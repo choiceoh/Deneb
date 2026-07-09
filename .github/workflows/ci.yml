@@ -177,6 +177,7 @@ jobs:
   # ── Secrets: private key detection + workflow audit ───────────
   secrets:
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:

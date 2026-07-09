@@ -172,7 +172,7 @@ jobs:
           ref: ${{ needs.release-please.outputs.andromeda-tag }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           package_json_file: andromeda/package.json
 
@@ -197,7 +197,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build, sign, and upload bundles
-        uses: tauri-apps/tauri-action@v1.0.0
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
