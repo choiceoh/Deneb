@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
@@ -39,6 +40,8 @@ object DenebMessagingNotification {
     // Stable request codes so PendingIntents update in place instead of piling up.
     private const val REQUEST_REPLY = 1
     private const val REQUEST_MARK_AS_READ = 2
+
+    private const val TAG = "DenebMsgNotif"
 
     private val denebPerson: Person =
         Person.Builder().setName("데네브").setKey("deneb").setBot(true).setImportant(true).build()
@@ -103,21 +106,26 @@ object DenebMessagingNotification {
     }.getOrNull()
 
     private fun post(context: Context, style: NotificationCompat.MessagingStyle) {
-        val manager = notificationManager(context)
-        ensureAiNotificationChannel(manager)
-        if (!canPostNotifications(context, AI_NOTIFICATION_CHANNEL_ID)) return
-
-        val builder = NotificationCompat.Builder(context, AI_NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .setStyle(style)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
-            .addAction(replyAction(context))
-            .addAction(markAsReadAction(context))
-        contentIntent(context)?.let { builder.setContentIntent(it) }
-
-        runCatching { manager.notify(NOTIFICATION_ID, builder.build()) }
+        // postIncoming runs on the FCM background thread (onMessageReceived), so ANY
+        // throw here — channel create, PendingIntent build, MessagingStyle build, or
+        // notify — would crash the app on push delivery. Guard the WHOLE post (not
+        // just notify) so a failure drops the one notification instead of the process.
+        runCatching {
+            val manager = notificationManager(context)
+            ensureAiNotificationChannel(manager)
+            if (canPostNotifications(context, AI_NOTIFICATION_CHANNEL_ID)) {
+                val builder = NotificationCompat.Builder(context, AI_NOTIFICATION_CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_notification)
+                    .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                    .setStyle(style)
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                    .setAutoCancel(true)
+                    .addAction(replyAction(context))
+                    .addAction(markAsReadAction(context))
+                contentIntent(context)?.let { builder.setContentIntent(it) }
+                manager.notify(NOTIFICATION_ID, builder.build())
+            }
+        }.onFailure { Log.w(TAG, "notification post failed; dropped this one", it) }
     }
 
     /**
