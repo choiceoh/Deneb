@@ -38,7 +38,9 @@ TOOL_RE = re.compile(r'Name:\s*"([^"]+)"[^}]*?Fn:\s*(?:\w+\.)?([A-Za-z_]\w*)', r
 # Where deneb registers things (scoped to cut false positives from unrelated
 # dotted-string maps elsewhere in the tree).
 RPC_DIRS = ["gateway-go/internal/runtime"]
-TOOL_DIRS = ["gateway-go/internal/pipeline/chat/toolreg"]
+# chat root (not just chat/toolreg/) — some ToolDefs live in chat/toolreg_core.go.
+# TOOL_RE is specific enough (Name+Fn in a ToolDef) that the wider walk is clean.
+TOOL_DIRS = ["gateway-go/internal/pipeline/chat"]
 
 # Runtime-assembled method names static extraction can't see literally.
 # ALIAS_PREFIX: documented, stable aliases (same handler) — resolve back to base.
