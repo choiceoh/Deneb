@@ -53,6 +53,27 @@ func TestFormatExecResult(t *testing.T) {
 			t.Errorf("got %q", got)
 		}
 	})
+
+	t.Run("ring-buffer head drop is annotated", func(t *testing.T) {
+		// A tail-only capture must never read as complete output (measured:
+		// seq 1..300000 → the model's "first line" was 150204, unmarked).
+		r := &process.ExecResult{
+			Stdout:             "150204\n150205",
+			StdoutDroppedBytes: 1040319,
+			Stderr:             "tail of errors",
+			StderrDroppedBytes: 42,
+		}
+		got := formatExecResult(r)
+		if !strings.HasPrefix(got, "[stdout truncated: first 1040319 bytes dropped") {
+			t.Errorf("missing stdout head-drop note, got %q", got)
+		}
+		if !strings.Contains(got, "[stderr truncated: first 42 bytes dropped") {
+			t.Errorf("missing stderr head-drop note, got %q", got)
+		}
+		if !strings.Contains(got, "STDERR:\ntail of errors") {
+			t.Errorf("stderr body lost, got %q", got)
+		}
+	})
 }
 
 func TestValidateWorkdir(t *testing.T) {

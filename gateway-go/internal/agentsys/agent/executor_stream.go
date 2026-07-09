@@ -9,6 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -35,6 +39,40 @@ const defaultStreamIdleTimeout = 180 * time.Second
 // idle timeout). The error is considered retryable by callers.
 var ErrStreamIdle = fmt.Errorf("stream stalled: no event within idle timeout")
 
+// streamIdleTimeoutOverride reads DENEB_STREAM_IDLE_TIMEOUT_MS once. The
+// watchdog deliberately measures real progress events — keepalive pings and
+// SSE comments do NOT reset it (see forwardAnthropicStream) — so a consumer
+// that legitimately holds a request without emitting events (the puppet
+// broker, where a coding agent sits in the model seat and thinks for minutes)
+// must widen or disable it explicitly: positive ms overrides the default,
+// negative disables, unset/invalid keeps the default.
+var streamIdleTimeoutOverride = sync.OnceValue(func() time.Duration {
+	v := strings.TrimSpace(os.Getenv("DENEB_STREAM_IDLE_TIMEOUT_MS"))
+	if v == "" {
+		return 0
+	}
+	ms, err := strconv.Atoi(v)
+	if err != nil {
+		return 0
+	}
+	if ms < 0 {
+		return -1 // disable sentinel (any negative duration disables)
+	}
+	return time.Duration(ms) * time.Millisecond
+})
+
+// effectiveIdleTimeout resolves the stream idle timeout: an explicit config
+// value wins, then the env override, then the default. Negative = disabled.
+func effectiveIdleTimeout(cfg time.Duration) time.Duration {
+	if cfg != 0 {
+		return cfg
+	}
+	if o := streamIdleTimeoutOverride(); o != 0 {
+		return o
+	}
+	return defaultStreamIdleTimeout
+}
+
 // ErrStreamEvent is returned when the provider emits an explicit error event
 // mid-stream (upstream disconnect, transient backend fault, overload). Like
 // ErrStreamIdle it is considered retryable: mid-stream errors are almost
@@ -52,10 +90,7 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 	if logger == nil {
 		logger = slog.Default()
 	}
-	// Resolve idle timeout.
-	if idleTimeout == 0 {
-		idleTimeout = defaultStreamIdleTimeout
-	}
+	idleTimeout = effectiveIdleTimeout(idleTimeout)
 
 	// Track current content block being built.
 	type blockBuilder struct {

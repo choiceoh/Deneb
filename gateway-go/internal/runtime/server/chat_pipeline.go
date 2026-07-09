@@ -5,7 +5,6 @@ package server
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -281,8 +280,11 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// Spillover store: saves large tool results to disk, replaces with preview.
 	// Session-end events release per-session spill files immediately instead of
 	// waiting for the 30-minute TTL sweep (see server_spillover_lifecycle.go).
-	if home, err := os.UserHomeDir(); err == nil {
-		spillDir := filepath.Join(home, ".deneb", "spillover")
+	// Keyed by the STATE dir (not the home dir): prod resolves to ~/.deneb as
+	// before, while dev/puppet instances (DENEB_STATE_DIR=/tmp/...) keep their
+	// spill files out of the production store.
+	{
+		spillDir := filepath.Join(config.ResolveStateDir(), "spillover")
 		spillStore := agent.NewSpilloverStore(spillDir)
 		spillStore.StartCleanup(context.Background())
 		s.toolDeps.SpilloverStore = spillStore

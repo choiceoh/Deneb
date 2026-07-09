@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-
-	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // Pre-compiled regex for ExecAnnotator (avoid re-compiling on every tool call).
@@ -57,22 +55,17 @@ func (r *PostProcessRegistry) Apply(ctx context.Context, toolName, output string
 
 // --- Built-in post-processors ---
 
-const (
-	outputTrimMax     = 32000 // chars — safety net cap for any tool output
-	outputTrimPreview = 1500  // chars preserved from head and tail when trimming
-	grepMaxMatches    = 200   // max match lines before summarizing
-)
+const grepMaxMatches = 200 // max match lines before summarizing
 
-// OutputTrimmer caps output at outputTrimMax chars, preserving head and tail.
-func OutputTrimmer(_ context.Context, _, output string) string {
-	if len(output) <= outputTrimMax {
-		return output
-	}
-	head := textutil.TruncateBytes(output, outputTrimPreview)
-	tail := textutil.TailBytes(output, outputTrimPreview)
-	return fmt.Sprintf("%s\n\n[... trimmed %d chars — showing first and last %d chars ...]\n\n%s",
-		head, len(output), outputTrimPreview, tail)
-}
+// NOTE: there is deliberately no generic output trimmer here. Size capping is
+// owned by ToolRegistry.Execute (head/tail truncation + disk spillover with a
+// read_spillover pointer), which runs BEFORE post-processing. A second cap in
+// this chain re-trimmed the registry's already-budgeted output — the registry
+// emits budget+marker chars, one marker over any equal cap — and deleted the
+// spillover pointer from the middle (puppet measurement: a 2MB exec result
+// reached the model as 3,069 chars with no marker while the 1MB spill file
+// sat orphaned on disk). If a processor here ever needs to shrink output, it
+// must preserve the read_spillover marker.
 
 // ErrorEnricher adds actionable hints to common error patterns.
 func ErrorEnricher(_ context.Context, _, output string) string {
@@ -153,20 +146,17 @@ func ExecAnnotator(_ context.Context, toolName, output string) string {
 }
 
 // RegisterDefaultPostProcessors sets up the standard post-processing pipeline.
-// Execution order: per-tool processors run first, then global ones.
-// This ensures tool-specific summarizers (grep, find) reduce output BEFORE
-// OutputTrimmer applies the 64K cap — summarizing 10K lines to 200 is far
-// cheaper than trimming 100K to 64K first and then summarizing.
+// Execution order: per-tool processors run first, then global ones. Size
+// capping is NOT done here — ToolRegistry.Execute already spill+truncated the
+// output to the tool's budget before post-processing (see the note above).
 func RegisterDefaultPostProcessors(registry *ToolRegistry) {
 	pp := NewPostProcessRegistry()
 
 	// Global processors (run on all tools after per-tool processors).
 	// 1. Compactor: strip ANSI + collapse adjacent duplicate lines (cheap,
-	//    lossless, deterministic) so the trimmer's cap sees already-clean text.
+	//    lossless, deterministic).
 	pp.AddGlobal(CompactToolOutput)
-	// 2. Generic trimmer: caps any remaining large output at 32K chars.
-	pp.AddGlobal(OutputTrimmer)
-	// 3. Error enrichment: adds actionable hints to error patterns.
+	// 2. Error enrichment: adds actionable hints to error patterns.
 	pp.AddGlobal(ErrorEnricher)
 
 	// Tool-specific processors (run before global processors).

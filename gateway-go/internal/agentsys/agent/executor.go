@@ -214,10 +214,12 @@ func RunAgent(
 		// chain, switching the turn to a different model.
 		err = consumeStreamInto(ctx, events, hooks, turnRes, cfg.StreamIdleTimeout, logger)
 		if (errors.Is(err, ErrStreamIdle) || errors.Is(err, ErrStreamEvent)) && ctx.Err() == nil {
+			// Log the RESOLVED timeout — cfg is usually 0 ("use default"),
+			// which printed a misleading "idleTimeout=0µs" here.
 			logger.Warn("stream interrupted, retrying turn on same model",
 				"turn", turn,
 				"error", err,
-				"idleTimeout", cfg.StreamIdleTimeout)
+				"idleTimeout", effectiveIdleTimeout(cfg.StreamIdleTimeout))
 			turnRes = &turnResult{}
 			events, err = client.StreamChat(ctx, req)
 			if err == nil {

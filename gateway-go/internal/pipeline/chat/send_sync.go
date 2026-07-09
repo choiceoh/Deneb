@@ -280,6 +280,16 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 		StopReason:      result.StopReason,
 	}
 	res.fillEmptyStopFallback()
+	// Accidental empty completion — end_turn after tool activity with zero
+	// text and no silent token. fillEmptyStopFallback deliberately leaves
+	// end_turn alone (NO_REPLY silence must survive), and that narrow rule
+	// let this case reach the client as a blank reply with ok=true
+	// (measured from the puppet seat). The silent-token case cannot land
+	// here: its raw AllText is non-empty, so isEmptyFinalResult is false.
+	if res.BestText() == "" && isEmptyFinalResult(result.AgentResult) {
+		msg := fallbackForEmptyFinalReply()
+		res.Text, res.AllText, res.DeliverableText = msg, msg, msg
+	}
 	return res, nil
 }
 

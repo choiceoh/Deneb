@@ -212,9 +212,15 @@ func deliverRunReply(params RunParams, deps runDeps, result *agent.AgentResult, 
 
 		// Abnormal stop with empty output — tell the user something went
 		// wrong instead of leaving them staring at silence. end_turn with
-		// empty text can happen legitimately (tool-only turns) so we only
-		// surface for limit/error-like terminations.
-		if fallbackMsg := fallbackForStopReason(result.StopReason); fallbackMsg != "" && deps.callbacks.replyFunc != nil {
+		// empty text maps to "" in fallbackForStopReason (a NO_REPLY silent
+		// turn must stay silent), but an ACCIDENTAL empty completion —
+		// end_turn after tool activity with zero text and no silent token —
+		// still deserves a notice (measured: blank bubble with ok=true).
+		fallbackMsg := fallbackForStopReason(result.StopReason)
+		if fallbackMsg == "" && isEmptyFinalResult(result) {
+			fallbackMsg = fallbackForEmptyFinalReply()
+		}
+		if fallbackMsg != "" && deps.callbacks.replyFunc != nil {
 			replyCtx, replyCancel := context.WithTimeout(context.Background(), 10*time.Second)
 			if err := deps.callbacks.replyFunc(replyCtx, params.Delivery, fallbackMsg); err != nil {
 				logger.Error("fallback delivery failed",
