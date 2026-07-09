@@ -157,8 +157,17 @@ func (s *searchDB) rebuildIndex(dir string) error {
 	s.validity = make(map[string]float64)
 
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil //nolint:nilerr // skip inaccessible entries and directories in walk
+		if err != nil {
+			return nil //nolint:nilerr // skip inaccessible entries in walk
+		}
+		if info.IsDir() {
+			// Prune backup/hidden dirs so their pages never enter the search
+			// index — same rule as ListPages (store.go), so search and the
+			// person/project lists agree on what a real page is.
+			if path != dir && isNonPageDir(info.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if filepath.Ext(path) != ".md" {
 			return nil

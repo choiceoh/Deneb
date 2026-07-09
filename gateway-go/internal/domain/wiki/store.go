@@ -478,6 +478,15 @@ func (s *Store) ListPages(category string) ([]string, error) {
 			return nil //nolint:nilerr // skip inaccessible entries in walk
 		}
 		if info.IsDir() {
+			// Prune non-page directories entirely so their pages never leak into
+			// a listing — the wiki .git repo, and operator-made backup copies
+			// (인물/backup/, 백업/, foo-backup/), which otherwise surfaced as
+			// phantom 인물/프로젝트 rows. SkipDir on the search root itself would
+			// abort the whole walk, so never prune it. The legit project
+			// subfolders (기자재/메일분석/자료/회의록) never match.
+			if path != searchDir && isNonPageDir(info.Name()) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if filepath.Ext(path) != ".md" {
@@ -493,6 +502,18 @@ func (s *Store) ListPages(category string) ([]string, error) {
 		return nil
 	})
 	return pages, err
+}
+
+// isNonPageDir reports whether a directory holds derived/backup state rather
+// than live wiki pages, so ListPages can prune it. Matches hidden dirs (.git,
+// .trash, …) and any name signalling a backup copy — no real 인물/프로젝트 page
+// directory (대표/로그/기자재/메일분석/자료/회의록/거래) is named this way.
+func isNonPageDir(name string) bool {
+	if strings.HasPrefix(name, ".") {
+		return true
+	}
+	lower := strings.ToLower(name)
+	return strings.Contains(lower, "backup") || strings.Contains(name, "백업") || lower == "bak"
 }
 
 // SnapshotIndex returns a deep copy of the cached master index, safe to walk,
