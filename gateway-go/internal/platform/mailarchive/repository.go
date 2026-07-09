@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/mail"
 	"net/url"
 	"regexp"
 	"sort"
@@ -582,7 +581,7 @@ func (r *Repository) searchArchive(ctx context.Context, spec archiveQuery, pageT
 			row := detailToSummary(detail, mailbox, st)
 			all = append(all, archiveRow{
 				summary: row,
-				when:    parseMailDate(detail.Date),
+				when:    mailbody.ParseMailDate(detail.Date),
 				uid:     parseUID(uid),
 			})
 		}
@@ -814,28 +813,6 @@ func snippetFromBody(body string) string {
 	}
 	runes := []rune(body)
 	return string(runes[:max]) + "..."
-}
-
-func parseMailDate(raw string) time.Time {
-	if strings.TrimSpace(raw) == "" {
-		return time.Time{}
-	}
-	if t, err := mail.ParseDate(raw); err == nil {
-		return t
-	}
-	layouts := []string{
-		time.RFC1123Z,
-		time.RFC1123,
-		time.RFC822Z,
-		time.RFC822,
-		"Mon, 02 Jan 2006 15:04:05 -0700",
-	}
-	for _, layout := range layouts {
-		if t, err := time.Parse(layout, raw); err == nil {
-			return t
-		}
-	}
-	return time.Time{}
 }
 
 func archiveLocator(mailbox, uid string) string {
