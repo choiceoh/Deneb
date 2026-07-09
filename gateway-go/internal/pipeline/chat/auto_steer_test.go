@@ -43,6 +43,34 @@ func TestTrySteerIntoActiveRun_FoldsShortFollowUp(t *testing.T) {
 	}
 }
 
+// TestTrySteerIntoActiveRun_NativeClientCarveOut proves the native surface folds
+// even though it sets AutoDeliveredOutput. miniapp.chat.send ALWAYS sets that
+// flag (reply returned as the RPC result, not pushed via the message tool) AND
+// Delivery.Channel="client". Blocking steer on the flag alone left it dead on
+// the sole native entry (measured live: a mid-turn correction raced a second
+// concurrent run); the carve-out restores folding while keeping autonomous
+// AutoDeliveredOutput relays (cron/mailpoll — no client delivery) excluded.
+func TestTrySteerIntoActiveRun_NativeClientCarveOut(t *testing.T) {
+	h := newSteerTestHandler()
+	markActiveRun(h, "client:main")
+
+	nativeOpts := &SyncOptions{
+		AutoDeliveredOutput: true,
+		Delivery:            &DeliveryContext{Channel: "client", To: "main"},
+	}
+	res, handled := h.trySteerIntoActiveRun("client:main", "아 남도에코만 봐줘", nativeOpts)
+	if !handled {
+		t.Fatal("native client + AutoDeliveredOutput must fold (interactive mid-turn correction)")
+	}
+	if res.StopReason != "steered" {
+		t.Fatalf("unexpected ack: %+v", res)
+	}
+	notes := h.steer.Drain("client:main")
+	if len(notes) != 1 || !strings.Contains(notes[0], "남도에코") {
+		t.Fatalf("steer queue missing the native note: %v", notes)
+	}
+}
+
 func TestTrySteerIntoActiveRun_Gates(t *testing.T) {
 	h := newSteerTestHandler()
 	markActiveRun(h, "client:main")
@@ -57,7 +85,8 @@ func TestTrySteerIntoActiveRun_Gates(t *testing.T) {
 		{"nil opts (non-interactive caller)", "client:main", "짧은 정정", nil},
 		{"API messages traffic", "client:main", "짧은 정정", &SyncOptions{Messages: make([]llm.Message, 1)}},
 		{"autonomous ephemeral surface", "client:main", "짧은 정정", &SyncOptions{EphemeralUser: true}},
-		{"auto-delivered surface (cron)", "client:main", "짧은 정정", &SyncOptions{AutoDeliveredOutput: true}},
+		{"auto-delivered relay, no client channel (cron/mailpoll)", "client:main", "짧은 정정", &SyncOptions{AutoDeliveredOutput: true}},
+		{"auto-delivered relay on a non-client channel", "client:main", "짧은 정정", &SyncOptions{AutoDeliveredOutput: true, Delivery: &DeliveryContext{Channel: "telegram", To: "telegram:1"}}},
 		{"blank message", "client:main", "   ", &SyncOptions{}},
 		{"long message is a new request", "client:main", strings.Repeat("가", steerMaxRunes+1), &SyncOptions{}},
 	}

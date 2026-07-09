@@ -42,7 +42,10 @@ func handleRunSuccess(
 		broadcaster.EmitComplete(hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.Text))), result.Usage)
 	}
 
-	deliverRunReply(params, deps, result, isSilent, logger)
+	// broadcaster != nil means EmitComplete (above) delivered the reply to the
+	// native app over SSE; deliverRunReply uses this to tell a client session
+	// that already got its answer from a genuine reply-delivery wiring gap.
+	deliverRunReply(params, deps, result, isSilent, broadcaster != nil, logger)
 
 	// Store last output on the session so cron, subagent notifications, and
 	// other consumers can read it. Prefer AllText (accumulated across all turns)
@@ -197,7 +200,7 @@ func persistAggregateAssistantText(params RunParams, deps runDeps, result *agent
 // channel reply with one retry, and media token delivery — with every
 // user-observable failure escalated per logging.md (Error + broadcast +
 // transcript note).
-func deliverRunReply(params RunParams, deps runDeps, result *agent.AgentResult, isSilent bool, logger *slog.Logger) {
+func deliverRunReply(params RunParams, deps runDeps, result *agent.AgentResult, isSilent, sseDelivered bool, logger *slog.Logger) {
 	// Deliver response back to the originating channel (e.g., the native client).
 	// Use parseReplyDirectives (chatport boundary) for unified processing: silent token
 	// detection, leaked tool-call stripping, MEDIA: extraction, and threading.
@@ -294,20 +297,32 @@ func deliverRunReply(params RunParams, deps runDeps, result *agent.AgentResult, 
 			if replyText != "" {
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer replyCancel()
-				// A nil replyFunc is only a wiring bug when there is a real user
-				// channel to deliver to. Two run shapes legitimately have none, so
-				// a missing replyFunc is the expected state, not an operator alarm:
+				// A nil replyFunc is only a wiring bug when there is a real
+				// channel-PUSH surface that did NOT already get the reply another
+				// way. Three run shapes legitimately have no such surface, so a
+				// missing replyFunc is the expected state there, not an operator
+				// alarm:
+				//   - native "client" channel WHOSE reply already went out over SSE
+				//     (sseDelivered: handleRunSuccess called EmitComplete). The app
+				//     receives replies through the SSE broadcaster, never a
+				//     channel-push replyFunc, so a nil replyFunc there is expected.
+				//     Without this, every async completion on a native session
+				//     (subnotify sub-agent relay, drained pending message) fired a
+				//     false "채팅 응답 전달 실패" alarm even though the reply reached
+				//     the device. A client session with NO broadcaster (sseDelivered
+				//     false) still escalates — that reply reached neither surface.
 				//   - sub-agent (child) sessions — the parent reads their result via
 				//     session.LastOutput, not a channel push (SpawnedBy is set when
 				//     the spawn captured a non-empty parent key);
-				//   - channel-less runs — a sub-agent spawned with an empty parent
-				//     key gets a session key like ":label:ts" (observed live), which
-				//     deliveryFromSessionKey turns into an empty Delivery.Channel:
-				//     there is literally no channel a reply could reach. (The empty
-				//     parent key is a separate lineage bug — SendSync does not inject
-				//     the session key into the tool context the way runAgentAsync
-				//     does — but this guard must hold regardless of that fix.)
-				noUserChannel := isSubagentSession(deps, params.SessionKey) || params.Delivery.Channel == ""
+				//   - channel-less runs — deliveryFromSessionKey yields an empty
+				//     Delivery.Channel, so there is no channel a reply could reach.
+				//     (The old ":label:ts" orphan from a sync-spawned sub-agent no
+				//     longer occurs — OnTurnInit binds the session key into the tool
+				//     context on every turn, sync entries included — but this guard
+				//     holds regardless.)
+				noUserChannel := isSubagentSession(deps, params.SessionKey) ||
+					params.Delivery.Channel == "" ||
+					(params.Delivery.Channel == "client" && sseDelivered)
 				if deps.callbacks.replyFunc == nil {
 					if noUserChannel {
 						// Expected: no channel to deliver to. Log quietly and skip the

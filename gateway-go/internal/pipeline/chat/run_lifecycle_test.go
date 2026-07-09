@@ -11,6 +11,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
@@ -203,7 +204,7 @@ func TestHandleRunSuccess_SubagentReplyFuncNil(t *testing.T) {
 	// event name broadcast during it. replyFunc, transcript, tools, broadcaster,
 	// wikiStore, jobTracker are all left nil — exactly the
 	// native-only production shape where no channel replyFunc is registered.
-	run := func(t *testing.T, sessionKey, spawnedBy string) []string {
+	run := func(t *testing.T, sessionKey, spawnedBy string, withSSE bool) []string {
 		t.Helper()
 		sm := session.NewManager()
 		s := sm.Create(sessionKey, session.KindDirect)
@@ -240,7 +241,16 @@ func TestHandleRunSuccess_SubagentReplyFuncNil(t *testing.T) {
 			StopReason: "end_turn",
 			Turns:      1,
 		}
-		handleRunSuccess(context.Background(), params, deps, nil, logger, result, time.Now().UnixMilli())
+		// withSSE mirrors production: a native session has a broadcaster, so its
+		// reply reaches the device over SSE and a nil replyFunc is expected. The
+		// broadcaster-less cases model a genuine no-delivery-surface run.
+		var broadcaster *streaming.Broadcaster
+		if withSSE {
+			broadcaster = streaming.NewBroadcaster(
+				func(string, []byte) int { return 0 }, sessionKey, "run-test",
+			)
+		}
+		handleRunSuccess(context.Background(), params, deps, broadcaster, logger, result, time.Now().UnixMilli())
 
 		mu.Lock()
 		defer mu.Unlock()
@@ -260,9 +270,21 @@ func TestHandleRunSuccess_SubagentReplyFuncNil(t *testing.T) {
 	// "client:main:label:ts", Delivery.Channel="client", and SpawnedBy is set.
 	// The SpawnedBy signal must suppress the alarm.
 	t.Run("subagent with SpawnedBy suppresses delivery_failed", func(t *testing.T) {
-		events := run(t, "client:main:math-test:1780851684916", "client:main")
+		events := run(t, "client:main:math-test:1780851684916", "client:main", false)
 		if hasEvent(events, "chat.delivery_failed") {
 			t.Errorf("sub-agent completion emitted chat.delivery_failed (false alarm); events=%v", events)
+		}
+	})
+
+	// The native production shape: a top-level "client" session whose reply
+	// went out over SSE (broadcaster present). A nil replyFunc there is
+	// expected wiring, not a bug — this used to fire a false "채팅 응답 전달
+	// 실패" alarm on every async completion (subnotify sub-agent relay, drained
+	// pending) on a native session.
+	t.Run("client session delivered over SSE suppresses delivery_failed", func(t *testing.T) {
+		events := run(t, "client:main", "", true)
+		if hasEvent(events, "chat.delivery_failed") {
+			t.Errorf("client session whose reply went out over SSE emitted a false delivery_failed; events=%v", events)
 		}
 	})
 
@@ -271,7 +293,7 @@ func TestHandleRunSuccess_SubagentReplyFuncNil(t *testing.T) {
 	// deliveryFromSessionKey yields an empty Delivery.Channel. The empty-channel
 	// signal must suppress the alarm even though SpawnedBy is empty.
 	t.Run("channel-less subagent (empty parent key) suppresses delivery_failed", func(t *testing.T) {
-		events := run(t, ":livetest:1780852962773", "")
+		events := run(t, ":livetest:1780852962773", "", false)
 		if hasEvent(events, "chat.delivery_failed") {
 			t.Errorf("channel-less sub-agent completion emitted chat.delivery_failed (false alarm); events=%v", events)
 		}
@@ -281,7 +303,7 @@ func TestHandleRunSuccess_SubagentReplyFuncNil(t *testing.T) {
 	// nil replyFunc IS a wiring bug and must still escalate — the suppression
 	// must not hide genuine delivery failures.
 	t.Run("top-level channel session still escalates", func(t *testing.T) {
-		events := run(t, "client:main", "")
+		events := run(t, "client:main", "", false)
 		if !hasEvent(events, "chat.delivery_failed") {
 			t.Errorf("top-level session with nil replyFunc did NOT emit chat.delivery_failed; a real wiring bug must still escalate; events=%v", events)
 		}
