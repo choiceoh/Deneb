@@ -40,12 +40,13 @@ type Handler struct {
 	providerConfigsMu sync.RWMutex
 	providerConfigs   map[string]ProviderConfig
 	// memory groups the memory/knowledge backends. See MemoryDeps.
-	memory             MemoryDeps
-	dreamTurnFn        func(ctx context.Context)         // optional; increments dream turn via autonomous
-	preferenceSignalFn func()                            // optional; notes a 선호-tagged diary capsule for accelerated dreaming
-	agentLog           *agentlog.Writer                  // optional; agent detail logging
-	registry           *modelrole.Registry               // centralized model role registry
-	providerRuntime    *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
+	memory               MemoryDeps
+	dreamTurnFn          func(ctx context.Context)         // optional; increments dream turn via autonomous
+	preferenceSignalFn   func()                            // optional; notes a 선호-tagged diary capsule for accelerated dreaming
+	deliverablePublisher func(text string) (bool, error)   // optional; auto-publishes a document-analysis deliverable to the work feed
+	agentLog             *agentlog.Writer                  // optional; agent detail logging
+	registry             *modelrole.Registry               // centralized model role registry
+	providerRuntime      *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
 
 	// Agent run configuration.
 	contextCfg           ContextConfig
@@ -242,12 +243,15 @@ type HandlerConfig struct {
 	JobTracker      *agent.JobTracker
 	ProviderConfigs map[string]ProviderConfig // provider ID → config
 	// Memory groups the memory/knowledge backends. See MemoryDeps.
-	Memory               MemoryDeps
-	DreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
-	PreferenceSignalFn   func()                    // optional; notes a 선호-tagged diary capsule so the dreamer consolidates it on the accelerated cadence
-	AgentLog             *agentlog.Writer          // optional; agent detail logging
-	Registry             *modelrole.Registry       // centralized model role registry
-	LocalAIHub           *localai.Hub              // centralized local AI request hub
+	Memory             MemoryDeps
+	DreamTurnFn        func(ctx context.Context) // optional; increments dream turn via autonomous
+	PreferenceSignalFn func()                    // optional; notes a 선호-tagged diary capsule so the dreamer consolidates it on the accelerated cadence
+	// DeliverablePublisher files a document-analysis turn's final response as a
+	// doc_analysis work-feed card (server-side auto safety net). Optional; nil disables.
+	DeliverablePublisher func(text string) (bool, error)
+	AgentLog             *agentlog.Writer    // optional; agent detail logging
+	Registry             *modelrole.Registry // centralized model role registry
+	LocalAIHub           *localai.Hub        // centralized local AI request hub
 	ContextCfg           ContextConfig
 	DefaultModel         string
 	SubagentDefaultModel string // separate default model for sub-agents (from agents.defaults.subagents.model)
@@ -340,6 +344,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		memory:               cfg.Memory,
 		dreamTurnFn:          cfg.DreamTurnFn,
 		preferenceSignalFn:   cfg.PreferenceSignalFn,
+		deliverablePublisher: cfg.DeliverablePublisher,
 		agentLog:             cfg.AgentLog,
 		registry:             cfg.Registry,
 		contextCfg:           cfg.ContextCfg,

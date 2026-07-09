@@ -1869,11 +1869,12 @@
     "properties": {
       "action": {
         "type": "string",
-        "description": "list(카드 목록, 기본) | read(카드 본문 — 열람 표시 겸함) | ack(처리 완료 표시)",
+        "description": "list(카드 목록, 기본) | read(카드 본문 — 열람 표시 겸함) | ack(처리 완료 표시) | publish(사용자가 요청한 산출물을 작업 피드 카드로 발행)",
         "enum": [
           "list",
           "read",
-          "ack"
+          "ack",
+          "publish"
         ]
       },
       "id": {
@@ -1889,6 +1890,36 @@
       "include_acked": {
         "type": "boolean",
         "description": "true면 처리 완료된 카드까지 포함 (기본 미처리만)"
+      },
+      "title": {
+        "type": "string",
+        "description": "publish 필수 — 카드 한 줄 제목 (문서/사안을 식별할 수 있게)"
+      },
+      "summary": {
+        "type": "string",
+        "description": "publish 선택 — 피드에서 보이는 2줄 미리보기. 비우면 body에서 자동 추출"
+      },
+      "body": {
+        "type": "string",
+        "description": "publish 필수 — 산출물 본문(마크다운). 핵심 결론 + 액션아이템(회람 대상·기한 포함)을 담는다"
+      },
+      "priority": {
+        "type": "string",
+        "description": "publish 선택 — urgent | high | normal | low. 비우면 본문에서 자동 추론",
+        "enum": [
+          "urgent",
+          "high",
+          "normal",
+          "low"
+        ]
+      },
+      "ref_type": {
+        "type": "string",
+        "description": "publish 선택 — 근거 페이지 유형(예: wiki). ref_id와 함께 카드를 그 페이지에 연결"
+      },
+      "ref_id": {
+        "type": "string",
+        "description": "publish 선택 — 근거 페이지 식별자(예: 위키 경로)"
       }
     },
     "required": []

@@ -229,6 +229,18 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 			s.WriteString("**확신이 없으면 추측으로 리포트를 쓰지 마라.** 틀린 분석은 안 하느니만 못하고, 사용자가 그걸 믿고 움직이면 더 위험하다. 결론을 가르는 핵심 사실(이 인물이 누구인지, 이 거래의 맥락·조건, 이 건의 우선순위 등)이 불확실하거나 비어 있으면 — 그럴듯하게 메우지 말고, 모르는 부분을 분명히 밝힌 뒤 사용자에게 확인 질문을 먼저 하라. 받은 답은 즉시 위키에 기록해 **다음 분석부터는 같은 것을 다시 틀리지도, 다시 묻지도 않게** 하라(불확실 → 질문 → 기록의 닫힌 루프).\n")
 			s.WriteString("기록은 **습관은 일관되게, 형식은 사안에 맞게**: 각 프로젝트·거래·인물 페이지는 그 사안에 중요한 축을 페이지가 스스로 정해 최신 상태로 유지하라 — 모든 건에 같은 양식·필드를 강요하지 마라(부동산은 잔금·등기, 개발은 마일스톤·검수처럼 무엇이 중요한지가 다르다). 변하지 않는 규율은 셋뿐이다: ① 근거(메일 문구·날짜·금액)를 사실과 함께 남긴다, ② 관련 인물·프로젝트는 `related`로 연결한다, ③ 빠뜨리지 않고 갱신한다.\n\n")
 
+			// Deliverable → work-feed publish. A user-requested analysis (contract/
+			// document review, research writeup) is a deliverable the user must
+			// *receive* — filing it to the wiki + a chat summary buries it. Static,
+			// gated on the workfeed tool being in the session (deferred is fine:
+			// toolSet includes deferred tools and buildStaticCacheKey folds the
+			// deferred list into the cache key, so this block's presence is keyed —
+			// same pattern as the polaris/wiki blocks above; no cache marker added).
+			if _, ok := toolSet["workfeed"]; ok {
+				s.WriteString("## 산출물 → 작업 피드 발행\n")
+				s.WriteString("사용자가 **요청한 분석 산출물**(문서·계약서 검토, 자료 정리·리서치처럼 그 자체가 딜리버러블인 결과)은 위키 저장에서 그치지 말고 — 같은 응답 안에서 `workfeed(action=\"publish\")`로 **작업 피드 카드로 발행**하라. 위키는 기억(내가 찾아보는 곳)이고 작업 피드는 전달(사용자가 받는 곳)이다: 챗 요약만 남기고 산출물을 위키에 묻으면 사용자는 결과를 받지 못한다. title=사안 식별 제목, body=핵심 결론 + 액션아이템(회람 대상·기한 포함), 근거 위키 페이지가 있으면 `ref_type=\"wiki\"`·`ref_id=`경로로 연결한다. 발행 후 챗에는 짧은 요지만 남긴다. 단순 질의응답·잡담·중간 사고에는 발행하지 마라 — 사용자가 결과물로 인지할 산출물에만.\n\n")
+			}
+
 			// User-model write-back: the same-turn counterpart of the dreamer's
 			// batched 사용자 synthesis (wiki/dreamer_apply.go). The main agent
 			// hears a standing preference with full conversational context —

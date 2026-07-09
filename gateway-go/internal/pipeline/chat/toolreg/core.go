@@ -78,7 +78,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	if deps.WorkFeedRW != nil {
 		registry.RegisterTool(toolctx.ToolDef{
 			Name:        "workfeed",
-			Description: "능동 업무 피드(내가 보낸 알림 카드)를 조회·정리한다 — '이번 주 능동 알림 뭐 보냈지'·'미응답 질문 카드 있나'·'그 카드 처리됐다고 표시해줘'에 사용. action=list(미처리 카드 목록) | read(id로 본문 — 열람 표시 겸함) | ack(처리 완료 표시). 집계 통계는 observe action=proactive.",
+			Description: "작업 피드(업무 피드) 도구 — 카드를 조회·정리하고, 요청받은 산출물을 카드로 발행한다. action=list(미처리 카드 목록) | read(id로 본문 — 열람 표시 겸함) | ack(처리 완료 표시) | publish(문서·계약서 검토처럼 사용자가 요청한 산출물을 작업 피드 카드로 발행 — title+body 필수, 위키에만 묻지 말고 사용자에게 딜리버). '이번 주 능동 알림 뭐 보냈지'·'그 카드 처리 표시'에도 사용. 집계 통계는 observe action=proactive.",
 			InputSchema: workfeedToolSchema(),
 			Fn:          tools.ToolWorkFeed(deps.WorkFeedRW),
 			Deferred:    true,

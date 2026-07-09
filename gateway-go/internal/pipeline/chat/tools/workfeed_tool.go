@@ -1,9 +1,11 @@
-// workfeed_tool.go — the agent's read/settle surface over its OWN proactive
-// card feed (업무 피드). The agent (mail analysis, dreams, heartbeat) produces
-// these cards, but until this tool only the native client could see them —
-// the agent could not answer "이번 주에 뭘 능동적으로 알렸지", check whether a
-// question card ever got answered, or mark one handled. observe(action=
-// proactive) stays the aggregate funnel view; this is the per-card view.
+// workfeed_tool.go — the agent's surface over the work feed (업무/작업 피드). Two
+// halves: (1) read/settle its OWN proactive cards — the agent (mail analysis,
+// dreams, heartbeat) produces these, and this tool lets it answer "이번 주에 뭘
+// 능동적으로 알렸지", check whether a question card got answered, or mark one
+// handled; (2) publish — post a user-requested deliverable (document/contract
+// analysis) as a card so the result is a trackable work item, not only a wiki
+// page + an ephemeral chat summary. observe(action=proactive) stays the aggregate
+// funnel view; this is the per-card view.
 package tools
 
 import (
@@ -28,6 +30,12 @@ func ToolWorkFeed(store toolctx.WorkFeedRW) ToolFunc {
 			ID           string `json:"id"`
 			Limit        int    `json:"limit"`
 			IncludeAcked bool   `json:"include_acked"`
+			Title        string `json:"title"`
+			Summary      string `json:"summary"`
+			Body         string `json:"body"`
+			Priority     string `json:"priority"`
+			RefType      string `json:"ref_type"`
+			RefID        string `json:"ref_id"`
 		}
 		if err := jsonutil.UnmarshalInto("workfeed params", input, &p); err != nil {
 			return "", err
@@ -39,8 +47,10 @@ func ToolWorkFeed(store toolctx.WorkFeedRW) ToolFunc {
 			return workFeedRead(store, p.ID)
 		case "ack":
 			return workFeedAck(store, p.ID)
+		case "publish":
+			return workFeedPublish(store, p.Title, p.Summary, p.Body, p.Priority, p.RefType, p.RefID)
 		default:
-			return "", fmt.Errorf("workfeed: unknown action %q (list|read|ack)", p.Action)
+			return "", fmt.Errorf("workfeed: unknown action %q (list|read|ack|publish)", p.Action)
 		}
 	}
 }
@@ -118,6 +128,56 @@ func workFeedAck(store toolctx.WorkFeedRW, id string) (string, error) {
 		return "", fmt.Errorf("workfeed ack %q: %w", id, err)
 	}
 	return fmt.Sprintf("처리 완료로 표시했습니다: [%s] %s · %s", item.Status, item.ID, workFeedTitle(item)), nil
+}
+
+// workFeedPublish posts a user-requested deliverable (document/contract analysis)
+// to the work feed as a card so the result is a trackable work item — not only a
+// wiki page + a chat summary that scrolls away. title is the one-line card label
+// and body is the deliverable itself (conclusions + action items); both are
+// required. refType/refID optionally deep-link a backing page (e.g. wiki path).
+// The store dedups against the most recent identical card, so a re-run does not
+// pile up duplicates. The server's native-sync wrapper mirrors the created card
+// to the phone.
+func workFeedPublish(store toolctx.WorkFeedRW, title, summary, body, priority, refType, refID string) (string, error) {
+	title = strings.TrimSpace(title)
+	body = strings.TrimSpace(body)
+	if title == "" {
+		return "", fmt.Errorf("workfeed publish: title이 필요합니다 (카드 한 줄 제목)")
+	}
+	if body == "" {
+		return "", fmt.Errorf("workfeed publish: body가 필요합니다 (산출물 본문 — 핵심 결론 + 액션아이템)")
+	}
+	created, err := store.Append(workfeed.Item{
+		Source:   workfeed.SourceDocAnalysis,
+		Title:    title,
+		Summary:  strings.TrimSpace(summary),
+		Body:     body,
+		RefType:  strings.TrimSpace(refType),
+		RefID:    strings.TrimSpace(refID),
+		Priority: workFeedPriority(priority),
+	})
+	if err != nil {
+		return "", fmt.Errorf("workfeed publish: %w", err)
+	}
+	return fmt.Sprintf("작업 피드에 발행했습니다: [%s] %s (id=%s)", created.Source, workFeedTitle(created), created.ID), nil
+}
+
+// workFeedPriority maps an optional priority word (ko/en) to the store's priority
+// level. An empty/unknown value returns 0 so the store infers priority from the
+// body's urgency markers (its default), rather than forcing a level.
+func workFeedPriority(s string) int {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "urgent", "긴급":
+		return workfeed.PriorityUrgent
+	case "high", "높음":
+		return workfeed.PriorityHigh
+	case "normal", "보통":
+		return workfeed.PriorityNormal
+	case "low", "낮음":
+		return workfeed.PriorityLow
+	default:
+		return 0 // let the store infer from the body
+	}
 }
 
 // workFeedTitle picks the best one-line label for a card.

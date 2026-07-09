@@ -188,11 +188,15 @@ type runDeps struct {
 	logger               *slog.Logger                 // required (defaults to slog.Default)
 
 	// memory groups the memory/knowledge backends. See MemoryDeps.
-	memory               MemoryDeps
-	dreamTurnFn          func(ctx context.Context) // optional; increments dream turn via autonomous
-	preferenceSignalFn   func()                    // optional; notes a 선호-tagged diary capsule for accelerated dreaming
-	agentLog             *agentlog.Writer          // optional; enables agent detail logging
-	registry             *modelrole.Registry       // centralized model role registry
+	memory             MemoryDeps
+	dreamTurnFn        func(ctx context.Context) // optional; increments dream turn via autonomous
+	preferenceSignalFn func()                    // optional; notes a 선호-tagged diary capsule for accelerated dreaming
+	// deliverablePublisher files the turn's final response as a doc_analysis
+	// work-feed card — the server-side auto safety net for the deliverable → 작업
+	// 피드 contract. Optional; nil disables (older wiring/tests).
+	deliverablePublisher func(text string) (bool, error)
+	agentLog             *agentlog.Writer    // optional; enables agent detail logging
+	registry             *modelrole.Registry // centralized model role registry
 	contextCfg           ContextConfig
 	subagentDefaultModel string
 	defaultSystem        string

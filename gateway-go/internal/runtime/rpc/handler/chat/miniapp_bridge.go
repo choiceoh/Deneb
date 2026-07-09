@@ -301,6 +301,8 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 		if savedPath != "" {
 			message += "\n\n(원문 보관: memory/" + savedPath + ")"
 		}
+		// Turn start — the dedup window for a model-published deliverable card below.
+		turnStartMs := time.Now().UnixMilli()
 		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
 			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
@@ -310,13 +312,7 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
 		}
-		recordWorkFeed(deps, workfeed.Item{
-			Source:     workfeed.SourceCaptureDocument,
-			Title:      "공유 문서",
-			Summary:    workfeed.Preview(res.BestText(), 180),
-			Body:       res.BestText(),
-			SessionKey: sessionKey,
-		})
+		cardCapturedDocument(deps, sessionKey, res, turnStartMs)
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"text":       res.Text,
 			"document":   strings.TrimSpace(text),
@@ -532,6 +528,53 @@ func recordWorkFeed(deps Deps, item workfeed.Item) {
 		return
 	}
 	_, _ = deps.WorkFeed.Append(item)
+}
+
+// cardCapturedDocument files the feed card for a shared-document analysis turn. It
+// prefers a proper doc_analysis deliverable card (derived title, via
+// PublishDeliverable) over the raw "공유 문서" capture card, and:
+//   - skips entirely when the model already published a deliverable itself this turn
+//     (guidance path) — the turn is synchronous, so any such card is already in the
+//     feed (alreadyCardedThisTurn), preventing a double card;
+//   - falls back to the raw capture card when the analysis is too thin to be a
+//     deliverable (PublishDeliverable suppressed it) or PublishDeliverable is
+//     unwired, so a shared document is never silently dropped.
+func cardCapturedDocument(deps Deps, sessionKey string, res *chatpkg.SyncResult, turnStartMs int64) {
+	body := res.BestText()
+	if alreadyCardedThisTurn(deps, sessionKey, turnStartMs) {
+		return
+	}
+	if deps.PublishDeliverable != nil {
+		if published, _ := deps.PublishDeliverable(body); published {
+			return
+		}
+	}
+	recordWorkFeed(deps, workfeed.Item{
+		Source:     workfeed.SourceCaptureDocument,
+		Title:      "공유 문서",
+		Summary:    workfeed.Preview(body, 180),
+		Body:       body,
+		SessionKey: sessionKey,
+	})
+}
+
+// alreadyCardedThisTurn reports whether a doc_analysis deliverable card for this
+// session was created since turnStartMs — i.e. the model published one itself
+// during the (synchronous) turn, so the server must not add a duplicate.
+func alreadyCardedThisTurn(deps Deps, sessionKey string, turnStartMs int64) bool {
+	if deps.WorkFeed == nil {
+		return false
+	}
+	items, _, err := deps.WorkFeed.List(10, false)
+	if err != nil {
+		return false
+	}
+	for _, it := range items {
+		if it.Source == workfeed.SourceDocAnalysis && it.SessionKey == sessionKey && it.CreatedAtMs >= turnStartMs {
+			return true
+		}
+	}
+	return false
 }
 
 // handleMiniappEventIngest queues a proactive judgment turn for a phone event from

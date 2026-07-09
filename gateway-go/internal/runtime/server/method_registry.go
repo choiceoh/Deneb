@@ -986,7 +986,13 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				}
 				return res, nil
 			},
-			WorkFeed:    s.nativeWorkFeedStore(),
+			WorkFeed: s.nativeWorkFeedStore(),
+			// Upgrade a shared document's feed card to a proper doc_analysis
+			// deliverable. Wrapped so s.proactiveRelay (built after the chat handler)
+			// is resolved at call time.
+			PublishDeliverable: func(text string) (bool, error) {
+				return s.proactiveRelay.publishDeliverable(text)
+			},
 			IngestEvent: s.ingestPhoneEventAsync,
 		}),
 		handlersession.ExecMethods(handlersession.ExecDeps{

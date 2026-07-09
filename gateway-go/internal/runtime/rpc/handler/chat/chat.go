@@ -69,6 +69,13 @@ type Deps struct {
 		// the updated item; used by miniapp.workfeed.rewrite.
 		Rewrite(id, newBody string) (workfeed.Item, error)
 	}
+	// PublishDeliverable files a document-analysis result as a proper doc_analysis
+	// work-feed card (derived title, substance-gated) instead of a raw capture card.
+	// Returns (true, nil) when a card was filed; (false, nil) when the analysis was
+	// too thin to be a deliverable — the caller then falls back to the raw capture
+	// card so a shared document is never dropped. Wired to the proactive relay's card
+	// builder; nil keeps the legacy raw capture card.
+	PublishDeliverable func(text string) (bool, error)
 	// IngestEvent queues a proactive 비서실장 judgment turn for a phone event — the
 	// native NotificationListener's broad capture (the gateway triages: OTP/spam/
 	// routine → NO_REPLY, signal → work feed + push). Optional; nil disables
