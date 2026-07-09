@@ -136,3 +136,37 @@ func TestClassifyEvolveRejection_ExclusiveFirstMatch(t *testing.T) {
 		}
 	}
 }
+
+// The same mechanism on two models is two clusters — fixes are usually
+// model-specific (Self-Harness). Legacy rows without a model fold together.
+func TestFailureEvidenceClusters_ModelAxisSplits(t *testing.T) {
+	tr := newTestTracker(t)
+	now := time.UnixMilli(1_783_500_000_000)
+	hourMs := int64(time.Hour / time.Millisecond)
+
+	for i, model := range []string{"m2.5", "m2.5", "qwen3.5", ""} {
+		appendFunnel(t, tr.usagePath, UsageRecord{
+			SkillName: "ocr-run", SessionKey: "client:a", Success: false, Model: model,
+			ErrorMsg: "bash: timeout after 120 seconds", UsedAt: now.UnixMilli() - int64(i+1)*hourMs, Source: UsageSourceReal,
+		})
+	}
+
+	tr.mu.Lock()
+	clusters := tr.computeFailureEvidenceClustersLocked(now, 0)
+	tr.mu.Unlock()
+
+	if len(clusters) != 3 {
+		t.Fatalf("want 3 clusters (m2.5 x2, qwen3.5, legacy \"\"), got %d: %+v", len(clusters), clusters)
+	}
+	top := clusters[0]
+	if top.Model != "m2.5" || top.Support != 2 {
+		t.Fatalf("dominant cluster should be m2.5 with support 2, got %+v", top)
+	}
+	seen := map[string]int{}
+	for _, c := range clusters {
+		seen[c.Model] = c.Support
+	}
+	if seen["qwen3.5"] != 1 || seen[""] != 1 {
+		t.Fatalf("per-model split wrong: %+v", clusters)
+	}
+}

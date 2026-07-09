@@ -25,10 +25,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 )
 
-// selfImproveSweepMinInterval throttles the generator. 48h (vs the review
-// lane's per-tick reactivity): sweeps mine week-scale signal accumulation,
-// and a starving queue is a slow condition, not an incident.
-const selfImproveSweepMinInterval = 48 * time.Hour
+// selfImproveSweepMinInterval throttles the generator. 12h (was 48h; measured-
+// bets posture 2026-07-09): with the failure evidence bundle and the held-out
+// bench gates in place, a starving queue can be re-mined twice a day — the
+// signal gate below still means no fresh signals → no turn, so quiet weeks
+// cost nothing extra.
+const selfImproveSweepMinInterval = 12 * time.Hour
 
 // sweepEvidenceClusterLimit caps how many failure clusters the nudge renders.
 // Top clusters by support are what the turn should target; the long tail stays
@@ -125,6 +127,9 @@ func formatSweepCluster(c genesis.FailureClusterSummary) string {
 		skill = "(unknown-skill)"
 	}
 	line := fmt.Sprintf("[%s] %s · %s · %d건", c.Kind, skill, c.Signature, c.Support)
+	if c.Model != "" {
+		line += " · model=" + c.Model
+	}
 	if c.LastAt > 0 {
 		line += " · 최근 " + time.UnixMilli(c.LastAt).Format("01-02")
 	}
