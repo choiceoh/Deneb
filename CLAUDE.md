@@ -63,6 +63,7 @@ codegraph query    NAME      # 이름으로 심볼 검색
 ```
 
 - **인덱스는 로컬 `.codegraph/`**(SQLite, gitignore됨)에 저장, **데몬 파일와처가 편집을 2초 내 자동동기** — 수동 명령 불필요, 항상 신선. Go·Kotlin·TypeScript·Rust 등 전부 인덱싱.
+- **새 워크트리는 SessionStart 훅(`codegraph-autoindex.py`)이 자동 준비** — 형제 워크트리 인덱스를 복사+`sync`(<1s)하거나 없으면 풀 init, 백그라운드라 세션 지연 0. 즉 워크트리마다 손수 `codegraph init` 할 필요 없다.
 - 설치/재빌드: `npm i -g @colbymchenry/codegraph` → `codegraph init`. 재인덱싱은 `codegraph index`, MCP 재배선은 `codegraph install`. GPU·컴파일 불필요(aarch64 네이티브). 상세는 메모리 [[codegraph-adoption]] 참조.
 - 주의: CodeGraph는 **소스 코드 전용**. 위키/업무 지식 그래프는 별개 도구(`graphify` 챗 툴 → `~/.deneb/wiki-graph`)이며 이걸로 대체 불가.
 
