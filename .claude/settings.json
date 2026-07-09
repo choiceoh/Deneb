@@ -17,6 +17,17 @@
             "statusMessage": "rules-gate: 경로별 룰 첫 접촉 안내"
           }
         ]
+      },
+      {
+        "matcher": "Grep|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/dev/greppy-nudge.py\"",
+            "timeout": 10,
+            "statusMessage": "greppy: 심볼 검색은 greppy로 유도"
+          }
+        ]
       }
     ]
   }
