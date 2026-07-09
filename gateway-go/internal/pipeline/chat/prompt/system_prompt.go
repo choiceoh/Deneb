@@ -29,7 +29,7 @@ var toolCategories = []struct {
 
 // buildStaticCacheKey returns a stable string key for the static prompt block
 // based on the sorted tool name list.
-func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo, topicCacheKey, personaCacheKey string, coding bool, codingRepoKey string) string {
+func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo, topicCacheKey, personaCacheKey string) string {
 	names := make([]string, 0, len(toolDefs)+len(deferredTools))
 	for _, d := range toolDefs {
 		names = append(names, d.Name)
@@ -39,16 +39,6 @@ func buildStaticCacheKey(toolDefs []ToolDef, deferredTools []DeferredToolInfo, t
 	}
 	sort.Strings(names)
 	base := strings.Join(names, ",")
-	// 코드모드 builds the implementer static block; the repo-docs hash keys it
-	// per repo/doc-version so two coding sessions on different repos (or after
-	// a rule edit) never share an entry. Doc-less repos share the bare |coding
-	// entry — their bytes are identical.
-	if coding {
-		base += "|coding"
-		if codingRepoKey != "" {
-			base += "|repo=" + codingRepoKey
-		}
-	}
 	// Persona override: only an edited persona carries a key, so the default
 	// (unedited) 업무 key stays byte-identical to before and keeps sharing the
 	// existing Static cache entry. An edit's content hash gives it its own slot.
@@ -85,39 +75,22 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	// --- Static block (cached) ---
 	// The static block depends only on the tool set, which is fixed after server
 	// start. Cache it to avoid rebuilding ~2 KB of strings on every request.
-	cacheKey := buildStaticCacheKey(params.ToolDefs, params.DeferredTools, params.TopicCacheKey, params.PersonaCacheKey, params.Coding, params.CodingRepoCacheKey)
+	cacheKey := buildStaticCacheKey(params.ToolDefs, params.DeferredTools, params.TopicCacheKey, params.PersonaCacheKey)
 	if cached, ok := Cache.StaticPrompt(cacheKey); ok {
 		staticText = cached
 	} else {
 		var s strings.Builder
 
-		if params.Coding {
-			// 코드모드 (code: sessions): the implementer contract replaces the
-			// chief-of-staff persona wholesale, followed by the target repo's
-			// own rule docs. The 업무 work-loop sections below are skipped and
-			// the work context is withheld upstream (run_prepare).
-			s.WriteString(CodingPersona)
-			if params.CodingRepoContext != "" {
-				s.WriteString("## 프로젝트 규칙 (저장소 루트 CLAUDE.md/AGENTS.md)\n")
-				s.WriteString("아래는 작업 중인 저장소가 선언한 규칙이다(세션 시작 시점 동결). 커밋 형식·빌드/테스트 명령·금지사항을 그대로 따르라. 하위 디렉토리에 별도 CLAUDE.md/AGENTS.md나 docs/agent-rules/ 규칙 파일이 있으면 그 영역을 수정하기 전에 read로 직접 읽어라.\n\n")
-				s.WriteString(params.CodingRepoContext)
-				s.WriteString("\n\n")
-			} else {
-				s.WriteString("## 프로젝트 규칙\n")
-				s.WriteString("저장소 루트에서 CLAUDE.md/AGENTS.md를 찾지 못했다. 작업 전에 README와 기존 코드 관례를 먼저 확인하고, 하위 디렉토리에 CLAUDE.md/AGENTS.md가 보이면 그 영역을 수정하기 전에 read로 읽어라.\n\n")
-			}
+		// Identity + 역할 (chief-of-staff persona — see CLAUDE.md "비서실장형 단일
+		// 에이전트"). Editable via the Settings prompt corner: an override
+		// arrives as params.PersonaText (byte-stable per session, hash-keyed in
+		// the Static cache key); no override → DefaultPersona, byte-identical to
+		// the prior three inline WriteString calls.
+		if params.PersonaText != "" {
+			s.WriteString(strings.TrimSpace(params.PersonaText))
+			s.WriteString("\n\n")
 		} else {
-			// Identity + 역할 (chief-of-staff persona — see CLAUDE.md "비서실장형 단일
-			// 에이전트"). Editable via the Settings prompt corner: an override
-			// arrives as params.PersonaText (byte-stable per session, hash-keyed in
-			// the Static cache key); no override → DefaultPersona, byte-identical to
-			// the prior three inline WriteString calls.
-			if params.PersonaText != "" {
-				s.WriteString(strings.TrimSpace(params.PersonaText))
-				s.WriteString("\n\n")
-			} else {
-				s.WriteString(DefaultPersona)
-			}
+			s.WriteString(DefaultPersona)
 		}
 
 		// Topic background knowledge (per-forum-topic; config-mapped). Lives in
@@ -221,51 +194,48 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 			s.WriteString("자동 `<recall-context>`는 cue 기반 preflight라 턴 시작에 한 번 주입될 뿐이다 — 대화 도중 새 회상이 필요해지면 이 도구를 직접 사용하라.\n\n")
 		}
 
-		// 코드모드 skips the 업무 work-loop coaching (분석→위키, 작업 기억) below.
-		if !params.Coding {
-			// Analysis → wiki write-back loop (SOUL.md continuity contract).
-			s.WriteString("## 분석 → 위키 갱신\n")
-			s.WriteString("메일·거래·인물·프로젝트 분석에서 **새로 알게 된 사실**(역할 변경, 진행률, 거래 조건, 금액·기한, 결정 사항)은 같은 응답 안에서 즉시 `wiki(action=\"write\")` 또는 `wiki(action=\"log\")`로 기록한다. \"기록할까요?\" 같은 확인 금지 — 묻지 말고 실행하라. SOUL.md '연속성 확보' 원칙. 오늘 분석한 사실 위에 다음 분석이 쌓이려면 위키가 기억의 끝점이어야 한다.\n")
-			s.WriteString("**확신이 없으면 추측으로 리포트를 쓰지 마라.** 틀린 분석은 안 하느니만 못하고, 사용자가 그걸 믿고 움직이면 더 위험하다. 결론을 가르는 핵심 사실(이 인물이 누구인지, 이 거래의 맥락·조건, 이 건의 우선순위 등)이 불확실하거나 비어 있으면 — 그럴듯하게 메우지 말고, 모르는 부분을 분명히 밝힌 뒤 사용자에게 확인 질문을 먼저 하라. 받은 답은 즉시 위키에 기록해 **다음 분석부터는 같은 것을 다시 틀리지도, 다시 묻지도 않게** 하라(불확실 → 질문 → 기록의 닫힌 루프).\n")
-			s.WriteString("기록은 **습관은 일관되게, 형식은 사안에 맞게**: 각 프로젝트·거래·인물 페이지는 그 사안에 중요한 축을 페이지가 스스로 정해 최신 상태로 유지하라 — 모든 건에 같은 양식·필드를 강요하지 마라(부동산은 잔금·등기, 개발은 마일스톤·검수처럼 무엇이 중요한지가 다르다). 변하지 않는 규율은 셋뿐이다: ① 근거(메일 문구·날짜·금액)를 사실과 함께 남긴다, ② 관련 인물·프로젝트는 `related`로 연결한다, ③ 빠뜨리지 않고 갱신한다.\n\n")
+		// Analysis → wiki write-back loop (SOUL.md continuity contract).
+		s.WriteString("## 분석 → 위키 갱신\n")
+		s.WriteString("메일·거래·인물·프로젝트 분석에서 **새로 알게 된 사실**(역할 변경, 진행률, 거래 조건, 금액·기한, 결정 사항)은 같은 응답 안에서 즉시 `wiki(action=\"write\")` 또는 `wiki(action=\"log\")`로 기록한다. \"기록할까요?\" 같은 확인 금지 — 묻지 말고 실행하라. SOUL.md '연속성 확보' 원칙. 오늘 분석한 사실 위에 다음 분석이 쌓이려면 위키가 기억의 끝점이어야 한다.\n")
+		s.WriteString("**확신이 없으면 추측으로 리포트를 쓰지 마라.** 틀린 분석은 안 하느니만 못하고, 사용자가 그걸 믿고 움직이면 더 위험하다. 결론을 가르는 핵심 사실(이 인물이 누구인지, 이 거래의 맥락·조건, 이 건의 우선순위 등)이 불확실하거나 비어 있으면 — 그럴듯하게 메우지 말고, 모르는 부분을 분명히 밝힌 뒤 사용자에게 확인 질문을 먼저 하라. 받은 답은 즉시 위키에 기록해 **다음 분석부터는 같은 것을 다시 틀리지도, 다시 묻지도 않게** 하라(불확실 → 질문 → 기록의 닫힌 루프).\n")
+		s.WriteString("기록은 **습관은 일관되게, 형식은 사안에 맞게**: 각 프로젝트·거래·인물 페이지는 그 사안에 중요한 축을 페이지가 스스로 정해 최신 상태로 유지하라 — 모든 건에 같은 양식·필드를 강요하지 마라(부동산은 잔금·등기, 개발은 마일스톤·검수처럼 무엇이 중요한지가 다르다). 변하지 않는 규율은 셋뿐이다: ① 근거(메일 문구·날짜·금액)를 사실과 함께 남긴다, ② 관련 인물·프로젝트는 `related`로 연결한다, ③ 빠뜨리지 않고 갱신한다.\n\n")
 
-			// Deliverable → work-feed publish. A user-requested analysis (contract/
-			// document review, research writeup) is a deliverable the user must
-			// *receive* — filing it to the wiki + a chat summary buries it. Static,
-			// gated on the workfeed tool being in the session (deferred is fine:
-			// toolSet includes deferred tools and buildStaticCacheKey folds the
-			// deferred list into the cache key, so this block's presence is keyed —
-			// same pattern as the polaris/wiki blocks above; no cache marker added).
-			if _, ok := toolSet["workfeed"]; ok {
-				s.WriteString("## 산출물 → 작업 피드 발행\n")
-				s.WriteString("사용자가 **요청한 분석 산출물**(문서·계약서 검토, 자료 정리·리서치처럼 그 자체가 딜리버러블인 결과)은 위키 저장에서 그치지 말고 — 같은 응답 안에서 `workfeed(action=\"publish\")`로 **작업 피드 카드로 발행**하라. 위키는 기억(내가 찾아보는 곳)이고 작업 피드는 전달(사용자가 받는 곳)이다: 챗 요약만 남기고 산출물을 위키에 묻으면 사용자는 결과를 받지 못한다. title=사안 식별 제목, body=핵심 결론 + 액션아이템(회람 대상·기한 포함), 근거 위키 페이지가 있으면 `ref_type=\"wiki\"`·`ref_id=`경로로 연결한다. 발행 후 챗에는 짧은 요지만 남긴다. 단순 질의응답·잡담·중간 사고에는 발행하지 마라 — 사용자가 결과물로 인지할 산출물에만.\n\n")
-			}
-
-			// User-model write-back: the same-turn counterpart of the dreamer's
-			// batched 사용자 synthesis (wiki/dreamer_apply.go). The main agent
-			// hears a standing preference with full conversational context —
-			// recording it immediately beats waiting for the next dream cycle;
-			// the dreamer's dedup/supersede pass folds any overlap.
-			s.WriteString("## 사용자 모델 갱신\n")
-			s.WriteString("사용자가 **지속되는 선호·스타일 교정·개인 맥락**을 드러내면 (\"앞으로/항상/다음부터 …\", 말투·형식·호칭 교정, 업무 리듬·습관, 반복되는 지시) — 같은 응답 안에서 즉시 `wiki(action=\"write\", category=\"사용자\")`로 기록하라. 확인 질문 금지 — 조용히 기록한다.\n")
-			s.WriteString("- 먼저 `wiki(action=\"search\")`로 기존 사용자 페이지를 확인하고, 있으면 그 페이지 본문을 **현재값으로 교체**하라 — 사용자 페이지는 이력 로그가 아니라 현행 정책이다. 없으면 한 사실=한 페이지로 작게 생성한다 (`사용자/<주제>.md`).\n")
-			s.WriteString("- 근거(날짜·발화 요지)를 본문에 남기고 cues를 채워라. '이번만' 류 일회성 지시·추측·과잉 일반화는 기록 금지 — 명시했거나 반복된 것만.\n\n")
-
-			// Elicited proprietary knowledge guard: market/competitor/partner
-			// facts the model cannot derive from training or the web — it must
-			// search the wiki and, when empty, ask the user instead of guessing.
-			s.WriteString("## 사내 고유 지식 (시장·경쟁·거래처)\n")
-			s.WriteString("경쟁사·시장 세분·거래처 판단처럼 **사용자가 직접 알려주는 사내·시장 지식**은 모델 기본 지식·웹에 없거나 (신생·니치 시장이라) 틀리다. 이런 질문엔 일반론·추측으로 답하지 마라 — 먼저 `knowledge(op=\"recall\")`/`wiki(action=\"search\")`로 위키를 찾고, **비어 있으면 지어내지 말고** \"아직 위키에 없다\"고 밝힌 뒤 사용자에게 물어 채운다(받은 답은 즉시 `wiki(action=\"write\")`로 기록, `사용자지식` 태그). 위키에 있으면 그 페이지의 작성일·출처·확신도를 근거로 답한다.\n\n")
-
-			// Work-memory reflex: wiki/diary/polaris own the retired memory
-			// service's useful behavior without keeping a separate skill or
-			// recall layer.
-			s.WriteString("## 작업 기억 (wiki/diary)\n")
-			s.WriteString("wiki·diary·polaris·graphify는 어제의 나와 오늘의 나를 잇는 기억 인프라다. 외부 사건 분석(↑ 위 섹션)이 아니라 **내가 한 작업 자체**를 다룬다. 두 곳에서 발화한다:\n")
-			s.WriteString("- **작업 전**: 도구 호출 2회 이상이 필요한 새 작업(설치/설정/배포/누구에게 응답 작성 등)을 시작할 때 — **딱 한 번** `polaris(action=\"search\")` 또는 `knowledge(op=\"recall\")`/`wiki(action=\"search\")`로 \"전에 비슷한 거 한 적 있나\" 검색. 같은 작업 발견 → 거기서 시작. 검색은 빠르고 실수보다 싸다.\n")
-			s.WriteString("- **작업 후**: 시행착오·실패·회피법은 자동 일지에 쌓인다. 재사용 가치가 있거나 반복될 주제면 `wiki(action=\"write\")`/`knowledge(op=\"record\")`로 관련 페이지에 병합하고, 관련 항목은 `related`와 `[[wikilink]]`로 잇는다.\n")
-			s.WriteString("- **충돌 처리**: 이번 작업 결과가 과거 기록과 다르면 본문에 `모순/갱신:` 근거와 날짜를 남기고 `supersedes`로 대체되는 페이지를 표시한다. 오래된 거짓을 조용히 덮어쓰지 않는다.\n\n")
+		// Deliverable → work-feed publish. A user-requested analysis (contract/
+		// document review, research writeup) is a deliverable the user must
+		// *receive* — filing it to the wiki + a chat summary buries it. Static,
+		// gated on the workfeed tool being in the session (deferred is fine:
+		// toolSet includes deferred tools and buildStaticCacheKey folds the
+		// deferred list into the cache key, so this block's presence is keyed —
+		// same pattern as the polaris/wiki blocks above; no cache marker added).
+		if _, ok := toolSet["workfeed"]; ok {
+			s.WriteString("## 산출물 → 작업 피드 발행\n")
+			s.WriteString("사용자가 **요청한 분석 산출물**(문서·계약서 검토, 자료 정리·리서치처럼 그 자체가 딜리버러블인 결과)은 위키 저장에서 그치지 말고 — 같은 응답 안에서 `workfeed(action=\"publish\")`로 **작업 피드 카드로 발행**하라. 위키는 기억(내가 찾아보는 곳)이고 작업 피드는 전달(사용자가 받는 곳)이다: 챗 요약만 남기고 산출물을 위키에 묻으면 사용자는 결과를 받지 못한다. title=사안 식별 제목, body=핵심 결론 + 액션아이템(회람 대상·기한 포함), 근거 위키 페이지가 있으면 `ref_type=\"wiki\"`·`ref_id=`경로로 연결한다. 발행 후 챗에는 짧은 요지만 남긴다. 단순 질의응답·잡담·중간 사고에는 발행하지 마라 — 사용자가 결과물로 인지할 산출물에만.\n\n")
 		}
+
+		// User-model write-back: the same-turn counterpart of the dreamer's
+		// batched 사용자 synthesis (wiki/dreamer_apply.go). The main agent
+		// hears a standing preference with full conversational context —
+		// recording it immediately beats waiting for the next dream cycle;
+		// the dreamer's dedup/supersede pass folds any overlap.
+		s.WriteString("## 사용자 모델 갱신\n")
+		s.WriteString("사용자가 **지속되는 선호·스타일 교정·개인 맥락**을 드러내면 (\"앞으로/항상/다음부터 …\", 말투·형식·호칭 교정, 업무 리듬·습관, 반복되는 지시) — 같은 응답 안에서 즉시 `wiki(action=\"write\", category=\"사용자\")`로 기록하라. 확인 질문 금지 — 조용히 기록한다.\n")
+		s.WriteString("- 먼저 `wiki(action=\"search\")`로 기존 사용자 페이지를 확인하고, 있으면 그 페이지 본문을 **현재값으로 교체**하라 — 사용자 페이지는 이력 로그가 아니라 현행 정책이다. 없으면 한 사실=한 페이지로 작게 생성한다 (`사용자/<주제>.md`).\n")
+		s.WriteString("- 근거(날짜·발화 요지)를 본문에 남기고 cues를 채워라. '이번만' 류 일회성 지시·추측·과잉 일반화는 기록 금지 — 명시했거나 반복된 것만.\n\n")
+
+		// Elicited proprietary knowledge guard: market/competitor/partner
+		// facts the model cannot derive from training or the web — it must
+		// search the wiki and, when empty, ask the user instead of guessing.
+		s.WriteString("## 사내 고유 지식 (시장·경쟁·거래처)\n")
+		s.WriteString("경쟁사·시장 세분·거래처 판단처럼 **사용자가 직접 알려주는 사내·시장 지식**은 모델 기본 지식·웹에 없거나 (신생·니치 시장이라) 틀리다. 이런 질문엔 일반론·추측으로 답하지 마라 — 먼저 `knowledge(op=\"recall\")`/`wiki(action=\"search\")`로 위키를 찾고, **비어 있으면 지어내지 말고** \"아직 위키에 없다\"고 밝힌 뒤 사용자에게 물어 채운다(받은 답은 즉시 `wiki(action=\"write\")`로 기록, `사용자지식` 태그). 위키에 있으면 그 페이지의 작성일·출처·확신도를 근거로 답한다.\n\n")
+
+		// Work-memory reflex: wiki/diary/polaris own the retired memory
+		// service's useful behavior without keeping a separate skill or
+		// recall layer.
+		s.WriteString("## 작업 기억 (wiki/diary)\n")
+		s.WriteString("wiki·diary·polaris·graphify는 어제의 나와 오늘의 나를 잇는 기억 인프라다. 외부 사건 분석(↑ 위 섹션)이 아니라 **내가 한 작업 자체**를 다룬다. 두 곳에서 발화한다:\n")
+		s.WriteString("- **작업 전**: 도구 호출 2회 이상이 필요한 새 작업(설치/설정/배포/누구에게 응답 작성 등)을 시작할 때 — **딱 한 번** `polaris(action=\"search\")` 또는 `knowledge(op=\"recall\")`/`wiki(action=\"search\")`로 \"전에 비슷한 거 한 적 있나\" 검색. 같은 작업 발견 → 거기서 시작. 검색은 빠르고 실수보다 싸다.\n")
+		s.WriteString("- **작업 후**: 시행착오·실패·회피법은 자동 일지에 쌓인다. 재사용 가치가 있거나 반복될 주제면 `wiki(action=\"write\")`/`knowledge(op=\"record\")`로 관련 페이지에 병합하고, 관련 항목은 `related`와 `[[wikilink]]`로 잇는다.\n")
+		s.WriteString("- **충돌 처리**: 이번 작업 결과가 과거 기록과 다르면 본문에 `모순/갱신:` 근거와 날짜를 남기고 `supersedes`로 대체되는 페이지를 표시한다. 오래된 거짓을 조용히 덮어쓰지 않는다.\n\n")
 
 		// Tooling: compact categorized list (descriptions are in tool schemas).
 		s.WriteString("## Tooling\n")
@@ -306,15 +276,8 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	} // end else (cache miss)
 
 	// --- Semi-static block (skills — changes only when skills are added/removed) ---
-	// 코드모드 carries no skills block at all: Deneb skills are 업무 절차서
-	// (release/mail/CRM workflows) irrelevant inside an external repo worktree,
-	// and the fallback note below coaches `skills`/`sessions` — tools outside
-	// the coding preset. run_prepare withholds SkillsPrompt for coding, and this
-	// gate drops the fallback note too (empty semi-static → no block, no marker).
 	var ss strings.Builder
-	if params.Coding {
-		// no skills block
-	} else if params.SkillsPrompt != "" {
+	if params.SkillsPrompt != "" {
 		ss.WriteString("## 스킬 (전문 절차서)\n\n")
 		ss.WriteString("스킬은 특정 작업에 대한 검증된 절차서다. **직접 즉흥으로 하지 말고, 스킬이 있으면 반드시 따라라.**\n\n")
 		ss.WriteString("### 반드시 스킬을 사용하는 경우\n")
@@ -486,11 +449,6 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 		d.WriteString("대화, 설명, 토론, 조사, 브레인스토밍에 집중하세요.\n")
 		d.WriteString("파일이나 명령어 실행이 필요한 작업은 이 모드에서는 지원되지 않습니다.\n\n")
 	}
-
-	// NOTE: the old "현재 모드: 코딩" section that keyed on the implementer
-	// preset moved into CodingPersona (Static block, coding profile). It also
-	// mis-fired for spawned implementer sub-agents, which never run in a
-	// worktree — those now correctly get no worktree coaching.
 
 	// Messaging (merged: Reply Tags + Messaging + Silent Replies).
 	d.WriteString("## Messaging\n")

@@ -181,12 +181,10 @@ func TestShouldRecordRunDiarySkipsHeartbeatAndSystemSessions(t *testing.T) {
 	if shouldRecordRunDiary(RunParams{SessionKey: "system:diary-heartbeat", Message: "internal"}) {
 		t.Fatal("system session should not be recorded to diary")
 	}
-	// Sync-only surfaces excluded by design: coding worktrees (checkpoints are
-	// their history), cron payload prompts.
-	for _, key := range []string{"code:task-0703-1", "cron:morning-letter"} {
-		if shouldRecordRunDiary(RunParams{SessionKey: key, Message: "실질적인 내용이 있는 메시지"}) {
-			t.Errorf("%s: should NOT record diary", key)
-		}
+	// Sync-only surface excluded by design: cron payload prompts (their "user"
+	// message is a payload, not the user speaking).
+	if shouldRecordRunDiary(RunParams{SessionKey: "cron:morning-letter", Message: "실질적인 내용이 있는 메시지"}) {
+		t.Error("cron:morning-letter: should NOT record diary")
 	}
 	if !shouldRecordRunDiary(RunParams{SessionKey: "client:main:task:123", Message: "서브 대화도 일지에 남는다"}) {
 		t.Error("client sub-conversation should record diary")

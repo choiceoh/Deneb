@@ -11,7 +11,6 @@ import ai.deneb.deneb.DenebCalendarEventScreen
 import ai.deneb.deneb.DenebCalendarScreen
 import ai.deneb.deneb.DenebCategoriesScreen
 import ai.deneb.deneb.DenebCategoryPagesScreen
-import ai.deneb.deneb.DenebCodeModeScreen
 import ai.deneb.deneb.DenebConfigScreen
 import ai.deneb.deneb.DenebContactsScreen
 import ai.deneb.deneb.DenebCronEditScreen
@@ -271,10 +270,6 @@ data class DenebCronEdit(val cronId: String)
 @Serializable
 @SerialName("deneb_files")
 object DenebFiles
-
-@Serializable
-@SerialName("deneb_codemode")
-object DenebCodeMode
 
 @Composable
 fun App(
@@ -693,22 +688,6 @@ private fun AppContent(
                                             DenebFilesScreen(
                                                 client = client,
                                                 onBack = { navController.navigateUp() },
-                                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                                            )
-                                        }
-                                    }
-                                    denebComposable<DenebCodeMode> {
-                                        denebClient?.let { client ->
-                                            DenebCodeModeScreen(
-                                                client = client,
-                                                onBack = { navController.navigateUp() },
-                                                // Open the worktree's chat (key code:<id>) and jump to the
-                                                // chat screen — that's where turns edit the worktree, so the
-                                                // user keeps the work going there.
-                                                onOpenChat = { key ->
-                                                    client.loadConversation(key)
-                                                    navigateToDenebSection(navController, Home)
-                                                },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                                             )
                                         }

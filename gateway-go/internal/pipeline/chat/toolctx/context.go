@@ -25,7 +25,6 @@ const (
 	ctxKeyCheckpointer
 	ctxKeyAutoDelivery
 	ctxKeySkillConsult
-	ctxKeyWorkspaceOverride
 	ctxKeyToolExecStats
 	ctxKeyToolDryRun
 )
@@ -164,25 +163,6 @@ func WithToolPreset(ctx context.Context, preset string) context.Context {
 // ToolPresetFromContext extracts the tool preset from a context.
 func ToolPresetFromContext(ctx context.Context) string {
 	s, _ := ctx.Value(ctxKeyToolPreset).(string)
-	return s
-}
-
-// WithWorkspaceOverride binds this run's filesystem tools (read/write/edit,
-// search, exec) to a specific directory, overriding the workspace they were
-// registered with. A coding session sets this to its git worktree so the agent
-// edits the project there. An empty dir is a no-op (the registered default stays
-// in force), so non-coding turns are provably unaffected.
-func WithWorkspaceOverride(ctx context.Context, dir string) context.Context {
-	if dir == "" {
-		return ctx
-	}
-	return context.WithValue(ctx, ctxKeyWorkspaceOverride, dir)
-}
-
-// WorkspaceOverrideFromContext returns this run's workspace directory, or "" when
-// none is set (tools then use their registered default).
-func WorkspaceOverrideFromContext(ctx context.Context) string {
-	s, _ := ctx.Value(ctxKeyWorkspaceOverride).(string)
 	return s
 }
 

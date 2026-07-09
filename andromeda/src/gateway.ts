@@ -8,7 +8,7 @@ import { readJsonSSE } from "./sse";
 import { log } from "./log";
 import { getJSON, setJSON } from "./storage";
 import { isTauri } from "./tauri";
-import type { CodeSession, MailAttachment, PromptDetailOut, PromptListResponse, PromptRow } from "./types";
+import type { MailAttachment, PromptDetailOut, PromptListResponse, PromptRow } from "./types";
 
 const rpcLog = log.child("rpc");
 const chatLog = log.child("chat");
@@ -253,69 +253,6 @@ export interface SyncPullResult {
 // Pull events with seq > cursor (0 = from the start). limit is server-capped at 500.
 export const syncPull = (cfg: GatewayConfig, cursor = 0, limit = 100) =>
   callRpc<SyncPullResult>(cfg, "miniapp.sync.pull", { cursor, limit });
-
-// --- Coding mode (miniapp.code.*) — git-worktree coding sessions ---
-
-// List sessions for the rail (most-recently-updated first, gateway-sorted).
-export const codeSessions = (cfg: GatewayConfig) =>
-  callRpc<{ sessions?: CodeSession[] }>(cfg, "miniapp.code.sessions").then((r) => r.sessions ?? []);
-
-// List the operator's GitHub repos for the new-task picker (empty when gh is unauthenticated).
-export const codeRepos = (cfg: GatewayConfig) =>
-  callRpc<{ repos?: { owner?: string; name?: string }[] }>(cfg, "miniapp.code.repos").then((r) => r.repos ?? []);
-
-// Start a worktree + session for owner/name; taskId becomes branch deneb/<taskId>.
-export const codeStart = (cfg: GatewayConfig, owner: string, name: string, taskId: string, title?: string) =>
-  callRpc<{ session: CodeSession }>(cfg, "miniapp.code.start", { owner, name, taskId, title }).then((r) => r.session);
-
-// One session's current state.
-export const codeStatus = (cfg: GatewayConfig, id: string) =>
-  callRpc<{ session: CodeSession }>(cfg, "miniapp.code.status", { id }).then((r) => r.session);
-
-// The pull-request URL for a session's branch, or "" when none exists yet (or gh
-// is unauthenticated). Read-only lookup so the UI can show a "결과 보기" link.
-export const codePr = (cfg: GatewayConfig, id: string) =>
-  callRpc<{ url?: string }>(cfg, "miniapp.code.pr", { id }).then((r) => r.url ?? "");
-
-// Discard the worktree + session record ("작업 삭제").
-export const codeDiscard = (cfg: GatewayConfig, id: string) =>
-  callRpc<{ ok?: boolean }>(cfg, "miniapp.code.discard", { id }).then((r) => Boolean(r.ok));
-
-// Archive a session ("세션 닫기") — hides it from the rail but KEEPS the worktree,
-// branch, and PR (unlike discard, which deletes the worktree). For clearing
-// finished work off the list without losing it.
-export const codeClose = (cfg: GatewayConfig, id: string) =>
-  callRpc<{ ok?: boolean }>(cfg, "miniapp.code.close", { id }).then((r) => Boolean(r.ok));
-
-export interface CodeVerifyStep {
-  label?: string;
-  cmd?: string;
-  ok?: boolean;
-  output?: string;
-}
-
-// Deterministic build/test outcome (mirrors gateway code.VerifyResult).
-export interface CodeVerifyResult {
-  kind?: string;
-  passed?: boolean;
-  steps?: CodeVerifyStep[];
-}
-
-// Run build/test in the worktree and flip the session status (passed/failed).
-export const codeVerify = (cfg: GatewayConfig, id: string) =>
-  callRpc<{ session: CodeSession; result: CodeVerifyResult }>(cfg, "miniapp.code.verify", { id });
-
-// Save a checkpoint ("좋아요") — commit with a Korean summary.
-export const codeCheckpoint = (cfg: GatewayConfig, id: string, summary?: string) =>
-  callRpc<{ session: CodeSession }>(cfg, "miniapp.code.checkpoint", { id, summary }).then((r) => r.session);
-
-// Step back one — the "되돌리기".
-export const codeUndo = (cfg: GatewayConfig, id: string) =>
-  callRpc<{ session: CodeSession }>(cfg, "miniapp.code.undo", { id }).then((r) => r.session);
-
-// Push the task branch to GitHub (publish — up to, not including, the merge).
-export const codePush = (cfg: GatewayConfig, id: string) =>
-  callRpc<{ ok?: boolean }>(cfg, "miniapp.code.push", { id }).then((r) => Boolean(r.ok));
 
 // --- Calendar proposals (miniapp.calendar.proposals.*) ---
 

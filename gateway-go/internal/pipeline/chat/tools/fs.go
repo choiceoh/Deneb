@@ -157,9 +157,6 @@ func ToolRead(defaultDir string, extraReadRoots ...string) ToolFunc {
 		}
 
 		dir := defaultDir
-		if w := toolctx.WorkspaceOverrideFromContext(ctx); w != "" {
-			dir = w
-		}
 		path := ResolvePathWithRoots(p.FilePath, dir, extraReadRoots)
 		if err := CheckProtectedPath(path, "read"); err != nil {
 			return "", err
@@ -431,9 +428,6 @@ func ToolWrite(defaultDir string) ToolFunc {
 		}
 
 		dir := defaultDir
-		if w := toolctx.WorkspaceOverrideFromContext(ctx); w != "" {
-			dir = w
-		}
 		path := ResolvePath(p.FilePath, dir)
 		// A directory target yields a confusing "rename: is a directory" error
 		// from atomicfile below; reject it up front with a clear message.
@@ -488,9 +482,6 @@ func ToolEdit(defaultDir string) ToolFunc {
 		}
 
 		dir := defaultDir
-		if w := toolctx.WorkspaceOverrideFromContext(ctx); w != "" {
-			dir = w
-		}
 		path := ResolvePath(p.FilePath, dir)
 		if err := CheckProtectedPath(path, "edit"); err != nil {
 			return "", err

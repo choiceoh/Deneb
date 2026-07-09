@@ -123,35 +123,6 @@ func TestAllowedTools_Implementer(t *testing.T) {
 	}
 }
 
-func TestAllowedTools_Coding(t *testing.T) {
-	allowed := AllowedTools(PresetCoding)
-	if allowed == nil {
-		t.Fatal("coding preset should return non-nil allowed set")
-	}
-	// Worktree coding surface: inspect + mutate + shell + web docs lookup.
-	for _, name := range []string{
-		"read", "grep", "read_spillover",
-		"write", "edit", "exec", "process",
-		"web", "fetch_tools",
-	} {
-		if _, ok := allowed[name]; !ok {
-			t.Errorf("coding preset should include %q", name)
-		}
-	}
-	// The whole point vs implementer: no 업무 memory / personal-data surfaces
-	// inside an external repo worktree, and no spawn (children would not
-	// inherit the worktree binding).
-	for _, name := range []string{
-		"mail_archive", "contacts", "graphify", "wiki", "knowledge", "polaris",
-		"message", "send_file", "cron", "gateway", "calendar", "skills",
-		"sessions_spawn", "subagents", "sessions",
-	} {
-		if _, ok := allowed[name]; ok {
-			t.Errorf("coding preset should NOT include %q", name)
-		}
-	}
-}
-
 func TestAllowedTools_Verifier(t *testing.T) {
 	allowed := AllowedTools(PresetVerifier)
 	if allowed == nil {
@@ -194,7 +165,7 @@ func TestSpawnPresets_CannotSpawn(t *testing.T) {
 func TestIsValid(t *testing.T) {
 	for _, p := range []Preset{
 		PresetNone, PresetConversation, PresetBoot, PresetSelfReview,
-		PresetResearcher, PresetImplementer, PresetVerifier, PresetCoding,
+		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch,
 	} {
 		if !IsValid(p) {
 			t.Errorf("IsValid(%q) should be true", p)
@@ -207,8 +178,8 @@ func TestIsValid(t *testing.T) {
 
 func TestKnownPresets(t *testing.T) {
 	presets := KnownPresets()
-	if len(presets) != 8 {
-		t.Errorf("got %d, want 8 known presets", len(presets))
+	if len(presets) != 7 {
+		t.Errorf("got %d, want 7 known presets", len(presets))
 	}
 	for _, p := range presets {
 		if AllowedTools(p) == nil {

@@ -237,7 +237,7 @@ textarea {
 }
 /* 노트북 등 하단-채팅 모드 — 세로 분할: 위=작업(자료), 아래=데네브 채팅(전 폭). 같은
  * AIPanel 엘리먼트를 그리드 하단 셀에 재배치하므로 리마운트/대화 손실이 없다. 숨김 패널
- * (CodeView/ChatView=display:none)·드래그 스트립(absolute)은 그리드 흐름에서 빠진다. */
+ * (ChatView=display:none)·드래그 스트립(absolute)은 그리드 흐름에서 빠진다. */
 .workstation-shell.ws-bottom-chat {
   display: grid;
   grid-template-columns: var(--rail-w) minmax(0, 1fr);
@@ -348,21 +348,6 @@ textarea {
 }
 .nav-item.active .ico {
   color: var(--accent);
-}
-
-/* code-session status dot — overlaid on the rail icon (no extra row width on the
-   100px rail). Color = session status: 진행중 초록, 멈춤(완료) 검정, 문제 빨강. */
-.nav-item .ico.code-ico {
-  position: relative;
-}
-.code-dot {
-  position: absolute;
-  right: -3px;
-  bottom: -3px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 1.5px var(--panel); /* ring separates the dot from the icon */
 }
 
 /* form controls */

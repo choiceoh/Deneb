@@ -77,26 +77,9 @@ func executeAgentRun(
 		workspaceDir = resolveWorkspaceDirForPrompt()
 	}
 
-	// Coding sessions: re-establish the worktree binding BEFORE any session
-	// state is read. The binding (Mode/ToolPreset/WorkspaceDir) lives only in
-	// the in-memory session manager, which forgets terminal sessions after its
-	// GC window (1h for direct sessions) and everything on restart — without
-	// this, a turn into "code:<id>" silently runs unscoped (full 업무 toolset,
-	// fs/exec in the default workspace) and skips the turn-end checkpoint/
-	// verify. The server-side implementation reads the durable code store and
-	// is an idempotent no-op when the binding is already in place.
-	codingSession := isCodingSessionKey(params.SessionKey)
-	if codingSession && deps.coding.Rebind != nil {
-		deps.coding.Rebind(params.SessionKey)
-	}
-
 	// Pre-warm context file snapshot for this session so disk I/O happens
 	// before the parallel prep phase (no-op if already cached from a prior turn).
-	// Coding sessions skip it: their profile withholds the Deneb workspace
-	// context files entirely (run_prepare), so the snapshot would never be read.
-	if !codingSession {
-		prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
-	}
+	prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
 
 	// Cache session lookup: fetched once and reused throughout this function
 	// to avoid repeated map lookups + lock acquisitions.

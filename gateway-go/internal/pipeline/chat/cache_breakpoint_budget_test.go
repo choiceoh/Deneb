@@ -107,32 +107,6 @@ func TestCacheBreakpointBudget_AnthropicWithEmptySkillsPrompt(t *testing.T) {
 	}
 }
 
-func TestCacheBreakpointBudget_AnthropicCodingProfile(t *testing.T) {
-	// 코드모드 drops the skills block entirely (empty semi-static → no second
-	// system marker), so the profile runs at 3 breakpoints: Static + msg×2.
-	sysBlocks := prompt.BuildSystemPromptBlocks(prompt.SystemPromptParams{
-		WorkspaceDir:       "/data/code/acme/api/wt/task-1",
-		ToolDefs:           []prompt.ToolDef{{Name: "read"}, {Name: "exec"}},
-		Coding:             true,
-		CodingRepoContext:  "### CLAUDE.md\n\nrules",
-		CodingRepoCacheKey: "hashA",
-	})
-	msgs := []llm.Message{
-		llm.NewTextMessage("user", "u1"),
-		llm.NewTextMessage("assistant", "a1"),
-		llm.NewTextMessage("user", "u2"),
-	}
-	msgs = applyTrailingHookOrIdentity(llm.APIModeAnthropic, msgs)
-
-	got := countCacheBreakpoints(sysBlocks, msgs, nil)
-	if got > anthropicMaxBreakpoints {
-		t.Fatalf("breakpoint budget exceeded: got %d, max %d", got, anthropicMaxBreakpoints)
-	}
-	if got != 3 {
-		t.Errorf("expected 3 breakpoints (Static + msg×2, no skills semi-static), got %d", got)
-	}
-}
-
 func TestCacheBreakpointBudget_AnthropicSingleMessage(t *testing.T) {
 	// Static + Semi + msg×1 = 3. The hook only marks one trailing message
 	// when only one exists; the budget invariant still holds.

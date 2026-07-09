@@ -89,9 +89,6 @@ func finishTurnSideEffects(deps runDeps, params RunParams, result *agent.AgentRe
 	if result == nil {
 		return
 	}
-	// Coding mode: snapshot the worktree edits as a checkpoint and verify
-	// build/tests, flipping the rail status.
-	maybeCodingTurnEnd(deps, params, result.Text, logger)
 	// Diary recording: append raw conversation turn to today's diary.
 	// Wiki page curation is handled by the main LLM via system prompt.
 	maybeRecordRunDiary(deps, params, result, logger)
@@ -111,17 +108,12 @@ func finishTurnSideEffects(deps runDeps, params RunParams, result *agent.AgentRe
 //   - hard anchor: a document was actually attached + extracted THIS turn
 //     (hasDocumentAttachment) — no document, no card, ever;
 //   - mutual exclusion: skip if the model already used the workfeed tool this turn
-//     (it likely published via the guidance path — don't double-card);
-//   - scope: non-coding sessions only (coding turns produce no user deliverable).
+//     (it likely published via the guidance path — don't double-card).
 //
 // The substance floor (thin/narration-only answers) lives in publishDeliverable.
 // No-op unless the server wired deps.deliverablePublisher.
 func maybeAutoPublishDeliverable(deps runDeps, params RunParams, result *agent.AgentResult, logger *slog.Logger) {
 	if deps.deliverablePublisher == nil || result == nil {
-		return
-	}
-	// Coding turns don't produce user deliverables.
-	if sess := deps.sessions.Get(params.SessionKey); sess != nil && sess.Mode == session.ModeCode {
 		return
 	}
 	// Hard anchor: a document was ingested this turn. This is the false-positive
@@ -637,18 +629,6 @@ func emitJobEvent(deps runDeps, runID, phase string, aborted bool, errMsg string
 	})
 }
 
-// CodingTurnEndFunc fires after a coding-session turn completes. It checkpoints
-// the worktree edits and verifies build/tests, updating the rail status. The
-// concrete implementation lives in the server package (closing over the shared
-// code Manager + session store); the chat package stays free of the domain/code
-// import by talking through this closure. sessionKey is the coding chat session
-// key ("code:<taskID>"); summary is the turn's user message (the checkpoint label).
-// CodingTurnEndFunc receives the turn's fallback checkpoint label (the trimmed
-// user message) plus the head of the agent's final report text, so the server
-// side can synthesize a better Korean checkpoint label (tiny role) with the
-// fallback as its fail-open floor.
-type CodingTurnEndFunc func(ctx context.Context, sessionKey, fallbackSummary, resultText string)
-
 // maybeRecordRunDiary appends a successful run to today's diary and, when an
 // entry was actually recorded, feeds the dream-turn trigger. Shared by the
 // async lifecycle (handleRunSuccess) and the synchronous SendSync/
@@ -689,7 +669,7 @@ func maybeRecordRunDiary(deps runDeps, params RunParams, result *agent.AgentResu
 	shouldIncrementDream := dreamTurnFn != nil
 	prefSignalFn := deps.preferenceSignalFn
 	// Background work rides the server lifecycle ctx (canceled on shutdown,
-	// not on request completion) — same contract as maybeCodingTurnEnd.
+	// not on request completion).
 	bgCtx := deps.callbacks.shutdownCtx
 	if bgCtx == nil {
 		bgCtx = context.Background()
@@ -708,73 +688,4 @@ func maybeRecordRunDiary(deps runDeps, params RunParams, result *agent.AgentResu
 			dreamTurnFn(bgCtx)
 		}
 	})
-}
-
-// maybeCodingTurnEnd fires the coding checkpoint + verify hook after a
-// successful run of a Mode==code session; a no-op for every other session.
-// Runs detached on the server lifecycle ctx (verify can take minutes — well
-// past the turn's deadline). Shared by the async lifecycle (handleRunSuccess)
-// and the synchronous SendSync/SendSyncStream paths: the native client's
-// miniapp.chat.send is SendSync, so hooking only the async path left the
-// per-turn checkpoint/verify dead on the real 코드모드 surface (rail stuck on
-// "working", empty checkpoint list, nothing for undo to pop).
-func maybeCodingTurnEnd(deps runDeps, params RunParams, resultText string, logger *slog.Logger) {
-	if deps.coding.TurnEnd == nil || deps.sessions == nil {
-		return
-	}
-	sess := deps.sessions.Get(params.SessionKey)
-	if sess == nil || sess.Mode != session.ModeCode {
-		return
-	}
-	fn := deps.coding.TurnEnd
-	// Prefer the server lifecycle ctx so the background verify is cancelled
-	// on shutdown; fall back to Background (still bounded below) if unset.
-	bgCtx := deps.callbacks.shutdownCtx
-	if bgCtx == nil {
-		bgCtx = context.Background()
-	}
-	sessionKey := params.SessionKey
-	summary := summarizeForCheckpoint(params.Message)
-	resultHead := headRunes(resultText, 600)
-	safego.GoWithSlog(logger, "coding-turn-end", func() {
-		hookCtx, cancel := context.WithTimeout(bgCtx, 6*time.Minute)
-		defer cancel()
-		fn(hookCtx, sessionKey, summary, resultHead)
-	})
-}
-
-// headRunes returns at most n runes of s (rune-safe for Korean text).
-func headRunes(s string, n int) string {
-	r := []rune(strings.TrimSpace(s))
-	if len(r) <= n {
-		return string(r)
-	}
-	return string(r[:n])
-}
-
-// CodingRebindFunc re-establishes a coding session's worktree binding
-// (Mode/ToolPreset/WorkspaceDir in the session manager) from the durable code
-// store before a turn runs. The in-memory binding is lost on session-manager GC
-// (terminal direct sessions expire after 1h) and on every restart; without the
-// rebind a code: turn silently runs unscoped — full 업무 toolset, fs/exec in
-// the default workspace — and skips the turn-end checkpoint/verify. Must be
-// idempotent and cheap: it is called at the start of every coding turn.
-type CodingRebindFunc func(sessionKey string)
-
-// summarizeForCheckpoint turns the turn's user message into a short Korean commit
-// summary for the coding checkpoint. The user's own words are the most faithful
-// label — no LLM call needed (and none of the analysis-role cloud cost).
-func summarizeForCheckpoint(msg string) string {
-	msg = strings.TrimSpace(msg)
-	if msg == "" {
-		return "변경 저장"
-	}
-	if i := strings.IndexByte(msg, '\n'); i >= 0 {
-		msg = strings.TrimSpace(msg[:i])
-	}
-	r := []rune(msg)
-	if len(r) > 80 {
-		return strings.TrimSpace(string(r[:80])) + "…"
-	}
-	return msg
 }

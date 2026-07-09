@@ -53,22 +53,11 @@ func resolveModel(
 	// RoleVision) so a main model with no vision tower (e.g. DeepSeek-V4-Flash)
 	// never receives image blocks it would strip or reject. OPT-IN: FullModelID
 	// is "" until configured, so this is a no-op and image turns fall through to
-	// the main model exactly as before. Checked before the 코드모드 block so an
-	// image in a coding turn still gets a model that can see it.
+	// the main model exactly as before.
 	if model == "" && deps.registry != nil && hasImageAttachment(params.Attachments) {
 		if v := deps.registry.FullModelID(modelrole.RoleVision); v != "" {
 			model = v
 			initialRole = modelrole.RoleVision
-		}
-	}
-	// 코드모드 (code: session key): when the operator assigned a coding model
-	// (agents.codingModel → RoleCoding — the same role spawned implementer
-	// sub-agents use), coding turns route to it. Opt-in: unconfigured
-	// deployments fall through to the main model unchanged.
-	if model == "" && deps.registry != nil && isCodingSessionKey(params.SessionKey) {
-		if cm := deps.registry.FullModelID(modelrole.RoleCoding); cm != "" {
-			model = cm
-			initialRole = modelrole.RoleCoding
 		}
 	}
 	if model == "" {

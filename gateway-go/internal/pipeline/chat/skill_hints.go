@@ -49,12 +49,8 @@ func cachedResolvedSkills() []skills.PromptSkill {
 //
 // sessionToolPreset is the run's effective preset: the hint instructs a
 // `skills(action="read")` call, so a preset whose allow-list excludes the
-// skills tool (btw:* runs use "conversation", code: sessions use "coding")
-// would turn the hint into a guaranteed tool-not-allowed error — no hint
-// beats a hint at a blocked door. Coding sessions are excluded even when
-// unbound (empty preset): the coding profile deliberately withholds the 업무
-// context (run_prepare), and 업무 skill pointers inside an external repo
-// worktree are off-profile noise.
+// skills tool (btw:* runs use "conversation") would turn the hint into a
+// guaranteed tool-not-allowed error — no hint beats a hint at a blocked door.
 func buildSkillHints(params RunParams, sessionToolPreset string, resolved []skills.PromptSkill) (string, []string) {
 	if params.EphemeralUser || params.SkipRecall {
 		return "", nil
@@ -62,7 +58,7 @@ func buildSkillHints(params RunParams, sessionToolPreset string, resolved []skil
 	if strings.HasPrefix(params.SessionKey, "system:") {
 		return "", nil
 	}
-	if isCodingSessionKey(params.SessionKey) || !presetAllowsSkillsTool(sessionToolPreset) {
+	if !presetAllowsSkillsTool(sessionToolPreset) {
 		return "", nil
 	}
 	message := strings.ToLower(strings.TrimSpace(params.Message))

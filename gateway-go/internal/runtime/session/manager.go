@@ -35,18 +35,6 @@ const (
 	KindSubagent Kind = "subagent"
 )
 
-// SessionMode controls the behavioral mode of a session.
-// Each mode gates different capabilities (tool sets, etc.).
-type SessionMode string
-
-const (
-	// ModeNormal is the default mode — full tools.
-	ModeNormal SessionMode = ""
-	// ModeCode is a coding session: fs/exec tools bind to a git worktree
-	// (Session.WorkspaceDir) and the turn runs with the implementer tool preset.
-	ModeCode SessionMode = "code"
-)
-
 // IsInternal returns true for session kinds that are system-internal
 // (cron, subagent) and should be excluded from user-facing listings.
 func (k Kind) IsInternal() bool {
@@ -112,21 +100,19 @@ type AgentConfig struct {
 // ExecConfig, AgentConfig) for readability; they remain flat in JSON.
 type Session struct {
 	// Core identity and lifecycle.
-	Key            string      `json:"key"`
-	Kind           Kind        `json:"kind"`
-	Mode           SessionMode `json:"mode,omitempty"`
-	Status         RunStatus   `json:"status,omitempty"`
-	Channel        string      `json:"channel,omitempty"`
-	Model          string      `json:"model,omitempty"`
-	WorkspaceDir   string      `json:"workspaceDir,omitempty"` // coding sessions: git worktree fs/exec bind to
-	UpdatedAt      int64       `json:"updatedAt,omitempty"`
-	StartedAt      *int64      `json:"startedAt,omitempty"`
-	EndedAt        *int64      `json:"endedAt,omitempty"`
-	RuntimeMs      *int64      `json:"runtimeMs,omitempty"`
-	AbortedLastRun bool        `json:"abortedLastRun"`
-	CreatedAt      time.Time   `json:"-"`
-	SessionID      string      `json:"sessionId,omitempty"`
-	Label          string      `json:"label,omitempty"`
+	Key            string    `json:"key"`
+	Kind           Kind      `json:"kind"`
+	Status         RunStatus `json:"status,omitempty"`
+	Channel        string    `json:"channel,omitempty"`
+	Model          string    `json:"model,omitempty"`
+	UpdatedAt      int64     `json:"updatedAt,omitempty"`
+	StartedAt      *int64    `json:"startedAt,omitempty"`
+	EndedAt        *int64    `json:"endedAt,omitempty"`
+	RuntimeMs      *int64    `json:"runtimeMs,omitempty"`
+	AbortedLastRun bool      `json:"abortedLastRun"`
+	CreatedAt      time.Time `json:"-"`
+	SessionID      string    `json:"sessionId,omitempty"`
+	Label          string    `json:"label,omitempty"`
 
 	// Token accounting (cleared on compaction).
 	InputTokens  *int64 `json:"inputTokens,omitempty"`

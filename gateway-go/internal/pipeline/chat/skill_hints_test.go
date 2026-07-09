@@ -75,8 +75,8 @@ func TestBuildSkillHints_CapAndOrder(t *testing.T) {
 
 // TestBuildSkillHints_Gates: system sessions (skill-review forks would
 // self-trigger on SKILL.md bodies), ephemeral/recall-suppressed runs, empty
-// messages, triggerless catalogs, skills-tool-less presets (the hint would
-// instruct a blocked call), and coding sessions all yield no hint.
+// messages, triggerless catalogs, and skills-tool-less presets (the hint would
+// instruct a blocked call) all yield no hint.
 func TestBuildSkillHints_Gates(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -91,10 +91,6 @@ func TestBuildSkillHints_Gates(t *testing.T) {
 		// btw:* side questions run with the "conversation" preset, whose
 		// allow-list has no skills tool — the hinted call would be rejected.
 		{"conversation preset (btw)", RunParams{SessionKey: "btw:abc123", Message: "계약서 검토"}, "conversation"},
-		// code: sessions run the "coding" preset (no skills tool), and even an
-		// unbound coding session (empty preset) is off-profile for 업무 skills.
-		{"coding preset", RunParams{SessionKey: "code:fix-login", Message: "계약서 검토"}, "coding"},
-		{"coding session without preset", RunParams{SessionKey: "code:fix-login", Message: "계약서 검토"}, ""},
 	}
 	for _, tc := range cases {
 		if out, names := buildSkillHints(tc.params, tc.preset, hintSkills()); out != "" || len(names) != 0 {

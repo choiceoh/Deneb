@@ -13,7 +13,6 @@ const (
 	PresetImplementer  Preset = "implementer"   // spawn preset: researcher + file mutation + shell
 	PresetVerifier     Preset = "verifier"      // spawn preset: read + build/test execution
 	PresetWikiResearch Preset = "wiki-research" // autonomous wiki refresh: researcher minus web (internal sources only)
-	PresetCoding       Preset = "coding"        // 코드모드 (code: sessions): worktree coding, no 업무 memory/personal-data tools
 )
 
 // conversationTools are minimal tools for conversation mode (대화모드).
@@ -114,23 +113,6 @@ var implementerTools = union(researcherTools, toSet(
 	"write", "exec",
 ))
 
-// codingTools back 코드모드 (code: sessions, ConfigureCoding): file inspection +
-// mutation + shell + web docs lookup, and nothing personal. Deliberately NOT
-// derived from implementerTools: that preset carries the Deneb 업무 memory
-// surfaces (mail_archive/contacts/wiki/knowledge/polaris/graphify), which are
-// noise — and a privacy leak — inside an external GitHub repo worktree. The
-// coding profile withholds the 업무 context from the prompt (run_prepare), so
-// the tool surface must match or the swap is half-done. No sessions_spawn: a
-// spawned child would not inherit the worktree binding and would edit the
-// default workspace (follow-up if fan-out is ever needed).
-var codingTools = toSet(
-	"edit", "process", // deferred — loaded via fetch_tools
-	"read", "grep", "read_spillover",
-	"write", "exec",
-	"web",
-	"fetch_tools",
-)
-
 // verifierTools: read + execute, nothing else — build/test/behavior
 // validation. No write surface (a verifier that can patch the code it judges
 // defeats the role) and no research surfaces (web/mail/wiki belong to the
@@ -160,8 +142,6 @@ func AllowedTools(preset Preset) map[string]struct{} {
 		return verifierTools
 	case PresetWikiResearch:
 		return wikiResearchTools
-	case PresetCoding:
-		return codingTools
 	default:
 		return nil
 	}
@@ -171,8 +151,7 @@ func AllowedTools(preset Preset) map[string]struct{} {
 func IsValid(preset Preset) bool {
 	switch preset {
 	case PresetNone, PresetConversation, PresetBoot, PresetSelfReview,
-		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch,
-		PresetCoding:
+		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch:
 		return true
 	default:
 		return false
@@ -184,7 +163,6 @@ func KnownPresets() []Preset {
 	return []Preset{
 		PresetConversation, PresetBoot, PresetSelfReview,
 		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch,
-		PresetCoding,
 	}
 }
 

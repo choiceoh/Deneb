@@ -104,7 +104,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(screen.queryByRole("button", { name: "Deneb 패널 열기" })).not.toBeInTheDocument();
   });
 
-  it("keeps Ctrl+C for copy — editing combos never switch panes (code moved to Ctrl+D)", async () => {
+  it("keeps Ctrl+C for copy — editing combos never switch panes", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,
       dataProvider,
@@ -115,11 +115,9 @@ describe("Workstation (connected, fixtures)", () => {
     fireEvent.keyDown(window, { key: "c", ctrlKey: true });
     expect(screen.getByText("세금 신고")).toBeInTheDocument();
 
-    // 코드 pane은 Ctrl+D로 이동했다 — 대시보드가 코드 pane으로 바뀐다.
-    fireEvent.keyDown(window, { key: "d", ctrlKey: true });
+    // 대조군: 편집 계열이 아닌 pane 단축키(⌘/Ctrl+9 = 피드)는 정상적으로 화면을 전환한다.
+    fireEvent.keyDown(window, { key: "9", ctrlKey: true });
     await waitFor(() => expect(screen.queryByText("세금 신고")).not.toBeInTheDocument());
-    // 대시보드가 사라졌을 뿐 아니라 실제로 코드 pane이 렌더됐는지 — 고유 마커까지 확인.
-    expect(document.querySelector(".code-pane")).toBeInTheDocument();
   });
 
   it("opens the 채팅 탭 from the rail (center chat greets)", async () => {

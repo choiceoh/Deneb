@@ -5,7 +5,6 @@ import type { View } from "@/types";
 import { useWorkspace } from "@/workspaceContext";
 import { AIPanel } from "./AIPanel";
 import { ChatView } from "./ChatView";
-import { CodeView } from "./CodeView";
 import { Icon } from "./Icon";
 import { Sidebar } from "./Sidebar";
 import { PANES } from "./panes";
@@ -22,10 +21,10 @@ import { FilesPane } from "./panes/FilesPane";
 const EDIT_KEYS = new Set(["a", "c", "v", "x", "y", "z"]);
 
 export function Workstation({ cfg }: { cfg: GatewayConfig }) {
-  const { view, setView, codeMode, connected, notebookTop } = useWorkspace();
+  const { view, setView, connected, notebookTop } = useWorkspace();
 
   // 우측 데네브 패널을 중앙 작업 영역까지 넓히는 토글(maximize). 활성화되면 작업 pane을
-  // 숨기고 AIPanel이 사이드바를 제외한 전 폭을 차지한다. 채팅·코드 탭에선 ChatView/CodeView가
+  // 숨기고 AIPanel이 사이드바를 제외한 전 폭을 차지한다. 채팅 탭에선 ChatView가
   // 중앙+우측을 이미 점유하므로 의미 없다(AIPanel 자체가 숨겨짐).
   const [aiExpanded, setAiExpanded] = useState(false);
 
@@ -67,7 +66,7 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
   // 노트북 화면에서는 데네브 채팅을 우측이 아니라 하단 전 폭으로 도킹한다 — 노트북의 메인
   // 작업이 자료를 근거로 AI에게 질문하는 것이라, 좁은 측면 패널보다 넓은 하단이 맞다. CSS
   // 그리드로 같은 AIPanel 엘리먼트를 하단 셀에 배치만 바꾸므로(리마운트 없음) 대화는 유지된다.
-  const bottomChat = view === "notebook" && !codeMode;
+  const bottomChat = view === "notebook";
   // 노트북 상단(자료) 높이 3단계 — NotebookPane의 바 버튼이 컨텍스트로 순환시키고, 여기서
   // 그리드 상단 행을 접힘=auto(바 높이)·확대=70%로 바꾼다(기본은 CSS 기본값 30%). 접힘 시
   // 확보된 높이는 하단 채팅이 갖고, 확대 시엔 반대로 상단이 넓어진다.
@@ -75,10 +74,10 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
   const topExpanded = bottomChat && notebookTop === "expanded";
   // 접기는 측면 모드에만 적용(노트북 하단 도킹 제외).
   const aiSideCollapsed = aiCollapsed && !bottomChat;
-  // 작업 pane은 비채팅·비코드 탭에서 렌더. 데네브 패널 확대(maximize) 시엔 숨기지만, 노트북
+  // 작업 pane은 비채팅 탭에서 렌더. 데네브 패널 확대(maximize) 시엔 숨기지만, 노트북
   // 하단 채팅 모드·패널 접힘에서는 작업 pane이 전 폭을 차지하도록 함께 렌더한다.
-  const mainVisible = !codeMode && (bottomChat || aiSideCollapsed || !aiExpanded);
-  // 파일 pane은 chat/code 처럼 별도로 항상 마운트되므로(열린 탭·미저장 편집 보존) 제네릭
+  const mainVisible = bottomChat || aiSideCollapsed || !aiExpanded;
+  // 파일 pane은 chat 처럼 별도로 항상 마운트되므로(열린 탭·미저장 편집 보존) 제네릭
   // 렌더에서 제외한다.
   const showMain = view !== "chat" && view !== "files" && mainVisible;
   const showFiles = view === "files" && mainVisible;
@@ -127,13 +126,11 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
           <FilesPane active={view === "files"} />
         </main>
       )}
-      {/* 코드 모드 — 가운데 코딩 채팅(주작업) + 우측 작업 관리. 항상 마운트, 비활성 시 숨김. */}
-      <CodeView cfg={cfg} hidden={!codeMode} />
       {/* 채팅 탭(비업무)·측면 데네브 패널 모두 항상 마운트(각자 대화 유지) — 비활성 탭에선 숨긴다. */}
-      <ChatView cfg={cfg} hidden={view !== "chat" || codeMode} />
+      <ChatView cfg={cfg} hidden={view !== "chat"} />
       <AIPanel
         cfg={cfg}
-        hidden={view === "chat" || codeMode || aiSideCollapsed}
+        hidden={view === "chat" || aiSideCollapsed}
         placement={bottomChat ? "bottom" : "side"}
         expanded={!bottomChat && aiExpanded}
         onToggleExpand={bottomChat ? undefined : () => setAiExpanded((v) => !v)}
@@ -147,7 +144,7 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
         }
       />
       {/* 패널이 접혀 있을 때 우측 가장자리의 다시-열기 탭. */}
-      {aiSideCollapsed && view !== "chat" && !codeMode && (
+      {aiSideCollapsed && view !== "chat" && (
         <button
           className="ai-reopen"
           onClick={() => setAiCollapsed(false)}

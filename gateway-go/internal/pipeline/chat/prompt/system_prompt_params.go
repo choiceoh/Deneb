@@ -86,24 +86,6 @@ type SystemPromptParams struct {
 	DocsPath      string
 	ToolPreset    string // active tool preset ("conversation" etc.); empty = normal mode
 
-	// Coding selects the implementer prompt profile for 코드모드 (code:
-	// sessions): CodingPersona replaces the Nev chief-of-staff identity, the
-	// 업무 work-loop sections are dropped, and the target repo's root rule
-	// docs (CodingRepoContext) are injected instead. The 업무 context inputs
-	// (ContextFiles, TopicKnowledge, CalendarGlance, GoalGlance, tier-1 wiki,
-	// skills) are withheld upstream (run_prepare). Folds into the Static cache
-	// key so coding sessions live in their own prefix family.
-	Coding bool
-
-	// CodingRepoContext is the worktree root's CLAUDE.md/AGENTS.md content
-	// (rendered sections, frozen per session — see LoadCodingRepoContext).
-	// Empty = no root docs found; the prompt then coaches on-demand reads only.
-	CodingRepoContext string
-	// CodingRepoCacheKey is the content hash of CodingRepoContext, folded into
-	// buildStaticCacheKey so different repos/doc versions never share a coding
-	// Static entry. Empty when CodingRepoContext is empty.
-	CodingRepoCacheKey string
-
 	// CompactionFired triggers a one-time-per-session reminder appended
 	// to the dynamic block: tells the model that prior turns have been
 	// compacted into summaries so summary messages should be treated as
@@ -148,8 +130,7 @@ type SystemPromptParams struct {
 	// PersonaText overrides the default Nev identity + 역할 text at the top of the
 	// 업무 Static block, edited via the Settings prompt corner
 	// (PromptIDSystemPersona). Empty = use DefaultPersona (byte-identical to
-	// before). Only the 업무 path consumes it (코드모드 keeps its implementer
-	// identity). It is byte-stable between edits (rare operator action) so the
+	// before). It is byte-stable between edits (rare operator action) so the
 	// Static cache holds; PersonaCacheKey keys the cache per persona content.
 	PersonaText string
 	// PersonaCacheKey is the sha256[:12] of an edited PersonaText, folded into
