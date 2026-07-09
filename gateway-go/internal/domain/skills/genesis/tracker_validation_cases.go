@@ -311,11 +311,15 @@ func normalizedValidationFrontierTier(value string) string {
 }
 
 func isAutomaticValidationCase(rec SkillValidationCaseRecord) bool {
-	switch strings.ToLower(strings.TrimSpace(rec.Source)) {
-	case "review-session", "review-finding", "self-review", "session-backfill", "auto-failed-skill-use":
+	src := strings.ToLower(strings.TrimSpace(rec.Source))
+	switch src {
+	case "review-session", "review-finding", "self-review", "session-backfill",
+		"auto-failed-skill-use", "auto-successful-skill-use", "auto-backfill-lane":
 		return true
 	default:
-		return strings.HasPrefix(strings.ToLower(strings.TrimSpace(rec.Source)), "review")
+		// Any auto-* or review* source is machine-authored and must face the
+		// weak-case guard; only operator-entered cases skip it.
+		return strings.HasPrefix(src, "review") || strings.HasPrefix(src, "auto-")
 	}
 }
 

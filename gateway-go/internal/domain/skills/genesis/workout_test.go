@@ -71,8 +71,8 @@ func TestSkillWorkoutTask_RecordsQuarantinedFailures(t *testing.T) {
 	}
 }
 
-// A passing replay records nothing, and an executor error ends the cycle
-// cleanly without records.
+// A passing replay records only a lightweight rotation marker (no failure
+// evidence), and an executor error ends the cycle cleanly without any record.
 func TestSkillWorkoutTask_PassAndExecutorErrorPaths(t *testing.T) {
 	tr, catalog := workoutFixtures(t)
 	pass := &SkillWorkoutTask{
@@ -84,8 +84,9 @@ func TestSkillWorkoutTask_PassAndExecutorErrorPaths(t *testing.T) {
 	if err := pass.Run(context.Background()); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if records, _ := jsonlstore.Load[UsageRecord](tr.usagePath); len(records) != 0 {
-		t.Fatalf("passing workout must record nothing, got %+v", records)
+	records, _ := jsonlstore.Load[UsageRecord](tr.usagePath)
+	if len(records) != 1 || !records[0].Success || records[0].FailureTrace != nil {
+		t.Fatalf("passing workout must record exactly one success rotation marker, got %+v", records)
 	}
 
 	broken := &SkillWorkoutTask{
@@ -97,8 +98,10 @@ func TestSkillWorkoutTask_PassAndExecutorErrorPaths(t *testing.T) {
 	if err := broken.Run(context.Background()); err != nil {
 		t.Fatalf("executor failure must fail open, got %v", err)
 	}
-	if records, _ := jsonlstore.Load[UsageRecord](tr.usagePath); len(records) != 0 {
-		t.Fatalf("failed executor must not record evidence, got %+v", records)
+	// The executor errors before the case is scored, so no NEW record is added
+	// (the marker only fires after a clean per-skill pass).
+	if after, _ := jsonlstore.Load[UsageRecord](tr.usagePath); len(after) != 1 {
+		t.Fatalf("failed executor must not add evidence, got %+v", after)
 	}
 }
 
@@ -118,10 +121,19 @@ func TestSkillWorkoutTask_RotationAndDedup(t *testing.T) {
 		t.Fatalf("run2: %v", err)
 	}
 	records, _ := jsonlstore.Load[UsageRecord](tr.usagePath)
-	if len(records) != 1 {
-		t.Fatalf("second cycle must dedup the already-evidenced defect, got %d records", len(records))
+	var failureRecs []UsageRecord
+	for _, r := range records {
+		if !r.Success {
+			failureRecs = append(failureRecs, r)
+		}
 	}
-	trace := records[0].FailureTrace
+	// Exactly one FAILURE record across both cycles — cycle 2's deduped defect
+	// must not re-record. (Cycle 2 also drops a success rotation marker, so
+	// total records > 1; the dedup guarantee is about failure evidence.)
+	if len(failureRecs) != 1 {
+		t.Fatalf("second cycle must dedup the already-evidenced defect, got %d failure records", len(failureRecs))
+	}
+	trace := failureRecs[0].FailureTrace
 	if trace == nil || trace.Signature != "terminal=heldout-assertion|mechanism=skill-behavior-drift" ||
 		!strings.Contains(trace.CausalStatus, "synthetic workout") {
 		t.Fatalf("workout failure needs the stable explicit trace, got %+v", trace)
@@ -155,5 +167,35 @@ func TestWorkoutActivitySummarize(t *testing.T) {
 	empty := newTestTracker(t)
 	if got := empty.WorkoutActivitySummarize(); got.SkillsExercised != 0 || got.LastRunAt != 0 {
 		t.Fatalf("empty lane must summarize to zero, got %+v", got)
+	}
+}
+
+// A workout failure on a case whose ID embeds a session key (colon) must dedup
+// on the SECOND cycle — the label parser split on a bare ":" before, so dedup
+// missed and the same synthetic failure re-recorded every cycle.
+func TestWorkoutCaseLabelFromError_PreservesColonLabels(t *testing.T) {
+	errMsg := "workout replay failed 1/1 assertions on case session-client:main: required tool fs not used"
+	if got := workoutCaseLabelFromError(errMsg); got != "session-client:main" {
+		t.Fatalf("label with an embedded colon must survive, got %q", got)
+	}
+}
+
+// Passing skills advance rotation via a success marker, so lastAt is set for
+// every exercised skill (not just failing ones) — fixes the starvation where
+// alphabetically-first passing skills ran every cycle.
+func TestSkillWorkoutTask_PassingSkillAdvancesRotation(t *testing.T) {
+	tr, catalog := workoutFixtures(t)
+	pass := &SkillWorkoutTask{
+		Tracker: tr, Catalog: catalog,
+		replay: func(_ context.Context, _ string, _ SkillValidationCaseRecord) (skillReplayTrace, error) {
+			return traceFromEmittedCalls([]emittedToolCall{{Name: "fs"}}), nil // passes
+		},
+	}
+	if err := pass.Run(context.Background()); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	lastAt, _ := tr.WorkoutActivity(evolutionHealthWindow)
+	if lastAt["contract-review"] == 0 {
+		t.Fatal("a passed skill must still advance its rotation timestamp")
 	}
 }

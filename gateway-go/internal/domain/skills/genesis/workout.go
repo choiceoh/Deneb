@@ -26,8 +26,8 @@ import (
 //     success-rate gates, curator stats, and the bench backfill stay clean.
 //   - They surface only as their own failure-cluster kind (workout-failure) in
 //     the sweep's evidence bundle — proposers see synthetic provenance.
-//   - Only failures are recorded; a passing workout carries no actionable
-//     evidence and would just bloat the sidecar.
+//   - Failures carry the evidence; a passing skill writes only a lightweight
+//     success-marker record so fair rotation (lastAt) advances for it too.
 type SkillWorkoutTask struct {
 	Engine  *SkillValidationEngine
 	Tracker *Tracker
@@ -102,9 +102,11 @@ func (t *SkillWorkoutTask) Run(ctx context.Context) error {
 		// real use OLDER than the evidence window can't be evolved anyway, so
 		// exercising it would stockpile evidence with no consumer. Never-used
 		// skills stay eligible, same exemption as the evolve path.
-		if stats, serr := t.Tracker.Stats(name); serr == nil && stats.LastUsed > 0 &&
-			stats.LastUsed < time.Now().Add(-skillEvolutionEvidenceWindow()).UnixMilli() {
-			continue
+		if window := skillEvolutionEvidenceWindow(); window > 0 {
+			if stats, serr := t.Tracker.Stats(name); serr == nil && stats.LastUsed > 0 &&
+				stats.LastUsed < time.Now().Add(-window).UnixMilli() {
+				continue
+			}
 		}
 		cases, err := t.Tracker.RecentSkillValidationCases(name, defaultSkillValidationCaseLimit)
 		if err != nil || len(cases) == 0 {
@@ -129,6 +131,7 @@ func (t *SkillWorkoutTask) Run(ctx context.Context) error {
 		}
 		body := skillBodyOnly(string(content))
 		exercised++
+		skillFailures := 0
 
 		for _, tc := range evaluable {
 			// A defect already evidenced inside the window stays one cluster
@@ -151,6 +154,7 @@ func (t *SkillWorkoutTask) Run(ctx context.Context) error {
 				continue
 			}
 			failures++
+			skillFailures++
 			errMsg := fmt.Sprintf("workout replay failed %d/%d assertions on case %s: %s",
 				score.Total-score.Passed, score.Total, validationCaseLabel(tc), formatValidationFailures(score.Failures))
 			if rerr := t.Tracker.RecordUsage(UsageRecord{
@@ -172,6 +176,21 @@ func (t *SkillWorkoutTask) Run(ctx context.Context) error {
 				Source: UsageSourceWorkout,
 			}); rerr != nil {
 				logger.Warn("skill-workout: usage record failed", "skill", name, "error", rerr)
+			}
+		}
+		// Rotation marker: a skill that passed every case leaves no failure
+		// record, so without this its lastAt stays 0 and it sorts first forever —
+		// starving later skills. A success-marker (Source=workout, excluded from
+		// real stats) advances lastAt for every exercised skill.
+		if skillFailures == 0 {
+			if rerr := t.Tracker.RecordUsage(UsageRecord{
+				SkillName:  name,
+				SessionKey: workoutSessionPrefix + strconv.FormatInt(cycle, 10),
+				Model:      executorModel,
+				Success:    true,
+				Source:     UsageSourceWorkout,
+			}); rerr != nil {
+				logger.Warn("skill-workout: rotation marker record failed", "skill", name, "error", rerr)
 			}
 		}
 	}
@@ -253,7 +272,10 @@ func workoutCaseLabelFromError(errMsg string) string {
 		return ""
 	}
 	rest := errMsg[i+len(marker):]
-	if j := strings.Index(rest, ":"); j > 0 {
+	// Split on ": " (colon-SPACE) — the label/failures delimiter in Run's
+	// format string. A bare ":" truncated case IDs that embed a session key
+	// (e.g. "session-client:main"), so dedup missed and re-recorded every cycle.
+	if j := strings.Index(rest, ": "); j > 0 {
 		return strings.TrimSpace(rest[:j])
 	}
 	return ""

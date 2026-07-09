@@ -170,3 +170,18 @@ func TestFailureEvidenceClusters_ModelAxisSplits(t *testing.T) {
 		t.Fatalf("per-model split wrong: %+v", clusters)
 	}
 }
+
+// A signature-mismatch rejection whose evidence involves the common
+// missing-artifact class must NOT be misfiled as missing-audit (the "missing"
+// substring used to win). Regression for the bot-flagged classifier ordering.
+func TestClassifyEvolveRejection_MissingArtifactSignatureNotMissingAudit(t *testing.T) {
+	sigMismatch := `self-harness audit rejected: target_signature "x" does not match supported failure signatures: terminal=missing-artifact|mechanism=artifact-recovery`
+	if got := classifyEvolveRejection(sigMismatch); got != "signature-mismatch" {
+		t.Fatalf("signature-mismatch with a missing-artifact signature list must classify as signature-mismatch, got %q", got)
+	}
+	// The genuine audit-completeness rejection still lands on missing-audit.
+	missingAudit := "self-harness audit rejected: missing target_signature, edited_surface"
+	if got := classifyEvolveRejection(missingAudit); got != "missing-audit" {
+		t.Fatalf("audit-completeness rejection must classify as missing-audit, got %q", got)
+	}
+}

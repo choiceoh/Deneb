@@ -52,3 +52,22 @@ func TestRunEvolveBurst_LoopUntilDryAndCap(t *testing.T) {
 		t.Fatalf("rejected first round must not burst: %d results / %d calls", len(results), calls)
 	}
 }
+
+// A2/A4: "covered" (relaxed caps + burst continuation) requires a SCORABLE
+// case, not mere case existence — an assertion-less corpus must read uncovered.
+func TestHasScorableValidationCase(t *testing.T) {
+	if hasScorableValidationCase(nil) {
+		t.Fatal("no cases must read uncovered")
+	}
+	assertionless := []SkillValidationCaseRecord{{SkillName: "s", ID: "x"}}
+	if hasScorableValidationCase(assertionless) {
+		t.Fatal("an assertion-less case grants no real regression gate → uncovered")
+	}
+	scorable := []SkillValidationCaseRecord{{
+		SkillName: "s", ID: "y",
+		Replay: SkillReplayCaseRecord{Input: "do x", RequiredTools: []string{"fs"}},
+	}}
+	if !hasScorableValidationCase(scorable) {
+		t.Fatal("a case with assertions is covered")
+	}
+}

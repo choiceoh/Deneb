@@ -210,6 +210,18 @@ func (e *Evolver) thinkingOff(model string) *llm.ThinkingConfig {
 // evolver proceed even with no usage data — usage-stat-driven evolution
 // otherwise never fires because skill usage is sparsely recorded.
 func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding string) (*EvolveResult, error) {
+	return e.evolveSkill(ctx, skillName, reviewFinding, false)
+}
+
+// evolveSkill is the shared implementation. burstContinuation is set only for
+// rounds 2+ of runEvolveBurst: those rounds have no fresh usage (the evidence
+// cutoff moved to round 1's evolve), so the evidence-sufficiency gate would
+// stop the burst immediately — making the advertised loop-until-dry inert. When
+// the skill is COVERED (a real held-out regression gate exists), a burst round
+// may proceed on that bench alone; the per-round held-out + judge + rollback
+// gates decide dryness. Uncovered skills keep the conservative gate (burst
+// stops after round 1) so nothing churns on judge opinion without a bench.
+func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding string, burstContinuation bool) (*EvolveResult, error) {
 	if e.catalog == nil {
 		return nil, fmt.Errorf("evolver: catalog not configured")
 	}
@@ -266,11 +278,17 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 		stats = &UsageStats{SkillName: skillName}
 	}
 	if !hasSufficientEvolutionEvidence(stats, reviewFinding) {
-		return &EvolveResult{
-			SkillName: skillName,
-			Evolved:   false,
-			Reason:    fmt.Sprintf("insufficient evolution evidence: need review finding or at least %d counted uses with %d real failures and recent error evidence", skillEvolutionMinEvidenceUses, skillEvolutionMinEvidenceFailures),
-		}, nil
+		// Burst continuation on a covered skill bypasses the fresh-evidence
+		// requirement — its held-out bench is the evidence, and the pre-commit
+		// gates below still guard every round. Uncovered skills fall through to
+		// the conservative stop.
+		if !(burstContinuation && hasScorableValidationCase(e.validationCasesForPrompt(skillName))) {
+			return &EvolveResult{
+				SkillName: skillName,
+				Evolved:   false,
+				Reason:    fmt.Sprintf("insufficient evolution evidence: need review finding or at least %d counted uses with %d real failures and recent error evidence", skillEvolutionMinEvidenceUses, skillEvolutionMinEvidenceFailures),
+			}, nil
+		}
 	}
 
 	var rejected []RejectedSkillEditRecord
@@ -564,7 +582,10 @@ func (e *Evolver) EvolveUnderperformers(ctx context.Context) ([]EvolveResult, er
 		if result != nil {
 			results = append(results, e.runEvolveBurst(ctx, candidate.SkillName, *result,
 				func(ctx context.Context, name string) (*EvolveResult, error) {
-					return e.EvolveSkill(ctx, name, "")
+					// burstContinuation=true: rounds 2+ ride the held-out bench of
+					// a covered skill (A4 — otherwise the evidence gate makes burst
+					// inert after round 1).
+					return e.evolveSkill(ctx, name, "", true)
 				})...)
 		}
 	}
@@ -1964,7 +1985,10 @@ func (e *Evolver) validateCandidate(ctx context.Context, skillName string, clien
 }
 
 func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candidateBody string, audit HarnessEditAudit, stats *UsageStats, reviewFinding string) (bool, string) {
-	covered := len(e.validationCasesForPrompt(skillName)) > 0
+	// covered means a REAL regression check is active: at least one case the
+	// held-out gate can score (hasAssertions). Mere case existence let an
+	// assertion-less corpus grant the relaxed caps while the gate failed open.
+	covered := hasScorableValidationCase(e.validationCasesForPrompt(skillName))
 	if ok, reason := validateHermesEvolutionGuardrails(originalContent, candidateBody, covered); !ok {
 		return false, reason
 	}
@@ -2025,6 +2049,17 @@ func (e *Evolver) heldOutSelectionMargin(skillName, originalContent, candidateBo
 		return 0
 	}
 	return result.CandidateScore - result.OriginalScore
+}
+
+// hasScorableValidationCase reports whether any case carries an assertion the
+// held-out/behavioral gate can actually score — the honest test for "covered".
+func hasScorableValidationCase(cases []SkillValidationCaseRecord) bool {
+	for _, tc := range cases {
+		if tc.hasAssertions() {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *Evolver) validationCasesForPrompt(skillName string) []SkillValidationCaseRecord {
