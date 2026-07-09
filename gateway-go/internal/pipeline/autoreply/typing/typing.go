@@ -241,29 +241,3 @@ func (tc *TypingController) IsStarted() bool {
 	defer tc.mu.Unlock()
 	return tc.started
 }
-
-// TypingSignaler wraps a TypingController for phase-aware signaling.
-type TypingSignaler struct {
-	controller *TypingController
-	phase      string // "text", "reasoning", "tool"
-}
-
-// NewTypingSignaler creates a new typing signaler.
-func NewTypingSignaler(controller *TypingController) *TypingSignaler {
-	return &TypingSignaler{controller: controller, phase: "text"}
-}
-
-// Signal sends a typing signal if appropriate for the current phase.
-func (s *TypingSignaler) Signal() {
-	if s.controller == nil {
-		return
-	}
-	s.controller.Start()
-}
-
-// Stop stops the typing controller.
-func (s *TypingSignaler) Stop() {
-	if s.controller != nil {
-		s.controller.Stop()
-	}
-}

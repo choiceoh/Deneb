@@ -78,19 +78,6 @@ type Handler struct {
 	// skills groups the Propus/genesis skill-loop hooks. See SkillDeps.
 	skills SkillDeps
 
-	// UNUSED-skillNudger fires mid-session skill reviews every N tool calls.
-	// Optional — when nil, the tool-call accounting path short-circuits.
-	// Injected by the server via SetSkillNudger so chat doesn't depend
-	// on the domain/skills/genesis package directly.
-	skillNudger SkillNudger
-
-	// skillUsageRecorder records, per turn, which skills the agent consulted
-	// and whether the turn succeeded — feeding the genesis Evolver real
-	// success-rate data instead of empty stats. Optional; nil disables usage
-	// attribution. Injected by the server via SetSkillUsageRecorder so chat
-	// doesn't depend on the domain/skills/genesis package directly.
-	skillUsageRecorder SkillUsageRecorder
-
 	// ambient groups the ambient system-prompt context providers (topic
 	// knowledge, calendar/goal glances, persona override). See AmbientDeps.
 	ambient AmbientDeps

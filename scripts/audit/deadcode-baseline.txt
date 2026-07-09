@@ -84,9 +84,6 @@ internal/pipeline/autoreply/types/thinking.go :: NormalizeFastMode
 internal/pipeline/autoreply/types/thinking.go :: NormalizeReasoningLevel
 internal/pipeline/autoreply/types/thinking.go :: NormalizeUsageDisplay
 internal/pipeline/autoreply/types/thinking.go :: NormalizeVerboseLevel
-internal/pipeline/autoreply/typing/typing.go :: NewTypingSignaler
-internal/pipeline/autoreply/typing/typing.go :: TypingSignaler.Signal
-internal/pipeline/autoreply/typing/typing.go :: TypingSignaler.Stop
 internal/pipeline/autoreply/typing/typing_mode.go :: ResolveTypingMode
 internal/pipeline/autoreply/typing/typing_policy.go :: ResolveRunTypingPolicy
 internal/pipeline/chat/denebui/denebui.go :: HasFence
@@ -95,11 +92,6 @@ internal/pipeline/chat/prompt/context_files.go :: ResetContextFileCacheForTest
 internal/pipeline/chat/prompt/prompt_cache.go :: PromptCache.Reset
 internal/pipeline/chat/prompt/system_prompt.go :: BuildSystemPrompt
 internal/pipeline/chat/run_provider.go :: isCacheIncompatibleProvider
-internal/pipeline/chat/tool_context.go :: DeliveryFromContext
-internal/pipeline/chat/tool_context.go :: MaxUploadBytesFromContext
-internal/pipeline/chat/tool_context.go :: MediaSendFuncFromContext
-internal/pipeline/chat/tool_context.go :: ReplyFuncFromContext
-internal/pipeline/chat/tool_context.go :: SessionKeyFromContext
 internal/pipeline/chat/tool_turn_context.go :: DetectCycle
 internal/pipeline/chat/toolctx/turn_context.go :: DetectCycle
 internal/pipeline/chat/toolpreset/preset.go :: KnownPresets
