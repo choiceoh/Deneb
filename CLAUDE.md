@@ -77,7 +77,7 @@ codegraph query    NAME      # 이름으로 심볼 검색
 - **인덱스는 로컬 `.codegraph/`**(SQLite, gitignore됨)에 저장, **데몬 파일와처가 편집을 2초 내 자동동기** — 수동 명령 불필요, 항상 신선. Go·Kotlin·TypeScript·Rust 등 전부 인덱싱.
 - **새 워크트리는 SessionStart 훅(`codegraph-autoindex.py`)이 자동 준비** — 형제 워크트리 인덱스를 복사+`sync`(<1s)하거나 없으면 풀 init, 백그라운드라 세션 지연 0. 즉 워크트리마다 손수 `codegraph init` 할 필요 없다.
 - 설치/재빌드: `npm i -g @colbymchenry/codegraph` → `codegraph init`. 재인덱싱은 `codegraph index`, MCP 재배선은 `codegraph install`. GPU·컴파일 불필요(aarch64 네이티브). 상세는 메모리 [[codegraph-adoption]] 참조.
-- 한계·기법(문자열-키 간접참조): RPC 메서드명·툴명 같은 **문자열 키 → 핸들러** 엣지는 그래프가 못 잇는다(static-analysis frontier). 기법: 메서드 문자열을 grep(문자열 리터럴이라 훅 안 걸림 — `*Methods` 함수의 맵 키에서 핸들러 이름 확인) → `codegraph node/explore <핸들러>`로 전체 맥락. 역방향(핸들러→등록지)은 `codegraph callers <핸들러>`(예: `callers peopleList`→`PeopleMethods`).
+- 문자열-키 간접참조(RPC 메서드명·툴명 → 핸들러)는 CodeGraph가 못 잇는 엣지(static-analysis frontier). **`scripts/dev/rpcmap.py`가 결정적으로 채운다**: `rpcmap <메서드명|툴명>` → 핸들러+파일:라인+`codegraph node` 힌트 (예: `rpcmap miniapp.people.list`→`peopleList (people.go:91)`, `rpcmap wiki`→`ToolWiki`). 역방향 `rpcmap --handler <이름>`, 전체는 `rpcmap --list`. 핸들러를 얻으면 `codegraph node <핸들러>`로 소스+호출자/피호출자. (점 있는 메서드명을 grep하면 훅이 rpcmap으로 유도한다.)
 - 주의: CodeGraph는 **소스 코드 전용**. 위키/업무 지식 그래프는 별개 도구(`graphify` 챗 툴 → `~/.deneb/wiki-graph`)이며 이걸로 대체 불가.
 
 ## 룰 인덱스 — 필요할 때 Read (조건부 로딩)

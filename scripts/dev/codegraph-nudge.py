@@ -98,6 +98,27 @@ def is_defined_symbol(pat, root):
     return False
 
 
+# A dotted RPC method / tool name like "miniapp.people.list" — CodeGraph can't
+# resolve its string→handler edge, but rpcmap.py can.
+DOTTED_METHOD = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$")
+
+
+def resolves_via_rpcmap(pat, root):
+    """True iff rpcmap.py maps this dotted name to an RPC/tool handler. rpcmap is
+    the false-positive filter — 'package.json' etc. return no match."""
+    script = os.path.join(root, "scripts", "dev", "rpcmap.py")
+    if not os.path.isfile(script):
+        return False
+    try:
+        out = subprocess.run(
+            [sys.executable, script, pat, "--json", "--root", root],
+            capture_output=True, text=True, timeout=6,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return out.returncode == 0 and out.stdout.strip() not in ("", "[]")
+
+
 def main():
     payload = json.load(sys.stdin)
     tool = payload.get("tool_name") or ""
@@ -110,14 +131,26 @@ def main():
     else:
         return 0
 
-    if not bare_identifier(pat):
-        return 0  # regex, multi-word, or empty → a real text search
-
     root = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd()
     root = os.path.realpath(root)
 
-    if not is_defined_symbol(pat, root):
-        return 0  # not a known symbol → let the text search run
+    if bare_identifier(pat):
+        if not is_defined_symbol(pat, root):
+            return 0  # not a known symbol → let the text search run
+        msg = [
+            f"[codegraph] '{pat}'는 코드 심볼입니다 (CodeGraph 인덱스에 정의 존재). 관계·구조 질문이면 텍스트 grep보다:",
+            f"  · MCP 툴 codegraph_explore \"{pat} 관련 질문\"  (호출자·호출대상·블래스트 반경을 한 번에)",
+            f"  · 또는 CLI: codegraph callers {pat}  ·  codegraph impact {pat}  ·  codegraph node {pat}",
+            "텍스트 문자열 검색이 목적이면 같은 검색을 그대로 재실행하세요 (세션당 1회만 안내).",
+        ]
+    elif DOTTED_METHOD.match(pat) and resolves_via_rpcmap(pat, root):
+        msg = [
+            f"[codegraph] '{pat}'는 RPC 메서드/툴 이름입니다. 어느 핸들러가 처리하는지는 grep보다:",
+            f"  · scripts/dev/rpcmap.py {pat}   → 핸들러 + 파일:라인 (그다음 codegraph node <핸들러>)",
+            "텍스트 문자열 검색이 목적이면 같은 검색을 그대로 재실행하세요 (세션당 1회만 안내).",
+        ]
+    else:
+        return 0  # regex / plain text / unknown name → a real text search
 
     session = re.sub(r"[^A-Za-z0-9_-]", "_", str(payload.get("session_id") or "nosession"))
     seen_dir = os.path.join(tempfile.gettempdir(), f"codegraph-nudge-{session}")
@@ -127,12 +160,6 @@ def main():
         return 0
     open(marker, "w").close()
 
-    msg = [
-        f"[codegraph] '{pat}'는 코드 심볼입니다 (CodeGraph 인덱스에 정의 존재). 관계·구조 질문이면 텍스트 grep보다:",
-        f"  · MCP 툴 codegraph_explore \"{pat} 관련 질문\"  (호출자·호출대상·블래스트 반경을 한 번에)",
-        f"  · 또는 CLI: codegraph callers {pat}  ·  codegraph impact {pat}  ·  codegraph node {pat}",
-        "텍스트 문자열 검색이 목적이면 같은 검색을 그대로 재실행하세요 (세션당 심볼별 1회만 안내).",
-    ]
     print("\n".join(msg), file=sys.stderr)
     return 2  # block this one call; retry passes via the marker
 
