@@ -124,9 +124,17 @@ class TaskScheduler(
      * to the main thread) since the job fields are not synchronized.
      */
     fun stop() {
-        pushJob?.cancel()
+        // cancel() synchronously runs the job's completion/cleanup handlers on THIS
+        // (caller/main) thread. The ktor+okhttp SSE cleanup can throw
+        // `IllegalStateException: Unbalanced enter/exit` when the chunked response is
+        // torn down mid-flight, which surfaces as an uncaught CompletionHandlerException
+        // and crashed the app on the background transition (BackgroundConnectionPolicy
+        // → onStop → stop(); observed on Android 16, build 609). The job is being
+        // cancelled regardless, so the teardown-race throw is benign — contain it so it
+        // never escapes to the lifecycle callback that drives this.
+        runCatching { pushJob?.cancel() }
         pushJob = null
-        proactiveJob?.cancel()
+        runCatching { proactiveJob?.cancel() }
         proactiveJob = null
     }
 }
