@@ -11,10 +11,19 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// replayExecutorMaxTokens bounds the simulated tool-call plan. The executor must
-// emit a short JSON plan, not prose, so a small cap keeps the call cheap and
-// prevents a runaway "reasoning" body from dominating the evolve cycle.
-const replayExecutorMaxTokens = 1024
+// replayExecutorMaxTokens bounds the simulated tool-call plan. The plan output
+// itself is short JSON, but this budget must ALSO cover chain-of-thought:
+// runReplayExecutorWith requests Thinking=disabled, yet reasoning models with
+// no honored off-switch (glm-5.2 via wormhole) ignore it and reason anyway
+// (modelrole/thinking.go — "the caller must budget MaxTokens for reasoning +
+// answer instead"). At 1024 the reasoning alone overran the cap and the call
+// returned finish_reason=length with EMPTY content, failing every replay —
+// evolve's behavioral gate (fail-open, so it silently stopped guarding) AND the
+// skill-workout lane (observed 2026-07-09: reasoning_chars=4540, "replay
+// executor failed, ending cycle"). Budget reasoning (~1.5K tokens observed) +
+// the short plan, with headroom; the model still stops at the plan, so a
+// non-runaway call does not actually consume this whole cap.
+const replayExecutorMaxTokens = 4096
 
 // emittedToolCall is one tool invocation the executor model says it would make
 // when following a skill. Args is intentionally a flat string so the existing
