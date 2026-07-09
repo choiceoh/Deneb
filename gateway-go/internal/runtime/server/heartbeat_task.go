@@ -229,6 +229,27 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 
 	opts := heartbeatSyncOptions()
 	result, err := t.chatHandler.SendSync(runCtx, sessionKey, triggerMsg, "", opts)
+
+	// Fixture harvest (P0 of instruction-surface evolve): persist this firing's
+	// variable inputs + outcome so a future shadow-replay gate has a real
+	// corpus. Best-effort by design — recorded for failed turns too (the error
+	// IS ground truth), and never allowed to affect the turn result.
+	fixture := heartbeatFixture{
+		FiredAt:         time.Now().UnixMilli(),
+		SessionKey:      sessionKey,
+		SignalSummary:   signalSummary,
+		SelfCodingNudge: selfCodingNudge,
+		SweepNudge:      sweepNudge,
+		ResearchNudge:   researchNudge,
+		HeartbeatMD:     content,
+	}
+	if err != nil {
+		fixture.OutcomeErr = err.Error()
+	} else {
+		fixture.OutcomeText = result.Text
+	}
+	t.recordHeartbeatFixture(fixture)
+
 	if err != nil {
 		return fmt.Errorf("heartbeat: agent turn failed: %w", err)
 	}
