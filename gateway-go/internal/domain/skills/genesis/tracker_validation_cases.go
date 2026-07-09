@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -407,6 +408,56 @@ func cleanValidationStrings(values []string) []string {
 		out = append(out, value)
 		if len(out) >= maxValidationStrings {
 			break
+		}
+	}
+	return out
+}
+
+// RecentRealUseSessionsBySkill returns, per skill, the newest-first distinct
+// session keys of real uses inside window, capped at perSkill. The autonomous
+// backfill lane replays these transcripts into held-out validation cases so
+// corpus growth no longer depends on an LLM turn remembering to call
+// validation_backfill.
+func (t *Tracker) RecentRealUseSessionsBySkill(window time.Duration, perSkill int) map[string][]string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if perSkill <= 0 {
+		perSkill = 1
+	}
+	cutoff := time.Now().Add(-window).UnixMilli()
+	records, err := jsonlstore.Load[UsageRecord](t.usagePath)
+	if err != nil {
+		return nil
+	}
+	type use struct {
+		key string
+		at  int64
+	}
+	bySkill := map[string][]use{}
+	for _, r := range records {
+		if r.UsedAt < cutoff || !isRealUsageRecord(r) {
+			continue
+		}
+		key := strings.TrimSpace(r.SessionKey)
+		name := strings.TrimSpace(r.SkillName)
+		if key == "" || name == "" {
+			continue
+		}
+		bySkill[name] = append(bySkill[name], use{key: key, at: r.UsedAt})
+	}
+	out := map[string][]string{}
+	for name, uses := range bySkill {
+		sort.Slice(uses, func(i, j int) bool { return uses[i].at > uses[j].at })
+		seen := map[string]bool{}
+		for _, u := range uses {
+			if seen[u.key] {
+				continue
+			}
+			seen[u.key] = true
+			out[name] = append(out[name], u.key)
+			if len(out[name]) >= perSkill {
+				break
+			}
 		}
 	}
 	return out
