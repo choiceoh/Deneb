@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
 // SkillWorkoutTask — synthetic exercise lane (self-improvement accelerator,
@@ -56,6 +57,7 @@ func (t *SkillWorkoutTask) Run(ctx context.Context) error {
 		logger = slog.Default()
 	}
 	replay := t.replay
+	executorModel := ""
 	if replay == nil {
 		if t.Engine == nil {
 			return nil
@@ -64,13 +66,24 @@ func (t *SkillWorkoutTask) Run(ctx context.Context) error {
 		if executor == nil {
 			return nil // no local replay model wired → lane idles for free
 		}
+		executorModel = model
 		replay = func(ctx context.Context, skillBody string, tc SkillValidationCaseRecord) (skillReplayTrace, error) {
 			return t.Engine.runReplayExecutorWith(ctx, executor, model, skillBody, tc.Replay)
 		}
 	}
 
 	entries := t.Catalog.List()
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Skill.Name < entries[j].Skill.Name })
+	// Fair rotation: least-recently-exercised first (never-exercised leads),
+	// names only as the deterministic tie-break — without this the per-cycle
+	// cap would exercise the same first-N skills forever.
+	lastAt, seenFailures := t.Tracker.WorkoutActivity(evolutionHealthWindow)
+	sort.Slice(entries, func(i, j int) bool {
+		li, lj := lastAt[entries[i].Skill.Name], lastAt[entries[j].Skill.Name]
+		if li != lj {
+			return li < lj
+		}
+		return entries[i].Skill.Name < entries[j].Skill.Name
+	})
 	cycle := time.Now().UnixMilli()
 
 	var exercised, failures int
@@ -110,6 +123,12 @@ func (t *SkillWorkoutTask) Run(ctx context.Context) error {
 		exercised++
 
 		for _, tc := range evaluable {
+			// A defect already evidenced inside the window stays one cluster
+			// member — re-recording it every cycle would inflate support on a
+			// single unfixed failure and drown the sweep's evidence ranking.
+			if seenFailures[name][validationCaseLabel(tc)] {
+				continue
+			}
 			trace, terr := replay(ctx, body, tc)
 			if terr != nil {
 				// Executor trouble is systemic (model down, timeout) — stop the
@@ -129,9 +148,20 @@ func (t *SkillWorkoutTask) Run(ctx context.Context) error {
 			if rerr := t.Tracker.RecordUsage(UsageRecord{
 				SkillName:  name,
 				SessionKey: workoutSessionPrefix + strconv.FormatInt(cycle, 10),
+				Model:      executorModel,
 				Success:    false,
 				ErrorMsg:   truncateRunes(errMsg, 500),
-				Source:     UsageSourceWorkout,
+				// Explicit trace: a stable signature per mechanism (instead of
+				// keyword-classifying the assertion text) keeps one skill's
+				// workout failures in one cluster, with cases in the example.
+				FailureTrace: &UsageFailureTrace{
+					Signature:      "terminal=heldout-assertion|mechanism=skill-behavior-drift",
+					TerminalCause:  "held-out replay assertion failure",
+					CausalStatus:   "synthetic workout replay (not real use)",
+					AgentMechanism: "skill body no longer yields the proven tool plan",
+					ErrorMsg:       truncateRunes(errMsg, 500),
+				},
+				Source: UsageSourceWorkout,
 			}); rerr != nil {
 				logger.Warn("skill-workout: usage record failed", "skill", name, "error", rerr)
 			}
@@ -139,4 +169,57 @@ func (t *SkillWorkoutTask) Run(ctx context.Context) error {
 	}
 	logger.Info("skill-workout: cycle complete", "skillsExercised", exercised, "failuresRecorded", failures)
 	return nil
+}
+
+// WorkoutActivity summarizes the lane's recent records so a cycle can rotate
+// fairly and avoid re-recording known defects: when each skill was last
+// exercised, and which (skill, case-label) failures already exist inside the
+// window.
+func (t *Tracker) WorkoutActivity(window time.Duration) (lastAt map[string]int64, failedCases map[string]map[string]bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	lastAt = map[string]int64{}
+	failedCases = map[string]map[string]bool{}
+	records, err := jsonlstore.Load[UsageRecord](t.usagePath)
+	if err != nil {
+		return lastAt, failedCases
+	}
+	cutoff := time.Now().Add(-window).UnixMilli()
+	for _, r := range records {
+		if r.Source != UsageSourceWorkout {
+			continue
+		}
+		name := strings.TrimSpace(r.SkillName)
+		if name == "" {
+			continue
+		}
+		if r.UsedAt > lastAt[name] {
+			lastAt[name] = r.UsedAt
+		}
+		if r.Success || r.UsedAt < cutoff {
+			continue
+		}
+		if label := workoutCaseLabelFromError(r.ErrorMsg); label != "" {
+			if failedCases[name] == nil {
+				failedCases[name] = map[string]bool{}
+			}
+			failedCases[name][label] = true
+		}
+	}
+	return lastAt, failedCases
+}
+
+// workoutCaseLabelFromError recovers the case label a workout failure was
+// recorded for (see the errMsg format in Run). Empty when unparsable.
+func workoutCaseLabelFromError(errMsg string) string {
+	const marker = " on case "
+	i := strings.Index(errMsg, marker)
+	if i < 0 {
+		return ""
+	}
+	rest := errMsg[i+len(marker):]
+	if j := strings.Index(rest, ":"); j > 0 {
+		return strings.TrimSpace(rest[:j])
+	}
+	return ""
 }
