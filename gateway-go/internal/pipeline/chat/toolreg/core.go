@@ -360,11 +360,17 @@ func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps
 		InputSchema: sessionsSpawnToolSchema(),
 		Fn:          tools.ToolSessionsSpawn(d),
 	})
+	// Deferred (2026-07-09): the Sub-Agents prompt section tells the model NOT to
+	// poll with subagents — child completions auto-deliver via the notify relay
+	// (subagent_notify.go). Its only live use is the edge-case steer/kill of a
+	// running child, so that rare turn fetches it. sessions_spawn stays eager: the
+	// prompt directs delegation by name and it must stay frictionless.
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "subagents",
 		Description: "Monitor and control sub-agents: list status, steer with messages, or kill. Defaults to list",
 		InputSchema: subagentsToolSchema(),
 		Fn:          tools.ToolSubagents(d),
+		Deferred:    true,
 	})
 }
 
@@ -398,6 +404,9 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 		InputSchema: heartbeatUpdateToolSchema(),
 		Fn:          tools.ToolHeartbeatUpdate(),
 	})
+	// Deferred (2026-07-09): the native client owns the user's 할일 list
+	// (miniapp.todo.*) as the primary surface, and no prompt trigger names this
+	// tool — chat-side todo edits are occasional, so an "할일 추가/목록" turn fetches it.
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "todo",
 		Description: "Manage the user's 할일 (to-do) list — the SAME localtodo store the native client reads via miniapp.todo.*. " +
@@ -405,6 +414,7 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 			"Use THIS for the user's checkable tasks (a to-do added here appears on the user's device); heartbeat_update is the agent's own free-form work memo, not the user's task list.",
 		InputSchema: todoToolSchema(),
 		Fn:          tools.ToolTodo(),
+		Deferred:    true,
 	})
 }
 

@@ -761,19 +761,19 @@ func CodeActionSchema() map[string]any {
 			},
 			"promoteToSkill": map[string]any{
 				"type":        "object",
-				"description": "Optional. When the script succeeds and the workflow is reusable, code_action calls skill_lifecycle action=propose afterward. This keeps code_action as the discovery/execution surface and uses the normal skill lifecycle for genesis/evolve gates.",
+				"description": "Optional. On a successful reusable workflow, code_action calls skill_lifecycle propose afterward — code_action stays the discovery/execution surface; genesis/evolve gates run via the normal lifecycle.",
 				"properties": map[string]any{
 					"candidate": map[string]any{
 						"type":        "string",
-						"description": "One-sentence reusable workflow pattern. Required when promoteToSkill is present.",
+						"description": "One-sentence reusable workflow pattern (required when promoteToSkill is present).",
 					},
 					"evidence": map[string]any{
 						"type":        "string",
-						"description": "Why this successful code_action should become procedural memory: repeated joins, filters, calendar/wiki updates, or tool orchestration.",
+						"description": "Why it should become procedural memory: repeated joins/filters, calendar/wiki updates, or tool orchestration.",
 					},
 					"route": map[string]any{
 						"type":        "string",
-						"description": "Lifecycle route, default genesis. Use evolve with skillName when an existing skill should absorb this workflow.",
+						"description": "Lifecycle route (default genesis). Use evolve + skillName to fold into an existing skill.",
 						"enum":        []string{"genesis", "evolve", "create", "no-op"},
 					},
 					"skillName": map[string]any{
@@ -786,11 +786,11 @@ func CodeActionSchema() map[string]any {
 					},
 					"dreamSummary": map[string]any{
 						"type":        "string",
-						"description": "Optional compact summary for genesis when the Python code itself is the reusable pattern.",
+						"description": "Optional compact genesis summary when the Python code itself is the reusable pattern.",
 					},
 					"execute": map[string]any{
 						"type":        "boolean",
-						"description": "Whether skill_lifecycle should execute the route after recording the proposal. Default true.",
+						"description": "Execute the route after recording the proposal (default true).",
 						"default":     true,
 					},
 				},
