@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.61](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.60...andromeda-v0.0.61) (2026-07-09)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** PDF 미리보기가 원본 소스로 뜨는 문제 — blob MIME 재스탬프 ([#3346](https://github.com/choiceoh/Deneb/issues/3346)) ([5910f1e](https://github.com/choiceoh/Deneb/commit/5910f1e2912d06bcab972d5d383b120c2d8e1fa0))
+
 ## [0.0.60](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.59...andromeda-v0.0.60) (2026-07-09)
 
 
