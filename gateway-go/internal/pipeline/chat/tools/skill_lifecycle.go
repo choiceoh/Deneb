@@ -24,6 +24,15 @@ type SkillLifecycleBackend interface {
 	BackfillSkillValidationCases(context.Context, SkillValidationBackfillRequest) (any, error)
 	RecordSelfCorrectionCandidate(context.Context, SkillSelfCorrectionCandidateRequest) (any, error)
 	ReviewSelfCorrectionCandidate(context.Context, SkillSelfCorrectionReviewRequest) (any, error)
+	HeartbeatShadowReplay(context.Context, HeartbeatShadowReplayRequest) (any, error)
+}
+
+// HeartbeatShadowReplayRequest carries a candidate HEARTBEAT.md body for a
+// DRY-RUN shadow replay over harvested heartbeat fixtures. Nothing is applied;
+// the report is evidence to attach to a propose-only self-correction.
+type HeartbeatShadowReplayRequest struct {
+	Candidate string `json:"candidate"`
+	Limit     int    `json:"limit,omitempty"`
 }
 
 // SkillEvolutionProposalRequest records the agent's routing decision after a
@@ -235,6 +244,11 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 				SkillName: p.SkillName,
 				Finding:   p.Finding,
 			})
+		case "heartbeat_shadow_replay":
+			result, err = backend.HeartbeatShadowReplay(ctx, HeartbeatShadowReplayRequest{
+				Candidate: p.Candidate,
+				Limit:     p.Limit,
+			})
 		case "status":
 			result, err = backend.SkillLifecycleStatus(ctx, SkillLifecycleStatusRequest{
 				SkillName: p.SkillName,
@@ -303,7 +317,7 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 				ReviewNote: p.ReviewNote,
 			})
 		default:
-			return "action은 propose, genesis, evolve, status, self_correction, self_correction_review, validation_case, validation_case_from_session, validation_backfill, pin, unpin, archive, restore 중 하나를 지정하세요.", nil
+			return "action은 propose, genesis, evolve, status, self_correction, self_correction_review, validation_case, validation_case_from_session, validation_backfill, heartbeat_shadow_replay, pin, unpin, archive, restore 중 하나를 지정하세요.", nil
 		}
 		if err != nil {
 			return "", err
@@ -324,8 +338,8 @@ func SkillLifecycleToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Propus action: propose (record/route a self-improvement proposal), genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), status (inspect Propus overview.nextActions plus lifecycle logs, opportunity backlog, usage stats, validation corpus, curator state, and pending self-corrections), self_correction (record a deferred correction candidate without applying it), self_correction_review (mark a candidate accepted/rejected/superseded/applied after batch review), validation_case (record held-out assertions for a skill), validation_case_from_session (extract a held-out replay trace from sessionKey), validation_backfill (batch-extract held-out replay traces from stored sessions for skillName), pin/unpin/archive/restore (manual curator state for agent-created skills)",
-				"enum":        []string{"propose", "genesis", "evolve", "status", "self_correction", "self_correction_review", "validation_case", "validation_case_from_session", "validation_backfill", "pin", "unpin", "archive", "restore"},
+				"description": "Propus action: propose (record/route a self-improvement proposal), genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), status (inspect Propus overview.nextActions plus lifecycle logs, opportunity backlog, usage stats, validation corpus, curator state, and pending self-corrections), self_correction (record a deferred correction candidate without applying it), self_correction_review (mark a candidate accepted/rejected/superseded/applied after batch review), validation_case (record held-out assertions for a skill), validation_case_from_session (extract a held-out replay trace from sessionKey), validation_backfill (batch-extract held-out replay traces from stored sessions for skillName), heartbeat_shadow_replay (dry-run a candidate HEARTBEAT.md body over harvested heartbeat fixtures — nothing applied; pass candidate=new body), pin/unpin/archive/restore (manual curator state for agent-created skills)",
+				"enum":        []string{"propose", "genesis", "evolve", "status", "self_correction", "self_correction_review", "validation_case", "validation_case_from_session", "validation_backfill", "heartbeat_shadow_replay", "pin", "unpin", "archive", "restore"},
 			},
 			"candidate": map[string]any{
 				"type":        "string",
