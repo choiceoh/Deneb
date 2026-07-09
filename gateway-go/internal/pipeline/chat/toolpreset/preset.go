@@ -89,8 +89,9 @@ func PreloadedDeferredTools(preset Preset) []string {
 // write sub-actions ("분석 → 위키 갱신" doctrine). Received mail always flows
 // through mail_archive; direct Gmail OAuth access is intentionally absent.
 var researcherTools = toSet(
-	"mail_archive",         // eager (received-mail hand)
-	"contacts", "graphify", // deferred — loaded via fetch_tools
+	"mail_archive",                   // eager (received-mail hand)
+	"contacts",                       // deferred — loaded via fetch_tools
+	"graphify",                       // deferred — loaded via fetch_tools
 	"read", "grep", "read_spillover", // file inspection
 	"web",                          // web search + page fetch
 	"wiki", "knowledge", "polaris", // knowledge bases + recall

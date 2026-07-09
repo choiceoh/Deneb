@@ -534,15 +534,18 @@ func RegisterContactsTool(registry toolctx.ToolRegistrar, contactsDeps *toolctx.
 	if contactsDeps.Store == nil {
 		return
 	}
-	// Deferred (prompt audit 2026-06-12): ~220 wire tokens for 6 uses in 14
-	// days. ASR hotword injection and wiki person enrichment read the contacts
-	// store server-side and are unaffected; only the rare "이 번호 누구야" turn
-	// pays a fetch round-trip.
+	// Deferred (2026-07-09): the person wiki now carries 연락처 for the people the
+	// user keeps pages for, so contacts' meeting-prep/context role is covered there
+	// (wiki/knowledge/org). Its surviving unique value is full address-book coverage
+	// + reverse phone lookup (번호→사람, normalized) — an occasional "이 번호 누구야"
+	// turn that fetches on demand. code_action's bridge still exposes it zero-hop.
+	// ASR hotword injection and wiki person enrichment read the store server-side,
+	// unaffected. Description leads with the trigger so the 80-rune summary is useful.
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "contacts",
-		Description: "주소록(연락처 DB)에서 전화번호로 인물을 찾거나(lookup) 이름·회사로 검색(search). " +
-			"네이티브 클라이언트가 동기화한 연락처 전체를 조회한다. " +
-			"사용자가 '이 번호 누구?', '010-xxxx 누구야', 'OOO 연락처/번호' 같이 물으면 짐작하지 말고 호출하라.",
+		Description: "'이 번호 누구?'·'010-xxxx 누구야'·'OOO 연락처/번호'처럼 주소록을 물으면 짐작 말고 호출 — " +
+			"전화번호로 인물 찾기(lookup) 또는 이름·회사로 검색(search). " +
+			"네이티브 클라이언트가 동기화한 연락처 전체를 조회한다.",
 		InputSchema: contactsToolSchema(),
 		Fn:          tools.ToolContacts(contactsDeps),
 		Deferred:    true,
@@ -583,11 +586,15 @@ func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDep
 		// deal_ledger: deterministic list/sum over the typed deal-record ledger
 		// (wiki/deal_records.go) — 합계·건수·기간 질문을 모델 눈대중 대신 코드
 		// 계산으로. The ledger itself is teed on every UpsertDealPage filing.
+		// Deferred (2026-07-09): niche direct use, and code_action's bridge already
+		// exposes it zero-hop as "deals", so deferring strands nothing — a direct
+		// 거래 집계 turn fetches it. Description leads with the trigger phrases.
 		registry.RegisterTool(toolctx.ToolDef{
 			Name:        "deal_ledger",
-			Description: "정형 거래 원장 조회·집계: 메일 분석이 파일한 거래 문서(견적·계약·세금계산서 등)의 타입드 기록. 거래 금액의 합계·건수·통화별 집계·기간 필터가 코드로 계산된다 — '총 거래액', '올해 견적 몇 건', '거래처별 합계' 류 질문은 위키 산문을 눈대중으로 합산하지 말고 반드시 이 도구를 쓸 것. 금액 미파싱 건은 합계에서 제외되고 원문과 함께 표기된다",
+			Description: "'총 거래액'·'올해 견적 몇 건'·'거래처별 합계' 류 거래 금액 집계 질문에 쓰는 정형 거래 원장 — 메일 분석이 파일한 거래 문서(견적·계약·세금계산서 등)의 타입드 기록에서 합계·건수·통화별 집계·기간 필터를 코드로 계산한다(위키 산문 눈대중 금지). 금액 미파싱 건은 합계에서 제외되고 원문과 함께 표기된다",
 			InputSchema: dealLedgerToolSchema(),
 			Fn:          tools.ToolDealLedger(wikiDeps.Store),
+			Deferred:    true,
 		})
 	}
 }
@@ -599,10 +606,17 @@ func RegisterNotebookTool(registry toolctx.ToolRegistrar, deps *toolctx.Notebook
 	if deps == nil || deps.Store == nil {
 		return
 	}
+	// Deferred (2026-07-09): the notebook is a deliberate multi-step workflow
+	// (create → add_source → brief) needed only when the user explicitly asks for
+	// a grounded/cited briefing over pinned sources — rare per interactive turn,
+	// yet its schema was the 4th-largest eager tool (~2.6KB). Not on code_action's
+	// bridge and not named by any autonomous trigger, so a notebook turn fetches
+	// it. Description front-loads the WHEN so the 80-rune deferred summary is useful.
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "notebook",
-		Description: "NotebookLM식 자료 노트북: create (노트북 생성), list (목록), show (자료 보기), add_source (자료 핀: kind=wiki 위키페이지 또는 kind=note 붙여넣기 텍스트), remove_source (자료 제거), delete (노트북 삭제), brief (핀된 자료에만 근거한 인용 포함 브리핑 생성). 특정 딜/프로젝트의 메일·문서·메모를 한데 모아 그 자료만으로 출처 추적 가능한 종합을 만들 때 사용. brief는 [S1] 형식으로 각 사실을 인용한다",
+		Description: "딜/프로젝트 자료(메일·문서·메모)를 한데 모아 그 자료만으로 출처 추적 가능한 인용 브리핑을 만들 때 쓰는 NotebookLM식 노트북. action=create (노트북 생성) | list (목록) | show (자료 보기) | add_source (자료 핀: kind=wiki 위키페이지 또는 kind=note 붙여넣기 텍스트) | remove_source (자료 제거) | delete (노트북 삭제) | brief (핀된 자료에만 근거해 [S1] 형식 인용 브리핑 생성).",
 		InputSchema: notebookToolSchema(),
 		Fn:          tools.ToolNotebook(deps),
+		Deferred:    true,
 	})
 }
