@@ -95,7 +95,8 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 	// Track current content block being built.
 	type blockBuilder struct {
 		block   llm.ContentBlock
-		jsonBuf []byte // accumulator for input_json_delta
+		jsonBuf []byte          // accumulator for input_json_delta
+		textBuf strings.Builder // accumulator for text_delta / thinking_delta
 	}
 	var currentBlock *blockBuilder
 	blockIndex := -1
@@ -110,6 +111,13 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 		// Finalize the block's fields BEFORE appending — result.contentBlocks
 		// takes a value copy, so any mutation after the append lands on the
 		// soon-discarded currentBlock.block and is lost.
+		//
+		// Drain textBuf into Text first: text_delta/thinking_delta accumulated
+		// here during streaming. (The thinking branch below then moves Text into
+		// Thinking, so the ordering is identical to the previous `+=` path.)
+		if currentBlock.textBuf.Len() > 0 {
+			currentBlock.block.Text = currentBlock.textBuf.String()
+		}
 		switch currentBlock.block.Type {
 		case "tool_use":
 			if len(currentBlock.jsonBuf) > 0 {
@@ -224,7 +232,7 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 				} else {
 					switch cbd.Delta.Type {
 					case "text_delta":
-						currentBlock.block.Text += cbd.Delta.Text
+						currentBlock.textBuf.WriteString(cbd.Delta.Text)
 						if hooks.OnTextDelta != nil && cbd.Delta.Text != "" {
 							hooks.OnTextDelta(cbd.Delta.Text)
 						}
@@ -236,7 +244,7 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 						if chunk == "" {
 							chunk = cbd.Delta.Text
 						}
-						currentBlock.block.Text += chunk
+						currentBlock.textBuf.WriteString(chunk)
 						if hooks.OnThinking != nil {
 							hooks.OnThinking(chunk)
 						}
