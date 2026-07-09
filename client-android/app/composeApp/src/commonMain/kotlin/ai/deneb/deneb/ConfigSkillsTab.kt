@@ -655,7 +655,8 @@ private fun skillMetaLine(skill: SkillRow): String {
 internal fun lifecycleRouteLabel(route: String): String? = when (route) {
     "no-op" -> "판정: 변경 없음"
     "evolve" -> "판정: 기존 스킬 진화"
-    "create", "genesis" -> "판정: 새 스킬 생성"
+    "genesis" -> "판정: 새 스킬 생성(자동)"
+    "create" -> "판정: 새 스킬 생성(수동)"
     else -> route.takeIf { it.isNotBlank() }?.let { "판정: $it" }
 }
 
