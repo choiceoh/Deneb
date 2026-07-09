@@ -60,6 +60,7 @@ const (
 	UsageSourceReal          = "real"           // genuine use in a client/cron turn
 	UsageSourceReviewVerdict = "review-verdict" // the review fork's no-op/evolve judgment
 	UsageSourceReviewConsult = "review-consult" // the review fork reading a skill to judge it
+	UsageSourceWorkout       = "workout"        // synthetic exercise lane (workout.go) — evidence only, never real usage
 )
 
 // UsageRecord represents a single skill usage event.
@@ -261,6 +262,11 @@ func isReviewUsageRecord(r UsageRecord) bool {
 // consult-infrastructure failures (the skill could not even be loaded), and
 // legacy empty failures with no actionable session/error evidence.
 func isRealUsageRecord(r UsageRecord) bool {
+	if r.Source == UsageSourceWorkout {
+		// Synthetic exercise (workout.go): evidence for clustering only — it
+		// must never move success rates, curator stats, or bench backfill.
+		return false
+	}
 	if isReviewUsageRecord(r) {
 		return false
 	}
