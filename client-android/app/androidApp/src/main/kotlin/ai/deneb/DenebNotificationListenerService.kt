@@ -272,23 +272,24 @@ class DenebNotificationListenerService : NotificationListenerService() {
         // user has already seen before this update, so forwarding them only repeats
         // content an earlier event already carried.
         //
-        // The first getter on a cross-process Bundle unparcels every value at once,
-        // so one custom Parcelable from the source app throws for the entire read.
-        // Contain it here (degrade to empty) instead of letting it propagate — the
-        // notification is simply skipped, and the whole notification stream keeps
-        // flowing instead of the process dying on a single odd payload.
-        return runCatching {
-            NotificationText(
-                title = extras.text(Notification.EXTRA_TITLE),
-                body = extras.text(Notification.EXTRA_TEXT),
-                bigText = extras.text(Notification.EXTRA_BIG_TEXT),
-                subText = extras.text(Notification.EXTRA_SUB_TEXT),
-                summaryText = extras.text(Notification.EXTRA_SUMMARY_TEXT),
-                conversationTitle = extras.text(Notification.EXTRA_CONVERSATION_TITLE),
-                textLines = extras.textArray(Notification.EXTRA_TEXT_LINES),
-                messages = extras.messages(Notification.EXTRA_MESSAGES),
-            )
-        }.getOrElse { NotificationText() }
+        // Each field is read independently (the text/textArray/messages helpers below
+        // self-guard), so one un-deserializable extra — a custom Parcelable an app
+        // stuffed into its OWN key — costs us only that field, not the readable ones.
+        // On Android 13+ (lazy Bundle unparcel) reading a standard string key never
+        // even touches a foreign key, so title/body/bigText come through intact and
+        // the notification is still captured instead of dropped; on older Android the
+        // first getter unparcels the whole Bundle eagerly, so a hostile payload yields
+        // empty here (still no crash — onNotificationPosted is the process-death backstop).
+        return NotificationText(
+            title = extras.text(Notification.EXTRA_TITLE),
+            body = extras.text(Notification.EXTRA_TEXT),
+            bigText = extras.text(Notification.EXTRA_BIG_TEXT),
+            subText = extras.text(Notification.EXTRA_SUB_TEXT),
+            summaryText = extras.text(Notification.EXTRA_SUMMARY_TEXT),
+            conversationTitle = extras.text(Notification.EXTRA_CONVERSATION_TITLE),
+            textLines = extras.textArray(Notification.EXTRA_TEXT_LINES),
+            messages = extras.messages(Notification.EXTRA_MESSAGES),
+        )
     }
 
     // The app label already travels as the event's source field (the gateway prompt
@@ -419,17 +420,20 @@ class DenebNotificationListenerService : NotificationListenerService() {
         return ""
     }
 
-    private fun Bundle.text(key: String): String = getCharSequence(key)?.toString()?.trim().orEmpty()
+    // Each reader self-guards: a cross-process Bundle getter can throw
+    // BadParcelableException when one value's class isn't in our process. Catching
+    // per-field (instead of once around the whole read) lets a notification keep its
+    // readable fields when only one extra is un-deserializable — see readNotificationText.
+    private fun Bundle.text(key: String): String = runCatching { getCharSequence(key)?.toString()?.trim().orEmpty() }.getOrDefault("")
 
-    private fun Bundle.textArray(key: String): List<String> = getCharSequenceArray(key)
-        ?.mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotEmpty) }
-        .orEmpty()
+    private fun Bundle.textArray(key: String): List<String> = runCatching {
+        getCharSequenceArray(key)?.mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotEmpty) }.orEmpty()
+    }.getOrDefault(emptyList())
 
     @Suppress("DEPRECATION")
-    private fun Bundle.messages(key: String): List<NotificationMessage> = getParcelableArray(key)
-        ?.mapNotNull { it as? Bundle }
-        ?.mapNotNull(::notificationMessage)
-        .orEmpty()
+    private fun Bundle.messages(key: String): List<NotificationMessage> = runCatching {
+        getParcelableArray(key)?.mapNotNull { it as? Bundle }?.mapNotNull(::notificationMessage).orEmpty()
+    }.getOrDefault(emptyList())
 
     private fun notificationMessage(bundle: Bundle): NotificationMessage? {
         val text = bundle.getCharSequence("text")?.toString()?.trim().orEmpty()
