@@ -62,10 +62,20 @@ func persistMediaDeliveryFailure(deps runDeps, sessionKey, channel string, faile
 	}
 }
 
+// fallbackForEmptyFinalReply is the user-facing notice for an accidental
+// empty completion (isEmptyFinalResult: end_turn after tool activity, zero
+// text, no silent token). Deliberately NOT a fallbackForStopReason case —
+// the "end_turn" mapping must stay empty there so intentional NO_REPLY
+// silence is never overwritten with an error notice.
+func fallbackForEmptyFinalReply() string {
+	return "도구 실행은 끝났는데 모델이 빈 응답으로 턴을 마쳤어요. 다시 한 번 요청해 주세요."
+}
+
 // fallbackForStopReason returns a user-visible Korean message for abnormal
 // terminations where the agent produced no text output. Empty string means
 // no fallback needed (e.g., end_turn is a normal termination — tool-only
-// turns legitimately produce no text and the caller already logged it).
+// turns legitimately produce no text and the caller already logged it;
+// the accidental-empty case is fallbackForEmptyFinalReply's).
 func fallbackForStopReason(stopReason string) string {
 	switch stopReason {
 	case "max_turns":

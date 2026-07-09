@@ -226,3 +226,30 @@ func TestHealthyFallbackExists(t *testing.T) {
 		}
 	})
 }
+
+// TestIsEmptyFinalResult pins the accidental-empty-completion classifier: an
+// end_turn with tool activity (Turns > 1) and zero text is a failure surface
+// (blank bubble), while intentional silence (NO_REPLY token), single-shot
+// answers, and timeout stalls (isStalledResult's territory) are left alone.
+func TestIsEmptyFinalResult(t *testing.T) {
+	cases := []struct {
+		name string
+		r    *agent.AgentResult
+		want bool
+	}{
+		{"nil result", nil, false},
+		{"empty after tool round", &agent.AgentResult{StopReason: "end_turn", Turns: 2}, true},
+		{"whitespace only after tools", &agent.AgentResult{StopReason: "end_turn", Turns: 3, AllText: " \n\t"}, true},
+		{"NO_REPLY intentional silence", &agent.AgentResult{StopReason: "end_turn", Turns: 2, AllText: "NO_REPLY"}, false},
+		{"text produced", &agent.AgentResult{StopReason: "end_turn", Turns: 2, AllText: "답변"}, false},
+		{"single-shot empty left alone", &agent.AgentResult{StopReason: "end_turn", Turns: 1}, false},
+		{"timeout is the stall path", &agent.AgentResult{StopReason: "timeout", Turns: 2}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isEmptyFinalResult(tc.r); got != tc.want {
+				t.Errorf("isEmptyFinalResult() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
