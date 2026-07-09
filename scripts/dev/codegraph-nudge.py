@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""PreToolUse nudge: steer symbol-name text searches to greppy.
+"""PreToolUse nudge: steer symbol-name text searches to CodeGraph.
 
 Reads the Claude Code PreToolUse payload on stdin (Grep / Bash). When an agent
-greps a BARE IDENTIFIER that greppy's symbol graph knows as an actual definition
-(exact name match), block that one call with a pointer to the structural
-commands (who-calls / brief / impact / semantic-search). The retry — or any
-genuine text search (TODO, log strings, regex) — passes silently.
+greps a BARE IDENTIFIER that CodeGraph's index knows as an actual definition
+(exact name match), block that one call with a pointer to the structural tools
+(the codegraph_explore MCP tool, or `codegraph callers/impact` on the CLI). The
+retry — or any genuine text search (TODO, log strings, regex) — passes silently.
 
-Discriminator: `greppy search-symbols <pat> --json` must return a hit whose
-`name` equals the pattern exactly. Common words (TODO, error, handler) fuzzy-match
-but never exact-match a definition, so they are never blocked.
+Discriminator: `codegraph query <pat> --json` must return a node whose `name`
+equals the pattern exactly. Common words (TODO, error, handler) either miss or
+match a differently-cased symbol, so they are never blocked.
 
 Blocks once per (session, pattern): the immediate retry passes via the marker.
-Fail-open by design: greppy missing, graph unbuilt, parse error, timeout → exit 0
-(never break searching). This is the enforcement half of CLAUDE.md's greppy line.
+Fail-open by design: codegraph missing, index unbuilt, parse error, timeout →
+exit 0 (never break searching). Enforcement half of CLAUDE.md's CodeGraph line.
 """
 
 import hashlib
@@ -35,45 +35,49 @@ def bare_identifier(pat):
 
 
 def pattern_from_bash(command):
-    """Best-effort: extract the search pattern from a `grep/rg PATTERN` command.
-    Returns "" when the command is not a simple grep/rg, invokes greppy, or can't
-    be parsed — all of which mean "not ours to gate"."""
-    if "greppy" in command:
-        return ""  # never gate an explicit greppy call
+    """Best-effort: extract the pattern from a `grep/rg PATTERN` command. Returns
+    "" when the command is not a simple grep/rg, invokes codegraph, or can't be
+    parsed — all of which mean "not ours to gate"."""
+    if "codegraph" in command:
+        return ""  # never gate an explicit codegraph call
     try:
         tokens = shlex.split(command)
     except ValueError:
         return ""
-    # Find a grep-family program token, then the first non-flag argument.
     for i, tok in enumerate(tokens):
-        prog = os.path.basename(tok)
-        if prog in GREP_TOKENS:
+        if os.path.basename(tok) in GREP_TOKENS:
             for arg in tokens[i + 1:]:
                 if arg.startswith("-"):
                     continue
                 if arg in ("|", "&&", "||", ";"):
-                    break  # end of this grep segment, no pattern seen
+                    break
                 return arg
             return ""
     return ""
 
 
 def is_defined_symbol(pat, root):
-    """True iff greppy's graph has a definition whose name == pat (exact)."""
+    """True iff CodeGraph's index has a definition whose name == pat (exact)."""
     try:
         out = subprocess.run(
-            ["greppy", "search-symbols", pat, "--json", "--root", root],
-            capture_output=True, text=True, timeout=6,
+            ["codegraph", "query", pat, "--json"],
+            capture_output=True, text=True, timeout=6, cwd=root,
         )
     except (OSError, subprocess.SubprocessError):
-        return False  # greppy absent / crashed → fail open
+        return False  # codegraph absent / crashed → fail open
     if out.returncode != 0 or not out.stdout:
         return False
     try:
-        hits = (json.loads(out.stdout) or {}).get("hits") or []
+        data = json.loads(out.stdout)
     except ValueError:
         return False
-    return any(h.get("name") == pat for h in hits)
+    rows = data if isinstance(data, list) else (data.get("results") or data.get("nodes") or [])
+    for row in rows:
+        node = row.get("node") if isinstance(row, dict) else None
+        name = (node or row or {}).get("name") if isinstance(row, dict) else None
+        if name == pat:
+            return True
+    return False
 
 
 def main():
@@ -97,9 +101,8 @@ def main():
     if not is_defined_symbol(pat, root):
         return 0  # not a known symbol → let the text search run
 
-    # Block once per (session, pattern); the retry passes via the marker.
     session = re.sub(r"[^A-Za-z0-9_-]", "_", str(payload.get("session_id") or "nosession"))
-    seen_dir = os.path.join(tempfile.gettempdir(), f"greppy-nudge-{session}")
+    seen_dir = os.path.join(tempfile.gettempdir(), f"codegraph-nudge-{session}")
     os.makedirs(seen_dir, exist_ok=True)
     marker = os.path.join(seen_dir, hashlib.sha1(pat.encode()).hexdigest())
     if os.path.exists(marker):
@@ -107,9 +110,9 @@ def main():
     open(marker, "w").close()
 
     msg = [
-        f"[greppy] '{pat}'는 코드 심볼입니다 (greppy 그래프에 정의 존재). 관계·구조 질문이면 텍스트 grep보다:",
-        f"  greppy who-calls {pat}   ·  greppy brief {pat}   ·  greppy impact {pat}   ·  greppy callees {pat}",
-        f'  이름을 모를 땐: greppy semantic-search "동작 설명"',
+        f"[codegraph] '{pat}'는 코드 심볼입니다 (CodeGraph 인덱스에 정의 존재). 관계·구조 질문이면 텍스트 grep보다:",
+        f"  · MCP 툴 codegraph_explore \"{pat} 관련 질문\"  (호출자·호출대상·블래스트 반경을 한 번에)",
+        f"  · 또는 CLI: codegraph callers {pat}  ·  codegraph impact {pat}  ·  codegraph node {pat}",
         "텍스트 문자열 검색이 목적이면 같은 검색을 그대로 재실행하세요 (세션당 심볼별 1회만 안내).",
     ]
     print("\n".join(msg), file=sys.stderr)

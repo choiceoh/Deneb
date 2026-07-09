@@ -12,7 +12,10 @@ build/
 # IDE
 .idea/
 .vscode/
-.mcp.json
+
+# CodeGraph local index (SQLite, per-machine; rebuilt via `codegraph init`).
+# The MCP wiring itself (.mcp.json) IS committed so every agent gets codegraph.
+.codegraph/
 .claude/settings.local.json
 *.swp
 *.swo
