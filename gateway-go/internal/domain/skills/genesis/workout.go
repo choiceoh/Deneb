@@ -217,6 +217,33 @@ func (t *Tracker) WorkoutActivity(window time.Duration) (lastAt map[string]int64
 	return lastAt, failedCases
 }
 
+// WorkoutActivitySummary is the operator-facing liveness of the synthetic
+// exercise lane: the workout lane had no status surface (its evidence shows up
+// only as workout-failure clusters), so this gives "is it running, and what is
+// it finding" in one place (skill_lifecycle status).
+type WorkoutActivitySummary struct {
+	LastRunAt        int64 `json:"lastRunAt,omitempty"` // newest workout record (unix ms)
+	SkillsExercised  int   `json:"skillsExercised"`     // distinct skills with a workout record in-window
+	DistinctFailures int   `json:"distinctFailures"`    // distinct (skill, case) failures in-window
+}
+
+// WorkoutActivitySummarize rolls WorkoutActivity into the liveness summary over
+// the evolution-health window.
+func (t *Tracker) WorkoutActivitySummarize() WorkoutActivitySummary {
+	lastAt, failed := t.WorkoutActivity(evolutionHealthWindow)
+	var s WorkoutActivitySummary
+	s.SkillsExercised = len(lastAt)
+	for _, at := range lastAt {
+		if at > s.LastRunAt {
+			s.LastRunAt = at
+		}
+	}
+	for _, cases := range failed {
+		s.DistinctFailures += len(cases)
+	}
+	return s
+}
+
 // workoutCaseLabelFromError recovers the case label a workout failure was
 // recorded for (see the errMsg format in Run). Empty when unparsable.
 func workoutCaseLabelFromError(errMsg string) string {

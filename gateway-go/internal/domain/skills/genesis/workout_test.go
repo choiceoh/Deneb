@@ -133,3 +133,27 @@ func TestSkillWorkoutTask_RotationAndDedup(t *testing.T) {
 		t.Fatalf("workout activity should report exercised skill + failed case: %v %v", lastAt, seen)
 	}
 }
+
+// The liveness summary rolls up in-window workout records for the status view.
+func TestWorkoutActivitySummarize(t *testing.T) {
+	tr, catalog := workoutFixtures(t)
+	task := &SkillWorkoutTask{
+		Tracker: tr, Catalog: catalog,
+		replay: func(_ context.Context, _ string, _ SkillValidationCaseRecord) (skillReplayTrace, error) {
+			return skillReplayTrace{}, nil // fails the RequiredTools assertion
+		},
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	s := tr.WorkoutActivitySummarize()
+	if s.SkillsExercised != 1 || s.DistinctFailures != 1 || s.LastRunAt == 0 {
+		t.Fatalf("summary should report 1 skill / 1 failure / a timestamp, got %+v", s)
+	}
+
+	// No workout records → zero-valued summary (never-run lane reads clean).
+	empty := newTestTracker(t)
+	if got := empty.WorkoutActivitySummarize(); got.SkillsExercised != 0 || got.LastRunAt != 0 {
+		t.Fatalf("empty lane must summarize to zero, got %+v", got)
+	}
+}

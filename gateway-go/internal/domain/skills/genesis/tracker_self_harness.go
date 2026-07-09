@@ -48,19 +48,19 @@ func (t *Tracker) computeSelfHarnessSignalsLocked(now time.Time) SelfHarnessSign
 		if isSelfHarnessOrReplayRejection(reason) {
 			s.Rejections7d++
 		}
-		if strings.Contains(reason, "self-harness audit rejected") && strings.Contains(reason, "missing") {
+		// Non-exclusive counters over the SHARED classifier substrings
+		// (tracker_failure_clusters.go) — a reason can bump several at once, but
+		// the substrings themselves are defined once.
+		if evolveRejectionMatchesClass(reason, "missing-audit") {
 			s.MissingAuditRejections7d++
 		}
-		if strings.Contains(reason, "does not match supported failure signatures") ||
-			strings.Contains(reason, "no failure evidence bundle") {
+		if evolveRejectionMatchesClass(reason, "signature-mismatch") {
 			s.SignatureMismatchRejections7d++
 		}
-		if strings.Contains(reason, "self-harness surface rejected") ||
-			strings.Contains(reason, "did not match changed skill.md sections") ||
-			strings.Contains(reason, "not editable by skill.md body evolve") {
+		if evolveRejectionMatchesClass(reason, "surface-mismatch") {
 			s.SurfaceMismatchRejections7d++
 		}
-		if strings.Contains(reason, "held-out") || strings.Contains(reason, "replay") {
+		if evolveRejectionMatchesClass(reason, "heldout-replay") {
 			s.HeldOutReplayRejections7d++
 		}
 	}
