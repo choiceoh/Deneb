@@ -30,12 +30,52 @@ func executeOneTool(
 	runLog *agentlog.RunLogger,
 	loopDetector *ToolLoopDetector,
 ) llm.ContentBlock {
+	return executeOneToolTracked(
+		ctx, tc, tools, hooks, turnReason, turn, logger, runLog, loopDetector,
+	).block
+}
+
+type toolCallExecution struct {
+	block       llm.ContentBlock
+	interrupted bool
+}
+
+// executeOneToolTracked retains whether cancellation actually interrupted the
+// call. A turn-level ctx check alone is insufficient: one sibling may have
+// already completed with an ordinary validation error before another call is
+// cancelled, and that completed error must not be reported as interrupted.
+func executeOneToolTracked(
+	ctx context.Context,
+	tc llm.ContentBlock,
+	tools ToolExecutor,
+	hooks StreamHooks,
+	turnReason string,
+	turn int,
+	logger *slog.Logger,
+	runLog *agentlog.RunLogger,
+	loopDetector *ToolLoopDetector,
+) toolCallExecution {
 	prep := prepareToolCall(tc, tools, hooks, turnReason, turn, logger, runLog, loopDetector)
 	if prep.done {
-		return prep.block
+		return toolCallExecution{block: prep.block}
+	}
+	// Hooks run during prepare and may cancel the turn. Re-check immediately
+	// before dispatch so a side-effecting executor never starts after cancel.
+	if err := ctx.Err(); err != nil {
+		return toolCallExecution{
+			block:       finishToolCall(prep, tc, "", err, tools, hooks, turn, logger, runLog, loopDetector),
+			interrupted: true,
+		}
 	}
 	output, toolErr := runToolCore(ctx, tc, tools, hooks, logger, prep.start)
-	return finishToolCall(prep, tc, output, toolErr, tools, hooks, turn, logger, runLog, loopDetector)
+	return toolCallExecution{
+		block:       finishToolCall(prep, tc, output, toolErr, tools, hooks, turn, logger, runLog, loopDetector),
+		interrupted: isContextToolError(toolErr),
+	}
+}
+
+func isContextToolError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 // toolCallPrep is the strictly-ordered pre-execution outcome of one tool
@@ -296,15 +336,23 @@ func parallelSafeTurn(cfg AgentConfig, calls []llm.ContentBlock) bool {
 	return true
 }
 
-// executeToolsParallel runs one turn's tool calls concurrently. Reached only
-// through parallelSafeTurn (all read-only, no $ref), so cross-tool side
-// effects cannot occur. Determinism is preserved by staging: loop-detector
-// checks and start hooks fire in call order BEFORE dispatch, executions
-// overlap, then result recording/hooks/logs replay in call order — the result
-// blocks the model sees, the transcript, and the agent-log are ordered
-// exactly as a sequential run of the same outcomes. Measured motivation
-// (2026-07-07, 3d of prod agent-logs): all-read-only multi-tool turns wasted
-// 124s of wall time on serial waits, web+web research turns 20-30s each.
+type toolCallLifecycle struct {
+	prepared    bool
+	dispatched  bool
+	resolved    bool
+	interrupted bool
+}
+
+// parallelToolExecution retains per-call lifecycle state alongside results.
+// Keeping the flags together prevents parallel boolean slices from drifting
+// when cancellation races prepare, dispatch, and completion.
+type parallelToolExecution struct {
+	results []llm.ContentBlock
+	calls   []toolCallLifecycle
+}
+
+// executeToolsParallel preserves the original result-only API for focused
+// helper tests and callers that do not need lifecycle metadata.
 func executeToolsParallel(
 	ctx context.Context,
 	calls []llm.ContentBlock,
@@ -316,20 +364,48 @@ func executeToolsParallel(
 	runLog *agentlog.RunLogger,
 	loopDetector *ToolLoopDetector,
 ) []llm.ContentBlock {
+	return executeToolsParallelTracked(
+		ctx, calls, tools, hooks, turnReason, turn, logger, runLog, loopDetector,
+	).results
+}
+
+// executeToolsParallelTracked runs one turn's tool calls concurrently.
+// Reached only through parallelSafeTurn (all read-only, no $ref), so
+// cross-tool side effects cannot occur. Determinism is preserved by staging:
+// loop-detector checks and start hooks fire in call order BEFORE dispatch,
+// executions overlap, then result recording/hooks/logs replay in call order.
+// The per-call lifecycle lets the turn-level commit path distinguish real
+// results from calls skipped by cancellation and identifies only executions
+// that actually ended through context failure.
+func executeToolsParallelTracked(
+	ctx context.Context,
+	calls []llm.ContentBlock,
+	tools ToolExecutor,
+	hooks StreamHooks,
+	turnReason string,
+	turn int,
+	logger *slog.Logger,
+	runLog *agentlog.RunLogger,
+	loopDetector *ToolLoopDetector,
+) parallelToolExecution {
 	preps := make([]toolCallPrep, len(calls))
+	lifecycles := make([]toolCallLifecycle, len(calls))
 	for i, tc := range calls {
+		if ctx.Err() != nil {
+			break
+		}
 		preps[i] = prepareToolCall(tc, tools, hooks, turnReason, turn, logger, runLog, loopDetector)
+		lifecycles[i].prepared = true
 	}
 
 	outputs := make([]string, len(calls))
 	errs := make([]error, len(calls))
-	dispatched := make([]bool, len(calls))
 	var wg sync.WaitGroup
 	for i, tc := range calls {
 		if preps[i].done || ctx.Err() != nil {
 			continue
 		}
-		dispatched[i] = true
+		lifecycles[i].dispatched = true
 		wg.Add(1)
 		go func(i int, tc llm.ContentBlock) {
 			defer wg.Done()
@@ -349,17 +425,24 @@ func executeToolsParallel(
 	results := make([]llm.ContentBlock, len(calls))
 	for i, tc := range calls {
 		switch {
+		case !lifecycles[i].prepared:
+			// Cancellation stopped the ordered prepare stage before this call.
 		case preps[i].done:
 			results[i] = preps[i].block
-		case !dispatched[i]:
+			lifecycles[i].resolved = true
+		case !lifecycles[i].dispatched:
 			// ctx canceled before dispatch — leave the zero block; the caller's
-			// post-loop ctx check reports the interruption (same as the
-			// sequential path's break).
+			// turn-level commit path replaces it with a synthetic error result.
 		default:
 			results[i] = finishToolCall(preps[i], tc, outputs[i], errs[i], tools, hooks, turn, logger, runLog, loopDetector)
+			lifecycles[i].resolved = true
+			lifecycles[i].interrupted = isContextToolError(errs[i])
 		}
 	}
-	return results
+	return parallelToolExecution{
+		results: results,
+		calls:   lifecycles,
+	}
 }
 
 // UntrustedToolOutputMarker is the opening token of the fence that

@@ -74,6 +74,7 @@ func RunAgent(
 	runCtx := ctx
 
 	result := &AgentResult{}
+	journal := newRunMessageJournal(messages, cfg.OnMessagePersist)
 
 	// Run-level aggregates so `agent loop complete` can surface the whole-run
 	// shape at a glance. Without this the caller only sees the LAST turn's
@@ -89,6 +90,7 @@ func RunAgent(
 	// max_turns, end_turn) surfaces the same diagnostic shape without
 	// duplicating the assignment across six return statements.
 	defer func() {
+		result.TurnsPersisted = journal.persisted
 		result.TotalTextChars = totalTextChars
 		result.TotalToolCalls = totalToolCalls
 		if len(toolCounts) > 0 {
@@ -117,7 +119,7 @@ func RunAgent(
 	for turn := 0; turn < cfg.MaxTurns || result.BudgetGraceCall; turn++ {
 		result.Turns = turn + 1
 
-		prepared := turnPreparer.prepare(runCtx, turn, messages, result.ToolActivities)
+		prepared := turnPreparer.prepare(runCtx, turn, journal.messages, result.ToolActivities)
 		ctx = prepared.ctx
 		turnThinking := prepared.thinking
 
@@ -129,7 +131,7 @@ func RunAgent(
 			if ctx.Err() != nil {
 				result.Stream.TerminationReason = string(streamTerminationContextDone)
 				result.StopReason = stopReasonFromCtx(ctx)
-				result.FinalMessages = messages
+				result.FinalMessages = journal.messages
 				return result, nil
 			}
 			if streamOutcome.initialConnectionFailed() {
@@ -189,7 +191,7 @@ func RunAgent(
 			"turnCacheReadTokens", turnRes.usage.CacheReadInputTokens,
 			"turnCacheCreationTokens", turnRes.usage.CacheCreationInputTokens,
 			"accInputTokens", result.Usage.InputTokens,
-			"messages", len(messages),
+			"messages", len(journal.messages),
 			"textChars", textChars,
 			"textHead", textHead,
 			"toolCount", toolCount,
@@ -273,6 +275,12 @@ func RunAgent(
 			result.Thinking += turnThinking
 		}
 
+		// Build the assistant message once. Recovery and tool turns append it to
+		// the next request's history; finishing turns persist it without append.
+		// The staged wrapper keeps the finalize gate's pre-decision persist and
+		// later append on a single, exactly-once persistence path.
+		assistantMessage := journal.stage(llm.NewBlockMessage("assistant", turnRes.contentBlocks))
+
 		// --- Max-output-tokens recovery ---
 		// When the LLM response is truncated by max_tokens (not a clean end_turn),
 		// inject a "resume" message and retry. This prevents losing partially
@@ -292,8 +300,8 @@ func RunAgent(
 				cfg.MaxTokens = baseMaxTokens
 				logger.Info("max_tokens recovery: thinking runaway — retrying with thinking off",
 					"attempt", maxTokensRecoveryCount, "maxAttempts", cfg.MaxOutputTokensRecovery)
-				messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
-				messages = append(messages, llm.NewTextMessage("user",
+				assistantMessage.append()
+				journal.append(llm.NewTextMessage("user",
 					"[직전 응답이 분석(생각)만 하다 토큰 한도에 걸렸습니다. 추가 분석 없이 곧바로 최종 답변만 작성하세요.]"))
 				continue
 			}
@@ -312,9 +320,9 @@ func RunAgent(
 				"baseMaxTokens", baseMaxTokens,
 				"newMaxTokens", cfg.MaxTokens)
 			// Append the truncated assistant output so the LLM sees what it already wrote.
-			messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
+			assistantMessage.append()
 			// Inject a user-role resume prompt.
-			messages = append(messages, llm.NewTextMessage("user",
+			journal.append(llm.NewTextMessage("user",
 				"[Output was truncated due to token limit. Resume directly from where you left off — no apology, no recap.]"))
 			continue
 		}
@@ -326,14 +334,11 @@ func RunAgent(
 		// "verification not applicable" opt-out is recognized on the SAME turn
 		// the model tries to end, never nagged after a valid reason); (2) whether
 		// the gate then holds or lets the finish through, the turn is recorded
-		// exactly once — finishPersisted guards the terminal block from a second
-		// persist. Non-finish turns persist via the normal path further down.
+		// exactly once — the staged message is idempotent when a held finish later
+		// moves into history. Non-finish turns append via the normal path below.
 		finishAttempt := turnRes.stopReason == "end_turn" || len(turnRes.toolCalls) == 0
-		finishPersisted := false
-		if finishAttempt && cfg.OnMessagePersist != nil && turnRes.text != "" {
-			cfg.OnMessagePersist(llm.NewBlockMessage("assistant", turnRes.contentBlocks))
-			result.TurnsPersisted++
-			finishPersisted = true
+		if finishAttempt && turnRes.text != "" {
+			assistantMessage.persist()
 		}
 
 		// --- Verification gate: hold a finish that skipped verification ---
@@ -357,8 +362,8 @@ func RunAgent(
 				_ = cfg.FinalizeGate(-1) // log-only; never hold past the grace turn
 			} else if gatePrompt := cfg.FinalizeGate(turn); gatePrompt != "" {
 				logger.Info("finalize gate: holding finish for verification", "turn", turn)
-				messages = append(messages, llm.NewBlockMessage("assistant", turnRes.contentBlocks))
-				messages = append(messages, llm.NewTextMessage("user", gatePrompt))
+				assistantMessage.append()
+				journal.append(llm.NewTextMessage("user", gatePrompt))
 				continue
 			}
 		}
@@ -367,10 +372,9 @@ func RunAgent(
 		if finishAttempt {
 			// Persist the terminal assistant message (not appended to messages
 			// since the loop is ending, but must be in transcript for next run).
-			// Skipped when the finish-attempt persist above already recorded it.
-			if !finishPersisted && cfg.OnMessagePersist != nil && turnRes.text != "" {
-				cfg.OnMessagePersist(llm.NewBlockMessage("assistant", turnRes.contentBlocks))
-				result.TurnsPersisted++
+			// Idempotent when the finish-attempt path above already recorded it.
+			if turnRes.text != "" {
+				assistantMessage.persist()
 			}
 
 			// Grace iteration produced its wrap-up reply — surface the graceful
@@ -386,7 +390,7 @@ func RunAgent(
 				}
 			}
 			result.MaxTokensRecoveries = maxTokensRecoveryCount
-			result.FinalMessages = messages
+			result.FinalMessages = journal.messages
 			return result, nil
 		}
 
@@ -396,116 +400,65 @@ func RunAgent(
 		// only need the text context. Each image block (~1600 tokens) becomes a tiny
 		// text placeholder instead.
 		if turn == 0 && cfg.StripImagesAfterFirstTurn {
-			messages = stripBase64ImagesFromHistory(messages)
+			journal.messages = stripBase64ImagesFromHistory(journal.messages)
 		}
 
 		// Record where the current turn's messages begin in the array.
 		// Everything before this index is from prior turns and eligible for
 		// tool result compaction.
-		currentTurnStart := len(messages)
+		currentTurnStart := len(journal.messages)
 
-		// Build assistant message with all content blocks from this turn.
-		assistantMsg := llm.NewBlockMessage("assistant", turnRes.contentBlocks)
-		messages = append(messages, assistantMsg)
-		if cfg.OnMessagePersist != nil {
-			cfg.OnMessagePersist(assistantMsg)
-			result.TurnsPersisted++
-		}
+		// Tool turns continue the conversation, so append the staged assistant
+		// message before dispatching its calls.
+		assistantMessage.append()
 
-		// Execute tools sequentially in the order the LLM emitted them.
-		// Tools run one at a time so cross-tool side effects stay predictable.
-		// The one exception is a turn whose EVERY call is read-only and
-		// $ref-free (parallelSafeTurn) — those execute concurrently with
-		// in-order staging, because by construction no call can observe or
-		// depend on another's effects.
-		var toolResults []llm.ContentBlock
-		// Per-path edit-thrash nudges produced this turn. The hash-based loop
-		// detector only catches identical name+args repeats; a run that issues
-		// many DIFFERENT edits to one file slips past it, so RecordFileMutation
-		// counts successful mutations by resolved path and hands back a one-shot
-		// nudge per path. Collected here and appended below as user-role text
-		// blocks, the same channel buildTurnBudgetWarning uses (non-blocking).
-		var editThrashNudges []string
-		if len(turnRes.toolCalls) > 0 {
-			turnReason := extractThinkingText(turnRes.contentBlocks)
-			if parallelSafeTurn(cfg, turnRes.toolCalls) {
-				// All calls read-only and $ref-free: execute concurrently.
-				// RecordFileMutation is skipped — the parallel-safe set cannot
-				// mutate files, so there is no thrash to count.
-				toolResults = executeToolsParallel(ctx, turnRes.toolCalls, tools, hooks, turnReason, turn, logger, runLog, cfg.ToolLoopDetector)
-			} else {
-				provenanceRoot := toolProvenanceRoot(tools)
-				toolResults = make([]llm.ContentBlock, len(turnRes.toolCalls))
-				for i, tc := range turnRes.toolCalls {
-					if ctx.Err() != nil {
-						break
-					}
-					toolResults[i] = executeOneTool(ctx, tc, tools, hooks, turnReason, turn, logger, runLog, cfg.ToolLoopDetector)
-
-					// Count this mutation toward the per-path thrash breaker, but
-					// only on success — a failed edit is not progress and must not
-					// push a file toward the nudge threshold.
-					if cfg.ToolLoopDetector != nil && !toolResults[i].IsError {
-						if nudge := cfg.ToolLoopDetector.RecordFileMutation(provenanceRoot, tc.Name, tc.Input); nudge != "" {
-							editThrashNudges = append(editThrashNudges, nudge)
-						}
-					}
-				}
-			}
-
-			// Check context cancellation after tool execution.
-			if ctx.Err() != nil {
-				result.StopReason = stopReasonFromCtx(ctx)
-				for _, tc := range turnRes.toolCalls {
-					result.InterruptedToolNames = append(result.InterruptedToolNames, tc.Name)
-				}
-				result.FinalMessages = messages
-				return result, nil
-			}
-		}
-
-		// Record tool activities for context persistence.
-		var turnActivities []ToolActivity
-		if len(turnRes.toolCalls) > 0 {
-			turnActivities = make([]ToolActivity, 0, len(turnRes.toolCalls))
-		}
-		for i, tc := range turnRes.toolCalls {
-			ta := ToolActivity{Name: tc.Name, Turn: turn + 1}
-			if i < len(toolResults) {
-				ta.IsError = toolResults[i].IsError
-				ta.OutputRunes = len([]rune(toolResults[i].Content))
-			}
-			result.ToolActivities = append(result.ToolActivities, ta)
-			turnActivities = append(turnActivities, ta)
-		}
+		// Execute the complete tool turn into a commit-ready outcome. The helper
+		// preserves real results and fills calls skipped by cancellation with
+		// synthetic error results, so every persisted tool_use remains paired.
+		toolTurn := executeToolTurn(
+			ctx,
+			cfg,
+			turnRes.toolCalls,
+			tools,
+			hooks,
+			extractThinkingText(turnRes.contentBlocks),
+			turn,
+			logger,
+			runLog,
+		)
+		result.ToolActivities = append(result.ToolActivities, toolTurn.activities...)
 
 		// Post-turn hook: skill nudger (and future accounting that needs
 		// the turn's tool activities). Fires even when the turn had no
 		// tool calls so subscribers can track turn progression.
 		if cfg.OnToolTurn != nil {
-			cfg.OnToolTurn(turn+1, turnActivities)
+			cfg.OnToolTurn(turn+1, toolTurn.activities)
 		}
 
-		// Per-path edit-thrash nudges: surface any one-shot "you keep editing the
-		// same file" warnings produced during this turn's tool execution. These
-		// ride the same user-role tool_result message as the budget warning and
-		// never block — they only ask the model to reconsider its approach.
-		for _, nudge := range editThrashNudges {
-			toolResults = append(toolResults, llm.ContentBlock{
-				Type: "text",
-				Text: nudge,
-			})
+		toolResults := toolTurn.results
+		if !toolTurn.canceled {
+			// Per-path edit-thrash nudges and budget warnings only matter when a
+			// later LLM turn will consume them. Omit both from canceled history.
+			for _, nudge := range toolTurn.editThrashNudges {
+				toolResults = append(toolResults, llm.ContentBlock{
+					Type: "text",
+					Text: nudge,
+				})
+			}
+			toolResults = turnPreparer.appendBudgetWarning(turn, toolResults)
 		}
-
-		// Budget warnings remain the final tool-result annotation so their
-		// relative position and prompt-cache behavior stay unchanged.
-		toolResults = turnPreparer.appendBudgetWarning(turn, toolResults)
 
 		toolResultMsg := llm.NewBlockMessage("user", toolResults)
-		messages = append(messages, toolResultMsg)
-		if cfg.OnMessagePersist != nil {
-			cfg.OnMessagePersist(toolResultMsg)
-			result.TurnsPersisted++
+		journal.append(toolResultMsg)
+
+		// Cancellation returns only after the same activity/result commit used
+		// by normal turns. This keeps FinalMessages and the durable transcript
+		// balanced while retaining successful calls that finished before abort.
+		if toolTurn.canceled {
+			result.StopReason = stopReasonFromCtx(ctx)
+			result.InterruptedToolNames = append(result.InterruptedToolNames, toolTurn.interruptedNames...)
+			result.FinalMessages = journal.messages
+			return result, nil
 		}
 
 		// Prior-turn tool result compaction: shrink tool_result content from
@@ -513,7 +466,7 @@ func RunAgent(
 		// saw the full result on the turn it was produced; subsequent turns
 		// only need a summary. This prevents multi-turn token explosion where
 		// resending full tool results (32K each) on every turn compounds cost.
-		if n := CompactPriorToolResults(messages, currentTurnStart); n > 0 {
+		if n := CompactPriorToolResults(journal.messages, currentTurnStart); n > 0 {
 			logger.Info("compacted prior tool results",
 				"turn", turn,
 				"blocksCompacted", n)
@@ -535,11 +488,7 @@ func RunAgent(
 			// one iteration. The injection is an append-only operation so
 			// prompt cache up through the just-recorded tool_result is
 			// preserved (no mutation of prior messages).
-			messages = append(messages, llm.NewTextMessage("user", GraceCallPrompt))
-			if cfg.OnMessagePersist != nil {
-				cfg.OnMessagePersist(messages[len(messages)-1])
-				result.TurnsPersisted++
-			}
+			journal.append(llm.NewTextMessage("user", GraceCallPrompt))
 			result.BudgetExhaustedInjected = true
 			result.BudgetGraceCall = true
 			logger.Warn("agent turn budget exhausted; issuing grace wrap-up call",
@@ -565,7 +514,7 @@ func RunAgent(
 		result.StopReason = "max_turns"
 	}
 	result.MaxTokensRecoveries = maxTokensRecoveryCount
-	result.FinalMessages = messages
+	result.FinalMessages = journal.messages
 	return result, nil
 }
 

@@ -278,10 +278,11 @@ type AgentResult struct {
 	// so subsequent runs know what the agent actually did (not just what it said).
 	ToolActivities []ToolActivity
 
-	// InterruptedToolNames lists the tool names that were in-flight when the
-	// run was aborted (context cancelled). Empty when the run completes normally.
-	// Used to persist interrupted context to the transcript so the next run
-	// knows what was being done when the user interrupted.
+	// InterruptedToolNames lists calls that did not complete successfully when
+	// a tool turn was cancelled, including calls that never started. Successful
+	// calls that won the cancellation race are excluded so callers do not retry
+	// already-committed side effects. Empty when the run completes normally.
+	// Used to persist interruption context for the next run.
 	InterruptedToolNames []string
 
 	// MaxTokensRecoveries is the number of max-output-tokens recovery retries
