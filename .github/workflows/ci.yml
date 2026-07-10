@@ -82,6 +82,10 @@ jobs:
       - name: Test (coverage)
         run: CGO_ENABLED=0 go test -count=1 -coverprofile=coverage.out -covermode=atomic ./...
 
+      - name: Test runtime-health audit
+        working-directory: .
+        run: make runtime-health-test
+
       - name: Coverage gate (threshold 50%)
         run: |
           TOTAL=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $NF}' | tr -d '%')
