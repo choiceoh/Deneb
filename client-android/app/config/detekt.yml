@@ -10,7 +10,25 @@ naming:
   active: false
 
 style:
-  active: false
+  # detekt disables the whole ruleset when inactive, so `style` must be on for
+  # the one rule we actually want: UnusedImports. Every other style rule is
+  # explicitly OFF below — taste rules stay ungated (this file's philosophy);
+  # only dead-code hygiene (unused imports) is enforced. Rationale: ktlint
+  # dropped its no-unused-imports rule and spotless doesn't catch them, so
+  # detekt is the only gate (97 unused imports had accumulated, incl. #3378's).
+  active: true
+  UnusedImports: { active: true, autoCorrect: true }
+  MagicNumber: { active: false }
+  MaxLineLength: { active: false }
+  ReturnCount: { active: false }
+  LoopWithTooManyJumpStatements: { active: false }
+  UseCheckOrError: { active: false }
+  UnusedParameter: { active: false }
+  UnusedPrivateProperty: { active: false }
+  UnusedPrivateMember: { active: false }
+  ThrowsCount: { active: false }
+  ForbiddenComment: { active: false }
+  MayBeConst: { active: false }
 
 comments:
   active: false
