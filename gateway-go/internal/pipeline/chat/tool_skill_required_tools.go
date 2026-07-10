@@ -19,7 +19,6 @@ package chat
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
@@ -73,8 +72,9 @@ func activateSkillRequiredTools(ctx context.Context, registry *ToolRegistry, ski
 		return ""
 	}
 	da.Activate(names)
-	return fmt.Sprintf("\n\n[스킬 필요 도구 활성화: %s — 스키마가 로드되어 fetch_tools 없이 바로 호출할 수 있습니다.]",
-		strings.Join(names, ", "))
+	// Exact shared format (toolctx/activation_notice.go): the next run's
+	// history replay re-derives activation state from this notice.
+	return "\n\n" + toolctx.FormatSkillActivationNotice(names)
 }
 
 // NewSkillsReadToolsActivator returns the per-tool post-processor for the

@@ -55,6 +55,37 @@ func TestTruncateOldToolResults_StubsOversizedContent(t *testing.T) {
 	}
 }
 
+// TestTruncateOldToolResults_KeepsActivationNotice: a stubbed result that
+// carried a deferred-tool activation notice keeps the notice line in the stub,
+// so the next run's history replay (chat/deferred_replay.go) still sees the
+// activation evidence after cheap pruning.
+func TestTruncateOldToolResults_KeepsActivationNotice(t *testing.T) {
+	long := strings.Repeat("본문 ", 200) +
+		"\n\n[스킬 필요 도구 활성화: graphify — 스키마가 로드되어 fetch_tools 없이 바로 호출할 수 있습니다.]"
+	messages := []llm.Message{
+		assistantMsg(t, "a1"),
+		toolResultMsg(long),
+		assistantMsg(t, "a2"),
+		assistantMsg(t, "a3"),
+		assistantMsg(t, "a4"),
+		assistantMsg(t, "a5"),
+	}
+	out, stubbed := TruncateOldToolResults(messages, 4, 256)
+	if stubbed != 1 {
+		t.Fatalf("stubbed = %d, want 1", stubbed)
+	}
+	got := firstToolResultContent(t, out[1].Content)
+	if !strings.HasPrefix(got, stubPlaceholder) {
+		t.Errorf("stub must lead with the placeholder, got %q", got)
+	}
+	if !strings.Contains(got, "[스킬 필요 도구 활성화: graphify — ") {
+		t.Errorf("stub must keep the activation notice, got %q", got)
+	}
+	if strings.Contains(got, "본문") {
+		t.Errorf("stub must not keep the body, got %q", got)
+	}
+}
+
 func TestTruncateOldToolResults_PreservesShortContent(t *testing.T) {
 	short := strings.Repeat("a", 100)
 	messages := []llm.Message{

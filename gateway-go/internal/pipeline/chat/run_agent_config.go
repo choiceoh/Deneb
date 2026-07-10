@@ -47,6 +47,10 @@ type agentConfigDeps struct {
 	// SkillUsageRecorder attributes each turn's outcome to the skills consulted
 	// that turn, feeding the genesis Evolver's success-rate gate. Nil disables.
 	SkillUsageRecorder SkillUsageRecorder
+	// ReplayDeferredTools are deferred tools the session transcript proves were
+	// activated in earlier runs (replayActivatedTools, deferred_replay.go);
+	// they re-enter this run's Tools array and pre-seed DeferredActivation.
+	ReplayDeferredTools []string
 }
 
 // buildAgentConfig constructs the agent.AgentConfig, building tool lists and
@@ -84,6 +88,24 @@ func buildAgentConfig(
 		}
 		partition := PartitionTools(rawTools, builtinNames)
 		tools = partition.MergedTools()
+
+		// Replayed deferred tools (activated in earlier runs per the transcript)
+		// are appended AFTER the sorted merge, in first-activation order — the
+		// same tail position DynamicToolsProvider gave them at the end of the
+		// previous run, so this run's initial Tools array matches the previous
+		// run's final one and the provider prompt-cache prefix survives the
+		// turn boundary instead of shrinking back and re-growing.
+		if len(acd.ReplayDeferredTools) > 0 {
+			existing := make(map[string]struct{}, len(tools))
+			for _, t := range tools {
+				existing[t.Name] = struct{}{}
+			}
+			for _, t := range acd.Tools.DeferredLLMTools(acd.ReplayDeferredTools) {
+				if _, ok := existing[t.Name]; !ok {
+					tools = append(tools, t)
+				}
+			}
+		}
 	}
 
 	maxTokens := acd.MaxTokens
@@ -111,8 +133,13 @@ func buildAgentConfig(
 	verifyGate := &verifyGateState{}
 
 	// DeferredActivation: tracks which deferred tools have been activated via
-	// fetch_tools during this run.
+	// fetch_tools during this run. Pre-seeded with the transcript-replayed
+	// activations so fetch_tools short-circuits re-fetches from turn 0 and
+	// DynamicToolsProvider never double-appends them.
 	deferredActivation := NewDeferredActivation()
+	if len(acd.ReplayDeferredTools) > 0 {
+		deferredActivation.Seed(acd.ReplayDeferredTools)
+	}
 
 	// ToolExecStats: run-scoped anomaly counters only the chat tool layer can
 	// see (malformed-argument repairs); logged on run.end for aggregation.
