@@ -1,7 +1,6 @@
-// openai_stream.go — OpenAI SSE → Anthropic StreamEvent translation for the
-// LLM client: synthetic message_start/finish-reason mapping and the chunk
-// translation loop that re-emits OpenAI deltas as Anthropic-style events.
-// Split from openai.go (pure move, no behavior change).
+// openai_stream.go — OpenAI SSE → Anthropic StreamEvent protocol translation:
+// synthetic message_start/finish-reason mapping, usage handling, and terminal
+// state decisions. Content-block lifecycle lives in openai_stream_content.go.
 package llm
 
 import (
@@ -84,133 +83,39 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 	firstChunk := true
 	sawFinishReason := false // any non-nil choice finish_reason — a clean-end signal
 	chunkCount := 0          // parsed data chunks, for the premature-EOF diagnostic
-	nextBlockIndex := 0
-	textBlockOpen := false
-	textBlockIndex := -1
-	thinkingBlockOpen := false
-	thinkingBlockIndex := -1
+	content := newOpenAIContentEmitter(ctx, out, c.logger)
 
-	type toolBuilder struct {
-		id       string
-		name     string
-		args     []byte
-		blockIdx int
-	}
-	toolBuilders := map[int]*toolBuilder{}
-	var toolOrder []int // tool-call indices in first-seen order, for deterministic contiguous emission at finish
-
-	closeBlock := func(idx int) {
-		p, _ := json.Marshal(ContentBlockStop{Index: idx})
-		emit(ctx, out, StreamEvent{Type: "content_block_stop", Payload: p})
-	}
-
-	emitDelta := func(idx int, deltaType, text, partialJSON string) {
-		var cbd ContentBlockDelta
-		cbd.Index = idx
-		cbd.Delta.Type = deltaType
-		cbd.Delta.Text = text
-		cbd.Delta.PartialJSON = partialJSON
-		p, _ := json.Marshal(cbd)
-		emit(ctx, out, StreamEvent{Type: "content_block_delta", Payload: p})
-	}
-
-	// emitText routes a string into the (lazily opened) text block, closing an
-	// open thinking block first so the single-active-block consumer doesn't
-	// discard it. Shared by streamed content and surfaced model refusals.
-	emitText := func(s string) {
-		if thinkingBlockOpen {
-			thinkingBlockOpen = false
-			closeBlock(thinkingBlockIndex)
-		}
-		if !textBlockOpen {
-			textBlockOpen = true
-			textBlockIndex = nextBlockIndex
-			nextBlockIndex++
-			start, _ := json.Marshal(ContentBlockStart{
-				Index:        textBlockIndex,
-				ContentBlock: ContentBlock{Type: "text"},
-			})
-			emit(ctx, out, StreamEvent{Type: "content_block_start", Payload: start})
-		}
-		emitDelta(textBlockIndex, "text_delta", s, "")
-	}
-
-	// closeOpenBlocks stops any in-flight thinking/text block so every block
-	// the single-active-block consumer sees stays contiguous.
-	closeOpenBlocks := func() {
-		if thinkingBlockOpen {
-			thinkingBlockOpen = false
-			closeBlock(thinkingBlockIndex)
-		}
-		if textBlockOpen {
-			textBlockOpen = false
-			closeBlock(textBlockIndex)
-		}
-	}
-
-	// emitBufferedTools emits each accumulated tool_use block contiguously
-	// (start → full input_json_delta → stop) in first-seen order, then clears
-	// the buffer. dropInvalidArgs guards the premature-end path: a stream cut
-	// mid-arguments must not surface a half-specified call — the consumer's
-	// content_block_stop path takes arguments as-is without re-validating.
-	emitBufferedTools := func(dropInvalidArgs bool) {
-		for _, idx := range toolOrder {
-			tb := toolBuilders[idx]
-			if dropInvalidArgs && len(tb.args) > 0 && !json.Valid(tb.args) {
-				c.logger.Warn("dropping tool call with truncated arguments at premature stream end",
-					"tool", tb.name, "argsLen", len(tb.args))
-				continue
-			}
-			if tb.id == "" {
-				// Some OpenAI-compatible servers stream tool calls without an
-				// id. Synthesize one — tool_use↔tool_result pairing and the
-				// echo-back to the provider both require a non-empty id.
-				tb.id = fmt.Sprintf("call_%d", tb.blockIdx)
-			}
-			startP, _ := json.Marshal(ContentBlockStart{
-				Index:        tb.blockIdx,
-				ContentBlock: ContentBlock{Type: "tool_use", ID: tb.id, Name: tb.name},
-			})
-			emit(ctx, out, StreamEvent{Type: "content_block_start", Payload: startP})
-			if len(tb.args) > 0 {
-				emitDelta(tb.blockIdx, "input_json_delta", "", string(tb.args))
-			}
-			closeBlock(tb.blockIdx)
-		}
-		toolBuilders = map[int]*toolBuilder{}
-		toolOrder = nil
-	}
-
-	// flushPremature rescues buffered state when the server explicitly ended
-	// the stream ([DONE]) without a finish_reason chunk. Open text/thinking
-	// blocks are closed and complete buffered tool calls are emitted — without
-	// this, a dropped finish chunk silently discarded every tool call of the
-	// turn. No stop_reason is synthesized: the consumer executes tools based
-	// on block presence, and a fake "tool_use" would misrepresent the cut as a
-	// clean stop. After a normal finish chunk the buffers are already empty,
-	// so this is a no-op. A bare EOF (no [DONE], no finish_reason) does NOT
-	// take this path — that is a connection cut and surfaces as an error
-	// event below instead.
-	flushPremature := func() {
-		closeOpenBlocks()
-		if len(toolOrder) == 0 {
+streamLoop:
+	for {
+		if ctx.Err() != nil {
 			return
 		}
-		c.logger.Warn("openai stream ended without finish_reason; flushing buffered tool calls",
-			"count", len(toolOrder))
-		emitBufferedTools(true)
-	}
+		var raw StreamEvent
+		var ok bool
+		select {
+		case <-ctx.Done():
+			return
+		case raw, ok = <-rawEvents:
+			if !ok {
+				break streamLoop
+			}
+		}
 
-	for raw := range rawEvents {
 		// OpenAI sends "data: [DONE]" as the final event.
 		if string(raw.Payload) == "[DONE]" {
-			flushPremature()
+			content.closeVisible()
+			if count := content.bufferedToolCount(); count > 0 {
+				c.logger.Warn("openai stream ended without finish_reason; flushing buffered tool calls",
+					"count", count)
+			}
+			content.flushTools(openAIFlushValidTools)
 			emit(ctx, out, StreamEvent{Type: "message_stop"})
 			return
 		}
 
 		// Handle SSE error events from OpenAI-compatible providers.
 		if raw.Type == "error" {
+			content.flushTools(openAIDiscardTools)
 			emit(ctx, out, StreamEvent{Type: "error", Payload: raw.Payload})
 			return
 		}
@@ -219,6 +124,7 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 		if err := json.Unmarshal(raw.Payload, &chunk); err != nil {
 			// Try parsing as an OpenAI error response ({"error": {...}}).
 			if errPayload, ok := probeOpenAIError(raw.Payload); ok {
+				content.flushTools(openAIDiscardTools)
 				emit(ctx, out, StreamEvent{Type: "error", Payload: errPayload})
 				return
 			}
@@ -244,6 +150,7 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 			// empty usage chunk and vanishes from the turn entirely.
 			if chunk.Usage == nil {
 				if errPayload, ok := probeOpenAIError(raw.Payload); ok {
+					content.flushTools(openAIDiscardTools)
 					emit(ctx, out, StreamEvent{Type: "error", Payload: errPayload})
 					return
 				}
@@ -276,45 +183,33 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 			}
 			continue
 		}
+		if sawFinishReason {
+			// A finish_reason is the terminal choice event. Some compatible
+			// providers send duplicate or stale choice chunks while delivering
+			// trailing usage; accepting them could append content after the stop
+			// delta or overwrite tool_use with a later end_turn.
+			c.logger.Debug("ignoring OpenAI choice chunk after finish_reason")
+			continue
+		}
 
 		choice := chunk.Choices[0]
 
 		// Emit reasoning content as a thinking block (OpenAI/vLLM reasoning models).
 		if rtext := choice.Delta.reasoningText(); rtext != "" {
-			if !thinkingBlockOpen {
-				// Close an already-open text block first. Reasoning normally
-				// precedes text, but some providers emit content before reasoning;
-				// opening thinking over an un-stopped text block makes the
-				// single-active-block consumer discard the text, and a hardcoded
-				// index 0 would collide with the text block already at 0. Give the
-				// thinking block its own index instead.
-				if textBlockOpen {
-					textBlockOpen = false
-					closeBlock(textBlockIndex)
-				}
-				thinkingBlockOpen = true
-				thinkingBlockIndex = nextBlockIndex
-				nextBlockIndex++
-				p, _ := json.Marshal(ContentBlockStart{
-					Index:        thinkingBlockIndex,
-					ContentBlock: ContentBlock{Type: "thinking"},
-				})
-				emit(ctx, out, StreamEvent{Type: "content_block_start", Payload: p})
-			}
-			emitDelta(thinkingBlockIndex, "thinking_delta", rtext, "")
+			content.emitThinking(rtext)
 		}
 
 		// Emit text content. emitText opens the text block lazily and closes any
 		// open thinking block first.
 		if choice.Delta.Content != "" {
-			emitText(choice.Delta.Content)
+			content.emitText(choice.Delta.Content)
 		}
 
 		// Surface model refusals. OpenAI streams a refusal on delta.refusal with
 		// content null; without this the refusal text is dropped and the user
 		// gets an empty reply (a silent no-reply).
 		if choice.Delta.Refusal != "" {
-			emitText(choice.Delta.Refusal)
+			content.emitText(choice.Delta.Refusal)
 		}
 
 		// Accumulate streamed tool calls; emit each as a CONTIGUOUS block at
@@ -326,37 +221,25 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 		// the wrong block or drop it, and the un-stopped block N gets overwritten
 		// and lost. Buffering and emitting start → full args → stop together per
 		// tool keeps every block contiguous and correctly assembled.
-		for _, tc := range choice.Delta.ToolCalls {
-			tb, exists := toolBuilders[tc.Index]
-			if !exists {
-				// Close thinking/text block before the first tool call if open.
-				closeOpenBlocks()
-				tb = &toolBuilder{id: tc.ID, name: tc.Function.Name, blockIdx: nextBlockIndex}
-				toolBuilders[tc.Index] = tb
-				toolOrder = append(toolOrder, tc.Index)
-				nextBlockIndex++
-			} else {
-				// Update name/id if provided in subsequent chunks.
-				if tc.ID != "" {
-					tb.id = tc.ID
-				}
-				if tc.Function.Name != "" {
-					tb.name = tc.Function.Name
-				}
-			}
-			tb.args = append(tb.args, tc.Function.Arguments...)
-		}
+		content.appendToolCalls(choice.Delta.ToolCalls)
 
 		// Check finish reason (nil = not yet finished, non-nil = terminal).
 		if choice.FinishReason != nil {
 			sawFinishReason = true
-			closeOpenBlocks()
+			content.closeVisible()
 
 			// Emit each accumulated tool_use block contiguously
 			// (start → full input_json_delta → stop) in first-seen order, so the
 			// single-active-block consumer assembles every call's arguments
-			// instead of dropping interleaved or overwritten blocks.
-			emitBufferedTools(false)
+			// instead of dropping interleaved or overwritten blocks. A length
+			// finish is different: the tool call may be incomplete even when its
+			// partial JSON happens to be valid, so discard it and let max_tokens
+			// recovery retry the turn without executing a partial side effect.
+			if *choice.FinishReason == "length" {
+				content.flushTools(openAIDiscardTools)
+			} else {
+				content.flushTools(openAIFlushAllTools)
+			}
 
 			outputTokens := 0
 			if chunk.Usage != nil {
@@ -392,7 +275,8 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 	// completed its answer and the server merely omitted the [DONE] sentinel
 	// (either signal counts as a clean end) — emit the normal stop.
 	if sawFinishReason {
-		flushPremature()
+		content.closeVisible()
+		content.flushTools(openAIFlushValidTools)
 		emit(ctx, out, StreamEvent{Type: "message_stop"})
 		return
 	}
@@ -407,10 +291,11 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 	// chain. Buffered tool calls are deliberately dropped, not flushed — the
 	// flush rescue is reserved for an explicit [DONE], where the server (not
 	// the transport) ended the stream.
-	if len(toolOrder) > 0 {
+	if count := content.bufferedToolCount(); count > 0 {
 		c.logger.Warn("dropping buffered tool calls at mid-stream EOF",
-			"count", len(toolOrder))
+			"count", count)
 	}
+	content.flushTools(openAIDiscardTools)
 	errPayload, _ := json.Marshal(struct {
 		Type    string `json:"type"`
 		Message string `json:"message"`
