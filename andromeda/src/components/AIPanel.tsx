@@ -2,6 +2,7 @@ import { type ChangeEvent, useEffect, useLayoutEffect, useRef, useState } from "
 import { inferAttachmentMimeType } from "@/attachmentMime";
 import { readFileBase64, splitAttachable } from "@/attachments";
 import { type GatewayConfig, type ModelsList, listModels } from "@/gateway";
+import { printClosest } from "@/print";
 import { type AttachmentPart, type ChatTurn, useChat } from "@/hooks";
 import { useFileDrop } from "@/useFileDrop";
 import { useSessions } from "@/useSessions";
@@ -416,8 +417,20 @@ export function AIPanel({
                 turn.canRegenerate !== false &&
                 !busy &&
                 turn.status !== "streaming" && (
-                  <button className="row-btn ai-regen" onClick={regenerate} title="다시 생성">
+                  <button className="row-btn ai-regen no-print" onClick={regenerate} title="다시 생성">
                     <Icon name="refresh" size={12} /> 다시 생성
+                  </button>
+                )}
+              {/* 이 답변(모닝레터·브리핑 카드 포함)만 인쇄 — .ai-turn subtree를 프린트로. */}
+              {turn.role === "assistant" &&
+                turn.status !== "streaming" &&
+                (turn.text.trim().length > 0 || (turn.parts?.length ?? 0) > 0) && (
+                  <button
+                    className="row-btn ai-print no-print"
+                    onClick={(e) => printClosest(e.currentTarget, ".ai-turn")}
+                    title="이 답변을 인쇄 (프린터 또는 PDF)"
+                  >
+                    <Icon name="printer" size={12} /> 인쇄
                   </button>
                 )}
               {/* Save this answer into the open notebook as a cited note — shown only
@@ -426,7 +439,7 @@ export function AIPanel({
                   after the sink confirms; a failed pin stays clickable for retry. */}
               {noteSink && turn.role === "assistant" && turn.status === "done" && turn.text.trim() && (
                 <button
-                  className="row-btn ai-save-note"
+                  className="row-btn ai-save-note no-print"
                   disabled={noteSaves.get(turn.id) === "saving" || noteSaves.get(turn.id) === "saved"}
                   onClick={() => void saveNote(turn.id, turn.text)}
                   title="이 답변을 노트북에 인용자료(노트)로 저장"

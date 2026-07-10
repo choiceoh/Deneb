@@ -1336,9 +1336,10 @@ textarea {
   background: var(--accent-soft);
 }
 
-/* regenerate / save-note affordances under an answer */
+/* regenerate / save-note / print affordances under an answer */
 .ai-regen,
-.ai-save-note {
+.ai-save-note,
+.ai-print {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
@@ -4816,4 +4817,59 @@ button.mail-attachment {
   height: auto;
   border: 1px solid var(--line);
   border-radius: var(--radius-ctl);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * 인쇄 (print) — Andromeda has no routes, so printElement() in src/print.ts
+ * marks one subtree (.deneb-print-region) plus its ancestor chain
+ * (.deneb-print-ancestor, up to body.deneb-printing). Below we hide every
+ * off-path sibling and collapse the chain so that subtree flows onto the page
+ * unclipped. Interactive chrome inside a region opts out with .no-print.
+ * ───────────────────────────────────────────────────────────────────────── */
+@page {
+  margin: 15mm;
+}
+@media print {
+  /* Off-path siblings along the ancestor chain don't reach the page. */
+  body.deneb-printing > *:not(.deneb-print-ancestor):not(.deneb-print-region),
+  body.deneb-printing .deneb-print-ancestor > *:not(.deneb-print-ancestor):not(.deneb-print-region) {
+    display: none !important;
+  }
+  /* The chain itself collapses to a plain, full-height column so the region is
+   * never trapped in a flex cell, scroll viewport, or positioned box. */
+  body.deneb-printing,
+  body.deneb-printing .deneb-print-ancestor {
+    display: block !important;
+    position: static !important;
+    width: auto !important;
+    min-width: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    flex: none !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+  /* The printed subtree: paper-white, full content, backgrounds preserved (so
+   * chart bars / badges still render), no floating-panel shadows. */
+  body.deneb-printing .deneb-print-region {
+    background: #fff !important;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.deneb-printing .deneb-print-region,
+  body.deneb-printing .deneb-print-region * {
+    overflow: visible !important;
+    max-height: none !important;
+    box-shadow: none !important;
+  }
+  /* Interactive chrome (action bars, tabs, forms) never prints. */
+  body.deneb-printing .no-print {
+    display: none !important;
+  }
 }

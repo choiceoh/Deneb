@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { clearCachedResource } from "@/cachedList";
+import { printElement } from "@/print";
 import { MEMORY_RPC } from "@/resources";
 import type { WikiCategory, WikiDiaryEntry, WikiPage } from "@/types";
 import { useCachedRpc } from "@/useCachedRpc";
@@ -47,6 +48,14 @@ export function WikiPane() {
   const [deleting, setDeleting] = useState(false);
   const [preview, setPreview] = useState(true);
   const dirty = Boolean(path && content !== savedContent);
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  // 페이지 인쇄: 편집 중이었다면 미리보기(렌더된 마크다운)로 전환한 뒤, 그 렌더가 커밋된
+  // 다음 프레임에 인쇄한다 — raw 마크다운 대신 읽기용 문서가 나가도록.
+  function printPage() {
+    setPreview(true);
+    requestAnimationFrame(() => printElement(editorRef.current));
+  }
 
   useRegisterPane(WIKI_RESOURCE, content.trim() ? `[위키${path ? ` ${path}` : ""}]\n${content}` : "");
 
@@ -438,15 +447,17 @@ export function WikiPane() {
               </>
             )}
           </div>
-          <div className="wiki-editor">
+          <div className="wiki-editor" ref={editorRef}>
             <div className="wiki-editor-head">
               <div className="wiki-title-line">
                 <h3>{path ?? "위키"}</h3>
                 {path && (
-                  <span className={"wiki-save-state" + (dirty ? " dirty" : "")}>{dirty ? "수정됨" : "저장됨"}</span>
+                  <span className={"wiki-save-state no-print" + (dirty ? " dirty" : "")}>
+                    {dirty ? "수정됨" : "저장됨"}
+                  </span>
                 )}
               </div>
-              <div className="wiki-mode-tabs" role="group" aria-label="위키 보기 방식">
+              <div className="wiki-mode-tabs no-print" role="group" aria-label="위키 보기 방식">
                 <button
                   className={"wiki-mode-tab" + (!preview ? " active" : "")}
                   onClick={() => setPreview(false)}
@@ -464,12 +475,20 @@ export function WikiPane() {
                   미리보기
                 </button>
               </div>
-              <div className="wiki-editor-actions">
+              <div className="wiki-editor-actions no-print">
                 <button className="btn btn-accent" onClick={() => void save()} disabled={!path || !dirty}>
                   저장
                 </button>
                 <button className="row-btn" onClick={() => editContent(savedContent)} disabled={!dirty}>
                   되돌리기
+                </button>
+                <button
+                  className="row-btn"
+                  onClick={printPage}
+                  disabled={!path}
+                  title="이 페이지를 인쇄 (프린터 또는 PDF)"
+                >
+                  인쇄
                 </button>
                 <button className="row-btn" onClick={() => setMoving(true)} disabled={!path || dirty}>
                   이동

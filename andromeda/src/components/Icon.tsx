@@ -38,7 +38,8 @@ export type IconName =
   | "chevron-down"
   | "chevron-up"
   | "expand-panel"
-  | "collapse-panel";
+  | "collapse-panel"
+  | "printer";
 
 const PATHS: Record<IconName, ReactNode> = {
   today: (
@@ -191,6 +192,13 @@ const PATHS: Record<IconName, ReactNode> = {
   "expand-panel": <path d="M13 6.5L7.5 12l5.5 5.5M19 6.5L13.5 12l5.5 5.5" />,
   // Shrink the chat panel back to the right — double chevron ».
   "collapse-panel": <path d="M11 6.5L16.5 12 11 17.5M5 6.5L10.5 12 5 17.5" />,
+  printer: (
+    <>
+      <path d="M17 9V5a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v4" />
+      <path d="M17 17h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2" />
+      <rect x="7" y="13" width="10" height="8" rx="1.5" />
+    </>
+  ),
 };
 
 export function Icon({

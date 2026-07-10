@@ -3,9 +3,10 @@
 // collapsed-by-default sender-context card (recent volume + curated wiki pages),
 // and a grounded Q&A box. The enrichment cards each own their fetch/loading/error
 // state and degrade silently on an older gateway that lacks the method.
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { depsEqual } from "@/depsEqual";
+import { printElement } from "@/print";
 import {
   type QATurn,
   analyzeMail,
@@ -46,6 +47,9 @@ export function MailDetail({
   // 분석 ↔ 본문 토글. 분석이 기본값 — "왜 지금 중요한가"(합성)를 본문보다 먼저 보여준다.
   // (Hook before the early return below — rules-of-hooks.)
   const [mailView, setMailView] = useState<"analysis" | "body">("analysis");
+  // 인쇄 대상 = 상세 전체 subtree. 인쇄 시 액션바·탭·질문칸(.no-print)은 빠지고, 현재
+  // 보고 있는 분석/본문이 그대로 리포트로 나간다 ("보이는 대로 인쇄").
+  const detailRef = useRef<HTMLElement>(null);
 
   if (!mail) return null;
 
@@ -57,7 +61,7 @@ export function MailDetail({
   const id = String(mail.id);
 
   return (
-    <section className="mail-detail" aria-label="메일 상세">
+    <section className="mail-detail" aria-label="메일 상세" ref={detailRef}>
       {query.isLoading && <div className="mail-detail-status">본문 불러오는 중…</div>}
       {query.isError && <div className="mail-detail-status error">본문 불러오기 실패</div>}
       <div className="mail-detail-head">
@@ -78,7 +82,7 @@ export function MailDetail({
         )}
       </div>
 
-      <div className="mail-actions">
+      <div className="mail-actions no-print">
         {mail.isUnread && (
           <button className="btn" onClick={onMarkRead} disabled={busy} title="읽음으로 표시">
             읽음
@@ -90,11 +94,18 @@ export function MailDetail({
         <button className="btn" onClick={onTrash} disabled={busy} title="휴지통으로">
           삭제
         </button>
+        <button
+          className="btn"
+          onClick={() => printElement(detailRef.current)}
+          title="이 메일을 인쇄 (프린터 또는 PDF)"
+        >
+          인쇄
+        </button>
       </div>
 
       {/* 분석 ↔ 본문 토글 (분석 기본): the synthesis (왜 지금 중요한가) leads; switch to
           본문 for the full raw text. */}
-      <div className="mail-view-tabs" role="group" aria-label="메일 보기 방식">
+      <div className="mail-view-tabs no-print" role="group" aria-label="메일 보기 방식">
         <button
           className={"mail-view-tab" + (mailView === "analysis" ? " active" : "")}
           aria-pressed={mailView === "analysis"}
@@ -403,7 +414,8 @@ function AskBox({ mailId }: { mailId: string }) {
   }
 
   return (
-    <div className="mail-card">
+    // Interactive follow-up Q&A — belongs on screen, not in a printed report.
+    <div className="mail-card no-print">
       <div className="mail-card-title">이 메일에 질문</div>
       {turns.map((t, i) => (
         <div key={i} className="mail-qa">
