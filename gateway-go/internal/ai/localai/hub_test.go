@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -252,7 +255,6 @@ func TestSubmit_UnhealthyRejectsBackground(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	h.ctx = ctx
 	h.cancel = cancel
-	h.budgetCond = sync.NewCond(&h.budgetMu)
 	// healthy defaults to false.
 
 	req := SimpleRequest("sys", "test", 100, PriorityBackground, "test")
@@ -262,4 +264,164 @@ func TestSubmit_UnhealthyRejectsBackground(t *testing.T) {
 	}
 
 	h.cancel()
+}
+
+func TestSubmit_OversizedRequestDoesNotBlockFollowingRequest(t *testing.T) {
+	h := newDispatchTestHub(t, Config{TokenBudget: 10}, nil)
+
+	oversized := SimpleRequest("sys", "too large", 1, PriorityNormal, "test")
+	oversized.EstInputTokens = 10 // total reservation 11 > the 10-token budget
+	callCtx, callCancel := context.WithTimeout(context.Background(), time.Second)
+	defer callCancel()
+	if _, err := h.Submit(callCtx, oversized); !errors.Is(err, ErrRequestTooLarge) {
+		t.Fatalf("oversized request error = %v, want ErrRequestTooLarge", err)
+	}
+
+	// The oversized request must not wedge the single dispatch loop. With no
+	// client configured, a following admissible request reaches executeRequest
+	// and returns its normal initialization error instead of timing out.
+	small := SimpleRequest("sys", "small", 1, PriorityNormal, "test")
+	small.EstInputTokens = 1
+	_, err := h.Submit(callCtx, small)
+	if err == nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrRequestTooLarge) {
+		t.Fatalf("following request did not reach execution: %v", err)
+	}
+}
+
+func TestSubmit_CallerCancellationStopsActiveRequest(t *testing.T) {
+	client, started, upstreamCanceled := newBlockingLLMClient(t)
+	h := newDispatchTestHub(t, Config{TokenBudget: 4}, client)
+
+	callerCtx, cancelCaller := context.WithCancel(context.Background())
+	req := SimpleRequest("sys", "cancel me", 1, PriorityNormal, "test")
+	req.EstInputTokens = 3
+	done := make(chan error, 1)
+	go func() {
+		_, err := h.Submit(callerCtx, req)
+		done <- err
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("upstream request did not start")
+	}
+	cancelCaller()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Submit error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Submit did not return after caller cancellation")
+	}
+	select {
+	case <-upstreamCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("caller cancellation did not cancel the upstream LLM request")
+	}
+
+	// The active request's deferred release must return its full reservation.
+	probeCtx, probeCancel := context.WithTimeout(context.Background(), time.Second)
+	defer probeCancel()
+	if err := h.budget.acquire(probeCtx, 4, PriorityNormal); err != nil {
+		t.Fatalf("budget was not released after caller cancellation: %v", err)
+	}
+	h.budget.release(4)
+	stats := h.Stats.Snapshot()
+	if stats.Cancelled != 1 || stats.Failed != 0 {
+		t.Fatalf("cancellation stats = %+v, want cancelled=1 failed=0", stats)
+	}
+}
+
+func TestShutdownCancelsActiveRequest(t *testing.T) {
+	client, started, upstreamCanceled := newBlockingLLMClient(t)
+	h := newDispatchTestHub(t, Config{TokenBudget: 4}, client)
+
+	req := SimpleRequest("sys", "shutdown", 1, PriorityNormal, "test")
+	req.EstInputTokens = 3
+	done := make(chan error, 1)
+	go func() {
+		_, err := h.Submit(context.Background(), req)
+		done <- err
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("upstream request did not start")
+	}
+	shutdownDone := make(chan struct{})
+	go func() {
+		h.Shutdown()
+		close(shutdownDone)
+	}()
+
+	select {
+	case <-shutdownDone:
+	case <-time.After(time.Second):
+		t.Fatal("hub shutdown did not wait for and cancel the active request")
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrHubShutdown) {
+			t.Fatalf("Submit error = %v, want ErrHubShutdown", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("active Submit did not return during hub shutdown")
+	}
+	select {
+	case <-upstreamCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("hub shutdown did not cancel the upstream LLM request")
+	}
+	if _, err := h.Submit(context.Background(), req); !errors.Is(err, ErrHubShutdown) {
+		t.Fatalf("post-shutdown Submit error = %v, want ErrHubShutdown", err)
+	}
+	if stats := h.Stats.Snapshot(); stats.Failed != 0 {
+		t.Fatalf("shutdown should not count as execution failure: %+v", stats)
+	}
+}
+
+func newDispatchTestHub(t *testing.T, cfg Config, client *llm.Client) *Hub {
+	t.Helper()
+	cfg = cfg.withDefaults()
+	ctx, cancel := context.WithCancel(context.Background())
+	h := &Hub{
+		client: client,
+		cfg:    cfg,
+		budget: newTokenBudgetLimiter(cfg.TokenBudget, cfg.CriticalOverdraw),
+		queue:  newRequestQueue(),
+		cache:  newResponseCache(cfg.CacheTTL, cfg.CacheMaxEntries),
+		Stats:  &HubStats{},
+		ctx:    ctx,
+		cancel: cancel,
+		logger: slog.Default(),
+	}
+	h.healthy.Store(true)
+	h.wg.Add(1)
+	go h.dispatchLoop()
+	t.Cleanup(h.Shutdown)
+	return h
+}
+
+func newBlockingLLMClient(t *testing.T) (*llm.Client, <-chan struct{}, <-chan struct{}) {
+	t.Helper()
+	started := make(chan struct{})
+	canceled := make(chan struct{})
+	var startedOnce sync.Once
+	var canceledOnce sync.Once
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		startedOnce.Do(func() { close(started) })
+		<-r.Context().Done()
+		canceledOnce.Do(func() { close(canceled) })
+	}))
+	t.Cleanup(srv.Close)
+	return llm.NewClient(srv.URL, "test", llm.WithRetry(0, 0, 0)), started, canceled
 }

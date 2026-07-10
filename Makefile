@@ -11,7 +11,7 @@
        kotlin-check kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile \
        docs-lint docs-lint-fix \
        ci ci/fast go-test-cached \
-       health health-check \
+       health health-check runtime-health runtime-health-test \
        preview native-smoke \
        info
 
@@ -154,8 +154,8 @@ clean: go-clean
 
 check-go: go-fmt go-vet go-lint go-test
 
-# Full check: generate-check first (sequential), then Go checks.
-check: generate-check check-go
+# Full check: generate-check first (sequential), then Go and deterministic audit checks.
+check: generate-check check-go runtime-health-test
 	@echo "All checks passed"
 
 # Fast check: format + vet + lint only (no tests). Good for pre-commit gate.
@@ -183,6 +183,11 @@ health-check:
 # latency) from the last 7 days of logs. Run on srv4. See runtime-health.py.
 runtime-health:
 	@python3 scripts/audit/runtime-health.py
+
+# Deterministic parser/scoring regression tests for the advisory runtime metric.
+# Safe in CI: fixtures only, never reads the host journal.
+runtime-health-test:
+	@python3 -m unittest discover -s scripts/audit -p 'test_runtime_health.py' -v
 
 # Agent-doc coverage (advisory) — rank gateway-go subsystems by weight and flag
 # heavy ones with no module CLAUDE.md and no agent-rule glob, i.e. the subsystems
@@ -339,12 +344,13 @@ docs-lint-fix:
 # lint, test) AND the native client (spotless, detekt, desktop smoke tests) — and
 # reports a per-gate PASS/FAIL summary with offender detail for failures. Unlike
 # `make check` it continues past the first failure, so a single run surfaces the
-# whole local pre-push set in one pass. The Go and Kotlin suites run in parallel
-# since gradle startup is the long pole.
+# whole local pre-push set in one pass. Go, Kotlin, and deterministic audit lanes
+# run in parallel since gradle startup is the long pole.
 #
-#   make ci                  # all gates (Go + Kotlin)
+#   make ci                  # all gates (Go + Kotlin + audit)
 #   make ci ARGS=--go        # Go gates only (skip the gradle/Kotlin lane)
 #   make ci ARGS=--kotlin    # Kotlin gates only
+#   make ci ARGS=--audit     # runtime-health audit tests only
 #
 # This mirrors CI's *fast* gates only — no -race, coverage threshold, or
 # integration-tagged tests; run those in CI or via `make go-test` variants.
@@ -393,8 +399,8 @@ info:
 	@echo "  make test       - Run Go tests"
 	@echo "  make go-lint    - Run golangci-lint on Go gateway"
 	@echo "  make go-fmt     - Check Go formatting"
-	@echo "  make ci         - PRE-PUSH GATE: every CI check (Go + Kotlin), pass/fail summary"
-	@echo "                    (ARGS=--go / ARGS=--kotlin to run one lane)"
+	@echo "  make ci         - PRE-PUSH GATE: every CI check (Go + Kotlin + audit), pass/fail summary"
+	@echo "                    (ARGS=--go / ARGS=--kotlin / ARGS=--audit to run one lane)"
 	@echo "  make ci/fast    - Inner-loop gate: only the changed side (Go/Kotlin), cached tests"
 	@echo "  make check      - Go-only checks (generate + fmt + vet + lint + test)"
 	@echo "  make check/fast - Fast Go checks: fmt + vet + lint, no tests"

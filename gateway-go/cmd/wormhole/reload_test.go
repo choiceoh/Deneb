@@ -23,7 +23,7 @@ func writeFileT(t *testing.T, path, content string) {
 func TestConfigHotReload(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/wormhole.json"
-	writeFileT(t, path, `{"localOnly":false,"models":[{"name":"a","url":"http://127.0.0.1/v1"}]}`)
+	writeFileT(t, path, `{"listen":"127.0.0.1:18800","localOnly":false,"models":[{"name":"a","url":"http://127.0.0.1/v1"}]}`)
 	cfg, err := loadConfig(path)
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +34,7 @@ func TestConfigHotReload(t *testing.T) {
 	}
 
 	// Flip localOnly true and bump mtime so the watcher's mtime check fires.
-	writeFileT(t, path, `{"localOnly":true,"models":[{"name":"a","url":"http://127.0.0.1/v1"}]}`)
+	writeFileT(t, path, `{"listen":":19999","localOnly":true,"models":[{"name":"a","url":"http://127.0.0.1/v1"}]}`)
 	future := time.Now().Add(2 * time.Second)
 	if err := os.Chtimes(path, future, future); err != nil {
 		t.Fatal(err)
@@ -45,6 +45,33 @@ func TestConfigHotReload(t *testing.T) {
 	}
 	if !rt.cur().cfg.LocalOnly {
 		t.Error("localOnly should be true after the hot-reload — the toggle didn't apply live")
+	}
+	if got := rt.cur().cfg.Listen; got != "127.0.0.1:18800" {
+		t.Errorf("listen = %q after hot reload, want immutable bound address", got)
+	}
+}
+
+func TestConfigHotReloadRejectsTokenRemovalOnNetworkListener(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/wormhole.json"
+	writeFileT(t, path, `{"listen":":18800","token":"secret","models":[{"name":"a","url":"http://127.0.0.1/v1"}]}`)
+	cfg, err := loadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := newRouter(cfg, path, quietLog())
+
+	writeFileT(t, path, `{"listen":":18800","models":[{"name":"a","url":"http://127.0.0.1/v1"}]}`)
+	future := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(path, future, future); err != nil {
+		t.Fatal(err)
+	}
+
+	if rt.reloadIfChanged() {
+		t.Fatal("expected unsafe token removal to be rejected")
+	}
+	if got := rt.cur().cfg.Token; got != "secret" {
+		t.Errorf("active token = %q after rejected reload, want previous token", got)
 	}
 }
 

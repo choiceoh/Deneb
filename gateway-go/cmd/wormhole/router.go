@@ -64,8 +64,9 @@ const (
 )
 
 type router struct {
-	path string // config path to watch ("" disables hot-reload)
-	snap atomic.Pointer[snapshot]
+	path        string // config path to watch ("" disables hot-reload)
+	boundListen string // immutable effective listener; hot reload cannot rebind the server
+	snap        atomic.Pointer[snapshot]
 	// fleet holds models discovered from SparkFleet (fleet.go), refreshed by the
 	// watcher on fleetRefreshInterval. Separate from snap because it refreshes on
 	// its own cadence (HTTP poll), independent of the config file's mtime. Never
@@ -104,7 +105,8 @@ type router struct {
 
 func newRouter(cfg config, path string, log *slog.Logger) *router {
 	rt := &router{
-		path: path,
+		path:        path,
+		boundListen: cfg.Listen,
 		// Streaming client: NO overall timeout — SSE responses run long and the
 		// request context cancels on client disconnect. Only the dial, TLS
 		// handshake, and time-to-first-response-header are bounded.
@@ -368,6 +370,15 @@ func (rt *router) reloadIfChanged() bool {
 		rt.log.Warn("config reload failed, keeping current", "error", err)
 		return false
 	}
+	// The HTTP listener is fixed for the lifetime of the process. Preserve the
+	// actual bound address in the live snapshot (and /status), then reject a
+	// token removal that would expose that listener. This also covers a missing
+	// env-backed token during secrets/config rotation.
+	nc.Listen = rt.boundListen
+	if err := validateInboundAuth(nc.Listen, nc.Token); err != nil {
+		rt.log.Error("config reload rejected, keeping current", "error", err)
+		return false
+	}
 	rt.snap.Store(buildSnapshot(nc, st.ModTime()))
 	if cfgChanged {
 		rt.log.Info("config reloaded", "models", len(nc.Models))
@@ -392,7 +403,8 @@ func (rt *router) handler() http.Handler {
 }
 
 // authed gates a request on the wormhole token. An empty configured token means
-// "open" (dev/loopback) — main() warns loudly about that at boot.
+// "open" (dev/loopback). main() and the hot-reload path enforce that an open
+// configuration can only be used on an immutable loopback listener.
 func (rt *router) authed(w http.ResponseWriter, r *http.Request) bool {
 	token := rt.cur().cfg.Token
 	if token == "" {

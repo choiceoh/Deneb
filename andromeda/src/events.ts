@@ -53,9 +53,13 @@ export async function subscribeEvents(
   evLog.info("stream open");
   handlers.onOpen?.();
 
-  await readJsonSSE(body, (event, obj) => {
-    const ev = toEvent(event, obj);
-    evLog.debug(`event ${ev.kind ?? "?"}`, ev.title ?? "");
-    handlers.onEvent?.(ev);
-  });
+  await readJsonSSE(
+    body,
+    (event, obj) => {
+      const ev = toEvent(event, obj);
+      evLog.debug(`event ${ev.kind ?? "?"}`, ev.title ?? "");
+      handlers.onEvent?.(ev);
+    },
+    signal,
+  );
 }

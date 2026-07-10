@@ -204,14 +204,12 @@ func main() {
 	if cfg.Listen == "" {
 		cfg.Listen = ":18800"
 	}
+	if err := validateInboundAuth(cfg.Listen, cfg.Token); err != nil {
+		log.Error("unsafe listener configuration", "error", err)
+		os.Exit(1)
+	}
 	if cfg.Token == "" {
-		if isLoopbackListen(cfg.Listen) {
-			log.Warn("no token configured — wormhole is open, but only on loopback", "listen", cfg.Listen)
-		} else {
-			// Bound to a routable address with no auth: anyone on the network (e.g.
-			// the tailnet) can reach every model, including cloud egress. Set a token.
-			log.Error("INSECURE: wormhole is bound to a non-loopback address WITHOUT a token — it is OPEN to the network; set a token", "listen", cfg.Listen)
-		}
+		log.Warn("no token configured — wormhole is open, but only on loopback", "listen", cfg.Listen)
 	}
 	logConfigWarnings(log, cfg) // catch misconfig (e.g. anthropic url missing /v1) at boot
 

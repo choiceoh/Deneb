@@ -251,3 +251,51 @@ func TestDispatchTimeoutCancelsHandler(t *testing.T) {
 		t.Error("handler did not observe context cancellation after timeout")
 	}
 }
+
+func TestDispatchTimeoutWhileWorkerPoolSaturated(t *testing.T) {
+	d := NewDispatcher(rpctest.NewLogger())
+	d.SetWorkerPool(NewWorkerPool(1))
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var startedOnce sync.Once
+	var releaseOnce sync.Once
+	releaseFirst := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseFirst)
+
+	d.Register("saturated", func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		startedOnce.Do(func() { close(started) })
+		<-release
+		resp, _ := protocol.NewResponseOK(req.ID, nil)
+		return resp
+	})
+
+	firstDone := make(chan *protocol.ResponseFrame, 1)
+	go func() {
+		firstDone <- d.Dispatch(context.Background(), &protocol.RequestFrame{ID: "first", Method: "saturated"})
+	}()
+	<-started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	secondDone := make(chan *protocol.ResponseFrame, 1)
+	go func() {
+		secondDone <- d.Dispatch(ctx, &protocol.RequestFrame{ID: "second", Method: "saturated"})
+	}()
+
+	select {
+	case resp := <-secondDone:
+		if resp.Error == nil || resp.Error.Code != protocol.ErrAgentTimeout {
+			t.Fatalf("expected AGENT_TIMEOUT while pool is saturated, got: %+v", resp)
+		}
+	case <-time.After(250 * time.Millisecond):
+		releaseFirst()
+		<-firstDone
+		t.Fatal("dispatch stayed blocked on worker-pool capacity after its context deadline")
+	}
+
+	releaseFirst()
+	if resp := <-firstDone; !resp.OK {
+		t.Fatalf("first dispatch failed: %+v", resp.Error)
+	}
+}

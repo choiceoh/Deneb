@@ -71,7 +71,7 @@ func NewDispatcher(logger *slog.Logger) *Dispatcher {
 		logger:  logger,
 	}
 	d.snap.Store(handlerSnapshot{})
-	pool := NewWorkerPool(0) // default: 2× CPU cores, clamped [4, 64]
+	pool := NewWorkerPool(0) // default: 2× CPU cores, clamped [4, 128]
 	d.pool.Store(pool)
 	return d
 }
@@ -226,7 +226,10 @@ func (d *Dispatcher) safeCall(ctx context.Context, req *protocol.RequestFrame, h
 	}
 
 	if pool := d.pool.Load(); pool != nil {
-		pool.Submit(run)
+		if !pool.Submit(ctx, run) {
+			handlerCancel()
+			return d.handlerTimeoutResponse(req)
+		}
 	} else {
 		go run()
 	}

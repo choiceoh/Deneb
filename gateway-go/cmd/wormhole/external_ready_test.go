@@ -126,3 +126,27 @@ func TestIsLoopbackListen(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateInboundAuth(t *testing.T) {
+	cases := []struct {
+		name    string
+		listen  string
+		token   string
+		wantErr bool
+	}{
+		{name: "loopback may be open", listen: "127.0.0.1:18800"},
+		{name: "ipv6 loopback may be open", listen: "[::1]:18800"},
+		{name: "all interfaces require token", listen: ":18800", wantErr: true},
+		{name: "tailnet requires token", listen: "100.105.145.6:18800", wantErr: true},
+		{name: "whitespace is not a token", listen: "0.0.0.0:18800", token: "  ", wantErr: true},
+		{name: "authenticated network listener", listen: ":18800", token: "secret"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateInboundAuth(tc.listen, tc.token)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("validateInboundAuth(%q, token-set=%v) error = %v, wantErr %v", tc.listen, tc.token != "", err, tc.wantErr)
+			}
+		})
+	}
+}

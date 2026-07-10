@@ -94,6 +94,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		},
 		"providers": providerCount,
 	}
+	if s.dispatcher != nil {
+		health["rpc"] = map[string]any{
+			"worker_pool": s.dispatcher.PoolStats(),
+		}
+	}
 
 	// Propus liveness: makes silent death of the self-improvement loop visible.
 	// If review_age keeps growing, the nudger→review→evolve pipeline stalled.
@@ -240,16 +245,15 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		health["fleet"] = s.fleet.HealthReport()
 	}
 
-	// Prefix-cache hit-rate (ops surface for the prompt-cache doctrine). Reuses
-	// the existing engine /metrics scrape; absent on non-vLLM hosts.
-	if sec, ok := s.cacheHealth.observe(r.Context(), s.vllmBaseURLs()); ok {
-		health["cache"] = sec
+	// Prefix-cache and GPU telemetry are independent, optional probes. Collect
+	// them concurrently so their individual two-second backstops do not add up
+	// and make a healthy gateway miss the three-second self-poll deadline.
+	optional := s.collectOptionalHealth(r.Context())
+	if optional.cachePresent {
+		health["cache"] = optional.cache
 	}
-
-	// DGX Spark GPU telemetry. Omitted entirely when nvidia-smi is absent so
-	// /health stays green on non-GPU hosts.
-	if stats, present := s.gpuHealth.observe(r.Context(), nil); present {
-		health["gpu"] = stats
+	if optional.gpuPresent {
+		health["gpu"] = optional.gpu
 	}
 
 	s.writeJSON(w, http.StatusOK, health)

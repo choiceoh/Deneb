@@ -5,6 +5,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -67,6 +68,17 @@ func isLoopbackListen(listen string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+// validateInboundAuth rejects an unauthenticated listener that is reachable
+// off-box. A missing secret must fail closed: wormhole fronts both local and
+// cloud models, so merely logging this configuration would leave every model
+// and upstream credential usable by any network peer until an operator noticed.
+func validateInboundAuth(listen, token string) error {
+	if strings.TrimSpace(token) == "" && !isLoopbackListen(listen) {
+		return fmt.Errorf("refusing unauthenticated non-loopback listener %q", listen)
+	}
+	return nil
 }
 
 // localOnly reports whether THIS request must stay local — either the instance

@@ -13,14 +13,16 @@ import { type ProactiveNav, proactiveNav } from "./proactiveNav";
 // carries a deep-link target (gateway kind+ref) is clickable → opens its pane.
 export function ProactivePanel({ cfg }: { cfg: GatewayConfig }) {
   const { connected, openPane, openWiki } = useWorkspace();
-  const { events, dismiss, clearAll } = useEvents(cfg, connected);
+  const { events, status, dismiss, clearAll } = useEvents(cfg, connected);
 
   const onNavigate = (nav: ProactiveNav) => {
     if (nav.view === "wiki" && nav.ref) openWiki(nav.ref);
     else openPane(nav.view, nav.ref ? { id: nav.ref } : undefined);
   };
 
-  return <ProactiveList events={events} onDismiss={dismiss} onClearAll={clearAll} onNavigate={onNavigate} />;
+  return (
+    <ProactiveList events={events} status={status} onDismiss={dismiss} onClearAll={clearAll} onNavigate={onNavigate} />
+  );
 }
 
 // Presentational — events injected, so it renders without an SSE subscription
@@ -30,24 +32,30 @@ export function ProactiveList({
   onDismiss,
   onClearAll,
   onNavigate,
+  status,
   now,
 }: {
   events: ProactiveEvent[];
   onDismiss: (id: string) => void;
   onClearAll: () => void;
   onNavigate?: (nav: ProactiveNav) => void;
+  status?: string;
   now?: number;
 }) {
-  if (events.length === 0) return null;
+  const showStatus = status === "재연결 중…" || status?.startsWith("오류:");
+  if (events.length === 0 && !showStatus) return null;
 
   return (
     <div className="proactive-panel" aria-live="polite" aria-label="능동 알림">
-      <div className="proactive-head">
-        <span className="proactive-head-label">알림 {events.length}</span>
-        <button className="proactive-clear" onClick={onClearAll}>
-          모두 지우기
-        </button>
-      </div>
+      {showStatus && <div className="pane-status">능동 알림 · {status}</div>}
+      {events.length > 0 && (
+        <div className="proactive-head">
+          <span className="proactive-head-label">알림 {events.length}</span>
+          <button className="proactive-clear" onClick={onClearAll}>
+            모두 지우기
+          </button>
+        </div>
+      )}
       {events.map((e) => {
         const nav = onNavigate ? proactiveNav(e) : null;
         const body = (

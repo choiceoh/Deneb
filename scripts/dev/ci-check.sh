@@ -9,11 +9,12 @@
 #
 # Gates (each is the make target of the same name):
 #   Go      generate-check  go-fmt  go-vet  go-lint  go-test
+#   Audit   runtime-health-test
 #   Kotlin  kotlin-spotless  kotlin-detekt  kotlin-desktop-smoke-test
 #           kotlin-android-compile
 #
-# The Go and Kotlin lanes run in parallel (gradle JVM startup is the long pole),
-# so wall-clock is roughly max(Go suite, Kotlin suite), not their sum.
+# The Go, Kotlin, and audit lanes run in parallel (gradle JVM startup is the long
+# pole), so wall-clock is roughly the slowest selected lane, not their sum.
 #
 # Two modes:
 #   (default)  full local gate — every configured lane. Run before pushing.
@@ -27,9 +28,10 @@
 # integration-tagged tests. Driven by `make ci` / `make ci/fast`.
 #
 # Usage:
-#   scripts/dev/ci-check.sh            # full gate (Go + Kotlin)
+#   scripts/dev/ci-check.sh            # full gate (Go + Kotlin + audit)
 #   scripts/dev/ci-check.sh --go       # Go gates only
 #   scripts/dev/ci-check.sh --kotlin   # Kotlin gates only
+#   scripts/dev/ci-check.sh --audit    # runtime-health audit tests only
 #   scripts/dev/ci-check.sh --fast     # changed-side gates only, cached tests
 #
 # Exit status: 0 if every run gate passed (or nothing changed in --fast), 1 if
@@ -53,29 +55,33 @@ BASE_REF="${CI_CHECK_BASE:-origin/main}"
 # --- Gate definitions (gate name == make target) -----------------------------
 GO_GATES=(generate-check go-fmt go-vet go-lint go-test)
 KOTLIN_GATES=(kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile)
+AUDIT_GATES=(runtime-health-test)
 
 # --- Args --------------------------------------------------------------------
 RUN_GO=true
 RUN_KOTLIN=true
+RUN_AUDIT=true
 FAST=false
 case "${1:-}" in
-  --go)      RUN_KOTLIN=false ;;
-  --kotlin)  RUN_GO=false ;;
+  --go)      RUN_KOTLIN=false; RUN_AUDIT=false ;;
+  --kotlin)  RUN_GO=false; RUN_AUDIT=false ;;
+  --audit)   RUN_GO=false; RUN_KOTLIN=false ;;
   --fast)    FAST=true ;;
   --all|"")  ;;
   -h|--help)
     echo "ci-check.sh — local mirror of CI's fast gates"
     echo
     echo "Usage:"
-    echo "  scripts/dev/ci-check.sh           full gate (Go + Kotlin)"
+    echo "  scripts/dev/ci-check.sh           full gate (Go + Kotlin + audit)"
     echo "  scripts/dev/ci-check.sh --go      Go gates only"
     echo "  scripts/dev/ci-check.sh --kotlin  Kotlin gates only"
+    echo "  scripts/dev/ci-check.sh --audit   runtime-health audit tests only"
     echo "  scripts/dev/ci-check.sh --fast    changed-side gates only, cached tests"
     echo
     echo "Via make:  make ci   |   make ci ARGS=--go   |   make ci/fast"
     exit 0 ;;
   *)
-    echo "ci-check: unknown argument '$1' (use --go, --kotlin, --fast, or no argument)" >&2
+    echo "ci-check: unknown argument '$1' (use --go, --kotlin, --audit, --fast, or no argument)" >&2
     exit 2 ;;
 esac
 
@@ -107,12 +113,14 @@ if $FAST; then
     )"
     grep -q '^gateway-go/'     <<<"$changed" || RUN_GO=false
     grep -q '^client-android/' <<<"$changed" || RUN_KOTLIN=false
+    grep -Eq '^scripts/audit/(runtime-health\.py|runtime_health\.py|test_runtime_health\.py)$' \
+      <<<"$changed" || RUN_AUDIT=false
   fi
 fi
 
 # Fast mode with nothing relevant changed: nothing to gate.
-if $FAST && ! $RUN_GO && ! $RUN_KOTLIN; then
-  echo "${GREEN}${BOLD}make ci/fast${RESET} — no Go or Kotlin changes vs ${BASE_REF}; nothing to gate."
+if $FAST && ! $RUN_GO && ! $RUN_KOTLIN && ! $RUN_AUDIT; then
+  echo "${GREEN}${BOLD}make ci/fast${RESET} — no Go, Kotlin, or runtime-audit changes vs ${BASE_REF}; nothing to gate."
   echo "${DIM}(run the full ${RESET}${BOLD}make ci${RESET}${DIM} before pushing.)${RESET}"
   exit 0
 fi
@@ -278,17 +286,19 @@ run_gate() {
 
 go_lane()     { local g; for g in "${GO_GATES[@]}";     do run_gate "$g"; done; }
 kotlin_lane() { local g; for g in "${KOTLIN_GATES[@]}"; do run_gate "$g"; done; }
+audit_lane()  { local g; for g in "${AUDIT_GATES[@]}";  do run_gate "$g"; done; }
 
 # --- Run lanes in parallel ---------------------------------------------------
 SELECTED=()
 $RUN_GO     && SELECTED+=("${GO_GATES[@]}")
 $RUN_KOTLIN && SELECTED+=("${KOTLIN_GATES[@]}")
+$RUN_AUDIT  && SELECTED+=("${AUDIT_GATES[@]}")
 
 if $FAST; then
-  desc="vs ${BASE_REF} → Go:$($RUN_GO && echo run || echo skip)  Kotlin:$($RUN_KOTLIN && echo run || echo skip); tests cached"
+  desc="vs ${BASE_REF} → Go:$($RUN_GO && echo run || echo skip)  Kotlin:$($RUN_KOTLIN && echo run || echo skip)  Audit:$($RUN_AUDIT && echo run || echo skip); Go tests cached"
 else
   desc="${#SELECTED[@]} gates"
-  $RUN_GO && $RUN_KOTLIN && desc="$desc, Go ∥ Kotlin in parallel"
+  desc="$desc, selected lanes run in parallel"
 fi
 echo "${BOLD}make ${LABEL}${RESET} — $( $FAST && echo 'incremental gate' || echo 'CI gate mirror' )  ${DIM}(${desc})${RESET}"
 echo
@@ -297,6 +307,7 @@ wall_start=$(now_ms)
 pids=()
 $RUN_GO     && { go_lane &     pids+=($!); }
 $RUN_KOTLIN && { kotlin_lane & pids+=($!); }
+$RUN_AUDIT  && { audit_lane &  pids+=($!); }
 for p in "${pids[@]}"; do wait "$p"; done
 wall_ms=$(( $(now_ms) - wall_start ))
 

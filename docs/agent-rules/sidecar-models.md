@@ -172,7 +172,7 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 
 - ★**상주 호스트 = srv4** (게이트웨이와 동일 호스트, 2026-07-06 통일 — 게이트웨이는 `127.0.0.1:18800` 로컬 소비). srv1 의 구 인스턴스는 트래픽 0 확인 후 disable 됨(유닛·config 보존).
 - 빌드: **`make wormhole`** → `dist/wormhole`. 서비스: **`scripts/deploy/wormhole.service`**(systemd, `Restart=on-failure`, `MemoryMax=512M`, journal) 또는 수동 **`scripts/deploy/start-wormhole.sh {start|stop|restart|status}`**.
-- 설정: **`~/.wormhole/config.json`**(레포 밖, 시크릿 포함). 템플릿 = `gateway-go/cmd/wormhole/config.example.json`. `token` + 각 model `key` 는 `${ENV}` 확장. 포트 기본 `:18800`.
+- 설정: **`~/.wormhole/config.json`**(레포 밖, 시크릿 포함). 템플릿 = `gateway-go/cmd/wormhole/config.example.json`. `token` + 각 model `key` 는 `${ENV}` 확장. 포트 기본 `:18800`. 비루프백 listen에서 token이 비면 부팅과 핫리로드 모두 거부한다(누락된 env 토큰도 fail-closed); 무인증 개발 모드는 명시적 loopback listen에서만 허용한다.
 - Deneb-백엔드용 config 골격(메인 dsv4 = no-toggleKwarg 패스스루):
 
   ```json

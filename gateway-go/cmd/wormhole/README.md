@@ -205,7 +205,8 @@ live in the environment, not the file. Each model entry:
 | `fleet` | `true` = resolve `url` live from SparkFleet discovery (keyed by `upstreamModel`) while keeping this entry's routing config; survives node moves (see above) |
 
 Top-level config: `listen` (default `:18800`); `token` gates every request
-(`Authorization: Bearer` or `x-api-key`) — empty means open; `localOnly: true`
+(`Authorization: Bearer` or `x-api-key`) — empty is allowed only on an explicit
+loopback listener; `localOnly: true`
 air-gaps the whole instance (every cloud model is refused); `auto: ["dsv4",
 "claude"]` sets the ordered candidate list for the reserved `auto` model name
 (`autoName` overrides the name; default `auto`); `sparkfleet: { url, token }`
@@ -214,9 +215,9 @@ auto-discovers local models (see above).
 **Exposing it (single URL for external clients).** To let Claude Code / scripts
 reach wormhole over the tailnet, bind a routable address (`"listen": ":18800"`)
 **and set a `token`** — then point the client at `http://<host>:18800/v1` with
-that token. wormhole logs an `INSECURE` error at boot if it binds a non-loopback
-address with no token (open to the network, cloud keys and all). Loopback +
-no-token is fine for a same-box gateway.
+that token. wormhole refuses to start, and rejects a hot reload, if a
+non-loopback listener would have no token (open to the network, cloud keys and
+all). Loopback + no-token is fine for a same-box gateway.
 
 **Secrets file (live key rotation).** `${ENV}` refs also resolve from a
 wormhole-owned `secrets.env` next to the config (`~/.wormhole/secrets.env`, mode
