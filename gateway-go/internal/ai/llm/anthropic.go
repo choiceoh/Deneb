@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 )
 
 // anthropicAPIVersion is sent with every Anthropic Messages request via
@@ -42,29 +41,9 @@ func (c *Client) streamChatAnthropic(ctx context.Context, req ChatRequest) (<-ch
 		return nil, err
 	}
 
-	rawEvents := ParseSSE(respBody)
-
-	out := make(chan StreamEvent, 16)
-	done := make(chan struct{})
-
-	closeOnce := sync.OnceFunc(func() { respBody.Close() })
-
-	go func() {
-		select {
-		case <-ctx.Done():
-			closeOnce()
-		case <-done:
-		}
-	}()
-
-	go func() {
-		defer close(out)
-		defer close(done)
-		defer closeOnce()
+	return startSSEPipeline(ctx, respBody, func(ctx context.Context, rawEvents <-chan StreamEvent, out chan<- StreamEvent) {
 		forwardAnthropicStream(ctx, rawEvents, out)
-	}()
-
-	return out, nil
+	}), nil
 }
 
 // defaultAnthropicMaxTokens is the output cap used when the caller did not set

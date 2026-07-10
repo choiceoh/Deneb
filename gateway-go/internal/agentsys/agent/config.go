@@ -40,14 +40,16 @@ type AgentConfig struct {
 
 	// OnTurnInit is called at the start of each turn to decorate the context.
 	// Use this to inject per-turn state (e.g., a TurnContext for cross-tool sharing).
-	// Returning nil is a no-op; returning a modified ctx replaces the turn context.
+	// Each call receives the run-scoped base context rather than the prior turn's
+	// decorated context, so per-turn values can be released promptly. Returning
+	// nil is a no-op; returning a modified ctx replaces the current turn context.
 	OnTurnInit func(ctx context.Context) context.Context
 
 	// DeferredSystemText is called before each turn starting from turn 1.
-	// When it returns a non-empty string, that text is appended to System
-	// once and the hook is cleared. Use this for late-arriving context
-	// (e.g., proactive hints) that should be injected without blocking
-	// the first turn.
+	// When it returns a non-empty string, that text is appended to System and
+	// remains in subsequent requests. The hook stays installed and is polled
+	// on every later turn so multiple late-arriving sources can be injected
+	// without blocking the first turn.
 	DeferredSystemText func() string
 
 	// Thinking configures extended thinking for this run (mapped to reasoning_effort).
@@ -156,9 +158,9 @@ type AgentConfig struct {
 	// tool_result block) and returns the adjusted messages to send. Returning
 	// the input unchanged is a no-op. Nil = skipped entirely.
 	//
-	// The executor re-reads cfg.Messages from the return value only for the
-	// current call; its own internal messages array is untouched by this
-	// hook so prompt-cache stability is preserved across turns.
+	// The executor uses the returned slice only for the current call; its own
+	// internal messages array is untouched by this hook so prompt-cache
+	// stability is preserved across turns.
 	//
 	// Single writer: callers that need multiple hooks must compose them
 	// explicitly via ComposeBeforeAPICall. Overwriting this field silently

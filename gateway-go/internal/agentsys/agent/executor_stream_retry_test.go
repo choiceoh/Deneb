@@ -20,15 +20,25 @@ type scriptedStreamAttempt struct {
 }
 
 type scriptedRetryStreamer struct {
-	mu       sync.Mutex
-	attempts []scriptedStreamAttempt
-	calls    int
+	mu                      sync.Mutex
+	attempts                []scriptedStreamAttempt
+	contexts                []context.Context
+	requirePreviousCanceled bool
+	calls                   int
 }
 
-func (s *scriptedRetryStreamer) StreamChat(context.Context, llm.ChatRequest) (<-chan llm.StreamEvent, error) {
+func (s *scriptedRetryStreamer) StreamChat(ctx context.Context, _ llm.ChatRequest) (<-chan llm.StreamEvent, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.requirePreviousCanceled && len(s.contexts) > 0 {
+		select {
+		case <-s.contexts[len(s.contexts)-1].Done():
+		default:
+			return nil, errors.New("previous stream attempt was not canceled before retry")
+		}
+	}
+	s.contexts = append(s.contexts, ctx)
 	s.calls++
 	if len(s.attempts) == 0 {
 		return nil, errors.New("unexpected StreamChat call")
@@ -47,6 +57,42 @@ func (s *scriptedRetryStreamer) StreamChat(context.Context, llm.ChatRequest) (<-
 		close(events)
 	}
 	return events, nil
+}
+
+func TestRunStreamingTurnWithRetryCancelsEachAttempt(t *testing.T) {
+	parent := context.Background()
+	streamer := &scriptedRetryStreamer{
+		requirePreviousCanceled: true,
+		attempts: []scriptedStreamAttempt{
+			{holdOpen: true},
+			{events: buildTextTurnEvents("recovered", 10, 5)},
+		},
+	}
+
+	outcome, err := runStreamingTurnWithRetry(
+		parent,
+		streamer,
+		llm.ChatRequest{Stream: true},
+		StreamHooks{},
+		10*time.Millisecond,
+		nil,
+		0,
+	)
+	testutil.NoError(t, err)
+	if outcome.result.text != "recovered" {
+		t.Fatalf("result text = %q, want recovered", outcome.result.text)
+	}
+	if len(streamer.contexts) != 2 {
+		t.Fatalf("attempt contexts = %d, want 2", len(streamer.contexts))
+	}
+	for i, attemptCtx := range streamer.contexts {
+		if !errors.Is(attemptCtx.Err(), context.Canceled) {
+			t.Errorf("attempt %d context error = %v, want canceled after attempt", i+1, attemptCtx.Err())
+		}
+	}
+	if parent.Err() != nil {
+		t.Fatalf("parent context was canceled: %v", parent.Err())
+	}
 }
 
 func (*scriptedRetryStreamer) Complete(context.Context, llm.ChatRequest) (string, error) {

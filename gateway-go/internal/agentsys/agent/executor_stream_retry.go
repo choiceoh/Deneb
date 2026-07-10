@@ -72,12 +72,12 @@ func runStreamingTurnWithRetry(
 		logger = slog.Default()
 	}
 	outcome := streamingTurnOutcome{
-		result:   &turnResult{},
 		attempts: 1,
 	}
 
-	events, err := client.StreamChat(ctx, req)
-	if err != nil {
+	result, connected, err := runStreamingAttempt(ctx, client, req, hooks, idleTimeout, logger)
+	outcome.result = result
+	if !connected {
 		outcome.terminationReason = streamTerminationInitialConnectErr
 		if ctx.Err() != nil {
 			outcome.terminationReason = streamTerminationContextDone
@@ -85,7 +85,6 @@ func runStreamingTurnWithRetry(
 		return outcome, err
 	}
 
-	err = consumeStreamInto(ctx, events, hooks, outcome.result, idleTimeout, logger)
 	if err == nil {
 		outcome.terminationReason = streamTerminationCompleted
 		return outcome, nil
@@ -109,9 +108,9 @@ func runStreamingTurnWithRetry(
 
 	outcome.retries = 1
 	outcome.attempts++
-	outcome.result = &turnResult{}
-	events, err = client.StreamChat(ctx, req)
-	if err != nil {
+	result, connected, err = runStreamingAttempt(ctx, client, req, hooks, idleTimeout, logger)
+	outcome.result = result
+	if !connected {
 		outcome.terminationReason = streamTerminationRetryConnectErr
 		if ctx.Err() != nil {
 			outcome.terminationReason = streamTerminationContextDone
@@ -119,7 +118,6 @@ func runStreamingTurnWithRetry(
 		return outcome, err
 	}
 
-	err = consumeStreamInto(ctx, events, hooks, outcome.result, idleTimeout, logger)
 	switch {
 	case err == nil:
 		outcome.terminationReason = streamTerminationCompleted
@@ -129,6 +127,29 @@ func runStreamingTurnWithRetry(
 		outcome.terminationReason = streamTerminationRetryBudgetSpent
 	}
 	return outcome, err
+}
+
+// runStreamingAttempt gives every connection its own cancellation boundary.
+// consumeStreamInto may abandon a still-open provider stream after an idle
+// timeout or error event; canceling here releases that attempt's response body,
+// parser, and forwarder before the caller starts a retry.
+func runStreamingAttempt(
+	ctx context.Context,
+	client LLMStreamer,
+	req llm.ChatRequest,
+	hooks StreamHooks,
+	idleTimeout time.Duration,
+	logger *slog.Logger,
+) (*turnResult, bool, error) {
+	attemptCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	result := &turnResult{}
+	events, err := client.StreamChat(attemptCtx, req)
+	if err != nil {
+		return result, false, err
+	}
+	return result, true, consumeStreamInto(attemptCtx, events, hooks, result, idleTimeout, logger)
 }
 
 func retryReasonForStreamError(err error) streamRetryReason {
