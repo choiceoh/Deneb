@@ -133,7 +133,8 @@ type AgentConfig struct {
 	// during LLM streaming. If no event arrives within this period, the stream
 	// is considered stalled and aborted with a retryable error. This prevents
 	// indefinite hangs when the LLM API stops sending events but keeps the TCP
-	// connection alive. Default: 90s. Zero disables the watchdog.
+	// connection alive. Default: 180s. Zero uses the default; a negative value
+	// disables the watchdog.
 	StreamIdleTimeout time.Duration
 
 	// ToolLoopDetector detects stuck tool-call patterns (repeated calls, polling
@@ -225,6 +226,17 @@ type ToolActivity struct {
 	OutputRunes int `json:"outputRunes,omitempty"`
 }
 
+// StreamStats summarizes the provider-stream attempts made during an agent
+// run. Attempts and Retries aggregate across turns; LastRetryReason retains
+// the most recent retry trigger, while TerminationReason describes the final
+// stream attempt observed by the run.
+type StreamStats struct {
+	Attempts          int
+	Retries           int
+	LastRetryReason   string
+	TerminationReason string
+}
+
 // AgentResult is the outcome of an agent run.
 type AgentResult struct {
 	Text    string // last turn's text (for channel reply — avoids duplicating streamed content)
@@ -243,6 +255,7 @@ type AgentResult struct {
 	StopReason      string // "end_turn", "max_tokens", "timeout", "aborted", "max_turns", "max_turns_graceful"
 	Usage           llm.TokenUsage
 	Turns           int
+	Stream          StreamStats
 
 	// BudgetExhaustedInjected is true once the one-time grace-call user message
 	// has been appended to the history after MaxTurns exhaustion. Guards against
