@@ -176,6 +176,14 @@ health:
 health-check:
 	@python3 scripts/audit/codebase-health.py --check
 
+# Runtime-health score (advisory, on-host only — reads the production gateway's
+# journald over a rolling window, so it is NON-deterministic and has NO ratchet
+# gate). Sibling to `health`: that scores static structure, this scores the LIVE
+# runtime (crashes, error rate, LLM-serving faults, turn/tool reliability,
+# latency) from the last 7 days of logs. Run on srv4. See runtime-health.py.
+runtime-health:
+	@python3 scripts/audit/runtime-health.py
+
 # Run all code generation pipelines in dependency order.
 generate: tool-schemas data-gen kotlin-models
 	@echo "All code generation pipelines completed"
