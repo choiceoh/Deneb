@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -22,7 +23,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/timeouts"
 )
 
-// gracefulStopDelay is how long to wait after SIGTERM before sending SIGKILL.
+// gracefulStopDelay is the maximum time os/exec gives the direct child to
+// exit after SIGTERM before forcing it down and releasing its pipes.
 const gracefulStopDelay = 5 * time.Second
 
 // RunStatus represents the current state of a managed process.
@@ -86,9 +88,11 @@ type TrackedProcess struct {
 	stderrBuf *StreamBuffer
 }
 
-// ApprovalCallback is called when a command requires approval.
+// ApprovalCallback is called when a command requires approval. Implementations
+// must observe ctx so Manager.Stop can release a background command waiting for
+// a decision, and must not call Manager.Stop synchronously from the callback.
 // Return true to allow execution, false to deny.
-type ApprovalCallback func(req ExecRequest) bool
+type ApprovalCallback func(ctx context.Context, req ExecRequest) bool
 
 // Manager manages subprocess lifecycle.
 //
@@ -114,20 +118,23 @@ type Manager struct {
 	envOnce       sync.Once
 	cachedBaseEnv []string
 
-	stopPrune chan struct{} // closed to stop auto-prune goroutine
+	runtime *managerRuntime
 }
 
 // NewManager creates a new process manager.
 // It caches the sanitized parent environment and starts a background
 // goroutine that prunes completed processes every 5 minutes.
 func NewManager(logger *slog.Logger) *Manager {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	m := &Manager{
 		processes: make(map[string]*TrackedProcess),
 		logger:    logger,
 		maxStdout: 1024 * 1024, // 1 MB default
-		stopPrune: make(chan struct{}),
+		runtime:   newManagerRuntime(),
 	}
-	go func() {
+	m.runtime.goRun(func(ctx context.Context) {
 		// Panic here must not kill the process manager: it's long-lived and
 		// recovery keeps pruning operational even if one sweep hits bad state.
 		defer func() {
@@ -135,18 +142,16 @@ func NewManager(logger *slog.Logger) *Manager {
 				logger.Error("panic in process autoPrune", "panic", r)
 			}
 		}()
-		m.autoPrune()
-	}()
+		m.autoPrune(ctx)
+	})
 	return m
 }
 
-// Stop terminates the background prune goroutine. Safe to call multiple times.
+// Stop cancels and joins every manager-owned goroutine, including background
+// commands and the prune loop. Safe to call concurrently and multiple times.
 func (m *Manager) Stop() {
-	select {
-	case <-m.stopPrune:
-		// already stopped
-	default:
-		close(m.stopPrune)
+	if m.runtime != nil {
+		m.runtime.stop()
 	}
 }
 
@@ -156,12 +161,12 @@ const (
 )
 
 // autoPrune periodically removes completed processes older than pruneMaxAge.
-func (m *Manager) autoPrune() {
+func (m *Manager) autoPrune(ctx context.Context) {
 	ticker := time.NewTicker(pruneInterval)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-m.stopPrune:
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			if n := m.Prune(pruneMaxAge); n > 0 {
@@ -199,7 +204,11 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	if req.ID == "" {
 		req.ID = shortid.New("proc")
 	}
+	tracked := m.track(req)
+	return m.executeTracked(ctx, req, tracked)
+}
 
+func (m *Manager) track(req ExecRequest) *TrackedProcess {
 	tracked := &TrackedProcess{
 		Request: req,
 		Status:  StatusPending,
@@ -208,6 +217,13 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	m.mu.Lock()
 	m.processes[req.ID] = tracked
 	m.mu.Unlock()
+	return tracked
+}
+
+func (m *Manager) executeTracked(ctx context.Context, req ExecRequest, tracked *TrackedProcess) *ExecResult {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return m.cancelProcess(tracked, req.ID, time.Now().UnixMilli(), ctxErr)
+	}
 
 	// Approval gate.
 	if req.RequiresApproval {
@@ -215,21 +231,34 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 		approver := m.approver
 		m.mu.RUnlock()
 
-		if approver == nil || !approver(req) {
-			tracked.mu.Lock()
-			tracked.Status = StatusDenied
+		if approver == nil {
 			result := &ExecResult{
 				ID:     req.ID,
 				Status: StatusDenied,
 				Error:  "execution denied",
 			}
-			tracked.Result = result
-			tracked.mu.Unlock()
+			m.finishProcess(tracked, result)
+			return result
+		}
+		approved := approver(ctx, req)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return m.cancelProcess(tracked, req.ID, time.Now().UnixMilli(), ctxErr)
+		}
+		if !approved {
+			result := &ExecResult{
+				ID:     req.ID,
+				Status: StatusDenied,
+				Error:  "execution denied",
+			}
+			m.finishProcess(tracked, result)
 			return result
 		}
 		tracked.mu.Lock()
 		tracked.Status = StatusApproved
 		tracked.mu.Unlock()
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return m.cancelProcess(tracked, req.ID, time.Now().UnixMilli(), ctxErr)
 	}
 
 	// Build command.
@@ -246,13 +275,19 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	cmd := exec.CommandContext(execCtx, req.Command, req.Args...) //nolint:gosec // G204 — command execution is by design
 	// Run in a new process group so we can kill all children together.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	// Graceful shutdown: send SIGTERM to the process group first, then SIGKILL
-	// after gracefulStopDelay if the process hasn't exited.
+	// Graceful shutdown: send SIGTERM to the process group first. os/exec's
+	// WaitDelay fallback kills only the direct child, so the post-Wait cleanup
+	// below explicitly sweeps the full process group with SIGKILL as well.
+	var cancelIssued atomic.Bool
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return nil
 		}
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+		if err == nil {
+			cancelIssued.Store(true)
+		}
+		return err
 	}
 	cmd.WaitDelay = gracefulStopDelay
 	if req.WorkingDir != "" {
@@ -309,7 +344,11 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	m.logger.Info("process starting", "id", req.ID, "command", req.Command)
 
 	if err := cmd.Start(); err != nil {
+		ctxErr := execCtx.Err()
 		cancel()
+		if ctxErr != nil {
+			return m.cancelProcess(tracked, req.ID, startedAt, ctxErr)
+		}
 		return m.failProcess(tracked, req.ID, startedAt, err.Error())
 	}
 
@@ -322,6 +361,15 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 	err = cmd.Wait()
 	// Capture context error before cancel() overwrites it.
 	ctxErr := execCtx.Err()
+	if cancelIssued.Load() && cmd.Process != nil {
+		// A shell may exit on SIGTERM while a grandchild in the same process
+		// group ignores it. os/exec escalates only cmd.Process, which would let
+		// that descendant survive Manager.Stop. Sweep the original group after
+		// Wait so shutdown never returns with a canceled process tree alive.
+		if killErr := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); killErr != nil && !errors.Is(killErr, syscall.ESRCH) {
+			m.logger.Warn("failed to kill canceled process group", "id", req.ID, "pid", cmd.Process.Pid, "error", killErr)
+		}
+	}
 	cancel()
 
 	if errors.Is(err, exec.ErrWaitDelay) {
@@ -368,12 +416,7 @@ func (m *Manager) Execute(ctx context.Context, req ExecRequest) *ExecResult {
 		result.ExitCode = 0
 	}
 
-	tracked.mu.Lock()
-	tracked.Status = result.Status
-	tracked.Result = result
-	tracked.stdoutBuf = nil // release stream buffers after completion
-	tracked.stderrBuf = nil
-	tracked.mu.Unlock()
+	m.finishProcess(tracked, result)
 	m.logger.Info("process completed", "id", req.ID, "status", result.Status, "exitCode", result.ExitCode, "ms", result.RuntimeMs)
 	return result
 }
@@ -384,10 +427,17 @@ func (m *Manager) ExecuteBackground(ctx context.Context, req ExecRequest) string
 	if req.ID == "" {
 		req.ID = shortid.New("proc")
 	}
-	// Detach from the caller's context so the process outlives the RPC call,
-	// but still respects server-level shutdown via the background context.
-	bgCtx := context.WithoutCancel(ctx)
-	go m.Execute(bgCtx, req)
+
+	// Install the pending snapshot before returning so poll never races a raw
+	// goroutine that has not registered the process yet.
+	tracked := m.track(req)
+	if m.runtime == nil || !m.runtime.goDetached(ctx, func(bgCtx context.Context) {
+		m.executeTracked(bgCtx, req, tracked)
+	}) {
+		// Shutdown won registration. Leave a terminal, pollable snapshot rather
+		// than an entry stuck forever in pending.
+		m.cancelProcess(tracked, req.ID, time.Now().UnixMilli(), context.Canceled)
+	}
 	return req.ID
 }
 
@@ -499,8 +549,6 @@ func (m *Manager) List() []ProcessSnapshot {
 
 // failProcess records a failed process and returns the result.
 func (m *Manager) failProcess(tracked *TrackedProcess, id string, startedAt int64, errMsg string) *ExecResult {
-	tracked.mu.Lock()
-	tracked.Status = StatusFailed
 	result := &ExecResult{
 		ID:        id,
 		Status:    StatusFailed,
@@ -508,9 +556,50 @@ func (m *Manager) failProcess(tracked *TrackedProcess, id string, startedAt int6
 		EndedAt:   time.Now().UnixMilli(),
 		Error:     errMsg,
 	}
-	tracked.Result = result
-	tracked.mu.Unlock()
+	m.finishProcess(tracked, result)
 	return result
+}
+
+// cancelProcess records cancellation before cmd.Wait can produce its normal
+// terminal result (for example, Manager.Stop racing process startup).
+func (m *Manager) cancelProcess(tracked *TrackedProcess, id string, startedAt int64, ctxErr error) *ExecResult {
+	endedAt := time.Now().UnixMilli()
+	errMsg := "canceled"
+	if errors.Is(ctxErr, context.DeadlineExceeded) {
+		errMsg = "timeout"
+	}
+	result := &ExecResult{
+		ID:        id,
+		Status:    StatusKilled,
+		ExitCode:  -1,
+		StartedAt: startedAt,
+		EndedAt:   endedAt,
+		RuntimeMs: endedAt - startedAt,
+		Error:     errMsg,
+	}
+	m.finishProcess(tracked, result)
+	return result
+}
+
+// finishProcess publishes a terminal snapshot and releases execution-only
+// references. In particular, exec.Cmd retains its Stdout/Stderr writers; merely
+// clearing stdoutBuf/stderrBuf would otherwise keep both capture buffers alive
+// until the process entry is pruned.
+func (m *Manager) finishProcess(tracked *TrackedProcess, result *ExecResult) {
+	tracked.mu.Lock()
+	stdin := tracked.stdin
+	tracked.Status = result.Status
+	tracked.Result = result
+	tracked.cmd = nil
+	tracked.cancel = nil
+	tracked.stdin = nil
+	tracked.stdoutBuf = nil
+	tracked.stderrBuf = nil
+	tracked.mu.Unlock()
+
+	if stdin != nil {
+		_ = stdin.Close()
+	}
 }
 
 // Prune removes completed/failed processes older than the given duration.

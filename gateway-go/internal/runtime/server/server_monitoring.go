@@ -44,29 +44,6 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 	s.safeGo("memory-pressure-monitor", func() { runMemPressureMonitor(ctx, s.logger) })
 }
 
-// startProcessPruner runs a background loop that periodically prunes completed
-// processes older than 1 hour to prevent unbounded memory growth.
-func (s *Server) startProcessPruner(ctx context.Context) {
-	if s.processes == nil {
-		return
-	}
-	s.safeGo("process-pruner", func() {
-		ticker := time.NewTicker(10 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				pruned := s.processes.Prune(1 * time.Hour)
-				if pruned > 0 {
-					s.logger.Info("pruned completed processes", "count", pruned)
-				}
-			}
-		}
-	})
-}
-
 // runMemPressureMonitor ticks every 30s and emits a compact memory snapshot
 // when the Go heap is unusually large or Linux PSI reports stall time.
 //

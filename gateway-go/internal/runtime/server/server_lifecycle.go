@@ -15,7 +15,7 @@ import (
 )
 
 // initAndListen creates the HTTP server, binds to the address, and starts
-// background subsystems (tick broadcaster, monitoring, process pruner, hooks).
+// background subsystems (tick broadcaster, monitoring, session GC, hooks).
 // Shared by Run and StartAndListen to avoid duplicating the startup sequence.
 func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	// Lifecycle context was initialised in New() so that background
@@ -75,7 +75,6 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 
 	s.startedAt = time.Now()
 	s.StartMonitoring(ctx)
-	s.startProcessPruner(ctx)
 	s.sessions.StartGC(ctx)
 
 	// Propagate server lifecycle context to the chat handler so background
@@ -279,7 +278,10 @@ func (s *Server) doShutdown() error {
 
 	// 14. Stop process manager background goroutine.
 	if s.processes != nil {
-		stopWithTimeout(5*time.Second, "processes.Stop", s.logger, s.processes.Stop)
+		// Process cancellation allows a 5s SIGTERM grace before SIGKILL. Keep
+		// the outer shutdown bound above that window so Stop can finish its join
+		// instead of leaving the cleanup goroutine behind at the same deadline.
+		stopWithTimeout(10*time.Second, "processes.Stop", s.logger, s.processes.Stop)
 	}
 
 	// 15. ACP cleanup: persist bindings, registry, and unsubscribe lifecycle sync.

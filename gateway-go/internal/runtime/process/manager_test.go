@@ -111,7 +111,7 @@ func TestExecute_Timeout(t *testing.T) {
 
 func TestExecute_ApprovalDenied(t *testing.T) {
 	m := newTestManager(t)
-	m.SetApprover(func(_ ExecRequest) bool { return false })
+	m.SetApprover(func(_ context.Context, _ ExecRequest) bool { return false })
 
 	result := m.Execute(context.Background(), ExecRequest{
 		ID:               "denied-1",
@@ -126,7 +126,7 @@ func TestExecute_ApprovalDenied(t *testing.T) {
 
 func TestExecute_ApprovalGranted(t *testing.T) {
 	m := newTestManager(t)
-	m.SetApprover(func(_ ExecRequest) bool { return true })
+	m.SetApprover(func(_ context.Context, _ ExecRequest) bool { return true })
 
 	result := m.Execute(context.Background(), ExecRequest{
 		ID:               "approved-1",

@@ -463,7 +463,7 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	// When a tool execution requires approval, create an approval request,
 	// broadcast it to WS clients, and wait for a decision.
 	if s.processes != nil {
-		s.processes.SetApprover(func(req process.ExecRequest) bool {
+		s.processes.SetApprover(func(ctx context.Context, req process.ExecRequest) bool {
 			ar := s.approvals.CreateRequest(approval.CreateRequestParams{
 				Command:     req.Command,
 				CommandArgv: req.Args,
@@ -484,6 +484,8 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 				if resolved != nil && resolved.Decision != nil {
 					return *resolved.Decision == approval.DecisionAllowOnce || *resolved.Decision == approval.DecisionAllowAlways
 				}
+				return false
+			case <-ctx.Done():
 				return false
 			case <-timer.C:
 				return false
