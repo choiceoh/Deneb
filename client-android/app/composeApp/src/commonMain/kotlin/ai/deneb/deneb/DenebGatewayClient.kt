@@ -12,7 +12,6 @@ import ai.deneb.data.SmsDraftStatus
 import ai.deneb.data.SmsDraftStore
 import ai.deneb.data.UiSubmission
 import ai.deneb.deneb.generated.SkillRow
-import ai.deneb.executePhoneAction
 import ai.deneb.httpClient
 import ai.deneb.sensing.readCurrentLocation
 import ai.deneb.sensing.readWorkUsageDigest
@@ -28,7 +27,6 @@ import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
-import io.ktor.client.request.prepareGet
 import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
@@ -44,7 +42,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,7 +65,6 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
 import kotlin.concurrent.Volatile
 import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource

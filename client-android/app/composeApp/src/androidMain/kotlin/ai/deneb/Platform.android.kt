@@ -11,7 +11,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.core.graphics.scale
 import androidx.core.net.toUri
-import com.russhwolf.settings.BuildConfig
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.SharedPreferencesSettings
 import dev.spght.encryptedprefs.EncryptedSharedPreferences

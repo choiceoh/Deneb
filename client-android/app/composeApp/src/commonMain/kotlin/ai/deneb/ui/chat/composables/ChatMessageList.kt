@@ -8,11 +8,8 @@ package ai.deneb.ui.chat.composables
 import ai.deneb.deneb.DenebLoading
 import ai.deneb.getBackgroundDispatcher
 import ai.deneb.onDragAndDropEventDropped
-import ai.deneb.ui.DenebMotion
-import ai.deneb.ui.chat.ChatActions
 import ai.deneb.ui.chat.ChatUiState
 import ai.deneb.ui.chat.History
-import ai.deneb.ui.chat.composables.uiErrorText
 import ai.deneb.ui.chat.lastRenderedAssistant
 import ai.deneb.ui.components.VerticalScrollbarForList
 import ai.deneb.ui.components.rememberHaptics
@@ -23,20 +20,13 @@ import ai.deneb.ui.dynamicui.FrozenSubmission
 import ai.deneb.ui.dynamicui.toSpeakableText
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.precomputeMarkdownAsync
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,7 +34,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
@@ -67,7 +56,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment.Companion.BottomCenter
-import androidx.compose.ui.Alignment.Companion.Center
 import androidx.compose.ui.Alignment.Companion.CenterEnd
 import androidx.compose.ui.Alignment.Companion.CenterHorizontally
 import androidx.compose.ui.Modifier
@@ -80,13 +68,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -103,11 +86,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import nl.marc_apps.tts.TextToSpeechInstance
 import nl.marc_apps.tts.errors.TextToSpeechSynthesisInterruptedError
-import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
-import kotlin.math.PI
-import kotlin.math.abs
-import kotlin.math.sin
 import kotlin.time.TimeSource
 
 /**
