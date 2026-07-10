@@ -25,8 +25,14 @@ type PromptSkill struct {
 	// Triggers are NOT rendered into any prompt block (the semi-static skills
 	// index stays byte-stable) — they feed the chat pipeline's deterministic
 	// per-turn auto-hint matcher (chat/skill_hints.go).
-	Triggers               []string `json:"triggers,omitempty"`
-	RelatedSkills          []string `json:"relatedSkills,omitempty"`
+	Triggers      []string `json:"triggers,omitempty"`
+	RelatedSkills []string `json:"relatedSkills,omitempty"`
+	// RequiresTools is likewise NOT rendered into any prompt block — it feeds
+	// the chat pipeline's skill-consult auto-activation: reading a skill body
+	// activates its required deferred tools in the same step, so the skill's
+	// instructions and tools arrive as one bundle
+	// (chat/tool_skill_required_tools.go).
+	RequiresTools          []string `json:"requiresTools,omitempty"`
 	DisableModelInvocation bool     `json:"disableModelInvocation,omitempty"`
 }
 
