@@ -275,13 +275,38 @@ func TestStreamChat_FinishReasonWithoutDone_NormalStop(t *testing.T) {
 	if len(got) == 0 {
 		t.Fatal("no events received")
 	}
-	if last := got[len(got)-1]; last.Type != "message_stop" {
-		t.Errorf("terminal event = %q, want message_stop (finish_reason counts as a clean end)", last.Type)
-	}
+	var text strings.Builder
+	var endTurnCount int
 	for _, ev := range got {
-		if ev.Type == "error" {
+		switch ev.Type {
+		case "content_block_delta":
+			var delta ContentBlockDelta
+			if err := json.Unmarshal(ev.Payload, &delta); err != nil {
+				t.Fatalf("decode content delta: %v", err)
+			}
+			if delta.Delta.Type == "text_delta" {
+				text.WriteString(delta.Delta.Text)
+			}
+		case "message_delta":
+			var delta MessageDelta
+			if err := json.Unmarshal(ev.Payload, &delta); err != nil {
+				t.Fatalf("decode message delta: %v", err)
+			}
+			if delta.Delta.StopReason == "end_turn" {
+				endTurnCount++
+			}
+		case "error":
 			t.Errorf("unexpected error event on a finish_reason-terminated stream: %s", ev.Payload)
 		}
+	}
+	if got := text.String(); got != "complete reply" {
+		t.Errorf("assembled text = %q, want complete reply", got)
+	}
+	if endTurnCount != 1 {
+		t.Errorf("end_turn deltas = %d, want exactly 1", endTurnCount)
+	}
+	if last := got[len(got)-1]; last.Type != "message_stop" {
+		t.Errorf("terminal event = %q, want message_stop (finish_reason counts as a clean end)", last.Type)
 	}
 }
 
