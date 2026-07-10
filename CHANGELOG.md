@@ -1,5 +1,27 @@
 # Changelog
 
+## [4.86.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.85.0...deneb-v4.86.0) (2026-07-10)
+
+
+### ✨ Features
+
+* **audit:** 코드베이스 구조 건강도 평가 하네스 추가 ([#3377](https://github.com/choiceoh/Deneb/issues/3377)) ([94b0282](https://github.com/choiceoh/Deneb/commit/94b02824750ec318a745e7365fd0c453034105a4))
+
+
+### 🐛 Bug Fixes
+
+* **ci:** topology-parity의 systemctl --user 거짓 FAIL 수정 (XDG_RUNTIME_DIR) ([#3376](https://github.com/choiceoh/Deneb/issues/3376)) ([43eface](https://github.com/choiceoh/Deneb/commit/43efacef3ae31c09c1c75f0e30106fc70a906680))
+* **genesis:** 자가코딩 리뷰 넛지 필수-판정 계약 + 미소비 재시도 단축 ([#3380](https://github.com/choiceoh/Deneb/issues/3380)) ([77d666b](https://github.com/choiceoh/Deneb/commit/77d666ba187aa327cf3921908104e19f90244f95))
+
+
+### 🔧 Internal
+
+* **android:** ChatModeScreen + DenebGatewayClient 관심사별 분할 (순수 이동) ([#3378](https://github.com/choiceoh/Deneb/issues/3378)) ([39c0d52](https://github.com/choiceoh/Deneb/commit/39c0d52125b5a6eb22c357eb17bbd49b3c7912fa))
+* **chat:** drop superseded dead code ([#3374](https://github.com/choiceoh/Deneb/issues/3374)) ([cc5b345](https://github.com/choiceoh/Deneb/commit/cc5b345bf31439cf9a5a09a84c1e3ad9433de9c1))
+* deadcode 미사용 래퍼 제거 + staticcheck SA4004 단순화 ([#3370](https://github.com/choiceoh/Deneb/issues/3370)) ([8c15843](https://github.com/choiceoh/Deneb/commit/8c15843b3998c9d25d1e5f01325e3e6148c08000))
+* **genesis:** evolver.go를 관심사별 4파일로 분할 (순수 이동, -727줄) ([#3372](https://github.com/choiceoh/Deneb/issues/3372)) ([f266670](https://github.com/choiceoh/Deneb/commit/f2666707b2e237827f9699e25beaab23af3c887e))
+* 중복 문자열 헬퍼 통합 + 스트림 누적 최적화 + parseMailDate 통합(KST 버그정정) + dreamer 중복 추출 ([#3379](https://github.com/choiceoh/Deneb/issues/3379)) ([0373541](https://github.com/choiceoh/Deneb/commit/0373541740661b03f976690aeb05e172f1185d4c))
+
 ## [4.85.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.84.2...deneb-v4.85.0) (2026-07-09)
 
 
