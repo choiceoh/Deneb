@@ -84,6 +84,7 @@ is Deneb proposing fixes to itself. `RecordSelfCorrectionCandidate`
 superseded/applied.
 
 Deterministic promotion lives in `tracker_recurrence_promotion.go`:
+
 - `PromoteTargetRecurrenceCandidates()` / `PromoteFailureClusterCandidates()` turn
   recurring failures (`FailureEvidenceClusters`, Support ≥ threshold) into
   candidates with no LLM in the loop — the reliable backstop when the LLM sweep
