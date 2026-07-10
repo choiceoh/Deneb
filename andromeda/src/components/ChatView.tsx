@@ -1,15 +1,14 @@
-import { type ChangeEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
-import { inferAttachmentMimeType } from "@/attachmentMime";
-import { readFileBase64, splitAttachable } from "@/attachments";
-import { type GatewayConfig, type ModelsList, listModels } from "@/gateway";
-import { printClosest } from "@/print";
+import { type GatewayConfig } from "@/gateway";
 import { useChat } from "@/hooks";
+import { useAttachPipeline, useComposerBehavior, useModels } from "@/useChatSurface";
 import { useFileDrop } from "@/useFileDrop";
 import { useSessions } from "@/useSessions";
 import { useStickyScroll } from "@/useStickyScroll";
 import { useWorkspace } from "@/workspaceContext";
-import { AssistantBody } from "./AIPanel";
+import { AssistantBody, AssistantTurnActions } from "./AssistantBody";
+import { ChatComposer, ScrollToBottomButton } from "./ChatComposer";
 import { DenebStar } from "./DenebStar";
 import { Icon } from "./Icon";
 import { LiveDot } from "./LiveDot";
@@ -20,18 +19,17 @@ import { SessionDrawer } from "./SessionDrawer";
 // 밀어넣음)과 달리 자체 useChat + client:main:* 세션을 가지며, pane 컨텍스트는 보내지
 // 않는다 — 서버가 업무 프로파일(위키·회상·비서 페르소나)을 그대로 적용한다. 모바일
 // 업무 워크스페이스와 같은 세션 공간을 공유한다. 레이아웃은 중앙 채팅 컬럼(가독성을
-// 위해 메시지를 좁게 가운데 정렬) + 우측 세션 목록.
+// 위해 메시지를 좁게 가운데 정렬) + 우측 세션 목록. 컴포저·첨부·모델 로딩 등 두 챗
+// surface 공통 동작은 useChatSurface/ChatComposer/AssistantBody 공유 모듈에서 온다.
 export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?: boolean }) {
   const { connected } = useWorkspace();
   const { thinking, busy, stoppable, turns, send, capture, stop, regenerate, clear, setTurns } = useChat(cfg);
   const [input, setInput] = useState("");
   const composeRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [models, setModels] = useState<ModelsList | null>(null);
-  const [model, setModel] = useState("");
-  // 첨부 배치 진행 플래그(상태) — busy가 파일 읽기 틈에 잠깐 내려가는 동안에도 세션
-  // 전환/삭제/새 대화를 막는다 (배치 도중 세션이 바뀌면 남은 파일이 옛 sessionKey로
-  // 보이지 않게 전송된다). 동기 재진입 차단은 아래 attachingRef가 맡는다.
+  const { models, model, setModel } = useModels(cfg, connected);
+  // 첨부 배치 진행 state — busy가 파일 읽기 틈에 잠깐 내려가는 동안에도 세션 전환/삭제/
+  // 새 대화를 막는다 (useSessions 인자로 들어가야 해서 파이프라인 훅 밖에 산다).
   const [attaching, setAttaching] = useState(false);
   // 업무 네임스페이스(client:*)로 스코프 — 모바일 업무 드로어와 같은 세션 공간.
   const { sessions, sessionKey, sessionErr, selectSession, removeSession, newChat, refreshSessions } = useSessions(
@@ -48,64 +46,19 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   );
   const { ref: transcriptRef, onScroll, pin, atBottom, scrollToBottom } = useStickyScroll([turns, thinking]);
 
-  // Disconnect reset is a render adjustment; the effect only does the fetch.
-  const [prevModelsConn, setPrevModelsConn] = useState(connected);
-  if (prevModelsConn !== connected) {
-    setPrevModelsConn(connected);
-    if (!connected) setModels(null);
-  }
-  useEffect(() => {
-    if (!connected) return;
-    let cancelled = false;
-    void listModels(cfg)
-      .then((m) => {
-        if (cancelled) return;
-        setModels(m);
-        setModel((prev) => prev || m.current || "");
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connected, cfg.url, cfg.token]);
+  useComposerBehavior(composeRef, { input, busy, hidden, focusOnReveal: true });
 
-  // Re-measure on reveal too: the tab stays mounted while hidden (display:none → the
-  // textarea measures 0 height), so without `hidden` here it would open collapsed.
-  useEffect(() => {
-    const el = composeRef.current;
-    if (!el || hidden) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [input, hidden]);
-
-  // Focus the composer when the tab is revealed, so you can type right away.
-  useEffect(() => {
-    if (!hidden) composeRef.current?.focus();
-  }, [hidden]);
-
-  // 응답/첨부 분석이 끝나면 입력창 포커스를 복구한다 — busy 동안 textarea가 disabled 되며
-  // 포커스를 잃어, 이게 없으면 매 턴 입력창을 다시 클릭해야 한다. 단 사용자가 그 사이
-  // 다른 곳으로 포커스를 옮겼다면 뺏지 않는다 (disabled 해제 시 activeElement는 body).
-  const wasBusy = useRef(false);
-  useEffect(() => {
-    if (wasBusy.current && !busy && !hidden) {
-      const active = document.activeElement;
-      if (!active || active === document.body || active === composeRef.current) {
-        composeRef.current?.focus();
-      }
-    }
-    wasBusy.current = busy;
-  }, [busy, hidden]);
-
-  // busy의 ref 미러 + 첨부 큐 락 — attachFiles의 파일 읽기 틈에 턴이 인터리브되는 것 방지
-  // (AIPanel과 동일 패턴). 미러는 useLayoutEffect — 커밋 시 동기 반영이라 FileReader
-  // 콜백이 낡은 값을 읽을 수 없고, 렌더 중 ref 대입(react-hooks/refs 위반)도 피한다.
-  const busyRef = useRef(busy);
-  useLayoutEffect(() => {
-    busyRef.current = busy;
+  const { attachNote, attachingRef, attachFiles, onPick } = useAttachPipeline({
+    connected,
+    busy,
+    input,
+    setInput,
+    setAttaching,
+    pin,
+    capture: (file, caption) => capture(file, { sessionKey, caption }),
+    // 배치가 끝나면 세션 목록을 한 번 갱신 — 게이트웨이가 세션을 만들거나 라벨을 바꿨을 수 있다.
+    onBatchDone: () => void refreshSessions(),
   });
-  const attachingRef = useRef(false);
 
   // No workspaceContext / activeResource push (that is the side panel's job) —
   // the gateway applies the full 업무 profile (wiki/recall/persona) on its own.
@@ -119,73 +72,10 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
     void send(msg, { model: model || undefined, sessionKey }).then(() => void refreshSessions());
   }
 
-  // 첨부 인입에서 건너뛴 파일 안내(미지원 형식·크기 초과) — 컴포저 위에 잠깐 떴다 사라진다.
-  const [attachNote, setAttachNote] = useState("");
-  const noteTimer = useRef<number | null>(null);
-  useEffect(
-    () => () => {
-      if (noteTimer.current !== null) window.clearTimeout(noteTimer.current);
-    },
-    [],
-  );
-  function showAttachNote(lines: string[]) {
-    if (lines.length === 0) return;
-    setAttachNote(lines.join(" · "));
-    if (noteTimer.current !== null) window.clearTimeout(noteTimer.current);
-    noteTimer.current = window.setTimeout(() => setAttachNote(""), 6000);
-  }
-
-  // 첨부 인입(클립 버튼·드롭·붙여넣기 공용): 형식·크기를 거른 뒤(splitAttachable) 한 파일씩
-  // 순서대로 capture(이미지 OCR·음성 전사·문서 추출)에 보낸다. 입력창의 텍스트는 첫 비-음성
-  // 파일의 캡션으로 동봉하고, 배치가 끝나면 세션 목록을 한 번 갱신한다.
-  async function attachFiles(files: File[]) {
-    if (busy || attachingRef.current || !connected || files.length === 0) return;
-    const { ok, skipped } = splitAttachable(files);
-    showAttachNote(skipped);
-    if (ok.length === 0) return;
-    const captionTarget = ok.find((f) => !inferAttachmentMimeType(f.name, f.type).startsWith("audio/"));
-    const caption = captionTarget ? input.trim() : "";
-    if (caption) setInput("");
-    attachingRef.current = true;
-    setAttaching(true);
-    try {
-      for (const file of ok) {
-        const mimeType = inferAttachmentMimeType(file.name, file.type);
-        try {
-          const base64 = await readFileBase64(file);
-          // 파일 읽기 틈에 이 배치 밖의 턴이 시작됐다면 남은 파일은 건너뛴다 —
-          // 턴 인터리브 방지 (읽기 후 확인이라 직전 capture의 busy 해제는 반영됨).
-          if (busyRef.current) {
-            showAttachNote([`${file.name} — 다른 응답이 진행 중이라 건너뜀`]);
-            continue;
-          }
-          pin();
-          await capture(
-            { name: file.name, mimeType, base64 },
-            { sessionKey, caption: file === captionTarget ? caption : "" },
-          );
-        } catch {
-          showAttachNote([`${file.name} — 읽기 실패라 건너뜀`]);
-        }
-      }
-    } finally {
-      attachingRef.current = false;
-      setAttaching(false);
-    }
-    void refreshSessions();
-  }
-
-  function onPick(e: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    e.target.value = ""; // let the same selection be picked again later
-    void attachFiles(files);
-  }
-
   // 채팅 컬럼 전체가 무표시 드롭존 — 파일 드래그가 위에 있을 때만 살짝 표시(.drop-over).
   const { over: dropOver, dropProps } = useFileDrop(!busy && connected, (files) => void attachFiles(files));
 
-  const last = turns.at(-1);
-  const lastId = last?.id;
+  const lastId = turns.at(-1)?.id;
 
   return (
     <section className="chat-view" style={{ display: hidden ? "none" : "flex" }}>
@@ -229,126 +119,28 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
                 ) : (
                   <AssistantBody turn={turn} thinking={thinking} onUiSubmit={submit} busy={busy} />
                 )}
-                {turn.role === "assistant" &&
-                  turn.id === lastId &&
-                  turn.parts &&
-                  turn.canRegenerate !== false &&
-                  !busy &&
-                  turn.status !== "streaming" && (
-                    <button className="row-btn ai-regen no-print" onClick={regenerate} title="다시 생성">
-                      <Icon name="refresh" size={12} /> 다시 생성
-                    </button>
-                  )}
-                {/* 이 답변(모닝레터·브리핑 카드 포함)만 인쇄 — .ai-turn subtree를 프린트로.
-                    스트리밍이 끝나 내용이 있는 어시스턴트 턴에만 노출. */}
-                {turn.role === "assistant" &&
-                  turn.status !== "streaming" &&
-                  (turn.text.trim().length > 0 || (turn.parts?.length ?? 0) > 0) && (
-                    <button
-                      className="row-btn ai-print no-print"
-                      onClick={(e) => printClosest(e.currentTarget, ".ai-turn")}
-                      title="이 답변을 인쇄 (프린터 또는 PDF)"
-                    >
-                      <Icon name="printer" size={12} /> 인쇄
-                    </button>
-                  )}
+                <AssistantTurnActions turn={turn} lastId={lastId} busy={busy} onRegenerate={regenerate} />
               </div>
             ))
           )}
         </div>
 
-        {!atBottom && turns.length > 0 && (
-          <button
-            type="button"
-            className="chat-scroll-bottom"
-            onClick={scrollToBottom}
-            aria-label="맨 아래로"
-            title="맨 아래로"
-          >
-            <Icon name="chevron-down" size={18} />
-          </button>
-        )}
-        {attachNote && (
-          <div className="attach-notice" role="status">
-            {attachNote}
-          </div>
-        )}
-        <form
-          className="ai-composer"
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-        >
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*,audio/*,.png,.jpg,.jpeg,.webp,.gif,.mp3,.m4a,.wav,.ogg,.webm,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt"
-            multiple
-            hidden
-            onChange={onPick}
-          />
-          <button
-            type="button"
-            className="row-btn"
-            onClick={() => fileRef.current?.click()}
-            disabled={busy || !connected}
-            title="파일 첨부 (이미지·문서·녹음)"
-            aria-label="파일 첨부"
-            style={{ padding: 5, alignSelf: "flex-end" }}
-          >
-            <Icon name="attach" size={18} />
-          </button>
-          <textarea
-            ref={composeRef}
-            className="ai-compose"
-            aria-label="Deneb에게 메시지"
-            placeholder={busy ? "응답 중…" : "질문을 입력하세요"}
-            rows={1}
-            value={input}
-            disabled={busy}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
-              e.preventDefault();
-              submit();
-            }}
-            onPaste={(e) => {
-              // 클립보드에 파일(스크린샷·복사한 이미지)이 있으면 첨부로 — 텍스트 붙여넣기는 그대로.
-              const files = Array.from(e.clipboardData?.files ?? []);
-              if (files.length === 0) return;
-              e.preventDefault();
-              void attachFiles(files);
-            }}
-          />
-          {busy ? (
-            stoppable ? (
-              <button type="button" className="ai-send ai-send-stop" onClick={stop} aria-label="중단" title="응답 중단">
-                <Icon name="stop" size={15} />
-              </button>
-            ) : (
-              // 첨부 분석(capture)은 중간에 끊을 수 없다 — 되는 척하는 중단 버튼 대신 정직한 표시.
-              <button
-                type="button"
-                className="ai-send"
-                disabled
-                aria-label="첨부 분석 중"
-                title="첨부 분석 중에는 중단할 수 없습니다"
-              >
-                <Icon name="attach" size={15} />
-              </button>
-            )
-          ) : (
-            <button
-              type="submit"
-              className="ai-send"
-              disabled={!connected || input.trim().length === 0}
-              aria-label="전송"
-            >
-              <Icon name="send" size={16} />
-            </button>
-          )}
-        </form>
+        <ScrollToBottomButton visible={!atBottom && turns.length > 0} onClick={scrollToBottom} />
+        <ChatComposer
+          composeRef={composeRef}
+          fileRef={fileRef}
+          busy={busy}
+          stoppable={stoppable}
+          connected={connected}
+          input={input}
+          placeholder="질문을 입력하세요"
+          note={attachNote}
+          onInput={setInput}
+          onSubmit={submit}
+          onStop={stop}
+          onPick={onPick}
+          onAttachFiles={(files) => void attachFiles(files)}
+        />
       </main>
 
       <aside className="panel chat-sessions">
