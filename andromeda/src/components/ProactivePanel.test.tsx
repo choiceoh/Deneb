@@ -14,6 +14,19 @@ describe("ProactiveList", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it("surfaces reconnect failures even when there are no events", () => {
+    render(
+      <ProactiveList
+        events={[]}
+        status="오류: events: HTTP 500 · 1초 후 재연결…"
+        onDismiss={() => {}}
+        onClearAll={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("능동 알림 · 오류: events: HTTP 500 · 1초 후 재연결…")).toBeInTheDocument();
+  });
+
   it("shows the count, title, body, and a relative receipt time", () => {
     const events = [ev({ id: "e1", title: "회의 10분 전", body: "분기 리뷰 준비", ts: NOW - 5 * 60_000 })];
     render(<ProactiveList events={events} onDismiss={() => {}} onClearAll={() => {}} now={NOW} />);

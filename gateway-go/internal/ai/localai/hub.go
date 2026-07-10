@@ -18,9 +18,10 @@ import (
 
 // Errors returned by Hub.Submit.
 var (
-	ErrQueueFull   = errors.New("localai hub: queue full, request dropped")
-	ErrHubShutdown = errors.New("localai hub: shutting down")
-	ErrUnhealthy   = errors.New("localai hub: model unhealthy")
+	ErrQueueFull       = errors.New("localai hub: queue full, request dropped")
+	ErrHubShutdown     = errors.New("localai hub: shutting down")
+	ErrUnhealthy       = errors.New("localai hub: model unhealthy")
+	ErrRequestTooLarge = errors.New("localai hub: request exceeds token budget")
 )
 
 // NoThinking disables Qwen3 reasoning mode at the chat-template level — hub
@@ -121,9 +122,7 @@ type Hub struct {
 	cfg Config
 
 	// Token budget admission control.
-	inFlightTokens atomic.Int64
-	budgetMu       sync.Mutex
-	budgetCond     *sync.Cond
+	budget *tokenBudgetLimiter
 
 	// Priority queue.
 	queue *requestQueue
@@ -168,6 +167,7 @@ func New(cfg Config, registry *modelrole.Registry, logger *slog.Logger) *Hub {
 	h := &Hub{
 		registry: registry,
 		cfg:      cfg,
+		budget:   newTokenBudgetLimiter(cfg.TokenBudget, cfg.CriticalOverdraw),
 		queue:    newRequestQueue(),
 		cache:    newResponseCache(cfg.CacheTTL, cfg.CacheMaxEntries),
 		Stats:    &HubStats{},
@@ -175,8 +175,6 @@ func New(cfg Config, registry *modelrole.Registry, logger *slog.Logger) *Hub {
 		cancel:   cancel,
 		logger:   logger,
 	}
-	h.budgetCond = sync.NewCond(&h.budgetMu)
-
 	// Resolve client and model from registry.
 	if registry != nil {
 		h.client = registry.Client(modelrole.RoleLightweight)
@@ -204,8 +202,8 @@ func New(cfg Config, registry *modelrole.Registry, logger *slog.Logger) *Hub {
 // Shutdown stops the hub, draining all queued requests.
 func (h *Hub) Shutdown() {
 	h.cancel()
+	h.budget.close()
 	h.queue.Close()
-	h.budgetCond.Broadcast()
 	h.queue.DrainAll(ErrHubShutdown)
 	h.wg.Wait()
 }
@@ -227,6 +225,13 @@ func (h *Hub) Client() *llm.Client { return h.client }
 func (h *Hub) Submit(ctx context.Context, req Request) (Response, error) {
 	start := time.Now()
 	h.Stats.Submitted.Add(1)
+	if h.ctx.Err() != nil {
+		return Response{}, ErrHubShutdown
+	}
+	if err := ctx.Err(); err != nil {
+		h.Stats.Cancelled.Add(1)
+		return Response{}, err
+	}
 
 	// Estimate input tokens if not provided.
 	if req.EstInputTokens <= 0 {
@@ -260,10 +265,13 @@ func (h *Hub) Submit(ctx context.Context, req Request) (Response, error) {
 	ch := make(chan submitResult, 1)
 	entry := &queueEntry{
 		req:        &req,
+		callerCtx:  ctx,
 		resultCh:   ch,
 		enqueuedAt: time.Now(),
 	}
-	h.queue.Push(entry)
+	if !h.queue.Push(entry) {
+		return Response{}, ErrHubShutdown
+	}
 
 	// Drop oldest background if over depth.
 	if h.queue.Len() > h.cfg.MaxQueueDepth {
@@ -278,6 +286,10 @@ func (h *Hub) Submit(ctx context.Context, req Request) (Response, error) {
 		h.Stats.Cancelled.Add(1)
 		return Response{}, ctx.Err()
 	case res := <-ch:
+		if err := ctx.Err(); err != nil {
+			h.Stats.Cancelled.Add(1)
+			return Response{}, err
+		}
 		if res.err != nil {
 			return Response{}, res.err
 		}
@@ -297,7 +309,10 @@ func (h *Hub) CallLocalLLM(ctx context.Context, system, userMessage string, maxT
 	if err == nil {
 		return resp.Text, nil
 	}
-	if h.registry == nil {
+	// Admission/health failures may use another configured model, but shutdown
+	// and caller cancellation are terminal for this work item. Starting a direct
+	// fallback after either would recreate the zombie work the hub just stopped.
+	if h.registry == nil || errors.Is(err, ErrHubShutdown) || ctx.Err() != nil {
 		return "", err
 	}
 
@@ -351,57 +366,41 @@ func (h *Hub) dispatchLoop() {
 		if entry == nil {
 			return // shutdown
 		}
-		estimatedTokens := int64(entry.req.EstInputTokens + entry.req.MaxTokens)
+		estimatedTokens := int64(entry.req.EstInputTokens) + int64(entry.req.MaxTokens)
 
 		// Wait for token budget.
-		if !h.waitForBudget(estimatedTokens, entry.req.Priority) {
-			entry.resultCh <- submitResult{err: ErrHubShutdown}
+		if err := h.budget.acquire(entry.callerCtx, estimatedTokens, entry.req.Priority); err != nil {
+			if h.ctx.Err() != nil {
+				err = ErrHubShutdown
+			}
+			if errors.Is(err, ErrRequestTooLarge) {
+				h.Stats.Failed.Add(1)
+			}
+			entry.resultCh <- submitResult{err: err}
 			continue
 		}
 
 		h.wg.Add(1)
 		go func(e *queueEntry, tokens int64) {
 			defer h.wg.Done()
-			defer func() {
-				h.inFlightTokens.Add(-tokens)
-				h.budgetCond.Broadcast()
-			}()
+			defer h.budget.release(tokens)
 			h.executeRequest(e)
 		}(entry, estimatedTokens)
 	}
 }
 
-func (h *Hub) waitForBudget(tokens int64, priority Priority) bool {
-	limit := h.cfg.TokenBudget
-	if priority == PriorityCritical {
-		limit = int64(float64(limit) * (1 + h.cfg.CriticalOverdraw))
-	}
-
-	h.budgetMu.Lock()
-	defer h.budgetMu.Unlock()
-	for h.inFlightTokens.Load()+tokens > limit {
-		// Check shutdown.
-		select {
-		case <-h.ctx.Done():
-			return false
-		default:
-		}
-		h.budgetCond.Wait()
-	}
-	h.inFlightTokens.Add(tokens)
-	return true
-}
-
 func (h *Hub) executeRequest(entry *queueEntry) {
 	req := entry.req
 
-	// Create a request-scoped context with the caller's timeout.
-	reqCtx, reqCancel := context.WithCancel(h.ctx)
+	// Preserve the caller's values/deadline while also stopping the request when
+	// the hub shuts down. This context reaches the outbound HTTP stream, so a
+	// disconnected or timed-out caller cannot leave GPU work running behind it.
+	reqCtx, reqCancel := linkedRequestContext(entry.callerCtx, h.ctx)
 	defer reqCancel()
 
 	// Track for cancellation.
 	id := fmt.Sprintf("localai-%d", h.reqIDCounter.Add(1))
-	ar := &activeRequest{id: id, cancel: reqCancel, tokens: int64(req.EstInputTokens + req.MaxTokens)}
+	ar := &activeRequest{id: id, cancel: reqCancel, tokens: int64(req.EstInputTokens) + int64(req.MaxTokens)}
 	h.activeReqs.Store(id, ar)
 	defer h.activeReqs.Delete(id)
 
@@ -438,7 +437,8 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 
 	events, err := h.client.StreamChat(reqCtx, chatReq)
 	if err != nil {
-		h.Stats.Failed.Add(1)
+		err = h.requestError(reqCtx, entry, err)
+		h.recordExecutionFailure(err)
 		h.logger.Debug("localai hub: stream failed",
 			"caller", req.CallerTag, "error", err)
 		entry.resultCh <- submitResult{err: fmt.Errorf("localai stream: %w", err)}
@@ -447,8 +447,12 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 
 	// Collect response.
 	text, err := collectStream(reqCtx, events)
+	if err == nil && reqCtx.Err() != nil {
+		err = reqCtx.Err()
+	}
 	if err != nil {
-		h.Stats.Failed.Add(1)
+		err = h.requestError(reqCtx, entry, err)
+		h.recordExecutionFailure(err)
 		entry.resultCh <- submitResult{err: err}
 		return
 	}
@@ -472,6 +476,36 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 	}
 
 	entry.resultCh <- submitResult{resp: Response{Text: text}}
+}
+
+// linkedRequestContext keeps the caller context as the parent (preserving its
+// values and deadline) and adds hub shutdown as a second cancellation source.
+func linkedRequestContext(callerCtx, hubCtx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancelCause := context.WithCancelCause(callerCtx)
+	stopHubCancel := context.AfterFunc(hubCtx, func() { cancelCause(ErrHubShutdown) })
+	return ctx, func() {
+		stopHubCancel()
+		cancelCause(context.Canceled)
+	}
+}
+
+func (h *Hub) requestError(reqCtx context.Context, entry *queueEntry, err error) error {
+	if errors.Is(context.Cause(reqCtx), ErrHubShutdown) || h.ctx.Err() != nil {
+		return ErrHubShutdown
+	}
+	if entry.callerCtx != nil && entry.callerCtx.Err() != nil {
+		return entry.callerCtx.Err()
+	}
+	return err
+}
+
+func (h *Hub) recordExecutionFailure(err error) {
+	if errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, ErrHubShutdown) {
+		return
+	}
+	h.Stats.Failed.Add(1)
 }
 
 // callDirect is a raw local AI call for fallback chains (bypasses queue/budget).

@@ -71,7 +71,7 @@ func TestReloadIfChanged_SecretsRotation(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.json")
 	secPath := filepath.Join(dir, "secrets.env")
-	if err := os.WriteFile(cfgPath, []byte(`{"listen":":0","models":[{"name":"m","url":"https://api.example.com/v1","key":"${WH_ROT_KEY}"}]}`), 0o600); err != nil {
+	if err := os.WriteFile(cfgPath, []byte(`{"listen":"127.0.0.1:0","models":[{"name":"m","url":"https://api.example.com/v1","key":"${WH_ROT_KEY}"}]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(secPath, []byte("WH_ROT_KEY=key-one\n"), 0o600); err != nil {

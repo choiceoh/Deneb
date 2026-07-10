@@ -34,6 +34,21 @@ func TestHealthEndpoint(t *testing.T) {
 	if _, ok := resp["subsystems"]; !ok {
 		t.Errorf("expected subsystems field in health response")
 	}
+	rpcHealth, ok := resp["rpc"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rpc health section, got %T", resp["rpc"])
+	}
+	pool, ok := rpcHealth["worker_pool"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rpc worker_pool health, got %T", rpcHealth["worker_pool"])
+	}
+	if pool["maxSize"].(float64) < 1 ||
+		pool["canceledBeforeStart"].(float64) != 0 ||
+		pool["saturationEvents"].(float64) != 0 ||
+		pool["peakQueued"].(float64) != 0 ||
+		pool["saturated"].(bool) {
+		t.Fatalf("unexpected rpc worker-pool health: %+v", pool)
+	}
 }
 
 func TestHealthEndpointIncludesUsageQualitySignals(t *testing.T) {

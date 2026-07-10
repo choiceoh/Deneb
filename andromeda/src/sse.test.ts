@@ -32,4 +32,37 @@ describe("readSSE", () => {
     await readSSE(stream(['data:\ndata: {"a":1}\n']), (f) => frames.push(f));
     expect(frames).toEqual([{ event: "", data: '{"a":1}' }]);
   });
+
+  it("cancels an open reader when its signal aborts", async () => {
+    let cancelled = false;
+    const pending = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const controller = new AbortController();
+
+    const reading = readSSE(pending, () => {}, controller.signal);
+    controller.abort();
+    await reading;
+
+    expect(cancelled).toBe(true);
+    expect(pending.locked).toBe(false);
+  });
+
+  it("cancels and releases the reader when the signal is already aborted", async () => {
+    let cancelled = false;
+    const pending = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const controller = new AbortController();
+    controller.abort();
+
+    await readSSE(pending, () => {}, controller.signal);
+
+    expect(cancelled).toBe(true);
+    expect(pending.locked).toBe(false);
+  });
 });

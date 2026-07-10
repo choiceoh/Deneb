@@ -2,6 +2,7 @@ package localai
 
 import (
 	"container/heap"
+	"context"
 	"sync"
 	"time"
 )
@@ -9,6 +10,7 @@ import (
 // queueEntry wraps a request with dispatch metadata.
 type queueEntry struct {
 	req        *Request
+	callerCtx  context.Context
 	resultCh   chan<- submitResult
 	enqueuedAt time.Time
 	index      int // heap index, managed by container/heap
@@ -43,12 +45,18 @@ func (q *requestQueue) Close() {
 	q.cond.Broadcast()
 }
 
-// Push adds an entry and signals the dispatcher.
-func (q *requestQueue) Push(e *queueEntry) {
+// Push adds an entry and signals the dispatcher. It returns false after Close
+// so a submission racing hub shutdown cannot become an orphaned queue entry.
+func (q *requestQueue) Push(e *queueEntry) bool {
 	q.mu.Lock()
+	if q.closed {
+		q.mu.Unlock()
+		return false
+	}
 	heap.Push(&q.h, e)
 	q.mu.Unlock()
 	q.cond.Signal()
+	return true
 }
 
 // PopWait blocks until an entry is available or the queue is closed.

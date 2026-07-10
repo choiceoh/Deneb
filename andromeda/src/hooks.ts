@@ -5,6 +5,7 @@ import { useInvalidate } from "@refinedev/core";
 import { clearCachedResource } from "./cachedList";
 import { type ChatToolEvent, type GatewayConfig, callRpc, chatStream, ping } from "./gateway";
 import { type ProactiveEvent, subscribeEvents } from "./events";
+import { errText } from "./format";
 import { relatedResourcesForResource, relatedResourcesForTools } from "./resourceRefresh";
 import { appendTextPart, chatTurnId, upsertToolPart } from "./chatParts";
 
@@ -349,8 +350,39 @@ export interface EventsState {
   clearAll: () => void;
 }
 
+export const EVENTS_RETRY_BASE_MS = 1_000;
+export const EVENTS_RETRY_MAX_MS = 30_000;
+
+// Consecutive pre-connect failures back off exponentially. A successful HTTP/SSE
+// open resets the attempt counter, so a later disconnect starts promptly again.
+export function eventsRetryDelay(attempt: number): number {
+  const exponent = Math.max(0, Math.min(Math.floor(attempt), 30));
+  return Math.min(EVENTS_RETRY_MAX_MS, EVENTS_RETRY_BASE_MS * 2 ** exponent);
+}
+
+// Abort-aware sleep for the reconnect loop. Resolving false (rather than
+// rejecting) keeps an ordinary unmount/config switch out of error handling.
+function waitForEventsRetry(ms: number, signal: AbortSignal): Promise<boolean> {
+  if (signal.aborted) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const finish = (elapsed: boolean) => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      resolve(elapsed);
+    };
+    const onAbort = () => finish(false);
+    const timer = setTimeout(() => finish(true), ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function retrySeconds(ms: number): string {
+  return `${Math.max(1, Math.ceil(ms / 1_000))}초`;
+}
+
 // Subscribes to the proactive event stream while connected, keeping the most
-// recent events. Aborts cleanly on unmount or config change.
+// recent events. One abortable loop owns both the active stream and its retry
+// timer, preventing duplicate subscriptions across reconnects/config changes.
 export function useEvents(cfg: GatewayConfig, connected: boolean): EventsState {
   const [events, setEvents] = useState<ProactiveEvent[]>([]);
   const [status, setStatus] = useState("");
@@ -369,31 +401,59 @@ export function useEvents(cfg: GatewayConfig, connected: boolean): EventsState {
   useEffect(() => {
     if (!connected) return;
     const controller = new AbortController();
-    subscribeEvents(
-      cfg,
-      {
-        onOpen: () => setStatus("수신 중"),
-        // The gateway's push payload is title+body only (no ts), so stamp the
-        // arrival time here — the panel renders it as a relative "N분 전".
-        onEvent: (ev) => {
-          setEvents((prev) => [{ ...ev, ts: ev.ts ?? Date.now() }, ...prev].slice(0, 50));
-          // A nudge means its backing data just changed server-side. Refresh the
-          // affected resource list(s) now so the feed/grid updates with the
-          // notification instead of waiting out the 60s list cache — the instant
-          // counterpart to useNativeSync's catch-up poll (sync.ts). The event
-          // kind is a pane key (workfeed/mail/calendar/…); non-resource kinds
-          // (push fallback, errors) map to nothing and no-op.
-          for (const resource of relatedResourcesForResource(ev.kind)) {
-            clearCachedResource(resource);
-            invalidate({ resource, invalidates: ["list"] });
-          }
-        },
-        onError: (e) => setStatus(`오류: ${e}`),
-      },
-      controller.signal,
-    ).catch((e) => {
-      if (!controller.signal.aborted) setStatus(`오류: ${(e as Error).message}`);
-    });
+    const { signal } = controller;
+
+    const run = async () => {
+      let attempt = 0;
+      while (!signal.aborted) {
+        if (attempt > 0) setStatus("재연결 중…");
+        let failure: unknown;
+        try {
+          await subscribeEvents(
+            cfg,
+            {
+              onOpen: () => {
+                if (signal.aborted) return;
+                attempt = 0;
+                setStatus("수신 중");
+              },
+              // The gateway's push payload is title+body only (no ts), so stamp the
+              // arrival time here — the panel renders it as a relative "N분 전".
+              onEvent: (ev) => {
+                if (signal.aborted) return;
+                setEvents((prev) => [{ ...ev, ts: ev.ts ?? Date.now() }, ...prev].slice(0, 50));
+                // A nudge means its backing data just changed server-side. Refresh the
+                // affected resource list(s) now so the feed/grid updates with the
+                // notification instead of waiting out the 60s list cache — the instant
+                // counterpart to useNativeSync's catch-up poll (sync.ts). The event
+                // kind is a pane key (workfeed/mail/calendar/…); non-resource kinds
+                // (push fallback, errors) map to nothing and no-op.
+                for (const resource of relatedResourcesForResource(ev.kind)) {
+                  clearCachedResource(resource);
+                  invalidate({ resource, invalidates: ["list"] });
+                }
+              },
+              onError: (e) => {
+                if (!signal.aborted) setStatus(`오류: ${e}`);
+              },
+            },
+            signal,
+          );
+          if (signal.aborted) return;
+          failure = new Error("이벤트 스트림이 종료되었습니다.");
+        } catch (e) {
+          if (signal.aborted) return;
+          failure = e;
+        }
+
+        const delay = eventsRetryDelay(attempt);
+        attempt += 1;
+        setStatus(`오류: ${errText(failure)} · ${retrySeconds(delay)} 후 재연결…`);
+        if (!(await waitForEventsRetry(delay, signal))) return;
+      }
+    };
+
+    void run();
     return () => controller.abort();
     // Re-subscribe only when the connection identity changes, not on every cfg ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps

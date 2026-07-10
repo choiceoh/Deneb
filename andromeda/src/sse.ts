@@ -9,29 +9,51 @@ export interface SSEFrame {
   data: string; // the raw `data:` payload (usually JSON — caller parses)
 }
 
-export async function readSSE(body: ReadableStream<Uint8Array>, onFrame: (frame: SSEFrame) => void): Promise<void> {
+export async function readSSE(
+  body: ReadableStream<Uint8Array>,
+  onFrame: (frame: SSEFrame) => void,
+  signal?: AbortSignal,
+): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let event = "";
 
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? ""; // keep the trailing partial line for the next chunk
-    for (const line of lines) {
-      if (line.startsWith("event:")) {
-        event = line.slice(6).trim();
-        continue;
+  // A fetch AbortSignal normally tears down its response body too, but explicitly
+  // cancel the reader so custom transports/tests and already-open native streams
+  // also stop immediately on unmount or gateway-config change.
+  const onAbort = () => {
+    void reader.cancel().catch(() => {});
+  };
+  if (signal?.aborted) {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+    return;
+  }
+  signal?.addEventListener("abort", onAbort, { once: true });
+
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done || signal?.aborted) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? ""; // keep the trailing partial line for the next chunk
+      for (const line of lines) {
+        if (line.startsWith("event:")) {
+          event = line.slice(6).trim();
+          continue;
+        }
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (!data) continue;
+        onFrame({ event, data });
+        event = ""; // event name applies to a single frame
       }
-      if (!line.startsWith("data:")) continue;
-      const data = line.slice(5).trim();
-      if (!data) continue;
-      onFrame({ event, data });
-      event = ""; // event name applies to a single frame
     }
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+    reader.releaseLock();
   }
 }
 
@@ -41,14 +63,19 @@ export async function readSSE(body: ReadableStream<Uint8Array>, onFrame: (frame:
 export async function readJsonSSE(
   body: ReadableStream<Uint8Array>,
   onObj: (event: string, obj: Record<string, unknown>) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
-  await readSSE(body, ({ event, data }) => {
-    let obj: Record<string, unknown>;
-    try {
-      obj = JSON.parse(data) as Record<string, unknown>;
-    } catch {
-      return; // ignore malformed frame
-    }
-    onObj(event, obj);
-  });
+  await readSSE(
+    body,
+    ({ event, data }) => {
+      let obj: Record<string, unknown>;
+      try {
+        obj = JSON.parse(data) as Record<string, unknown>;
+      } catch {
+        return; // ignore malformed frame
+      }
+      onObj(event, obj);
+    },
+    signal,
+  );
 }
