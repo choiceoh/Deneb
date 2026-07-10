@@ -1,106 +1,19 @@
-import { type ChangeEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { inferAttachmentMimeType } from "@/attachmentMime";
-import { readFileBase64, splitAttachable } from "@/attachments";
-import { type GatewayConfig, type ModelsList, listModels } from "@/gateway";
-import { printClosest } from "@/print";
-import { type AttachmentPart, type ChatTurn, useChat } from "@/hooks";
+import { useRef, useState } from "react";
+
+import { type GatewayConfig } from "@/gateway";
+import { useChat } from "@/hooks";
+import { useAttachPipeline, useComposerBehavior, useModels } from "@/useChatSurface";
 import { useFileDrop } from "@/useFileDrop";
 import { useSessions } from "@/useSessions";
 import { useStickyScroll } from "@/useStickyScroll";
 import { useWorkspace } from "@/workspaceContext";
-import { DenebStatus } from "./DenebStatus";
-import { AssistantText } from "./DenebUi";
+import { AssistantBody, AssistantTurnActions } from "./AssistantBody";
+import { ChatComposer, ScrollToBottomButton } from "./ChatComposer";
 import { Icon } from "./Icon";
 import { LiveDot } from "./LiveDot";
 import { ModelPicker } from "./ModelPicker";
 import { ProactivePanel } from "./ProactivePanel";
 import { SessionDrawer } from "./SessionDrawer";
-import { ToolChip } from "./ToolChip";
-
-function attachmentKindLabel(kind: AttachmentPart["captureKind"]) {
-  if (kind === "image") return "이미지 분석";
-  if (kind === "audio") return "녹음 전사";
-  return "문서 추출";
-}
-
-function AttachmentResult({
-  part,
-  onUiSubmit,
-  busy,
-}: {
-  part: AttachmentPart;
-  onUiSubmit: (msg: string) => void;
-  busy: boolean;
-}) {
-  const stateText = part.isError ? "실패" : "완료";
-  return (
-    <section className={"attachment-result" + (part.isError ? " error" : "")} role="group" aria-label="첨부 분석 결과">
-      <div className="attachment-result-head">
-        <span className="attachment-result-icon" aria-hidden="true">
-          <Icon name="attach" size={15} />
-        </span>
-        <div className="attachment-result-title">
-          <span>{attachmentKindLabel(part.captureKind)}</span>
-          <strong>{part.filename}</strong>
-        </div>
-        <span className="attachment-result-state">{stateText}</span>
-      </div>
-      <div className="attachment-result-meta">
-        <span>형식</span>
-        <b>{part.mimeType}</b>
-        {part.caption ? (
-          <>
-            <span>설명</span>
-            <b>{part.caption}</b>
-          </>
-        ) : null}
-      </div>
-      <div className="attachment-result-content">
-        <AssistantText text={part.text} onUiSubmit={onUiSubmit} busy={busy} />
-      </div>
-    </section>
-  );
-}
-
-// One assistant reply: ordered text and tool chips. Each text span renders as
-// Markdown, with any ```deneb-ui block drawn as interactive UI (AssistantText);
-// transcript-loaded / pre-stream turns with no parts use the plain body.
-export function AssistantBody({
-  turn,
-  thinking,
-  onUiSubmit,
-  busy,
-}: {
-  turn: ChatTurn;
-  thinking?: string;
-  onUiSubmit: (msg: string) => void;
-  busy: boolean;
-}) {
-  const parts = turn.parts;
-  if (!parts || parts.length === 0) {
-    // Pre-content stream → Deneb's "응답 중" sparkle, with the gateway's thinking
-    // preview as its inline summary (mirrors the native PulsingStatusIndicator).
-    if (turn.status === "streaming") return <DenebStatus summary={thinking?.trim() ? thinking : undefined} />;
-    return (
-      <div className="ai-turn-body">
-        <AssistantText text={turn.text || ""} onUiSubmit={onUiSubmit} busy={busy} />
-      </div>
-    );
-  }
-  return (
-    <div className="ai-turn-body">
-      {parts.map((p, i) =>
-        p.kind === "text" ? (
-          <AssistantText key={i} text={p.text} onUiSubmit={onUiSubmit} busy={busy} />
-        ) : p.kind === "attachment" ? (
-          <AttachmentResult key={p.id || i} part={p} onUiSubmit={onUiSubmit} busy={busy} />
-        ) : (
-          <ToolChip key={p.id || i} part={p} />
-        ),
-      )}
-    </div>
-  );
-}
 
 // Right floating panel: Deneb AI collaboration. Reads the active pane's pushed
 // text from the workspace context and streams a reply with Markdown + tool
@@ -108,6 +21,8 @@ export function AssistantBody({
 // conversations. Tool calls that mutate data refresh the active grid (useChat).
 // Files attach via the same capture path as the chat tab (image OCR · audio
 // transcription · document extraction), landing in this panel's session.
+// 컴포저·첨부·모델 로딩 등 두 챗 surface 공통 동작은 useChatSurface/ChatComposer/
+// AssistantBody 공유 모듈에서 온다.
 export function AIPanel({
   cfg,
   hidden = false,
@@ -148,73 +63,27 @@ export function AIPanel({
   }
   const composeRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [models, setModels] = useState<ModelsList | null>(null);
-  const [model, setModel] = useState(""); // selected override id ("" → gateway main)
-  // 첨부 배치 진행 플래그(상태) — busy가 파일 읽기 틈에 잠깐 내려가는 동안에도 세션
-  // 전환/삭제/새 대화를 막는다 (배치 도중 세션이 바뀌면 남은 파일이 옛 sessionKey로
-  // 보이지 않게 전송된다). 동기 재진입 차단은 아래 attachingRef가 맡는다.
+  const { models, model, setModel } = useModels(cfg, connected);
+  // 첨부 배치 진행 state — busy가 파일 읽기 틈에 잠깐 내려가는 동안에도 세션 전환/삭제/
+  // 새 대화를 막는다 (useSessions 인자로 들어가야 해서 파이프라인 훅 밖에 산다).
   const [attaching, setAttaching] = useState(false);
   const { sessions, sessionKey, sessionsOpen, sessionErr, toggleSessions, selectSession, removeSession, newChat } =
     useSessions(cfg, connected, busy || attaching, { clear, setTurns });
   // Follow the newest message while it streams, unless the user scrolled up to read.
   const { ref: transcriptRef, onScroll, pin, atBottom, scrollToBottom } = useStickyScroll([turns, thinking]);
 
-  // Load the model registry once connected; best-effort (older gateway / the offline
-  // test path just leaves it empty). The disconnect reset is a render adjustment.
-  const [prevModelsConn, setPrevModelsConn] = useState(connected);
-  if (prevModelsConn !== connected) {
-    setPrevModelsConn(connected);
-    if (!connected) setModels(null);
-  }
-  useEffect(() => {
-    if (!connected) return;
-    let cancelled = false;
-    void listModels(cfg)
-      .then((m) => {
-        if (cancelled) return;
-        setModels(m);
-        setModel((prev) => prev || m.current || "");
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connected, cfg.url, cfg.token]);
+  // 사이드 패널은 focusOnReveal 없음 — 드러날 때 작업 영역의 포커스를 뺏으면 안 된다.
+  useComposerBehavior(composeRef, { input, busy, hidden });
 
-  // Grow the composer from one line up to its CSS max-height, then it scrolls.
-  useEffect(() => {
-    const el = composeRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [input]);
-
-  // 응답/첨부 분석이 끝나면 입력창 포커스를 복구한다 — busy 동안 textarea가 disabled 되며
-  // 포커스를 잃어, 이게 없으면 매 턴 입력창을 다시 클릭해야 한다. 단 사용자가 그 사이
-  // 다른 곳(위키 에디터·모달 등)으로 포커스를 옮겼다면 뺏지 않는다 — disabled로 포커스가
-  // 풀리면 activeElement는 body로 떨어지므로, body/컴포저일 때만 복구가 안전하다.
-  const wasBusy = useRef(false);
-  useEffect(() => {
-    if (wasBusy.current && !busy && !hidden) {
-      const active = document.activeElement;
-      if (!active || active === document.body || active === composeRef.current) {
-        composeRef.current?.focus();
-      }
-    }
-    wasBusy.current = busy;
-  }, [busy, hidden]);
-
-  // busy의 ref 미러 + 첨부 큐 락. attachFiles의 순차 루프는 파일당 capture가 busy를
-  // 내렸다 올리는 틈(파일 읽기 구간)이 있어, 그 틈에 사용자가 전송하면 턴이 인터리브된다.
-  // 루프는 매 파일 전에 busyRef를 재확인하고, submit/새 배치는 attaching 동안 차단한다.
-  // 미러는 useLayoutEffect — 커밋 시 동기 반영이라 다음 매크로태스크(FileReader 콜백)가
-  // 낡은 값을 읽을 수 없고, 렌더 중 ref 대입(react-hooks/refs 위반)도 피한다.
-  const busyRef = useRef(busy);
-  useLayoutEffect(() => {
-    busyRef.current = busy;
+  const { attachNote, attachingRef, attachFiles, onPick } = useAttachPipeline({
+    connected,
+    busy,
+    input,
+    setInput,
+    setAttaching,
+    pin,
+    capture: (file, caption) => capture(file, { sessionKey, caption }),
   });
-  const attachingRef = useRef(false);
 
   function submit(message = input) {
     const msg = message.trim();
@@ -222,63 +91,6 @@ export function AIPanel({
     setInput("");
     pin(); // a fresh send always rides down to the latest
     void send(msg, { workspaceContext: aiText, activeResource, model: model || undefined, sessionKey });
-  }
-
-  // 첨부 인입에서 건너뛴 파일 안내(미지원 형식·크기 초과) — 컴포저 위에 잠깐 떴다 사라진다.
-  const [attachNote, setAttachNote] = useState("");
-  const noteTimer = useRef<number | null>(null);
-  useEffect(
-    () => () => {
-      if (noteTimer.current !== null) window.clearTimeout(noteTimer.current);
-    },
-    [],
-  );
-  function showAttachNote(lines: string[]) {
-    if (lines.length === 0) return;
-    setAttachNote(lines.join(" · "));
-    if (noteTimer.current !== null) window.clearTimeout(noteTimer.current);
-    noteTimer.current = window.setTimeout(() => setAttachNote(""), 6000);
-  }
-
-  // 첨부 인입(클립 버튼·드롭·붙여넣기 공용): 형식·크기를 거른 뒤(splitAttachable) 한 파일씩
-  // 순서대로 capture(이미지 OCR·음성 전사·문서 추출)에 보낸다 — 채팅 탭과 같은 경로,
-  // 드로어에서 선택된 현재 세션(sessionKey)에 턴으로 남는다. 입력창의 텍스트는 첫 비-음성
-  // 파일의 캡션으로.
-  async function attachFiles(files: File[]) {
-    if (busy || attachingRef.current || !connected || files.length === 0) return;
-    const { ok, skipped } = splitAttachable(files);
-    showAttachNote(skipped);
-    if (ok.length === 0) return;
-    const captionTarget = ok.find((f) => !inferAttachmentMimeType(f.name, f.type).startsWith("audio/"));
-    const caption = captionTarget ? input.trim() : "";
-    if (caption) setInput("");
-    attachingRef.current = true;
-    setAttaching(true);
-    try {
-      for (const file of ok) {
-        const mimeType = inferAttachmentMimeType(file.name, file.type);
-        try {
-          const base64 = await readFileBase64(file);
-          // 파일 읽기 틈에 이 배치 밖의 턴(다시 생성 등)이 시작됐다면 남은 파일은
-          // 건너뛴다 — 턴 인터리브 방지. 읽기(≥1 태스크 경계) 후 확인이라 직전
-          // capture의 busy 해제는 ref에 이미 반영돼 있다.
-          if (busyRef.current) {
-            showAttachNote([`${file.name} — 다른 응답이 진행 중이라 건너뜀`]);
-            continue;
-          }
-          pin();
-          await capture(
-            { name: file.name, mimeType, base64 },
-            { sessionKey, caption: file === captionTarget ? caption : "" },
-          );
-        } catch {
-          showAttachNote([`${file.name} — 읽기 실패라 건너뜀`]);
-        }
-      }
-    } finally {
-      attachingRef.current = false;
-      setAttaching(false);
-    }
   }
 
   // 노트에 저장: 성공해야만 저장됨으로 표시한다 — sink(RPC)가 실패하면 실패 상태로
@@ -293,12 +105,6 @@ export function AIPanel({
       ok = false;
     }
     setNoteSaves((prev) => new Map(prev).set(turnId, ok ? "saved" : "error"));
-  }
-
-  function onPick(e: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    e.target.value = ""; // let the same selection be picked again later
-    void attachFiles(files);
   }
 
   // 패널 전체가 무표시 드롭존 — 파일 드래그가 위에 있을 때만 살짝 표시(.drop-over).
@@ -410,50 +216,29 @@ export function AIPanel({
               ) : (
                 <AssistantBody turn={turn} thinking={thinking} onUiSubmit={submit} busy={busy} />
               )}
-              {/* Regenerate only the last streamed reply (transcript-loaded turns have no parts). */}
-              {turn.role === "assistant" &&
-                turn.id === lastId &&
-                turn.parts &&
-                turn.canRegenerate !== false &&
-                !busy &&
-                turn.status !== "streaming" && (
-                  <button className="row-btn ai-regen no-print" onClick={regenerate} title="다시 생성">
-                    <Icon name="refresh" size={12} /> 다시 생성
-                  </button>
-                )}
-              {/* 이 답변(모닝레터·브리핑 카드 포함)만 인쇄 — .ai-turn subtree를 프린트로. */}
-              {turn.role === "assistant" &&
-                turn.status !== "streaming" &&
-                (turn.text.trim().length > 0 || (turn.parts?.length ?? 0) > 0) && (
+              <AssistantTurnActions turn={turn} lastId={lastId} busy={busy} onRegenerate={regenerate}>
+                {/* Save this answer into the open notebook as a cited note — shown only
+                    while a notebook pane has registered a sink (the notebook's output
+                    loop: material made with the AI stays with the deal). 저장됨 only
+                    after the sink confirms; a failed pin stays clickable for retry. */}
+                {noteSink && turn.status === "done" && turn.text.trim() && (
                   <button
-                    className="row-btn ai-print no-print"
-                    onClick={(e) => printClosest(e.currentTarget, ".ai-turn")}
-                    title="이 답변을 인쇄 (프린터 또는 PDF)"
+                    className="row-btn ai-save-note no-print"
+                    disabled={noteSaves.get(turn.id) === "saving" || noteSaves.get(turn.id) === "saved"}
+                    onClick={() => void saveNote(turn.id, turn.text)}
+                    title="이 답변을 노트북에 인용자료(노트)로 저장"
                   >
-                    <Icon name="printer" size={12} /> 인쇄
+                    <Icon name="plus" size={12} />{" "}
+                    {noteSaves.get(turn.id) === "saved"
+                      ? "노트로 저장됨"
+                      : noteSaves.get(turn.id) === "saving"
+                        ? "저장 중…"
+                        : noteSaves.get(turn.id) === "error"
+                          ? "저장 실패 — 다시 시도"
+                          : "노트에 저장"}
                   </button>
                 )}
-              {/* Save this answer into the open notebook as a cited note — shown only
-                  while a notebook pane has registered a sink (the notebook's output
-                  loop: material made with the AI stays with the deal). 저장됨 only
-                  after the sink confirms; a failed pin stays clickable for retry. */}
-              {noteSink && turn.role === "assistant" && turn.status === "done" && turn.text.trim() && (
-                <button
-                  className="row-btn ai-save-note no-print"
-                  disabled={noteSaves.get(turn.id) === "saving" || noteSaves.get(turn.id) === "saved"}
-                  onClick={() => void saveNote(turn.id, turn.text)}
-                  title="이 답변을 노트북에 인용자료(노트)로 저장"
-                >
-                  <Icon name="plus" size={12} />{" "}
-                  {noteSaves.get(turn.id) === "saved"
-                    ? "노트로 저장됨"
-                    : noteSaves.get(turn.id) === "saving"
-                      ? "저장 중…"
-                      : noteSaves.get(turn.id) === "error"
-                        ? "저장 실패 — 다시 시도"
-                        : "노트에 저장"}
-                </button>
-              )}
+              </AssistantTurnActions>
             </div>
           ))
         )}
@@ -464,101 +249,22 @@ export function AIPanel({
         )}
       </div>
 
-      {/* 위로 스크롤해 읽는 중일 때만 — 최신으로 복귀 (채팅 탭과 동일 부품) */}
-      {!atBottom && turns.length > 0 && (
-        <button
-          type="button"
-          className="chat-scroll-bottom"
-          onClick={scrollToBottom}
-          aria-label="맨 아래로"
-          title="맨 아래로"
-        >
-          <Icon name="chevron-down" size={18} />
-        </button>
-      )}
-
-      {attachNote && (
-        <div className="attach-notice" role="status">
-          {attachNote}
-        </div>
-      )}
-
-      <form
-        className="ai-composer"
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*,audio/*,.png,.jpg,.jpeg,.webp,.gif,.mp3,.m4a,.wav,.ogg,.webm,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt"
-          multiple
-          hidden
-          onChange={onPick}
-        />
-        <button
-          type="button"
-          className="row-btn"
-          onClick={() => fileRef.current?.click()}
-          disabled={busy || !connected}
-          title="파일 첨부 (이미지·문서·녹음)"
-          aria-label="파일 첨부"
-          style={{ padding: 5, alignSelf: "flex-end" }}
-        >
-          <Icon name="attach" size={18} />
-        </button>
-        <textarea
-          ref={composeRef}
-          className="ai-compose"
-          aria-label="Deneb에게 메시지"
-          placeholder={busy ? "응답 중…" : "메시지…"}
-          rows={1}
-          value={input}
-          disabled={busy}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
-            e.preventDefault();
-            submit();
-          }}
-          onPaste={(e) => {
-            // 클립보드에 파일(스크린샷·복사한 이미지)이 있으면 첨부로 — 텍스트 붙여넣기는 그대로.
-            const files = Array.from(e.clipboardData?.files ?? []);
-            if (files.length === 0) return;
-            e.preventDefault();
-            void attachFiles(files);
-          }}
-        />
-        {busy ? (
-          stoppable ? (
-            <button type="button" className="ai-send ai-send-stop" onClick={stop} aria-label="중단" title="응답 중단">
-              <Icon name="stop" size={15} />
-            </button>
-          ) : (
-            // 첨부 분석(capture)은 중간에 끊을 수 없다 — 되는 척하는 중단 버튼 대신 정직한 표시.
-            <button
-              type="button"
-              className="ai-send"
-              disabled
-              aria-label="첨부 분석 중"
-              title="첨부 분석 중에는 중단할 수 없습니다"
-            >
-              <Icon name="attach" size={15} />
-            </button>
-          )
-        ) : (
-          <button
-            type="submit"
-            className="ai-send"
-            disabled={!connected || input.trim().length === 0}
-            aria-label="전송"
-          >
-            <Icon name="send" size={16} />
-          </button>
-        )}
-      </form>
+      <ScrollToBottomButton visible={!atBottom && turns.length > 0} onClick={scrollToBottom} />
+      <ChatComposer
+        composeRef={composeRef}
+        fileRef={fileRef}
+        busy={busy}
+        stoppable={stoppable}
+        connected={connected}
+        input={input}
+        placeholder="메시지…"
+        note={attachNote}
+        onInput={setInput}
+        onSubmit={submit}
+        onStop={stop}
+        onPick={onPick}
+        onAttachFiles={(files) => void attachFiles(files)}
+      />
     </aside>
   );
 }
