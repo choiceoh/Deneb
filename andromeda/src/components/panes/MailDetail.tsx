@@ -16,8 +16,7 @@ import {
   senderContext,
 } from "@/gateway";
 import type { Mail, MailAttachment } from "@/types";
-import { errText, firstString, fmtMailDate, senderName, text } from "@/format";
-import { stripMailChrome } from "@/mailChrome";
+import { errText, fmtMailDate, senderName, text } from "@/format";
 import { formatBytes } from "@/components/panes/fileHelpers";
 import { useAsyncOnOpen } from "@/useAsyncOnOpen";
 import { useWorkspace } from "@/workspaceContext";
@@ -25,27 +24,7 @@ import { Markdown } from "@/components/Markdown";
 import { Modal } from "@/components/Modal";
 import { FileViewer } from "@/components/FileViewer";
 import { viewKindFor } from "@/components/fileView";
-
-// The displayable mail body, falling back through the gateway's field aliases and
-// finally a stripped HTML part. Exported so the pane can project it to the AI.
-export function mailBody(mail?: Mail): string {
-  if (!mail) return "";
-  const body = firstString(mail, ["body", "plain", "plainText", "bodyText", "text", "message", "content"]);
-  if (body) return stripMailChrome(body);
-  if (mail.snippet) return mail.snippet;
-  const html = firstString(mail, ["html"]);
-  return html ? stripMailChrome(htmlToText(html)) : "";
-}
-
-function htmlToText(html: string): string {
-  if (typeof DOMParser !== "undefined") {
-    return new DOMParser().parseFromString(html, "text/html").body.textContent?.trim() ?? "";
-  }
-  return html
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+import { mailBody } from "./mailBody";
 
 const HOT_IMPORTANCE = /urgent|high|중요|긴급|priority/i;
 

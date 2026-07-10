@@ -6,7 +6,7 @@ import { Refine, type DataProvider } from "@refinedev/core";
 import type { GatewayConfig } from "@/gateway";
 import { denebAuthProvider } from "@/authProvider";
 import { refineResources } from "@/resources";
-import { WorkspaceProvider } from "@/workspaceContext";
+import { WorkspaceProvider } from "@/WorkspaceProvider";
 
 // A DataProvider backed by in-memory fixtures keyed by resource name.
 export function fakeProvider(fixtures: Record<string, any[]> = {}): DataProvider {

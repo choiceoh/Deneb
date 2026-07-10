@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ProactiveList, proactiveNav } from "./ProactivePanel";
+import { ProactiveList } from "./ProactivePanel";
+import { proactiveNav } from "./proactiveNav";
 import type { ProactiveEvent } from "@/events";
 
 const NOW = 1_700_000_000_000;

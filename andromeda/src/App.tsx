@@ -8,7 +8,7 @@ import { readDesktopToken } from "./tauri";
 import { checkForUpdates } from "./updater";
 import { errText } from "./format";
 import { log } from "./log";
-import { WorkspaceProvider } from "./workspaceContext";
+import { WorkspaceProvider } from "./WorkspaceProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Workstation } from "./components/Workstation";
 
