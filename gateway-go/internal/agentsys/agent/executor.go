@@ -9,7 +9,6 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -194,46 +193,23 @@ func RunAgent(
 			ToolChoice:       cfg.ToolChoice,
 		}
 
-		events, err := client.StreamChat(ctx, req)
+		streamOutcome, err := runStreamingTurnWithRetry(
+			ctx, client, req, hooks, cfg.StreamIdleTimeout, logger, turn,
+		)
+		result.Stream.record(streamOutcome)
 		if err != nil {
 			if ctx.Err() != nil {
+				result.Stream.TerminationReason = string(streamTerminationContextDone)
 				result.StopReason = stopReasonFromCtx(ctx)
 				result.FinalMessages = messages
 				return result, nil
 			}
-			return nil, fmt.Errorf("stream chat (turn %d): %w", turn, err)
-		}
-
-		turnRes := &turnResult{}
-
-		// Consume the stream for this turn. On idle stall or a mid-stream error
-		// event, retry once on the SAME model — both are transient far more
-		// often than not (the API stalls and recovers on reconnect; permanent
-		// faults reject at the HTTP layer before streaming). Without this, a
-		// single mid-stream hiccup escalated straight to the model-fallback
-		// chain, switching the turn to a different model.
-		err = consumeStreamInto(ctx, events, hooks, turnRes, cfg.StreamIdleTimeout, logger)
-		if (errors.Is(err, ErrStreamIdle) || errors.Is(err, ErrStreamEvent)) && ctx.Err() == nil {
-			// Log the RESOLVED timeout — cfg is usually 0 ("use default"),
-			// which printed a misleading "idleTimeout=0µs" here.
-			logger.Warn("stream interrupted, retrying turn on same model",
-				"turn", turn,
-				"error", err,
-				"idleTimeout", effectiveIdleTimeout(cfg.StreamIdleTimeout))
-			turnRes = &turnResult{}
-			events, err = client.StreamChat(ctx, req)
-			if err == nil {
-				err = consumeStreamInto(ctx, events, hooks, turnRes, cfg.StreamIdleTimeout, logger)
-			}
-		}
-		if err != nil {
-			if ctx.Err() != nil {
-				result.StopReason = stopReasonFromCtx(ctx)
-				result.FinalMessages = messages
-				return result, nil
+			if streamOutcome.initialConnectionFailed() {
+				return nil, fmt.Errorf("stream chat (turn %d): %w", turn, err)
 			}
 			return nil, fmt.Errorf("consume stream (turn %d): %w", turn, err)
 		}
+		turnRes := streamOutcome.result
 
 		// Accumulate usage. Cache fields aggregate per-turn so the run-level
 		// total answers "of all input tokens this run, how many were cache

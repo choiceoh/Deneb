@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
@@ -108,6 +109,9 @@ func TestHealthEndpointIncludesUsageQualitySignals(t *testing.T) {
 	}
 	selfEvolution := resp["self_evolution"].(map[string]any)
 	propus := resp["propus"].(map[string]any)
+	if !reflect.DeepEqual(propus, selfEvolution) {
+		t.Fatalf("propus and self_evolution health payloads diverged: propus=%+v self=%+v", propus, selfEvolution)
+	}
 	if propus["system"] != "Propus" || propus["tool"] != "skill_lifecycle" {
 		t.Fatalf("unexpected Propus health identity: %+v", propus)
 	}
