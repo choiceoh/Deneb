@@ -257,6 +257,25 @@ func NewDeferredActivation() *DeferredActivation {
 	}
 }
 
+// Seed marks tool names as already activated BEFORE the run starts — used by
+// the history replay (chat/deferred_replay.go) to carry activation state
+// across runs. Unlike Activate it writes the executor-owned state directly and
+// publishes the IsActive snapshot immediately, so tools can short-circuit from
+// turn 0. Must only be called before the agent loop spawns tool goroutines.
+func (d *DeferredActivation) Seed(names []string) {
+	for _, n := range names {
+		if !d.seen[n] {
+			d.seen[n] = true
+			d.collected = append(d.collected, n)
+		}
+	}
+	snapshot := make(map[string]bool, len(d.seen))
+	for n := range d.seen {
+		snapshot[n] = true
+	}
+	d.active.Store(snapshot)
+}
+
 // Activate marks the given tool names as activated.
 // Called from tool goroutines; non-blocking.
 func (d *DeferredActivation) Activate(names []string) {

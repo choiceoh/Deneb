@@ -231,6 +231,13 @@ func executeAgentRun(
 		Transcript:         deps.transcript,
 		SkillNudger:        deps.skills.Nudger,
 		SkillUsageRecorder: deps.skills.UsageRecorder,
+		// Deferred tools activated in earlier runs stay active: replay the
+		// transcript's activation evidence into this run (deferred_replay.go).
+		ReplayDeferredTools: replayActivatedTools(messages, deps.tools, sessionToolPreset),
+	}
+	if n := len(acd.ReplayDeferredTools); n > 0 {
+		logger.Info("deferred replay: reactivating tools from transcript",
+			"count", n, "tools", strings.Join(acd.ReplayDeferredTools, ","))
 	}
 	// execStats threads into recordRunCompletion (LogEnd's RepairedToolCalls) —
 	// #3117 introduced it while #3121 moved LogEnd into the completion sink.

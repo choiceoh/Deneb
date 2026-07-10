@@ -139,12 +139,15 @@ func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 		}
 
 		if len(alreadyActive) > 0 {
-			fmt.Fprintf(&sb, "Already active (schema loaded, no re-fetch needed): %s. Call them directly.\n",
-				strings.Join(alreadyActive, ", "))
+			// Shared format (toolctx/activation_notice.go): also replay evidence,
+			// re-anchoring activation after old evidence was summarized away.
+			sb.WriteString(toolctx.FormatAlreadyActiveNotice(alreadyActive))
+			sb.WriteString("\n")
 		}
 		if len(activated) > 0 {
-			fmt.Fprintf(&sb, "Activated %d tool(s): %s. You can now call them directly.",
-				len(activated), strings.Join(activated, ", "))
+			// Exact shared format (toolctx/activation_notice.go): the next run's
+			// history replay re-derives activation state from this sentence.
+			sb.WriteString(toolctx.FormatFetchActivationNotice(activated))
 		}
 
 		return sb.String(), nil

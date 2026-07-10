@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -364,15 +365,23 @@ func TruncateOldToolResults(messages []llm.Message, turnThreshold, minChars int)
 			if utf8.RuneCountInString(blocks[j].Content) <= minChars {
 				continue
 			}
+			original := blocks[j].Content
 			// A spilled result's full output still lives on disk; keep its
 			// read_spillover pointer in the stub so the agent can still page
 			// through it instead of losing access when the marker is cleared.
-			if ref := spilloverRef(blocks[j].Content); ref != "" {
+			if ref := spilloverRef(original); ref != "" {
 				blocks[j].Content = fmt.Sprintf(
 					"[older tool output cleared — full output still available via read_spillover(%q)]", ref,
 				)
 			} else {
 				blocks[j].Content = placeholder
+			}
+			// Deferred-tool activation notices must survive the stub: the next
+			// run's history replay (chat/deferred_replay.go) re-derives which
+			// deferred tools stay active from these lines. One line kept per
+			// notice — the body still compacts.
+			for _, notice := range toolctx.ExtractActivationNotices(original) {
+				blocks[j].Content += "\n" + notice
 			}
 			changed = true
 			stubbed++
