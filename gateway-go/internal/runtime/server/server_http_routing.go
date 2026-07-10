@@ -1,9 +1,11 @@
 package server
 
 import (
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"strings"
 )
 
 // buildMux configures HTTP routing for health, RPC/WS, API, hooks, and plugin routes.
@@ -41,15 +43,16 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /api/observatory", s.handleObservatory)
 
 	// /debug/pprof/* — runtime profiling + goroutine dumps for live diagnosis.
-	// Safe to expose because the gateway binds loopback by default in
-	// production; these endpoints are never reachable from outside the host.
+	// These stay open on loopback for local debugging, but non-loopback binds
+	// must prove the same client token the native app uses so profiler dumps
+	// cannot be fetched from the network without authentication.
 	// Visit /debug/pprof/goroutine?debug=2 when the gateway appears hung —
 	// it returns a full stack dump without killing the process.
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	mux.HandleFunc("/debug/pprof/", s.protectPprof(pprof.Index))
+	mux.HandleFunc("/debug/pprof/cmdline", s.protectPprof(pprof.Cmdline))
+	mux.HandleFunc("/debug/pprof/profile", s.protectPprof(pprof.Profile))
+	mux.HandleFunc("/debug/pprof/symbol", s.protectPprof(pprof.Symbol))
+	mux.HandleFunc("/debug/pprof/trace", s.protectPprof(pprof.Trace))
 
 	// Explicit method-not-allowed for health/ready endpoints.
 	// Without these, non-GET requests fall through to the catch-all "/" handler
@@ -80,6 +83,38 @@ func (s *Server) buildMux() *http.ServeMux {
 	})
 
 	return mux
+}
+
+func (s *Server) protectPprof(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.pprofRequiresClientToken() {
+			if _, ok := s.authenticateMiniappRequest(w, r); !ok {
+				return
+			}
+		}
+		next(w, r)
+	}
+}
+
+func (s *Server) pprofRequiresClientToken() bool {
+	host := ""
+	if s != nil && s.runtimeCfg != nil {
+		host = strings.TrimSpace(s.runtimeCfg.BindHost)
+	}
+	if host == "" && s != nil {
+		if addr := strings.TrimSpace(s.BoundAddr()); addr != "" {
+			if splitHost, _, err := net.SplitHostPort(addr); err == nil {
+				host = splitHost
+			} else {
+				host = addr
+			}
+		}
+	}
+	if host == "" || host == "localhost" {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip == nil || !ip.IsLoopback()
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, _ *http.Request) {

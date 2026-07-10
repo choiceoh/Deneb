@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -45,6 +47,43 @@ func TestBuildMux_RegistersExpectedRoutes(t *testing.T) {
 				t.Errorf("got %d, want %d (body: %s)", w.Code, tt.wantCode, w.Body.String())
 			}
 		})
+	}
+}
+
+func TestBuildMux_PprofLoopbackRemainsAccessible(t *testing.T) {
+	srv := testutil.Must(New(":0", WithConfig(&config.GatewayRuntimeConfig{BindHost: "127.0.0.1"})))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/debug/pprof/", nil)
+	w := httptest.NewRecorder()
+
+	srv.buildMux().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("loopback pprof must stay accessible, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestBuildMux_PprofRequiresClientTokenOnNonLoopback(t *testing.T) {
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
+	token, err := clientauth.Generate()
+	if err != nil {
+		t.Fatalf("generate client token: %v", err)
+	}
+	srv := testutil.Must(New(":0", WithConfig(&config.GatewayRuntimeConfig{BindHost: "0.0.0.0"})))
+	mux := srv.buildMux()
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/debug/pprof/", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("non-loopback pprof without token must be 401, got %d: %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/debug/pprof/", nil)
+	req.Header.Set(clientauth.Header, token)
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("non-loopback pprof with token must be 200, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
