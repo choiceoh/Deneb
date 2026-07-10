@@ -159,6 +159,7 @@ func entriesToPromptSkills(entries []SkillEntry) []PromptSkill {
 			ps.Tags = entry.Metadata.Tags
 			ps.Triggers = entry.Metadata.Triggers
 			ps.RelatedSkills = entry.Metadata.RelatedSkills
+			ps.RequiresTools = entry.Metadata.RequiresTools
 		}
 		result = append(result, ps)
 	}

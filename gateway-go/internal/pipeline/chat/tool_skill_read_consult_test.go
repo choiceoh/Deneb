@@ -61,7 +61,7 @@ func TestReadSkillConsultRecorder(t *testing.T) {
 	log := NewSkillConsultLog()
 	ctx := WithSkillConsultLog(context.Background(), log)
 	in := "[File: skills/productivity/contract-review/SKILL.md | 88 lines]\n1\t---"
-	if out := ReadSkillConsultRecorder(ctx, "read", in); out != in {
+	if out := NewReadSkillConsultRecorder(nil)(ctx, "read", in); out != in {
 		t.Fatalf("output must pass through unchanged")
 	}
 	// Direct wiring proof with an explicit catalog: matcher result → log.Add.

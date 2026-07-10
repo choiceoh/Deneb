@@ -28,14 +28,21 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
 
-// ReadSkillConsultRecorder is a per-tool post-processor for `read`. Pure
-// side-effect: the output is returned unchanged. Registered before the global
-// compaction/trimming processors, so the "[File: …]" header is still intact.
-func ReadSkillConsultRecorder(ctx context.Context, _, output string) string {
-	if name := skillNameFromReadOutput(output, cachedResolvedSkills()); name != "" {
+// NewReadSkillConsultRecorder returns the per-tool post-processor for `read`.
+// It records the consult and activates the skill's required deferred tools
+// (tool_skill_required_tools.go) — non-consult reads pass through unchanged.
+// Registered before the global compaction/trimming processors, so the
+// "[File: …]" header is still intact.
+func NewReadSkillConsultRecorder(registry *ToolRegistry) PostProcessor {
+	return func(ctx context.Context, _, output string) string {
+		resolved := cachedResolvedSkills()
+		name := skillNameFromReadOutput(output, resolved)
+		if name == "" {
+			return output
+		}
 		toolctx.SkillConsultLogFromContext(ctx).Add(name)
+		return output + activateSkillRequiredTools(ctx, registry, name, resolved)
 	}
-	return output
 }
 
 // skillNameFromReadOutput extracts the consulted skill name from a read-tool

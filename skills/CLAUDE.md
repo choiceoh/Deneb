@@ -96,7 +96,7 @@ allowed so bundled skills stay readable in Markdown frontmatter.
 | `tags` | string[] | Searchable keywords for skill discovery |
 | `triggers` | string[] | Korean utterance keywords for per-turn auto-surfacing: when a user message contains one, the chat pipeline appends a wire-only hint pointing at this skill (`chat/skill_hints.go`, max 2/turn, longest match wins). Precision-first — deliberately NOT mined from tags/description |
 | `related_skills` | string[] | Cross-references to complementary skills |
-| `requires_tools` | string[] | Show only when ALL listed agent tools are available |
+| `requires_tools` | string[] | Show only when ALL listed agent tools are available; loading the skill body auto-activates listed deferred tools (see Conditional Activation) |
 | `fallback_for_tools` | string[] | Show only when ANY listed tool is UNavailable (fallback) |
 | `install` | object[] | Installation specs (`apt`, `brew`, `node`, `go`, `uv`, `download`) |
 
@@ -182,11 +182,12 @@ metadata:
 
 | Field | Semantics |
 |---|---|
-| `requires_tools` | Skill visible **only when ALL** listed tools are registered |
+| `requires_tools` | Skill visible **only when ALL** listed tools are registered. Also a capability bundle: loading the skill body (plain `read` of SKILL.md or `skills(action=read)`) auto-activates any listed tool that is deferred, skipping the `fetch_tools` round-trip (`chat/tool_skill_required_tools.go`) |
 | `fallback_for_tools` | Skill visible **only when ANY** listed tool is UNavailable |
 
 Use `fallback_for_tools` for free/CLI alternatives to premium tools.
-Use `requires_tools` for skills that depend on specific agent capabilities.
+Use `requires_tools` for skills that depend on specific agent capabilities —
+list the exact tool names the procedure calls, so they load with the skill.
 
 ## Support Files
 
