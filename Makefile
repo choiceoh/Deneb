@@ -184,6 +184,14 @@ health-check:
 runtime-health:
 	@python3 scripts/audit/runtime-health.py
 
+# Agent-doc coverage (advisory) — rank gateway-go subsystems by weight and flag
+# heavy ones with no module CLAUDE.md and no agent-rule glob, i.e. the subsystems
+# most worth a narrative doc. Draft one with Deneb's own model (grounded in source
+# + call graph) via: scripts/audit/doc-draft.py --target <pkg> --name <slug>.
+# The draft is a *.draft.md an agent curates before it lands. See doc-draft.py.
+doc-draft-gaps:
+	@python3 scripts/audit/doc-draft.py --list-gaps
+
 # Run all code generation pipelines in dependency order.
 generate: tool-schemas data-gen kotlin-models
 	@echo "All code generation pipelines completed"

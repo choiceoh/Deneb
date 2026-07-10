@@ -90,6 +90,7 @@ codegraph query    NAME      # 이름으로 심볼 검색
 | go-gateway.md · live-testing.md · concurrency.md · logging.md | gateway-go 코드를 만질 때 |
 | prompt-cache.md | 챗 prompt/캐시/컴팩션 경로 (불가침 원칙 — 위반 금지) |
 | hub-wiring.md | method_registry·GatewayHub 배선 |
+| self-improvement.md | genesis 자가개선 루프 (스킬 생성·진화·큐레이션·자기교정 캡처·게이트) |
 | model-roles.md · sidecar-models.md | LLM 역할 배치 · 로컬 모델/wormhole 운영 |
 | wiki-layout.md | 위키 도메인 (project_layout.go 규약) |
 | native-design-system.md · native-live-app.md | client-android UI · 실앱 라이브 검증 |
