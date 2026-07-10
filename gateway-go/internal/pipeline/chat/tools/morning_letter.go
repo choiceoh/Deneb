@@ -89,7 +89,7 @@ func ToolMorningLetter(_ toolctx.ToolExecutor, opts ...MorningLetterOpts) ToolFu
 			"timestamp": now.Format(time.RFC3339),
 			// Instruction rides with the data (the cron prompt is user config):
 			// the model places digit-free tokens; the relay injects real values.
-			"note": "시세(환율·구리) 숫자는 절대 직접 쓰지 말 것 — exchange의 usd_krw_token/eur_krw_token, copper의 token 플레이스홀더를 문장 안에 그대로 배치하면 발송 시 실제 숫자로 자동 치환된다. 토큰은 숫자만 치환되므로 단위(원, 달러, /t 등)는 문장에 직접 쓴다",
+			"note": "시세(환율·구리) 숫자는 절대 직접 쓰지 말 것 — exchange의 usd_krw_token, copper의 token 플레이스홀더를 문장 안에 그대로 배치하면 발송 시 실제 숫자로 자동 치환된다. 토큰은 숫자만 치환되므로 단위(원, 달러, /t 등)는 문장에 직접 쓴다. 환율은 달러(USD/KRW)만 — 유로 등 다른 통화는 제공하지 않는다",
 			"sections": map[string]any{
 				"weather":        results[0],
 				"exchange":       results[1],
@@ -130,11 +130,7 @@ func formatMorningDiarySummary(dateStr string, results []any) string {
 	}
 
 	if x, ok := results[1].(exchangeData); ok && x.OK {
-		fmt.Fprintf(&sb, "- 환율: USD/KRW %.0f", x.USDKRW)
-		if x.EURKRW > 0 {
-			fmt.Fprintf(&sb, ", EUR/KRW %.0f", x.EURKRW)
-		}
-		sb.WriteString("\n")
+		fmt.Fprintf(&sb, "- 환율: USD/KRW %.0f\n", x.USDKRW)
 	}
 
 	if c, ok := results[2].(copperData); ok && c.OK {
@@ -190,8 +186,6 @@ type exchangeData struct {
 	// "1,331원" when the LLM reformatted the float itself).
 	USDKRW      float64 `json:"usd_krw,omitempty"`
 	USDKRWToken string  `json:"usd_krw_token,omitempty"`
-	EURKRW      float64 `json:"eur_krw,omitempty"`
-	EURKRWToken string  `json:"eur_krw_token,omitempty"`
 	Error       string  `json:"error,omitempty"`
 }
 
@@ -342,13 +336,11 @@ func fetchExchangeRates(ctx context.Context) any {
 		return exchangeData{Error: "KRW rate not found"}
 	}
 
+	// Morning letter shows USD/KRW + copper only (operator preference); EUR is
+	// deliberately not surfaced. Not emitting the token at the source keeps it
+	// out of the letter regardless of what the composing turn loads.
 	d := exchangeData{OK: true, USDKRW: krw, USDKRWToken: market.LetterTokenUSDKRW}
 	tokens := map[string]string{market.LetterTokenUSDKRW: formatGroupedInt(krw)}
-	if eurRate, ok := raw.Rates["EUR"]; ok && eurRate > 0 {
-		d.EURKRW = krw / eurRate
-		d.EURKRWToken = market.LetterTokenEURKRW
-		tokens[market.LetterTokenEURKRW] = formatGroupedInt(d.EURKRW)
-	}
 	market.RecordLetterTokens(tokens)
 	return d
 }
