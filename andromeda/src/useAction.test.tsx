@@ -7,7 +7,7 @@ import { denebAuthProvider } from "./authProvider";
 import { refineResources } from "./resources";
 import { fakeProvider } from "./test/util";
 import { useAction } from "./useAction";
-import { WorkspaceProvider } from "./workspaceContext";
+import { WorkspaceProvider } from "./WorkspaceProvider";
 
 const cfg = { url: "http://test", token: "tok" };
 

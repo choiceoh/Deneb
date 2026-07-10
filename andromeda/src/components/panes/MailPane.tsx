@@ -10,7 +10,8 @@ import { useAction } from "@/useAction";
 import { useRegisterPane, useWorkspace, type PaneTarget } from "@/workspaceContext";
 import { Column, Grid, GridNotice } from "@/components/Grid";
 import { DayPager } from "@/components/DayPager";
-import { MailDetail, mailBody } from "./MailDetail";
+import { MailDetail } from "./MailDetail";
+import { mailBody } from "./mailBody";
 
 // How far back the day-pager can step before the ‹이전 arrow stops (matches the
 // work feed's lookback so a quiet stretch never traps you on today).

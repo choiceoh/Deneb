@@ -12,7 +12,7 @@ import { calSpan, errText, eventDayKeys, eventEndMs, eventTitle } from "@/format
 import { Markdown } from "@/components/Markdown";
 
 // One-line-per-field summary of the event, used as the AI's workspace context.
-export function eventContext(event: CalEvent): string {
+function eventContext(event: CalEvent): string {
   return [
     `제목: ${eventTitle(event)}`,
     `시간: ${calSpan(event.start, event.end) || "미정"}`,
@@ -26,7 +26,7 @@ export function eventContext(event: CalEvent): string {
 // Heuristic analysis used as a placeholder before the AI responds (or when the
 // gateway is offline). Infers meeting/deadline/timing/prep/risk/next from the
 // title + description keywords and the event's span.
-export function fallbackAnalysis(event: CalEvent): string {
+function fallbackAnalysis(event: CalEvent): string {
   const title = eventTitle(event);
   const span = calSpan(event.start, event.end);
   const days = eventDayKeys(event.start, event.end);
