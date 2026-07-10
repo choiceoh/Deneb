@@ -1,10 +1,10 @@
 // executor.go — Core agent execution loop.
 //
 // RunAgent implements the LLM → tool-call → repeat cycle shared by both the
-// chat pipeline (chat/) and the auto-reply pipeline (autoreply/).  All
-// LLM-update surface area (thinking budget, tool streaming, content block
-// layout) lives here; callers only need to write thin adapters that map their
-// domain-specific config to AgentConfig.
+// chat pipeline (chat/) and the auto-reply pipeline (autoreply/). Turn request
+// preparation and streaming mechanics live in adjacent executor_* files;
+// callers only need thin adapters that map their domain-specific config to
+// AgentConfig.
 package agent
 
 import (
@@ -68,6 +68,10 @@ func RunAgent(
 
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
+	// Every turn is decorated from the same run-scoped base. Reusing the prior
+	// turn's decorated context retains per-turn values (including potentially
+	// large tool results) until the whole run ends and grows Value lookup depth.
+	runCtx := ctx
 
 	result := &AgentResult{}
 
@@ -102,11 +106,7 @@ func RunAgent(
 	// after the LLM response was truncated by max_tokens.
 	var maxTokensRecoveryCount int
 	baseMaxTokens := cfg.MaxTokens // Original value before any recovery scaling.
-
-	// One-shot per-turn thinking override: set by the thinking-runaway recovery to
-	// force the NEXT turn's thinking off (takes precedence over cfg.Thinking and the
-	// modulator), then cleared so it applies to exactly that retry turn.
-	var thinkingRetryOverride *llm.ThinkingConfig
+	turnPreparer := newTurnRequestPreparer(&cfg)
 
 	// Loop condition permits one extra iteration past MaxTurns when the grace
 	// flag is set — see grace.go. Normal runs behave identically to `range
@@ -117,84 +117,12 @@ func RunAgent(
 	for turn := 0; turn < cfg.MaxTurns || result.BudgetGraceCall; turn++ {
 		result.Turns = turn + 1
 
-		// Per-turn context initialization (e.g., injecting a TurnContext for
-		// cross-tool result sharing). The caller sets cfg.OnTurnInit to provide
-		// this behaviour; the executor itself stays context-agnostic.
-		if cfg.OnTurnInit != nil {
-			ctx = cfg.OnTurnInit(ctx)
-		}
-
-		// Deferred system text injection: from turn 1 onward, check if
-		// late-arriving context (e.g., proactive hints, subagent completion
-		// notifications) is ready. The hook is kept alive so multiple sources
-		// can deliver text across different turns (e.g., proactive hint on
-		// turn 1, subagent notification on turn 5).
-		if turn > 0 && cfg.DeferredSystemText != nil {
-			if extra := cfg.DeferredSystemText(); extra != "" {
-				cfg.System = llm.AppendSystemText(cfg.System, extra)
-			}
-		}
-
-		// Dynamic tool injection: from turn 1 onward, check if new tools
-		// were activated (e.g., via fetch_tools). Append them to cfg.Tools
-		// so they appear in subsequent LLM requests.
-		if turn > 0 && cfg.DynamicToolsProvider != nil {
-			if extra := cfg.DynamicToolsProvider(); len(extra) > 0 {
-				cfg.Tools = appendUniqueTools(cfg.Tools, extra)
-			}
-		}
-
-		// BeforeAPICall hook: lets the caller produce a per-request copy of the
-		// messages (e.g. append a /steer nudge into the last tool_result block).
-		// The internal `messages` slice is intentionally NOT mutated so prompt
-		// cache keys remain stable on subsequent turns — only this one request
-		// carries the augmentation.
-		apiMessages := messages
-		if cfg.BeforeAPICall != nil {
-			apiMessages = cfg.BeforeAPICall(messages)
-			if apiMessages == nil {
-				apiMessages = messages
-			}
-		}
-
-		// Per-turn thinking budget: the modulator (when set) lets the caller
-		// vary reasoning by turn — e.g. boost the planning turn, baseline the
-		// rest (the "reasoning sandwich"). It receives this run's accumulated
-		// tool activities (run-scoped o_t: size + error per call) so policies
-		// never re-parse the message array. Thinking is request-level, so this
-		// does not affect prompt cache. Falls back to cfg.Thinking.
-		turnThinking := cfg.Thinking
-		switch {
-		case thinkingRetryOverride != nil:
-			// A thinking-runaway recovery forced this one turn off; consume it.
-			turnThinking = thinkingRetryOverride
-			thinkingRetryOverride = nil
-		case cfg.ThinkingModulator != nil:
-			if m := cfg.ThinkingModulator(turn, result.ToolActivities); m != nil {
-				turnThinking = m
-			}
-		}
-
-		req := llm.ChatRequest{
-			Model:            cfg.Model,
-			Messages:         apiMessages,
-			System:           cfg.System,
-			MaxTokens:        cfg.MaxTokens,
-			Tools:            cfg.Tools,
-			Stream:           true,
-			Thinking:         turnThinking,
-			Temperature:      cfg.Temperature,
-			TopP:             cfg.TopP,
-			TopK:             cfg.TopK,
-			FrequencyPenalty: cfg.FrequencyPenalty,
-			PresencePenalty:  cfg.PresencePenalty,
-			StopSequences:    cfg.StopSequences,
-			ResponseFormat:   cfg.ResponseFormat,
-			ToolChoice:       cfg.ToolChoice,
-		}
+		prepared := turnPreparer.prepare(runCtx, turn, messages, result.ToolActivities)
+		ctx = prepared.ctx
+		turnThinking := prepared.thinking
 
 		streamOutcome, err := runStreamingTurnWithRetry(
-			ctx, client, req, hooks, cfg.StreamIdleTimeout, logger, turn,
+			ctx, client, prepared.request, hooks, cfg.StreamIdleTimeout, logger, turn,
 		)
 		result.Stream.record(streamOutcome)
 		if err != nil {
@@ -272,8 +200,8 @@ func RunAgent(
 		// Feed actual token usage back to the estimator for self-calibration.
 		if turnRes.usage.InputTokens > 0 {
 			est := tokenest.ForModel(cfg.Model)
-			estimated := est.CountBytes([]byte(req.System))
-			for _, m := range req.Messages {
+			estimated := est.CountBytes([]byte(prepared.request.System))
+			for _, m := range prepared.request.Messages {
 				estimated += est.CountBytes([]byte(m.Content))
 			}
 			tokenest.RecordFeedback(est.Family(), estimated, turnRes.usage.InputTokens)
@@ -360,7 +288,7 @@ func RunAgent(
 			// answers directly. Only when the caller supplied an off-config.
 			if cfg.ThinkingOffRetry != nil && strings.TrimSpace(turnRes.text) == "" &&
 				joinAllThinkingTexts(turnRes.contentBlocks) != "" {
-				thinkingRetryOverride = cfg.ThinkingOffRetry
+				turnPreparer.overrideThinkingOnce(cfg.ThinkingOffRetry)
 				cfg.MaxTokens = baseMaxTokens
 				logger.Info("max_tokens recovery: thinking runaway — retrying with thinking off",
 					"attempt", maxTokensRecoveryCount, "maxAttempts", cfg.MaxOutputTokensRecovery)
@@ -569,17 +497,9 @@ func RunAgent(
 			})
 		}
 
-		// When the turn budget is almost spent and sub-agents are running, nudge
-		// the agent to wrap up and yield to the notification system.
-		spawnActive := cfg.SpawnDetected != nil && cfg.SpawnDetected()
-		if spawnActive {
-			if warning := buildTurnBudgetWarning(turn, cfg.MaxTurns); warning != "" {
-				toolResults = append(toolResults, llm.ContentBlock{
-					Type: "text",
-					Text: warning,
-				})
-			}
-		}
+		// Budget warnings remain the final tool-result annotation so their
+		// relative position and prompt-cache behavior stay unchanged.
+		toolResults = turnPreparer.appendBudgetWarning(turn, toolResults)
 
 		toolResultMsg := llm.NewBlockMessage("user", toolResults)
 		messages = append(messages, toolResultMsg)
@@ -647,43 +567,6 @@ func RunAgent(
 	result.MaxTokensRecoveries = maxTokensRecoveryCount
 	result.FinalMessages = messages
 	return result, nil
-}
-
-// buildTurnBudgetWarning returns a warning message when the agent is
-// approaching the turn limit while sub-agents are running. Used to tell the
-// agent to wrap up and yield to the notification system. Returns "" when no
-// warning is needed.
-func buildTurnBudgetWarning(currentTurn, maxTurns int) string {
-	remaining := maxTurns - currentTurn - 1 // -1 because turn is 0-based and we just finished it
-	if remaining <= 0 {
-		return ""
-	}
-	// Warning at 80% of budget (5 turns remaining out of 25).
-	threshold := maxTurns / 5
-	if threshold < 3 {
-		threshold = 3
-	}
-	if remaining > threshold {
-		return ""
-	}
-	return fmt.Sprintf("[System: 턴 예산 정보 — 남은 턴 %d/%d. 서브에이전트가 작업 중입니다. 추가 작업이 없으면 턴을 종료하세요.]",
-		remaining, maxTurns)
-}
-
-// appendUniqueTools appends extra tools to base, skipping any whose name
-// already exists in base. Used for dynamic tool injection (deferred tools).
-func appendUniqueTools(base, extra []llm.Tool) []llm.Tool {
-	existing := make(map[string]struct{}, len(base))
-	for _, t := range base {
-		existing[t.Name] = struct{}{}
-	}
-	for _, t := range extra {
-		if _, ok := existing[t.Name]; !ok {
-			base = append(base, t)
-			existing[t.Name] = struct{}{}
-		}
-	}
-	return base
 }
 
 // turnResult holds the parsed output of a single LLM turn.

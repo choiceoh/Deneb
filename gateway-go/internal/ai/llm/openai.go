@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
 )
@@ -100,30 +99,9 @@ func (c *Client) streamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 		return nil, err
 	}
 
-	rawEvents := ParseSSE(respBody)
-
-	out := make(chan StreamEvent, 16)
-	done := make(chan struct{})
-
-	// Protect respBody.Close() from concurrent calls (context cancel vs normal exit).
-	closeOnce := sync.OnceFunc(func() { respBody.Close() })
-
-	go func() {
-		select {
-		case <-ctx.Done():
-			closeOnce()
-		case <-done:
-		}
-	}()
-
-	go func() {
-		defer close(out)
-		defer close(done)
-		defer closeOnce()
+	return startSSEPipeline(ctx, respBody, func(ctx context.Context, rawEvents <-chan StreamEvent, out chan<- StreamEvent) {
 		c.translateOpenAIStream(ctx, rawEvents, out)
-	}()
-
-	return out, nil
+	}), nil
 }
 
 // --- StreamChat helpers ---

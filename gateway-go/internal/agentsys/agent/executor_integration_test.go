@@ -515,6 +515,7 @@ func TestRunAgent_MultipleToolCalls(t *testing.T) {
 func TestRunAgent_OnTurnInit_Hook(t *testing.T) {
 	type ctxKey struct{}
 	var capturedTurnValues []int
+	var inheritedTurnValues []int
 
 	streamer := &fakeLLMStreamer{
 		turns: [][]llm.StreamEvent{
@@ -536,6 +537,9 @@ func TestRunAgent_OnTurnInit_Hook(t *testing.T) {
 		Timeout:   10 * time.Second,
 		MaxTokens: 4096,
 		OnTurnInit: func(ctx context.Context) context.Context {
+			if inherited, ok := ctx.Value(ctxKey{}).(int); ok {
+				inheritedTurnValues = append(inheritedTurnValues, inherited)
+			}
 			turnCounter++
 			return context.WithValue(ctx, ctxKey{}, turnCounter)
 		},
@@ -550,6 +554,9 @@ func TestRunAgent_OnTurnInit_Hook(t *testing.T) {
 	}
 	if len(capturedTurnValues) != 1 || capturedTurnValues[0] != 1 {
 		t.Errorf("captured turn values = %v, want [1]", capturedTurnValues)
+	}
+	if len(inheritedTurnValues) != 0 {
+		t.Errorf("OnTurnInit inherited prior per-turn values = %v, want none", inheritedTurnValues)
 	}
 }
 

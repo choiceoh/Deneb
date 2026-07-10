@@ -2,10 +2,19 @@ package llm
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"io"
 	"strings"
+	"sync"
 )
+
+const (
+	rawSSEBufferSize      = 64
+	streamEventBufferSize = 16
+)
+
+type sseForwarder func(context.Context, <-chan StreamEvent, chan<- StreamEvent)
 
 // ParseSSE reads server-sent events from r and sends them on the returned
 // channel. The channel is closed when r reaches EOF or encounters an error.
@@ -17,8 +26,8 @@ import (
 //   - An empty line dispatches the accumulated event.
 //
 // Multi-line data fields are joined with "\n".
-func ParseSSE(r io.Reader) <-chan StreamEvent {
-	ch := make(chan StreamEvent, 64)
+func ParseSSE(ctx context.Context, r io.Reader) <-chan StreamEvent {
+	ch := make(chan StreamEvent, rawSSEBufferSize)
 	go func() {
 		defer close(ch)
 
@@ -30,6 +39,9 @@ func ParseSSE(r io.Reader) <-chan StreamEvent {
 		var dataBuf strings.Builder
 
 		for scanner.Scan() {
+			if ctx.Err() != nil {
+				return
+			}
 			line := scanner.Text()
 
 			// Empty line: dispatch accumulated event.
@@ -39,7 +51,9 @@ func ParseSSE(r io.Reader) <-chan StreamEvent {
 						Type:    eventType,
 						Payload: json.RawMessage(dataBuf.String()),
 					}
-					ch <- ev
+					if !sendSSE(ctx, ch, ev) {
+						return
+					}
 				}
 				// Reset accumulators.
 				eventType = ""
@@ -76,9 +90,11 @@ func ParseSSE(r io.Reader) <-chan StreamEvent {
 
 		// Flush any remaining data (stream ended without trailing blank line).
 		if dataBuf.Len() > 0 {
-			ch <- StreamEvent{
+			if !sendSSE(ctx, ch, StreamEvent{
 				Type:    eventType,
 				Payload: json.RawMessage(dataBuf.String()),
+			}) {
+				return
 			}
 		}
 
@@ -90,13 +106,59 @@ func ParseSSE(r io.Reader) <-chan StreamEvent {
 		// a user-observed failure silently buried (logging.md). Both provider
 		// translators forward a Type=="error" raw event, so the executor surfaces it
 		// as "stream error: ..." instead.
-		if err := scanner.Err(); err != nil {
+		if err := scanner.Err(); err != nil && ctx.Err() == nil {
 			payload, _ := json.Marshal(struct {
 				Type    string `json:"type"`
 				Message string `json:"message"`
 			}{Type: "error", Message: "SSE stream read error: " + err.Error()})
-			ch <- StreamEvent{Type: "error", Payload: payload}
+			sendSSE(ctx, ch, StreamEvent{Type: "error", Payload: payload})
 		}
 	}()
 	return ch
+}
+
+// sendSSE makes parser backpressure interruptible. Without the context arm, a
+// parser whose buffer fills after the protocol translator has observed a
+// terminal event can remain blocked forever even after the response body is
+// closed: closing a reader only interrupts reads, not a channel send.
+func sendSSE(ctx context.Context, ch chan<- StreamEvent, event StreamEvent) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	select {
+	case ch <- event:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// startSSEPipeline owns the common streaming lifecycle shared by OpenAI and
+// Anthropic modes: response-body cancellation, raw SSE parsing, translation,
+// and deterministic cleanup. A pipeline-local parser context is canceled when
+// a translator returns early on a terminal protocol event, so buffered trailing
+// provider events cannot strand the parser goroutine.
+func startSSEPipeline(ctx context.Context, body io.ReadCloser, forward sseForwarder) <-chan StreamEvent {
+	parserCtx, cancelParser := context.WithCancel(ctx)
+	rawEvents := ParseSSE(parserCtx, body)
+	out := make(chan StreamEvent, streamEventBufferSize)
+
+	closeBody := sync.OnceFunc(func() { _ = body.Close() })
+	stopContextClose := context.AfterFunc(ctx, closeBody)
+
+	go func() {
+		defer close(out)
+		defer func() {
+			cancelParser()
+			stopContextClose()
+			closeBody()
+			// Joining the parser makes terminal cleanup deterministic. The cancel
+			// releases a blocked channel send and Close releases a blocked read.
+			for range rawEvents {
+			}
+		}()
+		forward(ctx, rawEvents, out)
+	}()
+
+	return out
 }
