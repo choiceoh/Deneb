@@ -1,4 +1,13 @@
 {
+  "mcp": {
+    "servers": {
+      "codegraph": {
+        "type": "stdio",
+        "command": "bash",
+        "args": ["/Users/ost/Documents/GitHub/Deneb/scripts/dev/codegraph-serve.sh"]
+      }
+    }
+  },
   "hooks": {
     "enabled": true,
     "events": {
@@ -26,6 +35,12 @@
             },
             {
               "type": "command",
+              "command": "command -v clash >/dev/null 2>&1 || exit 0; exec clash check",
+              "timeout": 10,
+              "statusMessage": "clash: 크로스 워크트리 충돌 검사"
+            },
+            {
+              "type": "command",
               "command": "bash \"${ZCODE_PROJECT_DIR}/scripts/dev/zcode-hook-bridge.sh\" \"${ZCODE_PROJECT_DIR}/scripts/dev/claude-rules-gate.py\"",
               "timeout": 10,
               "statusMessage": "rules-gate: 경로별 룰 첫 접촉 안내"
@@ -46,6 +61,12 @@
               "command": "bash \"${ZCODE_PROJECT_DIR}/scripts/dev/zcode-hook-bridge.sh\" \"${ZCODE_PROJECT_DIR}/scripts/dev/codegraph-nudge.py\"",
               "timeout": 10,
               "statusMessage": "codegraph: 심볼 검색은 CodeGraph로 유도"
+            },
+            {
+              "type": "command",
+              "command": "CLAUDE_PROJECT_DIR=\"${ZCODE_PROJECT_DIR}\" bash \"${ZCODE_PROJECT_DIR}/.claude/hooks/pre-commit-gate.sh\"",
+              "timeout": 10,
+              "statusMessage": "pre-commit: committer 호출 시 go-fmt/vet 게이트"
             }
           ]
         }

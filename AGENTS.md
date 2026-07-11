@@ -115,3 +115,12 @@ and the native client's Settings → 스킬 tab lists them read-only (no toggles
 
 - Keep heartbeats enabled so the assistant can schedule reminders and monitor inboxes.
 - Skills are read via each skill's `SKILL.md` on demand; there is no install step — adding a directory under `skills/` is the install.
+
+## ZCode development agent rules
+
+When this repository is opened in **ZCode** (not the Deneb personal assistant), the development rules live in **`CLAUDE.md`** at the repo root. Read it at session start — it carries the authoritative safety gates, Git/PR conventions, style rules, CodeGraph usage, and the `docs/agent-rules/` conditional-loading index that the ZCode hooks reference.
+
+- **Safety** (CLAUDE.md "안전" section): production paths, multi-agent worktree isolation, generated-code rules, security CODEOWNERS — always apply.
+- **ZCode worktree isolation**: the SessionStart hook auto-creates `~/.zcode/worktrees/Deneb/<session-id>`. `cd` into it before any edit; the guard blocks main-checkout edits.
+- **CodeGraph**: the `codegraph_explore` MCP tool is wired via `.zcode/config.json`. Use it for structural/relational queries; hooks nudge you there on symbol greps and source edits.
+- **Rules gate**: editing a path under `docs/agent-rules/*.md` globs triggers a one-time pointer (via `zcode-hook-bridge.sh` → `claude-rules-gate.py`). Read the flagged rule, then retry.
