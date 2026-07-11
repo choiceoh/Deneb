@@ -215,7 +215,7 @@ describe("ProjectHomePane boundary behavior", () => {
     it("sorts related mail newest first and marks unread mail", async () => {
       renderHome();
       const section = (await screen.findByText("관련 메일")).closest("section")!;
-      const rows = within(section).getAllByRole("button");
+      const rows = await within(section).findAllByRole("button");
       expect(rows[0]).toHaveTextContent("Alpha 최신 메일");
       expect(rows[1]).toHaveTextContent("Alpha 오래된 메일");
       expect(rows[0]).toHaveTextContent("미열람");
@@ -224,7 +224,7 @@ describe("ProjectHomePane boundary behavior", () => {
     it("sorts events by start time and carries location as body context", async () => {
       renderHome();
       const section = (await screen.findByText("관련 일정")).closest("section")!;
-      const rows = within(section).getAllByRole("button");
+      const rows = await within(section).findAllByRole("button");
       expect(rows[0]).toHaveTextContent("Alpha 킥오프");
       expect(rows[0]).toHaveTextContent("회의실 A");
       expect(rows[1]).toHaveTextContent("Alpha 후속 회의");
@@ -233,7 +233,7 @@ describe("ProjectHomePane boundary behavior", () => {
     it("filters completed todos before sorting by due date", async () => {
       renderHome();
       const section = (await screen.findByText("관련 할일")).closest("section")!;
-      const rows = within(section).getAllByRole("button");
+      const rows = await within(section).findAllByRole("button");
       expect(rows[0]).toHaveTextContent("Alpha 빠른 할일");
       expect(rows[1]).toHaveTextContent("Alpha 늦은 할일");
       expect(within(section).queryByText("Alpha 완료 할일")).not.toBeInTheDocument();
@@ -242,9 +242,9 @@ describe("ProjectHomePane boundary behavior", () => {
     it("sorts workfeed and notebooks newest first", async () => {
       renderHome();
       const feed = (await screen.findByText("관련 피드")).closest("section")!;
-      expect(within(feed).getAllByRole("button")[0]).toHaveTextContent("Alpha 최신 피드");
+      expect((await within(feed).findAllByRole("button"))[0]).toHaveTextContent("Alpha 최신 피드");
       const notebooks = screen.getByText("연결 노트북").closest("section")!;
-      expect(within(notebooks).getAllByRole("button")[0]).toHaveTextContent("Alpha 최신 노트북");
+      expect((await within(notebooks).findAllByRole("button"))[0]).toHaveTextContent("Alpha 최신 노트북");
     });
 
     it("caps every related section at five rows after sorting", async () => {
@@ -256,7 +256,7 @@ describe("ProjectHomePane boundary behavior", () => {
       installGateway(calls, () => reply({ mail: manyMail.map((mail) => mail.id) }));
       renderHome({ ...fixtures, mail: manyMail });
       const section = (await screen.findByText("관련 메일")).closest("section")!;
-      expect(within(section).getAllByRole("button")).toHaveLength(5);
+      expect(await within(section).findAllByRole("button")).toHaveLength(5);
       expect(within(section).getByText("5")).toHaveClass("project-home-count");
       expect(within(section).getAllByRole("button")[0]).toHaveTextContent("메일 7");
     });
@@ -271,11 +271,7 @@ describe("ProjectHomePane boundary behavior", () => {
         ],
       });
       const list = await screen.findByRole("complementary", { name: "프로젝트 목록" });
-      expect(
-        within(list)
-          .getAllByRole("button")
-          .map((button) => button.textContent),
-      ).toEqual([
+      expect((await within(list).findAllByRole("button")).map((button) => button.textContent)).toEqual([
         expect.stringContaining("Newest"),
         expect.stringContaining("Old"),
         expect.stringContaining("No timestamp"),

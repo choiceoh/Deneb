@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 )
 
@@ -26,7 +27,7 @@ func TestHandleMetaProposalAction(t *testing.T) {
 		return &Server{
 			logger: slog.Default(),
 			GenesisSubsystem: &GenesisSubsystem{
-				genesisMeta:    genesis.NewMetaArtifacts(metaDir, slog.Default()),
+				genesisMeta:    generation.NewMetaArtifacts(metaDir, slog.Default()),
 				genesisTracker: tracker,
 			},
 		}, metaDir

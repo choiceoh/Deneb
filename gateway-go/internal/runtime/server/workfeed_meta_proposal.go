@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 )
 
@@ -72,7 +73,7 @@ func (s *Server) handleMetaProposalAction(item workfeed.Item, actionID string) {
 	if artifact == "" || artifact == "." {
 		return
 	}
-	fallback := genesis.DefaultMetaArtifacts()[artifact]
+	fallback := generation.DefaultMetaArtifacts()[artifact]
 	fromVersion := s.genesisMeta.Version(artifact, fallback)
 	switch actionID {
 	case metaProposalActionAdopt:

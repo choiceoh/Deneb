@@ -191,7 +191,7 @@ func (m *MetaArtifacts) AdoptProposal(name string) (string, error) {
 		return "", err
 	}
 	content := strings.TrimSpace(string(raw))
-	if len(content) < metaArtifactMinBytes {
+	if len(content) < MetaArtifactMinBytes {
 		return "", errors.New("proposal below the artifact size floor")
 	}
 	if err := os.WriteFile(filepath.Join(m.dir, name), []byte(content), 0o644); err != nil {
