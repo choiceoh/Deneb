@@ -685,6 +685,9 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			Meta:    s.genesisMeta,
 			Tracker: s.genesisTracker,
 			Logger:  s.logger,
+			// Surface each proposal as a work-feed card: propose-only adoption
+			// is an operator decision, so the operator must actually see it.
+			OnProposal: s.postMetaProposalCard,
 		})
 		s.autonomousSvc.RegisterTask(&genesis.SkillCuratorTask{
 			Tracker: s.genesisTracker,
