@@ -68,6 +68,9 @@ type SkillValidationResult struct {
 	OriginalScore   float64  `json:"originalScore,omitempty"`
 	CandidateScore  float64  `json:"candidateScore,omitempty"`
 	Failures        []string `json:"failures,omitempty"`
+	// FlippedCases lists held-out cases the original passed but the candidate
+	// fails — promotion-blocking regardless of aggregate score (flip gate).
+	FlippedCases []string `json:"flippedCases,omitempty"`
 }
 
 // NewSkillValidationEngine constructs the deterministic skill validation engine.
@@ -227,8 +230,19 @@ func (v *SkillValidationEngine) ValidateCandidate(skillName, originalContent, ca
 		return SkillValidationResult{Pass: true}, nil
 	}
 
-	orig := scoreSkillValidationCases(skillBodyOnly(originalContent), cases)
-	cand := scoreSkillValidationCases(candidateBody, cases)
+	origByCase := scoreSkillValidationCasesByCase(skillBodyOnly(originalContent), cases)
+	candByCase := scoreSkillValidationCasesByCase(candidateBody, cases)
+	var orig, cand validationCaseScore
+	for i := range origByCase {
+		orig.add(origByCase[i])
+		cand.add(candByCase[i])
+	}
+	if len(orig.Failures) > 3 {
+		orig.Failures = orig.Failures[:3]
+	}
+	if len(cand.Failures) > 3 {
+		cand.Failures = cand.Failures[:3]
+	}
 	if cand.Skipped > 0 && v.logger != nil {
 		v.logger.Warn("skill validation: non-discriminative assertions isolated from scoring",
 			"skill", skillName, "skipped", cand.Skipped)
@@ -246,6 +260,26 @@ func (v *SkillValidationEngine) ValidateCandidate(skillName, originalContent, ca
 		Failures:        cand.Failures,
 	}
 	if cand.Total == 0 {
+		return result, nil
+	}
+	// Flip gate (RSI P1.5, AgentDevel 2601.04620): any case the original passes
+	// and the candidate fails blocks promotion outright — aggregate gains
+	// elsewhere must not buy back a regression on proven behavior.
+	var flipped []string
+	for i := range origByCase {
+		if origByCase[i].Total > 0 && origByCase[i].casePasses() && !candByCase[i].casePasses() {
+			flipped = append(flipped, validationCaseLabel(cases[i]))
+		}
+	}
+	if len(flipped) > 0 {
+		result.FlippedCases = flipped
+		result.Pass = false
+		shown := flipped
+		if len(shown) > 3 {
+			shown = shown[:3]
+		}
+		result.Reason = fmt.Sprintf("flip gate rejected: candidate regressed %d previously-passing held-out case(s) (%s): %s",
+			len(flipped), strings.Join(shown, ", "), formatValidationFailures(cand.Failures))
 		return result, nil
 	}
 	if cand.Passed < orig.Passed {
@@ -322,12 +356,29 @@ func (s validationCaseScore) Percent() float64 {
 
 func scoreSkillValidationCases(body string, cases []SkillValidationCaseRecord) validationCaseScore {
 	var score validationCaseScore
+	for _, caseScore := range scoreSkillValidationCasesByCase(body, cases) {
+		score.add(caseScore)
+	}
+	if len(score.Failures) > 3 {
+		score.Failures = score.Failures[:3]
+	}
+	return score
+}
+
+// scoreSkillValidationCasesByCase scores each case independently, parallel to
+// cases. Per-case granularity is what the flip gate compares: a case "passes"
+// when every scorable assertion in it passes (vacuously if none are scorable).
+// Assertion Totals depend only on the case, never the body, so original and
+// candidate outcomes for the same index are directly comparable.
+func scoreSkillValidationCasesByCase(body string, cases []SkillValidationCaseRecord) []validationCaseScore {
+	scores := make([]validationCaseScore, 0, len(cases))
 	normalizedBody := normalizedValidationText(body)
 	headings := map[string]struct{}{}
 	for _, heading := range skillHeadings(body) {
 		headings[heading.normalized] = struct{}{}
 	}
 	for _, tc := range cases {
+		var score validationCaseScore
 		label := validationCaseLabel(tc)
 		for _, required := range tc.RequiredSubstrings {
 			if normalizedValidationText(required) == "" {
@@ -367,11 +418,13 @@ func scoreSkillValidationCases(body string, cases []SkillValidationCaseRecord) v
 			score.Failures = append(score.Failures, fmt.Sprintf("%s missing required heading %q", label, truncateRunes(required, 80)))
 		}
 		score.add(scoreSkillReplayCase(body, tc))
+		scores = append(scores, score)
 	}
-	if len(score.Failures) > 3 {
-		score.Failures = score.Failures[:3]
-	}
-	return score
+	return scores
+}
+
+func (s validationCaseScore) casePasses() bool {
+	return s.Passed == s.Total // vacuous pass when no scorable assertion
 }
 
 func (s *validationCaseScore) add(other validationCaseScore) {
