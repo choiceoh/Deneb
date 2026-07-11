@@ -100,4 +100,5 @@ codegraph query    NAME      # 이름으로 심볼 검색
 | denebui.md | deneb-ui 카드 (라벨 HTML) — 3구현 동기·계약 위치·검증 사슬 |
 | generated-code.md | 생성 파일 재생성 방법 |
 | release-and-deploy.md | 배포 · APK 발행/서명 · OTA |
+| codebase-health-v2.md | Health Bench 2.0 점수·finding·baseline 변경 |
 | git-pr.md · testing.md · docs.md · build-status.md · collaboration.md · optimization.md | 각 주제 상세 |

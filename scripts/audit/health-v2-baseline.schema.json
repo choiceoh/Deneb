@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/choiceoh/Deneb/schemas/health-v2-baseline.schema.json",
+  "title": "Deneb Health Bench 2.0 baseline",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_keep_policy",
+    "schema_version",
+    "rubric_version",
+    "profile",
+    "revision",
+    "overall",
+    "pillars",
+    "high_findings",
+    "tolerances"
+  ],
+  "properties": {
+    "_keep_policy": { "type": "string", "minLength": 1 },
+    "schema_version": { "const": 2 },
+    "rubric_version": { "const": "2.1.1" },
+    "profile": { "enum": ["fast", "deep"] },
+    "revision": { "type": "string", "minLength": 7 },
+    "overall": { "type": "number", "minimum": 0, "maximum": 100 },
+    "pillars": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "number", "minimum": 0, "maximum": 100 }
+    },
+    "high_findings": {
+      "type": "object",
+      "additionalProperties": { "enum": ["high", "critical"] }
+    },
+    "tolerances": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["overall", "pillar"],
+      "properties": {
+        "overall": { "const": 0.3 },
+        "pillar": { "const": 1.0 }
+      }
+    },
+    "provenance": { "type": "object" }
+  }
+}

@@ -1,0 +1,136 @@
+"""AI-maintainability architecture contracts for Health Bench 2.1."""
+
+from __future__ import annotations
+
+import unittest
+
+from health_v2 import ai_readiness, architecture, delivery, inventory, operations, testing
+from test_codebase_health_v2_support import GitFixture, pillar
+
+
+class ArchitectureRubricTests(unittest.TestCase):
+    _SOURCE = """\
+package widget
+
+func WidgetValue(input int) int { return input }
+"""
+    _TEST = """\
+package widget
+
+import "testing"
+
+func TestWidgetValue(t *testing.T) {
+    if got := WidgetValue(2); got != 2 {
+        t.Fatalf("got %d", got)
+    }
+}
+"""
+
+    def test_rubric_weights_include_ai_change_readiness_and_total_one_hundred(
+        self,
+    ) -> None:
+        workflow = """\
+name: fixture
+on: push
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: go test -count=1 ./...
+"""
+        with GitFixture() as fixture:
+            fixture.write("gateway-go/go.mod", "module example.invalid/fixture\n")
+            fixture.write("gateway-go/internal/widget/widget.go", self._SOURCE)
+            fixture.write("gateway-go/internal/widget/widget_test.go", self._TEST)
+            fixture.write(".github/workflows/fixture.yml", workflow)
+            fixture.track()
+
+            groups = [
+                architecture.evaluate(fixture.root)[0],
+                operations.evaluate(fixture.root)[0],
+                testing.evaluate(fixture.root)[0],
+                delivery.evaluate(fixture.root)[0],
+            ]
+
+        pillars = [item for group in groups for item in group]
+        by_id = {item.id: item for item in pillars}
+        self.assertIn("ai-change-readiness", by_id)
+        self.assertEqual(by_id["ai-change-readiness"].weight, 8)
+        self.assertEqual(sum(item.weight for item in pillars), 100)
+        self.assertEqual(len(by_id), len(pillars))
+
+    def test_placeholder_and_false_guide_references_receive_no_credit(self) -> None:
+        placeholder = """\
+# Widget
+
+TODO: document the entry point, package responsibility, and tests.
+"""
+        false_guide = """\
+# Widget ownership and entry point
+
+This package owns widget behavior and its local architecture boundary. Start in
+`ghost_entry.go` at `GhostEntry`, which is claimed to be the registry for every
+change. Adapters must depend inward through a narrow contract, and callers must
+never bypass that dependency direction or mutate state outside the owner.
+
+## Invariants and verification
+
+The invariant is that changes must preserve deterministic results and failure
+propagation. Run `make imaginary-check` before merging. The named file, symbol,
+and command intentionally do not exist; descriptive prose alone must not make
+an unverified navigation path or definition of done score as executable truth.
+"""
+        with GitFixture() as fixture:
+            fixture.write("gateway-go/go.mod", "module example.invalid/fixture\n")
+            fixture.write("gateway-go/internal/widget/widget.go", self._SOURCE)
+            fixture.write("gateway-go/internal/widget/widget_test.go", self._TEST)
+            fixture.write("gateway-go/internal/widget/CLAUDE.md", placeholder)
+            fixture.write("Makefile", "real-check:\n\tgo test ./gateway-go/...\n")
+            fixture.track()
+
+            placeholder_repo = inventory.collect(fixture.root)
+            placeholder_facts = ai_readiness.collect(placeholder_repo)
+
+            fixture.write("gateway-go/internal/widget/CLAUDE.md", false_guide)
+            fixture.track()
+            false_repo = inventory.collect(fixture.root)
+            false_facts = ai_readiness.collect(false_repo)
+
+        placeholder_signal = placeholder_facts.packages["internal/widget"]
+        self.assertIsNone(placeholder_signal.guide_path)
+        self.assertEqual(placeholder_signal.guide_quality, 0.0)
+        self.assertEqual(placeholder_signal.entrypoint_score, 0.0)
+        self.assertEqual(placeholder_signal.verification_score, 0.0)
+
+        false_signal = false_facts.packages["internal/widget"]
+        self.assertEqual(
+            false_signal.guide_path, "gateway-go/internal/widget/CLAUDE.md"
+        )
+        self.assertEqual(false_signal.valid_entry_files, ())
+        self.assertEqual(false_signal.valid_entry_symbols, ())
+        self.assertEqual(false_signal.valid_commands, ())
+        self.assertEqual(false_signal.entrypoint_score, 0.0)
+        self.assertEqual(false_signal.verification_score, 0.0)
+
+        navigability = architecture._ai_navigability(false_repo, false_facts)
+        readiness = architecture._ai_change_readiness(false_repo, false_facts)
+        self.assertEqual(
+            navigability.metrics["risk_weighted_valid_entrypoints"], 0.0
+        )
+        self.assertEqual(
+            navigability.metrics["risk_weighted_specific_verification"], 0.0
+        )
+        self.assertEqual(
+            readiness.metrics["subscores"]["entrypoint_registry_index"], 0.0
+        )
+        self.assertEqual(
+            readiness.metrics["subscores"]["verification_specificity"], 0.0
+        )
+        self.assertTrue(
+            any("actual source symbol" in item.why for item in navigability.findings)
+        )
+        self.assertEqual(pillar([readiness], "ai-change-readiness"), readiness)
+
+
+if __name__ == "__main__":
+    unittest.main()
