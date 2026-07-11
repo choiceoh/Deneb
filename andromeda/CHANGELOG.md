@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.0.64](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.63...andromeda-v0.0.64) (2026-07-11)
+
+
+### ✨ Features
+
+* **andromeda:** 메일·위키·브리핑 답변 인쇄 — window.print + [@media](https://github.com/media) print 서브트리 격리 ([#3400](https://github.com/choiceoh/Deneb/issues/3400)) ([723cc60](https://github.com/choiceoh/Deneb/commit/723cc6099d7bd7b31063daf0e94a994353f18f92))
+
+
+### 🐛 Bug Fixes
+
+* **runtime:** harden recovery and health reporting ([#3397](https://github.com/choiceoh/Deneb/issues/3397)) ([9d74081](https://github.com/choiceoh/Deneb/commit/9d74081fa924701d746e260f4c1f62ac4231cb46))
+
+
+### 🔧 Internal
+
+* **andromeda:** FleetPane 1178 LOC 분할 — 탭 뷰·카드는 FleetViews, 타입·헬퍼는 fleetHelpers (순수 이동) ([#3405](https://github.com/choiceoh/Deneb/issues/3405)) ([a033fe1](https://github.com/choiceoh/Deneb/commit/a033fe1d2d10b4a014880916b546ed301fb4929a))
+* **andromeda:** WikiPane 모달 분리 — 이동·새 페이지·미저장 모달을 WikiModals로 (순수 이동) ([#3407](https://github.com/choiceoh/Deneb/issues/3407)) ([4bc37f2](https://github.com/choiceoh/Deneb/commit/4bc37f2cc957a56fcb1e7685ca848576036ae063))
+* **andromeda:** 챗 surface 중복 제거 — ChatView·AIPanel 공유 로직 추출 (컴포저·첨부 파이프라인·모델 로딩·답변 액션) ([#3403](https://github.com/choiceoh/Deneb/issues/3403)) ([c4497c5](https://github.com/choiceoh/Deneb/commit/c4497c5b6a589f1d7c1f22a77d75135775f01888))
+* **andromeda:** 컴포넌트 파일의 비컴포넌트 export 분리 — react-refresh 경고 7개 제거 ([#3393](https://github.com/choiceoh/Deneb/issues/3393)) ([025c6b3](https://github.com/choiceoh/Deneb/commit/025c6b30daf48d1240d860a5f0a5f877f1cf285c))
+* raise code health to 90.1 ([#3438](https://github.com/choiceoh/Deneb/issues/3438)) ([0dbc45d](https://github.com/choiceoh/Deneb/commit/0dbc45d681a062ae09907f574f93ba8c132375cd))
+
 ## [0.0.63](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.62...andromeda-v0.0.63) (2026-07-09)
 
 
