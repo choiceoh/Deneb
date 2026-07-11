@@ -2,6 +2,8 @@
 
 **비서실장형 단일 AI 에이전트** (NVIDIA DGX Spark 플릿 · 단일 사용자 · Korean-first — 게이트웨이·배포·웜홀=srv4, GPU 보조=srv1·srv2). 한 페르소나가 업무분석(깊이)과 업무비서(능동)를 동시에 수행한다 — 분석/비서 *페르소나* 분리 금지 (기기별 반응형 레이아웃은 허용). 좁고 깊게: 완성도·응집도 우선, 옵션보다 opinionated 기본값.
 
+**프로젝트 주 목표(북극성, 2026-07): 에이전트의 재귀적 자가개선** — 개선 절차 자체를 진화 대상으로. 우선순위 판단·설계 결정은 [RSI 로드맵](docs/research/recursive-self-improvement-roadmap.md)(P1 절차 외부화 → P2 slow loop → P3 verifier 공진화 → P4 스킬+도구 번들)을 기준으로 한다.
+
 - `gateway-go/` — Go 게이트웨이 (HTTP+SSE, RPC 150+, 챗/LLM 파이프라인, 도구 통합). **주 런타임.**
 - `client-android/` — Kotlin Multiplatform **모바일** 클라 (Android 데일리드라이버 + iOS). Compose Desktop 타깃은 헤드리스 검증용으로만 잔존.
 - `andromeda/` — **데스크톱** 워크스테이션 (Tauri 2 + React 18 + Refine + Vite). 자체 게이트/가이드 보유.
