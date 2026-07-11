@@ -31,6 +31,10 @@ type WorkFeedDeps struct {
 	// item is the settled card (carries Source + RefID); actionID is the tapped
 	// answer (e.g. "dept:pl1").
 	OnAnswer func(item workfeed.Item, actionID string)
+	// OnMetaProposal, if set, applies a meta-proposal card's adopt/reject
+	// decision after the action settles (RSI P2 feed-card adoption). Same
+	// best-effort contract as OnAnswer.
+	OnMetaProposal func(item workfeed.Item, actionID string)
 }
 
 const (
@@ -210,6 +214,11 @@ func workFeedActionRun(deps WorkFeedDeps) rpcutil.HandlerFunc {
 			result.Item.Source == "deal_question" &&
 			strings.HasPrefix(actionID, "dept:") {
 			deps.OnAnswer(result.Item, actionID)
+		}
+		if deps.OnMetaProposal != nil &&
+			result.Item.Source == "genesis-meta" &&
+			strings.HasPrefix(actionID, "meta:") {
+			deps.OnMetaProposal(result.Item, actionID)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":             true,

@@ -6,11 +6,18 @@ package server
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 )
 
-const metaProposalSource = "genesis-meta"
+const (
+	metaProposalSource       = "genesis-meta"
+	metaProposalActionAdopt  = "meta:adopt"
+	metaProposalActionReject = "meta:reject"
+)
 
 // postMetaProposalCard surfaces one slow-loop proposal in the work feed.
 // Best-effort: a feed failure must never affect the meta-evolution cycle.
@@ -33,17 +40,70 @@ func (s *Server) postMetaProposalCard(artifact, epoch, reason, path string) {
 - 사유: %s
 - 제안 파일: %s
 
-채택하려면 제안 파일을 검토한 뒤 .proposed 확장자를 제거해 원본 자리에 두면 됩니다. 채택하지 않으면 그대로 두거나 삭제하세요 — 다음 주 사이클은 이 결정을 원장에서 읽습니다.`,
+아래 버튼으로 채택하거나 기각하세요 — 결정은 메타 경험 원장에 기록되어 다음 사이클이 읽습니다.`,
 		artifact, epochLabel, reason, path)
 	if _, err := nf.Append(workfeed.Item{
-		Source:  metaProposalSource,
-		Title:   "메타 개정 제안: " + artifact,
-		Summary: reason,
-		Body:    body,
-		RefType: "file",
-		RefID:   path,
-		Status:  "unread",
+		Source:   metaProposalSource,
+		Title:    "메타 개정 제안: " + artifact,
+		Summary:  reason,
+		Body:     body,
+		RefType:  "file",
+		RefID:    path,
+		Status:   "unread",
+		Question: true, // render the decision chips inline
+		Actions: []workfeed.Action{
+			{ID: metaProposalActionAdopt, Kind: workfeed.ActionAck, Label: "채택"},
+			{ID: metaProposalActionReject, Kind: workfeed.ActionAck, Label: "기각"},
+		},
 	}); err != nil {
 		s.logger.Warn("meta proposal 카드 생성 실패", "artifact", artifact, "error", err)
+	}
+}
+
+// handleMetaProposalAction applies the operator's feed-card decision: adopt
+// promotes the .proposed into the live artifact, reject discards it. Either
+// way the decision lands in the meta-experience ledger so the next weekly
+// cycles read it. Best-effort — the card has already settled.
+func (s *Server) handleMetaProposalAction(item workfeed.Item, actionID string) {
+	if s.genesisMeta == nil || s.genesisTracker == nil {
+		return
+	}
+	artifact := strings.TrimSuffix(filepath.Base(strings.TrimSpace(item.RefID)), ".proposed")
+	if artifact == "" || artifact == "." {
+		return
+	}
+	fallback := genesis.DefaultMetaArtifacts()[artifact]
+	fromVersion := s.genesisMeta.Version(artifact, fallback)
+	switch actionID {
+	case metaProposalActionAdopt:
+		toVersion, err := s.genesisMeta.AdoptProposal(artifact)
+		if err != nil {
+			s.logger.Warn("meta proposal 채택 실패", "artifact", artifact, "error", err)
+			return
+		}
+		if err := s.genesisTracker.LogMetaRevision(genesis.MetaRevisionRecord{
+			Artifact:    artifact,
+			FromVersion: fromVersion,
+			ToVersion:   toVersion,
+			Action:      "adopted",
+			Reason:      "operator adopted from feed card",
+		}); err != nil {
+			s.logger.Warn("meta adoption ledger write failed", "artifact", artifact, "error", err)
+		}
+		s.logger.Info("meta proposal adopted from feed card", "artifact", artifact, "from", fromVersion, "to", toVersion)
+	case metaProposalActionReject:
+		if err := s.genesisMeta.RejectProposal(artifact); err != nil {
+			s.logger.Warn("meta proposal 기각 실패", "artifact", artifact, "error", err)
+			return
+		}
+		if err := s.genesisTracker.LogMetaRevision(genesis.MetaRevisionRecord{
+			Artifact:    artifact,
+			FromVersion: fromVersion,
+			Action:      "rejected",
+			Reason:      "operator rejected from feed card",
+		}); err != nil {
+			s.logger.Warn("meta rejection ledger write failed", "artifact", artifact, "error", err)
+		}
+		s.logger.Info("meta proposal rejected from feed card", "artifact", artifact)
 	}
 }

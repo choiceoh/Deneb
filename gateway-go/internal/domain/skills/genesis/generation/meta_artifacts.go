@@ -175,6 +175,43 @@ func (m *MetaArtifacts) WriteProposal(name, content string) (string, error) {
 	return path, nil
 }
 
+// AdoptProposal promotes <name>.proposed to the live artifact: atomic-ish
+// write of the proposal content over the live file, then the .proposed is
+// removed. The provenance sidecar is deliberately left untouched — the live
+// content no longer matches it, which is exactly the "revised since
+// materialization" state MaterializeDefaults never clobbers. Returns the
+// adopted content's version (sha12).
+func (m *MetaArtifacts) AdoptProposal(name string) (string, error) {
+	if m == nil || m.dir == "" {
+		return "", errors.New("meta artifacts unwired")
+	}
+	proposalPath := filepath.Join(m.dir, name+".proposed")
+	raw, err := os.ReadFile(proposalPath)
+	if err != nil {
+		return "", err
+	}
+	content := strings.TrimSpace(string(raw))
+	if len(content) < metaArtifactMinBytes {
+		return "", errors.New("proposal below the artifact size floor")
+	}
+	if err := os.WriteFile(filepath.Join(m.dir, name), []byte(content), 0o644); err != nil {
+		return "", err
+	}
+	if err := os.Remove(proposalPath); err != nil {
+		m.logger.Warn("adopted proposal file remove failed", "name", name, "error", err)
+	}
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:])[:12], nil
+}
+
+// RejectProposal discards <name>.proposed without touching the live artifact.
+func (m *MetaArtifacts) RejectProposal(name string) error {
+	if m == nil || m.dir == "" {
+		return errors.New("meta artifacts unwired")
+	}
+	return os.Remove(filepath.Join(m.dir, name+".proposed"))
+}
+
 // DefaultMetaArtifacts maps every known artifact to its compiled-in default —
 // the single registry MaterializeDefaults and tests share.
 func DefaultMetaArtifacts() map[string]string {
