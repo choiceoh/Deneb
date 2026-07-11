@@ -323,3 +323,18 @@ func TestNudger_RunStaleReview(t *testing.T) {
 		t.Fatal("disabled nudger must not fire")
 	}
 }
+
+func TestNudger_WouldReview(t *testing.T) {
+	n := newTestNudger(t, 3)
+	rich := SessionContext{Turns: 2, ToolActivities: []ToolActivity{{Name: "a"}, {Name: "b"}}}
+	if !n.WouldReview(rich) {
+		t.Fatal("review-worthy snapshot must pass the pre-filter")
+	}
+	if n.WouldReview(SessionContext{Turns: 0}) {
+		t.Fatal("thin snapshot must not pass")
+	}
+	n.interval = 0
+	if n.WouldReview(rich) {
+		t.Fatal("disabled nudger must not pass")
+	}
+}

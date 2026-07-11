@@ -33,7 +33,7 @@ import (
 const (
 	defaultIdleReviewStaleAfter = 6 * time.Hour
 	idleReviewRetryGap          = 2 * time.Hour
-	idleReviewCandidates        = 3
+	idleReviewCandidates        = 10
 )
 
 // idleReviewStaleAfterFromEnv resolves the staleness threshold. Empty env →
@@ -61,13 +61,22 @@ func idleReviewStaleAfterFromEnv(logger *slog.Logger) time.Duration {
 
 // idleReviewDue is the pure pacing check: fire only when reviews are stale
 // (or have never run) AND the lane's own last attempt is outside the retry
-// gap. lastReviewAtMs==0 means no review has ever completed — due.
-func idleReviewDue(now time.Time, lastReviewAtMs int64, staleAfter time.Duration, lastAttempt time.Time, retryGap time.Duration) bool {
+// gap. lastReviewAtMs==0 means no review has ever completed — due. A FAILED
+// last review (lastReviewOK=false) re-arms after the shorter retry gap
+// instead of the full stale window, so a transient model outage doesn't
+// suppress the backstop for hours (Codex P2, #3427).
+func idleReviewDue(now time.Time, lastReviewAtMs int64, lastReviewOK bool, staleAfter time.Duration, lastAttempt time.Time, retryGap time.Duration) bool {
 	if staleAfter <= 0 {
 		return false
 	}
-	if lastReviewAtMs > 0 && now.Sub(time.UnixMilli(lastReviewAtMs)) < staleAfter {
-		return false
+	if lastReviewAtMs > 0 {
+		threshold := staleAfter
+		if !lastReviewOK && retryGap < threshold {
+			threshold = retryGap
+		}
+		if now.Sub(time.UnixMilli(lastReviewAtMs)) < threshold {
+			return false
+		}
 	}
 	if !lastAttempt.IsZero() && now.Sub(lastAttempt) < retryGap {
 		return false
@@ -131,6 +140,20 @@ func recentRealSessionKeys(dir string, limit int) ([]string, error) {
 	return keys, nil
 }
 
+// idleSkillReviewLaneIfProduction returns the lane closure only when this
+// process owns the production state dir (productionStateDir — the same
+// invariant memory-backup gates on). A dev/live-test instance
+// (DENEB_STATE_DIR=/tmp/...) reads production transcripts and would write
+// review liveness/proposals into production Propus state, so the lane stays
+// off there (Codex P2, #3427).
+func (s *Server) idleSkillReviewLaneIfProduction(homeDir string) func(ctx context.Context) (bool, string) {
+	if _, prod := s.productionStateDir(homeDir); !prod {
+		s.logger.Info("idle skill review lane disabled: non-production state dir")
+		return nil
+	}
+	return s.newIdleSkillReviewLane()
+}
+
 // newIdleSkillReviewLane returns the heartbeat closure for this lane. Genesis
 // deps late-bind via field reads per tick (genesis init runs after session
 // wiring — same ordering-immune trick as the other heartbeat lanes). The
@@ -147,7 +170,7 @@ func (s *Server) newIdleSkillReviewLane() func(ctx context.Context) (bool, strin
 		}
 		live := tracker.LivenessSnapshot()
 		now := time.Now()
-		if !idleReviewDue(now, live.LastReviewAt, staleAfter, lastAttempt, idleReviewRetryGap) {
+		if !idleReviewDue(now, live.LastReviewAt, live.LastReviewOK, staleAfter, lastAttempt, idleReviewRetryGap) {
 			return false, ""
 		}
 		lastAttempt = now
@@ -169,6 +192,12 @@ func (s *Server) newIdleSkillReviewLane() func(ctx context.Context) (bool, strin
 		for _, key := range keys {
 			sctx, err := buildSkillLifecycleSessionContext(store, key)
 			if err != nil {
+				continue
+			}
+			// Pre-filter thin transcripts without burning attempt/skip
+			// counters — a run of short native chats must not starve the
+			// lane when reviewable evidence sits just past them (Codex P2).
+			if !nudger.WouldReview(sctx) {
 				continue
 			}
 			fired, err := nudger.RunStaleReview(key, sctx)

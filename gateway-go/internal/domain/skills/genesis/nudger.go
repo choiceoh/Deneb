@@ -290,6 +290,14 @@ func (n *Nudger) fire(parent context.Context, sessionKey string, snapshot Sessio
 	})
 }
 
+// WouldReview reports whether snapshot would pass the review evaluate gate.
+// The idle backstop uses it to pre-filter thin transcripts without burning
+// the attempt/skip liveness counters; RunStaleReview still enforces the gate
+// itself, so this is an optimization, not a bypass.
+func (n *Nudger) WouldReview(snapshot SessionContext) bool {
+	return n.Enabled() && n.svc.EvaluateReview(snapshot)
+}
+
 // RunStaleReview fires one fenced review outside the per-session tool-call
 // cadence — the idle backstop for stretches where no real user turn crosses
 // the nudge threshold (user away for a day, deploy churn cancelling forks),
