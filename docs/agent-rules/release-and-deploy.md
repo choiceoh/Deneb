@@ -27,6 +27,53 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
 - 스크립트는 **항상 exit 0** (실패는 로그로만) — 빨간 unit 상태를 보고 타이머를 꺼버리는
   사고 방지. 같은 커밋 재시도는 600초 스로틀.
 
+## 배포 롤백 워치 (deploy-watch)
+
+- `auto-deploy.sh`가 deploy OK 직후 `scripts/deploy/deploy-watch.sh`를 백그라운드로
+  발사한다(fail-open — 스크립트 부재 시 배포는 정상 진행). 워치는 기본 600초 동안
+  30초 간격으로 `/health`와 게이트웨이 저널 ERROR 수를 감시하고, health 연속 2회
+  실패 또는 ERROR 예산(기본 30) 초과 시 **직전 바이너리(`dist/deneb-gateway.bak-prev`)
+  복원 + `systemctl --user restart`**로 자동 롤백한다 (git 무접촉; 다운그레이드
+  가드는 SIGUSR1 경로에만 있어 hard restart가 복원 바이너리를 부팅).
+- 롤백된 head는 `~/.deneb/auto-deploy.regressed-head`에 기록되어 **더 새로운
+  커밋이 main에 landing될 때까지** 재배포가 차단된다. 로그: `/tmp/deneb-deploy-watch.log`.
+- env: `DENEB_DEPLOY_WATCH_SEC`·`_POLL_SEC`·`_ERROR_BUDGET`. 이 워치가 RSI L4
+  소스 자가편집의 auto-apply 전제 안전망이다 (docs/research 로드맵 L4 절).
+
+## 코딩 디스패치 (RSI L4 실행 레인 — 오퍼레이터 활성 필요)
+
+- `scripts/dev/coding-dispatch.sh`: 자기교정 큐(`~/.deneb/data/skill_self_correction.jsonl`)의
+  미배차 proposed 소스 후보(scope=code, 증거 기반 Source) 1건을 골라 프로덕션
+  클론의 새 워크트리에서 **Claude Code 헤드리스**(`~/.claude/remote/ccd-cli/` 최신)로
+  구현을 배차한다. 세션 프롬프트가 CLAUDE.md 게이트 준수 + 그린 시 `pr.sh land`
+  랜딩까지 지시하며, 배차 마커(`~/.deneb/data/coding_dispatch/<id>.json`)와 일일
+  상한(`DENEB_DISPATCH_DAILY_CAP`, 기본 2)이 재배차·토큰 예산을 통제한다.
+- **상설화(타이머)는 자동 설치하지 않는다** — 무인 자율 코딩 루프의 스위치는
+  오퍼레이터가 직접 켠다. 수동 1회 실행: `scripts/dev/coding-dispatch.sh`.
+  상설 활성(오퍼레이터, srv4에서 1회):
+
+```bash
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/deneb-coding-dispatch.service <<'UNIT'
+[Unit]
+Description=Deneb RSI L4 coding dispatch (self-correction queue -> Claude Code headless)
+[Service]
+Type=oneshot
+ExecStart=%h/deneb/scripts/dev/coding-dispatch.sh
+UNIT
+cat > ~/.config/systemd/user/deneb-coding-dispatch.timer <<'UNIT'
+[Unit]
+Description=Run Deneb coding dispatch every 2 hours
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=2h
+Persistent=true
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl --user daemon-reload && systemctl --user enable --now deneb-coding-dispatch.timer
+```
+
 ## 수동 배포 (폴백)
 
 - `make gateway-prod` — 프로덕션 바이너리 (`dist/deneb-gateway`).

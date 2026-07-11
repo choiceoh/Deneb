@@ -39,6 +39,10 @@ PROD_DIR="${DENEB_PROD_DIR:-$HOME/deneb}"
 STATE_DIR="${DENEB_STATE_DIR:-$HOME/.deneb}"
 STATE_FILE="$STATE_DIR/auto-deploy.deployed-head"
 FAIL_FILE="$STATE_DIR/auto-deploy.failed-head"
+# Head auto-rolled-back by deploy-watch.sh — blocked until a NEWER commit
+# lands (remote head change clears it implicitly; file is informational after).
+REGRESS_FILE="$STATE_DIR/auto-deploy.regressed-head"
+PREV_HEAD_FILE="$STATE_DIR/auto-deploy.prev-head"
 DIRTY_FAIL_FILE="$STATE_DIR/auto-deploy.dirty-failed"
 PAUSE_FILE="${DENEB_AUTO_DEPLOY_PAUSE_FILE:-$STATE_DIR/auto-deploy.paused}"
 LOCK_FILE="/tmp/deneb-auto-deploy.lock"
@@ -243,6 +247,16 @@ if recent_failed_head "$remote_head"; then
     exit 0
 fi
 
+# deploy-watch rollback guard: a head the post-swap watch reverted must not
+# redeploy — only a newer commit (different remote head) resumes deploys.
+if [[ -f "$REGRESS_FILE" ]]; then
+    regressed_head=$(cut -d' ' -f1 < "$REGRESS_FILE" 2>/dev/null || true)
+    if [[ -n "$regressed_head" && "$regressed_head" == "$remote_head" ]]; then
+        log "skipping deploy: head ${remote_head:0:10} was auto-rolled-back by deploy-watch (waiting for a newer commit)"
+        exit 0
+    fi
+fi
+
 # PR-stack guard. 2026-06-10: 12 PRs merged in 31 minutes produced 12
 # build+restart cycles; each restart aborted in-flight cron agent turns
 # (three mail analyses lost). Deploying only once main has been quiet for
@@ -270,9 +284,20 @@ set -e
 if (( rc == 0 )); then
     deployed_now=$(git rev-parse HEAD)
     mkdir -p "$STATE_DIR"
+    # Remember what we replaced so the rollback watch can restore the record.
+    if [[ -n "${deployed_head:-}" ]]; then
+        printf '%s\n' "$deployed_head" > "$PREV_HEAD_FILE"
+    fi
     printf '%s\n' "$deployed_now" > "$STATE_FILE"
     rm -f "$FAIL_FILE" "$DIRTY_FAIL_FILE"
     log "deploy OK (head now $deployed_now)"
+    # Post-swap rollback watch (L4 auto-apply precondition): detached so this
+    # tick's lock releases; the watch self-terminates on window end or when a
+    # newer deploy supersedes it. Fail-open — a missing watch never blocks.
+    if [[ -x "$PROD_DIR/scripts/deploy/deploy-watch.sh" ]]; then
+        nohup "$PROD_DIR/scripts/deploy/deploy-watch.sh" "$deployed_now" >/dev/null 2>&1 &
+        log "deploy-watch launched for ${deployed_now:0:10}"
+    fi
 else
     record_failure "$remote_head"
     log "deploy FAILED (rc=$rc) — manual intervention may be required"
