@@ -87,7 +87,8 @@ type wikiResearchTask struct {
 }
 
 // Name returns the component's stable scheduler name.
-func (t *wikiResearchTask) Name() string            { return "wiki-research" }
+func (t *wikiResearchTask) Name() string { return "wiki-research" }
+
 // Interval returns the component's scheduling cadence.
 func (t *wikiResearchTask) Interval() time.Duration { return wikiResearchInterval }
 

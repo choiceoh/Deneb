@@ -23,8 +23,10 @@ func TestGenerateIsDeterministicAndHonorsMetadata(t *testing.T) {
 	}
 
 	got := generate(doc, "data/sample.json")
-	for _, want := range []string{"//go:build tools", "package sample", `import "time"`,
-		"var Alpha = []string{", `"first"`, `"second"`, "var Zed = map[string]int{"} {
+	for _, want := range []string{
+		"//go:build tools", "package sample", `import "time"`,
+		"var Alpha = []string{", `"first"`, `"second"`, "var Zed = map[string]int{",
+	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("generated output missing %q\n%s", want, got)
 		}

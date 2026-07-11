@@ -48,7 +48,8 @@ type validationBackfillTask struct {
 }
 
 // Name returns the component's stable scheduler name.
-func (t *validationBackfillTask) Name() string            { return "validation-backfill" }
+func (t *validationBackfillTask) Name() string { return "validation-backfill" }
+
 // Interval returns the component's scheduling cadence.
 func (t *validationBackfillTask) Interval() time.Duration { return validationBackfillInterval }
 

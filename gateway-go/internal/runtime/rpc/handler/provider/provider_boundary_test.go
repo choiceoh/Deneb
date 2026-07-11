@@ -138,7 +138,8 @@ func TestProvidersListDeterministicAndEmptyNonNil(t *testing.T) {
 		t.Fatalf("empty providers = %#v", got.Providers)
 	}
 
-	r := registerPlugins(t,
+	r := registerPlugins(
+		t,
 		basicPlugin{id: "zeta", label: "Zeta"},
 		aliasOnlyPlugin{basicPlugin: basicPlugin{id: "alpha", label: "Alpha"}, aliases: []string{"a", "first"}},
 		basicPlugin{id: "middle", label: "Middle"},
@@ -157,7 +158,8 @@ func TestProvidersListDeterministicAndEmptyNonNil(t *testing.T) {
 }
 
 func TestProvidersGetValidationNormalizationAliasesAndMalformed(t *testing.T) {
-	r := registerPlugins(t,
+	r := registerPlugins(
+		t,
 		aliasOnlyPlugin{basicPlugin: basicPlugin{id: "open-ai", label: "Open AI"}, aliases: []string{"OpenAI", "oa"}},
 	)
 	methods := Methods(Deps{Providers: r})
@@ -190,7 +192,8 @@ func TestProvidersCatalogSuccessUnknownPlainErrorNilAndCancellation(t *testing.T
 		{Provider: "good", ModelID: "m1", Label: "Model 1", ContextWindow: 128000, Reasoning: true, APIType: "openai"},
 		{Provider: "good", ModelID: "m2"},
 	}
-	r := registerPlugins(t,
+	r := registerPlugins(
+		t,
 		catalogPlugin{id: "good", label: "Good", entries: entries},
 		catalogPlugin{id: "broken", label: "Broken", err: errors.New("offline")},
 		catalogPlugin{id: "nil", label: "Nil", entries: nil},
@@ -255,7 +258,8 @@ func TestProvidersAuthPreparePassthroughValidationAndManagedSuccess(t *testing.T
 }
 
 func TestAuthManagerPluginFailureAndNilResultDegradeToInputKey(t *testing.T) {
-	r := registerPlugins(t,
+	r := registerPlugins(
+		t,
 		runtimePlugin{catalogPlugin: catalogPlugin{id: "broken-auth"}, authErr: errors.New("oauth down")},
 		runtimePlugin{catalogPlugin: catalogPlugin{id: "nil-auth"}, prepared: nil},
 	)
@@ -272,7 +276,8 @@ func TestAuthManagerPluginFailureAndNilResultDegradeToInputKey(t *testing.T) {
 }
 
 func TestModelsListSkipsNonCatalogErrorsNilAndPreservesProviderOrder(t *testing.T) {
-	r := registerPlugins(t,
+	r := registerPlugins(
+		t,
 		catalogPlugin{id: "zeta", entries: []providercore.CatalogEntry{{Provider: "zeta", ModelID: "z1"}, {Provider: "zeta", ModelID: "z2"}}},
 		catalogPlugin{id: "alpha", entries: []providercore.CatalogEntry{{Provider: "alpha", ModelID: "a1"}}},
 		catalogPlugin{id: "broken", err: errors.New("offline")},
@@ -298,7 +303,8 @@ func TestModelsListSkipsNonCatalogErrorsNilAndPreservesProviderOrder(t *testing.
 }
 
 func TestConcurrentProviderReadsAreDeterministic(t *testing.T) {
-	r := registerPlugins(t,
+	r := registerPlugins(
+		t,
 		catalogPlugin{id: "b", entries: []providercore.CatalogEntry{{Provider: "b", ModelID: "b1"}}},
 		catalogPlugin{id: "a", entries: []providercore.CatalogEntry{{Provider: "a", ModelID: "a1"}}},
 	)

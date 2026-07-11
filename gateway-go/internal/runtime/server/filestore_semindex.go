@@ -164,7 +164,8 @@ type semindexTask struct {
 }
 
 // Name returns the component's stable scheduler name.
-func (t *semindexTask) Name() string            { return "file-semindex" }
+func (t *semindexTask) Name() string { return "file-semindex" }
+
 // Interval returns the component's scheduling cadence.
 func (t *semindexTask) Interval() time.Duration { return semindexInterval }
 

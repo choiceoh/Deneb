@@ -46,7 +46,8 @@ const (
 )
 
 // Name returns the component's stable scheduler name.
-func (t *SkillWorkoutTask) Name() string            { return "skill-workout" }
+func (t *SkillWorkoutTask) Name() string { return "skill-workout" }
+
 // Interval returns the component's scheduling cadence.
 func (t *SkillWorkoutTask) Interval() time.Duration { return skillWorkoutInterval }
 

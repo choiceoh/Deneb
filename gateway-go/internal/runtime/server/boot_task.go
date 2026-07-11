@@ -37,7 +37,8 @@ type bootTask struct {
 }
 
 // Name returns the component's stable scheduler name.
-func (t *bootTask) Name() string            { return "boot" }
+func (t *bootTask) Name() string { return "boot" }
+
 // Interval returns the component's scheduling cadence.
 func (t *bootTask) Interval() time.Duration { return 24 * time.Hour }
 
