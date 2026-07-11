@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"sort"
@@ -93,10 +95,10 @@ func idleReviewableSessionKey(key string) bool {
 // recentRealSessionKeys lists the newest reviewable session keys from the
 // on-disk transcript dir — durable across the deploy restarts that empty the
 // in-memory session manager (transcript filenames are the session keys).
-func recentRealSessionKeys(dir string, limit int) []string {
+func recentRealSessionKeys(dir string, limit int) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	type candidate struct {
 		key string
@@ -126,7 +128,7 @@ func recentRealSessionKeys(dir string, limit int) []string {
 	for _, c := range cands {
 		keys = append(keys, c.key)
 	}
-	return keys
+	return keys, nil
 }
 
 // newIdleSkillReviewLane returns the heartbeat closure for this lane. Genesis
@@ -153,7 +155,18 @@ func (s *Server) newIdleSkillReviewLane() func(ctx context.Context) (bool, strin
 		if live.LastReviewAt > 0 {
 			staleFor = now.Sub(time.UnixMilli(live.LastReviewAt)).Round(time.Minute).String()
 		}
-		for _, key := range recentRealSessionKeys(transcriptBaseDir(), idleReviewCandidates) {
+		keys, err := recentRealSessionKeys(transcriptBaseDir(), idleReviewCandidates)
+		if err != nil {
+			// A missing dir is a fresh install (quiet); anything else is an
+			// operational failure that must not masquerade as "no candidates".
+			if errors.Is(err, fs.ErrNotExist) {
+				s.logger.Debug("idle skill review: transcript dir absent", "dir", transcriptBaseDir())
+			} else {
+				s.logger.Warn("idle skill review: transcript dir unreadable", "dir", transcriptBaseDir(), "error", err)
+			}
+			return false, ""
+		}
+		for _, key := range keys {
 			sctx, err := buildSkillLifecycleSessionContext(store, key)
 			if err != nil {
 				continue

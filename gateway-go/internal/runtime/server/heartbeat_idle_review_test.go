@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -77,7 +79,10 @@ func TestRecentRealSessionKeys_FilterAndOrder(t *testing.T) {
 	write("cron:morning-letter:1.jsonl", time.Minute)
 	write("notes.txt", time.Minute) // non-transcript file
 
-	got := recentRealSessionKeys(dir, 2)
+	got, err := recentRealSessionKeys(dir, 2)
+	if err != nil {
+		t.Fatalf("recentRealSessionKeys: %v", err)
+	}
 	want := []string{"client:main:abc", "client:main"}
 	if len(got) != len(want) {
 		t.Fatalf("keys = %v, want %v", got, want)
@@ -88,8 +93,9 @@ func TestRecentRealSessionKeys_FilterAndOrder(t *testing.T) {
 		}
 	}
 
-	if keys := recentRealSessionKeys(filepath.Join(dir, "missing"), 3); keys != nil {
-		t.Fatalf("missing dir should yield nil, got %v", keys)
+	keys, err := recentRealSessionKeys(filepath.Join(dir, "missing"), 3)
+	if keys != nil || !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("missing dir should surface fs.ErrNotExist with no keys, got (%v, %v)", keys, err)
 	}
 }
 
@@ -129,11 +135,13 @@ func TestIdleReviewStaleAfterFromEnv(t *testing.T) {
 // review loop. chatHandler only needs to be non-nil here: with no
 // HEARTBEAT.md, no signals, and no nudges the tick returns before any turn.
 func TestHeartbeatRun_ReachesIdleReviewLane(t *testing.T) {
-	if !withinActiveHours(time.Now()) {
-		t.Skip("outside heartbeat active hours (KST) — Run() no-ops by design")
-	}
 	called := false
+	kst, err := time.LoadLocation("Asia/Seoul")
+	if err != nil {
+		t.Fatalf("tz: %v", err)
+	}
 	task := &heartbeatTask{
+		nowFn:       func() time.Time { return time.Date(2026, 7, 11, 12, 0, 0, 0, kst) },
 		chatHandler: &chat.Handler{},
 		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
 		homeDir:     t.TempDir(),

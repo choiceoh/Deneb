@@ -105,6 +105,18 @@ type heartbeatTask struct {
 	// fires even on an otherwise empty tick. Nil → lane disabled. See
 	// heartbeat_idle_review.go.
 	idleSkillReview func(ctx context.Context) (fired bool, detail string)
+
+	// nowFn overrides the task clock in tests so the active-hours gate is
+	// deterministic (a real run leaves it nil → time.Now).
+	nowFn func() time.Time
+}
+
+// now returns the task clock (nowFn in tests, time.Now in production).
+func (t *heartbeatTask) now() time.Time {
+	if t.nowFn != nil {
+		return t.nowFn()
+	}
+	return time.Now()
 }
 
 func (t *heartbeatTask) Name() string            { return "heartbeat" }
@@ -159,7 +171,7 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		return nil
 	}
 
-	if !withinActiveHours(time.Now()) {
+	if !withinActiveHours(t.now()) {
 		t.logger.Debug("heartbeat: skipped, outside active hours")
 		return nil
 	}
