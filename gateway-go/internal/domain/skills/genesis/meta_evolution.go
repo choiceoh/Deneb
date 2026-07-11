@@ -105,6 +105,41 @@ func (t *Tracker) RecentMetaRevisions(limit int) ([]MetaRevisionRecord, error) {
 	return out, nil
 }
 
+// MetaEvolutionHealth summarizes the slow loop for the health scoreboard.
+type MetaEvolutionHealth struct {
+	Revisions7d  int    `json:"revisions7d"`
+	Proposed7d   int    `json:"proposed7d"`
+	LastArtifact string `json:"lastArtifact,omitempty"`
+	LastEpoch    string `json:"lastEpoch,omitempty"`
+	LastReason   string `json:"lastReason,omitempty"`
+	LastProposed bool   `json:"lastProposed,omitempty"`
+}
+
+// MetaEvolutionHealth computes the 7-day slow-loop scoreboard from the ledger.
+func (t *Tracker) MetaEvolutionHealth() MetaEvolutionHealth {
+	var out MetaEvolutionHealth
+	entries, err := t.RecentMetaRevisions(50)
+	if err != nil || len(entries) == 0 {
+		return out
+	}
+	cutoff := time.Now().Add(-7 * 24 * time.Hour).UnixMilli()
+	for _, e := range entries {
+		if e.CreatedAt < cutoff {
+			continue
+		}
+		out.Revisions7d++
+		if e.Proposed {
+			out.Proposed7d++
+		}
+	}
+	newest := entries[0]
+	out.LastArtifact = newest.Artifact
+	out.LastEpoch = newest.Epoch
+	out.LastReason = truncateRunes(newest.Reason, 200)
+	out.LastProposed = newest.Proposed
+	return out
+}
+
 // MetaEvolutionTask is the weekly slow-loop cycle. Registered like the other
 // genesis autonomous tasks; a dev/live-test instance writes only under its
 // isolated state dir, so no extra production gate is needed for propose-only.
@@ -113,6 +148,10 @@ type MetaEvolutionTask struct {
 	Meta    *MetaArtifacts
 	Tracker *Tracker
 	Logger  *slog.Logger
+
+	// OnProposal, when set, surfaces a written proposal to the operator (work
+	// feed card). Best-effort: surfacing failures never affect the cycle.
+	OnProposal func(artifact, epoch, reason, path string)
 
 	// pending bench outcomes for the in-flight cycle's ledger write (set via
 	// recordWithBench; Run is single-flight per task so no locking needed).
@@ -232,6 +271,9 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	toVersion := contentSHA256(strings.TrimSpace(proposal))[:12]
 	logger.Info("meta-evolution: revision proposed (propose-only — adoption is a separate decision)",
 		"artifact", artifact, "epoch", epoch, "from", fromVersion, "to", toVersion, "path", path)
+	if t.OnProposal != nil {
+		t.OnProposal(artifact, epoch, reason, path)
+	}
 	return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow, true, toVersion, reason)
 }
 

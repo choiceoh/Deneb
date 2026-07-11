@@ -63,6 +63,18 @@ func (s *Server) collectPropusHealth() (map[string]any, bool) {
 		section["thrash"] = true
 	}
 
+	// RSI P2 slow loop: the weekly meta-evolution cycle and its propose-only
+	// output, so a silent slow loop (or a waiting .proposed) is visible here.
+	meta := s.genesisTracker.MetaEvolutionHealth()
+	section["meta_revisions_7d"] = meta.Revisions7d
+	section["meta_proposed_7d"] = meta.Proposed7d
+	if meta.LastArtifact != "" {
+		section["meta_last_artifact"] = meta.LastArtifact
+		section["meta_last_epoch"] = meta.LastEpoch
+		section["meta_last_proposed"] = meta.LastProposed
+		section["meta_last_reason"] = meta.LastReason
+	}
+
 	selfHarness := s.genesisTracker.SelfHarnessSignals()
 	section["self_harness_rejections_7d"] = selfHarness.Rejections7d
 	section["self_harness_missing_audit_rejections_7d"] = selfHarness.MissingAuditRejections7d

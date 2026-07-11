@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"context"
 	"log/slog"
 	"strings"
 	"testing"
@@ -133,5 +134,49 @@ func TestWriteProposal_DoesNotTouchLiveArtifact(t *testing.T) {
 	}
 	if got := m.Load("prompt.md", "fallback"); got != strings.TrimSpace(live) {
 		t.Fatalf("live artifact changed: %q", got)
+	}
+}
+
+// The 7d scoreboard reads the ledger: counts within the window, newest entry
+// summarized.
+func TestMetaEvolutionHealth(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := tr.MetaEvolutionHealth(); h.Revisions7d != 0 || h.LastArtifact != "" {
+		t.Fatalf("empty ledger scoreboard = %+v", h)
+	}
+	old := MetaRevisionRecord{Epoch: metaEpochProducer, Artifact: MetaEvolveSystemPrompt, FromVersion: "v0", Reason: "ancient", CreatedAt: 1}
+	if err := tr.LogMetaRevision(old); err != nil {
+		t.Fatal(err)
+	}
+	fresh := MetaRevisionRecord{Epoch: metaEpochEvaluator, Artifact: MetaSkillJudgeSystemPrompt, FromVersion: "v1", ToVersion: "v2", Proposed: true, Reason: "recent proposal"}
+	if err := tr.LogMetaRevision(fresh); err != nil {
+		t.Fatal(err)
+	}
+	h := tr.MetaEvolutionHealth()
+	if h.Revisions7d != 1 || h.Proposed7d != 1 {
+		t.Fatalf("window counts = %+v (ancient entry must be excluded)", h)
+	}
+	if h.LastArtifact != MetaSkillJudgeSystemPrompt || !h.LastProposed || h.LastReason != "recent proposal" {
+		t.Fatalf("newest summary = %+v", h)
+	}
+}
+
+// OnProposal surfacing must not be reachable from skip/rejection paths — only
+// a gate-passing proposal calls it. (Direct wiring check: callback rides Run's
+// success tail; here we pin the nil-safety contract.)
+func TestMetaEvolutionTask_OnProposalNilSafe(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// No Evolver/Meta wired → Run is a no-op and must not touch OnProposal.
+	task := &MetaEvolutionTask{Tracker: tr, OnProposal: func(_, _, _, _ string) { t.Fatal("OnProposal called on no-op run") }}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 }
