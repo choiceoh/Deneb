@@ -147,7 +147,15 @@ func (t *Tracker) LogEvolveWithProvenance(skillName, newVersion, description str
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
 	if t.rollbackThreshold > 0 {
-		t.postEvolve[skillName] = &evolveWatch{version: newVersion, audit: audit}
+		w := &evolveWatch{version: newVersion, audit: audit}
+		// Pre-evolve baseline snapshot (PACE): what "healthy" looked like
+		// before this evolve, for the future baseline-aware rollback test.
+		if s := t.getStatsLocked(skillName); s != nil {
+			w.baselineUses = s.TotalUses
+			w.baselineFails = s.FailureCount
+		}
+		t.postEvolve[skillName] = w
+		t.saveWatchesLocked()
 	}
 	if err := jsonlstore.Append(t.logPath, evolveLogEntry{
 		Type:             "evolved",

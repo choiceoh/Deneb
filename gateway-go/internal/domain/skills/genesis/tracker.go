@@ -117,6 +117,7 @@ type Tracker struct {
 	logPath             string
 	curatorPath         string
 	livenessPath        string
+	watchPath           string
 	rejectedPath        string
 	opportunityPath     string
 	optimizerMemoryPath string
@@ -162,6 +163,26 @@ type evolveWatch struct {
 	postUses  int
 	postFails int
 	recurred  int
+	// Pre-evolve baseline snapshot (RSI P1.5, PACE): captured when the watch
+	// opens so a future baseline-aware rollback can test "worse than before"
+	// instead of the baseline-blind absolute threshold, and so P3 can audit
+	// which rollbacks were true regressions. Recorded now, consumed later.
+	baselineUses  int
+	baselineFails int
+}
+
+// persistedEvolveWatch is the JSON shape of one in-flight rollback watch.
+// Persisted so the frequent SIGUSR1 deploy restarts stop silently discarding
+// active watches (a shipped evolve then never resolved to rolled_back OR
+// confirmed — a confirmed liveness gap).
+type persistedEvolveWatch struct {
+	Version       string           `json:"version"`
+	Audit         HarnessEditAudit `json:"audit,omitempty"`
+	PostUses      int              `json:"postUses,omitempty"`
+	PostFails     int              `json:"postFails,omitempty"`
+	Recurred      int              `json:"recurred,omitempty"`
+	BaselineUses  int              `json:"baselineUses,omitempty"`
+	BaselineFails int              `json:"baselineFails,omitempty"`
 }
 
 // usageAgg holds running aggregates per skill.
@@ -193,6 +214,7 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 		logPath:             filepath.Join(dir, "skill_genesis_log.jsonl"),
 		curatorPath:         filepath.Join(dir, "skill_curator_state.json"),
 		livenessPath:        filepath.Join(dir, "skill_liveness.json"),
+		watchPath:           filepath.Join(dir, "skill_evolve_watch.json"),
 		rejectedPath:        filepath.Join(dir, "skill_rejected_edits.jsonl"),
 		opportunityPath:     filepath.Join(dir, "skill_opportunities.jsonl"),
 		optimizerMemoryPath: filepath.Join(dir, "skill_optimizer_memory.json"),
@@ -212,6 +234,12 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 	for _, r := range records {
 		t.ingest(r)
 	}
+
+	// Restore in-flight rollback watches (RSI P1.5): before persistence every
+	// SIGUSR1 deploy restart silently dropped active watches, so evolves that
+	// shipped shortly before a deploy never resolved to rolled_back OR
+	// confirmed. Best-effort: a missing/corrupt file starts clean.
+	t.loadWatchesLocked()
 
 	return t, nil
 }

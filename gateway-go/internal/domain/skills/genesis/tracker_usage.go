@@ -1,9 +1,13 @@
 package genesis
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
@@ -87,6 +91,60 @@ func (t *Tracker) RecordUsage(record UsageRecord) error {
 // sub-threshold coupling HarnessX §6.6 documents) still rolls back. Caller holds
 // t.mu; the callback runs lock-free in a recovered goroutine (it re-enters the
 // tracker via LogEvolveRolledBack, so it must not run under the lock).
+// loadWatchesLocked restores persisted in-flight watches. Caller holds no
+// lock during NewTracker; named for the convention since it touches t state.
+func (t *Tracker) loadWatchesLocked() {
+	raw, err := os.ReadFile(t.watchPath)
+	if err != nil {
+		return // absent (fresh install) or unreadable — start clean
+	}
+	var persisted map[string]persistedEvolveWatch
+	if err := json.Unmarshal(raw, &persisted); err != nil {
+		if t.logger != nil {
+			t.logger.Warn("genesis: evolve watch state corrupt, starting clean", "error", err)
+		}
+		return
+	}
+	for skill, w := range persisted {
+		t.postEvolve[skill] = &evolveWatch{
+			version:       w.Version,
+			audit:         w.Audit,
+			postUses:      w.PostUses,
+			postFails:     w.PostFails,
+			recurred:      w.Recurred,
+			baselineUses:  w.BaselineUses,
+			baselineFails: w.BaselineFails,
+		}
+	}
+	if len(persisted) > 0 && t.logger != nil {
+		t.logger.Info("genesis: restored in-flight evolve watches", "count", len(persisted))
+	}
+}
+
+// saveWatchesLocked persists the in-flight watches (caller holds t.mu).
+// Best-effort: a write failure is logged, never blocks the usage path.
+func (t *Tracker) saveWatchesLocked() {
+	out := make(map[string]persistedEvolveWatch, len(t.postEvolve))
+	for skill, w := range t.postEvolve {
+		out[skill] = persistedEvolveWatch{
+			Version:       w.version,
+			Audit:         w.audit,
+			PostUses:      w.postUses,
+			PostFails:     w.postFails,
+			Recurred:      w.recurred,
+			BaselineUses:  w.baselineUses,
+			BaselineFails: w.baselineFails,
+		}
+	}
+	raw, err := json.Marshal(out)
+	if err == nil {
+		err = atomicfile.WriteFile(t.watchPath, raw, &atomicfile.Options{Perm: 0o600})
+	}
+	if err != nil && t.logger != nil {
+		t.logger.Warn("genesis: evolve watch persist failed", "error", err)
+	}
+}
+
 func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 	w := t.postEvolve[r.SkillName]
 	if w == nil || t.rollback == nil {
@@ -105,11 +163,13 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 			w.recurred++
 		}
 	}
+	t.saveWatchesLocked()
 	// Regression: threshold failures within the window — fire the rollback.
 	if w.postFails >= t.rollbackThreshold {
 		recurred := w.recurred
 		threshold := t.rollbackThreshold // capture under the lock; the goroutine must not read t.* fields
 		delete(t.postEvolve, r.SkillName)
+		t.saveWatchesLocked()
 		fn := t.rollback
 		skill := r.SkillName
 		go func() {
@@ -136,6 +196,7 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 		audit := w.audit
 		skill := r.SkillName
 		delete(t.postEvolve, r.SkillName)
+		t.saveWatchesLocked()
 		go func() {
 			defer func() {
 				if rec := recover(); rec != nil && t.logger != nil {
