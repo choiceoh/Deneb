@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -68,6 +69,22 @@ func (s *Server) initGenesisServices() {
 	}
 
 	s.genesisEvolver = genesis.NewEvolver(lwClient, s.skillCatalog, s.genesisTracker, lwModel, s.logger)
+
+	// RSI P1 (docs/research/recursive-self-improvement-roadmap.md): the
+	// generative half of the improvement pipeline resolves its system prompts
+	// from versioned artifacts under <managed genesis dir>/meta, with the
+	// compiled-in constants as fallback. Materialization (write-if-absent
+	// byte-copies) is production-state gated — the same invariant as the
+	// idle-review lane — while loading is read-only+fallback everywhere, so a
+	// dev instance behaves identically without touching production state.
+	metaArtifacts := genesis.NewMetaArtifacts(filepath.Join(cfg.OutputDir, "meta"), s.logger)
+	if home, err := os.UserHomeDir(); err == nil {
+		if _, prod := s.productionStateDir(home); prod {
+			metaArtifacts.MaterializeDefaults(genesis.DefaultMetaArtifacts())
+		}
+	}
+	s.genesisSvc.SetMetaArtifacts(metaArtifacts)
+	s.genesisEvolver.SetMetaArtifacts(metaArtifacts)
 	// Copy-on-evolve for bundled repo skills: they are not seeded into the
 	// genesis catalog (curator staleness would archive the unused ones), so the
 	// evolver adopts one into the managed dir on its first evolve verdict and

@@ -108,6 +108,9 @@ type Evolver struct {
 	// runMu serializes evolve cycles so the periodic task and the event
 	// trigger can't overlap (TryLock: a second concurrent caller skips).
 	runMu sync.Mutex
+
+	// meta resolves prompt artifacts (RSI P1); nil → compiled-in prompts.
+	meta *MetaArtifacts
 }
 
 // NewEvolver creates a skill evolver. Self-test defaults on; disable with
@@ -175,6 +178,21 @@ func (e *Evolver) SetReplayExecutor(client *llm.Client, model string) {
 // vLLM models (the only effective control on e.g. deepseek-v4). Keyed by bare
 // model name. Safe to call with nil (the calls then fall back to the provider's
 // reasoning-effort floor).
+// SetMetaArtifacts wires the prompt-artifact resolver (RSI P1). Nil keeps
+// compiled-in prompts.
+func (e *Evolver) SetMetaArtifacts(m *MetaArtifacts) {
+	e.configMu.Lock()
+	e.meta = m
+	e.configMu.Unlock()
+}
+
+func (e *Evolver) metaLoad(name, fallback string) string {
+	e.configMu.RLock()
+	m := e.meta
+	e.configMu.RUnlock()
+	return m.Load(name, fallback)
+}
+
 func (e *Evolver) SetThinkingKwargs(kwargs map[string]string) {
 	cloned := make(map[string]string, len(kwargs))
 	for k, v := range kwargs {
@@ -475,7 +493,7 @@ func (e *Evolver) generateCandidateText(ctx context.Context, userPrompt string, 
 	text, err := primaryClient.Complete(ctx, llm.ChatRequest{
 		Model:    primaryModel,
 		Messages: []llm.Message{llm.NewTextMessage("user", prompt)},
-		System:   llm.SystemString(evolveSystemPrompt),
+		System:   llm.SystemString(e.metaLoad(MetaEvolveSystemPrompt, evolveSystemPrompt)),
 		// 12288, not 4096: GLM bills reasoning INSIDE the completion budget and
 		// the rewrite must carry a full SKILL.md body (cap 15KB ≈ 5.5K tokens)
 		// plus audit fields — at 4096 the live drill (2026-07-04) truncated

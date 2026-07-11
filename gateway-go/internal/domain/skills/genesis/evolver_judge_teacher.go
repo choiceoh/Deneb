@@ -66,7 +66,7 @@ func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *
 	raw, err := client.Complete(ctx, llm.ChatRequest{
 		Model:    model,
 		Messages: []llm.Message{llm.NewTextMessage("user", userPrompt)},
-		System:   llm.SystemString(skillJudgeSystemPrompt),
+		System:   llm.SystemString(e.metaLoad(MetaSkillJudgeSystemPrompt, skillJudgeSystemPrompt)),
 		// 4096: verdict JSON is small, but GLM reasoning shares the budget.
 		MaxTokens:      4096,
 		Temperature:    evolveTemperature(),
@@ -186,7 +186,7 @@ func (e *Evolver) teacherRewrite(ctx context.Context, teacherClient *llm.Client,
 	raw, err := teacherClient.Complete(ctx, llm.ChatRequest{
 		Model:    teacherModel,
 		Messages: []llm.Message{llm.NewTextMessage("user", userPrompt)},
-		System:   llm.SystemString(evolveSystemPrompt),
+		System:   llm.SystemString(e.metaLoad(MetaEvolveSystemPrompt, evolveSystemPrompt)),
 		// Same budget as the producer — the teacher rewrites the same shape.
 		MaxTokens:      12288,
 		Temperature:    evolveTemperature(),
