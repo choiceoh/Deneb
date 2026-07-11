@@ -383,6 +383,9 @@ func (c *Client) backoffDelay(attempt int, err error) time.Duration {
 // previous seconds-only parse silently dropped (losing the server's explicit
 // pacing and falling back to blind exponential backoff).
 func parseRetryAfter(val string) time.Duration {
+	// RFC 9110 permits optional whitespace around field values; without the
+	// trim, " 120" fails Atoi and a CRLF-tailed date fails ParseTime.
+	val = strings.TrimSpace(val)
 	if val == "" {
 		return 0
 	}

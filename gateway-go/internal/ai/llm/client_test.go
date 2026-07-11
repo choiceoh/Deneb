@@ -278,6 +278,48 @@ func TestBackoffDelay_RateLimitFloor(t *testing.T) {
 	}
 }
 
+// TestParseRetryAfter: both RFC 9110 forms parse — delay-seconds and
+// HTTP-date — with surrounding whitespace tolerated; garbage and past dates
+// yield 0 (fall back to exponential backoff).
+func TestParseRetryAfter(t *testing.T) {
+	if got := parseRetryAfter("120"); got != 120*time.Second {
+		t.Errorf("seconds form = %v, want 120s", got)
+	}
+	if got := parseRetryAfter(" 120 "); got != 120*time.Second {
+		t.Errorf("OWS-wrapped seconds = %v, want 120s", got)
+	}
+	future := time.Now().Add(90 * time.Second).UTC().Format(http.TimeFormat)
+	if got := parseRetryAfter(future); got <= 80*time.Second || got > 90*time.Second {
+		t.Errorf("HTTP-date form = %v, want ~90s", got)
+	}
+	if got := parseRetryAfter(future + "\r\n"); got <= 80*time.Second || got > 90*time.Second {
+		t.Errorf("CRLF-tailed HTTP-date = %v, want ~90s", got)
+	}
+	past := time.Now().Add(-time.Hour).UTC().Format(http.TimeFormat)
+	for _, val := range []string{"", "soon", "-5", past} {
+		if got := parseRetryAfter(val); got != 0 {
+			t.Errorf("parseRetryAfter(%q) = %v, want 0", val, got)
+		}
+	}
+}
+
+// TestBackoffDelay_RetryAfterClamp: a provider-directed Retry-After larger
+// than the configured max delay is clamped so it cannot stall the retry loop;
+// values within the max are honored verbatim.
+func TestBackoffDelay_RetryAfterClamp(t *testing.T) {
+	c := NewClient("http://localhost", "key",
+		WithRetry(6, 100*time.Millisecond, 10*time.Second))
+
+	huge := &httpretry.APIError{StatusCode: 429, Message: "rate limited", RetryAfter: time.Hour}
+	if got := c.backoffDelay(1, huge); got != 10*time.Second {
+		t.Errorf("oversized Retry-After = %v, want clamp to 10s", got)
+	}
+	modest := &httpretry.APIError{StatusCode: 429, Message: "rate limited", RetryAfter: 3 * time.Second}
+	if got := c.backoffDelay(1, modest); got != 3*time.Second {
+		t.Errorf("in-range Retry-After = %v, want 3s honored verbatim", got)
+	}
+}
+
 func TestDoStream_DefaultMaxRetries(t *testing.T) {
 	calls := 0
 	// Use default client (maxRetries=6) with fast delays for testing.
