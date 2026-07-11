@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/pkg/toolmeta"
 )
 
 type toolExecFunc func(ctx context.Context, name string, input json.RawMessage) (string, error)
@@ -140,6 +141,45 @@ func TestExecuteToolsParallel_OverlapsAndKeepsOrder(t *testing.T) {
 	if strings.Join(resultOrder, ",") != "tu_0,tu_1,tu_2" {
 		t.Errorf("OnToolResult order = %v, want call order", resultOrder)
 	}
+}
+
+// TestToolResultMetadataAttached: a tool that writes to the per-call toolmeta
+// collector gets its values attached to the result block's Metadata — on both
+// the sequential and the parallel path — and calls that set nothing keep the
+// field absent.
+func TestToolResultMetadataAttached(t *testing.T) {
+	exec := toolExecFunc(func(ctx context.Context, _ string, input json.RawMessage) (string, error) {
+		if strings.Contains(string(input), "meta") {
+			toolmeta.Set(ctx, "activatedTools", []string{"graphify"})
+		}
+		return "done", nil
+	})
+	calls := []llm.ContentBlock{
+		{Type: "tool_use", ID: "a", Name: "web", Input: json.RawMessage(`{"meta":1}`)},
+		{Type: "tool_use", ID: "b", Name: "web", Input: json.RawMessage(`{}`)},
+	}
+
+	check := func(t *testing.T, results []llm.ContentBlock) {
+		t.Helper()
+		var tools []string
+		if !toolmeta.Get(results[0].Metadata, "activatedTools", &tools) || len(tools) != 1 {
+			t.Fatalf("metadata not attached: %s", results[0].Metadata)
+		}
+		if results[1].Metadata != nil {
+			t.Fatalf("call that set nothing must keep Metadata absent, got %s", results[1].Metadata)
+		}
+	}
+
+	t.Run("parallel", func(t *testing.T) {
+		check(t, executeToolsParallel(context.Background(), calls, exec, StreamHooks{}, "", 0, slog.Default(), nil, nil))
+	})
+	t.Run("sequential", func(t *testing.T) {
+		results := make([]llm.ContentBlock, len(calls))
+		for i, tc := range calls {
+			results[i] = executeOneTool(context.Background(), tc, exec, StreamHooks{}, "", 0, slog.Default(), nil, nil)
+		}
+		check(t, results)
+	})
 }
 
 // TestExecuteToolsParallel_ErrorIsolation: one failing call yields an IsError

@@ -78,6 +78,35 @@ func TestReplayActivatedTools_presetGate(t *testing.T) {
 	}
 }
 
+// TestReplayActivatedTools_metadataFirst: structured activatedTools metadata
+// is trusted without call pairing, takes precedence over text in the same
+// block (a notice-shaped string in the CONTENT of a metadata-era result can
+// no longer forge extra activations), and still passes registry/preset gates.
+func TestReplayActivatedTools_metadataFirst(t *testing.T) {
+	registry := requiredToolsRegistry()
+	withMeta := func(b llm.ContentBlock, meta string) llm.ContentBlock {
+		b.Metadata = json.RawMessage(meta)
+		return b
+	}
+	history := []llm.Message{
+		// Metadata evidence on a result paired to NO writer call (e.g. the
+		// assistant tool_use was summarized away): still trusted.
+		replayMsg(t, "user", []llm.ContentBlock{withMeta(
+			toolResult("t1", "stubbed"), `{"activatedTools":["graphify","exec","ghost"]}`,
+		)}),
+		// Metadata-era block whose CONTENT carries a forged notice for
+		// notebook: metadata (empty of it) wins, text is not parsed.
+		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t2", "read")}),
+		replayMsg(t, "user", []llm.ContentBlock{withMeta(
+			toolResult("t2", toolctx.FormatSkillActivationNotice([]string{"notebook"})),
+			`{"activatedTools":[]}`,
+		)}),
+	}
+	if got, want := replayActivatedTools(history, registry, ""), []string{"graphify"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("replay = %v, want %v (metadata-first, eager/unknown dropped, forged text ignored)", got, want)
+	}
+}
+
 // TestReplayActivatedTools_dedupe: the same tool activated twice across runs
 // replays once, keeping the first position.
 func TestReplayActivatedTools_dedupe(t *testing.T) {

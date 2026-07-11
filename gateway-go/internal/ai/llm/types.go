@@ -322,6 +322,13 @@ type ContentBlock struct {
 	ToolUseID string `json:"tool_use_id,omitempty"`
 	Content   string `json:"content,omitempty"`
 	IsError   bool   `json:"is_error,omitempty"`
+	// Metadata is the code-only sideband attached by the executor from the
+	// call's toolmeta collector (pkg/toolmeta). Transcript-persistent and
+	// compaction-surviving (stubs replace only Content), but NEVER sent to a
+	// provider: both wire paths project blocks through explicit structs
+	// (marshalAnthropicBlocks' wireBlock, the OpenAI tool-message conversion)
+	// that must not copy this field.
+	Metadata json.RawMessage `json:"metadata,omitempty"`
 
 	// image block (base64 inline)
 	Source *ImageSource `json:"source,omitempty"`

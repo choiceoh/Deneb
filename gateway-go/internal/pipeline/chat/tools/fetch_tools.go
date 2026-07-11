@@ -16,6 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/toolmeta"
 )
 
 // FetchToolsRegistry is the subset of ToolRegistry needed by fetch_tools.
@@ -136,6 +137,13 @@ func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 
 		if da != nil && len(activated) > 0 {
 			da.Activate(activated)
+		}
+		// Structured replay evidence (server-attached, unforgeable by output
+		// content) — the code half of the text notices below. Already-active
+		// names are included: they re-anchor the state after older evidence
+		// was summarized away. See chat/deferred_replay.go.
+		if len(activated)+len(alreadyActive) > 0 {
+			toolmeta.Set(ctx, "activatedTools", append(append([]string{}, activated...), alreadyActive...))
 		}
 
 		if len(alreadyActive) > 0 {

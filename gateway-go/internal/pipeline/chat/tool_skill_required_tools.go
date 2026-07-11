@@ -24,6 +24,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/pkg/toolmeta"
 )
 
 // activateSkillRequiredTools activates the named skill's requires_tools that
@@ -72,8 +73,12 @@ func activateSkillRequiredTools(ctx context.Context, registry *ToolRegistry, ski
 		return ""
 	}
 	da.Activate(names)
-	// Exact shared format (toolctx/activation_notice.go): the next run's
-	// history replay re-derives activation state from this notice.
+	// Structured replay evidence (server-attached) — a SKILL.md body that
+	// CONTAINS a notice-shaped string can no longer forge activation once
+	// readers prefer metadata (deferred_replay.go).
+	toolmeta.Set(ctx, "activatedTools", names)
+	// Exact shared format (toolctx/activation_notice.go): the model-facing
+	// half, and the replay fallback for pre-metadata transcripts.
 	return "\n\n" + toolctx.FormatSkillActivationNotice(names)
 }
 
