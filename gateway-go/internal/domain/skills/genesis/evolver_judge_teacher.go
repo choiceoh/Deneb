@@ -144,8 +144,16 @@ func validJudgeScore(score float64) bool {
 
 // evolveResp is the evolver model's verdict: skip, or a changed skill body.
 type evolveResp struct {
-	Skip    bool   `json:"skip"`
-	Reason  string `json:"reason,omitempty"`
+	Skip   bool   `json:"skip"`
+	Reason string `json:"reason,omitempty"`
+	// ToolGap pairs a skipped evolve with a tool-repair coding candidate when
+	// the producer's failure analysis names a tool capability as the root
+	// cause (RSI P4, SkillSmith-adapted — propose-only pairing).
+	ToolGap *struct {
+		Tool        string `json:"tool,omitempty"`
+		Description string `json:"description,omitempty"`
+		ProposedFix string `json:"proposed_fix,omitempty"`
+	} `json:"tool_gap,omitempty"`
 	Changes *struct {
 		Description            string `json:"description"`
 		NewVersion             string `json:"new_version"`
