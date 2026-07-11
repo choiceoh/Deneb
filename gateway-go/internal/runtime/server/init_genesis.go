@@ -73,18 +73,14 @@ func (s *Server) initGenesisServices() {
 	// RSI P1 (docs/research/recursive-self-improvement-roadmap.md): the
 	// generative half of the improvement pipeline resolves its system prompts
 	// from versioned artifacts under <managed genesis dir>/meta, with the
-	// compiled-in constants as fallback. Materialization (write-if-absent
-	// byte-copies) is production-state gated — the same invariant as the
-	// idle-review lane — while loading is read-only+fallback everywhere, so a
-	// dev instance behaves identically without touching production state.
-	metaArtifacts := genesis.NewMetaArtifacts(filepath.Join(cfg.OutputDir, "meta"), s.logger)
-	if home, err := os.UserHomeDir(); err == nil {
-		if _, prod := s.productionStateDir(home); prod {
-			metaArtifacts.MaterializeDefaults(genesis.DefaultMetaArtifacts())
-		}
-	}
-	s.genesisSvc.SetMetaArtifacts(metaArtifacts)
-	s.genesisEvolver.SetMetaArtifacts(metaArtifacts)
+	// compiled-in constants as fallback. Wiring here is read-only (load +
+	// fallback, safe for any instance/test); materialization happens in
+	// registerGenesisAutonomousTasks — the boot-only session-phase path bare
+	// New() unit tests never reach — behind the production-state gate, so
+	// neither a dev instance nor an unisolated test writes production state.
+	s.genesisMeta = genesis.NewMetaArtifacts(filepath.Join(cfg.OutputDir, "meta"), s.logger)
+	s.genesisSvc.SetMetaArtifacts(s.genesisMeta)
+	s.genesisEvolver.SetMetaArtifacts(s.genesisMeta)
 	// Copy-on-evolve for bundled repo skills: they are not seeded into the
 	// genesis catalog (curator staleness would archive the unused ones), so the
 	// evolver adopts one into the managed dir on its first evolve verdict and
@@ -660,6 +656,21 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 		evolveTask := &genesis.EvolutionTask{
 			Evolver: s.genesisEvolver,
 			Logger:  s.logger,
+			// RSI P1 materialization rides the first real evolution tick:
+			// autonomous tasks only Run() after Service.Start(), which unit
+			// tests (including the method-registry snapshot, which builds the
+			// full wiring) never call — so no test can write production
+			// state. The production-state gate additionally covers
+			// dev/live-test instances (same invariant as memory-backup).
+			Bootstrap: func() {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return
+				}
+				if _, prod := s.productionStateDir(home); prod {
+					s.genesisMeta.MaterializeDefaults(genesis.DefaultMetaArtifacts())
+				}
+			},
 		}
 		s.autonomousSvc.RegisterTask(evolveTask)
 		s.autonomousSvc.RegisterTask(&genesis.SkillCuratorTask{

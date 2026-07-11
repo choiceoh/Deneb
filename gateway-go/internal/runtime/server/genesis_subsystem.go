@@ -14,6 +14,7 @@ import (
 // Embedded in Server so fields are promoted.
 type GenesisSubsystem struct {
 	genesisSvc         *genesis.Service
+	genesisMeta        *genesis.MetaArtifacts // RSI P1 prompt artifacts (read wiring in initGenesisServices; prod-gated materialize in registerGenesisAutonomousTasks)
 	genesisTracker     *genesis.Tracker
 	genesisEvolver     *genesis.Evolver
 	genesisNudger      *genesis.Nudger

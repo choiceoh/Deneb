@@ -649,7 +649,14 @@ func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.
 // EvolutionTask implements autonomous.PeriodicTask for background skill evolution.
 type EvolutionTask struct {
 	Evolver *Evolver
-	Logger  *slog.Logger
+	// Bootstrap, when set, runs exactly once before the first cycle — the
+	// anchor for boot-only side effects (RSI P1 meta-artifact
+	// materialization) that must never fire from unit tests, which register
+	// tasks but never start the autonomous service.
+	Bootstrap func()
+
+	bootstrapOnce sync.Once
+	Logger        *slog.Logger
 }
 
 // Name returns the task identifier.
@@ -660,6 +667,9 @@ func (t *EvolutionTask) Interval() time.Duration { return 6 * time.Hour }
 
 // Run executes one evolution cycle.
 func (t *EvolutionTask) Run(ctx context.Context) error {
+	if t.Bootstrap != nil {
+		t.bootstrapOnce.Do(t.Bootstrap)
+	}
 	results, err := t.Evolver.EvolveUnderperformers(ctx)
 	// Heartbeat: records that the evolve cycle actually ran (liveness on /health).
 	if t.Evolver != nil && t.Evolver.tracker != nil {
