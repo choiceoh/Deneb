@@ -324,8 +324,8 @@ class DenebGatewayClient(
     // Restored to the persisted last-open session, so a restart reopens the
     // conversation the user left, not always client:main.
     internal var sessionKey: String = appSettings.lastSession()
-        internal set
-    internal val _currentConversationId = MutableStateFlow<String?>(sessionKey)
+        private set
+    private val _currentConversationId = MutableStateFlow<String?>(sessionKey)
     override val currentConversationId: StateFlow<String?> = _currentConversationId
 
     internal val gatewayUrl: String
@@ -930,6 +930,13 @@ class DenebGatewayClient(
             }.body<RpcEnv<T>>().payload
         }.getOrNull()
         return if (epoch == credEpoch && url == gatewayUrl && token == clientToken) payload else null
+    }
+
+    internal fun switchSession(key: String) {
+        sessionKey = key
+        _currentConversationId.value = key
+        // Remember this as the active session so a restart restores it.
+        appSettings.setLastSession(key)
     }
 
     // rpcWrite posts a write RPC and surfaces the gateway's error message (so the

@@ -252,13 +252,6 @@ private suspend fun DenebGatewayClient.installRecoveredTranscript(key: String, t
     storeCachedTranscript(key, transcript)
 }
 
-internal fun DenebGatewayClient.switchSession(key: String) {
-    sessionKey = key
-    _currentConversationId.value = key
-    // Remember this as the active session so a restart restores it.
-    appSettings.setLastSession(key)
-}
-
 // Returns null on an RPC failure (so callers can keep a cache render instead of
 // flashing to empty), or the messages — possibly an authoritative empty list —
 // on success. The null-vs-[] distinction is what lets loadTranscriptGuarded
