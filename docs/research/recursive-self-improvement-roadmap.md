@@ -153,6 +153,21 @@ Label quality is triple-threatened (2026H1 sweep) — three preconditions:
    (isolation + diversity monitoring, CoVerRL) apply to any majority-vote
    label augmentation.
 
+### L4 — Source-level self-editing (operator-authorized 2026-07-12)
+
+**Status: conditionally OPEN.** The operator lifted the blanket
+source-self-edit prohibition: the loop may now target gateway source as a
+DECLARED propose-only surface (`genesis/surfaces.go`), with the execution
+contract *dev-worktree edit → full gates green → PR → CI green → land →
+auto-deploy hot-swap* and no human approval step. Three exclusions survive
+the opening: security CODEOWNERS paths, the prompt-cache invariants, and the
+**acceptance machinery itself** (gates/benches/e-process/rollback watch/the
+surface whitelist — forbidden at record time; a loop must never be able to
+queue an edit to its own acceptor, the unanimous 2026H1 principle). Auto-apply
+for source waits on a deploy-level rollback watch (post-hot-swap health
+regression → auto-revert); until then the executor lane is a coding agent
+consuming the self-correction queue.
+
 ### P4 — Skill+tool bundles (SkillSmith, adapted)
 
 When an evolve attempt's failure analysis names a missing/broken tool

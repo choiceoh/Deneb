@@ -50,6 +50,32 @@ func DeclaredEditableSurfaces() []EditableSurface {
 			Note:     "security CODEOWNERS paths — operator-only",
 		},
 		{
+			// The acceptance machinery must never be optimizable by the loop it
+			// accepts for (unanimous across the 2026H1 sweep — an exploitable
+			// gate poisons every downstream label). Human/agent PRs may still
+			// change these through normal review; the SELF-improvement queue
+			// rejects them at record time.
+			Name: "acceptance-machinery", Tier: SurfaceTierForbidden,
+			Patterns: []string{
+				"validation_engine.go", "validation_replay.go", "eprocess.go",
+				"meta_judge_bench.go", "meta_producer_bench.go", "meta_evolution.go",
+				"judge_accuracy.go", "surfaces.go", "tracker_usage.go",
+			},
+			Note: "deterministic accept/reject core (gates, benches, e-process, rollback watch, this whitelist)",
+		},
+		{
+			// Operator authorization 2026-07-12 ("게이트웨이 소스 자가편집도 괜찮다 —
+			// dev 소스만 뜯어고치고 문제 없을 때만 핫스왑"): gateway source is a
+			// DECLARED propose-only surface. The execution contract for the
+			// coding lane: dev worktree only, full gates (make check + live-test
+			// smoke) green, PR + CI green, land → auto-deploy hot-swap; prod
+			// tree is never edited directly. Auto-apply stays off until the
+			// deploy-level rollback watch exists.
+			Name: "gateway-source", Tier: SurfaceTierProposeOnly,
+			Patterns: []string{"*.go"},
+			Note:     "operator-authorized self-edit via dev-tree + gates + hot-swap (2026-07-12); acceptance-machinery excluded above",
+		},
+		{
 			Name: "skill-body", Tier: SurfaceTierAutoApply,
 			Patterns: []string{"SKILL.md"},
 			Note:     "evolver path: patch-first budget + judge + held-out replay + rollback watch",

@@ -55,11 +55,14 @@ func (e *Evolver) queueRejectedEvolveValidationDraft(skillName, reason, source s
 		Candidate: "Rejected evolve should become a validation case for " + target,
 		Evidence:  evidence,
 		Reason:    reason,
+		// The edit surface is the validation-case DATA, not the replay engine:
+		// acceptance-machinery source is a forbidden self-edit target (surfaces
+		// quarantine), and pointing at it got these drafts rejected at record
+		// time. The engine file stays referenced in prose only.
 		TargetFiles: []string{
 			"~/.deneb/data/skill_validation_cases.jsonl",
-			"gateway-go/internal/domain/skills/genesis/validation_replay.go",
 		},
-		ProposedChange: "Review the rejected candidate and add a held-out SkillValidationCaseRecord that fails the weak rewrite before any similar evolve is allowed.",
+		ProposedChange: "Review the rejected candidate and add a held-out SkillValidationCaseRecord (validation_replay.go contract) that fails the weak rewrite before any similar evolve is allowed.",
 		Risk:           "Do not auto-apply the rejected body; only convert stable observed behavior into a test/replay assertion.",
 		Source:         "self-harness-rejected-evolve:" + strings.TrimSpace(source),
 	}); err != nil && e.logger != nil {
