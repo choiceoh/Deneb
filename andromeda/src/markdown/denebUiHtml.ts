@@ -480,7 +480,6 @@ function isMarkdownBullet(t: string): boolean {
 // Element → node conversion
 // ---------------------------------------------------------------------------
 
-/* eslint-disable complexity */
 function convert(el: OpenElem): Node | Structural | null {
   const a = el.attrs;
   const inner = el.text.join("").trim();
@@ -720,7 +719,6 @@ function convert(el: OpenElem): Node | Structural | null {
       return null; // unknown tag: skip subtree (server validation reports it)
   }
 }
-/* eslint-enable complexity */
 
 function fillInput(node: Node, a: Record<string, string>, textKind: boolean): Node {
   node.id = a.id ?? "";
