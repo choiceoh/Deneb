@@ -115,6 +115,12 @@ func (t *Tracker) loadWatchesLocked() {
 			baselineUses:  w.BaselineUses,
 			baselineFails: w.BaselineFails,
 			ep:            w.EProcess,
+			createdAt:     w.CreatedAt,
+		}
+		// Pre-timestamp watches (persisted by an older binary) start their
+		// resolution clock at restore rather than never expiring.
+		if t.postEvolve[skill].createdAt == 0 {
+			t.postEvolve[skill].createdAt = time.Now().UnixMilli()
 		}
 	}
 	if len(persisted) > 0 && t.logger != nil {
@@ -139,6 +145,7 @@ func (t *Tracker) saveWatchesLocked() {
 			BaselineUses:  w.baselineUses,
 			BaselineFails: w.baselineFails,
 			EProcess:      w.ep,
+			CreatedAt:     w.createdAt,
 		}
 	}
 	raw, err := json.Marshal(out)
@@ -247,6 +254,70 @@ func (t *Tracker) rollbackWindowLocked() int {
 		return 0
 	}
 	return t.rollbackThreshold * 2
+}
+
+// ResolveStaleWatches closes rollback watches older than maxAge that the
+// usage-driven path will never resolve (backtest 2026-07-11: zero historical
+// resolutions — post-evolve real usage runs out at 0-5 uses, below the 6-use
+// window). A stale watch with at least one clean-enough use confirms with a
+// small-sample marker (its observation-mode e-process verdict still rides the
+// entry — this is what unblocks the P3 label pipeline); a stale watch with
+// ZERO uses expires without polluting confirm/rollback statistics. Returns
+// the number of watches closed.
+func (t *Tracker) ResolveStaleWatches(maxAge time.Duration) int {
+	if maxAge <= 0 {
+		return 0
+	}
+	type confirmJob struct {
+		skill                 string
+		audit                 HarnessEditAudit
+		uses, fails, recurred int
+	}
+	var confirms []confirmJob
+	var expired []string
+
+	t.mu.Lock()
+	now := time.Now().UnixMilli()
+	for skill, w := range t.postEvolve {
+		if w.createdAt == 0 || now-w.createdAt < maxAge.Milliseconds() {
+			continue
+		}
+		if w.postUses == 0 {
+			expired = append(expired, skill)
+			delete(t.postEvolve, skill)
+			continue
+		}
+		// A watch at/over the failure threshold cannot be stale (the fire path
+		// resolves it on the use that crossed it) — guard anyway.
+		if t.rollbackThreshold > 0 && w.postFails >= t.rollbackThreshold {
+			continue
+		}
+		t.stashBaselineTestLocked(skill, w, false)
+		confirms = append(confirms, confirmJob{skill, w.audit, w.postUses, w.postFails, w.recurred})
+		delete(t.postEvolve, skill)
+	}
+	if len(confirms)+len(expired) > 0 {
+		t.saveWatchesLocked()
+	}
+	t.mu.Unlock()
+
+	for _, skill := range expired {
+		if t.logger != nil {
+			t.logger.Info("genesis: post-evolve watch expired unused (no real usage within window)",
+				"skill", skill, "maxAge", maxAge)
+		}
+		if err := t.LogEvolveWatchExpired(skill); err != nil && t.logger != nil {
+			t.logger.Warn("genesis: watch-expired lifecycle log failed", "skill", skill, "error", err)
+		}
+	}
+	for _, c := range confirms {
+		if t.logger != nil {
+			t.logger.Info("genesis: post-evolve watch resolved time-based (window unfilled)",
+				"skill", c.skill, "uses", c.uses, "fails", c.fails, "maxAge", maxAge)
+		}
+		t.confirmEvolve(c.skill, c.audit, c.uses, c.fails, c.recurred)
+	}
+	return len(confirms) + len(expired)
 }
 
 func selfHarnessTargetRecurred(audit HarnessEditAudit, r UsageRecord) bool {
