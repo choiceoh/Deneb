@@ -194,11 +194,48 @@ func (m *MetaArtifacts) AdoptProposal(name string) (string, error) {
 	if len(content) < MetaArtifactMinBytes {
 		return "", errors.New("proposal below the artifact size floor")
 	}
+	// Back up the EFFECTIVE incumbent (live file, else compiled default) so a
+	// regressing adoption can be reverted — the meta-level rollback watch and
+	// the operator's 되돌리기 both restore from this.
+	incumbent := m.Load(name, DefaultMetaArtifacts()[name])
+	if incumbent != "" {
+		if err := os.WriteFile(filepath.Join(m.dir, name+metaRollbackSuffix), []byte(incumbent), 0o644); err != nil {
+			m.logger.Warn("adoption rollback backup failed", "name", name, "error", err)
+		}
+	}
 	if err := os.WriteFile(filepath.Join(m.dir, name), []byte(content), 0o644); err != nil {
 		return "", err
 	}
 	if err := os.Remove(proposalPath); err != nil {
 		m.logger.Warn("adopted proposal file remove failed", "name", name, "error", err)
+	}
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:])[:12], nil
+}
+
+// metaRollbackSuffix marks the pre-adoption backup an adoption writes.
+const metaRollbackSuffix = ".rollback"
+
+// RevertAdoption restores the pre-adoption backup over the live artifact and
+// consumes the backup. Returns the restored content's version (sha12).
+func (m *MetaArtifacts) RevertAdoption(name string) (string, error) {
+	if m == nil || m.dir == "" {
+		return "", errors.New("meta artifacts unwired")
+	}
+	backupPath := filepath.Join(m.dir, name+metaRollbackSuffix)
+	raw, err := os.ReadFile(backupPath)
+	if err != nil {
+		return "", err
+	}
+	content := strings.TrimSpace(string(raw))
+	if len(content) < MetaArtifactMinBytes {
+		return "", errors.New("rollback backup below the artifact size floor")
+	}
+	if err := os.WriteFile(filepath.Join(m.dir, name), []byte(content), 0o644); err != nil {
+		return "", err
+	}
+	if err := os.Remove(backupPath); err != nil {
+		m.logger.Warn("consumed rollback backup remove failed", "name", name, "error", err)
 	}
 	sum := sha256.Sum256([]byte(content))
 	return hex.EncodeToString(sum[:])[:12], nil

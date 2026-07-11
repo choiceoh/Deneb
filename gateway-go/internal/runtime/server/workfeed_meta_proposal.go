@@ -18,11 +18,14 @@ const (
 	metaProposalSource       = "genesis-meta"
 	metaProposalActionAdopt  = "meta:adopt"
 	metaProposalActionReject = "meta:reject"
+	metaProposalActionRevert = "meta:revert"
 )
 
-// postMetaProposalCard surfaces one slow-loop proposal in the work feed.
+// postMetaProposalCard surfaces one slow-loop revision in the work feed.
+// adopted=true → auto-adoption NOTIFICATION with a post-hoc veto (되돌리기);
+// adopted=false → the legacy decision card (auto-adopt kill switch off).
 // Best-effort: a feed failure must never affect the meta-evolution cycle.
-func (s *Server) postMetaProposalCard(artifact, epoch, reason, path string) {
+func (s *Server) postMetaProposalCard(artifact, epoch, reason, path string, adopted bool) {
 	nf := s.nativeWorkFeedStore()
 	if nf == nil {
 		return
@@ -34,7 +37,30 @@ func (s *Server) postMetaProposalCard(artifact, epoch, reason, path string) {
 	if epochLabel == "" {
 		epochLabel = epoch
 	}
-	body := fmt.Sprintf(`주간 자가개선 슬로우 루프가 메타 아티팩트 개정을 제안했습니다 (게이트 통과, propose-only).
+	item := workfeed.Item{
+		Source:  metaProposalSource,
+		Summary: reason,
+		RefType: "file",
+		RefID:   path,
+		Status:  "unread",
+	}
+	if adopted {
+		item.Title = "메타 개정 자동 채택: " + artifact
+		item.Body = fmt.Sprintf(`주간 자가개선 슬로우 루프가 메타 아티팩트 개정을 벤치 통과로 자동 채택했습니다.
+
+- 대상: %s
+- Epoch: %s
+- 사유: %s
+- 적용 파일: %s
+
+건강 지표가 열화하면 롤백 워치가 자동 복원합니다. 지금 되돌리려면 아래 버튼을 누르세요.`,
+			artifact, epochLabel, reason, path)
+		item.Actions = []workfeed.Action{
+			{ID: metaProposalActionRevert, Kind: workfeed.ActionAck, Label: "되돌리기"},
+		}
+	} else {
+		item.Title = "메타 개정 제안: " + artifact
+		item.Body = fmt.Sprintf(`주간 자가개선 슬로우 루프가 메타 아티팩트 개정을 제안했습니다 (게이트 통과, propose-only).
 
 - 대상: %s
 - Epoch: %s
@@ -42,22 +68,38 @@ func (s *Server) postMetaProposalCard(artifact, epoch, reason, path string) {
 - 제안 파일: %s
 
 아래 버튼으로 채택하거나 기각하세요 — 결정은 메타 경험 원장에 기록되어 다음 사이클이 읽습니다.`,
-		artifact, epochLabel, reason, path)
-	if _, err := nf.Append(workfeed.Item{
-		Source:   metaProposalSource,
-		Title:    "메타 개정 제안: " + artifact,
-		Summary:  reason,
-		Body:     body,
-		RefType:  "file",
-		RefID:    path,
-		Status:   "unread",
-		Question: true, // render the decision chips inline
-		Actions: []workfeed.Action{
+			artifact, epochLabel, reason, path)
+		item.Question = true // render the decision chips inline
+		item.Actions = []workfeed.Action{
 			{ID: metaProposalActionAdopt, Kind: workfeed.ActionAck, Label: "채택"},
 			{ID: metaProposalActionReject, Kind: workfeed.ActionAck, Label: "기각"},
-		},
-	}); err != nil {
+		}
+	}
+	if _, err := nf.Append(item); err != nil {
 		s.logger.Warn("meta proposal 카드 생성 실패", "artifact", artifact, "error", err)
+	}
+}
+
+// postMetaRevertedCard notifies the operator that the meta rollback watch
+// reverted an adoption. Informational — no decision required.
+func (s *Server) postMetaRevertedCard(artifact, reason string) {
+	nf := s.nativeWorkFeedStore()
+	if nf == nil {
+		return
+	}
+	if _, err := nf.Append(workfeed.Item{
+		Source:  metaProposalSource,
+		Title:   "메타 개정 자동 복원: " + artifact,
+		Summary: reason,
+		Body: fmt.Sprintf(`롤백 워치가 채택된 메타 개정을 자동 복원했습니다.
+
+- 대상: %s
+- 사유: %s
+
+복원 결정은 메타 경험 원장에 기록되어 다음 사이클이 같은 방향을 재제안하지 않습니다.`, artifact, reason),
+		Status: "unread",
+	}); err != nil {
+		s.logger.Warn("meta reverted 카드 생성 실패", "artifact", artifact, "error", err)
 	}
 }
 
@@ -92,6 +134,22 @@ func (s *Server) handleMetaProposalAction(item workfeed.Item, actionID string) {
 			s.logger.Warn("meta adoption ledger write failed", "artifact", artifact, "error", err)
 		}
 		s.logger.Info("meta proposal adopted from feed card", "artifact", artifact, "from", fromVersion, "to", toVersion)
+	case metaProposalActionRevert:
+		toVersion, err := s.genesisMeta.RevertAdoption(artifact)
+		if err != nil {
+			s.logger.Warn("meta proposal 되돌리기 실패", "artifact", artifact, "error", err)
+			return
+		}
+		if err := s.genesisTracker.LogMetaRevision(genesis.MetaRevisionRecord{
+			Artifact:    artifact,
+			FromVersion: fromVersion,
+			ToVersion:   toVersion,
+			Action:      "operator_reverted",
+			Reason:      "operator reverted the auto-adoption from feed card",
+		}); err != nil {
+			s.logger.Warn("meta revert ledger write failed", "artifact", artifact, "error", err)
+		}
+		s.logger.Info("meta adoption reverted from feed card", "artifact", artifact, "restored", toVersion)
 	case metaProposalActionReject:
 		if err := s.genesisMeta.RejectProposal(artifact); err != nil {
 			s.logger.Warn("meta proposal 기각 실패", "artifact", artifact, "error", err)

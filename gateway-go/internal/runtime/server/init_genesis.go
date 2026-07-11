@@ -2,12 +2,13 @@ package server
 
 import (
 	"context"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/review"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/review"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
@@ -401,9 +402,11 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			Meta:    s.genesisMeta,
 			Tracker: s.genesisTracker,
 			Logger:  s.logger,
-			// Surface each proposal as a work-feed card: propose-only adoption
-			// is an operator decision, so the operator must actually see it.
+			// Surface each revision as a work-feed card (auto-adopted
+			// notification with 되돌리기 veto, or the propose-only decision card
+			// when the kill switch is off), and revert-watch notifications.
 			OnProposal: s.postMetaProposalCard,
+			OnReverted: s.postMetaRevertedCard,
 		})
 		s.autonomousSvc.RegisterTask(&genesis.SkillCuratorTask{
 			Tracker: s.genesisTracker,
