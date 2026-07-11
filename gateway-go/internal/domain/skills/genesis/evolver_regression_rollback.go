@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -208,6 +209,15 @@ func (e *Evolver) RollbackSkill(skillName string) {
 		e.logger.Warn("evolver: rollback skipped, no backup available", "skill", skillName, "error", err)
 		return
 	}
+	// Capture the regressing body BEFORE restoring the backup: recording it as
+	// a rejected edit (RSI P1.5 ③, CPE 2605.09315) feeds the rejected-edit
+	// buffer and recurrence machinery so the exact same bad rewrite cannot be
+	// silently re-proposed on the next evolve cycle — previously a rollback
+	// left only a lifecycle line and no re-proposal defense. Best-effort.
+	rolledBackBody := ""
+	if cur, rerr := os.ReadFile(entry.Skill.FilePath); rerr == nil {
+		rolledBackBody = skillBodyOnly(string(cur))
+	}
 	if err := atomicfile.WriteFile(entry.Skill.FilePath, prev, &atomicfile.Options{Perm: 0o644}); err != nil {
 		e.logger.Error("evolver: rollback write failed", "skill", skillName, "error", err)
 		return
@@ -217,5 +227,54 @@ func (e *Evolver) RollbackSkill(skillName string) {
 		if err := e.tracker.LogEvolveRolledBack(skillName); err != nil {
 			e.logger.Warn("evolver: rollback lifecycle log failed", "skill", skillName, "error", err)
 		}
+		if rolledBackBody != "" {
+			e.recordRejectedSkillEdit(skillName, rolledBackBody, "post-evolve rollback: regressed in real use", "rollback", HarnessEditAudit{})
+		}
+		e.distillRollbackValidationCase(skillName)
+	}
+}
+
+// distillRollbackValidationCase turns the failure evidence that tripped a
+// rollback into a hard-frontier held-out case (RSI P1.5 ③): the next evolve
+// of this skill must clear the exact regression that killed the last one —
+// the deterministic half of verifier co-evolution, no LLM in the loop. The
+// weak-case guard in RecordSkillValidationCase filters traces with no
+// concrete tool evidence; that rejection is quiet and expected.
+func (e *Evolver) distillRollbackValidationCase(skillName string) {
+	stats, err := e.tracker.Stats(skillName)
+	if err != nil || stats == nil || len(stats.RecentFailureTraces) == 0 {
+		return
+	}
+	for i := len(stats.RecentFailureTraces) - 1; i >= 0; i-- { // newest evidence first
+		tr := stats.RecentFailureTraces[i]
+		if strings.TrimSpace(tr.ToolName) == "" {
+			continue
+		}
+		call := SkillReplayToolCallRecord{Name: strings.TrimSpace(tr.ToolName)}
+		if frag := strings.TrimSpace(tr.ToolInput); frag != "" {
+			call.InputIncludes = []string{truncateRunes(frag, 120)}
+		}
+		desc := strings.TrimSpace(tr.AgentMechanism)
+		if desc == "" {
+			desc = strings.TrimSpace(tr.ErrorMsg)
+		}
+		rec := SkillValidationCaseRecord{
+			SkillName:    skillName,
+			Description:  truncateRunes("post-rollback regression evidence: "+desc, 400),
+			FrontierTier: "hard",
+			Source:       "post-rollback",
+			Replay: SkillReplayCaseRecord{
+				Input:             truncateRunes(strings.TrimSpace(tr.Signature), 200),
+				ExpectedToolCalls: []SkillReplayToolCallRecord{call},
+			},
+		}
+		if err := e.tracker.RecordSkillValidationCase(rec); err != nil {
+			if !errors.Is(err, ErrWeakAutomaticValidationCase) {
+				e.logger.Warn("evolver: rollback case distillation failed", "skill", skillName, "error", err)
+			}
+			continue
+		}
+		e.logger.Info("evolver: rollback evidence distilled into held-out case", "skill", skillName, "tool", call.Name)
+		return // one case per rollback — the cap is the rollback cadence itself
 	}
 }
