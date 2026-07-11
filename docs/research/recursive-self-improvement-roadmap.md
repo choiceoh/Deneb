@@ -36,7 +36,7 @@ most of the measurement substrate the papers assume:
 
 ## Phases
 
-### P1 — Externalize the improvement procedure (prerequisite for recursion)
+### P1 — Externalize the improvement procedure (LANDED, #3430)
 
 Move the LLM-facing components of the evolve pipeline out of Go constants into
 versioned artifacts under the managed genesis dir (e.g. `meta/evolve-prompt.md`,
@@ -49,16 +49,62 @@ change at rollout: artifacts start as byte-copies of today's constants.
   stay in Go — the *deterministic* half of the pipeline is not self-editable.
   Only the *generative* half (prompts) becomes an artifact.
 
-### P2 — Slow loop (MetaSkill-Evolve two-timescale)
+### P1.5 — Acceptor hardening (NEW, 2026H1 research revision)
 
-A weekly autonomous task proposes ONE meta-artifact revision per cycle, judged
-against aggregate fitness — `EvolutionHealthSummary` deltas over the window
-(accept rate up, rollback/thrash down, staleness down) — with automatic revert
-when the next window regresses (the same post-evolve watch pattern, applied at
-the meta level). Cadence asymmetry is the point: fast loop 6h, slow loop 7d,
-one change at a time so attribution stays possible.
+The single strongest convergence of the 2026H1 literature sweep
+(`rsi-research-2026h1.md`): self-evolution succeeds or fails on the
+statistical trustworthiness of the ACCEPTANCE mechanism, not candidate
+quality (PACE 2606.08106: greedy score-based acceptance yields 72-100%
+false commits at the no-headroom regime; AgentDevel 2601.04620: removing
+flip-gating raises regression rate 3.1%→14.8%). Eleven of eleven deep
+mappings independently flagged this phase. Components, all deterministic Go:
 
-### P3 — Verifier co-evolution (CoEvoSkills)
+- **Certificate ledger + evaluator version attribution** (SEA 2607.00871,
+  RQGM 2606.26294): every accept/reject/rollback lifecycle event carries the
+  judge/evolve artifact versions (SHA of the meta artifacts), judge model,
+  score pairs, and held-out margins — the substrate P2/P3 consume. Additive
+  JSONL fields; time-sensitive (labels lost daily until it lands).
+- **e-process accept/rollback testing** (PACE): anytime-valid sequential
+  testing primitive replacing point-estimate deltas; also fixes the known
+  bug that in-flight rollback watches evaporate on SIGUSR1 restarts.
+- **Flip gates + held-out isolation** (AgentDevel): pass→fail regressions
+  block promotion regardless of aggregate score movement.
+- **Rollback evidence persistence + anchor distillation** (CPE 2605.09315):
+  a rollback records the rejected body + failure trace as validation cases
+  so the same bad edit cannot be re-proposed; confirmed evolves distill
+  frozen anchor cases (preservation gate separate from the acquisition gate).
+- **Gate fuzz harness** (verifier fuzzing 2606.01066): fuzz the deterministic
+  gates BEFORE optimization pressure learns their bugs; fixes the confirmed
+  min-delta wedge (one unfixable assertion permanently rejects all
+  candidates for a skill).
+- **GRAO exemplar retrieval + verifier scoreboard** (TPGO 2604.20714,
+  CoVerRL 2603.17775): cross-skill confirmed-evolve exemplars fed few-shot
+  into evolve prompts; judgeAccuracy/falseAcceptRate/candidate-diversity on
+  `/health`.
+
+### P2 — Slow loop (revised: deterministic bench primary, health delta advisory)
+
+A weekly autonomous task proposes ONE meta-artifact revision per cycle. The
+original fitness design ("EvolutionHealthSummary deltas + auto-revert") was
+independently rejected by six 2026H1 mappings (noisy point estimates,
+memoryless repetition collapse, erosion blindness, flip-free regressions,
+judge self-grading circularity, unobserved reward accuracy). Revised
+promotion gate, in order:
+
+1. **Frozen anchor bench preservation** (CPE) — no anchor regressions.
+2. **Shadow-replay flip gate** (AgentDevel) — no pass→fail flips on the
+   held-out corpus vs the incumbent artifact.
+3. **Judge-degradation bench** (BabelJudge 2606.22329) — for judge-artifact
+   revisions, a deterministic bench of controlled-degradation gold pairs is
+   the only fitness; a judge must never grade its own revision.
+4. `EvolutionHealthSummary` deltas — advisory only.
+
+Meta-experience memory is mandatory (TPGO: memoryless meta-loops collapse,
+30.0→14.5% in their ablation): each weekly cycle reads the ledger of prior
+meta-revisions and their outcomes. Cadence asymmetry stands: fast 6h, slow
+7d, one change per window, evaluator/producer epochs alternate (RQGM).
+
+### P3 — Verifier co-evolution (CoEvoSkills; preconditions added)
 
 Close the loop on verification quality using labels we already collect:
 a rollback after an accepted evolve = judge false-accept; strong post-rejection
@@ -66,6 +112,19 @@ real usage = false-reject. Feed these as few-shot exhibits into the judge
 prompt artifact (P1) and auto-expand the validation-case corpus from the same
 events (the backfill machinery exists). The judge improves on the same slow
 cadence as P2, never mid-window.
+
+Label quality is triple-threatened (2026H1 sweep) — three preconditions:
+
+1. **Baseline-aware rollback first** (PACE): the current baseline-blind
+   3-in-6 rollback mislabels; fix before harvesting rollbacks as labels.
+2. **Fuzz before co-evolving** (2606.01066): an exploitable gate poisons the
+   very labels used to improve it (exploit passes → rollback → false-accept
+   mislabel).
+3. **Charter cases frozen** (SkillAudit 2606.14239): a held-out charter
+   subset of validation cases is explicitly EXCLUDED from co-evolution — the
+   structural hedge against false-accept drift. Consensus-trap guards
+   (isolation + diversity monitoring, CoVerRL) apply to any majority-vote
+   label augmentation.
 
 ### P4 — Skill+tool bundles (SkillSmith, adapted)
 
@@ -87,3 +146,10 @@ tracked*, not atomically applied.
    usage-source gate) — meta-fitness must read the same honest signals.
 4. Everything lands behind the existing lifecycle log so Propus and the
    operator can audit what the loop did to itself.
+
+## Research base
+
+- Anchor papers: table above. Full 2026H1 sweep (118 verified papers, 14
+  deep-mapped against this codebase): `rsi-research-2026h1.md` — includes the
+  per-paper code-change mappings and the five next-commit candidates this
+  revision draws from.
