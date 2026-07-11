@@ -146,6 +146,25 @@ func validationCaseBlindHeldOut(rec SkillValidationCaseRecord) bool {
 	return h.Sum32()%3 != 0
 }
 
+// IsCharterCase reports whether a validation case belongs to the FROZEN
+// charter subset (P3 precondition #3, SkillAudit 2606.14239): a deterministic
+// ~25% slice of the corpus, hashed on the same stable dedupe identity as the
+// pool split but on an independent salt, that verifier co-evolution MUST
+// EXCLUDE from its training/mutation surface. The charter is the structural
+// hedge against false-accept drift: whatever the co-evolved judge learns, this
+// slice keeps measuring it with cases it never touched. Frozen from birth —
+// membership never migrates.
+//
+// CONTRACT for P3 implementers: any path that mutates, regenerates, or feeds
+// validation cases into judge/producer evolution must skip records where
+// IsCharterCase is true; benches and gates may still SCORE against them.
+func IsCharterCase(rec SkillValidationCaseRecord) bool {
+	h := fnv.New32a()
+	_, _ = io.WriteString(h, "charter|")
+	_, _ = io.WriteString(h, validationCaseDedupeKey(rec))
+	return h.Sum32()%4 == 0
+}
+
 // RecentSkillValidationCasesPool is RecentSkillValidationCases restricted to
 // one partition pool: blind=true → held-out gate pool, blind=false → visible
 // contract pool.

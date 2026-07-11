@@ -446,6 +446,17 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 		// wiki-research).
 		workoutHome, _ := os.UserHomeDir()
 		_, isProdState := s.productionStateDir(workoutHome)
+		// P3 label food factory (judge-accuracy standing lane): planted-defect
+		// replay through the LIVE judge + deterministic false-reject mining.
+		// Same gate as workout — live model calls + shared genesis writes.
+		if isProdState {
+			s.autonomousSvc.RegisterTask(&genesis.JudgeAccuracyTask{
+				Evolver: s.genesisEvolver,
+				Meta:    s.genesisMeta,
+				Tracker: s.genesisTracker,
+				Logger:  s.logger,
+			})
+		}
 		if replayExecutorEnabled() && isProdState {
 			workoutEngine := genesis.NewSkillValidationEngine(s.genesisTracker, s.logger)
 			workoutEngine.SetExecutor(
