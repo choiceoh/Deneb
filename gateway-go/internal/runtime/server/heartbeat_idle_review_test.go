@@ -23,20 +23,25 @@ func TestIdleReviewDue_Pacing(t *testing.T) {
 	cases := []struct {
 		name         string
 		lastReviewMs int64
+		lastOK       bool
 		staleAfter   time.Duration
 		lastAttempt  time.Time
 		want         bool
 	}{
-		{"disabled", ms(now.Add(-24 * time.Hour)), 0, time.Time{}, false},
-		{"fresh review holds the lane", ms(now.Add(-1 * time.Hour)), staleAfter, time.Time{}, false},
-		{"stale review fires", ms(now.Add(-7 * time.Hour)), staleAfter, time.Time{}, true},
-		{"never reviewed fires", 0, staleAfter, time.Time{}, true},
-		{"recent attempt blocks retry", ms(now.Add(-7 * time.Hour)), staleAfter, now.Add(-30 * time.Minute), false},
-		{"old attempt allows retry", ms(now.Add(-7 * time.Hour)), staleAfter, now.Add(-3 * time.Hour), true},
+		{"disabled", ms(now.Add(-24 * time.Hour)), true, 0, time.Time{}, false},
+		{"fresh review holds the lane", ms(now.Add(-1 * time.Hour)), true, staleAfter, time.Time{}, false},
+		{"stale review fires", ms(now.Add(-7 * time.Hour)), true, staleAfter, time.Time{}, true},
+		{"never reviewed fires", 0, true, staleAfter, time.Time{}, true},
+		{"recent attempt blocks retry", ms(now.Add(-7 * time.Hour)), true, staleAfter, now.Add(-30 * time.Minute), false},
+		{"old attempt allows retry", ms(now.Add(-7 * time.Hour)), true, staleAfter, now.Add(-3 * time.Hour), true},
+		// A failed review re-arms after the retry gap, not the full window —
+		// a transient model outage must not suppress the backstop for 6h.
+		{"failed review retries after gap", ms(now.Add(-3 * time.Hour)), false, staleAfter, time.Time{}, true},
+		{"failed review still paced within gap", ms(now.Add(-1 * time.Hour)), false, staleAfter, time.Time{}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := idleReviewDue(now, tc.lastReviewMs, tc.staleAfter, tc.lastAttempt, retryGap); got != tc.want {
+			if got := idleReviewDue(now, tc.lastReviewMs, tc.lastOK, tc.staleAfter, tc.lastAttempt, retryGap); got != tc.want {
 				t.Fatalf("idleReviewDue = %v, want %v", got, tc.want)
 			}
 		})
@@ -155,5 +160,25 @@ func TestHeartbeatRun_ReachesIdleReviewLane(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("idleSkillReview lane was not reached by Run()")
+	}
+}
+
+// TestIdleSkillReviewLane_ProductionGate proves the wiring-level invariant: a
+// non-production state dir (dev/live-test) gets a nil lane — it must never
+// run live reviews into production Propus state.
+func TestIdleSkillReviewLane_ProductionGate(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	srv := &Server{ServerRuntime: &ServerRuntime{}, GenesisSubsystem: &GenesisSubsystem{}}
+	srv.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	t.Setenv("DENEB_STATE_DIR", t.TempDir()) // dev-style redirect
+	if lane := srv.idleSkillReviewLaneIfProduction(home); lane != nil {
+		t.Fatal("non-production state dir must disable the lane")
+	}
+
+	t.Setenv("DENEB_STATE_DIR", "")
+	if lane := srv.idleSkillReviewLaneIfProduction(home); lane == nil {
+		t.Fatal("production state dir must enable the lane")
 	}
 }
