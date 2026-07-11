@@ -16,22 +16,23 @@ import (
 // proposal events. Older genesis entries may not have Type populated; readers
 // normalize those to "genesis".
 type LifecycleLogEntry struct {
-	Type             string            `json:"type,omitempty"`
-	SkillName        string            `json:"skillName,omitempty"`
-	Source           string            `json:"source,omitempty"`
-	SessionKey       string            `json:"sessionKey,omitempty"`
-	CreatedAt        int64             `json:"createdAt,omitempty"`
-	Category         string            `json:"category,omitempty"`
-	Description      string            `json:"description,omitempty"`
-	Candidate        string            `json:"candidate,omitempty"`
-	Route            string            `json:"route,omitempty"`
-	Evidence         string            `json:"evidence,omitempty"`
-	Reason           string            `json:"reason,omitempty"`
-	Executed         bool              `json:"executed,omitempty"`
-	Result           string            `json:"result,omitempty"`
-	NewVersion       string            `json:"newVersion,omitempty"`
-	SelfHarnessAudit *HarnessEditAudit `json:"selfHarnessAudit,omitempty"`
-	Provenance       *EvolveProvenance `json:"provenance,omitempty"`
+	Type             string                `json:"type,omitempty"`
+	SkillName        string                `json:"skillName,omitempty"`
+	Source           string                `json:"source,omitempty"`
+	SessionKey       string                `json:"sessionKey,omitempty"`
+	CreatedAt        int64                 `json:"createdAt,omitempty"`
+	Category         string                `json:"category,omitempty"`
+	Description      string                `json:"description,omitempty"`
+	Candidate        string                `json:"candidate,omitempty"`
+	Route            string                `json:"route,omitempty"`
+	Evidence         string                `json:"evidence,omitempty"`
+	Reason           string                `json:"reason,omitempty"`
+	Executed         bool                  `json:"executed,omitempty"`
+	Result           string                `json:"result,omitempty"`
+	NewVersion       string                `json:"newVersion,omitempty"`
+	SelfHarnessAudit *HarnessEditAudit     `json:"selfHarnessAudit,omitempty"`
+	Provenance       *EvolveProvenance     `json:"provenance,omitempty"`
+	BaselineTest     *RollbackBaselineTest `json:"baselineTest,omitempty"`
 }
 
 // genesisLogEntry is the JSONL format for genesis log events.
@@ -117,15 +118,31 @@ type EvolveProvenance struct {
 	HeldOutMargin         *float64 `json:"heldOutMargin,omitempty"`
 }
 
+// RollbackBaselineTest is the baseline-aware test's verdict at the moment a
+// watch resolved (observation mode): Disagreement marks the mislabeling class
+// PACE warns about — on a rollback, the legacy threshold fired while the
+// anytime-valid test had NOT rejected (possible false rollback); on a
+// confirm, the test HAD rejected while the threshold confirmed (possible
+// missed regression). These labels accumulate on the lifecycle ledger until
+// there is enough evidence to switch the firing decision over.
+type RollbackBaselineTest struct {
+	EValue       float64 `json:"eValue"`
+	N            int     `json:"n"`
+	Reject       bool    `json:"reject"`
+	Baseline     float64 `json:"baseline"`
+	Disagreement bool    `json:"disagreement"`
+}
+
 type evolveLogEntry struct {
-	Type             string            `json:"type"` // "evolved" | "evolve_rejected" | "evolve_rolled_back" | "evolve_confirmed" | "cross_skill_regression"
-	SkillName        string            `json:"skillName"`
-	NewVersion       string            `json:"newVersion,omitempty"`
-	Description      string            `json:"description,omitempty"`
-	Reason           string            `json:"reason,omitempty"`
-	CreatedAt        int64             `json:"createdAt"`
-	SelfHarnessAudit *HarnessEditAudit `json:"selfHarnessAudit,omitempty"`
-	Provenance       *EvolveProvenance `json:"provenance,omitempty"`
+	Type             string                `json:"type"` // "evolved" | "evolve_rejected" | "evolve_rolled_back" | "evolve_confirmed" | "cross_skill_regression"
+	SkillName        string                `json:"skillName"`
+	NewVersion       string                `json:"newVersion,omitempty"`
+	Description      string                `json:"description,omitempty"`
+	Reason           string                `json:"reason,omitempty"`
+	CreatedAt        int64                 `json:"createdAt"`
+	SelfHarnessAudit *HarnessEditAudit     `json:"selfHarnessAudit,omitempty"`
+	Provenance       *EvolveProvenance     `json:"provenance,omitempty"`
+	BaselineTest     *RollbackBaselineTest `json:"baselineTest,omitempty"`
 }
 
 // LogEvolve records a committed skill evolution (rewrite applied to disk) and
@@ -154,6 +171,11 @@ func (t *Tracker) LogEvolveWithProvenance(skillName, newVersion, description str
 			w.baselineUses = s.TotalUses
 			w.baselineFails = s.FailureCount
 		}
+		baselineRate := 0.0
+		if w.baselineUses > 0 {
+			baselineRate = float64(w.baselineFails) / float64(w.baselineUses)
+		}
+		w.ep = NewEProcess(DefaultEProcessAlpha, baselineRate)
 		t.postEvolve[skillName] = w
 		t.saveWatchesLocked()
 	}
@@ -178,11 +200,14 @@ func (t *Tracker) LogEvolveRolledBack(skillName string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
+	bt := t.pendingBaselineTest[skillName]
+	delete(t.pendingBaselineTest, skillName)
 	if err := jsonlstore.Append(t.logPath, evolveLogEntry{
-		Type:      "evolve_rolled_back",
-		SkillName: skillName,
-		Reason:    evolveRollbackReason,
-		CreatedAt: now,
+		Type:         "evolve_rolled_back",
+		SkillName:    skillName,
+		Reason:       evolveRollbackReason,
+		CreatedAt:    now,
+		BaselineTest: bt,
 	}); err != nil {
 		return err
 	}
@@ -220,11 +245,14 @@ func (t *Tracker) LogEvolveConfirmed(skillName string, audit HarnessEditAudit, c
 	if clean {
 		reason = "clean: target signature did not recur within the window"
 	}
+	bt := t.pendingBaselineTest[skillName]
+	delete(t.pendingBaselineTest, skillName)
 	return jsonlstore.Append(t.logPath, evolveLogEntry{
 		Type:             "evolve_confirmed",
 		SkillName:        skillName,
 		Reason:           reason,
 		CreatedAt:        time.Now().UnixMilli(),
+		BaselineTest:     bt,
 		SelfHarnessAudit: audit.ptr(),
 	})
 }

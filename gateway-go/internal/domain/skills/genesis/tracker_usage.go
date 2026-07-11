@@ -114,6 +114,7 @@ func (t *Tracker) loadWatchesLocked() {
 			recurred:      w.Recurred,
 			baselineUses:  w.BaselineUses,
 			baselineFails: w.BaselineFails,
+			ep:            w.EProcess,
 		}
 	}
 	if len(persisted) > 0 && t.logger != nil {
@@ -134,6 +135,7 @@ func (t *Tracker) saveWatchesLocked() {
 			Recurred:      w.recurred,
 			BaselineUses:  w.baselineUses,
 			BaselineFails: w.baselineFails,
+			EProcess:      w.ep,
 		}
 	}
 	raw, err := json.Marshal(out)
@@ -142,6 +144,28 @@ func (t *Tracker) saveWatchesLocked() {
 	}
 	if err != nil && t.logger != nil {
 		t.logger.Warn("genesis: evolve watch persist failed", "error", err)
+	}
+}
+
+// stashBaselineTestLocked captures the observation-mode verdict at the moment
+// a watch resolves (caller holds t.mu). rollbackFired distinguishes the two
+// disagreement classes: threshold-fired-but-test-quiet (possible false
+// rollback) vs test-rejected-but-threshold-confirmed (possible missed
+// regression).
+func (t *Tracker) stashBaselineTestLocked(skill string, w *evolveWatch, rollbackFired bool) {
+	if w == nil || w.ep == nil {
+		return
+	}
+	reject := w.ep.Reject()
+	if t.pendingBaselineTest == nil { // struct-literal construction in tests
+		t.pendingBaselineTest = make(map[string]*RollbackBaselineTest)
+	}
+	t.pendingBaselineTest[skill] = &RollbackBaselineTest{
+		EValue:       w.ep.E,
+		N:            w.ep.N,
+		Reject:       reject,
+		Baseline:     w.ep.Baseline,
+		Disagreement: rollbackFired != reject,
 	}
 }
 
@@ -163,9 +187,11 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 			w.recurred++
 		}
 	}
+	w.ep.Observe(!r.Success)
 	t.saveWatchesLocked()
 	// Regression: threshold failures within the window — fire the rollback.
 	if w.postFails >= t.rollbackThreshold {
+		t.stashBaselineTestLocked(r.SkillName, w, true)
 		recurred := w.recurred
 		threshold := t.rollbackThreshold // capture under the lock; the goroutine must not read t.* fields
 		delete(t.postEvolve, r.SkillName)
@@ -192,6 +218,7 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 	// rollback event, never an "it held up" event. Now every shipped evolve ends
 	// in either evolve_rolled_back or evolve_confirmed.
 	if w.postUses >= t.rollbackWindowLocked() {
+		t.stashBaselineTestLocked(r.SkillName, w, false)
 		uses, fails, recurred := w.postUses, w.postFails, w.recurred
 		audit := w.audit
 		skill := r.SkillName
