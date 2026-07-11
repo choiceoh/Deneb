@@ -3,12 +3,13 @@ package skilllifecycle
 import (
 	"context"
 	"encoding/json"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"

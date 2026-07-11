@@ -529,9 +529,13 @@ func TestFormatGatewayUptimeBoundaries(t *testing.T) {
 		d    time.Duration
 		want string
 	}{
-		{d: -time.Second, want: "0s"}, {d: 0, want: "0s"}, {d: 59*time.Second + 999*time.Millisecond, want: "59s"},
-		{d: time.Minute, want: "1m"}, {d: 59*time.Minute + 59*time.Second, want: "59m"},
-		{d: time.Hour, want: "1h 0m"}, {d: 25*time.Hour + 2*time.Minute, want: "1d 1h 2m"},
+		{d: -time.Second, want: "0s"},
+		{d: 0, want: "0s"},
+		{d: 59*time.Second + 999*time.Millisecond, want: "59s"},
+		{d: time.Minute, want: "1m"},
+		{d: 59*time.Minute + 59*time.Second, want: "59m"},
+		{d: time.Hour, want: "1h 0m"},
+		{d: 25*time.Hour + 2*time.Minute, want: "1d 1h 2m"},
 	} {
 		if got := formatGatewayUptime(tt.d); got != tt.want {
 			t.Errorf("formatGatewayUptime(%s) = %q", tt.d, got)

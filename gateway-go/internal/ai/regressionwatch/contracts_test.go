@@ -48,8 +48,13 @@ func TestRateContract(t *testing.T) {
 		n, d int
 		want float64
 	}{
-		{n: 0, d: 0}, {n: 1, d: 0}, {n: 1, d: -1}, {n: 0, d: 10},
-		{n: 1, d: 4, want: 0.25}, {n: 5, d: 2, want: 2.5}, {n: -1, d: 2, want: -0.5},
+		{n: 0, d: 0},
+		{n: 1, d: 0},
+		{n: 1, d: -1},
+		{n: 0, d: 10},
+		{n: 1, d: 4, want: 0.25},
+		{n: 5, d: 2, want: 2.5},
+		{n: -1, d: 2, want: -0.5},
 	} {
 		if got := rate(tt.n, tt.d); got != tt.want {
 			t.Errorf("rate(%d,%d) = %v, want %v", tt.n, tt.d, got, tt.want)

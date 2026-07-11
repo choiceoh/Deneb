@@ -285,7 +285,8 @@ func TestPutConcurrentDuplicateContract(t *testing.T) {
 
 func TestListOrderingMailboxSinceAndLimits(t *testing.T) {
 	s := newContractStore(t)
-	putContractMessages(t, s,
+	putContractMessages(
+		t, s,
 		contractMessage("old-inbox", "INBOX", "alpha", "one", "Thu, 01 Jan 2026 01:00:00 +0000"),
 		contractMessage("new-inbox", "INBOX", "alpha", "two", "Sun, 01 Mar 2026 01:00:00 +0000"),
 		contractMessage("middle-sent", "Sent", "alpha", "three", "Sun, 01 Feb 2026 01:00:00 +0000"),
@@ -444,7 +445,8 @@ func TestProjectHistoryContracts(t *testing.T) {
 	if got, ok := s.ProjectHistory("project", time.Time{}, 10, 10); ok || len(got.Messages) != 0 {
 		t.Fatalf("empty history = %+v/%v", got, ok)
 	}
-	putContractMessages(t, s,
+	putContractMessages(
+		t, s,
 		contractMessage("one", "INBOX", "apollo project", "launch scope", "2026-01-01"),
 		contractMessage("two", "Sent", "RE: apollo project", "launch answer", "2026-02-01"),
 		contractMessage("three", "INBOX", "different", "unrelated", "2026-03-01"),

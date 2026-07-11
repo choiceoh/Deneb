@@ -25,9 +25,17 @@ func TestAdaptiveEffortEnabledContract(t *testing.T) {
 		value string
 		want  bool
 	}{
-		{value: "1", want: true}, {value: "true", want: true}, {value: "TRUE", want: true},
-		{value: " on ", want: true}, {value: "yes", want: true},
-		{value: ""}, {value: "0"}, {value: "false"}, {value: "off"}, {value: "no"}, {value: "enabled"},
+		{value: "1", want: true},
+		{value: "true", want: true},
+		{value: "TRUE", want: true},
+		{value: " on ", want: true},
+		{value: "yes", want: true},
+		{value: ""},
+		{value: "0"},
+		{value: "false"},
+		{value: "off"},
+		{value: "no"},
+		{value: "enabled"},
 	} {
 		t.Run(tt.value, func(t *testing.T) {
 			t.Setenv(adaptiveEffortTuneEnv, tt.value)
@@ -106,8 +114,13 @@ func TestKoreanRatioAdditional(t *testing.T) {
 		input string
 		want  float64
 	}{
-		{input: ""}, {input: "123 !"}, {input: "abc", want: 0}, {input: "가나다", want: 1},
-		{input: "가a나b", want: .5}, {input: "漢字가", want: 1.0 / 3.0}, {input: "가-나 123", want: 1},
+		{input: ""},
+		{input: "123 !"},
+		{input: "abc", want: 0},
+		{input: "가나다", want: 1},
+		{input: "가a나b", want: .5},
+		{input: "漢字가", want: 1.0 / 3.0},
+		{input: "가-나 123", want: 1},
 	} {
 		if got := koreanRatio(tt.input); got != tt.want {
 			t.Errorf("koreanRatio(%q) = %v, want %v", tt.input, got, tt.want)
@@ -178,7 +191,8 @@ func newProbeServer(t *testing.T, chunks ...map[string]any) *httptest.Server {
 }
 
 func TestProbeModelFiltersThinkingAndMeasuresAnswer(t *testing.T) {
-	srv := newProbeServer(t,
+	srv := newProbeServer(
+		t,
 		map[string]any{"role": "assistant", "reasoning_content": "내부 추론"},
 		map[string]any{"content": "안녕하세요 반갑습니다"},
 	)
@@ -222,6 +236,7 @@ func (s *contractStats) AggregateByModel(since int64) []agentlog.ModelStat {
 	s.since = append(s.since, since)
 	return s.stats
 }
+
 func (s *contractStats) AggregateEffortByModel(since int64) map[string]agentlog.EffortStat {
 	s.since = append(s.since, since)
 	return s.effort

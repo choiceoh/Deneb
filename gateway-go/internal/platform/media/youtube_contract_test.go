@@ -540,7 +540,8 @@ func TestCaptionLabelAndSelectionContract(t *testing.T) {
 
 func TestTimedTextSegmentsContractAdditional(t *testing.T) {
 	doc := timedTextDoc{}
-	doc.Texts = append(doc.Texts,
+	doc.Texts = append(
+		doc.Texts,
 		struct {
 			Start   string `xml:"start,attr"`
 			Dur     string `xml:"dur,attr"`
@@ -557,7 +558,8 @@ func TestTimedTextSegmentsContractAdditional(t *testing.T) {
 			Content string `xml:",chardata"`
 		}{Start: "3", Content: "   "},
 	)
-	doc.Paras = append(doc.Paras,
+	doc.Paras = append(
+		doc.Paras,
 		srv3Para{TMs: "2500", Content: " paragraph "},
 		srv3Para{TMs: "bad", Content: "bad ms"},
 	)
