@@ -390,12 +390,17 @@ describe("useAttachPipeline", () => {
     });
     await waitFor(() => expect(result.current.attachingRef.current).toBe(true));
     await act(async () => result.current.attachFiles([image]));
-    expect(capture).toHaveBeenCalledTimes(1);
+    // The first batch reads the file before invoking capture — wait for that
+    // call to land (it also assigns release) instead of asserting mid-flight.
+    await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
 
     await act(async () => {
       release();
       await first;
     });
+    // Everything settled: if re-entry weren't blocked, a second capture would
+    // have landed by now.
+    expect(capture).toHaveBeenCalledTimes(1);
     expect(props.setAttaching).toHaveBeenLastCalledWith(false);
   });
 
