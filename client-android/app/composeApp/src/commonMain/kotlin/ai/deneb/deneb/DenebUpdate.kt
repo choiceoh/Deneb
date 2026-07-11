@@ -23,6 +23,9 @@ data class UpdateManifest(
     val name: String = "",
     val file: String = "",
     val notes: String = "",
+    // Short-lived HMAC token bound to [file] — preferred over putting the
+    // long-lived client token in the download URL. Blank on old gateways.
+    val downloadToken: String = "",
 )
 
 /** A newer build is available — surfaced to the settings UI. */
