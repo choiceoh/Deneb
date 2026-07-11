@@ -2,9 +2,14 @@
 //
 // This is the data-gathering half of the watch tool (the analysis half is the
 // isolated vision call in pilot/vision.go). Given a YouTube URL or a local video
-// file, it produces a WatchResult: a set of evenly-spaced JPEG frames plus the
+// file, it produces a WatchResult: a set of representative JPEG frames plus the
 // subtitle transcript, so the model can both SEE (frames) and READ/HEAR
 // (subtitles) the video.
+//
+// Frame selection prefers scene-change detection (one ffmpeg scan pass): cuts
+// and slide transitions land exactly on a frame instead of being straddled by
+// an even grid. Videos with too few scene changes (talking heads, screen
+// recordings) fall back to even spacing, as does any scan failure or timeout.
 //
 // Frame budgeting follows a duration-adaptive scale (denser for short clips,
 // sparser for long ones) so the vision payload stays bounded regardless of
@@ -20,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"time"
 )
@@ -75,6 +81,25 @@ const (
 	// watchMaxVideoBytes caps a downloaded video file (200 MB) so a long 4K
 	// video cannot exhaust disk. Frame extraction only needs a watchable copy.
 	watchMaxVideoBytes = 200 * 1024 * 1024
+
+	// Scene-change frame selection (single ffmpeg scan pass over the window).
+	//
+	// sceneChangeThreshold is ffmpeg's scene score cutoff (fraction of the frame
+	// that changed, 0..1). 0.2 catches hard cuts and slide flips while ignoring
+	// camera pans and talking-head motion.
+	sceneChangeThreshold = "0.2"
+	// sceneMinCandidates: below this many detected changes the video is treated
+	// as static content (screen recording, talking head) where an even grid
+	// covers better than a handful of cuts, so selection falls back to even
+	// spacing.
+	sceneMinCandidates = 8
+	// sceneScanTimeout bounds the detection decode pass. On timeout selection
+	// silently falls back to even spacing — never fails the watch.
+	sceneScanTimeout = 90 * time.Second
+	// sceneScanWidth downscales the decode before the scene filter: the score
+	// is computed per-pixel, so a small luma plane is dramatically cheaper and
+	// just as good at spotting cuts.
+	sceneScanWidth = 320
 )
 
 // WatchVideo extracts frames + subtitles from a YouTube URL or local file.
@@ -154,7 +179,7 @@ func watchYouTube(ctx context.Context, url string, opts WatchOptions) (*WatchRes
 		return nil, fmt.Errorf("video download: %w", err)
 	}
 
-	frames, timestamps, err := extractFramesAtWindow(videoPath, meta.Duration, opts)
+	frames, timestamps, err := extractFramesAtWindow(ctx, videoPath, meta.Duration, opts)
 	if err != nil {
 		return nil, fmt.Errorf("frame extraction: %w", err)
 	}
@@ -185,7 +210,7 @@ func watchLocalFile(ctx context.Context, path string, opts WatchOptions) (*Watch
 		EndSec:      opts.EndSec,
 	}
 
-	frames, timestamps, err := extractFramesAtWindow(path, duration, opts)
+	frames, timestamps, err := extractFramesAtWindow(ctx, path, duration, opts)
 	if err != nil {
 		return nil, fmt.Errorf("frame extraction: %w", err)
 	}
@@ -231,20 +256,145 @@ func downloadYouTubeVideo(ctx context.Context, ytdlpPath, url, tmpDir string) (s
 	return "", fmt.Errorf("no video file produced by yt-dlp")
 }
 
-// extractFramesAtWindow selects adaptive timestamps across the video (or the
-// requested [start,end] window) and extracts a JPEG frame at each via ffmpeg.
-func extractFramesAtWindow(videoPath string, duration int, opts WatchOptions) (frames [][]byte, timestamps []float64, err error) {
+// extractFramesAtWindow selects representative timestamps across the video (or
+// the requested [start,end] window) and extracts a JPEG frame at each via
+// ffmpeg. Scene-change timestamps are preferred; even spacing is the fallback.
+func extractFramesAtWindow(ctx context.Context, videoPath string, duration int, opts WatchOptions) (frames [][]byte, timestamps []float64, err error) {
 	count := opts.MaxFrames
 	if count <= 0 {
 		count = selectWatchFrameCount(duration)
 	}
 
-	stamps := selectWatchTimestamps(duration, count, opts.StartSec, opts.EndSec)
+	stamps := selectSceneTimestamps(ctx, videoPath, duration, count, opts.StartSec, opts.EndSec)
+	if len(stamps) == 0 {
+		stamps = selectWatchTimestamps(duration, count, opts.StartSec, opts.EndSec)
+	}
 	frames, timestamps = extractFramesFromPath(videoPath, stamps)
 	if len(frames) == 0 {
 		return nil, nil, fmt.Errorf("no frames extracted (ffmpeg may be unavailable)")
 	}
 	return frames, timestamps, nil
+}
+
+// selectSceneTimestamps returns scene-change timestamps for the analyzed
+// window, downsampled to the frame budget. Returns nil (fall back to even
+// spacing) when the video has too few scene changes to represent it — static
+// content is covered better by an even grid — or when the scan fails.
+func selectSceneTimestamps(ctx context.Context, videoPath string, duration, count int, start, end float64) []float64 {
+	lo := start
+	if lo < 0 {
+		lo = 0
+	}
+	hi := end
+	if hi <= 0 || (duration > 0 && hi > float64(duration)) {
+		hi = float64(duration)
+	}
+	// Unknown duration with no explicit end would mean decoding to EOF just to
+	// discover the scenes — skip the scan and let even spacing (which handles
+	// unknown duration with a bounded 1s grid) cover it.
+	if hi <= lo {
+		return nil
+	}
+
+	candidates := detectSceneChangeTimestamps(ctx, videoPath, lo, hi)
+	if len(candidates) < sceneMinCandidates {
+		return nil
+	}
+	return evenSampleTimestamps(candidates, count)
+}
+
+// detectSceneChangeTimestamps runs one ffmpeg decode pass over [lo, hi] (hi<=0
+// means "to the end") and returns the timestamps whose scene score exceeds the
+// threshold, plus the window's first frame as an anchor. Returns nil on any
+// failure — callers degrade to even spacing.
+func detectSceneChangeTimestamps(ctx context.Context, videoPath string, lo, hi float64) []float64 {
+	ffmpegPath, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		return nil
+	}
+	scanCtx, cancel := context.WithTimeout(ctx, sceneScanTimeout)
+	defer cancel()
+
+	// -ss before -i seeks fast but resets timestamps to 0, so parsed times are
+	// shifted back by lo below. The first frame (n=0) is always selected as the
+	// window anchor; showinfo prints one line per selected frame.
+	args := []string{"-v", "info"}
+	if lo > 0 {
+		args = append(args, "-ss", fmt.Sprintf("%.2f", lo))
+	}
+	if hi > lo {
+		args = append(args, "-t", fmt.Sprintf("%.2f", hi-lo))
+	}
+	args = append(
+		args,
+		"-i", videoPath,
+		"-an", "-sn",
+		"-vf", fmt.Sprintf(
+			"scale=w='min(%d,iw)':h=-2,select=eq(n\\,0)+gt(scene\\,%s),showinfo",
+			sceneScanWidth, sceneChangeThreshold,
+		),
+		"-f", "null", "-",
+	)
+	// showinfo reports via the log stream (stderr).
+	out, err := exec.CommandContext(scanCtx, ffmpegPath, args...).CombinedOutput()
+	if err != nil {
+		return nil
+	}
+
+	times := parseShowinfoTimes(out)
+	for i := range times {
+		times[i] += lo
+	}
+	return times
+}
+
+// showinfoPtsTimeRe pulls the presentation timestamp out of ffmpeg showinfo
+// log lines ("... pts_time:12.345 ...").
+var showinfoPtsTimeRe = regexp.MustCompile(`pts_time:([0-9]+(?:\.[0-9]+)?)`)
+
+// parseShowinfoTimes extracts the pts_time values from ffmpeg showinfo output,
+// sorted ascending with duplicates dropped.
+func parseShowinfoTimes(out []byte) []float64 {
+	matches := showinfoPtsTimeRe.FindAllSubmatch(out, -1)
+	times := make([]float64, 0, len(matches))
+	for _, m := range matches {
+		var ts float64
+		if _, err := fmt.Sscanf(string(m[1]), "%f", &ts); err != nil {
+			continue
+		}
+		times = append(times, ts)
+	}
+	sort.Float64s(times)
+	deduped := times[:0]
+	for _, ts := range times {
+		if n := len(deduped); n > 0 && deduped[n-1] == ts {
+			continue
+		}
+		deduped = append(deduped, ts)
+	}
+	return deduped
+}
+
+// evenSampleTimestamps downsamples candidates to at most n entries, always
+// keeping the first and last so the window's opening scene and final state
+// both survive.
+func evenSampleTimestamps(candidates []float64, n int) []float64 {
+	if n <= 0 || len(candidates) <= n {
+		return candidates
+	}
+	if n == 1 {
+		return candidates[:1]
+	}
+	sampled := make([]float64, 0, n)
+	last := len(candidates) - 1
+	for i := range n {
+		idx := i * last / (n - 1)
+		if k := len(sampled); k > 0 && sampled[k-1] == candidates[idx] {
+			continue
+		}
+		sampled = append(sampled, candidates[idx])
+	}
+	return sampled
 }
 
 // extractFramesFromPath extracts one JPEG per timestamp from a video file on
