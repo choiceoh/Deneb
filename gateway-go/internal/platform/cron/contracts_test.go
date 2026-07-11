@@ -207,7 +207,12 @@ func TestParseAbsoluteTimeContractAdditional(t *testing.T) {
 		{input: "1970-01-02", want: 86_400_000},
 		{input: "1970-01-01T00:00:01Z", want: 1000},
 		{input: "1970-01-01T00:00:01", want: 1000},
-		{input: ""}, {input: "0"}, {input: "-1"}, {input: "NaN"}, {input: "+Inf"}, {input: "bad"},
+		{input: ""},
+		{input: "0"},
+		{input: "-1"},
+		{input: "NaN"},
+		{input: "+Inf"},
+		{input: "bad"},
 	} {
 		if got := parseAbsoluteTimeMs(tt.input); got != tt.want {
 			t.Errorf("parseAbsoluteTimeMs(%q) = %d, want %d", tt.input, got, tt.want)
@@ -273,10 +278,16 @@ func TestFormatDurationKoreanBoundariesAndNoOverflow(t *testing.T) {
 		ms   int64
 		want string
 	}{
-		{ms: -1, want: "0초"}, {ms: 0, want: "0초"}, {ms: 999, want: "0초"},
-		{ms: 1000, want: "1초"}, {ms: 59_999, want: "59초"}, {ms: 60_000, want: "1분"},
-		{ms: 61_000, want: "1분 1초"}, {ms: 3_600_000, want: "1시간"},
-		{ms: 3_661_000, want: "1시간 1분"}, {ms: 86_400_000, want: "1일"},
+		{ms: -1, want: "0초"},
+		{ms: 0, want: "0초"},
+		{ms: 999, want: "0초"},
+		{ms: 1000, want: "1초"},
+		{ms: 59_999, want: "59초"},
+		{ms: 60_000, want: "1분"},
+		{ms: 61_000, want: "1분 1초"},
+		{ms: 3_600_000, want: "1시간"},
+		{ms: 3_661_000, want: "1시간 1분"},
+		{ms: 86_400_000, want: "1일"},
 		{ms: 90_061_000, want: "1일 1시간 1분"},
 	} {
 		if got := FormatDurationKorean(tt.ms); got != tt.want {

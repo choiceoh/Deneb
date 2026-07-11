@@ -6,9 +6,10 @@
 package runstate
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
 
 // AbortEntry describes one cancellable chat run.

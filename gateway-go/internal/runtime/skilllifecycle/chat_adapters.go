@@ -3,10 +3,11 @@ package skilllifecycle
 import (
 	"context"
 	"errors"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/review"
 	"log/slog"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/review"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"

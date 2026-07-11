@@ -80,10 +80,22 @@ func TestHeartbeatContentEmptyContractAdditional(t *testing.T) {
 		content string
 		want    bool
 	}{
-		{want: true}, {content: "\r\n\t", want: true}, {content: "#", want: true}, {content: "######", want: true},
-		{content: "# Header", want: true}, {content: "-", want: true}, {content: "*", want: true}, {content: "+", want: true},
-		{content: "- [ ]", want: true}, {content: "- [x]", want: true}, {content: "* [X]", want: true},
-		{content: "- [ ] task"}, {content: "#hashtag"}, {content: "text"}, {content: "> quote"}, {content: "```"},
+		{want: true},
+		{content: "\r\n\t", want: true},
+		{content: "#", want: true},
+		{content: "######", want: true},
+		{content: "# Header", want: true},
+		{content: "-", want: true},
+		{content: "*", want: true},
+		{content: "+", want: true},
+		{content: "- [ ]", want: true},
+		{content: "- [x]", want: true},
+		{content: "* [X]", want: true},
+		{content: "- [ ] task"},
+		{content: "#hashtag"},
+		{content: "text"},
+		{content: "> quote"},
+		{content: "```"},
 	} {
 		if got := IsHeartbeatContentEffectivelyEmpty(tt.content); got != tt.want {
 			t.Errorf("empty(%q) = %v, want %v", tt.content, got, tt.want)
@@ -133,8 +145,14 @@ func TestTokenBoundaryHelpers(t *testing.T) {
 		b    byte
 		want bool
 	}{
-		{b: 'a', want: true}, {b: 'Z', want: true}, {b: '0', want: true}, {b: '_', want: true},
-		{b: '-', want: false}, {b: ' ', want: false}, {b: '.', want: false}, {b: 0, want: false},
+		{b: 'a', want: true},
+		{b: 'Z', want: true},
+		{b: '0', want: true},
+		{b: '_', want: true},
+		{b: '-', want: false},
+		{b: ' ', want: false},
+		{b: '.', want: false},
+		{b: 0, want: false},
 	} {
 		if got := isTokenWordByte(tt.b); got != tt.want {
 			t.Errorf("word(%q) = %v", tt.b, got)
@@ -227,9 +245,16 @@ func TestSilentReplyPrefixAdditionalMatrix(t *testing.T) {
 		text, token string
 		want        bool
 	}{
-		{text: " NO", want: true}, {text: "\nNO_RE", want: true}, {text: "NO_REPLY", want: true},
-		{text: "N"}, {text: "NO-"}, {text: "NO RE"}, {text: "No_RE"}, {text: "NO_REPLY extra"},
-		{text: "CUSTOM_", token: "CUSTOM_TOKEN", want: true}, {text: "CU", token: "CUSTOM_TOKEN"},
+		{text: " NO", want: true},
+		{text: "\nNO_RE", want: true},
+		{text: "NO_REPLY", want: true},
+		{text: "N"},
+		{text: "NO-"},
+		{text: "NO RE"},
+		{text: "No_RE"},
+		{text: "NO_REPLY extra"},
+		{text: "CUSTOM_", token: "CUSTOM_TOKEN", want: true},
+		{text: "CU", token: "CUSTOM_TOKEN"},
 		{text: "CUSTOM_TOKEN", token: "CUSTOM_TOKEN", want: true},
 	} {
 		if got := IsSilentReplyPrefixText(tt.text, tt.token); got != tt.want {

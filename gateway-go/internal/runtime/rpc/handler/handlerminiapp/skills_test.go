@@ -3,10 +3,11 @@ package handlerminiapp
 import (
 	"context"
 	"encoding/json"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"

@@ -676,7 +676,8 @@ func TestAnalyzeEmailPipelineFallbackErrorsAndThinkingFilter(t *testing.T) {
 }
 
 func TestAnalyzeBatchFallbackIntegration(t *testing.T) {
-	q := newQueuedOpenAIServer(t,
+	q := newQueuedOpenAIServer(
+		t,
 		"첫 분석\nIMPORTANCE: 참고",
 		"둘 분석\nIMPORTANCE: 확인",
 		"통합 報告書",

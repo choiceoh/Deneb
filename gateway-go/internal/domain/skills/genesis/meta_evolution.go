@@ -73,6 +73,10 @@ type MetaRevisionRecord struct {
 	ToVersion   string `json:"toVersion,omitempty"` // set when a proposal was produced
 	Proposed    bool   `json:"proposed"`
 	Reason      string `json:"reason,omitempty"` // proposal rationale, or skip/rejection cause
+	// Action marks operator decisions ("adopted" | "rejected") recorded outside
+	// the weekly cycle — meta-experience the next cycles read. Empty on cycle
+	// records.
+	Action string `json:"action,omitempty"`
 	// Evaluator-epoch only: judge-degradation bench outcomes (BabelJudge) for
 	// the incumbent and the proposal over the same gold pairs.
 	BenchIncumbent *JudgeBenchOutcome `json:"benchIncumbent,omitempty"`
@@ -293,11 +297,20 @@ func (t *MetaEvolutionTask) recordWithBenches(record func(bool, string, string) 
 	return record(proposed, toVersion, reason)
 }
 
-// nextEpoch alternates producer/evaluator based on the last ledger entry.
+// nextEpoch alternates producer/evaluator based on the last CYCLE entry —
+// operator adopt/reject records (Action != "") don't consume an epoch.
 func (t *MetaEvolutionTask) nextEpoch() (string, string) {
-	prior, err := t.Tracker.RecentMetaRevisions(1)
-	if err == nil && len(prior) > 0 && prior[0].Epoch == metaEpochProducer {
-		return metaEpochEvaluator, generation.MetaSkillJudgeSystemPrompt
+	prior, err := t.Tracker.RecentMetaRevisions(10)
+	if err == nil {
+		for _, p := range prior {
+			if p.Action != "" {
+				continue
+			}
+			if p.Epoch == metaEpochProducer {
+				return metaEpochEvaluator, generation.MetaSkillJudgeSystemPrompt
+			}
+			break
+		}
 	}
 	return metaEpochProducer, generation.MetaEvolveSystemPrompt
 }
@@ -326,6 +339,9 @@ func (t *MetaEvolutionTask) assembleEvidence() string {
 			status := "제안됨"
 			if !p.Proposed {
 				status = "불발"
+			}
+			if p.Action != "" {
+				status = "오퍼레이터 " + p.Action
 			}
 			fmt.Fprintf(&b, "- [%s] %s %s→%s: %s (%s)\n",
 				p.Epoch, p.Artifact, p.FromVersion, p.ToVersion, common.TruncateRunes(p.Reason, 160), status)

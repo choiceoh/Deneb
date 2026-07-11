@@ -139,7 +139,8 @@ func TestCallRoleLLMShapesRequestAndMergesAllExtras(t *testing.T) {
 	resetPilotHarness()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	got, err := CallRoleLLM(ctx, modelrole.RoleMain, "system prompt", "user prompt", 321,
+	got, err := CallRoleLLM(
+		ctx, modelrole.RoleMain, "system prompt", "user prompt", 321,
 		map[string]any{"temperature": 0.2, "first": true},
 		map[string]any{"top_p": 0.8, "first": false},
 	)
