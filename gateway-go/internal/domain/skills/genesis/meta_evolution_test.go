@@ -178,7 +178,7 @@ func TestMetaEvolutionTask_OnProposalNilSafe(t *testing.T) {
 		t.Fatal(err)
 	}
 	// No Evolver/Meta wired → Run is a no-op and must not touch OnProposal.
-	task := &MetaEvolutionTask{Tracker: tr, OnProposal: func(_, _, _, _ string) { t.Fatal("OnProposal called on no-op run") }}
+	task := &MetaEvolutionTask{Tracker: tr, OnProposal: func(_, _, _, _ string, _ bool) { t.Fatal("OnProposal called on no-op run") }}
 	if err := task.Run(context.Background()); err != nil {
 		t.Fatal(err)
 	}

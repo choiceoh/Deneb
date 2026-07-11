@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -73,10 +74,14 @@ type MetaRevisionRecord struct {
 	ToVersion   string `json:"toVersion,omitempty"` // set when a proposal was produced
 	Proposed    bool   `json:"proposed"`
 	Reason      string `json:"reason,omitempty"` // proposal rationale, or skip/rejection cause
-	// Action marks operator decisions ("adopted" | "rejected") recorded outside
-	// the weekly cycle — meta-experience the next cycles read. Empty on cycle
-	// records.
+	// Action marks adoption-lifecycle records outside the propose step:
+	// "auto_adopted" | "adopted" | "rejected" | "auto_reverted" |
+	// "operator_reverted" — meta-experience the next cycles read. Empty on
+	// cycle records.
 	Action string `json:"action,omitempty"`
+	// AdoptionHealth snapshots the 7d evolution health at adoption time — the
+	// revert watch compares the current window against it.
+	AdoptionHealth *MetaAdoptionHealth `json:"adoptionHealth,omitempty"`
 	// Evaluator-epoch only: judge-degradation bench outcomes (BabelJudge) for
 	// the incumbent and the proposal over the same gold pairs.
 	BenchIncumbent *JudgeBenchOutcome `json:"benchIncumbent,omitempty"`
@@ -113,6 +118,32 @@ func (t *Tracker) RecentMetaRevisions(limit int) ([]MetaRevisionRecord, error) {
 		out = append(out, entries[i])
 	}
 	return out, nil
+}
+
+// MetaAdoptionHealth is the evolution-health snapshot recorded with an
+// adoption, and the deterministic basis for the meta rollback watch.
+type MetaAdoptionHealth struct {
+	ConfirmRate     float64 `json:"confirmRate"`
+	FalseAcceptRate float64 `json:"falseAcceptRate"`
+	Resolved        int     `json:"resolved"`
+}
+
+// Meta rollback watch thresholds: revert an adoption when the CURRENT 7d
+// window regresses this hard against the adoption snapshot with a minimum
+// sample. Conservative on purpose — the benches already gated the adoption;
+// this net catches what they missed.
+const (
+	metaRevertMinResolved     = 4
+	metaRevertFARJump         = 0.25
+	metaRevertConfirmDrop     = 0.30
+	metaRevertWatchWindowDays = 14
+)
+
+// metaAutoAdoptEnabled reports whether bench-gated proposals adopt themselves
+// (operator mandate 2026-07-11: no human approval in the loop). Kill switch:
+// DENEB_META_AUTO_ADOPT=0.
+func metaAutoAdoptEnabled() bool {
+	return os.Getenv("DENEB_META_AUTO_ADOPT") != "0"
 }
 
 // MetaEvolutionHealth summarizes the slow loop for the health scoreboard.
@@ -159,15 +190,21 @@ type MetaEvolutionTask struct {
 	Tracker *Tracker
 	Logger  *slog.Logger
 
-	// OnProposal, when set, surfaces a written proposal to the operator (work
-	// feed card). Best-effort: surfacing failures never affect the cycle.
-	OnProposal func(artifact, epoch, reason, path string)
+	// OnProposal, when set, surfaces a written proposal (adopted=false: awaiting
+	// the operator; adopted=true: auto-adopted notification with a revert veto).
+	// Best-effort: surfacing failures never affect the cycle.
+	OnProposal func(artifact, epoch, reason, path string, adopted bool)
+	// OnReverted, when set, notifies the operator that the meta rollback watch
+	// reverted an adoption.
+	OnReverted func(artifact, reason string)
 
 	// pending bench outcomes for the in-flight cycle's ledger write (set via
 	// recordWithBench; Run is single-flight per task so no locking needed).
 	pendingBenchIncumbent *JudgeBenchOutcome
 	pendingBenchProposal  *JudgeBenchOutcome
 	pendingBenchShadow    *ProducerBenchOutcome
+	pendingAdoptionHealth *MetaAdoptionHealth
+	pendingAction         string
 }
 
 // Name identifies the task in the autonomous scheduler.
@@ -186,6 +223,8 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 		logger = slog.Default()
 	}
 
+	t.maybeRevertAdoption(logger)
+
 	epoch, artifact := t.nextEpoch()
 	fallback := generation.DefaultMetaArtifacts()[artifact]
 	incumbent := t.Meta.Load(artifact, fallback)
@@ -202,6 +241,8 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 			BenchIncumbent: t.pendingBenchIncumbent,
 			BenchProposal:  t.pendingBenchProposal,
 			BenchShadow:    t.pendingBenchShadow,
+			AdoptionHealth: t.pendingAdoptionHealth,
+			Action:         t.pendingAction,
 		})
 		if err != nil {
 			logger.Warn("meta-evolution: ledger write failed", "error", err)
@@ -279,10 +320,34 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 			false, "", "proposal write failed: "+werr.Error())
 	}
 	toVersion := generation.ContentSHA256(strings.TrimSpace(proposal))[:12]
+	if metaAutoAdoptEnabled() {
+		// Operator mandate (2026-07-11): the deterministic gate chain (contract
+		// + epoch bench) IS the approver. Adopt immediately; the ledger health
+		// snapshot arms the revert watch and the feed card carries a post-hoc
+		// veto (되돌리기).
+		if adoptedVersion, aerr := t.Meta.AdoptProposal(artifact); aerr != nil {
+			logger.Warn("meta-evolution: auto-adoption failed, falling back to propose-only",
+				"artifact", artifact, "error", aerr)
+		} else {
+			h := t.Tracker.EvolutionHealth()
+			t.pendingAdoptionHealth = &MetaAdoptionHealth{
+				ConfirmRate:     h.ConfirmRate,
+				FalseAcceptRate: h.FalseAcceptRate,
+				Resolved:        h.ResolvedEvolves7d,
+			}
+			t.pendingAction = "auto_adopted"
+			logger.Info("meta-evolution: revision AUTO-ADOPTED (bench-gated; revert watch armed)",
+				"artifact", artifact, "epoch", epoch, "from", fromVersion, "to", adoptedVersion)
+			if t.OnProposal != nil {
+				t.OnProposal(artifact, epoch, reason, filepath.Join(filepath.Dir(path), artifact), true)
+			}
+			return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow, true, adoptedVersion, reason)
+		}
+	}
 	logger.Info("meta-evolution: revision proposed (propose-only — adoption is a separate decision)",
 		"artifact", artifact, "epoch", epoch, "from", fromVersion, "to", toVersion, "path", path)
 	if t.OnProposal != nil {
-		t.OnProposal(artifact, epoch, reason, path)
+		t.OnProposal(artifact, epoch, reason, path, false)
 	}
 	return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow, true, toVersion, reason)
 }
@@ -293,8 +358,65 @@ func (t *MetaEvolutionTask) recordWithBenches(record func(bool, string, string) 
 	inc, prop *JudgeBenchOutcome, shadow *ProducerBenchOutcome, proposed bool, toVersion, reason string,
 ) error {
 	t.pendingBenchIncumbent, t.pendingBenchProposal, t.pendingBenchShadow = inc, prop, shadow
-	defer func() { t.pendingBenchIncumbent, t.pendingBenchProposal, t.pendingBenchShadow = nil, nil, nil }()
+	defer func() {
+		t.pendingBenchIncumbent, t.pendingBenchProposal, t.pendingBenchShadow = nil, nil, nil
+		t.pendingAdoptionHealth, t.pendingAction = nil, ""
+	}()
 	return record(proposed, toVersion, reason)
+}
+
+// maybeRevertAdoption is the meta rollback watch: for each artifact whose
+// newest adoption-lifecycle record is a recent (auto_)adoption with a health
+// snapshot, compare the CURRENT 7d evolution health — a hard regression
+// restores the pre-adoption backup and records the reversal. Deterministic
+// and conservative; the benches remain the primary gate.
+func (t *MetaEvolutionTask) maybeRevertAdoption(logger *slog.Logger) {
+	prior, err := t.Tracker.RecentMetaRevisions(20)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-metaRevertWatchWindowDays * 24 * time.Hour).UnixMilli()
+	seen := map[string]bool{}
+	for _, p := range prior { // newest first
+		if p.Action == "" || seen[p.Artifact] {
+			continue
+		}
+		seen[p.Artifact] = true // only the newest lifecycle record per artifact counts
+		if (p.Action != "auto_adopted" && p.Action != "adopted") || p.AdoptionHealth == nil || p.CreatedAt < cutoff {
+			continue
+		}
+		h := t.Tracker.EvolutionHealth()
+		if h.ResolvedEvolves7d < metaRevertMinResolved {
+			continue // not enough post-adoption evidence yet
+		}
+		farJump := h.FalseAcceptRate - p.AdoptionHealth.FalseAcceptRate
+		confirmDrop := p.AdoptionHealth.ConfirmRate - h.ConfirmRate
+		if farJump < metaRevertFARJump && confirmDrop < metaRevertConfirmDrop {
+			continue
+		}
+		reason := fmt.Sprintf("evolution health regressed since adoption: falseAcceptRate %.2f→%.2f, confirmRate %.2f→%.2f (resolved %d)",
+			p.AdoptionHealth.FalseAcceptRate, h.FalseAcceptRate, p.AdoptionHealth.ConfirmRate, h.ConfirmRate, h.ResolvedEvolves7d)
+		restored, rerr := t.Meta.RevertAdoption(p.Artifact)
+		if rerr != nil {
+			logger.Warn("meta-evolution: revert watch fired but restore failed",
+				"artifact", p.Artifact, "error", rerr)
+			continue
+		}
+		if lerr := t.Tracker.LogMetaRevision(MetaRevisionRecord{
+			Artifact:    p.Artifact,
+			FromVersion: p.ToVersion,
+			ToVersion:   restored,
+			Action:      "auto_reverted",
+			Reason:      reason,
+		}); lerr != nil {
+			logger.Warn("meta-evolution: revert ledger write failed", "artifact", p.Artifact, "error", lerr)
+		}
+		logger.Warn("meta-evolution: adoption AUTO-REVERTED by the rollback watch",
+			"artifact", p.Artifact, "reason", reason)
+		if t.OnReverted != nil {
+			t.OnReverted(p.Artifact, reason)
+		}
+	}
 }
 
 // nextEpoch alternates producer/evaluator based on the last CYCLE entry —
