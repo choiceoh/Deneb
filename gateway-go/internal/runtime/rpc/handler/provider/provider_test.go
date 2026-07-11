@@ -25,6 +25,7 @@ func (p catalogPlugin) Aliases() []string { return []string{"alias-" + p.id} }
 func (p catalogPlugin) Capabilities() providercore.Capabilities {
 	return providercore.Capabilities{SupportsTools: true}
 }
+
 func (p catalogPlugin) Catalog(context.Context, providercore.CatalogContext) (*providercore.CatalogResult, error) {
 	if p.err != nil {
 		return nil, p.err

@@ -17,6 +17,10 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     css: false,
+    // Deneb is a Korean-first, single-operator product: time-of-day expectations
+    // in component tests (calendar prefill hours, quick durations) are written
+    // against KST. Pin the zone so the suite is deterministic on UTC CI runners.
+    env: { TZ: "Asia/Seoul" },
     // Ephemeral git worktrees (Claude Code sessions) live under .claude/ and carry
     // their own copies of these test files — don't double-run them from the root.
     exclude: [...configDefaults.exclude, "**/.claude/**"],

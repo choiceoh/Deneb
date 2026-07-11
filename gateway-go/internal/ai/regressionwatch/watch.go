@@ -49,7 +49,8 @@ func NewTask(deps Deps) *Task {
 }
 
 // Name returns the component's stable scheduler name.
-func (t *Task) Name() string            { return "regression-watch" }
+func (t *Task) Name() string { return "regression-watch" }
+
 // Interval returns the component's scheduling cadence.
 func (t *Task) Interval() time.Duration { return watchInterval }
 

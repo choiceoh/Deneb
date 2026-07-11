@@ -120,7 +120,8 @@ func (t *heartbeatTask) now() time.Time {
 }
 
 // Name returns the component's stable scheduler name.
-func (t *heartbeatTask) Name() string            { return "heartbeat" }
+func (t *heartbeatTask) Name() string { return "heartbeat" }
+
 // Interval returns the component's scheduling cadence.
 func (t *heartbeatTask) Interval() time.Duration { return 30 * time.Minute }
 

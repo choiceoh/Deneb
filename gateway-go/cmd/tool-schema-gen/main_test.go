@@ -17,8 +17,10 @@ func TestGenerateOrdersSchemasAndEmitsBudgets(t *testing.T) {
 	}}
 
 	got := generate(tools, "tools", "schemas.json")
-	for _, want := range []string{"func readFileToolSchema()", `"required": []string{"path"}`,
-		`"default": 20`, `"maximum": 100`, `"read_file": 1200`} {
+	for _, want := range []string{
+		"func readFileToolSchema()", `"required": []string{"path"}`,
+		`"default": 20`, `"maximum": 100`, `"read_file": 1200`,
+	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("generated output missing %q\n%s", want, got)
 		}

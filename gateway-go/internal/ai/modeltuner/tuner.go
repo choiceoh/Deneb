@@ -106,7 +106,8 @@ func NewTask(deps Deps) *Task {
 }
 
 // Name returns the component's stable scheduler name.
-func (t *Task) Name() string            { return "model-tuner" }
+func (t *Task) Name() string { return "model-tuner" }
+
 // Interval returns the component's scheduling cadence.
 func (t *Task) Interval() time.Duration { return taskInterval }
 

@@ -39,7 +39,8 @@ func TestParseFlagsDefaultsToCompiledVersion(t *testing.T) {
 }
 
 func TestParseFlagsCapturesEveryOverride(t *testing.T) {
-	got := parseFlagsForTest(t, "compiled",
+	got := parseFlagsForTest(
+		t, "compiled",
 		"-config", "/tmp/deneb-test.json",
 		"-port", "32145",
 		"-bind", "lan",
@@ -176,16 +177,19 @@ func TestLoadConfigMalformedAndRuntimeValidationErrors(t *testing.T) {
 		t.Fatal("custom bind without host unexpectedly succeeded")
 	}
 
-	missing := filepath.Join(t.TempDir(), "absent", "deneb.json")
+	// A missing config file is not an error: the gateway boots on in-memory
+	// defaults and records the file as absent. (Persist only appends a
+	// generated auth token to an existing config — it never creates the file.)
+	missing := filepath.Join(t.TempDir(), "deneb.json")
 	created, err := LoadConfig(Flags{ConfigPath: missing}, discardLogger())
 	if err != nil {
-		t.Fatalf("missing config bootstrap should create defaults: %v", err)
+		t.Fatalf("missing config bootstrap should fall back to defaults: %v", err)
 	}
 	if created.Bootstrap == nil || created.Bootstrap.Snapshot == nil || created.Bootstrap.Snapshot.Path != missing {
 		t.Fatalf("created default config result = %#v", created)
 	}
-	if _, err := os.Stat(missing); err != nil {
-		t.Fatalf("missing config was not persisted: %v", err)
+	if created.Bootstrap.Snapshot.Exists {
+		t.Fatal("snapshot should record the config file as absent")
 	}
 }
 

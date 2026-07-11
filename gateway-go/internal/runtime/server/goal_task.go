@@ -58,7 +58,8 @@ type goalTask struct {
 }
 
 // Name returns the component's stable scheduler name.
-func (t *goalTask) Name() string            { return "goal-loop" }
+func (t *goalTask) Name() string { return "goal-loop" }
+
 // Interval returns the component's scheduling cadence.
 func (t *goalTask) Interval() time.Duration { return goalTickInterval }
 
