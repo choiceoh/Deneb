@@ -279,3 +279,47 @@ func TestNudger_ResetClearsBackoff(t *testing.T) {
 		t.Fatal("expected fire at 5 after Reset cleared the backoff")
 	}
 }
+
+func TestNudger_RunStaleReview(t *testing.T) {
+	n := newTestNudger(t, 3)
+	rec := &fakeReviewRunner{}
+	n.reviewer = rec
+	snap := SessionContext{Turns: 2, ToolActivities: []ToolActivity{{Name: "a"}, {Name: "b"}}}
+
+	fired, err := n.RunStaleReview("client:main", snap)
+	if err != nil || !fired {
+		t.Fatalf("stale review = (%v, %v), want fired", fired, err)
+	}
+	if rec.calls != 1 {
+		t.Fatalf("reviewer calls = %d, want 1", rec.calls)
+	}
+
+	// A thin snapshot is gate-rejected — a quiet skip, not an error.
+	fired, err = n.RunStaleReview("client:main", SessionContext{Turns: 0})
+	if err != nil || fired {
+		t.Fatalf("thin snapshot = (%v, %v), want quiet skip", fired, err)
+	}
+	if rec.calls != 1 {
+		t.Fatalf("reviewer calls after skip = %d, want 1", rec.calls)
+	}
+
+	// A session already under review is never double-run.
+	n.mu.Lock()
+	n.inflight["client:busy"] = time.Now()
+	n.mu.Unlock()
+	if fired, _ := n.RunStaleReview("client:busy", snap); fired {
+		t.Fatal("inflight session must not double-run")
+	}
+	if rec.calls != 1 {
+		t.Fatalf("reviewer calls after inflight guard = %d, want 1", rec.calls)
+	}
+
+	// Empty key and disabled nudger are no-ops.
+	if fired, _ := n.RunStaleReview("", snap); fired {
+		t.Fatal("empty key must not fire")
+	}
+	n.interval = 0
+	if fired, _ := n.RunStaleReview("client:main", snap); fired {
+		t.Fatal("disabled nudger must not fire")
+	}
+}

@@ -95,6 +95,28 @@ type heartbeatTask struct {
 	// instead of bare counters. Called only when the sweep actually fires
 	// (≤ once per interval). Nil → the nudge falls back to counters only.
 	selfImproveEvidence func(limit int) []genesis.FailureClusterSummary
+
+	// idleSkillReview, when set, fires one fenced Propus review when no
+	// review has completed for a long stretch (user away, deploy churn
+	// cancelling forks) — the idle backstop that keeps the review loop fed
+	// on quiet days. The closure owns staleness/retry pacing and returns
+	// whether a review actually ran plus a short detail for the log. Runs
+	// with the deterministic lanes, before the turn-gating check, so it
+	// fires even on an otherwise empty tick. Nil → lane disabled. See
+	// heartbeat_idle_review.go.
+	idleSkillReview func(ctx context.Context) (fired bool, detail string)
+
+	// nowFn overrides the task clock in tests so the active-hours gate is
+	// deterministic (a real run leaves it nil → time.Now).
+	nowFn func() time.Time
+}
+
+// now returns the task clock (nowFn in tests, time.Now in production).
+func (t *heartbeatTask) now() time.Time {
+	if t.nowFn != nil {
+		return t.nowFn()
+	}
+	return time.Now()
 }
 
 func (t *heartbeatTask) Name() string            { return "heartbeat" }
@@ -149,7 +171,7 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		return nil
 	}
 
-	if !withinActiveHours(time.Now()) {
+	if !withinActiveHours(t.now()) {
 		t.logger.Debug("heartbeat: skipped, outside active hours")
 		return nil
 	}
@@ -201,6 +223,17 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 			t.logger.Warn("heartbeat: failure-cluster promotion failed", "error", err)
 		} else if promoted > 0 {
 			t.logger.Info("heartbeat: failure-cluster candidates promoted", "count", promoted)
+		}
+	}
+
+	// Idle review backstop: with no real user turns for a long stretch the
+	// nudger never fires (cron/system sessions are excluded by design), so
+	// Propus starves — re-review the most recent real session directly. Runs
+	// here with the deterministic lanes so it fires even when the tick has
+	// nothing else to do.
+	if t.idleSkillReview != nil {
+		if fired, detail := t.idleSkillReview(ctx); fired {
+			t.logger.Info("heartbeat: idle skill review fired", "detail", detail)
 		}
 	}
 
