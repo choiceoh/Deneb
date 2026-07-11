@@ -138,6 +138,7 @@ const evolveSystemPrompt = `당신은 AI 에이전트의 스킬 개선 시스템
 13. **Promotion gate**: skip=false라면 target_signature, edited_surface, expected_behavior_change, regression_risk는 필수다. failure evidence bundle을 쓰는 경우 target_signature는 bundle의 signature 문자열과 일치해야 한다. edited_surface는 실제로 바꾼 SKILL.md body section이어야 하며, 이 evolve 경로에서 수정할 수 없는 support-file/runtime 표면을 주장하지 마라
 14. **Hermes-style patch first**: 출력 형식은 전체 body지만, 실제 변경은 작은 targeted patch여야 한다. 스킬 제목/목적을 바꾸거나 여러 섹션을 동시에 크게 갈아엎지 마라. 그런 변경이 필요하면 skip하고 source-level self-correction 또는 별도 review 후보로 남겨야 한다
 15. **Size/cache guard**: 후보는 frontmatter 포함 15KB 이하로 유지하고, 대화 중 시스템 프롬프트·도구셋·외부 support file 변경을 요구하지 마라. 이 evolve 경로는 SKILL.md body만 바꾼다
+16. **Reproduction case**: skip=false라면 reproduction_case를 함께 저작하라 — 이번 수정이 고치는 결함을 재현하는 검증 케이스로, "원본 body는 FAIL하고 후보 body는 PASS"해야 한다. required_substrings에는 후보에 새로 들어간(원본에 없는) 절차·검증 문구를, forbidden_substrings에는 후보에서 제거된 잘못된 지시를 담아라. 시스템이 결정적으로 재확인하므로 조건을 만족하지 못하는 케이스는 조용히 버려진다 — 확신이 없으면 생략해도 된다
 
 ## 출력 형식
 
@@ -151,7 +152,12 @@ const evolveSystemPrompt = `당신은 AI 에이전트의 스킬 개선 시스템
     "edited_surface": "Procedure|Pitfalls|Verification|metadata|support-file 중 실제 수정한 표면",
     "expected_behavior_change": "후보가 유도할 관찰 가능한 행동 변화",
     "regression_risk": "회귀 위험과 보존해야 할 동작",
-    "body": "개선된 전체 body 내용"
+    "body": "개선된 전체 body 내용",
+    "reproduction_case": {
+      "description": "이 수정이 고치는 결함 한 문장",
+      "required_substrings": ["후보에 새로 들어간 구체 문구"],
+      "forbidden_substrings": ["후보에서 제거된 잘못된 지시 (없으면 생략)"]
+    }
   }
 }
 

@@ -73,11 +73,21 @@ func (m *MetaArtifacts) Load(name, fallback string) string {
 	return content
 }
 
-// MaterializeDefaults writes each artifact that does not exist yet as a
-// byte-copy of its compiled-in default, so the operator (and the future slow
-// loop) has a concrete file to inspect and revise. Existing files are never
-// touched — an evolved artifact survives deploys. Best-effort: failures are
-// logged and skipped, never fatal (the Load fallback covers them).
+// metaSidecarSuffix marks the provenance sidecar written next to each
+// materialized artifact: the sha256 of the artifact content AS MATERIALIZED.
+// It is how a later deploy distinguishes "file is still the pristine default
+// I wrote" (safe to refresh when the compiled default moves) from "the slow
+// loop or the operator revised this" (never touch).
+const metaSidecarSuffix = ".default-sha256"
+
+// MaterializeDefaults writes each absent artifact as a byte-copy of its
+// compiled-in default, and REFRESHES an existing file when two things hold:
+// the compiled default changed since materialization AND the file is still
+// byte-identical to what was materialized (per the provenance sidecar). A
+// revised artifact — slow-loop evolve or operator edit — is never touched; a
+// pre-sidecar file of unknown provenance is preserved with a warning.
+// Best-effort: failures are logged and skipped, never fatal (the Load
+// fallback covers them).
 func (m *MetaArtifacts) MaterializeDefaults(defaults map[string]string) {
 	if m == nil || m.dir == "" {
 		return
@@ -88,14 +98,61 @@ func (m *MetaArtifacts) MaterializeDefaults(defaults map[string]string) {
 	}
 	for name, content := range defaults {
 		path := filepath.Join(m.dir, name)
-		if _, err := os.Stat(path); err == nil {
-			continue // present (possibly evolved) — never clobber
+		sidecarPath := path + metaSidecarSuffix
+		defaultSum := contentSHA256(content)
+		existing, err := os.ReadFile(path)
+		switch {
+		case err == nil:
+			if contentSHA256(string(existing)) == defaultSum {
+				m.writeSidecarIfAbsent(name, sidecarPath, defaultSum)
+				continue // already the current default
+			}
+			sidecar, sErr := os.ReadFile(sidecarPath)
+			if sErr != nil {
+				m.logger.Warn("meta artifact diverged from compiled default without provenance sidecar — preserving as-is",
+					"name", name)
+				continue
+			}
+			if strings.TrimSpace(string(sidecar)) != contentSHA256(string(existing)) {
+				continue // revised since materialization (evolved/operator) — never clobber
+			}
+			// Pristine default from an older binary: refresh to the new default.
+			if wErr := os.WriteFile(path, []byte(content), 0o644); wErr != nil {
+				m.logger.Warn("meta artifact refresh failed", "name", name, "error", wErr)
+				continue
+			}
+			if wErr := os.WriteFile(sidecarPath, []byte(defaultSum), 0o644); wErr != nil {
+				m.logger.Warn("meta artifact sidecar write failed", "name", name, "error", wErr)
+			}
+			m.logger.Info("meta artifact refreshed to new compiled default (was pristine)", "name", name)
+		case errors.Is(err, fs.ErrNotExist):
+			if wErr := os.WriteFile(path, []byte(content), 0o644); wErr != nil {
+				m.logger.Warn("meta artifact materialize failed", "name", name, "error", wErr)
+				continue
+			}
+			if wErr := os.WriteFile(sidecarPath, []byte(defaultSum), 0o644); wErr != nil {
+				m.logger.Warn("meta artifact sidecar write failed", "name", name, "error", wErr)
+			}
+			m.logger.Info("meta artifact materialized from compiled default", "name", name)
+		default:
+			m.logger.Warn("meta artifact unreadable during materialize", "name", name, "error", err)
 		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			m.logger.Warn("meta artifact materialize failed", "name", name, "error", err)
-			continue
-		}
-		m.logger.Info("meta artifact materialized from compiled default", "name", name)
+	}
+}
+
+func contentSHA256(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:])
+}
+
+// writeSidecarIfAbsent backfills provenance for a file that matches the current
+// compiled default but predates the sidecar scheme.
+func (m *MetaArtifacts) writeSidecarIfAbsent(name, sidecarPath, sum string) {
+	if _, err := os.Stat(sidecarPath); err == nil {
+		return
+	}
+	if err := os.WriteFile(sidecarPath, []byte(sum), 0o644); err != nil {
+		m.logger.Warn("meta artifact sidecar backfill failed", "name", name, "error", err)
 	}
 }
 
