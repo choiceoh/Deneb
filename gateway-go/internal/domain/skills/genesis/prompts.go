@@ -138,6 +138,7 @@ const evolveSystemPrompt = `당신은 AI 에이전트의 스킬 개선 시스템
 13. **Promotion gate**: skip=false라면 target_signature, edited_surface, expected_behavior_change, regression_risk는 필수다. failure evidence bundle을 쓰는 경우 target_signature는 bundle의 signature 문자열과 일치해야 한다. edited_surface는 실제로 바꾼 SKILL.md body section이어야 하며, 이 evolve 경로에서 수정할 수 없는 support-file/runtime 표면을 주장하지 마라
 14. **Hermes-style patch first**: 출력 형식은 전체 body지만, 실제 변경은 작은 targeted patch여야 한다. 스킬 제목/목적을 바꾸거나 여러 섹션을 동시에 크게 갈아엎지 마라. 그런 변경이 필요하면 skip하고 source-level self-correction 또는 별도 review 후보로 남겨야 한다
 15. **Size/cache guard**: 후보는 frontmatter 포함 15KB 이하로 유지하고, 대화 중 시스템 프롬프트·도구셋·외부 support file 변경을 요구하지 마라. 이 evolve 경로는 SKILL.md body만 바꾼다
+16-a. **Tool gap 선언**: 반복 실패의 근본 원인이 스킬 본문이 아니라 **도구 결함/부재**(툴 에러, 없는 기능, 잘못된 파라미터 계약)라면, skip과 함께 tool_gap을 선언하라. tool은 실패 트레이스에 실제로 나타난 도구명이어야 한다(시스템이 대조함). 이 선언은 스킬 개선과 도구 수리를 짝지어 코딩 후보 큐로 보낸다
 16. **Reproduction case**: skip=false라면 reproduction_case를 함께 저작하라 — 이번 수정이 고치는 결함을 재현하는 검증 케이스로, "원본 body는 FAIL하고 후보 body는 PASS"해야 한다. required_substrings에는 후보에 새로 들어간(원본에 없는) 절차·검증 문구를, forbidden_substrings에는 후보에서 제거된 잘못된 지시를 담아라. 시스템이 결정적으로 재확인하므로 조건을 만족하지 못하는 케이스는 조용히 버려진다 — 확신이 없으면 생략해도 된다
 
 ## 출력 형식
@@ -164,8 +165,14 @@ const evolveSystemPrompt = `당신은 AI 에이전트의 스킬 개선 시스템
 개선이 불필요할 때:
 {
   "skip": true,
-  "reason": "이유"
+  "reason": "이유",
+  "tool_gap": {
+    "tool": "실패 트레이스에 나타난 도구명 (도구 결함이 근본 원인일 때만)",
+    "description": "무엇이 고장/부재인가",
+    "proposed_fix": "제안하는 도구 수리 방향 한 문장"
+  }
 }
+(tool_gap은 선택 — 근본 원인이 도구일 때만)
 
 ## body 작성 규칙
 
