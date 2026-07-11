@@ -31,6 +31,7 @@ type LifecycleLogEntry struct {
 	Result           string            `json:"result,omitempty"`
 	NewVersion       string            `json:"newVersion,omitempty"`
 	SelfHarnessAudit *HarnessEditAudit `json:"selfHarnessAudit,omitempty"`
+	Provenance       *EvolveProvenance `json:"provenance,omitempty"`
 }
 
 // genesisLogEntry is the JSONL format for genesis log events.
@@ -102,6 +103,20 @@ func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
 // curator's MarkSkillPatched (which only tracks agent-created skills), this
 // records every committed or rejected evolve — including ones on user-authored
 // skills — so the native client can render a complete evolution timeline.
+// EvolveProvenance attributes an evolve decision to the exact evaluator
+// configuration that produced it (RSI P1.5 certificate ledger): the effective
+// meta-artifact versions, the judge identity, and the decision scores.
+// Additive JSONL — older entries simply lack it; P2/P3 consume it as their
+// label substrate (per-version judge accuracy, false-accept attribution).
+type EvolveProvenance struct {
+	EvolveArtifactVersion string   `json:"evolveArtifactVersion,omitempty"`
+	JudgeArtifactVersion  string   `json:"judgeArtifactVersion,omitempty"`
+	JudgeModel            string   `json:"judgeModel,omitempty"`
+	JudgeScoreOriginal    *float64 `json:"judgeScoreOriginal,omitempty"`
+	JudgeScoreCandidate   *float64 `json:"judgeScoreCandidate,omitempty"`
+	HeldOutMargin         *float64 `json:"heldOutMargin,omitempty"`
+}
+
 type evolveLogEntry struct {
 	Type             string            `json:"type"` // "evolved" | "evolve_rejected" | "evolve_rolled_back" | "evolve_confirmed" | "cross_skill_regression"
 	SkillName        string            `json:"skillName"`
@@ -110,6 +125,7 @@ type evolveLogEntry struct {
 	Reason           string            `json:"reason,omitempty"`
 	CreatedAt        int64             `json:"createdAt"`
 	SelfHarnessAudit *HarnessEditAudit `json:"selfHarnessAudit,omitempty"`
+	Provenance       *EvolveProvenance `json:"provenance,omitempty"`
 }
 
 // LogEvolve records a committed skill evolution (rewrite applied to disk) and
@@ -121,6 +137,12 @@ func (t *Tracker) LogEvolve(skillName, newVersion, description string) error {
 // LogEvolveWithAudit records a committed skill evolution with structured
 // Self-Harness transition metadata.
 func (t *Tracker) LogEvolveWithAudit(skillName, newVersion, description string, audit HarnessEditAudit) error {
+	return t.LogEvolveWithProvenance(skillName, newVersion, description, audit, nil)
+}
+
+// LogEvolveWithProvenance is LogEvolveWithAudit plus the evaluator-attribution
+// certificate (RSI P1.5). prov may be nil (legacy callers).
+func (t *Tracker) LogEvolveWithProvenance(skillName, newVersion, description string, audit HarnessEditAudit, prov *EvolveProvenance) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
@@ -134,6 +156,7 @@ func (t *Tracker) LogEvolveWithAudit(skillName, newVersion, description string, 
 		Description:      description,
 		CreatedAt:        now,
 		SelfHarnessAudit: audit.ptr(),
+		Provenance:       prov,
 	}); err != nil {
 		return err
 	}
@@ -207,6 +230,12 @@ func (t *Tracker) LogEvolveRejected(skillName, reason string) error {
 // LogEvolveRejectedWithAudit records a rejected skill evolution with structured
 // Self-Harness transition metadata from the candidate that failed validation.
 func (t *Tracker) LogEvolveRejectedWithAudit(skillName, reason string, audit HarnessEditAudit) error {
+	return t.LogEvolveRejectedWithProvenance(skillName, reason, audit, nil)
+}
+
+// LogEvolveRejectedWithProvenance is LogEvolveRejectedWithAudit plus the
+// evaluator-attribution certificate (RSI P1.5). prov may be nil.
+func (t *Tracker) LogEvolveRejectedWithProvenance(skillName, reason string, audit HarnessEditAudit, prov *EvolveProvenance) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
@@ -216,6 +245,7 @@ func (t *Tracker) LogEvolveRejectedWithAudit(skillName, reason string, audit Har
 		Reason:           reason,
 		CreatedAt:        now,
 		SelfHarnessAudit: audit.ptr(),
+		Provenance:       prov,
 	}); err != nil {
 		return err
 	}

@@ -38,7 +38,7 @@ func (e *Evolver) pickCandidateJudge() (*llm.Client, string) {
 // judgeCandidate asks a model to validate a rewritten skill body against the
 // original. Returns (pass, reason, err). On any error the caller keeps the
 // original (fail-closed).
-func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *llm.Client, model, originalContent, candidateBody string, stats *UsageStats) (pass bool, reason string, err error) {
+func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *llm.Client, model, originalContent, candidateBody string, stats *UsageStats, prov *EvolveProvenance) (pass bool, reason string, err error) {
 	if client == nil {
 		return false, "", fmt.Errorf("judge: nil client")
 	}
@@ -82,6 +82,10 @@ func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *
 	resp, err := jsonutil.UnmarshalLLM[judgeVerdict](raw)
 	if err != nil {
 		return false, "", fmt.Errorf("judge: parse verdict: %w", err)
+	}
+	if prov != nil {
+		prov.JudgeScoreOriginal = resp.OriginalScore
+		prov.JudgeScoreCandidate = resp.CandidateScore
 	}
 	pass, reason = acceptJudgeVerdict(resp, len(cases) > 0)
 	if pass && len(cases) == 0 {

@@ -80,3 +80,42 @@ func TestMetaArtifacts_UnwiredIdentity(t *testing.T) {
 		}
 	}
 }
+
+func TestMetaArtifacts_VersionAttribution(t *testing.T) {
+	// Unwired resolver: version = hash of the compiled fallback — stable.
+	var nilM *MetaArtifacts
+	base := nilM.Version(MetaEvolveSystemPrompt, evolveSystemPrompt)
+	if len(base) != 12 {
+		t.Fatalf("version length = %d, want 12", len(base))
+	}
+	if again := nilM.Version(MetaEvolveSystemPrompt, evolveSystemPrompt); again != base {
+		t.Fatal("version must be deterministic")
+	}
+
+	// A wired dir with no file resolves to the same fallback version; a real
+	// file override changes it; a short (invalid) file falls back — version
+	// attribution always matches the EFFECTIVE prompt content.
+	dir := t.TempDir()
+	m := NewMetaArtifacts(dir, discardLogger())
+	if v := m.Version(MetaEvolveSystemPrompt, evolveSystemPrompt); v != base {
+		t.Fatalf("absent file version %s != fallback version %s", v, base)
+	}
+	long := strings.Repeat("evolved prompt content ", 20)
+	if err := os.WriteFile(filepath.Join(dir, MetaEvolveSystemPrompt), []byte(long), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if v := m.Version(MetaEvolveSystemPrompt, evolveSystemPrompt); v == base {
+		t.Fatal("file override must change the version")
+	}
+	if err := os.WriteFile(filepath.Join(dir, MetaEvolveSystemPrompt), []byte("stub"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if v := m.Version(MetaEvolveSystemPrompt, evolveSystemPrompt); v != base {
+		t.Fatal("short-floor fallback must report the fallback version")
+	}
+
+	vs := m.ActiveVersions(DefaultMetaArtifacts())
+	if len(vs) != len(DefaultMetaArtifacts()) {
+		t.Fatalf("ActiveVersions size = %d", len(vs))
+	}
+}

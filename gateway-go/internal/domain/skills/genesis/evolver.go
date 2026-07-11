@@ -186,6 +186,19 @@ func (e *Evolver) SetMetaArtifacts(m *MetaArtifacts) {
 	e.configMu.Unlock()
 }
 
+// newProvenance seeds the certificate with the evaluator artifact versions in
+// effect for this evolve attempt (RSI P1.5); the judge fields are filled as
+// the validation chain runs.
+func (e *Evolver) newProvenance() EvolveProvenance {
+	e.configMu.RLock()
+	m := e.meta
+	e.configMu.RUnlock()
+	return EvolveProvenance{
+		EvolveArtifactVersion: m.Version(MetaEvolveSystemPrompt, evolveSystemPrompt),
+		JudgeArtifactVersion:  m.Version(MetaSkillJudgeSystemPrompt, skillJudgeSystemPrompt),
+	}
+}
+
 func (e *Evolver) metaLoad(name, fallback string) string {
 	e.configMu.RLock()
 	m := e.meta

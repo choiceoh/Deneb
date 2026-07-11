@@ -29,6 +29,9 @@ type evaluatedCandidate struct {
 	description string
 	audit       HarnessEditAudit
 	margin      float64 // held-out score margin (candidate - original); selection rank
+	// prov is the evaluator-attribution certificate accumulated while the
+	// candidate ran the gates (RSI P1.5) — recorded with the lifecycle entry.
+	prov EvolveProvenance
 }
 
 // evaluateCandidateText parses one producer/teacher response and runs the full
@@ -75,6 +78,7 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 	}
 	committedDescription := strings.TrimSpace(resp.Changes.Description)
 	committedAudit := audit
+	prov := e.newProvenance()
 
 	// Execution-grounded behavioral gate (do-no-harm safety net). Replays the
 	// candidate vs the original through the executor model on stored replay
@@ -86,7 +90,7 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 			"skill", entry.Skill.Name, "error", berr)
 	} else if behavior.Evaluated && !behavior.Pass {
 		if e.tracker != nil {
-			if logErr := e.tracker.LogEvolveRejectedWithAudit(entry.Skill.Name, behavior.Reason, audit); logErr != nil {
+			if logErr := e.tracker.LogEvolveRejectedWithProvenance(entry.Skill.Name, behavior.Reason, audit, &prov); logErr != nil {
 				e.logger.Warn("evolver: lifecycle log write failed",
 					"skill", entry.Skill.Name, "error", logErr)
 			}
@@ -105,7 +109,7 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 	if !e.selfTest {
 		if ok, reason := e.validateCandidatePreflight(entry.Skill.Name, originalContent, candidateBody, audit, stats, reviewFinding); !ok {
 			if e.tracker != nil {
-				if logErr := e.tracker.LogEvolveRejectedWithAudit(entry.Skill.Name, reason, audit); logErr != nil {
+				if logErr := e.tracker.LogEvolveRejectedWithProvenance(entry.Skill.Name, reason, audit, &prov); logErr != nil {
 					e.logger.Warn("evolver: lifecycle log write failed",
 						"skill", entry.Skill.Name, "error", logErr)
 				}
@@ -123,12 +127,12 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 	// keeps the original — a bad "improvement" is worse than no change. When a
 	// teacher (main) model is wired, it gets one escalated attempt first (#4).
 	if e.selfTest {
-		accepted, ok, reason := e.selfTestAndMaybeEscalate(ctx, entry, originalContent, candidateBody, stats, audit, reviewFinding)
+		accepted, ok, reason := e.selfTestAndMaybeEscalate(ctx, entry, originalContent, candidateBody, stats, audit, reviewFinding, &prov)
 		if !ok {
 			// Best-effort lifecycle record so rejected attempts are visible in
 			// the native observability feed, not just operator logs.
 			if e.tracker != nil {
-				if logErr := e.tracker.LogEvolveRejectedWithAudit(entry.Skill.Name, reason, audit); logErr != nil {
+				if logErr := e.tracker.LogEvolveRejectedWithProvenance(entry.Skill.Name, reason, audit, &prov); logErr != nil {
 					e.logger.Warn("evolver: lifecycle log write failed",
 						"skill", entry.Skill.Name, "error", logErr)
 				}
@@ -155,12 +159,15 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 	// matches what would actually be committed. It stays 0 when a skill has no
 	// held-out cases — all such candidates then tie and fall back to
 	// first-committable order, preserving single-candidate behavior.
+	margin := e.heldOutSelectionMargin(entry.Skill.Name, originalContent, candidateBody)
+	prov.HeldOutMargin = &margin
 	return evaluatedCandidate{
 		body:        candidateBody,
 		newVersion:  newVersion,
 		description: committedDescription,
 		audit:       committedAudit,
-		margin:      e.heldOutSelectionMargin(entry.Skill.Name, originalContent, candidateBody),
+		margin:      margin,
+		prov:        prov,
 	}, nil
 }
 
@@ -212,7 +219,7 @@ func (e *Evolver) commitEvaluatedCandidate(entry *skills.SkillEntry, originalCon
 	// MarkSkillPatched only tracks agent-created skills, so without this a
 	// committed evolve of a user-authored skill leaves no queryable trace.
 	if e.tracker != nil {
-		if logErr := e.tracker.LogEvolveWithAudit(entry.Skill.Name, newVersion, committedDescription, committedAudit); logErr != nil {
+		if logErr := e.tracker.LogEvolveWithProvenance(entry.Skill.Name, newVersion, committedDescription, committedAudit, &eval.prov); logErr != nil {
 			e.logger.Warn("evolver: lifecycle log write failed",
 				"skill", entry.Skill.Name, "error", logErr)
 		}

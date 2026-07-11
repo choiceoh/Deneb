@@ -421,7 +421,7 @@ type acceptedSkillCandidate struct {
 // candidate. On fail it escalates to the teacher model (if wired) for one more
 // attempt, then re-judges. ok=false means the caller must keep the original
 // skill untouched.
-func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.SkillEntry, originalContent, candidateBody string, stats *UsageStats, audit HarnessEditAudit, reviewFinding string) (acceptedSkillCandidate, bool, string) {
+func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.SkillEntry, originalContent, candidateBody string, stats *UsageStats, audit HarnessEditAudit, reviewFinding string, prov *EvolveProvenance) (acceptedSkillCandidate, bool, string) {
 	teacherClient, teacherModel := e.teacherModelSnapshot()
 	hasTeacher := teacherClient != nil && teacherModel != ""
 
@@ -430,7 +430,10 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	// self-preference bias skews toward accepting it (LLM-judge survey
 	// arXiv:2508.02994). pickCandidateJudge routes to the teacher when wired.
 	judgeClient, judgeModel := e.pickCandidateJudge()
-	pass, reason, err := e.validateCandidate(ctx, entry.Skill.Name, judgeClient, judgeModel, originalContent, candidateBody, stats, audit, reviewFinding)
+	if prov != nil {
+		prov.JudgeModel = judgeModel
+	}
+	pass, reason, err := e.validateCandidate(ctx, entry.Skill.Name, judgeClient, judgeModel, originalContent, candidateBody, stats, audit, reviewFinding, prov)
 	if err != nil {
 		e.logger.Warn("evolver: self-test errored, keeping original",
 			"skill", entry.Skill.Name, "error", err)
@@ -457,7 +460,7 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	// stamp its own rewrite. A weaker judge may false-reject a good rewrite, but
 	// the loop is fail-closed (keeps the original), so that errs safe.
 	primaryClient, primaryModel := e.primaryModel()
-	tpass, treason, tjerr := e.validateCandidate(ctx, entry.Skill.Name, primaryClient, primaryModel, originalContent, teacherCandidate.Body, stats, teacherCandidate.Audit, reviewFinding)
+	tpass, treason, tjerr := e.validateCandidate(ctx, entry.Skill.Name, primaryClient, primaryModel, originalContent, teacherCandidate.Body, stats, teacherCandidate.Audit, reviewFinding, prov)
 	if tjerr != nil || !tpass {
 		e.logger.Info("evolver: teacher rewrite still failed self-test",
 			"skill", entry.Skill.Name, "reason", treason)
@@ -467,11 +470,11 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	return teacherCandidate, true, treason
 }
 
-func (e *Evolver) validateCandidate(ctx context.Context, skillName string, client *llm.Client, model, originalContent, candidateBody string, stats *UsageStats, audit HarnessEditAudit, reviewFinding string) (pass bool, reason string, err error) {
+func (e *Evolver) validateCandidate(ctx context.Context, skillName string, client *llm.Client, model, originalContent, candidateBody string, stats *UsageStats, audit HarnessEditAudit, reviewFinding string, prov *EvolveProvenance) (pass bool, reason string, err error) {
 	if ok, reason := e.validateCandidatePreflight(skillName, originalContent, candidateBody, audit, stats, reviewFinding); !ok {
 		return false, reason, nil
 	}
-	return e.judgeCandidate(ctx, skillName, client, model, originalContent, candidateBody, stats)
+	return e.judgeCandidate(ctx, skillName, client, model, originalContent, candidateBody, stats, prov)
 }
 
 func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candidateBody string, audit HarnessEditAudit, stats *UsageStats, reviewFinding string) (bool, string) {

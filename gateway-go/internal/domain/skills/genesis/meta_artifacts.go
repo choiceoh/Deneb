@@ -1,6 +1,8 @@
 package genesis
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io/fs"
 	"log/slog"
@@ -106,4 +108,23 @@ func DefaultMetaArtifacts() map[string]string {
 		MetaEvolveSystemPrompt:       evolveSystemPrompt,
 		MetaSkillJudgeSystemPrompt:   skillJudgeSystemPrompt,
 	}
+}
+
+// Version returns a short content hash (sha256, 12 hex) of the artifact's
+// EFFECTIVE content — the file when present and valid, the compiled fallback
+// otherwise. This is the evaluator-version attribution the lifecycle ledger
+// records (RSI P1.5): two decisions carry the same version iff the exact same
+// prompt text produced them, whether it came from disk or the binary.
+func (m *MetaArtifacts) Version(name, fallback string) string {
+	sum := sha256.Sum256([]byte(m.Load(name, fallback)))
+	return hex.EncodeToString(sum[:])[:12]
+}
+
+// ActiveVersions maps every artifact in defaults to its effective version.
+func (m *MetaArtifacts) ActiveVersions(defaults map[string]string) map[string]string {
+	out := make(map[string]string, len(defaults))
+	for name, fallback := range defaults {
+		out[name] = m.Version(name, fallback)
+	}
+	return out
 }
