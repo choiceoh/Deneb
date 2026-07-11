@@ -46,10 +46,14 @@ const metaProposalMaxBytes = 24 * 1024
 // preserve per artifact — the response-schema markers the Go parsers depend
 // on. A proposal that drops one would silently break the pipeline, so the
 // contract gate rejects it outright.
+// NOTE: every response-schema addition to a prompt MUST add its anchor here
+// in the same PR — a proposal generated against an older incumbent would
+// otherwise silently drop the new schema when adopted (near-miss 2026-07-11:
+// the first live proposal predated tool_gap and would have erased it).
 var metaArtifactContracts = map[string][]string{
 	MetaEvolveSystemPrompt: {
 		`"skip"`, `"changes"`, `"body"`, `"new_version"`,
-		`"target_signature"`, `"reproduction_case"`,
+		`"target_signature"`, `"reproduction_case"`, `"tool_gap"`,
 	},
 	MetaSkillJudgeSystemPrompt: {
 		`"pass"`, `"original_score"`, `"candidate_score"`, `"reason"`,

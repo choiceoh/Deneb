@@ -14,7 +14,8 @@ func TestMetaProposalGate(t *testing.T) {
 	incumbent := strings.Repeat("현재 프롬프트 내용. ", 30)
 	valid := incumbent + `
 ## 출력 (JSON만)
-{"skip": false, "changes": {"body": "...", "new_version": "0.1.1", "target_signature": "...", "reproduction_case": {}}}`
+{"skip": false, "changes": {"body": "...", "new_version": "0.1.1", "target_signature": "...", "reproduction_case": {}}}
+{"skip": true, "tool_gap": {"tool": "..."}}`
 
 	cases := []struct {
 		name     string
