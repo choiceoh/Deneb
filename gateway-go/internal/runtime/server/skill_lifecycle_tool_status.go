@@ -12,6 +12,7 @@ import (
 // move, no behavior change): per-skill/global status assembly and the Propus
 // overview/doctrine maps.
 
+// SkillLifecycleStatus returns the current skill-lifecycle status.
 func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chattools.SkillLifecycleStatusRequest) (any, error) {
 	if b.tracker == nil {
 		return map[string]any{

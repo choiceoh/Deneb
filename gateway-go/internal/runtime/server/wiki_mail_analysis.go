@@ -20,7 +20,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
-	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	handlermail "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail"
 )
 
 // wikiProjectCategory is the wiki category whose pages are offered to the
@@ -55,7 +55,7 @@ func mailProjectName(relatedProjects []string) string {
 // buildMailAnalysisPage renders a wiki.Page from a fresh analysis. The
 // body is a short metadata blockquote followed by the LLM markdown so
 // memory.search hits show the From/Date/ID in the preview.
-func buildMailAnalysisPage(in handlerminiapp.WikiAnalysisInput) *wiki.Page {
+func buildMailAnalysisPage(in handlermail.WikiAnalysisInput) *wiki.Page {
 	title := strings.TrimSpace(in.Subject)
 	if title == "" {
 		title = "(제목 없음) " + in.MsgID
@@ -157,14 +157,14 @@ func (s *Server) projectCandidatesFn() func() []mailanalysis.ProjectCandidate {
 // what lets a polled email show up already-analyzed in the Mini App with no
 // manual tap.
 func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, mailanalysis.AnalysisResult) error {
-	cacheStore := handlerminiapp.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis"))
+	cacheStore := handlermail.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis"))
 	workStore := mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json"))
 	return func(msg *gmail.MessageDetail, res mailanalysis.AnalysisResult) error {
 		if msg == nil {
 			return nil
 		}
 		var errs []error
-		if err := cacheStore.SaveAnalysis(handlerminiapp.CachedAnalysis{
+		if err := cacheStore.SaveAnalysis(handlermail.CachedAnalysis{
 			MsgID:           msg.ID,
 			Subject:         msg.Subject,
 			From:            msg.From,
@@ -178,7 +178,7 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, mailanalysis.
 			errs = append(errs, err)
 		}
 		if s.wikiStore != nil {
-			page := buildMailAnalysisPage(handlerminiapp.WikiAnalysisInput{
+			page := buildMailAnalysisPage(handlermail.WikiAnalysisInput{
 				MsgID:           msg.ID,
 				Subject:         msg.Subject,
 				From:            msg.From,

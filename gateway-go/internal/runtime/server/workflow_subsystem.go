@@ -3,7 +3,7 @@ package server
 import (
 	"log/slog"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/usage"

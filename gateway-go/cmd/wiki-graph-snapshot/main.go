@@ -14,6 +14,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -34,9 +35,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("resolve home: %w", err)
 	}
-	defaultIn := filepath.Join(home, ".deneb", "wiki")
-	defaultOut := filepath.Join(home, ".deneb", "wiki-graph")
-	defaultDiary := filepath.Join(home, ".deneb", "memory", "diary")
+	defaultIn, defaultOut, defaultDiary := defaultSnapshotPaths(home)
 
 	in := flag.String("in", defaultIn, "wiki directory")
 	out := flag.String("out", defaultOut, "output directory for graph.json + GRAPH_REPORT.md")
@@ -56,16 +55,26 @@ func run() error {
 		return fmt.Errorf("snapshot failed: %w", err)
 	}
 
-	fmt.Printf("graphPath: %s\n", res.GraphPath)
-	fmt.Printf("nodes:     %d\n", res.Nodes)
-	fmt.Printf("edges:     %d\n", res.Edges)
-	fmt.Printf("clustered: %v\n", res.Clustered)
-	if res.ClusterError != "" {
-		fmt.Printf("clusterErr:%s\n", res.ClusterError)
-	}
+	printSnapshotResult(os.Stdout, res)
 
 	if info, err := os.Stat(res.GraphPath); err == nil {
 		fmt.Printf("size:      %d bytes (%.1f KB)\n", info.Size(), float64(info.Size())/1024)
 	}
 	return nil
+}
+
+func defaultSnapshotPaths(home string) (in, out, diary string) {
+	return filepath.Join(home, ".deneb", "wiki"),
+		filepath.Join(home, ".deneb", "wiki-graph"),
+		filepath.Join(home, ".deneb", "memory", "diary")
+}
+
+func printSnapshotResult(w io.Writer, res *wiki.SnapshotResult) {
+	fmt.Fprintf(w, "graphPath: %s\n", res.GraphPath)
+	fmt.Fprintf(w, "nodes:     %d\n", res.Nodes)
+	fmt.Fprintf(w, "edges:     %d\n", res.Edges)
+	fmt.Fprintf(w, "clustered: %v\n", res.Clustered)
+	if res.ClusterError != "" {
+		fmt.Fprintf(w, "clusterErr:%s\n", res.ClusterError)
+	}
 }

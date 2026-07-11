@@ -22,7 +22,6 @@ package handlerminiapp
 
 import (
 	"context"
-	"encoding/json"
 	"sort"
 	"strings"
 	"time"
@@ -31,7 +30,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -151,20 +149,9 @@ func DashboardMethods(deps DashboardDeps) map[string]rpcutil.HandlerFunc {
 }
 
 func dashboardLanes(deps DashboardDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		// Tolerate (and ignore) any params for forward-compat — the dashboard
-		// currently takes none, but accepting a body keeps the client free to
-		// send filters later without a 400.
-		if len(req.Params) > 0 {
-			var ignore map[string]any
-			if err := json.Unmarshal(req.Params, &ignore); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
-
+	// Tolerate (and ignore) any object params for forward compatibility. The
+	// typed optional bind still rejects malformed JSON before entering the body.
+	return bindAuthenticatedOptional[map[string]any](func(ctx context.Context, req *protocol.RequestFrame, _ map[string]any) *protocol.ResponseFrame {
 		// Resolve the ruleset. A load error degrades to keyword-only defaults
 		// (better a partial dashboard than none); the classifier with default
 		// rules still buckets by domain keyword.
@@ -181,7 +168,7 @@ func dashboardLanes(deps DashboardDeps) rpcutil.HandlerFunc {
 		items := collectItems(ctx, deps, rules)
 		out := groupByLane(items, lanes)
 		return rpcutil.RespondOK(req.ID, out)
-	}
+	})
 }
 
 // classifiedItem pairs a projected DashboardItem with the lane it was assigned,

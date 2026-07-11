@@ -2,19 +2,20 @@ package handlerminiapp
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+// NativeSyncStore defines the native-sync persistence operations used by RPC handlers.
 type NativeSyncStore interface {
 	Pull(afterSeq int64, limit int) (nativesync.PullResult, error)
 }
 
+// SyncDeps holds dependencies required by native-sync RPC handlers.
 type SyncDeps struct {
 	Store NativeSyncStore
 }
@@ -24,6 +25,7 @@ const (
 	maxSyncLimit     = 500
 )
 
+// SyncMethods registers native-sync RPC handlers.
 func SyncMethods(deps SyncDeps) map[string]rpcutil.HandlerFunc {
 	if deps.Store == nil {
 		return nil
@@ -38,16 +40,7 @@ func syncPull(deps SyncDeps) rpcutil.HandlerFunc {
 		Cursor int64 `json:"cursor,omitempty"`
 		Limit  int   `json:"limit,omitempty"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p params
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		limit := p.Limit
 		if limit <= 0 {
 			limit = defaultSyncLimit
@@ -67,5 +60,5 @@ func syncPull(deps SyncDeps) rpcutil.HandlerFunc {
 			"count":        len(result.Events),
 			"serverTimeMs": time.Now().UnixMilli(),
 		})
-	}
+	})
 }

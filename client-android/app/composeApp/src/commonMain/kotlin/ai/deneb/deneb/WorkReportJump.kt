@@ -61,7 +61,8 @@ internal fun expandCollapsedReportFence(content: String): String {
     val payload = lines.subList(1, close).joinToString("\n")
     val root = runCatching { SharedJson.parseToJsonElement(payload) }.getOrNull() as? JsonObject
         ?: return content
-    if (root["type"]?.jsonPrimitive?.contentOrNull != "accordion") return content
+    val type = runCatching { root["type"]?.jsonPrimitive?.contentOrNull }.getOrNull()
+    if (type != "accordion") return content
     val expanded = JsonObject(root + ("expanded" to JsonPrimitive(true)))
     val rebuilt = buildString {
         append(lines.first())

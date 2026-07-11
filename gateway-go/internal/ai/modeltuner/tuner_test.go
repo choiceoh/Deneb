@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/router"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 )
 
 type fakeStats struct {

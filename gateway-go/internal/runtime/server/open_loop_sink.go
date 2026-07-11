@@ -11,7 +11,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localtodo"
 )
 

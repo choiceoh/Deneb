@@ -16,7 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/lmtpd"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
@@ -29,6 +29,7 @@ import (
 // than a nil notifier) keeps sendNotification from logging a per-cycle warn.
 type noopGmailNotifier struct{}
 
+// Notify accepts a notification without external delivery.
 func (noopGmailNotifier) Notify(context.Context, string) error { return nil }
 
 type mailIngestHealth struct {
@@ -71,7 +72,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 		LocalModel:             stage1Model,
 		SenderFactsFn:          s.wikiSenderFacts,
 		CounterpartyProjectsFn: s.mailCounterpartyProjects,
-		AttachmentExtractFn:    tools.ExtractAttachmentTextBytes,
+		AttachmentExtractFn:    document.ExtractAttachmentText,
 		PromptOverride:         s.promptOverride,
 		ThinkingKwarg:          s.mailStage2ThinkingKwarg(),
 	}
@@ -228,7 +229,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		LocalModel:             stage1Model,
 		SenderFactsFn:          s.wikiSenderFacts,
 		CounterpartyProjectsFn: s.mailCounterpartyProjects,
-		AttachmentExtractFn:    tools.ExtractAttachmentTextBytes,
+		AttachmentExtractFn:    document.ExtractAttachmentText,
 		PromptOverride:         s.promptOverride,
 		OnAnalyzed:             s.makeMailAnalysisSink(),
 		OnDelivered:            s.makeMailFeedDeliverySink(),

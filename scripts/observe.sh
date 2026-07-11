@@ -3,7 +3,7 @@
 #
 # One entry point to watch a running Deneb gateway's logging, runtime behavior,
 # and per-run turn shape — the external adapter over the miniapp.observe.* RPC
-# surface (see gateway-go/internal/runtime/observe). Because observe.* itself is
+# surface (see gateway-go/internal/core/observe). Because observe.* itself is
 # in-process only, this talks to the client-token-gated miniapp.observe.* mirror,
 # which is the one wire path the broader RPC surface stays closed behind.
 #
@@ -80,7 +80,7 @@ build_params() {
 		v="${P[$k]}"
 		case "$k" in
 			limit|sinceMs|days) val="$v" ;;
-			*) val="\"$v\"" ;;
+			*) val=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1], ensure_ascii=False))' "$v") ;;
 		esac
 		json="$json$sep\"$k\":$val"
 		sep=","

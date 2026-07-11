@@ -59,6 +59,7 @@ type uaTransport struct {
 	base http.RoundTripper
 }
 
+// RoundTrip adds the configured user agent before forwarding an HTTP request.
 func (t *uaTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", UserAgent())

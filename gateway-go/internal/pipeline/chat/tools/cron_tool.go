@@ -10,6 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // --- cron tool ---
@@ -174,7 +175,7 @@ func cronList(svc *cron.Service) (string, error) {
 		if nextRun != "" {
 			fmt.Fprintf(&sb, "  다음 실행%s\n", nextRun)
 		}
-		if cmd := truncateLine(cronPayloadMsg(j.Payload), 80); cmd != "" {
+		if cmd := textutil.TruncateRunesWithin(cronPayloadMsg(j.Payload), 80, "…"); cmd != "" {
 			fmt.Fprintf(&sb, "  명령: %s\n", cmd)
 		}
 		if j.State.ConsecutiveErrors > 0 {
@@ -406,7 +407,7 @@ func cronGet(d *toolctx.ChronoDeps, jobID string) (string, error) {
 	fmt.Fprintf(&sb, "- 상태: %s\n", status)
 	fmt.Fprintf(&sb, "- 스케줄: %s\n", cron.FormatHumanSchedule(job.Schedule))
 
-	if cmd := truncateLine(cronPayloadMsg(job.Payload), 120); cmd != "" {
+	if cmd := textutil.TruncateRunesWithin(cronPayloadMsg(job.Payload), 120, "…"); cmd != "" {
 		fmt.Fprintf(&sb, "- 명령: %s\n", cmd)
 	}
 
@@ -511,12 +512,12 @@ func cronRuns(d *toolctx.ChronoDeps, jobID string, limit int) (string, error) {
 
 			errStr := ""
 			if e.Error != "" {
-				errStr = fmt.Sprintf(" — %s", truncateLine(e.Error, 60))
+				errStr = fmt.Sprintf(" — %s", textutil.TruncateRunesWithin(e.Error, 60, "…"))
 			}
 
 			summary := ""
 			if e.Summary != "" && e.Error == "" {
-				summary = fmt.Sprintf(" — %s", truncateLine(e.Summary, 60))
+				summary = fmt.Sprintf(" — %s", textutil.TruncateRunesWithin(e.Summary, 60, "…"))
 			}
 
 			fmt.Fprintf(&sb, "\n%s [%s] %s (%s%s%s%s)%s%s",

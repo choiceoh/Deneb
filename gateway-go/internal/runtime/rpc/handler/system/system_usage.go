@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/usage"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -125,11 +125,12 @@ func logsTail(deps LogsDeps) rpcutil.HandlerFunc {
 		fileSize := info.Size()
 		var cursor int64
 		reset := false
+		skipPartialLine := false
 
 		if p.Cursor != nil {
 			cursor = *p.Cursor
-			// Detect log rotation: if cursor exceeds file size, reset to start.
-			if cursor > fileSize {
+			// Detect log rotation or an invalid external cursor and reset to start.
+			if cursor < 0 || cursor > fileSize {
 				cursor = 0
 				reset = true
 			}
@@ -137,6 +138,13 @@ func logsTail(deps LogsDeps) rpcutil.HandlerFunc {
 
 		// Seek to cursor position.
 		if cursor > 0 {
+			// Cursors returned by this handler point immediately after a complete
+			// newline and must resume at the next line. Only discard a prefix when
+			// an external caller supplied a cursor in the middle of a line.
+			var previous [1]byte
+			if _, err := f.ReadAt(previous[:], cursor-1); err == nil {
+				skipPartialLine = previous[0] != '\n'
+			}
 			if _, err := f.Seek(cursor, io.SeekStart); err != nil {
 				return rpcerr.WrapUnavailable("seek failed", err).Response(req.ID)
 			}
@@ -152,9 +160,9 @@ func logsTail(deps LogsDeps) rpcutil.HandlerFunc {
 		bytesRead := int64(0)
 
 		// If resuming mid-file, skip first partial line.
-		if cursor > 0 && !reset {
+		if skipPartialLine && !reset {
 			if scanner.Scan() {
-				bytesRead += int64(len(scanner.Bytes())) + 1 // +1 for newline
+				bytesRead += scannedLineWidth(f, cursor+bytesRead, fileSize, scanner.Bytes())
 			}
 		}
 
@@ -164,11 +172,14 @@ func logsTail(deps LogsDeps) rpcutil.HandlerFunc {
 				break
 			}
 			line := scanner.Text()
-			bytesRead += int64(len(line)) + 1
+			bytesRead += scannedLineWidth(f, cursor+bytesRead, fileSize, scanner.Bytes())
 			lines = append(lines, line)
 		}
 
 		newCursor := cursor + bytesRead
+		if newCursor < fileSize {
+			truncated = true
+		}
 
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"cursor":    newCursor,
@@ -179,6 +190,35 @@ func logsTail(deps LogsDeps) rpcutil.HandlerFunc {
 			"file":      filepath.Base(logFile),
 		})
 		return resp
+	}
+}
+
+// scannedLineWidth returns the source bytes consumed for a ScanLines token,
+// including LF or CRLF delimiters stripped by the scanner. When a byte limit
+// ends mid-line, no delimiter is added, so the returned cursor never jumps
+// past unread log bytes.
+func scannedLineWidth(file *os.File, offset, fileSize int64, token []byte) int64 {
+	width := int64(len(token))
+	separatorAt := offset + width
+	if separatorAt >= fileSize {
+		return width
+	}
+	var separator [2]byte
+	n, _ := file.ReadAt(separator[:], separatorAt)
+	if n == 0 {
+		return width
+	}
+	switch separator[0] {
+	case '\n':
+		return width + 1
+	case '\r':
+		if n > 1 && separator[1] == '\n' {
+			return width + 2
+		}
+		// ScanLines drops a terminal carriage return even without LF.
+		return width + 1
+	default:
+		return width
 	}
 }
 

@@ -30,6 +30,7 @@ type PropusSystemIdentity struct {
 	FilteredPrinciples []PropusDoctrinePaper `json:"filteredPrinciples"`
 }
 
+// BuildPropusSystemIdentity derives the system identity for scope.
 func BuildPropusSystemIdentity(scope string) PropusSystemIdentity {
 	doctrine := PropusDoctrine()
 	scope = normalizePropusScope(scope)
@@ -68,6 +69,7 @@ type PropusDoctrineCoverage struct {
 	Opportunities      int            `json:"opportunities"`
 }
 
+// EvaluatePropusDoctrineCoverage scores evidence against the doctrine sources.
 func EvaluatePropusDoctrineCoverage(
 	counts map[string]int,
 	validationSummary SkillValidationCaseSummary,
@@ -136,6 +138,7 @@ func EvaluatePropusDoctrineCoverage(
 	}, actions
 }
 
+// PropusOverviewInput collects the lifecycle signals used by the overview.
 type PropusOverviewInput struct {
 	Scope              string
 	SkillName          string
@@ -180,6 +183,7 @@ type PropusOverview struct {
 	NextActions            []string               `json:"nextActions"`
 }
 
+// BuildPropusOverview summarizes the current self-improvement system state.
 func BuildPropusOverview(input PropusOverviewInput) PropusOverview {
 	scope := normalizePropusScope(input.Scope)
 	counts := PropusLifecycleCounts(input.Recent)
@@ -289,6 +293,7 @@ func BuildPropusOverview(input PropusOverviewInput) PropusOverview {
 	return overview
 }
 
+// PropusLifecycleSummaryInput carries lifecycle history and live skill state.
 type PropusLifecycleSummaryInput struct {
 	Scope              string
 	SkillName          string
@@ -302,6 +307,7 @@ type PropusLifecycleSummaryInput struct {
 	SelfHarnessSignals SelfHarnessSignalSummary
 }
 
+// PropusLifecycleSummary is the operator-facing lifecycle digest.
 type PropusLifecycleSummary struct {
 	System           string                 `json:"system"`
 	State            string                 `json:"state"`
@@ -328,6 +334,7 @@ type PropusLifecycleSummary struct {
 	AttentionCue     string                 `json:"attentionCue,omitempty"`
 }
 
+// BuildPropusLifecycleSummary aggregates lifecycle counts, activity, and cues.
 func BuildPropusLifecycleSummary(input PropusLifecycleSummaryInput) PropusLifecycleSummary {
 	doctrine := PropusDoctrine()
 	var skillStats *UsageStats
@@ -391,6 +398,7 @@ func BuildPropusLifecycleSummary(input PropusLifecycleSummaryInput) PropusLifecy
 	return summary
 }
 
+// PropusLifecycleCounts counts normalized event types across entries.
 func PropusLifecycleCounts(entries []LifecycleLogEntry) map[string]int {
 	counts := map[string]int{
 		"genesis":              0,
@@ -428,6 +436,7 @@ func PropusLifecycleCounts(entries []LifecycleLogEntry) map[string]int {
 	return counts
 }
 
+// PropusLifecycleEventType returns the normalized event type for entry.
 func PropusLifecycleEventType(entry LifecycleLogEntry) string {
 	switch entry.Type {
 	case "genesis", "evolved", "evolve_rejected", "evolve_rolled_back":
@@ -437,6 +446,7 @@ func PropusLifecycleEventType(entry LifecycleLogEntry) string {
 	}
 }
 
+// PropusHealthInput collects the signals used for a health evaluation.
 type PropusHealthInput struct {
 	Liveness          SkillLivenessState
 	Evolution         EvolutionHealthSummary
@@ -446,12 +456,14 @@ type PropusHealthInput struct {
 	UnusedAgentSkills int
 }
 
+// PropusHealthSnapshot reports health status, reasons, and the next cue.
 type PropusHealthSnapshot struct {
 	State          string   `json:"state"`
 	Attention      []string `json:"attention,omitempty"`
 	LastActivityMS int64    `json:"lastActivityMS,omitempty"`
 }
 
+// BuildPropusHealth evaluates a health snapshot from current lifecycle state.
 func BuildPropusHealth(input PropusHealthInput) PropusHealthSnapshot {
 	lastActivity := PropusLastActivityMS(input.Liveness)
 	attention := propusHealthAttention(input)
@@ -470,6 +482,7 @@ func BuildPropusHealth(input PropusHealthInput) PropusHealthSnapshot {
 	}
 }
 
+// PropusLastActivityMS returns the newest activity timestamp in live state.
 func PropusLastActivityMS(live SkillLivenessState) int64 {
 	last := live.LastReviewAt
 	if live.LastEvolveAt > last {
@@ -484,6 +497,7 @@ func PropusLastActivityMS(live SkillLivenessState) int64 {
 	return last
 }
 
+// PropusNextCue chooses the next operator cue for state and available actions.
 func PropusNextCue(state string, nextActions []string) string {
 	if len(nextActions) > 0 {
 		switch nextActions[0] {

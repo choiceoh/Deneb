@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	chatpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -210,12 +210,7 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		if savedPath != "" {
 			message += "\n\n(원문 보관: memory/" + savedPath + ")"
 		}
-		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
-			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
-			AutoDeliveredOutput: true,
-			// OCR'd text is untrusted (a malicious screenshot): block exec/gmail send if it carries promptware.
-			GateUntrustedTools: true,
-		})
+		res, err := sendUntrustedCapture(ctx, deps, sessionKey, message)
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
 		}
@@ -303,12 +298,7 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 		}
 		// Turn start — the dedup window for a model-published deliverable card below.
 		turnStartMs := time.Now().UnixMilli()
-		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
-			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
-			AutoDeliveredOutput: true,
-			// Document content is untrusted (a malicious attachment): block exec/gmail send if it carries promptware.
-			GateUntrustedTools: true,
-		})
+		res, err := sendUntrustedCapture(ctx, deps, sessionKey, message)
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
 		}
@@ -430,12 +420,7 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 		if savedPath != "" {
 			message += "\n\n(전사 원문 보관: memory/" + savedPath + " — 회의록에 이 경로를 출처로 남겨라)"
 		}
-		res, err := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
-			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
-			AutoDeliveredOutput: true,
-			// Transcribed audio is untrusted input: block exec/gmail send if it carries promptware.
-			GateUntrustedTools: true,
-		})
+		res, err := sendUntrustedCapture(ctx, deps, sessionKey, message)
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
 		}
@@ -453,6 +438,14 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 			"sessionKey": sessionKey,
 		})
 	}
+}
+
+func sendUntrustedCapture(ctx context.Context, deps Deps, sessionKey, message string) (*chatpkg.SyncResult, error) {
+	return deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
+		Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
+		AutoDeliveredOutput: true,
+		GateUntrustedTools:  true,
+	})
 }
 
 // handleMiniappCaptureContacts stores a shared address book into the contacts
@@ -647,17 +640,7 @@ func handleMiniappWorkfeedFeedback(deps Deps) rpcutil.HandlerFunc {
 		// Locate the card so the turn can reconcile against the exact analysis the
 		// user is correcting. List(0, true) returns every retained item (no limit,
 		// includes acked/snoozed) — the card may have been acked before correcting.
-		var card workfeed.Item
-		found := false
-		if items, _, lerr := deps.WorkFeed.List(0, true); lerr == nil {
-			for _, it := range items {
-				if it.ID == itemID {
-					card = it
-					found = true
-					break
-				}
-			}
-		}
+		card, found := findWorkFeedItem(deps, itemID)
 		if !found {
 			return rpcerr.NotFound("work feed item").Response(req.ID)
 		}
@@ -715,19 +698,7 @@ func buildWorkfeedFeedbackMessage(card workfeed.Item, feedback string) string {
 	b.WriteString("출처가 '사용자 직접 정정(업무 피드 피드백)'임을 남겨라.\n")
 	b.WriteString("2. 무엇을 어떻게 반영했는지 한국어로 1~3줄로 간단히 보고하라. ")
 	b.WriteString("(이 카드 자체의 정정 표기는 시스템이 이미 처리했으니 다시 하지 마라.)\n\n")
-	b.WriteString("## 원본 카드\n")
-	if t := strings.TrimSpace(card.Title); t != "" {
-		b.WriteString("제목: ")
-		b.WriteString(t)
-		b.WriteByte('\n')
-	}
-	if body := strings.TrimSpace(card.Body); body != "" {
-		b.WriteString(body)
-		b.WriteByte('\n')
-	} else if s := strings.TrimSpace(card.Summary); s != "" {
-		b.WriteString(s)
-		b.WriteByte('\n')
-	}
+	writeOriginalWorkFeedCard(&b, card)
 	b.WriteString("\n## 사용자 피드백\n")
 	b.WriteString(feedback)
 	return b.String()
@@ -754,17 +725,7 @@ func handleMiniappWorkfeedRewrite(deps Deps) rpcutil.HandlerFunc {
 		if itemID == "" {
 			return rpcerr.MissingParam("itemId").Response(req.ID)
 		}
-		var card workfeed.Item
-		found := false
-		if items, _, lerr := deps.WorkFeed.List(0, true); lerr == nil {
-			for _, it := range items {
-				if it.ID == itemID {
-					card = it
-					found = true
-					break
-				}
-			}
-		}
+		card, found := findWorkFeedItem(deps, itemID)
 		if !found {
 			return rpcerr.NotFound("work feed item").Response(req.ID)
 		}
@@ -813,20 +774,37 @@ func buildWorkfeedRewriteMessage(card workfeed.Item) string {
 	b.WriteString("더 명확하고 정돈된 구조로 — 핵심 상황, 근거·숫자, 지금 할 다음 행동이 잘 드러나게 한국어로 다시 써라. ")
 	b.WriteString("필요하면 wiki 등 도구로 맥락을 보강해도 좋다. ")
 	b.WriteString("출력은 **다시 쓴 분석 본문만** 내라 — '다시 작성했습니다' 같은 머리말·맺음말이나 메타 설명 없이 본문 마크다운만.\n\n")
-	b.WriteString("## 원본 카드\n")
+	writeOriginalWorkFeedCard(&b, card)
+	return b.String()
+}
+
+func findWorkFeedItem(deps Deps, itemID string) (workfeed.Item, bool) {
+	items, _, err := deps.WorkFeed.List(0, true)
+	if err != nil {
+		return workfeed.Item{}, false
+	}
+	for _, item := range items {
+		if item.ID == itemID {
+			return item, true
+		}
+	}
+	return workfeed.Item{}, false
+}
+
+func writeOriginalWorkFeedCard(builder *strings.Builder, card workfeed.Item) {
+	builder.WriteString("## 원본 카드\n")
 	if t := strings.TrimSpace(card.Title); t != "" {
-		b.WriteString("제목: ")
-		b.WriteString(t)
-		b.WriteByte('\n')
+		builder.WriteString("제목: ")
+		builder.WriteString(t)
+		builder.WriteByte('\n')
 	}
 	if body := strings.TrimSpace(card.Body); body != "" {
-		b.WriteString(body)
-		b.WriteByte('\n')
+		builder.WriteString(body)
+		builder.WriteByte('\n')
 	} else if s := strings.TrimSpace(card.Summary); s != "" {
-		b.WriteString(s)
-		b.WriteByte('\n')
+		builder.WriteString(s)
+		builder.WriteByte('\n')
 	}
-	return b.String()
 }
 
 // contactsSummary renders a short Korean summary of an address-book sync for the

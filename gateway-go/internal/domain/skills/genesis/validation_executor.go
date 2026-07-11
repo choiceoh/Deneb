@@ -41,6 +41,7 @@ type emittedToolCall struct {
 // behavioral gate (the same flexStr lesson as the ASR segment parser).
 type flexArgs string
 
+// UnmarshalJSON decodes the supported flexible JSON representation.
 func (a *flexArgs) UnmarshalJSON(b []byte) error {
 	b = bytes.TrimSpace(b)
 	if len(b) == 0 || string(b) == "null" {

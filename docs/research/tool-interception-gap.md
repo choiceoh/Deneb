@@ -35,7 +35,7 @@ The plugin hook at step 1 is orthogonal — it only *blocks*, never *handles*.
 Trace a tool call from model response to execution:
 
 1. **Stream consumer** assembles `tool_use` content blocks as the LLM streams them
-   (`gateway-go/internal/agentsys/agent/executor.go:454-509` — the `content_block_stop`
+   (`gateway-go/internal/ai/agent/executor.go:454-509` — the `content_block_stop`
    case appends to `turnRes.toolCalls`).
 2. **Post-stream dispatch** runs each tool call sequentially via `executeOneTool`
    (`executor.go:265-277`). That function:
@@ -79,7 +79,7 @@ No tool name collides with a plugin-provided tool, and there is no external memo
 
 ## 4. Does Deneb have a pre-registry intercept hook?
 
-Yes — `StreamHooks.OnBeforeToolCall` in `gateway-go/internal/agentsys/agent/hooks.go`. It is:
+Yes — `StreamHooks.OnBeforeToolCall` in `gateway-go/internal/ai/agent/hooks.go`. It is:
 
 - Called for every tool call *before* `tools.Execute`.
 - Returns `(block bool, blockReason string)` — can only *block* (short-circuit with an error), not *handle* the call.
@@ -200,9 +200,9 @@ contract: wireStreamHooks (goal guard) runs before wireUntrustedToolGate.
 
 **Files cited:**
 
-- `gateway-go/internal/agentsys/agent/executor.go:265-277` (sequential tool dispatch)
-- `gateway-go/internal/agentsys/agent/executor.go:533-647` (`executeOneTool`)
-- `gateway-go/internal/agentsys/agent/hooks.go:12-15` (`OnBeforeToolCall`)
+- `gateway-go/internal/ai/agent/executor.go:265-277` (sequential tool dispatch)
+- `gateway-go/internal/ai/agent/executor.go:533-647` (`executeOneTool`)
+- `gateway-go/internal/ai/agent/hooks.go:12-15` (`OnBeforeToolCall`)
 - `gateway-go/internal/pipeline/chat/tools.go:84-179` (`ToolRegistry.Execute`)
 - `gateway-go/internal/pipeline/chat/toolreg/core.go` (all registration)
 - `gateway-go/internal/pipeline/chat/toolreg_core.go` (chat-side registration + skills/wiki/fetch_tools)

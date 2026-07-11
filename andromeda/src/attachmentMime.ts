@@ -6,6 +6,7 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   jpeg: "image/jpeg",
   jpg: "image/jpeg",
   m4a: "audio/mp4",
+  md: "text/markdown",
   mp3: "audio/mpeg",
   ogg: "audio/ogg",
   pdf: "application/pdf",

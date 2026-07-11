@@ -89,7 +89,11 @@ object ServerAutoDetect {
     )
 
     fun detect(email: String): ServerConfig? {
-        val domain = email.substringAfter("@").lowercase()
+        val normalized = email.trim()
+        if (normalized.count { it == '@' } != 1) return null
+        val at = normalized.indexOf('@')
+        if (at <= 0 || at == normalized.lastIndex) return null
+        val domain = normalized.substring(at + 1).lowercase()
         return knownProviders[domain]
     }
 }

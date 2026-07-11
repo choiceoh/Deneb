@@ -24,8 +24,8 @@ package handlerminiapp
 import (
 	"context"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -154,10 +154,7 @@ func OrgMethods(deps OrgDeps) map[string]rpcutil.HandlerFunc {
 // corrupt/invalid on-disk chart surfaces as UNAVAILABLE so a bad file is visible
 // rather than silently shown as empty.
 func orgGet(deps OrgDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
+	return authenticated(func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		tree, err := deps.Load()
 		if err != nil {
 			return rpcerr.WrapUnavailable("org chart unavailable", err).Response(req.ID)
@@ -169,7 +166,7 @@ func orgGet(deps OrgDeps) rpcutil.HandlerFunc {
 			personPaths = deps.ResolvePeople(allMemberNames(tree))
 		}
 		return rpcutil.RespondOK(req.ID, projectOrgTree(tree, deps.LookupContact, personPaths, deps.ResolvePersonByEmail))
-	}
+	})
 }
 
 // orgSave validates and persists an edited chart. The whole tree is replaced
@@ -178,14 +175,7 @@ func orgGet(deps OrgDeps) rpcutil.HandlerFunc {
 // invalid edit (missing parent, cycle, duplicate lane) is rejected with a clear
 // message and the existing file is left intact.
 func orgSave(deps OrgDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		p, errResp := rpcutil.DecodeParams[OrgTreeOut](req)
-		if errResp != nil {
-			return errResp
-		}
+	return bindAuthenticated[OrgTreeOut](func(ctx context.Context, req *protocol.RequestFrame, p OrgTreeOut) *protocol.ResponseFrame {
 		if len(p.Nodes) > maxOrgNodes {
 			return rpcerr.ValidationFailed("org chart has too many nodes").Response(req.ID)
 		}
@@ -205,7 +195,7 @@ func orgSave(deps OrgDeps) rpcutil.HandlerFunc {
 			NodeCount: len(tree.Nodes),
 			HasLanes:  tree.HasLanes(),
 		})
-	}
+	})
 }
 
 // --- projection ------------------------------------------------------------

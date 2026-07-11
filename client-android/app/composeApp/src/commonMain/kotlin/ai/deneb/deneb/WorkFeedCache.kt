@@ -32,6 +32,7 @@ internal fun decodeWorkFeedCache(json: String, expectedOwner: String): List<Work
     .getOrNull()
     ?.takeIf { it.owner == expectedOwner }
     ?.items
+    ?.take(WORK_FEED_CACHE_MAX)
     ?.takeIf { it.isNotEmpty() }
 
 internal fun DenebGatewayClient.loadCachedWorkFeed(): List<WorkFeedItem>? {

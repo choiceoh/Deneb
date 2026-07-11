@@ -119,7 +119,15 @@ func (s *SessionBindingService) Resolve(channel, accountID, conversationID strin
 	if !ok {
 		return nil
 	}
-	return s.bindings[bindingID]
+	entry := s.bindings[bindingID]
+	if entry == nil {
+		return nil
+	}
+	// Return a snapshot rather than the map-owned pointer. Callers keep the
+	// result after the read lock is released, so exposing the stored entry
+	// would allow unsynchronised mutation of routing state.
+	copy := *entry
+	return &copy
 }
 
 // Unbind removes a session binding.

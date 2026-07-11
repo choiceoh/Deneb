@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/liteparse"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
@@ -59,7 +59,7 @@ func classifyContentType(contentType, url string) fetchedContentType {
 	case strings.Contains(contentType, "application/json"),
 		strings.Contains(contentType, "+json"):
 		return contentTypeJSON
-	case tools.IsExtractableDocument(contentType, documentName(url)):
+	case document.IsExtractableDocument(contentType, documentName(url)):
 		return contentTypeDocument
 	default:
 		return contentTypePlain
@@ -135,7 +135,7 @@ func processDocument(ctx context.Context, data []byte, url, contentType string) 
 			return text
 		}
 	}
-	if text, ok := tools.ExtractDocumentText(ctx, data, name, contentType); ok && strings.TrimSpace(text) != "" {
+	if text, ok := document.ExtractDocumentText(ctx, data, name, contentType); ok && strings.TrimSpace(text) != "" {
 		return text
 	}
 	return "(문서에서 텍스트를 추출하지 못했습니다)"

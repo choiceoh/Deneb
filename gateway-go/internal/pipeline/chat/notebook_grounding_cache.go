@@ -51,7 +51,7 @@ func storeNotebookGrounding(sessionKey, notebookID string, updated int64, text s
 }
 
 // clearNotebookGrounding drops the session's cached grounding. Called by /reset
-// alongside clearRecallMemory/clearTier1Wiki; safe for sessions with no entry.
+// alongside recall.ClearSession/clearTier1Wiki; safe for sessions with no entry.
 func clearNotebookGrounding(sessionKey string) {
 	if sessionKey == "" {
 		return

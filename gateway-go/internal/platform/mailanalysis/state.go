@@ -37,6 +37,7 @@ func newStateStore(stateDir string) *stateStore {
 	return &stateStore{path: filepath.Join(stateDir, defaultStateFile)}
 }
 
+// Load loads the persisted analysis polling state.
 func (s *stateStore) Load() (*PollState, error) {
 	data, err := os.ReadFile(s.path)
 	if err != nil {
@@ -57,6 +58,7 @@ func (s *stateStore) Load() (*PollState, error) {
 	return &state, nil
 }
 
+// Save persists the analysis polling state.
 func (s *stateStore) Save(state *PollState) error {
 	// Trim SeenIDs to prevent unbounded growth.
 	if len(state.SeenIDs) > maxSeenIDs {

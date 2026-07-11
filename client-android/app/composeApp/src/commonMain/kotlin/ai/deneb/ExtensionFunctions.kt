@@ -53,7 +53,9 @@ fun formatFileSize(bytes: Long): String = when {
 }
 
 fun String.smartTruncate(maxLength: Int): String {
+    if (maxLength <= 0) return ""
     if (length <= maxLength) return this
+    if (maxLength < 80) return take(maxLength)
     val keep = (maxLength - 80) / 2
     return take(keep) +
         "\n[... ${length - 2 * keep} characters truncated ...]\n" +

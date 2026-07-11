@@ -365,21 +365,7 @@ func (s *Service) Generate(ctx context.Context, sctx SessionContext) (*Generated
 		return nil, fmt.Errorf("genesis LLM: nil event channel")
 	}
 
-	var sb strings.Builder
-	for ev := range events {
-		if ev.Type == "content_block_delta" {
-			var delta struct {
-				Delta struct {
-					Text string `json:"text"`
-				} `json:"delta"`
-			}
-			if json.Unmarshal(ev.Payload, &delta) == nil && delta.Delta.Text != "" {
-				sb.WriteString(delta.Delta.Text)
-			}
-		}
-	}
-
-	gen, perr := parseGenesisResponse(sb.String())
+	gen, perr := parseGenesisResponse(llm.DrainStreamText(events))
 	return s.gateGenerated(ctx, gen, perr)
 }
 
@@ -414,21 +400,7 @@ func (s *Service) GenerateFromDream(ctx context.Context, summaryContent string) 
 		return nil, fmt.Errorf("genesis-dream LLM: nil event channel")
 	}
 
-	var sb strings.Builder
-	for ev := range events {
-		if ev.Type == "content_block_delta" {
-			var delta struct {
-				Delta struct {
-					Text string `json:"text"`
-				} `json:"delta"`
-			}
-			if json.Unmarshal(ev.Payload, &delta) == nil && delta.Delta.Text != "" {
-				sb.WriteString(delta.Delta.Text)
-			}
-		}
-	}
-
-	gen, perr := parseGenesisResponse(sb.String())
+	gen, perr := parseGenesisResponse(llm.DrainStreamText(events))
 	return s.gateGenerated(ctx, gen, perr)
 }
 
@@ -491,7 +463,7 @@ func (s *Service) judgeGenerated(ctx context.Context, skill *GeneratedSkill) (pa
 		s.logger.Warn("genesis: judge unavailable, accepting on heuristic", "skill", skill.Name, "error", err)
 		return true, ""
 	}
-	extracted := jsonutil.ExtractObject(drainStreamText(events))
+	extracted := jsonutil.ExtractObject(llm.DrainStreamText(events))
 	if extracted == "" {
 		s.logger.Warn("genesis: judge empty verdict, accepting on heuristic", "skill", skill.Name)
 		return true, ""

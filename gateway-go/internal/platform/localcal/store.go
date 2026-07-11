@@ -8,10 +8,8 @@
 package localcal
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -20,6 +18,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // IDPrefix tags locally-created events so the handler can route get/update/delete
@@ -152,15 +151,8 @@ func Default() (*Store, error) {
 // New loads the store from path (an empty store if the file is absent).
 func New(path string) (*Store, error) {
 	s := &Store{path: path}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return s, nil
-		}
-		return nil, fmt.Errorf("localcal: read %s: %w", path, err)
-	}
-	if err := json.Unmarshal(data, &s.events); err != nil {
-		return nil, fmt.Errorf("localcal: parse %s: %w", path, err)
+	if _, err := jsonutil.LoadFile(path, &s.events, "localcal"); err != nil {
+		return nil, err
 	}
 	return s, nil
 }
@@ -341,20 +333,5 @@ func buildRecord(id string, in CreateInput) storedEvent {
 }
 
 func (s *Store) persistLocked() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
-		return fmt.Errorf("localcal: mkdir: %w", err)
-	}
-	data, err := json.MarshalIndent(s.events, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil { //nolint:gosec // G306 — single-user host
-		return fmt.Errorf("localcal: write %s: %w", tmp, err)
-	}
-	if err := os.Rename(tmp, s.path); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("localcal: rename: %w", err)
-	}
-	return nil
+	return jsonutil.WriteFile(s.path, s.events, "localcal")
 }

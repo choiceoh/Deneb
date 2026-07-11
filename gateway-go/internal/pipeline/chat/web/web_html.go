@@ -79,6 +79,7 @@ func htmlmdConvertStripNoise(html string) string {
 
 // --- local AI-powered content extraction ---
 
+// LocalAIExtractor converts fetched HTML into readable text using local models.
 type LocalAIExtractor struct {
 	mu      sync.Mutex
 	client  *http.Client
@@ -97,6 +98,7 @@ const (
 	localAIReprobeInterval = 5 * time.Minute
 )
 
+// NewLocalAIExtractor constructs an extractor with production defaults.
 func NewLocalAIExtractor() *LocalAIExtractor {
 	baseURL := firstEnv("LOCAL_AI_BASE_URL", "SGLANG_BASE_URL")
 	if baseURL == "" {

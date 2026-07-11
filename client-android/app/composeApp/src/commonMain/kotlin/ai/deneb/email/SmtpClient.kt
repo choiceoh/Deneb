@@ -3,6 +3,8 @@ package ai.deneb.email
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
+private val smtpHeaderBreakRegex = Regex("[\\r\\n]+")
+
 /**
  * Minimal SMTP client for sending email replies.
  * Supports EHLO, AUTH LOGIN, STARTTLS, MAIL FROM, RCPT TO, DATA.
@@ -11,11 +13,12 @@ class SmtpClient(
     private val host: String,
     private val port: Int = 587,
     private val useStartTls: Boolean = true,
+    private val connectionFactory: suspend (host: String, port: Int, tls: Boolean) -> EmailConnection = ::createEmailConnection,
 ) {
     private var connection: EmailConnection? = null
 
     suspend fun connect() {
-        connection = createEmailConnection(host, port, tls = !useStartTls)
+        connection = connectionFactory(host, port, !useStartTls)
         // Read server greeting
         readResponse()
     }
@@ -67,11 +70,16 @@ class SmtpClient(
         body: String,
         inReplyTo: String? = null,
     ): Boolean {
-        writeLine("MAIL FROM:<$from>")
+        val safeFrom = from.replace(smtpHeaderBreakRegex, " ")
+        val safeTo = to.replace(smtpHeaderBreakRegex, " ")
+        val safeSubject = subject.replace(smtpHeaderBreakRegex, " ")
+        val safeInReplyTo = inReplyTo?.replace(smtpHeaderBreakRegex, " ")
+
+        writeLine("MAIL FROM:<$safeFrom>")
         var response = readResponse()
         if (!response.startsWith("250")) throw Exception("MAIL FROM failed: $response")
 
-        writeLine("RCPT TO:<$to>")
+        writeLine("RCPT TO:<$safeTo>")
         response = readResponse()
         if (!response.startsWith("250")) throw Exception("RCPT TO failed: $response")
 
@@ -81,14 +89,14 @@ class SmtpClient(
 
         // Build email headers + body
         val headers = buildString {
-            appendLine("From: $from")
-            appendLine("To: $to")
-            appendLine("Subject: $subject")
+            appendLine("From: $safeFrom")
+            appendLine("To: $safeTo")
+            appendLine("Subject: $safeSubject")
             appendLine("MIME-Version: 1.0")
             appendLine("Content-Type: text/plain; charset=UTF-8")
-            if (inReplyTo != null) {
-                appendLine("In-Reply-To: $inReplyTo")
-                appendLine("References: $inReplyTo")
+            if (safeInReplyTo != null) {
+                appendLine("In-Reply-To: $safeInReplyTo")
+                appendLine("References: $safeInReplyTo")
             }
             appendLine()
         }

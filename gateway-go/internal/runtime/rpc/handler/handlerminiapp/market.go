@@ -9,8 +9,8 @@ package handlerminiapp
 import (
 	"context"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -56,10 +56,7 @@ type MarketSummary struct {
 }
 
 func marketSummary(deps MarketDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
+	return authenticated(func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		quotes, asOf, stale, err := deps.Fetch(ctx)
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("fetch market data", err).Response(req.ID)
@@ -80,5 +77,5 @@ func marketSummary(deps MarketDeps) rpcutil.HandlerFunc {
 			})
 		}
 		return rpcutil.RespondOK(req.ID, MarketSummary{Quotes: rows, AsOf: asOf, Stale: stale})
-	}
+	})
 }

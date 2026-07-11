@@ -360,8 +360,10 @@ func newChatNudgerAdapter(n *genesis.Nudger) chat.SkillNudger {
 	return &chatNudgerAdapter{inner: n}
 }
 
+// Enabled reports whether the handler accepts records at the requested level.
 func (a *chatNudgerAdapter) Enabled() bool { return a.inner.Enabled() }
 
+// OnToolCalls records a tool-call delta for skill nudging.
 func (a *chatNudgerAdapter) OnToolCalls(ctx context.Context, sessionKey string, delta int, snap chat.SkillNudgeSnapshot) {
 	activities := make([]genesis.ToolActivity, 0, len(snap.ToolActivities))
 	for _, t := range snap.ToolActivities {
@@ -379,6 +381,7 @@ func (a *chatNudgerAdapter) OnToolCalls(ctx context.Context, sessionKey string, 
 	})
 }
 
+// Reset clears the adapter state for the requested session.
 func (a *chatNudgerAdapter) Reset(sessionKey string) { a.inner.Reset(sessionKey) }
 
 // chatUsageRecorderAdapter adapts *genesis.Tracker to chat.SkillUsageRecorder,
@@ -395,6 +398,7 @@ func newChatUsageRecorderAdapter(t *genesis.Tracker, transcripts toolctx.Transcr
 	return &chatUsageRecorderAdapter{inner: t, transcripts: transcripts, logger: logger}
 }
 
+// RecordSkillUse records the outcome of one skill invocation.
 func (a *chatUsageRecorderAdapter) RecordSkillUse(sessionKey, skillName string, success bool, errMsg, model string) {
 	if a == nil || a.inner == nil {
 		return

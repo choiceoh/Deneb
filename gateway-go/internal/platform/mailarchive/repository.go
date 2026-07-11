@@ -48,12 +48,14 @@ type FallbackClient interface {
 	GetAttachment(ctx context.Context, messageID, attachmentID string) ([]byte, error)
 }
 
+// RepositoryOptions configures local state and Gmail fallback behavior.
 type RepositoryOptions struct {
 	StatePath string
 	Fallback  FallbackClient
 	Now       func() time.Time
 }
 
+// NativeStatus summarizes archive availability for the native client.
 type NativeStatus struct {
 	Source         string
 	Available      bool
@@ -63,6 +65,7 @@ type NativeStatus struct {
 	GeneratedAt    time.Time
 }
 
+// NativeMailboxStatus describes the configured on-box archive mailbox.
 type NativeMailboxStatus struct {
 	Name              string
 	Total             int
@@ -74,6 +77,7 @@ type NativeMailboxStatus struct {
 	AttachmentCapable bool
 }
 
+// NativeOverlayStatus reports the local read/archive/trash state overlay.
 type NativeOverlayStatus struct {
 	Messages int
 	Read     int
@@ -92,6 +96,7 @@ type Repository struct {
 	now      func() time.Time
 }
 
+// NewRepository constructs an archive repository with optional Gmail fallback.
 func NewRepository(cfg Config, opts RepositoryOptions) *Repository {
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = 5 * time.Second
@@ -111,11 +116,13 @@ func NewRepository(cfg Config, opts RepositoryOptions) *Repository {
 	}
 }
 
+// Search returns the first page of messages matching query.
 func (r *Repository) Search(ctx context.Context, query string, maxResults int) ([]gmail.MessageSummary, error) {
 	rows, _, err := r.SearchPage(ctx, query, "", maxResults)
 	return rows, err
 }
 
+// SearchPage returns a page of archive messages and the next page token.
 func (r *Repository) SearchPage(ctx context.Context, query, pageToken string, maxResults int) ([]gmail.MessageSummary, string, error) {
 	if r == nil || !r.archiveEnabled() {
 		return r.fallbackSearchPage(ctx, query, pageToken, maxResults)
@@ -140,6 +147,7 @@ func (r *Repository) SearchPage(ctx context.Context, query, pageToken string, ma
 	return rows, next, nil
 }
 
+// GetMessage resolves a full message from the archive or configured fallback.
 func (r *Repository) GetMessage(ctx context.Context, messageID string) (*gmail.MessageDetail, error) {
 	messageID = strings.TrimSpace(messageID)
 	if messageID == "" {
@@ -162,6 +170,7 @@ func (r *Repository) GetMessage(ctx context.Context, messageID string) (*gmail.M
 	return nil, ErrArchiveUnavailable
 }
 
+// ModifyLabels applies supported native label changes to messageID.
 func (r *Repository) ModifyLabels(ctx context.Context, messageID string, addNames, removeNames []string) error {
 	messageID = strings.TrimSpace(messageID)
 	if messageID == "" {
@@ -176,6 +185,7 @@ func (r *Repository) ModifyLabels(ctx context.Context, messageID string, addName
 	return ErrArchiveUnavailable
 }
 
+// Trash marks messageID trashed in the native state overlay.
 func (r *Repository) Trash(ctx context.Context, messageID string) error {
 	messageID = strings.TrimSpace(messageID)
 	if messageID == "" {
@@ -190,6 +200,7 @@ func (r *Repository) Trash(ctx context.Context, messageID string) error {
 	return ErrArchiveUnavailable
 }
 
+// GetAttachment retrieves one message attachment from the backing source.
 func (r *Repository) GetAttachment(ctx context.Context, messageID, attachmentID string) ([]byte, error) {
 	messageID = strings.TrimSpace(messageID)
 	attachmentID = strings.TrimSpace(attachmentID)
@@ -215,6 +226,7 @@ func (r *Repository) GetAttachment(ctx context.Context, messageID, attachmentID 
 	return nil, ErrArchiveUnavailable
 }
 
+// NativeStatus reports archive connectivity and local overlay counts.
 func (r *Repository) NativeStatus(ctx context.Context) (NativeStatus, error) {
 	if r == nil || !r.archiveEnabled() {
 		// Native-archive-only now (Gmail fallback removed): an unconfigured/disabled

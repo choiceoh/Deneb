@@ -306,8 +306,11 @@ def imap_env(name):
 
 def decode_header(s):
     parts = email.header.decode_header(s or "")
-    return " ".join(v.decode(e or "utf-8", errors="replace") if isinstance(v, bytes) else v
-                    for v, e in parts)
+    decoded = [
+        (v.decode(e or "utf-8", errors="replace") if isinstance(v, bytes) else v).strip()
+        for v, e in parts
+    ]
+    return " ".join(part for part in decoded if part)
 
 def body_text(msg):
     plain, htm = [], []

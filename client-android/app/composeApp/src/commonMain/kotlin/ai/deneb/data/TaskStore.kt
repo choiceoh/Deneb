@@ -35,7 +35,10 @@ class TaskStore(private val appSettings: AppSettings) {
                 task
             }
         }.toMutableList()
-        if (migrated) saveTasks(upgraded)
+        if (migrated) {
+            runCatching { saveTasks(upgraded) }
+                .onFailure { DenebLog.error("TaskStore", "failed to persist task migration: ${it.message}") }
+        }
         upgraded
     } catch (e: Exception) {
         DenebLog.error("TaskStore", "failed to load tasks: ${e.message}")

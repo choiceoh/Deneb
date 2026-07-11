@@ -52,7 +52,7 @@ func storeTier1Wiki(sessionKey, value string) {
 }
 
 // clearTier1Wiki drops the session's snapshot. Called by /reset alongside
-// clearRecallMemory; safe for sessions that never stored one.
+// recall.ClearSession; safe for sessions that never stored one.
 func clearTier1Wiki(sessionKey string) {
 	if sessionKey == "" {
 		return

@@ -164,7 +164,7 @@ class McpServerManager(private val appSettings: AppSettings) {
     fun isConnected(serverId: String): Boolean = clients.containsKey(serverId)
 
     private fun generateServerId(name: String, existing: List<McpServerConfig>): String {
-        val base = name.lowercase().replace(serverIdRegex, "_").take(30)
+        val base = name.lowercase().replace(serverIdRegex, "_").take(30).ifBlank { "server" }
         val existingIds = existing.map { it.id }.toSet()
         if (base !in existingIds) return base
         var counter = 2

@@ -11,7 +11,7 @@
 //
 // Mirrors NousResearch/hermes-agent tools/threat_patterns.py (single source +
 // load-time scan + tool-result delimiters). Leaf package: stdlib only, so both
-// internal/pipeline/chat and internal/agentsys/agent can import it without a
+// internal/pipeline/chat and internal/ai/agent can import it without a
 // dependency cycle.
 package promptguard
 

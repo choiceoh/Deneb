@@ -6,10 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/goals"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/goals"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
+	chatrecall "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/recall"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -42,7 +43,7 @@ func (h *Handler) handleSlashCommand(
 			h.steer.Clear(sessionKey)
 		}
 		prompt.ClearSessionSnapshot(sessionKey)
-		clearRecallMemory(sessionKey)
+		chatrecall.ClearSession(sessionKey)
 		clearTier1Wiki(sessionKey)
 		toolctx.ClearActiveNotebook(sessionKey) // unbind any active notebook-grounding session
 		clearNotebookGrounding(sessionKey)      // drop the frozen grounding snapshot too
@@ -136,7 +137,7 @@ func (h *Handler) handleSlashCommand(
 		// card (head line + fence). Mirrors the Saturday cron path
 		// (cron_agent_adapter.go) so a manual trigger produces the same output.
 		// No agent loop — the card is built straight from wiki data
-		// (RenderWeeklyReportCard) so the format never drifts.
+		// (routine.RenderWeeklyReportCard) so the format never drifts.
 		if h.weeklyReportTextFn == nil {
 			respond("주간업무보고 생성이 이 게이트웨이에 배선되지 않았습니다.")
 			break

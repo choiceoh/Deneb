@@ -18,6 +18,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
+	chatrecall "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/recall"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
@@ -157,13 +158,13 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, lo
 	if _, _, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
 		return ""
 	}
-	fingerprint := recallCueFingerprint(params.Message)
+	fingerprint := chatrecall.CueFingerprint(params.Message)
 	hasCue := fingerprint != ""
 	// Hermes-style auto_recall: run the preflight every turn, not just cue turns.
-	// buildRecallPreflight searches wiki/diary/polaris/transcript and returns
+	// recall.Build searches wiki/diary/polaris/transcript and returns
 	// "" silently when there's no evidence, so non-cue turns add latency but no noise.
 	if hasCue {
-		if cached, ok := cachedRecallMemory(params.SessionKey, fingerprint); ok {
+		if cached, ok := chatrecall.CachedSnapshot(params.SessionKey, fingerprint); ok {
 			return cached
 		}
 		// Explicit recall: surface the recalling phase so the user sees the
@@ -171,9 +172,24 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, lo
 		// stays invisible.
 		emitPhase(deps, params, "recalling", time.Now())
 	}
-	recallMemory, recallTruncated := buildRecallPreflight(ctx, params, deps, logger)
-	if shouldFreezeRecallSnapshot(hasCue, recallTruncated, recallMemory) {
-		storeRecallMemory(params.SessionKey, fingerprint, recallMemory)
+	recallMemory, recallTruncated := chatrecall.Build(
+		ctx,
+		chatrecall.Params{
+			SessionKey:    params.SessionKey,
+			Message:       params.Message,
+			EphemeralUser: params.EphemeralUser,
+			SkipRecall:    params.SkipRecall,
+		},
+		chatrecall.Deps{
+			Wiki:       deps.memory.Wiki,
+			Transcript: deps.transcript,
+			FileRecall: deps.memory.FileRecall,
+			Org:        deps.memory.Org,
+		},
+		logger,
+	)
+	if chatrecall.ShouldFreeze(hasCue, recallTruncated, recallMemory) {
+		chatrecall.StoreSnapshot(params.SessionKey, fingerprint, recallMemory)
 	}
 	return recallMemory
 }
@@ -754,6 +770,7 @@ var _ compact.Summarizer = (*localAISummarizer)(nil)
 // background path is free and the sync path no longer times out.
 type localAISummarizer struct{}
 
+// Summarize produces a bounded summary of the supplied conversation.
 func (s *localAISummarizer) Summarize(ctx context.Context, system, conversation string, maxOutputTokens int) (string, error) {
 	return pilot.CallLocalLLM(ctx, system, conversation, maxOutputTokens)
 }

@@ -33,4 +33,33 @@ class AttachmentRouteTest {
             assertEquals(AttachmentRoute.FILE_ATTACH, routeAttachment(ext, capturesAvailable = false), ext)
         }
     }
+
+    @Test
+    fun classifyFileUsesRecognizedMimeTypes() {
+        assertEquals(FileCategory.IMAGE, classifyFile("image/avif", "file.bin"))
+        assertEquals(FileCategory.PDF, classifyFile("application/pdf", "file.bin"))
+        assertEquals(FileCategory.TEXT, classifyFile("text/csv", "file.bin"))
+        assertEquals(FileCategory.TEXT, classifyFile("application/x-yaml", "file.bin"))
+    }
+
+    @Test
+    fun classifyFilePrefersMimeTypeOverConflictingExtension() {
+        assertEquals(FileCategory.IMAGE, classifyFile("image/png", "notes.txt"))
+        assertEquals(FileCategory.TEXT, classifyFile("text/plain", "scan.pdf"))
+        assertEquals(FileCategory.PDF, classifyFile("application/pdf", "photo.jpg"))
+    }
+
+    @Test
+    fun classifyFileFallsBackToCaseInsensitiveExtensions() {
+        assertEquals(FileCategory.IMAGE, classifyFile("application/octet-stream", "PHOTO.HEIC"))
+        assertEquals(FileCategory.TEXT, classifyFile(null, "README.MD"))
+        assertEquals(FileCategory.PDF, classifyFile(null, "contract.PDF"))
+    }
+
+    @Test
+    fun classifyFileRejectsUnknownOrMissingTypes() {
+        assertEquals(FileCategory.UNSUPPORTED, classifyFile(null, null))
+        assertEquals(FileCategory.UNSUPPORTED, classifyFile(null, "archive.zip"))
+        assertEquals(FileCategory.UNSUPPORTED, classifyFile("application/octet-stream", "archive.zip"))
+    }
 }

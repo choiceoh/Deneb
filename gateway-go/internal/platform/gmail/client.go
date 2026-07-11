@@ -2,18 +2,15 @@ package gmail
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/googleoauth"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
@@ -28,43 +25,18 @@ const apiBase = "https://gmail.googleapis.com/gmail/v1/users/me"
 // ~94 MiB once base64-wrapped in the API JSON (GetAttachment rides readJSON),
 // so the API cap must never clip a legitimate payload. Readers fetch limit+1
 // and fail with an explicit over-limit error instead of a confusing JSON one.
-const (
-	maxAPIResponseBytes   = 128 << 20 // Gmail API reads (base64-wrapped attachments)
-	maxTokenResponseBytes = 1 << 20   // OAuth token endpoint (tiny JSON)
-)
+const maxAPIResponseBytes = 128 << 20 // Gmail API reads (base64-wrapped attachments)
 
 // setTokenURL overrides the token endpoint URL (for testing).
 func setTokenURL(u string) { tokenURL = u }
 
-// clientCredentials matches the Google OAuth2 client_secret JSON format.
-type clientCredentials struct {
-	Installed *oauthClientConfig `json:"installed"`
-	Web       *oauthClientConfig `json:"web"`
-}
-
-type oauthClientConfig struct {
-	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
-}
-
 // tokenJSON matches the standard Google OAuth2 token JSON format.
-type tokenJSON struct {
-	AccessToken  string `json:"access_token"`
-	TokenType    string `json:"token_type"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int64  `json:"expires_in,omitempty"`
-	Expiry       string `json:"expiry,omitempty"`
-}
+type tokenJSON = googleoauth.Token
 
 // Client is a Gmail API client with auto-refreshing OAuth2 tokens.
 type Client struct {
 	mu           sync.Mutex
-	clientID     string
-	clientSecret string
-	accessToken  string
-	refreshToken string
-	expiry       time.Time
-	tokenPath    string
+	tokens       *googleoauth.Source
 	httpClient   *http.Client
 	accountEmail string // cached authenticated address (users/me/profile)
 }
@@ -137,49 +109,15 @@ func newClientFromDir(dir string) (*Client, error) {
 	clientPath := filepath.Join(dir, "gmail_client.json")
 	tokenPath := filepath.Join(dir, "gmail_token.json")
 
-	// Load client credentials.
-	clientData, err := os.ReadFile(clientPath)
+	loaded, err := googleoauth.Load("Gmail", clientPath, tokenPath)
 	if err != nil {
-		return nil, fmt.Errorf("Gmail client credentials를 읽을 수 없습니다 (%s): %w", clientPath, err) //nolint:staticcheck // ST1005 — Korean error message
-	}
-	var creds clientCredentials
-	if err := json.Unmarshal(clientData, &creds); err != nil {
-		return nil, fmt.Errorf("Gmail client credentials 파싱 실패: %w", err) //nolint:staticcheck // ST1005 — Korean error message
-	}
-	cfg := creds.Installed
-	if cfg == nil {
-		cfg = creds.Web
-	}
-	if cfg == nil || cfg.ClientID == "" || cfg.ClientSecret == "" {
-		return nil, fmt.Errorf("Gmail client credentials에 client_id/client_secret이 없습니다") //nolint:staticcheck // ST1005 — Korean error message
+		return nil, err
 	}
 
-	// Load token.
-	tokenData, err := os.ReadFile(tokenPath)
-	if err != nil {
-		return nil, fmt.Errorf("Gmail 토큰을 읽을 수 없습니다 (%s): %w", tokenPath, err) //nolint:staticcheck // ST1005 — Korean error message
-	}
-	var tok tokenJSON
-	if err := json.Unmarshal(tokenData, &tok); err != nil {
-		return nil, fmt.Errorf("Gmail 토큰 파싱 실패: %w", err) //nolint:staticcheck // ST1005 — Korean error message
-	}
-	if tok.RefreshToken == "" {
-		return nil, fmt.Errorf("Gmail 토큰에 refresh_token이 없습니다") //nolint:staticcheck // ST1005 — Korean error message
-	}
-
-	var expiry time.Time
-	if tok.Expiry != "" {
-		expiry, _ = time.Parse(time.RFC3339, tok.Expiry)
-	}
-
+	httpClient := httputil.NewClient(60 * time.Second)
 	return &Client{
-		clientID:     cfg.ClientID,
-		clientSecret: cfg.ClientSecret,
-		accessToken:  tok.AccessToken,
-		refreshToken: tok.RefreshToken,
-		expiry:       expiry,
-		tokenPath:    tokenPath,
-		httpClient:   httputil.NewClient(60 * time.Second),
+		tokens:     googleoauth.NewSource("Gmail", loaded, tokenPath, httpClient),
+		httpClient: httpClient,
 	}, nil
 }
 
@@ -188,69 +126,7 @@ func newClientFromDir(dir string) (*Client, error) {
 // parent request deadline. A 10s floor is applied on top of the caller's
 // deadline to bound refresh latency.
 func (c *Client) validToken(ctx context.Context) (string, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Refresh if expired or within 60s of expiry.
-	if c.accessToken != "" && time.Until(c.expiry) > 60*time.Second {
-		return c.accessToken, nil
-	}
-	return c.refresh(ctx)
-}
-
-// refresh exchanges the refresh token for a new access token.
-func (c *Client) refresh(ctx context.Context) (string, error) {
-	data := url.Values{
-		"client_id":     {c.clientID},
-		"client_secret": {c.clientSecret},
-		"refresh_token": {c.refreshToken},
-		"grant_type":    {"refresh_token"},
-	}
-
-	refreshCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(refreshCtx, http.MethodPost, tokenURL, strings.NewReader(data.Encode()))
-	if err != nil {
-		return "", fmt.Errorf("토큰 갱신 요청 생성 실패: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("토큰 갱신 요청 실패: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTokenResponseBytes+1))
-	if err != nil {
-		return "", fmt.Errorf("토큰 응답 읽기 실패: %w", err)
-	}
-	if len(body) > maxTokenResponseBytes {
-		return "", fmt.Errorf("토큰 응답이 비정상적으로 큼 (>%dB)", maxTokenResponseBytes)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("토큰 갱신 실패 (HTTP %d): %s", resp.StatusCode, truncate(string(body), 500))
-	}
-
-	var tok tokenJSON
-	if err := json.Unmarshal(body, &tok); err != nil {
-		return "", fmt.Errorf("토큰 응답 파싱 실패: %w", err)
-	}
-
-	c.accessToken = tok.AccessToken
-	c.expiry = time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
-	if tok.RefreshToken != "" && tok.RefreshToken != c.refreshToken {
-		// Google rotated the refresh token. The old one is now invalidated by
-		// Google, so persisting the new one is critical — failure here means
-		// the next gateway restart will load the stale (revoked) token and
-		// every Gmail call will fail with "unauthorized" until manual re-auth.
-		slog.Info("Gmail refresh token rotated by Google", "tokenPath", c.tokenPath)
-		c.refreshToken = tok.RefreshToken
-	}
-
-	// Persist updated token to disk.
-	c.persistToken()
-
-	return c.accessToken, nil
+	return c.tokens.ValidToken(ctx, tokenURL)
 }
 
 // persistToken writes the current token state to disk atomically.
@@ -261,105 +137,27 @@ func (c *Client) refresh(ctx context.Context) (string, error) {
 // "unauthorized" until the user re-runs the OAuth flow. Surface every failure
 // at Error level so the operator can react before tokens drift.
 func (c *Client) persistToken() {
-	tok := tokenJSON{
-		AccessToken:  c.accessToken,
-		TokenType:    "Bearer",
-		RefreshToken: c.refreshToken,
-		Expiry:       c.expiry.Format(time.RFC3339),
-	}
-	data, err := json.MarshalIndent(tok, "", "  ") //nolint:gosec // G117 false positive — not a secret
-	if err != nil {
-		slog.Error("Gmail token marshal failed — refresh token may be stale on restart",
-			"tokenPath", c.tokenPath, "error", err)
-		return
-	}
-	// Atomic write via temp file + rename to prevent corruption on crash.
-	tmp := c.tokenPath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		slog.Error("Gmail token write failed — refresh token may be stale on restart",
-			"tmp", tmp, "tokenPath", c.tokenPath, "error", err)
-		return
-	}
-	if err := os.Rename(tmp, c.tokenPath); err != nil {
-		slog.Error("Gmail token rename failed — refresh token may be stale on restart",
-			"tmp", tmp, "tokenPath", c.tokenPath, "error", err)
-		_ = os.Remove(tmp)
-	}
+	c.tokens.Persist()
 }
 
 // doAPI performs an authenticated HTTP request to the Gmail API.
 func (c *Client) doAPI(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
-	token, err := c.validToken(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	reqURL := apiBase + path
-	req, err := http.NewRequestWithContext(ctx, method, reqURL, body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	return c.httpClient.Do(req)
+	return googleoauth.DoBearer(ctx, c.httpClient, c.validToken, apiBase, method, path, body)
 }
 
 // readJSON performs a GET request and decodes the JSON response into dest.
 func (c *Client) readJSON(ctx context.Context, path string, dest any) error {
-	resp, err := c.doAPI(ctx, "GET", path, nil)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAPIResponseBytes+1))
-	if err != nil {
-		return fmt.Errorf("Gmail API 응답 읽기 실패: %w", err) //nolint:staticcheck // ST1005 — Korean error message
-	}
-	if len(body) > maxAPIResponseBytes {
-		return fmt.Errorf("Gmail API 응답이 비정상적으로 큼 (>%dB)", maxAPIResponseBytes) //nolint:staticcheck // ST1005 — Korean error message
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Gmail API 오류 (HTTP %d): %s", resp.StatusCode, truncate(string(body), 500)) //nolint:staticcheck // ST1005 — Korean error message
-	}
-	return json.Unmarshal(body, dest)
+	return c.requestJSON(ctx, http.MethodGet, path, nil, dest)
 }
 
 // postJSON performs a POST request with a JSON body and decodes the response.
 func (c *Client) postJSON(ctx context.Context, path string, payload, dest any) error {
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	resp, err := c.doAPI(ctx, "POST", path, strings.NewReader(string(data)))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAPIResponseBytes+1))
-	if err != nil {
-		return fmt.Errorf("Gmail API 응답 읽기 실패: %w", err) //nolint:staticcheck // ST1005 — Korean error message
-	}
-	if len(body) > maxAPIResponseBytes {
-		return fmt.Errorf("Gmail API 응답이 비정상적으로 큼 (>%dB)", maxAPIResponseBytes) //nolint:staticcheck // ST1005 — Korean error message
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Gmail API 오류 (HTTP %d): %s", resp.StatusCode, truncate(string(body), 500)) //nolint:staticcheck // ST1005 — Korean error message
-	}
-	if dest != nil {
-		return json.Unmarshal(body, dest)
-	}
-	return nil
+	return c.requestJSON(ctx, http.MethodPost, path, payload, dest)
 }
 
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
+func (c *Client) requestJSON(ctx context.Context, method, path string, payload, dest any) error {
+	return googleoauth.JSON(ctx, c.doAPI, method, path, payload, dest, googleoauth.APIOptions{
+		Service:          "Gmail",
+		MaxResponseBytes: maxAPIResponseBytes,
+	})
 }

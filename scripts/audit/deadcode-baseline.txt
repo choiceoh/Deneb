@@ -74,8 +74,8 @@ internal/pipeline/autoreply/session/history.go :: HistoryTracker.Recent
 internal/pipeline/autoreply/session/session_full.go :: ApplySessionUpdate
 internal/pipeline/autoreply/session/session_full.go :: ResetSessionModel
 internal/pipeline/autoreply/session/session_full.go :: ResetSessionPrompt
-internal/pipeline/autoreply/tokens/heartbeat.go :: IsHeartbeatContentEffectivelyEmpty
-internal/pipeline/autoreply/tokens/heartbeat.go :: ResolveHeartbeatPrompt
+internal/core/replytokens/heartbeat.go :: IsHeartbeatContentEffectivelyEmpty
+internal/core/replytokens/heartbeat.go :: ResolveHeartbeatPrompt
 internal/pipeline/autoreply/types/session.go :: DefaultSessionResetPolicy
 internal/pipeline/autoreply/types/session.go :: IsSessionExpired
 internal/pipeline/autoreply/types/session.go :: IsSessionIdle
@@ -136,7 +136,7 @@ internal/runtime/rpc/dispatch.go :: Dispatcher.beginRegistryValidation
 internal/runtime/rpc/dispatch.go :: Dispatcher.endRegistryValidation
 internal/runtime/rpc/dispatch.go :: Dispatcher.setRegistryModule
 internal/runtime/rpc/handler/process/process_acp.go :: ACPDeps.IsEnabled
-internal/runtime/rpc/rpcerr/error.go :: WrapConflict
+internal/core/rpcerr/error.go :: WrapConflict
 internal/runtime/rpc/rpcutil/gateway_hub.go :: GatewayHub.Approvals
 internal/runtime/rpc/rpcutil/gateway_hub.go :: GatewayHub.EmbeddingClient
 internal/runtime/rpc/rpcutil/gateway_hub.go :: GatewayHub.LocalAIHub

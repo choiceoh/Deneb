@@ -47,6 +47,7 @@ func newContextIndex(msgs []ContextMessage) *ContextIndex {
 	return ci
 }
 
+// Search returns context messages relevant to the query.
 func (ci *ContextIndex) Search(query string, limit int) []ContextMessage {
 	if ci == nil || ci.idx == nil {
 		return nil

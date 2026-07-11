@@ -532,7 +532,15 @@ internal fun parseScheduleDraft(kind: String, spec: String, today: LocalDate): S
             val f = s.split(Regex("\\s+"))
             val minute = f.getOrNull(0)?.toIntOrNull()
             val hour = f.getOrNull(1)?.toIntOrNull()
-            if (f.size == 5 && minute != null && hour != null && f[2] == "*" && f[3] == "*") {
+            if (
+                f.size == 5 &&
+                minute != null &&
+                minute in 0..59 &&
+                hour != null &&
+                hour in 0..23 &&
+                f[2] == "*" &&
+                f[3] == "*"
+            ) {
                 if (f[4] == "*") {
                     base.copy(mode = SchedMode.DAILY, timeText = fmtHhmm(hour, minute))
                 } else {

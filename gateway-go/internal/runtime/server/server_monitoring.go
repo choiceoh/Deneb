@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 )
 
+// SetDaemon attaches the daemon used by server monitoring.
 func (s *Server) SetDaemon(d *daemon.Daemon) {
 	s.daemon = d
 }
@@ -27,6 +28,7 @@ func (s *Server) Publisher() *events.Publisher {
 	return s.publisher
 }
 
+// StartMonitoring starts server health and lifecycle monitoring.
 func (s *Server) StartMonitoring(ctx context.Context) {
 	// No gateway self-watchdog and no channel health monitor: both were
 	// false-positive prone in a single-user native deployment. The self-watchdog

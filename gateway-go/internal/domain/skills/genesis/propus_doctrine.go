@@ -17,6 +17,7 @@ type PropusDoctrineSpec struct {
 	QualityGates   []string
 }
 
+// PropusDoctrinePaper describes one source that grounds the doctrine.
 type PropusDoctrinePaper struct {
 	ID                string
 	Title             string
@@ -26,6 +27,7 @@ type PropusDoctrinePaper struct {
 	FilterReason      string
 }
 
+// PropusDoctrine returns the immutable self-improvement doctrine specification.
 func PropusDoctrine() PropusDoctrineSpec {
 	return PropusDoctrineSpec{
 		Name:     "Propus",
@@ -137,10 +139,12 @@ func PropusDoctrine() PropusDoctrineSpec {
 	}
 }
 
+// LifecycleText renders the doctrine lifecycle as compact prose.
 func (d PropusDoctrineSpec) LifecycleText() string {
 	return strings.Join(d.Lifecycle, " -> ")
 }
 
+// SourceIDs returns every doctrine source identifier.
 func (d PropusDoctrineSpec) SourceIDs() []string {
 	out := make([]string, 0, len(d.Papers))
 	for _, paper := range d.Papers {
@@ -149,6 +153,7 @@ func (d PropusDoctrineSpec) SourceIDs() []string {
 	return out
 }
 
+// FilteredSourceIDs returns the sources retained by the current policy.
 func (d PropusDoctrineSpec) FilteredSourceIDs() []string {
 	out := make([]string, 0, len(d.FilteredPapers))
 	for _, paper := range d.FilteredPapers {
@@ -157,6 +162,7 @@ func (d PropusDoctrineSpec) FilteredSourceIDs() []string {
 	return out
 }
 
+// ProductRules returns a defensive copy of the doctrine product rules.
 func (d PropusDoctrineSpec) ProductRules() []string {
 	out := make([]string, 0, len(d.Papers))
 	for _, paper := range d.Papers {

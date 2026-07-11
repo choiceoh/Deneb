@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.CalendarEventOut
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.JsonObject
@@ -26,6 +27,7 @@ suspend fun DenebGatewayClient.refreshCalendar(): Boolean {
     ) ?: return false
     _denebCalendar.value = payload.events
         .filter { it.id.isNotBlank() }
+        .distinctByLast { it.id }
         .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.local, it.category) }
     storeCachedCalendar(_denebCalendar.value)
     return true
@@ -57,6 +59,7 @@ suspend fun DenebGatewayClient.fetchCalendarRange(
     ) ?: return null
     val events = payload.events
         .filter { it.id.isNotBlank() }
+        .distinctByLast { it.id }
         .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.local, it.category) }
     storeCalendarRange(key, events)
     return events
@@ -108,7 +111,9 @@ suspend fun DenebGatewayClient.refreshCalendarProposals(): Boolean {
         "miniapp.calendar.proposals.list",
         buildJsonObject {},
     ) ?: return false
-    _denebCalProposals.value = payload.proposals.filter { it.id.isNotBlank() }
+    _denebCalProposals.value = payload.proposals
+        .filter { it.id.isNotBlank() }
+        .distinctByLast { it.id }
     return true
 }
 
@@ -159,6 +164,7 @@ suspend fun DenebGatewayClient.fetchTodos(): List<Todo>? {
     val payload = callRpc<TodoListPayload>("miniapp.todo.list", buildJsonObject {}) ?: return null
     return payload.todos
         .filter { it.id.isNotBlank() }
+        .distinctByLast { it.id }
         .map { Todo(it.id, it.title, it.note, it.due, it.dueAllDay, it.done) }
 }
 
@@ -245,7 +251,7 @@ suspend fun DenebGatewayClient.widgetSummary(): WidgetSummary {
     if (clientToken.isEmpty() || gatewayUrl.isBlank()) {
         return WidgetSummary(configured = false)
     }
-    return runCatching {
+    return try {
         // Calendar and mail are independent — fetch them concurrently so the
         // widget refresh costs one RTT instead of the sum of two.
         coroutineScope {
@@ -275,7 +281,11 @@ suspend fun DenebGatewayClient.widgetSummary(): WidgetSummary {
                 ?.let { mailGlance(it.from, it.subject) }.orEmpty()
             WidgetSummary(meeting = meeting, unread = unread, latestMail = latestMail)
         }
-    }.getOrElse { WidgetSummary(ok = false) }
+    } catch (cancel: CancellationException) {
+        throw cancel
+    } catch (_: Exception) {
+        WidgetSummary(ok = false)
+    }
 }
 
 // mailGlance renders "sender · subject" for the widget's recent-mail line.

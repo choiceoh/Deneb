@@ -18,3 +18,28 @@ func FormatDuration(ms int64) string {
 	remainSecs := int(secs) % 60
 	return fmt.Sprintf("%dm%ds", mins, remainSecs)
 }
+
+// FormatBytes renders a byte count with the compact B, KB, or MB units used in
+// user-facing storage and attachment summaries.
+func FormatBytes(bytes int64) string {
+	switch {
+	case bytes >= 1024*1024:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/(1024*1024))
+	case bytes >= 1024:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/1024)
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
+}
+
+// GroupThousands inserts comma separators into a non-negative integer string.
+func GroupThousands(integer string) string {
+	var out []byte
+	for i, digit := range []byte(integer) {
+		if i > 0 && (len(integer)-i)%3 == 0 {
+			out = append(out, ',')
+		}
+		out = append(out, digit)
+	}
+	return string(out)
+}

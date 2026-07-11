@@ -18,7 +18,7 @@ class AppSettings(internal val settings: Settings) {
     // App open tracking
     fun trackAppOpen(): Int {
         val currentCount = settings.getInt(KEY_APP_OPENS, 0)
-        val newCount = currentCount + 1
+        val newCount = if (currentCount == Int.MAX_VALUE) Int.MAX_VALUE else currentCount + 1
         settings.putInt(KEY_APP_OPENS, newCount)
         return newCount
     }

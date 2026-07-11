@@ -1,0 +1,700 @@
+package ai.deneb.deneb
+
+import ai.deneb.ui.chat.History
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class TurnProgressStateMachineTest {
+
+    private fun history(vararg rows: History) = MutableStateFlow(rows.toList())
+
+    private fun user(id: String = "user", text: String = "question") = History(
+        id = id,
+        role = History.Role.USER,
+        content = text,
+    )
+
+    private fun assistant(id: String = "assistant", text: String = "answer") = History(
+        id = id,
+        role = History.Role.ASSISTANT,
+        content = text,
+    )
+
+    private fun started(
+        tool: String = "mail_search",
+        id: String = "tool-1",
+        detail: String = "",
+    ) = ToolEvent(
+        state = "started",
+        tool = tool,
+        toolUseId = id,
+        detail = detail,
+    )
+
+    private fun completed(
+        tool: String = "mail_search",
+        id: String = "tool-1",
+        isError: Boolean = false,
+    ) = ToolEvent(
+        state = "completed",
+        tool = tool,
+        toolUseId = id,
+        isError = isError,
+    )
+
+    private fun List<History>.progressRows() = filter { it.role == History.Role.TOOL_EXECUTING && it.isStatusMessage }
+
+    @Test
+    fun thinkingPulseAddsOneStatusRowAfterExistingHistory() = runTest {
+        val rows = history(user(), assistant())
+        val progress = TurnProgress(rows, this)
+
+        progress.onThinking("발신인 이력 확인")
+
+        assertEquals(3, rows.value.size)
+        val status = rows.value.last()
+        assertEquals(History.Role.TOOL_EXECUTING, status.role)
+        assertEquals("thinking", status.content)
+        assertTrue(status.isStatusMessage)
+        assertTrue(status.toolName.orEmpty().contains("발신인 이력 확인"))
+    }
+
+    @Test
+    fun blankThinkingPulseUsesBaseThinkingLabelWithoutColon() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+
+        progress.onThinking("")
+
+        val label = rows.value.single().toolName.orEmpty()
+        assertEquals(ToolStatusLabels.THINKING, label)
+        assertFalse(label.endsWith(':'))
+    }
+
+    @Test
+    fun repeatedThinkingPulseUpdatesExistingRowInsteadOfAppending() = runTest {
+        val rows = history(user())
+        val progress = TurnProgress(rows, this)
+        progress.onThinking("first")
+        val firstId = rows.value.last().id
+
+        progress.onThinking("second")
+
+        assertEquals(1, rows.value.progressRows().size)
+        assertEquals(firstId, rows.value.last().id)
+        assertTrue(rows.value.last().toolName.orEmpty().endsWith("second"))
+    }
+
+    @Test
+    fun blankRepeatedThinkingPulseDoesNotEraseVisiblePreview() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onThinking("keep me")
+        val label = rows.value.single().toolName
+
+        progress.onThinking("")
+
+        assertEquals(label, rows.value.single().toolName)
+        assertEquals(1, rows.value.size)
+    }
+
+    @Test
+    fun thinkingPulseNeverMutatesUnrelatedRows() = runTest {
+        val originalUser = user(text = "immutable question")
+        val originalAssistant = assistant(text = "immutable answer")
+        val rows = history(originalUser, originalAssistant)
+        val progress = TurnProgress(rows, this)
+
+        progress.onThinking("preview")
+
+        assertEquals(originalUser, rows.value[0])
+        assertEquals(originalAssistant, rows.value[1])
+    }
+
+    @Test
+    fun deltaRemovesThinkingRowImmediately() = runTest {
+        val rows = history(user())
+        val progress = TurnProgress(rows, this)
+        progress.onThinking("preview")
+
+        progress.onDelta()
+
+        assertEquals(listOf(user()), rows.value)
+    }
+
+    @Test
+    fun repeatedDeltaWhileNothingVisibleIsNoOp() = runTest {
+        val original = listOf(user(), assistant())
+        val rows = MutableStateFlow(original)
+        val progress = TurnProgress(rows, this)
+
+        progress.onDelta()
+        progress.onDelta()
+
+        assertEquals(original, rows.value)
+    }
+
+    @Test
+    fun toolStartReplacesThinkingWithToolRow() = runTest {
+        val rows = history(user())
+        val progress = TurnProgress(rows, this)
+        progress.onThinking("planning")
+
+        progress.onTool(started(tool = "web_search", detail = "Deneb"))
+
+        val status = rows.value.progressRows().single()
+        assertEquals("web_search", status.content)
+        assertFalse(status.toolName.orEmpty().contains(ToolStatusLabels.THINKING))
+        assertTrue(status.toolName.orEmpty().contains("Deneb"))
+    }
+
+    @Test
+    fun clearRemovesVisibleThinkingAndPreservesConversation() = runTest {
+        val original = user()
+        val rows = history(original)
+        val progress = TurnProgress(rows, this)
+        progress.onThinking("temporary")
+
+        progress.clear()
+
+        assertEquals(listOf(original), rows.value)
+    }
+
+    @Test
+    fun clearIsIdempotentWithThinkingRow() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onThinking("temporary")
+
+        progress.clear()
+        progress.clear()
+
+        assertTrue(rows.value.isEmpty())
+    }
+
+    @Test
+    fun thinkingCanBeShownAgainAfterClear() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onThinking("first")
+        val firstId = rows.value.single().id
+        progress.clear()
+
+        progress.onThinking("second")
+
+        assertEquals(1, rows.value.size)
+        assertEquals(firstId, rows.value.single().id)
+        assertTrue(rows.value.single().toolName.orEmpty().endsWith("second"))
+    }
+
+    @Test
+    fun startedToolCarriesContentRoleAndReadableLabel() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+
+        progress.onTool(started(tool = "mail_search"))
+
+        val row = rows.value.single()
+        assertEquals("mail_search", row.content)
+        assertEquals(History.Role.TOOL_EXECUTING, row.role)
+        assertTrue(row.isStatusMessage)
+        assertEquals(ToolStatusLabels.label("mail_search"), row.toolName)
+    }
+
+    @Test
+    fun startedToolAppendsNonBlankDetailToLabel() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+
+        progress.onTool(started(tool = "mail_search", detail = "계약서"))
+
+        assertEquals("${ToolStatusLabels.label("mail_search")}: 계약서", rows.value.single().toolName)
+    }
+
+    @Test
+    fun startedToolWithBlankDetailDoesNotLeaveDanglingSeparator() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+
+        progress.onTool(started(detail = ""))
+
+        assertFalse(rows.value.single().toolName.orEmpty().endsWith(":"))
+    }
+
+    @Test
+    fun blankToolUseIdFallsBackToToolNameForCompletionPairing() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started(tool = "web_search", id = ""))
+
+        progress.onTool(completed(tool = "web_search", id = ""))
+        advanceTimeBy(DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS + 1)
+        runCurrent()
+
+        assertEquals(ToolStatusLabels.REVIEWING, rows.value.single().toolName)
+        assertEquals(ToolStatusLabels.trailLabel("web_search"), progress.footprint())
+    }
+
+    @Test
+    fun twoDistinctToolIdsCanRunConcurrently() = runTest {
+        val rows = history(user())
+        val progress = TurnProgress(rows, this)
+
+        progress.onTool(started(id = "one", detail = "A"))
+        progress.onTool(started(id = "two", detail = "B"))
+
+        assertEquals(2, rows.value.progressRows().size)
+        assertEquals(setOf("A", "B"), rows.value.progressRows().map { it.toolName.orEmpty().substringAfterLast(' ') }.toSet())
+    }
+
+    @Test
+    fun sameToolNameWithDifferentIdsGetsIndependentRows() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+
+        progress.onTool(started(id = "one"))
+        progress.onTool(started(id = "two"))
+
+        assertEquals(2, rows.value.size)
+        assertNotEquals(rows.value[0].id, rows.value[1].id)
+    }
+
+    @Test
+    fun duplicateStartedFrameForSameIdDoesNotCreateZombieRow() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started(id = "same", detail = "first"))
+
+        progress.onTool(started(id = "same", detail = "retry"))
+
+        assertEquals(1, rows.value.progressRows().size)
+        assertTrue(rows.value.single().toolName.orEmpty().endsWith("retry"))
+    }
+
+    @Test
+    fun duplicateStartedFramePreservesOriginalRowIdentity() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started(id = "same"))
+        val id = rows.value.single().id
+
+        progress.onTool(started(id = "same", detail = "updated"))
+
+        assertEquals(id, rows.value.single().id)
+    }
+
+    @Test
+    fun unknownToolStateDoesNotMutateHistoryOrFootprint() = runTest {
+        val original = user()
+        val rows = history(original)
+        val progress = TurnProgress(rows, this)
+
+        progress.onTool(ToolEvent(state = "queued", tool = "mail_search", toolUseId = "one"))
+
+        assertEquals(listOf(original), rows.value)
+        assertNull(progress.footprint())
+    }
+
+    @Test
+    fun blankToolAndIdAreIgnored() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+
+        progress.onTool(ToolEvent(state = "started"))
+        progress.onTool(ToolEvent(state = "completed"))
+
+        assertTrue(rows.value.isEmpty())
+        assertNull(progress.footprint())
+    }
+
+    @Test
+    fun completionWithoutMatchingStartDoesNotPolluteFootprint() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+
+        progress.onTool(completed(id = "missing"))
+
+        assertTrue(rows.value.isEmpty())
+        assertNull(progress.footprint())
+    }
+
+    @Test
+    fun duplicateCompletionIsCountedOnlyOnce() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started())
+
+        progress.onTool(completed())
+        progress.onTool(completed())
+
+        assertEquals(ToolStatusLabels.trailLabel("mail_search"), progress.footprint())
+    }
+
+    @Test
+    fun successfulLastToolBecomesReviewingContinuityAfterMinimumDisplay() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started())
+
+        progress.onTool(completed())
+        advanceTimeBy(DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS + 1)
+        runCurrent()
+
+        val row = rows.value.single()
+        assertEquals("continuity", row.content)
+        assertEquals(ToolStatusLabels.REVIEWING, row.toolName)
+    }
+
+    @Test
+    fun successfulToolKeepsOriginalLabelBeforeMinimumDisplayExpires() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started(detail = "target"))
+        val label = rows.value.single().toolName
+
+        progress.onTool(completed())
+        advanceTimeBy(DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS - 1)
+        runCurrent()
+
+        assertEquals(label, rows.value.single().toolName)
+        assertEquals("mail_search", rows.value.single().content)
+    }
+
+    @Test
+    fun answerDeltaRemovesReviewingContinuity() = runTest {
+        val rows = history(user())
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started())
+        progress.onTool(completed())
+        advanceTimeBy(DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS + 1)
+        runCurrent()
+
+        progress.onDelta()
+
+        assertEquals(listOf(user()), rows.value)
+    }
+
+    @Test
+    fun deltaBeforeDelayedReviewSwapPreventsRowResurrection() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started())
+        progress.onTool(completed())
+
+        progress.onDelta()
+        advanceTimeBy(DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS + 10)
+        runCurrent()
+
+        assertTrue(rows.value.isEmpty())
+    }
+
+    @Test
+    fun thinkingPulseReplacesReviewingContinuity() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started())
+        progress.onTool(completed())
+        advanceTimeBy(DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS + 1)
+        runCurrent()
+
+        progress.onThinking("next step")
+
+        val row = rows.value.single()
+        assertEquals("thinking", row.content)
+        assertTrue(row.toolName.orEmpty().endsWith("next step"))
+    }
+
+    @Test
+    fun nextToolStartRemovesPriorReviewingContinuity() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started(id = "one"))
+        progress.onTool(completed(id = "one"))
+        advanceTimeBy(DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS + 1)
+        runCurrent()
+
+        progress.onTool(started(tool = "web_search", id = "two"))
+
+        assertEquals(1, rows.value.size)
+        assertEquals("web_search", rows.value.single().content)
+    }
+
+    @Test
+    fun completingOneOfTwoToolsRemovesOnlyThatRowAfterDelay() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started(tool = "mail_search", id = "one"))
+        progress.onTool(started(tool = "web_search", id = "two"))
+
+        progress.onTool(completed(tool = "mail_search", id = "one"))
+        advanceTimeBy(DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS + 1)
+        runCurrent()
+
+        assertEquals(1, rows.value.size)
+        assertEquals("web_search", rows.value.single().content)
+    }
+
+    @Test
+    fun finalParallelToolTransitionsItsOwnRowToReviewing() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started(tool = "mail_search", id = "one"))
+        progress.onTool(started(tool = "web_search", id = "two"))
+        progress.onTool(completed(tool = "mail_search", id = "one"))
+        advanceTimeBy(DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS + 1)
+        runCurrent()
+
+        progress.onTool(completed(tool = "web_search", id = "two"))
+        advanceTimeBy(DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS + 1)
+        runCurrent()
+
+        assertEquals(1, rows.value.size)
+        assertEquals(ToolStatusLabels.REVIEWING, rows.value.single().toolName)
+    }
+
+    @Test
+    fun failedToolSwitchesToReadableFailureLabel() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started(tool = "mail_search"))
+
+        progress.onTool(completed(tool = "mail_search", isError = true))
+
+        assertEquals(ToolStatusLabels.failureLabel("mail_search"), rows.value.single().toolName)
+    }
+
+    @Test
+    fun failedToolRowIsHeldThenRemoved() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started())
+        progress.onTool(completed(isError = true))
+
+        advanceTimeBy(DenebGatewayClient.FAILURE_DISPLAY_MS - 1)
+        runCurrent()
+        assertEquals(1, rows.value.size)
+
+        advanceTimeBy(2)
+        runCurrent()
+        assertTrue(rows.value.isEmpty())
+    }
+
+    @Test
+    fun clearBeforeFailureTimerExpiresPreventsZombieRow() = runTest {
+        val rows = history(user())
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started())
+        progress.onTool(completed(isError = true))
+
+        progress.clear()
+        advanceTimeBy(DenebGatewayClient.FAILURE_DISPLAY_MS + 1)
+        runCurrent()
+
+        assertEquals(listOf(user()), rows.value)
+    }
+
+    @Test
+    fun failedLastToolDoesNotPretendResultsAreBeingReviewed() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started())
+
+        progress.onTool(completed(isError = true))
+        advanceTimeBy(DenebGatewayClient.FAILURE_DISPLAY_MS + 1)
+        runCurrent()
+
+        assertTrue(rows.value.isEmpty())
+    }
+
+    @Test
+    fun failedToolContributesWarningToFootprint() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started(tool = "web_search"))
+
+        progress.onTool(completed(tool = "web_search", isError = true))
+
+        assertEquals("${ToolStatusLabels.trailLabel("web_search")} ⚠", progress.footprint())
+    }
+
+    @Test
+    fun footprintIsNullBeforeAnyMatchedCompletion() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started())
+
+        assertNull(progress.footprint())
+    }
+
+    @Test
+    fun footprintCountsRepeatedCompletedTool() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        repeat(3) { index ->
+            progress.onTool(started(tool = "mail_search", id = "id-$index"))
+            progress.onTool(completed(tool = "mail_search", id = "id-$index"))
+        }
+
+        assertEquals("${ToolStatusLabels.trailLabel("mail_search")} ×3", progress.footprint())
+    }
+
+    @Test
+    fun anyFailureMarksAggregatedToolEvenWhenLaterAttemptSucceeds() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started(tool = "mail_search", id = "one"))
+        progress.onTool(completed(tool = "mail_search", id = "one", isError = true))
+        progress.onTool(started(tool = "mail_search", id = "two"))
+        progress.onTool(completed(tool = "mail_search", id = "two"))
+
+        val footprint = progress.footprint().orEmpty()
+        assertTrue(footprint.contains("×2"))
+        assertTrue(footprint.endsWith("⚠"))
+    }
+
+    @Test
+    fun footprintKeepsFirstCompletionOrderAcrossDistinctTools() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started(tool = "web_search", id = "web"))
+        progress.onTool(started(tool = "mail_search", id = "mail"))
+
+        progress.onTool(completed(tool = "mail_search", id = "mail"))
+        progress.onTool(completed(tool = "web_search", id = "web"))
+
+        assertEquals(
+            "${ToolStatusLabels.trailLabel("mail_search")} · ${ToolStatusLabels.trailLabel("web_search")}",
+            progress.footprint(),
+        )
+    }
+
+    @Test
+    fun footprintCapsNamedToolsAndReportsRemainder() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        val tools = listOf("mail_search", "web_search", "calendar", "wiki", "files", "exec", "memory")
+        tools.forEachIndexed { index, tool ->
+            progress.onTool(started(tool = tool, id = "id-$index"))
+            progress.onTool(completed(tool = tool, id = "id-$index"))
+        }
+
+        val footprint = progress.footprint().orEmpty()
+        assertTrue(footprint.endsWith("외 2"))
+        assertFalse(footprint.contains(ToolStatusLabels.trailLabel("memory")))
+    }
+
+    @Test
+    fun exactlyMaximumDistinctToolsHasNoRemainderSuffix() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        val tools = listOf("one", "two", "three", "four", "five")
+        tools.forEach { tool ->
+            progress.onTool(started(tool = tool, id = tool))
+            progress.onTool(completed(tool = tool, id = tool))
+        }
+
+        val footprint = progress.footprint().orEmpty()
+        assertEquals(DenebGatewayClient.FOOTPRINT_MAX_TOOLS - 1, footprint.count { it == '·' })
+        assertFalse(footprint.contains(" 외 "))
+    }
+
+    @Test
+    fun clearRemovesAllOwnedRowsButNotForeignStatusRows() = runTest {
+        val foreign = History(
+            id = "foreign",
+            role = History.Role.TOOL_EXECUTING,
+            content = "foreign",
+            toolName = "foreign",
+            isStatusMessage = true,
+        )
+        val rows = history(user(), foreign)
+        val progress = TurnProgress(rows, this)
+        progress.onThinking("plan")
+        progress.onTool(started(id = "one"))
+        progress.onTool(started(id = "two"))
+
+        progress.clear()
+
+        assertEquals(listOf(user(), foreign), rows.value)
+    }
+
+    @Test
+    fun clearRemainsSafeAfterDelayedSuccessRemovalRuns() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started(tool = "mail_search", id = "one"))
+        progress.onTool(started(tool = "web_search", id = "two"))
+        progress.onTool(completed(tool = "mail_search", id = "one"))
+        advanceTimeBy(DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS + 1)
+        runCurrent()
+
+        progress.clear()
+        runCurrent()
+
+        assertTrue(rows.value.isEmpty())
+    }
+
+    @Test
+    fun clearBeforeDelayedContinuitySwapPreventsReappearance() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started())
+        progress.onTool(completed())
+
+        progress.clear()
+        advanceTimeBy(DenebGatewayClient.MIN_PROGRESS_DISPLAY_MS + 1)
+        runCurrent()
+
+        assertTrue(rows.value.isEmpty())
+    }
+
+    @Test
+    fun errorFlagOnStartedFrameDoesNotPrematurelyMarkFailure() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+
+        progress.onTool(started().copy(isError = true))
+
+        assertEquals(ToolStatusLabels.label("mail_search"), rows.value.single().toolName)
+        assertNull(progress.footprint())
+    }
+
+    @Test
+    fun completionDetailDoesNotOverwriteStableFailureLabel() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started(tool = "web_search", detail = "query"))
+
+        progress.onTool(completed(tool = "web_search", isError = true).copy(detail = "raw server detail"))
+
+        assertEquals(ToolStatusLabels.failureLabel("web_search"), rows.value.single().toolName)
+    }
+
+    @Test
+    fun parallelCompletionFootprintReflectsCompletionNotStartOrder() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onTool(started(tool = "first", id = "one"))
+        progress.onTool(started(tool = "second", id = "two"))
+        progress.onTool(started(tool = "third", id = "three"))
+
+        progress.onTool(completed(tool = "third", id = "three"))
+        progress.onTool(completed(tool = "first", id = "one"))
+        progress.onTool(completed(tool = "second", id = "two"))
+
+        assertEquals(
+            listOf("third", "first", "second"),
+            progress.footprint().orEmpty().split(" · "),
+        )
+    }
+}

@@ -3,11 +3,11 @@ package system
 import (
 	"context"
 	"encoding/json"
-	"os"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -104,27 +104,10 @@ func configSet(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 		BaseHash string `json:"baseHash"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		if p.Raw == "" {
-			return nil, rpcerr.MissingParam("raw")
-		}
-		issues, warnings, err := config.ValidateRawConfig([]byte(p.Raw))
+		warnings, newHash, err := persistValidatedConfig(p.Raw, p.BaseHash)
 		if err != nil {
-			return nil, rpcerr.WrapValidationFailed("config validation error", err)
+			return nil, err
 		}
-		if len(issues) > 0 {
-			return nil, rpcerr.ValidationFailed("invalid config: " + issues[0].String())
-		}
-		snapshot, loadErr := config.LoadConfigFromDefaultPath()
-		if loadErr == nil && snapshot != nil && p.BaseHash != "" {
-			if snapshot.Hash != p.BaseHash {
-				return nil, rpcerr.Conflict("config has been modified since last read (hash mismatch)")
-			}
-		}
-		cfgPath := config.ResolveConfigPath()
-		if err := os.WriteFile(cfgPath, []byte(p.Raw), 0o644); err != nil { //nolint:gosec // G306 — world-readable config is intentional
-			return nil, rpcerr.WrapUnavailable("failed to write config", err)
-		}
-		newHash := config.HashString(p.Raw)
 		if deps.Broadcaster != nil {
 			deps.Broadcaster("config.changed", map[string]any{"hash": newHash})
 		}
@@ -145,27 +128,10 @@ func configApply(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 		RestartDelayMs int    `json:"restartDelayMs,omitempty"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		if p.Raw == "" {
-			return nil, rpcerr.MissingParam("raw")
-		}
-		issues, warnings, err := config.ValidateRawConfig([]byte(p.Raw))
+		warnings, newHash, err := persistValidatedConfig(p.Raw, p.BaseHash)
 		if err != nil {
-			return nil, rpcerr.WrapValidationFailed("config validation error", err)
+			return nil, err
 		}
-		if len(issues) > 0 {
-			return nil, rpcerr.ValidationFailed("invalid config: " + issues[0].String())
-		}
-		snapshot, loadErr := config.LoadConfigFromDefaultPath()
-		if loadErr == nil && snapshot != nil && p.BaseHash != "" {
-			if snapshot.Hash != p.BaseHash {
-				return nil, rpcerr.Conflict("config has been modified since last read (hash mismatch)")
-			}
-		}
-		cfgPath := config.ResolveConfigPath()
-		if err := os.WriteFile(cfgPath, []byte(p.Raw), 0o644); err != nil { //nolint:gosec // G306 — world-readable config is intentional
-			return nil, rpcerr.WrapUnavailable("failed to write config", err)
-		}
-		newHash := config.HashString(p.Raw)
 		if deps.Broadcaster != nil {
 			deps.Broadcaster("config.applied", map[string]any{
 				"hash":       newHash,
@@ -179,6 +145,27 @@ func configApply(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 			"warnings": warnings,
 		}, nil
 	})
+}
+
+func persistValidatedConfig(raw, baseHash string) ([]string, string, error) {
+	if raw == "" {
+		return nil, "", rpcerr.MissingParam("raw")
+	}
+	issues, warnings, err := config.ValidateRawConfig([]byte(raw))
+	if err != nil {
+		return nil, "", rpcerr.WrapValidationFailed("config validation error", err)
+	}
+	if len(issues) > 0 {
+		return nil, "", rpcerr.ValidationFailed("invalid config: " + issues[0].String())
+	}
+	snapshot, loadErr := config.LoadConfigFromDefaultPath()
+	if loadErr == nil && snapshot != nil && baseHash != "" && snapshot.Hash != baseHash {
+		return nil, "", rpcerr.Conflict("config has been modified since last read (hash mismatch)")
+	}
+	if err := writeConfigBytes(config.ResolveConfigPath(), []byte(raw)); err != nil {
+		return nil, "", rpcerr.WrapUnavailable("failed to write config", err)
+	}
+	return warnings, config.HashString(raw), nil
 }
 
 func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
@@ -225,7 +212,7 @@ func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 			return nil, rpcerr.ValidationFailed("merged config is invalid: " + issues[0].String())
 		}
 		cfgPath := config.ResolveConfigPath()
-		if err := os.WriteFile(cfgPath, merged, 0o644); err != nil { //nolint:gosec // G306 — world-readable config is intentional
+		if err := writeConfigBytes(cfgPath, merged); err != nil {
 			return nil, rpcerr.WrapUnavailable("failed to write config", err)
 		}
 		newHash := config.HashString(string(merged))
@@ -241,6 +228,14 @@ func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 			"hash":     newHash,
 			"warnings": warnings,
 		}, nil
+	})
+}
+
+func writeConfigBytes(path string, data []byte) error {
+	return atomicfile.WriteFile(path, data, &atomicfile.Options{
+		Perm:    0o600,
+		DirPerm: 0o700,
+		Fsync:   true,
 	})
 }
 

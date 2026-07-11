@@ -49,7 +49,7 @@ object SandboxSessions {
     const val TERMINAL = "__terminal__"
 
     /** True for chat-bound session ids (anything that isn't a sentinel). Such sessions get their transcript persisted. */
-    fun isPersistable(sessionId: String): Boolean = sessionId != TERMINAL && sessionId != SYSTEM && sessionId != DEFAULT
+    fun isPersistable(sessionId: String): Boolean = sessionId.isNotBlank() && sessionId != TERMINAL && sessionId != SYSTEM && sessionId != DEFAULT
 }
 
 interface SandboxController {

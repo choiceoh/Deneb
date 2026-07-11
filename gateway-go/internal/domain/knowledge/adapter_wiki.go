@@ -23,8 +23,10 @@ func NewWikiAdapter(store *wiki.Store) Adapter {
 	return &wikiAdapter{store: store}
 }
 
+// Layer identifies the knowledge layer served by the adapter.
 func (a *wikiAdapter) Layer() Layer { return LayerWiki }
 
+// Recall searches the adapter for knowledge relevant to the query.
 func (a *wikiAdapter) Recall(ctx context.Context, query string, limit int) ([]Result, error) {
 	hits, err := a.store.Search(ctx, query, limit)
 	if err != nil {
@@ -41,6 +43,7 @@ func (a *wikiAdapter) Recall(ctx context.Context, query string, limit int) ([]Re
 	return out, nil
 }
 
+// Read returns the wiki document identified by id.
 func (a *wikiAdapter) Read(_ context.Context, id string) (*Document, error) {
 	page, err := a.store.ReadPage(id)
 	if err != nil {
@@ -73,6 +76,7 @@ func (a *wikiAdapter) Read(_ context.Context, id string) (*Document, error) {
 	}, nil
 }
 
+// Record persists a document through the adapter.
 func (a *wikiAdapter) Record(_ context.Context, opts RecordOptions) (Ref, error) {
 	if strings.TrimSpace(opts.Page) == "" {
 		return Ref{}, fmt.Errorf("page is required for knowledge.record")

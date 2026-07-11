@@ -1,12 +1,9 @@
 package genesis
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
 // Rejection capture split out of evolver.go (pure move, no behavior change):
@@ -190,23 +187,4 @@ func selfHarnessAuditSummary(audit HarnessEditAudit) string {
 		"risk=" + strings.TrimSpace(audit.RegressionRisk),
 	}
 	return strings.Join(parts, "; ")
-}
-
-// drainStreamText collects the assistant text from a streamed completion.
-func drainStreamText(events <-chan llm.StreamEvent) string {
-	var sb strings.Builder
-	for ev := range events {
-		if ev.Type != "content_block_delta" {
-			continue
-		}
-		var delta struct {
-			Delta struct {
-				Text string `json:"text"`
-			} `json:"delta"`
-		}
-		if json.Unmarshal(ev.Payload, &delta) == nil && delta.Delta.Text != "" {
-			sb.WriteString(delta.Delta.Text)
-		}
-	}
-	return sb.String()
 }

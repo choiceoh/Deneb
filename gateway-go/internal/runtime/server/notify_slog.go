@@ -66,6 +66,7 @@ func (s *swappableHandler) Swap(h slog.Handler) {
 	s.mu.Unlock()
 }
 
+// Handle forwards a record through the currently installed delegate.
 func (s *swappableHandler) Handle(ctx context.Context, r slog.Record) error {
 	s.mu.RLock()
 	h := s.inner
@@ -73,6 +74,7 @@ func (s *swappableHandler) Handle(ctx context.Context, r slog.Record) error {
 	return h.Handle(ctx, r)
 }
 
+// Enabled asks the currently installed delegate whether level should be logged.
 func (s *swappableHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	s.mu.RLock()
 	h := s.inner
@@ -80,6 +82,7 @@ func (s *swappableHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	return h.Enabled(ctx, level)
 }
 
+// WithAttrs derives a handler whose attributes survive later delegate swaps.
 func (s *swappableHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	if len(attrs) == 0 {
 		return s
@@ -88,6 +91,7 @@ func (s *swappableHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &lazyAttrHandler{root: s, attrs: cp}
 }
 
+// WithGroup derives a handler whose group survives later delegate swaps.
 func (s *swappableHandler) WithGroup(name string) slog.Handler {
 	if name == "" {
 		return s
@@ -146,14 +150,17 @@ func (l *lazyAttrHandler) flatten() []*lazyAttrHandler {
 	return out
 }
 
+// Handle resolves the latest delegate before forwarding a record.
 func (l *lazyAttrHandler) Handle(ctx context.Context, r slog.Record) error {
 	return l.resolve().Handle(ctx, r)
 }
 
+// Enabled checks the latest root delegate without materializing the attribute chain.
 func (l *lazyAttrHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	return l.root.currentInner().Enabled(ctx, level)
 }
 
+// WithAttrs appends attributes to the lazily resolved handler chain.
 func (l *lazyAttrHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	if len(attrs) == 0 {
 		return l
@@ -162,6 +169,7 @@ func (l *lazyAttrHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &lazyAttrHandler{root: l.root, attrs: cp, parent: l}
 }
 
+// WithGroup appends a group to the lazily resolved handler chain.
 func (l *lazyAttrHandler) WithGroup(name string) slog.Handler {
 	if name == "" {
 		return l
@@ -205,10 +213,12 @@ func newNotifySlogHandler(delegate slog.Handler, n *notifyService) slog.Handler 
 	}
 }
 
+// Enabled preserves the wrapped delegate's level policy.
 func (h *notifySlogHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	return h.delegate.Enabled(ctx, level)
 }
 
+// WithAttrs derives a forwarding handler with delegate-side attributes.
 func (h *notifySlogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &notifySlogHandler{
 		delegate:         h.delegate.WithAttrs(attrs),
@@ -217,6 +227,7 @@ func (h *notifySlogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	}
 }
 
+// WithGroup derives a forwarding handler with a delegate-side group.
 func (h *notifySlogHandler) WithGroup(name string) slog.Handler {
 	return &notifySlogHandler{
 		delegate:         h.delegate.WithGroup(name),

@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/schedule"
 )
 
 // CalendarGlanceFunc returns the ambient upcoming-events glance for a turn.
@@ -66,7 +66,7 @@ func NewCalendarGlanceFunc(d *toolctx.CalendarDeps) CalendarGlanceFunc {
 		// don't want to stall other turns. Concurrent builders are harmless
 		// (idempotent; last write wins).
 		fctx, cancel := context.WithTimeout(ctx, calGlanceFetchTimeout)
-		glance := tools.CalendarGlance(fctx, d, now, calGlanceDays)
+		glance := schedule.CalendarGlance(fctx, d, now, calGlanceDays)
 		cancel()
 
 		calGlanceCache.mu.Lock()

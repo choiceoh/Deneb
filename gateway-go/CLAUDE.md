@@ -71,7 +71,7 @@ When you need to intervene in a tool call, use the supported extension points �
 **do not add a side-chain or adapter layer**:
 
 - **Pre-execution block / audit** → `StreamHooks.OnBeforeToolCall` in
-  `internal/agentsys/agent/hooks.go`. It can only *block* a call (returns
+  `internal/ai/agent/hooks.go`. It can only *block* a call (returns
   `block, blockReason`), not handle it. Wire it via
   `HookCompositor.OnBeforeToolCall` — gates compose first-block-wins in
   registration order (current consumers: goal-loop idempotency guard, then

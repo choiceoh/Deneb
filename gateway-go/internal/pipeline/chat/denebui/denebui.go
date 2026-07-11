@@ -30,6 +30,7 @@ type Issue struct {
 	Msg  string
 }
 
+// String returns the human-readable representation.
 func (is Issue) String() string { return is.Path + ": " + is.Msg }
 
 // nodeSpec captures the structural rules for one node type.

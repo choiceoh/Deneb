@@ -2,6 +2,7 @@ package nativesync
 
 import "github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 
+// TranscriptAppendedPayload is the compact transcript update sent to clients.
 type TranscriptAppendedPayload struct {
 	SessionKey  string `json:"sessionKey"`
 	Role        string `json:"role"`
@@ -9,10 +10,12 @@ type TranscriptAppendedPayload struct {
 	TimestampMs int64  `json:"timestampMs"`
 }
 
+// WorkFeedItemPayload wraps a created or updated work-feed item.
 type WorkFeedItemPayload struct {
 	Item workfeed.Item `json:"item"`
 }
 
+// WorkFeedActionPayload wraps a completed work-feed action.
 type WorkFeedActionPayload struct {
 	Item           workfeed.Item   `json:"item"`
 	Action         workfeed.Action `json:"action"`
@@ -22,6 +25,7 @@ type WorkFeedActionPayload struct {
 	RemoveFromFeed bool            `json:"removeFromFeed,omitempty"`
 }
 
+// TranscriptAppended builds a transcript synchronization event.
 func TranscriptAppended(sessionKey, role, preview string, timestampMs int64) AppendInput {
 	return AppendInput{
 		Type:       TypeTranscriptAppended,
@@ -47,14 +51,17 @@ func CalendarChanged(eventID string) AppendInput {
 	}
 }
 
+// WorkFeedCreated builds a work-feed creation event.
 func WorkFeedCreated(item workfeed.Item) AppendInput {
 	return workFeedItem(TypeWorkFeedCreated, item)
 }
 
+// WorkFeedUpdated builds a work-feed update event.
 func WorkFeedUpdated(item workfeed.Item) AppendInput {
 	return workFeedItem(TypeWorkFeedUpdated, item)
 }
 
+// WorkFeedActionRun builds a work-feed action completion event.
 func WorkFeedActionRun(result workfeed.ActionResult) AppendInput {
 	return AppendInput{
 		Type:           TypeWorkFeedActionRun,

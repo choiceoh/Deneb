@@ -13,11 +13,10 @@ package handlerminiapp
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -38,6 +37,7 @@ type ProjectLinkedNotebook struct {
 	ProjectRefs []string
 }
 
+// ProjectLinkedWorkItem carries the explicit project reference fields of a work item.
 type ProjectLinkedWorkItem struct {
 	ID    string
 	RefID string
@@ -135,18 +135,12 @@ func ProjectMethods(deps ProjectDeps) map[string]rpcutil.HandlerFunc {
 // passes the project 대표페이지 path and filters its already-fetched lists by the
 // returned IDs, so the fragile client-side ref-collection heuristic retires.
 func projectLinked(deps ProjectDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p struct {
-			Path string `json:"path"`
-		}
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[struct {
+		Path string `json:"path"`
+	}](func(ctx context.Context, req *protocol.RequestFrame, p struct {
+		Path string `json:"path"`
+	},
+	) *protocol.ResponseFrame {
 		if strings.TrimSpace(p.Path) == "" {
 			return rpcerr.MissingParam("path").Response(req.ID)
 		}
@@ -206,14 +200,11 @@ func projectLinked(deps ProjectDeps) rpcutil.HandlerFunc {
 			}
 		}
 		return rpcutil.RespondOK(req.ID, out)
-	}
+	})
 }
 
 func projectDigests(deps ProjectDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
+	return authenticated(func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		src, err := deps.Wiki()
 		if err != nil {
 			return rpcerr.WrapUnavailable("project digests unavailable", err).Response(req.ID)
@@ -237,5 +228,5 @@ func projectDigests(deps ProjectDeps) rpcutil.HandlerFunc {
 			})
 		}
 		return rpcutil.RespondOK(req.ID, ProjectDigestsOut{Digests: rows})
-	}
+	})
 }

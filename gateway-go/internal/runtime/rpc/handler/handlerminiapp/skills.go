@@ -25,15 +25,14 @@ package handlerminiapp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -227,11 +226,7 @@ func SkillsMethods(deps SkillsDeps) map[string]rpcutil.HandlerFunc {
 }
 
 func skillsList(deps SkillsDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-
+	return authenticated(func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		entries := deps.List()
 		curator := curatorBySkill(deps)
 		usage := usageBySkill(deps)
@@ -245,7 +240,7 @@ func skillsList(deps SkillsDeps) rpcutil.HandlerFunc {
 		}
 
 		return rpcutil.RespondOK(req.ID, SkillsListResponse{Skills: rows, Count: len(rows)})
-	}
+	})
 }
 
 // buildSkillRow projects one catalog entry into the enriched wire row —
@@ -367,19 +362,12 @@ func skillInstallSpecLabel(spec skills.SkillInstallSpec) string {
 }
 
 func skillsDetail(deps SkillsDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-
-		var p struct {
-			Name string `json:"name"`
-		}
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[struct {
+		Name string `json:"name"`
+	}](func(ctx context.Context, req *protocol.RequestFrame, p struct {
+		Name string `json:"name"`
+	},
+	) *protocol.ResponseFrame {
 		if strings.TrimSpace(p.Name) == "" {
 			return rpcerr.MissingParam("name").Response(req.ID)
 		}
@@ -390,24 +378,18 @@ func skillsDetail(deps SkillsDeps) rpcutil.HandlerFunc {
 		}
 
 		return rpcutil.RespondOK(req.ID, skillDetailResponse(deps, entry))
-	}
+	})
 }
 
 func skillsUpdate(deps SkillsDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-
-		var p struct {
-			Name string `json:"name"`
-			Body string `json:"body"`
-		}
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[struct {
+		Name string `json:"name"`
+		Body string `json:"body"`
+	}](func(ctx context.Context, req *protocol.RequestFrame, p struct {
+		Name string `json:"name"`
+		Body string `json:"body"`
+	},
+	) *protocol.ResponseFrame {
 		p.Name = strings.TrimSpace(p.Name)
 		if p.Name == "" {
 			return rpcerr.MissingParam("name").Response(req.ID)
@@ -435,23 +417,16 @@ func skillsUpdate(deps SkillsDeps) rpcutil.HandlerFunc {
 			return rpcutil.RespondOK(req.ID, skillDetailResponse(deps, refreshed))
 		}
 		return rpcutil.RespondOK(req.ID, skillDetailResponse(deps, entry))
-	}
+	})
 }
 
 func skillsDelete(deps SkillsDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-
-		var p struct {
-			Name string `json:"name"`
-		}
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[struct {
+		Name string `json:"name"`
+	}](func(ctx context.Context, req *protocol.RequestFrame, p struct {
+		Name string `json:"name"`
+	},
+	) *protocol.ResponseFrame {
 		p.Name = strings.TrimSpace(p.Name)
 		if p.Name == "" {
 			return rpcerr.MissingParam("name").Response(req.ID)
@@ -470,7 +445,7 @@ func skillsDelete(deps SkillsDeps) rpcutil.HandlerFunc {
 		invalidateSkills(deps)
 
 		return rpcutil.RespondOK(req.ID, map[string]any{"name": p.Name, "deleted": true})
-	}
+	})
 }
 
 func skillEntryByName(deps SkillsDeps, name string) (skills.SkillEntry, bool) {
@@ -536,20 +511,14 @@ func invalidateSkills(deps SkillsDeps) {
 }
 
 func skillsLifecycle(deps SkillsDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-
-		var p struct {
-			Limit     int    `json:"limit"`
-			SkillName string `json:"skillName"`
-		}
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[struct {
+		Limit     int    `json:"limit"`
+		SkillName string `json:"skillName"`
+	}](func(ctx context.Context, req *protocol.RequestFrame, p struct {
+		Limit     int    `json:"limit"`
+		SkillName string `json:"skillName"`
+	},
+	) *protocol.ResponseFrame {
 		if p.Limit <= 0 || p.Limit > lifecycleScanLimit {
 			p.Limit = 60
 		}
@@ -585,7 +554,7 @@ func skillsLifecycle(deps SkillsDeps) rpcutil.HandlerFunc {
 			Count:   len(events),
 			Summary: summary,
 		})
-	}
+	})
 }
 
 // lifecycleTextMaxRunes caps Detail/Evidence on lifecycle events. The native

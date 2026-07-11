@@ -2,12 +2,11 @@ package handlerminiapp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
@@ -90,6 +89,7 @@ type SelfImprovementCodingListResponse struct {
 	Funnel SelfImprovementCodingFunnel `json:"funnel"`
 }
 
+// SelfImprovementCodingMethods registers self-improvement coding RPC handlers.
 func SelfImprovementCodingMethods(deps SelfImprovementCodingDeps) map[string]rpcutil.HandlerFunc {
 	if deps.RecentCandidates == nil {
 		return nil
@@ -104,16 +104,7 @@ func selfImprovementCodingList(deps SelfImprovementCodingDeps) rpcutil.HandlerFu
 		Limit  int    `json:"limit"`
 		Status string `json:"status"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p params
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		if p.Limit <= 0 || p.Limit > lifecycleScanLimit {
 			p.Limit = 60
 		}
@@ -139,7 +130,7 @@ func selfImprovementCodingList(deps SelfImprovementCodingDeps) rpcutil.HandlerFu
 			StatusCounts: selfImprovementCodingStatusCounts(allRecs),
 			Funnel:       selfImprovementCodingFunnel(deps),
 		})
-	}
+	})
 }
 
 func selfImprovementCodingFunnel(deps SelfImprovementCodingDeps) SelfImprovementCodingFunnel {

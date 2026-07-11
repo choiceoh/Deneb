@@ -22,9 +22,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/observe"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )

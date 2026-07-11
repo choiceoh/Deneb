@@ -18,6 +18,7 @@ type TranscriptAppender interface {
 // TranscriptAppendFunc adapts a plain function to the TranscriptAppender interface.
 type TranscriptAppendFunc func(sessionKey, text string) error
 
+// AppendSystemNote appends a system note to the requested transcript.
 func (f TranscriptAppendFunc) AppendSystemNote(sessionKey, text string) error {
 	return f(sessionKey, text)
 }

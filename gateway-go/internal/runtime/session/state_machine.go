@@ -10,6 +10,7 @@ type TransitionError struct {
 	To   RunStatus
 }
 
+// Error returns the human-readable error message.
 func (e *TransitionError) Error() string {
 	return fmt.Sprintf("invalid state transition: %s → %s", e.From, e.To)
 }

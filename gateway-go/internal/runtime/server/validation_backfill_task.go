@@ -47,9 +47,12 @@ type validationBackfillTask struct {
 	logger  *slog.Logger
 }
 
+// Name returns the component's stable scheduler name.
 func (t *validationBackfillTask) Name() string            { return "validation-backfill" }
+// Interval returns the component's scheduling cadence.
 func (t *validationBackfillTask) Interval() time.Duration { return validationBackfillInterval }
 
+// Run executes one scheduled task cycle.
 func (t *validationBackfillTask) Run(ctx context.Context) error {
 	if t.backend == nil || t.backend.tracker == nil || t.backend.transcripts == nil {
 		return nil

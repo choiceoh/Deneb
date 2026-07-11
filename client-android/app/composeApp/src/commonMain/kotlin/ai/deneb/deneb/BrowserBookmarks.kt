@@ -65,7 +65,14 @@ internal fun isBrowserBookmarked(bookmarks: List<BrowserBookmark>, url: String):
 
 internal fun canBookmarkUrl(url: String): Boolean {
     val s = canonicalBrowserBookmarkUrl(url)
-    return s.startsWith("https://", ignoreCase = true) || s.startsWith("http://", ignoreCase = true)
+    val schemeLength = when {
+        s.startsWith("https://", ignoreCase = true) -> 8
+        s.startsWith("http://", ignoreCase = true) -> 7
+        else -> return false
+    }
+    if (s.any { it.isWhitespace() || it.isISOControl() }) return false
+    val authority = s.drop(schemeLength).substringBefore('/').substringBefore('?').substringBefore('#')
+    return authority.isNotBlank()
 }
 
 internal fun browserBookmarkDisplayTitle(bookmark: BrowserBookmark): String = bookmark.title.ifBlank { browserBookmarkHost(bookmark.url) }.ifBlank { bookmark.url }
@@ -83,10 +90,11 @@ private fun List<BrowserBookmark>.sanitizedBrowserBookmarks(): List<BrowserBookm
 private fun canonicalBrowserBookmarkUrl(url: String): String = url.trim()
 
 private fun cleanBrowserBookmarkTitle(title: String, url: String): String {
-    val cleaned = title
+    var cleaned = title
         .trim()
         .replace(Regex("\\s+"), " ")
         .take(BROWSER_BOOKMARK_TITLE_LIMIT)
+    if (cleaned.lastOrNull()?.isHighSurrogate() == true) cleaned = cleaned.dropLast(1)
     return cleaned.ifBlank { browserBookmarkHost(url) }
 }
 
@@ -96,7 +104,7 @@ private fun browserBookmarkHost(url: String): String {
         .substringBefore('/')
         .substringBefore('?')
         .substringBefore('#')
-        .removePrefix("www.")
+        .let { if (it.startsWith("www.", ignoreCase = true)) it.drop(4) else it }
 }
 
 @OptIn(ExperimentalTime::class)

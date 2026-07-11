@@ -55,6 +55,21 @@ func TestTruncateRunes(t *testing.T) {
 	}
 }
 
+func TestTruncateRunesWithin(t *testing.T) {
+	if got := TruncateRunesWithin("가나다라마", 4, "…"); got != "가나다…" {
+		t.Errorf("TruncateRunesWithin CJK = %q, want 가나다…", got)
+	}
+	if got := TruncateRunesWithin("short", 10, "…"); got != "short" {
+		t.Errorf("TruncateRunesWithin no-trim = %q, want short", got)
+	}
+	if got := TruncateRunesWithin("abcdef", 1, "…"); got != "…" {
+		t.Errorf("TruncateRunesWithin suffix budget = %q, want …", got)
+	}
+	if got := TruncateRunesWithin("abcdef", 0, "…"); got != "" {
+		t.Errorf("TruncateRunesWithin zero budget = %q, want empty", got)
+	}
+}
+
 func TestDedupeStrings(t *testing.T) {
 	in := []string{"  b  ", "a", "", "b", "a", "  ", "c"}
 	got := DedupeStrings(in)

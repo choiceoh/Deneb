@@ -9,16 +9,16 @@ import (
 	"net/mail"
 	"os"
 	"strings"
-	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
 )
 
+// MailArchiveDeps supplies archive readers and optional enrichment services.
 type MailArchiveDeps struct {
 	Wiki     *wiki.Store
 	Calendar *toolctx.CalendarDeps
@@ -55,7 +55,7 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 		configuredMailboxes := mailarchive.ParseMailboxList(os.Getenv("DENEB_ARCHIVE_IMAP_MAILBOXES"))
 		mailboxes := mailarchive.SelectMailboxes(args.Mailbox, configuredMailboxes)
 		cfg := mailarchive.Config{
-			Addr:      mailArchiveAddr(),
+			Addr:      mailarchive.AddressFromEnv(),
 			User:      os.Getenv("DENEB_ARCHIVE_IMAP_USER"),
 			Pass:      os.Getenv("DENEB_ARCHIVE_IMAP_PASS"),
 			Mailboxes: mailboxes,
@@ -346,90 +346,18 @@ func mailArchivePath(action string, usedIMAP bool) string {
 	}
 }
 
-// Active on-demand attachment read caps. Generous because the agent or user
-// explicitly asked to read THIS attachment (unlike the autonomous gate's bounded
-// pre-injection): a multi-page 견적서/계약서 should come back whole.
-const (
-	archiveAttachmentPerDocRunes = 20000
-	archiveAttachmentTotalRunes  = 48000
-	// archiveAttachmentConcurrency bounds how many attachments extract/OCR at
-	// once. The loop used to be serial, so a 견적서 sent as N page-photos (each
-	// its own image attachment) OCR'd one at a time — tens of seconds. This fans
-	// them out like pdfOCR's page loop; PaddleOCR's server-side seq cap keeps the
-	// total (attachments × any internal page fan-out) from starving live OCR.
-	archiveAttachmentConcurrency = 4
-)
-
-// formatArchiveAttachments extracts text from each selected attachment (the same
-// PDF/Excel/Word/OCR extractor the autonomous gate uses) and renders it, honoring
-// per-document and total rune caps so one huge file can't flood the turn.
-//
-// Extraction runs concurrently (OCR dominates and was serialized per attachment);
-// each writes its own slot so order is preserved, and rendering below stays serial
-// to keep the caps exact.
+// formatArchiveAttachments adapts archive records to the format-neutral
+// document extraction boundary.
 func formatArchiveAttachments(ctx context.Context, atts []mailarchive.ArchivedAttachment) string {
-	texts := make([]string, len(atts))
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, archiveAttachmentConcurrency)
+	documents := make([]document.Attachment, len(atts))
 	for i := range atts {
-		select {
-		case sem <- struct{}{}:
-		case <-ctx.Done():
-			wg.Wait()
-			return renderArchiveAttachments(atts, texts) // render whatever finished
+		documents[i] = document.Attachment{
+			Filename: atts[i].Filename,
+			MimeType: atts[i].MimeType,
+			Bytes:    atts[i].Bytes,
 		}
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			defer func() { _ = recover() }() // one attachment's panic must not crash the gateway
-			texts[i] = strings.TrimSpace(ExtractAttachmentTextBytes(ctx, atts[i].Bytes, atts[i].Filename, atts[i].MimeType))
-		}(i)
 	}
-	wg.Wait()
-	return renderArchiveAttachments(atts, texts)
-}
-
-// renderArchiveAttachments builds the output serially so the per-doc/total rune
-// caps and attachment order stay deterministic regardless of extraction timing.
-func renderArchiveAttachments(atts []mailarchive.ArchivedAttachment, texts []string) string {
-	var b strings.Builder
-	total := 0
-	for i, a := range atts {
-		fmt.Fprintf(&b, "### 📎 %s (%s)\n", a.Filename, a.MimeType)
-		text := texts[i]
-		if text == "" {
-			b.WriteString("(텍스트를 추출하지 못했습니다 — 스캔 품질이 낮거나 지원하지 않는 형식일 수 있습니다.)\n\n")
-			continue
-		}
-		remaining := archiveAttachmentTotalRunes - total
-		if remaining <= 0 {
-			b.WriteString("(이하 첨부는 전체 분량 한도로 생략 — 개별 첨부로 다시 요청하세요.)\n")
-			break
-		}
-		limit := min(archiveAttachmentPerDocRunes, remaining)
-		clipped := clipArchiveRunes(text, limit)
-		b.WriteString(clipped)
-		b.WriteString("\n\n")
-		total += utf8.RuneCountInString(clipped)
-	}
-	return strings.TrimSpace(b.String())
-}
-
-// clipArchiveRunes truncates s to at most n runes, marking the cut.
-func clipArchiveRunes(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n]) + " …(생략 — 전체가 필요하면 더 좁은 첨부 선택자로 다시 요청하세요.)"
-}
-
-func mailArchiveAddr() string {
-	if v := strings.TrimSpace(os.Getenv("DENEB_ARCHIVE_IMAP_ADDR")); v != "" {
-		return v
-	}
-	return "127.0.0.1:1143"
+	return document.ExtractAttachments(ctx, documents)
 }
 
 func mailArchiveMailboxLabel(mailboxes []string) string {

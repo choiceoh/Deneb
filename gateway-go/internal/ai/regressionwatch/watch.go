@@ -48,7 +48,9 @@ func NewTask(deps Deps) *Task {
 	return &Task{deps: deps}
 }
 
+// Name returns the component's stable scheduler name.
 func (t *Task) Name() string            { return "regression-watch" }
+// Interval returns the component's scheduling cadence.
 func (t *Task) Interval() time.Duration { return watchInterval }
 
 // Run samples every source, detects regressions versus the persisted baseline,

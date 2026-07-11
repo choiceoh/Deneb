@@ -9,7 +9,7 @@ import {
   buildTable,
   concatBytes,
   hwpWchars,
-} from "./testfixtures";
+} from "./__tests__/fixtures";
 
 // The parser is exercised against HAND-BUILT compound files (no real HWP binary
 // needed): a minimal CFB with a FileHeader + one uncompressed Section0 whose

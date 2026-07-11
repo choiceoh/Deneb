@@ -5,19 +5,16 @@
 package config
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 	"unicode"
 )
 
+// ErrInvalidCustomModel reports a custom model configuration that cannot be accepted.
 var ErrInvalidCustomModel = errors.New("invalid custom model")
 
 // PersistedCustomModel describes the provider/model entry written to config.
@@ -52,22 +49,9 @@ func PersistCustomProviderModel(configPath, endpoint, model string, meta CustomM
 		return PersistedCustomModel{}, err
 	}
 
-	dir := filepath.Dir(configPath)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return PersistedCustomModel{}, fmt.Errorf("creating config directory: %w", err)
-	}
-
-	var raw map[string]any
-	data, err := os.ReadFile(configPath)
+	raw, err := prepareConfigMap(configPath)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return PersistedCustomModel{}, fmt.Errorf("reading config: %w", err)
-		}
-		raw = make(map[string]any)
-	} else {
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return PersistedCustomModel{}, fmt.Errorf("parsing config: %w", err)
-		}
+		return PersistedCustomModel{}, err
 	}
 
 	models := ensureObject(raw, "models")
@@ -84,16 +68,8 @@ func PersistCustomProviderModel(configPath, endpoint, model string, meta CustomM
 	}
 	added := upsertCustomModel(providerConfig, modelID, meta)
 
-	metaObj := ensureObject(raw, "meta")
-	metaObj["lastTouchedAt"] = time.Now().UTC().Format(time.RFC3339)
-
-	out, err := json.MarshalIndent(raw, "", "  ")
-	if err != nil {
-		return PersistedCustomModel{}, fmt.Errorf("encoding config: %w", err)
-	}
-
-	if err := os.WriteFile(configPath, append(out, '\n'), 0o600); err != nil {
-		return PersistedCustomModel{}, fmt.Errorf("writing config: %w", err)
+	if err := writeConfigMap(configPath, raw); err != nil {
+		return PersistedCustomModel{}, err
 	}
 
 	result := PersistedCustomModel{
@@ -139,16 +115,12 @@ func DeleteCustomProviderModel(configPath, fullModelID string, logger *slog.Logg
 		FullModelID: providerID + "/" + modelID,
 	}
 
-	data, err := os.ReadFile(configPath)
+	raw, exists, err := readConfigMap(configPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return result, nil // nothing persisted yet — idempotent no-op
-		}
-		return DeletedCustomModel{}, fmt.Errorf("reading config: %w", err)
+		return DeletedCustomModel{}, err
 	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return DeletedCustomModel{}, fmt.Errorf("parsing config: %w", err)
+	if !exists {
+		return result, nil // nothing persisted yet — idempotent no-op
 	}
 
 	// Remove the model from its provider, dropping the provider when empty.
@@ -174,15 +146,8 @@ func DeleteCustomProviderModel(configPath, fullModelID string, logger *slog.Logg
 		return result, nil // nothing changed — skip the write
 	}
 
-	meta := ensureObject(raw, "meta")
-	meta["lastTouchedAt"] = time.Now().UTC().Format(time.RFC3339)
-
-	out, err := json.MarshalIndent(raw, "", "  ")
-	if err != nil {
-		return DeletedCustomModel{}, fmt.Errorf("encoding config: %w", err)
-	}
-	if err := os.WriteFile(configPath, append(out, '\n'), 0o600); err != nil {
-		return DeletedCustomModel{}, fmt.Errorf("writing config: %w", err)
+	if err := writeConfigMap(configPath, raw); err != nil {
+		return DeletedCustomModel{}, err
 	}
 
 	if logger != nil {
@@ -233,15 +198,6 @@ func normalizeCustomModelID(model string) (string, error) {
 		return "", fmt.Errorf("%w: model name must not contain whitespace", ErrInvalidCustomModel)
 	}
 	return id, nil
-}
-
-func ensureObject(parent map[string]any, key string) map[string]any {
-	if obj, ok := parent[key].(map[string]any); ok {
-		return obj
-	}
-	obj := make(map[string]any)
-	parent[key] = obj
-	return obj
 }
 
 func providerForCustomEndpoint(providers map[string]any, baseURL string) (string, map[string]any) {
@@ -453,15 +409,9 @@ func HideModel(configPath, fullModelID string, logger *slog.Logger) (HiddenModel
 	}
 	result := HiddenModel{FullModelID: id}
 
-	var raw map[string]any
-	data, err := os.ReadFile(configPath)
+	raw, _, err := readConfigMap(configPath)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return HiddenModel{}, fmt.Errorf("reading config: %w", err)
-		}
-		raw = make(map[string]any)
-	} else if err := json.Unmarshal(data, &raw); err != nil {
-		return HiddenModel{}, fmt.Errorf("parsing config: %w", err)
+		return HiddenModel{}, err
 	}
 
 	models := ensureObject(raw, "models")
@@ -483,13 +433,8 @@ func HideModel(configPath, fullModelID string, logger *slog.Logger) (HiddenModel
 		return result, nil // already hidden, no role to clear — skip the write
 	}
 
-	ensureObject(raw, "meta")["lastTouchedAt"] = time.Now().UTC().Format(time.RFC3339)
-	out, err := json.MarshalIndent(raw, "", "  ")
-	if err != nil {
-		return HiddenModel{}, fmt.Errorf("encoding config: %w", err)
-	}
-	if err := os.WriteFile(configPath, append(out, '\n'), 0o600); err != nil {
-		return HiddenModel{}, fmt.Errorf("writing config: %w", err)
+	if err := writeConfigMap(configPath, raw); err != nil {
+		return HiddenModel{}, err
 	}
 	if logger != nil {
 		logger.Info("hid model", "model", id, "clearedRoles", result.ClearedRoles, "path", configPath)
@@ -501,12 +446,8 @@ func HideModel(configPath, fullModelID string, logger *slog.Logger) (HiddenModel
 // the picker must omit. Missing/empty/unreadable → nil (callers treat nil as an
 // empty set). Read per models.list call; the file is small.
 func LoadHiddenModels(configPath string) map[string]bool {
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
+	raw, exists, err := readConfigMap(configPath)
+	if err != nil || !exists {
 		return nil
 	}
 	models, ok := raw["models"].(map[string]any)

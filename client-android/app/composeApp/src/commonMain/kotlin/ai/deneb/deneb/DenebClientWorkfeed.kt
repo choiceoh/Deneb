@@ -238,7 +238,9 @@ suspend fun DenebGatewayClient.refreshWorkFeed(sinceMs: Long = 0L, beforeMs: Lon
         return false
     }
     if (epoch != credEpoch) return false // credentials switched — don't show the old account's work-feed
-    val incoming = payload.items.filter { it.id.isNotBlank() }
+    val incoming = payload.items
+        .filter { it.id.isNotBlank() }
+        .distinctByLast { it.id }
     if (merge && ranged) {
         _denebWorkFeed.update { current ->
             val kept = current.filterNot { item ->

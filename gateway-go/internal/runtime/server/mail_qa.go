@@ -1,6 +1,6 @@
 // mail_qa.go — wiring for miniapp.gmail.ask (mail follow-up Q&A).
 //
-// The handler (handlerminiapp/gmail_qa.go) assembles the grounding context
+// The handler (handler/mail/gmail_qa.go) assembles the grounding context
 // from the email + cached analysis; this layer runs the actual LLM via the
 // chat handler's SendSync as an EPHEMERAL, ISOLATED run:
 //
@@ -21,7 +21,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	handlermail "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail"
 )
 
 const mailQASystemPrompt = `당신은 사용자가 보고 있는 이메일에 대한 후속 질문에 답하는 비서다.
@@ -35,11 +35,11 @@ const mailQAMaxTokens = 1536
 // makeMailQAAsk returns the Ask callback wired into GmailAnalyzeDeps. Returns
 // nil when chatHandler isn't ready, in which case the handler skips
 // registering miniapp.gmail.ask entirely.
-func (s *Server) makeMailQAAsk() func(context.Context, string, []handlerminiapp.QATurn, string) (string, error) {
+func (s *Server) makeMailQAAsk() func(context.Context, string, []handlermail.QATurn, string) (string, error) {
 	if s.chatHandler == nil {
 		return nil
 	}
-	return func(ctx context.Context, mailContext string, history []handlerminiapp.QATurn, question string) (string, error) {
+	return func(ctx context.Context, mailContext string, history []handlermail.QATurn, question string) (string, error) {
 		msgs := make([]llm.Message, 0, len(history)*2+1)
 		for _, t := range history {
 			if strings.TrimSpace(t.Q) != "" {

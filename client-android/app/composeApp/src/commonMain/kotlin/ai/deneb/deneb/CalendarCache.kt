@@ -28,6 +28,7 @@ internal fun decodeCalendarCache(json: String, expectedOwner: String): List<Cale
     .getOrNull()
     ?.takeIf { it.owner == expectedOwner }
     ?.events
+    ?.take(CALENDAR_CACHE_MAX)
     ?.takeIf { it.isNotEmpty() }
 
 internal fun DenebGatewayClient.loadCachedCalendar(): List<CalendarEvent>? {

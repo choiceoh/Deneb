@@ -11,11 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
 )
 
 const (
@@ -270,7 +270,7 @@ func (r *ToolRegistry) ApplyMaxOutputs(budgets map[string]int) {
 // invalidation policy. Two regimes:
 //
 //   - Synchronous mutations (write/edit; foreground exec whose command is not
-//     provably read-only per tools.ExecCommandPreservesRunCache) have fully
+//     provably read-only per runtimeops.ExecCommandPreservesRunCache) have fully
 //     landed by the time this runs, so a point-in-time invalidation brackets
 //     them: by mutated path where known, whole cache otherwise.
 //   - Async writers (background exec with a non-read-only command; a spawned
@@ -310,7 +310,7 @@ func invalidateCachesAfterTool(ctx context.Context, name string, input json.RawM
 	switch name {
 	case "exec":
 		cmd, background := extractExecMeta(input)
-		if tools.ExecCommandPreservesRunCache(cmd) {
+		if runtimeops.ExecCommandPreservesRunCache(cmd) {
 			return
 		}
 		if background {
@@ -529,17 +529,7 @@ func (r *ToolRegistry) buildLLMToolsLocked() []llm.Tool {
 		if def.Hidden || def.Deferred {
 			continue
 		}
-		schema := def.InputSchema
-		if schema == nil {
-			schema = map[string]any{"type": "object"}
-		}
-		t := llm.Tool{
-			Name:        def.Name,
-			Description: def.Description,
-			InputSchema: schema,
-		}
-		t.PreSerialize()
-		tools = append(tools, t)
+		tools = append(tools, toLLMTool(def))
 	}
 	return tools
 }
@@ -562,17 +552,7 @@ func (r *ToolRegistry) FilteredLLMTools(allowed map[string]struct{}) []llm.Tool 
 		if def.Hidden || def.Deferred {
 			continue
 		}
-		schema := def.InputSchema
-		if schema == nil {
-			schema = map[string]any{"type": "object"}
-		}
-		t := llm.Tool{
-			Name:        def.Name,
-			Description: def.Description,
-			InputSchema: schema,
-		}
-		t.PreSerialize()
-		tools = append(tools, t)
+		tools = append(tools, toLLMTool(def))
 	}
 	return tools
 }
@@ -623,19 +603,25 @@ func (r *ToolRegistry) DeferredLLMTools(names []string) []llm.Tool {
 		if !ok || !def.Deferred {
 			continue
 		}
-		schema := def.InputSchema
-		if schema == nil {
-			schema = map[string]any{"type": "object"}
-		}
-		t := llm.Tool{
-			Name:        def.Name,
-			Description: def.Description,
-			InputSchema: schema,
-		}
-		t.PreSerialize()
-		tools = append(tools, t)
+		tools = append(tools, toLLMTool(def))
 	}
 	return tools
+}
+
+// toLLMTool is the single schema-normalization and pre-serialization path for
+// every registry view exposed to an LLM.
+func toLLMTool(def ToolDef) llm.Tool {
+	schema := def.InputSchema
+	if schema == nil {
+		schema = map[string]any{"type": "object"}
+	}
+	tool := llm.Tool{
+		Name:        def.Name,
+		Description: def.Description,
+		InputSchema: schema,
+	}
+	tool.PreSerialize()
+	return tool
 }
 
 // DeferredSummaries returns name+description for all deferred (non-hidden) tools.

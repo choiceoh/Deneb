@@ -68,6 +68,7 @@ var (
 // window elapses, restoring the distinction between the two actions.
 const snoozeDuration = 3 * time.Hour
 
+// Action describes an operator action available on a work-feed item.
 type Action struct {
 	ID     string `json:"id"`
 	Kind   string `json:"kind"`
@@ -76,6 +77,7 @@ type Action struct {
 	Prompt string `json:"prompt,omitempty"`
 }
 
+// Item is one durable work-feed entry and its acknowledgement state.
 type Item struct {
 	ID         string `json:"id"`
 	Source     string `json:"source"`
@@ -104,6 +106,7 @@ type Item struct {
 	ReadAtMs int64 `json:"readAtMs,omitempty"`
 }
 
+// ActionResult records the outcome of running an item action.
 type ActionResult struct {
 	Item           Item   `json:"item"`
 	Action         Action `json:"action"`
@@ -113,11 +116,13 @@ type ActionResult struct {
 	RemoveFromFeed bool   `json:"removeFromFeed,omitempty"`
 }
 
+// Store persists work-feed items and action outcomes.
 type Store struct {
 	path string
 	mu   sync.Mutex
 }
 
+// NewStore opens a work-feed store backed by path.
 func NewStore(path string) *Store {
 	return &Store{path: path}
 }
@@ -187,6 +192,7 @@ func fingerprint(body string) string {
 	return strings.Join(strings.Fields(body), " ")
 }
 
+// ListOptions controls work-feed filtering, ordering, and pagination.
 type ListOptions struct {
 	Limit        int
 	IncludeAcked bool
@@ -194,14 +200,17 @@ type ListOptions struct {
 	BeforeMs     int64
 }
 
+// List returns the newest items and total count under the acknowledgement filter.
 func (s *Store) List(limit int, includeAcked bool) ([]Item, int, error) {
 	return s.ListFiltered(ListOptions{Limit: limit, IncludeAcked: includeAcked})
 }
 
+// ListRange returns items within the requested timestamp window.
 func (s *Store) ListRange(limit int, includeAcked bool, sinceMs, beforeMs int64) ([]Item, int, error) {
 	return s.ListFiltered(ListOptions{Limit: limit, IncludeAcked: includeAcked, SinceMs: sinceMs, BeforeMs: beforeMs})
 }
 
+// ListFiltered returns items matching opts plus the count before limit truncation.
 func (s *Store) ListFiltered(opts ListOptions) ([]Item, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -322,37 +331,13 @@ func (s *Store) Engagement(now, staleWindowMs int64) (EngagementStat, error) {
 	return stat, nil
 }
 
+// Ack marks id acknowledged and returns its updated item.
 func (s *Store) Ack(id string) (Item, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return Item{}, ErrNotFound
-	}
-	items, err := jsonlstore.Load[Item](s.path)
-	if err != nil {
-		return Item{}, err
-	}
-	now := time.Now().UnixMilli()
-	var out Item
-	found := false
-	for i := range items {
-		items[i] = normalizeExisting(items[i])
-		if items[i].ID == id {
-			items[i].Status = StatusAcked
-			items[i].UpdatedAtMs = now
-			out = items[i]
-			found = true
-		}
-	}
-	if !found {
-		return Item{}, ErrNotFound
-	}
-	if err := jsonlstore.Snapshot(s.path, items); err != nil {
-		return Item{}, err
-	}
-	return out, nil
+	return s.mutateItem(id, func(item *Item, now int64) bool {
+		item.Status = StatusAcked
+		item.UpdatedAtMs = now
+		return true
+	})
 }
 
 // MarkRead stamps the card identified by id as read (ReadAtMs) WITHOUT settling it:
@@ -362,6 +347,64 @@ func (s *Store) Ack(id string) (Item, error) {
 // (legacy twins), mirroring Ack. ReadAtMs flows to the clients (List + native sync),
 // which render read cards de-emphasized.
 func (s *Store) MarkRead(id string) (Item, error) {
+	return s.mutateItem(id, func(item *Item, now int64) bool {
+		if item.ReadAtMs != 0 {
+			return false
+		}
+		item.ReadAtMs = now
+		return true
+	})
+}
+
+// Correct annotates the card identified by id with a user correction, appending
+// note to the body as a dated "사용자 정정" erratum block and bumping UpdatedAtMs.
+// The card stays in the feed, now visibly carrying the correction so a wrong
+// analysis is never shown unqualified. Applies to every item sharing the id
+// (legacy id twins), mirroring Ack. The durable knowledge fix (wiki) is the
+// caller's separate agent turn; this is only the on-card erratum.
+func (s *Store) Correct(id, note string) (Item, error) {
+	note = strings.TrimSpace(note)
+	return s.mutateItem(id, func(item *Item, now int64) bool {
+		if note != "" {
+			item.Body = strings.TrimRight(item.Body, "\n") + formatCorrection(note, now)
+		}
+		item.UpdatedAtMs = now
+		return true
+	})
+}
+
+// formatCorrection renders a user correction as a dated block appended to a card
+// body, kept visually distinct from the original analysis by a rule + marker.
+func formatCorrection(note string, atMs int64) string {
+	date := time.UnixMilli(atMs).Format("2006-01-02")
+	return "\n\n---\n\n✏️ **사용자 정정** (" + date + ")\n" + note
+}
+
+// Rewrite replaces the body of the card identified by id with newBody (a freshly
+// regenerated analysis), re-derives the glance priority from the new content, and
+// bumps UpdatedAtMs. Title and summary are left intact so the row preview stays
+// stable; the regenerated analysis shows when the card is expanded. Applies to
+// every item sharing the id (legacy twins), mirroring Ack/Correct. The native
+// "다시 작성" path: the agent rewrites the analysis and the result lands here. A
+// blank newBody is rejected so a failed regeneration never wipes the card.
+func (s *Store) Rewrite(id, newBody string) (Item, error) {
+	id = strings.TrimSpace(id)
+	newBody = strings.TrimSpace(newBody)
+	if id == "" || newBody == "" {
+		return Item{}, ErrNotFound
+	}
+	return s.mutateItem(id, func(item *Item, now int64) bool {
+		item.Body = newBody
+		item.Priority = inferPriority(*item)
+		item.UpdatedAtMs = now
+		return true
+	})
+}
+
+// mutateItem serializes the common load-normalize-update-snapshot lifecycle
+// for id-scoped card changes. The callback reports whether persistence is
+// needed, allowing idempotent reads to avoid rewriting the feed.
+func (s *Store) mutateItem(id string, update func(*Item, int64) bool) (Item, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -380,10 +423,7 @@ func (s *Store) MarkRead(id string) (Item, error) {
 	for i := range items {
 		items[i] = normalizeExisting(items[i])
 		if items[i].ID == id {
-			if items[i].ReadAtMs == 0 {
-				items[i].ReadAtMs = now
-				changed = true
-			}
+			changed = update(&items[i], now) || changed
 			out = items[i]
 			found = true
 		}
@@ -391,7 +431,6 @@ func (s *Store) MarkRead(id string) (Item, error) {
 	if !found {
 		return Item{}, ErrNotFound
 	}
-	// Already-read repeat: nothing to persist, just echo the stored card.
 	if changed {
 		if err := jsonlstore.Snapshot(s.path, items); err != nil {
 			return Item{}, err
@@ -400,98 +439,7 @@ func (s *Store) MarkRead(id string) (Item, error) {
 	return out, nil
 }
 
-// Correct annotates the card identified by id with a user correction, appending
-// note to the body as a dated "사용자 정정" erratum block and bumping UpdatedAtMs.
-// The card stays in the feed, now visibly carrying the correction so a wrong
-// analysis is never shown unqualified. Applies to every item sharing the id
-// (legacy id twins), mirroring Ack. The durable knowledge fix (wiki) is the
-// caller's separate agent turn; this is only the on-card erratum.
-func (s *Store) Correct(id, note string) (Item, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	id = strings.TrimSpace(id)
-	note = strings.TrimSpace(note)
-	if id == "" {
-		return Item{}, ErrNotFound
-	}
-	items, err := jsonlstore.Load[Item](s.path)
-	if err != nil {
-		return Item{}, err
-	}
-	now := time.Now().UnixMilli()
-	block := formatCorrection(note, now)
-	var out Item
-	found := false
-	for i := range items {
-		items[i] = normalizeExisting(items[i])
-		if items[i].ID == id {
-			if note != "" {
-				items[i].Body = strings.TrimRight(items[i].Body, "\n") + block
-			}
-			items[i].UpdatedAtMs = now
-			out = items[i]
-			found = true
-		}
-	}
-	if !found {
-		return Item{}, ErrNotFound
-	}
-	if err := jsonlstore.Snapshot(s.path, items); err != nil {
-		return Item{}, err
-	}
-	return out, nil
-}
-
-// formatCorrection renders a user correction as a dated block appended to a card
-// body, kept visually distinct from the original analysis by a rule + marker.
-func formatCorrection(note string, atMs int64) string {
-	date := time.UnixMilli(atMs).Format("2006-01-02")
-	return "\n\n---\n\n✏️ **사용자 정정** (" + date + ")\n" + note
-}
-
-// Rewrite replaces the body of the card identified by id with newBody (a freshly
-// regenerated analysis), re-derives the glance priority from the new content, and
-// bumps UpdatedAtMs. Title and summary are left intact so the row preview stays
-// stable; the regenerated analysis shows when the card is expanded. Applies to
-// every item sharing the id (legacy twins), mirroring Ack/Correct. The native
-// "다시 작성" path: the agent rewrites the analysis and the result lands here. A
-// blank newBody is rejected so a failed regeneration never wipes the card.
-func (s *Store) Rewrite(id, newBody string) (Item, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	id = strings.TrimSpace(id)
-	newBody = strings.TrimSpace(newBody)
-	if id == "" || newBody == "" {
-		return Item{}, ErrNotFound
-	}
-	items, err := jsonlstore.Load[Item](s.path)
-	if err != nil {
-		return Item{}, err
-	}
-	now := time.Now().UnixMilli()
-	var out Item
-	found := false
-	for i := range items {
-		items[i] = normalizeExisting(items[i])
-		if items[i].ID == id {
-			items[i].Body = newBody
-			items[i].Priority = inferPriority(items[i])
-			items[i].UpdatedAtMs = now
-			out = items[i]
-			found = true
-		}
-	}
-	if !found {
-		return Item{}, ErrNotFound
-	}
-	if err := jsonlstore.Snapshot(s.path, items); err != nil {
-		return Item{}, err
-	}
-	return out, nil
-}
-
+// RunAction executes an allowed item action and records its result.
 func (s *Store) RunAction(itemID, actionID string) (ActionResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -582,28 +530,14 @@ func (s *Store) RunAction(itemID, actionID string) (ActionResult, error) {
 		result.Message = "snoozed"
 		result.RemoveFromFeed = true
 	case ActionAck:
-		for i := range items {
-			if items[i].ID != itemID {
-				continue
-			}
-			items[i].Status = StatusAcked
-			items[i].UpdatedAtMs = now
-			markActionDone(&items[i], action.ID)
-		}
+		settleAction(items, itemID, action.ID, now)
 		result.Item = items[first]
 		result.Message = "acked"
 		result.RemoveFromFeed = true
 	case ActionAnswer:
 		// Settle the card like ack, but also surface the chosen option as a prompt
 		// the native sends to the asking session so the agent reacts to the answer.
-		for i := range items {
-			if items[i].ID != itemID {
-				continue
-			}
-			items[i].Status = StatusAcked
-			items[i].UpdatedAtMs = now
-			markActionDone(&items[i], action.ID)
-		}
+		settleAction(items, itemID, action.ID, now)
 		result.Item = items[first]
 		result.Prompt = actionPrompt(action, "")
 		result.Message = "answered"
@@ -615,6 +549,17 @@ func (s *Store) RunAction(itemID, actionID string) (ActionResult, error) {
 		return ActionResult{}, err
 	}
 	return result, nil
+}
+
+func settleAction(items []Item, itemID, actionID string, now int64) {
+	for i := range items {
+		if items[i].ID != itemID {
+			continue
+		}
+		items[i].Status = StatusAcked
+		items[i].UpdatedAtMs = now
+		markActionDone(&items[i], actionID)
+	}
 }
 
 // idCounter disambiguates ids minted within the same millisecond. Combined with
@@ -692,27 +637,8 @@ func normalizeNew(item Item) Item {
 	if item.ID == "" {
 		item.ID = fmt.Sprintf("wf_%d_%04d", now, idCounter.Add(1)%10000)
 	}
-	item.Source = strings.TrimSpace(item.Source)
-	item.Title = strings.TrimSpace(item.Title)
 	item.Summary = Preview(item.Summary, 240)
-	item.Body = strings.TrimSpace(item.Body)
-	item.SessionKey = strings.TrimSpace(item.SessionKey)
-	item.RefType = strings.TrimSpace(item.RefType)
-	item.RefID = strings.TrimSpace(item.RefID)
-	item.Status = strings.TrimSpace(item.Status)
-	if item.Status == "" {
-		item.Status = StatusUnread
-	}
-	if item.Title == "" {
-		item.Title = defaultTitle(item.Source)
-	}
-	if item.Summary == "" {
-		item.Summary = Preview(item.Body, 240)
-	}
-	if item.Priority <= 0 {
-		item.Priority = inferPriority(item)
-	}
-	item.Actions = normalizeActions(item)
+	item = normalizeItem(item)
 	if item.CreatedAtMs <= 0 {
 		item.CreatedAtMs = now
 	}
@@ -721,10 +647,18 @@ func normalizeNew(item Item) Item {
 }
 
 func normalizeExisting(item Item) Item {
+	item.Summary = strings.TrimSpace(item.Summary)
+	item = normalizeItem(item)
+	if item.UpdatedAtMs <= 0 {
+		item.UpdatedAtMs = item.CreatedAtMs
+	}
+	return item
+}
+
+func normalizeItem(item Item) Item {
 	item.ID = strings.TrimSpace(item.ID)
 	item.Source = strings.TrimSpace(item.Source)
 	item.Title = strings.TrimSpace(item.Title)
-	item.Summary = strings.TrimSpace(item.Summary)
 	item.Body = strings.TrimSpace(item.Body)
 	item.SessionKey = strings.TrimSpace(item.SessionKey)
 	item.RefType = strings.TrimSpace(item.RefType)
@@ -743,9 +677,6 @@ func normalizeExisting(item Item) Item {
 		item.Priority = inferPriority(item)
 	}
 	item.Actions = normalizeActions(item)
-	if item.UpdatedAtMs <= 0 {
-		item.UpdatedAtMs = item.CreatedAtMs
-	}
 	return item
 }
 
@@ -919,6 +850,7 @@ func contextBody(item Item) string {
 	return body
 }
 
+// Preview truncates text to maxRunes without splitting Unicode code points.
 func Preview(text string, maxRunes int) string {
 	s := strings.TrimSpace(strings.ReplaceAll(text, "\x00", ""))
 	if i := strings.IndexByte(s, '\n'); i >= 0 {

@@ -23,11 +23,15 @@ private fun DenebUiNode.walk(parts: MutableList<String>) {
 
         is ButtonNode -> parts += label
 
-        is TextInputNode -> (value ?: label ?: placeholder)?.let { parts += it }
+        is TextInputNode -> (
+            value?.takeIf { it.isNotBlank() }
+                ?: label?.takeIf { it.isNotBlank() }
+                ?: placeholder?.takeIf { it.isNotBlank() }
+            )?.let { parts += it }
 
-        is DateInputNode -> (value ?: label)?.let { parts += it }
+        is DateInputNode -> (value?.takeIf { it.isNotBlank() } ?: label?.takeIf { it.isNotBlank() })?.let { parts += it }
 
-        is TimeInputNode -> (value ?: label)?.let { parts += it }
+        is TimeInputNode -> (value?.takeIf { it.isNotBlank() } ?: label?.takeIf { it.isNotBlank() })?.let { parts += it }
 
         is CheckboxNode -> parts += label
 
@@ -98,8 +102,10 @@ private fun DenebUiNode.walk(parts: MutableList<String>) {
         }
 
         is TableNode -> {
-            if (headers.isNotEmpty()) parts += headers.joinToString(", ")
-            rows.forEach { parts += it.joinToString(", ") }
+            headers.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.let { parts += it.joinToString(", ") }
+            rows.forEach { row ->
+                row.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.let { parts += it.joinToString(", ") }
+            }
         }
 
         is CodeNode -> Unit
@@ -110,7 +116,7 @@ private fun DenebUiNode.walk(parts: MutableList<String>) {
 
         is ChartNode -> {
             label?.let { parts += it }
-            if (labels.isNotEmpty()) parts += labels.joinToString(", ")
+            labels.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.let { parts += it.joinToString(", ") }
         }
     }
 }

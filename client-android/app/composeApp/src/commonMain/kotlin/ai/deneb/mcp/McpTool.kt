@@ -71,7 +71,7 @@ class McpTool(
 
         fun convertInputSchema(inputSchema: JsonObject?): Map<String, ParameterSchema> {
             if (inputSchema == null) return emptyMap()
-            val properties = inputSchema["properties"]?.jsonObject ?: return emptyMap()
+            val properties = runCatching { inputSchema["properties"]?.jsonObject }.getOrNull() ?: return emptyMap()
             val required = try {
                 inputSchema["required"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet() ?: emptySet()
             } catch (_: Exception) {

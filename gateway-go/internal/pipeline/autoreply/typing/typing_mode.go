@@ -1,7 +1,7 @@
 package typing
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/tokens"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )

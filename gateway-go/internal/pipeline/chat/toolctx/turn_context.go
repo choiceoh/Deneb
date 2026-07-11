@@ -142,9 +142,33 @@ func (tc *TurnContext) Wait(ctx context.Context, toolUseID string, timeout time.
 		tc.mu.Unlock()
 		return r, true
 	case <-timer.C:
+		tc.removeWaiter(toolUseID, ch)
 		return nil, false
 	case <-ctx.Done():
+		tc.removeWaiter(toolUseID, ch)
 		return nil, false
+	}
+}
+
+// removeWaiter detaches a timed-out or cancelled waiter. Store removes and
+// closes all live waiters atomically under the same lock, so racing cleanup is
+// safe and abandoned waits do not accumulate for tool IDs that never finish.
+func (tc *TurnContext) removeWaiter(toolUseID string, target chan struct{}) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	chs := tc.waiters[toolUseID]
+	for i, ch := range chs {
+		if ch != target {
+			continue
+		}
+		chs[i] = chs[len(chs)-1]
+		chs = chs[:len(chs)-1]
+		if len(chs) == 0 {
+			delete(tc.waiters, toolUseID)
+		} else {
+			tc.waiters[toolUseID] = chs
+		}
+		return
 	}
 }
 

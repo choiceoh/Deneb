@@ -3,7 +3,7 @@
 // data without a gateway.
 //
 // It calls wiki.Store.Search directly — the exact retrieval behind
-// miniapp.memory.search (see handlerminiapp.MemorySearcher) — so the number
+// miniapp.memory.search (see handlerminiapp/knowledge.MemorySearcher) — so the number
 // here IS what wiki-qa-bench.py's recall mode measures, minus the RPC hop.
 //
 // ALWAYS point --wiki at a COPY of the production wiki: wiki.NewStore is NOT

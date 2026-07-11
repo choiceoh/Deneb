@@ -23,13 +23,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
+	"github.com/choiceoh/deneb/gateway-go/pkg/vectorutil"
 )
 
 // semindexVersion is bumped when the on-disk shape or chunking changes, so a
@@ -502,37 +502,10 @@ func (si *SemanticIndex) embedFile(ctx context.Context, store Store, extractFn E
 // no/unhealthy embedder, an empty index, a too-short query, or an embed failure
 // — so callers fall back to name/content search.
 func (si *SemanticIndex) Search(ctx context.Context, query string, max int, embed Embedder) ([]ScoredEntry, error) {
-	if embed == nil || !embed.IsHealthy() {
+	_, qv, entries, max, ok := si.prepareSemanticQuery(ctx, query, max, embed)
+	if !ok {
 		return nil, nil
 	}
-	q := strings.TrimSpace(query)
-	if len([]rune(q)) < minChunkRunes {
-		return nil, nil // too short to embed meaningfully
-	}
-	if max <= 0 {
-		max = 20
-	}
-
-	// An embed failure or empty result is not surfaced as an error: Search is a
-	// best-effort enhancement, and the caller falls back to name/content search
-	// on an empty slice. (Reindex, the writer, does propagate embed errors.)
-	qvecs, err := embed.Embed(ctx, []string{q})
-	if err != nil || len(qvecs) == 0 {
-		return nil, nil //nolint:nilerr // intentional graceful degradation to lexical search
-	}
-	qv := qvecs[0]
-
-	// Snapshot the entry pointers under the lock, then run the O(all chunks)
-	// cosine scan OUTSIDE it — the scan is pure CPU over immutable chunk vectors,
-	// so holding mu across it would needlessly block concurrent reindex writes.
-	// Entries are replaced wholesale (never mutated in place), so the retained
-	// pointers stay valid even if the map mutates after the snapshot.
-	si.mu.Lock()
-	entries := make([]*fileEntry, 0, len(si.files))
-	for _, fe := range si.files {
-		entries = append(entries, fe)
-	}
-	si.mu.Unlock()
 
 	type scored struct {
 		path    string
@@ -588,6 +561,39 @@ func (si *SemanticIndex) Search(ctx context.Context, query string, max int, embe
 	return out, nil
 }
 
+// prepareSemanticQuery owns the shared graceful-degradation and snapshot path
+// for cosine-only and hybrid search. Scoring runs outside the index lock over
+// immutable entry pointers.
+func (si *SemanticIndex) prepareSemanticQuery(
+	ctx context.Context,
+	query string,
+	max int,
+	embed Embedder,
+) (string, []float32, []*fileEntry, int, bool) {
+	if si == nil || embed == nil || !embed.IsHealthy() {
+		return "", nil, nil, max, false
+	}
+	query = strings.TrimSpace(query)
+	if len([]rune(query)) < minChunkRunes {
+		return "", nil, nil, max, false
+	}
+	if max <= 0 {
+		max = 20
+	}
+	vectors, err := embed.Embed(ctx, []string{query})
+	if err != nil || len(vectors) == 0 {
+		return "", nil, nil, max, false
+	}
+
+	si.mu.Lock()
+	entries := make([]*fileEntry, 0, len(si.files))
+	for _, entry := range si.files {
+		entries = append(entries, entry)
+	}
+	si.mu.Unlock()
+	return query, vectors[0], entries, max, len(entries) > 0
+}
+
 // pathBase returns the last "/"-segment of a virtual path (its file name).
 func pathBase(p string) string {
 	p = strings.TrimRight(p, "/")
@@ -600,17 +606,5 @@ func pathBase(p string) string {
 // cosine returns the cosine similarity of two equal-length vectors (0 when
 // either is empty or their lengths differ). Mirrors wiki/semantic.go's cosine.
 func cosine(a, b []float32) float64 {
-	if len(a) == 0 || len(a) != len(b) {
-		return 0
-	}
-	var dot, na, nb float64
-	for i := range a {
-		dot += float64(a[i]) * float64(b[i])
-		na += float64(a[i]) * float64(a[i])
-		nb += float64(b[i]) * float64(b[i])
-	}
-	if na == 0 || nb == 0 {
-		return 0
-	}
-	return dot / (math.Sqrt(na) * math.Sqrt(nb))
+	return vectorutil.Cosine(a, b)
 }

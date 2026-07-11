@@ -33,7 +33,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -86,9 +86,12 @@ type wikiResearchTask struct {
 	statePath   string
 }
 
+// Name returns the component's stable scheduler name.
 func (t *wikiResearchTask) Name() string            { return "wiki-research" }
+// Interval returns the component's scheduling cadence.
 func (t *wikiResearchTask) Interval() time.Duration { return wikiResearchInterval }
 
+// Run executes one scheduled task cycle.
 func (t *wikiResearchTask) Run(ctx context.Context) error {
 	if t.chatHandler == nil || t.wikiStore == nil {
 		return fmt.Errorf("wiki-research: chat handler or wiki store not available")

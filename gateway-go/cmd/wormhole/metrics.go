@@ -127,6 +127,7 @@ type statusWriter struct {
 	wrote  bool
 }
 
+// WriteHeader records and forwards the HTTP response status code.
 func (s *statusWriter) WriteHeader(code int) {
 	if !s.wrote {
 		s.status = code
@@ -135,6 +136,7 @@ func (s *statusWriter) WriteHeader(code int) {
 	s.ResponseWriter.WriteHeader(code)
 }
 
+// Write writes bytes to the wrapped destination.
 func (s *statusWriter) Write(b []byte) (int, error) {
 	if !s.wrote {
 		s.status = http.StatusOK // a body write with no explicit WriteHeader means 200

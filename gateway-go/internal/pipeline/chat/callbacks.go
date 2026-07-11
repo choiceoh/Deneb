@@ -106,60 +106,70 @@ func (cb *ChannelCallbacks) Validate() error {
 
 // --- Setters (called during server initialization) ---
 
+// SetReplyFunc installs the channel reply delivery callback.
 func (cb *ChannelCallbacks) SetReplyFunc(fn ReplyFunc) {
 	cb.mu.Lock()
 	cb.replyFunc = fn
 	cb.mu.Unlock()
 }
 
+// SetMediaSendFunc installs the channel media delivery callback.
 func (cb *ChannelCallbacks) SetMediaSendFunc(fn MediaSendFunc) {
 	cb.mu.Lock()
 	cb.mediaSendFn = fn
 	cb.mu.Unlock()
 }
 
+// SetTypingFunc installs the typing-indicator callback.
 func (cb *ChannelCallbacks) SetTypingFunc(fn TypingFunc) {
 	cb.mu.Lock()
 	cb.typingFn = fn
 	cb.mu.Unlock()
 }
 
+// SetReactionFunc installs the message-reaction callback.
 func (cb *ChannelCallbacks) SetReactionFunc(fn ReactionFunc) {
 	cb.mu.Lock()
 	cb.reactionFn = fn
 	cb.mu.Unlock()
 }
 
+// SetDraftEditFunc installs the streaming draft editor.
 func (cb *ChannelCallbacks) SetDraftEditFunc(fn DraftEditFunc) {
 	cb.mu.Lock()
 	cb.draftEditFn = fn
 	cb.mu.Unlock()
 }
 
+// SetMessageDeleter installs the channel message deletion callback.
 func (cb *ChannelCallbacks) SetMessageDeleter(fn MessageDeleter) {
 	cb.mu.Lock()
 	cb.deleteMsgFn = fn
 	cb.mu.Unlock()
 }
 
+// SetChannelUploadLimit records the maximum media size for a channel.
 func (cb *ChannelCallbacks) SetChannelUploadLimit(channelID string, maxBytes int64) {
 	cb.mu.Lock()
 	cb.uploadLimits[channelID] = maxBytes
 	cb.mu.Unlock()
 }
 
+// SetDefaultModel updates the model reported to newly captured runs.
 func (cb *ChannelCallbacks) SetDefaultModel(model string) {
 	cb.mu.Lock()
 	cb.defaultModel = model
 	cb.mu.Unlock()
 }
 
+// SetShutdownCtx installs the server lifecycle context.
 func (cb *ChannelCallbacks) SetShutdownCtx(ctx context.Context) {
 	cb.mu.Lock()
 	cb.shutdownCtx = ctx
 	cb.mu.Unlock()
 }
 
+// SetStatusDepsFunc installs the lazy status dependency provider.
 func (cb *ChannelCallbacks) SetStatusDepsFunc(fn StatusDepsFunc) {
 	cb.mu.Lock()
 	cb.statusDepsFunc = fn
@@ -168,6 +178,7 @@ func (cb *ChannelCallbacks) SetStatusDepsFunc(fn StatusDepsFunc) {
 
 // --- Getters ---
 
+// ChannelUploadLimit returns the configured media limit for channelID.
 func (cb *ChannelCallbacks) ChannelUploadLimit(channelID string) int64 {
 	cb.mu.RLock()
 	n := cb.uploadLimits[channelID]
@@ -175,6 +186,7 @@ func (cb *ChannelCallbacks) ChannelUploadLimit(channelID string) int64 {
 	return n
 }
 
+// ReplyFn returns the current reply delivery callback.
 func (cb *ChannelCallbacks) ReplyFn() ReplyFunc {
 	cb.mu.RLock()
 	fn := cb.replyFunc
@@ -182,6 +194,7 @@ func (cb *ChannelCallbacks) ReplyFn() ReplyFunc {
 	return fn
 }
 
+// MediaSendFn returns the current media delivery callback.
 func (cb *ChannelCallbacks) MediaSendFn() MediaSendFunc {
 	cb.mu.RLock()
 	fn := cb.mediaSendFn
@@ -189,6 +202,7 @@ func (cb *ChannelCallbacks) MediaSendFn() MediaSendFunc {
 	return fn
 }
 
+// TypingFn returns the current typing callback.
 func (cb *ChannelCallbacks) TypingFn() TypingFunc {
 	cb.mu.RLock()
 	fn := cb.typingFn
@@ -196,6 +210,7 @@ func (cb *ChannelCallbacks) TypingFn() TypingFunc {
 	return fn
 }
 
+// ReactionFn returns the current reaction callback.
 func (cb *ChannelCallbacks) ReactionFn() ReactionFunc {
 	cb.mu.RLock()
 	fn := cb.reactionFn
@@ -203,6 +218,7 @@ func (cb *ChannelCallbacks) ReactionFn() ReactionFunc {
 	return fn
 }
 
+// DefaultModel returns the model captured for new runs.
 func (cb *ChannelCallbacks) DefaultModel() string {
 	cb.mu.RLock()
 	m := cb.defaultModel
@@ -210,6 +226,7 @@ func (cb *ChannelCallbacks) DefaultModel() string {
 	return m
 }
 
+// StatusDeps returns the lazy status dependency provider.
 func (cb *ChannelCallbacks) StatusDeps() StatusDepsFunc {
 	cb.mu.RLock()
 	fn := cb.statusDepsFunc

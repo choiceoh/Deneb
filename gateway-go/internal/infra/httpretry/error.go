@@ -15,6 +15,7 @@ type APIError struct {
 	Cause      error // underlying error (e.g. body-read failure)
 }
 
+// Error returns the human-readable error message.
 func (e *APIError) Error() string {
 	return fmt.Sprintf("API error %d: %s", e.StatusCode, e.Message)
 }

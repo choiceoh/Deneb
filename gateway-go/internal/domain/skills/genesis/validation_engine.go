@@ -70,6 +70,7 @@ type SkillValidationResult struct {
 	Failures        []string `json:"failures,omitempty"`
 }
 
+// NewSkillValidationEngine constructs the deterministic skill validation engine.
 func NewSkillValidationEngine(tracker *Tracker, logger *slog.Logger) *SkillValidationEngine {
 	if logger == nil {
 		logger = slog.Default()
@@ -311,6 +312,7 @@ type validationCaseScore struct {
 	Skipped int
 }
 
+// Percent returns the score normalized as a percentage.
 func (s validationCaseScore) Percent() float64 {
 	if s.Total == 0 {
 		return 100

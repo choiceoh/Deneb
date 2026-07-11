@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { FileViewer } from "./FileViewer";
-import { buildCfb, buildFileHeader, buildParagraph, buildTable, concatBytes } from "./hwp/testfixtures";
+import { buildCfb, buildFileHeader, buildParagraph, buildTable, concatBytes } from "./hwp/__tests__/fixtures";
 
 // End-to-end through the viewer: a synthetic UNCOMPRESSED HWP blob (jsdom has
 // no DecompressionStream, so the fixture sets the uncompressed flag) renders

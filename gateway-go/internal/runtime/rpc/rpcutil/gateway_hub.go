@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
@@ -25,9 +25,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
@@ -69,6 +69,7 @@ type HubConfig struct {
 	Version string // optional
 }
 
+// GatewayHub owns the shared runtime services wired into RPC handlers.
 type GatewayHub struct {
 	// Event infrastructure.
 	broadcaster *events.Broadcaster
@@ -140,23 +141,56 @@ func NewGatewayHub(cfg HubConfig) *GatewayHub {
 
 // --- Read-only accessors ---
 
-func (h *GatewayHub) Broadcaster() *events.Broadcaster               { return h.broadcaster }
+// Broadcaster returns the gateway event broadcaster.
+func (h *GatewayHub) Broadcaster() *events.Broadcaster { return h.broadcaster }
+
+// GatewaySubs returns the lifecycle event subscription registry.
 func (h *GatewayHub) GatewaySubs() *events.GatewayEventSubscriptions { return h.gatewaySubs }
-func (h *GatewayHub) Sessions() *session.Manager                     { return h.sessions }
-func (h *GatewayHub) Processes() *process.Manager                    { return h.processes }
-func (h *GatewayHub) Chat() *chat.Handler                            { return h.chat }
-func (h *GatewayHub) JobTracker() *agent.JobTracker                  { return h.jobTracker }
-func (h *GatewayHub) CronService() *cron.Service                     { return h.cronService }
-func (h *GatewayHub) CronPersistLog() *cron.PersistentRunLog         { return h.cronPersistLog }
-func (h *GatewayHub) Approvals() *approval.Store                     { return h.approvals }
-func (h *GatewayHub) Skills() *skills.Registry                       { return h.skills }
-func (h *GatewayHub) WikiStore() *wiki.Store                         { return h.wikiStore }
-func (h *GatewayHub) ContactsStore() *contacts.Store                 { return h.contactsStore }
-func (h *GatewayHub) Insights() *insights.Engine                     { return h.insights }
-func (h *GatewayHub) Logger() *slog.Logger                           { return h.logger }
-func (h *GatewayHub) Version() string                                { return h.version }
-func (h *GatewayHub) LocalAIHub() *localai.Hub                       { return h.localAIHub }
-func (h *GatewayHub) EmbeddingClient() *embedding.Client             { return h.embeddingClient }
+
+// Sessions returns the session manager.
+func (h *GatewayHub) Sessions() *session.Manager { return h.sessions }
+
+// Processes returns the managed-process registry.
+func (h *GatewayHub) Processes() *process.Manager { return h.processes }
+
+// Chat returns the late-bound chat handler, or nil before the session phase.
+func (h *GatewayHub) Chat() *chat.Handler { return h.chat }
+
+// JobTracker returns the background agent job tracker.
+func (h *GatewayHub) JobTracker() *agent.JobTracker { return h.jobTracker }
+
+// CronService returns the scheduler service.
+func (h *GatewayHub) CronService() *cron.Service { return h.cronService }
+
+// CronPersistLog returns the optional durable cron run log.
+func (h *GatewayHub) CronPersistLog() *cron.PersistentRunLog { return h.cronPersistLog }
+
+// Approvals returns the approval request store.
+func (h *GatewayHub) Approvals() *approval.Store { return h.approvals }
+
+// Skills returns the runtime skill registry.
+func (h *GatewayHub) Skills() *skills.Registry { return h.skills }
+
+// WikiStore returns the optional wiki store.
+func (h *GatewayHub) WikiStore() *wiki.Store { return h.wikiStore }
+
+// ContactsStore returns the optional native address-book mirror.
+func (h *GatewayHub) ContactsStore() *contacts.Store { return h.contactsStore }
+
+// Insights returns the optional usage insights engine.
+func (h *GatewayHub) Insights() *insights.Engine { return h.insights }
+
+// Logger returns the gateway logger.
+func (h *GatewayHub) Logger() *slog.Logger { return h.logger }
+
+// Version returns the configured gateway build version.
+func (h *GatewayHub) Version() string { return h.version }
+
+// LocalAIHub returns the centralized local-model request hub.
+func (h *GatewayHub) LocalAIHub() *localai.Hub { return h.localAIHub }
+
+// EmbeddingClient returns the optional embedding client.
+func (h *GatewayHub) EmbeddingClient() *embedding.Client { return h.embeddingClient }
 
 // --- Late-binding setters ---
 

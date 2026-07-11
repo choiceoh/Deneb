@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/goals"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/goals"
 )
 
 // GoalGlanceFunc returns a compact, pre-formatted snapshot of the session's

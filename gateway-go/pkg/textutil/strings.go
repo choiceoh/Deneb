@@ -44,6 +44,23 @@ func TruncateRunes(s string, maxRunes int, suffix string) string {
 	return string(r[:maxRunes]) + suffix
 }
 
+// TruncateRunesWithin caps the complete result, including suffix, to maxRunes.
+// If suffix itself exhausts the budget, the leading suffix runes are returned.
+func TruncateRunesWithin(s string, maxRunes int, suffix string) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= maxRunes {
+		return s
+	}
+	suffixRunes := []rune(suffix)
+	if len(suffixRunes) >= maxRunes {
+		return string(suffixRunes[:maxRunes])
+	}
+	return string(r[:maxRunes-len(suffixRunes)]) + suffix
+}
+
 // DedupeStrings trims each entry, drops blanks, and removes duplicates while
 // preserving first-seen order. Returns a freshly allocated slice (never shares
 // the input backing array) so callers can mutate it freely.

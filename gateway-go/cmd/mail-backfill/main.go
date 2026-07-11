@@ -47,13 +47,12 @@ func run() error {
 	limit := flag.Int("limit", 5000, "Gmail 최대 건수 (gmail 소스)")
 	flag.Parse()
 
-	var since time.Time
-	if s := *sinceStr; s != "" {
-		t, err := time.Parse("2006-01-02", s)
-		if err != nil {
-			return fmt.Errorf("잘못된 --since (YYYY-MM-DD): %w", err)
-		}
-		since = t
+	since, err := parseSince(*sinceStr)
+	if err != nil {
+		return err
+	}
+	if err := validateSource(*source); err != nil {
+		return err
 	}
 
 	store, err := mailstore.New(*dir)
@@ -70,6 +69,26 @@ func run() error {
 		return backfillIMAP(store, *batch, since)
 	default:
 		return fmt.Errorf("알 수 없는 --source: %s (imap | gmail)", *source)
+	}
+}
+
+func parseSince(value string) (time.Time, error) {
+	if value == "" {
+		return time.Time{}, nil
+	}
+	t, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("잘못된 --since (YYYY-MM-DD): %w", err)
+	}
+	return t, nil
+}
+
+func validateSource(source string) error {
+	switch source {
+	case "gmail", "imap", "":
+		return nil
+	default:
+		return fmt.Errorf("알 수 없는 --source: %s (imap | gmail)", source)
 	}
 }
 

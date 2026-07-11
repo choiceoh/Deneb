@@ -5,7 +5,6 @@ package cron
 import (
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -18,7 +17,7 @@ func (rl *PersistentRunLog) ReadPageAll(opts RunLogReadOpts) RunLogPageResult {
 	dir := rl.runsDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return RunLogPageResult{Entries: []RunLogEntry{}, Total: 0, Offset: opts.Offset, Limit: clampLimit(opts.Limit)}
+		return buildRunLogPage(nil, opts)
 	}
 
 	var allEntries []RunLogEntry
@@ -31,96 +30,5 @@ func (rl *PersistentRunLog) ReadPageAll(opts RunLogReadOpts) RunLogPageResult {
 		allEntries = append(allEntries, fileEntries...)
 	}
 
-	// Apply filters.
-	allEntries = filterEntries(allEntries, opts)
-
-	// Sort by timestamp descending (newest first) by default.
-	if opts.SortDir == "asc" {
-		sort.Slice(allEntries, func(i, j int) bool {
-			return allEntries[i].Ts < allEntries[j].Ts
-		})
-	} else {
-		sort.Slice(allEntries, func(i, j int) bool {
-			return allEntries[i].Ts > allEntries[j].Ts
-		})
-	}
-
-	total := len(allEntries)
-	limit := clampLimit(opts.Limit)
-	offset := opts.Offset
-	if offset < 0 {
-		offset = 0
-	}
-	if offset >= total {
-		return RunLogPageResult{
-			Entries: []RunLogEntry{},
-			Total:   total,
-			Offset:  offset,
-			Limit:   limit,
-		}
-	}
-	end := offset + limit
-	if end > total {
-		end = total
-	}
-	page := allEntries[offset:end]
-	hasMore := end < total
-	var nextOffset *int
-	if hasMore {
-		no := end
-		nextOffset = &no
-	}
-
-	return RunLogPageResult{
-		Entries:    page,
-		Total:      total,
-		Offset:     offset,
-		Limit:      limit,
-		HasMore:    hasMore,
-		NextOffset: nextOffset,
-	}
-}
-
-func filterEntries(entries []RunLogEntry, opts RunLogReadOpts) []RunLogEntry {
-	if opts.Status != "" && opts.Status != "all" {
-		var filtered []RunLogEntry
-		for _, e := range entries {
-			if e.Status == opts.Status {
-				filtered = append(filtered, e)
-			}
-		}
-		entries = filtered
-	}
-
-	if opts.DeliveryStatus != "" {
-		var filtered []RunLogEntry
-		for _, e := range entries {
-			if e.DeliveryStatus == opts.DeliveryStatus {
-				filtered = append(filtered, e)
-			}
-		}
-		entries = filtered
-	}
-
-	if opts.Query != "" {
-		query := strings.ToLower(opts.Query)
-		var filtered []RunLogEntry
-		for _, e := range entries {
-			if strings.Contains(strings.ToLower(e.Summary), query) ||
-				strings.Contains(strings.ToLower(e.Error), query) ||
-				strings.Contains(strings.ToLower(e.JobID), query) {
-				filtered = append(filtered, e)
-			}
-		}
-		entries = filtered
-	}
-
-	return entries
-}
-
-func clampLimit(limit int) int {
-	if limit <= 0 || limit > 5000 {
-		return 200
-	}
-	return limit
+	return buildRunLogPage(allEntries, opts)
 }

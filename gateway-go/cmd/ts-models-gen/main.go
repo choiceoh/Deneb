@@ -25,13 +25,12 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/codegen/gowire"
 )
 
 // wireMarker is the doc-comment directive that opts a struct into generation —
@@ -59,7 +58,7 @@ func main() {
 		fail("usage: ts-models-gen -src DIR -out FILE [-check]")
 	}
 
-	structs, marked, err := parseStructs(srcDir)
+	structs, marked, err := gowire.ParseStructs(srcDir, wireMarker)
 	if err != nil {
 		fail("parse %s: %v", srcDir, err)
 	}
@@ -96,79 +95,6 @@ func main() {
 }
 
 // ---------------------------------------------------------------------------
-// Parsing (identical to kotlin-models-gen — shared marker, shared discovery)
-// ---------------------------------------------------------------------------
-
-// parseStructs returns every package-level struct in srcDir keyed by Go name,
-// plus the subset whose doc comment carries the //deneb:wire marker.
-func parseStructs(srcDir string) (structs map[string]*ast.StructType, marked []string, err error) {
-	entries, err := os.ReadDir(srcDir)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	fset := token.NewFileSet()
-	var files []*ast.File
-	for _, e := range entries {
-		name := e.Name()
-		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		f, perr := parser.ParseFile(fset, filepath.Join(srcDir, name), nil, parser.ParseComments)
-		if perr != nil {
-			return nil, nil, perr
-		}
-		files = append(files, f)
-	}
-
-	structs = map[string]*ast.StructType{}
-	markedSet := map[string]bool{}
-	for _, file := range files {
-		for _, decl := range file.Decls {
-			gd, ok := decl.(*ast.GenDecl)
-			if !ok || gd.Tok != token.TYPE {
-				continue
-			}
-			declMarked := hasMarker(gd.Doc)
-			for _, spec := range gd.Specs {
-				ts, ok := spec.(*ast.TypeSpec)
-				if !ok {
-					continue
-				}
-				st, ok := ts.Type.(*ast.StructType)
-				if !ok {
-					continue
-				}
-				structs[ts.Name.Name] = st
-				if declMarked || hasMarker(ts.Doc) {
-					markedSet[ts.Name.Name] = true
-				}
-			}
-		}
-	}
-
-	for name := range markedSet {
-		marked = append(marked, name)
-	}
-	sort.Strings(marked)
-	return structs, marked, nil
-}
-
-// hasMarker scans the raw comment lines for the directive. CommentGroup.Text()
-// strips directive-style comments (//word:word), so we must scan .List directly.
-func hasMarker(cg *ast.CommentGroup) bool {
-	if cg == nil {
-		return false
-	}
-	for _, c := range cg.List {
-		if strings.Contains(c.Text, wireMarker) {
-			return true
-		}
-	}
-	return false
-}
-
-// ---------------------------------------------------------------------------
 // Model building (Go struct -> TS interface)
 // ---------------------------------------------------------------------------
 
@@ -202,12 +128,12 @@ func buildIfaces(structs map[string]*ast.StructType, roots []string) ([]tsIface,
 			return nil, fmt.Errorf("marked struct %q not found", name)
 		}
 
-		iface := tsIface{name: tsName(name)}
+		iface := tsIface{name: gowire.ExportedName(name)}
 		for _, f := range st.Fields.List {
 			if len(f.Names) != 1 {
 				return nil, fmt.Errorf("%s: embedded or multi-name fields are unsupported", name)
 			}
-			jsonName, skip := jsonFieldName(f)
+			jsonName, skip := gowire.JSONFieldName(f)
 			if skip {
 				continue
 			}
@@ -242,7 +168,7 @@ func mapType(expr ast.Expr, structs map[string]*ast.StructType) (typ string, ref
 			return "number", nil, nil
 		}
 		if _, ok := structs[t.Name]; ok {
-			n := tsName(t.Name)
+			n := gowire.ExportedName(t.Name)
 			return n, []string{t.Name}, nil
 		}
 		return "", nil, fmt.Errorf("unsupported type %q", t.Name)
@@ -268,39 +194,6 @@ func mapType(expr ast.Expr, structs map[string]*ast.StructType) (typ string, ref
 	default:
 		return "", nil, fmt.Errorf("unsupported type expression %T", expr)
 	}
-}
-
-// jsonFieldName returns the JSON key for a struct field (from its `json` tag,
-// falling back to the Go field name) and whether to skip it (tag "-").
-func jsonFieldName(f *ast.Field) (name string, skip bool) {
-	goName := f.Names[0].Name
-	if f.Tag == nil {
-		return goName, false
-	}
-	tag := reflect.StructTag(strings.Trim(f.Tag.Value, "`"))
-	jt := tag.Get("json")
-	if jt == "" {
-		return goName, false
-	}
-	first := strings.Split(jt, ",")[0]
-	switch first {
-	case "-":
-		return "", true
-	case "":
-		return goName, false
-	default:
-		return first, false
-	}
-}
-
-// tsName upper-cases the first letter so an unexported Go wire struct
-// (e.g. calendarEventOut) becomes an idiomatic TS interface (CalendarEventOut),
-// matching the Kotlin class names one-to-one.
-func tsName(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // ---------------------------------------------------------------------------

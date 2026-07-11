@@ -294,6 +294,7 @@ type base64Sanitizer struct {
 	r io.Reader
 }
 
+// Read reads bytes from the wrapped source.
 func (s *base64Sanitizer) Read(p []byte) (int, error) {
 	for {
 		tmp := make([]byte, len(p))

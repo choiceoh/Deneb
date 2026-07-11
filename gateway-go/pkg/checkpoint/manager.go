@@ -391,6 +391,7 @@ func (m *Manager) readBlob(path string) ([]byte, error) {
 // bytesWriter adapts strings.Builder for io.Writer used by gzip.
 type bytesWriter struct{ w *strings.Builder }
 
+// Write writes bytes to the wrapped destination.
 func (b *bytesWriter) Write(p []byte) (int, error) { return b.w.Write(p) }
 
 func hashPath(abs string) string {

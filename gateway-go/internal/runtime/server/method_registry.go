@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/mailpriority"
@@ -35,6 +35,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/routine"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calprop"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
@@ -48,7 +51,11 @@ import (
 	handlercheckpoint "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/checkpoint"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
 	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	minifiles "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/files"
+	miniknowledge "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/knowledge"
+	minischedule "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/schedule"
 	handlerinsights "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/insights"
+	handlermail "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail"
 	handlerobservatory "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/observatory"
 	handlerobserve "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/observe"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
@@ -422,13 +429,13 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// list/search/share/upload over the on-box file store (filestore). share
 		// mints a signed download link (fileshare); a nil store (open error)
 		// skips the domain.
-		handlerminiapp.FilesBrowseMethods(handlerminiapp.FilesBrowseDeps{
+		minifiles.FilesBrowseMethods(minifiles.FilesBrowseDeps{
 			Store: localFileStoreOrNil(s.logger),
 			// Content search (search content=true) extracts file text via the chat
 			// tools' document extractor. Wired here (server layer may import tools);
 			// the handler keeps it as an injected callback to avoid a layer inversion.
 			ExtractText: func(ctx context.Context, d []byte, n string) string {
-				t, _ := tools.ExtractDocumentText(ctx, d, n, "")
+				t, _ := document.ExtractDocumentText(ctx, d, n, "")
 				return t
 			},
 			// Semantic search (search semantic=true) ranks by meaning via the shared
@@ -455,16 +462,16 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// what shipped clients call) and miniapp.mail.* (accurate name — the
 		// server prefers the on-box archive repository and keeps Gmail only as
 		// a fallback for legacy queries/tokens). See withMailAliases.
-		withMailAliases(handlerminiapp.GmailMethods(handlerminiapp.GmailDeps{
+		withMailAliases(handlermail.GmailMethods(handlermail.GmailDeps{
 			Client: s.miniappMailClientFactory(denebDir),
 			// Same per-msgID cache directory the analyze handler/poller
 			// write to (the store is a stateless dir wrapper) — list rows
 			// prefer its LLM verdict over the heuristic below.
-			AnalysisCache: handlerminiapp.NewAnalysisStore(filepath.Join(denebDir, "cache", "mail_analysis")),
+			AnalysisCache: handlermail.NewAnalysisStore(filepath.Join(denebDir, "cache", "mail_analysis")),
 			WorkState:     mailwork.New(filepath.Join(denebDir, "mail_work_state.json")),
 			// Lazy: mailStore is created in the session phase, after this early
 			// registration. Serve get bodies from it once present (no API round-trip).
-			MailStore: func() handlerminiapp.MailStoreReader {
+			MailStore: func() handlermail.MailStoreReader {
 				if s.mailStore == nil {
 					return nil
 				}
@@ -490,8 +497,8 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// return UNAVAILABLE only when no local store either) plus a local
 		// store ({stateDir}/calendar.json) that holds hand-added events, so
 		// create/edit/delete work without a Google write scope.
-		handlerminiapp.CalendarMethods(handlerminiapp.CalendarDeps{
-			Client: func() (handlerminiapp.CalendarClient, error) {
+		minischedule.CalendarMethods(minischedule.CalendarDeps{
+			Client: func() (minischedule.CalendarClient, error) {
 				return calendar.DefaultClient()
 			},
 			Local:     resolveLocalCalendar(s.logger),
@@ -581,7 +588,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// the calendar, backed by a local store ({stateDir}/todos.json). No
 		// external provider — every method writes locally, so it works without
 		// any OAuth scope. Skipped if the store file can't be read.
-		handlerminiapp.TodoMethods(handlerminiapp.TodoDeps{
+		minischedule.TodoMethods(minischedule.TodoDeps{
 			Store: resolveLocalTodos(s.logger),
 		}),
 
@@ -590,8 +597,8 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// (registerLateMethods) so the factory is what defers the lookup
 		// to per-request, by which time the store is wired. When wiki
 		// is disabled by config the factory surfaces UNAVAILABLE.
-		handlerminiapp.MemoryMethods(handlerminiapp.MemoryDeps{
-			Store: func() (handlerminiapp.MemorySearcher, error) {
+		miniknowledge.MemoryMethods(miniknowledge.MemoryDeps{
+			Store: func() (miniknowledge.MemorySearcher, error) {
 				store := hub.WikiStore()
 				if store == nil {
 					return nil, errWikiDisabled
@@ -610,7 +617,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// the lookup to per-request means the store is wired by the first RPC.
 		// A gateway whose notebook store failed to init gets a clean
 		// UNAVAILABLE per call instead of a boot crash.
-		handlerminiapp.NotebookMethods(handlerminiapp.NotebookDeps{
+		miniknowledge.NotebookMethods(miniknowledge.NotebookDeps{
 			Store: func() (*notebook.Store, error) {
 				if s.notebookStore == nil {
 					return nil, errNotebookDisabled
@@ -624,8 +631,8 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// the time the first RPC fires the service is ready, but a
 		// gateway started with the cron subsystem disabled still gets a
 		// clean UNAVAILABLE per call instead of a crash at boot.
-		handlerminiapp.CronsMethods(handlerminiapp.CronsDeps{
-			Service: func() (handlerminiapp.CronService, error) {
+		minischedule.CronsMethods(minischedule.CronsDeps{
+			Service: func() (minischedule.CronService, error) {
 				svc := hub.CronService()
 				if svc == nil {
 					return nil, errCronUnavailable
@@ -650,7 +657,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// applyNow drops the frozen topic snapshots so an edit lands this
 		// session (the RPC analog of slash "--now"); the default is deferred
 		// (next-session) to keep the Static prompt cache stable.
-		handlerminiapp.TopicDocsMethods(handlerminiapp.TopicDocsDeps{
+		miniknowledge.TopicDocsMethods(miniknowledge.TopicDocsDeps{
 			TopicsDir:  func() (string, error) { return resolveTopicsDir(), nil },
 			CurrentKey: resolveCurrentTopicKey,
 			ApplyNow:   prompt.Cache.ClearAllTopicSnapshots,
@@ -675,11 +682,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// Combines Gmail recent-activity query, wiki memory lookup, and
 		// wiki-graph traversal (graphify CLI) so the Mini App detail
 		// view can show a contextual sender card.
-		withMailAliases(handlerminiapp.GmailContextMethods(handlerminiapp.GmailContextDeps{
-			Client: func() (handlerminiapp.GmailClient, error) {
+		withMailAliases(handlermail.GmailContextMethods(handlermail.GmailContextDeps{
+			Client: func() (handlermail.GmailClient, error) {
 				return gmail.DefaultClient()
 			},
-			WikiStore: func() (handlerminiapp.MemorySearcher, error) {
+			WikiStore: func() (miniknowledge.MemorySearcher, error) {
 				store := hub.WikiStore()
 				if store == nil {
 					return nil, errWikiDisabled
@@ -700,11 +707,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// lazy-client pattern; aggregates a single Search call into a
 		// frequency-sorted counterparty list, then folds in 인물 wiki
 		// pages (best-effort — wiki disabled degrades to Gmail-only).
-		handlerminiapp.PeopleMethods(handlerminiapp.PeopleDeps{
-			Client: func() (handlerminiapp.PeopleClient, error) {
+		miniknowledge.PeopleMethods(miniknowledge.PeopleDeps{
+			Client: func() (miniknowledge.PeopleClient, error) {
 				return gmail.DefaultClient()
 			},
-			WikiStore: func() (handlerminiapp.MemorySearcher, error) {
+			WikiStore: func() (miniknowledge.MemorySearcher, error) {
 				store := hub.WikiStore()
 				if store == nil {
 					return nil, errWikiDisabled
@@ -826,15 +833,15 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// search input on home that returns three result sections.
 		// Either factory may be unavailable; the handler degrades
 		// gracefully (Gmail-disabled gateway still serves wiki+diary).
-		handlerminiapp.SearchMethods(handlerminiapp.SearchDeps{
-			Store: func() (handlerminiapp.MemorySearcher, error) {
+		miniknowledge.SearchMethods(miniknowledge.SearchDeps{
+			Store: func() (miniknowledge.MemorySearcher, error) {
 				store := hub.WikiStore()
 				if store == nil {
 					return nil, errWikiDisabled
 				}
 				return store, nil
 			},
-			Client: func() (handlerminiapp.PeopleClient, error) {
+			Client: func() (miniknowledge.PeopleClient, error) {
 				return gmail.DefaultClient()
 			},
 		}),
@@ -886,11 +893,11 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		// SendSync, with deneb-ui emission enabled (channel "client").
 		handlerchat.MiniappMethods(handlerchat.Deps{
 			Chat:       hub.Chat(),
-			OcrImage:   tools.OcrImageBytes,
-			Transcribe: tools.TranscribeAudio,
+			OcrImage:   document.OCRImage,
+			Transcribe: artifact.TranscribeAudio,
 			// Document attach (pdf/doc/sheet) → in-house extractor (PDF/Excel/Word/
 			// PowerPoint/CSV/text, with a scanned-PDF / image OCR fallback).
-			ExtractDocument: tools.ExtractAttachmentTextBytes,
+			ExtractDocument: document.ExtractAttachmentText,
 			// In-app browser in-place translation (en/ru → ko) — DeepL-only.
 			Translate: tools.TranslateSegments,
 			// Raw capture persistence: full OCR text / diarized transcript →
@@ -1006,7 +1013,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		// init right before this phase. Lazy factory still — operator
 		// runs without any provider configured, the call returns
 		// UNAVAILABLE rather than crashing the gateway.
-		withMailAliases(handlerminiapp.GmailAnalyzeMethods(handlerminiapp.GmailAnalyzeDeps{
+		withMailAliases(handlermail.GmailAnalyzeMethods(handlermail.GmailAnalyzeDeps{
 			// Archive-first client — the same factory the native mail list/detail
 			// surface uses. Mail now arrives via LMTP and lives in the on-box
 			// archive keyed by RFC822 Message-ID. The old gmail.DefaultClient()
@@ -1015,7 +1022,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			// "Invalid id value". The miniapp mail surface is now native-archive-only
 			// (the Gmail fallback was removed — see server_mail_repository.go).
 			Client: s.miniappMailClientFactory(s.denebDir),
-			Pipeline: func() (handlerminiapp.AnalyzePipeline, error) {
+			Pipeline: func() (handlermail.AnalyzePipeline, error) {
 				// Role selection is shared with the autonomous poller via
 				// mailAnalysisModels (stage-2 = main role, stage-1 = tiny
 				// role) so the two mail-analysis paths cannot drift apart.
@@ -1027,18 +1034,18 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				// 2026-06-10).
 				llmClient, model, localClient, localModel := s.mailAnalysisModels()
 				if llmClient == nil {
-					return nil, handlerminiapp.ErrAnalyzeNoLLM
+					return nil, handlermail.ErrAnalyzeNoLLM
 				}
 				gmailClient, err := gmail.DefaultClient()
 				if err != nil {
 					return nil, err
 				}
-				return handlerminiapp.PipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, tools.ExtractAttachmentTextBytes, s.mailCounterpartyProjects)
+				return handlermail.PipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, document.ExtractAttachmentText, s.mailCounterpartyProjects)
 			},
-			Cache:      handlerminiapp.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
+			Cache:      handlermail.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
 			WorkState:  mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json")),
 			SaveToWiki: makeMailAnalysisWikiSink(hub),
-			WikiStore: func() (handlerminiapp.MemorySearcher, error) {
+			WikiStore: func() (miniknowledge.MemorySearcher, error) {
 				store := hub.WikiStore()
 				if store == nil {
 					return nil, errWikiDisabled
@@ -1068,7 +1075,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		if s.wikiStore != nil {
 			wikiDir := s.wikiStore.Dir()
 			weeklyDataFn = func(ctx context.Context) (string, error) {
-				return tools.CollectWeeklyReportData(ctx, tools.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
+				return routine.CollectWeeklyReportData(ctx, routine.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
 			}
 			// Deterministic report body — a head line + server-assembled deneb-ui
 			// card (RenderWeeklyReportCard), preferred over the LLM turn so the
@@ -1076,10 +1083,10 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			// The plain-text 양식 (RenderWeeklyReportText) remains the PDF path's
 			// fallback composition.
 			weeklyTextFn = func(_ context.Context) (string, error) {
-				return tools.RenderWeeklyReportCard(tools.WeeklyReportOpts{WikiDir: wikiDir}, time.Now()), nil
+				return routine.RenderWeeklyReportCard(routine.WeeklyReportOpts{WikiDir: wikiDir}, time.Now()), nil
 			}
 			weeklyFormFn = func(ctx context.Context) error {
-				img, ok := tools.BuildWeeklyReportImage(ctx, tools.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
+				img, ok := routine.BuildWeeklyReportImage(ctx, routine.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
 				if !ok {
 					return nil // render unavailable (low memory/disk) → text report only
 				}
@@ -1116,8 +1123,8 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 // wiki_mail_analysis.go so this file stays focused on wiring. Returns nil
 // if no wiki store is available, which is the handler's signal to skip
 // persistence entirely.
-func makeMailAnalysisWikiSink(hub *rpcutil.GatewayHub) func(handlerminiapp.WikiAnalysisInput) error {
-	return func(in handlerminiapp.WikiAnalysisInput) error {
+func makeMailAnalysisWikiSink(hub *rpcutil.GatewayHub) func(handlermail.WikiAnalysisInput) error {
+	return func(in handlermail.WikiAnalysisInput) error {
 		store := hub.WikiStore()
 		if store == nil {
 			return nil
@@ -1144,7 +1151,7 @@ func localFileStoreOrNil(logger *slog.Logger) filestore.Store {
 	return store
 }
 
-func resolveLocalCalendar(logger *slog.Logger) handlerminiapp.LocalCalendar {
+func resolveLocalCalendar(logger *slog.Logger) minischedule.LocalCalendar {
 	store, err := localcal.Default()
 	if err != nil {
 		if logger != nil {
@@ -1158,7 +1165,7 @@ func resolveLocalCalendar(logger *slog.Logger) handlerminiapp.LocalCalendar {
 // resolveCalendarProposals returns the process-wide calendar-proposal store
 // (the bell), or a nil interface when its file can't be read. Mirrors
 // resolveLocalCalendar. The store lives at {stateDir}/calendar_proposals.json.
-func resolveCalendarProposals(logger *slog.Logger) handlerminiapp.CalProposals {
+func resolveCalendarProposals(logger *slog.Logger) minischedule.CalProposals {
 	store, err := calprop.Default()
 	if err != nil {
 		if logger != nil {
@@ -1172,7 +1179,7 @@ func resolveCalendarProposals(logger *slog.Logger) handlerminiapp.CalProposals {
 // resolveLocalTodos returns the process-wide to-do store, or a nil interface (so
 // handlers degrade to UNAVAILABLE) when its file can't be read. Mirrors
 // resolveLocalCalendar. The store lives at {stateDir}/todos.json.
-func resolveLocalTodos(logger *slog.Logger) handlerminiapp.LocalTodos {
+func resolveLocalTodos(logger *slog.Logger) minischedule.LocalTodos {
 	store, err := localtodo.Default()
 	if err != nil {
 		if logger != nil {

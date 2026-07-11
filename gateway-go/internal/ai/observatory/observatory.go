@@ -302,7 +302,10 @@ func readCapped(path string, max int64) []byte {
 		return nil
 	}
 	defer f.Close()
-	data, _ := io.ReadAll(io.LimitReader(f, max))
+	data, err := io.ReadAll(io.LimitReader(f, max))
+	if err != nil {
+		return nil
+	}
 	return data
 }
 
@@ -379,6 +382,9 @@ func memoryStatus(stateDir string, now time.Time) MemoryStatus {
 	if entries, err := os.ReadDir(filepath.Join(stateDir, "spillover")); err == nil {
 		y, mo, d := now.Date()
 		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
 			if info, err := e.Info(); err == nil {
 				ey, emo, ed := info.ModTime().Date()
 				if ey == y && emo == mo && ed == d {
@@ -402,6 +408,7 @@ func modelSummary(stateDir string) ModelSummary {
 			for name := range st.Models {
 				ms.Models = append(ms.Models, name)
 			}
+			sort.Strings(ms.Models)
 		}
 	}
 	ms.Down = fleetDownBackends(filepath.Join(stateDir, "logs", "sparkfleet.log"))

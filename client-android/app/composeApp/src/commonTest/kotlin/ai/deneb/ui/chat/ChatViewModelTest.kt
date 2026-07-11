@@ -11,10 +11,13 @@ import ai.deneb.network.GenericNetworkException
 import ai.deneb.network.OpenAICompatibleInvalidApiKeyException
 import ai.deneb.network.OpenAICompatibleRateLimitExceededException
 import ai.deneb.testutil.FakeDataRepository
+import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -33,6 +36,7 @@ class ChatViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private val unconfinedDispatcher = UnconfinedTestDispatcher()
+    private val viewModels = mutableListOf<ChatViewModel>()
     private lateinit var fakeRepository: FakeDataRepository
 
     @BeforeTest
@@ -43,35 +47,58 @@ class ChatViewModelTest {
 
     @AfterTest
     fun tearDown() {
+        clearViewModels()
         Dispatchers.resetMain()
+    }
+
+    private fun clearViewModels() {
+        viewModels.forEach { it.viewModelScope.cancel() }
+        viewModels.clear()
+    }
+
+    private fun runViewModelTest(block: suspend TestScope.() -> Unit) = runTest {
+        try {
+            block()
+        } finally {
+            clearViewModels()
+            testDispatcher.scheduler.runCurrent()
+            testScheduler.runCurrent()
+        }
     }
 
     private fun createViewModel(): ChatViewModel {
         val noOpScheduler = TaskScheduler(fakeRepository, enabled = false)
         return ChatViewModel(fakeRepository, noOpScheduler, unconfinedDispatcher)
+            .also(viewModels::add)
     }
 
     @Test
-    fun `restore runs off the main thread and flips isRestoring`() = runTest {
+    fun `restore runs off the main thread and flips isRestoring`() = runViewModelTest {
         // Isolated paused dispatcher so the launched restore coroutine doesn't run synchronously.
         val backgroundDispatcher = StandardTestDispatcher()
         val noOpScheduler = TaskScheduler(fakeRepository, enabled = false)
         val viewModel = ChatViewModel(fakeRepository, noOpScheduler, backgroundDispatcher)
+            .also(viewModels::add)
 
         viewModel.state.test {
             // Restore hasn't run yet — initial state still has isRestoring=true.
             assertTrue(awaitItem().isRestoring)
 
-            backgroundDispatcher.scheduler.advanceUntilIdle()
-            testDispatcher.scheduler.advanceUntilIdle()
+            backgroundDispatcher.scheduler.runCurrent()
+            testDispatcher.scheduler.runCurrent()
 
             assertFalse(awaitItem().isRestoring)
             cancelAndIgnoreRemainingEvents()
         }
+        // This test deliberately gives the restore job its own paused scheduler.
+        // Cancel the ViewModel, then execute its cancellation continuation on that
+        // scheduler before runTest performs its unfinished-work check.
+        clearViewModels()
+        backgroundDispatcher.scheduler.runCurrent()
     }
 
     @Test
-    fun `ask completes successfully and updates history`() = runTest {
+    fun `ask completes successfully and updates history`() = runViewModelTest {
         val viewModel = createViewModel()
 
         viewModel.state.test {
@@ -80,7 +107,7 @@ class ChatViewModelTest {
             assertTrue(initialState.history.isEmpty())
 
             initialState.actions.ask("Hello")
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             // Wait for completion - collect all states until we get a non-loading state with history
             var finalState: ChatUiState
@@ -94,7 +121,7 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `successful ask adds messages to history`() = runTest {
+    fun `successful ask adds messages to history`() = runViewModelTest {
         val viewModel = createViewModel()
 
         viewModel.state.test {
@@ -102,7 +129,7 @@ class ChatViewModelTest {
             assertTrue(initialState.history.isEmpty())
 
             initialState.actions.ask("Hello")
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             // Wait for history to be populated
             var finalState: ChatUiState
@@ -118,7 +145,7 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `ask clears previous error`() = runTest {
+    fun `ask clears previous error`() = runViewModelTest {
         fakeRepository.askException = GenericNetworkException("First error")
         val viewModel = createViewModel()
 
@@ -127,7 +154,7 @@ class ChatViewModelTest {
 
             // First call - will fail
             initialState.actions.ask("First")
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             // Wait for error
             var errorState: ChatUiState
@@ -139,7 +166,7 @@ class ChatViewModelTest {
             // Clear exception and ask again
             fakeRepository.askException = null
             errorState.actions.ask("Second")
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             // Wait for loading state which should have cleared error
             var loadingState: ChatUiState
@@ -155,14 +182,14 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `failed ask with GeminiInvalidApiKeyException sets error`() = runTest {
+    fun `failed ask with GeminiInvalidApiKeyException sets error`() = runViewModelTest {
         fakeRepository.askException = GeminiInvalidApiKeyException()
         val viewModel = createViewModel()
 
         viewModel.state.test {
             val initialState = awaitItem()
             initialState.actions.ask("Hello")
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             var errorState: ChatUiState
             do {
@@ -175,14 +202,14 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `failed ask with GroqInvalidApiKeyException sets error`() = runTest {
+    fun `failed ask with GroqInvalidApiKeyException sets error`() = runViewModelTest {
         fakeRepository.askException = OpenAICompatibleInvalidApiKeyException()
         val viewModel = createViewModel()
 
         viewModel.state.test {
             val initialState = awaitItem()
             initialState.actions.ask("Hello")
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             var errorState: ChatUiState
             do {
@@ -195,14 +222,14 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `failed ask with GeminiRateLimitExceededException sets error`() = runTest {
+    fun `failed ask with GeminiRateLimitExceededException sets error`() = runViewModelTest {
         fakeRepository.askException = GeminiRateLimitExceededException()
         val viewModel = createViewModel()
 
         viewModel.state.test {
             val initialState = awaitItem()
             initialState.actions.ask("Hello")
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             var errorState: ChatUiState
             do {
@@ -215,14 +242,14 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `failed ask with GroqRateLimitExceededException sets error`() = runTest {
+    fun `failed ask with GroqRateLimitExceededException sets error`() = runViewModelTest {
         fakeRepository.askException = OpenAICompatibleRateLimitExceededException()
         val viewModel = createViewModel()
 
         viewModel.state.test {
             val initialState = awaitItem()
             initialState.actions.ask("Hello")
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             var errorState: ChatUiState
             do {
@@ -235,14 +262,14 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `failed ask with AnthropicInvalidApiKeyException sets error`() = runTest {
+    fun `failed ask with AnthropicInvalidApiKeyException sets error`() = runViewModelTest {
         fakeRepository.askException = AnthropicInvalidApiKeyException()
         val viewModel = createViewModel()
 
         viewModel.state.test {
             val initialState = awaitItem()
             initialState.actions.ask("Hello")
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             var errorState: ChatUiState
             do {
@@ -255,14 +282,14 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `failed ask with AnthropicRateLimitExceededException sets error`() = runTest {
+    fun `failed ask with AnthropicRateLimitExceededException sets error`() = runViewModelTest {
         fakeRepository.askException = AnthropicRateLimitExceededException()
         val viewModel = createViewModel()
 
         viewModel.state.test {
             val initialState = awaitItem()
             initialState.actions.ask("Hello")
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             var errorState: ChatUiState
             do {
@@ -275,14 +302,14 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `failed ask with AnthropicOverloadedException sets error`() = runTest {
+    fun `failed ask with AnthropicOverloadedException sets error`() = runViewModelTest {
         fakeRepository.askException = AnthropicOverloadedException()
         val viewModel = createViewModel()
 
         viewModel.state.test {
             val initialState = awaitItem()
             initialState.actions.ask("Hello")
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             var errorState: ChatUiState
             do {
@@ -295,14 +322,14 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `failed ask with AnthropicInsufficientCreditsException sets error`() = runTest {
+    fun `failed ask with AnthropicInsufficientCreditsException sets error`() = runViewModelTest {
         fakeRepository.askException = AnthropicInsufficientCreditsException()
         val viewModel = createViewModel()
 
         viewModel.state.test {
             val initialState = awaitItem()
             initialState.actions.ask("Hello")
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             var errorState: ChatUiState
             do {
@@ -315,7 +342,7 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `clearHistory clears history and error`() = runTest {
+    fun `clearHistory clears history and error`() = runViewModelTest {
         fakeRepository.askException = GenericNetworkException("Error")
         val viewModel = createViewModel()
 
@@ -324,7 +351,7 @@ class ChatViewModelTest {
 
             // Trigger an error first
             initialState.actions.ask("Hello")
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             var errorState: ChatUiState
             do {
@@ -334,7 +361,7 @@ class ChatViewModelTest {
 
             // Clear history
             errorState.actions.clearHistory()
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             var clearedState: ChatUiState
             do {
@@ -348,7 +375,7 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `toggleSpeechOutput toggles isSpeechOutputEnabled`() = runTest {
+    fun `toggleSpeechOutput toggles isSpeechOutputEnabled`() = runViewModelTest {
         val viewModel = createViewModel()
 
         viewModel.state.test {
@@ -356,13 +383,13 @@ class ChatViewModelTest {
             assertFalse(initialState.isSpeechOutputEnabled)
 
             initialState.actions.toggleSpeechOutput()
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             val enabledState = awaitItem()
             assertTrue(enabledState.isSpeechOutputEnabled)
 
             enabledState.actions.toggleSpeechOutput()
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             val disabledState = awaitItem()
             assertFalse(disabledState.isSpeechOutputEnabled)
@@ -370,7 +397,7 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `setIsSpeaking updates speaking state`() = runTest {
+    fun `setIsSpeaking updates speaking state`() = runViewModelTest {
         val viewModel = createViewModel()
 
         viewModel.state.test {
@@ -378,14 +405,14 @@ class ChatViewModelTest {
             assertFalse(initialState.isSpeaking)
 
             initialState.actions.setIsSpeaking(true, "content-123")
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             val speakingState = awaitItem()
             assertTrue(speakingState.isSpeaking)
             assertEquals("content-123", speakingState.isSpeakingContentId)
 
             speakingState.actions.setIsSpeaking(false, "")
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             val notSpeakingState = awaitItem()
             assertFalse(notSpeakingState.isSpeaking)
@@ -395,14 +422,14 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `retry calls ask with null`() = runTest {
+    fun `retry calls ask with null`() = runViewModelTest {
         val viewModel = createViewModel()
 
         viewModel.state.test {
             val initialState = awaitItem()
 
             initialState.actions.retry()
-            testDispatcher.scheduler.advanceUntilIdle()
+            testDispatcher.scheduler.runCurrent()
 
             // Wait for completion
             var finalState: ChatUiState
@@ -416,7 +443,7 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `allowFileAttachment is true when repository supports it`() = runTest {
+    fun `allowFileAttachment is true when repository supports it`() = runViewModelTest {
         fakeRepository.fileAttachmentSupported = true
         val viewModel = createViewModel()
 
@@ -428,7 +455,7 @@ class ChatViewModelTest {
     }
 
     @Test
-    fun `allowFileAttachment is false when repository does not support it`() = runTest {
+    fun `allowFileAttachment is false when repository does not support it`() = runViewModelTest {
         fakeRepository.fileAttachmentSupported = false
         val viewModel = createViewModel()
 

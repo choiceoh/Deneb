@@ -31,10 +31,16 @@ internal sealed interface TurnProbe {
  */
 internal fun probeTranscriptForTurn(transcript: List<History>, sentText: String): TurnProbe {
     val sent = sentText.trim()
+    if (sent.isEmpty()) return TurnProbe.NotArrived
     val idx = transcript.indexOfLast { it.role == History.Role.USER && it.content.trim() == sent }
     if (idx < 0) return TurnProbe.NotArrived
     val answer = transcript.drop(idx + 1)
-        .lastOrNull { it.role == History.Role.ASSISTANT && it.content.isNotBlank() }
+        .lastOrNull {
+            it.role == History.Role.ASSISTANT &&
+                it.content.isNotBlank() &&
+                !it.isThinking &&
+                !it.isStatusMessage
+        }
         ?: return TurnProbe.StillRunning
     return TurnProbe.Answered(answer.content)
 }

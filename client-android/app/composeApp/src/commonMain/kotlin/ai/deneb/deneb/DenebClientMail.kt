@@ -174,7 +174,7 @@ private fun stableMailCacheFingerprint(value: String): String {
 }
 
 internal fun encodeMailCache(rows: List<MailMessage>, owner: String): String = mailCacheJson.encodeToString(
-    MailCacheEnvelope(owner = owner, rows = rows),
+    MailCacheEnvelope(owner = owner, rows = rows.take(MAIL_LIST_PAGE_SIZE)),
 )
 
 internal fun decodeMailCache(json: String, expectedOwner: String): List<MailMessage>? = runCatching {
@@ -182,6 +182,7 @@ internal fun decodeMailCache(json: String, expectedOwner: String): List<MailMess
 }.getOrNull()
     ?.takeIf { it.owner == expectedOwner }
     ?.rows
+    ?.take(MAIL_LIST_PAGE_SIZE)
     ?.takeIf { it.isNotEmpty() }
 
 internal fun DenebGatewayClient.loadCachedMail(): List<MailMessage>? {

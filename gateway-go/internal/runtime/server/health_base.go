@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/process"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/process"
 )
 
 // collectBaseHealth builds the always-present portion of the /health contract.

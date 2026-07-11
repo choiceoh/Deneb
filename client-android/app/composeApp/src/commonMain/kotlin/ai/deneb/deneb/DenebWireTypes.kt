@@ -18,6 +18,9 @@ import ai.deneb.ui.chat.WorkFeedItem
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
+/** Keep stable server order while letting the latest row for an identity win. */
+internal inline fun <T, K> Iterable<T>.distinctByLast(crossinline keyOf: (T) -> K): List<T> = toList().asReversed().distinctBy { keyOf(it) }.asReversed()
+
 // On-the-wire RPC response payloads for DenebGatewayClient — the envelopes the
 // gateway returns over miniapp.*. Kept thin: element shapes (MailRowOut,
 // SessionRowOut, …) are generated from the Go structs in deneb/generated/, so

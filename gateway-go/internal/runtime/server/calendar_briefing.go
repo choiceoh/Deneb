@@ -110,6 +110,7 @@ type mergedBriefingSource struct {
 	local  *localcal.Store        // nil when the local file can't be read
 }
 
+// ListUpcoming merges upcoming events from the configured briefing sources.
 func (m mergedBriefingSource) ListUpcoming(ctx context.Context, from, to time.Time, maxResults int) ([]calendar.Event, error) {
 	var out []calendar.Event
 	if m.google != nil {

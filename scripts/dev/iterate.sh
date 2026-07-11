@@ -133,8 +133,8 @@ if ! devlib_build "$BINARY" 2>"$BUILD_LOG"; then
   echo "FAIL (${BUILD_MS}ms)"
 
   # Extract first compiler error for diagnostics.
-  FIRST_ERROR=$(grep -m1 -E '\.go:\d+:\d+:' "$BUILD_LOG" 2>/dev/null || echo "")
-  ERROR_COUNT=$(grep -cE '\.go:\d+:\d+:' "$BUILD_LOG" 2>/dev/null || echo "0")
+  FIRST_ERROR=$(grep -m1 -E '\.go:[0-9]+:[0-9]+:' "$BUILD_LOG" 2>/dev/null || true)
+  ERROR_COUNT=$(grep -cE '\.go:[0-9]+:[0-9]+:' "$BUILD_LOG" 2>/dev/null || true)
 
   if [[ -n "$FIRST_ERROR" ]]; then
     echo "  first error: $FIRST_ERROR"
@@ -249,7 +249,7 @@ _run_metric_cmd() {
   CHECK_START=$(date +%s%N)
   METRIC_OUT=$(eval "$cmd" 2>&1) || true
 
-  METRIC_VAL=$(echo "$METRIC_OUT" | grep -oP 'metric_value=\K[\d.]+' | tail -1)
+  METRIC_VAL=$(echo "$METRIC_OUT" | grep -oP 'metric_value=\K[\d.]+' | tail -1 || true)
   if [[ -z "$METRIC_VAL" ]]; then
     echo "FAIL (no metric_value in output)"
     echo "$METRIC_OUT" | tail -5
@@ -258,7 +258,8 @@ _run_metric_cmd() {
     echo "$METRIC_VAL"
   fi
 
-  METRIC_DETAIL=$(echo "$METRIC_OUT" | grep '^DENEB_METRIC_DETAIL ' | tail -1 | sed 's/^DENEB_METRIC_DETAIL //')
+  METRIC_DETAIL=$(echo "$METRIC_OUT" | grep '^DENEB_METRIC_DETAIL ' \
+    | tail -1 | sed 's/^DENEB_METRIC_DETAIL //' || true)
   if [[ -n "$METRIC_DETAIL" ]]; then
     QUALITY_JSON=$(python3 -c "
 import json
@@ -300,7 +301,7 @@ if [[ -n "$METRIC_PRESET" ]]; then
         echo "0 (smoke failed)"
       else
         Q_OUT=$("$SCRIPT_DIR/quality-metric.sh" 2>&1) || true
-        Q_VAL=$(echo "$Q_OUT" | grep -oP 'metric_value=\K[\d.]+' | tail -1)
+        Q_VAL=$(echo "$Q_OUT" | grep -oP 'metric_value=\K[\d.]+' | tail -1 || true)
         Q_VAL=${Q_VAL:-0}
         SMOKE_SCORE=$(python3 -c "print(round($SMOKE_PASS / 2 * 20))")
         Q_SCORE=$(python3 -c "print(round($Q_VAL / 100 * 80))")

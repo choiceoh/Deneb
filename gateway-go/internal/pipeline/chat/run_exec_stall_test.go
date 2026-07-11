@@ -3,7 +3,7 @@ package chat
 import (
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 )
 
 // TestIsStalledResult locks the stall-detection predicate that decides whether

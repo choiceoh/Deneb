@@ -3,8 +3,8 @@ package regressionwatch
 import (
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 )
 
 // --- agent-log source --------------------------------------------------------
@@ -23,8 +23,10 @@ type AgentLogSource struct {
 	Window time.Duration
 }
 
+// Name returns the component's stable scheduler name.
 func (s AgentLogSource) Name() string { return "agentlog" }
 
+// Sample collects the source's current regression signals.
 func (s AgentLogSource) Sample() []Signal {
 	if s.Logs == nil {
 		return nil
@@ -73,8 +75,10 @@ type HealthSource struct {
 	Registry healthRegistry
 }
 
+// Name returns the component's stable scheduler name.
 func (s HealthSource) Name() string { return "model-health" }
 
+// Sample collects the source's current regression signals.
 func (s HealthSource) Sample() []Signal {
 	if s.Registry == nil {
 		return nil

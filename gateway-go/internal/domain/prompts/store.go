@@ -23,6 +23,7 @@ var (
 	ErrTooLarge = errors.New("prompt text is too large")
 )
 
+// Template defines a built-in prompt and its default text.
 type Template struct {
 	ID          string
 	Title       string
@@ -32,6 +33,7 @@ type Template struct {
 	Editable    bool
 }
 
+// Entry is the effective prompt plus override metadata returned to callers.
 type Entry struct {
 	ID          string
 	Title       string
@@ -53,6 +55,7 @@ type overrideEntry struct {
 	UpdatedAtMs int64  `json:"updatedAtMs"`
 }
 
+// Store manages built-in prompts and their durable operator overrides.
 type Store struct {
 	path      string
 	byID      map[string]Template
@@ -62,6 +65,7 @@ type Store struct {
 	loaded    bool
 }
 
+// NewStore constructs a prompt store backed by path.
 func NewStore(path string, templates []Template) *Store {
 	byID := make(map[string]Template, len(templates))
 	order := make([]string, 0, len(templates))
@@ -86,6 +90,7 @@ func NewStore(path string, templates []Template) *Store {
 	return &Store{path: path, byID: byID, order: order}
 }
 
+// List returns every prompt in deterministic template order.
 func (s *Store) List() ([]Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -99,6 +104,7 @@ func (s *Store) List() ([]Entry, error) {
 	return out, nil
 }
 
+// Get returns the effective prompt for id and whether it exists.
 func (s *Store) Get(id string) (Entry, bool, error) {
 	id = strings.TrimSpace(id)
 	s.mu.Lock()
@@ -112,6 +118,7 @@ func (s *Store) Get(id string) (Entry, bool, error) {
 	return s.entryLocked(id), true, nil
 }
 
+// Text returns the effective text for id, or an empty string on miss or error.
 func (s *Store) Text(id string) string {
 	id = strings.TrimSpace(id)
 	s.mu.Lock()
@@ -125,6 +132,7 @@ func (s *Store) Text(id string) string {
 	return s.entryLocked(id).Text
 }
 
+// OverrideText returns only the stored override for id.
 func (s *Store) OverrideText(id string) (string, bool) {
 	id = strings.TrimSpace(id)
 	s.mu.Lock()
@@ -139,6 +147,7 @@ func (s *Store) OverrideText(id string) (string, bool) {
 	return strings.TrimSpace(ov.Text), true
 }
 
+// Set persists an override and returns the resulting effective entry.
 func (s *Store) Set(id, text string) (Entry, error) {
 	id = strings.TrimSpace(id)
 	text = strings.TrimSpace(text)
@@ -168,6 +177,7 @@ func (s *Store) Set(id, text string) (Entry, error) {
 	return s.entryLocked(id), nil
 }
 
+// Reset removes an override and restores the built-in prompt text.
 func (s *Store) Reset(id string) (Entry, error) {
 	id = strings.TrimSpace(id)
 	s.mu.Lock()

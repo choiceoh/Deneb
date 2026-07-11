@@ -2,7 +2,6 @@ package tools
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -19,17 +18,8 @@ func phoneUsageCachePath() string {
 }
 
 func readCachedPhoneUsage(maxAge time.Duration) (string, bool) {
-	path := phoneUsageCachePath()
-	data, err := os.ReadFile(path)
-	if err != nil || len(strings.TrimSpace(string(data))) == 0 {
-		return "", false
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", false
-	}
-	age := time.Since(info.ModTime())
-	if age > maxAge {
+	data, age, ok := readFreshPhoneCache(phoneUsageCachePath(), maxAge)
+	if !ok {
 		return "", false
 	}
 	return fmt.Sprintf("앱 보고 사용 리듬 (약 %d분 전):\n%s", int(age.Minutes()), strings.TrimSpace(string(data))), true

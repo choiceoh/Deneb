@@ -86,35 +86,8 @@ const (
 // scores the already-extracted chunk text held in the index, so it is not called
 // here (kept non-nil-required to keep the DI contract uniform).
 func (si *SemanticIndex) HybridSearch(ctx context.Context, query string, max int, embed Embedder, extractFn ExtractFunc) ([]ScoredEntry, error) {
-	if si == nil || embed == nil || !embed.IsHealthy() {
-		return nil, nil
-	}
-	q := strings.TrimSpace(query)
-	if len([]rune(q)) < minChunkRunes {
-		return nil, nil // too short to embed meaningfully
-	}
-	if max <= 0 {
-		max = 20
-	}
-
-	// Embed the query (best-effort: an embed failure degrades to empty so the
-	// caller's lexical fallback runs, exactly like Search).
-	qvecs, err := embed.Embed(ctx, []string{q})
-	if err != nil || len(qvecs) == 0 {
-		return nil, nil //nolint:nilerr // intentional graceful degradation to lexical search
-	}
-	qv := qvecs[0]
-
-	// Snapshot entry pointers under the lock; do all scoring outside it (pure CPU
-	// over immutable chunk vectors + tokens). Entries are replaced wholesale, so
-	// retained pointers stay valid even if the map mutates after the snapshot.
-	si.mu.Lock()
-	entries := make([]*fileEntry, 0, len(si.files))
-	for _, fe := range si.files {
-		entries = append(entries, fe)
-	}
-	si.mu.Unlock()
-	if len(entries) == 0 {
+	q, qv, entries, max, ok := si.prepareSemanticQuery(ctx, query, max, embed)
+	if !ok {
 		return nil, nil
 	}
 

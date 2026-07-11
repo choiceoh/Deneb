@@ -1175,6 +1175,9 @@ async def run_health_test(client: GatewayClient, tdef: dict) -> QualityResult:
         result.add_check("has_version", bool(version), f"version={version}")
         result.add_check("latency", *check_latency(result.latency_ms, 500))
 
+    else:
+        result.add_check("health_type", False, f"unsupported health type: {health_type}")
+
     passed_count = sum(1 for _, p, _ in result.checks if p)
     result.score = passed_count / max(len(result.checks), 1)
     result.passed = all(p for _, p, _ in result.checks)

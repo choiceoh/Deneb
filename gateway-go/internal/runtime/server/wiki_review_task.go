@@ -36,8 +36,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
@@ -89,7 +89,9 @@ type wikiReviewTask struct {
 	llm func(ctx context.Context, system, user string, maxTokens int) (string, error)
 }
 
+// Name returns the component's stable scheduler name.
 func (t *wikiReviewTask) Name() string            { return "wiki-review" }
+// Interval returns the component's scheduling cadence.
 func (t *wikiReviewTask) Interval() time.Duration { return wikiReviewInterval }
 
 // wikiReviewSuspect pairs one recently-written page with its near-match candidates.
@@ -107,6 +109,7 @@ type wikiReviewVerdict struct {
 	Confidence  string `json:"confidence"`   // high | medium | low
 }
 
+// Run executes one scheduled task cycle.
 func (t *wikiReviewTask) Run(ctx context.Context) error {
 	if t.wikiStore == nil {
 		return fmt.Errorf("wiki-review: wiki store not available")

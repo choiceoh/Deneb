@@ -125,6 +125,7 @@ func BuildWorkspaceSkillSnapshot(cfg SnapshotConfig) *FullSkillSnapshot {
 	}
 }
 
+// FilterExcludedSkills returns entries whose names are not in excluded.
 func FilterExcludedSkills(entries []SkillEntry, excluded map[string]struct{}) []SkillEntry {
 	if len(excluded) == 0 || len(entries) == 0 {
 		return entries

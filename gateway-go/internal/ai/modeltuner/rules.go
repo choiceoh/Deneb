@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 )
 
 // Rule thresholds. All rules require minRunsForRules completed runs in the

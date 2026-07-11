@@ -84,11 +84,12 @@ def main():
     try:
         # LOGIN shell: restores the profile PATH (node + codegraph) that a
         # minimal detached hook env lacks. Detached so it never blocks startup.
-        subprocess.Popen(
-            ["bash", "-lc", cmd],
-            stdout=open(log, "w"), stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
+        with open(log, "w") as log_file:
+            subprocess.Popen(
+                ["bash", "-lc", cmd],
+                stdout=log_file, stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
     except OSError:
         pass                                            # fail-open
     return 0

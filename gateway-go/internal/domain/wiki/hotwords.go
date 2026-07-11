@@ -2,7 +2,8 @@ package wiki
 
 import (
 	"sort"
-	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // HotwordHints builds a comma-separated proper-noun bias list for speech
@@ -36,34 +37,14 @@ func (s *Store) HotwordHints(maxTerms int) string {
 	})
 
 	const maxChars = 2500
-	seen := make(map[string]bool)
-	terms := make([]string, 0, maxTerms)
-	chars := 0
-	// add appends a unique, non-blank term; returns false once a cap is hit.
-	add := func(raw string) bool {
-		t := strings.TrimSpace(raw)
-		if t == "" {
-			return true
-		}
-		key := strings.ToLower(t)
-		if seen[key] {
-			return true
-		}
-		if len(terms) >= maxTerms || chars+len(t) > maxChars {
-			return false
-		}
-		seen[key] = true
-		terms = append(terms, t)
-		chars += len(t) + 2
-		return true
-	}
+	terms := textutil.NewLimitedTerms(maxTerms, maxChars)
 	for _, e := range entries {
-		if !add(e.Title) {
+		if !terms.Add(e.Title) {
 			break
 		}
 		capped := false
 		for _, tag := range e.Tags {
-			if !add(tag) {
+			if !terms.Add(tag) {
 				capped = true
 				break
 			}
@@ -72,5 +53,5 @@ func (s *Store) HotwordHints(maxTerms int) string {
 			break
 		}
 	}
-	return strings.Join(terms, ", ")
+	return terms.String()
 }

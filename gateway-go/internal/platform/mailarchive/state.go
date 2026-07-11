@@ -32,10 +32,12 @@ type StateStore struct {
 	mu   sync.Mutex
 }
 
+// NewStateStore constructs a native mail-state overlay backed by path.
 func NewStateStore(path string) *StateStore {
 	return &StateStore{path: path}
 }
 
+// Get returns the overlay state for id, or its zero value on miss.
 func (s *StateStore) Get(id string) MessageState {
 	if s == nil || id == "" {
 		return MessageState{}
@@ -46,6 +48,7 @@ func (s *StateStore) Get(id string) MessageState {
 	return st.Messages[id]
 }
 
+// Known reports whether id has a persisted overlay record.
 func (s *StateStore) Known(id string) bool {
 	if s == nil || id == "" {
 		return false
@@ -57,6 +60,7 @@ func (s *StateStore) Known(id string) bool {
 	return ok
 }
 
+// Snapshot returns an independent copy of all overlay records.
 func (s *StateStore) Snapshot() map[string]MessageState {
 	if s == nil {
 		return nil
@@ -71,6 +75,7 @@ func (s *StateStore) Snapshot() map[string]MessageState {
 	return out
 }
 
+// RememberLocator records the mailbox and UID used to resolve id.
 func (s *StateStore) RememberLocator(id, mailbox, uid string) error {
 	if s == nil || id == "" || mailbox == "" || uid == "" {
 		return nil
@@ -82,6 +87,7 @@ func (s *StateStore) RememberLocator(id, mailbox, uid string) error {
 	}, false)
 }
 
+// MarkRead records the local read overlay for id.
 func (s *StateStore) MarkRead(id string) error {
 	return s.update(id, func(ms MessageState) MessageState {
 		ms.Read = true
@@ -89,6 +95,7 @@ func (s *StateStore) MarkRead(id string) error {
 	}, true)
 }
 
+// MarkArchived records the local archive overlay for id.
 func (s *StateStore) MarkArchived(id string) error {
 	return s.update(id, func(ms MessageState) MessageState {
 		ms.Read = true
@@ -97,6 +104,7 @@ func (s *StateStore) MarkArchived(id string) error {
 	}, true)
 }
 
+// MarkTrashed records the local trash overlay for id.
 func (s *StateStore) MarkTrashed(id string) error {
 	return s.update(id, func(ms MessageState) MessageState {
 		ms.Read = true

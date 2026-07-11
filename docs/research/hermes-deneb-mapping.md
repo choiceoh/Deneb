@@ -168,7 +168,7 @@
 ### P1. `/steer` main-agent — ✅ 완료
 
 - **새 파일**: `gateway-go/internal/pipeline/chat/steer.go` (SteerQueue), `steer_inject.go` (drain+append), `steer_test.go` (13 tests), `gateway-go/internal/runtime/server/inbound_steer.go` (파서), `inbound_steer_test.go` (13 tests)
-- **수정**: `internal/agentsys/agent/config.go`(BeforeAPICall hook), `executor.go`, `pipeline/chat/handler.go/run.go/run_start.go/run_exec.go/slash_dispatch.go`, `runtime/rpc/handler/chat/chat.go` (`chat.steer` RPC), `runtime/server/method_registry.go` + `_test.go`, `inbound.go`
+- **수정**: `internal/ai/agent/config.go`(BeforeAPICall hook), `executor.go`, `pipeline/chat/handler.go/run.go/run_start.go/run_exec.go/slash_dispatch.go`, `runtime/rpc/handler/chat/chat.go` (`chat.steer` RPC), `runtime/server/method_registry.go` + `_test.go`, `inbound.go`
 - **테스트**: 26/26 통과 (-race)
 - **한국어 마커**: `[사용자 조정: ...]` (CLAUDE.md Korean-first 준수)
 - **핵심 디자인**: Anthropic block 프로토콜 대응 (tool_result in `role:"user"` vs Hermes 의 `role:"tool"`). 메시지 샬로우 복사 후 주입 → 영속 messages 불변 → 캐시 prefix 보존.
@@ -257,7 +257,7 @@
 8. ❌ **Grace Call 메커니즘** (`run_agent.py:_budget_exhausted_injected`)
    - 예산 도달 시 모델에게 1회 공지 메시지 주입 → 마무리 턴 1회 → 종료
    - Deneb 현재: 예산 도달 시 즉시 종료 → "반 완성" 응답 위험
-   - **위치**: `gateway-go/internal/agentsys/agent/executor.go` 루프 종료 조건
+   - **위치**: `gateway-go/internal/ai/agent/executor.go` 루프 종료 조건
    - **복잡도**: 작음. 플래그 1개 + 메시지 주입 1회
    - **가치**: 장기 멀티턴 작업이 "깨끗한" 마무리. Hermes 가 엣지케이스에서 배운 UX 결정.
 
@@ -370,8 +370,8 @@ gateway-go/internal/pipeline/chat/steer_test.go       (new)
 gateway-go/internal/runtime/server/inbound_steer.go   (new)
 gateway-go/internal/runtime/server/inbound_steer_test.go (new)
 
-gateway-go/internal/agentsys/agent/config.go          (edit — BeforeAPICall hook)
-gateway-go/internal/agentsys/agent/executor.go        (edit — hook 호출)
+gateway-go/internal/ai/agent/config.go          (edit — BeforeAPICall hook)
+gateway-go/internal/ai/agent/executor.go        (edit — hook 호출)
 gateway-go/internal/pipeline/chat/handler.go          (edit — SteerQueue / InsightsProvider)
 gateway-go/internal/pipeline/chat/run.go              (edit — steerQueue dep)
 gateway-go/internal/pipeline/chat/run_start.go        (edit — 와이어링)
