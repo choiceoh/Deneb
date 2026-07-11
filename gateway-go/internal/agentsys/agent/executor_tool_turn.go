@@ -47,47 +47,61 @@ func executeToolTurn(
 	}
 	lifecycles := make([]toolCallLifecycle, len(calls))
 
-	if ctx.Err() == nil && parallelSafeTurn(cfg, calls) {
-		parallel := executeToolsParallelTracked(
-			ctx,
-			calls,
-			tools,
-			hooks,
-			turnReason,
-			turn,
-			logger,
-			runLog,
-			cfg.ToolLoopDetector,
-		)
-		outcome.results = parallel.results
-		copy(lifecycles, parallel.calls)
-	} else if ctx.Err() == nil {
+	// Dispatch by parallel-safety segments (segmentToolCalls): consecutive
+	// read-only $ref-free calls overlap; every other call is a barrier that
+	// runs alone at its emitted position, so cross-tool side effects stay
+	// exactly as predictable as a fully sequential run.
+	if ctx.Err() == nil {
 		provenanceRoot := toolProvenanceRoot(tools)
-		for i, tc := range calls {
+		for _, seg := range segmentToolCalls(cfg, calls) {
 			if ctx.Err() != nil {
 				break
 			}
+			if seg.parallel {
+				// Read-only segment: overlap executions. RecordFileMutation is
+				// skipped — the parallel-safe set cannot mutate files, so there
+				// is no thrash to count.
+				parallel := executeToolsParallelTracked(
+					ctx,
+					calls[seg.start:seg.end],
+					tools,
+					hooks,
+					turnReason,
+					turn,
+					logger,
+					runLog,
+					cfg.ToolLoopDetector,
+				)
+				copy(outcome.results[seg.start:seg.end], parallel.results)
+				copy(lifecycles[seg.start:seg.end], parallel.calls)
+				continue
+			}
+			for i := seg.start; i < seg.end; i++ {
+				if ctx.Err() != nil {
+					break
+				}
+				tc := calls[i]
+				execution := executeOneToolTracked(
+					ctx,
+					tc,
+					tools,
+					hooks,
+					turnReason,
+					turn,
+					logger,
+					runLog,
+					cfg.ToolLoopDetector,
+				)
+				outcome.results[i] = execution.block
+				lifecycles[i].resolved = true
+				lifecycles[i].interrupted = execution.interrupted
 
-			execution := executeOneToolTracked(
-				ctx,
-				tc,
-				tools,
-				hooks,
-				turnReason,
-				turn,
-				logger,
-				runLog,
-				cfg.ToolLoopDetector,
-			)
-			outcome.results[i] = execution.block
-			lifecycles[i].resolved = true
-			lifecycles[i].interrupted = execution.interrupted
-
-			// Count only successful mutations. The nudge is staged here but is
-			// omitted by RunAgent when cancellation means no next LLM turn exists.
-			if cfg.ToolLoopDetector != nil && !outcome.results[i].IsError {
-				if nudge := cfg.ToolLoopDetector.RecordFileMutation(provenanceRoot, tc.Name, tc.Input); nudge != "" {
-					outcome.editThrashNudges = append(outcome.editThrashNudges, nudge)
+				// Count only successful mutations. The nudge is staged here but is
+				// omitted by RunAgent when cancellation means no next LLM turn exists.
+				if cfg.ToolLoopDetector != nil && !outcome.results[i].IsError {
+					if nudge := cfg.ToolLoopDetector.RecordFileMutation(provenanceRoot, tc.Name, tc.Input); nudge != "" {
+						outcome.editThrashNudges = append(outcome.editThrashNudges, nudge)
+					}
 				}
 			}
 		}

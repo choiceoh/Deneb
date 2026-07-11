@@ -355,9 +355,13 @@ func (c *cancelOnClose) Close() error {
 // backoffDelay computes exponential backoff with jitter, respecting
 // Retry-After headers. 429 rate limits use a higher base delay floor.
 func (c *Client) backoffDelay(attempt int, err error) time.Duration {
-	// Respect Retry-After header from the API.
+	// Respect Retry-After header from the API, clamped to the configured max
+	// so a large (or hostile) header value cannot stall the retry loop.
 	var apiErr *httpretry.APIError
 	if errors.As(err, &apiErr) && apiErr.RetryAfter > 0 {
+		if c.maxDelay > 0 && apiErr.RetryAfter > c.maxDelay {
+			return c.maxDelay
+		}
 		return apiErr.RetryAfter
 	}
 
@@ -374,16 +378,26 @@ func (c *Client) backoffDelay(attempt int, err error) time.Duration {
 	return httpretry.Backoff{Base: base, Max: c.maxDelay, Jitter: 0.25}.Delay(attempt)
 }
 
-// parseRetryAfter parses the Retry-After header value as seconds.
+// parseRetryAfter parses the Retry-After header value. RFC 9110 allows both
+// delay-seconds and an HTTP-date; some providers send the date form, which the
+// previous seconds-only parse silently dropped (losing the server's explicit
+// pacing and falling back to blind exponential backoff).
 func parseRetryAfter(val string) time.Duration {
 	if val == "" {
 		return 0
 	}
-	secs, err := strconv.Atoi(val)
-	if err != nil {
-		return 0
+	if secs, err := strconv.Atoi(val); err == nil {
+		if secs < 0 {
+			return 0
+		}
+		return time.Duration(secs) * time.Second
 	}
-	return time.Duration(secs) * time.Second
+	if t, err := http.ParseTime(val); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
+	}
+	return 0
 }
 
 // isProviderPermanentRateLimit returns true for provider error payloads that

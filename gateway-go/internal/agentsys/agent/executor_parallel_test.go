@@ -21,27 +21,68 @@ func (f toolExecFunc) Execute(ctx context.Context, name string, input json.RawMe
 
 func vetAll(string) bool { return true }
 
-func TestParallelSafeTurn(t *testing.T) {
+func TestSegmentToolCalls(t *testing.T) {
 	call := func(name, input string) llm.ContentBlock {
 		return llm.ContentBlock{Type: "tool_use", Name: name, Input: json.RawMessage(input)}
 	}
 	vetWeb := func(name string) bool { return name == "web" }
+	seg := func(start, end int, parallel bool) toolCallSegment {
+		return toolCallSegment{start: start, end: end, parallel: parallel}
+	}
 
 	cases := []struct {
 		name  string
 		cfg   AgentConfig
 		calls []llm.ContentBlock
-		want  bool
+		want  []toolCallSegment
 	}{
-		{"nil vet stays sequential", AgentConfig{}, []llm.ContentBlock{call("web", `{}`), call("web", `{}`)}, false},
-		{"single call stays sequential", AgentConfig{ParallelSafeTool: vetAll}, []llm.ContentBlock{call("web", `{}`)}, false},
-		{"unvetted tool stays sequential", AgentConfig{ParallelSafeTool: vetWeb}, []llm.ContentBlock{call("web", `{}`), call("edit", `{}`)}, false},
-		{"$ref piping stays sequential", AgentConfig{ParallelSafeTool: vetAll}, []llm.ContentBlock{call("web", `{}`), call("web", `{"$ref":"tu_1"}`)}, false},
-		{"all vetted goes parallel", AgentConfig{ParallelSafeTool: vetWeb}, []llm.ContentBlock{call("web", `{"u":1}`), call("web", `{"u":2}`)}, true},
+		{
+			"nil vet stays sequential",
+			AgentConfig{},
+			[]llm.ContentBlock{call("web", `{}`), call("web", `{}`)},
+			[]toolCallSegment{seg(0, 1, false), seg(1, 2, false)},
+		},
+		{
+			"single call is one singleton",
+			AgentConfig{ParallelSafeTool: vetAll},
+			[]llm.ContentBlock{call("web", `{}`)},
+			[]toolCallSegment{seg(0, 1, false)},
+		},
+		{
+			"$ref anywhere keeps the whole turn sequential",
+			AgentConfig{ParallelSafeTool: vetAll},
+			[]llm.ContentBlock{call("web", `{}`), call("web", `{"$ref":"tu_1"}`), call("web", `{}`)},
+			[]toolCallSegment{seg(0, 1, false), seg(1, 2, false), seg(2, 3, false)},
+		},
+		{
+			"all vetted is one parallel segment",
+			AgentConfig{ParallelSafeTool: vetWeb},
+			[]llm.ContentBlock{call("web", `{"u":1}`), call("web", `{"u":2}`)},
+			[]toolCallSegment{seg(0, 2, true)},
+		},
+		{
+			"unsafe call is a barrier, safe neighbors still overlap",
+			AgentConfig{ParallelSafeTool: vetWeb},
+			[]llm.ContentBlock{call("web", `{"u":1}`), call("web", `{"u":2}`), call("edit", `{}`), call("web", `{"u":3}`), call("web", `{"u":4}`)},
+			[]toolCallSegment{seg(0, 2, true), seg(2, 3, false), seg(3, 5, true)},
+		},
+		{
+			"lone safe call between barriers stays a singleton",
+			AgentConfig{ParallelSafeTool: vetWeb},
+			[]llm.ContentBlock{call("edit", `{}`), call("web", `{}`), call("edit", `{}`)},
+			[]toolCallSegment{seg(0, 1, false), seg(1, 2, false), seg(2, 3, false)},
+		},
 	}
 	for _, tc := range cases {
-		if got := parallelSafeTurn(tc.cfg, tc.calls); got != tc.want {
-			t.Errorf("%s: parallelSafeTurn = %v, want %v", tc.name, got, tc.want)
+		got := segmentToolCalls(tc.cfg, tc.calls)
+		if len(got) != len(tc.want) {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("%s: segment[%d] = %v, want %v", tc.name, i, got[i], tc.want[i])
+			}
 		}
 	}
 }

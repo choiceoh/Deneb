@@ -34,8 +34,23 @@ func TestValidateURL(t *testing.T) {
 }
 
 func TestIsPrivateIP(t *testing.T) {
-	privateIPs := []string{"127.0.0.1", "10.0.0.1", "192.168.1.1", "172.16.0.1", "::1"}
-	publicIPs := []string{"8.8.8.8", "1.1.1.1", "203.0.113.1"}
+	privateIPs := []string{
+		"127.0.0.1", "10.0.0.1", "192.168.1.1", "172.16.0.1", "::1",
+		// CGNAT / tailnet range and other non-routable blocks.
+		"100.64.0.1", "100.100.7.9", "192.0.0.8", "198.18.0.1", "224.0.0.251", "255.255.255.255",
+		// Cloud metadata endpoints — Azure WireServer is a PUBLIC IP.
+		"169.254.169.254", "168.63.129.16", "100.100.100.200",
+		// IPv4-mapped IPv6 smuggling a private target.
+		"::ffff:192.168.1.1", "::ffff:169.254.169.254",
+		// IPv6 transition formats embedding a blocked IPv4:
+		"2002:c0a8:101::",        // 6to4 → 192.168.1.1
+		"2002:a9fe:a9fe::",       // 6to4 → 169.254.169.254 (metadata)
+		"64:ff9b::a9fe:a9fe",     // NAT64 → 169.254.169.254
+		"64:ff9b::808:808",       // NAT64 prefix blocked wholesale (even public embed)
+		"2001:0:1234::3f57:fefe", // Teredo client XOR ff → 192.168.1.1
+		"fe80::1", "fc00::1",
+	}
+	publicIPs := []string{"8.8.8.8", "1.1.1.1", "203.0.113.1", "2607:f8b0::1"}
 
 	for _, ip := range privateIPs {
 		if !isPrivateIP(net.ParseIP(ip)) {
@@ -45,6 +60,40 @@ func TestIsPrivateIP(t *testing.T) {
 	for _, ip := range publicIPs {
 		if isPrivateIP(net.ParseIP(ip)) {
 			t.Errorf("expected %s to be public", ip)
+		}
+	}
+	if !isPrivateIP(nil) {
+		t.Error("unparseable IP (nil) must be treated as dangerous")
+	}
+}
+
+// TestEmbeddedIPv4s: each transition format decodes to the exact embedded
+// IPv4, and plain addresses decode to nothing.
+func TestEmbeddedIPv4s(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string // "" = no embedding
+	}{
+		{"2002:c0a8:101::", "192.168.1.1"},         // 6to4
+		{"64:ff9b::c0a8:101", "192.168.1.1"},       // NAT64
+		{"2001:0:1234::3f57:fefe", "192.168.1.1"},  // Teredo (XOR ff: 3f^ff=c0, 57^ff=a8, fe^ff=01)
+		{"fe80::200:5efe:c0a8:101", "192.168.1.1"}, // ISATAP
+		{"2607:f8b0::1", ""},                       // plain public IPv6
+		{"8.8.8.8", ""},                            // IPv4 — no decode
+	}
+	for _, tc := range cases {
+		got := embeddedIPv4s(net.ParseIP(tc.in))
+		found := ""
+		for _, ip := range got {
+			if ip.String() == tc.want {
+				found = tc.want
+			}
+		}
+		if tc.want == "" && len(got) > 0 {
+			t.Errorf("%s: expected no embedded IPv4, got %v", tc.in, got)
+		}
+		if tc.want != "" && found == "" {
+			t.Errorf("%s: expected embedded %s, got %v", tc.in, tc.want, got)
 		}
 	}
 }

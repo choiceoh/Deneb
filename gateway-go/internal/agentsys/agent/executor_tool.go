@@ -319,21 +319,50 @@ func finishToolCall(
 	return block
 }
 
-// parallelSafeTurn reports whether one turn's tool calls may execute
-// concurrently: at least two calls, every tool vetted by cfg.ParallelSafeTool
-// (read-only set, default-deny), and no call carrying $ref piping — a later
-// call waiting on an earlier call's result is exactly the cross-tool
-// dependency that keeps the sequential path authoritative.
-func parallelSafeTurn(cfg AgentConfig, calls []llm.ContentBlock) bool {
-	if cfg.ParallelSafeTool == nil || len(calls) < 2 {
-		return false
-	}
-	for _, tc := range calls {
-		if !cfg.ParallelSafeTool(tc.Name) || bytes.Contains(tc.Input, []byte(`"$ref"`)) {
-			return false
+// toolCallSegment is a contiguous range of one turn's tool calls that executes
+// as a unit: a parallel segment holds ≥2 consecutive parallel-safe calls whose
+// executions overlap; every other call is its own sequential singleton.
+type toolCallSegment struct {
+	start, end int // [start, end) into the turn's call slice
+	parallel   bool
+}
+
+// segmentToolCalls partitions one turn's tool calls into execution segments.
+// A parallel-unsafe call is a BARRIER: it runs alone, after everything emitted
+// before it and before everything emitted after it — but consecutive read-only
+// calls on either side still overlap among themselves. (Previously a single
+// unsafe call forced the WHOLE turn serial, wasting the wall-clock win the
+// parallel path was built for on any mixed turn.) Safety is per-tool via
+// cfg.ParallelSafeTool (read-only set, default-deny). Any $ref keeps the whole
+// turn sequential: piping means a later call depends on an earlier call's
+// result, and the sequential path is authoritative for dependency order.
+func segmentToolCalls(cfg AgentConfig, calls []llm.ContentBlock) []toolCallSegment {
+	allSequential := cfg.ParallelSafeTool == nil
+	if !allSequential {
+		for _, tc := range calls {
+			if bytes.Contains(tc.Input, []byte(`"$ref"`)) {
+				allSequential = true
+				break
+			}
 		}
 	}
-	return true
+
+	var segs []toolCallSegment
+	for i := 0; i < len(calls); {
+		if allSequential || !cfg.ParallelSafeTool(calls[i].Name) {
+			segs = append(segs, toolCallSegment{start: i, end: i + 1})
+			i++
+			continue
+		}
+		j := i + 1
+		for j < len(calls) && cfg.ParallelSafeTool(calls[j].Name) {
+			j++
+		}
+		// A lone safe call gains nothing from the parallel machinery.
+		segs = append(segs, toolCallSegment{start: i, end: j, parallel: j-i >= 2})
+		i = j
+	}
+	return segs
 }
 
 type toolCallLifecycle struct {
@@ -369,9 +398,10 @@ func executeToolsParallel(
 	).results
 }
 
-// executeToolsParallelTracked runs one turn's tool calls concurrently.
-// Reached only through parallelSafeTurn (all read-only, no $ref), so
-// cross-tool side effects cannot occur. Determinism is preserved by staging:
+// executeToolsParallelTracked runs one segment's tool calls concurrently.
+// Reached only for segmentToolCalls parallel segments (all read-only, no $ref
+// in the turn), so cross-tool side effects cannot occur. Determinism is
+// preserved by staging:
 // loop-detector checks and start hooks fire in call order BEFORE dispatch,
 // executions overlap, then result recording/hooks/logs replay in call order.
 // The per-call lifecycle lets the turn-level commit path distinguish real

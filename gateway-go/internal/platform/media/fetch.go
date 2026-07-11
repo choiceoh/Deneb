@@ -185,7 +185,15 @@ func init() {
 	cidrs := []string{
 		"127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12",
 		"192.168.0.0/16", "169.254.0.0/16", "0.0.0.0/8",
-		"::1/128", "fc00::/7", "fe80::/10",
+		// CGNAT / Tailscale tailnet range: every node on this fleet's tailnet
+		// lives here — a prompt-directed fetch must not reach sibling nodes.
+		"100.64.0.0/10",
+		// IETF protocol assignments, benchmarking, multicast, reserved.
+		"192.0.0.0/24", "198.18.0.0/15", "224.0.0.0/4", "240.0.0.0/4",
+		"::/128", "::1/128", "fc00::/7", "fe80::/10",
+		// NAT64 well-known prefix: the embedded IPv4 is additionally decoded
+		// in embeddedIPv4s, but the whole prefix is internal-gateway routed.
+		"64:ff9b::/96",
 	}
 	for _, cidr := range cidrs {
 		_, ipNet, _ := net.ParseCIDR(cidr)
@@ -193,6 +201,19 @@ func init() {
 			privateNetworks = append(privateNetworks, ipNet)
 		}
 	}
+}
+
+// metadataIPs are cloud metadata/credential endpoints blocked unconditionally,
+// even where the private-range check would pass: Azure's WireServer is a
+// PUBLIC IP, so no range list catches it. AWS/GCP metadata (169.254.169.254,
+// 169.254.170.2) are already inside 169.254.0.0/16 but listed for clarity in
+// the embedded-IPv4 path, where an attacker can smuggle them inside an IPv6
+// literal that no IPv4 range check sees.
+var metadataIPs = map[string]bool{
+	"169.254.169.254": true, // AWS IMDS / GCP / Oracle / OpenStack
+	"169.254.170.2":   true, // AWS ECS task credentials
+	"168.63.129.16":   true, // Azure WireServer (public IP!)
+	"100.100.100.200": true, // Alibaba Cloud metadata
 }
 
 func validateURL(rawURL string) error {
@@ -218,12 +239,53 @@ func validateURL(rawURL string) error {
 }
 
 func isPrivateIP(ip net.IP) bool {
-	for _, cidr := range privateNetworks {
-		if cidr.Contains(ip) {
+	if ip == nil {
+		// Unparseable input is dangerous, not safe.
+		return true
+	}
+	candidates := append([]net.IP{ip}, embeddedIPv4s(ip)...)
+	for _, c := range candidates {
+		if metadataIPs[c.String()] {
 			return true
+		}
+		for _, cidr := range privateNetworks {
+			if cidr.Contains(c) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// embeddedIPv4s decodes the IPv4 address embedded in IPv6 transition-format
+// literals. An attacker can smuggle a blocked IPv4 (e.g. a link-local metadata
+// endpoint or a LAN host) inside a 6to4/NAT64/Teredo/ISATAP IPv6 literal that
+// no IPv4 range check sees — each standardized embedding position is decoded
+// and validated as if the IPv4 had been given directly. (IPv4-mapped
+// ::ffff:a.b.c.d needs no decode: net.IPNet.Contains already normalizes it.)
+func embeddedIPv4s(ip net.IP) []net.IP {
+	v6 := ip.To16()
+	if v6 == nil || ip.To4() != nil {
+		return nil
+	}
+	var out []net.IP
+	// 6to4 (RFC 3056): 2002:AABB:CCDD::/16 embeds A.B.C.D at bytes 2-6.
+	if v6[0] == 0x20 && v6[1] == 0x02 {
+		out = append(out, net.IPv4(v6[2], v6[3], v6[4], v6[5]))
+	}
+	// NAT64 well-known prefix (RFC 6052): 64:ff9b::/96, IPv4 in bytes 12-16.
+	if v6[0] == 0x00 && v6[1] == 0x64 && v6[2] == 0xff && v6[3] == 0x9b {
+		out = append(out, net.IPv4(v6[12], v6[13], v6[14], v6[15]))
+	}
+	// Teredo (RFC 4380): 2001:0000::/32, client IPv4 in bytes 12-16 XOR 0xff.
+	if v6[0] == 0x20 && v6[1] == 0x01 && v6[2] == 0x00 && v6[3] == 0x00 {
+		out = append(out, net.IPv4(v6[12]^0xff, v6[13]^0xff, v6[14]^0xff, v6[15]^0xff))
+	}
+	// ISATAP (RFC 5214): interface id ::0[2]00:5efe:a.b.c.d, IPv4 in bytes 12-16.
+	if (v6[8] == 0x00 || v6[8] == 0x02) && v6[9] == 0x00 && v6[10] == 0x5e && v6[11] == 0xfe {
+		out = append(out, net.IPv4(v6[12], v6[13], v6[14], v6[15]))
+	}
+	return out
 }
 
 // SSRFSafeDialer returns a DialContext that validates resolved IPs.
