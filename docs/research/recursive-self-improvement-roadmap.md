@@ -21,8 +21,8 @@ The genesis subsystem (`gateway-go/internal/domain/skills/genesis/`, rules in
 `docs/agent-rules/self-improvement.md`) already implements the fast loop and
 most of the measurement substrate the papers assume:
 
-- **Fast loop**: `EvolveUnderperformers` (6h periodic) + mid-session `Nudger`
-  + heartbeat idle-review backstop (#3427/#3428) + K-candidate generation with
+- **Fast loop**: `EvolveUnderperformers` (6h periodic) + mid-session `Nudger` +
+  heartbeat idle-review backstop (#3427/#3428) + K-candidate generation with
   judge selection (`evolver_judge_teacher.go`) + teacher rewrite escalation.
 - **Gates**: deterministic admissibility (`evolver_skill_validation.go`, pure),
   independent judge, held-out selection margin, post-evolve rollback watch
