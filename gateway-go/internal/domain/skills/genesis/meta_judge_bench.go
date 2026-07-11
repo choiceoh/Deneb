@@ -23,7 +23,8 @@ import (
 
 const (
 	// judgeBenchMaxPairs bounds weekly bench cost: each pair costs two judge
-	// calls (incumbent + proposal).
+	// calls (incumbent + proposal). DENEB_META_BENCH_SCALE multiplies both
+	// bench corpora (judge pairs + shadow scenarios) for calibration.
 	judgeBenchMaxPairs = 6
 	// judgeBenchMinPairs below this the bench is too small to mean anything —
 	// the evaluator-epoch proposal is rejected as unbenchable.
