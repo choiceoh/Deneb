@@ -3,7 +3,7 @@
 > **출처**: Zhiwei Li, Yong Hu, *"SkillHone: A Harness for Continual Agent Skill Evolution Through Persistent Decision History"* ([arXiv:2606.08671](https://arxiv.org/abs/2606.08671), [HF papers](https://huggingface.co/papers/2606.08671)). arxiv HTML 직접 fetch 성공 — 본문 기반 검토.
 > **방법**: 논문 핵심 추출 → Deneb genesis 진화 루프(`gateway-go/internal/domain/skills/genesis/`)와 대조 → 채택/스킵 판정. 코드 대조는 탐색 에이전트 + 핵심 경로 직접 재확인.
 > **일시**: 2026-07-11
-> **한 줄 결론**: SkillHone 의 코어 — **결정 히스토리 지속화** h_t=(진단, 수정, 증거, 결과)를 남기고 차기 최적화 세션이 이를 조회해 중복/재실패 편집을 회피 — 는 Deneb genesis 가 **이미 세 겹으로 구현**하고 있다(lifecycle log+`HarnessEditAudit` · rejected-edit 버퍼 · optimizer memory → 전부 다음 evolve 프롬프트에 재주입). 논문의 ablation(히스토리 제거 -13.4pt, 역할분리 제거의 ~2배)은 이 기존 투자의 정량 뒷받침이다. 남는 실질 검토거리는 **redaction 비대칭 1건**: SkillHone 은 최적화자가 probe 정답·validator 를 *못 보게* 가리는데, Deneb 는 producer 프롬프트에 "held-out" 케이스의 oracle(요구 substring·tool-call)을 최신 5건까지 그대로 노출한다 — 그 5건에 한해 선택 게이트가 game 가능. 케이스 코퍼스가 자랄 P3 진입 시 가시/블라인드 분할을 함께 설계할 것. 신규 대규모 채택은 없음.
+> **한 줄 결론**: SkillHone 의 코어 — **결정 히스토리 지속화** h_t=(진단, 수정, 증거, 결과)를 남기고 차기 최적화 세션이 이를 조회해 중복/재실패 편집을 회피 — 는 Deneb genesis 가 **이미 세 겹으로 구현**하고 있다(lifecycle log+`HarnessEditAudit` · rejected-edit 버퍼 · optimizer memory → 전부 다음 evolve 프롬프트에 재주입). 논문의 ablation(히스토리 제거 -13.4pt, 역할분리 제거의 ~2배)은 이 기존 투자의 정량 뒷받침이다. 실질 격차는 **redaction 비대칭 1건**이었다: SkillHone 은 최적화자가 probe 정답·validator 를 *못 보게* 가리는데, Deneb 는 producer 프롬프트에 "held-out" 케이스의 oracle(요구 substring·tool-call)을 최신 5건까지 그대로 노출했다 — 그 케이스들에 한해 선택 게이트가 game 가능. 커버리지 ~0 인 지금이 행동 중립 롤아웃 적기라 **가시 계약 풀/블라인드 held-out 풀 분할을 검토 직후 선제 구현**했다 (§3-1). 그 외 신규 채택은 없음.
 
 ---
 
@@ -37,7 +37,7 @@ Deneb genesis 는 SkillHone 의 (1) 결정 히스토리를 이미 갖추고 있�
 | **부분-롤백형 이터레이션** (문제 부분만 타깃, 유용 편집 보존) | K-후보 생성+judge 선택, post-evolve 롤백 워치(`evolve_confirmed`/`evolve_rolled_back`), 롤백 사유가 다음 라운드 AvoidDirections 로 환류 | `genesis/evolver_judge_teacher.go`, `tracker_lifecycle.go` | ✅ **개념적 등가** |
 | **GitHub-스타일 이슈/PR 원장** | JSONL append-only 로그 + `/health` `EvolutionHealthSummary` — 형식은 다르나 "감사 가능한 원장" 성질 동일 | `genesis/tracker.go` (데이터 디렉토리의 `*.jsonl`) | ✅ **다르게 해결** |
 | **역할 분리: 평가자는 스킬 수정 불가** | `SkillValidationEngine` 은 채점만 함(구조적으로 수정 경로 없음); producer≠judge 모델 강제(자기선호 편향 회피, arXiv:2508.02994 인용) + teacher/judge/replay-executor 역할별 모델 | `genesis/validation_engine.go`, `evolver_judge_teacher.go` (`pickCandidateJudge`) | ✅ **이미 구현** |
-| **역할 분리: 최적화자가 probe 정답을 못 봄 (redaction)** | **없음** — producer 프롬프트가 "Held-out validation/replay cases" 섹션에 최신 5케이스의 required/forbidden substring·heading·tool-call(=oracle 전체)을 노출하고 "검증 계약이니 충족하라"고 지시. judge·teacher 도 동일 노출. 유일한 블라인드는 replay executor(*"executor 는 정답을 못 보고 스킬 텍스트만으로 plan 도출"*) | `genesis/evolver_prompt_format.go` (`formatValidationCasesForPrompt`), `evolver_skill_validation.go` (`validationCasesForPrompt`, limit 5) vs `validation_executor.go` (블라인드) | 🟡 **격차** (아래 §3) |
+| **역할 분리: 최적화자가 probe 정답을 못 봄 (redaction)** | **없음** — producer 프롬프트가 "Held-out validation/replay cases" 섹션에 최신 5케이스의 required/forbidden substring·heading·tool-call(=oracle 전체)을 노출하고 "검증 계약이니 충족하라"고 지시. judge·teacher 도 동일 노출. 유일한 블라인드는 replay executor(*"executor 는 정답을 못 보고 스킬 텍스트만으로 plan 도출"*) | `genesis/evolver_prompt_format.go` (`formatValidationCasesForPrompt`), `evolver_skill_validation.go` (`validationCasesForPrompt`, limit 5) vs `validation_executor.go` (블라인드) | 🟡 **격차였음 → 검토 직후 풀 분할로 해소** (아래 §3-1) |
 | **평가자산 별도 레포 격리** (암기 방지) | 파일은 분리(`skill_validation_cases.jsonl` vs 스킬 디렉토리의 SKILL.md)돼 있으나 위 행처럼 내용이 producer 에 재노출 → 물리 분리 ≠ 정보 격리 | `genesis/tracker.go`, `tracker_validation_cases.go` | 🟡 **부분** |
 | **소수 practice probe 로 큰 이득** (probe 20개→+40pt) | 케이스 채굴 기계는 존재(리뷰 세션·세션 backfill·per-use 자동 캡처+약케이스 가드)하나 **프로덕션 커버리지가 사실상 0** — 코드 주석이 자인: behavioral held-out 게이트가 대부분 스킬에서 inert, "NO skill has validation cases" 경로가 상시 | `genesis/tracker_validation_cases.go`, `gateway-go/internal/runtime/server/validation_backfill_task.go`, `genesis/evolver_candidate_eval.go` | 🟡 **알려진 약점 재확인** |
 | **개발 컨트롤러/실행 백본 모델 분리** + 소형→대형 스킬 이전 | producer=코딩 모델(glm 계열)·judge=main·replay=lightweight 로 이미 분리 배치 | `genesis/evolver.go`, `docs/agent-rules/model-roles.md` | ✅ **이미 구현** |
@@ -60,7 +60,7 @@ Deneb genesis 는 SkillHone 의 (1) 결정 히스토리를 이미 갖추고 있�
 - post-evolve 롤백 워치가 실사용 회귀를 잡는 최종 백스톱.
 - 무엇보다 프로덕션 케이스 커버리지가 ~0 이라 이 격차는 **현재 비활성**이다.
 
-**판정**: 지금 코드를 고칠 사안은 아니고, **P3(verifier 공진화)로 케이스 코퍼스가 실제로 자라기 시작할 때 함께 설계할 항목**. 그 시점의 설계 옵션: (a) 케이스를 **가시 계약 서브셋**(producer 에 보여주는 소수)과 **블라인드 held-out 서브셋**(게이트 전용)으로 분할 — SkillHone 의 레포 분리를 파일 하나 안의 필드/샘플링 분할로 축소 구현; (b) producer 에는 oracle 대신 **redacted 실패 요약**(어떤 실패 모드가 몇 건, 어느 섹션이 문제)만 주기 — SkillHone 의 redacted report 와 동형. (a)가 기존 구조 변경이 작다. 이 항목을 RSI 로드맵 P3 의 설계 체크리스트에 얹는 것이 이 논문의 유일한 직접 액션이다.
+**판정 → 채택(선제 구현)**: 원래 P3 착수 시 설계할 항목으로 분류했으나, 커버리지가 ~0 인 지금이 **행동 중립 롤아웃의 적기**(코퍼스가 자란 뒤에는 이미 producer 에 노출된 케이스를 소급 격리할 수 없다)라서 옵션 (a)를 선제 구현했다: 케이스의 기존 dedupe 정체성 해시로 **가시 계약 풀(~1/3) / 블라인드 held-out 풀(~2/3)** 을 결정적으로 분할 (`validationCaseBlindHeldOut`, `tracker_validation_cases.go`). producer·judge·teacher 프롬프트는 가시 풀만(`validationCasesForPrompt`), 선택/행동 게이트는 블라인드 풀만(블라인드 풀이 비면 전체 폴백 — `heldOutCases`, `validation_engine.go`), 커버리지 판정은 양쪽 풀 전체(`validationCasesForCoverage`). 케이스는 해시가 결정적이라 풀을 절대 이동하지 않는다. 대안 (b)(redacted 실패 요약)는 여전히 P3 확장 옵션으로 남는다 — 기각 사유가 rejected-edit 버퍼로 환류되는 기존 루프가 이미 redacted report 의 축소판이다.
 
 ### 3-2. Probe 코퍼스 우선순위 근거 강화
 
@@ -83,13 +83,13 @@ Deneb genesis 는 SkillHone 의 (1) 결정 히스토리를 이미 갖추고 있�
 | 결정 히스토리 지속화 (h_t 축적+차기 조회) — SkillHone 코어 | ✅ **이미 구현** | lifecycle log+audit · rejected 버퍼 · optimizer memory · 저수율 lever → evolve 프롬프트 재주입. ablation -13.4pt 는 기존 설계의 외부 정량 근거 |
 | GitHub-스타일 원장 | ✅ **다르게 해결** | JSONL append-only + `/health` 요약 — 원장 성질 동일, 형식 전환 무익 |
 | 역할분리: 평가자 수정불가·producer≠judge·개발/실행 모델 분리 | ✅ **이미 구현** | `pickCandidateJudge` 자기선호 회피, 역할별 모델, 채점 전용 엔진 |
-| Redaction: 최적화자에게 oracle 은닉 | 🟡 **P3 설계 체크리스트에 편입** | producer 가 게이트 채점 기준(최신 5케이스 oracle)을 봄 — 커버리지 0 이라 현재 비활성, 코퍼스 성장 시 가시/블라인드 분할 설계 |
-| 평가자산 격리 저장소 | 🟡 **위와 동일 사안** | 파일 분리는 있음 — 정보 격리만 P3 에서 |
+| Redaction: 최적화자에게 oracle 은닉 | ✅ **채택 — 가시/블라인드 풀 분할 구현** | 검토 직후 선제 구현 (§3-1): 프롬프트=가시 풀, 게이트=블라인드 풀(+빈 풀 폴백), 커버리지=전체. 커버리지 0 인 지금이 행동 중립 롤아웃 적기 |
+| 평가자산 격리 저장소 | ✅ **위 분할로 정보 격리 확보** | 파일 분리 + 블라인드 풀은 최적화 측 프롬프트에 불노출 |
 | probe 소수 확보의 지렛대 (20개→+40pt) | 🟡 **우선순위 근거 강화** | 알려진 커버리지 약점의 해소 가치를 정량 뒷받침 — 기존 backfill/캡처 레인 가동률 문제 |
 | 단일-스킬 고립 (논문 한계) | ✅ **Deneb 가 앞섬** | cross-skill regression sweep 기존 |
-| 신규 코드 채택 | ⛔ **지금은 없음** | 코어 기구현 + 격차는 현재 비활성. P3 착수 시 §3-1 반영 |
+| 신규 코드 채택 | ✅ **1건 — 풀 분할** | §3-1 가시/블라인드 분할을 행동 중립으로 선제 구현. 그 외 코어는 기구현이라 추가 채택 불요 |
 
-**한 줄**: SkillHone 은 Deneb genesis 가 이미 내린 설계 결정(결정 히스토리를 남기고 재주입하라)에 정량 근거를 주는 논문이다. 채택거리는 새 기계가 아니라 **P3 때 케이스 코퍼스의 가시/블라인드 분할 1건**과 **케이스 커버리지 확대의 우선순위 상향 근거**뿐이다.
+**한 줄**: SkillHone 은 Deneb genesis 가 이미 내린 설계 결정(결정 히스토리를 남기고 재주입하라)에 정량 근거를 주는 논문이다. 채택은 **케이스 코퍼스의 가시/블라인드 풀 분할 1건**(커버리지 0 인 지금 행동 중립으로 선제 적용)이고, 남는 것은 **케이스 커버리지 확대의 우선순위 상향 근거**다.
 
 ---
 

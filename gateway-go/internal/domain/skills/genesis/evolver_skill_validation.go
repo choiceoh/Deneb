@@ -478,7 +478,7 @@ func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candida
 	// covered means a REAL regression check is active: at least one case the
 	// held-out gate can score (hasAssertions). Mere case existence let an
 	// assertion-less corpus grant the relaxed caps while the gate failed open.
-	covered := hasScorableValidationCase(e.validationCasesForPrompt(skillName))
+	covered := hasScorableValidationCase(e.validationCasesForCoverage(skillName))
 	if ok, reason := validateHermesEvolutionGuardrails(originalContent, candidateBody, covered); !ok {
 		return false, reason
 	}
@@ -552,14 +552,36 @@ func hasScorableValidationCase(cases []SkillValidationCaseRecord) bool {
 	return false
 }
 
+// validationCasesForPrompt returns recent VISIBLE-pool cases only — what the
+// producer/judge/teacher prompts may show as the behavior contract. Blind
+// held-out cases never reach an optimization-side prompt, so the gates keep
+// scoring assertions the candidate was never shown (gate-echo prevention).
 func (e *Evolver) validationCasesForPrompt(skillName string) []SkillValidationCaseRecord {
+	if e == nil || e.tracker == nil {
+		return nil
+	}
+	cases, err := e.tracker.RecentSkillValidationCasesPool(skillName, skillEvolutionPromptCaseLimit, false)
+	if err != nil {
+		if e.logger != nil {
+			e.logger.Warn("evolver: validation cases unavailable for prompt",
+				"skill", skillName, "error", err)
+		}
+		return nil
+	}
+	return cases
+}
+
+// validationCasesForCoverage spans BOTH pools: coverage ("does a scorable case
+// exist for this skill?") must count blind cases the prompt deliberately hides,
+// otherwise a blind-only skill would wrongly take the uncovered relaxed caps.
+func (e *Evolver) validationCasesForCoverage(skillName string) []SkillValidationCaseRecord {
 	if e == nil || e.tracker == nil {
 		return nil
 	}
 	cases, err := e.tracker.RecentSkillValidationCases(skillName, skillEvolutionPromptCaseLimit)
 	if err != nil {
 		if e.logger != nil {
-			e.logger.Warn("evolver: validation cases unavailable for prompt",
+			e.logger.Warn("evolver: validation cases unavailable for coverage",
 				"skill", skillName, "error", err)
 		}
 		return nil

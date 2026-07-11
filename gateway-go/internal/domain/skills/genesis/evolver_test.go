@@ -632,7 +632,7 @@ func TestFormatValidationCasesForPromptIncludesReplayTrace(t *testing.T) {
 		},
 	}})
 	for _, want := range []string{
-		"Held-out validation/replay cases",
+		"Validation/replay contract cases",
 		"real-server-trace",
 		"required actions",
 		"ssh srv1",
@@ -645,7 +645,7 @@ func TestFormatValidationCasesForPromptIncludesReplayTrace(t *testing.T) {
 			t.Fatalf("formatted validation cases missing %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(formatValidationCasesForPrompt(nil), "Held-out validation") {
+	if strings.Contains(formatValidationCasesForPrompt(nil), "contract cases") {
 		t.Fatal("empty validation cases should not add prompt text")
 	}
 }
@@ -722,9 +722,21 @@ func TestEvolveSkillPromptIncludesValidationCases(t *testing.T) {
 		t.Fatal(err)
 	}
 	tracker := newTestTracker(t)
+	// Only visible-pool cases reach the evolve prompt; probe for an ID that
+	// lands visible so the assertion below targets what the prompt may show.
+	caseID := ""
+	for i := 0; i < 256 && caseID == ""; i++ {
+		id := fmt.Sprintf("real-server-trace-%d", i)
+		if !validationCaseBlindHeldOut(SkillValidationCaseRecord{SkillName: "srv1-ops", ID: id}) {
+			caseID = id
+		}
+	}
+	if caseID == "" {
+		t.Fatal("could not find a visible-pool case ID")
+	}
 	if err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
 		SkillName:   "srv1-ops",
-		ID:          "real-server-trace",
+		ID:          caseID,
 		Description: "preserve srv1 inspection",
 		Replay: SkillReplayCaseRecord{
 			RequiredActions: []string{"ssh srv1"},
@@ -788,8 +800,8 @@ func TestEvolveSkillPromptIncludesValidationCases(t *testing.T) {
 		t.Fatalf("expected skip response to avoid evolve, got %+v", result)
 	}
 	for _, want := range []string{
-		"Held-out validation/replay cases",
-		"real-server-trace",
+		"Validation/replay contract cases",
+		caseID,
 		"ssh srv1 systemctl --user status deneb-gateway.service",
 		"Active: active (running)",
 		"Self-Harness failure evidence bundle",

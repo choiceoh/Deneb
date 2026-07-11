@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -124,6 +126,33 @@ func (t *Tracker) RecordSkillValidationCase(record SkillValidationCaseRecord) er
 // replay case just because the background reviewer recorded the same session
 // more than once.
 func (t *Tracker) RecentSkillValidationCases(skillName string, limit int) ([]SkillValidationCaseRecord, error) {
+	return t.recentValidationCases(skillName, limit, nil)
+}
+
+// validationCaseBlindHeldOut deterministically partitions cases into a visible
+// "contract" pool (may be shown to producer/judge/teacher prompts as the
+// behavior contract to preserve) and a blind held-out pool (scored by the
+// selection/behavior gates only), so a candidate cannot satisfy the gate by
+// echoing assertions it was shown (SkillHone-style split,
+// docs/research/skillhone-2606.08671.md §3-1). Hashing the stable dedupe
+// identity means a case never migrates pools across runs. Roughly 2/3 of cases
+// land blind: gate integrity is worth more than contract visibility.
+func validationCaseBlindHeldOut(rec SkillValidationCaseRecord) bool {
+	h := fnv.New32a()
+	_, _ = io.WriteString(h, validationCaseDedupeKey(rec))
+	return h.Sum32()%3 != 0
+}
+
+// RecentSkillValidationCasesPool is RecentSkillValidationCases restricted to
+// one partition pool: blind=true → held-out gate pool, blind=false → visible
+// contract pool.
+func (t *Tracker) RecentSkillValidationCasesPool(skillName string, limit int, blind bool) ([]SkillValidationCaseRecord, error) {
+	return t.recentValidationCases(skillName, limit, func(rec SkillValidationCaseRecord) bool {
+		return validationCaseBlindHeldOut(rec) == blind
+	})
+}
+
+func (t *Tracker) recentValidationCases(skillName string, limit int, keep func(SkillValidationCaseRecord) bool) ([]SkillValidationCaseRecord, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -140,6 +169,9 @@ func (t *Tracker) RecentSkillValidationCases(skillName string, limit int) ([]Ski
 	for i := len(entries) - 1; i >= 0 && len(out) < limit; i-- {
 		rec := entries[i]
 		if filter != "" && rec.SkillName != filter {
+			continue
+		}
+		if keep != nil && !keep(rec) {
 			continue
 		}
 		key := validationCaseDedupeKey(rec)
