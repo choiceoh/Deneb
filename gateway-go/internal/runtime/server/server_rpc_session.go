@@ -627,6 +627,10 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 				}
 				return tracker.FailureEvidenceClusters(limit)
 			},
+			// Idle review backstop: fires a fenced Propus review of the most
+			// recent real session when none has completed for hours (user
+			// away / deploy churn) — see heartbeat_idle_review.go.
+			idleSkillReview: s.newIdleSkillReviewLane(),
 		})
 
 		// Register the goal loop (Ralph loop): advances active standing goals

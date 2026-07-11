@@ -290,6 +290,30 @@ func (n *Nudger) fire(parent context.Context, sessionKey string, snapshot Sessio
 	})
 }
 
+// RunStaleReview fires one fenced review outside the per-session tool-call
+// cadence — the idle backstop for stretches where no real user turn crosses
+// the nudge threshold (user away for a day, deploy churn cancelling forks),
+// which otherwise starves the Propus review loop entirely (cron/system
+// sessions never nudge by design). Reuses the same evaluate gate, reviewer,
+// and liveness recording as a threshold fire, and the per-session inflight
+// guard still applies so a session already under review is never double-run.
+// Synchronous — the caller (heartbeat idle-review lane) owns pacing; the run
+// itself is bounded by nudgeGenerationTimeout like any other fire.
+func (n *Nudger) RunStaleReview(sessionKey string, snapshot SessionContext) (bool, error) {
+	if !n.Enabled() || n.reviewer == nil || sessionKey == "" {
+		return false, nil
+	}
+	n.mu.Lock()
+	if _, busy := n.inflight[sessionKey]; busy {
+		n.mu.Unlock()
+		return false, nil
+	}
+	n.inflight[sessionKey] = time.Now()
+	n.mu.Unlock()
+	defer n.clearInflight(sessionKey)
+	return n.runReviewOnce(sessionKey, snapshot)
+}
+
 func (n *Nudger) runReviewOnce(sessionKey string, snapshot SessionContext) (bool, error) {
 	if !n.Enabled() || n.reviewer == nil {
 		return false, nil
