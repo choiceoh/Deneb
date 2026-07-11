@@ -32,6 +32,10 @@ type evaluatedCandidate struct {
 	// prov is the evaluator-attribution certificate accumulated while the
 	// candidate ran the gates (RSI P1.5) — recorded with the lifecycle entry.
 	prov EvolveProvenance
+	// reproduction is the producer-authored defect-reproduction case, adopted
+	// at commit only after the deterministic oracle confirms it (fails on the
+	// original body, passes on the committed body).
+	reproduction *SkillValidationCaseRecord
 }
 
 // evaluateCandidateText parses one producer/teacher response and runs the full
@@ -161,13 +165,27 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 	// first-committable order, preserving single-candidate behavior.
 	margin := e.heldOutSelectionMargin(entry.Skill.Name, originalContent, candidateBody)
 	prov.HeldOutMargin = &margin
+	var reproduction *SkillValidationCaseRecord
+	if rc := resp.Changes.ReproductionCase; rc != nil {
+		reproduction = &SkillValidationCaseRecord{
+			SkillName:           entry.Skill.Name,
+			ID:                  fmt.Sprintf("repro-%s-%s", entry.Skill.Name, newVersion),
+			Description:         strings.TrimSpace(rc.Description),
+			RequiredSubstrings:  rc.RequiredSubstrings,
+			ForbiddenSubstrings: rc.ForbiddenSubstrings,
+			RequiredHeadings:    rc.RequiredHeadings,
+			Source:              "reproduction-oracle",
+			FrontierTier:        "hard",
+		}
+	}
 	return evaluatedCandidate{
-		body:        candidateBody,
-		newVersion:  newVersion,
-		description: committedDescription,
-		audit:       committedAudit,
-		margin:      margin,
-		prov:        prov,
+		body:         candidateBody,
+		newVersion:   newVersion,
+		description:  committedDescription,
+		audit:        committedAudit,
+		margin:       margin,
+		prov:         prov,
+		reproduction: reproduction,
 	}, nil
 }
 
@@ -225,6 +243,13 @@ func (e *Evolver) commitEvaluatedCandidate(entry *skills.SkillEntry, originalCon
 		}
 	}
 
+	// Reproduction oracle (SEA Alg 8, RSI P1.5): adopt the producer-authored
+	// defect-reproduction case only after deterministically confirming it fails
+	// on the original body and passes on the committed body — solving the
+	// zero-validation-case cold start exactly where evolves happen. Best-effort
+	// and non-blocking; the weak-case filter still applies on record.
+	e.adoptReproductionCase(entry.Skill.Name, originalContent, candidateBody, eval.reproduction)
+
 	// Cross-skill regression sweep (#4). Replays the just-evolved skill's held-out
 	// assertions against its most similar neighbors and surfaces any neighbor that
 	// now violates the new forbidden/required contract. Best-effort and
@@ -238,6 +263,41 @@ func (e *Evolver) commitEvaluatedCandidate(entry *skills.SkillEntry, originalCon
 		Description: committedDescription,
 		Audit:       committedAudit.ptr(),
 	}, nil
+}
+
+// adoptReproductionCase runs the deterministic reproduction oracle: the case is
+// recorded as a validation case only when the original body FAILS it and the
+// committed candidate body PASSES it. Anything else — vacuous case, passes on
+// the original (non-discriminative), fails on the candidate (mis-authored) — is
+// dropped with a debug log. LLM produces, Go verifies.
+func (e *Evolver) adoptReproductionCase(skillName, originalContent, candidateBody string, rc *SkillValidationCaseRecord) {
+	if rc == nil || e.tracker == nil {
+		return
+	}
+	cases := []SkillValidationCaseRecord{*rc}
+	origScore := scoreSkillValidationCases(skillBodyOnly(originalContent), cases)
+	candScore := scoreSkillValidationCases(candidateBody, cases)
+	if origScore.Total == 0 {
+		e.logger.Debug("evolver: reproduction case vacuous, dropped", "skill", skillName)
+		return
+	}
+	if origScore.Passed == origScore.Total {
+		e.logger.Debug("evolver: reproduction case passes on original (non-discriminative), dropped",
+			"skill", skillName)
+		return
+	}
+	if candScore.Passed != candScore.Total {
+		e.logger.Debug("evolver: reproduction case fails on candidate (mis-authored), dropped",
+			"skill", skillName)
+		return
+	}
+	if err := e.tracker.RecordSkillValidationCase(*rc); err != nil {
+		e.logger.Debug("evolver: reproduction case rejected by tracker filter",
+			"skill", skillName, "error", err)
+		return
+	}
+	e.logger.Info("evolver: reproduction case adopted (fails-on-original, passes-on-candidate confirmed)",
+		"skill", skillName, "case", rc.ID)
 }
 
 func (e *Evolver) primaryModel() (*llm.Client, string) {

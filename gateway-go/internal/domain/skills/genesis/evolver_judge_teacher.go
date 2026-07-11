@@ -154,6 +154,16 @@ type evolveResp struct {
 		ExpectedBehaviorChange string `json:"expected_behavior_change,omitempty"`
 		RegressionRisk         string `json:"regression_risk,omitempty"`
 		Body                   string `json:"body"`
+		// ReproductionCase is the producer-authored case demonstrating the fixed
+		// defect: original body FAILS it, candidate body PASSES it. Adopted only
+		// after the deterministic gate confirms both directions (SEA Alg 8 —
+		// reproduction oracle, RSI P1.5).
+		ReproductionCase *struct {
+			Description         string   `json:"description,omitempty"`
+			RequiredSubstrings  []string `json:"required_substrings,omitempty"`
+			ForbiddenSubstrings []string `json:"forbidden_substrings,omitempty"`
+			RequiredHeadings    []string `json:"required_headings,omitempty"`
+		} `json:"reproduction_case,omitempty"`
 	} `json:"changes,omitempty"`
 }
 
@@ -237,5 +247,15 @@ type teacherRewriteResp struct {
 		ExpectedBehaviorChange string `json:"expected_behavior_change,omitempty"`
 		RegressionRisk         string `json:"regression_risk,omitempty"`
 		Body                   string `json:"body"`
+		// ReproductionCase is the producer-authored case demonstrating the fixed
+		// defect: original body FAILS it, candidate body PASSES it. Adopted only
+		// after the deterministic gate confirms both directions (SEA Alg 8 —
+		// reproduction oracle, RSI P1.5).
+		ReproductionCase *struct {
+			Description         string   `json:"description,omitempty"`
+			RequiredSubstrings  []string `json:"required_substrings,omitempty"`
+			ForbiddenSubstrings []string `json:"forbidden_substrings,omitempty"`
+			RequiredHeadings    []string `json:"required_headings,omitempty"`
+		} `json:"reproduction_case,omitempty"`
 	} `json:"changes,omitempty"`
 }
