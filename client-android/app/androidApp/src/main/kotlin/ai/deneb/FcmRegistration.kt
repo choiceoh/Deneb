@@ -2,6 +2,7 @@ package ai.deneb
 
 import ai.deneb.data.DataRepository
 import ai.deneb.deneb.DenebGatewayClient
+import ai.deneb.deneb.registerPushToken
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

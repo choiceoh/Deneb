@@ -28,6 +28,11 @@ import deneb.composeapp.generated.resources.ic_service_qwen
 import deneb.composeapp.generated.resources.ic_service_step
 import deneb.composeapp.generated.resources.ic_service_xai
 import deneb.composeapp.generated.resources.ic_service_zai
+import io.ktor.client.call.body
+import io.ktor.client.plugins.timeout
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -390,4 +395,81 @@ suspend fun DenebGatewayClient.updateCron(
     )
     if (err == null) refreshScheduledTasks()
     return err
+}
+
+// --- moved from DenebGatewayClient.kt (stage 3, logic unchanged): client
+// status hello, update manifest check, push token register/unregister. ---
+
+suspend fun DenebGatewayClient.refreshClientStatus(): ClientStatus? {
+    val payload = callRpc<ClientHelloPayload>("miniapp.client.hello", buildJsonObject {}) ?: run {
+        _clientStatus.value = null
+        return null
+    }
+    val status = ClientStatus(
+        version = payload.version,
+        nativeApiVersion = payload.nativeApiVersion,
+        model = payload.model,
+        capabilities = payload.capabilities,
+        endpoints = payload.endpoints,
+        timestampMs = payload.tsMs,
+    )
+    _clientStatus.value = status
+    return status
+}
+
+/**
+ * Check the gateway-served update manifest. The gateway exposes the APK +
+ * metadata on its own port (the same base URL used for chat), so this works
+ * over the cloudflare tunnel — unlike the old :19010 side-server the tunnel
+ * never routed. Returns non-null only when a strictly newer build than the
+ * compiled-in [DENEB_VERSION_CODE] is published.
+ */
+suspend fun DenebGatewayClient.checkUpdate(): UpdateInfo? = runCatching {
+    val base = gatewayUrl.trim().removeSuffix("/")
+    if (base.isEmpty() || clientToken.isEmpty()) return@runCatching null
+    val m = http.get("$base/api/v1/app/update/manifest") {
+        header(DenebGatewayClient.CLIENT_TOKEN_HEADER, clientToken)
+        // Bounded timeout: a missing or blocked gateway must fail fast
+        // instead of hanging the "check for update" spinner forever.
+        timeout {
+            requestTimeoutMillis = 10_000
+            connectTimeoutMillis = 6_000
+        }
+    }.body<UpdateManifest>()
+    if (m.code > DENEB_VERSION_CODE && m.file.isNotBlank()) {
+        // The browser opening this link can't set a header, so the client
+        // token rides in the query string (same as the Gmail attachment route).
+        val apk = "$base/api/v1/app/update/download" +
+            "?file=${m.file.encodeURLParameter()}&clientToken=${clientToken.encodeURLParameter()}"
+        UpdateInfo(buildLabel = m.code.toString(), apkUrl = apk, notes = m.notes)
+    } else {
+        null
+    }
+}.getOrNull()
+
+/**
+ * Registers this device's FCM registration token so the gateway can deliver
+ * proactive reports when no live SSE connection is held (app fully closed /
+ * Doze). Best-effort and idempotent — the gateway dedups by token — so it is
+ * cheap to call on every foreground. Returns true on success. Android-only
+ * caller, but the RPC itself is platform-agnostic so this lives in commonMain.
+ */
+suspend fun DenebGatewayClient.registerPushToken(token: String, platform: String): Boolean {
+    if (token.isBlank()) return false
+    return rpcWrite(
+        "miniapp.push.register",
+        buildJsonObject {
+            put("token", token)
+            put("platform", platform)
+        },
+    ) == null
+}
+
+/** Removes a device token (e.g. on sign-out / token invalidation). */
+suspend fun DenebGatewayClient.unregisterPushToken(token: String): Boolean {
+    if (token.isBlank()) return false
+    return rpcWrite(
+        "miniapp.push.unregister",
+        buildJsonObject { put("token", token) },
+    ) == null
 }
