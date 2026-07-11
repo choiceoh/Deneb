@@ -73,40 +73,11 @@ func RunAgent(
 	// large tool results) until the whole run ends and grows Value lookup depth.
 	runCtx := ctx
 
-	result := &AgentResult{}
-	journal := newRunMessageJournal(messages, cfg.OnMessagePersist)
+	state := newAgentRunState(messages, cfg.OnMessagePersist)
+	result := state.result
+	journal := state.journal
+	defer state.finalize()
 
-	// Run-level aggregates so `agent loop complete` can surface the whole-run
-	// shape at a glance. Without this the caller only sees the LAST turn's
-	// text/tool summary and has to grep per-turn lines to recover "how many
-	// of each tool was used" — tedious during a postmortem.
-	var (
-		totalTextChars int
-		totalToolCalls int
-		toolCounts     = map[string]int{}
-	)
-
-	// Defer the run-aggregate finalization so every return path (early errors,
-	// max_turns, end_turn) surfaces the same diagnostic shape without
-	// duplicating the assignment across six return statements.
-	defer func() {
-		result.TurnsPersisted = journal.persisted
-		result.TotalTextChars = totalTextChars
-		result.TotalToolCalls = totalToolCalls
-		if len(toolCounts) > 0 {
-			// Copy out so the caller reads a stable snapshot even if a
-			// future refactor ever moves the loop into a goroutine.
-			copied := make(map[string]int, len(toolCounts))
-			for k, v := range toolCounts {
-				copied[k] = v
-			}
-			result.ToolCounts = copied
-		}
-	}()
-
-	// Max-output-tokens recovery: tracks how many times we've auto-resumed
-	// after the LLM response was truncated by max_tokens.
-	var maxTokensRecoveryCount int
 	baseMaxTokens := cfg.MaxTokens // Original value before any recovery scaling.
 	turnPreparer := newTurnRequestPreparer(&cfg)
 
@@ -131,7 +102,6 @@ func RunAgent(
 			if ctx.Err() != nil {
 				result.Stream.TerminationReason = string(streamTerminationContextDone)
 				result.StopReason = stopReasonFromCtx(ctx)
-				result.FinalMessages = journal.messages
 				return result, nil
 			}
 			if streamOutcome.initialConnectionFailed() {
@@ -141,14 +111,9 @@ func RunAgent(
 		}
 		turnRes := streamOutcome.result
 
-		// Accumulate usage. Cache fields aggregate per-turn so the run-level
-		// total answers "of all input tokens this run, how many were cache
-		// hits vs. fresh writes" — the proof point for the system_and_3
-		// caching strategy (see prompt-cache.md § 1).
-		result.Usage.InputTokens += turnRes.usage.InputTokens
-		result.Usage.OutputTokens += turnRes.usage.OutputTokens
-		result.Usage.CacheReadInputTokens += turnRes.usage.CacheReadInputTokens
-		result.Usage.CacheCreationInputTokens += turnRes.usage.CacheCreationInputTokens
+		// Commit the completed provider turn to run-level usage/text/tool
+		// aggregates before any hook or recovery decision observes the result.
+		turnStats := state.recordTurn(turnRes)
 
 		// Per-turn token logging: surface per-turn cost so multi-turn runs
 		// are transparent (the accumulated total can be misleading).
@@ -157,33 +122,12 @@ func RunAgent(
 		// investigating "agent composed body as tool-call argument vs. as text"
 		// questions (the 4/24 19:35 email-analysis-full wrap-up postmortem had
 		// to guess this from token counts alone).
-		textChars := len(turnRes.text)
-		toolCount := len(turnRes.toolCalls)
-		toolNames := make([]string, 0, toolCount)
-		toolInputBytes := 0
-		for _, tc := range turnRes.toolCalls {
-			if tc.Name != "" {
-				toolNames = append(toolNames, tc.Name)
-				toolCounts[tc.Name]++
-			}
-			toolInputBytes += len(tc.Input)
-		}
-		totalTextChars += textChars
-		totalToolCalls += toolCount
-		// textHead gives a 200-char window into the turn's prose output. This is
-		// the single most useful field for distinguishing "the agent composed
-		// the deliverable here" from "the agent only emitted a status line".
+		// textHead gives a 200-byte, rune-safe window into the turn's prose
+		// output. It distinguishes "the agent composed the deliverable here"
+		// from "the agent only emitted a status line".
 		// The 19:35 wrap-up bug would have been a 5-second grep with this field:
 		// look for a turn where textChars is large AND textHead is not 'wiki
 		// 업데이트 완료'.
-		textHead := ""
-		if textChars > 0 {
-			if textChars > 200 {
-				textHead = turnRes.text[:200] + "…"
-			} else {
-				textHead = turnRes.text
-			}
-		}
 		logger.Info("agent turn complete",
 			"turn", turn,
 			"turnInputTokens", turnRes.usage.InputTokens,
@@ -192,11 +136,11 @@ func RunAgent(
 			"turnCacheCreationTokens", turnRes.usage.CacheCreationInputTokens,
 			"accInputTokens", result.Usage.InputTokens,
 			"messages", len(journal.messages),
-			"textChars", textChars,
-			"textHead", textHead,
-			"toolCount", toolCount,
-			"toolNames", strings.Join(toolNames, ","),
-			"toolInputBytes", toolInputBytes,
+			"textChars", turnStats.textChars,
+			"textHead", turnStats.textHead,
+			"toolCount", turnStats.toolCount,
+			"toolNames", strings.Join(turnStats.toolNames, ","),
+			"toolInputBytes", turnStats.toolInputBytes,
 			"stopReason", turnRes.stopReason)
 
 		// Feed actual token usage back to the estimator for self-calibration.
@@ -214,10 +158,6 @@ func RunAgent(
 		// that informed it (run-scoped tool-result runes seen so far) — the
 		// label feed for a future learned router.
 		if runLog != nil {
-			obsRunes := 0
-			for _, ta := range result.ToolActivities {
-				obsRunes += ta.OutputRunes
-			}
 			runLog.LogTurnLLM(agentlog.TurnLLMData{
 				Turn:                turn + 1,
 				InputTokens:         turnRes.usage.InputTokens,
@@ -228,51 +168,13 @@ func RunAgent(
 				CacheReadTokens:     turnRes.usage.CacheReadInputTokens,
 				CacheCreationTokens: turnRes.usage.CacheCreationInputTokens,
 				ThinkingOff:         turnThinking != nil && turnThinking.Type == "disabled",
-				ObsRunes:            obsRunes,
+				ObsRunes:            state.priorToolOutputRunes,
 			})
 		}
 
 		// Mid-run hook: notify caller of token accumulation.
 		if cfg.OnTurn != nil {
 			cfg.OnTurn(turn+1, result.Usage.InputTokens+result.Usage.OutputTokens)
-		}
-
-		// Text: last turn's text for channel reply (avoids re-sending
-		// content already streamed to the user).
-		// AllText: accumulated text from all turns for transcript persistence,
-		// so intermediate findings (e.g., "tab indentation is the issue")
-		// survive into the next run's context assembly.
-		if turnRes.text != "" {
-			result.Text = turnRes.text
-			if result.AllText != "" {
-				result.AllText += "\n\n"
-			}
-			result.AllText += turnRes.text
-
-			// DeliverableText is AllText minus the brief progress narration the
-			// model emits alongside tool calls ("위키 맥락 확보 완료. 이제 메일
-			// 읽을게요"). Proactive/cron delivery uses it so multi-turn reports
-			// don't ship the working narration. See isInterimNarration and
-			// AgentResult.DeliverableText. An answer turn can still open with a
-			// self-talk sentence before the report body ("이제 분석 보고를
-			// 정리해.\n\n---\n\n## …"); stripNarrationHead peels that preamble
-			// off the deliverable copy only — Text/AllText keep the raw turn text.
-			if !isInterimNarration(turnRes.text, len(turnRes.toolCalls)) {
-				if result.DeliverableText != "" {
-					result.DeliverableText += "\n\n"
-				}
-				result.DeliverableText += stripNarrationHead(turnRes.text)
-			}
-		}
-
-		// Accumulate thinking text from every turn (interleaved + final) so the
-		// channel adapter can optionally surface it. Joined across turns to
-		// preserve the full reasoning trail across tool boundaries.
-		if turnThinking := joinAllThinkingTexts(turnRes.contentBlocks); turnThinking != "" {
-			if result.Thinking != "" {
-				result.Thinking += "\n\n"
-			}
-			result.Thinking += turnThinking
 		}
 
 		// Build the assistant message once. Recovery and tool turns append it to
@@ -286,8 +188,8 @@ func RunAgent(
 		// inject a "resume" message and retry. This prevents losing partially
 		// generated code or explanations.
 		if turnRes.stopReason == "max_tokens" && len(turnRes.toolCalls) == 0 &&
-			cfg.MaxOutputTokensRecovery > 0 && maxTokensRecoveryCount < cfg.MaxOutputTokensRecovery {
-			maxTokensRecoveryCount++
+			cfg.MaxOutputTokensRecovery > 0 && state.maxTokenRecoveries < cfg.MaxOutputTokensRecovery {
+			recoveryAttempt := state.noteRecovery()
 
 			// Thinking runaway: the turn produced ONLY reasoning and no answer text,
 			// burning the whole output budget on the thinking channel. Scaling the
@@ -295,11 +197,11 @@ func RunAgent(
 			// retry the turn with thinking OFF (resetting the budget) — it then
 			// answers directly. Only when the caller supplied an off-config.
 			if cfg.ThinkingOffRetry != nil && strings.TrimSpace(turnRes.text) == "" &&
-				joinAllThinkingTexts(turnRes.contentBlocks) != "" {
+				turnStats.thinkingText != "" {
 				turnPreparer.overrideThinkingOnce(cfg.ThinkingOffRetry)
 				cfg.MaxTokens = baseMaxTokens
 				logger.Info("max_tokens recovery: thinking runaway — retrying with thinking off",
-					"attempt", maxTokensRecoveryCount, "maxAttempts", cfg.MaxOutputTokensRecovery)
+					"attempt", recoveryAttempt, "maxAttempts", cfg.MaxOutputTokensRecovery)
 				assistantMessage.append()
 				journal.append(llm.NewTextMessage("user",
 					"[직전 응답이 분석(생각)만 하다 토큰 한도에 걸렸습니다. 추가 분석 없이 곧바로 최종 답변만 작성하세요.]"))
@@ -309,13 +211,13 @@ func RunAgent(
 			// Genuine truncated answer: scale up MaxTokens so the model has room to
 			// finish, and resume from where it left off.
 			scale := 2.0 // Default: double the original.
-			if idx := maxTokensRecoveryCount - 1; idx < len(cfg.MaxOutputTokensScaleFactors) {
+			if idx := recoveryAttempt - 1; idx < len(cfg.MaxOutputTokensScaleFactors) {
 				scale = cfg.MaxOutputTokensScaleFactors[idx]
 			}
 			cfg.MaxTokens = int(float64(baseMaxTokens) * scale)
 
 			logger.Info("max_tokens recovery: scaling output tokens and injecting resume",
-				"attempt", maxTokensRecoveryCount,
+				"attempt", recoveryAttempt,
 				"maxAttempts", cfg.MaxOutputTokensRecovery,
 				"baseMaxTokens", baseMaxTokens,
 				"newMaxTokens", cfg.MaxTokens)
@@ -389,8 +291,6 @@ func RunAgent(
 					result.StopReason = "end_turn"
 				}
 			}
-			result.MaxTokensRecoveries = maxTokensRecoveryCount
-			result.FinalMessages = journal.messages
 			return result, nil
 		}
 
@@ -426,7 +326,7 @@ func RunAgent(
 			logger,
 			runLog,
 		)
-		result.ToolActivities = append(result.ToolActivities, toolTurn.activities...)
+		state.recordToolActivities(toolTurn.activities)
 
 		// Post-turn hook: skill nudger (and future accounting that needs
 		// the turn's tool activities). Fires even when the turn had no
@@ -457,7 +357,6 @@ func RunAgent(
 		if toolTurn.canceled {
 			result.StopReason = stopReasonFromCtx(ctx)
 			result.InterruptedToolNames = append(result.InterruptedToolNames, toolTurn.interruptedNames...)
-			result.FinalMessages = journal.messages
 			return result, nil
 		}
 
@@ -513,8 +412,6 @@ func RunAgent(
 	} else {
 		result.StopReason = "max_turns"
 	}
-	result.MaxTokensRecoveries = maxTokensRecoveryCount
-	result.FinalMessages = journal.messages
 	return result, nil
 }
 
