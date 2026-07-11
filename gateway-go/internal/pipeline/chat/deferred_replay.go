@@ -9,14 +9,14 @@
 // previous run's requests established.
 //
 // Replay re-derives the activated set from the transcript itself (no separate
-// store, survives gateway restarts): scan assistant tool_use blocks for the
-// activating tools, pair them with their tool_result by tool_use_id, and parse
-// the exact activation notices those writers emit
-// (toolctx/activation_notice.go). Pairing is deliberate — a result is only
-// trusted if it belongs to an activating tool's call, so a marker-shaped
-// string inside some unrelated tool output (a read of a log file, promptware)
-// cannot seed tools. An unpaired call (run died before the result) proves
-// nothing and is ignored.
+// store, survives gateway restarts). Evidence has two tiers: the structured
+// activatedTools metadata the executor attaches to tool_result blocks
+// (pkg/toolmeta — server-attached, so tool output CONTENT cannot forge it),
+// and, for pre-metadata transcripts, the exact activation notices the writers
+// emit (toolctx/activation_notice.go), parsed only from results paired by
+// tool_use_id to an activating tool's call — so a marker-shaped string inside
+// some unrelated tool output (a read of a log file, promptware) cannot seed
+// tools, and an unpaired call (run died before the result) proves nothing.
 //
 // Cheap pruning keeps the evidence alive: fetch_tools results are on the
 // compaction protection list, and TruncateOldToolResults re-embeds activation
@@ -32,6 +32,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/pkg/toolmeta"
 )
 
 // activationNoticeWriters are the tools whose results can carry an activation
@@ -52,7 +53,9 @@ func replayActivatedTools(messages []llm.Message, registry *ToolRegistry, sessio
 		return nil
 	}
 
-	// Pass 1: map tool_use_id → name for calls made by activating tools.
+	// Pass 1: map tool_use_id → name for calls made by activating tools —
+	// only the TEXT fallback needs this pairing; the metadata path below is
+	// server-attached and trusts the block directly.
 	writerCalls := make(map[string]bool)
 	for _, msg := range messages {
 		if msg.Role != "assistant" {
@@ -64,36 +67,50 @@ func replayActivatedTools(messages []llm.Message, registry *ToolRegistry, sessio
 			}
 		}
 	}
-	if len(writerCalls) == 0 {
-		return nil
-	}
 
-	// Pass 2: parse notices out of the paired tool_results, keeping order.
+	// Pass 2: collect activation evidence from tool_results, keeping order.
+	// Metadata first — the activatedTools sideband is attached by the
+	// executor (pkg/toolmeta), so tool output CONTENT cannot forge it and no
+	// call pairing is needed. The text-notice parse remains as the fallback
+	// for pre-metadata transcripts, gated to writer-paired results as before.
 	allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
 	seen := make(map[string]bool)
 	var names []string
+	admit := func(name string) {
+		if seen[name] {
+			return
+		}
+		seen[name] = true
+		if _, ok := registry.DeferredToolDef(name); !ok {
+			return
+		}
+		if allowed != nil {
+			if _, ok := allowed[name]; !ok {
+				return
+			}
+		}
+		names = append(names, name)
+	}
 	for _, msg := range messages {
 		if msg.Role != "user" {
 			continue
 		}
 		for _, b := range decodeBlocks(msg.Content) {
-			if b.Type != "tool_result" || !writerCalls[b.ToolUseID] {
+			if b.Type != "tool_result" {
+				continue
+			}
+			var metaNames []string
+			if toolmeta.Get(b.Metadata, "activatedTools", &metaNames) {
+				for _, name := range metaNames {
+					admit(name)
+				}
+				continue
+			}
+			if !writerCalls[b.ToolUseID] {
 				continue
 			}
 			for _, name := range toolctx.ParseActivationNotices(b.Content) {
-				if seen[name] {
-					continue
-				}
-				seen[name] = true
-				if _, ok := registry.DeferredToolDef(name); !ok {
-					continue
-				}
-				if allowed != nil {
-					if _, ok := allowed[name]; !ok {
-						continue
-					}
-				}
-				names = append(names, name)
+				admit(name)
 			}
 		}
 	}

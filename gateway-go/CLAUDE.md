@@ -75,6 +75,13 @@ When you need to intervene in a tool call, use the supported extension points �
   `block, blockReason`), not handle it. Wire it via `HookCompositor.SetBeforeToolCall`.
 - **Post-execution side effects on specific tools** → `PostProcessRegistry`
   (name-matched, runs after execution).
+- **Code-only result sideband** → `pkg/toolmeta`: a tool fn or post-processor
+  calls `toolmeta.Set(ctx, key, v)`; the executor attaches it to the
+  tool_result block's `Metadata` (transcript-persistent, compaction-surviving,
+  NEVER sent to a provider — wire projections must not copy the field).
+  Readers use `toolmeta.Get`. Model-facing facts still belong in the result
+  TEXT; metadata is the machine half of the same fact (e.g. deferred-replay's
+  `activatedTools`).
 - **Adding a tool** (including from a future plugin/provider) → `RegisterTool`.
   The provider already owns its name; no interception is needed.
 

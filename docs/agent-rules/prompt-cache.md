@@ -228,7 +228,7 @@ LLM summarizer 를 부르기 전에 두 단계 cheap pruning 이 항상 발화�
 
 두 cheap 패스 공통 **보호 목록** (`compaction/protected.go:protectedToolResultIDs`): `fetch_tools` 결과는 스텁/펜스제거에서 제외한다 — 그 결과가 곧 도구 스키마라서 지우면 모델이 동일 재fetch를 반복한다 (실측 2026-07-05: fetch_tools 호출의 20%가 런 내 동일입력·동일결과 반복, 한 런에서 7회). LLM 요약 tier 는 보호 대상이 아니므로 초장기 런에서는 여전히 압축될 수 있다.
 
-**Deferred 활성화 replay 와의 연동**: 지연 도구 활성화 상태는 별도 저장소 없이 transcript 의 활성화 안내문(`toolctx/activation_notice.go` 의 fetch_tools 문장·스킬 consult 노티스)에서 **런 시작 시 재구성**된다 (`chat/deferred_replay.go` → `run_agent_config.go` 시딩). replay 된 도구는 초기 Tools 배열 **끝에** 이전 활성화 순서 그대로 붙어, 직전 런의 최종 Tools 배열과 일치 → 턴 경계에서 provider 프리픽스 캐시가 유지된다 (시스템 프롬프트의 static 키는 애초에 불변 — deferred 는 이름·설명이 항상 프롬프트에 있고 스키마만 지연). `TruncateOldToolResults` 는 스텁 시 활성화 안내문 한 줄을 스텁에 재삽입해 증거를 보존한다 (read_spillover 포인터 보존과 같은 패턴).
+**Deferred 활성화 replay 와의 연동**: 지연 도구 활성화 상태는 별도 저장소 없이 transcript 에서 **런 시작 시 재구성**된다 (`chat/deferred_replay.go` → `run_agent_config.go` 시딩) — 1차 증거는 실행기가 tool_result 블록에 부착하는 구조화 metadata(`pkg/toolmeta` 의 `activatedTools`, wire 미전송·압축 생존), 폴백은 활성화 안내문 텍스트(`toolctx/activation_notice.go`, 구 transcript 용). replay 된 도구는 초기 Tools 배열 **끝에** 이전 활성화 순서 그대로 붙어, 직전 런의 최종 Tools 배열과 일치 → 턴 경계에서 provider 프리픽스 캐시가 유지된다 (시스템 프롬프트의 static 키는 애초에 불변 — deferred 는 이름·설명이 항상 프롬프트에 있고 스키마만 지연). `TruncateOldToolResults` 는 스텁 시 활성화 안내문 한 줄을 스텁에 재삽입해 증거를 보존한다 (read_spillover 포인터 보존과 같은 패턴).
 
 두 단계 모두 LLM 호출 X. Hermes Agent 의 Phase 1 cheap pruning 패턴. Tier 2b 가 발화하면 `polaris: stubbed old tool results count=N` 로 logger 에 기록.
 
