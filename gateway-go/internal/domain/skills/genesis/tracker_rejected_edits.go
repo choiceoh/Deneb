@@ -2,10 +2,11 @@ package genesis
 
 import (
 	"fmt"
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"sort"
 	"strings"
 	"time"
+
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )

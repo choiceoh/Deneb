@@ -3,11 +3,12 @@ package genesis
 import (
 	"context"
 	"fmt"
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/guardrails"
 	"log/slog"
 	"strings"
 	"sync"
+
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/guardrails"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
