@@ -322,6 +322,14 @@ type EvolutionHealthSummary struct {
 	EvolveConfirmed7d       int     `json:"evolveConfirmed7d"`
 	CrossSkillRegressions7d int     `json:"crossSkillRegressions7d"`
 	ConfirmRate             float64 `json:"confirmRate"`
+	// FalseAcceptRate is the judge's observed false-accept rate over RESOLVED
+	// evolves (rolledBack/(confirmed+rolledBack)) with ResolvedEvolves7d as
+	// the sample size — the first observation window on a judge quietly going
+	// soft (RSI P1.5 ⑤, CoVerRL). Complement of ConfirmRate, made explicit so
+	// the scoreboard reads without arithmetic; n alongside so a 1/1 doesn't
+	// masquerade as certainty.
+	FalseAcceptRate         float64 `json:"falseAcceptRate"`
+	ResolvedEvolves7d       int     `json:"resolvedEvolves7d"`
 	Genesis7d               int     `json:"genesis7d"`
 	DistinctSkillsEvolved7d int     `json:"distinctSkillsEvolved7d"`
 	TopEvolvedSkill         string  `json:"topEvolvedSkill,omitempty"`
@@ -384,6 +392,8 @@ func (t *Tracker) computeEvolutionHealthLocked(now time.Time) EvolutionHealthSum
 	}
 	s.DistinctSkillsEvolved7d = len(perSkill)
 	if resolved := s.EvolveConfirmed7d + s.EvolveRolledBack7d; resolved > 0 {
+		s.ResolvedEvolves7d = resolved
+		s.FalseAcceptRate = float64(s.EvolveRolledBack7d) / float64(resolved)
 		// Confirm rate = of the evolves that resolved (held up vs reverted), the
 		// fraction that confirmed — the headline success metric of the loop, now
 		// visible on /health instead of only living in the lifecycle log.

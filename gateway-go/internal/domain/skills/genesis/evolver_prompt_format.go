@@ -179,3 +179,27 @@ func writePromptToolCalls(b *strings.Builder, label string, calls []SkillReplayT
 		fmt.Fprintf(b, "  - %s\n", strings.Join(parts, "; "))
 	}
 }
+
+// formatConfirmedEvolveExemplars renders cross-skill confirmed-evolve exhibits
+// as a positive few-shot section for the evolve prompt (RSI P1.5 ⑤) — the
+// mirror of formatLowYieldLevers: instead of "these directions keep dying",
+// "these edits on the same failure family actually held up in real use".
+func formatConfirmedEvolveExemplars(exemplars []ConfirmedEvolveExemplar) string {
+	if len(exemplars) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("\n\n## 같은 실패 계열에서 검증 완주한 개선 사례 (교차 스킬 참고)\n")
+	sb.WriteString("아래 편집 방향은 유사한 실패 시그니처에서 실제 사용 관찰까지 살아남았다:\n")
+	for _, ex := range exemplars {
+		line := "- [" + ex.SkillName + "] 대상: " + truncateRunes(strings.TrimSpace(ex.Audit.TargetSignature), 100)
+		if s := strings.TrimSpace(ex.Audit.EditedSurface); s != "" {
+			line += " · 편집면: " + truncateRunes(s, 40)
+		}
+		if c := strings.TrimSpace(ex.Audit.ExpectedBehaviorChange); c != "" {
+			line += " · 효과: " + truncateRunes(c, 120)
+		}
+		sb.WriteString(line + "\n")
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
