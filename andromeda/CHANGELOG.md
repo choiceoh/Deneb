@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.65](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.64...andromeda-v0.0.65) (2026-07-11)
+
+
+### 🐛 Bug Fixes
+
+* [#3438](https://github.com/choiceoh/Deneb/issues/3438) 후속 main 수리 — gofmt/gofumpt 16파일 정리·bootstrap 경계 테스트 계약 수정·andromeda 테스트 TZ 고정 ([#3441](https://github.com/choiceoh/Deneb/issues/3441)) ([12ecbb2](https://github.com/choiceoh/Deneb/commit/12ecbb2e56475c7dab0576a109e1c0d31e67f597))
+
 ## [0.0.64](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.63...andromeda-v0.0.64) (2026-07-11)
 
 

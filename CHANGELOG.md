@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.88.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.87.0...deneb-v4.88.0) (2026-07-11)
+
+
+### ✨ Features
+
+* **genesis:** RSI P1.5 — e-process 관측 배선(듀얼트랙) — 롤백/확인 lifecycle에 baseline-aware 판정·disagreement 라벨 병기 ([#3439](https://github.com/choiceoh/Deneb/issues/3439)) ([8bdcc4d](https://github.com/choiceoh/Deneb/commit/8bdcc4dc6933c436bc0f56b240e5314779f807f1))
+
+
+### 🐛 Bug Fixes
+
+* [#3438](https://github.com/choiceoh/Deneb/issues/3438) 후속 main 수리 — gofmt/gofumpt 16파일 정리·bootstrap 경계 테스트 계약 수정·andromeda 테스트 TZ 고정 ([#3441](https://github.com/choiceoh/Deneb/issues/3441)) ([12ecbb2](https://github.com/choiceoh/Deneb/commit/12ecbb2e56475c7dab0576a109e1c0d31e67f597))
+
 ## [4.87.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.86.0...deneb-v4.87.0) (2026-07-11)
 
 
