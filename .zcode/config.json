@@ -1,0 +1,67 @@
+{
+  "hooks": {
+    "enabled": true,
+    "events": {
+      "SessionStart": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "bash \"${ZCODE_PROJECT_DIR}/scripts/dev/zcode-worktree-init.sh\"",
+              "timeout": 15,
+              "statusMessage": "zcode: 세션 전용 워크트리 자동 생성"
+            }
+          ]
+        }
+      ],
+      "PreToolUse": [
+        {
+          "matcher": "Write|Edit|MultiEdit",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "bash \"${ZCODE_PROJECT_DIR}/scripts/dev/zcode-worktree-guard.sh\"",
+              "timeout": 10,
+              "statusMessage": "zcode: 메인 체크아웃 편집 차단 가드"
+            },
+            {
+              "type": "command",
+              "command": "bash \"${ZCODE_PROJECT_DIR}/scripts/dev/zcode-hook-bridge.sh\" \"${ZCODE_PROJECT_DIR}/scripts/dev/claude-rules-gate.py\"",
+              "timeout": 10,
+              "statusMessage": "rules-gate: 경로별 룰 첫 접촉 안내"
+            },
+            {
+              "type": "command",
+              "command": "bash \"${ZCODE_PROJECT_DIR}/scripts/dev/zcode-hook-bridge.sh\" \"${ZCODE_PROJECT_DIR}/scripts/dev/codegraph-remind.py\"",
+              "timeout": 10,
+              "statusMessage": "codegraph: 소스 탐색 시 1회 안내"
+            }
+          ]
+        },
+        {
+          "matcher": "Grep|Bash",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "bash \"${ZCODE_PROJECT_DIR}/scripts/dev/zcode-hook-bridge.sh\" \"${ZCODE_PROJECT_DIR}/scripts/dev/codegraph-nudge.py\"",
+              "timeout": 10,
+              "statusMessage": "codegraph: 심볼 검색은 CodeGraph로 유도"
+            }
+          ]
+        }
+      ],
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "bash \"${ZCODE_PROJECT_DIR}/scripts/dev/zcode-worktree-status.sh\"",
+              "timeout": 10,
+              "statusMessage": "zcode: 워크트리 작업 상태 보고"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

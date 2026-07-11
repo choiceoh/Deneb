@@ -16,6 +16,7 @@
 - 레포: https://github.com/choiceoh/Deneb. 챗 응답의 파일 참조는 레포 상대 경로만 (절대경로·`~/...` 금지).
 - `~/deneb/` = **프로덕션 전용** (main만 — srv4 의 auto-deploy 타이머가 pull·빌드·핫스왑) — 에이전트는 거기서 브랜치/워크트리/수동 빌드 금지. 개발은 `~/deneb-dev/`.
 - 멀티에이전트 안전: `git stash`·워크트리 조작·브랜치 전환은 **명시 요청 시에만**. "push" = rebase 통합 허용, "commit" = 내 변경만. 낯선 파일은 무시하고 내 변경만 커밋.
+- **ZCode 자동 워크트리 격리**: ZCode 세션은 SessionStart 훅(`scripts/dev/zcode-worktree-init.sh`)이 `~/.zcode/worktrees/Deneb/<session-id>` 워크트리(`zcode/<session-id>` 브랜치)를 자동 생성. 메인 체크아웃 편집은 PreToolUse 가드(`zcode-worktree-guard.sh`)가 차단 — 반드시 워크트리에서 작업. Stop 훅은 상태만 보고(PR/push 없음). Codex(`~/.codex/worktrees/`)/Trae(`~/.trae/worktrees/`)와 경로·브랜치 분리로 충돌 회피.
 - **생성 코드(`DO NOT EDIT` 헤더) 직접 수정 금지** — 소스 오브 트루스 수정 후 make 타깃으로 재생성 ([generated-code](docs/agent-rules/generated-code.md)). `//deneb:wire` 변경 = `make kotlin-models` **와** `pnpm gen:wire` 둘 다.
 - 보안 CODEOWNERS 경로(`.github/dependabot.yml`, `codeql.yml`, `gateway-go/internal/infra/{clientauth,secret,config}/`)는 소유자가 명시 요청할 때만 수정.
 - 실 전화번호·크리덴셜·라이브 설정값 커밋 금지. 버전 번호 변경·release/publish는 운영자 명시 승인. baseline/snapshot/expected-failure 파일로 실패를 침묵시키지 말 것. 의존성 패치는 명시 승인 필요.
@@ -77,7 +78,7 @@ codegraph query    NAME      # 이름으로 심볼 검색
 ```
 
 - **인덱스는 로컬 `.codegraph/`**(SQLite, gitignore됨)에 저장, **데몬 파일와처가 편집을 2초 내 자동동기** — 수동 명령 불필요, 항상 신선. Go·Kotlin·TypeScript·Rust 등 전부 인덱싱.
-- **새 워크트리는 SessionStart 훅(`codegraph-autoindex.py`)이 자동 준비** — 형제 워크트리 인덱스를 복사+`sync`(<1s)하거나 없으면 풀 init, 백그라운드라 세션 지연 0. 즉 워크트리마다 손수 `codegraph init` 할 필요 없다.
+- **새 워크트리는 SessionStart 훅(`codegraph-autoindex.py`)이 자동 준비** — 형제 워크트리 인덱스를 복사+`sync`(<1s)하거나 없으면 풀 init, 백그라운드라 세션 지연 0. 즉 워크트리마다 손수 `codegraph init` 할 필요 없다. ZCode 워크트리도 `zcode-worktree-init.sh`가 메인 체크아웃의 인덱스를 복사+`sync`로 동일하게 준비.
 - 설치/재빌드: `npm i -g @colbymchenry/codegraph` → `codegraph init`. 재인덱싱은 `codegraph index`, MCP 재배선은 `codegraph install`. GPU·컴파일 불필요(aarch64 네이티브). 상세는 메모리 [[codegraph-adoption]] 참조.
 - 문자열-키 간접참조(RPC 메서드명·툴명 → 핸들러)는 CodeGraph가 못 잇는 엣지(static-analysis frontier). **`scripts/dev/rpcmap.py`가 결정적으로 채운다**: `rpcmap <메서드명|툴명>` → 핸들러+파일:라인+`codegraph node` 힌트 (예: `rpcmap miniapp.people.list`→`peopleList (people.go:91)`, `rpcmap wiki`→`ToolWiki`). 역방향 `rpcmap --handler <이름>`, 전체는 `rpcmap --list`. 핸들러를 얻으면 `codegraph node <핸들러>`로 소스+호출자/피호출자. (점 있는 메서드명을 grep하면 훅이 rpcmap으로 유도한다.)
 - 주의: CodeGraph는 **소스 코드 전용**. 위키/업무 지식 그래프는 별개 도구(`graphify` 챗 툴 → `~/.deneb/wiki-graph`)이며 이걸로 대체 불가.
