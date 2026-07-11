@@ -156,6 +156,23 @@ func (m *MetaArtifacts) writeSidecarIfAbsent(name, sidecarPath, sum string) {
 	}
 }
 
+// WriteProposal writes a slow-loop revision proposal NEXT TO the live
+// artifact (<name>.proposed) without touching the live file — adoption is a
+// separate decision (operator move, or a future bench-gated promotion).
+func (m *MetaArtifacts) WriteProposal(name, content string) (string, error) {
+	if m == nil || m.dir == "" {
+		return "", errors.New("meta artifacts unwired")
+	}
+	if err := os.MkdirAll(m.dir, 0o755); err != nil {
+		return "", err
+	}
+	path := filepath.Join(m.dir, name+".proposed")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
 // DefaultMetaArtifacts maps every known artifact to its compiled-in default —
 // the single registry MaterializeDefaults and tests share.
 func DefaultMetaArtifacts() map[string]string {

@@ -677,6 +677,15 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			},
 		}
 		s.autonomousSvc.RegisterTask(evolveTask)
+		// RSI P2 slow loop (propose-only): weekly, one meta-artifact revision
+		// proposal per cycle, alternating producer/evaluator epochs. Never
+		// touches live artifacts — writes <name>.proposed + the ledger.
+		s.autonomousSvc.RegisterTask(&genesis.MetaEvolutionTask{
+			Evolver: s.genesisEvolver,
+			Meta:    s.genesisMeta,
+			Tracker: s.genesisTracker,
+			Logger:  s.logger,
+		})
 		s.autonomousSvc.RegisterTask(&genesis.SkillCuratorTask{
 			Tracker: s.genesisTracker,
 			Logger:  s.logger,
