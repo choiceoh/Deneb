@@ -123,30 +123,12 @@ func isIrreversibleTool(name string, input []byte) bool {
 	}
 }
 
-// composeBeforeToolCall chains two before-tool-call gates: the first to return
-// block wins. Either may be nil. Used so the untrusted-tool gate composes with
-// any pre-existing gate (e.g. the goal loop's idempotency guard) on the same
-// single-valued hook slot instead of clobbering it.
-func composeBeforeToolCall(a, b func(string, string, []byte) (bool, string)) func(string, string, []byte) (bool, string) {
-	switch {
-	case a == nil:
-		return b
-	case b == nil:
-		return a
-	default:
-		return func(name, id string, input []byte) (bool, string) {
-			if block, reason := a(name, id, input); block {
-				return true, reason
-			}
-			return b(name, id, input)
-		}
-	}
-}
-
 // wireUntrustedToolGate installs the untrusted-origin tool gate on the hook
 // compositor for runs that opted in (the interactive native transports). It is
-// called right after wireStreamHooks so prep.RecallMemory is available to seed
-// the taint, and composes with any before-tool-call gate that was already set.
+// called right after wireStreamHooks, so prep.RecallMemory is available to
+// seed the taint and the gate registers AFTER any goal-loop guard — the
+// compositor composes before-tool-call gates first-block-wins in registration
+// order, so no hand-rolled chaining is needed here.
 func wireUntrustedToolGate(hc *agent.HookCompositor, params RunParams, prep prepResult, deps runDeps, logger *slog.Logger) {
 	if !params.GateUntrustedTools {
 		return
@@ -154,5 +136,5 @@ func wireUntrustedToolGate(hc *agent.HookCompositor, params RunParams, prep prep
 	gate := newUntrustedToolGate(params.SessionKey, params.ClientRunID, deps.broadcast, logger)
 	gate.seed(params.Message, prep.RecallMemory)
 	hc.OnToolResult(gate.observeToolResult)
-	hc.SetBeforeToolCall(composeBeforeToolCall(params.BeforeToolCall, gate.beforeToolCall))
+	hc.OnBeforeToolCall(gate.beforeToolCall)
 }

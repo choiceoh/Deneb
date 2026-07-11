@@ -90,24 +90,35 @@ func TestUntrustedToolGate_ErrorResultDoesNotTaint(t *testing.T) {
 	}
 }
 
-func TestComposeBeforeToolCall(t *testing.T) {
+// TestBeforeToolCallComposition: the hook compositor composes before-tool-call
+// gates first-block-wins in registration order — the contract the goal guard
+// and the untrusted gate rely on (previously a hand-rolled compose function).
+func TestBeforeToolCallComposition(t *testing.T) {
 	allow := func(string, string, []byte) (bool, string) { return false, "" }
 	blockA := func(string, string, []byte) (bool, string) { return true, "A" }
 	blockB := func(string, string, []byte) (bool, string) { return true, "B" }
 
-	if composeBeforeToolCall(nil, nil) != nil {
-		t.Fatal("compose(nil,nil) should be nil")
+	if (&agent.HookCompositor{}).Build().OnBeforeToolCall != nil {
+		t.Fatal("no registered gates should build a nil hook")
 	}
-	// First gate wins when it blocks.
-	if block, reason := composeBeforeToolCall(blockA, blockB)("exec", "c", nil); !block || reason != "A" {
-		t.Fatalf("first blocker should win: block=%v reason=%q", block, reason)
+
+	var hc agent.HookCompositor
+	hc.OnBeforeToolCall(blockA)
+	hc.OnBeforeToolCall(blockB)
+	if block, reason := hc.Build().OnBeforeToolCall("exec", "c", nil); !block || reason != "A" {
+		t.Fatalf("first registered blocker should win: block=%v reason=%q", block, reason)
 	}
-	// Falls through to the second when the first allows.
-	if block, reason := composeBeforeToolCall(allow, blockB)("exec", "c", nil); !block || reason != "B" {
-		t.Fatalf("should fall through to second: block=%v reason=%q", block, reason)
+
+	var hc2 agent.HookCompositor
+	hc2.OnBeforeToolCall(allow)
+	hc2.OnBeforeToolCall(blockB)
+	if block, reason := hc2.Build().OnBeforeToolCall("exec", "c", nil); !block || reason != "B" {
+		t.Fatalf("should fall through to second gate: block=%v reason=%q", block, reason)
 	}
-	// A single non-nil gate is returned as-is.
-	if block, _ := composeBeforeToolCall(allow, nil)("exec", "c", nil); block {
+
+	var hc3 agent.HookCompositor
+	hc3.OnBeforeToolCall(allow)
+	if block, _ := hc3.Build().OnBeforeToolCall("exec", "c", nil); block {
 		t.Fatal("single allow gate should allow")
 	}
 }

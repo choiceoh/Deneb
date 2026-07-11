@@ -178,6 +178,19 @@ after untrusted web/mail content enters the turn) needs an argument-inspecting
 hook, and THAT is the point at which widening the hook signature — not a
 generic chain — is the right move.
 
+## 10. Addendum (2026-07-11): second consumer arrived — the SLOT widened, the chain still didn't
+
+The §9 trigger fired: the untrusted-origin gate (untrusted_tool_gate.go)
+became the second `OnBeforeToolCall` consumer and initially composed onto the
+single-valued slot with a hand-rolled `composeBeforeToolCall`. Following the
+Pydantic AI audit (their before-hooks fan out forward, first-block-wins, by
+plain iteration order), the compositor now owns that composition:
+`HookCompositor.OnBeforeToolCall` appends and `Build()` runs gates in
+registration order, first block short-circuiting. This widens the SANCTIONED
+extension point's plumbing — it is still block-only (no handle), still not an
+interceptor chain, and Scenario C stands. Registration order is the ordering
+contract: wireStreamHooks (goal guard) runs before wireUntrustedToolGate.
+
 ---
 
 **Files cited:**
