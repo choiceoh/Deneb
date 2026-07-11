@@ -38,13 +38,14 @@ import kotlin.system.exitProcess
  * role, clickable flag, bounds — the same tree accessibility uses, so Korean is exact,
  * unlike OCR), then applies a sequence of actions (click by node text), re-dumping after
  * each so a state change is visible. Wired by scripts/dev/ui-inspect.sh + the
- * previewInspect Gradle task. Siblings: RenderPreview.kt (PNG) and native-app.sh (live,
- * pixel/OCR). Driven by system properties: deneb.screen, deneb.actions, deneb.dark.
+ * previewInspect Gradle task. Siblings: the RenderPreview*.kt PNG harness and
+ * native-app.sh (live, pixel/OCR). Driven by system properties: deneb.screen,
+ * deneb.actions, deneb.dark.
  */
 // Inspector-only demo screens layered on top of the shared previewScreens registry
-// (RenderPreview.kt): a synthetic settings group, and a tiny STATEFUL counter whose
-// state change is visible across a re-dump. Real app screens come from previewScreens,
-// so the same registry feeds both the PNG renderer and this inspector.
+// (RenderPreviewScreens.kt): a synthetic settings group, and a tiny STATEFUL counter
+// whose state change is visible across a re-dump. Real app screens come from
+// previewScreens, so the same registry feeds both the PNG renderer and this inspector.
 private val localScreens: Map<String, @Composable (ColorScheme) -> Unit> = mapOf(
     "settings" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
