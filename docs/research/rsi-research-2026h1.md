@@ -342,22 +342,27 @@
 선정 기준: effort S~M · 게이트 동작 무변경(또는 순수 신규) · P1.5/P2/P3의 기질을 지금부터 축적 · 독립 랜딩 가능.
 
 ### ① Lifecycle certificate 원장 + 평가자 버전 귀속 (SEA + RQGM 합류): **최우선**
+
 - **파일**: `gateway-go/internal/domain/skills/genesis/meta_artifacts.go` (Version()·ActiveVersions() 헬퍼, SHA-256 12hex), `tracker_lifecycle.go` + `evolver_candidate_eval.go` + `evolver_judge_teacher.go` (additive 필드: judgeArtifactVersion·evolveArtifactVersion·judgeModel·judge 점수쌍·held-out orig/cand·margin·behavioral counts)
 - **왜 지금**: P1이 방금 랜딩해 아티팩트 파일이 존재하는 첫 시점. **하루 늦을수록 P3의 false-accept 라벨이 하루치 소실된다** — 시간에 비례해 가치가 쌓이는 유일한 후보. JSONL additive라 하위호환, 게이트 무변경. Effort S+M / Risk 낮음.
 
 ### ② `eprocess.go` 순수 프리미티브 + 롤백 워치 영속화 (PACE + SEA)
+
 - **파일**: `genesis/eprocess.go` 신규 (페어드 베팅 마팅게일, α·베팅 파라미터 Go 상수, 테이블 주도 anytime-validity 테스트), `tracker_usage.go` (evolveWatch에 pre-evolve 베이스라인 스냅숏 필드 + liveness JSON 영속화)
 - **왜 지금**: 프리미티브는 배선 전까지 동작 무변경(Risk 최저)인데 후속 게이트 3곳(챔피언 확인·롤백 워치·behavioral replay)이 전부 이걸 소비. 워치 영속화는 **SIGUSR1 재시작마다 활성 롤백 워치가 증발하는 확인된 버그**의 수정을 겸함. Effort S+M.
 
 ### ③ 롤백 증거 영속화 + confirmed→앵커 증류 (CPE: "P3의 결정적 절반")
+
 - **파일**: `evolver_regression_rollback.go` (RollbackSkill에서 recordRejectedSkillEdit(reason="post-evolve rollback") + 롤백 유발 실패 트레이스의 validation case 증류), `tracker_lifecycle.go` (confirmEvolve에서 audit 기반 FrontierTier=easy 앵커 케이스 자동 기록, weak-case 가드+캡 통과)
 - **왜 지금**: 현재 롤백은 lifecycle 로그만 남겨 **같은 나쁜 편집이 재제안될 수 있다**. 순수 기록 추가(게이트 불변)로 LLM 공진화 없이 P3 라벨의 결정적 전단계를 확보하고, 2026-07-09 aggressive 모드 전환으로 올라간 침식 리스크에 첫 앵커를 심는다. Effort S+M / Risk 낮음.
 
 ### ④ 게이트 퍼즈 하니스 + min-delta 웨지 해소 (Verifier Fuzzing)
+
 - **파일**: `genesis/gate_fuzz_test.go` 신규 (FuzzScoreSkillValidationCases 등 4타깃 + 메타모픽 불변식 + 확인된 익스플로잇 4종 시드 체크인), `validation_engine.go` (정규화 후 빈 forbidden 단언 등 비판별 케이스를 Total에서 격리 + 로그)
 - **왜 지금**: **min-delta 영구 기각 웨지는 확인된 라이브 버그** — 고칠 수 없는 단언 하나가 해당 스킬의 모든 후보를 영원히 기각한다. 퍼즈는 테스트 전용(런타임 무위험)이고, K=5 셀렉터의 최적화 압력이 P2/P3에서 더 커지기 전에 래칫을 걸어야 한다. Effort M+S.
 
 ### ⑤ GRAO exemplar 회수기 + verifier 정확도 스코어보드 (TPGO + CoVerRL)
+
 - **파일**: `tracker_lever_yield.go` (ConfirmedEvolveExemplars — normalizedSelfHarnessSignature 일치하는 교차-스킬 confirmed evolve를 ConfirmRate 순 반환 + HighYieldLevers), `evolver.go`/`evolver_prompt_format.go` (exemplar few-shot 섹션 ≤3건), `tracker.go` (judgeAccuracy=confirmed/(confirmed+rolledBack)·falseAcceptRate·K-후보 pairwise 유사도를 EvolutionHealthSummary→/health 노출, n 병기)
 - **왜 지금**: lifecycle log에 데이터가 이미 전부 있고 회수기만 없는 **최소 비용·최대 가치** 지점(전부 읽기 전용 결정적 Go). 스코어보드는 P2 fitness의 필수 차원이자 "judge가 조용히 물러지는" 드리프트의 첫 관측창 — ①의 버전 귀속과 결합하면 버전별 judge 정확도까지 즉시 나온다. Effort S×3 / Risk 낮음.
 
