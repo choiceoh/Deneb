@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -66,7 +67,7 @@ func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *
 	raw, err := client.Complete(ctx, llm.ChatRequest{
 		Model:    model,
 		Messages: []llm.Message{llm.NewTextMessage("user", userPrompt)},
-		System:   llm.SystemString(e.metaLoad(MetaSkillJudgeSystemPrompt, skillJudgeSystemPrompt)),
+		System:   llm.SystemString(e.metaLoad(generation.MetaSkillJudgeSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt])),
 		// 4096: verdict JSON is small, but GLM reasoning shares the budget.
 		MaxTokens:      4096,
 		Temperature:    evolveTemperature(),
@@ -208,7 +209,7 @@ func (e *Evolver) teacherRewrite(ctx context.Context, teacherClient *llm.Client,
 	raw, err := teacherClient.Complete(ctx, llm.ChatRequest{
 		Model:    teacherModel,
 		Messages: []llm.Message{llm.NewTextMessage("user", userPrompt)},
-		System:   llm.SystemString(e.metaLoad(MetaEvolveSystemPrompt, evolveSystemPrompt)),
+		System:   llm.SystemString(e.metaLoad(generation.MetaEvolveSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaEvolveSystemPrompt])),
 		// Same budget as the producer — the teacher rewrites the same shape.
 		MaxTokens:      12288,
 		Temperature:    evolveTemperature(),

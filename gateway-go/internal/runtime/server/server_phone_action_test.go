@@ -9,7 +9,18 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 )
+
+func ingestPhoneActionResult(s *Server, eventType, source, text string) {
+	phoneevents.New(phoneevents.Config{
+		Logger: s.logger,
+		ResolvePhoneAction: func(res phoneevents.ActionResult) bool {
+			return s.phoneActions.resolve(phoneActionResult{ID: res.ID, OK: res.OK, Error: res.Error})
+		},
+	}).IngestAsync(eventType, source, text)
+}
 
 func TestPhoneActionAwaiter(t *testing.T) {
 	a := newPhoneActionAwaiter()
@@ -80,7 +91,7 @@ func TestPhoneActionAwaiter_SuccessBiasedAggregation(t *testing.T) {
 // the phone_action_result ingest branch touch: push hub + awaiter + logger.
 func phoneActionTestServer() *Server {
 	return &Server{
-		pushHub:      newClientPushHub(),
+		pushHub:      proactive.NewHub(),
 		phoneActions: newPhoneActionAwaiter(),
 		logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
@@ -88,7 +99,7 @@ func phoneActionTestServer() *Server {
 
 func TestDispatchPhoneAction_ConfirmedRoundTrip(t *testing.T) {
 	s := phoneActionTestServer()
-	frames, unsub := s.pushHub.subscribe(kindMobile)
+	frames, unsub := s.pushHub.Subscribe(proactive.KindMobile)
 	defer unsub()
 
 	done := make(chan error, 1)
@@ -97,14 +108,14 @@ func TestDispatchPhoneAction_ConfirmedRoundTrip(t *testing.T) {
 	}()
 
 	frame := <-frames
-	if frame.Kind != pushKindPhoneAction || frame.Data["action"] != "timer" {
+	if frame.Kind != proactive.PushKindPhoneAction || frame.Data["action"] != "timer" {
 		t.Fatalf("unexpected frame: %+v", frame)
 	}
 	if frame.Ref == "" {
 		t.Fatal("dispatch must carry a correlation id in Ref")
 	}
 	// The app reports success through the shared ingest door.
-	s.ingestPhoneEventAsync("phone_action_result", "timer", `{"id":"`+frame.Ref+`","ok":true}`)
+	ingestPhoneActionResult(s, "phone_action_result", "timer", `{"id":"`+frame.Ref+`","ok":true}`)
 	if err := <-done; err != nil {
 		t.Fatalf("confirmed dispatch must return nil, got %v", err)
 	}
@@ -112,7 +123,7 @@ func TestDispatchPhoneAction_ConfirmedRoundTrip(t *testing.T) {
 
 func TestDispatchPhoneAction_ReportedFailure(t *testing.T) {
 	s := phoneActionTestServer()
-	frames, unsub := s.pushHub.subscribe(kindMobile)
+	frames, unsub := s.pushHub.Subscribe(proactive.KindMobile)
 	defer unsub()
 
 	done := make(chan error, 1)
@@ -120,7 +131,7 @@ func TestDispatchPhoneAction_ReportedFailure(t *testing.T) {
 		done <- s.dispatchPhoneAction(context.Background(), "alarm", map[string]string{"hour": "7", "minute": "0"})
 	}()
 	frame := <-frames
-	s.ingestPhoneEventAsync("phone_action_result", "alarm", `{"id":"`+frame.Ref+`","ok":false}`)
+	ingestPhoneActionResult(s, "phone_action_result", "alarm", `{"id":"`+frame.Ref+`","ok":false}`)
 	err := <-done
 	if err == nil || !strings.Contains(err.Error(), "failed on the device") {
 		t.Fatalf("reported failure must surface as an error, got %v", err)
@@ -136,9 +147,9 @@ func TestDispatchPhoneAction_ReportedFailure(t *testing.T) {
 // phone's success.
 func TestDispatchPhoneAction_HarnessFailureDoesNotMaskPhoneSuccess(t *testing.T) {
 	s := phoneActionTestServer()
-	phone, unsubPhone := s.pushHub.subscribe(kindMobile)
+	phone, unsubPhone := s.pushHub.Subscribe(proactive.KindMobile)
 	defer unsubPhone()
-	harness, unsubHarness := s.pushHub.subscribe(kindMobile)
+	harness, unsubHarness := s.pushHub.Subscribe(proactive.KindMobile)
 	defer unsubHarness()
 
 	done := make(chan error, 1)
@@ -149,8 +160,8 @@ func TestDispatchPhoneAction_HarnessFailureDoesNotMaskPhoneSuccess(t *testing.T)
 	<-harness
 
 	// Harness reports failure first, then the real phone succeeds.
-	s.ingestPhoneEventAsync("phone_action_result", "alarm", `{"id":"`+frame.Ref+`","ok":false}`)
-	s.ingestPhoneEventAsync("phone_action_result", "alarm", `{"id":"`+frame.Ref+`","ok":true}`)
+	ingestPhoneActionResult(s, "phone_action_result", "alarm", `{"id":"`+frame.Ref+`","ok":false}`)
+	ingestPhoneActionResult(s, "phone_action_result", "alarm", `{"id":"`+frame.Ref+`","ok":true}`)
 	if err := <-done; err != nil {
 		t.Fatalf("phone success must win over harness failure, got %v", err)
 	}
@@ -158,9 +169,9 @@ func TestDispatchPhoneAction_HarnessFailureDoesNotMaskPhoneSuccess(t *testing.T)
 
 func TestDispatchPhoneAction_AllSubscribersFailed(t *testing.T) {
 	s := phoneActionTestServer()
-	phone, unsubPhone := s.pushHub.subscribe(kindMobile)
+	phone, unsubPhone := s.pushHub.Subscribe(proactive.KindMobile)
 	defer unsubPhone()
-	harness, unsubHarness := s.pushHub.subscribe(kindMobile)
+	harness, unsubHarness := s.pushHub.Subscribe(proactive.KindMobile)
 	defer unsubHarness()
 
 	done := make(chan error, 1)
@@ -170,8 +181,8 @@ func TestDispatchPhoneAction_AllSubscribersFailed(t *testing.T) {
 	frame := <-phone
 	<-harness
 
-	s.ingestPhoneEventAsync("phone_action_result", "timer", `{"id":"`+frame.Ref+`","ok":false}`)
-	s.ingestPhoneEventAsync("phone_action_result", "timer", `{"id":"`+frame.Ref+`","ok":false}`)
+	ingestPhoneActionResult(s, "phone_action_result", "timer", `{"id":"`+frame.Ref+`","ok":false}`)
+	ingestPhoneActionResult(s, "phone_action_result", "timer", `{"id":"`+frame.Ref+`","ok":false}`)
 	err := <-done
 	if err == nil || !strings.Contains(err.Error(), "failed on the device") {
 		t.Fatalf("unanimous failure must surface as an error, got %v", err)
@@ -180,7 +191,7 @@ func TestDispatchPhoneAction_AllSubscribersFailed(t *testing.T) {
 
 func TestDispatchPhoneAction_UnconfirmedOnCancel(t *testing.T) {
 	s := phoneActionTestServer()
-	frames, unsub := s.pushHub.subscribe(kindMobile)
+	frames, unsub := s.pushHub.Subscribe(proactive.KindMobile)
 	defer unsub()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -197,7 +208,7 @@ func TestDispatchPhoneAction_UnconfirmedOnCancel(t *testing.T) {
 
 func TestDispatchPhoneAction_SyncStateFireAndForget(t *testing.T) {
 	s := phoneActionTestServer()
-	frames, unsub := s.pushHub.subscribe(kindMobile)
+	frames, unsub := s.pushHub.Subscribe(proactive.KindMobile)
 	defer unsub()
 
 	// Returns nil immediately — no waiting, no correlation id.
@@ -213,7 +224,7 @@ func TestDispatchPhoneAction_SyncStateFireAndForget(t *testing.T) {
 func TestDispatchPhoneAction_NoMobileSubscriber(t *testing.T) {
 	s := phoneActionTestServer()
 	// Desktop-only connection must not read as dispatchable.
-	_, unsub := s.pushHub.subscribe(kindDesktop)
+	_, unsub := s.pushHub.Subscribe(proactive.KindDesktop)
 	defer unsub()
 	if err := s.dispatchPhoneAction(context.Background(), "timer", map[string]string{"seconds": "60"}); err == nil {
 		t.Fatal("dispatch without a mobile subscriber must error")

@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -40,6 +41,10 @@ type Client struct {
 func New(baseURL string, logger *slog.Logger) *Client {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+	if logger == nil {
+		logger = slog.Default()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &Client{
@@ -120,11 +125,22 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 	}
 
 	var result embedResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(&result); err != nil {
 		return nil, fmt.Errorf("embedding: decode: %w", err)
 	}
 	if len(result.Embeddings) != len(texts) {
 		return nil, fmt.Errorf("embedding: expected %d embeddings, got %d", len(texts), len(result.Embeddings))
+	}
+	if result.Count > 0 && result.Count != len(result.Embeddings) {
+		return nil, fmt.Errorf("embedding: response count %d does not match %d embeddings", result.Count, len(result.Embeddings))
+	}
+	for i, vector := range result.Embeddings {
+		if len(vector) == 0 {
+			return nil, fmt.Errorf("embedding: embedding %d is empty", i)
+		}
+		if result.Dimensions > 0 && len(vector) != result.Dimensions {
+			return nil, fmt.Errorf("embedding: embedding %d has %d dimensions, expected %d", i, len(vector), result.Dimensions)
+		}
 	}
 	return result.Embeddings, nil
 }

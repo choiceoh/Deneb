@@ -60,7 +60,10 @@ func TestAppUpdateManifest_Integration(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("manifest with token must be 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var m appUpdateManifest
+	var m struct {
+		Code int    `json:"code"`
+		File string `json:"file"`
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
 		t.Fatalf("decode manifest: %v", err)
 	}

@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -51,11 +53,11 @@ const metaProposalMaxBytes = 24 * 1024
 // otherwise silently drop the new schema when adopted (near-miss 2026-07-11:
 // the first live proposal predated tool_gap and would have erased it).
 var metaArtifactContracts = map[string][]string{
-	MetaEvolveSystemPrompt: {
+	generation.MetaEvolveSystemPrompt: {
 		`"skip"`, `"changes"`, `"body"`, `"new_version"`,
 		`"target_signature"`, `"reproduction_case"`, `"tool_gap"`,
 	},
-	MetaSkillJudgeSystemPrompt: {
+	generation.MetaSkillJudgeSystemPrompt: {
 		`"pass"`, `"original_score"`, `"candidate_score"`, `"reason"`,
 	},
 }
@@ -139,7 +141,7 @@ func (t *Tracker) MetaEvolutionHealth() MetaEvolutionHealth {
 	newest := entries[0]
 	out.LastArtifact = newest.Artifact
 	out.LastEpoch = newest.Epoch
-	out.LastReason = truncateRunes(newest.Reason, 200)
+	out.LastReason = common.TruncateRunes(newest.Reason, 200)
 	out.LastProposed = newest.Proposed
 	return out
 }
@@ -149,7 +151,7 @@ func (t *Tracker) MetaEvolutionHealth() MetaEvolutionHealth {
 // isolated state dir, so no extra production gate is needed for propose-only.
 type MetaEvolutionTask struct {
 	Evolver *Evolver
-	Meta    *MetaArtifacts
+	Meta    *generation.MetaArtifacts
 	Tracker *Tracker
 	Logger  *slog.Logger
 
@@ -181,7 +183,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	}
 
 	epoch, artifact := t.nextEpoch()
-	fallback := DefaultMetaArtifacts()[artifact]
+	fallback := generation.DefaultMetaArtifacts()[artifact]
 	incumbent := t.Meta.Load(artifact, fallback)
 	fromVersion := t.Meta.Version(artifact, fallback)
 
@@ -272,7 +274,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 		return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow,
 			false, "", "proposal write failed: "+werr.Error())
 	}
-	toVersion := contentSHA256(strings.TrimSpace(proposal))[:12]
+	toVersion := generation.ContentSHA256(strings.TrimSpace(proposal))[:12]
 	logger.Info("meta-evolution: revision proposed (propose-only — adoption is a separate decision)",
 		"artifact", artifact, "epoch", epoch, "from", fromVersion, "to", toVersion, "path", path)
 	if t.OnProposal != nil {
@@ -295,9 +297,9 @@ func (t *MetaEvolutionTask) recordWithBenches(record func(bool, string, string) 
 func (t *MetaEvolutionTask) nextEpoch() (string, string) {
 	prior, err := t.Tracker.RecentMetaRevisions(1)
 	if err == nil && len(prior) > 0 && prior[0].Epoch == metaEpochProducer {
-		return metaEpochEvaluator, MetaSkillJudgeSystemPrompt
+		return metaEpochEvaluator, generation.MetaSkillJudgeSystemPrompt
 	}
-	return metaEpochProducer, MetaEvolveSystemPrompt
+	return metaEpochProducer, generation.MetaEvolveSystemPrompt
 }
 
 // assembleEvidence builds the compact evidence block the proposal prompt sees:
@@ -309,13 +311,13 @@ func (t *MetaEvolutionTask) assembleEvidence() string {
 		h.Evolves7d, h.EvolveRejected7d, h.EvolveRolledBack7d, h.EvolveConfirmed7d,
 		h.ConfirmRate, h.FalseAcceptRate, h.ResolvedEvolves7d)
 	if h.LastRejectedReason != "" {
-		fmt.Fprintf(&b, "- 최근 기각: %s — %s\n", h.LastRejectedSkill, truncateRunes(h.LastRejectedReason, 200))
+		fmt.Fprintf(&b, "- 최근 기각: %s — %s\n", h.LastRejectedSkill, common.TruncateRunes(h.LastRejectedReason, 200))
 	}
 	if levers, err := t.Tracker.LowYieldLevers(3, 2, 0.5); err == nil && len(levers) > 0 {
 		b.WriteString("\n## 저수율 레버 (반복 커밋되나 확인율 낮음)\n")
 		for _, lv := range levers {
 			fmt.Fprintf(&b, "- %s/%s: committed %d, confirmed %d, rolledBack %d (rate %.2f)\n",
-				truncateRunes(lv.Signature, 80), lv.Surface, lv.Committed, lv.Confirmed, lv.RolledBack, lv.ConfirmRate)
+				common.TruncateRunes(lv.Signature, 80), lv.Surface, lv.Committed, lv.Confirmed, lv.RolledBack, lv.ConfirmRate)
 		}
 	}
 	if prior, err := t.Tracker.RecentMetaRevisions(5); err == nil && len(prior) > 0 {
@@ -326,7 +328,7 @@ func (t *MetaEvolutionTask) assembleEvidence() string {
 				status = "불발"
 			}
 			fmt.Fprintf(&b, "- [%s] %s %s→%s: %s (%s)\n",
-				p.Epoch, p.Artifact, p.FromVersion, p.ToVersion, truncateRunes(p.Reason, 160), status)
+				p.Epoch, p.Artifact, p.FromVersion, p.ToVersion, common.TruncateRunes(p.Reason, 160), status)
 		}
 	}
 	return b.String()
@@ -385,8 +387,8 @@ func (t *MetaEvolutionTask) propose(ctx context.Context, artifact, incumbent, ev
 // Returns "" when the proposal is admissible, else the rejection reason.
 func metaProposalGate(artifact, incumbent, proposal string) string {
 	trimmed := strings.TrimSpace(proposal)
-	if len(trimmed) < metaArtifactMinBytes {
-		return fmt.Sprintf("proposal too short (%d bytes < %d floor)", len(trimmed), metaArtifactMinBytes)
+	if len(trimmed) < generation.MetaArtifactMinBytes {
+		return fmt.Sprintf("proposal too short (%d bytes < %d floor)", len(trimmed), generation.MetaArtifactMinBytes)
 	}
 	if len(trimmed) > metaProposalMaxBytes {
 		return fmt.Sprintf("proposal too large (%d bytes > %d cap)", len(trimmed), metaProposalMaxBytes)

@@ -627,7 +627,10 @@ func contextMessageDedupeKey(msg ContextMessage) string {
 	if id := strings.TrimSpace(msg.ID); id != "" {
 		return "id:" + id
 	}
-	return "loc:" + msg.Locator
+	if locator := strings.TrimSpace(msg.Locator); locator != "" {
+		return "loc:" + locator
+	}
+	return ""
 }
 
 func sortContextMessages(msgs []ContextMessage, chronological bool) {
@@ -723,22 +726,36 @@ func normalizeProjectSubject(subject string) string {
 func contextParticipants(msg ContextMessage) []string {
 	var out []string
 	seen := map[string]bool{}
+	addOne := func(raw string) {
+		part := strings.TrimSpace(raw)
+		if part == "" {
+			return
+		}
+		addr := extractParticipantAddress(part)
+		if addr == "" {
+			addr = part
+		}
+		key := strings.ToLower(addr)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, addr)
+	}
 	add := func(raw string) {
+		// Parse the header as RFC 5322 first. Splitting on commas corrupts a
+		// perfectly valid quoted display name such as "Doe, Jane" <jane@x> and
+		// used to add a bogus participant named "Doe" beside the real address.
+		if addresses, err := mail.ParseAddressList(raw); err == nil && len(addresses) > 0 {
+			for _, address := range addresses {
+				addOne(address.Address)
+			}
+			return
+		}
+		// Archive data can contain malformed legacy headers. Preserve the old
+		// best-effort behavior for those instead of dropping every participant.
 		for _, part := range strings.Split(raw, ",") {
-			part = strings.TrimSpace(part)
-			if part == "" {
-				continue
-			}
-			addr := extractParticipantAddress(part)
-			if addr == "" {
-				addr = part
-			}
-			key := strings.ToLower(addr)
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			out = append(out, addr)
+			addOne(part)
 		}
 	}
 	add(msg.From)

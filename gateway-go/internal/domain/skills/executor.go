@@ -31,6 +31,10 @@ func ExecuteLocalSkill(entry SkillEntry, args string) (string, error) {
 	cmdArgs = append(cmdArgs, strings.Fields(args)...)
 	cmd := exec.CommandContext(ctx, le.Command, cmdArgs...) //nolint:gosec // G204 — command comes from trusted skill definitions
 	cmd.Dir = entry.Skill.Dir
+	// A shell command may spawn descendants that inherit its stdout/stderr
+	// descriptors. Killing only the shell at the deadline otherwise leaves
+	// Cmd.Wait blocked until those descendants exit and close the pipes.
+	cmd.WaitDelay = 250 * time.Millisecond
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

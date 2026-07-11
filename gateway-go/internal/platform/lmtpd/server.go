@@ -238,6 +238,10 @@ func (s *Server) process(ctx context.Context, body []byte, readErr error) string
 		return "554 5.6.0 Parse error"
 	}
 	msg.Raw = body
+	if s.handler == nil {
+		s.log.Error("LMTP 메시지 처리기 없음")
+		return "451 4.3.0 Processing unavailable, try again"
+	}
 	if err := s.handler(ctx, msg); err != nil {
 		s.log.Error("LMTP 메시지 처리 실패", "error", err, "subject", msg.Detail.Subject)
 		return "451 4.3.0 Processing failed, try again"

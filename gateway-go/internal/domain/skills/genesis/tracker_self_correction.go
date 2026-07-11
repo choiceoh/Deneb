@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/surfaces"
+
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
@@ -76,7 +78,7 @@ func (t *Tracker) RecordSelfCorrectionCandidate(record SelfCorrectionCandidateRe
 	// the loop): a forbidden target rejects the whole candidate at record time,
 	// and the summary tier travels with the record so reviewers see at a glance
 	// whether this could ever auto-apply or must land as a reviewed PR.
-	tier, forbidden := classifyProposalSurfaces(record.TargetFiles)
+	tier, forbidden := surfaces.ClassifyProposalSurfaces(record.TargetFiles)
 	if len(forbidden) > 0 {
 		return record, fmt.Errorf("genesis-tracker: self-correction targets a forbidden surface: %s", strings.Join(forbidden, ", "))
 	}

@@ -155,7 +155,7 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 		if strings.TrimSpace(accepted.Description) != "" {
 			committedDescription = strings.TrimSpace(accepted.Description)
 		}
-		if !accepted.Audit.empty() {
+		if !accepted.Audit.Empty() {
 			committedAudit = accepted.Audit
 		}
 	}
@@ -264,7 +264,7 @@ func (e *Evolver) commitEvaluatedCandidate(entry *skills.SkillEntry, originalCon
 		Evolved:     true,
 		NewVersion:  newVersion,
 		Description: committedDescription,
-		Audit:       committedAudit.ptr(),
+		Audit:       committedAudit.Ptr(),
 	}, nil
 }
 
@@ -385,12 +385,6 @@ func formatRecentErrors(errors []string) string {
 }
 
 const (
-	skillEditBudgetMinOriginalLines   = 12
-	skillEditBudgetMaxChangedRatio    = 0.65
-	skillEditBudgetMaxAddedLines      = 80
-	skillEditBudgetMaxGrowthMultiple  = 2
-	skillHermesMaxSkillBytes          = 15 * 1024
-	skillHermesMaxChangedSections     = 3
 	skillJudgeMinScoreDelta           = 2.0
 	skillEvolutionMinEvidenceUses     = 2
 	skillEvolutionMinEvidenceFailures = 2
@@ -406,9 +400,7 @@ const (
 // (validation_backfill_task.go) grows coverage, so skills graduate to the
 // relaxed tier as their corpus fills.
 const (
-	skillCoveredEditBudgetMaxChangedRatio = 0.85
-	skillCoveredHermesMaxChangedSections  = 5
-	skillCoveredJudgeMinScoreDelta        = 1.0
+	skillCoveredJudgeMinScoreDelta = 1.0
 )
 
 // skillEvolveBurstMaxRounds bounds loop-until-dry evolution per skill per

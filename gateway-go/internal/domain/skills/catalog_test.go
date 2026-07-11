@@ -1,6 +1,8 @@
 package skills
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -126,5 +128,112 @@ func TestResolveSkillInvocationPolicy(t *testing.T) {
 	}
 	if pol.DisableModelInvocation {
 		t.Error("default DisableModelInvocation should be false")
+	}
+}
+
+func TestCatalogOwnsDeepCopiesOfEntries(t *testing.T) {
+	extract := true
+	strip := 2
+	original := SkillEntry{
+		Skill:       Skill{Name: "deep-copy", Source: SourceWorkspace},
+		Frontmatter: ParsedFrontmatter{"description": "original"},
+		Metadata: &DenebSkillMetadata{
+			Tags:      []string{"safe"},
+			Triggers:  []string{"검토"},
+			Requires:  &SkillRequires{Bins: []string{"git"}, Env: []string{"TOKEN"}},
+			LocalExec: &SkillLocalExec{Command: "tool", Args: []string{"--safe"}},
+			Install:   []SkillInstallSpec{{Kind: "download", Bins: []string{"tool"}, Extract: &extract, StripComponents: &strip}},
+		},
+		Invocation: &SkillInvocationPolicy{UserInvocable: true},
+	}
+	catalog := NewCatalog(nil)
+	catalog.Register(original)
+
+	original.Frontmatter["description"] = "caller mutation"
+	original.Metadata.Tags[0] = "mutated"
+	original.Metadata.Triggers[0] = "changed"
+	original.Metadata.Requires.Bins[0] = "bad-bin"
+	original.Metadata.LocalExec.Args[0] = "--unsafe"
+	original.Metadata.Install[0].Bins[0] = "bad-install"
+	*original.Metadata.Install[0].Extract = false
+	*original.Metadata.Install[0].StripComponents = 9
+	original.Invocation.UserInvocable = false
+
+	got, ok := catalog.Get("deep-copy")
+	if !ok {
+		t.Fatal("registered entry missing")
+	}
+	if got.Frontmatter["description"] != "original" || got.Metadata.Tags[0] != "safe" || got.Metadata.Triggers[0] != "검토" {
+		t.Fatalf("catalog retained caller-owned maps/slices: %#v", got)
+	}
+	if got.Metadata.Requires.Bins[0] != "git" || got.Metadata.LocalExec.Args[0] != "--safe" || got.Metadata.Install[0].Bins[0] != "tool" {
+		t.Fatalf("catalog retained nested caller slices: %#v", got.Metadata)
+	}
+	if !*got.Metadata.Install[0].Extract || *got.Metadata.Install[0].StripComponents != 2 || !got.Invocation.UserInvocable {
+		t.Fatalf("catalog retained nested caller pointers: %#v", got)
+	}
+}
+
+func TestCatalogReadViewsCannotMutateStoredEntry(t *testing.T) {
+	catalog := NewCatalog(nil)
+	catalog.Register(SkillEntry{
+		Skill:       Skill{Name: "immutable"},
+		Frontmatter: ParsedFrontmatter{"key": "value"},
+		Metadata:    &DenebSkillMetadata{Tags: []string{"tag"}, Requires: &SkillRequires{Bins: []string{"rg"}}},
+	})
+
+	fromGet, _ := catalog.Get("immutable")
+	fromGet.Frontmatter["key"] = "get-mutated"
+	fromGet.Metadata.Tags[0] = "get-mutated"
+	fromGet.Metadata.Requires.Bins[0] = "get-mutated"
+	fromList := catalog.List()
+	fromList[0].Metadata.Tags[0] = "list-mutated"
+	fromSnapshot := catalog.Snapshot()
+	fromSnapshot.Entries[0].Frontmatter["key"] = "snapshot-mutated"
+
+	fresh, _ := catalog.Get("immutable")
+	if fresh.Frontmatter["key"] != "value" || fresh.Metadata.Tags[0] != "tag" || fresh.Metadata.Requires.Bins[0] != "rg" {
+		t.Fatalf("stored entry mutated through a read view: %#v", fresh)
+	}
+}
+
+func TestCatalogVersionCountAndUnregister(t *testing.T) {
+	catalog := NewCatalog(nil)
+	catalog.SetVersion(42)
+	catalog.Register(SkillEntry{Skill: Skill{Name: "one"}})
+	catalog.Register(SkillEntry{Skill: Skill{Name: "two"}})
+	if catalog.Version() != 42 || catalog.Snapshot().Version != 42 || catalog.Count() != 2 {
+		t.Fatalf("catalog state = version %d, snapshot %d, count %d", catalog.Version(), catalog.Snapshot().Version, catalog.Count())
+	}
+	if !catalog.Unregister("one") || catalog.Unregister("one") || catalog.Count() != 1 {
+		t.Fatalf("unexpected unregister behavior, count=%d", catalog.Count())
+	}
+	if _, ok := catalog.Get("one"); ok {
+		t.Fatal("unregistered entry still returned")
+	}
+}
+
+func TestCatalogConcurrentRegistrationAndSnapshots(t *testing.T) {
+	catalog := NewCatalog(nil)
+	const count = 64
+	var writers sync.WaitGroup
+	for i := range count {
+		writers.Add(1)
+		go func(i int) {
+			defer writers.Done()
+			catalog.Register(SkillEntry{Skill: Skill{Name: fmt.Sprintf("skill-%02d", i)}})
+			_ = catalog.Snapshot()
+			_ = catalog.List()
+		}(i)
+	}
+	writers.Wait()
+	if catalog.Count() != count {
+		t.Fatalf("concurrent count = %d, want %d", catalog.Count(), count)
+	}
+	entries := catalog.List()
+	for i, entry := range entries {
+		if want := fmt.Sprintf("skill-%02d", i); entry.Skill.Name != want {
+			t.Fatalf("entries[%d] = %q, want %q", i, entry.Skill.Name, want)
+		}
 	}
 }

@@ -6,6 +6,7 @@ package chat
 
 import (
 	"context"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
@@ -200,6 +201,8 @@ func handleChatBtw(deps BtwDeps) rpcutil.HandlerFunc {
 		if errResp != nil {
 			return errResp
 		}
+		p.Question = strings.TrimSpace(p.Question)
+		p.SessionKey = strings.TrimSpace(p.SessionKey)
 		if p.Question == "" {
 			return rpcerr.MissingParam("question").Response(req.ID)
 		}

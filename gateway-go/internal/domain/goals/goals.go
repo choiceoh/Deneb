@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -222,6 +223,12 @@ func (s *Store) ListActive() []*State {
 			out = append(out, st.clone())
 		}
 	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt != out[j].CreatedAt {
+			return out[i].CreatedAt < out[j].CreatedAt
+		}
+		return out[i].SessionKey < out[j].SessionKey
+	})
 	return out
 }
 
@@ -361,7 +368,18 @@ func statusLabel(st Status) string {
 
 // Pause suspends an active goal (resumable). No-op if not active.
 func (s *Store) Pause(sessionKey, reason string) *State {
-	return s.setStatus(sessionKey, StatusPaused, reason, false)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st := s.byKey[sessionKey]
+	if st == nil || st.Status != StatusActive {
+		return st.clone()
+	}
+	st.Status = StatusPaused
+	if reason != "" {
+		st.PausedReason = reason
+	}
+	s.saveLocked()
+	return st.clone()
 }
 
 // Resume reactivates a paused goal and resets the budget (a fresh allotment),

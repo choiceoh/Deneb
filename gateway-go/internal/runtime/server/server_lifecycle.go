@@ -14,6 +14,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 )
 
+// DefaultTurnDeadline is the end-to-end budget for one user turn.
+const DefaultTurnDeadline = 5 * time.Minute
+
 // initAndListen creates the HTTP server, binds to the address, and starts
 // background subsystems (tick broadcaster, monitoring, session GC, hooks).
 // Shared by Run and StartAndListen to avoid duplicating the startup sequence.

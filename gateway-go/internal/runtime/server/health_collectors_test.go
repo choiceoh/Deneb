@@ -3,6 +3,7 @@ package server
 import (
 	"testing"
 
+	runtimehealth "github.com/choiceoh/deneb/gateway-go/internal/runtime/health"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -55,13 +56,13 @@ func TestPropusHealthCompatibilityAliasSharesSnapshot(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // same isolation — New() touches the HOME cron store
 	srv := testutil.Must(New(":0"))
 	srv.GenesisSubsystem = &GenesisSubsystem{}
-	if section, ok := srv.collectPropusHealth(); ok || section != nil {
+	if section, ok := runtimehealth.Propus(srv.genesisTracker); ok || section != nil {
 		t.Fatalf("unwired Propus tracker returned section=%v, ok=%v", section, ok)
 	}
 
 	health := map[string]any{}
 	section := map[string]any{"state": "healthy"}
-	attachPropusHealth(health, section)
+	runtimehealth.AttachPropus(health, section)
 
 	propus, ok := health["propus"].(map[string]any)
 	if !ok {

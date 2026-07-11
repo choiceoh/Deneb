@@ -216,10 +216,11 @@ func formatToolProvenance(t agentlog.TurnToolData) string {
 }
 
 func shortHash(h string) string {
-	if len(h) <= 12 {
+	runes := []rune(h)
+	if len(runes) <= 12 {
 		return h
 	}
-	return h[:12]
+	return string(runes[:12])
 }
 
 func formatObserveLogs(lines []observe.LogLine) string {

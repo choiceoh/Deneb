@@ -9,6 +9,8 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 )
 
 // TestCardTitle_RoleCompare_Live exercises the REAL card-title prompt against the
@@ -24,14 +26,14 @@ func TestCardTitle_RoleCompare_Live(t *testing.T) {
 	}
 	logger := slog.Default()
 	reg := modelrole.NewRegistryWithOptions(logger, modelrole.RegistryOptions{
-		MainModel:        resolveDefaultModel(logger),
-		LocalVllmModel:   resolveLocalVllmModel(logger),
-		LightweightModel: resolveLightweightModel(logger),
-		TinyModel:        resolveTinyModel(logger),
-		CodingModel:      resolveCodingModel(logger),
-		FallbackModel:    resolveFallbackModel(logger),
-		VisionModel:      resolveVisionModel(logger),
-		Providers:        providerCatalog(logger),
+		MainModel:        configresolve.DefaultModel(logger),
+		LocalVllmModel:   configresolve.LocalVLLMModel(logger),
+		LightweightModel: configresolve.LightweightModel(logger),
+		TinyModel:        configresolve.TinyModel(logger),
+		CodingModel:      configresolve.CodingModel(logger),
+		FallbackModel:    configresolve.FallbackModel(logger),
+		VisionModel:      configresolve.VisionModel(logger),
+		Providers:        configresolve.ProviderCatalog(logger),
 	})
 	pilot.SetModelRoleRegistry(reg)
 
@@ -45,12 +47,11 @@ func TestCardTitle_RoleCompare_Live(t *testing.T) {
 	for _, role := range []modelrole.Role{modelrole.RoleTiny, modelrole.RoleLightweight} {
 		t.Logf("========== role=%s  model=%s ==========", role, reg.FullModelID(role))
 		for i, body := range samples {
-			ctx, cancel := context.WithTimeout(context.Background(), cardTitleTimeout)
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 			start := time.Now()
-			out, err := pilot.CallRoleLLM(ctx, role, cardTitleSystemPrompt, body, cardTitleMaxTokens)
+			title, summary, out, err := proactive.EvaluateCardTitleRole(ctx, role, body)
 			el := time.Since(start).Round(time.Millisecond)
 			cancel()
-			title, summary := parseLLMTitleSummary(out)
 			verdict := "OK"
 			if err != nil {
 				verdict = "ERR"

@@ -2,6 +2,7 @@ package genesis
 
 import (
 	"fmt"
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"strings"
 	"unicode"
 )
@@ -36,7 +37,7 @@ func scoreReplayAgainstTrace(trace skillReplayTrace, tc SkillValidationCaseRecor
 			score.Passed++
 			continue
 		}
-		score.Failures = append(score.Failures, fmt.Sprintf("%s replay missing required action %q", label, truncateRunes(action, 80)))
+		score.Failures = append(score.Failures, fmt.Sprintf("%s replay missing required action %q", label, genesiscommon.TruncateRunes(action, 80)))
 	}
 	for _, action := range replay.ForbiddenActions {
 		score.Total++
@@ -44,7 +45,7 @@ func scoreReplayAgainstTrace(trace skillReplayTrace, tc SkillValidationCaseRecor
 			score.Passed++
 			continue
 		}
-		score.Failures = append(score.Failures, fmt.Sprintf("%s replay contains forbidden action %q", label, truncateRunes(action, 80)))
+		score.Failures = append(score.Failures, fmt.Sprintf("%s replay contains forbidden action %q", label, genesiscommon.TruncateRunes(action, 80)))
 	}
 	for _, observation := range replay.RequiredObservations {
 		score.Total++
@@ -52,7 +53,7 @@ func scoreReplayAgainstTrace(trace skillReplayTrace, tc SkillValidationCaseRecor
 			score.Passed++
 			continue
 		}
-		score.Failures = append(score.Failures, fmt.Sprintf("%s replay missing required observation %q", label, truncateRunes(observation, 80)))
+		score.Failures = append(score.Failures, fmt.Sprintf("%s replay missing required observation %q", label, genesiscommon.TruncateRunes(observation, 80)))
 	}
 	for _, observation := range replay.ForbiddenObservations {
 		score.Total++
@@ -60,7 +61,7 @@ func scoreReplayAgainstTrace(trace skillReplayTrace, tc SkillValidationCaseRecor
 			score.Passed++
 			continue
 		}
-		score.Failures = append(score.Failures, fmt.Sprintf("%s replay contains forbidden observation %q", label, truncateRunes(observation, 80)))
+		score.Failures = append(score.Failures, fmt.Sprintf("%s replay contains forbidden observation %q", label, genesiscommon.TruncateRunes(observation, 80)))
 	}
 	for _, tool := range replay.RequiredTools {
 		score.Total++
@@ -68,7 +69,7 @@ func scoreReplayAgainstTrace(trace skillReplayTrace, tc SkillValidationCaseRecor
 			score.Passed++
 			continue
 		}
-		score.Failures = append(score.Failures, fmt.Sprintf("%s replay missing required tool %q", label, truncateRunes(tool, 80)))
+		score.Failures = append(score.Failures, fmt.Sprintf("%s replay missing required tool %q", label, genesiscommon.TruncateRunes(tool, 80)))
 	}
 	for _, tool := range replay.ForbiddenTools {
 		score.Total++
@@ -76,7 +77,7 @@ func scoreReplayAgainstTrace(trace skillReplayTrace, tc SkillValidationCaseRecor
 			score.Passed++
 			continue
 		}
-		score.Failures = append(score.Failures, fmt.Sprintf("%s replay contains forbidden tool %q", label, truncateRunes(tool, 80)))
+		score.Failures = append(score.Failures, fmt.Sprintf("%s replay contains forbidden tool %q", label, genesiscommon.TruncateRunes(tool, 80)))
 	}
 	for _, call := range replay.ExpectedToolCalls {
 		score.Total++
@@ -206,7 +207,7 @@ func formatReplayToolCall(call SkillReplayToolCallRecord) string {
 	if call.FixtureError {
 		parts = append(parts, "fixtureError=true")
 	}
-	return truncateRunes(strings.Join(parts, " "), 120)
+	return genesiscommon.TruncateRunes(strings.Join(parts, " "), 120)
 }
 
 func containsNormalizedValidationText(haystack, needle string) bool {

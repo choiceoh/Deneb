@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/sparkfleet"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/fleetapi"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 )
 
 func TestFleetPathAllowed(t *testing.T) {
@@ -25,7 +27,7 @@ func TestFleetPathAllowed(t *testing.T) {
 		{http.MethodGet, "/api/recipes/qwen36/drift"},
 	}
 	for _, a := range allowed {
-		if !fleetPathAllowed(a[0], a[1]) {
+		if !fleetapi.PathAllowed(a[0], a[1]) {
 			t.Errorf("%s %s should be allowed", a[0], a[1])
 		}
 	}
@@ -41,18 +43,15 @@ func TestFleetPathAllowed(t *testing.T) {
 		{http.MethodGet, "/healthz"},
 	}
 	for _, d := range denied {
-		if fleetPathAllowed(d[0], d[1]) {
+		if fleetapi.PathAllowed(d[0], d[1]) {
 			t.Errorf("%s %s must be denied", d[0], d[1])
 		}
 	}
 }
 
 // fleetTestServer is a minimal Server wired to a stub SparkFleet upstream.
-func fleetTestServer(upstreamURL string) *Server {
-	return &Server{
-		logger: slog.Default(),
-		fleet:  sparkfleet.New(upstreamURL, slog.Default()),
-	}
+func fleetTestServer(upstreamURL string) *fleetapi.Handler {
+	return fleetapi.New(sparkfleet.New(upstreamURL, slog.Default()), slog.Default())
 }
 
 func TestFleetProxyForwards(t *testing.T) {
@@ -73,7 +72,7 @@ func TestFleetProxyForwards(t *testing.T) {
 		strings.NewReader(`{"recipe":"qwen36","action":"launch"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	s.fleetProxy(w, req)
+	s.Proxy(w, req)
 
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "job-7") {
 		t.Fatalf("proxy response: %d %s", w.Code, w.Body.String())
@@ -99,17 +98,17 @@ func TestFleetProxyDeniesUnlistedPath(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/fleet/api/recipes/save", strings.NewReader("{}"))
 	w := httptest.NewRecorder()
-	s.fleetProxy(w, req)
+	s.Proxy(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Errorf("recipe save through the proxy: got %d want 403", w.Code)
 	}
 }
 
 func TestFleetProxyOffWithoutURL(t *testing.T) {
-	s := &Server{logger: slog.Default()} // fleet nil — integration disabled
+	s := fleetapi.New(nil, slog.Default()) // fleet nil — integration disabled
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/fleet/api/state", nil)
 	w := httptest.NewRecorder()
-	s.fleetProxy(w, req)
+	s.Proxy(w, req)
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("disabled integration: got %d want 503", w.Code)
 	}
@@ -120,18 +119,18 @@ func TestFleetProxyRequiresToken(t *testing.T) {
 	s := fleetTestServer("http://127.0.0.1:1")
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/fleet/api/state", nil)
 	w := httptest.NewRecorder()
-	s.handleFleetProxy(w, req)
+	s.ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("missing token: got %d want 401", w.Code)
 	}
 }
 
 func TestFleetPathAllowedJobCancel(t *testing.T) {
-	if !fleetPathAllowed(http.MethodPost, "/api/jobs/job-12/cancel") {
+	if !fleetapi.PathAllowed(http.MethodPost, "/api/jobs/job-12/cancel") {
 		t.Error("job cancel must be allowed")
 	}
 	for _, bad := range []string{"/api/jobs//cancel", "/api/jobs/a/b/cancel", "/api/jobs/cancel"} {
-		if fleetPathAllowed(http.MethodPost, bad) {
+		if fleetapi.PathAllowed(http.MethodPost, bad) {
 			t.Errorf("%s must be denied", bad)
 		}
 	}
@@ -140,8 +139,8 @@ func TestFleetPathAllowedJobCancel(t *testing.T) {
 // The fleet webhook relays SparkFleet's generic alerts to connected clients,
 // loopback-only.
 func TestFleetHook(t *testing.T) {
-	s := &Server{logger: slog.Default(), pushHub: newClientPushHub()}
-	ch, unsub := s.pushHub.subscribe(kindMobile)
+	s := &Server{logger: slog.Default(), pushHub: proactive.NewHub()}
+	ch, unsub := s.pushHub.Subscribe(proactive.KindMobile)
 	defer unsub()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/hooks/fleet",
@@ -157,8 +156,8 @@ func TestFleetHook(t *testing.T) {
 		if !strings.Contains(ev.Title, "플릿") || !strings.Contains(ev.Title, "node down: srv3") || ev.Body != "ssh unreachable" {
 			t.Errorf("unexpected push frame: %+v", ev)
 		}
-		if ev.Kind != pushKindFleet {
-			t.Errorf("fleet push Kind = %q, want %q", ev.Kind, pushKindFleet)
+		if ev.Kind != proactive.PushKindFleet {
+			t.Errorf("fleet push Kind = %q, want %q", ev.Kind, proactive.PushKindFleet)
 		}
 	default:
 		t.Fatal("no push frame published")

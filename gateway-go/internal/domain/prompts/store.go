@@ -170,8 +170,14 @@ func (s *Store) Set(id, text string) (Entry, error) {
 	if !t.Editable {
 		return Entry{}, ErrReadOnly
 	}
+	previous, hadPrevious := s.overrides[id]
 	s.overrides[id] = overrideEntry{Text: text, UpdatedAtMs: time.Now().UnixMilli()}
 	if err := s.saveLocked(); err != nil {
+		if hadPrevious {
+			s.overrides[id] = previous
+		} else {
+			delete(s.overrides, id)
+		}
 		return Entry{}, err
 	}
 	return s.entryLocked(id), nil
@@ -188,8 +194,12 @@ func (s *Store) Reset(id string) (Entry, error) {
 	if _, ok := s.byID[id]; !ok {
 		return Entry{}, ErrNotFound
 	}
+	previous, hadPrevious := s.overrides[id]
 	delete(s.overrides, id)
 	if err := s.saveLocked(); err != nil {
+		if hadPrevious {
+			s.overrides[id] = previous
+		}
 		return Entry{}, err
 	}
 	return s.entryLocked(id), nil

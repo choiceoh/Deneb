@@ -6,6 +6,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compactuner"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rolehealth"
 )
 
 // AutonomousSubsystem groups background/periodic services: the autonomous
@@ -17,7 +18,7 @@ type AutonomousSubsystem struct {
 	autonomousSvc *autonomous.Service
 	wikiDreamer   *wiki.WikiDreamer // set during initMemorySubsystem()
 	gmailPollSvc  *mailanalysis.Service
-	roleHealth    *roleHealthWatch // set during registerWorkflowSideEffects()
+	roleHealth    *rolehealth.Watch // set during registerWorkflowSideEffects()
 	compactTuner  *compactuner.Task
 
 	// agentLogWriter is the shared behavioral event log (the same instance the

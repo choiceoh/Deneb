@@ -114,7 +114,12 @@ func (t *Task) Interval() time.Duration { return taskInterval }
 // Run executes one measure → threshold → adjust cycle.
 func (t *Task) Run(ctx context.Context) error {
 	since := time.Now().Add(-statsWindow).UnixMilli()
-	stats := t.deps.Logs.AggregateByModel(since)
+	var stats []agentlog.ModelStat
+	var effortStats map[string]agentlog.EffortStat
+	if t.deps.Logs != nil {
+		stats = t.deps.Logs.AggregateByModel(since)
+		effortStats = t.deps.Logs.AggregateEffortByModel(since)
+	}
 	recs := Analyze(stats)
 	prev := LoadScorecard(t.deps.StatePath)
 
@@ -143,7 +148,7 @@ func (t *Task) Run(ctx context.Context) error {
 	// from the escalation-rate / routed-share verdict the scorecard already
 	// computes — closing the loop the EffortStat doc describes. Off by default;
 	// a no-op without the flag, so this is inert in the current deployment.
-	if nudged := t.applyEffortNudge(t.deps.Logs.AggregateEffortByModel(since)); nudged > 0 {
+	if nudged := t.applyEffortNudge(effortStats); nudged > 0 {
 		t.deps.Logger.Info("modeltuner: effort gates nudged", "models", nudged)
 	}
 
@@ -228,7 +233,7 @@ func probeModel(ctx context.Context, client *llm.Client, model string) (Calibrat
 		switch ev.Type {
 		case "content_block_delta":
 			var d llm.ContentBlockDelta
-			if json.Unmarshal(ev.Payload, &d) == nil {
+			if json.Unmarshal(ev.Payload, &d) == nil && d.Delta.Type != "thinking_delta" {
 				text.WriteString(d.Delta.Text)
 			}
 		case "error":

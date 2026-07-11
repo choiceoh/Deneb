@@ -60,9 +60,12 @@ func NewStore(path string) (*Store, error) {
 func (s *Store) ReplaceAll(contacts []Contact) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.all = contacts
+	previous := s.all
+	s.all = cloneContacts(contacts)
 	s.reindexLocked()
 	if err := s.persistLocked(); err != nil {
+		s.all = previous
+		s.reindexLocked()
 		return len(s.all), err
 	}
 	return len(s.all), nil
@@ -81,9 +84,7 @@ func (s *Store) Count() int {
 func (s *Store) All() []Contact {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]Contact, len(s.all))
-	copy(out, s.all)
-	return out
+	return cloneContacts(s.all)
 }
 
 // LookupPhone returns contacts whose number matches phone. It first tries an
@@ -103,16 +104,14 @@ func (s *Store) LookupPhone(phone string) []Contact {
 	if tail == "" {
 		return nil
 	}
-	seen := map[int]bool{}
 	var out []Contact
-	for k, idxs := range s.byPhone {
-		if tailDigits(k, 8) != tail {
-			continue
-		}
-		for _, i := range idxs {
-			if !seen[i] {
-				seen[i] = true
-				out = append(out, s.all[i])
+	// Scan the snapshot rather than the byPhone map so ambiguous suffix matches
+	// retain address-book order; map iteration made these results nondeterministic.
+	for i := range s.all {
+		for _, phone := range s.all[i].Phones {
+			if tailDigits(normalizePhone(phone), 8) == tail {
+				out = append(out, cloneContact(s.all[i]))
+				break
 			}
 		}
 	}
@@ -139,7 +138,7 @@ func (s *Store) Search(query string, limit int) []Contact {
 			strings.Contains(strings.ToLower(c.Org), q) ||
 			anyContains(c.Emails, q) ||
 			(digits != "" && anyPhoneContains(c.Phones, digits)) {
-			out = append(out, *c)
+			out = append(out, cloneContact(*c))
 			if len(out) >= limit {
 				break
 			}
@@ -233,7 +232,7 @@ func (s *Store) LookupEmail(email string) []Contact {
 	}
 	out := make([]Contact, 0, len(idxs))
 	for _, i := range idxs {
-		out = append(out, s.all[i])
+		out = append(out, cloneContact(s.all[i]))
 	}
 	return out
 }
@@ -257,9 +256,26 @@ func (s *Store) persistLocked() error {
 func (s *Store) collectLocked(idxs []int) []Contact {
 	out := make([]Contact, 0, len(idxs))
 	for _, i := range idxs {
-		out = append(out, s.all[i])
+		out = append(out, cloneContact(s.all[i]))
 	}
 	return out
+}
+
+func cloneContacts(in []Contact) []Contact {
+	if in == nil {
+		return nil
+	}
+	out := make([]Contact, len(in))
+	for i := range in {
+		out[i] = cloneContact(in[i])
+	}
+	return out
+}
+
+func cloneContact(in Contact) Contact {
+	in.Phones = append([]string(nil), in.Phones...)
+	in.Emails = append([]string(nil), in.Emails...)
+	return in
 }
 
 // normalizePhone strips to digits and maps a Korean +82 country code to the

@@ -188,7 +188,7 @@ func (s *Store) MarkAnalysisDone(in AnalysisInput) (MessageState, error) {
 		mergeMessageInput(&ms, in.MessageInput)
 		ms.AnalysisStatus = AnalysisDone
 		ms.AnalysisQuality = strings.TrimSpace(in.Quality)
-		ms.AnalysisDurationMs = in.DurationMs
+		ms.AnalysisDurationMs = maxInt64(0, in.DurationMs)
 		ms.AnalysisUpdatedAtMs = now
 		if in.DerivedCountsKnown {
 			ms.CalendarProposalCount = nonNegativeInt(in.CalendarProposalCount)

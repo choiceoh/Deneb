@@ -48,16 +48,12 @@ import ai.deneb.tools.SetupSmsPermissionHandler
 import ai.deneb.tools.SetupSmsSendPermissionHandler
 import ai.deneb.tools.SmsPermissionController
 import ai.deneb.tools.SmsSendPermissionController
-import ai.deneb.ui.DarkColorScheme
-import ai.deneb.ui.LightColorScheme
 import ai.deneb.ui.LocalSharedTransitionScope
 import ai.deneb.ui.Theme
 import ai.deneb.ui.chat.ChatScreen
 import ai.deneb.ui.chat.ChatViewModel
-import ai.deneb.ui.chat.composables.CaptureActions
 import ai.deneb.ui.chat.composables.DenebBottomBar
 import ai.deneb.ui.chat.composables.FeedScreen
-import ai.deneb.ui.chat.composables.LocalCaptureActions
 import ai.deneb.ui.chat.composables.denebBottomBarRoutes
 import ai.deneb.ui.chat.composables.navigateToDenebSection
 import ai.deneb.ui.components.FullScreenImageHost
@@ -111,194 +107,22 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.toRoute
-import coil3.ImageLoader
-import coil3.PlatformContext
-import coil3.compose.setSingletonImageLoaderFactory
-import coil3.network.ktor3.KtorNetworkFetcherFactory
-import coil3.svg.SvgDecoder
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.tab_chat
 import deneb.composeapp.generated.resources.tab_settings
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.todayIn
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import nl.marc_apps.tts.TextToSpeechInstance
 import nl.marc_apps.tts.experimental.ExperimentalVoiceApi
 import org.jetbrains.compose.resources.stringResource
-import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
-import org.koin.dsl.koinConfiguration
 import kotlin.time.Clock
 import kotlin.time.Instant
 
-@Serializable
-@SerialName("home")
-object Home
-
-@Serializable
-@SerialName("deneb_feed")
-object DenebFeed
-
-@Serializable
-@SerialName("deneb_config")
-object DenebConfig
-
-@Serializable
-@SerialName("deneb_fleet")
-object DenebFleet
-
-@Serializable
-@SerialName("deneb_mail")
-object DenebMail
-
-@Serializable
-@SerialName("deneb_calendar")
-object DenebCalendar
-
-@Serializable
-@SerialName("deneb_mail_detail")
-data class DenebMailDetail(val id: String)
-
-@Serializable
-@SerialName("deneb_calendar_event")
-data class DenebCalendarEvent(val id: String)
-
-@Serializable
-@SerialName("deneb_calendar_add")
-data class DenebCalendarAdd(val dateIso: String)
-
-@Serializable
-@SerialName("deneb_calendar_edit")
-data class DenebCalendarEdit(val id: String)
-
-@Serializable
-@SerialName("deneb_todo_add")
-data class DenebTodoAdd(val dueIso: String? = null)
-
-@Serializable
-@SerialName("deneb_todo_edit")
-data class DenebTodoEdit(val id: String)
-
-@Serializable
-@SerialName("deneb_search")
-object DenebSearch
-
-// 더보기 — the section hub (bottom-bar tab). A grouped text list of the sections that are
-// not first-class bottom-bar tabs (파트별 업무 현황·조직도·검색·할일·일기·카테고리·전체 연락처·
-// 노트북·파일·브라우저·설정). 채팅·피드·메일·달력 are their own tabs. See DenebMoreScreen.
-@Serializable
-@SerialName("deneb_more")
-object DenebMore
-
-@Serializable
-@SerialName("deneb_wiki")
-data class DenebWiki(val path: String)
-
-@Serializable
-@SerialName("deneb_people")
-object DenebPeople
-
-@Serializable
-@SerialName("deneb_person")
-data class DenebPerson(val sender: String)
-
-// Full address book (전체 연락처) — the raw contacts.json mirror, sectioned ㄱㄴㄷ.
-// Distinct from DenebPeople (Gmail counterparties + 인물 wiki, volume-ranked).
-@Serializable
-@SerialName("deneb_contacts")
-object DenebContacts
-
-@Serializable
-@SerialName("deneb_categories")
-object DenebCategories
-
-@Serializable
-@SerialName("deneb_diary")
-object DenebDiary
-
-@Serializable
-@SerialName("deneb_notebooks")
-// openId deep-links straight into one notebook's detail (e.g. from a wiki project
-// page's "이 딜 노트북" link); null opens the notebook list.
-data class DenebNotebooks(val openId: String? = null)
-
-@Serializable
-@SerialName("deneb_dashboard")
-object DenebDashboard
-
-@Serializable
-@SerialName("deneb_project_digests")
-object DenebProjectDigests
-
-@Serializable
-@SerialName("deneb_org")
-object DenebOrgChart
-
-@Serializable
-@SerialName("deneb_category_pages")
-data class DenebCategoryPages(val category: String)
-
-@Serializable
-@SerialName("deneb_skill")
-data class DenebSkill(val name: String)
-
-@Serializable
-@SerialName("deneb_browser")
-data class DenebBrowser(val url: String)
-
-@Serializable
-@SerialName("deneb_cron")
-data class DenebCron(val cronId: String)
-
-@Serializable
-@SerialName("deneb_cron_edit")
-data class DenebCronEdit(val cronId: String)
-
-@Serializable
-@SerialName("deneb_files")
-object DenebFiles
-
 @Composable
-fun App(
-    navController: NavHostController,
-    lightColorScheme: ColorScheme = LightColorScheme,
-    darkColorScheme: ColorScheme = DarkColorScheme,
-    textToSpeech: TextToSpeechInstance? = null,
-    isKoinStarted: Boolean = false,
-    onAppOpens: ((Int) -> Unit)? = null,
-    captureActions: CaptureActions? = null,
-) {
-    setSingletonImageLoaderFactory { context: PlatformContext ->
-        ImageLoader.Builder(context)
-            .components {
-                add(KtorNetworkFetcherFactory())
-                add(SvgDecoder.Factory())
-            }
-            .build()
-    }
-
-    // Reuse global Koin if already started (Android Application class),
-    // otherwise create a new instance (iOS, Desktop, Wasm).
-    CompositionLocalProvider(LocalCaptureActions provides captureActions) {
-        if (isKoinStarted) {
-            AppContent(navController, lightColorScheme, darkColorScheme, textToSpeech, onAppOpens)
-        } else {
-            KoinApplication(
-                configuration = koinConfiguration {
-                    modules(appModule)
-                },
-            ) {
-                AppContent(navController, lightColorScheme, darkColorScheme, textToSpeech, onAppOpens)
-            }
-        }
-    }
-}
-
-@Composable
-private fun AppContent(
+internal fun AppContent(
     navController: NavHostController,
     lightColorScheme: ColorScheme,
     darkColorScheme: ColorScheme,

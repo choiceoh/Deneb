@@ -9,6 +9,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -187,27 +188,42 @@ internal val fleetJson = Json {
 // --- transport helpers -----------------------------------------------------
 
 private suspend fun DenebGatewayClient.fleetGetText(path: String): String? {
-    if (clientToken.isEmpty() || gatewayUrl.isBlank()) return null
-    return runCatching {
-        val resp = http.get("$gatewayUrl/api/v1/fleet$path") {
-            header(DenebGatewayClient.CLIENT_TOKEN_HEADER, clientToken)
+    val url = gatewayUrl
+    val token = clientToken
+    val epoch = credEpoch
+    if (token.isEmpty() || url.isBlank()) return null
+    return try {
+        val resp = http.get("$url/api/v1/fleet$path") {
+            header(DenebGatewayClient.CLIENT_TOKEN_HEADER, token)
         }
-        if (resp.status.isSuccess()) resp.bodyAsText() else null
-    }.getOrNull()
+        if (!resp.status.isSuccess()) return null
+        val body = resp.bodyAsText()
+        if (epoch == credEpoch && url == gatewayUrl && token == clientToken) body else null
+    } catch (c: CancellationException) {
+        throw c
+    } catch (_: Exception) {
+        null
+    }
 }
 
 /** POST returning the upstream's error text on failure, null on success. */
 private suspend fun DenebGatewayClient.fleetPost(path: String, jsonBody: String): Pair<String?, String?> {
-    if (clientToken.isEmpty()) return null to "게이트웨이에 연결되어 있지 않습니다."
-    return runCatching {
-        val resp = http.post("$gatewayUrl/api/v1/fleet$path") {
-            header(DenebGatewayClient.CLIENT_TOKEN_HEADER, clientToken)
+    val url = gatewayUrl
+    val token = clientToken
+    if (token.isEmpty() || url.isBlank()) return null to "게이트웨이에 연결되어 있지 않습니다."
+    return try {
+        val resp = http.post("$url/api/v1/fleet$path") {
+            header(DenebGatewayClient.CLIENT_TOKEN_HEADER, token)
             contentType(ContentType.Application.Json)
             setBody(jsonBody)
         }
         val text = resp.bodyAsText()
         if (resp.status.isSuccess()) text to null else null to text.ifBlank { "요청 실패 (${resp.status.value})" }
-    }.getOrElse { null to "플릿에 연결하지 못했습니다: ${it.message ?: "전송 오류"}" }
+    } catch (c: CancellationException) {
+        throw c
+    } catch (e: Exception) {
+        null to "플릿에 연결하지 못했습니다: ${e.message ?: "전송 오류"}"
+    }
 }
 
 // --- reads ------------------------------------------------------------------

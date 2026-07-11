@@ -465,6 +465,9 @@ func (s *Service) batchAnalyze(ctx context.Context, gmailClient *gmail.Client, m
 // the thread-context stage simply no-ops (it is best-effort). Safe to call
 // concurrently with the poll loop.
 func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail, attBytes map[string][]byte) (AnalysisResult, error) {
+	if msg == nil {
+		return AnalysisResult{}, fmt.Errorf("email message is required")
+	}
 	// Read s.gmailClient under the lock the poll loop writes it with, so a
 	// concurrent lazy-init in Run() can't race this read.
 	s.mu.Lock()

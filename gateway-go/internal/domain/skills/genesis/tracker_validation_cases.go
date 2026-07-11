@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"hash/fnv"
 	"io"
 	"sort"
@@ -93,10 +94,10 @@ func (t *Tracker) RecordSkillValidationCase(record SkillValidationCaseRecord) er
 	defer t.mu.Unlock()
 
 	record.SkillName = strings.TrimSpace(record.SkillName)
-	record.ID = strings.TrimSpace(truncateRunes(record.ID, 120))
-	record.Description = strings.TrimSpace(truncateRunes(record.Description, 400))
+	record.ID = strings.TrimSpace(genesiscommon.TruncateRunes(record.ID, 120))
+	record.Description = strings.TrimSpace(genesiscommon.TruncateRunes(record.Description, 400))
 	record.FrontierTier = normalizedValidationFrontierTier(record.FrontierTier)
-	record.Source = strings.TrimSpace(truncateRunes(record.Source, 120))
+	record.Source = strings.TrimSpace(genesiscommon.TruncateRunes(record.Source, 120))
 	record.RequiredSubstrings = cleanValidationStrings(record.RequiredSubstrings)
 	record.ForbiddenSubstrings = cleanValidationStrings(record.ForbiddenSubstrings)
 	record.RequiredHeadings = cleanValidationStrings(record.RequiredHeadings)
@@ -396,7 +397,7 @@ func (r SkillReplayCaseRecord) hasAssertions() bool {
 }
 
 func cleanSkillReplayCase(replay SkillReplayCaseRecord) SkillReplayCaseRecord {
-	replay.Input = strings.TrimSpace(truncateRunes(replay.Input, 1000))
+	replay.Input = strings.TrimSpace(genesiscommon.TruncateRunes(replay.Input, 1000))
 	replay.Context = cleanValidationStrings(replay.Context)
 	replay.RequiredActions = cleanValidationStrings(replay.RequiredActions)
 	replay.ForbiddenActions = cleanValidationStrings(replay.ForbiddenActions)
@@ -413,10 +414,10 @@ func cleanSkillReplayToolCalls(calls []SkillReplayToolCallRecord) []SkillReplayT
 	const maxReplayToolCalls = 20
 	out := make([]SkillReplayToolCallRecord, 0, min(len(calls), maxReplayToolCalls))
 	for _, call := range calls {
-		call.Name = strings.TrimSpace(truncateRunes(call.Name, 120))
+		call.Name = strings.TrimSpace(genesiscommon.TruncateRunes(call.Name, 120))
 		call.InputIncludes = cleanValidationStrings(call.InputIncludes)
 		call.InputExcludes = cleanValidationStrings(call.InputExcludes)
-		call.FixtureOutput = strings.TrimSpace(truncateRunes(call.FixtureOutput, 2000))
+		call.FixtureOutput = strings.TrimSpace(genesiscommon.TruncateRunes(call.FixtureOutput, 2000))
 		if call.Name == "" && len(call.InputIncludes)+len(call.InputExcludes) == 0 && call.FixtureOutput == "" {
 			continue
 		}
@@ -433,7 +434,7 @@ func cleanValidationStrings(values []string) []string {
 	out := make([]string, 0, min(len(values), maxValidationStrings))
 	seen := map[string]struct{}{}
 	for _, value := range values {
-		value = strings.TrimSpace(truncateRunes(value, 300))
+		value = strings.TrimSpace(genesiscommon.TruncateRunes(value, 300))
 		if value == "" {
 			continue
 		}

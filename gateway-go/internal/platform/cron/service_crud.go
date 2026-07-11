@@ -268,28 +268,39 @@ func sortJobs(jobs []StoreJob, sortBy, sortDir string) {
 	asc := sortDir != "desc"
 
 	sort.SliceStable(jobs, func(i, j int) bool {
-		var less bool
+		cmp := 0
 		switch sortBy {
 		case "name":
-			less = strings.ToLower(jobs[i].Name) < strings.ToLower(jobs[j].Name)
+			cmp = strings.Compare(strings.ToLower(jobs[i].Name), strings.ToLower(jobs[j].Name))
 		case "updatedAtMs":
-			less = jobs[i].UpdatedAtMs < jobs[j].UpdatedAtMs
+			cmp = compareInt64(jobs[i].UpdatedAtMs, jobs[j].UpdatedAtMs)
 		default: // "nextRunAtMs"
 			// 0 (no next run) sorts last.
 			ni, nj := jobs[i].State.NextRunAtMs, jobs[j].State.NextRunAtMs
 			if ni == 0 && nj == 0 {
-				less = jobs[i].ID < jobs[j].ID
+				cmp = strings.Compare(jobs[i].ID, jobs[j].ID)
 			} else if ni == 0 {
-				less = false
+				cmp = 1
 			} else if nj == 0 {
-				less = true
+				cmp = -1
 			} else {
-				less = ni < nj
+				cmp = compareInt64(ni, nj)
 			}
 		}
-		if !asc {
-			return !less
+		if asc {
+			return cmp < 0
 		}
-		return less
+		return cmp > 0
 	})
+}
+
+func compareInt64(a, b int64) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	default:
+		return 0
+	}
 }

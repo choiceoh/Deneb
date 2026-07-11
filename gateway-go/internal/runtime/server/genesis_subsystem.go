@@ -3,6 +3,8 @@ package server
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/review"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
 
@@ -13,11 +15,11 @@ import (
 // and LLM clients are available.
 // Embedded in Server so fields are promoted.
 type GenesisSubsystem struct {
-	genesisSvc         *genesis.Service
-	genesisMeta        *genesis.MetaArtifacts // RSI P1 prompt artifacts (read wiring in initGenesisServices; prod-gated materialize in registerGenesisAutonomousTasks)
+	genesisSvc         *generation.Service
+	genesisMeta        *generation.MetaArtifacts // RSI P1 prompt artifacts (read wiring in initGenesisServices; prod-gated materialize in registerGenesisAutonomousTasks)
 	genesisTracker     *genesis.Tracker
 	genesisEvolver     *genesis.Evolver
-	genesisNudger      *genesis.Nudger
+	genesisNudger      *review.Nudger
 	skillCatalog       *skills.Catalog
 	genesisTranscripts toolctx.TranscriptStore
 }

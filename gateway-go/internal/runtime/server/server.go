@@ -33,8 +33,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
+	runtimehealth "github.com/choiceoh/deneb/gateway-go/internal/runtime/health"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
+	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
+	runtimenotify "github.com/choiceoh/deneb/gateway-go/internal/runtime/notify"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -103,8 +108,7 @@ type ServerRuntime struct {
 	// the /health gpu section and /health/gpu route. Both zero values are
 	// ready-to-use (no constructor) and degrade silently on hosts without a vLLM
 	// role or NVIDIA GPU. See health_cache.go and health_gpu.go.
-	cacheHealth cacheHealth
-	gpuHealth   gpuHealth
+	healthProbes runtimehealth.Probes
 }
 
 // Server is the main gateway server.
@@ -128,7 +132,7 @@ type Server struct {
 	// pushHub fans proactive 업무-topic reports out to connected native clients
 	// over their long-lived SSE connection (GET /api/v1/miniapp/events). Created
 	// in New so it's non-nil before any handler or relay touches it.
-	pushHub *clientPushHub
+	pushHub *proactive.Hub
 
 	// phoneActions correlates dispatched phone_write actions with the app's
 	// execution reports (phone_action_result events) so the tool can return
@@ -181,22 +185,22 @@ type Server struct {
 	// notify mirrors user-impacting error events and status snapshots to the
 	// native client (live push) and the operator log. Created during
 	// registerEarlyMethods.
-	notify *notifyService
+	notify *runtimenotify.Service
 
 	// calendarBriefing is the D-15min meeting push service, delivered to the
 	// native client. nil when calendar OAuth tokens aren't configured — safe to
 	// call start() unconditionally; the service is a no-op.
-	calendarBriefing *calendarBriefingService
+	calendarBriefing *runtimemeeting.CalendarBriefingService
 
 	// meetingHarvest asks "회의 어떻게 됐어요?" after work-linked calendar events
 	// end, pulling meeting/call outcomes into the wiki flywheel (mail is only
 	// half the negotiation). nil-safe start(); see meeting_harvest.go.
-	meetingHarvest *meetingHarvestService
+	meetingHarvest *runtimemeeting.HarvestService
 
 	// plaudRecordings analyzes new Plaud meeting recordings via the external
 	// MCP tools (transcript → meeting report → 회의록 wiki page + feed card).
 	// nil-safe start(); see plaud_recordings.go.
-	plaudRecordings *plaudRecordingsService
+	plaudRecordings *runtimemeeting.PlaudService
 
 	// chatToolRegistry is the chat pipeline's tool registry, captured at
 	// pipeline build so background services (plaud recordings) can execute
@@ -211,7 +215,7 @@ type Server struct {
 	// logSwap wraps the gateway logger so the notify service can install
 	// an ERROR-mirroring handler after creation. Set once in New(); never
 	// nil if logger is non-nil.
-	logSwap *swappableHandler
+	logSwap *runtimenotify.SwappableHandler
 
 	// logCapture heads the slog handler chain: it mirrors every record into an
 	// in-memory ring for the observe plane (observe.logs / observe.turn) before
@@ -314,7 +318,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		GenesisSubsystem:    &GenesisSubsystem{},
 		version:             "0.1.0-go",
 		logger:              slog.Default(),
-		pushHub:             newClientPushHub(),
+		pushHub:             proactive.NewHub(),
 		phoneActions:        newPhoneActionAwaiter(),
 		fleetAlerts:         newFleetAlertGate(),
 		SessionManager: &SessionManager{
@@ -342,7 +346,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		// notify forwards ERRORs but always runs its delegate first, so capture
 		// still sees every line after the swap.
 		s.logCapture = observe.NewCapture(s.logger.Handler(), observe.NewRing(observe.DefaultRingSize))
-		s.logSwap = newSwappableHandler(s.logCapture)
+		s.logSwap = runtimenotify.NewSwappableHandler(s.logCapture)
 		if s.logSwap != nil {
 			s.logger = slog.New(s.logSwap)
 		}
@@ -385,7 +389,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		s.cronService = cron.NewService(cron.ServiceConfig{
 			StorePath:      storePath,
 			DefaultChannel: "client",
-			DefaultTo:      nativeWorkSessionKeyTo,
+			DefaultTo:      proactive.NativeWorkSessionTarget,
 			Enabled:        cronEnabled,
 			Sessions:       s.sessions,
 		}, nil, s.logger) // agent runner wired later during chat handler setup
@@ -402,7 +406,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 	}
 
 	// Subsystem construction: each independently testable.
-	denebDir := resolveDenebDir()
+	denebDir := configresolve.DenebDir()
 	s.denebDir = denebDir
 	s.promptStore = newPromptStore(denebDir)
 	s.InfraSubsystem = NewInfraSubsystem(s.logger, denebDir)

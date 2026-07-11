@@ -103,9 +103,11 @@ func computeNextEveryMs(schedule StoreSchedule, nowMs int64) int64 {
 		return anchor
 	}
 	elapsed := nowMs - anchor
-	steps := (elapsed + everyMs - 1) / everyMs
-	if steps < 1 {
-		steps = 1
+	// The next run must be strictly after now, including when now lands exactly
+	// on an interval boundary. Division-first also avoids elapsed+every overflow.
+	steps := elapsed/everyMs + 1
+	if steps > (math.MaxInt64-anchor)/everyMs {
+		return 0
 	}
 	return anchor + steps*everyMs
 }
@@ -183,10 +185,13 @@ func evaluateCronExpr(expr string, now time.Time, _ *time.Location) time.Time {
 	hours := parseCronField(fields[1], 0, 23)
 	doms := parseCronField(fields[2], 1, 31)
 	months := parseCronField(fields[3], 1, 12)
-	dows := parseCronField(fields[4], 0, 6)
+	dows := parseCronField(fields[4], 0, 7)
 
 	if minutes == nil || hours == nil || doms == nil || months == nil || dows == nil {
 		return time.Time{}
+	}
+	if dows[7] { // standard cron accepts both 0 and 7 for Sunday
+		dows[0] = true
 	}
 
 	// Brute-force search: check every minute for the next 366 days.
@@ -244,6 +249,9 @@ func parseCronField(field string, lo, hi int) map[int]bool {
 					}
 				}
 			}
+			if rangeStart < lo || rangeStart > hi || rangeEnd < lo || rangeEnd > hi || rangeStart > rangeEnd {
+				return nil
+			}
 			for i := rangeStart; i <= rangeEnd; i += step {
 				result[i] = true
 			}
@@ -261,6 +269,9 @@ func parseCronField(field string, lo, hi int) map[int]bool {
 			if err != nil {
 				return nil
 			}
+			if start < lo || start > hi || end < lo || end > hi || start > end {
+				return nil
+			}
 			for i := start; i <= end; i++ {
 				result[i] = true
 			}
@@ -270,6 +281,9 @@ func parseCronField(field string, lo, hi int) map[int]bool {
 		// Fixed value.
 		val, err := strconv.Atoi(part)
 		if err != nil {
+			return nil
+		}
+		if val < lo || val > hi {
 			return nil
 		}
 		result[val] = true
@@ -503,12 +517,11 @@ func FormatDurationKorean(ms int64) string {
 	if ms <= 0 {
 		return "0초"
 	}
-	d := time.Duration(ms) * time.Millisecond
-
-	days := int(d.Hours()) / 24
-	hours := int(d.Hours()) % 24
-	mins := int(d.Minutes()) % 60
-	secs := int(d.Seconds()) % 60
+	totalSeconds := ms / 1000
+	days := totalSeconds / (24 * 60 * 60)
+	hours := totalSeconds / (60 * 60) % 24
+	mins := totalSeconds / 60 % 60
+	secs := totalSeconds % 60
 
 	var parts []string
 	if days > 0 {

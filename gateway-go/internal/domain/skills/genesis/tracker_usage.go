@@ -125,6 +125,9 @@ func (t *Tracker) loadWatchesLocked() {
 // saveWatchesLocked persists the in-flight watches (caller holds t.mu).
 // Best-effort: a write failure is logged, never blocks the usage path.
 func (t *Tracker) saveWatchesLocked() {
+	if t.watchPath == "" {
+		return
+	}
 	out := make(map[string]persistedEvolveWatch, len(t.postEvolve))
 	for skill, w := range t.postEvolve {
 		out[skill] = persistedEvolveWatch{

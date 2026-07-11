@@ -2,8 +2,11 @@ package genesis
 
 import (
 	"fmt"
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/guardrails"
 )
 
 // Rejection capture split out of evolver.go (pure move, no behavior change):
@@ -19,7 +22,7 @@ func (e *Evolver) recordRejectedSkillEdit(skillName, candidateBody, reason, sour
 		Reason:           reason,
 		CandidateBody:    candidateBody,
 		Source:           source,
-		SelfHarnessAudit: audit.ptr(),
+		SelfHarnessAudit: audit.Ptr(),
 	}); err != nil && e.logger != nil {
 		e.logger.Warn("evolver: rejected edit record failed",
 			"skill", skillName, "error", err)
@@ -41,7 +44,7 @@ func (e *Evolver) queueRejectedEvolveValidationDraft(skillName, reason, source s
 		target = "rejected skill evolution"
 	}
 	evidence := strings.TrimSpace(reason)
-	if auditPtr := audit.ptr(); auditPtr != nil {
+	if auditPtr := audit.Ptr(); auditPtr != nil {
 		evidence = strings.TrimSpace(evidence + "\nself_harness_audit=" + selfHarnessAuditSummary(*auditPtr))
 	}
 	if _, err := e.tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
@@ -153,7 +156,7 @@ func (e *Evolver) queueRepeatedPatchFirstReviewDraft(skillName, reason, source s
 	evidence = append(evidence, fmt.Sprintf("%d patch-first gate rejections within %dd:",
 		len(repeats), int(skillPatchFirstRepeatWindow.Hours()/24)))
 	for _, rec := range repeats {
-		evidence = append(evidence, "- "+truncateRunes(rec.Reason, 300))
+		evidence = append(evidence, "- "+genesiscommon.TruncateRunes(rec.Reason, 300))
 	}
 	targets := []string{"gateway-go/internal/domain/skills/genesis/prompts.go"}
 	if e.catalog != nil {
@@ -166,7 +169,7 @@ func (e *Evolver) queueRepeatedPatchFirstReviewDraft(skillName, reason, source s
 		SkillName: skillName,
 		Title:     "Evolve repeatedly rejected by patch-first gate",
 		Candidate: fmt.Sprintf("Evolve for %s repeatedly generated rewrites broader than the Hermes patch-first budget. Review splitting the skill body into smaller sections and/or strengthening the evolve prompt's section-cap guidance so candidates stay within %d changed sections.",
-			skillName, skillHermesMaxChangedSections),
+			skillName, guardrails.MaxChangedSections),
 		Evidence:       strings.Join(evidence, "\n"),
 		Reason:         reason,
 		TargetFiles:    targets,

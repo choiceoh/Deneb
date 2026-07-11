@@ -96,7 +96,10 @@ func (q *Queue) Enqueue(msg *Message) (bool, error) {
 	if q.existsLocked(name) {
 		return false, nil
 	}
-	return true, q.writeItemAtomic(filepath.Join(q.pendingDir, name), item)
+	if err := q.writeItemAtomic(filepath.Join(q.pendingDir, name), item); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // Claim atomically moves the oldest pending item into processing.
@@ -263,7 +266,11 @@ func (q *Queue) writeItemAtomic(path string, item *QueueItem) error {
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 func (q *Queue) processingPath(item *QueueItem) string {

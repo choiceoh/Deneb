@@ -2,6 +2,9 @@ package localai
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
+	"encoding/json"
+	"hash"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/corecache"
@@ -39,22 +42,42 @@ func newResponseCache(ttl time.Duration, maxEntries int) *responseCache {
 // cacheKey computes a SHA-256 hash of the request's semantic identity.
 func cacheKey(req *Request) [32]byte {
 	h := sha256.New()
-	h.Write([]byte(req.System))
+	writeCacheField(h, []byte(req.System))
+	var count [8]byte
+	binary.BigEndian.PutUint64(count[:], uint64(len(req.Messages)))
+	h.Write(count[:])
 	for _, m := range req.Messages {
-		h.Write([]byte(m.Role))
+		writeCacheField(h, []byte(m.Role))
 		// Content is json.RawMessage — include raw bytes directly.
-		h.Write(m.Content)
+		writeCacheField(h, m.Content)
 	}
 	// Include maxTokens and response format in the key so requests with
 	// different generation parameters don't collide.
 	b := [4]byte{byte(req.MaxTokens >> 24), byte(req.MaxTokens >> 16), byte(req.MaxTokens >> 8), byte(req.MaxTokens)} //nolint:gosec // G115 — extracting individual bytes from int for hashing
 	h.Write(b[:])
 	if req.ResponseFormat != nil {
-		h.Write([]byte(req.ResponseFormat.Type))
+		h.Write([]byte{1})
+		writeCacheField(h, []byte(req.ResponseFormat.Type))
+		writeCacheField(h, req.ResponseFormat.JSONSchema)
+	} else {
+		h.Write([]byte{0})
+	}
+	// Provider-specific generation controls (temperature, logit_bias, template
+	// kwargs, etc.) are semantic input too. Ignoring ExtraBody used to let two
+	// requests with different decoding behavior share a cached response.
+	if extra, err := json.Marshal(req.ExtraBody); err == nil {
+		writeCacheField(h, extra)
 	}
 	var key [32]byte
 	h.Sum(key[:0])
 	return key
+}
+
+func writeCacheField(h hash.Hash, field []byte) {
+	var size [8]byte
+	binary.BigEndian.PutUint64(size[:], uint64(len(field)))
+	h.Write(size[:])
+	h.Write(field)
 }
 
 // Get returns a cached response if present and not expired.

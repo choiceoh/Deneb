@@ -40,24 +40,33 @@ suspend fun DenebGatewayClient.sendDetachedChat(
     message: String,
     targetSessionKey: String = "client:main",
 ): Boolean {
-    if (message.isBlank() || clientToken.isEmpty()) return false
-    return runCatching {
-        val resp: DenebGatewayClient.RpcResponse = http.post("$gatewayUrl/api/v1/miniapp/rpc") {
-            header(DenebGatewayClient.CLIENT_TOKEN_HEADER, clientToken)
+    val url = gatewayUrl
+    val token = clientToken
+    val epoch = credEpoch
+    if (message.isBlank() || token.isEmpty() || url.isBlank()) return false
+    return try {
+        val response = http.post("$url/api/v1/miniapp/rpc") {
+            header(DenebGatewayClient.CLIENT_TOKEN_HEADER, token)
             contentType(ContentType.Application.Json)
             setBody(
-                DenebGatewayClient.RpcRequest(
+                RpcRequest(
                     id = Uuid.random().toString(),
                     method = "miniapp.chat.send",
-                    params = DenebGatewayClient.SendParams(
+                    params = SendParams(
                         message = message,
                         sessionKey = targetSessionKey,
                     ),
                 ),
             )
-        }.body()
-        resp.ok
-    }.getOrDefault(false)
+        }
+        if (!response.status.isSuccess()) return false
+        val payload: RpcResponse = response.body()
+        payload.ok && epoch == credEpoch && url == gatewayUrl && token == clientToken
+    } catch (c: CancellationException) {
+        throw c
+    } catch (_: Exception) {
+        false
+    }
 }
 
 /**
@@ -117,7 +126,7 @@ suspend fun DenebGatewayClient.subscribeEvents(onPush: (title: String, body: Str
                         line.isEmpty() -> {
                             if (event == "push") {
                                 runCatching {
-                                    jsonCodec.decodeFromString(DenebGatewayClient.PushEvent.serializer(), data.toString())
+                                    jsonCodec.decodeFromString(PushEvent.serializer(), data.toString())
                                 }.getOrNull()?.let { p ->
                                     // kind=phone_action: run the gateway's Intent command in-app
                                     // (open_url/open_app/share/message/dial/photo) instead of

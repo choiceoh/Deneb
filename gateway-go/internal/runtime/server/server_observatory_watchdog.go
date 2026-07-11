@@ -7,6 +7,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/observatory"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 )
 
 const (
@@ -78,7 +79,7 @@ func (s *Server) observatoryWatchdogTick(now time.Time) {
 			continue
 		}
 		if s.pushHub != nil {
-			s.pushHub.publish(clientPushEvent{Title: "⚠️ 자기점검 · " + a.Title, Body: a.Body, Kind: pushKindFleet})
+			s.pushHub.Publish(proactive.Event{Title: "⚠️ 자기점검 · " + a.Title, Body: a.Body, Kind: proactive.PushKindFleet})
 		}
 		s.logger.Warn("observatory watchdog alert", "title", a.Title)
 	}

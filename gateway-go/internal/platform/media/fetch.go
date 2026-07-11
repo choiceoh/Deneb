@@ -101,18 +101,27 @@ func Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error) {
 		client = &http.Client{
 			Transport: ssrfTransport,
 			Timeout:   60 * time.Second,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) >= opts.MaxRedirects {
-					return fmt.Errorf("too many redirects (%d)", opts.MaxRedirects)
-				}
-				// Validate each redirect destination.
-				if err := validateURL(req.URL.String()); err != nil {
-					return err
-				}
-				return nil
-			},
 		}
 	}
+	// Enforce redirect validation even when the caller supplies a custom client.
+	// Previously a custom transport/client could start at a public URL and then
+	// follow a 30x to loopback or cloud metadata because the SSRF check lived only
+	// on the package-created client. Clone instead of mutating the caller's client.
+	clientCopy := *client
+	callerRedirect := clientCopy.CheckRedirect
+	clientCopy.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= opts.MaxRedirects {
+			return fmt.Errorf("too many redirects (%d)", opts.MaxRedirects)
+		}
+		if err := validateURL(req.URL.String()); err != nil {
+			return err
+		}
+		if callerRedirect != nil {
+			return callerRedirect(req, via)
+		}
+		return nil
+	}
+	client = &clientCopy
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opts.URL, http.NoBody)
 	if err != nil {

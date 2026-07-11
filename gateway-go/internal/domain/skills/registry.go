@@ -7,6 +7,8 @@ package skills
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -63,11 +65,13 @@ func (r *Registry) Status(_ string) *RegistryStatus {
 
 	entries := make([]RegisteredSkill, 0, len(r.skills))
 	for _, s := range r.skills {
-		entries = append(entries, *s)
+		entries = append(entries, cloneRegisteredSkill(*s))
 	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Key < entries[j].Key })
+	bins := append([]string(nil), r.bins...)
 	return &RegistryStatus{
 		Skills:       entries,
-		RequiredBins: r.bins,
+		RequiredBins: bins,
 	}
 }
 
@@ -84,6 +88,10 @@ func (r *Registry) ListBins() []string {
 func (r *Registry) Install(name, _ string) *InstallAck {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return &InstallAck{OK: false, Message: "skill name is required"}
+	}
 
 	if existing, ok := r.skills[name]; ok && existing.Installed {
 		return &InstallAck{OK: true, Message: fmt.Sprintf("skill %q already installed", name)}
@@ -130,6 +138,17 @@ func (r *Registry) Update(skillKey string, patch ConfigPatch) (*RegisteredSkill,
 	}
 	entry.UpdatedAtMs = time.Now().UnixMilli()
 
-	cp := *entry
+	cp := cloneRegisteredSkill(*entry)
 	return &cp, nil
+}
+
+func cloneRegisteredSkill(src RegisteredSkill) RegisteredSkill {
+	dst := src
+	if src.Config != nil {
+		dst.Config = make(map[string]string, len(src.Config))
+		for key, value := range src.Config {
+			dst.Config[key] = value
+		}
+	}
+	return dst
 }

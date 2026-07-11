@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -34,6 +35,9 @@ type Filter struct {
 
 // Accepts returns true if the filter allows the given event name.
 func (f *Filter) Accepts(event string) bool {
+	if f == nil {
+		return true
+	}
 	if len(f.Events) == 0 {
 		return true
 	}
@@ -81,7 +85,7 @@ type Broadcaster struct {
 	mu          sync.RWMutex
 	subscribers map[string]subscriberEntry
 	seq         uint64
-	logger      *slog.Logger
+	logger      atomic.Pointer[slog.Logger]
 
 	// In-process tap listeners. Held under tapMu to allow registration without
 	// blocking broadcast fan-out, and so callbacks run with no broadcaster
@@ -106,22 +110,26 @@ type subscriberEntry struct {
 
 // NewBroadcaster creates a new event broadcaster.
 func NewBroadcaster() *Broadcaster {
-	return &Broadcaster{
+	b := &Broadcaster{
 		subscribers:    make(map[string]subscriberEntry),
 		sessionSubs:    make(map[string]struct{}),
 		sessionMsgSubs: make(map[string]map[string]struct{}),
 		toolRecipients: make(map[string]string),
-		logger:         slog.Default(),
 	}
+	b.logger.Store(slog.Default())
+	return b
 }
 
 // SetLogger sets the broadcaster logger.
 func (b *Broadcaster) SetLogger(l *slog.Logger) {
-	b.logger = l
+	b.logger.Store(l)
 }
 
 // Subscribe adds a subscriber. If the subscriber ID already exists, it is replaced.
 func (b *Broadcaster) Subscribe(sub Subscriber, filter Filter) {
+	if sub == nil {
+		return
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.subscribers[sub.ID()] = subscriberEntry{sub: sub, filter: filter}
@@ -189,8 +197,10 @@ func (b *Broadcaster) dispatchTaps(event string, payload any) {
 	for _, t := range snapshot {
 		func() {
 			defer func() {
-				if r := recover(); r != nil && b.logger != nil {
-					b.logger.Error("panic in broadcast tap", "event", event, "panic", r)
+				if r := recover(); r != nil {
+					if logger := b.logger.Load(); logger != nil {
+						logger.Error("panic in broadcast tap", "event", event, "panic", r)
+					}
 				}
 			}()
 			t(event, payload)
@@ -206,6 +216,9 @@ func (b *Broadcaster) Broadcast(event string, payload any) (sent int, errs []err
 
 // BroadcastWithOpts sends an event with advanced options (targeting, slow consumer, state version).
 func (b *Broadcaster) BroadcastWithOpts(event string, payload any, opts BroadcastOpts) (sent int, errs []error) {
+	// Taps observe every attempted broadcast, including a payload that cannot be
+	// serialized. Defer keeps the callback after network fan-out on success.
+	defer b.dispatchTaps(event, payload)
 	b.mu.Lock()
 	b.seq++
 	seq := b.seq
@@ -242,12 +255,13 @@ func (b *Broadcaster) BroadcastWithOpts(event string, payload any, opts Broadcas
 			continue
 		}
 		// Slow consumer detection.
-		if opts.DropIfSlow && entry.sub.BufferedAmount() > maxBufferedBytes {
-			if b.logger != nil {
-				b.logger.Warn(
+		buffered := entry.sub.BufferedAmount()
+		if opts.DropIfSlow && buffered > maxBufferedBytes {
+			if logger := b.logger.Load(); logger != nil {
+				logger.Warn(
 					"dropping slow consumer",
 					"connId", entry.sub.ID(),
-					"buffered", entry.sub.BufferedAmount(),
+					"buffered", buffered,
 					"event", event,
 				)
 			}
@@ -260,7 +274,6 @@ func (b *Broadcaster) BroadcastWithOpts(event string, payload any, opts Broadcas
 		}
 	}
 
-	b.dispatchTaps(event, payload)
 	return sent, errs
 }
 
@@ -282,12 +295,13 @@ func (b *Broadcaster) BroadcastRaw(event string, data []byte) (sent int) {
 			continue
 		}
 		// Slow consumer detection: skip subscribers with excessive buffered data.
-		if entry.sub.BufferedAmount() > maxBufferedBytes {
-			if b.logger != nil {
-				b.logger.Warn(
+		buffered := entry.sub.BufferedAmount()
+		if buffered > maxBufferedBytes {
+			if logger := b.logger.Load(); logger != nil {
+				logger.Warn(
 					"dropping slow consumer (raw broadcast)",
 					"connId", entry.sub.ID(),
-					"buffered", entry.sub.BufferedAmount(),
+					"buffered", buffered,
 					"event", event,
 				)
 			}
@@ -305,6 +319,9 @@ func (b *Broadcaster) BroadcastRaw(event string, data []byte) (sent int) {
 
 // SubscribeSessionEvents registers a connID to receive session events.
 func (b *Broadcaster) SubscribeSessionEvents(connID string) {
+	if connID == "" {
+		return
+	}
 	b.sessionSubMu.Lock()
 	defer b.sessionSubMu.Unlock()
 	b.sessionSubs[connID] = struct{}{}
@@ -319,6 +336,9 @@ func (b *Broadcaster) UnsubscribeSessionEvents(connID string) {
 
 // SubscribeSessionMessageEvents registers a connID to receive messages for a specific session.
 func (b *Broadcaster) SubscribeSessionMessageEvents(connID, sessionKey string) {
+	if connID == "" || sessionKey == "" {
+		return
+	}
 	b.sessionSubMu.Lock()
 	defer b.sessionSubMu.Unlock()
 	if b.sessionMsgSubs[sessionKey] == nil {
@@ -369,6 +389,9 @@ func (b *Broadcaster) SessionMessageSubscriberConnIDs(sessionKey string) map[str
 
 // RegisterToolEventRecipient maps a run ID to a specific connID for tool events.
 func (b *Broadcaster) RegisterToolEventRecipient(runID, connID string) {
+	if runID == "" || connID == "" {
+		return
+	}
 	b.toolRecipientMu.Lock()
 	defer b.toolRecipientMu.Unlock()
 	b.toolRecipients[runID] = connID

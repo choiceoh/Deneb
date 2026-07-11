@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
@@ -136,7 +136,7 @@ func TestBuildSystemPromptSkillsInjection(t *testing.T) {
 	if !strings.Contains(prompt, "skills") {
 		t.Error("missing skills tool hint for discoverable skills")
 	}
-	doctrine := genesis.PropusDoctrine()
+	doctrine := propus.PropusDoctrine()
 	for _, want := range []string{
 		"### Propus",
 		doctrine.Version,

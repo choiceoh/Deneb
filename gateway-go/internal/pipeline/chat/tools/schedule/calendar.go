@@ -431,14 +431,18 @@ func calDetail(e calendar.Event) string {
 	if org := attendeeLabel(e.Organizer); org != "" {
 		fmt.Fprintf(&sb, "주최: %s\n", org)
 	}
-	if len(e.Attendees) > 0 {
+	attendeeLines := make([]string, 0, len(e.Attendees))
+	for _, a := range e.Attendees {
+		label := attendeeLabel(a)
+		if label == "" {
+			continue
+		}
+		attendeeLines = append(attendeeLines, fmt.Sprintf("  - %s (%s)\n", label, rsvpKorean(a.ResponseStatus)))
+	}
+	if len(attendeeLines) > 0 {
 		sb.WriteString("참석자:\n")
-		for _, a := range e.Attendees {
-			label := attendeeLabel(a)
-			if label == "" {
-				continue
-			}
-			fmt.Fprintf(&sb, "  - %s (%s)\n", label, rsvpKorean(a.ResponseStatus))
+		for _, line := range attendeeLines {
+			sb.WriteString(line)
 		}
 	}
 	if desc := strings.TrimSpace(e.Description); desc != "" {

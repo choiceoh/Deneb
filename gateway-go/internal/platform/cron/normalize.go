@@ -37,6 +37,10 @@ func NormalizeJobInput(job *StoreJob) {
 }
 
 func normalizeSchedule(s *StoreSchedule) {
+	s.At = strings.TrimSpace(s.At)
+	s.Expr = strings.TrimSpace(s.Expr)
+	s.Tz = strings.TrimSpace(s.Tz)
+
 	// Normalize kind.
 	kind := strings.ToLower(strings.TrimSpace(s.Kind))
 	switch kind {
@@ -54,12 +58,6 @@ func normalizeSchedule(s *StoreSchedule) {
 		}
 	}
 
-	// Normalize expression (legacy "cron" field to "expr").
-	s.Expr = strings.TrimSpace(s.Expr)
-
-	// Normalize timezone.
-	s.Tz = strings.TrimSpace(s.Tz)
-
 	// Ensure stagger is non-negative.
 	if s.StaggerMs < 0 {
 		s.StaggerMs = 0
@@ -67,6 +65,13 @@ func normalizeSchedule(s *StoreSchedule) {
 }
 
 func normalizePayload(p *StorePayload) {
+	// Trim before inference so whitespace-only legacy fields do not manufacture
+	// a payload kind that has no executable content.
+	p.Message = strings.TrimSpace(p.Message)
+	p.Text = strings.TrimSpace(p.Text)
+	p.Model = strings.TrimSpace(p.Model)
+	p.Thinking = strings.TrimSpace(p.Thinking)
+
 	// Normalize kind.
 	kind := strings.ToLower(strings.TrimSpace(p.Kind))
 	switch kind {
@@ -85,12 +90,6 @@ func normalizePayload(p *StorePayload) {
 			p.Kind = "agentTurn"
 		}
 	}
-
-	// Trim strings.
-	p.Message = strings.TrimSpace(p.Message)
-	p.Text = strings.TrimSpace(p.Text)
-	p.Model = strings.TrimSpace(p.Model)
-	p.Thinking = strings.TrimSpace(p.Thinking)
 
 	// Ensure timeout is non-negative.
 	if p.TimeoutSeconds < 0 {

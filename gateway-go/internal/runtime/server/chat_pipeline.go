@@ -24,24 +24,29 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/externalmcp"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/filesemindex"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/modelpanel"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/notebooksource"
 )
 
 // initMemorySubsystem initializes model registry, session memory, and wiki.
 // All results are set on chatCfg and s.
 func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **modelrole.Registry) {
 	// Model role registry.
-	chatCfg.DefaultModel = resolveDefaultModel(s.logger)
-	chatCfg.SubagentDefaultModel = resolveSubagentDefaultModel(s.logger)
-	localVllmModel := resolveLocalVllmModel(s.logger)
+	chatCfg.DefaultModel = configresolve.DefaultModel(s.logger)
+	chatCfg.SubagentDefaultModel = configresolve.SubagentDefaultModel(s.logger)
+	localVllmModel := configresolve.LocalVLLMModel(s.logger)
 	reg := modelrole.NewRegistryWithOptions(s.logger, modelrole.RegistryOptions{
 		MainModel:        chatCfg.DefaultModel,
 		LocalVllmModel:   localVllmModel,
-		LightweightModel: resolveLightweightModel(s.logger),
-		TinyModel:        resolveTinyModel(s.logger),
-		CodingModel:      resolveCodingModel(s.logger),
-		FallbackModel:    resolveFallbackModel(s.logger),
-		VisionModel:      resolveVisionModel(s.logger),
-		Providers:        providerCatalog(s.logger),
+		LightweightModel: configresolve.LightweightModel(s.logger),
+		TinyModel:        configresolve.TinyModel(s.logger),
+		CodingModel:      configresolve.CodingModel(s.logger),
+		FallbackModel:    configresolve.FallbackModel(s.logger),
+		VisionModel:      configresolve.VisionModel(s.logger),
+		Providers:        configresolve.ProviderCatalog(s.logger),
 	})
 	*regPtr = reg
 	chatCfg.Registry = reg
@@ -49,7 +54,7 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 
 	// Seed new sessions with operator-configured thinking defaults so the
 	// model can use extended thinking from the first turn without /think.
-	if defaults := resolveSessionThinkingDefaults(s.logger); defaults.ThinkingLevel != "" || defaults.InterleavedThinking != nil {
+	if defaults := configresolve.SessionThinkingDefaults(s.logger); defaults.ThinkingLevel != "" || defaults.InterleavedThinking != nil {
 		s.sessions.SetSessionDefaults(defaults)
 		interleaved := false
 		if defaults.InterleavedThinking != nil {
@@ -100,7 +105,7 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 				s.wikiDreamer.SetLLMRequestShape(extra, synthMax)
 				// Let dream cycles consume + curate the auto-recorded
 				// workspace MEMORY.md (distill to wiki, keep a bounded buffer).
-				s.wikiDreamer.SetWorkspaceDir(resolveWorkspaceDir())
+				s.wikiDreamer.SetWorkspaceDir(configresolve.WorkspaceDir())
 				// Open loops are no longer auto-recorded as to-dos (operator approval
 				// first) — no open-loop sink is wired (the dreamer skips it when nil).
 				// Per-project latest-progress digests are written directly into each
@@ -129,7 +134,7 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 // initToolsAndDeps builds CoreToolDeps, registers core/plugin tools,
 // and stores toolDeps on the server.
 func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Registry, transcriptStore chat.TranscriptStore, agentLogWriter *agentlog.Writer) {
-	workspaceDir := resolveWorkspaceDir()
+	workspaceDir := configresolve.WorkspaceDir()
 
 	// Out-of-workspace skill catalog roots: lets the read tool reach the SKILL.md
 	// locations the skills index advertises (same roots the discovery walks;
@@ -203,10 +208,10 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			// External source ingesters (url/mail/diary) — snapshot to text at
 			// add time (notebook_sources.go). file (PDF/image OCR, text) is
 			// handled in-package by the tool and needs no reader here.
-			FetchURL: notebookFetchURL,
-			ReadMail: notebookReadMail,
+			FetchURL: notebooksource.FetchURL,
+			ReadMail: notebooksource.ReadMail,
 			ReadDiary: func(ctx context.Context, ref string) (string, error) {
-				return notebookReadDiary(chatCfg.Memory.Wiki, ref)
+				return notebooksource.ReadDiary(chatCfg.Memory.Wiki, ref)
 			},
 		},
 		Contacts: chat.ContactsDeps{
@@ -228,7 +233,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		DefaultModel: reg.Model(modelrole.RoleLightweight),
 		// Deep-research panel fan-out: one prompt → every healthy wormhole-served
 		// model in parallel (research_panel tool). nil-safe — the tool checks it.
-		ConsultPanel: s.consultModelPanel,
+		ConsultPanel: modelpanel.New(s.modelRegistry, s.logger).Consult,
 		AgentLog:     agentLogWriter,
 		LogCapture:   s.logCapture,
 		WorkFeed:     s.workFeedStore,
@@ -299,14 +304,17 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// and wires s.toolDeps.FilesSemanticSearch. Must run before RegisterCoreTools
 	// (the files tool captures the search closure at registration time). The
 	// background reindex task is registered later in registerWorkflowSideEffects.
-	s.initFileSemanticIndex()
+	s.fileSemindex = filesemindex.New(localFileStoreOrNil(s.logger), s.embeddingClient, s.logger)
+	if s.fileSemindex != nil {
+		s.toolDeps.FilesSemanticSearch = s.fileSemindex.Search
+	}
 
 	// Core tools (file I/O, exec, process, sessions, gateway, cron, image).
 	chat.RegisterCoreTools(chatCfg.Tools, s.toolDeps)
 
 	// External MCP servers (Plaud recorder) as deferred tools — discovered in
 	// the background so a slow npx cold start never blocks boot.
-	s.initExternalMCPTools(chatCfg.Tools)
+	s.externalMCP = externalmcp.Start(s.ShutdownCtx(), chatCfg.Tools, s.logger)
 
 	// Background services execute registered tools outside chat turns through
 	// this handle (plaud_recordings.go polls the Plaud MCP tools).
@@ -319,7 +327,10 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// (wiki store missing, or file index/embedding server down) → the router
 	// simply drops that layer (knowledge.New ignores nil adapters), so recall
 	// degrades gracefully to whatever backends are live.
-	filesAdapter := s.newFilesKnowledgeAdapter()
+	var filesAdapter knowledge.Adapter
+	if s.fileSemindex != nil {
+		filesAdapter = s.fileSemindex.KnowledgeAdapter()
+	}
 	knowledgeRouter := knowledge.New(
 		knowledge.NewWikiAdapter(s.wikiStore),
 		filesAdapter,
@@ -332,7 +343,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// files source contributes nothing (graceful, recall unaffected). Set on the
 	// config here (after initFileSemanticIndex) so NewHandler captures it.
 	if filesAdapter != nil {
-		chatCfg.Memory.FileRecall = s.fileRecallForPreflight
+		chatCfg.Memory.FileRecall = s.fileSemindex.Recall
 	}
 
 	// Org chart recall source: org.Load reads {stateDir}/org.json independently of

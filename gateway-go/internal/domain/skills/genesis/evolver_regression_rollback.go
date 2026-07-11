@@ -3,6 +3,7 @@ package genesis
 import (
 	"errors"
 	"fmt"
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"os"
 	"path/filepath"
 	"sort"
@@ -96,7 +97,7 @@ func (e *Evolver) crossSkillNeighbors(skillName string) []skills.SkillEntry {
 	if !ok {
 		return nil
 	}
-	selfTokens := skillDedupTokens(self.Skill.Name, self.Skill.Description)
+	selfTokens := genesiscommon.SkillDedupTokens(self.Skill.Name, self.Skill.Description)
 	selfTags := skillTagSet(*self)
 	if len(selfTokens) == 0 && len(selfTags) == 0 {
 		return nil
@@ -111,7 +112,7 @@ func (e *Evolver) crossSkillNeighbors(skillName string) []skills.SkillEntry {
 		if candidate.Skill.Name == skillName || strings.TrimSpace(candidate.Skill.FilePath) == "" {
 			continue
 		}
-		similarity := jaccardSimilarity(selfTokens, skillDedupTokens(candidate.Skill.Name, candidate.Skill.Description))
+		similarity := genesiscommon.JaccardSimilarity(selfTokens, genesiscommon.SkillDedupTokens(candidate.Skill.Name, candidate.Skill.Description))
 		sharesTag := tagSetsOverlap(selfTags, skillTagSet(candidate))
 		if similarity < skillCrossRegressionMinSimilarity && !sharesTag {
 			continue
@@ -252,7 +253,7 @@ func (e *Evolver) distillRollbackValidationCase(skillName string) {
 		}
 		call := SkillReplayToolCallRecord{Name: strings.TrimSpace(tr.ToolName)}
 		if frag := strings.TrimSpace(tr.ToolInput); frag != "" {
-			call.InputIncludes = []string{truncateRunes(frag, 120)}
+			call.InputIncludes = []string{genesiscommon.TruncateRunes(frag, 120)}
 		}
 		desc := strings.TrimSpace(tr.AgentMechanism)
 		if desc == "" {
@@ -260,11 +261,11 @@ func (e *Evolver) distillRollbackValidationCase(skillName string) {
 		}
 		rec := SkillValidationCaseRecord{
 			SkillName:    skillName,
-			Description:  truncateRunes("post-rollback regression evidence: "+desc, 400),
+			Description:  genesiscommon.TruncateRunes("post-rollback regression evidence: "+desc, 400),
 			FrontierTier: "hard",
 			Source:       "post-rollback",
 			Replay: SkillReplayCaseRecord{
-				Input:             truncateRunes(strings.TrimSpace(tr.Signature), 200),
+				Input:             genesiscommon.TruncateRunes(strings.TrimSpace(tr.Signature), 200),
 				ExpectedToolCalls: []SkillReplayToolCallRecord{call},
 			},
 		}

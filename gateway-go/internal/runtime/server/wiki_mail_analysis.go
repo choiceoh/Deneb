@@ -21,6 +21,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	handlermail "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // wikiProjectCategory is the wiki category whose pages are offered to the
@@ -485,7 +486,7 @@ func mailStatusLine(msg *gmail.MessageDetail, res mailanalysis.AnalysisResult) s
 		return ""
 	}
 	if sender := strings.TrimSpace(senderShortLabel(msg.From)); sender != "" {
-		return sender + ": " + clipRunes(subj, 60)
+		return sender + ": " + textutil.TruncateRunes(subj, 60, "...")
 	}
-	return clipRunes(subj, 60)
+	return textutil.TruncateRunes(subj, 60, "...")
 }

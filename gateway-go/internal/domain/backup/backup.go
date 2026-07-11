@@ -85,12 +85,12 @@ func NewTask(cfg Config, preSnapshot func(context.Context)) (*Task, error) {
 	}
 	// The remote dir and archive name are interpolated into a remote shell
 	// command line; refuse anything that needs quoting rather than escape it.
-	if strings.ContainsAny(cfg.RemoteDir, " '\"`$;|&<>") {
+	if strings.ContainsAny(cfg.RemoteDir, " \t\r\n'\"`$;|&<>") {
 		return nil, fmt.Errorf("backup: RemoteDir must not contain shell metacharacters: %q", cfg.RemoteDir)
 	}
 	// The host is passed as a single argv to ssh (no local shell), but a value
 	// starting with '-' would be parsed as an ssh option (e.g. -oProxyCommand).
-	if strings.HasPrefix(cfg.SSHHost, "-") || strings.ContainsAny(cfg.SSHHost, " '\"`$;|&<>") {
+	if strings.HasPrefix(cfg.SSHHost, "-") || strings.ContainsAny(cfg.SSHHost, " \t\r\n'\"`$;|&<>") {
 		return nil, fmt.Errorf("backup: invalid SSHHost: %q", cfg.SSHHost)
 	}
 	t := &Task{cfg: cfg, preSnapshot: preSnapshot}

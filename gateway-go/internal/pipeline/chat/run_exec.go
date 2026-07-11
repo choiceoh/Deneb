@@ -17,7 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	notebooktool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
@@ -148,7 +148,7 @@ func executeAgentRun(
 	// prep above (recall/history/sysprompt), so on the common path they cost
 	// no extra wall-clock. The joined (enriched) message is persisted HERE —
 	// after the history load, which therefore does not contain it — and
-	// appendCurrentMessage tells assembleTurnMessages to append the exact
+	// AppendCurrentMessage tells assembleTurnMessages to append the exact
 	// persisted bytes explicitly, keeping next turn's history reload
 	// byte-identical to what this turn's LLM call sees (vLLM APC).
 	enrichStart := time.Now()
@@ -156,7 +156,7 @@ func executeAgentRun(
 		params.Message = params.PendingEnrichment(ctx)
 		if formatted := persistTurnUserMessage(params, deps, logger); formatted != "" {
 			params.Message = formatted
-			params.appendCurrentMessage = true
+			params.AppendCurrentMessage = true
 		}
 	}
 	enrichJoinMs := time.Since(enrichStart).Milliseconds()
@@ -168,7 +168,7 @@ func executeAgentRun(
 	// in assembleTurnMessages, byte-identical to before.
 	if ephemeralNeedsExplicitAppend(params, prep) {
 		params.Message = formatTurnUserMessage(params.Message, dentime.Now())
-		params.appendCurrentMessage = true
+		params.AppendCurrentMessage = true
 	}
 
 	// Stage 2: Assemble final message list (prebuilt, attachments, Polaris compaction).
@@ -524,10 +524,10 @@ func formatTurnUserMessage(message string, now time.Time) string {
 // working message list wire-only. True only for history-bearing sessions:
 // fresh sessions (empty history) are handled by assembleTurnMessages'
 // scratch-build path exactly as before, and prebuilt-history API turns carry
-// their own message. appendCurrentMessage already set means the enrichment
+// their own message. AppendCurrentMessage already set means the enrichment
 // join handled it.
 func ephemeralNeedsExplicitAppend(params RunParams, prep prepResult) bool {
-	return params.EphemeralUser && !params.appendCurrentMessage &&
+	return params.EphemeralUser && !params.AppendCurrentMessage &&
 		params.Message != "" && len(params.PrebuiltMessages) == 0 && len(prep.Messages) > 0
 }
 
@@ -556,7 +556,7 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 	if nbID, updated, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
 		if g, hit := cachedNotebookGrounding(params.SessionKey, nbID, updated); hit {
 			notebookGrounding = g
-		} else if g, gok := tools.BuildNotebookGrounding(&toolctx.NotebookDeps{Store: deps.memory.Notebook, Wiki: deps.memory.Wiki}, nbID); gok {
+		} else if g, gok := notebooktool.BuildNotebookGrounding(&toolctx.NotebookDeps{Store: deps.memory.Notebook, Wiki: deps.memory.Wiki}, nbID); gok {
 			notebookGrounding = g
 			storeNotebookGrounding(params.SessionKey, nbID, updated, g)
 		}

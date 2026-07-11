@@ -1,6 +1,8 @@
 package typing
 
 import (
+	"sync/atomic"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
@@ -63,7 +65,7 @@ type FullTypingSignaler struct {
 	ShouldStartOnReasoning    bool
 
 	disabled          bool
-	hasRenderableText bool
+	hasRenderableText atomic.Bool
 }
 
 // NewFullTypingSignaler creates a phase-aware typing signaler.
@@ -92,7 +94,7 @@ func (s *FullTypingSignaler) SignalMessageStart() {
 	if s.disabled || !s.ShouldStartOnMessageStart || s.controller == nil {
 		return
 	}
-	if !s.hasRenderableText {
+	if !s.hasRenderableText.Load() {
 		return
 	}
 	s.controller.Start()
@@ -111,9 +113,14 @@ func (s *FullTypingSignaler) SignalTextDelta(text string) {
 	if trimmed == "" {
 		return
 	}
-	renderable := !tokens.IsSilentReplyText(trimmed, tokens.SilentReplyToken)
+	silentToken := tokens.SilentReplyToken
+	if s.controller.silentToken != "" {
+		silentToken = s.controller.silentToken
+	}
+	renderable := !tokens.IsSilentReplyText(trimmed, silentToken) &&
+		!tokens.IsSilentReplyPrefixText(trimmed, silentToken)
 	if renderable {
-		s.hasRenderableText = true
+		s.hasRenderableText.Store(true)
 	} else {
 		// Non-renderable text (silent token) — skip typing.
 		return
@@ -136,7 +143,7 @@ func (s *FullTypingSignaler) SignalReasoningDelta() {
 	if s.disabled || !s.ShouldStartOnReasoning || s.controller == nil {
 		return
 	}
-	if !s.hasRenderableText {
+	if !s.hasRenderableText.Load() {
 		return
 	}
 	s.controller.StartTypingLoop()

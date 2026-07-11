@@ -3,6 +3,7 @@ package handlerminiapp
 import (
 	"context"
 	"encoding/json"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
 	"os"
 	"path/filepath"
 	"testing"
@@ -361,11 +362,11 @@ func TestSkillsLifecycle_MappingAndLimit(t *testing.T) {
 		payload.Summary.Attention != 2 ||
 		payload.Summary.LatestAt != 333 ||
 		payload.Summary.LatestSkill != "email-analysis" ||
-		payload.Summary.DoctrineVersion != genesis.PropusDoctrine().Version ||
-		len(payload.Summary.SourcePapers) != len(genesis.PropusDoctrine().SourceIDs()) ||
-		len(payload.Summary.FilteredSources) != len(genesis.PropusDoctrine().FilteredSourceIDs()) ||
-		len(payload.Summary.Principles) != len(genesis.PropusDoctrine().ProductRules()) ||
-		len(payload.Summary.QualityGates) != len(genesis.PropusDoctrine().QualityGates) ||
+		payload.Summary.DoctrineVersion != propus.PropusDoctrine().Version ||
+		len(payload.Summary.SourcePapers) != len(propus.PropusDoctrine().SourceIDs()) ||
+		len(payload.Summary.FilteredSources) != len(propus.PropusDoctrine().FilteredSourceIDs()) ||
+		len(payload.Summary.Principles) != len(propus.PropusDoctrine().ProductRules()) ||
+		len(payload.Summary.QualityGates) != len(propus.PropusDoctrine().QualityGates) ||
 		payload.Summary.CoverageState != "covered" ||
 		len(payload.Summary.CoverageGaps) != 0 ||
 		len(payload.Summary.NextActions) == 0 ||

@@ -24,6 +24,10 @@ import (
 // model reads columns as a grid instead of comma soup. Ragged rows are
 // tolerated; output is capped to keep large exports out of the context budget.
 func csvToMarkdown(data []byte) (string, error) {
+	// Spreadsheet exports commonly prefix UTF-8 CSV with a BOM. encoding/csv
+	// treats it as part of the first field, which made the rendered header read
+	// "\ufeff품목" and broke exact header matching downstream.
+	data = bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf})
 	r := csv.NewReader(bytes.NewReader(data))
 	r.FieldsPerRecord = -1 // tolerate ragged rows
 	r.LazyQuotes = true

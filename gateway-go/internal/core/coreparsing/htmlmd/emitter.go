@@ -97,10 +97,13 @@ func emit(tokens []token, inputLen int, stripNoise bool) (string, *string) { //n
 
 		// --- Suppressed content ---
 		if ctx.suppressDepth > 0 {
-			if tok.kind == tokenTagClose {
-				alwaysSuppressed := tok.tag == tagScript || tok.tag == tagStyle || tok.tag == tagNoscript
-				noiseSuppressed := stripNoise && isNoiseTag(tok.tag)
-				if alwaysSuppressed || noiseSuppressed {
+			alwaysSuppressed := tok.tag == tagScript || tok.tag == tagStyle || tok.tag == tagNoscript
+			noiseSuppressed := stripNoise && isNoiseTag(tok.tag)
+			if alwaysSuppressed || noiseSuppressed {
+				switch tok.kind {
+				case tokenTagOpen:
+					ctx.suppressDepth++
+				case tokenTagClose:
 					ctx.suppressDepth--
 					if ctx.suppressDepth < 0 {
 						ctx.suppressDepth = 0
@@ -408,37 +411,68 @@ func emitImage(ctx *emitCtx, raw string) {
 // extractAttr extracts an attribute value from a raw tag string.
 // Handles quoted ("value", 'value') and unquoted attribute values.
 func extractAttr(tag, attr string) string {
-	lower := strings.ToLower(tag)
-	pattern := attr + "="
-	idx := strings.Index(lower, pattern)
-	if idx < 0 {
-		return ""
+	// Start after the tag name. Attribute lookup must be token-aware: a raw
+	// substring search would mistake data-href for href (or an href= fragment
+	// inside another attribute's quoted value).
+	i := 1
+	for i < len(tag) && !isAttrSpace(tag[i]) && tag[i] != '>' {
+		i++
 	}
-	afterEq := idx + len(pattern)
-	if afterEq >= len(tag) {
-		return ""
-	}
-	quote := tag[afterEq]
-	if quote == '"' || quote == '\'' {
-		start := afterEq + 1
-		if start >= len(tag) {
+	for i < len(tag) {
+		for i < len(tag) && (isAttrSpace(tag[i]) || tag[i] == '/') {
+			i++
+		}
+		if i >= len(tag) || tag[i] == '>' {
 			return ""
 		}
-		end := strings.IndexByte(tag[start:], quote)
-		if end < 0 {
+		nameStart := i
+		for i < len(tag) && !isAttrSpace(tag[i]) && tag[i] != '=' && tag[i] != '>' && tag[i] != '/' {
+			i++
+		}
+		name := tag[nameStart:i]
+		for i < len(tag) && isAttrSpace(tag[i]) {
+			i++
+		}
+		if i >= len(tag) || tag[i] != '=' {
+			// Boolean attribute. Whitespace was already consumed, so i is at
+			// either the next attribute name or the end of the tag.
+			continue
+		}
+		i++
+		for i < len(tag) && isAttrSpace(tag[i]) {
+			i++
+		}
+		if i >= len(tag) {
 			return ""
 		}
-		return tag[start : start+end]
+		valueStart := i
+		valueEnd := i
+		if tag[i] == '"' || tag[i] == '\'' {
+			quote := tag[i]
+			valueStart = i + 1
+			valueEnd = valueStart
+			for valueEnd < len(tag) && tag[valueEnd] != quote {
+				valueEnd++
+			}
+			if valueEnd >= len(tag) {
+				return ""
+			}
+			i = valueEnd + 1
+		} else {
+			for valueEnd < len(tag) && !isAttrSpace(tag[valueEnd]) && tag[valueEnd] != '>' {
+				valueEnd++
+			}
+			i = valueEnd
+		}
+		if strings.EqualFold(name, attr) {
+			return tag[valueStart:valueEnd]
+		}
 	}
-	// Unquoted: read until whitespace or >.
-	rest := tag[afterEq:]
-	end := strings.IndexFunc(rest, func(r rune) bool {
-		return r == ' ' || r == '\t' || r == '>'
-	})
-	if end < 0 {
-		return rest
-	}
-	return rest[:end]
+	return ""
+}
+
+func isAttrSpace(ch byte) bool {
+	return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r'
 }
 
 // extractCodeLanguage extracts language from <code class="language-X"> or "lang-X".

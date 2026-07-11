@@ -1,6 +1,10 @@
 package server
 
-import "strings"
+import (
+	"strings"
+
+	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+)
 
 const nativeClientSessionPrefix = "client:"
 
@@ -15,13 +19,6 @@ func isNativeClientSessionKey(sessionKey string) bool {
 		strings.TrimPrefix(sessionKey, nativeClientSessionPrefix) != ""
 }
 
-func heartbeatTargetSessionKey(lastSessionKey string) string {
-	if isNativeClientSessionKey(lastSessionKey) {
-		return lastSessionKey
-	}
-	return nativeWorkSessionKey
-}
-
 // restorableTranscriptSession decides whether a transcript file found on disk
 // at startup should be woken back into the session manager. The live native
 // session shapes qualify: the 업무 home (client:main) and its explicit new
@@ -33,13 +30,6 @@ func heartbeatTargetSessionKey(lastSessionKey string) string {
 // resurrect. Matching bare isNativeClientSessionKey here is what kept reviving
 // them: the gateway restarts every few minutes on SIGUSR1, re-scanning the
 // transcript dir each time. All these sessions run on the "client" channel.
-func restorableTranscriptSession(sessionKey string) (channel string, ok bool) {
-	if isRestorableNativeSessionKey(sessionKey) || isChatWorkspaceSessionKey(sessionKey) {
-		return "client", true
-	}
-	return "", false
-}
-
 // isChatWorkspaceSessionKey reports whether sessionKey belongs to the legacy
 // 챗봇 namespace (chat:<uuid>). Unlike the retired client:topic:* /
 // client:<uuid> shapes, chat: conversations persist transcripts exactly like
@@ -56,8 +46,8 @@ func isChatWorkspaceSessionKey(sessionKey string) bool {
 // startup restore cannot revive them. This is intentionally stricter than
 // isNativeClientSessionKey, which still governs activity/heartbeat/resume paths.
 func isRestorableNativeSessionKey(sessionKey string) bool {
-	return sessionKey == nativeWorkSessionKey ||
-		strings.HasPrefix(sessionKey, nativeWorkSessionKey+":")
+	return sessionKey == runtimesession.NativeWorkSessionKey ||
+		strings.HasPrefix(sessionKey, runtimesession.NativeWorkSessionKey+":")
 }
 
 type resumableSessionTarget struct {

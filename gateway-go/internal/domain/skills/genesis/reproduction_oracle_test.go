@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 )
 
 // Reproduction oracle (SEA Alg 8, RSI P1.5): a producer-authored case is
@@ -84,12 +86,12 @@ func TestAdoptReproductionCase(t *testing.T) {
 // default follows the compiled default forward; a revised file never moves.
 func TestMaterializeDefaults_SidecarRefresh(t *testing.T) {
 	dir := t.TempDir()
-	m := NewMetaArtifacts(dir, slog.Default())
+	m := generation.NewMetaArtifacts(dir, slog.Default())
 	name := "prompt.md"
 	v1 := strings.Repeat("v1 prompt content. ", 20)
 	v2 := strings.Repeat("v2 prompt content. ", 20)
 	path := filepath.Join(dir, name)
-	sidecar := path + metaSidecarSuffix
+	sidecar := path + ".default-sha256"
 
 	// First materialization writes file + provenance sidecar.
 	m.MaterializeDefaults(map[string]string{name: v1})
@@ -121,7 +123,7 @@ func TestMaterializeDefaults_SidecarRefresh(t *testing.T) {
 // provenance — preserved, never refreshed.
 func TestMaterializeDefaults_NoSidecarDivergentPreserved(t *testing.T) {
 	dir := t.TempDir()
-	m := NewMetaArtifacts(dir, slog.Default())
+	m := generation.NewMetaArtifacts(dir, slog.Default())
 	name := "prompt.md"
 	legacy := strings.Repeat("legacy default from an old binary. ", 10)
 	path := filepath.Join(dir, name)
@@ -133,7 +135,7 @@ func TestMaterializeDefaults_NoSidecarDivergentPreserved(t *testing.T) {
 	if got, _ := os.ReadFile(path); string(got) != legacy {
 		t.Fatalf("unknown-provenance file was clobbered: %q", got)
 	}
-	if _, err := os.Stat(path + metaSidecarSuffix); err == nil {
+	if _, err := os.Stat(path + ".default-sha256"); err == nil {
 		t.Fatal("sidecar must not be backfilled for divergent content")
 	}
 
@@ -143,7 +145,7 @@ func TestMaterializeDefaults_NoSidecarDivergentPreserved(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.MaterializeDefaults(map[string]string{name: strings.Repeat("new default. ", 30)})
-	if _, err := os.Stat(path + metaSidecarSuffix); err != nil {
+	if _, err := os.Stat(path + ".default-sha256"); err != nil {
 		t.Fatalf("sidecar not backfilled for pristine match: %v", err)
 	}
 }

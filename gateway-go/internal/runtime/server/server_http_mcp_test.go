@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mcpapi"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -23,8 +25,19 @@ func postMCP(t *testing.T, s *Server, token, body string) *httptest.ResponseReco
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	rec := httptest.NewRecorder()
-	s.handleMCP(rec, req)
+	mcpHandler(s).ServeHTTP(rec, req)
 	return rec
+}
+
+func mcpHandler(s *Server) *mcpapi.Handler {
+	return mcpapi.New(mcpapi.Config{
+		Authenticate: func(w http.ResponseWriter, r *http.Request) (*clientauth.Identity, bool) {
+			return nativeauth.Authenticate(w, r, s.logger)
+		},
+		Dispatcher: s.dispatcher,
+		Version:    s.version,
+		Logger:     s.logger,
+	})
 }
 
 func decodeMCP(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
@@ -65,15 +78,15 @@ func TestMCP_InitializeAndToolsList(t *testing.T) {
 	// An unsupported requested version negotiates down to our newest.
 	rec = postMCP(t, s, token, `{"jsonrpc":"2.0","id":2,"method":"initialize","params":{"protocolVersion":"2099-01-01"}}`)
 	out = decodeMCP(t, rec)
-	if v := out["result"].(map[string]any)["protocolVersion"]; v != mcpProtocolVersions[0] {
-		t.Errorf("negotiated version = %v, want %s", v, mcpProtocolVersions[0])
+	if versions := mcpapi.ProtocolVersions(); out["result"].(map[string]any)["protocolVersion"] != versions[0] {
+		t.Errorf("negotiated version = %v, want %s", out["result"].(map[string]any)["protocolVersion"], versions[0])
 	}
 
 	rec = postMCP(t, s, token, `{"jsonrpc":"2.0","id":3,"method":"tools/list"}`)
 	out = decodeMCP(t, rec)
 	tools, _ := out["result"].(map[string]any)["tools"].([]any)
-	if len(tools) != len(mcpTools) {
-		t.Fatalf("tools = %d, want %d", len(tools), len(mcpTools))
+	if want := len(mcpapi.ToolDefinitions()); len(tools) != want {
+		t.Fatalf("tools = %d, want %d", len(tools), want)
 	}
 	first, _ := tools[0].(map[string]any)
 	if first["name"] != "wiki_search" {
@@ -178,7 +191,7 @@ func TestMCP_TransportRules(t *testing.T) {
 	getReq := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/mcp", nil)
 	getReq.Header.Set(clientauth.Header, token)
 	getRec := httptest.NewRecorder()
-	s.handleMCP(getRec, getReq)
+	mcpHandler(s).ServeHTTP(getRec, getReq)
 	if getRec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("GET status = %d", getRec.Code)
 	}
@@ -188,7 +201,7 @@ func TestMCP_TransportRules(t *testing.T) {
 	origReq.Header.Set(clientauth.Header, token)
 	origReq.Header.Set("Origin", "https://evil.example")
 	origRec := httptest.NewRecorder()
-	s.handleMCP(origRec, origReq)
+	mcpHandler(s).ServeHTTP(origRec, origReq)
 	if origRec.Code != http.StatusForbidden {
 		t.Errorf("Origin status = %d", origRec.Code)
 	}
@@ -208,7 +221,7 @@ func TestMCP_TransportRules(t *testing.T) {
 // ("creates", "marked") — over-flagging is fine for a security tripwire.
 func TestMCP_ToolTableIsReadOnly(t *testing.T) {
 	writeVerbs := []string{"write", "create", "update", "delete", "move", "merge", "send", "accept", "reject", "mark", "archive", "trash", "close", "reopen", "analyze", "ask"}
-	for _, tool := range mcpTools {
+	for _, tool := range mcpapi.ToolDefinitions() {
 		if !strings.HasPrefix(tool.Method, "miniapp.") {
 			t.Errorf("%s maps outside the miniapp surface: %s", tool.Name, tool.Method)
 		}
@@ -262,12 +275,12 @@ func TestMCP_RejectsMalformedEnvelopes(t *testing.T) {
 // (numeric 1 vs string "1" must not collide) and length-capped (a
 // client-chosen id can't inflate internal ids).
 func TestMCPInternalID(t *testing.T) {
-	num := mcpInternalID(json.RawMessage(`1`))
-	str := mcpInternalID(json.RawMessage(`"1"`))
+	num := mcpapi.InternalID(json.RawMessage(`1`))
+	str := mcpapi.InternalID(json.RawMessage(`"1"`))
 	if num == str {
 		t.Errorf("numeric 1 and string \"1\" collide: %q", num)
 	}
-	long := mcpInternalID(json.RawMessage(`"` + strings.Repeat("x", 500) + `"`))
+	long := mcpapi.InternalID(json.RawMessage(`"` + strings.Repeat("x", 500) + `"`))
 	if n := len([]rune(long)); n > 66 { // prefix + 64-rune cap
 		t.Errorf("derived id length = %d, want capped", n)
 	}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -17,7 +18,7 @@ import (
 // GenesisDeps holds dependencies for skills.genesis, skills.evolve, and
 // skills.usage RPC methods.
 type GenesisDeps struct {
-	Genesis     *genesis.Service
+	Genesis     *generation.Service
 	Evolver     *genesis.Evolver
 	Tracker     *genesis.Tracker
 	Transcripts toolctx.TranscriptStore // optional: enables session-based genesis
@@ -67,7 +68,7 @@ func skillsGenesis(deps GenesisDeps) rpcutil.HandlerFunc {
 		ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 		defer cancel()
 
-		var skill *genesis.GeneratedSkill
+		var skill *generation.GeneratedSkill
 		var err error
 
 		if p.DreamSummary != "" {
@@ -98,7 +99,7 @@ func skillsGenesis(deps GenesisDeps) rpcutil.HandlerFunc {
 		}
 
 		if err := deps.Genesis.Persist(skill); err != nil {
-			if errors.Is(err, genesis.ErrSkillDeduped) {
+			if errors.Is(err, generation.ErrSkillDeduped) {
 				return rpcutil.RespondOK(req.ID, map[string]any{
 					"ok":     true,
 					"skip":   true,
@@ -210,8 +211,8 @@ func skillsUsageReport(deps GenesisDeps) rpcutil.HandlerFunc {
 }
 
 // buildSessionContext loads transcript messages and extracts genesis-relevant data.
-func buildSessionContext(store toolctx.TranscriptStore, sessionKey string) (genesis.SessionContext, error) {
-	sctx := genesis.SessionContext{Key: sessionKey}
+func buildSessionContext(store toolctx.TranscriptStore, sessionKey string) (generation.SessionContext, error) {
+	sctx := generation.SessionContext{Key: sessionKey}
 	if store == nil {
 		return sctx, nil // degrade gracefully — generate with minimal context
 	}
@@ -238,7 +239,7 @@ func buildSessionContext(store toolctx.TranscriptStore, sessionKey string) (gene
 	}
 	sctx.AllText = strings.Join(textParts, "\n")
 	for name := range toolSet {
-		sctx.ToolActivities = append(sctx.ToolActivities, genesis.ToolActivity{Name: name})
+		sctx.ToolActivities = append(sctx.ToolActivities, generation.ToolActivity{Name: name})
 	}
 	return sctx, nil
 }

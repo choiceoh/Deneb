@@ -3,6 +3,8 @@ package genesis
 import (
 	"context"
 	"fmt"
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/guardrails"
 	"log/slog"
 	"strings"
 	"sync"
@@ -374,8 +376,8 @@ func scoreSkillValidationCasesByCase(body string, cases []SkillValidationCaseRec
 	scores := make([]validationCaseScore, 0, len(cases))
 	normalizedBody := normalizedValidationText(body)
 	headings := map[string]struct{}{}
-	for _, heading := range skillHeadings(body) {
-		headings[heading.normalized] = struct{}{}
+	for _, heading := range guardrails.NormalizedSkillHeadings(body) {
+		headings[heading] = struct{}{}
 	}
 	for _, tc := range cases {
 		var score validationCaseScore
@@ -390,7 +392,7 @@ func scoreSkillValidationCasesByCase(body string, cases []SkillValidationCaseRec
 				score.Passed++
 				continue
 			}
-			score.Failures = append(score.Failures, fmt.Sprintf("%s missing required substring %q", label, truncateRunes(required, 80)))
+			score.Failures = append(score.Failures, fmt.Sprintf("%s missing required substring %q", label, genesiscommon.TruncateRunes(required, 80)))
 		}
 		for _, forbidden := range tc.ForbiddenSubstrings {
 			if normalizedValidationText(forbidden) == "" {
@@ -402,7 +404,7 @@ func scoreSkillValidationCasesByCase(body string, cases []SkillValidationCaseRec
 				score.Passed++
 				continue
 			}
-			score.Failures = append(score.Failures, fmt.Sprintf("%s contains forbidden substring %q", label, truncateRunes(forbidden, 80)))
+			score.Failures = append(score.Failures, fmt.Sprintf("%s contains forbidden substring %q", label, genesiscommon.TruncateRunes(forbidden, 80)))
 		}
 		for _, required := range tc.RequiredHeadings {
 			normalizedHeading := strings.ToLower(strings.Join(strings.Fields(required), " "))
@@ -415,7 +417,7 @@ func scoreSkillValidationCasesByCase(body string, cases []SkillValidationCaseRec
 				score.Passed++
 				continue
 			}
-			score.Failures = append(score.Failures, fmt.Sprintf("%s missing required heading %q", label, truncateRunes(required, 80)))
+			score.Failures = append(score.Failures, fmt.Sprintf("%s missing required heading %q", label, genesiscommon.TruncateRunes(required, 80)))
 		}
 		score.add(scoreSkillReplayCase(body, tc))
 		scores = append(scores, score)

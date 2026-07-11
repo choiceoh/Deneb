@@ -128,6 +128,9 @@ func Default() (*Store, error) {
 
 // New loads the store from path (an empty store if the file is absent).
 func New(path string) (*Store, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, fmt.Errorf("localtodo: empty path")
+	}
 	s := &Store{path: path}
 	if _, err := jsonutil.LoadFile(path, &s.todos, "localtodo"); err != nil {
 		return nil, err
@@ -192,6 +195,7 @@ func (s *Store) Create(in CreateInput) (Todo, error) {
 	rec := s.newRecordLocked(in)
 	s.todos = append(s.todos, rec)
 	if err := s.persistLocked(); err != nil {
+		s.todos = s.todos[:len(s.todos)-1]
 		return Todo{}, err
 	}
 	return rec.toTodo(), nil
@@ -220,6 +224,7 @@ func (s *Store) CreateIfAbsent(in CreateInput) (td Todo, created bool, err error
 	rec := s.newRecordLocked(in)
 	s.todos = append(s.todos, rec)
 	if perr := s.persistLocked(); perr != nil {
+		s.todos = s.todos[:len(s.todos)-1]
 		return Todo{}, false, perr
 	}
 	return rec.toTodo(), true, nil
@@ -242,8 +247,12 @@ func (s *Store) Update(id string, in CreateInput) (*Todo, error) {
 		rec.Created = prev.Created
 		rec.Done = prev.Done
 		rec.DoneAt = prev.DoneAt
+		if rec.Source == "" {
+			rec.Source = prev.Source
+		}
 		s.todos[i] = rec
 		if err := s.persistLocked(); err != nil {
+			s.todos[i] = prev
 			return nil, err
 		}
 		td := rec.toTodo()
@@ -261,6 +270,11 @@ func (s *Store) SetDone(id string, done bool) (*Todo, error) {
 		if s.todos[i].ID != id {
 			continue
 		}
+		if s.todos[i].Done == done {
+			td := s.todos[i].toTodo()
+			return &td, nil
+		}
+		previous := s.todos[i]
 		now := time.Now().UTC()
 		s.todos[i].Done = done
 		if done {
@@ -270,6 +284,7 @@ func (s *Store) SetDone(id string, done bool) (*Todo, error) {
 		}
 		s.todos[i].Updated = now.Format(time.RFC3339)
 		if err := s.persistLocked(); err != nil {
+			s.todos[i] = previous
 			return nil, err
 		}
 		td := s.todos[i].toTodo()
@@ -286,8 +301,13 @@ func (s *Store) Delete(id string) error {
 		if s.todos[i].ID != id {
 			continue
 		}
+		before := append([]storedTodo(nil), s.todos...)
 		s.todos = append(s.todos[:i], s.todos[i+1:]...)
-		return s.persistLocked()
+		if err := s.persistLocked(); err != nil {
+			s.todos = before
+			return err
+		}
+		return nil
 	}
 	return ErrNotFound
 }

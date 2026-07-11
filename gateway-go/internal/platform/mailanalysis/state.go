@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -34,6 +35,13 @@ type stateStore struct {
 }
 
 func newStateStore(stateDir string) *stateStore {
+	if strings.TrimSpace(stateDir) == "" {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			stateDir = filepath.Join(home, ".deneb")
+		} else {
+			stateDir = "."
+		}
+	}
 	return &stateStore{path: filepath.Join(stateDir, defaultStateFile)}
 }
 
@@ -60,6 +68,9 @@ func (s *stateStore) Load() (*PollState, error) {
 
 // Save persists the analysis polling state.
 func (s *stateStore) Save(state *PollState) error {
+	if state == nil {
+		return fmt.Errorf("poll state is required")
+	}
 	// Trim SeenIDs to prevent unbounded growth.
 	if len(state.SeenIDs) > maxSeenIDs {
 		state.SeenIDs = state.SeenIDs[len(state.SeenIDs)-maxSeenIDs:]
@@ -110,23 +121,40 @@ func (s *stateStore) Save(state *PollState) error {
 		}
 	}
 	_ = os.Remove(tmp) // best-effort cleanup on final rename failure
-	return renameErr
+	return fmt.Errorf("replace poll state: %w", renameErr)
 }
 
 // hasSeen checks if a message ID has already been processed (O(1)).
 func (state *PollState) hasSeen(id string) bool {
-	if state.seenSet == nil {
+	if state == nil || id == "" {
 		return false
 	}
+	state.ensureSeenSet()
 	_, ok := state.seenSet[id]
 	return ok
 }
 
 // markSeen adds a message ID to the seen list and set.
 func (state *PollState) markSeen(id string) {
-	if state.seenSet == nil {
-		state.seenSet = make(map[string]struct{})
+	if state == nil || id == "" {
+		return
+	}
+	state.ensureSeenSet()
+	if _, exists := state.seenSet[id]; exists {
+		return
 	}
 	state.SeenIDs = append(state.SeenIDs, id)
 	state.seenSet[id] = struct{}{}
+}
+
+func (state *PollState) ensureSeenSet() {
+	if state.seenSet != nil {
+		return
+	}
+	state.seenSet = make(map[string]struct{}, len(state.SeenIDs))
+	for _, id := range state.SeenIDs {
+		if id != "" {
+			state.seenSet[id] = struct{}{}
+		}
+	}
 }

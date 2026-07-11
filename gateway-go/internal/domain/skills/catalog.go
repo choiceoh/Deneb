@@ -80,7 +80,8 @@ func (c *Catalog) Register(entry SkillEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	key := ResolveSkillKey(entry)
-	c.entries[key] = &entry
+	cloned := cloneSkillEntry(entry)
+	c.entries[key] = &cloned
 	c.logger.Debug("skill registered", "key", key, "source", entry.Skill.Source)
 }
 
@@ -101,7 +102,7 @@ func (c *Catalog) List() []SkillEntry {
 	defer c.mu.RUnlock()
 	result := make([]SkillEntry, 0, len(c.entries))
 	for _, e := range c.entries {
-		result = append(result, *e)
+		result = append(result, cloneSkillEntry(*e))
 	}
 	sort.Slice(result, func(i, j int) bool {
 		return ResolveSkillKey(result[i]) < ResolveSkillKey(result[j])
@@ -117,7 +118,7 @@ func (c *Catalog) Get(key string) (*SkillEntry, bool) {
 	if !ok {
 		return nil, false
 	}
-	dup := *e
+	dup := cloneSkillEntry(*e)
 	return &dup, true
 }
 
@@ -127,7 +128,7 @@ func (c *Catalog) Snapshot() SkillSnapshot {
 	defer c.mu.RUnlock()
 	entries := make([]SkillEntry, 0, len(c.entries))
 	for _, e := range c.entries {
-		entries = append(entries, *e)
+		entries = append(entries, cloneSkillEntry(*e))
 	}
 	sort.Slice(entries, func(i, j int) bool {
 		return ResolveSkillKey(entries[i]) < ResolveSkillKey(entries[j])
@@ -193,4 +194,54 @@ func (c *Catalog) Count() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return len(c.entries)
+}
+
+func cloneSkillEntry(src SkillEntry) SkillEntry {
+	dst := src
+	if src.Frontmatter != nil {
+		dst.Frontmatter = make(ParsedFrontmatter, len(src.Frontmatter))
+		for key, value := range src.Frontmatter {
+			dst.Frontmatter[key] = value
+		}
+	}
+	if src.Invocation != nil {
+		invocation := *src.Invocation
+		dst.Invocation = &invocation
+	}
+	if src.Metadata == nil {
+		return dst
+	}
+	metadata := *src.Metadata
+	metadata.Tags = append([]string(nil), src.Metadata.Tags...)
+	metadata.Triggers = append([]string(nil), src.Metadata.Triggers...)
+	metadata.RelatedSkills = append([]string(nil), src.Metadata.RelatedSkills...)
+	metadata.RequiresTools = append([]string(nil), src.Metadata.RequiresTools...)
+	metadata.FallbackForTools = append([]string(nil), src.Metadata.FallbackForTools...)
+	if src.Metadata.Requires != nil {
+		requires := *src.Metadata.Requires
+		requires.Bins = append([]string(nil), requires.Bins...)
+		requires.AnyBins = append([]string(nil), requires.AnyBins...)
+		requires.Env = append([]string(nil), requires.Env...)
+		requires.Config = append([]string(nil), requires.Config...)
+		metadata.Requires = &requires
+	}
+	if src.Metadata.LocalExec != nil {
+		localExec := *src.Metadata.LocalExec
+		localExec.Args = append([]string(nil), localExec.Args...)
+		metadata.LocalExec = &localExec
+	}
+	metadata.Install = append([]SkillInstallSpec(nil), src.Metadata.Install...)
+	for i := range metadata.Install {
+		metadata.Install[i].Bins = append([]string(nil), metadata.Install[i].Bins...)
+		if metadata.Install[i].Extract != nil {
+			value := *metadata.Install[i].Extract
+			metadata.Install[i].Extract = &value
+		}
+		if metadata.Install[i].StripComponents != nil {
+			value := *metadata.Install[i].StripComponents
+			metadata.Install[i].StripComponents = &value
+		}
+	}
+	dst.Metadata = &metadata
+	return dst
 }

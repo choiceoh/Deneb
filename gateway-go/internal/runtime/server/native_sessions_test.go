@@ -1,6 +1,10 @@
 package server
 
-import "testing"
+import (
+	"testing"
+
+	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+)
 
 // TestRestorableTranscriptSession pins the startup-restore filter to the live
 // native session shapes only. Retired keys — the topic sessions removed in
@@ -30,7 +34,7 @@ func TestRestorableTranscriptSession(t *testing.T) {
 		{"", false},
 	}
 	for _, c := range cases {
-		ch, ok := restorableTranscriptSession(c.key)
+		ch, ok := runtimesession.RestorableTranscriptChannel(c.key)
 		if ok != c.want {
 			t.Errorf("restorableTranscriptSession(%q) ok=%v, want %v", c.key, ok, c.want)
 		}

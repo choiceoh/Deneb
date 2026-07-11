@@ -36,6 +36,8 @@ func (h *HistoryTracker) Append(sessionKey string, entry HistoryEntry) {
 
 	if _, exists := h.entries[sessionKey]; !exists {
 		h.order = append(h.order, sessionKey)
+	} else {
+		h.touchLocked(sessionKey)
 	}
 	entry.Timestamp = time.Now().UnixMilli()
 	entry.SessionKey = sessionKey
@@ -57,6 +59,7 @@ func (h *HistoryTracker) Get(sessionKey string) []HistoryEntry {
 	if entries == nil {
 		return nil
 	}
+	h.touchLocked(sessionKey)
 	result := make([]HistoryEntry, len(entries))
 	copy(result, entries)
 	return result
@@ -70,6 +73,7 @@ func (h *HistoryTracker) Recent(sessionKey string, n int) []HistoryEntry {
 	if entries == nil || n <= 0 {
 		return nil
 	}
+	h.touchLocked(sessionKey)
 	if n >= len(entries) {
 		result := make([]HistoryEntry, len(entries))
 		copy(result, entries)
@@ -99,4 +103,15 @@ func (h *HistoryTracker) Count() int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return len(h.entries)
+}
+
+func (h *HistoryTracker) touchLocked(sessionKey string) {
+	for i, key := range h.order {
+		if key != sessionKey {
+			continue
+		}
+		copy(h.order[i:], h.order[i+1:])
+		h.order[len(h.order)-1] = sessionKey
+		return
+	}
 }

@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"sort"
 	"strings"
 	"time"
@@ -125,7 +126,7 @@ func (t *Tracker) computeFailureEvidenceClustersLocked(now time.Time, limit int)
 			c.Support++
 			if entry.CreatedAt >= c.LastAt {
 				c.LastAt = entry.CreatedAt
-				if example := singleLine(truncateRunes(strings.TrimSpace(entry.Reason), 160)); example != "" {
+				if example := singleLine(genesiscommon.TruncateRunes(strings.TrimSpace(entry.Reason), 160)); example != "" {
 					c.Example = example
 				}
 			}

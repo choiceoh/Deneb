@@ -3,13 +3,15 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+
+	runtimehealth "github.com/choiceoh/deneb/gateway-go/internal/runtime/health"
 )
 
 // handleHealth responds with gateway health status including subsystem state.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	health := s.collectBaseHealth()
-	if propus, ok := s.collectPropusHealth(); ok {
-		attachPropusHealth(health, propus)
+	if propus, ok := runtimehealth.Propus(s.genesisTracker); ok {
+		runtimehealth.AttachPropus(health, propus)
 	}
 
 	if s.fleet != nil {
@@ -19,12 +21,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	// Prefix-cache and GPU telemetry are independent, optional probes. Collect
 	// them concurrently so their individual two-second backstops do not add up
 	// and make a healthy gateway miss the three-second self-poll deadline.
-	optional := s.collectOptionalHealth(r.Context())
-	if optional.cachePresent {
-		health["cache"] = optional.cache
+	optional := s.healthProbes.Collect(r.Context(), s.vllmBaseURLs())
+	if optional.CachePresent {
+		health["cache"] = optional.Cache
 	}
-	if optional.gpuPresent {
-		health["gpu"] = optional.gpu
+	if optional.GPUPresent {
+		health["gpu"] = optional.GPU
 	}
 
 	s.writeJSON(w, http.StatusOK, health)
@@ -46,7 +48,7 @@ func (s *Server) vllmBaseURLs() []string {
 // {"gpu": null, "present": false} on a host without an NVIDIA GPU (200, not an
 // error: "no GPU here" is a valid, queryable answer).
 func (s *Server) handleHealthGPU(w http.ResponseWriter, r *http.Request) {
-	stats, present := s.gpuHealth.observe(r.Context(), nil)
+	stats, present := s.healthProbes.GPU(r.Context())
 	out := map[string]any{"present": present}
 	if present {
 		out["gpu"] = stats

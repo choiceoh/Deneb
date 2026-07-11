@@ -162,15 +162,17 @@ func calKindLabel(kind string) string {
 // event that carries no Deneb annotation.
 func calSourceLine(e calendar.Event) string {
 	src := strings.TrimSpace(e.Source)
-	if src == "" && calKindLabel(e.Kind) == "" {
+	kind := calKindLabel(e.Kind)
+	label := strings.TrimSpace(e.SourceLabel)
+	if src == "" && kind == "" && label == "" {
 		return ""
 	}
 	var parts []string
-	if k := calKindLabel(e.Kind); k != "" {
-		parts = append(parts, k)
+	if kind != "" {
+		parts = append(parts, kind)
 	}
-	if lbl := strings.TrimSpace(e.SourceLabel); lbl != "" {
-		parts = append(parts, fmt.Sprintf("메일 「%s」", lbl))
+	if label != "" {
+		parts = append(parts, fmt.Sprintf("메일 「%s」", label))
 	}
 	if src != "" {
 		parts = append(parts, src)

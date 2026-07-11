@@ -1,0 +1,204 @@
+package nativeapi
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+)
+
+// parseSSEEvents splits an SSE body into (event, dataJSON) pairs, skipping
+// comment (keepalive) lines. Mirrors the minimal parser the native client uses.
+func parseSSEEvents(t *testing.T, body string) []struct{ Event, Data string } {
+	t.Helper()
+	var out []struct{ Event, Data string }
+	var event string
+	var data strings.Builder
+	flush := func() {
+		if event == "" && data.Len() == 0 {
+			return
+		}
+		out = append(out, struct{ Event, Data string }{event, data.String()})
+		event = ""
+		data.Reset()
+	}
+	for _, line := range strings.Split(body, "\n") {
+		switch {
+		case strings.HasPrefix(line, ":"):
+			// comment / keepalive — ignore
+		case strings.HasPrefix(line, "event:"):
+			event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+		case strings.HasPrefix(line, "data:"):
+			data.WriteString(strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+		case line == "":
+			flush()
+		}
+	}
+	flush()
+	return out
+}
+
+func TestWriteChatStreamSSE_DeltasThenDone(t *testing.T) {
+	rec := httptest.NewRecorder()
+	run := func(_ context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
+		sinks.Delta("안녕")
+		sinks.Delta("하세요")
+		return &chatStreamResult{Text: "안녕하세요", Model: "step3p7", FellBack: true}, nil
+	}
+	writeChatStreamSSE(context.Background(), rec, "client:test", run, nil)
+
+	if ct := rec.Header().Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
+	}
+	events := parseSSEEvents(t, rec.Body.String())
+	if len(events) != 3 {
+		t.Fatalf("event count = %d, want 3 (2 delta + 1 done): %q", len(events), rec.Body.String())
+	}
+	if events[0].Event != "delta" || events[1].Event != "delta" {
+		t.Errorf("first two events = %q/%q, want delta/delta", events[0].Event, events[1].Event)
+	}
+	var d0 struct {
+		Delta string `json:"delta"`
+	}
+	if err := json.Unmarshal([]byte(events[0].Data), &d0); err != nil || d0.Delta != "안녕" {
+		t.Errorf("delta[0] = %q (err %v), want 안녕", d0.Delta, err)
+	}
+	if events[2].Event != "done" {
+		t.Fatalf("last event = %q, want done", events[2].Event)
+	}
+	var done struct {
+		Text     string `json:"text"`
+		Model    string `json:"model"`
+		FellBack bool   `json:"fellBack"`
+	}
+	if err := json.Unmarshal([]byte(events[2].Data), &done); err != nil {
+		t.Fatalf("done payload: %v", err)
+	}
+	if done.Text != "안녕하세요" || done.Model != "step3p7" || !done.FellBack {
+		t.Errorf("done = %+v, want {안녕하세요 step3p7 true}", done)
+	}
+}
+
+func TestWriteChatStreamSSE_ErrorFrame(t *testing.T) {
+	rec := httptest.NewRecorder()
+	run := func(_ context.Context, _ chatStreamSinks) (*chatStreamResult, error) {
+		return nil, errors.New("boom")
+	}
+	writeChatStreamSSE(context.Background(), rec, "client:test", run, nil)
+
+	events := parseSSEEvents(t, rec.Body.String())
+	if len(events) != 1 || events[0].Event != "error" {
+		t.Fatalf("events = %+v, want single error frame", events)
+	}
+	var e struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(events[0].Data), &e); err != nil || e.Error != "boom" {
+		t.Errorf("error payload = %q (err %v), want boom", e.Error, err)
+	}
+}
+
+// TestWriteChatStreamSSE_ToolAndThinkingFrames covers the live-progress frames:
+// a turn that thinks, runs a tool (with a detail hint), fails one, then answers
+// must interleave thinking/tool frames with deltas in arrival order, ending
+// with done. Also pins the wire shape: detail/isError omitted when zero.
+func TestWriteChatStreamSSE_ToolAndThinkingFrames(t *testing.T) {
+	rec := httptest.NewRecorder()
+	run := func(_ context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
+		sinks.Thinking("발신인 이력을 대조")
+		sinks.Thinking("")
+		sinks.Tool(chat.ToolStreamEvent{State: "started", Tool: "gmail", ToolUseID: "tu_1", Detail: "아르고에너지"})
+		sinks.Tool(chat.ToolStreamEvent{State: "completed", Tool: "gmail", ToolUseID: "tu_1", IsError: true})
+		sinks.Delta("메일 3통이 도착했습니다")
+		sinks.Tool(chat.ToolStreamEvent{}) // empty tool name must be dropped, not framed
+		return &chatStreamResult{Text: "메일 3통이 도착했습니다", Model: "step3p7"}, nil
+	}
+	writeChatStreamSSE(context.Background(), rec, "client:test", run, nil)
+
+	events := parseSSEEvents(t, rec.Body.String())
+	wantOrder := []string{"thinking", "thinking", "tool", "tool", "delta", "done"}
+	if len(events) != len(wantOrder) {
+		t.Fatalf("event count = %d, want %d: %q", len(events), len(wantOrder), rec.Body.String())
+	}
+	for i, want := range wantOrder {
+		if events[i].Event != want {
+			t.Errorf("event[%d] = %q, want %q", i, events[i].Event, want)
+		}
+	}
+	var thinking thinkingStreamFrame
+	if err := json.Unmarshal([]byte(events[0].Data), &thinking); err != nil || thinking.Preview != "발신인 이력을 대조" {
+		t.Errorf("thinking payload = %+v (err %v), want preview passthrough", thinking, err)
+	}
+	if strings.Contains(events[1].Data, "preview") {
+		t.Errorf("empty preview should be omitted from the frame: %q", events[1].Data)
+	}
+	var tool toolStreamFrame
+	if err := json.Unmarshal([]byte(events[2].Data), &tool); err != nil {
+		t.Fatalf("tool payload: %v", err)
+	}
+	if tool.State != "started" || tool.Tool != "gmail" || tool.ToolUseID != "tu_1" || tool.Detail != "아르고에너지" || tool.IsError {
+		t.Errorf("tool[started] = %+v, want {started gmail tu_1 아르고에너지 false}", tool)
+	}
+	if strings.Contains(events[2].Data, "isError") {
+		t.Errorf("started frame should omit isError: %q", events[2].Data)
+	}
+	if err := json.Unmarshal([]byte(events[3].Data), &tool); err != nil || tool.State != "completed" || !tool.IsError {
+		t.Errorf("tool[completed] = %+v (err %v), want state=completed isError=true", tool, err)
+	}
+	if strings.Contains(events[3].Data, "detail") {
+		t.Errorf("completed frame should omit empty detail: %q", events[3].Data)
+	}
+}
+
+// postMiniappChatStream drives the streaming handler with a client token.
+func postMiniappChatStream(t *testing.T, s *Handler, token string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/miniapp/chat/stream", bytes.NewReader(raw))
+	req.Header.Set(clientauth.Header, token)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.ChatStream(rec, req)
+	return rec
+}
+
+func TestHandleMiniappChatStream_GuardPaths(t *testing.T) {
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
+	token, err := clientauth.Generate()
+	if err != nil {
+		t.Fatalf("generate client token: %v", err)
+	}
+	s := New(Config{})
+
+	// Bad token → 401 (handled before any SSE bytes).
+	rec := postMiniappChatStream(t, s, token+"x", map[string]any{"message": "hi"})
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("bad token: code = %d, want 401", rec.Code)
+	}
+
+	// Empty message → 400.
+	rec = postMiniappChatStream(t, s, token, map[string]any{"message": "   "})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("empty message: code = %d, want 400", rec.Code)
+	}
+
+	// Valid request but chat handler not wired → 503 (not a stream). Null it
+	// explicitly so the guard is exercised without driving a real LLM turn.
+	rec = postMiniappChatStream(t, s, token, map[string]any{"message": "hi"})
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("nil chat handler: code = %d, want 503", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "chat handler not ready") {
+		t.Errorf("nil chat handler: body = %q, want 'chat handler not ready'", rec.Body.String())
+	}
+}

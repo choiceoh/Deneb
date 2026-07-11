@@ -2,6 +2,7 @@ package ai.deneb.deneb
 
 import ai.deneb.contacts.ContactData
 import ai.deneb.ui.chat.History
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
@@ -33,8 +34,9 @@ suspend fun DenebGatewayClient.captureImage(bytes: ByteArray, mimeType: String, 
     } else {
         "📷 이미지 공유됨 (OCR 분석 중…)"
     }
-    _chatHistory.update { it + History(role = History.Role.USER, content = label) }
-    val reply = runCatching {
+    val pending = History(role = History.Role.USER, content = label)
+    _chatHistory.update { it + pending }
+    val reply = try {
         val payload = callRpc<CaptureImagePayload>(
             "miniapp.capture.image",
             buildJsonObject {
@@ -47,7 +49,12 @@ suspend fun DenebGatewayClient.captureImage(bytes: ByteArray, mimeType: String, 
             },
         )
         payload?.text?.ifBlank { null } ?: "이미지에서 텍스트를 찾지 못했거나 분석에 실패했습니다."
-    }.getOrElse { "⚠️ ${it.message ?: "이미지 캡처 실패"}" }
+    } catch (c: CancellationException) {
+        _chatHistory.update { history -> history.filterNot { it.id == pending.id } }
+        throw c
+    } catch (e: Exception) {
+        "⚠️ ${e.message ?: "이미지 캡처 실패"}"
+    }
     _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
     syncNativeStateAsync()
     return true
@@ -62,8 +69,9 @@ suspend fun DenebGatewayClient.captureImage(bytes: ByteArray, mimeType: String, 
 @OptIn(ExperimentalEncodingApi::class)
 suspend fun DenebGatewayClient.captureAudio(bytes: ByteArray, mimeType: String) {
     if (clientToken.isEmpty() || bytes.isEmpty()) return
-    _chatHistory.update { it + History(role = History.Role.USER, content = "🎙️ 녹음 공유됨 (전사·회의록 분석 중…)") }
-    val reply = runCatching {
+    val pending = History(role = History.Role.USER, content = "🎙️ 녹음 공유됨 (전사·회의록 분석 중…)")
+    _chatHistory.update { it + pending }
+    val reply = try {
         val payload = callRpc<CaptureAudioPayload>(
             "miniapp.capture.audio",
             buildJsonObject {
@@ -73,7 +81,12 @@ suspend fun DenebGatewayClient.captureAudio(bytes: ByteArray, mimeType: String) 
             },
         )
         payload?.text?.ifBlank { null } ?: "녹음에서 음성을 인식하지 못했거나 전사에 실패했습니다."
-    }.getOrElse { "⚠️ ${it.message ?: "녹음 캡처 실패"}" }
+    } catch (c: CancellationException) {
+        _chatHistory.update { history -> history.filterNot { it.id == pending.id } }
+        throw c
+    } catch (e: Exception) {
+        "⚠️ ${e.message ?: "녹음 캡처 실패"}"
+    }
     _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
     syncNativeStateAsync()
 }
@@ -99,8 +112,9 @@ suspend fun DenebGatewayClient.captureDocument(
     } else {
         "📄 문서 공유됨: $name (분석 중…)"
     }
-    _chatHistory.update { it + History(role = History.Role.USER, content = label) }
-    val reply = runCatching {
+    val pending = History(role = History.Role.USER, content = label)
+    _chatHistory.update { it + pending }
+    val reply = try {
         val payload = callRpc<CaptureDocumentPayload>(
             "miniapp.capture.document",
             buildJsonObject {
@@ -114,7 +128,12 @@ suspend fun DenebGatewayClient.captureDocument(
             },
         )
         payload?.text?.ifBlank { null } ?: "문서에서 텍스트를 추출하지 못했거나 분석에 실패했습니다."
-    }.getOrElse { "⚠️ ${it.message ?: "문서 캡처 실패"}" }
+    } catch (c: CancellationException) {
+        _chatHistory.update { history -> history.filterNot { it.id == pending.id } }
+        throw c
+    } catch (e: Exception) {
+        "⚠️ ${e.message ?: "문서 캡처 실패"}"
+    }
     _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
     syncNativeStateAsync()
     return true
@@ -129,8 +148,9 @@ suspend fun DenebGatewayClient.captureDocument(
  */
 suspend fun DenebGatewayClient.captureContacts(contacts: List<ContactData>) {
     if (clientToken.isEmpty() || contacts.isEmpty()) return
-    _chatHistory.update { it + History(role = History.Role.USER, content = "📇 주소록 ${contacts.size}개 동기화 중…") }
-    val reply = runCatching {
+    val pending = History(role = History.Role.USER, content = "📇 주소록 ${contacts.size}개 동기화 중…")
+    _chatHistory.update { it + pending }
+    val reply = try {
         val payload = callRpc<CaptureContactsPayload>(
             "miniapp.capture.contacts",
             buildJsonObject {
@@ -148,7 +168,12 @@ suspend fun DenebGatewayClient.captureContacts(contacts: List<ContactData>) {
             },
         )
         payload?.text?.ifBlank { null } ?: "주소록 동기화에 실패했습니다."
-    }.getOrElse { "⚠️ ${it.message ?: "주소록 동기화 실패"}" }
+    } catch (c: CancellationException) {
+        _chatHistory.update { history -> history.filterNot { it.id == pending.id } }
+        throw c
+    } catch (e: Exception) {
+        "⚠️ ${e.message ?: "주소록 동기화 실패"}"
+    }
     _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
     syncNativeStateAsync()
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeauth"
 )
 
 // handleEvalExtract runs a PRODUCTION extractor (its real prompt + jsonutil parse +
@@ -22,7 +23,7 @@ import (
 // tags) the result is fence-immune — the difference prod never sees and the raw
 // sparkfleet probe wrongly penalized.
 func (s *Server) handleEvalExtract(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authenticateMiniappRequest(w, r); !ok {
+	if _, ok := nativeauth.Authenticate(w, r, s.logger); !ok {
 		return
 	}
 	var req struct {

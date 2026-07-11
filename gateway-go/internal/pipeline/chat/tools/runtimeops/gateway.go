@@ -280,13 +280,17 @@ func ToolGatewayWithDeps(repoDir string, deps GatewayDeps) toolctx.ToolFunc {
 // ── Action implementations ────────────────────────────────────────────────
 
 func gatewayStatus(deps GatewayDeps) (string, error) {
-	snap, err := config.LoadConfig(deps.configPath())
+	cfgPath := deps.configPath()
+	snap, err := config.LoadConfig(cfgPath)
 	port := config.DefaultGatewayPort
 	if err == nil && snap != nil && snap.Config.Gateway != nil && snap.Config.Gateway.Port != nil {
 		port = *snap.Config.Gateway.Port
 	}
 
 	uptime := deps.now().Sub(gatewayStartTime)
+	if snap != nil && snap.Path != "" {
+		cfgPath = snap.Path
+	}
 	result := map[string]any{
 		"version":    GatewayVersion,
 		"pid":        deps.signaller().PID(),
@@ -294,7 +298,10 @@ func gatewayStatus(deps GatewayDeps) (string, error) {
 		"uptime":     formatGatewayUptime(uptime),
 		"uptime_sec": int64(uptime.Seconds()),
 		"go_version": runtime.Version(),
-		"config":     snap.Path,
+		"config":     cfgPath,
+	}
+	if err != nil {
+		result["config_error"] = err.Error()
 	}
 	data, _ := json.MarshalIndent(result, "", "  ")
 	return string(data), nil
@@ -648,8 +655,13 @@ func dottedGet(root map[string]any, path string) (any, bool) {
 // maps (or missing, in which case they are created).
 func dottedSet(root map[string]any, path string, value any) error {
 	parts := strings.Split(path, ".")
-	if len(parts) == 0 || parts[0] == "" {
+	if len(parts) == 0 {
 		return fmt.Errorf("empty path")
+	}
+	for _, part := range parts {
+		if strings.TrimSpace(part) == "" {
+			return fmt.Errorf("empty path segment")
+		}
 	}
 	cur := root
 	for i, p := range parts[:len(parts)-1] {
@@ -686,6 +698,9 @@ func formatValueForSummary(v any) string {
 
 // formatGatewayUptime renders a duration as "Nd Nh Nm" style.
 func formatGatewayUptime(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
 	if d < time.Minute {
 		return fmt.Sprintf("%ds", int(d.Seconds()))
 	}

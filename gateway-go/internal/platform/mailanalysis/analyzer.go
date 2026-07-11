@@ -80,6 +80,9 @@ func loadPrompt(promptFile string) string {
 
 // FormatEmailForAnalysis builds the user message from email details.
 func FormatEmailForAnalysis(msg *gmail.MessageDetail) string {
+	if msg == nil {
+		return ""
+	}
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "From: %s\n", msg.From)
 	fmt.Fprintf(&sb, "To: %s\n", msg.To)
@@ -106,6 +109,12 @@ func FormatEmailForAnalysis(msg *gmail.MessageDetail) string {
 // no-op reasoning_effort on dual-mode vLLM models, which then exhaust the budget
 // on reasoning and return empty.
 func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt, thinkingKwarg string, counterpartyFn func(domain string) []string, msg *gmail.MessageDetail) (string, error) {
+	if client == nil {
+		return "", fmt.Errorf("LLM client is required")
+	}
+	if msg == nil {
+		return "", fmt.Errorf("email message is required")
+	}
 	userContent := prompt + "\n\n" + FormatEmailForAnalysis(msg)
 	// Same deterministic party anchor as the pipeline path (party_anchor.go);
 	// counterpartyFn (nil-safe) keeps active-counterparty labels on the

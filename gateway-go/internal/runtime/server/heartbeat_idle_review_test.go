@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 )
 
 func TestIdleReviewDue_Pacing(t *testing.T) {
@@ -145,16 +146,16 @@ func TestHeartbeatRun_ReachesIdleReviewLane(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tz: %v", err)
 	}
-	task := &heartbeatTask{
-		nowFn:       func() time.Time { return time.Date(2026, 7, 11, 12, 0, 0, 0, kst) },
-		chatHandler: &chat.Handler{},
-		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
-		homeDir:     t.TempDir(),
-		idleSkillReview: func(context.Context) (bool, string) {
+	task := runtimeheartbeat.NewTask(runtimeheartbeat.TaskConfig{
+		Now:         func() time.Time { return time.Date(2026, 7, 11, 12, 0, 0, 0, kst) },
+		ChatHandler: &chat.Handler{},
+		Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		HomeDir:     t.TempDir(),
+		IdleSkillReview: func(context.Context) (bool, string) {
 			called = true
 			return false, ""
 		},
-	}
+	})
 	if err := task.Run(t.Context()); err != nil {
 		t.Fatalf("Run: %v", err)
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 func extractThreadContext(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail) (ThreadContext, error) {
@@ -140,7 +141,7 @@ func extractSenderContext(ctx context.Context, deps PipelineDeps, msg *gmail.Mes
 		// prefers the EMAIL to reach the right 인물 page across 동명이인.
 		if facts := strings.TrimSpace(deps.SenderFactsFn(ctx, msg.From)); facts != "" {
 			if len(facts) > maxSenderFactsChars {
-				facts = facts[:maxSenderFactsChars] + "\n...(생략)"
+				facts = textutil.TruncateBytes(facts, maxSenderFactsChars) + "\n...(생략)"
 			}
 			return MemoryContext{SenderFacts: facts}
 		}
@@ -194,7 +195,7 @@ func extractWikiGraphContext(ctx context.Context, msg *gmail.MessageDetail) Memo
 		return zero
 	}
 	if len(facts) > maxSenderFactsChars {
-		facts = facts[:maxSenderFactsChars] + "\n...(생략)"
+		facts = textutil.TruncateBytes(facts, maxSenderFactsChars) + "\n...(생략)"
 	}
 	return MemoryContext{SenderFacts: facts}
 }
@@ -256,6 +257,9 @@ func runFinalSynthesis(ctx context.Context, deps PipelineDeps, userPrompt string
 		if deps.Logger != nil {
 			deps.Logger.Warn("mail analysis: agent synthesis unavailable; falling back to single completion", "error", err)
 		}
+	}
+	if deps.LLMClient == nil {
+		return "", fmt.Errorf("analysis LLM client is required")
 	}
 	thinking := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: deps.ThinkingKwarg}
 	if deps.DeepThinking {

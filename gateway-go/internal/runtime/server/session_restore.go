@@ -37,7 +37,7 @@ func (s *Server) restoreAndWakeSessions(_ context.Context) {
 			continue
 		}
 		sessionKey := strings.TrimSuffix(name, ".jsonl")
-		channel, ok := restorableTranscriptSession(sessionKey)
+		channel, ok := session.RestorableTranscriptChannel(sessionKey)
 		if !ok {
 			continue
 		}

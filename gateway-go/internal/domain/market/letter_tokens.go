@@ -71,9 +71,13 @@ func SubstituteLetterTokens(s string) string {
 		return s
 	}
 	letterTokens.Lock()
-	values := letterTokens.values
+	values := make(map[string]string, len(letterTokens.values))
 	if time.Since(letterTokens.asOf) > letterTokenTTL {
 		values = nil
+	} else {
+		for token, value := range letterTokens.values {
+			values[token] = value
+		}
 	}
 	letterTokens.Unlock()
 	return letterTokenRe.ReplaceAllStringFunc(s, func(tok string) string {

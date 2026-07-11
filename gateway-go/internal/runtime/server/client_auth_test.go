@@ -22,7 +22,7 @@ func postMiniappClientToken(t *testing.T, s *Server, token string, body any) *ht
 	req.Header.Set(clientauth.Header, token)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
-	s.handleMiniappRPC(rec, req)
+	nativeAPIHandler(s).RPC(rec, req)
 	return rec
 }
 
