@@ -101,6 +101,16 @@ its disagreement labels justify cutover (P3 precondition #1).
 
 ### P2 — Slow loop (revised: deterministic bench primary, health delta advisory)
 
+**Status (2026-07-11): scaffold + both epoch benches LANDED, propose-only.**
+Weekly `MetaEvolutionTask` (#3448) alternates producer/evaluator epochs,
+assembles evidence (7d scoreboard, low-yield levers, meta-experience ledger)
+and writes gated proposals as `<artifact>.proposed` + ledger entries — never
+touching live artifacts. Evaluator-epoch fitness = judge-degradation gold
+pairs (#3449); producer-epoch fitness = shadow-replay flip bench (#3450).
+First live cycle verified in production (2026-07-11 19:56 KST: producer
+epoch proposed quantifying evolve rule 14). Remaining: accumulate real
+weekly-cycle bench data, then flip gated proposals to auto-adoption.
+
 A weekly autonomous task proposes ONE meta-artifact revision per cycle. The
 original fitness design ("EvolutionHealthSummary deltas + auto-revert") was
 independently rejected by six 2026H1 mappings (noisy point estimates,
