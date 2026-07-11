@@ -139,6 +139,7 @@ type Service struct {
 	dailyCount     int
 	dailyCountDate string // YYYY-MM-DD
 	unsub          func()
+	meta           *MetaArtifacts // RSI P1: prompt artifacts (nil → compiled-in)
 }
 
 // NewService creates a genesis service.
@@ -173,6 +174,21 @@ func NewService(cfg Config, llmClient *llm.Client, catalog *skills.Catalog, logg
 // (reject semantic duplicates of existing skills and vague/one-off/low-value
 // skills the specificity heuristic misses). judge != producer to avoid same-
 // family self-preference bias. Safe to call with a nil client (no-op gate).
+// SetMetaArtifacts wires the prompt-artifact resolver (RSI P1). Nil keeps
+// compiled-in prompts — construction order stays free.
+func (s *Service) SetMetaArtifacts(m *MetaArtifacts) {
+	s.mu.Lock()
+	s.meta = m
+	s.mu.Unlock()
+}
+
+func (s *Service) metaLoad(name, fallback string) string {
+	s.mu.Lock()
+	m := s.meta
+	s.mu.Unlock()
+	return m.Load(name, fallback)
+}
+
 func (s *Service) SetJudge(client *llm.Client, model string, thinking *llm.ThinkingConfig) {
 	s.judgeClient = client
 	s.judgeModel = model
@@ -337,7 +353,7 @@ func (s *Service) Generate(ctx context.Context, sctx SessionContext) (*Generated
 	events, err := s.llmClient.StreamChat(ctx, llm.ChatRequest{
 		Model:          s.resolveModel(sctx.Model),
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
-		System:         llm.SystemString(genesisSystemPrompt),
+		System:         llm.SystemString(s.metaLoad(MetaGenesisSystemPrompt, genesisSystemPrompt)),
 		MaxTokens:      2048,
 		Stream:         true,
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
@@ -386,7 +402,7 @@ func (s *Service) GenerateFromDream(ctx context.Context, summaryContent string) 
 	events, err := s.llmClient.StreamChat(ctx, llm.ChatRequest{
 		Model:          s.cfg.Model,
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
-		System:         llm.SystemString(genesisSystemPrompt),
+		System:         llm.SystemString(s.metaLoad(MetaGenesisSystemPrompt, genesisSystemPrompt)),
 		MaxTokens:      2048,
 		Stream:         true,
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
@@ -465,7 +481,7 @@ func (s *Service) judgeGenerated(ctx context.Context, skill *GeneratedSkill) (pa
 	events, err := s.judgeClient.StreamChat(ctx, llm.ChatRequest{
 		Model:          s.judgeModel,
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
-		System:         llm.SystemString(genesisJudgeSystemPrompt),
+		System:         llm.SystemString(s.metaLoad(MetaGenesisJudgeSystemPrompt, genesisJudgeSystemPrompt)),
 		MaxTokens:      1024,
 		Stream:         true,
 		Thinking:       s.judgeThinking,

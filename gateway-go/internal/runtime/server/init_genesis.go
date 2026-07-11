@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -68,6 +69,18 @@ func (s *Server) initGenesisServices() {
 	}
 
 	s.genesisEvolver = genesis.NewEvolver(lwClient, s.skillCatalog, s.genesisTracker, lwModel, s.logger)
+
+	// RSI P1 (docs/research/recursive-self-improvement-roadmap.md): the
+	// generative half of the improvement pipeline resolves its system prompts
+	// from versioned artifacts under <managed genesis dir>/meta, with the
+	// compiled-in constants as fallback. Wiring here is read-only (load +
+	// fallback, safe for any instance/test); materialization happens in
+	// registerGenesisAutonomousTasks — the boot-only session-phase path bare
+	// New() unit tests never reach — behind the production-state gate, so
+	// neither a dev instance nor an unisolated test writes production state.
+	s.genesisMeta = genesis.NewMetaArtifacts(filepath.Join(cfg.OutputDir, "meta"), s.logger)
+	s.genesisSvc.SetMetaArtifacts(s.genesisMeta)
+	s.genesisEvolver.SetMetaArtifacts(s.genesisMeta)
 	// Copy-on-evolve for bundled repo skills: they are not seeded into the
 	// genesis catalog (curator staleness would archive the unused ones), so the
 	// evolver adopts one into the managed dir on its first evolve verdict and
@@ -643,6 +656,21 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 		evolveTask := &genesis.EvolutionTask{
 			Evolver: s.genesisEvolver,
 			Logger:  s.logger,
+			// RSI P1 materialization rides the first real evolution tick:
+			// autonomous tasks only Run() after Service.Start(), which unit
+			// tests (including the method-registry snapshot, which builds the
+			// full wiring) never call — so no test can write production
+			// state. The production-state gate additionally covers
+			// dev/live-test instances (same invariant as memory-backup).
+			Bootstrap: func() {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return
+				}
+				if _, prod := s.productionStateDir(home); prod {
+					s.genesisMeta.MaterializeDefaults(genesis.DefaultMetaArtifacts())
+				}
+			},
 		}
 		s.autonomousSvc.RegisterTask(evolveTask)
 		s.autonomousSvc.RegisterTask(&genesis.SkillCuratorTask{
