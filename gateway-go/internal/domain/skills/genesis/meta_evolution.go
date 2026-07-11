@@ -67,6 +67,10 @@ type MetaRevisionRecord struct {
 	ToVersion   string `json:"toVersion,omitempty"` // set when a proposal was produced
 	Proposed    bool   `json:"proposed"`
 	Reason      string `json:"reason,omitempty"` // proposal rationale, or skip/rejection cause
+	// Evaluator-epoch only: judge-degradation bench outcomes (BabelJudge) for
+	// the incumbent and the proposal over the same gold pairs.
+	BenchIncumbent *JudgeBenchOutcome `json:"benchIncumbent,omitempty"`
+	BenchProposal  *JudgeBenchOutcome `json:"benchProposal,omitempty"`
 }
 
 // metaRevisionLogPath mirrors the tracker's data-dir convention.
@@ -106,6 +110,11 @@ type MetaEvolutionTask struct {
 	Meta    *MetaArtifacts
 	Tracker *Tracker
 	Logger  *slog.Logger
+
+	// pending bench outcomes for the in-flight cycle's ledger write (set via
+	// recordWithBench; Run is single-flight per task so no locking needed).
+	pendingBenchIncumbent *JudgeBenchOutcome
+	pendingBenchProposal  *JudgeBenchOutcome
 }
 
 // Name identifies the task in the autonomous scheduler.
@@ -131,12 +140,14 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 
 	record := func(proposed bool, toVersion, reason string) error {
 		err := t.Tracker.LogMetaRevision(MetaRevisionRecord{
-			Epoch:       epoch,
-			Artifact:    artifact,
-			FromVersion: fromVersion,
-			ToVersion:   toVersion,
-			Proposed:    proposed,
-			Reason:      reason,
+			Epoch:          epoch,
+			Artifact:       artifact,
+			FromVersion:    fromVersion,
+			ToVersion:      toVersion,
+			Proposed:       proposed,
+			Reason:         reason,
+			BenchIncumbent: t.pendingBenchIncumbent,
+			BenchProposal:  t.pendingBenchProposal,
 		})
 		if err != nil {
 			logger.Warn("meta-evolution: ledger write failed", "error", err)
@@ -160,15 +171,51 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 		return record(false, "", "contract gate rejected: "+rejectReason)
 	}
 
+	// Evaluator epoch: the judge-degradation bench is the ONLY fitness for a
+	// judge-prompt revision (BabelJudge — a judge must never grade its own
+	// revision). Incumbent and proposal replay the same gold pairs; a proposal
+	// that regresses or misses the floor is rejected before it is surfaced.
+	var benchIncumbent, benchProposal *JudgeBenchOutcome
+	if epoch == metaEpochEvaluator {
+		verdict := t.judgeBenchExecutor()
+		if verdict == nil {
+			logger.Warn("meta-evolution: no judge model wired, evaluator proposal dropped")
+			return record(false, "", "judge bench unavailable: no model wired")
+		}
+		pairs := buildJudgeDegradationPairs(t.Evolver.catalogEntries(), judgeBenchMaxPairs)
+		inc := runJudgeDegradationBench(ctx, incumbent, pairs, verdict)
+		prop := runJudgeDegradationBench(ctx, proposal, pairs, verdict)
+		benchIncumbent, benchProposal = &inc, &prop
+		if rejectReason := judgeBenchDecision(inc, prop); rejectReason != "" {
+			logger.Info("meta-evolution: proposal rejected by judge-degradation bench",
+				"artifact", artifact, "incumbentRate", inc.Rate(), "proposalRate", prop.Rate(), "reason", rejectReason)
+			return t.recordWithBench(record, benchIncumbent, benchProposal,
+				false, "", "judge bench rejected: "+rejectReason)
+		}
+		logger.Info("meta-evolution: proposal cleared judge-degradation bench",
+			"incumbentRate", inc.Rate(), "proposalRate", prop.Rate(), "pairs", prop.Total)
+	}
+
 	path, werr := t.Meta.WriteProposal(artifact, proposal)
 	if werr != nil {
 		logger.Warn("meta-evolution: proposal write failed", "artifact", artifact, "error", werr)
-		return record(false, "", "proposal write failed: "+werr.Error())
+		return t.recordWithBench(record, benchIncumbent, benchProposal,
+			false, "", "proposal write failed: "+werr.Error())
 	}
 	toVersion := contentSHA256(strings.TrimSpace(proposal))[:12]
 	logger.Info("meta-evolution: revision proposed (propose-only — adoption is a separate decision)",
 		"artifact", artifact, "epoch", epoch, "from", fromVersion, "to", toVersion, "path", path)
-	return record(true, toVersion, reason)
+	return t.recordWithBench(record, benchIncumbent, benchProposal, true, toVersion, reason)
+}
+
+// recordWithBench stashes the bench outcomes for the closure-based ledger
+// writer. The closure owns the shared fields; bench fields ride via the task.
+func (t *MetaEvolutionTask) recordWithBench(record func(bool, string, string) error,
+	inc, prop *JudgeBenchOutcome, proposed bool, toVersion, reason string,
+) error {
+	t.pendingBenchIncumbent, t.pendingBenchProposal = inc, prop
+	defer func() { t.pendingBenchIncumbent, t.pendingBenchProposal = nil, nil }()
+	return record(proposed, toVersion, reason)
 }
 
 // nextEpoch alternates producer/evaluator based on the last ledger entry.

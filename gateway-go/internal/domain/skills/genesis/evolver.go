@@ -189,6 +189,15 @@ func (e *Evolver) SetMetaArtifacts(m *MetaArtifacts) {
 // newProvenance seeds the certificate with the evaluator artifact versions in
 // effect for this evolve attempt (RSI P1.5); the judge fields are filled as
 // the validation chain runs.
+// catalogEntries returns the current skill catalog listing ([] when unwired) —
+// the judge-degradation bench builds gold pairs from real skill bodies.
+func (e *Evolver) catalogEntries() []skills.SkillEntry {
+	if e.catalog == nil {
+		return nil
+	}
+	return e.catalog.List()
+}
+
 func (e *Evolver) newProvenance() EvolveProvenance {
 	e.configMu.RLock()
 	m := e.meta
