@@ -15,10 +15,11 @@ func TestParseShowinfoTimes(t *testing.T) {
 [Parsed_showinfo_1 @ 0x5] n:   1 pts:  51200 pts_time:2.048   duration_time:0.04
 [Parsed_showinfo_1 @ 0x5] n:   2 pts: 102400 pts_time:4.1     duration_time:0.04
 [Parsed_showinfo_1 @ 0x5] n:   3 pts: 102400 pts_time:4.1     duration_time:0.04
+[Parsed_showinfo_1 @ 0x5] n:   4 pts:  51200 pts_time:2.048   duration_time:0.04
 frame=  150 fps=0.0 q=-0.0 Lsize=N/A time=00:00:06.00 bitrate=N/A
 `)
 	got := parseShowinfoTimes(out)
-	want := []float64{0, 2.048, 4.1} // duplicate 4.1 dropped
+	want := []float64{0, 2.048, 4.1} // adjacent and non-adjacent duplicates dropped
 	if len(got) != len(want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
@@ -78,6 +79,14 @@ func TestSelectSceneTimestamps_InvalidWindow(t *testing.T) {
 	// end <= start: reject before any ffmpeg work.
 	if got := selectSceneTimestamps(context.Background(), "nonexistent.mp4", 60, 10, 30, 20); got != nil {
 		t.Errorf("expected nil for inverted window, got %v", got)
+	}
+}
+
+func TestSelectSceneTimestamps_UnknownDuration(t *testing.T) {
+	// duration 0 with no explicit end: skip the scan (it would decode to EOF)
+	// and let even spacing's bounded unknown-duration grid handle it.
+	if got := selectSceneTimestamps(context.Background(), "nonexistent.mp4", 0, 10, 0, 0); got != nil {
+		t.Errorf("expected nil for unknown duration without explicit end, got %v", got)
 	}
 }
 

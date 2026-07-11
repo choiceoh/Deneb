@@ -287,9 +287,12 @@ func selectSceneTimestamps(ctx context.Context, videoPath string, duration, coun
 	}
 	hi := end
 	if hi <= 0 || (duration > 0 && hi > float64(duration)) {
-		hi = float64(duration) // 0 when duration is unknown: scan to EOF
+		hi = float64(duration)
 	}
-	if hi > 0 && hi <= lo {
+	// Unknown duration with no explicit end would mean decoding to EOF just to
+	// discover the scenes — skip the scan and let even spacing (which handles
+	// unknown duration with a bounded 1s grid) cover it.
+	if hi <= lo {
 		return nil
 	}
 
@@ -359,13 +362,17 @@ func parseShowinfoTimes(out []byte) []float64 {
 		if _, err := fmt.Sscanf(string(m[1]), "%f", &ts); err != nil {
 			continue
 		}
-		if n := len(times); n > 0 && times[n-1] == ts {
-			continue
-		}
 		times = append(times, ts)
 	}
 	sort.Float64s(times)
-	return times
+	deduped := times[:0]
+	for _, ts := range times {
+		if n := len(deduped); n > 0 && deduped[n-1] == ts {
+			continue
+		}
+		deduped = append(deduped, ts)
+	}
+	return deduped
 }
 
 // evenSampleTimestamps downsamples candidates to at most n entries, always
