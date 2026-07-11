@@ -117,11 +117,11 @@ func wireStreamHooks(
 
 	// Goal loop: idempotency guard (blocks duplicate destructive actions) +
 	// ledger recorder (observes committed actions). Set only for goal-driven
-	// runs; nil for all interactive/cron/heartbeat runs. SetBeforeToolCall is
-	// single-valued and unused elsewhere in the chat path, so the goal guard
-	// claims it cleanly; OnToolResult fans out alongside the broadcaster's.
+	// runs; nil for all interactive/cron/heartbeat runs. Registered first so
+	// it gates ahead of the untrusted-origin gate (wired after this function);
+	// the compositor composes gates first-block-wins in registration order.
 	if params.BeforeToolCall != nil {
-		hc.SetBeforeToolCall(params.BeforeToolCall)
+		hc.OnBeforeToolCall(params.BeforeToolCall)
 	}
 	if params.OnToolResult != nil {
 		hc.OnToolResult(params.OnToolResult)

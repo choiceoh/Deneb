@@ -72,7 +72,10 @@ When you need to intervene in a tool call, use the supported extension points �
 
 - **Pre-execution block / audit** → `StreamHooks.OnBeforeToolCall` in
   `internal/agentsys/agent/hooks.go`. It can only *block* a call (returns
-  `block, blockReason`), not handle it. Wire it via `HookCompositor.SetBeforeToolCall`.
+  `block, blockReason`), not handle it. Wire it via
+  `HookCompositor.OnBeforeToolCall` — gates compose first-block-wins in
+  registration order (current consumers: goal-loop idempotency guard, then
+  the untrusted-origin gate).
 - **Post-execution side effects on specific tools** → `PostProcessRegistry`
   (name-matched, runs after execution).
 - **Code-only result sideband** → `pkg/toolmeta`: a tool fn or post-processor

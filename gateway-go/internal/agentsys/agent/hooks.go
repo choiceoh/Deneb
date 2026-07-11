@@ -22,8 +22,9 @@ type StreamHooks struct {
 }
 
 // HookCompositor collects multiple handlers per hook and builds a StreamHooks
-// with fan-out dispatch. Fan-out hooks fire in registration order.
-// Hooks that return a value (OnBeforeToolCall) are set directly via Set* methods.
+// with fan-out dispatch. Fan-out hooks fire in registration order; the
+// before-tool-call gates compose first-block-wins in registration order (a
+// blocking gate short-circuits the rest).
 type HookCompositor struct {
 	textDelta    []func(string)
 	thinking     []func(string)
@@ -32,7 +33,7 @@ type HookCompositor struct {
 	toolResult   []func(string, string, string, bool)
 	toolProgress []func(string, string, int)
 
-	beforeToolCall func(string, string, []byte) (bool, string)
+	beforeToolCall []func(string, string, []byte) (bool, string)
 }
 
 func (c *HookCompositor) OnTextDelta(fn func(string)) { c.textDelta = append(c.textDelta, fn) }
@@ -53,8 +54,13 @@ func (c *HookCompositor) OnToolProgress(fn func(string, string, int)) {
 	c.toolProgress = append(c.toolProgress, fn)
 }
 
-func (c *HookCompositor) SetBeforeToolCall(fn func(string, string, []byte) (bool, string)) {
-	c.beforeToolCall = fn
+// OnBeforeToolCall registers a pre-execution gate. Gates run in registration
+// order and the first to block wins — later gates are not consulted for a
+// blocked call. This replaced the original single-valued Set slot once a
+// second consumer arrived (the untrusted-origin gate composing onto the goal
+// loop's idempotency guard) and hand-rolled the chaining at its wiring site.
+func (c *HookCompositor) OnBeforeToolCall(fn func(string, string, []byte) (bool, string)) {
+	c.beforeToolCall = append(c.beforeToolCall, fn)
 }
 
 // Build returns a StreamHooks where each fan-out hook dispatches to all
@@ -103,6 +109,15 @@ func (c *HookCompositor) Build() StreamHooks {
 			}
 		}
 	}
-	h.OnBeforeToolCall = c.beforeToolCall
+	if fns := c.beforeToolCall; len(fns) > 0 {
+		h.OnBeforeToolCall = func(name, toolCallID string, input []byte) (bool, string) {
+			for _, fn := range fns {
+				if block, reason := fn(name, toolCallID, input); block {
+					return true, reason
+				}
+			}
+			return false, ""
+		}
+	}
 	return h
 }

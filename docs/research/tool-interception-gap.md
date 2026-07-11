@@ -79,12 +79,17 @@ No tool name collides with a plugin-provided tool, and there is no external memo
 
 ## 4. Does Deneb have a pre-registry intercept hook?
 
-Yes — `StreamHooks.OnBeforeToolCall` in `gateway-go/internal/agentsys/agent/hooks.go:14`. It is:
+Yes — `StreamHooks.OnBeforeToolCall` in `gateway-go/internal/agentsys/agent/hooks.go`. It is:
 
-- Called for every tool call *before* `tools.Execute` (`executor.go:577`).
+- Called for every tool call *before* `tools.Execute`.
 - Returns `(block bool, blockReason string)` — can only *block* (short-circuit with an error), not *handle* the call.
-- Wired via `HookCompositor.SetBeforeToolCall`.
-- **Currently unused.** No production code sets it — it sits as a future extension point for the plugin system described in the Hermes reference.
+- Wired via `HookCompositor.OnBeforeToolCall` — gates append and compose
+  first-block-wins in registration order (§10). *(Originally a single-valued
+  `SetBeforeToolCall`; widened when the second consumer arrived.)*
+- **Two production consumers** (updated 2026-07-11; originally unused): the
+  goal loop's idempotency guard (`RunParams.BeforeToolCall`, registered first
+  in `wireStreamHooks`) and the untrusted-origin gate
+  (`wireUntrustedToolGate`).
 
 This is sufficient for the policy/guard use case (audit, deny-list, per-turn budgets) but does not support the "claim this tool name and execute it myself" pattern that `memory_manager.has_tool()` enables in Hermes.
 
@@ -177,6 +182,19 @@ The remaining known gap is unchanged: taint-aware gating (block risky tools
 after untrusted web/mail content enters the turn) needs an argument-inspecting
 hook, and THAT is the point at which widening the hook signature — not a
 generic chain — is the right move.
+
+## 10. Addendum (2026-07-11): second consumer arrived — the SLOT widened, the chain still didn't
+
+The §9 trigger fired: the untrusted-origin gate (untrusted_tool_gate.go)
+became the second `OnBeforeToolCall` consumer and initially composed onto the
+single-valued slot with a hand-rolled `composeBeforeToolCall`. Following the
+Pydantic AI audit (their before-hooks fan out forward, first-block-wins, by
+plain iteration order), the compositor now owns that composition:
+`HookCompositor.OnBeforeToolCall` appends and `Build()` runs gates in
+registration order, first block short-circuiting. This widens the SANCTIONED
+extension point's plumbing — it is still block-only (no handle), still not an
+interceptor chain, and Scenario C stands. Registration order is the ordering
+contract: wireStreamHooks (goal guard) runs before wireUntrustedToolGate.
 
 ---
 
