@@ -29,7 +29,6 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
-import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.utils.io.ByteReadChannel
@@ -257,7 +256,7 @@ class DenebGatewayClient(
 
     // Native-client handshake snapshot: gateway version, active model, and
     // feature flags exposed by miniapp.client.hello.
-    private val _clientStatus = MutableStateFlow<ClientStatus?>(null)
+    internal val _clientStatus = MutableStateFlow<ClientStatus?>(null)
     val clientStatus: StateFlow<ClientStatus?> = _clientStatus
 
     // Native work feed: proactive reports and native shares as actionable rows.
@@ -710,53 +709,6 @@ class DenebGatewayClient(
     // refreshScheduledTasks, removeCron) — not the DataRepository interface, which
     // no longer carries on-device memory/scheduling members.
 
-    suspend fun refreshClientStatus(): ClientStatus? {
-        val payload = callRpc<ClientHelloPayload>("miniapp.client.hello", buildJsonObject {}) ?: run {
-            _clientStatus.value = null
-            return null
-        }
-        val status = ClientStatus(
-            version = payload.version,
-            nativeApiVersion = payload.nativeApiVersion,
-            model = payload.model,
-            capabilities = payload.capabilities,
-            endpoints = payload.endpoints,
-            timestampMs = payload.tsMs,
-        )
-        _clientStatus.value = status
-        return status
-    }
-
-    /**
-     * Check the gateway-served update manifest. The gateway exposes the APK +
-     * metadata on its own port (the same base URL used for chat), so this works
-     * over the cloudflare tunnel — unlike the old :19010 side-server the tunnel
-     * never routed. Returns non-null only when a strictly newer build than the
-     * compiled-in [DENEB_VERSION_CODE] is published.
-     */
-    suspend fun checkUpdate(): UpdateInfo? = runCatching {
-        val base = gatewayUrl.trim().removeSuffix("/")
-        if (base.isEmpty() || clientToken.isEmpty()) return@runCatching null
-        val m = http.get("$base/api/v1/app/update/manifest") {
-            header(CLIENT_TOKEN_HEADER, clientToken)
-            // Bounded timeout: a missing or blocked gateway must fail fast
-            // instead of hanging the "check for update" spinner forever.
-            timeout {
-                requestTimeoutMillis = 10_000
-                connectTimeoutMillis = 6_000
-            }
-        }.body<UpdateManifest>()
-        if (m.code > DENEB_VERSION_CODE && m.file.isNotBlank()) {
-            // The browser opening this link can't set a header, so the client
-            // token rides in the query string (same as the Gmail attachment route).
-            val apk = "$base/api/v1/app/update/download" +
-                "?file=${m.file.encodeURLParameter()}&clientToken=${clientToken.encodeURLParameter()}"
-            UpdateInfo(buildLabel = m.code.toString(), apkUrl = apk, notes = m.notes)
-        } else {
-            null
-        }
-    }.getOrNull()
-
     private suspend fun send(message: String): GatewayReply {
         if (clientToken.isEmpty()) {
             return GatewayReply("⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요.", ok = false)
@@ -952,33 +904,6 @@ class DenebGatewayClient(
             }.body<RpcResult>()
             if (result.ok) null else (result.error?.message?.ifBlank { null } ?: "요청을 처리하지 못했습니다.")
         }.getOrElse { "요청을 처리하지 못했습니다." }
-    }
-
-    /**
-     * Registers this device's FCM registration token so the gateway can deliver
-     * proactive reports when no live SSE connection is held (app fully closed /
-     * Doze). Best-effort and idempotent — the gateway dedups by token — so it is
-     * cheap to call on every foreground. Returns true on success. Android-only
-     * caller, but the RPC itself is platform-agnostic so this lives in commonMain.
-     */
-    suspend fun registerPushToken(token: String, platform: String): Boolean {
-        if (token.isBlank()) return false
-        return rpcWrite(
-            "miniapp.push.register",
-            buildJsonObject {
-                put("token", token)
-                put("platform", platform)
-            },
-        ) == null
-    }
-
-    /** Removes a device token (e.g. on sign-out / token invalidation). */
-    suspend fun unregisterPushToken(token: String): Boolean {
-        if (token.isBlank()) return false
-        return rpcWrite(
-            "miniapp.push.unregister",
-            buildJsonObject { put("token", token) },
-        ) == null
     }
 
     @Serializable
