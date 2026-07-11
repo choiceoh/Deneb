@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // In-app update endpoints, served from the gateway's own port so the single
@@ -46,7 +47,19 @@ type appUpdateManifest struct {
 	Code  int    `json:"code"`
 	File  string `json:"file"`
 	Notes string `json:"notes"`
+	// DownloadToken is a short-lived HMAC token bound to File — the download
+	// URL carries it instead of the long-lived client token (URLs leak via
+	// access logs/history in ways headers do not). Old clients ignore the
+	// field and keep using the legacy clientToken query.
+	DownloadToken string `json:"downloadToken,omitempty"`
 }
+
+// apkDownloadTokenPurpose namespaces update-download tokens; apkDownloadTokenTTL
+// covers the gap between an update check and the user tapping download.
+const (
+	apkDownloadTokenPurpose = "apk-download"
+	apkDownloadTokenTTL     = 15 * time.Minute
+)
 
 // latestPublishedApk scans the APK dir for the highest version code. The files
 // on disk are the source of truth — a stale version.json can't mask a newer
@@ -119,6 +132,7 @@ func (s *Server) handleAppUpdateManifest(w http.ResponseWriter, r *http.Request)
 		s.writeJSON(w, http.StatusNotFound, map[string]any{"error": "no published apk"})
 		return
 	}
+	m.DownloadToken = mintDownloadToken(apkDownloadTokenPurpose, m.File, apkDownloadTokenTTL)
 	s.writeJSON(w, http.StatusOK, m)
 }
 
@@ -126,11 +140,6 @@ func (s *Server) handleAppUpdateManifest(w http.ResponseWriter, r *http.Request)
 // query string because the browser opening the download link cannot set the
 // X-Deneb-Client-Token header (same shape as the Gmail attachment route).
 func (s *Server) handleAppUpdateDownload(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authenticateMiniappDownloadRequest(w, r); !ok {
-		return
-	}
-	// A multi-MB APK over a slow mobile link can outlast the global WriteTimeout.
-	disableWriteDeadline(w)
 	// filepath.Base strips any directory segments and the .apk suffix check
 	// keeps this confined to APK files inside the serve dir — no traversal.
 	name := filepath.Base(strings.TrimSpace(r.URL.Query().Get("file")))
@@ -138,6 +147,20 @@ func (s *Server) handleAppUpdateDownload(w http.ResponseWriter, r *http.Request)
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid file"})
 		return
 	}
+	// Preferred auth: the short-lived token the manifest minted for THIS file.
+	// When the dl param is present its verdict is final (no long-lived-token
+	// fallback for a bad short token); absent → legacy clientToken query for
+	// clients from before the manifest carried downloadToken.
+	if dl := strings.TrimSpace(r.URL.Query().Get("dl")); dl != "" {
+		if !verifyDownloadToken(apkDownloadTokenPurpose, name, dl) {
+			s.writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "invalid or expired download token"})
+			return
+		}
+	} else if _, ok := s.authenticateMiniappDownloadRequest(w, r); !ok {
+		return
+	}
+	// A multi-MB APK over a slow mobile link can outlast the global WriteTimeout.
+	disableWriteDeadline(w)
 	full := filepath.Join(denebApkDir(), name)
 	f, err := os.Open(full) //nolint:gosec // name is filepath.Base'd and .apk-suffixed; confined to the serve dir
 	if err != nil {

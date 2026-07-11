@@ -444,10 +444,18 @@ suspend fun DenebGatewayClient.checkUpdate(): UpdateInfo? {
         if (!response.status.isSuccess()) return null
         val m = response.body<UpdateManifest>()
         if (m.code > DENEB_VERSION_CODE && m.file.isNotBlank()) {
-            // The browser opening this link can't set a header, so the client
-            // token rides in the query string (same as the Gmail attachment route).
+            // The browser opening this link can't set a header, so a token rides
+            // in the query string. Prefer the manifest's short-lived download
+            // token (URLs leak via logs/history — the long-lived client token
+            // shouldn't); fall back to the legacy clientToken query only for
+            // old gateways that don't mint one.
+            val auth = if (m.downloadToken.isNotBlank()) {
+                "dl=${m.downloadToken.encodeURLParameter()}"
+            } else {
+                "clientToken=${clientToken.encodeURLParameter()}"
+            }
             val apk = "$base/api/v1/app/update/download" +
-                "?file=${m.file.encodeURLParameter()}&clientToken=${clientToken.encodeURLParameter()}"
+                "?file=${m.file.encodeURLParameter()}&$auth"
             UpdateInfo(buildLabel = m.code.toString(), apkUrl = apk, notes = m.notes)
         } else {
             null

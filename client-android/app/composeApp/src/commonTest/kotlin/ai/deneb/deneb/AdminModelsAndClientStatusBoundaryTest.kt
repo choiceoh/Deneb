@@ -389,6 +389,28 @@ class AdminModelsAndClientStatusBoundaryTest {
     }
 
     @Test
+    fun updateWithDownloadTokenPrefersShortLivedUrlAuth() = runTest {
+        val f = gatewayClientFixture(token = "long-lived-secret", url = "https://gateway.example/")
+        f.transport.enqueueJson(
+            json.encodeToString(
+                UpdateManifest(
+                    code = DENEB_VERSION_CODE + 1,
+                    file = "deneb.apk",
+                    downloadToken = "1234567890.abcdef",
+                ),
+            ),
+        )
+
+        val update = f.client.checkUpdate()
+
+        val url = update?.apkUrl.orEmpty()
+        assertTrue(url.contains("dl=1234567890.abcdef"))
+        // The long-lived client token must never leak into the URL when the
+        // gateway minted a short-lived one.
+        assertTrue(!url.contains("long-lived-secret"))
+    }
+
+    @Test
     fun currentOlderAndBlankFileManifestsAreIgnored() = runTest {
         val current = gatewayClientFixture()
         current.transport.enqueueJson(json.encodeToString(UpdateManifest(code = DENEB_VERSION_CODE, file = "app.apk")))
