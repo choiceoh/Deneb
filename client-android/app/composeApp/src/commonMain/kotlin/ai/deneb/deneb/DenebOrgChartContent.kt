@@ -53,7 +53,6 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.first
 
 // Stateless org-chart body: tree rows, search, contact actions — split from
 // DenebOrgChartScreen.kt (pure move). Previewed by the render harness.
@@ -536,5 +535,3 @@ internal fun OrgContactActions(
         }
     }
 }
-
-// --- node editor (bottom sheet body) ----------------------------------------

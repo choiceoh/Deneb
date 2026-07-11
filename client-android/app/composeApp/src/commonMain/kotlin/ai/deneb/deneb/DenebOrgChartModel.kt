@@ -95,5 +95,3 @@ internal fun searchMembers(nodes: List<OrgNodeOut>, query: String): List<OrgSear
     }
     return hits
 }
-
-// --- chart geometry ----------------------------------------------------------
