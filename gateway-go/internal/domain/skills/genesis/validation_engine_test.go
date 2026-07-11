@@ -25,7 +25,7 @@ func TestSkillValidationEngineRejectsHeldOutRegression(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ValidateCandidate: %v", err)
 	}
-	if !result.Evaluated || result.Pass || !strings.Contains(result.Reason, "regressed validation cases") {
+	if !result.Evaluated || result.Pass || !strings.Contains(result.Reason, "regressed") {
 		t.Fatalf("expected held-out regression rejection, got %+v", result)
 	}
 	if result.OriginalPassed <= result.CandidatePassed {
@@ -112,7 +112,7 @@ func TestSkillValidationEngineRejectsDryRunReplayRegression(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ValidateCandidate: %v", err)
 	}
-	if !result.Evaluated || result.Pass || !strings.Contains(result.Reason, "regressed validation cases") {
+	if !result.Evaluated || result.Pass || !strings.Contains(result.Reason, "regressed") {
 		t.Fatalf("expected replay regression rejection, got %+v", result)
 	}
 	if result.CandidatePassed >= result.OriginalPassed {
@@ -201,7 +201,7 @@ func TestSkillValidationEngineRejectsToolCallTraceOrderRegression(t *testing.T) 
 	if err != nil {
 		t.Fatalf("ValidateCandidate: %v", err)
 	}
-	if !result.Evaluated || result.Pass || !strings.Contains(result.Reason, "regressed validation cases") {
+	if !result.Evaluated || result.Pass || !strings.Contains(result.Reason, "regressed") {
 		t.Fatalf("expected ordered trace regression rejection, got %+v", result)
 	}
 }

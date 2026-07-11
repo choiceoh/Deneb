@@ -41,8 +41,8 @@ func TestRollback_BaselineTestObservation(t *testing.T) {
 		// 1/alpha (1.475^8 ≈ 22 ≥ 20) — set the legacy threshold there so
 		// both trackers resolve on the same evidence.
 		tr.SetRollback(func(s string) {
-			fired <- s
 			_ = tr.LogEvolveRolledBack(s) // evolver callback does this in production
+			fired <- s                    // signal only after the entry is durable
 		}, 8)
 		for i := 0; i < 10; i++ { // baseline: 10 uses, 0 fails → p0 clamps to floor
 			use(tr, "sk", true)
@@ -78,8 +78,8 @@ func TestRollback_BaselineTestObservation(t *testing.T) {
 		}
 		fired := make(chan string, 1)
 		tr.SetRollback(func(s string) {
-			fired <- s
 			_ = tr.LogEvolveRolledBack(s)
+			fired <- s // signal only after the entry is durable
 		}, 3)
 		for i := 0; i < 10; i++ { // baseline: 50% fail rate — 3 fails is business as usual
 			use(tr, "sk", i%2 == 0)
