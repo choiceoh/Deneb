@@ -71,6 +71,9 @@ type MetaRevisionRecord struct {
 	// the incumbent and the proposal over the same gold pairs.
 	BenchIncumbent *JudgeBenchOutcome `json:"benchIncumbent,omitempty"`
 	BenchProposal  *JudgeBenchOutcome `json:"benchProposal,omitempty"`
+	// Producer-epoch only: shadow-replay bench (CPE anchor preservation +
+	// AgentDevel flip gate over generated candidates).
+	BenchShadow *ProducerBenchOutcome `json:"benchShadow,omitempty"`
 }
 
 // metaRevisionLogPath mirrors the tracker's data-dir convention.
@@ -115,6 +118,7 @@ type MetaEvolutionTask struct {
 	// recordWithBench; Run is single-flight per task so no locking needed).
 	pendingBenchIncumbent *JudgeBenchOutcome
 	pendingBenchProposal  *JudgeBenchOutcome
+	pendingBenchShadow    *ProducerBenchOutcome
 }
 
 // Name identifies the task in the autonomous scheduler.
@@ -148,6 +152,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 			Reason:         reason,
 			BenchIncumbent: t.pendingBenchIncumbent,
 			BenchProposal:  t.pendingBenchProposal,
+			BenchShadow:    t.pendingBenchShadow,
 		})
 		if err != nil {
 			logger.Warn("meta-evolution: ledger write failed", "error", err)
@@ -189,32 +194,54 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 		if rejectReason := judgeBenchDecision(inc, prop); rejectReason != "" {
 			logger.Info("meta-evolution: proposal rejected by judge-degradation bench",
 				"artifact", artifact, "incumbentRate", inc.Rate(), "proposalRate", prop.Rate(), "reason", rejectReason)
-			return t.recordWithBench(record, benchIncumbent, benchProposal,
+			return t.recordWithBenches(record, benchIncumbent, benchProposal, nil,
 				false, "", "judge bench rejected: "+rejectReason)
 		}
 		logger.Info("meta-evolution: proposal cleared judge-degradation bench",
 			"incumbentRate", inc.Rate(), "proposalRate", prop.Rate(), "pairs", prop.Total)
 	}
 
+	// Producer epoch: shadow-replay the same evolve scenarios through both
+	// prompts and compare what they PRODUCE (CPE anchor preservation +
+	// AgentDevel flip gate). With zero benchable scenarios the proposal stays
+	// propose-only surfaced — manual adoption adjudicates until the corpus
+	// can bench producer revisions.
+	var benchShadow *ProducerBenchOutcome
+	if epoch == metaEpochProducer {
+		if gen := t.producerShadowExecutor(); gen != nil {
+			scenarios := buildProducerShadowScenarios(t.Evolver.catalogEntries(), t.Tracker, producerBenchMaxSkills)
+			shadow := runProducerShadowBench(ctx, incumbent, proposal, scenarios, gen)
+			benchShadow = &shadow
+			if rejectReason := producerBenchDecision(shadow); rejectReason != "" {
+				logger.Info("meta-evolution: proposal rejected by producer shadow bench",
+					"artifact", artifact, "skills", shadow.Skills, "flips", shadow.Flips, "reason", rejectReason)
+				return t.recordWithBenches(record, nil, nil, benchShadow,
+					false, "", "shadow bench rejected: "+rejectReason)
+			}
+			logger.Info("meta-evolution: proposal cleared producer shadow bench",
+				"skills", shadow.Skills, "incumbentScore", shadow.IncumbentScore, "proposalScore", shadow.ProposalScore)
+		}
+	}
+
 	path, werr := t.Meta.WriteProposal(artifact, proposal)
 	if werr != nil {
 		logger.Warn("meta-evolution: proposal write failed", "artifact", artifact, "error", werr)
-		return t.recordWithBench(record, benchIncumbent, benchProposal,
+		return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow,
 			false, "", "proposal write failed: "+werr.Error())
 	}
 	toVersion := contentSHA256(strings.TrimSpace(proposal))[:12]
 	logger.Info("meta-evolution: revision proposed (propose-only — adoption is a separate decision)",
 		"artifact", artifact, "epoch", epoch, "from", fromVersion, "to", toVersion, "path", path)
-	return t.recordWithBench(record, benchIncumbent, benchProposal, true, toVersion, reason)
+	return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow, true, toVersion, reason)
 }
 
-// recordWithBench stashes the bench outcomes for the closure-based ledger
+// recordWithBenches stashes the bench outcomes for the closure-based ledger
 // writer. The closure owns the shared fields; bench fields ride via the task.
-func (t *MetaEvolutionTask) recordWithBench(record func(bool, string, string) error,
-	inc, prop *JudgeBenchOutcome, proposed bool, toVersion, reason string,
+func (t *MetaEvolutionTask) recordWithBenches(record func(bool, string, string) error,
+	inc, prop *JudgeBenchOutcome, shadow *ProducerBenchOutcome, proposed bool, toVersion, reason string,
 ) error {
-	t.pendingBenchIncumbent, t.pendingBenchProposal = inc, prop
-	defer func() { t.pendingBenchIncumbent, t.pendingBenchProposal = nil, nil }()
+	t.pendingBenchIncumbent, t.pendingBenchProposal, t.pendingBenchShadow = inc, prop, shadow
+	defer func() { t.pendingBenchIncumbent, t.pendingBenchProposal, t.pendingBenchShadow = nil, nil, nil }()
 	return record(proposed, toVersion, reason)
 }
 
