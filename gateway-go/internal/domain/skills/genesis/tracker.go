@@ -146,6 +146,11 @@ type Tracker struct {
 	rollback          func(skillName string)
 	rollbackThreshold int
 	postEvolve        map[string]*evolveWatch
+	// pendingBaselineTest stashes the e-process verdict captured under lock at
+	// the moment a watch resolves, for the Log* call that follows in the
+	// resolver callback — avoids threading a new param through the rollback
+	// callback signature.
+	pendingBaselineTest map[string]*RollbackBaselineTest
 
 	// Cached evolve-health summary (EvolutionHealth) so frequent /health polls
 	// don't rescan the growing lifecycle log every call. Guarded by mu.
@@ -169,6 +174,11 @@ type evolveWatch struct {
 	// which rollbacks were true regressions. Recorded now, consumed later.
 	baselineUses  int
 	baselineFails int
+	// ep runs the baseline-aware anytime-valid test alongside the legacy
+	// absolute threshold — OBSERVATION MODE (RSI P1.5, PACE): it never fires
+	// the rollback yet; its verdict is recorded on the resolving lifecycle
+	// entry so weeks of agreement/disagreement labels decide the switch.
+	ep *EProcess
 }
 
 // persistedEvolveWatch is the JSON shape of one in-flight rollback watch.
@@ -183,6 +193,7 @@ type persistedEvolveWatch struct {
 	Recurred      int              `json:"recurred,omitempty"`
 	BaselineUses  int              `json:"baselineUses,omitempty"`
 	BaselineFails int              `json:"baselineFails,omitempty"`
+	EProcess      *EProcess        `json:"eProcess,omitempty"`
 }
 
 // usageAgg holds running aggregates per skill.
@@ -224,6 +235,7 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 		recentErrors:        make(map[string][]string),
 		recentFailureTraces: make(map[string][]UsageFailureTrace),
 		postEvolve:          make(map[string]*evolveWatch),
+		pendingBaselineTest: make(map[string]*RollbackBaselineTest),
 	}
 
 	// Rebuild in-memory state from existing JSONL.

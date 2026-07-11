@@ -50,6 +50,11 @@ func TestTracker_EvolveWatchSurvivesRestart(t *testing.T) {
 	if w.PostFails != 2 || w.BaselineUses != 2 || w.BaselineFails != 1 {
 		t.Fatalf("persisted watch wrong: %+v", w)
 	}
+	// The observation-mode e-process rides the same persistence: its wealth
+	// must reflect the two observed post-evolve fails, not reset to 1.
+	if w.EProcess == nil || w.EProcess.N != 2 || w.EProcess.E <= 1 {
+		t.Fatalf("e-process not persisted mid-flight: %+v", w.EProcess)
+	}
 
 	// "Restart": a fresh tracker over the same HOME restores the watch, so ONE
 	// more failure trips the threshold that would otherwise have reset to 0.
