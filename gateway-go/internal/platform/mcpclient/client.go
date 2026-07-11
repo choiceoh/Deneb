@@ -210,6 +210,7 @@ func (c *Client) ListTools(ctx context.Context) ([]ToolInfo, error) {
 	}
 	var out []ToolInfo
 	cursor := ""
+	seenCursors := map[string]bool{}
 	for {
 		params := map[string]any{}
 		if cursor != "" {
@@ -230,6 +231,10 @@ func (c *Client) ListTools(ctx context.Context) ([]ToolInfo, error) {
 		if page.NextCursor == "" || len(page.Tools) == 0 {
 			return out, nil
 		}
+		if seenCursors[page.NextCursor] {
+			return nil, fmt.Errorf("mcpclient: tools/list repeated cursor %q", page.NextCursor)
+		}
+		seenCursors[page.NextCursor] = true
 		cursor = page.NextCursor
 	}
 }

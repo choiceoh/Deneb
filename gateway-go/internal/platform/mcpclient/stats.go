@@ -82,7 +82,7 @@ func (c *Client) recordStderr(gen int, line string) {
 func (c *Client) stderrSnippet(n int) string {
 	c.stderrMu.Lock()
 	defer c.stderrMu.Unlock()
-	if len(c.stderrTail) == 0 {
+	if len(c.stderrTail) == 0 || n <= 0 {
 		return ""
 	}
 	start := len(c.stderrTail) - n

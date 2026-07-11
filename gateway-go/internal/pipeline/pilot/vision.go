@@ -45,6 +45,11 @@ func CallVisionLLM(ctx context.Context, system, userText string, frames []Vision
 	if len(frames) == 0 {
 		return "", fmt.Errorf("no frames to analyze")
 	}
+	for i, frame := range frames {
+		if frame.Base64 == "" {
+			return "", fmt.Errorf("frame %d has no image data", i)
+		}
+	}
 
 	client, model := visionClientAndModel()
 	if client == nil {

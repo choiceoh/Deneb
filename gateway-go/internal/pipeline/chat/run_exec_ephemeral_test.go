@@ -55,7 +55,7 @@ func TestEphemeralNeedsExplicitAppend(t *testing.T) {
 			name: "enrichment join already handled the append",
 			params: RunParams{
 				SessionKey: "client:main", Message: "링크", EphemeralUser: true,
-				appendCurrentMessage: true,
+				AppendCurrentMessage: true,
 			},
 			prep: history,
 			want: false,

@@ -9,6 +9,8 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
 import io.ktor.http.encodeURLParameter
+import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -358,14 +360,31 @@ suspend fun DenebGatewayClient.askMail(id: String, question: String, history: Li
  * previews). Reuses [attachmentUrl] so auth matches the browser download path
  * exactly. Returns null on any failure — callers fall back to the plain chip.
  */
-suspend fun DenebGatewayClient.fetchAttachmentBytes(messageId: String, att: MailAttachment): ByteArray? = runCatching {
-    http.get(attachmentUrl(messageId, att)) {
-        timeout {
-            requestTimeoutMillis = 30_000
-            connectTimeoutMillis = 6_000
+suspend fun DenebGatewayClient.fetchAttachmentBytes(messageId: String, att: MailAttachment): ByteArray? {
+    val url = gatewayUrl
+    val token = clientToken
+    val epoch = credEpoch
+    if (token.isEmpty() || url.isBlank()) return null
+    fun e(s: String) = s.encodeURLParameter()
+    val downloadUrl = "$url/api/v1/miniapp/gmail/attachment" +
+        "?messageId=${e(messageId)}&attachmentId=${e(att.id)}" +
+        "&filename=${e(att.filename)}&mimeType=${e(att.mimeType)}&clientToken=${e(token)}"
+    return try {
+        val response = http.get(downloadUrl) {
+            timeout {
+                requestTimeoutMillis = 30_000
+                connectTimeoutMillis = 6_000
+            }
         }
-    }.body<ByteArray>()
-}.getOrNull()
+        if (!response.status.isSuccess()) return null
+        val bytes = response.body<ByteArray>()
+        if (epoch == credEpoch && url == gatewayUrl && token == clientToken) bytes else null
+    } catch (c: CancellationException) {
+        throw c
+    } catch (_: Exception) {
+        null
+    }
+}
 
 /**
  * Browser-openable attachment download URL. The download endpoint can't read

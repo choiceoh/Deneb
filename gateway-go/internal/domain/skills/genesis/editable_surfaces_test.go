@@ -3,6 +3,8 @@ package genesis
 import (
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/surfaces"
 )
 
 func TestClassifySurface_TiersAndPrecedence(t *testing.T) {
@@ -11,16 +13,16 @@ func TestClassifySurface_TiersAndPrecedence(t *testing.T) {
 		wantName string
 		wantTier string
 	}{
-		{"~/.deneb/skills/contract-review/SKILL.md", "skill-body", SurfaceTierAutoApply},
-		{"workspace/HEARTBEAT.md", "heartbeat-instructions", SurfaceTierProposeOnly},
-		{"workspace/AGENTS.md", "workspace-context", SurfaceTierProposeOnly},
-		{"gateway-go/internal/pipeline/chat/prompt/prompt_cache.go", "prompt-cache-path", SurfaceTierForbidden},
-		{".github/dependabot.yml", "security-owned", SurfaceTierForbidden},
-		{"gateway-go/internal/runtime/server/mail_counterparty.go", "undeclared", SurfaceTierProposeOnly},
-		{"", "undeclared", SurfaceTierProposeOnly},
+		{"~/.deneb/skills/contract-review/SKILL.md", "skill-body", surfaces.SurfaceTierAutoApply},
+		{"workspace/HEARTBEAT.md", "heartbeat-instructions", surfaces.SurfaceTierProposeOnly},
+		{"workspace/AGENTS.md", "workspace-context", surfaces.SurfaceTierProposeOnly},
+		{"gateway-go/internal/pipeline/chat/prompt/prompt_cache.go", "prompt-cache-path", surfaces.SurfaceTierForbidden},
+		{".github/dependabot.yml", "security-owned", surfaces.SurfaceTierForbidden},
+		{"gateway-go/internal/runtime/server/mail_counterparty.go", "undeclared", surfaces.SurfaceTierProposeOnly},
+		{"", "undeclared", surfaces.SurfaceTierProposeOnly},
 	}
 	for _, tc := range cases {
-		got := ClassifySurface(tc.target)
+		got := surfaces.ClassifySurface(tc.target)
 		if got.Name != tc.wantName || got.Tier != tc.wantTier {
 			t.Errorf("ClassifySurface(%q) = (%s, %s), want (%s, %s)", tc.target, got.Name, got.Tier, tc.wantName, tc.wantTier)
 		}
@@ -47,7 +49,7 @@ func TestRecordSelfCorrectionCandidate_EnforcesDeclaredSurfaces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("allowed surfaces should record: %v", err)
 	}
-	if rec.Surface != SurfaceTierProposeOnly {
+	if rec.Surface != surfaces.SurfaceTierProposeOnly {
 		t.Fatalf("mixed targets must summarize to the most restrictive tier, got %q", rec.Surface)
 	}
 
@@ -58,7 +60,7 @@ func TestRecordSelfCorrectionCandidate_EnforcesDeclaredSurfaces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("skill-body target should record: %v", err)
 	}
-	if auto.Surface != SurfaceTierAutoApply {
+	if auto.Surface != surfaces.SurfaceTierAutoApply {
 		t.Fatalf("skill-body-only candidate should summarize auto-apply, got %q", auto.Surface)
 	}
 }

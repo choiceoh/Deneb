@@ -77,7 +77,7 @@ func NewCache() *Cache {
 func (c *Cache) Summary(ctx context.Context) (quotes []Quote, asOf int64, stale bool, err error) {
 	c.mu.Lock()
 	if len(c.quotes) > 0 && time.Since(c.fetched) < c.ttl {
-		q, f := c.quotes, c.fetched
+		q, f := cloneQuotes(c.quotes), c.fetched
 		c.mu.Unlock()
 		return q, f.UnixMilli(), false, nil
 	}
@@ -92,13 +92,17 @@ func (c *Cache) Summary(ctx context.Context) (quotes []Quote, asOf int64, stale 
 	defer c.mu.Unlock()
 	if ferr != nil {
 		if len(c.quotes) > 0 {
-			return c.quotes, c.fetched.UnixMilli(), true, nil // serve stale on failure
+			return cloneQuotes(c.quotes), c.fetched.UnixMilli(), true, nil // serve stale on failure
 		}
 		return nil, 0, false, ferr
 	}
-	c.quotes = fresh
+	c.quotes = cloneQuotes(fresh)
 	c.fetched = time.Now()
-	return c.quotes, c.fetched.UnixMilli(), false, nil
+	return cloneQuotes(c.quotes), c.fetched.UnixMilli(), false, nil
+}
+
+func cloneQuotes(in []Quote) []Quote {
+	return append([]Quote(nil), in...)
 }
 
 // fetchAll pulls every catalog symbol. A per-symbol failure is skipped (partial

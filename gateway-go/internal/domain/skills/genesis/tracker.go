@@ -2,6 +2,7 @@ package genesis
 
 import (
 	"fmt"
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -343,10 +344,10 @@ func usageFailureTraceFromRecord(record UsageRecord) *UsageFailureTrace {
 	trace.TerminalCause = strings.TrimSpace(trace.TerminalCause)
 	trace.CausalStatus = strings.TrimSpace(trace.CausalStatus)
 	trace.AgentMechanism = strings.TrimSpace(trace.AgentMechanism)
-	trace.ToolName = truncateRunes(strings.TrimSpace(trace.ToolName), 120)
-	trace.ToolInput = truncateRunes(strings.TrimSpace(trace.ToolInput), 1000)
-	trace.ToolOutput = truncateRunes(strings.TrimSpace(trace.ToolOutput), 1000)
-	trace.ErrorMsg = truncateRunes(strings.TrimSpace(trace.ErrorMsg), 1000)
+	trace.ToolName = genesiscommon.TruncateRunes(strings.TrimSpace(trace.ToolName), 120)
+	trace.ToolInput = genesiscommon.TruncateRunes(strings.TrimSpace(trace.ToolInput), 1000)
+	trace.ToolOutput = genesiscommon.TruncateRunes(strings.TrimSpace(trace.ToolOutput), 1000)
+	trace.ErrorMsg = genesiscommon.TruncateRunes(strings.TrimSpace(trace.ErrorMsg), 1000)
 
 	classifyText := usageFailureTraceText(trace)
 	if strings.TrimSpace(classifyText) == "" {
@@ -401,5 +402,5 @@ func usageFailureTraceExample(trace UsageFailureTrace) string {
 	if len(parts) == 0 {
 		return ""
 	}
-	return truncateRunes(strings.Join(parts, "; "), 160)
+	return genesiscommon.TruncateRunes(strings.Join(parts, "; "), 160)
 }

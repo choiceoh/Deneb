@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/middleware"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // HandlerFunc is an alias for middleware.HandlerFunc so that the dispatcher,
@@ -43,7 +44,7 @@ func TruncateForError(s string) string {
 	if len(s) <= MaxKeyInErrorMsg {
 		return s
 	}
-	return s[:MaxKeyInErrorMsg] + "..."
+	return textutil.TruncateBytes(s, MaxKeyInErrorMsg) + "..."
 }
 
 // RequireKey trims and validates a session key, returning a MISSING_PARAM
@@ -80,6 +81,9 @@ func ParamError(reqID string, err error) *protocol.ResponseFrame {
 //	}
 func DecodeParams[T any](req *protocol.RequestFrame) (T, *protocol.ResponseFrame) {
 	var v T
+	if req == nil {
+		return v, rpcerr.InvalidParams(errors.New("missing request")).Response("")
+	}
 	if err := UnmarshalParams(req.Params, &v); err != nil {
 		return v, rpcerr.InvalidParams(err).Response(req.ID)
 	}
@@ -102,6 +106,9 @@ func RespondOK(reqID string, result any) *protocol.ResponseFrame {
 //	})
 func BindHandler[P any](fn func(P) (any, error)) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if fn == nil {
+			return rpcerr.InvalidParams(errors.New("handler is nil")).Response(requestID(req))
+		}
 		p, errResp := DecodeParams[P](req)
 		if errResp != nil {
 			return errResp
@@ -124,6 +131,9 @@ func BindHandler[P any](fn func(P) (any, error)) HandlerFunc {
 //	    return deps.Manager.DoSomething(p.Name), nil
 //	})
 func Bind[P any](req *protocol.RequestFrame, fn func(P) (any, error)) *protocol.ResponseFrame {
+	if fn == nil {
+		return rpcerr.InvalidParams(errors.New("handler is nil")).Response(requestID(req))
+	}
 	p, errResp := DecodeParams[P](req)
 	if errResp != nil {
 		return errResp
@@ -140,6 +150,9 @@ func Bind[P any](req *protocol.RequestFrame, fn func(P) (any, error)) *protocol.
 //	    return deps.Provider.Catalog(ctx, p.Name)
 //	})
 func BindCtx[P any](ctx context.Context, req *protocol.RequestFrame, fn func(context.Context, P) (any, error)) *protocol.ResponseFrame {
+	if fn == nil {
+		return rpcerr.InvalidParams(errors.New("handler is nil")).Response(requestID(req))
+	}
 	p, errResp := DecodeParams[P](req)
 	if errResp != nil {
 		return errResp
@@ -156,6 +169,9 @@ func BindCtx[P any](ctx context.Context, req *protocol.RequestFrame, fn func(con
 //	})
 func BindHandlerCtx[P any](fn func(context.Context, P) (any, error)) HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		if fn == nil {
+			return rpcerr.InvalidParams(errors.New("handler is nil")).Response(requestID(req))
+		}
 		p, errResp := DecodeParams[P](req)
 		if errResp != nil {
 			return errResp
@@ -163,6 +179,13 @@ func BindHandlerCtx[P any](fn func(context.Context, P) (any, error)) HandlerFunc
 		result, err := fn(ctx, p)
 		return finalize(req.ID, result, err)
 	}
+}
+
+func requestID(req *protocol.RequestFrame) string {
+	if req == nil {
+		return ""
+	}
+	return req.ID
 }
 
 // finalize converts (result, error) into a ResponseFrame.

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	propussystem "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -115,10 +116,10 @@ func TestHealthEndpointIncludesUsageQualitySignals(t *testing.T) {
 	if propus["system"] != "Propus" || propus["tool"] != "skill_lifecycle" {
 		t.Fatalf("unexpected Propus health identity: %+v", propus)
 	}
-	if propus["doctrine_version"] != genesis.PropusDoctrine().Version {
+	if propus["doctrine_version"] != propussystem.PropusDoctrine().Version {
 		t.Fatalf("unexpected Propus doctrine version: %+v", propus)
 	}
-	if gates, ok := propus["quality_gates"].([]any); !ok || len(gates) != len(genesis.PropusDoctrine().QualityGates) {
+	if gates, ok := propus["quality_gates"].([]any); !ok || len(gates) != len(propussystem.PropusDoctrine().QualityGates) {
 		t.Fatalf("expected Propus quality gates, got %+v", propus)
 	}
 	if propus["state"] != "attention" {

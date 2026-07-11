@@ -133,9 +133,13 @@ func (t *Task) collect() []Signal {
 }
 
 func (t *Task) sampleSource(src SignalSource) (sig []Signal) {
+	if src == nil {
+		return nil
+	}
+	name := src.Name()
 	defer func() {
 		if r := recover(); r != nil {
-			t.deps.Logger.Error("regression-watch: source panicked", "source", src.Name(), "panic", r)
+			t.deps.Logger.Error("regression-watch: source panicked", "source", name, "panic", r)
 			sig = nil
 		}
 	}()

@@ -25,6 +25,7 @@ type TypingController struct {
 	dispatchIdle bool
 	done         chan struct{}
 	closeOnce    sync.Once // guards close(done) from double-close panic
+	cleanupOnce  sync.Once // guards the external cleanup callback
 	onStart      func()
 	onStop       func()
 	onCleanup    func()
@@ -120,6 +121,7 @@ func (tc *TypingController) StartTypingLoop() {
 				// Check TTL expiry.
 				if time.Now().After(tc.ttlDeadline) {
 					tc.active = false
+					tc.started = false
 					tc.mu.Unlock()
 					return
 				}
@@ -174,7 +176,12 @@ func (tc *TypingController) MarkRunComplete() {
 		return
 	}
 	tc.runComplete = true
+	dispatchIdle := tc.dispatchIdle
 	tc.mu.Unlock()
+	if dispatchIdle {
+		tc.Stop()
+		return
+	}
 
 	// Grace period: keep typing for up to 10 seconds after run completes,
 	// matching the TS implementation.
@@ -203,9 +210,11 @@ func (tc *TypingController) MarkDispatchIdle() {
 // Cleanup stops typing and prevents re-entry. Calls onCleanup if set.
 func (tc *TypingController) Cleanup() {
 	tc.Stop()
-	if tc.onCleanup != nil {
-		tc.onCleanup()
-	}
+	tc.cleanupOnce.Do(func() {
+		if tc.onCleanup != nil {
+			tc.onCleanup()
+		}
+	})
 }
 
 // Stop ends typing indicators and prevents further signals.

@@ -6,6 +6,7 @@ package genesis
 
 import (
 	"fmt"
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"sort"
 	"strings"
 )
@@ -72,7 +73,7 @@ func mineSkillFailurePatterns(stats *UsageStats) []skillFailurePattern {
 			}
 			pattern.Support++
 			if example := strings.TrimSpace(raw); example != "" && len(pattern.Examples) < 2 {
-				pattern.Examples = append(pattern.Examples, truncateRunes(example, 160))
+				pattern.Examples = append(pattern.Examples, genesiscommon.TruncateRunes(example, 160))
 			}
 		}
 	}

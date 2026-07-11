@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -152,6 +153,15 @@ func pruneTerminalLocked(m *fileModel) bool {
 // Source already exists (in any status — a rejected proposal stays rejected and
 // is not re-proposed). Returns the proposal and whether it was newly created.
 func (s *Store) CreateIfAbsent(in CreateInput) (Proposal, bool, error) {
+	if err := validateCreate(in); err != nil {
+		return Proposal{}, false, err
+	}
+	in.Title = strings.TrimSpace(in.Title)
+	in.Start = strings.TrimSpace(in.Start)
+	in.Kind = strings.TrimSpace(in.Kind)
+	in.Source = strings.TrimSpace(in.Source)
+	in.SourceSubject = strings.TrimSpace(in.SourceSubject)
+	in.SourceFrom = strings.TrimSpace(in.SourceFrom)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	m, err := s.loadLocked()
@@ -179,7 +189,7 @@ func (s *Store) CreateIfAbsent(in CreateInput) (Proposal, bool, error) {
 		Source:        in.Source,
 		SourceSubject: in.SourceSubject,
 		SourceFrom:    in.SourceFrom,
-		Docs:          in.Docs,
+		Docs:          append([]string(nil), in.Docs...),
 		Status:        StatusPending,
 		CreatedAtMs:   nowMs(),
 	}
@@ -265,6 +275,9 @@ func (s *Store) ClaimForAccept(id string) (*Proposal, bool, error) {
 // the "pending ⇒ no decision time" invariant holds. Returns the updated proposal,
 // or nil if id is unknown.
 func (s *Store) Decide(id string, status Status, calendarEventID string) (*Proposal, error) {
+	if status != StatusPending && status != StatusAccepted && status != StatusRejected {
+		return nil, fmt.Errorf("calprop: invalid status %q", status)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	m, err := s.loadLocked()
@@ -276,7 +289,11 @@ func (s *Store) Decide(id string, status Status, calendarEventID string) (*Propo
 			continue
 		}
 		m.Proposals[i].Status = status
-		m.Proposals[i].CalendarEventID = calendarEventID
+		if status == StatusAccepted {
+			m.Proposals[i].CalendarEventID = strings.TrimSpace(calendarEventID)
+		} else {
+			m.Proposals[i].CalendarEventID = ""
+		}
 		if status == StatusPending {
 			m.Proposals[i].DecidedAtMs = 0 // reopened: no decision time
 		} else {
@@ -289,6 +306,28 @@ func (s *Store) Decide(id string, status Status, calendarEventID string) (*Propo
 		return &p, nil
 	}
 	return nil, nil
+}
+
+func validateCreate(in CreateInput) error {
+	if strings.TrimSpace(in.Title) == "" {
+		return fmt.Errorf("calprop: title is required")
+	}
+	start := strings.TrimSpace(in.Start)
+	if start == "" {
+		return fmt.Errorf("calprop: start is required")
+	}
+	if in.AllDay {
+		if _, err := time.Parse("2006-01-02", start); err != nil {
+			return fmt.Errorf("calprop: invalid all-day start %q: %w", start, err)
+		}
+	} else if _, err := time.Parse(time.RFC3339, start); err != nil {
+		return fmt.Errorf("calprop: invalid timed start %q: %w", start, err)
+	}
+	kind := strings.TrimSpace(in.Kind)
+	if kind != "" && kind != "meeting" && kind != "deadline" {
+		return fmt.Errorf("calprop: invalid kind %q", kind)
+	}
+	return nil
 }
 
 func sortByStart(ps []Proposal) {

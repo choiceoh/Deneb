@@ -113,6 +113,14 @@ func sanitizePathComponent(s string) string {
 	s = strings.TrimSpace(strings.Trim(strings.TrimSpace(s), "<>"))
 	s = strings.ReplaceAll(s, "/", "_")
 	s = strings.ReplaceAll(s, "\\", "_")
+	// NUL and other control characters are not valid portable filenames and can
+	// make an otherwise safe archive destination impossible to persist.
+	s = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
 	s = path.Base(s)
 	if s == "" || s == "." {
 		return "unknown"

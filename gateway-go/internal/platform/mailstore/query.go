@@ -76,13 +76,19 @@ func (s *Store) Read(messageID, query string, mailboxes []string) (mailarchive.C
 func (s *Store) readLocked(messageID, query string, mailboxes []string) (mailarchive.ContextMessage, bool) {
 	if id := strings.TrimSpace(messageID); id != "" {
 		if key, ok := s.byLoc[id]; ok { // it's a locator
-			return s.byKey[key], true
+			if msg := s.byKey[key]; matchMailbox(msg, mailboxes) {
+				return msg, true
+			}
 		}
 		if key, ok := s.byMsgID[mailarchive.NormalizeMsgID(id)]; ok { // it's a Message-ID
-			return s.byKey[key], true
+			if msg := s.byKey[key]; matchMailbox(msg, mailboxes) {
+				return msg, true
+			}
 		}
 		if key, ok := s.byID[id]; ok { // bare ContextMessage.ID (sanitized Message-ID or fallback)
-			return s.byKey[key], true
+			if msg := s.byKey[key]; matchMailbox(msg, mailboxes) {
+				return msg, true
+			}
 		}
 	}
 	if q := strings.TrimSpace(query); q != "" {
@@ -125,9 +131,12 @@ func (s *Store) Thread(messageID, query string, mailboxes []string, limit int) (
 	var out []mailarchive.ContextMessage
 	seen := map[string]bool{mailarchive.ContextMessageDedupeKey(seed): true}
 	out = append(out, seed)
-	for changed := true; changed && len(out) < limit; {
+	for changed := true; changed; {
 		changed = false
 		for _, msg := range s.byKey {
+			if !matchMailbox(msg, mailboxes) {
+				continue
+			}
 			key := mailarchive.ContextMessageDedupeKey(msg)
 			if seen[key] {
 				continue

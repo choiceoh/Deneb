@@ -80,6 +80,9 @@ func extractVideoID(input string) string {
 }
 
 func isVideoID(s string) bool {
+	if len(s) != 11 {
+		return false
+	}
 	for _, c := range s {
 		switch {
 		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_', c == '-':

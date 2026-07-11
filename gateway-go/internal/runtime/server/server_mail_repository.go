@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeapi"
 	handlermail "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail"
 )
 
@@ -36,7 +38,7 @@ func (s *Server) newMiniappMailClient(denebDir string) (handlermail.GmailClient,
 	return nil, errNativeMailUnconfigured
 }
 
-func (s *Server) newMiniappMailAttachmentClient() (miniappMailAttachmentClient, error) {
+func (s *Server) newMiniappMailAttachmentClient() (nativeapi.MailAttachmentClient, error) {
 	if repo := s.newArchiveMailRepository(s.denebDir, nil); repo != nil {
 		return repo, nil
 	}
@@ -51,7 +53,7 @@ func (s *Server) newArchiveMailRepository(denebDir string, fallback mailarchive.
 		return nil
 	}
 	if denebDir == "" {
-		denebDir = resolveDenebDir()
+		denebDir = configresolve.DenebDir()
 	}
 	return mailarchive.NewRepository(cfg, mailarchive.RepositoryOptions{
 		StatePath: filepath.Join(denebDir, "mail", "native_state.json"),

@@ -4,6 +4,7 @@ package handlerevents
 
 import (
 	"log/slog"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
@@ -46,6 +47,7 @@ func EventsMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
 	}
 
 	subscribeSession := rpcutil.BindHandler[connParams](func(p connParams) (any, error) {
+		p.ConnID = strings.TrimSpace(p.ConnID)
 		if p.ConnID == "" {
 			return nil, rpcerr.MissingParam("connId")
 		}
@@ -54,6 +56,7 @@ func EventsMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
 	})
 
 	unsubscribeSession := rpcutil.BindHandler[connParams](func(p connParams) (any, error) {
+		p.ConnID = strings.TrimSpace(p.ConnID)
 		if p.ConnID == "" {
 			return nil, rpcerr.MissingParam("connId")
 		}
@@ -62,6 +65,8 @@ func EventsMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
 	})
 
 	subscribeMessages := rpcutil.BindHandler[connSessionParams](func(p connSessionParams) (any, error) {
+		p.ConnID = strings.TrimSpace(p.ConnID)
+		p.SessionKey = strings.TrimSpace(p.SessionKey)
 		if p.ConnID == "" || p.SessionKey == "" {
 			return nil, rpcerr.MissingParam("connId and sessionKey")
 		}
@@ -70,6 +75,8 @@ func EventsMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
 	})
 
 	unsubscribeMessages := rpcutil.BindHandler[connSessionParams](func(p connSessionParams) (any, error) {
+		p.ConnID = strings.TrimSpace(p.ConnID)
+		p.SessionKey = strings.TrimSpace(p.SessionKey)
 		if p.ConnID == "" || p.SessionKey == "" {
 			return nil, rpcerr.MissingParam("connId and sessionKey")
 		}
@@ -80,6 +87,8 @@ func EventsMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
 	// Tool event subscription: routes session.tool events for a specific run
 	// to a single connection instead of broadcasting to all subscribers.
 	subscribeToolEvents := rpcutil.BindHandler[connRunParams](func(p connRunParams) (any, error) {
+		p.ConnID = strings.TrimSpace(p.ConnID)
+		p.RunID = strings.TrimSpace(p.RunID)
 		if p.ConnID == "" || p.RunID == "" {
 			return nil, rpcerr.MissingParam("connId and runId")
 		}
@@ -88,6 +97,7 @@ func EventsMethods(deps EventsDeps) map[string]rpcutil.HandlerFunc {
 	})
 
 	unsubscribeToolEvents := rpcutil.BindHandler[runParams](func(p runParams) (any, error) {
+		p.RunID = strings.TrimSpace(p.RunID)
 		if p.RunID == "" {
 			return nil, rpcerr.MissingParam("runId")
 		}
@@ -130,6 +140,7 @@ func eventsBroadcast(deps EventsDeps) rpcutil.HandlerFunc {
 		Payload any    `json:"payload"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		p.Event = strings.TrimSpace(p.Event)
 		if p.Event == "" {
 			return nil, rpcerr.MissingParam("event")
 		}

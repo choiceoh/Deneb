@@ -295,7 +295,7 @@ func (ix *Index) SearchBatch(ctx context.Context, queries []string, limit int) [
 
 // SearchVec ranks the corpus by cosine to a pre-computed query vector.
 func (ix *Index) SearchVec(qv []float32, limit int) []Hit {
-	if ix == nil || len(qv) == 0 {
+	if ix == nil || len(qv) == 0 || limit <= 0 {
 		return nil
 	}
 	ix.mu.Lock()
@@ -305,7 +305,12 @@ func (ix *Index) SearchVec(qv []float32, limit int) []Hit {
 	}
 	ix.mu.Unlock()
 
-	sort.Slice(hits, func(a, b int) bool { return hits[a].Score > hits[b].Score })
+	sort.Slice(hits, func(a, b int) bool {
+		if hits[a].Score == hits[b].Score {
+			return hits[a].ID < hits[b].ID
+		}
+		return hits[a].Score > hits[b].Score
+	})
 	if len(hits) > limit {
 		hits = hits[:limit]
 	}

@@ -176,7 +176,7 @@ func updateBaseline(base Baseline, current []Signal, regressed []Regression, now
 		out.Entries[k] = v
 	}
 	for _, s := range current {
-		if s.Sample == 0 {
+		if s.Sample == 0 && s.Kind != KindCount {
 			continue
 		}
 		k := s.FullKey()

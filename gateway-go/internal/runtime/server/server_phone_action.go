@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 )
 
 // phoneActionConfirmWait bounds how long a phone_write dispatch waits for the
@@ -159,7 +160,7 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 	if s.pushHub == nil {
 		return fmt.Errorf("no mobile app connected to execute the phone action")
 	}
-	fanout := s.pushHub.mobileSubscriberCount()
+	fanout := s.pushHub.MobileSubscriberCount()
 	if fanout == 0 {
 		return fmt.Errorf("no mobile app connected to execute the phone action")
 	}
@@ -170,8 +171,8 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 	data["action"] = action
 
 	if action == "sync_state" {
-		s.pushHub.publish(clientPushEvent{
-			Kind:  pushKindPhoneAction,
+		s.pushHub.Publish(proactive.Event{
+			Kind:  proactive.PushKindPhoneAction,
 			Title: "phone action",
 			Body:  action,
 			Data:  data,
@@ -184,8 +185,8 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 	result := s.phoneActions.register(id, fanout)
 	defer s.phoneActions.drop(id)
 
-	s.pushHub.publish(clientPushEvent{
-		Kind:  pushKindPhoneAction,
+	s.pushHub.Publish(proactive.Event{
+		Kind:  proactive.PushKindPhoneAction,
 		Title: "phone action",
 		Body:  action,
 		Ref:   id,

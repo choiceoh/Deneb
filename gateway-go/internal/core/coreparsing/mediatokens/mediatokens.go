@@ -55,7 +55,7 @@ func Parse(raw string) Result {
 		}
 
 		trimmedStart := strings.TrimLeft(line, " \t")
-		if !strings.HasPrefix(trimmedStart, "MEDIA:") {
+		if len(trimmedStart) < len("MEDIA:") || !strings.EqualFold(trimmedStart[:len("MEDIA:")], "MEDIA:") {
 			keptLines = append(keptLines, line)
 			lineOffset += len(line) + 1
 			continue
@@ -77,7 +77,8 @@ func Parse(raw string) Result {
 		anyValid := false
 
 		// Stage 1: Try unwrapping quoted payload.
-		if unquoted, ok := tryUnwrapQuoted(payload); ok {
+		unquoted, payloadWasQuoted := tryUnwrapQuoted(payload)
+		if payloadWasQuoted {
 			candidate := cleanCandidate(unquoted)
 			normalized := normalizeMediaSource(candidate)
 			if isValidMediaAllowSpaces(normalized) || isBareFilename(normalized) {
@@ -88,7 +89,7 @@ func Parse(raw string) Result {
 		}
 
 		// Stage 2: Try each space-separated part.
-		if !anyValid {
+		if !anyValid && !payloadWasQuoted {
 			for _, part := range strings.Fields(payload) {
 				candidate := cleanCandidate(part)
 				normalized := normalizeMediaSource(candidate)
@@ -204,12 +205,21 @@ func isValidMediaAllowSpaces(candidate string) bool {
 	if candidate == "" || len(candidate) > 4096 {
 		return false
 	}
+	lower := strings.ToLower(candidate)
+	if (strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://")) &&
+		strings.ContainsAny(candidate, " \t\n\r") {
+		return false
+	}
 	return isValidMediaCore(candidate)
 }
 
 // isValidMediaCore checks URL or local path patterns.
 func isValidMediaCore(candidate string) bool {
-	if strings.HasPrefix(candidate, "http://") || strings.HasPrefix(candidate, "https://") {
+	if candidate == "/" || candidate == "./" || candidate == "../" || candidate == "~" || candidate == "\\\\" {
+		return false
+	}
+	lower := strings.ToLower(candidate)
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
 		return true
 	}
 	if strings.HasPrefix(candidate, "/") ||
@@ -292,8 +302,9 @@ doneLeading:
 
 // normalizeMediaSource strips file:// prefix.
 func normalizeMediaSource(src string) string {
-	if rest, ok := strings.CutPrefix(src, "file://"); ok {
-		return rest
+	const prefix = "file://"
+	if len(src) >= len(prefix) && strings.EqualFold(src[:len(prefix)], prefix) {
+		return src[len(prefix):]
 	}
 	return src
 }

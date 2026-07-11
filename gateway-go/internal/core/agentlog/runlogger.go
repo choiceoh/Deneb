@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"time"
+	"unicode/utf8"
 )
 
 const maxMessageLen = 4096
@@ -37,9 +38,27 @@ func (rl *RunLogger) LogStart(data RunStartData) {
 		return
 	}
 	if len(data.Message) > maxMessageLen {
-		data.Message = data.Message[:maxMessageLen] + "..."
+		data.Message = truncateUTF8Bytes(data.Message, maxMessageLen) + "..."
 	}
 	rl.emit(TypeRunStart, data)
+}
+
+// truncateUTF8Bytes returns at most max bytes without splitting a UTF-8 code
+// point. Agent-log messages are byte bounded, but native-client input is often
+// Korean; slicing at the raw byte boundary used to leave json.Marshal to replace
+// a severed final rune with U+FFFD, corrupting the diagnostic preview.
+func truncateUTF8Bytes(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	if len(s) <= max {
+		return s
+	}
+	cut := max
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 // LogPrep records context preparation completion.

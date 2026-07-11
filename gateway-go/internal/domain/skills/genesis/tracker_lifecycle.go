@@ -5,12 +5,17 @@ import (
 	"sort"
 	"time"
 
+	genesiseprocess "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/eprocess"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
 // Lifecycle log split out of tracker.go (pure move, no behavior change):
 // genesis/evolve/rollback log entries, their writers, and the evidence queries
 // (SkillsNeedingEvolution) built on them.
+
+// EProcess keeps the tracker wire types stable while the implementation lives
+// in the dependency-free eprocess child package.
+type EProcess = genesiseprocess.EProcess
 
 // LifecycleLogEntry is the combined JSONL view for genesis and evolution
 // proposal events. Older genesis entries may not have Type populated; readers
@@ -175,7 +180,7 @@ func (t *Tracker) LogEvolveWithProvenance(skillName, newVersion, description str
 		if w.baselineUses > 0 {
 			baselineRate = float64(w.baselineFails) / float64(w.baselineUses)
 		}
-		w.ep = NewEProcess(DefaultEProcessAlpha, baselineRate)
+		w.ep = genesiseprocess.NewEProcess(genesiseprocess.DefaultEProcessAlpha, baselineRate)
 		t.postEvolve[skillName] = w
 		t.saveWatchesLocked()
 	}
@@ -185,7 +190,7 @@ func (t *Tracker) LogEvolveWithProvenance(skillName, newVersion, description str
 		NewVersion:       newVersion,
 		Description:      description,
 		CreatedAt:        now,
-		SelfHarnessAudit: audit.ptr(),
+		SelfHarnessAudit: audit.Ptr(),
 		Provenance:       prov,
 	}); err != nil {
 		return err
@@ -253,7 +258,7 @@ func (t *Tracker) LogEvolveConfirmed(skillName string, audit HarnessEditAudit, c
 		Reason:           reason,
 		CreatedAt:        time.Now().UnixMilli(),
 		BaselineTest:     bt,
-		SelfHarnessAudit: audit.ptr(),
+		SelfHarnessAudit: audit.Ptr(),
 	})
 }
 
@@ -280,7 +285,7 @@ func (t *Tracker) LogEvolveRejectedWithProvenance(skillName, reason string, audi
 		SkillName:        skillName,
 		Reason:           reason,
 		CreatedAt:        now,
-		SelfHarnessAudit: audit.ptr(),
+		SelfHarnessAudit: audit.Ptr(),
 		Provenance:       prov,
 	}); err != nil {
 		return err

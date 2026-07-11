@@ -17,6 +17,7 @@ package denebui
 import (
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // ---------------------------------------------------------------------------
@@ -662,7 +663,7 @@ func decodeEntities(s string) string {
 				} else {
 					code, err = strconv.ParseInt(ent[1:], 10, 32)
 				}
-				if err == nil && code > 0 {
+				if err == nil && code > 0 && code <= utf8.MaxRune && !(code >= 0xd800 && code <= 0xdfff) {
 					b.WriteRune(rune(code))
 				} else {
 					b.WriteByte(s[i])

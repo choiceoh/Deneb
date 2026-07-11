@@ -66,6 +66,10 @@ func AnalyzeBatch(ctx context.Context, deps PipelineDeps, msgs []*gmail.MessageD
 	// caches/pages each one, and they feed the consolidated report below.
 	items := make([]BatchItem, 0, len(msgs))
 	for _, msg := range msgs {
+		if msg == nil {
+			logger.Warn("개별 메일 분석 실패 — nil 메시지 건너뜀")
+			continue
+		}
 		res, err := AnalyzeEmailPipeline(ctx, deps, msg)
 		if err != nil {
 			logger.Warn("개별 메일 분석 실패 — 건너뜀", "id", msg.ID, "error", err)
@@ -99,8 +103,17 @@ func AnalyzeBatch(ctx context.Context, deps PipelineDeps, msgs []*gmail.MessageD
 // analyses — gives the model the full source material for a richer
 // big-picture report (grouping by project, prioritizing across emails).
 func synthesizeBatchReport(ctx context.Context, deps PipelineDeps, items []BatchItem) (string, error) {
+	if len(items) == 0 {
+		return "", fmt.Errorf("no analyzed emails to synthesize")
+	}
+	if deps.LLMClient == nil {
+		return "", fmt.Errorf("analysis LLM client is required")
+	}
 	var sb strings.Builder
 	for i, it := range items {
+		if it.Msg == nil {
+			return "", fmt.Errorf("analyzed email %d has no message", i+1)
+		}
 		if i > 0 {
 			sb.WriteString("\n---\n\n")
 		}

@@ -3,6 +3,7 @@ package tokens
 import (
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // Default heartbeat configuration constants.
@@ -79,7 +80,7 @@ func stripTokenAtEdges(raw string) (string, bool) {
 		changed := false
 		next := strings.TrimSpace(text)
 
-		if strings.HasPrefix(next, HeartbeatToken) {
+		if strings.HasPrefix(next, HeartbeatToken) && tokenBoundaryAfter(next, len(HeartbeatToken)) {
 			after := strings.TrimLeftFunc(next[len(HeartbeatToken):], func(r rune) bool {
 				return r == ' ' || r == '\t'
 			})
@@ -91,6 +92,9 @@ func stripTokenAtEdges(raw string) (string, bool) {
 
 		if tokenEndRe.MatchString(next) {
 			idx := strings.LastIndex(next, HeartbeatToken)
+			if idx > 0 && isTokenWordByte(next[idx-1]) {
+				break
+			}
 			before := strings.TrimRightFunc(next[:idx], func(r rune) bool {
 				return r == ' ' || r == '\t'
 			})
@@ -116,10 +120,16 @@ func stripTokenAtEdges(raw string) (string, bool) {
 	return collapsed, didStrip
 }
 
-var wsCollapseRe = regexp.MustCompile(`\s+`)
+func tokenBoundaryAfter(s string, index int) bool {
+	return index >= len(s) || !isTokenWordByte(s[index])
+}
+
+func isTokenWordByte(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || b == '_'
+}
 
 func collapseWhitespace(s string) string {
-	return strings.TrimSpace(wsCollapseRe.ReplaceAllString(s, " "))
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // StripHeartbeatToken removes the HEARTBEAT_OK token from agent output and
@@ -153,7 +163,7 @@ func StripHeartbeatToken(raw string, mode StripHeartbeatMode, maxAckChars int) S
 	}
 
 	rest := strings.TrimSpace(stripped)
-	if mode == StripModeHeartbeat && len(rest) <= maxAckChars {
+	if mode == StripModeHeartbeat && utf8.RuneCountInString(rest) <= maxAckChars {
 		return StripHeartbeatResult{ShouldSkip: true, DidStrip: true}
 	}
 	return StripHeartbeatResult{Text: rest, DidStrip: true}

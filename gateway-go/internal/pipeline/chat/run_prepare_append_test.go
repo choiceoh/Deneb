@@ -25,13 +25,13 @@ func messagesContain(msgs []llm.Message, needle string) bool {
 	return false
 }
 
-// appendCurrentMessage (deferred-enrichment / ephemeral path) must append the
+// AppendCurrentMessage (deferred-enrichment / ephemeral path) must append the
 // current message as a NEW last user message after the loaded history.
 func TestAssembleTurnMessages_AppendCurrentMessage(t *testing.T) {
 	params := RunParams{
 		SessionKey:           "client:main",
 		Message:              "[2026-07-05T10:05:00+09:00] 링크 요약해줘",
-		appendCurrentMessage: true,
+		AppendCurrentMessage: true,
 	}
 	prep := prepResult{Messages: appendTestHistory()}
 	msgs := assembleTurnMessages(context.Background(), params, runDeps{}, prep, modelResolution{})
@@ -50,13 +50,13 @@ func TestAssembleTurnMessages_AppendCurrentMessage(t *testing.T) {
 	}
 }
 
-// appendCurrentMessage + attachments must APPEND a multimodal message, not
+// AppendCurrentMessage + attachments must APPEND a multimodal message, not
 // replace the previous turn's last user message.
 func TestAssembleTurnMessages_AppendCurrentMessageWithAttachments(t *testing.T) {
 	params := RunParams{
 		SessionKey:           "client:main",
 		Message:              "[2026-07-05T10:05:00+09:00] 스크린샷이랑 링크 봐줘",
-		appendCurrentMessage: true,
+		AppendCurrentMessage: true,
 		Attachments: []ChatAttachment{
 			{Type: "image", MimeType: "image/png", Data: "aGVsbG8="},
 		},

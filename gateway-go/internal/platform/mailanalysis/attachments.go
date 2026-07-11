@@ -351,6 +351,9 @@ func buildAttachmentSelection(extracted []extractedAttachment, picks map[int]boo
 // clipChars truncates s to at most n runes, appending an ellipsis marker when cut.
 func clipChars(s string, n int) string {
 	s = strings.TrimSpace(s)
+	if n <= 0 {
+		return ""
+	}
 	r := []rune(s)
 	if len(r) <= n {
 		return s

@@ -61,6 +61,9 @@ type Daemon struct {
 
 // NewDaemon creates a new daemon manager.
 func NewDaemon(pidFile string, port int, version string, logger *slog.Logger) *Daemon {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &Daemon{
 		state:   StateIdle,
 		pidFile: pidFile,
@@ -161,6 +164,9 @@ func (d *Daemon) CheckExistingDaemon() *PIDInfo {
 
 	var info PIDInfo
 	if err := json.Unmarshal(data, &info); err != nil {
+		return nil
+	}
+	if info.PID <= 0 {
 		return nil
 	}
 

@@ -172,7 +172,13 @@ func (s *Source) RelatedMessages(ctx context.Context, msg *gmail.MessageDetail) 
 // --- helpers ---
 
 func normalizeMsgID(id string) string {
-	return strings.ToLower(strings.TrimSpace(id))
+	id = strings.TrimSpace(id)
+	// References commonly carry RFC 5322 angle brackets while callers often
+	// paste the bare Message-ID. Treat both spellings as the same identity.
+	if len(id) >= 2 && id[0] == '<' && id[len(id)-1] == '>' {
+		id = strings.TrimSpace(id[1 : len(id)-1])
+	}
+	return strings.ToLower(id)
 }
 
 var addrRe = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)

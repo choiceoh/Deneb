@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 )
 
 // The deterministic contract gate is what stands between an LLM proposal and
@@ -24,16 +26,16 @@ func TestMetaProposalGate(t *testing.T) {
 		wantPass bool
 		wantIn   string
 	}{
-		{"valid evolve revision passes", MetaEvolveSystemPrompt, valid, true, ""},
-		{"identical proposal rejected", MetaEvolveSystemPrompt, incumbent, false, "identical"},
-		{"short stump rejected", MetaEvolveSystemPrompt, "too short", false, "too short"},
-		{"oversized rejected", MetaEvolveSystemPrompt, valid + strings.Repeat("x", metaProposalMaxBytes), false, "too large"},
+		{"valid evolve revision passes", generation.MetaEvolveSystemPrompt, valid, true, ""},
+		{"identical proposal rejected", generation.MetaEvolveSystemPrompt, incumbent, false, "identical"},
+		{"short stump rejected", generation.MetaEvolveSystemPrompt, "too short", false, "too short"},
+		{"oversized rejected", generation.MetaEvolveSystemPrompt, valid + strings.Repeat("x", metaProposalMaxBytes), false, "too large"},
 		{
-			"dropped schema anchor rejected", MetaEvolveSystemPrompt,
+			"dropped schema anchor rejected", generation.MetaEvolveSystemPrompt,
 			strings.ReplaceAll(valid, `"reproduction_case"`, `"repro"`), false, "anchor",
 		},
 		{
-			"judge contract enforced", MetaSkillJudgeSystemPrompt,
+			"judge contract enforced", generation.MetaSkillJudgeSystemPrompt,
 			strings.Repeat("점수 없이 서술만 하는 judge 프롬프트. ", 20), false, `"pass"`,
 		},
 	}
@@ -66,14 +68,14 @@ func TestMetaEvolution_EpochAlternation(t *testing.T) {
 	task := &MetaEvolutionTask{Tracker: tr}
 
 	epoch, artifact := task.nextEpoch()
-	if epoch != metaEpochProducer || artifact != MetaEvolveSystemPrompt {
+	if epoch != metaEpochProducer || artifact != generation.MetaEvolveSystemPrompt {
 		t.Fatalf("first cycle = %s/%s, want producer/evolve", epoch, artifact)
 	}
 	if err := tr.LogMetaRevision(MetaRevisionRecord{Epoch: epoch, Artifact: artifact, FromVersion: "aaa"}); err != nil {
 		t.Fatal(err)
 	}
 	epoch, artifact = task.nextEpoch()
-	if epoch != metaEpochEvaluator || artifact != MetaSkillJudgeSystemPrompt {
+	if epoch != metaEpochEvaluator || artifact != generation.MetaSkillJudgeSystemPrompt {
 		t.Fatalf("second cycle = %s/%s, want evaluator/judge", epoch, artifact)
 	}
 	if err := tr.LogMetaRevision(MetaRevisionRecord{Epoch: epoch, Artifact: artifact, FromVersion: "bbb"}); err != nil {
@@ -94,8 +96,8 @@ func TestMetaEvolution_LedgerAndEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, r := range []MetaRevisionRecord{
-		{Epoch: metaEpochProducer, Artifact: MetaEvolveSystemPrompt, FromVersion: "v1", Reason: "first"},
-		{Epoch: metaEpochEvaluator, Artifact: MetaSkillJudgeSystemPrompt, FromVersion: "v2", ToVersion: "v3", Proposed: true, Reason: "tightened scoring rubric"},
+		{Epoch: metaEpochProducer, Artifact: generation.MetaEvolveSystemPrompt, FromVersion: "v1", Reason: "first"},
+		{Epoch: metaEpochEvaluator, Artifact: generation.MetaSkillJudgeSystemPrompt, FromVersion: "v2", ToVersion: "v3", Proposed: true, Reason: "tightened scoring rubric"},
 	} {
 		if err := tr.LogMetaRevision(r); err != nil {
 			t.Fatal(err)
@@ -122,7 +124,7 @@ func TestMetaEvolution_LedgerAndEvidence(t *testing.T) {
 // Propose-only invariant: WriteProposal never touches the live artifact.
 func TestWriteProposal_DoesNotTouchLiveArtifact(t *testing.T) {
 	dir := t.TempDir()
-	m := NewMetaArtifacts(dir, slog.Default())
+	m := generation.NewMetaArtifacts(dir, slog.Default())
 	live := strings.Repeat("live artifact content. ", 20)
 	m.MaterializeDefaults(map[string]string{"prompt.md": live})
 
@@ -149,11 +151,11 @@ func TestMetaEvolutionHealth(t *testing.T) {
 	if h := tr.MetaEvolutionHealth(); h.Revisions7d != 0 || h.LastArtifact != "" {
 		t.Fatalf("empty ledger scoreboard = %+v", h)
 	}
-	old := MetaRevisionRecord{Epoch: metaEpochProducer, Artifact: MetaEvolveSystemPrompt, FromVersion: "v0", Reason: "ancient", CreatedAt: 1}
+	old := MetaRevisionRecord{Epoch: metaEpochProducer, Artifact: generation.MetaEvolveSystemPrompt, FromVersion: "v0", Reason: "ancient", CreatedAt: 1}
 	if err := tr.LogMetaRevision(old); err != nil {
 		t.Fatal(err)
 	}
-	fresh := MetaRevisionRecord{Epoch: metaEpochEvaluator, Artifact: MetaSkillJudgeSystemPrompt, FromVersion: "v1", ToVersion: "v2", Proposed: true, Reason: "recent proposal"}
+	fresh := MetaRevisionRecord{Epoch: metaEpochEvaluator, Artifact: generation.MetaSkillJudgeSystemPrompt, FromVersion: "v1", ToVersion: "v2", Proposed: true, Reason: "recent proposal"}
 	if err := tr.LogMetaRevision(fresh); err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +163,7 @@ func TestMetaEvolutionHealth(t *testing.T) {
 	if h.Revisions7d != 1 || h.Proposed7d != 1 {
 		t.Fatalf("window counts = %+v (ancient entry must be excluded)", h)
 	}
-	if h.LastArtifact != MetaSkillJudgeSystemPrompt || !h.LastProposed || h.LastReason != "recent proposal" {
+	if h.LastArtifact != generation.MetaSkillJudgeSystemPrompt || !h.LastProposed || h.LastReason != "recent proposal" {
 		t.Fatalf("newest summary = %+v", h)
 	}
 }

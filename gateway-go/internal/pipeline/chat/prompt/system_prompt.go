@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
 )
 
 // toolCategories defines tool groupings for the compact tool list.
@@ -573,7 +573,7 @@ func truncateDescription(s string, maxLen int) string {
 }
 
 func writePropusDoctrinePrompt(b *strings.Builder) {
-	doctrine := genesis.PropusDoctrine()
+	doctrine := propus.PropusDoctrine()
 	fmt.Fprintf(b, "Source doctrine `%s`: %s.\n", doctrine.Version, doctrine.LifecycleText())
 	if sources := doctrine.SourceIDs(); len(sources) > 0 {
 		fmt.Fprintf(b, "Sources: %s.\n", strings.Join(sources, ", "))

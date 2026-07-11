@@ -22,6 +22,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
@@ -145,7 +146,7 @@ func concatMergeBody(target, source *wiki.Page) string {
 // the same proactive relay cron uses. Best-effort: a delivery failure is logged
 // (the merge itself already succeeded or failed on its own merits).
 func (s *Server) notifyMergeResult(ctx context.Context, message string) {
-	if _, err := s.proactiveRelay.relay(ctx, nativeWorkSessionKey, message); err != nil {
+	if _, err := s.proactiveRelay.Relay(ctx, proactive.NativeWorkSessionKey, message); err != nil {
 		s.logger.Error("wiki merge: completion notify failed", "error", err)
 	}
 }

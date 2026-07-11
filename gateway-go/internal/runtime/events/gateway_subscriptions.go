@@ -10,7 +10,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
@@ -51,7 +50,7 @@ type GatewayEventSubscriptions struct {
 	done         chan struct{}
 
 	// Optional publisher for enriched event delivery (set after construction).
-	publisher unsafe.Pointer // *Publisher, accessed atomically
+	publisher atomic.Pointer[Publisher]
 
 	// Drop counters for observability (atomic, no lock needed).
 	agentDrops      atomic.Int64
@@ -86,12 +85,12 @@ func NewGatewayEventSubscriptions(params GatewaySubscriptionParams) *GatewayEven
 // SetPublisher sets the enrichment publisher for transcript and agent events.
 // Safe to call after construction; the running loops pick it up atomically.
 func (g *GatewayEventSubscriptions) SetPublisher(p *Publisher) {
-	atomic.StorePointer(&g.publisher, unsafe.Pointer(p))
+	g.publisher.Store(p)
 }
 
 // getPublisher returns the current publisher, or nil if none is set.
 func (g *GatewayEventSubscriptions) getPublisher() *Publisher {
-	return (*Publisher)(atomic.LoadPointer(&g.publisher))
+	return g.publisher.Load()
 }
 
 // EmitAgent sends an agent event into the subscription pipeline.

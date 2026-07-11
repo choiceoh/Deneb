@@ -290,6 +290,12 @@ func analysisPrompt(deps PipelineDeps) string {
 // Stage 2: final analysis combining email + thread context + memory via main LLM.
 // Falls back to single-LLM analysis if pipeline deps are insufficient.
 func AnalyzeEmailPipeline(ctx context.Context, deps PipelineDeps, msg *gmail.MessageDetail) (AnalysisResult, error) {
+	if msg == nil {
+		return AnalysisResult{}, fmt.Errorf("email message is required")
+	}
+	if deps.LLMClient == nil && deps.AgentSynthesisFn == nil {
+		return AnalysisResult{}, fmt.Errorf("analysis LLM client is required")
+	}
 	candidates := deps.projectCandidates()
 
 	if !deps.canRunPipeline() {
@@ -467,7 +473,7 @@ func extractEmailAddr(from string) string {
 	if idx := strings.LastIndex(from, "<"); idx >= 0 {
 		end := strings.Index(from[idx:], ">")
 		if end > 0 {
-			return from[idx+1 : idx+end]
+			return strings.TrimSpace(from[idx+1 : idx+end])
 		}
 	}
 	// Might be a plain email address.

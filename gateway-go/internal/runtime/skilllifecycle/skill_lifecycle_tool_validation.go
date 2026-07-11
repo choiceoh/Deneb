@@ -1,0 +1,420 @@
+package skilllifecycle
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
+)
+
+// Self-correction and validation-case recording split out of
+// skill_lifecycle_tool.go (pure move, no behavior change): candidate
+// record/review, validation-case capture, and session backfill.
+
+// RecordSelfCorrectionCandidate queues an evidence-backed correction for later review.
+func (b *skillLifecycleBackend) RecordSelfCorrectionCandidate(ctx context.Context, req chattools.SkillSelfCorrectionCandidateRequest) (any, error) {
+	if b.tracker == nil {
+		return map[string]any{
+			"ok":     false,
+			"reason": "skill tracker is not configured",
+		}, nil
+	}
+	if req.SessionKey == "" {
+		req.SessionKey = toolctx.SessionKeyFromContext(ctx)
+	}
+	// Default provenance: agent-proposed candidates were landing with an empty
+	// source (observed 2026-07-04), indistinguishable from legacy rows.
+	if strings.TrimSpace(req.Source) == "" {
+		req.Source = "skill-lifecycle-tool"
+	}
+	rec, err := b.tracker.RecordSelfCorrectionCandidate(genesis.SelfCorrectionCandidateRecord{
+		ID:             req.ID,
+		Scope:          req.Scope,
+		SkillName:      req.SkillName,
+		SessionKey:     req.SessionKey,
+		Title:          req.Title,
+		Candidate:      req.Candidate,
+		Evidence:       req.Evidence,
+		Reason:         req.Reason,
+		TargetFiles:    req.TargetFiles,
+		ProposedChange: req.ProposedChange,
+		Risk:           req.Risk,
+		Source:         req.Source,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"ok":        true,
+		"candidate": rec,
+	}, nil
+}
+
+// ReviewSelfCorrectionCandidate records the disposition of a queued correction.
+func (b *skillLifecycleBackend) ReviewSelfCorrectionCandidate(_ context.Context, req chattools.SkillSelfCorrectionReviewRequest) (any, error) {
+	if b.tracker == nil {
+		return map[string]any{
+			"ok":     false,
+			"reason": "skill tracker is not configured",
+		}, nil
+	}
+	rec, err := b.tracker.RecordSelfCorrectionReview(genesis.SelfCorrectionCandidateRecord{
+		ID:         req.ID,
+		Status:     req.Status,
+		Reviewer:   req.Reviewer,
+		ReviewNote: req.ReviewNote,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"ok":     true,
+		"review": rec,
+	}, nil
+}
+
+// RecordSkillValidationCase persists a held-out assertion for one named skill.
+func (b *skillLifecycleBackend) RecordSkillValidationCase(_ context.Context, req chattools.SkillValidationCaseRequest) (any, error) {
+	if b.tracker == nil {
+		return map[string]any{
+			"ok":     false,
+			"reason": "skill tracker is not configured",
+		}, nil
+	}
+	// A validation_case is a held-out assertion bound to a specific skill. A
+	// session-level correction with no skill to attach to belongs in the
+	// self-correction queue instead — steer the caller there so the capture is
+	// not lost when it reached for the wrong action (observed: the review lane
+	// hitting a bare "skillName is required" and dropping the correction).
+	if strings.TrimSpace(req.SkillName) == "" {
+		return nil, fmt.Errorf("validation_case requires a skill binding (skillName). For a session-level correction with no owning skill, use action=self_correction instead (title/evidence/proposedChange/risk)")
+	}
+	record := genesis.SkillValidationCaseRecord{
+		SkillName:           req.SkillName,
+		ID:                  req.ID,
+		Description:         req.Description,
+		FrontierTier:        req.FrontierTier,
+		RequiredSubstrings:  req.RequiredSubstrings,
+		ForbiddenSubstrings: req.ForbiddenSubstrings,
+		RequiredHeadings:    req.RequiredHeadings,
+		Replay: genesis.SkillReplayCaseRecord{
+			Input:                 req.Replay.Input,
+			Context:               req.Replay.Context,
+			RequiredActions:       req.Replay.RequiredActions,
+			ForbiddenActions:      req.Replay.ForbiddenActions,
+			RequiredObservations:  req.Replay.RequiredObservations,
+			ForbiddenObservations: req.Replay.ForbiddenObservations,
+			RequiredTools:         req.Replay.RequiredTools,
+			ForbiddenTools:        req.Replay.ForbiddenTools,
+			ExpectedToolCalls:     skillReplayToolCallsFromRequest(req.Replay.ExpectedToolCalls),
+			ForbiddenToolCalls:    skillReplayToolCallsFromRequest(req.Replay.ForbiddenToolCalls),
+			RequireOrder:          req.Replay.RequireOrder,
+		},
+		Source: req.Source,
+	}
+	if err := b.tracker.RecordSkillValidationCase(record); err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"ok":        true,
+		"skillName": strings.TrimSpace(req.SkillName),
+		"id":        strings.TrimSpace(req.ID),
+	}, nil
+}
+
+// RecordSkillValidationCaseFromSession derives and persists a replay case from a transcript.
+func (b *skillLifecycleBackend) RecordSkillValidationCaseFromSession(ctx context.Context, req chattools.SkillValidationCaseFromSessionRequest) (any, error) {
+	if b.tracker == nil {
+		return map[string]any{
+			"ok":     false,
+			"reason": "skill tracker is not configured",
+		}, nil
+	}
+	if req.SessionKey == "" {
+		req.SessionKey = toolctx.SessionKeyFromContext(ctx)
+	}
+	if strings.TrimSpace(req.SessionKey) == "" {
+		return nil, fmt.Errorf("sessionKey is required")
+	}
+	sctx, err := buildSkillLifecycleSessionContext(b.transcripts, req.SessionKey)
+	if err != nil {
+		return nil, fmt.Errorf("load session: %w", err)
+	}
+	record := buildSkillValidationCaseFromSession(req, sctx)
+	if err := b.tracker.RecordSkillValidationCase(record); err != nil {
+		if errors.Is(err, genesis.ErrWeakAutomaticValidationCase) {
+			return map[string]any{
+				"ok":         true,
+				"skip":       true,
+				"reason":     err.Error(),
+				"skillName":  strings.TrimSpace(req.SkillName),
+				"sessionKey": strings.TrimSpace(req.SessionKey),
+			}, nil
+		}
+		return nil, err
+	}
+	return map[string]any{
+		"ok":                 true,
+		"skillName":          strings.TrimSpace(req.SkillName),
+		"id":                 record.ID,
+		"sessionKey":         strings.TrimSpace(req.SessionKey),
+		"expectedToolCalls":  len(record.Replay.ExpectedToolCalls),
+		"forbiddenToolCalls": len(record.Replay.ForbiddenToolCalls),
+		"requiredTools":      len(record.Replay.RequiredTools),
+	}, nil
+}
+
+// BackfillSkillValidationCases mines recent transcripts for additional held-out cases.
+func (b *skillLifecycleBackend) BackfillSkillValidationCases(ctx context.Context, req chattools.SkillValidationBackfillRequest) (any, error) {
+	if b.tracker == nil {
+		return map[string]any{
+			"ok":     false,
+			"reason": "skill tracker is not configured",
+		}, nil
+	}
+	skillName := strings.TrimSpace(req.SkillName)
+	if skillName == "" {
+		return nil, fmt.Errorf("skillName is required")
+	}
+
+	limit := normalizeSkillValidationBackfillLimit(req.Limit)
+	sessionKey := strings.TrimSpace(req.SessionKey)
+	if sessionKey != "" {
+		return b.backfillSkillValidationCasesFromKeys(ctx, req, []string{sessionKey}, 1)
+	}
+	if b.transcripts == nil {
+		return nil, fmt.Errorf("transcript store is not configured")
+	}
+	keys, err := b.transcripts.ListKeys()
+	if err != nil {
+		return nil, fmt.Errorf("list transcripts: %w", err)
+	}
+	sort.Strings(keys)
+	for i, j := 0, len(keys)-1; i < j; i, j = i+1, j-1 {
+		keys[i], keys[j] = keys[j], keys[i]
+	}
+	return b.backfillSkillValidationCasesFromKeys(ctx, req, keys, limit)
+}
+
+func (b *skillLifecycleBackend) backfillSkillValidationCasesFromKeys(ctx context.Context, req chattools.SkillValidationBackfillRequest, keys []string, limit int) (map[string]any, error) {
+	result := map[string]any{
+		"ok":        true,
+		"skillName": strings.TrimSpace(req.SkillName),
+		"limit":     limit,
+		"scanned":   0,
+		"recorded":  0,
+		"skipped":   0,
+		"errors":    []string{},
+		"details":   []map[string]any{},
+	}
+	var (
+		scanned  int
+		recorded int
+		skipped  int
+		errs     []string
+		details  []map[string]any
+	)
+	for _, key := range keys {
+		if scanned >= limit {
+			break
+		}
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		scanned++
+		gotAny, err := b.RecordSkillValidationCaseFromSession(ctx, skillValidationBackfillCaseRequest(req, key))
+		if err != nil {
+			errText := key + ": " + err.Error()
+			errs = append(errs, errText)
+			if len(details) < 20 {
+				details = append(details, map[string]any{
+					"sessionKey": key,
+					"ok":         false,
+					"error":      err.Error(),
+				})
+			}
+			continue
+		}
+		got, _ := gotAny.(map[string]any)
+		if skip, _ := got["skip"].(bool); skip {
+			skipped++
+			if len(details) < 20 {
+				details = append(details, map[string]any{
+					"sessionKey": key,
+					"ok":         true,
+					"skip":       true,
+					"reason":     got["reason"],
+				})
+			}
+			continue
+		}
+		recorded++
+		if len(details) < 20 {
+			details = append(details, map[string]any{
+				"sessionKey":         key,
+				"ok":                 true,
+				"id":                 got["id"],
+				"expectedToolCalls":  got["expectedToolCalls"],
+				"forbiddenToolCalls": got["forbiddenToolCalls"],
+				"requiredTools":      got["requiredTools"],
+			})
+		}
+	}
+	result["scanned"] = scanned
+	result["recorded"] = recorded
+	result["skipped"] = skipped
+	result["errors"] = errs
+	result["details"] = details
+	if summary, summaryErr := b.validationCaseSummary(strings.TrimSpace(req.SkillName)); summaryErr == "" {
+		result["validationCaseSummary"] = summary
+	} else {
+		result["validationCaseSummaryError"] = summaryErr
+	}
+	return result, nil
+}
+
+func skillValidationBackfillCaseRequest(req chattools.SkillValidationBackfillRequest, sessionKey string) chattools.SkillValidationCaseFromSessionRequest {
+	source := strings.TrimSpace(req.Source)
+	if source == "" {
+		source = "session-backfill"
+	}
+	description := strings.TrimSpace(req.Description)
+	if description == "" {
+		description = "Backfilled replay trace from session " + strings.TrimSpace(sessionKey)
+	}
+	return chattools.SkillValidationCaseFromSessionRequest{
+		SkillName:    req.SkillName,
+		SessionKey:   sessionKey,
+		Description:  description,
+		FrontierTier: req.FrontierTier,
+		Replay:       req.Replay,
+		Source:       source,
+	}
+}
+
+func skillReplayToolCallsFromRequest(calls []chattools.SkillReplayToolCallRequest) []genesis.SkillReplayToolCallRecord {
+	out := make([]genesis.SkillReplayToolCallRecord, 0, len(calls))
+	for _, call := range calls {
+		out = append(out, genesis.SkillReplayToolCallRecord{
+			Name:          call.Name,
+			InputIncludes: call.InputIncludes,
+			InputExcludes: call.InputExcludes,
+			FixtureOutput: call.FixtureOutput,
+			FixtureError:  call.FixtureError,
+		})
+	}
+	return out
+}
+
+func buildSkillValidationCaseFromSession(req chattools.SkillValidationCaseFromSessionRequest, sctx generation.SessionContext) genesis.SkillValidationCaseRecord {
+	replay := genesis.SkillReplayCaseRecord{
+		Input:                 textutil.FirstNonBlank(req.Replay.Input, skillReplayInputFromTranscript(sctx.AllText)),
+		Context:               append([]string(nil), req.Replay.Context...),
+		RequiredActions:       append([]string(nil), req.Replay.RequiredActions...),
+		ForbiddenActions:      append([]string(nil), req.Replay.ForbiddenActions...),
+		RequiredObservations:  append([]string(nil), req.Replay.RequiredObservations...),
+		ForbiddenObservations: append([]string(nil), req.Replay.ForbiddenObservations...),
+		RequiredTools:         append([]string(nil), req.Replay.RequiredTools...),
+		ForbiddenTools:        append([]string(nil), req.Replay.ForbiddenTools...),
+		ExpectedToolCalls:     skillReplayToolCallsFromRequest(req.Replay.ExpectedToolCalls),
+		ForbiddenToolCalls:    skillReplayToolCallsFromRequest(req.Replay.ForbiddenToolCalls),
+		RequireOrder:          req.Replay.RequireOrder,
+	}
+	replay.Context = append(replay.Context, skillReplayContextFromTranscript(sctx.AllText)...)
+
+	autoExpectedCalls, autoForbiddenCalls := skillReplayToolCallsFromActivities(sctx.ToolActivities)
+	if len(autoExpectedCalls) > 0 {
+		replay.ExpectedToolCalls = append(autoExpectedCalls, replay.ExpectedToolCalls...)
+		replay.RequiredTools = appendUniqueStrings(replay.RequiredTools, skillReplayToolNames(autoExpectedCalls)...)
+		if len(autoExpectedCalls) > 1 {
+			replay.RequireOrder = true
+		}
+	}
+	replay.ForbiddenToolCalls = append(autoForbiddenCalls, replay.ForbiddenToolCalls...)
+
+	source := strings.TrimSpace(req.Source)
+	if source == "" {
+		source = "review-session"
+	}
+	description := strings.TrimSpace(req.Description)
+	if description == "" {
+		description = "Replay trace extracted from session " + strings.TrimSpace(req.SessionKey)
+	}
+	id := strings.TrimSpace(req.ID)
+	if id == "" {
+		id = skillValidationCaseIDFromSession(req.SessionKey)
+	}
+	return genesis.SkillValidationCaseRecord{
+		SkillName:           req.SkillName,
+		ID:                  id,
+		Description:         description,
+		FrontierTier:        req.FrontierTier,
+		RequiredSubstrings:  req.RequiredSubstrings,
+		ForbiddenSubstrings: req.ForbiddenSubstrings,
+		RequiredHeadings:    req.RequiredHeadings,
+		Replay:              replay,
+		Source:              source,
+	}
+}
+
+// BuildValidationCaseFromSession derives a held-out replay record from a real
+// session trace.
+func BuildValidationCaseFromSession(req chattools.SkillValidationCaseFromSessionRequest, sctx generation.SessionContext) genesis.SkillValidationCaseRecord {
+	return buildSkillValidationCaseFromSession(req, sctx)
+}
+
+func skillReplayToolCallsFromActivities(activities []generation.ToolActivity) ([]genesis.SkillReplayToolCallRecord, []genesis.SkillReplayToolCallRecord) {
+	const maxExtractedReplayToolCalls = 12
+	expected := make([]genesis.SkillReplayToolCallRecord, 0, min(len(activities), maxExtractedReplayToolCalls))
+	forbidden := make([]genesis.SkillReplayToolCallRecord, 0, min(len(activities), maxExtractedReplayToolCalls))
+	for _, activity := range activities {
+		name := strings.TrimSpace(activity.Name)
+		if name == "" {
+			continue
+		}
+		call := genesis.SkillReplayToolCallRecord{
+			Name:          name,
+			InputIncludes: skillReplayInputIncludes(activity.Input),
+			FixtureOutput: truncateRunes(strings.TrimSpace(activity.Output), 1000),
+			FixtureError:  activity.IsError,
+		}
+		if activity.IsError {
+			if len(call.InputIncludes)+len(call.InputExcludes) > 0 {
+				forbidden = append(forbidden, genesis.SkillReplayToolCallRecord{
+					Name:          call.Name,
+					InputIncludes: append([]string(nil), call.InputIncludes...),
+					InputExcludes: append([]string(nil), call.InputExcludes...),
+				})
+			}
+		} else {
+			expected = append(expected, call)
+		}
+		if len(expected)+len(forbidden) >= maxExtractedReplayToolCalls {
+			break
+		}
+	}
+	return expected, forbidden
+}
+
+func skillReplayToolNames(calls []genesis.SkillReplayToolCallRecord) []string {
+	out := make([]string, 0, len(calls))
+	for _, call := range calls {
+		if name := strings.TrimSpace(call.Name); name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// ReplayToolNames returns the stable unique tool-name list for replay calls.
+func ReplayToolNames(calls []genesis.SkillReplayToolCallRecord) []string {
+	return skillReplayToolNames(calls)
+}

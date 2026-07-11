@@ -2,12 +2,24 @@ package genesis
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestTrackerSaveWatchesWithoutPathIsNoop(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	tracker := &Tracker{}
+	tracker.saveWatchesLocked()
+
+	if _, err := os.Stat(".lock"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("empty watch path created a lock sidecar: %v", err)
+	}
+}
 
 // An in-flight rollback watch must survive a tracker restart (the SIGUSR1
 // deploy hot-swap) — before persistence, post-evolve failure counts silently

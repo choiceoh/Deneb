@@ -3,6 +3,7 @@ package genesis
 import (
 	"context"
 	"fmt"
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"log/slog"
 	"os"
 	"strings"
@@ -12,6 +13,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/guardrails"
 )
 
 // Compile-time interface compliance.
@@ -41,26 +44,7 @@ type EvolveResult struct {
 // HarnessEditAudit is the Self-Harness transition metadata for a candidate
 // skill-body edit. It keeps the "why this changed" fields queryable instead of
 // burying them in a free-form description.
-type HarnessEditAudit struct {
-	TargetSignature        string `json:"targetSignature,omitempty"`
-	EditedSurface          string `json:"editedSurface,omitempty"`
-	ExpectedBehaviorChange string `json:"expectedBehaviorChange,omitempty"`
-	RegressionRisk         string `json:"regressionRisk,omitempty"`
-}
-
-func (a HarnessEditAudit) empty() bool {
-	return strings.TrimSpace(a.TargetSignature) == "" &&
-		strings.TrimSpace(a.EditedSurface) == "" &&
-		strings.TrimSpace(a.ExpectedBehaviorChange) == "" &&
-		strings.TrimSpace(a.RegressionRisk) == ""
-}
-
-func (a HarnessEditAudit) ptr() *HarnessEditAudit {
-	if a.empty() {
-		return nil
-	}
-	return &a
-}
+type HarnessEditAudit = guardrails.Audit
 
 // Evolver auto-improves skills based on usage data.
 type Evolver struct {
@@ -110,7 +94,7 @@ type Evolver struct {
 	runMu sync.Mutex
 
 	// meta resolves prompt artifacts (RSI P1); nil → compiled-in prompts.
-	meta *MetaArtifacts
+	meta *generation.MetaArtifacts
 }
 
 // NewEvolver creates a skill evolver. Self-test defaults on; disable with
@@ -180,7 +164,7 @@ func (e *Evolver) SetReplayExecutor(client *llm.Client, model string) {
 // reasoning-effort floor).
 // SetMetaArtifacts wires the prompt-artifact resolver (RSI P1). Nil keeps
 // compiled-in prompts.
-func (e *Evolver) SetMetaArtifacts(m *MetaArtifacts) {
+func (e *Evolver) SetMetaArtifacts(m *generation.MetaArtifacts) {
 	e.configMu.Lock()
 	e.meta = m
 	e.configMu.Unlock()
@@ -203,8 +187,8 @@ func (e *Evolver) newProvenance() EvolveProvenance {
 	m := e.meta
 	e.configMu.RUnlock()
 	return EvolveProvenance{
-		EvolveArtifactVersion: m.Version(MetaEvolveSystemPrompt, evolveSystemPrompt),
-		JudgeArtifactVersion:  m.Version(MetaSkillJudgeSystemPrompt, skillJudgeSystemPrompt),
+		EvolveArtifactVersion: m.Version(generation.MetaEvolveSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaEvolveSystemPrompt]),
+		JudgeArtifactVersion:  m.Version(generation.MetaSkillJudgeSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]),
 	}
 }
 
@@ -215,6 +199,7 @@ func (e *Evolver) metaLoad(name, fallback string) string {
 	return m.Load(name, fallback)
 }
 
+// SetThinkingKwargs replaces the per-model thinking keyword overrides used by evolution runs.
 func (e *Evolver) SetThinkingKwargs(kwargs map[string]string) {
 	cloned := make(map[string]string, len(kwargs))
 	for k, v := range kwargs {
@@ -531,7 +516,7 @@ func (e *Evolver) generateCandidateText(ctx context.Context, userPrompt string, 
 	text, err := primaryClient.Complete(ctx, llm.ChatRequest{
 		Model:    primaryModel,
 		Messages: []llm.Message{llm.NewTextMessage("user", prompt)},
-		System:   llm.SystemString(e.metaLoad(MetaEvolveSystemPrompt, evolveSystemPrompt)),
+		System:   llm.SystemString(e.metaLoad(generation.MetaEvolveSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaEvolveSystemPrompt])),
 		// 12288, not 4096: GLM bills reasoning INSIDE the completion budget and
 		// the rewrite must carry a full SKILL.md body (cap 15KB ≈ 5.5K tokens)
 		// plus audit fields — at 4096 the live drill (2026-07-04) truncated
@@ -711,7 +696,7 @@ func (t *EvolutionTask) Run(ctx context.Context) error {
 	results, err := t.Evolver.EvolveUnderperformers(ctx)
 	// Heartbeat: records that the evolve cycle actually ran (liveness on /health).
 	if t.Evolver != nil && t.Evolver.tracker != nil {
-		t.Evolver.tracker.RecordEvolutionActivity(SkillActivityEvolve, err == nil, errString(err))
+		t.Evolver.tracker.RecordEvolutionActivity(SkillActivityEvolve, err == nil, genesiscommon.ErrorString(err))
 	}
 	if err != nil {
 		return err

@@ -31,6 +31,9 @@ func DoBearer(
 	if err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(token) == "" {
+		return nil, fmt.Errorf("OAuth access token is empty")
+	}
 	req, err := http.NewRequestWithContext(ctx, method, baseURL+path, body)
 	if err != nil {
 		return nil, err
@@ -62,6 +65,9 @@ func JSON(
 	resp, err := request(ctx, method, path, body)
 	if err != nil {
 		return err
+	}
+	if resp == nil {
+		return fmt.Errorf("%s API returned a nil response", options.Service)
 	}
 	defer resp.Body.Close()
 

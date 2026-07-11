@@ -9,6 +9,7 @@ import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.io.encoding.Base64
@@ -138,19 +139,32 @@ fun DenebGatewayClient.filesDownloadUrl(path: String): String {
  * back to the share link.
  */
 suspend fun DenebGatewayClient.filesDownloadText(path: String, maxBytes: Int = 256 * 1024): String? {
-    if (clientToken.isEmpty() || gatewayUrl.isBlank()) return null
-    return runCatching {
-        val resp = http.get(filesDownloadUrl(path)) {
-            header(DenebGatewayClient.CLIENT_TOKEN_HEADER, clientToken)
+    val url = gatewayUrl
+    val token = clientToken
+    val epoch = credEpoch
+    if (token.isEmpty() || url.isBlank()) return null
+    return try {
+        fun e(s: String) = s.encodeURLParameter()
+        val downloadUrl = "$url/api/v1/files/download?path=${e(path)}&clientToken=${e(token)}"
+        val resp = http.get(downloadUrl) {
+            header(DenebGatewayClient.CLIENT_TOKEN_HEADER, token)
         }
-        if (!resp.status.isSuccess()) return@runCatching null
-        val body = resp.bodyAsText()
-        // Cap by char count (a safe proxy for the byte budget here — bounded
-        // protection, not an exact byte slice). A multibyte tail is fine.
-        if (body.length > maxBytes) {
-            body.take(maxBytes) + "\n\n…(이하 생략 — 파일이 너무 큽니다)"
+        if (!resp.status.isSuccess()) {
+            null
         } else {
-            body
+            val body = resp.bodyAsText()
+            if (epoch != credEpoch || url != gatewayUrl || token != clientToken) return null
+            // Cap by char count (a safe proxy for the byte budget here — bounded
+            // protection, not an exact byte slice). A multibyte tail is fine.
+            if (body.length > maxBytes) {
+                body.take(maxBytes) + "\n\n…(이하 생략 — 파일이 너무 큽니다)"
+            } else {
+                body
+            }
         }
-    }.getOrNull()
+    } catch (c: CancellationException) {
+        throw c
+    } catch (_: Exception) {
+        null
+    }
 }

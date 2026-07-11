@@ -168,14 +168,15 @@ func (s *Service) runJobOnce(ctx context.Context, job StoreJob, trigger triggerS
 
 		for attempt := 0; attempt <= maxRetries; attempt++ {
 			output, runErr = s.agent.RunAgentTurn(runCtx, AgentTurnParams{
-				SessionKey: sessionKey,
-				AgentID:    job.AgentID,
-				Command:    command,
-				Channel:    safeStr(target, func(t *DeliveryTarget) string { return t.Channel }),
-				To:         safeStr(target, func(t *DeliveryTarget) string { return t.To }),
-				AccountID:  safeStr(target, func(t *DeliveryTarget) string { return t.AccountID }),
-				ThreadID:   safeStr(target, func(t *DeliveryTarget) string { return t.ThreadID }),
-				Thinking:   job.Payload.Thinking,
+				SessionKey:  sessionKey,
+				SessionKind: sessionKind,
+				AgentID:     job.AgentID,
+				Command:     command,
+				Channel:     safeStr(target, func(t *DeliveryTarget) string { return t.Channel }),
+				To:          safeStr(target, func(t *DeliveryTarget) string { return t.To }),
+				AccountID:   safeStr(target, func(t *DeliveryTarget) string { return t.AccountID }),
+				ThreadID:    safeStr(target, func(t *DeliveryTarget) string { return t.ThreadID }),
+				Thinking:    job.Payload.Thinking,
 			})
 			if runErr == nil {
 				break
@@ -520,6 +521,10 @@ func (s *Service) sendFailureAlert(ctx context.Context, job StoreJob, outcome Ru
 	// Deliver via the main-session handoff (native client 업무 transcript +
 	// push), the same path regular cron output uses. ch/to are passed for the
 	// legacy relay signature but ignored in native-only mode.
+	if s.cfg.MainSessionHandoff == nil {
+		s.logger.Error("failure alert delivery failed", "jobID", job.ID, "error", "main session handoff not configured")
+		return
+	}
 	handled, err := s.cfg.MainSessionHandoff(ctx, ch, to, job.ID, text)
 	if err != nil || !handled {
 		s.logger.Error("failure alert delivery failed",

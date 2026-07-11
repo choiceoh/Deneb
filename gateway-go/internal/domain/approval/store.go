@@ -110,8 +110,8 @@ func (s *Store) CreateRequest(params CreateRequestParams) *Request {
 	req := &Request{
 		ID:            id,
 		Command:       params.Command,
-		CommandArgv:   params.CommandArgv,
-		Env:           params.Env,
+		CommandArgv:   cloneStrings(params.CommandArgv),
+		Env:           cloneStringMap(params.Env),
 		Cwd:           params.Cwd,
 		SystemRunPlan: params.SystemRunPlan,
 		Host:          params.Host,
@@ -125,14 +125,15 @@ func (s *Store) CreateRequest(params CreateRequestParams) *Request {
 		ExpiresAtMs:   now + ttl.Milliseconds(),
 	}
 	if params.TurnSource != nil {
-		req.TurnSourceInfo = params.TurnSource
+		turnSource := *params.TurnSource
+		req.TurnSourceInfo = &turnSource
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.requests[id] = req
 
-	return req
+	return cloneRequest(req)
 }
 
 // CreateRequestParams holds input for creating an approval request.
@@ -162,8 +163,7 @@ func (s *Store) Get(id string) *Request {
 	if req == nil {
 		return nil
 	}
-	cp := *req
-	return &cp
+	return cloneRequest(req)
 }
 
 // Resolve sets the decision on an approval request and notifies waiters.
@@ -218,8 +218,7 @@ func (s *Store) GlobalSnapshot() *Snapshot {
 	if s.globalSnapshot == nil {
 		return nil
 	}
-	cp := *s.globalSnapshot
-	return &cp
+	return cloneSnapshot(s.globalSnapshot)
 }
 
 // SetGlobalSnapshot sets the global exec approvals configuration.
@@ -227,10 +226,66 @@ func (s *Store) SetGlobalSnapshot(file ApprovalsFile, hash string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.globalSnapshot = &Snapshot{
-		File:     file,
+		File:     cloneApprovalsFile(file),
 		Hash:     hash,
 		LoadedAt: time.Now().UnixMilli(),
 	}
+}
+
+func cloneRequest(req *Request) *Request {
+	if req == nil {
+		return nil
+	}
+	cp := *req
+	cp.CommandArgv = cloneStrings(req.CommandArgv)
+	cp.Env = cloneStringMap(req.Env)
+	if req.Decision != nil {
+		decision := *req.Decision
+		cp.Decision = &decision
+	}
+	if req.ResolvedAtMs != nil {
+		resolvedAt := *req.ResolvedAtMs
+		cp.ResolvedAtMs = &resolvedAt
+	}
+	if req.TurnSourceInfo != nil {
+		turnSource := *req.TurnSourceInfo
+		cp.TurnSourceInfo = &turnSource
+	}
+	return &cp
+}
+
+func cloneSnapshot(snapshot *Snapshot) *Snapshot {
+	if snapshot == nil {
+		return nil
+	}
+	cp := *snapshot
+	cp.File = cloneApprovalsFile(snapshot.File)
+	return &cp
+}
+
+func cloneApprovalsFile(file ApprovalsFile) ApprovalsFile {
+	file.Rules = append([]ApprovalRule(nil), file.Rules...)
+	file.GlobalDeny = cloneStrings(file.GlobalDeny)
+	file.Metadata = cloneStringMap(file.Metadata)
+	return file
+}
+
+func cloneStrings(src []string) []string {
+	if src == nil {
+		return nil
+	}
+	return append(make([]string, 0, len(src)), src...)
+}
+
+func cloneStringMap(src map[string]string) map[string]string {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]string, len(src))
+	for key, value := range src {
+		dst[key] = value
+	}
+	return dst
 }
 
 // Cleanup removes expired, unresolved requests.

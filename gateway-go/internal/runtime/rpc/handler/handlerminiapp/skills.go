@@ -33,6 +33,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/propusview"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -603,9 +605,9 @@ func lifecycleEvent(e genesis.LifecycleLogEntry) SkillLifecycleEvent {
 }
 
 func propusLifecycleSummary(deps SkillsDeps, entries []genesis.LifecycleLogEntry, skillName string, limit int) PropusLifecycleSummary {
-	scope := genesis.PropusScopeGlobal
+	scope := propus.PropusScopeGlobal
 	if strings.TrimSpace(skillName) != "" {
-		scope = genesis.PropusScopeSkill
+		scope = propus.PropusScopeSkill
 	}
 	stats, _ := skillsDepsUsageStats(deps)
 	curator, _ := skillsDepsCuratorRecords(deps)
@@ -616,16 +618,16 @@ func propusLifecycleSummary(deps SkillsDeps, entries []genesis.LifecycleLogEntry
 	if deps.SelfHarnessSignals != nil && strings.TrimSpace(skillName) == "" {
 		selfHarnessSignals = deps.SelfHarnessSignals()
 	}
-	shared := genesis.BuildPropusLifecycleSummary(genesis.PropusLifecycleSummaryInput{
+	shared := propus.BuildPropusLifecycleSummary(propus.PropusLifecycleSummaryInput{
 		Scope:              scope,
 		SkillName:          skillName,
-		Recent:             entries,
-		Stats:              stats,
-		Curator:            curator,
-		ValidationSummary:  validationSummary,
-		Opportunities:      opportunities,
-		SelfCorrections:    selfCorrections,
-		SelfHarnessSignals: selfHarnessSignals,
+		Recent:             propusview.LifecycleEntries(entries),
+		Stats:              propusview.UsageStats(stats),
+		Curator:            propusview.Curator(curator),
+		ValidationSummary:  propusview.Validation(validationSummary),
+		Opportunities:      propusview.Opportunities(opportunities),
+		SelfCorrections:    propusview.SelfCorrections(selfCorrections),
+		SelfHarnessSignals: propusview.SelfHarness(selfHarnessSignals),
 	})
 	return PropusLifecycleSummary{
 		System:          shared.System,

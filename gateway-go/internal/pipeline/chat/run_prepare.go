@@ -441,7 +441,7 @@ func assembleTurnMessages(ctx context.Context, params RunParams, deps runDeps, p
 		} else {
 			messages = []llm.Message{llm.NewTextMessage("user", params.Message)}
 		}
-	case params.appendCurrentMessage && params.Message != "":
+	case params.AppendCurrentMessage && params.Message != "":
 		// The current turn's message is not in the loaded history — its
 		// persist was deferred to the enrichment join, or it is an ephemeral
 		// trigger that never persists (run_exec.go). Append it as a NEW last

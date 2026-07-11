@@ -27,7 +27,7 @@ func ReadAbortCutoffFromSessionEntry(entry *SessionAbortCutoffEntry) *AbortCutof
 		return nil
 	}
 	sid := strings.TrimSpace(entry.AbortCutoffMessageSid)
-	ts := entry.AbortCutoffTimestamp
+	ts := cloneTimestamp(entry.AbortCutoffTimestamp)
 	if sid == "" && ts == nil {
 		return nil
 	}
@@ -41,13 +41,24 @@ func HasAbortCutoff(entry *SessionAbortCutoffEntry) bool {
 
 // ApplyAbortCutoffToSessionEntry writes cutoff fields onto a session entry.
 func ApplyAbortCutoffToSessionEntry(entry *SessionAbortCutoffEntry, cutoff *AbortCutoffContext) {
+	if entry == nil {
+		return
+	}
 	if cutoff == nil {
 		entry.AbortCutoffMessageSid = ""
 		entry.AbortCutoffTimestamp = nil
 		return
 	}
 	entry.AbortCutoffMessageSid = cutoff.MessageSid
-	entry.AbortCutoffTimestamp = cutoff.Timestamp
+	entry.AbortCutoffTimestamp = cloneTimestamp(cutoff.Timestamp)
+}
+
+func cloneTimestamp(timestamp *int64) *int64 {
+	if timestamp == nil {
+		return nil
+	}
+	value := *timestamp
+	return &value
 }
 
 // ClearAbortCutoffInSession clears the abort cutoff fields on the entry struct.

@@ -1,20 +1,18 @@
-// Centralized RPC method registration via GatewayHub.
+// Centralized early-phase RPC method registration via GatewayHub.
 //
-// Replaces 18 register* wrapper methods with two functions:
-//   - registerEarlyMethods: ~30 domains that don't need chatHandler
-//   - registerLateMethods:  ~4 domains that depend on chatHandler
+// Replaces the early register* wrappers with registerEarlyMethods for domains
+// that do not need chatHandler. Late-phase wiring lives in
+// method_registry_late.go and shared factories in method_registry_helpers.go.
 //
 // Deps structs are assembled inline from hub accessors — no adapter layer.
 // Handlers still accept their own Deps structs (testability preserved);
-// only this file knows about the hub→Deps mapping.
+// only the method_registry files know about the hub→Deps mapping.
 package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,7 +21,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/mailpriority"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
@@ -34,20 +31,20 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/routine"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/calprop"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/localtodo"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
+	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mailflow"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/modelpicker"
+	runtimenotify "github.com/choiceoh/deneb/gateway-go/internal/runtime/notify"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
-	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
 	handlercheckpoint "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/checkpoint"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
 	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
@@ -63,7 +60,6 @@ import (
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/session"
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/skill"
 	handlersystem "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/system"
-	handlerwiki "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 )
 
@@ -216,10 +212,12 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	}
 
 	// Monitoring notify service (error mirrors + status snapshots → native push).
-	s.notify = newNotifyService(hub.Sessions(), hub.Logger(), s.pushHub, s.pushNotifier, s.BoundAddr)
+	s.notify = runtimenotify.NewService(hub.Sessions(), hub.Logger(), func(title, body string) {
+		proactive.PublishWithFallback(s.pushHub, s.pushNotifier, proactive.Event{Title: title, Body: body})
+	}, s.BoundAddr)
 	if s.notify != nil {
-		s.broadcaster.RegisterTap(s.notify.tap)
-		s.notify.start(s.ShutdownCtx())
+		s.broadcaster.RegisterTap(s.notify.Tap)
+		s.notify.Start(s.ShutdownCtx())
 	}
 
 	// Observation-plane deps, shared verbatim by the in-process observe.* and
@@ -401,7 +399,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 					// True only when a current topic key resolves (topics.map
 					// has a "0" entry) — i.e. there is actually a doc to edit
 					// that injects into the prompt.
-					"topicDocs": resolveCurrentTopicKey() != "",
+					"topicDocs": configresolve.CurrentTopicKey() != "",
 				}
 			},
 		}),
@@ -423,7 +421,21 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			// (불확실 → 질문 → 기록). See deal_question.go.
 			OnAnswer: s.recordDealQuestionAnswer,
 		}),
-		s.miniappModelMethods(),
+		modelpicker.NewController(modelpicker.ControllerConfig{
+			Registry:    s.modelRegistry,
+			ChatHandler: s.chatHandler,
+			Logger:      s.logger,
+			RoleHealthVerdicts: func() map[string]string {
+				if s.roleHealth == nil {
+					return nil
+				}
+				return s.roleHealth.Verdicts()
+			},
+			RefreshCodingModelConsumers: s.refreshCodingModelConsumers,
+			ProviderConfigs: func() map[string]chat.ProviderConfig {
+				return configresolve.LoadProviderConfigs(s.logger)
+			},
+		}).Methods(),
 
 		// Native local file browser (miniapp.files.{list,search,share,upload}):
 		// list/search/share/upload over the on-box file store (filestore). share
@@ -445,7 +457,10 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			// safe. Returns empty (→ name/content fallback) when the index/embedding
 			// server is unavailable.
 			SemanticSearch: func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error) {
-				return s.fileSemanticSearch(ctx, query, max)
+				if s.fileSemindex == nil {
+					return nil, nil
+				}
+				return s.fileSemindex.Search(ctx, query, max)
 			},
 			// Keep the semantic index fresh after a delete/move/overwrite so
 			// search doesn't hand back a stale path — or rank an overwritten
@@ -453,9 +468,21 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			// like SemanticSearch (the index is created later in
 			// initToolsAndDeps). An overwrite-save drops the stale vectors
 			// (Remove); the next reindex re-embeds the new content.
-			OnDelete: s.fileIndexRemove,
-			OnMove:   s.fileIndexRename,
-			OnUpload: s.fileIndexRemove,
+			OnDelete: func(path string) {
+				if s.fileSemindex != nil {
+					s.fileSemindex.Remove(path)
+				}
+			},
+			OnMove: func(oldPath, newPath string) {
+				if s.fileSemindex != nil {
+					s.fileSemindex.Rename(oldPath, newPath)
+				}
+			},
+			OnUpload: func(path string) {
+				if s.fileSemindex != nil {
+					s.fileSemindex.Remove(path)
+				}
+			},
 		}),
 
 		// Native mail domain. Registered under BOTH miniapp.gmail.* (legacy,
@@ -484,7 +511,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			// phase), which the lookup's getter tolerates — until it exists
 			// the boost is simply off. Nil stores just drop their signal.
 			Priority: func() func(from, subject, snippet string) (string, string) {
-				cp := newCounterpartyLookup(func() *wiki.Store { return s.wikiStore })
+				cp := mailflow.NewCounterpartyLookup(func() *wiki.Store { return s.wikiStore })
 				return func(from, subject, snippet string) (string, string) {
 					tier, hint := mailPriorityScorer(s.contactsStore, cp).Score(from, subject, snippet)
 					return string(tier), hint
@@ -658,8 +685,8 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// session (the RPC analog of slash "--now"); the default is deferred
 		// (next-session) to keep the Static prompt cache stable.
 		miniknowledge.TopicDocsMethods(miniknowledge.TopicDocsDeps{
-			TopicsDir:  func() (string, error) { return resolveTopicsDir(), nil },
-			CurrentKey: resolveCurrentTopicKey,
+			TopicsDir:  func() (string, error) { return configresolve.TopicsDir(), nil },
+			CurrentKey: configresolve.CurrentTopicKey,
 			ApplyNow:   prompt.Cache.ClearAllTopicSnapshots,
 		}),
 
@@ -761,7 +788,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				if s.chatHandler != nil {
 					toolNames = s.chatHandler.ToolNames()
 				}
-				return chat.EligibleWorkspaceSkills(resolveWorkspaceDir(), toolNames)
+				return chat.EligibleWorkspaceSkills(configresolve.WorkspaceDir(), toolNames)
 			},
 			CuratorRecords: func() ([]genesis.SkillCuratorRecord, error) {
 				if s.genesisTracker == nil {
@@ -824,7 +851,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return s.genesisTracker.SelfCorrectionFunnel()
 			},
-			LastNudgeAtMs: lastSelfCodingNudgeAtMs,
+			LastNudgeAtMs: runtimeheartbeat.LastSelfCodingNudgeAtMillis,
 		}),
 
 		// Mini App unified search (miniapp.search.all). Single entry
@@ -870,338 +897,4 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	// Special-case registrations with embedded business logic.
 	s.registerConfigLifecycleMethods()
 	return nil
-}
-
-// registerLateMethods registers RPC domains that depend on chatHandler.
-// Called after registerSessionRPCMethods() which creates the chat handler.
-func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
-	hub.AdvancePhase(rpcutil.PhaseLate)
-	hub.SetChat(s.chatHandler)
-	hub.SetWikiStore(s.wikiStore) // late-bound: created during session phase
-
-	domains := []map[string]rpcutil.HandlerFunc{
-		handlerchat.Methods(handlerchat.Deps{
-			Chat:        hub.Chat(),
-			Broadcaster: hub.Broadcast,
-		}),
-		handlerchat.BtwMethods(handlerchat.BtwDeps{
-			Chat:        hub.Chat(),
-			Broadcaster: hub.Broadcast,
-		}),
-		// Native-client chat bridge (miniapp.chat.send/history): lets the
-		// standalone app drive a turn over the miniapp.* RPC surface via
-		// SendSync, with deneb-ui emission enabled (channel "client").
-		handlerchat.MiniappMethods(handlerchat.Deps{
-			Chat:       hub.Chat(),
-			OcrImage:   document.OCRImage,
-			Transcribe: artifact.TranscribeAudio,
-			// Document attach (pdf/doc/sheet) → in-house extractor (PDF/Excel/Word/
-			// PowerPoint/CSV/text, with a scanned-PDF / image OCR fallback).
-			ExtractDocument: document.ExtractAttachmentText,
-			// In-app browser in-place translation (en/ru → ko) — DeepL-only.
-			Translate: tools.TranslateSegments,
-			// Raw capture persistence: full OCR text / diarized transcript →
-			// {memory}/captures/ + diary breadcrumb (recallable, dream-distilled,
-			// backed up). The agent turn only summarizes; this keeps the original.
-			SaveCapture: func(kind, context, text string) (string, error) {
-				ws := hub.WikiStore()
-				if ws == nil {
-					return "", fmt.Errorf("wiki store unavailable")
-				}
-				return ws.SaveCapture(kind, context, text)
-			},
-			// Proper-noun bias for audio transcription, merged from two sources:
-			// the wiki (people/companies/deals/domain terms) and the contacts
-			// address book (every saved name + org). Either may be empty.
-			Hotwords: func() string {
-				var parts []string
-				if ws := hub.WikiStore(); ws != nil {
-					if h := ws.HotwordHints(150); h != "" {
-						parts = append(parts, h)
-					}
-				}
-				if cs := hub.ContactsStore(); cs != nil {
-					if h := cs.HotwordHints(100); h != "" {
-						parts = append(parts, h)
-					}
-				}
-				return strings.Join(parts, ", ")
-			},
-			// Primary contacts sync: persist the whole address book into the
-			// contacts store (phone lookup / name search / ASR hotwords).
-			SaveContacts: func(contactsJSON []byte) (int, error) {
-				cs := hub.ContactsStore()
-				if cs == nil {
-					return 0, fmt.Errorf("contacts store unavailable")
-				}
-				var p struct {
-					Contacts []contacts.Contact `json:"contacts"`
-				}
-				if err := json.Unmarshal(contactsJSON, &p); err != nil {
-					return 0, err
-				}
-				return cs.ReplaceAll(p.Contacts)
-			},
-			// Bonus: enrich existing wiki people (native-client contacts sync).
-			// Enriches only 사람 pages already in the wiki — it creates none — so
-			// the phone book strengthens the curated set without flooding it.
-			EnrichContacts: func(contactsJSON []byte) (wiki.ContactEnrichResult, error) {
-				ws := hub.WikiStore()
-				if ws == nil {
-					return wiki.ContactEnrichResult{}, fmt.Errorf("wiki store unavailable")
-				}
-				res, err := ws.EnrichContacts(contactsJSON)
-				if err != nil {
-					return res, err
-				}
-				// Also backfill each 인물 page's identity email(s) into frontmatter, so
-				// mail senders / org members resolve to the page by email — the key that
-				// disambiguates 동명이인 the name cannot. Best-effort (a bonus alongside
-				// the 연락처 body enrichment); homonyms are flagged, not guessed.
-				var p struct {
-					Contacts []wiki.Contact `json:"contacts"`
-				}
-				if json.Unmarshal(contactsJSON, &p) == nil {
-					// Give our own staff (company-domain contacts) an 인물 page even without
-					// a wiki mention — they should be first-class identities. External people
-					// stay mention-curated (the dreamer), so this never floods with the whole
-					// phone book. Runs BEFORE the email backfill so the new pages get seeded.
-					ourDomains := mailanalysis.OurMailDomains()
-					if cr, cerr := ws.EnrichEmployeePages(p.Contacts, ourDomains); cerr == nil && len(cr.Created) > 0 {
-						s.logger.Info("employee pages created", "count", len(cr.Created))
-					}
-					// Also give a page to important EXTERNAL people — the counterparties our
-					// 프로젝트/거래 pages actually name. Everyone else stays mention-curated.
-					if dr, derr := ws.EnrichDealMentionedPages(p.Contacts, ourDomains); derr == nil && len(dr.Created) > 0 {
-						s.logger.Info("deal-mentioned pages created", "count", len(dr.Created))
-					}
-					if er, eerr := ws.EnrichPersonEmails(p.Contacts); eerr == nil && len(er.Ambiguous) > 0 {
-						s.logger.Info("person email backfill", "seeded", len(er.Updated), "homonyms_flagged", len(er.Ambiguous))
-					}
-				}
-				return res, nil
-			},
-			WorkFeed: s.nativeWorkFeedStore(),
-			// Upgrade a shared document's feed card to a proper doc_analysis
-			// deliverable. Wrapped so s.proactiveRelay (built after the chat handler)
-			// is resolved at call time.
-			PublishDeliverable: func(text string) (bool, error) {
-				return s.proactiveRelay.publishDeliverable(text)
-			},
-			IngestEvent: s.ingestPhoneEventAsync,
-		}),
-		handlersession.ExecMethods(handlersession.ExecDeps{
-			Chat:       hub.Chat(),
-			JobTracker: hub.JobTracker(),
-		}),
-		// --- Wiki knowledge base (feature-flagged, late-bound) ---
-		handlerwiki.Methods(handlerwiki.Deps{
-			Store: hub.WikiStore(),
-		}),
-
-		// --- Skill genesis (depends on chatHandler for LLM client) ---
-		handlerskill.GenesisMethods(handlerskill.GenesisDeps{
-			Genesis:     s.genesisSvc,
-			Evolver:     s.genesisEvolver,
-			Tracker:     s.genesisTracker,
-			Transcripts: s.genesisTranscripts,
-		}),
-
-		// --- Mini App email analysis (miniapp.gmail.analyze) ---
-		// Late-bound because the analyzer needs a configured LLM client
-		// from the model registry, which is wired during memory subsystem
-		// init right before this phase. Lazy factory still — operator
-		// runs without any provider configured, the call returns
-		// UNAVAILABLE rather than crashing the gateway.
-		withMailAliases(handlermail.GmailAnalyzeMethods(handlermail.GmailAnalyzeDeps{
-			// Archive-first client — the same factory the native mail list/detail
-			// surface uses. Mail now arrives via LMTP and lives in the on-box
-			// archive keyed by RFC822 Message-ID. The old gmail.DefaultClient()
-			// fetched by Gmail-API message id, so "🔄 다시 분석" on an archived mail
-			// handed an archive id (…@amazonses.com) to the Gmail API → HTTP 400
-			// "Invalid id value". The miniapp mail surface is now native-archive-only
-			// (the Gmail fallback was removed — see server_mail_repository.go).
-			Client: s.miniappMailClientFactory(s.denebDir),
-			Pipeline: func() (handlermail.AnalyzePipeline, error) {
-				// Role selection is shared with the autonomous poller via
-				// mailAnalysisModels (stage-2 = main role, stage-1 = tiny
-				// role) so the two mail-analysis paths cannot drift apart.
-				// This replaces a #1816-era pin to the fallback role
-				// ("step3.7 streams unstoppable thinking") that the poller
-				// has since disproven — the pipeline disables thinking and
-				// scrubs reasoning leaks — and that broke the interactive
-				// button alone when the fallback provider's key died (401,
-				// 2026-06-10).
-				llmClient, model, localClient, localModel := s.mailAnalysisModels()
-				if llmClient == nil {
-					return nil, handlermail.ErrAnalyzeNoLLM
-				}
-				gmailClient, err := gmail.DefaultClient()
-				if err != nil {
-					return nil, err
-				}
-				return handlermail.PipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, document.ExtractAttachmentText, s.mailCounterpartyProjects)
-			},
-			Cache:      handlermail.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
-			WorkState:  mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json")),
-			SaveToWiki: makeMailAnalysisWikiSink(hub),
-			WikiStore: func() (miniknowledge.MemorySearcher, error) {
-				store := hub.WikiStore()
-				if store == nil {
-					return nil, errWikiDisabled
-				}
-				return store, nil
-			},
-			Ask: s.makeMailQAAsk(),
-		})),
-	}
-
-	for _, d := range domains {
-		if d != nil {
-			s.dispatcher.RegisterDomain(d)
-		}
-	}
-
-	// Wire agent runner and subagent poller to cron service. Cron output is
-	// delivered to the native client via the main-session handoff wired in
-	// registerSessionRPCMethods (proactive relay), not Telegram.
-	if s.cronService != nil {
-		// Pre-collect wiki weekly-report data for "/weekly" cron payloads so the
-		// LLM writes inside a fixed 양식 (cronChatAdapter.resolveCronCommand), and
-		// render the formal form image to post to the 업무 chat alongside the text.
-		var weeklyDataFn func(ctx context.Context) (string, error)
-		var weeklyFormFn func(ctx context.Context) error
-		var weeklyTextFn func(ctx context.Context) (string, error)
-		if s.wikiStore != nil {
-			wikiDir := s.wikiStore.Dir()
-			weeklyDataFn = func(ctx context.Context) (string, error) {
-				return routine.CollectWeeklyReportData(ctx, routine.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
-			}
-			// Deterministic report body — a head line + server-assembled deneb-ui
-			// card (RenderWeeklyReportCard), preferred over the LLM turn so the
-			// format is identical every run and no model ever touches a figure.
-			// The plain-text 양식 (RenderWeeklyReportText) remains the PDF path's
-			// fallback composition.
-			weeklyTextFn = func(_ context.Context) (string, error) {
-				return routine.RenderWeeklyReportCard(routine.WeeklyReportOpts{WikiDir: wikiDir}, time.Now()), nil
-			}
-			weeklyFormFn = func(ctx context.Context) error {
-				img, ok := routine.BuildWeeklyReportImage(ctx, routine.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
-				if !ok {
-					return nil // render unavailable (low memory/disk) → text report only
-				}
-				_, err := s.proactiveRelay.deliverNativeImage("📋 주간업무보고 — 정식 양식", img)
-				return err
-			}
-		}
-		s.cronService.SetAgentRunner(&cronChatAdapter{
-			chat:              s.chatHandler,
-			logger:            s.logger,
-			weeklyReportData:  weeklyDataFn,
-			weeklyReportText:  weeklyTextFn,
-			weeklyFormDeliver: weeklyFormFn,
-		})
-		// Interactive /weekly (/주간보고) reuses the same deterministic generators
-		// so a manually typed command matches the Saturday cron output (this path
-		// was cron-only before — typed input fell through to the LLM).
-		if s.chatHandler != nil {
-			s.chatHandler.SetWeeklyReport(weeklyTextFn, weeklyFormFn)
-		}
-		if s.acpDeps != nil {
-			s.cronService.SetSubagentPoller(&acpSubagentPoller{
-				registry: s.acpDeps.Registry,
-				sessions: s.sessions,
-			})
-		}
-	}
-}
-
-// makeMailAnalysisWikiSink returns the SaveToWiki callback the Mini App's
-// gmail.analyze handler invokes after a fresh LLM run. We persist into the
-// wiki so the analysis (a) shows up in recall/search, (b) accumulates per
-// sender for RAG context on future analyses. Page assembly lives in
-// wiki_mail_analysis.go so this file stays focused on wiring. Returns nil
-// if no wiki store is available, which is the handler's signal to skip
-// persistence entirely.
-func makeMailAnalysisWikiSink(hub *rpcutil.GatewayHub) func(handlermail.WikiAnalysisInput) error {
-	return func(in handlermail.WikiAnalysisInput) error {
-		store := hub.WikiStore()
-		if store == nil {
-			return nil
-		}
-		return store.WritePage(mailAnalysisWikiPath(in.MsgID, in.RelatedProjects), buildMailAnalysisPage(in))
-	}
-}
-
-// resolveLocalCalendar returns the process-wide local calendar store, or a nil
-// interface (so handlers degrade) when its file can't be read. Returning a nil
-// literal — not the (nil, err) store — avoids a non-nil interface wrapping a nil
-// pointer. The store lives at {stateDir}/calendar.json (dev uses its own dir).
-// localFileStoreOrNil opens the default on-box file store, returning a nil
-// interface (not a typed-nil *LocalStore) on error so FilesBrowseMethods skips
-// the domain rather than panicking on a nil deref later.
-func localFileStoreOrNil(logger *slog.Logger) filestore.Store {
-	store, err := filestore.DefaultLocalStore()
-	if err != nil {
-		if logger != nil {
-			logger.Error("local file store unavailable — miniapp.files.* disabled", "error", err)
-		}
-		return nil
-	}
-	return store
-}
-
-func resolveLocalCalendar(logger *slog.Logger) minischedule.LocalCalendar {
-	store, err := localcal.Default()
-	if err != nil {
-		if logger != nil {
-			logger.Error("local calendar store unavailable — add/edit/delete disabled", "error", err)
-		}
-		return nil
-	}
-	return store
-}
-
-// resolveCalendarProposals returns the process-wide calendar-proposal store
-// (the bell), or a nil interface when its file can't be read. Mirrors
-// resolveLocalCalendar. The store lives at {stateDir}/calendar_proposals.json.
-func resolveCalendarProposals(logger *slog.Logger) minischedule.CalProposals {
-	store, err := calprop.Default()
-	if err != nil {
-		if logger != nil {
-			logger.Error("calendar proposal store unavailable — bell disabled", "error", err)
-		}
-		return nil
-	}
-	return store
-}
-
-// resolveLocalTodos returns the process-wide to-do store, or a nil interface (so
-// handlers degrade to UNAVAILABLE) when its file can't be read. Mirrors
-// resolveLocalCalendar. The store lives at {stateDir}/todos.json.
-func resolveLocalTodos(logger *slog.Logger) minischedule.LocalTodos {
-	store, err := localtodo.Default()
-	if err != nil {
-		if logger != nil {
-			logger.Error("local todo store unavailable — to-do list disabled", "error", err)
-		}
-		return nil
-	}
-	return store
-}
-
-// mailPriorityScorer builds the inbox-row scorer for the gmail list handler.
-// The scorer is stateless and cheap to construct. The VIP signal binds the
-// (possibly nil) contacts store; the active-counterparty signal binds the
-// wiki-derived cached lookup — either nil simply drops its signal.
-func mailPriorityScorer(cs *contacts.Store, cp *counterpartyLookup) *mailpriority.Scorer {
-	var vip func(string) bool
-	if cs != nil {
-		vip = cs.HasEmail
-	}
-	var counterparty func(string) bool
-	if cp != nil {
-		counterparty = cp.Has
-	}
-	return mailpriority.New(vip, counterparty)
 }

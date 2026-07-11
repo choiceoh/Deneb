@@ -242,6 +242,9 @@ func Refresh(ctx context.Context, client *http.Client, input RefreshRequest) (Re
 	if err := json.Unmarshal(body, &token); err != nil {
 		return RefreshResult{}, fmt.Errorf("토큰 응답 파싱 실패: %w", err)
 	}
+	if strings.TrimSpace(token.AccessToken) == "" {
+		return RefreshResult{}, fmt.Errorf("토큰 응답에 access_token이 없습니다")
+	}
 
 	rotated := token.RefreshToken != "" && token.RefreshToken != input.RefreshToken
 	if token.RefreshToken == "" {
@@ -348,8 +351,12 @@ func persist(tokenPath string, token Token, files fileOps) error {
 }
 
 func truncate(value string, maxLen int) string {
-	if len(value) <= maxLen {
+	if maxLen < 0 {
+		maxLen = 0
+	}
+	runes := []rune(value)
+	if len(runes) <= maxLen {
 		return value
 	}
-	return value[:maxLen] + "..."
+	return string(runes[:maxLen]) + "..."
 }

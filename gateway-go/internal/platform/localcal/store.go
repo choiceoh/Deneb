@@ -87,7 +87,7 @@ func (e storedEvent) toCalendar() calendar.Event {
 		Source:      e.Source,
 		SourceLabel: e.SourceLabel,
 		Kind:        e.Kind,
-		Docs:        e.Docs,
+		Docs:        append([]string(nil), e.Docs...),
 	}
 }
 
@@ -150,6 +150,9 @@ func Default() (*Store, error) {
 
 // New loads the store from path (an empty store if the file is absent).
 func New(path string) (*Store, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, fmt.Errorf("localcal: empty path")
+	}
 	s := &Store{path: path}
 	if _, err := jsonutil.LoadFile(path, &s.events, "localcal"); err != nil {
 		return nil, err
@@ -172,11 +175,11 @@ func (s *Store) ListRange(from, to time.Time) []calendar.Event {
 			continue
 		}
 		end := ev.End
-		if !end.After(ev.Start) {
-			end = ev.Start
-		}
-		// Half-open overlap: [Start, end) intersects [from, to).
-		if ev.Start.Before(to) && end.After(from) {
+		instant := !end.After(ev.Start)
+		// Half-open overlap: [Start, end) intersects [from, to). A malformed
+		// or missing end is an instant at Start, including exactly at `from`.
+		if (instant && !ev.Start.Before(from) && ev.Start.Before(to)) ||
+			(!instant && ev.Start.Before(to) && end.After(from)) {
 			out = append(out, ev)
 		}
 	}
@@ -206,6 +209,9 @@ func (s *Store) Create(in CreateInput) (calendar.Event, error) {
 	rec := s.newRecordLocked(in)
 	s.events = append(s.events, rec)
 	err := s.persistLocked()
+	if err != nil {
+		s.events = s.events[:len(s.events)-1]
+	}
 	s.mu.Unlock()
 	if err != nil {
 		return calendar.Event{}, err
@@ -234,7 +240,8 @@ func (s *Store) Update(id string, in CreateInput) (*calendar.Event, error) {
 		return nil, ErrNotFound
 	}
 	rec := buildRecord(id, in)
-	rec.Created = s.events[idx].Created
+	previous := s.events[idx]
+	rec.Created = previous.Created
 	// Preserve the origin link the editor didn't re-supply: a user editing the
 	// time/title of a proposal-accepted meeting must not lose which mail it came
 	// from (the update callers only carry summary/time/location, never these).
@@ -253,6 +260,9 @@ func (s *Store) Update(id string, in CreateInput) (*calendar.Event, error) {
 	}
 	s.events[idx] = rec
 	err := s.persistLocked()
+	if err != nil {
+		s.events[idx] = previous
+	}
 	s.mu.Unlock()
 	if err != nil {
 		return nil, err
@@ -276,8 +286,12 @@ func (s *Store) Delete(id string) error {
 		s.mu.Unlock()
 		return ErrNotFound
 	}
+	before := append([]storedEvent(nil), s.events...)
 	s.events = append(s.events[:idx], s.events[idx+1:]...)
 	err := s.persistLocked()
+	if err != nil {
+		s.events = before
+	}
 	s.mu.Unlock()
 	if err != nil {
 		return err
@@ -309,7 +323,7 @@ func buildRecord(id string, in CreateInput) storedEvent {
 	end := in.End
 	if !end.After(in.Start) {
 		if in.AllDay {
-			end = in.Start.Add(24 * time.Hour)
+			end = in.Start.AddDate(0, 0, 1)
 		} else {
 			end = in.Start.Add(time.Hour)
 		}
@@ -326,7 +340,7 @@ func buildRecord(id string, in CreateInput) storedEvent {
 		Source:      strings.TrimSpace(in.Source),
 		SourceLabel: strings.TrimSpace(in.SourceLabel),
 		Kind:        strings.TrimSpace(in.Kind),
-		Docs:        in.Docs,
+		Docs:        append([]string(nil), in.Docs...),
 		Created:     now,
 		Updated:     now,
 	}

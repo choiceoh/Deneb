@@ -3,6 +3,7 @@ package genesis
 import (
 	"context"
 	"fmt"
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"log/slog"
 	"os"
 	"sort"
@@ -166,7 +167,7 @@ func (t *SkillWorkoutTask) Run(ctx context.Context) error {
 				SessionKey: workoutSessionPrefix + strconv.FormatInt(cycle, 10),
 				Model:      executorModel,
 				Success:    false,
-				ErrorMsg:   truncateRunes(errMsg, 500),
+				ErrorMsg:   genesiscommon.TruncateRunes(errMsg, 500),
 				// Explicit trace: a stable signature per mechanism (instead of
 				// keyword-classifying the assertion text) keeps one skill's
 				// workout failures in one cluster, with cases in the example.
@@ -175,7 +176,7 @@ func (t *SkillWorkoutTask) Run(ctx context.Context) error {
 					TerminalCause:  "held-out replay assertion failure",
 					CausalStatus:   "synthetic workout replay (not real use)",
 					AgentMechanism: "skill body no longer yields the proven tool plan",
-					ErrorMsg:       truncateRunes(errMsg, 500),
+					ErrorMsg:       genesiscommon.TruncateRunes(errMsg, 500),
 				},
 				Source: UsageSourceWorkout,
 			}); rerr != nil {

@@ -23,12 +23,15 @@ import (
 var (
 	pkgRegistry     *modelrole.Registry
 	pkgRegistryOnce sync.Once
-	pkgLocalAIHub   *localai.Hub
+	pkgLocalAIHub   atomic.Pointer[localai.Hub]
 )
 
 // SetModelRoleRegistry sets the package-level model role registry.
 // Called once during chat handler initialization.
 func SetModelRoleRegistry(reg *modelrole.Registry) {
+	if reg == nil {
+		return
+	}
 	pkgRegistryOnce.Do(func() {
 		pkgRegistry = reg
 	})
@@ -37,13 +40,13 @@ func SetModelRoleRegistry(reg *modelrole.Registry) {
 // SetLocalAIHub sets the centralized local AI hub. When set, CallLocalLLM
 // delegates to the hub instead of making direct calls.
 func SetLocalAIHub(h *localai.Hub) {
-	pkgLocalAIHub = h
+	pkgLocalAIHub.Store(h)
 }
 
 // LocalAIHub returns the centralized local AI hub, or nil if not set.
 // Used by callers (e.g., session memory) that need multi-message submission.
 func LocalAIHub() *localai.Hub {
-	return pkgLocalAIHub
+	return pkgLocalAIHub.Load()
 }
 
 // --- local AI health check (cached) ---
@@ -61,8 +64,8 @@ var (
 // When the hub is set, delegates to the hub's cached health state (background
 // inference-based probe). Otherwise falls back to the legacy atomic cache.
 func LocalAIRecentlyDown() bool {
-	if pkgLocalAIHub != nil {
-		return !pkgLocalAIHub.IsHealthy()
+	if hub := pkgLocalAIHub.Load(); hub != nil {
+		return !hub.IsHealthy()
 	}
 	return !localAIHealthy.Load() && localAILastCheck.Load() > 0
 }
@@ -95,8 +98,8 @@ func LightweightModel() string {
 // extraBody maps merge into the request body (e.g. chat_template_kwargs).
 func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
 	// Hub path: only the lightweight role is hub-managed today.
-	if role == modelrole.RoleLightweight && pkgLocalAIHub != nil {
-		return pkgLocalAIHub.CallLocalLLM(ctx, system, userMessage, maxTokens, extraBody...)
+	if hub := pkgLocalAIHub.Load(); role == modelrole.RoleLightweight && hub != nil {
+		return hub.CallLocalLLM(ctx, system, userMessage, maxTokens, extraBody...)
 	}
 
 	// Direct path: tiny/main, or lightweight before the hub is wired.
@@ -120,9 +123,11 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 			providerID = p
 		}
 	}
-	var callerExtra map[string]any
-	if len(extraBody) > 0 {
-		callerExtra = extraBody[0]
+	callerExtra := make(map[string]any)
+	for _, body := range extraBody {
+		for key, value := range body {
+			callerExtra[key] = value
+		}
 	}
 	// shapedExtra rebuilds the per-model request body: model-specific
 	// thinking-off kwargs + caller extras + the server-side timeout. Computed
@@ -219,6 +224,9 @@ func CallTinyLLM(ctx context.Context, system, userMessage string, maxTokens int,
 
 // CollectStream reads all events from a streaming LLM response and returns the text.
 func CollectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {
+	if events == nil {
+		return "", fmt.Errorf("nil event stream")
+	}
 	var sb strings.Builder
 	for {
 		select {
@@ -298,8 +306,12 @@ func ExtractDeltaText(payload []byte) string {
 
 // TruncateHead is a simple head-only truncation (used for chain prompts, fallback).
 func TruncateHead(s string, maxChars int) string {
-	if len(s) <= maxChars {
+	runes := []rune(s)
+	if len(runes) <= maxChars {
 		return s
 	}
-	return s[:maxChars] + fmt.Sprintf("\n\n[... truncated at %d chars]", maxChars)
+	if maxChars < 0 {
+		maxChars = 0
+	}
+	return string(runes[:maxChars]) + fmt.Sprintf("\n\n[... truncated at %d chars]", maxChars)
 }

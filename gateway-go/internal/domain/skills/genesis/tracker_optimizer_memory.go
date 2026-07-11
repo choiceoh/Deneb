@@ -3,6 +3,7 @@ package genesis
 import (
 	"encoding/json"
 	"fmt"
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"os"
 	"strings"
 	"time"
@@ -163,7 +164,7 @@ func applyOptimizerMemoryOutcome(entry *SkillOptimizerMemoryEntry, outcome, note
 	if entry == nil {
 		return
 	}
-	direction := strings.TrimSpace(truncateRunes(note, 400))
+	direction := strings.TrimSpace(genesiscommon.TruncateRunes(note, 400))
 	switch outcome {
 	case "accepted":
 		entry.AcceptedCount++

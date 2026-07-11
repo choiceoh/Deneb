@@ -137,7 +137,9 @@ func xlsxToText(data []byte) (string, error) {
 	if len(sheetFiles) == 0 {
 		return "", fmt.Errorf("워크시트를 찾을 수 없습니다")
 	}
-	sort.Slice(sheetFiles, func(i, j int) bool { return sheetFiles[i].Name < sheetFiles[j].Name })
+	sort.Slice(sheetFiles, func(i, j int) bool {
+		return ooxmlPartLess(sheetFiles[i].Name, sheetFiles[j].Name, "xl/worksheets/sheet")
+	})
 
 	const (
 		maxRowsPerSheet = 500
@@ -153,11 +155,6 @@ func xlsxToText(data []byte) (string, error) {
 		if err := unmarshalZipXML(f, &sheet); err != nil {
 			continue
 		}
-		if idx > 0 {
-			sb.WriteString("\n")
-		}
-		fmt.Fprintf(&sb, "### Sheet %d\n\n", idx+1)
-
 		rows := sheet.Rows
 		truncated := false
 		if len(rows) > maxRowsPerSheet {
@@ -189,10 +186,16 @@ func xlsxToText(data []byte) (string, error) {
 			}
 			grid = append(grid, cells)
 		}
-		if table := mdTable(grid); table != "" {
-			sb.WriteString(table)
+		table := mdTable(grid)
+		if table == "" {
+			continue
+		}
+		if sb.Len() > 0 {
 			sb.WriteString("\n")
 		}
+		fmt.Fprintf(&sb, "### Sheet %d\n\n", idx+1)
+		sb.WriteString(table)
+		sb.WriteString("\n")
 		if truncated {
 			fmt.Fprintf(&sb, "... (%d행 이하 생략)\n", len(sheet.Rows)-maxRowsPerSheet)
 		}
@@ -394,7 +397,9 @@ func pptxToText(data []byte) (string, error) {
 	if len(slideFiles) == 0 {
 		return "", fmt.Errorf("슬라이드를 찾을 수 없습니다")
 	}
-	sort.Slice(slideFiles, func(i, j int) bool { return slideFiles[i].Name < slideFiles[j].Name })
+	sort.Slice(slideFiles, func(i, j int) bool {
+		return ooxmlPartLess(slideFiles[i].Name, slideFiles[j].Name, "ppt/slides/slide")
+	})
 
 	var sb strings.Builder
 	for i, f := range slideFiles {
@@ -418,6 +423,28 @@ func pptxToText(data []byte) (string, error) {
 		return "", fmt.Errorf("빈 프레젠테이션")
 	}
 	return out, nil
+}
+
+// ooxmlPartLess orders numbered OOXML parts naturally. Lexicographic order puts
+// sheet10/slide10 before sheet2/slide2, silently scrambling a workbook or deck
+// once it grows past nine parts.
+func ooxmlPartLess(a, b, prefix string) bool {
+	partNumber := func(name string) (int, bool) {
+		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, ".xml") {
+			return 0, false
+		}
+		n, err := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(name, prefix), ".xml"))
+		return n, err == nil
+	}
+	an, aok := partNumber(a)
+	bn, bok := partNumber(b)
+	if aok && bok && an != bn {
+		return an < bn
+	}
+	if aok != bok {
+		return aok
+	}
+	return a < b
 }
 
 // --- OCR (scanned PDFs and image attachments) ---

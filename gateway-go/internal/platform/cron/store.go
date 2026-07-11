@@ -154,7 +154,9 @@ func cloneStoreFile(src *CronStoreFile) *CronStoreFile {
 		return nil
 	}
 	cp := *src
-	cp.Jobs = append([]StoreJob(nil), src.Jobs...)
+	if src.Jobs != nil {
+		cp.Jobs = append([]StoreJob{}, src.Jobs...)
+	}
 	return &cp
 }
 

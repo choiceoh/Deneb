@@ -13,6 +13,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/filesystem"
+	mailtool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/mailarchive"
+	notebooktool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/routine"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/schedule"
@@ -59,7 +61,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 		Name:        "mail_archive",
 		Description: "받은 메일 조회 1순위 — 메일 분석·미팅 준비·프로젝트 과거 확인에 우선 사용. 자체 메일 아카이브(자동보관 수신 메일 + 과거 백필)를 조회해 ID/Locator를 얻고, 전체 스레드와 프로젝트 히스토리를 복원한다. action=list(오늘/최근 메일) | search(키워드) | read(Locator/ID 또는 query로 원문 열기) | thread(Message-ID/References 기반 전체 대화) | project_history(회사·프로젝트 키워드 시간선+스레드 후보).",
 		InputSchema: mailArchiveToolSchema(),
-		Fn: tools.ToolMailArchive(tools.MailArchiveDeps{
+		Fn: mailtool.ToolMailArchive(mailtool.MailArchiveDeps{
 			Wiki:     deps.Wiki.Store,
 			Calendar: &deps.Calendar,
 			Store:    deps.MailStore,
@@ -631,7 +633,7 @@ func RegisterNotebookTool(registry toolctx.ToolRegistrar, deps *toolctx.Notebook
 		Name:        "notebook",
 		Description: "딜/프로젝트 자료(메일·문서·메모)를 한데 모아 그 자료만으로 출처 추적 가능한 인용 브리핑을 만들 때 쓰는 NotebookLM식 노트북. action=create (노트북 생성) | list (목록) | show (자료 보기) | add_source (자료 핀: kind=wiki 위키페이지 또는 kind=note 붙여넣기 텍스트) | remove_source (자료 제거) | delete (노트북 삭제) | brief (핀된 자료에만 근거해 [S1] 형식 인용 브리핑 생성).",
 		InputSchema: notebookToolSchema(),
-		Fn:          tools.ToolNotebook(deps),
+		Fn:          notebooktool.ToolNotebook(deps),
 		Deferred:    true,
 	})
 }

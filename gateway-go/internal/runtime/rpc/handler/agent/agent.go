@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coresecurity"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
@@ -57,6 +58,7 @@ func ExtendedMethods(deps ExtendedDeps) map[string]rpcutil.HandlerFunc {
 
 func processExec(deps ExtendedDeps) rpcutil.HandlerFunc {
 	return rpcutil.BindHandlerCtx[process.ExecRequest](func(ctx context.Context, p process.ExecRequest) (any, error) {
+		p.Command = strings.TrimSpace(p.Command)
 		if p.Command == "" {
 			return nil, rpcerr.MissingParam("command")
 		}
@@ -81,6 +83,7 @@ func processKill(deps ExtendedDeps) rpcutil.HandlerFunc {
 		ID string `json:"id"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		p.ID = strings.TrimSpace(p.ID)
 		if p.ID == "" {
 			return nil, rpcerr.MissingParam("id")
 		}
@@ -96,6 +99,7 @@ func processGet(deps ExtendedDeps) rpcutil.HandlerFunc {
 		ID string `json:"id"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		p.ID = strings.TrimSpace(p.ID)
 		if p.ID == "" {
 			return nil, rpcerr.MissingParam("id")
 		}
@@ -130,6 +134,7 @@ func cronGet(deps ExtendedDeps) rpcutil.HandlerFunc {
 		ID string `json:"id"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		p.ID = strings.TrimSpace(p.ID)
 		if p.ID == "" {
 			return nil, rpcerr.MissingParam("id")
 		}
@@ -146,6 +151,7 @@ func cronUnregister(deps ExtendedDeps) rpcutil.HandlerFunc {
 		ID string `json:"id"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		p.ID = strings.TrimSpace(p.ID)
 		if p.ID == "" {
 			return nil, rpcerr.MissingParam("id")
 		}
@@ -195,6 +201,8 @@ func sessionsCreate(deps ExtendedDeps) rpcutil.HandlerFunc {
 		Kind string `json:"kind"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		p.Key = strings.TrimSpace(p.Key)
+		p.Kind = strings.TrimSpace(p.Kind)
 		if p.Key == "" {
 			return nil, rpcerr.MissingParam("key")
 		}
@@ -226,11 +234,19 @@ func sessionsLifecycle(deps ExtendedDeps) rpcutil.HandlerFunc {
 		EndedAt    *int64 `json:"endedAt,omitempty"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
+		p.Key = strings.TrimSpace(p.Key)
+		p.Phase = strings.TrimSpace(p.Phase)
 		if p.Key == "" || p.Phase == "" {
 			return nil, rpcerr.MissingParam("key and phase")
 		}
 		if err := coresecurity.ValidateSessionKey(p.Key); err != nil {
 			return nil, rpcerr.New(protocol.ErrValidationFailed, "invalid session key").
+				WithSession(p.Key)
+		}
+		switch session.LifecyclePhase(p.Phase) {
+		case session.PhaseStart, session.PhaseEnd, session.PhaseError:
+		default:
+			return nil, rpcerr.New(protocol.ErrValidationFailed, "invalid lifecycle phase").
 				WithSession(p.Key)
 		}
 

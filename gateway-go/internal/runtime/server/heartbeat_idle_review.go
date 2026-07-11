@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle"
 )
 
 // Idle skill-review lane — the backstop that keeps the Propus review loop fed
@@ -190,7 +192,7 @@ func (s *Server) newIdleSkillReviewLane() func(ctx context.Context) (bool, strin
 			return false, ""
 		}
 		for _, key := range keys {
-			sctx, err := buildSkillLifecycleSessionContext(store, key)
+			sctx, err := skilllifecycle.BuildSessionContext(store, key)
 			if err != nil {
 				continue
 			}

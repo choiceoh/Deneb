@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 )
 
 // fleetAlertReNotify is how long a standing fleet condition stays suppressed
@@ -102,7 +104,7 @@ func (s *Server) handleFleetHook(w http.ResponseWriter, r *http.Request) {
 	}
 	title := strings.TrimSpace(badge + " 플릿 · " + ev.Title)
 	// Live-push + FCM fallback so fleet alerts reach a backgrounded/closed phone.
-	publishProactive(s.pushHub, s.pushNotifier, clientPushEvent{Title: title, Body: ev.Message, Kind: pushKindFleet})
+	proactive.PublishWithFallback(s.pushHub, s.pushNotifier, proactive.Event{Title: title, Body: ev.Message, Kind: proactive.PushKindFleet})
 	s.logger.Info("fleet alert relayed to clients", "level", ev.Level, "title", ev.Title)
 	s.writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }

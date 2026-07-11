@@ -199,7 +199,7 @@ internal suspend fun DenebGatewayClient.loadTranscriptGuarded(key: String, repla
  * dropped turn). Returns null when the caller may use its legacy fallbacks
  * (blocking re-send for a message that never arrived / keep the partial).
  */
-internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(key: String, sentText: String): DenebGatewayClient.GatewayReply? {
+internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(key: String, sentText: String): GatewayReply? {
     val started = TimeSource.Monotonic.markNow()
     var misses = 0
     var candidate: List<History>? = null
@@ -213,7 +213,7 @@ internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(key: String, s
                     val tail = transcript.size to probe.text
                     if (tail == candidateTail) {
                         installRecoveredTranscript(key, transcript)
-                        return DenebGatewayClient.GatewayReply(text = probe.text, ok = true)
+                        return GatewayReply(text = probe.text, ok = true)
                     }
                     candidate = transcript
                     candidateTail = tail
@@ -239,7 +239,7 @@ internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(key: String, s
     val last = candidate ?: return null
     val text = candidateTail?.second ?: return null
     installRecoveredTranscript(key, last)
-    return DenebGatewayClient.GatewayReply(text = text, ok = true)
+    return GatewayReply(text = text, ok = true)
 }
 
 /** Install a recovered transcript as the visible history (and cache it). */

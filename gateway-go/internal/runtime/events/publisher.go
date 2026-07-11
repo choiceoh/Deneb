@@ -64,7 +64,7 @@ func NewPublisher(b *Broadcaster, snapshots SessionSnapshotProvider, logger *slo
 // Sends "session.message" to session subscribers and "sessions.changed" to
 // session event subscribers.
 func (p *Publisher) PublishSessionMessage(update TranscriptUpdate) {
-	if update.SessionKey == "" || update.Message == nil {
+	if p == nil || p.broadcaster == nil || update.SessionKey == "" || update.Message == nil {
 		return
 	}
 
@@ -99,6 +99,9 @@ func (p *Publisher) PublishSessionMessage(update TranscriptUpdate) {
 
 // PublishAgentEvent publishes an agent event with sequencing.
 func (p *Publisher) PublishAgentEvent(evt AgentEvent) {
+	if p == nil || p.broadcaster == nil {
+		return
+	}
 	payload := map[string]any{
 		"kind": evt.Kind,
 	}
@@ -121,13 +124,14 @@ func (p *Publisher) PublishAgentEvent(evt AgentEvent) {
 	// Target session subscribers if sessionKey is present.
 	if evt.SessionKey != "" {
 		connIDs := p.broadcaster.MergedSessionRecipients(evt.SessionKey)
-		if len(connIDs) > 0 {
-			p.broadcaster.BroadcastWithOpts("agent.event", payload, BroadcastOpts{
-				DropIfSlow:    true,
-				TargetConnIDs: connIDs,
-			})
+		if len(connIDs) == 0 {
 			return
 		}
+		p.broadcaster.BroadcastWithOpts("agent.event", payload, BroadcastOpts{
+			DropIfSlow:    true,
+			TargetConnIDs: connIDs,
+		})
+		return
 	}
 
 	p.broadcaster.BroadcastWithOpts("agent.event", payload, BroadcastOpts{DropIfSlow: true})
@@ -135,6 +139,9 @@ func (p *Publisher) PublishAgentEvent(evt AgentEvent) {
 
 // PublishConfigChanged broadcasts a configuration change event.
 func (p *Publisher) PublishConfigChanged(section string) {
+	if p == nil || p.broadcaster == nil {
+		return
+	}
 	p.broadcaster.BroadcastWithOpts("config.changed", map[string]any{
 		"section": section,
 		"ts":      time.Now().UnixMilli(),
@@ -143,6 +150,9 @@ func (p *Publisher) PublishConfigChanged(section string) {
 
 // CleanupAgentSeq removes sequence tracking for a completed agent run.
 func (p *Publisher) CleanupAgentSeq(runID string) {
+	if p == nil {
+		return
+	}
 	p.seqMu.Lock()
 	delete(p.agentSeq, runID)
 	p.seqMu.Unlock()
@@ -150,6 +160,9 @@ func (p *Publisher) CleanupAgentSeq(runID string) {
 
 // publishSessionChanged sends a sessions.changed event to session event subscribers.
 func (p *Publisher) publishSessionChanged(sessionKey, phase string, overrides map[string]any) {
+	if p == nil || p.broadcaster == nil {
+		return
+	}
 	connIDs := p.broadcaster.SessionEventSubscriberConnIDs()
 	if len(connIDs) == 0 {
 		return

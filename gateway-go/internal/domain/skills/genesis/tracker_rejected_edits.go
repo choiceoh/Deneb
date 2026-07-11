@@ -2,6 +2,7 @@ package genesis
 
 import (
 	"fmt"
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"sort"
 	"strings"
 	"time"
@@ -31,8 +32,8 @@ func (t *Tracker) RecordRejectedSkillEdit(record RejectedSkillEditRecord) error 
 	record.SkillName = strings.TrimSpace(record.SkillName)
 	record.Reason = strings.TrimSpace(record.Reason)
 	record.Source = strings.TrimSpace(record.Source)
-	record.CandidateBody = strings.TrimSpace(truncateRunes(record.CandidateBody, 1997))
-	if record.SelfHarnessAudit != nil && record.SelfHarnessAudit.empty() {
+	record.CandidateBody = strings.TrimSpace(genesiscommon.TruncateRunes(record.CandidateBody, 1997))
+	if record.SelfHarnessAudit != nil && record.SelfHarnessAudit.Empty() {
 		record.SelfHarnessAudit = nil
 	}
 	if record.SkillName == "" {

@@ -121,6 +121,9 @@ func (s *Service) SetMainSessionHandoff(fn func(ctx context.Context, channel, to
 
 // NewService creates a new cron service.
 func NewService(cfg ServiceConfig, agent AgentRunner, logger *slog.Logger) *Service {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	rl := NewPersistentRunLog(cfg.StorePath)
 	rl.SetLogger(logger)
 	return &Service{

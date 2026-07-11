@@ -37,6 +37,7 @@ package observe
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"sync"
 )
@@ -146,7 +147,7 @@ func (r *Ring) Query(opts QueryOpts) []LogLine {
 		if !matchLine(l, opts) {
 			continue
 		}
-		out = append(out, l)
+		out = append(out, cloneLogLine(l))
 		if len(out) >= limit {
 			break
 		}
@@ -217,6 +218,9 @@ type LogCapture struct {
 // NewCapture wraps delegate so every handled record is also appended to ring.
 // Returns the delegate unchanged when it is nil (nothing to wrap).
 func NewCapture(delegate slog.Handler, ring *Ring) *LogCapture {
+	if delegate == nil {
+		delegate = slog.NewTextHandler(io.Discard, nil)
+	}
 	return &LogCapture{ring: ring, delegate: delegate}
 }
 
@@ -290,6 +294,18 @@ func (c *LogCapture) toLine(r slog.Record) LogLine {
 		consume(a)
 		return true
 	})
+	line.Attrs = attrs
+	return line
+}
+
+func cloneLogLine(line LogLine) LogLine {
+	if line.Attrs == nil {
+		return line
+	}
+	attrs := make(map[string]string, len(line.Attrs))
+	for key, value := range line.Attrs {
+		attrs[key] = value
+	}
 	line.Attrs = attrs
 	return line
 }

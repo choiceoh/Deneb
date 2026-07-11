@@ -17,27 +17,12 @@ import ai.deneb.sms.SmsSender
 import ai.deneb.ui.chat.History
 import ai.deneb.ui.chat.WorkFeedItem
 import io.github.vinceglb.filekit.PlatformFile
-import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.timeout
-import io.ktor.client.request.get
-import io.ktor.client.request.header
-import io.ktor.client.request.post
-import io.ktor.client.request.preparePost
-import io.ktor.client.request.setBody
-import io.ktor.client.statement.bodyAsChannel
-import io.ktor.http.ContentType
-import io.ktor.http.contentType
-import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
-import io.ktor.utils.io.ByteReadChannel
-import io.ktor.utils.io.readByte
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -45,15 +30,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.concurrent.Volatile
@@ -63,34 +43,6 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
-
-// SSE lines, UTF-8-safe. Ktor 3.x readUTF8Line decoded multibyte characters per internal
-// network segment, so a 3-byte Korean character split across the buffer boundary surfaced
-// as `�` on the native client (both the streamed chat reply and proactive-push text; the
-// browser/CIO paths were unaffected). Accumulating raw bytes until the ASCII newline —
-// which never falls inside a multibyte UTF-8 sequence — then decoding the whole line fixes
-// it. readByte() is per-byte, which is fine for SSE's low frame volume. An exception thrown
-// by [onLine] (e.g. the gateway "error" event) propagates; only readByte's EOF/close is
-// swallowed so a normal stream end isn't an error.
-internal suspend fun readSseLines(channel: ByteReadChannel, onLine: (String) -> Unit) {
-    val line = ArrayList<Byte>(256)
-    fun emit() {
-        val text = line.toByteArray().decodeToString()
-        line.clear()
-        onLine(if (text.endsWith('\r')) text.dropLast(1) else text)
-    }
-    while (!channel.isClosedForRead) {
-        val b = try {
-            channel.readByte()
-        } catch (c: CancellationException) {
-            throw c
-        } catch (_: Exception) {
-            break
-        }
-        if (b.toInt() == 10) emit() else line.add(b)
-    }
-    if (line.isNotEmpty()) emit()
-}
 
 /**
  * A [DataRepository] backed by the Deneb gateway — the sole production implementation.
@@ -104,8 +56,8 @@ internal suspend fun readSseLines(channel: ByteReadChannel, onLine: (String) -> 
  * host with `go run ./gateway-go/cmd/deneb-client-token` and set it, together
  * with the gateway URL, under the [KEY_URL] / [KEY_TOKEN] settings keys.
  *
- * This file is the core: chat send/stream, session + transcript management,
- * native sync / work feed, and the RPC transport ([callRpc] / [rpcWrite]). The
+ * This file owns the long-lived repository state and conversation lifecycle.
+ * Chat turn orchestration and RPC/SSE transport live in focused sibling files. The
  * per-domain RPC surfaces live as extensions in the sibling DenebClient*.kt
  * files (mail, calendar/todo, memory/search, models/skills/crons, capture,
  * sessions browser) — they reach the transport and the backing StateFlows
@@ -416,197 +368,7 @@ class DenebGatewayClient private constructor(
         nativeSyncBaselined = false
     }
 
-    override suspend fun ask(question: String?, files: List<PlatformFile>, uiSubmission: UiSubmission?): Boolean {
-        val displayText = question?.trim().orEmpty()
-        // A deneb-ui button press arrives as a UiSubmission. Show the friendly
-        // question in the chat, but send the agent a structured callback naming
-        // the event (per the deneb-ui prompt contract) plus the collected inputs.
-        val sendText = if (uiSubmission != null) formatCallback(uiSubmission) else displayText
-        if (sendText.isEmpty()) return true // no-op, not a failure
-
-        // Append the user message + a placeholder assistant bubble (grown as
-        // deltas stream in; replacement is keyed by id so concurrent history
-        // edits stay safe). Bump the epoch and append under historyGate so a
-        // background transcript load in flight — the cold-start topic
-        // auto-select — can't overwrite them (see historyGate).
-        val assistantId = Uuid.random().toString()
-        // Pinned for the stream-failure recovery below: the transcript to
-        // reconcile against is the one this turn was SENT to, even if the user
-        // switches conversations while recovery is polling.
-        val sessionKeyAtSend = sessionKey
-        askActive = true
-        historyGate.withLock {
-            historyEpoch++
-            _chatHistory.update { list ->
-                val withUser = if (displayText.isNotEmpty()) {
-                    list + History(role = History.Role.USER, content = displayText)
-                } else {
-                    list
-                }
-                withUser + History(id = assistantId, role = History.Role.ASSISTANT, content = "")
-            }
-        }
-        val accumulated = StringBuilder()
-        val replaceAssistant: (String, String?) -> Unit = { text, fallback ->
-            _chatHistory.update { list ->
-                list.map {
-                    if (it.id == assistantId) it.copy(content = text, fallbackServiceName = fallback) else it
-                }
-            }
-        }
-
-        // Token pacer. The gateway emits a delta per token (~65/s, smooth at the
-        // source — measured directly), but the network coalesces those tiny frames
-        // into ~170ms bursts over a relay/Wi-Fi link, so painting arrivals as-is
-        // looks like "one char → stall → burst". Instead we REVEAL the accumulated
-        // text at a steady cadence: a ticker advances a `revealed` cursor toward
-        // accumulated.length, draining a proportional slice each tick so a burst
-        // crawls out smoothly and a small constant buffer (~one tick of lag) absorbs
-        // the next one. The finalize block below always writes the full canonical
-        // text, so the trailing buffer is never lost. Cost stays bounded — the VM
-        // samples chatHistory (64ms) and BotMessage re-parses (96ms) downstream, so
-        // these steady reveals coalesce there.
-        //
-        // Thread-safety: ask() runs on a background (multi-thread) dispatcher, so a
-        // pacer launched there could race onDelta on `accumulated`. We pin just this
-        // streaming section to Dispatchers.Main via withContext, serializing onDelta
-        // and the pacer on the single UI thread — they interleave only at suspension
-        // points and share `accumulated`/`revealed` without a lock. The pacer's only
-        // suspension is delay(); its tick body never yields, so accumulated is stable
-        // while it is read. The per-delta work pinned here is light (a StringBuilder
-        // append + a small StateFlow update); the turn's heavy work stays off Main.
-        val revealTickMs = 33L
-        val revealDrainDivisor = 4
-        val revealMinChars = 2
-        var revealed = 0
-        // Live progress: the gateway's tool/thinking SSE frames become transient
-        // TOOL_EXECUTING rows so the waiting chip narrates what the agent is
-        // doing ("메일 확인 중") instead of cycling generic spinner text.
-        val progress = TurnProgress(_chatHistory, scope)
-        val reply = try {
-            withContext(Dispatchers.Main) {
-                val pacer = launch {
-                    while (isActive) {
-                        if (revealed < accumulated.length) {
-                            val backlog = accumulated.length - revealed
-                            val step = maxOf(revealMinChars, backlog / revealDrainDivisor)
-                            revealed = minOf(accumulated.length, revealed + step)
-                            replaceAssistant(accumulated.toString().take(revealed), null)
-                        }
-                        delay(revealTickMs)
-                    }
-                }
-                try {
-                    sendStreaming(
-                        sendText,
-                        onTool = progress::onTool,
-                        onThinking = progress::onThinking,
-                    ) { delta ->
-                        progress.onDelta()
-                        accumulated.append(delta)
-                    }
-                } finally {
-                    pacer.cancel()
-                }
-            }
-        } catch (cancel: CancellationException) {
-            // The turn's coroutine died (topic switch, VM teardown). Never leave
-            // the placeholder as a phantom empty bubble: keep what streamed, or
-            // drop the row — the transcript reconcile on the next events-stream
-            // (re)connect restores the canonical answer if the server finished.
-            settlePlaceholderOnAbort(assistantId, accumulated.toString())
-            askActive = false
-            throw cancel
-        } catch (e: Exception) {
-            // Mid-stream failure. On mobile the socket often dies HALF-OPEN: the
-            // gateway never notices, keeps running the turn, and persists an
-            // answer nobody received. The transcript is the canonical record —
-            // reconcile with it BEFORE considering a re-send, which would
-            // double-generate the answer for a message that did arrive.
-            val recovered = try {
-                recoverTurnFromTranscript(sessionKeyAtSend, sendText)
-            } catch (cancel: CancellationException) {
-                settlePlaceholderOnAbort(assistantId, accumulated.toString())
-                askActive = false
-                throw cancel
-            }
-            recovered
-                ?: if (accumulated.isEmpty()) {
-                    // Never reached the gateway (or an old gateway without the
-                    // stream endpoint) — a blocking re-send is safe.
-                    try {
-                        send(sendText)
-                    } catch (cancel: CancellationException) {
-                        settlePlaceholderOnAbort(assistantId, accumulated.toString())
-                        askActive = false
-                        throw cancel
-                    } catch (sendError: Exception) {
-                        GatewayReply("⚠️ ${sendError.message ?: "gateway request failed"}", ok = false)
-                    }
-                } else {
-                    // Keep the partial answer, but the turn still FAILED (stream broke
-                    // mid-answer) — report ok=false so the queue never auto-fires after it.
-                    GatewayReply(text = accumulated.toString(), ok = false)
-                }
-        } finally {
-            // Progress rows are turn-scoped — never leak a zombie chip past the
-            // turn, whatever way the stream ended (done, error, cancel).
-            progress.clear()
-        }
-
-        // Finalize: pick text + fallback badge.
-        //
-        // `accumulated` holds every streamed delta — the full visible answer.
-        // `reply.text` is the gateway terminal text (now BestText-corrected, but
-        // keep this guard belt-and-suspenders): when the agent runs a tool
-        // mid-answer (e.g. writing the reply to the wiki) the final turn is a
-        // short wrap-up, so trusting it alone would erase the streamed body. Keep
-        // the streamed accumulation when it's meaningfully longer than the
-        // terminal text; otherwise use reply.text so the gateway's canonical
-        // answer wins.
-        val streamed = accumulated.toString()
-        val finalText = when {
-            streamed.length > reply.text.length + 40 -> streamed
-            reply.text.isNotBlank() -> reply.text
-            else -> streamed
-        }
-        replaceAssistant(
-            finalText.ifBlank { "⚠️ 빈 응답" },
-            // Mirrors the upstream fallback badge: show which model answered when the
-            // gateway fell back from its main model to a fallback role.
-            if (reply.fellBack && reply.model.isNotBlank()) reply.model else null,
-        )
-        // Post-turn transparency: leave a compact trail of what the agent did
-        // ("메일 확인 ×2 · 웹 검색") under the finished answer.
-        progress.footprint()?.let { fp ->
-            _chatHistory.update { list ->
-                list.map { if (it.id == assistantId) it.copy(toolFootprint = fp) else it }
-            }
-        }
-        askActive = false
-        return reply.ok
-    }
-
-    // Never leave ask()'s optimistic placeholder as a phantom empty bubble when
-    // the turn dies mid-flight: keep whatever streamed, or drop the row.
-    private fun settlePlaceholderOnAbort(assistantId: String, partial: String) {
-        _chatHistory.update { list ->
-            if (partial.isBlank()) {
-                list.filter { it.id != assistantId }
-            } else {
-                list.map { if (it.id == assistantId) it.copy(content = partial) else it }
-            }
-        }
-    }
-
-    private fun formatCallback(submission: UiSubmission): String = buildString {
-        append("[deneb-ui] event=").append(submission.pressedEvent)
-        if (submission.values.isNotEmpty()) {
-            append(" values={")
-            append(submission.values.entries.joinToString(", ") { "${it.key}=${it.value}" })
-            append("}")
-        }
-    }
+    override suspend fun ask(question: String?, files: List<PlatformFile>, uiSubmission: UiSubmission?): Boolean = askGateway(question, uiSubmission)
 
     override fun clearHistory() {
         _chatHistory.value = emptyList()
@@ -727,198 +489,6 @@ class DenebGatewayClient private constructor(
     // refreshScheduledTasks, removeCron) — not the DataRepository interface, which
     // no longer carries on-device memory/scheduling members.
 
-    private suspend fun send(message: String): GatewayReply {
-        if (clientToken.isEmpty()) {
-            return GatewayReply("⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요.", ok = false)
-        }
-        val response = http.post("$gatewayUrl/api/v1/miniapp/rpc") {
-            header(CLIENT_TOKEN_HEADER, clientToken)
-            contentType(ContentType.Application.Json)
-            setBody(
-                RpcRequest(
-                    id = Uuid.random().toString(),
-                    method = "miniapp.chat.send",
-                    params = SendParams(
-                        message = message,
-                        sessionKey = sessionKey,
-                    ),
-                ),
-            )
-        }
-        if (!response.status.isSuccess()) {
-            throw IllegalStateException("chat HTTP ${response.status.value}")
-        }
-        val resp = response.body<RpcResponse>()
-        val payload = resp.payload
-        return if (resp.ok && payload != null) {
-            GatewayReply(text = payload.text, model = payload.model, fellBack = payload.fellBack)
-        } else {
-            GatewayReply("⚠️ 게이트웨이 오류", ok = false)
-        }
-    }
-
-    /**
-     * Streaming counterpart of [send]: POSTs to the gateway's SSE chat endpoint
-     * and invokes [onDelta] with each assistant text chunk as it arrives. The
-     * gateway also frames live progress — [onTool] fires on tool lifecycle
-     * transitions (state "started"/"completed") and [onThinking] on throttled
-     * reasoning liveness pulses (carrying a chip-sized preview of the live
-     * reasoning text, "" on older gateways) — which [ask] surfaces in the
-     * waiting chip. The
-     * terminal `done` frame carries the canonical text + which model answered,
-     * returned as the [GatewayReply]. Throws on transport failure or a server
-     * `error` frame so [ask] can fall back to the blocking RPC.
-     *
-     * SSE is parsed by hand off the response channel (no Ktor SSE plugin): lines
-     * accumulate per frame and dispatch on the blank-line separator. Comment
-     * lines (": keepalive") and unknown events are ignored, so an older gateway
-     * without tool/thinking frames degrades gracefully. The request timeout is
-     * disabled because an agent turn (tool calls included) can outlast the
-     * default window.
-     */
-    private suspend fun sendStreaming(
-        message: String,
-        onTool: (ToolEvent) -> Unit = {},
-        onThinking: (String) -> Unit = {},
-        onDelta: (String) -> Unit,
-    ): GatewayReply {
-        if (clientToken.isEmpty()) {
-            return GatewayReply("⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요.", ok = false)
-        }
-        var model = ""
-        var fellBack = false
-        var doneText: String? = null
-        http.preparePost("$gatewayUrl/api/v1/miniapp/chat/stream") {
-            header(CLIENT_TOKEN_HEADER, clientToken)
-            header("Accept", "text/event-stream")
-            contentType(ContentType.Application.Json)
-            setBody(SendParams(message = message, sessionKey = sessionKey))
-            timeout {
-                // No overall request cap: an agent turn (tool calls included) can
-                // outlast any fixed window. Long.MAX_VALUE is the plugin's
-                // "infinite" sentinel. The 15s server keepalive keeps the socket
-                // from idling out within STREAM_SOCKET_TIMEOUT_MS.
-                requestTimeoutMillis = Long.MAX_VALUE
-                socketTimeoutMillis = STREAM_SOCKET_TIMEOUT_MS
-            }
-        }.execute { response ->
-            if (!response.status.isSuccess()) {
-                throw IllegalStateException("stream HTTP ${response.status.value}")
-            }
-            val channel = response.bodyAsChannel()
-            var event = ""
-            val data = StringBuilder()
-            readSseLines(channel) { line ->
-                when {
-                    line.startsWith(":") -> Unit
-
-                    // comment / keepalive
-                    line.startsWith("event:") -> event = line.removePrefix("event:").trim()
-
-                    line.startsWith("data:") -> {
-                        if (data.isNotEmpty()) data.append('\n')
-                        data.append(line.removePrefix("data:").trimStart())
-                    }
-
-                    line.isEmpty() -> {
-                        when (event) {
-                            "delta" -> {
-                                val d = runCatching {
-                                    jsonCodec.decodeFromString(DeltaEvent.serializer(), data.toString()).delta
-                                }.getOrNull()
-                                if (!d.isNullOrEmpty()) onDelta(d)
-                            }
-
-                            "tool" -> {
-                                runCatching {
-                                    jsonCodec.decodeFromString(ToolEvent.serializer(), data.toString())
-                                }.getOrNull()?.let {
-                                    if (it.tool.isNotEmpty()) onTool(it)
-                                }
-                            }
-
-                            "thinking" -> {
-                                // preview: chip-sized tail of the live reasoning
-                                // text; absent on bare liveness pulses (and on
-                                // older gateways, which send an empty object).
-                                val preview = runCatching {
-                                    jsonCodec.decodeFromString(ThinkingEvent.serializer(), data.toString()).preview
-                                }.getOrNull() ?: ""
-                                onThinking(preview)
-                            }
-
-                            "done" -> {
-                                runCatching {
-                                    jsonCodec.decodeFromString(DoneEvent.serializer(), data.toString())
-                                }.getOrNull()?.let {
-                                    doneText = it.text
-                                    model = it.model
-                                    fellBack = it.fellBack
-                                }
-                            }
-
-                            "error" -> {
-                                val msg = runCatching {
-                                    jsonCodec.decodeFromString(ErrorEvent.serializer(), data.toString()).error
-                                }.getOrNull() ?: "gateway stream error"
-                                throw IllegalStateException(msg)
-                            }
-                        }
-                        event = ""
-                        data.clear()
-                    }
-                }
-            }
-        }
-        return GatewayReply(text = doneText ?: "", model = model, fellBack = fellBack)
-    }
-
-    /**
-     * Generic POST to the miniapp RPC bridge. Returns the typed payload, or null
-     * on any failure (missing token, transport error, non-ok response) so callers
-     * degrade to empty rather than crash. Use this for non-critical reads; the
-     * chat [send] keeps its own throwing path so the UI can surface errors.
-     * Internal (not private) so the per-domain extension files can reach it.
-     *
-     * Credential fence (two complementary checks; the result is dropped to null if
-     * either trips, so an old-account response can never be assigned under new
-     * credentials — callers already treat null as "no data"):
-     *   - credEpoch: bumped FIRST and atomically in [onCredentialsChanged], so every
-     *     already-in-flight request is fenced the instant a switch begins, even before
-     *     the new URL/token are written.
-     *   - URL+token value: the exact values the request was SENT with vs. current.
-     *     Ordering-immune for the post-write case (a counter alone could be fooled).
-     * This is the single chokepoint protecting EVERY read (mail, transcript, sessions,
-     * work-feed, calendar, memories, models, skills, …).
-     */
-    internal suspend inline fun <reified T> callRpc(method: String, params: JsonObject): T? {
-        val url = gatewayUrl
-        val token = clientToken
-        val epoch = credEpoch
-        if (token.isEmpty()) return null
-        val response = try {
-            http.post("$url/api/v1/miniapp/rpc") {
-                header(CLIENT_TOKEN_HEADER, token)
-                contentType(ContentType.Application.Json)
-                setBody(RpcReq(id = Uuid.random().toString(), method = method, params = params))
-            }
-        } catch (c: CancellationException) {
-            throw c
-        } catch (_: Exception) {
-            return null
-        }
-        if (!response.status.isSuccess()) return null
-        val envelope = try {
-            response.body<RpcEnv<T>>()
-        } catch (c: CancellationException) {
-            throw c
-        } catch (_: Exception) {
-            return null
-        }
-        val payload = envelope.takeIf { it.ok }?.payload
-        return if (epoch == credEpoch && url == gatewayUrl && token == clientToken) payload else null
-    }
-
     internal fun switchSession(key: String) {
         sessionKey = key
         _currentConversationId.value = key
@@ -926,111 +496,6 @@ class DenebGatewayClient private constructor(
         appSettings.setLastSession(key)
     }
 
-    // rpcWrite posts a write RPC and surfaces the gateway's error message (so the
-    // UI can show the exact reason), returning null on success. Internal (not
-    // private) so the per-domain extension files can reach it.
-    internal suspend fun rpcWrite(method: String, params: JsonObject): String? {
-        if (clientToken.isEmpty()) return "게이트웨이에 연결되어 있지 않습니다."
-        return try {
-            val response = http.post("$gatewayUrl/api/v1/miniapp/rpc") {
-                header(CLIENT_TOKEN_HEADER, clientToken)
-                contentType(ContentType.Application.Json)
-                setBody(RpcReq(id = Uuid.random().toString(), method = method, params = params))
-            }
-            if (!response.status.isSuccess()) return "요청을 처리하지 못했습니다."
-            val result = response.body<RpcResult>()
-            if (result.ok) null else (result.error?.message?.ifBlank { null } ?: "요청을 처리하지 못했습니다.")
-        } catch (c: CancellationException) {
-            throw c
-        } catch (_: Exception) {
-            "요청을 처리하지 못했습니다."
-        }
-    }
-
-    @Serializable
-    internal data class RpcRequest(val id: String, val method: String, val params: SendParams)
-
-    @Serializable
-    internal data class SendParams(
-        val message: String,
-        val sessionKey: String? = null,
-    )
-
-    @Serializable
-    internal data class RpcResponse(val ok: Boolean = false, val payload: SendPayload? = null)
-
-    @Serializable
-    internal data class SendPayload(
-        val text: String = "",
-        val model: String = "",
-        val sessionKey: String = "",
-        // True when the gateway's model fallback chain fired (main → fallback);
-        // `model` is then the model that actually answered. Surfaced as a badge.
-        val fellBack: Boolean = false,
-    )
-
-    /**
-     * Internal result of one gateway chat turn (text + which model answered).
-     * [ok] is false when the turn FAILED and [text] is an ⚠️ error notice (or a
-     * partial answer cut off mid-stream) rather than a real reply — [ask] renders
-     * it as a bubble but reports the failure to its caller, so the ViewModel never
-     * auto-fires queued messages after a failed turn.
-     */
-    internal data class GatewayReply(
-        val text: String,
-        val model: String = "",
-        val fellBack: Boolean = false,
-        val ok: Boolean = true,
-    )
-
-    // SSE frame payloads from POST /api/v1/miniapp/chat/stream.
-    @Serializable
-    private data class DeltaEvent(val delta: String = "")
-
-    // preview: chip-sized tail of the live reasoning text the gateway condenses
-    // from the model's thinking stream; empty on bare liveness pulses.
-    @Serializable
-    private data class ThinkingEvent(val preview: String = "")
-
-    @Serializable
-    private data class DoneEvent(val text: String = "", val model: String = "", val fellBack: Boolean = false)
-
-    @Serializable
-    private data class ErrorEvent(val error: String = "")
-
-    // A proactive frame off the events stream. kind="phone_action" marks a command
-    // the gateway's phone_write tool dispatched (server: pushKindPhoneAction) for
-    // in-app Intent execution — data carries "action" plus its args (url/package/
-    // number/text/to) — rather than a {title, body} notification to surface. ref
-    // carries the dispatch id: the gateway waits briefly on it, so the executor
-    // reports the execution result back via a phone_action_result ingest event.
-    @Serializable
-    internal data class PushEvent(
-        val title: String = "",
-        val body: String = "",
-        val kind: String = "",
-        val ref: String = "",
-        val data: Map<String, String> = emptyMap(),
-    )
-
-    // RpcReq / RpcEnv are internal (not private) because the inline [callRpc]
-    // references them from extension call sites.
-    @Serializable
-    internal data class RpcReq(val id: String, val method: String, val params: JsonObject)
-
-    @Serializable
-    internal data class RpcEnv<T>(val ok: Boolean = false, val payload: T? = null)
-
-    // Error-bearing envelope for writes (e.g. calendar.create) where the caller
-    // needs the gateway's error message, not just a null payload.
-    @Serializable
-    private data class RpcResult(val ok: Boolean = false, val error: RpcError? = null)
-
-    @Serializable
-    private data class RpcError(val code: String = "", val message: String = "")
-
-    // Internal (not private) because the inline [callRpc] and the per-domain
-    // extension files reference these constants.
     // --- DataRepository: non-chat surface -----------------------------------
     // The small set of non-chat DataRepository members the UI still reaches
     // through the interface. Re-homed here when the on-device RemoteDataRepository

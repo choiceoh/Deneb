@@ -6,6 +6,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mailflow"
 )
 
 // MemorySubsystem groups the wiki knowledge base and contacts address-book mirror.
@@ -23,5 +24,5 @@ type MemorySubsystem struct {
 	// cpProjects caches the wiki-derived counterparty→projects map for the
 	// mail-analysis party anchor (mail_counterparty.go). Zero value ready;
 	// reads tolerate the late-bound wikiStore.
-	cpProjects counterpartyProjectsCache
+	cpProjects mailflow.CounterpartyProjectsCache
 }

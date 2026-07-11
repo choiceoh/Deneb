@@ -224,6 +224,9 @@ func (h *GatewayHub) SetChat(c *chat.Handler) {
 // Broadcast sends an event to all connected SSE clients.
 // Satisfies BroadcastFunc signature for direct use in handler Deps.
 func (h *GatewayHub) Broadcast(event string, payload any) (int, []error) {
+	if h == nil || h.broadcaster == nil {
+		return 0, []error{fmt.Errorf("gateway broadcaster is not available")}
+	}
 	return h.broadcaster.Broadcast(event, payload)
 }
 
@@ -233,7 +236,7 @@ func (h *GatewayHub) Broadcast(event string, payload any) (int, []error) {
 // Panics if the target is not exactly one step ahead of the current phase,
 // preventing out-of-order initialization.
 func (h *GatewayHub) AdvancePhase(target uint8) {
-	if target != h.phase+1 {
+	if target > PhaseLate || target != h.phase+1 {
 		panic(fmt.Sprintf("GatewayHub.AdvancePhase: expected phase %d, got target %d (current: %d)",
 			h.phase+1, target, h.phase))
 	}
@@ -248,6 +251,9 @@ func (h *GatewayHub) Phase() uint8 { return h.phase }
 // Validate checks that all required hub fields are non-nil.
 // Called once at startup before method registration begins.
 func (h *GatewayHub) Validate() error {
+	if h == nil {
+		return fmt.Errorf("gatewayHub is nil")
+	}
 	var missing []string
 
 	// Required: used by handlers without nil checks.
