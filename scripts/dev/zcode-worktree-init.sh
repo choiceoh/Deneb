@@ -56,18 +56,21 @@ mkdir -p "$WT_BASE"
 
 # ── Idempotent: reuse if the worktree already exists ──────────────────────
 if git worktree list --porcelain 2>/dev/null | grep -q "^worktree ${WT_PATH}$"; then
-    printf '{"additionalContext":"ZCode 워크트리 재사용: %s (브랜치 %s). 이 디렉터리에서 작업하세요 — 메인 체크아웃 편집은 가드가 차단합니다."}\n' \
-        "$WT_PATH" "$WT_BRANCH"
+    printf '{"additionalContext":"⚡ ZCode 워크트리 재사용: %s (브랜치 %s).\\n\\n첫 작업 전 반드시 진입: cd %s\\n이 디렉터리에서만 편집하세요 — 메인 체크아웃(/Users/ost/Documents/GitHub/Deneb)에서의 Write/Edit/MultiEdit는 가드가 차단합니다."}\n' \
+        "$WT_PATH" "$WT_BRANCH" "$WT_PATH"
     exit 0
 fi
 
 # ── Create the worktree ───────────────────────────────────────────────────
+# Note: git worktree add prints "HEAD is now at ..." to stdout, which would
+# corrupt our JSON output.  Redirect all git output to stderr so only our
+# printf lands on stdout (hook output must be clean JSON).
 if git show-ref --verify --quiet "refs/heads/$WT_BRANCH" 2>/dev/null; then
     # Branch exists (worktree was cleaned up earlier) — re-attach.
-    git worktree add "$WT_PATH" "$WT_BRANCH" 2>/dev/null || exit 0
+    git worktree add "$WT_PATH" "$WT_BRANCH" >&2 2>/dev/null || exit 0
 else
     # Fresh branch from main.
-    git worktree add -b "$WT_BRANCH" "$WT_PATH" main 2>/dev/null || exit 0
+    git worktree add -b "$WT_BRANCH" "$WT_PATH" main >&2 2>/dev/null || exit 0
 fi
 
 # ── Seed CodeGraph index (background, fail-open) ──────────────────────────
@@ -84,6 +87,9 @@ if [[ -d "$ROOT/.codegraph" ]]; then
 fi
 
 # ── Report to agent ───────────────────────────────────────────────────────
-printf '{"additionalContext":"ZCode 워크트리 자동 생성: %s (브랜치 %s). cd %s 후 작업하세요 — 메인 체크아웃 편집은 가드가 차단합니다."}\n' \
+# Strong directive: the agent must cd into the worktree before any edit,
+# otherwise the guard (zcode-worktree-guard.sh) blocks Write/Edit/MultiEdit
+# in the main checkout.
+printf '{"additionalContext":"⚡ ZCode 워크트리 준비됨: %s (브랜치 %s).\\n\\n첫 작업 전 반드시 진입: cd %s\\n이 디렉터리에서만 편집하세요 — 메인 체크아웃(/Users/ost/Documents/GitHub/Deneb)에서의 Write/Edit/MultiEdit는 가드가 차단합니다."}\n' \
     "$WT_PATH" "$WT_BRANCH" "$WT_PATH"
 exit 0

@@ -43,9 +43,9 @@ WT_HINT=""
 if [[ -n "$SESSION_ID" ]]; then
     WT_PATH="$HOME/.zcode/worktrees/Deneb/$SESSION_ID"
     if [[ -d "$WT_PATH" ]]; then
-        WT_HINT=$'\n\n→ 워크트리로 이동: cd '"$WT_PATH"
+        WT_HINT=$'\n\n→ 즉시 워크트리로 진입 후 같은 편집 재시도:\n  cd '"$WT_PATH"
     else
-        WT_HINT=$'\n\n→ 워크트리가 아직 없습니다. SessionStart 훅(zcode-worktree-init.sh)을 확인하거나 수동 생성: git worktree add -b zcode/'"$SESSION_ID"' '"$WT_PATH"' main'
+        WT_HINT=$'\n\n→ 워크트리가 아직 없습니다. 수동 생성 후 진입:\n  git worktree add -b zcode/'"$SESSION_ID"' '"$WT_PATH"' main && cd '"$WT_PATH"
     fi
 fi
 
@@ -53,9 +53,9 @@ cat >&2 <<EOF
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🛑 메인 체크아웃 편집 차단 (zcode-worktree-guard)
 
-현재 메인 체크아웃(main 브랜치)에서 편집하려 했습니다.
-동시 작업 에이전트(Codex/Trae/Claude)와 충돌 위험이 있으므로
-전용 워크트리에서 작업해야 합니다.${WT_HINT}
+메인 체크아웃(main 브랜치)에서 편집을 시도했습니다.
+동시 작업 에이전트(Codex/Trae/Claude)와 충돌을 막기 위해
+전용 워크트리에서만 편집할 수 있습니다.${WT_HINT}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EOF
 

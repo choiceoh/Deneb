@@ -16,7 +16,7 @@
 - 레포: https://github.com/choiceoh/Deneb. 챗 응답의 파일 참조는 레포 상대 경로만 (절대경로·`~/...` 금지).
 - `~/deneb/` = **프로덕션 전용** (main만 — srv4 의 auto-deploy 타이머가 pull·빌드·핫스왑) — 에이전트는 거기서 브랜치/워크트리/수동 빌드 금지. 개발은 `~/deneb-dev/`.
 - 멀티에이전트 안전: `git stash`·워크트리 조작·브랜치 전환은 **명시 요청 시에만**. "push" = rebase 통합 허용, "commit" = 내 변경만. 낯선 파일은 무시하고 내 변경만 커밋.
-- **ZCode 자동 워크트리 격리**: ZCode 세션은 SessionStart 훅(`scripts/dev/zcode-worktree-init.sh`)이 `~/.zcode/worktrees/Deneb/<session-id>` 워크트리(`zcode/<session-id>` 브랜치)를 자동 생성. 메인 체크아웃 편집은 PreToolUse 가드(`zcode-worktree-guard.sh`)가 차단 — 반드시 워크트리에서 작업. Stop 훅은 상태만 보고(PR/push 없음). Codex(`~/.codex/worktrees/`)/Trae(`~/.trae/worktrees/`)와 경로·브랜치 분리로 충돌 회피.
+- **ZCode 자동 워크트리 격리**: ZCode 세션은 SessionStart 훅(`scripts/dev/zcode-worktree-init.sh`)이 `~/.zcode/worktrees/Deneb/<session-id>` 워크트리(`zcode/<session-id>` 브랜치)를 자동 생성. **세션 시작 직후 반드시 `cd ~/.zcode/worktrees/Deneb/<session-id>`로 진입** — SessionStart 안내 메시지의 경로를 따를 것. 메인 체크아웃 편집은 PreToolUse 가드(`zcode-worktree-guard.sh`)가 차단. Stop 훅은 상태만 보고(PR/push 없음). Codex(`~/.codex/worktrees/`)/Trae(`~/.trae/worktrees/`)와 경로·브랜치 분리로 충돌 회피.
 - **생성 코드(`DO NOT EDIT` 헤더) 직접 수정 금지** — 소스 오브 트루스 수정 후 make 타깃으로 재생성 ([generated-code](docs/agent-rules/generated-code.md)). `//deneb:wire` 변경 = `make kotlin-models` **와** `pnpm gen:wire` 둘 다.
 - 보안 CODEOWNERS 경로(`.github/dependabot.yml`, `codeql.yml`, `gateway-go/internal/infra/{clientauth,secret,config}/`)는 소유자가 명시 요청할 때만 수정.
 - 실 전화번호·크리덴셜·라이브 설정값 커밋 금지. 버전 번호 변경·release/publish는 운영자 명시 승인. baseline/snapshot/expected-failure 파일로 실패를 침묵시키지 말 것. 의존성 패치는 명시 승인 필요.
