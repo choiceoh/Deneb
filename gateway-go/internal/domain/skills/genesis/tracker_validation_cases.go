@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"hash/fnv"
 	"io"
 	"sort"
 	"strings"
 	"time"
+
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )

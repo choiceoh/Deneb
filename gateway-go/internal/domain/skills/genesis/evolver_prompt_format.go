@@ -11,8 +11,9 @@ package genesis
 
 import (
 	"fmt"
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"strings"
+
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 )
 
 func formatRejectedSkillEdits(records []RejectedSkillEditRecord) string {

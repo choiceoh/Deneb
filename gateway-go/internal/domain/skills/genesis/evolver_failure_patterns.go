@@ -6,9 +6,10 @@ package genesis
 
 import (
 	"fmt"
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"sort"
 	"strings"
+
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 )
 
 type skillFailurePattern struct {

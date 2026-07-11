@@ -17,7 +17,10 @@ package skilllifecycle
 import (
 	"context"
 	"log/slog"
+	"os"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
@@ -42,6 +45,32 @@ const (
 	validationBackfillTargetUniqueCases = 5
 )
 
+// Archive-sweep acceleration knobs (가속 노화, 2026-07-11): the deterministic
+// extractor is idempotent and LLM-free, so during calibration the sweep can
+// open up from "recent sessions" to the whole skill-attributable archive —
+// the only hard bound is the usage log's own age (transcripts predating skill
+// tracking carry no deterministic skill join and stay out of scope).
+func backfillEnvInt(name string, def int) int {
+	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return def
+}
+
+func backfillWindow() time.Duration {
+	return time.Duration(backfillEnvInt("DENEB_VALIDATION_BACKFILL_WINDOW_DAYS", 7)) * 24 * time.Hour
+}
+
+func backfillSessionsPerSkill() int {
+	return backfillEnvInt("DENEB_VALIDATION_BACKFILL_SESSIONS_PER_SKILL", validationBackfillSessionsPerSkill)
+}
+
+func backfillTargetUniqueCases() int {
+	return backfillEnvInt("DENEB_VALIDATION_BACKFILL_TARGET_CASES", validationBackfillTargetUniqueCases)
+}
+
 type validationBackfillTask struct {
 	backend *skillLifecycleBackend
 	logger  *slog.Logger
@@ -64,7 +93,7 @@ func (t *validationBackfillTask) Run(ctx context.Context) error {
 	if t.backend == nil || t.backend.tracker == nil || t.backend.transcripts == nil {
 		return nil
 	}
-	sessions := t.backend.tracker.RecentRealUseSessionsBySkill(validationBackfillWindow, validationBackfillSessionsPerSkill)
+	sessions := t.backend.tracker.RecentRealUseSessionsBySkill(backfillWindow(), backfillSessionsPerSkill())
 	if len(sessions) == 0 {
 		return nil
 	}
@@ -80,7 +109,7 @@ func (t *validationBackfillTask) Run(ctx context.Context) error {
 			return err
 		}
 		if summary, err := t.backend.tracker.ValidationCaseSummary(name); err == nil &&
-			summary.UniqueRecords >= validationBackfillTargetUniqueCases {
+			summary.UniqueRecords >= backfillTargetUniqueCases() {
 			covered++
 			continue
 		}
