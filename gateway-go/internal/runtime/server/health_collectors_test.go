@@ -7,6 +7,11 @@ import (
 )
 
 func TestCollectBaseHealthPreservesRequiredContract(t *testing.T) {
+	// Isolate from the host's real cron store: New() opens the cron service at
+	// DefaultCronStorePath(homeDir), so without this the workers contract
+	// (cron==0) reads the operator's live task count and fails on any machine
+	// with real crons (package convention — see server_test.go).
+	t.Setenv("HOME", t.TempDir())
 	srv := testutil.Must(New(":0"))
 	srv.ChatManager = &ChatManager{}
 	srv.GenesisSubsystem = &GenesisSubsystem{}
@@ -47,6 +52,7 @@ func TestCollectBaseHealthPreservesRequiredContract(t *testing.T) {
 }
 
 func TestPropusHealthCompatibilityAliasSharesSnapshot(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // same isolation — New() touches the HOME cron store
 	srv := testutil.Must(New(":0"))
 	srv.GenesisSubsystem = &GenesisSubsystem{}
 	if section, ok := srv.collectPropusHealth(); ok || section != nil {
