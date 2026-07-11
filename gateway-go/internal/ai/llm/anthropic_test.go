@@ -14,6 +14,10 @@ import (
 // Anthropic client posts to /v1/messages with x-api-key, anthropic-version,
 // and an Anthropic-format JSON body.
 func TestStreamChat_AnthropicMode_BuildsMessagesEndpointRequest(t *testing.T) {
+	temperature := 0.0
+	topP := 1.0
+	frequencyPenalty := 0.0
+	presencePenalty := 0.0
 	var (
 		gotPath    string
 		gotMethod  string
@@ -40,9 +44,13 @@ func TestStreamChat_AnthropicMode_BuildsMessagesEndpointRequest(t *testing.T) {
 	client := NewClient(srv.URL, "secret-key", WithAPIMode(APIModeAnthropic))
 
 	events, err := client.StreamChat(context.Background(), ChatRequest{
-		Model:     "glm-5.1",
-		MaxTokens: 1024,
-		System:    SystemString("be helpful"),
+		Model:            "glm-5.1",
+		MaxTokens:        1024,
+		System:           SystemString("be helpful"),
+		Temperature:      &temperature,
+		TopP:             &topP,
+		FrequencyPenalty: &frequencyPenalty,
+		PresencePenalty:  &presencePenalty,
 		Messages: []Message{
 			NewTextMessage("user", "hello"),
 		},
@@ -77,6 +85,15 @@ func TestStreamChat_AnthropicMode_BuildsMessagesEndpointRequest(t *testing.T) {
 	}
 	if gotBody["system"] != "be helpful" {
 		t.Errorf("body.system = %v, want \"be helpful\"", gotBody["system"])
+	}
+	if gotBody["temperature"] != float64(0) || gotBody["top_p"] != float64(1) {
+		t.Errorf("Anthropic sampling body = temperature:%v top_p:%v, want 0 and 1", gotBody["temperature"], gotBody["top_p"])
+	}
+	if _, ok := gotBody["frequency_penalty"]; ok {
+		t.Errorf("Anthropic body unexpectedly contains unsupported frequency_penalty: %v", gotBody["frequency_penalty"])
+	}
+	if _, ok := gotBody["presence_penalty"]; ok {
+		t.Errorf("Anthropic body unexpectedly contains unsupported presence_penalty: %v", gotBody["presence_penalty"])
 	}
 	thinking, _ := gotBody["thinking"].(map[string]any)
 	if thinking == nil || thinking["type"] != "enabled" {

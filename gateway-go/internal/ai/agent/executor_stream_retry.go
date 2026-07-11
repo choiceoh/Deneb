@@ -40,6 +40,7 @@ type streamingTurnOutcome struct {
 	retries           int
 	retryReason       streamRetryReason
 	terminationReason streamTerminationReason
+	streamBytes       int
 }
 
 func (o streamingTurnOutcome) initialConnectionFailed() bool {
@@ -68,6 +69,22 @@ func runStreamingTurnWithRetry(
 	logger *slog.Logger,
 	turn int,
 ) (streamingTurnOutcome, error) {
+	return runStreamingTurnWithPolicy(ctx, client, req, hooks, idleTimeout, logger, turn, false, 0)
+}
+
+// runStreamingTurnWithPolicy applies deterministic-run retry and translated
+// stream limits while retaining runStreamingTurnWithRetry's production API.
+func runStreamingTurnWithPolicy(
+	ctx context.Context,
+	client LLMStreamer,
+	req llm.ChatRequest,
+	hooks StreamHooks,
+	idleTimeout time.Duration,
+	logger *slog.Logger,
+	turn int,
+	disableRetry bool,
+	maxStreamBytes int,
+) (streamingTurnOutcome, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -75,8 +92,9 @@ func runStreamingTurnWithRetry(
 		attempts: 1,
 	}
 
-	result, connected, err := runStreamingAttempt(ctx, client, req, hooks, idleTimeout, logger)
+	result, connected, err := runStreamingAttemptWithLimit(ctx, client, req, hooks, idleTimeout, logger, maxStreamBytes)
 	outcome.result = result
+	outcome.streamBytes += result.streamBytes
 	if !connected {
 		outcome.terminationReason = streamTerminationInitialConnectErr
 		if ctx.Err() != nil {
@@ -99,6 +117,19 @@ func runStreamingTurnWithRetry(
 		outcome.terminationReason = streamTerminationConsumeErr
 		return outcome, err
 	}
+	if disableRetry {
+		outcome.terminationReason = streamTerminationConsumeErr
+		return outcome, err
+	}
+
+	retryStreamBytes := maxStreamBytes
+	if maxStreamBytes > 0 {
+		retryStreamBytes -= outcome.streamBytes
+		if retryStreamBytes <= 0 {
+			outcome.terminationReason = streamTerminationRetryBudgetSpent
+			return outcome, ErrStreamLimit
+		}
+	}
 
 	logger.Warn("stream interrupted, retrying turn on same model",
 		"turn", turn,
@@ -108,8 +139,9 @@ func runStreamingTurnWithRetry(
 
 	outcome.retries = 1
 	outcome.attempts++
-	result, connected, err = runStreamingAttempt(ctx, client, req, hooks, idleTimeout, logger)
+	result, connected, err = runStreamingAttemptWithLimit(ctx, client, req, hooks, idleTimeout, logger, retryStreamBytes)
 	outcome.result = result
+	outcome.streamBytes += result.streamBytes
 	if !connected {
 		outcome.terminationReason = streamTerminationRetryConnectErr
 		if ctx.Err() != nil {
@@ -141,10 +173,22 @@ func runStreamingAttempt(
 	idleTimeout time.Duration,
 	logger *slog.Logger,
 ) (*turnResult, bool, error) {
+	return runStreamingAttemptWithLimit(ctx, client, req, hooks, idleTimeout, logger, 0)
+}
+
+func runStreamingAttemptWithLimit(
+	ctx context.Context,
+	client LLMStreamer,
+	req llm.ChatRequest,
+	hooks StreamHooks,
+	idleTimeout time.Duration,
+	logger *slog.Logger,
+	maxStreamBytes int,
+) (*turnResult, bool, error) {
 	attemptCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	result := &turnResult{}
+	result := &turnResult{maxStreamBytes: maxStreamBytes}
 	events, err := client.StreamChat(attemptCtx, req)
 	if err != nil {
 		return result, false, err

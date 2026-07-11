@@ -20,14 +20,18 @@ type Params struct {
 	WorkspaceDir string // per-channel workspace override (empty = use global default)
 
 	// Sampling parameters (from OpenAI-compatible API pass-through).
-	Temperature      *float64
-	TopP             *float64
-	MaxTokens        *int // overrides default max output tokens
-	FrequencyPenalty *float64
-	PresencePenalty  *float64
-	Stop             []string
-	ResponseFormat   *llm.ResponseFormat
-	ToolChoice       any // "auto", "none", "required", or structured object
+	Temperature *float64
+	TopP        *float64
+	MaxTokens   *int // overrides default max output tokens
+	MaxTurns    *int // overrides the agent-loop request count
+	// MaxToolCallAttempts caps model-emitted calls across this agent run. Nil
+	// is unlimited; non-nil zero is a valid hard cap.
+	MaxToolCallAttempts *int
+	FrequencyPenalty    *float64
+	PresencePenalty     *float64
+	Stop                []string
+	ResponseFormat      *llm.ResponseFormat
+	ToolChoice          any // "auto", "none", "required", or structured object
 
 	// Thinking is a per-run thinking-level override: a resolveThinkingConfig
 	// level ("minimal".."xhigh") or "off"/"none" to disable the thinking

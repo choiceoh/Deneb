@@ -3,7 +3,7 @@
 # Pure Go gateway build (Rust core has been removed).
 
 .PHONY: all \
-       go go-run go-dev go-test go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod wormhole \
+       go go-run go-dev go-test go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod wormhole briefcase briefcase-test briefcase-smoke \
        test clean check check-go fmt generate generate-check \
        tool-schemas tool-schemas-check \
        data-gen data-gen-check \
@@ -136,6 +136,36 @@ gateway-prod:
 wormhole:
 	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build -trimpath -p $(GO_PAR) $(GO_LDFLAGS) -o ../dist/wormhole ./cmd/wormhole/
 	@echo "wormhole router ready: dist/wormhole"
+
+# Build the standalone, fail-closed Deneb-Briefcase runner.
+briefcase:
+	@mkdir -p dist
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go build -trimpath -p $(GO_PAR) $(GO_LDFLAGS) -o ../dist/deneb-briefcase ./cmd/deneb-briefcase/
+	@echo "Deneb-Briefcase ready: dist/deneb-briefcase"
+
+briefcase-test:
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go test -p $(GO_PAR) -count=1 \
+		./cmd/deneb-briefcase \
+		./internal/ai/llm \
+		./internal/ai/tokenest \
+		./internal/ai/agent \
+		./internal/domain/briefcase \
+		./internal/domain/wiki \
+		./internal/runtime/briefcase \
+		./internal/eval/briefcase \
+		./internal/eval/briefcase/closedloop \
+		./internal/pipeline/chat/toolpreset \
+		./internal/pipeline/chat/prompt \
+		./internal/pipeline/chat/tools \
+		./internal/pipeline/chat \
+		./internal/pipeline/polaris \
+		./pkg/atomicfile
+
+briefcase-smoke:
+	cd gateway-go && $(GO_ENV) go run ./cmd/deneb-briefcase validate \
+		--case ../bench/briefcase/portable/budget-supersession-v1
+	cd gateway-go && $(GO_ENV) go test -count=1 ./cmd/deneb-briefcase \
+		-run 'TestPortableSmokeCaseRemainsSignedAndValid|TestScoreCommand'
 
 go-clean:
 	cd gateway-go && go clean ./...

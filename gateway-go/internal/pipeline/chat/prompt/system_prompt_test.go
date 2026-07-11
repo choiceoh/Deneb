@@ -350,6 +350,19 @@ func TestBuildSystemPromptDateInConfiguredZone(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPromptDateUsesInjectedSemanticTime(t *testing.T) {
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs:     []ToolDef{{Name: "read"}},
+		UserTimezone: "Asia/Seoul",
+		Now:          time.Date(2040, time.December, 31, 16, 30, 0, 0, time.UTC),
+	}
+	prompt := BuildSystemPrompt(params)
+	if want := "Tuesday, January 1, 2041"; !strings.Contains(prompt, want) {
+		t.Fatalf("system prompt did not use injected semantic time %q; got:\n%s", want, prompt)
+	}
+}
+
 func TestBuildSystemPromptBlocksMatchesString(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",

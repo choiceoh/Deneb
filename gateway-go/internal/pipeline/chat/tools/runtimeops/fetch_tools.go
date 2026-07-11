@@ -28,6 +28,12 @@ type FetchToolsRegistry interface {
 // ToolFetchTools returns a tool that activates deferred tools and returns their schemas.
 func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		if ctx == nil {
+			return "", fmt.Errorf("fetch_tools requires a context")
+		}
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		var p struct {
 			Names []string `json:"names"`
 			Query string   `json:"query"`
@@ -106,6 +112,9 @@ func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 		var sb strings.Builder
 		var activated, alreadyActive []string
 		for _, name := range p.Names {
+			if err := ctx.Err(); err != nil {
+				return "", err
+			}
 			if !isAllowed(name) {
 				fmt.Fprintf(&sb, "- %s: not available under the current tool preset\n", name)
 				continue
@@ -135,6 +144,9 @@ func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 			sb.WriteString("\n")
 		}
 
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		if da != nil && len(activated) > 0 {
 			da.Activate(activated)
 		}
@@ -158,6 +170,9 @@ func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 			sb.WriteString(toolctx.FormatFetchActivationNotice(activated))
 		}
 
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		return sb.String(), nil
 	}
 }

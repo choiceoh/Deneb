@@ -2,6 +2,7 @@ package recall
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -177,6 +178,9 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 			if logger != nil {
 				logger.Warn("recall preflight recovered panic", "session", params.SessionKey, "panic", r)
 			}
+			if deps.Briefcase {
+				deps.recordStrictError(errors.New("briefcase recall preflight panicked"))
+			}
 			out = ""
 		}
 	}()
@@ -198,8 +202,14 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ctx, cancel := context.WithTimeout(ctx, recallPreflightTimeout)
-	defer cancel()
+	// Production caps broad ambient recall at 1.5s. Briefcase already carries a
+	// signed per-turn/global deadline; an additional host-speed-sensitive cutoff
+	// would make identical casepacks observe different partial source sets.
+	if !deps.Briefcase {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, recallPreflightTimeout)
+		defer cancel()
+	}
 
 	queries := searchQueries(message)
 
@@ -218,10 +228,18 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 		sources = append(
 			sources,
 			recallSource{"wiki", func(c context.Context) []recallEvidence {
-				return recallWikiEvidence(c, store, queries, message)
+				evidence, err := recallWikiEvidenceResult(c, store, queries, message)
+				if err != nil && deps.Briefcase {
+					deps.recordStrictError(fmt.Errorf("briefcase wiki recall: %w", err))
+				}
+				return evidence
 			}},
 			recallSource{"diary", func(c context.Context) []recallEvidence {
-				return recallDiaryEvidence(c, store, queries, false)
+				evidence, err := recallDiaryEvidenceResult(c, store, queries, false)
+				if err != nil && deps.Briefcase {
+					deps.recordStrictError(fmt.Errorf("briefcase diary recall: %w", err))
+				}
+				return evidence
 			}},
 		)
 	}
@@ -267,8 +285,13 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 			// Per-goroutine recovery: the outer recover cannot see goroutine
 			// panics, and one broken source must cost its slot, not the turn.
 			defer func() {
-				if r := recover(); r != nil && logger != nil {
-					logger.Warn("recall preflight: source panicked", "source", src.name, "panic", r)
+				if r := recover(); r != nil {
+					if logger != nil {
+						logger.Warn("recall preflight: source panicked", "source", src.name, "panic", r)
+					}
+					if deps.Briefcase {
+						deps.recordStrictError(fmt.Errorf("briefcase recall source %s panicked", src.name))
+					}
 				}
 			}()
 			start := time.Now()
@@ -357,7 +380,7 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	// from another episode ("context collapse"). Cue-gated + soft (boost, not
 	// filter): a frameless query is untouched and a strong out-of-frame row can
 	// still surface. See recall_temporal.go.
-	if tr := parseRecallTemporalRange(message); tr.ok {
+	if tr := parseRecallTemporalRangeAt(message, deps.now()); tr.ok {
 		for i := range evidence {
 			if at := evidence[i].At; at > 0 && at >= tr.From && at <= tr.To {
 				evidence[i].Score *= recallTemporalBoost
@@ -381,7 +404,7 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 		logger.Info("recall preflight: evidence injected",
 			"session", params.SessionKey, "count", len(evidence), "sources", sourceSummary, "truncated", truncated)
 	}
-	return formatRecallEvidence(evidence), truncated
+	return formatRecallEvidenceAt(evidence, deps.now()), truncated
 }
 
 // hasCue reports whether a message explicitly asks to recall prior context.

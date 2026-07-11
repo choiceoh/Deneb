@@ -87,6 +87,9 @@ var enrichFetch fetchFunc = webFetch
 // original message — the run is being torn down anyway, and the buffered
 // channel lets the fetch goroutine exit regardless.
 func (h *Handler) startLinkEnrichment(ctx context.Context, message string, opts *SyncOptions) func(context.Context) string {
+	if h != nil && h.briefcaseMode {
+		return nil
+	}
 	if opts != nil && len(opts.Messages) > 0 {
 		// OpenAI-compatible API traffic with caller-owned history — leave it
 		// untouched, same boundary as trySlashSync.

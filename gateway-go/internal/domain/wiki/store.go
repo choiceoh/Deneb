@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Categories are the top-level wiki directories — the fixed 6-category taxonomy.
@@ -84,16 +85,31 @@ type Store struct {
 	// called; when present, Search blends BM25 with dense-vector neighbors so a
 	// query finds pages by meaning, not just keyword overlap. Degrades silently
 	// to pure BM25 whenever the embedding server is unavailable.
-	sem *semanticIndex
+	sem             *semanticIndex
+	bm25RarityFloor float64
+}
+
+// SearchOptions fixes search-time inputs that production normally obtains
+// from the process clock and environment. Zero values preserve production.
+type SearchOptions struct {
+	Now             func() time.Time
+	FieldBoost      float64
+	BM25RarityFloor float64
 }
 
 // NewStore creates a wiki store rooted at dir.
 // It ensures the directory structure exists.
 func NewStore(dir, diaryDir string) (*Store, error) {
+	return NewStoreWithSearchOptions(dir, diaryDir, SearchOptions{})
+}
+
+// NewStoreWithSearchOptions creates a store with explicit deterministic search
+// inputs. It is used by isolated evaluation runtimes, not normal deployment.
+func NewStoreWithSearchOptions(dir, diaryDir string, options SearchOptions) (*Store, error) {
 	if err := ensureDirs(dir); err != nil {
 		return nil, fmt.Errorf("wiki: ensure dirs: %w", err)
 	}
-	s := &Store{dir: dir, diaryDir: diaryDir}
+	s := &Store{dir: dir, diaryDir: diaryDir, bm25RarityFloor: options.BM25RarityFloor}
 
 	// Load or create master index, then reconcile it with disk in both
 	// directions: prune ghost entries (index → no file) and adopt orphan pages
@@ -108,7 +124,7 @@ func NewStore(dir, diaryDir string) (*Store, error) {
 	s.adoptOrphanPages()
 
 	// Initialize in-memory search index (rebuilt from .md files on startup).
-	fts := newSearchDB()
+	fts := newSearchDB(options.Now, options.FieldBoost)
 	s.fts = fts
 	if err := fts.rebuildIndex(dir); err != nil {
 		return nil, fmt.Errorf("wiki: rebuild search index: %w", err)

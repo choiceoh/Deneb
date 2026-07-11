@@ -58,7 +58,7 @@ const sessionTitleSystemPrompt = "다음 대화를 보고 주제를 한국어 �
 // (keeps the drawer and any prefix caching stable). No-op for non-native sessions,
 // the bare client:main home, an empty message, or a missing session manager.
 func (h *Handler) autoTitleSessionAsync(sessionKey, userMsg string, result *SyncResult) {
-	if h.sessions == nil || result == nil {
+	if h.sessions == nil || result == nil || h.briefcaseMode {
 		return
 	}
 	// Only per-conversation native chats ("client:main:<uuid>" / "chat:<uuid>").

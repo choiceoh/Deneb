@@ -1,6 +1,8 @@
 package recall
 
 import (
+	"time"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
@@ -16,10 +18,26 @@ type Params struct {
 
 // Deps contains the optional recall evidence sources. Nil fields disable their source.
 type Deps struct {
-	Wiki       *wiki.Store
-	Transcript toolctx.TranscriptStore
-	FileRecall FileRecallFunc
-	Org        func() (org.OrgTree, error)
+	Wiki         *wiki.Store
+	Transcript   toolctx.TranscriptStore
+	FileRecall   FileRecallFunc
+	Org          func() (org.OrgTree, error)
+	Briefcase    bool
+	StrictErrors interface{ Record(error) }
+	Now          func() time.Time
+}
+
+func (d Deps) now() time.Time {
+	if d.Now != nil {
+		return d.Now()
+	}
+	return time.Now()
+}
+
+func (d Deps) recordStrictError(err error) {
+	if d.StrictErrors != nil && err != nil {
+		d.StrictErrors.Record(err)
+	}
 }
 
 func abbreviateSession(key string) string {

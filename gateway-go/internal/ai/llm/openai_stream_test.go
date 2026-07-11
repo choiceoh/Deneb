@@ -4,12 +4,41 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
+
+func TestMapFinishReasonFailsClosedForUnknownValues(t *testing.T) {
+	if got := mapFinishReason("stop"); got != "end_turn" {
+		t.Fatalf("stop = %q", got)
+	}
+	for _, reason := range []string{"", "mystery"} {
+		if got := mapFinishReason(reason); !strings.HasPrefix(got, "unknown_finish_reason") {
+			t.Fatalf("reason %q mapped to %q", reason, got)
+		}
+	}
+}
+
+func TestTranslateOpenAIStreamCapsRawBytesBeforeToolBuffering(t *testing.T) {
+	client := &Client{logger: slog.Default(), maxStreamBytes: 32}
+	raw := make(chan StreamEvent, 1)
+	raw <- StreamEvent{Payload: json.RawMessage(`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"this-is-too-large"}}]}}]}`)}
+	close(raw)
+	out := make(chan StreamEvent, 4)
+	client.translateOpenAIStream(context.Background(), raw, out)
+	close(out)
+	for event := range out {
+		if event.Type == "error" && strings.Contains(string(event.Payload), "stream_limit") {
+			return
+		}
+	}
+	t.Fatal("raw stream byte limit did not emit a terminal error")
+}
 
 // TestStreamChat_UsageOnFinishChunk verifies that input tokens are
 // captured when the provider bundles usage data on the finish_reason chunk

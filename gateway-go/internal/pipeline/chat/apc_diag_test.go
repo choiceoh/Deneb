@@ -14,7 +14,7 @@ import (
 func apcDiagFor(t *testing.T, system string, msgs []llm.Message, recall string) *apcDiagRun {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return beginAPCDiag(context.Background(), runDeps{}, "test:"+t.Name(), "vllm", "deepseek-v4-flash", []byte(system), recall, msgs, logger)
+	return beginAPCDiag(context.Background(), runDeps{}, "test:"+t.Name(), llm.APIModeOpenAI, "vllm", "deepseek-v4-flash", []byte(system), recall, msgs, logger)
 }
 
 func TestAPCDiag_Classification(t *testing.T) {

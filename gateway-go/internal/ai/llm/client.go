@@ -91,6 +91,9 @@ type Client struct {
 	// derived context with a fresh timeout is created (still cancellable via
 	// the parent for agent abort).
 	minRequestTimeout time.Duration
+	// maxStreamBytes caps raw provider SSE payload bytes before protocol
+	// translation. Zero preserves the production unlimited aggregate behavior.
+	maxStreamBytes int
 }
 
 // ClientOption configures a Client.
@@ -143,6 +146,36 @@ func (c *Client) APIMode() string { return c.apiMode }
 // to locate a self-hosted vLLM engine's /metrics endpoint for prefix-cache
 // telemetry; it carries no credentials.
 func (c *Client) BaseURL() string { return c.baseURL }
+
+// CloneForDeterministicRun returns an isolated client profile for bounded
+// evaluation. It preserves endpoint/auth/wire settings while disabling
+// redirects, retries with jitter, and the production minimum-request timeout
+// that can intentionally outlive a short parent deadline.
+func (c *Client) CloneForDeterministicRun() *Client {
+	if c == nil {
+		return nil
+	}
+	clone := *c
+	if c.httpClient != nil {
+		httpClone := *c.httpClient
+		httpClone.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+		clone.httpClient = &httpClone
+	}
+	clone.maxRetries = 0
+	clone.baseDelay = 0
+	clone.maxDelay = 0
+	clone.minRequestTimeout = 0
+	clone.maxStreamBytes = 8 << 20
+	if c.extraHeaders != nil {
+		clone.extraHeaders = make(map[string]string, len(c.extraHeaders))
+		for key, value := range c.extraHeaders {
+			clone.extraHeaders[key] = value
+		}
+	}
+	return &clone
+}
 
 // WithHeaders sets extra HTTP headers applied to every request this
 // client makes. Provider configs use this for endpoint-required headers

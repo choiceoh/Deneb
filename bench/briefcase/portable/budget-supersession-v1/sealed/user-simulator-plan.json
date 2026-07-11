@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "deneb-briefcase-user-simulator/v1",
+  "caseId": "budget-supersession-v1",
+  "followUps": [
+    {
+      "cycle": 1,
+      "whenVerdict": "needs-revision",
+      "message": "공개된 자료를 다시 살펴보고 요청한 근거가 드러나도록 보완해 주세요."
+    },
+    {
+      "cycle": 2,
+      "whenVerdict": "needs-revision",
+      "message": "남아 있는 누락이나 상충되는 내용을 점검한 뒤 최종 답변을 마무리해 주세요."
+    }
+  ]
+}

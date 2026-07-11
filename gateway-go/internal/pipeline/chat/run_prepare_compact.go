@@ -140,7 +140,7 @@ func compactTurnMessages(ctx context.Context, params RunParams, deps runDeps, mr
 	const syncCompactionStall = 3 * time.Minute
 	polarisCtx, polarisCancel := context.WithTimeout(ctx, syncCompactionStall)
 	var summarizer compact.Summarizer
-	if pilotHub := pilot.LocalAIHub(); pilotHub != nil {
+	if pilotHub := pilot.LocalAIHub(); pilotHub != nil && !deps.briefcaseMode {
 		summarizer = &localAISummarizer{}
 	}
 
@@ -229,8 +229,13 @@ func compactTurnMessages(ctx context.Context, params RunParams, deps runDeps, mr
 		if deps.memory.Embedding != nil {
 			engine.SetEmbedder(deps.memory.Embedding)
 		}
-		engine.SetAnchorKeywords(buildAnchorKeywords(deps.memory.Wiki))
-		engine.SetLearnedGuidelines(buildLearnedGuidelines())
+		if deps.briefcaseMode {
+			engine.SetAnchorKeywords(nil)
+			engine.SetLearnedGuidelines(nil)
+		} else {
+			engine.SetAnchorKeywords(buildAnchorKeywords(deps.memory.Wiki))
+			engine.SetLearnedGuidelines(buildLearnedGuidelines())
+		}
 		messages, polarisResult = engine.CompactAndPersist(polarisCtx, params.SessionKey, messages, summarizer, contextBudget)
 
 		// Proactive condensation: when a new leaf summary was persisted,

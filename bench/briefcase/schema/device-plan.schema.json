@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/choiceoh/deneb/bench/briefcase/schema/device-plan.schema.json",
+  "title": "Deneb-Briefcase Device Twin plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["plans"],
+  "properties": {
+    "plans": {
+      "type": "array",
+      "minItems": 1,
+	  "maxItems": 256,
+      "items": { "$ref": "#/$defs/plan" }
+    }
+  },
+  "$defs": {
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actionId", "kind", "payload", "status"],
+      "properties": {
+		"actionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+		"kind": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "payload": true,
+        "status": {
+          "enum": ["confirmed", "failed", "unconfirmed", "delayed"]
+        },
+        "delaySeconds": { "type": "integer", "minimum": 0 },
+        "finalStatus": {
+          "enum": ["confirmed", "failed", "unconfirmed"]
+        },
+        "result": true,
+		"failure": { "type": "string", "maxLength": 8192 }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "delayed" } },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["delaySeconds", "finalStatus"],
+            "properties": { "delaySeconds": { "minimum": 1 } }
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                { "required": ["delaySeconds"] },
+                { "required": ["finalStatus"] }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

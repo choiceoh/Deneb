@@ -41,9 +41,19 @@ func newStreamAccumulator(result *turnResult, hooks StreamHooks, logger *slog.Lo
 // apply folds one provider event into the turn result. complete is true only
 // for message_stop; an exhausted raw event channel is handled by the caller.
 func (a *streamAccumulator) apply(event llm.StreamEvent) (complete bool, err error) {
+	if a.result.maxStreamBytes > 0 {
+		incoming := len(event.Type) + len(event.Payload)
+		if incoming > a.result.maxStreamBytes-a.result.streamBytes {
+			return false, ErrStreamLimit
+		}
+		a.result.streamBytes += incoming
+	}
+
 	switch event.Type {
 	case "message_start":
-		a.applyMessageStart(event.Payload)
+		if err := a.applyMessageStart(event.Payload); err != nil {
+			return false, err
+		}
 	case "content_block_start":
 		a.startContentBlock(event.Payload)
 	case "content_block_delta":
@@ -63,17 +73,25 @@ func (a *streamAccumulator) apply(event llm.StreamEvent) (complete bool, err err
 	return false, nil
 }
 
-func (a *streamAccumulator) applyMessageStart(payload json.RawMessage) {
+func (a *streamAccumulator) applyMessageStart(payload json.RawMessage) error {
 	var messageStart llm.MessageStart
 	if err := json.Unmarshal(payload, &messageStart); err != nil {
 		a.logger.Warn("unmarshal message_start failed", "error", err)
-		return
+		return nil
 	}
 
+	providerModel := strings.TrimSpace(messageStart.Message.Model)
+	if providerModel != "" {
+		if a.result.providerModel != "" && a.result.providerModel != providerModel {
+			return fmt.Errorf("provider model changed within turn from %q to %q", a.result.providerModel, providerModel)
+		}
+		a.result.providerModel = providerModel
+	}
 	usage := messageStart.Message.Usage
 	a.result.usage.InputTokens = usage.InputTokens
 	a.result.usage.CacheReadInputTokens = usage.CacheReadInputTokens
 	a.result.usage.CacheCreationInputTokens = usage.CacheCreationInputTokens
+	return nil
 }
 
 func (a *streamAccumulator) startContentBlock(payload json.RawMessage) {
@@ -137,7 +155,11 @@ func (a *streamAccumulator) applyMessageDelta(payload json.RawMessage) {
 	if messageDelta.Delta.StopReason != "" {
 		a.result.stopReason = messageDelta.Delta.StopReason
 	}
-	a.result.usage.OutputTokens = messageDelta.Usage.OutputTokens
+	// Output usage is cumulative. A trailing usage-less delta must not erase a
+	// larger provider-attested count before hard-budget accounting.
+	if messageDelta.Usage.OutputTokens > a.result.usage.OutputTokens {
+		a.result.usage.OutputTokens = messageDelta.Usage.OutputTokens
+	}
 	// Cache totals may be absent from message_delta. Zero means missing here,
 	// so retain the message_start value in that case.
 	if messageDelta.Usage.CacheReadInputTokens > 0 {

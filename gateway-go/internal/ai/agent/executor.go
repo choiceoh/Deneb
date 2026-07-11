@@ -9,6 +9,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -35,6 +36,15 @@ var toolHeartbeatInterval = 10 * time.Second
 // narration peaked near 83 runes while the shortest tool-accompanied answer ran
 // ~2300 runes, so 300 sits in a wide safe gap.
 const deliverableNarrationMaxRunes = 300
+
+var (
+	// ErrToolCallLimit is returned before any call in an over-limit model turn
+	// reaches tool hooks or execution.
+	ErrToolCallLimit = errors.New("agent tool-call attempt limit exceeded")
+	// ErrInvalidStopShape is returned when a strict run's stop reason disagrees
+	// with whether the model emitted tool calls.
+	ErrInvalidStopShape = errors.New("agent invalid stop shape")
+)
 
 // RunAgent executes the agent tool-call loop: call LLM → detect tool_use →
 // execute tool → feed result → repeat until the model stops or limits are hit.
@@ -65,6 +75,13 @@ func RunAgent(
 	if logger == nil {
 		logger = slog.Default()
 	}
+	maxToolCallAttempts := -1
+	if cfg.MaxToolCallAttempts != nil {
+		maxToolCallAttempts = *cfg.MaxToolCallAttempts
+		if maxToolCallAttempts < 0 {
+			return nil, errors.New("agent max tool-call attempt limit must be non-negative")
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
@@ -80,6 +97,8 @@ func RunAgent(
 
 	baseMaxTokens := cfg.MaxTokens // Original value before any recovery scaling.
 	turnPreparer := newTurnRequestPreparer(&cfg)
+	streamBytesUsed := 0
+	toolCallAttemptsUsed := 0
 
 	// Loop condition permits one extra iteration past MaxTurns when the grace
 	// flag is set — see grace.go. Normal runs behave identically to `range
@@ -87,16 +106,37 @@ func RunAgent(
 	// BudgetGraceCall is armed at the bottom of the final budgeted turn (see
 	// the injection block at loop tail) and cleared there or on the early
 	// end_turn return path.
-	for turn := 0; turn < cfg.MaxTurns || result.BudgetGraceCall; turn++ {
+	for turn := 0; turn < cfg.MaxTurns || (!cfg.DisableBudgetGrace && result.BudgetGraceCall); turn++ {
+		requestMaxTokens := cfg.MaxTokens
+		if cfg.MaxTotalOutputTokens > 0 {
+			remaining := cfg.MaxTotalOutputTokens - result.Usage.OutputTokens
+			if remaining <= 0 {
+				result.StopReason = "max_total_tokens"
+				return result, nil
+			}
+			if requestMaxTokens > remaining {
+				requestMaxTokens = remaining
+			}
+		}
+		remainingStreamBytes := cfg.MaxStreamBytes
+		if cfg.MaxStreamBytes > 0 {
+			remainingStreamBytes -= streamBytesUsed
+			if remainingStreamBytes <= 0 {
+				return nil, ErrStreamLimit
+			}
+		}
 		result.Turns = turn + 1
 
 		prepared := turnPreparer.prepare(runCtx, turn, journal.messages, result.ToolActivities)
+		prepared.request.MaxTokens = requestMaxTokens
 		ctx = prepared.ctx
 		turnThinking := prepared.thinking
 
-		streamOutcome, err := runStreamingTurnWithRetry(
+		streamOutcome, err := runStreamingTurnWithPolicy(
 			ctx, client, prepared.request, hooks, cfg.StreamIdleTimeout, logger, turn,
+			cfg.DisableStreamRetry, remainingStreamBytes,
 		)
+		streamBytesUsed += streamOutcome.streamBytes
 		result.Stream.record(streamOutcome)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -110,6 +150,60 @@ func RunAgent(
 			return nil, fmt.Errorf("consume stream (turn %d): %w", turn, err)
 		}
 		turnRes := streamOutcome.result
+
+		if cfg.RequireProviderModel {
+			if strings.TrimSpace(turnRes.providerModel) == "" {
+				return nil, fmt.Errorf("provider did not report a model identifier on turn %d", turn)
+			}
+			if result.ProviderModel != "" && result.ProviderModel != turnRes.providerModel {
+				return nil, fmt.Errorf("provider model changed from %q to %q", result.ProviderModel, turnRes.providerModel)
+			}
+		}
+		if turnRes.providerModel != "" {
+			result.ProviderModel = turnRes.providerModel
+		}
+		if cfg.RequireStrictStopShape {
+			expectedStopReason := "end_turn"
+			if len(turnRes.toolCalls) > 0 {
+				expectedStopReason = "tool_use"
+			}
+			if turnRes.stopReason != expectedStopReason {
+				return nil, fmt.Errorf(
+					"%w: turn %d reported %q with %d tool calls; expected %q",
+					ErrInvalidStopShape, turn+1, turnRes.stopReason, len(turnRes.toolCalls), expectedStopReason,
+				)
+			}
+		}
+		if cfg.RequireExplicitStopReason && turnRes.stopReason == "" {
+			return nil, errors.New("provider did not report an explicit stop reason")
+		}
+
+		// A provider may omit usage or report zero while still returning large
+		// thinking/tool arguments. Hard cumulative budgets charge the greater of
+		// provider usage and a deterministic estimate of the complete payload.
+		chargedOutputTokens := turnRes.usage.OutputTokens
+		if cfg.MaxTotalOutputTokens > 0 {
+			chargedOutputTokens = generatedOutputTokenCharge(turnRes.contentBlocks, chargedOutputTokens)
+			remaining := cfg.MaxTotalOutputTokens - result.Usage.OutputTokens
+			if chargedOutputTokens > remaining {
+				return nil, errors.New("provider exceeded the configured total output-token budget")
+			}
+		}
+		turnRes.usage.OutputTokens = chargedOutputTokens
+
+		// Reserve the complete emitted batch before hooks or execution. Denied
+		// calls still consume the cumulative attempt budget.
+		if maxToolCallAttempts >= 0 {
+			requested := len(turnRes.toolCalls)
+			remaining := maxToolCallAttempts - toolCallAttemptsUsed
+			if requested > remaining {
+				return nil, fmt.Errorf(
+					"%w: turn %d requested %d calls with %d remaining",
+					ErrToolCallLimit, turn+1, requested, remaining,
+				)
+			}
+			toolCallAttemptsUsed += requested
+		}
 
 		// Commit the completed provider turn to run-level usage/text/tool
 		// aggregates before any hook or recovery decision observes the result.
@@ -144,7 +238,7 @@ func RunAgent(
 			"stopReason", turnRes.stopReason)
 
 		// Feed actual token usage back to the estimator for self-calibration.
-		if turnRes.usage.InputTokens > 0 {
+		if turnRes.usage.InputTokens > 0 && !cfg.DisableTokenFeedback {
 			est := tokenest.ForModel(cfg.Model)
 			estimated := est.CountBytes([]byte(prepared.request.System))
 			for _, m := range prepared.request.Messages {
@@ -378,7 +472,7 @@ func RunAgent(
 			// next check — the terminal return below sets the graceful marker.
 			result.BudgetGraceCall = false
 
-		case turn+1 >= cfg.MaxTurns && !result.BudgetExhaustedInjected:
+		case !cfg.DisableBudgetGrace && turn+1 >= cfg.MaxTurns && !result.BudgetExhaustedInjected:
 			// This was the final budgeted turn AND the model chose to keep
 			// calling tools (if it had emitted end_turn / no tools, the
 			// early-exit branch above would already have returned). Inject
@@ -413,6 +507,28 @@ func RunAgent(
 		result.StopReason = "max_turns"
 	}
 	return result, nil
+}
+
+// generatedOutputTokenCharge counts the complete structured assistant payload,
+// not only user-visible text. When provider usage is absent, the local fallback
+// is floored at one token per serialized byte because bytes/4 is not a hard
+// upper bound across tokenizers.
+func generatedOutputTokenCharge(blocks []llm.ContentBlock, providerTokens int) int {
+	if len(blocks) == 0 {
+		if providerTokens > 0 {
+			return providerTokens
+		}
+		return 0
+	}
+	content := llm.NewBlockMessage("assistant", blocks).Content
+	estimate := tokenest.EstimateBytesUncalibrated(content)
+	if providerTokens <= 0 && len(content) > estimate {
+		estimate = len(content)
+	}
+	if providerTokens > estimate {
+		return providerTokens
+	}
+	return estimate
 }
 
 // turnResult holds the parsed output of a single LLM turn.

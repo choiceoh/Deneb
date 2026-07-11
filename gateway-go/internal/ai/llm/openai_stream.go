@@ -43,14 +43,18 @@ func marshalMessageStart(id, model string, inputTokens, cacheReadTokens int) jso
 // mapFinishReason translates an OpenAI finish reason to an Anthropic stop reason.
 func mapFinishReason(reason string) string {
 	switch reason {
+	case "stop":
+		return "end_turn"
 	case "length":
 		return "max_tokens"
 	case "tool_calls", "function_call":
 		return "tool_use"
 	case "content_filter":
 		return "content_filtered"
+	case "":
+		return "unknown_finish_reason"
 	default:
-		return "end_turn"
+		return "unknown_finish_reason:" + reason
 	}
 }
 
@@ -84,6 +88,7 @@ func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan Str
 	sawFinishReason := false // any non-nil choice finish_reason — a clean-end signal
 	chunkCount := 0          // parsed data chunks, for the premature-EOF diagnostic
 	content := newOpenAIContentEmitter(ctx, out, c.logger)
+	rawBytes := 0
 
 streamLoop:
 	for {
@@ -99,6 +104,17 @@ streamLoop:
 			if !ok {
 				break streamLoop
 			}
+		}
+		if c.maxStreamBytes > 0 {
+			incoming := len(raw.Type) + len(raw.Payload)
+			if incoming > c.maxStreamBytes-rawBytes {
+				payload, _ := json.Marshal(map[string]string{
+					"type": "stream_limit", "message": "provider stream exceeded configured byte limit",
+				})
+				emit(ctx, out, StreamEvent{Type: "error", Payload: payload})
+				return
+			}
+			rawBytes += incoming
 		}
 
 		// OpenAI sends "data: [DONE]" as the final event.

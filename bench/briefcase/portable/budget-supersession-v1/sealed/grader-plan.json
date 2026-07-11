@@ -1,0 +1,16 @@
+{
+  "fingerprint": {
+    "caseId": "budget-supersession-v1",
+    "seed": 42001
+  },
+  "passThreshold": 1,
+  "checks": [
+    {
+      "id": "grounded-one-sentence-answer",
+      "type": "exact_text",
+      "critical": true,
+      "weight": 1,
+      "expectedText": "개정 메일이 이전 승인 예산 100을 대체했으며, Project Aurora의 최신 승인 예산은 120입니다."
+    }
+  ]
+}

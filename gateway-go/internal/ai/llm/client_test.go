@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -145,6 +148,123 @@ func newTestClient(t *testing.T, handler http.HandlerFunc, opts ...ClientOption)
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 	return NewClient(server.URL, "test-key", opts...), server
+}
+
+func TestCloneForDeterministicRunDoesNotExtendParentDeadline(t *testing.T) {
+	parent := NewClient("http://example.invalid", "test-key", WithMinRequestTimeout(2*time.Second))
+	clone := parent.CloneForDeterministicRun()
+	if clone == nil {
+		t.Fatal("CloneForDeterministicRun returned nil")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	parentDeadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("parent context has no deadline")
+	}
+
+	// Prove the source client is configured to extend this short deadline, so
+	// equality below is exercising the deterministic clone rather than a weak
+	// test setup.
+	productionCtx, productionCancel := parent.requestContext(ctx)
+	defer productionCancel()
+	productionDeadline, ok := productionCtx.Deadline()
+	if !ok || !productionDeadline.After(parentDeadline) {
+		t.Fatalf("source client did not extend the short deadline: parent=%v production=%v", parentDeadline, productionDeadline)
+	}
+
+	deterministicCtx, deterministicCancel := clone.requestContext(ctx)
+	defer deterministicCancel()
+	deterministicDeadline, ok := deterministicCtx.Deadline()
+	if !ok {
+		t.Fatal("deterministic request context lost the parent deadline")
+	}
+	if !deterministicDeadline.Equal(parentDeadline) {
+		t.Fatalf("deterministic request deadline = %v, want parent deadline %v", deterministicDeadline, parentDeadline)
+	}
+}
+
+func TestCloneForDeterministicRunDoesNotRetryHTTP500(t *testing.T) {
+	var calls atomic.Int32
+	parent, server := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = io.WriteString(w, "transient server failure")
+	}, WithRetry(3, time.Millisecond, 5*time.Millisecond))
+	clone := parent.CloneForDeterministicRun()
+
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", strings.NewReader(`{"secret":"body"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = clone.DoStream(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected HTTP 500 error")
+	}
+	var apiErr *httpretry.APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("error = %v, want APIError status 500", err)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("server calls = %d, want exactly 1 (no deterministic retry)", got)
+	}
+}
+
+func TestCloneForDeterministicRunDoesNotFollowRedirect(t *testing.T) {
+	type requestSnapshot struct {
+		authorization string
+		body          string
+	}
+	const secretBody = `{"private":"briefcase-secret"}`
+	const secretAuthorization = "Bearer briefcase-secret-token"
+
+	targetSeen := make(chan requestSnapshot, 1)
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		targetSeen <- requestSnapshot{authorization: r.Header.Get("Authorization"), body: string(body)}
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "unexpected redirect target")
+	}))
+	defer target.Close()
+
+	firstSeen := make(chan requestSnapshot, 1)
+	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		firstSeen <- requestSnapshot{authorization: r.Header.Get("Authorization"), body: string(body)}
+		w.Header().Set("Location", target.URL+"/sink")
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	}))
+	defer first.Close()
+
+	clone := NewClient(first.URL, "unused", WithRetry(3, time.Millisecond, 5*time.Millisecond)).CloneForDeterministicRun()
+	req, err := http.NewRequest(http.MethodPost, first.URL+"/start", strings.NewReader(secretBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", secretAuthorization)
+	_, err = clone.DoStream(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected the unfollowed 307 response to be returned as an error")
+	}
+	var apiErr *httpretry.APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusTemporaryRedirect {
+		t.Fatalf("error = %v, want APIError status 307", err)
+	}
+
+	select {
+	case got := <-firstSeen:
+		if got.authorization != secretAuthorization || got.body != secretBody {
+			t.Fatalf("first server request = %+v, want original authorization and body", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("first server did not receive the request")
+	}
+	select {
+	case got := <-targetSeen:
+		t.Fatalf("redirect target received secret request data: %+v", got)
+	default:
+	}
 }
 
 func TestDoStream_Success(t *testing.T) {

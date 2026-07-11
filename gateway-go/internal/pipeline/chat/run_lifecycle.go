@@ -86,7 +86,7 @@ func handleRunSuccess(
 // native client's sync surface after PR #1922 — adding any future entry path
 // must call this, not re-wire the hooks individually.
 func finishTurnSideEffects(deps runDeps, params RunParams, result *agent.AgentResult, logger *slog.Logger) {
-	if result == nil {
+	if result == nil || deps.briefcaseMode {
 		return
 	}
 	// Diary recording: append raw conversation turn to today's diary.

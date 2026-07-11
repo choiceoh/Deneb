@@ -153,6 +153,13 @@ func runAgentWithFallback(
 	logger *slog.Logger,
 	runLog *agentlog.RunLogger,
 ) (*agent.AgentResult, string, bool, error) {
+	// Briefcase binds maxTurns and timeout as hard signed budgets. Production's
+	// retry/fallback ladder can execute a fresh Agent loop (and repeat tool side
+	// effects), so deterministic runs make exactly one attempt and fail closed.
+	if deps.briefcaseMode {
+		result, err := agent.RunAgent(ctx, cfg, messages, client, deps.tools, hooks, logger, runLog)
+		return result, cfg.Model, false, err
+	}
 	t := &fallbackTurn{
 		deps:          deps,
 		client:        client,
@@ -349,7 +356,7 @@ func (t *fallbackTurn) compactionRecovery(ctx context.Context, compactAttempt in
 	// Emergency summarize: keep head 2 + tail 8, summarize the middle.
 	if len(t.messages) > 10 {
 		var summarizer compact.Summarizer
-		if pilotHub := pilot.LocalAIHub(); pilotHub != nil {
+		if pilotHub := pilot.LocalAIHub(); pilotHub != nil && !t.deps.briefcaseMode {
 			summarizer = &localAISummarizer{}
 		}
 		if summarizer != nil {
@@ -486,7 +493,7 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 		// (Kimi: every attempt 400s) or Anthropic-mode behind an OpenAI-mode
 		// main (runs uncached). Reconcile per attempt.
 		reconcileFallbackCacheMarkers(&agentCfg, t.deps, t.providerID, t.cfg.Model,
-			fbCfg.ProviderID, fbCfg.Model, fbClient, t.logger)
+			fbCfg.ProviderID, fbCfg.Model, t.client, fbClient, t.logger)
 		// Routed runs: carry "disabled" only to fallback models whose template
 		// supports the toggle (provider-aware capability lookup); every other
 		// fallback gets the session's ORIGINAL thinking back — never a bare

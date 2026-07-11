@@ -2,6 +2,7 @@ package polaris
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,9 +24,10 @@ import (
 // Store is the file-backed immutable message store and summary DAG.
 // Messages are stored as per-session JSONL files; summaries as per-session JSON snapshots.
 type Store struct {
-	dir      string
-	mu       sync.Mutex // all methods need write access due to lazy session init
-	sessions map[string]*sessionData
+	dir           string
+	mu            sync.Mutex // all methods need write access due to lazy session init
+	sessions      map[string]*sessionData
+	tokenEstimate func(string) int
 
 	// summarySem is the optional dense-vector index over RESIDENT sessions'
 	// summary nodes (semantic.go). nil until SetSummaryEmbedder; when present,
@@ -59,6 +61,13 @@ type sessionData struct {
 // The path parameter is reinterpreted as a base: if it ends in ".db",
 // we strip that and use the parent directory + "polaris/" subdirectory.
 func NewStore(path string) (*Store, error) {
+	return NewStoreWithTokenEstimator(path, tokenest.Estimate)
+}
+
+// NewStoreWithTokenEstimator opens a store with an explicit token estimator.
+// The Briefcase harness supplies the fixed, uncalibrated estimator so embedded
+// runs cannot inherit process-global production calibration.
+func NewStoreWithTokenEstimator(path string, estimate func(string) int) (*Store, error) {
 	dir := path
 	if strings.HasSuffix(path, ".db") {
 		dir = filepath.Join(filepath.Dir(path), "polaris")
@@ -70,9 +79,13 @@ func NewStore(path string) (*Store, error) {
 		}
 	}
 
+	if estimate == nil {
+		estimate = tokenest.Estimate
+	}
 	s := &Store{
-		dir:      dir,
-		sessions: make(map[string]*sessionData),
+		dir:           dir,
+		sessions:      make(map[string]*sessionData),
+		tokenEstimate: estimate,
 	}
 	return s, nil
 }
@@ -143,7 +156,7 @@ func (s *Store) AppendMessage(sessionKey string, msg toolctx.ChatMessage) error 
 
 	content := string(msg.Content)
 	textContent := indexableText(msg)
-	tokenEst := tokenest.Estimate(textContent)
+	tokenEst := s.tokenEstimate(textContent)
 	ts := msg.Timestamp
 	if ts == 0 {
 		ts = time.Now().UnixMilli()
@@ -538,7 +551,12 @@ func (s *Store) DeleteSession(sessionKey string) error {
 	defer s.mu.Unlock()
 
 	delete(s.sessions, sessionKey)
-	os.Remove(s.messagesPath(sessionKey))
-	os.Remove(s.summariesPath(sessionKey))
-	return nil
+	var deleteErrs []error
+	if err := os.Remove(s.messagesPath(sessionKey)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		deleteErrs = append(deleteErrs, fmt.Errorf("polaris: delete messages: %w", err))
+	}
+	if err := os.Remove(s.summariesPath(sessionKey)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		deleteErrs = append(deleteErrs, fmt.Errorf("polaris: delete summaries: %w", err))
+	}
+	return errors.Join(deleteErrs...)
 }

@@ -114,6 +114,9 @@ func prepareContextAndPrompt(
 // buildTier1WikiSnapshot returns the session-frozen tier-1 wiki block ("" for
 // explicit-System runs, which own their prompt).
 func buildTier1WikiSnapshot(params RunParams, deps runDeps) string {
+	if deps.disableTier1Wiki {
+		return ""
+	}
 	var tier1 string
 	// Explicit-System runs (subagents, skill-review forks) own their prompt
 	// end to end — finalizePrompt would otherwise append always-on wiki
@@ -158,7 +161,7 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, lo
 	// Hermes-style auto_recall: run the preflight every turn, not just cue turns.
 	// recall.Build searches wiki/diary/polaris/transcript and returns
 	// "" silently when there's no evidence, so non-cue turns add latency but no noise.
-	if hasCue {
+	if hasCue && !deps.briefcaseMode {
 		if cached, ok := chatrecall.CachedSnapshot(params.SessionKey, fingerprint); ok {
 			return cached
 		}
@@ -176,14 +179,17 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, lo
 			SkipRecall:    params.SkipRecall,
 		},
 		chatrecall.Deps{
-			Wiki:       deps.memory.Wiki,
-			Transcript: deps.transcript,
-			FileRecall: deps.memory.FileRecall,
-			Org:        deps.memory.Org,
+			Wiki:         deps.memory.Wiki,
+			Transcript:   deps.transcript,
+			FileRecall:   deps.memory.FileRecall,
+			Org:          deps.memory.Org,
+			Briefcase:    deps.briefcaseMode,
+			StrictErrors: deps.strictErrors,
+			Now:          deps.now,
 		},
 		logger,
 	)
-	if chatrecall.ShouldFreeze(hasCue, recallTruncated, recallMemory) {
+	if !deps.briefcaseMode && chatrecall.ShouldFreeze(hasCue, recallTruncated, recallMemory) {
 		chatrecall.StoreSnapshot(params.SessionKey, fingerprint, recallMemory)
 	}
 	return recallMemory
@@ -233,6 +239,9 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 		return nil, nil, nil
 	}
 	tz, _ := prompt.LoadCachedTimezone()
+	if deps.semanticTimezone != "" {
+		tz = deps.semanticTimezone
+	}
 	// Channel feeds the prompt only (the runtime line).
 	// Runs without a DeliveryContext that piggyback on a client session
 	// (heartbeat, boot) fall back to the session's channel so their
@@ -290,7 +299,7 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 	// key change → topic-less Static cache stays shared).
 	var topicKnowledge, topicCacheKey, topicKnowledgePath string
 	var frozenTopic *prompt.TopicKnowledge
-	if deps.ambient.TopicResolver != nil && params.Delivery != nil {
+	if deps.ambient.TopicResolver != nil && params.Delivery != nil && !deps.briefcaseMode {
 		if key := deps.ambient.TopicResolver.TopicKey(params.Delivery.ThreadID); key != "" {
 			tk := prompt.LoadTopicKnowledge(workspaceDir, deps.ambient.TopicResolver.Dir(), key, params.SessionKey)
 			if tk.Content != "" {
@@ -307,7 +316,7 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 	// it per day, so this is a cheap cache hit on all but the first turn of
 	// the day; "" when no calendar source or no upcoming events.
 	var calendarGlance string
-	if deps.ambient.CalendarGlance != nil {
+	if deps.ambient.CalendarGlance != nil && !deps.briefcaseMode {
 		calendarGlance = deps.ambient.CalendarGlance(ctx, params.SessionKey, tz)
 	}
 
@@ -315,36 +324,56 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 	// standing goal, read live from the process store. "" when no active
 	// goal or goals are not wired.
 	var goalGlance string
-	if deps.ambient.GoalGlance != nil {
+	if deps.ambient.GoalGlance != nil && !deps.briefcaseMode {
 		goalGlance = deps.ambient.GoalGlance(ctx, params.SessionKey)
 	}
 
-	ctxFiles := prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
+	var ctxFiles []prompt.ContextFile
+	if !deps.briefcaseMode {
+		ctxFiles = prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
+	}
 
 	// Operator-edited 업무 persona (Settings prompt corner). "" override → default
 	// persona renders, byte-identical to before. PersonaCacheKey (content hash)
 	// keys the Static cache per persona so an edit invalidates only its own entry.
 	var personaText, personaCacheKey string
-	if deps.ambient.PersonaOverride != nil {
+	if deps.ambient.PersonaOverride != nil && !deps.briefcaseMode {
 		if ov := strings.TrimSpace(deps.ambient.PersonaOverride()); ov != "" {
 			personaText = ov
 			personaCacheKey = prompt.PersonaCacheKeyFor(ov)
 		}
 	}
 
-	skillsPrompt := loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools))
+	skillsPrompt := ""
+	if !deps.briefcaseMode {
+		skillsPrompt = loadCachedSkillsPrompt(workspaceDir, availableToolNames(deps.tools))
+	}
+
+	promptWorkspaceDir := workspaceDir
+	if deps.promptWorkspaceDir != "" {
+		promptWorkspaceDir = deps.promptWorkspaceDir
+	}
+	runtimeInfo := prompt.BuildDefaultRuntimeInfo(params.Model, deps.callbacks.defaultModel)
+	if deps.briefcaseMode {
+		runtimeInfo = &prompt.RuntimeInfo{
+			AgentID: "briefcase", Host: "briefcase", OS: "isolated", Arch: "v1",
+			Model: params.Model, DefaultModel: deps.callbacks.defaultModel,
+		}
+	}
 
 	spp := prompt.SystemPromptParams{
-		WorkspaceDir:       workspaceDir,
+		WorkspaceDir:       promptWorkspaceDir,
 		ToolDefs:           toolDefs,
 		DeferredTools:      deferredToolInfos,
 		UserTimezone:       tz,
 		ContextFiles:       ctxFiles,
-		RuntimeInfo:        prompt.BuildDefaultRuntimeInfo(params.Model, deps.callbacks.defaultModel),
+		RuntimeInfo:        runtimeInfo,
 		Channel:            ch,
 		SkillsPrompt:       skillsPrompt,
 		ToolPreset:         sessionToolPreset,
 		CompactionFired:    compactionFired,
+		Briefcase:          deps.briefcaseMode,
+		DisableSkills:      deps.briefcaseMode,
 		CalendarGlance:     calendarGlance,
 		GoalGlance:         goalGlance,
 		TopicKnowledge:     topicKnowledge,
@@ -352,6 +381,7 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 		TopicKnowledgePath: topicKnowledgePath,
 		PersonaText:        personaText,
 		PersonaCacheKey:    personaCacheKey,
+		Now:                deps.now(),
 	}
 
 	return llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp)), ctxFiles, frozenTopic

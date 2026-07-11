@@ -118,6 +118,7 @@ func (p *turnRequestPreparer) buildRequest(messages []llm.Message, thinking *llm
 		TopK:             p.cfg.TopK,
 		FrequencyPenalty: p.cfg.FrequencyPenalty,
 		PresencePenalty:  p.cfg.PresencePenalty,
+		Seed:             p.cfg.Seed,
 		StopSequences:    p.cfg.StopSequences,
 		ResponseFormat:   p.cfg.ResponseFormat,
 		ToolChoice:       p.cfg.ToolChoice,

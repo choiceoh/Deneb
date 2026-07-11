@@ -159,6 +159,14 @@ func (h *Handler) buildRunDeps() runDeps {
 		subagentDefaultModel: h.subagentDefaultModel,
 		defaultSystem:        h.defaultSystem,
 		maxTokens:            h.maxTokens,
+		runLimits:            h.runLimits,
+		samplingSeed:         h.samplingSeed,
+		disableTier1Wiki:     h.disableTier1Wiki,
+		semanticNow:          h.semanticNow,
+		semanticTimezone:     h.semanticTimezone,
+		promptWorkspaceDir:   h.promptWorkspaceDir,
+		briefcaseMode:        h.briefcaseMode,
+		auditSystemPrompt:    h.auditSystemPrompt,
 		drainPendingFn:       h.pending.Drain,
 		startRunFn: func(params RunParams) {
 			h.startAsyncRun("pending-"+params.ClientRunID, params, false)
@@ -215,3 +223,7 @@ func sanitizeInput(s string) string {
 	}
 	return strings.TrimSpace(b.String())
 }
+
+// SanitizeInput exposes the exact chat wire normalization to trusted harnesses
+// that must bind provenance to the bytes the model actually receives.
+func SanitizeInput(s string) string { return sanitizeInput(s) }

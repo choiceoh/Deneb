@@ -38,6 +38,9 @@ func modelCapability(deps runDeps, providerID, model string) modelcaps.Capabilit
 // the model's toggle apply — so an unconfigured deployment still routes the
 // current main model exactly as before.
 func routingProfileForRun(deps runDeps, providerID, model string) router.Profile {
+	if deps.briefcaseMode {
+		return router.Profile{}
+	}
 	if deps.registry != nil {
 		return deps.registry.RoutingProfileForModel(providerID, model)
 	}
@@ -64,6 +67,15 @@ func routingProfileForRun(deps runDeps, providerID, model string) router.Profile
 //     no-op on deepseek-v4). The effort router builds its own disabled config
 //     with the kwarg already set; this covers the config-driven path.
 func applyModelTuning(cfg *agent.AgentConfig, deps runDeps, params RunParams, providerID, model string) {
+	if deps.briefcaseMode {
+		temperature, topP, zero := 0.0, 1.0, 0.0
+		cfg.Temperature = &temperature
+		cfg.TopP = &topP
+		cfg.TopK = nil
+		cfg.FrequencyPenalty = &zero
+		cfg.PresencePenalty = &zero
+		return
+	}
 	if t := cfg.Thinking; t != nil && t.Type == "disabled" && t.TemplateKwarg == "" {
 		t.TemplateKwarg = modelCapability(deps, providerID, model).ThinkingToggleKwarg
 	}

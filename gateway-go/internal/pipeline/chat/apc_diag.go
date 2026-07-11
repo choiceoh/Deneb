@@ -84,7 +84,7 @@ type apcDiagRun struct {
 // session's previous run and snapshots the engine prefix-cache counters.
 // systemPrompt is the finalized system-block JSON (the wire form).
 // Always returns a usable value; callers pair it with a deferred finish().
-func beginAPCDiag(ctx context.Context, deps runDeps, sessionKey, providerID, model string, systemPrompt []byte, recallMemory string, messages []llm.Message, logger *slog.Logger) *apcDiagRun {
+func beginAPCDiag(ctx context.Context, deps runDeps, sessionKey, apiMode, providerID, model string, systemPrompt []byte, recallMemory string, messages []llm.Message, logger *slog.Logger) *apcDiagRun {
 	d := &apcDiagRun{logger: logger, model: model, divergedAt: -1}
 
 	cur := apcSnapshot{
@@ -128,7 +128,7 @@ func beginAPCDiag(ctx context.Context, deps runDeps, sessionKey, providerID, mod
 	// to a vLLM engine (OpenAI mode). The scrape is local and bounded; a down
 	// or non-vLLM endpoint contributes nothing and the diag line simply omits
 	// the engine fields.
-	if deps.registry != nil && resolveAPIMode(deps, providerID) == llm.APIModeOpenAI {
+	if deps.registry != nil && apiMode == llm.APIModeOpenAI {
 		if bases := deps.registry.VllmBaseURLs(); len(bases) > 0 {
 			d.scrapeBases = bases
 			if q, h, ok := scrapeAPCCounters(ctx, bases, model); ok {

@@ -58,6 +58,9 @@ var engineCacheState = struct {
 // non-OpenAI-mode providers, fallback runs (the sampled engine would not be
 // the one that answered), and base URLs that don't resolve to a local engine.
 func logEngineCacheAsync(deps runDeps, runLog *agentlog.RunLogger, client *llm.Client, model string, fellBack bool, logger *slog.Logger) {
+	if deps.briefcaseMode {
+		return
+	}
 	// Gate on the client's actual wire mode, not the config-derived apiMode:
 	// providers without an explicit `api` field resolve to "" upstream while
 	// the client still speaks OpenAI by default — an apiMode!=openai check

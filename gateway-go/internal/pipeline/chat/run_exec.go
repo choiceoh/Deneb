@@ -20,7 +20,6 @@ import (
 	notebooktool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
-	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
@@ -50,6 +49,9 @@ func executeAgentRun(
 	runLog *agentlog.RunLogger,
 ) (*chatRunResult, error) {
 	runStart := time.Now()
+	if deps.briefcaseMode {
+		deps.strictErrors = &strictRunErrorSink{}
+	}
 
 	// Emit agent run.start event to gateway subscriptions.
 	if deps.callbacks.emitAgentFn != nil {
@@ -71,6 +73,9 @@ func executeAgentRun(
 	// message cannot be persisted until the fetches complete.
 	if params.PendingEnrichment == nil {
 		persistTurnUserMessage(params, deps, logger)
+		if err := deps.strictErrors.Err(); err != nil {
+			return nil, fmt.Errorf("briefcase transcript persistence: %w", err)
+		}
 	}
 	workspaceDir := params.WorkspaceDir
 	if workspaceDir == "" {
@@ -79,7 +84,9 @@ func executeAgentRun(
 
 	// Pre-warm context file snapshot for this session so disk I/O happens
 	// before the parallel prep phase (no-op if already cached from a prior turn).
-	prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
+	if !deps.briefcaseMode {
+		prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
+	}
 
 	// Cache session lookup: fetched once and reused throughout this function
 	// to avoid repeated map lookups + lock acquisitions.
@@ -140,8 +147,14 @@ func executeAgentRun(
 	logger.Info("pipeline: parallel prep done (context+sysprompt)", "ms", parallelPrepMs)
 
 	if prep.ContextErr != nil {
+		if deps.briefcaseMode {
+			return nil, fmt.Errorf("briefcase context assembly: %w", prep.ContextErr)
+		}
 		logger.Error("context assembly failed, proceeding with degraded context",
 			"sessionKey", params.SessionKey, "error", prep.ContextErr)
+	}
+	if err := deps.strictErrors.Err(); err != nil {
+		return nil, fmt.Errorf("briefcase context preparation: %w", err)
 	}
 
 	// Enrichment join: the link fetches ran concurrently with the parallel
@@ -158,6 +171,9 @@ func executeAgentRun(
 			params.Message = formatted
 			params.AppendCurrentMessage = true
 		}
+		if err := deps.strictErrors.Err(); err != nil {
+			return nil, fmt.Errorf("briefcase transcript persistence: %w", err)
+		}
 	}
 	enrichJoinMs := time.Since(enrichStart).Milliseconds()
 	// Ephemeral turns (heartbeat) never persist their trigger message, and on
@@ -167,7 +183,7 @@ func executeAgentRun(
 	// Fresh sessions (boot, mail-qa, event-ingest) keep the scratch-build path
 	// in assembleTurnMessages, byte-identical to before.
 	if ephemeralNeedsExplicitAppend(params, prep) {
-		params.Message = formatTurnUserMessage(params.Message, dentime.Now())
+		params.Message = formatTurnUserMessage(params.Message, deps.now())
 		params.AppendCurrentMessage = true
 	}
 
@@ -192,6 +208,9 @@ func executeAgentRun(
 
 	// Stage 3: Finalize system prompt (budget optimization, coordinator suggestion, tier-1 injection).
 	systemPrompt := finalizePrompt(prep.SystemPrompt, tailForSystem, prep.Tier1Wiki, deps.contextCfg, sessionToolPreset, params.Message)
+	if deps.auditSystemPrompt != nil {
+		deps.auditSystemPrompt(params.SessionKey, append([]byte(nil), systemPrompt...))
+	}
 
 	logger.Info("pipeline: system prompt finalized",
 		"chars", len(systemPrompt))
@@ -219,8 +238,11 @@ func executeAgentRun(
 	// assembled prompt diverges from the session's previous run and bracket
 	// the engine prefix-cache counters around the run. Deferred so the "apc
 	// diag" line is emitted on error paths too. See apc_diag.go.
-	apcDiag := beginAPCDiag(ctx, deps, params.SessionKey, providerID, model, systemPrompt, prep.RecallMemory, messages, logger)
-	defer apcDiag.finish()
+	var apcDiag *apcDiagRun
+	if !deps.briefcaseMode {
+		apcDiag = beginAPCDiag(ctx, deps, params.SessionKey, client.APIMode(), providerID, model, systemPrompt, prep.RecallMemory, messages, logger)
+		defer apcDiag.finish()
+	}
 
 	// Stage 4: Build tool list and agent config.
 	acd := agentConfigDeps{
@@ -254,7 +276,7 @@ func executeAgentRun(
 
 	// BeforeAPICall hook chain (steer + trailing cache markers) and the
 	// provider's cache_control policy — see wireBeforeAPICall.
-	apiMode := wireBeforeAPICall(&cfg, deps, params, providerID, model, logger)
+	apiMode := wireBeforeAPICall(&cfg, deps, params, providerID, model, client, logger)
 
 	// Set up stream hooks via compositor: fan-out dispatch for each hook type.
 	var hc agent.HookCompositor
@@ -295,6 +317,9 @@ func executeAgentRun(
 			Aborted: ctx.Err() != nil,
 		})
 		return nil, err
+	}
+	if err := deps.strictErrors.Err(); err != nil {
+		return nil, fmt.Errorf("briefcase transcript persistence: %w", err)
 	}
 
 	// Release any trailing backticks the delta transliterator held back to
@@ -500,11 +525,12 @@ func persistTurnUserMessage(params RunParams, deps runDeps, logger *slog.Logger)
 	if deps.transcript == nil || params.Message == "" || params.EphemeralUser {
 		return ""
 	}
-	now := dentime.Now()
+	now := deps.now()
 	formattedMessage := formatTurnUserMessage(params.Message, now)
 	userMsg := NewTextChatMessage("user", formattedMessage, now.UnixMilli())
 	if err := deps.transcript.Append(params.SessionKey, userMsg); err != nil {
 		logger.Error("failed to persist user message", "error", err)
+		deps.strictErrors.Record(err)
 	}
 	if deps.callbacks.emitTranscriptFn != nil {
 		deps.callbacks.emitTranscriptFn(params.SessionKey, userMsg, "")
@@ -561,7 +587,11 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 			storeNotebookGrounding(params.SessionKey, nbID, updated, g)
 		}
 	}
-	skillHints, hintedSkills := buildSkillHints(params, sessionToolPreset, cachedResolvedSkills())
+	var skillHints string
+	var hintedSkills []string
+	if !deps.briefcaseMode {
+		skillHints, hintedSkills = buildSkillHints(params, sessionToolPreset, cachedResolvedSkills())
+	}
 	if len(hintedSkills) > 0 {
 		// Measurement anchor for the auto-hint experiment: joining these events
 		// with skill_usage.jsonl (same session, consult after this ts) yields the
@@ -606,10 +636,23 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 // modelcaps; a `promptCache` boolean on the provider's deneb.json entry
 // overrides it either way. The strip operates on the per-request cfg.System
 // copy, so the prompt-cache doctrine (don't mutate cached blocks) holds.
-func wireBeforeAPICall(cfg *agent.AgentConfig, deps runDeps, params RunParams, providerID, model string, logger *slog.Logger) string {
+func wireBeforeAPICall(cfg *agent.AgentConfig, deps runDeps, params RunParams, providerID, model string, client *llm.Client, logger *slog.Logger) string {
 	apiMode := resolveAPIMode(deps, providerID)
+	if client != nil {
+		// The selected client is the wire authority. A handler-scoped client
+		// (including Briefcase) can intentionally have no provider ID, and a
+		// provider config can be stale relative to the already-built client.
+		apiMode = client.APIMode()
+	}
 	trailingCache := buildTrailingCacheHook(apiMode)
-	if modelCapability(deps, providerID, model).RejectsCacheControl {
+	if deps.briefcaseMode {
+		// Prompt-cache metadata is an endpoint capability and a performance
+		// optimization, not part of the scored task. Generic Anthropic-compatible
+		// endpoints may reject it, so deterministic Briefcase requests strip the
+		// system markers and never add trailing markers.
+		cfg.System = stripCacheControlMarkers(cfg.System)
+		trailingCache = nil
+	} else if modelCapability(deps, providerID, model).RejectsCacheControl {
 		cfg.System = stripCacheControlMarkers(cfg.System)
 		trailingCache = nil
 	}
