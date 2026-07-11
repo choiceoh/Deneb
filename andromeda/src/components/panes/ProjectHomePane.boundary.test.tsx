@@ -344,11 +344,13 @@ describe("ProjectHomePane boundary behavior", () => {
       renderHome();
       await screen.findByText("Alpha 최신 메일");
       const ai = screen.getByTestId("ai");
+      // The linked-row sections reach the AI projection one effect flush after
+      // the grid renders them — wait on the projection itself, not the grid.
+      await waitFor(() => expect(ai).toHaveTextContent("[관련 메일 2건]"));
       expect(ai).toHaveTextContent("[프로젝트 홈] Alpha");
       expect(ai).toHaveTextContent("Alpha 출시 준비");
       expect(ai).toHaveTextContent("마감: 7월 20일");
       expect(ai).toHaveTextContent("위키: projects/alpha");
-      expect(ai).toHaveTextContent("[관련 메일 2건]");
       expect(ai).toHaveTextContent("Alpha 최신 메일");
       expect(ai).not.toHaveTextContent("Alpha라는 단어만 포함");
     });
