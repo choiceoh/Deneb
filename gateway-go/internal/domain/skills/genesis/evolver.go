@@ -3,12 +3,14 @@ package genesis
 import (
 	"context"
 	"fmt"
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
@@ -688,10 +690,31 @@ func (t *EvolutionTask) Name() string { return "skill-evolution" }
 // Interval returns how often to check for underperforming skills.
 func (t *EvolutionTask) Interval() time.Duration { return 6 * time.Hour }
 
+// watchMaxAge is how long a rollback watch may stay open before the
+// time-based sweep resolves it (small-sample confirm, or expiry at zero
+// uses). Env knob DENEB_SKILL_WATCH_MAX_AGE_DAYS accelerates label
+// accumulation without faking usage.
+func watchMaxAge() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("DENEB_SKILL_WATCH_MAX_AGE_DAYS")); v != "" {
+		if days, err := strconv.Atoi(v); err == nil && days > 0 {
+			return time.Duration(days) * 24 * time.Hour
+		}
+	}
+	return 14 * 24 * time.Hour
+}
+
 // Run executes one evolution cycle.
 func (t *EvolutionTask) Run(ctx context.Context) error {
 	if t.Bootstrap != nil {
 		t.bootstrapOnce.Do(t.Bootstrap)
+	}
+	// Time-based watch resolution first: without it a watch on a rarely-used
+	// skill never resolves and the e-process label pipeline starves (backtest
+	// 2026-07-11: zero historical resolutions).
+	if t.Evolver != nil && t.Evolver.tracker != nil {
+		if n := t.Evolver.tracker.ResolveStaleWatches(watchMaxAge()); n > 0 && t.Evolver.logger != nil {
+			t.Evolver.logger.Info("evolver: stale rollback watches resolved time-based", "count", n)
+		}
 	}
 	results, err := t.Evolver.EvolveUnderperformers(ctx)
 	// Heartbeat: records that the evolve cycle actually ran (liveness on /health).

@@ -2,13 +2,14 @@ package genesis
 
 import (
 	"fmt"
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
@@ -180,6 +181,11 @@ type evolveWatch struct {
 	// the rollback yet; its verdict is recorded on the resolving lifecycle
 	// entry so weeks of agreement/disagreement labels decide the switch.
 	ep *EProcess
+	// createdAt (unix millis) starts the time-based resolution clock: a watch
+	// on a rarely-used skill would otherwise stay open forever (backtest
+	// 2026-07-11: ZERO watches ever resolved in production history — the
+	// label pipeline was starved by design, not by time).
+	createdAt int64
 }
 
 // persistedEvolveWatch is the JSON shape of one in-flight rollback watch.
@@ -195,6 +201,7 @@ type persistedEvolveWatch struct {
 	BaselineUses  int              `json:"baselineUses,omitempty"`
 	BaselineFails int              `json:"baselineFails,omitempty"`
 	EProcess      *EProcess        `json:"eProcess,omitempty"`
+	CreatedAt     int64            `json:"createdAt,omitempty"`
 }
 
 // usageAgg holds running aggregates per skill.

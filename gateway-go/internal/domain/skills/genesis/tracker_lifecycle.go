@@ -169,7 +169,7 @@ func (t *Tracker) LogEvolveWithProvenance(skillName, newVersion, description str
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
 	if t.rollbackThreshold > 0 {
-		w := &evolveWatch{version: newVersion, audit: audit}
+		w := &evolveWatch{version: newVersion, audit: audit, createdAt: now}
 		// Pre-evolve baseline snapshot (PACE): what "healthy" looked like
 		// before this evolve, for the future baseline-aware rollback test.
 		if s := t.getStatsLocked(skillName); s != nil {
@@ -259,6 +259,18 @@ func (t *Tracker) LogEvolveConfirmed(skillName string, audit HarnessEditAudit, c
 		CreatedAt:        time.Now().UnixMilli(),
 		BaselineTest:     bt,
 		SelfHarnessAudit: audit.Ptr(),
+	})
+}
+
+// LogEvolveWatchExpired records a watch that aged out with ZERO post-evolve
+// real uses — closed for hygiene, but deliberately a distinct type so it never
+// counts as confirmed (no evidence) nor rolled back in health statistics.
+func (t *Tracker) LogEvolveWatchExpired(skillName string) error {
+	return jsonlstore.Append(t.logPath, evolveLogEntry{
+		Type:      "evolve_watch_expired",
+		SkillName: skillName,
+		Reason:    "watch aged out with zero real uses",
+		CreatedAt: time.Now().UnixMilli(),
 	})
 }
 
