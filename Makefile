@@ -11,7 +11,7 @@
        kotlin-check kotlin-spotless kotlin-detekt kotlin-desktop-test kotlin-desktop-smoke-test kotlin-android-compile \
        docs-lint docs-lint-fix \
        ci ci/fast go-test-cached \
-       health health-check runtime-health runtime-health-test \
+       health health-check health-v2 health-v2-check health-v2-deep health-v2-test health-v2-baseline runtime-health runtime-health-test \
        preview native-smoke \
        info
 
@@ -185,7 +185,7 @@ clean: go-clean
 check-go: go-fmt go-vet go-lint go-test
 
 # Full check: generate-check first (sequential), then Go and deterministic audit checks.
-check: generate-check check-go runtime-health-test
+check: generate-check check-go runtime-health-test health-v2-test health-v2-check
 	@echo "All checks passed"
 
 # Fast check: format + vet + lint only (no tests). Good for pre-commit gate.
@@ -205,6 +205,34 @@ health:
 # improvement with: python3 scripts/audit/codebase-health.py --update (operator approval).
 health-check:
 	@python3 scripts/audit/codebase-health.py --check
+
+# Health Bench 2.0 measures change locality, boundary/contract clarity, test
+# behavior, runtime diagnosability, AI change readiness, and role-appropriate
+# CI evidence weighted by product impact. It intentionally lives beside v1:
+# scores from the two rubrics are not comparable. The default report leads with actionable
+# interventions; see docs/agent-rules/codebase-health-v2.md.
+health-v2:
+	@python3 scripts/audit/codebase-health-v2.py
+
+# Multi-axis ratchet: overall, every pillar, and new high-risk findings are
+# checked independently so improvement in one area cannot hide regression in
+# another.
+health-v2-check:
+	@python3 scripts/audit/codebase-health-v2.py --check
+
+# Executed evidence profile: fresh shuffled tests + coverage, vet, lint, and
+# race detection. This is intentionally slower and uses a distinct profile.
+health-v2-deep:
+	@python3 scripts/audit/codebase-health-v2.py --deep --require-readiness
+
+# Stdlib-only scorer regression and anti-gaming fixtures.
+health-v2-test:
+	@python3 -m unittest discover -s scripts/audit -p 'test_codebase_health_v2*.py' -v
+
+# One-way baseline update. Review the report and diff; the command refuses to
+# lower the composite or any pillar and refuses new high/critical findings.
+health-v2-baseline:
+	@python3 scripts/audit/codebase-health-v2.py --update-baseline
 
 # Runtime-health score (advisory, on-host only — reads the production gateway's
 # journald over a rolling window, so it is NON-deterministic and has NO ratchet
@@ -378,7 +406,7 @@ docs-lint-fix:
 #   make ci                  # all gates (Go + Kotlin + audit)
 #   make ci ARGS=--go        # Go gates only (skip the gradle/Kotlin lane)
 #   make ci ARGS=--kotlin    # Kotlin gates only
-#   make ci ARGS=--audit     # runtime-health audit tests only
+#   make ci ARGS=--audit     # deterministic audit tests + Health Bench ratchet
 #
 # This mirrors CI's *fast* gates only — no -race, coverage threshold, or
 # integration-tagged tests; run those in CI or via `make go-test` variants.
@@ -430,7 +458,7 @@ info:
 	@echo "  make ci         - PRE-PUSH GATE: every CI check (Go + Kotlin + audit), pass/fail summary"
 	@echo "                    (ARGS=--go / ARGS=--kotlin / ARGS=--audit to run one lane)"
 	@echo "  make ci/fast    - Inner-loop gate: only the changed side (Go/Kotlin), cached tests"
-	@echo "  make check      - Go-only checks (generate + fmt + vet + lint + test)"
+	@echo "  make check      - Go checks + deterministic audit ratchets"
 	@echo "  make check/fast - Fast Go checks: fmt + vet + lint, no tests"
 	@echo "  make kotlin-check - Native client gate (spotless + detekt)"
 	@echo "  make generate         - Run all code generation pipelines"

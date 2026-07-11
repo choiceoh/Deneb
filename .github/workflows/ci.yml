@@ -13,6 +13,40 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
+  # Health Bench 2.0 is intentionally independent of the Go job: documentation,
+  # test, client, and CI-only changes can all affect maintainability evidence.
+  # Full history is required for change-locality and co-change measurements.
+  code-health:
+    name: Code health 2.0 (fast)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: false
+          submodules: false
+
+      - name: Test Health Bench 2.0
+        run: make health-v2-test
+
+      - name: Check Health Bench 2.0 ratchet
+        run: |
+          python3 scripts/audit/codebase-health-v2.py \
+            --check \
+            --format markdown \
+            --json-out health-v2-report.json \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Health Bench 2.0 report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-v2-report
+          path: health-v2-report.json
+          if-no-files-found: warn
+          retention-days: 14
+
   # Detect docs-only changes to skip heavy jobs.
   docs-scope:
     runs-on: ubuntu-24.04-arm

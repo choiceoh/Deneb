@@ -9,7 +9,7 @@
 #
 # Gates (each is the make target of the same name):
 #   Go      generate-check  go-fmt  go-vet  go-lint  go-test
-#   Audit   runtime-health-test
+#   Audit   runtime-health-test  health-v2-test  health-v2-check
 #   Kotlin  kotlin-spotless  kotlin-detekt  kotlin-desktop-smoke-test
 #           kotlin-android-compile
 #
@@ -31,7 +31,7 @@
 #   scripts/dev/ci-check.sh            # full gate (Go + Kotlin + audit)
 #   scripts/dev/ci-check.sh --go       # Go gates only
 #   scripts/dev/ci-check.sh --kotlin   # Kotlin gates only
-#   scripts/dev/ci-check.sh --audit    # runtime-health audit tests only
+#   scripts/dev/ci-check.sh --audit    # deterministic audit tests + health ratchet
 #   scripts/dev/ci-check.sh --fast     # changed-side gates only, cached tests
 #
 # Exit status: 0 if every run gate passed (or nothing changed in --fast), 1 if
@@ -55,7 +55,7 @@ BASE_REF="${CI_CHECK_BASE:-origin/main}"
 # --- Gate definitions (gate name == make target) -----------------------------
 GO_GATES=(generate-check go-fmt go-vet go-lint go-test)
 KOTLIN_GATES=(kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile)
-AUDIT_GATES=(runtime-health-test)
+AUDIT_GATES=(runtime-health-test health-v2-test health-v2-check)
 
 # --- Args --------------------------------------------------------------------
 RUN_GO=true
@@ -75,7 +75,7 @@ case "${1:-}" in
     echo "  scripts/dev/ci-check.sh           full gate (Go + Kotlin + audit)"
     echo "  scripts/dev/ci-check.sh --go      Go gates only"
     echo "  scripts/dev/ci-check.sh --kotlin  Kotlin gates only"
-    echo "  scripts/dev/ci-check.sh --audit   runtime-health audit tests only"
+    echo "  scripts/dev/ci-check.sh --audit   deterministic audit tests + health ratchet"
     echo "  scripts/dev/ci-check.sh --fast    changed-side gates only, cached tests"
     echo
     echo "Via make:  make ci   |   make ci ARGS=--go   |   make ci/fast"
@@ -113,14 +113,14 @@ if $FAST; then
     )"
     grep -q '^gateway-go/'     <<<"$changed" || RUN_GO=false
     grep -q '^client-android/' <<<"$changed" || RUN_KOTLIN=false
-    grep -Eq '^scripts/audit/(runtime-health\.py|runtime_health\.py|test_runtime_health\.py)$' \
+    grep -Eq '^(gateway-go/|client-android/app/|andromeda/src/|scripts/audit/|Makefile$|\.github/workflows/|docs/agent-rules/|CLAUDE\.md$)' \
       <<<"$changed" || RUN_AUDIT=false
   fi
 fi
 
 # Fast mode with nothing relevant changed: nothing to gate.
 if $FAST && ! $RUN_GO && ! $RUN_KOTLIN && ! $RUN_AUDIT; then
-  echo "${GREEN}${BOLD}make ci/fast${RESET} — no Go, Kotlin, or runtime-audit changes vs ${BASE_REF}; nothing to gate."
+  echo "${GREEN}${BOLD}make ci/fast${RESET} — no Go, Kotlin, or audit changes vs ${BASE_REF}; nothing to gate."
   echo "${DIM}(run the full ${RESET}${BOLD}make ci${RESET}${DIM} before pushing.)${RESET}"
   exit 0
 fi
@@ -245,6 +245,8 @@ offenders() {
         | grep -v 'host platform is not supported by Kotlin/Native' ;;
     generate-check)
       grep -E '^==> |^diff --git|^\+\+\+ |^--- |^@@ |generated file changed|out of date|not up to date' "$log" ;;
+    health-v2-check)
+      grep -E '^(REGRESSION:|health-v2:|DENEB_HEALTH_V2)' "$log" ;;
   esac
 }
 
