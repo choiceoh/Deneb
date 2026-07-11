@@ -1,0 +1,237 @@
+package genesis
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
+)
+
+// Judge selection/verdict and teacher rewrite split out of evolver.go (pure
+// move, no behavior change).
+
+// pickCandidateJudge returns the client/model that should judge a
+// producer-generated candidate. It prefers an independent judge (SetJudge,
+// typically modelrole main), then the teacher, and never the producing model
+// itself — same-family self-preference bias skews a self-judge toward accepting
+// (arXiv:2508.02994). When a dedicated coding model owns rewrites the teacher is
+// nil, so without the explicit judge the old logic silently self-judged; the
+// judge wire closes that. Falls back to self-judge only when nothing else is
+// wired, logging the degraded mode so the misconfig is observable.
+func (e *Evolver) pickCandidateJudge() (*llm.Client, string) {
+	_, producer := e.primaryModel()
+	if client, model := e.judgeModelSnapshot(); client != nil && model != "" && model != producer {
+		return client, model
+	}
+	if client, model := e.teacherModelSnapshot(); client != nil && model != "" && model != producer {
+		return client, model
+	}
+	if e.logger != nil {
+		e.logger.Warn("evolver: no independent judge wired, candidate is self-judged (self-preference bias risk)",
+			"producer", producer)
+	}
+	return e.primaryModel()
+}
+
+// judgeCandidate asks a model to validate a rewritten skill body against the
+// original. Returns (pass, reason, err). On any error the caller keeps the
+// original (fail-closed).
+func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *llm.Client, model, originalContent, candidateBody string, stats *UsageStats) (pass bool, reason string, err error) {
+	if client == nil {
+		return false, "", fmt.Errorf("judge: nil client")
+	}
+	cases := e.validationCasesForPrompt(skillName)
+	validationSection := formatValidationCasesForPrompt(cases)
+	failurePatternSection := formatFailurePatternsForPrompt(stats)
+	userPrompt := fmt.Sprintf(`## 원본 SKILL.md
+%s
+
+## 개선된 본문 (검증 대상)
+%s
+
+## 사용 이력
+- 총 %d회, 성공 %d, 실패 %d (%.0f%%)
+- 최근 에러: %s%s%s`,
+		originalContent, candidateBody,
+		stats.TotalUses, stats.SuccessCount, stats.FailureCount, stats.SuccessRate*100,
+		formatRecentErrors(stats.RecentErrors),
+		failurePatternSection,
+		validationSection)
+
+	// Non-streaming for the same reason as generateCandidateText: glm-class
+	// models leak reasoning into the content stream / append junk when
+	// streaming JSON; non-streaming is clean.
+	raw, err := client.Complete(ctx, llm.ChatRequest{
+		Model:    model,
+		Messages: []llm.Message{llm.NewTextMessage("user", userPrompt)},
+		System:   llm.SystemString(skillJudgeSystemPrompt),
+		// 4096: verdict JSON is small, but GLM reasoning shares the budget.
+		MaxTokens:      4096,
+		Temperature:    evolveTemperature(),
+		Thinking:       e.thinkingOff(model),
+		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+	})
+	if err != nil {
+		return false, "", fmt.Errorf("judge LLM call: %w", err)
+	}
+	if strings.TrimSpace(raw) == "" {
+		return false, "", fmt.Errorf("judge: empty verdict")
+	}
+	resp, err := jsonutil.UnmarshalLLM[judgeVerdict](raw)
+	if err != nil {
+		return false, "", fmt.Errorf("judge: parse verdict: %w", err)
+	}
+	pass, reason = acceptJudgeVerdict(resp, len(cases) > 0)
+	if pass && len(cases) == 0 {
+		// No held-out validation cases cover this skill, so the held-out gate
+		// failed open and the judge verdict is the only behavioral check. Require a
+		// larger score margin before accepting such a blind evolve (#5). Scores are
+		// guaranteed non-nil here because acceptJudgeVerdict only passes with both
+		// present.
+		if resp.OriginalScore != nil && resp.CandidateScore != nil &&
+			*resp.CandidateScore-*resp.OriginalScore < skillUncoveredJudgeMinScoreDelta {
+			return false, fmt.Sprintf("uncovered skill (no validation cases): candidate margin %.1f below the %.1f required without held-out coverage: %s",
+				*resp.CandidateScore-*resp.OriginalScore, skillUncoveredJudgeMinScoreDelta, reason), nil
+		}
+	}
+	return pass, reason, nil
+}
+
+// judgeVerdict is the strict-improvement judge's decision on a candidate skill.
+type judgeVerdict struct {
+	Pass           bool     `json:"pass"`
+	OriginalScore  *float64 `json:"original_score,omitempty"`
+	CandidateScore *float64 `json:"candidate_score,omitempty"`
+	Reason         string   `json:"reason"`
+}
+
+func acceptJudgeVerdict(resp judgeVerdict, covered bool) (bool, string) {
+	reason := strings.TrimSpace(resp.Reason)
+	if reason == "" {
+		reason = "judge rejected candidate"
+	}
+	if !resp.Pass {
+		return false, reason
+	}
+	if resp.OriginalScore == nil || resp.CandidateScore == nil {
+		return false, "judge missing paired scores: " + reason
+	}
+	orig, cand := *resp.OriginalScore, *resp.CandidateScore
+	if !validJudgeScore(orig) || !validJudgeScore(cand) {
+		return false, fmt.Sprintf("judge score out of range: original=%.1f candidate=%.1f: %s", orig, cand, reason)
+	}
+	minDelta := skillJudgeMinScoreDelta
+	if covered {
+		// Held-out replay is the real behavioral check for covered skills; the
+		// judge only needs to confirm direction, not clear a tall bar.
+		minDelta = skillCoveredJudgeMinScoreDelta
+	}
+	if cand-orig < minDelta {
+		return false, fmt.Sprintf("candidate score %.1f did not clear %.1f point improvement margin over original score %.1f: %s", cand, minDelta, orig, reason)
+	}
+	return true, reason
+}
+
+func validJudgeScore(score float64) bool {
+	return score >= 0 && score <= 100
+}
+
+// evolveResp is the evolver model's verdict: skip, or a changed skill body.
+type evolveResp struct {
+	Skip    bool   `json:"skip"`
+	Reason  string `json:"reason,omitempty"`
+	Changes *struct {
+		Description            string `json:"description"`
+		NewVersion             string `json:"new_version"`
+		TargetSignature        string `json:"target_signature,omitempty"`
+		EditedSurface          string `json:"edited_surface,omitempty"`
+		ExpectedBehaviorChange string `json:"expected_behavior_change,omitempty"`
+		RegressionRisk         string `json:"regression_risk,omitempty"`
+		Body                   string `json:"body"`
+	} `json:"changes,omitempty"`
+}
+
+// teacherRewrite asks the stronger model to produce a better body after the
+// lightweight rewrite failed self-test. Reuses the evolve envelope; returns
+// the accepted candidate fields (or an empty Body when the teacher declines).
+func (e *Evolver) teacherRewrite(ctx context.Context, teacherClient *llm.Client, teacherModel, skillName, originalContent, failedCandidate, rejectReason string, stats *UsageStats) (acceptedSkillCandidate, error) {
+	if teacherClient == nil || strings.TrimSpace(teacherModel) == "" {
+		return acceptedSkillCandidate{}, fmt.Errorf("teacher rewrite: teacher not configured")
+	}
+	validationSection := formatValidationCasesForPrompt(e.validationCasesForPrompt(skillName))
+	failurePatternSection := formatFailurePatternsForPrompt(stats)
+	userPrompt := fmt.Sprintf(`## 현재 SKILL.md
+%s
+
+## 직전 개선 시도 (검증 실패)
+%s
+
+## 검증 실패 사유
+%s
+
+## 사용 통계
+- 총 %d회, 성공 %d, 실패 %d (%.0f%%)
+- 최근 에러: %s%s%s
+
+위 실패 사유를 해결한 개선된 SKILL.md body 를 생성하세요. 검증 기준(명확성·실재 도구만·구조 유지·범주 수준·실패패턴 해결)을 모두 만족해야 합니다.`,
+		originalContent, failedCandidate, rejectReason,
+		stats.TotalUses, stats.SuccessCount, stats.FailureCount, stats.SuccessRate*100,
+		formatRecentErrors(stats.RecentErrors),
+		failurePatternSection,
+		validationSection)
+
+	// Non-streaming — same glm streaming-JSON unreliability as the producer.
+	raw, err := teacherClient.Complete(ctx, llm.ChatRequest{
+		Model:    teacherModel,
+		Messages: []llm.Message{llm.NewTextMessage("user", userPrompt)},
+		System:   llm.SystemString(evolveSystemPrompt),
+		// Same budget as the producer — the teacher rewrites the same shape.
+		MaxTokens:      12288,
+		Temperature:    evolveTemperature(),
+		Thinking:       e.thinkingOff(teacherModel),
+		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+	})
+	if err != nil {
+		return acceptedSkillCandidate{}, fmt.Errorf("teacher rewrite LLM call: %w", err)
+	}
+	if strings.TrimSpace(raw) == "" {
+		return acceptedSkillCandidate{}, nil
+	}
+	// Robust parse: a long skill body sometimes hits the token cap mid-string
+	// ("unexpected end of JSON input") or carries unescaped newlines —
+	// UnmarshalLLM recovers truncation + escapes control chars. A salvaged-but-
+	// broken body still fails the caller's self-test, so recovery is safe.
+	resp, err := jsonutil.UnmarshalLLM[teacherRewriteResp](raw)
+	if err != nil {
+		return acceptedSkillCandidate{}, fmt.Errorf("teacher rewrite: parse: %w", err)
+	}
+	if resp.Skip || resp.Changes == nil {
+		return acceptedSkillCandidate{}, nil
+	}
+	return acceptedSkillCandidate{
+		Body:        stripEchoedFrontmatter(resp.Changes.Body),
+		Description: strings.TrimSpace(resp.Changes.Description),
+		Audit: HarnessEditAudit{
+			TargetSignature:        strings.TrimSpace(resp.Changes.TargetSignature),
+			EditedSurface:          strings.TrimSpace(resp.Changes.EditedSurface),
+			ExpectedBehaviorChange: strings.TrimSpace(resp.Changes.ExpectedBehaviorChange),
+			RegressionRisk:         strings.TrimSpace(resp.Changes.RegressionRisk),
+		},
+	}, nil
+}
+
+// teacherRewriteResp is the teacher model's rewrite verdict: skip, or a changed
+// skill body.
+type teacherRewriteResp struct {
+	Skip    bool `json:"skip"`
+	Changes *struct {
+		Description            string `json:"description"`
+		TargetSignature        string `json:"target_signature,omitempty"`
+		EditedSurface          string `json:"edited_surface,omitempty"`
+		ExpectedBehaviorChange string `json:"expected_behavior_change,omitempty"`
+		RegressionRisk         string `json:"regression_risk,omitempty"`
+		Body                   string `json:"body"`
+	} `json:"changes,omitempty"`
+}

@@ -10,10 +10,12 @@
 package genesis
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 )
 
@@ -404,4 +406,163 @@ func countRetainedLines(originalLines, candidateLines []string) int {
 		candidateCounts[line]--
 	}
 	return retained
+}
+
+// --- validation flow (moved from evolver.go, pure move): self-test +
+// escalation calling the deterministic gates above. ---
+
+type acceptedSkillCandidate struct {
+	Body        string
+	Description string
+	Audit       HarnessEditAudit
+}
+
+// selfTestAndMaybeEscalate judges a candidate rewrite. On pass it returns the
+// candidate. On fail it escalates to the teacher model (if wired) for one more
+// attempt, then re-judges. ok=false means the caller must keep the original
+// skill untouched.
+func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.SkillEntry, originalContent, candidateBody string, stats *UsageStats, audit HarnessEditAudit, reviewFinding string) (acceptedSkillCandidate, bool, string) {
+	teacherClient, teacherModel := e.teacherModelSnapshot()
+	hasTeacher := teacherClient != nil && teacherModel != ""
+
+	// Judge != producer. The candidate came from the lightweight model, so a
+	// lightweight judge would be grading its own output — same-family /
+	// self-preference bias skews toward accepting it (LLM-judge survey
+	// arXiv:2508.02994). pickCandidateJudge routes to the teacher when wired.
+	judgeClient, judgeModel := e.pickCandidateJudge()
+	pass, reason, err := e.validateCandidate(ctx, entry.Skill.Name, judgeClient, judgeModel, originalContent, candidateBody, stats, audit, reviewFinding)
+	if err != nil {
+		e.logger.Warn("evolver: self-test errored, keeping original",
+			"skill", entry.Skill.Name, "error", err)
+		return acceptedSkillCandidate{}, false, "judge error"
+	}
+	if pass {
+		return acceptedSkillCandidate{Body: candidateBody, Audit: audit}, true, reason
+	}
+	e.logger.Info("evolver: self-test rejected lightweight rewrite",
+		"skill", entry.Skill.Name, "reason", reason)
+
+	// Teacher-escalation: let the stronger model rewrite once.
+	if !hasTeacher {
+		return acceptedSkillCandidate{}, false, reason
+	}
+	teacherCandidate, terr := e.teacherRewrite(ctx, teacherClient, teacherModel, entry.Skill.Name, originalContent, candidateBody, reason, stats)
+	if terr != nil || strings.TrimSpace(teacherCandidate.Body) == "" {
+		e.logger.Warn("evolver: teacher escalation failed",
+			"skill", entry.Skill.Name, "error", terr)
+		return acceptedSkillCandidate{}, false, "teacher escalation failed"
+	}
+	// This rewrite came from the teacher, so judge it with the lightweight model
+	// — again keeping judge != producer rather than letting the teacher rubber-
+	// stamp its own rewrite. A weaker judge may false-reject a good rewrite, but
+	// the loop is fail-closed (keeps the original), so that errs safe.
+	primaryClient, primaryModel := e.primaryModel()
+	tpass, treason, tjerr := e.validateCandidate(ctx, entry.Skill.Name, primaryClient, primaryModel, originalContent, teacherCandidate.Body, stats, teacherCandidate.Audit, reviewFinding)
+	if tjerr != nil || !tpass {
+		e.logger.Info("evolver: teacher rewrite still failed self-test",
+			"skill", entry.Skill.Name, "reason", treason)
+		return acceptedSkillCandidate{}, false, "teacher: " + treason
+	}
+	e.logger.Info("evolver: teacher escalation succeeded", "skill", entry.Skill.Name)
+	return teacherCandidate, true, treason
+}
+
+func (e *Evolver) validateCandidate(ctx context.Context, skillName string, client *llm.Client, model, originalContent, candidateBody string, stats *UsageStats, audit HarnessEditAudit, reviewFinding string) (pass bool, reason string, err error) {
+	if ok, reason := e.validateCandidatePreflight(skillName, originalContent, candidateBody, audit, stats, reviewFinding); !ok {
+		return false, reason, nil
+	}
+	return e.judgeCandidate(ctx, skillName, client, model, originalContent, candidateBody, stats)
+}
+
+func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candidateBody string, audit HarnessEditAudit, stats *UsageStats, reviewFinding string) (bool, string) {
+	// covered means a REAL regression check is active: at least one case the
+	// held-out gate can score (hasAssertions). Mere case existence let an
+	// assertion-less corpus grant the relaxed caps while the gate failed open.
+	covered := hasScorableValidationCase(e.validationCasesForPrompt(skillName))
+	if ok, reason := validateHermesEvolutionGuardrails(originalContent, candidateBody, covered); !ok {
+		return false, reason
+	}
+	if ok, reason := validateTextualEditBudget(originalContent, candidateBody, covered); !ok {
+		return false, reason
+	}
+	if engine := e.skillValidationEngine(); engine != nil {
+		result, err := engine.ValidateCandidate(skillName, originalContent, candidateBody)
+		if err != nil {
+			if e.logger != nil {
+				e.logger.Warn("evolver: held-out validation engine unavailable",
+					"skill", skillName, "error", err)
+			}
+		} else if result.Evaluated && !result.Pass {
+			return false, result.Reason
+		}
+	}
+	if ok, reason := validateSelfHarnessAudit(audit, stats, reviewFinding); !ok {
+		return false, reason
+	}
+	if ok, reason := validateSelfHarnessEditedSurface(audit, originalContent, candidateBody); !ok {
+		return false, reason
+	}
+	return true, ""
+}
+
+func (e *Evolver) skillValidationEngine() *SkillValidationEngine {
+	if e == nil || e.tracker == nil {
+		return nil
+	}
+	if e.validationEngine != nil {
+		return e.validationEngine
+	}
+	return NewSkillValidationEngine(e.tracker, e.logger)
+}
+
+// heldOutSelectionMargin scores a candidate body's held-out validation
+// improvement over the original (candidate score - original score) for the
+// K-candidate selector's ranking (#3). It is the deterministic, judge-free
+// margin: a candidate that satisfies more held-out forbidden/required assertions
+// ranks higher. Returns 0 when there is no engine, no cases, or the gate could
+// not evaluate — so uncovered skills tie and fall back to first-committable
+// order. Never blocks: an engine error is logged and treated as a 0 margin.
+func (e *Evolver) heldOutSelectionMargin(skillName, originalContent, candidateBody string) float64 {
+	engine := e.skillValidationEngine()
+	if engine == nil {
+		return 0
+	}
+	result, err := engine.ValidateCandidate(skillName, originalContent, candidateBody)
+	if err != nil {
+		if e.logger != nil {
+			e.logger.Warn("evolver: held-out selection margin unavailable",
+				"skill", skillName, "error", err)
+		}
+		return 0
+	}
+	if !result.Evaluated {
+		return 0
+	}
+	return result.CandidateScore - result.OriginalScore
+}
+
+// hasScorableValidationCase reports whether any case carries an assertion the
+// held-out/behavioral gate can actually score — the honest test for "covered".
+func hasScorableValidationCase(cases []SkillValidationCaseRecord) bool {
+	for _, tc := range cases {
+		if tc.hasAssertions() {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *Evolver) validationCasesForPrompt(skillName string) []SkillValidationCaseRecord {
+	if e == nil || e.tracker == nil {
+		return nil
+	}
+	cases, err := e.tracker.RecentSkillValidationCases(skillName, skillEvolutionPromptCaseLimit)
+	if err != nil {
+		if e.logger != nil {
+			e.logger.Warn("evolver: validation cases unavailable for prompt",
+				"skill", skillName, "error", err)
+		}
+		return nil
+	}
+	return cases
 }
