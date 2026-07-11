@@ -2,6 +2,7 @@ package ai.deneb
 
 import ai.deneb.data.DataRepository
 import ai.deneb.deneb.DenebGatewayClient
+import ai.deneb.deneb.ingestEvent
 import android.app.Notification
 import android.app.NotificationManager
 import android.os.Build

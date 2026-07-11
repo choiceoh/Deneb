@@ -2,6 +2,8 @@ package ai.deneb
 
 import ai.deneb.data.DataRepository
 import ai.deneb.deneb.DenebGatewayClient
+import ai.deneb.deneb.markWorkFeedRead
+import ai.deneb.deneb.refreshWorkFeed
 import ai.deneb.ui.chat.WorkFeedItem
 import androidx.car.app.CarContext
 import androidx.car.app.Screen

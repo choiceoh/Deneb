@@ -2,6 +2,7 @@ package ai.deneb
 
 import ai.deneb.data.DataRepository
 import ai.deneb.deneb.DenebGatewayClient
+import ai.deneb.deneb.ingestEvent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
