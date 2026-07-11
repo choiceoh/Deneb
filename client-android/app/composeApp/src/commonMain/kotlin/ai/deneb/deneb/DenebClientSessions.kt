@@ -1,9 +1,15 @@
 package ai.deneb.deneb
 
+import ai.deneb.data.Attachment
 import ai.deneb.data.Conversation
 import ai.deneb.deneb.generated.SessionRowOut
+import ai.deneb.ui.chat.History
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlin.time.TimeSource
 
 /**
  * Sessions-drawer surface of [DenebGatewayClient] (`miniapp.sessions.recent`):
@@ -112,4 +118,175 @@ private fun prettyJobName(job: String): String = when {
     job.startsWith("evening") -> "저녁 정리"
     job.startsWith("heartbeat") -> "하트비트"
     else -> job.replace('-', ' ')
+}
+
+// --- moved from DenebGatewayClient.kt (stage 2, logic unchanged): guarded
+// transcript load + turn recovery, and session switch/fetch. ---
+
+// --- Proactive-report deep link → session transcript --------------------
+
+/**
+ * Fetch a session transcript and install it as the chat history UNLESS an
+ * optimistic send (ask()) appended while we were fetching. Closes the
+ * cold-start share race: the topic auto-select's transcript fetch used to
+ * overwrite the just-shared message and its streaming reply, so the share
+ * appeared to get no response until the next message was sent. Epoch-checked
+ * under historyGate, so it is safe whichever of load / send finishes first.
+ */
+internal suspend fun DenebGatewayClient.loadTranscriptGuarded(key: String, replacing: Boolean = false) {
+    val startEpoch = historyGate.withLock { historyEpoch }
+    // Pin the credential epoch: if the user switches gateways while this fetch is
+    // in flight, both the view install and the cache write below are skipped, so an
+    // old-account transcript can neither render under the new credentials nor
+    // repopulate the just-cleared cache.
+    val epoch = credEpoch
+    // Cache-then-network: render the encrypted local copy instantly (no spinner).
+    // [replacing] = an explicit switch to a different conversation (drawer pick,
+    // proactive deep link): the view must reflect [key], so render its cache or
+    // clear the previous session's rows even when there's no cache — otherwise a
+    // failed fetch below would leave the prior conversation lingering under the
+    // new sessionKey. When not replacing (cold-start restore / in-place reload)
+    // only fill an empty view, so a live transcript never flashes. Either way the
+    // epoch guard means an optimistic send (ask()) is never clobbered.
+    val cached = loadCachedTranscript(key)
+    historyGate.withLock {
+        if (historyEpoch != startEpoch) return
+        if (epoch != credEpoch) return // credentials switched — don't render the old account's cache
+        when {
+            // Switch: reflect the new key now — its cache, or clear the previous
+            // session's rows so nothing lingers under the new key on a failed fetch.
+            replacing -> _chatHistory.value = cached ?: emptyList()
+
+            // Restore/reload in place: only fill an empty view from cache, so a
+            // live transcript is never flashed over by a (possibly staler) snapshot.
+            cached != null && _chatHistory.value.isEmpty() -> _chatHistory.value = cached
+            // not replacing + (no cache or live view present): leave it for the network.
+        }
+    }
+    val transcript = fetchTranscript(key) // null = RPC failure; [] = authoritative empty
+    val authoritative = historyGate.withLock {
+        if (historyEpoch != startEpoch) return // optimistic send won — don't touch view or cache
+        if (epoch != credEpoch) return // credentials switched mid-flight — old account, drop it
+        if (transcript != null) {
+            _chatHistory.value = transcript
+            true
+        } else {
+            false // transient failure: keep the instant cache render (or cleared view)
+        }
+    }
+    // Reconcile the cache only for an authoritative fetch that won the epoch race,
+    // so a stale (pre-send) transcript can never poison the cache. An authoritative
+    // empty evicts any stale entry — e.g. a session deleted server-side — so it
+    // can't resurrect on the next reopen. Skip entirely if credentials changed
+    // mid-flight (this transcript belongs to the old account).
+    if (authoritative && epoch == credEpoch) {
+        if (transcript!!.isEmpty()) removeCachedTranscript(key) else storeCachedTranscript(key, transcript)
+    }
+}
+
+/**
+ * Stream-failure recovery for one sent turn: poll the session transcript
+ * until it shows an assistant reply to [sentText], the message turns out
+ * never to have arrived, or the budget runs out. The gateway keeps a turn
+ * running after its SSE socket goes half-open (it cannot tell), so the
+ * canonical answer usually lands in the transcript moments after the phone
+ * loses the stream.
+ *
+ * An answer is only accepted once it is QUIESCENT — the same tail on two
+ * consecutive polls — because a multi-step agent turn persists intermediate
+ * assistant messages while its tools are still running. On budget expiry a
+ * non-quiescent candidate is still installed (a partial real answer beats a
+ * dropped turn). Returns null when the caller may use its legacy fallbacks
+ * (blocking re-send for a message that never arrived / keep the partial).
+ */
+internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(key: String, sentText: String): DenebGatewayClient.GatewayReply? {
+    val started = TimeSource.Monotonic.markNow()
+    var misses = 0
+    var candidate: List<History>? = null
+    var candidateTail: Pair<Int, String>? = null
+    while (started.elapsedNow().inWholeMilliseconds < DenebGatewayClient.STREAM_RECOVERY_BUDGET_MS) {
+        if (sessionKey != key) return null // switched conversations — abandon
+        val transcript = fetchTranscript(key)
+        if (transcript != null) {
+            when (val probe = probeTranscriptForTurn(transcript, sentText)) {
+                is TurnProbe.Answered -> {
+                    val tail = transcript.size to probe.text
+                    if (tail == candidateTail) {
+                        installRecoveredTranscript(key, transcript)
+                        return DenebGatewayClient.GatewayReply(text = probe.text, ok = true)
+                    }
+                    candidate = transcript
+                    candidateTail = tail
+                }
+
+                TurnProbe.StillRunning -> {
+                    misses = 0
+                    candidate = null
+                    candidateTail = null
+                }
+
+                TurnProbe.NotArrived -> {
+                    // One grace poll: the POST may still be landing while we
+                    // probe — declaring "never arrived" too early re-creates
+                    // the duplicate-send this path exists to prevent.
+                    misses++
+                    if (misses >= 2) return null
+                }
+            }
+        }
+        delay(DenebGatewayClient.STREAM_RECOVERY_POLL_MS)
+    }
+    val last = candidate ?: return null
+    val text = candidateTail?.second ?: return null
+    installRecoveredTranscript(key, last)
+    return DenebGatewayClient.GatewayReply(text = text, ok = true)
+}
+
+/** Install a recovered transcript as the visible history (and cache it). */
+private suspend fun DenebGatewayClient.installRecoveredTranscript(key: String, transcript: List<History>) {
+    historyGate.withLock {
+        if (sessionKey != key) return // switched away — don't clobber the open view
+        historyEpoch++ // fence any in-flight background load
+        _chatHistory.value = transcript
+    }
+    storeCachedTranscript(key, transcript)
+}
+
+internal fun DenebGatewayClient.switchSession(key: String) {
+    sessionKey = key
+    _currentConversationId.value = key
+    // Remember this as the active session so a restart restores it.
+    appSettings.setLastSession(key)
+}
+
+// Returns null on an RPC failure (so callers can keep a cache render instead of
+// flashing to empty), or the messages — possibly an authoritative empty list —
+// on success. The null-vs-[] distinction is what lets loadTranscriptGuarded
+// evict a stale cache only when the server says the session is really empty.
+internal suspend fun DenebGatewayClient.fetchTranscript(sessionKey: String): List<History>? {
+    val payload = callRpc<TranscriptPayload>(
+        "miniapp.sessions.transcript",
+        buildJsonObject {
+            put("sessionKey", sessionKey)
+            put("limit", 200)
+        },
+    ) ?: return null
+    return payload.messages.mapNotNull { m ->
+        val role = when (m.role.lowercase()) {
+            "user" -> History.Role.USER
+            "assistant" -> History.Role.ASSISTANT
+            else -> return@mapNotNull null
+        }
+        val attachments = m.attachments
+            .filter { it.data.isNotBlank() && it.mimeType.isNotBlank() }
+            .map { Attachment(data = it.data, mimeType = it.mimeType, fileName = it.name.ifBlank { null }) }
+            .toImmutableList()
+        // Keep image-only proactive messages (e.g. the weekly-report form) even
+        // when the caption is blank — they carry the attachment, not text.
+        if (m.content.isBlank() && attachments.isEmpty()) {
+            null
+        } else {
+            History(role = role, content = m.content, attachments = attachments, timestampMs = m.timestampMs)
+        }
+    }
 }
