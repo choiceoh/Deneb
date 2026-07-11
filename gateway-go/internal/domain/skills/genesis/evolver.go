@@ -345,6 +345,21 @@ func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding stri
 	rejectedSection := formatRejectedSkillEdits(rejected)
 	memorySection := formatOptimizerMemory(optimizerMemory)
 	leverSection := e.formatLowYieldLevers()
+	exemplarSection := ""
+	if e.tracker != nil && stats != nil {
+		var sigs []string
+		for _, tr := range stats.RecentFailureTraces {
+			if s := strings.TrimSpace(tr.Signature); s != "" {
+				sigs = append(sigs, s)
+			}
+			if len(sigs) >= 3 {
+				break
+			}
+		}
+		if exemplars, exErr := e.tracker.ConfirmedEvolveExemplars(sigs, skillName, 3); exErr == nil {
+			exemplarSection = formatConfirmedEvolveExemplars(exemplars)
+		}
+	}
 	validationSection := formatValidationCasesForPrompt(validationCases)
 	failurePatternSection := formatFailurePatternsForPrompt(stats)
 	userPrompt := fmt.Sprintf(`## 현재 SKILL.md
@@ -354,7 +369,7 @@ func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding stri
 - 총 사용: %d회
 - 성공: %d회 (%.0f%%)
 - 실패: %d회
-- 최근 에러: %s%s%s%s%s%s%s`,
+- 최근 에러: %s%s%s%s%s%s%s%s`,
 		string(currentContent),
 		stats.TotalUses, stats.SuccessCount, stats.SuccessRate*100,
 		stats.FailureCount,
@@ -363,6 +378,7 @@ func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding stri
 		rejectedSection,
 		memorySection,
 		leverSection,
+		exemplarSection,
 		validationSection,
 		findingSection)
 

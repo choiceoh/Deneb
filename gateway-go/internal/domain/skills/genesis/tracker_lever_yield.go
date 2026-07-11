@@ -150,3 +150,63 @@ func filterLowYieldLevers(levers []LeverYield, minResolved int, maxConfirmRate f
 	}
 	return low
 }
+
+// ConfirmedEvolveExemplar is one cross-skill "this edit actually held up"
+// exhibit for the evolve prompt (RSI P1.5 ⑤, TPGO 2604.20714 / GRAO): the
+// audit of a confirmed evolve whose target signature matches one of the
+// failing skill's current failure signatures.
+type ConfirmedEvolveExemplar struct {
+	SkillName string           `json:"skillName"`
+	Audit     HarnessEditAudit `json:"audit"`
+	CreatedAt int64            `json:"createdAt"`
+}
+
+// ConfirmedEvolveExemplars returns confirmed evolves (newest first, at most
+// limit) whose normalized target signature matches any of signatures,
+// excluding excludeSkill (its own history already reaches the prompt via
+// optimizer memory). This is the positive mirror of LowYieldLevers — the
+// GRAO experience-retrieval mechanism: a memoryless improvement loop repeats
+// dead ends AND forgets what worked (TPGO ablation 30.0→14.5%).
+func (t *Tracker) ConfirmedEvolveExemplars(signatures []string, excludeSkill string, limit int) ([]ConfirmedEvolveExemplar, error) {
+	if limit <= 0 || len(signatures) == 0 {
+		return nil, nil
+	}
+	wanted := make([]string, 0, len(signatures))
+	for _, s := range signatures {
+		if n := normalizedSelfHarnessSignature(s); n != "" {
+			wanted = append(wanted, n)
+		}
+	}
+	if len(wanted) == 0 {
+		return nil, nil
+	}
+	entries, err := t.RecentLifecycleLog(skillLeverYieldScanLimit)
+	if err != nil {
+		return nil, err
+	}
+	var out []ConfirmedEvolveExemplar
+	for _, e := range entries { // newest first
+		if e.Type != "evolve_confirmed" || e.SkillName == excludeSkill || e.SelfHarnessAudit == nil {
+			continue
+		}
+		sig := normalizedSelfHarnessSignature(e.SelfHarnessAudit.TargetSignature)
+		if sig == "" {
+			continue
+		}
+		matched := false
+		for _, w := range wanted {
+			if selfHarnessSignatureMatches(w, sig) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		out = append(out, ConfirmedEvolveExemplar{SkillName: e.SkillName, Audit: *e.SelfHarnessAudit, CreatedAt: e.CreatedAt})
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
