@@ -57,30 +57,47 @@ statistical trustworthiness of the ACCEPTANCE mechanism, not candidate
 quality (PACE 2606.08106: greedy score-based acceptance yields 72-100%
 false commits at the no-headroom regime; AgentDevel 2601.04620: removing
 flip-gating raises regression rate 3.1%→14.8%). Eleven of eleven deep
-mappings independently flagged this phase. Components, all deterministic Go:
+mappings independently flagged this phase. Components, all deterministic Go.
+
+**Status (2026-07-11): every component below is LANDED.** P2 preconditions
+from this phase are in place; the e-process runs in observation mode until
+its disagreement labels justify cutover (P3 precondition #1).
 
 - **Certificate ledger + evaluator version attribution** (SEA 2607.00871,
   RQGM 2606.26294): every accept/reject/rollback lifecycle event carries the
   judge/evolve artifact versions (SHA of the meta artifacts), judge model,
   score pairs, and held-out margins — the substrate P2/P3 consume. Additive
   JSONL fields; time-sensitive (labels lost daily until it lands).
+  *Landed: #3433.*
 - **e-process accept/rollback testing** (PACE): anytime-valid sequential
   testing primitive replacing point-estimate deltas; also fixes the known
   bug that in-flight rollback watches evaporate on SIGUSR1 restarts.
+  *Landed: #3434 (primitive + watch persistence), #3439 (observation-mode
+  wiring — legacy threshold still owns firing; `baselineTest` disagreement
+  labels accumulate in the lifecycle ledger as cutover evidence).*
 - **Flip gates + held-out isolation** (AgentDevel): pass→fail regressions
   block promotion regardless of aggregate score movement.
+  *Landed: #3445 (per-case flip gate ahead of the aggregate/min-delta
+  gates; visible/blind pool isolation predates it).*
 - **Rollback evidence persistence + anchor distillation** (CPE 2605.09315):
   a rollback records the rejected body + failure trace as validation cases
   so the same bad edit cannot be re-proposed; confirmed evolves distill
   frozen anchor cases (preservation gate separate from the acquisition gate).
+  *Landed: #3435.*
 - **Gate fuzz harness** (verifier fuzzing 2606.01066): fuzz the deterministic
   gates BEFORE optimization pressure learns their bugs; fixes the confirmed
   min-delta wedge (one unfixable assertion permanently rejects all
-  candidates for a skill).
+  candidates for a skill). *Landed: #3436.*
 - **GRAO exemplar retrieval + verifier scoreboard** (TPGO 2604.20714,
   CoVerRL 2603.17775): cross-skill confirmed-evolve exemplars fed few-shot
   into evolve prompts; judgeAccuracy/falseAcceptRate/candidate-diversity on
-  `/health`.
+  `/health`. *Landed: #3437.*
+- **Reproduction oracle** (SEA Alg 8): at evolve commit, the producer also
+  authors a case reproducing the fixed defect; adopted only after the
+  deterministic gate confirms fails-on-original AND passes-on-candidate —
+  dissolving the zero-validation-case cold start at the point evolves
+  happen. *Landed: #3446 (with meta-artifact sidecar refresh so pristine
+  materialized prompts follow compiled-default updates).*
 
 ### P2 — Slow loop (revised: deterministic bench primary, health delta advisory)
 
