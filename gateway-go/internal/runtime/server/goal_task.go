@@ -20,8 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/goals"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/goals"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
@@ -57,9 +57,12 @@ type goalTask struct {
 	notify func(ctx context.Context, sessionKey, msg string) error
 }
 
+// Name returns the component's stable scheduler name.
 func (t *goalTask) Name() string            { return "goal-loop" }
+// Interval returns the component's scheduling cadence.
 func (t *goalTask) Interval() time.Duration { return goalTickInterval }
 
+// Run executes one scheduled task cycle.
 func (t *goalTask) Run(ctx context.Context) error {
 	if t.chatHandler == nil || t.store == nil {
 		return nil

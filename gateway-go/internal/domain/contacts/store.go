@@ -14,6 +14,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // Contact is one address-book entry synced from the native client. The shape
@@ -167,37 +169,18 @@ func (s *Store) HotwordHints(maxTerms int) string {
 	}
 
 	const maxChars = 2500
-	seen := make(map[string]bool)
-	terms := make([]string, 0, maxTerms)
-	chars := 0
-	add := func(raw string) bool {
-		t := strings.TrimSpace(raw)
-		if t == "" {
-			return true
-		}
-		key := strings.ToLower(t)
-		if seen[key] {
-			return true
-		}
-		if len(terms) >= maxTerms || chars+len(t) > maxChars {
-			return false
-		}
-		seen[key] = true
-		terms = append(terms, t)
-		chars += len(t) + 2
-		return true
-	}
+	terms := textutil.NewLimitedTerms(maxTerms, maxChars)
 	for _, group := range [][]int{withOrg, withoutOrg} {
 		for _, i := range group {
-			if !add(s.all[i].Name) {
-				return strings.Join(terms, ", ")
+			if !terms.Add(s.all[i].Name) {
+				return terms.String()
 			}
-			if !add(s.all[i].Org) {
-				return strings.Join(terms, ", ")
+			if !terms.Add(s.all[i].Org) {
+				return terms.String()
 			}
 		}
 	}
-	return strings.Join(terms, ", ")
+	return terms.String()
 }
 
 func (s *Store) reindexLocked() {

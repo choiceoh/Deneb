@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/goals"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/goals"
 )
 
 func TestFormatGoalGlance(t *testing.T) {

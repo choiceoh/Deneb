@@ -45,5 +45,8 @@ fun parseLocationToGeofence(id: String, label: String, locationJson: String, rad
     val obj = Json.parseToJsonElement(locationJson).jsonObject
     val lat = obj["latitude"]!!.jsonPrimitive.double
     val lng = obj["longitude"]!!.jsonPrimitive.double
+    require(lat.isFinite() && lat in -90.0..90.0)
+    require(lng.isFinite() && lng in -180.0..180.0)
+    require(radiusM.isFinite() && radiusM > 0f)
     DenebGeofence(id, label, lat, lng, radiusM)
 }.getOrNull()

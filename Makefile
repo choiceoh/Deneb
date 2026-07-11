@@ -8,7 +8,7 @@
        tool-schemas tool-schemas-check \
        data-gen data-gen-check \
        kotlin-models kotlin-models-check \
-       kotlin-check kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile \
+       kotlin-check kotlin-spotless kotlin-detekt kotlin-desktop-test kotlin-desktop-smoke-test kotlin-android-compile \
        docs-lint docs-lint-fix \
        ci ci/fast go-test-cached \
        health health-check runtime-health runtime-health-test \
@@ -295,13 +295,11 @@ kotlin-spotless:
 kotlin-detekt:
 	cd $(KOTLIN_APP_DIR) && ./gradlew detekt --console=plain
 
-kotlin-desktop-smoke-test:
-	cd $(KOTLIN_APP_DIR) && ./gradlew desktopTest --console=plain \
-		--tests 'ai.deneb.data.TaskStoreMigrationTest*' \
-		--tests 'ai.deneb.data.CronExpressionTest*' \
-		--tests 'ai.deneb.deneb.generated.MiniappWireTypesTest*' \
-		--tests 'ai.deneb.data.AttachmentRouteTest*' \
-		--tests 'ai.deneb.network.UiErrorTest*'
+kotlin-desktop-test:
+	cd $(KOTLIN_APP_DIR) && ./gradlew desktopTest --console=plain --no-configuration-cache
+
+# Backward-compatible alias for scripts that used the former allowlisted smoke target.
+kotlin-desktop-smoke-test: kotlin-desktop-test
 
 # Android compile gate. compileKotlinDesktop (the desktop smoke + renderPreviews
 # path) only type-checks the desktop source set, so two whole classes of break
@@ -318,9 +316,9 @@ kotlin-desktop-smoke-test:
 kotlin-android-compile:
 	cd $(KOTLIN_APP_DIR) && ./gradlew :composeApp:compileAndroidMain :androidApp:compileFossReleaseKotlin --console=plain
 
-# Native client gate: formatting + bug-lint + stable JVM smoke tests + Android
+# Native client gate: formatting + bug-lint + the full desktop JVM suite + Android
 # compile (matches kotlin-lint.yml).
-kotlin-check: kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile
+kotlin-check: kotlin-spotless kotlin-detekt kotlin-desktop-test kotlin-android-compile
 	@echo "Kotlin client checks passed"
 
 # --- Docs lint gate (Mintlify markdown) ---

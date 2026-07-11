@@ -17,6 +17,7 @@ import (
 // skill_lifecycle_tool.go (pure move, no behavior change): candidate
 // record/review, validation-case capture, and session backfill.
 
+// RecordSelfCorrectionCandidate queues an evidence-backed correction for later review.
 func (b *skillLifecycleBackend) RecordSelfCorrectionCandidate(ctx context.Context, req chattools.SkillSelfCorrectionCandidateRequest) (any, error) {
 	if b.tracker == nil {
 		return map[string]any{
@@ -55,6 +56,7 @@ func (b *skillLifecycleBackend) RecordSelfCorrectionCandidate(ctx context.Contex
 	}, nil
 }
 
+// ReviewSelfCorrectionCandidate records the disposition of a queued correction.
 func (b *skillLifecycleBackend) ReviewSelfCorrectionCandidate(_ context.Context, req chattools.SkillSelfCorrectionReviewRequest) (any, error) {
 	if b.tracker == nil {
 		return map[string]any{
@@ -77,6 +79,7 @@ func (b *skillLifecycleBackend) ReviewSelfCorrectionCandidate(_ context.Context,
 	}, nil
 }
 
+// RecordSkillValidationCase persists a held-out assertion for one named skill.
 func (b *skillLifecycleBackend) RecordSkillValidationCase(_ context.Context, req chattools.SkillValidationCaseRequest) (any, error) {
 	if b.tracker == nil {
 		return map[string]any{
@@ -125,6 +128,7 @@ func (b *skillLifecycleBackend) RecordSkillValidationCase(_ context.Context, req
 	}, nil
 }
 
+// RecordSkillValidationCaseFromSession derives and persists a replay case from a transcript.
 func (b *skillLifecycleBackend) RecordSkillValidationCaseFromSession(ctx context.Context, req chattools.SkillValidationCaseFromSessionRequest) (any, error) {
 	if b.tracker == nil {
 		return map[string]any{
@@ -166,6 +170,7 @@ func (b *skillLifecycleBackend) RecordSkillValidationCaseFromSession(ctx context
 	}, nil
 }
 
+// BackfillSkillValidationCases mines recent transcripts for additional held-out cases.
 func (b *skillLifecycleBackend) BackfillSkillValidationCases(ctx context.Context, req chattools.SkillValidationBackfillRequest) (any, error) {
 	if b.tracker == nil {
 		return map[string]any{

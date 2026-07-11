@@ -8,10 +8,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -149,7 +149,14 @@ func sessionsOverflowCheck(_ Deps) rpcutil.HandlerFunc {
 			}, nil
 		}
 
-		usage := float64(p.CurrentTokens) / float64(p.MaxTokens)
+		currentTokens := p.CurrentTokens
+		if currentTokens < 0 {
+			// Treat malformed negative counters as empty usage. Allowing a
+			// negative numerator through the prune formula yields a misleading
+			// 50% emergency-prune recommendation.
+			currentTokens = 0
+		}
+		usage := float64(currentTokens) / float64(p.MaxTokens)
 		isOverflow := usage > 0.9 // 90% threshold
 
 		return map[string]any{

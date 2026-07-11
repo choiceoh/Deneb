@@ -48,7 +48,8 @@ DEFAULT_EXEMPLAR = "hub-wiring.md"
 
 # --- model transport --------------------------------------------------------- #
 def wormhole_token() -> str:
-    cfg = json.load(open(WORMHOLE_CFG))
+    with open(WORMHOLE_CFG, encoding="utf-8") as fh:
+        cfg = json.load(fh)
     return os.path.expandvars(cfg["token"])
 
 
@@ -103,7 +104,8 @@ def _file_map(target: str) -> str:
         for f in sorted(files):
             if f.endswith(".go") and not f.endswith("_test.go"):
                 p = os.path.join(base, f)
-                loc = sum(1 for _ in open(p, errors="ignore"))
+                with open(p, errors="ignore") as fh:
+                    loc = sum(1 for _ in fh)
                 rows.append((loc, os.path.relpath(p, REPO)))
     rows.sort(reverse=True)
     return "\n".join(f"  {loc:>5} LOC  {path}" for loc, path in rows[:40])
@@ -111,9 +113,12 @@ def _file_map(target: str) -> str:
 
 def _codegraph(name: str, target: str) -> str:
     env = dict(os.environ, PATH=os.path.expanduser("~/.local/bin") + ":" + os.environ.get("PATH", ""))
-    out = subprocess.run(
-        ["codegraph", "explore", f"{name} subsystem: entry points and end-to-end flow ({target})"],
-        cwd=REPO, capture_output=True, text=True, timeout=120, env=env)
+    try:
+        out = subprocess.run(
+            ["codegraph", "explore", f"{name} subsystem: entry points and end-to-end flow ({target})"],
+            cwd=REPO, capture_output=True, text=True, timeout=120, env=env)
+    except (OSError, subprocess.TimeoutExpired):
+        return "(codegraph unavailable)"
     txt = out.stdout or out.stderr
     return txt[:12_000] if txt else "(codegraph unavailable)"
 
@@ -184,7 +189,8 @@ def _rule_globs() -> list[str]:
     for f in os.listdir(RULES_DIR):
         if not f.endswith(".md"):
             continue
-        head = open(os.path.join(RULES_DIR, f), errors="ignore").read(1500)
+        with open(os.path.join(RULES_DIR, f), errors="ignore") as fh:
+            head = fh.read(1500)
         globs += re.findall(r'internal/[\w/*.-]+', head)
     return globs
 
@@ -199,7 +205,10 @@ def list_gaps(top: int = 20) -> None:
         rel = os.path.relpath(base, INTERNAL)
         if rel.count("/") > 2:            # roll leaf pkgs up to subsystem granularity
             continue
-        loc = sum(sum(1 for _ in open(os.path.join(base, f), errors="ignore")) for f in gofiles)
+        loc = 0
+        for filename in gofiles:
+            with open(os.path.join(base, filename), errors="ignore") as fh:
+                loc += sum(1 for _ in fh)
         has_claude = os.path.exists(os.path.join(base, "CLAUDE.md"))
         covered_by_rule = any(rel in g or g.split("*")[0].rstrip("/").endswith(rel) for g in rule_globs)
         rows.append((loc, rel, len(gofiles), has_claude, covered_by_rule))
@@ -236,7 +245,8 @@ def main() -> int:
 
     print(f"doc-draft: gathering grounding for internal/{args.target} …", file=sys.stderr)
     context = gather_context(args.name, args.target)
-    exemplar = open(os.path.join(RULES_DIR, args.exemplar), errors="ignore").read()
+    with open(os.path.join(RULES_DIR, args.exemplar), errors="ignore") as fh:
+        exemplar = fh.read()
     system, user = build_prompt(args.name, args.target, context, exemplar)
     print(f"doc-draft: {len(context)} chars grounding → drafting with {args.model} "
           f"(this can take ~30-90s) …", file=sys.stderr)

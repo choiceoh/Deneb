@@ -19,6 +19,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	minischedule "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/schedule"
 )
 
 // dashboardCalendarSource adapts the hybrid calendar (read-only Google client +
@@ -28,8 +29,8 @@ import (
 // absent — a nil client or a Google error degrades to local-only so the
 // dashboard's calendar lane keeps working without OAuth.
 type dashboardCalendarSource struct {
-	client func() (handlerminiapp.CalendarClient, error)
-	local  handlerminiapp.LocalCalendar
+	client func() (minischedule.CalendarClient, error)
+	local  minischedule.LocalCalendar
 }
 
 // ListRange returns events in [from, to), Google ∪ local, sorted by start and
@@ -75,7 +76,7 @@ func (s *Server) dashboardDeps() handlerminiapp.DashboardDeps {
 		Rules: func() (classification.Rules, error) { return org.LoadRules() },
 		Lanes: func() ([]org.LaneDef, error) { return org.LoadLanes() },
 		Calendar: dashboardCalendarSource{
-			client: func() (handlerminiapp.CalendarClient, error) { return calendar.DefaultClient() },
+			client: func() (minischedule.CalendarClient, error) { return calendar.DefaultClient() },
 			local:  resolveLocalCalendar(s.logger),
 		},
 		WorkFeed: wf,

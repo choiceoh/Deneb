@@ -11,8 +11,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/googleoauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
+
+func clientWithTokens(loaded googleoauth.Loaded, tokenPath string, httpClient *http.Client) *Client {
+	return &Client{
+		tokens:     googleoauth.NewSource("Gmail", loaded, tokenPath, httpClient),
+		httpClient: httpClient,
+	}
+}
 
 // writeJSON writes a JSON file to the given path.
 func writeJSON(t *testing.T, path string, v any) {
@@ -40,17 +48,19 @@ func TestNewClientFromDir_InstalledCredentials(t *testing.T) {
 
 	client := testutil.Must(newClientFromDir(dir))
 
-	if client.clientID != "test-id.apps.googleusercontent.com" {
-		t.Errorf("clientID = %q, want test-id.apps.googleusercontent.com", client.clientID)
+	clientID, clientSecret := client.tokens.Credentials()
+	if clientID != "test-id.apps.googleusercontent.com" {
+		t.Errorf("clientID = %q, want test-id.apps.googleusercontent.com", clientID)
 	}
-	if client.clientSecret != "test-secret" {
-		t.Errorf("clientSecret = %q, want test-secret", client.clientSecret)
+	if clientSecret != "test-secret" {
+		t.Errorf("clientSecret = %q, want test-secret", clientSecret)
 	}
-	if client.refreshToken != "1//test-refresh" {
-		t.Errorf("refreshToken = %q, want 1//test-refresh", client.refreshToken)
+	accessToken, refreshToken, _ := client.tokens.State()
+	if refreshToken != "1//test-refresh" {
+		t.Errorf("refreshToken = %q, want 1//test-refresh", refreshToken)
 	}
-	if client.accessToken != "ya29.test-access" {
-		t.Errorf("accessToken = %q, want ya29.test-access", client.accessToken)
+	if accessToken != "ya29.test-access" {
+		t.Errorf("accessToken = %q, want ya29.test-access", accessToken)
 	}
 }
 
@@ -70,8 +80,9 @@ func TestNewClientFromDir_WebCredentials(t *testing.T) {
 
 	client := testutil.Must(newClientFromDir(dir))
 
-	if client.clientID != "web-id.apps.googleusercontent.com" {
-		t.Errorf("clientID = %q, want web-id", client.clientID)
+	clientID, _ := client.tokens.Credentials()
+	if clientID != "web-id.apps.googleusercontent.com" {
+		t.Errorf("clientID = %q, want web-id", clientID)
 	}
 }
 
@@ -157,10 +168,10 @@ func TestNewClientFromDir_InvalidJSON(t *testing.T) {
 }
 
 func TestValidToken_UsesCache(t *testing.T) {
-	c := &Client{
-		accessToken: "cached-token",
-		expiry:      time.Now().Add(10 * time.Minute),
-	}
+	c := clientWithTokens(googleoauth.Loaded{
+		AccessToken: "cached-token",
+		Expiry:      time.Now().Add(10 * time.Minute),
+	}, "", nil)
 
 	tok := testutil.Must(c.validToken(context.Background()))
 	if tok != "cached-token" {
@@ -196,22 +207,21 @@ func TestValidToken_RefreshesExpired(t *testing.T) {
 	defer func() { setTokenURL(origURL) }()
 	setTokenURL(srv.URL)
 
-	c := &Client{
-		clientID:     "test-id",
-		clientSecret: "test-secret",
-		accessToken:  "expired",
-		refreshToken: "1//test-refresh",
-		expiry:       time.Now().Add(-1 * time.Minute), // expired
-		tokenPath:    tokenPath,
-		httpClient:   &http.Client{},
-	}
+	c := clientWithTokens(googleoauth.Loaded{
+		ClientID:     "test-id",
+		ClientSecret: "test-secret",
+		AccessToken:  "expired",
+		RefreshToken: "1//test-refresh",
+		Expiry:       time.Now().Add(-1 * time.Minute), // expired
+	}, tokenPath, &http.Client{})
 
 	tok := testutil.Must(c.validToken(context.Background()))
 	if tok != "ya29.refreshed" {
 		t.Errorf("token = %q, want ya29.refreshed", tok)
 	}
-	if c.accessToken != "ya29.refreshed" {
-		t.Errorf("client.accessToken = %q, want ya29.refreshed", c.accessToken)
+	accessToken, _, _ := c.tokens.State()
+	if accessToken != "ya29.refreshed" {
+		t.Errorf("client accessToken = %q, want ya29.refreshed", accessToken)
 	}
 
 	// Verify token was persisted.
@@ -234,14 +244,12 @@ func TestValidToken_RefreshFailsOnBadResponse(t *testing.T) {
 	defer func() { setTokenURL(origURL) }()
 	setTokenURL(srv.URL)
 
-	c := &Client{
-		clientID:     "test-id",
-		clientSecret: "test-secret",
-		refreshToken: "1//bad",
-		expiry:       time.Now().Add(-1 * time.Minute),
-		tokenPath:    filepath.Join(t.TempDir(), "token.json"),
-		httpClient:   &http.Client{},
-	}
+	c := clientWithTokens(googleoauth.Loaded{
+		ClientID:     "test-id",
+		ClientSecret: "test-secret",
+		RefreshToken: "1//bad",
+		Expiry:       time.Now().Add(-1 * time.Minute),
+	}, filepath.Join(t.TempDir(), "token.json"), &http.Client{})
 
 	_, err := c.validToken(context.Background())
 	if err == nil {
@@ -284,12 +292,11 @@ func TestGetClient_RetriableOnFailure(t *testing.T) {
 func TestPersistToken(t *testing.T) {
 	tokenPath := filepath.Join(t.TempDir(), "token.json")
 
-	c := &Client{
-		accessToken:  "ya29.new",
-		refreshToken: "1//refresh",
-		expiry:       time.Date(2026, 3, 27, 12, 0, 0, 0, time.UTC),
-		tokenPath:    tokenPath,
-	}
+	c := clientWithTokens(googleoauth.Loaded{
+		AccessToken:  "ya29.new",
+		RefreshToken: "1//refresh",
+		Expiry:       time.Date(2026, 3, 27, 12, 0, 0, 0, time.UTC),
+	}, tokenPath, nil)
 
 	c.persistToken()
 
@@ -338,21 +345,20 @@ func TestRefresh_PersistsRotatedRefreshToken(t *testing.T) {
 	setTokenURL(srv.URL)
 
 	tokenPath := filepath.Join(t.TempDir(), "token.json")
-	c := &Client{
-		clientID:     "test-id",
-		clientSecret: "test-secret",
-		refreshToken: "1//old-refresh",
-		expiry:       time.Now().Add(-1 * time.Minute),
-		tokenPath:    tokenPath,
-		httpClient:   &http.Client{},
-	}
+	c := clientWithTokens(googleoauth.Loaded{
+		ClientID:     "test-id",
+		ClientSecret: "test-secret",
+		RefreshToken: "1//old-refresh",
+		Expiry:       time.Now().Add(-1 * time.Minute),
+	}, tokenPath, &http.Client{})
 
 	if _, err := c.validToken(context.Background()); err != nil {
 		t.Fatalf("validToken: %v", err)
 	}
 
-	if c.refreshToken != "1//rotated-refresh" {
-		t.Errorf("in-memory refreshToken = %q, want 1//rotated-refresh", c.refreshToken)
+	_, refreshToken, _ := c.tokens.State()
+	if refreshToken != "1//rotated-refresh" {
+		t.Errorf("in-memory refreshToken = %q, want 1//rotated-refresh", refreshToken)
 	}
 
 	data := testutil.Must(os.ReadFile(tokenPath))
@@ -370,12 +376,11 @@ func TestRefresh_PersistsRotatedRefreshToken(t *testing.T) {
 // path does not crash the gateway. The error is surfaced via slog.Error in
 // the real code path (asserted by inspection, not by capturing logs here).
 func TestPersistToken_DoesNotPanicOnUnwritablePath(t *testing.T) {
-	c := &Client{
-		accessToken:  "ya29.x",
-		refreshToken: "1//x",
-		expiry:       time.Now(),
-		tokenPath:    filepath.Join(t.TempDir(), "no-such-dir", "token.json"),
-	}
+	c := clientWithTokens(googleoauth.Loaded{
+		AccessToken:  "ya29.x",
+		RefreshToken: "1//x",
+		Expiry:       time.Now(),
+	}, filepath.Join(t.TempDir(), "no-such-dir", "token.json"), nil)
 
 	defer func() {
 		if r := recover(); r != nil {

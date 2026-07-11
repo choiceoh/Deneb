@@ -56,73 +56,7 @@ const compactWarningOverhead = 150
 // from discovery) ensures cache hits across turns. Only SKILL.md file changes
 // invalidate the skills cache — not conversation state or tool results.
 func BuildSkillsPrompt(skills []PromptSkill, limits SkillsLimits) PromptResult {
-	// Filter out model-invocation-disabled skills.
-	var visible []PromptSkill
-	for _, s := range skills {
-		if !s.DisableModelInvocation {
-			visible = append(visible, s)
-		}
-	}
-
-	if len(visible) == 0 {
-		return PromptResult{}
-	}
-
-	// Apply count limit.
-	maxCount := limits.MaxSkillsInPrompt
-	if maxCount <= 0 {
-		maxCount = 150
-	}
-	maxChars := limits.MaxSkillsPromptChars
-	if maxChars <= 0 {
-		maxChars = 30_000
-	}
-
-	truncated := len(visible) > maxCount
-	if len(visible) > maxCount {
-		visible = visible[:maxCount]
-	}
-
-	// Try full format first.
-	if len(formatSkillsFull(visible)) <= maxChars {
-		return PromptResult{
-			Prompt:    formatSkillsFull(visible),
-			Truncated: truncated,
-			Compact:   false,
-			Count:     len(visible),
-		}
-	}
-
-	// Full format exceeds budget. Try compact format.
-	compactBudget := maxChars - compactWarningOverhead
-	if len(formatSkillsCompact(visible)) <= compactBudget {
-		return PromptResult{
-			Prompt:    formatSkillsCompact(visible),
-			Truncated: truncated,
-			Compact:   true,
-			Count:     len(visible),
-		}
-	}
-
-	// Compact still too large — binary search for largest fitting prefix.
-	lo, hi := 0, len(visible)
-	for lo < hi {
-		mid := (lo + hi + 1) / 2
-		if len(formatSkillsCompact(visible[:mid])) <= compactBudget {
-			lo = mid
-		} else {
-			hi = mid - 1
-		}
-	}
-	visible = visible[:lo]
-	truncated = true
-
-	return PromptResult{
-		Prompt:    formatSkillsCompact(visible),
-		Truncated: truncated,
-		Compact:   true,
-		Count:     len(visible),
-	}
+	return buildBudgetedSkills(visibleSkills(skills), limits, formatSkillsFull, formatSkillsCompact)
 }
 
 // formatSkillsFull renders the full skills prompt with name, description, and file path.
@@ -271,21 +205,32 @@ func indexLineText(s string) string {
 // chat/run_exec_skills.go (loadCachedSkillsPrompt). The agent loads full
 // SKILL.md body on demand — see system_prompt.go's skills instructions.
 func BuildSkillsIndex(skills []PromptSkill, limits SkillsLimits) PromptResult {
-	var visible []PromptSkill
-	for _, s := range skills {
-		if !s.DisableModelInvocation {
-			visible = append(visible, s)
-		}
-	}
-
-	if len(visible) == 0 {
-		return PromptResult{}
-	}
-
 	// ~/-compact the listed locations (the read tool expands ~ and allows the
 	// skills catalog root — tools/fs_search.go ResolvePathWithRoots), saving
 	// the home-dir prefix on every entry.
-	visible = CompactSkillPaths(visible)
+	visible := CompactSkillPaths(visibleSkills(skills))
+	return buildBudgetedSkills(visible, limits, formatSkillsIndex, formatSkillsIndexCompact)
+}
+
+func visibleSkills(skills []PromptSkill) []PromptSkill {
+	visible := make([]PromptSkill, 0, len(skills))
+	for _, skill := range skills {
+		if !skill.DisableModelInvocation {
+			visible = append(visible, skill)
+		}
+	}
+	return visible
+}
+
+func buildBudgetedSkills(
+	visible []PromptSkill,
+	limits SkillsLimits,
+	fullFormat func([]PromptSkill) string,
+	compactFormat func([]PromptSkill) string,
+) PromptResult {
+	if len(visible) == 0 {
+		return PromptResult{}
+	}
 
 	maxCount := limits.MaxSkillsInPrompt
 	if maxCount <= 0 {
@@ -301,9 +246,9 @@ func BuildSkillsIndex(skills []PromptSkill, limits SkillsLimits) PromptResult {
 		visible = visible[:maxCount]
 	}
 
-	if len(formatSkillsIndex(visible)) <= maxChars {
+	if prompt := fullFormat(visible); len(prompt) <= maxChars {
 		return PromptResult{
-			Prompt:    formatSkillsIndex(visible),
+			Prompt:    prompt,
 			Truncated: truncated,
 			Compact:   false,
 			Count:     len(visible),
@@ -311,9 +256,9 @@ func BuildSkillsIndex(skills []PromptSkill, limits SkillsLimits) PromptResult {
 	}
 
 	compactBudget := maxChars - compactWarningOverhead
-	if len(formatSkillsIndexCompact(visible)) <= compactBudget {
+	if prompt := compactFormat(visible); len(prompt) <= compactBudget {
 		return PromptResult{
-			Prompt:    formatSkillsIndexCompact(visible),
+			Prompt:    prompt,
 			Truncated: truncated,
 			Compact:   true,
 			Count:     len(visible),
@@ -323,7 +268,7 @@ func BuildSkillsIndex(skills []PromptSkill, limits SkillsLimits) PromptResult {
 	lo, hi := 0, len(visible)
 	for lo < hi {
 		mid := (lo + hi + 1) / 2
-		if len(formatSkillsIndexCompact(visible[:mid])) <= compactBudget {
+		if len(compactFormat(visible[:mid])) <= compactBudget {
 			lo = mid
 		} else {
 			hi = mid - 1
@@ -333,7 +278,7 @@ func BuildSkillsIndex(skills []PromptSkill, limits SkillsLimits) PromptResult {
 	truncated = true
 
 	return PromptResult{
-		Prompt:    formatSkillsIndexCompact(visible),
+		Prompt:    compactFormat(visible),
 		Truncated: truncated,
 		Compact:   true,
 		Count:     len(visible),

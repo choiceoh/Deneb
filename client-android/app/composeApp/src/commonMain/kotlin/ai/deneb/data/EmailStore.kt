@@ -43,6 +43,7 @@ class EmailStore(private val appSettings: AppSettings) {
             appSettings.setEmailAccountsJson(json.encodeToString(accounts))
             appSettings.removeEmailPassword(id)
             removeSyncState(id)
+            pendingQueue.remove(getPending().filter { it.accountId == id })
         }
         removed
     }

@@ -45,9 +45,12 @@ const (
 	workoutSessionPrefix         = "system:skill-workout:"
 )
 
+// Name returns the component's stable scheduler name.
 func (t *SkillWorkoutTask) Name() string            { return "skill-workout" }
+// Interval returns the component's scheduling cadence.
 func (t *SkillWorkoutTask) Interval() time.Duration { return skillWorkoutInterval }
 
+// Run executes one scheduled task cycle.
 func (t *SkillWorkoutTask) Run(ctx context.Context) error {
 	if t == nil || t.Tracker == nil || t.Catalog == nil {
 		return nil

@@ -28,6 +28,7 @@ internal suspend fun DenebGatewayClient.refreshMemories() {
     ) ?: return
     _denebMemories.value = payload.pages
         .filter { it.path.isNotBlank() }
+        .distinctByLast { it.path }
         .map { p ->
             MemoryEntry(
                 key = p.path,
@@ -61,6 +62,7 @@ suspend fun DenebGatewayClient.fetchCategoryPages(category: String): List<WikiPa
     ) ?: return null
     return p.pages
         .filter { it.path.isNotBlank() }
+        .distinctByLast { it.path }
         .map { WikiPageRef(it.path, it.title.ifBlank { it.path }, it.summary, it.updated) }
 }
 
@@ -81,14 +83,15 @@ suspend fun DenebGatewayClient.fetchRecentDiary(limit: Int = 30): List<DiaryEntr
  *  letting the category screen surface a partial failure instead of
  *  silently dropping unselected rows. */
 suspend fun DenebGatewayClient.deleteCategoryPages(paths: List<String>): Boolean {
-    if (paths.isEmpty()) return true
+    val uniquePaths = paths.distinct()
+    if (uniquePaths.isEmpty()) return true
     val resp = callRpc<DeletePagesPayload>(
         "miniapp.memory.delete_pages",
         buildJsonObject {
-            putJsonArray("paths") { paths.forEach { add(it) } }
+            putJsonArray("paths") { uniquePaths.forEach { add(it) } }
         },
     ) ?: return false
-    return resp.ok && resp.deleted == paths.size
+    return resp.ok && resp.deleted == uniquePaths.size
 }
 
 /** Move one wiki page to a new path (`miniapp.memory.move_page`). The bucket is
@@ -112,7 +115,7 @@ suspend fun DenebGatewayClient.moveWikiPage(from: String, to: String): Boolean {
  *  taken in the target). A page already in the target category is skipped. */
 suspend fun DenebGatewayClient.moveCategoryPages(paths: List<String>, targetCategory: String): Int {
     var moved = 0
-    for (p in paths) {
+    for (p in paths.distinct()) {
         val base = p.substringAfterLast('/')
         val to = "$targetCategory/$base"
         if (p == to) continue
@@ -166,6 +169,7 @@ suspend fun DenebGatewayClient.createWikiPage(title: String, category: String, b
         put("body", body)
     },
 )?.path
+    ?.takeIf { it.isNotBlank() }
 
 /** Unified search across wiki, diary and people (`miniapp.search.all`). */
 suspend fun DenebGatewayClient.searchAll(query: String): SearchResults? {
@@ -196,6 +200,7 @@ suspend fun DenebGatewayClient.fetchPeople(): List<PersonHit>? {
     ) ?: return null
     return p.people
         .filter { it.email.isNotBlank() || it.name.isNotBlank() }
+        .distinctByLast { it.email.ifBlank { it.name } }
         .map {
             PersonHit(
                 name = it.name.ifBlank { it.email },

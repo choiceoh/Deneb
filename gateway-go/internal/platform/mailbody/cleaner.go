@@ -125,6 +125,7 @@ var (
 	bodyPrepMeetingDetailRE          = regexp.MustCompile(`(?i)(?:microsoft\s+teams|teams\.microsoft|zoom\.us|google\s+meet|meet\.google|join\s*:|meeting\s+id|passcode|회의\s*(?:참가|링크)|미팅\s*(?:참가|링크))`)
 )
 
+// CleanResult contains the human-readable body and any removed blocks.
 type CleanResult struct {
 	Body         string
 	HiddenBlocks []HiddenBlock
@@ -132,6 +133,7 @@ type CleanResult struct {
 	CleanRunes   int
 }
 
+// HiddenBlock describes content hidden from the primary display body.
 type HiddenBlock struct {
 	Kind  string
 	Lines int

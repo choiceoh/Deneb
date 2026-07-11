@@ -53,3 +53,15 @@ func TestToolMarket_StaleAndError(t *testing.T) {
 		t.Error("fetch error must surface")
 	}
 }
+
+func TestFormatQuotePriceGrouping(t *testing.T) {
+	if got := formatQuotePrice(1530.98389); got != "1,530.98" {
+		t.Errorf("formatQuotePrice = %q, want 1,530.98", got)
+	}
+	if got := formatQuotePrice(-1234.5); got != "-1,234.50" {
+		t.Errorf("formatQuotePrice = %q, want -1,234.50", got)
+	}
+	if got := formatQuotePrice(13786.17); !strings.Contains(got, "13,786") {
+		t.Errorf("formatQuotePrice lost grouping: %q", got)
+	}
+}

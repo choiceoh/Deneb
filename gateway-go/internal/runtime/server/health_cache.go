@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/observe"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 )
 
 const (

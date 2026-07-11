@@ -10,7 +10,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Parse arguments.
 PORT=""
@@ -63,8 +63,11 @@ last_restart=0
 
 echo "Starting Go gateway: ${CMD[*]}"
 while true; do
-  "${CMD[@]}"
-  EXIT=$?
+  if "${CMD[@]}"; then
+    EXIT=0
+  else
+    EXIT=$?
+  fi
   if [ "$EXIT" -ne 75 ]; then
     exit "$EXIT"
   fi

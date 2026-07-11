@@ -3,7 +3,7 @@ package chat
 import (
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 )
 
 type usageCall struct {

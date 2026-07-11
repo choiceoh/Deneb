@@ -19,13 +19,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 )
 
 const (
@@ -134,7 +134,7 @@ func (s *Server) fileIndexRename(oldPath, newPath string) {
 // here (the server layer may import tools); the domain takes it as a callback to
 // avoid a layer inversion.
 func fileSemindexExtract(ctx context.Context, data []byte, name string) string {
-	t, _ := tools.ExtractDocumentText(ctx, data, name, "")
+	t, _ := document.ExtractDocumentText(ctx, data, name, "")
 	return t
 }
 
@@ -163,7 +163,9 @@ type semindexTask struct {
 	logger    *slog.Logger
 }
 
+// Name returns the component's stable scheduler name.
 func (t *semindexTask) Name() string            { return "file-semindex" }
+// Interval returns the component's scheduling cadence.
 func (t *semindexTask) Interval() time.Duration { return semindexInterval }
 
 // Run does one incremental reindex pass. It owns its own generous deadline

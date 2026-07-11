@@ -179,6 +179,7 @@ func newUsageTail(src io.ReadCloser, done func(tail []byte)) *usageTail {
 	return &usageTail{src: src, done: done}
 }
 
+// Read reads bytes from the wrapped source.
 func (u *usageTail) Read(p []byte) (int, error) {
 	n, err := u.src.Read(p)
 	if n > 0 {
@@ -193,6 +194,7 @@ func (u *usageTail) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// Close releases the wrapped resource.
 func (u *usageTail) Close() error {
 	u.finish()
 	return u.src.Close()

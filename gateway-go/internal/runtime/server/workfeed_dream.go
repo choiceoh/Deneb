@@ -8,7 +8,7 @@ package server
 import (
 	"fmt"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 )
 

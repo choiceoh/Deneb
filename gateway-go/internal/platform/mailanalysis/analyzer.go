@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
+// PromptIDAutoMailAnalysis identifies the automatic mail-analysis prompt.
 const PromptIDAutoMailAnalysis = "mail.auto.analysis"
 
 // DefaultPrompt is the editable default instruction block for single-mail

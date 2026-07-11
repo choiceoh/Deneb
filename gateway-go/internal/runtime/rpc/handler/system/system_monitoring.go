@@ -4,6 +4,7 @@ package system
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -49,10 +50,7 @@ func MonitoringMethods(deps MonitoringDeps) map[string]rpcutil.HandlerFunc {
 			var zeroCalls []string
 			called := make([]map[string]any, 0)
 			for _, m := range methods {
-				okKey := m + "\x00" + "ok"
-				errKey := m + "\x00" + "error"
-				ok := counts[okKey]
-				errs := counts[errKey]
+				ok, errs := rpcMethodCounts(counts, m)
 				total := ok + errs
 				if total == 0 {
 					zeroCalls = append(zeroCalls, m)
@@ -75,4 +73,24 @@ func MonitoringMethods(deps MonitoringDeps) map[string]rpcutil.HandlerFunc {
 			return resp
 		},
 	}
+}
+
+// rpcMethodCounts aggregates every error-code bucket for one method. The
+// metrics counter is keyed by method, status, and error code, so looking up a
+// two-label key would silently classify all real calls as zero-call methods.
+func rpcMethodCounts(counts map[string]int64, method string) (okCount, errorCount int64) {
+	prefix := method + "\x00"
+	for key, count := range counts {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		status, _, _ := strings.Cut(strings.TrimPrefix(key, prefix), "\x00")
+		switch status {
+		case "ok":
+			okCount += count
+		case "error":
+			errorCount += count
+		}
+	}
+	return okCount, errorCount
 }

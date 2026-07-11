@@ -1,0 +1,163 @@
+// fetch_tools.go — Meta-tool that activates deferred tools mid-run.
+//
+// Deferred tools have their name+description visible in the system prompt but
+// full JSON schemas are not sent in the initial Tools array. When the LLM
+// needs a deferred tool, it calls fetch_tools to:
+//  1. Get the full schema description (returned as text).
+//  2. Signal DeferredActivation so the executor injects schemas on the next turn.
+package runtimeops
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/toolmeta"
+)
+
+// FetchToolsRegistry is the subset of ToolRegistry needed by fetch_tools.
+type FetchToolsRegistry interface {
+	DeferredToolDef(name string) (toolctx.ToolDef, bool)
+	DeferredSummaries() []toolctx.DeferredToolSummary
+}
+
+// ToolFetchTools returns a tool that activates deferred tools and returns their schemas.
+func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		var p struct {
+			Names []string `json:"names"`
+			Query string   `json:"query"`
+		}
+		if err := jsonutil.UnmarshalInto("fetch_tools params", input, &p); err != nil {
+			return "", err
+		}
+
+		p.Query = strings.TrimSpace(p.Query)
+		if len(p.Names) == 0 && p.Query == "" {
+			return "", fmt.Errorf("names or query is required")
+		}
+
+		// Preset-restricted runs only see and activate allowed tools. The
+		// system prompt already hides disallowed deferred tools, but the
+		// query path below searches the full registry — without this filter
+		// a restricted sub-agent could surface and "activate" a tool that
+		// Execute then rejects, wasting a turn on a false "you can now call
+		// them directly". nil allowed = no restriction.
+		allowed := toolpreset.AllowedTools(toolpreset.Preset(toolctx.ToolPresetFromContext(ctx)))
+		isAllowed := func(name string) bool {
+			if allowed == nil {
+				return true
+			}
+			_, ok := allowed[name]
+			return ok
+		}
+
+		// If query is provided, search deferred tools by keyword. Rank with
+		// BM25 over name + description + parameter names so the most relevant
+		// tools come first, then union in any literal substring matches so the
+		// recall floor of the old substring search is preserved (e.g. "book"
+		// still surfaces "notebook" when BM25's whole-token match misses).
+		if p.Query != "" && len(p.Names) == 0 {
+			summaries := registry.DeferredSummaries()
+			docs := make([]searchDoc, 0, len(summaries))
+			for _, s := range summaries {
+				if !isAllowed(s.Name) {
+					continue
+				}
+				tokens := append(tokenize(s.Name), tokenize(s.Description)...)
+				if def, ok := registry.DeferredToolDef(s.Name); ok {
+					for _, pn := range extractParamNames(def.InputSchema) {
+						tokens = append(tokens, tokenize(pn)...)
+					}
+				}
+				docs = append(docs, searchDoc{
+					name:     s.Name,
+					tokens:   tokens,
+					fallback: strings.ToLower(s.Name + " " + s.Description),
+				})
+			}
+
+			p.Names = bm25Rank(p.Query, docs)
+			// Append substring matches not already surfaced by BM25, ordered
+			// after the ranked hits.
+			seen := make(map[string]bool, len(p.Names))
+			for _, name := range p.Names {
+				seen[name] = true
+			}
+			q := strings.ToLower(p.Query)
+			for _, d := range docs {
+				if !seen[d.name] && strings.Contains(d.fallback, q) {
+					p.Names = append(p.Names, d.name)
+					seen[d.name] = true
+				}
+			}
+			if len(p.Names) == 0 {
+				return fmt.Sprintf("No deferred tools match query %q.", p.Query), nil
+			}
+		}
+
+		// Activate and collect schema descriptions.
+		da := toolctx.DeferredActivationFromContext(ctx)
+
+		var sb strings.Builder
+		var activated, alreadyActive []string
+		for _, name := range p.Names {
+			if !isAllowed(name) {
+				fmt.Fprintf(&sb, "- %s: not available under the current tool preset\n", name)
+				continue
+			}
+			def, ok := registry.DeferredToolDef(name)
+			if !ok {
+				fmt.Fprintf(&sb, "- %s: not found or not a deferred tool\n", name)
+				continue
+			}
+			// Already-active short-circuit: the schema is already injected into
+			// the Tools array (and the prior fetch_tools result is compaction-
+			// protected), so re-emitting the full schema only duplicates it in
+			// history. Production measurement (2026-07-05, 14d agent-logs): 20%
+			// of fetch_tools calls were same-input repeats, up to 7 in one run.
+			if da != nil && da.IsActive(name) {
+				alreadyActive = append(alreadyActive, name)
+				continue
+			}
+			activated = append(activated, name)
+
+			// Format schema for LLM readability.
+			fmt.Fprintf(&sb, "## %s\n%s\n", def.Name, def.Description)
+			if def.InputSchema != nil {
+				schemaJSON, _ := json.MarshalIndent(def.InputSchema, "", "  ")
+				fmt.Fprintf(&sb, "```json\n%s\n```\n", schemaJSON)
+			}
+			sb.WriteString("\n")
+		}
+
+		if da != nil && len(activated) > 0 {
+			da.Activate(activated)
+		}
+		// Structured replay evidence (server-attached, unforgeable by output
+		// content) — the code half of the text notices below. Already-active
+		// names are included: they re-anchor the state after older evidence
+		// was summarized away. See chat/deferred_replay.go.
+		if len(activated)+len(alreadyActive) > 0 {
+			toolmeta.Set(ctx, "activatedTools", append(append([]string{}, activated...), alreadyActive...))
+		}
+
+		if len(alreadyActive) > 0 {
+			// Shared format (toolctx/activation_notice.go): also replay evidence,
+			// re-anchoring activation after old evidence was summarized away.
+			sb.WriteString(toolctx.FormatAlreadyActiveNotice(alreadyActive))
+			sb.WriteString("\n")
+		}
+		if len(activated) > 0 {
+			// Exact shared format (toolctx/activation_notice.go): the next run's
+			// history replay re-derives activation state from this sentence.
+			sb.WriteString(toolctx.FormatFetchActivationNotice(activated))
+		}
+
+		return sb.String(), nil
+	}
+}

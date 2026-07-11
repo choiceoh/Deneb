@@ -112,7 +112,7 @@ improvement-ideas 4.3("왜 그 도구를 골랐는지")과 통합. recall 로 �
 
 Deneb 의 **업무비서 모드 = 정확히 proactive**. 그리고 SOTA 모델이 LLM 단일 호출로 6.7% 밖에 못 푸는 이 영역을, Deneb 는 **시스템 레벨 스캐폴딩**으로 우회한다:
 
-- `gateway-go/internal/agentsys/autonomous/service.go:Service` — dreaming + periodic task 오케스트레이터. task 상태를 `~/.deneb/autonomous_state.json` 에 영속 → 24h/weekly 간격이 재시작 생존.
+- `gateway-go/internal/domain/autonomous/service.go:Service` — dreaming + periodic task 오케스트레이터. task 상태를 `~/.deneb/autonomous_state.json` 에 영속 → 24h/weekly 간격이 재시작 생존.
 - `boot_task.go` (24h, 기동 시) — `~/.deneb/BOOT.md` 기반 선제 turn.
 - `heartbeat_task.go` (30min, 08:00–23:00 KST) — `~/.deneb/HEARTBEAT.md` 기반 주기 체크.
 - `gmailpoll` — 신규 메일 주기 분석.
@@ -127,7 +127,7 @@ Deneb 의 proactive 트리거는 **시간 기반(매 30분, 매 24h)** 이지 **
 ### 제안
 
 **B1. 이벤트-스트림 이상탐지 신호 레이어 — P1 / M. 🚧 1차 착수됨 (이 PR).**
-> **구현 현황:** 순수 신호 엔진 `gateway-go/internal/agentsys/autonomous/signal.go`
+> **구현 현황:** 순수 신호 엔진 `gateway-go/internal/domain/autonomous/signal.go`
 > (`DetectSignals` — VIP 미응답 메일·일정 충돌·임박 일정·마감 임박을 가중 점수화,
 > exhaustive 단위 테스트) + heartbeat 가산 훅(`heartbeat_task.go`, nil-safe·기존
 > HEARTBEAT.md 체크를 **억제하지 않고** 신호 요약을 앞에 덧붙임) + 캘린더 수집기
@@ -300,5 +300,5 @@ recall preflight 가 여러 소스에서 **같은 엔티티에 상충하는 사�
 - 논문: [arXiv 2605.26086](https://arxiv.org/abs/2605.26086) · [HTML](https://arxiv.org/html/2605.26086) · 국내 보도 [AI Matters](https://aimatters.co.kr/news-report/43380/)
 - 관련 벤치마크: [π-Bench (2605.14678)](https://arxiv.org/html/2605.14678v3) — proactive long-horizon 평가 (B 발견 보강 참고)
 - Deneb research: `docs/research/{improvement-ideas, ideal-agent-environment-harness, hermes-deneb-mapping, memory-integration-strategy}.md`
-- 코드 근거: `gateway-go/internal/agentsys/autonomous/`, `internal/pipeline/chat/recall_preflight.go`, `internal/pipeline/compaction/polaris.go`, `internal/pipeline/chat/tools.go`, `internal/runtime/rpc/handler/chat/miniapp_bridge.go`
+- 코드 근거: `gateway-go/internal/domain/autonomous/`, `internal/pipeline/chat/recall_preflight.go`, `internal/pipeline/compaction/polaris.go`, `internal/pipeline/chat/tools.go`, `internal/runtime/rpc/handler/chat/miniapp_bridge.go`
 - 도메인 규칙: `docs/agent-rules/{live-testing, prompt-cache, logging, optimization}.md`

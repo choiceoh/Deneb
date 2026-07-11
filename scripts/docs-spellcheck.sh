@@ -27,7 +27,7 @@ fi
 
 if command -v python3 >/dev/null 2>&1; then
   python3 -m pip install --user --disable-pip-version-check --break-system-packages codespell >/dev/null 2>&1 || \
-    python3 -m pip install --user --disable-pip-version-check codespell >/dev/null 2>&1
+    python3 -m pip install --user --disable-pip-version-check codespell >/dev/null 2>&1 || true
 
   user_bin="$(python3 - <<'PY'
 import site

@@ -2,11 +2,10 @@ package handlerminiapp
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compactuner"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -19,6 +18,7 @@ type PromptTuner interface {
 	RunWithReport(ctx context.Context) compactuner.Report
 }
 
+// PromptTunerDeps holds dependencies required by prompt-tuning RPC handlers.
 type PromptTunerDeps struct {
 	Tuner func() PromptTuner
 }
@@ -47,6 +47,7 @@ type PromptTunerReport struct {
 	AfterCount    int      `json:"afterCount"`
 }
 
+// PromptTunerMethods registers prompt-tuning RPC handlers.
 func PromptTunerMethods(deps PromptTunerDeps) map[string]rpcutil.HandlerFunc {
 	if deps.Tuner == nil {
 		return nil
@@ -60,16 +61,7 @@ func promptTunerRun(deps PromptTunerDeps) rpcutil.HandlerFunc {
 	type params struct {
 		Target string `json:"target,omitempty"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p params
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		target := strings.TrimSpace(p.Target)
 		if target == "" {
 			target = "compaction"
@@ -85,7 +77,7 @@ func promptTunerRun(deps PromptTunerDeps) rpcutil.HandlerFunc {
 			Target: target,
 			Report: promptTunerReport(tuner.RunWithReport(ctx)),
 		})
-	}
+	})
 }
 
 func promptTunerReport(r compactuner.Report) PromptTunerReport {

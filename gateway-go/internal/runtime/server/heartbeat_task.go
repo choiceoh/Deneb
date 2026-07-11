@@ -35,7 +35,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -119,7 +119,9 @@ func (t *heartbeatTask) now() time.Time {
 	return time.Now()
 }
 
+// Name returns the component's stable scheduler name.
 func (t *heartbeatTask) Name() string            { return "heartbeat" }
+// Interval returns the component's scheduling cadence.
 func (t *heartbeatTask) Interval() time.Duration { return 30 * time.Minute }
 
 // Active-hours window (Asia/Seoul). Outside this window, Run() is a no-op.
@@ -166,6 +168,7 @@ const heartbeatTriggerTemplate = prompt.HeartbeatTriggerPrefix + ` 30분 주기 
 HEARTBEAT.md:
 %s`
 
+// Run executes one scheduled task cycle.
 func (t *heartbeatTask) Run(ctx context.Context) error {
 	if t.chatHandler == nil {
 		return nil

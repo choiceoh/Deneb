@@ -6,8 +6,8 @@ package skill
 import (
 	"context"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -141,33 +141,16 @@ func skillsSnapshot(_ Deps) rpcutil.HandlerFunc {
 		RemoteNote       string                        `json:"remoteNote,omitempty"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		if p.WorkspaceDir == "" {
-			return nil, rpcerr.MissingParam("workspaceDir")
+		discover, err := workspaceDiscoverConfig(p.WorkspaceDir, p.BundledSkillsDir, p.ManagedSkillsDir, p.ExtraDirs, p.PluginSkillDirs)
+		if err != nil {
+			return nil, err
 		}
-		eligCtx := skills.DefaultEligibilityContext()
-		if p.SkillConfigs != nil {
-			eligCtx.SkillConfigs = p.SkillConfigs
-		}
-		if p.AllowBundled != nil {
-			eligCtx.AllowBundled = p.AllowBundled
-		}
-		if p.ConfigValues != nil {
-			eligCtx.ConfigValues = p.ConfigValues
-		}
-		if p.EnvVars != nil {
-			eligCtx.EnvVars = p.EnvVars
-		}
+		eligCtx := eligibilityContext(p.SkillConfigs, p.AllowBundled, p.ConfigValues, p.EnvVars)
 		snapshot := skills.BuildWorkspaceSkillSnapshot(skills.SnapshotConfig{
-			DiscoverConfig: skills.DiscoverConfig{
-				WorkspaceDir:     p.WorkspaceDir,
-				BundledSkillsDir: p.BundledSkillsDir,
-				ManagedSkillsDir: p.ManagedSkillsDir,
-				ExtraDirs:        p.ExtraDirs,
-				PluginSkillDirs:  p.PluginSkillDirs,
-			},
-			SkillFilter: p.SkillFilter,
-			Eligibility: eligCtx,
-			RemoteNote:  p.RemoteNote,
+			DiscoverConfig: discover,
+			SkillFilter:    p.SkillFilter,
+			Eligibility:    eligCtx,
+			RemoteNote:     p.RemoteNote,
 		})
 		return snapshot, nil
 	})
@@ -186,22 +169,12 @@ func skillsCommands(_ Deps) rpcutil.HandlerFunc {
 		ReservedNames    []string                      `json:"reservedNames,omitempty"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		if p.WorkspaceDir == "" {
-			return nil, rpcerr.MissingParam("workspaceDir")
+		discover, err := workspaceDiscoverConfig(p.WorkspaceDir, p.BundledSkillsDir, "", p.ExtraDirs, p.PluginSkillDirs)
+		if err != nil {
+			return nil, err
 		}
-		entries := skills.DiscoverWorkspaceSkills(skills.DiscoverConfig{
-			WorkspaceDir:     p.WorkspaceDir,
-			BundledSkillsDir: p.BundledSkillsDir,
-			ExtraDirs:        p.ExtraDirs,
-			PluginSkillDirs:  p.PluginSkillDirs,
-		})
-		eligCtx := skills.DefaultEligibilityContext()
-		if p.SkillConfigs != nil {
-			eligCtx.SkillConfigs = p.SkillConfigs
-		}
-		if p.AllowBundled != nil {
-			eligCtx.AllowBundled = p.AllowBundled
-		}
+		entries := skills.DiscoverWorkspaceSkills(discover)
+		eligCtx := eligibilityContext(p.SkillConfigs, p.AllowBundled, nil, nil)
 		eligible := skills.FilterEligibleSkills(entries, eligCtx)
 		eligible = skills.FilterBySkillFilter(eligible, p.SkillFilter)
 		reserved := make(map[string]struct{})
@@ -221,15 +194,11 @@ func skillsDiscover(deps Deps) rpcutil.HandlerFunc {
 		PluginSkillDirs  []string `json:"pluginSkillDirs,omitempty"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		if p.WorkspaceDir == "" {
-			return nil, rpcerr.MissingParam("workspaceDir")
+		discover, err := workspaceDiscoverConfig(p.WorkspaceDir, p.BundledSkillsDir, "", p.ExtraDirs, p.PluginSkillDirs)
+		if err != nil {
+			return nil, err
 		}
-		entries := skills.DiscoverWorkspaceSkills(skills.DiscoverConfig{
-			WorkspaceDir:     p.WorkspaceDir,
-			BundledSkillsDir: p.BundledSkillsDir,
-			ExtraDirs:        p.ExtraDirs,
-			PluginSkillDirs:  p.PluginSkillDirs,
-		})
+		entries := skills.DiscoverWorkspaceSkills(discover)
 		broadcast(deps.Broadcaster, "skills.changed", map[string]any{
 			"action": "discovered",
 			"count":  len(entries),
@@ -252,25 +221,14 @@ func skillsEntries(_ Deps) rpcutil.HandlerFunc {
 		SkillFilter      []string                      `json:"skillFilter,omitempty"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		if p.WorkspaceDir == "" {
-			return nil, rpcerr.MissingParam("workspaceDir")
+		discover, err := workspaceDiscoverConfig(p.WorkspaceDir, p.BundledSkillsDir, p.ManagedSkillsDir, p.ExtraDirs, p.PluginSkillDirs)
+		if err != nil {
+			return nil, err
 		}
-		entries := skills.DiscoverWorkspaceSkills(skills.DiscoverConfig{
-			WorkspaceDir:     p.WorkspaceDir,
-			BundledSkillsDir: p.BundledSkillsDir,
-			ManagedSkillsDir: p.ManagedSkillsDir,
-			ExtraDirs:        p.ExtraDirs,
-			PluginSkillDirs:  p.PluginSkillDirs,
-		})
+		entries := skills.DiscoverWorkspaceSkills(discover)
 		// Optionally filter by eligibility.
 		if p.SkillConfigs != nil || p.AllowBundled != nil {
-			ctx := skills.DefaultEligibilityContext()
-			if p.SkillConfigs != nil {
-				ctx.SkillConfigs = p.SkillConfigs
-			}
-			if p.AllowBundled != nil {
-				ctx.AllowBundled = p.AllowBundled
-			}
+			ctx := eligibilityContext(p.SkillConfigs, p.AllowBundled, nil, nil)
 			entries = skills.FilterEligibleSkills(entries, ctx)
 		}
 		entries = skills.FilterBySkillFilter(entries, p.SkillFilter)
@@ -288,23 +246,52 @@ func skillsWorkspaceStatus(_ Deps) rpcutil.HandlerFunc {
 		AllowBundled     []string                      `json:"allowBundled,omitempty"`
 	}
 	return rpcutil.BindHandler[params](func(p params) (any, error) {
-		if p.WorkspaceDir == "" {
-			return nil, rpcerr.MissingParam("workspaceDir")
+		discover, err := workspaceDiscoverConfig(p.WorkspaceDir, p.BundledSkillsDir, "", p.ExtraDirs, nil)
+		if err != nil {
+			return nil, err
 		}
-		eligCtx := skills.DefaultEligibilityContext()
-		if p.SkillConfigs != nil {
-			eligCtx.SkillConfigs = p.SkillConfigs
-		}
-		if p.AllowBundled != nil {
-			eligCtx.AllowBundled = p.AllowBundled
-		}
+		eligCtx := eligibilityContext(p.SkillConfigs, p.AllowBundled, nil, nil)
 		return skills.BuildWorkspaceSkillStatus(
-			skills.DiscoverConfig{
-				WorkspaceDir:     p.WorkspaceDir,
-				BundledSkillsDir: p.BundledSkillsDir,
-				ExtraDirs:        p.ExtraDirs,
-			},
+			discover,
 			eligCtx,
 		), nil
 	})
+}
+
+func workspaceDiscoverConfig(
+	workspaceDir, bundledSkillsDir, managedSkillsDir string,
+	extraDirs, pluginSkillDirs []string,
+) (skills.DiscoverConfig, error) {
+	if workspaceDir == "" {
+		return skills.DiscoverConfig{}, rpcerr.MissingParam("workspaceDir")
+	}
+	return skills.DiscoverConfig{
+		WorkspaceDir:     workspaceDir,
+		BundledSkillsDir: bundledSkillsDir,
+		ManagedSkillsDir: managedSkillsDir,
+		ExtraDirs:        extraDirs,
+		PluginSkillDirs:  pluginSkillDirs,
+	}, nil
+}
+
+func eligibilityContext(
+	configs map[string]skills.SkillConfig,
+	allowBundled []string,
+	configValues map[string]bool,
+	envVars map[string]string,
+) skills.EligibilityContext {
+	ctx := skills.DefaultEligibilityContext()
+	if configs != nil {
+		ctx.SkillConfigs = configs
+	}
+	if allowBundled != nil {
+		ctx.AllowBundled = allowBundled
+	}
+	if configValues != nil {
+		ctx.ConfigValues = configValues
+	}
+	if envVars != nil {
+		ctx.EnvVars = envVars
+	}
+	return ctx
 }

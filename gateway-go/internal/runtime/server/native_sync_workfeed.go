@@ -22,6 +22,7 @@ func (s *Server) nativeWorkFeedStore() *nativeWorkFeedStore {
 	}
 }
 
+// Append stores a new work-feed item and mirrors its creation to native clients.
 func (s *nativeWorkFeedStore) Append(item workfeed.Item) (workfeed.Item, error) {
 	out, created, err := s.store.AppendIfNew(item)
 	if err != nil {
@@ -35,14 +36,17 @@ func (s *nativeWorkFeedStore) Append(item workfeed.Item) (workfeed.Item, error) 
 	return out, nil
 }
 
+// List returns the newest work-feed items using the underlying store's filters.
 func (s *nativeWorkFeedStore) List(limit int, includeAcked bool) ([]workfeed.Item, int, error) {
 	return s.store.List(limit, includeAcked)
 }
 
+// ListRange returns work-feed items bounded by creation time.
 func (s *nativeWorkFeedStore) ListRange(limit int, includeAcked bool, sinceMs, beforeMs int64) ([]workfeed.Item, int, error) {
 	return s.store.ListRange(limit, includeAcked, sinceMs, beforeMs)
 }
 
+// Ack acknowledges an item and publishes the updated state to native clients.
 func (s *nativeWorkFeedStore) Ack(id string) (workfeed.Item, error) {
 	item, err := s.store.Ack(id)
 	if err != nil {
@@ -52,6 +56,7 @@ func (s *nativeWorkFeedStore) Ack(id string) (workfeed.Item, error) {
 	return item, nil
 }
 
+// MarkRead records that an item was opened and publishes the updated state.
 func (s *nativeWorkFeedStore) MarkRead(id string) (workfeed.Item, error) {
 	item, err := s.store.MarkRead(id)
 	if err != nil {
@@ -63,6 +68,7 @@ func (s *nativeWorkFeedStore) MarkRead(id string) (workfeed.Item, error) {
 	return item, nil
 }
 
+// Correct attaches operator feedback to an item and mirrors the change.
 func (s *nativeWorkFeedStore) Correct(id, note string) (workfeed.Item, error) {
 	item, err := s.store.Correct(id, note)
 	if err != nil {
@@ -72,6 +78,7 @@ func (s *nativeWorkFeedStore) Correct(id, note string) (workfeed.Item, error) {
 	return item, nil
 }
 
+// Rewrite replaces an item's body and mirrors the resulting item.
 func (s *nativeWorkFeedStore) Rewrite(id, newBody string) (workfeed.Item, error) {
 	item, err := s.store.Rewrite(id, newBody)
 	if err != nil {
@@ -81,6 +88,7 @@ func (s *nativeWorkFeedStore) Rewrite(id, newBody string) (workfeed.Item, error)
 	return item, nil
 }
 
+// RunAction executes a declared item action and publishes its result.
 func (s *nativeWorkFeedStore) RunAction(itemID, actionID string) (workfeed.ActionResult, error) {
 	result, err := s.store.RunAction(itemID, actionID)
 	if err != nil {

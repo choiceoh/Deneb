@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
@@ -569,9 +570,9 @@ func ingestFileSource(ctx context.Context, ref string) (string, error) {
 	var text string
 	switch detectFileKind(path, data) {
 	case "pdf":
-		text, err = pdfOCR(ctx, data)
+		text, err = document.OCRPDF(ctx, data)
 	case "image":
-		text, err = ocrImageBytes(ctx, data)
+		text, err = document.OCRImage(ctx, data)
 	default:
 		if !utf8.Valid(data) {
 			return "", errors.New("텍스트로 읽을 수 없는 파일입니다 (PDF·이미지가 아니면 OCR 대상이 아님)")

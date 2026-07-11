@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // MarketSummaryFunc matches market.Cache.Summary — injected by the server so
@@ -57,19 +58,7 @@ func formatQuotePrice(v float64) string {
 	neg := strings.HasPrefix(intPart, "-")
 	intPart = strings.TrimPrefix(intPart, "-")
 	if neg {
-		return "-" + groupThousands(intPart) + frac
+		return "-" + textutil.GroupThousands(intPart) + frac
 	}
-	return groupThousands(intPart) + frac
-}
-
-// groupThousands inserts comma separators into a non-negative integer string.
-func groupThousands(intPart string) string {
-	var out []byte
-	for i, c := range []byte(intPart) {
-		if i > 0 && (len(intPart)-i)%3 == 0 {
-			out = append(out, ',')
-		}
-		out = append(out, c)
-	}
-	return string(out)
+	return textutil.GroupThousands(intPart) + frac
 }

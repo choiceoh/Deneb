@@ -58,6 +58,7 @@ func NewFilesAdapter(deps FilesAdapterDeps) Adapter {
 	}
 }
 
+// Layer identifies the knowledge layer served by the adapter.
 func (a *filesAdapter) Layer() Layer { return LayerFiles }
 
 // Recall runs the index's hybrid (BM25 lexical + dense cosine) search and maps

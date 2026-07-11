@@ -7,10 +7,15 @@
 package toolreg
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/filesystem"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/routine"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/schedule"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/web"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 )
@@ -95,7 +100,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 		Name:        "transcribe",
 		Description: "디스크의 오디오 파일(회의 녹음·음성 메모, m4a/mp3/oga/wav 등 최대 60분)을 화자분리+타임스탬프로 전사한다 — '이 녹음 정리해줘'에 사용. hotwords로 거래처·인명 교정 힌트 추가 가능(주소록/위키 힌트 자동 병합). 앱에서 공유된 오디오는 이미 자동 전사되므로 이 도구는 경로로 받은 파일용.",
 		InputSchema: transcribeToolSchema(),
-		Fn:          tools.ToolTranscribe(deps.AsrHotwords),
+		Fn:          artifact.ToolTranscribe(deps.AsrHotwords),
 		Deferred:    true,
 	})
 
@@ -105,7 +110,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 		Name:        "ocr",
 		Description: "디스크의 이미지·스캔 PDF·오피스 문서에서 텍스트를 추출한다(OCR) — 영수증 사진·스캔 계약서·팩스 PDF를 읽어야 할 때 사용. read 도구는 바이너리를 그대로 덤프하므로 이미지/스캔물은 반드시 이 도구로. 파일스토어 파일은 files action=analyze로도 가능.",
 		InputSchema: ocrToolSchema(),
-		Fn:          tools.ToolOCR(),
+		Fn:          artifact.ToolOCR(),
 		Deferred:    true,
 	})
 
@@ -220,13 +225,13 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		Name:        "read",
 		Description: "Read file contents with line numbers for code review (default: 2000 lines). Use offset/limit for large files; equivalent to a clean bat/cat -n view",
 		InputSchema: readToolSchema(),
-		Fn:          tools.ToolRead(workspaceDir, deps.SkillsCatalogDirs...),
+		Fn:          filesystem.ToolRead(workspaceDir, deps.SkillsCatalogDirs...),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "write",
 		Description: "Create or overwrite a file. Auto-creates parent directories. Use edit for partial changes",
 		InputSchema: writeToolSchema(),
-		Fn:          tools.ToolWrite(workspaceDir),
+		Fn:          filesystem.ToolWrite(workspaceDir),
 	})
 	// Deferred (prompt audit 2026-06-12): ~370 wire tokens for 2 uses in 14
 	// days — Deneb is a chief-of-staff, not a coding agent, so partial file
@@ -235,14 +240,14 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 		Name:        "edit",
 		Description: "Search-and-replace in a file. old_string must be unique unless replace_all=true. Read first to find the exact string",
 		InputSchema: editToolSchema(),
-		Fn:          tools.ToolEdit(workspaceDir),
+		Fn:          filesystem.ToolEdit(workspaceDir),
 		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "grep",
 		Description: "Regex search across files (rg / ripgrep). Use include/fileType to narrow scope. Returns file:line:match format",
 		InputSchema: grepToolSchema(),
-		Fn:          tools.ToolGrep(workspaceDir),
+		Fn:          filesystem.ToolGrep(workspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name: "gateway",
@@ -250,14 +255,14 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 			"Destructive actions (restart/update/config_set) require approval — the first call returns a needs_approval envelope; relay the Korean summary to the user verbatim, and after approval call the .confirmed variant with the same action_token. " +
 			"토큰/비밀번호/API 키는 절대 config_set으로 건드리지 마라.",
 		InputSchema: gatewayToolSchema(),
-		Fn:          tools.ToolGateway(workspaceDir),
+		Fn:          runtimeops.ToolGateway(workspaceDir),
 		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "observe",
 		Description: "Self-diagnosis: why a turn was slow/failed, tool-usage stats, improvement-loop health. Observe your OWN runtime via the in-process observation plane: action=turn (runId → a past run's tokens/tools/cache + its captured logs), action=logs (recent log ring; filter by runId/session/level/contains), action=behavior (cross-session tool usage / proactive funnel / background-job health over N days, plus the local vLLM engine's prefix-cache hit rate), action=effort (adaptive effort-router scorecard: routed-off vs kept-on, escalation rate, savings), action=proactive (proactive-card engagement: FTR / over-intervention rate by source), action=health (self-improvement machinery digest: loop liveness, skill-decision mix, dreamer backlog, no-op frontier, silent-failure counts — same data as the loopback /api/observatory, read mid-reasoning).",
 		InputSchema: observeToolSchema(),
-		Fn:          tools.ToolObserve(deps.LogCapture, deps.AgentLog, deps.WorkFeed, deps.VllmBaseURLs),
+		Fn:          runtimeops.ToolObserve(deps.LogCapture, deps.AgentLog, deps.WorkFeed, deps.VllmBaseURLs),
 		Deferred:    true,
 	})
 
@@ -272,7 +277,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 			"launch/stop/restart (recipe 이름으로 모델 기동·중지·재시작 — 실제 동작) · cancel (jobId로 작업 취소) · diagnose (실행 중 레시피 컨테이너 크래시 진단). " +
 			"\"플릿 괜찮아?\" · \"qwen36 재시작해줘\" · \"왜 죽었어?\" 같은 요청에 사용.",
 		InputSchema: fleetToolSchema(),
-		Fn:          tools.ToolFleet(&deps.Fleet),
+		Fn:          runtimeops.ToolFleet(&deps.Fleet),
 		Deferred:    true,
 	})
 
@@ -284,7 +289,7 @@ func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps)
 			Name:        "read_spillover",
 			Description: "Read a previous large tool result by spill ID, paged — offset/limit line window (default 400 lines) or grep to jump to matching lines. Use when a tool result was too large and was replaced with a preview; follow the [계속: offset=N] tail hint to page",
 			InputSchema: readSpilloverToolSchema(),
-			Fn:          tools.ToolSpilloverRead(deps.SpilloverStore),
+			Fn:          artifact.ToolSpilloverRead(deps.SpilloverStore),
 		})
 	}
 
@@ -320,13 +325,13 @@ func RegisterProcessTools(registry toolctx.ToolRegistrar, d *toolctx.ProcessDeps
 		Name:        "exec",
 		Description: "Run a shell command (bash -c). Default timeout 60s, max 10min. Use background=true for long tasks, then process to check",
 		InputSchema: execToolSchema(),
-		Fn:          tools.ToolExec(d.Mgr, d.WorkspaceDir),
+		Fn:          runtimeops.ToolExec(d.Mgr, d.WorkspaceDir),
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "process",
 		Description: "Manage background exec sessions: list running, poll/log output, kill by sessionId",
 		InputSchema: processToolSchema(),
-		Fn:          tools.ToolProcess(d.Mgr),
+		Fn:          runtimeops.ToolProcess(d.Mgr),
 		Deferred:    true,
 	})
 }
@@ -351,14 +356,14 @@ func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps
 		Name:        "sessions",
 		Description: "Sessions: list / history / search / send — other sessions' message logs, transcript keyword search, cross-session messaging",
 		InputSchema: sessionsToolSchema(),
-		Fn:          tools.ToolSessions(d),
+		Fn:          runtimeops.ToolSessions(d),
 		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "sessions_spawn",
 		Description: "Spawn a sub-agent to work in parallel — use for long tasks, research, or when the user is waiting. Faster than doing it yourself",
 		InputSchema: sessionsSpawnToolSchema(),
-		Fn:          tools.ToolSessionsSpawn(d),
+		Fn:          runtimeops.ToolSessionsSpawn(d),
 	})
 	// Deferred (2026-07-09): the Sub-Agents prompt section tells the model NOT to
 	// poll with subagents — child completions auto-deliver via the notify relay
@@ -369,7 +374,7 @@ func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps
 		Name:        "subagents",
 		Description: "Monitor and control sub-agents: list status, steer with messages, or kill. Defaults to list",
 		InputSchema: subagentsToolSchema(),
-		Fn:          tools.ToolSubagents(d),
+		Fn:          runtimeops.ToolSubagents(d),
 		Deferred:    true,
 	})
 }
@@ -402,7 +407,7 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 			"trigger explicitly directs the agent to call this tool, so it must be visible in the default prompt " +
 			"(deferring it would force a fetch_tools round-trip and add a fragile turn).",
 		InputSchema: heartbeatUpdateToolSchema(),
-		Fn:          tools.ToolHeartbeatUpdate(),
+		Fn:          runtimeops.ToolHeartbeatUpdate(),
 	})
 	// Deferred (2026-07-09): the native client owns the user's 할일 list
 	// (miniapp.todo.*) as the primary surface, and no prompt trigger names this
@@ -423,7 +428,7 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 // Typical trigger: cron scheduler, daily routines, periodic checks.
 // diaryDir is the wiki diary directory for morning letter logging; wikiDir is
 // the wiki root for its deadline scan (either empty = that part disabled).
-func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, diaryDir, wikiDir string, filesSemanticSearch tools.FilesSemanticSearchFunc) {
+func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, diaryDir, wikiDir string, filesSemanticSearch artifact.FilesSemanticSearchFunc) {
 	// Deferred (prompt audit 2026-06-12): ~590 wire tokens — the second-largest
 	// eager tool — for 11 interactive uses in 14 days. The scheduler itself runs
 	// server-side; this tool only manages jobs, so a "매일 아침에 …" turn pays one
@@ -442,7 +447,7 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 		Name:        "files",
 		Description: "파일 저장소 (로컬 디스크, 외부 클라우드 아님): list, search (이름·content=true로 내용, semantic=true로 의미 기반 벡터 검색), semantic_search (=search semantic=true), download (extract=true로 텍스트 추출 — PDF/이미지 OCR·Excel/Word/PowerPoint), upload (로컬 파일을 저장소에 저장), share (7일 유효 공유 링크), analyze (문서 내용 추출). 저장 위치: DENEB_FILES_DIR (기본 ~/.deneb/files). 인증 불필요.",
 		InputSchema: filesToolSchema(),
-		Fn:          tools.ToolFiles(filesSemanticSearch),
+		Fn:          artifact.ToolFiles(filesSemanticSearch),
 		Deferred:    true,
 	})
 	// Morning-letter data collection: six sections in parallel, raw JSON out;
@@ -452,7 +457,7 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 		Name:        "morning_letter",
 		Description: "모닝레터 데이터 수집: 날씨·환율·구리시세·오늘 일정·미읽음 메일·위키 마감(due) 6개 섹션을 병렬 수집해 raw JSON 반환. 편지 작성(어조·해석·우선순위)은 에이전트 몫. No parameters",
 		InputSchema: morningLetterToolSchema(),
-		Fn:          tools.ToolMorningLetter(nil, tools.MorningLetterOpts{DiaryDir: diaryDir, WikiDir: wikiDir}),
+		Fn:          routine.ToolMorningLetter(routine.MorningLetterOpts{DiaryDir: diaryDir, WikiDir: wikiDir}),
 		Deferred:    true,
 	})
 	// Evening-letter data collection: the end-of-day counterpart to
@@ -475,7 +480,7 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 			"ok:false 섹션은 본문에 '조회 실패'). 최종 텍스트가 곧 전달 메시지 — message 툴 호출·확인 문구·채널 상태 추측 금지. " +
 			"No parameters",
 		InputSchema: eveningLetterToolSchema(),
-		Fn:          tools.ToolEveningLetter(nil, tools.EveningLetterOpts{DiaryDir: diaryDir, WikiDir: wikiDir}),
+		Fn:          routine.ToolEveningLetter(routine.EveningLetterOpts{DiaryDir: diaryDir, WikiDir: wikiDir}),
 		Deferred:    true,
 	})
 }
@@ -501,7 +506,7 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar, workspaceDir string) {
 		Name:        "send_file",
 		Description: "Send a file to the user (auto-detects: photo/video/audio/document). Max 50 MB",
 		InputSchema: sendFileToolSchema(),
-		Fn:          tools.ToolSendFile(),
+		Fn:          artifact.ToolSendFile(),
 		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
@@ -511,7 +516,7 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar, workspaceDir string) {
 			"막대 위에 추세선을 얹는 콤보도 가능(한 시리즈에 type:line). " +
 			"렌더된 PNG 경로를 돌려주므로, 그 경로를 send_file(type:\"photo\")로 사용자에게 전송해야 실제로 보인다.",
 		InputSchema: chartToolSchema(),
-		Fn:          tools.ToolChart(),
+		Fn:          artifact.ToolChart(),
 		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
@@ -521,7 +526,7 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar, workspaceDir string) {
 			"숫자 비교·추이는 diagram이 아니라 chart를 써라. " +
 			"렌더된 PNG 경로를 돌려주므로, 그 경로를 send_file(type:\"photo\")로 사용자에게 전송해야 실제로 보인다.",
 		InputSchema: diagramToolSchema(),
-		Fn:          tools.ToolDiagram(),
+		Fn:          artifact.ToolDiagram(),
 		Deferred:    true,
 	})
 	registry.RegisterTool(toolctx.ToolDef{
@@ -531,7 +536,7 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar, workspaceDir string) {
 			"Use for analyzing video structure/hooks, diagnosing bugs from screen recordings, or summarizing long videos. " +
 			"Supports start/end to focus on a time window.",
 		InputSchema: watchToolSchema(),
-		Fn:          tools.ToolWatch(workspaceDir),
+		Fn:          artifact.ToolWatch(workspaceDir),
 		Deferred:    true,
 	})
 }
@@ -576,7 +581,7 @@ func RegisterCalendarTool(registry toolctx.ToolRegistrar, calDeps *toolctx.Calen
 			"구글 캘린더(읽기)와 로컬 일정(읽기·쓰기)을 합쳐 보여주며 추가·수정·삭제는 로컬 일정에만 적용된다. " +
 			"사용자가 '오늘/이번 주 일정', '내일 3시 미팅 잡아줘', 'OOO 일정 언제야', '미팅 준비' 같이 일정을 묻거나 시키면 짐작하지 말고 호출하라.",
 		InputSchema: calendarToolSchema(),
-		Fn:          tools.ToolCalendar(calDeps),
+		Fn:          schedule.ToolCalendar(calDeps),
 	})
 }
 

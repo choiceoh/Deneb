@@ -599,6 +599,7 @@ type capturingSummarizer struct {
 	captured *string
 }
 
+// Summarize produces a bounded summary of the supplied conversation.
 func (c *capturingSummarizer) Summarize(ctx context.Context, system, conversation string, maxOutputTokens int) (string, error) {
 	result, err := c.inner.Summarize(ctx, system, conversation, maxOutputTokens)
 	if err == nil && result != "" {

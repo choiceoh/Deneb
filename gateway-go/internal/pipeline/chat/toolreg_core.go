@@ -3,7 +3,8 @@ package chat
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolreg"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/codeaction"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
 )
 
 // RegisterCoreTools populates the tool registry with all core agent tools.
@@ -40,7 +41,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		Name:        "fetch_tools",
 		Description: "Load full schemas for deferred tools so you can call them. Use names (exact) or query (keyword search). The activated tools become available on the next turn",
 		InputSchema: toolreg.FetchToolsSchema(),
-		Fn:          tools.ToolFetchTools(registry),
+		Fn:          runtimeops.ToolFetchTools(registry),
 	})
 
 	// code_action (CodeAct): the model writes Python to orchestrate several
@@ -55,9 +56,9 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// regardless of eager/deferred).
 	registry.RegisterTool(toolctx.ToolDef{
 		Name:        "code_action",
-		Description: tools.CodeActionDescription,
-		InputSchema: tools.CodeActionSchema(),
-		Fn: tools.ToolCodeAction(tools.CodeActionDeps{
+		Description: codeaction.CodeActionDescription,
+		InputSchema: codeaction.CodeActionSchema(),
+		Fn: codeaction.ToolCodeAction(codeaction.CodeActionDeps{
 			Invoker:  registry,
 			Contacts: deps.Contacts.Store, // structured deneb.contacts(as_json=True); nil-safe
 			Calendar: &deps.Calendar,      // structured deneb.calendar(as_json=True)

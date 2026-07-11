@@ -206,7 +206,7 @@ func TestIsMutationTool(t *testing.T) {
 	// exec is excluded from mutation tools: most exec calls are read-only
 	// (cat, ls, curl) and blanket invalidation destroys cache hit rates.
 	// Commands that CAN write are handled separately — Execute consults
-	// tools.ExecCommandPreservesRunCache and invalidates for anything not
+	// runtimeops.ExecCommandPreservesRunCache and invalidates for anything not
 	// provably read-only (see TestExecute_ExecInvalidatesRunCache).
 	if IsMutationTool("exec") {
 		t.Fatal("exec should not be a mutation tool")

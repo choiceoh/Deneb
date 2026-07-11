@@ -4,8 +4,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/router"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 )
 
 // adaptiveEffortTuneEnv is the opt-in flag for the adaptive effort-router nudge.

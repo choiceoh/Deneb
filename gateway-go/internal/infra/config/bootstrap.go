@@ -3,13 +3,10 @@ package config
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
@@ -219,24 +216,9 @@ func generateRandomToken() (string, error) {
 // persistGeneratedToken writes the generated token into the config file.
 // If the file doesn't exist, creates it with the token.
 func persistGeneratedToken(configPath, token string, _ *slog.Logger) error {
-	// Ensure parent directory exists.
-	dir := filepath.Dir(configPath)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("creating config directory: %w", err)
-	}
-
-	// Read existing config or start with empty object.
-	var raw map[string]any
-	data, err := os.ReadFile(configPath)
+	raw, err := prepareConfigMap(configPath)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("reading config: %w", err)
-		}
-		raw = make(map[string]any)
-	} else {
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return fmt.Errorf("parsing config: %w", err)
-		}
+		return err
 	}
 
 	// Set gateway.auth.token.
@@ -252,24 +234,7 @@ func persistGeneratedToken(configPath, token string, _ *slog.Logger) error {
 	}
 	auth["token"] = token
 
-	// Update meta.
-	meta, ok := raw["meta"].(map[string]any)
-	if !ok {
-		meta = make(map[string]any)
-		raw["meta"] = meta
-	}
-	meta["lastTouchedAt"] = time.Now().UTC().Format(time.RFC3339)
-
-	out, err := json.MarshalIndent(raw, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encoding config: %w", err)
-	}
-
-	if err := os.WriteFile(configPath, append(out, '\n'), 0o600); err != nil {
-		return fmt.Errorf("writing config: %w", err)
-	}
-
-	return nil
+	return writeConfigMap(configPath, raw)
 }
 
 // mergeAuthConfig merges an override auth config into the base.

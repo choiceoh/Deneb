@@ -19,6 +19,7 @@ import (
 
 type flexStringList []string
 
+// UnmarshalJSON decodes the supported flexible JSON representation.
 func (f *flexStringList) UnmarshalJSON(data []byte) error {
 	trimmed := strings.TrimSpace(string(data))
 	if trimmed == "" || trimmed == "null" {

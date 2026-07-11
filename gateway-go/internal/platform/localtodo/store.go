@@ -9,10 +9,8 @@
 package localtodo
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -20,6 +18,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // IDPrefix tags to-do IDs so they never collide with calendar event IDs.
@@ -130,15 +129,8 @@ func Default() (*Store, error) {
 // New loads the store from path (an empty store if the file is absent).
 func New(path string) (*Store, error) {
 	s := &Store{path: path}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return s, nil
-		}
-		return nil, fmt.Errorf("localtodo: read %s: %w", path, err)
-	}
-	if err := json.Unmarshal(data, &s.todos); err != nil {
-		return nil, fmt.Errorf("localtodo: parse %s: %w", path, err)
+	if _, err := jsonutil.LoadFile(path, &s.todos, "localtodo"); err != nil {
+		return nil, err
 	}
 	return s, nil
 }
@@ -354,20 +346,5 @@ func buildRecord(id string, in CreateInput) storedTodo {
 }
 
 func (s *Store) persistLocked() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
-		return fmt.Errorf("localtodo: mkdir: %w", err)
-	}
-	data, err := json.MarshalIndent(s.todos, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil { //nolint:gosec // G306 — single-user host
-		return fmt.Errorf("localtodo: write %s: %w", tmp, err)
-	}
-	if err := os.Rename(tmp, s.path); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("localtodo: rename: %w", err)
-	}
-	return nil
+	return jsonutil.WriteFile(s.path, s.todos, "localtodo")
 }

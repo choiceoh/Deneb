@@ -32,6 +32,7 @@ const (
 
 const maxLastErrorChars = 500
 
+// MessageInput carries stable archive metadata into workflow state updates.
 type MessageInput struct {
 	ID              string
 	ThreadID        string
@@ -43,6 +44,7 @@ type MessageInput struct {
 	AttachmentCount int
 }
 
+// AnalysisInput records a completed analysis and its derived-item counts.
 type AnalysisInput struct {
 	MessageInput
 	Quality            string
@@ -55,6 +57,7 @@ type AnalysisInput struct {
 	DurationMs            int64
 }
 
+// MessageState is the durable assistant workflow state for one message.
 type MessageState struct {
 	ID                    string `json:"id"`
 	ThreadID              string `json:"threadId,omitempty"`
@@ -78,6 +81,7 @@ type MessageState struct {
 	UpdatedAtMs           int64  `json:"updatedAtMs,omitempty"`
 }
 
+// Summary aggregates workflow progress across all known messages.
 type Summary struct {
 	Messages           int   `json:"messages"`
 	Analyzed           int   `json:"analyzed"`
@@ -94,6 +98,7 @@ type diskModel struct {
 	Messages map[string]MessageState `json:"messages"`
 }
 
+// Store persists message workflow state in one atomically replaced JSON file.
 type Store struct {
 	path string
 	mu   sync.Mutex
@@ -104,10 +109,12 @@ var (
 	pathLocks   = map[string]*sync.Mutex{}
 )
 
+// New creates a workflow store backed by path.
 func New(path string) *Store {
 	return &Store{path: path}
 }
 
+// Get returns the current state for id, or the zero value on miss or read error.
 func (s *Store) Get(id string) MessageState {
 	if s == nil || strings.TrimSpace(id) == "" {
 		return MessageState{}
@@ -121,11 +128,13 @@ func (s *Store) Get(id string) MessageState {
 	return st.Messages[strings.TrimSpace(id)]
 }
 
+// Summary returns aggregate state and suppresses storage errors.
 func (s *Store) Summary() Summary {
 	summary, _ := s.SummaryWithError()
 	return summary
 }
 
+// SummaryWithError returns aggregate state and surfaces storage errors.
 func (s *Store) SummaryWithError() (Summary, error) {
 	if s == nil {
 		return Summary{}, nil
@@ -139,6 +148,7 @@ func (s *Store) SummaryWithError() (Summary, error) {
 	return summarize(st.Messages), nil
 }
 
+// RememberMessage upserts archive metadata and refreshes the last-seen time.
 func (s *Store) RememberMessage(in MessageInput) (MessageState, error) {
 	if s == nil {
 		return MessageState{}, nil
@@ -159,10 +169,12 @@ func (s *Store) RememberMessage(in MessageInput) (MessageState, error) {
 	})
 }
 
+// MarkAnalysisAnalyzing records that analysis has started.
 func (s *Store) MarkAnalysisAnalyzing(in MessageInput) (MessageState, error) {
 	return s.markAnalysis(in, AnalysisAnalyzing, "", nil)
 }
 
+// MarkAnalysisDone records a successful analysis and known derived counts.
 func (s *Store) MarkAnalysisDone(in AnalysisInput) (MessageState, error) {
 	if strings.TrimSpace(in.ID) == "" {
 		return MessageState{}, nil
@@ -188,14 +200,17 @@ func (s *Store) MarkAnalysisDone(in AnalysisInput) (MessageState, error) {
 	})
 }
 
+// MarkAnalysisFailed records a bounded diagnostic for a failed analysis.
 func (s *Store) MarkAnalysisFailed(in MessageInput, err error) (MessageState, error) {
 	return s.markAnalysis(in, AnalysisFailed, errorText(err), nil)
 }
 
+// MarkFeedCreated records that the message produced a work-feed item.
 func (s *Store) MarkFeedCreated(id string) (MessageState, error) {
 	return s.markFeed(id, FeedCreated, nil)
 }
 
+// MarkDerivedCounts updates the calendar and to-do counts for id.
 func (s *Store) MarkDerivedCounts(id string, calendarProposalCount, todoCount int) (MessageState, error) {
 	if s == nil || strings.TrimSpace(id) == "" {
 		return MessageState{}, nil

@@ -109,18 +109,28 @@ internal class TurnProgress(
 
     fun onTool(ev: ToolEvent) {
         val key = ev.toolUseId.ifEmpty { ev.tool }
+        if (key.isBlank() || ev.tool.isBlank()) return
         when (ev.state) {
             "started" -> {
                 hideThinking()
                 hideContinuity()
+                val label = ToolStatusLabels.label(ev.tool) +
+                    if (ev.detail.isNotEmpty()) ": ${ev.detail}" else ""
+                rowIds[key]?.let { existingId ->
+                    // An SSE reconnect/replay can repeat a started frame. Refresh
+                    // its detail in place instead of leaking a second progress row
+                    // that can no longer be paired with the eventual completion.
+                    chatHistory.update { list ->
+                        list.map { if (it.id == existingId) it.copy(toolName = label) else it }
+                    }
+                    return
+                }
                 val rowId = "progress-tool-${Uuid.random()}"
                 rowIds[key] = rowId
                 startMarks[key] = TimeSource.Monotonic.markNow()
                 allRowIds += rowId
                 // "메일 확인 중: 아르고에너지" — the server-extracted hint
                 // names the target, not just the tool.
-                val label = ToolStatusLabels.label(ev.tool) +
-                    if (ev.detail.isNotEmpty()) ": ${ev.detail}" else ""
                 chatHistory.update { list ->
                     list + History(
                         id = rowId,
@@ -133,8 +143,11 @@ internal class TurnProgress(
             }
 
             "completed" -> {
-                trail += ev.tool to ev.isError
                 val rowId = rowIds.remove(key) ?: return
+                // Count only lifecycle pairs this client actually observed.
+                // Duplicate or replayed completion frames must not inflate the
+                // post-turn footprint.
+                trail += ev.tool to ev.isError
                 if (ev.isError) {
                     // Swap the row to its failure form ("메일 확인 실패")
                     // and hold it readable — the agent usually keeps going,

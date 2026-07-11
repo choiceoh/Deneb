@@ -8,7 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/filesystem"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -74,7 +75,7 @@ func TestResolvePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := chattools.ResolvePath(tt.path, tt.defaultDir)
+			got := artifact.ResolvePath(tt.path, tt.defaultDir)
 			// Normalize both for comparison.
 			gotAbs, _ := filepath.Abs(got)
 			wantAbs, _ := filepath.Abs(tt.want)
@@ -92,7 +93,7 @@ func TestToolRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fn := chattools.ToolRead(dir)
+	fn := filesystem.ToolRead(dir)
 
 	t.Run("basic read with line numbers", func(t *testing.T) {
 		input, _ := json.Marshal(map[string]any{"file_path": filepath.Join(dir, "test.txt")})
@@ -143,7 +144,7 @@ func TestToolRead(t *testing.T) {
 
 func TestToolWrite(t *testing.T) {
 	dir := t.TempDir()
-	fn := chattools.ToolWrite(dir)
+	fn := filesystem.ToolWrite(dir)
 
 	t.Run("write creates file", func(t *testing.T) {
 		path := filepath.Join(dir, "out.txt")
@@ -180,7 +181,7 @@ func TestToolWrite(t *testing.T) {
 
 func TestToolEdit(t *testing.T) {
 	dir := t.TempDir()
-	fn := chattools.ToolEdit(dir)
+	fn := filesystem.ToolEdit(dir)
 
 	t.Run("successful unique replacement", func(t *testing.T) {
 		path := filepath.Join(dir, "edit.txt")

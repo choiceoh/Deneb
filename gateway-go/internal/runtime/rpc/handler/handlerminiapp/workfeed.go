@@ -2,16 +2,16 @@ package handlerminiapp
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+// WorkFeedStore defines the work-feed persistence operations used by RPC handlers.
 type WorkFeedStore interface {
 	List(limit int, includeAcked bool) ([]workfeed.Item, int, error)
 	Ack(id string) (workfeed.Item, error)
@@ -23,6 +23,7 @@ type rangedWorkFeedStore interface {
 	ListRange(limit int, includeAcked bool, sinceMs, beforeMs int64) ([]workfeed.Item, int, error)
 }
 
+// WorkFeedDeps holds dependencies required by work-feed RPC handlers.
 type WorkFeedDeps struct {
 	Store WorkFeedStore
 	// OnAnswer, if set, records a deal-question card's answer (team → deal wiki
@@ -37,6 +38,7 @@ const (
 	maxWorkFeedLimit     = 100
 )
 
+// WorkFeedMethods registers work-feed RPC handlers.
 func WorkFeedMethods(deps WorkFeedDeps) map[string]rpcutil.HandlerFunc {
 	if deps.Store == nil {
 		return nil
@@ -57,16 +59,7 @@ func workFeedRead(deps WorkFeedDeps) rpcutil.HandlerFunc {
 	type params struct {
 		ItemID string `json:"itemId"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p params
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		itemID := strings.TrimSpace(p.ItemID)
 		if itemID == "" {
 			return rpcerr.MissingParam("itemId").Response(req.ID)
@@ -82,7 +75,7 @@ func workFeedRead(deps WorkFeedDeps) rpcutil.HandlerFunc {
 			"ok":   true,
 			"item": item,
 		})
-	}
+	})
 }
 
 // workFeedAnswer settles a question card and returns its asking SessionKey so the
@@ -94,16 +87,7 @@ func workFeedAnswer(deps WorkFeedDeps) rpcutil.HandlerFunc {
 		ItemID string `json:"itemId"`
 		Answer string `json:"answer"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p params
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		itemID := strings.TrimSpace(p.ItemID)
 		answer := strings.TrimSpace(p.Answer)
 		if itemID == "" {
@@ -126,7 +110,7 @@ func workFeedAnswer(deps WorkFeedDeps) rpcutil.HandlerFunc {
 			"prompt":         answer,
 			"removeFromFeed": true,
 		})
-	}
+	})
 }
 
 func workFeedList(deps WorkFeedDeps) rpcutil.HandlerFunc {
@@ -136,16 +120,7 @@ func workFeedList(deps WorkFeedDeps) rpcutil.HandlerFunc {
 		SinceMs      int64 `json:"sinceMs,omitempty"`
 		BeforeMs     int64 `json:"beforeMs,omitempty"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p params
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		limit := p.Limit
 		if limit <= 0 {
 			limit = defaultWorkFeedLimit
@@ -178,23 +153,14 @@ func workFeedList(deps WorkFeedDeps) rpcutil.HandlerFunc {
 			"count": len(items),
 			"total": total,
 		})
-	}
+	})
 }
 
 func workFeedAck(deps WorkFeedDeps) rpcutil.HandlerFunc {
 	type params struct {
 		ID string `json:"id"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p params
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		id := strings.TrimSpace(p.ID)
 		if id == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
@@ -210,7 +176,7 @@ func workFeedAck(deps WorkFeedDeps) rpcutil.HandlerFunc {
 			"ok":   true,
 			"item": item,
 		})
-	}
+	})
 }
 
 func workFeedActionRun(deps WorkFeedDeps) rpcutil.HandlerFunc {
@@ -218,16 +184,7 @@ func workFeedActionRun(deps WorkFeedDeps) rpcutil.HandlerFunc {
 		ItemID   string `json:"itemId"`
 		ActionID string `json:"actionId"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p params
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		itemID := strings.TrimSpace(p.ItemID)
 		actionID := strings.TrimSpace(p.ActionID)
 		if itemID == "" {
@@ -263,5 +220,5 @@ func workFeedActionRun(deps WorkFeedDeps) rpcutil.HandlerFunc {
 			"message":        result.Message,
 			"removeFromFeed": result.RemoveFromFeed,
 		})
-	}
+	})
 }

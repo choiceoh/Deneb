@@ -23,6 +23,7 @@ type Queue struct {
 	failedDir     string
 }
 
+// QueueItem identifies one claimed message and its retry metadata.
 type QueueItem struct {
 	Key       string    `json:"key"`
 	Raw       []byte    `json:"raw"`
@@ -35,12 +36,14 @@ type QueueItem struct {
 	name string
 }
 
+// QueueStats summarizes pending, processing, and failed queue entries.
 type QueueStats struct {
 	Pending    int
 	Processing int
 	Failed     int
 }
 
+// NewQueue opens or creates the durable LMTP queue under dir.
 func NewQueue(dir string) (*Queue, error) {
 	if dir == "" {
 		return nil, fmt.Errorf("lmtp queue: empty dir")
@@ -62,8 +65,10 @@ func NewQueue(dir string) (*Queue, error) {
 	return q, nil
 }
 
+// Dir returns the queue root directory.
 func (q *Queue) Dir() string { return q.dir }
 
+// Enqueue durably adds msg unless its identity is already queued.
 func (q *Queue) Enqueue(msg *Message) (bool, error) {
 	if msg == nil {
 		return false, fmt.Errorf("lmtp queue: nil message")
@@ -94,6 +99,7 @@ func (q *Queue) Enqueue(msg *Message) (bool, error) {
 	return true, q.writeItemAtomic(filepath.Join(q.pendingDir, name), item)
 }
 
+// Claim atomically moves the oldest pending item into processing.
 func (q *Queue) Claim() (*QueueItem, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -145,6 +151,7 @@ func (q *Queue) Claim() (*QueueItem, error) {
 	return nil, nil
 }
 
+// Complete removes a successfully processed queue item.
 func (q *Queue) Complete(item *QueueItem) error {
 	if item == nil {
 		return nil
@@ -154,6 +161,7 @@ func (q *Queue) Complete(item *QueueItem) error {
 	return removeIfExists(q.processingPath(item))
 }
 
+// Fail requeues item or moves it to failed after maxAttempts.
 func (q *Queue) Fail(item *QueueItem, cause error, maxAttempts int) error {
 	if item == nil {
 		return nil
@@ -181,6 +189,7 @@ func (q *Queue) Fail(item *QueueItem, cause error, maxAttempts int) error {
 	return removeIfExists(src)
 }
 
+// Stats returns a point-in-time count of items in each queue state.
 func (q *Queue) Stats() QueueStats {
 	q.mu.Lock()
 	defer q.mu.Unlock()

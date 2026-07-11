@@ -332,12 +332,14 @@ fun QuestionInput(
  * recognizes the file type. Short names are returned unchanged.
  */
 internal fun truncateFileName(name: String, maxChars: Int = 16): String {
+    if (maxChars <= 0) return ""
     if (name.length <= maxChars) return name
+    if (maxChars == 1) return "…"
     val dotIndex = name.lastIndexOf('.')
-    return if (dotIndex > 0 && dotIndex < name.length - 1) {
+    return if (dotIndex > 0 && dotIndex < name.length - 1 && name.length - dotIndex + 2 <= maxChars) {
         val base = name.substring(0, dotIndex)
         val ext = name.substring(dotIndex) // includes the dot
-        val keep = (maxChars - ext.length - 1).coerceAtLeast(1)
+        val keep = maxChars - ext.length - 1
         "${base.take(keep)}…$ext"
     } else {
         "${name.take(maxChars - 1)}…"

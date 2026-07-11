@@ -1,5 +1,13 @@
 // Vitest global setup — jest-dom matchers (toBeInTheDocument, etc.) for all tests.
 import "@testing-library/jest-dom/vitest";
+import { cleanup } from "@testing-library/react";
+import { afterEach } from "vitest";
+
+// Vitest runs with `globals: false`, so Testing Library cannot discover a
+// global afterEach and register its usual cleanup hook. Keep test DOMs isolated
+// explicitly; otherwise rendering in one test leaks into every later query in
+// the same worker and makes failures order-dependent.
+afterEach(cleanup);
 
 // Node ≥22 ships an experimental built-in Web Storage API. On Node 25 it is enabled
 // by default, but without `--localstorage-file` the global `localStorage` is a

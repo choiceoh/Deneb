@@ -36,6 +36,7 @@ type MediaFetchError struct {
 	Cause   error               `json:"-"` // underlying error, excluded from JSON
 }
 
+// Error returns the human-readable error message.
 func (e *MediaFetchError) Error() string {
 	return fmt.Sprintf("media fetch error (%s): %s", e.Code, e.Message)
 }

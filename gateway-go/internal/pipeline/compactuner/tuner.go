@@ -89,7 +89,9 @@ func NewTask(d Deps) *Task {
 	return &Task{deps: d}
 }
 
+// Name returns the component's stable scheduler name.
 func (t *Task) Name() string            { return "compaction-tuner" }
+// Interval returns the component's scheduling cadence.
 func (t *Task) Interval() time.Duration { return taskInterval }
 
 // Run audits recent summaries and merges any new preservation guidelines.
@@ -236,7 +238,7 @@ func (t *Task) critique(ctx context.Context, summaries []string) ([]string, erro
 	if events == nil {
 		return nil, fmt.Errorf("compaction-tuner: nil event channel")
 	}
-	return parseGuidelines(drainStreamText(events)), nil
+	return parseGuidelines(llm.DrainStreamText(events)), nil
 }
 
 // parseGuidelines extracts the guidelines array from the model's JSON verdict.
@@ -259,24 +261,6 @@ func parseGuidelines(text string) []string {
 		}
 	}
 	return out
-}
-
-func drainStreamText(events <-chan llm.StreamEvent) string {
-	var sb strings.Builder
-	for ev := range events {
-		if ev.Type != "content_block_delta" {
-			continue
-		}
-		var delta struct {
-			Delta struct {
-				Text string `json:"text"`
-			} `json:"delta"`
-		}
-		if json.Unmarshal(ev.Payload, &delta) == nil && delta.Delta.Text != "" {
-			sb.WriteString(delta.Delta.Text)
-		}
-	}
-	return sb.String()
 }
 
 func clip(s string, max int) string {

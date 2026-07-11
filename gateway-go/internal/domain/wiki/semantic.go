@@ -18,7 +18,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log/slog"
-	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -28,6 +27,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
+	"github.com/choiceoh/deneb/gateway-go/pkg/vectorutil"
 )
 
 // Embedder is the minimal embedding-server surface the wiki needs.
@@ -536,17 +536,5 @@ func (s *Store) SuggestRelated(ctx context.Context, relPath string, limit int) [
 // cosine returns the cosine similarity of two equal-length vectors (0 when
 // either is empty or their lengths differ).
 func cosine(a, b []float32) float64 {
-	if len(a) == 0 || len(a) != len(b) {
-		return 0
-	}
-	var dot, na, nb float64
-	for i := range a {
-		dot += float64(a[i]) * float64(b[i])
-		na += float64(a[i]) * float64(a[i])
-		nb += float64(b[i]) * float64(b[i])
-	}
-	if na == 0 || nb == 0 {
-		return 0
-	}
-	return dot / (math.Sqrt(na) * math.Sqrt(nb))
+	return vectorutil.Cosine(a, b)
 }

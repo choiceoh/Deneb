@@ -369,7 +369,12 @@ function AnalysisCard({ mailId }: { mailId: string }) {
           )}
         </>
       ) : err ? (
-        <div className="mail-card-line error">{err}</div>
+        <>
+          <div className="mail-card-line error">{err}</div>
+          <button className="btn" onClick={() => void run()} disabled={!connected}>
+            🔍 이 메일 분석
+          </button>
+        </>
       ) : (
         <button className="btn" onClick={() => void run()} disabled={!connected}>
           🔍 이 메일 분석

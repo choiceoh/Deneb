@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 )
 
 // suggestToolNames returns up to maxResults registered tool names that are

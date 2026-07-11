@@ -37,15 +37,9 @@ func run() error {
 	apply := flag.Bool("apply", false, "execute the migration (default: dry-run report only)")
 	flag.Parse()
 
-	var plan []wiki.RestructureOp
-	if *planPath != "" {
-		data, err := os.ReadFile(*planPath)
-		if err != nil {
-			return fmt.Errorf("read plan: %w", err)
-		}
-		if err := json.Unmarshal(data, &plan); err != nil {
-			return fmt.Errorf("parse plan: %w", err)
-		}
+	plan, err := loadPlan(*planPath)
+	if err != nil {
+		return err
 	}
 
 	store, err := wiki.NewStore(*wikiDir, "")
@@ -86,4 +80,19 @@ func run() error {
 		fmt.Println("(dry-run — nothing written; re-run with --apply after stopping the gateway)")
 	}
 	return nil
+}
+
+func loadPlan(path string) ([]wiki.RestructureOp, error) {
+	if path == "" {
+		return nil, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read plan: %w", err)
+	}
+	var plan []wiki.RestructureOp
+	if err := json.Unmarshal(data, &plan); err != nil {
+		return nil, fmt.Errorf("parse plan: %w", err)
+	}
+	return plan, nil
 }

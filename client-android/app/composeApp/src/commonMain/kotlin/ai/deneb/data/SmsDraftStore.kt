@@ -30,7 +30,7 @@ class SmsDraftStore(private val appSettings: AppSettings) {
 
     suspend fun addDraft(draft: SmsDraft) = mutex.withLock {
         // Cap at MAX_DRAFTS — oldest dropped, protecting against runaway AI.
-        val merged = (_drafts.value + draft).takeLast(MAX_DRAFTS)
+        val merged = (_drafts.value.filterNot { it.id == draft.id } + draft).takeLast(MAX_DRAFTS)
         persist(merged)
     }
 

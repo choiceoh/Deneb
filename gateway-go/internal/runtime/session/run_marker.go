@@ -86,33 +86,9 @@ func (s *RunMarkerStore) pathFor(key string) string {
 // Atomicity is enforced via temp-file-and-rename so that a crash during
 // serialization never leaves a partial JSON blob on disk.
 func (s *RunMarkerStore) Write(m RunMarker) error {
-	if m.SessionKey == "" {
-		return fmt.Errorf("run marker: empty session key")
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if err := os.MkdirAll(s.baseDir, 0o755); err != nil {
-		return fmt.Errorf("run marker: mkdir %q: %w", s.baseDir, err)
-	}
-
-	// SessionKey is a routing id ("client:main"), not a credential; gosec
-	// G117 flags the "Key" suffix defensively. Confirmed non-secret.
-	data, err := json.Marshal(m) //nolint:gosec // SessionKey is a routing id, not a credential
-	if err != nil {
-		return fmt.Errorf("run marker: marshal: %w", err)
-	}
-
-	final := s.pathFor(m.SessionKey)
-	tmp := final + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil { //nolint:gosec // user-owned state file
-		return fmt.Errorf("run marker: write temp: %w", err)
-	}
-	if err := os.Rename(tmp, final); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("run marker: rename: %w", err)
-	}
-	return nil
+	return s.writeLocked(m)
 }
 
 // Delete removes the marker for sessionKey. It is NOT an error if the

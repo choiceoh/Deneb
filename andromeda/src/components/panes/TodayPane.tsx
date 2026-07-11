@@ -42,7 +42,8 @@ const TODAY_HIDDEN_KEY = "andromeda.todayHidden";
 const TODAY_WIDE_KEY = "andromeda.todayWide";
 
 function validKeys(raw: unknown): SectionKey[] {
-  return Array.isArray(raw) ? raw.filter((k): k is SectionKey => SECTIONS.includes(k as SectionKey)) : [];
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.filter((k): k is SectionKey => SECTIONS.includes(k as SectionKey)))];
 }
 // Saved order, with any new/missing sections appended in catalog order.
 function readOrder(): SectionKey[] {

@@ -108,7 +108,9 @@ export function NotebookPane() {
     }
     const id = active.id;
     setNoteSink(async (text: string) => {
-      const r = await call(NOTEBOOK_RPC.addSource, { id, kind: "note", title: "", text }, "노트 저장 중…");
+      const body = text.trim();
+      if (!body) return false;
+      const r = await call(NOTEBOOK_RPC.addSource, { id, kind: "note", title: "", text: body }, "노트 저장 중…");
       if (!r.ok) return false;
       // Refresh only if this notebook is still the open one — the user may have
       // switched during the RPC, and re-opening would yank them back.

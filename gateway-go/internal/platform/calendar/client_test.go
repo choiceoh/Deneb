@@ -40,14 +40,16 @@ func TestNewClientFromDir_LoadsBothFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newClientFromDir: %v", err)
 	}
-	if c.clientID != "test-id.apps.googleusercontent.com" {
-		t.Errorf("clientID = %q", c.clientID)
+	clientID, _ := c.tokens.Credentials()
+	if clientID != "test-id.apps.googleusercontent.com" {
+		t.Errorf("clientID = %q", clientID)
 	}
-	if c.refreshToken != "1//calendar-refresh" {
-		t.Errorf("refreshToken = %q", c.refreshToken)
+	_, refreshToken, _ := c.tokens.State()
+	if refreshToken != "1//calendar-refresh" {
+		t.Errorf("refreshToken = %q", refreshToken)
 	}
-	if c.tokenPath != filepath.Join(dir, "calendar_token.json") {
-		t.Errorf("tokenPath = %q", c.tokenPath)
+	if tokenPath := c.tokens.TokenPath(); tokenPath != filepath.Join(dir, "calendar_token.json") {
+		t.Errorf("tokenPath = %q", tokenPath)
 	}
 }
 
@@ -106,15 +108,16 @@ func TestRefresh_PersistsRotatedToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newClientFromDir: %v", err)
 	}
-	if _, err := c.refresh(context.Background()); err != nil {
+	if _, err := c.validToken(context.Background()); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 
-	if c.accessToken != "ya29.fresh" {
-		t.Errorf("accessToken not updated: %q", c.accessToken)
+	accessToken, refreshToken, _ := c.tokens.State()
+	if accessToken != "ya29.fresh" {
+		t.Errorf("accessToken not updated: %q", accessToken)
 	}
-	if c.refreshToken != "1//rotated" {
-		t.Errorf("refreshToken not rotated: %q", c.refreshToken)
+	if refreshToken != "1//rotated" {
+		t.Errorf("refreshToken not rotated: %q", refreshToken)
 	}
 
 	// Persisted to disk?

@@ -1,9 +1,6 @@
 package chat
 
-import (
-	"regexp"
-	"strings"
-)
+import "github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 
 // Reasoning models served through vLLM occasionally leak their chain-of-thought
 // delimiters into the *answer* text when the server-side reasoning parser fails
@@ -16,11 +13,6 @@ import (
 // We remove both complete blocks (<think>…</think>, [thinking]…[/thinking]) and
 // any leftover standalone delimiters. (?is): i = case-insensitive, s = dot
 // matches newlines so a multi-line reasoning block is removed whole.
-var (
-	reasoningBlockRe  = regexp.MustCompile(`(?is)<think(?:ing)?>.*?</think(?:ing)?>|\[think(?:ing)?\].*?\[/think(?:ing)?\]`)
-	reasoningMarkerRe = regexp.MustCompile(`(?i)</?think(?:ing)?>|\[/?think(?:ing)?\]`)
-)
-
 // stripReasoningLeak removes chain-of-thought delimiters (and the content a
 // complete pair wraps) that leaked into an answer. It does NOT trim surrounding
 // whitespace, so it is safe to call on individual stream deltas where inter-
@@ -34,15 +26,5 @@ var (
 // in full by buildSyncResult, which runs this over the assembled string where the
 // block regex does match and collapses the whole leak.
 func stripReasoningLeak(s string) string {
-	if s == "" {
-		return s
-	}
-	// Fast path: every delimiter starts with '<' or '['. Plain prose (the
-	// overwhelming common case) skips both regexes entirely.
-	if !strings.ContainsAny(s, "<[") {
-		return s
-	}
-	s = reasoningBlockRe.ReplaceAllString(s, "")
-	s = reasoningMarkerRe.ReplaceAllString(s, "")
-	return s
+	return textutil.StripReasoningLeak(s)
 }

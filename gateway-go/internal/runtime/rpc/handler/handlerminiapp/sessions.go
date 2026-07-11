@@ -16,8 +16,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -128,16 +128,7 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 		Messages   []transcriptMsgOut `json:"messages"`
 		Total      int                `json:"total"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p params
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		key := strings.TrimSpace(p.SessionKey)
 		if key == "" {
 			return rpcerr.MissingParam("sessionKey").Response(req.ID)
@@ -204,7 +195,7 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 			Messages:   rows,
 			Total:      total,
 		})
-	}
+	})
 }
 
 // decodeChatContent collapses ChatMessage.Content (which can be a plain
@@ -251,16 +242,7 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 		Limit   int    `json:"limit,omitempty"`
 		Channel string `json:"channel,omitempty"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p params
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		limit := p.Limit
 		if limit <= 0 {
 			limit = defaultSessionsLimit
@@ -311,7 +293,7 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 			"sessions": out,
 			"count":    len(out),
 		})
-	}
+	})
 }
 
 // sessionsDelete removes a session the user dismissed (the × in the drawer's
@@ -332,16 +314,7 @@ func sessionsDelete(deps SessionsDeps) rpcutil.HandlerFunc {
 		SessionKey string `json:"sessionKey"`
 		Force      bool   `json:"force,omitempty"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p params
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		key := strings.TrimSpace(p.SessionKey)
 		if key == "" {
 			return rpcerr.MissingParam("sessionKey").Response(req.ID)
@@ -368,5 +341,5 @@ func sessionsDelete(deps SessionsDeps) rpcutil.HandlerFunc {
 		}
 
 		return rpcutil.RespondOK(req.ID, map[string]bool{"deleted": deleted})
-	}
+	})
 }

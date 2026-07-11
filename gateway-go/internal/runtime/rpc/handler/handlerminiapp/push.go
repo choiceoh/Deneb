@@ -2,9 +2,8 @@ package handlerminiapp
 
 import (
 	"context"
-	"encoding/json"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -45,16 +44,7 @@ func pushRegister(deps PushDeps) rpcutil.HandlerFunc {
 		Token    string `json:"token"`
 		Platform string `json:"platform,omitempty"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p params
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		if p.Token == "" {
 			return rpcerr.MissingParam("token").Response(req.ID)
 		}
@@ -66,23 +56,14 @@ func pushRegister(deps PushDeps) rpcutil.HandlerFunc {
 			return rpcerr.WrapUnavailable("push token registration failed", err).Response(req.ID)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true, "count": count})
-	}
+	})
 }
 
 func pushUnregister(deps PushDeps) rpcutil.HandlerFunc {
 	type params struct {
 		Token string `json:"token"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p params
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		if p.Token == "" {
 			return rpcerr.MissingParam("token").Response(req.ID)
 		}
@@ -91,5 +72,5 @@ func pushUnregister(deps PushDeps) rpcutil.HandlerFunc {
 			return rpcerr.WrapUnavailable("push token unregister failed", err).Response(req.ID)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true, "count": count})
-	}
+	})
 }

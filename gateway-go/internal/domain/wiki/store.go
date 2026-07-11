@@ -464,6 +464,7 @@ func (s *Store) removeBacklink(targetPath, sourcePath string) {
 	}
 }
 
+// ListPages returns wiki page paths in the requested category.
 func (s *Store) ListPages(category string) ([]string, error) {
 	var searchDir string
 	if category != "" {

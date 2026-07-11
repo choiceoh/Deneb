@@ -6,7 +6,7 @@ import (
 	"sort"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -106,6 +106,11 @@ func providersCatalog(deps Deps) rpcutil.HandlerFunc {
 			if cp, ok := plugin.(provider.CatalogProvider); ok {
 				result, err := cp.Catalog(ctx, provider.CatalogContext{})
 				if err == nil && result != nil {
+					if result.Entries == nil {
+						// Keep the wire shape stable: an available provider with no
+						// models is an empty catalog, not JSON null.
+						result.Entries = []provider.CatalogEntry{}
+					}
 					return result, nil
 				}
 			}

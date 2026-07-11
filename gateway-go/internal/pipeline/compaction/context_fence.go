@@ -47,6 +47,7 @@ func FormatContextFence(source, contextType, title, body string) string {
 	return sb.String()
 }
 
+// IsContextFenceText reports whether text is a synthetic compaction boundary.
 func IsContextFenceText(text string) bool {
 	text = strings.TrimSpace(strings.ToLower(text))
 	return strings.HasPrefix(text, "<recall-context") && strings.Contains(text, `trust="untrusted"`)

@@ -41,7 +41,17 @@ export function renderWithProviders(
       dataProvider={opts.dataProvider ?? fakeProvider()}
       authProvider={denebAuthProvider(cfg)}
       resources={refineResources}
-      options={{ disableTelemetry: true }}
+      options={{
+        disableTelemetry: true,
+        // Refine otherwise reuses its default QueryClient across test renders.
+        // A fresh client keeps resource data and failures from one test from
+        // satisfying the next test's identically-keyed useList call.
+        reactQuery: {
+          clientConfig: {
+            defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+          },
+        },
+      }}
     >
       <WorkspaceProvider connected={connected} cfg={cfg} setCfg={opts.setCfg ?? (() => {})}>
         {ui}

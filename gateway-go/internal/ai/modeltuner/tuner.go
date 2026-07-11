@@ -21,9 +21,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 )
 
@@ -105,7 +105,9 @@ func NewTask(deps Deps) *Task {
 	return t
 }
 
+// Name returns the component's stable scheduler name.
 func (t *Task) Name() string            { return "model-tuner" }
+// Interval returns the component's scheduling cadence.
 func (t *Task) Interval() time.Duration { return taskInterval }
 
 // Run executes one measure → threshold → adjust cycle.

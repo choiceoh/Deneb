@@ -17,7 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
@@ -36,7 +36,9 @@ type bootTask struct {
 	firstRun    atomic.Bool // true after the initial boot run
 }
 
+// Name returns the component's stable scheduler name.
 func (t *bootTask) Name() string            { return "boot" }
+// Interval returns the component's scheduling cadence.
 func (t *bootTask) Interval() time.Duration { return 24 * time.Hour }
 
 // defaultBootPrompt is used when no BOOT.md file exists.
@@ -50,6 +52,7 @@ const defaultBootPrompt = `[시스템 부트 — 게이트웨이 시작됨]
 
 특이사항이 없으면 사용자에게 불필요한 알림을 보내지 말고 조용히 종료하세요.`
 
+// Run executes one scheduled task cycle.
 func (t *bootTask) Run(ctx context.Context) error {
 	if t.chatHandler == nil {
 		return fmt.Errorf("boot: chat handler not available")

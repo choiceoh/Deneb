@@ -13,8 +13,8 @@ package handlerminiapp
 import (
 	"context"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -53,10 +53,7 @@ func contactsList(deps ContactsDeps) rpcutil.HandlerFunc {
 		Contacts []ContactRow `json:"contacts"`
 		Count    int          `json:"count"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
+	return authenticated(func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		store, err := deps.Store()
 		if err != nil {
 			return rpcerr.Unavailable("contacts store unavailable").Response(req.ID)
@@ -67,5 +64,5 @@ func contactsList(deps ContactsDeps) rpcutil.HandlerFunc {
 			rows = append(rows, ContactRow{Name: c.Name, Phones: c.Phones, Emails: c.Emails, Org: c.Org})
 		}
 		return rpcutil.RespondOK(req.ID, out{Contacts: rows, Count: len(rows)})
-	}
+	})
 }

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
@@ -545,13 +545,16 @@ type SkillCuratorTask struct {
 	Config  SkillCuratorConfig
 }
 
+// Name returns the component's stable scheduler name.
 func (t *SkillCuratorTask) Name() string { return "skill-curator" }
 
+// Interval returns the component's scheduling cadence.
 func (t *SkillCuratorTask) Interval() time.Duration {
 	cfg := t.Config.withDefaults()
 	return time.Duration(cfg.IntervalHours) * time.Hour
 }
 
+// Run executes one scheduled task cycle.
 func (t *SkillCuratorTask) Run(ctx context.Context) error {
 	if t.Tracker == nil {
 		return nil

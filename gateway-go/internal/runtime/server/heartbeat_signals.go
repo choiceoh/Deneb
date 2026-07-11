@@ -1,5 +1,5 @@
 // heartbeat_signals.go — wires the proactive signal engine
-// (internal/agentsys/autonomous/signal.go) to a live data source for the
+// (internal/domain/autonomous/signal.go) to a live data source for the
 // heartbeat task.
 //
 // Research basis: docs/research/claw-anything-always-on-assistant.md, finding B
@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/agentsys/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 )
 

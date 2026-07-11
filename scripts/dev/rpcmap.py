@@ -76,7 +76,8 @@ def build_map(root):
             continue
     for path in _go_files(root, TOOL_DIRS):
         try:
-            text = open(path, encoding="utf-8").read()
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read()
         except OSError:
             continue
         rel = os.path.relpath(path, root)

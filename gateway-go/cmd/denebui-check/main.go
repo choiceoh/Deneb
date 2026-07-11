@@ -20,8 +20,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "read stdin:", err)
 		os.Exit(3)
 	}
-	text := string(data)
+	if code := check(string(data), os.Stdout, os.Stderr); code != 0 {
+		os.Exit(code)
+	}
+}
 
+func check(text string, stdout, stderr io.Writer) int {
 	blocks := denebui.ExtractFences(text)
 	fenced := len(blocks) > 0
 	if !fenced {
@@ -35,23 +39,24 @@ func main() {
 		issues, err := denebui.Validate(b)
 		if err != nil {
 			bad++
-			fmt.Printf("block %d: NOT PARSEABLE: %v\n", i, err)
+			fmt.Fprintf(stdout, "block %d: NOT PARSEABLE: %v\n", i, err)
 			continue
 		}
 		if len(issues) == 0 {
-			fmt.Printf("block %d: VALID\n", i)
+			fmt.Fprintf(stdout, "block %d: VALID\n", i)
 			continue
 		}
 		bad++
-		fmt.Printf("block %d: %d issue(s)\n", i, len(issues))
+		fmt.Fprintf(stdout, "block %d: %d issue(s)\n", i, len(issues))
 		for _, is := range issues {
-			fmt.Printf("  - %s\n", is)
+			fmt.Fprintf(stdout, "  - %s\n", is)
 		}
 	}
 	if !fenced {
-		fmt.Fprintln(os.Stderr, "note: no ```deneb-ui fence found; validated raw input as a single block")
+		fmt.Fprintln(stderr, "note: no ```deneb-ui fence found; validated raw input as a single block")
 	}
 	if bad > 0 {
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

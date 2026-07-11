@@ -44,6 +44,7 @@ func (b *skillLifecycleBackend) HeartbeatShadowReplay(ctx context.Context, req c
 	return runHeartbeatShadowReplay(ctx, b.fixturePath, req.Candidate, req.Limit, b.shadowComplete)
 }
 
+// ProposeSkillEvolution creates a skill-evolution proposal through the lifecycle backend.
 func (b *skillLifecycleBackend) ProposeSkillEvolution(ctx context.Context, req chattools.SkillEvolutionProposalRequest) (any, error) {
 	if req.SessionKey == "" {
 		req.SessionKey = toolctx.SessionKeyFromContext(ctx)
@@ -117,6 +118,7 @@ func (b *skillLifecycleBackend) ProposeSkillEvolution(ctx context.Context, req c
 	return result, nil
 }
 
+// RunSkillGenesis runs a requested skill-genesis operation.
 func (b *skillLifecycleBackend) RunSkillGenesis(ctx context.Context, req chattools.SkillGenesisRequest) (any, error) {
 	if b.genesis == nil {
 		return nil, fmt.Errorf("skill genesis is not configured")
@@ -178,6 +180,7 @@ func (b *skillLifecycleBackend) RunSkillGenesis(ctx context.Context, req chattoo
 	}, nil
 }
 
+// RunSkillEvolution runs a requested skill-evolution operation.
 func (b *skillLifecycleBackend) RunSkillEvolution(ctx context.Context, req chattools.SkillEvolutionRequest) (any, error) {
 	if b.evolver == nil {
 		return nil, fmt.Errorf("skill evolver is not configured")
@@ -200,6 +203,7 @@ func (b *skillLifecycleBackend) RunSkillEvolution(ctx context.Context, req chatt
 	}, nil
 }
 
+// RunSkillCuratorAction runs a requested curator action.
 func (b *skillLifecycleBackend) RunSkillCuratorAction(_ context.Context, req chattools.SkillCuratorActionRequest) (any, error) {
 	if b.tracker == nil {
 		return map[string]any{

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/regressionwatch"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/observe"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 )
 
 // regressionWindow is the telemetry look-back each watch cycle samples.
@@ -36,8 +36,10 @@ type observeLogSource struct {
 	window time.Duration
 }
 
+// Name returns the component's stable scheduler name.
 func (s observeLogSource) Name() string { return "observe-log" }
 
+// Sample collects the source's current regression signals.
 func (s observeLogSource) Sample() []regressionwatch.Signal {
 	if s.ring == nil {
 		return nil

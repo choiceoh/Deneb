@@ -42,6 +42,7 @@ const (
 	StatusBroken
 )
 
+// String returns the human-readable representation.
 func (s Status) String() string {
 	switch s {
 	case StatusOK:

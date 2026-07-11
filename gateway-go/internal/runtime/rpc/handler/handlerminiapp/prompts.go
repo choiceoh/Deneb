@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	domainprompts "github.com/choiceoh/deneb/gateway-go/internal/domain/prompts"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -54,6 +54,7 @@ type PromptListResponse struct {
 	Count   int         `json:"count"`
 }
 
+// PromptMethods registers prompt-management RPC handlers.
 func PromptMethods(deps PromptDeps) map[string]rpcutil.HandlerFunc {
 	if deps.Store == nil {
 		return nil
@@ -67,10 +68,7 @@ func PromptMethods(deps PromptDeps) map[string]rpcutil.HandlerFunc {
 }
 
 func promptsList(deps PromptDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
+	return authenticated(func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		entries, err := deps.Store.List()
 		if err != nil {
 			return rpcerr.WrapUnavailable("prompt store unavailable", err).Response(req.ID)
@@ -80,21 +78,14 @@ func promptsList(deps PromptDeps) rpcutil.HandlerFunc {
 			rows = append(rows, promptRow(entry))
 		}
 		return rpcutil.RespondOK(req.ID, PromptListResponse{Prompts: rows, Count: len(rows)})
-	}
+	})
 }
 
 func promptsGet(deps PromptDeps) rpcutil.HandlerFunc {
 	type params struct {
 		ID string `json:"id"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		p, errResp := rpcutil.DecodeParams[params](req)
-		if errResp != nil {
-			return errResp
-		}
+	return bindAuthenticated[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		id := strings.TrimSpace(p.ID)
 		if id == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
@@ -107,7 +98,7 @@ func promptsGet(deps PromptDeps) rpcutil.HandlerFunc {
 			return rpcerr.NotFound("prompt " + rpcutil.TruncateForError(id)).Response(req.ID)
 		}
 		return rpcutil.RespondOK(req.ID, promptDetail(entry))
-	}
+	})
 }
 
 func promptsUpdate(deps PromptDeps) rpcutil.HandlerFunc {
@@ -115,14 +106,7 @@ func promptsUpdate(deps PromptDeps) rpcutil.HandlerFunc {
 		ID   string `json:"id"`
 		Text string `json:"text"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		p, errResp := rpcutil.DecodeParams[params](req)
-		if errResp != nil {
-			return errResp
-		}
+	return bindAuthenticated[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		id := strings.TrimSpace(p.ID)
 		if id == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
@@ -135,21 +119,14 @@ func promptsUpdate(deps PromptDeps) rpcutil.HandlerFunc {
 			return promptStoreError(req.ID, id, "prompt update failed", err)
 		}
 		return rpcutil.RespondOK(req.ID, promptDetail(entry))
-	}
+	})
 }
 
 func promptsReset(deps PromptDeps) rpcutil.HandlerFunc {
 	type params struct {
 		ID string `json:"id"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		p, errResp := rpcutil.DecodeParams[params](req)
-		if errResp != nil {
-			return errResp
-		}
+	return bindAuthenticated[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		id := strings.TrimSpace(p.ID)
 		if id == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
@@ -159,7 +136,7 @@ func promptsReset(deps PromptDeps) rpcutil.HandlerFunc {
 			return promptStoreError(req.ID, id, "prompt reset failed", err)
 		}
 		return rpcutil.RespondOK(req.ID, promptDetail(entry))
-	}
+	})
 }
 
 func promptStoreError(reqID, id, msg string, err error) *protocol.ResponseFrame {

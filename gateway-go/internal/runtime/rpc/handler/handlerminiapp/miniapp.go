@@ -1,7 +1,7 @@
 // Package handlerminiapp implements RPC handlers for the native-client surface
 // (miniapp.* methods). Every method assumes the request has already passed
 // client-token verification, so handlers can pull the authenticated operator
-// identity straight from context via clientauth.FromContext.
+// identity straight from context via minibind.Identity.
 //
 // The current method set is intentionally minimal — just enough to prove the
 // HTTP → middleware → dispatcher → handler path end-to-end. Real domain
@@ -12,8 +12,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -49,7 +49,7 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 // without waiting on a domain query.
 func ping(deps Deps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if clientauth.FromContext(ctx) == nil {
+		if minibind.Identity(ctx) == nil {
 			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.ping requires client identity context").Response(req.ID)
 		}
 		payload := map[string]any{
@@ -72,7 +72,7 @@ func ping(deps Deps) rpcutil.HandlerFunc {
 // without probing multiple domain RPCs.
 func clientHello(deps Deps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if clientauth.FromContext(ctx) == nil {
+		if minibind.Identity(ctx) == nil {
 			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.client.hello requires client identity context").Response(req.ID)
 		}
 		caps := map[string]bool{"rpc": true}
@@ -106,7 +106,7 @@ func clientHello(deps Deps) rpcutil.HandlerFunc {
 // The client uses this to confirm that client-token verification is intact.
 func whoami() rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		data := clientauth.FromContext(ctx)
+		data := minibind.Identity(ctx)
 		if data == nil {
 			return rpcerr.New(protocol.ErrUnauthorized, "miniapp.whoami requires client identity context").Response(req.ID)
 		}

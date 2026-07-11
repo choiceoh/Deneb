@@ -121,8 +121,10 @@ func (q *requestQueue) DrainAll(err error) {
 
 type queueHeap []*queueEntry
 
+// Len implements heap.Interface.
 func (h queueHeap) Len() int { return len(h) }
 
+// Less orders requests by priority and arrival sequence.
 func (h queueHeap) Less(i, j int) bool {
 	if h[i].req.Priority != h[j].req.Priority {
 		return h[i].req.Priority < h[j].req.Priority
@@ -130,18 +132,21 @@ func (h queueHeap) Less(i, j int) bool {
 	return h[i].enqueuedAt.Before(h[j].enqueuedAt)
 }
 
+// Swap implements heap.Interface and maintains item indexes.
 func (h queueHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 	h[i].index = i
 	h[j].index = j
 }
 
+// Push appends an item to the heap.
 func (h *queueHeap) Push(x any) {
 	e, _ := x.(*queueEntry) //nolint:errcheck // type guaranteed by heap interface contract
 	e.index = len(*h)
 	*h = append(*h, e)
 }
 
+// Pop removes and returns the last heap item.
 func (h *queueHeap) Pop() any {
 	old := *h
 	n := len(old)

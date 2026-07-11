@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
+// ErrWeakAutomaticValidationCase reports an automatic validation case without sufficient evidence.
 var ErrWeakAutomaticValidationCase = errors.New("weak automatic validation case")
 
 // SkillValidationCaseRecord is a lightweight held-out selection fixture for a

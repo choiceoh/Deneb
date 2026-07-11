@@ -59,6 +59,7 @@ func newSkillReviewFork(
 	}
 }
 
+// RunSkillReview runs an isolated review for the requested skill snapshot.
 func (r *skillReviewFork) RunSkillReview(ctx context.Context, sessionKey string, snapshot genesis.SessionContext) error {
 	if r == nil || r.chat == nil {
 		return fmt.Errorf("skill review fork: chat handler is not configured")

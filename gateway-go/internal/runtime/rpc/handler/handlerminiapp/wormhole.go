@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcerr"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -108,10 +108,7 @@ type whConfig struct {
 }
 
 func wormholeStatus(deps WormholeDeps) rpcutil.HandlerFunc {
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
+	return authenticated(func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		// Prefer wormhole's live /status: it carries the discovered SparkFleet
 		// models and reflects hot-reloaded toggles, which the static config file
 		// can't. Fall back to the config-file view when wormhole is unreachable or
@@ -121,7 +118,7 @@ func wormholeStatus(deps WormholeDeps) rpcutil.HandlerFunc {
 			return rpcutil.RespondOK(req.ID, statusFromLive(live))
 		}
 		return rpcutil.RespondOK(req.ID, statusFromConfigFile(ctx, deps))
-	}
+	})
 }
 
 // statusFromLive maps wormhole's live /status readout onto the wire shape.
@@ -264,16 +261,7 @@ func wormholeSetFeature(deps WormholeDeps) rpcutil.HandlerFunc {
 		Feature string `json:"feature"`
 		Enabled bool   `json:"enabled"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p params
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		if p.Feature != "localOnly" && p.Feature != "effortRouting" {
 			return rpcerr.InvalidRequest("feature must be 'localOnly' or 'effortRouting'").Response(req.ID)
 		}
@@ -302,7 +290,7 @@ func wormholeSetFeature(deps WormholeDeps) rpcutil.HandlerFunc {
 			return rpcerr.WrapUnavailable("wormhole config swap failed", err).Response(req.ID)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true, "feature": p.Feature, "enabled": p.Enabled})
-	}
+	})
 }
 
 // wormholeSetKey rotates a cloud model's upstream key WITHOUT a restart. The model
@@ -316,16 +304,7 @@ func wormholeSetKey(deps WormholeDeps) rpcutil.HandlerFunc {
 		Model string `json:"model"`
 		Key   string `json:"key"`
 	}
-	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		if errResp := requireAuth(ctx, req.ID); errResp != nil {
-			return errResp
-		}
-		var p params
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &p); err != nil {
-				return rpcerr.InvalidParams(err).Response(req.ID)
-			}
-		}
+	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		p.Model = strings.TrimSpace(p.Model)
 		p.Key = strings.TrimSpace(p.Key)
 		if p.Model == "" || p.Key == "" {
@@ -352,7 +331,7 @@ func wormholeSetKey(deps WormholeDeps) rpcutil.HandlerFunc {
 			"valid":    valid,
 			"status":   status,
 		})
-	}
+	})
 }
 
 // wormholeModelKeyVar reads a model's config `key` and returns the env var name it

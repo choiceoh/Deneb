@@ -49,15 +49,18 @@ class DurableMirrorSettings(
     }
 
     override fun remove(key: String) {
-        delegate.remove(key)
+        // Delete the recovery copy first. If that fails, leave the authoritative
+        // delegate intact; otherwise a stale mirror could resurrect a credential
+        // after the delegate was already removed.
         if (key in mirroredKeys) mirror.remove(key)
+        delegate.remove(key)
     }
 
     override fun clear() {
-        delegate.clear()
         // The mirror holds only the whitelisted keys; drop them explicitly rather
         // than clear() in case the backing prefs file is ever shared.
         mirroredKeys.forEach { mirror.remove(it) }
+        delegate.clear()
     }
 
     /**
@@ -72,7 +75,13 @@ class DurableMirrorSettings(
         return when {
             inDelegate -> {
                 val value = delegate.getString(key, "")
-                if (!inMirror) mirror.putString(key, value) // backfill: cover a future wipe
+                // Reconcile stale mirrors as well as missing ones. A prior partial
+                // write can leave both stores populated with different values; if
+                // that stale mirror is not repaired, a later delegate wipe revives
+                // the old credential.
+                if (!inMirror || mirror.getString(key, "") != value) {
+                    mirror.putString(key, value)
+                }
                 value
             }
 

@@ -109,7 +109,7 @@ sidebarTitle: "도구 개선 탐구"
 
 ### 4.1 (B) 도구 통계 폐쇄 루프 (**P1 / M**), 로드맵상 최우선
 
-- **현황**: 데이터의 절반은 이미 쌓인다 — `agentlog`의 `TurnToolData`가 per-call duration/입출력 크기/에러를 기록하고, `Writer.Aggregate`가 `ToolStat{Calls, Errors, TotalMs, AvgMs}`로 롤업하며(`agentsys/agentlog/reader.go:222-246`), 주석은 명시적으로 *"a tool with high Errors or absent entirely is a candidate for fixing or removal"*이라 적어놨다. `observe` 도구가 top-15를 노출하고 insights에도 배선되어 있다(`server_rpc_session.go:131`). **그러나 소비자가 없다**: modeltuner는 모델 단위만 다루고, 도구 단위 이상 신호(에러율 급등, 특정 도구 항상 실패)는 아무도 안 본다. 더 중요한 것 — 코드가 스스로 "측정 먼저"를 요구하는 신호 3종이 **로그로만 흩어지고 집계되지 않는다**:
+- **현황**: 데이터의 절반은 이미 쌓인다 — `agentlog`의 `TurnToolData`가 per-call duration/입출력 크기/에러를 기록하고, `Writer.Aggregate`가 `ToolStat{Calls, Errors, TotalMs, AvgMs}`로 롤업하며(`core/agentlog/reader.go`), 주석은 명시적으로 *"a tool with high Errors or absent entirely is a candidate for fixing or removal"*이라 적어놨다. `observe` 도구가 top-15를 노출하고 insights에도 배선되어 있다(`server_rpc_session.go`). **그러나 소비자가 없다**: modeltuner는 모델 단위만 다루고, 도구 단위 이상 신호(에러율 급등, 특정 도구 항상 실패)는 아무도 안 본다. 더 중요한 것 — 코드가 스스로 "측정 먼저"를 요구하는 신호 3종이 **로그로만 흩어지고 집계되지 않는다**:
   - argrepair 발동율 — `tool_argrepair.go:27-30`: *"measure the repair-Warn rate first before adding them(schema-aware repairs)"*. Warn은 찍히지만 집계 없음.
   - unknown-tool(환각 도구명) 발생율 — `tool_suggest.go` 경로, 미집계.
   - loop-block(critical/breaker 차단) 발생율 — `tool_loop.go`, 미집계.

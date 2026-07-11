@@ -118,13 +118,24 @@ internal suspend fun readSseLines(channel: ByteReadChannel, onLine: (String) -> 
  * path that used to back those via `RemoteDataRepository` delegation is gone.
  */
 @OptIn(ExperimentalUuidApi::class)
-class DenebGatewayClient(
+class DenebGatewayClient private constructor(
     // internal (not private) so the facade's extension files (sessions, admin,
     // patch notes) can read persisted settings.
     internal val appSettings: AppSettings,
     private val smsDraftStore: SmsDraftStore,
     private val smsSender: SmsSender,
+    injectedHttp: (() -> io.ktor.client.HttpClient)?,
 ) : DataRepository {
+
+    constructor(appSettings: AppSettings, smsDraftStore: SmsDraftStore, smsSender: SmsSender) :
+        this(appSettings, smsDraftStore, smsSender, null)
+
+    internal constructor(
+        appSettings: AppSettings,
+        smsDraftStore: SmsDraftStore,
+        smsSender: SmsSender,
+        http: io.ktor.client.HttpClient,
+    ) : this(appSettings, smsDraftStore, smsSender, { http })
 
     internal val jsonCodec = Json {
         ignoreUnknownKeys = true
@@ -132,7 +143,7 @@ class DenebGatewayClient(
         coerceInputValues = true
     }
 
-    internal val http = httpClient {
+    internal val http = injectedHttp?.invoke() ?: httpClient {
         install(ContentNegotiation) { json(jsonCodec) }
         install(HttpTimeout) {
             requestTimeoutMillis = REQUEST_TIMEOUT_MS
@@ -523,8 +534,15 @@ class DenebGatewayClient(
                 ?: if (accumulated.isEmpty()) {
                     // Never reached the gateway (or an old gateway without the
                     // stream endpoint) — a blocking re-send is safe.
-                    runCatching { send(sendText) }
-                        .getOrElse { GatewayReply("⚠️ ${it.message ?: "gateway request failed"}", ok = false) }
+                    try {
+                        send(sendText)
+                    } catch (cancel: CancellationException) {
+                        settlePlaceholderOnAbort(assistantId, accumulated.toString())
+                        askActive = false
+                        throw cancel
+                    } catch (sendError: Exception) {
+                        GatewayReply("⚠️ ${sendError.message ?: "gateway request failed"}", ok = false)
+                    }
                 } else {
                     // Keep the partial answer, but the turn still FAILED (stream broke
                     // mid-answer) — report ok=false so the queue never auto-fires after it.
@@ -713,7 +731,7 @@ class DenebGatewayClient(
         if (clientToken.isEmpty()) {
             return GatewayReply("⚠️ Deneb 클라이언트 토큰이 설정되지 않았습니다. 게이트웨이에서 deneb-client-token을 생성해 설정하세요.", ok = false)
         }
-        val resp: RpcResponse = http.post("$gatewayUrl/api/v1/miniapp/rpc") {
+        val response = http.post("$gatewayUrl/api/v1/miniapp/rpc") {
             header(CLIENT_TOKEN_HEADER, clientToken)
             contentType(ContentType.Application.Json)
             setBody(
@@ -726,7 +744,11 @@ class DenebGatewayClient(
                     ),
                 ),
             )
-        }.body()
+        }
+        if (!response.status.isSuccess()) {
+            throw IllegalStateException("chat HTTP ${response.status.value}")
+        }
+        val resp = response.body<RpcResponse>()
         val payload = resp.payload
         return if (resp.ok && payload != null) {
             GatewayReply(text = payload.text, model = payload.model, fellBack = payload.fellBack)
@@ -874,13 +896,26 @@ class DenebGatewayClient(
         val token = clientToken
         val epoch = credEpoch
         if (token.isEmpty()) return null
-        val payload = runCatching {
+        val response = try {
             http.post("$url/api/v1/miniapp/rpc") {
                 header(CLIENT_TOKEN_HEADER, token)
                 contentType(ContentType.Application.Json)
                 setBody(RpcReq(id = Uuid.random().toString(), method = method, params = params))
-            }.body<RpcEnv<T>>().payload
-        }.getOrNull()
+            }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Exception) {
+            return null
+        }
+        if (!response.status.isSuccess()) return null
+        val envelope = try {
+            response.body<RpcEnv<T>>()
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Exception) {
+            return null
+        }
+        val payload = envelope.takeIf { it.ok }?.payload
         return if (epoch == credEpoch && url == gatewayUrl && token == clientToken) payload else null
     }
 
@@ -896,14 +931,20 @@ class DenebGatewayClient(
     // private) so the per-domain extension files can reach it.
     internal suspend fun rpcWrite(method: String, params: JsonObject): String? {
         if (clientToken.isEmpty()) return "게이트웨이에 연결되어 있지 않습니다."
-        return runCatching {
-            val result = http.post("$gatewayUrl/api/v1/miniapp/rpc") {
+        return try {
+            val response = http.post("$gatewayUrl/api/v1/miniapp/rpc") {
                 header(CLIENT_TOKEN_HEADER, clientToken)
                 contentType(ContentType.Application.Json)
                 setBody(RpcReq(id = Uuid.random().toString(), method = method, params = params))
-            }.body<RpcResult>()
+            }
+            if (!response.status.isSuccess()) return "요청을 처리하지 못했습니다."
+            val result = response.body<RpcResult>()
             if (result.ok) null else (result.error?.message?.ifBlank { null } ?: "요청을 처리하지 못했습니다.")
-        }.getOrElse { "요청을 처리하지 못했습니다." }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Exception) {
+            "요청을 처리하지 못했습니다."
+        }
     }
 
     @Serializable

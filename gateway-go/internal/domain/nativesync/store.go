@@ -35,8 +35,10 @@ const (
 	TypeCalendarChanged = "calendar.changed"
 )
 
+// ErrInvalidEvent reports an append without an event type.
 var ErrInvalidEvent = errors.New("native sync event type is required")
 
+// Event is one monotonically sequenced native-client synchronization record.
 type Event struct {
 	Seq            int64           `json:"seq"`
 	Type           string          `json:"type"`
@@ -47,6 +49,7 @@ type Event struct {
 	Payload        json.RawMessage `json:"payload,omitempty"`
 }
 
+// AppendInput carries an event type, payload, and optional deduplication key.
 type AppendInput struct {
 	Type           string
 	EntityID       string
@@ -55,6 +58,7 @@ type AppendInput struct {
 	Payload        any
 }
 
+// PullResult is a bounded event page and its latest sequence watermark.
 type PullResult struct {
 	Events    []Event
 	Cursor    int64
@@ -62,6 +66,7 @@ type PullResult struct {
 	HasMore   bool
 }
 
+// Store persists native synchronization events as an append-only log.
 type Store struct {
 	path    string
 	mu      sync.Mutex
@@ -69,10 +74,12 @@ type Store struct {
 	nextSeq int64
 }
 
+// NewStore constructs an event store backed by path.
 func NewStore(path string) *Store {
 	return &Store{path: path}
 }
 
+// Append records an event and returns the existing event on deduplication hit.
 func (s *Store) Append(in AppendInput) (Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -134,6 +141,7 @@ func (s *Store) pruneIfNeededLocked() {
 	}
 }
 
+// Pull returns events after afterSeq up to the bounded limit.
 func (s *Store) Pull(afterSeq int64, limit int) (PullResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

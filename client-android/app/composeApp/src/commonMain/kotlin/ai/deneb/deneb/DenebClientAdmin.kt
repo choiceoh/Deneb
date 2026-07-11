@@ -33,6 +33,8 @@ import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.http.encodeURLParameter
+import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -60,6 +62,7 @@ suspend fun DenebGatewayClient.refreshModels(): Boolean {
     val payload = callRpc<ModelsPayload>("miniapp.models.list", buildJsonObject {}) ?: return false
     _denebModels.value = payload.sections
         .flatMap { it.models }
+        .filter { it.id.isNotBlank() }
         .distinctBy { it.id }
         .map {
             ModelOption(
@@ -312,6 +315,7 @@ internal suspend fun DenebGatewayClient.refreshScheduledTasks(): Boolean {
     ) ?: return false
     _denebScheduledTasks.value = payload.jobs
         .filter { it.id.isNotBlank() }
+        .distinctByLast { it.id }
         .map { j ->
             ScheduledTask(
                 id = j.id,
@@ -424,28 +428,36 @@ suspend fun DenebGatewayClient.refreshClientStatus(): ClientStatus? {
  * never routed. Returns non-null only when a strictly newer build than the
  * compiled-in [DENEB_VERSION_CODE] is published.
  */
-suspend fun DenebGatewayClient.checkUpdate(): UpdateInfo? = runCatching {
-    val base = gatewayUrl.trim().removeSuffix("/")
-    if (base.isEmpty() || clientToken.isEmpty()) return@runCatching null
-    val m = http.get("$base/api/v1/app/update/manifest") {
-        header(DenebGatewayClient.CLIENT_TOKEN_HEADER, clientToken)
-        // Bounded timeout: a missing or blocked gateway must fail fast
-        // instead of hanging the "check for update" spinner forever.
-        timeout {
-            requestTimeoutMillis = 10_000
-            connectTimeoutMillis = 6_000
+suspend fun DenebGatewayClient.checkUpdate(): UpdateInfo? {
+    return try {
+        val base = gatewayUrl.trim().removeSuffix("/")
+        if (base.isEmpty() || clientToken.isEmpty()) return null
+        val response = http.get("$base/api/v1/app/update/manifest") {
+            header(DenebGatewayClient.CLIENT_TOKEN_HEADER, clientToken)
+            // Bounded timeout: a missing or blocked gateway must fail fast
+            // instead of hanging the "check for update" spinner forever.
+            timeout {
+                requestTimeoutMillis = 10_000
+                connectTimeoutMillis = 6_000
+            }
         }
-    }.body<UpdateManifest>()
-    if (m.code > DENEB_VERSION_CODE && m.file.isNotBlank()) {
-        // The browser opening this link can't set a header, so the client
-        // token rides in the query string (same as the Gmail attachment route).
-        val apk = "$base/api/v1/app/update/download" +
-            "?file=${m.file.encodeURLParameter()}&clientToken=${clientToken.encodeURLParameter()}"
-        UpdateInfo(buildLabel = m.code.toString(), apkUrl = apk, notes = m.notes)
-    } else {
+        if (!response.status.isSuccess()) return null
+        val m = response.body<UpdateManifest>()
+        if (m.code > DENEB_VERSION_CODE && m.file.isNotBlank()) {
+            // The browser opening this link can't set a header, so the client
+            // token rides in the query string (same as the Gmail attachment route).
+            val apk = "$base/api/v1/app/update/download" +
+                "?file=${m.file.encodeURLParameter()}&clientToken=${clientToken.encodeURLParameter()}"
+            UpdateInfo(buildLabel = m.code.toString(), apkUrl = apk, notes = m.notes)
+        } else {
+            null
+        }
+    } catch (cancel: CancellationException) {
+        throw cancel
+    } catch (_: Exception) {
         null
     }
-}.getOrNull()
+}
 
 /**
  * Registers this device's FCM registration token so the gateway can deliver

@@ -346,6 +346,7 @@ type cancelOnClose struct {
 	cancel context.CancelFunc
 }
 
+// Close releases the wrapped resource.
 func (c *cancelOnClose) Close() error {
 	err := c.ReadCloser.Close()
 	c.cancel()

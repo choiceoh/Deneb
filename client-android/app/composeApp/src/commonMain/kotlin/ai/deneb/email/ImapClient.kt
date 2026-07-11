@@ -145,7 +145,7 @@ class ImapClient(
         return result.toString()
     }
 
-    private fun parseEmailFromFetch(uid: Long, accountId: String, raw: String): EmailMessage? {
+    internal fun parseEmailFromFetch(uid: Long, accountId: String, raw: String): EmailMessage? {
         var from = ""
         var to = ""
         var subject = ""
@@ -217,7 +217,7 @@ class ImapClient(
      * Extract readable body text from the IMAP FETCH response. Returns
      * (plainText, htmlText) — htmlText is empty when the message has no HTML part.
      */
-    private fun extractBodyFromResponse(raw: String): Pair<String, String> {
+    internal fun extractBodyFromResponse(raw: String): Pair<String, String> {
         // Find BODY[TEXT] or BODY.PEEK[TEXT] section
         val bodyIdx = raw.indexOfAny("BODY[TEXT]", "BODY.PEEK[TEXT]")
         if (bodyIdx == -1) {
@@ -248,7 +248,7 @@ class ImapClient(
         return cleaned.trim() to ""
     }
 
-    private fun extractFallbackBody(raw: String): String {
+    internal fun extractFallbackBody(raw: String): String {
         // Try \n\n (appendLine uses \n)
         val bodyStart = raw.indexOf("\n\n")
         if (bodyStart == -1) return ""
@@ -265,9 +265,9 @@ class ImapClient(
     /**
      * Detect MIME boundary from content. Looks for lines like "--boundary_string".
      */
-    private fun detectMimeBoundary(content: String): String? {
+    internal fun detectMimeBoundary(content: String): String? {
         val match = mimeBoundaryRegex.find(content)
-        return match?.groupValues?.get(1)
+        return match?.groupValues?.get(1)?.trimEnd()
     }
 
     /**
@@ -275,7 +275,7 @@ class ImapClient(
      * Returns (plainText, htmlText); either may be empty if absent. Decodes the parts
      * according to their Content-Transfer-Encoding (quoted-printable, base64).
      */
-    private fun extractPartsFromMultipart(content: String, boundary: String): Pair<String, String> {
+    internal fun extractPartsFromMultipart(content: String, boundary: String): Pair<String, String> {
         val parts = content.split("--$boundary")
         var plain = ""
         var html = ""
@@ -305,7 +305,7 @@ class ImapClient(
         return plain to html
     }
 
-    private fun extractPartBody(trimmed: String): String {
+    internal fun extractPartBody(trimmed: String): String {
         val encoding = transferEncodingRegex.find(trimmed)?.groupValues?.get(1)?.lowercase()?.trim()
 
         val raw = run {
@@ -329,7 +329,7 @@ class ImapClient(
         }
     }
 
-    private fun decodeQuotedPrintable(input: String): String {
+    internal fun decodeQuotedPrintable(input: String): String {
         // Drop soft line breaks (= at end of line) then decode =HH escapes as UTF-8 bytes.
         val joined = input.replace("=\r\n", "").replace("=\n", "")
         val bytes = ArrayList<Byte>(joined.length)
@@ -355,7 +355,7 @@ class ImapClient(
         return bytes.toByteArray().decodeToString()
     }
 
-    private fun decodeBase64OrOriginal(input: String): String = try {
+    internal fun decodeBase64OrOriginal(input: String): String = try {
         Base64.Mime.decode(input.encodeToByteArray()).decodeToString()
     } catch (_: Exception) {
         input
@@ -375,9 +375,9 @@ class ImapClient(
         return minIdx
     }
 
-    private fun escapeQuoted(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"")
+    internal fun escapeQuoted(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"")
 
-    private fun stripHtml(html: String): String = html
+    internal fun stripHtml(html: String): String = html
         .replace(scriptRegex, "")
         .replace(styleRegex, "")
         .replace(htmlTagRegex, " ")

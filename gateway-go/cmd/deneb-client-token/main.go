@@ -10,6 +10,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
@@ -21,7 +22,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
-	// Token to stdout (pipeable); guidance to stderr.
-	fmt.Println(token)
-	fmt.Fprintf(os.Stderr, "Wrote %s secret (0600). Paste this value into the native app to pair.\n", clientauth.Header)
+	writePairingOutput(os.Stdout, os.Stderr, token)
+}
+
+// writePairingOutput keeps the secret pipeable on stdout while all operator
+// guidance stays on stderr.
+func writePairingOutput(stdout, stderr io.Writer, token string) {
+	fmt.Fprintln(stdout, token)
+	fmt.Fprintf(stderr, "Wrote %s secret (0600). Paste this value into the native app to pair.\n", clientauth.Header)
 }

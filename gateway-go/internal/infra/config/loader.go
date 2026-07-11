@@ -28,6 +28,7 @@ type ConfigIssue struct {
 	Message string `json:"message"`
 }
 
+// String returns the human-readable representation.
 func (i ConfigIssue) String() string {
 	if i.Path == "" {
 		return i.Message

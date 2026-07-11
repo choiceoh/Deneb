@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/tokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
@@ -82,6 +82,7 @@ const weeklyReportPromptTmpl = `[주간업무보고 데이터 — 위키 프로�
 
 var _ cron.AgentRunner = (*cronChatAdapter)(nil)
 
+// RunAgentTurn executes one cron-triggered agent turn.
 func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTurnParams) (string, error) {
 	// Inject delivery context so proactive tools (especially message.send) can
 	// route back to the cron job's configured channel. Without this, the tool
@@ -270,6 +271,7 @@ type acpSubagentPoller struct {
 
 var _ cron.SubagentPoller = (*acpSubagentPoller)(nil)
 
+// HasActiveDescendants reports whether a session still has active descendant agents.
 func (p *acpSubagentPoller) HasActiveDescendants(sessionKey string) bool {
 	if p.registry == nil {
 		return false
@@ -287,6 +289,7 @@ func (p *acpSubagentPoller) HasActiveDescendants(sessionKey string) bool {
 	return false
 }
 
+// CollectDescendantOutputs collects completed output from a session's descendants.
 func (p *acpSubagentPoller) CollectDescendantOutputs(sessionKey string) string {
 	if p.registry == nil || p.sessions == nil {
 		return ""
