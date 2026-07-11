@@ -308,7 +308,7 @@ func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding stri
 		// requirement — its held-out bench is the evidence, and the pre-commit
 		// gates below still guard every round. Uncovered skills fall through to
 		// the conservative stop.
-		if !(burstContinuation && hasScorableValidationCase(e.validationCasesForPrompt(skillName))) {
+		if !(burstContinuation && hasScorableValidationCase(e.validationCasesForCoverage(skillName))) {
 			return &EvolveResult{
 				SkillName: skillName,
 				Evolved:   false,

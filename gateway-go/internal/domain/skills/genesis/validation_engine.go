@@ -95,6 +95,24 @@ func (v *SkillValidationEngine) SetExecutor(client *llm.Client, model string) {
 	v.executorModel = strings.TrimSpace(model)
 }
 
+// heldOutCases loads the cases both gates score: the blind held-out pool the
+// producer prompt never sees, so a candidate cannot pass by echoing assertions
+// it was shown (docs/research/skillhone-2606.08671.md §3-1). Tiny-corpus
+// fallback: while a skill has no blind-pool case yet, gate on all cases —
+// contract-compliance scoring beats an inert gate, and matches the pre-split
+// behavior.
+func (v *SkillValidationEngine) heldOutCases(skillName string) ([]SkillValidationCaseRecord, error) {
+	limit := v.caseLimit
+	if limit <= 0 {
+		limit = defaultSkillValidationCaseLimit
+	}
+	cases, err := v.tracker.RecentSkillValidationCasesPool(skillName, limit, true)
+	if err != nil || len(cases) > 0 {
+		return cases, err
+	}
+	return v.tracker.RecentSkillValidationCases(skillName, limit)
+}
+
 func (v *SkillValidationEngine) executorSnapshot() (*llm.Client, string) {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
@@ -119,11 +137,7 @@ func (v *SkillValidationEngine) EvaluateBehavior(ctx context.Context, skillName,
 	if executor == nil {
 		return SkillBehaviorResult{}, nil
 	}
-	limit := v.caseLimit
-	if limit <= 0 {
-		limit = defaultSkillValidationCaseLimit
-	}
-	cases, err := v.tracker.RecentSkillValidationCases(skillName, limit)
+	cases, err := v.heldOutCases(skillName)
 	if err != nil {
 		return SkillBehaviorResult{}, err
 	}
@@ -204,11 +218,7 @@ func (v *SkillValidationEngine) ValidateCandidate(skillName, originalContent, ca
 	if v == nil || v.tracker == nil {
 		return SkillValidationResult{Pass: true}, nil
 	}
-	limit := v.caseLimit
-	if limit <= 0 {
-		limit = defaultSkillValidationCaseLimit
-	}
-	cases, err := v.tracker.RecentSkillValidationCases(skillName, limit)
+	cases, err := v.heldOutCases(skillName)
 	if err != nil {
 		return SkillValidationResult{}, err
 	}
