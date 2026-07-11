@@ -100,6 +100,7 @@ func (c *Client) completeOpenAI(ctx context.Context, req ChatRequest) (string, e
 		Model:     req.Model,
 		Stream:    false,
 		MaxTokens: req.MaxTokens,
+		Seed:      req.Seed,
 	}
 
 	// System prompt → system message.

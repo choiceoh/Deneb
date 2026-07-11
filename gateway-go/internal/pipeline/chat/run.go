@@ -17,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
 // cachedWorkspaceDir caches the resolved workspace directory at startup
@@ -36,6 +37,13 @@ const (
 	defaultMaxTurns     = 50
 	defaultAgentTimeout = 60 * time.Minute
 )
+
+// RunLimits is a trusted, handler-scoped override for agent execution budgets.
+// Zero values retain the normal mode-aware defaults.
+type RunLimits struct {
+	MaxTurns int
+	Timeout  time.Duration
+}
 
 // chatportAdapters holds injected implementations that decouple chat from autoreply.
 // When nil, the corresponding functionality is simply skipped.
@@ -81,6 +89,15 @@ type runDeps struct {
 	subagentDefaultModel string
 	defaultSystem        string
 	maxTokens            int
+	runLimits            RunLimits
+	samplingSeed         *int64
+	disableTier1Wiki     bool
+	semanticNow          func() time.Time
+	semanticTimezone     string
+	promptWorkspaceDir   string
+	briefcaseMode        bool
+	strictErrors         *strictRunErrorSink
+	auditSystemPrompt    func(sessionKey string, prompt []byte)
 	// drainPendingFn drains the next queued message for a session after the
 	// current run completes. Set by the Handler; nil disables pending queue.
 	drainPendingFn func(sessionKey string) *RunParams
@@ -112,6 +129,36 @@ type runDeps struct {
 
 	// chatport holds injected adapters that decouple chat from autoreply.
 	chatport chatportAdapters
+}
+
+type strictRunErrorSink struct {
+	mu  sync.Mutex
+	err error
+}
+
+func (s *strictRunErrorSink) Record(err error) {
+	if s == nil || err == nil {
+		return
+	}
+	s.mu.Lock()
+	s.err = errors.Join(s.err, err)
+	s.mu.Unlock()
+}
+
+func (s *strictRunErrorSink) Err() error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.err
+}
+
+func (d runDeps) now() time.Time {
+	if d.semanticNow != nil {
+		return d.semanticNow()
+	}
+	return dentime.Now()
 }
 
 // PersonaOverrideFunc returns the operator-edited 업무 persona override text, or

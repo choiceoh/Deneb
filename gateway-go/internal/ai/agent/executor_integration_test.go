@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -511,6 +512,77 @@ func TestRunAgent_MultipleToolCalls(t *testing.T) {
 		t.Errorf("Turns = %d, want 2", result.Turns)
 	}
 }
+
+func TestRunAgent_ToolCallAttemptLimitRejectsWholeTurnBeforeHooks(t *testing.T) {
+	const limit = 2
+	streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{
+		buildToolUseTurnEventsWithNames([]toolUseSpec{
+			{id: "toolu_1", name: "read", inputJSON: `{"path":"a"}`},
+			{id: "toolu_2", name: "read", inputJSON: `{"path":"b"}`},
+			{id: "toolu_3", name: "read", inputJSON: `{"path":"c"}`},
+		}, 1, 1),
+	}}
+	tools := newFakeToolExecutor()
+	beforeCalls := 0
+	hooks := StreamHooks{OnBeforeToolCall: func(string, string, []byte) (bool, string) {
+		beforeCalls++
+		return false, ""
+	}}
+
+	result, err := RunAgent(context.Background(), AgentConfig{
+		MaxTurns: 5, MaxTokens: 128, MaxToolCallAttempts: intPtr(limit),
+	}, []llm.Message{llm.NewTextMessage("user", "read all")}, streamer, tools, hooks, nil, nil)
+	if result != nil {
+		t.Fatalf("result = %+v, want nil on hard limit", result)
+	}
+	if !errors.Is(err, ErrToolCallLimit) {
+		t.Fatalf("error = %v, want ErrToolCallLimit", err)
+	}
+	wantErr := "agent tool-call attempt limit exceeded: turn 1 requested 3 calls with 2 remaining"
+	if err.Error() != wantErr {
+		t.Fatalf("error = %q, want %q", err, wantErr)
+	}
+	if tools.callCount() != 0 || beforeCalls != 0 {
+		t.Fatalf("over-limit batch reached tools/hooks: executions=%d hooks=%d", tools.callCount(), beforeCalls)
+	}
+}
+
+func TestRunAgent_ToolCallAttemptLimitIsCumulativeAndCountsDenied(t *testing.T) {
+	const limit = 2
+	streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{
+		buildToolUseTurnEventsWithNames([]toolUseSpec{{id: "toolu_denied", name: "read", inputJSON: `{}`}}, 1, 1),
+		buildToolUseTurnEventsWithNames([]toolUseSpec{{id: "toolu_allowed", name: "read", inputJSON: `{}`}}, 1, 1),
+		buildToolUseTurnEventsWithNames([]toolUseSpec{{id: "toolu_over", name: "read", inputJSON: `{}`}}, 1, 1),
+	}}
+	tools := newFakeToolExecutor()
+	var beforeIDs []string
+	hooks := StreamHooks{OnBeforeToolCall: func(_ string, id string, _ []byte) (bool, string) {
+		beforeIDs = append(beforeIDs, id)
+		if id == "toolu_denied" {
+			return true, "signed policy denied"
+		}
+		return false, ""
+	}}
+
+	_, err := RunAgent(context.Background(), AgentConfig{
+		MaxTurns: 5, MaxTokens: 128, MaxToolCallAttempts: intPtr(limit), RequireStrictStopShape: true,
+	}, []llm.Message{llm.NewTextMessage("user", "try")}, streamer, tools, hooks, nil, nil)
+	if !errors.Is(err, ErrToolCallLimit) {
+		t.Fatalf("error = %v, want ErrToolCallLimit", err)
+	}
+	wantErr := "agent tool-call attempt limit exceeded: turn 3 requested 1 calls with 0 remaining"
+	if err.Error() != wantErr {
+		t.Fatalf("error = %q, want %q", err, wantErr)
+	}
+	if got := strings.Join(beforeIDs, ","); got != "toolu_denied,toolu_allowed" {
+		t.Fatalf("gate IDs = %q, want denied and allowed attempts only", got)
+	}
+	if tools.callCount() != 1 {
+		t.Fatalf("tool executions = %d, want only the allowed call", tools.callCount())
+	}
+}
+
+func intPtr(value int) *int { return &value }
 
 func TestRunAgent_OnTurnInit_Hook(t *testing.T) {
 	type ctxKey struct{}

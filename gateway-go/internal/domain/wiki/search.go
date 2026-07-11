@@ -26,25 +26,33 @@ type SearchResult struct {
 
 // searchDB manages the in-memory FTS index for wiki pages.
 type searchDB struct {
-	idx *textsearch.Index
-	mu  sync.RWMutex
+	idx        *textsearch.Index
+	mu         sync.RWMutex
+	now        func() time.Time
+	fieldBoost float64
 	// validity holds the per-page staleness factor (see validityFactor),
 	// computed when the page is (re)indexed. Search multiplies scores by it
 	// so archived/superseded/aging facts stop outranking current ones.
 	validity map[string]float64
 }
 
-func newSearchDB() *searchDB {
-	return &searchDB{idx: textsearch.New(), validity: make(map[string]float64)}
+func newSearchDB(now func() time.Time, fieldBoost float64) *searchDB {
+	if now == nil {
+		now = time.Now
+	}
+	if fieldBoost <= 0 {
+		fieldBoost = wikiFieldBoostValue()
+	}
+	return &searchDB{idx: textsearch.New(), validity: make(map[string]float64), now: now, fieldBoost: fieldBoost}
 }
 
 // indexPage upserts a page into the search index.
 func (s *searchDB) indexPage(relPath string, page *Page) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.idx.UpsertFields(relPath, searchablePageFields(page)...)
+	s.idx.UpsertFields(relPath, searchablePageFieldsWithBoost(page, s.fieldBoost)...)
 	if page != nil {
-		s.validity[relPath] = validityFactor(page.Meta, time.Now())
+		s.validity[relPath] = validityFactor(page.Meta, s.now())
 	}
 }
 
@@ -185,8 +193,8 @@ func (s *searchDB) rebuildIndex(dir string) error {
 				"path", rel, "error", err)
 			return nil //nolint:nilerr // skip unparseable files
 		}
-		s.idx.UpsertFields(rel, searchablePageFields(page)...)
-		s.validity[rel] = validityFactor(page.Meta, time.Now())
+		s.idx.UpsertFields(rel, searchablePageFieldsWithBoost(page, s.fieldBoost)...)
+		s.validity[rel] = validityFactor(page.Meta, s.now())
 		return nil
 	})
 }
@@ -217,10 +225,13 @@ func wikiFieldBoostValue() float64 {
 }
 
 func searchablePageFields(page *Page) []textsearch.Field {
+	return searchablePageFieldsWithBoost(page, wikiFieldBoostValue())
+}
+
+func searchablePageFieldsWithBoost(page *Page, boost float64) []textsearch.Field {
 	if page == nil {
 		return nil
 	}
-	boost := wikiFieldBoostValue()
 	return []textsearch.Field{
 		{Text: page.Meta.Title, Weight: boost},
 		{Text: page.Meta.Summary, Weight: boost},
@@ -293,8 +304,12 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 	// word, a 2-page corpus where both pages share the query terms). The leak it
 	// guards needs many pages for a common word to collide with off-topic ones;
 	// at small N there is little to leak and the conservative choice is gate-off.
+	rarityFloor := s.bm25RarityFloor
+	if rarityFloor <= 0 {
+		rarityFloor = bm25RarityFloorValue()
+	}
 	commonOnlyQuery := s.fts.docCount() >= bm25GateMinCorpus &&
-		s.fts.queryMaxRarity(query) < bm25RarityFloorValue()
+		s.fts.queryMaxRarity(query) < rarityFloor
 
 	sem := s.searchSemantic(ctx, query, max(fetchLimit, semanticBlendK))
 	if len(sem) == 0 {

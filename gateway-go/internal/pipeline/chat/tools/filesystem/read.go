@@ -126,6 +126,9 @@ func trySkillRootFallback(path string, skillRoots []string) (string, []byte, boo
 // the system prompt directs the model to read SKILL.md at those locations).
 func ToolRead(defaultDir string, extraReadRoots ...string) toolctx.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		var p struct {
 			FilePath string `json:"file_path"`
 			Offset   int    `json:"offset"`

@@ -27,6 +27,21 @@ type sseForwarder func(context.Context, <-chan StreamEvent, chan<- StreamEvent)
 //
 // Multi-line data fields are joined with "\n".
 func ParseSSE(ctx context.Context, r io.Reader) <-chan StreamEvent {
+	return parseSSE(ctx, r, 0)
+}
+
+// ParseSSEWithByteLimit is ParseSSE with a cumulative wire-byte limit. The
+// limit is enforced while scanning, before a delimiter-free sequence of data
+// lines can grow dataBuf without bound. A non-positive limit preserves the
+// general-purpose parser's historical unlimited behavior.
+func ParseSSEWithByteLimit(r io.Reader, maxBytes int) <-chan StreamEvent {
+	return parseSSE(context.Background(), r, maxBytes)
+}
+
+func parseSSE(ctx context.Context, r io.Reader, maxBytes int) <-chan StreamEvent {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	ch := make(chan StreamEvent, rawSSEBufferSize)
 	go func() {
 		defer close(ch)
@@ -37,12 +52,40 @@ func ParseSSE(ctx context.Context, r io.Reader) <-chan StreamEvent {
 
 		var eventType string
 		var dataBuf strings.Builder
+		var wireBytes int
+
+		emit := func(event StreamEvent) bool {
+			select {
+			case ch <- event:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+		emitReadError := func(message string) bool {
+			payload, _ := json.Marshal(struct {
+				Type    string `json:"type"`
+				Message string `json:"message"`
+			}{Type: "error", Message: message})
+			return emit(StreamEvent{Type: "error", Payload: payload})
+		}
 
 		for scanner.Scan() {
 			if ctx.Err() != nil {
 				return
 			}
 			line := scanner.Text()
+			if maxBytes > 0 {
+				// Scanner strips the line ending. Count one framing byte per line;
+				// this is exact for LF streams and conservatively treats a final
+				// unterminated line as if it had a delimiter.
+				incoming := len(line) + 1
+				if incoming > maxBytes-wireBytes {
+					_ = emitReadError("SSE stream read error: configured byte limit exceeded")
+					return
+				}
+				wireBytes += incoming
+			}
 
 			// Empty line: dispatch accumulated event.
 			if line == "" {
@@ -51,7 +94,7 @@ func ParseSSE(ctx context.Context, r io.Reader) <-chan StreamEvent {
 						Type:    eventType,
 						Payload: json.RawMessage(dataBuf.String()),
 					}
-					if !sendSSE(ctx, ch, ev) {
+					if !emit(ev) {
 						return
 					}
 				}
@@ -90,7 +133,7 @@ func ParseSSE(ctx context.Context, r io.Reader) <-chan StreamEvent {
 
 		// Flush any remaining data (stream ended without trailing blank line).
 		if dataBuf.Len() > 0 {
-			if !sendSSE(ctx, ch, StreamEvent{
+			if !emit(StreamEvent{
 				Type:    eventType,
 				Payload: json.RawMessage(dataBuf.String()),
 			}) {
@@ -107,11 +150,7 @@ func ParseSSE(ctx context.Context, r io.Reader) <-chan StreamEvent {
 		// translators forward a Type=="error" raw event, so the executor surfaces it
 		// as "stream error: ..." instead.
 		if err := scanner.Err(); err != nil && ctx.Err() == nil {
-			payload, _ := json.Marshal(struct {
-				Type    string `json:"type"`
-				Message string `json:"message"`
-			}{Type: "error", Message: "SSE stream read error: " + err.Error()})
-			sendSSE(ctx, ch, StreamEvent{Type: "error", Payload: payload})
+			_ = emitReadError("SSE stream read error: " + err.Error())
 		}
 	}()
 	return ch
@@ -139,8 +178,15 @@ func sendSSE(ctx context.Context, ch chan<- StreamEvent, event StreamEvent) bool
 // a translator returns early on a terminal protocol event, so buffered trailing
 // provider events cannot strand the parser goroutine.
 func startSSEPipeline(ctx context.Context, body io.ReadCloser, forward sseForwarder) <-chan StreamEvent {
+	return startSSEPipelineWithByteLimit(ctx, body, 0, forward)
+}
+
+// startSSEPipelineWithByteLimit preserves the shared cancellation/cleanup
+// lifecycle while bounding raw provider bytes before an unterminated SSE event
+// can grow the parser buffer without limit.
+func startSSEPipelineWithByteLimit(ctx context.Context, body io.ReadCloser, maxBytes int, forward sseForwarder) <-chan StreamEvent {
 	parserCtx, cancelParser := context.WithCancel(ctx)
-	rawEvents := ParseSSE(parserCtx, body)
+	rawEvents := parseSSE(parserCtx, body, maxBytes)
 	out := make(chan StreamEvent, streamEventBufferSize)
 
 	closeBody := sync.OnceFunc(func() { _ = body.Close() })

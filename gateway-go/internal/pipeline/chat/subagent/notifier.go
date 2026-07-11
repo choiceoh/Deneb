@@ -101,6 +101,7 @@ type SubagentNotifier struct {
 	getSessions            func() *session.Manager
 	delivery               func(string) *toolctx.DeliveryContext
 	parentTerminatedReason string
+	unsubscribe            func()
 }
 
 // SubagentNotifierDeps holds the dependencies for SubagentNotifier.
@@ -136,7 +137,7 @@ func NewSubagentNotifier(deps SubagentNotifierDeps) *SubagentNotifier {
 
 	sm := sn.getSessions()
 	bus := sm.EventBusRef()
-	bus.Subscribe(func(event session.Event) {
+	sn.unsubscribe = bus.Subscribe(func(event session.Event) {
 		if event.Kind != session.EventStatusChanged {
 			return
 		}
@@ -193,9 +194,29 @@ func (sn *SubagentNotifier) NotifyCh(sessionKey string) <-chan string {
 // Reset clears all notification state.
 func (sn *SubagentNotifier) Reset() {
 	sn.mu.Lock()
+	for _, queue := range sn.queues {
+		if queue.timer != nil {
+			queue.timer.Stop()
+		}
+	}
 	sn.channels = make(map[string]chan string)
 	sn.queues = make(map[string]*notifyQueue)
 	sn.mu.Unlock()
+}
+
+// Close releases the EventBus subscription and pending debounce timers.
+func (sn *SubagentNotifier) Close() {
+	if sn == nil {
+		return
+	}
+	sn.Reset()
+	sn.mu.Lock()
+	unsubscribe := sn.unsubscribe
+	sn.unsubscribe = nil
+	sn.mu.Unlock()
+	if unsubscribe != nil {
+		unsubscribe()
+	}
 }
 
 // getOrCreateQueue returns the debounced queue for a parent, creating lazily.

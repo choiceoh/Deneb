@@ -18,11 +18,14 @@ import (
 )
 
 type turnResult struct {
-	text          string
-	stopReason    string
-	toolCalls     []llm.ContentBlock
-	contentBlocks []llm.ContentBlock
-	usage         llm.TokenUsage
+	text           string
+	stopReason     string
+	toolCalls      []llm.ContentBlock
+	contentBlocks  []llm.ContentBlock
+	usage          llm.TokenUsage
+	providerModel  string
+	maxStreamBytes int
+	streamBytes    int
 }
 
 // defaultStreamIdleTimeout is the default maximum wait for the next SSE event
@@ -79,6 +82,10 @@ func effectiveIdleTimeout(cfg time.Duration) time.Duration {
 // before streaming starts), so callers retry the turn once on the same model
 // before escalating to the model-fallback chain.
 var ErrStreamEvent = errors.New("stream reported error event")
+
+// ErrStreamLimit is returned before a translated provider stream can exceed
+// the run-scoped byte budget configured by a deterministic evaluator.
+var ErrStreamLimit = errors.New("stream exceeded configured byte limit")
 
 // consumeStreamInto reads all events from a streaming LLM response and
 // populates the provided turnResult.

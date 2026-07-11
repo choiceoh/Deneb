@@ -133,8 +133,13 @@ const recallCounterpartyAnchorQuery = "counterparty-anchor"
 // that can be part of a name — a ledger called 에스와이 must still anchor on
 // "에스와이랑 최근 거래" even though the token normalizer eats the final 이.
 func recallWikiEvidence(ctx context.Context, store *wiki.Store, queries []string, rawMessage string) []recallEvidence {
+	evidence, _ := recallWikiEvidenceResult(ctx, store, queries, rawMessage)
+	return evidence
+}
+
+func recallWikiEvidenceResult(ctx context.Context, store *wiki.Store, queries []string, rawMessage string) ([]recallEvidence, error) {
 	if store == nil || len(queries) == 0 {
-		return nil
+		return nil, nil
 	}
 	seen := make(map[string]struct{})
 	var evidence []recallEvidence
@@ -179,11 +184,10 @@ func recallWikiEvidence(ctx context.Context, store *wiki.Store, queries []string
 
 	// One batched embed for every wiki query (the server fans them across its
 	// context pool) instead of a per-query round-trip. Results stay index-aligned
-	// with queries, so queries[i] labels batch[i]'s hits. A down embedder or ctx
-	// cancel degrades to the anchors already gathered above.
+	// with queries, so queries[i] labels batch[i]'s hits.
 	batch, err := store.SearchBatch(ctx, queries, 3)
 	if err != nil {
-		return evidence
+		return evidence, err
 	}
 	for i, results := range batch {
 		for _, r := range results {
@@ -200,7 +204,7 @@ func recallWikiEvidence(ctx context.Context, store *wiki.Store, queries []string
 			})
 		}
 	}
-	return evidence
+	return evidence, nil
 }
 
 // formatRecallProjectAnchorNote renders an anchored 대표페이지: title, summary,
@@ -301,8 +305,13 @@ const diaryRecallSemanticFloor = 0.70
 const diaryRecallSemanticQuota = 2
 
 func recallDiaryEvidence(ctx context.Context, store *wiki.Store, queries []string, includeRecentFallback bool) []recallEvidence {
+	evidence, _ := recallDiaryEvidenceResult(ctx, store, queries, includeRecentFallback)
+	return evidence
+}
+
+func recallDiaryEvidenceResult(ctx context.Context, store *wiki.Store, queries []string, includeRecentFallback bool) ([]recallEvidence, error) {
 	if store == nil {
-		return nil
+		return nil, nil
 	}
 	seen := make(map[string]struct{})
 	var evidence []recallEvidence
@@ -311,12 +320,12 @@ func recallDiaryEvidence(ctx context.Context, store *wiki.Store, queries []strin
 	for _, q := range queries {
 		if ctx != nil {
 			if err := ctx.Err(); err != nil {
-				break
+				return nil, err
 			}
 		}
 		results, err := store.SearchDiary(ctx, q, 4)
 		if err != nil {
-			continue
+			return nil, err
 		}
 		for _, h := range results {
 			key := h.File + "#" + h.Header
@@ -365,7 +374,7 @@ func recallDiaryEvidence(ctx context.Context, store *wiki.Store, queries []strin
 			evidence = append(evidence, diaryHitEvidence(h))
 		}
 	}
-	return evidence
+	return evidence, nil
 }
 
 // diarySemanticHitEvidence converts a cosine-ranked diary hit into evidence. It
@@ -599,6 +608,10 @@ const recallSummarySemanticFloor = 0.60
 const recallSummarySemanticQuota = 2
 
 func formatRecallEvidence(evidence []recallEvidence) string {
+	return formatRecallEvidenceAt(evidence, time.Now())
+}
+
+func formatRecallEvidenceAt(evidence []recallEvidence, now time.Time) string {
 	var sb strings.Builder
 	sb.WriteString(recallContextOpenTag)
 	sb.WriteString("\n")
@@ -616,7 +629,7 @@ func formatRecallEvidence(evidence []recallEvidence) string {
 			kind,
 			source,
 			recallConfidence(ev),
-			formatRecallAge(ev.At),
+			formatRecallAgeAt(ev.At, now),
 			ev.Score,
 		)
 		if ev.Query != "" {
@@ -675,10 +688,17 @@ func recallConfidence(ev recallEvidence) string {
 }
 
 func formatRecallAge(at int64) string {
+	return formatRecallAgeAt(at, time.Now())
+}
+
+func formatRecallAgeAt(at int64, now time.Time) string {
 	if at <= 0 {
 		return "unknown"
 	}
-	d := time.Since(time.UnixMilli(at))
+	if now.IsZero() {
+		now = time.Now()
+	}
+	d := now.Sub(time.UnixMilli(at))
 	if d < 0 {
 		return "future"
 	}

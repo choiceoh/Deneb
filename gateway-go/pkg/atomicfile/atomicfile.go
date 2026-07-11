@@ -5,12 +5,14 @@
 package atomicfile
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
 	"syscall"
+	"time"
 )
 
 // Options controls optional behaviours of WriteFile.
@@ -45,9 +47,25 @@ func (o *Options) dirPerm() os.FileMode {
 // The lock file (path + ".lock") is separate from the data file so
 // readers are never blocked and the rename stays atomic.
 func WriteFile(path string, data []byte, opts *Options) error {
+	return WriteFileContext(context.Background(), path, data, opts)
+}
+
+// WriteFileContext is WriteFile with cooperative cancellation through the
+// preparation phase and an explicit check immediately before atomic rename.
+// A canceled operation removes its temporary file without replacing path.
+func WriteFileContext(ctx context.Context, path string, data []byte, opts *Options) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, opts.dirPerm()); err != nil {
 		return fmt.Errorf("atomicfile: mkdir %s: %w", dir, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	// Advisory lock on a sidecar .lock file.
@@ -58,8 +76,19 @@ func WriteFile(path string, data []byte, opts *Options) error {
 	}
 	defer lockFd.Close()
 
-	if err := syscall.Flock(int(lockFd.Fd()), syscall.LOCK_EX); err != nil { //nolint:gosec // G115 — Fd() returns a valid file descriptor, safe for syscall
-		return fmt.Errorf("atomicfile: flock %s: %w", lockPath, err)
+	for {
+		err := syscall.Flock(int(lockFd.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) //nolint:gosec // G115 — Fd() returns a valid file descriptor, safe for syscall
+		if err == nil {
+			break
+		}
+		if err != syscall.EWOULDBLOCK && err != syscall.EAGAIN {
+			return fmt.Errorf("atomicfile: flock %s: %w", lockPath, err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 	defer syscall.Flock(int(lockFd.Fd()), syscall.LOCK_UN) //nolint:gosec,errcheck // G115 — Fd() returns a valid file descriptor //nolint:errcheck
 
@@ -68,6 +97,9 @@ func WriteFile(path string, data []byte, opts *Options) error {
 	if _, err := rand.Read(randBytes); err != nil {
 		return fmt.Errorf("atomicfile: random: %w", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	tmp := fmt.Sprintf("%s.%d.%s.tmp", path, os.Getpid(), hex.EncodeToString(randBytes))
 
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, opts.perm())
@@ -75,10 +107,28 @@ func WriteFile(path string, data []byte, opts *Options) error {
 		return fmt.Errorf("atomicfile: create temp %s: %w", tmp, err)
 	}
 
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return fmt.Errorf("atomicfile: write temp: %w", err)
+	for written := 0; written < len(data); {
+		if err := ctx.Err(); err != nil {
+			f.Close()
+			os.Remove(tmp)
+			return err
+		}
+		end := written + 64*1024
+		if end > len(data) {
+			end = len(data)
+		}
+		n, err := f.Write(data[written:end])
+		if err != nil {
+			f.Close()
+			os.Remove(tmp)
+			return fmt.Errorf("atomicfile: write temp: %w", err)
+		}
+		if n == 0 {
+			f.Close()
+			os.Remove(tmp)
+			return fmt.Errorf("atomicfile: write temp: short write")
+		}
+		written += n
 	}
 
 	if opts != nil && opts.Fsync {
@@ -93,12 +143,20 @@ func WriteFile(path string, data []byte, opts *Options) error {
 		os.Remove(tmp)
 		return fmt.Errorf("atomicfile: close temp: %w", err)
 	}
+	if err := ctx.Err(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
 
 	// Best-effort backup of existing file.
 	if opts != nil && opts.Backup {
 		if _, statErr := os.Stat(path); statErr == nil {
 			_ = copyFile(path, path+".bak")
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		os.Remove(tmp)
+		return err
 	}
 
 	// Atomic rename (POSIX guarantees atomicity on same filesystem).

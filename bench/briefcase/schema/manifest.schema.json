@@ -1,0 +1,459 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/choiceoh/deneb/bench/briefcase/schema/manifest.schema.json",
+  "title": "Deneb-Briefcase manifest v1",
+  "description": "Portable, immutable casepack contract consumed by internal/domain/briefcase. Cross-record, temporal, digest, and filesystem invariants remain enforced by the Go loader.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "manifestDigest",
+    "caseId",
+    "familyId",
+    "split",
+    "privacyMode",
+    "seed",
+    "cutoffAt",
+    "frozenNow",
+    "timezone",
+    "locale",
+    "sources",
+    "episodes",
+    "artifacts",
+    "runPolicy",
+    "toolPolicy",
+    "networkPolicy"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "deneb.briefcase/v1"
+    },
+    "manifestDigest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "caseId": {
+      "$ref": "#/$defs/id"
+    },
+    "familyId": {
+      "$ref": "#/$defs/id"
+    },
+    "split": {
+      "enum": ["dev", "calibration", "holdout"]
+    },
+    "privacyMode": {
+      "enum": ["portable", "vault"]
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "cutoffAt": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "frozenNow": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "timezone": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "locale": {
+      "const": "ko-KR"
+    },
+    "sources": {
+      "type": "array",
+	  "maxItems": 512,
+      "items": {
+        "$ref": "#/$defs/source"
+      },
+      "uniqueItems": true
+    },
+    "episodes": {
+      "type": "array",
+	  "minItems": 1,
+	  "maxItems": 500,
+      "items": {
+        "$ref": "#/$defs/episode"
+      },
+      "uniqueItems": true
+    },
+    "artifacts": {
+      "type": "array",
+	  "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/artifact"
+      },
+      "uniqueItems": true
+    },
+    "runPolicy": {
+      "$ref": "#/$defs/runPolicy"
+    },
+    "toolPolicy": {
+      "$ref": "#/$defs/toolPolicy"
+    },
+    "networkPolicy": {
+      "$ref": "#/$defs/networkPolicy"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "canonicalRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!\\s)(?!.*\\s$)(?!/)(?!.*\\\\)(?!.*\\u0000)(?!.*//)(?!.*(?:^|/)\\.\\.?(/|$))(?!.*\\/$).+$"
+    },
+    "nonBlankString": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "origin",
+        "access",
+        "path",
+        "sha256",
+        "eventAt",
+        "availableAt",
+        "capturedAt"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": [
+            "mail",
+            "calendar",
+            "wiki",
+            "diary",
+            "capture",
+            "file",
+            "notebook",
+            "workfeed",
+            "transcript",
+            "device"
+          ]
+        },
+        "origin": {
+          "enum": ["external", "human", "deneb-generated", "synthetic"]
+        },
+        "access": {
+          "enum": ["snapshot", "timeline", "sealed"]
+        },
+        "path": {
+          "$ref": "#/$defs/canonicalRelativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "eventAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "availableAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "capturedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "projectRefs": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true
+        },
+        "sourceRef": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "supersedes": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true
+        },
+        "sensitivity": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "memory": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "access": { "const": "sealed" }
+            },
+            "required": ["access"]
+          },
+          "then": {
+            "properties": {
+              "memory": { "const": false }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "access": {
+                "const": "snapshot"
+              }
+            },
+            "required": ["access"]
+          },
+          "then": {
+            "properties": {
+              "path": {
+                "pattern": "^snapshot/.+"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "access": {
+                "const": "timeline"
+              }
+            },
+            "required": ["access"]
+          },
+          "then": {
+            "properties": {
+              "path": {
+                "pattern": "^timeline/.+"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "access": {
+                "const": "sealed"
+              }
+            },
+            "required": ["access"]
+          },
+          "then": {
+            "properties": {
+              "path": {
+                "pattern": "^sealed/.+"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "fileRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/canonicalRelativePath"
+            },
+            {
+              "pattern": "^timeline/.+"
+            }
+          ]
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "episode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "at"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": ["user-turn", "event", "heartbeat"]
+        },
+        "at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "input": {
+          "$ref": "#/$defs/fileRef"
+        },
+        "releaseSourceIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true
+        },
+        "expectedArtifactIds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": ["user-turn", "heartbeat"]
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["input"]
+          }
+        }
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "mime", "required"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "path": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/canonicalRelativePath"
+            },
+            {
+              "pattern": "^output/.+"
+            }
+          ]
+        },
+        "mime": {
+          "type": "string",
+          "pattern": "/"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "maxBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 67108864
+        }
+      }
+    },
+    "runPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxTurns", "timeoutSeconds", "maxTokens"],
+      "properties": {
+        "maxTurns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "maxTokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 250000
+        },
+        "maxFollowUps": {
+          "description": "Maximum user-simulator turns after the initial executor timeline. Zero or omitted keeps single-pass behavior.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "perTurnTimeoutSeconds": {
+          "description": "Optional executor-turn timeout. LoadDir additionally requires it not to exceed timeoutSeconds.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400
+        }
+      }
+    },
+    "toolRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "decision"],
+      "properties": {
+        "name": {
+		  "enum": ["mail_archive", "contacts", "files", "calendar", "todo", "phone_read", "phone_write", "wiki", "knowledge", "polaris", "notebook", "read", "grep", "write", "edit"]
+        },
+        "decision": {
+		  "enum": ["deny", "allow"]
+        },
+        "maxCalls": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      }
+    },
+    "toolPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default", "maxCalls"],
+      "properties": {
+        "default": {
+          "const": "deny"
+        },
+        "maxCalls": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "rules": {
+          "type": "array",
+		  "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/toolRule"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "const": "deny"
+        },
+        "allowedHosts": {
+          "type": "array",
+          "maxItems": 0
+        }
+      }
+    }
+  }
+}

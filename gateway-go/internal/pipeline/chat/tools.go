@@ -97,20 +97,28 @@ func (r *ToolRegistry) RegisterTool(def ToolDef) {
 // compressed via the local AI model before returning. This lets the AI
 // agent opt-in to compression on a per-call basis to save context tokens.
 func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawMessage) (string, error) {
+	if ctx == nil {
+		return "", fmt.Errorf("tool %q requires a context", name)
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	r.mu.RLock()
 	def, ok := r.tools[name]
 	r.mu.RUnlock()
 	if !ok {
 		return "", r.unknownToolError(name)
 	}
+	presetName := toolctx.ToolPresetFromContext(ctx)
+	briefcasePreset := presetName == string(toolpreset.PresetBriefcase)
 
 	// Enforce tool preset: reject tools not in the allowed set.
 	// This is a defense-in-depth check — the LLM only sees filtered tools,
 	// but if it hallucinates a tool call, this blocks execution.
-	if preset := toolctx.ToolPresetFromContext(ctx); preset != "" {
-		if allowed := toolpreset.AllowedTools(toolpreset.Preset(preset)); allowed != nil {
+	if presetName != "" {
+		if allowed := toolpreset.AllowedTools(toolpreset.Preset(presetName)); allowed != nil {
 			if _, ok := allowed[name]; !ok {
-				return "", fmt.Errorf("tool %q is not allowed for preset %q", name, preset)
+				return "", fmt.Errorf("tool %q is not allowed for preset %q", name, presetName)
 			}
 		}
 	}
@@ -137,17 +145,26 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	// fail-fast parse error (the loop detector remains the backstop). The Warn
 	// is the measurement signal for how often the main model emits malformed
 	// calls — no argument content is logged (it may be sensitive).
-	if repaired, didRepair := repairToolArguments(input); didRepair {
-		slog.Warn("repaired malformed tool-call arguments", "tool", name, "bytes", len(input))
-		toolctx.ToolExecStatsFromContext(ctx).RecordRepaired(name)
-		input = repaired
+	if !briefcasePreset {
+		if repaired, didRepair := repairToolArguments(input); didRepair {
+			slog.Warn("repaired malformed tool-call arguments", "tool", name, "bytes", len(input))
+			toolctx.ToolExecStatsFromContext(ctx).RecordRepaired(name)
+			input = repaired
+		}
 	}
-
+	if briefcasePreset && (hasTopLevelJSONKey(input, "compress") || hasTopLevelJSONKey(input, "$ref")) {
+		return "", fmt.Errorf("tool %q uses metadata forbidden by the briefcase preset", name)
+	}
 	// Check for compress flag before executing (avoids re-parsing in every tool).
-	wantCompress := extractCompressFlag(input)
+	wantCompress := !briefcasePreset && extractCompressFlag(input)
 
 	// Resolve $ref: wait for the referenced tool result and inject it.
-	input = resolveRef(ctx, input)
+	if !briefcasePreset {
+		input = resolveRef(ctx, input)
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 
 	// Check run-level cache for idempotent tools (grep, fetch_tools).
 	// Cached results include post-processing but not compression.
@@ -167,7 +184,13 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 		}
 	}
 
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	output, err := def.Fn(ctx, input)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return output, ctxErr
+	}
 	// Verification-gate bookkeeping (verify_gate.go): a successful write/edit
 	// arms the gate; a successful verification exec disarms it. Nil-safe.
 	verifyGateFromContext(ctx).recordTool(name, input, output, err)
@@ -419,6 +442,18 @@ func extractCompressFlag(input json.RawMessage) bool {
 		return meta.Compress
 	}
 	return false
+}
+
+func hasTopLevelJSONKey(input json.RawMessage, key string) bool {
+	if key == "" || !bytes.Contains(input, []byte(`"`+key+`"`)) {
+		return false
+	}
+	var object map[string]json.RawMessage
+	if json.Unmarshal(input, &object) != nil {
+		return false
+	}
+	_, ok := object[key]
+	return ok
 }
 
 // resolveRef checks for a "$ref" field in the input. If present, it waits for

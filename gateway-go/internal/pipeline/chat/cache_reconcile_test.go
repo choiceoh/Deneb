@@ -125,10 +125,11 @@ func TestReconcileFallbackCacheMarkers_RejectingProviderStrips(t *testing.T) {
 		// Original provider was Anthropic-mode (zai): trailing hook installed.
 		BeforeAPICall: agent.ComposeBeforeAPICall(buildTrailingCacheHook(llm.APIModeAnthropic)),
 	}
+	origClient := llm.NewClient("http://127.0.0.1:1", "", llm.WithAPIMode(llm.APIModeAnthropic))
 	fbClient := llm.NewClient("http://127.0.0.1:1", "", llm.WithAPIMode(llm.APIModeAnthropic))
 
 	reconcileFallbackCacheMarkers(&cfg, runDeps{}, "zai", "glm-5-turbo",
-		"kimi", "kimi-for-coding", fbClient, discardLogger())
+		"kimi", "kimi-for-coding", origClient, fbClient, discardLogger())
 
 	if bytes.Contains(cfg.System, []byte("cache_control")) {
 		t.Error("system markers survived; Kimi rejects them with 400")
@@ -149,10 +150,11 @@ func TestReconcileFallbackCacheMarkers_RejectingProviderStrips(t *testing.T) {
 // provider installs the trailing-marker hook so the attempt runs cached.
 func TestReconcileFallbackCacheMarkers_AnthropicFallbackGetsTrailingHook(t *testing.T) {
 	cfg := agent.AgentConfig{System: markedSystemBlocks(t)} // vllm main: no hook
+	origClient := llm.NewClient("http://127.0.0.1:1", "", llm.WithAPIMode(llm.APIModeOpenAI))
 	fbClient := llm.NewClient("http://127.0.0.1:1", "", llm.WithAPIMode(llm.APIModeAnthropic))
 
 	reconcileFallbackCacheMarkers(&cfg, runDeps{}, "vllm", "deepseek-v4-flash",
-		"mimo-plan", "mimo-v2", fbClient, discardLogger())
+		"mimo-plan", "mimo-v2", origClient, fbClient, discardLogger())
 
 	if cfg.BeforeAPICall == nil {
 		t.Fatal("trailing-marker hook not installed for Anthropic-mode fallback")
@@ -177,15 +179,83 @@ func TestReconcileFallbackCacheMarkers_AnthropicFallbackGetsTrailingHook(t *test
 func TestReconcileFallbackCacheMarkers_OpenAIFallbackUntouched(t *testing.T) {
 	system := markedSystemBlocks(t)
 	cfg := agent.AgentConfig{System: system}
+	origClient := llm.NewClient("http://127.0.0.1:1", "", llm.WithAPIMode(llm.APIModeOpenAI))
 	fbClient := llm.NewClient("http://127.0.0.1:1", "", llm.WithAPIMode(llm.APIModeOpenAI))
 
 	reconcileFallbackCacheMarkers(&cfg, runDeps{}, "vllm", "deepseek-v4-flash",
-		"vllm", "qwen3.6", fbClient, discardLogger())
+		"vllm", "qwen3.6", origClient, fbClient, discardLogger())
 
 	if cfg.BeforeAPICall != nil {
 		t.Error("hook installed for OpenAI-mode fallback; expected no change")
 	}
 	if !bytes.Equal(cfg.System, system) {
 		t.Error("system rewritten for OpenAI-mode fallback; expected no change")
+	}
+}
+
+func TestWireBeforeAPICall_UsesAnthropicClientModeWithoutProviderID(t *testing.T) {
+	cfg := agent.AgentConfig{System: markedSystemBlocks(t)}
+	client := llm.NewClient("http://127.0.0.1:1", "", llm.WithAPIMode(llm.APIModeAnthropic))
+
+	mode := wireBeforeAPICall(&cfg, runDeps{}, RunParams{}, "", "test-model", client, discardLogger())
+	if mode != llm.APIModeAnthropic {
+		t.Fatalf("wire mode = %q, want actual client mode %q", mode, llm.APIModeAnthropic)
+	}
+	if cfg.BeforeAPICall == nil {
+		t.Fatal("Anthropic client with an empty provider ID did not get the trailing cache hook")
+	}
+	msgs := []llm.Message{
+		llm.NewTextMessage("user", "q1"),
+		llm.NewTextMessage("assistant", "a1"),
+		llm.NewTextMessage("user", "q2"),
+	}
+	if got := countCacheMarkers(t, cfg.BeforeAPICall(msgs)); got != trailingCacheCount {
+		t.Fatalf("messages carry %d cache markers, want %d", got, trailingCacheCount)
+	}
+}
+
+func TestWireBeforeAPICall_BriefcaseDisablesEndpointCacheMetadata(t *testing.T) {
+	cfg := agent.AgentConfig{System: markedSystemBlocks(t)}
+	client := llm.NewClient("http://127.0.0.1:1", "", llm.WithAPIMode(llm.APIModeAnthropic))
+
+	mode := wireBeforeAPICall(&cfg, runDeps{briefcaseMode: true}, RunParams{}, "", "test-model", client, discardLogger())
+	if mode != llm.APIModeAnthropic {
+		t.Fatalf("wire mode = %q, want actual client mode %q", mode, llm.APIModeAnthropic)
+	}
+	if bytes.Contains(cfg.System, []byte("cache_control")) {
+		t.Fatal("Briefcase system prompt retained endpoint-specific cache metadata")
+	}
+	if cfg.BeforeAPICall != nil {
+		messages := []llm.Message{
+			llm.NewTextMessage("user", "q1"),
+			llm.NewTextMessage("assistant", "a1"),
+			llm.NewTextMessage("user", "q2"),
+		}
+		if got := countCacheMarkers(t, cfg.BeforeAPICall(messages)); got != 0 {
+			t.Fatalf("Briefcase hook added %d cache markers, want zero", got)
+		}
+	}
+}
+
+func TestReconcileFallbackCacheMarkers_UsesActualOriginalClientMode(t *testing.T) {
+	// The provider ID suggests Anthropic, but the already-built original client
+	// actually speaks OpenAI. The Anthropic fallback therefore needs a hook.
+	cfg := agent.AgentConfig{System: markedSystemBlocks(t)}
+	origClient := llm.NewClient("http://127.0.0.1:1", "", llm.WithAPIMode(llm.APIModeOpenAI))
+	fbClient := llm.NewClient("http://127.0.0.1:1", "", llm.WithAPIMode(llm.APIModeAnthropic))
+
+	reconcileFallbackCacheMarkers(&cfg, runDeps{}, "zai", "glm-5-turbo",
+		"mimo-plan", "mimo-v2", origClient, fbClient, discardLogger())
+
+	if cfg.BeforeAPICall == nil {
+		t.Fatal("fallback reconciliation trusted the provider ID instead of the original client's wire mode")
+	}
+	msgs := []llm.Message{
+		llm.NewTextMessage("user", "q1"),
+		llm.NewTextMessage("assistant", "a1"),
+		llm.NewTextMessage("user", "q2"),
+	}
+	if got := countCacheMarkers(t, cfg.BeforeAPICall(msgs)); got != trailingCacheCount {
+		t.Fatalf("fallback messages carry %d cache markers, want %d", got, trailingCacheCount)
 	}
 }

@@ -18,6 +18,18 @@ type AgentConfig struct {
 	System    json.RawMessage // System prompt: JSON string or array of ContentBlocks.
 	Tools     []llm.Tool
 	MaxTokens int // Max output tokens per LLM call. Default: 8192.
+	// MaxTotalOutputTokens caps the sum of output tokens across every LLM call
+	// in this agent loop. When enabled, each turn is charged the greater of
+	// provider usage and a deterministic estimate of its full structured output.
+	// Zero keeps the production per-call-only behavior.
+	MaxTotalOutputTokens int
+	// MaxStreamBytes caps translated stream payload bytes across the agent run.
+	// Zero keeps the production default unlimited behavior.
+	MaxStreamBytes int
+	// MaxToolCallAttempts caps model-emitted tool calls across the entire agent
+	// run. Nil keeps production unlimited; a non-nil zero value forbids tool
+	// calls while still permitting a text-only terminal response.
+	MaxToolCallAttempts *int
 
 	// Sampling parameters (passed through to the LLM request).
 	Temperature      *float64
@@ -25,9 +37,12 @@ type AgentConfig struct {
 	TopK             *int
 	FrequencyPenalty *float64
 	PresencePenalty  *float64
-	StopSequences    []string
-	ResponseFormat   *llm.ResponseFormat
-	ToolChoice       any // "auto", "none", "required", or structured object
+	// Seed is forwarded only by OpenAI-compatible wire mode. Provider support
+	// remains best-effort and does not make remote inference bit-identical.
+	Seed           *int64
+	StopSequences  []string
+	ResponseFormat *llm.ResponseFormat
+	ToolChoice     any // "auto", "none", "required", or structured object
 
 	// OnTurn is called after each agent turn with accumulated token count.
 	// Used for mid-conversation hooks (e.g., memory extraction).
@@ -112,6 +127,31 @@ type AgentConfig struct {
 	// uses 1.5× the original MaxTokens, 2nd and 3rd use 2×.
 	// When nil or shorter than the recovery attempt, defaults to 2× for missing entries.
 	MaxOutputTokensScaleFactors []float64
+
+	// DisableBudgetGrace makes MaxTurns a hard request-count ceiling. When set,
+	// the executor never issues the normal extra wrap-up LLM call after the last
+	// budgeted tool turn. Deterministic evaluation harnesses use this so a signed
+	// turn budget cannot be exceeded by ambient production recovery behavior.
+	DisableBudgetGrace bool
+
+	// DisableTokenFeedback prevents this run from mutating the process-global
+	// token estimator calibrator. Evaluation runs must not influence later arms
+	// (or be influenced by their execution order) through learned global state.
+	DisableTokenFeedback bool
+
+	// DisableStreamRetry prevents replay after a mid-stream idle/error event.
+	// Deterministic runs fail closed rather than duplicate a partial request.
+	DisableStreamRetry bool
+	// RequireProviderModel fails the run unless every streamed turn reports one
+	// stable provider model identifier in message_start.
+	RequireProviderModel bool
+	// RequireExplicitStopReason rejects a text-only turn unless the provider
+	// emitted an explicit, recognized terminal reason.
+	RequireExplicitStopReason bool
+	// RequireStrictStopShape requires tool-bearing turns to report tool_use and
+	// tool-free turns to report end_turn. Deterministic evaluators use this to
+	// prevent ambiguous/truncated responses from reaching tool execution.
+	RequireStrictStopShape bool
 
 	// SpawnDetected returns true when sessions_spawn was called during this run.
 	// Used to emit a turn-budget warning that tells the agent to wrap up and
@@ -258,6 +298,7 @@ type AgentResult struct {
 	Usage           llm.TokenUsage
 	Turns           int
 	Stream          StreamStats
+	ProviderModel   string
 
 	// BudgetExhaustedInjected is true once the one-time grace-call user message
 	// has been appended to the history after MaxTurns exhaustion. Guards against

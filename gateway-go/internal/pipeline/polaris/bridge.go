@@ -1,6 +1,7 @@
 package polaris
 
 import (
+	"fmt"
 	"log/slog"
 	"sync"
 
@@ -18,21 +19,47 @@ var _ toolctx.TranscriptStore = (*Bridge)(nil)
 // messages into the Polaris store (idempotent). Subsequent Appends dual-write
 // to both stores.
 type Bridge struct {
-	legacy   toolctx.TranscriptStore
-	store    *Store
-	engine   *Engine
-	logger   *slog.Logger
-	migrated sync.Map // session_key → true
+	legacy            toolctx.TranscriptStore
+	store             *Store
+	engine            *Engine
+	logger            *slog.Logger
+	strictPersistence bool
+	migrated          sync.Map // session_key → true
+	strictMigrationMu sync.Mutex
+}
+
+// BridgeOptions controls optional persistence behavior. The zero value keeps
+// production's historical best-effort Polaris mirror: the legacy transcript
+// remains authoritative and Polaris failures are logged.
+type BridgeOptions struct {
+	// StrictPersistence makes every Polaris migration, append, and delete
+	// failure observable to the caller. It is intended for isolated evaluators
+	// such as Deneb-Briefcase, where continuing after a partial write would make
+	// the evidence bundle non-reproducible.
+	StrictPersistence bool
 }
 
 // NewBridge wraps a legacy TranscriptStore with Polaris dual-write.
 // Creates a long-lived Engine with circuit breaker for the lifecycle of the Bridge.
 func NewBridge(legacy toolctx.TranscriptStore, store *Store, logger *slog.Logger) *Bridge {
+	return NewBridgeWithOptions(legacy, store, logger, BridgeOptions{})
+}
+
+// NewBridgeWithOptions wraps a legacy TranscriptStore with explicit
+// persistence behavior. Production callers should normally use NewBridge;
+// isolated evaluators can opt into fail-closed persistence.
+func NewBridgeWithOptions(
+	legacy toolctx.TranscriptStore,
+	store *Store,
+	logger *slog.Logger,
+	options BridgeOptions,
+) *Bridge {
 	return &Bridge{
-		legacy: legacy,
-		store:  store,
-		engine: NewEngine(store, logger, DefaultConfig()),
-		logger: logger,
+		legacy:            legacy,
+		store:             store,
+		engine:            NewEngine(store, logger, DefaultConfig()),
+		logger:            logger,
+		strictPersistence: options.StrictPersistence,
 	}
 }
 
@@ -44,18 +71,32 @@ func (b *Bridge) Engine() *Engine { return b.engine }
 
 // Load delegates to the legacy store and triggers lazy migration.
 func (b *Bridge) Load(sessionKey string, limit int) ([]toolctx.ChatMessage, int, error) {
-	b.ensureMigrated(sessionKey)
+	if err := b.ensureMigrated(sessionKey); err != nil {
+		return nil, 0, err
+	}
 	return b.legacy.Load(sessionKey, limit)
 }
 
 // Append writes to both legacy JSONL and Polaris file store.
 func (b *Bridge) Append(sessionKey string, msg toolctx.ChatMessage) error {
+	// A strict bridge must establish the legacy prefix before it dual-writes a
+	// new tail message. Otherwise a fresh Bridge over an existing transcript
+	// could place the new message at Polaris index zero and make the subsequent
+	// delta migration skip the actual first legacy message.
+	if b.strictPersistence {
+		if err := b.ensureMigrated(sessionKey); err != nil {
+			return err
+		}
+	}
 	if err := b.legacy.Append(sessionKey, msg); err != nil {
 		return err
 	}
 	if err := b.store.AppendMessage(sessionKey, msg); err != nil {
 		b.logger.Warn("polaris: dual-write failed",
 			"session", sessionKey, "error", err)
+		if b.strictPersistence {
+			return fmt.Errorf("polaris: strict dual-write append failed for session %q: %w", sessionKey, err)
+		}
 	}
 	return nil
 }
@@ -68,6 +109,9 @@ func (b *Bridge) Delete(sessionKey string) error {
 	b.migrated.Delete(sessionKey)
 	if err := b.store.DeleteSession(sessionKey); err != nil {
 		b.logger.Warn("polaris: delete failed", "session", sessionKey, "error", err)
+		if b.strictPersistence {
+			return fmt.Errorf("polaris: strict delete failed for session %q: %w", sessionKey, err)
+		}
 	}
 	return nil
 }
@@ -96,7 +140,9 @@ func (b *Bridge) AssembleContext(
 	freshTailCount int,
 	logger *slog.Logger,
 ) (*AssemblyResult, error) {
-	b.ensureMigrated(sessionKey)
+	if err := b.ensureMigrated(sessionKey); err != nil {
+		return nil, err
+	}
 	return assembleContextFull(b.store, sessionKey, memoryTokenBudget, freshTailCount, logger)
 }
 
@@ -109,11 +155,31 @@ type AssemblyResult struct {
 }
 
 // ensureMigrated runs lazy migration for a session (once per process lifetime).
-func (b *Bridge) ensureMigrated(sessionKey string) {
+//
+// The default path deliberately retains production's existing best-effort
+// behavior. Strict bridges serialize migration so no caller can observe a
+// session as migrated before the copy has completed, and record success only
+// after every message is durable in Polaris.
+func (b *Bridge) ensureMigrated(sessionKey string) error {
+	if b.strictPersistence {
+		b.strictMigrationMu.Lock()
+		defer b.strictMigrationMu.Unlock()
+		if _, migrated := b.migrated.Load(sessionKey); migrated {
+			return nil
+		}
+		if err := MigrateSession(b.legacy, b.store, sessionKey, b.logger); err != nil {
+			b.logger.Warn("polaris: lazy migration failed", "session", sessionKey, "error", err)
+			return fmt.Errorf("polaris: strict lazy migration failed for session %q: %w", sessionKey, err)
+		}
+		b.migrated.Store(sessionKey, true)
+		return nil
+	}
+
 	if _, loaded := b.migrated.LoadOrStore(sessionKey, true); loaded {
-		return
+		return nil
 	}
 	if err := MigrateSession(b.legacy, b.store, sessionKey, b.logger); err != nil {
 		b.logger.Warn("polaris: lazy migration failed", "session", sessionKey, "error", err)
 	}
+	return nil
 }

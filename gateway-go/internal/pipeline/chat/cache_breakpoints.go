@@ -191,7 +191,7 @@ func stripMessageCacheMarkersHook(messages []llm.Message) []llm.Message {
 //
 // OpenAI-mode fallbacks need nothing: their converters drop cache_control
 // during message translation.
-func reconcileFallbackCacheMarkers(agentCfg *agent.AgentConfig, deps runDeps, origProviderID, origModel, fbProviderID, fbModel string, fbClient *llm.Client, logger *slog.Logger) {
+func reconcileFallbackCacheMarkers(agentCfg *agent.AgentConfig, deps runDeps, origProviderID, origModel, fbProviderID, fbModel string, origClient, fbClient *llm.Client, logger *slog.Logger) {
 	if fbClient == nil {
 		return
 	}
@@ -202,7 +202,7 @@ func reconcileFallbackCacheMarkers(agentCfg *agent.AgentConfig, deps runDeps, or
 			"fallbackProvider", fbProviderID, "fallbackModel", fbModel)
 		return
 	}
-	hookInstalled := resolveAPIMode(deps, origProviderID) == llm.APIModeAnthropic &&
+	hookInstalled := origClient != nil && origClient.APIMode() == llm.APIModeAnthropic &&
 		!modelCapability(deps, origProviderID, origModel).RejectsCacheControl
 	if fbClient.APIMode() == llm.APIModeAnthropic && !hookInstalled {
 		agentCfg.BeforeAPICall = agent.ComposeBeforeAPICall(

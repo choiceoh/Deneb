@@ -16,6 +16,7 @@ type openAIRequest struct {
 	TopK                *int              `json:"top_k,omitempty"` // vLLM/OpenRouter extension; only sent when a profile/config sets it
 	FrequencyPenalty    *float64          `json:"frequency_penalty,omitempty"`
 	PresencePenalty     *float64          `json:"presence_penalty,omitempty"`
+	Seed                *int64            `json:"seed,omitempty"`
 	Stop                []string          `json:"stop,omitempty"`
 	Tools               []openAITool      `json:"tools,omitempty"`
 	ToolChoice          any               `json:"tool_choice,omitempty"`

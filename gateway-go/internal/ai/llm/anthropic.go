@@ -41,7 +41,7 @@ func (c *Client) streamChatAnthropic(ctx context.Context, req ChatRequest) (<-ch
 		return nil, err
 	}
 
-	return startSSEPipeline(ctx, respBody, func(ctx context.Context, rawEvents <-chan StreamEvent, out chan<- StreamEvent) {
+	return startSSEPipelineWithByteLimit(ctx, respBody, c.maxStreamBytes, func(ctx context.Context, rawEvents <-chan StreamEvent, out chan<- StreamEvent) {
 		forwardAnthropicStream(ctx, rawEvents, out)
 	}), nil
 }

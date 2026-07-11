@@ -15,7 +15,7 @@ func TestPreloadedDeferredTools(t *testing.T) {
 	// Every other preset (and the empty/main-chat preset) keeps the normal
 	// fetch-on-demand behavior — no pre-load, so main chat's toolset/cache is
 	// untouched.
-	for _, p := range []Preset{Preset(""), PresetImplementer, PresetResearcher, PresetVerifier, PresetConversation} {
+	for _, p := range []Preset{Preset(""), PresetImplementer, PresetResearcher, PresetVerifier, PresetConversation, PresetBriefcase} {
 		if got := PreloadedDeferredTools(p); len(got) != 0 {
 			t.Errorf("preload(%q) = %v, want nil (only self-review pre-loads)", p, got)
 		}

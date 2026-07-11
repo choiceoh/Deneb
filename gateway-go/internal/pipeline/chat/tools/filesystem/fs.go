@@ -19,6 +19,9 @@ import (
 // ToolWrite builds the workspace file-write tool.
 func ToolWrite(defaultDir string) toolctx.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		var p struct {
 			FilePath string `json:"file_path"`
 			Content  string `json:"content"`
@@ -52,7 +55,10 @@ func ToolWrite(defaultDir string) toolctx.ToolFunc {
 		// Pre-edit checkpoint so the user can roll back this write.
 		toolctx.SnapshotBeforeWrite(ctx, path, "write")
 
-		if err := atomicfile.WriteFile(path, []byte(p.Content), nil); err != nil {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		if err := atomicfile.WriteFileContext(ctx, path, []byte(p.Content), nil); err != nil {
 			return "", fmt.Errorf("failed to write file: %w", err)
 		}
 		return fmt.Sprintf("Wrote %s", p.FilePath), nil
@@ -64,6 +70,9 @@ func ToolWrite(defaultDir string) toolctx.ToolFunc {
 // ToolEdit builds the workspace file-edit tool.
 func ToolEdit(defaultDir string) toolctx.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		var p struct {
 			FilePath   string      `json:"file_path"`
 			OldString  string      `json:"old_string"`
@@ -131,7 +140,7 @@ func ToolEdit(defaultDir string) toolctx.ToolFunc {
 		// the single biggest coding-turn waste). All-or-nothing: any failing
 		// edit aborts before the write, so the file is never left half-edited.
 		if len(p.Edits) > 0 {
-			result, err := applyBatchEdits(path, p.FilePath, content, p.Edits)
+			result, err := applyBatchEditsContext(ctx, path, p.FilePath, content, p.Edits)
 			if err == nil {
 				updateCache()
 			}
@@ -143,7 +152,7 @@ func ToolEdit(defaultDir string) toolctx.ToolFunc {
 		// short hash surfaced via read(hashes=true), instead of reproducing
 		// old_string. Replaces the matched line(s) wholesale with new_string.
 		if p.Anchor != "" {
-			result, err := editByAnchor(path, p.FilePath, content, p.Anchor, p.AnchorEnd, p.NewString)
+			result, err := editByAnchorContext(ctx, path, p.FilePath, content, p.Anchor, p.AnchorEnd, p.NewString)
 			if err == nil {
 				updateCache()
 			}
@@ -152,7 +161,7 @@ func ToolEdit(defaultDir string) toolctx.ToolFunc {
 
 		// Regex-based replacement.
 		if p.Regex {
-			result, err := editWithRegex(path, p.FilePath, content, p.OldString, p.NewString, p.ReplaceAll)
+			result, err := editWithRegexContext(ctx, path, p.FilePath, content, p.OldString, p.NewString, p.ReplaceAll)
 			if err == nil {
 				updateCache()
 			}
@@ -161,7 +170,7 @@ func ToolEdit(defaultDir string) toolctx.ToolFunc {
 
 		// Line-targeted replacement.
 		if p.Line > 0 {
-			result, err := editAtLine(path, p.FilePath, content, p.OldString, p.NewString, p.Line)
+			result, err := editAtLineContext(ctx, path, p.FilePath, content, p.OldString, p.NewString, p.Line)
 			if err == nil {
 				updateCache()
 			}
@@ -178,7 +187,7 @@ func ToolEdit(defaultDir string) toolctx.ToolFunc {
 			// coding-turn waste. Ambiguous or partial-line cases still fail
 			// with the existing hint so the model can disambiguate.
 			if !p.ReplaceAll {
-				if result, handled, err := editWhitespaceTolerant(path, p.FilePath, content, p.OldString, p.NewString); handled {
+				if result, handled, err := editWhitespaceTolerantContext(ctx, path, p.FilePath, content, p.OldString, p.NewString); handled {
 					if err == nil {
 						updateCache()
 					}
@@ -198,7 +207,7 @@ func ToolEdit(defaultDir string) toolctx.ToolFunc {
 		} else {
 			newContent = strings.Replace(content, p.OldString, p.NewString, 1)
 		}
-		if err := atomicfile.WriteFile(path, []byte(newContent), nil); err != nil {
+		if err := atomicfile.WriteFileContext(ctx, path, []byte(newContent), nil); err != nil {
 			return "", fmt.Errorf("failed to write file: %w", err)
 		}
 		updateCache()
@@ -221,9 +230,16 @@ type batchEdit struct {
 // write — the file is never left half-edited — and names the failing index so
 // the model can fix just that entry.
 func applyBatchEdits(path, displayPath, content string, edits []batchEdit) (string, error) {
+	return applyBatchEditsContext(context.Background(), path, displayPath, content, edits)
+}
+
+func applyBatchEditsContext(ctx context.Context, path, displayPath, content string, edits []batchEdit) (string, error) {
 	cur := content
 	total := 0
 	for i, e := range edits {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		if e.OldString == "" {
 			return "", fmt.Errorf("edits[%d]: old_string is required (file unchanged)", i)
 		}
@@ -243,7 +259,7 @@ func applyBatchEdits(path, displayPath, content string, edits []batchEdit) (stri
 			total++
 		}
 	}
-	if err := atomicfile.WriteFile(path, []byte(cur), nil); err != nil {
+	if err := atomicfile.WriteFileContext(ctx, path, []byte(cur), nil); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 	return fmt.Sprintf("Edited %s (%d edits, %d replacements)", displayPath, len(edits), total), nil
@@ -251,6 +267,10 @@ func applyBatchEdits(path, displayPath, content string, edits []batchEdit) (stri
 
 // editWithRegex performs regex-based search and replace.
 func editWithRegex(path, displayPath, content, pattern, replacement string, replaceAll bool) (string, error) {
+	return editWithRegexContext(context.Background(), path, displayPath, content, pattern, replacement, replaceAll)
+}
+
+func editWithRegexContext(ctx context.Context, path, displayPath, content, pattern, replacement string, replaceAll bool) (string, error) {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return "", fmt.Errorf("invalid regex pattern: %w", err)
@@ -273,7 +293,7 @@ func editWithRegex(path, displayPath, content, pattern, replacement string, repl
 		newContent = content[:loc[0]] + re.ReplaceAllString(content[loc[0]:loc[1]], replacement) + content[loc[1]:]
 	}
 
-	if err := atomicfile.WriteFile(path, []byte(newContent), nil); err != nil {
+	if err := atomicfile.WriteFileContext(ctx, path, []byte(newContent), nil); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 	return fmt.Sprintf("Edited %s (regex, %d matches)", displayPath, len(matches)), nil
@@ -281,6 +301,10 @@ func editWithRegex(path, displayPath, content, pattern, replacement string, repl
 
 // editAtLine performs replacement only on a specific line.
 func editAtLine(path, displayPath, content, oldStr, newStr string, lineNum int) (string, error) {
+	return editAtLineContext(context.Background(), path, displayPath, content, oldStr, newStr, lineNum)
+}
+
+func editAtLineContext(ctx context.Context, path, displayPath, content, oldStr, newStr string, lineNum int) (string, error) {
 	lines := strings.Split(content, "\n")
 	if lineNum > len(lines) {
 		return "", fmt.Errorf("line %d out of range (file has %d lines)", lineNum, len(lines))
@@ -294,7 +318,7 @@ func editAtLine(path, displayPath, content, oldStr, newStr string, lineNum int) 
 	lines[idx] = strings.Replace(lines[idx], oldStr, newStr, 1)
 	newContent := strings.Join(lines, "\n")
 
-	if err := atomicfile.WriteFile(path, []byte(newContent), nil); err != nil {
+	if err := atomicfile.WriteFileContext(ctx, path, []byte(newContent), nil); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 	return fmt.Sprintf("Edited %s (line %d)", displayPath, lineNum), nil
@@ -306,6 +330,10 @@ func editAtLine(path, displayPath, content, oldStr, newStr string, lineNum int) 
 // match zero or multiple lines are rejected so the model can disambiguate
 // (re-read for fresh anchors, or fall back to line=/old_string).
 func editByAnchor(path, displayPath, content, anchor, anchorEnd, newStr string) (string, error) {
+	return editByAnchorContext(context.Background(), path, displayPath, content, anchor, anchorEnd, newStr)
+}
+
+func editByAnchorContext(ctx context.Context, path, displayPath, content, anchor, anchorEnd, newStr string) (string, error) {
 	lines := strings.Split(content, "\n")
 
 	findUnique := func(target string) (int, error) {
@@ -347,7 +375,7 @@ func editByAnchor(path, displayPath, content, anchor, anchorEnd, newStr string) 
 	newLines = append(newLines, lines[endIdx+1:]...)
 	newContent := strings.Join(newLines, "\n")
 
-	if err := atomicfile.WriteFile(path, []byte(newContent), nil); err != nil {
+	if err := atomicfile.WriteFileContext(ctx, path, []byte(newContent), nil); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 	if endIdx > startIdx {
@@ -369,6 +397,10 @@ func editByAnchor(path, displayPath, content, anchor, anchorEnd, newStr string) 
 // new_string is re-indented by the first-line indent delta so the block lands
 // at the file's actual depth, preserving relative indentation.
 func editWhitespaceTolerant(path, displayPath, content, oldStr, newStr string) (result string, handled bool, err error) {
+	return editWhitespaceTolerantContext(context.Background(), path, displayPath, content, oldStr, newStr)
+}
+
+func editWhitespaceTolerantContext(ctx context.Context, path, displayPath, content, oldStr, newStr string) (result string, handled bool, err error) {
 	if strings.Contains(content, "\r") {
 		// CR/CRLF file: the tolerant splice joins with bare \n, so the
 		// replaced block (and any new lines) would silently switch line
@@ -395,6 +427,9 @@ func editWhitespaceTolerant(path, displayPath, content, oldStr, newStr string) (
 	}
 	var starts []int
 	for i := 0; i+len(oldLines) <= len(lines); i++ {
+		if err := ctx.Err(); err != nil {
+			return "", true, err
+		}
 		ok := true
 		for j := range oldLines {
 			if strings.TrimSpace(lines[i+j]) != oldTrimmed[j] {
@@ -472,7 +507,7 @@ func editWhitespaceTolerant(path, displayPath, content, oldStr, newStr string) (
 	spliced = append(spliced, lines[:start]...)
 	spliced = append(spliced, newLines...)
 	spliced = append(spliced, lines[start+len(oldLines):]...)
-	if err := atomicfile.WriteFile(path, []byte(strings.Join(spliced, "\n")), nil); err != nil {
+	if err := atomicfile.WriteFileContext(ctx, path, []byte(strings.Join(spliced, "\n")), nil); err != nil {
 		return "", true, fmt.Errorf("failed to write file: %w", err)
 	}
 	note := ""

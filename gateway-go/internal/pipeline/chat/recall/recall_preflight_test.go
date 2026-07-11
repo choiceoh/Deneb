@@ -11,6 +11,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 )
 
+type testStrictErrorSink struct{ err error }
+
+func (s *testStrictErrorSink) Record(err error) { s.err = err }
+
 func TestShouldRunRecallPreflight(t *testing.T) {
 	if !hasCue("전에 이야기한 회상 개선 계속해줘") {
 		t.Fatal("expected explicit recall cue to trigger preflight")
@@ -474,6 +478,19 @@ func TestBuildRecallPreflightSurvivesPanickingSource(t *testing.T) {
 	)
 	if !strings.Contains(out, "프로젝트/deneb-recall.md") {
 		t.Fatalf("wiki evidence lost when a sibling source panicked: %q", out)
+	}
+}
+
+func TestBuildRecallPreflightBriefcaseRecordsPanickingSource(t *testing.T) {
+	sink := &testStrictErrorSink{}
+	Build(
+		context.Background(),
+		Params{SessionKey: "client:briefcase", Message: "전에 결정을 기억해줘"},
+		Deps{Briefcase: true, StrictErrors: sink, Transcript: panickyTranscriptStore{}},
+		nil,
+	)
+	if sink.err == nil || !strings.Contains(sink.err.Error(), "recall source transcript panicked") {
+		t.Fatalf("strict recall error = %v", sink.err)
 	}
 }
 

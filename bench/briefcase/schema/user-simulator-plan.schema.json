@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/choiceoh/deneb/bench/briefcase/schema/user-simulator-plan.schema.json",
+  "title": "Deneb-Briefcase scripted user simulator plan",
+  "description": "Sealed deterministic follow-up fixture. It receives only a coarse public handoff; generated text is separately checked by the feedback firewall before reaching the executor.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "caseId", "followUps"],
+  "properties": {
+    "schemaVersion": {
+      "const": "deneb-briefcase-user-simulator/v1"
+    },
+    "caseId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "followUps": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cycle", "whenVerdict", "message"],
+        "properties": {
+          "cycle": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2
+          },
+          "whenVerdict": {
+            "const": "needs-revision"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        }
+      }
+    }
+  }
+}

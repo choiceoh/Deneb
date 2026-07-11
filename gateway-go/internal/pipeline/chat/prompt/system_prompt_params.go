@@ -86,6 +86,15 @@ type SystemPromptParams struct {
 	DocsPath      string
 	ToolPreset    string // active tool preset ("conversation" etc.); empty = normal mode
 
+	// Now freezes user-visible semantic time for replay/evaluation. Zero uses
+	// the process clock. It must never be used for latency measurements.
+	Now time.Time
+
+	// Briefcase selects the deterministic evaluator variant of the prompt.
+	// DisableSkills removes both the catalog and the normal no-catalog fallback.
+	Briefcase     bool
+	DisableSkills bool
+
 	// CompactionFired triggers a one-time-per-session reminder appended
 	// to the dynamic block: tells the model that prior turns have been
 	// compacted into summaries so summary messages should be treated as

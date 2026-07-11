@@ -106,6 +106,13 @@ func Estimate(text string) int {
 	return defaultEst.Count(text)
 }
 
+// EstimateUncalibrated uses the fixed built-in ratios and deliberately ignores
+// process-global feedback. Deterministic evaluators use it to avoid run-order
+// dependence while production continues benefiting from self-calibration.
+func EstimateUncalibrated(text string) int {
+	return defaultEst.rawCount(text)
+}
+
 // EstimateBytes returns estimated token count from raw bytes without
 // full UTF-8 rune iteration. Uses a byte-level heuristic: samples the
 // byte stream to detect ASCII vs multi-byte ratio and applies an
@@ -115,6 +122,12 @@ func Estimate(text string) int {
 // analysis is unnecessary overhead.
 func EstimateBytes(data []byte) int {
 	return defaultEst.CountBytes(data)
+}
+
+// EstimateBytesUncalibrated is the byte-oriented fixed-ratio counterpart of
+// EstimateUncalibrated.
+func EstimateBytesUncalibrated(data []byte) int {
+	return defaultEst.rawCountBytes(data)
 }
 
 // ForModel returns an estimator calibrated for the given model ID.

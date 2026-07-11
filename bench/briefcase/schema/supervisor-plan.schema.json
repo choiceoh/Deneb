@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/choiceoh/deneb/bench/briefcase/schema/supervisor-plan.schema.json",
+  "title": "Deneb-Briefcase sealed checkpoint supervisor plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "planDigest", "fingerprint", "maxCycles", "feedbackDenyTokens", "checkpoints"],
+  "properties": {
+    "schemaVersion": {
+      "const": "deneb-briefcase-supervisor/v1"
+    },
+    "planDigest": {
+      "$ref": "#/$defs/lowerSha256"
+    },
+    "fingerprint": {
+      "$ref": "#/$defs/fingerprint"
+    },
+    "maxCycles": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "passThreshold": {
+      "description": "Omitted or zero selects the strict default 1.0.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "feedbackDenyTokens": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+      }
+    },
+    "checkpoints": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/checkpoint"
+      }
+    }
+  },
+  "$defs": {
+    "lowerSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "fingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caseId"],
+      "properties": {
+        "caseId": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 128
+        },
+        "casepackSha256": {
+          "$ref": "#/$defs/lowerSha256"
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "providerModel": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "arm": {
+          "enum": ["raw-primary", "memory-assisted"]
+        },
+        "apiMode": {
+          "enum": ["openai", "anthropic"]
+        },
+        "recallMode": {
+          "enum": ["enabled", "disabled"]
+        },
+        "devicePlanSha256": {
+          "$ref": "#/$defs/lowerSha256"
+        },
+        "devicePlanSourceSha256": {
+          "$ref": "#/$defs/lowerSha256"
+        },
+        "toolSchemaSha256": {
+          "$ref": "#/$defs/lowerSha256"
+        },
+        "endpointSha256": {
+          "$ref": "#/$defs/lowerSha256"
+        },
+        "buildSha256": {
+          "$ref": "#/$defs/lowerSha256"
+        },
+        "executionProfileSha256": {
+          "$ref": "#/$defs/lowerSha256"
+        }
+      }
+    },
+    "safeRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?(/|$))(?!.*\\/$).+$"
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cycle", "checks"],
+      "properties": {
+        "cycle": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "checks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/check"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "weight"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 128
+        },
+        "type": {
+          "enum": ["exact_text", "contains", "contains_token", "forbidden", "artifact", "state_json_equal"]
+        },
+        "critical": {
+          "type": "boolean"
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0.000001,
+          "maximum": 1000000
+        },
+        "expectedText": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "needle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "artifactPath": {
+          "allOf": [
+            { "$ref": "#/$defs/safeRelativePath" },
+            { "maxLength": 1024 }
+          ]
+        },
+        "expectedSha256": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{64}$"
+        },
+        "expectedState": true
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": ["contains", "contains_token", "forbidden"]
+              }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["needle"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "artifact"
+              }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["artifactPath", "expectedSha256"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "state_json_equal"
+              }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["expectedState"]
+          }
+        }
+      ]
+    }
+  }
+}

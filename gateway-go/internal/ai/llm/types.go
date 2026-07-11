@@ -22,6 +22,9 @@ type ChatRequest struct {
 	StopSequences    []string        `json:"stop_sequences,omitempty"`
 	FrequencyPenalty *float64        `json:"frequency_penalty,omitempty"`
 	PresencePenalty  *float64        `json:"presence_penalty,omitempty"`
+	// Seed requests deterministic sampling from OpenAI-compatible backends that
+	// implement the seed extension. Anthropic wire mode deliberately omits it.
+	Seed *int64 `json:"seed,omitempty"`
 
 	// ResponseFormat requests structured output.
 	// Use &ResponseFormat{Type: "json_object"} for JSON mode.

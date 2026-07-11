@@ -1,0 +1,136 @@
+{
+  "schemaVersion": "deneb.briefcase/v1",
+  "manifestDigest": "c5a7a3e47fa20c33f649c216fba9f9faed0d296c2fc4c56d5794935e994c9597",
+  "caseId": "budget-supersession-v1",
+  "familyId": "temporal-supersession",
+  "split": "dev",
+  "privacyMode": "portable",
+  "seed": 42001,
+  "cutoffAt": "2029-07-04T09:00:00Z",
+  "frozenNow": "2029-07-04T09:00:00Z",
+  "timezone": "Asia/Seoul",
+  "locale": "ko-KR",
+  "sources": [
+    {
+      "id": "wiki-budget-v1",
+      "kind": "wiki",
+      "origin": "synthetic",
+      "access": "snapshot",
+      "path": "snapshot/wiki-old.md",
+      "sha256": "82bac181ce696471c4123ac6b4ad44c28f53fa8e02eb4ab72802f19367b47831",
+      "eventAt": "2029-07-04T08:00:00Z",
+      "availableAt": "2029-07-04T08:00:00Z",
+      "capturedAt": "2029-07-04T09:00:00Z",
+      "projectRefs": [
+        "project-aurora"
+      ],
+      "sourceRef": "wiki:project-aurora/budget",
+      "memory": true
+    },
+    {
+      "id": "mail-budget-v2",
+      "kind": "mail",
+      "origin": "synthetic",
+      "access": "timeline",
+      "path": "timeline/mail-new.eml",
+      "sha256": "a25765c5a4c210c3b8a9bb7cde2d57a8317a287a46cd6086aa58214c1efcb9e8",
+      "eventAt": "2029-07-04T10:00:00Z",
+      "availableAt": "2029-07-04T10:00:00Z",
+      "capturedAt": "2029-07-04T10:00:00Z",
+      "projectRefs": [
+        "project-aurora"
+      ],
+      "sourceRef": "mail:<aurora-budget-v2@example.invalid>",
+      "supersedes": [
+        "wiki-budget-v1"
+      ]
+    },
+    {
+      "id": "sealed-grader-plan",
+      "kind": "file",
+      "origin": "synthetic",
+      "access": "sealed",
+      "path": "sealed/grader-plan.json",
+      "sha256": "639ea7a79eb610b067da79b1376a7d06cce2908e208ca74b007a1ac313e29e7c",
+      "eventAt": "2029-07-04T10:00:00Z",
+      "availableAt": "2029-07-04T10:00:00Z",
+      "capturedAt": "2029-07-04T10:00:00Z",
+      "sourceRef": "briefcase:grader-plan"
+    },
+    {
+      "id": "sealed-supervisor-plan",
+      "kind": "file",
+      "origin": "synthetic",
+      "access": "sealed",
+      "path": "sealed/supervisor-plan.json",
+      "sha256": "b8f1f934baca561eb34968dfb6f8ea84ad7e4ad8362de0ef69795487e0cc5a4d",
+      "eventAt": "2029-07-04T10:00:00Z",
+      "availableAt": "2029-07-04T10:00:00Z",
+      "capturedAt": "2029-07-04T10:00:00Z",
+      "sourceRef": "briefcase:supervisor-plan"
+    },
+    {
+      "id": "sealed-user-simulator-plan",
+      "kind": "file",
+      "origin": "synthetic",
+      "access": "sealed",
+      "path": "sealed/user-simulator-plan.json",
+      "sha256": "0433b38c9c3ffb0271153f009bb8e3fb5db74e09d4a6c2def868880d3f4c7c7b",
+      "eventAt": "2029-07-04T10:00:00Z",
+      "availableAt": "2029-07-04T10:00:00Z",
+      "capturedAt": "2029-07-04T10:00:00Z",
+      "sourceRef": "briefcase:user-simulator-plan"
+    }
+  ],
+  "episodes": [
+    {
+      "id": "budget-update",
+      "kind": "user-turn",
+      "at": "2029-07-04T10:00:00Z",
+      "input": {
+        "path": "timeline/task-1.md",
+        "sha256": "c2378a20d343e613d16f00b75065f4e539f5be88913900d623611879943c1e2d"
+      },
+      "releaseSourceIds": [
+        "mail-budget-v2"
+      ]
+    }
+  ],
+  "artifacts": [],
+  "runPolicy": {
+    "maxTurns": 12,
+    "timeoutSeconds": 300,
+    "maxTokens": 4096,
+    "maxFollowUps": 2,
+    "perTurnTimeoutSeconds": 120
+  },
+  "toolPolicy": {
+    "default": "deny",
+    "maxCalls": 12,
+    "rules": [
+      {
+        "name": "mail_archive",
+        "decision": "allow",
+        "maxCalls": 4
+      },
+      {
+        "name": "wiki",
+        "decision": "allow",
+        "maxCalls": 4
+      },
+      {
+        "name": "read",
+        "decision": "allow",
+        "maxCalls": 2
+      },
+      {
+        "name": "grep",
+        "decision": "allow",
+        "maxCalls": 2
+      }
+    ]
+  },
+  "networkPolicy": {
+    "mode": "deny"
+  }
+}

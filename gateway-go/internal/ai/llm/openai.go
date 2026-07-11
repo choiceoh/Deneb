@@ -42,6 +42,7 @@ func (c *Client) streamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 		Stream:        true,
 		StreamOptions: &openAIStreamOpts{IncludeUsage: true},
 		MaxTokens:     req.MaxTokens,
+		Seed:          req.Seed,
 	}
 
 	// Convert tools to OpenAI function-calling format.
@@ -99,7 +100,7 @@ func (c *Client) streamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 		return nil, err
 	}
 
-	return startSSEPipeline(ctx, respBody, func(ctx context.Context, rawEvents <-chan StreamEvent, out chan<- StreamEvent) {
+	return startSSEPipelineWithByteLimit(ctx, respBody, c.maxStreamBytes, func(ctx context.Context, rawEvents <-chan StreamEvent, out chan<- StreamEvent) {
 		c.translateOpenAIStream(ctx, rawEvents, out)
 	}), nil
 }

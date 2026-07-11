@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
 )
 
 // OnTurnInit is the only ctx-decoration point shared by BOTH run entries:
@@ -30,6 +32,64 @@ func TestBuildAgentConfig_OnTurnInitSetsSessionKeyAndPreset(t *testing.T) {
 	}
 	if got := toolctx.ToolPresetFromContext(ctx); got != "researcher" {
 		t.Errorf("tool preset from OnTurnInit ctx = %q, want %q", got, "researcher")
+	}
+}
+
+func TestBuildAgentConfig_HandlerRunLimitsOverrideModeDefaults(t *testing.T) {
+	wantTimeout := 7 * time.Minute
+	wantSeed := int64(42001)
+	deps := runDeps{runLimits: RunLimits{MaxTurns: 123, Timeout: wantTimeout}, samplingSeed: &wantSeed}
+	cfg, _, _ := buildAgentConfig(RunParams{}, deps, nil, nil, "briefcase", agentConfigDeps{}, "m-test", slog.Default())
+
+	if cfg.MaxTurns != 123 {
+		t.Fatalf("MaxTurns = %d, want 123", cfg.MaxTurns)
+	}
+	if cfg.Timeout != wantTimeout {
+		t.Fatalf("Timeout = %s, want %s", cfg.Timeout, wantTimeout)
+	}
+	if cfg.Seed == nil || *cfg.Seed != wantSeed {
+		t.Fatalf("Seed = %v, want %d", cfg.Seed, wantSeed)
+	}
+}
+
+func TestBuildAgentConfig_BriefcaseUsesHardDeterministicLimits(t *testing.T) {
+	t.Setenv("DENEB_STREAM_IDLE_TIMEOUT_MS", "-1")
+	t.Setenv("DENEB_PARALLEL_TOOLS", "1")
+	maxTurns, maxTokens, maxToolCallAttempts := 7, 1234, 3
+	cfg, _, _ := buildAgentConfig(RunParams{
+		MaxTurns: &maxTurns, MaxTokens: &maxTokens, MaxToolCallAttempts: &maxToolCallAttempts,
+	}, runDeps{
+		briefcaseMode: true, runLimits: RunLimits{MaxTurns: 99, Timeout: time.Minute},
+	}, nil, nil, string(toolpreset.PresetBriefcase), agentConfigDeps{MaxTokens: maxTokens}, "m-test", slog.Default())
+
+	if cfg.MaxTurns != maxTurns || cfg.MaxTokens != maxTokens || cfg.MaxTotalOutputTokens != maxTokens {
+		t.Fatalf("briefcase budgets = turns %d tokens %d total %d", cfg.MaxTurns, cfg.MaxTokens, cfg.MaxTotalOutputTokens)
+	}
+	if cfg.MaxStreamBytes <= 0 || !cfg.DisableBudgetGrace || !cfg.DisableTokenFeedback || !cfg.DisableStreamRetry ||
+		!cfg.RequireProviderModel || !cfg.RequireExplicitStopReason || !cfg.RequireStrictStopShape ||
+		cfg.MaxOutputTokensRecovery != 0 || cfg.ToolLoopDetector != nil {
+		t.Fatalf("briefcase hard-limit flags are incomplete: %+v", cfg)
+	}
+	if cfg.MaxToolCallAttempts == nil || *cfg.MaxToolCallAttempts != maxToolCallAttempts {
+		t.Fatalf("MaxToolCallAttempts = %v, want %d", cfg.MaxToolCallAttempts, maxToolCallAttempts)
+	}
+	if cfg.StreamIdleTimeout != BriefcaseStreamIdleTimeout {
+		t.Fatalf("StreamIdleTimeout = %s, want fixed %s", cfg.StreamIdleTimeout, BriefcaseStreamIdleTimeout)
+	}
+	if cfg.ParallelSafeTool != nil {
+		t.Fatal("ParallelSafeTool must be nil in Briefcase mode despite DENEB_PARALLEL_TOOLS")
+	}
+}
+
+func TestBuildAgentConfig_ProductionRetainsEnvironmentControlledParallelPolicy(t *testing.T) {
+	t.Setenv("DENEB_PARALLEL_TOOLS", "1")
+	cfg, _, _ := buildAgentConfig(RunParams{}, runDeps{}, nil, nil, "", agentConfigDeps{}, "m-test", slog.Default())
+
+	if cfg.StreamIdleTimeout != 0 {
+		t.Fatalf("production StreamIdleTimeout = %s, want zero so the executor can apply its normal env/default policy", cfg.StreamIdleTimeout)
+	}
+	if cfg.ParallelSafeTool == nil {
+		t.Fatal("production ParallelSafeTool unexpectedly disabled")
 	}
 }
 

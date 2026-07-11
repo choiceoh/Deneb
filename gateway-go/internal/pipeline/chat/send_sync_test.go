@@ -38,6 +38,22 @@ func TestSendSync_UninitializedHandler(t *testing.T) {
 	}
 }
 
+func TestPrepareSyncRun_PropagatesToolCallAttemptLimit(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+	h := newSyncTestHandler(server, NewMemoryTranscriptStore())
+	defer h.Close()
+
+	limit := 0 // zero is an intentional hard cap, not an omitted option.
+	params, _, err := h.prepareSyncRun("sync-limit", "hello", "test-model", "sync-test", &SyncOptions{
+		MaxToolCallAttempts: &limit,
+	})
+	testutil.NoError(t, err)
+	if params.MaxToolCallAttempts == nil || *params.MaxToolCallAttempts != 0 {
+		t.Fatalf("MaxToolCallAttempts = %v, want explicit zero", params.MaxToolCallAttempts)
+	}
+}
+
 func TestSendSync_UsesDefaultModelWhenRequestModelEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -172,6 +188,9 @@ func TestBuildSyncResult_LeavesNormalEmptyEndTurnBlank(t *testing.T) {
 func TestBestText_SubstitutesMarketLetterTokens(t *testing.T) {
 	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
 	r := SyncResult{DeliverableText: `<stat value="{{market:usd_krw}}" label="USD/KRW"/>`}
+	if got := r.BestTextRaw(); got != `<stat value="{{market:usd_krw}}" label="USD/KRW"/>` {
+		t.Fatalf("BestTextRaw() = %q, want original model text", got)
+	}
 	if got := r.BestText(); got != `<stat value="1,531" label="USD/KRW"/>` {
 		t.Fatalf("BestText() = %q, want substituted stat", got)
 	}

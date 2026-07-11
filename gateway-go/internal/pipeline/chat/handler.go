@@ -19,6 +19,7 @@ import (
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
 // Handler manages chat RPC methods.
@@ -53,13 +54,23 @@ type Handler struct {
 	subagentDefaultModel string
 	defaultSystem        string
 	maxTokens            int
+	runLimits            RunLimits
+	samplingSeed         *int64
+	disableTier1Wiki     bool
+	semanticNow          func() time.Time
+	semanticTimezone     string
+	workspaceDir         string
+	promptWorkspaceDir   string
+	briefcaseMode        bool
+	auditSystemPrompt    func(sessionKey string, prompt []byte)
 
 	// Extracted components.
-	abort       *AbortTracker
-	pending     *PendingQueue
-	mergeWindow *MergeWindowTracker
-	subagent    *SubagentNotifier
-	steer       *SteerQueue // mid-run /steer notes for the main agent
+	abort                *AbortTracker
+	pending              *PendingQueue
+	mergeWindow          *MergeWindowTracker
+	subagent             *SubagentNotifier
+	subagentCleanupUnsub func()
+	steer                *SteerQueue // mid-run /steer notes for the main agent
 
 	// checkpointRoot is the directory where per-session file-edit snapshots
 	// are stored (e.g. "~/.deneb/checkpoints"). When non-empty, each agent
@@ -229,6 +240,36 @@ type HandlerConfig struct {
 	SubagentDefaultModel string // separate default model for sub-agents (from agents.defaults.subagents.model)
 	DefaultSystem        string
 	MaxTokens            int
+	// RunLimits overrides the mode-derived agent budget for every run through
+	// this handler. Zero fields preserve production defaults. It is handler-
+	// scoped rather than a public per-request option so benchmark callers cannot
+	// silently change the signed case policy mid-run.
+	RunLimits RunLimits
+	// SamplingSeed is a trusted handler-scoped OpenAI-compatible sampling seed.
+	// Anthropic wire mode omits it; provider determinism is still best-effort.
+	SamplingSeed *int64
+	// DisableTier1Wiki prevents ambient high-importance pages from entering the
+	// system prompt while leaving explicit recall and wiki tools available.
+	DisableTier1Wiki bool
+	// SemanticNow supplies user-visible wall-clock time for prompts, transcript
+	// timestamps, and temporal recall. Nil uses Deneb's normal configured clock.
+	// Latency and timeout measurement deliberately keep the real monotonic clock.
+	SemanticNow func() time.Time
+	// SemanticTimezone overrides the prompt timezone for this handler without
+	// mutating process-global Deneb configuration. Empty uses the normal zone.
+	SemanticTimezone string
+	// WorkspaceDir binds prompt context and filesystem-facing harness adapters
+	// to an explicit root. Empty preserves production workspace resolution.
+	WorkspaceDir string
+	// PromptWorkspaceDir is a stable display-only workspace label. Filesystem
+	// operations still use WorkspaceDir. Empty displays the real path.
+	PromptWorkspaceDir string
+	// BriefcaseMode disables ambient production shortcuts that sit outside a
+	// signed evaluation world.
+	BriefcaseMode bool
+	// AuditSystemPrompt receives the exact finalized system-prompt wire bytes.
+	// It is a trusted observability hook used by deterministic evaluation only.
+	AuditSystemPrompt func(sessionKey string, prompt []byte)
 
 	// Fields below were previously Set*() after construction. They are all
 	// available at handler creation time and passed here to reduce late-binding.
@@ -282,6 +323,9 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		cfg.MaxHistoryCount = defaults.MaxHistoryCount
 		cfg.MaxMessageBytes = defaults.MaxMessageBytes
 	}
+	if cfg.SemanticNow == nil {
+		cfg.SemanticNow = dentime.Now
+	}
 
 	cb := NewChannelCallbacks(cfg.DefaultModel)
 	// Initialize callbacks available at construction time.
@@ -318,6 +362,15 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		subagentDefaultModel: cfg.SubagentDefaultModel,
 		defaultSystem:        cfg.DefaultSystem,
 		maxTokens:            cfg.MaxTokens,
+		runLimits:            cfg.RunLimits,
+		samplingSeed:         cfg.SamplingSeed,
+		disableTier1Wiki:     cfg.DisableTier1Wiki,
+		semanticNow:          cfg.SemanticNow,
+		semanticTimezone:     cfg.SemanticTimezone,
+		workspaceDir:         cfg.WorkspaceDir,
+		promptWorkspaceDir:   cfg.PromptWorkspaceDir,
+		briefcaseMode:        cfg.BriefcaseMode,
+		auditSystemPrompt:    cfg.AuditSystemPrompt,
 		providerRuntime:      cfg.ProviderRuntime,
 		abort:                NewAbortTracker(),
 		pending:              NewPendingQueue(),
@@ -347,7 +400,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 	// Cascade cleanup: when a parent session is killed or deleted, interrupt and
 	// kill its running children. Subscribed for the handler's lifetime (same as
 	// the notifier above).
-	StartSubagentCleanup(SubagentCleanupDeps{
+	h.subagentCleanupUnsub = StartSubagentCleanup(SubagentCleanupDeps{
 		Logger:       h.logger,
 		Sessions:     func() *session.Manager { return h.sessions },
 		InterruptRun: h.abort.InterruptSession,
@@ -407,10 +460,19 @@ func (h *Handler) ToolNames() []string {
 
 // Close stops background goroutines and cancels all active abort entries.
 func (h *Handler) Close() {
+	if h == nil {
+		return
+	}
 	h.abort.Close()
 	h.pending.Reset()
 	h.mergeWindow.Reset()
-	h.subagent.Reset()
+	if h.subagent != nil {
+		h.subagent.Close()
+	}
+	if h.subagentCleanupUnsub != nil {
+		h.subagentCleanupUnsub()
+		h.subagentCleanupUnsub = nil
+	}
 	h.steer.Reset()
 }
 

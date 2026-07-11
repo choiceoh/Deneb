@@ -27,13 +27,19 @@ type SyncResult struct {
 	// 할게요" working narration. See agent.AgentResult.DeliverableText.
 	DeliverableText string
 	Model           string
+	ProviderModel   string
 	FellBack        bool // true when the model fallback chain fired (Model is the model that actually answered)
 	InputTokens     int
 	OutputTokens    int
+	Turns           int
 	StopReason      string // "end_turn", "max_tokens", "tool_use", etc.
 }
 
-// BestText returns the answer to surface to the user. It prefers DeliverableText
+// BestTextRaw returns the answer selected for delivery before surface-specific
+// substitutions. Deterministic evaluators use this form so process-global,
+// time-sensitive presentation caches cannot change score-visible model text.
+//
+// It prefers DeliverableText
 // — the accumulation of every substantial answer turn with the interim
 // "이제 ~할게요" tool-call narration removed — which fixes two failure modes at
 // once: a short wrap-up final turn (the agent writes the body mid-run, then
@@ -46,22 +52,27 @@ type SyncResult struct {
 //   - else AllText (last resort: a run that produced only narration before
 //     aborting).
 //
-// NO_REPLY is stripped so the marker never leaks to the client. Market letter
-// tokens ("{{market:usd_krw}}") are substituted with their fetched values —
-// the proactive relay covers the cron path, this covers the interactive one
-// (a letter composed in chat would otherwise surface raw tokens). No-op for
-// ordinary replies (fast path on the token prefix).
-func (r *SyncResult) BestText() string {
+// NO_REPLY is stripped so the marker never leaks to consumers.
+func (r *SyncResult) BestTextRaw() string {
 	if d := strings.TrimSpace(StripSilentToken(r.DeliverableText)); d != "" {
-		return market.SubstituteLetterTokens(d)
+		return d
 	}
 	// Text needs the silent strip too: a final turn of exactly NO_REPLY with an
 	// empty DeliverableText would otherwise return the literal marker here,
 	// contradicting the "never leaks to the client" contract above.
 	if t := strings.TrimSpace(StripSilentToken(r.Text)); t != "" {
-		return market.SubstituteLetterTokens(t)
+		return t
 	}
-	return market.SubstituteLetterTokens(strings.TrimSpace(StripSilentToken(r.AllText)))
+	return strings.TrimSpace(StripSilentToken(r.AllText))
+}
+
+// BestText returns the answer to surface to an interactive user. Market letter
+// tokens ("{{market:usd_krw}}") are substituted with their fetched values —
+// the proactive relay covers the cron path, this covers the interactive one
+// (a letter composed in chat would otherwise surface raw tokens). No-op for
+// ordinary replies (fast path on the token prefix).
+func (r *SyncResult) BestText() string {
+	return market.SubstituteLetterTokens(r.BestTextRaw())
 }
 
 func (r *SyncResult) fillEmptyStopFallback() bool {
@@ -82,14 +93,18 @@ func (r *SyncResult) fillEmptyStopFallback() bool {
 // Used by the OpenAI-compatible HTTP endpoints to pass through sampling
 // parameters and conversation context.
 type SyncOptions struct {
-	Temperature      *float64
-	TopP             *float64
-	MaxTokens        *int
-	FrequencyPenalty *float64
-	PresencePenalty  *float64
-	Stop             []string
-	ResponseFormat   *llm.ResponseFormat
-	ToolChoice       any // "auto", "none", "required", or structured object
+	Temperature *float64
+	TopP        *float64
+	MaxTokens   *int
+	MaxTurns    *int
+	// MaxToolCallAttempts is a hard run-local cap on model-emitted tool calls.
+	// Nil is unlimited; non-nil zero allows only a tool-free response.
+	MaxToolCallAttempts *int
+	FrequencyPenalty    *float64
+	PresencePenalty     *float64
+	Stop                []string
+	ResponseFormat      *llm.ResponseFormat
+	ToolChoice          any // "auto", "none", "required", or structured object
 	// Thinking overrides the session's thinking level for this run — a
 	// resolveThinkingConfig level or "off"/"none" to disable the thinking
 	// phase (cron jobs use this). Empty = session/provider default.
@@ -188,16 +203,19 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 	}
 
 	params := RunParams{
-		SessionKey:  sessionKey,
-		Message:     sanitizeInput(message),
-		Model:       model,
-		ClientRunID: shortid.New(runIDPrefix),
+		SessionKey:   sessionKey,
+		Message:      sanitizeInput(message),
+		Model:        model,
+		ClientRunID:  shortid.New(runIDPrefix),
+		WorkspaceDir: h.workspaceDir,
 	}
 
 	if opts != nil {
 		params.Temperature = opts.Temperature
 		params.TopP = opts.TopP
 		params.MaxTokens = opts.MaxTokens
+		params.MaxTurns = opts.MaxTurns
+		params.MaxToolCallAttempts = opts.MaxToolCallAttempts
 		params.FrequencyPenalty = opts.FrequencyPenalty
 		params.PresencePenalty = opts.PresencePenalty
 		params.Stop = opts.Stop
@@ -284,9 +302,11 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 		AllText:         hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.AllText))),
 		DeliverableText: hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.DeliverableText))),
 		Model:           resolvedModel,
+		ProviderModel:   result.ProviderModel,
 		FellBack:        result.FellBack,
 		InputTokens:     result.Usage.InputTokens,
 		OutputTokens:    result.Usage.OutputTokens,
+		Turns:           result.Turns,
 		StopReason:      result.StopReason,
 	}
 	res.fillEmptyStopFallback()
@@ -475,6 +495,9 @@ func (h *Handler) trySteerIntoActiveRun(sessionKey, message string, opts *SyncOp
 // Long-running commands (/update, /rollback, …) reply from their own
 // goroutines later; their sync response is an acknowledgement only.
 func (h *Handler) trySlashSync(sessionKey, message string, opts *SyncOptions) (*SyncResult, bool) {
+	if h != nil && h.briefcaseMode {
+		return nil, false
+	}
 	// PrebuiltMessages flows (OpenAI-compatible HTTP with full history) are
 	// API traffic, not interactive chat — leave them untouched.
 	if opts != nil && len(opts.Messages) > 0 {

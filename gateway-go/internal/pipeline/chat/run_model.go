@@ -29,6 +29,12 @@ func resolveModel(
 	deps runDeps,
 	sess *session.Session,
 ) modelResolution {
+	if deps.briefcaseMode {
+		// A benchmark model ID is an opaque endpoint-owned identifier. In
+		// particular, Hugging Face/vLLM IDs commonly contain '/', which the
+		// production provider-prefix parser must not strip in this mode.
+		return modelResolution{model: params.Model, initialRole: modelrole.RoleMain}
+	}
 	model := params.Model
 	initialRole := modelrole.RoleMain
 

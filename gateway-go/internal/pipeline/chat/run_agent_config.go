@@ -35,6 +35,15 @@ func parallelSafeToolVet() func(string) bool {
 	}
 }
 
+const (
+	// BriefcaseStreamIdleTimeout is pinned into deterministic benchmark runs so
+	// DENEB_STREAM_IDLE_TIMEOUT_MS cannot change a signed run's stream policy.
+	BriefcaseStreamIdleTimeout = 180 * time.Second
+	// BriefcaseParallelToolsEnabled records the benchmark's fixed sequential
+	// tool policy. Production runs retain the environment-controlled vet above.
+	BriefcaseParallelToolsEnabled = false
+)
+
 type agentConfigDeps struct {
 	Tools            *ToolRegistry
 	MaxTokens        int
@@ -186,9 +195,28 @@ func buildAgentConfig(
 			maxTurns = 50
 		}
 	}
+	if deps.runLimits.MaxTurns > 0 {
+		maxTurns = deps.runLimits.MaxTurns
+	}
+	if params.MaxTurns != nil && *params.MaxTurns > 0 {
+		maxTurns = *params.MaxTurns
+	}
+	if deps.runLimits.Timeout > 0 {
+		agentTimeout = deps.runLimits.Timeout
+	}
 
 	maxOutputRecovery := 1
 	maxOutputScaleFactors := []float64{1.5}
+	streamIdleTimeout := time.Duration(0)
+	parallelSafeTool := parallelSafeToolVet()
+	if deps.briefcaseMode {
+		maxOutputRecovery = 0
+		maxOutputScaleFactors = nil
+		streamIdleTimeout = BriefcaseStreamIdleTimeout
+		if !BriefcaseParallelToolsEnabled {
+			parallelSafeTool = nil
+		}
+	}
 
 	// Skill-nudger hook state: tracks per-run tool activity so we can
 	// hand a clean snapshot to the background review goroutine. Zero cost
@@ -204,22 +232,29 @@ func buildAgentConfig(
 	if nudgeCtx == nil {
 		nudgeCtx = context.Background()
 	}
+	var maxToolCallAttempts *int
+	if params.MaxToolCallAttempts != nil {
+		value := *params.MaxToolCallAttempts
+		maxToolCallAttempts = &value
+	}
 
 	cfg = agent.AgentConfig{
-		MaxTurns:         maxTurns,
-		Timeout:          agentTimeout,
-		Model:            "", // set by caller after model resolution
-		System:           systemPrompt,
-		Tools:            tools,
-		MaxTokens:        maxTokens,
-		Thinking:         thinkingCfg,
-		Temperature:      params.Temperature,
-		TopP:             params.TopP,
-		FrequencyPenalty: params.FrequencyPenalty,
-		PresencePenalty:  params.PresencePenalty,
-		StopSequences:    params.Stop,
-		ResponseFormat:   params.ResponseFormat,
-		ToolChoice:       params.ToolChoice,
+		MaxTurns:            maxTurns,
+		Timeout:             agentTimeout,
+		Model:               "", // set by caller after model resolution
+		System:              systemPrompt,
+		Tools:               tools,
+		MaxTokens:           maxTokens,
+		MaxToolCallAttempts: maxToolCallAttempts,
+		Thinking:            thinkingCfg,
+		Temperature:         params.Temperature,
+		TopP:                params.TopP,
+		FrequencyPenalty:    params.FrequencyPenalty,
+		PresencePenalty:     params.PresencePenalty,
+		Seed:                deps.samplingSeed,
+		StopSequences:       params.Stop,
+		ResponseFormat:      params.ResponseFormat,
+		ToolChoice:          params.ToolChoice,
 		// Drop base64 image bytes from the message history after turn 0 so that
 		// subsequent tool-call turns don't retransmit the full image payload.
 		StripImagesAfterFirstTurn: hasImageAttachment(params.Attachments),
@@ -309,9 +344,14 @@ func buildAgentConfig(
 		},
 		MaxOutputTokensRecovery:     maxOutputRecovery,
 		MaxOutputTokensScaleFactors: maxOutputScaleFactors,
+		DisableBudgetGrace:          deps.briefcaseMode,
+		DisableTokenFeedback:        deps.briefcaseMode,
+		DisableStreamRetry:          deps.briefcaseMode,
+		RequireProviderModel:        deps.briefcaseMode,
 		SpawnDetected:               spawnFlag.IsSet,
 		ToolLoopDetector:            agent.NewToolLoopDetector(agent.DefaultToolLoopConfig(), logger),
-		ParallelSafeTool:            parallelSafeToolVet(),
+		StreamIdleTimeout:           streamIdleTimeout,
+		ParallelSafeTool:            parallelSafeTool,
 		// Per-turn message persistence: persist each assistant and tool_result
 		// message immediately to transcript so intermediate findings survive
 		// across runs (fixes the "short-term memory loss" bug). Wrapped below so
@@ -319,6 +359,23 @@ func buildAgentConfig(
 		// text (for the explicit "검증 불필요:" opt-out) on the same turn the
 		// model tries to end.
 		OnMessagePersist: verifyGateObservingPersister(buildMessagePersister(deps, params, logger), verifyGate),
+	}
+	if deps.briefcaseMode {
+		cfg.MaxTotalOutputTokens = maxTokens
+		cfg.MaxStreamBytes = maxTokens * 16
+		if cfg.MaxStreamBytes < 64<<10 {
+			cfg.MaxStreamBytes = 64 << 10
+		}
+		if cfg.MaxStreamBytes > 8<<20 {
+			cfg.MaxStreamBytes = 8 << 20
+		}
+		cfg.RequireExplicitStopReason = true
+		cfg.RequireStrictStopShape = true
+		// The signed ToolGate must observe every within-budget attempt so its
+		// case-wide remaining count stays exact. The generic loop detector runs
+		// before that hook, so deterministic Briefcase runs use the signed hard
+		// cap instead of the ambient production detector.
+		cfg.ToolLoopDetector = nil
 	}
 
 	// Reasoning sandwich (docs/research/ideal-agent-environment-harness.md §11):
@@ -330,7 +387,7 @@ func buildAgentConfig(
 	// modulator returns nil on no-opinion turns so it composes cleanly with the
 	// effort router (see effortStepModulator). Thinking is a request-level param,
 	// so per-turn variation is cache-safe.
-	if thinkingCfg != nil && thinkingCfg.Type == "enabled" && reasoningSandwichEnabled() {
+	if !deps.briefcaseMode && thinkingCfg != nil && thinkingCfg.Type == "enabled" && reasoningSandwichEnabled() {
 		cfg.ThinkingModulator = reasoningSandwichThinking(thinkingCfg, cfg.MaxTokens, verifyGate)
 	}
 
@@ -342,7 +399,7 @@ func buildAgentConfig(
 	// persister). A still-armed run that escapes only via max_turns is logged by
 	// the sentinel terminal probe (turn < 0). Default ON (inert for non-mutating
 	// runs); DENEB_VERIFY_GATE=0 disables.
-	if verifyGateEnabled() {
+	if !deps.briefcaseMode && verifyGateEnabled() {
 		cfg.FinalizeGate = func(turn int) string {
 			if turn < 0 {
 				// Terminal probe from the executor's max_turns path: the gate
@@ -567,13 +624,18 @@ func buildMessagePersister(
 			}
 			content = sanitized
 		}
+		now := time.Now()
+		if deps.briefcaseMode {
+			now = deps.now()
+		}
 		chatMsg := ChatMessage{
 			Role:      msg.Role,
 			Content:   content, // json.RawMessage — rich blocks preserved
-			Timestamp: time.Now().UnixMilli(),
+			Timestamp: now.UnixMilli(),
 		}
 		if err := deps.transcript.Append(params.SessionKey, chatMsg); err != nil {
 			logger.Error("per-turn message persist failed", "role", msg.Role, "error", err)
+			deps.strictErrors.Record(err)
 		}
 	}
 }

@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "deneb-briefcase-supervisor/v1",
+  "planDigest": "d22797a8d10e421e54838302099388f4897242402175a15201c4bd5946062af7",
+  "fingerprint": {
+    "caseId": "budget-supersession-v1",
+    "seed": 42001
+  },
+  "maxCycles": 3,
+  "passThreshold": 1,
+  "feedbackDenyTokens": [
+    "100",
+    "120",
+    "개정 메일",
+    "Project Aurora"
+  ],
+  "checkpoints": [
+    {
+      "cycle": 1,
+      "checks": [
+        {
+          "id": "grounded-one-sentence-answer",
+          "type": "exact_text",
+          "weight": 1,
+          "expectedText": "개정 메일이 이전 승인 예산 100을 대체했으며, Project Aurora의 최신 승인 예산은 120입니다."
+        }
+      ]
+    },
+    {
+      "cycle": 2,
+      "checks": [
+        {
+          "id": "grounded-one-sentence-answer",
+          "type": "exact_text",
+          "weight": 1,
+          "expectedText": "개정 메일이 이전 승인 예산 100을 대체했으며, Project Aurora의 최신 승인 예산은 120입니다."
+        }
+      ]
+    },
+    {
+      "cycle": 3,
+      "checks": [
+        {
+          "id": "grounded-one-sentence-answer",
+          "type": "exact_text",
+          "critical": true,
+          "weight": 1,
+          "expectedText": "개정 메일이 이전 승인 예산 100을 대체했으며, Project Aurora의 최신 승인 예산은 120입니다."
+        }
+      ]
+    }
+  ]
+}
