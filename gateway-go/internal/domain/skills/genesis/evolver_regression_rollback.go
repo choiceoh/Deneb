@@ -119,7 +119,7 @@ func (e *Evolver) crossSkillNeighbors(skillName string) []skills.SkillEntry {
 		// purely token-similar neighbor while still letting similarity break ties.
 		score := similarity
 		if sharesTag {
-			score += 1
+			score++
 		}
 		scored = append(scored, scoredNeighbor{entry: candidate, score: score})
 	}

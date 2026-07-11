@@ -233,11 +233,6 @@ func (e *Evolver) commitEvaluatedCandidate(entry *skills.SkillEntry, originalCon
 	}, nil
 }
 
-func (e *Evolver) resolveModel() string {
-	_, model := e.primaryModel()
-	return model
-}
-
 func (e *Evolver) primaryModel() (*llm.Client, string) {
 	e.configMu.RLock()
 	defer e.configMu.RUnlock()
