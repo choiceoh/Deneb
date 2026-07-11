@@ -16,6 +16,14 @@ admin framework) + **Vite**. Design rationale (why/what): [`docs/DESIGN.md`](doc
 UI·UX design system (how it looks/behaves — tokens, components, patterns): [`docs/UI-UX.md`](docs/UI-UX.md).
 Design philosophy (the beliefs behind the system + how to judge a design): [`docs/DESIGN-PHILOSOPHY.md`](docs/DESIGN-PHILOSOPHY.md).
 
+**Impeccable** (`/impeccable …` design commands, skill at repo root
+`.claude/skills/impeccable/`) is scoped to andromeda only — its design context
+is [`DESIGN.md`](DESIGN.md) at this directory's root (impeccable-spec mirror of
+`styles.css`/`theme.ts`; regenerate when tokens change, code wins on conflict).
+Do not run impeccable commands against gateway or client-android surfaces, and
+any color it suggests must land as a `:root` token / `theme.ts` reference —
+never inline hex (see Conventions).
+
 ## Commands
 
 ```bash

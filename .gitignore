@@ -90,3 +90,6 @@ graphify-out/
 .graphify_python
 .graphify_*.json
 gateway-go/dream-once
+
+# impeccable runtime state (screenshots, live sessions, local config; per-machine)
+.impeccable/

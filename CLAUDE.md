@@ -44,6 +44,7 @@
 - 독립적인 도구 호출은 한 응답에 **병렬로**. 긴 명령(CI watch·빌드·배포)은 **background 실행 + 완료 통지** — 반복 폴링 금지.
 - **시끄러운 출력을 컨텍스트에 담지 말 것**: 진행바 명령은 `2>&1 | tail -N`, 대량 리포트는 `--format json` + 필터, 로그는 grep. 파일은 필요한 범위만 Read (offset/limit).
 - 넓은 탐색은 저비용 탐색 에이전트로. 환경 특이사항(머신별 함정)은 메모리에 저장해 재진단을 없앤다.
+- 유튜브/영상 내용 파악은 claude-video 플러그인 `/watch`(유저 스코프 설치, 없으면 yt-dlp 자막 직접 추출) — 기본 `transcript`/`efficient` 모드, 프레임 다량 모드(`balanced`+)는 화면 확인이 꼭 필요할 때만.
 - 세션 시작 시 관례적 빌드/테스트 금지 — 작업에 필요할 때만 (`make go` · `make test` · `make go-dev` · `./scripts/check-dev-env.sh`).
 
 ### 코드 내비게이션: CodeGraph (소스 코드 그래프)
