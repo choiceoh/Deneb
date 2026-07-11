@@ -177,10 +177,14 @@ func TestLoadConfigMalformedAndRuntimeValidationErrors(t *testing.T) {
 		t.Fatal("custom bind without host unexpectedly succeeded")
 	}
 
-	// A missing config file is not an error: the gateway boots on in-memory
-	// defaults and records the file as absent. (Persist only appends a
-	// generated auth token to an existing config — it never creates the file.)
-	missing := filepath.Join(t.TempDir(), "deneb.json")
+	// A missing config file is not an error: the gateway boots on defaults,
+	// auto-generates an auth token (default mode is token), and persists it —
+	// creating the config file and any missing parent directories. Isolate
+	// from the host: ~/.deneb/.env would otherwise hand us a token via dotenv
+	// and skip the generate+persist path entirely.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_GATEWAY_TOKEN", "")
+	missing := filepath.Join(t.TempDir(), "absent", "deneb.json")
 	created, err := LoadConfig(Flags{ConfigPath: missing}, discardLogger())
 	if err != nil {
 		t.Fatalf("missing config bootstrap should fall back to defaults: %v", err)
@@ -189,7 +193,13 @@ func TestLoadConfigMalformedAndRuntimeValidationErrors(t *testing.T) {
 		t.Fatalf("created default config result = %#v", created)
 	}
 	if created.Bootstrap.Snapshot.Exists {
-		t.Fatal("snapshot should record the config file as absent")
+		t.Fatal("snapshot should record the config file as absent at load time")
+	}
+	if !created.Bootstrap.PersistedGeneratedToken {
+		t.Fatal("generated token was not persisted")
+	}
+	if _, err := os.Stat(missing); err != nil {
+		t.Fatalf("missing config was not persisted: %v", err)
 	}
 }
 
