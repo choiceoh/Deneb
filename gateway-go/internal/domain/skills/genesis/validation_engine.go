@@ -228,6 +228,10 @@ func (v *SkillValidationEngine) ValidateCandidate(skillName, originalContent, ca
 
 	orig := scoreSkillValidationCases(skillBodyOnly(originalContent), cases)
 	cand := scoreSkillValidationCases(candidateBody, cases)
+	if cand.Skipped > 0 && v.logger != nil {
+		v.logger.Warn("skill validation: non-discriminative assertions isolated from scoring",
+			"skill", skillName, "skipped", cand.Skipped)
+	}
 	result := SkillValidationResult{
 		Evaluated:       cand.Total > 0,
 		Pass:            true,
@@ -297,6 +301,14 @@ type validationCaseScore struct {
 	Passed   int
 	Total    int
 	Failures []string
+	// Skipped counts non-discriminative assertions isolated from Total: an
+	// assertion that normalizes to empty text is body-independent (an empty
+	// forbidden/heading always fails, an empty required always passes), so
+	// counting it either wedges the min-delta gate permanently — original
+	// score pinned below 100 by an unfixable assertion rejects every future
+	// candidate — or inflates both scores for free (RSI P1.5 ④, verifier
+	// fuzzing 2606.01066).
+	Skipped int
 }
 
 func (s validationCaseScore) Percent() float64 {
@@ -316,6 +328,10 @@ func scoreSkillValidationCases(body string, cases []SkillValidationCaseRecord) v
 	for _, tc := range cases {
 		label := validationCaseLabel(tc)
 		for _, required := range tc.RequiredSubstrings {
+			if normalizedValidationText(required) == "" {
+				score.Skipped++
+				continue
+			}
 			score.Total++
 			if containsNormalizedValidationText(normalizedBody, required) {
 				score.Passed++
@@ -324,6 +340,10 @@ func scoreSkillValidationCases(body string, cases []SkillValidationCaseRecord) v
 			score.Failures = append(score.Failures, fmt.Sprintf("%s missing required substring %q", label, truncateRunes(required, 80)))
 		}
 		for _, forbidden := range tc.ForbiddenSubstrings {
+			if normalizedValidationText(forbidden) == "" {
+				score.Skipped++
+				continue
+			}
 			score.Total++
 			if !containsNormalizedValidationText(normalizedBody, forbidden) {
 				score.Passed++
@@ -332,8 +352,12 @@ func scoreSkillValidationCases(body string, cases []SkillValidationCaseRecord) v
 			score.Failures = append(score.Failures, fmt.Sprintf("%s contains forbidden substring %q", label, truncateRunes(forbidden, 80)))
 		}
 		for _, required := range tc.RequiredHeadings {
-			score.Total++
 			normalizedHeading := strings.ToLower(strings.Join(strings.Fields(required), " "))
+			if normalizedHeading == "" {
+				score.Skipped++
+				continue
+			}
+			score.Total++
 			if _, ok := headings[normalizedHeading]; ok {
 				score.Passed++
 				continue
@@ -351,6 +375,7 @@ func scoreSkillValidationCases(body string, cases []SkillValidationCaseRecord) v
 func (s *validationCaseScore) add(other validationCaseScore) {
 	s.Passed += other.Passed
 	s.Total += other.Total
+	s.Skipped += other.Skipped
 	s.Failures = append(s.Failures, other.Failures...)
 }
 
