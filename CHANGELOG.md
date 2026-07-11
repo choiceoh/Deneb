@@ -1,5 +1,66 @@
 # Changelog
 
+## [4.87.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.86.0...deneb-v4.87.0) (2026-07-11)
+
+
+### ✨ Features
+
+* **andromeda:** 메일·위키·브리핑 답변 인쇄 — window.print + [@media](https://github.com/media) print 서브트리 격리 ([#3400](https://github.com/choiceoh/Deneb/issues/3400)) ([723cc60](https://github.com/choiceoh/Deneb/commit/723cc6099d7bd7b31063daf0e94a994353f18f92))
+* **audit:** codebase-health를 14차원 정직 엄격 벤치로 재설계 (90.9→77.1) — Go 아키텍처/구조/문서·테스트 + 중복·부채 + 코틀린/TS/기타 언어 차원, 월드클래스 기준·Martin-D 배제 ([#3390](https://github.com/choiceoh/Deneb/issues/3390)) ([5850da9](https://github.com/choiceoh/Deneb/commit/5850da9e3a9284fa2ee9efe3a340ff2b577518df))
+* **audit:** doc-draft — Deneb 로컬모델로 서브시스템 문서 초안 생성 (OpenWiki 아이디어 훔쳐 고침) ([#3396](https://github.com/choiceoh/Deneb/issues/3396)) ([9082368](https://github.com/choiceoh/Deneb/commit/9082368a604712441329938b7bac11b0191bc748))
+* **audit:** runtime-health 벤치 — 7일 게이트웨이 로그 기반 런타임 건강 점수 /100 ([#3394](https://github.com/choiceoh/Deneb/issues/3394)) ([13e89a8](https://github.com/choiceoh/Deneb/commit/13e89a8584471140a60e7712151bb898f75e8837))
+* **chat:** auto-activate skill requires_tools deferred tools on consult ([#3406](https://github.com/choiceoh/Deneb/issues/3406)) ([1f76634](https://github.com/choiceoh/Deneb/commit/1f7663474dfd00ba4714f4129d94b1f7a16fa42c))
+* **chat:** replay deferred-tool activation across runs from transcript ([#3409](https://github.com/choiceoh/Deneb/issues/3409)) ([84fa1d9](https://github.com/choiceoh/Deneb/commit/84fa1d9454e933d885373a7569ae3ea47df571d5))
+* **gateway:** Pydantic AI 전수 감사 2차 도입 — 배리어 세그먼트화·SSRF 강화·Retry-After·구조화 metadata ([#3414](https://github.com/choiceoh/Deneb/issues/3414)) ([ea5fd60](https://github.com/choiceoh/Deneb/commit/ea5fd600b9459ff24ee6830ccf3932279e63dbb5))
+* **genesis:** RSI P1 — 개선 프롬프트를 meta 아티팩트로 외부화 (동작 중립) ([#3430](https://github.com/choiceoh/Deneb/issues/3430)) ([b52a630](https://github.com/choiceoh/Deneb/commit/b52a630b111fb37fba2c1b158de56209766dcfe8))
+* **genesis:** RSI P1.5 ② — anytime-valid e-process 프리미티브 + 롤백 워치 영속화(SIGUSR1 증발 버그 수정)·pre-evolve 베이스라인 스냅숏 ([#3434](https://github.com/choiceoh/Deneb/issues/3434)) ([fae1f28](https://github.com/choiceoh/Deneb/commit/fae1f28edc7301a67321a822316134b23f5b9d95))
+* **genesis:** RSI P1.5 ③ — 롤백 증거 영속화(재제안 방어) + 실패 트레이스→hard 케이스 증류 (P3의 결정적 절반) ([#3435](https://github.com/choiceoh/Deneb/issues/3435)) ([092031d](https://github.com/choiceoh/Deneb/commit/092031db27b84d3814f80d5dade98c390080ddfb))
+* **genesis:** RSI P1.5 ⑤(완) — 교차스킬 confirmed exemplar 회수→evolve 프롬프트 few-shot + falseAcceptRate 스코어보드 ([#3437](https://github.com/choiceoh/Deneb/issues/3437)) ([742b132](https://github.com/choiceoh/Deneb/commit/742b1322f625c58ec715a7936b0e032b24dbabde))
+* **genesis:** RSI P1.5 착수 — evolve 라이프사이클 certificate 원장 (아티팩트 버전·judge 모델·점수쌍·margin 귀속) ([#3433](https://github.com/choiceoh/Deneb/issues/3433)) ([451c214](https://github.com/choiceoh/Deneb/commit/451c2145f7534a19a0a506a5d900272499897cf7))
+* **genesis:** 검증 케이스 가시/블라인드 풀 분할 + SkillHone(2606.08671) 검토 ([#3432](https://github.com/choiceoh/Deneb/issues/3432)) ([5d860ac](https://github.com/choiceoh/Deneb/commit/5d860ac60ffbd6ff0e6a4dae3c8a09df9b746861))
+* **genesis:** 아이들 리뷰 백스톱 — heartbeat가 리뷰 공백을 최대 6h에서 차단 ([#3427](https://github.com/choiceoh/Deneb/issues/3427)) ([187c3b1](https://github.com/choiceoh/Deneb/commit/187c3b1b2e128d44f43506a48558f72aac4f01da))
+* **media:** watch 프레임 선별을 장면전환 감지 기반으로 (균등 그리드는 폴백) ([#3422](https://github.com/choiceoh/Deneb/issues/3422)) ([7a3b27e](https://github.com/choiceoh/Deneb/commit/7a3b27e2fca06a8b1ce26754dfec094e4cd53ff1))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** 모닝레터 시장 데이터에서 유로 제거 — 달러·구리만 ([#3391](https://github.com/choiceoh/Deneb/issues/3391)) ([50818ee](https://github.com/choiceoh/Deneb/commit/50818ee0b0eb9a7ca04b066831c5bc2ef845c7ea))
+* **genesis:** RSI P1.5 ④ — min-delta 영구기각 웨지 수정(비판별 단언 격리) + 게이트 퍼즈 하니스 ([#3436](https://github.com/choiceoh/Deneb/issues/3436)) ([ab90b29](https://github.com/choiceoh/Deneb/commit/ab90b292cb83d391eb6d8ef55fb312b3fa3afd63))
+* **genesis:** 아이들 리뷰 Codex P2 3건 — 실패 리뷰 2h 재시도·프로드 상태디렉토리 게이트·얇은 후보 프리필터 ([#3427](https://github.com/choiceoh/Deneb/issues/3427) 후속) ([#3428](https://github.com/choiceoh/Deneb/issues/3428)) ([bcc13f2](https://github.com/choiceoh/Deneb/commit/bcc13f2d4af4dc9e5a776cbc216feeb3b7d4eef1))
+* **runtime:** harden recovery and health reporting ([#3397](https://github.com/choiceoh/Deneb/issues/3397)) ([9d74081](https://github.com/choiceoh/Deneb/commit/9d74081fa924701d746e260f4c1f62ac4231cb46))
+* **runtime:** 헬스 계약 테스트 HOME 격리 — 호스트 실제 cron 저장소를 읽어 cron:3으로 오탐하던 환경 의존 제거 ([#3418](https://github.com/choiceoh/Deneb/issues/3418)) ([3d013fb](https://github.com/choiceoh/Deneb/commit/3d013fb277d487d158d5ee13811b73c450d1ecd8))
+
+
+### ⚡ Performance
+
+* **mail:** mail_archive 첨부 OCR 병렬화 — 다첨부 견적서 직렬→동시 추출 ([#3395](https://github.com/choiceoh/Deneb/issues/3395)) ([898d001](https://github.com/choiceoh/Deneb/commit/898d001327bf51d20c91fc46fbfa8ded296dc3f1))
+
+
+### 🔧 Internal
+
+* **agent:** before-tool-call 게이트를 HookCompositor 네이티브 합성으로 ([#3425](https://github.com/choiceoh/Deneb/issues/3425)) ([3d167ba](https://github.com/choiceoh/Deneb/commit/3d167ba64601bab4493f312aeeb55caf7eff3b8c))
+* **agent:** centralize run state finalization ([#3419](https://github.com/choiceoh/Deneb/issues/3419)) ([f93b535](https://github.com/choiceoh/Deneb/commit/f93b535cec94820006a8be90eb9ecaf8ddb4d00b))
+* **agent:** unify tool-turn lifecycle ([#3411](https://github.com/choiceoh/Deneb/issues/3411)) ([a14ec72](https://github.com/choiceoh/Deneb/commit/a14ec72067148dee0fc669f5bf8eb873e2506e09))
+* **andromeda:** FleetPane 1178 LOC 분할 — 탭 뷰·카드는 FleetViews, 타입·헬퍼는 fleetHelpers (순수 이동) ([#3405](https://github.com/choiceoh/Deneb/issues/3405)) ([a033fe1](https://github.com/choiceoh/Deneb/commit/a033fe1d2d10b4a014880916b546ed301fb4929a))
+* **andromeda:** WikiPane 모달 분리 — 이동·새 페이지·미저장 모달을 WikiModals로 (순수 이동) ([#3407](https://github.com/choiceoh/Deneb/issues/3407)) ([4bc37f2](https://github.com/choiceoh/Deneb/commit/4bc37f2cc957a56fcb1e7685ca848576036ae063))
+* **andromeda:** 챗 surface 중복 제거 — ChatView·AIPanel 공유 로직 추출 (컴포저·첨부 파이프라인·모델 로딩·답변 액션) ([#3403](https://github.com/choiceoh/Deneb/issues/3403)) ([c4497c5](https://github.com/choiceoh/Deneb/commit/c4497c5b6a589f1d7c1f22a77d75135775f01888))
+* **andromeda:** 컴포넌트 파일의 비컴포넌트 export 분리 — react-refresh 경고 7개 제거 ([#3393](https://github.com/choiceoh/Deneb/issues/3393)) ([025c6b3](https://github.com/choiceoh/Deneb/commit/025c6b30daf48d1240d860a5f0a5f877f1cf285c))
+* **genesis:** evolver.go 2차 분할 — 1820→669, 관심사별 4파일+게이트 합류 (순수 이동) ([#3415](https://github.com/choiceoh/Deneb/issues/3415)) ([fdd619a](https://github.com/choiceoh/Deneb/commit/fdd619aa26aae4604f863a7f219b958cfeaf645c))
+* **genesis:** tracker.go 1286→365 분할 — usage·lifecycle·activity 순수 이동 ([#3417](https://github.com/choiceoh/Deneb/issues/3417)) ([89f67be](https://github.com/choiceoh/Deneb/commit/89f67be6c30126facf61f108a5047ca77187f613))
+* **llm:** isolate OpenAI stream content state ([#3404](https://github.com/choiceoh/Deneb/issues/3404)) ([5a80f88](https://github.com/choiceoh/Deneb/commit/5a80f88681f6fcb2d7efa9cbc78e7d37c150f36a))
+* **mail:** mailbody cleaner.go 1412 LOC 4분할 — strip·cut·signals 순수 이동 ([#3408](https://github.com/choiceoh/Deneb/issues/3408)) ([ac8342a](https://github.com/choiceoh/Deneb/commit/ac8342af6c07c8d614d244b4f15c068530e18bf0))
+* **native:** DenebFleetScreen 1080 LOC 4분할 — Pages·Models·Diagnostics 순수 이동 ([#3413](https://github.com/choiceoh/Deneb/issues/3413)) ([285fe1e](https://github.com/choiceoh/Deneb/commit/285fe1e9af09261da39f30a77342408aa9986477))
+* **native:** DenebOrgChartScreen 1140 LOC 4분할 — Model·Content·Editors 순수 이동 ([#3410](https://github.com/choiceoh/Deneb/issues/3410)) ([793e9da](https://github.com/choiceoh/Deneb/commit/793e9da2f8e3cbdd94955839a21b17f41edd437e))
+* **native:** GatewayClient 감량 1단계 — 워크피드·네이티브동기화를 DenebClientWorkfeed 확장으로 (1895→1384) ([#3420](https://github.com/choiceoh/Deneb/issues/3420)) ([3938d07](https://github.com/choiceoh/Deneb/commit/3938d07d9c2607b7b924662171c03cf8dd5d6b3b))
+* **native:** GatewayClient 감량 2단계 — 세션/트랜스크립트 확장 분리 (1384→1214) ([#3421](https://github.com/choiceoh/Deneb/issues/3421)) ([4d10f17](https://github.com/choiceoh/Deneb/commit/4d10f177c1ed2f1d789c1c314792f04f1a096b90))
+* **native:** GatewayClient 감량 3단계(완) — 상태·업데이트·푸시토큰을 DenebClientAdmin 확장으로 (1221→1147) ([#3423](https://github.com/choiceoh/Deneb/issues/3423)) ([6865279](https://github.com/choiceoh/Deneb/commit/6865279dc9b55dd0a41d6647d7fea6f4a9757681))
+* **native:** split render preview harness by concern ([#3426](https://github.com/choiceoh/Deneb/issues/3426)) ([649e5b7](https://github.com/choiceoh/Deneb/commit/649e5b7ac7ee4a8a4789e217628a7cdeac6a4d86))
+* raise code health to 90.1 ([#3438](https://github.com/choiceoh/Deneb/issues/3438)) ([0dbc45d](https://github.com/choiceoh/Deneb/commit/0dbc45d681a062ae09907f574f93ba8c132375cd))
+* **runtime:** skill_lifecycle_tool.go 1482→408 분할 — status·validation·replay 순수 이동 ([#3424](https://github.com/choiceoh/Deneb/issues/3424)) ([bc4017f](https://github.com/choiceoh/Deneb/commit/bc4017f5fd42cd42d8a066a63b7c0a3b78c7f778))
+* **runtime:** split agent stream lifecycle ([#3399](https://github.com/choiceoh/Deneb/issues/3399)) ([06a95b4](https://github.com/choiceoh/Deneb/commit/06a95b48420714d696efb3673cf5a71d28a1d25f))
+* **runtime:** split health and stream orchestration ([#3398](https://github.com/choiceoh/Deneb/issues/3398)) ([96f5771](https://github.com/choiceoh/Deneb/commit/96f57717b34f27dc4db9e19ac405569a04edbda7))
+* **runtime:** supervise process manager lifecycle ([#3401](https://github.com/choiceoh/Deneb/issues/3401)) ([5b25169](https://github.com/choiceoh/Deneb/commit/5b2516917575b4d1263b9217f4385cb23798c361))
+
 ## [4.86.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.85.0...deneb-v4.86.0) (2026-07-10)
 
 
