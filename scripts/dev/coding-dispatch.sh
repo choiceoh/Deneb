@@ -21,7 +21,7 @@
 set -euo pipefail
 
 STATE_DIR="${DENEB_STATE_DIR:-$HOME/.deneb}"
-QUEUE_FILE="$STATE_DIR/data/skill_self_correction.jsonl"
+QUEUE_FILE="$STATE_DIR/data/self_correction_candidates.jsonl"
 DISPATCH_DIR="$STATE_DIR/data/coding_dispatch"
 PROD_DIR="${DENEB_PROD_DIR:-$HOME/deneb}"
 WORKTREE_ROOT="${DENEB_DISPATCH_WORKTREE_ROOT:-$HOME/deneb-agent-worktrees}"
@@ -73,7 +73,11 @@ main() {
     pick=$(python3 - "$QUEUE_FILE" "$DISPATCH_DIR" <<'PYEOF'
 import json, os, sys
 queue, dispatch_dir = sys.argv[1], sys.argv[2]
-latest = {}
+# A self_correction_review row is a STATUS DELTA ({id,status,...}), not a full
+# record — merge its status onto the candidate rather than replacing it, or the
+# candidate's scope/source/title get wiped and nothing ever matches.
+cand = {}    # id -> full candidate record
+status = {}  # id -> latest status
 for line in open(queue, errors="replace"):
     line = line.strip()
     if not line:
@@ -83,19 +87,21 @@ for line in open(queue, errors="replace"):
     except json.JSONDecodeError:
         continue
     rid = rec.get("id") or ""
-    if rid:
-        latest[rid] = rec  # later lines (reviews) supersede
-for rec in sorted(latest.values(), key=lambda r: -(r.get("createdAt") or 0)):
-    if rec.get("type") not in ("self_correction_candidate", "self_correction_review"):
+    if not rid:
         continue
-    if (rec.get("status") or "proposed") != "proposed":
+    if rec.get("type") == "self_correction_candidate":
+        cand[rid] = rec
+    if rec.get("status"):
+        status[rid] = rec["status"]
+for rid, rec in sorted(cand.items(), key=lambda kv: -(kv[1].get("createdAt") or 0)):
+    if status.get(rid, rec.get("status") or "proposed") != "proposed":
         continue
     if rec.get("scope") != "code":
         continue
     src = rec.get("source") or ""
     if not (src.startswith("evolve-tool-gap") or src.startswith("self-harness")):
         continue
-    if os.path.exists(os.path.join(dispatch_dir, rec["id"] + ".json")):
+    if os.path.exists(os.path.join(dispatch_dir, rid + ".json")):
         continue
     print(json.dumps(rec, ensure_ascii=False))
     break
