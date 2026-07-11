@@ -250,7 +250,7 @@ type AgentResult struct {
 	// a leading self-talk preamble stripped when the report body follows behind a
 	// rule/heading ("이제 분석 보고를 정리해.\n\n---\n\n## …" ships from "## …").
 	// Used by proactive/cron delivery so reports don't open with the agent's
-	// working narration. See the accumulation in executor.go,
+	// working narration. See the accumulation in executor_run_state.go,
 	// deliverableNarrationMaxRunes, and stripNarrationHead.
 	DeliverableText string
 	Thinking        string // accumulated thinking text from ALL turns (interleaved + final). Empty when extended thinking is disabled.
@@ -265,8 +265,9 @@ type AgentResult struct {
 	BudgetExhaustedInjected bool
 
 	// BudgetGraceCall marks the in-flight grace iteration. Set immediately after
-	// injection, cleared after the grace turn finishes. Also extends the loop
-	// guard so one additional iteration runs past the normal MaxTurns cap.
+	// injection, cleared after the grace turn or when any result-returning exit
+	// finalizes the run. Also extends the loop guard so one additional iteration
+	// runs past the normal MaxTurns cap.
 	BudgetGraceCall bool
 
 	// TurnsPersisted counts messages persisted via OnMessagePersist during

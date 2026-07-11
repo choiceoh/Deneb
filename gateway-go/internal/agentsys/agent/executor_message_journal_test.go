@@ -135,6 +135,9 @@ func TestRunAgentMessageJournal_FinalizeGatePersistsExchangeOnce(t *testing.T) {
 		FinalizeGate: func(_ int) string {
 			gateCalls++
 			if gateCalls == 1 {
+				if len(persisted) != 1 || !strings.Contains(string(persisted[0].Content), "first finish") {
+					t.Errorf("gate observed persisted messages = %+v, want first finish before decision", persisted)
+				}
 				return "[verification gate] run tests"
 			}
 			return ""
@@ -202,5 +205,9 @@ func TestRunAgentMessageJournal_TerminalAssistantPersistsExactlyOnce(t *testing.
 	}
 	if !strings.Contains(string(persisted[0].Content), "done once") {
 		t.Errorf("persisted assistant = %s, want terminal answer", persisted[0].Content)
+	}
+	if len(result.FinalMessages) != 1 || result.FinalMessages[0].Role != "user" ||
+		strings.Contains(string(result.FinalMessages[0].Content), "done once") {
+		t.Errorf("FinalMessages = %+v, terminal assistant must remain persist-only", result.FinalMessages)
 	}
 }
