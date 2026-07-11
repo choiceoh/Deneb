@@ -3,13 +3,14 @@ package genesis
 import (
 	"context"
 	"fmt"
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"log/slog"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
@@ -50,7 +51,17 @@ const (
 func (t *SkillWorkoutTask) Name() string { return "skill-workout" }
 
 // Interval returns the component's scheduling cadence.
-func (t *SkillWorkoutTask) Interval() time.Duration { return skillWorkoutInterval }
+// Interval honors DENEB_SKILL_WORKOUT_INTERVAL_HOURS so the synthetic
+// evidence lane (failure traces + validation coverage — never real usage) can
+// run hotter during calibration.
+func (t *SkillWorkoutTask) Interval() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("DENEB_SKILL_WORKOUT_INTERVAL_HOURS")); v != "" {
+		if hours, err := strconv.Atoi(v); err == nil && hours > 0 {
+			return time.Duration(hours) * time.Hour
+		}
+	}
+	return skillWorkoutInterval
+}
 
 // Run executes one scheduled task cycle.
 func (t *SkillWorkoutTask) Run(ctx context.Context) error {

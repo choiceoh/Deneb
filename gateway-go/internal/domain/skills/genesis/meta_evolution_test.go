@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 )
@@ -181,5 +182,45 @@ func TestMetaEvolutionTask_OnProposalNilSafe(t *testing.T) {
 	task := &MetaEvolutionTask{Tracker: tr, OnProposal: func(_, _, _, _ string, _ bool) { t.Fatal("OnProposal called on no-op run") }}
 	if err := task.Run(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Acceleration knobs: cadence and bench-scale env overrides with sane bounds.
+func TestAccelerationKnobs(t *testing.T) {
+	task := &MetaEvolutionTask{}
+	t.Setenv("DENEB_META_EVOLUTION_INTERVAL_DAYS", "")
+	if task.Interval() != 7*24*time.Hour {
+		t.Fatalf("default meta interval = %v", task.Interval())
+	}
+	t.Setenv("DENEB_META_EVOLUTION_INTERVAL_DAYS", "2")
+	if task.Interval() != 2*24*time.Hour {
+		t.Fatalf("accelerated meta interval = %v", task.Interval())
+	}
+	t.Setenv("DENEB_META_EVOLUTION_INTERVAL_DAYS", "-1")
+	if task.Interval() != 7*24*time.Hour {
+		t.Fatalf("invalid override must fall back: %v", task.Interval())
+	}
+
+	t.Setenv("DENEB_META_BENCH_SCALE", "")
+	if metaBenchScale() != 1 {
+		t.Fatalf("default bench scale = %d", metaBenchScale())
+	}
+	t.Setenv("DENEB_META_BENCH_SCALE", "3")
+	if metaBenchScale() != 3 {
+		t.Fatalf("bench scale = %d", metaBenchScale())
+	}
+	t.Setenv("DENEB_META_BENCH_SCALE", "99")
+	if metaBenchScale() != 1 {
+		t.Fatalf("out-of-bounds scale must fall back: %d", metaBenchScale())
+	}
+
+	w := &SkillWorkoutTask{}
+	t.Setenv("DENEB_SKILL_WORKOUT_INTERVAL_HOURS", "4")
+	if w.Interval() != 4*time.Hour {
+		t.Fatalf("workout interval = %v", w.Interval())
+	}
+	t.Setenv("DENEB_SKILL_WORKOUT_INTERVAL_HOURS", "")
+	if w.Interval() != skillWorkoutInterval {
+		t.Fatalf("default workout interval = %v", w.Interval())
 	}
 }

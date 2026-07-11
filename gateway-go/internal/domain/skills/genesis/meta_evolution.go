@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -139,6 +140,18 @@ const (
 	metaRevertWatchWindowDays = 14
 )
 
+// metaBenchScale multiplies both bench corpora (judge gold pairs, producer
+// shadow scenarios) — DENEB_META_BENCH_SCALE, default 1. Benches are synthetic
+// and clock-free, so scale is bounded only by weekly LLM budget.
+func metaBenchScale() int {
+	if v := strings.TrimSpace(os.Getenv("DENEB_META_BENCH_SCALE")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 10 {
+			return n
+		}
+	}
+	return 1
+}
+
 // metaAutoAdoptEnabled reports whether bench-gated proposals adopt themselves
 // (operator mandate 2026-07-11: no human approval in the loop). Kill switch:
 // DENEB_META_AUTO_ADOPT=0.
@@ -211,7 +224,17 @@ type MetaEvolutionTask struct {
 func (t *MetaEvolutionTask) Name() string { return "meta-evolution" }
 
 // Interval is the slow-loop cadence: fast loop 6h, slow loop 7d (roadmap P2).
-func (t *MetaEvolutionTask) Interval() time.Duration { return 7 * 24 * time.Hour }
+// DENEB_META_EVOLUTION_INTERVAL_DAYS accelerates the calibration phase — the
+// one-change-per-window principle (RQGM) holds at any cadence, and the revert
+// watch's min-sample gate keeps thin windows from mis-firing.
+func (t *MetaEvolutionTask) Interval() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("DENEB_META_EVOLUTION_INTERVAL_DAYS")); v != "" {
+		if days, err := strconv.Atoi(v); err == nil && days > 0 {
+			return time.Duration(days) * 24 * time.Hour
+		}
+	}
+	return 7 * 24 * time.Hour
+}
 
 // Run executes one propose-only cycle.
 func (t *MetaEvolutionTask) Run(ctx context.Context) error {
@@ -277,7 +300,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 			logger.Warn("meta-evolution: no judge model wired, evaluator proposal dropped")
 			return record(false, "", "judge bench unavailable: no model wired")
 		}
-		pairs := buildJudgeDegradationPairs(t.Evolver.catalogEntries(), judgeBenchMaxPairs)
+		pairs := buildJudgeDegradationPairs(t.Evolver.catalogEntries(), judgeBenchMaxPairs*metaBenchScale())
 		inc := runJudgeDegradationBench(ctx, incumbent, pairs, verdict)
 		prop := runJudgeDegradationBench(ctx, proposal, pairs, verdict)
 		benchIncumbent, benchProposal = &inc, &prop
@@ -299,7 +322,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	var benchShadow *ProducerBenchOutcome
 	if epoch == metaEpochProducer {
 		if gen := t.producerShadowExecutor(); gen != nil {
-			scenarios := buildProducerShadowScenarios(t.Evolver.catalogEntries(), t.Tracker, producerBenchMaxSkills)
+			scenarios := buildProducerShadowScenarios(t.Evolver.catalogEntries(), t.Tracker, producerBenchMaxSkills*metaBenchScale())
 			shadow := runProducerShadowBench(ctx, incumbent, proposal, scenarios, gen)
 			benchShadow = &shadow
 			if rejectReason := producerBenchDecision(shadow); rejectReason != "" {
