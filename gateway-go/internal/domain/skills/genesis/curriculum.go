@@ -67,6 +67,8 @@ const curriculumSystemPrompt = `당신은 비서실장 에이전트의 능력 �
 - 검증 케이스를 먼저 설계한다: 각 케이스는 사용자 입력(input)과 관찰 가능한
   문자열 단언(required_substrings/forbidden_substrings)으로 스킬 없이도 채점
   가능해야 한다.
+- 각 단언은 2자 이상의 완결된 단어/구여야 한다 ("납" 같은 잘린 조각 금지 —
+  기대 응답에 실제로 그대로 나타날 문자열만).
 
 JSON으로만 응답:
 {"skip":bool,"reason":"스킵/제안 근거 한 줄","name":"kebab-case-능력명(영문)",
