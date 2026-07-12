@@ -78,6 +78,34 @@ class DenebUiBlockIntegrationTest {
     }
 
     @Test
+    fun `closer glued to an HTML body tail closes the fence and keeps trailing prose`() {
+        // HTML bodies escape backticks (&#96;), so a raw ``` run can only close.
+        val md = "카드.```deneb-ui\n<text>hi</text>```\n뒤 프로즈는 카드 밖."
+        val blocks = parseMarkdown(md).blocks
+        assertEquals(3, blocks.size)
+        assertTrue(blocks[0] is Paragraph)
+        assertTrue(blocks[1] is DenebUiBlock)
+        assertTrue(blocks[2] is Paragraph)
+    }
+
+    @Test
+    fun `one-liner fence renders prose on both sides`() {
+        val blocks = parseMarkdown("프로즈.```deneb-ui<text>hi</text>``` 끝.").blocks
+        assertEquals(3, blocks.size)
+        assertTrue(blocks[0] is Paragraph)
+        assertTrue(blocks[1] is DenebUiBlock)
+        assertTrue(blocks[2] is Paragraph)
+    }
+
+    @Test
+    fun `legacy JSON body keeps the strict own-line close`() {
+        // JSON string values may legitimately contain ``` (markdown values).
+        val md = "```deneb-ui\n{\"type\":\"markdown\",\"value\":\"a```b\"}\n```"
+        val block = parseMarkdown(md).blocks.single()
+        assertTrue(block is DenebUiBlock)
+    }
+
+    @Test
     fun `mid-sentence fence mention stays prose`() {
         val blocks = parseMarkdown("```deneb-ui 펜스는 이렇게 씁니다").blocks
         assertTrue(blocks.none { it is DenebUiBlock || it is DenebUiError || it is DenebUiPending })

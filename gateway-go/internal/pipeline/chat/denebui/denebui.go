@@ -93,21 +93,51 @@ var nodeSpecs = map[string]nodeSpec{
 
 // ExtractFences returns the raw bodies of every ```deneb-ui fenced block in text,
 // in document order. Fence info match is case-insensitive.
+//
+// Leniency (mirrors TS splitDenebUi / Kotlin BlockScanner): the opener may be
+// glued to a prose tail and may carry the first body tag on the same line
+// ("…할게요.```deneb-ui<column>…"), and inside an HTML body a ``` run glued to
+// the last body line closes the fence — HTML bodies escape backticks as &#96;
+// per the authoring contract, so a raw run can only be the close. Legacy JSON
+// bodies keep the strict own-line close (their string values may carry ```).
 func ExtractFences(text string) []string {
 	var out []string
 	lines := strings.Split(text, "\n")
 	for i := 0; i < len(lines); i++ {
-		if !isDenebUIFenceOpen(strings.TrimSpace(lines[i])) {
+		rest, open := denebUIFenceOpenSplit(strings.TrimSpace(lines[i]))
+		if !open {
 			continue
 		}
 		var body []string
-		i++
-		for i < len(lines) && !isFenceClose(strings.TrimSpace(lines[i])) {
-			body = append(body, lines[i])
+		isHTML := rest != ""
+		htmlDecided := rest != ""
+		closed := false
+		if rest != "" {
+			if pre, ok := splitGluedFenceClose(rest); ok {
+				body, closed = appendBodyLine(body, pre), true
+			} else {
+				body = append(body, rest)
+			}
+		}
+		for !closed && i+1 < len(lines) {
 			i++
+			t := strings.TrimSpace(lines[i])
+			if isFenceClose(t) {
+				break
+			}
+			if !htmlDecided && t != "" {
+				isHTML = strings.HasPrefix(t, "<")
+				htmlDecided = true
+			}
+			if isHTML {
+				if pre, ok := splitGluedFenceClose(lines[i]); ok {
+					body, closed = appendBodyLine(body, pre), true
+					break
+				}
+			}
+			body = append(body, lines[i])
 		}
 		out = append(out, strings.Join(body, "\n"))
-		// loop's i++ steps past the closing fence (or stays at end)
 	}
 	return out
 }
@@ -115,7 +145,7 @@ func ExtractFences(text string) []string {
 // HasFence reports whether text contains at least one deneb-ui block.
 func HasFence(text string) bool {
 	for _, line := range strings.Split(text, "\n") {
-		if isDenebUIFenceOpen(strings.TrimSpace(line)) {
+		if _, open := denebUIFenceOpenSplit(strings.TrimSpace(line)); open {
 			return true
 		}
 	}
@@ -123,18 +153,65 @@ func HasFence(text string) bool {
 }
 
 // isDenebUIFenceOpen reports whether a (whitespace-trimmed) line opens a
-// deneb-ui fence. The fence normally occupies its own line, but models
-// sometimes glue it to the tail of a prose sentence ("…할게요.```deneb-ui") —
-// a tail match accepts that shape too, so the card still renders instead of
-// dumping raw HTML. Only a line-final opener counts: prose that merely
-// mentions the fence mid-sentence stays prose.
+// deneb-ui fence (see denebUIFenceOpenSplit for the tolerated shapes).
 func isDenebUIFenceOpen(line string) bool {
+	_, open := denebUIFenceOpenSplit(line)
+	return open
+}
+
+// denebUIFenceOpenSplit recognizes a deneb-ui fence opener in a line and
+// returns any body content glued after the info string. The fence normally
+// occupies its own line, but models sometimes glue it to the tail of a prose
+// sentence ("…할게요.```deneb-ui") or run straight into the first tag
+// ("…```deneb-ui<column>"). A remainder is accepted only when it starts with
+// '<' — prose that merely mentions the fence mid-sentence stays prose.
+func denebUIFenceOpenSplit(line string) (rest string, open bool) {
 	line = strings.TrimRight(line, " \t")
-	if len(line) < 3+len(FenceInfo) || !strings.EqualFold(line[len(line)-len(FenceInfo):], FenceInfo) {
-		return false
+	for from := 0; ; {
+		bt := strings.Index(line[from:], "```")
+		if bt < 0 {
+			return "", false
+		}
+		j := from + bt
+		for j < len(line) && line[j] == '`' {
+			j++
+		}
+		k := j
+		for k < len(line) && (line[k] == ' ' || line[k] == '\t') {
+			k++
+		}
+		if len(line)-k >= len(FenceInfo) && strings.EqualFold(line[k:k+len(FenceInfo)], FenceInfo) {
+			m := k + len(FenceInfo)
+			for m < len(line) && (line[m] == ' ' || line[m] == '\t') {
+				m++
+			}
+			if m == len(line) {
+				return "", true
+			}
+			if line[m] == '<' {
+				return line[m:], true
+			}
+		}
+		from = from + bt + 1
 	}
-	rest := strings.TrimRight(line[:len(line)-len(FenceInfo)], " \t")
-	return strings.HasSuffix(rest, "```")
+}
+
+// splitGluedFenceClose detects a ``` run glued into an HTML body line
+// ("</column>``` 뒤 프로즈") and returns the body part before the run.
+func splitGluedFenceClose(line string) (pre string, closed bool) {
+	bt := strings.Index(line, "```")
+	if bt < 0 {
+		return "", false
+	}
+	return line[:bt], true
+}
+
+// appendBodyLine appends a body fragment, skipping blank fragments.
+func appendBodyLine(body []string, line string) []string {
+	if strings.TrimSpace(line) == "" {
+		return body
+	}
+	return append(body, line)
 }
 
 func isFenceClose(line string) bool {

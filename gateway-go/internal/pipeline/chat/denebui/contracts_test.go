@@ -31,6 +31,8 @@ func TestFenceRecognitionContract(t *testing.T) {
 		// Lenient tail match: models glue the opener to a prose sentence.
 		{name: "glued to prose", line: "가져올게요.```deneb-ui", want: true},
 		{name: "glued with space", line: "카드로 정리했어요. ```deneb-ui", want: true},
+		{name: "glued body tag", line: "```deneb-ui<column>", want: true},
+		{name: "prose and glued body tag", line: "정리했어요.```deneb-ui<card>", want: true},
 		{name: "no info", line: "```", want: false},
 		{name: "json", line: "```json", want: false},
 		{name: "prefix only", line: "```deneb", want: false},

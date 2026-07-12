@@ -57,6 +57,32 @@ describe("splitDenebUi boundaries", () => {
     const input = "```deneb-ui 펜스는 이렇게 씁니다\n본문";
     expect(splitDenebUi(input)).toEqual([{ kind: "md", text: input }]);
   });
+
+  it("splits a closer glued to an HTML body tail", () => {
+    expect(splitDenebUi("카드.```deneb-ui\n<text>hi</text>```\n뒤 프로즈는 카드 밖.")).toEqual([
+      { kind: "md", text: "카드." },
+      { kind: "ui", body: "<text>hi</text>" },
+      { kind: "md", text: "뒤 프로즈는 카드 밖." },
+    ]);
+  });
+
+  it("handles a one-liner fence with prose on both sides", () => {
+    expect(splitDenebUi("프로즈.```deneb-ui<text>hi</text>``` 끝.")).toEqual([
+      { kind: "md", text: "프로즈." },
+      { kind: "ui", body: "<text>hi</text>" },
+      { kind: "md", text: " 끝." },
+    ]);
+  });
+
+  it("keeps the strict own-line close for legacy JSON bodies", () => {
+    // JSON string values may legitimately contain ``` (markdown values).
+    const body = '{"type":"markdown","value":"a```b"}';
+    expect(splitDenebUi("```deneb-ui\n" + body + "\n```")).toEqual([{ kind: "ui", body }]);
+  });
+
+  it("accepts a four-backtick close line", () => {
+    expect(splitDenebUi('```deneb-ui\n{"type":"divider"}\n````')).toEqual([{ kind: "ui", body: '{"type":"divider"}' }]);
+  });
 });
 
 describe("parseDenebUi legacy boundaries", () => {
