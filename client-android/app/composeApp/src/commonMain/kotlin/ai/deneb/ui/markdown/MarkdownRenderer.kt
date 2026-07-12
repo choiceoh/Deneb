@@ -145,6 +145,12 @@ private fun parseContentSafely(content: String): MarkdownDocument = runCatching 
  */
 val LocalDenebUiStreaming = compositionLocalOf { false }
 
+// True while rendering a list item's children: the item's paragraph must not
+// stack its own block air on top of the list's item spacing. The doubled
+// padding made TIGHT bullet groups looser than plain paragraphs (14dp vs
+// 10dp — inverted rhythm, visible across the 2026-07-12 reply corpus).
+internal val LocalInsideListItem = compositionLocalOf { false }
+
 // Optional base style for body / list / table / quote text. Null = the chat body
 // style below. Non-chat surfaces (wiki, diary, skill, person, cron) provide their own
 // (e.g. MaterialTheme.typography.bodyMedium) so MarkdownContent matches their existing
@@ -461,11 +467,12 @@ private fun ParagraphBlock(block: Paragraph) {
     // A paragraph carries more air above/below than the body line-height, so
     // consecutive paragraphs read as distinct blocks rather than one wall of
     // text (the old 2dp made the paragraph gap smaller than the line gap once
-    // the line-height loosened).
+    // the line-height loosened). Inside a list item the list's spacedBy owns
+    // the rhythm — the paragraph keeps only a hairline of its own.
     InlineContent(
         inlines = block.inlines,
         style = markdownBodyStyle,
-        modifier = Modifier.padding(vertical = 5.dp),
+        modifier = Modifier.padding(vertical = if (LocalInsideListItem.current) 2.dp else 5.dp),
     )
 }
 
@@ -595,13 +602,15 @@ private fun TaskItemRow(
             modifier = Modifier.size(18.dp).padding(end = 6.dp, top = 2.dp),
         )
         Column(Modifier.fillMaxWidth()) {
-            // Done items read muted so the eye skips to what's still open.
-            if (checked) {
-                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+            CompositionLocalProvider(LocalInsideListItem provides true) {
+                // Done items read muted so the eye skips to what's still open.
+                if (checked) {
+                    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                        item.children.forEach { BlockRenderer(it, isInteractive, onUiCallback, frozen) }
+                    }
+                } else {
                     item.children.forEach { BlockRenderer(it, isInteractive, onUiCallback, frozen) }
                 }
-            } else {
-                item.children.forEach { BlockRenderer(it, isInteractive, onUiCallback, frozen) }
             }
         }
     }
@@ -650,7 +659,9 @@ private fun ListItemRow(
             modifier = Modifier.width(markerWidth).padding(end = 4.dp),
         )
         Column(Modifier.fillMaxWidth()) {
-            item.children.forEach { BlockRenderer(it, isInteractive, onUiCallback, frozen) }
+            CompositionLocalProvider(LocalInsideListItem provides true) {
+                item.children.forEach { BlockRenderer(it, isInteractive, onUiCallback, frozen) }
+            }
         }
     }
 }
