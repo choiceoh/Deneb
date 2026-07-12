@@ -5,21 +5,14 @@ import (
 	"fmt"
 	"strings"
 
+	contactdomain "github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
-// Contact is one shared address-book entry from the native client.
-type Contact struct {
-	Name   string   `json:"name"`
-	Phones []string `json:"phones"`
-	Emails []string `json:"emails"`
-	Org    string   `json:"org"`
-}
-
 // contactsPayload is the wire shape EnrichContacts parses: {"contacts": [...]}.
 type contactsPayload struct {
-	Contacts []Contact `json:"contacts"`
+	Contacts []contactdomain.Contact `json:"contacts"`
 }
 
 // ContactEnrichResult summarizes one EnrichContacts run.
@@ -112,7 +105,7 @@ type PeopleEnrichResult struct {
 //     which is exactly the work-relevance signal the no-dump doctrine wants.
 //
 // Best-effort per name: one unreadable/unwritable page never aborts the rest.
-func (s *Store) EnrichPeople(names []string, book []Contact, createMissing bool) (PeopleEnrichResult, error) {
+func (s *Store) EnrichPeople(names []string, book []contactdomain.Contact, createMissing bool) (PeopleEnrichResult, error) {
 	var res PeopleEnrichResult
 	if len(names) == 0 || len(book) == 0 {
 		return res, nil
@@ -129,7 +122,7 @@ func (s *Store) EnrichPeople(names []string, book []Contact, createMissing bool)
 
 	seen := make(map[string]bool, len(names))
 	for _, name := range names {
-		key := NormalizePersonName(name)
+		key := contactdomain.NormalizePersonName(name)
 		if len([]rune(key)) < 2 || seen[key] {
 			continue
 		}
@@ -171,11 +164,11 @@ type personPage struct{ path, title string }
 // mergeContactsByName collapses address-book entries that share a normalized
 // name into one record, uniting all numbers/emails for a person saved under
 // several entries. 1-char/empty names are dropped as too ambiguous to match.
-func mergeContactsByName(book []Contact) map[string]*Contact {
-	merged := make(map[string]*Contact, len(book))
+func mergeContactsByName(book []contactdomain.Contact) map[string]*contactdomain.Contact {
+	merged := make(map[string]*contactdomain.Contact, len(book))
 	for i := range book {
 		c := book[i]
-		key := NormalizePersonName(c.Name)
+		key := contactdomain.NormalizePersonName(c.Name)
 		if len([]rune(key)) < 2 {
 			continue
 		}
@@ -219,7 +212,7 @@ func (s *Store) listPeopleByName() (map[string]personPage, error) {
 		if title == "" {
 			continue
 		}
-		key := NormalizePersonName(title)
+		key := contactdomain.NormalizePersonName(title)
 		if len([]rune(key)) < 2 {
 			continue
 		}
@@ -235,7 +228,7 @@ func (s *Store) listPeopleByName() (map[string]personPage, error) {
 // whether content changed. A pre-existing page at the slug path is enriched in
 // place (created=false) rather than overwritten, so a slug collision never
 // clobbers curated content.
-func (s *Store) createPersonPage(title string, c *Contact) (path string, created, changed bool, err error) {
+func (s *Store) createPersonPage(title string, c *contactdomain.Contact) (path string, created, changed bool, err error) {
 	slug := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(title)), " ", "-")
 	if slug == "" {
 		return "", false, false, fmt.Errorf("wiki: empty person title")
@@ -283,7 +276,7 @@ func (s *Store) createPersonPage(title string, c *Contact) (path string, created
 //
 // The read-modify-write runs under UpdatePage so a concurrent writer of the same
 // person page can't clobber the enrichment (or vice versa).
-func (s *Store) enrichPersonPage(relPath string, c *Contact) (bool, error) {
+func (s *Store) enrichPersonPage(relPath string, c *contactdomain.Contact) (bool, error) {
 	section := renderContactSection(c)
 	if section == "" {
 		return false, nil // nothing worth writing (no phone/email/org)
@@ -333,7 +326,7 @@ const personStubImportance = 0.50
 // renderPersonTemplate seeds a new 인물 page body with the standard form (see the
 // section constants above). 소속 is filled from the contact's org and 연락처 from
 // its numbers; 담당 · 관계 is a placeholder the dreamer / mail analysis fills in.
-func renderPersonTemplate(title string, c *Contact) string {
+func renderPersonTemplate(title string, c *contactdomain.Contact) string {
 	var b strings.Builder
 	b.WriteString("# " + title + "\n\n")
 
@@ -362,7 +355,7 @@ func renderPersonTemplate(title string, c *Contact) string {
 // section. Returns "" when there's nothing to record. The provenance line is a
 // fixed string (no date) so an unchanged contact renders byte-identically and
 // the idempotent re-sync check holds.
-func renderContactSection(c *Contact) string {
+func renderContactSection(c *contactdomain.Contact) string {
 	phones := textutil.DedupeStrings(c.Phones)
 	emails := textutil.DedupeStrings(c.Emails)
 	org := strings.TrimSpace(c.Org)
@@ -412,58 +405,4 @@ func upsertSection(body, heading, newContent string) string {
 		b.WriteString("\n\n")
 	}
 	return strings.TrimRight(b.String(), "\n") + "\n"
-}
-
-// personTitleSuffixes are Korean honorific/role tokens stripped from the tail of
-// a name when matching an address-book entry to a wiki person ("김민준 부장" and
-// "김민준대표님" both normalize to "김민준"). Ordered longest-first so a compound
-// title ("대표이사") is removed whole before its parts.
-var personTitleSuffixes = []string{
-	"대표이사",
-	"부사장", "본부장", "부회장",
-	"부장", "차장", "과장", "대리", "사원", "주임", "팀장", "실장",
-	"이사", "상무", "전무", "사장", "회장", "선임", "책임", "수석", "대표",
-	"님", "씨", "군", "양",
-}
-
-// NormalizePersonName reduces a display name to a stable match key: it drops any
-// parenthetical/affiliation suffix, removes whitespace, peels trailing honorific
-// tokens (while never shrinking below 2 runes, so "김부장" doesn't collapse to a
-// bare surname), and lowercases ASCII. Matching is exact on this key — no
-// substring matching, which would mis-pair "이수" with "이수민". Exported so the
-// miniapp people directory matches Gmail senders to 인물 pages with the same
-// semantics the contacts sync uses.
-func NormalizePersonName(s string) string {
-	t := strings.TrimSpace(s)
-	if t == "" {
-		return ""
-	}
-	// Cut at the first affiliation/role separator: "김민준(탑솔라)" -> "김민준".
-	for _, sep := range []string{"(", "（", "[", "<", "/", ",", "·"} {
-		if i := strings.Index(t, sep); i >= 0 {
-			t = t[:i]
-		}
-	}
-	t = strings.ReplaceAll(t, " ", "")
-	t = strings.TrimSpace(t)
-	// Peel trailing honorific/role tokens, keeping at least 2 runes.
-	for {
-		stripped := false
-		for _, suf := range personTitleSuffixes {
-			if !strings.HasSuffix(t, suf) {
-				continue
-			}
-			cand := strings.TrimSuffix(t, suf)
-			if len([]rune(cand)) < 2 {
-				continue
-			}
-			t = cand
-			stripped = true
-			break
-		}
-		if !stripped {
-			break
-		}
-	}
-	return strings.ToLower(t)
 }

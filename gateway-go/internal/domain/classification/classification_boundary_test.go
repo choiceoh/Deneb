@@ -138,37 +138,6 @@ func TestNormalizeCompanyBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestNormalizePersonNameBoundaryMatrix(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{name: "empty", in: "", want: ""},
-		{name: "spaces", in: "   ", want: ""},
-		{name: "plain", in: "홍길동", want: "홍길동"},
-		{name: "internal space", in: "홍 길 동", want: "홍길동"},
-		{name: "leading trailing", in: "  홍길동  ", want: "홍길동"},
-		{name: "manager honorific", in: "홍길동 부장", want: "홍길동"},
-		{name: "director honorific", in: "홍길동 이사", want: "홍길동"},
-		{name: "representative suffix", in: "홍길동대표님", want: "홍길동"},
-		{name: "parenthetical company", in: "홍길동(가나다에너지)", want: "홍길동"},
-		{name: "parenthetical spaced", in: "홍길동 ( 가나다에너지 )", want: "홍길동"},
-		{name: "ascii lower", in: "ALICE KIM", want: "alicekim"},
-		{name: "ascii preserved after title", in: "Alice Kim 부장", want: "alicekim"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := NormalizePersonName(tc.in); got != tc.want {
-				t.Fatalf("NormalizePersonName(%q) = %q, want %q", tc.in, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestPickLaneBoundaryAndDeterministicSorting(t *testing.T) {
 	t.Parallel()
 

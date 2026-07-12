@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 )
 
@@ -124,7 +124,7 @@ func LoadFromFile(path string) (Rules, error) {
 }
 
 // mergePersons folds JSON person entries into dst, normalizing each name with
-// the wiki helper (so the rules file can hold display names like "김민준 부장" and
+// the address-book identity key (so the rules file can hold display names like "김민준 부장" and
 // still match an attendee "김민준"). Entries with an invalid/blank lane or a name
 // that normalizes too short are skipped.
 func mergePersons(dst map[string]Lane, src map[string]string) {
@@ -133,7 +133,7 @@ func mergePersons(dst map[string]Lane, src map[string]string) {
 		if !validLane(lane) {
 			continue
 		}
-		key := wiki.NormalizePersonName(name)
+		key := contacts.NormalizePersonName(name)
 		if len([]rune(key)) < 2 {
 			continue
 		}

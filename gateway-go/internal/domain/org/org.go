@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/classification"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 )
 
 // Node type values. The tree is intentionally shallow and these are advisory
@@ -369,8 +370,8 @@ func (t OrgTree) checkNoCycles(byID map[string]int) error {
 // DeriveRules projects the tree into a classification.Rules. For every
 // lane-tagged node it folds:
 //
-//	Members   → PersonToLane   (each member's Name, normalized with the same wiki
-//	                            helper the classifier uses, so a display name in
+//	Members   → PersonToLane   (each member's Name, normalized with the canonical
+//	                            contacts identity key, so a display name in
 //	                            the chart matches a bare attendee/sender name;
 //	                            the member's Rank/Position are ignored here)
 //	Keywords  → KeywordToLane  (lowercased, matched as substrings)
@@ -405,7 +406,7 @@ func (t OrgTree) DeriveRules() classification.Rules {
 		for _, m := range n.Members {
 			// Only the member's Name routes classification; Rank/Position are
 			// display/sort metadata and never affect lane assignment.
-			key := classification.NormalizePersonName(m.Name)
+			key := contacts.NormalizePersonName(m.Name)
 			if len([]rune(key)) < 2 {
 				continue // too short/ambiguous to be a reliable person key
 			}

@@ -2,16 +2,19 @@
 // mentions) to their 인물 wiki page paths. Any caller that holds only a person's
 // name — the org chart editor linking a member to their knowledge page, the org
 // recall source surfacing who a query is about — uses this to bridge into the
-// wiki. The bridge deliberately lives in the wiki package (not org/): it is the
-// wiki that owns the person pages and the name normalization, and both stay
-// unexported.
+// wiki. The bridge deliberately lives in the wiki package (not org/): wiki owns
+// person-page paths, while the contacts domain supplies the shared name key.
 
 package wiki
 
-import "strings"
+import (
+	"strings"
+
+	contactdomain "github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
+)
 
 // ResolvePersonPaths maps each display name to its 인물 page relPath, for the
-// names that have a page. Matching uses NormalizePersonName — the same
+// names that have a page. Matching uses contacts.NormalizePersonName — the same
 // normalization contact enrichment uses — so "오선택 전무", "오선택(탑솔라)" and
 // "오선택" all resolve to the one 인물/오선택… page. A name with no page is simply
 // absent from the result (callers treat a missing key as "no wiki page yet").
@@ -31,7 +34,7 @@ func (s *Store) ResolvePersonPaths(names []string) map[string]string {
 	}
 	out := make(map[string]string, len(names))
 	for _, name := range names {
-		key := NormalizePersonName(name)
+		key := contactdomain.NormalizePersonName(name)
 		if len([]rune(key)) < 2 {
 			continue
 		}
