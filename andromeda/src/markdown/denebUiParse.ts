@@ -11,7 +11,11 @@ import { parseDenebUiHtml } from "./denebUiHtml";
 // Nodes are AI-produced (a dynamic boundary) — typed loosely on purpose.
 export type Node = any;
 
-const FENCE_OPEN = /^```\s*deneb-ui\s*$/i;
+// Lenient opener: the fence normally occupies its own line, but models
+// sometimes glue it to the tail of a prose sentence ("…가져올게요.```deneb-ui").
+// Group 1 captures that prose prefix so it stays markdown. Only a line-final
+// opener counts: mid-sentence mentions (text after the info string) stay prose.
+const FENCE_OPEN = /^(.*?)`{3,}\s*deneb-ui\s*$/i;
 const FENCE_CLOSE = /^```\s*$/;
 
 export type UiSegment =
@@ -34,7 +38,9 @@ export function splitDenebUi(text: string): UiSegment[] {
     md = [];
   };
   for (let i = 0; i < lines.length; i++) {
-    if (FENCE_OPEN.test(lines[i].trim())) {
+    const open = FENCE_OPEN.exec(lines[i]);
+    if (open) {
+      if (open[1].trim()) md.push(open[1]);
       flush();
       const body: string[] = [];
       let closed = false;

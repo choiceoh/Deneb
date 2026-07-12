@@ -61,6 +61,9 @@ const GENERIC_TAGS = new Set([
   "figure",
   "center",
   "nav",
+  "thead",
+  "tbody",
+  "tfoot",
 ]);
 
 // Every tag convert() maps to a node or structural. Tags in none of the
@@ -146,6 +149,7 @@ class Parser {
   private stack: OpenElem[] = [];
   private roots: Node[] = [];
   private rootPending: string[] = [];
+  private rootPendingSpace = false;
 
   constructor(private src: string) {}
 
@@ -321,9 +325,12 @@ class Parser {
     }
     if (GENERIC_TAGS.has(el.tag) || !KNOWN_TAGS.has(el.tag)) {
       // Unwrap: the wrapper produces no node; its children (incl. flushed
-      // implicit text) hoist to the parent in source order.
+      // implicit text) hoist to the parent in source order. Structural
+      // intermediates hoist too, so <thead>/<tbody> table rows reach the
+      // enclosing <table> instead of vanishing with the wrapper.
       this.flushPending(el);
       for (const c of el.children) this.attach(c);
+      for (const s of el.structs) this.attach(s);
       return;
     }
     this.flushPending(el);
@@ -362,6 +369,7 @@ class Parser {
     if (v == null) return;
     const isStruct = typeof v === "object" && "kind" in v;
     const top = this.stack[this.stack.length - 1];
+    if (top) top.pendingSpace = false; // whitespace before a child is layout, not a separator
     if (isStruct) {
       top?.structs.push(v as Structural); // floating at root: drop
       return;
@@ -371,13 +379,29 @@ class Parser {
       top.children.push(v);
     } else {
       this.flushRootPending();
+      this.rootPendingSpace = false;
       this.roots.push(v);
     }
   }
 
   private emitText(t: string) {
-    if (!t.trim()) return;
+    if (!t.trim()) {
+      this.markPendingSpace();
+      return;
+    }
     this.emitRun(decodeEntities(t));
+  }
+
+  // Remembers that a whitespace-only run arrived after existing text, so the
+  // next run in the same flow keeps a single separating space — dropping it
+  // glues inline markers ("**A****B**").
+  private markPendingSpace() {
+    const top = this.stack[this.stack.length - 1];
+    if (!top) {
+      if (this.rootPending.length > 0) this.rootPendingSpace = true;
+      return;
+    }
+    if (top.text.length > 0) top.pendingSpace = true;
   }
 
   // Adds an already-decoded text run (entity decoding must not repeat on
@@ -386,8 +410,16 @@ class Parser {
     if (!t.trim()) return;
     const top = this.stack[this.stack.length - 1];
     if (!top) {
+      if (this.rootPendingSpace) {
+        t = " " + t;
+        this.rootPendingSpace = false;
+      }
       this.rootPending.push(t);
       return;
+    }
+    if (top.pendingSpace) {
+      t = " " + t;
+      top.pendingSpace = false;
     }
     top.text.push(t);
     if (treatsTextAsChildren(top.tag)) top.pending.push(t);

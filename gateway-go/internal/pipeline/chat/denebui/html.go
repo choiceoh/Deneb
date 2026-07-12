@@ -69,7 +69,7 @@ var inlineTags = map[string]string{
 var genericTags = map[string]bool{
 	"div": true, "section": true, "article": true, "header": true,
 	"footer": true, "main": true, "aside": true, "figure": true,
-	"center": true, "nav": true,
+	"center": true, "nav": true, "thead": true, "tbody": true, "tfoot": true,
 }
 
 // knownTags is every tag convertElem maps to a node or structural. Tags in
@@ -142,15 +142,20 @@ type openElem struct {
 	structs  []any    // structural intermediates (option/chip/tab/tr cell/point)
 	text     []string // text runs (for label/value content)
 	pending  []string // buffered implicit-text runs, flushed as one merged node
+	// pendingSpace records a whitespace-only run between two text runs; the
+	// next run gets one leading space so inline merges don't glue
+	// (<b>A</b> <b>B</b> → "**A** **B**", not "**A****B**").
+	pendingSpace bool
 }
 
 type htmlParser struct {
-	src         string
-	pos         int
-	stack       []*openElem
-	roots       []any
-	rootPending []string // buffered root-level text runs
-	issues      []Issue
+	src              string
+	pos              int
+	stack            []*openElem
+	roots            []any
+	rootPending      []string // buffered root-level text runs
+	rootPendingSpace bool     // root-level counterpart of openElem.pendingSpace
+	issues           []Issue
 }
 
 func (p *htmlParser) parseNodes() []any {
@@ -429,12 +434,17 @@ func (p *htmlParser) closeTop() {
 	if genericTags[el.tag] || !knownTags[el.tag] {
 		// Unwrap: the wrapper produces no node; its children (including the
 		// flushed implicit text) hoist to the parent in source order.
+		// Structural intermediates hoist too, so <thead>/<tbody> table rows
+		// reach the enclosing <table> instead of vanishing with the wrapper.
 		if !genericTags[el.tag] {
 			p.issues = append(p.issues, Issue{"$", "unknown tag <" + el.tag + "> (children hoisted)"})
 		}
 		p.flushPending(el)
 		for _, c := range el.children {
 			p.attach(c)
+		}
+		for _, s := range el.structs {
+			p.attach(s)
 		}
 		return
 	}
@@ -488,10 +498,12 @@ func (p *htmlParser) attach(v any) {
 			return // option/chip/… floating at root: drop
 		}
 		p.flushRootPending()
+		p.rootPendingSpace = false // whitespace before a block child is layout, not a separator
 		p.roots = append(p.roots, v)
 		return
 	}
 	top := p.stack[len(p.stack)-1]
+	top.pendingSpace = false
 	if _, isStruct := v.(structural); isStruct {
 		top.structs = append(top.structs, v)
 		return
@@ -502,9 +514,24 @@ func (p *htmlParser) attach(v any) {
 
 func (p *htmlParser) emitText(t string) {
 	if strings.TrimSpace(t) == "" {
+		p.markPendingSpace()
 		return
 	}
 	p.emitRun(decodeEntities(t))
+}
+
+// markPendingSpace remembers that a whitespace-only run arrived after existing
+// text, so the next run in the same flow keeps a single separating space.
+func (p *htmlParser) markPendingSpace() {
+	if len(p.stack) == 0 {
+		if len(p.rootPending) > 0 {
+			p.rootPendingSpace = true
+		}
+		return
+	}
+	if top := p.stack[len(p.stack)-1]; len(top.text) > 0 {
+		top.pendingSpace = true
+	}
 }
 
 // emitRun adds an already-decoded text run (entity decoding must not repeat —
@@ -514,10 +541,18 @@ func (p *htmlParser) emitRun(t string) {
 		return
 	}
 	if len(p.stack) == 0 {
+		if p.rootPendingSpace {
+			t = " " + t
+			p.rootPendingSpace = false
+		}
 		p.rootPending = append(p.rootPending, t)
 		return
 	}
 	top := p.stack[len(p.stack)-1]
+	if top.pendingSpace {
+		t = " " + t
+		top.pendingSpace = false
+	}
 	top.text = append(top.text, t)
 	if treatsTextAsChildren(top.tag) {
 		top.pending = append(top.pending, t)

@@ -93,10 +93,27 @@ describe("parseDenebUi (labeled HTML)", () => {
     expect(root.children[0]).toMatchObject({ type: "text", value: "안" });
   });
 
+  it("unwraps table sections keeping their rows", () => {
+    const root = parseDenebUi(
+      "<table><thead><tr><th>이름</th><th>값</th></tr></thead><tbody><tr><td>구리</td><td>9,540</td></tr></tbody></table>",
+    );
+    expect(root).toMatchObject({ type: "table", headers: ["이름", "값"], rows: [["구리", "9,540"]] });
+  });
+
   it("merges inline formatting tags into the text flow", () => {
     const card = parseDenebUi("<card>이건 <b>중요</b>한 일</card>");
     expect(card.children).toHaveLength(1);
     expect(card.children[0]).toMatchObject({ type: "text", value: "이건 **중요**한 일" });
+  });
+
+  it("keeps a separating space between adjacent inline runs", () => {
+    // Dropping the whitespace-only run would glue the markers ("**A****B**")
+    // and break the inline markdown pass.
+    const card = parseDenebUi(`<card><b>최종 결론:</b> <b>"지금 사라"</b></card>`);
+    expect(card.children).toHaveLength(1);
+    expect(card.children[0]).toMatchObject({ type: "text", value: `**최종 결론:** **"지금 사라"**` });
+    const text = parseDenebUi("<text><b>A</b> <b>B</b></text>");
+    expect(text).toMatchObject({ type: "text", value: "**A** **B**" });
   });
 
   it("merges inline anchor and code into the text value", () => {

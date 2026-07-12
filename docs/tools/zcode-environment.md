@@ -37,6 +37,7 @@ All three auto-connect the `codegraph` MCP server and share the same PostToolUse
 ### `.zcode/config.json` (workspace scope)
 
 Defines:
+
 - **MCP server**: `codegraph` via `scripts/dev/codegraph-serve.sh` (absolute path — config-file MCP does not expand templates).
 - **Hooks**: 8 hooks across SessionStart / PreToolUse / PostToolUse / Stop, with `hooks.enabled: true`.
 

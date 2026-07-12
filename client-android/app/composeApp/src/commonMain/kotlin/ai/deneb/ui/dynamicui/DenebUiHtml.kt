@@ -60,6 +60,7 @@ object DenebUiHtml {
      */
     private val genericTags = setOf(
         "div", "section", "article", "header", "footer", "main", "aside", "figure", "center", "nav",
+        "thead", "tbody", "tfoot",
     )
 
     /**
@@ -119,6 +120,12 @@ object DenebUiHtml {
 
         /** Buffered implicit-text runs, flushed as one merged node. */
         val pending = mutableListOf<String>()
+
+        /**
+         * A whitespace-only run arrived after existing text; the next run keeps
+         * one separating space so inline merges don't glue ("**A** **B**").
+         */
+        var pendingSpace = false
     }
 
     // =====================================================================
@@ -130,6 +137,7 @@ object DenebUiHtml {
         private val stack = mutableListOf<OpenElem>()
         private val roots = mutableListOf<DenebUiNode>()
         private val rootPending = mutableListOf<String>()
+        private var rootPendingSpace = false
 
         fun parseNodes(): List<DenebUiNode> {
             while (pos < src.length) {
@@ -325,8 +333,11 @@ object DenebUiHtml {
             if (el.tag in genericTags || el.tag !in knownTags) {
                 // Unwrap: the wrapper produces no node; its children (incl.
                 // flushed implicit text) hoist to the parent in source order.
+                // Structural intermediates hoist too, so <thead>/<tbody> table
+                // rows reach the enclosing <table> instead of vanishing.
                 flushPending(el)
                 el.children.forEach { attach(it) }
+                el.structs.forEach { attach(it) }
                 return
             }
             flushPending(el)
@@ -360,6 +371,10 @@ object DenebUiHtml {
         }
 
         private fun attach(v: Any?) {
+            if (v != null) {
+                // Whitespace before a child is layout, not a run separator.
+                stack.lastOrNull()?.pendingSpace = false
+            }
             when (v) {
                 null -> return
 
@@ -370,6 +385,7 @@ object DenebUiHtml {
                     val top = stack.lastOrNull()
                     if (top == null) {
                         flushRootPending()
+                        rootPendingSpace = false
                         roots.add(v)
                     } else {
                         flushPending(top)
@@ -380,8 +396,25 @@ object DenebUiHtml {
         }
 
         private fun emitText(t: String) {
-            if (t.isBlank()) return
+            if (t.isBlank()) {
+                markPendingSpace()
+                return
+            }
             emitRun(decodeEntities(t))
+        }
+
+        /**
+         * Remembers that a whitespace-only run arrived after existing text, so
+         * the next run in the same flow keeps a single separating space —
+         * dropping it glues inline markers ("**A****B**").
+         */
+        private fun markPendingSpace() {
+            val top = stack.lastOrNull()
+            if (top == null) {
+                if (rootPending.isNotEmpty()) rootPendingSpace = true
+                return
+            }
+            if (top.text.isNotEmpty()) top.pendingSpace = true
         }
 
         /** Adds an already-decoded text run (entity decoding must not repeat on inline re-emits). */
@@ -389,11 +422,15 @@ object DenebUiHtml {
             if (t.isBlank()) return
             val top = stack.lastOrNull()
             if (top == null) {
-                rootPending.add(t)
+                val run = if (rootPendingSpace) " $t" else t
+                rootPendingSpace = false
+                rootPending.add(run)
                 return
             }
-            top.text.add(t)
-            if (treatsTextAsChildren(top.tag)) top.pending.add(t)
+            val run = if (top.pendingSpace) " $t" else t
+            top.pendingSpace = false
+            top.text.add(run)
+            if (treatsTextAsChildren(top.tag)) top.pending.add(run)
         }
 
         /**
