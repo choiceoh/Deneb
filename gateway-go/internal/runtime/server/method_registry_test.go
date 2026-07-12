@@ -1,14 +1,18 @@
 package server
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // requiredMethods lists RPC methods that MUST be registered after full server
@@ -228,6 +232,36 @@ func TestMethodRegistry_RequiredMethodsRegistered(t *testing.T) {
 		for _, m := range missing {
 			t.Errorf("  - %s", m)
 		}
+	}
+}
+
+// TestMethodRegistry_ModelPickerSeesSessionState guards the phase contract for
+// miniapp.models.*: the picker Controller snapshots s.modelRegistry and
+// s.chatHandler at construction, so it must register in registerLateMethods,
+// after registerSessionRPCMethods creates both. Registered early (#3457) the
+// snapshots stayed nil — models.list reported roles=null and the native picker
+// showed every role as 미설정 while models.set was rejected as "not ready".
+// The role rows come from the registry (not provider config), so a populated
+// roles list proves the controller saw the session-phase registry.
+func TestMethodRegistry_ModelPickerSeesSessionState(t *testing.T) {
+	srv := testutil.Must(New(":0"))
+	ctx := clientauth.WithContext(context.Background(), &clientauth.Identity{})
+	resp := srv.dispatcher.Dispatch(ctx, &protocol.RequestFrame{
+		ID:     "test-models-roles",
+		Method: "miniapp.models.list",
+		Params: json.RawMessage(`{}`),
+	})
+	if resp == nil || !resp.OK {
+		t.Fatalf("miniapp.models.list failed: %+v", resp)
+	}
+	var payload struct {
+		Roles []struct {
+			Role string `json:"role"`
+		} `json:"roles"`
+	}
+	testutil.NoError(t, json.Unmarshal(resp.Payload, &payload))
+	if len(payload.Roles) == 0 {
+		t.Fatal("models.list returned no roles: picker controller was constructed before the model registry (early/late phase regression)")
 	}
 }
 

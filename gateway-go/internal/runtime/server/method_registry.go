@@ -41,7 +41,6 @@ import (
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mailflow"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/modelpicker"
 	runtimenotify "github.com/choiceoh/deneb/gateway-go/internal/runtime/notify"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
@@ -457,21 +456,10 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			// See workfeed_meta_proposal.go.
 			OnMetaProposal: s.handleMetaProposalAction,
 		}),
-		modelpicker.NewController(modelpicker.ControllerConfig{
-			Registry:    s.modelRegistry,
-			ChatHandler: s.chatHandler,
-			Logger:      s.logger,
-			RoleHealthVerdicts: func() map[string]string {
-				if s.roleHealth == nil {
-					return nil
-				}
-				return s.roleHealth.Verdicts()
-			},
-			RefreshCodingModelConsumers: s.refreshCodingModelConsumers,
-			ProviderConfigs: func() map[string]chat.ProviderConfig {
-				return configresolve.LoadProviderConfigs(s.logger)
-			},
-		}).Methods(),
+		// miniapp.models.* is registered in registerLateMethods: the picker
+		// Controller snapshots s.modelRegistry/s.chatHandler at construction,
+		// and both are nil until registerSessionRPCMethods runs (#3457 had it
+		// here → every role showed 미설정 and model switching was rejected).
 		// Native local file browser (miniapp.files.{list,search,share,upload}):
 		// list/search/share/upload over the on-box file store (filestore). share
 		// mints a signed download link (fileshare); a nil store (open error)
