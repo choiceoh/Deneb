@@ -5,18 +5,18 @@ import "context"
 // optionalHealthSections contains the independently collected /health sections
 // that gracefully disappear when their backing runtime is unavailable.
 type optionalHealthSections struct {
-	cache        cacheHealthSection
+	cache        CacheSection
 	cachePresent bool
-	gpu          []gpuStat
+	gpu          []GPUStat
 	gpuPresent   bool
 }
 
 // OptionalSections is the transport-neutral result of concurrent cache and
 // GPU probes.
 type OptionalSections struct {
-	Cache        any
+	Cache        CacheSection
 	CachePresent bool
-	GPU          any
+	GPU          []GPUStat
 	GPUPresent   bool
 }
 
@@ -27,18 +27,18 @@ type Probes struct {
 }
 
 type (
-	cacheHealthProbe func(context.Context) (cacheHealthSection, bool)
-	gpuHealthProbe   func(context.Context) ([]gpuStat, bool)
+	cacheHealthProbe func(context.Context) (CacheSection, bool)
+	gpuHealthProbe   func(context.Context) ([]GPUStat, bool)
 )
 
 // Collect runs the optional cache and GPU probes concurrently.
 func (p *Probes) Collect(ctx context.Context, bases []string) OptionalSections {
 	sections := collectOptionalHealthProbes(
 		ctx,
-		func(probeCtx context.Context) (cacheHealthSection, bool) {
+		func(probeCtx context.Context) (CacheSection, bool) {
 			return p.cache.observe(probeCtx, bases)
 		},
-		func(probeCtx context.Context) ([]gpuStat, bool) {
+		func(probeCtx context.Context) ([]GPUStat, bool) {
 			return p.gpu.observe(probeCtx, nil)
 		},
 	)
@@ -51,7 +51,7 @@ func (p *Probes) Collect(ctx context.Context, bases []string) OptionalSections {
 }
 
 // GPU returns the standalone GPU health section.
-func (p *Probes) GPU(ctx context.Context) (any, bool) {
+func (p *Probes) GPU(ctx context.Context) ([]GPUStat, bool) {
 	stats, present := p.gpu.observe(ctx, nil)
 	return stats, present
 }
@@ -66,8 +66,8 @@ func collectOptionalHealthProbes(
 ) optionalHealthSections {
 	type probeResult struct {
 		cache        bool
-		cacheSection cacheHealthSection
-		gpuStats     []gpuStat
+		cacheSection CacheSection
+		gpuStats     []GPUStat
 		present      bool
 		panicValue   any
 	}

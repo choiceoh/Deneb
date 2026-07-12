@@ -16,18 +16,18 @@ func TestCollectOptionalHealthProbesRunConcurrently(t *testing.T) {
 		}
 	})
 
-	wantCache := cacheHealthSection{WindowQueries: 11, WindowHits: 7, Samples: 2}
-	wantGPU := []gpuStat{{Index: 0, UtilPct: 42}}
+	wantCache := CacheSection{WindowQueries: 11, WindowHits: 7, Samples: 2}
+	wantGPU := []GPUStat{{Index: 0, UtilPct: 42}}
 	done := make(chan optionalHealthSections, 1)
 	go func() {
 		done <- collectOptionalHealthProbes(
 			context.Background(),
-			func(context.Context) (cacheHealthSection, bool) {
+			func(context.Context) (CacheSection, bool) {
 				started <- "cache"
 				<-release
 				return wantCache, true
 			},
-			func(context.Context) ([]gpuStat, bool) {
+			func(context.Context) ([]GPUStat, bool) {
 				started <- "gpu"
 				<-release
 				return wantGPU, true
@@ -77,10 +77,10 @@ func TestCollectOptionalHealthProbesPropagateCancellation(t *testing.T) {
 	go func() {
 		done <- collectOptionalHealthProbes(
 			ctx,
-			func(probeCtx context.Context) (cacheHealthSection, bool) {
-				return cacheHealthSection{}, cacheProbe(probeCtx)
+			func(probeCtx context.Context) (CacheSection, bool) {
+				return CacheSection{}, cacheProbe(probeCtx)
 			},
-			func(probeCtx context.Context) ([]gpuStat, bool) {
+			func(probeCtx context.Context) ([]GPUStat, bool) {
 				return nil, gpuProbe(probeCtx)
 			},
 		)
@@ -112,10 +112,10 @@ func TestCollectOptionalHealthProbesRepanicsOnCaller(t *testing.T) {
 
 	collectOptionalHealthProbes(
 		context.Background(),
-		func(context.Context) (cacheHealthSection, bool) {
+		func(context.Context) (CacheSection, bool) {
 			panic("cache probe panic")
 		},
-		func(context.Context) ([]gpuStat, bool) {
+		func(context.Context) ([]GPUStat, bool) {
 			return nil, false
 		},
 	)

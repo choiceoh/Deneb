@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from pathlib import Path
 import unittest
 
 from health_v2 import ai_readiness, architecture, delivery, inventory, operations, testing
+from health_v2.history import ChangeCommit, HistoryFacts
 from test_codebase_health_v2_support import GitFixture, pillar
 
 
@@ -146,9 +149,7 @@ an unverified navigation path or definition of done score as executable truth.
         self.assertEqual(placeholder_signal.verification_score, 0.0)
 
         false_signal = false_facts.packages["internal/widget"]
-        self.assertEqual(
-            false_signal.guide_path, "gateway-go/internal/widget/CLAUDE.md"
-        )
+        self.assertEqual(false_signal.guide_path, "gateway-go/internal/widget/CLAUDE.md")
         self.assertEqual(false_signal.valid_entry_files, ())
         self.assertEqual(false_signal.valid_entry_symbols, ())
         self.assertEqual(false_signal.valid_commands, ())
@@ -157,22 +158,172 @@ an unverified navigation path or definition of done score as executable truth.
 
         navigability = architecture._ai_navigability(false_repo, false_facts)
         readiness = architecture._ai_change_readiness(false_repo, false_facts)
-        self.assertEqual(
-            navigability.metrics["risk_weighted_valid_entrypoints"], 0.0
-        )
-        self.assertEqual(
-            navigability.metrics["risk_weighted_specific_verification"], 0.0
-        )
-        self.assertEqual(
-            readiness.metrics["subscores"]["entrypoint_registry_index"], 0.0
-        )
-        self.assertEqual(
-            readiness.metrics["subscores"]["verification_specificity"], 0.0
-        )
-        self.assertTrue(
-            any("actual source symbol" in item.why for item in navigability.findings)
-        )
+        self.assertEqual(navigability.metrics["risk_weighted_valid_entrypoints"], 0.0)
+        self.assertEqual(navigability.metrics["risk_weighted_specific_verification"], 0.0)
+        self.assertEqual(readiness.metrics["subscores"]["entrypoint_registry_index"], 0.0)
+        self.assertEqual(readiness.metrics["subscores"]["verification_specificity"], 0.0)
+        self.assertTrue(any("actual source symbol" in item.why for item in navigability.findings))
         self.assertEqual(pillar([readiness], "ai-change-readiness"), readiness)
+
+    def test_composition_root_frequency_is_preserved_but_not_scored_as_hotspot(
+        self,
+    ) -> None:
+        repo = self._locality_repo(
+            [ChangeCommit(packages=(("internal/runtime/server", 1),)) for _ in range(20)]
+        )
+
+        result = architecture._change_locality(repo)
+
+        self.assertEqual(result.metrics["observed_hottest_package"], "internal/runtime/server")
+        self.assertEqual(result.metrics["observed_hottest_package_share"], 1.0)
+        self.assertEqual(result.metrics["scored_hottest_package"], "")
+        self.assertEqual(result.metrics["scored_hottest_package_share"], 0.0)
+        self.assertEqual(
+            result.metrics["subscores"]["non_composition_integration_hotspot_share"],
+            100.0,
+        )
+        self.assertEqual(result.score, 100.0)
+
+    def test_frequently_changed_local_package_is_not_a_false_hotspot(self) -> None:
+        repo = self._locality_repo(
+            [ChangeCommit(packages=(("internal/domain/widget", 1),)) for _ in range(20)]
+        )
+
+        result = architecture._change_locality(repo)
+
+        self.assertEqual(result.metrics["observed_hottest_package"], "internal/domain/widget")
+        self.assertEqual(result.metrics["observed_hottest_package_share"], 1.0)
+        self.assertEqual(result.metrics["scored_hottest_package"], "")
+        self.assertEqual(result.metrics["scored_hottest_package_share"], 0.0)
+        self.assertEqual(
+            result.metrics["subscores"]["non_composition_integration_hotspot_share"],
+            100.0,
+        )
+        self.assertEqual(result.score, 100.0)
+        self.assertFalse(any(item.id.startswith("change-hotspot:") for item in result.findings))
+
+    def test_non_composition_cross_component_hotspot_remains_penalized(self) -> None:
+        repo = self._locality_repo(
+            [
+                ChangeCommit(
+                    packages=(
+                        ("internal/domain/widget", 1),
+                        ("internal/infra/store", 1),
+                    )
+                )
+                for _ in range(20)
+            ]
+        )
+
+        result = architecture._change_locality(repo)
+
+        self.assertEqual(result.metrics["scored_hottest_package_share"], 1.0)
+        self.assertEqual(
+            result.metrics["subscores"]["non_composition_integration_hotspot_share"],
+            0.0,
+        )
+        self.assertEqual(result.score, 30.0)
+        self.assertTrue(any(item.id.startswith("change-hotspot:") for item in result.findings))
+
+    def test_package_nested_under_composition_root_cannot_gain_exemption(self) -> None:
+        repo = self._locality_repo(
+            [
+                ChangeCommit(
+                    packages=(
+                        ("internal/domain/widget", 1),
+                        ("internal/runtime/server/widget", 1),
+                    )
+                )
+                for _ in range(20)
+            ]
+        )
+
+        result = architecture._change_locality(repo)
+
+        self.assertEqual(
+            result.metrics["scored_hottest_package"],
+            "internal/runtime/server/widget",
+        )
+        self.assertEqual(
+            result.metrics["subscores"]["non_composition_integration_hotspot_share"],
+            0.0,
+        )
+        self.assertEqual(result.score, 30.0)
+
+    def test_composition_root_exemption_does_not_hide_scattered_changes(self) -> None:
+        repo = self._locality_repo(
+            [
+                ChangeCommit(
+                    packages=(
+                        ("internal/domain/widget", 1),
+                        ("internal/infra/store", 1),
+                        ("internal/runtime/server", 1),
+                    )
+                )
+                for _ in range(20)
+            ]
+        )
+
+        result = architecture._change_locality(repo)
+
+        self.assertEqual(result.metrics["observed_hottest_package"], "internal/runtime/server")
+        self.assertLess(result.metrics["subscores"]["p90_packages_per_change"], 100.0)
+        self.assertLess(result.metrics["subscores"]["p90_components_per_change"], 100.0)
+        self.assertLess(result.score, 50.0)
+        self.assertTrue(any(item.id.startswith("scattered-change:") for item in result.findings))
+
+    @staticmethod
+    def _locality_repo(commits: list[ChangeCommit]) -> inventory.RepositoryInventory:
+        package_keys = sorted({package for commit in commits for package, _ in commit.packages})
+        packages = {
+            key: inventory.PackageFacts(
+                key=key,
+                path=f"gateway-go/{key}",
+                package_name=key.rsplit("/", 1)[-1],
+                source_loc=10,
+                source_files=1,
+                imports=(),
+                exported_declarations=1,
+                dynamic_exported_contracts=0,
+                max_dependency_bag_fields=0,
+                package_doc_chars=0,
+                guide_path=None,
+                guide_strength=0.0,
+            )
+            for key in package_keys
+        }
+        touches: Counter[str] = Counter()
+        multipackage: Counter[str] = Counter()
+        cochange: Counter[tuple[str, str]] = Counter()
+        for commit in commits:
+            changed = [package for package, _ in commit.packages]
+            touches.update(changed)
+            if len(changed) > 1:
+                multipackage.update(changed)
+            for index, left in enumerate(changed):
+                for right in changed[index + 1 :]:
+                    cochange[(left, right)] += 1
+        history = HistoryFacts(
+            available=True,
+            detail=f"{len(commits)} fixture changes measured",
+            commits=tuple(commits),
+            package_touches=dict(touches),
+            multipackage_touches=dict(multipackage),
+            cochange_counts=dict(cochange),
+        )
+        graph = {key: frozenset() for key in package_keys}
+        return inventory.RepositoryInventory(
+            root=Path("/fixture"),
+            module_path="example.invalid/fixture",
+            packages=packages,
+            graph=graph,
+            reverse_graph=graph,
+            component_graph={},
+            component_sccs=(),
+            history=history,
+            source_files=len(packages),
+            source_loc=10 * len(packages),
+        )
 
 
 if __name__ == "__main__":

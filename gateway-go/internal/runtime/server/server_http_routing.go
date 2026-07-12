@@ -3,30 +3,14 @@ package server
 import (
 	"net/http"
 	"net/http/pprof"
-	"os"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/appupdate"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/fleetapi"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mcpapi"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeapi"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeauth"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/gatewayhttp"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 )
 
 // buildMux configures HTTP routing for health, RPC/WS, API, hooks, and plugin routes.
 func (s *Server) buildMux() *http.ServeMux {
 	mux := http.NewServeMux()
-	nativeHandler := func() *nativeapi.Handler {
-		return nativeapi.New(nativeapi.Config{
-			Dispatcher:        s.dispatcher,
-			ChatHandler:       s.chatHandler,
-			PushHub:           s.pushHub,
-			ShutdownContext:   s.ShutdownCtx(),
-			Logger:            s.logger,
-			AttachmentFactory: s.newMiniappMailAttachmentClient,
-		})
-	}
 	phoneEventHandler := func() *phoneevents.Handler {
 		return phoneevents.New(phoneevents.Config{
 			ChatHandler:     s.chatHandler,
@@ -49,34 +33,26 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /readyz", s.handleReady)
 	mux.HandleFunc("POST /api/cron/run", s.handleCronRun)
 	mux.HandleFunc("POST /api/event/ingest", func(w http.ResponseWriter, r *http.Request) { phoneEventHandler().ServeHTTP(w, r) })
+	clientRoutes := gatewayhttp.Config{
+		PushHub:           s.pushHub,
+		ShutdownContext:   s.ShutdownCtx(),
+		Logger:            s.logger,
+		AttachmentFactory: s.newMiniappMailAttachmentClient,
+		Fleet:             s.fleet,
+		Version:           s.version,
+	}
+	// Keep route discovery available to lightweight tests and diagnostics that
+	// construct a zero-value Server without the full RPC/chat bootstrap.
+	if s.ServerRPC != nil {
+		clientRoutes.Dispatcher = s.dispatcher
+	}
+	if s.ChatManager != nil {
+		clientRoutes.ChatHandler = s.chatHandler
+	}
+	gatewayhttp.RegisterRoutes(mux, clientRoutes)
 	// Production-fidelity extraction benchmark: run a real extractor against a named
 	// wormhole model. Client-token guarded. See server_http_eval.go.
 	mux.HandleFunc("POST /api/eval/extract", s.handleEvalExtract)
-	mux.HandleFunc("POST /api/v1/miniapp/rpc", func(w http.ResponseWriter, r *http.Request) { nativeHandler().RPC(w, r) })
-	mux.HandleFunc("POST /api/v1/miniapp/chat/stream", func(w http.ResponseWriter, r *http.Request) { nativeHandler().ChatStream(w, r) })
-	mux.HandleFunc("GET /api/v1/miniapp/events", func(w http.ResponseWriter, r *http.Request) { nativeHandler().Events(w, r) })
-	mux.HandleFunc("GET /api/v1/miniapp/gmail/attachment", func(w http.ResponseWriter, r *http.Request) { nativeHandler().GmailAttachment(w, r) })
-	// MCP gateway — read-only Deneb memory (wiki/projects/diary/calendar/search)
-	// as Model Context Protocol tools for external AI clients (Claude Code 등).
-	// Same client-token auth as the miniapp surface. See server_http_mcp.go.
-	if os.Getenv("DENEB_MCP_DISABLE") != "1" {
-		mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
-			mcpapi.New(mcpapi.Config{
-				Authenticate: func(w http.ResponseWriter, r *http.Request) (*clientauth.Identity, bool) {
-					return nativeauth.Authenticate(w, r, s.logger)
-				},
-				Dispatcher: s.dispatcher,
-				Version:    s.version,
-				Logger:     s.logger,
-			}).ServeHTTP(w, r)
-		})
-	}
-	mux.HandleFunc("GET /api/v1/app/update/manifest", appupdate.New(s.logger).Manifest)
-	mux.HandleFunc("GET /api/v1/app/update/download", appupdate.New(s.logger).Download)
-	mux.HandleFunc("GET /api/v1/files/download", func(w http.ResponseWriter, r *http.Request) { nativeHandler().FilesDownload(w, r) })
-	// Fleet passthrough — the native app manages SparkFleet through the gateway
-	// (subtree route; the handler enforces method+path allowlist + client token).
-	mux.Handle("/api/v1/fleet/", fleetapi.New(s.fleet, s.logger))
 	// SparkFleet webhook → native push (loopback-only, like /api/event/ingest).
 	mux.HandleFunc("POST /api/hooks/fleet", s.handleFleetHook)
 	// Self-improvement telemetry digest for an agent/puppeteer (loopback-only).
@@ -106,11 +82,6 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("/readyz", methodNotAllowed)
 	mux.HandleFunc("/api/cron/run", methodNotAllowed)
 	mux.HandleFunc("/api/event/ingest", methodNotAllowed)
-	mux.HandleFunc("/api/v1/miniapp/rpc", methodNotAllowed)
-	mux.HandleFunc("/api/v1/miniapp/chat/stream", methodNotAllowed)
-	mux.HandleFunc("/api/v1/miniapp/events", methodNotAllowed)
-	mux.HandleFunc("/api/v1/miniapp/gmail/attachment", methodNotAllowed)
-	mux.HandleFunc("/api/v1/files/download", methodNotAllowed)
 	// Catch-all handler: root fallback.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Root fallback for exact "/" GET.

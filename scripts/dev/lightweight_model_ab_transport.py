@@ -7,7 +7,7 @@ import time
 import urllib.error
 import urllib.request
 
-# --- Per-candidate request shaping (mirror of modelrole.ThinkingOffExtraBody) ---
+# --- Per-candidate request shaping (mirror of modelrole.ThinkingOffDirectiveFor) ---
 
 
 def _is_reasoning_model(model: str) -> bool:
@@ -24,7 +24,7 @@ def _is_reasoning_model(model: str) -> bool:
 def thinking_off_extra_body(model: str):
     """프로덕션 텍스트 콜(pilot.CallRoleLLM)이 자동 적용하는 thinking-off 셰이핑의
     Python 미러. 단일 진실원: gateway-go/internal/ai/modelrole/thinking.go
-    (ThinkingOffExtraBody) — 그쪽 분기가 바뀌면 여기도 갱신할 것. 3분기:
+    (ThinkingOffDirectiveFor) — 그쪽 분기가 바뀌면 여기도 갱신할 것. 3분기:
 
       1) dual-mode deepseek-v4 → chat_template_kwargs.thinking=false (템플릿 토글 철자)
       2) 끌 수 없는 사고형(step3/qwq/r1/비-instruct qwen3 등) → None

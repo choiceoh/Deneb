@@ -53,4 +53,22 @@ class SandboxContractsTest {
         assertEquals(-1, NoOpCommandHandle.awaitExit())
         assertEquals(-1, NoOpCommandHandle.awaitExit())
     }
+
+    @Test
+    fun noOpHandleCancellationLeavesTerminalStateUnavailable() = runTest {
+        NoOpCommandHandle.cancel()
+
+        assertFalse(NoOpCommandHandle.isCancelled())
+        assertEquals(-1, NoOpCommandHandle.awaitExit())
+    }
+
+    @Test
+    fun noOpHandleWriteAfterCancellationRemainsSafeAndStateless() = runTest {
+        NoOpCommandHandle.cancel()
+
+        NoOpCommandHandle.writeInput("input after cancel")
+
+        assertFalse(NoOpCommandHandle.isCancelled())
+        assertEquals(-1, NoOpCommandHandle.awaitExit())
+    }
 }

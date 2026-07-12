@@ -137,7 +137,63 @@ var (
 
 const maxFollowUpInputBytes = 64 << 10
 
+type chatHarnessAssembly struct {
+	cfg    ChatHarnessConfig
+	paths  RunPaths
+	clock  *ManualClock
+	arm    Arm
+	device harnessDevicePlan
+	world  *World
+	policy *Policy
+	memory *denebMemoryMirror
+
+	profile     harnessExecutionProfile
+	transcript  *RunTranscript
+	gate        *ToolGate
+	handler     *chat.Handler
+	promptAudit *systemPromptAudit
+}
+
+type harnessDevicePlan struct {
+	twin         *DeviceTwin
+	digest       string
+	allowedKinds []string
+}
+
+type harnessExecutionProfile struct {
+	toolSchemaSHA256       string
+	endpointSHA256         string
+	buildSHA256            string
+	executionProfileSHA256 string
+	sampling               SamplingProfile
+}
+
 func NewChatHarness(cfg ChatHarnessConfig) (*ChatHarness, error) {
+	assembly, err := prepareChatHarnessAssembly(cfg)
+	if err != nil {
+		return nil, err
+	}
+	// A post-claim failure deliberately consumes the RunRoot: device validation
+	// and runtime assembly may have observed or materialized attempt-local state.
+	if err := assembly.cfg.Root.claimHarness(); err != nil {
+		return nil, err
+	}
+	if err := assembly.prepareDevicePlan(); err != nil {
+		return nil, err
+	}
+	if err := assembly.prepareWorldAndMemory(); err != nil {
+		return nil, err
+	}
+	// The memory mirror is the first closeable resource. Every remaining
+	// fallible step runs behind one boundary so cleanup cannot drift by branch.
+	if err := assembly.prepareExecution(); err != nil {
+		_ = assembly.memory.Close()
+		return nil, err
+	}
+	return assembly.buildHarness(), nil
+}
+
+func prepareChatHarnessAssembly(cfg ChatHarnessConfig) (*chatHarnessAssembly, error) {
 	if cfg.Pack == nil || cfg.Root == nil || cfg.Client == nil {
 		return nil, errors.New("briefcase: pack, run root, and LLM client are required")
 	}
@@ -145,15 +201,9 @@ func NewChatHarness(cfg ChatHarnessConfig) (*ChatHarness, error) {
 		return nil, errors.New("briefcase: model is required")
 	}
 	cfg.Client = cfg.Client.CloneForDeterministicRun()
-	if err := casepack.Validate(cfg.Pack); err != nil {
-		return nil, fmt.Errorf("briefcase: harness pack: %w", err)
-	}
-	authenticatedPack, err := casepack.LoadDir(cfg.Pack.Root)
+	authenticatedPack, err := authenticateHarnessPack(cfg.Pack)
 	if err != nil {
-		return nil, fmt.Errorf("briefcase: reload harness pack: %w", err)
-	}
-	if authenticatedPack.Digest != cfg.Pack.Digest {
-		return nil, errors.New("briefcase: harness pack changed after authentication")
+		return nil, err
 	}
 	cfg.Pack = authenticatedPack
 	if cfg.Pack.Manifest.RunPolicy.MaxTokens > int64(math.MaxInt) {
@@ -167,143 +217,224 @@ func NewChatHarness(cfg ChatHarnessConfig) (*ChatHarness, error) {
 		return nil, err
 	}
 	clock := NewManualClock(cfg.Pack.Manifest.FrozenNow)
-	arm := cfg.Arm
-	if arm == "" {
-		arm = ArmMemoryAssisted
-	}
-	if arm != ArmRawPrimary && arm != ArmMemoryAssisted {
-		return nil, fmt.Errorf("briefcase: unsupported arm %q", arm)
-	}
-	if err := cfg.Root.claimHarness(); err != nil {
-		return nil, err
-	}
-	var device *DeviceTwin
-	var devicePlans []DevicePlan
-	devicePlanSHA256 := ""
-	devicePlanRoleCount := 0
-	devicePlanRoleSHA256 := ""
-	for _, source := range cfg.Pack.Manifest.Sources {
-		if source.Access == casepack.SourceAccessSealed && source.SourceRef == "briefcase:device-plan" {
-			devicePlanRoleCount++
-			devicePlanRoleSHA256 = source.SHA256
-		}
-	}
-	if devicePlanRoleCount > 1 {
-		return nil, errors.New("briefcase: casepack must declare at most one briefcase:device-plan role")
-	}
-	if cfg.DevicePlanSourceSHA256 != "" {
-		decoded, decodeErr := hex.DecodeString(cfg.DevicePlanSourceSHA256)
-		if decodeErr != nil || len(decoded) != sha256.Size || strings.ToLower(cfg.DevicePlanSourceSHA256) != cfg.DevicePlanSourceSHA256 {
-			return nil, errors.New("briefcase: device plan source digest must be lowercase SHA-256")
-		}
-		if devicePlanRoleCount != 1 || devicePlanRoleSHA256 != cfg.DevicePlanSourceSHA256 {
-			return nil, errors.New("briefcase: device plan source is not the signed briefcase:device-plan role")
-		}
-		if casepack.DigestBytes(cfg.DevicePlanSource) != cfg.DevicePlanSourceSHA256 {
-			return nil, errors.New("briefcase: device plan bytes do not match the signed source digest")
-		}
-		devicePlans, err = DecodeDevicePlanSource(cfg.DevicePlanSource)
-		if err != nil {
-			return nil, err
-		}
-		devicePlanSHA256, err = DevicePlansDigest(devicePlans)
-		if err != nil {
-			return nil, err
-		}
-		device, err = NewDeviceTwin(clock, devicePlans)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		if len(cfg.DevicePlanSource) != 0 {
-			return nil, errors.New("briefcase: device plan bytes require a signed source digest")
-		}
-		if devicePlanRoleCount == 1 {
-			return nil, errors.New("briefcase: signed briefcase:device-plan source must be loaded")
-		}
-	}
-	allowedDeviceKinds := make([]string, 0, len(devicePlans))
-	seenKinds := make(map[string]struct{})
-	for _, plan := range devicePlans {
-		if _, seen := seenKinds[plan.Kind]; !seen {
-			seenKinds[plan.Kind] = struct{}{}
-			allowedDeviceKinds = append(allowedDeviceKinds, plan.Kind)
-		}
-	}
-	world, err := NewWorldWithOptions(cfg.Pack, clock, WorldOptions{IncludeMemory: arm == ArmMemoryAssisted})
+	arm, err := normalizeHarnessArm(cfg.Arm)
 	if err != nil {
 		return nil, err
 	}
-	if err := world.Materialize(cfg.Root); err != nil {
-		return nil, err
+	return &chatHarnessAssembly{cfg: cfg, paths: paths, clock: clock, arm: arm}, nil
+}
+
+func authenticateHarnessPack(pack *casepack.Pack) (*casepack.Pack, error) {
+	if err := casepack.Validate(pack); err != nil {
+		return nil, fmt.Errorf("briefcase: harness pack: %w", err)
 	}
-	writableArtifacts := make(map[string]int64, len(cfg.Pack.Manifest.Artifacts))
-	for _, artifact := range cfg.Pack.Manifest.Artifacts {
+	authenticatedPack, err := casepack.LoadDir(pack.Root)
+	if err != nil {
+		return nil, fmt.Errorf("briefcase: reload harness pack: %w", err)
+	}
+	if authenticatedPack.Digest != pack.Digest {
+		return nil, errors.New("briefcase: harness pack changed after authentication")
+	}
+	return authenticatedPack, nil
+}
+
+func normalizeHarnessArm(arm Arm) (Arm, error) {
+	if arm == "" {
+		return ArmMemoryAssisted, nil
+	}
+	if arm != ArmRawPrimary && arm != ArmMemoryAssisted {
+		return "", fmt.Errorf("briefcase: unsupported arm %q", arm)
+	}
+	return arm, nil
+}
+
+func (a *chatHarnessAssembly) prepareDevicePlan() error {
+	devicePlan, err := loadHarnessDevicePlan(a.cfg, a.clock)
+	if err != nil {
+		return err
+	}
+	a.device = devicePlan
+	return nil
+}
+
+func loadHarnessDevicePlan(cfg ChatHarnessConfig, clock *ManualClock) (harnessDevicePlan, error) {
+	roleCount, roleSHA256 := declaredDevicePlanRole(cfg.Pack)
+	if roleCount > 1 {
+		return harnessDevicePlan{}, errors.New("briefcase: casepack must declare at most one briefcase:device-plan role")
+	}
+	if cfg.DevicePlanSourceSHA256 == "" {
+		if len(cfg.DevicePlanSource) != 0 {
+			return harnessDevicePlan{}, errors.New("briefcase: device plan bytes require a signed source digest")
+		}
+		if roleCount == 1 {
+			return harnessDevicePlan{}, errors.New("briefcase: signed briefcase:device-plan source must be loaded")
+		}
+		return harnessDevicePlan{}, nil
+	}
+	if err := validateDevicePlanSource(cfg, roleCount, roleSHA256); err != nil {
+		return harnessDevicePlan{}, err
+	}
+	plans, err := DecodeDevicePlanSource(cfg.DevicePlanSource)
+	if err != nil {
+		return harnessDevicePlan{}, err
+	}
+	digest, err := DevicePlansDigest(plans)
+	if err != nil {
+		return harnessDevicePlan{}, err
+	}
+	twin, err := NewDeviceTwin(clock, plans)
+	if err != nil {
+		return harnessDevicePlan{}, err
+	}
+	return harnessDevicePlan{twin: twin, digest: digest, allowedKinds: uniqueDeviceKinds(plans)}, nil
+}
+
+func declaredDevicePlanRole(pack *casepack.Pack) (count int, sha256 string) {
+	for _, source := range pack.Manifest.Sources {
+		if source.Access == casepack.SourceAccessSealed && source.SourceRef == "briefcase:device-plan" {
+			count++
+			sha256 = source.SHA256
+		}
+	}
+	return count, sha256
+}
+
+func validateDevicePlanSource(cfg ChatHarnessConfig, roleCount int, roleSHA256 string) error {
+	decoded, err := hex.DecodeString(cfg.DevicePlanSourceSHA256)
+	if err != nil || len(decoded) != sha256.Size || strings.ToLower(cfg.DevicePlanSourceSHA256) != cfg.DevicePlanSourceSHA256 {
+		return errors.New("briefcase: device plan source digest must be lowercase SHA-256")
+	}
+	if roleCount != 1 || roleSHA256 != cfg.DevicePlanSourceSHA256 {
+		return errors.New("briefcase: device plan source is not the signed briefcase:device-plan role")
+	}
+	if casepack.DigestBytes(cfg.DevicePlanSource) != cfg.DevicePlanSourceSHA256 {
+		return errors.New("briefcase: device plan bytes do not match the signed source digest")
+	}
+	return nil
+}
+
+func uniqueDeviceKinds(plans []DevicePlan) []string {
+	kinds := make([]string, 0, len(plans))
+	seen := make(map[string]struct{}, len(plans))
+	for _, plan := range plans {
+		if _, ok := seen[plan.Kind]; ok {
+			continue
+		}
+		seen[plan.Kind] = struct{}{}
+		kinds = append(kinds, plan.Kind)
+	}
+	return kinds
+}
+
+func (a *chatHarnessAssembly) prepareWorldAndMemory() error {
+	world, err := NewWorldWithOptions(a.cfg.Pack, a.clock, WorldOptions{IncludeMemory: a.arm == ArmMemoryAssisted})
+	if err != nil {
+		return err
+	}
+	if err := world.Materialize(a.cfg.Root); err != nil {
+		return err
+	}
+	policy, err := NewPolicy(a.cfg.Root, PolicyOptions{
+		AllowedDeviceKinds: a.device.allowedKinds,
+		WritableArtifacts:  writableArtifactLimits(a.cfg.Pack),
+	})
+	if err != nil {
+		return err
+	}
+	memory, err := newDenebMemoryMirror(a.paths, world)
+	if err != nil {
+		return err
+	}
+	if err := memory.Sync(); err != nil {
+		_ = memory.Close()
+		return err
+	}
+	a.world = world
+	a.policy = policy
+	a.memory = memory
+	return nil
+}
+
+func writableArtifactLimits(pack *casepack.Pack) map[string]int64 {
+	limits := make(map[string]int64, len(pack.Manifest.Artifacts))
+	for _, artifact := range pack.Manifest.Artifacts {
 		limit := artifact.MaxBytes
 		if limit <= 0 {
 			limit = casepack.MaxArtifactBytesV1
 		}
-		writableArtifacts[artifact.Path] = limit
+		limits[artifact.Path] = limit
 	}
-	policy, err := NewPolicy(cfg.Root, PolicyOptions{
-		AllowedDeviceKinds: allowedDeviceKinds,
-		WritableArtifacts:  writableArtifacts,
-	})
-	if err != nil {
-		return nil, err
-	}
-	memory, err := newDenebMemoryMirror(paths, world)
-	if err != nil {
-		return nil, err
-	}
-	if err := memory.Sync(); err != nil {
-		_ = memory.Close()
-		return nil, err
-	}
+	return limits
+}
+
+func (a *chatHarnessAssembly) prepareExecution() error {
 	registry, err := NewFixtureRegistry(FixtureRegistryConfig{
-		Workspace:  paths.Workspace,
-		World:      world,
-		Policy:     policy,
-		Device:     device,
-		WikiStore:  memory.store,
-		ToolPolicy: cfg.Pack.Manifest.ToolPolicy,
-		Approval:   cfg.Approval,
+		Workspace:  a.paths.Workspace,
+		World:      a.world,
+		Policy:     a.policy,
+		Device:     a.device.twin,
+		WikiStore:  a.memory.store,
+		ToolPolicy: a.cfg.Pack.Manifest.ToolPolicy,
+		Approval:   a.cfg.Approval,
 	})
 	if err != nil {
-		_ = memory.Close()
-		return nil, err
+		return err
 	}
+	profile, err := buildHarnessExecutionProfile(a.cfg, registry)
+	if err != nil {
+		return err
+	}
+	gate, err := NewToolGate(a.cfg.Pack.Manifest.ToolPolicy, a.cfg.Approval)
+	if err != nil {
+		return err
+	}
+	logger := a.cfg.Logger
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	transcript, err := NewRunTranscript(a.paths, logger)
+	if err != nil {
+		return err
+	}
+	handler, promptAudit := newDeterministicChatHandler(a, registry, transcript, logger)
+	a.profile = profile
+	a.gate = gate
+	a.transcript = transcript
+	a.handler = handler
+	a.promptAudit = promptAudit
+	return nil
+}
+
+func buildHarnessExecutionProfile(cfg ChatHarnessConfig, registry *chat.ToolRegistry) (harnessExecutionProfile, error) {
 	toolSchemaSHA256, err := fixtureToolSchemaDigest(registry)
 	if err != nil {
-		_ = memory.Close()
-		return nil, err
+		return harnessExecutionProfile{}, err
 	}
 	endpointSHA256, err := modelEndpointDigest(cfg.Client.BaseURL())
 	if err != nil {
-		_ = memory.Close()
-		return nil, err
+		return harnessExecutionProfile{}, err
 	}
 	buildSHA256 := buildIdentityDigest()
 	sampling := SamplingProfile{Temperature: 0, TopP: 1, FrequencyPenalty: 0, PresencePenalty: 0}
 	executionProfileSHA256, err := executionProfileDigest(cfg, toolSchemaSHA256, endpointSHA256, buildSHA256, sampling)
 	if err != nil {
-		_ = memory.Close()
-		return nil, err
+		return harnessExecutionProfile{}, err
 	}
-	gate, err := NewToolGate(cfg.Pack.Manifest.ToolPolicy, cfg.Approval)
-	if err != nil {
-		_ = memory.Close()
-		return nil, err
-	}
-	logger := cfg.Logger
-	if logger == nil {
-		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
-	}
-	transcript, err := NewRunTranscript(paths, logger)
-	if err != nil {
-		_ = memory.Close()
-		return nil, err
-	}
+	return harnessExecutionProfile{
+		toolSchemaSHA256:       toolSchemaSHA256,
+		endpointSHA256:         endpointSHA256,
+		buildSHA256:            buildSHA256,
+		executionProfileSHA256: executionProfileSHA256,
+		sampling:               sampling,
+	}, nil
+}
+
+func newDeterministicChatHandler(
+	a *chatHarnessAssembly,
+	registry *chat.ToolRegistry,
+	transcript *RunTranscript,
+	logger *slog.Logger,
+) (*chat.Handler, *systemPromptAudit) {
 	sessions := session.NewManager()
 	handlerCfg := chat.DefaultHandlerConfig()
 	// Never inherit DENEB_MEMORY_TOKEN_BUDGET or another host deployment knob.
@@ -314,64 +445,66 @@ func NewChatHarness(cfg ChatHarnessConfig) (*ChatHarness, error) {
 		SystemPromptBudget: 30_000,
 		FreshTailCount:     24,
 	}
-	handlerCfg.LLMClient = cfg.Client
+	handlerCfg.LLMClient = a.cfg.Client
 	handlerCfg.Transcript = transcript.Bridge()
 	handlerCfg.Tools = registry
-	if arm == ArmMemoryAssisted {
-		handlerCfg.Memory = chat.MemoryDeps{Wiki: memory.store}
+	if a.arm == ArmMemoryAssisted {
+		handlerCfg.Memory = chat.MemoryDeps{Wiki: a.memory.store}
 	}
-	handlerCfg.DefaultModel = cfg.Model
-	handlerCfg.MaxTokens = int(cfg.Pack.Manifest.RunPolicy.MaxTokens)
+	handlerCfg.DefaultModel = a.cfg.Model
+	handlerCfg.MaxTokens = int(a.cfg.Pack.Manifest.RunPolicy.MaxTokens)
 	handlerCfg.RunLimits = chat.RunLimits{
-		MaxTurns: cfg.Pack.Manifest.RunPolicy.MaxTurns,
-		Timeout:  runTurnTimeout(cfg.Pack.Manifest.RunPolicy),
+		MaxTurns: a.cfg.Pack.Manifest.RunPolicy.MaxTurns,
+		Timeout:  runTurnTimeout(a.cfg.Pack.Manifest.RunPolicy),
 	}
-	seed := cfg.Pack.Manifest.Seed
+	seed := a.cfg.Pack.Manifest.Seed
 	handlerCfg.SamplingSeed = &seed
 	handlerCfg.DisableTier1Wiki = true
-	handlerCfg.SemanticNow = clock.Now
-	handlerCfg.SemanticTimezone = cfg.Pack.Manifest.Timezone
-	handlerCfg.WorkspaceDir = paths.Workspace
+	handlerCfg.SemanticNow = a.clock.Now
+	handlerCfg.SemanticTimezone = a.cfg.Pack.Manifest.Timezone
+	handlerCfg.WorkspaceDir = a.paths.Workspace
 	handlerCfg.PromptWorkspaceDir = "/briefcase/workspace"
 	handlerCfg.BriefcaseMode = true
 	promptAudit := &systemPromptAudit{}
 	handlerCfg.AuditSystemPrompt = promptAudit.record
-	handler := chat.NewHandler(sessions, nil, logger, handlerCfg)
+	return chat.NewHandler(sessions, nil, logger, handlerCfg), promptAudit
+}
 
-	runID := strings.TrimSpace(cfg.RunID)
+func (a *chatHarnessAssembly) buildHarness() *ChatHarness {
+	runID := strings.TrimSpace(a.cfg.RunID)
 	if runID == "" {
-		runID = fmt.Sprintf("%s-seed-%d-%s", cfg.Pack.Manifest.CaseID, cfg.Pack.Manifest.Seed, arm)
+		runID = fmt.Sprintf("%s-seed-%d-%s", a.cfg.Pack.Manifest.CaseID, a.cfg.Pack.Manifest.Seed, a.arm)
 	}
-	sessionKey := strings.TrimSpace(cfg.SessionKey)
+	sessionKey := strings.TrimSpace(a.cfg.SessionKey)
 	if sessionKey == "" {
-		sessionKey = "bench:" + cfg.Pack.Manifest.CaseID + ":" + string(arm)
+		sessionKey = "bench:" + a.cfg.Pack.Manifest.CaseID + ":" + string(a.arm)
 	}
 	// Session keys reach filesystem-backed Polaris paths. Hash the complete
 	// caller value with a RunRoot nonce so it is both unique and an opaque safe
 	// path segment; raw separators and traversal text never reach a store.
-	sessionDigest := sha256.Sum256([]byte(sessionKey + "\x00" + paths.Root))
+	sessionDigest := sha256.Sum256([]byte(sessionKey + "\x00" + a.paths.Root))
 	sessionKey = "briefcase-" + hex.EncodeToString(sessionDigest[:16])
 	binding := HarnessBinding{
-		CaseID: cfg.Pack.Manifest.CaseID, CasepackSHA256: cfg.Pack.Digest,
-		Seed: cfg.Pack.Manifest.Seed, Model: cfg.Model, APIMode: cfg.Client.APIMode(), Arm: arm,
-		RecallMode:       recallMode(cfg.SkipRecall || arm == ArmRawPrimary),
-		DevicePlanSHA256: devicePlanSHA256, DevicePlanSourceSHA256: cfg.DevicePlanSourceSHA256,
-		ToolSchemaSHA256: toolSchemaSHA256,
-		EndpointSHA256:   endpointSHA256, BuildSHA256: buildSHA256,
-		ExecutionProfileSHA256: executionProfileSHA256,
+		CaseID: a.cfg.Pack.Manifest.CaseID, CasepackSHA256: a.cfg.Pack.Digest,
+		Seed: a.cfg.Pack.Manifest.Seed, Model: a.cfg.Model, APIMode: a.cfg.Client.APIMode(), Arm: a.arm,
+		RecallMode:       recallMode(a.cfg.SkipRecall || a.arm == ArmRawPrimary),
+		DevicePlanSHA256: a.device.digest, DevicePlanSourceSHA256: a.cfg.DevicePlanSourceSHA256,
+		ToolSchemaSHA256: a.profile.toolSchemaSHA256,
+		EndpointSHA256:   a.profile.endpointSHA256, BuildSHA256: a.profile.buildSHA256,
+		ExecutionProfileSHA256: a.profile.executionProfileSHA256,
 	}
 	return &ChatHarness{
-		pack: cfg.Pack, root: cfg.Root, clock: clock, world: world, memory: memory,
+		pack: a.cfg.Pack, root: a.cfg.Root, clock: a.clock, world: a.world, memory: a.memory,
 		binding:    binding,
-		transcript: transcript,
-		device:     device, devicePlanSHA256: devicePlanSHA256,
-		devicePlanSourceSHA256: cfg.DevicePlanSourceSHA256, gate: gate, handler: handler,
-		toolSchemaSHA256: toolSchemaSHA256,
-		endpointSHA256:   endpointSHA256, buildSHA256: buildSHA256,
-		executionProfileSHA256: executionProfileSHA256, sampling: sampling, promptAudit: promptAudit,
-		model: cfg.Model, apiMode: cfg.Client.APIMode(), runID: runID, sessionKey: sessionKey,
-		skipRecall: cfg.SkipRecall || arm == ArmRawPrimary, arm: arm, paths: paths,
-	}, nil
+		transcript: a.transcript,
+		device:     a.device.twin, devicePlanSHA256: a.device.digest,
+		devicePlanSourceSHA256: a.cfg.DevicePlanSourceSHA256, gate: a.gate, handler: a.handler,
+		toolSchemaSHA256: a.profile.toolSchemaSHA256,
+		endpointSHA256:   a.profile.endpointSHA256, buildSHA256: a.profile.buildSHA256,
+		executionProfileSHA256: a.profile.executionProfileSHA256, sampling: a.profile.sampling, promptAudit: a.promptAudit,
+		model: a.cfg.Model, apiMode: a.cfg.Client.APIMode(), runID: runID, sessionKey: sessionKey,
+		skipRecall: a.cfg.SkipRecall || a.arm == ArmRawPrimary, arm: a.arm, paths: a.paths,
+	}
 }
 
 func requireFreshWorkspace(workspace string) error {

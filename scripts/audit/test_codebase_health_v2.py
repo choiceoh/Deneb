@@ -238,7 +238,7 @@ class BaselineRatchetTests(unittest.TestCase):
             )
 
             self.assertEqual(load(path), migrated)
-        self.assertEqual(migrated["rubric_version"], "2.1.2")
+        self.assertEqual(migrated["rubric_version"], "2.2.0")
         self.assertEqual(migrated["overall"], 50.0)
         self.assertEqual(
             migrated["provenance"],
@@ -258,7 +258,7 @@ class BaselineRatchetTests(unittest.TestCase):
     def test_rubric_migration_rejects_same_rubric_and_profile_mismatch(self) -> None:
         with tempfile.TemporaryDirectory(prefix="deneb-health-migration-") as folder:
             path = Path(folder) / "baseline.json"
-            with self.assertRaisesRegex(BaselineError, "already uses rubric 2.1.2"):
+            with self.assertRaisesRegex(BaselineError, "already uses rubric 2.2.0"):
                 migrate(path, _report(), snapshot(_report()))
 
             old_deep = {

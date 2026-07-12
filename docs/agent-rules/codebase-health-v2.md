@@ -33,12 +33,13 @@ Health Bench 2.0은 줄 수를 줄이는 게임이 아니라, 변경이 국소�
 - 필수 증거가 없으면 check를 tooling error로 끝낸다. 모르는 상태를 건강한
   상태로 간주하지 않는다.
 
-## Rubric 2.1.2
+## Rubric 2.2.0
 
-2.1.2는 Go의 범용 generic constraint를 런타임 동적 계약으로 세지 않고,
-중앙/생성 테스트는 실제 production subject와 검증 provenance가 확인되는 독립
-shape만 인정한다. 생성된 반복 case 수는 점수에 더하지 않으며 test
-maintainability에서는 계속 제외한다.
+2.2.0은 2.1.2의 typed-contract와 테스트 provenance 규칙을 유지하면서,
+단일 패키지 안에서 반복된 변경 빈도를 integration bottleneck으로 오인하지
+않는다. Locality hotspot은 여러 컴포넌트를 가로지른 변경에 반복 참여한 현재
+패키지만 점수화하며, 원시 빈도와 산개 변경·co-change·volatile hub 증거는 계속
+보존한다.
 
 | Pillar | Weight | 실제로 묻는 질문 | 주요 증거 |
 |---|---:|---|---|
@@ -60,6 +61,13 @@ maintainability에서는 계속 제외한다.
 shape를 하나로 접어 계산한다. Git 이력이 없거나 필수 source inventory가 비면
 해당 축을 100점으로 건너뛰지 않고 측정 실패로 처리한다.
 
+Change locality는 raw 변경 빈도를 관측 증거로 계속 보고하되, 그 빈도만으로
+feature ownership hotspot을 감점하지 않는다. Hotspot은 같은 패키지가 반복적인
+cross-component 변경에 참여할 때만 점수화한다. 조립 루트를 포함한 산개 변경,
+cross-package co-change, 현재 reverse dependency와 결합된 volatile-hub 위험은
+그대로 점수화한다. 따라서 조립 루트 경로로 코드를 옮기는 것만으로는 경계 문제를
+숨길 수 없고, 과거 wiring 빈도도 보고서에서 사라지지 않는다.
+
 언어 lane의 제품 영향도는 Go gateway 45%, Kotlin native 25%, TypeScript desktop
 15%, Python operations 10%, Shell operations 3%, Rust/Tauri 2%로 고정한다. 이는 LOC
 비율이 아니라 런타임 소유권과 사용자 노출도를 나타낸다. 새 핵심 제품 surface가
@@ -75,7 +83,7 @@ revision의 format, vet, lint, test, race 실행 결과다. Fast 프로필에서
 - Metric에 `scored: false`가 있으면 문제 판정이 아니라 조사 위치를 제공하는
   진단값이다. LOC·파일 수·raw goroutine·root context·blank assignment·inline
   HTTP timeout·test file size는 이 방식으로만 보고한다.
-- Rubric 2.1의 정밀 AI navigation은 우선 Go gateway package를 측정한다. Kotlin,
+- Rubric 2.2의 정밀 AI navigation은 우선 Go gateway package를 측정한다. Kotlin,
   TypeScript, Python의 AI 전용 증거는 아직 측정하지 않는다. 미측정 영역을 0점이나
   100점으로 만들지 않고 report confidence를 낮춘다. 이 두 pillar는 provisional Go
   scope로 해석하고 `measured_product_lanes`와

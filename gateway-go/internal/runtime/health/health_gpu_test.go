@@ -10,17 +10,17 @@ func TestParseGPUStats(t *testing.T) {
 	cases := []struct {
 		desc string
 		csv  string
-		want []gpuStat
+		want []GPUStat
 	}{
 		{
 			desc: "single GPU typical DGX Spark output",
 			csv:  "37, 18432, 81920, 54\n",
-			want: []gpuStat{{Index: 0, UtilPct: 37, MemUsedMiB: 18432, MemTotalMiB: 81920, TempC: 54}},
+			want: []GPUStat{{Index: 0, UtilPct: 37, MemUsedMiB: 18432, MemTotalMiB: 81920, TempC: 54}},
 		},
 		{
 			desc: "multi-GPU rows index in order",
 			csv:  "0, 1024, 81920, 41\n100, 80000, 81920, 73\n",
-			want: []gpuStat{
+			want: []GPUStat{
 				{Index: 0, UtilPct: 0, MemUsedMiB: 1024, MemTotalMiB: 81920, TempC: 41},
 				{Index: 1, UtilPct: 100, MemUsedMiB: 80000, MemTotalMiB: 81920, TempC: 73},
 			},
@@ -28,22 +28,22 @@ func TestParseGPUStats(t *testing.T) {
 		{
 			desc: "no trailing newline",
 			csv:  "12, 2048, 81920, 48",
-			want: []gpuStat{{Index: 0, UtilPct: 12, MemUsedMiB: 2048, MemTotalMiB: 81920, TempC: 48}},
+			want: []GPUStat{{Index: 0, UtilPct: 12, MemUsedMiB: 2048, MemTotalMiB: 81920, TempC: 48}},
 		},
 		{
 			desc: "N/A field tolerated as zero (temp unsupported)",
 			csv:  "5, 512, 81920, [N/A]\n",
-			want: []gpuStat{{Index: 0, UtilPct: 5, MemUsedMiB: 512, MemTotalMiB: 81920, TempC: 0}},
+			want: []GPUStat{{Index: 0, UtilPct: 5, MemUsedMiB: 512, MemTotalMiB: 81920, TempC: 0}},
 		},
 		{
 			desc: "stray unit suffix stripped (defensive, nounits should prevent)",
 			csv:  "37 %, 18432 MiB, 81920 MiB, 54 C\n",
-			want: []gpuStat{{Index: 0, UtilPct: 37, MemUsedMiB: 18432, MemTotalMiB: 81920, TempC: 54}},
+			want: []GPUStat{{Index: 0, UtilPct: 37, MemUsedMiB: 18432, MemTotalMiB: 81920, TempC: 54}},
 		},
 		{
 			desc: "blank lines skipped, malformed short row skipped, good rows kept",
 			csv:  "\n10, 100, 200, 30\nbroken,row\n20, 200, 400, 40\n\n",
-			want: []gpuStat{
+			want: []GPUStat{
 				{Index: 0, UtilPct: 10, MemUsedMiB: 100, MemTotalMiB: 200, TempC: 30},
 				{Index: 1, UtilPct: 20, MemUsedMiB: 200, MemTotalMiB: 400, TempC: 40},
 			},
@@ -61,7 +61,7 @@ func TestParseGPUStats(t *testing.T) {
 		{
 			desc: "garbage numeric cells default to zero, row still emitted",
 			csv:  "abc, def, 81920, 50\n",
-			want: []gpuStat{{Index: 0, UtilPct: 0, MemUsedMiB: 0, MemTotalMiB: 81920, TempC: 50}},
+			want: []GPUStat{{Index: 0, UtilPct: 0, MemUsedMiB: 0, MemTotalMiB: 81920, TempC: 50}},
 		},
 	}
 	for _, tc := range cases {

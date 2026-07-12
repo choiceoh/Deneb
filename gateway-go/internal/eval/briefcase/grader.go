@@ -178,19 +178,46 @@ func GradeContext(ctx context.Context, plan Plan, evidence Evidence) (Report, er
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	threshold := plan.PassThreshold
+	threshold, reportedThreshold, thresholdValid := normalizeGradeThreshold(plan.PassThreshold)
+	report := newGradeReport(plan, reportedThreshold)
+	if err := ctx.Err(); err != nil {
+		return report, err
+	}
+
+	grading := newGradeAccumulator(&report, plan, thresholdValid)
+	for _, check := range plan.Checks {
+		if err := ctx.Err(); err != nil {
+			return report, err
+		}
+		if err := grading.gradeCheck(ctx, check, evidence); err != nil {
+			return report, err
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return report, err
+	}
+	grading.finalize(threshold, thresholdValid)
+	return report, nil
+}
+
+func normalizeGradeThreshold(configured float64) (threshold, reported float64, valid bool) {
+	threshold = configured
 	if threshold == 0 {
 		threshold = 1
 	}
-	thresholdValid := threshold > 0 && threshold <= 1 && !math.IsNaN(threshold) && !math.IsInf(threshold, 0)
-	reportedThreshold := threshold
-	if math.IsNaN(reportedThreshold) || math.IsInf(reportedThreshold, 0) {
+	valid = threshold > 0 && threshold <= 1 && !math.IsNaN(threshold) && !math.IsInf(threshold, 0)
+	reported = threshold
+	if math.IsNaN(reported) || math.IsInf(reported, 0) {
 		// Reports must remain JSON-serializable even when a malformed plan uses
 		// a non-finite number. INVALID carries the verdict; zero is the safe wire
 		// representation of the rejected threshold.
-		reportedThreshold = 0
+		reported = 0
 	}
-	report := Report{
+	return threshold, reported, valid
+}
+
+func newGradeReport(plan Plan, reportedThreshold float64) Report {
+	return Report{
 		SchemaVersion:     ReportSchemaVersion,
 		Status:            StatusInvalid,
 		PassThreshold:     reportedThreshold,
@@ -199,124 +226,143 @@ func GradeContext(ctx context.Context, plan Plan, evidence Evidence) (Report, er
 		FingerprintSHA256: plan.Fingerprint.Digest(),
 		Checks:            make([]CheckResult, 0, len(plan.Checks)),
 	}
-	if err := ctx.Err(); err != nil {
-		return report, err
-	}
+}
 
-	planInvalid := false
+type gradeAccumulator struct {
+	report      *Report
+	seen        map[string]struct{}
+	exactTotal  *big.Rat
+	exactPassed *big.Rat
+	planInvalid bool
+}
+
+func newGradeAccumulator(report *Report, plan Plan, thresholdValid bool) *gradeAccumulator {
+	grading := &gradeAccumulator{
+		report:      report,
+		seen:        make(map[string]struct{}, len(plan.Checks)),
+		exactTotal:  new(big.Rat),
+		exactPassed: new(big.Rat),
+	}
 	if len(plan.Checks) == 0 {
 		report.Errors = append(report.Errors, "plan must contain at least one check")
-		planInvalid = true
+		grading.planInvalid = true
 	}
 	if len(plan.Checks) > MaxChecksPerPlanV1 {
 		report.Errors = append(report.Errors, "plan exceeds the v1 check limit")
-		planInvalid = true
+		grading.planInvalid = true
 	}
 	if !thresholdValid {
 		report.Errors = append(report.Errors, "pass threshold must be a finite number in (0, 1]")
-		planInvalid = true
+		grading.planInvalid = true
 	}
+	return grading
+}
 
-	seen := make(map[string]struct{}, len(plan.Checks))
-	exactTotal := new(big.Rat)
-	exactPassed := new(big.Rat)
-	for _, check := range plan.Checks {
-		if err := ctx.Err(); err != nil {
-			return report, err
-		}
-		result, err := gradeCheckContext(ctx, check, evidence)
-		if err != nil {
-			return report, err
-		}
-		id := strings.TrimSpace(check.ID)
-		if id == "" {
-			result.Status = StatusInvalid
-			result.Detail = "check id is required"
-		} else if utf8.RuneCountInString(id) > MaxCheckIDRunesV1 {
-			result.Status = StatusInvalid
-			result.Detail = "check id exceeds the v1 length limit"
-		} else if _, exists := seen[id]; exists {
-			result.Status = StatusInvalid
-			result.Detail = "duplicate check id"
-		}
-		seen[id] = struct{}{}
-
-		nextTotal := report.WeightedTotal + validWeight(check.Weight)
-		if math.IsNaN(nextTotal) || math.IsInf(nextTotal, 0) {
-			result.Status = StatusInvalid
-			result.Detail = "cumulative check weight exceeds the finite range"
-			report.InvalidChecks++
-			planInvalid = true
-			if check.Critical {
-				report.CriticalPassed = false
-			}
-			report.Checks = append(report.Checks, result)
-			continue
-		}
-		report.WeightedTotal = nextTotal
-		exactWeight := new(big.Rat)
-		if isValidWeight(check.Weight) {
-			exactWeight.SetFloat64(check.Weight)
-		}
-		exactTotal.Add(exactTotal, exactWeight)
-		switch result.Status {
-		case StatusPass:
-			nextPassed := report.WeightedPassed + check.Weight
-			if math.IsNaN(nextPassed) || math.IsInf(nextPassed, 0) {
-				result.Status = StatusInvalid
-				result.Detail = "cumulative passed weight exceeds the finite range"
-				report.InvalidChecks++
-				planInvalid = true
-				if check.Critical {
-					report.CriticalPassed = false
-				}
-				break
-			}
-			report.PassedChecks++
-			report.WeightedPassed = nextPassed
-			exactPassed.Add(exactPassed, exactWeight)
-		case StatusFail:
-			report.FailedChecks++
-			if check.Critical {
-				report.CriticalPassed = false
-			}
-		default:
-			report.InvalidChecks++
-			planInvalid = true
-			if check.Critical {
-				report.CriticalPassed = false
-			}
-		}
-		report.Checks = append(report.Checks, result)
+func (grading *gradeAccumulator) gradeCheck(ctx context.Context, check Check, evidence Evidence) error {
+	result, err := gradeCheckContext(ctx, check, evidence)
+	if err != nil {
+		return err
 	}
-	if err := ctx.Err(); err != nil {
-		return report, err
+	grading.validateCheckID(&result, check.ID)
+	if grading.recordCheckWeight(&result, check) {
+		grading.report.Checks = append(grading.report.Checks, result)
+		return nil
 	}
+	grading.recordCheckOutcome(&result, check)
+	grading.report.Checks = append(grading.report.Checks, result)
+	return nil
+}
 
+func (grading *gradeAccumulator) validateCheckID(result *CheckResult, rawID string) {
+	id := strings.TrimSpace(rawID)
+	if id == "" {
+		result.Status = StatusInvalid
+		result.Detail = "check id is required"
+	} else if utf8.RuneCountInString(id) > MaxCheckIDRunesV1 {
+		result.Status = StatusInvalid
+		result.Detail = "check id exceeds the v1 length limit"
+	} else if _, exists := grading.seen[id]; exists {
+		result.Status = StatusInvalid
+		result.Detail = "duplicate check id"
+	}
+	grading.seen[id] = struct{}{}
+}
+
+// recordCheckWeight returns true when overflow has already finalized the
+// check as invalid and no outcome-specific counters should be updated.
+func (grading *gradeAccumulator) recordCheckWeight(result *CheckResult, check Check) bool {
+	nextTotal := grading.report.WeightedTotal + validWeight(check.Weight)
+	if math.IsNaN(nextTotal) || math.IsInf(nextTotal, 0) {
+		result.Status = StatusInvalid
+		result.Detail = "cumulative check weight exceeds the finite range"
+		grading.recordInvalidCheck(check.Critical)
+		return true
+	}
+	grading.report.WeightedTotal = nextTotal
+	exactWeight := new(big.Rat)
+	if isValidWeight(check.Weight) {
+		exactWeight.SetFloat64(check.Weight)
+	}
+	grading.exactTotal.Add(grading.exactTotal, exactWeight)
+	return false
+}
+
+func (grading *gradeAccumulator) recordCheckOutcome(result *CheckResult, check Check) {
+	switch result.Status {
+	case StatusPass:
+		nextPassed := grading.report.WeightedPassed + check.Weight
+		if math.IsNaN(nextPassed) || math.IsInf(nextPassed, 0) {
+			result.Status = StatusInvalid
+			result.Detail = "cumulative passed weight exceeds the finite range"
+			grading.recordInvalidCheck(check.Critical)
+			return
+		}
+		grading.report.PassedChecks++
+		grading.report.WeightedPassed = nextPassed
+		exactWeight := new(big.Rat).SetFloat64(check.Weight)
+		grading.exactPassed.Add(grading.exactPassed, exactWeight)
+	case StatusFail:
+		grading.report.FailedChecks++
+		if check.Critical {
+			grading.report.CriticalPassed = false
+		}
+	default:
+		grading.recordInvalidCheck(check.Critical)
+	}
+}
+
+func (grading *gradeAccumulator) recordInvalidCheck(critical bool) {
+	grading.report.InvalidChecks++
+	grading.planInvalid = true
+	if critical {
+		grading.report.CriticalPassed = false
+	}
+}
+
+func (grading *gradeAccumulator) finalize(threshold float64, thresholdValid bool) {
 	meetsThreshold := false
-	if exactTotal.Sign() > 0 && !math.IsNaN(report.WeightedPassed) && !math.IsInf(report.WeightedPassed, 0) {
-		exactScore := new(big.Rat).Quo(exactPassed, exactTotal)
-		report.Score, _ = exactScore.Float64()
+	if grading.exactTotal.Sign() > 0 && !math.IsNaN(grading.report.WeightedPassed) && !math.IsInf(grading.report.WeightedPassed, 0) {
+		exactScore := new(big.Rat).Quo(grading.exactPassed, grading.exactTotal)
+		grading.report.Score, _ = exactScore.Float64()
 		if thresholdValid {
 			thresholdRat := new(big.Rat).SetFloat64(threshold)
 			meetsThreshold = exactScore.Cmp(thresholdRat) >= 0
 		}
 	}
-	if math.IsNaN(report.Score) || math.IsInf(report.Score, 0) {
-		report.Score = 0
-		report.Errors = append(report.Errors, "weighted score is not finite")
-		planInvalid = true
+	if math.IsNaN(grading.report.Score) || math.IsInf(grading.report.Score, 0) {
+		grading.report.Score = 0
+		grading.report.Errors = append(grading.report.Errors, "weighted score is not finite")
+		grading.planInvalid = true
 	}
-	if planInvalid || report.WeightedTotal == 0 {
-		report.Status = StatusInvalid
-		return report, nil
+	if grading.planInvalid || grading.report.WeightedTotal == 0 {
+		grading.report.Status = StatusInvalid
+		return
 	}
-	if !report.CriticalPassed || !meetsThreshold {
-		report.Status = StatusFail
-		return report, nil
+	if !grading.report.CriticalPassed || !meetsThreshold {
+		grading.report.Status = StatusFail
+		return
 	}
-	report.Status = StatusPass
-	return report, nil
+	grading.report.Status = StatusPass
 }
 
 func gradeCheckContext(ctx context.Context, check Check, evidence Evidence) (CheckResult, error) {

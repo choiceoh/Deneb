@@ -144,6 +144,16 @@ func withMailAliases(m map[string]rpcutil.HandlerFunc) map[string]rpcutil.Handle
 	return out
 }
 
+// earlyMethodCapabilities contains the shared, phase-local dependencies created
+// before early RPC domains are registered. It is deliberately private to this
+// composition root: handler Deps remain assembled inline below.
+type earlyMethodCapabilities struct {
+	nativeWorkFeed *nativeWorkFeedStore
+	observe        handlerobserve.Deps
+	observatory    handlerobservatory.Deps
+	miniapp        map[string]rpcutil.HandlerFunc
+}
+
 // registerEarlyMethods registers all RPC domains that don't depend on chatHandler.
 // Called after buildHub() but before registerSessionRPCMethods().
 func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) error {
@@ -154,6 +164,22 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		return fmt.Errorf("server init: hub validation: %w", err)
 	}
 
+	capabilities, err := s.initializeEarlyMethodCapabilities(hub, denebDir)
+	if err != nil {
+		return err
+	}
+	s.registerEarlyCapabilityDomains(hub, denebDir, capabilities)
+
+	// Special-case registrations with embedded business logic.
+	s.registerConfigLifecycleMethods()
+	return nil
+}
+
+// initializeEarlyMethodCapabilities creates stores and long-lived services that
+// early handlers consume. Keeping lifecycle setup separate from registration
+// makes the boot sequence explicit and prevents registration changes from
+// accidentally reordering service initialization.
+func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, denebDir string) (earlyMethodCapabilities, error) {
 	// Create the insights engine. Read-only — aggregates session manager
 	// snapshots and usage tracker state. Stored on both the hub (for RPC
 	// handlers) and the server (so the chat dispatcher can wire /insights).
@@ -276,19 +302,48 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		Market: minimodule.MarketDeps{Fetch: marketCache.Summary},
 	})
 	if err != nil {
-		return fmt.Errorf("server init: miniapp module: %w", err)
+		return earlyMethodCapabilities{}, fmt.Errorf("server init: miniapp module: %w", err)
 	}
 
+	return earlyMethodCapabilities{
+		nativeWorkFeed: nativeWorkFeed,
+		observe:        observeDeps,
+		observatory:    observatoryDeps,
+		miniapp:        miniappMethods,
+	}, nil
+}
+
+// registerEarlyCapabilityDomains preserves the historical domain order while
+// keeping phase orchestration independent from handler dependency assembly.
+func (s *Server) registerEarlyCapabilityDomains(hub *rpcutil.GatewayHub, denebDir string, capabilities earlyMethodCapabilities) {
 	// Table-driven domain registration: one slice, one loop.
 	// Deps assembled inline from hub accessors — no adapter layer.
-	domains := []map[string]rpcutil.HandlerFunc{
-		// --- Session CRUD (list/get/delete) ---
+	domains := s.earlyCoreMethods(hub, denebDir, capabilities)
+	domains = append(domains, s.earlyNativeClientMethods(hub, capabilities)...)
+	domains = append(domains, s.earlyMailAndCalendarMethods(denebDir)...)
+	domains = append(domains, s.earlyPlanningMethods(hub)...)
+	domains = append(domains, s.earlyKnowledgeMethods(hub)...)
+	domains = append(domains, s.earlyImprovementMethods(hub)...)
+
+	// Provider methods are the only capability group omitted entirely when its
+	// backing registry is unavailable.
+	domains = append(domains, s.earlyProviderMethods()...)
+
+	for _, d := range domains {
+		if d != nil {
+			s.dispatcher.RegisterDomain(d)
+		}
+	}
+}
+
+// earlyCoreMethods owns the transport-agnostic control plane. Its order is
+// intentionally stable: sessions and health precede orchestration, followed by
+// tools, events, scheduling, observability, and lifecycle operations.
+func (s *Server) earlyCoreMethods(hub *rpcutil.GatewayHub, denebDir string, capabilities earlyMethodCapabilities) []map[string]rpcutil.HandlerFunc {
+	return []map[string]rpcutil.HandlerFunc{
 		handlersession.CRUDMethods(handlersession.Deps{
 			Sessions:    hub.Sessions(),
 			GatewaySubs: hub.GatewaySubs(),
-			// Lazy: the transcript store exists only after chat init (between
-			// early and late phase). sessions.delete must remove the .jsonl or
-			// the startup restore resurrects the session.
 			Transcripts: func() (handlersession.TranscriptDeleter, error) {
 				if s.toolDeps == nil || s.toolDeps.Sessions.Transcript == nil {
 					return nil, errTranscriptUnavailable
@@ -296,14 +351,10 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				return s.toolDeps.Sessions.Transcript, nil
 			},
 		}),
-
-		// --- Health and system info ---
 		handlersystem.HealthMethods(handlersystem.HealthDeps{
 			SessionCount: hub.Sessions().Count,
 			Version:      hub.Version(),
 		}),
-
-		// --- Agent orchestration ---
 		handleragent.ExtendedMethods(handleragent.ExtendedDeps{
 			Sessions:    hub.Sessions(),
 			GatewaySubs: hub.GatewaySubs(),
@@ -312,15 +363,11 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Broadcaster: hub.Broadcast,
 		}),
 		handlerprocess.ACPMethods(s.acpDeps),
-
-		// --- Tools and skills ---
 		handlerskill.ToolMethods(handlerskill.ToolDeps{Processes: hub.Processes()}),
 		handlerskill.Methods(handlerskill.Deps{
 			Skills:      hub.Skills(),
 			Broadcaster: hub.Broadcast,
 		}),
-
-		// --- Events (transport-agnostic) ---
 		handlerevents.BroadcastMethods(handlerevents.EventsDeps{
 			Broadcaster: hub.Broadcaster(),
 			Logger:      hub.Logger(),
@@ -329,224 +376,78 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Broadcaster: hub.Broadcaster(),
 			Logger:      hub.Logger(),
 		}),
-
-		// --- Scheduling ---
 		handlerprocess.CronAdvancedMethods(handlerprocess.CronAdvancedDeps{
 			Service:     hub.CronService(),
 			RunLog:      hub.CronPersistLog(),
 			Broadcaster: hub.Broadcast,
 		}),
 		handlerprocess.CronServiceMethods(handlerprocess.CronServiceDeps{Service: hub.CronService()}),
-
-		// --- Background task control plane ---
-
-		// --- System ---
 		handlersystem.IdentityMethods(hub.Version()),
-		handlersystem.MonitoringMethods(handlersystem.MonitoringDeps{
-			Dispatcher: s.dispatcher,
-		}),
-		handlersystem.ConfigAdvancedMethods(handlersystem.ConfigAdvancedDeps{
-			Broadcaster: hub.Broadcast,
-		}),
+		handlersystem.MonitoringMethods(handlersystem.MonitoringDeps{Dispatcher: s.dispatcher}),
+		handlersystem.ConfigAdvancedMethods(handlersystem.ConfigAdvancedDeps{Broadcaster: hub.Broadcast}),
 		handlersystem.UsageMethods(handlersystem.UsageDeps{Tracker: s.usageTracker}),
 		handlersystem.LogsMethods(handlersystem.LogsDeps{LogDir: filepath.Join(denebDir, "logs")}),
-
-		// --- Observation plane (unified: log ring + turn shape + behavior) ---
-		handlerobserve.Methods(observeDeps),
-		handlerobservatory.Methods(observatoryDeps),
-
-		// --- Insights (usage reports) ---
+		handlerobserve.Methods(capabilities.observe),
+		handlerobservatory.Methods(capabilities.observatory),
 		handlerinsights.Methods(handlerinsights.Deps{
 			Engine: hub.Insights(),
 			Logger: hub.Logger(),
 		}),
-
-		// --- Checkpoint (list/restore/diff backing /rollback) ---
-		// Root is derived from the resolved state dir. When denebDir is
-		// empty the handler still registers but replies UNAVAILABLE.
 		handlercheckpoint.Methods(handlercheckpoint.Deps{
 			Root:   filepath.Join(denebDir, "checkpoints"),
 			Logger: hub.Logger(),
 		}),
 		handlersystem.MaintenanceMethods(handlersystem.MaintenanceDeps{Runner: s.maintRunner}),
 		handlersystem.UpdateMethods(handlersystem.UpdateDeps{DenebDir: denebDir}),
+	}
+}
 
-		// --- Native client miniapp.* RPC (HTTP-exposed via /api/v1/miniapp/rpc) ---
-		// Requires client-token auth, enforced by the HTTP bridge in
-		// server_http_miniapp.go before the dispatcher is reached. The
-		// methods read the authenticated operator from context via
-		// clientauth.FromContext.
-
-		// Observation plane under miniapp.observe.* — the same handlers as the
-		// in-process observe.* above, exposed here so remote adapters (native
-		// dashboard, token-holding external CLI) can reach logs/turns/behavior.
-		// The miniapp.* gate is exactly the client-token boundary we want.
-		handlerobserve.MiniappMethods(observeDeps),
-		handlerobservatory.MiniappMethods(observatoryDeps),
-		handlerminiapp.Methods(handlerminiapp.Deps{
-			Version: hub.Version(),
-			CurrentModel: func() string {
-				// Lazy: chatHandler / modelRegistry are populated after this
-				// registration phase. Resolve at request time.
-				if s.chatHandler != nil {
-					if m := s.chatHandler.DefaultModel(); m != "" {
-						return m
-					}
-				}
-				if s.modelRegistry != nil {
-					return s.modelRegistry.FullModelID(modelrole.RoleMain)
-				}
-				return ""
-			},
-			Capabilities: func() map[string]bool {
-				wikiReady := hub.WikiStore() != nil
-				chatReady := s.chatHandler != nil
-				return map[string]bool{
-					"rpc":             true,
-					"chat":            chatReady,
-					"chatStream":      chatReady,
-					"events":          s.pushHub != nil,
-					"models":          s.modelRegistry != nil,
-					"gmail":           true,
-					"calendar":        true,
-					"wiki":            wikiReady,
-					"search":          wikiReady,
-					"people":          true,
-					"crons":           hub.CronService() != nil,
-					"captureImage":    chatReady,
-					"captureAudio":    chatReady,
-					"captureContacts": hub.ContactsStore() != nil,
-					"workFeed":        s.workFeedStore != nil,
-					"workFeedActions": s.workFeedStore != nil,
-					"nativeSync":      s.nativeSyncStore != nil,
-					"pushRegister":    s.pushTokenStore != nil,
-					"pushFallback":    s.pushNotifier != nil,
-					"gmailAttachment": true,
-					"updateManifest":  true,
-					"prompts":         s.promptStore != nil,
-					"promptTuner":     s.compactTuner != nil,
-					// topicDocs gates the native single-topic background editor.
-					// True only when a current topic key resolves (topics.map
-					// has a "0" entry) — i.e. there is actually a doc to edit
-					// that injects into the prompt.
-					"topicDocs": configresolve.CurrentTopicKey() != "",
-				}
-			},
-		}),
-		miniappMethods,
-		// Native-client FCM device-token registration. Always available (tokens
-		// accumulate even before the FCM sender is configured); the proactive
-		// fallback that consumes them is wired separately via s.pushNotifier.
-		// DeliveryEnabled tells the client whether that sender actually exists,
-		// so it can keep background SSE alive instead of trusting a dormant FCM
-		// handoff (battery doc §3.1 acked-token/server-credential gate).
+// earlyNativeClientMethods owns the authenticated miniapp transport surface
+// and shared native stores. Product domains are registered by later groups.
+func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities earlyMethodCapabilities) []map[string]rpcutil.HandlerFunc {
+	return []map[string]rpcutil.HandlerFunc{
+		handlerobserve.MiniappMethods(capabilities.observe),
+		handlerobservatory.MiniappMethods(capabilities.observatory),
+		s.earlyMiniappGatewayMethods(hub),
+		capabilities.miniapp,
+		// DeliveryEnabled keeps the client on background SSE when device tokens
+		// exist but the server has no configured FCM sender.
 		handlerminiapp.PushMethods(handlerminiapp.PushDeps{
 			Store:           s.pushTokenStore,
 			DeliveryEnabled: func() bool { return s.pushNotifier != nil },
 		}),
-		// Wormhole router status + feature toggles (config path / URL resolved
-		// from env, defaulting to the on-host single-machine layout).
 		handlerminiapp.WormholeMethods(handlerminiapp.WormholeDeps{}),
 		handlerminiapp.WorkFeedMethods(handlerminiapp.WorkFeedDeps{
-			Store: nativeWorkFeed,
-			// Record a deal-question card's team answer onto the deal wiki page
-			// (불확실 → 질문 → 기록). See deal_question.go.
-			OnAnswer: s.recordDealQuestionAnswer,
-			// Apply a meta-proposal card's 채택/기각 (RSI P2 feed-card adoption).
-			// See workfeed_meta_proposal.go.
+			Store:          capabilities.nativeWorkFeed,
+			OnAnswer:       s.recordDealQuestionAnswer,
 			OnMetaProposal: s.handleMetaProposalAction,
 		}),
-		// miniapp.models.* is registered in registerLateMethods: the picker
-		// Controller snapshots s.modelRegistry/s.chatHandler at construction,
-		// and both are nil until registerSessionRPCMethods runs (#3457 had it
-		// here → every role showed 미설정 and model switching was rejected).
-		// Native local file browser (miniapp.files.{list,search,share,upload}):
-		// list/search/share/upload over the on-box file store (filestore). share
-		// mints a signed download link (fileshare); a nil store (open error)
-		// skips the domain.
-		minifiles.FilesBrowseMethods(minifiles.FilesBrowseDeps{
-			Store: localFileStoreOrNil(s.logger),
-			// Content search (search content=true) extracts file text via the chat
-			// tools' document extractor. Wired here (server layer may import tools);
-			// the handler keeps it as an injected callback to avoid a layer inversion.
-			ExtractText: func(ctx context.Context, d []byte, n string) string {
-				t, _ := document.ExtractDocumentText(ctx, d, n, "")
-				return t
-			},
-			// Semantic search (search semantic=true) ranks by meaning via the shared
-			// BGE-M3 file index. A lazy closure: the index + embedding client are
-			// created later in initToolsAndDeps (this wiring runs in the early phase),
-			// and requests arrive well after boot, so reading them at call time is
-			// safe. Returns empty (→ name/content fallback) when the index/embedding
-			// server is unavailable.
-			SemanticSearch: func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error) {
-				if s.fileSemindex == nil {
-					return nil, nil
-				}
-				return s.fileSemindex.Search(ctx, query, max)
-			},
-			// Keep the semantic index fresh after a delete/move/overwrite so
-			// search doesn't hand back a stale path — or rank an overwritten
-			// file by its old content — between 15-min reindex passes. Lazy
-			// like SemanticSearch (the index is created later in
-			// initToolsAndDeps). An overwrite-save drops the stale vectors
-			// (Remove); the next reindex re-embeds the new content.
-			OnDelete: func(path string) {
-				if s.fileSemindex != nil {
-					s.fileSemindex.Remove(path)
-				}
-			},
-			OnMove: func(oldPath, newPath string) {
-				if s.fileSemindex != nil {
-					s.fileSemindex.Rename(oldPath, newPath)
-				}
-			},
-			OnUpload: func(path string) {
-				if s.fileSemindex != nil {
-					s.fileSemindex.Remove(path)
-				}
-			},
-		}),
+		// miniapp.models.* is deliberately registered in registerLateMethods:
+		// the picker snapshots the model registry and chat handler at creation.
+		s.earlyFileMethods(),
+	}
+}
 
-		// Native mail domain. Registered under BOTH miniapp.gmail.* (legacy,
-		// what shipped clients call) and miniapp.mail.* (accurate name — the
-		// server prefers the on-box archive repository and keeps Gmail only as
-		// a fallback for legacy queries/tokens). See withMailAliases.
+func (s *Server) earlyMailAndCalendarMethods(denebDir string) []map[string]rpcutil.HandlerFunc {
+	return []map[string]rpcutil.HandlerFunc{
 		withMailAliases(handlermail.GmailMethods(handlermail.GmailDeps{
-			Client: s.miniappMailClientFactory(denebDir),
-			// Same per-msgID cache directory the analyze handler/poller
-			// write to (the store is a stateless dir wrapper) — list rows
-			// prefer its LLM verdict over the heuristic below.
+			Client:        s.miniappMailClientFactory(denebDir),
 			AnalysisCache: handlermail.NewAnalysisStore(filepath.Join(denebDir, "cache", "mail_analysis")),
 			WorkState:     mailwork.New(filepath.Join(denebDir, "mail_work_state.json")),
-			// Lazy: mailStore is created in the session phase, after this early
-			// registration. Serve get bodies from it once present (no API round-trip).
 			MailStore: func() handlermail.MailStoreReader {
 				if s.mailStore == nil {
 					return nil
 				}
 				return s.mailStore
 			},
-			// Row priority: cheap local heuristics + address-book VIP lookup
-			// + active-counterparty boost (recent project-linked mail
-			// analyses in the wiki). contactsStore is created above in this
-			// same registration pass; the wiki store is late-bound (session
-			// phase), which the lookup's getter tolerates — until it exists
-			// the boost is simply off. Nil stores just drop their signal.
 			Priority: func() func(from, subject, snippet string) (string, string) {
-				cp := mailflow.NewCounterpartyLookup(func() *wiki.Store { return s.wikiStore })
+				counterparties := mailflow.NewCounterpartyLookup(func() *wiki.Store { return s.wikiStore })
 				return func(from, subject, snippet string) (string, string) {
-					tier, hint := mailPriorityScorer(s.contactsStore, cp).Score(from, subject, snippet)
+					tier, hint := mailPriorityScorer(s.contactsStore, counterparties).Score(from, subject, snippet)
 					return string(tier), hint
 				}
 			}(),
 		})),
-
-		// Mini App Calendar domain. Hybrid: a read-only Google client (lazy
-		// factory, like Gmail — gateway boots without OAuth tokens; reads
-		// return UNAVAILABLE only when no local store either) plus a local
-		// store ({stateDir}/calendar.json) that holds hand-added events, so
-		// create/edit/delete work without a Google write scope.
 		minischedule.CalendarMethods(minischedule.CalendarDeps{
 			Client: func() (minischedule.CalendarClient, error) {
 				return calendar.DefaultClient()
@@ -554,111 +455,34 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Local:     resolveLocalCalendar(s.logger),
 			Proposals: resolveCalendarProposals(s.logger),
 		}),
+	}
+}
 
-		// Mini App project digests (miniapp.project.digests). Each active
-		// project's latest-progress digest lives ON its 대표페이지 (프로젝트/<name>.md)
-		// "## 현재 상태" section — written by the dream cycle (LLM roll-up) and kept
-		// fresh by mail analysis (dated bullets). This reads those sections from the
-		// wiki store; no LLM on the read path, so the screen loads instantly. Lazy
-		// factory (wiki is late-bound in the session phase) — UNAVAILABLE when wiki
-		// is disabled, exactly like the memory factory.
-		handlerminiapp.ProjectMethods(handlerminiapp.ProjectDeps{
-			Wiki: func() (handlerminiapp.ProjectStatusSource, error) {
-				store := hub.WikiStore()
-				if store == nil {
-					return nil, errWikiDisabled
-				}
-				return store, nil
-			},
-			// Item snapshots for miniapp.project.linked (server-side matching).
-			// Read at call time so the late-set notebook store is picked up; a nil
-			// store simply contributes no matches. Mail needs no provider — it is
-			// resolved from the project's graph refs inside the handler.
-			Notebooks: func() []handlerminiapp.ProjectLinkedNotebook {
-				if s.notebookStore == nil {
-					return nil
-				}
-				nbs := s.notebookStore.List()
-				out := make([]handlerminiapp.ProjectLinkedNotebook, 0, len(nbs))
-				for _, nb := range nbs {
-					out = append(out, handlerminiapp.ProjectLinkedNotebook{ID: nb.ID, DealRef: nb.DealRef, ProjectRefs: nb.ProjectRefs})
-				}
-				return out
-			},
-			WorkItems: func() []handlerminiapp.ProjectLinkedWorkItem {
-				nf := s.nativeWorkFeedStore()
-				if nf == nil {
-					return nil
-				}
-				items, _, err := nf.List(1000, true) // superset; the client filters to its own list
-				if err != nil {
-					return nil
-				}
-				out := make([]handlerminiapp.ProjectLinkedWorkItem, 0, len(items))
-				for _, it := range items {
-					out = append(out, handlerminiapp.ProjectLinkedWorkItem{ID: it.ID, RefID: it.RefID})
-				}
-				return out
-			},
-			Calendar: func() []handlerminiapp.ProjectLinkedCalEvent {
-				store, err := localcal.Default()
-				if err != nil || store == nil {
-					return nil
-				}
-				now := time.Now()
-				events := store.ListRange(now.AddDate(-1, 0, 0), now.AddDate(1, 0, 0)) // wide superset
-				out := make([]handlerminiapp.ProjectLinkedCalEvent, 0, len(events))
-				for _, ev := range events {
-					if ev.Source == "" {
-						continue // only Deneb-sourced (mail-proposal) events carry a project link
-					}
-					out = append(out, handlerminiapp.ProjectLinkedCalEvent{ID: ev.ID, Source: ev.Source})
-				}
-				return out
-			},
-		}),
-
-		// Mini App org chart editor (miniapp.org.{get,save}). The org chart
-		// ({stateDir}/org.json, operator data, never in the repo) is the MASTER
-		// source for the dashboard's part classification — its lane-tagged nodes
-		// define the dashboard columns and seed the classification rules. get
-		// returns the tree (missing file → empty); save validates (unique ids,
-		// existing parents, no cycles, unique lane keys) then atomically writes.
+func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub) []map[string]rpcutil.HandlerFunc {
+	return []map[string]rpcutil.HandlerFunc{
+		s.earlyProjectMethods(hub),
 		handlerminiapp.OrgMethods(s.orgDeps()),
+		minischedule.TodoMethods(minischedule.TodoDeps{Store: resolveLocalTodos(s.logger)}),
+	}
+}
 
-		// Mini App To-do domain (miniapp.todo.*). The task-list companion to
-		// the calendar, backed by a local store ({stateDir}/todos.json). No
-		// external provider — every method writes locally, so it works without
-		// any OAuth scope. Skipped if the store file can't be read.
-		minischedule.TodoMethods(minischedule.TodoDeps{
-			Store: resolveLocalTodos(s.logger),
-		}),
+// earlyKnowledgeMethods keeps every late-bound knowledge source behind its
+// request-time factory so an unavailable wiki, notebook, or cron service does
+// not prevent gateway startup.
+func (s *Server) earlyKnowledgeMethods(hub *rpcutil.GatewayHub) []map[string]rpcutil.HandlerFunc {
+	wikiStore := func() (miniknowledge.MemorySearcher, error) {
+		store := hub.WikiStore()
+		if store == nil {
+			return nil, errWikiDisabled
+		}
+		return store, nil
+	}
 
-		// Mini App memory search (miniapp.memory.search). Lazy factory
-		// around hub.WikiStore() — wiki is created in the late phase
-		// (registerLateMethods) so the factory is what defers the lookup
-		// to per-request, by which time the store is wired. When wiki
-		// is disabled by config the factory surfaces UNAVAILABLE.
+	return []map[string]rpcutil.HandlerFunc{
 		miniknowledge.MemoryMethods(miniknowledge.MemoryDeps{
-			Store: func() (miniknowledge.MemorySearcher, error) {
-				store := hub.WikiStore()
-				if store == nil {
-					return nil, errWikiDisabled
-				}
-				return store, nil
-			},
-			// Background worker for miniapp.memory.merge — synthesizes the
-			// combined body (lightweight model), runs the structural merge,
-			// then notifies the home chat. Off the request path so the Mini
-			// App never blocks on a slow/down model.
+			Store:      wikiStore,
 			StartMerge: s.makeWikiMergeStarter(hub),
 		}),
-
-		// Mini App notebook read surface (miniapp.notebook.*). Lazy factory
-		// around s.notebookStore (set in the late chat-init phase); deferring
-		// the lookup to per-request means the store is wired by the first RPC.
-		// A gateway whose notebook store failed to init gets a clean
-		// UNAVAILABLE per call instead of a boot crash.
 		miniknowledge.NotebookMethods(miniknowledge.NotebookDeps{
 			Store: func() (*notebook.Store, error) {
 				if s.notebookStore == nil {
@@ -667,191 +491,50 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				return s.notebookStore, nil
 			},
 		}),
-
-		// Mini App cron job list (miniapp.crons.list). Same lazy-factory
-		// pattern as memory: cron.Service is wired during buildHub so by
-		// the time the first RPC fires the service is ready, but a
-		// gateway started with the cron subsystem disabled still gets a
-		// clean UNAVAILABLE per call instead of a crash at boot.
 		minischedule.CronsMethods(minischedule.CronsDeps{
 			Service: func() (minischedule.CronService, error) {
-				svc := hub.CronService()
-				if svc == nil {
+				service := hub.CronService()
+				if service == nil {
 					return nil, errCronUnavailable
 				}
-				return svc, nil
+				return service, nil
 			},
 		}),
-		handlerminiapp.PromptMethods(handlerminiapp.PromptDeps{
-			Store: s.promptStore,
-		}),
+		handlerminiapp.PromptMethods(handlerminiapp.PromptDeps{Store: s.promptStore}),
 		handlerminiapp.PromptTunerMethods(handlerminiapp.PromptTunerDeps{
-			Tuner: func() handlerminiapp.PromptTuner {
-				return s.compactTuner
-			},
+			Tuner: func() handlerminiapp.PromptTuner { return s.compactTuner },
 		}),
-		// Mini App single-topic background editor (miniapp.topicdocs.*).
-		// Edits <workspace>/topics/<key>.md for the current topic key, the
-		// same file prompt.LoadTopicKnowledge injects into the Static block.
-		// Resolved per call (dir + "0"-key) so a config change applies without
-		// a restart; both factories are nil-tolerant so when topics are
-		// unconfigured the handler responds UNAVAILABLE rather than 404.
-		// applyNow drops the frozen topic snapshots so an edit lands this
-		// session (the RPC analog of slash "--now"); the default is deferred
-		// (next-session) to keep the Static prompt cache stable.
 		miniknowledge.TopicDocsMethods(miniknowledge.TopicDocsDeps{
 			TopicsDir:  func() (string, error) { return configresolve.TopicsDir(), nil },
 			CurrentKey: configresolve.CurrentTopicKey,
 			ApplyNow:   prompt.Cache.ClearAllTopicSnapshots,
 		}),
-
-		// Mini App Gmail sender context (miniapp.gmail.sender_context).
-		// Combines Gmail recent-activity query, wiki memory lookup, and
-		// wiki-graph traversal (graphify CLI) so the Mini App detail
-		// view can show a contextual sender card.
 		withMailAliases(handlermail.GmailContextMethods(handlermail.GmailContextDeps{
 			Client: func() (handlermail.GmailClient, error) {
 				return gmail.DefaultClient()
 			},
-			WikiStore: func() (miniknowledge.MemorySearcher, error) {
-				store := hub.WikiStore()
-				if store == nil {
-					return nil, errWikiDisabled
-				}
-				return store, nil
-			},
-			// In-process wiki graph first (always current); fall back to the
-			// external graphify snapshot only when nothing matches in-process.
+			WikiStore: wikiStore,
 			SenderFacts: func(ctx context.Context, from string) string {
-				if f := s.wikiSenderFacts(ctx, from); f != "" {
-					return f
+				if facts := s.wikiSenderFacts(ctx, from); facts != "" {
+					return facts
 				}
 				return mailanalysis.ExtractSenderFacts(ctx, from)
 			},
 		})),
-
-		// Mini App people directory (miniapp.people.list). Same Gmail
-		// lazy-client pattern; aggregates a single Search call into a
-		// frequency-sorted counterparty list, then folds in 인물 wiki
-		// pages (best-effort — wiki disabled degrades to Gmail-only).
 		miniknowledge.PeopleMethods(miniknowledge.PeopleDeps{
 			Client: func() (miniknowledge.PeopleClient, error) {
 				return gmail.DefaultClient()
 			},
-			WikiStore: func() (miniknowledge.MemorySearcher, error) {
-				store := hub.WikiStore()
-				if store == nil {
-					return nil, errWikiDisabled
-				}
-				return store, nil
-			},
+			WikiStore: wikiStore,
 		}),
+	}
+}
 
-		// Mini App skills list/detail/write surface + Propus feed
-		// (miniapp.skills.*). Catalog for the Settings → Skills tab, guarded
-		// update/delete for mutable local skills, plus the genesis → review →
-		// evolve timeline. Uses the same archived + eligibility filtering as
-		// the system prompt
-		// (chat.EligibleWorkspaceSkills), so the tab advertises only skills
-		// the agent can actually use. The tracker projections read
-		// s.genesisTracker lazily (it is wired after early registration) and
-		// are nil-tolerant so the tab degrades to an un-enriched list when
-		// the tracker is unavailable.
-		handlerminiapp.SkillsMethods(handlerminiapp.SkillsDeps{
-			List: func() []skills.SkillEntry {
-				// chatHandler (and its tool registry) is ready by the time this
-				// runs — the RPC fires long after boot wires the chat pipeline.
-				// Pass the live toolset so requires_tools eligibility matches the
-				// prompt and slash routing.
-				var toolNames []string
-				if s.chatHandler != nil {
-					toolNames = s.chatHandler.ToolNames()
-				}
-				return chat.EligibleWorkspaceSkills(configresolve.WorkspaceDir(), toolNames)
-			},
-			CuratorRecords: func() ([]genesis.SkillCuratorRecord, error) {
-				if s.genesisTracker == nil {
-					return nil, nil
-				}
-				return s.genesisTracker.SkillCuratorReport("")
-			},
-			UsageStats: func() ([]genesis.UsageStats, error) {
-				if s.genesisTracker == nil {
-					return nil, nil
-				}
-				return s.genesisTracker.ListAllStats()
-			},
-			RecentLifecycle: func(limit int) ([]genesis.LifecycleLogEntry, error) {
-				if s.genesisTracker == nil {
-					return nil, nil
-				}
-				return s.genesisTracker.RecentLifecycleLog(limit)
-			},
-			ValidationSummary: func(skillName string) (genesis.SkillValidationCaseSummary, error) {
-				if s.genesisTracker == nil {
-					return genesis.SkillValidationCaseSummary{SkillName: strings.TrimSpace(skillName)}, nil
-				}
-				return s.genesisTracker.ValidationCaseSummary(strings.TrimSpace(skillName))
-			},
-			RecentOpportunities: func(skillName string, limit int) ([]genesis.SkillOpportunityRecord, error) {
-				if s.genesisTracker == nil {
-					return nil, nil
-				}
-				return s.genesisTracker.RecentSkillOpportunities(strings.TrimSpace(skillName), limit)
-			},
-			RecentSelfCorrections: func(skillName string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error) {
-				if s.genesisTracker == nil {
-					return nil, nil
-				}
-				return s.genesisTracker.RecentSelfCorrectionCandidates(strings.TrimSpace(skillName), genesis.SelfCorrectionStatusProposed, limit)
-			},
-			SelfHarnessSignals: func() genesis.SelfHarnessSignalSummary {
-				if s.genesisTracker == nil {
-					return genesis.SelfHarnessSignalSummary{}
-				}
-				return s.genesisTracker.SelfHarnessSignals()
-			},
-			InvalidateSkills: chat.InvalidateSkillsCache,
-		}),
-
-		// Mini App self-improvement coding queue. This is not a skill list and
-		// not a Propus event log: it is the deferred coding-correction backlog
-		// that an AI coding agent should batch-review before applying changes.
-		handlerminiapp.SelfImprovementCodingMethods(handlerminiapp.SelfImprovementCodingDeps{
-			RecentCandidates: func(status string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error) {
-				if s.genesisTracker == nil {
-					return nil, nil
-				}
-				return s.genesisTracker.RecentSelfCorrectionCandidates("", status, limit)
-			},
-			Funnel: func() genesis.SelfCorrectionFunnelSummary {
-				if s.genesisTracker == nil {
-					return genesis.SelfCorrectionFunnelSummary{}
-				}
-				return s.genesisTracker.SelfCorrectionFunnel()
-			},
-			LastNudgeAtMs: runtimeheartbeat.LastSelfCodingNudgeAtMillis,
-		}),
-
-		// Mini App recursive-self-improvement loop status (miniapp.rsi.status).
-		// The user-facing window onto the four RSI layers (L1 skill evolution,
-		// L2 meta-evolution, L3 verifier co-evolution, L4 source self-edit) with
-		// each layer's honest LIVE/DATA-GATED/STARVED/FROZEN/IDLE state.
-		handlerminiapp.RSIStatusMethods(handlerminiapp.RSIStatusDeps{
-			Status: func() genesis.RSILoopStatus {
-				if s.genesisTracker == nil {
-					return genesis.RSILoopStatus{}
-				}
-				return s.genesisTracker.RSIStatus()
-			},
-		}),
-
-		// Mini App unified search (miniapp.search.all). Single entry
-		// point that fans out to wiki + diary + people in parallel.
-		// Replaces the per-domain home menu entries — there's now one
-		// search input on home that returns three result sections.
-		// Either factory may be unavailable; the handler degrades
-		// gracefully (Gmail-disabled gateway still serves wiki+diary).
+func (s *Server) earlyImprovementMethods(hub *rpcutil.GatewayHub) []map[string]rpcutil.HandlerFunc {
+	return []map[string]rpcutil.HandlerFunc{
+		s.earlySkillMethods(),
+		s.earlySelfImprovementMethods(),
+		s.earlyRSIStatusMethods(),
 		miniknowledge.SearchMethods(miniknowledge.SearchDeps{
 			Store: func() (miniknowledge.MemorySearcher, error) {
 				store := hub.WikiStore()
@@ -865,28 +548,247 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			},
 		}),
 	}
+}
 
-	// Conditional: provider methods.
-	if s.providers != nil {
-		domains = append(
-			domains,
-			handlerprovider.Methods(handlerprovider.Deps{
-				Providers:   s.providers,
-				AuthManager: s.authManager,
-			}),
-			handlerprovider.ModelsMethods(handlerprovider.ModelsDeps{
-				Providers: s.providers,
-			}),
-		)
+// earlyMiniappGatewayMethods wires the native client's boot identity and
+// capability snapshot. All readiness probes are lazy because chat, wiki, and
+// model services become available after the early phase.
+func (s *Server) earlyMiniappGatewayMethods(hub *rpcutil.GatewayHub) map[string]rpcutil.HandlerFunc {
+	return handlerminiapp.Methods(handlerminiapp.Deps{
+		Version: hub.Version(),
+		CurrentModel: func() string {
+			if s.chatHandler != nil {
+				if model := s.chatHandler.DefaultModel(); model != "" {
+					return model
+				}
+			}
+			if s.modelRegistry != nil {
+				return s.modelRegistry.FullModelID(modelrole.RoleMain)
+			}
+			return ""
+		},
+		Capabilities: func() map[string]bool {
+			wikiReady := hub.WikiStore() != nil
+			chatReady := s.chatHandler != nil
+			return map[string]bool{
+				"rpc":             true,
+				"chat":            chatReady,
+				"chatStream":      chatReady,
+				"events":          s.pushHub != nil,
+				"models":          s.modelRegistry != nil,
+				"gmail":           true,
+				"calendar":        true,
+				"wiki":            wikiReady,
+				"search":          wikiReady,
+				"people":          true,
+				"crons":           hub.CronService() != nil,
+				"captureImage":    chatReady,
+				"captureAudio":    chatReady,
+				"captureContacts": hub.ContactsStore() != nil,
+				"workFeed":        s.workFeedStore != nil,
+				"workFeedActions": s.workFeedStore != nil,
+				"nativeSync":      s.nativeSyncStore != nil,
+				"pushRegister":    s.pushTokenStore != nil,
+				"pushFallback":    s.pushNotifier != nil,
+				"gmailAttachment": true,
+				"updateManifest":  true,
+				"prompts":         s.promptStore != nil,
+				"promptTuner":     s.compactTuner != nil,
+				"topicDocs":       configresolve.CurrentTopicKey() != "",
+			}
+		},
+	})
+}
+
+// earlyFileMethods wires local file operations and the late-bound semantic
+// index. Mutations invalidate stale vectors immediately; the periodic indexer
+// repopulates them with current content.
+func (s *Server) earlyFileMethods() map[string]rpcutil.HandlerFunc {
+	return minifiles.FilesBrowseMethods(minifiles.FilesBrowseDeps{
+		Store: localFileStoreOrNil(s.logger),
+		ExtractText: func(ctx context.Context, data []byte, name string) string {
+			text, _ := document.ExtractDocumentText(ctx, data, name, "")
+			return text
+		},
+		SemanticSearch: func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error) {
+			if s.fileSemindex == nil {
+				return nil, nil
+			}
+			return s.fileSemindex.Search(ctx, query, max)
+		},
+		OnDelete: func(path string) {
+			if s.fileSemindex != nil {
+				s.fileSemindex.Remove(path)
+			}
+		},
+		OnMove: func(oldPath, newPath string) {
+			if s.fileSemindex != nil {
+				s.fileSemindex.Rename(oldPath, newPath)
+			}
+		},
+		OnUpload: func(path string) {
+			if s.fileSemindex != nil {
+				s.fileSemindex.Remove(path)
+			}
+		},
+	})
+}
+
+// earlyProjectMethods wires the project dashboard to lazy snapshots. Every
+// source is resolved at request time so session-phase stores are visible.
+func (s *Server) earlyProjectMethods(hub *rpcutil.GatewayHub) map[string]rpcutil.HandlerFunc {
+	return handlerminiapp.ProjectMethods(handlerminiapp.ProjectDeps{
+		Wiki: func() (handlerminiapp.ProjectStatusSource, error) {
+			store := hub.WikiStore()
+			if store == nil {
+				return nil, errWikiDisabled
+			}
+			return store, nil
+		},
+		Notebooks: func() []handlerminiapp.ProjectLinkedNotebook {
+			if s.notebookStore == nil {
+				return nil
+			}
+			notebooks := s.notebookStore.List()
+			out := make([]handlerminiapp.ProjectLinkedNotebook, 0, len(notebooks))
+			for _, notebook := range notebooks {
+				out = append(out, handlerminiapp.ProjectLinkedNotebook{
+					ID: notebook.ID, DealRef: notebook.DealRef, ProjectRefs: notebook.ProjectRefs,
+				})
+			}
+			return out
+		},
+		WorkItems: func() []handlerminiapp.ProjectLinkedWorkItem {
+			feed := s.nativeWorkFeedStore()
+			if feed == nil {
+				return nil
+			}
+			items, _, err := feed.List(1000, true)
+			if err != nil {
+				return nil
+			}
+			out := make([]handlerminiapp.ProjectLinkedWorkItem, 0, len(items))
+			for _, item := range items {
+				out = append(out, handlerminiapp.ProjectLinkedWorkItem{ID: item.ID, RefID: item.RefID})
+			}
+			return out
+		},
+		Calendar: func() []handlerminiapp.ProjectLinkedCalEvent {
+			store, err := localcal.Default()
+			if err != nil || store == nil {
+				return nil
+			}
+			now := time.Now()
+			events := store.ListRange(now.AddDate(-1, 0, 0), now.AddDate(1, 0, 0))
+			out := make([]handlerminiapp.ProjectLinkedCalEvent, 0, len(events))
+			for _, event := range events {
+				if event.Source == "" {
+					continue
+				}
+				out = append(out, handlerminiapp.ProjectLinkedCalEvent{ID: event.ID, Source: event.Source})
+			}
+			return out
+		},
+	})
+}
+
+// earlySkillMethods wires the native skill catalog to late-bound Genesis
+// projections. Missing tracker state degrades to an unenriched catalog.
+func (s *Server) earlySkillMethods() map[string]rpcutil.HandlerFunc {
+	return handlerminiapp.SkillsMethods(handlerminiapp.SkillsDeps{
+		List: func() []skills.SkillEntry {
+			var toolNames []string
+			if s.chatHandler != nil {
+				toolNames = s.chatHandler.ToolNames()
+			}
+			return chat.EligibleWorkspaceSkills(configresolve.WorkspaceDir(), toolNames)
+		},
+		CuratorRecords: func() ([]genesis.SkillCuratorRecord, error) {
+			if s.genesisTracker == nil {
+				return nil, nil
+			}
+			return s.genesisTracker.SkillCuratorReport("")
+		},
+		UsageStats: func() ([]genesis.UsageStats, error) {
+			if s.genesisTracker == nil {
+				return nil, nil
+			}
+			return s.genesisTracker.ListAllStats()
+		},
+		RecentLifecycle: func(limit int) ([]genesis.LifecycleLogEntry, error) {
+			if s.genesisTracker == nil {
+				return nil, nil
+			}
+			return s.genesisTracker.RecentLifecycleLog(limit)
+		},
+		ValidationSummary: func(skillName string) (genesis.SkillValidationCaseSummary, error) {
+			if s.genesisTracker == nil {
+				return genesis.SkillValidationCaseSummary{SkillName: strings.TrimSpace(skillName)}, nil
+			}
+			return s.genesisTracker.ValidationCaseSummary(strings.TrimSpace(skillName))
+		},
+		RecentOpportunities: func(skillName string, limit int) ([]genesis.SkillOpportunityRecord, error) {
+			if s.genesisTracker == nil {
+				return nil, nil
+			}
+			return s.genesisTracker.RecentSkillOpportunities(strings.TrimSpace(skillName), limit)
+		},
+		RecentSelfCorrections: func(skillName string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error) {
+			if s.genesisTracker == nil {
+				return nil, nil
+			}
+			return s.genesisTracker.RecentSelfCorrectionCandidates(strings.TrimSpace(skillName), genesis.SelfCorrectionStatusProposed, limit)
+		},
+		SelfHarnessSignals: func() genesis.SelfHarnessSignalSummary {
+			if s.genesisTracker == nil {
+				return genesis.SelfHarnessSignalSummary{}
+			}
+			return s.genesisTracker.SelfHarnessSignals()
+		},
+		InvalidateSkills: chat.InvalidateSkillsCache,
+	})
+}
+
+func (s *Server) earlySelfImprovementMethods() map[string]rpcutil.HandlerFunc {
+	return handlerminiapp.SelfImprovementCodingMethods(handlerminiapp.SelfImprovementCodingDeps{
+		RecentCandidates: func(status string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error) {
+			if s.genesisTracker == nil {
+				return nil, nil
+			}
+			return s.genesisTracker.RecentSelfCorrectionCandidates("", status, limit)
+		},
+		Funnel: func() genesis.SelfCorrectionFunnelSummary {
+			if s.genesisTracker == nil {
+				return genesis.SelfCorrectionFunnelSummary{}
+			}
+			return s.genesisTracker.SelfCorrectionFunnel()
+		},
+		LastNudgeAtMs: runtimeheartbeat.LastSelfCodingNudgeAtMillis,
+	})
+}
+
+func (s *Server) earlyRSIStatusMethods() map[string]rpcutil.HandlerFunc {
+	return handlerminiapp.RSIStatusMethods(handlerminiapp.RSIStatusDeps{
+		Status: func() genesis.RSILoopStatus {
+			if s.genesisTracker == nil {
+				return genesis.RSILoopStatus{}
+			}
+			return s.genesisTracker.RSIStatus()
+		},
+	})
+}
+
+func (s *Server) earlyProviderMethods() []map[string]rpcutil.HandlerFunc {
+	if s.providers == nil {
+		return nil
 	}
-
-	for _, d := range domains {
-		if d != nil {
-			s.dispatcher.RegisterDomain(d)
-		}
+	return []map[string]rpcutil.HandlerFunc{
+		handlerprovider.Methods(handlerprovider.Deps{
+			Providers:   s.providers,
+			AuthManager: s.authManager,
+		}),
+		handlerprovider.ModelsMethods(handlerprovider.ModelsDeps{
+			Providers: s.providers,
+		}),
 	}
-
-	// Special-case registrations with embedded business logic.
-	s.registerConfigLifecycleMethods()
-	return nil
 }

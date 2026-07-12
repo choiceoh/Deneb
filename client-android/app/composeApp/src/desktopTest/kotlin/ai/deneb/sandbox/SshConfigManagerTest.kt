@@ -51,6 +51,17 @@ class SshConfigManagerTest {
     }
 
     @Test
+    fun defaultsPersistExactlyOnceAcrossManagerRestart() {
+        mgr.ensureDefaults()
+        val first = configText()
+
+        SshConfigManager(home).ensureDefaults()
+
+        assertEquals(first, configText())
+        assertEquals(1, "# deneb:defaults:start".toRegex().findAll(configText()).count())
+    }
+
+    @Test
     fun upsertHostAddsBlockAndSeedsDefaults() {
         val changed = mgr.upsertHost(alias = "prod", hostname = "1.2.3.4")
         assertTrue(changed)
@@ -87,6 +98,18 @@ class SshConfigManagerTest {
         assertContains(text, "Port 2222")
         assertFalse(text.contains("old.example.com"))
         assertFalse(text.contains("User root"))
+    }
+
+    @Test
+    fun hostReplacementPersistsAcrossManagerReopen() {
+        mgr.upsertHost("prod", "old.example.com", user = "root")
+        mgr.upsertHost("prod", "new.example.com", user = "deploy", port = 2222)
+
+        val reopened = SshConfigManager(home)
+
+        assertEquals(listOf("prod"), reopened.listAliases())
+        assertContains(configText(), "HostName new.example.com")
+        assertFalse(configText().contains("old.example.com"))
     }
 
     @Test
@@ -167,6 +190,17 @@ class SshConfigManagerTest {
         assertFalse(mgr.appendKnownHostLine(line), "duplicate exact line should not be re-appended")
         val text = knownHostsText()
         assertEquals(1, text.lines().count { it.trim() == line.trim() })
+    }
+
+    @Test
+    fun knownHostDeduplicationSurvivesManagerReload() {
+        val line = "example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIRELOAD"
+        assertTrue(mgr.appendKnownHostLine(line))
+
+        val reopened = SshConfigManager(home)
+
+        assertFalse(reopened.appendKnownHostLine(line))
+        assertEquals(1, knownHostsText().lineSequence().count { it.trim() == line })
     }
 
     @Test

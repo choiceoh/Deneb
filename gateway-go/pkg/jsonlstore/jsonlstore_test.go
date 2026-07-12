@@ -3,6 +3,7 @@ package jsonlstore
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -42,13 +43,14 @@ func TestAppendAndLoad(t *testing.T) {
 	}
 }
 
-func TestLoadSkipsCorruptLines(t *testing.T) {
+func TestLoadMalformedRecordsPreservesValidEntries(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "corrupt.jsonl")
 	data := `{"name":"a","value":1}
 not json
 {"name":"b","value":2}
 
 {"name":"c","value":3}
+{"name":"truncated"
 `
 	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
 		t.Fatal(err)
@@ -59,7 +61,23 @@ not json
 		t.Fatal(err)
 	}
 	if len(items) != 3 {
-		t.Fatalf("got %d items, want 3 (skipping corrupt line)", len(items))
+		t.Fatalf("got %d items, want 3 (skipping malformed records)", len(items))
+	}
+}
+
+func TestAppendMarshalErrorDoesNotCreateFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rejected.jsonl")
+	item := struct {
+		Callback func() `json:"callback"`
+	}{Callback: func() {}}
+
+	err := Append(path, item)
+
+	if err == nil || !strings.Contains(err.Error(), "jsonlstore: marshal") {
+		t.Fatalf("Append() error = %v, want wrapped marshal error", err)
+	}
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("rejected append created file: stat error = %v", statErr)
 	}
 }
 

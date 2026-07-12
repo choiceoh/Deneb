@@ -284,99 +284,25 @@ func calActionAudit(ctx context.Context, d *toolctx.CalendarDeps, p calParams) s
 		}
 	}
 
-	var overloads, runs, noFocus, suggestions []string
-	for day := startOfDay(from, loc); !day.After(to); day = day.AddDate(0, 0, 1) {
-		dayTimed := timedEventsOn(events, day, loc)
-		if len(dayTimed) == 0 {
-			continue
-		}
-		dayMidnight := startOfDay(day, loc)
-		dayNext := dayMidnight.AddDate(0, 0, 1)
-		// Bound this day to the audited range: an explicit sub-day from/to must not
-		// count meeting time outside it, and a run-in from another day is clipped.
-		lo, hi := dayMidnight, dayNext
-		if from.After(lo) {
-			lo = from
-		}
-		if to.Before(hi) {
-			hi = to
-		}
-		var total time.Duration
-		var busy []interval
-		inWindow := dayTimed[:0:0] // events actually overlapping [lo, hi)
-		for _, e := range dayTimed {
-			s := e.Start.In(loc)
-			if s.Before(lo) {
-				s = lo
-			}
-			en := eventEnd(e).In(loc)
-			if en.After(hi) {
-				en = hi
-			}
-			if !en.After(s) {
-				continue // falls entirely outside the audited window
-			}
-			inWindow = append(inWindow, e)
-			total += en.Sub(s)
-			busy = append(busy, interval{s, en})
-		}
-		if len(inWindow) == 0 {
-			continue
-		}
-		overloaded := len(inWindow) >= auditOverloadCount || total >= auditOverloadHours
-		label := calDayWeekday(day)
+	audit := evaluateScheduleAudit(events, from, to, now, loc, dayStart, dayEnd)
 
-		if overloaded {
-			overloads = append(overloads, fmt.Sprintf("%s 회의 %d건·%s", label, len(inWindow), shortDur(total)))
-		}
-		if run := longestBackToBack(inWindow); run >= auditBackToBackRun {
-			runs = append(runs, fmt.Sprintf("%s %d연속(버퍼 없음)", label, run))
-		}
-		if overloaded {
-			winStart := time.Date(day.Year(), day.Month(), day.Day(), dayStart, 0, 0, 0, loc)
-			winEnd := time.Date(day.Year(), day.Month(), day.Day(), dayEnd, 0, 0, 0, loc)
-			// Keep the focus suggestion inside the audited range and not in the
-			// past — an explicit from/to must never yield a block outside it.
-			if winStart.Before(from) {
-				winStart = from
-			}
-			if winEnd.After(to) {
-				winEnd = to
-			}
-			if winStart.Before(now) {
-				winStart = now
-			}
-			var focus []interval
-			if winEnd.After(winStart) {
-				focus = freeWithin(winStart, winEnd, busy, auditFocusMin)
-			}
-			if len(focus) == 0 {
-				noFocus = append(noFocus, label)
-			} else {
-				f := focus[0]
-				suggestions = append(suggestions, fmt.Sprintf("%s %02d:%02d–%02d:%02d 포커스 블록 확보",
-					label, f.start.Hour(), f.start.Minute(), f.end.Hour(), f.end.Minute()))
-			}
-		}
+	if len(audit.overloads) > 0 {
+		sb.WriteString("\n🔴 과부하: " + strings.Join(audit.overloads, " · ") + "\n")
 	}
-
-	if len(overloads) > 0 {
-		sb.WriteString("\n🔴 과부하: " + strings.Join(overloads, " · ") + "\n")
+	if len(audit.runs) > 0 {
+		sb.WriteString("⏱️ 연속 회의: " + strings.Join(audit.runs, " · ") + "\n")
 	}
-	if len(runs) > 0 {
-		sb.WriteString("⏱️ 연속 회의: " + strings.Join(runs, " · ") + "\n")
+	if len(audit.noFocus) > 0 {
+		sb.WriteString("🚫 포커스 시간 없음: " + strings.Join(audit.noFocus, " · ") + "\n")
 	}
-	if len(noFocus) > 0 {
-		sb.WriteString("🚫 포커스 시간 없음: " + strings.Join(noFocus, " · ") + "\n")
-	}
-	if len(suggestions) > 0 {
+	if len(audit.suggestions) > 0 {
 		sb.WriteString("\n💡 보호 제안:\n")
-		for _, s := range suggestions {
+		for _, s := range audit.suggestions {
 			fmt.Fprintf(&sb, "  • %s\n", s)
 		}
 	}
 
-	if len(conflicts) == 0 && len(overloads) == 0 && len(runs) == 0 {
+	if len(conflicts) == 0 && len(audit.overloads) == 0 && len(audit.runs) == 0 {
 		if warn != "" {
 			// The primary (Google) calendar fetch had a problem, so we only saw
 			// local events — don't certify the whole schedule clean.
@@ -392,6 +318,148 @@ func calActionAudit(ctx context.Context, d *toolctx.CalendarDeps, p calParams) s
 		sb.WriteString("\n(" + warn + ")")
 	}
 	return strings.TrimRight(sb.String(), "\n")
+}
+
+type scheduleAudit struct {
+	overloads   []string
+	runs        []string
+	noFocus     []string
+	suggestions []string
+}
+
+func evaluateScheduleAudit(
+	events []calendar.Event,
+	from, to, now time.Time,
+	loc *time.Location,
+	dayStart, dayEnd int,
+) scheduleAudit {
+	var result scheduleAudit
+	for day := startOfDay(from, loc); !day.After(to); day = day.AddDate(0, 0, 1) {
+		dayResult, ok := evaluateScheduleDay(events, day, from, to, now, loc, dayStart, dayEnd)
+		if !ok {
+			continue
+		}
+		if dayResult.overload != "" {
+			result.overloads = append(result.overloads, dayResult.overload)
+		}
+		if dayResult.run != "" {
+			result.runs = append(result.runs, dayResult.run)
+		}
+		if dayResult.noFocus != "" {
+			result.noFocus = append(result.noFocus, dayResult.noFocus)
+		}
+		if dayResult.suggestion != "" {
+			result.suggestions = append(result.suggestions, dayResult.suggestion)
+		}
+	}
+	return result
+}
+
+type scheduleDayAudit struct {
+	overload   string
+	run        string
+	noFocus    string
+	suggestion string
+}
+
+func evaluateScheduleDay(
+	events []calendar.Event,
+	day, from, to, now time.Time,
+	loc *time.Location,
+	dayStart, dayEnd int,
+) (scheduleDayAudit, bool) {
+	dayEvents := timedEventsOn(events, day, loc)
+	if len(dayEvents) == 0 {
+		return scheduleDayAudit{}, false
+	}
+	lo, hi := boundedAuditDay(day, from, to, loc)
+	inWindow, busy, total := clipAuditEvents(dayEvents, lo, hi, loc)
+	if len(inWindow) == 0 {
+		return scheduleDayAudit{}, false
+	}
+
+	label := calDayWeekday(day)
+	overloaded := len(inWindow) >= auditOverloadCount || total >= auditOverloadHours
+	result := scheduleDayAudit{}
+	if overloaded {
+		result.overload = fmt.Sprintf("%s 회의 %d건·%s", label, len(inWindow), shortDur(total))
+		result.noFocus, result.suggestion = auditFocusOpportunity(
+			day, from, to, now, loc, dayStart, dayEnd, busy, label,
+		)
+	}
+	if run := longestBackToBack(inWindow); run >= auditBackToBackRun {
+		result.run = fmt.Sprintf("%s %d연속(버퍼 없음)", label, run)
+	}
+	return result, true
+}
+
+func boundedAuditDay(day, from, to time.Time, loc *time.Location) (time.Time, time.Time) {
+	lo := startOfDay(day, loc)
+	hi := lo.AddDate(0, 0, 1)
+	if from.After(lo) {
+		lo = from
+	}
+	if to.Before(hi) {
+		hi = to
+	}
+	return lo, hi
+}
+
+func clipAuditEvents(
+	events []calendar.Event,
+	lo, hi time.Time,
+	loc *time.Location,
+) ([]calendar.Event, []interval, time.Duration) {
+	inWindow := make([]calendar.Event, 0, len(events))
+	busy := make([]interval, 0, len(events))
+	var total time.Duration
+	for _, event := range events {
+		start := event.Start.In(loc)
+		if start.Before(lo) {
+			start = lo
+		}
+		end := eventEnd(event).In(loc)
+		if end.After(hi) {
+			end = hi
+		}
+		if !end.After(start) {
+			continue
+		}
+		inWindow = append(inWindow, event)
+		busy = append(busy, interval{start: start, end: end})
+		total += end.Sub(start)
+	}
+	return inWindow, busy, total
+}
+
+func auditFocusOpportunity(
+	day, from, to, now time.Time,
+	loc *time.Location,
+	dayStart, dayEnd int,
+	busy []interval,
+	label string,
+) (noFocus, suggestion string) {
+	windowStart := time.Date(day.Year(), day.Month(), day.Day(), dayStart, 0, 0, 0, loc)
+	windowEnd := time.Date(day.Year(), day.Month(), day.Day(), dayEnd, 0, 0, 0, loc)
+	if windowStart.Before(from) {
+		windowStart = from
+	}
+	if windowEnd.After(to) {
+		windowEnd = to
+	}
+	if windowStart.Before(now) {
+		windowStart = now
+	}
+	if !windowEnd.After(windowStart) {
+		return label, ""
+	}
+	focus := freeWithin(windowStart, windowEnd, busy, auditFocusMin)
+	if len(focus) == 0 {
+		return label, ""
+	}
+	first := focus[0]
+	return "", fmt.Sprintf("%s %02d:%02d–%02d:%02d 포커스 블록 확보",
+		label, first.start.Hour(), first.start.Minute(), first.end.Hour(), first.end.Minute())
 }
 
 // eventEnd returns an event's end, defaulting to start+1h when missing/invalid —

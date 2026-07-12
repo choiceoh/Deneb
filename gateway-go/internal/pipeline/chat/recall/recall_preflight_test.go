@@ -520,3 +520,84 @@ func TestRecallEvidenceBudget_Adaptive(t *testing.T) {
 		t.Error("auto-recall budget must be tighter than the explicit-cue budget")
 	}
 }
+
+func TestRunRecallSourcesPreservesDeclarationOrderAcrossConcurrentCompletion(t *testing.T) {
+	releaseFirst := make(chan struct{})
+	sources := []recallSource{
+		{name: "first", run: func(context.Context) []recallEvidence {
+			<-releaseFirst
+			return []recallEvidence{{Source: "first", Note: "first evidence"}}
+		}},
+		{name: "second", run: func(context.Context) []recallEvidence {
+			close(releaseFirst)
+			return []recallEvidence{{Source: "second", Note: "second evidence"}}
+		}},
+		{name: "third", run: func(context.Context) []recallEvidence {
+			return []recallEvidence{{Source: "third", Note: "third evidence"}}
+		}},
+	}
+
+	got := runRecallSources(context.Background(), sources, Deps{}, nil)
+	if got.truncated {
+		t.Fatal("complete sources were marked truncated")
+	}
+	if len(got.evidence) != 3 || got.evidence[0].Source != "first" || got.evidence[1].Source != "second" || got.evidence[2].Source != "third" {
+		t.Fatalf("evidence order = %+v", got.evidence)
+	}
+	first := strings.Index(got.sourceSummary, "first=1(")
+	second := strings.Index(got.sourceSummary, "second=1(")
+	third := strings.Index(got.sourceSummary, "third=1(")
+	if first < 0 || second <= first || third <= second {
+		t.Fatalf("source summary order = %q", got.sourceSummary)
+	}
+}
+
+func TestRankRecallEvidenceAppliesStableOrderingAndAdaptiveBudget(t *testing.T) {
+	evidence := make([]recallEvidence, 10)
+	for i := range evidence {
+		evidence[i] = recallEvidence{
+			Source: "test",
+			Note:   string(rune('a' + i)),
+			Score:  float64(10 - i),
+			At:     int64(i),
+		}
+	}
+	// Equal-score rows use recency as the deterministic tie-breaker.
+	evidence[1].Score = evidence[0].Score
+
+	auto := rankRecallEvidence(append([]recallEvidence(nil), evidence...), nil, "ordinary topic", false, time.Unix(0, 0))
+	if len(auto) != recallAutoMaxEvidence {
+		t.Fatalf("auto evidence count = %d, want %d", len(auto), recallAutoMaxEvidence)
+	}
+	if auto[0].Note != "b" || auto[1].Note != "a" {
+		t.Fatalf("score/recency order = %+v", auto[:2])
+	}
+
+	explicit := rankRecallEvidence(append([]recallEvidence(nil), evidence...), nil, "recall topic", true, time.Unix(0, 0))
+	if len(explicit) != recallMaxEvidence {
+		t.Fatalf("explicit evidence count = %d, want %d", len(explicit), recallMaxEvidence)
+	}
+}
+
+func TestTopiclessDiaryFallbackRequiresExplicitCueAndNoQueries(t *testing.T) {
+	dir := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	if err := store.AppendDiary("topicless fallback evidence"); err != nil {
+		t.Fatalf("AppendDiary: %v", err)
+	}
+	deps := Deps{Wiki: store}
+
+	if got := withTopiclessDiaryFallback(context.Background(), nil, true, deps, nil); len(got) == 0 {
+		t.Fatal("explicit topicless cue did not receive diary fallback")
+	}
+	if got := withTopiclessDiaryFallback(context.Background(), nil, false, deps, nil); len(got) != 0 {
+		t.Fatalf("silent auto-recall received fallback: %+v", got)
+	}
+	if got := withTopiclessDiaryFallback(context.Background(), nil, true, deps, []string{"topic"}); len(got) != 0 {
+		t.Fatalf("topical recall received fallback: %+v", got)
+	}
+}

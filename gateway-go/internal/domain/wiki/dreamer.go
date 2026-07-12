@@ -314,308 +314,348 @@ func (wd *WikiDreamer) ShouldDream(_ context.Context) bool {
 	return false
 }
 
-// RunDream executes the wiki consolidation cycle.
+type dreamCycle struct {
+	startedAt   time.Time
+	report      *autonomous.DreamReport
+	phaseErrors []string
+	scan        *diaryScanResult
+	memoryScan  *memoryScanResult
+	synthInput  string
+	updates     []wikiUpdate
+	partial     bool
+	proposal    dreamProposalReport
+	created     int
+	updated     int
+	userPages   int
+}
+
+func newDreamCycle() *dreamCycle {
+	return &dreamCycle{
+		startedAt: time.Now(),
+		report:    &autonomous.DreamReport{},
+	}
+}
+
+func (cycle *dreamCycle) addPhaseError(format string, args ...any) {
+	cycle.phaseErrors = append(cycle.phaseErrors, fmt.Sprintf(format, args...))
+}
+
+// RunDream executes the wiki consolidation cycle as named, independently
+// observable phases. Each phase owns one failure policy while this method owns
+// only ordering and early exits.
 func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, error) {
-	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, wikiDreamTimeout)
 	defer cancel()
+	cycle := newDreamCycle()
 
-	report := &autonomous.DreamReport{}
-	var phaseErrors []string
+	wd.collectDreamSources(ctx, cycle)
+	if cycle.synthInput == "" {
+		return wd.finishDreamWithoutInput(cycle), nil
+	}
 
-	// Phase 1: Scan unprocessed diary entries.
+	if !wd.synthesizeDreamCycle(ctx, cycle) {
+		return cycle.report, nil
+	}
+
+	wd.applyDreamUpdates(ctx, cycle)
+	wd.captureDreamOpenLoops(ctx, cycle)
+	wd.seedDreamPersonPages(ctx, cycle)
+	wd.applyDreamProjectDigests(ctx, cycle)
+	wd.applyDreamUserDirectives(cycle)
+
+	wd.rebuildAndVerifyDreamWiki(ctx, cycle)
+	wd.enrichDreamRelatedLinks(ctx)
+	wd.writeDreamGraphSnapshot(ctx, cycle)
+
+	heldOffsets := wd.applyDreamPartialBackpressure(cycle)
+	wd.curateDreamMemory(cycle, heldOffsets)
+	wd.persistDreamProgress(cycle, heldOffsets)
+
+	wd.completeDreamCycle(ctx, cycle)
+	return cycle.report, nil
+}
+
+func (wd *WikiDreamer) collectDreamSources(ctx context.Context, cycle *dreamCycle) {
 	scan, err := wd.scanDiaries(ctx)
 	if err != nil {
-		phaseErrors = append(phaseErrors, fmt.Sprintf("diary-scan: %v", err))
+		cycle.addPhaseError("diary-scan: %v", err)
 	}
 	if scan == nil {
-		// No new diary bytes. Keep a state-bearing scan so a MEMORY.md-only
-		// cycle flows through the same synthesis/persistence tail.
+		// A state-bearing scan lets MEMORY.md-only cycles share the normal tail.
 		scan = &diaryScanResult{State: wd.loadDiaryProcessState()}
 	}
-	diaryContent := scan.Content
+	cycle.scan = scan
 
-	// Phase 1a: hard on-disk cap for MEMORY.md, enforced unconditionally before
-	// any early return below. Phase 4b curation only runs when synthesis
-	// consumes sections, so a disabled/lagging dreamer (no diary bytes, no LLM
-	// client) would otherwise let the file grow without bound. This bounds it
-	// regardless of dreaming health.
-	if n, derr := wd.enforceMemoryDiskCap(); derr != nil {
-		phaseErrors = append(phaseErrors, fmt.Sprintf("memory-disk-cap: %v", derr))
-	} else if n > 0 {
-		wd.logger.Info("wiki-dream: MEMORY.md disk-capped", "droppedSections", n)
+	if dropped, err := wd.enforceMemoryDiskCap(); err != nil {
+		cycle.addPhaseError("memory-disk-cap: %v", err)
+	} else if dropped > 0 {
+		wd.logger.Info("wiki-dream: MEMORY.md disk-capped", "droppedSections", dropped)
 	}
 
-	// Phase 1b: unconsumed workspace MEMORY.md sections join the synthesis
-	// input — same distillation as diaries; the file is curated in Phase 4b.
-	memScan := wd.scanWorkspaceMemory(scan.State.MemoryConsumedThrough)
-	synthInput := diaryContent
-	if memScan != nil {
-		synthInput += memScan.Content
+	cycle.memoryScan = wd.scanWorkspaceMemory(scan.State.MemoryConsumedThrough)
+	cycle.synthInput = scan.Content
+	if cycle.memoryScan != nil {
+		cycle.synthInput += cycle.memoryScan.Content
 		wd.logger.Info("wiki-dream: memory sections queued for distillation",
-			"sections", memScan.Sections, "through", memScan.ConsumedThrough)
+			"sections", cycle.memoryScan.Sections,
+			"through", cycle.memoryScan.ConsumedThrough)
 	}
+}
 
-	if synthInput == "" {
-		wd.logger.Info("wiki-dream: no new diary or memory entries to process")
-		wd.resetCounters()
-		report.DurationMs = time.Since(start).Milliseconds()
-		return report, nil
-	}
+func (wd *WikiDreamer) finishDreamWithoutInput(cycle *dreamCycle) *autonomous.DreamReport {
+	wd.logger.Info("wiki-dream: no new diary or memory entries to process")
+	wd.resetCounters()
+	cycle.report.DurationMs = time.Since(cycle.startedAt).Milliseconds()
+	return cycle.report
+}
 
-	// Phase 2: LLM synthesis — determine which wiki pages to update.
-	//
-	// Both failure paths below back off a full interval (resetCounters).
-	// Without it, ShouldDream stays true and the 30-min timer hot-loops a
-	// doomed cycle — with a wedged LLM each attempt burned the entire 10-min
-	// cycle timeout, observed in production on 2026-06-11. Nothing is lost by
-	// backing off: diary offsets and the MEMORY.md high-water mark only
-	// persist on success, so the content is re-consumed next cycle.
+func (wd *WikiDreamer) synthesizeDreamCycle(ctx context.Context, cycle *dreamCycle) bool {
 	if wd.client == nil {
-		phaseErrors = append(phaseErrors, "synthesis: LLM client not available")
-		wd.resetCounters()
-		report.PhaseErrors = phaseErrors
-		report.DurationMs = time.Since(start).Milliseconds()
-		return report, nil
+		cycle.phaseErrors = append(cycle.phaseErrors, "synthesis: LLM client not available")
+		wd.finishFailedDreamSynthesis(cycle)
+		return false
 	}
 
-	updates, partial, err := wd.synthesize(ctx, synthInput, scan.State)
+	updates, partial, err := wd.synthesize(ctx, cycle.synthInput, cycle.scan.State)
 	if err != nil {
-		// Dreaming silently stalling is the audit's #1 ghost failure —
-		// surface it at Error so the operator sees consolidation is stuck.
 		wd.logger.Error("wiki-dream: synthesis failed; backing off one interval", "error", err)
-		wd.resetCounters()
-		phaseErrors = append(phaseErrors, fmt.Sprintf("synthesis: %v", err))
-		report.PhaseErrors = phaseErrors
-		report.DurationMs = time.Since(start).Milliseconds()
-		return report, nil
+		cycle.addPhaseError("synthesis: %v", err)
+		wd.finishFailedDreamSynthesis(cycle)
+		return false
 	}
-	report.WikiUpdatesProposed = len(updates)
-	proposal := buildDreamProposalReport(scan, updates)
-	proposalPath := wd.dreamProposalPath()
-	report.WikiProposalPath = proposalPath
-	if err := wd.saveDreamProposalReport(proposal); err != nil {
-		phaseErrors = append(phaseErrors, fmt.Sprintf("proposal-save: %v", err))
+	cycle.updates = updates
+	cycle.partial = partial
+	cycle.report.WikiUpdatesProposed = len(updates)
+	cycle.proposal = buildDreamProposalReport(cycle.scan, updates)
+	cycle.report.WikiProposalPath = wd.dreamProposalPath()
+	if err := wd.saveDreamProposalReport(cycle.proposal); err != nil {
+		cycle.addPhaseError("proposal-save: %v", err)
 	}
+	return true
+}
 
-	// Phase 3: Apply page updates.
-	created, updated, userPages, oversized := wd.applyUpdates(ctx, updates)
-	report.WikiPagesCreated = created
-	report.WikiPagesUpdated = updated
-	report.UserModelUpdated = userPages
+func (wd *WikiDreamer) finishFailedDreamSynthesis(cycle *dreamCycle) {
+	// Back off a full interval so a missing or wedged LLM cannot hot-loop.
+	wd.resetCounters()
+	cycle.report.PhaseErrors = cycle.phaseErrors
+	cycle.report.DurationMs = time.Since(cycle.startedAt).Milliseconds()
+}
+
+func (wd *WikiDreamer) applyDreamUpdates(ctx context.Context, cycle *dreamCycle) {
+	created, updated, userPages, oversized := wd.applyUpdates(ctx, cycle.updates)
+	cycle.created = created
+	cycle.updated = updated
+	cycle.userPages = userPages
+	cycle.report.WikiPagesCreated = created
+	cycle.report.WikiPagesUpdated = updated
+	cycle.report.UserModelUpdated = userPages
 	if len(oversized) > 0 {
-		phaseErrors = append(phaseErrors, fmt.Sprintf("oversized pages: %s", strings.Join(oversized, ", ")))
+		cycle.addPhaseError("oversized pages: %s", strings.Join(oversized, ", "))
 	}
+}
 
-	// Phase 3b: prospective memory — extract unfulfilled commitments from the
-	// same input and hand them to the wired sink (the to-do store). Best-effort:
-	// a failed extraction never costs the consolidation cycle.
-	if wd.openLoopSink != nil {
-		loops, lerr := wd.extractOpenLoops(ctx, synthInput)
-		switch {
-		case lerr != nil:
-			phaseErrors = append(phaseErrors, fmt.Sprintf("open-loops: %v", lerr))
-		case len(loops) > 0:
-			if added, serr := wd.openLoopSink(ctx, loops); serr != nil {
-				phaseErrors = append(phaseErrors, fmt.Sprintf("open-loops-sink: %v", serr))
-			} else if added > 0 {
-				wd.logger.Info("wiki-dream: open loops captured", "extracted", len(loops), "new", added)
-			}
-		}
+func (wd *WikiDreamer) captureDreamOpenLoops(ctx context.Context, cycle *dreamCycle) {
+	if wd.openLoopSink == nil {
+		return
 	}
-
-	// Phase 3c: mention-driven 인물 seeding — contacts repeatedly mentioned in
-	// this cycle's input get stub pages from the address book (see
-	// person_seed.go); later cycles enrich them like any page.
-	if n := wd.seedPersonPages(ctx, synthInput); n > 0 {
-		created += n
-		report.WikiPagesCreated = created
+	loops, err := wd.extractOpenLoops(ctx, cycle.synthInput)
+	if err != nil {
+		cycle.addPhaseError("open-loops: %v", err)
+		return
 	}
-
-	// Phase 3d: project digests — roll up per-project latest progress from the
-	// same input and write each into its project 대표페이지's "## 현재 상태" section
-	// (the native "프로젝트 진행상황" 모아보기 screen reads those sections). Best-effort:
-	// a failed digest pass never costs the consolidation cycle.
-	if digests, derr := wd.extractProjectDigests(ctx, synthInput); derr != nil {
-		phaseErrors = append(phaseErrors, fmt.Sprintf("project-digests: %v", derr))
-	} else if len(digests) > 0 {
-		if written := wd.applyProjectDigests(digests, time.Now()); written > 0 {
-			report.WikiProjectDigests = written
-			wd.logger.Info("wiki-dream: project status updated", "written", written)
-		}
+	if len(loops) == 0 {
+		return
 	}
-
-	// Phase 3e: procedural memory — promote the active 사용자 (user-preference)
-	// pages into USER.md's managed "행동 지침" section so standing directives are
-	// *applied* every turn (prompt context file) instead of only recalled. The
-	// dreamer's existing 사용자 synthesis is the distiller; supersede is the
-	// consolidation. Opt-in (DENEB_USER_DIRECTIVES) and best-effort: a failed
-	// pass never costs the consolidation cycle (see user_directives.go).
-	if userDirectivesEnabled() {
-		if n, derr := wd.distillUserDirectives(); derr != nil {
-			phaseErrors = append(phaseErrors, fmt.Sprintf("user-directives: %v", derr))
-		} else if n > 0 {
-			wd.logger.Info("wiki-dream: user directives applied", "directives", n)
-		}
+	added, err := wd.openLoopSink(ctx, loops)
+	if err != nil {
+		cycle.addPhaseError("open-loops-sink: %v", err)
+		return
 	}
+	if added > 0 {
+		wd.logger.Info("wiki-dream: open loops captured", "extracted", len(loops), "new", added)
+	}
+}
 
-	// Phase 4: Rebuild index.
+func (wd *WikiDreamer) seedDreamPersonPages(ctx context.Context, cycle *dreamCycle) {
+	created := wd.seedPersonPages(ctx, cycle.synthInput)
+	if created == 0 {
+		return
+	}
+	cycle.created += created
+	cycle.report.WikiPagesCreated = cycle.created
+}
+
+func (wd *WikiDreamer) applyDreamProjectDigests(ctx context.Context, cycle *dreamCycle) {
+	digests, err := wd.extractProjectDigests(ctx, cycle.synthInput)
+	if err != nil {
+		cycle.addPhaseError("project-digests: %v", err)
+		return
+	}
+	if len(digests) == 0 {
+		return
+	}
+	written := wd.applyProjectDigests(digests, time.Now())
+	if written == 0 {
+		return
+	}
+	cycle.report.WikiProjectDigests = written
+	wd.logger.Info("wiki-dream: project status updated", "written", written)
+}
+
+func (wd *WikiDreamer) applyDreamUserDirectives(cycle *dreamCycle) {
+	if !userDirectivesEnabled() {
+		return
+	}
+	applied, err := wd.distillUserDirectives()
+	if err != nil {
+		cycle.addPhaseError("user-directives: %v", err)
+		return
+	}
+	if applied > 0 {
+		wd.logger.Info("wiki-dream: user directives applied", "directives", applied)
+	}
+}
+
+func (wd *WikiDreamer) rebuildAndVerifyDreamWiki(ctx context.Context, cycle *dreamCycle) {
 	if err := wd.rebuildIndex(); err != nil {
-		phaseErrors = append(phaseErrors, fmt.Sprintf("index-rebuild: %v", err))
+		cycle.addPhaseError("index-rebuild: %v", err)
 	}
 
-	// Phase 5: Verify existing pages (duplicate detection + misclassification),
-	// then AUTO-APPLY the high-confidence fixes (exact-duplicate merge, LLM
-	// high-confidence category move). Low-confidence findings stay advisory in
-	// the report; auto-applied corrections are logged and capped per cycle, and
-	// are reversible from this cycle's git snapshot.
 	findings := wd.verifyPages(ctx)
-	if len(findings) > 0 {
-		applied := wd.applyVerifyFixes(findings)
-		for _, f := range findings {
-			if f.Fix != nil {
-				continue // high-confidence: auto-applied (or attempted, logged), not advisory
-			}
-			report.VerifyFindings = append(report.VerifyFindings, f.Detail)
-		}
-		wd.logger.Info("wiki-dream: verification", "findings", len(findings), "autoApplied", applied)
-		if applied > 0 {
-			// The moves/merges changed the page set — rebuild so the snapshot
-			// (Phase 6) and next cycle see the corrected wiki.
-			if err := wd.rebuildIndex(); err != nil {
-				phaseErrors = append(phaseErrors, fmt.Sprintf("index-rebuild after auto-fix: %v", err))
-			}
+	if len(findings) == 0 {
+		return
+	}
+	applied := wd.applyVerifyFixes(findings)
+	for _, finding := range findings {
+		if finding.Fix == nil {
+			cycle.report.VerifyFindings = append(cycle.report.VerifyFindings, finding.Detail)
 		}
 	}
+	wd.logger.Info("wiki-dream: verification", "findings", len(findings), "autoApplied", applied)
+	if applied > 0 {
+		if err := wd.rebuildIndex(); err != nil {
+			cycle.addPhaseError("index-rebuild after auto-fix: %v", err)
+		}
+	}
+}
 
-	// Phase 5.5: Densify the graph. For pages that have no related links yet,
-	// suggest a couple of semantic neighbors (high cosine floor) and wire them.
-	// Additive only — never removes a link — and a no-op without an embedder.
-	// Runs before the snapshot so the new edges land in this cycle's graph.
+func (wd *WikiDreamer) enrichDreamRelatedLinks(ctx context.Context) {
 	if enriched := wd.enrichRelatedLinks(ctx); enriched > 0 {
 		wd.logger.Info("wiki-dream: related-link enrichment", "linksAdded", enriched)
 	}
+}
 
-	// Phase 6: Project the wiki into a graphify-compatible graph.json so the
-	// `graphify` tool can query, traverse, and cluster wiki concepts. No LLM
-	// call here — synthesize() already curates Related[], we just serialize.
-	if outDir, ok := graphSnapshotOutDir(); ok {
-		snap, snapErr := BuildGraphSnapshot(ctx, wd.store, outDir, true)
-		if snapErr != nil {
-			phaseErrors = append(phaseErrors, fmt.Sprintf("graph-snapshot: %v", snapErr))
-		} else {
-			report.WikiGraphNodes = snap.Nodes
-			report.WikiGraphEdges = snap.Edges
-			report.WikiGraphClustered = snap.Clustered
-			if snap.ClusterError != "" {
-				wd.logger.Warn("wiki-dream: graph cluster step failed",
-					"error", snap.ClusterError)
-			}
-			wd.logger.Info("wiki-dream: graph snapshot",
-				"nodes", snap.Nodes, "edges", snap.Edges,
-				"clustered", snap.Clustered, "out", snap.GraphPath)
-		}
+func (wd *WikiDreamer) writeDreamGraphSnapshot(ctx context.Context, cycle *dreamCycle) {
+	outDir, enabled := graphSnapshotOutDir()
+	if !enabled {
+		return
+	}
+	snapshot, err := BuildGraphSnapshot(ctx, wd.store, outDir, true)
+	if err != nil {
+		cycle.addPhaseError("graph-snapshot: %v", err)
+		return
+	}
+	cycle.report.WikiGraphNodes = snapshot.Nodes
+	cycle.report.WikiGraphEdges = snapshot.Edges
+	cycle.report.WikiGraphClustered = snapshot.Clustered
+	if snapshot.ClusterError != "" {
+		wd.logger.Warn("wiki-dream: graph cluster step failed", "error", snapshot.ClusterError)
+	}
+	wd.logger.Info("wiki-dream: graph snapshot",
+		"nodes", snapshot.Nodes, "edges", snapshot.Edges,
+		"clustered", snapshot.Clustered, "out", snapshot.GraphPath)
+}
+
+// applyDreamPartialBackpressure holds every consumed cursor for the first two
+// damaged synthesis responses, then advances to avoid permanent poisoning.
+func (wd *WikiDreamer) applyDreamPartialBackpressure(cycle *dreamCycle) bool {
+	if !cycle.partial {
+		cycle.scan.State.PartialStreak = 0
+		return false
+	}
+	if cycle.scan.State.PartialStreak >= 2 {
+		wd.logger.Warn("wiki-dream: partial synthesis repeated — advancing past damaged input",
+			"streak", cycle.scan.State.PartialStreak)
+		cycle.scan.State.PartialStreak = 0
+		return false
 	}
 
-	// Partial synthesis back-pressure: a salvaged (damaged) array means the
-	// tail of this cycle's input was never turned into updates. Hold EVERY
-	// consumed cursor — diary per-file offsets, the MEMORY.md high-water mark
-	// (Phase 4b), and the legacy date cutoff (index.LastProcessed below) — so
-	// the next cycle re-consumes the same input; duplicate re-application is
-	// absorbed by the create/update dedup, the verbatim-line drop
-	// (mergeUpdateContent), and the project-log contains check. The hold must
-	// not depend on PriorFiles: a MEMORY.md-only cycle has none, but its
-	// high-water mark still needs holding. A streak cap stops a deterministic
-	// corruption from pinning the pipeline to the same chunk forever.
-	heldOffsets := false
-	if partial {
-		if scan.State.PartialStreak < 2 {
-			scan.State.PartialStreak++
-			if scan.PriorFiles != nil {
-				scan.State.Files = scan.PriorFiles
-			}
-			heldOffsets = true
-			wd.logger.Warn("wiki-dream: partial synthesis — input cursors held for re-consumption",
-				"streak", scan.State.PartialStreak)
-		} else {
-			wd.logger.Warn("wiki-dream: partial synthesis repeated — advancing past damaged input",
-				"streak", scan.State.PartialStreak)
-			scan.State.PartialStreak = 0
-		}
-	} else {
-		scan.State.PartialStreak = 0
+	cycle.scan.State.PartialStreak++
+	if cycle.scan.PriorFiles != nil {
+		cycle.scan.State.Files = cycle.scan.PriorFiles
 	}
+	wd.logger.Warn("wiki-dream: partial synthesis — input cursors held for re-consumption",
+		"streak", cycle.scan.State.PartialStreak)
+	return true
+}
 
-	// Phase 4b: curate MEMORY.md now that its consumed sections are distilled
-	// into wiki pages, and advance the high-water mark for the state save below.
-	// Skipped while offsets are held — the memory sections ride the same
-	// re-consumed input.
-	if memScan != nil && !heldOffsets {
-		if _, derr := wd.curateWorkspaceMemory(memScan); derr != nil {
-			phaseErrors = append(phaseErrors, fmt.Sprintf("memory-curation: %v", derr))
-		}
-		scan.State.MemoryConsumedThrough = memScan.ConsumedThrough
+func (wd *WikiDreamer) curateDreamMemory(cycle *dreamCycle, heldOffsets bool) {
+	if cycle.memoryScan == nil || heldOffsets {
+		return
 	}
+	if _, err := wd.curateWorkspaceMemory(cycle.memoryScan); err != nil {
+		cycle.addPhaseError("memory-curation: %v", err)
+	}
+	cycle.scan.State.MemoryConsumedThrough = cycle.memoryScan.ConsumedThrough
+}
 
-	// Persist diary high-water state only after synthesis/apply/index work has
-	// completed. LastProcessed remains for display and legacy migration, but
-	// scanDiaries uses per-file offsets as the primary source of truth. The
-	// cursor advance + save goes through the locked Store method — mutating the
-	// live index through a raw pointer (and rendering it in Save) would race
-	// concurrent page writers.
-	var cursor string
-	switch {
-	case heldOffsets:
-		// Keep the previous cutoff (empty cursor = no advance). LastProcessed
-		// doubles as scanDiaries's legacy cutoff for newly-seen files without
-		// per-file state; advancing it while cursors are held would skip those
-		// files next cycle.
-	case scan.LatestDate != "":
-		cursor = scan.LatestDate
-	default:
-		cursor = time.Now().Format("2006-01-02")
+func dreamProgressCursor(scan *diaryScanResult, heldOffsets bool, now time.Time) string {
+	if heldOffsets {
+		return ""
 	}
+	if scan.LatestDate != "" {
+		return scan.LatestDate
+	}
+	return now.Format("2006-01-02")
+}
+
+func (wd *WikiDreamer) persistDreamProgress(cycle *dreamCycle, heldOffsets bool) {
+	cursor := dreamProgressCursor(cycle.scan, heldOffsets, time.Now())
 	if err := wd.store.SetLastProcessedAndSave(cursor); err != nil {
-		phaseErrors = append(phaseErrors, fmt.Sprintf("index-save: %v", err))
+		cycle.addPhaseError("index-save: %v", err)
 	}
-	if scan != nil {
-		scan.State.Recent = appendProcessedDiaryCapsule(scan.State.Recent, processedDiaryCapsule{
-			At:        time.Now().Format(time.RFC3339),
-			DiaryDate: scan.LatestDate,
-			Proposed:  len(updates),
-			Created:   created,
-			Updated:   updated,
-			Paths:     updatePaths(updates),
-		})
-		if err := wd.saveDiaryProcessState(scan.State); err != nil {
-			phaseErrors = append(phaseErrors, fmt.Sprintf("diary-state-save: %v", err))
-		}
+	if cycle.scan == nil {
+		return
 	}
+	cycle.scan.State.Recent = appendProcessedDiaryCapsule(cycle.scan.State.Recent, processedDiaryCapsule{
+		At:        time.Now().Format(time.RFC3339),
+		DiaryDate: cycle.scan.LatestDate,
+		Proposed:  len(cycle.updates),
+		Created:   cycle.created,
+		Updated:   cycle.updated,
+		Paths:     updatePaths(cycle.updates),
+	})
+	if err := wd.saveDiaryProcessState(cycle.scan.State); err != nil {
+		cycle.addPhaseError("diary-state-save: %v", err)
+	}
+}
 
+func (wd *WikiDreamer) completeDreamCycle(ctx context.Context, cycle *dreamCycle) {
 	wd.resetCounters()
-	report.PhaseErrors = phaseErrors
-	report.DurationMs = time.Since(start).Milliseconds()
-	proposal.Applied = dreamApplySummary{Created: created, Updated: updated}
-	proposal.PhaseErrors = phaseErrors
-	proposal.DurationMs = report.DurationMs
-	if err := wd.saveDreamProposalReport(proposal); err != nil {
-		report.PhaseErrors = append(report.PhaseErrors, fmt.Sprintf("proposal-save-final: %v", err))
+	cycle.report.PhaseErrors = cycle.phaseErrors
+	cycle.report.DurationMs = time.Since(cycle.startedAt).Milliseconds()
+	cycle.proposal.Applied = dreamApplySummary{Created: cycle.created, Updated: cycle.updated}
+	cycle.proposal.PhaseErrors = cycle.phaseErrors
+	cycle.proposal.DurationMs = cycle.report.DurationMs
+	if err := wd.saveDreamProposalReport(cycle.proposal); err != nil {
+		cycle.report.PhaseErrors = append(cycle.report.PhaseErrors, fmt.Sprintf("proposal-save-final: %v", err))
 	}
 
-	// Version the cycle's wiki mutations and surface exactly what changed —
-	// pages, snapshot hash, diffstat — plus a one-step rollback hint. A bad
-	// LLM cycle becomes a visible, revertible event instead of silent drift.
-	if hash := wd.store.SnapshotGit(ctx, fmt.Sprintf("dream: +%d페이지 생성, %d페이지 수정", created, updated)); hash != "" {
-		report.WikiChangeSummary = formatWikiChangeSummary(
-			hash, wd.store.GitSnapshotStat(ctx, hash), wd.store.Dir(), updatePaths(updates),
+	message := fmt.Sprintf("dream: +%d페이지 생성, %d페이지 수정", cycle.created, cycle.updated)
+	if hash := wd.store.SnapshotGit(ctx, message); hash != "" {
+		cycle.report.WikiChangeSummary = formatWikiChangeSummary(
+			hash,
+			wd.store.GitSnapshotStat(ctx, hash),
+			wd.store.Dir(),
+			updatePaths(cycle.updates),
 		)
 	}
 
 	wd.logger.Info("wiki-dream: cycle complete",
-		"created", created, "updated", updated, "userModel", userPages,
-		"duration", time.Since(start).Round(time.Millisecond))
-
-	return report, nil
+		"created", cycle.created,
+		"updated", cycle.updated,
+		"userModel", cycle.userPages,
+		"duration", time.Since(cycle.startedAt).Round(time.Millisecond))
 }
 
 // scanDiaries reads diary bytes that have not yet been consolidated. The

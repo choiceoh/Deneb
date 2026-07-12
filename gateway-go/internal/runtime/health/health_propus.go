@@ -1,6 +1,7 @@
 package health
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -9,10 +10,24 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/propusview"
 )
 
+type propusValues map[string]any
+
+// PropusSection is an immutable health snapshot. Its wire representation stays
+// private to this adapter so callers cannot inject arbitrary fields into the
+// canonical Propus health contract.
+type PropusSection struct {
+	values propusValues
+}
+
+// MarshalJSON renders the established flat /health payload.
+func (s PropusSection) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.values)
+}
+
 // Propus snapshots the self-improvement control plane. The bool
 // distinguishes an unwired tracker from an initialized tracker whose counters
 // are all zero, preserving the optional-section behavior of /health.
-func Propus(tracker *genesis.Tracker) (map[string]any, bool) {
+func Propus(tracker *genesis.Tracker) (*PropusSection, bool) {
 	if tracker == nil {
 		return nil, false
 	}
@@ -20,7 +35,7 @@ func Propus(tracker *genesis.Tracker) (map[string]any, bool) {
 	liveness := tracker.LivenessSnapshot()
 	identity := propus.BuildPropusSystemIdentity(propus.PropusScopeGlobal)
 	lastActivity := propus.PropusLastActivityMS(propusview.Liveness(liveness))
-	section := map[string]any{
+	section := propusValues{
 		"system":                identity.Name,
 		"tool":                  identity.Tool,
 		"doctrine_version":      identity.Version,
@@ -132,10 +147,10 @@ func Propus(tracker *genesis.Tracker) (map[string]any, bool) {
 		section["attention"] = health.Attention
 	}
 
-	return section, true
+	return &PropusSection{values: section}, true
 }
 
-func collectPropusUsageQuality(tracker *genesis.Tracker, section map[string]any) genesis.UsageQualitySummary {
+func collectPropusUsageQuality(tracker *genesis.Tracker, section propusValues) genesis.UsageQualitySummary {
 	quality, err := tracker.UsageQualitySummary("")
 	if err != nil {
 		return genesis.UsageQualitySummary{}
@@ -151,7 +166,7 @@ func collectPropusUsageQuality(tracker *genesis.Tracker, section map[string]any)
 	return quality
 }
 
-func collectPropusValidationSummary(tracker *genesis.Tracker, section map[string]any) genesis.SkillValidationCaseSummary {
+func collectPropusValidationSummary(tracker *genesis.Tracker, section propusValues) genesis.SkillValidationCaseSummary {
 	summary, err := tracker.ValidationCaseSummary("")
 	if err != nil {
 		return genesis.SkillValidationCaseSummary{}
@@ -176,7 +191,7 @@ func collectPropusValidationSummary(tracker *genesis.Tracker, section map[string
 	return summary
 }
 
-func collectPropusAgentSkillValue(tracker *genesis.Tracker, section map[string]any) (total int, unused int) {
+func collectPropusAgentSkillValue(tracker *genesis.Tracker, section propusValues) (total int, unused int) {
 	trackedTotal, trackedUnused := tracker.AgentSkillValueSummary()
 	if trackedTotal > 0 {
 		section["agent_skills"] = trackedTotal
@@ -184,13 +199,6 @@ func collectPropusAgentSkillValue(tracker *genesis.Tracker, section map[string]a
 		return trackedTotal, trackedUnused
 	}
 	return 0, 0
-}
-
-// AttachPropus publishes the canonical Propus name and the legacy
-// self_evolution compatibility name as aliases of the same snapshot.
-func AttachPropus(health map[string]any, section map[string]any) {
-	health["propus"] = section
-	health["self_evolution"] = section
 }
 
 func formatDuration(d time.Duration) string {

@@ -46,7 +46,7 @@ type Capability struct {
 	// ThinkingToggleKwarg names the vLLM chat_template_kwargs boolean that
 	// disables the model's thinking phase per request ("" = no template
 	// toggle). DeepSeek V4 templates use "thinking"; Qwen3-family templates
-	// use "enable_thinking" (cf. localai.NoThinking — the kwarg SPELLING is
+	// use "enable_thinking" (the kwarg SPELLING is
 	// per-family, and the wrong one fails at template render time). Only
 	// self-hosted vLLM serving honors chat_template_kwargs, so the builtin
 	// is gated to vllm provider ids; other providers silently drop or 400

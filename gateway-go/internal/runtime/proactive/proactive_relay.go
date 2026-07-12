@@ -226,6 +226,46 @@ type Options struct {
 	MirrorTranscript bool
 }
 
+type preparedProactiveDelivery struct {
+	target         string
+	content        string
+	body           string
+	originalLength int
+}
+
+func (d proactiveRelayDeps) prepareProactiveDelivery(sessionKey, content string) (preparedProactiveDelivery, bool) {
+	target := sessionKey
+	if target == "" {
+		target = nativeWorkSessionKey
+	}
+	originalLength := len(content)
+	content = tokens.StripSilentToken(content, tokens.SilentReplyToken)
+	if strings.TrimSpace(content) == "" {
+		d.logProactive("suppressed", "silent_token", originalLength, "")
+		return preparedProactiveDelivery{}, false
+	}
+
+	content = stripProactiveMetaPreamble(market.SubstituteLetterTokens(content))
+	if isContentlessProactive(content) {
+		d.logProactive("suppressed", "contentless", originalLength, pushPreview(content))
+		return preparedProactiveDelivery{}, false
+	}
+	if isNarrationOnlyProactive(content) {
+		d.logProactive("suppressed", "narration", originalLength, pushPreview(content))
+		return preparedProactiveDelivery{}, false
+	}
+
+	body := content
+	if target == nativeWorkSessionKey && d.workModel != nil {
+		if model := strings.TrimSpace(d.workModel()); model != "" {
+			body = appendWorkModelFooter(content, model)
+		}
+	}
+	return preparedProactiveDelivery{
+		target: target, content: content, body: body, originalLength: originalLength,
+	}, true
+}
+
 // relayNativeToOpts is relayNativeTo with the collapse switch: when collapse is
 // true the transcript message is wrapped as a collapsed deneb-ui accordion
 // (title-only card, tap to expand) while every other consumer of the body —
@@ -240,70 +280,12 @@ func (d proactiveRelayDeps) relayNativeToOpts(sessionKey, content string, collap
 // card type even when the user-edited prompt no longer starts with a generic
 // "메일 분석 리포트" heading.
 func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opts proactiveRelayOptions) (bool, error) {
-	target := sessionKey
-	if target == "" {
-		target = nativeWorkSessionKey
-	}
-	// Respect the NO_REPLY silent-reply contract: a proactive turn that correctly
-	// signals "nothing to report" with the token (alone or trailing) must be
-	// suppressed — not delivered as a literal "NO_REPLY" work-feed card + push.
-	// isContentlessProactive below only catches the chatty prose variants
-	// ("메일이 없습니다" etc.); the bare token needs this explicit strip.
-	origLen := len(content) // raw body size, recorded on every relay decision
-	if content = tokens.StripSilentToken(content, tokens.SilentReplyToken); strings.TrimSpace(content) == "" {
-		d.logProactive("suppressed", "silent_token", origLen, "")
+	delivery, ok := d.prepareProactiveDelivery(sessionKey, content)
+	if !ok {
 		return false, nil
 	}
-	// Market tokens ("{{market:usd_krw}}") → the display strings the letter
-	// tool fetched. Mechanical substitution: the model never writes the digits
-	// itself (see market.SubstituteLetterTokens). Before the card/push/summary
-	// derivations below so every delivered surface shows real values.
-	content = market.SubstituteLetterTokens(content)
-	// Drop the model's leading working-narration preamble — "전체 맥락 파악됐습니다.
-	// 분석 결과 정리합니다." (then "---" then the actual report) — before it reaches
-	// the work-feed card title/summary, the client:main transcript, or the push.
-	// A cron/morning-letter turn sometimes opens its terminal (no-tool) turn with
-	// this meta sentence about its own process; because it sits atop a single
-	// terminal turn, the per-turn isInterimNarration filter (tool-count based)
-	// never sees it. See stripProactiveMetaPreamble.
-	content = stripProactiveMetaPreamble(content)
-	// Floor: drop "nothing to report" pings before they reach the transcript,
-	// work feed, or push. A proactive agent turn that ignores its NO_REPLY
-	// contract and writes a chatty "읽지 않은 메일이 없습니다" (an email-check cron
-	// firing every poll cycle), a dreaming "변경 없음", or a "(분석 실패)" stub would
-	// otherwise pile up as 업무 리포트 work-feed cards + pushes — the
-	// over-notification the project forbids. Reported as not-delivered
-	// (false, nil): benign for callers (cron logs "not-delivered" without
-	// erroring), and the raw agent output is still kept in the cron run log for
-	// diagnosis.
-	if isContentlessProactive(content) {
-		d.logProactive("suppressed", "contentless", origLen, pushPreview(content))
-		return false, nil
-	}
-	// Floor #2: drop bodies that are the model's working-narration, a stray
-	// markup/tool fragment, or a bare generic label — self-talk that leaked into a
-	// terminal turn ("이제 분석 보고를 정리해.", "<tool>", "분석") with no report behind
-	// it. stripProactiveMetaPreamble only peels a narration *head* that real content
-	// follows; this catches the case where narration is the *whole* body.
-	if isNarrationOnlyProactive(content) {
-		d.logProactive("suppressed", "narration", origLen, pushPreview(content))
-		return false, nil
-	}
-
-	// Stamp the producing model at the foot of every 업무 feed report so the user
-	// can see which model did the work. Scoped to the main feed (client:main),
-	// where proactive content is uniformly a main-model agent turn. The footer
-	// goes only into the DELIVERED body (the work-feed card / transcript message),
-	// never into `content` — which keeps feeding the title/summary heuristics and
-	// the push preview the clean report, so the stamp can't leak into a card's
-	// title or 2-line summary. nil-safe; a "" resolver result (e.g. no model
-	// registry) leaves the delivered body equal to content.
-	deliverBody := content
-	if target == nativeWorkSessionKey && d.workModel != nil {
-		if model := strings.TrimSpace(d.workModel()); model != "" {
-			deliverBody = appendWorkModelFooter(content, model)
-		}
-	}
+	target, content, deliverBody := delivery.target, delivery.content, delivery.body
+	origLen := delivery.originalLength
 
 	// The main 업무 feed (client:main) delivers proactive reports to the work FEED
 	// only — not the chat transcript — so the chat stays a place to ask, not a wall
@@ -357,73 +339,7 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 			}
 		}
 	}
-	// Deep-link target for the desktop proactive nudge — set when this delivery
-	// also creates a work-feed card (below); empty otherwise (informational push).
-	var pushKind, pushRef string
-	if d.workFeed != nil && target == nativeWorkSessionKey {
-		// Answerable question card: a ```choices fence becomes inline answer chips
-		// and a trailing "?" (no fence) flags a free-text question, so the agent's
-		// questions get a reply path instead of dead-ending in the feed. The fence
-		// is stripped from the card body (cardSrc/cardBody); the transcript mirror
-		// above keeps the original so the chat still renders the chips inline.
-		cardSrc, choices := splitChoicesFence(content)
-		cardBody, _ := splitChoicesFence(deliverBody)
-		qActions := choiceAnswerActions(choices)
-		isQuestion := len(choices) > 0 || endsWithQuestionMark(cardSrc)
-		// Derive a human title + summary from the body rather than the fixed
-		// "업무 리포트" + first-line slice that leaked markdown markers ("### …",
-		// "---") into every card. An empty title falls back to the store's
-		// defaultTitle ("업무 리포트"). See workfeed_extract.go.
-		title, titleLine := extractCardTitle(cardSrc)
-		source := strings.TrimSpace(opts.workFeedSource)
-		if source == "" {
-			source = workfeed.SourceProactive
-		}
-		// Mail reports get the envelope card icon (SourceMailReport). Prefer the
-		// explicit source from Gmail/LMTP delivery; fall back to body-shape detection
-		// for older callers and tests.
-		isMail := source == workfeed.SourceMailReport || isMailReportBody(cardSrc)
-		if isMail {
-			source = workfeed.SourceMailReport
-		}
-		// Let the lightweight model name the card when the heuristic title is weak:
-		// a mail report (the analysis model writes a generic "메일 분석 리포트" heading, so
-		// name it from the email's real subject) OR any proactive body that opens with
-		// a prose sentence (the heuristic then grabbed a whole narration line). The
-		// deterministic extractCardTitle result stays as the fallback.
-		summary := extractCardSummary(cardSrc, titleLine)
-		if d.cardTitler != nil && (isMail || isWeakCardTitle(title, titleLine)) {
-			if t, s := d.cardTitler(cardSrc); t != "" || s != "" {
-				if t != "" {
-					title = t
-				}
-				// The LLM summary replaces the heuristic only when present; an empty
-				// summary keeps the heuristic (so a good title is never paired with a
-				// blank preview).
-				if s != "" {
-					summary = s
-				}
-			}
-		}
-		appended, err := d.workFeed.Append(workfeed.Item{
-			Source:     source,
-			Title:      title,
-			Summary:    summary,
-			Body:       cardBody,
-			SessionKey: target,
-			Question:   isQuestion,
-			Actions:    qActions,
-		})
-		if err != nil {
-			if d.logger != nil {
-				d.logger.Error("proactive native relay: work feed append failed",
-					"sessionKey", target, "error", err)
-			}
-		} else {
-			// The desktop nudge deep-links to the work-feed card it just created.
-			pushKind, pushRef = pushKindWorkfeed, appended.ID
-		}
-	}
+	pushKind, pushRef := d.appendProactiveWorkFeed(target, content, deliverBody, opts)
 	if d.pushHub != nil {
 		d.pushHub.publish(clientPushEvent{
 			Title: "Deneb",
@@ -443,6 +359,61 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 	}
 	d.logProactive("delivered", "", origLen, pushPreview(content))
 	return true, nil
+}
+
+// appendProactiveWorkFeed records a main-session delivery as a work-feed card
+// and returns the deep-link metadata for the corresponding native push. The
+// transcript remains the delivery source of truth, so feed failures are logged
+// and deliberately do not fail the relay.
+func (d proactiveRelayDeps) appendProactiveWorkFeed(
+	target, content, deliverBody string,
+	opts proactiveRelayOptions,
+) (pushKind, pushRef string) {
+	if d.workFeed == nil || target != nativeWorkSessionKey {
+		return "", ""
+	}
+
+	cardSrc, choices := splitChoicesFence(content)
+	cardBody, _ := splitChoicesFence(deliverBody)
+	title, titleLine := extractCardTitle(cardSrc)
+	source := strings.TrimSpace(opts.workFeedSource)
+	if source == "" {
+		source = workfeed.SourceProactive
+	}
+	isMail := source == workfeed.SourceMailReport || isMailReportBody(cardSrc)
+	if isMail {
+		source = workfeed.SourceMailReport
+	}
+
+	summary := extractCardSummary(cardSrc, titleLine)
+	if d.cardTitler != nil && (isMail || isWeakCardTitle(title, titleLine)) {
+		if modelTitle, modelSummary := d.cardTitler(cardSrc); modelTitle != "" || modelSummary != "" {
+			if modelTitle != "" {
+				title = modelTitle
+			}
+			if modelSummary != "" {
+				summary = modelSummary
+			}
+		}
+	}
+
+	appended, err := d.workFeed.Append(workfeed.Item{
+		Source:     source,
+		Title:      title,
+		Summary:    summary,
+		Body:       cardBody,
+		SessionKey: target,
+		Question:   len(choices) > 0 || endsWithQuestionMark(cardSrc),
+		Actions:    choiceAnswerActions(choices),
+	})
+	if err != nil {
+		if d.logger != nil {
+			d.logger.Error("proactive native relay: work feed append failed",
+				"sessionKey", target, "error", err)
+		}
+		return "", ""
+	}
+	return pushKindWorkfeed, appended.ID
 }
 
 // Relay delivers content to the native work session.

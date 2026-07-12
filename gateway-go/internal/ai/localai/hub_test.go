@@ -151,8 +151,8 @@ func TestMergeRequestBody_NonReasoningKeepsNoThinking(t *testing.T) {
 	if !ok {
 		t.Fatalf("non-reasoning model: chat_template_kwargs missing, got %v", merged)
 	}
-	if ctk["enable_thinking"] != false {
-		t.Errorf("non-reasoning model: enable_thinking = %v, want false", ctk["enable_thinking"])
+	if got, exists := ctk["enable_thinking"]; !exists || got != false {
+		t.Errorf("non-reasoning model: enable_thinking = %v, present=%v; want false and present", got, exists)
 	}
 }
 
@@ -177,8 +177,8 @@ func TestMergeRequestBody_DualModeGetsTemplateToggle(t *testing.T) {
 	if !ok {
 		t.Fatalf("dsv4: chat_template_kwargs missing, got %v", merged)
 	}
-	if ctk["thinking"] != false {
-		t.Errorf("dsv4: thinking = %v, want false", ctk["thinking"])
+	if got, exists := ctk["thinking"]; !exists || got != false {
+		t.Errorf("dsv4: thinking = %v, present=%v; want false and present", got, exists)
 	}
 	if _, has := ctk["enable_thinking"]; has {
 		t.Errorf("dsv4: enable_thinking must not be sent (wrong spelling), got %v", ctk)

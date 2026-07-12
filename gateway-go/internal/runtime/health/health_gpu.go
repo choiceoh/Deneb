@@ -37,9 +37,9 @@ const (
 	gpuQueryTimeout = 2 * time.Second
 )
 
-// gpuStat is one GPU's telemetry. Units match the nounits CSV: utilization and
+// GPUStat is one GPU's telemetry. Units match the nounits CSV: utilization and
 // temperature in percent / Celsius, memory in MiB.
-type gpuStat struct {
+type GPUStat struct {
 	Index       int `json:"index"`
 	UtilPct     int `json:"utilizationPct"`
 	MemUsedMiB  int `json:"memUsedMiB"`
@@ -53,7 +53,7 @@ type gpuStat struct {
 type gpuHealth struct {
 	mu       sync.Mutex
 	cachedAt time.Time
-	stats    []gpuStat
+	stats    []GPUStat
 	present  bool // whether the last probe found nvidia-smi at all
 	probed   bool // whether we have probed even once
 }
@@ -81,7 +81,7 @@ func defaultGPURunner(ctx context.Context) (string, bool) {
 // observe returns the current GPU stats, scraping at most once per gpuSampleTTL.
 // present reports whether a GPU was found at all: when false the caller omits
 // the gpu section. Pass a nil runner to use the real nvidia-smi.
-func (g *gpuHealth) observe(ctx context.Context, runner gpuRunner) (stats []gpuStat, present bool) {
+func (g *gpuHealth) observe(ctx context.Context, runner gpuRunner) (stats []GPUStat, present bool) {
 	if runner == nil {
 		runner = defaultGPURunner
 	}
@@ -121,8 +121,8 @@ func (g *gpuHealth) observe(ctx context.Context, runner gpuRunner) (stats []gpuS
 // short, or non-numeric are skipped individually so one malformed row never
 // discards the rest. Missing/blank values default to 0, and "[N/A]" (which
 // nvidia-smi emits for an unsupported field) is tolerated as 0.
-func parseGPUStats(csv string) []gpuStat {
-	var out []gpuStat
+func parseGPUStats(csv string) []GPUStat {
+	var out []GPUStat
 	idx := 0
 	for _, line := range strings.Split(csv, "\n") {
 		line = strings.TrimSpace(line)
@@ -133,7 +133,7 @@ func parseGPUStats(csv string) []gpuStat {
 		if len(fields) < 4 {
 			continue // not the shape we asked for — skip defensively
 		}
-		out = append(out, gpuStat{
+		out = append(out, GPUStat{
 			Index:       idx,
 			UtilPct:     parseGPUInt(fields[0]),
 			MemUsedMiB:  parseGPUInt(fields[1]),

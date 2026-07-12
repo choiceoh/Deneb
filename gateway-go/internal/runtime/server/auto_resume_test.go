@@ -95,6 +95,12 @@ func TestAnalyzeTranscriptTail_AllShapes(t *testing.T) {
 			},
 			want: tailEndToolResult,
 		},
+		{
+			name:       "corrupt-only tail is ambiguous",
+			sessionKey: "client:corrupt_only",
+			lines:      []string{`{"role":"user","content":`},
+			want:       tailUnknown,
+		},
 	}
 
 	for _, tc := range tests {

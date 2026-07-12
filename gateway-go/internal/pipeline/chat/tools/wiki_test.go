@@ -303,6 +303,57 @@ func TestWikiWrite_ProjectLogAppendsSection(t *testing.T) {
 	}
 }
 
+func TestWikiWrite_UpdatePreservesOmittedFieldsAndBody(t *testing.T) {
+	store := newTestWikiStore(t)
+	page := wiki.NewPage("기존 제목", "기타", []string{"keep"})
+	page.Meta.ID = "keep-id"
+	page.Meta.Summary = "keep summary"
+	page.Meta.Related = []string{"기술/dgx.md"}
+	page.Meta.Cues = []string{"keep cue"}
+	page.Meta.Client = "keep client"
+	page.Meta.Sites = []string{"keep site"}
+	page.Meta.Kinds = []string{"기자재/모듈"}
+	page.Meta.Importance = 0.7
+	page.Meta.Type = "concept"
+	page.Meta.Confidence = "high"
+	page.Meta.Due = "2026-12-31"
+	page.Body = "body that must survive a metadata-only update"
+	if err := store.WritePage("기타/keep.md", page); err != nil {
+		t.Fatalf("seed page: %v", err)
+	}
+
+	out, err := wikiWrite(context.Background(), store, nil,
+		"기타/keep.md", "새 제목", "", "", "기타", "",
+		nil, nil, nil, "", nil, nil, nil, 0, "", "", "", false)
+	if err != nil {
+		t.Fatalf("wikiWrite: %v", err)
+	}
+	if !strings.Contains(out, "위키 페이지 업데이트") {
+		t.Fatalf("result should identify an update: %s", out)
+	}
+
+	got := testutil.Must(store.ReadPage("기타/keep.md"))
+	if got.Meta.Title != "새 제목" || got.Meta.ID != "keep-id" || got.Meta.Summary != "keep summary" {
+		t.Fatalf("required update or preserved identity metadata diverged: %+v", got.Meta)
+	}
+	if strings.Join(got.Meta.Tags, ",") != "keep" ||
+		strings.Join(got.Meta.Related, ",") != "기술/dgx.md" ||
+		strings.Join(got.Meta.Cues, ",") != "keep cue" ||
+		got.Meta.Client != "keep client" ||
+		strings.Join(got.Meta.Sites, ",") != "keep site" ||
+		strings.Join(got.Meta.Kinds, ",") != "기자재/모듈" ||
+		got.Meta.Importance != 0.7 || got.Meta.Type != "concept" ||
+		got.Meta.Confidence != "high" || got.Meta.Due != "2026-12-31" {
+		t.Fatalf("omitted metadata was not preserved: %+v", got.Meta)
+	}
+	if got.Body != page.Body {
+		t.Fatalf("metadata-only update replaced body: %q", got.Body)
+	}
+	if got.Meta.Updated == "" {
+		t.Fatal("update did not refresh the updated date")
+	}
+}
+
 // TestWikiSearch_EmptyQueryReturnsGuidance verifies that an empty query
 // returns a friendly Korean guidance string (not an error).
 func TestWikiSearch_EmptyQueryReturnsGuidance(t *testing.T) {

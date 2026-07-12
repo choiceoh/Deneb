@@ -213,6 +213,16 @@ type forbiddenFeedbackToken struct {
 	fragments  []string
 }
 
+type hiddenFeedbackTokenGroup struct {
+	class  ForbiddenFeedbackClass
+	values []string
+}
+
+type feedbackTokenBuilder struct {
+	seen      map[string]struct{}
+	forbidden []forbiddenFeedbackToken
+}
+
 // FeedbackFirewall holds supervisor tokens only for negative matching. Its
 // String and GoString methods reveal counts, never token values.
 type FeedbackFirewall struct {
@@ -239,10 +249,30 @@ func NewFeedbackFirewall(hidden HiddenFeedbackInputs, limits FeedbackLimits) (*F
 	if err != nil {
 		return nil, err
 	}
-	tokenGroups := []struct {
-		class  ForbiddenFeedbackClass
-		values []string
-	}{
+	tokenGroups := hiddenFeedbackTokenGroups(hidden)
+	tokenCount := countHiddenFeedbackTokens(tokenGroups)
+	if tokenCount > hardMaxHiddenTokens {
+		return nil, validationError("hiddenInputs", "too many deny tokens")
+	}
+
+	builder := newFeedbackTokenBuilder(tokenCount + len(structuralFeedbackMarkers))
+	if err := builder.addGroups(tokenGroups); err != nil {
+		return nil, err
+	}
+	if err := builder.addSealedContents(hidden.SealedContents); err != nil {
+		return nil, err
+	}
+	if err := builder.addStructuralMarkers(); err != nil {
+		return nil, err
+	}
+	forbidden := builder.sortedTokens()
+	return &FeedbackFirewall{
+		limits: resolved, forbidden: forbidden, fragmentSeen: make([]map[string]struct{}, len(forbidden)),
+	}, nil
+}
+
+func hiddenFeedbackTokenGroups(hidden HiddenFeedbackInputs) []hiddenFeedbackTokenGroup {
+	return []hiddenFeedbackTokenGroup{
 		{ForbiddenSealedSource, hidden.SealedSourceIDs},
 		{ForbiddenSealedPath, hidden.SealedPaths},
 		{ForbiddenHiddenReference, hidden.HiddenReferences},
@@ -254,116 +284,148 @@ func NewFeedbackFirewall(hidden HiddenFeedbackInputs, limits FeedbackLimits) (*F
 		{ForbiddenSupervisorMetadata, hidden.SupervisorMetadata},
 		{ForbiddenExplicitSensitive, hidden.ExplicitSensitiveTokens},
 	}
+}
+
+func countHiddenFeedbackTokens(groups []hiddenFeedbackTokenGroup) int {
 	count := 0
-	for _, group := range tokenGroups {
+	for _, group := range groups {
 		count += len(group.values)
 	}
-	if count > hardMaxHiddenTokens {
-		return nil, validationError("hiddenInputs", "too many deny tokens")
-	}
+	return count
+}
 
-	seen := make(map[string]struct{}, count+len(structuralFeedbackMarkers))
-	forbidden := make([]forbiddenFeedbackToken, 0, count+len(structuralFeedbackMarkers))
-	add := func(class ForbiddenFeedbackClass, value string) error {
-		if !utf8.ValidString(value) {
-			return validationError("hiddenInputs", "deny token is not valid UTF-8")
-		}
-		value = strings.TrimSpace(value)
-		if value == "" {
-			return validationError("hiddenInputs", "deny token is empty")
-		}
-		if utf8.RuneCountInString(value) > hardMaxHiddenTokenRunes {
-			return validationError("hiddenInputs", "deny token exceeds hard limit")
-		}
-		normalized := normalizeForLeakScan(value)
-		if normalized == "" {
-			return validationError("hiddenInputs", "deny token is empty after normalization")
-		}
-		key := string(class) + "\x00" + normalized
-		if _, exists := seen[key]; exists {
-			return nil
-		}
-		seen[key] = struct{}{}
-		fragments := []string(nil)
-		if expandsLeakFragments(class) {
-			fragments = leakFragments(normalized)
-		}
-		forbidden = append(forbidden, forbiddenFeedbackToken{
-			class: class, normalized: normalized, compact: compactForLeakScan(value),
-			numeric: canonicalLeakNumber(normalized), fragments: fragments,
-		})
-		if len(forbidden) > hardMaxHiddenTokens {
-			return validationError("hiddenInputs", "too many expanded deny tokens")
-		}
+func newFeedbackTokenBuilder(capacity int) *feedbackTokenBuilder {
+	return &feedbackTokenBuilder{
+		seen:      make(map[string]struct{}, capacity),
+		forbidden: make([]forbiddenFeedbackToken, 0, capacity),
+	}
+}
+
+func validateHiddenFeedbackToken(value string) (string, string, error) {
+	if !utf8.ValidString(value) {
+		return "", "", validationError("hiddenInputs", "deny token is not valid UTF-8")
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", "", validationError("hiddenInputs", "deny token is empty")
+	}
+	if utf8.RuneCountInString(value) > hardMaxHiddenTokenRunes {
+		return "", "", validationError("hiddenInputs", "deny token exceeds hard limit")
+	}
+	normalized := normalizeForLeakScan(value)
+	if normalized == "" {
+		return "", "", validationError("hiddenInputs", "deny token is empty after normalization")
+	}
+	return value, normalized, nil
+}
+
+func (b *feedbackTokenBuilder) add(class ForbiddenFeedbackClass, rawValue string) error {
+	value, normalized, err := validateHiddenFeedbackToken(rawValue)
+	if err != nil {
+		return err
+	}
+	key := string(class) + "\x00" + normalized
+	if _, exists := b.seen[key]; exists {
 		return nil
 	}
-	for _, group := range tokenGroups {
+	b.seen[key] = struct{}{}
+	fragments := []string(nil)
+	if expandsLeakFragments(class) {
+		fragments = leakFragments(normalized)
+	}
+	b.forbidden = append(b.forbidden, forbiddenFeedbackToken{
+		class: class, normalized: normalized, compact: compactForLeakScan(value),
+		numeric: canonicalLeakNumber(normalized), fragments: fragments,
+	})
+	if len(b.forbidden) > hardMaxHiddenTokens {
+		return validationError("hiddenInputs", "too many expanded deny tokens")
+	}
+	return nil
+}
+
+func (b *feedbackTokenBuilder) addGroups(groups []hiddenFeedbackTokenGroup) error {
+	for _, group := range groups {
 		for _, value := range group.values {
-			if err := add(group.class, value); err != nil {
-				return nil, err
+			if err := b.add(group.class, value); err != nil {
+				return err
 			}
-			if !expandsLeakFragments(group.class) {
-				continue
-			}
-			for _, fragment := range leakFragments(value) {
-				if !isSensitiveLeakFragment(group.class, fragment) {
-					continue
-				}
-				if err := add(group.class, fragment); err != nil {
-					return nil, err
+			for _, fragment := range sensitiveLeakFragments(group.class, value) {
+				if err := b.add(group.class, fragment); err != nil {
+					return err
 				}
 			}
 		}
 	}
+	return nil
+}
+
+func sensitiveLeakFragments(class ForbiddenFeedbackClass, value string) []string {
+	if !expandsLeakFragments(class) {
+		return nil
+	}
+	fragments := leakFragments(value)
+	filtered := fragments[:0]
+	for _, fragment := range fragments {
+		if isSensitiveLeakFragment(class, fragment) {
+			filtered = append(filtered, fragment)
+		}
+	}
+	return filtered
+}
+
+func (b *feedbackTokenBuilder) addSealedContents(contents []string) error {
 	totalSealedBytes := 0
-	for _, content := range hidden.SealedContents {
+	for _, content := range contents {
 		if !utf8.ValidString(content) {
-			return nil, validationError("hiddenInputs", "sealed content is not valid UTF-8")
+			return validationError("hiddenInputs", "sealed content is not valid UTF-8")
 		}
 		totalSealedBytes += len(content)
 		if totalSealedBytes > maxSealedFeedbackBytes {
-			return nil, validationError("hiddenInputs", "sealed text exceeds the scan limit")
+			return validationError("hiddenInputs", "sealed text exceeds the scan limit")
 		}
 		if utf8.RuneCountInString(content) <= hardMaxHiddenTokenRunes {
-			if err := add(ForbiddenSealedSource, content); err != nil {
-				return nil, err
+			if err := b.add(ForbiddenSealedSource, content); err != nil {
+				return err
 			}
 		}
-		for _, fragment := range leakFragments(content) {
-			if !isSensitiveLeakFragment(ForbiddenSealedSource, fragment) {
-				continue
-			}
-			if err := add(ForbiddenSealedSource, fragment); err != nil {
-				return nil, err
+		for _, fragment := range sensitiveLeakFragments(ForbiddenSealedSource, content) {
+			if err := b.add(ForbiddenSealedSource, fragment); err != nil {
+				return err
 			}
 		}
 	}
+	return nil
+}
+
+func (b *feedbackTokenBuilder) addStructuralMarkers() error {
 	for _, marker := range structuralFeedbackMarkers {
-		if err := add(ForbiddenStructuralMarker, marker); err != nil {
-			return nil, err
+		if err := b.add(ForbiddenStructuralMarker, marker); err != nil {
+			return err
 		}
 	}
-	sort.Slice(forbidden, func(i, j int) bool {
+	return nil
+}
+
+func (b *feedbackTokenBuilder) sortedTokens() []forbiddenFeedbackToken {
+	sort.Slice(b.forbidden, func(i, j int) bool {
 		// Specific supervisor-provided tokens take precedence over generic
 		// structural markers, and longer tokens take precedence over their
 		// prefixes. This keeps leak classification deterministic and useful
 		// without ever exposing the matching token itself.
-		leftStructural := forbidden[i].class == ForbiddenStructuralMarker
-		rightStructural := forbidden[j].class == ForbiddenStructuralMarker
+		leftStructural := b.forbidden[i].class == ForbiddenStructuralMarker
+		rightStructural := b.forbidden[j].class == ForbiddenStructuralMarker
 		if leftStructural != rightStructural {
 			return !leftStructural
 		}
-		if len(forbidden[i].normalized) != len(forbidden[j].normalized) {
-			return len(forbidden[i].normalized) > len(forbidden[j].normalized)
+		if len(b.forbidden[i].normalized) != len(b.forbidden[j].normalized) {
+			return len(b.forbidden[i].normalized) > len(b.forbidden[j].normalized)
 		}
-		if forbidden[i].normalized != forbidden[j].normalized {
-			return forbidden[i].normalized < forbidden[j].normalized
+		if b.forbidden[i].normalized != b.forbidden[j].normalized {
+			return b.forbidden[i].normalized < b.forbidden[j].normalized
 		}
-		return forbidden[i].class < forbidden[j].class
+		return b.forbidden[i].class < b.forbidden[j].class
 	})
-	return &FeedbackFirewall{
-		limits: resolved, forbidden: forbidden, fragmentSeen: make([]map[string]struct{}, len(forbidden)),
-	}, nil
+	return b.forbidden
 }
 
 var structuralFeedbackMarkers = []string{

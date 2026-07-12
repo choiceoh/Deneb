@@ -217,78 +217,83 @@ func evaluateCronExpr(expr string, now time.Time, _ *time.Location) time.Time {
 // Returns nil on parse error.
 func parseCronField(field string, lo, hi int) map[int]bool {
 	result := make(map[int]bool)
-
-	parts := strings.Split(field, ",")
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "*" {
-			for i := lo; i <= hi; i++ {
-				result[i] = true
-			}
-			continue
-		}
-
-		// Step: */N or M-N/S
-		if strings.Contains(part, "/") {
-			tokens := strings.SplitN(part, "/", 2)
-			step, err := strconv.Atoi(tokens[1])
-			if err != nil || step <= 0 {
-				return nil
-			}
-			rangeStart, rangeEnd := lo, hi
-			if tokens[0] != "*" {
-				rangeParts := strings.SplitN(tokens[0], "-", 2)
-				rangeStart, err = strconv.Atoi(rangeParts[0])
-				if err != nil {
-					return nil
-				}
-				if len(rangeParts) > 1 {
-					rangeEnd, err = strconv.Atoi(rangeParts[1])
-					if err != nil {
-						return nil
-					}
-				}
-			}
-			if rangeStart < lo || rangeStart > hi || rangeEnd < lo || rangeEnd > hi || rangeStart > rangeEnd {
-				return nil
-			}
-			for i := rangeStart; i <= rangeEnd; i += step {
-				result[i] = true
-			}
-			continue
-		}
-
-		// Range: M-N
-		if strings.Contains(part, "-") {
-			tokens := strings.SplitN(part, "-", 2)
-			start, err := strconv.Atoi(tokens[0])
-			if err != nil {
-				return nil
-			}
-			end, err := strconv.Atoi(tokens[1])
-			if err != nil {
-				return nil
-			}
-			if start < lo || start > hi || end < lo || end > hi || start > end {
-				return nil
-			}
-			for i := start; i <= end; i++ {
-				result[i] = true
-			}
-			continue
-		}
-
-		// Fixed value.
-		val, err := strconv.Atoi(part)
-		if err != nil {
+	for _, part := range strings.Split(field, ",") {
+		values, ok := parseCronPart(strings.TrimSpace(part), lo, hi)
+		if !ok {
 			return nil
 		}
-		if val < lo || val > hi {
-			return nil
+		for _, value := range values {
+			result[value] = true
 		}
-		result[val] = true
 	}
 	return result
+}
+
+func parseCronPart(part string, lo, hi int) ([]int, bool) {
+	if part == "*" {
+		return cronRange(lo, hi, 1, lo, hi)
+	}
+	if strings.Contains(part, "/") {
+		return parseCronStep(part, lo, hi)
+	}
+	if strings.Contains(part, "-") {
+		start, end, ok := parseCronBounds(part)
+		if !ok {
+			return nil, false
+		}
+		return cronRange(start, end, 1, lo, hi)
+	}
+	value, err := strconv.Atoi(part)
+	if err != nil || value < lo || value > hi {
+		return nil, false
+	}
+	return []int{value}, true
+}
+
+func parseCronStep(part string, lo, hi int) ([]int, bool) {
+	tokens := strings.SplitN(part, "/", 2)
+	step, err := strconv.Atoi(tokens[1])
+	if err != nil || step <= 0 {
+		return nil, false
+	}
+	start, end := lo, hi
+	if tokens[0] != "*" {
+		var ok bool
+		start, end, ok = parseCronBoundsOrStart(tokens[0], hi)
+		if !ok {
+			return nil, false
+		}
+	}
+	return cronRange(start, end, step, lo, hi)
+}
+
+func parseCronBoundsOrStart(value string, defaultEnd int) (int, int, bool) {
+	if strings.Contains(value, "-") {
+		return parseCronBounds(value)
+	}
+	start, err := strconv.Atoi(value)
+	return start, defaultEnd, err == nil
+}
+
+func parseCronBounds(value string) (int, int, bool) {
+	tokens := strings.SplitN(value, "-", 2)
+	if len(tokens) != 2 {
+		return 0, 0, false
+	}
+	start, startErr := strconv.Atoi(tokens[0])
+	end, endErr := strconv.Atoi(tokens[1])
+	return start, end, startErr == nil && endErr == nil
+}
+
+func cronRange(start, end, step, lo, hi int) ([]int, bool) {
+	if step <= 0 || start < lo || start > hi || end < lo || end > hi || start > end {
+		return nil, false
+	}
+	values := make([]int, 0, 1+(end-start)/step)
+	for value := start; value <= end; value += step {
+		values = append(values, value)
+	}
+	return values, true
 }
 
 // parseAbsoluteTimeMs parses an absolute time string into milliseconds since epoch.
@@ -397,87 +402,118 @@ func FormatHumanSchedule(s StoreSchedule) string {
 // formatCronExprKorean converts common cron expressions to Korean descriptions.
 func formatCronExprKorean(expr string) string {
 	lower := strings.ToLower(strings.TrimSpace(expr))
-
-	// Shorthand aliases.
-	switch lower {
-	case "@yearly", "@annually":
-		return "매년 1월 1일 00:00"
-	case "@monthly":
-		return "매월 1일 00:00"
-	case "@weekly":
-		return "매주 일요일 00:00"
-	case "@daily", "@midnight":
-		return "매일 00:00"
-	case "@hourly":
-		return "매시 정각"
+	if description, ok := cronAliasDescription(lower); ok {
+		return description
 	}
-
 	fields := strings.Fields(lower)
 	if len(fields) < 5 {
 		return "cron: " + expr
 	}
-
-	minute, hour, dom, mon, dow := fields[0], fields[1], fields[2], fields[3], fields[4]
-
-	// "every N minutes": */N * * * *
-	if strings.HasPrefix(minute, "*/") && hour == "*" && dom == "*" && mon == "*" && dow == "*" {
-		if n, err := strconv.Atoi(minute[2:]); err == nil {
-			return fmt.Sprintf("%d분마다", n)
+	parsed := cronDisplayFields{
+		minute: fields[0], hour: fields[1], dayOfMonth: fields[2],
+		month: fields[3], dayOfWeek: fields[4],
+	}
+	for _, describe := range []func(cronDisplayFields) (string, bool){
+		describeCronInterval,
+		describeCronFixedTime,
+		describeCronHourly,
+	} {
+		if description, ok := describe(parsed); ok {
+			return description
 		}
 	}
-
-	// "every N hours": 0 */N * * *
-	if minute == "0" && strings.HasPrefix(hour, "*/") && dom == "*" && mon == "*" && dow == "*" {
-		if n, err := strconv.Atoi(hour[2:]); err == nil {
-			return fmt.Sprintf("%d시간마다", n)
-		}
-	}
-
-	// Fixed minute + hour patterns.
-	minVal, minErr := strconv.Atoi(minute)
-	hourVal, hourErr := strconv.Atoi(hour)
-	fixedTime := minErr == nil && hourErr == nil
-
-	if fixedTime {
-		timeStr := fmt.Sprintf("%02d:%02d", hourVal, minVal)
-
-		// "daily at HH:MM": M H * * *
-		if dom == "*" && mon == "*" && dow == "*" {
-			return "매일 " + timeStr
-		}
-
-		// "weekdays at HH:MM": M H * * 1-5
-		if dom == "*" && mon == "*" && (dow == "1-5" || dow == "mon-fri") {
-			return "평일 " + timeStr
-		}
-
-		// "weekends": M H * * 0,6 or 6,0
-		if dom == "*" && mon == "*" && (dow == "0,6" || dow == "6,0" || dow == "sat,sun" || dow == "sun,sat") {
-			return "주말 " + timeStr
-		}
-
-		// "weekly on specific day": M H * * D
-		if dom == "*" && mon == "*" {
-			if dayName := dowKorean(dow); dayName != "" {
-				return "매주 " + dayName + " " + timeStr
-			}
-		}
-
-		// "monthly on Nth": M H N * *
-		if _, domErr := strconv.Atoi(dom); domErr == nil && mon == "*" && dow == "*" {
-			return fmt.Sprintf("매월 %s일 %s", dom, timeStr)
-		}
-	}
-
-	// "hourly at minute M": M * * * *
-	if minErr == nil && hour == "*" && dom == "*" && mon == "*" && dow == "*" {
-		if minVal == 0 {
-			return "매시 정각"
-		}
-		return fmt.Sprintf("매시 %d분", minVal)
-	}
-
 	return "cron: " + expr
+}
+
+type cronDisplayFields struct {
+	minute     string
+	hour       string
+	dayOfMonth string
+	month      string
+	dayOfWeek  string
+}
+
+func cronAliasDescription(alias string) (string, bool) {
+	descriptions := map[string]string{
+		"@yearly":   "매년 1월 1일 00:00",
+		"@annually": "매년 1월 1일 00:00",
+		"@monthly":  "매월 1일 00:00",
+		"@weekly":   "매주 일요일 00:00",
+		"@daily":    "매일 00:00",
+		"@midnight": "매일 00:00",
+		"@hourly":   "매시 정각",
+	}
+	description, ok := descriptions[alias]
+	return description, ok
+}
+
+func describeCronInterval(fields cronDisplayFields) (string, bool) {
+	allDays := fields.dayOfMonth == "*" && fields.month == "*" && fields.dayOfWeek == "*"
+	if !allDays {
+		return "", false
+	}
+	if strings.HasPrefix(fields.minute, "*/") && fields.hour == "*" {
+		if interval, err := strconv.Atoi(fields.minute[2:]); err == nil {
+			return fmt.Sprintf("%d분마다", interval), true
+		}
+	}
+	if fields.minute == "0" && strings.HasPrefix(fields.hour, "*/") {
+		if interval, err := strconv.Atoi(fields.hour[2:]); err == nil {
+			return fmt.Sprintf("%d시간마다", interval), true
+		}
+	}
+	return "", false
+}
+
+func describeCronFixedTime(fields cronDisplayFields) (string, bool) {
+	minute, minuteErr := strconv.Atoi(fields.minute)
+	hour, hourErr := strconv.Atoi(fields.hour)
+	if minuteErr != nil || hourErr != nil {
+		return "", false
+	}
+	timeText := fmt.Sprintf("%02d:%02d", hour, minute)
+	if fields.dayOfMonth == "*" && fields.month == "*" && fields.dayOfWeek == "*" {
+		return "매일 " + timeText, true
+	}
+	if fields.dayOfMonth == "*" && fields.month == "*" && isCronWeekdaySet(fields.dayOfWeek) {
+		return "평일 " + timeText, true
+	}
+	if fields.dayOfMonth == "*" && fields.month == "*" && isCronWeekendSet(fields.dayOfWeek) {
+		return "주말 " + timeText, true
+	}
+	if fields.dayOfMonth == "*" && fields.month == "*" {
+		if dayName := dowKorean(fields.dayOfWeek); dayName != "" {
+			return "매주 " + dayName + " " + timeText, true
+		}
+	}
+	if _, err := strconv.Atoi(fields.dayOfMonth); err == nil && fields.month == "*" && fields.dayOfWeek == "*" {
+		return fmt.Sprintf("매월 %s일 %s", fields.dayOfMonth, timeText), true
+	}
+	return "", false
+}
+
+func describeCronHourly(fields cronDisplayFields) (string, bool) {
+	minute, err := strconv.Atoi(fields.minute)
+	if err != nil || fields.hour != "*" || fields.dayOfMonth != "*" || fields.month != "*" || fields.dayOfWeek != "*" {
+		return "", false
+	}
+	if minute == 0 {
+		return "매시 정각", true
+	}
+	return fmt.Sprintf("매시 %d분", minute), true
+}
+
+func isCronWeekdaySet(value string) bool {
+	return value == "1-5" || value == "mon-fri"
+}
+
+func isCronWeekendSet(value string) bool {
+	switch value {
+	case "0,6", "6,0", "sat,sun", "sun,sat":
+		return true
+	default:
+		return false
+	}
 }
 
 // dowKorean maps a single day-of-week value to Korean.

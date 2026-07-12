@@ -1,31 +1,29 @@
 {
   "_keep_policy": "Health Bench 2.0 baseline. This is a one-way ratchet: update only after a genuine improvement. Never lower overall or pillar floors, or accept a new high/critical finding, merely to make --check pass.",
   "schema_version": 2,
-  "rubric_version": "2.1.2",
+  "rubric_version": "2.2.0",
   "profile": "fast",
-  "revision": "77d135a8e03ff8cde00f388c39f23b438ce73944",
-  "overall": 78.6,
+  "revision": "0816f82b784a13c28298f52d20dad131783185e7",
+  "overall": 82.7,
   "pillars": {
     "ai-change-readiness": 92.8,
-    "ai-navigability": 94.5,
+    "ai-navigability": 95.7,
     "boundary-integrity": 74.4,
-    "change-locality": 30.0,
-    "complexity-hotspots": 72.7,
-    "contract-explicitness": 77.6,
-    "delivery-confidence": 98.3,
-    "responsibility-cohesion": 48.6,
+    "change-locality": 55.0,
+    "complexity-hotspots": 81.6,
+    "contract-explicitness": 80.8,
+    "delivery-confidence": 100.0,
+    "responsibility-cohesion": 52.6,
     "runtime-safety": 100.0,
-    "test-effectiveness": 90.9,
+    "test-effectiveness": 92.6,
     "test-maintainability": 75.9
   },
   "high_findings": {
-    "change-hotspot:df9d2c680856": "high",
     "diffuse-change-responsibility:3ef63a16f7d7": "high",
     "dynamic-exported-contract:24c7dff4db03": "high",
     "fanout-hotspot:4377ea3f4d16": "high",
     "fanout-hotspot:e3983434e99a": "high",
     "responsibility-cochange:1f9976bcc2ef": "high",
-    "responsibility-cochange:70225d989a27": "high",
     "responsibility-cochange:bf0c5ca48a1e": "high",
     "two-hop-blast:7753391fbc89": "high",
     "two-hop-blast:ac823ac2dd00": "high",
@@ -37,28 +35,35 @@
     "pillar": 1.0
   },
   "provenance": {
-    "reason": "Count universal Go generic constraints as compile-time types and credit only provenance-backed independent central/generated test shapes.",
+    "reason": "Score recurring cross-component integration hotspots rather than raw local package churn; preserve full history diagnostics.",
     "migration": "rubric-remeasurement",
-    "previous_rubric": "2.1.1",
-    "previous_score": 53.0,
+    "previous_rubric": "2.1.2",
+    "previous_score": 78.6,
     "note": "Scores are not converted or directly comparable across rubric versions.",
     "previous_provenance": {
-      "reason": "Removed non-quality deductions, made findings lane-aware, hardened delivery evidence, and remeasured the unreleased baseline after rebasing onto current origin/main.",
+      "reason": "Count universal Go generic constraints as compile-time types and credit only provenance-backed independent central/generated test shapes.",
       "migration": "rubric-remeasurement",
-      "previous_rubric": "2.1.0",
-      "previous_score": 50.7,
+      "previous_rubric": "2.1.1",
+      "previous_score": 53.0,
       "note": "Scores are not converted or directly comparable across rubric versions.",
       "previous_provenance": {
-        "reason": "Removed non-quality deductions and expanded AI change-readiness evidence.",
+        "reason": "Removed non-quality deductions, made findings lane-aware, hardened delivery evidence, and remeasured the unreleased baseline after rebasing onto current origin/main.",
         "migration": "rubric-remeasurement",
-        "previous_rubric": "2.0.0",
-        "previous_score": 47.4,
+        "previous_rubric": "2.1.0",
+        "previous_score": 50.7,
         "note": "Scores are not converted or directly comparable across rubric versions.",
         "previous_provenance": {
-          "migration": "v1-to-v2-remeasurement",
-          "v1_baseline_path": "scripts/audit/health-baseline.json",
-          "v1_baseline_score": 77.1,
-          "note": "Scores are not converted or comparable across rubric versions."
+          "reason": "Removed non-quality deductions and expanded AI change-readiness evidence.",
+          "migration": "rubric-remeasurement",
+          "previous_rubric": "2.0.0",
+          "previous_score": 47.4,
+          "note": "Scores are not converted or directly comparable across rubric versions.",
+          "previous_provenance": {
+            "migration": "v1-to-v2-remeasurement",
+            "v1_baseline_path": "scripts/audit/health-baseline.json",
+            "v1_baseline_score": 77.1,
+            "note": "Scores are not converted or comparable across rubric versions."
+          }
         }
       }
     }

@@ -107,134 +107,152 @@ func Compact(
 	summarizer Summarizer,
 	logger *slog.Logger,
 ) ([]llm.Message, Result) {
-	var r Result
-	r.TokensBefore = EstimateMessagesTokens(messages)
+	result := Result{TokensBefore: EstimateMessagesTokens(messages)}
 
 	// Snapshot file reads before compaction so we can restore them afterward.
 	// This preserves file contents the agent was actively editing.
 	fileReads := ExtractRecentFileReads(messages)
 
-	// Strip image blocks before summarization to prevent prompt-too-long errors.
-	// The stripped copy is used only for LLM calls; file restoration uses originals.
-	summarizeMessages := StripImageBlocks(messages)
-
-	// Tier 1: Emergency — evict oldest when a real user input is huge.
-	// Only fires for actual user messages, not tool_result blocks.
-	// Emergency already summarizes non-evicted old messages, so skip LLM tier after it.
-	emergencyFired := false
-	lastInputTokens := lastUserInputTokens(messages)
-	if lastInputTokens >= DefaultEmergencyInputThreshold && summarizer != nil {
-		var evicted int
-		summarizeMessages, evicted = EmergencyCompact(ctx, cfg, summarizeMessages, summarizer, logger)
-		r.EmergencyEvicted = evicted
-		emergencyFired = evicted > 0
-		if emergencyFired {
-			messages = summarizeMessages
-		}
-	}
-
-	// Tier 2/2b run only when the context is actually under pressure
-	// (above CheapPruneMinUsagePct of the budget) — see the constant's
-	// comment for the APC rationale. Emergency keeps them unconditionally:
-	// that path already rewrote history wholesale. A non-positive budget
-	// (boot session, subagent) also keeps the old always-prune behavior.
-	cheapPrune := emergencyFired || cfg.ContextBudget <= 0 ||
-		r.TokensBefore > int(float64(cfg.ContextBudget)*CheapPruneMinUsagePct)
-	if cheapPrune {
-		// Tier 2: Micro — strip code from old tool results (zero cost).
-		var pruned int
-		messages, pruned = MicroCompact(messages, DefaultMicroTurnThreshold)
-		r.MicroPruned = pruned
-
-		// Tier 2b: Stub bulky old tool_result content (Hermes Agent Phase 1
-		// cheap pruning). Runs after MicroCompact so blocks already shrunk by
-		// fence-stripping fall under DefaultStubMinChars and are skipped here.
-		// Still zero-cost: no LLM call.
-		var stubbed int
-		messages, stubbed = TruncateOldToolResults(messages, DefaultMicroTurnThreshold, DefaultStubMinChars)
-		r.OldToolResultsStubbed = stubbed
-		if stubbed > 0 && logger != nil {
-			logger.Info("polaris: stubbed old tool results", "count", stubbed)
-		}
-	} else if logger != nil {
-		logger.Debug("polaris: cheap pruning skipped (context far from budget)",
-			"tokens", r.TokensBefore, "budget", cfg.ContextBudget)
-	}
-
+	var emergencyFired bool
+	messages, emergencyFired, result.EmergencyEvicted = runEmergencyCompaction(
+		ctx, cfg, messages, summarizer, logger,
+	)
+	messages, result.MicroPruned, result.OldToolResultsStubbed = runCheapPruning(
+		cfg, messages, result.TokensBefore, emergencyFired, logger,
+	)
 	if !emergencyFired {
-		summarizeMessages = messages
+		messages, result = runFallbackCompaction(ctx, cfg, messages, summarizer, logger, result)
 	}
 
-	// Tier 3: Compaction fallback chain (LLM → Embedding+MMR → Recency).
-	// Skipped when emergency already summarized (avoids double summarization / fact loss).
-	if !emergencyFired && !cfg.SkipLLMCompaction {
-		threshold := int(float64(cfg.ContextBudget) * DefaultLLMThresholdPct)
-		if EstimateMessagesTokens(summarizeMessages) > threshold {
-			compacted := false
-
-			// Tier 3a: LLM summarization (best quality).
-			if !compacted && summarizer != nil {
-				if result, summary, ok := LLMCompact(ctx, cfg, summarizeMessages, summarizer, logger); ok {
-					messages = result
-					r.LLMCompacted = true
-					r.Summary = summary
-					compacted = true
-				}
-			}
-
-			// Tier 3b: Embedding + MMR extractive selection (fallback).
-			if !compacted && cfg.Embedder != nil {
-				if result, ok := EmbeddingCompact(ctx, cfg, messages, cfg.Embedder, logger); ok {
-					messages = result
-					r.EmbeddingCompacted = true
-					compacted = true
-				}
-			}
-
-			// Tier 3c: Recency window (last resort).
-			if !compacted {
-				if result, ok := RecencyCompact(cfg, messages, logger); ok {
-					messages = result
-					r.RecencyCompacted = true
-				}
-			}
-		}
-	}
-
-	// Post-compaction file restoration: re-inject recently-read file contents
-	// so the agent retains access to files it was actively working on.
-	// Insert before the final user message so the LLM sees restored files
-	// as prior context, not after the user's current input.
-	if (r.LLMCompacted || r.EmbeddingCompacted || r.RecencyCompacted || r.EmergencyEvicted > 0) && len(fileReads) > 0 {
-		if restored := BuildRestorationMessages(fileReads, restorationBudgetTokens); len(restored) > 0 {
-			// Find the last user message (current turn input) and insert before it.
-			insertIdx := len(messages)
-			for i := len(messages) - 1; i >= 0; i-- {
-				if messages[i].Role == "user" && !isToolResultMessage(messages[i].Content) {
-					insertIdx = i
-					break
-				}
-			}
-			result := make([]llm.Message, 0, len(messages)+len(restored))
-			result = append(result, messages[:insertIdx]...)
-			result = append(result, restored...)
-			result = append(result, messages[insertIdx:]...)
-			messages = result
-			if logger != nil {
-				logger.Info("polaris: restored file reads after compaction", "files", len(fileReads))
-			}
-		}
+	if result.didCompact() {
+		messages = restoreFileReads(messages, fileReads, logger)
 	}
 
 	// Repair any tool_use↔tool_result pair the tiers split across a cut/selection
 	// boundary, so the compacted transcript never carries an orphan that Anthropic
 	// rejects with a 400 (and that re-sending would wedge into until /reset).
-	if r.LLMCompacted || r.EmbeddingCompacted || r.RecencyCompacted || r.EmergencyEvicted > 0 {
+	if result.didCompact() {
 		messages = BalanceToolBlocks(messages)
 	}
 
-	r.TokensAfter = EstimateMessagesTokens(messages)
-	return messages, r
+	result.TokensAfter = EstimateMessagesTokens(messages)
+	return messages, result
+}
+
+func runEmergencyCompaction(
+	ctx context.Context,
+	cfg Config,
+	messages []llm.Message,
+	summarizer Summarizer,
+	logger *slog.Logger,
+) ([]llm.Message, bool, int) {
+	if lastUserInputTokens(messages) < DefaultEmergencyInputThreshold || summarizer == nil {
+		return messages, false, 0
+	}
+	// Image blocks are irrelevant to the summary and can make an emergency LLM
+	// request exceed its prompt budget. File restoration still uses the original
+	// messages captured by the caller.
+	compacted, evicted := EmergencyCompact(
+		ctx, cfg, StripImageBlocks(messages), summarizer, logger,
+	)
+	if evicted == 0 {
+		return messages, false, 0
+	}
+	return compacted, true, evicted
+}
+
+func runCheapPruning(
+	cfg Config,
+	messages []llm.Message,
+	tokensBefore int,
+	emergencyFired bool,
+	logger *slog.Logger,
+) ([]llm.Message, int, int) {
+	underPressure := emergencyFired || cfg.ContextBudget <= 0 ||
+		tokensBefore > int(float64(cfg.ContextBudget)*CheapPruneMinUsagePct)
+	if !underPressure {
+		if logger != nil {
+			logger.Debug("polaris: cheap pruning skipped (context far from budget)",
+				"tokens", tokensBefore, "budget", cfg.ContextBudget)
+		}
+		return messages, 0, 0
+	}
+
+	messages, pruned := MicroCompact(messages, DefaultMicroTurnThreshold)
+	messages, stubbed := TruncateOldToolResults(
+		messages, DefaultMicroTurnThreshold, DefaultStubMinChars,
+	)
+	if stubbed > 0 && logger != nil {
+		logger.Info("polaris: stubbed old tool results", "count", stubbed)
+	}
+	return messages, pruned, stubbed
+}
+
+func runFallbackCompaction(
+	ctx context.Context,
+	cfg Config,
+	messages []llm.Message,
+	summarizer Summarizer,
+	logger *slog.Logger,
+	result Result,
+) ([]llm.Message, Result) {
+	if cfg.SkipLLMCompaction || EstimateMessagesTokens(messages) <= int(float64(cfg.ContextBudget)*DefaultLLMThresholdPct) {
+		return messages, result
+	}
+	if summarizer != nil {
+		if compacted, summary, ok := LLMCompact(ctx, cfg, messages, summarizer, logger); ok {
+			result.LLMCompacted = true
+			result.Summary = summary
+			return compacted, result
+		}
+	}
+	if cfg.Embedder != nil {
+		if compacted, ok := EmbeddingCompact(ctx, cfg, messages, cfg.Embedder, logger); ok {
+			result.EmbeddingCompacted = true
+			return compacted, result
+		}
+	}
+	if compacted, ok := RecencyCompact(cfg, messages, logger); ok {
+		result.RecencyCompacted = true
+		return compacted, result
+	}
+	return messages, result
+}
+
+func (r Result) didCompact() bool {
+	return r.LLMCompacted || r.EmbeddingCompacted || r.RecencyCompacted || r.EmergencyEvicted > 0
+}
+
+func restoreFileReads(
+	messages []llm.Message,
+	fileReads []FileReadRecord,
+	logger *slog.Logger,
+) []llm.Message {
+	if len(fileReads) == 0 {
+		return messages
+	}
+	restored := BuildRestorationMessages(fileReads, restorationBudgetTokens)
+	if len(restored) == 0 {
+		return messages
+	}
+	insertIdx := lastUserMessageIndex(messages)
+	result := make([]llm.Message, 0, len(messages)+len(restored))
+	result = append(result, messages[:insertIdx]...)
+	result = append(result, restored...)
+	result = append(result, messages[insertIdx:]...)
+	if logger != nil {
+		logger.Info("polaris: restored file reads after compaction", "files", len(fileReads))
+	}
+	return result
+}
+
+func lastUserMessageIndex(messages []llm.Message) int {
+	for index := len(messages) - 1; index >= 0; index-- {
+		if messages[index].Role == "user" && !isToolResultMessage(messages[index].Content) {
+			return index
+		}
+	}
+	return len(messages)
 }
 
 // EstimateMessagesTokens estimates total tokens across all messages.

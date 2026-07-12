@@ -147,6 +147,24 @@ func TestFeedbackFirewallRejectsEveryHiddenTokenClassWithoutEcho(t *testing.T) {
 	}
 }
 
+func TestFeedbackFirewallOwnsDenylistAfterConstruction(t *testing.T) {
+	hidden := HiddenFeedbackInputs{ExpectedAnswers: []string{"cobalt-17"}}
+	firewall, err := NewFeedbackFirewall(hidden, FeedbackLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The firewall must retain its own normalized denylist, not the caller's
+	// mutable slice, so later supervisor bookkeeping cannot change isolation.
+	hidden.ExpectedAnswers[0] = "ember-29"
+	if _, err := firewall.SanitizeFollowUp("Use cobalt-17."); !errors.Is(err, ErrFeedbackLeak) {
+		t.Fatalf("original hidden token was no longer isolated: %v", err)
+	}
+	if got, err := firewall.SanitizeFollowUp("Use ember-29 instead."); err != nil || got == "" {
+		t.Fatalf("caller mutation contaminated denylist: got=%q err=%v", got, err)
+	}
+}
+
 func TestFeedbackFirewallRejectsUnicodeAndSeparatorAnswerObfuscation(t *testing.T) {
 	firewall, err := NewFeedbackFirewall(HiddenFeedbackInputs{ExpectedAnswers: []string{"120", "42"}}, FeedbackLimits{})
 	if err != nil {

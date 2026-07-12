@@ -30,100 +30,95 @@ var blockedHosts = map[string]struct{}{
 // cloud metadata endpoints, dangerous schemes, and numeric IPv4 bypass
 // techniques (octal, hex, decimal).
 func IsSafeURL(rawURL string) bool {
-	// Explicit UNC path blocking (defense-in-depth).
-	if strings.HasPrefix(rawURL, "\\\\") ||
-		(strings.HasPrefix(rawURL, "//") && !strings.Contains(rawURL, "://")) {
+	if isUNCPath(rawURL) {
 		return false
 	}
-
-	u, err := url.Parse(rawURL)
+	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return false
 	}
-	scheme := strings.ToLower(u.Scheme)
-	if _, ok := blockedSchemes[scheme]; ok {
+	if !isSafeWebScheme(parsed.Scheme) {
 		return false
 	}
-	if scheme != "http" && scheme != "https" {
-		return false
-	}
-
-	host := strings.ToLower(u.Hostname())
+	host := strings.ToLower(parsed.Hostname())
 	if host == "" {
 		return false
 	}
-	if _, ok := blockedHosts[host]; ok {
+	return isSafeURLHost(normalizeURLHost(host))
+}
+
+func isUNCPath(rawURL string) bool {
+	return strings.HasPrefix(rawURL, "\\\\") ||
+		(strings.HasPrefix(rawURL, "//") && !strings.Contains(rawURL, "://"))
+}
+
+func isSafeWebScheme(rawScheme string) bool {
+	scheme := strings.ToLower(rawScheme)
+	if _, blocked := blockedSchemes[scheme]; blocked {
 		return false
 	}
+	return scheme == "http" || scheme == "https"
+}
 
-	// Normalize IPv6: strip brackets and zone IDs.
-	hostNoBrackets := strings.TrimLeft(strings.TrimRight(host, "]"), "[")
-	hostNormalized := stripIPv6ZoneID(hostNoBrackets)
+func normalizeURLHost(host string) string {
+	withoutBrackets := strings.TrimLeft(strings.TrimRight(host, "]"), "[")
+	return stripIPv6ZoneID(withoutBrackets)
+}
 
-	// Re-check after normalization (catches [::1] → ::1, zone-id variants).
-	if _, ok := blockedHosts[hostNormalized]; ok {
+func isSafeURLHost(host string) bool {
+	if _, blocked := blockedHosts[host]; blocked {
 		return false
 	}
-
-	// Block IPv4-mapped IPv6 loopback/private.
-	if strings.HasPrefix(hostNormalized, "::ffff:127.") ||
-		strings.HasPrefix(hostNormalized, "::ffff:10.") ||
-		strings.HasPrefix(hostNormalized, "::ffff:192.168.") ||
-		strings.HasPrefix(hostNormalized, "::ffff:169.254.") {
+	if hasPrivateIPv6Prefix(host) {
 		return false
 	}
-
-	// Block IPv6 private: fc00::/7 (ULA) and fe80::/10 (link-local).
-	if strings.HasPrefix(hostNormalized, "fc") ||
-		strings.HasPrefix(hostNormalized, "fd") ||
-		strings.HasPrefix(hostNormalized, "fe80") {
-		return false
+	if ip := net.ParseIP(host); ip != nil {
+		return isPublicIP(ip)
 	}
+	return !hasPrivateIPv4Prefix(host) && !isNumericPrivateIPv4(host)
+}
 
-	// Parse as IP to check private/reserved ranges.
-	ip := net.ParseIP(hostNormalized)
-	if ip != nil {
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-			ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
-			return false
+func hasPrivateIPv6Prefix(host string) bool {
+	for _, prefix := range []string{
+		"::ffff:127.", "::ffff:10.", "::ffff:192.168.", "::ffff:169.254.",
+		"fc", "fd", "fe80",
+	} {
+		if strings.HasPrefix(host, prefix) {
+			return true
 		}
-		// Block CGNAT range 100.64.0.0/10.
-		if ip4 := ip.To4(); ip4 != nil && ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127 {
-			return false
-		}
+	}
+	return false
+}
+
+func isPublicIP(ip net.IP) bool {
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+		return false
+	}
+	if ipv4 := ip.To4(); ipv4 != nil && ipv4[0] == 100 && ipv4[1] >= 64 && ipv4[1] <= 127 {
+		return false
+	}
+	return true
+}
+
+func hasPrivateIPv4Prefix(host string) bool {
+	if strings.HasPrefix(host, "10.") || strings.HasPrefix(host, "192.168.") ||
+		strings.HasPrefix(host, "169.254.") {
 		return true
 	}
+	if strings.HasPrefix(host, "172.") && secondIPv4OctetInRange(host, 16, 31) {
+		return true
+	}
+	return strings.HasPrefix(host, "100.") && secondIPv4OctetInRange(host, 64, 127)
+}
 
-	// Host is not a standard IP — check string-prefix private ranges.
-	if strings.HasPrefix(hostNormalized, "10.") || strings.HasPrefix(hostNormalized, "192.168.") {
+func secondIPv4OctetInRange(host string, low, high int) bool {
+	parts := strings.SplitN(host, ".", 3)
+	if len(parts) < 2 {
 		return false
 	}
-	if strings.HasPrefix(hostNormalized, "172.") {
-		parts := strings.SplitN(hostNormalized, ".", 3)
-		if len(parts) >= 2 {
-			if n, err := strconv.Atoi(parts[1]); err == nil && n >= 16 && n <= 31 {
-				return false
-			}
-		}
-	}
-	if strings.HasPrefix(hostNormalized, "169.254.") {
-		return false
-	}
-	if strings.HasPrefix(hostNormalized, "100.") {
-		parts := strings.SplitN(hostNormalized, ".", 3)
-		if len(parts) >= 2 {
-			if n, err := strconv.Atoi(parts[1]); err == nil && n >= 64 && n <= 127 {
-				return false
-			}
-		}
-	}
-
-	// Block numeric IPv4 bypass techniques (octal, hex, decimal integer).
-	if isNumericPrivateIPv4(hostNormalized) {
-		return false
-	}
-
-	return true
+	value, err := strconv.Atoi(parts[1])
+	return err == nil && value >= low && value <= high
 }
 
 // stripIPv6ZoneID removes zone ID from an IPv6 address.

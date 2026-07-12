@@ -237,195 +237,243 @@ func wikiIndex(store *wiki.Store, category string) (string, error) {
 	return sb.String(), nil
 }
 
+type wikiWriteRequest struct {
+	title      string
+	id         string
+	summary    string
+	category   string
+	content    string
+	tags       []string
+	related    []string
+	cues       []string
+	client     string
+	sites      []string
+	kinds      []string
+	supersedes []string
+	importance float64
+	pageType   string
+	confidence string
+	due        string
+	force      bool
+}
+
 func wikiWrite(ctx context.Context, store *wiki.Store, contactsStore *contacts.Store, path, title, id, summary, category, content string, tags, related, cues []string, client string, sites, kinds, supersedes []string, importance float64, pageType, confidence, due string, force bool) (string, error) {
-	if title == "" {
-		return "title은 필수입니다.", nil
+	req := wikiWriteRequest{
+		title: title, id: id, summary: summary, category: category, content: content,
+		tags: tags, related: related, cues: cues, client: client, sites: sites,
+		kinds: kinds, supersedes: supersedes, importance: importance,
+		pageType: pageType, confidence: confidence, due: due, force: force,
 	}
-	if category == "" {
-		return "category는 필수입니다.", nil
-	}
-	if !wiki.ValidateCategory(category) {
-		return fmt.Sprintf("잘못된 카테고리: %s. 사용 가능: %s", category, strings.Join(wiki.Categories, ", ")), nil
+	if guidance := validateWikiWrite(req); guidance != "" {
+		return guidance, nil
 	}
 
-	// Auto-generate path if not provided. Slashes in the title ("6/25 회의")
-	// must not become directories — they'd mint phantom nested folders.
+	path, guidance := resolveWikiWritePath(store, path, req)
+	if guidance != "" {
+		return guidance, nil
+	}
+	if guidance := duplicateWikiWriteGuidance(ctx, store, path, req); guidance != "" {
+		return guidance, nil
+	}
+
+	logAppend := shouldAppendProjectLog(path, req.force)
+	page, existed, err := persistWikiWrite(store, path, req, logAppend)
+	if err != nil {
+		return fmt.Sprintf("위키 페이지 쓰기 실패: %v", err), nil
+	}
+	marked, failed := markSupersededPages(store, req.supersedes, path)
+	note := autoRecordPeople(store, contactsStore, page, req.category)
+	return formatWikiWriteResult(path, req, note, existed, logAppend, marked, failed), nil
+}
+
+func validateWikiWrite(req wikiWriteRequest) string {
+	if req.title == "" {
+		return "title은 필수입니다."
+	}
+	if req.category == "" {
+		return "category는 필수입니다."
+	}
+	if !wiki.ValidateCategory(req.category) {
+		return fmt.Sprintf("잘못된 카테고리: %s. 사용 가능: %s", req.category, strings.Join(wiki.Categories, ", "))
+	}
+	return ""
+}
+
+// resolveWikiWritePath owns the write target policy: generated slugs, escape
+// rejection, project representative-page layout, and mint-time name cleanup.
+func resolveWikiWritePath(store *wiki.Store, path string, req wikiWriteRequest) (string, string) {
 	if path == "" {
-		slug := strings.ToLower(title)
+		slug := strings.ToLower(req.title)
 		slug = strings.NewReplacer(" ", "-", "/", "-", "\\", "-").Replace(slug)
-		path = category + "/" + slug + ".md"
+		path = req.category + "/" + slug + ".md"
 	} else if err := wiki.ValidateExternalPath(path); err != nil {
-		// Escape guard on caller-supplied paths — a "../…" write target would
-		// land a file outside the wiki root (same contract as the read path).
-		return fmt.Sprintf("잘못된 페이지 경로입니다 (위키 루트 밖 접근 불가): %s", path), nil //nolint:nilerr // tool surface: guidance to the model, not an error
+		return "", fmt.Sprintf("잘못된 페이지 경로입니다 (위키 루트 밖 접근 불가): %s", path)
 	}
 	if !strings.HasSuffix(path, ".md") {
 		path += ".md"
 	}
-	// Project layout: a flat 프로젝트/<name>.md is the legacy 대표페이지 form — route
-	// it onto the in-folder slot (프로젝트/<name>/대표.md) so agent writes can't
-	// resurrect flat pages after the layout migration (see wiki/project_layout.go).
-	if np := wiki.NormalizeProjectPagePath(path); np != path {
-		path = np
+	path = wiki.NormalizeProjectPagePath(path)
+	path = store.CleanNewProjectRepPath(path)
+	return path, ""
+}
+
+// duplicateWikiWriteGuidance applies only to creates. Existing targets are
+// updates, while a forced create deliberately bypasses similarity checks.
+func duplicateWikiWriteGuidance(ctx context.Context, store *wiki.Store, path string, req wikiWriteRequest) string {
+	if req.force {
+		return ""
 	}
-	// Mint-time name hygiene: a NEW project folder must not carry mail-subject
-	// debris (trailing dates, 요청/송부 suffixes); existing folders keep their
-	// paths, and a cleaned twin routes into the existing clean folder.
-	if np := store.CleanNewProjectRepPath(path); np != path {
-		path = np
+	_, err := store.ReadPage(path)
+	if err == nil {
+		return ""
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Sprintf("위키 페이지 읽기 실패 (쓰기 중단): %v", err)
 	}
 
-	// Pre-write duplicate guard: creating a page whose subject an existing page
-	// already covers is how the wiki splintered (2026-07 cleanup). When the target
-	// doesn't exist yet and a near-match does, refuse and point at it — the agent
-	// should update that page (or retry with force=true if genuinely distinct).
-	if !force {
-		if _, err := store.ReadPage(path); err != nil { // create, not update
-			if !os.IsNotExist(err) {
-				// Transient read failure (permissions, I/O) — routing it through
-				// the create guard would give the model wrong guidance; fail the
-				// write with the real error instead.
-				return fmt.Sprintf("위키 페이지 읽기 실패 (쓰기 중단): %v", err), nil
-			}
-			hits := store.FindSimilarPages(ctx, wiki.SimilarQuery{
-				Path: path, ID: id, Title: title, Category: category,
-			}, 3)
-			if len(hits) > 0 {
-				var sb strings.Builder
-				sb.WriteString("⚠️ 새 문서를 만들지 않았습니다 — 같은 주제로 보이는 기존 문서가 있습니다:\n")
-				for _, h := range hits {
-					fmt.Fprintf(&sb, "- %s — %s", h.Path, h.Title)
-					if h.Summary != "" {
-						fmt.Fprintf(&sb, " (%s)", h.Summary)
-					}
-					sb.WriteByte('\n')
-				}
-				sb.WriteString("기존 문서를 read 후 그 경로로 update 하세요. 정말 별개의 문서라면 force=true로 다시 호출하세요.")
-				return sb.String(), nil
-			}
+	hits := store.FindSimilarPages(ctx, wiki.SimilarQuery{
+		Path: path, ID: req.id, Title: req.title, Category: req.category,
+	}, 3)
+	if len(hits) == 0 {
+		return ""
+	}
+	return formatDuplicateWikiWriteGuidance(hits)
+}
+
+func formatDuplicateWikiWriteGuidance(hits []wiki.SimilarHit) string {
+	var sb strings.Builder
+	sb.WriteString("⚠️ 새 문서를 만들지 않았습니다 — 같은 주제로 보이는 기존 문서가 있습니다:\n")
+	for _, hit := range hits {
+		fmt.Fprintf(&sb, "- %s — %s", hit.Path, hit.Title)
+		if hit.Summary != "" {
+			fmt.Fprintf(&sb, " (%s)", hit.Summary)
 		}
+		sb.WriteByte('\n')
 	}
+	sb.WriteString("기존 문서를 read 후 그 경로로 update 하세요. 정말 별개의 문서라면 force=true로 다시 호출하세요.")
+	return sb.String()
+}
 
-	// Project 로그.md slot: the tool contract says events APPEND there (query
-	// description: "사건·소식은 여기에 append"), but a body replace would let a model
-	// sending only its new entry wipe the whole log. Append it as a dated H2
-	// section instead (H2 = RotateProjectLog's rotation unit, mirroring the
-	// dreamer's reroute); force=true keeps the raw replace for deliberate
-	// rewrites.
-	logAppend := false
-	if name, ok := wiki.ProjectNameOf(path); ok && path == wiki.LogPagePath(name) && !force {
-		logAppend = true
-	}
+func shouldAppendProjectLog(path string, force bool) bool {
+	name, ok := wiki.ProjectNameOf(path)
+	return ok && path == wiki.LogPagePath(name) && !force
+}
 
-	// Read-modify-write through UpdatePage so a concurrent writer of the same page
-	// (the dreamer, the wiki-research turn, mail analysis) can't clobber this edit,
-	// and so a content-less "update" preserves the body that's actually on disk at
-	// write time rather than a copy read in a separate, earlier call. page/existed
-	// are captured for the post-write people enrichment and the result message.
+// persistWikiWrite keeps the read-modify-write inside Store.UpdatePage so a
+// concurrent writer cannot clobber the page between a separate read and write.
+func persistWikiWrite(store *wiki.Store, path string, req wikiWriteRequest, logAppend bool) (*wiki.Page, bool, error) {
 	var page *wiki.Page
-	existed := false
+	var existed bool
 	err := store.UpdatePage(path, func(existing *wiki.Page) (*wiki.Page, error) {
-		if existing != nil {
-			// Update existing page.
-			existed = true
-			page = existing
-			page.Meta.Title = title
-			if id != "" {
-				page.Meta.ID = id
-			}
-			if summary != "" {
-				page.Meta.Summary = summary
-			}
-			if len(tags) > 0 {
-				page.Meta.Tags = tags
-			}
-			if len(related) > 0 {
-				page.Meta.Related = related
-			}
-			if len(cues) > 0 {
-				page.Meta.Cues = cues
-			}
-			if strings.TrimSpace(client) != "" {
-				page.Meta.Client = client
-			}
-			if len(sites) > 0 {
-				page.Meta.Sites = sites
-			}
-			if len(kinds) > 0 {
-				page.Meta.Kinds = kinds
-			}
-			if importance > 0 {
-				page.Meta.Importance = importance
-			}
-			if pageType != "" {
-				page.Meta.Type = pageType
-			}
-			if confidence != "" {
-				page.Meta.Confidence = confidence
-			}
-			if due != "" {
-				page.Meta.Due = due
-			}
-			page.Meta.Updated = time.Now().Format("2006-01-02")
-			if content != "" {
-				if logAppend {
-					page.Body = appendProjectLogSection(page.Body, content)
-				} else {
-					page.Body = content
-				}
-			}
-			return page, nil
-		}
-		// Create new page.
-		page = wiki.NewPage(title, category, tags)
-		page.Meta.ID = id
-		page.Meta.Summary = summary
-		page.Meta.Related = related
-		page.Meta.Cues = cues
-		page.Meta.Client = client
-		page.Meta.Sites = sites
-		page.Meta.Kinds = kinds
-		if importance > 0 {
-			page.Meta.Importance = importance
-		}
-		page.Meta.Type = pageType
-		page.Meta.Confidence = confidence
-		if due != "" {
-			page.Meta.Due = due
-		}
-		switch {
-		case content != "" && logAppend:
-			// A fresh 로그.md starts as a dated section so rotation works from
-			// the first entry.
-			page.Body = appendProjectLogSection("", content)
-		case content != "":
-			page.Body = content
-		default:
-			page.Body = fmt.Sprintf("# %s\n\n## 요약\n\n\n## 핵심 사실\n\n\n## 변경 이력\n- %s: 페이지 생성\n",
-				title, time.Now().Format("2006-01-02"))
-		}
+		page, existed = mergeWikiWrite(existing, req, logAppend)
 		return page, nil
 	})
-	if err != nil {
-		return fmt.Sprintf("위키 페이지 쓰기 실패: %v", err), nil
-	}
-	marked, failed := markSupersededPages(store, supersedes, path)
+	return page, existed, err
+}
 
+func mergeWikiWrite(existing *wiki.Page, req wikiWriteRequest, logAppend bool) (*wiki.Page, bool) {
+	if existing == nil {
+		return newWikiWritePage(req, logAppend), false
+	}
+	updateWikiWritePage(existing, req, logAppend)
+	return existing, true
+}
+
+func updateWikiWritePage(page *wiki.Page, req wikiWriteRequest, logAppend bool) {
+	page.Meta.Title = req.title
+	if req.id != "" {
+		page.Meta.ID = req.id
+	}
+	if req.summary != "" {
+		page.Meta.Summary = req.summary
+	}
+	if len(req.tags) > 0 {
+		page.Meta.Tags = req.tags
+	}
+	if len(req.related) > 0 {
+		page.Meta.Related = req.related
+	}
+	if len(req.cues) > 0 {
+		page.Meta.Cues = req.cues
+	}
+	if strings.TrimSpace(req.client) != "" {
+		page.Meta.Client = req.client
+	}
+	if len(req.sites) > 0 {
+		page.Meta.Sites = req.sites
+	}
+	if len(req.kinds) > 0 {
+		page.Meta.Kinds = req.kinds
+	}
+	if req.importance > 0 {
+		page.Meta.Importance = req.importance
+	}
+	if req.pageType != "" {
+		page.Meta.Type = req.pageType
+	}
+	if req.confidence != "" {
+		page.Meta.Confidence = req.confidence
+	}
+	if req.due != "" {
+		page.Meta.Due = req.due
+	}
+	page.Meta.Updated = time.Now().Format("2006-01-02")
+	if req.content != "" {
+		page.Body = wikiWriteBody(page.Body, req.content, logAppend)
+	}
+}
+
+func newWikiWritePage(req wikiWriteRequest, logAppend bool) *wiki.Page {
+	page := wiki.NewPage(req.title, req.category, req.tags)
+	page.Meta.ID = req.id
+	page.Meta.Summary = req.summary
+	page.Meta.Related = req.related
+	page.Meta.Cues = req.cues
+	page.Meta.Client = req.client
+	page.Meta.Sites = req.sites
+	page.Meta.Kinds = req.kinds
+	if req.importance > 0 {
+		page.Meta.Importance = req.importance
+	}
+	page.Meta.Type = req.pageType
+	page.Meta.Confidence = req.confidence
+	if req.due != "" {
+		page.Meta.Due = req.due
+	}
+	page.Body = newWikiWriteBody(req.title, req.content, logAppend)
+	return page
+}
+
+func newWikiWriteBody(title, content string, logAppend bool) string {
+	if content != "" {
+		return wikiWriteBody("", content, logAppend)
+	}
+	return fmt.Sprintf("# %s\n\n## 요약\n\n\n## 핵심 사실\n\n\n## 변경 이력\n- %s: 페이지 생성\n",
+		title, time.Now().Format("2006-01-02"))
+}
+
+func wikiWriteBody(body, content string, logAppend bool) string {
+	if logAppend {
+		return appendProjectLogSection(body, content)
+	}
+	return content
+}
+
+func formatWikiWriteResult(path string, req wikiWriteRequest, note string, existed, logAppend bool, marked, failed []string) string {
 	action := "생성"
 	if existed {
 		action = "업데이트"
-		if logAppend && content != "" {
+		if logAppend && req.content != "" {
 			action = "업데이트 (로그에 섹션 append — 기존 항목 유지)"
 		}
 	}
-	note := autoRecordPeople(store, contactsStore, page, category)
 	if len(marked) > 0 {
 		note += fmt.Sprintf(" · 대체 표시 %d건", len(marked))
 	}
 	if len(failed) > 0 {
 		note += fmt.Sprintf(" · 대체 표시 실패: %s", strings.Join(failed, ", "))
 	}
-	return fmt.Sprintf("위키 페이지 %s: %s (%s)%s", action, path, title, note), nil
+	return fmt.Sprintf("위키 페이지 %s: %s (%s)%s", action, path, req.title, note)
 }
 
 // appendProjectLogSection appends a write's content to a project 로그.md body

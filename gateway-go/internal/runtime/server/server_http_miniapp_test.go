@@ -98,7 +98,10 @@ var miniappMailAttachmentClientFactory func() (nativeapi.MailAttachmentClient, e
 func nativeAPIHandler(s *Server) *nativeapi.Handler {
 	factory := miniappMailAttachmentClientFactory
 	if factory == nil {
-		factory = s.newMiniappMailAttachmentClient
+		factory = func() (nativeapi.MailAttachmentClient, error) {
+			client, err := s.newMiniappMailAttachmentClient()
+			return client, err
+		}
 	}
 	return nativeapi.New(nativeapi.Config{
 		Dispatcher:        s.dispatcher,

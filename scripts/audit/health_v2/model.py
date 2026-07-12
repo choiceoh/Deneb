@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 SCHEMA_VERSION = 2
-RUBRIC_VERSION = "2.1.2"
+RUBRIC_VERSION = "2.2.0"
 SEVERITY_ORDER = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
 
 # Product impact, not source volume. The gateway owns runtime behavior; native

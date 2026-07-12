@@ -7,6 +7,10 @@ import (
 	"sort"
 )
 
+type retentionSelection struct {
+	keep map[string]bool
+}
+
 // pruneLocked applies the retention policy. Caller MUST hold m.mu.
 //
 //  1. Per-file keep-N: oldest snapshots above retentionN per path are removed.
@@ -24,93 +28,127 @@ func (m *Manager) pruneLocked() error {
 		return nil
 	}
 
-	keep := make(map[string]bool, len(all))
-	for _, s := range all {
-		keep[s.ID] = true
-	}
-
-	// Pass 1: per-file keep-N.
-	byPath := make(map[string][]*Snapshot)
-	for _, s := range all {
-		byPath[s.Path] = append(byPath[s.Path], s)
-	}
-	for _, group := range byPath {
-		sort.SliceStable(group, func(i, j int) bool { return group[i].Seq > group[j].Seq })
-		for i, s := range group {
-			if i >= m.retentionN {
-				keep[s.ID] = false
-			}
-		}
-	}
-
-	// Pass 2: global byte cap. Walk oldest-first, drop until total fits.
-	// Always protect the most recent surviving snapshot per path so a tight
-	// cap doesn't wipe the ability to roll back at all.
-	var total int64
-	for _, s := range all {
-		if keep[s.ID] {
-			total += s.Size
-		}
-	}
-	if total > m.maxBytes {
-		// Compute the newest-per-path set among keeps.
-		newestPerPath := make(map[string]int)
-		for _, s := range all {
-			if !keep[s.ID] {
-				continue
-			}
-			if seq, ok := newestPerPath[s.Path]; !ok || s.Seq > seq {
-				newestPerPath[s.Path] = s.Seq
-			}
-		}
-		ordered := make([]*Snapshot, 0, len(all))
-		for _, s := range all {
-			if keep[s.ID] {
-				ordered = append(ordered, s)
-			}
-		}
-		sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Seq < ordered[j].Seq })
-		for _, s := range ordered {
-			if total <= m.maxBytes {
-				break
-			}
-			if newestPerPath[s.Path] == s.Seq {
-				continue // protect the newest snapshot for each path
-			}
-			keep[s.ID] = false
-			total -= s.Size
-		}
-	}
-
-	// Nothing to prune?
-	remaining := make([]*Snapshot, 0, len(all))
-	var removed []*Snapshot
-	for _, s := range all {
-		if keep[s.ID] {
-			remaining = append(remaining, s)
-		} else {
-			removed = append(removed, s)
-		}
-	}
+	remaining, removed := selectSnapshotsForRetention(all, m.retentionN, m.maxBytes)
 	if len(removed) == 0 {
 		return nil
 	}
 
-	// Best-effort: delete blob files (and their atomicfile .lock sidecar)
-	// first, then rewrite index.
-	var firstBlobErr error
-	for _, s := range removed {
-		if s.BlobPath == "" {
-			continue
-		}
-		if err := os.Remove(s.BlobPath); err != nil && !errors.Is(err, os.ErrNotExist) && firstBlobErr == nil {
-			firstBlobErr = fmt.Errorf("checkpoint: remove blob %s: %w", s.BlobPath, err)
-		}
-		// Silently best-effort: remove the sidecar lock file left by atomicfile.
-		_ = os.Remove(s.BlobPath + ".lock")
-	}
+	// Blob deletion remains best-effort, but the index must still be rewritten
+	// so a single undeletable blob cannot retain every expired checkpoint.
+	blobErr := deleteRetiredSnapshotBlobs(removed)
 	if err := rewriteIndex(m.indexPath(), remaining); err != nil {
 		return err
+	}
+	return blobErr
+}
+
+func selectSnapshotsForRetention(all []*Snapshot, retentionN int, maxBytes int64) ([]*Snapshot, []*Snapshot) {
+	selection := newRetentionSelection(all)
+	selection.dropBeyondPerPathLimit(all, retentionN)
+	selection.dropToByteLimit(all, maxBytes)
+	return selection.partition(all)
+}
+
+func newRetentionSelection(all []*Snapshot) *retentionSelection {
+	keep := make(map[string]bool, len(all))
+	for _, s := range all {
+		keep[s.ID] = true
+	}
+	return &retentionSelection{keep: keep}
+}
+
+func (s *retentionSelection) dropBeyondPerPathLimit(all []*Snapshot, retentionN int) {
+	byPath := make(map[string][]*Snapshot)
+	for _, snapshot := range all {
+		byPath[snapshot.Path] = append(byPath[snapshot.Path], snapshot)
+	}
+	for _, group := range byPath {
+		sort.SliceStable(group, func(i, j int) bool { return group[i].Seq > group[j].Seq })
+		for i, snapshot := range group {
+			if i >= retentionN {
+				s.keep[snapshot.ID] = false
+			}
+		}
+	}
+}
+
+func (s *retentionSelection) dropToByteLimit(all []*Snapshot, maxBytes int64) {
+	total := s.retainedBytes(all)
+	if total <= maxBytes {
+		return
+	}
+
+	newestPerPath := s.newestRetainedSequenceByPath(all)
+	for _, snapshot := range s.oldestRetainedSnapshots(all) {
+		if total <= maxBytes {
+			break
+		}
+		if newestPerPath[snapshot.Path] == snapshot.Seq {
+			continue
+		}
+		s.keep[snapshot.ID] = false
+		total -= snapshot.Size
+	}
+}
+
+func (s *retentionSelection) retainedBytes(all []*Snapshot) int64 {
+	var total int64
+	for _, snapshot := range all {
+		if s.keep[snapshot.ID] {
+			total += snapshot.Size
+		}
+	}
+	return total
+}
+
+func (s *retentionSelection) newestRetainedSequenceByPath(all []*Snapshot) map[string]int {
+	newest := make(map[string]int)
+	for _, snapshot := range all {
+		if !s.keep[snapshot.ID] {
+			continue
+		}
+		if seq, ok := newest[snapshot.Path]; !ok || snapshot.Seq > seq {
+			newest[snapshot.Path] = snapshot.Seq
+		}
+	}
+	return newest
+}
+
+func (s *retentionSelection) oldestRetainedSnapshots(all []*Snapshot) []*Snapshot {
+	ordered := make([]*Snapshot, 0, len(all))
+	for _, snapshot := range all {
+		if s.keep[snapshot.ID] {
+			ordered = append(ordered, snapshot)
+		}
+	}
+	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Seq < ordered[j].Seq })
+	return ordered
+}
+
+func (s *retentionSelection) partition(all []*Snapshot) ([]*Snapshot, []*Snapshot) {
+	remaining := make([]*Snapshot, 0, len(all))
+	removed := make([]*Snapshot, 0, len(all))
+	for _, snapshot := range all {
+		if s.keep[snapshot.ID] {
+			remaining = append(remaining, snapshot)
+		} else {
+			removed = append(removed, snapshot)
+		}
+	}
+	return remaining, removed
+}
+
+func deleteRetiredSnapshotBlobs(removed []*Snapshot) error {
+	var firstBlobErr error
+	for _, snapshot := range removed {
+		if snapshot.BlobPath == "" {
+			continue
+		}
+		if err := os.Remove(snapshot.BlobPath); err != nil && !errors.Is(err, os.ErrNotExist) && firstBlobErr == nil {
+			firstBlobErr = fmt.Errorf("checkpoint: remove blob %s: %w", snapshot.BlobPath, err)
+		}
+		// Silently best-effort: remove the sidecar lock file left by atomicfile.
+		_ = os.Remove(snapshot.BlobPath + ".lock")
 	}
 	return firstBlobErr
 }

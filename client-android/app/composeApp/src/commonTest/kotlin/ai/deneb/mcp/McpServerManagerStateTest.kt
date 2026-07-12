@@ -2,6 +2,7 @@ package ai.deneb.mcp
 
 import ai.deneb.data.AppSettings
 import com.russhwolf.settings.MapSettings
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
@@ -213,5 +214,28 @@ class McpServerManagerStateTest {
         assertEquals(emptyList(), f.manager.getToolsForServer(server.id))
         assertEquals(emptyList(), f.manager.getEnabledMcpTools())
         assertFalse(f.manager.isConnected(server.id))
+    }
+
+    @Test
+    fun connectMissingServerReturnsFailureWithoutConnectedState() = runTest {
+        val f = fixture()
+
+        val result = f.manager.connectAndDiscoverTools("missing")
+
+        assertTrue(result.isFailure)
+        assertEquals("Server not found: missing", result.exceptionOrNull()?.message)
+        assertFalse(f.manager.isConnected("missing"))
+        assertEquals(emptyList(), f.manager.getToolsForServer("missing"))
+    }
+
+    @Test
+    fun connectEnabledServersWithEmptyStateCompletesWithoutMutation() = runTest {
+        val f = fixture()
+
+        f.manager.connectEnabledServers()
+
+        assertEquals(emptyList(), f.manager.getServers())
+        assertEquals(emptyList(), f.manager.getEnabledMcpTools())
+        assertEquals("", f.settings.getMcpServersJson())
     }
 }

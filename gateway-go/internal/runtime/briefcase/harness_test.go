@@ -605,6 +605,28 @@ func TestChatHarnessReportsTwoArmsWithoutCrossRunCollisions(t *testing.T) {
 	}
 }
 
+func TestChatHarnessClaimsRunRootOnlyAfterInputValidation(t *testing.T) {
+	pack := writeHarnessCase(t)
+	root, err := NewRunRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	client := llm.NewClient("http://127.0.0.1:1", "")
+
+	if _, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client}); err == nil || !strings.Contains(err.Error(), "model is required") {
+		t.Fatalf("missing model error = %v", err)
+	}
+	if _, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test", Arm: Arm("unsupported")}); err == nil || !strings.Contains(err.Error(), "unsupported arm") {
+		t.Fatalf("unsupported arm error = %v", err)
+	}
+	harness, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test"})
+	if err != nil {
+		t.Fatalf("valid construction after pre-claim validation failures: %v", err)
+	}
+	defer harness.Close()
+}
+
 func TestChatHarnessRejectsRunRootReuseAcrossArms(t *testing.T) {
 	pack := writeHarnessMemoryCase(t)
 	root, err := NewRunRoot(t.TempDir())
@@ -682,6 +704,12 @@ func TestChatHarnessRequiresDeclaredDevicePlanSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := NewChatHarness(ChatHarnessConfig{
+		Pack: pack, Root: root, Client: llm.NewClient("http://127.0.0.1:1", ""), Model: "test",
+		DevicePlanSource: data, DevicePlanSourceSHA256: role.SHA256,
+	}); !errors.Is(err, ErrRunRootClaimed) {
+		t.Fatalf("post-claim device-plan retry error = %v, want ErrRunRootClaimed", err)
+	}
 	configuredRoot, err := NewRunRoot(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -695,6 +723,35 @@ func TestChatHarnessRequiresDeclaredDevicePlanSource(t *testing.T) {
 		t.Fatalf("configured signed device plan: %v", err)
 	}
 	defer harness.Close()
+}
+
+func TestChatHarnessConstructionFailureLeavesRunRootCleanable(t *testing.T) {
+	pack := writeHarnessCase(t)
+	root, err := NewRunRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths, err := root.Paths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(paths.State, "transcripts"), []byte("block transcript setup"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewChatHarness(ChatHarnessConfig{
+		Pack: pack, Root: root, Client: llm.NewClient("http://127.0.0.1:1", ""), Model: "test",
+	}); err == nil || !strings.Contains(err.Error(), "transcript path must be a real directory") {
+		t.Fatalf("transcript setup error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(paths.State, "briefcase-memory")); err != nil {
+		t.Fatalf("failure did not reach post-memory assembly: %v", err)
+	}
+	if err := root.Close(); err != nil {
+		t.Fatalf("cleanup after post-memory construction failure: %v", err)
+	}
+	if _, err := os.Stat(paths.Root); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("run root remains after cleanup: %v", err)
+	}
 }
 
 func TestValidateRunProvenanceRejectsDerivedFieldMutation(t *testing.T) {

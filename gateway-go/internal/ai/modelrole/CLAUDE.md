@@ -17,8 +17,8 @@ vision)을 실제 provider/model과 LLM client로 해석한다. 호출자는 역
 - `profile.go`의 `ProfileFor`는 sampling/reasoning builtin 표,
   `routing.go`의 `Registry.RoutingProfileForModel`은 effort routing
   override를 소유한다.
-- `thinking.go`의 `ThinkingOffExtraBody`와
-  `Registry.ThinkingOffExtraBodyFor`가 raw LLM 호출의 thinking-off
+- `thinking.go`의 `ThinkingOffDirectiveFor`와
+  `Registry.ThinkingOffDirectiveFor`가 raw LLM 호출의 thinking-off
   request shape 단일 소스다.
 - `health.go`의 `Registry.RecordModelFailure`,
   `Registry.RecordModelSuccess`, `Registry.ModelUnhealthy`가 fallback
@@ -36,8 +36,9 @@ vision)을 실제 provider/model과 LLM client로 해석한다. 호출자는 역
   live discovery network 호출은 `Registry.mu` 밖에서 수행한다.
 - `Registry.mu`와 `health.mu`는 독립 lock이며 동시에 잡지 않는다.
   client cache나 role 변경 경로에서 이 순서를 깨지 않는다.
-- raw-call thinking shape를 호출자마다 복제하지 않는다. 새 template toggle은
-  `ThinkingOffExtraBodyFor`와 routing capability를 함께 갱신한다.
+- raw-call thinking 정책을 호출자마다 복제하지 않는다. 새 template toggle은
+  `ThinkingOffDirectiveFor`와 routing capability를 함께 갱신하고, wire map 조립은
+  각 transport adapter에 둔다.
 
 ## 집중 검증
 

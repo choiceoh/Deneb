@@ -125,6 +125,23 @@ type recallEvidence struct {
 	At     int64
 }
 
+type recallSource struct {
+	name string
+	run  func(context.Context) []recallEvidence
+}
+
+type recallSourceResult struct {
+	evidence  []recallEvidence
+	elapsed   time.Duration
+	truncated bool
+}
+
+type recallCollection struct {
+	evidence      []recallEvidence
+	sourceSummary string
+	truncated     bool
+}
+
 var recallCuePhrases = []string{
 	"기억", "회상", "전에", "저번", "지난번", "예전에", "아까", "방금", "그때",
 	"말했던", "말한", "했던", "해둔", "정리했던", "논의했던", "이어", "이어서", "계속",
@@ -213,120 +230,10 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 
 	queries := searchQueries(message)
 
-	// All sources run concurrently under the shared preflight deadline. They
-	// used to run serially, so a slow wiki search ate the 1.5s budget and
-	// starved diary/polaris — and every turn paid the SUM of source latencies
-	// instead of the slowest one. Results land in ordered slots to keep the
-	// historical evidence order (wiki, diary, session).
-	type recallSource struct {
-		name string
-		run  func(context.Context) []recallEvidence
-	}
-	var sources []recallSource
-	if deps.Wiki != nil {
-		store := deps.Wiki
-		sources = append(
-			sources,
-			recallSource{"wiki", func(c context.Context) []recallEvidence {
-				evidence, err := recallWikiEvidenceResult(c, store, queries, message)
-				if err != nil && deps.Briefcase {
-					deps.recordStrictError(fmt.Errorf("briefcase wiki recall: %w", err))
-				}
-				return evidence
-			}},
-			recallSource{"diary", func(c context.Context) []recallEvidence {
-				evidence, err := recallDiaryEvidenceResult(c, store, queries, false)
-				if err != nil && deps.Briefcase {
-					deps.recordStrictError(fmt.Errorf("briefcase diary recall: %w", err))
-				}
-				return evidence
-			}},
-		)
-	}
-	if bridge, ok := deps.Transcript.(*polaris.Bridge); ok {
-		sources = append(sources, recallSource{"polaris", func(c context.Context) []recallEvidence {
-			return recallPolarisEvidence(c, bridge, params.SessionKey, queries)
-		}})
-	} else {
-		sources = append(sources, recallSource{"transcript", func(c context.Context) []recallEvidence {
-			return recallTranscriptEvidence(c, deps.Transcript, params.SessionKey, message, queries)
-		}})
-	}
-	// On-box file store (hybrid semantic search). Runs under the same shared
-	// deadline; a down embedding server returns zero file evidence, so this never
-	// blocks the turn. The per-source quota (recallFileQuota) is enforced inside
-	// recallFilesEvidence so files cannot crowd out the other sources.
-	if deps.FileRecall != nil {
-		search := deps.FileRecall
-		sources = append(sources, recallSource{"file", func(c context.Context) []recallEvidence {
-			return recallFilesEvidence(c, search, queries)
-		}})
-	}
-	// Org chart source: people/divisions named in the message → their 부서 + 인물
-	// page. Runs under the same shared deadline; a missing org file yields zero
-	// evidence (graceful-empty), so this never blocks the turn. Needs the wiki
-	// store to resolve members to their person pages.
-	if deps.Org != nil {
-		load := deps.Org
-		store := deps.Wiki
-		sources = append(sources, recallSource{"org", func(c context.Context) []recallEvidence {
-			return recallOrgEvidence(c, load, store, message)
-		}})
-	}
-
-	slots := make([][]recallEvidence, len(sources))
-	elapsed := make([]time.Duration, len(sources))
-	cut := make([]bool, len(sources))
-	var wg sync.WaitGroup
-	for i, src := range sources {
-		wg.Add(1)
-		go func(i int, src recallSource) {
-			defer wg.Done()
-			// Per-goroutine recovery: the outer recover cannot see goroutine
-			// panics, and one broken source must cost its slot, not the turn.
-			defer func() {
-				if r := recover(); r != nil {
-					if logger != nil {
-						logger.Warn("recall preflight: source panicked", "source", src.name, "panic", r)
-					}
-					if deps.Briefcase {
-						deps.recordStrictError(fmt.Errorf("briefcase recall source %s panicked", src.name))
-					}
-				}
-			}()
-			start := time.Now()
-			slots[i] = src.run(ctx)
-			elapsed[i] = time.Since(start)
-			// Sampled at this source's own return: a source that finished
-			// before the deadline stays false even if the budget expires
-			// later, while one that early-returned on ctx.Err() (or came back
-			// from a blocking call to find the deadline gone) is flagged —
-			// its slot likely holds partial evidence.
-			cut[i] = ctx.Err() != nil
-		}(i, src)
-	}
-	wg.Wait()
-	for _, c := range cut {
-		if c {
-			truncated = true
-			break
-		}
-	}
-
-	// Per-source contribution + latency. This accumulating record is the
-	// evidence base for backend consolidation: a source that never
-	// contributes rows but always burns the deadline argues for retirement.
-	sourceStats := make([]string, 0, len(sources))
-	for i, src := range sources {
-		sourceStats = append(sourceStats,
-			fmt.Sprintf("%s=%d(%dms)", src.name, len(slots[i]), elapsed[i].Milliseconds()))
-	}
-	sourceSummary := strings.Join(sourceStats, " ")
-
-	var evidence []recallEvidence
-	for _, slot := range slots {
-		evidence = append(evidence, slot...)
-	}
+	sources := buildRecallSources(params, deps, queries, message)
+	collection := runRecallSources(ctx, sources, deps, logger)
+	truncated = collection.truncated
+	evidence := collection.evidence
 	// Recent-diary fallback ONLY for topicless cues ("아까 뭐였지?" — no signal
 	// terms, so nothing was searchable). A topical question that found nothing
 	// must get the honest no-evidence notice, not two unrelated recent diary
@@ -334,14 +241,12 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	// gate matters: a topicless NON-cue turn is smalltalk ("안녕, 오늘 뭐
 	// 도와줄 수 있어?"), and silent auto-recall must stay silent there rather
 	// than dress recent diary entries up as relevant context.
-	if len(evidence) == 0 && cue && deps.Wiki != nil && len(queries) == 0 {
-		evidence = append(evidence, recallDiaryEvidence(ctx, deps.Wiki, queries, true)...)
-	}
+	evidence = withTopiclessDiaryFallback(ctx, evidence, cue, deps, queries)
 
 	if len(evidence) == 0 {
 		if logger != nil {
 			logger.Info("recall preflight: no evidence",
-				"session", params.SessionKey, "sources", sourceSummary, "truncated", truncated)
+				"session", params.SessionKey, "sources", collection.sourceSummary, "truncated", truncated)
 		}
 		// Explicit recall tells the user nothing was found; silent auto-recall on a
 		// non-cue turn stays invisible so every-turn search adds no noise.
@@ -351,38 +256,148 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 		return "", truncated
 	}
 
-	// Broadening-query penalty: searchQueries issues one combined
-	// multi-term query (the full intent) plus one query per individual term to
-	// broaden recall. A hit found ONLY by an individual term is lower precision
-	// (e.g. the bare term "조직" matching an unrelated "조직명" page), so it must
-	// rank below combined-query hits. Within-source dedup already recorded
-	// combined-query hits under the combined query string (it runs first), so
-	// this demotes only the term-only stragglers. No-op for single-term messages.
-	// The project-anchor sentinel is exempt — it marks a guaranteed structural
-	// anchor, not a term hit, and the penalty let combined-query wiki hits
-	// outrank the named project's 대표페이지.
+	evidence = rankRecallEvidence(evidence, queries, message, cue, deps.now())
+	if logger != nil {
+		logger.Info("recall preflight: evidence injected",
+			"session", params.SessionKey, "count", len(evidence), "sources", collection.sourceSummary, "truncated", truncated)
+	}
+	return formatRecallEvidenceAt(evidence, deps.now()), truncated
+}
+
+func buildRecallSources(params Params, deps Deps, queries []string, message string) []recallSource {
+	var sources []recallSource
+	if deps.Wiki != nil {
+		store := deps.Wiki
+		sources = append(
+			sources,
+			recallSource{name: "wiki", run: func(ctx context.Context) []recallEvidence {
+				evidence, err := recallWikiEvidenceResult(ctx, store, queries, message)
+				if err != nil && deps.Briefcase {
+					deps.recordStrictError(fmt.Errorf("briefcase wiki recall: %w", err))
+				}
+				return evidence
+			}},
+			recallSource{name: "diary", run: func(ctx context.Context) []recallEvidence {
+				evidence, err := recallDiaryEvidenceResult(ctx, store, queries, false)
+				if err != nil && deps.Briefcase {
+					deps.recordStrictError(fmt.Errorf("briefcase diary recall: %w", err))
+				}
+				return evidence
+			}},
+		)
+	}
+
+	if bridge, ok := deps.Transcript.(*polaris.Bridge); ok {
+		sources = append(sources, recallSource{name: "polaris", run: func(ctx context.Context) []recallEvidence {
+			return recallPolarisEvidence(ctx, bridge, params.SessionKey, queries)
+		}})
+	} else {
+		sources = append(sources, recallSource{name: "transcript", run: func(ctx context.Context) []recallEvidence {
+			return recallTranscriptEvidence(ctx, deps.Transcript, params.SessionKey, message, queries)
+		}})
+	}
+
+	if deps.FileRecall != nil {
+		search := deps.FileRecall
+		sources = append(sources, recallSource{name: "file", run: func(ctx context.Context) []recallEvidence {
+			return recallFilesEvidence(ctx, search, queries)
+		}})
+	}
+	if deps.Org != nil {
+		load := deps.Org
+		store := deps.Wiki
+		sources = append(sources, recallSource{name: "org", run: func(ctx context.Context) []recallEvidence {
+			return recallOrgEvidence(ctx, load, store, message)
+		}})
+	}
+	return sources
+}
+
+// runRecallSources keeps source execution concurrent while collecting results
+// in declaration order. Completion order must not change tie-breaking input.
+func runRecallSources(ctx context.Context, sources []recallSource, deps Deps, logger *slog.Logger) recallCollection {
+	results := make([]recallSourceResult, len(sources))
+	var wg sync.WaitGroup
+	for i, source := range sources {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i] = runRecallSource(ctx, source, deps, logger)
+		}()
+	}
+	wg.Wait()
+
+	collection := recallCollection{}
+	sourceStats := make([]string, 0, len(sources))
+	for i, source := range sources {
+		result := results[i]
+		collection.evidence = append(collection.evidence, result.evidence...)
+		collection.truncated = collection.truncated || result.truncated
+		sourceStats = append(sourceStats,
+			fmt.Sprintf("%s=%d(%dms)", source.name, len(result.evidence), result.elapsed.Milliseconds()))
+	}
+	collection.sourceSummary = strings.Join(sourceStats, " ")
+	return collection
+}
+
+func runRecallSource(
+	ctx context.Context,
+	source recallSource,
+	deps Deps,
+	logger *slog.Logger,
+) (result recallSourceResult) {
+	// The outer Build recovery cannot see goroutine panics. A broken source
+	// therefore loses only its own ordered slot, never the whole turn.
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			if logger != nil {
+				logger.Warn("recall preflight: source panicked", "source", source.name, "panic", recovered)
+			}
+			if deps.Briefcase {
+				deps.recordStrictError(fmt.Errorf("briefcase recall source %s panicked", source.name))
+			}
+		}
+	}()
+
+	start := time.Now()
+	result.evidence = source.run(ctx)
+	result.elapsed = time.Since(start)
+	// Sample at this source's return. A fast source remains complete even when
+	// a sibling later exhausts the shared deadline.
+	result.truncated = ctx.Err() != nil
+	return result
+}
+
+func withTopiclessDiaryFallback(
+	ctx context.Context,
+	evidence []recallEvidence,
+	cue bool,
+	deps Deps,
+	queries []string,
+) []recallEvidence {
+	if len(evidence) != 0 || !cue || deps.Wiki == nil || len(queries) != 0 {
+		return evidence
+	}
+	return append(evidence, recallDiaryEvidence(ctx, deps.Wiki, queries, true)...)
+}
+
+func rankRecallEvidence(
+	evidence []recallEvidence,
+	queries []string,
+	message string,
+	cue bool,
+	now time.Time,
+) []recallEvidence {
+	// Lower-precision broadening hits must be demoted before cross-source dedup,
+	// which keeps the highest-scored copy of a fact.
 	applyBroadeningPenalty(evidence, queries)
-
-	// The same fact often surfaces from several sources at once (wiki page +
-	// polaris summary + diary echo); duplicate rows waste the evidence budget.
 	evidence = dedupRecallEvidence(evidence)
-
-	// Situational provenance weighting: a curated wiki figure that numerically
-	// contradicts the raw diary for the same fact (dreamer synthesis drift) is
-	// demoted below that raw observation, so the fixed wiki>diary prior cannot
-	// rank a drifted value first. Type-aware + entity-scoped — see
-	// recall_provenance.go. Must run before the sort (it adjusts scores).
 	applyProvenancePenalty(evidence)
 
-	// RaMem-style temporal scoping (arXiv 2606.22844): when the query names a
-	// concrete past frame ("지난달", "6월"), softly boost evidence whose timestamp
-	// falls inside it so the right-episode memory outranks a content-similar row
-	// from another episode ("context collapse"). Cue-gated + soft (boost, not
-	// filter): a frameless query is untouched and a strong out-of-frame row can
-	// still surface. See recall_temporal.go.
-	if tr := parseRecallTemporalRangeAt(message, deps.now()); tr.ok {
+	if temporalRange := parseRecallTemporalRangeAt(message, now); temporalRange.ok {
 		for i := range evidence {
-			if at := evidence[i].At; at > 0 && at >= tr.From && at <= tr.To {
+			at := evidence[i].At
+			if at > 0 && at >= temporalRange.From && at <= temporalRange.To {
 				evidence[i].Score *= recallTemporalBoost
 			}
 		}
@@ -394,17 +409,10 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 		}
 		return evidence[i].Score > evidence[j].Score
 	})
-	// Adaptive budget: an explicit cue earns the full evidence window; silent
-	// every-turn auto-recall gets a tighter one — the user didn't ask, so
-	// marginal rows are more likely noise than memory.
 	if budget := recallEvidenceBudget(cue); len(evidence) > budget {
-		evidence = evidence[:budget]
+		return evidence[:budget]
 	}
-	if logger != nil {
-		logger.Info("recall preflight: evidence injected",
-			"session", params.SessionKey, "count", len(evidence), "sources", sourceSummary, "truncated", truncated)
-	}
-	return formatRecallEvidenceAt(evidence, deps.now()), truncated
+	return evidence
 }
 
 // hasCue reports whether a message explicitly asks to recall prior context.

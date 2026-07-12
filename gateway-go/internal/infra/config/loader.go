@@ -90,125 +90,117 @@ func LoadConfigFromDefaultPath() (*ConfigSnapshot, error) {
 // validateConfig performs basic structural validation on the config.
 func validateConfig(cfg *DenebConfig) (issues []ConfigIssue, warnings []string) {
 	if cfg.Gateway != nil {
-		gw := cfg.Gateway
+		issues = append(issues, validateGatewayConfig(cfg.Gateway)...)
+	}
+	if cfg.Hooks != nil {
+		hookIssues, hookWarnings := validateHooksConfig(cfg.Hooks)
+		issues = append(issues, hookIssues...)
+		warnings = append(warnings, hookWarnings...)
+	}
+	return issues, warnings
+}
 
-		// Validate bind mode.
-		if gw.Bind != "" {
-			switch NormalizeBindMode(gw.Bind) {
-			case BindAuto, BindLAN, BindLoopback, BindCustom, BindTailnet:
-				// Valid.
-			default:
-				issues = append(issues, ConfigIssue{
-					Path:    "gateway.bind",
-					Message: fmt.Sprintf("invalid bind mode %q (expected auto|lan|loopback|custom|tailnet)", gw.Bind),
-				})
-			}
+func validateGatewayConfig(gateway *GatewayConfig) (issues []ConfigIssue) {
+	if gateway.Bind != "" && !validBindMode(gateway.Bind) {
+		issues = append(issues, ConfigIssue{
+			Path:    "gateway.bind",
+			Message: fmt.Sprintf("invalid bind mode %q (expected auto|lan|loopback|custom|tailnet)", gateway.Bind),
+		})
+	}
+	if gateway.Bind == BindCustom && strings.TrimSpace(gateway.CustomBindHost) == "" {
+		issues = append(issues, ConfigIssue{
+			Path:    "gateway.customBindHost",
+			Message: "gateway.bind=custom requires gateway.customBindHost",
+		})
+	}
+	if gateway.Port != nil && (*gateway.Port < 1 || *gateway.Port > 65535) {
+		issues = append(issues, ConfigIssue{
+			Path:    "gateway.port",
+			Message: fmt.Sprintf("port %d out of range (1-65535)", *gateway.Port),
+		})
+	}
+	if gateway.Auth != nil && gateway.Auth.Mode != "" && !validAuthMode(gateway.Auth.Mode) {
+		issues = append(issues, ConfigIssue{
+			Path: "gateway.auth.mode", Message: fmt.Sprintf("invalid auth mode %q", gateway.Auth.Mode),
+		})
+	}
+	if gateway.Tailscale != nil && gateway.Tailscale.Mode != "" && !validTailscaleMode(gateway.Tailscale.Mode) {
+		issues = append(issues, ConfigIssue{
+			Path: "gateway.tailscale.mode", Message: fmt.Sprintf("invalid tailscale mode %q", gateway.Tailscale.Mode),
+		})
+	}
+	if gateway.Reload != nil && gateway.Reload.Mode != "" && !validReloadMode(gateway.Reload.Mode) {
+		issues = append(issues, ConfigIssue{
+			Path: "gateway.reload.mode", Message: fmt.Sprintf("invalid reload mode %q", gateway.Reload.Mode),
+		})
+	}
+	return issues
+}
+
+func validBindMode(mode string) bool {
+	switch NormalizeBindMode(mode) {
+	case BindAuto, BindLAN, BindLoopback, BindCustom, BindTailnet:
+		return true
+	default:
+		return false
+	}
+}
+
+func validAuthMode(mode string) bool {
+	switch mode {
+	case AuthModeNone, AuthModeToken, AuthModePassword, AuthModeTrustedProxy:
+		return true
+	default:
+		return false
+	}
+}
+
+func validTailscaleMode(mode string) bool {
+	switch mode {
+	case TailscaleOff, TailscaleServe, TailscaleFunnel:
+		return true
+	default:
+		return false
+	}
+}
+
+func validReloadMode(mode string) bool {
+	switch mode {
+	case ReloadOff, ReloadRestart, ReloadHot, ReloadHybrid:
+		return true
+	default:
+		return false
+	}
+}
+
+func validateHooksConfig(hooks *HooksConfig) (issues []ConfigIssue, warnings []string) {
+	seenIDs := make(map[string]struct{})
+	for index, hook := range hooks.Entries {
+		prefix := fmt.Sprintf("hooks.entries[%d]", index)
+		if strings.TrimSpace(hook.Event) == "" {
+			issues = append(issues, ConfigIssue{Path: prefix + ".event", Message: "hook entry requires a non-empty event"})
 		}
-
-		// Validate custom bind host.
-		if gw.Bind == BindCustom && strings.TrimSpace(gw.CustomBindHost) == "" {
+		if strings.TrimSpace(hook.Command) == "" {
+			issues = append(issues, ConfigIssue{Path: prefix + ".command", Message: "hook entry requires a non-empty command"})
+		}
+		if hook.TimeoutMs != nil && *hook.TimeoutMs < 0 {
 			issues = append(issues, ConfigIssue{
-				Path:    "gateway.customBindHost",
-				Message: "gateway.bind=custom requires gateway.customBindHost",
+				Path: prefix + ".timeoutMs", Message: fmt.Sprintf("timeoutMs must be non-negative (got %d)", *hook.TimeoutMs),
 			})
 		}
-
-		// Validate port range.
-		if gw.Port != nil {
-			port := *gw.Port
-			if port < 1 || port > 65535 {
-				issues = append(issues, ConfigIssue{
-					Path:    "gateway.port",
-					Message: fmt.Sprintf("port %d out of range (1-65535)", port),
-				})
-			}
+		if hook.TimeoutMs != nil && *hook.TimeoutMs > DefaultMaxHookTimeoutMs {
+			warnings = append(warnings, fmt.Sprintf(
+				"%s.timeoutMs: %d exceeds recommended maximum (%d ms)",
+				prefix, *hook.TimeoutMs, DefaultMaxHookTimeoutMs,
+			))
 		}
-
-		// Validate auth mode.
-		if gw.Auth != nil && gw.Auth.Mode != "" {
-			switch gw.Auth.Mode {
-			case AuthModeNone, AuthModeToken, AuthModePassword, AuthModeTrustedProxy:
-				// Valid.
-			default:
-				issues = append(issues, ConfigIssue{
-					Path:    "gateway.auth.mode",
-					Message: fmt.Sprintf("invalid auth mode %q", gw.Auth.Mode),
-				})
+		if hook.ID != "" {
+			if _, exists := seenIDs[hook.ID]; exists {
+				issues = append(issues, ConfigIssue{Path: prefix + ".id", Message: fmt.Sprintf("duplicate hook ID %q", hook.ID)})
 			}
-		}
-
-		// Validate tailscale mode.
-		if gw.Tailscale != nil && gw.Tailscale.Mode != "" {
-			switch gw.Tailscale.Mode {
-			case TailscaleOff, TailscaleServe, TailscaleFunnel:
-				// Valid.
-			default:
-				issues = append(issues, ConfigIssue{
-					Path:    "gateway.tailscale.mode",
-					Message: fmt.Sprintf("invalid tailscale mode %q", gw.Tailscale.Mode),
-				})
-			}
-		}
-
-		// Validate reload mode.
-		if gw.Reload != nil && gw.Reload.Mode != "" {
-			switch gw.Reload.Mode {
-			case ReloadOff, ReloadRestart, ReloadHot, ReloadHybrid:
-				// Valid.
-			default:
-				issues = append(issues, ConfigIssue{
-					Path:    "gateway.reload.mode",
-					Message: fmt.Sprintf("invalid reload mode %q", gw.Reload.Mode),
-				})
-			}
+			seenIDs[hook.ID] = struct{}{}
 		}
 	}
-
-	// Validate hooks.
-	if cfg.Hooks != nil {
-		seenIDs := make(map[string]struct{})
-		for i, hook := range cfg.Hooks.Entries {
-			prefix := fmt.Sprintf("hooks.entries[%d]", i)
-
-			if strings.TrimSpace(hook.Event) == "" {
-				issues = append(issues, ConfigIssue{
-					Path:    prefix + ".event",
-					Message: "hook entry requires a non-empty event",
-				})
-			}
-
-			if strings.TrimSpace(hook.Command) == "" {
-				issues = append(issues, ConfigIssue{
-					Path:    prefix + ".command",
-					Message: "hook entry requires a non-empty command",
-				})
-			}
-
-			if hook.TimeoutMs != nil && *hook.TimeoutMs < 0 {
-				issues = append(issues, ConfigIssue{
-					Path:    prefix + ".timeoutMs",
-					Message: fmt.Sprintf("timeoutMs must be non-negative (got %d)", *hook.TimeoutMs),
-				})
-			}
-			if hook.TimeoutMs != nil && *hook.TimeoutMs > DefaultMaxHookTimeoutMs {
-				warnings = append(warnings, fmt.Sprintf(
-					"%s.timeoutMs: %d exceeds recommended maximum (%d ms)",
-					prefix, *hook.TimeoutMs, DefaultMaxHookTimeoutMs,
-				))
-			}
-
-			if hook.ID != "" {
-				if _, ok := seenIDs[hook.ID]; ok {
-					issues = append(issues, ConfigIssue{
-						Path:    prefix + ".id",
-						Message: fmt.Sprintf("duplicate hook ID %q", hook.ID),
-					})
-				}
-				seenIDs[hook.ID] = struct{}{}
-			}
-		}
-	}
-
 	return issues, warnings
 }
 
