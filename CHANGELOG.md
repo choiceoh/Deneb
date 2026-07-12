@@ -1,5 +1,55 @@
 # Changelog
 
+## [4.93.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.92.0...deneb-v4.93.0) (2026-07-12)
+
+
+### ✨ Features
+
+* **andromeda:** RSI 허브 드릴다운 — L1/L4 카드 인라인 상세 ([#3509](https://github.com/choiceoh/Deneb/issues/3509)) ([45157f4](https://github.com/choiceoh/Deneb/commit/45157f4d133d7e4c8c720e72722e6d4ca2a9a124))
+* **andromeda:** 데스크톱 표 정합 — fit-first 랩·어절 줄바꿈·숫자 열 자동 정렬·tabular figures ([#3517](https://github.com/choiceoh/Deneb/issues/3517)) ([e0ba611](https://github.com/choiceoh/Deneb/commit/e0ba611fbf14aab87bd2a44c31b18e046aa47bca))
+* **genesis:** RSI P5-1 커리큘럼 레인 — 커버리지 갭 수요 채굴 (propose-only) ([#3515](https://github.com/choiceoh/Deneb/issues/3515)) ([faf0e48](https://github.com/choiceoh/Deneb/commit/faf0e48a4c4303b55bcb1498ed079f3737c104fc))
+* **genesis:** RSI P5-5 외부 피트니스 접지 — feed-card 자문 증거(게이트 불가침) ([#3533](https://github.com/choiceoh/Deneb/issues/3533)) ([48de1df](https://github.com/choiceoh/Deneb/commit/48de1df83cba2e8b399c964c51cbae79697f6c9a))
+* **native:** 산문 수직 리듬 — 리스트 항목 이중 패딩 역전 수정 + 메시지 코퍼스 하네스 ([#3524](https://github.com/choiceoh/Deneb/issues/3524)) ([04dc4dc](https://github.com/choiceoh/Deneb/commit/04dc4dcf54763c58d705e393ba415f6f411a8973))
+* **native:** 수직 리듬 스케일 완성 — 시작/섹션 스택 해소·그룹 대비 강화·문단 경계 명확화 ([#3529](https://github.com/choiceoh/Deneb/issues/3529)) ([46581f2](https://github.com/choiceoh/Deneb/commit/46581f2ea6edb990450f75b7864554c55c9f3ab1))
+* **native:** 채팅 마크다운 표에 카드 표 처방 이식 — 평균 비례 폭·밀집 타이포·어절 줄바꿈·숫자 열 자동 정렬 ([#3514](https://github.com/choiceoh/Deneb/issues/3514)) ([f3a4f42](https://github.com/choiceoh/Deneb/commit/f3a4f4252a16a4b2a67e20ace20466c21e42b204))
+* **rsi:** L4 졸업 — health-finding 소스 디스패치 allowlist 개방 (첫 배치 7건 리뷰 클린) ([#3530](https://github.com/choiceoh/Deneb/issues/3530)) ([777ed69](https://github.com/choiceoh/Deneb/commit/777ed697d53eeb56962055eaf04d44ece4c09fda))
+* **rsi:** P5 선제 L4 공급 — health-finding 마이너 + record RPC + staged 가시성 ([#3528](https://github.com/choiceoh/Deneb/issues/3528)) ([f17d98f](https://github.com/choiceoh/Deneb/commit/f17d98ff119b0baf71025ab765c1a5db5d22d2a3))
+
+
+### 🐛 Bug Fixes
+
+* **audit:** health-v2 이력 측정에 shallow-truncation 가드 — 로컬/CI 점수 패리티 ([#3526](https://github.com/choiceoh/Deneb/issues/3526)) ([d8d9690](https://github.com/choiceoh/Deneb/commit/d8d969071bff251b9f343ea7748ff030701d0877))
+* **chat:** 스트리밍 턴을 요청 커넥션에서 분리 — 백그라운드 전환 시 답변 유실·세션 종료 해소 ([#3522](https://github.com/choiceoh/Deneb/issues/3522)) ([42229ea](https://github.com/choiceoh/Deneb/commit/42229eaa0344db77d60f77692f7a538a36ca25bf))
+* **chat:** 스트리밍·비동기 턴의 마켓 레터 토큰 생노출 차단 — per-turn persist·async 파이널라이즈 치환 배선 ([#3516](https://github.com/choiceoh/Deneb/issues/3516)) ([30a7266](https://github.com/choiceoh/Deneb/commit/30a7266e04c630bdfbbaac8eb4c317013f40f16f))
+* **deploy:** deploy-watch 롤백 재시작 경로 수리 — RefuseManualStop 거부 우회(kill -TERM MainPID) ([#3531](https://github.com/choiceoh/Deneb/issues/3531)) ([96876b1](https://github.com/choiceoh/Deneb/commit/96876b1b462443d098aa20a68e2b39900e4224dd))
+* **genesis:** 커리큘럼 프롬프트 단언 규칙 명시 — 잘린 조각 단언 방지 (프로드 1사이클 실증 반영) ([#3527](https://github.com/choiceoh/Deneb/issues/3527)) ([58f8add](https://github.com/choiceoh/Deneb/commit/58f8addea6dc7c06b75ecdb75aeab1916c7f5252))
+* **rsi:** coding-dispatch.sh 실행권한 복구 — systemd 203/EXEC 반복 실패 해소 ([#3532](https://github.com/choiceoh/Deneb/issues/3532)) ([c0f29d4](https://github.com/choiceoh/Deneb/commit/c0f29d43de2a4296cc2cd1cee1b5bab61f906cbc))
+* **rsi:** 디스패치 상태 계약 정합 — 리뷰 승인(accepted) 후보를 우선 배차 ([#3534](https://github.com/choiceoh/Deneb/issues/3534)) ([7152d8c](https://github.com/choiceoh/Deneb/commit/7152d8cbefd55ba59f9ecb55fe6522a2c0f8d92f))
+
+
+### 🔧 Internal
+
+* **briefcase:** clarify artifact export stages ([708d1c5](https://github.com/choiceoh/Deneb/commit/708d1c5f610278f53f9478ea5658842c7223e2b4))
+* **briefcase:** clarify artifact grading decisions ([e9a54a5](https://github.com/choiceoh/Deneb/commit/e9a54a54c9b9fb88d0a81f32da5a0c85ae11d4f3))
+* **briefcase:** clarify episode validation boundaries ([eb60966](https://github.com/choiceoh/Deneb/commit/eb609669481a5208e96a22411698f6654e067802))
+* **briefcase:** clarify pure grep traversal ([9508a8e](https://github.com/choiceoh/Deneb/commit/9508a8ea350c854a6e8c91ee3f7d91b688a7e035))
+* **chat:** isolate link enrichment lifecycle ([979dc6c](https://github.com/choiceoh/Deneb/commit/979dc6cdeda09cbfdf6b6d40d8a412e724636690))
+* **config:** clarify runtime resolution stages ([e34762b](https://github.com/choiceoh/Deneb/commit/e34762bd881ad14832858d0a68cfb8baf5c564ef))
+* **data-gen:** clarify generation stages ([7f1b6ec](https://github.com/choiceoh/Deneb/commit/7f1b6eca4dc233a5afee3d97f3e1a30c0d565373))
+* **denebui:** clarify structured HTML conversion ([2502bb0](https://github.com/choiceoh/Deneb/commit/2502bb075812d49928457271c160db537058001c))
+* **genesis:** clarify failure evidence clustering ([1d2d461](https://github.com/choiceoh/Deneb/commit/1d2d461d952dfa2cfe6a6c9746ee0d68834dc2cc))
+* **mailarchive:** clarify archive search decisions ([f57d98e](https://github.com/choiceoh/Deneb/commit/f57d98ec042f89b0b718cd44aaa382b6a778c2c3))
+* **mailarchive:** isolate local state overlay ([1ee7814](https://github.com/choiceoh/Deneb/commit/1ee7814a33920939e5a28120006ffc5f56691a03))
+* **mediatokens:** separate parsing decisions ([e1fac5f](https://github.com/choiceoh/Deneb/commit/e1fac5f2f2876be49652abebf9766ae2282acbdf))
+* **recall-bench:** separate benchmark stages ([5b4cc17](https://github.com/choiceoh/Deneb/commit/5b4cc17933d742674bd8ce7249e5d4499291a028))
+* **recall:** clarify org evidence decisions ([9c02214](https://github.com/choiceoh/Deneb/commit/9c02214bdf67ed28024ab4777721e349f6154100))
+* **runtime:** move Fleet alert ownership ([66b3952](https://github.com/choiceoh/Deneb/commit/66b39520a6806e0f00b140895950237b93c5e40f))
+* **runtimeops:** clarify deferred tool activation ([8ae8604](https://github.com/choiceoh/Deneb/commit/8ae860450aff6eccf0110243967929419847dc96))
+* **runtimeops:** clarify exec cache decisions ([e4489e1](https://github.com/choiceoh/Deneb/commit/e4489e156d4c77649f97ca59f44cb0f7e5776765))
+* **server:** isolate model maintenance wiring ([b67afb7](https://github.com/choiceoh/Deneb/commit/b67afb70f6cbe08987f36c45b75e82b8e18eb5f9))
+* **toolreg:** split workspace registration groups ([268a311](https://github.com/choiceoh/Deneb/commit/268a3117bf84527f3c2662b2c39f0fe81963a6be))
+* **wiki:** centralize contact identity contract ([447bdb3](https://github.com/choiceoh/Deneb/commit/447bdb39cb9bafffe14de5a23f751e32a1fc6b9e))
+
 ## [4.92.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.91.0...deneb-v4.92.0) (2026-07-12)
 
 
