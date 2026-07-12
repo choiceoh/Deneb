@@ -48,6 +48,7 @@ things it shouldn't.
 | `evolver_skill_validation.go` | Deterministic admissibility gates — **pure**, no `Evolver` state |
 | `editable_surfaces.go` | `EditableSurface`, `ClassifySurface`, `DeclaredEditableSurfaces` whitelist |
 | `workout.go` | Synthetic exercise lane — evidence only, never real usage |
+| `curriculum.go` | Demand-generation lane (RSI P5-1) — coverage-gap mining; files route=genesis opportunities with validation cases authored first (source=`curriculum`, propose-only) |
 | `tracker_self_correction.go` | Self-correction candidate record/query + forbidden-surface gate |
 | `tracker_recurrence_promotion.go` | Recurrence/cluster → self-correction candidate promotion |
 
