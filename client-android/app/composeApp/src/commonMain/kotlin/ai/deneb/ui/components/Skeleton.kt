@@ -28,6 +28,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+import ai.deneb.ui.DenebMotion
+
 /**
  * Shimmer placeholder fill — a soft base tint with a highlight band sweeping
  * left→right across it, the loading idiom users read instantly as "content is
@@ -43,7 +45,7 @@ fun Modifier.shimmer(shape: Shape = RoundedCornerShape(8.dp)): Modifier {
     val progress = transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1300, easing = LinearEasing), RepeatMode.Restart),
+        animationSpec = infiniteRepeatable(tween(DenebMotion.DurationBreath, easing = LinearEasing), RepeatMode.Restart),
         label = "shimmer-sweep",
     )
     val tint = MaterialTheme.colorScheme.onSurface

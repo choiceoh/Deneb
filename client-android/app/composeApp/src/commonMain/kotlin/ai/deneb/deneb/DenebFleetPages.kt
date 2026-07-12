@@ -47,8 +47,12 @@ import kotlinx.coroutines.launch
 
 @Composable
 internal fun FleetNodesPage(nodes: List<FleetNode>, loaded: Boolean) {
+    if (!loaded) {
+        DenebLoading()
+        return
+    }
     if (nodes.isEmpty()) {
-        EmptyTab(if (loaded) "노드 정보가 없습니다." else "불러오는 중…")
+        EmptyTab("노드 정보가 없습니다.")
         return
     }
     LazyColumn(Modifier.fillMaxSize()) {
@@ -58,8 +62,12 @@ internal fun FleetNodesPage(nodes: List<FleetNode>, loaded: Boolean) {
 
 @Composable
 internal fun FleetRecipesPage(recipes: List<FleetRecipe>, loaded: Boolean, onAction: (FleetRecipe, String) -> Unit) {
+    if (!loaded) {
+        DenebLoading()
+        return
+    }
     if (recipes.isEmpty()) {
-        EmptyTab(if (loaded) "레시피가 없습니다." else "불러오는 중…")
+        EmptyTab("레시피가 없습니다.")
         return
     }
     LazyColumn(Modifier.fillMaxSize()) {
@@ -75,8 +83,12 @@ internal fun FleetJobsPage(client: DenebGatewayClient, jobs: List<FleetJob>, loa
     var cancelTarget by remember { mutableStateOf<FleetJob?>(null) }
     val scope = rememberCoroutineScope()
     val recent = jobs.take(20)
+    if (!loaded) {
+        DenebLoading()
+        return
+    }
     if (recent.isEmpty()) {
-        EmptyTab(if (loaded) "진행 중인 작업이 없습니다." else "불러오는 중…")
+        EmptyTab("진행 중인 작업이 없습니다.")
         return
     }
     LazyColumn(Modifier.fillMaxSize()) {
