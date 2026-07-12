@@ -229,6 +229,37 @@ func TestMetaEvolution_JudgeAccuracyEvidence_OrganicLabels(t *testing.T) {
 	}
 }
 
+// Category segmentation (evaluator preference collapse, 2606.16682): a
+// category-local miss concentration must be named in the evaluator evidence;
+// a fully-caught category must not appear.
+func TestMetaEvolution_JudgeAccuracyEvidence_CategorySkew(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := generation.NewMetaArtifacts(t.TempDir(), slog.Default())
+	task := &MetaEvolutionTask{Tracker: tr, Meta: meta}
+	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
+	version := meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
+
+	if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+		JudgeVersion: version,
+		Pairs:        8, Correct: 6,
+		ByClass:    map[string][2]int{"safety-drop": {6, 8}},
+		ByCategory: map[string][2]int{"mail": {2, 4}, "wiki": {4, 4}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ev := task.assembleEvidence(context.Background(), metaEpochEvaluator)
+	if !strings.Contains(ev, "카테고리별 놓침 분포") || !strings.Contains(ev, "mail 2/4") {
+		t.Fatalf("category skew line missing:\n%s", ev)
+	}
+	if strings.Contains(ev, "wiki") {
+		t.Fatalf("fully-caught category leaked into the skew line:\n%s", ev)
+	}
+}
+
 // A clean incumbent judge (no misses, no false-rejects) leaves the evaluator
 // epoch exactly as it was — the closure is a no-op until labels accumulate.
 func TestMetaEvolution_JudgeAccuracyEvidence_CleanJudge(t *testing.T) {

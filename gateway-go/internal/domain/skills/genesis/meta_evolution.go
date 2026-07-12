@@ -668,7 +668,8 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 	}
 	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
 	version := t.Meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
-	byClass := map[string][2]int{} // class -> [missed, total]
+	byClass := map[string][2]int{}    // class -> [missed, total]
+	byCategory := map[string][2]int{} // skill category -> [missed, total]
 	falseRejects := 0
 	if records, err := t.Tracker.RecentJudgeAccuracy(judgeMissEvidenceRuns); err == nil {
 		for _, rec := range records {
@@ -680,6 +681,12 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 				cur[0] += ct[1] - ct[0] // missed = total - correct
 				cur[1] += ct[1]
 				byClass[cls] = cur
+			}
+			for cat, ct := range rec.ByCategory {
+				cur := byCategory[cat]
+				cur[0] += ct[1] - ct[0]
+				cur[1] += ct[1]
+				byCategory[cat] = cur
 			}
 			falseRejects += len(rec.FalseRejects)
 		}
@@ -725,6 +732,19 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 		}
 		fmt.Fprintf(&b, "- 실전 false-accept %d건: %s — 판정자가 통과시킨 evolve가 실사용에서 롤백됨 (baseline-aware 확인, 최근 30일)\n",
 			len(organic), strings.Join(names, ", "))
+	}
+	// Category-local bias (evaluator preference collapse, 2606.16682): a
+	// category whose misses concentrate must be named so the revision fixes
+	// the category blind spot, not just the aggregate.
+	var skewed []string
+	for cat, ct := range byCategory {
+		if ct[0] > 0 {
+			skewed = append(skewed, fmt.Sprintf("%s %d/%d", cat, ct[0], ct[1]))
+		}
+	}
+	if len(skewed) > 0 {
+		sort.Strings(skewed)
+		fmt.Fprintf(&b, "- 카테고리별 놓침 분포: %s (한 카테고리 편중 = 국소 편향 신호)\n", strings.Join(skewed, " · "))
 	}
 	if falseRejects > 0 {
 		fmt.Fprintf(&b, "- 의심 false-reject: %d건 (기각했으나 실제로는 현재 본문보다 나았던 후보 — 과잉 엄격화 경계)\n", falseRejects)
