@@ -279,6 +279,11 @@ type MetaEvolutionTask struct {
 	// OnDriftFreeze, when set, notifies the operator when the self-brake
 	// engages or releases (auto-adopt freeze transition).
 	OnDriftFreeze func(frozen bool, reasons []string)
+	// RuntimeHealth, when set, injects a compact runtime-health summary (p95
+	// latency, error rate, timeout/tool-error signals) as ADVISORY evidence
+	// into the meta-evidence block (RSI P5-5). Grounds the producer's prose on
+	// operator-experienced runtime utility; no gate reads it. Nil = skip.
+	RuntimeHealth func(ctx context.Context) string
 
 	// pending bench outcomes for the in-flight cycle's ledger write (set via
 	// recordWithBench; Run is single-flight per task so no locking needed).
@@ -357,7 +362,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	util := t.Tracker.OperatorUtilitySignals()
 	t.pendingOperatorUtility = &util
 
-	evidence := t.assembleEvidence(epoch)
+	evidence := t.assembleEvidence(ctx, epoch)
 	proposal, reason, err := t.propose(ctx, artifact, incumbent, evidence)
 	if err != nil {
 		logger.Warn("meta-evolution: proposal generation failed", "artifact", artifact, "error", err)
@@ -550,7 +555,7 @@ func (t *MetaEvolutionTask) nextEpoch() (string, string) {
 // For the evaluator epoch it also appends the live judge's own labeled mistakes
 // (P3), so a judge-prompt revision targets real blind spots (see
 // assembleJudgeAccuracyEvidence).
-func (t *MetaEvolutionTask) assembleEvidence(epoch string) string {
+func (t *MetaEvolutionTask) assembleEvidence(ctx context.Context, epoch string) string {
 	var b strings.Builder
 	h := t.Tracker.EvolutionHealth()
 	fmt.Fprintf(&b, "## 7일 진화 스코어보드\n- evolve %d건 (기각 %d, 롤백 %d, 확인 %d), confirmRate %.2f, falseAcceptRate %.2f (해소 %d건)\n",
@@ -582,6 +587,13 @@ func (t *MetaEvolutionTask) assembleEvidence(epoch string) string {
 	}
 	if epoch == metaEpochEvaluator {
 		b.WriteString(t.assembleJudgeAccuracyEvidence())
+	}
+	if t.RuntimeHealth != nil {
+		if line := strings.TrimSpace(t.RuntimeHealth(ctx)); line != "" {
+			b.WriteString("\n## 런타임 건강 (자문 — 게이트 아님, P5-5)\n")
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
 	}
 	b.WriteString(t.assembleOperatorUtilityEvidence())
 	return b.String()
