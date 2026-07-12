@@ -1,115 +1,174 @@
 package denebui
 
-// convertStructuredElem converts nodes built from parser-only structural
-// children, such as table rows, chart points, and tab definitions.
+// convertStructuredElem dispatches parser-only child records to the family
+// that owns their parent/child contract. Each family converts both the rendered
+// parent node and the structural intermediates that only that parent consumes.
 func convertStructuredElem(el *openElem, inner string, node map[string]any) (any, bool) {
-	a := el.attrs
 	switch el.tag {
-	case "chart":
-		node["type"] = "chart"
-		putNodeID(node, a)
-		putStr(node, "chartType", canonChartType(a["type"]))
-		putStr(node, "label", a["label"])
-		labels, values := []any{}, []any{}
-		for _, s := range el.structs {
-			pt, ok := s.(structural)
-			if !ok || pt.kind != "point" {
-				continue
-			}
-			labels = append(labels, pt.attrs["label"])
-			f, _ := lenientFloat(pt.attrs["value"])
-			values = append(values, f)
-		}
-		node["labels"], node["values"] = labels, values
-	case "point":
-		return structural{kind: "point", attrs: a}, true
-	case "table":
-		node["type"] = "table"
-		putNodeID(node, a)
-		headers, rows := []any{}, []any{}
-		for _, s := range el.structs {
-			tr, ok := s.(structural)
-			if !ok || tr.kind != "tr" {
-				continue
-			}
-			var cells []any
-			hasTH := false
-			for _, cs := range tr.structs {
-				c, cok := cs.(structural)
-				if !cok || c.kind != "cell" {
-					continue
-				}
-				if c.attrs["__th"] == "true" {
-					hasTH = true
-				}
-				cells = append(cells, c.text)
-			}
-			if hasTH && len(headers) == 0 {
-				headers = cells
-			} else {
-				rows = append(rows, cells)
-			}
-		}
-		node["headers"], node["rows"] = headers, rows
-	case "tr":
-		return structural{kind: "tr", structs: el.structs}, true
-	case "td", "th":
-		th := "false"
-		if el.tag == "th" {
-			th = "true"
-		}
-		return structural{kind: "cell", text: inner, attrs: map[string]string{"__th": th}}, true
-	case "ul", "ol", "list":
-		node["type"] = "list"
-		putNodeID(node, a)
-		// Presence-checked: a missing attribute must not read as truthy("")
-		// (that rendered every <ul> numbered — TS/Kotlin parity).
-		_, hasOrdered := a["ordered"]
-		ordered := el.tag == "ol" || (hasOrdered && truthy(a["ordered"]))
-		if ordered {
-			node["ordered"] = true
-		}
-		items := []any{}
-		for _, s := range el.structs {
-			li, ok := s.(structural)
-			if !ok || li.kind != "li" {
-				continue
-			}
-			switch len(li.children) {
-			case 0:
-				items = append(items, map[string]any{"type": "text", "value": li.text})
-			case 1:
-				items = append(items, li.children[0])
-			default:
-				items = append(items, map[string]any{"type": "column", "children": li.children})
-			}
-		}
-		node["items"] = items
-	case "li":
-		return structural{kind: "li", text: inner, children: el.children}, true
-	case "tabs":
-		node["type"] = "tabs"
-		putNodeID(node, a)
-		putNum(node, "selectedIndex", a["selected-index"], true)
-		tabs := []any{}
-		for _, s := range el.structs {
-			tb, ok := s.(structural)
-			if !ok || tb.kind != "tab" {
-				continue
-			}
-			tabs = append(tabs, map[string]any{"label": tb.attrs["label"], "children": tb.children})
-		}
-		node["tabs"] = tabs
-	case "tab":
-		return structural{kind: "tab", attrs: a, children: el.children}, true
+	case "chart", "point":
+		return convertChartElement(el, node), true
+	case "table", "tr", "td", "th":
+		return convertTableElement(el, inner, node), true
+	case "ul", "ol", "list", "li":
+		return convertListElement(el, inner, node), true
+	case "tabs", "tab":
+		return convertTabsElement(el, node), true
 	case "accordion":
-		node["type"] = "accordion"
-		putNodeID(node, a)
-		node["title"] = a["title"]
-		node["children"] = el.children
-		putBool(node, "expanded", a, "expanded")
+		return convertAccordionElement(el, node), true
 	default:
 		return nil, false
 	}
-	return node, true
+}
+
+func convertChartElement(el *openElem, node map[string]any) any {
+	if el.tag == "point" {
+		return structural{kind: "point", attrs: el.attrs}
+	}
+	node["type"] = "chart"
+	putNodeID(node, el.attrs)
+	putStr(node, "chartType", canonChartType(el.attrs["type"]))
+	putStr(node, "label", el.attrs["label"])
+	labels, values := chartPointSeries(el.structs)
+	node["labels"], node["values"] = labels, values
+	return node
+}
+
+// chartPointSeries accepts only point intermediates. A malformed numeric value
+// retains the parser's historical zero fallback so labels and values stay
+// positionally aligned for renderers.
+func chartPointSeries(structs []any) ([]any, []any) {
+	labels, values := []any{}, []any{}
+	for _, value := range structs {
+		point, ok := value.(structural)
+		if !ok || point.kind != "point" {
+			continue
+		}
+		labels = append(labels, point.attrs["label"])
+		number, _ := lenientFloat(point.attrs["value"])
+		values = append(values, number)
+	}
+	return labels, values
+}
+
+func convertTableElement(el *openElem, inner string, node map[string]any) any {
+	switch el.tag {
+	case "tr":
+		return structural{kind: "tr", structs: el.structs}
+	case "td", "th":
+		header := "false"
+		if el.tag == "th" {
+			header = "true"
+		}
+		return structural{
+			kind:  "cell",
+			text:  inner,
+			attrs: map[string]string{"__th": header},
+		}
+	}
+	node["type"] = "table"
+	putNodeID(node, el.attrs)
+	headers, rows := tableRows(el.structs)
+	node["headers"], node["rows"] = headers, rows
+	return node
+}
+
+func tableRows(structs []any) ([]any, []any) {
+	headers, rows := []any{}, []any{}
+	for _, value := range structs {
+		row, ok := value.(structural)
+		if !ok || row.kind != "tr" {
+			continue
+		}
+		cells, headerBearing := tableCells(row.structs)
+		if headerBearing && len(headers) == 0 {
+			headers = cells
+			continue
+		}
+		rows = append(rows, cells)
+	}
+	return headers, rows
+}
+
+func tableCells(structs []any) ([]any, bool) {
+	var cells []any
+	headerBearing := false
+	for _, value := range structs {
+		cell, ok := value.(structural)
+		if !ok || cell.kind != "cell" {
+			continue
+		}
+		headerBearing = headerBearing || cell.attrs["__th"] == "true"
+		cells = append(cells, cell.text)
+	}
+	return cells, headerBearing
+}
+
+func convertListElement(el *openElem, inner string, node map[string]any) any {
+	if el.tag == "li" {
+		return structural{kind: "li", text: inner, children: el.children}
+	}
+	node["type"] = "list"
+	putNodeID(node, el.attrs)
+	if _, present := el.attrs["ordered"]; el.tag == "ol" || (present && truthy(el.attrs["ordered"])) {
+		node["ordered"] = true
+	}
+	node["items"] = listItems(el.structs)
+	return node
+}
+
+func listItems(structs []any) []any {
+	items := []any{}
+	for _, value := range structs {
+		item, ok := value.(structural)
+		if !ok || item.kind != "li" {
+			continue
+		}
+		items = append(items, renderListItem(item))
+	}
+	return items
+}
+
+// renderListItem preserves the compact renderer contract: bare text becomes a
+// text node, one child stays unwrapped, and multiple children gain a column.
+func renderListItem(item structural) any {
+	switch len(item.children) {
+	case 0:
+		return map[string]any{"type": "text", "value": item.text}
+	case 1:
+		return item.children[0]
+	default:
+		return map[string]any{"type": "column", "children": item.children}
+	}
+}
+
+func convertTabsElement(el *openElem, node map[string]any) any {
+	if el.tag == "tab" {
+		return structural{kind: "tab", attrs: el.attrs, children: el.children}
+	}
+	node["type"] = "tabs"
+	putNodeID(node, el.attrs)
+	putNum(node, "selectedIndex", el.attrs["selected-index"], true)
+	node["tabs"] = tabDefinitions(el.structs)
+	return node
+}
+
+func tabDefinitions(structs []any) []any {
+	tabs := []any{}
+	for _, value := range structs {
+		tab, ok := value.(structural)
+		if !ok || tab.kind != "tab" {
+			continue
+		}
+		tabs = append(tabs, map[string]any{"label": tab.attrs["label"], "children": tab.children})
+	}
+	return tabs
+}
+
+func convertAccordionElement(el *openElem, node map[string]any) any {
+	node["type"] = "accordion"
+	putNodeID(node, el.attrs)
+	node["title"] = el.attrs["title"]
+	node["children"] = el.children
+	putBool(node, "expanded", el.attrs, "expanded")
+	return node
 }
