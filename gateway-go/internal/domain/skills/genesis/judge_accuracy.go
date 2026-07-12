@@ -129,15 +129,15 @@ type FalseRejectExhibit struct {
 // defects plus mined false-reject suspects, attributed to the judge prompt
 // version so P3 can segment labels per verifier revision.
 type JudgeAccuracyRecord struct {
-	CreatedAt    int64                `json:"createdAt"`
-	JudgeVersion string               `json:"judgeVersion"`
-	Pairs        int                  `json:"pairs"`
-	Correct      int                  `json:"correct"`
-	ByClass      map[string][2]int    `json:"byClass,omitempty"` // degradation -> [correct, total]
+	CreatedAt    int64             `json:"createdAt"`
+	JudgeVersion string            `json:"judgeVersion"`
+	Pairs        int               `json:"pairs"`
+	Correct      int               `json:"correct"`
+	ByClass      map[string][2]int `json:"byClass,omitempty"` // degradation -> [correct, total]
 	// ByCategory segments accuracy by skill CATEGORY (evaluator preference
 	// collapse, arXiv 2606.16682 — a category-local bias hides in the
 	// aggregate; segmenting makes it visible before it corrupts selection).
-	ByCategory map[string][2]int `json:"byCategory,omitempty"` // category -> [correct, total]
+	ByCategory   map[string][2]int    `json:"byCategory,omitempty"` // category -> [correct, total]
 	Misses       []JudgeMissExhibit   `json:"misses,omitempty"`
 	FalseRejects []FalseRejectExhibit `json:"falseRejects,omitempty"`
 }
