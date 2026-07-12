@@ -298,73 +298,122 @@ var findMutatingArgs = map[string]struct{}{
 //
 // Pure string analysis, no filesystem access. Returns false on any doubt.
 func ExecCommandPreservesRunCache(command string) bool {
-	command = strings.TrimSpace(command)
-	if command == "" {
+	stages, ok := parseExecCacheStages(command)
+	if !ok {
 		return false
 	}
-	if strings.ContainsAny(command, execCacheUnsafeMeta) {
-		return false
-	}
-	// Every pipeline stage must independently be a known read-only command.
-	for _, stage := range strings.Split(command, "|") {
-		fields := strings.Fields(stage)
-		if len(fields) == 0 {
-			return false // empty stage — includes "a || b" after the split
-		}
-		argv0 := fields[0]
-		if idx := strings.LastIndex(argv0, "/"); idx >= 0 {
-			argv0 = argv0[idx+1:]
-		}
-		// --output writes a file for every allowlisted command that accepts
-		// it (git diff/show/log, sort) and none uses it read-only.
-		for _, f := range fields[1:] {
-			if strings.HasPrefix(f, "--output") {
-				return false
-			}
-		}
-		switch argv0 {
-		case "git":
-			if len(fields) < 2 {
-				return false
-			}
-			if _, ok := gitReadSubcommands[fields[1]]; !ok {
-				return false
-			}
-		case "find":
-			for _, f := range fields[1:] {
-				if _, ok := findMutatingArgs[f]; ok {
-					return false
-				}
-			}
-		case "uniq":
-			// POSIX uniq writes its SECOND positional argument:
-			// `uniq in out`. Piped/single-file use stays read-only.
-			positional := 0
-			for _, f := range fields[1:] {
-				if !strings.HasPrefix(f, "-") {
-					positional++
-				}
-			}
-			if positional >= 2 {
-				return false
-			}
-		default:
-			// Note sed is deliberately NOT allowlisted: beyond -i/--in-place,
-			// sed scripts can write files via the `w` command and the s///w
-			// flag, which plain string analysis cannot reliably detect.
-			if _, ok := execReadOnlyCommands[argv0]; !ok {
-				return false
-			}
-			for _, flag := range execWriteToFileFlags[argv0] {
-				for _, f := range fields[1:] {
-					if strings.HasPrefix(f, flag) {
-						return false
-					}
-				}
-			}
+	for _, stage := range stages {
+		if !execStagePreservesRunCache(stage) {
+			return false
 		}
 	}
 	return true
+}
+
+type execCacheStage struct {
+	argv0 string
+	args  []string
+}
+
+// parseExecCacheStages accepts only the deliberately small shell subset whose
+// stages can be classified independently. Ambiguous syntax fails closed so the
+// caller invalidates the run cache.
+func parseExecCacheStages(command string) ([]execCacheStage, bool) {
+	command = strings.TrimSpace(command)
+	if command == "" || strings.ContainsAny(command, execCacheUnsafeMeta) {
+		return nil, false
+	}
+	rawStages := strings.Split(command, "|")
+	stages := make([]execCacheStage, 0, len(rawStages))
+	for _, rawStage := range rawStages {
+		fields := strings.Fields(rawStage)
+		if len(fields) == 0 {
+			return nil, false
+		}
+		stages = append(stages, execCacheStage{
+			argv0: execArgv0Base(fields[0]),
+			args:  fields[1:],
+		})
+	}
+	return stages, true
+}
+
+func execArgv0Base(argv0 string) string {
+	if index := strings.LastIndex(argv0, "/"); index >= 0 {
+		return argv0[index+1:]
+	}
+	return argv0
+}
+
+func execStagePreservesRunCache(stage execCacheStage) bool {
+	// --output writes a file for every allowlisted command that accepts it
+	// (git diff/show/log, sort) and none uses it read-only.
+	if execArgsHavePrefix(stage.args, "--output") {
+		return false
+	}
+	switch stage.argv0 {
+	case "git":
+		return gitStagePreservesRunCache(stage.args)
+	case "find":
+		return !execArgsContain(stage.args, findMutatingArgs)
+	case "uniq":
+		return uniqStagePreservesRunCache(stage.args)
+	default:
+		return allowlistedStagePreservesRunCache(stage)
+	}
+}
+
+func gitStagePreservesRunCache(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	_, ok := gitReadSubcommands[args[0]]
+	return ok
+}
+
+func uniqStagePreservesRunCache(args []string) bool {
+	// POSIX uniq writes its SECOND positional argument. Piped and single-file
+	// invocations stay read-only; ambiguous option values fail closed.
+	positional := 0
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		positional++
+		if positional >= 2 {
+			return false
+		}
+	}
+	return true
+}
+
+func allowlistedStagePreservesRunCache(stage execCacheStage) bool {
+	// sed is deliberately absent: beyond -i/--in-place, scripts can write via
+	// the w command and s///w flag, which string analysis cannot safely parse.
+	if _, ok := execReadOnlyCommands[stage.argv0]; !ok {
+		return false
+	}
+	return !execArgsHavePrefix(stage.args, execWriteToFileFlags[stage.argv0]...)
+}
+
+func execArgsHavePrefix(args []string, prefixes ...string) bool {
+	for _, arg := range args {
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(arg, prefix) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func execArgsContain(args []string, candidates map[string]struct{}) bool {
+	for _, arg := range args {
+		if _, ok := candidates[arg]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // sedModifiesFile detects sed commands that modify files in-place.

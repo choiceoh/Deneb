@@ -1,6 +1,7 @@
 package runtimeops
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -255,5 +256,51 @@ func TestExecCommandPreservesRunCache(t *testing.T) {
 		if ExecCommandPreservesRunCache(cmd) {
 			t.Errorf("ExecCommandPreservesRunCache(%q) = true, want false", cmd)
 		}
+	}
+}
+
+func TestExecCacheClassificationSeparatesParsingFromMutationDecision(t *testing.T) {
+	tests := []struct {
+		name         string
+		command      string
+		wantStages   []execCacheStage
+		wantParse    bool
+		wantPreserve bool
+	}{
+		{
+			name:    "read-only pipeline with absolute argv0",
+			command: "  /usr/bin/git status | head -1  ",
+			wantStages: []execCacheStage{
+				{argv0: "git", args: []string{"status"}},
+				{argv0: "head", args: []string{"-1"}},
+			},
+			wantParse: true, wantPreserve: true,
+		},
+		{
+			name: "parsed unknown command invalidates", command: "make test",
+			wantStages: []execCacheStage{{argv0: "make", args: []string{"test"}}},
+			wantParse:  true,
+		},
+		{
+			name: "parsed output flag invalidates", command: "git diff --output=changes.txt",
+			wantStages: []execCacheStage{{argv0: "git", args: []string{"diff", "--output=changes.txt"}}},
+			wantParse:  true,
+		},
+		{name: "empty command is unclassifiable", command: ""},
+		{name: "command substitution is unclassifiable", command: "cat $(pwd)"},
+		{name: "empty pipeline stage is unclassifiable", command: "cat a || head"},
+		{name: "shell chain is unclassifiable", command: "ls && rm x"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stages, ok := parseExecCacheStages(test.command)
+			if ok != test.wantParse || !reflect.DeepEqual(stages, test.wantStages) {
+				t.Fatalf("parse = (%+v, %v), want (%+v, %v)", stages, ok, test.wantStages, test.wantParse)
+			}
+			if got := ExecCommandPreservesRunCache(test.command); got != test.wantPreserve {
+				t.Fatalf("preserves cache = %v, want %v", got, test.wantPreserve)
+			}
+		})
 	}
 }
