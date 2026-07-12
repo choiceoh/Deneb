@@ -61,13 +61,28 @@ rollback() {
         return 1
     fi
     cp -p "$PROD_DIR/dist/deneb-gateway.bak-prev" "$PROD_DIR/dist/deneb-gateway"
-    if ! systemctl --user restart "$GATEWAY_SERVICE" 2>>"$LOG_FILE"; then
-        log "ERROR: restart after rollback failed — manual intervention required"
+    # The unit sets RefuseManualStop=yes, so `systemctl restart` is REFUSED
+    # ("Operation refused", verified live 2026-07-12) — the hard restart goes
+    # through Restart=always instead: TERM the tracked main pid and wait for
+    # systemd to boot the restored binary under a new pid. Never pkill by
+    # pattern; only the exact MainPID.
+    local old_pid
+    old_pid=$(systemctl --user show -p MainPID --value "$GATEWAY_SERVICE" 2>>"$LOG_FILE")
+    if [[ -z "$old_pid" || "$old_pid" == "0" ]] || ! kill -TERM "$old_pid" 2>>"$LOG_FILE"; then
+        log "ERROR: cannot signal gateway main pid (${old_pid:-none}) after rollback — manual intervention required"
         return 1
     fi
-    sleep 5
-    if ! health_ok; then
-        log "ERROR: gateway unhealthy even after rollback — manual intervention required"
+    local waited=0 new_pid=""
+    while (( waited < 90 )); do
+        sleep 5
+        waited=$(( waited + 5 ))
+        new_pid=$(systemctl --user show -p MainPID --value "$GATEWAY_SERVICE" 2>>"$LOG_FILE")
+        if [[ -n "$new_pid" && "$new_pid" != "0" && "$new_pid" != "$old_pid" ]] && health_ok; then
+            break
+        fi
+    done
+    if [[ -z "$new_pid" || "$new_pid" == "0" || "$new_pid" == "$old_pid" ]] || ! health_ok; then
+        log "ERROR: gateway unhealthy even after rollback (pid ${new_pid:-none}) — manual intervention required"
         return 1
     fi
     # Block this head from redeploying until a NEWER commit lands on main
