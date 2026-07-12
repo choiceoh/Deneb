@@ -343,11 +343,13 @@ internal fun renderLetterCard(name: String, scheme: ColorScheme, node: DenebUiNo
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.width(412.dp).padding(16.dp)) {
                     CompositionLocalProvider(LocalDenebUiMotion provides false) {
+                        // wrapInCard=true = the CHAT call site's shape, so these
+                        // previews pin what the phone actually shows mid-chat
+                        // (a chromed root must not gain a second outer card).
                         DenebUiRenderer(
                             node = node,
                             isInteractive = false,
                             onCallback = { _, _ -> },
-                            wrapInCard = false,
                         )
                     }
                 }

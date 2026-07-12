@@ -375,19 +375,24 @@ func (d proactiveRelayDeps) appendProactiveWorkFeed(
 
 	cardSrc, choices := splitChoicesFence(content)
 	cardBody, _ := splitChoicesFence(deliverBody)
-	title, titleLine := extractCardTitle(cardSrc)
+	// Every text heuristic (and the LLM titler) reads the card's PROSE: a body
+	// that is mostly a deneb-ui fence is otherwise invisible to the
+	// fence-skipping scans — the title fell back to the generic "업무 리포트"
+	// and the titler echoed "```deneb-ui" as the summary (2026-07-12 live feed).
+	extractSrc := denebui.ReplaceFences(cardSrc, denebui.PlainText)
+	title, titleLine := extractCardTitle(extractSrc)
 	source := strings.TrimSpace(opts.workFeedSource)
 	if source == "" {
 		source = workfeed.SourceProactive
 	}
-	isMail := source == workfeed.SourceMailReport || isMailReportBody(cardSrc)
+	isMail := source == workfeed.SourceMailReport || isMailReportBody(extractSrc)
 	if isMail {
 		source = workfeed.SourceMailReport
 	}
 
-	summary := extractCardSummary(cardSrc, titleLine)
+	summary := extractCardSummary(extractSrc, titleLine)
 	if d.cardTitler != nil && (isMail || isWeakCardTitle(title, titleLine)) {
-		if modelTitle, modelSummary := d.cardTitler(cardSrc); modelTitle != "" || modelSummary != "" {
+		if modelTitle, modelSummary := d.cardTitler(extractSrc); modelTitle != "" || modelSummary != "" {
 			if modelTitle != "" {
 				title = modelTitle
 			}
@@ -403,7 +408,7 @@ func (d proactiveRelayDeps) appendProactiveWorkFeed(
 		Summary:    summary,
 		Body:       cardBody,
 		SessionKey: target,
-		Question:   len(choices) > 0 || endsWithQuestionMark(cardSrc),
+		Question:   len(choices) > 0 || endsWithQuestionMark(extractSrc),
 		Actions:    choiceAnswerActions(choices),
 	})
 	if err != nil {
@@ -472,10 +477,13 @@ func (d proactiveRelayDeps) publishDeliverable(content string) (bool, error) {
 	if !hasReportStructure(content) && utf8.RuneCountInString(content) < minDeliverableRunes {
 		return false, nil
 	}
-	title, titleLine := extractCardTitle(content)
-	summary := extractCardSummary(content, titleLine)
+	// Same prose projection as the relay card path — a doc analysis whose
+	// answer is a deneb-ui card must not title itself "```deneb-ui".
+	extractSrc := denebui.ReplaceFences(content, denebui.PlainText)
+	title, titleLine := extractCardTitle(extractSrc)
+	summary := extractCardSummary(extractSrc, titleLine)
 	if d.cardTitler != nil && isWeakCardTitle(title, titleLine) {
-		if t, s := d.cardTitler(content); t != "" || s != "" {
+		if t, s := d.cardTitler(extractSrc); t != "" || s != "" {
 			if t != "" {
 				title = t
 			}
