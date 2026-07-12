@@ -3165,7 +3165,9 @@ class MiniappWireValueContractTest {
             val actual = encoded.getValue(field.name)
             when (field.expectation) {
                 Expectation.Exact -> assertEquals(field.value, actual, "$name.${field.name} value")
+
                 Expectation.Object -> assertIs<JsonObject>(actual, "$name.${field.name} object shape")
+
                 Expectation.ObjectList -> {
                     val values = actual.jsonArray
                     assertEquals(3, values.size, "$name.${field.name} collection cardinality")

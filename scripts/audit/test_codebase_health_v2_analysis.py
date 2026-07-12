@@ -267,7 +267,6 @@ class WireRecordGeneratedContractTest {
             fixture.track()
             after, _ = testing.evaluate(fixture.root)
 
-        before_effective = _pillar(before, "test-effectiveness").metrics
         after_effective = _pillar(after, "test-effectiveness").metrics
         before_maintainable = _pillar(before, "test-maintainability").metrics
         after_maintainable = _pillar(after, "test-maintainability").metrics

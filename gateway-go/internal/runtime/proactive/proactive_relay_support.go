@@ -8,9 +8,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
+	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
-	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 // Compile-time interface compliance — same notifier satisfies both the

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/usage"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/usage"
 )
 
 // fakeLister is a minimal in-memory session list for tests.
