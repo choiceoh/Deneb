@@ -1,10 +1,100 @@
 package config
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
+
+func TestResolveGatewayRuntimeConfigDefaultsWithoutLoader(t *testing.T) {
+	cfg := DenebConfig{}
+
+	got, err := ResolveGatewayRuntimeConfig(RuntimeConfigParams{
+		Config: &cfg,
+		Port:   18789,
+	})
+	testutil.NoError(t, err)
+
+	want := &GatewayRuntimeConfig{
+		BindHost:          "127.0.0.1",
+		Port:              18789,
+		ControlUIEnabled:  true,
+		ControlUIBasePath: "/",
+		ResolvedAuth:      ResolvedGatewayAuth{Mode: AuthModeToken},
+		AuthMode:          AuthModeToken,
+		TailscaleConfig:   GatewayTailscaleConfig{Mode: TailscaleOff},
+		TailscaleMode:     TailscaleOff,
+		ReloadConfig:      GatewayReloadConfig{Mode: ReloadHybrid},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ResolveGatewayRuntimeConfig() = %#v, want %#v", got, want)
+	}
+}
+
+func TestResolveGatewayRuntimeConfigSourcePrecedence(t *testing.T) {
+	configUIEnabled := false
+	overrideUIEnabled := true
+	configResetOnExit := false
+	overrideResetOnExit := true
+	reloadDebounce := 750
+	cfg := DenebConfig{Gateway: &GatewayConfig{
+		Bind:           BindLAN,
+		CustomBindHost: "10.0.0.10",
+		ControlUI: &GatewayControlUIConfig{
+			Enabled:  &configUIEnabled,
+			BasePath: " dashboard/ ",
+			Root:     " /srv/deneb-ui ",
+		},
+		Tailscale: &GatewayTailscaleConfig{
+			Mode:        TailscaleOff,
+			ResetOnExit: &configResetOnExit,
+		},
+		TrustedProxies: []string{"10.0.0.1"},
+		Reload: &GatewayReloadConfig{
+			Mode:       ReloadHot,
+			DebounceMs: &reloadDebounce,
+		},
+	}}
+	auth := ResolvedGatewayAuth{Mode: AuthModePassword, Password: "test-password"}
+
+	got, err := ResolveGatewayRuntimeConfig(RuntimeConfigParams{
+		Config:           &cfg,
+		Port:             19000,
+		Bind:             BindLoopback,
+		Host:             "127.0.0.2",
+		ControlUIEnabled: &overrideUIEnabled,
+		Auth:             &auth,
+		TailscaleOverride: &GatewayTailscaleConfig{
+			Mode:        TailscaleFunnel,
+			ResetOnExit: &overrideResetOnExit,
+		},
+	})
+	testutil.NoError(t, err)
+
+	want := &GatewayRuntimeConfig{
+		BindHost:          "127.0.0.2",
+		Port:              19000,
+		ControlUIEnabled:  true,
+		ControlUIBasePath: "/dashboard",
+		ControlUIRoot:     "/srv/deneb-ui",
+		ResolvedAuth:      auth,
+		AuthMode:          AuthModePassword,
+		TailscaleConfig: GatewayTailscaleConfig{
+			Mode:        TailscaleFunnel,
+			ResetOnExit: &overrideResetOnExit,
+		},
+		TailscaleMode:  TailscaleFunnel,
+		TrustedProxies: []string{"10.0.0.1"},
+		ReloadConfig: GatewayReloadConfig{
+			Mode:       ReloadHot,
+			DebounceMs: &reloadDebounce,
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ResolveGatewayRuntimeConfig() = %#v, want %#v", got, want)
+	}
+}
 
 func TestResolveGatewayRuntimeConfigDefaults(t *testing.T) {
 	cfg := DenebConfig{}
@@ -90,50 +180,107 @@ func TestResolveGatewayRuntimeConfigBindIPAliases(t *testing.T) {
 	}
 }
 
-func TestResolveGatewayRuntimeConfigNonLoopbackNoAuth(t *testing.T) {
-	cfg := DenebConfig{}
-	applyDefaults(&cfg)
-
-	auth := ResolvedGatewayAuth{Mode: "token"} // No token.
-	_, err := ResolveGatewayRuntimeConfig(RuntimeConfigParams{
-		Config: &cfg,
-		Port:   18789,
-		Bind:   "lan",
-		Auth:   &auth,
-	})
-	if err == nil {
-		t.Error("expected error for non-loopback without auth")
+func TestResolveGatewayRuntimeConfigValidationErrors(t *testing.T) {
+	tests := []struct {
+		name      string
+		params    RuntimeConfigParams
+		wantError string
+	}{
+		{
+			name: "loopback mode rejects a non-loopback host override",
+			params: RuntimeConfigParams{
+				Config: &DenebConfig{}, Port: 18789, Bind: BindLoopback, Host: "0.0.0.0",
+				Auth: &ResolvedGatewayAuth{Mode: AuthModeToken, Token: "test-token"},
+			},
+			wantError: "gateway bind=loopback resolved to non-loopback host 0.0.0.0; refusing fallback to a network bind",
+		},
+		{
+			name: "custom mode requires a configured host",
+			params: RuntimeConfigParams{
+				Config: &DenebConfig{Gateway: &GatewayConfig{Bind: BindCustom}}, Port: 18789,
+			},
+			wantError: "gateway.bind=custom requires gateway.customBindHost",
+		},
+		{
+			name: "custom mode requires IPv4",
+			params: RuntimeConfigParams{
+				Config: &DenebConfig{Gateway: &GatewayConfig{Bind: BindCustom, CustomBindHost: "not-an-ip"}}, Port: 18789,
+			},
+			wantError: "gateway.bind=custom requires a valid IPv4 customBindHost (got not-an-ip)",
+		},
+		{
+			name: "custom mode rejects a host fallback before auth validation",
+			params: RuntimeConfigParams{
+				Config: &DenebConfig{Gateway: &GatewayConfig{Bind: BindCustom, CustomBindHost: "10.0.0.1"}},
+				Port:   18789,
+				Host:   "10.0.0.2",
+				Auth:   &ResolvedGatewayAuth{Mode: AuthModeToken},
+			},
+			wantError: "gateway bind=custom requested 10.0.0.1 but resolved 10.0.0.2; refusing fallback",
+		},
+		{
+			name: "funnel auth is checked before bind and shared-secret constraints",
+			params: RuntimeConfigParams{
+				Config:            &DenebConfig{},
+				Port:              18789,
+				Bind:              BindLAN,
+				Auth:              &ResolvedGatewayAuth{Mode: AuthModeToken},
+				TailscaleOverride: &GatewayTailscaleConfig{Mode: TailscaleFunnel},
+			},
+			wantError: "tailscale funnel requires gateway auth mode=password (set gateway.auth.password or DENEB_GATEWAY_PASSWORD)",
+		},
+		{
+			name: "tailscale bind is checked before shared-secret constraints",
+			params: RuntimeConfigParams{
+				Config:            &DenebConfig{},
+				Port:              18789,
+				Bind:              BindLAN,
+				Auth:              &ResolvedGatewayAuth{Mode: AuthModeToken},
+				TailscaleOverride: &GatewayTailscaleConfig{Mode: TailscaleServe},
+			},
+			wantError: "tailscale serve/funnel requires gateway bind=loopback (127.0.0.1)",
+		},
+		{
+			name: "non-loopback auth is checked before control UI origins",
+			params: RuntimeConfigParams{
+				Config: &DenebConfig{}, Port: 18789, Bind: BindLAN,
+				Auth: &ResolvedGatewayAuth{Mode: AuthModeToken},
+			},
+			wantError: "refusing to bind gateway to 0.0.0.0:18789 without auth (set gateway.auth.token/password, or set DENEB_GATEWAY_TOKEN/DENEB_GATEWAY_PASSWORD)",
+		},
+		{
+			name: "non-loopback control UI requires origins",
+			params: RuntimeConfigParams{
+				Config: &DenebConfig{}, Port: 18789, Bind: BindLAN,
+				Auth: &ResolvedGatewayAuth{Mode: AuthModeToken, Token: "test-token"},
+			},
+			wantError: "non-loopback Control UI requires gateway.controlUi.allowedOrigins (set explicit origins), or set gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback=true",
+		},
+		{
+			name: "trusted proxy auth requires a proxy list",
+			params: RuntimeConfigParams{
+				Config: &DenebConfig{}, Port: 18789,
+				Auth: &ResolvedGatewayAuth{Mode: AuthModeTrustedProxy},
+			},
+			wantError: "gateway auth mode=trusted-proxy requires gateway.trustedProxies to be configured with at least one proxy IP",
+		},
+		{
+			name: "trusted proxy loopback bind requires a loopback proxy",
+			params: RuntimeConfigParams{
+				Config: &DenebConfig{Gateway: &GatewayConfig{TrustedProxies: []string{"10.0.0.1"}}}, Port: 18789,
+				Auth: &ResolvedGatewayAuth{Mode: AuthModeTrustedProxy},
+			},
+			wantError: "gateway auth mode=trusted-proxy with bind=loopback requires gateway.trustedProxies to include 127.0.0.1, ::1, or a loopback CIDR",
+		},
 	}
-}
 
-func TestResolveGatewayRuntimeConfigFunnelRequiresPassword(t *testing.T) {
-	cfg := DenebConfig{}
-	applyDefaults(&cfg)
-
-	auth := ResolvedGatewayAuth{Mode: "token", Token: "test-token"}
-	_, err := ResolveGatewayRuntimeConfig(RuntimeConfigParams{
-		Config:            &cfg,
-		Port:              18789,
-		Auth:              &auth,
-		TailscaleOverride: &GatewayTailscaleConfig{Mode: "funnel"},
-	})
-	if err == nil {
-		t.Error("expected error for funnel without password auth")
-	}
-}
-
-func TestResolveGatewayRuntimeConfigTrustedProxyRequiresProxies(t *testing.T) {
-	cfg := DenebConfig{}
-	applyDefaults(&cfg)
-
-	auth := ResolvedGatewayAuth{Mode: "trusted-proxy"}
-	_, err := ResolveGatewayRuntimeConfig(RuntimeConfigParams{
-		Config: &cfg,
-		Port:   18789,
-		Auth:   &auth,
-	})
-	if err == nil {
-		t.Error("expected error for trusted-proxy without trustedProxies")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ResolveGatewayRuntimeConfig(tt.params)
+			if err == nil || err.Error() != tt.wantError {
+				t.Fatalf("ResolveGatewayRuntimeConfig() error = %v, want %q", err, tt.wantError)
+			}
+		})
 	}
 }
 
@@ -154,25 +301,6 @@ func TestResolveGatewayRuntimeConfigTrustedProxyLoopback(t *testing.T) {
 	testutil.NoError(t, err)
 	if rtCfg.AuthMode != "trusted-proxy" {
 		t.Errorf("got %q, want trusted-proxy", rtCfg.AuthMode)
-	}
-}
-
-func TestResolveGatewayRuntimeConfigTrustedProxyLoopbackMissing(t *testing.T) {
-	cfg := DenebConfig{}
-	applyDefaults(&cfg)
-	cfg.Gateway.TrustedProxies = []string{"10.0.0.1"} // Not loopback.
-
-	auth := ResolvedGatewayAuth{
-		Mode:         "trusted-proxy",
-		TrustedProxy: &GatewayTrustedProxyConfig{UserHeader: "x-remote-user"},
-	}
-	_, err := ResolveGatewayRuntimeConfig(RuntimeConfigParams{
-		Config: &cfg,
-		Port:   18789,
-		Auth:   &auth,
-	})
-	if err == nil {
-		t.Error("expected error for trusted-proxy on loopback without loopback proxy")
 	}
 }
 

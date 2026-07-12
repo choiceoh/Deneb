@@ -39,164 +39,313 @@ type RuntimeConfigParams struct {
 // ResolveGatewayRuntimeConfig validates constraints and produces the final runtime config.
 // This ports the logic from src/gateway/server-runtime-config.ts.
 func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeConfig, error) {
-	cfg := params.Config
-	gw := cfg.Gateway
-	if gw == nil {
-		gw = &GatewayConfig{}
+	sources := selectGatewayRuntimeSources(params)
+	inputs := applyGatewayRuntimeDefaults(sources)
+	decision, err := deriveGatewayRuntimeDecision(inputs)
+	if err != nil {
+		return nil, err
 	}
+	if err := validateGatewayRuntimeDecision(decision); err != nil {
+		return nil, err
+	}
+	return decision.runtimeConfig(), nil
+}
 
-	logger := params.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
+// gatewayRuntimeSources captures where every setting can come from without
+// applying precedence or defaults. Keeping this raw layer makes CLI overrides
+// distinguishable from values already loaded from deneb.json.
+type gatewayRuntimeSources struct {
+	gateway                  *GatewayConfig
+	port                     int
+	bindOverride             string
+	hostOverride             string
+	controlUIEnabledOverride *bool
+	authOverride             *ResolvedGatewayAuth
+	tailscaleOverride        *GatewayTailscaleConfig
+	logger                   *slog.Logger
+}
 
-	// Resolve bind mode and host.
-	bindMode := params.Bind
-	if bindMode == "" {
-		bindMode = gw.Bind
+func selectGatewayRuntimeSources(params RuntimeConfigParams) gatewayRuntimeSources {
+	gateway := params.Config.Gateway
+	if gateway == nil {
+		gateway = &GatewayConfig{}
 	}
-	if bindMode == "" {
-		bindMode = BindLoopback
+	return gatewayRuntimeSources{
+		gateway:                  gateway,
+		port:                     params.Port,
+		bindOverride:             params.Bind,
+		hostOverride:             params.Host,
+		controlUIEnabledOverride: params.ControlUIEnabled,
+		authOverride:             params.Auth,
+		tailscaleOverride:        params.TailscaleOverride,
+		logger:                   params.Logger,
 	}
+}
 
-	bindHost := params.Host
-	if bindHost == "" {
-		var err error
-		bindHost, err = resolveBindHost(bindMode, gw.CustomBindHost, logger)
-		if err != nil {
-			return nil, err
-		}
-	}
+// gatewayRuntimeInputs contains concrete values after override precedence and
+// runtime-owned defaults have been applied, but before any derived decisions.
+type gatewayRuntimeInputs struct {
+	port             int
+	bindMode         string
+	bindHostOverride string
+	customBindHost   string
+	controlUI        *GatewayControlUIConfig
+	controlUIEnabled bool
+	resolvedAuth     ResolvedGatewayAuth
+	tailscaleConfig  GatewayTailscaleConfig
+	trustedProxies   []string
+	reloadConfig     GatewayReloadConfig
+	logger           *slog.Logger
+}
 
-	// Validate loopback constraint.
-	if bindMode == BindLoopback && !isLoopbackHost(bindHost) {
-		return nil, fmt.Errorf(
+func applyGatewayRuntimeDefaults(sources gatewayRuntimeSources) gatewayRuntimeInputs {
+	return gatewayRuntimeInputs{
+		port:             sources.port,
+		bindMode:         selectGatewayBindMode(sources.bindOverride, sources.gateway.Bind),
+		bindHostOverride: sources.hostOverride,
+		customBindHost:   sources.gateway.CustomBindHost,
+		controlUI:        sources.gateway.ControlUI,
+		controlUIEnabled: selectControlUIEnabled(sources.controlUIEnabledOverride, sources.gateway.ControlUI),
+		resolvedAuth:     selectResolvedGatewayAuth(sources.authOverride),
+		tailscaleConfig: selectGatewayTailscaleConfig(
+			sources.gateway.Tailscale,
+			sources.tailscaleOverride,
+		),
+		trustedProxies: sources.gateway.TrustedProxies,
+		reloadConfig:   selectGatewayReloadConfig(sources.gateway.Reload),
+		logger:         selectRuntimeLogger(sources.logger),
+	}
+}
+
+func selectGatewayBindMode(override, configured string) string {
+	if override != "" {
+		return override
+	}
+	if configured != "" {
+		return configured
+	}
+	return BindLoopback
+}
+
+func selectControlUIEnabled(override *bool, controlUI *GatewayControlUIConfig) bool {
+	if override != nil {
+		return *override
+	}
+	if controlUI != nil && controlUI.Enabled != nil {
+		return *controlUI.Enabled
+	}
+	return true
+}
+
+func selectResolvedGatewayAuth(override *ResolvedGatewayAuth) ResolvedGatewayAuth {
+	if override != nil {
+		return *override
+	}
+	return ResolvedGatewayAuth{Mode: AuthModeToken}
+}
+
+func selectGatewayTailscaleConfig(configured, override *GatewayTailscaleConfig) GatewayTailscaleConfig {
+	selected := GatewayTailscaleConfig{Mode: TailscaleOff}
+	if configured != nil {
+		selected = *configured
+	}
+	if override != nil {
+		selected = *mergeTailscaleConfig(&selected, override)
+	}
+	return selected
+}
+
+func selectGatewayReloadConfig(configured *GatewayReloadConfig) GatewayReloadConfig {
+	if configured != nil {
+		return *configured
+	}
+	return GatewayReloadConfig{Mode: ReloadHybrid}
+}
+
+func selectRuntimeLogger(configured *slog.Logger) *slog.Logger {
+	if configured != nil {
+		return configured
+	}
+	return slog.Default()
+}
+
+// gatewayRuntimeDecision stores the derived values together with the minimal
+// source context needed to validate that the decisions are safe.
+type gatewayRuntimeDecision struct {
+	port                       int
+	bindMode                   string
+	bindHost                   string
+	customBindHost             string
+	controlUIEnabled           bool
+	controlUIBasePath          string
+	controlUIRoot              string
+	controlUIAllowedOrigins    []string
+	dangerouslyAllowHostHeader bool
+	resolvedAuth               ResolvedGatewayAuth
+	authMode                   string
+	tailscaleConfig            GatewayTailscaleConfig
+	tailscaleMode              string
+	trustedProxies             []string
+	reloadConfig               GatewayReloadConfig
+}
+
+func deriveGatewayRuntimeDecision(inputs gatewayRuntimeInputs) (gatewayRuntimeDecision, error) {
+	bindHost, err := deriveGatewayBindHost(inputs)
+	if err != nil {
+		return gatewayRuntimeDecision{}, err
+	}
+	return gatewayRuntimeDecision{
+		port:                       inputs.port,
+		bindMode:                   inputs.bindMode,
+		bindHost:                   bindHost,
+		customBindHost:             strings.TrimSpace(inputs.customBindHost),
+		controlUIEnabled:           inputs.controlUIEnabled,
+		controlUIBasePath:          normalizeControlUIBasePath(inputs.controlUI),
+		controlUIRoot:              controlUIRoot(inputs.controlUI),
+		controlUIAllowedOrigins:    getControlUIAllowedOrigins(inputs.controlUI),
+		dangerouslyAllowHostHeader: dangerouslyAllowHostHeaderOriginFallback(inputs.controlUI),
+		resolvedAuth:               inputs.resolvedAuth,
+		authMode:                   inputs.resolvedAuth.Mode,
+		tailscaleConfig:            inputs.tailscaleConfig,
+		tailscaleMode:              effectiveTailscaleMode(inputs.tailscaleConfig.Mode),
+		trustedProxies:             inputs.trustedProxies,
+		reloadConfig:               inputs.reloadConfig,
+	}, nil
+}
+
+func deriveGatewayBindHost(inputs gatewayRuntimeInputs) (string, error) {
+	if inputs.bindHostOverride != "" {
+		return inputs.bindHostOverride, nil
+	}
+	return resolveBindHost(inputs.bindMode, inputs.customBindHost, inputs.logger)
+}
+
+func controlUIRoot(controlUI *GatewayControlUIConfig) string {
+	if controlUI == nil {
+		return ""
+	}
+	return strings.TrimSpace(controlUI.Root)
+}
+
+func dangerouslyAllowHostHeaderOriginFallback(controlUI *GatewayControlUIConfig) bool {
+	if controlUI == nil || controlUI.DangerouslyAllowHostHeaderOriginFallback == nil {
+		return false
+	}
+	return *controlUI.DangerouslyAllowHostHeaderOriginFallback
+}
+
+func effectiveTailscaleMode(mode string) string {
+	if mode == "" {
+		return TailscaleOff
+	}
+	return mode
+}
+
+func validateGatewayRuntimeDecision(decision gatewayRuntimeDecision) error {
+	if err := validateGatewayBindDecision(decision); err != nil {
+		return err
+	}
+	if err := validateGatewayTailscaleDecision(decision); err != nil {
+		return err
+	}
+	if err := validateGatewayNetworkExposure(decision); err != nil {
+		return err
+	}
+	return validateGatewayTrustedProxyDecision(decision)
+}
+
+func validateGatewayBindDecision(decision gatewayRuntimeDecision) error {
+	if decision.bindMode == BindLoopback && !isLoopbackHost(decision.bindHost) {
+		return fmt.Errorf(
 			"gateway bind=loopback resolved to non-loopback host %s; refusing fallback to a network bind",
-			bindHost,
+			decision.bindHost,
 		)
 	}
-
-	// Validate custom bind host.
-	if bindMode == BindCustom {
-		customHost := strings.TrimSpace(gw.CustomBindHost)
-		if customHost == "" {
-			return nil, fmt.Errorf("gateway.bind=custom requires gateway.customBindHost")
-		}
-		if !isValidIPv4(customHost) {
-			return nil, fmt.Errorf("gateway.bind=custom requires a valid IPv4 customBindHost (got %s)", customHost)
-		}
-		if bindHost != customHost {
-			return nil, fmt.Errorf("gateway bind=custom requested %s but resolved %s; refusing fallback", customHost, bindHost)
-		}
+	if decision.bindMode != BindCustom {
+		return nil
 	}
-
-	// Control UI.
-	controlUIEnabled := true
-	if params.ControlUIEnabled != nil {
-		controlUIEnabled = *params.ControlUIEnabled
-	} else if gw.ControlUI != nil && gw.ControlUI.Enabled != nil {
-		controlUIEnabled = *gw.ControlUI.Enabled
+	if decision.customBindHost == "" {
+		return fmt.Errorf("gateway.bind=custom requires gateway.customBindHost")
 	}
-
-	controlUIBasePath := normalizeControlUIBasePath(gw.ControlUI)
-	controlUIRoot := ""
-	if gw.ControlUI != nil && strings.TrimSpace(gw.ControlUI.Root) != "" {
-		controlUIRoot = strings.TrimSpace(gw.ControlUI.Root)
+	if !isValidIPv4(decision.customBindHost) {
+		return fmt.Errorf("gateway.bind=custom requires a valid IPv4 customBindHost (got %s)", decision.customBindHost)
 	}
-
-	// Tailscale.
-	tailscaleCfg := GatewayTailscaleConfig{Mode: TailscaleOff}
-	if gw.Tailscale != nil {
-		tailscaleCfg = *gw.Tailscale
+	if decision.bindHost != decision.customBindHost {
+		return fmt.Errorf(
+			"gateway bind=custom requested %s but resolved %s; refusing fallback",
+			decision.customBindHost,
+			decision.bindHost,
+		)
 	}
-	if params.TailscaleOverride != nil {
-		tailscaleCfg = *mergeTailscaleConfig(&tailscaleCfg, params.TailscaleOverride)
-	}
-	tailscaleMode := tailscaleCfg.Mode
-	if tailscaleMode == "" {
-		tailscaleMode = TailscaleOff
-	}
+	return nil
+}
 
-	// Resolved auth.
-	resolvedAuth := ResolvedGatewayAuth{Mode: AuthModeToken}
-	if params.Auth != nil {
-		resolvedAuth = *params.Auth
-	}
-	authMode := resolvedAuth.Mode
-
-	// ── Validation constraints ──
-
-	// Tailscale funnel requires password auth.
-	if tailscaleMode == TailscaleFunnel && authMode != AuthModePassword {
-		return nil, fmt.Errorf(
+func validateGatewayTailscaleDecision(decision gatewayRuntimeDecision) error {
+	if decision.tailscaleMode == TailscaleFunnel && decision.authMode != AuthModePassword {
+		return fmt.Errorf(
 			"tailscale funnel requires gateway auth mode=password (set gateway.auth.password or DENEB_GATEWAY_PASSWORD)",
 		)
 	}
-
-	// Tailscale serve/funnel requires loopback bind.
-	if tailscaleMode != TailscaleOff && !isLoopbackHost(bindHost) {
-		return nil, fmt.Errorf("tailscale serve/funnel requires gateway bind=loopback (127.0.0.1)")
+	if decision.tailscaleMode != TailscaleOff && !isLoopbackHost(decision.bindHost) {
+		return fmt.Errorf("tailscale serve/funnel requires gateway bind=loopback (127.0.0.1)")
 	}
+	return nil
+}
 
-	// Non-loopback requires auth.
-	if !isLoopbackHost(bindHost) && !resolvedAuth.HasSharedSecret() && authMode != AuthModeTrustedProxy {
-		return nil, fmt.Errorf(
+func validateGatewayNetworkExposure(decision gatewayRuntimeDecision) error {
+	loopback := isLoopbackHost(decision.bindHost)
+	if !loopback && !decision.resolvedAuth.HasSharedSecret() && decision.authMode != AuthModeTrustedProxy {
+		return fmt.Errorf(
 			"refusing to bind gateway to %s:%d without auth (set gateway.auth.token/password, or set DENEB_GATEWAY_TOKEN/DENEB_GATEWAY_PASSWORD)",
-			bindHost, params.Port,
+			decision.bindHost,
+			decision.port,
 		)
 	}
-
-	// Non-loopback Control UI requires allowed origins.
-	allowedOrigins := getControlUIAllowedOrigins(gw.ControlUI)
-	dangerouslyAllowHostHeader := false
-	if gw.ControlUI != nil && gw.ControlUI.DangerouslyAllowHostHeaderOriginFallback != nil {
-		dangerouslyAllowHostHeader = *gw.ControlUI.DangerouslyAllowHostHeaderOriginFallback
-	}
-	if controlUIEnabled && !isLoopbackHost(bindHost) && len(allowedOrigins) == 0 && !dangerouslyAllowHostHeader {
-		return nil, fmt.Errorf(
+	if decision.controlUIEnabled && !loopback && len(decision.controlUIAllowedOrigins) == 0 && !decision.dangerouslyAllowHostHeader {
+		return fmt.Errorf(
 			"non-loopback Control UI requires gateway.controlUi.allowedOrigins (set explicit origins), " +
 				"or set gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback=true",
 		)
 	}
+	return nil
+}
 
-	// Trusted-proxy auth requires trustedProxies.
-	trustedProxies := gw.TrustedProxies
-	if authMode == AuthModeTrustedProxy {
-		if len(trustedProxies) == 0 {
-			return nil, fmt.Errorf(
-				"gateway auth mode=trusted-proxy requires gateway.trustedProxies to be configured with at least one proxy IP",
-			)
-		}
-		if isLoopbackHost(bindHost) {
-			hasLoopback := isTrustedProxyAddress("127.0.0.1", trustedProxies) ||
-				isTrustedProxyAddress("::1", trustedProxies)
-			if !hasLoopback {
-				return nil, fmt.Errorf(
-					"gateway auth mode=trusted-proxy with bind=loopback requires gateway.trustedProxies to include 127.0.0.1, ::1, or a loopback CIDR",
-				)
-			}
-		}
+func validateGatewayTrustedProxyDecision(decision gatewayRuntimeDecision) error {
+	if decision.authMode != AuthModeTrustedProxy {
+		return nil
 	}
-
-	// Reload config (always populated with defaults by loader).
-	reloadCfg := GatewayReloadConfig{Mode: ReloadHybrid}
-	if gw.Reload != nil {
-		reloadCfg = *gw.Reload
+	if len(decision.trustedProxies) == 0 {
+		return fmt.Errorf(
+			"gateway auth mode=trusted-proxy requires gateway.trustedProxies to be configured with at least one proxy IP",
+		)
 	}
+	if !isLoopbackHost(decision.bindHost) {
+		return nil
+	}
+	hasLoopback := isTrustedProxyAddress("127.0.0.1", decision.trustedProxies) ||
+		isTrustedProxyAddress("::1", decision.trustedProxies)
+	if !hasLoopback {
+		return fmt.Errorf(
+			"gateway auth mode=trusted-proxy with bind=loopback requires gateway.trustedProxies to include 127.0.0.1, ::1, or a loopback CIDR",
+		)
+	}
+	return nil
+}
 
+func (decision gatewayRuntimeDecision) runtimeConfig() *GatewayRuntimeConfig {
 	return &GatewayRuntimeConfig{
-		BindHost:          bindHost,
-		Port:              params.Port,
-		ControlUIEnabled:  controlUIEnabled,
-		ControlUIBasePath: controlUIBasePath,
-		ControlUIRoot:     controlUIRoot,
-		ResolvedAuth:      resolvedAuth,
-		AuthMode:          authMode,
-		TailscaleConfig:   tailscaleCfg,
-		TailscaleMode:     tailscaleMode,
-		TrustedProxies:    trustedProxies,
-		ReloadConfig:      reloadCfg,
-	}, nil
+		BindHost:          decision.bindHost,
+		Port:              decision.port,
+		ControlUIEnabled:  decision.controlUIEnabled,
+		ControlUIBasePath: decision.controlUIBasePath,
+		ControlUIRoot:     decision.controlUIRoot,
+		ResolvedAuth:      decision.resolvedAuth,
+		AuthMode:          decision.authMode,
+		TailscaleConfig:   decision.tailscaleConfig,
+		TailscaleMode:     decision.tailscaleMode,
+		TrustedProxies:    decision.trustedProxies,
+		ReloadConfig:      decision.reloadConfig,
+	}
 }
 
 // resolveBindHost maps a bind mode to an IP address.
