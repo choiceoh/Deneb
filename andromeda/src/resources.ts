@@ -150,9 +150,12 @@ export const SKILLS_RPC = {
   delete: "miniapp.skills.delete",
 } as const;
 
-// Recursive self-improvement loop status (read-only, no params).
+// Recursive self-improvement hub RPCs (read-only). status = the 4-layer overview;
+// lifecycle/coding = the L1/L4 drill-down detail folded into the hub.
 export const RSI_RPC = {
   status: "miniapp.rsi.status",
+  lifecycle: "miniapp.skills.lifecycle",
+  coding: "miniapp.self_improvement_coding.list",
 } as const;
 
 export const WORKFEED_RPC = {
