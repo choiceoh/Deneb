@@ -340,6 +340,12 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		fixture.OutcomeText = result.Text
 	}
 	t.recordHeartbeatFixture(fixture)
+	// Post-apply anomaly watch (instruction-surface P2): consecutive failed
+	// heartbeat turns after an auto-applied HEARTBEAT.md restore the backup.
+	// No-op unless an auto-apply marker exists.
+	if t.homeDir != "" {
+		noteHeartbeatTurnOutcome(filepath.Join(t.homeDir, ".deneb", "HEARTBEAT.md"), err == nil, t.logger)
+	}
 
 	if err != nil {
 		return fmt.Errorf("heartbeat: agent turn failed: %w", err)

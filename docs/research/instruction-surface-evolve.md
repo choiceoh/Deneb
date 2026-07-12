@@ -89,6 +89,13 @@ proposals with `surface: propose-only` and they land through reviewed PRs.
 - **P2**: flip `heartbeat-instructions` to `auto-apply` behind an env flag
   (default off), with backup + rollback watch. Operator flips the registry
   tier after observing P1 reports for a while.
+  *Mechanism landed 2026-07-12 (`heartbeat_auto_apply.go`):
+  `MaybeAutoApplyCandidate` runs the P1 shadow gate and, only under
+  `DENEB_HEARTBEAT_AUTO_APPLY=1`, applies an accept-verdict candidate with a
+  `.autoapply.bak` backup; `noteHeartbeatTurnOutcome` (wired into the
+  heartbeat Run) restores the backup after 3 consecutive failed turns and
+  disarms. The declared surface tier stays propose-only — the env flag IS the
+  operator's tier flip, same pattern as the e-process cutover knob.*
 - **P3** (not scheduled): context files, pending the two blockers above.
 
 ## Open questions

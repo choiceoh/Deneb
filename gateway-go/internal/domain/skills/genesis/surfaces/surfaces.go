@@ -83,7 +83,7 @@ func DeclaredEditableSurfaces() []EditableSurface {
 		{
 			Name: "heartbeat-instructions", Tier: SurfaceTierProposeOnly,
 			Patterns: []string{"HEARTBEAT.md"},
-			Note:     "heartbeat turn contract; P1 shadow-replay gate is dry-run only (heartbeat_shadow_replay.go) — auto-apply awaits P2",
+			Note:     "heartbeat turn contract; P2 auto-apply mechanism landed (heartbeat_auto_apply.go: shadow gate + backup + anomaly rollback watch) behind DENEB_HEARTBEAT_AUTO_APPLY=1, default off — the flag is the tier flip, operator-owned",
 		},
 		{
 			Name: "workspace-context", Tier: SurfaceTierProposeOnly,
