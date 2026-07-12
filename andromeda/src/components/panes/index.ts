@@ -18,6 +18,7 @@ import { CronsPane } from "./CronsPane";
 import { FleetPane } from "./FleetPane";
 import { WorkfeedPane } from "./WorkfeedPane";
 import { SkillsPane } from "./SkillsPane";
+import { RsiPane } from "./RsiPane";
 import { TodayPane } from "./TodayPane";
 import { SettingsPane } from "./SettingsPane";
 
@@ -51,6 +52,7 @@ export const PANES: PaneDef[] = [
   { key: "fleet", label: "플릿", shortcut: "l", Component: FleetPane },
   { key: "workfeed", label: "피드", shortcut: "9", Component: WorkfeedPane },
   { key: "skills", label: "스킬", shortcut: "k", Component: SkillsPane },
+  { key: "rsi", label: "자가개선", shortcut: "r", Component: RsiPane },
   // App settings live at the bottom of the rail; ⌘, mirrors the OS settings shortcut.
   { key: "settings", label: "설정", shortcut: ",", Component: SettingsPane },
 ];

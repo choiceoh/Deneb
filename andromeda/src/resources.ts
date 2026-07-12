@@ -150,6 +150,11 @@ export const SKILLS_RPC = {
   delete: "miniapp.skills.delete",
 } as const;
 
+// Recursive self-improvement loop status (read-only, no params).
+export const RSI_RPC = {
+  status: "miniapp.rsi.status",
+} as const;
+
 export const WORKFEED_RPC = {
   ack: "miniapp.workfeed.ack",
   read: "miniapp.workfeed.read",
