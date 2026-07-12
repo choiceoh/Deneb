@@ -591,100 +591,219 @@ func isWordRune(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
 
-func gradeArtifactContext(ctx context.Context, check Check, evidence Evidence) (Status, string, error) {
-	if err := ctx.Err(); err != nil {
-		return StatusInvalid, "artifact grading was canceled", err
-	}
-	if strings.TrimSpace(evidence.ArtifactRoot) == "" {
-		return StatusInvalid, "artifact root is required", nil
-	}
-	rawPath := strings.TrimSpace(check.ArtifactPath)
-	rel := filepath.Clean(rawPath)
-	if rel == "." || rel == "" || rel != rawPath || strings.ContainsRune(rel, '\x00') || filepath.IsAbs(rel) || filepath.VolumeName(rel) != "" || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return StatusInvalid, "artifact path must be a safe relative file path", nil
-	}
-	want := strings.ToLower(strings.TrimSpace(check.ExpectedSHA256))
-	decoded, err := hex.DecodeString(want)
-	if err != nil || len(decoded) != sha256.Size || len(want) != sha256.Size*2 {
-		return StatusInvalid, "expected artifact sha256 must be a full hexadecimal digest", nil
-	}
+type artifactGradeRequest struct {
+	root           string
+	relativePath   string
+	expectedSHA256 string
+	maxBytes       int64
+}
 
-	rootAbs, err := filepath.Abs(evidence.ArtifactRoot)
+type artifactGradeOutcome struct {
+	status Status
+	detail string
+	err    error
+}
+
+func newArtifactGradeOutcome(status Status, detail string) *artifactGradeOutcome {
+	return &artifactGradeOutcome{status: status, detail: detail}
+}
+
+func canceledArtifactGradeOutcome(err error) *artifactGradeOutcome {
+	outcome := newArtifactGradeOutcome(StatusInvalid, "artifact grading was canceled")
+	outcome.err = err
+	return outcome
+}
+
+func (outcome artifactGradeOutcome) result() (Status, string, error) {
+	return outcome.status, outcome.detail, outcome.err
+}
+
+func gradeArtifactContext(ctx context.Context, check Check, evidence Evidence) (Status, string, error) {
+	if outcome := canceledArtifactGrade(ctx); outcome != nil {
+		return outcome.result()
+	}
+	request, outcome := prepareArtifactGradeRequest(check, evidence)
+	if outcome != nil {
+		return outcome.result()
+	}
+	resolvedRoot, outcome := inspectArtifactRoot(request.root)
+	if outcome != nil {
+		return outcome.result()
+	}
+	target, outcome := inspectArtifactTarget(ctx, resolvedRoot, request.relativePath)
+	if outcome != nil {
+		return outcome.result()
+	}
+	if outcome := enforceArtifactSizeLimit(target.info, request.maxBytes); outcome != nil {
+		return outcome.result()
+	}
+	digest, outcome := hashArtifactContext(ctx, target.path, request.maxBytes)
+	if outcome != nil {
+		return outcome.result()
+	}
+	return decideArtifactDigest(digest, request.expectedSHA256).result()
+}
+
+func canceledArtifactGrade(ctx context.Context) *artifactGradeOutcome {
+	if err := ctx.Err(); err != nil {
+		return canceledArtifactGradeOutcome(err)
+	}
+	return nil
+}
+
+func prepareArtifactGradeRequest(check Check, evidence Evidence) (artifactGradeRequest, *artifactGradeOutcome) {
+	if strings.TrimSpace(evidence.ArtifactRoot) == "" {
+		return artifactGradeRequest{}, newArtifactGradeOutcome(StatusInvalid, "artifact root is required")
+	}
+	relativePath, ok := normalizeArtifactRelativePath(check.ArtifactPath)
+	if !ok {
+		return artifactGradeRequest{}, newArtifactGradeOutcome(StatusInvalid, "artifact path must be a safe relative file path")
+	}
+	expectedSHA256, ok := normalizeArtifactDigest(check.ExpectedSHA256)
+	if !ok {
+		return artifactGradeRequest{}, newArtifactGradeOutcome(StatusInvalid, "expected artifact sha256 must be a full hexadecimal digest")
+	}
+	maxBytes := int64(domainbriefcase.MaxArtifactBytesV1)
+	if signed, exists := evidence.ArtifactMaxBytes[filepath.ToSlash(relativePath)]; exists && signed > 0 {
+		maxBytes = signed
+	}
+	return artifactGradeRequest{
+		root:           evidence.ArtifactRoot,
+		relativePath:   relativePath,
+		expectedSHA256: expectedSHA256,
+		maxBytes:       maxBytes,
+	}, nil
+}
+
+func normalizeArtifactRelativePath(path string) (string, bool) {
+	rawPath := strings.TrimSpace(path)
+	relativePath := filepath.Clean(rawPath)
+	if relativePath == "." || relativePath == "" || relativePath != rawPath || strings.ContainsRune(relativePath, '\x00') {
+		return "", false
+	}
+	if filepath.IsAbs(relativePath) || filepath.VolumeName(relativePath) != "" {
+		return "", false
+	}
+	if relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return relativePath, true
+}
+
+func normalizeArtifactDigest(digest string) (string, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(digest))
+	decoded, err := hex.DecodeString(normalized)
+	if err != nil || len(decoded) != sha256.Size || len(normalized) != sha256.Size*2 {
+		return "", false
+	}
+	return normalized, true
+}
+
+func inspectArtifactRoot(root string) (string, *artifactGradeOutcome) {
+	rootAbs, err := filepath.Abs(root)
 	if err != nil {
-		return StatusInvalid, "artifact root could not be resolved", nil
+		return "", newArtifactGradeOutcome(StatusInvalid, "artifact root could not be resolved")
 	}
 	rootInfo, err := os.Lstat(rootAbs)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return StatusFail, "artifact root does not exist", nil
+			return "", newArtifactGradeOutcome(StatusFail, "artifact root does not exist")
 		}
-		return StatusInvalid, "artifact root could not be inspected", nil
+		return "", newArtifactGradeOutcome(StatusInvalid, "artifact root could not be inspected")
 	}
 	if rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
-		return StatusInvalid, "artifact root is not a directory", nil
+		return "", newArtifactGradeOutcome(StatusInvalid, "artifact root is not a directory")
 	}
 	resolvedRoot, err := filepath.EvalSymlinks(rootAbs)
 	if err != nil {
-		return StatusInvalid, "artifact root could not be resolved", nil
+		return "", newArtifactGradeOutcome(StatusInvalid, "artifact root could not be resolved")
 	}
+	return resolvedRoot, nil
+}
 
-	resolvedTarget := resolvedRoot
+type inspectedArtifact struct {
+	path string
+	info os.FileInfo
+}
+
+// inspectArtifactTarget uses Lstat for every component so the grader rejects a
+// symlink instead of following it outside the sealed artifact root.
+func inspectArtifactTarget(ctx context.Context, root, relativePath string) (inspectedArtifact, *artifactGradeOutcome) {
+	targetPath := root
+	parts := strings.Split(relativePath, string(filepath.Separator))
 	var targetInfo os.FileInfo
-	parts := strings.Split(rel, string(filepath.Separator))
-	for i, part := range parts {
-		if err := ctx.Err(); err != nil {
-			return StatusInvalid, "artifact grading was canceled", err
+	for index, part := range parts {
+		if outcome := canceledArtifactGrade(ctx); outcome != nil {
+			return inspectedArtifact{}, outcome
 		}
-		resolvedTarget = filepath.Join(resolvedTarget, part)
-		info, statErr := os.Lstat(resolvedTarget)
-		if statErr != nil {
-			if errors.Is(statErr, os.ErrNotExist) {
-				return StatusFail, "artifact does not exist", nil
-			}
-			return StatusInvalid, "artifact could not be inspected", nil
+		targetPath = filepath.Join(targetPath, part)
+		terminal := index == len(parts)-1
+		info, outcome := inspectArtifactPathComponent(targetPath, terminal)
+		if outcome != nil {
+			return inspectedArtifact{}, outcome
 		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return StatusInvalid, "artifact path contains a symlink", nil
-		}
-		if i < len(parts)-1 && !info.IsDir() {
-			return StatusFail, "artifact path parent is not a directory", nil
-		}
-		if i == len(parts)-1 && !info.Mode().IsRegular() {
-			return StatusFail, "artifact is not a regular file", nil
-		}
-		if i == len(parts)-1 {
+		if terminal {
 			targetInfo = info
 		}
 	}
-	maxBytes := int64(domainbriefcase.MaxArtifactBytesV1)
-	if signed, ok := evidence.ArtifactMaxBytes[filepath.ToSlash(rel)]; ok && signed > 0 {
-		maxBytes = signed
-	}
-	if targetInfo == nil || targetInfo.Size() > maxBytes {
-		return StatusInvalid, "artifact exceeds its signed size limit", nil
-	}
+	return inspectedArtifact{path: targetPath, info: targetInfo}, nil
+}
 
-	f, err := os.Open(resolvedTarget)
+func inspectArtifactPathComponent(path string, terminal bool) (os.FileInfo, *artifactGradeOutcome) {
+	info, err := os.Lstat(path)
 	if err != nil {
-		return StatusInvalid, "artifact could not be opened", nil
-	}
-	defer f.Close()
-	h := sha256.New()
-	limited := &io.LimitedReader{R: f, N: maxBytes + 1}
-	if err := hashReaderContext(ctx, h, limited); err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return StatusInvalid, "artifact grading was canceled", err
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, newArtifactGradeOutcome(StatusFail, "artifact does not exist")
 		}
-		return StatusInvalid, "artifact could not be hashed", nil
+		return nil, newArtifactGradeOutcome(StatusInvalid, "artifact could not be inspected")
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, newArtifactGradeOutcome(StatusInvalid, "artifact path contains a symlink")
+	}
+	if !terminal && !info.IsDir() {
+		return nil, newArtifactGradeOutcome(StatusFail, "artifact path parent is not a directory")
+	}
+	if terminal && !info.Mode().IsRegular() {
+		return nil, newArtifactGradeOutcome(StatusFail, "artifact is not a regular file")
+	}
+	return info, nil
+}
+
+func enforceArtifactSizeLimit(info os.FileInfo, maxBytes int64) *artifactGradeOutcome {
+	if info == nil || info.Size() > maxBytes {
+		return newArtifactGradeOutcome(StatusInvalid, "artifact exceeds its signed size limit")
+	}
+	return nil
+}
+
+func hashArtifactContext(ctx context.Context, path string, maxBytes int64) (string, *artifactGradeOutcome) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", newArtifactGradeOutcome(StatusInvalid, "artifact could not be opened")
+	}
+	defer file.Close()
+
+	// The limited reader rechecks the signed bound while hashing, closing the
+	// gap where a file grows after the preceding size inspection.
+	hash := sha256.New()
+	limited := &io.LimitedReader{R: file, N: maxBytes + 1}
+	if err := hashReaderContext(ctx, hash, limited); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return "", canceledArtifactGradeOutcome(err)
+		}
+		return "", newArtifactGradeOutcome(StatusInvalid, "artifact could not be hashed")
 	}
 	if limited.N <= 0 {
-		return StatusInvalid, "artifact exceeds its signed size limit", nil
+		return "", newArtifactGradeOutcome(StatusInvalid, "artifact exceeds its signed size limit")
 	}
-	got := hex.EncodeToString(h.Sum(nil))
-	if got != want {
-		return StatusFail, "artifact sha256 did not match", nil
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func decideArtifactDigest(actual, expected string) *artifactGradeOutcome {
+	if actual != expected {
+		return newArtifactGradeOutcome(StatusFail, "artifact sha256 did not match")
 	}
-	return StatusPass, "artifact exists and sha256 matched", nil
+	return newArtifactGradeOutcome(StatusPass, "artifact exists and sha256 matched")
 }
 
 func hashReaderContext(ctx context.Context, dst io.Writer, src io.Reader) error {
