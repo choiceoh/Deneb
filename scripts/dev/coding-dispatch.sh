@@ -165,11 +165,26 @@ print(f'''자기교정 큐 후보를 구현하라 (RSI L4 자동 배차, id={r['
 
     log "dispatching $cid → $wt (claude $(basename "$claude_bin"), cap $((spent+1))/$DAILY_CAP today)"
     set +e
+    local started_at rc
+    started_at=$(date +%s)
     ( cd "$wt" && timeout "$SESSION_TIMEOUT" "$claude_bin" -p "$prompt" \
         --permission-mode acceptEdits >>"$LOG_FILE" 2>&1 )
-    local rc=$?
+    rc=$?
     set -e
-    log "dispatch $cid finished (rc=$rc)"
+    local elapsed=$(( $(date +%s) - started_at ))
+    log "dispatch $cid finished (rc=$rc, ${elapsed}s)"
+
+    # Instant failure (<60s, rc!=0) means the session never really started —
+    # binary not logged in ("Not logged in", observed live 2026-07-12), missing
+    # deps, etc. Burning the candidate AND a daily-cap slot on that would starve
+    # the lane silently: release the marker and the worktree so the same
+    # candidate re-dispatches once the environment is fixed.
+    if (( rc != 0 && elapsed < 60 )); then
+        rm -f "$DISPATCH_DIR/$cid.json"
+        git -C "$PROD_DIR" worktree remove --force "$wt" >>"$LOG_FILE" 2>&1 || true
+        log "instant failure — marker released for $cid (environment problem, not the candidate)"
+        exit 0
+    fi
 
     # Worktree cleanup only when the branch merged or session ended clean with
     # no unpushed work; otherwise keep for inspection.
