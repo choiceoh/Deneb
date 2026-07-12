@@ -68,38 +68,17 @@ func (t *SkillWorkoutTask) Run(ctx context.Context) error {
 	if t == nil || t.Tracker == nil || t.Catalog == nil {
 		return nil
 	}
-	logger := t.Logger
-	if logger == nil {
-		logger = slog.Default()
+	logger := t.workoutLogger()
+	replay, executorModel, ok := t.workoutReplay()
+	if !ok {
+		return nil
 	}
-	replay := t.replay
-	executorModel := ""
-	if replay == nil {
-		if t.Engine == nil {
-			return nil
-		}
-		executor, model := t.Engine.executorSnapshot()
-		if executor == nil {
-			return nil // no local replay model wired → lane idles for free
-		}
-		executorModel = model
-		replay = func(ctx context.Context, skillBody string, tc SkillValidationCaseRecord) (skillReplayTrace, error) {
-			return t.Engine.runReplayExecutorWith(ctx, executor, model, skillBody, tc.Replay)
-		}
-	}
-
 	entries := t.Catalog.List()
 	// Fair rotation: least-recently-exercised first (never-exercised leads),
 	// names only as the deterministic tie-break — without this the per-cycle
 	// cap would exercise the same first-N skills forever.
 	lastAt, seenFailures := t.Tracker.WorkoutActivity(evolutionHealthWindow)
-	sort.Slice(entries, func(i, j int) bool {
-		li, lj := lastAt[entries[i].Skill.Name], lastAt[entries[j].Skill.Name]
-		if li != lj {
-			return li < lj
-		}
-		return entries[i].Skill.Name < entries[j].Skill.Name
-	})
+	sortWorkoutEntries(entries, lastAt)
 	cycle := time.Now().UnixMilli()
 
 	var exercised, failures int
@@ -110,108 +89,165 @@ func (t *SkillWorkoutTask) Run(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		name := strings.TrimSpace(entry.Skill.Name)
-		if name == "" || strings.TrimSpace(entry.Skill.FilePath) == "" {
-			continue
+		didExercise, recorded, stop := t.exerciseSkill(
+			ctx, entry, replay, executorModel, cycle, seenFailures, logger,
+		)
+		if stop {
+			return nil
 		}
-		// Mirror the evolver's recency gate (evolutionSuppressed): a skill with
-		// real use OLDER than the evidence window can't be evolved anyway, so
-		// exercising it would stockpile evidence with no consumer. Never-used
-		// skills stay eligible, same exemption as the evolve path.
-		if window := skillEvolutionEvidenceWindow(); window > 0 {
-			if stats, serr := t.Tracker.Stats(name); serr == nil && stats.LastUsed > 0 &&
-				stats.LastUsed < time.Now().Add(-window).UnixMilli() {
-				continue
-			}
+		if didExercise {
+			exercised++
 		}
-		cases, err := t.Tracker.RecentSkillValidationCases(name, defaultSkillValidationCaseLimit)
-		if err != nil || len(cases) == 0 {
-			continue
-		}
-		evaluable := make([]SkillValidationCaseRecord, 0, skillWorkoutMaxCasesPerSkill)
-		for _, tc := range cases {
-			if replayBehaviorEvaluable(tc.Replay) {
-				evaluable = append(evaluable, tc)
-				if len(evaluable) >= skillWorkoutMaxCasesPerSkill {
-					break
-				}
-			}
-		}
-		if len(evaluable) == 0 {
-			continue
-		}
-		content, err := os.ReadFile(entry.Skill.FilePath)
-		if err != nil {
-			logger.Warn("skill-workout: body read failed", "skill", name, "error", err)
-			continue
-		}
-		body := skillBodyOnly(string(content))
-		exercised++
-		skillFailures := 0
-
-		for _, tc := range evaluable {
-			// A defect already evidenced inside the window stays one cluster
-			// member — re-recording it every cycle would inflate support on a
-			// single unfixed failure and drown the sweep's evidence ranking.
-			if seenFailures[name][validationCaseLabel(tc)] {
-				continue
-			}
-			trace, terr := replay(ctx, body, tc)
-			if terr != nil {
-				// Executor trouble is systemic (model down, timeout) — stop the
-				// cycle instead of burning through every skill; next interval
-				// retries. Fail-open, same doctrine as the behavioral gate.
-				logger.Warn("skill-workout: replay executor failed, ending cycle",
-					"skill", name, "error", terr)
-				return nil
-			}
-			score := scoreReplayAgainstTrace(trace, tc)
-			if score.Total == 0 || score.Passed >= score.Total {
-				continue
-			}
-			failures++
-			skillFailures++
-			errMsg := fmt.Sprintf("workout replay failed %d/%d assertions on case %s: %s",
-				score.Total-score.Passed, score.Total, validationCaseLabel(tc), formatValidationFailures(score.Failures))
-			if rerr := t.Tracker.RecordUsage(UsageRecord{
-				SkillName:  name,
-				SessionKey: workoutSessionPrefix + strconv.FormatInt(cycle, 10),
-				Model:      executorModel,
-				Success:    false,
-				ErrorMsg:   genesiscommon.TruncateRunes(errMsg, 500),
-				// Explicit trace: a stable signature per mechanism (instead of
-				// keyword-classifying the assertion text) keeps one skill's
-				// workout failures in one cluster, with cases in the example.
-				FailureTrace: &UsageFailureTrace{
-					Signature:      "terminal=heldout-assertion|mechanism=skill-behavior-drift",
-					TerminalCause:  "held-out replay assertion failure",
-					CausalStatus:   "synthetic workout replay (not real use)",
-					AgentMechanism: "skill body no longer yields the proven tool plan",
-					ErrorMsg:       genesiscommon.TruncateRunes(errMsg, 500),
-				},
-				Source: UsageSourceWorkout,
-			}); rerr != nil {
-				logger.Warn("skill-workout: usage record failed", "skill", name, "error", rerr)
-			}
-		}
-		// Rotation marker: a skill that passed every case leaves no failure
-		// record, so without this its lastAt stays 0 and it sorts first forever —
-		// starving later skills. A success-marker (Source=workout, excluded from
-		// real stats) advances lastAt for every exercised skill.
-		if skillFailures == 0 {
-			if rerr := t.Tracker.RecordUsage(UsageRecord{
-				SkillName:  name,
-				SessionKey: workoutSessionPrefix + strconv.FormatInt(cycle, 10),
-				Model:      executorModel,
-				Success:    true,
-				Source:     UsageSourceWorkout,
-			}); rerr != nil {
-				logger.Warn("skill-workout: rotation marker record failed", "skill", name, "error", rerr)
-			}
-		}
+		failures += recorded
 	}
 	logger.Info("skill-workout: cycle complete", "skillsExercised", exercised, "failuresRecorded", failures)
 	return nil
+}
+
+func (t *SkillWorkoutTask) workoutLogger() *slog.Logger {
+	if t.Logger != nil {
+		return t.Logger
+	}
+	return slog.Default()
+}
+
+func (t *SkillWorkoutTask) workoutReplay() (
+	func(context.Context, string, SkillValidationCaseRecord) (skillReplayTrace, error),
+	string,
+	bool,
+) {
+	if t.replay != nil {
+		return t.replay, "", true
+	}
+	if t.Engine == nil {
+		return nil, "", false
+	}
+	executor, model := t.Engine.executorSnapshot()
+	if executor == nil {
+		return nil, "", false
+	}
+	return func(ctx context.Context, body string, tc SkillValidationCaseRecord) (skillReplayTrace, error) {
+		return t.Engine.runReplayExecutorWith(ctx, executor, model, body, tc.Replay)
+	}, model, true
+}
+
+func sortWorkoutEntries(entries []skills.SkillEntry, lastAt map[string]int64) {
+	sort.Slice(entries, func(i, j int) bool {
+		left, right := lastAt[entries[i].Skill.Name], lastAt[entries[j].Skill.Name]
+		if left != right {
+			return left < right
+		}
+		return entries[i].Skill.Name < entries[j].Skill.Name
+	})
+}
+
+func (t *SkillWorkoutTask) exerciseSkill(
+	ctx context.Context,
+	entry skills.SkillEntry,
+	replay func(context.Context, string, SkillValidationCaseRecord) (skillReplayTrace, error),
+	executorModel string,
+	cycle int64,
+	seenFailures map[string]map[string]bool,
+	logger *slog.Logger,
+) (exercised bool, recordedFailures int, stopCycle bool) {
+	name := strings.TrimSpace(entry.Skill.Name)
+	if name == "" || strings.TrimSpace(entry.Skill.FilePath) == "" {
+		return false, 0, false
+	}
+	cases := t.evaluableWorkoutCases(name)
+	if len(cases) == 0 {
+		return false, 0, false
+	}
+	content, err := os.ReadFile(entry.Skill.FilePath)
+	if err != nil {
+		logger.Warn("skill-workout: body read failed", "skill", name, "error", err)
+		return false, 0, false
+	}
+	body := skillBodyOnly(string(content))
+
+	failures := 0
+	for _, testCase := range cases {
+		if seenFailures[name][validationCaseLabel(testCase)] {
+			continue
+		}
+		trace, replayErr := replay(ctx, body, testCase)
+		if replayErr != nil {
+			logger.Warn("skill-workout: replay executor failed, ending cycle",
+				"skill", name, "error", replayErr)
+			return true, failures, true
+		}
+		if t.recordWorkoutFailure(name, executorModel, cycle, testCase, trace, logger) {
+			failures++
+		}
+	}
+	if failures == 0 {
+		t.recordWorkoutRotation(name, executorModel, cycle, logger)
+	}
+	return true, failures, false
+}
+
+func (t *SkillWorkoutTask) evaluableWorkoutCases(name string) []SkillValidationCaseRecord {
+	if window := skillEvolutionEvidenceWindow(); window > 0 {
+		stats, err := t.Tracker.Stats(name)
+		if err == nil && stats.LastUsed > 0 && stats.LastUsed < time.Now().Add(-window).UnixMilli() {
+			return nil
+		}
+	}
+	cases, err := t.Tracker.RecentSkillValidationCases(name, defaultSkillValidationCaseLimit)
+	if err != nil {
+		return nil
+	}
+	evaluable := make([]SkillValidationCaseRecord, 0, skillWorkoutMaxCasesPerSkill)
+	for _, testCase := range cases {
+		if !replayBehaviorEvaluable(testCase.Replay) {
+			continue
+		}
+		evaluable = append(evaluable, testCase)
+		if len(evaluable) >= skillWorkoutMaxCasesPerSkill {
+			break
+		}
+	}
+	return evaluable
+}
+
+func (t *SkillWorkoutTask) recordWorkoutFailure(
+	name, executorModel string,
+	cycle int64,
+	testCase SkillValidationCaseRecord,
+	trace skillReplayTrace,
+	logger *slog.Logger,
+) bool {
+	score := scoreReplayAgainstTrace(trace, testCase)
+	if score.Total == 0 || score.Passed >= score.Total {
+		return false
+	}
+	errMsg := fmt.Sprintf("workout replay failed %d/%d assertions on case %s: %s",
+		score.Total-score.Passed, score.Total, validationCaseLabel(testCase), formatValidationFailures(score.Failures))
+	trimmedError := genesiscommon.TruncateRunes(errMsg, 500)
+	if err := t.Tracker.RecordUsage(UsageRecord{
+		SkillName: name, SessionKey: workoutSessionPrefix + strconv.FormatInt(cycle, 10),
+		Model: executorModel, Success: false, ErrorMsg: trimmedError,
+		FailureTrace: &UsageFailureTrace{
+			Signature:      "terminal=heldout-assertion|mechanism=skill-behavior-drift",
+			TerminalCause:  "held-out replay assertion failure",
+			CausalStatus:   "synthetic workout replay (not real use)",
+			AgentMechanism: "skill body no longer yields the proven tool plan",
+			ErrorMsg:       trimmedError,
+		},
+		Source: UsageSourceWorkout,
+	}); err != nil {
+		logger.Warn("skill-workout: usage record failed", "skill", name, "error", err)
+	}
+	return true
+}
+
+func (t *SkillWorkoutTask) recordWorkoutRotation(name, executorModel string, cycle int64, logger *slog.Logger) {
+	if err := t.Tracker.RecordUsage(UsageRecord{
+		SkillName: name, SessionKey: workoutSessionPrefix + strconv.FormatInt(cycle, 10),
+		Model: executorModel, Success: true, Source: UsageSourceWorkout,
+	}); err != nil {
+		logger.Warn("skill-workout: rotation marker record failed", "skill", name, "error", err)
+	}
 }
 
 // WorkoutActivity summarizes the lane's recent records so a cycle can rotate

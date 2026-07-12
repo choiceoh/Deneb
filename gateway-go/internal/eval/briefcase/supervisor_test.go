@@ -215,6 +215,44 @@ func TestSupervisorPlanValidationAndDigest(t *testing.T) {
 	}
 }
 
+func TestSupervisorPlanValidationReportsFirstViolationDeterministically(t *testing.T) {
+	valid := signedSupervisorPlan(t, 1, 1, []SupervisorCheckpoint{{
+		Cycle: 1, Checks: []Check{{ID: "answer", Type: CheckContains, Weight: 1, Needle: "ok"}},
+	}})
+	tests := []struct {
+		name string
+		plan SupervisorPlan
+		want string
+	}{
+		{
+			name: "required identity precedes seed",
+			plan: resignSupervisorPlan(t, func(plan SupervisorPlan) SupervisorPlan {
+				plan.Fingerprint.CaseID = ""
+				plan.Fingerprint.Seed = -1
+				return plan
+			}(cloneSupervisorPlan(valid))),
+			want: "invalid briefcase supervisor plan: fingerprint.caseId is required",
+		},
+		{
+			name: "fingerprint digests follow contract order",
+			plan: resignSupervisorPlan(t, func(plan SupervisorPlan) SupervisorPlan {
+				plan.Fingerprint.CasepackSHA256 = "bad"
+				plan.Fingerprint.BuildSHA256 = "also-bad"
+				return plan
+			}(cloneSupervisorPlan(valid))),
+			want: "invalid briefcase supervisor plan: fingerprint.casepackSha256 must be lowercase SHA-256",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewSupervisor(tt.plan)
+			if err == nil || err.Error() != tt.want {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func signedSupervisorPlan(t *testing.T, maxCycles int, threshold float64, checkpoints []SupervisorCheckpoint) SupervisorPlan {
 	t.Helper()
 	plan := SupervisorPlan{

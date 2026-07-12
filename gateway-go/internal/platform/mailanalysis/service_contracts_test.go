@@ -302,6 +302,138 @@ func TestMarkSkippedAnalysesSynthesizesPerItemFailure(t *testing.T) {
 	}
 }
 
+func TestSearchMessagesRetriesTransientFailuresWithoutChangingRequest(t *testing.T) {
+	svc := NewService(Config{Query: "label:ops is:unread", MaxPerCycle: 3}, quietMailLogger())
+	attempts := 0
+	var retryAttempts []int
+	messages, err := svc.searchMessages(
+		context.Background(),
+		func(_ context.Context, query string, maxResults int) ([]gmail.MessageSummary, error) {
+			attempts++
+			if query != "label:ops is:unread" || maxResults != 13 {
+				t.Fatalf("search request changed on attempt %d: query=%q max=%d", attempts, query, maxResults)
+			}
+			if attempts < 3 {
+				return nil, errors.New("temporary search failure")
+			}
+			return []gmail.MessageSummary{{ID: "mail-1"}}, nil
+		},
+		func(attempt int) time.Duration {
+			retryAttempts = append(retryAttempts, attempt)
+			return 0
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 3 || !reflect.DeepEqual(retryAttempts, []int{0, 1}) {
+		t.Fatalf("attempts=%d retryAttempts=%v", attempts, retryAttempts)
+	}
+	if len(messages) != 1 || messages[0].ID != "mail-1" {
+		t.Fatalf("messages = %+v", messages)
+	}
+}
+
+func TestSelectNewMessagesFiltersSeenBeforeApplyingCycleCap(t *testing.T) {
+	svc := NewService(Config{MaxPerCycle: 2}, quietMailLogger())
+	state := &PollState{SeenIDs: []string{"seen"}}
+	messages := []gmail.MessageSummary{
+		{ID: "seen"},
+		{ID: "new-a"},
+		{ID: "new-b"},
+		{ID: "new-c"},
+	}
+
+	got := svc.selectNewMessages(messages, state)
+	want := []gmail.MessageSummary{{ID: "new-a"}, {ID: "new-b"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("selected messages = %+v, want %+v", got, want)
+	}
+}
+
+func TestFetchMessageDetailsTreatsFetchFailureAsTerminal(t *testing.T) {
+	stateDir := t.TempDir()
+	var failed *gmail.MessageDetail
+	svc := NewService(Config{
+		StateDir: stateDir,
+		OnAnalysisFailed: func(msg *gmail.MessageDetail, _ error) {
+			failed = msg
+		},
+	}, quietMailLogger())
+	state := &PollState{}
+	messages := []gmail.MessageSummary{
+		{ID: "available", Subject: "available subject"},
+		{ID: "unreadable", ThreadID: "thread-2", From: "sender", Subject: "broken", Date: "date"},
+	}
+
+	details := svc.fetchMessageDetails(
+		context.Background(),
+		func(_ context.Context, id string) (*gmail.MessageDetail, error) {
+			if id == "unreadable" {
+				return nil, errors.New("body unavailable")
+			}
+			return &gmail.MessageDetail{ID: id, Subject: "available subject"}, nil
+		},
+		messages,
+		state,
+	)
+	if len(details) != 1 || details[0].ID != "available" {
+		t.Fatalf("details = %+v", details)
+	}
+	if !state.hasSeen("unreadable") || state.hasSeen("available") {
+		t.Fatalf("seen ids after fetch = %v", state.SeenIDs)
+	}
+	if failed == nil || failed.ID != "unreadable" || failed.ThreadID != "thread-2" || failed.Subject != "broken" {
+		t.Fatalf("failure callback message = %+v", failed)
+	}
+}
+
+func TestResolvePollAnalysisTotalFailureLeavesFetchedMessagesRetryable(t *testing.T) {
+	wantErr := errors.New("analysis backend unavailable")
+	var failures []string
+	svc := NewService(Config{OnAnalysisFailed: func(msg *gmail.MessageDetail, err error) {
+		if !errors.Is(err, wantErr) {
+			t.Errorf("failure cause = %v, want %v", err, wantErr)
+		}
+		failures = append(failures, msg.ID)
+	}}, quietMailLogger())
+	details := []*gmail.MessageDetail{{ID: "mail-a"}, {ID: "mail-b"}}
+
+	report, proceed := svc.resolvePollAnalysis(details, "discarded", nil, wantErr)
+	if proceed || report != "" {
+		t.Fatalf("total failure resolution = report %q proceed %v", report, proceed)
+	}
+	if !reflect.DeepEqual(failures, []string{"mail-a", "mail-b"}) {
+		t.Fatalf("failure callbacks = %v", failures)
+	}
+}
+
+func TestResolvePollAnalysisPartialFailureMarksOnlySuccessfulItemsSeen(t *testing.T) {
+	var failedIDs []string
+	svc := NewService(Config{OnAnalysisFailed: func(msg *gmail.MessageDetail, err error) {
+		if err == nil || err.Error() != "individual email analysis failed" {
+			t.Errorf("partial failure cause = %v", err)
+		}
+		failedIDs = append(failedIDs, msg.ID)
+	}}, quietMailLogger())
+	details := []*gmail.MessageDetail{{ID: "analyzed"}, {ID: "retry"}}
+	items := []BatchItem{{Msg: details[0], Result: AnalysisResult{Text: "analysis"}}}
+
+	report, proceed := svc.resolvePollAnalysis(details, "", items, errors.New("consolidation failed"))
+	if !proceed || report != "(분석 실패)" {
+		t.Fatalf("partial failure resolution = report %q proceed %v", report, proceed)
+	}
+	if !reflect.DeepEqual(failedIDs, []string{"retry"}) {
+		t.Fatalf("partial failure callbacks = %v", failedIDs)
+	}
+
+	state := &PollState{}
+	markAnalyzedMessagesSeen(state, []gmail.MessageSummary{{ID: "analyzed"}, {ID: "retry"}}, items)
+	if !state.hasSeen("analyzed") || state.hasSeen("retry") {
+		t.Fatalf("partial failure seen ids = %v", state.SeenIDs)
+	}
+}
+
 func TestServiceDiaryLoggingContract(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewService(Config{DiaryDir: dir}, quietMailLogger())

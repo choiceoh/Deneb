@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -114,5 +115,33 @@ func TestComplete_OmitsAuthorizationHeaderWhenAPIKeyEmpty(t *testing.T) {
 	testutil.NoError(t, err)
 	if got != "ok" {
 		t.Fatalf("CompleteOpenAI = %q, want %q", got, "ok")
+	}
+}
+
+func TestConvertMessagesToOpenAI_MixedBlockProjectionContract(t *testing.T) {
+	client := NewClient("http://example.invalid", "")
+	messages := []Message{
+		NewBlockMessage("assistant", []ContentBlock{
+			{Type: "thinking", Thinking: "reasoning"},
+			{Type: "text", Text: "answer"},
+			{Type: "tool_use", ID: "call-1", Name: "read", Input: json.RawMessage(`{"path":"a"}`)},
+			{Type: "image_url", ImageURL: &ImageURL{URL: "https://ignored.example/image.png"}},
+		}),
+		NewBlockMessage("user", []ContentBlock{
+			{Type: "tool_result", ToolUseID: "call-1", Content: "result"},
+			{Type: "text", Text: "follow-up"},
+			{Type: "image_url", ImageURL: &ImageURL{URL: "https://ignored.example/result.png"}},
+		}),
+		NewBlockMessage("user", []ContentBlock{
+			{Type: "text", Text: "inspect"},
+			{Type: "image_url", ImageURL: &ImageURL{URL: "https://example.com/chart.png", Detail: "high"}},
+		}),
+	}
+
+	got, err := json.Marshal(client.convertMessagesToOpenAI(messages, true))
+	testutil.NoError(t, err)
+	want := `[{"role":"assistant","content":"answer","tool_calls":[{"id":"call-1","type":"function","function":{"name":"read","arguments":"{\"path\":\"a\"}"}}],"reasoning_content":"reasoning"},{"role":"tool","content":"result","tool_call_id":"call-1"},{"role":"user","content":"follow-up"},{"role":"user","content":[{"type":"text","text":"inspect"},{"type":"image_url","image_url":{"url":"https://example.com/chart.png","detail":"high"}}]}]`
+	if string(got) != want {
+		t.Fatalf("converted messages = %s\nwant = %s", got, want)
 	}
 }

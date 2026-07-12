@@ -1,30 +1,29 @@
 package modelrole
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
-// TestThinkingOffExtraBody pins the shared raw-call thinking-off contract
+// TestThinkingOffDirective pins the shared raw-call thinking-off policy
 // consumed by the localai hub, the pilot direct path, and the wiki dreamer
 // wiring. The dual-mode case is the load-bearing one: deepseek-v4 keeps
 // Profile.Reasoning=false by design, so a reasoning-first check would send it
 // the Qwen enable_thinking spelling its template ignores.
-func TestThinkingOffExtraBody(t *testing.T) {
-	toggleOf := func(extra map[string]any) map[string]any {
+func TestThinkingOffDirective(t *testing.T) {
+	toggleOf := func(directive *ThinkingOffDirective) map[string]bool {
 		t.Helper()
-		if extra == nil {
-			t.Fatal("extra = nil, want kwargs")
+		if directive == nil {
+			t.Fatal("directive = nil, want template toggle")
 		}
-		ctk, ok := extra["chat_template_kwargs"].(map[string]any)
-		if !ok {
-			t.Fatalf("chat_template_kwargs missing: %v", extra)
-		}
-		return ctk
+		return map[string]bool{directive.TemplateKwarg(): false}
 	}
 
 	t.Run("dsv4 on vLLM-backed providers gets its template toggle", func(t *testing.T) {
 		for _, provider := range []string{"vllm", "wormhole"} {
-			ctk := toggleOf(ThinkingOffExtraBody(provider, "deepseek-v4-flash"))
-			if ctk["thinking"] != false {
-				t.Errorf("%s: thinking = %v, want false", provider, ctk["thinking"])
+			ctk := toggleOf(ThinkingOffDirectiveFor(provider, "deepseek-v4-flash"))
+			if got, ok := ctk["thinking"]; !ok || got {
+				t.Errorf("%s: thinking = %v, present=%v; want false and present", provider, got, ok)
 			}
 			if _, has := ctk["enable_thinking"]; has {
 				t.Errorf("%s: enable_thinking must not be sent to dsv4", provider)
@@ -34,17 +33,17 @@ func TestThinkingOffExtraBody(t *testing.T) {
 
 	t.Run("untoggleable reasoning models get nil (budget for thinking)", func(t *testing.T) {
 		for _, model := range []string{"qwen3.6-35b-a3b", "deepseek-r1", "step3p7"} {
-			if got := ThinkingOffExtraBody("vllm", model); got != nil {
-				t.Errorf("%s: extra = %v, want nil", model, got)
+			if got := ThinkingOffDirectiveFor("vllm", model); got != nil {
+				t.Errorf("%s: directive = %v, want nil", model, got)
 			}
 		}
 	})
 
-	t.Run("non-reasoning models keep the NoThinkingBody kwargs", func(t *testing.T) {
+	t.Run("non-reasoning models keep the enable_thinking directive", func(t *testing.T) {
 		for _, model := range []string{"gemma4", "qwen3.6-35b-instruct"} {
-			ctk := toggleOf(ThinkingOffExtraBody("vllm", model))
-			if ctk["enable_thinking"] != false {
-				t.Errorf("%s: enable_thinking = %v, want false", model, ctk["enable_thinking"])
+			ctk := toggleOf(ThinkingOffDirectiveFor("vllm", model))
+			if got, ok := ctk["enable_thinking"]; !ok || got {
+				t.Errorf("%s: enable_thinking = %v, present=%v; want false and present", model, got, ok)
 			}
 		}
 	})
@@ -53,11 +52,39 @@ func TestThinkingOffExtraBody(t *testing.T) {
 		// chat_template_kwargs is a vLLM serving feature: a strict OpenAI-compat
 		// API can 400 on the unknown field, so off vLLM-backed providers the
 		// three-way now returns nil for non-reasoning models too (the hub's
-		// historical NoThinkingBody used to leak to cloud lightweight configs).
+		// historical shared raw map used to leak to cloud lightweight configs).
 		for _, model := range []string{"deepseek-v4-flash", "gemma4"} {
-			if got := ThinkingOffExtraBody("zai", model); got != nil {
-				t.Errorf("zai/%s: extra = %v, want nil off vLLM-backed providers", model, got)
+			if got := ThinkingOffDirectiveFor("zai", model); got != nil {
+				t.Errorf("zai/%s: directive = %v, want nil off vLLM-backed providers", model, got)
 			}
 		}
 	})
+}
+
+func TestThinkingOffDirectivePreservesWireShape(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		model    string
+		wantJSON string
+	}{
+		{name: "dual mode", model: "deepseek-v4-flash", wantJSON: `{"chat_template_kwargs":{"thinking":false}}`},
+		{name: "non reasoning", model: "gemma4", wantJSON: `{"chat_template_kwargs":{"enable_thinking":false}}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			directive := ThinkingOffDirectiveFor("vllm", test.model)
+			if directive == nil {
+				t.Fatal("directive = nil")
+			}
+			body := map[string]any{
+				"chat_template_kwargs": map[string]bool{directive.TemplateKwarg(): false},
+			}
+			got, err := json.Marshal(body)
+			if err != nil {
+				t.Fatalf("marshal wire body: %v", err)
+			}
+			if string(got) != test.wantJSON {
+				t.Errorf("wire body = %s, want %s", got, test.wantJSON)
+			}
+		})
+	}
 }

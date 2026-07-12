@@ -354,111 +354,163 @@ func (s *Supervisor) publicResult(cycle int, decision SupervisorDecision, score 
 }
 
 func validateSupervisorPlan(plan SupervisorPlan) (float64, error) {
-	if plan.SchemaVersion != SupervisorPlanSchemaVersion {
-		return 0, fmt.Errorf("%w: unsupported schema version %q", ErrInvalidSupervisorPlan, plan.SchemaVersion)
+	if err := validateSupervisorPlanSeal(plan); err != nil {
+		return 0, err
 	}
-	if !lowerSHA256(plan.PlanDigest) {
-		return 0, fmt.Errorf("%w: planDigest must be lowercase SHA-256", ErrInvalidSupervisorPlan)
+	if err := validateSupervisorFingerprint(plan.Fingerprint); err != nil {
+		return 0, err
 	}
-	want, err := SupervisorPlanDigest(plan)
+	threshold, err := validatedSupervisorThreshold(plan.PassThreshold)
 	if err != nil {
 		return 0, err
 	}
+	if err := validateSupervisorPlanShape(plan); err != nil {
+		return 0, err
+	}
+	if err := validateFeedbackDenyTokens(plan.FeedbackDenyTokens); err != nil {
+		return 0, err
+	}
+	if err := validateSupervisorCheckpoints(plan.Checkpoints); err != nil {
+		return 0, err
+	}
+	return threshold, nil
+}
+
+func validateSupervisorPlanSeal(plan SupervisorPlan) error {
+	if plan.SchemaVersion != SupervisorPlanSchemaVersion {
+		return fmt.Errorf("%w: unsupported schema version %q", ErrInvalidSupervisorPlan, plan.SchemaVersion)
+	}
+	if !lowerSHA256(plan.PlanDigest) {
+		return fmt.Errorf("%w: planDigest must be lowercase SHA-256", ErrInvalidSupervisorPlan)
+	}
+	want, err := SupervisorPlanDigest(plan)
+	if err != nil {
+		return err
+	}
 	if plan.PlanDigest != want {
-		return 0, fmt.Errorf("%w: planDigest mismatch", ErrInvalidSupervisorPlan)
+		return fmt.Errorf("%w: planDigest mismatch", ErrInvalidSupervisorPlan)
 	}
-	if strings.TrimSpace(plan.Fingerprint.CaseID) == "" {
-		return 0, fmt.Errorf("%w: fingerprint.caseId is required", ErrInvalidSupervisorPlan)
+	return nil
+}
+
+func validateSupervisorFingerprint(fingerprint SupervisorFingerprint) error {
+	if strings.TrimSpace(fingerprint.CaseID) == "" {
+		return fmt.Errorf("%w: fingerprint.caseId is required", ErrInvalidSupervisorPlan)
 	}
-	if plan.Fingerprint.Seed < 0 {
-		return 0, fmt.Errorf("%w: fingerprint.seed must not be negative", ErrInvalidSupervisorPlan)
+	if fingerprint.Seed < 0 {
+		return fmt.Errorf("%w: fingerprint.seed must not be negative", ErrInvalidSupervisorPlan)
 	}
-	for name, digest := range map[string]string{
-		"casepackSha256":         plan.Fingerprint.CasepackSHA256,
-		"devicePlanSha256":       plan.Fingerprint.DevicePlanSHA256,
-		"devicePlanSourceSha256": plan.Fingerprint.DevicePlanSourceSHA256,
-		"toolSchemaSha256":       plan.Fingerprint.ToolSchemaSHA256,
-		"endpointSha256":         plan.Fingerprint.EndpointSHA256,
-		"buildSha256":            plan.Fingerprint.BuildSHA256,
-		"executionProfileSha256": plan.Fingerprint.ExecutionProfileSHA256,
+	for _, field := range []struct {
+		name   string
+		digest string
+	}{
+		{name: "casepackSha256", digest: fingerprint.CasepackSHA256},
+		{name: "devicePlanSha256", digest: fingerprint.DevicePlanSHA256},
+		{name: "devicePlanSourceSha256", digest: fingerprint.DevicePlanSourceSHA256},
+		{name: "toolSchemaSha256", digest: fingerprint.ToolSchemaSHA256},
+		{name: "endpointSha256", digest: fingerprint.EndpointSHA256},
+		{name: "buildSha256", digest: fingerprint.BuildSHA256},
+		{name: "executionProfileSha256", digest: fingerprint.ExecutionProfileSHA256},
 	} {
-		if digest != "" && !lowerSHA256(digest) {
-			return 0, fmt.Errorf("%w: fingerprint.%s must be lowercase SHA-256", ErrInvalidSupervisorPlan, name)
+		if field.digest != "" && !lowerSHA256(field.digest) {
+			return fmt.Errorf("%w: fingerprint.%s must be lowercase SHA-256", ErrInvalidSupervisorPlan, field.name)
 		}
 	}
-	if arm := plan.Fingerprint.Arm; arm != "" && arm != string(runcontract.ArmRawPrimary) && arm != string(runcontract.ArmMemoryAssisted) {
-		return 0, fmt.Errorf("%w: unsupported fingerprint arm %q", ErrInvalidSupervisorPlan, arm)
+	if arm := fingerprint.Arm; arm != "" && arm != string(runcontract.ArmRawPrimary) && arm != string(runcontract.ArmMemoryAssisted) {
+		return fmt.Errorf("%w: unsupported fingerprint arm %q", ErrInvalidSupervisorPlan, arm)
 	}
-	if mode := plan.Fingerprint.APIMode; mode != "" && mode != "openai" && mode != "anthropic" {
-		return 0, fmt.Errorf("%w: unsupported fingerprint apiMode %q", ErrInvalidSupervisorPlan, mode)
+	if mode := fingerprint.APIMode; mode != "" && mode != "openai" && mode != "anthropic" {
+		return fmt.Errorf("%w: unsupported fingerprint apiMode %q", ErrInvalidSupervisorPlan, mode)
 	}
-	if mode := plan.Fingerprint.RecallMode; mode != "" && mode != "enabled" && mode != "disabled" {
-		return 0, fmt.Errorf("%w: unsupported fingerprint recallMode %q", ErrInvalidSupervisorPlan, mode)
+	if mode := fingerprint.RecallMode; mode != "" && mode != "enabled" && mode != "disabled" {
+		return fmt.Errorf("%w: unsupported fingerprint recallMode %q", ErrInvalidSupervisorPlan, mode)
 	}
-	threshold := plan.PassThreshold
+	return nil
+}
+
+func validatedSupervisorThreshold(threshold float64) (float64, error) {
 	if threshold == 0 {
 		threshold = 1
 	}
 	if threshold <= 0 || threshold > 1 || math.IsNaN(threshold) || math.IsInf(threshold, 0) {
 		return 0, fmt.Errorf("%w: passThreshold must be in (0, 1] or zero for the strict default", ErrInvalidSupervisorPlan)
 	}
+	return threshold, nil
+}
+
+func validateSupervisorPlanShape(plan SupervisorPlan) error {
 	if plan.MaxCycles <= 0 || plan.MaxCycles > MaxSupervisorCycles {
-		return 0, fmt.Errorf("%w: maxCycles must be between 1 and %d", ErrInvalidSupervisorPlan, MaxSupervisorCycles)
+		return fmt.Errorf("%w: maxCycles must be between 1 and %d", ErrInvalidSupervisorPlan, MaxSupervisorCycles)
 	}
 	if len(plan.Checkpoints) != plan.MaxCycles {
-		return 0, fmt.Errorf("%w: checkpoints must cover every cycle", ErrInvalidSupervisorPlan)
+		return fmt.Errorf("%w: checkpoints must cover every cycle", ErrInvalidSupervisorPlan)
 	}
 	if plan.MaxCycles > 1 && len(plan.FeedbackDenyTokens) == 0 {
-		return 0, fmt.Errorf("%w: multi-cycle plans require feedbackDenyTokens", ErrInvalidSupervisorPlan)
+		return fmt.Errorf("%w: multi-cycle plans require feedbackDenyTokens", ErrInvalidSupervisorPlan)
 	}
-	if len(plan.FeedbackDenyTokens) > 256 {
-		return 0, fmt.Errorf("%w: feedbackDenyTokens exceeds 256 entries", ErrInvalidSupervisorPlan)
+	return nil
+}
+
+func validateFeedbackDenyTokens(tokens []string) error {
+	if len(tokens) > 256 {
+		return fmt.Errorf("%w: feedbackDenyTokens exceeds 256 entries", ErrInvalidSupervisorPlan)
 	}
-	seenDenyTokens := make(map[string]struct{}, len(plan.FeedbackDenyTokens))
-	for _, token := range plan.FeedbackDenyTokens {
+	seenDenyTokens := make(map[string]struct{}, len(tokens))
+	for _, token := range tokens {
 		trimmed := strings.TrimSpace(token)
 		if trimmed == "" || len([]rune(trimmed)) > 2_000 {
-			return 0, fmt.Errorf("%w: feedbackDenyTokens must contain 1..2000 runes", ErrInvalidSupervisorPlan)
+			return fmt.Errorf("%w: feedbackDenyTokens must contain 1..2000 runes", ErrInvalidSupervisorPlan)
 		}
 		if _, duplicate := seenDenyTokens[trimmed]; duplicate {
-			return 0, fmt.Errorf("%w: duplicate feedbackDenyToken", ErrInvalidSupervisorPlan)
+			return fmt.Errorf("%w: duplicate feedbackDenyToken", ErrInvalidSupervisorPlan)
 		}
 		seenDenyTokens[trimmed] = struct{}{}
 	}
-	for i, checkpoint := range plan.Checkpoints {
+	return nil
+}
+
+func validateSupervisorCheckpoints(checkpoints []SupervisorCheckpoint) error {
+	for i, checkpoint := range checkpoints {
 		if checkpoint.Cycle != i+1 {
-			return 0, fmt.Errorf("%w: checkpoints must be contiguous from cycle 1", ErrInvalidSupervisorPlan)
+			return fmt.Errorf("%w: checkpoints must be contiguous from cycle 1", ErrInvalidSupervisorPlan)
 		}
-		if len(checkpoint.Checks) == 0 {
-			return 0, fmt.Errorf("%w: cycle %d has no checks", ErrInvalidSupervisorPlan, checkpoint.Cycle)
-		}
-		if len(checkpoint.Checks) > MaxChecksPerPlanV1 {
-			return 0, fmt.Errorf("%w: cycle %d exceeds %d checks", ErrInvalidSupervisorPlan, checkpoint.Cycle, MaxChecksPerPlanV1)
-		}
-		seen := make(map[string]struct{}, len(checkpoint.Checks))
-		weightTotal := float64(0)
-		for _, check := range checkpoint.Checks {
-			id := strings.TrimSpace(check.ID)
-			if id == "" {
-				return 0, fmt.Errorf("%w: cycle %d has a blank check id", ErrInvalidSupervisorPlan, checkpoint.Cycle)
-			}
-			if utf8.RuneCountInString(id) > MaxCheckIDRunesV1 {
-				return 0, fmt.Errorf("%w: cycle %d check id exceeds the v1 length limit", ErrInvalidSupervisorPlan, checkpoint.Cycle)
-			}
-			if _, exists := seen[id]; exists {
-				return 0, fmt.Errorf("%w: cycle %d has duplicate check id %q", ErrInvalidSupervisorPlan, checkpoint.Cycle, id)
-			}
-			seen[id] = struct{}{}
-			if err := validateSupervisorCheck(check); err != nil {
-				return 0, fmt.Errorf("%w: cycle %d check %q: %w", ErrInvalidSupervisorPlan, checkpoint.Cycle, id, err)
-			}
-			weightTotal += check.Weight
-			if math.IsNaN(weightTotal) || math.IsInf(weightTotal, 0) {
-				return 0, fmt.Errorf("%w: cycle %d cumulative check weight exceeds the finite range", ErrInvalidSupervisorPlan, checkpoint.Cycle)
-			}
+		if err := validateSupervisorCheckpoint(checkpoint); err != nil {
+			return err
 		}
 	}
-	return threshold, nil
+	return nil
+}
+
+func validateSupervisorCheckpoint(checkpoint SupervisorCheckpoint) error {
+	if len(checkpoint.Checks) == 0 {
+		return fmt.Errorf("%w: cycle %d has no checks", ErrInvalidSupervisorPlan, checkpoint.Cycle)
+	}
+	if len(checkpoint.Checks) > MaxChecksPerPlanV1 {
+		return fmt.Errorf("%w: cycle %d exceeds %d checks", ErrInvalidSupervisorPlan, checkpoint.Cycle, MaxChecksPerPlanV1)
+	}
+	seen := make(map[string]struct{}, len(checkpoint.Checks))
+	weightTotal := float64(0)
+	for _, check := range checkpoint.Checks {
+		id := strings.TrimSpace(check.ID)
+		if id == "" {
+			return fmt.Errorf("%w: cycle %d has a blank check id", ErrInvalidSupervisorPlan, checkpoint.Cycle)
+		}
+		if utf8.RuneCountInString(id) > MaxCheckIDRunesV1 {
+			return fmt.Errorf("%w: cycle %d check id exceeds the v1 length limit", ErrInvalidSupervisorPlan, checkpoint.Cycle)
+		}
+		if _, exists := seen[id]; exists {
+			return fmt.Errorf("%w: cycle %d has duplicate check id %q", ErrInvalidSupervisorPlan, checkpoint.Cycle, id)
+		}
+		seen[id] = struct{}{}
+		if err := validateSupervisorCheck(check); err != nil {
+			return fmt.Errorf("%w: cycle %d check %q: %w", ErrInvalidSupervisorPlan, checkpoint.Cycle, id, err)
+		}
+		weightTotal += check.Weight
+		if math.IsNaN(weightTotal) || math.IsInf(weightTotal, 0) {
+			return fmt.Errorf("%w: cycle %d cumulative check weight exceeds the finite range", ErrInvalidSupervisorPlan, checkpoint.Cycle)
+		}
+	}
+	return nil
 }
 
 func validateSupervisorCheck(check Check) error {

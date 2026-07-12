@@ -4,13 +4,34 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
+
+type configNudgeCall struct {
+	sessionKey string
+	count      int
+	snapshot   SkillNudgeSnapshot
+}
+
+type configNudger struct {
+	calls []configNudgeCall
+}
+
+func (*configNudger) Enabled() bool { return true }
+
+func (n *configNudger) OnToolCalls(_ context.Context, sessionKey string, count int, snapshot SkillNudgeSnapshot) {
+	n.calls = append(n.calls, configNudgeCall{sessionKey: sessionKey, count: count, snapshot: snapshot})
+}
+
+func (*configNudger) Reset(string) {}
 
 // OnTurnInit is the only ctx-decoration point shared by BOTH run entries:
 // runAgentAsync decorates its own ctx, but the SendSync path (miniapp.chat.send
@@ -91,6 +112,146 @@ func TestBuildAgentConfig_ProductionRetainsEnvironmentControlledParallelPolicy(t
 	if cfg.ParallelSafeTool == nil {
 		t.Fatal("production ParallelSafeTool unexpectedly disabled")
 	}
+}
+
+// This pins the highest-risk assembly seam: deterministic Briefcase policy,
+// session-vs-run override precedence, replayed deferred-tool cache ordering,
+// shared turn context, post-turn observers, and verification-gate exclusion
+// all meet in buildAgentConfig. A refactor may split those responsibilities,
+// but it must not silently reorder or drop any of them.
+func TestBuildAgentConfig_PreservesCombinedPolicyAndHookContracts(t *testing.T) {
+	t.Setenv("DENEB_PARALLEL_TOOLS", "1")
+	t.Setenv("DENEB_REASONING_SANDWICH", "1")
+	t.Setenv("DENEB_VERIFY_GATE", "1")
+
+	registry := NewToolRegistry()
+	registry.RegisterTool(ToolDef{Name: "write", Description: "write"})
+	registry.RegisterTool(ToolDef{Name: "read", Description: "read"})
+	registry.RegisterTool(ToolDef{Name: "wiki", Description: "wiki", Deferred: true})
+	registry.RegisterTool(ToolDef{Name: "notebook", Description: "notebook", Deferred: true})
+
+	interleaved := true
+	cachedSession := &session.Session{
+		ModelConfig: session.ModelConfig{
+			ThinkingLevel:       "high",
+			InterleavedThinking: &interleaved,
+		},
+		AgentConfig: session.AgentConfig{SpawnedBy: "client:main"},
+	}
+	maxTurns, maxTokens, maxToolCallAttempts := 7, 1234, 3
+	params := RunParams{
+		SessionKey:          "client:briefcase:risk",
+		ClientRunID:         "run-risk",
+		Model:               "requested-role",
+		Thinking:            "off",
+		MaxTurns:            &maxTurns,
+		MaxTokens:           &maxTokens,
+		MaxToolCallAttempts: &maxToolCallAttempts,
+		AutoDeliveredOutput: true,
+		ToolDryRun:          true,
+	}
+
+	nudger := &configNudger{}
+	usage := &fakeUsageRecorder{}
+	var heartbeat map[string]any
+	acd := agentConfigDeps{
+		Tools:              registry,
+		MaxTokens:          9999,
+		SkillNudger:        nudger,
+		SkillUsageRecorder: usage,
+		ReplayDeferredTools: []string{
+			"wiki",
+			"notebook",
+		},
+		EmitAgentFn: func(kind, sessionKey, runID string, payload map[string]any) {
+			if kind != "heartbeat" || sessionKey != params.SessionKey || runID != params.ClientRunID {
+				t.Fatalf("unexpected heartbeat envelope: kind=%q session=%q run=%q", kind, sessionKey, runID)
+			}
+			heartbeat = payload
+		},
+	}
+	shutdownCtx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	deps := runDeps{
+		briefcaseMode: true,
+		runLimits:     RunLimits{MaxTurns: 99, Timeout: time.Minute},
+		callbacks:     CallbackSnapshot{shutdownCtx: shutdownCtx},
+	}
+
+	cfg, spawnFlag, execStats := buildAgentConfig(
+		params,
+		deps,
+		cachedSession,
+		json.RawMessage(`"system"`),
+		string(toolpreset.PresetBriefcase),
+		acd,
+		"resolved-model",
+		slog.Default(),
+	)
+
+	if got := toolNames(cfg.Tools); !slices.Equal(got, []string{"read", "write", "wiki", "notebook"}) {
+		t.Fatalf("initial tool order = %v, want sorted eager prefix plus replay-order tail", got)
+	}
+	if got := toolNames(cfg.DynamicToolsProvider()); !slices.Equal(got, []string{"wiki", "notebook"}) {
+		t.Fatalf("dynamic replay order = %v, want first-activation order", got)
+	}
+	if cfg.MaxTurns != maxTurns || cfg.Timeout != time.Minute || cfg.MaxTokens != maxTokens {
+		t.Fatalf("resolved budgets = turns %d timeout %s tokens %d", cfg.MaxTurns, cfg.Timeout, cfg.MaxTokens)
+	}
+	maxToolCallAttempts = 99
+	if cfg.MaxToolCallAttempts == nil || *cfg.MaxToolCallAttempts != 3 {
+		t.Fatalf("MaxToolCallAttempts was not copied: %v", cfg.MaxToolCallAttempts)
+	}
+	if cfg.Thinking == nil || cfg.Thinking.Type != "disabled" || cfg.Thinking.Interleaved {
+		t.Fatalf("per-run thinking=off must beat the interleaved session default: %+v", cfg.Thinking)
+	}
+	if cfg.ThinkingModulator != nil || cfg.FinalizeGate != nil {
+		t.Fatal("Briefcase must exclude ambient reasoning and verification policies")
+	}
+	productionCfg, _, _ := buildAgentConfig(
+		RunParams{}, runDeps{}, cachedSession, nil, "", agentConfigDeps{MaxTokens: 65536}, "resolved-model", slog.Default(),
+	)
+	if productionCfg.ThinkingModulator == nil || productionCfg.FinalizeGate == nil {
+		t.Fatal("production must retain enabled reasoning and verification policies")
+	}
+	if cfg.ToolLoopDetector != nil || cfg.ParallelSafeTool != nil || !cfg.RequireExplicitStopReason || !cfg.RequireStrictStopShape {
+		t.Fatal("Briefcase deterministic policy was not applied completely")
+	}
+
+	ctx := cfg.OnTurnInit(context.Background())
+	if toolctx.SessionKeyFromContext(ctx) != params.SessionKey ||
+		toolctx.ToolPresetFromContext(ctx) != string(toolpreset.PresetBriefcase) ||
+		!toolctx.AutoDeliveryFromContext(ctx) || !toolctx.ToolDryRunFromContext(ctx) {
+		t.Fatal("turn context lost run identity or delivery/dry-run policy")
+	}
+	if toolctx.SpawnFlagFromContext(ctx) != spawnFlag || toolctx.ToolExecStatsFromContext(ctx) != execStats {
+		t.Fatal("turn context did not retain the returned run-scoped state")
+	}
+	if verifyGateFromContext(ctx) == nil {
+		t.Fatal("turn context must retain verification bookkeeping even when Briefcase disables finish gating")
+	}
+
+	cfg.OnTurn(4, 321)
+	if heartbeat["turn"] != 4 || heartbeat["tokens"] != 321 {
+		t.Fatalf("heartbeat payload = %+v", heartbeat)
+	}
+	toolctx.SkillConsultLogFromContext(ctx).Add("risk-skill")
+	cfg.OnToolTurn(4, []agent.ToolActivity{{Name: "read"}})
+	if len(usage.calls) != 1 || usage.calls[0].skill != "risk-skill" || usage.calls[0].model != "resolved-model" {
+		t.Fatalf("skill usage hook calls = %+v", usage.calls)
+	}
+	if len(nudger.calls) != 1 || nudger.calls[0].sessionKey != params.SessionKey || nudger.calls[0].count != 1 ||
+		nudger.calls[0].snapshot.Model != params.Model || nudger.calls[0].snapshot.Turns != 4 {
+		t.Fatalf("skill nudger hook calls = %+v", nudger.calls)
+	}
+}
+
+func toolNames(tools []llm.Tool) []string {
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		names = append(names, tool.Name)
+	}
+	return names
 }
 
 // The reasoning sandwich boosts BOTH ends — turn 0 (planning) and the

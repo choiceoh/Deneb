@@ -289,97 +289,162 @@ func runCase(args []string, stdout, stderr io.Writer) (returnErr error) {
 	return nil
 }
 
-func runClosedLoop(args []string, stdout, stderr io.Writer) (returnErr error) {
+type closedLoopOptions struct {
+	caseDir            string
+	baseURL            string
+	model              string
+	apiKeyEnv          string
+	apiMode            string
+	allowRemote        bool
+	keepRoot           bool
+	output             string
+	artifactDir        string
+	supervisorPlanPath string
+	userPlanPath       string
+	devicePlanPath     string
+	arm                string
+	skipRecall         bool
+}
+
+func parseClosedLoopOptions(args []string, stderr io.Writer) (closedLoopOptions, error) {
+	var options closedLoopOptions
 	fs := flag.NewFlagSet("loop", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	caseDir := fs.String("case", "", "casepack directory")
-	baseURL := fs.String("base-url", os.Getenv("DENEB_BRIEFCASE_MODEL_BASE_URL"), "OpenAI/Anthropic compatible executor model base URL")
-	model := fs.String("model", os.Getenv("DENEB_BRIEFCASE_MODEL"), "executor model ID")
-	apiKeyEnv := fs.String("api-key-env", "DENEB_BRIEFCASE_MODEL_API_KEY", "environment variable containing the executor model API key")
-	apiMode := fs.String("api-mode", llm.APIModeOpenAI, "openai or anthropic")
-	allowRemote := fs.Bool("allow-remote-model", false, "allow Portable case data to reach a non-loopback model endpoint")
-	keepRoot := fs.Bool("keep-run-root", false, "retain plaintext run root for local debugging")
-	output := fs.String("output", "", "write closed-loop JSON to this file instead of stdout")
-	artifactDir := fs.String("artifact-dir", "", "durable export directory for current/best signed artifacts")
-	supervisorPlanPath := fs.String("supervisor-plan", "", "sealed checkpoint supervisor plan JSON")
-	userPlanPath := fs.String("user-plan", "", "sealed scripted user-simulator plan JSON")
-	devicePlan := fs.String("device-plan", "", "signed Device Twin plan JSON (auto-loaded from the casepack when declared)")
-	arm := fs.String("arm", string(runtimebriefcase.ArmMemoryAssisted), "benchmark arm: memory-assisted or raw-primary")
-	skipRecall := fs.Bool("skip-recall", false, "disable durable-memory recall preflight (raw-primary does this automatically)")
+	fs.StringVar(&options.caseDir, "case", "", "casepack directory")
+	fs.StringVar(&options.baseURL, "base-url", os.Getenv("DENEB_BRIEFCASE_MODEL_BASE_URL"), "OpenAI/Anthropic compatible executor model base URL")
+	fs.StringVar(&options.model, "model", os.Getenv("DENEB_BRIEFCASE_MODEL"), "executor model ID")
+	fs.StringVar(&options.apiKeyEnv, "api-key-env", "DENEB_BRIEFCASE_MODEL_API_KEY", "environment variable containing the executor model API key")
+	fs.StringVar(&options.apiMode, "api-mode", llm.APIModeOpenAI, "openai or anthropic")
+	fs.BoolVar(&options.allowRemote, "allow-remote-model", false, "allow Portable case data to reach a non-loopback model endpoint")
+	fs.BoolVar(&options.keepRoot, "keep-run-root", false, "retain plaintext run root for local debugging")
+	fs.StringVar(&options.output, "output", "", "write closed-loop JSON to this file instead of stdout")
+	fs.StringVar(&options.artifactDir, "artifact-dir", "", "durable export directory for current/best signed artifacts")
+	fs.StringVar(&options.supervisorPlanPath, "supervisor-plan", "", "sealed checkpoint supervisor plan JSON")
+	fs.StringVar(&options.userPlanPath, "user-plan", "", "sealed scripted user-simulator plan JSON")
+	fs.StringVar(&options.devicePlanPath, "device-plan", "", "signed Device Twin plan JSON (auto-loaded from the casepack when declared)")
+	fs.StringVar(&options.arm, "arm", string(runtimebriefcase.ArmMemoryAssisted), "benchmark arm: memory-assisted or raw-primary")
+	fs.BoolVar(&options.skipRecall, "skip-recall", false, "disable durable-memory recall preflight (raw-primary does this automatically)")
 	if err := fs.Parse(args); err != nil {
-		return err
+		return closedLoopOptions{}, err
 	}
-	pack, err := casepack.LoadDir(*caseDir)
-	if err != nil {
-		return err
-	}
-	if err := authorizeModelEndpoint(*baseURL, pack.Manifest.PrivacyMode, *allowRemote); err != nil {
-		return err
-	}
-	if strings.TrimSpace(*model) == "" {
-		return errors.New("--model is required")
-	}
-	mode := strings.ToLower(strings.TrimSpace(*apiMode))
-	if mode != llm.APIModeOpenAI && mode != llm.APIModeAnthropic {
-		return fmt.Errorf("--api-mode must be %q or %q", llm.APIModeOpenAI, llm.APIModeAnthropic)
-	}
+	return options, nil
+}
 
-	supervisorData, supervisorSourceDigest, err := readSealedSource(pack, *supervisorPlanPath, supervisorPlanSourceRef)
+func validateClosedLoopModel(pack *casepack.Pack, options closedLoopOptions) (string, error) {
+	if err := authorizeModelEndpoint(options.baseURL, pack.Manifest.PrivacyMode, options.allowRemote); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(options.model) == "" {
+		return "", errors.New("--model is required")
+	}
+	mode := strings.ToLower(strings.TrimSpace(options.apiMode))
+	if mode != llm.APIModeOpenAI && mode != llm.APIModeAnthropic {
+		return "", fmt.Errorf("--api-mode must be %q or %q", llm.APIModeOpenAI, llm.APIModeAnthropic)
+	}
+	return mode, nil
+}
+
+type closedLoopPlans struct {
+	supervisorData         []byte
+	supervisorSourceDigest string
+	userData               []byte
+	userSourceDigest       string
+}
+
+func loadClosedLoopPlans(pack *casepack.Pack, options closedLoopOptions) (closedLoopPlans, error) {
+	supervisorData, supervisorSourceDigest, err := readSealedSource(pack, options.supervisorPlanPath, supervisorPlanSourceRef)
 	if err != nil {
-		return fmt.Errorf("supervisor plan: %w", err)
+		return closedLoopPlans{}, fmt.Errorf("supervisor plan: %w", err)
 	}
 	var supervisorPlan evalbriefcase.SupervisorPlan
 	if err := decodeJSONBytes(supervisorData, &supervisorPlan); err != nil {
-		return fmt.Errorf("supervisor plan: %w", err)
+		return closedLoopPlans{}, fmt.Errorf("supervisor plan: %w", err)
 	}
 
-	var userData []byte
-	var userPlan runtimebriefcase.UserSimulatorPlan
-	userSourceDigest := ""
-	if pack.Manifest.RunPolicy.MaxFollowUps > 0 {
-		var digest string
-		var readErr error
-		userData, digest, readErr = readSealedSource(pack, *userPlanPath, userSimulatorPlanSourceRef)
-		if readErr != nil {
-			return fmt.Errorf("user simulator plan: %w", readErr)
-		}
-		if err := decodeJSONBytes(userData, &userPlan); err != nil {
-			return fmt.Errorf("user simulator plan: %w", err)
-		}
-		if userPlan.CaseID != pack.Manifest.CaseID {
-			return errors.New("user simulator plan caseId does not match the signed case")
-		}
-		if _, err := runtimebriefcase.NewScriptedUserSimulator(userPlan, pack.Manifest.RunPolicy.MaxFollowUps); err != nil {
-			return err
-		}
-		userSourceDigest = digest
-	} else if strings.TrimSpace(*userPlanPath) != "" {
-		return errors.New("--user-plan is forbidden when the signed maxFollowUps is zero")
+	userData, userSourceDigest, userPlan, err := loadClosedLoopUserPlan(pack, options.userPlanPath)
+	if err != nil {
+		return closedLoopPlans{}, err
 	}
 	if pack.Manifest.RunPolicy.MaxFollowUps > 0 {
-		hidden, err := closedloop.HiddenFeedbackInputs(pack, supervisorPlan, userSourceDigest, supervisorSourceDigest)
-		if err != nil {
-			return fmt.Errorf("feedback firewall inputs: %w", err)
+		if err := validateClosedLoopFeedback(pack, supervisorPlan, userPlan, userSourceDigest, supervisorSourceDigest); err != nil {
+			return closedLoopPlans{}, err
 		}
-		firewall, err := runtimebriefcase.NewFeedbackFirewall(hidden, runtimebriefcase.FeedbackLimits{})
-		if err != nil {
-			return fmt.Errorf("feedback firewall: %w", err)
+	}
+	return closedLoopPlans{
+		supervisorData:         supervisorData,
+		supervisorSourceDigest: supervisorSourceDigest,
+		userData:               userData,
+		userSourceDigest:       userSourceDigest,
+	}, nil
+}
+
+func loadClosedLoopUserPlan(pack *casepack.Pack, path string) ([]byte, string, runtimebriefcase.UserSimulatorPlan, error) {
+	if pack.Manifest.RunPolicy.MaxFollowUps == 0 {
+		if strings.TrimSpace(path) != "" {
+			return nil, "", runtimebriefcase.UserSimulatorPlan{}, errors.New("--user-plan is forbidden when the signed maxFollowUps is zero")
 		}
-		// Reject privileged feedback before the executor spends a token. The
-		// runtime repeats this check at the actual simulator boundary.
-		for _, followUp := range userPlan.FollowUps {
-			if _, err := firewall.SanitizeFollowUp(followUp.Message); err != nil {
-				return fmt.Errorf("user simulator plan feedback: %w", err)
-			}
+		return nil, "", runtimebriefcase.UserSimulatorPlan{}, nil
+	}
+	data, digest, err := readSealedSource(pack, path, userSimulatorPlanSourceRef)
+	if err != nil {
+		return nil, "", runtimebriefcase.UserSimulatorPlan{}, fmt.Errorf("user simulator plan: %w", err)
+	}
+	var userPlan runtimebriefcase.UserSimulatorPlan
+	if err := decodeJSONBytes(data, &userPlan); err != nil {
+		return nil, "", runtimebriefcase.UserSimulatorPlan{}, fmt.Errorf("user simulator plan: %w", err)
+	}
+	if userPlan.CaseID != pack.Manifest.CaseID {
+		return nil, "", runtimebriefcase.UserSimulatorPlan{}, errors.New("user simulator plan caseId does not match the signed case")
+	}
+	if _, err := runtimebriefcase.NewScriptedUserSimulator(userPlan, pack.Manifest.RunPolicy.MaxFollowUps); err != nil {
+		return nil, "", runtimebriefcase.UserSimulatorPlan{}, err
+	}
+	return data, digest, userPlan, nil
+}
+
+func validateClosedLoopFeedback(pack *casepack.Pack, supervisorPlan evalbriefcase.SupervisorPlan, userPlan runtimebriefcase.UserSimulatorPlan, userSourceDigest, supervisorSourceDigest string) error {
+	hidden, err := closedloop.HiddenFeedbackInputs(pack, supervisorPlan, userSourceDigest, supervisorSourceDigest)
+	if err != nil {
+		return fmt.Errorf("feedback firewall inputs: %w", err)
+	}
+	firewall, err := runtimebriefcase.NewFeedbackFirewall(hidden, runtimebriefcase.FeedbackLimits{})
+	if err != nil {
+		return fmt.Errorf("feedback firewall: %w", err)
+	}
+	// Reject privileged feedback before the executor spends a token. The
+	// runtime repeats this check at the actual simulator boundary.
+	for _, followUp := range userPlan.FollowUps {
+		if _, err := firewall.SanitizeFollowUp(followUp.Message); err != nil {
+			return fmt.Errorf("user simulator plan feedback: %w", err)
 		}
+	}
+	return nil
+}
+
+func runClosedLoop(args []string, stdout, stderr io.Writer) (returnErr error) {
+	options, err := parseClosedLoopOptions(args, stderr)
+	if err != nil {
+		return err
+	}
+	pack, err := casepack.LoadDir(options.caseDir)
+	if err != nil {
+		return err
+	}
+	mode, err := validateClosedLoopModel(pack, options)
+	if err != nil {
+		return err
+	}
+	plans, err := loadClosedLoopPlans(pack, options)
+	if err != nil {
+		return err
 	}
 
 	key := ""
-	if name := strings.TrimSpace(*apiKeyEnv); name != "" {
+	if name := strings.TrimSpace(options.apiKeyEnv); name != "" {
 		key = os.Getenv(name)
 	}
-	client := llm.NewClient(*baseURL, key, llm.WithAPIMode(mode))
-	devicePlanSource, devicePlanDigest, err := loadDevicePlanSource(pack, *devicePlan)
+	client := llm.NewClient(options.baseURL, key, llm.WithAPIMode(mode))
+	devicePlanSource, devicePlanDigest, err := loadDevicePlanSource(pack, options.devicePlanPath)
 	if err != nil {
 		return err
 	}
@@ -396,10 +461,10 @@ func runClosedLoop(args []string, stdout, stderr io.Writer) (returnErr error) {
 		}
 	}()
 	harness, err := runtimebriefcase.NewChatHarness(runtimebriefcase.ChatHarnessConfig{
-		Pack: pack, Root: runRoot, Client: client, Model: *model,
+		Pack: pack, Root: runRoot, Client: client, Model: options.model,
 		DevicePlanSource: devicePlanSource, DevicePlanSourceSHA256: devicePlanDigest,
-		SkipRecall: *skipRecall,
-		Arm:        runtimebriefcase.Arm(strings.TrimSpace(*arm)),
+		SkipRecall: options.skipRecall,
+		Arm:        runtimebriefcase.Arm(strings.TrimSpace(options.arm)),
 	})
 	if err != nil {
 		return err
@@ -411,15 +476,15 @@ func runClosedLoop(args []string, stdout, stderr io.Writer) (returnErr error) {
 	}()
 	runner, err := closedloop.New(closedloop.Config{
 		Pack: pack, Executor: harness,
-		SupervisorPlanSource:          supervisorData,
-		SupervisorPlanSourceSHA256:    supervisorSourceDigest,
-		UserSimulatorPlanSource:       userData,
-		UserSimulatorPlanSourceSHA256: userSourceDigest,
+		SupervisorPlanSource:          plans.supervisorData,
+		SupervisorPlanSourceSHA256:    plans.supervisorSourceDigest,
+		UserSimulatorPlanSource:       plans.userData,
+		UserSimulatorPlanSourceSHA256: plans.userSourceDigest,
 	})
 	if err != nil {
 		return err
 	}
-	if *keepRoot {
+	if options.keepRoot {
 		paths, pathErr := runRoot.Paths()
 		if pathErr != nil {
 			return pathErr
@@ -428,21 +493,25 @@ func runClosedLoop(args []string, stdout, stderr io.Writer) (returnErr error) {
 		fmt.Fprintln(stderr, "retained run root:", paths.Root)
 	}
 	result, loopErr := runner.Run(context.Background())
+	return finishClosedLoop(pack, runRoot, &cleanup, result, loopErr, options, stdout, stderr)
+}
+
+func finishClosedLoop(pack *casepack.Pack, runRoot *runtimebriefcase.RunRoot, cleanup *bool, result *closedloop.Result, loopErr error, options closedLoopOptions, stdout, stderr io.Writer) error {
 	if result != nil {
-		if err := exportLoopArtifacts(context.Background(), pack, result, *output, *artifactDir); err != nil {
+		if err := exportLoopArtifacts(context.Background(), pack, result, options.output, options.artifactDir); err != nil {
 			combined := errors.Join(loopErr, err)
-			if retainErr := retainFailedRunRoot(runRoot, &cleanup, stderr); retainErr != nil {
+			if retainErr := retainFailedRunRoot(runRoot, cleanup, stderr); retainErr != nil {
 				combined = errors.Join(combined, retainErr)
 			}
-			if writeErr := writeJSON(stdout, *output, partialLoopOutput{
+			if writeErr := writeJSON(stdout, options.output, partialLoopOutput{
 				SchemaVersion: "deneb-briefcase-loop-partial/v1", Complete: false, Error: combined.Error(), Result: result,
 			}); writeErr != nil {
 				combined = errors.Join(combined, writeErr)
 			}
 			return combined
 		}
-		makeLoopArtifactRootsPortable(*output, result)
-		if err := writeJSON(stdout, *output, result); err != nil {
+		makeLoopArtifactRootsPortable(options.output, result)
+		if err := writeJSON(stdout, options.output, result); err != nil {
 			return errors.Join(loopErr, err)
 		}
 	}

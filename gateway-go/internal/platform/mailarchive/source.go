@@ -74,25 +74,38 @@ func New(cfg Config) *Source {
 // Message-ID. Best-effort: a connection/auth failure returns an error and the
 // caller proceeds without thread context.
 func (s *Source) RelatedMessages(ctx context.Context, msg *gmail.MessageDetail) ([]*gmail.MessageDetail, error) {
-	c, err := dialIMAP(ctx, s.cfg.Addr, s.cfg.Timeout)
+	c, closeSession, err := s.openArchiveSession(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer c.close()
-	if err := c.login(s.cfg.User, s.cfg.Pass); err != nil {
-		return nil, err
-	}
-	defer c.logout()
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			c.close()
-		case <-done:
-		}
-	}()
-	defer close(done)
+	defer closeSession()
 
+	return s.collectRelatedMessages(ctx, c, msg), nil
+}
+
+// openArchiveSession owns the IMAP connection lifecycle for a related-message
+// lookup. Closing the socket interrupts an in-flight IMAP command when the
+// caller cancels its context; the returned cleanup still attempts LOGOUT before
+// finally closing the connection.
+func (s *Source) openArchiveSession(ctx context.Context) (*imapConn, func(), error) {
+	c, err := dialIMAP(ctx, s.cfg.Addr, s.cfg.Timeout)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := c.login(s.cfg.User, s.cfg.Pass); err != nil {
+		c.close()
+		return nil, nil, err
+	}
+	stopCancellationClose := context.AfterFunc(ctx, c.close)
+	closeSession := func() {
+		stopCancellationClose()
+		c.logout()
+		c.close()
+	}
+	return c, closeSession, nil
+}
+
+func (s *Source) collectRelatedMessages(ctx context.Context, c *imapConn, msg *gmail.MessageDetail) []*gmail.MessageDetail {
 	selfID := normalizeMsgID(msg.MessageIDHeader)
 	sender := extractAddr(msg.From)
 	// Date-header window (SENTSINCE), not INTERNALDATE — same skew as the
@@ -101,72 +114,116 @@ func (s *Source) RelatedMessages(ctx context.Context, msg *gmail.MessageDetail) 
 	sinceCriteria := archiveSentSinceCriteria(time.Now().Add(-s.senderWindow))
 
 	limit := s.maxThread + s.maxSender
-	seen := map[string]bool{}
-	var out []*gmail.MessageDetail
+	collector := newRelatedMessageCollector(msg, selfID, limit)
 
 	for _, mbox := range s.cfg.Mailboxes {
-		if ctx.Err() != nil || len(out) >= limit {
+		if ctx.Err() != nil || collector.full() {
 			break
 		}
 		if err := c.examine(mbox); err != nil {
 			continue // mailbox may not exist on this account; skip
 		}
+		uidGroups := s.findRelatedUIDGroups(ctx, c, msg.References, sender, sinceCriteria)
+		collector.fetchAndAppend(ctx, c, uidGroups)
+	}
+	return collector.messages
+}
 
-		var threadUIDs []string
-		// 1) Thread ancestors: one search per referenced Message-ID.
-		for _, ref := range capFirstStrings(msg.References, s.maxReferences) {
-			if ctx.Err() != nil {
-				break
-			}
-			found, serr := c.uidSearch(fmt.Sprintf(`HEADER "Message-ID" %s`, quote(ref)))
-			if serr == nil {
-				threadUIDs = append(threadUIDs, found...)
-			}
-		}
-		// 2) Recent history from the same sender.
-		var senderUIDs []string
-		if sender != "" && ctx.Err() == nil {
-			found, serr := c.uidSearch(fmt.Sprintf(`FROM %s %s`, quote(sender), sinceCriteria))
-			if serr == nil {
-				senderUIDs = append(senderUIDs, found...)
-			}
-		}
+func (s *Source) findRelatedUIDGroups(
+	ctx context.Context,
+	c *imapConn,
+	references []string,
+	sender string,
+	sinceCriteria string,
+) [][]string {
+	threadUIDs := s.findThreadUIDs(ctx, c, references)
+	senderUIDs := findSenderUIDs(ctx, c, sender, sinceCriteria)
+	return prioritizedArchiveUIDGroups(threadUIDs, senderUIDs, s.maxThread, s.maxSender, s.maxFetch)
+}
 
-		uidGroups := prioritizedArchiveUIDGroups(threadUIDs, senderUIDs, s.maxThread, s.maxSender, s.maxFetch)
-		if len(uidGroups) == 0 {
-			continue
+func (s *Source) findThreadUIDs(ctx context.Context, c *imapConn, references []string) []string {
+	var threadUIDs []string
+	for _, ref := range capFirstStrings(references, s.maxReferences) {
+		if ctx.Err() != nil {
+			break
 		}
-
-		for _, uids := range uidGroups {
-			if len(uids) == 0 || len(out) >= limit || ctx.Err() != nil {
-				break
-			}
-			bodies, ferr := c.uidFetchBodies(strings.Join(uids, ","))
-			if ferr != nil {
-				continue
-			}
-			for _, b := range bodies {
-				d, perr := lmtpd.ParseDetail(b)
-				if perr != nil {
-					continue
-				}
-				if sameArchivedMessage(msg, d, selfID) {
-					continue // exclude the message being analyzed
-				}
-				if key := archivedMessageDedupeKey(d); key != "" {
-					if seen[key] {
-						continue
-					}
-					seen[key] = true
-				}
-				out = append(out, d)
-				if len(out) >= limit {
-					break
-				}
-			}
+		found, err := c.uidSearch(fmt.Sprintf(`HEADER "Message-ID" %s`, quote(ref)))
+		if err == nil {
+			threadUIDs = append(threadUIDs, found...)
 		}
 	}
-	return out, nil
+	return threadUIDs
+}
+
+func findSenderUIDs(ctx context.Context, c *imapConn, sender, sinceCriteria string) []string {
+	if sender == "" || ctx.Err() != nil {
+		return nil
+	}
+	found, err := c.uidSearch(fmt.Sprintf(`FROM %s %s`, quote(sender), sinceCriteria))
+	if err != nil {
+		return nil
+	}
+	return found
+}
+
+type relatedMessageCollector struct {
+	current  *gmail.MessageDetail
+	selfID   string
+	limit    int
+	seen     map[string]bool
+	messages []*gmail.MessageDetail
+}
+
+func newRelatedMessageCollector(current *gmail.MessageDetail, selfID string, limit int) *relatedMessageCollector {
+	return &relatedMessageCollector{
+		current: current,
+		selfID:  selfID,
+		limit:   limit,
+		seen:    map[string]bool{},
+	}
+}
+
+func (c *relatedMessageCollector) full() bool {
+	return len(c.messages) >= c.limit
+}
+
+func (c *relatedMessageCollector) fetchAndAppend(ctx context.Context, conn *imapConn, uidGroups [][]string) {
+	for _, uids := range uidGroups {
+		if len(uids) == 0 || c.full() || ctx.Err() != nil {
+			break
+		}
+		bodies, err := conn.uidFetchBodies(strings.Join(uids, ","))
+		if err != nil {
+			continue
+		}
+		c.appendBodies(bodies)
+	}
+}
+
+func (c *relatedMessageCollector) appendBodies(bodies [][]byte) {
+	for _, body := range bodies {
+		detail, err := lmtpd.ParseDetail(body)
+		if err != nil {
+			continue
+		}
+		if c.append(detail) && c.full() {
+			break
+		}
+	}
+}
+
+func (c *relatedMessageCollector) append(detail *gmail.MessageDetail) bool {
+	if sameArchivedMessage(c.current, detail, c.selfID) {
+		return false // exclude the message being analyzed
+	}
+	if key := archivedMessageDedupeKey(detail); key != "" {
+		if c.seen[key] {
+			return false
+		}
+		c.seen[key] = true
+	}
+	c.messages = append(c.messages, detail)
+	return true
 }
 
 // --- helpers ---

@@ -117,145 +117,161 @@ func (c *Client) streamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 func (c *Client) convertMessagesToOpenAI(msgs []Message, preserveThinking bool) []openAIMessage {
 	var out []openAIMessage
 	for _, m := range msgs {
-		// Empty (0-byte) Content has nothing to convert — skip it without the
-		// unparseable-content warning below, which would otherwise fire on
-		// every API call for the rest of the run. Message factories guarantee
-		// valid JSON Content (see marshalBlocks), so this is defense in depth;
-		// a tool_use-bearing message can no longer arrive here empty, hence
-		// skipping cannot orphan a later tool_result.
-		if len(m.Content) == 0 {
-			c.logger.Debug("skipping message with empty content", "role", m.Role)
-			continue
-		}
-
-		// Try plain text string first.
-		var text string
-		if err := json.Unmarshal(m.Content, &text); err == nil {
-			out = append(out, openAIMessage{Role: m.Role, Content: text})
-			continue
-		}
-
-		// Content blocks — may contain text, tool_use, tool_result, or image.
-		var blocks []ContentBlock
-		if err := json.Unmarshal(m.Content, &blocks); err != nil {
-			c.logger.Warn("skipping message with unparseable content",
-				"role", m.Role, "error", err,
-				"content_preview", truncateForLog(string(m.Content), 200))
-			continue
-		}
-
-		// Classify blocks in this message.
-		var textParts string
-		var thinkingParts string
-		var toolCalls []openAIToolCall
-		var toolResults []ContentBlock
-		var imageParts []openAIContentPart
-		for _, b := range blocks {
-			switch b.Type {
-			case "text":
-				textParts += b.Text
-			case "thinking":
-				if preserveThinking && m.Role == "assistant" {
-					thinkingParts += b.Thinking
-				}
-			case "tool_use":
-				args := "{}"
-				if len(b.Input) > 0 {
-					args = string(b.Input)
-				}
-				toolCalls = append(toolCalls, openAIToolCall{
-					ID:   b.ID,
-					Type: "function",
-					Function: struct {
-						Name      string `json:"name"`
-						Arguments string `json:"arguments"`
-					}{
-						Name:      b.Name,
-						Arguments: args,
-					},
-				})
-			case "tool_result":
-				toolResults = append(toolResults, b)
-			case "image":
-				// Anthropic image block (base64) → OpenAI image_url with data URI.
-				if b.Source != nil && b.Source.Data != "" {
-					dataURI := "data:" + b.Source.MediaType + ";base64," + b.Source.Data
-					imageParts = append(imageParts, openAIContentPart{
-						Type:     "image_url",
-						ImageURL: &openAIImgURL{URL: dataURI},
-					})
-				}
-			case "image_url":
-				// Already in OpenAI format (image_url block).
-				if b.ImageURL != nil {
-					imageParts = append(imageParts, openAIContentPart{
-						Type:     "image_url",
-						ImageURL: &openAIImgURL{URL: b.ImageURL.URL, Detail: b.ImageURL.Detail},
-					})
-				}
-			}
-		}
-
-		// Assistant message with tool calls.
-		if m.Role == "assistant" {
-			// A turn whose only content was thinking blocks (dropped above when
-			// preserveThinking is off) would serialize as
-			// {"role":"assistant","content":null} — a contentless assistant
-			// message that some chat templates reject and models misread as
-			// "I replied with nothing". Skip it entirely; no tool_use means no
-			// later tool_result can orphan.
-			if textParts == "" && len(toolCalls) == 0 && thinkingParts == "" {
-				c.logger.Debug("skipping assistant message with no convertible content")
-				continue
-			}
-			msg := openAIMessage{Role: "assistant"}
-			if textParts != "" {
-				msg.Content = textParts
-			}
-			if len(toolCalls) > 0 {
-				msg.ToolCalls = toolCalls
-			}
-			if thinkingParts != "" {
-				msg.ReasoningContent = thinkingParts
-			}
-			out = append(out, msg)
-			continue
-		}
-
-		// Tool result messages (role=user with tool_result blocks → separate "tool" messages).
-		if len(toolResults) > 0 {
-			for _, tr := range toolResults {
-				out = append(out, openAIMessage{
-					Role:       "tool",
-					Content:    tr.Content,
-					ToolCallID: tr.ToolUseID,
-				})
-			}
-			// After normalization/merge, a message may contain both tool_results
-			// and text. Emit remaining text as a separate user message.
-			if textParts != "" {
-				out = append(out, openAIMessage{Role: m.Role, Content: textParts})
-			}
-			continue
-		}
-
-		// If message has images, use multipart content array.
-		if len(imageParts) > 0 {
-			var parts []openAIContentPart
-			if textParts != "" {
-				parts = append(parts, openAIContentPart{Type: "text", Text: textParts})
-			}
-			parts = append(parts, imageParts...)
-			out = append(out, openAIMessage{Role: m.Role, Content: parts})
-			continue
-		}
-
-		// Default: user/other message with text only.
-		if textParts != "" {
-			out = append(out, openAIMessage{Role: m.Role, Content: textParts})
-		}
+		out = append(out, c.convertMessageToOpenAI(m, preserveThinking)...)
 	}
 	return out
+}
+
+// openAIMessageParts is the normalized content of one block-form message.
+// Keeping classification separate from role-specific projection makes the
+// precedence rules explicit: assistant/tool-result handling wins over images,
+// exactly as required by the OpenAI chat message schema.
+type openAIMessageParts struct {
+	text        string
+	thinking    string
+	toolCalls   []openAIToolCall
+	toolResults []ContentBlock
+	images      []openAIContentPart
+}
+
+func (c *Client) convertMessageToOpenAI(message Message, preserveThinking bool) []openAIMessage {
+	// Empty (0-byte) Content has nothing to convert — skip it without the
+	// unparseable-content warning below, which would otherwise repeat on every
+	// API call for the rest of the run.
+	if len(message.Content) == 0 {
+		c.logger.Debug("skipping message with empty content", "role", message.Role)
+		return nil
+	}
+
+	var text string
+	if err := json.Unmarshal(message.Content, &text); err == nil {
+		return []openAIMessage{{Role: message.Role, Content: text}}
+	}
+
+	var blocks []ContentBlock
+	if err := json.Unmarshal(message.Content, &blocks); err != nil {
+		c.logger.Warn("skipping message with unparseable content",
+			"role", message.Role, "error", err,
+			"content_preview", truncateForLog(string(message.Content), 200))
+		return nil
+	}
+
+	parts := classifyOpenAIMessageBlocks(message.Role, blocks, preserveThinking)
+	if message.Role == "assistant" {
+		return c.convertAssistantMessage(parts)
+	}
+	if len(parts.toolResults) > 0 {
+		return convertToolResultMessage(message.Role, parts)
+	}
+	if len(parts.images) > 0 {
+		return []openAIMessage{convertMultipartMessage(message.Role, parts)}
+	}
+	if parts.text == "" {
+		return nil
+	}
+	return []openAIMessage{{Role: message.Role, Content: parts.text}}
+}
+
+func classifyOpenAIMessageBlocks(role string, blocks []ContentBlock, preserveThinking bool) openAIMessageParts {
+	var parts openAIMessageParts
+	for _, block := range blocks {
+		switch block.Type {
+		case "text":
+			parts.text += block.Text
+		case "thinking":
+			if preserveThinking && role == "assistant" {
+				parts.thinking += block.Thinking
+			}
+		case "tool_use":
+			parts.toolCalls = append(parts.toolCalls, openAIToolCallFromBlock(block))
+		case "tool_result":
+			parts.toolResults = append(parts.toolResults, block)
+		case "image", "image_url":
+			if image, ok := openAIImagePartFromBlock(block); ok {
+				parts.images = append(parts.images, image)
+			}
+		}
+	}
+	return parts
+}
+
+func openAIToolCallFromBlock(block ContentBlock) openAIToolCall {
+	arguments := "{}"
+	if len(block.Input) > 0 {
+		arguments = string(block.Input)
+	}
+	call := openAIToolCall{ID: block.ID, Type: "function"}
+	call.Function.Name = block.Name
+	call.Function.Arguments = arguments
+	return call
+}
+
+func openAIImagePartFromBlock(block ContentBlock) (openAIContentPart, bool) {
+	switch block.Type {
+	case "image":
+		if block.Source == nil || block.Source.Data == "" {
+			return openAIContentPart{}, false
+		}
+		dataURI := "data:" + block.Source.MediaType + ";base64," + block.Source.Data
+		return openAIContentPart{Type: "image_url", ImageURL: &openAIImgURL{URL: dataURI}}, true
+	case "image_url":
+		if block.ImageURL == nil {
+			return openAIContentPart{}, false
+		}
+		return openAIContentPart{
+			Type: "image_url",
+			ImageURL: &openAIImgURL{
+				URL:    block.ImageURL.URL,
+				Detail: block.ImageURL.Detail,
+			},
+		}, true
+	default:
+		return openAIContentPart{}, false
+	}
+}
+
+func (c *Client) convertAssistantMessage(parts openAIMessageParts) []openAIMessage {
+	// Dropping non-preserved thinking can leave a contentless assistant turn.
+	// Skip it rather than sending content:null without a tool call.
+	if parts.text == "" && len(parts.toolCalls) == 0 && parts.thinking == "" {
+		c.logger.Debug("skipping assistant message with no convertible content")
+		return nil
+	}
+	message := openAIMessage{
+		Role:             "assistant",
+		ToolCalls:        parts.toolCalls,
+		ReasoningContent: parts.thinking,
+	}
+	if parts.text != "" {
+		message.Content = parts.text
+	}
+	return []openAIMessage{message}
+}
+
+func convertToolResultMessage(role string, parts openAIMessageParts) []openAIMessage {
+	messages := make([]openAIMessage, 0, len(parts.toolResults)+1)
+	for _, result := range parts.toolResults {
+		messages = append(messages, openAIMessage{
+			Role:       "tool",
+			Content:    result.Content,
+			ToolCallID: result.ToolUseID,
+		})
+	}
+	// Normalization can merge a user text block into the same message as tool
+	// results. Keep that text as a separate user message after the results.
+	if parts.text != "" {
+		messages = append(messages, openAIMessage{Role: role, Content: parts.text})
+	}
+	return messages
+}
+
+func convertMultipartMessage(role string, parts openAIMessageParts) openAIMessage {
+	content := make([]openAIContentPart, 0, len(parts.images)+1)
+	if parts.text != "" {
+		content = append(content, openAIContentPart{Type: "text", Text: parts.text})
+	}
+	content = append(content, parts.images...)
+	return openAIMessage{Role: role, Content: content}
 }
 
 // applySamplingParams copies optional sampling and thinking parameters to the OpenAI request.

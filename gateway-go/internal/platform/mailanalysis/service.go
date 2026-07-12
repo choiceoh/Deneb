@@ -227,122 +227,190 @@ func (s *Service) Run(ctx context.Context) error {
 func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	s.log.Debug("Gmail 폴링 시작")
 
-	// Load persisted state.
-	pollState, err := s.state.Load()
+	pollState := s.loadPollState()
+	messages, err := s.searchMessages(ctx, client.Search, pollRetryDelay)
 	if err != nil {
-		s.log.Error("폴링 상태 로드 실패", "error", err)
-		pollState = &PollState{}
+		return err
 	}
-
-	// Search for emails with retry on transient failures.
-	var messages []gmail.MessageSummary
-	for attempt := 0; attempt <= searchMaxRetries; attempt++ {
-		messages, err = client.Search(ctx, s.cfg.Query, s.cfg.MaxPerCycle+10)
-		if err == nil {
-			break
-		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if attempt < searchMaxRetries {
-			delay := time.Duration(1<<uint(attempt+1)) * time.Second // 2s, 4s
-			s.log.Warn("Gmail 검색 실패, 재시도", "error", err, "attempt", attempt+1, "delay", delay)
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(delay):
-			}
-		}
-	}
-	if err != nil {
-		return fmt.Errorf("Gmail 검색 실패 (%d회 시도): %w", searchMaxRetries+1, err) //nolint:staticcheck // ST1005 — Korean error message
-	}
-
-	// Filter out already-seen messages.
-	var newMessages []gmail.MessageSummary
-	for _, msg := range messages {
-		if !pollState.hasSeen(msg.ID) {
-			newMessages = append(newMessages, msg)
-		}
-	}
+	newMessages := s.selectNewMessages(messages, pollState)
 
 	if len(newMessages) == 0 {
-		s.log.Debug("새 메일 없음")
-		pollState.LastPollAt = time.Now().UnixMilli()
-		if err := s.state.Save(pollState); err != nil {
-			// LastPollAt not persisted — next poll will re-query the same
-			// window (wasted API call but no data loss). Log so repeated
-			// failures surface instead of silently piling up.
-			s.log.Warn("gmailpoll: state persist failed (no-messages branch)", "error", err)
-		}
+		s.finishNoMessagePoll(pollState)
 		return nil
-	}
-
-	// Cap to MaxPerCycle.
-	if len(newMessages) > s.cfg.MaxPerCycle {
-		newMessages = newMessages[:s.cfg.MaxPerCycle]
 	}
 
 	s.log.Info("새 메일 발견", "count", len(newMessages))
-
-	// Fetch full details for all new messages.
-	var details []*gmail.MessageDetail
-	for _, summary := range newMessages {
-		detail, err := client.GetMessage(ctx, summary.ID)
-		if err != nil {
-			s.log.Warn("메일 본문 조회 실패", "id", summary.ID, "error", err)
-			s.markAnalysisFailed(&gmail.MessageDetail{
-				ID:       summary.ID,
-				ThreadID: summary.ThreadID,
-				From:     summary.From,
-				Subject:  summary.Subject,
-				Date:     summary.Date,
-			}, err)
-			pollState.markSeen(summary.ID)
-			s.saveState(pollState)
-			continue
-		}
-		details = append(details, detail)
-	}
+	details := s.fetchMessageDetails(ctx, client.GetMessage, newMessages, pollState)
 
 	if len(details) == 0 {
-		pollState.LastPollAt = time.Now().UnixMilli()
-		s.saveState(pollState)
+		s.finishPoll(pollState)
 		return nil
 	}
 
-	// Mirror the fetched Gmail messages into the local mailstore (best-effort,
-	// idempotent) so they're searchable via mail_archive without an API call. Done
-	// before analysis so a later analysis failure doesn't drop the raw message.
-	if s.cfg.MailStoreSink != nil {
-		for _, d := range details {
-			cm := mailarchive.ContextMessageFromDetail("Gmail", d.ID, d, 0)
-			if _, err := s.cfg.MailStoreSink(cm); err != nil {
-				s.log.Warn("gmailpoll mailstore put 실패", "id", d.ID, "error", err)
-			}
-		}
-	}
+	s.mirrorPollMessages(details)
 
 	// Batch analysis: each email analyzed individually + one consolidated report.
-	report, items, err := s.batchAnalyze(ctx, client, details)
+	report, items, analysisErr := s.batchAnalyze(ctx, client, details)
+	if report, ok := s.resolvePollAnalysis(details, report, items, analysisErr); ok {
+		s.finishAnalyzedPoll(ctx, client, pollState, newMessages, details, report, items, analysisErr)
+	}
+	return nil
+}
+
+type gmailSearchFunc func(context.Context, string, int) ([]gmail.MessageSummary, error)
+
+type gmailGetMessageFunc func(context.Context, string) (*gmail.MessageDetail, error)
+
+func (s *Service) loadPollState() *PollState {
+	pollState, err := s.state.Load()
+	if err != nil {
+		s.log.Error("폴링 상태 로드 실패", "error", err)
+		return &PollState{}
+	}
+	return pollState
+}
+
+func pollRetryDelay(attempt int) time.Duration {
+	return time.Duration(1<<uint(attempt+1)) * time.Second // 2s, 4s
+}
+
+func (s *Service) searchMessages(
+	ctx context.Context,
+	search gmailSearchFunc,
+	retryDelay func(int) time.Duration,
+) ([]gmail.MessageSummary, error) {
+	var (
+		messages []gmail.MessageSummary
+		err      error
+	)
+	for attempt := 0; attempt <= searchMaxRetries; attempt++ {
+		messages, err = search(ctx, s.cfg.Query, s.cfg.MaxPerCycle+10)
+		if err == nil {
+			return messages, nil
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if attempt == searchMaxRetries {
+			break
+		}
+		delay := retryDelay(attempt)
+		s.log.Warn("Gmail 검색 실패, 재시도", "error", err, "attempt", attempt+1, "delay", delay)
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return nil, fmt.Errorf("Gmail 검색 실패 (%d회 시도): %w", searchMaxRetries+1, err) //nolint:staticcheck // ST1005 — Korean error message
+}
+
+func (s *Service) selectNewMessages(messages []gmail.MessageSummary, pollState *PollState) []gmail.MessageSummary {
+	newMessages := make([]gmail.MessageSummary, 0, min(len(messages), s.cfg.MaxPerCycle))
+	for _, msg := range messages {
+		if pollState.hasSeen(msg.ID) {
+			continue
+		}
+		newMessages = append(newMessages, msg)
+		if len(newMessages) == s.cfg.MaxPerCycle {
+			break
+		}
+	}
+	return newMessages
+}
+
+func (s *Service) finishNoMessagePoll(pollState *PollState) {
+	s.log.Debug("새 메일 없음")
+	pollState.LastPollAt = time.Now().UnixMilli()
+	if err := s.state.Save(pollState); err != nil {
+		// LastPollAt not persisted — next poll will re-query the same window
+		// (wasted API call but no data loss).
+		s.log.Warn("gmailpoll: state persist failed (no-messages branch)", "error", err)
+	}
+}
+
+func (s *Service) fetchMessageDetails(
+	ctx context.Context,
+	getMessage gmailGetMessageFunc,
+	messages []gmail.MessageSummary,
+	pollState *PollState,
+) []*gmail.MessageDetail {
+	details := make([]*gmail.MessageDetail, 0, len(messages))
+	for _, summary := range messages {
+		detail, err := getMessage(ctx, summary.ID)
+		if err == nil {
+			details = append(details, detail)
+			continue
+		}
+		s.log.Warn("메일 본문 조회 실패", "id", summary.ID, "error", err)
+		s.markAnalysisFailed(messageDetailFromSummary(summary), err)
+		// A body-fetch failure is terminal for this poller: preserving the old
+		// contract avoids retrying a permanently malformed Gmail item forever.
+		pollState.markSeen(summary.ID)
+		s.saveState(pollState)
+	}
+	return details
+}
+
+func messageDetailFromSummary(summary gmail.MessageSummary) *gmail.MessageDetail {
+	return &gmail.MessageDetail{
+		ID:       summary.ID,
+		ThreadID: summary.ThreadID,
+		From:     summary.From,
+		Subject:  summary.Subject,
+		Date:     summary.Date,
+	}
+}
+
+func (s *Service) mirrorPollMessages(details []*gmail.MessageDetail) {
+	if s.cfg.MailStoreSink == nil {
+		return
+	}
+	for _, detail := range details {
+		message := mailarchive.ContextMessageFromDetail("Gmail", detail.ID, detail, 0)
+		if _, err := s.cfg.MailStoreSink(message); err != nil {
+			s.log.Warn("gmailpoll mailstore put 실패", "id", detail.ID, "error", err)
+		}
+	}
+}
+
+func (s *Service) resolvePollAnalysis(
+	details []*gmail.MessageDetail,
+	report string,
+	items []BatchItem,
+	err error,
+) (string, bool) {
 	if err != nil {
 		s.log.Warn("배치 분석 실패", "error", err, "count", len(details))
-		// Total failure — no per-email analysis survived (typically the LLM was
-		// unreachable). Bail BEFORE marking these emails seen so the next cycle
-		// retries them. Otherwise they are dropped silently: the "(분석 실패)"
-		// stub is contentless-suppressed (no card), yet the unconditional
-		// markSeen below would still bury them — exactly the lost-mail pattern.
-		// When only the consolidated report failed, items still holds the
-		// per-email analyses, which are persisted below; only the all-failed
-		// case bails here.
+		// No successful per-email item means nothing may be marked seen: the
+		// next cycle must retry every fetched message.
 		if len(items) == 0 {
 			s.markSkippedAnalyses(details, nil, err)
-			return nil
+			return "", false
 		}
 		report = "(분석 실패)"
 	}
 	s.markSkippedAnalyses(details, items, nil)
+	return report, true
+}
 
+func (s *Service) finishAnalyzedPoll(
+	ctx context.Context,
+	client *gmail.Client,
+	pollState *PollState,
+	newMessages []gmail.MessageSummary,
+	details []*gmail.MessageDetail,
+	report string,
+	items []BatchItem,
+	analysisErr error,
+) {
 	// Auto-archive substantive attachments to the local file store (best-effort). The note is
 	// added to the notification only (kept out of the diary so durable wiki
 	// knowledge stays clean) and only on a successful analysis — appending to the
@@ -350,43 +418,64 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	// contentless-floor suppression and push a failed-analysis card.
 	archived := s.archiveAttachments(ctx, client, details)
 
+	s.persistPollAnalyses(items)
+	s.logToDiary(len(details), report)
+	s.deliverPollReport(ctx, report, items, archived, analysisErr == nil)
+	markAnalyzedMessagesSeen(pollState, newMessages, items)
+	s.finishPoll(pollState)
+}
+
+func (s *Service) persistPollAnalyses(items []BatchItem) {
+	if s.cfg.OnAnalyzed == nil {
+		return
+	}
+
 	// Persist each individual analysis (cache + per-message wiki page) so the
 	// Mini App shows it instantly without a manual re-run. Runs even if the
 	// consolidated report failed — the per-email results are independent.
-	if s.cfg.OnAnalyzed != nil {
-		for _, it := range items {
-			if err := s.cfg.OnAnalyzed(it.Msg, it.Result); err != nil {
-				s.log.Warn("mail analysis sink 실패", "id", it.Msg.ID, "error", err)
-			}
+	for _, item := range items {
+		if err := s.cfg.OnAnalyzed(item.Msg, item.Result); err != nil {
+			s.log.Warn("mail analysis sink 실패", "id", item.Msg.ID, "error", err)
 		}
 	}
+}
 
-	// Log analysis result to diary for wiki knowledge synthesis.
-	s.logToDiary(len(details), report)
-
-	// Send single consolidated report (archive note appended on success only).
+func (s *Service) deliverPollReport(
+	ctx context.Context,
+	report string,
+	items []BatchItem,
+	archived []string,
+	includeArchive bool,
+) {
 	notifyMsg := report
-	if err == nil && len(archived) > 0 {
+	if includeArchive && len(archived) > 0 {
 		var b strings.Builder
 		b.WriteString(notifyMsg)
 		fmt.Fprintf(&b, "\n\n📎 첨부 %d개를 로컬 저장소에 보관했습니다:\n", len(archived))
-		for _, p := range archived {
-			fmt.Fprintf(&b, "- `%s`\n", p)
+		for _, path := range archived {
+			fmt.Fprintf(&b, "- `%s`\n", path)
 		}
 		notifyMsg = b.String()
 	}
-	if s.sendNotification(ctx, notifyMsg) && s.cfg.OnDelivered != nil {
-		ids := make([]string, 0, len(items))
-		for _, it := range items {
-			if it.Msg != nil && it.Msg.ID != "" {
-				ids = append(ids, it.Msg.ID)
-			}
-		}
-		if len(ids) > 0 {
-			s.cfg.OnDelivered(ids)
+	if !s.sendNotification(ctx, notifyMsg) || s.cfg.OnDelivered == nil {
+		return
+	}
+	if ids := analyzedMessageIDs(items); len(ids) > 0 {
+		s.cfg.OnDelivered(ids)
+	}
+}
+
+func analyzedMessageIDs(items []BatchItem) []string {
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		if item.Msg != nil && item.Msg.ID != "" {
+			ids = append(ids, item.Msg.ID)
 		}
 	}
+	return ids
+}
 
+func markAnalyzedMessagesSeen(pollState *PollState, messages []gmail.MessageSummary, items []BatchItem) {
 	// Mark seen ONLY the mails whose individual analysis succeeded (those in
 	// `items`). A mail that AnalyzeBatch skipped on a per-email error is absent
 	// from `items`; leaving it unseen lets the next cycle retry it instead of
@@ -394,18 +483,20 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	// local — a wrongly-marked mail leaves the `newer_than:1h` window and is lost
 	// forever. The all-failed case bails above; this is the partial-failure guard.
 	// (Fetch-failed summaries were already marked seen in the GetMessage loop.)
-	analyzed := make(map[string]bool, len(items))
-	for _, it := range items {
-		analyzed[it.Msg.ID] = true
+	analyzed := make(map[string]struct{}, len(items))
+	for _, id := range analyzedMessageIDs(items) {
+		analyzed[id] = struct{}{}
 	}
-	for _, summary := range newMessages {
-		if analyzed[summary.ID] {
+	for _, summary := range messages {
+		if _, ok := analyzed[summary.ID]; ok {
 			pollState.markSeen(summary.ID)
 		}
 	}
+}
+
+func (s *Service) finishPoll(pollState *PollState) {
 	pollState.LastPollAt = time.Now().UnixMilli()
 	s.saveState(pollState)
-	return nil
 }
 
 // pipelineDeps assembles the PipelineDeps for an analysis run from the service

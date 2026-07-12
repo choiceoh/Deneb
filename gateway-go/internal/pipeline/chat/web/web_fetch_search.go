@@ -548,105 +548,129 @@ func serperTypedSearch(ctx context.Context, apiKey, endpoint, searchType, query 
 
 // formatSerperTypedResults formats typed Serper responses by type.
 func formatSerperTypedResults(searchType string, raw map[string]json.RawMessage) string {
-	var sb strings.Builder
-
+	var formatted string
 	switch searchType {
 	case "news":
-		type newsItem struct {
-			Title   string `json:"title"`
-			Link    string `json:"link"`
-			Snippet string `json:"snippet"`
-			Date    string `json:"date"`
-			Source  string `json:"source"`
-		}
-		// knowledgeGraph
-		if kg, ok := raw["knowledgeGraph"]; ok {
-			var kgs struct {
-				Title       string `json:"title"`
-				Description string `json:"description"`
-			}
-			if json.Unmarshal(kg, &kgs) == nil && kgs.Title != "" {
-				fmt.Fprintf(&sb, "**%s**: %s\n\n", kgs.Title, kgs.Description)
-			}
-		}
-		var items []newsItem
-		if data, ok := raw["news"]; ok {
-			_ = json.Unmarshal(data, &items)
-		}
-		for i, item := range items {
-			fmt.Fprintf(&sb, "%d. **%s**\n", i+1, item.Title)
-			if item.Source != "" {
-				fmt.Fprintf(&sb, "   Source: %s", item.Source)
-			}
-			if item.Date != "" {
-				fmt.Fprintf(&sb, " | %s", item.Date)
-			}
-			sb.WriteString("\n")
-			if item.Snippet != "" {
-				fmt.Fprintf(&sb, "   %s\n", item.Snippet)
-			}
-			fmt.Fprintf(&sb, "   %s\n\n", item.Link)
-		}
-
+		formatted = formatSerperNews(raw)
 	case "scholar":
-		type scholarItem struct {
-			Title       string `json:"title"`
-			Link        string `json:"link"`
-			Snippet     string `json:"snippet"`
-			Publication string `json:"publication"`
-			Authors     string `json:"authors"`
-			Year        string `json:"year"`
-			CitedBy     struct {
-				Total int    `json:"total"`
-				Link  string `json:"link"`
-			} `json:"citedBy"`
-		}
-		var items []scholarItem
-		if data, ok := raw["organic"]; ok {
-			_ = json.Unmarshal(data, &items)
-		}
-		for i, item := range items {
-			fmt.Fprintf(&sb, "%d. **%s**\n", i+1, item.Title)
-			if item.Authors != "" {
-				fmt.Fprintf(&sb, "   Authors: %s\n", item.Authors)
-			}
-			if item.Publication != "" {
-				fmt.Fprintf(&sb, "   Publication: %s", item.Publication)
-			}
-			if item.Year != "" {
-				fmt.Fprintf(&sb, " (%s)", item.Year)
-			}
-			if item.CitedBy.Total > 0 {
-				fmt.Fprintf(&sb, " | Cited by: %d", item.CitedBy.Total)
-			}
-			sb.WriteString("\n")
-			if item.Snippet != "" {
-				fmt.Fprintf(&sb, "   %s\n", item.Snippet)
-			}
-			fmt.Fprintf(&sb, "   %s\n\n", item.Link)
-		}
-
+		formatted = formatSerperScholar(raw)
 	case "autocomplete":
-		var suggestions []string
-		if data, ok := raw["1"]; ok {
-			_ = json.Unmarshal(data, &suggestions)
-		}
-		for i, s := range suggestions {
-			fmt.Fprintf(&sb, "%d. %s\n", i+1, s)
-		}
-		if paa, ok := raw["peopleAlsoAsk"]; ok {
-			var questions []string
-			if json.Unmarshal(paa, &questions) == nil && len(questions) > 0 {
-				sb.WriteString("\n**Related questions:**\n")
-				for _, q := range questions {
-					fmt.Fprintf(&sb, "- %s\n", q)
-				}
-			}
-		}
+		formatted = formatSerperAutocomplete(raw)
 	}
-
-	if sb.Len() == 0 {
+	if formatted == "" {
 		return "No results found."
 	}
-	return sb.String()
+	return formatted
+}
+
+func formatSerperNews(raw map[string]json.RawMessage) string {
+	type newsItem struct {
+		Title   string `json:"title"`
+		Link    string `json:"link"`
+		Snippet string `json:"snippet"`
+		Date    string `json:"date"`
+		Source  string `json:"source"`
+	}
+	var builder strings.Builder
+	if knowledgeGraph, ok := raw["knowledgeGraph"]; ok {
+		var knowledge struct {
+			Title       string `json:"title"`
+			Description string `json:"description"`
+		}
+		if json.Unmarshal(knowledgeGraph, &knowledge) == nil && knowledge.Title != "" {
+			fmt.Fprintf(&builder, "**%s**: %s\n\n", knowledge.Title, knowledge.Description)
+		}
+	}
+	var items []newsItem
+	if data, ok := raw["news"]; ok {
+		_ = json.Unmarshal(data, &items)
+	}
+	for index, item := range items {
+		fmt.Fprintf(&builder, "%d. **%s**\n", index+1, item.Title)
+		writeSerperNewsMetadata(&builder, item.Source, item.Date)
+		if item.Snippet != "" {
+			fmt.Fprintf(&builder, "   %s\n", item.Snippet)
+		}
+		fmt.Fprintf(&builder, "   %s\n\n", item.Link)
+	}
+	return builder.String()
+}
+
+func writeSerperNewsMetadata(builder *strings.Builder, source, date string) {
+	if source != "" {
+		fmt.Fprintf(builder, "   Source: %s", source)
+	}
+	if date != "" {
+		fmt.Fprintf(builder, " | %s", date)
+	}
+	builder.WriteString("\n")
+}
+
+func formatSerperScholar(raw map[string]json.RawMessage) string {
+	type scholarItem struct {
+		Title       string `json:"title"`
+		Link        string `json:"link"`
+		Snippet     string `json:"snippet"`
+		Publication string `json:"publication"`
+		Authors     string `json:"authors"`
+		Year        string `json:"year"`
+		CitedBy     struct {
+			Total int    `json:"total"`
+			Link  string `json:"link"`
+		} `json:"citedBy"`
+	}
+	var items []scholarItem
+	if data, ok := raw["organic"]; ok {
+		_ = json.Unmarshal(data, &items)
+	}
+	var builder strings.Builder
+	for index, item := range items {
+		fmt.Fprintf(&builder, "%d. **%s**\n", index+1, item.Title)
+		if item.Authors != "" {
+			fmt.Fprintf(&builder, "   Authors: %s\n", item.Authors)
+		}
+		writeSerperScholarMetadata(&builder, item.Publication, item.Year, item.CitedBy.Total)
+		if item.Snippet != "" {
+			fmt.Fprintf(&builder, "   %s\n", item.Snippet)
+		}
+		fmt.Fprintf(&builder, "   %s\n\n", item.Link)
+	}
+	return builder.String()
+}
+
+func writeSerperScholarMetadata(builder *strings.Builder, publication, year string, citedBy int) {
+	if publication != "" {
+		fmt.Fprintf(builder, "   Publication: %s", publication)
+	}
+	if year != "" {
+		fmt.Fprintf(builder, " (%s)", year)
+	}
+	if citedBy > 0 {
+		fmt.Fprintf(builder, " | Cited by: %d", citedBy)
+	}
+	builder.WriteString("\n")
+}
+
+func formatSerperAutocomplete(raw map[string]json.RawMessage) string {
+	var suggestions []string
+	if data, ok := raw["1"]; ok {
+		_ = json.Unmarshal(data, &suggestions)
+	}
+	var builder strings.Builder
+	for index, suggestion := range suggestions {
+		fmt.Fprintf(&builder, "%d. %s\n", index+1, suggestion)
+	}
+	questionsRaw, ok := raw["peopleAlsoAsk"]
+	if !ok {
+		return builder.String()
+	}
+	var questions []string
+	if json.Unmarshal(questionsRaw, &questions) != nil || len(questions) == 0 {
+		return builder.String()
+	}
+	builder.WriteString("\n**Related questions:**\n")
+	for _, question := range questions {
+		fmt.Fprintf(&builder, "- %s\n", question)
+	}
+	return builder.String()
 }

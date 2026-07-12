@@ -176,101 +176,119 @@ func analyzeTranscriptTail(path string) (transcriptTailShape, error) {
 		}
 		return tailUnknown, err
 	}
-	lines := bytes.Split(data, []byte{'\n'})
-	var lastRole string
-	var lastBlockTypes []string
-	var lastIsStringContent bool
-	sawAnyMessage := false
+	return classifyTranscriptTail(lastTranscriptObservation(data)), nil
+}
 
-	// Minimal envelope — we only care about role and the shape of content.
-	type msg struct {
-		Type    string          `json:"type,omitempty"`
-		Role    string          `json:"role,omitempty"`
-		Content json.RawMessage `json:"content,omitempty"`
-	}
+type transcriptEnvelope struct {
+	Type    string          `json:"type,omitempty"`
+	Role    string          `json:"role,omitempty"`
+	Content json.RawMessage `json:"content,omitempty"`
+}
 
-	for _, line := range lines {
+type transcriptTailObservation struct {
+	role          string
+	blockTypes    []string
+	stringContent bool
+	sawMessage    bool
+	sawCorrupt    bool
+}
+
+func lastTranscriptObservation(data []byte) transcriptTailObservation {
+	var observation transcriptTailObservation
+	for _, line := range bytes.Split(data, []byte{'\n'}) {
 		if len(bytes.TrimSpace(line)) == 0 {
 			continue
 		}
-		var m msg
-		if err := json.Unmarshal(line, &m); err != nil {
+		var message transcriptEnvelope
+		if err := json.Unmarshal(line, &message); err != nil {
 			// Tolerate a single partial write at the tail; older lines
 			// should still decode. Keep scanning but do not update the
 			// "last message" state for this line.
+			observation.sawCorrupt = true
 			continue
 		}
 		// Session header line (first line only).
-		if m.Type == "session" && m.Role == "" {
+		if message.Type == "session" && message.Role == "" {
 			continue
 		}
-		if m.Role == "" {
+		if message.Role == "" {
 			continue
 		}
-		sawAnyMessage = true
-		lastRole = m.Role
-		lastBlockTypes = lastBlockTypes[:0]
-		lastIsStringContent = false
+		next := observeTranscriptMessage(message)
+		next.sawCorrupt = observation.sawCorrupt
+		observation = next
+	}
+	return observation
+}
 
-		// Content is either a JSON string (legacy text-only) or a
-		// ContentBlock array. Distinguish so we can tell a plain user
-		// message apart from a user tool_result.
-		if len(m.Content) > 0 {
-			trimmed := bytes.TrimSpace(m.Content)
-			if len(trimmed) > 0 && trimmed[0] == '"' {
-				lastIsStringContent = true
-			} else if len(trimmed) > 0 && trimmed[0] == '[' {
-				var blocks []struct {
-					Type string `json:"type"`
-				}
-				if jerr := json.Unmarshal(m.Content, &blocks); jerr == nil {
-					for _, b := range blocks {
-						if b.Type != "" {
-							lastBlockTypes = append(lastBlockTypes, b.Type)
-						}
-					}
-				}
-			}
+func observeTranscriptMessage(message transcriptEnvelope) transcriptTailObservation {
+	observation := transcriptTailObservation{role: message.Role, sawMessage: true}
+	trimmed := bytes.TrimSpace(message.Content)
+	if len(trimmed) == 0 {
+		return observation
+	}
+	if trimmed[0] == '"' {
+		observation.stringContent = true
+		return observation
+	}
+	if trimmed[0] != '[' {
+		return observation
+	}
+	var blocks []struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(message.Content, &blocks) != nil {
+		return observation
+	}
+	for _, block := range blocks {
+		if block.Type != "" {
+			observation.blockTypes = append(observation.blockTypes, block.Type)
 		}
 	}
+	return observation
+}
 
-	if !sawAnyMessage {
-		return tailEmpty, nil
+func classifyTranscriptTail(observation transcriptTailObservation) transcriptTailShape {
+	if !observation.sawMessage {
+		if observation.sawCorrupt {
+			return tailUnknown
+		}
+		return tailEmpty
 	}
 
-	switch lastRole {
+	switch observation.role {
 	case "user":
 		// String content = plain user text. Block content containing
 		// tool_result = the tool executed, but the next assistant turn
 		// never started.
-		if lastIsStringContent {
-			return tailEndUserText, nil
+		if observation.stringContent {
+			return tailEndUserText
 		}
-		for _, t := range lastBlockTypes {
-			if t == "tool_result" {
-				return tailEndToolResult, nil
-			}
+		if containsBlockType(observation.blockTypes, "tool_result") {
+			return tailEndToolResult
 		}
-		return tailEndUserText, nil
+		return tailEndUserText
 	case "assistant":
 		// Assistant with tool_use but no matching tool_result next
 		// means we crashed between "LLM decided to call tool" and
 		// "tool finished". Plain text (no tool_use) means the final
 		// assistant turn was persisted cleanly.
-		hasToolUse := false
-		for _, t := range lastBlockTypes {
-			if t == "tool_use" {
-				hasToolUse = true
-				break
-			}
+		if containsBlockType(observation.blockTypes, "tool_use") {
+			return tailEndAssistantToolUse
 		}
-		if hasToolUse {
-			return tailEndAssistantToolUse, nil
-		}
-		return tailEndAssistantText, nil
+		return tailEndAssistantText
 	default:
-		return tailUnknown, nil
+		return tailUnknown
 	}
+}
+
+func containsBlockType(types []string, want string) bool {
+	for _, blockType := range types {
+		if blockType == want {
+			return true
+		}
+	}
+	return false
 }
 
 // autoResumeOptions mirrors configurable knobs. Future knobs can thread

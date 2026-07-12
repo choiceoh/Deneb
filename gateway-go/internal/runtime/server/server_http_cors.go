@@ -25,29 +25,12 @@ package server
 import (
 	"net/http"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/gatewayhttp"
 )
 
 // withCORS wraps the gateway mux so browser clients can reach the miniapp.* HTTP
 // surface. It is a no-op for requests without an Origin header (native clients),
 // so non-browser callers are entirely unaffected.
 func withCORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		if origin != "" {
-			h := w.Header()
-			h.Set("Access-Control-Allow-Origin", origin)
-			h.Add("Vary", "Origin")
-			h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			h.Set("Access-Control-Allow-Headers", clientauth.Header+", Content-Type")
-			h.Set("Access-Control-Max-Age", "600")
-			// CORS preflight: OPTIONS carries no token, so short-circuit before the
-			// mux/auth would reject it. 204 No Content with the headers set above.
-			if r.Method == http.MethodOptions {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-		}
-		next.ServeHTTP(w, r)
-	})
+	return gatewayhttp.WithCORS(next)
 }

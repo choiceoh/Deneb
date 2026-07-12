@@ -24,16 +24,9 @@ var (
 	ErrRequestTooLarge = errors.New("localai hub: request exceeds token budget")
 )
 
-// NoThinking disables Qwen3 reasoning mode at the chat-template level — hub
-// calls (memory extraction, summaries, proactive context, pilot) need fast,
-// deterministic output and stable tool calls, not <think> traces. Alias of
-// modelrole.NoThinkingBody (the single definition) so the packages cannot
-// drift; exported so pilot and memory packages can reference it.
-var NoThinking = modelrole.NoThinkingBody
-
 // mergeRequestBody builds the OpenAI-compatible ExtraBody for a hub request.
 //
-// The thinking-off decision is modelrole.ThinkingOffExtraBody's three-way:
+// The thinking-off decision is modelrole.ThinkingOffDirectiveFor's three-way:
 // dual-mode models get their template toggle (deepseek-v4 →
 // chat_template_kwargs.thinking=false — the previous non-reasoning branch
 // sent the Qwen enable_thinking spelling, which dsv4 templates silently
@@ -44,10 +37,10 @@ var NoThinking = modelrole.NoThinkingBody
 // overrides shape hub calls too. callerExtra merges last so explicit fields
 // win.
 func mergeRequestBody(reg *modelrole.Registry, providerID, model string, callerExtra map[string]any) map[string]any {
-	off := reg.ThinkingOffExtraBodyFor(providerID, model)
-	merged := make(map[string]any, len(off)+len(callerExtra))
-	for k, v := range off {
-		merged[k] = v
+	directive := reg.ThinkingOffDirectiveFor(providerID, model)
+	merged := make(map[string]any, 1+len(callerExtra))
+	if directive != nil {
+		merged["chat_template_kwargs"] = map[string]any{directive.TemplateKwarg(): false}
 	}
 	for k, v := range callerExtra {
 		merged[k] = v

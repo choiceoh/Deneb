@@ -405,8 +405,8 @@ func formatRecentPolarisSummaries(nodes []polaris.SummaryNode) string {
 //     empty-content failures).
 //   - reasoning model with no off-switch: budget for the thinking instead —
 //     observed dsv4 reasoning runs ~13K chars (≈4K tokens), so 4x headroom.
-//   - non-reasoning model: mirror the hub's NoThinking kwargs (Qwen-family
-//     templates default thinking on).
+//   - non-reasoning model: send enable_thinking=false (Qwen-family templates
+//     default thinking on).
 func dreamerLLMShape(reg *modelrole.Registry) (extraBody map[string]any, synthesisMaxTokens int) {
 	if reg == nil {
 		return nil, 0
@@ -414,9 +414,11 @@ func dreamerLLMShape(reg *modelrole.Registry) (extraBody map[string]any, synthes
 	cfg := reg.Config(modelrole.RoleLightweight)
 	// Shared three-way, registry-aware so deneb.json routing.toggleKwarg
 	// overrides shape the dreamer like they shape foreground turns (see
-	// modelrole.ThinkingOffExtraBodyFor).
-	if off := reg.ThinkingOffExtraBodyFor(cfg.ProviderID, cfg.Model); off != nil {
-		return off, 0
+	// modelrole.ThinkingOffDirectiveFor).
+	if directive := reg.ThinkingOffDirectiveFor(cfg.ProviderID, cfg.Model); directive != nil {
+		return map[string]any{
+			"chat_template_kwargs": map[string]any{directive.TemplateKwarg(): false},
+		}, 0
 	}
 	// nil kwargs + a reasoning model = untoggleable chain-of-thought: the
 	// only defense is budgeting reasoning + answer. The dreamer scales its

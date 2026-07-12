@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import statistics
+from collections import Counter
 from pathlib import Path
 from typing import Iterable
 
@@ -20,6 +21,7 @@ from .architecture_contracts import (
     _package_path,
     _responsibility_cohesion,
     _rounded_map,
+    is_composition_root,
 )
 from .inventory import RepositoryInventory, collect, component_for
 from .model import (
@@ -112,19 +114,19 @@ def evaluate(root: str | Path) -> tuple[list[Pillar], list[Evidence]]:
         Evidence(
             name="ai-maintainability-kotlin",
             status="unavailable",
-            detail="Rubric 2.1 AI cross-check currently measures Go only; Kotlin lowers report confidence but is not scored as zero.",
+            detail="Rubric 2.2 AI cross-check currently measures Go only; Kotlin lowers report confidence but is not scored as zero.",
             required=False,
         ),
         Evidence(
             name="ai-maintainability-typescript",
             status="unavailable",
-            detail="Rubric 2.1 AI cross-check currently measures Go only; TypeScript lowers report confidence but is not scored as zero.",
+            detail="Rubric 2.2 AI cross-check currently measures Go only; TypeScript lowers report confidence but is not scored as zero.",
             required=False,
         ),
         Evidence(
             name="ai-maintainability-python",
             status="unavailable",
-            detail="Rubric 2.1 AI cross-check currently measures Go only; Python lowers report confidence but is not scored as zero.",
+            detail="Rubric 2.2 AI cross-check currently measures Go only; Python lowers report confidence but is not scored as zero.",
             required=False,
         ),
     ]
@@ -196,7 +198,9 @@ def _boundary_integrity(repo: RepositoryInventory) -> Pillar:
     grouped_forbidden: dict[str, list[str]] = {}
     for source, target in forbidden:
         grouped_forbidden.setdefault(source, []).append(target)
-    for source, targets in sorted(grouped_forbidden.items(), key=lambda item: (-len(item[1]), item[0])):
+    for source, targets in sorted(
+        grouped_forbidden.items(), key=lambda item: (-len(item[1]), item[0])
+    ):
         findings.append(
             _finding(
                 pillar=pillar_id,
@@ -263,7 +267,9 @@ def _boundary_integrity(repo: RepositoryInventory) -> Pillar:
                     "instead of importing unrelated implementations."
                 ),
                 priority=70 + min(25, 25 * fanout / max(hard, 1)),
-                related=tuple(_package_path(repo, item) for item in sorted(repo.graph[package])[:12]),
+                related=tuple(
+                    _package_path(repo, item) for item in sorted(repo.graph[package])[:12]
+                ),
             )
         )
 
@@ -289,10 +295,12 @@ def _boundary_integrity(repo: RepositoryInventory) -> Pillar:
         "cyclic_component_nodes": cyclic_nodes,
         "subscores": _rounded_map(subscores),
         "fanout_hotspots": [
-            {"package": package, "fanout": count} for count, package, _, _ in sorted(direct_rows, reverse=True)[:12]
+            {"package": package, "fanout": count}
+            for count, package, _, _ in sorted(direct_rows, reverse=True)[:12]
         ],
         "two_hop_hotspots": [
-            {"package": package, "reach": count} for count, package, _, _ in sorted(two_hop_rows, reverse=True)[:12]
+            {"package": package, "reach": count}
+            for count, package, _, _ in sorted(two_hop_rows, reverse=True)[:12]
         ],
     }
     return Pillar(
@@ -349,12 +357,35 @@ def _change_locality(repo: RepositoryInventory) -> Pillar:
         for package, touches in history.package_touches.items()
         if package in repo.packages
     }
-    hottest_package, hottest_touches = (
+    observed_hottest_package, observed_hottest_touches = (
         max(current_touches.items(), key=lambda item: (item[1], item[0]))
         if current_touches
         else ("", 0)
     )
-    hottest_share = hottest_touches / history.commit_count
+    observed_hottest_share = observed_hottest_touches / history.commit_count
+
+    # Raw touch frequency measures where product work happens, not whether that
+    # work is local. Score only packages recurring in cross-component changes;
+    # this supplies the missing integration-bottleneck evidence. A composition
+    # root is expected to participate in feature wiring, so keep its raw and
+    # cross-component frequency as evidence while leaving its coupling to the
+    # scatter/co-change and current-graph volatile-hub signals.
+    cross_component_touches: Counter[str] = Counter()
+    for commit in history.commits:
+        changed = [package for package, _ in commit.packages if package in repo.packages]
+        if len({component_for(package) for package in changed}) > 1:
+            cross_component_touches.update(changed)
+    scored_touches = {
+        package: touches
+        for package, touches in cross_component_touches.items()
+        if not _is_composition_root_package(package)
+    }
+    scored_hottest_package, scored_hottest_touches = (
+        max(scored_touches.items(), key=lambda item: (item[1], item[0]))
+        if scored_touches
+        else ("", 0)
+    )
+    scored_hottest_share = scored_hottest_touches / history.commit_count
 
     hot_risks: list[tuple[float, str, int, int]] = []
     for package in repo.packages:
@@ -363,15 +394,15 @@ def _change_locality(repo: RepositoryInventory) -> Pillar:
         risk = (touches / history.commit_count) * fanin
         if risk > 0:
             hot_risks.append((risk, package, touches, fanin))
-    hot_risk_score = tail_score(
-        (risk for risk, _, _, _ in hot_risks), soft=0.30, hard=3.0
-    )
+    hot_risk_score = tail_score((risk for risk, _, _, _ in hot_risks), soft=0.30, hard=3.0)
 
     subscores = {
         "p90_packages_per_change": descending_grade(p90_packages, 2, 6),
         "p90_components_per_change": descending_grade(p90_components, 1, 5),
         "median_dominant_package_share": ascending_grade(median_dominant, 0.55, 0.85),
-        "hottest_package_share": descending_grade(hottest_share, 0.15, 0.45),
+        "non_composition_integration_hotspot_share": descending_grade(
+            scored_hottest_share, 0.15, 0.45
+        ),
         "volatile_dependency_hubs": hot_risk_score,
     }
     score = _bounded_average([(value, 0.20) for value in subscores.values()])
@@ -397,18 +428,22 @@ def _change_locality(repo: RepositoryInventory) -> Pillar:
             )
         )
 
-    if hottest_package and hottest_share > 0.15:
+    if scored_hottest_package and scored_hottest_share > 0.15:
         findings.append(
             _finding(
                 pillar=pillar_id,
                 rule="change-hotspot",
-                path=_package_path(repo, hottest_package),
-                severity="high" if hottest_share >= 0.45 else "medium",
+                path=_package_path(repo, scored_hottest_package),
+                severity="high" if scored_hottest_share >= 0.45 else "medium",
                 evidence=(
-                    f"{hottest_package} changed in {hottest_touches}/{history.commit_count} "
-                    f"production-Go commits ({100 * hottest_share:.1f}%)."
+                    f"{scored_hottest_package} changed across components in "
+                    f"{scored_hottest_touches}/{history.commit_count} "
+                    f"production-Go commits ({100 * scored_hottest_share:.1f}%)."
                 ),
-                why="A package present in a large share of unrelated changes is an integration bottleneck.",
+                why=(
+                    "A package recurring in a large share of cross-component changes is an "
+                    "integration bottleneck."
+                ),
                 remediation="Move domain-specific assembly out and leave a stable, small composition contract.",
                 priority=92,
             )
@@ -430,7 +465,9 @@ def _change_locality(repo: RepositoryInventory) -> Pillar:
                 why="Many dependents consume a contract that changes frequently, amplifying every edit.",
                 remediation="Stabilize and narrow the public contract, then move volatile implementation behind it.",
                 priority=80 + min(15, risk * 4),
-                related=tuple(_package_path(repo, item) for item in sorted(repo.reverse_graph[package])[:12]),
+                related=tuple(
+                    _package_path(repo, item) for item in sorted(repo.reverse_graph[package])[:12]
+                ),
             )
         )
 
@@ -459,8 +496,11 @@ def _change_locality(repo: RepositoryInventory) -> Pillar:
         "p90_packages_per_change": round(p90_packages, 2),
         "p90_components_per_change": round(p90_components, 2),
         "median_dominant_package_share": round(median_dominant, 3),
-        "hottest_package": hottest_package,
-        "hottest_package_share": round(hottest_share, 3),
+        "observed_hottest_package": observed_hottest_package,
+        "observed_hottest_package_share": round(observed_hottest_share, 3),
+        "scored_hottest_package": scored_hottest_package,
+        "scored_hottest_package_share": round(scored_hottest_share, 3),
+        "scored_hottest_cross_component_touches": scored_hottest_touches,
         "subscores": _rounded_map(subscores),
         "volatile_hubs": [
             {
@@ -492,6 +532,12 @@ def _change_locality(repo: RepositoryInventory) -> Pillar:
 def _top_level(package: str) -> str:
     parts = package.split("/")
     return parts[1] if len(parts) > 1 and parts[0] == "internal" else parts[0]
+
+
+def _is_composition_root_package(package: str) -> bool:
+    """Keep the hotspot exception on the root package, not its whole subtree."""
+
+    return is_composition_root(package) and package == f"internal/{component_for(package)}"
 
 
 def _two_hop_reach(repo: RepositoryInventory, package: str) -> int:

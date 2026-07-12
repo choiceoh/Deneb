@@ -109,3 +109,55 @@ func TestArchivedMessageDedupeKeyFallsBackWithoutMessageID(t *testing.T) {
 		t.Fatal("did not expect different body to dedupe")
 	}
 }
+
+func TestRelatedMessageCollectorFiltersSelfMalformedAndDuplicates(t *testing.T) {
+	current := &gmail.MessageDetail{MessageIDHeader: "<current@example.com>"}
+	collector := newRelatedMessageCollector(current, normalizeMsgID(current.MessageIDHeader), 3)
+	collector.appendBodies([][]byte{
+		rawArchivedMessage("<current@example.com>", "current body"),
+		[]byte("malformed header without colon\r\n\r\nbroken"),
+		rawArchivedMessage("<related@example.com>", "first related body"),
+		rawArchivedMessage("<RELATED@example.com>", "duplicate message-id body"),
+		rawArchivedMessage("", "fallback body"),
+		rawArchivedMessage("", "fallback body"),
+	})
+
+	if len(collector.messages) != 2 {
+		t.Fatalf("collected %d messages, want 2", len(collector.messages))
+	}
+	if got := normalizeMsgID(collector.messages[0].MessageIDHeader); got != "related@example.com" {
+		t.Fatalf("first Message-ID = %q, want related@example.com", got)
+	}
+	if got := collector.messages[0].Body; got != "first related body" {
+		t.Fatalf("first body = %q, want first related body", got)
+	}
+	if got := collector.messages[1].MessageIDHeader; got != "" {
+		t.Fatalf("fallback Message-ID = %q, want empty", got)
+	}
+}
+
+func TestRelatedMessageCollectorStopsAtCombinedLimit(t *testing.T) {
+	collector := newRelatedMessageCollector(&gmail.MessageDetail{}, "", 1)
+	collector.appendBodies([][]byte{
+		rawArchivedMessage("<first@example.com>", "first body"),
+		rawArchivedMessage("<second@example.com>", "second body"),
+	})
+
+	if len(collector.messages) != 1 {
+		t.Fatalf("collected %d messages, want 1", len(collector.messages))
+	}
+	if got := normalizeMsgID(collector.messages[0].MessageIDHeader); got != "first@example.com" {
+		t.Fatalf("Message-ID = %q, want first@example.com", got)
+	}
+}
+
+func rawArchivedMessage(messageID, body string) []byte {
+	header := "From: Sender <sender@example.com>\r\n" +
+		"To: Recipient <recipient@example.com>\r\n" +
+		"Subject: Archive context\r\n" +
+		"Date: Tue, 16 Jun 2026 12:34:56 +0900\r\n"
+	if messageID != "" {
+		header += "Message-ID: " + messageID + "\r\n"
+	}
+	return []byte(header + "Content-Type: text/plain; charset=utf-8\r\n\r\n" + body)
+}

@@ -154,6 +154,36 @@ func TestGradeRejectsCumulativeWeightOverflow(t *testing.T) {
 	}
 }
 
+func TestGradeContextKeepsCheckDiagnosticsInPlanOrder(t *testing.T) {
+	plan := Plan{Checks: []Check{
+		{ID: "first", Type: CheckExactText, Weight: 1, ExpectedText: "missing"},
+		{ID: "first", Type: CheckExactText, Weight: 1, ExpectedText: "actual"},
+		{ID: "third", Type: CheckExactText, Weight: 1, ExpectedText: "actual"},
+	}}
+	report, err := GradeContext(context.Background(), plan, Evidence{Text: "actual"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Status != StatusInvalid || report.PassedChecks != 1 || report.FailedChecks != 1 || report.InvalidChecks != 1 {
+		t.Fatalf("report summary = %+v", report)
+	}
+	want := []struct {
+		id     string
+		status Status
+		detail string
+	}{
+		{id: "first", status: StatusFail, detail: "text did not exactly match"},
+		{id: "first", status: StatusInvalid, detail: "duplicate check id"},
+		{id: "third", status: StatusPass, detail: "text exactly matched"},
+	}
+	for i, expected := range want {
+		got := report.Checks[i]
+		if got.ID != expected.id || got.Status != expected.status || got.Detail != expected.detail {
+			t.Fatalf("check %d = %+v, want %+v", i, got, expected)
+		}
+	}
+}
+
 func TestGradeUsesExactWeightRatioForVerdict(t *testing.T) {
 	report := Grade(Plan{PassThreshold: 1, Checks: []Check{
 		{ID: "dominant", Type: CheckExactText, Weight: MaxCheckWeight, ExpectedText: "ok"},

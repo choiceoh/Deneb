@@ -62,6 +62,326 @@ type agentConfigDeps struct {
 	ReplayDeferredTools []string
 }
 
+// agentExecutionPolicy is the resolved, immutable execution policy for one
+// run. Keeping precedence resolution separate from AgentConfig assembly makes
+// the caller-facing defaults and Briefcase overrides auditable in one place.
+type agentExecutionPolicy struct {
+	maxTurns              int
+	timeout               time.Duration
+	maxTokens             int
+	maxToolCallAttempts   *int
+	thinking              *llm.ThinkingConfig
+	maxOutputRecovery     int
+	maxOutputScaleFactors []float64
+	streamIdleTimeout     time.Duration
+	parallelSafeTool      func(string) bool
+}
+
+// agentRunState owns the state shared by every turn in one agent run. The
+// initializer below injects these exact instances into each fresh turn
+// context; callers also receive spawnFlag and execStats for run-level reports.
+type agentRunState struct {
+	runCache           *RunCache
+	skillConsults      *SkillConsultLog
+	fileCache          *agent.FileCache
+	spawnFlag          *SpawnFlag
+	verifyGate         *verifyGateState
+	deferredActivation *DeferredActivation
+	execStats          *toolctx.ToolExecStats
+}
+
+func newAgentRunState(replayedDeferredTools []string) *agentRunState {
+	state := &agentRunState{
+		runCache:           NewRunCache(),
+		skillConsults:      NewSkillConsultLog(),
+		fileCache:          agent.NewFileCache(agent.DefaultFileCacheMaxItems),
+		spawnFlag:          NewSpawnFlag(),
+		verifyGate:         &verifyGateState{},
+		deferredActivation: NewDeferredActivation(),
+		execStats:          toolctx.NewToolExecStats(),
+	}
+	if len(replayedDeferredTools) > 0 {
+		state.deferredActivation.Seed(replayedDeferredTools)
+	}
+	return state
+}
+
+// turnInitializer is the shared context-decoration point for asynchronous and
+// SendSync runs. The ordering is deliberate: general run state is installed
+// before optional per-run policies such as dry-run and auto-delivery.
+func (s *agentRunState) turnInitializer(params RunParams, sessionToolPreset string) func(context.Context) context.Context {
+	return func(ctx context.Context) context.Context {
+		ctx = WithSessionKey(ctx, params.SessionKey)
+		ctx = WithTurnContext(ctx, NewTurnContext())
+		ctx = WithRunCache(ctx, s.runCache)
+		ctx = WithSkillConsultLog(ctx, s.skillConsults)
+		ctx = WithFileCache(ctx, s.fileCache)
+		ctx = WithToolPreset(ctx, sessionToolPreset)
+		ctx = WithDeferredActivation(ctx, s.deferredActivation)
+		ctx = WithSpawnFlag(ctx, s.spawnFlag)
+		ctx = WithVerifyGate(ctx, s.verifyGate)
+		ctx = toolctx.WithToolExecStats(ctx, s.execStats)
+		if params.ToolDryRun {
+			ctx = toolctx.WithToolDryRun(ctx)
+		}
+		if params.AutoDeliveredOutput {
+			ctx = WithAutoDelivery(ctx)
+		}
+		return ctx
+	}
+}
+
+func (s *agentRunState) dynamicToolsProvider(registry *ToolRegistry) func() []llm.Tool {
+	return func() []llm.Tool {
+		names := s.deferredActivation.ActivatedNames()
+		if len(names) == 0 || registry == nil {
+			return nil
+		}
+		return registry.DeferredLLMTools(names)
+	}
+}
+
+// agentTurnHooks owns the mutable bookkeeping used by the heartbeat, skill
+// usage, and skill-nudger callbacks. Its mutex protects only the nudger's
+// accumulated snapshot; external callbacks run after it is released.
+type agentTurnHooks struct {
+	params           RunParams
+	resolvedModel    string
+	emitAgentFn      func(kind, sessionKey, runID string, payload map[string]any)
+	usageRecorder    SkillUsageRecorder
+	skillConsults    *SkillConsultLog
+	nudger           SkillNudger
+	nudgerEnabled    bool
+	nudgeCtx         context.Context
+	nudgerMu         sync.Mutex
+	nudgerActivities []SkillNudgeToolActivity
+	nudgerTurns      int
+}
+
+func newAgentTurnHooks(params RunParams, deps runDeps, acd agentConfigDeps, resolvedModel, sessionToolPreset string, skillConsults *SkillConsultLog) *agentTurnHooks {
+	nudgeCtx := deps.callbacks.shutdownCtx
+	if nudgeCtx == nil {
+		// Reviews intentionally outlive a request. Production supplies the
+		// server lifecycle context; Background is a test-only fallback.
+		nudgeCtx = context.Background()
+	}
+	return &agentTurnHooks{
+		params:        params,
+		resolvedModel: resolvedModel,
+		emitAgentFn:   acd.EmitAgentFn,
+		usageRecorder: acd.SkillUsageRecorder,
+		skillConsults: skillConsults,
+		nudger:        acd.SkillNudger,
+		nudgerEnabled: shouldEnableSkillNudger(acd.SkillNudger, params, sessionToolPreset),
+		nudgeCtx:      nudgeCtx,
+	}
+}
+
+func (h *agentTurnHooks) onTurn(turn, accumulatedTokens int) {
+	if h.emitAgentFn == nil {
+		return
+	}
+	h.emitAgentFn("heartbeat", h.params.SessionKey, h.params.ClientRunID, map[string]any{
+		"turn":   turn,
+		"tokens": accumulatedTokens,
+		"ts":     time.Now().UnixMilli(),
+	})
+}
+
+func (h *agentTurnHooks) onToolTurn(turn int, activities []agent.ToolActivity) {
+	recordTurnSkillUsage(h.usageRecorder, h.skillConsults, activities, h.params.SessionKey, h.resolvedModel)
+	if !h.nudgerEnabled {
+		return
+	}
+	snapshot, ok := h.recordNudgeSnapshot(turn, activities)
+	if !ok {
+		return
+	}
+	h.nudger.OnToolCalls(h.nudgeCtx, h.params.SessionKey, len(activities), snapshot)
+}
+
+func (h *agentTurnHooks) recordNudgeSnapshot(turn int, activities []agent.ToolActivity) (SkillNudgeSnapshot, bool) {
+	h.nudgerMu.Lock()
+	defer h.nudgerMu.Unlock()
+
+	h.nudgerTurns = turn
+	for _, activity := range activities {
+		h.nudgerActivities = append(h.nudgerActivities, SkillNudgeToolActivity{
+			Name:    activity.Name,
+			IsError: activity.IsError,
+		})
+	}
+	if len(activities) == 0 {
+		return SkillNudgeSnapshot{}, false
+	}
+	return SkillNudgeSnapshot{
+		Turns:          h.nudgerTurns,
+		ToolActivities: append([]SkillNudgeToolActivity(nil), h.nudgerActivities...),
+		Label:          h.params.SessionKey,
+		Model:          h.params.Model,
+	}, true
+}
+
+func buildAgentTools(registry *ToolRegistry, sessionToolPreset string, replayedDeferredTools []string) []llm.Tool {
+	if registry == nil {
+		return nil
+	}
+	preset := toolpreset.Preset(sessionToolPreset)
+	rawTools := registry.FilteredLLMTools(toolpreset.AllowedTools(preset))
+	if preload := toolpreset.PreloadedDeferredTools(preset); len(preload) > 0 {
+		rawTools = append(rawTools, registry.DeferredLLMTools(preload)...)
+	}
+
+	// Cache-stable ordering: built-in tools form a sorted prefix, while
+	// replayed activations retain their first-activation order at the tail.
+	registeredNames := registry.Names()
+	builtinNames := make(map[string]struct{}, len(registeredNames))
+	for _, name := range registeredNames {
+		builtinNames[name] = struct{}{}
+	}
+	tools := PartitionTools(rawTools, builtinNames).MergedTools()
+	return appendReplayedDeferredTools(registry, tools, replayedDeferredTools)
+}
+
+func appendReplayedDeferredTools(registry *ToolRegistry, tools []llm.Tool, replayed []string) []llm.Tool {
+	if len(replayed) == 0 {
+		return tools
+	}
+	existing := make(map[string]struct{}, len(tools))
+	for _, tool := range tools {
+		existing[tool.Name] = struct{}{}
+	}
+	for _, tool := range registry.DeferredLLMTools(replayed) {
+		if _, ok := existing[tool.Name]; !ok {
+			tools = append(tools, tool)
+		}
+	}
+	return tools
+}
+
+func resolveAgentExecutionPolicy(params RunParams, deps runDeps, cachedSession *session.Session, configuredMaxTokens int) agentExecutionPolicy {
+	maxTurns, timeout := resolveAgentRunLimits(params, deps, cachedSession)
+	maxOutputRecovery, maxOutputScaleFactors, streamIdleTimeout, parallelSafeTool := resolveAgentOutputPolicy(deps.briefcaseMode)
+	return agentExecutionPolicy{
+		maxTurns:              maxTurns,
+		timeout:               timeout,
+		maxTokens:             resolveAgentMaxTokens(params, configuredMaxTokens),
+		maxToolCallAttempts:   copyMaxToolCallAttempts(params.MaxToolCallAttempts),
+		thinking:              resolveAgentThinking(params, cachedSession),
+		maxOutputRecovery:     maxOutputRecovery,
+		maxOutputScaleFactors: maxOutputScaleFactors,
+		streamIdleTimeout:     streamIdleTimeout,
+		parallelSafeTool:      parallelSafeTool,
+	}
+}
+
+func resolveAgentMaxTokens(params RunParams, configured int) int {
+	if params.MaxTokens != nil && *params.MaxTokens > 0 {
+		return *params.MaxTokens
+	}
+	if configured > 0 {
+		return configured
+	}
+	return defaultMaxTokens
+}
+
+func copyMaxToolCallAttempts(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
+}
+
+func resolveAgentThinking(params RunParams, cachedSession *session.Session) *llm.ThinkingConfig {
+	level := ""
+	if cachedSession != nil {
+		level = cachedSession.ThinkingLevel
+	}
+	if params.Thinking != "" {
+		level = params.Thinking
+	}
+	thinking := resolveThinkingConfig(level)
+	if thinking != nil && thinking.Type == "enabled" && cachedSession != nil &&
+		cachedSession.InterleavedThinking != nil && *cachedSession.InterleavedThinking {
+		thinking.Interleaved = true
+	}
+	return thinking
+}
+
+func resolveAgentRunLimits(params RunParams, deps runDeps, cachedSession *session.Session) (int, time.Duration) {
+	maxTurns := defaultMaxTurns
+	timeout := defaultAgentTimeout
+	if cachedSession != nil {
+		switch {
+		case cachedSession.SpawnedBy != "":
+			timeout = 15 * time.Minute
+		case cachedSession.Kind == session.KindCron:
+			maxTurns = 50
+		}
+	}
+	if deps.runLimits.MaxTurns > 0 {
+		maxTurns = deps.runLimits.MaxTurns
+	}
+	if params.MaxTurns != nil && *params.MaxTurns > 0 {
+		maxTurns = *params.MaxTurns
+	}
+	if deps.runLimits.Timeout > 0 {
+		timeout = deps.runLimits.Timeout
+	}
+	return maxTurns, timeout
+}
+
+func resolveAgentOutputPolicy(briefcaseMode bool) (int, []float64, time.Duration, func(string) bool) {
+	parallelSafeTool := parallelSafeToolVet()
+	if !briefcaseMode {
+		return 1, []float64{1.5}, 0, parallelSafeTool
+	}
+	if !BriefcaseParallelToolsEnabled {
+		parallelSafeTool = nil
+	}
+	return 0, nil, BriefcaseStreamIdleTimeout, parallelSafeTool
+}
+
+func applyBriefcaseAgentPolicy(cfg *agent.AgentConfig, briefcaseMode bool) {
+	if !briefcaseMode {
+		return
+	}
+	cfg.MaxTotalOutputTokens = cfg.MaxTokens
+	cfg.MaxStreamBytes = cfg.MaxTokens * 16
+	if cfg.MaxStreamBytes < 64<<10 {
+		cfg.MaxStreamBytes = 64 << 10
+	}
+	if cfg.MaxStreamBytes > 8<<20 {
+		cfg.MaxStreamBytes = 8 << 20
+	}
+	cfg.RequireExplicitStopReason = true
+	cfg.RequireStrictStopShape = true
+	// The signed hard cap replaces the ambient detector so the signed ToolGate
+	// observes every within-budget attempt and keeps its remaining count exact.
+	cfg.ToolLoopDetector = nil
+}
+
+func applyReasoningSandwichPolicy(cfg *agent.AgentConfig, briefcaseMode bool, thinking *llm.ThinkingConfig, verifyGate *verifyGateState) {
+	if briefcaseMode || thinking == nil || thinking.Type != "enabled" || !reasoningSandwichEnabled() {
+		return
+	}
+	cfg.ThinkingModulator = reasoningSandwichThinking(thinking, cfg.MaxTokens, verifyGate)
+}
+
+func applyVerificationAgentPolicy(cfg *agent.AgentConfig, briefcaseMode bool, verifyGate *verifyGateState, logger *slog.Logger) {
+	if briefcaseMode || !verifyGateEnabled() {
+		return
+	}
+	cfg.FinalizeGate = func(turn int) string {
+		if turn < 0 {
+			verifyGate.logFinishedWhileArmed(logger)
+			return ""
+		}
+		return verifyGate.finalizePrompt(logger)
+	}
+}
+
 // buildAgentConfig constructs the agent.AgentConfig, building tool lists and
 // wiring all turn-level hooks. Returns the config along with the spawn flag
 // for the run orchestrator.
@@ -75,178 +395,20 @@ func buildAgentConfig(
 	resolvedModel string,
 	logger *slog.Logger,
 ) (cfg agent.AgentConfig, spawnFlag *SpawnFlag, execStats *toolctx.ToolExecStats) {
-	// Build tool list from registry (uses stored descriptions and schemas).
-	// If a tool preset is active, filter the tool list to only include allowed tools.
-	var tools []llm.Tool
-	if acd.Tools != nil {
-		allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
-		rawTools := acd.Tools.FilteredLLMTools(allowed)
-		// Pre-load deferred tools the preset wants active from turn 1 (e.g. the
-		// self-review's skill_lifecycle) so the model can call them directly
-		// instead of doing a fetch_tools dance it routinely skips. Gated by
-		// preset — nil for main chat, so its toolset (and cache) is unchanged.
-		if preload := toolpreset.PreloadedDeferredTools(toolpreset.Preset(sessionToolPreset)); len(preload) > 0 {
-			rawTools = append(rawTools, acd.Tools.DeferredLLMTools(preload)...)
-		}
-
-		// Cache-stable ordering: built-in tools form a sorted prefix,
-		// dynamic tools (plugins, MCP) are sorted separately and appended.
-		builtinNames := make(map[string]struct{}, len(acd.Tools.Names()))
-		for _, name := range acd.Tools.Names() {
-			builtinNames[name] = struct{}{}
-		}
-		partition := PartitionTools(rawTools, builtinNames)
-		tools = partition.MergedTools()
-
-		// Replayed deferred tools (activated in earlier runs per the transcript)
-		// are appended AFTER the sorted merge, in first-activation order — the
-		// same tail position DynamicToolsProvider gave them at the end of the
-		// previous run, so this run's initial Tools array matches the previous
-		// run's final one and the provider prompt-cache prefix survives the
-		// turn boundary instead of shrinking back and re-growing.
-		if len(acd.ReplayDeferredTools) > 0 {
-			existing := make(map[string]struct{}, len(tools))
-			for _, t := range tools {
-				existing[t.Name] = struct{}{}
-			}
-			for _, t := range acd.Tools.DeferredLLMTools(acd.ReplayDeferredTools) {
-				if _, ok := existing[t.Name]; !ok {
-					tools = append(tools, t)
-				}
-			}
-		}
-	}
-
-	maxTokens := acd.MaxTokens
-	if maxTokens <= 0 {
-		maxTokens = defaultMaxTokens
-	}
-
-	// RunCache lives for the entire agent run (across all turns) and caches
-	// idempotent tool results (find, tree). Invalidated on mutation tools.
-	runCache := NewRunCache()
-
-	// skillConsults records which skills the agent reads during this run so the
-	// post-turn hook can attribute each turn's outcome to them (genesis usage
-	// signal). Run-scoped; shared with the skills tool via OnTurnInit.
-	skillConsults := NewSkillConsultLog()
-
-	// FileCache lives for the entire agent run and deduplicates repeated file reads.
-	fileCache := agent.NewFileCache(agent.DefaultFileCacheMaxItems)
-
-	// SpawnFlag: tracks whether sessions_spawn was called during this run.
-	spawnFlag = NewSpawnFlag()
-
-	// Verification gate state: armed by successful write/edit, disarmed by a
-	// successful build/test exec; consulted when the model tries to finish.
-	verifyGate := &verifyGateState{}
-
-	// DeferredActivation: tracks which deferred tools have been activated via
-	// fetch_tools during this run. Pre-seeded with the transcript-replayed
-	// activations so fetch_tools short-circuits re-fetches from turn 0 and
-	// DynamicToolsProvider never double-appends them.
-	deferredActivation := NewDeferredActivation()
-	if len(acd.ReplayDeferredTools) > 0 {
-		deferredActivation.Seed(acd.ReplayDeferredTools)
-	}
-
-	// ToolExecStats: run-scoped anomaly counters only the chat tool layer can
-	// see (malformed-argument repairs); logged on run.end for aggregation.
-	execStats = toolctx.NewToolExecStats()
-
-	// Resolve thinking config from the session's ThinkingLevel setting. A
-	// per-run override (params.Thinking — e.g. a cron payload's `thinking`
-	// field) takes precedence, including "off" to disable the phase.
-	thinkingLevel := ""
-	if cachedSession != nil {
-		thinkingLevel = cachedSession.ThinkingLevel
-	}
-	if params.Thinking != "" {
-		thinkingLevel = params.Thinking
-	}
-	thinkingCfg := resolveThinkingConfig(thinkingLevel)
-	// Interleaved thinking is an additive flag: it requires extended thinking
-	// to be enabled (otherwise there's nothing to interleave). When
-	// thinkingCfg is nil or disabled the interleaved bit has no effect.
-	if thinkingCfg != nil && thinkingCfg.Type == "enabled" && cachedSession != nil && cachedSession.InterleavedThinking != nil && *cachedSession.InterleavedThinking {
-		thinkingCfg.Interleaved = true
-	}
-
-	// Override max tokens if the caller (e.g., OpenAI HTTP endpoint) specified one.
-	if params.MaxTokens != nil && *params.MaxTokens > 0 {
-		maxTokens = *params.MaxTokens
-	}
-
-	// Mode-aware agent config: the default (업무 chat + sub-agents) and cron share
-	// the full 50-turn budget so multi-step work — deep research, mail/project
-	// synthesis, cron progress-reporting + wiki updates — runs without truncating.
-	// The 60-min agentTimeout co-bounds wall-clock and the in-turn loop guard
-	// stops a stuck agent, so the turn cap is headroom, not the safety mechanism.
-	maxTurns := defaultMaxTurns         // 50
-	agentTimeout := defaultAgentTimeout // 60min
-	if cachedSession != nil {
-		switch {
-		case cachedSession.SpawnedBy != "":
-			// Sub-agents are scoped delegations, not open-ended sessions: a
-			// stuck child should fail fast and report back instead of holding
-			// a local vLLM slot for the full 60-minute default.
-			agentTimeout = 15 * time.Minute
-		case cachedSession.Kind == session.KindCron:
-			maxTurns = 50
-		}
-	}
-	if deps.runLimits.MaxTurns > 0 {
-		maxTurns = deps.runLimits.MaxTurns
-	}
-	if params.MaxTurns != nil && *params.MaxTurns > 0 {
-		maxTurns = *params.MaxTurns
-	}
-	if deps.runLimits.Timeout > 0 {
-		agentTimeout = deps.runLimits.Timeout
-	}
-
-	maxOutputRecovery := 1
-	maxOutputScaleFactors := []float64{1.5}
-	streamIdleTimeout := time.Duration(0)
-	parallelSafeTool := parallelSafeToolVet()
-	if deps.briefcaseMode {
-		maxOutputRecovery = 0
-		maxOutputScaleFactors = nil
-		streamIdleTimeout = BriefcaseStreamIdleTimeout
-		if !BriefcaseParallelToolsEnabled {
-			parallelSafeTool = nil
-		}
-	}
-
-	// Skill-nudger hook state: tracks per-run tool activity so we can
-	// hand a clean snapshot to the background review goroutine. Zero cost
-	// when acd.SkillNudger is nil or disabled.
-	skillNudgerEnabled := shouldEnableSkillNudger(acd.SkillNudger, params, sessionToolPreset)
-	var nudgerMu sync.Mutex
-	var nudgerActivities []SkillNudgeToolActivity
-	var nudgerTurns int
-	// Nudger reviews are background work that may outlive the turn, so they
-	// ride the server lifecycle ctx (canceled on shutdown, not on request
-	// completion) — concurrency.md rule 7. Background is the test-only fallback.
-	nudgeCtx := deps.callbacks.shutdownCtx
-	if nudgeCtx == nil {
-		nudgeCtx = context.Background()
-	}
-	var maxToolCallAttempts *int
-	if params.MaxToolCallAttempts != nil {
-		value := *params.MaxToolCallAttempts
-		maxToolCallAttempts = &value
-	}
+	tools := buildAgentTools(acd.Tools, sessionToolPreset, acd.ReplayDeferredTools)
+	state := newAgentRunState(acd.ReplayDeferredTools)
+	policy := resolveAgentExecutionPolicy(params, deps, cachedSession, acd.MaxTokens)
+	turnHooks := newAgentTurnHooks(params, deps, acd, resolvedModel, sessionToolPreset, state.skillConsults)
 
 	cfg = agent.AgentConfig{
-		MaxTurns:            maxTurns,
-		Timeout:             agentTimeout,
+		MaxTurns:            policy.maxTurns,
+		Timeout:             policy.timeout,
 		Model:               "", // set by caller after model resolution
 		System:              systemPrompt,
 		Tools:               tools,
-		MaxTokens:           maxTokens,
-		MaxToolCallAttempts: maxToolCallAttempts,
-		Thinking:            thinkingCfg,
+		MaxTokens:           policy.maxTokens,
+		MaxToolCallAttempts: policy.maxToolCallAttempts,
+		Thinking:            policy.thinking,
 		Temperature:         params.Temperature,
 		TopP:                params.TopP,
 		FrequencyPenalty:    params.FrequencyPenalty,
@@ -260,158 +422,37 @@ func buildAgentConfig(
 		StripImagesAfterFirstTurn: hasImageAttachment(params.Attachments),
 		// Deferred context injection on turn 1+: subagent completion
 		// notifications via non-blocking channel reads.
-		DeferredSystemText: deferredSubagentNotifications(acd.SubagentNotifyCh),
-		// Emit heartbeat at each turn so WS clients know the agent is alive.
-		OnTurn: func(turn int, accumulatedTokens int) {
-			if acd.EmitAgentFn != nil {
-				acd.EmitAgentFn("heartbeat", params.SessionKey, params.ClientRunID, map[string]any{
-					"turn":   turn,
-					"tokens": accumulatedTokens,
-					"ts":     time.Now().UnixMilli(),
-				})
-			}
-		},
-		// Post-turn hook: (1) attribute this turn's outcome to the skills
-		// consulted during it (genesis usage signal), then (2) feed the skill
-		// nudger. Both are cheap no-ops when their dependency is nil.
-		OnToolTurn: func(turn int, activities []agent.ToolActivity) {
-			recordTurnSkillUsage(acd.SkillUsageRecorder, skillConsults, activities, params.SessionKey, resolvedModel)
-			if !skillNudgerEnabled {
-				return
-			}
-			nudgerMu.Lock()
-			nudgerTurns = turn
-			for _, a := range activities {
-				nudgerActivities = append(nudgerActivities, SkillNudgeToolActivity{
-					Name:    a.Name,
-					IsError: a.IsError,
-				})
-			}
-			if len(activities) == 0 {
-				nudgerMu.Unlock()
-				return
-			}
-			snapshot := SkillNudgeSnapshot{
-				Turns:          nudgerTurns,
-				ToolActivities: append([]SkillNudgeToolActivity(nil), nudgerActivities...),
-				Label:          params.SessionKey,
-				Model:          params.Model,
-			}
-			nudgerMu.Unlock()
-			acd.SkillNudger.OnToolCalls(nudgeCtx, params.SessionKey, len(activities), snapshot)
-		},
-		// Inject a fresh TurnContext at the start of each turn so that tools
-		// executing in parallel within the same turn can share results via $ref.
-		OnTurnInit: func(ctx context.Context) context.Context {
-			// Session key must be set HERE, not only in runAgentAsync's ctx
-			// decoration: the SendSync path (miniapp.chat.send — the native
-			// client's sole entry) reaches RunAgent without that decoration,
-			// so tools reading SessionKeyFromContext (sessions_spawn parent
-			// attribution, polaris session-scoped recall, subagents, spillover)
-			// saw "" there. Same precedent as WithAutoDelivery below.
-			ctx = WithSessionKey(ctx, params.SessionKey)
-			ctx = WithTurnContext(ctx, NewTurnContext())
-			ctx = WithRunCache(ctx, runCache)
-			ctx = WithSkillConsultLog(ctx, skillConsults)
-			ctx = WithFileCache(ctx, fileCache)
-			ctx = WithToolPreset(ctx, sessionToolPreset)
-			ctx = WithDeferredActivation(ctx, deferredActivation)
-			ctx = WithSpawnFlag(ctx, spawnFlag)
-			ctx = WithVerifyGate(ctx, verifyGate)
-			ctx = toolctx.WithToolExecStats(ctx, execStats)
-			if params.ToolDryRun {
-				ctx = toolctx.WithToolDryRun(ctx)
-			}
-			// Cron/scheduled runs deliver their final text via the run-completion
-			// layer, so an in-loop message-tool send is a benign no-op rather than
-			// an outage. Without this flag on the tool context, the message tool
-			// returns an error the model translates into a "전송이 안 됐네요, 직접
-			// 전달드릴게요" apology that then leaks into the delivered report.
-			// runAgentAsync sets this on its own ctx, but the SendSync/cron path
-			// reaches RunAgent only through this OnTurnInit — so it must be set
-			// here too. See message.go's AutoDeliveryFromContext branch.
-			if params.AutoDeliveredOutput {
-				ctx = WithAutoDelivery(ctx)
-			}
-			return ctx
-		},
-		DynamicToolsProvider: func() []llm.Tool {
-			names := deferredActivation.ActivatedNames()
-			if len(names) == 0 {
-				return nil
-			}
-			return acd.Tools.DeferredLLMTools(names)
-		},
-		MaxOutputTokensRecovery:     maxOutputRecovery,
-		MaxOutputTokensScaleFactors: maxOutputScaleFactors,
+		DeferredSystemText:          deferredSubagentNotifications(acd.SubagentNotifyCh),
+		OnTurn:                      turnHooks.onTurn,
+		OnToolTurn:                  turnHooks.onToolTurn,
+		OnTurnInit:                  state.turnInitializer(params, sessionToolPreset),
+		DynamicToolsProvider:        state.dynamicToolsProvider(acd.Tools),
+		MaxOutputTokensRecovery:     policy.maxOutputRecovery,
+		MaxOutputTokensScaleFactors: policy.maxOutputScaleFactors,
 		DisableBudgetGrace:          deps.briefcaseMode,
 		DisableTokenFeedback:        deps.briefcaseMode,
 		DisableStreamRetry:          deps.briefcaseMode,
 		RequireProviderModel:        deps.briefcaseMode,
-		SpawnDetected:               spawnFlag.IsSet,
+		SpawnDetected:               state.spawnFlag.IsSet,
 		ToolLoopDetector:            agent.NewToolLoopDetector(agent.DefaultToolLoopConfig(), logger),
-		StreamIdleTimeout:           streamIdleTimeout,
-		ParallelSafeTool:            parallelSafeTool,
+		StreamIdleTimeout:           policy.streamIdleTimeout,
+		ParallelSafeTool:            policy.parallelSafeTool,
 		// Per-turn message persistence: persist each assistant and tool_result
 		// message immediately to transcript so intermediate findings survive
 		// across runs (fixes the "short-term memory loss" bug). Wrapped below so
 		// the verification gate also observes each finishing assistant turn's
 		// text (for the explicit "검증 불필요:" opt-out) on the same turn the
 		// model tries to end.
-		OnMessagePersist: verifyGateObservingPersister(buildMessagePersister(deps, params, logger), verifyGate),
+		OnMessagePersist: verifyGateObservingPersister(buildMessagePersister(deps, params, logger), state.verifyGate),
 	}
-	if deps.briefcaseMode {
-		cfg.MaxTotalOutputTokens = maxTokens
-		cfg.MaxStreamBytes = maxTokens * 16
-		if cfg.MaxStreamBytes < 64<<10 {
-			cfg.MaxStreamBytes = 64 << 10
-		}
-		if cfg.MaxStreamBytes > 8<<20 {
-			cfg.MaxStreamBytes = 8 << 20
-		}
-		cfg.RequireExplicitStopReason = true
-		cfg.RequireStrictStopShape = true
-		// The signed ToolGate must observe every within-budget attempt so its
-		// case-wide remaining count stays exact. The generic loop detector runs
-		// before that hook, so deterministic Briefcase runs use the signed hard
-		// cap instead of the ambient production detector.
-		cfg.ToolLoopDetector = nil
-	}
+	applyBriefcaseAgentPolicy(&cfg, deps.briefcaseMode)
 
-	// Reasoning sandwich (docs/research/ideal-agent-environment-harness.md §11):
-	// when enabled, boost the planning (turn 0) thinking budget AND re-boost the
-	// verify/finish turn (the back half — the gate's armed-and-finishing turn is
-	// where a fix plan must form), keeping middle tool-execution turns at
-	// baseline. Opt-in via DENEB_REASONING_SANDWICH and only when the session
-	// already has thinking enabled, so default behavior is unchanged. The
-	// modulator returns nil on no-opinion turns so it composes cleanly with the
-	// effort router (see effortStepModulator). Thinking is a request-level param,
-	// so per-turn variation is cache-safe.
-	if !deps.briefcaseMode && thinkingCfg != nil && thinkingCfg.Type == "enabled" && reasoningSandwichEnabled() {
-		cfg.ThinkingModulator = reasoningSandwichThinking(thinkingCfg, cfg.MaxTokens, verifyGate)
-	}
+	// Both policies are per-request hooks: they do not alter prompt bytes or
+	// the cache-stable tool ordering assembled above.
+	applyReasoningSandwichPolicy(&cfg, deps.briefcaseMode, policy.thinking, state.verifyGate)
+	applyVerificationAgentPolicy(&cfg, deps.briefcaseMode, state.verifyGate, logger)
 
-	// Verification gate (docs/research/ideal-agent-environment-harness.md §10):
-	// a run that wrote/edited files must run a verification command before its
-	// finish is accepted. The gate escalates across two injections and then
-	// HARD-BLOCKS — refusing finish until a verify command runs or the model
-	// emits an explicit "검증 불필요: <이유>" opt-out (observed via the wrapped
-	// persister). A still-armed run that escapes only via max_turns is logged by
-	// the sentinel terminal probe (turn < 0). Default ON (inert for non-mutating
-	// runs); DENEB_VERIFY_GATE=0 disables.
-	if !deps.briefcaseMode && verifyGateEnabled() {
-		cfg.FinalizeGate = func(turn int) string {
-			if turn < 0 {
-				// Terminal probe from the executor's max_turns path: the gate
-				// never got the last word, so log a silent escape if still armed.
-				verifyGate.logFinishedWhileArmed(logger)
-				return ""
-			}
-			return verifyGate.finalizePrompt(logger)
-		}
-	}
-
-	return cfg, spawnFlag, execStats
+	return cfg, state.spawnFlag, state.execStats
 }
 
 // recordTurnSkillUsage attributes one turn's outcome to the skills consulted

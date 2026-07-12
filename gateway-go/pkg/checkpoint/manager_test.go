@@ -206,6 +206,41 @@ func TestRetentionMaxBytes(t *testing.T) {
 	}
 }
 
+func TestRetentionRewritesIndexAfterBlobDeleteFailure(t *testing.T) {
+	m := newTestManager(t, "session-ret-delete-error", WithRetentionN(1))
+	target := filepath.Join(t.TempDir(), "tracked.txt")
+	undeletableBlob := filepath.Join(t.TempDir(), "non-empty-blob-directory")
+	if err := os.Mkdir(undeletableBlob, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(undeletableBlob, "child"), "prevents directory removal")
+
+	snapshots := []*Snapshot{
+		{ID: "old", Path: target, Seq: 1, Size: 10, BlobPath: undeletableBlob},
+		{ID: "new", Path: target, Seq: 2, Size: 10},
+	}
+	if err := rewriteIndex(m.indexPath(), snapshots); err != nil {
+		t.Fatalf("seed index: %v", err)
+	}
+
+	m.mu.Lock()
+	err := m.pruneLocked()
+	m.mu.Unlock()
+	if err == nil || !strings.Contains(err.Error(), "remove blob") {
+		t.Fatalf("prune error = %v, want blob removal error", err)
+	}
+	remaining, err := readIndex(m.indexPath())
+	if err != nil {
+		t.Fatalf("read rewritten index: %v", err)
+	}
+	if len(remaining) != 1 || remaining[0].ID != "new" {
+		t.Fatalf("remaining snapshots = %+v, want only newest", remaining)
+	}
+	if _, err := os.Stat(undeletableBlob); err != nil {
+		t.Fatalf("failed blob unexpectedly disappeared: %v", err)
+	}
+}
+
 func TestConcurrentSnapshotSameFile(t *testing.T) {
 	m := newTestManager(t, "session-race")
 	target := filepath.Join(t.TempDir(), "racy.txt")

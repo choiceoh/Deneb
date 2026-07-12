@@ -157,7 +157,7 @@ class CLIContractTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr.getvalue(), "")
-        self.assertEqual(migrated["rubric_version"], "2.1.2")
+        self.assertEqual(migrated["rubric_version"], "2.2.0")
         self.assertEqual(migrated["provenance"]["previous_score"], 47.4)
         self.assertEqual(
             migrated["provenance"]["reason"],

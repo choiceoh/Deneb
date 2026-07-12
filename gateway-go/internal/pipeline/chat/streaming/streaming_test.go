@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -63,6 +64,28 @@ func TestStreamBroadcasterEmitThinkingThrottles(t *testing.T) {
 	}
 	if !strings.Contains(payloads[1], `"preview":"스텝 스텝 스텝 스텝 스텝 스텝 스텝 스텝 스텝 스텝 메일 발신인 이력 대조"`) {
 		t.Fatalf("second frame should carry the collapsed preview, got %s", payloads[1])
+	}
+}
+
+func TestStreamBroadcasterConcurrentThinkingEmitsSingleThrottledFrame(t *testing.T) {
+	var broadcasts atomic.Int64
+	sb := NewBroadcaster(func(string, []byte) int {
+		broadcasts.Add(1)
+		return 1
+	}, "s1", "r1")
+
+	var wg sync.WaitGroup
+	for range 32 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sb.EmitThinking("동시에 들어온 추론 조각 ")
+		}()
+	}
+	wg.Wait()
+
+	if got := broadcasts.Load(); got != 1 {
+		t.Fatalf("concurrent EmitThinking broadcasts = %d, want 1 throttled frame", got)
 	}
 }
 
@@ -180,7 +203,7 @@ func TestCleanThinkingPreviewEdgeCases(t *testing.T) {
 	}
 }
 
-func TestStreamBroadcasterEmitDelta(t *testing.T) {
+func TestStreamBroadcasterEmitDeltaEncodesProtocolPayload(t *testing.T) {
 	t.Run("skips empty text", func(t *testing.T) {
 		called := false
 		sb := NewBroadcaster(func(event string, data []byte) int {

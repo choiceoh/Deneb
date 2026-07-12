@@ -110,10 +110,11 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 	model := getRoleModel(role, modelrole.DefaultVllmModel)
 
 	// Thinking-off shaping, shared with the localai hub (modelrole.
-	// ThinkingOffExtraBody): the template toggle for dual-mode models
+	// ThinkingOffDirectiveFor): the template toggle for dual-mode models
 	// (deepseek-v4 → chat_template_kwargs.thinking=false), nothing for
 	// untoggleable reasoning models (their thinking-only templates can 400
-	// on enable_thinking), NoThinking for vLLM-backed non-reasoning models.
+	// on enable_thinking), enable_thinking=false for vLLM-backed
+	// non-reasoning models.
 	// Registry-aware when possible so routing.toggleKwarg overrides apply;
 	// the registry-less fallback assumes "vllm" — this direct path defaults
 	// to DefaultVllmBaseURL anyway.
@@ -135,10 +136,10 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 	// primary model's kwargs would send e.g. a vLLM-only template toggle to a
 	// cloud provider (or enable_thinking to an untoggleable reasoning model).
 	shapedExtra := func(providerID, model string) map[string]any {
-		off := pkgRegistry.ThinkingOffExtraBodyFor(providerID, model) // nil-receiver safe
-		merged := make(map[string]any, len(off)+len(callerExtra)+1)
-		for k, v := range off {
-			merged[k] = v
+		directive := pkgRegistry.ThinkingOffDirectiveFor(providerID, model) // nil-receiver safe
+		merged := make(map[string]any, len(callerExtra)+2)
+		if directive != nil {
+			merged["chat_template_kwargs"] = map[string]any{directive.TemplateKwarg(): false}
 		}
 		for k, v := range callerExtra {
 			merged[k] = v

@@ -11,6 +11,9 @@ root다. 제품 규칙을 구현하는 곳이 아니라, 소유 패키지의 좁
 - `server_lifecycle.go`의 `Server.StartAndListen`과 `Server.ShutdownCtx`가 시작,
   종료, drain 경계를 소유한다.
 - `server_http_routing.go`의 `Server.buildMux`가 HTTP route의 단일 등록 지점이다.
+  네이티브 클라이언트·앱 업데이트·Fleet·MCP route와 CORS 조립은
+  `../gatewayhttp/routes.go`의 `gatewayhttp.RegisterRoutes`와 `WithCORS`가
+  소유하며, server는 좁은 `gatewayhttp.Config`만 채운다.
 - `gateway_hub.go`의 `Server.buildHub`가 RPC 서비스 컨테이너를 만든다.
 - `method_registry.go`의 `Server.registerEarlyMethods`,
   `method_registry_late.go`의 `Server.registerLateMethods`,
@@ -42,3 +45,6 @@ root다. 제품 규칙을 구현하는 곳이 아니라, 소유 패키지의 좁
 
 RPC 또는 HTTP 표면을 바꿨다면 추가로 관련 handler 패키지 테스트를 실행하고,
 백그라운드 작업 변경은 취소된 context에서 종료되는지 테스트로 증명한다.
+클라이언트 HTTP 조립을 바꿨다면
+`go test ./internal/runtime/gatewayhttp ./internal/runtime/nativeapi ./internal/runtime/server`
+로 method boundary와 인증 전 CORS preflight를 함께 확인한다.

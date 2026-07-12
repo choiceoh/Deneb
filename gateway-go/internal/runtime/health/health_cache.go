@@ -58,9 +58,9 @@ type cacheHealth struct {
 	samples []cacheSample
 }
 
-// cacheHealthSection is the JSON shape rendered under health["cache"]. It mirrors
+// CacheSection is the JSON shape rendered under health["cache"]. It mirrors
 // the flat, snake_case-ish style of the other /health sections.
-type cacheHealthSection struct {
+type CacheSection struct {
 	// HitRatePct is the 24h rolling prefix-cache hit ratio (hits/queries*100,
 	// one decimal), or nil when the window has too little data to be meaningful.
 	HitRatePct *float64 `json:"hitRatePct,omitempty"`
@@ -85,7 +85,7 @@ type cacheHealthSection struct {
 // older than the window, and derives the rolling ratio. Returns ok=false when
 // there is nothing to surface (no vLLM bases, scrape down with an empty ring),
 // in which case /health omits the cache section entirely.
-func (c *cacheHealth) observe(ctx context.Context, bases []string) (cacheHealthSection, bool) {
+func (c *cacheHealth) observe(ctx context.Context, bases []string) (CacheSection, bool) {
 	now := time.Now()
 
 	c.mu.Lock()
@@ -155,14 +155,14 @@ func pruneCacheSamples(s *[]cacheSample, cutoff time.Time) {
 // between the newest and oldest retained samples (engine counters only ever
 // rise between restarts; a backwards delta means the engine restarted mid
 // window, so the ratio is suppressed rather than reported negative).
-func summarizeCacheWindow(samples []cacheSample, now time.Time) (cacheHealthSection, bool) {
+func summarizeCacheWindow(samples []cacheSample, now time.Time) (CacheSection, bool) {
 	if len(samples) == 0 {
-		return cacheHealthSection{}, false
+		return CacheSection{}, false
 	}
 	oldest := samples[0]
 	newest := samples[len(samples)-1]
 
-	sec := cacheHealthSection{
+	sec := CacheSection{
 		Samples:     len(samples),
 		WindowLabel: now.Sub(oldest.at).Round(time.Second).String(),
 	}

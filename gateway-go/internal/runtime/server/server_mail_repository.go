@@ -9,7 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeapi"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/gatewayhttp"
 	handlermail "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail"
 )
 
@@ -38,7 +38,7 @@ func (s *Server) newMiniappMailClient(denebDir string) (handlermail.GmailClient,
 	return nil, errNativeMailUnconfigured
 }
 
-func (s *Server) newMiniappMailAttachmentClient() (nativeapi.MailAttachmentClient, error) {
+func (s *Server) newMiniappMailAttachmentClient() (gatewayhttp.MailAttachmentClient, error) {
 	if repo := s.newArchiveMailRepository(s.denebDir, nil); repo != nil {
 		return repo, nil
 	}

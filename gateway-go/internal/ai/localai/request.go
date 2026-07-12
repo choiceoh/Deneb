@@ -47,7 +47,7 @@ type Request struct {
 	CallerTag string
 
 	// ExtraBody is merged into the OpenAI-compatible request body.
-	// The hub merges NoThinking defaults (currently empty) and a server-side
+	// The hub merges the model's typed thinking-off directive and a server-side
 	// "timeout" field; caller entries are merged on top.
 	ExtraBody map[string]any
 

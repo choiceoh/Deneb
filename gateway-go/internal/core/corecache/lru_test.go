@@ -1,6 +1,7 @@
 package corecache
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
@@ -118,5 +119,35 @@ func TestLRU_Cleanup(t *testing.T) {
 	}
 	if _, ok := c.Get("c"); !ok {
 		t.Fatal("expected 'c' to survive cleanup")
+	}
+}
+
+func TestLRU_ConcurrentAccessPreservesCapacity(t *testing.T) {
+	const (
+		capacity = 32
+		workers  = 12
+	)
+	c := NewLRU[int, int](capacity, 0)
+	var wg sync.WaitGroup
+	for worker := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for offset := range 200 {
+				key := worker*200 + offset
+				c.Put(key, key)
+				if value, ok := c.Get(key); ok && value != key {
+					t.Errorf("Get(%d) = %d, want %d", key, value, key)
+				}
+				if offset%3 == 0 {
+					c.Delete(key)
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+	if got := c.Len(); got > capacity {
+		t.Fatalf("Len() = %d after concurrent access, exceeds capacity %d", got, capacity)
 	}
 }

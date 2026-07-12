@@ -11,7 +11,7 @@ import (
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	health := s.collectBaseHealth()
 	if propus, ok := runtimehealth.Propus(s.genesisTracker); ok {
-		runtimehealth.AttachPropus(health, propus)
+		attachPropus(health, propus)
 	}
 
 	if s.fleet != nil {
@@ -30,6 +30,13 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeJSON(w, http.StatusOK, health)
+}
+
+// attachPropus publishes the canonical name and its legacy compatibility alias
+// as the same immutable snapshot.
+func attachPropus(health map[string]any, section *runtimehealth.PropusSection) {
+	health["propus"] = section
+	health["self_evolution"] = section
 }
 
 // vllmBaseURLs returns the configured vLLM ".../v1" base URLs, or nil when the

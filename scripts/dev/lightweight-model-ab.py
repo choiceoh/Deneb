@@ -37,7 +37,7 @@ output-token counts ride along because verbosity is wall-clock on these paths
 
 Request shaping mirrors production text-role calls (pilot.CallRoleLLM):
   - system/user 분리 메시지 (단일 user 메시지 아님)
-  - 후보별 기본 thinking-off extra body — modelrole.ThinkingOffExtraBody의 3분기
+  - 후보별 기본 thinking-off extra body — modelrole.ThinkingOffDirectiveFor의 3분기
     미러 (단일 진실원: gateway-go/internal/ai/modelrole/thinking.go). 끄려면
     --no-thinking-off, 키가 겹치면 --extra-body-*가 이긴다.
 Remaining deliberate gaps vs production: 배터리는 비스트리밍 HTTP(프로덕션은
@@ -96,7 +96,7 @@ def main() -> int:
     ap.add_argument("--extra-body-b", default="", help="model-b 요청 body에 병합할 JSON — 사고형 후보의 서빙 옵션 실험 등")
     ap.add_argument(
         "--no-thinking-off", action="store_true",
-        help="후보별 기본 thinking-off 셰이핑(modelrole.ThinkingOffExtraBody 미러)을 끈다 — chat_template_kwargs를 거부하는 비-vLLM 엔드포인트용",
+        help="후보별 기본 thinking-off 셰이핑(modelrole.ThinkingOffDirectiveFor 미러)을 끈다 — chat_template_kwargs를 거부하는 비-vLLM 엔드포인트용",
     )
     ap.add_argument(
         "--eval-extract-url", default=os.environ.get("DENEB_EVAL_EXTRACT_URL", ""),

@@ -309,91 +309,135 @@ func readCapped(path string, max int64) []byte {
 	return data
 }
 
+type diaryProcessState struct {
+	MemoryConsumedThrough string `json:"memoryConsumedThrough"`
+	Files                 map[string]struct {
+		Offset int64 `json:"offset"`
+	} `json:"files"`
+}
+
 func memoryStatus(stateDir string, now time.Time) MemoryStatus {
-	var m MemoryStatus
-	// Dreamer processing ledger: per-file consumption offsets + the (separate)
-	// MEMORY.md distillation stamp.
-	var offsets map[string]int64
-	if data, err := os.ReadFile(filepath.Join(stateDir, "wiki", ".diary-process-state.json")); err == nil {
-		var st struct {
-			MemoryConsumedThrough string `json:"memoryConsumedThrough"`
-			Files                 map[string]struct {
-				Offset int64 `json:"offset"`
-			} `json:"files"`
-		}
-		if json.Unmarshal(data, &st) == nil {
-			m.MemoryMDStamp = strings.TrimSpace(st.MemoryConsumedThrough)
-			offsets = make(map[string]int64, len(st.Files))
-			for name, f := range st.Files {
-				offsets[name] = f.Offset
-			}
-		}
+	memoryStamp, offsets := loadDiaryProcessState(stateDir)
+	m := scanDiaryStatus(stateDir, offsets)
+	m.MemoryMDStamp = memoryStamp
+	m.SpilloverToday = countSpilloverToday(stateDir, now)
+	return m
+}
+
+// loadDiaryProcessState reads the dreamer's two independent checkpoints: the
+// MEMORY.md distillation stamp and the consumed byte offset for each diary.
+// A missing or malformed ledger is equivalent to no checkpoint.
+func loadDiaryProcessState(stateDir string) (string, map[string]int64) {
+	data, err := os.ReadFile(filepath.Join(stateDir, "wiki", ".diary-process-state.json"))
+	if err != nil {
+		return "", nil
 	}
+	var state diaryProcessState
+	if json.Unmarshal(data, &state) != nil {
+		return "", nil
+	}
+	offsets := make(map[string]int64, len(state.Files))
+	for name, file := range state.Files {
+		offsets[name] = file.Offset
+	}
+	return strings.TrimSpace(state.MemoryConsumedThrough), offsets
+}
+
+// scanDiaryStatus joins the durable offsets with diary files. It deliberately
+// distinguishes legacy files (older than the newest tracked file) from diaries
+// that arrived after the ledger was last updated.
+func scanDiaryStatus(stateDir string, offsets map[string]int64) MemoryStatus {
+	var status MemoryStatus
 	// Join the ledger against the actual diary files. Untracked files OLDER
 	// than the newest tracked one are the dreamer's legacy-cutoff skips —
 	// neither consumed nor pending; untracked files NEWER than it simply
 	// haven't been scanned yet and count as fully pending. With no ledger at
 	// all we report only LatestDiary — the dreamer's absence already shows up
 	// as a liveness gap, not a fake byte backlog.
-	if entries, err := os.ReadDir(filepath.Join(stateDir, "memory", "diary")); err == nil {
-		newestTracked := ""
-		for name := range offsets {
-			if name > newestTracked {
-				newestTracked = name
-			}
-		}
-		oldestPending := ""
-		for _, e := range entries {
-			n := e.Name()
-			if e.IsDir() || !strings.HasPrefix(n, "diary-") || !strings.HasSuffix(n, ".md") {
-				continue
-			}
-			date := diaryDate(n)
-			if date > m.LatestDiary {
-				m.LatestDiary = date
-			}
-			info, err := e.Info()
-			if err != nil {
-				continue
-			}
-			pending := int64(0)
-			if off, tracked := offsets[n]; tracked {
-				if pending = info.Size() - off; pending <= 0 {
-					if date > m.DreamerConsumedThrough {
-						m.DreamerConsumedThrough = date
-					}
-					continue
-				}
-			} else if newestTracked != "" && n > newestTracked {
-				pending = info.Size()
-			} else {
-				continue // legacy skip (or no ledger at all)
-			}
-			m.PendingBytes += pending
-			if oldestPending == "" || date < oldestPending {
-				oldestPending = date
-			}
-		}
-		if oldestPending != "" {
-			m.BacklogDays = backlogDays(oldestPending, m.LatestDiary)
+	entries, err := os.ReadDir(filepath.Join(stateDir, "memory", "diary"))
+	if err != nil {
+		return status
+	}
+	newestTracked := ""
+	for name := range offsets {
+		if name > newestTracked {
+			newestTracked = name
 		}
 	}
-	// Spill pressure today.
-	if entries, err := os.ReadDir(filepath.Join(stateDir, "spillover")); err == nil {
-		y, mo, d := now.Date()
-		for _, e := range entries {
-			if e.IsDir() {
-				continue
+	oldestPending := ""
+	for _, entry := range entries {
+		date, pending, consumed := diaryEntryStatus(entry, offsets, newestTracked)
+		if date == "" {
+			continue
+		}
+		if date > status.LatestDiary {
+			status.LatestDiary = date
+		}
+		if consumed {
+			if date > status.DreamerConsumedThrough {
+				status.DreamerConsumedThrough = date
 			}
-			if info, err := e.Info(); err == nil {
-				ey, emo, ed := info.ModTime().Date()
-				if ey == y && emo == mo && ed == d {
-					m.SpilloverToday++
-				}
-			}
+			continue
+		}
+		if pending <= 0 {
+			continue
+		}
+		status.PendingBytes += pending
+		if oldestPending == "" || date < oldestPending {
+			oldestPending = date
 		}
 	}
-	return m
+	if oldestPending != "" {
+		status.BacklogDays = backlogDays(oldestPending, status.LatestDiary)
+	}
+	return status
+}
+
+func diaryEntryStatus(
+	entry os.DirEntry,
+	offsets map[string]int64,
+	newestTracked string,
+) (date string, pending int64, consumed bool) {
+	name := entry.Name()
+	if entry.IsDir() || !strings.HasPrefix(name, "diary-") || !strings.HasSuffix(name, ".md") {
+		return "", 0, false
+	}
+	date = diaryDate(name)
+	info, err := entry.Info()
+	if err != nil {
+		return date, 0, false
+	}
+	if offset, tracked := offsets[name]; tracked {
+		pending = info.Size() - offset
+		return date, pending, pending <= 0
+	}
+	if newestTracked != "" && name > newestTracked {
+		return date, info.Size(), false
+	}
+	return date, 0, false // legacy skip (or no ledger at all)
+}
+
+func countSpilloverToday(stateDir string, now time.Time) int {
+	entries, err := os.ReadDir(filepath.Join(stateDir, "spillover"))
+	if err != nil {
+		return 0
+	}
+	year, month, day := now.Date()
+	count := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		entryYear, entryMonth, entryDay := info.ModTime().Date()
+		if entryYear == year && entryMonth == month && entryDay == day {
+			count++
+		}
+	}
+	return count
 }
 
 func modelSummary(stateDir string) ModelSummary {

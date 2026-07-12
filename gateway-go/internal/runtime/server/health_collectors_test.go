@@ -61,19 +61,10 @@ func TestPropusHealthCompatibilityAliasSharesSnapshot(t *testing.T) {
 	}
 
 	health := map[string]any{}
-	section := map[string]any{"state": "healthy"}
-	runtimehealth.AttachPropus(health, section)
+	section := &runtimehealth.PropusSection{}
+	attachPropus(health, section)
 
-	propus, ok := health["propus"].(map[string]any)
-	if !ok {
-		t.Fatalf("propus type = %T, want map[string]any", health["propus"])
-	}
-	legacy, ok := health["self_evolution"].(map[string]any)
-	if !ok {
-		t.Fatalf("self_evolution type = %T, want map[string]any", health["self_evolution"])
-	}
-	propus["alias_probe"] = true
-	if legacy["alias_probe"] != true {
-		t.Fatalf("propus aliases do not share one snapshot: propus=%v self_evolution=%v", propus, legacy)
+	if health["propus"] != section || health["self_evolution"] != section {
+		t.Fatalf("propus aliases do not share one snapshot: propus=%v self_evolution=%v", health["propus"], health["self_evolution"])
 	}
 }

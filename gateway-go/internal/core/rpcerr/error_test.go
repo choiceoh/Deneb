@@ -1,9 +1,12 @@
 package rpcerr
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -17,25 +20,25 @@ func TestNewBasic(t *testing.T) {
 	if e.Message != "session not found" {
 		t.Errorf("message = %q", e.Message)
 	}
-	if len(e.Context) != 0 {
-		t.Errorf("context should be empty, got %v", e.Context)
+	if details := e.ToShape().Details; details != nil {
+		t.Errorf("new error details = %s, want nil", details)
 	}
 }
 
-func TestWithChaining(t *testing.T) {
+func TestTypedContextChaining(t *testing.T) {
 	e := New(protocol.ErrNotFound, "session not found").
 		WithSession("abc-123").
-		WithMethod("sessions.get").
-		With("extra", 42)
+		WithMethod("sessions.get")
 
-	if e.Context["sessionKey"] != "abc-123" {
-		t.Errorf("sessionKey = %v", e.Context["sessionKey"])
+	var details map[string]string
+	if err := json.Unmarshal(e.ToShape().Details, &details); err != nil {
+		t.Fatalf("decode details: %v", err)
 	}
-	if e.Context["method"] != "sessions.get" {
-		t.Errorf("method = %v", e.Context["method"])
+	if got := details["sessionKey"]; got != "abc-123" {
+		t.Errorf("sessionKey = %q", got)
 	}
-	if e.Context["extra"] != 42 {
-		t.Errorf("extra = %v", e.Context["extra"])
+	if got := details["method"]; got != "sessions.get" {
+		t.Errorf("method = %q", got)
 	}
 }
 
@@ -145,8 +148,25 @@ func TestWrapConvenienceConstructors(t *testing.T) {
 func TestLogAttrs(t *testing.T) {
 	e := New(protocol.ErrNotFound, "missing").WithSession("s1")
 	attrs := e.LogAttrs()
-	// Should have: code, ErrNotFound, message, "missing", sessionKey, "s1"
-	if len(attrs) < 6 {
-		t.Errorf("got %d: %v, want at least 6 attrs", len(attrs), attrs)
+	if len(attrs) != 3 {
+		t.Fatalf("got %d attrs, want 3: %v", len(attrs), attrs)
+	}
+
+	var out bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&out, nil))
+	logger.LogAttrs(context.Background(), slog.LevelError, "rpc error", attrs...)
+
+	var entry map[string]any
+	if err := json.Unmarshal(out.Bytes(), &entry); err != nil {
+		t.Fatalf("decode log entry: %v", err)
+	}
+	for key, want := range map[string]string{
+		"code":       protocol.ErrNotFound,
+		"message":    "missing",
+		"sessionKey": "s1",
+	} {
+		if got := entry[key]; got != want {
+			t.Errorf("log %s = %v, want %q", key, got, want)
+		}
 	}
 }

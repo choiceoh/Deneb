@@ -8,6 +8,7 @@ package rpcerr
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -18,8 +19,13 @@ import (
 type Error struct {
 	Code    string
 	Message string
-	Context map[string]any
 	Cause   error // original error, preserved for errors.Is/As chain traversal
+
+	// context stays private so RPC handlers cannot attach values whose JSON
+	// shape is discovered only when the error is serialized. The supported
+	// context contract is intentionally string-valued: every production caller
+	// identifies a session, channel, method, or agent.
+	context map[string]string
 }
 
 // New creates a structured RPC error with the given code and message.
@@ -71,32 +77,29 @@ func (e *Error) WithAgent(id string) *Error {
 	return e.with("agent", id)
 }
 
-// With attaches an arbitrary key-value pair to the error context.
-func (e *Error) With(key string, value any) *Error {
-	return e.with(key, value)
-}
-
-func (e *Error) with(key string, value any) *Error {
-	if e.Context == nil {
-		e.Context = make(map[string]any, 4)
+func (e *Error) with(key, value string) *Error {
+	if e.context == nil {
+		e.context = make(map[string]string, 4)
 	}
-	e.Context[key] = value
+	e.context[key] = value
 	return e
 }
 
 // Error implements the error interface.
 func (e *Error) Error() string {
-	if len(e.Context) == 0 {
+	if len(e.context) == 0 {
 		return fmt.Sprintf("[%s] %s", e.Code, e.Message)
 	}
-	return fmt.Sprintf("[%s] %s %v", e.Code, e.Message, e.Context)
+	return fmt.Sprintf("[%s] %s %v", e.Code, e.Message, e.context)
 }
 
 // ToShape converts to a protocol ErrorShape, encoding context into Details.
 func (e *Error) ToShape() *protocol.ErrorShape {
 	shape := protocol.NewError(e.Code, e.Message)
-	if len(e.Context) > 0 {
-		if b, err := json.Marshal(e.Context); err == nil {
+	if len(e.context) > 0 {
+		// A map[string]string is always JSON-serializable. Keep the defensive
+		// error check because json.Marshal still returns an error by contract.
+		if b, err := json.Marshal(e.context); err == nil {
 			shape.Details = b
 		}
 	}
@@ -108,13 +111,12 @@ func (e *Error) Response(reqID string) *protocol.ResponseFrame {
 	return protocol.NewResponseError(reqID, e.ToShape())
 }
 
-// LogAttrs returns the context as a flat slice of key-value pairs suitable
-// for slog structured logging: slog.Error("rpc error", rpcerr.LogAttrs()...)
-func (e *Error) LogAttrs() []any {
-	attrs := make([]any, 0, 2+len(e.Context)*2)
-	attrs = append(attrs, "code", e.Code, "message", e.Message)
-	for k, v := range e.Context {
-		attrs = append(attrs, k, v)
+// LogAttrs returns typed attributes for slog.Logger.LogAttrs.
+func (e *Error) LogAttrs() []slog.Attr {
+	attrs := make([]slog.Attr, 0, 2+len(e.context))
+	attrs = append(attrs, slog.String("code", e.Code), slog.String("message", e.Message))
+	for k, v := range e.context {
+		attrs = append(attrs, slog.String(k, v))
 	}
 	return attrs
 }

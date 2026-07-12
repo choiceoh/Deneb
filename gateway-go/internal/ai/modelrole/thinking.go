@@ -15,18 +15,21 @@ package modelrole
 
 import "github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
 
-// NoThinkingBody is the Qwen-family spelled thinking-off request kwargs for
-// non-reasoning models (their templates either honor it or ignore it; Qwen3
-// *-instruct variants ship with thinking already off). localai.NoThinking
-// aliases this var so the two packages cannot drift.
-var NoThinkingBody = map[string]any{
-	"chat_template_kwargs": map[string]any{
-		"enable_thinking": false,
-	},
+// ThinkingOffDirective describes the chat-template switch an adapter must set
+// to false. It deliberately does not expose a raw request-body map: modelrole
+// owns routing policy, while each raw LLM transport adapter owns its wire
+// representation.
+type ThinkingOffDirective struct {
+	templateKwarg string
 }
 
-// ThinkingOffExtraBody returns the extra-body kwargs a raw LLM call should
-// attach for the given provider/model, or nil when thinking cannot be
+// TemplateKwarg returns the provider template's thinking toggle name.
+func (d ThinkingOffDirective) TemplateKwarg() string {
+	return d.templateKwarg
+}
+
+// ThinkingOffDirectiveFor returns the typed policy directive a raw LLM adapter
+// should attach for the given provider/model, or nil when thinking cannot be
 // disabled (the caller must budget MaxTokens for reasoning + answer instead).
 //
 // Decision order — the template toggle comes FIRST:
@@ -39,15 +42,15 @@ var NoThinkingBody = map[string]any{
 //  2. Reasoning models with no off-switch (step3, qwen3 non-instruct, r1…):
 //     nil — the channel is always on; attaching enable_thinking risks a 400
 //     on thinking-only templates.
-//  3. Non-reasoning models on vLLM-backed providers: NoThinkingBody,
-//     byte-identical to the hub's historical behavior. Direct cloud
-//     providers get nil instead — chat_template_kwargs is a vLLM serving
-//     feature, and an unknown top-level field can 400 on strict
-//     OpenAI-compat APIs (wormhole-fronted models still count as
-//     vLLM-backed, preserving today's passthrough behavior).
-func ThinkingOffExtraBody(providerID, model string) map[string]any {
+//  3. Non-reasoning models on vLLM-backed providers: enable_thinking=false,
+//     byte-identical on the wire to the hub's historical behavior. Direct
+//     cloud providers get nil instead — chat_template_kwargs is a vLLM
+//     serving feature, and an unknown top-level field can 400 on strict
+//     OpenAI-compat APIs (wormhole-fronted models still count as vLLM-backed,
+//     preserving today's passthrough behavior).
+func ThinkingOffDirectiveFor(providerID, model string) *ThinkingOffDirective {
 	if kw := modelcaps.ThinkingToggleKwarg(providerID, model); kw != "" {
-		return map[string]any{"chat_template_kwargs": map[string]any{kw: false}}
+		return &ThinkingOffDirective{templateKwarg: kw}
 	}
 	if IsReasoningModel(model) {
 		return nil
@@ -55,20 +58,20 @@ func ThinkingOffExtraBody(providerID, model string) map[string]any {
 	if !modelcaps.ServesVllmBacked(providerID) {
 		return nil
 	}
-	return NoThinkingBody
+	return &ThinkingOffDirective{templateKwarg: "enable_thinking"}
 }
 
-// ThinkingOffExtraBodyFor is the registry-aware variant of
-// ThinkingOffExtraBody: the off-switch name comes from the resolved routing
-// profile (builtin capability + deneb.json routing.toggleKwarg override), so
-// an operator-declared dual-mode model shapes raw calls the same way the
-// chat effort router shapes foreground turns. Falls back to the package
-// heuristics when the profile names no toggle. Nil-receiver safe.
-func (r *Registry) ThinkingOffExtraBodyFor(providerID, model string) map[string]any {
+// ThinkingOffDirectiveFor is the registry-aware variant of the package-level
+// function: the off-switch name comes from the resolved routing profile
+// (builtin capability + deneb.json routing.toggleKwarg override), so an
+// operator-declared dual-mode model shapes raw calls the same way the chat
+// effort router shapes foreground turns. It falls back to package heuristics
+// when the profile names no toggle. Nil-receiver safe.
+func (r *Registry) ThinkingOffDirectiveFor(providerID, model string) *ThinkingOffDirective {
 	if r != nil {
 		if kw := r.RoutingProfileForModel(providerID, model).ToggleKwarg; kw != "" {
-			return map[string]any{"chat_template_kwargs": map[string]any{kw: false}}
+			return &ThinkingOffDirective{templateKwarg: kw}
 		}
 	}
-	return ThinkingOffExtraBody(providerID, model)
+	return ThinkingOffDirectiveFor(providerID, model)
 }

@@ -42,6 +42,19 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+// ClientTokenHeader is the public HTTP header used by native-client routes.
+// Route middleware should reference this constant instead of duplicating the
+// authentication package's wire name.
+const ClientTokenHeader = clientauth.Header
+
+// Authenticator binds the native client authentication adapter to a logger for
+// sibling HTTP surfaces that share the same token contract.
+func Authenticator(logger *slog.Logger) func(http.ResponseWriter, *http.Request) (*clientauth.Identity, bool) {
+	return func(w http.ResponseWriter, r *http.Request) (*clientauth.Identity, bool) {
+		return nativeauth.Authenticate(w, r, logger)
+	}
+}
+
 // Config supplies the gateway-owned dependencies used by native HTTP handlers.
 type Config struct {
 	Dispatcher        *rpc.Dispatcher
