@@ -1,337 +1,36 @@
-// link_enrichment.go — Automatic link understanding for inbound messages.
-//
-// When a user message contains URLs, this module extracts them, fetches their
-// content, converts HTML to readable markdown, and appends a formatted summary
-// to the message before it reaches the LLM agent. This saves the agent a web
-// tool turn and provides immediate context.
-//
-// Wired into the synchronous send paths (SendSync / SendSyncStream — the
-// native client's miniapp.chat.send and the SSE stream) via
-// startLinkEnrichment: the fetches start in a goroutine at the send entry and
-// executeAgentRun joins them AFTER the parallel prep phase, so on the common
-// path the fetch latency (up to totalEnrichmentTimeout) overlaps recall /
-// history / system-prompt work instead of blocking the turn up front. The
-// user-message persist is deferred to that join — the enriched text is
-// persisted in the transcript as-is (prompt-cache rule: what the LLM saw is
-// what history reloads), and History() strips the block for display so the
-// user's chat bubble shows what they typed.
+// link_enrichment.go bridges Handler turn policy to the link-enrichment
+// subsystem. URL extraction, fetch/conversion, budgets, and async join
+// lifecycle are owned by the linkenrichment package.
 package chat
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"strings"
-	"sync"
-	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/core/coreparsing/htmlmd"
-	"github.com/choiceoh/deneb/gateway-go/internal/core/coreparsing/urlextract"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/web"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/linkenrichment"
 )
 
-// Link enrichment limits.
-const (
-	maxLinksPerMessage     = 5
-	maxCharsPerLink        = 12000
-	maxTotalLinkChars      = 40000
-	linkFetchTimeout       = 10 * time.Second
-	totalEnrichmentTimeout = 30 * time.Second
-	// linkFetchMaxBytes caps the raw download per link. Raw HTML is much
-	// larger than the markdown it converts to, so this is intentionally far
-	// above maxCharsPerLink.
-	linkFetchMaxBytes = 2 * 1024 * 1024
-)
-
-// The enrichment block marker lives in toolctx (LinkEnrichmentHeader) so the
-// display strips shared by chat.history and miniapp.sessions.transcript stay
-// in sync with the formatter below.
-
-// fetchFunc abstracts URL fetching for testability.
-// Returns raw data, content-type header, and error.
-type fetchFunc func(ctx context.Context, url string) (data []byte, contentType string, err error)
-
-// webFetch is the production fetcher: the web tool's stealth fetch pipeline
-// (pooled SSRF-safe transport, browser-like profiles, bot-block escalation).
-func webFetch(ctx context.Context, url string) ([]byte, string, error) {
-	return web.FetchRaw(ctx, url, linkFetchMaxBytes)
-}
-
-// linkContent holds the fetched and converted content for a single URL.
-type linkContent struct {
-	URL     string
-	Title   string
-	Content string
-	Err     string // non-empty if fetch failed
-}
-
-// enrichFetch is the fetcher startLinkEnrichment hands to
-// enrichMessageWithLinks — a package var so tests can stub the network.
-var enrichFetch fetchFunc = webFetch
-
-// startLinkEnrichment starts the link fetches for an interactive chat message
-// in a goroutine and returns the join function executeAgentRun calls after
-// the parallel prep phase (RunParams.PendingEnrichment). Returns nil — no
-// enrichment, take the normal persist-first path — when the turn carries
-// prebuilt API history, the message is already enriched (a resent message;
-// never stack blocks), or it contains no fetchable URLs.
-//
-// The join blocks until the fetches complete (bounded by
-// totalEnrichmentTimeout inside enrichMessageWithLinks) and returns the final
-// message text: sanitized original + enrichment block, or the sanitized
-// original when no link yielded content. The result is passed through
-// sanitizeInput because fetched web content can carry the same control bytes
-// the send entry strips from user input. On ctx cancel the join returns the
-// original message — the run is being torn down anyway, and the buffered
-// channel lets the fetch goroutine exit regardless.
-func (h *Handler) startLinkEnrichment(ctx context.Context, message string, opts *SyncOptions) func(context.Context) string {
+// startLinkEnrichment preserves the chat-owned eligibility gates: signed
+// briefcase turns and API calls carrying caller-owned history must remain
+// byte-for-byte untouched. Eligible interactive messages delegate their
+// asynchronous fetch/join lifecycle to the handler-scoped engine.
+func (h *Handler) startLinkEnrichment(ctx context.Context, message string, opts *SyncOptions) linkenrichment.Join {
 	if h != nil && h.briefcaseMode {
 		return nil
 	}
 	if opts != nil && len(opts.Messages) > 0 {
-		// OpenAI-compatible API traffic with caller-owned history — leave it
-		// untouched, same boundary as trySlashSync.
 		return nil
 	}
-	if strings.Contains(message, toolctx.LinkEnrichmentHeader) {
-		return nil
-	}
-	if len(urlextract.ExtractLinks(message, maxLinksPerMessage)) == 0 {
-		return nil
-	}
-
-	message = sanitizeInput(message) // match what prepareSyncRun persists
-	start := time.Now()
-	// fetchMs is stamped when the fetches complete, so it measures actual
-	// enrichment latency; the time between completion and the join is prep
-	// overlap, not fetch time.
-	type enrichOutcome struct {
-		summary string
-		fetchMs int64
-	}
-	ch := make(chan enrichOutcome, 1) // buffered: the goroutine never blocks on an abandoned join
-	logger := h.logger
-	// Snapshot the fetch func on the caller's goroutine: enrichFetch is a
-	// package global that tests swap/restore, so reading it inside the spawned
-	// goroutine races with the test's deferred restore (-race, #3168 follow-up).
-	fetch := enrichFetch
-	go func() {
-		// Manual recover instead of safego: the join must always receive a
-		// result or it would block until the turn context dies.
-		defer func() {
-			if r := recover(); r != nil {
-				logger.Error("panic in link enrichment", "panic", r)
-				ch <- enrichOutcome{fetchMs: time.Since(start).Milliseconds()}
-			}
-		}()
-		summary := enrichMessageWithLinks(ctx, message, fetch, logger)
-		ch <- enrichOutcome{summary: summary, fetchMs: time.Since(start).Milliseconds()}
-	}()
-
-	return func(joinCtx context.Context) string {
-		// Independent join bound: enrichMessageWithLinks carries its own
-		// totalEnrichmentTimeout, but a fetch/convert step that ignores ctx
-		// deep in the stealth/HTML chain can overrun it — and this join would
-		// then stall the whole prep until the RUN context died. Past the
-		// grace window the message ships unenriched; the buffered channel
-		// lets the straggler goroutine finish and be discarded.
-		grace := time.NewTimer(totalEnrichmentTimeout + 5*time.Second)
-		defer grace.Stop()
-		select {
-		case out := <-ch:
-			if out.summary == "" {
-				return message
-			}
-			// overlappedMs is how much of the fetch the parallel prep absorbed —
-			// sinceSendMs - fetchMs would be join-side wait; fetchMs alone is the
-			// fetch latency the user no longer serially pays.
-			logger.Info("link enrichment appended",
-				"chars", len(out.summary),
-				"fetchMs", out.fetchMs,
-				"sinceSendMs", time.Since(start).Milliseconds())
-			return sanitizeInput(message + "\n\n" + out.summary)
-		case <-grace.C:
-			logger.Warn("link enrichment join overran its budget; sending unenriched",
-				"sinceSendMs", time.Since(start).Milliseconds())
-			return message
-		case <-joinCtx.Done():
-			return message
+	engine := (*linkenrichment.Engine)(nil)
+	logger := slog.Default()
+	if h != nil {
+		engine = h.linkEnrichment
+		if h.logger != nil {
+			logger = h.logger
 		}
 	}
-}
-
-// enrichMessageWithLinks extracts URLs from the message, fetches each one,
-// converts HTML to markdown, and returns a formatted summary string.
-// Returns "" if no links found or all fetches fail.
-func enrichMessageWithLinks(ctx context.Context, text string, fetchFn fetchFunc, logger *slog.Logger) string {
-	urls := urlextract.ExtractLinks(text, maxLinksPerMessage)
-	if len(urls) == 0 {
-		return ""
+	if engine == nil {
+		engine = linkenrichment.New(linkenrichment.Config{Logger: logger})
 	}
-
-	enrichCtx, enrichCancel := context.WithTimeout(ctx, totalEnrichmentTimeout)
-	defer enrichCancel()
-
-	// Parallel fetch: fan-out to goroutines, collect in order.
-	results := make([]linkContent, len(urls))
-	var wg sync.WaitGroup
-	for i, u := range urls {
-		wg.Add(1)
-		go func(idx int, target string) {
-			defer wg.Done()
-			// Per-goroutine recovery: this fan-out runs on the synchronous
-			// native-client send path, and the outer caller cannot see a
-			// goroutine panic — fetchAndConvert (HTML→markdown / JSON / YouTube
-			// parsing) panicking must cost only this link's slot, not crash the
-			// whole gateway process (concurrency rule 4). Record an error result
-			// for this index so the budget loop below treats it as a failed link.
-			defer func() {
-				if r := recover(); r != nil {
-					results[idx] = linkContent{URL: target, Err: fmt.Sprintf("panic: %v", r)}
-					if logger != nil {
-						logger.Error("panic in link enrichment fetch", "url", target, "panic", r)
-					}
-				}
-			}()
-			results[idx] = fetchAndConvert(enrichCtx, target, fetchFn, logger)
-		}(i, u)
-	}
-	wg.Wait()
-
-	// Apply total content budget in order.
-	totalChars := 0
-	var links []linkContent
-	for _, lc := range results {
-		contentLen := len(lc.Content)
-		if contentLen > 0 && totalChars+contentLen > maxTotalLinkChars {
-			remaining := maxTotalLinkChars - totalChars
-			if remaining <= 0 {
-				break
-			}
-			lc.Content = truncateContent(lc.Content, remaining)
-		}
-		totalChars += len(lc.Content)
-		links = append(links, lc)
-	}
-
-	return formatLinkSummary(links)
-}
-
-// youtubeExtract is the YouTube enrichment extractor: native-only (innertube
-// captions + chapters + metadata, no yt-dlp/ASR) so it stays light enough for
-// the synchronous send path. A package var so tests can stub it without network.
-var youtubeExtract = media.ExtractYouTubeTranscriptNative
-
-// fetchAndConvert fetches a single URL and converts the content.
-func fetchAndConvert(ctx context.Context, url string, fetchFn fetchFunc, logger *slog.Logger) linkContent {
-	// YouTube URLs can't be understood from a plain HTTP fetch (JS-heavy page, no
-	// transcript). Extract captions + chapters + metadata natively so a pasted
-	// link is summarizable immediately without an explicit web-tool turn. The
-	// native path is HTTP-only (no subprocess); when it can't serve the video the
-	// agent's web tool still covers the heavy fallback (yt-dlp + ASR).
-	if media.IsYouTubeURL(url) {
-		return enrichYouTube(ctx, url, logger)
-	}
-
-	fetchCtx, fetchCancel := context.WithTimeout(ctx, linkFetchTimeout)
-	defer fetchCancel()
-
-	data, contentType, err := fetchFn(fetchCtx, url)
-	if err != nil {
-		logger.Debug("link fetch failed", "url", url, "error", err)
-		return linkContent{URL: url, Err: err.Error()}
-	}
-
-	if len(data) == 0 {
-		return linkContent{URL: url, Err: "empty response"}
-	}
-
-	var title, content string
-
-	if isHTMLContent(contentType) {
-		cleaned := web.StripNoiseElements(string(data))
-		r := htmlmd.ConvertWithOpts(cleaned, htmlmd.Options{StripNoise: true})
-		content = r.Text
-		title = r.Title
-	} else {
-		content = string(data)
-	}
-
-	content = truncateContent(content, maxCharsPerLink)
-
-	return linkContent{
-		URL:     url,
-		Title:   title,
-		Content: content,
-	}
-}
-
-// enrichYouTube extracts a YouTube link's transcript + chapters + metadata via
-// the native path and renders it as link content. Bounded by linkFetchTimeout
-// and the shared per-link char budget. Returns an error-marked entry (which the
-// summary skips) when the native path yields nothing, leaving the heavy fallback
-// to the agent's web tool.
-func enrichYouTube(ctx context.Context, url string, logger *slog.Logger) linkContent {
-	yctx, cancel := context.WithTimeout(ctx, linkFetchTimeout)
-	defer cancel()
-
-	res := youtubeExtract(yctx, url)
-	if res == nil {
-		logger.Debug("youtube enrichment unavailable (native)", "url", url)
-		return linkContent{URL: url, Err: "skipped (native extraction unavailable; use web tool)"}
-	}
-
-	title := res.Title
-	if title == "" {
-		title = url
-	}
-	return linkContent{
-		URL:     url,
-		Title:   title,
-		Content: truncateContent(media.FormatYouTubeResult(res), maxCharsPerLink),
-	}
-}
-
-// formatLinkSummary builds the summary block from fetched link contents.
-// Skips links that failed to fetch entirely.
-func formatLinkSummary(links []linkContent) string {
-	var parts []string
-	for _, lc := range links {
-		if lc.Content == "" {
-			continue // failed or empty links carry nothing for the agent
-		}
-
-		label := lc.Title
-		if label == "" {
-			label = lc.URL
-		}
-		part := fmt.Sprintf("[%s](%s)\n%s", label, lc.URL, lc.Content)
-		parts = append(parts, part)
-	}
-
-	if len(parts) == 0 {
-		return ""
-	}
-
-	var b strings.Builder
-	b.WriteString("---\n" + toolctx.LinkEnrichmentHeader + "\n\n")
-	b.WriteString(strings.Join(parts, "\n\n"))
-	b.WriteString("\n---")
-	return b.String()
-}
-
-// isHTMLContent checks if the content-type indicates HTML.
-func isHTMLContent(contentType string) bool {
-	ct := strings.ToLower(contentType)
-	return strings.Contains(ct, "text/html") || strings.Contains(ct, "application/xhtml")
-}
-
-// truncateContent truncates text to maxLen characters with a marker.
-func truncateContent(text string, maxLen int) string {
-	if len(text) <= maxLen {
-		return text
-	}
-	return text[:maxLen] + "\n[...truncated]"
+	return engine.Start(ctx, message, sanitizeInput)
 }
