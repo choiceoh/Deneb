@@ -58,7 +58,7 @@ private fun tableToSpeakable(table: Table): String {
     return pieces.joinToString(". ")
 }
 
-private fun inlinesToText(inlines: List<InlineNode>): String {
+internal fun inlinesToText(inlines: List<InlineNode>): String {
     val sb = StringBuilder()
     for (n in inlines) appendInline(sb, n)
     return sb.toString()
