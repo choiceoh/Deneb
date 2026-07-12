@@ -198,6 +198,8 @@ fun main() {
     // This is the visual regression surface for card rendering quality.
     renderLetterCard("ui_gallery_dark.png", DarkColorScheme, uiGalleryNode(), 3200)
     renderLetterCard("ui_gallery_light.png", LightColorScheme, uiGalleryNode(), 3200)
+    // Opt-in corpus audit over real transcript cards (env-gated, no-op in CI).
+    renderCardCorpus()
     renderScreen("workfeed_dark.png", "workfeed", DarkColorScheme, 824, 1100)
     renderScreen("workfeed_light.png", "workfeed", LightColorScheme, 824, 1100)
     renderScreen("workfeed_answer_dark.png", "workfeed_answer", DarkColorScheme, 480, 720)

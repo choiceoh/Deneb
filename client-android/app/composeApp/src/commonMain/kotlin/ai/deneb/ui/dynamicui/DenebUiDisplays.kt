@@ -10,11 +10,13 @@ import ai.deneb.ui.denebWarningContainer
 import ai.deneb.ui.markdown.InlineTokenizer
 import ai.deneb.ui.markdown.MarkdownContent
 import ai.deneb.ui.markdown.toAnnotatedString
+import ai.deneb.ui.text.denebPhraseLineBreak
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -240,14 +242,40 @@ internal fun RenderTable(node: TableNode) {
         }
     }
 
-    // The first column is usually the entity name (현장, 항목) — give it room
-    // so Korean compound names don't wrap while short numeric columns hog width.
-    fun columnWeight(index: Int) = if (index == 0 && columnCount >= 3) 1.6f else 1f
+    // Column width follows content: the AVERAGE cell length (in runes) sets
+    // each column's share — an average reads truer than the max, where one
+    // long outlier cell starved every other column. The header participates
+    // as a floor so a short column never collapses under its own label.
+    // sqrt squashes the spread so the ratio stays civil (~2.7:1 max). Real
+    // briefing tables put the long prose in ANY column (비고, 결과) — the old
+    // fixed first-column boost squeezed exactly those columns (2026-07-12
+    // corpus audit over production transcript cards).
+    val weights = FloatArray(columnCount) { index ->
+        val cells = node.rows.mapNotNull { it.getOrNull(index)?.trim()?.takeIf(String::isNotEmpty) }
+        val avgRunes = if (cells.isEmpty()) 0 else cells.sumOf { it.length } / cells.size
+        val headerRunes = node.headers.getOrNull(index)?.trim()?.length ?: 0
+        kotlin.math.sqrt(maxOf(avgRunes, headerRunes).coerceIn(4, 30).toFloat())
+    }
+    fun columnWeight(index: Int) = weights[index]
     val hairline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
 
+    // Dense tables (3+ columns) drop one type rung so a narrow column fits
+    // whole phrases per line; 2-column label/value tables keep the body voice.
+    val dense = columnCount >= 3
+    // Phrase-aware wrapping keeps Korean units whole — "10월 단종 카운트다운"
+    // breaks at the spaces instead of mid-word ("카/운트다운", production
+    // corpus). Cells are short, so the phrase strategy's width cost is nil.
+    val cellStyle = (if (dense) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium)
+        .copy(lineBreak = denebPhraseLineBreak())
+    // Tabular figures align digits vertically down a numeric column.
+    val numericCellStyle = cellStyle.copy(fontFeatureSettings = "tnum")
+
+    // A visible gutter between columns — weight-divided cells otherwise sit
+    // flush and adjacent Korean cells read as one run ("수정계약기한 초과").
+    val columnGap = Arrangement.spacedBy(10.dp)
     Column(Modifier.fillMaxWidth().wrapContentHeight()) {
         if (node.headers.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = columnGap) {
                 for (index in 0 until columnCount) {
                     Text(
                         text = denebUiInlineText(node.headers.getOrElse(index) { "" }),
@@ -263,12 +291,16 @@ internal fun RenderTable(node: TableNode) {
         node.rows.forEachIndexed { rowIndex, row ->
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = columnGap,
+                // Top-align multi-line cells (the HTML-table reading
+                // convention): center-aligning wrapped cells made every tall
+                // briefing row look jumbled in the production corpus.
+                verticalAlignment = androidx.compose.ui.Alignment.Top,
             ) {
                 for (index in 0 until columnCount) {
                     Text(
                         text = denebUiInlineText(row.getOrElse(index) { "" }),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = if (numericColumn[index]) numericCellStyle else cellStyle,
                         textAlign = if (numericColumn[index]) TextAlign.End else TextAlign.Start,
                         modifier = Modifier.weight(columnWeight(index)),
                     )

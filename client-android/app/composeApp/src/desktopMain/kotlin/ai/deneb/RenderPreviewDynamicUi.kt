@@ -472,6 +472,27 @@ ORDER BY total DESC;</code>
     """.trimIndent(),
 )
 
+// Corpus audit: DENEB_RENDER_CARDS_DIR renders every *.txt fence body in that
+// directory (deneb-ui cards mined from real transcripts, kept OUT of the repo)
+// at phone width, dark scheme — the loop for "how do PRODUCTION cards actually
+// look", not just the curated gallery. Unparseable bodies (legacy JSON relics)
+// are skipped. No-op when the env var is absent, so the standard preview run
+// is unaffected.
+internal fun renderCardCorpus() {
+    val dir = System.getenv("DENEB_RENDER_CARDS_DIR")?.takeIf { it.isNotBlank() } ?: return
+    val files = File(dir).listFiles { f -> f.extension == "txt" }?.sortedBy { it.name } ?: return
+    var rendered = 0
+    for (f in files) {
+        val node = DenebUiHtml.parse(f.readText().trim()) ?: continue
+        // Height scales with source size so long briefings aren't clipped;
+        // the PNG is white below the content, which is fine for an audit.
+        val height = (600 + f.length().toInt() * 2 / 5).coerceIn(800, 6000)
+        renderLetterCard("corpus_${f.nameWithoutExtension}.png", ai.deneb.ui.DarkColorScheme, node, height)
+        rendered++
+    }
+    println("card corpus rendered: $rendered/${files.size} -> /tmp/deneb-render/corpus_*.png")
+}
+
 internal fun eveningLetterNode(): DenebUiNode = parseLetterHtml(
     """
     <column>
