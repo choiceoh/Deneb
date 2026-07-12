@@ -22,6 +22,7 @@ import ai.deneb.deneb.OrgChartContent
 import ai.deneb.deneb.OrgNodeEditor
 import ai.deneb.deneb.ProjectDigestContent
 import ai.deneb.deneb.PromptStyleEditor
+import ai.deneb.deneb.RsiStatusContent
 import ai.deneb.deneb.ScheduleDraft
 import ai.deneb.deneb.SearchContent
 import ai.deneb.deneb.SelfImprovementCodingContent
@@ -408,6 +409,13 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "파트별 업무 현황", onBack = {}) {
                 DashboardLanesContent(sampleDashboard)
+            }
+        }
+    },
+    "rsi" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "재귀적 자가개선", onBack = {}) {
+                RsiStatusContent(sampleRsi)
             }
         }
     },

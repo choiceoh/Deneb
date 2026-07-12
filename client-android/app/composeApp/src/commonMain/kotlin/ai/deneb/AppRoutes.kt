@@ -99,6 +99,10 @@ data class DenebNotebooks(val openId: String? = null)
 object DenebDashboard
 
 @Serializable
+@SerialName("deneb_rsi")
+object DenebRsi
+
+@Serializable
 @SerialName("deneb_project_digests")
 object DenebProjectDigests
 
