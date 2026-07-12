@@ -144,7 +144,19 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
   const { initial, required } = useMemo(() => collectInputs(spec), [spec]);
   const [form, setForm] = useState<Record<string, unknown>>(initial);
   const [toggles, setToggles] = useState<Record<string, boolean>>({});
-  const setField = (id: string, v: unknown) => setForm((f) => ({ ...f, [id]: v }));
+  // Required inputs a blocked submit flagged — cleared per field on edit.
+  // Native parity (UiFormValidation): the old silent return made the button
+  // feel dead when a required field was empty.
+  const [invalid, setInvalid] = useState<Set<string>>(new Set());
+  const setField = (id: string, v: unknown) => {
+    setForm((f) => ({ ...f, [id]: v }));
+    setInvalid((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
 
   function dispatch(action: Node) {
     if (!action || busy) return;
@@ -164,7 +176,11 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
       }
       case "callback": {
         const from: string[] = Array.isArray(action.collectFrom) ? action.collectFrom : [];
-        if (from.some((id) => required.has(id) && coerce(form[id]) === "")) return; // required gate
+        const missing = from.filter((id) => required.has(id) && coerce(form[id]) === "");
+        if (missing.length > 0) {
+          setInvalid((prev) => new Set([...prev, ...missing])); // required gate + visible flag
+          return;
+        }
         const data: Record<string, string> = {};
         const stat = action.data && typeof action.data === "object" ? action.data : {};
         for (const k of Object.keys(stat)) data[k] = coerce(stat[k]);
@@ -184,6 +200,10 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
   function kids(n: Node, key: string): ReactNode {
     return (Array.isArray(n?.children) ? n.children : []).map((c: Node, i: number) => render(c, `${key}.${i}`));
   }
+
+  // Required-flag presentation shared by every input case.
+  const fieldClass = (id: string) => "dui-field" + (invalid.has(id) ? " invalid" : "");
+  const reqHint = (id: string) => (invalid.has(id) ? <span className="dui-req">필수 입력입니다</span> : null);
 
   function render(n: Node, key: string): ReactNode {
     if (!n || typeof n !== "object") return null;
@@ -635,20 +655,21 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
           onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setField(id, e.target.value),
         };
         return (
-          <label key={key} className="dui-field">
+          <label key={key} className={fieldClass(id)}>
             {n.label ? <span className="dui-label">{String(n.label)}</span> : null}
             {n.multiline ? (
               <textarea {...common} rows={3} style={{ resize: "vertical" }} />
             ) : (
               <input {...common} type={n.keyboard === "number" || n.keyboard === "decimal" ? "number" : "text"} />
             )}
+            {reqHint(id)}
           </label>
         );
       }
       case "date_input":
       case "time_input":
         return (
-          <label key={key} className="dui-field">
+          <label key={key} className={fieldClass(id)}>
             {n.label ? <span className="dui-label">{String(n.label)}</span> : null}
             <input
               className="field"
@@ -657,6 +678,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
               disabled={busy}
               onChange={(e) => setField(id, e.target.value)}
             />
+            {reqHint(id)}
           </label>
         );
       case "checkbox":
@@ -674,7 +696,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         );
       case "select":
         return (
-          <label key={key} className="dui-field">
+          <label key={key} className={fieldClass(id)}>
             {n.label ? <span className="dui-label">{String(n.label)}</span> : null}
             <select
               className="field"
@@ -689,11 +711,12 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
                 </option>
               ))}
             </select>
+            {reqHint(id)}
           </label>
         );
       case "radio_group":
         return (
-          <div key={key} className="dui-field" role="radiogroup">
+          <div key={key} className={fieldClass(id)} role="radiogroup">
             {n.label ? <span className="dui-label">{String(n.label)}</span> : null}
             {(Array.isArray(n.options) ? n.options : []).map((o: string, i: number) => (
               <label key={i} className="dui-check">
@@ -707,6 +730,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
                 <span>{String(o)}</span>
               </label>
             ))}
+            {reqHint(id)}
           </div>
         );
       case "slider": {
@@ -749,7 +773,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
           }
         };
         return (
-          <div key={key} className="dui-chips">
+          <div key={key} className={"dui-chips" + (invalid.has(id) ? " invalid" : "")}>
             {chips.map((c, i) => {
               const val = String(c?.value ?? c?.label ?? "");
               return (
@@ -763,6 +787,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
                 </button>
               );
             })}
+            {reqHint(id)}
           </div>
         );
       }

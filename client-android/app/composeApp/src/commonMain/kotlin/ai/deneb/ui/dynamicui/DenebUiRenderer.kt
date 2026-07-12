@@ -122,8 +122,13 @@ fun DenebUiRenderer(
     // A root that already paints its own card chrome (card / accordion) renders
     // bare: wrapping it in another Card stacks surface-on-surface and eats 12dp
     // of content width per side — the #2238 mail-analysis accordion was down to
-    // ~330dp of body width on a phone.
-    val selfChromed = node is CardNode || node is AccordionNode
+    // ~330dp of body width on a phone. A COLUMN root whose top level already
+    // holds chromed sections (the letter/briefing shape: column of cards) is
+    // bare for the same reason — the wrap nested every card inside an outer
+    // card (double border), which previews never showed because they render
+    // wrapInCard=false; andromeda never wraps at all.
+    val selfChromed = node is CardNode || node is AccordionNode ||
+        (node is ColumnNode && node.children.any { it is CardNode || it is AccordionNode })
     CompositionLocalProvider(
         LocalFrozenSubmission provides frozen,
         LocalUiFormValidation provides validation,

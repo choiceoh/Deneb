@@ -160,6 +160,16 @@ func reportDenebUICardHealth(text, sessionKey string, logger *slog.Logger) {
 			logger.Warn("deneb-ui card has schema issues",
 				"session", sessionKey, "block", i,
 				"issueCount", len(issues), "firstIssue", issues[0].String())
+		default:
+			// Schema-valid cards still get a composition read (조형 관례 —
+			// prose dumps, missing section headers): Info-level observation
+			// only, so the journal shows whether the authoring contract
+			// actually shapes production cards.
+			if adv := denebui.CompositionAdvisories(body); len(adv) > 0 {
+				logger.Info("deneb-ui card composition advisory",
+					"session", sessionKey, "block", i,
+					"advisories", strings.Join(adv, ","))
+			}
 		}
 	}
 }

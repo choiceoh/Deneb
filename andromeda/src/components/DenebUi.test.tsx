@@ -52,7 +52,7 @@ describe("DenebUi rendering + callback round-trip", () => {
     expect(onSubmit).toHaveBeenCalledWith("Pressed: ok");
   });
 
-  it("blocks a callback while a required collected input is empty", async () => {
+  it("blocks a callback while a required collected input is empty — and says so", async () => {
     const onSubmit = vi.fn();
     const spec = {
       type: "column",
@@ -64,6 +64,13 @@ describe("DenebUi rendering + callback round-trip", () => {
     render(<DenebUi spec={spec} onSubmit={onSubmit} />);
     await userEvent.click(screen.getByRole("button", { name: "전송" }));
     expect(onSubmit).not.toHaveBeenCalled(); // required input empty → gated
+    // The blocked submit flags the field (the old silent return read as a dead button).
+    expect(screen.getByText("필수 입력입니다")).toBeInTheDocument();
+    // Editing the field clears its flag; the submit then goes through.
+    await userEvent.type(screen.getByRole("textbox"), "42");
+    expect(screen.queryByText("필수 입력입니다")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "전송" }));
+    expect(onSubmit).toHaveBeenCalledWith("Responded with: q: 42");
   });
 
   it("renders content nodes (stat, alert)", () => {

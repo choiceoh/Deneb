@@ -4488,6 +4488,22 @@ button.mail-attachment {
 .dui-check input {
   accent-color: var(--accent);
 }
+/* required-input flag (a blocked submit marks the missing fields) */
+.dui-field.invalid .field {
+  border-color: var(--due);
+}
+.dui-field.invalid .dui-label {
+  color: var(--due);
+}
+.dui-req {
+  font-size: 11px;
+  color: var(--due);
+}
+.dui-chips.invalid {
+  outline: 1px solid var(--due);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
 .dui-chips {
   display: flex;
   flex-wrap: wrap;

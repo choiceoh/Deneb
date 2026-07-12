@@ -10,6 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 )
 
@@ -319,7 +320,10 @@ func appendWorkModelFooter(body, model string) string {
 // pushPreview trims a relayed body to a notification-sized single line. The full
 // report is in the transcript; the push is just the nudge to open it.
 func pushPreview(content string) string {
-	s := strings.TrimSpace(content)
+	// A body that opens with a deneb-ui fence would preview as "```deneb-ui" —
+	// project cards to their prose first, so the notification carries the
+	// card's own headline instead of markup.
+	s := strings.TrimSpace(denebui.ReplaceFences(content, denebui.PlainText))
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		s = strings.TrimSpace(s[:i])
 	}
