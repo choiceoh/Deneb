@@ -183,6 +183,40 @@ func TestParseAndApplyRunsHeldOutGateWhenSelfTestDisabled(t *testing.T) {
 	}
 }
 
+// A skill that trips self-harness rejection repeatedly must not mint a fresh
+// held-out draft each time — one open draft per skill (regression: 4 duplicates
+// observed in prod before the dedup guard).
+func TestQueueRejectedEvolveValidationDraft_DedupsPerSkill(t *testing.T) {
+	tracker := newTestTracker(t)
+	e := &Evolver{
+		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		tracker: tracker,
+	}
+	audit := HarnessEditAudit{TargetSignature: "wiki_search timeout"}
+	reason := "self-harness audit rejected: held-out replay regressed"
+
+	e.queueRejectedEvolveValidationDraft("sk", reason, "preflight", audit)
+	e.queueRejectedEvolveValidationDraft("sk", reason, "replay", audit)
+
+	drafts, err := tracker.RecentSelfCorrectionCandidates("sk", SelfCorrectionStatusProposed, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(drafts) != 1 {
+		t.Fatalf("expected 1 deduped draft for the skill, got %d: %+v", len(drafts), drafts)
+	}
+
+	// A different skill's rejection is independent — dedup is per skill.
+	e.queueRejectedEvolveValidationDraft("other", reason, "preflight", audit)
+	other, err := tracker.RecentSelfCorrectionCandidates("other", SelfCorrectionStatusProposed, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(other) != 1 {
+		t.Fatalf("a different skill should get its own draft, got %d", len(other))
+	}
+}
+
 func TestParseAndApplyRejectsMissingSelfHarnessAudit(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "SKILL.md")
