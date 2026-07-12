@@ -23,25 +23,25 @@ func (m *mockRegistrar) toolNames() []string {
 	return names
 }
 
-// ─── RegisterFSTools ──────────────────────────────────────────────────────────
+// ─── RegisterFileTools ──────────────────────────────────────────────────────────
 
-func TestRegisterFSTools_registersTools(t *testing.T) {
+func TestRegisterFileToolsRegistersOnlyFileTools(t *testing.T) {
 	reg := &mockRegistrar{}
-	deps := &toolctx.CoreToolDeps{WorkspaceDir: t.TempDir()}
-	RegisterFSTools(reg, deps)
+	RegisterFileTools(reg, t.TempDir())
 
-	if len(reg.tools) == 0 {
-		t.Fatal("expected RegisterFSTools to register at least one tool")
+	want := []string{"read", "write", "edit", "grep"}
+	got := reg.toolNames()
+	if len(got) != len(want) {
+		t.Fatalf("names = %v, want %v", got, want)
 	}
-	// Verify well-known FS tools are present.
-	names := reg.toolNames()
-	for _, want := range []string{"read", "write", "edit", "grep"} {
-		if !containsName(names, want) {
-			t.Errorf("missing expected tool %q", want)
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("names = %v, want %v", got, want)
 		}
 	}
-	for _, name := range []string{"gateway", "observe", "fleet"} {
-		assertRegisteredContract(t, registeredTool(t, reg, name), true)
+
+	for _, name := range want {
+		assertRegisteredContract(t, registeredTool(t, reg, name), name == "edit")
 	}
 }
 
@@ -99,15 +99,6 @@ func TestRegisterMediaTools(t *testing.T) {
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
-
-func containsName(names []string, target string) bool {
-	for _, n := range names {
-		if n == target {
-			return true
-		}
-	}
-	return false
-}
 
 func registeredTool(t *testing.T, registrar *mockRegistrar, name string) toolctx.ToolDef {
 	t.Helper()

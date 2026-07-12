@@ -12,7 +12,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/filesystem"
 	mailtool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/mailarchive"
 	notebooktool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/routine"
@@ -25,7 +24,17 @@ import (
 // RegisterCoreTools populates the tool registrar with all core agent tools.
 // It delegates to domain-specific Register*Tools functions.
 func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps) {
-	RegisterFSTools(registry, deps)
+	RegisterFileTools(registry, deps.WorkspaceDir, deps.SkillsCatalogDirs...)
+	runtimeOps := RuntimeOpsToolSet{
+		Gateway: runtimeops.ToolGateway(deps.WorkspaceDir),
+		Observe: runtimeops.ToolObserve(deps.LogCapture, deps.AgentLog, deps.WorkFeed, deps.VllmBaseURLs),
+		Fleet:   runtimeops.ToolFleet(&deps.Fleet),
+	}
+	if deps.SpilloverStore != nil {
+		runtimeOps.SpilloverRead = artifact.ToolSpilloverRead(deps.SpilloverStore)
+	}
+	RegisterRuntimeOpsTools(registry, runtimeOps)
+	RegisterGraphTool(registry, deps.WorkspaceDir)
 	RegisterProcessTools(registry, &deps.Process)
 	RegisterWebTools(registry, deps.SpilloverStore)
 	RegisterSessionTools(registry, &deps.Sessions)
@@ -217,107 +226,6 @@ func RegisterKnowledgeTool(registry toolctx.ToolRegistrar, router *knowledge.Rou
 			"polaris(현재 세션 회상)·graphify(개념 그래프)는 별개 도구로 분리됨 — paradigm이 다름.",
 		InputSchema: knowledgeToolSchema(),
 		Fn:          tools.ToolKnowledge(router),
-	})
-}
-
-// RegisterFSTools registers file-system, code analysis, and git tools.
-func RegisterFSTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps) {
-	workspaceDir := deps.WorkspaceDir
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "read",
-		Description: "Read file contents with line numbers for code review (default: 2000 lines). Use offset/limit for large files; equivalent to a clean bat/cat -n view",
-		InputSchema: readToolSchema(),
-		Fn:          filesystem.ToolRead(workspaceDir, deps.SkillsCatalogDirs...),
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "write",
-		Description: "Create or overwrite a file. Auto-creates parent directories. Use edit for partial changes",
-		InputSchema: writeToolSchema(),
-		Fn:          filesystem.ToolWrite(workspaceDir),
-	})
-	// Deferred (prompt audit 2026-06-12): ~370 wire tokens for 2 uses in 14
-	// days — Deneb is a chief-of-staff, not a coding agent, so partial file
-	// edits are rare. read/write/grep stay eager; an editing turn fetches this.
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "edit",
-		Description: "Search-and-replace in a file. old_string must be unique unless replace_all=true. Read first to find the exact string",
-		InputSchema: editToolSchema(),
-		Fn:          filesystem.ToolEdit(workspaceDir),
-		Deferred:    true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "grep",
-		Description: "Regex search across files (rg / ripgrep). Use include/fileType to narrow scope. Returns file:line:match format",
-		InputSchema: grepToolSchema(),
-		Fn:          filesystem.ToolGrep(workspaceDir),
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name: "gateway",
-		Description: "Gateway self-management: status (버전/PID/포트/업타임/세션 수를 한 번에 반환), config_get/config_set (dotted paths), update (git pull + rebuild + restart), restart. " +
-			"Destructive actions (restart/update/config_set) require approval — the first call returns a needs_approval envelope; relay the Korean summary to the user verbatim, and after approval call the .confirmed variant with the same action_token. " +
-			"토큰/비밀번호/API 키는 절대 config_set으로 건드리지 마라.",
-		InputSchema: gatewayToolSchema(),
-		Fn:          runtimeops.ToolGateway(workspaceDir),
-		Deferred:    true,
-	})
-	registry.RegisterTool(toolctx.ToolDef{
-		Name:        "observe",
-		Description: "Self-diagnosis: why a turn was slow/failed, tool-usage stats, improvement-loop health. Observe your OWN runtime via the in-process observation plane: action=turn (runId → a past run's tokens/tools/cache + its captured logs), action=logs (recent log ring; filter by runId/session/level/contains), action=behavior (cross-session tool usage / proactive funnel / background-job health over N days, plus the local vLLM engine's prefix-cache hit rate), action=effort (adaptive effort-router scorecard: routed-off vs kept-on, escalation rate, savings), action=proactive (proactive-card engagement: FTR / over-intervention rate by source), action=health (self-improvement machinery digest: loop liveness, skill-decision mix, dreamer backlog, no-op frontier, silent-failure counts — same data as the loopback /api/observatory, read mid-reasoning).",
-		InputSchema: observeToolSchema(),
-		Fn:          runtimeops.ToolObserve(deps.LogCapture, deps.AgentLog, deps.WorkFeed, deps.VllmBaseURLs),
-		Deferred:    true,
-	})
-
-	// Fleet: manage the SparkFleet GPU control plane (the machine's own model
-	// servers) — the chat twin of the native 플릿 tab / the /api/v1/fleet
-	// passthrough. Deferred like gateway/observe: niche but powerful, loaded via
-	// fetch_tools when the user actually asks about the fleet.
-	registry.RegisterTool(toolctx.ToolDef{
-		Name: "fleet",
-		Description: "SparkFleet GPU 컨트롤 플레인 관리 — 이 머신의 GPU 모델 서버를 띄우고 점검한다. " +
-			"action=status (노드 GPU/메모리·레시피 실행 상태·최근 실패 작업 한눈에) · recipes (모델 레시피 목록) · jobs (백그라운드 작업) · " +
-			"launch/stop/restart (recipe 이름으로 모델 기동·중지·재시작 — 실제 동작) · cancel (jobId로 작업 취소) · diagnose (실행 중 레시피 컨테이너 크래시 진단). " +
-			"\"플릿 괜찮아?\" · \"qwen36 재시작해줘\" · \"왜 죽었어?\" 같은 요청에 사용.",
-		InputSchema: fleetToolSchema(),
-		Fn:          runtimeops.ToolFleet(&deps.Fleet),
-		Deferred:    true,
-	})
-
-	// Spillover: read full content of a previously spilled large tool result.
-	// Registered eagerly so the trim marker's embedded spill ID can be used
-	// in the same turn without a fetch_tools round-trip.
-	if deps.SpilloverStore != nil {
-		registry.RegisterTool(toolctx.ToolDef{
-			Name:        "read_spillover",
-			Description: "Read a previous large tool result by spill ID, paged — offset/limit line window (default 400 lines) or grep to jump to matching lines. Use when a tool result was too large and was replaced with a preview; follow the [계속: offset=N] tail hint to page",
-			InputSchema: readSpilloverToolSchema(),
-			Fn:          artifact.ToolSpilloverRead(deps.SpilloverStore),
-		})
-	}
-
-	// Graphify: knowledge-graph queries over the wiki concept graph (people,
-	// projects, deals, decisions, etc.) built by the wiki dreamer each cycle.
-	// Deferred: at ~1,200 tokens this was the single largest eager tool on the
-	// wire (prompt audit 2026-06-12) while most turns never touch the graph.
-	// The deferred listing shows the first sentence (80-char truncation); the
-	// full usage-pattern coaching below ships with the schema at fetch_tools
-	// time — exactly when the model is about to use it. No automation prompt
-	// directs graphify by name, so the fetch round-trip only ever lands on
-	// interactive turns (cf. heartbeat_update's eager rationale).
-	registry.RegisterTool(toolctx.ToolDef{
-		Name: "graphify",
-		Description: "위키 지식 그래프 질의 (사람·프로젝트·거래·결정·선호 등 개념/관계 그래프, dreamer가 매 사이클 갱신). " +
-			"graph=\"wiki\"(기본, ~/.deneb/wiki-graph) | graph=\"code\"(코드 호출/import/contains 그래프, `graphify update .`로 빌드, workspace/graphify-out). " +
-			"액션: query (자연어 질문 → 관련 노드 탐색), explain (한 노드와 이웃 요약), path (두 노드 간 최단 경로). " +
-			"**사용 패턴:** " +
-			"(a) 단순 검색이 아니라 **그래프 탐색**으로 사고하라 — query로 후보 노드를 찾고 explain으로 이웃을 펼친 뒤 path로 다른 영역과 연결. " +
-			"(b) explain 결과의 community 번호를 활용하라 — 같은 community 안의 노드는 의미적으로 한 묶음. " +
-			"(c) 단발 질의로 끝내지 마라 — 한 질문에 query/explain/path를 2~3회 chaining해 답을 입체화. " +
-			"(d) wiki search보다 graphify가 강한 상황: 관계·맥락·연쇄 추론이 필요할 때 (단순 키워드 룩업은 wiki/grep로 충분). " +
-			"(e) wiki + code 두 그래프를 묶어서 답하라 — \"이 함수가 어떤 개념을 구현하나\"면 code에서 함수 노드 explain 후 wiki에서 같은 개념을 query.",
-		InputSchema: graphifyToolSchema(),
-		Fn:          tools.ToolGraphify(workspaceDir),
-		Deferred:    true,
 	})
 }
 
