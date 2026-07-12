@@ -21,6 +21,126 @@ func harvestTestMatcher(text string) string {
 	return ""
 }
 
+// TestRecordAttendances pins the silent attendance pass: it records every
+// matched, ended meeting once — no ask cap, deduped across ticks — and never
+// touches personal/unmatched events.
+func TestRecordAttendances(t *testing.T) {
+	now := time.Date(2026, 7, 6, 14, 0, 0, 0, harvestKST)
+	mk := func(id, summary string, endedAgo time.Duration) calendar.Event {
+		end := now.Add(-endedAgo)
+		return calendar.Event{
+			ID: id, Summary: summary,
+			Start: end.Add(-time.Hour), End: end, Status: "confirmed",
+		}
+	}
+	m1 := mk("m1", "영산고 발주 미팅", 30*time.Minute)
+	m2 := mk("m2", "영산고 시공 미팅", 90*time.Minute)
+	personal := mk("p", "치과 예약", 30*time.Minute)
+	events := []calendar.Event{m1, m2, personal}
+
+	var recorded []string
+	s := &meetingHarvestService{
+		matchTarget: harvestTestMatcher,
+		displayLoc:  harvestKST,
+		logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		state:       meetingHarvestState{Version: 1, Asked: map[string]int64{}},
+		recordAttendance: func(ev calendar.Event) bool {
+			recorded = append(recorded, ev.ID)
+			return true
+		},
+	}
+
+	s.recordAttendances(now, events)
+	if len(recorded) != 2 {
+		t.Fatalf("recorded %v, want 2 matched meetings (personal excluded)", recorded)
+	}
+
+	// A second tick records nothing new (deduped by event key).
+	before := len(recorded)
+	s.recordAttendances(now, events)
+	if len(recorded) != before {
+		t.Errorf("re-recorded on second tick: %v", recorded)
+	}
+
+	// No recorder wired → no-op, no panic.
+	(&meetingHarvestService{matchTarget: harvestTestMatcher}).recordAttendances(now, events)
+}
+
+// TestRecordAttendancesRecordBeforeMark pins the review fix: an event is marked
+// Recorded only AFTER the recorder returns, so a recorder that fails does not
+// permanently suppress the meeting. The recorder observes its own key as NOT
+// yet marked at call time.
+func TestRecordAttendancesRecordBeforeMark(t *testing.T) {
+	now := time.Date(2026, 7, 6, 14, 0, 0, 0, harvestKST)
+	end := now.Add(-30 * time.Minute)
+	ev := calendar.Event{
+		ID: "m1", Summary: "영산고 발주 미팅",
+		Start: end.Add(-time.Hour), End: end, Status: "confirmed",
+	}
+	key := harvestKey(ev)
+
+	var markedAtCallTime bool
+	s := &meetingHarvestService{
+		matchTarget: harvestTestMatcher,
+		displayLoc:  harvestKST,
+		logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		state:       meetingHarvestState{Version: 1, Asked: map[string]int64{}},
+	}
+	s.recordAttendance = func(e calendar.Event) bool {
+		s.mu.Lock()
+		_, markedAtCallTime = s.state.Recorded[key]
+		s.mu.Unlock()
+		return true
+	}
+
+	s.recordAttendances(now, []calendar.Event{ev})
+	if markedAtCallTime {
+		t.Error("event was marked Recorded before the recorder ran — a failed record would be lost")
+	}
+	if _, done := s.state.Recorded[key]; !done {
+		t.Error("event must be marked Recorded after the recorder returns")
+	}
+}
+
+// TestRecordAttendancesRetryOnFailure pins the QK91E semantics: a recorder that
+// reports a transient failure (false) leaves the event UNMARKED so the next
+// poll retries, and a later success marks it.
+func TestRecordAttendancesRetryOnFailure(t *testing.T) {
+	now := time.Date(2026, 7, 6, 14, 0, 0, 0, harvestKST)
+	end := now.Add(-30 * time.Minute)
+	ev := calendar.Event{
+		ID: "m1", Summary: "영산고 발주 미팅",
+		Start: end.Add(-time.Hour), End: end, Status: "confirmed",
+	}
+	key := harvestKey(ev)
+
+	fail := true
+	calls := 0
+	s := &meetingHarvestService{
+		matchTarget: harvestTestMatcher,
+		displayLoc:  harvestKST,
+		logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		state:       meetingHarvestState{Version: 1, Asked: map[string]int64{}},
+		recordAttendance: func(e calendar.Event) bool {
+			calls++
+			return !fail
+		},
+	}
+
+	s.recordAttendances(now, []calendar.Event{ev}) // recorder fails
+	if _, done := s.state.Recorded[key]; done {
+		t.Error("a failed record must not be marked Recorded")
+	}
+	fail = false
+	s.recordAttendances(now, []calendar.Event{ev}) // retry succeeds
+	if _, done := s.state.Recorded[key]; !done {
+		t.Error("a successful retry must mark the event Recorded")
+	}
+	if calls != 2 {
+		t.Errorf("recorder calls = %d, want 2 (fail then retry)", calls)
+	}
+}
+
 func TestDecideHarvests(t *testing.T) {
 	now := time.Date(2026, 7, 6, 14, 0, 0, 0, harvestKST)
 	mk := func(id, summary string, endedAgo time.Duration) calendar.Event {

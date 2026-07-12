@@ -18,6 +18,7 @@ func (s *Server) buildMux() *http.ServeMux {
 			ShutdownContext: s.ShutdownCtx(),
 			Logger:          s.logger,
 			Ledger:          s.phoneEventLedgerInstance(),
+			OnLocationPlace: s.siteVisitOnLocation(),
 			ResolvePhoneAction: func(res phoneevents.ActionResult) bool {
 				if s.phoneActions == nil {
 					return false

@@ -59,6 +59,10 @@ type Config struct {
 	// (ledger.go). nil disables recording; the judgment path is unaffected
 	// either way.
 	Ledger *Ledger
+	// OnLocationPlace, if set, receives each location_update payload so a
+	// site-visit recorder can match its geocoded place against project 현장
+	// and log a visit. nil disables site-visit recording.
+	OnLocationPlace func(payload string)
 }
 
 // Handler accepts phone telemetry and runs proactive judgment turns.
@@ -69,6 +73,7 @@ type Handler struct {
 	shutdownContext    context.Context
 	logger             *slog.Logger
 	ledger             *Ledger
+	onLocationPlace    func(payload string)
 }
 
 // New creates a phone-event handler.
@@ -84,6 +89,7 @@ func New(cfg Config) *Handler {
 		shutdownContext:    shutdownContext,
 		logger:             cfg.Logger,
 		ledger:             cfg.Ledger,
+		onLocationPlace:    cfg.OnLocationPlace,
 	}
 }
 
@@ -343,6 +349,12 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 	// as ordinary events and DO run the judgment, so they can surface "사무실 도착".)
 	if strings.EqualFold(strings.TrimSpace(eventType), "location_update") {
 		recordPhoneLocation(s.logger, text)
+		// Site-visit memory: match the fix's geocoded place against project
+		// 현장 and log a visit (recorder enforces the privacy boundary — only
+		// a known-site match is ever written). Never spends a judgment turn.
+		if s.onLocationPlace != nil {
+			s.onLocationPlace(text)
+		}
 		return
 	}
 	// usage_update: coarse app-usage rhythm from the native client. Cache only; usage

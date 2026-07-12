@@ -46,6 +46,7 @@ import (
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/sessionstore"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
 	"github.com/choiceoh/deneb/gateway-go/pkg/checkpoint"
 )
 
@@ -143,9 +144,19 @@ type Server struct {
 	phoneActions *phoneActionAwaiter
 
 	// phoneEventLedger is the shared notification raw ledger — both phone-event
-	// entry doors (RPC bridge + HTTP loopback) record into one instance. Lazily
-	// created during single-threaded startup wiring (server_phone_action.go).
-	phoneEventLedger *phoneevents.Ledger
+	// entry doors (RPC bridge + HTTP loopback) record into one instance. The
+	// HTTP door (/api/event/ingest) builds its handler per request, so the lazy
+	// init is guarded by phoneEventLedgerOnce (concurrent ingests must share one
+	// ledger, not race two into existence — server_phone_action.go).
+	phoneEventLedger     *phoneevents.Ledger
+	phoneEventLedgerOnce sync.Once
+
+	// siteVisitRecorder logs project 현장 visits from phone location fixes
+	// (wikiwork.SiteVisitRecorder). Lazily created (guarded by
+	// siteVisitRecorderOnce — same per-request door as the ledger); nil when no
+	// wiki store.
+	siteVisitRecorder     *wikiwork.SiteVisitRecorder
+	siteVisitRecorderOnce sync.Once
 
 	// fleetAlerts dedups SparkFleet webhook alerts so a standing condition (e.g.
 	// "low memory headroom: srv2" re-emitted every heartbeat) does not push the

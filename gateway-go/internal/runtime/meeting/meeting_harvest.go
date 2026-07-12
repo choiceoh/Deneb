@@ -58,8 +58,9 @@ const (
 const HarvestStateFile = harvestStateFile
 
 type meetingHarvestState struct {
-	Version int              `json:"version"`
-	Asked   map[string]int64 `json:"asked"` // harvestKey → asked-at unix millis
+	Version  int              `json:"version"`
+	Asked    map[string]int64 `json:"asked"`              // harvestKey → asked-at unix millis
+	Recorded map[string]int64 `json:"recorded,omitempty"` // harvestKey → attendance-logged unix millis
 }
 
 // meetingHarvestService polls the calendar for recently-ended, work-linked
@@ -75,9 +76,28 @@ type meetingHarvestService struct {
 	logger      *slog.Logger
 	statePath   string // "" → in-memory only
 	displayLoc  *time.Location
+	// recordAttendance, if set, silently logs that the operator attended a
+	// matched meeting — regardless of the ask cap, so the meeting fact is
+	// remembered even when no follow-up is asked or answered. It receives the
+	// whole event (so it can resolve the project TYPED from the calendar text
+	// rather than re-interpreting a possibly-counterparty name string) and
+	// returns handled=true when the event should be marked recorded — either a
+	// line was written, or the event deliberately resolves to no single project.
+	// It returns false ONLY on a transient wiki write failure, so the event is
+	// retried on the next poll instead of being permanently suppressed. nil
+	// disables it.
+	recordAttendance func(ev calendar.Event) bool
 
 	mu    sync.Mutex
 	state meetingHarvestState
+}
+
+// SetAttendanceRecorder wires the silent meeting-attendance logger (see the
+// recordAttendance field). Called once at registration.
+func (s *meetingHarvestService) SetAttendanceRecorder(fn func(ev calendar.Event) bool) {
+	if s != nil {
+		s.recordAttendance = fn
+	}
 }
 
 // HarvestService asks a bounded follow-up after work-linked meetings.
@@ -166,6 +186,11 @@ func (s *meetingHarvestService) tick(ctx context.Context) {
 		return
 	}
 
+	// Attendance: silently log every matched, ended meeting to its project —
+	// independent of the ask cap, so the meeting is remembered even when no
+	// follow-up is asked/answered. Deduped by event key, persisted.
+	s.recordAttendances(now, events)
+
 	cands := decideHarvests(now, events, s.alreadyAsked, s.askedToday(now), s.matchTarget, s.displayLoc)
 	for _, c := range cands {
 		body := formatHarvestAsk(c.Event, c.Target, s.displayLoc)
@@ -194,6 +219,85 @@ type harvestCandidate struct {
 	Target string
 }
 
+// recordAttendances logs attendance for every matched, ended meeting not yet
+// recorded — no ask cap, no quiet-hours gate (it never notifies the user).
+func (s *meetingHarvestService) recordAttendances(now time.Time, events []calendar.Event) {
+	if s.recordAttendance == nil {
+		return
+	}
+	for _, ev := range events {
+		target := matchEndedMeeting(now, ev, s.matchTarget)
+		if target == "" {
+			continue
+		}
+		key := harvestKey(ev)
+		s.mu.Lock()
+		_, done := s.state.Recorded[key]
+		s.mu.Unlock()
+		if done {
+			continue
+		}
+		// Write to the wiki FIRST and mark recorded ONLY when the recorder reports
+		// it handled the event (a line written, or a deliberate no-project skip).
+		// A transient write failure returns false → leave the key unmarked so the
+		// next poll retries instead of losing the attendance fact permanently.
+		// (The tick loop is serial, so there is no double-record race in the
+		// window between the call and the mark.)
+		if !s.recordAttendance(ev) {
+			continue
+		}
+		s.mu.Lock()
+		if s.state.Recorded == nil {
+			s.state.Recorded = map[string]int64{}
+		}
+		s.state.Recorded[key] = now.UnixMilli()
+		s.mu.Unlock()
+		s.saveState()
+	}
+}
+
+// matchEndedMeeting returns the work target for an event that is a genuine,
+// recently-ended, in-window human meeting, or "" otherwise. Shared by the ask
+// flow (decideHarvests) and the attendance recorder so their notions of "a
+// meeting the operator attended" stay identical.
+func matchEndedMeeting(now time.Time, ev calendar.Event, matchTarget func(string) string) string {
+	if ev.AllDay || ev.Status == "cancelled" || ev.End.IsZero() {
+		return ""
+	}
+	age := now.Sub(ev.End)
+	if age < harvestMinAfterEnd || age > harvestMaxAfterEnd {
+		return ""
+	}
+	if selfDeclined(ev.Attendees) {
+		// A declined invite can stay on the feed; the operator wasn't there.
+		return ""
+	}
+	if !isMeetingShaped(ev) {
+		// A project-linked task block ("발주"/"서류 제출") is not a meeting.
+		return ""
+	}
+	return matchTarget(MeetingMatchText(ev))
+}
+
+// MeetingMatchText builds the text a meeting is matched against: title +
+// description, plus attendee/organizer names, because Google events often carry
+// the counterparty only in the guest list — or, for externally organized
+// invites, only in the organizer — not the title. Emails contribute their LOCAL
+// PART only: domain fragments ("co", "kr", "gmail") would otherwise feed the
+// loose unique-token matcher and bind a personal invite to an unrelated project.
+// Exported so the attendance recorder can resolve the SAME text to a typed
+// project ref (not a re-interpreted name string).
+func MeetingMatchText(ev calendar.Event) string {
+	text := ev.Summary + " " + ev.Description
+	for _, a := range ev.Attendees {
+		text += " " + a.DisplayName + " " + emailLocalPart(a.Email)
+	}
+	if ev.Organizer.DisplayName != "" || ev.Organizer.Email != "" {
+		text += " " + ev.Organizer.DisplayName + " " + emailLocalPart(ev.Organizer.Email)
+	}
+	return strings.TrimSpace(text)
+}
+
 // decideHarvests is the pure selection function (production and tests share
 // it): ended work-linked events inside the ask window, oldest first, capped by
 // the remaining daily budget. askedToday is how many asks already went out
@@ -218,44 +322,12 @@ func decideHarvests(
 	}
 	var out []harvestCandidate
 	for _, ev := range events {
-		if ev.AllDay || ev.Status == "cancelled" || ev.End.IsZero() {
-			continue
-		}
-		age := now.Sub(ev.End)
-		if age < harvestMinAfterEnd || age > harvestMaxAfterEnd {
-			continue
-		}
 		if alreadyAsked != nil && alreadyAsked(harvestKey(ev)) {
 			continue
 		}
-		if selfDeclined(ev.Attendees) {
-			// A declined invite can stay on the calendar feed; asking
-			// "끝나셨죠?" about a meeting the operator skipped reads as not
-			// paying attention.
-			continue
-		}
-		if !isMeetingShaped(ev) {
-			// A project-linked "발주"/"서류 제출" task block is NOT a meeting —
-			// asking "어떻게 됐어요, 뭐 결정됐어요" about a solo task reads as
-			// nagging (operator feedback 2026-07-05: 사람을 실제로 만나야 미팅).
-			continue
-		}
-		// Attendee/organizer names join the match text: Google events often
-		// carry the counterparty only in the guest list — or, for externally
-		// organized invites, only in the organizer — not the title. Emails
-		// contribute their LOCAL PART only: domain fragments ("co", "kr",
-		// "gmail") would otherwise feed the loose unique-token matcher and
-		// could bind a personal invite to an unrelated project.
-		text := ev.Summary + " " + ev.Description
-		for _, a := range ev.Attendees {
-			text += " " + a.DisplayName + " " + emailLocalPart(a.Email)
-		}
-		if ev.Organizer.DisplayName != "" || ev.Organizer.Email != "" {
-			text += " " + ev.Organizer.DisplayName + " " + emailLocalPart(ev.Organizer.Email)
-		}
-		target := matchTarget(strings.TrimSpace(text))
+		target := matchEndedMeeting(now, ev, matchTarget)
 		if target == "" {
-			continue // not work-linked — personal events are never harvested
+			continue // not a work-linked, recently-ended meeting
 		}
 		out = append(out, harvestCandidate{Event: ev, Target: target})
 	}
@@ -531,6 +603,12 @@ func (s *meetingHarvestService) pruneState(now time.Time) {
 	for k, ms := range s.state.Asked {
 		if ms < cutoff {
 			delete(s.state.Asked, k)
+			changed = true
+		}
+	}
+	for k, ms := range s.state.Recorded {
+		if ms < cutoff {
+			delete(s.state.Recorded, k)
 			changed = true
 		}
 	}

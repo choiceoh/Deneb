@@ -26,6 +26,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compactuner"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/goalloop"
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
@@ -33,6 +34,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rolehealth"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
 func (s *Server) registerProcessApprovalSideEffect(hub *rpcutil.GatewayHub) {
@@ -219,6 +222,25 @@ func (s *Server) registerMeetingHarvestWorkflow(homeDir string) {
 		filepath.Join(stateDir, runtimemeeting.HarvestStateFile),
 		s.logger,
 	)
+	// Silent attendance record: log that a matched meeting happened to its
+	// project, regardless of the ask cap or a reply. Resolves the project TYPED
+	// from the calendar text (UniqueProjectInText → rep path), NOT the ask flow's
+	// name string — a counterparty-only match has no single project ref, so it
+	// returns handled=true (deliberate skip, nothing to write) rather than
+	// re-interpreting a colliding name as a project. Returns false only on a
+	// transient write failure so the harvest retries.
+	s.meetingHarvest.SetAttendanceRecorder(func(ev calendar.Event) bool {
+		st := s.wikiStore
+		if st == nil {
+			return true
+		}
+		ref, ok := st.UniqueProjectInText(runtimemeeting.MeetingMatchText(ev))
+		if !ok {
+			return true // no single project — skip, don't retry
+		}
+		return wikiwork.RecordMeetingAttendanceByPath(st, ref.Path, ev.Summary,
+			ev.End.In(dentime.Location()).Format("2006-01-02"))
+	})
 	s.meetingHarvest.Start(s.ShutdownCtx())
 }
 
