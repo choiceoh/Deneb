@@ -52,7 +52,7 @@ func TestWriteChatStreamSSE_DeltasThenDone(t *testing.T) {
 		sinks.Delta("하세요")
 		return &chatStreamResult{Text: "안녕하세요", Model: "step3p7", FellBack: true}, nil
 	}
-	writeChatStreamSSE(context.Background(), rec, "client:test", run, nil)
+	writeChatStreamSSE(context.Background(), context.Background(), rec, "client:test", run, nil)
 
 	if ct := rec.Header().Get("Content-Type"); ct != "text/event-stream" {
 		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
@@ -86,12 +86,54 @@ func TestWriteChatStreamSSE_DeltasThenDone(t *testing.T) {
 	}
 }
 
+// The turn is detached from the client connection: a client disconnect (native
+// app backgrounded → SSE socket closed → connCtx cancelled) must NOT cancel the
+// run. The turn completes on its own (live) context and produces the terminal
+// frame, so the answer lands in the session transcript the client re-fetches on
+// resume. This is the fix for "background a chat mid-answer → answer lost".
+func TestWriteChatStreamSSE_RunSurvivesClientDisconnect(t *testing.T) {
+	rec := httptest.NewRecorder()
+	// The client already disconnected: connCtx is cancelled up front.
+	connCtx, cancelConn := context.WithCancel(context.Background())
+	cancelConn()
+
+	ran := false
+	run := func(ctx context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
+		ran = true
+		// The run's own context must stay live despite the dead connection.
+		if ctx.Err() != nil {
+			t.Errorf("run ctx cancelled by client disconnect: %v", ctx.Err())
+		}
+		sinks.Delta("응답")
+		return &chatStreamResult{Text: "완성된 응답", Model: "step3p7"}, nil
+	}
+	// runCtx = Background (live); connCtx = cancelled (client gone).
+	writeChatStreamSSE(context.Background(), connCtx, rec, "client:test", run, nil)
+
+	if !ran {
+		t.Fatal("detached run did not execute after client disconnect")
+	}
+	var done *struct{ Event, Data string }
+	for _, ev := range parseSSEEvents(t, rec.Body.String()) {
+		if ev.Event == "done" {
+			e := ev
+			done = &e
+		}
+	}
+	if done == nil {
+		t.Fatalf("no done frame — the detached run must complete: %q", rec.Body.String())
+	}
+	if !strings.Contains(done.Data, "완성된 응답") {
+		t.Errorf("done frame missing completed text: %q", done.Data)
+	}
+}
+
 func TestWriteChatStreamSSE_ErrorFrame(t *testing.T) {
 	rec := httptest.NewRecorder()
 	run := func(_ context.Context, _ chatStreamSinks) (*chatStreamResult, error) {
 		return nil, errors.New("boom")
 	}
-	writeChatStreamSSE(context.Background(), rec, "client:test", run, nil)
+	writeChatStreamSSE(context.Background(), context.Background(), rec, "client:test", run, nil)
 
 	events := parseSSEEvents(t, rec.Body.String())
 	if len(events) != 1 || events[0].Event != "error" {
@@ -120,7 +162,7 @@ func TestWriteChatStreamSSE_ToolAndThinkingFrames(t *testing.T) {
 		sinks.Tool(chatport.ToolStreamEvent{}) // empty tool name must be dropped, not framed
 		return &chatStreamResult{Text: "메일 3통이 도착했습니다", Model: "step3p7"}, nil
 	}
-	writeChatStreamSSE(context.Background(), rec, "client:test", run, nil)
+	writeChatStreamSSE(context.Background(), context.Background(), rec, "client:test", run, nil)
 
 	events := parseSSEEvents(t, rec.Body.String())
 	wantOrder := []string{"thinking", "thinking", "tool", "tool", "delta", "done"}
