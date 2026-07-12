@@ -1,5 +1,38 @@
 # Changelog
 
+## [4.92.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.91.0...deneb-v4.92.0) (2026-07-12)
+
+
+### ✨ Features
+
+* **andromeda:** 미학적 폴리싱 — GridNotice 스피너/재시도·접근성·디자인 토큰 정합 ([265792f](https://github.com/choiceoh/Deneb/commit/265792f8dde4a043806a7479a0d87a7c204f4aff))
+* **andromeda:** 재귀적 자가개선 루프 상태 페인 — L1-L4 상태 카드 ([#3497](https://github.com/choiceoh/Deneb/issues/3497)) ([b2d31ac](https://github.com/choiceoh/Deneb/commit/b2d31accf480395a2d5ec8c71648e553af267b12))
+* **audit:** RSI lifecycle 로그 패턴 마이너 — rsi-lifecycle-mine.py ([5e7b4fa](https://github.com/choiceoh/Deneb/commit/5e7b4fa2ea09018979fb592e946058aab6579b9a))
+* **audit:** RSI 루프 상태 감사 도구 — scripts/audit/rsi-loop-audit.py ([dc36942](https://github.com/choiceoh/Deneb/commit/dc3694257c1d735c26e31433bb39ac0d25f80989))
+* **denebui:** 카드 렌더 폴리싱 — 상태 톤·코드 크롬·아이콘/차트 패리티·조형 계약 ([#3498](https://github.com/choiceoh/Deneb/issues/3498)) ([31ccf3c](https://github.com/choiceoh/Deneb/commit/31ccf3c4db783c76c720ac917097fe454f5cec3c))
+* **native:** RSI 허브 드릴다운 — L1/L4 카드 인라인 상세 ([#3505](https://github.com/choiceoh/Deneb/issues/3505)) ([f62bb54](https://github.com/choiceoh/Deneb/commit/f62bb54abcee35635f74f5fcb87ca2d0423bc5d8))
+* **native:** 미학적 폴리싱 — dead code 제거·shimmer 토큰 정합·Fleet 로딩 skeleton ([1cc2336](https://github.com/choiceoh/Deneb/commit/1cc23365c0abdd72853aa0395a19c330f4da4a70))
+* **native:** 재귀적 자가개선 루프 상태 화면 (2/3) ([#3496](https://github.com/choiceoh/Deneb/issues/3496)) ([42033e0](https://github.com/choiceoh/Deneb/commit/42033e00c15d73660b3e49f4a20302524731c47a))
+* **wiki:** ingest Supernote Manta handwritten notes via Google Drive ([#3494](https://github.com/choiceoh/Deneb/issues/3494)) ([3b00dd5](https://github.com/choiceoh/Deneb/commit/3b00dd57404595815bdbbf8938df4cb94913de1c))
+* **wiki:** 현장 방문·회의 참석 자동 기억 (응고 격차 메우기) ([#3500](https://github.com/choiceoh/Deneb/issues/3500)) ([a44d138](https://github.com/choiceoh/Deneb/commit/a44d13853f2f38040291dcce20382e09313f5b23))
+
+
+### 🐛 Bug Fixes
+
+* **ci:** close Health Bench follow-up checks ([#3504](https://github.com/choiceoh/Deneb/issues/3504)) ([e165101](https://github.com/choiceoh/Deneb/commit/e16510192dbc723b9dd7901fc3e36d5bd9e67334))
+* **denebui:** 관용 렌더러 — 프로즈에 붙은 펜스 오프너 인식, 인라인 공백 보존, ul 순서·표 섹션 보정 ([#3499](https://github.com/choiceoh/Deneb/issues/3499)) ([4ed1b71](https://github.com/choiceoh/Deneb/commit/4ed1b71b0dafc24be023458020e83c45e227c755))
+* **denebui:** 관용 렌더러 2차 — 글루된 클로저·원라이너 펜스·아이콘 카탈로그 확충 ([#3503](https://github.com/choiceoh/Deneb/issues/3503)) ([dcb9816](https://github.com/choiceoh/Deneb/commit/dcb98162249fac5e9c13f9c5ecaba7179513936b))
+* **denebui:** 렌더 정렬 3차 — 피드/푸시 펜스 누출 근본수정·채팅 이중 카드 제거·required 피드백·조형 관측 ([#3506](https://github.com/choiceoh/Deneb/issues/3506)) ([f227075](https://github.com/choiceoh/Deneb/commit/f227075e341c3d93ab05c6a8dab05fbb663fde2c))
+* **native:** 코드 품질 — dead stability entries·FeedScreen key·Display 액션 no-op 수정 ([59853b2](https://github.com/choiceoh/Deneb/commit/59853b22ae5d2716570ffa3490b777b2811016d8))
+* **rsi:** RSI 뷰어 한글화 + 카드 탭 상세(층 역할 설명) ([#3502](https://github.com/choiceoh/Deneb/issues/3502)) ([46772c2](https://github.com/choiceoh/Deneb/commit/46772c2bfd136487d1b0d41f06647fa8ced7ffdf))
+
+
+### 🔧 Internal
+
+* improve runtime health and Health Bench 2.2 ([#3501](https://github.com/choiceoh/Deneb/issues/3501)) ([4b3882f](https://github.com/choiceoh/Deneb/commit/4b3882f2652434fe5a2b3ec69e2d8eef4db9971f))
+* **native:** GeneratingBackdrop 매직넘버 → DenebMotion.DurationSlow 토큰 ([3c3b50f](https://github.com/choiceoh/Deneb/commit/3c3b50f121e38e988818cd29bb61eb7bd84c099c))
+* **native:** LogoAnimation.kt 삭제 — dead code (호출처 제로) + hardcoded purple 제거 ([df99472](https://github.com/choiceoh/Deneb/commit/df99472737502cff3e42d59221a5582b40490dc0))
+
 ## [4.91.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.90.0...deneb-v4.91.0) (2026-07-12)
 
 
