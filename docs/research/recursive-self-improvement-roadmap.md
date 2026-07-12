@@ -294,6 +294,13 @@ deterministic acceptance, the drift brake, and the independent auditor
 (rsi-loop-audit). A P5 workstream that cannot show its gain in held-out,
 operator-grounded numbers is theater and gets cut.
 
+**L5 note (the layer above L4).** The one prompt L1–L4 hold fixed is the
+meta-governor (`metaEvolutionSystemPrompt`). Whether it should ever become the
+fourth evolvable prompt — and why it stays frozen until P3 is not just built but
+*calibrated* (currently 0 graded labels) — is worked out in
+[rsi-l5-meta-governor-unfreeze.md](rsi-l5-meta-governor-unfreeze.md). Design-only;
+recommendation is keep-frozen, feed the loop instead.
+
 ## Ground rules carried over
 
 1. Deterministic gates and safety surfaces are never self-editable (P1
