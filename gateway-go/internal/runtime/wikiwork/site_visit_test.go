@@ -106,6 +106,39 @@ func TestMatchProjectSiteIsSitesOnly(t *testing.T) {
 	}
 }
 
+// TestMatchProjectSiteReturnsReadableCandidate pins the review fix: the matched
+// string handed back is the human-readable site candidate (original spacing),
+// not the normalized lowercase/letters-only key, so the 로그 line reads naturally.
+func TestMatchProjectSiteReturnsReadableCandidate(t *testing.T) {
+	store := newTestStore(t)
+	seedProjectWithSite(t, store, "수산리태양광", "전북 군산시 옥구읍 수산리")
+
+	_, cand, ok := store.MatchProjectSite("전라북도 군산시 옥구읍 수산리")
+	if !ok {
+		t.Fatal("expected a site match")
+	}
+	// The candidate must be the trailing admin unit as stored ("수산리"), never a
+	// normalized key (which would strip case/spacing to a different form).
+	if cand != "수산리" {
+		t.Errorf("candidate = %q, want readable %q", cand, "수산리")
+	}
+}
+
+func TestSanitizeLogText(t *testing.T) {
+	cases := map[string]string{
+		"전북 군산시 수산리":         "전북 군산시 수산리",
+		"line1\nline2":       "line1 line2", // newline can't inject a new heading
+		"a\r\n## 조작\t- b":    "a ## 조작 - b", // control chars collapsed, markdown inert as one token
+		"  lots   of   ws  ": "lots of ws",  // runs of whitespace collapse
+		"x\x00\x01y":         "x y",         // NUL/control bytes → space
+	}
+	for in, want := range cases {
+		if got := sanitizeLogText(in); got != want {
+			t.Errorf("sanitizeLogText(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestSiteVisitStatePersist(t *testing.T) {
 	store := newTestStore(t)
 	seedProjectWithSite(t, store, "수산리태양광", "전북 군산시 옥구읍 수산리")

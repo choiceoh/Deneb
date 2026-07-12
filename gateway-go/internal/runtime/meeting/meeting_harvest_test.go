@@ -65,6 +65,41 @@ func TestRecordAttendances(t *testing.T) {
 	(&meetingHarvestService{matchTarget: harvestTestMatcher}).recordAttendances(now, events)
 }
 
+// TestRecordAttendancesRecordBeforeMark pins the review fix: an event is marked
+// Recorded only AFTER the recorder returns, so a recorder that fails does not
+// permanently suppress the meeting. The recorder observes its own key as NOT
+// yet marked at call time.
+func TestRecordAttendancesRecordBeforeMark(t *testing.T) {
+	now := time.Date(2026, 7, 6, 14, 0, 0, 0, harvestKST)
+	end := now.Add(-30 * time.Minute)
+	ev := calendar.Event{
+		ID: "m1", Summary: "영산고 발주 미팅",
+		Start: end.Add(-time.Hour), End: end, Status: "confirmed",
+	}
+	key := harvestKey(ev)
+
+	var markedAtCallTime bool
+	s := &meetingHarvestService{
+		matchTarget: harvestTestMatcher,
+		displayLoc:  harvestKST,
+		logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		state:       meetingHarvestState{Version: 1, Asked: map[string]int64{}},
+	}
+	s.recordAttendance = func(target string, e calendar.Event) {
+		s.mu.Lock()
+		_, markedAtCallTime = s.state.Recorded[key]
+		s.mu.Unlock()
+	}
+
+	s.recordAttendances(now, []calendar.Event{ev})
+	if markedAtCallTime {
+		t.Error("event was marked Recorded before the recorder ran — a failed record would be lost")
+	}
+	if _, done := s.state.Recorded[key]; !done {
+		t.Error("event must be marked Recorded after the recorder returns")
+	}
+}
+
 func TestDecideHarvests(t *testing.T) {
 	now := time.Date(2026, 7, 6, 14, 0, 0, 0, harvestKST)
 	mk := func(id, summary string, endedAgo time.Duration) calendar.Event {

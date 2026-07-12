@@ -133,23 +133,14 @@ func uniqueProjectIn(hay string, projects []ProjectRef) (ProjectRef, bool) {
 	return best.ref, true
 }
 
-// bestProjectKeyIn returns the longest (by rune count) normalized identity key
-// of ref contained in hay, or "" when none matches. Identity keys are the
-// display name, the folder name, the 거래처 (client), and the project's 현장
-// site paths — mail and calendar text names the PLACE ("수산리 현장 방문") at
-// least as often as the project title, so each site contributes its full form
-// and its final administrative unit (수산리) as keys. The client key makes a
-// counterparty mention ("금호타이어 근황?") anchor every project of that 거래처
-// in MatchProjectsInText (limit-capped); exactly-one consumers must resolve
-// through UniqueProjectInText, where same-length client-key hits across
-// distinct projects tie and yield no pick.
 // MatchProjectSite matches place text against project 현장(sites) ONLY — never
 // the project name or client. The location→site-visit recorder needs this
 // precision: matching on name/client would falsely "visit" a project just
 // because the geocoded place shares a token with its name (a project literally
 // named "군산" would match every 군산 location). Returns the project whose site
-// key is the longest (most specific) match, the matched key, and ok=false when
-// no site matches. Deterministic, active projects only.
+// key is the longest (most specific) match, the human-readable matched site
+// candidate (original spacing/text, e.g. "수산리" — not the normalized key), and
+// ok=false when no site matches. Deterministic, active projects only.
 func (s *Store) MatchProjectSite(place string) (ProjectRef, string, bool) {
 	if s == nil {
 		return ProjectRef{}, "", false
@@ -159,7 +150,8 @@ func (s *Store) MatchProjectSite(place string) (ProjectRef, string, bool) {
 		return ProjectRef{}, "", false
 	}
 	bestRef := ProjectRef{}
-	bestKey := ""
+	bestCand := ""  // original candidate string (for display/logging)
+	bestKeyLen := 0 // normalized-key rune count (for specificity comparison)
 	for _, ref := range s.knownProjects() {
 		for _, site := range ref.Sites {
 			for _, cand := range siteMatchCandidates(site) {
@@ -167,15 +159,15 @@ func (s *Store) MatchProjectSite(place string) (ProjectRef, string, bool) {
 				if utf8.RuneCountInString(key) < minProjectKeyRunes {
 					continue
 				}
-				if strings.Contains(hay, key) &&
-					utf8.RuneCountInString(key) > utf8.RuneCountInString(bestKey) {
-					bestKey = key
+				if strings.Contains(hay, key) && utf8.RuneCountInString(key) > bestKeyLen {
+					bestKeyLen = utf8.RuneCountInString(key)
+					bestCand = strings.TrimSpace(cand)
 					bestRef = ref
 				}
 			}
 		}
 	}
-	return bestRef, bestKey, bestKey != ""
+	return bestRef, bestCand, bestKeyLen > 0
 }
 
 // siteMatchCandidates returns the match keys for one 현장 value: the full site

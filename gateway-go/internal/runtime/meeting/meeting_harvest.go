@@ -225,17 +225,22 @@ func (s *meetingHarvestService) recordAttendances(now time.Time, events []calend
 		}
 		key := harvestKey(ev)
 		s.mu.Lock()
+		_, done := s.state.Recorded[key]
+		s.mu.Unlock()
+		if done {
+			continue
+		}
+		// Write to the wiki FIRST; only mark recorded after it returns. Marking
+		// before the write would permanently suppress the event if the recorder
+		// failed catastrophically (the tick loop is serial, so no double-record
+		// race in the window between call and mark).
+		s.recordAttendance(target, ev)
+		s.mu.Lock()
 		if s.state.Recorded == nil {
 			s.state.Recorded = map[string]int64{}
 		}
-		if _, done := s.state.Recorded[key]; done {
-			s.mu.Unlock()
-			continue
-		}
 		s.state.Recorded[key] = now.UnixMilli()
 		s.mu.Unlock()
-
-		s.recordAttendance(target, ev)
 		s.saveState()
 	}
 }

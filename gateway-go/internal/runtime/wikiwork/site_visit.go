@@ -44,6 +44,10 @@ type SiteVisitRecorder struct {
 	mu     sync.Mutex
 	seen   map[string]int64 // "project|YYYY-MM-DD" → recorded unix millis
 	loaded bool
+
+	// persistMu serializes state-file writes so a stale snapshot can't clobber
+	// a newer one (writes take a fresh snapshot under this lock — see persist).
+	persistMu sync.Mutex
 }
 
 // NewSiteVisitRecorder constructs the recorder. store nil ⇒ Record no-ops.
@@ -99,10 +103,14 @@ func (r *SiteVisitRecorder) Record(place string) {
 	}
 	r.seen[key] = now.UnixMilli()
 	r.pruneLocked()
-	state := r.snapshotLocked()
 	r.mu.Unlock()
 
-	section := "## [" + today + "] 방문 | " + place + "\n- 현장: " + matchedKey + " (휴대폰 위치 기반)\n"
+	// Sanitize third-party text before it reaches the markdown log: collapse
+	// all whitespace/control chars to single spaces so a crafted payload can't
+	// inject new headings or bullets (the Android escape is best-effort; this
+	// is the server-side defense).
+	section := "## [" + today + "] 방문 | " + sanitizeLogText(place) +
+		"\n- 현장: " + sanitizeLogText(matchedKey) + " (휴대폰 위치 기반)\n"
 	err := r.store.UpdatePage(wiki.LogPagePath(project), func(cur *wiki.Page) (*wiki.Page, error) {
 		if cur == nil {
 			p := wiki.NewPage(project+" 진행 로그", "프로젝트", nil)
@@ -125,12 +133,36 @@ func (r *SiteVisitRecorder) Record(place string) {
 		r.mu.Unlock()
 		return
 	}
-	if serr := r.saveState(state); serr != nil && r.logger != nil {
-		r.logger.Warn("site-visit: state persist failed", "error", serr)
-	}
+	r.persist()
 	if r.logger != nil {
 		r.logger.Info("site-visit recorded", "project", project, "site", matchedKey)
 	}
+}
+
+// persist serializes state writes and always snapshots the LATEST seen map
+// right before writing, under persistMu — so two concurrent Record calls can't
+// let an older snapshot overwrite a newer one and drop dedup keys.
+func (r *SiteVisitRecorder) persist() {
+	r.persistMu.Lock()
+	defer r.persistMu.Unlock()
+	r.mu.Lock()
+	state := r.snapshotLocked()
+	r.mu.Unlock()
+	if err := r.saveState(state); err != nil && r.logger != nil {
+		r.logger.Warn("site-visit: state persist failed", "error", err)
+	}
+}
+
+// sanitizeLogText collapses newlines, control chars, and runs of whitespace to
+// single spaces so untrusted place text stays one inert markdown token.
+func sanitizeLogText(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' || r == '\t' || r < 0x20 {
+			return ' '
+		}
+		return r
+	}, s)
+	return strings.TrimSpace(strings.Join(strings.Fields(s), " "))
 }
 
 // --- state (dedup) persistence ---
