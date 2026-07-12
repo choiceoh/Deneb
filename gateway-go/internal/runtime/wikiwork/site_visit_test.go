@@ -139,6 +139,27 @@ func TestSanitizeLogText(t *testing.T) {
 	}
 }
 
+// TestMatchProjectSiteAmbiguousTieNoMatch pins the QK91C fix: when two distinct
+// active projects match a location at the same longest site key (shared 현장 or
+// shared trailing 리), there is no evidence to choose, so it returns no match
+// rather than silently logging to whichever was scanned first.
+func TestMatchProjectSiteAmbiguousTieNoMatch(t *testing.T) {
+	store := newTestStore(t)
+	seedProjectWithSite(t, store, "수산리A", "전북 군산시 옥구읍 수산리")
+	seedProjectWithSite(t, store, "수산리B", "전북 군산시 옥구읍 수산리")
+
+	if ref, _, ok := store.MatchProjectSite("전라북도 군산시 옥구읍 수산리"); ok {
+		t.Errorf("ambiguous shared-site match must return no match, got %q", ref.Name)
+	}
+
+	// A third project with a MORE specific site that fully contains the place
+	// still resolves — a strictly longer key breaks the tie.
+	seedProjectWithSite(t, store, "옥구정밀", "군산시 옥구읍 수산리 123-4 태양광부지")
+	if _, _, ok := store.MatchProjectSite("군산시 옥구읍 수산리 123-4 태양광부지 진입로"); !ok {
+		t.Error("a strictly longer specific site should still resolve despite shorter ties")
+	}
+}
+
 func TestSiteVisitStatePersist(t *testing.T) {
 	store := newTestStore(t)
 	seedProjectWithSite(t, store, "수산리태양광", "전북 군산시 옥구읍 수산리")

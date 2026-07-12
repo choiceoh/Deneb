@@ -78,8 +78,15 @@ type meetingHarvestService struct {
 	displayLoc  *time.Location
 	// recordAttendance, if set, silently logs that the operator attended a
 	// matched meeting — regardless of the ask cap, so the meeting fact is
-	// remembered even when no follow-up is asked or answered. nil disables it.
-	recordAttendance func(target string, ev calendar.Event)
+	// remembered even when no follow-up is asked or answered. It receives the
+	// whole event (so it can resolve the project TYPED from the calendar text
+	// rather than re-interpreting a possibly-counterparty name string) and
+	// returns handled=true when the event should be marked recorded — either a
+	// line was written, or the event deliberately resolves to no single project.
+	// It returns false ONLY on a transient wiki write failure, so the event is
+	// retried on the next poll instead of being permanently suppressed. nil
+	// disables it.
+	recordAttendance func(ev calendar.Event) bool
 
 	mu    sync.Mutex
 	state meetingHarvestState
@@ -87,7 +94,7 @@ type meetingHarvestService struct {
 
 // SetAttendanceRecorder wires the silent meeting-attendance logger (see the
 // recordAttendance field). Called once at registration.
-func (s *meetingHarvestService) SetAttendanceRecorder(fn func(target string, ev calendar.Event)) {
+func (s *meetingHarvestService) SetAttendanceRecorder(fn func(ev calendar.Event) bool) {
 	if s != nil {
 		s.recordAttendance = fn
 	}
@@ -230,11 +237,15 @@ func (s *meetingHarvestService) recordAttendances(now time.Time, events []calend
 		if done {
 			continue
 		}
-		// Write to the wiki FIRST; only mark recorded after it returns. Marking
-		// before the write would permanently suppress the event if the recorder
-		// failed catastrophically (the tick loop is serial, so no double-record
-		// race in the window between call and mark).
-		s.recordAttendance(target, ev)
+		// Write to the wiki FIRST and mark recorded ONLY when the recorder reports
+		// it handled the event (a line written, or a deliberate no-project skip).
+		// A transient write failure returns false → leave the key unmarked so the
+		// next poll retries instead of losing the attendance fact permanently.
+		// (The tick loop is serial, so there is no double-record race in the
+		// window between the call and the mark.)
+		if !s.recordAttendance(ev) {
+			continue
+		}
 		s.mu.Lock()
 		if s.state.Recorded == nil {
 			s.state.Recorded = map[string]int64{}
@@ -265,12 +276,18 @@ func matchEndedMeeting(now time.Time, ev calendar.Event, matchTarget func(string
 		// A project-linked task block ("발주"/"서류 제출") is not a meeting.
 		return ""
 	}
-	// Attendee/organizer names join the match text: Google events often carry
-	// the counterparty only in the guest list — or, for externally organized
-	// invites, only in the organizer — not the title. Emails contribute their
-	// LOCAL PART only: domain fragments ("co", "kr", "gmail") would otherwise
-	// feed the loose unique-token matcher and bind a personal invite to an
-	// unrelated project.
+	return matchTarget(MeetingMatchText(ev))
+}
+
+// MeetingMatchText builds the text a meeting is matched against: title +
+// description, plus attendee/organizer names, because Google events often carry
+// the counterparty only in the guest list — or, for externally organized
+// invites, only in the organizer — not the title. Emails contribute their LOCAL
+// PART only: domain fragments ("co", "kr", "gmail") would otherwise feed the
+// loose unique-token matcher and bind a personal invite to an unrelated project.
+// Exported so the attendance recorder can resolve the SAME text to a typed
+// project ref (not a re-interpreted name string).
+func MeetingMatchText(ev calendar.Event) string {
 	text := ev.Summary + " " + ev.Description
 	for _, a := range ev.Attendees {
 		text += " " + a.DisplayName + " " + emailLocalPart(a.Email)
@@ -278,7 +295,7 @@ func matchEndedMeeting(now time.Time, ev calendar.Event, matchTarget func(string
 	if ev.Organizer.DisplayName != "" || ev.Organizer.Email != "" {
 		text += " " + ev.Organizer.DisplayName + " " + emailLocalPart(ev.Organizer.Email)
 	}
-	return matchTarget(strings.TrimSpace(text))
+	return strings.TrimSpace(text)
 }
 
 // decideHarvests is the pure selection function (production and tests share

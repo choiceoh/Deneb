@@ -18,23 +18,20 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
-// RecordMeetingAttendance appends a silent 회의 op to a project's 로그.md when
-// target resolves to a known project. dateISO is the meeting's date
-// (YYYY-MM-DD). Returns true when a line was written. store nil, empty target,
-// or a counterparty-only target ⇒ false (no-op).
-func RecordMeetingAttendance(store *wiki.Store, target, title, dateISO string) bool {
-	if store == nil {
-		return false
+// RecordMeetingAttendanceByPath appends a silent 회의 op to the 로그.md of the
+// project owning repPath (a 대표페이지 path already resolved from a TYPED project
+// match — never a bare name re-interpreted here, so a counterparty whose name
+// collides with a project folder can't be mislogged). dateISO is the meeting's
+// date (YYYY-MM-DD). Returns true when the event is HANDLED — a line was
+// written, OR repPath resolves to no project (nothing to write). Returns false
+// ONLY on a transient wiki write failure, so the caller retries next poll.
+func RecordMeetingAttendanceByPath(store *wiki.Store, repPath, title, dateISO string) bool {
+	if store == nil || dateISO == "" {
+		return true // nothing to write and nothing to retry
 	}
-	target = strings.TrimSpace(target)
-	if target == "" || dateISO == "" {
-		return false
-	}
-	// Resolve to a project rep (folder rep, legacy flat, or display title). A
-	// counterparty-only match errors here and is skipped by design.
-	project, _, err := store.ResolveProjectRep(target)
-	if err != nil || project == "" {
-		return false
+	folder, ok := wiki.ProjectNameOf(strings.TrimSpace(repPath))
+	if !ok || folder == "" {
+		return true // not a project path — deliberate skip
 	}
 
 	title = strings.TrimSpace(title)
@@ -42,11 +39,11 @@ func RecordMeetingAttendance(store *wiki.Store, target, title, dateISO string) b
 		title = "회의"
 	}
 	section := "## [" + dateISO + "] 회의 | " + title + " — 참석 (캘린더 기반)\n"
-	werr := store.UpdatePage(wiki.LogPagePath(project), func(cur *wiki.Page) (*wiki.Page, error) {
+	werr := store.UpdatePage(wiki.LogPagePath(folder), func(cur *wiki.Page) (*wiki.Page, error) {
 		if cur == nil {
-			p := wiki.NewPage(project+" 진행 로그", "프로젝트", nil)
+			p := wiki.NewPage(folder+" 진행 로그", "프로젝트", nil)
 			p.Meta.Type = "log"
-			p.Meta.Summary = project + " 진행 로그"
+			p.Meta.Summary = folder + " 진행 로그"
 			p.Body = section
 			return p, nil
 		}

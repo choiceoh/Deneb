@@ -81,19 +81,22 @@ func (r *SiteVisitRecorder) Record(place string) {
 	if !ok {
 		return // not a tracked 현장 — record nothing (privacy boundary)
 	}
-	project := ref.Name
-	if project == "" {
-		if name, nok := wiki.ProjectNameOf(ref.Path); nok {
-			project = name
-		}
-	}
-	if project == "" {
+	// The wiki path keys off the FOLDER name (ref.Path segment), never the
+	// display title: a project whose rep Title is "기아 화성" but folder is
+	// 기아-화성 would otherwise write to 프로젝트/기아 화성/로그.md and orphan the
+	// visit. display (Title, else folder) is only the human-readable heading.
+	folder, ok := wiki.ProjectNameOf(ref.Path)
+	if !ok || folder == "" {
 		return
+	}
+	display := strings.TrimSpace(ref.Name)
+	if display == "" {
+		display = folder
 	}
 
 	now := dentime.Now()
 	today := now.Format("2006-01-02")
-	key := project + "|" + today
+	key := folder + "|" + today
 
 	r.mu.Lock()
 	r.ensureLoadedLocked()
@@ -111,11 +114,11 @@ func (r *SiteVisitRecorder) Record(place string) {
 	// is the server-side defense).
 	section := "## [" + today + "] 방문 | " + sanitizeLogText(place) +
 		"\n- 현장: " + sanitizeLogText(matchedKey) + " (휴대폰 위치 기반)\n"
-	err := r.store.UpdatePage(wiki.LogPagePath(project), func(cur *wiki.Page) (*wiki.Page, error) {
+	err := r.store.UpdatePage(wiki.LogPagePath(folder), func(cur *wiki.Page) (*wiki.Page, error) {
 		if cur == nil {
-			p := wiki.NewPage(project+" 진행 로그", "프로젝트", nil)
+			p := wiki.NewPage(display+" 진행 로그", "프로젝트", nil)
 			p.Meta.Type = "log"
-			p.Meta.Summary = project + " 진행 로그"
+			p.Meta.Summary = display + " 진행 로그"
 			p.Body = section
 			return p, nil
 		}
@@ -125,7 +128,7 @@ func (r *SiteVisitRecorder) Record(place string) {
 	})
 	if err != nil {
 		if r.logger != nil {
-			r.logger.Warn("site-visit: log append failed", "project", project, "error", err)
+			r.logger.Warn("site-visit: log append failed", "project", folder, "error", err)
 		}
 		// Roll back the dedup entry so a transient failure can retry next fix.
 		r.mu.Lock()
@@ -135,7 +138,7 @@ func (r *SiteVisitRecorder) Record(place string) {
 	}
 	r.persist()
 	if r.logger != nil {
-		r.logger.Info("site-visit recorded", "project", project, "site", matchedKey)
+		r.logger.Info("site-visit recorded", "project", folder, "site", matchedKey)
 	}
 }
 

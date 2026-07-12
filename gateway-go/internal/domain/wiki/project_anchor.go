@@ -140,7 +140,13 @@ func uniqueProjectIn(hay string, projects []ProjectRef) (ProjectRef, bool) {
 // named "군산" would match every 군산 location). Returns the project whose site
 // key is the longest (most specific) match, the human-readable matched site
 // candidate (original spacing/text, e.g. "수산리" — not the normalized key), and
-// ok=false when no site matches. Deterministic, active projects only.
+// ok=false when no site matches.
+//
+// 모호하면 잔류: when two DISTINCT active projects match at the same longest key
+// (e.g. both list 수산리, or the geocoded place shares only a trailing 읍/면/리
+// unit with both), the location payload carries no evidence to choose between
+// them, so it returns ok=false rather than silently logging to whichever was
+// scanned first. Deterministic, active projects only.
 func (s *Store) MatchProjectSite(place string) (ProjectRef, string, bool) {
 	if s == nil {
 		return ProjectRef{}, "", false
@@ -150,24 +156,35 @@ func (s *Store) MatchProjectSite(place string) (ProjectRef, string, bool) {
 		return ProjectRef{}, "", false
 	}
 	bestRef := ProjectRef{}
-	bestCand := ""  // original candidate string (for display/logging)
-	bestKeyLen := 0 // normalized-key rune count (for specificity comparison)
+	bestCand := ""     // original candidate string (for display/logging)
+	bestKeyLen := 0    // normalized-key rune count (for specificity comparison)
+	ambiguous := false // another DISTINCT project matched at bestKeyLen
 	for _, ref := range s.knownProjects() {
 		for _, site := range ref.Sites {
 			for _, cand := range siteMatchCandidates(site) {
 				key := normalizeTitleKey(cand)
-				if utf8.RuneCountInString(key) < minProjectKeyRunes {
+				keyLen := utf8.RuneCountInString(key)
+				if keyLen < minProjectKeyRunes || !strings.Contains(hay, key) {
 					continue
 				}
-				if strings.Contains(hay, key) && utf8.RuneCountInString(key) > bestKeyLen {
-					bestKeyLen = utf8.RuneCountInString(key)
+				switch {
+				case keyLen > bestKeyLen:
+					bestKeyLen = keyLen
 					bestCand = strings.TrimSpace(cand)
 					bestRef = ref
+					ambiguous = false
+				case keyLen == bestKeyLen && ref.Path != bestRef.Path:
+					// A distinct project ties the current best key → no evidence
+					// to disambiguate a shared-site visit.
+					ambiguous = true
 				}
 			}
 		}
 	}
-	return bestRef, bestCand, bestKeyLen > 0
+	if bestKeyLen == 0 || ambiguous {
+		return ProjectRef{}, "", false
+	}
+	return bestRef, bestCand, true
 }
 
 // siteMatchCandidates returns the match keys for one 현장 value: the full site

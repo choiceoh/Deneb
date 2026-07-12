@@ -44,8 +44,9 @@ func TestRecordAttendances(t *testing.T) {
 		displayLoc:  harvestKST,
 		logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
 		state:       meetingHarvestState{Version: 1, Asked: map[string]int64{}},
-		recordAttendance: func(target string, ev calendar.Event) {
-			recorded = append(recorded, ev.ID+":"+target)
+		recordAttendance: func(ev calendar.Event) bool {
+			recorded = append(recorded, ev.ID)
+			return true
 		},
 	}
 
@@ -85,10 +86,11 @@ func TestRecordAttendancesRecordBeforeMark(t *testing.T) {
 		logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
 		state:       meetingHarvestState{Version: 1, Asked: map[string]int64{}},
 	}
-	s.recordAttendance = func(target string, e calendar.Event) {
+	s.recordAttendance = func(e calendar.Event) bool {
 		s.mu.Lock()
 		_, markedAtCallTime = s.state.Recorded[key]
 		s.mu.Unlock()
+		return true
 	}
 
 	s.recordAttendances(now, []calendar.Event{ev})
@@ -97,6 +99,45 @@ func TestRecordAttendancesRecordBeforeMark(t *testing.T) {
 	}
 	if _, done := s.state.Recorded[key]; !done {
 		t.Error("event must be marked Recorded after the recorder returns")
+	}
+}
+
+// TestRecordAttendancesRetryOnFailure pins the QK91E semantics: a recorder that
+// reports a transient failure (false) leaves the event UNMARKED so the next
+// poll retries, and a later success marks it.
+func TestRecordAttendancesRetryOnFailure(t *testing.T) {
+	now := time.Date(2026, 7, 6, 14, 0, 0, 0, harvestKST)
+	end := now.Add(-30 * time.Minute)
+	ev := calendar.Event{
+		ID: "m1", Summary: "영산고 발주 미팅",
+		Start: end.Add(-time.Hour), End: end, Status: "confirmed",
+	}
+	key := harvestKey(ev)
+
+	fail := true
+	calls := 0
+	s := &meetingHarvestService{
+		matchTarget: harvestTestMatcher,
+		displayLoc:  harvestKST,
+		logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		state:       meetingHarvestState{Version: 1, Asked: map[string]int64{}},
+		recordAttendance: func(e calendar.Event) bool {
+			calls++
+			return !fail
+		},
+	}
+
+	s.recordAttendances(now, []calendar.Event{ev}) // recorder fails
+	if _, done := s.state.Recorded[key]; done {
+		t.Error("a failed record must not be marked Recorded")
+	}
+	fail = false
+	s.recordAttendances(now, []calendar.Event{ev}) // retry succeeds
+	if _, done := s.state.Recorded[key]; !done {
+		t.Error("a successful retry must mark the event Recorded")
+	}
+	if calls != 2 {
+		t.Errorf("recorder calls = %d, want 2 (fail then retry)", calls)
 	}
 }
 

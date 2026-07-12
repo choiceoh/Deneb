@@ -17,31 +17,33 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
 )
 
-// phoneEventLedgerInstance lazily creates the shared notification ledger.
-// Both phone-event construction sites (method_registry_late.go RPC bridge and
-// server_http_routing.go loopback) run during single-threaded startup wiring,
-// so plain lazy init is race-free here.
+// phoneEventLedgerInstance lazily creates the shared notification ledger. The
+// HTTP loopback door (server_http_routing.go) builds its phone-event handler
+// per request, so this can run concurrently — sync.Once ensures every ingest
+// records into one ledger rather than racing separate instances into being.
 func (s *Server) phoneEventLedgerInstance() *phoneevents.Ledger {
-	if s.phoneEventLedger == nil {
+	s.phoneEventLedgerOnce.Do(func() {
 		s.phoneEventLedger = phoneevents.NewLedger(
 			filepath.Join(config.ResolveStateDir(), phoneevents.LedgerDirname), s.logger)
-	}
+	})
 	return s.phoneEventLedger
 }
 
 // siteVisitOnLocation lazily builds the site-visit recorder and returns its
 // location callback for phoneevents.Config.OnLocationPlace. nil wiki store ⇒
-// nil callback (site-visit recording off). Both phone-event doors share the
-// one recorder, created during single-threaded startup wiring.
+// nil callback (site-visit recording off). Guarded by sync.Once: the HTTP
+// ingest door constructs its handler per request, so two concurrent location
+// updates must share the one recorder (separate recorders would each load empty
+// dedup state and double-log the same visit).
 func (s *Server) siteVisitOnLocation() func(string) {
 	if s.wikiStore == nil {
 		return nil
 	}
-	if s.siteVisitRecorder == nil {
+	s.siteVisitRecorderOnce.Do(func() {
 		s.siteVisitRecorder = wikiwork.NewSiteVisitRecorder(
 			s.wikiStore, s.logger,
 			filepath.Join(config.ResolveStateDir(), wikiwork.SiteVisitStateFile))
-	}
+	})
 	return s.siteVisitRecorder.RecordFromLocationPayload
 }
 

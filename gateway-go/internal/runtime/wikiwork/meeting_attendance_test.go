@@ -7,16 +7,16 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
-func TestRecordMeetingAttendance(t *testing.T) {
+func TestRecordMeetingAttendanceByPath(t *testing.T) {
 	store := newTestStore(t)
 	rep := &wiki.Page{Meta: wiki.Frontmatter{Title: "기아PE", Category: "프로젝트"}, Body: "## 현재 상태\n"}
 	if err := store.WritePage(wiki.RepPagePath("기아PE"), rep); err != nil {
 		t.Fatal(err)
 	}
 
-	// A project match logs a 회의 op.
-	if !RecordMeetingAttendance(store, "기아PE", "기아PE 발주 협의", "2026-07-13") {
-		t.Fatal("expected attendance recorded")
+	// A project rep path logs a 회의 op and reports handled.
+	if !RecordMeetingAttendanceByPath(store, wiki.RepPagePath("기아PE"), "기아PE 발주 협의", "2026-07-13") {
+		t.Fatal("expected attendance handled")
 	}
 	log, err := store.ReadPage(wiki.LogPagePath("기아PE"))
 	if err != nil {
@@ -26,16 +26,19 @@ func TestRecordMeetingAttendance(t *testing.T) {
 		t.Errorf("attendance op missing: %q", log.Body)
 	}
 
-	// An unknown target (no such project — e.g. a counterparty-only match) is a
-	// silent no-op.
-	if RecordMeetingAttendance(store, "존재하지않는거래처", "회의", "2026-07-13") {
-		t.Error("recorded attendance for a non-project target")
+	// A non-project path is HANDLED (deliberate skip — the typed caller only ever
+	// passes real project reps) and writes nothing to retry.
+	if !RecordMeetingAttendanceByPath(store, "존재하지않는거래처", "회의", "2026-07-13") {
+		t.Error("non-project path should report handled")
 	}
-	// Empty inputs no-op.
-	if RecordMeetingAttendance(nil, "기아PE", "회의", "2026-07-13") {
-		t.Error("nil store must no-op")
+	// nil store / empty path / empty date all report handled (nothing to retry).
+	if !RecordMeetingAttendanceByPath(nil, wiki.RepPagePath("기아PE"), "회의", "2026-07-13") {
+		t.Error("nil store must report handled")
 	}
-	if RecordMeetingAttendance(store, "", "회의", "2026-07-13") {
-		t.Error("empty target must no-op")
+	if !RecordMeetingAttendanceByPath(store, "", "회의", "2026-07-13") {
+		t.Error("empty path must report handled")
+	}
+	if !RecordMeetingAttendanceByPath(store, wiki.RepPagePath("기아PE"), "회의", "") {
+		t.Error("empty date must report handled")
 	}
 }

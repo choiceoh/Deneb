@@ -223,9 +223,22 @@ func (s *Server) registerMeetingHarvestWorkflow(homeDir string) {
 		s.logger,
 	)
 	// Silent attendance record: log that a matched meeting happened to its
-	// project, regardless of the ask cap or a reply (project matches only).
-	s.meetingHarvest.SetAttendanceRecorder(func(target string, ev calendar.Event) {
-		wikiwork.RecordMeetingAttendance(s.wikiStore, target, ev.Summary,
+	// project, regardless of the ask cap or a reply. Resolves the project TYPED
+	// from the calendar text (UniqueProjectInText → rep path), NOT the ask flow's
+	// name string — a counterparty-only match has no single project ref, so it
+	// returns handled=true (deliberate skip, nothing to write) rather than
+	// re-interpreting a colliding name as a project. Returns false only on a
+	// transient write failure so the harvest retries.
+	s.meetingHarvest.SetAttendanceRecorder(func(ev calendar.Event) bool {
+		st := s.wikiStore
+		if st == nil {
+			return true
+		}
+		ref, ok := st.UniqueProjectInText(runtimemeeting.MeetingMatchText(ev))
+		if !ok {
+			return true // no single project — skip, don't retry
+		}
+		return wikiwork.RecordMeetingAttendanceByPath(st, ref.Path, ev.Summary,
 			ev.End.In(dentime.Location()).Format("2006-01-02"))
 	})
 	s.meetingHarvest.Start(s.ShutdownCtx())
