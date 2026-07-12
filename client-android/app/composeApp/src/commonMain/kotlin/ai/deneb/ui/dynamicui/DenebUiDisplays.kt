@@ -15,6 +15,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -240,14 +241,27 @@ internal fun RenderTable(node: TableNode) {
         }
     }
 
-    // The first column is usually the entity name (현장, 항목) — give it room
-    // so Korean compound names don't wrap while short numeric columns hog width.
-    fun columnWeight(index: Int) = if (index == 0 && columnCount >= 3) 1.6f else 1f
+    // Column width follows content: the widest cell (in runes) sets each
+    // column's share, sqrt-squashed so the ratio stays civil (~2.3:1 max) and
+    // floor-clamped so a short numeric column keeps a readable minimum. Real
+    // briefing tables put the long prose in ANY column (비고, 결과) — the old
+    // fixed first-column boost squeezed exactly those columns (2026-07-12
+    // corpus audit over production transcript cards).
+    val weights = FloatArray(columnCount) { index ->
+        val maxRunes = (sequenceOf(node.headers.getOrNull(index)) + node.rows.asSequence().map { it.getOrNull(index) })
+            .filterNotNull()
+            .maxOfOrNull { it.trim().length } ?: 1
+        kotlin.math.sqrt(maxRunes.coerceIn(6, 32).toFloat())
+    }
+    fun columnWeight(index: Int) = weights[index]
     val hairline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
 
+    // A visible gutter between columns — weight-divided cells otherwise sit
+    // flush and adjacent Korean cells read as one run ("수정계약기한 초과").
+    val columnGap = Arrangement.spacedBy(10.dp)
     Column(Modifier.fillMaxWidth().wrapContentHeight()) {
         if (node.headers.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = columnGap) {
                 for (index in 0 until columnCount) {
                     Text(
                         text = denebUiInlineText(node.headers.getOrElse(index) { "" }),
@@ -263,7 +277,11 @@ internal fun RenderTable(node: TableNode) {
         node.rows.forEachIndexed { rowIndex, row ->
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = columnGap,
+                // Top-align multi-line cells (the HTML-table reading
+                // convention): center-aligning wrapped cells made every tall
+                // briefing row look jumbled in the production corpus.
+                verticalAlignment = androidx.compose.ui.Alignment.Top,
             ) {
                 for (index in 0 until columnCount) {
                     Text(
