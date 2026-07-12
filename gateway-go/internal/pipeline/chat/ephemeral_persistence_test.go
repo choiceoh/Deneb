@@ -3,9 +3,11 @@ package chat
 import (
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 )
 
 // TestBuildMessagePersister_EphemeralAssistantSuppressesAssistant verifies the
@@ -90,5 +92,115 @@ func TestBuildMessagePersister_StripsNoReplyOnly(t *testing.T) {
 	}
 	if len(msgs) != 0 {
 		t.Errorf("NO_REPLY-only assistant turn must not be persisted; got %d msgs", len(msgs))
+	}
+}
+
+// TestBuildMessagePersister_SubstitutesMarketLetterTokens verifies the per-turn
+// persist chokepoint: a streamed/async turn that mimics the morning-letter
+// token syntax must persist the recorded display value, never the raw
+// "{{market:...}}" template (2026-07-11 production transcript, client:main —
+// the native card rendered "{{market:usd_krw}}원" verbatim).
+func TestBuildMessagePersister_SubstitutesMarketLetterTokens(t *testing.T) {
+	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
+	transcript := NewMemoryTranscriptStore()
+	deps := runDeps{transcript: transcript}
+	params := RunParams{SessionKey: "client:main"}
+
+	persister := buildMessagePersister(deps, params, slog.Default())
+	if persister == nil {
+		t.Fatal("expected persister")
+	}
+
+	rawText, _ := json.Marshal("1달러는 {{market:usd_krw}}원입니다.")
+	persister(llm.Message{Role: "assistant", Content: rawText})
+
+	msgs, _, err := transcript.Load("client:main", 100)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 persisted message, got %d", len(msgs))
+	}
+	var text string
+	if err := json.Unmarshal(msgs[0].Content, &text); err != nil {
+		t.Fatalf("unmarshal content: %v", err)
+	}
+	if text != "1달러는 1,531원입니다." {
+		t.Errorf("persisted text = %q, want substituted display value", text)
+	}
+}
+
+// TestBuildMessagePersister_SubstitutesMarketTokensInTextBlocksOnly verifies
+// the block-form path: text blocks are substituted while tool_use inputs (and
+// any other non-text block) pass through byte-identical — a tool argument that
+// happens to contain the token syntax is the model's business, not a display
+// surface.
+func TestBuildMessagePersister_SubstitutesMarketTokensInTextBlocksOnly(t *testing.T) {
+	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
+	transcript := NewMemoryTranscriptStore()
+	deps := runDeps{transcript: transcript}
+	params := RunParams{SessionKey: "client:main"}
+
+	persister := buildMessagePersister(deps, params, slog.Default())
+	toolInput := `{"command":"echo {{market:usd_krw}}"}`
+	blocks := []llm.ContentBlock{
+		{Type: "text", Text: "환율은 {{market:usd_krw}}원."},
+		{Type: "tool_use", ID: "tu_1", Name: "exec", Input: json.RawMessage(toolInput)},
+	}
+	rawBlocks, err := json.Marshal(blocks)
+	if err != nil {
+		t.Fatalf("marshal blocks: %v", err)
+	}
+	persister(llm.Message{Role: "assistant", Content: rawBlocks})
+
+	msgs, _, err := transcript.Load("client:main", 100)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 persisted message, got %d", len(msgs))
+	}
+	var got []llm.ContentBlock
+	if err := json.Unmarshal(msgs[0].Content, &got); err != nil {
+		t.Fatalf("unmarshal blocks: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 blocks, got %d", len(got))
+	}
+	if got[0].Text != "환율은 1,531원." {
+		t.Errorf("text block = %q, want substituted display value", got[0].Text)
+	}
+	if string(got[1].Input) != toolInput {
+		t.Errorf("tool_use input = %s, want untouched raw input", got[1].Input)
+	}
+}
+
+// TestBuildMessagePersister_BriefcaseKeepsRawMarketTokens locks the
+// BestTextRaw rule for the per-turn path: deterministic Briefcase runs must
+// not read the process-global, time-sensitive letter-token cache — persisted
+// bytes stay exactly what the model produced.
+func TestBuildMessagePersister_BriefcaseKeepsRawMarketTokens(t *testing.T) {
+	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
+	transcript := NewMemoryTranscriptStore()
+	deps := runDeps{transcript: transcript, briefcaseMode: true}
+	params := RunParams{SessionKey: "briefcase:run"}
+
+	persister := buildMessagePersister(deps, params, slog.Default())
+	rawText, _ := json.Marshal("환율은 {{market:usd_krw}}원.")
+	persister(llm.Message{Role: "assistant", Content: rawText})
+
+	msgs, _, err := transcript.Load("briefcase:run", 100)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 persisted message, got %d", len(msgs))
+	}
+	var text string
+	if err := json.Unmarshal(msgs[0].Content, &text); err != nil {
+		t.Fatalf("unmarshal content: %v", err)
+	}
+	if !strings.Contains(text, "{{market:usd_krw}}") {
+		t.Errorf("briefcase persisted text = %q, want raw token preserved", text)
 	}
 }
