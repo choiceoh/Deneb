@@ -26,6 +26,11 @@ const (
 	defaultSkillCuratorMinIdleHours  = 2
 	defaultSkillCuratorStaleDays     = 30
 	defaultSkillCuratorArchiveDays   = 90
+
+	// Utility-based archive (unfixable underperformer). See curator_utility.go.
+	defaultSkillCuratorUtilityWindowDays      = 30
+	defaultSkillCuratorUtilityMinRollbacks    = 2
+	defaultSkillCuratorUtilityRollbackRatePct = 50
 )
 
 // Compile-time interface compliance.
@@ -38,6 +43,12 @@ type SkillCuratorConfig struct {
 	MinIdleHours     int `json:"minIdleHours"`
 	StaleAfterDays   int `json:"staleAfterDays"`
 	ArchiveAfterDays int `json:"archiveAfterDays"`
+
+	// Utility-based archive: an unfixable underperformer (rollback thrash) is
+	// archived regardless of idle time. Reversible, evidence-floored.
+	UtilityWindowDays      int `json:"utilityWindowDays"`
+	UtilityMinRollbacks    int `json:"utilityMinRollbacks"`
+	UtilityRollbackRatePct int `json:"utilityRollbackRatePct"`
 }
 
 // SkillCuratorRecord is the persisted sidecar state for one managed skill.
@@ -71,21 +82,25 @@ type SkillCuratorTransition struct {
 
 // SkillCuratorSummary is returned by the periodic curator run.
 type SkillCuratorSummary struct {
-	Checked     int                      `json:"checked"`
-	MarkedStale int                      `json:"markedStale,omitempty"`
-	Archived    int                      `json:"archived,omitempty"`
-	Reactivated int                      `json:"reactivated,omitempty"`
-	Transitions []SkillCuratorTransition `json:"transitions,omitempty"`
+	Checked           int                      `json:"checked"`
+	MarkedStale       int                      `json:"markedStale,omitempty"`
+	Archived          int                      `json:"archived,omitempty"`
+	ArchivedUnfixable int                      `json:"archivedUnfixable,omitempty"`
+	Reactivated       int                      `json:"reactivated,omitempty"`
+	Transitions       []SkillCuratorTransition `json:"transitions,omitempty"`
 }
 
 // DefaultSkillCuratorConfig returns the production defaults copied from the
 // proven Hermes pattern: weekly review, stale after 30 days, archived after 90.
 func DefaultSkillCuratorConfig() SkillCuratorConfig {
 	return SkillCuratorConfig{
-		IntervalHours:    defaultSkillCuratorIntervalHours,
-		MinIdleHours:     defaultSkillCuratorMinIdleHours,
-		StaleAfterDays:   defaultSkillCuratorStaleDays,
-		ArchiveAfterDays: defaultSkillCuratorArchiveDays,
+		IntervalHours:          defaultSkillCuratorIntervalHours,
+		MinIdleHours:           defaultSkillCuratorMinIdleHours,
+		StaleAfterDays:         defaultSkillCuratorStaleDays,
+		ArchiveAfterDays:       defaultSkillCuratorArchiveDays,
+		UtilityWindowDays:      defaultSkillCuratorUtilityWindowDays,
+		UtilityMinRollbacks:    defaultSkillCuratorUtilityMinRollbacks,
+		UtilityRollbackRatePct: defaultSkillCuratorUtilityRollbackRatePct,
 	}
 }
 
@@ -96,6 +111,9 @@ func SkillCuratorConfigFromEnv() SkillCuratorConfig {
 	cfg.MinIdleHours = envInt("DENEB_SKILL_CURATOR_MIN_IDLE_HOURS", cfg.MinIdleHours)
 	cfg.StaleAfterDays = envInt("DENEB_SKILL_CURATOR_STALE_DAYS", cfg.StaleAfterDays)
 	cfg.ArchiveAfterDays = envInt("DENEB_SKILL_CURATOR_ARCHIVE_DAYS", cfg.ArchiveAfterDays)
+	cfg.UtilityWindowDays = envInt("DENEB_SKILL_CURATOR_UTILITY_WINDOW_DAYS", cfg.UtilityWindowDays)
+	cfg.UtilityMinRollbacks = envInt("DENEB_SKILL_CURATOR_UTILITY_MIN_ROLLBACKS", cfg.UtilityMinRollbacks)
+	cfg.UtilityRollbackRatePct = envInt("DENEB_SKILL_CURATOR_UTILITY_ROLLBACK_RATE_PCT", cfg.UtilityRollbackRatePct)
 	return cfg.withDefaults()
 }
 
@@ -140,6 +158,15 @@ func (cfg SkillCuratorConfig) withDefaults() SkillCuratorConfig {
 	}
 	if cfg.ArchiveAfterDays < cfg.StaleAfterDays {
 		cfg.ArchiveAfterDays = cfg.StaleAfterDays
+	}
+	if cfg.UtilityWindowDays <= 0 {
+		cfg.UtilityWindowDays = def.UtilityWindowDays
+	}
+	if cfg.UtilityMinRollbacks <= 0 {
+		cfg.UtilityMinRollbacks = def.UtilityMinRollbacks
+	}
+	if cfg.UtilityRollbackRatePct <= 0 {
+		cfg.UtilityRollbackRatePct = def.UtilityRollbackRatePct
 	}
 	return cfg
 }
@@ -254,13 +281,17 @@ func (t *Tracker) SkillCuratorReport(skillName string) ([]SkillCuratorRecord, er
 // ApplySkillCuratorTransitions updates active/stale/archive state for managed
 // skills. It never deletes skill files and never touches user-authored skills.
 func (t *Tracker) ApplySkillCuratorTransitions(now time.Time, cfg SkillCuratorConfig) (SkillCuratorSummary, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	if now.IsZero() {
 		now = time.Now()
 	}
 	cfg = cfg.withDefaults()
+	// Gather utility signals BEFORE taking t.mu: skillUtilityCounts calls
+	// RecentLifecycleLog/WorkoutActivity, which lock t.mu themselves.
+	utility := t.skillUtilityCounts(now, time.Duration(cfg.UtilityWindowDays)*24*time.Hour)
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	state, err := t.loadCuratorStateLocked()
 	if err != nil {
 		return SkillCuratorSummary{}, err
@@ -279,6 +310,22 @@ func (t *Tracker) ApplySkillCuratorTransitions(now time.Time, cfg SkillCuratorCo
 		}
 		summary.Checked++
 		if rec.Pinned || rec.State == SkillCuratorStateArchived {
+			state.Skills[name] = rec
+			continue
+		}
+
+		// Utility-based archive precedes the idle path: an actively-used but
+		// unfixable underperformer is never idle, so the staleness gate below
+		// would never reach it. Reversible; agent-created + unpinned inherited.
+		if ureason := classifyUnfixableUnderperformer(utility[name], cfg); ureason != "" {
+			from := rec.State
+			rec.State = SkillCuratorStateArchived
+			rec.ArchivedAt = now.UnixMilli()
+			summary.ArchivedUnfixable++
+			summary.Transitions = append(summary.Transitions, SkillCuratorTransition{
+				SkillName: rec.SkillName, From: from, To: SkillCuratorStateArchived, Reason: ureason,
+			})
+			changed = true
 			state.Skills[name] = rec
 			continue
 		}
@@ -578,6 +625,7 @@ func (t *SkillCuratorTask) Run(ctx context.Context) error {
 			"transitions", len(summary.Transitions),
 			"stale", summary.MarkedStale,
 			"archived", summary.Archived,
+			"unfixable", summary.ArchivedUnfixable,
 			"reactivated", summary.Reactivated,
 		)
 	}
