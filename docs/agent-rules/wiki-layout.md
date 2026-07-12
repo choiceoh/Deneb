@@ -191,6 +191,26 @@ globs:
 - 오프셋은 **성공한 턴 뒤에만** 전진(일시 장애로 내용 유실 금지), 연속 3회 실패 시 강제 전진(독배치가
   파이프라인을 못 박게). 게이트: 프로덕션 전용, `DENEB_NOTI_DIGEST_DISABLE=1`, 사용자 활동 중 스킵.
 
+## 슈퍼노트 다이제스트 (손글씨 노트 → 기억)
+
+- **수집 경로**: 슈퍼노트 만타(태블릿)가 손글씨 페이지를 온디바이스 필기인식으로 **검색가능 PDF**로
+  내보내 **Google Drive 폴더에 자동동기화** → Deneb가 그 폴더를 폴링. 기기 필기인식이라 Deneb는 OCR
+  불필요(PDF 텍스트 레이어를 뽑기만). 만타에 텍스트만 올라오면 `.txt`도 처리.
+- **Drive 클라이언트** (`platform/googledrive/client.go`): 읽기 전용, `~/.deneb/credentials/drive_*.json`
+  (gmail 패턴 미러). **Drive 스코프 크리덴셜은 운영자 1회 설정** — 게이트웨이는 토큰을 새로 발급하지
+  않고 refresh만 하므로, Drive-scoped 동의로 받은 `drive_client.json`+`drive_token.json`을 놓아야 함.
+- **supernote-digest 태스크** (`runtime/wikiwork/supernote_digest_task.go`, 6h): 설정 폴더의 신규
+  파일(modifiedTime 커서 + 처리 ID 셋으로 dedup, 사이클당 최대 5건)을 다운로드→`document.ExtractText`로
+  텍스트화→**내부 리서치 프리셋**(`PresetWikiResearch` — 웹 없음, 메모리 스토어 허용)의 턴 1회로 위키에
+  소화. 노티와 달리 **사용자 본인의 1차 자료**(신뢰됨)라 untrusted 게이트 미무장 — 프로젝트 매칭에
+  mail_archive/contacts/graphify 활용(드리머가 일지 소화하듯).
+- 쓰기 표면: 회의 필기·진행 → 프로젝트 로그.md op append(회의/메모/결정/이슈), 할 일 → 로그·커밋먼트,
+  인물 사실 → 기존 인물 페이지 update. **새 대표페이지 생성·대표 본문 재작성 금지.** 필기 오인식은
+  확정 사실로 쓰지 않음. 커서는 성공 시에만 전진(읽을 수 없는 배치는 재다운로드 방지 위해 커서만 전진).
+- 게이트: 프로덕션 전용, `DENEB_SUPERNOTE_DISABLE=1`로 비활성, `DENEB_SUPERNOTE_DRIVE_FOLDER_ID` 미설정
+  또는 Drive 크리덴셜 부재면 **1회 로그 후 휴면**(안전 no-op), 사용자 활동 중 스킵. 상태는
+  `supernote-digest-state.json`.
+
 ## 중복 방어 3겹 (모두 `FindSimilarPages` 공유 — ID·코드·슬러그·FTS 제목 신호)
 
 1. **쓰기 전 가드** — 위키 도구 write가 신규 생성 시 유사 문서를 찾으면 생성을
