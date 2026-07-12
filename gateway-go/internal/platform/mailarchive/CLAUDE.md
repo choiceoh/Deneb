@@ -15,8 +15,9 @@ thread/sender 문맥을, native mail UI에는 Gmail-like repository 계약을
 - `repository_search.go`가 archive query plan, mailbox scan, overlay/attachment
   filter, 정렬·page token 결정을 소유한다. 동작 변경은
   `repository_search_test.go`의 검색 특성 테스트에서 먼저 고정한다.
-- `state.go`의 `StateStore`와 `NewStateStore`가 read/archive/trash와
-  archive locator의 로컬 overlay를 영속한다.
+- `overlay/store.go`의 `overlay.Store`가 read/archive/trash와 archive locator의
+  로컬 영속화를 독립 소유한다. 저장 형식·원자성 변경은 `overlay/store_test.go`에서
+  먼저 고정하고 repository는 이 API를 통해서만 상태를 읽고 쓴다.
 - `context.go`의 `ReadContextMessage`, `SearchContextMessages`,
   `ThreadContext`, `ProjectHistoryContext`가 bounded context API다.
 - `repository_query.go`가 Gmail-style query를 IMAP criteria로 변환하고,
@@ -26,9 +27,9 @@ thread/sender 문맥을, native mail UI에는 Gmail-like repository 계약을
 
 ## 의존 방향과 불변조건
 
-- 의존 방향은 `pipeline/runtime → platform/mailarchive → gmail/lmtpd/mailbody`다.
-  mailarchive에서 mailanalysis, document extractor, RPC handler를 import하지
-  않는다.
+- 의존 방향은 `pipeline/runtime → platform/mailarchive → {mailarchive/overlay,
+  gmail, lmtpd, mailbody}`이며 `mailarchive/overlay → pkg/atomicfile`이다.
+  mailarchive에서 mailanalysis, document extractor, RPC handler를 import하지 않는다.
 - archive message의 본문·첨부는 원시 데이터로 반환한다. OCR/ASR/요약을
   이 패키지에 넣어 transport와 분석 계층을 결합하지 않는다.
 - thread ancestor가 sender history보다 우선하며 fetch 수와 References 탐색
@@ -38,7 +39,7 @@ thread/sender 문맥을, native mail UI에는 Gmail-like repository 계약을
 - 지원하지 않는 Gmail query는 bounded recent view로 명시적으로 degrade하고
   mailbox candidate scan은 상한을 지킨다. 일부 mailbox 실패는 다른 mailbox가
   완료됐을 때만 degrade하며, 전부 실패한 장애를 빈 inbox 성공으로 숨기지 않는다.
-- read/archive/trash는 `StateStore` overlay 계약을 통해 적용한다. IMAP
+- read/archive/trash는 `overlay.Store` 계약을 통해 적용한다. IMAP
   원본 mutation으로 의미를 바꾸지 않는다.
 
 ## 집중 검증
@@ -47,3 +48,7 @@ thread/sender 문맥을, native mail UI에는 Gmail-like repository 계약을
 있을 때만 실행한다. 결정적 패키지 검증 명령은:
 
 `cd gateway-go && go test -count=1 ./internal/platform/mailarchive`
+
+overlay 저장 계약 검증 명령은:
+
+`cd gateway-go && go test -count=1 ./internal/platform/mailarchive/overlay`

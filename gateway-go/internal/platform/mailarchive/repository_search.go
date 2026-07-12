@@ -11,6 +11,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/lmtpd"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive/overlay"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailbody"
 )
 
@@ -183,7 +184,7 @@ func archiveMessageID(messageID, mailbox, uid string) string {
 	return archiveLocator(mailbox, uid)
 }
 
-func archiveMessageVisible(spec archiveQuery, detail *gmail.MessageDetail, state MessageState) bool {
+func archiveMessageVisible(spec archiveQuery, detail *gmail.MessageDetail, state overlay.MessageState) bool {
 	if state.Trashed {
 		return false
 	}

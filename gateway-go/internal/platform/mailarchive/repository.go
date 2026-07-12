@@ -9,6 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/lmtpd"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive/overlay"
 )
 
 const (
@@ -85,7 +86,7 @@ type NativeOverlayStatus struct {
 // Gmail search tokens.
 type Repository struct {
 	cfg      Config
-	state    *StateStore
+	state    *overlay.Store
 	fallback FallbackClient
 	now      func() time.Time
 }
@@ -104,7 +105,7 @@ func NewRepository(cfg Config, opts RepositoryOptions) *Repository {
 	}
 	return &Repository{
 		cfg:      cfg,
-		state:    NewStateStore(opts.StatePath),
+		state:    overlay.NewStore(opts.StatePath),
 		fallback: opts.Fallback,
 		now:      now,
 	}

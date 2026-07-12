@@ -6,10 +6,11 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive/overlay"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailbody"
 )
 
-func detailToSummary(detail *gmail.MessageDetail, mailbox string, st MessageState) gmail.MessageSummary {
+func detailToSummary(detail *gmail.MessageDetail, mailbox string, st overlay.MessageState) gmail.MessageSummary {
 	return gmail.MessageSummary{
 		ID:              detail.ID,
 		ThreadID:        detail.ThreadID,
@@ -24,7 +25,7 @@ func detailToSummary(detail *gmail.MessageDetail, mailbox string, st MessageStat
 	}
 }
 
-func (r *Repository) applyStateToDetail(detail *gmail.MessageDetail, st MessageState) {
+func (r *Repository) applyStateToDetail(detail *gmail.MessageDetail, st overlay.MessageState) {
 	if detail == nil {
 		return
 	}
@@ -35,7 +36,7 @@ func (r *Repository) applyStateToDetail(detail *gmail.MessageDetail, st MessageS
 	detail.Labels = labelsForArchiveMessage(mailbox, st)
 }
 
-func labelsForArchiveMessage(mailbox string, st MessageState) []string {
+func labelsForArchiveMessage(mailbox string, st overlay.MessageState) []string {
 	if st.Trashed {
 		return []string{"TRASH"}
 	}
@@ -131,7 +132,7 @@ func latestUID(uids []string) string {
 	return latest
 }
 
-func nativeOverlayStatus(snapshot map[string]MessageState) NativeOverlayStatus {
+func nativeOverlayStatus(snapshot map[string]overlay.MessageState) NativeOverlayStatus {
 	var out NativeOverlayStatus
 	out.Messages = len(snapshot)
 	for _, st := range snapshot {
