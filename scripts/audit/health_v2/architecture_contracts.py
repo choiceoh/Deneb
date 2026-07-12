@@ -22,6 +22,25 @@ VERIFY = (
 )
 
 
+# Composition-root components are the dependency-injection / wiring layer whose
+# JOB is to touch many components in one change: the startup composition root
+# assembles domain services and registers their RPC methods / autonomous tasks
+# at a single documented wiring point (docs/agent-rules/hub-wiring.md names
+# method_registry.go as THE wiring seam). High cross-component co-change there
+# is the intended architecture, not a diffuse responsibility — and the
+# responsibility-cochange remediation ("align ownership with the recurring
+# co-change component") is inapplicable to a root that owns wiring, not a
+# domain. They are exempted from the cochange FINDING only; their rate still
+# feeds the soft tail subscore, so the exemption cannot hide a real regression
+# (the pillar score is unchanged) and every OTHER package remains fully scored.
+COMPOSITION_ROOT_COMPONENTS = frozenset({"runtime/server", "runtime/bootstrap"})
+
+
+def is_composition_root(package_key: str) -> bool:
+    """Report whether a package belongs to the wiring/composition-root layer."""
+    return component_for(package_key) in COMPOSITION_ROOT_COMPONENTS
+
+
 def _responsibility_cohesion(repo: RepositoryInventory) -> Pillar:
     pillar_id = "responsibility-cohesion"
     packages = list(repo.packages.values())
@@ -130,6 +149,12 @@ def _responsibility_cohesion(repo: RepositoryInventory) -> Pillar:
 
     for rate, package, multi, touches in sorted(cochange_rows, reverse=True)[:6]:
         if rate <= 0.25:
+            continue
+        if is_composition_root(package):
+            # The wiring/composition root co-changes across components by design
+            # (single documented wiring seam); flagging it as diffuse
+            # responsibility is a false positive. Its rate still fed the subscore
+            # above, so this suppresses only the inapplicable finding.
             continue
         findings.append(
             _finding(
