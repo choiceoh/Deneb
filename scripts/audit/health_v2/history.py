@@ -52,7 +52,7 @@ def collect_history(repo_root: Path) -> HistoryFacts:
         "--no-merges",
         f"-n{HISTORY_LIMIT}",
         "--find-renames",
-        "--format=@@%H",
+        "--format=@@%H %P",
         "--name-only",
         "--",
         "gateway-go/internal",
@@ -73,6 +73,22 @@ def collect_history(repo_root: Path) -> HistoryFacts:
         detail = process.stderr.strip().splitlines()
         reason = detail[-1] if detail else f"git exited {process.returncode}"
         return _unavailable_history(f"git history unavailable: {reason}")
+
+    # Shallow boundary commits are parentless, so git diffs them as the whole
+    # tree: the window both truncates and gains a phantom whole-tree bulk
+    # commit, and the same revision then scores differently by checkout depth.
+    # Refuse to score instead of silently drifting from full-history CI.
+    header_parents = [
+        line[2:].split()[1:]
+        for line in process.stdout.splitlines()
+        if line.startswith("@@")
+    ]
+    if not _window_complete(header_parents) and _is_shallow_repository(repo_root):
+        return _unavailable_history(
+            "git history unavailable: shallow clone truncates the "
+            f"{HISTORY_LIMIT}-commit change window ({len(header_parents)} commits "
+            "reachable); run 'git fetch --unshallow'"
+        )
 
     # actions/checkout uses a synthetic merge commit for pull requests. A
     # first-parent log correctly follows the base branch, but --no-merges would
@@ -178,6 +194,25 @@ def _unavailable_history(detail: str) -> HistoryFacts:
         multipackage_touches={},
         cochange_counts={},
     )
+
+
+def _window_complete(header_parents: list[list[str]]) -> bool:
+    """True when -n filled the window without reaching a parentless commit."""
+    return len(header_parents) >= HISTORY_LIMIT and all(header_parents)
+
+
+def _is_shallow_repository(repo_root: Path) -> bool:
+    try:
+        probe = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--is-shallow-repository"],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return probe.returncode == 0 and probe.stdout.strip() == "true"
 
 
 def _history_commit(paths: Iterable[str]) -> ChangeCommit | None:

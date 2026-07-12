@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -292,6 +294,47 @@ class WireRecordGeneratedContractTest {
         self.assertEqual(facts.commits, ())
         self.assertIn("git history unavailable", facts.detail)
         self.assertIn("timed out", facts.detail)
+
+    def test_shallow_clone_history_is_unavailable_not_mis_scored(self) -> None:
+        with _GitFixture() as fixture:
+            for index in range(25):
+                fixture.write(
+                    f"gateway-go/internal/widget/change_{index}.go",
+                    f"package widget\n\nfunc Change{index}() int {{ return {index} }}\n",
+                )
+                fixture.commit(f"production change {index}")
+            full = history.collect_history(fixture.root)
+
+            with tempfile.TemporaryDirectory(
+                prefix="deneb-health-v2-shallow-"
+            ) as clone_parent:
+                shallow_root = Path(clone_parent) / "clone"
+                subprocess.run(
+                    [
+                        "git",
+                        "clone",
+                        "--quiet",
+                        "--depth",
+                        "5",
+                        f"file://{fixture.root}",
+                        str(shallow_root),
+                    ],
+                    check=True,
+                    capture_output=True,
+                )
+                shallow = history.collect_history(shallow_root)
+
+        self.assertTrue(full.available, full.detail)
+        self.assertEqual(full.commit_count, 25)
+        self.assertFalse(shallow.available)
+        self.assertIn("shallow clone truncates", shallow.detail)
+        self.assertIn("git fetch --unshallow", shallow.detail)
+
+    def test_history_window_completeness_detects_boundary_commits(self) -> None:
+        parented = [["parent"]] * history.HISTORY_LIMIT
+        self.assertTrue(history._window_complete(parented))
+        self.assertFalse(history._window_complete(parented[:-1]))
+        self.assertFalse(history._window_complete([*parented[:-1], []]))
 
     def test_ai_tracked_files_git_error_returns_unavailable_inventory(self) -> None:
         failed = mock.Mock(returncode=128, stdout=b"")
