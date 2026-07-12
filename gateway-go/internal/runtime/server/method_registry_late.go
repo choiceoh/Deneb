@@ -14,10 +14,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/routine"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/cronrunner"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/modelpicker"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
 	miniknowledge "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/knowledge"
@@ -164,6 +167,28 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		handlerwiki.Methods(handlerwiki.Deps{
 			Store: hub.WikiStore(),
 		}),
+
+		// --- Native model picker (miniapp.models.*) ---
+		// Late on purpose: the Controller snapshots the registry and chat
+		// handler at construction, and both exist only after
+		// registerSessionRPCMethods. Registered early (#3457) the snapshot
+		// stayed nil forever — the native picker showed every role as 미설정
+		// and models.set was rejected as "not ready".
+		modelpicker.NewController(modelpicker.ControllerConfig{
+			Registry:    s.modelRegistry,
+			ChatHandler: s.chatHandler,
+			Logger:      s.logger,
+			RoleHealthVerdicts: func() map[string]string {
+				if s.roleHealth == nil {
+					return nil
+				}
+				return s.roleHealth.Verdicts()
+			},
+			RefreshCodingModelConsumers: s.refreshCodingModelConsumers,
+			ProviderConfigs: func() map[string]chatport.ProviderConfig {
+				return configresolve.LoadProviderConfigs(s.logger)
+			},
+		}).Methods(),
 
 		// --- Skill genesis (depends on chatHandler for LLM client) ---
 		handlerskill.GenesisMethods(handlerskill.GenesisDeps{
