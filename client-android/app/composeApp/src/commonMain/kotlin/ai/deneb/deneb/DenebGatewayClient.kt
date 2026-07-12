@@ -131,7 +131,7 @@ class DenebGatewayClient private constructor(
     // observe it and hold the foreground service open until an in-flight turn
     // completes (M1 active-stream exception, battery doc §3.1).
     private val _chatTurnActive = MutableStateFlow(false)
-    val chatTurnActive: StateFlow<Boolean> = _chatTurnActive
+    val chatTurnActive: StateFlow<Boolean> = _chatTurnActive.asStateFlow()
     internal var askActive: Boolean
         get() = _chatTurnActive.value
         set(value) {
