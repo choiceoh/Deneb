@@ -7,6 +7,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
 )
 
@@ -30,6 +31,7 @@ func (s *Server) registerWikiResearchTask(homeDir string) {
 		s.activity,
 		s.logger,
 		filepath.Join(stateDir, wikiwork.ResearchStateFile),
+		configresolve.WorkspaceDir(),
 	))
 	s.logger.Info("wiki-research task registered", "interval", wikiwork.ResearchInterval.String())
 }
