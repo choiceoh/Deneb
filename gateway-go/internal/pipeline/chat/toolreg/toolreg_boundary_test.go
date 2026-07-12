@@ -449,13 +449,37 @@ func TestRegisterCoreToolsDeferredPolicyMatchesOperationalIntent(t *testing.T) {
 	}
 }
 
+func TestWorkspaceRegistrationGroupsPreserveOrder(t *testing.T) {
+	noop := toolctx.ToolFunc(func(context.Context, json.RawMessage) (string, error) { return "", nil })
+	reg := &mockRegistrar{}
+	RegisterFileTools(reg, t.TempDir())
+	RegisterRuntimeOpsTools(reg, RuntimeOpsToolSet{
+		Gateway:       noop,
+		Observe:       noop,
+		Fleet:         noop,
+		SpilloverRead: noop,
+	})
+	RegisterGraphTool(reg, t.TempDir())
+
+	want := []string{"read", "write", "edit", "grep", "gateway", "observe", "fleet", "read_spillover", "graphify"}
+	if got := reg.toolNames(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("registration order = %#v, want %#v", got, want)
+	}
+}
+
 func TestRegistrationGroupsHaveExactNamesAndNoCrossGroupDuplicates(t *testing.T) {
 	type group struct {
 		name string
 		run  func(*mockRegistrar)
 		want []string
 	}
+	noop := toolctx.ToolFunc(func(context.Context, json.RawMessage) (string, error) { return "", nil })
 	groups := []group{
+		{name: "file", run: func(r *mockRegistrar) { RegisterFileTools(r, t.TempDir()) }, want: []string{"edit", "grep", "read", "write"}},
+		{name: "runtime-ops", run: func(r *mockRegistrar) {
+			RegisterRuntimeOpsTools(r, RuntimeOpsToolSet{Gateway: noop, Observe: noop, Fleet: noop})
+		}, want: []string{"fleet", "gateway", "observe"}},
+		{name: "graph", run: func(r *mockRegistrar) { RegisterGraphTool(r, t.TempDir()) }, want: []string{"graphify"}},
 		{name: "phone", run: func(r *mockRegistrar) { RegisterPhoneTools(r, nil) }, want: []string{"phone_read", "phone_write"}},
 		{name: "process", run: func(r *mockRegistrar) { RegisterProcessTools(r, &toolctx.ProcessDeps{WorkspaceDir: t.TempDir()}) }, want: []string{"exec", "process"}},
 		{name: "web", run: func(r *mockRegistrar) { RegisterWebTools(r, nil) }, want: []string{"web"}},

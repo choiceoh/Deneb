@@ -6,10 +6,14 @@
 
 ## 진입점과 소유권
 
-- `core.go`의 `RegisterCoreTools`가 기본 tool 집합을 조립하고,
-  `RegisterFSTools`, `RegisterProcessTools`, `RegisterWebTools`,
-  `RegisterSessionTools` 등 책임별 함수가 정확한 이름과 deferred 정책을
-  등록한다.
+- `core.go`의 `RegisterCoreTools`가 기본 tool 집합을 조립한다.
+- `file_tools.go`의 `RegisterFileTools`는 workspace 경로와 추가 읽기 root만
+  받아 `read/write/edit/grep`를 등록한다.
+- `runtime_ops.go`의 `RegisterRuntimeOpsTools`는 이미 배선된 runtime 실행기로
+  `gateway/observe/fleet/read_spillover`를, `graph_tool.go`의
+  `RegisterGraphTool`은 workspace 경로로 `graphify`를 등록한다.
+- `RegisterProcessTools`, `RegisterWebTools`, `RegisterSessionTools` 등 나머지
+  책임별 함수가 정확한 이름과 deferred 정책을 등록한다.
 - `core.go`의 `FetchToolsSchema`와 생성된 `tool_schemas_gen.go`의
   `ToolMaxOutputs`가 deferred-tool schema와 출력 한도를 노출한다.
 - schema의 단일 원본은 `tool_schemas.json`이다. 생성 파일
@@ -32,8 +36,9 @@
 - `toolreg_boundary_test.go`의
   `TestRegisterCoreToolsWithMinimalDependenciesHasValidUniqueContracts`,
   `TestRegisterCoreToolsDeferredPolicyMatchesOperationalIntent`,
+  `TestWorkspaceRegistrationGroupsPreserveOrder`,
   `TestConcurrentSchemaConstructionIsIsolated`가 핵심 계약을 고정한다.
-- `core_test.go`의 `TestRegisterFSTools_registersTools`와
+- `core_test.go`의 `TestRegisterFileToolsRegistersOnlyFileTools`와
   `TestRegisterSessionToolsContracts`가 책임별 등록 표면을 확인한다.
 
 `cd gateway-go && go test -count=1 ./internal/pipeline/chat/toolreg`

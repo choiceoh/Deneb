@@ -21,7 +21,6 @@ import (
 	casepack "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolreg"
 	chatfs "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/filesystem"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
@@ -70,7 +69,7 @@ func NewFixtureRegistry(cfg FixtureRegistryConfig) (*chat.ToolRegistry, error) {
 		advertised[def.Name] = struct{}{}
 	}
 	fsDefs := chat.NewToolRegistry()
-	toolreg.RegisterFSTools(fsDefs, &toolctx.CoreToolDeps{WorkspaceDir: workspace})
+	toolreg.RegisterFileTools(fsDefs, workspace)
 	for _, def := range fsDefs.Definitions() {
 		switch def.Name {
 		case "read":
