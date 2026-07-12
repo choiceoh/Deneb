@@ -156,12 +156,22 @@ func (s *Server) handleMetaProposalAction(item workfeed.Item, actionID string) {
 			s.logger.Warn("meta proposal 채택 실패", "artifact", artifact, "error", err)
 			return
 		}
+		// Snapshot evolution health like the auto-adopt path so the meta
+		// rollback watch also covers operator feed-card adoptions — without it
+		// an operator-adopted revision was never revert-watched (reviewer
+		// feedback, #3459).
+		eh := s.genesisTracker.EvolutionHealth()
 		if err := s.genesisTracker.LogMetaRevision(genesis.MetaRevisionRecord{
 			Artifact:    artifact,
 			FromVersion: fromVersion,
 			ToVersion:   toVersion,
 			Action:      "adopted",
 			Reason:      "operator adopted from feed card",
+			AdoptionHealth: &genesis.MetaAdoptionHealth{
+				ConfirmRate:     eh.ConfirmRate,
+				FalseAcceptRate: eh.FalseAcceptRate,
+				Resolved:        eh.ResolvedEvolves7d,
+			},
 		}); err != nil {
 			s.logger.Warn("meta adoption ledger write failed", "artifact", artifact, "error", err)
 		}

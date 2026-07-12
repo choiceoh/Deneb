@@ -1,6 +1,8 @@
 package server
 
 import (
+	"encoding/hex"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -40,5 +42,22 @@ func TestDownloadToken(t *testing.T) {
 		if verifyDownloadToken("apk-download", "deneb-1.apk", junk) {
 			t.Fatalf("junk token %q accepted", junk)
 		}
+	}
+}
+
+// verifyDownloadToken must fail closed when the per-process signing key never
+// initialized (crypto/rand failure): an empty HMAC key would otherwise let an
+// attacker forge a valid MAC (#3455/#3456).
+func TestVerifyDownloadToken_EmptyKeyFailsClosed(t *testing.T) {
+	_ = mintDownloadToken("x", "f.apk", time.Minute) // ensure the Once has run
+	saved := downloadTokenKey
+	downloadTokenKey = []byte{}
+	defer func() { downloadTokenKey = saved }()
+
+	// A MAC forged against the empty key must be rejected.
+	exp := time.Now().Add(time.Minute).Unix()
+	forged := strconv.FormatInt(exp, 10) + "." + hex.EncodeToString(downloadTokenMAC("apk-download", "deneb-1.apk", exp))
+	if verifyDownloadToken("apk-download", "deneb-1.apk", forged) {
+		t.Fatal("verify accepted a token under an empty signing key")
 	}
 }

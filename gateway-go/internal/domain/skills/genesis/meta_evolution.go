@@ -1,16 +1,20 @@
 package genesis
 
-// Meta evolution — P2 of the RSI roadmap (slow loop, first slice).
+// Meta evolution — P2 of the RSI roadmap (slow loop).
 //
 // A weekly autonomous task proposes ONE meta-artifact revision per cycle,
-// alternating producer/evaluator epochs (RQGM). This slice is PROPOSE-ONLY:
-// the proposal is written next to the live artifact as <name>.proposed and
-// recorded in the meta-experience ledger; it never touches the live file.
-// Auto-adoption waits for the deterministic promotion benches (frozen anchor
-// preservation, shadow-replay flip gate, judge-degradation gold pairs) —
-// until those exist, adoption is an operator/slow-loop decision made by
-// moving the .proposed file into place (the sidecar provenance then marks it
-// revised, so deploys never clobber it).
+// alternating producer/evaluator epochs (RQGM). Every proposal clears the
+// deterministic promotion benches for its epoch (judge-degradation gold pairs
+// for evaluator, shadow-replay flip for producer) before it is surfaced.
+//
+// Adoption is now AUTOMATIC by default (DENEB_META_AUTO_ADOPT, on unless "0"):
+// a bench-cleared proposal is written straight over the live artifact, an
+// evolution-health snapshot arms the meta rollback watch, and the feed card
+// carries a post-hoc revert. When auto-adopt is off, the proposal is written
+// next to the live artifact as <name>.proposed and adoption is an operator
+// decision (moving the file into place; the sidecar provenance then marks it
+// revised, so deploys never clobber it). Either way the drift self-brake
+// (evolution_drift.go) can freeze auto-adoption back to propose-only.
 //
 // Meta-experience memory is mandatory (TPGO: memoryless meta-loops collapse):
 // every cycle reads the ledger of prior revisions and their outcomes before
