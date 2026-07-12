@@ -1,7 +1,6 @@
 package briefcase
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -13,7 +12,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -559,166 +557,6 @@ func guardedOutputMutation(workspace string, policy *Policy, mode string, base c
 			}
 		}
 		return sanitizeBriefcaseResult(workspace, output, err)
-	}
-}
-
-func pureGrep(workspace string, policy *Policy) chat.ToolFunc {
-	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		if err := ctx.Err(); err != nil {
-			return "", err
-		}
-		if err := rejectUnknownFixtureFields(input, "pattern", "path", "ignoreCase", "maxResults"); err != nil {
-			return "", err
-		}
-		var params struct {
-			Pattern    string `json:"pattern"`
-			Path       string `json:"path"`
-			IgnoreCase bool   `json:"ignoreCase"`
-			MaxResults int    `json:"maxResults"`
-		}
-		if err := json.Unmarshal(input, &params); err != nil {
-			return "", err
-		}
-		if params.Pattern == "" {
-			return "", errors.New("pattern is required")
-		}
-		pattern := params.Pattern
-		if params.IgnoreCase {
-			pattern = "(?i)" + pattern
-		}
-		re, err := regexp.Compile(pattern)
-		if err != nil {
-			return "", fmt.Errorf("invalid grep pattern: %w", err)
-		}
-		root := workspace
-		if params.Path != "" {
-			root, err = resolveWorkspaceMember(workspace, params.Path)
-			if err != nil {
-				return "", err
-			}
-		}
-		if err := policy.CheckRead(root); err != nil {
-			return "", err
-		}
-		max := params.MaxResults
-		if max <= 0 {
-			max = 100
-		}
-		if max > 500 {
-			max = 500
-		}
-		workspaceRoot, err := os.OpenRoot(workspace)
-		if err != nil {
-			return "", err
-		}
-		defer workspaceRoot.Close()
-		rootRel, err := filepath.Rel(workspace, root)
-		if err != nil {
-			return "", err
-		}
-		errLimit := errors.New("briefcase: grep result limit reached")
-		var matches []string
-		var walk func(string) error
-		walk = func(path string) error {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			if len(matches) >= max {
-				return errLimit
-			}
-			info, err := workspaceRoot.Lstat(path)
-			if err != nil {
-				return err
-			}
-			if info.Mode()&os.ModeSymlink != 0 {
-				return fmt.Errorf("briefcase: grep encountered symlink %q", path)
-			}
-			if info.IsDir() {
-				dir, err := workspaceRoot.Open(path)
-				if err != nil {
-					return err
-				}
-				entries, readErr := dir.ReadDir(-1)
-				closeErr := dir.Close()
-				if readErr != nil {
-					return readErr
-				}
-				if closeErr != nil {
-					return closeErr
-				}
-				sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
-				for _, entry := range entries {
-					if err := ctx.Err(); err != nil {
-						return err
-					}
-					child := entry.Name()
-					if path != "." {
-						child = filepath.Join(path, child)
-					}
-					if err := walk(child); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
-			if !info.Mode().IsRegular() {
-				return fmt.Errorf("briefcase: grep encountered special file %q", path)
-			}
-			file, err := workspaceRoot.Open(path)
-			if err != nil {
-				return err
-			}
-			openedInfo, err := file.Stat()
-			if err != nil {
-				_ = file.Close()
-				return err
-			}
-			if !openedInfo.Mode().IsRegular() {
-				_ = file.Close()
-				return fmt.Errorf("briefcase: grep path changed to a non-regular file %q", path)
-			}
-			scanner := bufio.NewScanner(file)
-			line := 0
-			for scanner.Scan() {
-				if err := ctx.Err(); err != nil {
-					_ = file.Close()
-					return err
-				}
-				line++
-				if re.MatchString(scanner.Text()) {
-					matches = append(matches, fmt.Sprintf("%s:%d:%s", filepath.ToSlash(path), line, scanner.Text()))
-					if len(matches) >= max {
-						break
-					}
-				}
-			}
-			scanErr := scanner.Err()
-			closeErr := file.Close()
-			if scanErr != nil {
-				return scanErr
-			}
-			return closeErr
-		}
-		err = walk(rootRel)
-		if err != nil && !errors.Is(err, errLimit) {
-			return "", err
-		}
-		sort.Strings(matches)
-		return strings.Join(matches, "\n"), nil
-	}
-}
-
-func pureGrepFixtureSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"pattern":    map[string]any{"type": "string"},
-			"path":       map[string]any{"type": "string"},
-			"ignoreCase": map[string]any{"type": "boolean"},
-			"maxResults": map[string]any{"type": "integer", "minimum": 1, "maximum": 500},
-		},
-		"required":             []string{"pattern"},
-		"additionalProperties": false,
 	}
 }
 
