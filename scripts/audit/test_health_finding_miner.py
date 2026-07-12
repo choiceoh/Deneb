@@ -1,0 +1,228 @@
+"""Deterministic tests for the proactive L4 supply miner (P5 ws3).
+
+The load-bearing assertions: only high-severity findings become candidates,
+every candidate carries the bench finding ID inside its evidence (deterministic
+review), the reopen semantics mirror genesis selfCorrectionReopenBlocked
+(rejected never re-files; applied re-files only after cooldown), and blocked
+findings never consume the per-run cap.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import os
+import tempfile
+import unittest
+
+from health_finding_miner import (
+    MAX_RUNTIME_PER_RUN,
+    REOPEN_COOLDOWN_MS,
+    RUNTIME_WEAK_SCORE,
+    main,
+    parse_leading_json,
+    reopen_blocked,
+    runtime_candidates,
+    select_candidates,
+    structural_candidates,
+)
+
+NOW = 1_800_000_000_000
+
+
+def structural_report(**overrides):
+    report = {
+        "revision": "3258b6ffc0ffee",
+        "profile": "fast",
+        "findings": [
+            {
+                "id": "volatile-hub:46a381ef4981",
+                "pillar": "change-locality",
+                "severity": "high",
+                "path": "gateway-go/internal/domain/wiki",
+                "evidence": "Volatile-hub index is 5.13: 63/295 commits times 24 dependents.",
+                "why": "Many dependents consume a contract that changes frequently.",
+                "remediation": "Stabilize and narrow the public contract.",
+                "verify": "Re-run the bench and confirm this finding disappears.",
+                "priority": 95.0,
+                "related_paths": [],
+            },
+            {
+                "id": "fanout-hotspot:e3983434e99a",
+                "pillar": "boundary-integrity",
+                "severity": "high",
+                "path": "gateway-go/internal/runtime/server",
+                "evidence": "Direct internal fan-out is 116; bars are 20/50.",
+                "why": "A broad dependency surface.",
+                "remediation": "Depend on narrow capability ports.",
+                "verify": "Re-run the bench.",
+                "priority": 95.3,
+                "related_paths": ["gateway-go/internal/ai/agent"],
+            },
+            {
+                "id": "doc-drift:aaaa",
+                "pillar": "delivery",
+                "severity": "medium",
+                "path": "docs",
+                "evidence": "medium stuff",
+                "why": "not high severity",
+                "remediation": "n/a",
+                "verify": "n/a",
+                "priority": 99.0,
+                "related_paths": [],
+            },
+        ],
+    }
+    report.update(overrides)
+    return report
+
+
+def runtime_report():
+    return {
+        "composite": 82.3,
+        "meta": {"runs": 523, "days": 7.0, "since": "7 days ago"},
+        "dims": {"stability": 100.0, "latency": 51.1, "turn-reliability": 75.0},
+        "weights": {"stability": 18, "latency": 20, "turn-reliability": 16},
+        "detail": {"latency": ["p95 148.0s over 523 runs"]},
+        "extra": {"latency": {"p95_s": 148.0, "sampled_runs": 523}},
+    }
+
+
+class StructuralCandidatesTest(unittest.TestCase):
+    def test_only_high_severity_ranked_by_priority(self):
+        cands = structural_candidates(structural_report())
+        self.assertEqual(len(cands), 2)  # medium finding dropped
+        self.assertEqual(cands[0]["source"], "health-finding:fanout-hotspot:e3983434e99a")
+        self.assertEqual(cands[1]["source"], "health-finding:volatile-hub:46a381ef4981")
+
+    def test_candidate_carries_finding_id_and_evidence(self):
+        cand = structural_candidates(structural_report())[1]
+        self.assertIn("volatile-hub:46a381ef4981", cand["evidence"])
+        self.assertIn("Volatile-hub index is 5.13", cand["evidence"])
+        self.assertIn("3258b6ffc0ff", cand["evidence"])  # bench revision pinned
+        self.assertEqual(cand["scope"], "code")
+        self.assertEqual(cand["targetFiles"], ["gateway-go/internal/domain/wiki"])
+        self.assertIn("Verify:", cand["proposedChange"])
+
+    def test_empty_report_yields_nothing(self):
+        self.assertEqual(structural_candidates({"findings": []}), [])
+
+
+class RuntimeCandidatesTest(unittest.TestCase):
+    def test_weakest_dim_below_bar_selected(self):
+        cands = runtime_candidates(runtime_report())
+        self.assertEqual(len(cands), MAX_RUNTIME_PER_RUN)
+        cand = cands[0]
+        self.assertEqual(cand["source"], "health-finding:runtime-latency")
+        self.assertIn("runtime-latency", cand["evidence"])
+        self.assertIn("p95_s=148.0", cand["evidence"])
+        self.assertIn("51.1", cand["title"])
+
+    def test_healthy_dims_do_not_file(self):
+        report = runtime_report()
+        report["dims"] = {"stability": 100.0, "latency": RUNTIME_WEAK_SCORE}
+        self.assertEqual(runtime_candidates(report), [])
+
+    def test_missing_report_tolerated(self):
+        self.assertEqual(runtime_candidates(None), [])
+
+
+class ReopenBlockedTest(unittest.TestCase):
+    SRC = "health-finding:volatile-hub:46a381ef4981"
+
+    def _existing(self, status, created=NOW - 1000):
+        return [{"id": "sc-1", "source": self.SRC, "status": status, "createdAt": created}]
+
+    def test_never_filed_allows(self):
+        self.assertIsNone(reopen_blocked([], self.SRC, NOW))
+
+    def test_open_twin_blocks(self):
+        for status in ("proposed", "accepted"):
+            self.assertIsNotNone(reopen_blocked(self._existing(status), self.SRC, NOW))
+
+    def test_operator_veto_never_refiles(self):
+        old = NOW - 10 * REOPEN_COOLDOWN_MS
+        for status in ("rejected", "superseded"):
+            self.assertIsNotNone(reopen_blocked(self._existing(status, old), self.SRC, NOW))
+
+    def test_applied_blocks_inside_cooldown_then_reopens(self):
+        fresh = self._existing("applied", NOW - REOPEN_COOLDOWN_MS + 60_000)
+        self.assertIsNotNone(reopen_blocked(fresh, self.SRC, NOW))
+        cooled = self._existing("applied", NOW - REOPEN_COOLDOWN_MS - 60_000)
+        self.assertIsNone(reopen_blocked(cooled, self.SRC, NOW))
+
+    def test_newest_twin_wins(self):
+        rows = [
+            {"id": "old", "source": self.SRC, "status": "applied",
+             "createdAt": NOW - 10 * REOPEN_COOLDOWN_MS},
+            {"id": "new", "source": self.SRC, "status": "proposed", "createdAt": NOW - 1000},
+        ]
+        self.assertIn("new", reopen_blocked(rows, self.SRC, NOW) or "")
+
+
+class SelectCandidatesTest(unittest.TestCase):
+    def test_blocked_rows_do_not_consume_cap(self):
+        cands = structural_candidates(structural_report())
+        existing = [{
+            "id": "sc-1", "source": cands[0]["source"], "status": "proposed", "createdAt": NOW,
+        }]
+        selected, skipped = select_candidates(cands, existing, NOW, cap=1)
+        self.assertEqual([c["source"] for c in selected], [cands[1]["source"]])
+        self.assertEqual(len(skipped), 1)
+        self.assertIn("proposed twin", skipped[0][1])
+
+    def test_cap_enforced(self):
+        cands = structural_candidates(structural_report())
+        selected, skipped = select_candidates(cands, [], NOW, cap=1)
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(skipped[0][1], "per-run cap reached")
+
+
+class ParseLeadingJsonTest(unittest.TestCase):
+    def test_trailing_metric_lines_tolerated(self):
+        text = '{"composite": 82.3}\nmetric_value=82.3\nDENEB_RUNTIME_DETAIL {...}\n'
+        self.assertEqual(parse_leading_json(text), {"composite": 82.3})
+
+
+class CliDryRunTest(unittest.TestCase):
+    def test_dry_run_with_fixture_reports_needs_no_gateway(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_path = os.path.join(tmp, "health.json")
+            runtime_path = os.path.join(tmp, "runtime.json")
+            with open(report_path, "w", encoding="utf-8") as handle:
+                json.dump(structural_report(), handle)
+            with open(runtime_path, "w", encoding="utf-8") as handle:
+                json.dump(runtime_report(), handle)
+            out, err = io.StringIO(), io.StringIO()
+            rc = main(
+                ["--report", report_path, "--runtime-report", runtime_path,
+                 "--dry-run", "--json", "--url", "http://127.0.0.1:1",
+                 "--token", "t"],
+                stdout=out, stderr=err,
+            )
+            self.assertEqual(rc, 0)
+            self.assertIn("DRY-RUN continues WITHOUT dedup", err.getvalue())
+            lines = out.getvalue().strip().splitlines()
+            summary = json.loads(lines[-1])
+            self.assertEqual(summary["planned"], 3)  # 2 structural + 1 runtime
+            self.assertEqual(summary["filed"], 0)
+            self.assertTrue(summary["dry_run"])
+            self.assertIn("health-finding:runtime-latency", out.getvalue())
+
+    def test_real_run_refuses_to_file_blind(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report_path = os.path.join(tmp, "health.json")
+            with open(report_path, "w", encoding="utf-8") as handle:
+                json.dump(structural_report(), handle)
+            out, err = io.StringIO(), io.StringIO()
+            rc = main(
+                ["--report", report_path, "--runtime-report", report_path,
+                 "--url", "http://127.0.0.1:1", "--token", "t"],
+                stdout=out, stderr=err,
+            )
+            self.assertEqual(rc, 1)
+            self.assertIn("refusing to file blind", err.getvalue())
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -210,17 +210,29 @@ def assess_l4(rows: list[dict], dispatch_total: int, dispatch_today: int) -> Lay
     cand, status = _merge_candidates(rows)
     by_scope: dict[str, int] = {}
     dispatchable = 0
+    staged = 0
+    staged_sources: dict[str, int] = {}
     for rid, rec in cand.items():
         st = status.get(rid, rec.get("status") or "proposed")
         scope = rec.get("scope") or "?"
         by_scope[scope] = by_scope.get(scope, 0) + 1
         src = rec.get("source") or ""
-        if scope == "code" and st == "proposed" and src.startswith(L4_SOURCES):
-            dispatchable += 1
+        if scope == "code" and st == "proposed":
+            if src.startswith(L4_SOURCES):
+                dispatchable += 1
+            else:
+                # Proposed code candidate from a source not yet in the dispatch
+                # allowlist (runtime-error, health-finding, …): staged L4 supply
+                # awaiting review/graduation — real fuel, NOT a wiring gap.
+                staged += 1
+                prefix = src.split(":", 1)[0] if src else "(no source)"
+                staged_sources[prefix] = staged_sources.get(prefix, 0) + 1
     metrics = {
         "candidates": len(cand),
         "by_scope": by_scope,
         "dispatchable": dispatchable,
+        "staged": staged,
+        "staged_sources": staged_sources,
         "dispatched_total": dispatch_total,
         "dispatched_today": dispatch_today,
     }
@@ -230,6 +242,11 @@ def assess_l4(rows: list[dict], dispatch_total: int, dispatch_today: int) -> Lay
     if len(cand) == 0:
         return LayerStatus("L4", "source self-edit", IDLE, metrics,
                            "no self-correction candidates — capture funnel idle")
+    if staged > 0:
+        staged_summary = ", ".join(f"{k}:{v}" for k, v in sorted(staged_sources.items()))
+        return LayerStatus("L4", "source self-edit", STARVED, metrics,
+                           f"{staged} code candidates staged from non-dispatch sources ({staged_summary}) "
+                           "— propose-only supply awaiting allowlist graduation")
     scope_summary = ", ".join(f"{k}:{v}" for k, v in sorted(by_scope.items()))
     return LayerStatus("L4", "source self-edit", STARVED, metrics,
                        f"{len(cand)} candidates ({scope_summary}) but 0 are code-scope from "

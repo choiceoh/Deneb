@@ -3309,6 +3309,22 @@ class MiniappWireFieldBoundaryContractTest {
             expectation = Expectation.Object,
         ),
         fieldContract(
+            name = "SelfImprovementCodingRecordResponse.ok",
+            serializer = SelfImprovementCodingRecordResponse.serializer(),
+            field = "ok",
+            valid = JsonPrimitive(true),
+            invalid = JsonPrimitive(1),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
+            name = "SelfImprovementCodingRecordResponse.candidate",
+            serializer = SelfImprovementCodingRecordResponse.serializer(),
+            field = "candidate",
+            valid = JsonObject(emptyMap()),
+            invalid = JsonPrimitive("not-an-object"),
+            expectation = Expectation.Object,
+        ),
+        fieldContract(
             name = "SelfImprovementCodingStatusCount.status",
             serializer = SelfImprovementCodingStatusCount.serializer(),
             field = "status",

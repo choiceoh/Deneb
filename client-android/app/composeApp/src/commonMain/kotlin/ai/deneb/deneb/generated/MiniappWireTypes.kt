@@ -719,6 +719,13 @@ data class SelfImprovementCodingListResponse(
 
 @Immutable
 @Serializable
+data class SelfImprovementCodingRecordResponse(
+    val ok: Boolean = false,
+    val candidate: SelfCorrectionCandidate = SelfCorrectionCandidate(),
+)
+
+@Immutable
+@Serializable
 data class SelfImprovementCodingStatusCount(
     val status: String = "",
     val count: Int = 0,
