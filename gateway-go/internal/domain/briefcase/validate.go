@@ -277,80 +277,136 @@ func (v *validator) validateArtifacts() {
 	}
 }
 
+type episodeValidationState struct {
+	seenIDs    map[string]struct{}
+	previousAt time.Time
+}
+
 func (v *validator) validateEpisodes() {
-	m := v.pack.Manifest
-	if len(m.Episodes) == 0 {
+	episodes := v.pack.Manifest.Episodes
+	v.validateEpisodeCount(len(episodes))
+	state := episodeValidationState{seenIDs: make(map[string]struct{})}
+	for index, episode := range episodes {
+		v.validateEpisodeStep(index, episode, &state)
+	}
+	v.validateTimelineReleaseInvariant()
+}
+
+func (v *validator) validateEpisodeCount(count int) {
+	if count == 0 {
 		v.add("episodes must contain at least one event")
-	} else if len(m.Episodes) > MaxEpisodesV1 {
+	} else if count > MaxEpisodesV1 {
 		v.add("episodes exceed schema v1 hard cap %d", MaxEpisodesV1)
 	}
-	seen := make(map[string]struct{})
-	var previous time.Time
-	for i, episode := range m.Episodes {
-		label := fmt.Sprintf("episodes[%d]", i)
-		if !validID(episode.ID) {
-			v.add("%s.id %q is invalid", label, episode.ID)
-		} else if _, exists := seen[episode.ID]; exists {
-			v.add("duplicate episode id %q", episode.ID)
-		} else {
-			seen[episode.ID] = struct{}{}
-		}
-		if !oneOf(string(episode.Kind), string(EpisodeUserTurn), string(EpisodeEvent), string(EpisodeHeartbeat)) {
-			v.add("episode %q kind %q is invalid", episode.ID, episode.Kind)
-		}
-		if episode.At.IsZero() {
-			v.add("episode %q at is required", episode.ID)
-		} else {
-			if episode.At.Before(m.FrozenNow) {
-				v.add("episode %q at %s is before frozenNow %s", episode.ID, stamp(episode.At), stamp(m.FrozenNow))
-			}
-			if !previous.IsZero() && episode.At.Before(previous) {
-				v.add("episode %q is out of chronological order", episode.ID)
-			}
-			previous = episode.At
-		}
-		if (episode.Kind == EpisodeUserTurn || episode.Kind == EpisodeHeartbeat) && episode.Input == nil {
-			v.add("executable episode %q requires input", episode.ID)
-		}
-		if episode.Input != nil {
-			v.validateAssetPath(label+".input", episode.Input.Path, episode.Input.SHA256, "timeline")
-			v.validateEpisodeInput(episode.ID, episode.Input.Path)
-		}
-		for _, sourceID := range episode.ReleaseSourceIDs {
-			source, exists := v.sources[sourceID]
-			if !exists {
-				v.add("episode %q releases unknown source %q", episode.ID, sourceID)
-				continue
-			}
-			if prior, exists := v.released[sourceID]; exists {
-				v.add("source %q is released more than once by episodes %q and %q", sourceID, prior, episode.ID)
-			} else {
-				v.released[sourceID] = episode.ID
-			}
-			switch source.Access {
-			case SourceAccessSealed:
-				v.add("episode %q exposes sealed source %q", episode.ID, sourceID)
-			case SourceAccessSnapshot:
-				v.add("episode %q re-releases snapshot source %q", episode.ID, sourceID)
-			case SourceAccessTimeline:
-				if !episode.At.IsZero() && !source.AvailableAt.IsZero() && source.AvailableAt.After(episode.At) {
-					v.add("episode %q exposes future source %q at %s before availableAt %s", episode.ID, sourceID, stamp(episode.At), stamp(source.AvailableAt))
-				}
-			}
-		}
-		validateUniqueStrings(v, "episode "+episode.ID+" releaseSourceIds", episode.ReleaseSourceIDs, true)
-		validateUniqueStrings(v, "episode "+episode.ID+" expectedArtifactIds", episode.ExpectedArtifactIDs, true)
-		for _, artifactID := range episode.ExpectedArtifactIDs {
-			if _, exists := v.artifacts[artifactID]; !exists {
-				v.add("episode %q expects unknown artifact %q", episode.ID, artifactID)
-			}
+}
+
+func (v *validator) validateEpisodeStep(index int, episode Episode, state *episodeValidationState) {
+	label := fmt.Sprintf("episodes[%d]", index)
+	v.validateEpisodeIdentity(label, episode.ID, state)
+	v.validateEpisodeKind(episode)
+	v.validateEpisodeTimestamp(episode, state)
+	v.validateEpisodeExecution(label, episode)
+	v.validateEpisodeSourceReleases(episode)
+	v.validateEpisodeExpectedArtifacts(episode)
+}
+
+func (v *validator) validateEpisodeIdentity(label, episodeID string, state *episodeValidationState) {
+	if !validID(episodeID) {
+		v.add("%s.id %q is invalid", label, episodeID)
+		return
+	}
+	if _, exists := state.seenIDs[episodeID]; exists {
+		v.add("duplicate episode id %q", episodeID)
+		return
+	}
+	state.seenIDs[episodeID] = struct{}{}
+}
+
+func (v *validator) validateEpisodeKind(episode Episode) {
+	if !oneOf(string(episode.Kind), string(EpisodeUserTurn), string(EpisodeEvent), string(EpisodeHeartbeat)) {
+		v.add("episode %q kind %q is invalid", episode.ID, episode.Kind)
+	}
+}
+
+func (v *validator) validateEpisodeTimestamp(episode Episode, state *episodeValidationState) {
+	if episode.At.IsZero() {
+		v.add("episode %q at is required", episode.ID)
+		return
+	}
+	if episode.At.Before(v.pack.Manifest.FrozenNow) {
+		v.add("episode %q at %s is before frozenNow %s", episode.ID, stamp(episode.At), stamp(v.pack.Manifest.FrozenNow))
+	}
+	if !state.previousAt.IsZero() && episode.At.Before(state.previousAt) {
+		v.add("episode %q is out of chronological order", episode.ID)
+	}
+	state.previousAt = episode.At
+}
+
+func (v *validator) validateEpisodeExecution(label string, episode Episode) {
+	if (episode.Kind == EpisodeUserTurn || episode.Kind == EpisodeHeartbeat) && episode.Input == nil {
+		v.add("executable episode %q requires input", episode.ID)
+	}
+	if episode.Input == nil {
+		return
+	}
+	v.validateAssetPath(label+".input", episode.Input.Path, episode.Input.SHA256, "timeline")
+	v.validateEpisodeInput(episode.ID, episode.Input.Path)
+}
+
+func (v *validator) validateEpisodeSourceReleases(episode Episode) {
+	for _, sourceID := range episode.ReleaseSourceIDs {
+		v.validateEpisodeSourceRelease(episode, sourceID)
+	}
+	validateUniqueStrings(v, "episode "+episode.ID+" releaseSourceIds", episode.ReleaseSourceIDs, true)
+}
+
+func (v *validator) validateEpisodeSourceRelease(episode Episode, sourceID string) {
+	source, exists := v.sources[sourceID]
+	if !exists {
+		v.add("episode %q releases unknown source %q", episode.ID, sourceID)
+		return
+	}
+	v.recordEpisodeSourceRelease(episode.ID, sourceID)
+	v.validateEpisodeSourceVisibility(episode, sourceID, source)
+}
+
+func (v *validator) recordEpisodeSourceRelease(episodeID, sourceID string) {
+	if prior, exists := v.released[sourceID]; exists {
+		v.add("source %q is released more than once by episodes %q and %q", sourceID, prior, episodeID)
+		return
+	}
+	v.released[sourceID] = episodeID
+}
+
+func (v *validator) validateEpisodeSourceVisibility(episode Episode, sourceID string, source Source) {
+	switch source.Access {
+	case SourceAccessSealed:
+		v.add("episode %q exposes sealed source %q", episode.ID, sourceID)
+	case SourceAccessSnapshot:
+		v.add("episode %q re-releases snapshot source %q", episode.ID, sourceID)
+	case SourceAccessTimeline:
+		if !episode.At.IsZero() && !source.AvailableAt.IsZero() && source.AvailableAt.After(episode.At) {
+			v.add("episode %q exposes future source %q at %s before availableAt %s", episode.ID, sourceID, stamp(episode.At), stamp(source.AvailableAt))
 		}
 	}
-	for _, source := range m.Sources {
-		if source.Access == SourceAccessTimeline {
-			if _, exists := v.released[source.ID]; !exists {
-				v.add("timeline source %q is never released", source.ID)
-			}
+}
+
+func (v *validator) validateEpisodeExpectedArtifacts(episode Episode) {
+	validateUniqueStrings(v, "episode "+episode.ID+" expectedArtifactIds", episode.ExpectedArtifactIDs, true)
+	for _, artifactID := range episode.ExpectedArtifactIDs {
+		if _, exists := v.artifacts[artifactID]; !exists {
+			v.add("episode %q expects unknown artifact %q", episode.ID, artifactID)
+		}
+	}
+}
+
+func (v *validator) validateTimelineReleaseInvariant() {
+	for _, source := range v.pack.Manifest.Sources {
+		if source.Access != SourceAccessTimeline {
+			continue
+		}
+		if _, exists := v.released[source.ID]; !exists {
+			v.add("timeline source %q is never released", source.ID)
 		}
 	}
 }
