@@ -48,6 +48,7 @@ class BackgroundConnectionPolicy(
     private val taskScheduler: TaskScheduler,
     private val daemonController: DaemonController,
     private val chatTurnActive: StateFlow<Boolean>? = null,
+    private val fcmDeliveryReady: StateFlow<Boolean>? = null,
 ) {
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -55,10 +56,13 @@ class BackgroundConnectionPolicy(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     // Only ever read/written on the main thread (lifecycle callbacks, the
-    // main-posted connectivity reconcile, and the Main-dispatched chat-turn
-    // collector), so no synchronization is needed.
+    // main-posted connectivity reconcile, and the Main-dispatched flow
+    // collectors), so no synchronization is needed.
     private var foreground = false
     private var chatStreamActive = false
+
+    // Null flow (non-gateway repository binding) keeps today's behavior.
+    private var fcmReady = fcmDeliveryReady?.value ?: true
 
     /** Registers the lifecycle and connectivity observers. Call once, from onCreate. */
     fun install() {
@@ -95,6 +99,19 @@ class BackgroundConnectionPolicy(
                 }
             }
         }
+        // Acked-token / server-credential gate (battery doc §3.1): the doze
+        // handoff is only safe when the gateway confirmed FCM can DELIVER
+        // (token registered AND server credentials loaded). Until then the
+        // background teardown would silently drop proactive notifications, so
+        // reconcile falls back to always-connected (M3).
+        fcmDeliveryReady?.let { flow ->
+            scope.launch {
+                flow.collect { ready ->
+                    fcmReady = ready
+                    reconcile()
+                }
+            }
+        }
     }
 
     private fun onForeground(value: Boolean) {
@@ -119,7 +136,11 @@ class BackgroundConnectionPolicy(
     // behavior (SSE stays up while online).
     private fun reconcile() {
         val online = isOnline()
-        val sseDesired = online && (foreground || !BACKGROUND_DOZE_ENABLED)
+        // Doze teardown is only safe when the FCM handoff is confirmed working
+        // (fcmReady). Otherwise keep the SSE in the background — M3 fallback:
+        // pre-M1 battery cost, but no silently dropped notifications.
+        val dozeSafe = BACKGROUND_DOZE_ENABLED && fcmReady
+        val sseDesired = online && (foreground || !dozeSafe)
         if (sseDesired) taskScheduler.start() else taskScheduler.stop()
 
         if (BACKGROUND_DOZE_ENABLED) {
@@ -135,6 +156,10 @@ class BackgroundConnectionPolicy(
                 // Never start() from background: Android 12+ blocks background
                 // FGS starts, and a turn can only begin while foregrounded.
                 chatStreamActive -> Unit
+
+                // FCM delivery unconfirmed: the background SSE kept alive above
+                // needs the process to survive — hold the running service too.
+                !fcmReady -> Unit
 
                 else -> daemonController.stop()
             }

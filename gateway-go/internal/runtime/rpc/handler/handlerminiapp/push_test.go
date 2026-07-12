@@ -61,6 +61,25 @@ func TestPushRegister_WithIdentity(t *testing.T) {
 	if store.platforms[0] != "android" {
 		t.Errorf("platform = %v", store.platforms[0])
 	}
+	// No DeliveryEnabled wired: unknown must report false, never true.
+	if got["delivery"] != false {
+		t.Errorf("delivery = %v, want false without DeliveryEnabled", got["delivery"])
+	}
+}
+
+func TestPushRegister_ReportsDeliveryEnabled(t *testing.T) {
+	store := &fakePushStore{}
+	h := pushRegister(PushDeps{Store: store, DeliveryEnabled: func() bool { return true }})
+	ctx := clientauth.WithContext(context.Background(), sampleIdentity())
+
+	got := decodePayload(t, h(ctx, newPushReq(t, "miniapp.push.register",
+		map[string]any{"token": "fcm-token-abc", "platform": "android"})))
+	if got["ok"] != true {
+		t.Errorf("ok = %v", got["ok"])
+	}
+	if got["delivery"] != true {
+		t.Errorf("delivery = %v, want true with an enabled sender", got["delivery"])
+	}
 }
 
 func TestPushRegister_NoIdentityRejected(t *testing.T) {

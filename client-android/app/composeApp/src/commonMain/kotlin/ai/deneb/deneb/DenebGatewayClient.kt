@@ -137,6 +137,15 @@ class DenebGatewayClient private constructor(
         set(value) {
             _chatTurnActive.value = value
         }
+
+    // Whether the gateway confirmed it can actually DELIVER push (FCM sender
+    // configured server-side), from the last miniapp.push.register response.
+    // Persisted so a cold start keeps the last known answer while offline.
+    // BackgroundConnectionPolicy treats false as "FCM handoff unsafe" and keeps
+    // background SSE alive instead of dozing (battery doc §3.1 acked-token /
+    // server-credential gate) — losing notifications is worse than losing Doze.
+    internal val _fcmDeliveryReady = MutableStateFlow(appSettings.settings.getBoolean(KEY_FCM_DELIVERY, false))
+    val fcmDeliveryReady: StateFlow<Boolean> = _fcmDeliveryReady.asStateFlow()
     internal var historyEpoch = 0L
     internal val nativeSyncGate = Mutex()
     internal var nativeSyncCursor = appSettings.settings.getLong(KEY_SYNC_CURSOR, 0L)
@@ -601,6 +610,7 @@ class DenebGatewayClient private constructor(
         const val KEY_URL = "deneb.gatewayUrl"
         const val KEY_TOKEN = "deneb.clientToken"
         const val KEY_SYNC_CURSOR = "deneb.nativeSyncCursor"
+        const val KEY_FCM_DELIVERY = "deneb.fcmDeliveryReady"
 
         // Android emulator → host loopback. On a real device set the gateway's
         // LAN/Tailscale URL under KEY_URL.

@@ -457,9 +457,9 @@ class AdminModelsAndClientStatusBoundaryTest {
     }
 
     @Test
-    fun pushRegisterAndUnregisterUseWriteContract() = runTest {
+    fun pushRegisterAndUnregisterSerializeTokenParams() = runTest {
         val f = gatewayClientFixture()
-        f.transport.enqueueWrite(ok = true)
+        f.transport.enqueueRpc("""{"ok":true,"count":1,"delivery":true}""")
         f.transport.enqueueWrite(ok = true)
 
         assertTrue(f.client.registerPushToken("fcm-token", "android"))
@@ -470,5 +470,28 @@ class AdminModelsAndClientStatusBoundaryTest {
         assertEquals("android", register["platform"]?.jsonPrimitive?.content)
         val unregister = f.transport.requests[1].requireRpc("miniapp.push.unregister")
         assertEquals("fcm-token", unregister["token"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun pushRegisterTracksGatewayDeliveryReadiness() = runTest {
+        val f = gatewayClientFixture()
+
+        // Gateway confirms the FCM sender is configured: flips ready + persists.
+        f.transport.enqueueRpc("""{"ok":true,"count":1,"delivery":true}""")
+        assertTrue(f.client.registerPushToken("fcm-token", "android"))
+        assertTrue(f.client.fcmDeliveryReady.value)
+        assertTrue(f.settings.settings.getBoolean(DenebGatewayClient.KEY_FCM_DELIVERY, false))
+
+        // Older gateway omitting the field reads as not-ready (conservative:
+        // unknown delivery must keep background SSE alive, not doze).
+        f.transport.enqueueRpc("""{"ok":true,"count":1}""")
+        assertTrue(f.client.registerPushToken("fcm-token", "android"))
+        assertFalse(f.client.fcmDeliveryReady.value)
+        assertFalse(f.settings.settings.getBoolean(DenebGatewayClient.KEY_FCM_DELIVERY, true))
+
+        // No definitive response (RPC error) leaves the last answer untouched.
+        f.transport.enqueueRpc(ok = false)
+        assertFalse(f.client.registerPushToken("fcm-token", "android"))
+        assertFalse(f.client.fcmDeliveryReady.value)
     }
 }

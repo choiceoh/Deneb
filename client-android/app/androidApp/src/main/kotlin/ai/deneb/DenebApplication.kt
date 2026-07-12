@@ -32,11 +32,13 @@ class DenebApplication : Application() {
         // notification when the in-app banner isn't visible) PLUS the connectivity
         // gate (M2) and the flag-gated background-Doze teardown (M1/M4) with the
         // active-chat-stream hold. See BackgroundConnectionPolicy.
+        val gatewayClient = repository as? DenebGatewayClient
         BackgroundConnectionPolicy(
             this,
             taskScheduler,
             daemonController,
-            (repository as? DenebGatewayClient)?.chatTurnActive,
+            gatewayClient?.chatTurnActive,
+            gatewayClient?.fcmDeliveryReady,
         ).install()
     }
 }
