@@ -31,9 +31,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"go/format"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -42,182 +44,245 @@ import (
 )
 
 func main() {
-	jsonFile := flag.String("json", "", "JSON source file")
-	outFile := flag.String("out", "", "Output Go file")
-	flag.Parse()
+	os.Exit(runDataGen(os.Args[1:], os.Stdout, os.Stderr))
+}
 
+const dataGenUsage = "usage: data-gen -json FILE -out FILE"
+
+func runDataGen(args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("data-gen", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonFile := flags.String("json", "", "JSON source file")
+	outFile := flags.String("out", "", "Output Go file")
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
+	}
 	if *jsonFile == "" || *outFile == "" {
-		fmt.Fprintln(os.Stderr, "usage: data-gen -json FILE -out FILE")
-		os.Exit(1)
+		fmt.Fprintln(stderr, dataGenUsage)
+		return 1
 	}
 
-	data, err := os.ReadFile(*jsonFile)
+	plan, err := loadGenerationPlan(*jsonFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
 	}
+	if err := writeGeneratedOutput(*outFile, generate(plan), stderr); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "wrote %s (%d vars, %d entries)\n", *outFile, len(plan.variables), plan.entryCount)
+	return 0
+}
 
+func loadGenerationPlan(jsonFile string) (generationPlan, error) {
+	data, err := os.ReadFile(jsonFile)
+	if err != nil {
+		return generationPlan{}, err
+	}
 	var doc map[string]any
 	if err := json.Unmarshal(data, &doc); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return generationPlan{}, err
 	}
+	return prepareGeneration(doc, sourceCommentPath(jsonFile)), nil
+}
 
-	// Derive source path for the header comment.
-	sourcePath := *jsonFile
-	if abs, err := filepath.Abs(*jsonFile); err == nil {
+func sourceCommentPath(jsonFile string) string {
+	sourcePath := jsonFile
+	if abs, err := filepath.Abs(jsonFile); err == nil {
 		if idx := strings.Index(abs, "/gateway-go/"); idx >= 0 {
 			sourcePath = abs[idx+1:]
 		}
 	}
+	return sourcePath
+}
 
-	src := generate(doc, sourcePath)
-
-	formatted, err := format.Source([]byte(src))
+// writeGeneratedOutput owns the format-and-write boundary. Formatting remains
+// best effort for compatibility: invalid Go is written verbatim after a
+// warning so generator authors can inspect the faulty source.
+func writeGeneratedOutput(outFile, source string, stderr io.Writer) error {
+	formatted, err := format.Source([]byte(source))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "gofmt warning: %v\n", err)
-		formatted = []byte(src)
+		fmt.Fprintf(stderr, "gofmt warning: %v\n", err)
+		formatted = []byte(source)
 	}
+	return os.WriteFile(outFile, formatted, 0o600) //nolint:gosec // G306 — generated source file, needs read access
+}
 
-	if err := os.WriteFile(*outFile, formatted, 0o600); err != nil { //nolint:gosec // G306 — generated source file, needs read access
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+// ---------------------------------------------------------------------------
+// Input preparation
+// ---------------------------------------------------------------------------
+
+type generationPlan struct {
+	sourcePath string
+	config     generatorConfig
+	variables  []variableDefinition
+	entryCount int
+}
+
+type generatorConfig struct {
+	packageName string
+	imports     []string
+	buildTags   string
+}
+
+type variableDefinition struct {
+	name     string
+	typeName string
+	doc      string
+	valueMap map[string]string
+	values   any
+}
+
+func prepareGeneration(doc map[string]any, sourcePath string) generationPlan {
+	plan := generationPlan{
+		sourcePath: sourcePath,
+		config:     prepareGeneratorConfig(doc),
 	}
-
-	nVars, nEntries := 0, 0
-	for k, v := range doc {
-		if strings.HasPrefix(k, "_") {
+	var names []string
+	for name, raw := range doc {
+		if strings.HasPrefix(name, "_") {
 			continue
 		}
-		varDef, ok := v.(map[string]any)
+		if _, ok := raw.(map[string]any); ok {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	plan.variables = make([]variableDefinition, 0, len(names))
+	for _, name := range names {
+		raw, ok := doc[name].(map[string]any)
 		if !ok {
 			continue
 		}
-		nVars++
-		if values := varDef["_values"]; values != nil {
-			switch vals := values.(type) {
-			case map[string]any:
-				nEntries += len(vals)
-			case []any:
-				nEntries += len(vals)
-			}
+		definition := prepareVariableDefinition(name, raw)
+		plan.variables = append(plan.variables, definition)
+		plan.entryCount += countGeneratedEntries(definition.values)
+	}
+	return plan
+}
+
+func prepareGeneratorConfig(doc map[string]any) generatorConfig {
+	config := generatorConfig{packageName: "main"}
+	gen, _ := doc["_gen"].(map[string]any)
+	if gen == nil {
+		return config
+	}
+	if value, ok := gen["package"].(string); ok {
+		config.packageName = value
+	}
+	if values, ok := gen["imports"].([]any); ok {
+		config.imports = make([]string, 0, len(values))
+		for _, value := range values {
+			text, _ := value.(string)
+			config.imports = append(config.imports, text)
 		}
 	}
-	fmt.Printf("wrote %s (%d vars, %d entries)\n", *outFile, nVars, nEntries)
+	if value, ok := gen["build_tags"].(string); ok {
+		config.buildTags = value
+	}
+	return config
+}
+
+func prepareVariableDefinition(name string, raw map[string]any) variableDefinition {
+	definition := variableDefinition{name: name, typeName: "map[string]string", values: raw["_values"]}
+	if value, ok := raw["_type"].(string); ok {
+		definition.typeName = value
+	}
+	definition.doc, _ = raw["_doc"].(string)
+	if values, ok := raw["_value_map"].(map[string]any); ok {
+		definition.valueMap = make(map[string]string, len(values))
+		for key, value := range values {
+			definition.valueMap[key], _ = value.(string)
+		}
+	}
+	return definition
+}
+
+func countGeneratedEntries(values any) int {
+	switch value := values.(type) {
+	case map[string]any:
+		return len(value)
+	case []any:
+		return len(value)
+	default:
+		return 0
+	}
 }
 
 // ---------------------------------------------------------------------------
 // Code generation
 // ---------------------------------------------------------------------------
 
-func generate(doc map[string]any, sourcePath string) string {
-	gen, _ := doc["_gen"].(map[string]any)
-	pkg := "main"
-	var imports []string
-	buildTags := ""
-
-	if gen != nil {
-		if v, ok := gen["package"].(string); ok {
-			pkg = v
-		}
-		if v, ok := gen["imports"].([]any); ok {
-			for _, item := range v {
-				s, _ := item.(string)
-				imports = append(imports, s)
-			}
-		}
-		if v, ok := gen["build_tags"].(string); ok {
-			buildTags = v
-		}
-	}
-
+func generate(plan generationPlan) string {
 	var b strings.Builder
-
-	if buildTags != "" {
-		fmt.Fprintf(&b, "//go:build %s\n\n", buildTags)
+	writeGenerationHeader(&b, plan)
+	for _, definition := range plan.variables {
+		writeVariableDefinition(&b, definition)
 	}
+	return b.String()
+}
 
+func writeGenerationHeader(b *strings.Builder, plan generationPlan) {
+	if plan.config.buildTags != "" {
+		fmt.Fprintf(b, "//go:build %s\n\n", plan.config.buildTags)
+	}
 	b.WriteString("// Code generated by data-gen. DO NOT EDIT.\n")
-	fmt.Fprintf(&b, "// Source: %s\n", sourcePath)
+	fmt.Fprintf(b, "// Source: %s\n", plan.sourcePath)
 	b.WriteString("// Regenerate: make data-gen\n\n")
-	fmt.Fprintf(&b, "package %s\n\n", pkg)
-
-	if len(imports) > 0 {
-		if len(imports) == 1 {
-			fmt.Fprintf(&b, "import %s\n\n", goStr(imports[0]))
+	fmt.Fprintf(b, "package %s\n\n", plan.config.packageName)
+	if len(plan.config.imports) > 0 {
+		if len(plan.config.imports) == 1 {
+			fmt.Fprintf(b, "import %s\n\n", goStr(plan.config.imports[0]))
 		} else {
 			b.WriteString("import (\n")
-			for _, imp := range imports {
-				fmt.Fprintf(&b, "\t%s\n", goStr(imp))
+			for _, imp := range plan.config.imports {
+				fmt.Fprintf(b, "\t%s\n", goStr(imp))
 			}
 			b.WriteString(")\n\n")
 		}
 	}
+}
 
-	// Collect and sort variable names for deterministic output.
-	varNames := make([]string, 0)
-	for k := range doc {
-		if !strings.HasPrefix(k, "_") {
-			if _, ok := doc[k].(map[string]any); ok {
-				varNames = append(varNames, k)
-			}
+func writeVariableDefinition(b *strings.Builder, definition variableDefinition) {
+	if definition.doc != "" {
+		for _, line := range strings.Split(definition.doc, "\n") {
+			fmt.Fprintf(b, "// %s\n", line)
 		}
 	}
-	sort.Strings(varNames)
+	keyType, valueType := parseMapType(definition.typeName)
+	if keyType != "" {
+		writeMapDefinition(b, definition, keyType, valueType)
+		return
+	}
+	if elementType := parseSliceType(definition.typeName); elementType != "" {
+		writeSliceDefinition(b, definition, elementType)
+	}
+}
 
-	// Emit each variable definition.
-	for _, varName := range varNames {
-		// Safe: varNames only contains keys whose values passed this
-		// assertion during collection above.
-		varDef, _ := doc[varName].(map[string]any)
-
-		typeStr := "map[string]string"
-		if v, ok := varDef["_type"].(string); ok {
-			typeStr = v
-		}
-
-		if docStr, ok := varDef["_doc"].(string); ok {
-			for _, line := range strings.Split(docStr, "\n") {
-				fmt.Fprintf(&b, "// %s\n", line)
-			}
-		}
-
-		var valueMap map[string]string
-		if vm, ok := varDef["_value_map"].(map[string]any); ok {
-			valueMap = make(map[string]string)
-			for k, v := range vm {
-				s, _ := v.(string)
-				valueMap[k] = s
-			}
-		}
-
-		values := varDef["_values"]
-
-		keyType, valType := parseMapType(typeStr)
-		if keyType != "" {
-			// Map type.
-			fmt.Fprintf(&b, "var %s = %s{\n", varName, typeStr)
-			if valMap, ok := values.(map[string]any); ok {
-				keys := sortedKeys(valMap)
-				for _, k := range keys {
-					v := valMap[k]
-					fmt.Fprintf(&b, "\t%s: %s,\n", renderKey(k, keyType), renderValue(v, valType, valueMap))
-				}
-			}
-			b.WriteString("}\n\n")
-		} else if elemType := parseSliceType(typeStr); elemType != "" {
-			// Slice type.
-			if arr, ok := values.([]any); ok {
-				fmt.Fprintf(&b, "var %s = %s{\n", varName, typeStr)
-				for _, item := range arr {
-					fmt.Fprintf(&b, "\t%s,\n", renderValue(item, elemType, valueMap))
-				}
-				b.WriteString("}\n\n")
-			}
+func writeMapDefinition(b *strings.Builder, definition variableDefinition, keyType, valueType string) {
+	fmt.Fprintf(b, "var %s = %s{\n", definition.name, definition.typeName)
+	if values, ok := definition.values.(map[string]any); ok {
+		for _, key := range sortedKeys(values) {
+			fmt.Fprintf(b, "\t%s: %s,\n", renderKey(key, keyType), renderValue(values[key], valueType, definition.valueMap))
 		}
 	}
+	b.WriteString("}\n\n")
+}
 
-	return b.String()
+func writeSliceDefinition(b *strings.Builder, definition variableDefinition, elementType string) {
+	values, ok := definition.values.([]any)
+	if !ok {
+		return
+	}
+	fmt.Fprintf(b, "var %s = %s{\n", definition.name, definition.typeName)
+	for _, value := range values {
+		fmt.Fprintf(b, "\t%s,\n", renderValue(value, elementType, definition.valueMap))
+	}
+	b.WriteString("}\n\n")
 }
 
 // ---------------------------------------------------------------------------
