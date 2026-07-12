@@ -132,7 +132,7 @@ def check_slowloop(rsi_status: dict | None) -> Result:
     """P2: meta-evolution producing proposals?"""
     if rsi_status is None:
         return Result("P2.slowloop", Result.SOFT, "rsi.status RPC unavailable — gateway too old or not wired")
-    layers = {l["key"]: l for l in rsi_status.get("layers", []) if isinstance(l, dict)}
+    layers = {layer["key"]: layer for layer in rsi_status.get("layers", []) if isinstance(layer, dict)}
     meta = layers.get("L2") or layers.get("meta") or layers.get("slow")
     if meta is None:
         return Result("P2.slowloop", Result.SOFT, "L2 layer not in rsi.status response")
@@ -153,7 +153,7 @@ def check_labels(rsi_status: dict | None, health: dict | None) -> Result:
     """P3: verifier co-evolution labels accumulating?"""
     if rsi_status is None:
         return Result("P3.labels", Result.SOFT, "rsi.status RPC unavailable")
-    layers = {l["key"]: l for l in rsi_status.get("layers", []) if isinstance(l, dict)}
+    layers = {layer["key"]: layer for layer in rsi_status.get("layers", []) if isinstance(layer, dict)}
     p3 = layers.get("L3") or layers.get("verifier") or layers.get("coevolve")
     if p3 is None:
         return Result("P3.labels", Result.SOFT, "L3 layer not in rsi.status — P3 may not be wired yet")
@@ -240,12 +240,12 @@ def main() -> int:
     print(f"{'─' * 60}")
     if health:
         evo = health.get("evolution") or health.get("evolutionHealth") or {}
-        print(f"  게이트웨이: 연결됨")
+        print("  게이트웨이: 연결됨")
         print(f"  evolve(7d): {evo.get('evolveCount7d', evo.get('evolveCount', '?'))}  "
               f"rollback: {evo.get('rollbackCount7d', evo.get('rollbackCount', '?'))}  "
               f"confirm: {evo.get('confirmRate', '?')}")
     else:
-        print(f"  게이트웨이: /health 응답 없음 (RPC만 시도)")
+        print("  게이트웨이: /health 응답 없음 (RPC만 시도)")
     print(f"  rsi.status: {'가능' if rsi_status else '불가'}")
     print()
     for r in results:
