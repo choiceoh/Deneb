@@ -11,9 +11,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modeltuner"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/regressionwatch"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/goals"
@@ -24,13 +21,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compactuner"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/goalloop"
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/modelmaintenance"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rolehealth"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -333,60 +329,22 @@ func (s *Server) registerModelMaintenanceWorkflows() {
 	if s.modelRegistry == nil || s.agentLogWriter == nil {
 		return
 	}
-	s.registerModelTunerWorkflow()
-	s.registerRegressionWatchWorkflow()
-	s.registerCompactionTunerWorkflow()
-}
-
-func (s *Server) registerModelTunerWorkflow() {
 	var notify func(ctx context.Context, msg string) error
 	if notifier := s.proactiveRelay.NotifierForSession(proactive.NativeWorkSessionKey); notifier != nil {
 		notify = notifier.Notify
 	}
-	s.autonomousSvc.RegisterTask(modeltuner.NewTask(modeltuner.Deps{
+	s.modelMaintenance = modelmaintenance.New(modelmaintenance.Deps{
 		Logs:      s.agentLogWriter,
 		Registry:  s.modelRegistry,
-		StatePath: modeltuner.DefaultStatePath(),
+		Summaries: s.polarisStore,
+		Capture:   s.logCapture,
+		StateDir:  config.ResolveStateDir(),
 		Notify:    notify,
 		Logger:    s.logger,
-	}))
-}
-
-func (s *Server) registerRegressionWatchWorkflow() {
-	var notify func(ctx context.Context, msg string) error
-	if notifier := s.proactiveRelay.NotifierForSession(proactive.NativeWorkSessionKey); notifier != nil {
-		notify = notifier.Notify
-	}
-	s.autonomousSvc.RegisterTask(regressionwatch.NewTask(regressionwatch.Deps{
-		Sources:   s.regressionSources(),
-		StatePath: regressionwatch.DefaultStatePath(),
-		Notify:    notify,
-		Logger:    s.logger,
-	}))
-}
-
-func (s *Server) registerCompactionTunerWorkflow() {
-	if os.Getenv("DENEB_COMPACTION_TUNER") != "1" || s.polarisStore == nil || s.modelRegistry == nil {
-		return
-	}
-	lw := s.modelRegistry.Client(modelrole.RoleLightweight)
-	if lw == nil {
-		return
-	}
-	var notify func(ctx context.Context, msg string) error
-	if notifier := s.proactiveRelay.NotifierForSession(proactive.NativeWorkSessionKey); notifier != nil {
-		notify = notifier.Notify
-	}
-	s.compactTuner = compactuner.NewTask(compactuner.Deps{
-		Summaries:  s.polarisStore,
-		Guidelines: compaction.NewGuidelineStore(filepath.Join(config.ResolveStateDir(), compaction.GuidelineFileName)),
-		Client:     lw,
-		Model:      s.modelRegistry.Model(modelrole.RoleLightweight),
-		Notify:     notify,
-		Logger:     s.logger,
 	})
-	s.autonomousSvc.RegisterTask(s.compactTuner)
-	s.logger.Info("compaction-tuner: enabled (DENEB_COMPACTION_TUNER)")
+	for _, task := range s.modelMaintenance.Tasks() {
+		s.autonomousSvc.RegisterTask(task)
+	}
 }
 
 func (s *Server) registerFileSemanticIndexWorkflow() {

@@ -502,7 +502,12 @@ func (s *Server) earlyKnowledgeMethods(hub *rpcutil.GatewayHub) []map[string]rpc
 		}),
 		handlerminiapp.PromptMethods(handlerminiapp.PromptDeps{Store: s.promptStore}),
 		handlerminiapp.PromptTunerMethods(handlerminiapp.PromptTunerDeps{
-			Tuner: func() handlerminiapp.PromptTuner { return s.compactTuner },
+			Tuner: func() handlerminiapp.PromptTuner {
+				if s.modelMaintenance == nil {
+					return nil
+				}
+				return s.modelMaintenance.PromptTuner()
+			},
 		}),
 		miniknowledge.TopicDocsMethods(miniknowledge.TopicDocsDeps{
 			TopicsDir:  func() (string, error) { return configresolve.TopicsDir(), nil },
@@ -593,7 +598,7 @@ func (s *Server) earlyMiniappGatewayMethods(hub *rpcutil.GatewayHub) map[string]
 				"gmailAttachment": true,
 				"updateManifest":  true,
 				"prompts":         s.promptStore != nil,
-				"promptTuner":     s.compactTuner != nil,
+				"promptTuner":     s.modelMaintenance != nil && s.modelMaintenance.PromptTuner() != nil,
 				"topicDocs":       configresolve.CurrentTopicKey() != "",
 			}
 		},
