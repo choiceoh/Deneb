@@ -90,8 +90,28 @@ fun MarkdownContent(
         LocalMarkdownBaseStyle provides baseStyle,
     ) {
         Column(modifier) {
-            for (block in document.blocks) {
-                BlockRenderer(block, isInteractive, onUiCallback, frozen)
+            // Document-level rhythm context: the FIRST block sheds its own top
+            // air (the message container already insets, and a heading's 16dp
+            // opener stacked to a 36dp start on heading-led replies); a
+            // heading right after a rule keeps only a hairline (the rule
+            // already separates — the stacked pair measured 46dp); and a
+            // paragraph following another PARAGRAPH takes extra air so prose
+            // breaks read unmistakably while structured blocks keep their
+            // density (density stays — only consecutive-prose boundaries grow).
+            var prevWasRule = false
+            var prevWasParagraph = false
+            document.blocks.forEachIndexed { index, block ->
+                BlockRenderer(
+                    block,
+                    isInteractive,
+                    onUiCallback,
+                    frozen,
+                    isFirst = index == 0,
+                    afterRule = prevWasRule,
+                    afterParagraph = prevWasParagraph,
+                )
+                prevWasRule = block is HorizontalRule
+                prevWasParagraph = block is Paragraph
             }
         }
     }
@@ -174,11 +194,16 @@ private fun BlockRenderer(
     isInteractive: Boolean,
     onUiCallback: (String, Map<String, String>) -> Unit,
     frozen: FrozenSubmission?,
+    // Document-root rhythm context (defaults keep nested call sites — list
+    // items, quotes — unaffected): see MarkdownContent's block loop.
+    isFirst: Boolean = false,
+    afterRule: Boolean = false,
+    afterParagraph: Boolean = false,
 ) {
     when (block) {
-        is Heading -> HeadingBlock(block)
+        is Heading -> HeadingBlock(block, isFirst, afterRule)
 
-        is Paragraph -> ParagraphBlock(block)
+        is Paragraph -> ParagraphBlock(block, isFirst, afterParagraph)
 
         is CodeFence -> {
             if (block.language?.trim()?.lowercase() == "choices") {
@@ -208,7 +233,7 @@ private fun BlockRenderer(
         is Table -> TableBlock(block)
 
         HorizontalRule -> HorizontalDivider(
-            modifier = Modifier.padding(vertical = 10.dp),
+            modifier = Modifier.padding(vertical = 8.dp),
             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
         )
 
@@ -377,7 +402,7 @@ private fun DenebUiPendingBlock(
 }
 
 @Composable
-private fun HeadingBlock(block: Heading) {
+private fun HeadingBlock(block: Heading, isFirst: Boolean = false, afterRule: Boolean = false) {
     // Heading ladder rides the DenebType scale:
     // # = subject (22), ## = cardTitle (18), ###+ = rowTitleStrong (15). Deeper
     // levels collapse onto the emphasis rung on purpose — hierarchy comes from
@@ -389,12 +414,22 @@ private fun HeadingBlock(block: Heading) {
     }
     // A heading opens a section: clear air above (more for higher levels) and a
     // tight gap below, so the title visibly groups with the content it leads.
-    // Uniform 4dp let sections blur together in long analyses.
-    val topPad = when (block.level) {
-        1 -> 16.dp
-        2 -> 14.dp
-        3 -> 10.dp
-        else -> 6.dp
+    // Uniform 4dp let sections blur together in long analyses. Two stacking
+    // cases shed that air (2026-07-12 rhythm measurements): the document's
+    // first heading (the container inset already opens the message — the
+    // stack measured 36dp) and a heading right after a rule (the rule already
+    // separates — the pair measured 46dp).
+    val topPad = when {
+        isFirst -> 0.dp
+
+        afterRule -> 2.dp
+
+        else -> when (block.level) {
+            1 -> 16.dp
+            2 -> 14.dp
+            3 -> 10.dp
+            else -> 6.dp
+        }
     }
     InlineContent(
         inlines = block.inlines,
@@ -440,7 +475,7 @@ private fun ImageStatusBox(alt: String, loading: Boolean) {
 }
 
 @Composable
-private fun ParagraphBlock(block: Paragraph) {
+private fun ParagraphBlock(block: Paragraph, isFirst: Boolean = false, afterParagraph: Boolean = false) {
     if (block.inlines.size == 1 && block.inlines[0] is Image) {
         val img = block.inlines[0] as Image
         val showFullScreen = LocalShowFullScreenImageModel.current
@@ -466,13 +501,23 @@ private fun ParagraphBlock(block: Paragraph) {
     }
     // A paragraph carries more air above/below than the body line-height, so
     // consecutive paragraphs read as distinct blocks rather than one wall of
-    // text (the old 2dp made the paragraph gap smaller than the line gap once
-    // the line-height loosened). Inside a list item the list's spacedBy owns
-    // the rhythm — the paragraph keeps only a hairline of its own.
+    // text. A paragraph FOLLOWING another paragraph takes extra top so prose
+    // breaks read unmistakably (~20dp measured) — while transitions into
+    // structured blocks (lists, tables, headings) keep the denser 14dp bond,
+    // so overall density holds. Inside a list item the list's spacedBy owns
+    // the rhythm — the paragraph keeps only a hairline of its own. The
+    // document's first paragraph sheds its top so text-led and heading-led
+    // replies open at the same height.
+    val vPad = if (LocalInsideListItem.current) 1.dp else 5.dp
+    val topPad = when {
+        isFirst -> 0.dp
+        afterParagraph -> 9.dp
+        else -> vPad
+    }
     InlineContent(
         inlines = block.inlines,
         style = markdownBodyStyle,
-        modifier = Modifier.padding(vertical = if (LocalInsideListItem.current) 2.dp else 5.dp),
+        modifier = Modifier.padding(top = topPad, bottom = vPad),
     )
 }
 
@@ -566,10 +611,12 @@ private fun BulletListBlock(
     frozen: FrozenSubmission?,
 ) {
     Column(
-        modifier = Modifier.padding(vertical = 4.dp),
+        modifier = Modifier.padding(vertical = 2.dp),
         // Loose lists (blank lines between items in the source) read as separate thoughts —
-        // give them more air than tight ones.
-        verticalArrangement = Arrangement.spacedBy(if (block.tight) 4.dp else 8.dp),
+        // give them more air than tight ones. Tight-list spacing sits well under
+        // the paragraph gap so a bullet group reads as ONE unit (measured: the
+        // old 4dp landed within 2dp of the paragraph rhythm).
+        verticalArrangement = Arrangement.spacedBy(if (block.tight) 3.dp else 8.dp),
     ) {
         for (item in block.items) {
             val checked = item.checked
@@ -632,8 +679,8 @@ private fun OrderedListBlock(
         else -> 40.dp
     }
     Column(
-        modifier = Modifier.padding(vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(if (block.tight) 4.dp else 8.dp),
+        modifier = Modifier.padding(vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(if (block.tight) 3.dp else 8.dp),
     ) {
         block.items.forEachIndexed { index, item ->
             ListItemRow("${block.start + index}.", markerWidth, Color.Unspecified, item, isInteractive, onUiCallback, frozen)
