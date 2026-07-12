@@ -20,6 +20,7 @@ export type IconName =
   | "fleet"
   | "workfeed"
   | "skills"
+  | "rsi"
   | "code"
   | "send"
   | "bell"
@@ -129,6 +130,12 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M12 3.5l1.7 4.8 4.8 1.7-4.8 1.7L12 16.5l-1.7-4.8L5.5 10l4.8-1.7z" />
       <path d="M18.5 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z" />
+    </>
+  ),
+  rsi: (
+    <>
+      <path d="M18.5 8A7.5 7.5 0 0 0 5 9.5M5.5 16A7.5 7.5 0 0 0 19 14.5" />
+      <path d="M18.5 4.5V8H15M5.5 19.5V16H9" />
     </>
   ),
   code: <path d="M8.5 8l-4 4 4 4M15.5 8l4 4-4 4" />,
