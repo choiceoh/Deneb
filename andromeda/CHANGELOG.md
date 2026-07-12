@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.68](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.67...andromeda-v0.0.68) (2026-07-12)
+
+
+### ✨ Features
+
+* **rsi:** 재귀적 자가개선 루프 상태 RPC — miniapp.rsi.status + //deneb:wire(양 클라 생성) ([#3492](https://github.com/choiceoh/Deneb/issues/3492)) ([2f485dc](https://github.com/choiceoh/Deneb/commit/2f485dc9217e487724482d2d7a4ab8c488027326))
+
 ## [0.0.67](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.66...andromeda-v0.0.67) (2026-07-12)
 
 

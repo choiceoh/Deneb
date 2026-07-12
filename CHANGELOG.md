@@ -1,5 +1,24 @@
 # Changelog
 
+## [4.91.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.90.0...deneb-v4.91.0) (2026-07-12)
+
+
+### ✨ Features
+
+* **codegraph:** rpcmap 이벤트 브로드캐스트 패턴 + 편집 후 자동 sync 훅 ([077f602](https://github.com/choiceoh/Deneb/commit/077f6025380337a5b7bb2a9e7325bcfa0ab27ae9))
+* **genesis:** 런타임 에러 마이닝 — 반복 코드성 에러를 propose-only L4 후보로(에러 마이닝 소스 신설) ([#3491](https://github.com/choiceoh/Deneb/issues/3491)) ([ab8af73](https://github.com/choiceoh/Deneb/commit/ab8af731138384c884c4000d1c26f16df327553e))
+* **rsi:** 재귀적 자가개선 루프 상태 RPC — miniapp.rsi.status + //deneb:wire(양 클라 생성) ([#3492](https://github.com/choiceoh/Deneb/issues/3492)) ([2f485dc](https://github.com/choiceoh/Deneb/commit/2f485dc9217e487724482d2d7a4ab8c488027326))
+* **wiki:** OpenWiki 패턴 도입 — 브리프·질문 생애주기·인제스트 방어·wiki-scout·노티 기억화 ([#3484](https://github.com/choiceoh/Deneb/issues/3484)) ([10a6183](https://github.com/choiceoh/Deneb/commit/10a61835a6dd38dc101c0afd1dfbf272c0b4a639))
+* **zcode:** codegraph-remind Read 매처 추가 + push 자동화 스크립트 ([b9cb893](https://github.com/choiceoh/Deneb/commit/b9cb893181fddee5ddc8489a279f4ec55ad611c0))
+* **zcode:** 로컬 검증 커밋 래퍼 + 워크트리 정리 스크립트 ([3071eb2](https://github.com/choiceoh/Deneb/commit/3071eb26e5891487b4ed9f30e622c0bae45bb5d8))
+
+
+### 🐛 Bug Fixes
+
+* **gateway:** 네이티브 모델 설정 복구 — modelpicker 등록을 late 단계로 이동 ([#3457](https://github.com/choiceoh/Deneb/issues/3457) nil 스냅샷 회귀) ([#3490](https://github.com/choiceoh/Deneb/issues/3490)) ([cdd025e](https://github.com/choiceoh/Deneb/commit/cdd025e2466173e7790682c63917a373aa93d037))
+* **genesis:** rejected-evolve 검증 드래프트 스킬당 dedup — 프로드 4중복 유출 차단 ([#3489](https://github.com/choiceoh/Deneb/issues/3489)) ([2f4ff60](https://github.com/choiceoh/Deneb/commit/2f4ff6076f93f6a9684780eef1f77fcb1e6bb419))
+* **genesis:** 자가개선 스톨 하드닝 — sweep 필수-판정 계약·연속 무시 에스컬레이션(레버C)·dev 넛저 프로드 게이트 ([#3487](https://github.com/choiceoh/Deneb/issues/3487)) ([fe9cb9f](https://github.com/choiceoh/Deneb/commit/fe9cb9f456aeeea36904f7e5643226bfabfb8013))
+
 ## [4.90.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.89.0...deneb-v4.90.0) (2026-07-12)
 
 
