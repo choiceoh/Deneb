@@ -35,8 +35,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
@@ -85,7 +85,7 @@ type wikiResearchState struct {
 
 // wikiResearchTask implements autonomous.PeriodicTask.
 type wikiResearchTask struct {
-	chatHandler *chat.Handler
+	chatHandler chatport.SyncRunner
 	wikiStore   *wiki.Store
 	activity    *monitoring.ActivityTracker
 	logger      *slog.Logger
@@ -97,7 +97,7 @@ type ResearchTask = wikiResearchTask
 
 // NewResearchTask constructs the autonomous project-wiki research worker.
 func NewResearchTask(
-	chatHandler *chat.Handler,
+	chatHandler chatport.SyncRunner,
 	wikiStore *wiki.Store,
 	activity *monitoring.ActivityTracker,
 	logger *slog.Logger,
@@ -120,7 +120,7 @@ func (t *wikiResearchTask) Interval() time.Duration { return wikiResearchInterva
 
 // Run executes one scheduled task cycle.
 func (t *wikiResearchTask) Run(ctx context.Context) error {
-	if t.chatHandler == nil || t.wikiStore == nil {
+	if t.chatHandler == nil || !t.chatHandler.ChatReady() || t.wikiStore == nil {
 		return fmt.Errorf("wiki-research: chat handler or wiki store not available")
 	}
 
@@ -165,7 +165,9 @@ func (t *wikiResearchTask) runOne(ctx context.Context) (string, bool, error) {
 	defer cancel()
 
 	prompt := t.buildPrompt(target)
-	result, err := t.chatHandler.SendSync(runCtx, wikiResearchSessionKey, prompt, "", &chat.SyncOptions{
+	result, err := t.chatHandler.RunSync(runCtx, chatport.SyncRequest{
+		SessionKey:       wikiResearchSessionKey,
+		Message:          prompt,
 		ToolPreset:       string(toolpreset.PresetWikiResearch),
 		MaxHistoryTokens: 20_000,
 		// Background maintenance turn: it researches from the memory stores via

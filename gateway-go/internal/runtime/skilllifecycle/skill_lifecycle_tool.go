@@ -12,7 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
-	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/lifecycletool"
 )
 
 const (
@@ -31,8 +31,10 @@ type skillLifecycleBackend struct {
 
 	// Heartbeat shadow-replay deps (P1, heartbeat_shadow_replay.go). Nil/empty
 	// on backends that never serve the tool (e.g. the backfill task).
-	shadowReplay func(ctx context.Context, candidate string, limit int) (any, error)
+	shadowReplay func(ctx context.Context, candidate string, limit int) (chattools.HeartbeatShadowReplayResult, error)
 }
+
+var _ chattools.SkillLifecycleBackend = (*skillLifecycleBackend)(nil)
 
 // Backend implements the chat skill-lifecycle control-plane boundary.
 type Backend = skillLifecycleBackend
@@ -45,7 +47,7 @@ type BackendConfig struct {
 	Tracker      *genesis.Tracker
 	Transcripts  toolctx.TranscriptStore
 	Logger       *slog.Logger
-	ShadowReplay func(ctx context.Context, candidate string, limit int) (any, error)
+	ShadowReplay func(ctx context.Context, candidate string, limit int) (chattools.HeartbeatShadowReplayResult, error)
 }
 
 // NewBackend constructs a lifecycle backend from explicit dependencies.
@@ -63,38 +65,37 @@ func NewBackend(cfg BackendConfig) *Backend {
 // HeartbeatShadowReplay dry-runs a candidate HEARTBEAT.md body over the
 // harvested fixture corpus. Report only — nothing is applied (the surface
 // registry keeps heartbeat-instructions propose-only).
-func (b *skillLifecycleBackend) HeartbeatShadowReplay(ctx context.Context, req chattools.HeartbeatShadowReplayRequest) (any, error) {
+func (b *skillLifecycleBackend) HeartbeatShadowReplay(ctx context.Context, req chattools.HeartbeatShadowReplayRequest) (chattools.HeartbeatShadowReplayResult, error) {
 	if b.shadowReplay == nil {
-		return nil, fmt.Errorf("heartbeat shadow replay is not configured on this backend")
+		return chattools.HeartbeatShadowReplayResult{}, fmt.Errorf("heartbeat shadow replay is not configured on this backend")
 	}
 	return b.shadowReplay(ctx, req.Candidate, req.Limit)
 }
 
 // ProposeSkillEvolution creates a skill-evolution proposal through the lifecycle backend.
-func (b *skillLifecycleBackend) ProposeSkillEvolution(ctx context.Context, req chattools.SkillEvolutionProposalRequest) (any, error) {
+func (b *skillLifecycleBackend) ProposeSkillEvolution(ctx context.Context, req chattools.SkillEvolutionProposalRequest) (chattools.SkillEvolutionProposalResult, error) {
 	if req.SessionKey == "" {
 		req.SessionKey = toolctx.SessionKeyFromContext(ctx)
 	}
 	route := normalizeSkillLifecycleRoute(req.Route)
 	if route == "" {
-		return nil, fmt.Errorf("route must be one of no-op, genesis, create, evolve")
+		return chattools.SkillEvolutionProposalResult{}, fmt.Errorf("route must be one of no-op, genesis, create, evolve")
 	}
 	// A no-op proposal records "no skill-worthy pattern, nothing to do" — there
 	// is no reusable candidate by definition. Only executable routes (genesis/
 	// create/evolve) require one. Forcing candidate on no-op made the reviewer
 	// agent fail repeatedly with "candidate is required for propose".
 	if route != "no-op" && strings.TrimSpace(req.Candidate) == "" {
-		return nil, fmt.Errorf("candidate is required for propose with route=%q", route)
+		return chattools.SkillEvolutionProposalResult{}, fmt.Errorf("candidate is required for propose with route=%q", route)
 	}
 
-	result := map[string]any{
-		"ok":        true,
-		"candidate": req.Candidate,
-		"route":     route,
-		"executed":  false,
+	result := chattools.SkillEvolutionProposalResult{
+		OK:        true,
+		Candidate: req.Candidate,
+		Route:     route,
 	}
 	if req.Reason != "" {
-		result["reason"] = req.Reason
+		result.Reason = req.Reason
 	}
 
 	// Persist the reviewer's decision (route + candidate + evidence) BEFORE the
@@ -111,33 +112,38 @@ func (b *skillLifecycleBackend) ProposeSkillEvolution(ctx context.Context, req c
 	b.logProposal(req, route, result)
 
 	if req.Execute {
-		var execResult any
-		var execErr error
 		switch route {
 		case "genesis":
-			execResult, execErr = b.RunSkillGenesis(ctx, chattools.SkillGenesisRequest{
+			execResult, execErr := b.RunSkillGenesis(ctx, chattools.SkillGenesisRequest{
 				SessionKey:   req.SessionKey,
 				DreamSummary: req.DreamSummary,
 			})
+			if execErr != nil {
+				result.OK = false
+				result.Error = execErr.Error()
+			} else {
+				result.Executed = true
+				result.Result = &chattools.SkillEvolutionProposalExecutionResult{Genesis: &execResult}
+			}
 		case "evolve":
 			// Pass the review's reasoning + evidence as the improvement finding
 			// so the evolver can act on the LLM's verdict without usage stats.
 			finding := strings.TrimSpace(req.Reason + "\n" + req.Evidence)
-			execResult, execErr = b.RunSkillEvolution(ctx, chattools.SkillEvolutionRequest{
+			execResult, execErr := b.RunSkillEvolution(ctx, chattools.SkillEvolutionRequest{
 				SkillName: req.SkillName,
 				Finding:   finding,
 			})
+			if execErr != nil {
+				result.OK = false
+				result.Error = execErr.Error()
+			} else {
+				result.Executed = true
+				result.Result = &chattools.SkillEvolutionProposalExecutionResult{Evolution: &execResult}
+			}
 		case "create":
-			result["nextAction"] = "load skill-factory, then use skills action=create"
+			result.NextAction = "load skill-factory, then use skills action=create"
 		case "no-op":
 			// Nothing to execute; the proposal record is the result.
-		}
-		if execErr != nil {
-			result["ok"] = false
-			result["error"] = execErr.Error()
-		} else if execResult != nil {
-			result["executed"] = true
-			result["result"] = execResult
 		}
 	}
 
@@ -145,15 +151,15 @@ func (b *skillLifecycleBackend) ProposeSkillEvolution(ctx context.Context, req c
 }
 
 // RunSkillGenesis runs a requested skill-genesis operation.
-func (b *skillLifecycleBackend) RunSkillGenesis(ctx context.Context, req chattools.SkillGenesisRequest) (any, error) {
+func (b *skillLifecycleBackend) RunSkillGenesis(ctx context.Context, req chattools.SkillGenesisRequest) (chattools.SkillGenesisResult, error) {
 	if b.genesis == nil {
-		return nil, fmt.Errorf("skill genesis is not configured")
+		return chattools.SkillGenesisResult{}, fmt.Errorf("skill genesis is not configured")
 	}
 	if req.SessionKey == "" {
 		req.SessionKey = toolctx.SessionKeyFromContext(ctx)
 	}
 	if strings.TrimSpace(req.SessionKey) == "" && strings.TrimSpace(req.DreamSummary) == "" {
-		return nil, fmt.Errorf("sessionKey or dreamSummary is required")
+		return chattools.SkillGenesisResult{}, fmt.Errorf("sessionKey or dreamSummary is required")
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, skillLifecycleTimeout)
@@ -170,114 +176,123 @@ func (b *skillLifecycleBackend) RunSkillGenesis(ctx context.Context, req chattoo
 		sessionKey = req.SessionKey
 		sctx, buildErr := buildSkillLifecycleSessionContext(b.transcripts, req.SessionKey)
 		if buildErr != nil {
-			return nil, fmt.Errorf("load session: %w", buildErr)
+			return chattools.SkillGenesisResult{}, fmt.Errorf("load session: %w", buildErr)
 		}
 		skill, err = b.genesis.Generate(ctx, sctx)
 	}
 	if err != nil {
-		return nil, err
+		return chattools.SkillGenesisResult{}, err
 	}
 	if skill == nil {
-		return map[string]any{
-			"ok":     true,
-			"skip":   true,
-			"reason": "no skill-worthy pattern detected",
-			"source": source,
+		return chattools.SkillGenesisResult{
+			OK:     true,
+			Skip:   true,
+			Reason: "no skill-worthy pattern detected",
+			Source: source,
 		}, nil
 	}
 	if err := b.genesis.Persist(skill); err != nil {
 		if errors.Is(err, generation.ErrSkillDeduped) {
-			return map[string]any{
-				"ok":     true,
-				"skip":   true,
-				"reason": "existing skill already covers this (deduplicated)",
-				"source": source,
+			return chattools.SkillGenesisResult{
+				OK:     true,
+				Skip:   true,
+				Reason: "existing skill already covers this (deduplicated)",
+				Source: source,
 			}, nil
 		}
-		return nil, err
+		return chattools.SkillGenesisResult{}, err
 	}
 	if b.tracker != nil {
 		_ = b.tracker.LogGenesis(skill.Name, source, sessionKey, skill.Category, skill.Description)
 	}
-	return map[string]any{
-		"ok":     true,
-		"source": source,
-		"skill":  skill,
+	return chattools.SkillGenesisResult{
+		OK:     true,
+		Source: source,
+		Skill:  skill,
 	}, nil
 }
 
 // RunSkillEvolution runs a requested skill-evolution operation.
-func (b *skillLifecycleBackend) RunSkillEvolution(ctx context.Context, req chattools.SkillEvolutionRequest) (any, error) {
+func (b *skillLifecycleBackend) RunSkillEvolution(ctx context.Context, req chattools.SkillEvolutionRequest) (chattools.SkillEvolutionResult, error) {
 	if b.evolver == nil {
-		return nil, fmt.Errorf("skill evolver is not configured")
+		return chattools.SkillEvolutionResult{}, fmt.Errorf("skill evolver is not configured")
 	}
 	if strings.TrimSpace(req.SkillName) == "" {
-		return nil, fmt.Errorf("skillName is required")
+		return chattools.SkillEvolutionResult{}, fmt.Errorf("skillName is required")
 	}
 	ctx, cancel := context.WithTimeout(ctx, skillLifecycleTimeout)
 	defer cancel()
 	result, err := b.evolver.EvolveSkill(ctx, req.SkillName, req.Finding)
 	if err != nil {
-		return nil, err
+		return chattools.SkillEvolutionResult{}, err
 	}
 	if b.tracker != nil && result != nil && result.Evolved {
 		_ = b.tracker.MarkSkillPatched(req.SkillName)
 	}
-	return map[string]any{
-		"ok":     true,
-		"result": result,
+	return chattools.SkillEvolutionResult{
+		OK:     true,
+		Result: result,
 	}, nil
 }
 
 // RunSkillCuratorAction runs a requested curator action.
-func (b *skillLifecycleBackend) RunSkillCuratorAction(_ context.Context, req chattools.SkillCuratorActionRequest) (any, error) {
+func (b *skillLifecycleBackend) RunSkillCuratorAction(_ context.Context, req chattools.SkillCuratorActionRequest) (chattools.SkillCuratorActionResult, error) {
 	if b.tracker == nil {
-		return map[string]any{
-			"ok":     false,
-			"reason": "skill tracker is not configured",
+		return chattools.SkillCuratorActionResult{
+			Reason: "skill tracker is not configured",
 		}, nil
 	}
 	skillName := strings.TrimSpace(req.SkillName)
 	if skillName == "" {
-		return nil, fmt.Errorf("skillName is required")
+		return chattools.SkillCuratorActionResult{}, fmt.Errorf("skillName is required")
 	}
 	switch req.Action {
 	case "pin":
 		if err := b.tracker.SetSkillPinned(skillName, true); err != nil {
-			return nil, err
+			return chattools.SkillCuratorActionResult{}, err
 		}
 	case "unpin":
 		if err := b.tracker.SetSkillPinned(skillName, false); err != nil {
-			return nil, err
+			return chattools.SkillCuratorActionResult{}, err
 		}
 	case "archive":
 		rec, err := b.tracker.SetSkillCuratorState(skillName, genesis.SkillCuratorStateArchived)
 		if err != nil {
-			return nil, err
+			return chattools.SkillCuratorActionResult{}, err
 		}
-		return map[string]any{"ok": true, "action": req.Action, "skillName": skillName, "curator": rec}, nil
+		return chattools.SkillCuratorActionResult{
+			OK:        true,
+			Action:    lifecycleValue(req.Action),
+			SkillName: lifecycleValue(skillName),
+			Curator:   &chattools.SkillCuratorResult{Record: &rec},
+		}, nil
 	case "restore":
 		rec, err := b.tracker.SetSkillCuratorState(skillName, genesis.SkillCuratorStateActive)
 		if err != nil {
-			return nil, err
+			return chattools.SkillCuratorActionResult{}, err
 		}
-		return map[string]any{"ok": true, "action": req.Action, "skillName": skillName, "curator": rec}, nil
+		return chattools.SkillCuratorActionResult{
+			OK:        true,
+			Action:    lifecycleValue(req.Action),
+			SkillName: lifecycleValue(skillName),
+			Curator:   &chattools.SkillCuratorResult{Record: &rec},
+		}, nil
 	default:
-		return nil, fmt.Errorf("unsupported curator action %q", req.Action)
+		return chattools.SkillCuratorActionResult{}, fmt.Errorf("unsupported curator action %q", req.Action)
 	}
 	curator, err := b.tracker.SkillCuratorReport(skillName)
 	if err != nil {
-		return nil, err
+		return chattools.SkillCuratorActionResult{}, err
 	}
-	return map[string]any{
-		"ok":        true,
-		"action":    req.Action,
-		"skillName": skillName,
-		"curator":   curator,
+	return chattools.SkillCuratorActionResult{
+		OK:        true,
+		Action:    lifecycleValue(req.Action),
+		SkillName: lifecycleValue(skillName),
+		Curator:   &chattools.SkillCuratorResult{Records: lifecycleValue(curator)},
 	}, nil
 }
 
-func (b *skillLifecycleBackend) logProposal(req chattools.SkillEvolutionProposalRequest, route string, result map[string]any) {
+func (b *skillLifecycleBackend) logProposal(req chattools.SkillEvolutionProposalRequest, route string, result chattools.SkillEvolutionProposalResult) {
 	if b.tracker == nil {
 		return
 	}
@@ -285,7 +300,6 @@ func (b *skillLifecycleBackend) logProposal(req chattools.SkillEvolutionProposal
 	if data, err := json.Marshal(result); err == nil {
 		resultText = truncateSkillLifecycleProposalResult(string(data))
 	}
-	executed, _ := result["executed"].(bool)
 	if err := b.tracker.LogEvolutionProposal(genesis.EvolutionProposalRecord{
 		Candidate:  req.Candidate,
 		Route:      route,
@@ -293,7 +307,7 @@ func (b *skillLifecycleBackend) logProposal(req chattools.SkillEvolutionProposal
 		SkillName:  req.SkillName,
 		Evidence:   req.Evidence,
 		Reason:     req.Reason,
-		Executed:   executed,
+		Executed:   result.Executed,
 		Result:     resultText,
 	}); err != nil && b.logger != nil {
 		b.logger.Warn("skill lifecycle: proposal log failed", "error", err)
@@ -305,11 +319,15 @@ func (b *skillLifecycleBackend) logProposal(req chattools.SkillEvolutionProposal
 		SkillName:  req.SkillName,
 		Evidence:   req.Evidence,
 		Reason:     req.Reason,
-		Executed:   executed,
+		Executed:   result.Executed,
 		Source:     "skill_lifecycle",
 	}); err != nil && b.logger != nil {
 		b.logger.Warn("skill lifecycle: opportunity log failed", "error", err)
 	}
+}
+
+func lifecycleValue[T any](value T) *T {
+	return &value
 }
 
 // recordReviewUsage captures skill usage from a review verdict: a no-op means

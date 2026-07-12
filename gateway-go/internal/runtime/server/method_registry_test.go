@@ -293,25 +293,6 @@ func TestWiringRules_PhaseOrdering(t *testing.T) {
 	})
 }
 
-// TestWiringRules_SetChatBeforeSessionPhase verifies that SetChat panics before PhaseSession.
-func TestWiringRules_SetChatBeforeSessionPhase(t *testing.T) {
-	hub := rpcutil.NewGatewayHub(rpcutil.HubConfig{})
-
-	// SetChat before PhaseSession should panic.
-	assertPanics(t, "SetChat at PhaseInit", func() {
-		hub.SetChat(nil)
-	})
-
-	hub.AdvancePhase(rpcutil.PhaseEarly)
-	assertPanics(t, "SetChat at PhaseEarly", func() {
-		hub.SetChat(nil)
-	})
-
-	// After PhaseSession, SetChat should succeed.
-	hub.AdvancePhase(rpcutil.PhaseSession)
-	hub.SetChat(nil) // should not panic
-}
-
 func assertPanics(t *testing.T, name string, fn func()) {
 	t.Helper()
 	defer func() {

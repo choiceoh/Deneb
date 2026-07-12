@@ -33,7 +33,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 // notifyEventQueueSize bounds the worker's inbound channel so a flood of

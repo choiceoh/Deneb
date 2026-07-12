@@ -3,8 +3,8 @@ package chat
 import (
 	"log/slog"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	subagentnotify "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/subagent"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 // SubagentNotifier routes completed child results back to their parent.

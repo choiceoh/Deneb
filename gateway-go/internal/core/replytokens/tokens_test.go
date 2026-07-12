@@ -12,6 +12,8 @@ func TestIsSilentReplyText(t *testing.T) {
 		{"exact match", "NO_REPLY", "", true},
 		{"with whitespace", "  NO_REPLY  ", "", true},
 		{"with newlines", "\n NO_REPLY \n", "", true},
+		{"trailing emoji", "NO_REPLY🐾", "", true},
+		{"trailing punctuation", "NO_REPLY!!!", "", true},
 		{"empty", "", "", false},
 		{"substantive with token", "Hello NO_REPLY", "", false},
 		{"partial", "NO", "", false},
@@ -37,6 +39,8 @@ func TestStripSilentToken(t *testing.T) {
 		want  string
 	}{
 		{"trailing token", "Hello NO_REPLY", "", "Hello"},
+		{"trailing emoji", "Hello NO_REPLY🐾", "", "Hello"},
+		{"trailing punctuation", "Hello NO_REPLY!!!", "", "Hello"},
 		{"only token", "NO_REPLY", "", ""},
 		{"no token", "Hello world", "", "Hello world"},
 		{"token in middle", "Hello NO_REPLY world", "", "Hello NO_REPLY world"},

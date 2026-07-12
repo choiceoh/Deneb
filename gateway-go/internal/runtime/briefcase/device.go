@@ -15,6 +15,7 @@ import (
 	"time"
 
 	casepack "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase/runcontract"
 )
 
 const (
@@ -30,13 +31,13 @@ var (
 	ErrActionConflict    = errors.New("briefcase device action id conflicts with prior request")
 )
 
-type DeviceStatus string
+type DeviceStatus = runcontract.DeviceStatus
 
 const (
-	DeviceConfirmed   DeviceStatus = "confirmed"
-	DeviceFailed      DeviceStatus = "failed"
-	DeviceUnconfirmed DeviceStatus = "unconfirmed"
-	DeviceDelayed     DeviceStatus = "delayed"
+	DeviceConfirmed   = runcontract.DeviceConfirmed
+	DeviceFailed      = runcontract.DeviceFailed
+	DeviceUnconfirmed = runcontract.DeviceUnconfirmed
+	DeviceDelayed     = runcontract.DeviceDelayed
 )
 
 // DevicePlan scripts the only action payload accepted for ActionID. A delayed
@@ -119,19 +120,7 @@ type DeviceAction struct {
 	Payload  json.RawMessage `json:"payload,omitempty"`
 }
 
-type DeviceActionRecord struct {
-	ActionID          string          `json:"actionId"`
-	Kind              string          `json:"kind"`
-	Payload           json.RawMessage `json:"payload"`
-	Fingerprint       string          `json:"fingerprint"`
-	Status            DeviceStatus    `json:"status"`
-	RequestedAt       time.Time       `json:"requestedAt"`
-	ReadyAt           time.Time       `json:"readyAt,omitempty"`
-	ResolvedAt        time.Time       `json:"resolvedAt,omitempty"`
-	Result            json.RawMessage `json:"result,omitempty"`
-	Failure           string          `json:"failure,omitempty"`
-	DuplicateAttempts int             `json:"duplicateAttempts,omitempty"`
-}
+type DeviceActionRecord = runcontract.DeviceActionRecord
 
 type DeviceActionResult struct {
 	Record    DeviceActionRecord `json:"record"`

@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	chatpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -19,9 +19,19 @@ import (
 // BroadcastFunc is the canonical broadcast type defined in rpcutil.
 type BroadcastFunc = rpcutil.BroadcastFunc
 
+// ChatHandler is the protocol and synchronous-run surface consumed by this RPC
+// domain. The concrete chat pipeline implements it at the composition root.
+type ChatHandler interface {
+	chatport.SyncRunner
+	Send(context.Context, *protocol.RequestFrame) *protocol.ResponseFrame
+	History(context.Context, *protocol.RequestFrame) *protocol.ResponseFrame
+	Abort(context.Context, *protocol.RequestFrame) *protocol.ResponseFrame
+	EnqueueSteer(sessionKey, note string) bool
+}
+
 // Deps holds the dependencies for standard chat RPC methods (send, history, abort, steer).
 type Deps struct {
-	Chat        *chatpkg.Handler
+	Chat        ChatHandler
 	Broadcaster BroadcastFunc // optional; receives chat.steer_received events
 	// OcrImage OCRs a directly-shared image (native-client image capture).
 	// Optional; nil disables miniapp.capture.image.
@@ -98,7 +108,7 @@ type BtwDeps struct {
 // Methods returns the standard chat RPC handlers keyed by method name.
 // If deps.Chat is nil, an empty map is returned.
 func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
-	if deps.Chat == nil {
+	if deps.Chat == nil || !deps.Chat.ChatReady() {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{

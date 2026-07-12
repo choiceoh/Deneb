@@ -3,8 +3,8 @@ package agent
 import (
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpctest"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 func TestExtendedMethodsRegistersDependencyAwareSurface(t *testing.T) {

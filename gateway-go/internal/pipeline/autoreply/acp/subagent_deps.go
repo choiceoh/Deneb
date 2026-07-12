@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
 
 // SubagentInfraDeps provides the full dependency interface for subagent/ACP

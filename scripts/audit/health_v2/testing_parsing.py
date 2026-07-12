@@ -167,7 +167,7 @@ _ORACLE_PATTERNS: dict[str, Pattern[str]] = {
         r"\bt\.(?:Fatalf?|Errorf?|FailNow|Fail)\s*\(|"
         r"\b(?:assert|require)\.\w+\s*\(|\bassert[A-Z]\w*\s*\("
     ),
-    "kotlin": re.compile(r"\b(?:assert\w*|fail)\s*(?:<[^>]+>)?\s*\("),
+    "kotlin": re.compile(r"\b(?:assert\w*|fail)\s*(?:<[^>]+>)?\s*(?:\(|\{)"),
     "typescript": re.compile(r"\bexpect\s*\(|\bassert(?:\.\w+)?\s*\("),
     "python": re.compile(
         r"\bself\.assert\w+\s*\(|\bpytest\.raises\s*\(|"
@@ -210,9 +210,49 @@ def unit_key(language: str, path: Path, text: str, root: Path) -> str:
 
 
 def source_symbols(language: str, text: str) -> set[str]:
+    if language == "kotlin":
+        modifiers = (
+            r"(?:(?:public|private|internal|protected|data|sealed|open|abstract|"
+            r"actual|expect|suspend|inline|operator|tailrec|override)\s+)*"
+        )
+        type_symbols = {
+            match.group(1)
+            for match in re.finditer(
+                rf"(?m)^\s*{modifiers}(?:class|object|interface)\s+"
+                r"`?([^`\s(<:{{]+)`?",
+                text,
+            )
+        }
+        function_symbols = {
+            match.group(1)
+            for match in re.finditer(
+                rf"(?m)^\s*{modifiers}fun\s+"
+                r"(?:<[^>\n]+>\s*)?"
+                r"(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:<[^>\n]+>)?\??\s*\.\s*)?"
+                r"(?:`([^`]+)`|([A-Za-z_]\w*))\s*\(",
+                text,
+            )
+            if match.group(1)
+        }
+        # The backtick and ordinary-name alternatives occupy separate groups.
+        function_symbols.update(
+            match.group(2)
+            for match in re.finditer(
+                rf"(?m)^\s*{modifiers}fun\s+"
+                r"(?:<[^>\n]+>\s*)?"
+                r"(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:<[^>\n]+>)?\??\s*\.\s*)?"
+                r"(?:`([^`]+)`|([A-Za-z_]\w*))\s*\(",
+                text,
+            )
+            if match.group(2)
+        )
+        return {
+            symbol
+            for symbol in type_symbols | function_symbols
+            if len(symbol) >= 4 and symbol.lower() not in {"string", "error", "test"}
+        }
     patterns = {
         "go": r"(?m)^(?:func(?:\s*\([^)]*\))?\s+|type\s+)([A-Za-z_]\w*)",
-        "kotlin": r"(?m)^\s*(?:(?:public|private|internal|protected|data|sealed|open|abstract|actual|expect|suspend|inline)\s+)*(?:class|object|interface|fun)\s+`?([^`\s(<:{]+)`?",
         "typescript": r"(?m)^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function|class|interface|type|const|let)\s+([A-Za-z_$][\w$]*)",
         "python": r"(?m)^\s*(?:async\s+)?(?:def|class)\s+([A-Za-z_]\w*)",
     }
@@ -576,6 +616,11 @@ def test_cases(language: str, text: str) -> list[Case]:
     return cases
 
 
+def has_observable_oracle(language: str, text: str) -> bool:
+    """Report whether executable code contains a language assertion."""
+    return bool(_ORACLE_PATTERNS[language].search(_evidence_clean(text, language)))
+
+
 def normalized_subject(value: str) -> str:
     value = re.sub(r"^(?:test[_-]?)", "", value, flags=re.IGNORECASE)
     value = re.sub(r"(?:tests?|spec)$", "", value, flags=re.IGNORECASE)
@@ -650,6 +695,7 @@ __all__ = [
     "RISK_RULES",
     "case_has_intent",
     "hazards",
+    "has_observable_oracle",
     "normalized_subject",
     "risk_source_text",
     "source_symbols",

@@ -1,37 +1,21 @@
 package chat
 
-import (
-	"regexp"
-	"strings"
-)
+import tokens "github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
 
 // SilentReplyToken is the token that suppresses message delivery when the LLM
 // replies with exactly this value (with optional surrounding whitespace).
-const SilentReplyToken = "NO_REPLY"
-
-var (
-	// silentExactRe matches the exact silent reply token with optional
-	// surrounding whitespace and trailing non-alphanumeric characters (e.g.,
-	// emoji like 🐾 that the model sometimes appends).
-	silentExactRe = regexp.MustCompile(`^\s*NO_REPLY[^a-zA-Z0-9]*$`)
-	// silentTrailingRe matches a trailing NO_REPLY token at the end of mixed
-	// content, allowing optional trailing non-alphanumeric characters.
-	silentTrailingRe = regexp.MustCompile(`(?:^|\s+|\*+)NO_REPLY[^a-zA-Z0-9]*$`)
-)
+const SilentReplyToken = tokens.SilentReplyToken
 
 // IsSilentReply returns true if the text is exactly the silent reply token
 // (with optional surrounding whitespace). This prevents substantive replies
 // ending with NO_REPLY from being suppressed.
 func IsSilentReply(text string) bool {
-	if text == "" {
-		return false
-	}
-	return silentExactRe.MatchString(text)
+	return tokens.IsSilentReplyText(text, SilentReplyToken)
 }
 
 // StripSilentToken removes a trailing NO_REPLY token from mixed-content text.
 // Returns the remaining text trimmed. If the result is empty, the entire
 // message should be treated as silent.
 func StripSilentToken(text string) string {
-	return strings.TrimSpace(silentTrailingRe.ReplaceAllString(text, ""))
+	return tokens.StripSilentToken(text, SilentReplyToken)
 }

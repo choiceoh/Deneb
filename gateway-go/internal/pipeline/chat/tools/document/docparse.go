@@ -263,98 +263,155 @@ func unmarshalZipXML(f *zip.File, v any) error {
 // (w:tbl/w:tr/w:tc) and PowerPoint (a:tbl/a:tr/a:tc), so one extractor does both.
 func extractOOXMLText(r io.Reader) string {
 	decoder := xml.NewDecoder(r)
-	var sb strings.Builder
-	var inT, paragraphOpen bool
-
-	// Table state. tableDepth>0 means we're inside a <tbl>; rows/cells are only
-	// tracked at the outermost level (depth 1) — a nested table's text inlines
-	// into its parent cell rather than corrupting the grid.
-	tableDepth := 0
-	var rows [][]string
-	var curRow []string
-	var curCell strings.Builder
-	cellOpen := false
-
+	extractor := &ooxmlTextExtractor{}
 	for {
-		tok, err := decoder.Token()
+		token, err := decoder.Token()
 		if err != nil {
 			break
 		}
-		switch t := tok.(type) {
-		case xml.StartElement:
-			switch t.Name.Local {
-			case "tbl":
-				tableDepth++
-				if tableDepth == 1 {
-					rows = nil
-				}
-			case "tr":
-				if tableDepth == 1 {
-					curRow = nil
-				}
-			case "tc":
-				if tableDepth == 1 {
-					cellOpen = true
-					curCell.Reset()
-				}
-			case "p":
-				if cellOpen {
-					// New paragraph inside a cell → keep words apart.
-					if curCell.Len() > 0 {
-						curCell.WriteByte(' ')
-					}
-				} else {
-					paragraphOpen = true
-				}
-			case "t":
-				inT = true
-			}
-		case xml.EndElement:
-			switch t.Name.Local {
-			case "tbl":
-				if tableDepth == 1 {
-					if table := mdTable(rows); table != "" {
-						if sb.Len() > 0 {
-							sb.WriteString("\n")
-						}
-						sb.WriteString(table)
-						sb.WriteString("\n")
-					}
-					rows = nil
-				}
-				if tableDepth > 0 {
-					tableDepth--
-				}
-			case "tr":
-				if tableDepth == 1 {
-					rows = append(rows, curRow)
-					curRow = nil
-				}
-			case "tc":
-				if tableDepth == 1 {
-					curRow = append(curRow, strings.TrimSpace(curCell.String()))
-					curCell.Reset()
-					cellOpen = false
-				}
-			case "p":
-				if !cellOpen && paragraphOpen {
-					sb.WriteString("\n")
-					paragraphOpen = false
-				}
-			case "t":
-				inT = false
-			}
-		case xml.CharData:
-			if inT {
-				if cellOpen {
-					curCell.Write(t)
-				} else {
-					sb.Write(t)
-				}
-			}
-		}
+		extractor.consume(token)
 	}
-	return sb.String()
+	return extractor.output.String()
+}
+
+// ooxmlTextExtractor owns the streaming OOXML state machine. Table depth and
+// cell state stay together so nested tables inline into their parent cell while
+// only the outer table emits markdown.
+type ooxmlTextExtractor struct {
+	output        strings.Builder
+	inText        bool
+	paragraphOpen bool
+	tableDepth    int
+	rows          [][]string
+	currentRow    []string
+	currentCell   strings.Builder
+	cellOpen      bool
+}
+
+func (e *ooxmlTextExtractor) consume(token xml.Token) {
+	switch value := token.(type) {
+	case xml.StartElement:
+		e.startElement(value.Name.Local)
+	case xml.EndElement:
+		e.endElement(value.Name.Local)
+	case xml.CharData:
+		e.appendText(value)
+	}
+}
+
+func (e *ooxmlTextExtractor) startElement(name string) {
+	switch name {
+	case "tbl":
+		e.startTable()
+	case "tr":
+		if e.tableDepth == 1 {
+			e.currentRow = nil
+		}
+	case "tc":
+		e.startCell()
+	case "p":
+		e.startParagraph()
+	case "t":
+		e.inText = true
+	}
+}
+
+func (e *ooxmlTextExtractor) endElement(name string) {
+	switch name {
+	case "tbl":
+		e.endTable()
+	case "tr":
+		e.endRow()
+	case "tc":
+		e.endCell()
+	case "p":
+		e.endParagraph()
+	case "t":
+		e.inText = false
+	}
+}
+
+func (e *ooxmlTextExtractor) startTable() {
+	e.tableDepth++
+	if e.tableDepth == 1 {
+		e.rows = nil
+	}
+}
+
+func (e *ooxmlTextExtractor) endTable() {
+	if e.tableDepth == 1 {
+		e.renderTable()
+		e.rows = nil
+	}
+	if e.tableDepth > 0 {
+		e.tableDepth--
+	}
+}
+
+func (e *ooxmlTextExtractor) renderTable() {
+	table := mdTable(e.rows)
+	if table == "" {
+		return
+	}
+	if e.output.Len() > 0 {
+		e.output.WriteString("\n")
+	}
+	e.output.WriteString(table)
+	e.output.WriteString("\n")
+}
+
+func (e *ooxmlTextExtractor) endRow() {
+	if e.tableDepth != 1 {
+		return
+	}
+	e.rows = append(e.rows, e.currentRow)
+	e.currentRow = nil
+}
+
+func (e *ooxmlTextExtractor) startCell() {
+	if e.tableDepth != 1 {
+		return
+	}
+	e.cellOpen = true
+	e.currentCell.Reset()
+}
+
+func (e *ooxmlTextExtractor) endCell() {
+	if e.tableDepth != 1 {
+		return
+	}
+	e.currentRow = append(e.currentRow, strings.TrimSpace(e.currentCell.String()))
+	e.currentCell.Reset()
+	e.cellOpen = false
+}
+
+func (e *ooxmlTextExtractor) startParagraph() {
+	if e.cellOpen {
+		if e.currentCell.Len() > 0 {
+			e.currentCell.WriteByte(' ')
+		}
+		return
+	}
+	e.paragraphOpen = true
+}
+
+func (e *ooxmlTextExtractor) endParagraph() {
+	if e.cellOpen || !e.paragraphOpen {
+		return
+	}
+	e.output.WriteString("\n")
+	e.paragraphOpen = false
+}
+
+func (e *ooxmlTextExtractor) appendText(text xml.CharData) {
+	if !e.inText {
+		return
+	}
+	if e.cellOpen {
+		e.currentCell.Write(text)
+		return
+	}
+	e.output.Write(text)
 }
 
 // docxToText extracts body text from a .docx file (word/document.xml).

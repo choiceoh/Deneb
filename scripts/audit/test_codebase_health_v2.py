@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from test_codebase_health_v2_support import (
     AUDIT_DIR,
@@ -140,6 +141,35 @@ class ModelContractTests(unittest.TestCase):
 
 
 class BaselineRatchetTests(unittest.TestCase):
+    def test_load_rejects_malformed_json_with_a_baseline_error(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="deneb-health-invalid-") as folder:
+            path = Path(folder) / "baseline.json"
+            path.write_text('{"schema_version":', encoding="utf-8")
+
+            with self.assertRaisesRegex(BaselineError, "not valid JSON") as raised:
+                load(path)
+
+        self.assertIsInstance(raised.exception.__cause__, json.JSONDecodeError)
+
+    def test_update_replace_error_preserves_baseline_and_cleans_temporary_file(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="deneb-health-atomic-") as folder:
+            path = Path(folder) / "baseline.json"
+            accepted = update(path, _report())
+            original = path.read_bytes()
+
+            with mock.patch(
+                "health_v2.baseline.os.replace",
+                side_effect=OSError("read-only filesystem"),
+            ):
+                with self.assertRaisesRegex(BaselineError, "could not write baseline"):
+                    update(path, _report(71.0, 70.0))
+
+            self.assertEqual(path.read_bytes(), original)
+            self.assertEqual(load(path), accepted)
+            self.assertEqual(list(Path(folder).glob(".baseline.json.*.tmp")), [])
+
     def test_overall_and_pillar_regressions_cannot_mask_each_other(self) -> None:
         accepted = snapshot(_report())
 
@@ -208,7 +238,7 @@ class BaselineRatchetTests(unittest.TestCase):
             )
 
             self.assertEqual(load(path), migrated)
-        self.assertEqual(migrated["rubric_version"], "2.1.1")
+        self.assertEqual(migrated["rubric_version"], "2.1.2")
         self.assertEqual(migrated["overall"], 50.0)
         self.assertEqual(
             migrated["provenance"],
@@ -228,7 +258,7 @@ class BaselineRatchetTests(unittest.TestCase):
     def test_rubric_migration_rejects_same_rubric_and_profile_mismatch(self) -> None:
         with tempfile.TemporaryDirectory(prefix="deneb-health-migration-") as folder:
             path = Path(folder) / "baseline.json"
-            with self.assertRaisesRegex(BaselineError, "already uses rubric 2.1.1"):
+            with self.assertRaisesRegex(BaselineError, "already uses rubric 2.1.2"):
                 migrate(path, _report(), snapshot(_report()))
 
             old_deep = {

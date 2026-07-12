@@ -255,7 +255,7 @@ Terminal-Bench 상위권의 가장 강한 *공통* 발견: **비구조 ReAct 루
 
 ## 14. 참고
 
-- Deneb 런타임: `gateway-go/internal/pipeline/pilot/localai.go`(경량 워커), `gateway-go/internal/ai/agent/executor.go`(턴 루프), `gateway-go/internal/runtime/session/`(라이프사이클), `gateway-go/internal/domain/autonomous/`(자율 서비스).
+- Deneb 런타임: `gateway-go/internal/pipeline/pilot/localai.go`(경량 워커), `gateway-go/internal/ai/agent/executor.go`(턴 루프), `gateway-go/internal/domain/session/`(라이프사이클), `gateway-go/internal/domain/autonomous/`(자율 서비스).
 - 교리(`docs/agent-rules/`): `prompt-cache.md`, `concurrency.md`, `logging.md`, `optimization.md`, `live-testing.md`, `go-gateway.md`.
 - 관련 research: `docs/research/{hermes-agent-analysis,hermes-deneb-mapping,tool-interception-gap,improvement-ideas}.md`.
 - 외부 — 캐시/압축: Hermes Agent [Prompt assembly](https://hermes-agent.nousresearch.com/docs/developer-guide/prompt-assembly), [Context compression and caching](https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching); Anthropic [Prompt caching](https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching).

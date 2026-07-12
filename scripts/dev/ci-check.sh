@@ -40,7 +40,7 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit 1
 
 # Mirror the Makefile PATH so golangci-lint (and other ~/go/bin tools) resolve
 # even when this script is invoked directly rather than via make.

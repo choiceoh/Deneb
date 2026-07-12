@@ -3,7 +3,6 @@ package mailtool
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/mail"
@@ -40,18 +39,7 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 		deps = optional[0]
 	}
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		var args struct {
-			Action      string `json:"action"`
-			Mailbox     string `json:"mailbox"`
-			Days        int    `json:"days"`
-			Query       string `json:"query"`
-			MessageID   string `json:"message_id"`
-			Attachment  string `json:"attachment"`
-			Limit       int    `json:"limit"`
-			IncludeBody bool   `json:"include_body"`
-			AsJSON      bool   `json:"as_json"`
-		}
-		_ = json.Unmarshal(input, &args)
+		args := parseMailArchiveArgs(input)
 
 		configuredMailboxes := mailarchive.ParseMailboxList(os.Getenv("DENEB_ARCHIVE_IMAP_MAILBOXES"))
 		mailboxes := mailarchive.SelectMailboxes(args.Mailbox, configuredMailboxes)
@@ -113,218 +101,31 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			Limit:     limit,
 			BodyRunes: mailArchiveBodyRunes(args.IncludeBody),
 		}
+		query := mailArchiveQuery{
+			deps:       deps,
+			args:       args,
+			mailboxes:  mailboxes,
+			cfg:        cfg,
+			opts:       opts,
+			storeReady: storeReady,
+			imapReady:  imapReady,
+			usedIMAP:   &usedIMAP,
+			storeHits:  &storeHits,
+		}
 
 		switch args.Action {
 		case "search":
-			if strings.TrimSpace(args.Query) == "" {
-				return "", fmt.Errorf("search에는 query가 필요합니다")
-			}
-			// Honor days on search too — it was silently ignored here (only
-			// project_history bounded by date), so "지난달 메일만" forced the
-			// model to over-fetch and eyeball dates.
-			if args.Days > 0 {
-				opts.Since = time.Now().AddDate(0, 0, -(args.Days - 1))
-			}
-			var msgs []mailarchive.ContextMessage
-			widened := false
-			if storeReady {
-				msgs = deps.Store.Search(mailboxes, args.Query, opts.Since, limit)
-				storeHits = len(msgs)
-				// The model frequently attaches a `days` window even when the user
-				// asked for no recency (schema default for search is unlimited). A
-				// bounded search that finds nothing used to fall through to IMAP,
-				// which applies the SAME window and also returns little — seconds
-				// of latency for an empty recent slice. Widen to all-time in the
-				// fast store first: someone searching an older topic (a past deal,
-				// a discontinued product) wants those mails, not zero results.
-				if len(msgs) == 0 && !opts.Since.IsZero() {
-					if wider := deps.Store.Search(mailboxes, args.Query, time.Time{}, limit); len(wider) > 0 {
-						msgs = wider
-						storeHits = len(msgs)
-						widened = true
-					}
-				}
-			}
-			if len(msgs) == 0 && imapReady {
-				usedIMAP = true
-				var err error
-				msgs, err = mailarchive.SearchContextMessages(ctx, cfg, args.Query, opts)
-				if err != nil {
-					return "", fmt.Errorf("아카이브 검색 실패: %w", err)
-				}
-			}
-			if args.AsJSON {
-				return marshalMailArchiveResponse(mailArchiveResponse{
-					Action:      "search",
-					Mailboxes:   mailboxes,
-					Count:       len(msgs),
-					WidenedDays: mailArchiveWidenedDays(widened, args.Days),
-					Messages:    enrichArchiveMessages(ctx, deps, msgs, args.IncludeBody),
-				})
-			}
-			title := fmt.Sprintf("'%s' 검색 결과 (%s)", args.Query, mailArchiveMailboxLabel(mailboxes))
-			if widened {
-				// Tell the model the results are outside the window it asked for, so
-				// it reports "none in the last N days; here are older matches"
-				// instead of implying they are recent.
-				title = fmt.Sprintf("'%s' 검색 결과 (%s · 최근 %d일 내 없음 → 전체 기간)", args.Query, mailArchiveMailboxLabel(mailboxes), args.Days)
-			}
-			return formatArchiveMessages(title, msgs, args.IncludeBody), nil
+			return query.search(ctx)
 		case "read":
-			var msg mailarchive.ContextMessage
-			var found bool
-			if storeReady {
-				msg, found = deps.Store.Read(args.MessageID, args.Query, mailboxes)
-			}
-			if !found && imapReady {
-				usedIMAP = true
-				var err error
-				msg, err = mailarchive.ReadContextMessage(ctx, cfg, args.MessageID, args.Query, opts)
-				if err != nil {
-					if errors.Is(err, mailarchive.ErrArchiveNotFound) {
-						return "해당 메일을 아카이브에서 찾지 못했습니다 — Locator가 오래됐을 수 있습니다(재색인 후 흔함). action=search에 제목 키워드로 다시 찾아 새 Locator로 여세요.", nil
-					}
-					return "", fmt.Errorf("아카이브 메일 열기 실패: %w", err)
-				}
-			}
-			enriched := enrichArchiveMessage(ctx, deps, msg, true)
-			if args.AsJSON {
-				return marshalMailArchiveResponse(mailArchiveResponse{
-					Action:    "read",
-					Mailboxes: mailboxes,
-					Count:     1,
-					Message:   &enriched,
-				})
-			}
-			out := formatArchiveRead(msg)
-			if related := formatMailArchiveRelated(enriched); related != "" {
-				out += "\n\n" + related
-			}
-			return out, nil
+			return query.read(ctx)
 		case "thread":
-			var msgs []mailarchive.ContextMessage
-			var found bool
-			if storeReady {
-				msgs, found = deps.Store.Thread(args.MessageID, args.Query, mailboxes, limit)
-			}
-			if (!found || len(msgs) == 0) && imapReady {
-				usedIMAP = true
-				var err error
-				msgs, err = mailarchive.ThreadContext(ctx, cfg, args.MessageID, args.Query, opts)
-				if err != nil {
-					if errors.Is(err, mailarchive.ErrArchiveNotFound) {
-						return "스레드 기준 메일을 아카이브에서 찾지 못했습니다 — Locator가 오래됐을 수 있습니다. action=search에 제목 키워드로 다시 찾아 새 Locator로 시도하세요.", nil
-					}
-					return "", fmt.Errorf("아카이브 스레드 조회 실패: %w", err)
-				}
-			}
-			enriched := enrichArchiveMessages(ctx, deps, msgs, true)
-			if args.AsJSON {
-				return marshalMailArchiveResponse(mailArchiveResponse{
-					Action:    "thread",
-					Mailboxes: mailboxes,
-					Count:     len(enriched),
-					Messages:  enriched,
-				})
-			}
-			out := formatArchiveThread(msgs)
-			if related := formatMailArchiveRelatedSummary(enriched); related != "" {
-				out += "\n\n" + related
-			}
-			return out, nil
+			return query.thread(ctx)
 		case "project_history", "history":
-			if strings.TrimSpace(args.Query) == "" {
-				return "", fmt.Errorf("project_history에는 query가 필요합니다")
-			}
-			days := args.Days
-			if days > 0 {
-				opts.Since = time.Now().AddDate(0, 0, -(days - 1))
-			}
-			var history mailarchive.ProjectHistory
-			var used bool
-			if storeReady {
-				history, used = deps.Store.ProjectHistory(args.Query, opts.Since, limit, opts.IndexLimit)
-			}
-			if !used && imapReady {
-				usedIMAP = true
-				var err error
-				history, err = mailarchive.ProjectHistoryContext(ctx, cfg, args.Query, opts)
-				if err != nil {
-					return "", fmt.Errorf("프로젝트 히스토리 조회 실패: %w", err)
-				}
-			}
-			enriched := enrichProjectHistory(ctx, deps, history, args.IncludeBody)
-			if args.AsJSON {
-				return marshalMailArchiveResponse(mailArchiveResponse{
-					Action:    "project_history",
-					Mailboxes: mailboxes,
-					Count:     len(enriched.History.Messages),
-					History:   &enriched.History,
-				})
-			}
-			out := formatProjectHistory(history, args.IncludeBody)
-			if related := formatMailArchiveRelatedSummary(enriched.History.Messages); related != "" {
-				out += "\n\n" + related
-			}
-			return out, nil
+			return query.projectHistory(ctx)
 		case "list", "":
-			days := args.Days
-			if days <= 0 {
-				days = 1
-			}
-			since := time.Now().AddDate(0, 0, -(days - 1))
-			var msgs []mailarchive.ContextMessage
-			var err error
-			if storeReady {
-				msgs = deps.Store.List(mailboxes, since, limit)
-			} else if imapReady {
-				usedIMAP = true
-				msgs, err = mailarchive.ListContextMessages(ctx, cfg, since, opts)
-			}
-			if days == 1 {
-				if err != nil {
-					return "", fmt.Errorf("아카이브 목록 조회 실패: %w", err)
-				}
-				if args.AsJSON {
-					return marshalMailArchiveResponse(mailArchiveResponse{
-						Action:    "list",
-						Mailboxes: mailboxes,
-						Count:     len(msgs),
-						Messages:  enrichArchiveMessages(ctx, deps, msgs, args.IncludeBody),
-					})
-				}
-				return formatArchiveMessages(fmt.Sprintf("오늘 수신 메일 (%s)", mailArchiveMailboxLabel(mailboxes)), msgs, args.IncludeBody), nil
-			} else {
-				if err != nil {
-					return "", fmt.Errorf("아카이브 목록 조회 실패: %w", err)
-				}
-				if args.AsJSON {
-					return marshalMailArchiveResponse(mailArchiveResponse{
-						Action:    "list",
-						Mailboxes: mailboxes,
-						Count:     len(msgs),
-						Messages:  enrichArchiveMessages(ctx, deps, msgs, args.IncludeBody),
-					})
-				}
-				return formatArchiveMessages(fmt.Sprintf("최근 %d일 메일 (%s)", days, mailArchiveMailboxLabel(mailboxes)), msgs, args.IncludeBody), nil
-			}
+			return query.list(ctx)
 		case "attachment":
-			// Attachment bytes aren't mirrored into the local store (only the
-			// cleaned text is), so this action always needs IMAP.
-			if !imapReady {
-				return "첨부 원문은 IMAP 아카이브에서만 제공됩니다 — DENEB_ARCHIVE_IMAP_USER/PASS 설정이 필요합니다.", nil
-			}
-			atts, err := mailarchive.ReadAttachment(ctx, cfg, args.MessageID, args.Query, args.Attachment, opts)
-			if err != nil {
-				if errors.Is(err, mailarchive.ErrArchiveNotFound) {
-					return "해당 메일을 아카이브에서 찾지 못했습니다. message_id(Locator) 또는 query를 확인하세요.", nil
-				}
-				return "", fmt.Errorf("첨부 읽기 실패: %w", err)
-			}
-			if len(atts) == 0 {
-				return "선택한 조건에 맞는 첨부가 없습니다. action=read로 첨부 목록을 먼저 확인하세요.", nil
-			}
-			return formatArchiveAttachments(ctx, atts), nil
+			return query.attachment(ctx)
 		default:
 			return "", fmt.Errorf("알 수 없는 action %q (list|search|read|thread|project_history|attachment)", args.Action)
 		}

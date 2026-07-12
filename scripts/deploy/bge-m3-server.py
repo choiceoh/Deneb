@@ -22,7 +22,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
-import numpy as np
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -97,7 +96,7 @@ _embedding_dim = 1024  # BGE-M3 output dimension
 
 def load_model(n_gpu_layers: int = 99, pool_size: int = 4):
     """Load `pool_size` independent BGE-M3 GGUF contexts into the pool."""
-    global _pool_size
+    global _executor, _pool, _pool_size
 
     from llama_cpp import Llama
 
@@ -110,6 +109,7 @@ def load_model(n_gpu_layers: int = 99, pool_size: int = 4):
 
     logger.info("loading %d contexts of %s (n_gpu_layers=%d)...", pool_size, _model_path, n_gpu_layers)
     start = time.monotonic()
+    pending_pool: "queue.Queue" = queue.Queue()
     for i in range(pool_size):
         model = Llama(
             model_path=_model_path,
@@ -119,13 +119,27 @@ def load_model(n_gpu_layers: int = 99, pool_size: int = 4):
             verbose=False,
             pooling_type=1,  # LLAMA_POOLING_TYPE_MEAN for sentence embeddings
         )
-        _pool.put(model)
+        pending_pool.put(model)
         logger.info("  context %d/%d ready", i + 1, pool_size)
-    _pool_size = pool_size
-    global _executor
-    _executor = ThreadPoolExecutor(max_workers=pool_size, thread_name_prefix="embed")
+    model_size_mb = os.path.getsize(_model_path) / 1024 / 1024
+    pending_executor = ThreadPoolExecutor(
+        max_workers=pool_size,
+        thread_name_prefix="embed",
+    )
     elapsed = time.monotonic() - start
-    logger.info("%d contexts loaded in %.1fs (Q5_K_M, %.0f MB on disk)", pool_size, elapsed, os.path.getsize(_model_path) / 1024 / 1024)
+
+    # Publish the pool and its executor together only after every context and
+    # diagnostic needed for startup succeeded. A partial load must not leak a
+    # half-sized pool into health checks or a later retry.
+    _pool = pending_pool
+    _pool_size = pool_size
+    _executor = pending_executor
+    logger.info(
+        "%d contexts loaded in %.1fs (Q5_K_M, %.0f MB on disk)",
+        pool_size,
+        elapsed,
+        model_size_mb,
+    )
 
 
 # ---------------------------------------------------------------------------

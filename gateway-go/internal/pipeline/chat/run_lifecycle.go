@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/llmerr"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
@@ -244,228 +245,237 @@ func deliverRunReply(params RunParams, deps runDeps, result *agent.AgentResult, 
 	// Use parseReplyDirectives (chatport boundary) for unified processing: silent token
 	// detection, leaked tool-call stripping, MEDIA: extraction, and threading.
 	if params.Delivery != nil && result.Text == "" && !isSilent {
-		logger.Warn("agent produced empty response, nothing to deliver",
-			"session", params.SessionKey,
-			"channel", params.Delivery.Channel,
-			"turns", result.Turns,
-			"stopReason", result.StopReason,
-			"inputTokens", result.Usage.InputTokens,
-			"outputTokens", result.Usage.OutputTokens)
-
-		// Abnormal stop with empty output — tell the user something went
-		// wrong instead of leaving them staring at silence. end_turn with
-		// empty text maps to "" in fallbackForStopReason (a NO_REPLY silent
-		// turn must stay silent), but an ACCIDENTAL empty completion —
-		// end_turn after tool activity with zero text and no silent token —
-		// still deserves a notice (measured: blank bubble with ok=true).
-		fallbackMsg := fallbackForStopReason(result.StopReason)
-		if fallbackMsg == "" && isEmptyFinalResult(result) {
-			fallbackMsg = fallbackForEmptyFinalReply()
-		}
-		if fallbackMsg != "" && deps.callbacks.replyFunc != nil {
-			replyCtx, replyCancel := context.WithTimeout(context.Background(), 10*time.Second)
-			if err := deps.callbacks.replyFunc(replyCtx, params.Delivery, fallbackMsg); err != nil {
-				logger.Error("fallback delivery failed",
-					"error", err, "stopReason", result.StopReason,
-					"session", params.SessionKey)
-				if deps.broadcast != nil {
-					deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
-						Session: params.SessionKey,
-						Channel: params.Delivery.Channel,
-						Reason:  "stop_fallback_error",
-						Error:   err.Error(),
-					})
-				}
-			}
-			replyCancel()
-		} else if deps.broadcast != nil {
-			// No user-facing fallback (e.g. end_turn with empty text, which can
-			// be a legitimate tool-only turn). Still surface to monitoring so a
-			// silent no-reply is observable instead of being buried in a Warn.
-			deps.broadcast("chat.empty_response", ChatEmptyResponseEvent{
-				Session:    params.SessionKey,
-				Channel:    params.Delivery.Channel,
-				StopReason: result.StopReason,
-				Turns:      result.Turns,
-			})
-		}
+		deliverEmptyRunReply(params, deps, result, logger)
 	}
 	if params.Delivery != nil && result.Text != "" && deps.chatport.ParseReplyDirectives == nil {
-		// Wiring bug: with no directive parser the channel reply is silently
-		// dropped — the same broken-deploy class as replyFunc==nil below, so it
-		// escalates the same way (Error + broadcast + transcript note) instead of
-		// a Warn operators never read.
-		logger.Error("parseReplyDirectives is nil — response not delivered (wiring bug)",
-			"session", params.SessionKey,
-			"channel", params.Delivery.Channel,
-			"textLen", len(result.Text))
-		if deps.broadcast != nil {
-			deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
-				Session: params.SessionKey,
-				Channel: params.Delivery.Channel,
-				Reason:  "parse_directives_nil",
-			})
-		}
-		persistReplyDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, nil, logger)
+		reportMissingReplyDirectiveParser(params, deps, result, logger)
 	}
 	if params.Delivery != nil && result.Text != "" && deps.chatport.ParseReplyDirectives != nil {
 		directives := deps.chatport.ParseReplyDirectives(result.Text, params.Delivery.MessageID, "")
-		// IsSilent suppresses TEXT delivery only. Media tokens represent
-		// explicit agent intent ("send this image/audio") and are delivered
-		// regardless — otherwise an agent reply of "NO_REPLY [[media:url]]"
-		// would silently drop the media the agent clearly wanted to send.
-		if !directives.IsSilent {
-			// stripReasoningLeak matches the sync path's cleanup so the channel
-			// reply never carries leaked chain-of-thought delimiters either.
-			replyText := stripReasoningLeak(jsonutil.StripThinkingTags(directives.Text))
-			replyText = strings.TrimSpace(replyText)
+		replyCancel := deliverDirectiveReplyText(params, deps, result, directives, sseDelivered, logger)
+		defer replyCancel()
 
-			// Optionally surface extended-thinking text to the channel reply.
-			// Gated by the session flag so the noise stays opt-in. The reply
-			// carries a collapsible thinking block that stays hidden by default.
-			if showThinkingInChat(deps, params.SessionKey) && result.Thinking != "" {
-				if formatted := formatThinkingForChannel(params.Delivery.Channel, result.Thinking); formatted != "" {
-					if replyText != "" {
-						replyText = formatted + "\n\n" + replyText
-					} else {
-						replyText = formatted
-					}
-				}
+		deliverDirectiveMedia(params, deps, directives, logger)
+	}
+}
+
+// deliverEmptyRunReply preserves the empty-output decision tree: abnormal
+// stops receive a bounded fallback reply, while legitimate tool-only empties
+// remain observable through chat.empty_response.
+func deliverEmptyRunReply(params RunParams, deps runDeps, result *agent.AgentResult, logger *slog.Logger) {
+	logger.Warn("agent produced empty response, nothing to deliver",
+		"session", params.SessionKey,
+		"channel", params.Delivery.Channel,
+		"turns", result.Turns,
+		"stopReason", result.StopReason,
+		"inputTokens", result.Usage.InputTokens,
+		"outputTokens", result.Usage.OutputTokens)
+
+	fallbackMsg := fallbackForStopReason(result.StopReason)
+	if fallbackMsg == "" && isEmptyFinalResult(result) {
+		fallbackMsg = fallbackForEmptyFinalReply()
+	}
+	if fallbackMsg != "" && deps.callbacks.replyFunc != nil {
+		replyCtx, replyCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := deps.callbacks.replyFunc(replyCtx, params.Delivery, fallbackMsg); err != nil {
+			logger.Error("fallback delivery failed",
+				"error", err, "stopReason", result.StopReason,
+				"session", params.SessionKey)
+			if deps.broadcast != nil {
+				deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
+					Session: params.SessionKey,
+					Channel: params.Delivery.Channel,
+					Reason:  "stop_fallback_error",
+					Error:   err.Error(),
+				})
 			}
-
-			if replyText != "" {
-				replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer replyCancel()
-				// A nil replyFunc is only a wiring bug when there is a real
-				// channel-PUSH surface that did NOT already get the reply another
-				// way. Three run shapes legitimately have no such surface, so a
-				// missing replyFunc is the expected state there, not an operator
-				// alarm:
-				//   - native "client" channel WHOSE reply already went out over SSE
-				//     (sseDelivered: handleRunSuccess called EmitComplete). The app
-				//     receives replies through the SSE broadcaster, never a
-				//     channel-push replyFunc, so a nil replyFunc there is expected.
-				//     Without this, every async completion on a native session
-				//     (subnotify sub-agent relay, drained pending message) fired a
-				//     false "채팅 응답 전달 실패" alarm even though the reply reached
-				//     the device. A client session with NO broadcaster (sseDelivered
-				//     false) still escalates — that reply reached neither surface.
-				//   - sub-agent (child) sessions — the parent reads their result via
-				//     session.LastOutput, not a channel push (SpawnedBy is set when
-				//     the spawn captured a non-empty parent key);
-				//   - channel-less runs — deliveryFromSessionKey yields an empty
-				//     Delivery.Channel, so there is no channel a reply could reach.
-				//     (The old ":label:ts" orphan from a sync-spawned sub-agent no
-				//     longer occurs — OnTurnInit binds the session key into the tool
-				//     context on every turn, sync entries included — but this guard
-				//     holds regardless.)
-				noUserChannel := isSubagentSession(deps, params.SessionKey) ||
-					params.Delivery.Channel == "" ||
-					(params.Delivery.Channel == "client" && sseDelivered)
-				if deps.callbacks.replyFunc == nil {
-					if noUserChannel {
-						// Expected: no channel to deliver to. Log quietly and skip the
-						// operator escalation (Error + chat.delivery_failed broadcast +
-						// transcript note) that would otherwise fire as a false alarm
-						// on every sub-agent / channel-less completion.
-						logger.Debug("run produced reply text but has no channel replyFunc (expected: sub-agent or channel-less session; output read via LastOutput)",
-							"session", params.SessionKey,
-							"channel", params.Delivery.Channel,
-							"textLen", len(replyText))
-					} else {
-						// Wiring bug: reply callback not registered. Escalate so
-						// operators notice — silent Warn was hiding broken deploys.
-						logger.Error("replyFunc is nil — response not delivered (wiring bug)",
-							"session", params.SessionKey,
-							"channel", params.Delivery.Channel,
-							"textLen", len(replyText))
-						if deps.broadcast != nil {
-							deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
-								Session: params.SessionKey,
-								Channel: params.Delivery.Channel,
-								Reason:  "reply_func_nil",
-							})
-						}
-						persistReplyDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, nil, logger)
-					}
-				} else {
-					// Primary path: channel-specific reply function (handles dedup,
-					// formatting, chunking, etc.). Retry once on transient errors
-					// so flaky networks don't silently drop the reply.
-					err := deps.callbacks.replyFunc(replyCtx, params.Delivery, replyText)
-					if err != nil {
-						logger.Warn("channel reply failed, retrying once",
-							"error", err, "channel", params.Delivery.Channel)
-						time.Sleep(500 * time.Millisecond)
-						err = deps.callbacks.replyFunc(replyCtx, params.Delivery, replyText)
-					}
-					if err != nil {
-						logger.Error("channel reply failed after retry",
-							"error", err, "channel", params.Delivery.Channel,
-							"session", params.SessionKey)
-						if deps.broadcast != nil {
-							deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
-								Session: params.SessionKey,
-								Channel: params.Delivery.Channel,
-								Reason:  "reply_func_error",
-								Error:   err.Error(),
-							})
-						}
-						// Record the failure in the transcript so the next turn's
-						// agent has ground truth instead of inventing reasons.
-						persistReplyDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, err, logger)
-					}
-				}
-			}
-
-		} else {
-			logger.Info("suppressing silent reply (NO_REPLY); streamed draft preserved",
-				"hasMedia", len(directives.MediaURLs) > 0)
-			// Do not delete the draft: content already streamed to the user
-			// stays visible. NO_REPLY after streaming means "stop editing",
-			// not "retract what was shown".
 		}
+		replyCancel()
+		return
+	}
+	if deps.broadcast != nil {
+		deps.broadcast("chat.empty_response", ChatEmptyResponseEvent{
+			Session:    params.SessionKey,
+			Channel:    params.Delivery.Channel,
+			StopReason: result.StopReason,
+			Turns:      result.Turns,
+		})
+	}
+}
 
-		// Deliver MEDIA: tokens extracted by ParseReplyDirectives. Always run
-		// whenever media tokens are present — including when IsSilent is true —
-		// because the agent explicitly included them as output intent.
-		// [[audio_as_voice]] tag forces voice mode for audio files.
-		if deps.callbacks.mediaSendFn != nil && len(directives.MediaURLs) > 0 {
-			mediaCtx, mediaCancel := context.WithTimeout(context.Background(), 60*time.Second)
-			defer mediaCancel()
-			var failedURLs []string
-			for _, mediaURL := range directives.MediaURLs {
-				mediaType := ""
-				if directives.AudioAsVoice {
-					mediaType = "voice"
-				}
-				if err := deps.callbacks.mediaSendFn(mediaCtx, params.Delivery, mediaURL, mediaType, "", false); err != nil {
-					logger.Warn("media url send failed", "url", mediaURL, "error", err)
-					failedURLs = append(failedURLs, mediaURL)
-				}
-			}
-			if len(failedURLs) > 0 {
-				// The agent intended to send this media and it did not arrive —
-				// a user-visible delivery failure → Error, alongside the existing
-				// broadcast + transcript note (per-URL detail stays at Warn above).
-				logger.Error("media delivery failed",
-					"session", params.SessionKey,
-					"channel", params.Delivery.Channel,
-					"failed", len(failedURLs),
-					"total", len(directives.MediaURLs))
-				if deps.broadcast != nil {
-					deps.broadcast("chat.media_delivery_failed", ChatMediaDeliveryFailedEvent{
-						Session: params.SessionKey,
-						Channel: params.Delivery.Channel,
-						Count:   len(failedURLs),
-						Total:   len(directives.MediaURLs),
-						URLs:    failedURLs,
-					})
-				}
-				persistMediaDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, failedURLs, logger)
-			}
+func reportMissingReplyDirectiveParser(params RunParams, deps runDeps, result *agent.AgentResult, logger *slog.Logger) {
+	logger.Error("parseReplyDirectives is nil — response not delivered (wiring bug)",
+		"session", params.SessionKey,
+		"channel", params.Delivery.Channel,
+		"textLen", len(result.Text))
+	if deps.broadcast != nil {
+		deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
+			Session: params.SessionKey,
+			Channel: params.Delivery.Channel,
+			Reason:  "parse_directives_nil",
+		})
+	}
+	persistReplyDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, nil, logger)
+}
+
+// deliverDirectiveReplyText applies the directive-level silent decision before
+// any channel side effect. Silent replies intentionally leave streamed drafts
+// untouched; media delivery remains a later independent stage.
+func deliverDirectiveReplyText(
+	params RunParams,
+	deps runDeps,
+	result *agent.AgentResult,
+	directives chatport.ReplyDirectives,
+	sseDelivered bool,
+	logger *slog.Logger,
+) context.CancelFunc {
+	if directives.IsSilent {
+		logger.Info("suppressing silent reply (NO_REPLY); streamed draft preserved",
+			"hasMedia", len(directives.MediaURLs) > 0)
+		return func() {}
+	}
+	replyText := formatRunReplyText(params, deps, result, directives.Text)
+	if replyText == "" {
+		return func() {}
+	}
+	return deliverChannelReply(params, deps, replyText, sseDelivered, logger)
+}
+
+func formatRunReplyText(params RunParams, deps runDeps, result *agent.AgentResult, text string) string {
+	replyText := strings.TrimSpace(stripReasoningLeak(jsonutil.StripThinkingTags(text)))
+	if !showThinkingInChat(deps, params.SessionKey) || result.Thinking == "" {
+		return replyText
+	}
+	formatted := formatThinkingForChannel(params.Delivery.Channel, result.Thinking)
+	if formatted == "" {
+		return replyText
+	}
+	if replyText == "" {
+		return formatted
+	}
+	return formatted + "\n\n" + replyText
+}
+
+func deliverChannelReply(params RunParams, deps runDeps, replyText string, sseDelivered bool, logger *slog.Logger) context.CancelFunc {
+	replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if deps.callbacks.replyFunc == nil {
+		handleMissingChannelReply(params, deps, replyText, sseDelivered, logger)
+		return replyCancel
+	}
+	sendChannelReply(replyCtx, params, deps, replyText, logger)
+	return replyCancel
+}
+
+// channelReplyAlreadyHandled identifies run shapes with no pending channel
+// push: sub-agents, channel-less runs, and native replies already sent by SSE.
+func channelReplyAlreadyHandled(params RunParams, deps runDeps, sseDelivered bool) bool {
+	return isSubagentSession(deps, params.SessionKey) ||
+		params.Delivery.Channel == "" ||
+		(params.Delivery.Channel == "client" && sseDelivered)
+}
+
+func handleMissingChannelReply(params RunParams, deps runDeps, replyText string, sseDelivered bool, logger *slog.Logger) {
+	if channelReplyAlreadyHandled(params, deps, sseDelivered) {
+		logger.Debug("run produced reply text but has no channel replyFunc (expected: sub-agent or channel-less session; output read via LastOutput)",
+			"session", params.SessionKey,
+			"channel", params.Delivery.Channel,
+			"textLen", len(replyText))
+		return
+	}
+	logger.Error("replyFunc is nil — response not delivered (wiring bug)",
+		"session", params.SessionKey,
+		"channel", params.Delivery.Channel,
+		"textLen", len(replyText))
+	if deps.broadcast != nil {
+		deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
+			Session: params.SessionKey,
+			Channel: params.Delivery.Channel,
+			Reason:  "reply_func_nil",
+		})
+	}
+	persistReplyDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, nil, logger)
+}
+
+func sendChannelReply(ctx context.Context, params RunParams, deps runDeps, replyText string, logger *slog.Logger) {
+	err := deps.callbacks.replyFunc(ctx, params.Delivery, replyText)
+	if err != nil {
+		logger.Warn("channel reply failed, retrying once",
+			"error", err, "channel", params.Delivery.Channel)
+		time.Sleep(500 * time.Millisecond)
+		err = deps.callbacks.replyFunc(ctx, params.Delivery, replyText)
+	}
+	if err == nil {
+		return
+	}
+	logger.Error("channel reply failed after retry",
+		"error", err, "channel", params.Delivery.Channel,
+		"session", params.SessionKey)
+	if deps.broadcast != nil {
+		deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
+			Session: params.SessionKey,
+			Channel: params.Delivery.Channel,
+			Reason:  "reply_func_error",
+			Error:   err.Error(),
+		})
+	}
+	persistReplyDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, err, logger)
+}
+
+// deliverDirectiveMedia is deliberately last and independent of text silence:
+// explicit media tokens still express delivery intent after NO_REPLY.
+func deliverDirectiveMedia(
+	params RunParams,
+	deps runDeps,
+	directives chatport.ReplyDirectives,
+	logger *slog.Logger,
+) {
+	if deps.callbacks.mediaSendFn == nil || len(directives.MediaURLs) == 0 {
+		return
+	}
+	mediaCtx, mediaCancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer mediaCancel()
+
+	mediaType := ""
+	if directives.AudioAsVoice {
+		mediaType = "voice"
+	}
+	failedURLs := sendDirectiveMedia(mediaCtx, params, deps, directives.MediaURLs, mediaType, logger)
+	if len(failedURLs) == 0 {
+		return
+	}
+	logger.Error("media delivery failed",
+		"session", params.SessionKey,
+		"channel", params.Delivery.Channel,
+		"failed", len(failedURLs),
+		"total", len(directives.MediaURLs))
+	if deps.broadcast != nil {
+		deps.broadcast("chat.media_delivery_failed", ChatMediaDeliveryFailedEvent{
+			Session: params.SessionKey,
+			Channel: params.Delivery.Channel,
+			Count:   len(failedURLs),
+			Total:   len(directives.MediaURLs),
+			URLs:    failedURLs,
+		})
+	}
+	persistMediaDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, failedURLs, logger)
+}
+
+func sendDirectiveMedia(
+	ctx context.Context,
+	params RunParams,
+	deps runDeps,
+	mediaURLs []string,
+	mediaType string,
+	logger *slog.Logger,
+) []string {
+	var failedURLs []string
+	for _, mediaURL := range mediaURLs {
+		if err := deps.callbacks.mediaSendFn(ctx, params.Delivery, mediaURL, mediaType, "", false); err != nil {
+			logger.Warn("media url send failed", "url", mediaURL, "error", err)
+			failedURLs = append(failedURLs, mediaURL)
 		}
 	}
+	return failedURLs
 }
 
 // handleRunError processes a failed or aborted agent run.

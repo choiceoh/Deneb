@@ -35,7 +35,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
@@ -45,7 +45,7 @@ import (
 // Config supplies the gateway-owned dependencies used by native HTTP handlers.
 type Config struct {
 	Dispatcher        *rpc.Dispatcher
-	ChatHandler       *chat.Handler
+	ChatHandler       chatport.SyncStreamRunner
 	PushHub           *proactive.Hub
 	ShutdownContext   context.Context
 	Logger            *slog.Logger
@@ -55,7 +55,7 @@ type Config struct {
 // Handler serves the authenticated native-client HTTP surface.
 type Handler struct {
 	dispatcher        *rpc.Dispatcher
-	chatHandler       *chat.Handler
+	chatHandler       chatport.SyncStreamRunner
 	pushHub           *proactive.Hub
 	shutdownContext   context.Context
 	logger            *slog.Logger

@@ -14,7 +14,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textsearch"
@@ -148,7 +148,7 @@ func (s *Store) ensureSession(sessionKey string) *sessionData {
 
 // AppendMessage inserts a ChatMessage into the immutable store.
 // msg_index is auto-assigned as max(msg_index)+1 for the session.
-func (s *Store) AppendMessage(sessionKey string, msg toolctx.ChatMessage) error {
+func (s *Store) AppendMessage(sessionKey string, msg chatport.ChatMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -190,7 +190,7 @@ func (s *Store) AppendMessage(sessionKey string, msg toolctx.ChatMessage) error 
 // assistant turns (thinking + tool_use only) — which indexed JSON syntax and
 // made polaris search snippets read as `[{"type":"thinking",...` (production
 // observation 2026-07-05). Plain-string content passes through unchanged.
-func indexableText(msg toolctx.ChatMessage) string {
+func indexableText(msg chatport.ChatMessage) string {
 	if len(msg.Content) == 0 {
 		return ""
 	}
@@ -268,13 +268,13 @@ func (s *Store) SessionTokens(sessionKey string) (int, error) {
 
 // LoadMessages returns messages in [startIdx, endIdx] range (inclusive).
 // If endIdx < 0, loads from startIdx to the end.
-func (s *Store) LoadMessages(sessionKey string, startIdx, endIdx int) ([]toolctx.ChatMessage, error) {
+func (s *Store) LoadMessages(sessionKey string, startIdx, endIdx int) ([]chatport.ChatMessage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	sd := s.ensureSession(sessionKey)
 
-	var msgs []toolctx.ChatMessage
+	var msgs []chatport.ChatMessage
 	for _, m := range sd.messages {
 		if m.MsgIndex < startIdx {
 			continue
@@ -282,7 +282,7 @@ func (s *Store) LoadMessages(sessionKey string, startIdx, endIdx int) ([]toolctx
 		if endIdx >= 0 && m.MsgIndex > endIdx {
 			continue
 		}
-		msgs = append(msgs, toolctx.ChatMessage{
+		msgs = append(msgs, chatport.ChatMessage{
 			Role:      m.Role,
 			Content:   json.RawMessage(m.Content),
 			Timestamp: m.Timestamp,

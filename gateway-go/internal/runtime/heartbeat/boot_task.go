@@ -19,8 +19,8 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
 
 // Compile-time interface compliance.
@@ -29,7 +29,7 @@ var _ autonomous.PeriodicTask = (*bootTask)(nil)
 // bootTask implements autonomous.PeriodicTask.
 // Runs a full agent turn using BOOT.md content on startup and daily thereafter.
 type bootTask struct {
-	chatHandler *chat.Handler
+	chatHandler chatport.SyncRunner
 	activity    *monitoring.ActivityTracker
 	logger      *slog.Logger
 	homeDir     string
@@ -40,7 +40,7 @@ type bootTask struct {
 type BootTask = bootTask
 
 // NewBootTask constructs the boot worker.
-func NewBootTask(chatHandler *chat.Handler, activity *monitoring.ActivityTracker, logger *slog.Logger, homeDir string) *BootTask {
+func NewBootTask(chatHandler chatport.SyncRunner, activity *monitoring.ActivityTracker, logger *slog.Logger, homeDir string) *BootTask {
 	return &bootTask{chatHandler: chatHandler, activity: activity, logger: logger, homeDir: homeDir}
 }
 
@@ -63,7 +63,7 @@ const defaultBootPrompt = `[시스템 부트 — 게이트웨이 시작됨]
 
 // Run executes one scheduled task cycle.
 func (t *bootTask) Run(ctx context.Context) error {
-	if t.chatHandler == nil {
+	if t.chatHandler == nil || !t.chatHandler.ChatReady() {
 		return fmt.Errorf("boot: chat handler not available")
 	}
 
@@ -86,7 +86,9 @@ func (t *bootTask) Run(ctx context.Context) error {
 	runCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	result, err := t.chatHandler.SendSync(runCtx, "boot", prompt, "", &chat.SyncOptions{
+	result, err := t.chatHandler.RunSync(runCtx, chatport.SyncRequest{
+		SessionKey:       "boot",
+		Message:          prompt,
 		ToolPreset:       string(toolpreset.PresetBoot),
 		MaxHistoryTokens: 30_000,
 		// Boot is a stateless startup turn — it inspects system status and

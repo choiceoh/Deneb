@@ -26,7 +26,6 @@ import sys
 import time
 import argparse
 import re
-import os
 import random
 import socket
 import sqlite3
@@ -753,8 +752,6 @@ def evaluate_check(check_def, capture: ChatCapture) -> tuple[str, bool, str]:
 
     Returns (check_name, passed, detail).
     """
-    text = capture.reply_text
-
     # Simple string check: "rpc_success", "korean", etc.
     if isinstance(check_def, str):
         return _eval_simple(check_def, capture)

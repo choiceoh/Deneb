@@ -8,16 +8,16 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 // cronChatAdapter adapts chat.Handler to the cron.AgentRunner interface,
 // allowing cron jobs to execute agent turns via the chat pipeline.
 type cronChatAdapter struct {
-	chat   *chat.Handler
+	chat   chatport.SyncRunner
 	logger *slog.Logger
 	// weeklyReportData collects the formal weekly-report data (wiki-based JSON
 	// envelope) so a "/weekly" cron payload runs the LLM against pre-collected
@@ -42,7 +42,7 @@ type Runner = cronChatAdapter
 
 // Config contains the chat and weekly-report boundaries used by Runner.
 type Config struct {
-	Chat              *chat.Handler
+	Chat              chatport.SyncRunner
 	Logger            *slog.Logger
 	WeeklyReportData  func(context.Context) (string, error)
 	WeeklyReportText  func(context.Context) (string, error)
@@ -121,9 +121,14 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 	// is a benign no-op rather than an outage to report. This stops the LLM
 	// from translating a tool error into a "채널이 연결되지 않았다"
 	// apology that itself gets delivered through that very channel.
-	opts := &chat.SyncOptions{AutoDeliveredOutput: true, Thinking: params.Thinking}
+	req := chatport.SyncRequest{
+		SessionKey:          params.SessionKey,
+		Model:               "",
+		AutoDeliveredOutput: true,
+		Thinking:            params.Thinking,
+	}
 	if params.Channel != "" && params.To != "" {
-		opts.Delivery = &chat.DeliveryContext{
+		req.Delivery = &chatport.DeliveryContext{
 			Channel:   params.Channel,
 			To:        params.To,
 			AccountID: params.AccountID,
@@ -155,7 +160,11 @@ func (a *cronChatAdapter) RunAgentTurn(ctx context.Context, params cron.AgentTur
 			a.logger.Warn("deterministic weekly text unavailable; falling back to agent turn", "error", terr)
 		}
 	}
-	result, err := a.chat.SendSync(ctx, params.SessionKey, command, "", opts)
+	if a.chat == nil || !a.chat.ChatReady() {
+		return "", fmt.Errorf("cron chat runner is not ready")
+	}
+	req.Message = command
+	result, err := a.chat.RunSync(ctx, req)
 	if err != nil {
 		return "", err
 	}

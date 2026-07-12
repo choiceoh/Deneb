@@ -10,7 +10,7 @@ fi
 args=(
   README.md
   docs
-  --skip=*.png,*.jpg,*.jpeg,*.gif,*.svg
+  '--skip=*.png,*.jpg,*.jpeg,*.gif,*.svg'
   -D
   -
   -D

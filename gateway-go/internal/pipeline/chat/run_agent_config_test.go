@@ -9,7 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
 
 // OnTurnInit is the only ctx-decoration point shared by BOTH run entries:

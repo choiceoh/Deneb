@@ -346,255 +346,283 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 	codeIdx := wd.buildCodeIndex()
 
 	for _, u := range updates {
-		if u.Path == "" || u.Title == "" {
+		var ready bool
+		u, ready = wd.prepareDreamUpdate(u)
+		if !ready {
 			continue
 		}
-		// The LLM occasionally wraps its proposed content in a frontmatter
-		// block; strip it here so the append/create paths below never fold a
-		// second frontmatter into the page body. (Store.WritePage strips the
-		// create case too, but the update-append at existing.Body += u.Content
-		// would otherwise embed it mid-body, out of that helper's reach.)
-		u.Content = StripLeadingFrontmatter(u.Content)
-		if !strings.HasSuffix(u.Path, ".md") {
-			u.Path += ".md"
-		}
-		// Strip a wikilink namespace ("w:") the model sometimes prefixes onto the
-		// path's category directory (e.g. "w:프로젝트/…"). Categories are the page's
-		// directory (Store.Stats uses filepath.Dir), so a "w:프로젝트/" path files the
-		// page under a phantom "w:프로젝트" that duplicates the real "프로젝트" in the
-		// browser and, sharing a title, slips past the dedup below. Normalizing here
-		// folds both away and lets the dedup catch the duplicate.
-		u.Path = normalizeWikiPath(u.Path)
-		// Fold the page onto the 5-category taxonomy by its *directory*. The
-		// bucket is the path's leading dir (Store.Stats uses filepath.Dir), so the
-		// path — not the category field — is what files the page. This remaps
-		// legacy dir names (거래/결정→프로젝트, 사람→인물, 기술→업무, 선호→사용자,
-		// 운영시스템→시스템) and routes anything unrecognized to the 기타 catch-all,
-		// returning the category that matches the corrected directory so the
-		// frontmatter and the on-disk bucket agree.
-		if newPath, newCat := normalizeCategoryPath(u.Path, u.Category); newPath != u.Path || newCat != u.Category {
-			wd.logger.Info("wiki-dream: normalized category path",
-				"from", u.Path, "fromCat", u.Category, "to", newPath, "toCat", newCat)
-			u.Path, u.Category = newPath, newCat
-		}
-		// Project layout: a flat 프로젝트/<name>.md is the legacy 대표페이지 form —
-		// route it onto the in-folder slot (프로젝트/<name>/대표.md) so the dreamer
-		// can't resurrect flat pages after the layout migration.
-		if newPath := NormalizeProjectPagePath(u.Path); newPath != u.Path {
-			wd.logger.Info("wiki-dream: normalized project layout path",
-				"from", u.Path, "to", newPath)
-			u.Path = newPath
-		}
-		// New project folders must not be named after a mail subject
-		// ("…-요청-(2026-06-25)") — strip the debris at mint time; existing
-		// folders keep their paths.
-		if newPath := wd.store.CleanNewProjectRepPath(u.Path); newPath != u.Path {
-			wd.logger.Info("wiki-dream: cleaned mail-subject project name",
-				"from", u.Path, "to", newPath)
-			u.Path = newPath
-		}
-
-		// Guard: date-titled daily mail digests are neither created nor grown —
-		// the same batch already distributes those facts onto per-project pages,
-		// and a "오늘의 메일 분석" page re-spawns daily (2026-07-03 observed:
-		// 기타/daily mail analysis.md). See isDailyMailDigestPage.
-		if isDailyMailDigestPage(u.Title, u.Path) {
-			wd.logger.Warn("wiki-dream: skipped daily mail digest page",
-				"path", u.Path, "title", u.Title)
-			continue
-		}
-		// Duplicate prevention: if creating, check for existing similar pages.
-		if u.Action == "create" {
-			if existing := wd.findExistingPage(u); existing != "" {
-				wd.logger.Info("wiki-dream: duplicate detected, converting to update",
-					"proposed", u.Path, "existing", existing)
-				u.Action = "update"
-				u.Path = existing
-			}
-		}
-		// The update→create-on-missing fallback must not bypass dedup either:
-		// a slug variant of an existing page would silently resurrect a
-		// near-duplicate (the 2026-07 duplicate incident's root was exactly
-		// creation-without-search). One page read per update is cheap, and the
-		// single-writer dreamer makes the read-then-update window benign.
-		if u.Action == "update" {
-			if pg, _ := wd.store.ReadPage(u.Path); pg == nil {
-				if existing := wd.findExistingPage(u); existing != "" {
-					wd.logger.Info("wiki-dream: missing update target matched existing page",
-						"proposed", u.Path, "existing", existing)
-					u.Path = existing
-				}
-			}
-		}
-
-		// Guard: a 진행 로그 section aimed at a 대표페이지 belongs in the project's
-		// 로그.md slot (wiki-layout 불변식) — the synthesis prompt says so, but the
-		// model violates it, so the apply pass reroutes structurally. Runs AFTER
-		// the dedup retargets above so the log lands under the project that will
-		// actually receive the content — rerouting on the proposed path filed a
-		// slug-variant duplicate's log under a second project folder. On append
-		// failure the section stays in u.Content (imperfect placement beats
-		// silently losing the events).
-		if project, ok := ProjectNameOf(u.Path); ok && IsProjectRepPage(u.Path) && u.Content != "" {
-			if body, logLines := splitProgressLogSection(u.Content); logLines != "" {
-				if wd.appendProjectLog(project, logLines) {
-					u.Content = body
-					wd.logger.Info("wiki-dream: rerouted 진행 로그 section to project log",
-						"project", project)
-				}
-			}
-		}
+		u = wd.retargetDreamUpdate(u)
+		u = wd.rerouteDreamProgressLog(u)
 
 		// Stamp the project's frozen code: a child filing inherits the folder's
 		// code; a new project mints one from the LLM stem (Go assigns the 순번).
 		code := codeIdx.resolveCode(u)
 
-		wrote := false
-		switch u.Action {
-		case "create":
-			page := newPageFromUpdate(u, code)
-			if u.Content != "" {
-				page.Body = u.Content
-			} else {
-				page.Body = fmt.Sprintf("# %s\n\n## 요약\n\n\n## 핵심 사실\n\n\n## 변경 이력\n- %s: 페이지 생성 (dreaming)\n",
-					u.Title, time.Now().Format("2006-01-02"))
-			}
-			// Append a related-docs section if related pages are provided.
-			if len(u.Related) > 0 {
-				page.Body += "\n\n## 관련 문서\n"
-				for _, r := range u.Related {
-					page.Body += fmt.Sprintf("- [[%s]]\n", r)
-				}
-			}
-			if err := wd.store.WritePage(u.Path, page); err != nil {
-				wd.logger.Warn("wiki-dream: create page failed", "path", u.Path, "error", err)
-				continue
-			}
-			created++
-			wrote = true
-
-		case "update":
-			// Read-modify-write through UpdatePage so the append can't be clobbered
-			// by a concurrent writer of the same page (the wiki-research turn and
-			// mail analysis both target 프로젝트 pages). createdThis distinguishes the
-			// create-on-missing fallback from a true append for the counters.
-			createdThis := false
-			err := wd.store.UpdatePage(u.Path, func(existing *Page) (*Page, error) {
-				if existing == nil {
-					// Page doesn't exist — create it instead.
-					page := newPageFromUpdate(u, code)
-					page.Body = u.Content
-					createdThis = true
-					return page, nil
-				}
-
-				// Append content to existing page. Stamp the code only when the page
-				// lacks one — a frozen code is never overwritten.
-				if code != "" && existing.Meta.Code == "" {
-					existing.Meta.Code = code
-				}
-				if u.Content != "" {
-					merged := mergeUpdateContent(existing.Body, u.Content)
-					if merged == existing.Body {
-						wd.logger.Info("wiki-dream: update content already on page; append skipped", "path", u.Path)
-					}
-					existing.Body = merged
-				}
-				if len(u.Tags) > 0 {
-					existing.Meta.Tags = mergeTags(existing.Meta.Tags, u.Tags)
-				}
-				if u.Importance > existing.Meta.Importance {
-					existing.Meta.Importance = u.Importance
-				}
-				if u.ID != "" {
-					existing.Meta.ID = u.ID
-				}
-				if u.Summary != "" {
-					existing.Meta.Summary = u.Summary
-				}
-				if len(u.Related) > 0 {
-					existing.Meta.Related = mergeRelated(existing.Meta.Related, u.Related)
-				}
-				if u.Type != "" {
-					existing.Meta.Type = u.Type
-				}
-				if u.Confidence != "" {
-					existing.Meta.Confidence = u.Confidence
-				}
-				if u.Due != "" {
-					existing.Meta.Due = u.Due
-				}
-				if u.Resource != "" {
-					existing.Meta.Resource = u.Resource
-				}
-				if len(u.Cues) > 0 {
-					existing.Meta.Cues = mergeCues(existing.Meta.Cues, u.Cues)
-				}
-				// Fill-only: the dreamer may supply a missing 거래처 but never
-				// overwrites one already set (the operator backfill is authoritative).
-				if u.Client != "" && existing.Meta.Client == "" {
-					existing.Meta.Client = u.Client
-				}
-				existing.Meta.Updated = time.Now().Format("2006-01-02")
-				return existing, nil
-			})
-			if err != nil {
-				wd.logger.Warn("wiki-dream: update page failed", "path", u.Path, "error", err)
-				continue
-			}
-			if createdThis {
-				created++
-			} else {
-				updated++
-			}
-			wrote = true
+		outcome := wd.persistDreamUpdate(u, code)
+		if outcome.failed {
+			continue
 		}
+		created += outcome.created
+		updated += outcome.updated
 
 		// 사용자-category writes are the user model — counted separately so the
 		// dream report/notification surfaces how the model of the user itself
 		// evolved (the DreamReport counter existed but was never fed).
-		if wrote && strings.HasPrefix(u.Path, userPrefCategory+"/") {
+		if outcome.wrote && strings.HasPrefix(u.Path, userPrefCategory+"/") {
 			userPages++
 		}
 
-		// Contradiction handling: when the LLM flagged this update as REPLACING
-		// one or more existing pages' facts, stamp each old page so search
-		// demotes it (the page itself stays readable — history is memory too).
-		for _, old := range u.Supersedes {
-			if old == "" {
-				continue
-			}
-			if err := wd.store.MarkSuperseded(old, u.Path); err != nil {
-				wd.logger.Warn("wiki-dream: supersede mark failed",
-					"old", old, "new", u.Path, "error", err)
-			} else {
-				wd.logger.Info("wiki-dream: page superseded", "old", old, "new", u.Path)
-			}
-		}
-
-		// Check page size and split if needed.
-		if maxBytes > 0 {
-			abs := filepath.Join(wd.store.Dir(), u.Path)
-			if info, err := os.Stat(abs); err == nil && info.Size() > int64(maxBytes) {
-				subPaths, splitErr := wd.store.SplitPage(u.Path, maxBytes)
-				if splitErr != nil {
-					wd.logger.Warn("wiki-dream: split failed",
-						"path", u.Path, "error", splitErr)
-					oversized = append(oversized, u.Path)
-				} else if len(subPaths) > 0 {
-					wd.logger.Info("wiki-dream: page split",
-						"path", u.Path, "subPages", len(subPaths))
-					created += len(subPaths)
-				} else {
-					wd.logger.Warn("wiki-dream: page oversized but cannot split",
-						"path", u.Path, "size", info.Size())
-					oversized = append(oversized, u.Path)
-				}
-			}
+		wd.markDreamSuperseded(u)
+		splitCreated, stillOversized := wd.splitOversizedDreamPage(u.Path, maxBytes)
+		created += splitCreated
+		if stillOversized {
+			oversized = append(oversized, u.Path)
 		}
 	}
 
 	return created, updated, userPages, oversized
+}
+
+// prepareDreamUpdate performs deterministic path/content normalization and the
+// early digest guard. Returning false means the proposal has no write-side
+// effects; duplicate lookup and progress-log rerouting intentionally happen in
+// later stages.
+func (wd *WikiDreamer) prepareDreamUpdate(u wikiUpdate) (wikiUpdate, bool) {
+	if u.Path == "" || u.Title == "" {
+		return u, false
+	}
+	// Store.WritePage also strips frontmatter on create, but update content is
+	// merged before that boundary and must be cleaned here.
+	u.Content = StripLeadingFrontmatter(u.Content)
+	if !strings.HasSuffix(u.Path, ".md") {
+		u.Path += ".md"
+	}
+	u.Path = normalizeWikiPath(u.Path)
+
+	if newPath, newCategory := normalizeCategoryPath(u.Path, u.Category); newPath != u.Path || newCategory != u.Category {
+		wd.logger.Info("wiki-dream: normalized category path",
+			"from", u.Path, "fromCat", u.Category, "to", newPath, "toCat", newCategory)
+		u.Path, u.Category = newPath, newCategory
+	}
+	if newPath := NormalizeProjectPagePath(u.Path); newPath != u.Path {
+		wd.logger.Info("wiki-dream: normalized project layout path",
+			"from", u.Path, "to", newPath)
+		u.Path = newPath
+	}
+	if newPath := wd.store.CleanNewProjectRepPath(u.Path); newPath != u.Path {
+		wd.logger.Info("wiki-dream: cleaned mail-subject project name",
+			"from", u.Path, "to", newPath)
+		u.Path = newPath
+	}
+	if isDailyMailDigestPage(u.Title, u.Path) {
+		wd.logger.Warn("wiki-dream: skipped daily mail digest page",
+			"path", u.Path, "title", u.Title)
+		return u, false
+	}
+	return u, true
+}
+
+// retargetDreamUpdate prevents both explicit creates and update-on-missing
+// fallbacks from creating a slug/ID/code variant of an existing page.
+func (wd *WikiDreamer) retargetDreamUpdate(u wikiUpdate) wikiUpdate {
+	if u.Action == "create" {
+		if existing := wd.findExistingPage(u); existing != "" {
+			wd.logger.Info("wiki-dream: duplicate detected, converting to update",
+				"proposed", u.Path, "existing", existing)
+			u.Action = "update"
+			u.Path = existing
+		}
+	}
+	if u.Action != "update" {
+		return u
+	}
+	if page, _ := wd.store.ReadPage(u.Path); page != nil {
+		return u
+	}
+	if existing := wd.findExistingPage(u); existing != "" {
+		wd.logger.Info("wiki-dream: missing update target matched existing page",
+			"proposed", u.Path, "existing", existing)
+		u.Path = existing
+	}
+	return u
+}
+
+// rerouteDreamProgressLog runs after dedup retargeting so the event lands in
+// the actual project's 로그.md. On append failure the section stays in Content,
+// preserving the former imperfect-placement-over-data-loss behavior.
+func (wd *WikiDreamer) rerouteDreamProgressLog(u wikiUpdate) wikiUpdate {
+	project, isProject := ProjectNameOf(u.Path)
+	if !isProject || !IsProjectRepPage(u.Path) || u.Content == "" {
+		return u
+	}
+	body, logLines := splitProgressLogSection(u.Content)
+	if logLines == "" || !wd.appendProjectLog(project, logLines) {
+		return u
+	}
+	u.Content = body
+	wd.logger.Info("wiki-dream: rerouted 진행 로그 section to project log",
+		"project", project)
+	return u
+}
+
+type dreamWriteOutcome struct {
+	created int
+	updated int
+	wrote   bool
+	failed  bool
+}
+
+// persistDreamUpdate owns the create/update dispatch. Unknown actions retain
+// the historical no-write/non-error outcome so post-write maintenance still
+// observes the target path; actual storage errors stop later side effects for
+// this proposal while the outer batch continues.
+func (wd *WikiDreamer) persistDreamUpdate(u wikiUpdate, code string) dreamWriteOutcome {
+	switch u.Action {
+	case "create":
+		if err := wd.createDreamPage(u, code); err != nil {
+			wd.logger.Warn("wiki-dream: create page failed", "path", u.Path, "error", err)
+			return dreamWriteOutcome{failed: true}
+		}
+		return dreamWriteOutcome{created: 1, wrote: true}
+	case "update":
+		created, err := wd.updateDreamPage(u, code)
+		if err != nil {
+			wd.logger.Warn("wiki-dream: update page failed", "path", u.Path, "error", err)
+			return dreamWriteOutcome{failed: true}
+		}
+		if created {
+			return dreamWriteOutcome{created: 1, wrote: true}
+		}
+		return dreamWriteOutcome{updated: 1, wrote: true}
+	default:
+		return dreamWriteOutcome{}
+	}
+}
+
+func (wd *WikiDreamer) createDreamPage(u wikiUpdate, code string) error {
+	page := newPageFromUpdate(u, code)
+	if u.Content != "" {
+		page.Body = u.Content
+	} else {
+		page.Body = fmt.Sprintf("# %s\n\n## 요약\n\n\n## 핵심 사실\n\n\n## 변경 이력\n- %s: 페이지 생성 (dreaming)\n",
+			u.Title, time.Now().Format("2006-01-02"))
+	}
+	if len(u.Related) > 0 {
+		page.Body += "\n\n## 관련 문서\n"
+		for _, related := range u.Related {
+			page.Body += fmt.Sprintf("- [[%s]]\n", related)
+		}
+	}
+	return wd.store.WritePage(u.Path, page)
+}
+
+// updateDreamPage keeps the read-modify-write under Store.UpdatePage. The
+// boolean distinguishes update-on-missing creation from a true append so the
+// original counters remain exact.
+func (wd *WikiDreamer) updateDreamPage(u wikiUpdate, code string) (bool, error) {
+	created := false
+	err := wd.store.UpdatePage(u.Path, func(existing *Page) (*Page, error) {
+		if existing == nil {
+			page := newPageFromUpdate(u, code)
+			page.Body = u.Content
+			created = true
+			return page, nil
+		}
+		wd.mergeDreamUpdate(existing, u, code)
+		return existing, nil
+	})
+	return created, err
+}
+
+func (wd *WikiDreamer) mergeDreamUpdate(existing *Page, u wikiUpdate, code string) {
+	if code != "" && existing.Meta.Code == "" {
+		existing.Meta.Code = code
+	}
+	if u.Content != "" {
+		merged := mergeUpdateContent(existing.Body, u.Content)
+		if merged == existing.Body {
+			wd.logger.Info("wiki-dream: update content already on page; append skipped", "path", u.Path)
+		}
+		existing.Body = merged
+	}
+	if len(u.Tags) > 0 {
+		existing.Meta.Tags = mergeTags(existing.Meta.Tags, u.Tags)
+	}
+	if u.Importance > existing.Meta.Importance {
+		existing.Meta.Importance = u.Importance
+	}
+	if u.ID != "" {
+		existing.Meta.ID = u.ID
+	}
+	if u.Summary != "" {
+		existing.Meta.Summary = u.Summary
+	}
+	if len(u.Related) > 0 {
+		existing.Meta.Related = mergeRelated(existing.Meta.Related, u.Related)
+	}
+	if u.Type != "" {
+		existing.Meta.Type = u.Type
+	}
+	if u.Confidence != "" {
+		existing.Meta.Confidence = u.Confidence
+	}
+	if u.Due != "" {
+		existing.Meta.Due = u.Due
+	}
+	if u.Resource != "" {
+		existing.Meta.Resource = u.Resource
+	}
+	if len(u.Cues) > 0 {
+		existing.Meta.Cues = mergeCues(existing.Meta.Cues, u.Cues)
+	}
+	// Fill-only: an operator-set client remains authoritative.
+	if u.Client != "" && existing.Meta.Client == "" {
+		existing.Meta.Client = u.Client
+	}
+	existing.Meta.Updated = time.Now().Format("2006-01-02")
+}
+
+// markDreamSuperseded is deliberately after a non-failed persist. A failed
+// target write must not demote the pages it claimed to replace.
+func (wd *WikiDreamer) markDreamSuperseded(u wikiUpdate) {
+	for _, old := range u.Supersedes {
+		if old == "" {
+			continue
+		}
+		if err := wd.store.MarkSuperseded(old, u.Path); err != nil {
+			wd.logger.Warn("wiki-dream: supersede mark failed",
+				"old", old, "new", u.Path, "error", err)
+			continue
+		}
+		wd.logger.Info("wiki-dream: page superseded", "old", old, "new", u.Path)
+	}
+}
+
+// splitOversizedDreamPage returns newly-created split page count and whether
+// the original remains oversized. Stat failures and non-oversized pages retain
+// the former silent no-op behavior.
+func (wd *WikiDreamer) splitOversizedDreamPage(path string, maxBytes int) (int, bool) {
+	if maxBytes <= 0 {
+		return 0, false
+	}
+	info, err := os.Stat(filepath.Join(wd.store.Dir(), path))
+	if err != nil || info.Size() <= int64(maxBytes) {
+		return 0, false
+	}
+	subPaths, splitErr := wd.store.SplitPage(path, maxBytes)
+	if splitErr != nil {
+		wd.logger.Warn("wiki-dream: split failed",
+			"path", path, "error", splitErr)
+		return 0, true
+	}
+	if len(subPaths) == 0 {
+		wd.logger.Warn("wiki-dream: page oversized but cannot split",
+			"path", path, "size", info.Size())
+		return 0, true
+	}
+	wd.logger.Info("wiki-dream: page split",
+		"path", path, "subPages", len(subPaths))
+	return len(subPaths), false
 }
 
 // rebuildIndex scans all wiki pages and rebuilds the master index. It delegates

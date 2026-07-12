@@ -14,7 +14,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	runtimebriefcase "github.com/choiceoh/deneb/gateway-go/internal/runtime/briefcase"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase/runcontract"
 )
 
 const (
@@ -202,13 +202,13 @@ func cloneArtifactLimits(limits map[string]int64) map[string]int64 {
 // Evaluate grades the next signed checkpoint against a complete RunResult.
 // A critical failure, invalid grade, or run fingerprint mismatch is terminal.
 // A valid non-critical miss returns CONTINUE until MaxCycles, then FAIL.
-func (s *Supervisor) Evaluate(run *runtimebriefcase.RunResult) (SupervisorPublicResult, error) {
+func (s *Supervisor) Evaluate(run *runcontract.RunResult) (SupervisorPublicResult, error) {
 	return s.EvaluateContext(context.Background(), run)
 }
 
 // EvaluateContext evaluates one checkpoint without committing any supervisor
 // state if the context is canceled during grading.
-func (s *Supervisor) EvaluateContext(ctx context.Context, run *runtimebriefcase.RunResult) (SupervisorPublicResult, error) {
+func (s *Supervisor) EvaluateContext(ctx context.Context, run *runcontract.RunResult) (SupervisorPublicResult, error) {
 	if s == nil {
 		return SupervisorPublicResult{}, ErrSupervisorTerminal
 	}
@@ -305,8 +305,8 @@ func (s *Supervisor) EvaluateContext(ctx context.Context, run *runtimebriefcase.
 	return s.publicResult(cycle, decision, score, recoverable, summary), nil
 }
 
-func latestExecutorText(run *runtimebriefcase.RunResult) string {
-	return runtimebriefcase.LatestExecutorText(run)
+func latestExecutorText(run *runcontract.RunResult) string {
+	return runcontract.LatestExecutorText(run)
 }
 
 // HiddenDiagnostics returns a defensive copy of all trusted-side reports.
@@ -386,7 +386,7 @@ func validateSupervisorPlan(plan SupervisorPlan) (float64, error) {
 			return 0, fmt.Errorf("%w: fingerprint.%s must be lowercase SHA-256", ErrInvalidSupervisorPlan, name)
 		}
 	}
-	if arm := plan.Fingerprint.Arm; arm != "" && arm != string(runtimebriefcase.ArmRawPrimary) && arm != string(runtimebriefcase.ArmMemoryAssisted) {
+	if arm := plan.Fingerprint.Arm; arm != "" && arm != string(runcontract.ArmRawPrimary) && arm != string(runcontract.ArmMemoryAssisted) {
 		return 0, fmt.Errorf("%w: unsupported fingerprint arm %q", ErrInvalidSupervisorPlan, arm)
 	}
 	if mode := plan.Fingerprint.APIMode; mode != "" && mode != "openai" && mode != "anthropic" {
@@ -507,14 +507,14 @@ func validateSupervisorCheck(check Check) error {
 	}
 }
 
-func runMismatch(expected SupervisorFingerprint, run *runtimebriefcase.RunResult) string {
+func runMismatch(expected SupervisorFingerprint, run *runcontract.RunResult) string {
 	if run == nil {
 		return "run result is missing"
 	}
 	if run.SchemaVersion != "deneb-briefcase-run/v1" {
 		return "run schema version does not match"
 	}
-	if err := runtimebriefcase.ValidateRunProvenance(run); err != nil {
+	if err := runcontract.ValidateRunProvenance(run); err != nil {
 		return "run provenance is inconsistent"
 	}
 	if len(run.Episodes) == 0 {
@@ -571,7 +571,7 @@ func runMismatch(expected SupervisorFingerprint, run *runtimebriefcase.RunResult
 	return ""
 }
 
-func FingerprintFromRun(run *runtimebriefcase.RunResult) Fingerprint {
+func FingerprintFromRun(run *runcontract.RunResult) Fingerprint {
 	return Fingerprint{
 		RunID: run.RunID, CaseID: run.CaseID, CasepackSHA256: run.CasepackSHA256,
 		Model: run.Model, ProviderModel: run.ProviderModel, Arm: string(run.Arm), APIMode: run.APIMode, RecallMode: run.RecallMode,

@@ -33,7 +33,12 @@ Health Bench 2.0은 줄 수를 줄이는 게임이 아니라, 변경이 국소�
 - 필수 증거가 없으면 check를 tooling error로 끝낸다. 모르는 상태를 건강한
   상태로 간주하지 않는다.
 
-## Rubric 2.1.1
+## Rubric 2.1.2
+
+2.1.2는 Go의 범용 generic constraint를 런타임 동적 계약으로 세지 않고,
+중앙/생성 테스트는 실제 production subject와 검증 provenance가 확인되는 독립
+shape만 인정한다. 생성된 반복 case 수는 점수에 더하지 않으며 test
+maintainability에서는 계속 제외한다.
 
 | Pillar | Weight | 실제로 묻는 질문 | 주요 증거 |
 |---|---:|---|---|

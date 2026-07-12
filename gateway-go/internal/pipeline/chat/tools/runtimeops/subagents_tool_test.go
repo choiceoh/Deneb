@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 // A finished sub-agent returns its stored output, auto-targeted when only one

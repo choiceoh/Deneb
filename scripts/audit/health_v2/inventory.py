@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import history as _history
-from .history import ChangeCommit, HistoryFacts, collect_history
+from .history import ChangeCommit, HistoryFacts, collect_history  # noqa: F401 - fixture API
 
 # Compatibility aliases keep fixture-level tests and local audit tooling stable
 # while history ownership lives in its dedicated module.
@@ -62,13 +62,13 @@ _EXPORTED_NAMED_RE = re.compile(
     r"(?m)^(?:type|const|var)\s+([A-Z][A-Za-z0-9_]*)\b"
 )
 _DECLARED_TYPE_RE = re.compile(
-    r"(?m)^type\s+([A-Za-z_][A-Za-z0-9_]*)\s+(?:\[[^\n]*\]\s*)?"
+    r"(?m)^type\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*\[[^\n]*\])?\s+"
 )
 _GROUP_DECL_RE = re.compile(r"(?m)^(?:const|var)\s*\(")
 _GROUP_EXPORTED_RE = re.compile(r"(?m)^\s+([A-Z][A-Za-z0-9_]*)\b")
 _DYNAMIC_TYPE_RE = re.compile(
-    r"(?:\bany\b|\binterface\s*\{|\bjson\s*\.\s*RawMessage\b|"
-    r"\bmap\s*\[\s*string\s*\]\s*(?:any\b|interface\s*\{))"
+    r"(?:\bany\b|\binterface\s*\{\s*\}|\bjson\s*\.\s*RawMessage\b|"
+    r"\bmap\s*\[\s*string\s*\]\s*(?:any\b|interface\s*\{\s*\}))"
 )
 _DEPENDENCY_BAG_RE = re.compile(r"(?:Deps|Config|Options)$")
 
@@ -440,7 +440,7 @@ def _exported_contract_counts(code: str) -> tuple[int, int]:
         exported += 1
         end = _function_signature_end(code, match.start())
         signature = code[match.start() : end]
-        dynamic += bool(_DYNAMIC_TYPE_RE.search(signature))
+        dynamic += _has_dynamic_contract(signature, match.group(1))
 
     for match in _DECLARED_TYPE_RE.finditer(code):
         name = match.group(1)
@@ -449,7 +449,7 @@ def _exported_contract_counts(code: str) -> tuple[int, int]:
         exported += 1
         end = _type_declaration_end(code, match.end())
         declaration = code[match.start() : end]
-        dynamic += bool(_DYNAMIC_TYPE_RE.search(declaration))
+        dynamic += _has_dynamic_contract(declaration, name)
 
     # Direct const/var declarations not already counted as type/function APIs.
     for match in _EXPORTED_NAMED_RE.finditer(code):
@@ -472,6 +472,36 @@ def _exported_contract_counts(code: str) -> tuple[int, int]:
         exported += group_exported
         dynamic += group_dynamic
     return exported, dynamic
+
+
+def _has_dynamic_contract(declaration: str, name: str) -> bool:
+    """Detect runtime-dynamic values without penalizing universal constraints.
+
+    ``T any`` and ``T interface{}`` constrain a generic at compile time; they do
+    not expose an untyped value. Dynamic types inside the actual parameters,
+    results, fields, or a structural constraint such as ``~map[string]any``
+    remain scored.
+    """
+    name_match = re.search(rf"\b{re.escape(name)}\b", declaration)
+    if name_match is None:
+        return bool(_DYNAMIC_TYPE_RE.search(declaration))
+    opening = name_match.end()
+    while opening < len(declaration) and declaration[opening].isspace():
+        opening += 1
+    if opening >= len(declaration) or declaration[opening] != "[":
+        return bool(_DYNAMIC_TYPE_RE.search(declaration))
+    closing = _balanced_end(declaration, opening, "[", "]")
+    if closing <= opening:
+        return bool(_DYNAMIC_TYPE_RE.search(declaration))
+    constraints = declaration[opening + 1 : closing - 1]
+    constraints = re.sub(r"(?<=\s)any\b(?=\s*(?:,|$))", "constraint", constraints)
+    constraints = re.sub(
+        r"(?<=\s)interface\s*\{\s*\}(?=\s*(?:,|$))",
+        "constraint",
+        constraints,
+    )
+    normalized = declaration[: opening + 1] + constraints + declaration[closing - 1 :]
+    return bool(_DYNAMIC_TYPE_RE.search(normalized))
 
 
 def _group_export_counts(body: str) -> tuple[int, int]:

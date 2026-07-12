@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	runtimebriefcase "github.com/choiceoh/deneb/gateway-go/internal/runtime/briefcase"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase/runcontract"
 )
 
 const supervisorTestDigest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -221,7 +221,7 @@ func signedSupervisorPlan(t *testing.T, maxCycles int, threshold float64, checkp
 		SchemaVersion: SupervisorPlanSchemaVersion,
 		Fingerprint: SupervisorFingerprint{
 			CaseID: "case-1", CasepackSHA256: supervisorTestDigest, Seed: 7,
-			Arm: string(runtimebriefcase.ArmMemoryAssisted), APIMode: "openai",
+			Arm: string(runcontract.ArmMemoryAssisted), APIMode: "openai",
 		},
 		MaxCycles: maxCycles, PassThreshold: threshold, FeedbackDenyTokens: []string{"final"}, Checkpoints: checkpoints,
 	}
@@ -236,22 +236,22 @@ func resignSupervisorPlan(t *testing.T, plan SupervisorPlan) SupervisorPlan {
 	return plan
 }
 
-func supervisorRun(runID, text string) runtimebriefcase.RunResult {
-	result := runtimebriefcase.RunResult{
+func supervisorRun(runID, text string) runcontract.RunResult {
+	result := runcontract.RunResult{
 		SchemaVersion: "deneb-briefcase-run/v1",
 		RunID:         runID, CaseID: "case-1", CasepackSHA256: supervisorTestDigest,
 		Seed: 7, Model: "test-model", ProviderModel: "served-test-model", APIMode: "openai",
-		Arm:        runtimebriefcase.ArmMemoryAssisted,
+		Arm:        runcontract.ArmMemoryAssisted,
 		RecallMode: "enabled", ToolSchemaSHA256: supervisorTestDigest,
 		EndpointSHA256: supervisorTestDigest, BuildSHA256: supervisorTestDigest,
 		ExecutionProfileSHA256: supervisorTestDigest,
-		Episodes: []runtimebriefcase.EpisodeResult{{
+		Episodes: []runcontract.EpisodeResult{{
 			EpisodeID: "episode", Text: text, Model: "test-model", ProviderModel: "served-test-model", StopReason: "end_turn",
 			SystemPromptSHA256: supervisorTestDigest,
 		}},
 		State: json.RawMessage(`{"ok":true}`),
 	}
-	_ = runtimebriefcase.SetRunProvenance(&result)
+	_ = runcontract.SetRunProvenance(&result)
 	return result
 }
 

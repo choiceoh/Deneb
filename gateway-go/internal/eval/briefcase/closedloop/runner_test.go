@@ -16,9 +16,13 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	casepack "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase"
+	feedbackcontract "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase/feedback"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase/runcontract"
 	evalbriefcase "github.com/choiceoh/deneb/gateway-go/internal/eval/briefcase"
 	runtimebriefcase "github.com/choiceoh/deneb/gateway-go/internal/runtime/briefcase"
 )
+
+var _ Executor = (*runtimebriefcase.ChatHarness)(nil)
 
 func TestRunnerExecutesThreeRoleClosedLoop(t *testing.T) {
 	fixture := newLoopFixture(t, []string{
@@ -63,7 +67,7 @@ func TestRunnerRejectsScriptedSimulatorAnswerLeakBeforeExecutor(t *testing.T) {
 		"I found a draft but have not verified the latest value.",
 	}, "Use 120 as the answer.")
 	defer fixture.close()
-	if !errors.Is(err, runtimebriefcase.ErrFeedbackLeak) {
+	if !errors.Is(err, feedbackcontract.ErrFeedbackLeak) {
 		t.Fatalf("error = %v, want ErrFeedbackLeak", err)
 	}
 	if fixture.runner != nil || len(fixture.requests) != 0 {
@@ -148,7 +152,7 @@ func TestRunnerRejectsSupervisorBytesThatDoNotMatchSignedSource(t *testing.T) {
 	tampered := append([]byte(nil), fixture.supervisorSource...)
 	tampered[len(tampered)/2] ^= 1
 	if _, err := New(Config{
-		Pack: fixture.pack, Harness: fixture.harness,
+		Pack: fixture.pack, Executor: fixture.harness,
 		SupervisorPlanSource:       tampered,
 		SupervisorPlanSourceSHA256: fixture.supervisorSourceSHA256,
 	}); !errors.Is(err, ErrInvalidClosedLoop) || !strings.Contains(err.Error(), "do not match") {
@@ -156,7 +160,7 @@ func TestRunnerRejectsSupervisorBytesThatDoNotMatchSignedSource(t *testing.T) {
 	}
 }
 
-func TestRunnerRejectsHarnessFromDifferentCasepackDigest(t *testing.T) {
+func TestRunnerRejectsExecutorFromDifferentCasepackDigest(t *testing.T) {
 	fixture := newLoopFixture(t, []string{"done"}, "Try again.")
 	defer fixture.close()
 	otherPack, _, _, supervisorSHA, userSHA := writeLoopCase(t, "A different signed follow-up.")
@@ -169,12 +173,12 @@ func TestRunnerRejectsHarnessFromDifferentCasepackDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := New(Config{
-		Pack: otherPack, Harness: fixture.harness,
+		Pack: otherPack, Executor: fixture.harness,
 		SupervisorPlanSource:          supervisorSource,
 		SupervisorPlanSourceSHA256:    supervisorSHA,
 		UserSimulatorPlanSource:       userSource,
 		UserSimulatorPlanSourceSHA256: userSHA,
-	}); !errors.Is(err, ErrInvalidClosedLoop) || !strings.Contains(err.Error(), "harness does not match") {
+	}); !errors.Is(err, ErrInvalidClosedLoop) || !strings.Contains(err.Error(), "executor does not match") {
 		t.Fatalf("cross-pack harness error = %v", err)
 	}
 }
@@ -214,14 +218,14 @@ func TestRunnerRejectsSupervisorFingerprintBeforeMismatchedArmRuns(t *testing.T)
 	defer root.Close()
 	harness, err := runtimebriefcase.NewChatHarness(runtimebriefcase.ChatHarnessConfig{
 		Pack: fixture.pack, Root: root, Client: llm.NewClient(fixture.server.URL, "test-key"),
-		Model: "test-model", Arm: runtimebriefcase.ArmMemoryAssisted,
+		Model: "test-model", Arm: runcontract.ArmMemoryAssisted,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer harness.Close()
 	if _, err := New(Config{
-		Pack: fixture.pack, Harness: harness,
+		Pack: fixture.pack, Executor: harness,
 		SupervisorPlanSource:          fixture.supervisorSource,
 		SupervisorPlanSourceSHA256:    fixture.supervisorSourceSHA256,
 		UserSimulatorPlanSource:       fixture.userSource,
@@ -236,7 +240,7 @@ func TestRunnerRejectsSupervisorFingerprintBeforeMismatchedArmRuns(t *testing.T)
 
 func TestVisibleTrajectoryIncludesPublicDialogueButNeverSealedPlan(t *testing.T) {
 	pack, _, _, _, _ := writeLoopCase(t, "Please retry using only public evidence.")
-	run := &runtimebriefcase.RunResult{Episodes: []runtimebriefcase.EpisodeResult{
+	run := &runcontract.RunResult{Episodes: []runcontract.EpisodeResult{
 		{EpisodeID: "initial", Phase: "timeline", Model: "test-model", Text: "I have a draft."},
 		{EpisodeID: "simulator-followup-1", Phase: "follow-up", Cycle: 1, Model: "test-model", Text: "I checked again."},
 	}}
@@ -274,7 +278,7 @@ func TestHiddenFeedbackInputsExtractStateScalarAnswers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	firewall, err := runtimebriefcase.NewFeedbackFirewall(hidden, runtimebriefcase.FeedbackLimits{})
+	firewall, err := feedbackcontract.NewFeedbackFirewall(hidden, feedbackcontract.FeedbackLimits{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +286,7 @@ func TestHiddenFeedbackInputsExtractStateScalarAnswers(t *testing.T) {
 		"Use cobalt-17.", "The budget is １００.", "Mark it final.", "Use ９８７.",
 		"Set approved.", "Set true.", "Set optional.", "Set null.",
 	} {
-		if _, err := firewall.SanitizeFollowUp(leak); !errors.Is(err, runtimebriefcase.ErrFeedbackLeak) {
+		if _, err := firewall.SanitizeFollowUp(leak); !errors.Is(err, feedbackcontract.ErrFeedbackLeak) {
 			t.Fatalf("state scalar leak passed: %q err=%v hidden=%+v", leak, err, hidden)
 		}
 	}
@@ -303,7 +307,7 @@ func TestHiddenFeedbackInputsIncludesSupervisorMetadata(t *testing.T) {
 		SchemaVersion: evalbriefcase.SupervisorPlanSchemaVersion,
 		PlanDigest:    strings.Repeat("a", 64),
 		Fingerprint: evalbriefcase.SupervisorFingerprint{
-			CaseID: "private-case", Seed: 739, Model: "private-model", Arm: string(runtimebriefcase.ArmRawPrimary),
+			CaseID: "private-case", Seed: 739, Model: "private-model", Arm: string(runcontract.ArmRawPrimary),
 		},
 		MaxCycles: 2, PassThreshold: 0.75,
 		Checkpoints: []evalbriefcase.SupervisorCheckpoint{{Cycle: 1, Checks: []evalbriefcase.Check{{
@@ -314,7 +318,7 @@ func TestHiddenFeedbackInputsIncludesSupervisorMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	firewall, err := runtimebriefcase.NewFeedbackFirewall(hidden, runtimebriefcase.FeedbackLimits{})
+	firewall, err := feedbackcontract.NewFeedbackFirewall(hidden, feedbackcontract.FeedbackLimits{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +326,7 @@ func TestHiddenFeedbackInputsIncludesSupervisorMetadata(t *testing.T) {
 		"The pass threshold is 0.75.", "The check weight is 2.5.", "This is a critical check.",
 		"The fingerprint model is private-model.", "The plan digest starts with " + strings.Repeat("a", 64) + ".",
 	} {
-		if _, err := firewall.SanitizeFollowUp(leak); !errors.Is(err, runtimebriefcase.ErrFeedbackLeak) {
+		if _, err := firewall.SanitizeFollowUp(leak); !errors.Is(err, feedbackcontract.ErrFeedbackLeak) {
 			t.Fatalf("supervisor metadata leak passed: %q err=%v", leak, err)
 		}
 	}
@@ -333,7 +337,7 @@ type loopFixture struct {
 	harness  *runtimebriefcase.ChatHarness
 	runner   *Runner
 	plan     evalbriefcase.SupervisorPlan
-	userPlan runtimebriefcase.UserSimulatorPlan
+	userPlan feedbackcontract.UserSimulatorPlan
 	root     *runtimebriefcase.RunRoot
 	server   *httptest.Server
 	requests []string
@@ -425,7 +429,7 @@ func newLoopFixtureAllowRunnerError(t *testing.T, responses []string, feedback s
 	fixture.root = root
 	harness, err := runtimebriefcase.NewChatHarness(runtimebriefcase.ChatHarnessConfig{
 		Pack: fixture.pack, Root: root, Client: llm.NewClient(fixture.server.URL, "test-key"),
-		Model: "test-model", Arm: runtimebriefcase.ArmRawPrimary,
+		Model: "test-model", Arm: runcontract.ArmRawPrimary,
 	})
 	if err != nil {
 		fixture.close()
@@ -433,7 +437,7 @@ func newLoopFixtureAllowRunnerError(t *testing.T, responses []string, feedback s
 	}
 	fixture.harness = harness
 	fixture.runner, err = New(Config{
-		Pack: fixture.pack, Harness: harness,
+		Pack: fixture.pack, Executor: harness,
 		SupervisorPlanSource:          fixture.supervisorSource,
 		SupervisorPlanSourceSHA256:    fixture.supervisorSourceSHA256,
 		UserSimulatorPlanSource:       fixture.userSource,
@@ -445,7 +449,7 @@ func newLoopFixtureAllowRunnerError(t *testing.T, responses []string, feedback s
 	return fixture, nil
 }
 
-func writeLoopCase(t *testing.T, feedback string) (*casepack.Pack, evalbriefcase.SupervisorPlan, runtimebriefcase.UserSimulatorPlan, string, string) {
+func writeLoopCase(t *testing.T, feedback string) (*casepack.Pack, evalbriefcase.SupervisorPlan, feedbackcontract.UserSimulatorPlan, string, string) {
 	t.Helper()
 	dir := t.TempDir()
 	task := []byte("Find the latest approved budget and answer with evidence.\n")
@@ -461,7 +465,7 @@ func writeLoopCase(t *testing.T, feedback string) (*casepack.Pack, evalbriefcase
 		SchemaVersion: evalbriefcase.SupervisorPlanSchemaVersion,
 		Fingerprint: evalbriefcase.SupervisorFingerprint{
 			CaseID: "closed-loop-budget", Seed: 77, Model: "test-model",
-			Arm: string(runtimebriefcase.ArmRawPrimary), APIMode: llm.APIModeOpenAI,
+			Arm: string(runcontract.ArmRawPrimary), APIMode: llm.APIModeOpenAI,
 		},
 		MaxCycles:          2,
 		PassThreshold:      1,
@@ -474,11 +478,11 @@ func writeLoopCase(t *testing.T, feedback string) (*casepack.Pack, evalbriefcase
 	if _, err := evalbriefcase.SetSupervisorPlanDigest(&plan); err != nil {
 		t.Fatal(err)
 	}
-	userPlan := runtimebriefcase.UserSimulatorPlan{
-		SchemaVersion: runtimebriefcase.UserSimulatorPlanSchemaVersion,
+	userPlan := feedbackcontract.UserSimulatorPlan{
+		SchemaVersion: feedbackcontract.UserSimulatorPlanSchemaVersion,
 		CaseID:        "closed-loop-budget",
-		FollowUps: []runtimebriefcase.ScriptedFollowUp{{
-			Cycle: 1, WhenVerdict: runtimebriefcase.VerdictNeedsRevision, Message: feedback,
+		FollowUps: []feedbackcontract.ScriptedFollowUp{{
+			Cycle: 1, WhenVerdict: feedbackcontract.VerdictNeedsRevision, Message: feedback,
 		}},
 	}
 	supervisorData := marshalTestJSON(t, plan)

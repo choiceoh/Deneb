@@ -60,3 +60,15 @@ startAsyncRun (run_start.go)        # 세션 확보, abort ctx, buildRunDeps, go
 - **생성 파일 직접 수정 금지**: `toolreg/tool_schemas_gen.go`, `tool_classification_gen.go` (`docs/agent-rules/generated-code.md`).
 - **모델 역할 하드코딩 금지** — 코드는 역할만 고른다(`docs/agent-rules/model-roles.md`). 요약/추출 헬퍼를 analysis(클라우드)로 두면 비용·레이턴시가 샌다.
 - **새 goroutine/뮤텍스**는 `docs/agent-rules/concurrency.md`(턴 데드라인=`server.DefaultTurnDeadline`, recover 필수). 사용자 무응답 실패는 `Error`+broadcast(`docs/agent-rules/logging.md`).
+
+## 집중 검증
+
+top-level chat 변경은 `run_exec.go`의 `executeAgentRun`, `handler.go`의
+`ChatHandler`, `tools.go`의 `ToolRegistry` 중 실제 변경 진입 심볼을 테스트에서
+직접 호출해 검증한다. 패키지 전체의 결정적 검증 명령은 다음과 같다.
+
+`cd gateway-go && go test ./internal/pipeline/chat`
+
+도구·프롬프트·회상처럼 하위 패키지 계약도 바뀌면 해당 하위 패키지를 별도로
+검증한다. 생성 스키마를 건드린 변경은 `make tool-schemas` 후 diff가 비어 있어야
+하며, 런타임 배선 확인을 위해 server 테스트를 대신 사용하지 않는다.

@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/lifecycletool"
 )
 
 const (
@@ -122,11 +122,11 @@ func (t *validationBackfillTask) Run(ctx context.Context) error {
 			t.logger.Warn("validation-backfill: skill backfill failed", "skill", name, "error", err)
 			continue
 		}
-		if n, ok := res["recorded"].(int); ok {
-			recorded += n
+		if res.Recorded != nil {
+			recorded += *res.Recorded
 		}
-		if n, ok := res["skipped"].(int); ok {
-			skipped += n
+		if res.Skipped != nil {
+			skipped += *res.Skipped
 		}
 	}
 	t.logger.Info("validation-backfill: cycle complete",

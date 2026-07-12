@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 func TestWithinActiveHours_boundaries(t *testing.T) {
@@ -110,18 +110,15 @@ func TestHeartbeatTriggerTemplate_invariants(t *testing.T) {
 	}
 }
 
-func TestHeartbeatSyncOptionsAreTranscriptIsolated(t *testing.T) {
-	opts := heartbeatSyncOptions()
-	if opts == nil {
-		t.Fatal("heartbeatSyncOptions returned nil")
+func TestHeartbeatSyncRequestIsTranscriptIsolated(t *testing.T) {
+	req := heartbeatSyncRequest()
+	if req.MaxHistoryTokens != heartbeatHistoryBudget {
+		t.Fatalf("heartbeat history budget = %d, want %d", req.MaxHistoryTokens, heartbeatHistoryBudget)
 	}
-	if opts.MaxHistoryTokens != heartbeatHistoryBudget {
-		t.Fatalf("heartbeat history budget = %d, want %d", opts.MaxHistoryTokens, heartbeatHistoryBudget)
-	}
-	if !opts.EphemeralUser {
+	if !req.EphemeralUser {
 		t.Fatal("heartbeat trigger must not persist as a user message")
 	}
-	if !opts.EphemeralAssistant {
+	if !req.EphemeralAssistant {
 		t.Fatal("heartbeat assistant/tool output must not persist into short-term chat context")
 	}
 }

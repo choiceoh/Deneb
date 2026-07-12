@@ -167,6 +167,29 @@ class HTTPHelperTests(unittest.TestCase):
         self.assertEqual(requests[0][1], 2)
         self.assertEqual(result, {"ok": True, "payload": {}, "error": None})
 
+    def test_malformed_nonobject_rpc_json_returns_protocol_error(self) -> None:
+        for body in ([], "unexpected", 7, None):
+            with self.subTest(body=body):
+                with mock.patch.object(
+                    native.urllib.request,
+                    "urlopen",
+                    return_value=JSONResponse(body),
+                ):
+                    result = native._miniapp_rpc(
+                        "http://gateway", "token", "miniapp.test", {}, 3
+                    )
+
+                self.assertEqual(
+                    result,
+                    {
+                        "ok": False,
+                        "payload": {},
+                        "error": {
+                            "message": "invalid RPC response: expected JSON object"
+                        },
+                    },
+                )
+
     def test_protocol_and_nonframe_errors_are_normalized(self) -> None:
         bodies = [
             {"ok": False, "error": {"code": "invalid", "message": "bad request"}},

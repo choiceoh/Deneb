@@ -293,104 +293,139 @@ func (w *Writer) Aggregate(sinceMs int64) AggregateResult {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	res := AggregateResult{
-		ProactiveDecisions: map[string]int{},
-		BackgroundJobs:     map[string]int{},
-		BackgroundErrors:   map[string]int{},
-	}
-	toolMap := map[string]*ToolStat{}
-
+	accumulator := newAggregateAccumulator()
 	paths, _ := filepath.Glob(filepath.Join(w.baseDir, "*.jsonl"))
 	for _, path := range paths {
-		for _, e := range readAllEntries(path) {
-			if sinceMs > 0 && e.Ts < sinceMs {
+		for _, entry := range readAllEntries(path) {
+			if sinceMs > 0 && entry.Ts < sinceMs {
 				continue
 			}
-			switch e.Type {
-			case TypeTurnTool:
-				var d TurnToolData
-				if json.Unmarshal(e.Data, &d) != nil {
-					continue
-				}
-				ts := statFor(toolMap, d.Name)
-				ts.Calls++
-				ts.TotalMs += d.DurationMs
-				if d.IsError {
-					ts.Errors++
-				}
-				if d.UnknownTool {
-					ts.Unknown++
-				}
-				if d.Blocked != "" {
-					ts.Blocked++
-				}
-				ts.TotalOutputChars += int64(d.OutputLen)
-				if d.OutputLen > ts.MaxOutputChars {
-					ts.MaxOutputChars = d.OutputLen
-				}
-			case TypeRunEnd:
-				var d RunEndData
-				if json.Unmarshal(e.Data, &d) != nil {
-					continue
-				}
-				for name, c := range d.RepairedToolCalls {
-					statFor(toolMap, name).Repaired += c
-				}
-				for name, c := range d.CacheHitToolCalls {
-					statFor(toolMap, name).CacheHits += c
-				}
-				for name, c := range d.TruncatedToolCalls {
-					statFor(toolMap, name).Truncated += c
-				}
-				res.Runs++
-				res.TotalInputTokens += int64(d.InputTokens)
-				res.TotalOutputTokens += int64(d.OutputTokens)
-				res.CacheReadTokens += int64(d.CacheReadTokens)
-				if d.Proactive {
-					res.ProactiveRuns++
-				}
-				if d.Compacted {
-					res.CompactedRuns++
-				}
-			case TypeProactiveRelay:
-				var d ProactiveRelayData
-				if json.Unmarshal(e.Data, &d) != nil {
-					continue
-				}
-				key := d.Decision
-				if d.Reason != "" {
-					key = d.Decision + ":" + d.Reason
-				}
-				res.ProactiveDecisions[key]++
-			case TypeBackgroundJob:
-				var d BackgroundJobData
-				if json.Unmarshal(e.Data, &d) != nil {
-					continue
-				}
-				res.BackgroundJobs[d.Name]++
-				if d.Outcome == "error" {
-					res.BackgroundErrors[d.Name]++
-				}
-			}
+			accumulator.fold(entry)
 		}
 	}
+	return accumulator.finish()
+}
 
-	res.Tools = make([]ToolStat, 0, len(toolMap))
-	for _, ts := range toolMap {
-		if ts.Calls > 0 {
-			ts.AvgMs = ts.TotalMs / int64(ts.Calls)
+// aggregateAccumulator owns the event folds separately from file traversal and
+// final sorting. Each fold is best-effort: malformed payloads affect only their
+// own event, matching the append-only log reader's partial-data contract.
+type aggregateAccumulator struct {
+	result AggregateResult
+	tools  map[string]*ToolStat
+}
+
+func newAggregateAccumulator() *aggregateAccumulator {
+	return &aggregateAccumulator{
+		result: AggregateResult{
+			ProactiveDecisions: map[string]int{},
+			BackgroundJobs:     map[string]int{},
+			BackgroundErrors:   map[string]int{},
+		},
+		tools: map[string]*ToolStat{},
+	}
+}
+
+func (a *aggregateAccumulator) fold(entry LogEntry) {
+	switch entry.Type {
+	case TypeTurnTool:
+		a.foldTurnTool(entry.Data)
+	case TypeRunEnd:
+		a.foldRunEnd(entry.Data)
+	case TypeProactiveRelay:
+		a.foldProactiveRelay(entry.Data)
+	case TypeBackgroundJob:
+		a.foldBackgroundJob(entry.Data)
+	}
+}
+
+func (a *aggregateAccumulator) foldTurnTool(raw json.RawMessage) {
+	var data TurnToolData
+	if json.Unmarshal(raw, &data) != nil {
+		return
+	}
+	stat := statFor(a.tools, data.Name)
+	stat.Calls++
+	stat.TotalMs += data.DurationMs
+	if data.IsError {
+		stat.Errors++
+	}
+	if data.UnknownTool {
+		stat.Unknown++
+	}
+	if data.Blocked != "" {
+		stat.Blocked++
+	}
+	stat.TotalOutputChars += int64(data.OutputLen)
+	if data.OutputLen > stat.MaxOutputChars {
+		stat.MaxOutputChars = data.OutputLen
+	}
+}
+
+func (a *aggregateAccumulator) foldRunEnd(raw json.RawMessage) {
+	var data RunEndData
+	if json.Unmarshal(raw, &data) != nil {
+		return
+	}
+	for name, count := range data.RepairedToolCalls {
+		statFor(a.tools, name).Repaired += count
+	}
+	for name, count := range data.CacheHitToolCalls {
+		statFor(a.tools, name).CacheHits += count
+	}
+	for name, count := range data.TruncatedToolCalls {
+		statFor(a.tools, name).Truncated += count
+	}
+	a.result.Runs++
+	a.result.TotalInputTokens += int64(data.InputTokens)
+	a.result.TotalOutputTokens += int64(data.OutputTokens)
+	a.result.CacheReadTokens += int64(data.CacheReadTokens)
+	if data.Proactive {
+		a.result.ProactiveRuns++
+	}
+	if data.Compacted {
+		a.result.CompactedRuns++
+	}
+}
+
+func (a *aggregateAccumulator) foldProactiveRelay(raw json.RawMessage) {
+	var data ProactiveRelayData
+	if json.Unmarshal(raw, &data) != nil {
+		return
+	}
+	key := data.Decision
+	if data.Reason != "" {
+		key = data.Decision + ":" + data.Reason
+	}
+	a.result.ProactiveDecisions[key]++
+}
+
+func (a *aggregateAccumulator) foldBackgroundJob(raw json.RawMessage) {
+	var data BackgroundJobData
+	if json.Unmarshal(raw, &data) != nil {
+		return
+	}
+	a.result.BackgroundJobs[data.Name]++
+	if data.Outcome == "error" {
+		a.result.BackgroundErrors[data.Name]++
+	}
+}
+
+func (a *aggregateAccumulator) finish() AggregateResult {
+	a.result.Tools = make([]ToolStat, 0, len(a.tools))
+	for _, stat := range a.tools {
+		if stat.Calls > 0 {
+			stat.AvgMs = stat.TotalMs / int64(stat.Calls)
 		}
-		res.Tools = append(res.Tools, *ts)
+		a.result.Tools = append(a.result.Tools, *stat)
 	}
 	// Sort by calls desc, then name asc for a stable order on ties.
-	sort.Slice(res.Tools, func(i, j int) bool {
-		if res.Tools[i].Calls != res.Tools[j].Calls {
-			return res.Tools[i].Calls > res.Tools[j].Calls
+	sort.Slice(a.result.Tools, func(i, j int) bool {
+		if a.result.Tools[i].Calls != a.result.Tools[j].Calls {
+			return a.result.Tools[i].Calls > a.result.Tools[j].Calls
 		}
-		return res.Tools[i].Name < res.Tools[j].Name
+		return a.result.Tools[i].Name < a.result.Tools[j].Name
 	})
-
-	return res
+	return a.result
 }
 
 // readAllEntries reads all JSONL entries from a file.

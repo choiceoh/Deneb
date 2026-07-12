@@ -32,23 +32,22 @@ import (
 // Called after registerSessionRPCMethods() which creates the chat handler.
 func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 	hub.AdvancePhase(rpcutil.PhaseLate)
-	hub.SetChat(s.chatHandler)
 	hub.SetWikiStore(s.wikiStore) // late-bound: created during session phase
 
 	domains := []map[string]rpcutil.HandlerFunc{
 		handlerchat.Methods(handlerchat.Deps{
-			Chat:        hub.Chat(),
+			Chat:        s.chatHandler,
 			Broadcaster: hub.Broadcast,
 		}),
 		handlerchat.BtwMethods(handlerchat.BtwDeps{
-			Chat:        hub.Chat(),
+			Chat:        s.chatHandler,
 			Broadcaster: hub.Broadcast,
 		}),
 		// Native-client chat bridge (miniapp.chat.send/history): lets the
 		// standalone app drive a turn over the miniapp.* RPC surface via
 		// SendSync, with deneb-ui emission enabled (channel "client").
 		handlerchat.MiniappMethods(handlerchat.Deps{
-			Chat:       hub.Chat(),
+			Chat:       s.chatHandler,
 			OcrImage:   document.OCRImage,
 			Transcribe: artifact.TranscribeAudio,
 			// Document attach (pdf/doc/sheet) → in-house extractor (PDF/Excel/Word/
@@ -158,7 +157,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			}).IngestAsync,
 		}),
 		handlersession.ExecMethods(handlersession.ExecDeps{
-			Chat:       hub.Chat(),
+			Chat:       s.chatHandler,
 			JobTracker: hub.JobTracker(),
 		}),
 		// --- Wiki knowledge base (feature-flagged, late-bound) ---

@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
+	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpctest"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
-	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -30,6 +30,27 @@ func decodeSessionPayload[T any](t *testing.T, resp *protocol.ResponseFrame) T {
 		t.Fatalf("decode payload: %v (raw=%s)", err, resp.Payload)
 	}
 	return got
+}
+
+type execChatStub struct {
+	method string
+}
+
+func (s *execChatStub) ChatReady() bool { return s != nil }
+
+func (s *execChatStub) SessionsSend(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	s.method = "send"
+	return rpcutil.RespondOK(req.ID, map[string]bool{"ok": true})
+}
+
+func (s *execChatStub) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	s.method = "steer"
+	return rpcutil.RespondOK(req.ID, map[string]bool{"ok": true})
+}
+
+func (s *execChatStub) SessionsAbort(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+	s.method = "abort"
+	return rpcutil.RespondOK(req.ID, map[string]bool{"ok": true})
 }
 
 func TestMethodsAndCRUDMethodsExposeStableSurfaces(t *testing.T) {
@@ -55,6 +76,27 @@ func TestMethodsAndCRUDMethodsExposeStableSurfaces(t *testing.T) {
 	}
 	if got := ExecMethods(ExecDeps{}); got != nil {
 		t.Fatalf("ExecMethods without chat = %#v", got)
+	}
+}
+
+func TestExecMethodsRejectTypedNilAndDelegateThroughPort(t *testing.T) {
+	var typedNil *execChatStub
+	if got := ExecMethods(ExecDeps{Chat: typedNil}); got != nil {
+		t.Fatalf("ExecMethods with typed nil chat = %#v", got)
+	}
+
+	chat := &execChatStub{}
+	methods := ExecMethods(ExecDeps{Chat: chat})
+	for method, want := range map[string]string{
+		"sessions.send":  "send",
+		"sessions.steer": "steer",
+		"sessions.abort": "abort",
+		"agent":          "send",
+	} {
+		resp := methods[method](context.Background(), &protocol.RequestFrame{ID: method})
+		if resp == nil || resp.Error != nil || chat.method != want {
+			t.Fatalf("%s delegated as %q, response=%#v", method, chat.method, resp)
+		}
 	}
 }
 

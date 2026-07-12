@@ -17,8 +17,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	chatrecall "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/recall"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 

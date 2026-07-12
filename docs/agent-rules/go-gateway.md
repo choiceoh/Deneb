@@ -12,7 +12,7 @@ Primary runtime — HTTP + SSE gateway server.
 - `cmd/gateway/main.go` — Entry point with `--port`/`--bind` flags, graceful shutdown.
 - `internal/runtime/server/` — HTTP server: `/health`, `/api/v1/miniapp/rpc`, OpenAI/Responses APIs, hooks, session endpoints. Connection tracking.
 - `internal/runtime/rpc/` — Registry-based RPC method dispatcher (thread-safe). 150+ methods.
-- `internal/runtime/session/` — Session management with lifecycle state machine (`IDLE -> RUNNING -> DONE/FAILED/KILLED/TIMEOUT`), state transition validation, event pub/sub bus.
+- `internal/domain/session/` — Session management with lifecycle state machine (`IDLE -> RUNNING -> DONE/FAILED/KILLED/TIMEOUT`), state transition validation, event pub/sub bus.
 - `internal/infra/clientauth/` — Native-client token auth (`X-Deneb-Client-Token` verify, identity). Credentials/secret resolution lives in `internal/infra/secret/`, config load/bootstrap in `internal/infra/config/`. (The former single `internal/infra/auth/` package was split across these three.)
 - `pkg/protocol/` — Hand-written JSON wire types.
 - `internal/pipeline/chat/toolctx/` — Leaf package: shared types (ToolFunc, ToolDef, ToolRegistrar, ToolExecutor), context helpers (WithDeliveryContext, etc.), TurnContext, RunCache, dependency structs (CoreToolDeps, ProcessDeps, SessionDeps, etc.). Zero intra-chat imports.

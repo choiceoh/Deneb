@@ -35,7 +35,7 @@ for a in "${@:2}"; do
   esac
 done
 
-cd "$APP_DIR"
+cd "$APP_DIR" || exit 1
 # -q hushes Gradle's own logging; the harness's stdout passes through. Slice out just the
 # inspector's block (between its markers) so the agent reads clean text.
 ./gradlew -q :composeApp:previewInspect \

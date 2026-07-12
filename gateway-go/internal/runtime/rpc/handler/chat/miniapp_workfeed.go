@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	chatpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -64,8 +64,10 @@ func handleMiniappWorkfeedFeedback(deps Deps) rpcutil.HandlerFunc {
 		sessionKey := DefaultSessionKey(card.SessionKey)
 		// 2) One agent turn updates the durable knowledge (wiki) from the correction.
 		message := buildWorkfeedFeedbackMessage(card, feedback)
-		res, serr := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
-			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
+		res, serr := deps.Chat.RunSync(ctx, chatport.SyncRequest{
+			SessionKey:          sessionKey,
+			Message:             message,
+			Delivery:            &chatport.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
 			// A feed correction is a side action, not a chat message — keep it out of
 			// the client:main transcript (the wiki write still persists).
@@ -88,7 +90,7 @@ func handleMiniappWorkfeedFeedback(deps Deps) rpcutil.HandlerFunc {
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":         true,
 			"item":       updated,
-			"text":       res.BestText(),
+			"text":       res.BestText,
 			"model":      res.Model,
 			"sessionKey": sessionKey,
 		})
@@ -142,8 +144,10 @@ func handleMiniappWorkfeedRewrite(deps Deps) rpcutil.HandlerFunc {
 		}
 		sessionKey := DefaultSessionKey(card.SessionKey)
 		message := buildWorkfeedRewriteMessage(card)
-		res, serr := deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
-			Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
+		res, serr := deps.Chat.RunSync(ctx, chatport.SyncRequest{
+			SessionKey:          sessionKey,
+			Message:             message,
+			Delivery:            &chatport.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
 			EphemeralUser:       true,
 			EphemeralAssistant:  true,
@@ -152,7 +156,7 @@ func handleMiniappWorkfeedRewrite(deps Deps) rpcutil.HandlerFunc {
 		if serr != nil {
 			return rpcerr.WrapDependencyFailed("chat send failed", serr).Response(req.ID)
 		}
-		newBody := strings.TrimSpace(res.BestText())
+		newBody := strings.TrimSpace(res.BestText)
 		if newBody == "" {
 			// Never wipe the card on an empty regeneration; report softly.
 			return rpcutil.RespondOK(req.ID, map[string]any{

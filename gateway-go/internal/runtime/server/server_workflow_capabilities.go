@@ -1,0 +1,415 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modeltuner"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/regressionwatch"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/goals"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/process"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compactuner"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/goalloop"
+	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
+	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rolehealth"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+)
+
+func (s *Server) registerProcessApprovalSideEffect(hub *rpcutil.GatewayHub) {
+	if s.processes == nil {
+		return
+	}
+	// When a tool execution requires approval, create a request, broadcast it
+	// to connected clients, and wait for the bounded decision.
+	s.processes.SetApprover(func(ctx context.Context, req process.ExecRequest) bool {
+		ar := s.approvals.CreateRequest(approval.CreateRequestParams{
+			Command:     req.Command,
+			CommandArgv: req.Args,
+			Cwd:         req.WorkingDir,
+		})
+		hub.Broadcast("exec.approval.requested", map[string]any{
+			"id":      ar.ID,
+			"command": req.Command,
+			"args":    req.Args,
+		})
+		waitCh := s.approvals.WaitForDecision(ar.ID)
+		timer := time.NewTimer(30 * time.Second)
+		defer timer.Stop()
+		select {
+		case <-waitCh:
+			resolved := s.approvals.Get(ar.ID)
+			if resolved != nil && resolved.Decision != nil {
+				return *resolved.Decision == approval.DecisionAllowOnce || *resolved.Decision == approval.DecisionAllowAlways
+			}
+			return false
+		case <-ctx.Done():
+			return false
+		case <-timer.C:
+			return false
+		}
+	})
+}
+
+func (s *Server) configureAutonomousWorkflow(hub *rpcutil.GatewayHub) {
+	// AuroraDream: memory consolidation service (dreaming-only, no goal cycles).
+	s.autonomousSvc = autonomous.NewService(s.logger)
+	s.autonomousSvc.SetBehaviorLog(s.agentLogWriter)
+	// Persist last-run times so deploy restarts do not reset daily/weekly tasks.
+	if home, err := os.UserHomeDir(); err == nil {
+		s.autonomousSvc.SetStateDir(filepath.Join(home, ".deneb"))
+	}
+
+	// Prompt snapshots must be configured before the service can begin a dream
+	// cycle, otherwise a restart loses byte-identical APC prompt reuse.
+	chat.ConfigurePromptSnapshots(config.ResolveStateDir(), s.logger)
+	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {
+		hub.Broadcast("dreaming.cycle", event)
+		if event.Type == "dreaming_completed" {
+			s.postDreamWorkfeedCard(event.DreamReport)
+		}
+	})
+	if n := s.proactiveRelay.NotifierForSession(proactive.DreamWorkSessionKey); n != nil {
+		s.autonomousSvc.SetNotifier(n)
+	}
+	// Keep SetDreamer last: it starts the timer loop and can immediately emit.
+	if s.wikiDreamer != nil {
+		s.autonomousSvc.SetDreamer(s.wikiDreamer)
+	}
+}
+
+func workflowHomeDir() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return homeDir
+}
+
+func (s *Server) registerHeartbeatWorkflowTasks(homeDir string) {
+	s.autonomousSvc.RegisterTask(runtimeheartbeat.NewBootTask(
+		s.chatHandler, s.activity, s.logger, homeDir,
+	))
+	s.autonomousSvc.RegisterTask(runtimeheartbeat.NewTask(runtimeheartbeat.TaskConfig{
+		ChatHandler: s.chatHandler,
+		Activity:    s.activity,
+		Logger:      s.logger,
+		HomeDir:     homeDir,
+		CollectSignals: runtimeheartbeat.CombineCollectors(
+			runtimeheartbeat.CalendarSignalCollector(runtimemeeting.ResolveCalendarClient),
+			runtimeheartbeat.TodoDeadlineCollector(),
+			runtimeheartbeat.DealDeadlineSignalCollector(func() *wiki.Store { return s.wikiStore }),
+		),
+		SignalConfig:        autonomous.SignalConfigForThreshold(configresolve.ProactiveEscalateThreshold(s.logger)),
+		ProposedSelfCoding:  s.proposedSelfCodingFingerprint,
+		PromoteRecurrences:  s.promoteSelfCodingRecurrences,
+		PromoteClusters:     s.promoteSelfCodingClusters,
+		SelfImproveSignals:  s.selfCodingFunnelSignals,
+		SelfImproveEvidence: s.selfCodingFailureEvidence,
+		IdleSkillReview:     s.idleSkillReviewLaneIfProduction(homeDir),
+	}))
+}
+
+func (s *Server) proposedSelfCodingFingerprint() (int, string) {
+	tracker := s.genesisTracker
+	if tracker == nil {
+		return 0, ""
+	}
+	recs, err := tracker.RecentSelfCorrectionCandidates("", genesis.SelfCorrectionStatusProposed, 20)
+	if err != nil || len(recs) == 0 {
+		return 0, ""
+	}
+	newest := recs[0]
+	for _, record := range recs[1:] {
+		if record.UpdatedAt > newest.UpdatedAt {
+			newest = record
+		}
+	}
+	return len(recs), fmt.Sprintf("%d:%s:%d", len(recs), newest.ID, newest.UpdatedAt)
+}
+
+func (s *Server) promoteSelfCodingRecurrences() (int, error) {
+	tracker := s.genesisTracker
+	if tracker == nil {
+		return 0, nil
+	}
+	return tracker.PromoteTargetRecurrenceCandidates()
+}
+
+func (s *Server) promoteSelfCodingClusters() (int, error) {
+	tracker := s.genesisTracker
+	if tracker == nil {
+		return 0, nil
+	}
+	return tracker.PromoteFailureClusterCandidates()
+}
+
+func (s *Server) selfCodingFunnelSignals() (genesis.SelfCorrectionFunnelSummary, int) {
+	tracker := s.genesisTracker
+	if tracker == nil {
+		return genesis.SelfCorrectionFunnelSummary{}, 0
+	}
+	return tracker.SelfCorrectionFunnel(), tracker.SelfHarnessSignals().TargetRecurrences7d
+}
+
+func (s *Server) selfCodingFailureEvidence(limit int) []genesis.FailureClusterSummary {
+	tracker := s.genesisTracker
+	if tracker == nil {
+		return nil
+	}
+	return tracker.FailureEvidenceClusters(limit)
+}
+
+func (s *Server) registerGoalWorkflowTask(homeDir string) {
+	goalStateDir := ""
+	if homeDir != "" {
+		goalStateDir = filepath.Join(homeDir, ".deneb")
+	}
+	goalStore := goals.NewStore(goalStateDir, s.logger)
+	goals.SetDefault(goalStore)
+	s.autonomousSvc.RegisterTask(goalloop.NewTask(
+		s.chatHandler,
+		goalStore,
+		s.activity,
+		s.logger,
+		func(ctx context.Context, sessionKey, msg string) error {
+			n := s.proactiveRelay.NotifierForSession(sessionKey)
+			if n == nil {
+				return nil
+			}
+			return n.Notify(ctx, msg)
+		},
+	))
+}
+
+func (s *Server) registerMeetingHarvestWorkflow(homeDir string) {
+	if os.Getenv("DENEB_MEETING_HARVEST_DISABLE") == "1" {
+		return
+	}
+	stateDir, ok := s.productionStateDir(homeDir)
+	if !ok {
+		return
+	}
+	s.meetingHarvest = runtimemeeting.NewHarvestService(
+		func(text string) (bool, error) {
+			return s.proactiveRelay.RelayNativeToOptions("", text,
+				proactive.Options{MirrorTranscript: true})
+		},
+		runtimemeeting.ResolveCalendarClient,
+		s.matchMeetingProjectName,
+		filepath.Join(stateDir, runtimemeeting.HarvestStateFile),
+		s.logger,
+	)
+	s.meetingHarvest.Start(s.ShutdownCtx())
+}
+
+func (s *Server) matchMeetingProjectName(text string) string {
+	st := s.wikiStore
+	if st == nil {
+		return ""
+	}
+	if ref, ok := st.UniqueProjectInText(text); ok {
+		return ref.Name
+	}
+	if counterparties := st.MatchCounterpartiesInText(text, 1); len(counterparties) > 0 {
+		return counterparties[0].Name
+	}
+	return runtimemeeting.LooseUniqueNameMatch(text,
+		runtimemeeting.KnownNames(st.KnownProjects(), st.KnownCounterparties()))
+}
+
+func (s *Server) registerPlaudWorkflow(homeDir string) {
+	if os.Getenv(runtimemeeting.PlaudDisableEnv) == "1" {
+		return
+	}
+	stateDir, ok := s.productionStateDir(homeDir)
+	if !ok || s.wikiStore == nil {
+		return
+	}
+	s.plaudRecordings = runtimemeeting.NewPlaudService(
+		s.callPlaudTool,
+		s.completePlaudAnalysis,
+		s.completePlaudStageOne,
+		s.projectCandidatesFn(),
+		s.businessTopicKnowledge,
+		s.wikiStore.WritePage,
+		s.wikiStore.AppendProjectStatusLine,
+		s.relayMeetingReport,
+		filepath.Join(stateDir, runtimemeeting.PlaudStateFile),
+		s.logger,
+	)
+	s.plaudRecordings.Start(s.ShutdownCtx())
+}
+
+func (s *Server) callPlaudTool(ctx context.Context, name string, args json.RawMessage) (string, error) {
+	client := s.externalMCP["plaud"]
+	if client == nil {
+		return "", errors.New("unknown tool: plaud mcp not configured")
+	}
+	return client.CallTool(ctx, strings.TrimPrefix(name, "plaud_"), args)
+}
+
+func (s *Server) completePlaudAnalysis(ctx context.Context, system, user string, maxTokens int) (string, error) {
+	client, model, _, _ := s.mailAnalysisModels()
+	if client == nil {
+		return "", errors.New("analysis model unavailable")
+	}
+	return client.Complete(ctx, plaudChatRequest(model, system, user, maxTokens))
+}
+
+func (s *Server) completePlaudStageOne(ctx context.Context, system, user string, maxTokens int) (string, error) {
+	_, _, client, model := s.mailAnalysisModels()
+	if client == nil {
+		return "", errors.New("stage-1 model unavailable")
+	}
+	return client.Complete(ctx, plaudChatRequest(model, system, user, maxTokens))
+}
+
+func plaudChatRequest(model, system, user string, maxTokens int) llm.ChatRequest {
+	return llm.ChatRequest{
+		Model:     model,
+		System:    llm.SystemString(system),
+		Messages:  []llm.Message{llm.NewTextMessage("user", user)},
+		MaxTokens: maxTokens,
+		Thinking:  &llm.ThinkingConfig{Type: "disabled"},
+	}
+}
+
+func (s *Server) businessTopicKnowledge() string {
+	dir := configresolve.TopicsDir()
+	if dir == "" {
+		return ""
+	}
+	return prompt.LoadTopicKnowledge("", dir, "업무", "").Content
+}
+
+func (s *Server) relayMeetingReport(text string) (bool, error) {
+	return s.proactiveRelay.RelayNativeToOptions("", text,
+		proactive.Options{WorkFeedSource: workfeed.SourceMeetingReport})
+}
+
+func (s *Server) registerModelMaintenanceWorkflows() {
+	if s.modelRegistry == nil || s.agentLogWriter == nil {
+		return
+	}
+	s.registerModelTunerWorkflow()
+	s.registerRegressionWatchWorkflow()
+	s.registerCompactionTunerWorkflow()
+}
+
+func (s *Server) registerModelTunerWorkflow() {
+	var notify func(ctx context.Context, msg string) error
+	if notifier := s.proactiveRelay.NotifierForSession(proactive.NativeWorkSessionKey); notifier != nil {
+		notify = notifier.Notify
+	}
+	s.autonomousSvc.RegisterTask(modeltuner.NewTask(modeltuner.Deps{
+		Logs:      s.agentLogWriter,
+		Registry:  s.modelRegistry,
+		StatePath: modeltuner.DefaultStatePath(),
+		Notify:    notify,
+		Logger:    s.logger,
+	}))
+}
+
+func (s *Server) registerRegressionWatchWorkflow() {
+	var notify func(ctx context.Context, msg string) error
+	if notifier := s.proactiveRelay.NotifierForSession(proactive.NativeWorkSessionKey); notifier != nil {
+		notify = notifier.Notify
+	}
+	s.autonomousSvc.RegisterTask(regressionwatch.NewTask(regressionwatch.Deps{
+		Sources:   s.regressionSources(),
+		StatePath: regressionwatch.DefaultStatePath(),
+		Notify:    notify,
+		Logger:    s.logger,
+	}))
+}
+
+func (s *Server) registerCompactionTunerWorkflow() {
+	if os.Getenv("DENEB_COMPACTION_TUNER") != "1" || s.polarisStore == nil || s.modelRegistry == nil {
+		return
+	}
+	lw := s.modelRegistry.Client(modelrole.RoleLightweight)
+	if lw == nil {
+		return
+	}
+	var notify func(ctx context.Context, msg string) error
+	if notifier := s.proactiveRelay.NotifierForSession(proactive.NativeWorkSessionKey); notifier != nil {
+		notify = notifier.Notify
+	}
+	s.compactTuner = compactuner.NewTask(compactuner.Deps{
+		Summaries:  s.polarisStore,
+		Guidelines: compaction.NewGuidelineStore(filepath.Join(config.ResolveStateDir(), compaction.GuidelineFileName)),
+		Client:     lw,
+		Model:      s.modelRegistry.Model(modelrole.RoleLightweight),
+		Notify:     notify,
+		Logger:     s.logger,
+	})
+	s.autonomousSvc.RegisterTask(s.compactTuner)
+	s.logger.Info("compaction-tuner: enabled (DENEB_COMPACTION_TUNER)")
+}
+
+func (s *Server) registerFileSemanticIndexWorkflow() {
+	if s.fileSemindex == nil {
+		return
+	}
+	if task := s.fileSemindex.Task(); task != nil {
+		s.autonomousSvc.RegisterTask(task)
+	}
+}
+
+func (s *Server) registerMailIngestWorkflows() {
+	cfgSnap, _ := config.LoadConfigFromDefaultPath()
+	s.initGmailPoll(cfgSnap)
+	s.initLMTPServer(cfgSnap)
+}
+
+func (s *Server) registerCalendarBriefingWorkflow() {
+	s.calendarBriefing = runtimemeeting.NewCalendarBriefingService(
+		func(text string) (bool, error) { return s.proactiveRelay.RelayNative(text) },
+		runtimemeeting.ResolveCalendarClient,
+		s.logger,
+	)
+	if s.calendarBriefing != nil {
+		s.calendarBriefing.EnableEnrichment(
+			func() *wiki.Store { return s.wikiStore },
+			s.logger,
+		)
+	}
+	s.calendarBriefing.Start(s.ShutdownCtx())
+}
+
+func (s *Server) registerRoleHealthWorkflow() {
+	if s.modelRegistry == nil || s.roleHealth != nil {
+		return
+	}
+	s.roleHealth = rolehealth.New(
+		s.modelRegistry,
+		s.logger,
+		func(event string, payload any) {
+			if s.broadcaster != nil {
+				s.broadcaster.Broadcast(event, payload)
+			}
+		},
+		filepath.Join(s.denebDir, "role_health.json"),
+	)
+	s.roleHealth.Start(s.ShutdownCtx())
+}

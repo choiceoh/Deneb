@@ -157,6 +157,12 @@ def _miniapp_rpc(base: str, token: str, method: str, params: dict[str, Any],
         return {"ok": False, "payload": {}, "error": {"message": str(exc)}}
 
     # A miniapp.* method returns a protocol.ResponseFrame {ok, payload, error}.
+    if not isinstance(body, dict):
+        return {
+            "ok": False,
+            "payload": {},
+            "error": {"message": "invalid RPC response: expected JSON object"},
+        }
     if body.get("ok"):
         payload = body.get("payload")
         return {"ok": True, "payload": payload if isinstance(payload, dict) else {}, "error": None}

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import subprocess
 import unittest
-from pathlib import Path
 from unittest import mock
 
 from test_support import load_script

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 // TestShouldReleaseSpillover mirrors the checkpoint routing table — the two

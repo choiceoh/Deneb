@@ -16,9 +16,9 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
 
 // parallelSafeToolVet returns the executor's parallel-turn vet backed by the

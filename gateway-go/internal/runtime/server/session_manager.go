@@ -1,8 +1,8 @@
 package server
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	arSession "github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 // SessionManager groups session-lifecycle dependencies: the session store

@@ -18,14 +18,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/process"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -67,8 +66,8 @@ func TestGatewayHubConstructionAccessorsAndOptionalSetters(t *testing.T) {
 	if h.Approvals() != cfg.Approvals || h.Skills() != cfg.Skills {
 		t.Fatal("workflow accessors changed dependencies")
 	}
-	if h.Logger() != cfg.Logger || h.Version() != "v-test" || h.Chat() != nil {
-		t.Fatalf("metadata/chat = %p/%q/%p", h.Logger(), h.Version(), h.Chat())
+	if h.Logger() != cfg.Logger || h.Version() != "v-test" {
+		t.Fatalf("metadata = %p/%q", h.Logger(), h.Version())
 	}
 
 	local := new(localai.Hub)
@@ -165,13 +164,8 @@ func toString(v any) string {
 	return ""
 }
 
-func TestGatewayHubPhaseOrderingAndChatBinding(t *testing.T) {
+func TestGatewayHubPhaseOrdering(t *testing.T) {
 	h := NewGatewayHub(completeHubConfig())
-	chatHandler := new(chat.Handler)
-	expectPanicContaining(t, "before PhaseSession", func() { h.SetChat(chatHandler) })
-	if h.Chat() != nil || h.Phase() != PhaseInit {
-		t.Fatal("failed early SetChat changed hub")
-	}
 	expectPanicContaining(t, "expected phase 1", func() { h.AdvancePhase(PhaseSession) })
 	expectPanicContaining(t, "expected phase 1", func() { h.AdvancePhase(PhaseInit) })
 	if h.Phase() != PhaseInit {
@@ -181,12 +175,7 @@ func TestGatewayHubPhaseOrderingAndChatBinding(t *testing.T) {
 	if h.Phase() != PhaseEarly {
 		t.Fatalf("phase = %d", h.Phase())
 	}
-	expectPanicContaining(t, "before PhaseSession", func() { h.SetChat(chatHandler) })
 	h.AdvancePhase(PhaseSession)
-	h.SetChat(chatHandler)
-	if h.Chat() != chatHandler {
-		t.Fatal("chat handler was not bound at session phase")
-	}
 	h.AdvancePhase(PhaseLate)
 	if h.Phase() != PhaseLate {
 		t.Fatalf("phase = %d", h.Phase())
@@ -318,12 +307,15 @@ func TestStandardErrorResponseHelpers(t *testing.T) {
 }
 
 func TestRespondOKAndMarshalFailureContract(t *testing.T) {
-	resp := RespondOK("ok", map[string]any{"value": 7})
+	type responsePayload struct {
+		Value int `json:"value"`
+	}
+	resp := RespondOK("ok", responsePayload{Value: 7})
 	if resp.ID != "ok" || !resp.OK || resp.Error != nil {
 		t.Fatalf("success response = %+v", resp)
 	}
-	var payload map[string]any
-	if err := json.Unmarshal(resp.Payload, &payload); err != nil || payload["value"] != float64(7) {
+	var payload responsePayload
+	if err := json.Unmarshal(resp.Payload, &payload); err != nil || payload.Value != 7 {
 		t.Fatalf("payload = %#v/%v", payload, err)
 	}
 	failed := RespondOK("bad", make(chan int))
@@ -338,12 +330,12 @@ func TestFinalizeSuccessRPCErrorAndOrdinaryError(t *testing.T) {
 		t.Fatalf("success = %+v", success)
 	}
 	rpcFailure := rpcerr.NotFound("session").WithSession("session:one")
-	resp := finalize("rpc", nil, rpcFailure)
+	resp := finalize("rpc", struct{}{}, rpcFailure)
 	if resp.OK || responseErrorCode(resp) != protocol.ErrNotFound || !strings.Contains(string(resp.Error.Details), "session:one") {
 		t.Fatalf("rpc failure = %+v", resp)
 	}
 	ordinary := errors.New("domain rejected value")
-	resp = finalize("ordinary", nil, ordinary)
+	resp = finalize("ordinary", struct{}{}, ordinary)
 	if resp.OK || responseErrorCode(resp) != protocol.ErrInvalidRequest || !strings.Contains(resp.Error.Message, ordinary.Error()) {
 		t.Fatalf("ordinary failure = %+v", resp)
 	}
@@ -354,6 +346,11 @@ type bindParams struct {
 	N    int    `json:"n"`
 }
 
+type bindResult struct {
+	Greeting string `json:"greeting"`
+	Double   int    `json:"double"`
+}
+
 func bindRequest(id, raw string) *protocol.RequestFrame {
 	return &protocol.RequestFrame{ID: id, Params: json.RawMessage(raw)}
 }
@@ -361,37 +358,66 @@ func bindRequest(id, raw string) *protocol.RequestFrame {
 func TestBindSuccessAndErrorPaths(t *testing.T) {
 	req := bindRequest("bind", `{"name":"alice","n":3}`)
 	called := 0
-	resp := Bind[bindParams](req, func(p bindParams) (any, error) {
+	resp := Bind[bindParams](req, func(p bindParams) (bindResult, error) {
 		called++
-		return map[string]any{"greeting": p.Name, "double": p.N * 2}, nil
+		return bindResult{Greeting: p.Name, Double: p.N * 2}, nil
 	})
 	if !resp.OK || called != 1 {
 		t.Fatalf("Bind success = %+v calls=%d", resp, called)
 	}
-	var payload map[string]any
+	var payload bindResult
 	_ = json.Unmarshal(resp.Payload, &payload)
-	if payload["greeting"] != "alice" || payload["double"] != float64(6) {
+	if payload.Greeting != "alice" || payload.Double != 6 {
 		t.Fatalf("Bind payload = %#v", payload)
 	}
 
-	bad := Bind[bindParams](bindRequest("bad", `{`), func(bindParams) (any, error) {
+	bad := Bind[bindParams](bindRequest("bad", `{`), func(bindParams) (bindResult, error) {
 		called++
-		return nil, nil
+		return bindResult{}, nil
 	})
 	if bad.OK || responseErrorCode(bad) != protocol.ErrInvalidRequest || called != 1 {
 		t.Fatalf("decode failure = %+v calls=%d", bad, called)
 	}
-	rpcFailure := Bind[bindParams](req, func(bindParams) (any, error) {
-		return nil, rpcerr.Conflict("busy")
+	rpcFailure := Bind[bindParams](req, func(bindParams) (bindResult, error) {
+		return bindResult{}, rpcerr.Conflict("busy")
 	})
 	if responseErrorCode(rpcFailure) != protocol.ErrConflict {
 		t.Fatalf("RPC failure = %+v", rpcFailure)
 	}
-	ordinary := Bind[bindParams](req, func(bindParams) (any, error) {
-		return nil, errors.New("nope")
+	ordinary := Bind[bindParams](req, func(bindParams) (bindResult, error) {
+		return bindResult{}, errors.New("nope")
 	})
 	if responseErrorCode(ordinary) != protocol.ErrInvalidRequest {
 		t.Fatalf("ordinary failure = %+v", ordinary)
+	}
+}
+
+func TestGenericBindPreservesResponseJSONAndErrorShapes(t *testing.T) {
+	req := bindRequest("shape", `{"name":"alice","n":3}`)
+	success := Bind[bindParams](req, func(p bindParams) (bindResult, error) {
+		return bindResult{Greeting: p.Name, Double: p.N * 2}, nil
+	})
+	requireResponseJSON(t, success, `{"type":"res","id":"shape","ok":true,"payload":{"greeting":"alice","double":6}}`)
+
+	conflict := Bind[bindParams](req, func(bindParams) (bindResult, error) {
+		return bindResult{}, rpcerr.Conflict("busy")
+	})
+	requireResponseJSON(t, conflict, `{"type":"res","id":"shape","ok":false,"error":{"code":"CONFLICT","message":"busy"}}`)
+
+	ordinary := Bind[bindParams](req, func(bindParams) (bindResult, error) {
+		return bindResult{}, errors.New("nope")
+	})
+	requireResponseJSON(t, ordinary, `{"type":"res","id":"shape","ok":false,"error":{"code":"INVALID_REQUEST","message":"invalid params: nope"}}`)
+}
+
+func requireResponseJSON(t *testing.T, response *protocol.ResponseFrame, want string) {
+	t.Helper()
+	got, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("response JSON changed\n got: %s\nwant: %s", got, want)
 	}
 }
 
@@ -400,7 +426,7 @@ func TestBindCtxForwardsContextAndCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), contextKey("key"), "value"))
 	cancel()
 	req := bindRequest("ctx", `{"name":"bob","n":2}`)
-	resp := BindCtx[bindParams](ctx, req, func(got context.Context, p bindParams) (any, error) {
+	resp := BindCtx[bindParams](ctx, req, func(got context.Context, p bindParams) (string, error) {
 		if got.Value(contextKey("key")) != "value" || !errors.Is(got.Err(), context.Canceled) {
 			t.Fatalf("context = value=%v err=%v", got.Value(contextKey("key")), got.Err())
 		}
@@ -415,9 +441,9 @@ func TestBindCtxForwardsContextAndCancellation(t *testing.T) {
 	}
 
 	called := false
-	bad := BindCtx[bindParams](ctx, bindRequest("bad", ""), func(context.Context, bindParams) (any, error) {
+	bad := BindCtx[bindParams](ctx, bindRequest("bad", ""), func(context.Context, bindParams) (string, error) {
 		called = true
-		return nil, nil
+		return "", nil
 	})
 	if bad.OK || called {
 		t.Fatalf("invalid BindCtx = %+v called=%v", bad, called)
@@ -425,7 +451,7 @@ func TestBindCtxForwardsContextAndCancellation(t *testing.T) {
 }
 
 func TestBoundHandlerContracts(t *testing.T) {
-	handler := BindHandler[bindParams](func(p bindParams) (any, error) {
+	handler := BindHandler[bindParams](func(p bindParams) (string, error) {
 		return p.Name + "!", nil
 	})
 	resp := handler(context.Background(), bindRequest("handler", `{"name":"hello"}`))
@@ -440,7 +466,7 @@ func TestBoundHandlerContracts(t *testing.T) {
 
 	type contextKey string
 	ctx := context.WithValue(context.Background(), contextKey("key"), "ctx")
-	ctxHandler := BindHandlerCtx[bindParams](func(got context.Context, p bindParams) (any, error) {
+	ctxHandler := BindHandlerCtx[bindParams](func(got context.Context, p bindParams) ([]string, error) {
 		return []string{got.Value(contextKey("key")).(string), p.Name}, nil
 	})
 	resp = ctxHandler(ctx, bindRequest("ctx-handler", `{"name":"payload"}`))
@@ -454,14 +480,14 @@ func TestBoundHandlerContracts(t *testing.T) {
 func TestNilBoundFunctionsReturnErrorsInsteadOfPanicking(t *testing.T) {
 	req := bindRequest("nil", `{"name":"x"}`)
 	responses := []*protocol.ResponseFrame{
-		Bind[bindParams](req, nil),
-		Bind[bindParams](nil, nil),
-		BindCtx[bindParams](context.Background(), req, nil),
-		BindCtx[bindParams](context.Background(), nil, nil),
-		BindHandler[bindParams](nil)(context.Background(), req),
-		BindHandler[bindParams](nil)(context.Background(), nil),
-		BindHandlerCtx[bindParams](nil)(context.Background(), req),
-		BindHandlerCtx[bindParams](nil)(context.Background(), nil),
+		Bind[bindParams, bindResult](req, nil),
+		Bind[bindParams, bindResult](nil, nil),
+		BindCtx[bindParams, bindResult](context.Background(), req, nil),
+		BindCtx[bindParams, bindResult](context.Background(), nil, nil),
+		BindHandler[bindParams, bindResult](nil)(context.Background(), req),
+		BindHandler[bindParams, bindResult](nil)(context.Background(), nil),
+		BindHandlerCtx[bindParams, bindResult](nil)(context.Background(), req),
+		BindHandlerCtx[bindParams, bindResult](nil)(context.Background(), nil),
 	}
 	for i, resp := range responses {
 		if resp == nil || resp.OK || responseErrorCode(resp) != protocol.ErrInvalidRequest || !strings.Contains(resp.Error.Message, "handler is nil") {

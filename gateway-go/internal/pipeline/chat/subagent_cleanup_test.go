@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 // waitForChildStatus polls (bus delivery is async per subscriber) until the

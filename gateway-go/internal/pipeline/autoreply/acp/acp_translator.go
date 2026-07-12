@@ -8,7 +8,7 @@ package acp
 import (
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 // ACPSessionPrefix is the prefix for ACP-originated session keys.

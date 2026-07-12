@@ -37,10 +37,10 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
+	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
-	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 // Compile-time interface compliance.
@@ -49,7 +49,7 @@ var _ autonomous.PeriodicTask = (*heartbeatTask)(nil)
 // heartbeatTask implements autonomous.PeriodicTask.
 // Every 30 minutes, checks HEARTBEAT.md and executes tasks found there.
 type heartbeatTask struct {
-	chatHandler *chat.Handler
+	chatHandler chatport.SyncRunner
 	activity    *monitoring.ActivityTracker
 	logger      *slog.Logger
 	homeDir     string
@@ -117,7 +117,7 @@ type Task = heartbeatTask
 
 // TaskConfig contains the execution and signal boundaries for Task.
 type TaskConfig struct {
-	ChatHandler         *chat.Handler
+	ChatHandler         chatport.SyncRunner
 	Activity            *monitoring.ActivityTracker
 	Logger              *slog.Logger
 	HomeDir             string
@@ -211,7 +211,7 @@ HEARTBEAT.md:
 
 // Run executes one scheduled task cycle.
 func (t *heartbeatTask) Run(ctx context.Context) error {
-	if t.chatHandler == nil {
+	if t.chatHandler == nil || !t.chatHandler.ChatReady() {
 		return nil
 	}
 
@@ -316,8 +316,10 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	runCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	opts := heartbeatSyncOptions()
-	result, err := t.chatHandler.SendSync(runCtx, sessionKey, triggerMsg, "", opts)
+	req := heartbeatSyncRequest()
+	req.SessionKey = sessionKey
+	req.Message = triggerMsg
+	result, err := t.chatHandler.RunSync(runCtx, req)
 
 	// Fixture harvest (P0 of instruction-surface evolve): persist this firing's
 	// variable inputs + outcome so a future shadow-replay gate has a real
@@ -465,8 +467,8 @@ func composeHeartbeatBody(signalSummary, content, selfCodingNudge, sweepNudge, r
 	return body
 }
 
-func heartbeatSyncOptions() *chat.SyncOptions {
-	return &chat.SyncOptions{
+func heartbeatSyncRequest() chatport.SyncRequest {
+	return chatport.SyncRequest{
 		MaxHistoryTokens:   heartbeatHistoryBudget,
 		EphemeralUser:      true,
 		EphemeralAssistant: true,

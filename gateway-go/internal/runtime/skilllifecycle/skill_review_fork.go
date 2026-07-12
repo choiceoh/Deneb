@@ -10,9 +10,9 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
 
 const skillReviewMaxTranscriptRunes = 8000
@@ -37,7 +37,7 @@ const skillReviewSystemPrompt = `You are Deneb's background skill reviewer — a
 const skillReviewHistoryBudget = 32000
 
 type skillReviewFork struct {
-	chat        *chat.Handler
+	chat        chatport.SyncRunner
 	transcripts toolctx.TranscriptStore
 	tracker     *genesis.Tracker
 	model       string
@@ -48,7 +48,7 @@ type skillReviewFork struct {
 type ReviewFork = skillReviewFork
 
 func newSkillReviewFork(
-	chatHandler *chat.Handler,
+	chatHandler chatport.SyncRunner,
 	transcripts toolctx.TranscriptStore,
 	tracker *genesis.Tracker,
 	model string,
@@ -65,7 +65,7 @@ func newSkillReviewFork(
 
 // NewReviewFork constructs the isolated skill-review runner.
 func NewReviewFork(
-	chatHandler *chat.Handler,
+	chatHandler chatport.SyncRunner,
 	transcripts toolctx.TranscriptStore,
 	tracker *genesis.Tracker,
 	model string,
@@ -76,7 +76,7 @@ func NewReviewFork(
 
 // RunSkillReview runs an isolated review for the requested skill snapshot.
 func (r *skillReviewFork) RunSkillReview(ctx context.Context, sessionKey string, snapshot generation.SessionContext) error {
-	if r == nil || r.chat == nil {
+	if r == nil || r.chat == nil || !r.chat.ChatReady() {
 		return fmt.Errorf("skill review fork: chat handler is not configured")
 	}
 	reviewCtx := snapshot
@@ -98,7 +98,10 @@ func (r *skillReviewFork) RunSkillReview(ctx context.Context, sessionKey string,
 	// loop (no evolution_proposal ever logged; verified on prod 2026-07-09).
 	// Budget reasoning + at least one (often two) tool calls with evidence.
 	maxTokens := 8192
-	_, err := r.chat.SendSync(ctx, skillReviewSessionKey(sessionKey), prompt, r.model, &chat.SyncOptions{
+	_, err := r.chat.RunSync(ctx, chatport.SyncRequest{
+		SessionKey:         skillReviewSessionKey(sessionKey),
+		Message:            prompt,
+		Model:              r.model,
 		SystemPrompt:       skillReviewSystemPrompt,
 		ToolPreset:         string(toolpreset.PresetSelfReview),
 		MaxTokens:          &maxTokens,

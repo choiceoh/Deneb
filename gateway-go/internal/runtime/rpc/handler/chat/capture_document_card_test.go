@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	chatpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 // fakeCaptureFeed is a minimal Deps.WorkFeed for the capture-card tests.
@@ -35,7 +35,7 @@ func TestCardCapturedDocument(t *testing.T) {
 				return true, nil
 			},
 		}
-		cardCapturedDocument(deps, "client:main", &chatpkg.SyncResult{Text: substantial}, 1000)
+		cardCapturedDocument(deps, "client:main", &chatport.SyncResult{Text: substantial, BestText: substantial}, 1000)
 		if len(feed.items) != 1 || feed.items[0].Source != workfeed.SourceDocAnalysis {
 			t.Fatalf("want 1 doc_analysis card, got %+v", feed.items)
 		}
@@ -47,7 +47,7 @@ func TestCardCapturedDocument(t *testing.T) {
 			WorkFeed:           feed,
 			PublishDeliverable: func(string) (bool, error) { return false, nil }, // suppressed
 		}
-		cardCapturedDocument(deps, "client:main", &chatpkg.SyncResult{Text: "3페이지입니다"}, 1000)
+		cardCapturedDocument(deps, "client:main", &chatport.SyncResult{Text: "3페이지입니다", BestText: "3페이지입니다"}, 1000)
 		if len(feed.items) != 1 || feed.items[0].Source != workfeed.SourceCaptureDocument {
 			t.Fatalf("want 1 capture_document fallback card, got %+v", feed.items)
 		}
@@ -62,7 +62,7 @@ func TestCardCapturedDocument(t *testing.T) {
 			WorkFeed:           feed,
 			PublishDeliverable: func(string) (bool, error) { published = true; return true, nil },
 		}
-		cardCapturedDocument(deps, "client:main", &chatpkg.SyncResult{Text: substantial}, 1000)
+		cardCapturedDocument(deps, "client:main", &chatport.SyncResult{Text: substantial, BestText: substantial}, 1000)
 		if published {
 			t.Error("must not publish again when the model already carded this turn")
 		}
@@ -82,7 +82,7 @@ func TestCardCapturedDocument(t *testing.T) {
 				return true, nil
 			},
 		}
-		cardCapturedDocument(deps, "client:main", &chatpkg.SyncResult{Text: substantial}, 1000)
+		cardCapturedDocument(deps, "client:main", &chatport.SyncResult{Text: substantial, BestText: substantial}, 1000)
 		if len(feed.items) != 2 {
 			t.Errorf("older card (t=500 < turnStart=1000) must not block this turn, got %d", len(feed.items))
 		}

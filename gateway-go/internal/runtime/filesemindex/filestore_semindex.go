@@ -24,8 +24,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 const (
@@ -240,11 +240,11 @@ func (s *Service) KnowledgeAdapter() knowledge.Adapter {
 // fileRecallForPreflight adapts the file semantic search into the chat recall
 // preflight's transport-neutral FileRecallFunc. It reuses fileSemanticSearch
 // (hybrid search + live-store Stat validation + the query timeout), then maps
-// each hit to chat.FileRecallHit. Returns nil-safe empty on any degradation
+// each hit to chatport.FileRecallHit. Returns nil-safe empty on any degradation
 // (no index/embedding server, an embed error) so the preflight's files source
 // simply contributes nothing — never an error, never a stall. Wired into
 // HandlerConfig.FileRecallFn only when the index is enabled.
-func (s *Service) Recall(ctx context.Context, query string, limit int) []chat.FileRecallHit {
+func (s *Service) Recall(ctx context.Context, query string, limit int) []chatport.FileRecallHit {
 	if s.index == nil || s.embedding == nil {
 		return nil
 	}
@@ -252,9 +252,9 @@ func (s *Service) Recall(ctx context.Context, query string, limit int) []chat.Fi
 	if err != nil || len(hits) == 0 {
 		return nil
 	}
-	out := make([]chat.FileRecallHit, 0, len(hits))
+	out := make([]chatport.FileRecallHit, 0, len(hits))
 	for _, h := range hits {
-		out = append(out, chat.FileRecallHit{
+		out = append(out, chatport.FileRecallHit{
 			Path:       h.Entry.PathDisplay,
 			Snippet:    h.Snippet,
 			Score:      h.Score,

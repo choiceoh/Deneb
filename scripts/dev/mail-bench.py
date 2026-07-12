@@ -273,7 +273,10 @@ def run_trap(args, token):
                                                args.max_tokens, args.timeout)
                 hits, detail = score_probes(mail, out)
                 t = totals[model]
-                t[0] += hits; t[1] += len(mail["probes"]); t[2] += ms; t[3] += ptok or 0
+                t[0] += hits
+                t[1] += len(mail["probes"])
+                t[2] += ms
+                t[3] += ptok or 0
                 miss = [n for n, ok in detail if not ok]
                 print(f"{mail['name']:<24} {model:<14} rep{rep+1} probes={hits}/{len(detail)}"
                       f" {ms}ms in={ptok}" + (f"  MISS={miss}" if miss else ""))

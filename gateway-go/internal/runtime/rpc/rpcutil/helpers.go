@@ -91,9 +91,9 @@ func DecodeParams[T any](req *protocol.RequestFrame) (T, *protocol.ResponseFrame
 }
 
 // RespondOK is a shorthand for protocol.MustResponseOK.
-// It builds a success ResponseFrame, panicking only on JSON marshal failure
-// (which should never happen for well-formed result values).
-func RespondOK(reqID string, result any) *protocol.ResponseFrame {
+// It preserves the concrete result type until the protocol serialization
+// boundary and falls back to an UNAVAILABLE response on marshal failure.
+func RespondOK[R any](reqID string, result R) *protocol.ResponseFrame {
 	return protocol.MustResponseOK(reqID, result)
 }
 
@@ -101,10 +101,12 @@ func RespondOK(reqID string, result any) *protocol.ResponseFrame {
 // builds the response. It eliminates the closure-wrapping boilerplate that
 // otherwise repeats in every handler:
 //
-//	return rpcutil.BindHandler[params](func(p params) (any, error) {
+//	return rpcutil.BindHandler[params](func(p params) (manager.Result, error) {
 //	    return deps.Manager.DoSomething(p.Name), nil
 //	})
-func BindHandler[P any](fn func(P) (any, error)) HandlerFunc {
+//
+// R is inferred from fn, so callers retain compile-time result validation.
+func BindHandler[P, R any](fn func(P) (R, error)) HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if fn == nil {
 			return rpcerr.InvalidParams(errors.New("handler is nil")).Response(requestID(req))
@@ -126,11 +128,12 @@ func BindHandler[P any](fn func(P) (any, error)) HandlerFunc {
 // Typical usage with a local named type:
 //
 //	type params struct { Name string `json:"name"` }
-//	return rpcutil.Bind[params](req, func(p params) (any, error) {
-//	    if p.Name == "" { return nil, rpcerr.MissingParam("name") }
+//	type result struct { Value string `json:"value"` }
+//	return rpcutil.Bind[params](req, func(p params) (result, error) {
+//	    if p.Name == "" { return result{}, rpcerr.MissingParam("name") }
 //	    return deps.Manager.DoSomething(p.Name), nil
 //	})
-func Bind[P any](req *protocol.RequestFrame, fn func(P) (any, error)) *protocol.ResponseFrame {
+func Bind[P, R any](req *protocol.RequestFrame, fn func(P) (R, error)) *protocol.ResponseFrame {
 	if fn == nil {
 		return rpcerr.InvalidParams(errors.New("handler is nil")).Response(requestID(req))
 	}
@@ -146,10 +149,10 @@ func Bind[P any](req *protocol.RequestFrame, fn func(P) (any, error)) *protocol.
 // function. Use this for handlers that call context-aware services (providers,
 // process execution, timeout-scoped operations).
 //
-//	return rpcutil.BindCtx[params](ctx, req, func(ctx context.Context, p params) (any, error) {
+//	return rpcutil.BindCtx[params](ctx, req, func(ctx context.Context, p params) (provider.CatalogResult, error) {
 //	    return deps.Provider.Catalog(ctx, p.Name)
 //	})
-func BindCtx[P any](ctx context.Context, req *protocol.RequestFrame, fn func(context.Context, P) (any, error)) *protocol.ResponseFrame {
+func BindCtx[P, R any](ctx context.Context, req *protocol.RequestFrame, fn func(context.Context, P) (R, error)) *protocol.ResponseFrame {
 	if fn == nil {
 		return rpcerr.InvalidParams(errors.New("handler is nil")).Response(requestID(req))
 	}
@@ -164,10 +167,10 @@ func BindCtx[P any](ctx context.Context, req *protocol.RequestFrame, fn func(con
 // BindHandlerCtx returns a HandlerFunc that decodes params into P, calls fn
 // with context and decoded params, and builds the response.
 //
-//	return rpcutil.BindHandlerCtx[params](func(ctx context.Context, p params) (any, error) {
+//	return rpcutil.BindHandlerCtx[params](func(ctx context.Context, p params) (provider.CatalogResult, error) {
 //	    return deps.Provider.Catalog(ctx, p.Name), nil
 //	})
-func BindHandlerCtx[P any](fn func(context.Context, P) (any, error)) HandlerFunc {
+func BindHandlerCtx[P, R any](fn func(context.Context, P) (R, error)) HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		if fn == nil {
 			return rpcerr.InvalidParams(errors.New("handler is nil")).Response(requestID(req))
@@ -189,7 +192,7 @@ func requestID(req *protocol.RequestFrame) string {
 }
 
 // finalize converts (result, error) into a ResponseFrame.
-func finalize(reqID string, result any, err error) *protocol.ResponseFrame {
+func finalize[R any](reqID string, result R, err error) *protocol.ResponseFrame {
 	if err != nil {
 		var rpcErr *rpcerr.Error
 		if errors.As(err, &rpcErr) {

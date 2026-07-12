@@ -13,7 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -380,7 +380,7 @@ func TruncateOldToolResults(messages []llm.Message, turnThreshold, minChars int)
 			// run's history replay (chat/deferred_replay.go) re-derives which
 			// deferred tools stay active from these lines. One line kept per
 			// notice — the body still compacts.
-			for _, notice := range toolctx.ExtractActivationNotices(original) {
+			for _, notice := range chatport.ExtractActivationNotices(original) {
 				blocks[j].Content += "\n" + notice
 			}
 			changed = true

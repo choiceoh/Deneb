@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.testing.Test
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
@@ -170,6 +171,22 @@ kotlin {
             implementation(libs.ktor.client.js)
         }
     }
+}
+
+// Stable native-client boundary suite. Keep this separate from the broad JVM
+// unit suite so CI can identify gateway/wire regressions as integration
+// failures and run the same contract locally without an emulator.
+val desktopTestTask = tasks.named<Test>("desktopTest")
+tasks.register<Test>("integrationTest") {
+    group = "verification"
+    description = "Runs native client gateway and rendered-block integration contracts."
+    testClassesDirs = desktopTestTask.get().testClassesDirs
+    classpath = desktopTestTask.get().classpath
+    filter {
+        includeTestsMatching("ai.deneb.deneb.Gateway*")
+        includeTestsMatching("ai.deneb.ui.markdown.DenebUiBlockIntegrationTest")
+    }
+    shouldRunAfter(desktopTestTask)
 }
 
 compose.desktop {

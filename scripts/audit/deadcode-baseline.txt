@@ -158,9 +158,9 @@ internal/runtime/server/server_lifecycle.go :: Server.StartAndListen
 internal/runtime/server/server_monitoring.go :: Server.Broadcaster
 internal/runtime/server/server_monitoring.go :: Server.Publisher
 internal/runtime/server/server_rpc.go :: truncateForDedup
-internal/runtime/session/run_marker.go :: RunMarkerStore.BaseDir
-internal/runtime/session/run_marker.go :: RunMarkerStore.Read
-internal/runtime/session/run_marker.go :: RunMarkerStore.Touch
+internal/domain/session/run_marker.go :: RunMarkerStore.BaseDir
+internal/domain/session/run_marker.go :: RunMarkerStore.Read
+internal/domain/session/run_marker.go :: RunMarkerStore.Touch
 pkg/checkpoint/manager.go :: WithGzip
 pkg/checkpoint/manager.go :: WithMaxBytes
 pkg/checkpoint/manager.go :: WithRetentionN

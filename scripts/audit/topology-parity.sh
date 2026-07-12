@@ -228,7 +228,7 @@ if [ "$((${data_err:-0} + ${arch_err:-0}))" -eq 0 ]; then
     pass "maddy DATA 거부 없음 (24h — 인입/아카이브 양쪽)"
 else
     fail "maddy DATA 거부 인입=${data_err:-0} 아카이브=${arch_err:-0} (24h) — 메일이 엣지에서 죽고 있다 (2026-07-06 사고: smtp_max_line_length, 두 인스턴스 모두)" \
-        "~/mailserver/maddy.conf + ~/mailserver/archive/maddy.conf (각 smtp/lmtp 블록) + sidecar-models.md"
+        "$HOME/mailserver/maddy.conf + $HOME/mailserver/archive/maddy.conf (각 smtp/lmtp 블록) + sidecar-models.md"
 fi
 
 echo "== 외부 표면 =="

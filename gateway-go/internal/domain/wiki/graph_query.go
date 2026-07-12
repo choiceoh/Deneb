@@ -197,232 +197,300 @@ func (s *Store) graphScoreMap(ctx context.Context, query string, includeMentions
 		return nil, -1, nil, nil
 	}
 
-	relPaths, err := s.ListPages("")
+	corpus, err := s.loadGraphCorpus(ctx)
 	if err != nil {
 		return nil, -1, nil, err
 	}
+	if len(corpus.recs) == 0 {
+		return corpus.recs, -1, nil, nil
+	}
 
-	recs := make([]graphRec, 0, len(relPaths))
-	byNorm := make(map[string]int, len(relPaths)) // normTitle -> idx
-	byID := make(map[string]int, len(relPaths))   // frontmatter id -> idx
-	byCode := make(map[string]int, len(relPaths)) // frozen project code -> idx
-	byPath := make(map[string]int, len(relPaths)) // relPath (with + without .md) -> idx
-	for _, rp := range relPaths {
+	seed := corpus.seedIndex(q, seedOverride)
+	if seed < 0 {
+		return corpus.recs, -1, nil, nil
+	}
+
+	scorer := newGraphEdgeScorer(&corpus, seed)
+	scorer.addRelatedEdges()
+	scorer.addInlineLinkEdges()
+	scorer.addProjectFamilyEdges()
+	scorer.addSharedTagEdges()
+	if includeMentions {
+		scorer.addMentionEdges()
+	}
+
+	return corpus.recs, seed, scorer.best, nil
+}
+
+// graphCorpus is the live-page snapshot plus its deterministic lookup indexes.
+// Building it is separate from edge scoring so cancellation/read failures never
+// leave graphScoreMap with a partially scored graph.
+type graphCorpus struct {
+	recs   []graphRec
+	byNorm map[string]int
+	byID   map[string]int
+	byCode map[string]int
+	byPath map[string]int
+}
+
+func newGraphCorpus(capacity int) graphCorpus {
+	return graphCorpus{
+		recs:   make([]graphRec, 0, capacity),
+		byNorm: make(map[string]int, capacity),
+		byID:   make(map[string]int, capacity),
+		byCode: make(map[string]int, capacity),
+		byPath: make(map[string]int, capacity),
+	}
+}
+
+// loadGraphCorpus snapshots readable pages in ListPages order. Individual page
+// read failures remain best-effort skips, while context cancellation aborts the
+// whole build exactly as the former inline loop did.
+func (s *Store) loadGraphCorpus(ctx context.Context) (graphCorpus, error) {
+	relPaths, err := s.ListPages("")
+	if err != nil {
+		return graphCorpus{}, err
+	}
+	corpus := newGraphCorpus(len(relPaths))
+	for _, relPath := range relPaths {
 		if ctx.Err() != nil {
-			return nil, -1, nil, ctx.Err()
+			return graphCorpus{}, ctx.Err()
 		}
-		page, perr := s.ReadPage(rp)
-		if perr != nil || page == nil {
+		page, readErr := s.ReadPage(relPath)
+		if readErr != nil || page == nil {
 			continue
 		}
-		title := page.Meta.Title
-		if title == "" {
-			title = strings.TrimSuffix(rp, ".md")
-		}
-		tags := make([]string, 0, len(page.Meta.Tags))
-		for _, t := range page.Meta.Tags {
-			if t = strings.ToLower(strings.TrimSpace(t)); t != "" {
-				tags = append(tags, t)
-			}
-		}
-		idx := len(recs)
-		recs = append(recs, graphRec{
-			relPath:   rp,
-			title:     title,
-			normTitle: strings.ToLower(strings.TrimSpace(title)),
-			id:        page.Meta.ID,
-			code:      page.Meta.Code,
-			summary:   page.Meta.Summary,
-			category:  page.Meta.Category,
-			due:       page.Meta.Due,
-			tags:      tags,
-			related:   page.Meta.Related,
-			links:     ExtractWikiLinks(page.Body),
-			bodyLower: strings.ToLower(page.Body),
-			archived:  page.Meta.Archived,
-		})
-		byNorm[recs[idx].normTitle] = idx
-		if recs[idx].id != "" {
-			byID[recs[idx].id] = idx
-		}
-		if recs[idx].code != "" {
-			byCode[recs[idx].code] = idx
-		}
-		byPath[rp] = idx
-		byPath[strings.TrimSuffix(rp, ".md")] = idx
+		corpus.add(graphRecord(relPath, page))
 	}
-	if len(recs) == 0 {
-		return recs, -1, nil, nil
-	}
+	return corpus, nil
+}
 
-	// The benchmark scores from a known seed page (by path); production resolves
-	// the seed from the free-text query.
-	seed := -1
-	if seedOverride != "" {
-		if i, ok := byPath[seedOverride]; ok {
-			seed = i
-		}
-	} else {
-		seed = findSeed(recs, byNorm, byID, byCode, q)
+func graphRecord(relPath string, page *Page) graphRec {
+	title := page.Meta.Title
+	if title == "" {
+		title = strings.TrimSuffix(relPath, ".md")
 	}
-	if seed < 0 {
-		return recs, -1, nil, nil
+	return graphRec{
+		relPath:   relPath,
+		title:     title,
+		normTitle: strings.ToLower(strings.TrimSpace(title)),
+		id:        page.Meta.ID,
+		code:      page.Meta.Code,
+		summary:   page.Meta.Summary,
+		category:  page.Meta.Category,
+		due:       page.Meta.Due,
+		tags:      normalizeGraphTags(page.Meta.Tags),
+		related:   page.Meta.Related,
+		links:     ExtractWikiLinks(page.Body),
+		bodyLower: strings.ToLower(page.Body),
+		archived:  page.Meta.Archived,
 	}
+}
 
-	// Tag frequency for the shared-tag pass (skip degenerate tags that span
-	// too much of the corpus — same 2..12 window as graph_snapshot.go).
-	tagFreq := make(map[string]int)
-	for i := range recs {
-		for _, t := range recs[i].tags {
-			tagFreq[t]++
+func normalizeGraphTags(tags []string) []string {
+	normalized := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		if tag = strings.ToLower(strings.TrimSpace(tag)); tag != "" {
+			normalized = append(normalized, tag)
 		}
 	}
+	return normalized
+}
 
-	best := make(map[int]*graphNeighbor)
-	bump := func(idx int, score float64, relation string) {
-		if idx < 0 || idx == seed {
-			return
-		}
-		// Archived pages are retired from the active stage everywhere else
-		// (search demotes, digests/anchors skip); recommending them as
-		// neighbors — e.g. a rotated 로그-보관.md via the family edge — would
-		// resurface exactly what archiving put away.
-		if recs[idx].archived {
-			return
-		}
-		n := best[idx]
-		if n == nil {
-			best[idx] = &graphNeighbor{idx: idx, score: score, relation: relation}
-			return
-		}
-		if score > n.score {
-			n.score = score
-			n.relation = relation
-		}
+func (c *graphCorpus) add(rec graphRec) {
+	idx := len(c.recs)
+	c.recs = append(c.recs, rec)
+	c.byNorm[rec.normTitle] = idx
+	if rec.id != "" {
+		c.byID[rec.id] = idx
 	}
+	if rec.code != "" {
+		c.byCode[rec.code] = idx
+	}
+	c.byPath[rec.relPath] = idx
+	c.byPath[strings.TrimSuffix(rec.relPath, ".md")] = idx
+}
 
-	resolve := func(rel string) int {
-		rel = strings.TrimSpace(rel)
-		rel = strings.TrimPrefix(rel, "[[")
-		rel = strings.TrimSuffix(rel, "]]")
-		if i, ok := byPath[rel]; ok {
-			return i
-		}
-		if i, ok := byPath[strings.TrimSuffix(rel, ".md")]; ok {
-			return i
-		}
-		// Code first among the identifier maps: it's the frozen, move-stable
-		// identity, so a code ref keeps resolving after the target page moves.
-		if i, ok := byCode[normalizeProjectCode(rel)]; ok {
-			return i
-		}
-		if i, ok := byID[rel]; ok {
-			return i
-		}
-		if i, ok := byNorm[strings.ToLower(strings.TrimSpace(rel))]; ok {
-			return i
+// seedIndex keeps benchmark path seeding and production query seeding as two
+// explicit modes. A non-empty override never falls back to fuzzy query lookup.
+func (c *graphCorpus) seedIndex(query, override string) int {
+	if override != "" {
+		if idx, ok := c.byPath[override]; ok {
+			return idx
 		}
 		return -1
 	}
+	return findSeed(c.recs, c.byNorm, c.byID, c.byCode, query)
+}
 
-	// Explicit Related[] edges, forward (seed -> X) and reverse (X -> seed).
-	for _, rel := range recs[seed].related {
-		bump(resolve(rel), 1.0, "관련")
+func (c *graphCorpus) resolveReference(raw string) int {
+	ref := strings.TrimSpace(raw)
+	ref = strings.TrimPrefix(ref, "[[")
+	ref = strings.TrimSuffix(ref, "]]")
+	if idx, ok := c.byPath[ref]; ok {
+		return idx
 	}
-	for i := range recs {
-		if i == seed {
+	if idx, ok := c.byPath[strings.TrimSuffix(ref, ".md")]; ok {
+		return idx
+	}
+	// Code first among the identifier maps: it is the frozen, move-stable
+	// identity, so a code ref keeps resolving after the target page moves.
+	if idx, ok := c.byCode[normalizeProjectCode(ref)]; ok {
+		return idx
+	}
+	if idx, ok := c.byID[ref]; ok {
+		return idx
+	}
+	if idx, ok := c.byNorm[strings.ToLower(strings.TrimSpace(ref))]; ok {
+		return idx
+	}
+	return -1
+}
+
+// graphEdgeScorer applies the edge phases in graphScoreMap's declared order.
+// bump replaces only a strictly weaker edge, so equal-score phases keep the
+// earlier authored relation label.
+type graphEdgeScorer struct {
+	corpus *graphCorpus
+	seed   int
+	best   map[int]*graphNeighbor
+}
+
+func newGraphEdgeScorer(corpus *graphCorpus, seed int) *graphEdgeScorer {
+	return &graphEdgeScorer{
+		corpus: corpus,
+		seed:   seed,
+		best:   make(map[int]*graphNeighbor),
+	}
+}
+
+func (g *graphEdgeScorer) bump(idx int, score float64, relation string) {
+	if idx < 0 || idx == g.seed || g.corpus.recs[idx].archived {
+		return
+	}
+	neighbor := g.best[idx]
+	if neighbor == nil {
+		g.best[idx] = &graphNeighbor{idx: idx, score: score, relation: relation}
+		return
+	}
+	if score > neighbor.score {
+		neighbor.score = score
+		neighbor.relation = relation
+	}
+}
+
+// addRelatedEdges scores explicit Related[] edges in both directions.
+func (g *graphEdgeScorer) addRelatedEdges() {
+	for _, ref := range g.corpus.recs[g.seed].related {
+		g.bump(g.corpus.resolveReference(ref), 1.0, "관련")
+	}
+	for idx := range g.corpus.recs {
+		if idx == g.seed {
 			continue
 		}
-		for _, rel := range recs[i].related {
-			if resolve(rel) == seed {
-				bump(i, 1.0, "관련")
+		for _, ref := range g.corpus.recs[idx].related {
+			if g.corpus.resolveReference(ref) == g.seed {
+				g.bump(idx, 1.0, "관련")
 			}
 		}
 	}
+}
 
-	// Inline [[wiki-link]] edges in bodies — author-intended links, as
-	// trustworthy as Related[]. The dreamer emits these into pages' "관련 문서"
-	// sections and an agent can link in prose via wiki write; parsing them here
-	// turns inline links into real graph edges instead of decoration. Forward
-	// (seed body links X) and reverse (X body links seed).
-	for _, l := range recs[seed].links {
-		bump(resolve(l), 1.0, "링크")
+// addInlineLinkEdges scores authored [[wiki-link]] edges after Related[], so
+// equal scores retain the explicit frontmatter relation.
+func (g *graphEdgeScorer) addInlineLinkEdges() {
+	for _, ref := range g.corpus.recs[g.seed].links {
+		g.bump(g.corpus.resolveReference(ref), 1.0, "링크")
 	}
-	for i := range recs {
-		if i == seed {
+	for idx := range g.corpus.recs {
+		if idx == g.seed {
 			continue
 		}
-		for _, l := range recs[i].links {
-			if resolve(l) == seed {
-				bump(i, 1.0, "링크")
+		for _, ref := range g.corpus.recs[idx].links {
+			if g.corpus.resolveReference(ref) == g.seed {
+				g.bump(idx, 1.0, "링크")
 			}
 		}
 	}
+}
 
-	// Layout-family edges: pages in one project folder are related by
-	// construction (대표/로그/기자재/메일분석 slots of the same project), yet often
-	// nothing links them explicitly — the dominant orphan class in the 2026-07
-	// audit (로그.md and 기자재 pages invisible to GraphContext). The folder
-	// already encodes the relation, so count it as a real edge: curated slots
-	// rank like authored links, while raw mail-analysis pages join weaker so a
-	// mail-heavy project cannot crowd curated neighbors out of the top-N.
-	if folder, ok := ProjectFolderOf(recs[seed].relPath); ok {
-		for i := range recs {
-			if i == seed {
-				continue
-			}
-			if f, ok2 := ProjectFolderOf(recs[i].relPath); ok2 && f == folder {
-				score := 1.0
-				if IsMailAnalysisPath(recs[i].relPath) {
-					score = 0.6
-				}
-				bump(i, score, "같은 프로젝트")
-			}
-		}
+// addProjectFamilyEdges connects pages whose canonical project folder already
+// encodes ownership. Raw mail-analysis pages intentionally receive less weight.
+func (g *graphEdgeScorer) addProjectFamilyEdges() {
+	folder, ok := ProjectFolderOf(g.corpus.recs[g.seed].relPath)
+	if !ok {
+		return
 	}
+	for idx := range g.corpus.recs {
+		if idx == g.seed {
+			continue
+		}
+		candidateFolder, belongs := ProjectFolderOf(g.corpus.recs[idx].relPath)
+		if !belongs || candidateFolder != folder {
+			continue
+		}
+		score := 1.0
+		if IsMailAnalysisPath(g.corpus.recs[idx].relPath) {
+			score = 0.6
+		}
+		g.bump(idx, score, "같은 프로젝트")
+	}
+}
 
-	// Shared-tag edges.
-	seedTags := make(map[string]bool, len(recs[seed].tags))
-	for _, t := range recs[seed].tags {
-		if f := tagFreq[t]; f >= 2 && f <= 12 {
-			seedTags[t] = true
+func graphTagFrequencies(recs []graphRec) map[string]int {
+	frequencies := make(map[string]int)
+	for idx := range recs {
+		for _, tag := range recs[idx].tags {
+			frequencies[tag]++
 		}
 	}
-	if len(seedTags) > 0 {
-		for i := range recs {
-			if i == seed {
-				continue
-			}
-			for _, t := range recs[i].tags {
-				if seedTags[t] {
-					bump(i, 0.5, "태그:"+t)
-					break
-				}
-			}
-		}
-	}
+	return frequencies
+}
 
-	// Body-mention edges: seed mentions X (0.7), or X mentions seed (0.8 —
-	// being talked about is a slightly stronger signal than talking). Gated
-	// because the graded benchmark showed these mostly add false neighbors (a
-	// page sharing a site name in prose is not a real relation).
-	if includeMentions {
-		seedTitle := recs[seed].normTitle
-		for i := range recs {
-			if i == seed {
-				continue
-			}
-			other := &recs[i]
-			if len(other.normTitle) >= minMentionTitleLen && strings.Contains(recs[seed].bodyLower, other.normTitle) {
-				bump(i, 0.7, "언급")
-			}
-			if len(seedTitle) >= minMentionTitleLen && strings.Contains(other.bodyLower, seedTitle) {
-				bump(i, 0.8, "언급")
+// addSharedTagEdges excludes corpus-wide and singleton tags using the same
+// 2..12 frequency window as graph_snapshot.go.
+func (g *graphEdgeScorer) addSharedTagEdges() {
+	frequencies := graphTagFrequencies(g.corpus.recs)
+	seedTags := make(map[string]bool, len(g.corpus.recs[g.seed].tags))
+	for _, tag := range g.corpus.recs[g.seed].tags {
+		if frequency := frequencies[tag]; frequency >= 2 && frequency <= 12 {
+			seedTags[tag] = true
+		}
+	}
+	if len(seedTags) == 0 {
+		return
+	}
+	for idx := range g.corpus.recs {
+		if idx == g.seed {
+			continue
+		}
+		for _, tag := range g.corpus.recs[idx].tags {
+			if seedTags[tag] {
+				g.bump(idx, 0.5, "태그:"+tag)
+				break
 			}
 		}
 	}
+}
 
-	return recs, seed, best, nil
+// addMentionEdges scores seed→candidate mentions at 0.7 and reverse mentions
+// at 0.8. graphScoreMap calls it only when the benchmark-backed gate is on.
+func (g *graphEdgeScorer) addMentionEdges() {
+	seed := &g.corpus.recs[g.seed]
+	for idx := range g.corpus.recs {
+		if idx == g.seed {
+			continue
+		}
+		candidate := &g.corpus.recs[idx]
+		if len(candidate.normTitle) >= minMentionTitleLen &&
+			strings.Contains(seed.bodyLower, candidate.normTitle) {
+			g.bump(idx, 0.7, "언급")
+		}
+		if len(seed.normTitle) >= minMentionTitleLen &&
+			strings.Contains(candidate.bodyLower, seed.normTitle) {
+			g.bump(idx, 0.8, "언급")
+		}
+	}
 }
 
 // graphEmbedWeight scales the dense-similarity term folded into each candidate's

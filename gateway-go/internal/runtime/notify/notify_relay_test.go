@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 // Test debounce: checkDebounce + markSent — first marked send succeeds,

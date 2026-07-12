@@ -81,7 +81,9 @@ class CUDABuildShellTests(unittest.TestCase):
         self.assertIn("nvcc --version", calls)
         self.assertIn("nvidia-smi --query-gpu=name,compute_cap --format=csv,noheader", calls)
         self.assertIn("pip CUDACXX= CMAKE_ARGS= args=install --quiet --upgrade pip", calls)
-        self.assertIn("args=install --quiet fastapi uvicorn pydantic numpy", calls)
+        self.assertIn("args=install --quiet --require-hashes -r ", calls)
+        self.assertIn("requirements.lock", calls)
+        self.assertNotIn("args=install --quiet fastapi uvicorn pydantic numpy", calls)
         self.assertIn(f"CUDACXX={self.cuda}/bin/nvcc", calls)
         self.assertIn("CMAKE_ARGS=-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=121", calls)
         self.assertIn(

@@ -18,7 +18,7 @@
 # Usage: DENEB_INSTANCE=effortr scripts/dev/effort-eval.sh
 # Output: ~/.cache/deneb-visual/effort-eval-<ts>.md  (tmpfs-safe location)
 set -uo pipefail
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/../.." || exit 1
 
 INSTANCE="${DENEB_INSTANCE:-effortr}"
 LOG="/tmp/deneb-${INSTANCE}-gateway-live.log"

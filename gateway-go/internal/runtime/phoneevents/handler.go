@@ -31,9 +31,10 @@ import (
 	"strings"
 	"time"
 
+	tokens "github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
@@ -49,7 +50,7 @@ type ActionResult struct {
 
 // Config supplies the late-bound runtime dependencies for phone event handling.
 type Config struct {
-	ChatHandler        *chat.Handler
+	ChatHandler        chatport.SyncRunner
 	Relay              *proactive.Relay
 	ResolvePhoneAction func(ActionResult) bool
 	ShutdownContext    context.Context
@@ -58,7 +59,7 @@ type Config struct {
 
 // Handler accepts phone telemetry and runs proactive judgment turns.
 type Handler struct {
-	chatHandler        *chat.Handler
+	chatHandler        chatport.SyncRunner
 	relay              *proactive.Relay
 	resolvePhoneAction func(ActionResult) bool
 	shutdownContext    context.Context
@@ -287,7 +288,7 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusForbidden, map[string]any{"error": "localhost only"})
 		return
 	}
-	if s.chatHandler == nil {
+	if s.chatHandler == nil || !s.chatHandler.ChatReady() {
 		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "chat handler unavailable"})
 		return
 	}
@@ -395,7 +396,7 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 	}
 	command := fmt.Sprintf(phoneEventPromptTmpl,
 		phoneEventKindLabel(eventType), source, text,
-		fmt.Sprintf(phoneEventGuidance(eventType), chat.SilentReplyToken))
+		fmt.Sprintf(phoneEventGuidance(eventType), tokens.SilentReplyToken))
 
 	safego.GoWithSlog(s.logger, "phone-event-ingest", func() {
 		ctx, cancel := context.WithTimeout(s.shutdownContext, phoneEventTurnDeadline)
@@ -413,7 +414,9 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 
 		maxTok := phoneEventMaxTokens
 		sessionKey := phoneEventSessionPrefix + ":" + shortid.New("e")
-		result, err := s.chatHandler.SendSync(ctx, sessionKey, command, "", &chat.SyncOptions{
+		result, err := s.chatHandler.RunSync(ctx, chatport.SyncRequest{
+			SessionKey:          sessionKey,
+			Message:             command,
 			MaxTokens:           &maxTok,
 			EphemeralUser:       true, // throwaway session — persist nothing
 			EphemeralAssistant:  true,
@@ -427,7 +430,7 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 		// relayNative applies the same noise floor as every proactive surface:
 		// a NO_REPLY or "별 일 없음" judgment is suppressed (delivered=false) and
 		// never reaches the work feed or push.
-		output := result.BestText()
+		output := result.BestText
 		if s.relay == nil {
 			s.logger.Error("phone-event relay unavailable", "source", source, "type", eventType)
 			return

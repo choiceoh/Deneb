@@ -23,6 +23,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/prompts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/middleware"
@@ -43,7 +44,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/sessionstore"
 	"github.com/choiceoh/deneb/gateway-go/pkg/checkpoint"
 )
 
@@ -100,7 +101,7 @@ type ServerRuntime struct {
 	// lazy init, and runMarkerUnsub tears down the lifecycle listener
 	// on shutdown.
 	resumeMu       sync.Mutex
-	markerStore    *session.RunMarkerStore
+	markerStore    *sessionstore.RunMarkerStore
 	runMarkerUnsub func()
 
 	// cacheHealth holds the rolling vLLM prefix-cache hit-ratio samples surfaced

@@ -11,7 +11,7 @@
        kotlin-check kotlin-spotless kotlin-detekt kotlin-desktop-test kotlin-desktop-smoke-test kotlin-android-compile \
        docs-lint docs-lint-fix \
        ci ci/fast go-test-cached \
-       health health-check health-v2 health-v2-check health-v2-deep health-v2-test health-v2-baseline runtime-health runtime-health-test \
+       health health-check health-v2 health-v2-check health-v2-deep health-v2-test health-v2-baseline runtime-health runtime-health-test python-test python-lint shell-lint shell-behavior-test \
        preview native-smoke \
        info
 
@@ -229,6 +229,28 @@ health-v2-deep:
 health-v2-test:
 	@python3 -m unittest discover -s scripts/audit -p 'test_codebase_health_v2*.py' -v
 
+# All checked-in Python behavior tests. Keep the two roots isolated so their
+# fixture/support modules resolve exactly as they do when invoked directly.
+python-test:
+	@python3 -m unittest discover -s scripts/audit -p 'test_*.py' -v
+	@python3 -m unittest discover -s scripts/dev -p 'test_*.py' -v
+
+# Static analysis for support, audit, and deployment Python. CI installs the
+# hash-locked toolchain from requirements-dev.lock before invoking this target.
+python-lint:
+	@python3 -m ruff check scripts
+
+# Operational scripts are checked at warning severity: correctness and safety
+# findings gate delivery, while ShellCheck's style-only suggestions stay advisory.
+shell-lint:
+	@git ls-files -z 'scripts/*.sh' 'scripts/**/*.sh' | xargs -0 shellcheck --severity=warning
+
+# Deterministic behavioral coverage for the operational topology shell. This is
+# named separately in CI so a deployment-script contract failure is visible
+# without searching the full Python support-tooling log.
+shell-behavior-test:
+	@python3 -m unittest discover -s scripts/audit -p 'test_topology_parity_shell.py' -v
+
 # One-way baseline update. Review the report and diff; the command refuses to
 # lower the composite or any pillar and refuses new high/critical findings.
 health-v2-baseline:
@@ -319,18 +341,31 @@ data-gen-check:
 
 KOTLIN_MODELS_SRC = internal/runtime/rpc/handler/handlerminiapp
 KOTLIN_MODELS_OUT = ../client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/deneb/generated/MiniappWireTypes.kt
+KOTLIN_MODELS_TEST_OUT = ../client-android/app/composeApp/src/commonTest/kotlin/ai/deneb/deneb/generated/MiniappWireDescriptorContractTest.kt
+KOTLIN_MODELS_FIELD_TEST_OUT = ../client-android/app/composeApp/src/commonTest/kotlin/ai/deneb/deneb/generated/MiniappWireFieldBoundaryContractTest.kt
+KOTLIN_MODELS_NULL_TEST_OUT = ../client-android/app/composeApp/src/commonTest/kotlin/ai/deneb/deneb/generated/MiniappWireNullCompatibilityTest.kt
+KOTLIN_MODELS_VALUE_TEST_OUT = ../client-android/app/composeApp/src/commonTest/kotlin/ai/deneb/deneb/generated/MiniappWireValueContractTest.kt
 KOTLIN_MODELS_PKG = ai.deneb.deneb.generated
 
 kotlin-models:
 	cd gateway-go && go run cmd/kotlin-models-gen/main.go \
 		-src $(KOTLIN_MODELS_SRC) \
 		-out $(KOTLIN_MODELS_OUT) \
+		-test-out $(KOTLIN_MODELS_TEST_OUT) \
+		-field-test-out $(KOTLIN_MODELS_FIELD_TEST_OUT) \
+		-null-test-out $(KOTLIN_MODELS_NULL_TEST_OUT) \
+		-value-test-out $(KOTLIN_MODELS_VALUE_TEST_OUT) \
 		-pkg $(KOTLIN_MODELS_PKG)
 
 kotlin-models-check:
+	@# Drift-check gateway-go/cmd/kotlin-models-gen/main.go outputs with -check.
 	cd gateway-go && go run cmd/kotlin-models-gen/main.go \
 		-src $(KOTLIN_MODELS_SRC) \
 		-out $(KOTLIN_MODELS_OUT) \
+		-test-out $(KOTLIN_MODELS_TEST_OUT) \
+		-field-test-out $(KOTLIN_MODELS_FIELD_TEST_OUT) \
+		-null-test-out $(KOTLIN_MODELS_NULL_TEST_OUT) \
+		-value-test-out $(KOTLIN_MODELS_VALUE_TEST_OUT) \
 		-pkg $(KOTLIN_MODELS_PKG) \
 		-check
 

@@ -56,97 +56,137 @@ func (w *Writer) AggregateByModel(sinceMs int64) []ModelStat {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	stats := map[string]*ModelStat{} // key: provider+"/"+model
-	durations := map[string][]int64{}
-
+	accumulator := newModelAggregateAccumulator()
 	paths, _ := filepath.Glob(filepath.Join(w.baseDir, "*.jsonl"))
 	for _, path := range paths {
-		// runId → stats key / thinking flag, scoped per file (a run lands in
-		// exactly one file).
-		runModel := map[string]string{}
-		runThinking := map[string]bool{}
-		for _, e := range readAllEntries(path) {
-			if sinceMs > 0 && e.Ts < sinceMs {
-				continue
-			}
-			switch e.Type {
-			case TypeRunStart:
-				var d RunStartData
-				if json.Unmarshal(e.Data, &d) != nil || d.Model == "" {
-					continue
-				}
-				key := d.Provider + "/" + d.Model
-				runModel[e.RunID] = key
-				runThinking[e.RunID] = d.ThinkingLevel != "" && d.ThinkingLevel != "off"
-				if stats[key] == nil {
-					stats[key] = &ModelStat{Model: d.Model, Provider: d.Provider}
-				}
-			case TypeRunEnd:
-				st := stats[runModel[e.RunID]]
-				if st == nil {
-					continue
-				}
-				var d RunEndData
-				if json.Unmarshal(e.Data, &d) != nil {
-					continue
-				}
-				st.Runs++
-				st.Turns += d.Turns
-				st.InputTokens += int64(d.InputTokens)
-				st.OutputTokens += int64(d.OutputTokens)
-				st.CacheReadTokens += int64(d.CacheReadTokens)
-				st.CacheCreationTokens += int64(d.CacheCreationTokens)
-				st.MaxTokensRecoveries += d.MaxTokensRecoveries
-				st.ToolCalls += d.ToolCalls
-				if d.StopReason == "timeout" {
-					st.TimeoutRuns++
-				}
-				if d.Model != "" && d.Model != st.Model {
-					st.FallbackRuns++
-				}
-				if runThinking[e.RunID] {
-					st.ThinkingRuns++
-				}
-				if d.Compacted {
-					st.CompactedRuns++
-				}
-				key := runModel[e.RunID]
-				durations[key] = append(durations[key], d.TotalMs)
-			case TypeRunError:
-				if st := stats[runModel[e.RunID]]; st != nil {
-					st.Errors++
-				}
-			case TypeTurnTool:
-				st := stats[runModel[e.RunID]]
-				if st == nil {
-					continue
-				}
-				var d TurnToolData
-				if json.Unmarshal(e.Data, &d) != nil {
-					continue
-				}
-				if d.IsError {
-					st.ToolErrors++
-				}
-			}
-		}
+		accumulator.foldFile(readAllEntries(path), sinceMs)
 	}
+	return accumulator.finish()
+}
 
-	out := make([]ModelStat, 0, len(stats))
-	for key, st := range stats {
-		if st.Runs == 0 && st.Errors == 0 {
-			continue // run.start without any completion in the window
+type modelAggregateAccumulator struct {
+	stats     map[string]*ModelStat
+	durations map[string][]int64
+}
+
+type modelRunScope struct {
+	modelKeys map[string]string
+	thinking  map[string]bool
+}
+
+func newModelAggregateAccumulator() *modelAggregateAccumulator {
+	return &modelAggregateAccumulator{
+		stats:     map[string]*ModelStat{},
+		durations: map[string][]int64{},
+	}
+}
+
+// foldFile keeps runId correlation scoped to one session JSONL. Reusing a run
+// ID in another session cannot reattribute its completion to this file's model.
+func (a *modelAggregateAccumulator) foldFile(entries []LogEntry, sinceMs int64) {
+	scope := modelRunScope{
+		modelKeys: map[string]string{},
+		thinking:  map[string]bool{},
+	}
+	for _, entry := range entries {
+		if sinceMs > 0 && entry.Ts < sinceMs {
+			continue
 		}
-		if ds := durations[key]; len(ds) > 0 {
-			var total int64
-			for _, d := range ds {
-				total += d
-			}
-			st.AvgMs = total / int64(len(ds))
-			sort.Slice(ds, func(i, j int) bool { return ds[i] < ds[j] })
-			st.P95Ms = ds[(len(ds)*95)/100]
+		a.foldEntry(entry, &scope)
+	}
+}
+
+func (a *modelAggregateAccumulator) foldEntry(entry LogEntry, scope *modelRunScope) {
+	switch entry.Type {
+	case TypeRunStart:
+		a.foldRunStart(entry, scope)
+	case TypeRunEnd:
+		a.foldModelRunEnd(entry, scope)
+	case TypeRunError:
+		a.foldModelRunError(entry, scope)
+	case TypeTurnTool:
+		a.foldModelTool(entry, scope)
+	}
+}
+
+func (a *modelAggregateAccumulator) foldRunStart(entry LogEntry, scope *modelRunScope) {
+	var data RunStartData
+	if json.Unmarshal(entry.Data, &data) != nil || data.Model == "" {
+		return
+	}
+	key := data.Provider + "/" + data.Model
+	scope.modelKeys[entry.RunID] = key
+	scope.thinking[entry.RunID] = data.ThinkingLevel != "" && data.ThinkingLevel != "off"
+	if a.stats[key] == nil {
+		a.stats[key] = &ModelStat{Model: data.Model, Provider: data.Provider}
+	}
+}
+
+func (a *modelAggregateAccumulator) statForRun(entry LogEntry, scope *modelRunScope) *ModelStat {
+	return a.stats[scope.modelKeys[entry.RunID]]
+}
+
+func (a *modelAggregateAccumulator) foldModelRunEnd(entry LogEntry, scope *modelRunScope) {
+	stat := a.statForRun(entry, scope)
+	if stat == nil {
+		return
+	}
+	var data RunEndData
+	if json.Unmarshal(entry.Data, &data) != nil {
+		return
+	}
+	stat.Runs++
+	stat.Turns += data.Turns
+	stat.InputTokens += int64(data.InputTokens)
+	stat.OutputTokens += int64(data.OutputTokens)
+	stat.CacheReadTokens += int64(data.CacheReadTokens)
+	stat.CacheCreationTokens += int64(data.CacheCreationTokens)
+	stat.MaxTokensRecoveries += data.MaxTokensRecoveries
+	stat.ToolCalls += data.ToolCalls
+	if data.StopReason == "timeout" {
+		stat.TimeoutRuns++
+	}
+	if data.Model != "" && data.Model != stat.Model {
+		stat.FallbackRuns++
+	}
+	if scope.thinking[entry.RunID] {
+		stat.ThinkingRuns++
+	}
+	if data.Compacted {
+		stat.CompactedRuns++
+	}
+	key := scope.modelKeys[entry.RunID]
+	a.durations[key] = append(a.durations[key], data.TotalMs)
+}
+
+func (a *modelAggregateAccumulator) foldModelRunError(entry LogEntry, scope *modelRunScope) {
+	if stat := a.statForRun(entry, scope); stat != nil {
+		stat.Errors++
+	}
+}
+
+func (a *modelAggregateAccumulator) foldModelTool(entry LogEntry, scope *modelRunScope) {
+	stat := a.statForRun(entry, scope)
+	if stat == nil {
+		return
+	}
+	var data TurnToolData
+	if json.Unmarshal(entry.Data, &data) != nil {
+		return
+	}
+	if data.IsError {
+		stat.ToolErrors++
+	}
+}
+
+func (a *modelAggregateAccumulator) finish() []ModelStat {
+	out := make([]ModelStat, 0, len(a.stats))
+	for key, stat := range a.stats {
+		if stat.Runs == 0 && stat.Errors == 0 {
+			continue
 		}
-		out = append(out, *st)
+		finalizeModelLatency(stat, a.durations[key])
+		out = append(out, *stat)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Runs != out[j].Runs {
@@ -155,4 +195,17 @@ func (w *Writer) AggregateByModel(sinceMs int64) []ModelStat {
 		return out[i].Model < out[j].Model
 	})
 	return out
+}
+
+func finalizeModelLatency(stat *ModelStat, durations []int64) {
+	if len(durations) == 0 {
+		return
+	}
+	var total int64
+	for _, duration := range durations {
+		total += duration
+	}
+	stat.AvgMs = total / int64(len(durations))
+	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
+	stat.P95Ms = durations[(len(durations)*95)/100]
 }

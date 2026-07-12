@@ -11,7 +11,7 @@
 | `rpc/handler/<domain>/` | 도메인별 핸들러(agent·chat·session·skill·wiki·process·observe·insights·handlerminiapp·handlerevents·provider·system·gateway·checkpoint). `Deps` 구조체 + `Methods(deps)`만 노출 |
 | `rpc/rpcutil/` | `gateway_hub.go`(서비스 컨테이너 — 읽기 접근자·late-bind setter·phase 헬퍼 외 행위는 `Broadcast`/`Validate`뿐), `helpers.go` |
 | `rpc/rpcerr/`·`rpc/rpctest/` | 에러 타입 / 테스트 헬퍼 |
-| `session/` | 세션 라이프사이클 상태기계(`IDLE→RUNNING→DONE/FAILED/KILLED/TIMEOUT`), 전이 검증, 이벤트 pub/sub 버스 |
+| `../domain/session/` | 세션 도메인 상태기계(`IDLE→RUNNING→DONE/FAILED/KILLED/TIMEOUT`), 전이 검증, 이벤트 pub/sub 버스. runtime보다 아래 계층이라 pipeline/platform도 역의존 없이 사용 |
 | `bootstrap/` | 기동 시퀀스 조립 |
 | `process/` | exec 프로세스 추적 |
 | `observe/` | LogCapture ring + observe 평면([project_observe_plane]) |
@@ -55,7 +55,7 @@ registerWorkflowSideEffects() # 비-RPC: autonomous/dreaming/notifier (server_rp
 | 새 RPC 도메인 추가 | `docs/agent-rules/hub-wiring.md`의 3단계 — 핸들러 `Deps`+`Methods` → 허브 필드 → `method_registry.go` 인라인 배선 → `requiredMethods` 스냅샷 갱신 |
 | 새 HTTP 라우트 | `server_http_routing.go`에서 시작, 핸들러는 `server_http_<area>.go` |
 | 새 배경 서브시스템/주기작업 | `*_subsystem.go` 패턴 따라 신설 → `registerWorkflowSideEffects`에서 기동 |
-| 세션 상태 전이 변경 | `session/` 상태기계 (전이 검증이 잘못된 전이를 거부) |
+| 세션 상태 전이 변경 | `internal/domain/session/` 상태기계 (전이 검증이 잘못된 전이를 거부) |
 | 미니앱 모델 피커/헬스 | `miniapp_models*.go` |
 
 ## 함정

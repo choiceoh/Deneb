@@ -23,7 +23,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/goals"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
@@ -47,7 +47,7 @@ const (
 
 // goalTask implements autonomous.PeriodicTask: it advances standing goals.
 type goalTask struct {
-	chatHandler *chat.Handler
+	chatHandler chatport.SyncRunner
 	store       *goals.Store
 	activity    *monitoring.ActivityTracker
 	logger      *slog.Logger
@@ -63,7 +63,7 @@ type Task = goalTask
 
 // NewTask constructs the standing-goal loop.
 func NewTask(
-	chatHandler *chat.Handler,
+	chatHandler chatport.SyncRunner,
 	store *goals.Store,
 	activity *monitoring.ActivityTracker,
 	logger *slog.Logger,
@@ -86,7 +86,7 @@ func (t *goalTask) Interval() time.Duration { return goalTickInterval }
 
 // Run executes one scheduled task cycle.
 func (t *goalTask) Run(ctx context.Context) error {
-	if t.chatHandler == nil || t.store == nil {
+	if t.chatHandler == nil || !t.chatHandler.ChatReady() || t.store == nil {
 		return nil
 	}
 	// User-active gate: do not advance a goal while the user is actively using
@@ -153,14 +153,16 @@ func (t *goalTask) driveOne(ctx context.Context, g *goals.State) error {
 		mu.Unlock()
 	}
 
-	opts := &chat.SyncOptions{
+	req := chatport.SyncRequest{
+		SessionKey:          sessionKey,
+		Message:             composeGoalContinuation(g.Goal, g.Subgoals),
 		AutoDeliveredOutput: true, // run-completion relay delivers; agent must not self-send
 		BeforeToolCall:      before,
 		OnToolResult:        onResult,
 	}
 
 	runCtx, cancel := context.WithTimeout(ctx, goalStepTimeout)
-	res, err := t.chatHandler.SendSync(runCtx, sessionKey, composeGoalContinuation(g.Goal, g.Subgoals), "", opts)
+	res, err := t.chatHandler.RunSync(runCtx, req)
 	cancel()
 
 	// Commit successfully-executed destructive actions regardless of the judge —
@@ -177,7 +179,7 @@ func (t *goalTask) driveOne(ctx context.Context, g *goals.State) error {
 		return nil
 	}
 
-	verdict, reason, parseFailed := t.judge(ctx, g.Goal, g.Subgoals, res.BestText())
+	verdict, reason, parseFailed := t.judge(ctx, g.Goal, g.Subgoals, res.BestText)
 	updated := t.store.RecordRun(sessionKey, verdict, reason, parseFailed)
 	t.logger.Info("goal-loop: step done",
 		"session", sessionKey, "verdict", verdict,
