@@ -36,6 +36,32 @@ func (s *Server) registerWikiResearchTask(homeDir string) {
 	s.logger.Info("wiki-research task registered", "interval", wikiwork.ResearchInterval.String())
 }
 
+// registerWikiScoutTask wires the external-scouting twin of wiki-research
+// (open questions + WIKI.md brief topics → bounded web turn) only for the
+// production state directory.
+func (s *Server) registerWikiScoutTask(homeDir string) {
+	if s.chatHandler == nil || s.wikiStore == nil {
+		return
+	}
+	if os.Getenv("DENEB_WIKI_SCOUT_DISABLE") == "1" {
+		s.logger.Info("wiki-scout disabled via DENEB_WIKI_SCOUT_DISABLE")
+		return
+	}
+	stateDir, ok := s.productionStateDir(homeDir)
+	if !ok {
+		return
+	}
+	s.autonomousSvc.RegisterTask(wikiwork.NewScoutTask(
+		s.chatHandler,
+		s.wikiStore,
+		s.activity,
+		s.logger,
+		filepath.Join(stateDir, wikiwork.ScoutStateFile),
+		configresolve.WorkspaceDir(),
+	))
+	s.logger.Info("wiki-scout task registered", "interval", wikiwork.ScoutInterval.String())
+}
+
 // registerWikiReviewTask wires post-write review and deterministic maintenance
 // only for the production state directory.
 func (s *Server) registerWikiReviewTask(homeDir string) {

@@ -232,8 +232,8 @@ func TestIsValid(t *testing.T) {
 
 func TestKnownPresets(t *testing.T) {
 	presets := KnownPresets()
-	if len(presets) != 9 {
-		t.Errorf("got %d, want 9 known presets", len(presets))
+	if len(presets) != 10 {
+		t.Errorf("got %d, want 10 known presets", len(presets))
 	}
 	for _, p := range presets {
 		if AllowedTools(p) == nil {

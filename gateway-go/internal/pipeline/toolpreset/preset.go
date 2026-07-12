@@ -14,6 +14,7 @@ const (
 	PresetImplementer  Preset = "implementer"   // spawn preset: researcher + file mutation + shell
 	PresetVerifier     Preset = "verifier"      // spawn preset: read + build/test execution
 	PresetWikiResearch Preset = "wiki-research" // autonomous wiki refresh: researcher minus web (internal sources only)
+	PresetWikiScout    Preset = "wiki-scout"    // autonomous external scouting: researcher surface incl. web
 	PresetCoding       Preset = "coding"        // 코드모드 (code: sessions): worktree coding, no 업무 memory/personal-data tools
 	PresetBriefcase    Preset = "briefcase"     // isolated Deneb-Briefcase evaluation world
 )
@@ -109,6 +110,14 @@ var researcherTools = toSet(
 // keeps its write sub-action so the turn can persist the refresh.
 var wikiResearchTools = without(researcherTools, "web")
 
+// wikiScoutTools backs the autonomous external-scouting task
+// (wiki_scout_task.go): the full researcher surface INCLUDING web — the
+// scout's whole job is answering externally-answerable open questions and
+// watching operator brief topics on the web. Curated-memory pollution is
+// prevented by the scout's write discipline (자료 ingest + 로그 op only, rep
+// page body untouched), not by dropping the web tool as wiki-research does.
+var wikiScoutTools = researcherTools
+
 // implementerTools: researcher + file mutation + shell — the "do the work"
 // preset for delegated changes that end in artifacts, not just findings.
 var implementerTools = union(researcherTools, toSet(
@@ -176,6 +185,8 @@ func AllowedTools(preset Preset) map[string]struct{} {
 		return verifierTools
 	case PresetWikiResearch:
 		return wikiResearchTools
+	case PresetWikiScout:
+		return wikiScoutTools
 	case PresetCoding:
 		return codingTools
 	case PresetBriefcase:
@@ -190,7 +201,7 @@ func IsValid(preset Preset) bool {
 	switch preset {
 	case PresetNone, PresetConversation, PresetBoot, PresetSelfReview,
 		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch,
-		PresetCoding, PresetBriefcase:
+		PresetWikiScout, PresetCoding, PresetBriefcase:
 		return true
 	default:
 		return false
@@ -202,7 +213,7 @@ func KnownPresets() []Preset {
 	return []Preset{
 		PresetConversation, PresetBoot, PresetSelfReview,
 		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch,
-		PresetCoding, PresetBriefcase,
+		PresetWikiScout, PresetCoding, PresetBriefcase,
 	}
 }
 

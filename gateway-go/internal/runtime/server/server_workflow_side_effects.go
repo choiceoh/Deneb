@@ -44,6 +44,13 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		// registerWikiResearchTask.
 		s.registerWikiResearchTask(homeDir)
 
+		// Wiki scout: every 12h, take stale project open questions plus the
+		// operator's WIKI.md brief topics and run one bounded agent turn WITH
+		// web access to chase externally-answerable answers. Findings persist
+		// only via wiki ingest (자료) + 로그.md '질문해결' ops — rep-page body
+		// stays untouched. Production state dir only.
+		s.registerWikiScoutTask(homeDir)
+
 		// Wiki reviewer: every 2h, review pages created/updated since the last
 		// pass for near-duplicates (skill-reviewer pattern for memory writes) —
 		// deterministic candidate gather → one lightweight JSON verdict →
