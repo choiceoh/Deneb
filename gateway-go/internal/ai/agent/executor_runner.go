@@ -231,7 +231,7 @@ func (r *agentRunner) streamTurn(prepared preparedAgentTurn) (*turnResult, bool,
 	if prepared.request.ctx.Err() != nil {
 		r.result.Stream.TerminationReason = string(streamTerminationContextDone)
 		r.result.StopReason = stopReasonFromCtx(prepared.request.ctx)
-		return nil, true, nil
+		return nil, true, nil //nolint:nilerr // context cancellation is recorded as a controlled stop, not a run failure
 	}
 	if outcome.initialConnectionFailed() {
 		return nil, false, fmt.Errorf("stream chat (turn %d): %w", prepared.index, err)

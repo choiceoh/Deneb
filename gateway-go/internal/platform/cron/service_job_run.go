@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
+	tokens "github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
@@ -90,7 +90,7 @@ func (r *cronJobRun) execute() RunOutcome {
 
 func (r *cronJobRun) executeAgent() RunOutcome {
 	sessionKind := r.prepareSession()
-	output, runErr, retriesUsed := r.runAgentWithRetries(sessionKind)
+	output, retriesUsed, runErr := r.runAgentWithRetries(sessionKind)
 	if runErr != nil {
 		return r.failedAgentOutcome(runErr, retriesUsed)
 	}
@@ -113,7 +113,7 @@ func (r *cronJobRun) prepareSession() session.Kind {
 	return sessionKind
 }
 
-func (r *cronJobRun) runAgentWithRetries(sessionKind session.Kind) (string, error, int) {
+func (r *cronJobRun) runAgentWithRetries(sessionKind session.Kind) (string, int, error) {
 	maxRetries := boundedCronRetries(r.job.Payload.RetryCount)
 	retryBackoff := cronRetryBackoffMs(r.job.Payload.RetryBackoffMs)
 	var output string
@@ -136,7 +136,7 @@ func (r *cronJobRun) runAgentWithRetries(sessionKind session.Kind) (string, erro
 			break
 		}
 	}
-	return output, runErr, retriesUsed
+	return output, retriesUsed, runErr
 }
 
 func boundedCronRetries(retries int) int {

@@ -2,6 +2,7 @@ package wiki
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -310,7 +311,7 @@ func TestGraphScoreMap_PreservesPhasePrecedenceAndBoundaries(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, _, _, err := store.graphScoreMap(ctx, "", true, "seed.md"); err != context.Canceled {
+	if _, _, _, err := store.graphScoreMap(ctx, "", true, "seed.md"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled load error = %v, want context.Canceled", err)
 	}
 }

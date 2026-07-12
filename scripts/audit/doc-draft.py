@@ -186,7 +186,7 @@ def strip_fences(text: str) -> str:
 # --- gap finder (deterministic) ---------------------------------------------- #
 def _rule_globs() -> list[str]:
     globs = []
-    for f in os.listdir(RULES_DIR):
+    for f in sorted(os.listdir(RULES_DIR)):
         if not f.endswith(".md"):
             continue
         with open(os.path.join(RULES_DIR, f), errors="ignore") as fh:

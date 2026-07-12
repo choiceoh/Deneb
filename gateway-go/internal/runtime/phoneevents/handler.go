@@ -31,7 +31,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
+	tokens "github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"

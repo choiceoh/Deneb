@@ -14,12 +14,15 @@ func (s *chatPortStub) ChatReady() bool { return s != nil }
 func (*chatPortStub) RunSync(context.Context, chatport.SyncRequest) (*chatport.SyncResult, error) {
 	return &chatport.SyncResult{}, nil
 }
+
 func (*chatPortStub) Send(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 	return &protocol.ResponseFrame{ID: req.ID, OK: true}
 }
+
 func (*chatPortStub) History(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 	return &protocol.ResponseFrame{ID: req.ID, OK: true}
 }
+
 func (*chatPortStub) Abort(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 	return &protocol.ResponseFrame{ID: req.ID, OK: true}
 }

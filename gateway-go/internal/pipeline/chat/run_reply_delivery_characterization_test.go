@@ -19,6 +19,7 @@ type replyDeliverySequenceTranscript struct {
 func (*replyDeliverySequenceTranscript) Load(string, int) ([]ChatMessage, int, error) {
 	return nil, 0, nil
 }
+
 func (t *replyDeliverySequenceTranscript) Append(string, ChatMessage) error {
 	*t.events = append(*t.events, "transcript")
 	return nil

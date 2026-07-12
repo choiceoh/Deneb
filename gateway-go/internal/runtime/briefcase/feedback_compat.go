@@ -39,21 +39,23 @@ var (
 	ErrInvalidUserSimulatorPlan = feedbackcontract.ErrInvalidUserSimulatorPlan
 )
 
-type VerdictCategory = feedbackcontract.VerdictCategory
-type ScoreBand = feedbackcontract.ScoreBand
-type ArtifactSummaryStatus = feedbackcontract.ArtifactSummaryStatus
-type HiddenFeedbackInputs = feedbackcontract.HiddenFeedbackInputs
-type FeedbackLimits = feedbackcontract.FeedbackLimits
-type VisibleArtifactSummary = feedbackcontract.VisibleArtifactSummary
-type SimulatorHandoffInput = feedbackcontract.SimulatorHandoffInput
-type SimulatorHandoff = feedbackcontract.SimulatorHandoff
-type ForbiddenFeedbackClass = feedbackcontract.ForbiddenFeedbackClass
-type FeedbackLeakError = feedbackcontract.FeedbackLeakError
-type FeedbackFirewall = feedbackcontract.FeedbackFirewall
-type UserSimulator = feedbackcontract.UserSimulator
-type UserSimulatorPlan = feedbackcontract.UserSimulatorPlan
-type ScriptedFollowUp = feedbackcontract.ScriptedFollowUp
-type ScriptedUserSimulator = feedbackcontract.ScriptedUserSimulator
+type (
+	VerdictCategory        = feedbackcontract.VerdictCategory
+	ScoreBand              = feedbackcontract.ScoreBand
+	ArtifactSummaryStatus  = feedbackcontract.ArtifactSummaryStatus
+	HiddenFeedbackInputs   = feedbackcontract.HiddenFeedbackInputs
+	FeedbackLimits         = feedbackcontract.FeedbackLimits
+	VisibleArtifactSummary = feedbackcontract.VisibleArtifactSummary
+	SimulatorHandoffInput  = feedbackcontract.SimulatorHandoffInput
+	SimulatorHandoff       = feedbackcontract.SimulatorHandoff
+	ForbiddenFeedbackClass = feedbackcontract.ForbiddenFeedbackClass
+	FeedbackLeakError      = feedbackcontract.FeedbackLeakError
+	FeedbackFirewall       = feedbackcontract.FeedbackFirewall
+	UserSimulator          = feedbackcontract.UserSimulator
+	UserSimulatorPlan      = feedbackcontract.UserSimulatorPlan
+	ScriptedFollowUp       = feedbackcontract.ScriptedFollowUp
+	ScriptedUserSimulator  = feedbackcontract.ScriptedUserSimulator
+)
 
 func NewFeedbackFirewall(hidden HiddenFeedbackInputs, limits FeedbackLimits) (*FeedbackFirewall, error) {
 	return feedbackcontract.NewFeedbackFirewall(hidden, limits)

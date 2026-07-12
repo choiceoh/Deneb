@@ -44,12 +44,14 @@ type ChatHarnessConfig struct {
 	Arm                    Arm
 }
 
-type Arm = runcontract.Arm
-type EpisodeResult = runcontract.EpisodeResult
-type SamplingProfile = runcontract.SamplingProfile
-type ToolResultRecord = runcontract.ToolResultRecord
-type RunResult = runcontract.RunResult
-type HarnessBinding = runcontract.HarnessBinding
+type (
+	Arm              = runcontract.Arm
+	EpisodeResult    = runcontract.EpisodeResult
+	SamplingProfile  = runcontract.SamplingProfile
+	ToolResultRecord = runcontract.ToolResultRecord
+	RunResult        = runcontract.RunResult
+	HarnessBinding   = runcontract.HarnessBinding
+)
 
 const (
 	RunSchemaVersion  = runcontract.RunSchemaVersion

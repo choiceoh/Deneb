@@ -18,8 +18,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/promptguard"
 )
 
-type FileRecallHit = chatport.FileRecallHit
-type FileRecallFunc = chatport.FileRecallFunc
+type (
+	FileRecallHit  = chatport.FileRecallHit
+	FileRecallFunc = chatport.FileRecallFunc
+)
 
 // recallFileSource gates how many file hits a single turn's recall may carry.
 // Files are a high-precision but easily-overweighted source: the index's 0.73

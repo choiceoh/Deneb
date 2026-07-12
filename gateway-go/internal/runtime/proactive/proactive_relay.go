@@ -8,7 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
+	tokens "github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"

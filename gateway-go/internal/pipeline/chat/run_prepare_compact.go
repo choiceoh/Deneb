@@ -336,7 +336,7 @@ func compactWithPolarisBridge(
 		ctx, params.SessionKey, messages, summarizer, contextBudget,
 	)
 	if result.LLMCompacted && summarizer != nil {
-		schedulePolarisCondensation(engine, params.SessionKey, deps.callbacks.shutdownCtx, summarizer, logger)
+		schedulePolarisCondensation(deps.callbacks.shutdownCtx, engine, params.SessionKey, summarizer, logger)
 	}
 	return compacted, result
 }
@@ -355,22 +355,22 @@ func configurePolarisEngine(engine *polaris.Engine, deps runDeps) {
 }
 
 func schedulePolarisCondensation(
+	parentCtx context.Context,
 	engine *polaris.Engine,
 	sessionKey string,
-	parentCtx context.Context,
 	summarizer compact.Summarizer,
 	logger *slog.Logger,
 ) {
 	if parentCtx == nil {
 		parentCtx = context.Background()
 	}
-	go condensePolarisInBackground(engine, sessionKey, parentCtx, summarizer, logger) //nolint:gosec // G118 -- shutdown-derived and timeout-bounded
+	go condensePolarisInBackground(parentCtx, engine, sessionKey, summarizer, logger) //nolint:gosec // G118 -- shutdown-derived and timeout-bounded
 }
 
 func condensePolarisInBackground(
+	parentCtx context.Context,
 	engine *polaris.Engine,
 	sessionKey string,
-	parentCtx context.Context,
 	summarizer compact.Summarizer,
 	logger *slog.Logger,
 ) {

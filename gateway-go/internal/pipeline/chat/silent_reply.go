@@ -1,6 +1,6 @@
 package chat
 
-import "github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
+import tokens "github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
 
 // SilentReplyToken is the token that suppresses message delivery when the LLM
 // replies with exactly this value (with optional surrounding whitespace).

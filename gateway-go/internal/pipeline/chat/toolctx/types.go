@@ -79,8 +79,10 @@ type DeliveryContext = chatport.DeliveryContext
 // Transcript wire types are owned by chatport. Aliases keep the established
 // toolctx API source- and JSON-compatible while Polaris and compaction depend
 // on the neutral contract directly.
-type ChatMessage = chatport.ChatMessage
-type ChatAttachment = chatport.ChatAttachment
+type (
+	ChatMessage    = chatport.ChatMessage
+	ChatAttachment = chatport.ChatAttachment
+)
 
 // NewTextChatMessage preserves the legacy toolctx constructor surface.
 func NewTextChatMessage(role, text string, ts int64) ChatMessage {
@@ -108,6 +110,8 @@ type AbortEntry struct {
 // mediaType is one of: photo, document, video, audio, voice (empty = auto-detect).
 type MediaSendFunc func(ctx context.Context, delivery *DeliveryContext, filePath, mediaType, caption string, silent bool) error
 
-type SearchResult = chatport.SearchResult
-type MatchedMsg = chatport.MatchedMsg
-type TranscriptStore = chatport.TranscriptStore
+type (
+	SearchResult    = chatport.SearchResult
+	MatchedMsg      = chatport.MatchedMsg
+	TranscriptStore = chatport.TranscriptStore
+)

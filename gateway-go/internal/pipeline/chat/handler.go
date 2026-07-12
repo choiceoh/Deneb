@@ -168,10 +168,12 @@ type TopicResolver interface {
 	Dir() string
 }
 
-type SkillNudger = chatport.SkillNudger
-type SkillNudgeSnapshot = chatport.SkillNudgeSnapshot
-type SkillNudgeToolActivity = chatport.SkillNudgeToolActivity
-type SkillUsageRecorder = chatport.SkillUsageRecorder
+type (
+	SkillNudger            = chatport.SkillNudger
+	SkillNudgeSnapshot     = chatport.SkillNudgeSnapshot
+	SkillNudgeToolActivity = chatport.SkillNudgeToolActivity
+	SkillUsageRecorder     = chatport.SkillUsageRecorder
+)
 
 // HandlerConfig configures the chat handler.
 type HandlerConfig struct {
