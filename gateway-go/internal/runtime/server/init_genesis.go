@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -514,6 +516,25 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 				Tracker: s.genesisTracker,
 				Logger:  s.logger,
 			})
+			// Runtime-error mining: recurring, code-actionable gateway errors in
+			// the live error ring become propose-only scope=code candidates — the
+			// second, always-available L4 fuel source (evolve-tool-gap is rare).
+			// Propose-only and staged: coding-dispatch does NOT yet accept the
+			// runtime-error source, so candidates accumulate for review before any
+			// autonomous source edit is dispatched.
+			if s.logCapture != nil {
+				s.autonomousSvc.RegisterTask(&genesis.RuntimeErrorMiningTask{
+					ErrorLines: func(limit int) []observe.LogLine {
+						r := s.logCapture.Ring()
+						if r == nil {
+							return nil
+						}
+						return r.Query(observe.QueryOpts{MinLevel: slog.LevelError, Limit: limit})
+					},
+					Tracker: s.genesisTracker,
+					Logger:  s.logger,
+				})
+			}
 		}
 		if replayExecutorEnabled() && isProdState {
 			workoutEngine := genesis.NewSkillValidationEngine(s.genesisTracker, s.logger)
