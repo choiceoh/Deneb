@@ -115,7 +115,7 @@ func TestMetaEvolution_LedgerAndEvidence(t *testing.T) {
 	}
 
 	task := &MetaEvolutionTask{Tracker: tr}
-	evidence := task.assembleEvidence(metaEpochProducer)
+	evidence := task.assembleEvidence(context.Background(), metaEpochProducer)
 	if !strings.Contains(evidence, "tightened scoring rubric") {
 		t.Fatalf("evidence lacks meta-experience memory:\n%s", evidence)
 	}
@@ -162,7 +162,7 @@ func TestMetaEvolution_JudgeAccuracyEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ev := task.assembleEvidence(metaEpochEvaluator)
+	ev := task.assembleEvidence(context.Background(), metaEpochEvaluator)
 	if !strings.Contains(ev, "판정자 최근 오판") {
 		t.Fatalf("evaluator epoch lacks the P3 miss block:\n%s", ev)
 	}
@@ -180,7 +180,7 @@ func TestMetaEvolution_JudgeAccuracyEvidence(t *testing.T) {
 	}
 
 	// The producer epoch must NOT be grounded on judge misses (different target).
-	if prod := task.assembleEvidence(metaEpochProducer); strings.Contains(prod, "판정자 최근 오판") {
+	if prod := task.assembleEvidence(context.Background(), metaEpochProducer); strings.Contains(prod, "판정자 최근 오판") {
 		t.Fatalf("producer epoch was grounded on judge misses:\n%s", prod)
 	}
 }
@@ -206,7 +206,7 @@ func TestMetaEvolution_JudgeAccuracyEvidence_CleanJudge(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if ev := task.assembleEvidence(metaEpochEvaluator); strings.Contains(ev, "판정자 최근 오판") {
+	if ev := task.assembleEvidence(context.Background(), metaEpochEvaluator); strings.Contains(ev, "판정자 최근 오판") {
 		t.Fatalf("clean judge produced a miss block:\n%s", ev)
 	}
 }
@@ -400,7 +400,7 @@ func TestMetaEvolution_OperatorUtilityEvidence(t *testing.T) {
 	}
 	// The full assembled evidence must carry the block in BOTH epochs.
 	for _, epoch := range []string{metaEpochProducer, metaEpochEvaluator} {
-		if ev := task.assembleEvidence(epoch); !strings.Contains(ev, "운영자 피드카드 결정") {
+		if ev := task.assembleEvidence(context.Background(), epoch); !strings.Contains(ev, "운영자 피드카드 결정") {
 			t.Fatalf("%s epoch evidence lacks utility block:\n%s", epoch, ev)
 		}
 	}
@@ -436,5 +436,47 @@ func TestMetaRevisionRecord_OperatorUtilityRoundTrip(t *testing.T) {
 	}
 	if legacyRec.OperatorUtility != nil {
 		t.Fatalf("legacy record got a non-nil utility: %+v", legacyRec.OperatorUtility)
+	}
+}
+
+// P5-5: the runtime-health advisory block appears in the evidence when
+// RuntimeHealth is wired and returns non-empty; it is absent when the closure
+// is nil (dev without agentlog) or returns empty (fresh install). The block
+// must be marked advisory so the producer knows it is prose-grounding, not a
+// gate.
+func TestMetaEvolution_RuntimeHealthEvidence(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Nil closure → block absent (quiet).
+	nilTask := &MetaEvolutionTask{Tracker: tr}
+	if ev := nilTask.assembleEvidence(context.Background(), metaEpochProducer); strings.Contains(ev, "런타임 건강") {
+		t.Fatalf("nil RuntimeHealth produced a block:\n%s", ev)
+	}
+	// Empty closure → block absent (fresh install quiet).
+	emptyTask := &MetaEvolutionTask{Tracker: tr, RuntimeHealth: func(context.Context) string { return "" }}
+	if ev := emptyTask.assembleEvidence(context.Background(), metaEpochProducer); strings.Contains(ev, "런타임 건강") {
+		t.Fatalf("empty RuntimeHealth produced a block:\n%s", ev)
+	}
+	// Non-empty → block present in BOTH epochs, marked advisory.
+	wiredTask := &MetaEvolutionTask{
+		Tracker: tr,
+		RuntimeHealth: func(context.Context) string {
+			return "- p95 8200ms, 오류율 2.1%"
+		},
+	}
+	for _, epoch := range []string{metaEpochProducer, metaEpochEvaluator} {
+		ev := wiredTask.assembleEvidence(context.Background(), epoch)
+		if !strings.Contains(ev, "런타임 건강") {
+			t.Fatalf("%s epoch evidence lacks runtime-health block:\n%s", epoch, ev)
+		}
+		if !strings.Contains(ev, "자문") || !strings.Contains(ev, "게이트 아님") {
+			t.Fatalf("%s epoch runtime-health block missing advisory marker:\n%s", epoch, ev)
+		}
+		if !strings.Contains(ev, "8200ms") {
+			t.Fatalf("%s epoch runtime-health block lost the closure content:\n%s", epoch, ev)
+		}
 	}
 }

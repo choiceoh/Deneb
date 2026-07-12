@@ -268,10 +268,16 @@ Five workstreams, in priority order:
    ledger as an ADVISORY snapshot — the producer's prose is grounded on
    operator-perceived utility while every deterministic gate stays
    untouched. The aggregate is a read-side view of the existing `Action`
-   ledger field (zero new signal source, zero new dependency). Remaining:
-   runtime-health composite and quality-bench trends both live in
-   `scripts/audit/` (Python) with no Go reader and no time-series store —
-   wiring either is a cross-package slice (P5-5 next).
+   ledger field (zero new signal source, zero new dependency).
+
+   **Second slice LANDED (runtime-health advisory evidence).** The 7d
+   per-model agentlog aggregate (p95 agentMs, error/timeout/tool-error
+   rates) flows into the same meta-evidence block via an injected
+   `RuntimeHealth` closure — no new persistence (reads the existing
+   `agentlog.Writer.AggregateByModel`), no leaf-package break. The latency
+   signal ("latency #1" at proposal time) now grounds the producer's prose.
+   Remaining: quality-bench trends live in `scripts/audit/` (Python) with no
+   Go reader and no time-series store — a cross-package slice (P5-5 next).
 
 **Graduation ladder.** Autonomy expands on track record, never on calendar.
 Staged locks and the evidence that flips them (thresholds are proposals,

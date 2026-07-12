@@ -457,6 +457,11 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			OnProposal:    s.postMetaProposalCard,
 			OnReverted:    s.postMetaRevertedCard,
 			OnDriftFreeze: s.postDriftFreezeCard,
+			// RSI P5-5: advisory runtime-health evidence — grounds the producer's
+			// prose on operator-experienced latency/reliability (p95 agentMs,
+			// error/timeout/tool-error rates). Sourced from the shared agentlog
+			// writer; no gate reads it.
+			RuntimeHealth: s.metaRuntimeHealthEvidence,
 		})
 		s.autonomousSvc.RegisterTask(&genesis.SkillCuratorTask{
 			Tracker: s.genesisTracker,
