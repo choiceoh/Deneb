@@ -43,6 +43,7 @@ class BackgroundConnectionPolicy(
     private val taskScheduler: TaskScheduler,
     private val daemonController: DaemonController,
 ) {
+    private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
 
@@ -79,6 +80,11 @@ class BackgroundConnectionPolicy(
         foreground = value
         taskScheduler.appInForeground = value
         reconcile()
+        // The user is looking at the phone and the radio is coming up anyway —
+        // opportune moment to refresh the home widget (throttled, no-op when
+        // no widget is placed). Pairs with the stretched system cycle in
+        // deneb_widget_info.xml.
+        if (value) WidgetRefresher.requestRefresh(appContext)
     }
 
     private fun postReconcile() {

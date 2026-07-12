@@ -17,10 +17,12 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
 // Home-screen widget: the next meeting and unread-mail count at a glance, with a
-// tap that opens the Deneb chat. Refreshes on the system's 30-min cycle
-// (deneb_widget_info.xml) and whenever a widget is added or resized. A
-// native-only surface — something the retired Telegram bot never could put on the
-// home screen.
+// tap that opens the Deneb chat. Refreshes on a slow 2h system cycle
+// (deneb_widget_info.xml) plus event-driven updates via [WidgetRefresher]
+// (FCM delivery, app foreground) — the alarm cadence is kept long for battery
+// and freshness rides moments the radio is already awake. A native-only
+// surface — something the retired Telegram bot never could put on the home
+// screen.
 class DenebWidgetProvider :
     AppWidgetProvider(),
     KoinComponent {
