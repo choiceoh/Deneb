@@ -1,6 +1,9 @@
 package genesis
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func rsiLayerByKey(layers []RSILayer, key string) RSILayer {
 	for _, l := range layers {
@@ -79,8 +82,9 @@ func TestRSIStatus_L1DataGatedOnRejectionsOnly(t *testing.T) {
 }
 
 // L4 with only a non-dispatchable code candidate (e.g. the staged runtime-error
-// source, not yet in the dispatch allowlist) is STARVED — code fuel exists but
-// nothing is dispatchable. This is the exact honesty the viewer must show.
+// or health-finding sources, not yet in the dispatch allowlist) is STARVED —
+// code fuel exists but nothing is dispatchable. The staged metric and diagnosis
+// must say so explicitly: supply awaiting review, not a wiring gap.
 func TestRSIStatus_L4StarvedOnNonDispatchableCode(t *testing.T) {
 	tr := newTestTracker(t)
 	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
@@ -89,8 +93,53 @@ func TestRSIStatus_L4StarvedOnNonDispatchableCode(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "codebase-health",
+		Title: "structural finding: volatile-hub @ domain/wiki", Source: "health-finding:volatile-hub:46a381ef4981",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
 	if l.State != RSIStateStarved {
 		t.Fatalf("L4 = %s, want STARVED (%s)", l.State, l.Diagnosis)
 	}
+	if got := rsiMetricValue(l.Metrics, "검토 대기(비배차)"); got != "2" {
+		t.Fatalf("staged metric = %q, want 2 (%+v)", got, l.Metrics)
+	}
+	if got := rsiMetricValue(l.Metrics, "배차 가능"); got != "0" {
+		t.Fatalf("dispatchable metric = %q, want 0", got)
+	}
+	if !strings.Contains(l.Diagnosis, "검토 대기") {
+		t.Fatalf("diagnosis must name the staged supply, got %q", l.Diagnosis)
+	}
+}
+
+// A dispatch-source candidate keeps L4 LIVE regardless of staged extras, and
+// staged still counts the non-dispatch supply next to it.
+func TestRSIStatus_L4LiveWithStagedExtras(t *testing.T) {
+	tr := newTestTracker(t)
+	for _, rec := range []SelfCorrectionCandidateRecord{
+		{Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "sk", Title: "tool gap: wiki_search — sk", Source: "evolve-tool-gap"},
+		{Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "codebase-health", Title: "structural finding: fanout", Source: "health-finding:fanout-hotspot:aa"},
+	} {
+		if _, err := tr.RecordSelfCorrectionCandidate(rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
+	if l.State != RSIStateLive {
+		t.Fatalf("L4 = %s, want LIVE (%s)", l.State, l.Diagnosis)
+	}
+	if got := rsiMetricValue(l.Metrics, "검토 대기(비배차)"); got != "1" {
+		t.Fatalf("staged metric = %q, want 1 (%+v)", got, l.Metrics)
+	}
+}
+
+func rsiMetricValue(metrics []RSIMetricKV, label string) string {
+	for _, m := range metrics {
+		if m.Label == label {
+			return m.Value
+		}
+	}
+	return ""
 }

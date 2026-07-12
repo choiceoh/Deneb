@@ -197,20 +197,29 @@ func (t *Tracker) rsiAssessL4() RSILayer {
 	}
 	byScope := map[string]int{}
 	dispatchable := 0
+	staged := 0
 	for _, c := range cands {
 		scope := strings.TrimSpace(c.Scope)
 		if scope == "" {
 			scope = "?"
 		}
 		byScope[scope]++
-		if scope == "code" && normalizeSelfCorrectionStatus(c.Status) == SelfCorrectionStatusProposed && rsiSourceDispatchable(c.Source) {
-			dispatchable++
+		if scope == "code" && normalizeSelfCorrectionStatus(c.Status) == SelfCorrectionStatusProposed {
+			if rsiSourceDispatchable(c.Source) {
+				dispatchable++
+			} else {
+				// Proposed code candidate from a source not yet in the dispatch
+				// allowlist (runtime-error, health-finding, …): real L4 supply
+				// staged for review, not a wiring gap.
+				staged++
+			}
 		}
 	}
 	metrics := []RSIMetricKV{
 		{"후보", strconv.Itoa(len(cands))},
 		{"코드 후보", strconv.Itoa(byScope["code"])},
 		{"배차 가능", strconv.Itoa(dispatchable)},
+		{"검토 대기(비배차)", strconv.Itoa(staged)},
 	}
 	base := RSILayer{Key: "L4", Title: "소스 자가편집", Metrics: metrics}
 	switch {
@@ -220,6 +229,9 @@ func (t *Tracker) rsiAssessL4() RSILayer {
 	case len(cands) == 0:
 		base.State = RSIStateIdle
 		base.Diagnosis = "아직 캡처된 자기교정 후보가 없습니다"
+	case staged > 0:
+		base.State = RSIStateStarved
+		base.Diagnosis = fmt.Sprintf("비배차 소스의 코드 후보 %d건이 검토 대기 중 — 품질 리뷰 후 배차 소스로 졸업하면 배차됩니다", staged)
 	default:
 		base.State = RSIStateStarved
 		base.Diagnosis = fmt.Sprintf("후보 %d건(%s)이지만 배차 가능한 코드 후보가 아직 없습니다", len(cands), rsiScopeSummary(byScope))

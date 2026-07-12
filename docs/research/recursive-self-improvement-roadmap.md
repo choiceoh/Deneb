@@ -231,6 +231,15 @@ Five workstreams, in priority order:
    Meta-Harness 2603.28052, Agentic Harness Engineering 2604.25850, Bilevel
    Autoresearch 2603.23420 (outer loop reads the inner loop's own code and
    traces — ~5x in their setting).
+   *First slice landed:* `scripts/audit/health-finding-miner.py` files
+   codebase-health high-severity findings (cap 3/run) plus the weakest
+   runtime-health dimension (<60, cap 1/run) as `health-finding:<finding-id>`
+   candidates over the new `miniapp.self_improvement_coding.record` RPC;
+   reopen semantics mirror `selfCorrectionReopenBlocked`. Decision record:
+   scripts-side miner, NOT a gateway PeriodicTask — the inputs (git checkout +
+   history, journald) live outside the serving process, and the tracker stays
+   the queue's single writer via the RPC (rationale in the module docstring).
+   deadcode-audit deltas remain follow-up.
 
 4. **Recursion-surface widening — externalize more of the generative half
    (P1 pattern, one artifact per window).** L2 can only improve what is an
@@ -260,6 +269,7 @@ operator-tunable):
 | Lock (today) | Evidence to graduate | Action |
 |---|---|---|
 | runtime-error source not dispatchable (#3491 staging) | first 3–5 mined candidates review clean (no hallucinated signatures) | allowlist flip in coding-dispatch.sh + rsi_status L4_SOURCES |
+| health-finding source not dispatchable (P5-ws3 first slice) | first mined batch reviews clean (findings reproduce at HEAD, remediation directions actionable) | allowlist flip in coding-dispatch.sh + rsi_status L4_SOURCES |
 | e-process observation mode (#3439) | disagreement labels n≥20, legacy-agreement ≥90% | cutover: e-process owns rollback firing |
 | L4 daily dispatch cap = 2 | N dispatches with 0 deploy-watch rollbacks and ≥50% land rate | raise DENEB_DISPATCH_DAILY_CAP |
 | deploy-watch = binary rollback only | one rollback exercised end-to-end (real or fire-drill) | open the source auto-apply tier per the L4 note |

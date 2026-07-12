@@ -2,6 +2,8 @@ package handlerminiapp
 
 import (
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
@@ -179,6 +181,113 @@ func TestSelfImprovementCodingList_FunnelOptional(t *testing.T) {
 func TestSelfImprovementCodingMethods_NilProvider(t *testing.T) {
 	if got := SelfImprovementCodingMethods(SelfImprovementCodingDeps{}); got != nil {
 		t.Fatalf("SelfImprovementCodingMethods(nil) = %#v, want nil", got)
+	}
+}
+
+func TestSelfImprovementCodingMethods_RecordOptional(t *testing.T) {
+	deps := testSelfImprovementCodingDeps()
+	deps.RecordCandidate = nil
+	methods := SelfImprovementCodingMethods(deps)
+	if _, ok := methods["miniapp.self_improvement_coding.record"]; ok {
+		t.Fatalf("record method must be absent without a RecordCandidate dep")
+	}
+	deps.RecordCandidate = func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
+		return rec, nil
+	}
+	methods = SelfImprovementCodingMethods(deps)
+	if _, ok := methods["miniapp.self_improvement_coding.record"]; !ok {
+		t.Fatalf("record method missing despite RecordCandidate dep")
+	}
+}
+
+func TestSelfImprovementCodingRecord_FilesProposeOnly(t *testing.T) {
+	var got genesis.SelfCorrectionCandidateRecord
+	deps := testSelfImprovementCodingDeps()
+	deps.RecordCandidate = func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
+		got = rec
+		rec.ID = "sc-new"
+		rec.Status = genesis.SelfCorrectionStatusProposed
+		return rec, nil
+	}
+	h := selfImprovementCodingRecord(deps)
+	params, _ := json.Marshal(map[string]any{
+		"scope":          "code",
+		"skillName":      "codebase-health",
+		"title":          "structural finding: volatile-hub @ domain/wiki",
+		"candidate":      "Many dependents consume a contract that changes frequently.",
+		"evidence":       "volatile-hub:46a381ef4981 [change-locality/high] index 5.13",
+		"targetFiles":    []string{"gateway-go/internal/domain/wiki"},
+		"proposedChange": "Stabilize and narrow the public contract.",
+		"source":         "health-finding:volatile-hub:46a381ef4981",
+	})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{
+		ID:     "1",
+		Method: "miniapp.self_improvement_coding.record",
+		Params: params,
+	})
+	payload := decodeSkillsPayload[SelfImprovementCodingRecordResponse](t, resp)
+	if !payload.OK || payload.Candidate.ID != "sc-new" {
+		t.Fatalf("record response = %+v, want ok with recorded id", payload)
+	}
+	if payload.Candidate.Status != genesis.SelfCorrectionStatusProposed {
+		t.Fatalf("recorded status = %q, want proposed", payload.Candidate.Status)
+	}
+	// The handler must pass provenance through untouched and never smuggle a
+	// status past the tracker's propose-only default.
+	if got.Source != "health-finding:volatile-hub:46a381ef4981" || got.Status != "" {
+		t.Fatalf("tracker record = %+v, want untouched source and empty status", got)
+	}
+	if len(got.TargetFiles) != 1 || got.TargetFiles[0] != "gateway-go/internal/domain/wiki" {
+		t.Fatalf("target files = %+v", got.TargetFiles)
+	}
+}
+
+func TestSelfImprovementCodingRecord_RequiresSource(t *testing.T) {
+	h := selfImprovementCodingRecord(testSelfImprovementCodingDeps())
+	params, _ := json.Marshal(map[string]any{"title": "no provenance"})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{
+		ID:     "1",
+		Method: "miniapp.self_improvement_coding.record",
+		Params: params,
+	})
+	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
+		t.Fatalf("expected MISSING_PARAM for empty source, got %+v", resp.Error)
+	}
+}
+
+func TestSelfImprovementCodingRecord_RequiresContent(t *testing.T) {
+	h := selfImprovementCodingRecord(testSelfImprovementCodingDeps())
+	params, _ := json.Marshal(map[string]any{"source": "health-finding:x"})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{
+		ID:     "1",
+		Method: "miniapp.self_improvement_coding.record",
+		Params: params,
+	})
+	if resp.Error == nil || resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Fatalf("expected INVALID_REQUEST for empty content, got %+v", resp.Error)
+	}
+}
+
+func TestSelfImprovementCodingRecord_TrackerRejection(t *testing.T) {
+	deps := testSelfImprovementCodingDeps()
+	deps.RecordCandidate = func(genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
+		return genesis.SelfCorrectionCandidateRecord{}, errors.New("self-correction targets a forbidden surface: surfaces.go")
+	}
+	h := selfImprovementCodingRecord(deps)
+	params, _ := json.Marshal(map[string]any{
+		"title":  "forbidden",
+		"source": "health-finding:x",
+	})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{
+		ID:     "1",
+		Method: "miniapp.self_improvement_coding.record",
+		Params: params,
+	})
+	if resp.Error == nil || resp.Error.Code != protocol.ErrValidationFailed {
+		t.Fatalf("expected VALIDATION_FAILED passthrough, got %+v", resp.Error)
+	}
+	if !strings.Contains(resp.Error.Message, "forbidden surface") {
+		t.Fatalf("rejection cause must reach the caller, got %q", resp.Error.Message)
 	}
 }
 

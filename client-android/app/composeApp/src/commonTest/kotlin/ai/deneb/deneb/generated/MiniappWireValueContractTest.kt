@@ -2594,6 +2594,24 @@ class MiniappWireValueContractTest {
             invalidValue = JsonObject(mapOf("not" to JsonPrimitive("a-list"))),
         ),
         wireContract(
+            name = "SelfImprovementCodingRecordResponse",
+            serializer = SelfImprovementCodingRecordResponse.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "ok",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "candidate",
+                    value = JsonObject(emptyMap()),
+                    expectation = Expectation.Object,
+                ),
+            ),
+            invalidField = "ok",
+            invalidValue = JsonPrimitive(1),
+        ),
+        wireContract(
             name = "SelfImprovementCodingStatusCount",
             serializer = SelfImprovementCodingStatusCount.serializer(),
             fields = listOf(

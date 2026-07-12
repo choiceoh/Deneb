@@ -2476,6 +2476,18 @@ class MiniappWireNullCompatibilityTest {
             field = "funnel",
         ),
         nullContract(
+            name = "SelfImprovementCodingRecordResponse.ok",
+            serializer = SelfImprovementCodingRecordResponse.serializer(),
+            empty = SelfImprovementCodingRecordResponse(),
+            field = "ok",
+        ),
+        nullContract(
+            name = "SelfImprovementCodingRecordResponse.candidate",
+            serializer = SelfImprovementCodingRecordResponse.serializer(),
+            empty = SelfImprovementCodingRecordResponse(),
+            field = "candidate",
+        ),
+        nullContract(
             name = "SelfImprovementCodingStatusCount.status",
             serializer = SelfImprovementCodingStatusCount.serializer(),
             empty = SelfImprovementCodingStatusCount(),

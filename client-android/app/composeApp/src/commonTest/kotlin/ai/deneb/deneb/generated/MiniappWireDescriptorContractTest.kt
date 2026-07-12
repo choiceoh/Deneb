@@ -415,6 +415,12 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("candidates", "count", "statusCounts", "funnel"),
         ),
         contract(
+            name = "SelfImprovementCodingRecordResponse",
+            serializer = SelfImprovementCodingRecordResponse.serializer(),
+            empty = SelfImprovementCodingRecordResponse(),
+            fields = listOf("ok", "candidate"),
+        ),
+        contract(
             name = "SelfImprovementCodingStatusCount",
             serializer = SelfImprovementCodingStatusCount.serializer(),
             empty = SelfImprovementCodingStatusCount(),

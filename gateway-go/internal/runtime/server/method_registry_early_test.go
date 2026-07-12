@@ -64,7 +64,10 @@ func TestEarlyCapabilityHelpers_PreserveMethodNames(t *testing.T) {
 		{
 			name: "self improvement",
 			got:  srv.earlySelfImprovementMethods(),
-			want: []string{"miniapp.self_improvement_coding.list"},
+			want: []string{
+				"miniapp.self_improvement_coding.list",
+				"miniapp.self_improvement_coding.record",
+			},
 		},
 	}
 

@@ -17,6 +17,10 @@ import (
 // lifecycle log events; they are unapplied coding hypotheses for batch review.
 type SelfImprovementCodingDeps struct {
 	RecentCandidates func(status string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error)
+	// RecordCandidate appends one propose-only candidate through the genesis
+	// tracker — the queue's single writer, which enforces the forbidden-surface
+	// list at record time. Optional: without it the record method is absent.
+	RecordCandidate func(genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error)
 	// Funnel reports capture-side activity (optional — zero summary when absent).
 	Funnel func() genesis.SelfCorrectionFunnelSummary
 	// LastNudgeAtMs reports when the heartbeat self-coding review lane last
@@ -94,9 +98,74 @@ func SelfImprovementCodingMethods(deps SelfImprovementCodingDeps) map[string]rpc
 	if deps.RecentCandidates == nil {
 		return nil
 	}
-	return map[string]rpcutil.HandlerFunc{
+	methods := map[string]rpcutil.HandlerFunc{
 		"miniapp.self_improvement_coding.list": selfImprovementCodingList(deps),
 	}
+	if deps.RecordCandidate != nil {
+		methods["miniapp.self_improvement_coding.record"] = selfImprovementCodingRecord(deps)
+	}
+	return methods
+}
+
+// SelfImprovementCodingRecordResponse is the miniapp.self_improvement_coding.record
+// payload. The callers today are script-side miners (e.g.
+// scripts/audit/health-finding-miner.py); native clients read the queue via .list.
+//
+//deneb:wire
+type SelfImprovementCodingRecordResponse struct {
+	OK        bool                    `json:"ok"`
+	Candidate SelfCorrectionCandidate `json:"candidate"`
+}
+
+// selfImprovementCodingRecord files one PROPOSE-ONLY self-correction candidate.
+// There is intentionally no status parameter: every record lands as proposed and
+// can only move through the reviewed lifecycle (accept/reject/apply) elsewhere,
+// so no RPC caller can inject a pre-approved edit.
+func selfImprovementCodingRecord(deps SelfImprovementCodingDeps) rpcutil.HandlerFunc {
+	type params struct {
+		Scope          string   `json:"scope"`
+		SkillName      string   `json:"skillName"`
+		Title          string   `json:"title"`
+		Candidate      string   `json:"candidate"`
+		Evidence       string   `json:"evidence"`
+		Reason         string   `json:"reason"`
+		TargetFiles    []string `json:"targetFiles"`
+		ProposedChange string   `json:"proposedChange"`
+		Risk           string   `json:"risk"`
+		Source         string   `json:"source"`
+	}
+	return bindAuthenticated[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		// Provenance is mandatory: source-less rows are indistinguishable from
+		// legacy captures (observed 2026-07-04) and can never graduate through
+		// the dispatch allowlist.
+		if strings.TrimSpace(p.Source) == "" {
+			return rpcerr.MissingParam("source").Response(req.ID)
+		}
+		if strings.TrimSpace(p.Title) == "" && strings.TrimSpace(p.Candidate) == "" && strings.TrimSpace(p.ProposedChange) == "" {
+			return rpcerr.InvalidParams(fmt.Errorf("candidate needs title, candidate, or proposedChange")).Response(req.ID)
+		}
+		rec, err := deps.RecordCandidate(genesis.SelfCorrectionCandidateRecord{
+			Scope:          p.Scope,
+			SkillName:      p.SkillName,
+			Title:          p.Title,
+			Candidate:      p.Candidate,
+			Evidence:       p.Evidence,
+			Reason:         p.Reason,
+			TargetFiles:    p.TargetFiles,
+			ProposedChange: p.ProposedChange,
+			Risk:           p.Risk,
+			Source:         p.Source,
+		})
+		if err != nil {
+			// Includes record-time forbidden-surface rejections — the candidate
+			// was refused, not lost; surface the cause verbatim to the caller.
+			return rpcerr.WrapValidationFailed("self-correction record rejected", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, SelfImprovementCodingRecordResponse{
+			OK:        true,
+			Candidate: selfCorrectionCandidate(rec),
+		})
+	})
 }
 
 func selfImprovementCodingList(deps SelfImprovementCodingDeps) rpcutil.HandlerFunc {

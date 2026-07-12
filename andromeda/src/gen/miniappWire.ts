@@ -592,6 +592,11 @@ export interface SelfImprovementCodingListResponse {
   funnel?: SelfImprovementCodingFunnel
 }
 
+export interface SelfImprovementCodingRecordResponse {
+  ok?: boolean
+  candidate?: SelfCorrectionCandidate
+}
+
 export interface SelfImprovementCodingStatusCount {
   status?: string
   count?: number
