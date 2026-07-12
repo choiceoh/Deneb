@@ -69,6 +69,13 @@ func Propus(tracker *genesis.Tracker) (*PropusSection, bool) {
 	section["evolve_rolled_back_7d"] = evolution.EvolveRolledBack7d
 	section["genesis_7d"] = evolution.Genesis7d
 	section["distinct_skills_evolved_7d"] = evolution.DistinctSkillsEvolved7d
+	// Acceptor scoreboard (RSI P1.5 ⑤): the rates ride with their sample size
+	// so a consumer can tell "measured 0.00" from "nothing resolved yet" —
+	// rsi-loop-audit.py grades them as unmeasured when resolved is 0.
+	section["evolve_confirmed_7d"] = evolution.EvolveConfirmed7d
+	section["resolved_evolves_7d"] = evolution.ResolvedEvolves7d
+	section["confirm_rate"] = evolution.ConfirmRate
+	section["false_accept_rate"] = evolution.FalseAcceptRate
 	if evolution.TopEvolvedSkill != "" {
 		section["top_evolved_skill"] = evolution.TopEvolvedSkill
 		section["top_evolved_count"] = evolution.TopEvolvedCount
