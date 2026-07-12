@@ -535,6 +535,17 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 					Logger:  s.logger,
 				})
 			}
+			// Curriculum lane (RSI P5-1): coverage-gap demand injection for the
+			// fast loop — proposes at most one missing capability per cycle with
+			// validation cases authored first, filed as a route=genesis
+			// opportunity for the existing reviews to route. Propose-only;
+			// prod-gated for the same reason as the lanes above (live LLM call +
+			// shared genesis writes).
+			s.autonomousSvc.RegisterTask(&genesis.CurriculumTask{
+				Evolver: s.genesisEvolver,
+				Tracker: s.genesisTracker,
+				Logger:  s.logger,
+			})
 		}
 		if replayExecutorEnabled() && isProdState {
 			workoutEngine := genesis.NewSkillValidationEngine(s.genesisTracker, s.logger)
