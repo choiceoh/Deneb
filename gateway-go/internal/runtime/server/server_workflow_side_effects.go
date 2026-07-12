@@ -59,6 +59,13 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		// capped, git-snapshotted merges. Production state dir only.
 		s.registerWikiReviewTask(homeDir)
 
+		// Notification digest: every 12h, consume the phone-notification raw
+		// ledger (phoneevents/ledger.go — KakaoTalk/approval/SMS events the
+		// ephemeral judgment path would otherwise evaporate) into the wiki via
+		// one internal-only agent turn. Alerting stays instant; memory is
+		// batched. Production state dir only.
+		s.registerNotiDigestTask(homeDir)
+
 		s.registerMeetingHarvestWorkflow(homeDir)
 
 		s.registerPlaudWorkflow(homeDir)

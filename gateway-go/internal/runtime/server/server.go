@@ -40,6 +40,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
 	runtimenotify "github.com/choiceoh/deneb/gateway-go/internal/runtime/notify"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
@@ -140,6 +141,11 @@ type Server struct {
 	// confirmed/failed/unconfirmed instead of fire-and-forget. Created in New
 	// alongside pushHub. See server_phone_action.go.
 	phoneActions *phoneActionAwaiter
+
+	// phoneEventLedger is the shared notification raw ledger — both phone-event
+	// entry doors (RPC bridge + HTTP loopback) record into one instance. Lazily
+	// created during single-threaded startup wiring (server_phone_action.go).
+	phoneEventLedger *phoneevents.Ledger
 
 	// fleetAlerts dedups SparkFleet webhook alerts so a standing condition (e.g.
 	// "low memory headroom: srv2" re-emitted every heartbeat) does not push the

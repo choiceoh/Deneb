@@ -8,6 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
 )
 
@@ -70,6 +71,33 @@ func (s *Server) registerWikiScoutTask(homeDir string) *wikiwork.ScoutTask {
 	s.autonomousSvc.RegisterTask(task)
 	s.logger.Info("wiki-scout task registered", "interval", wikiwork.ScoutInterval.String())
 	return task
+}
+
+// registerNotiDigestTask wires the phone-notification ledger digestion (the
+// memory half of phone sensing — the judgment path stays ephemeral) only for
+// the production state directory.
+func (s *Server) registerNotiDigestTask(homeDir string) {
+	if s.chatHandler == nil || s.wikiStore == nil {
+		return
+	}
+	if os.Getenv("DENEB_NOTI_DIGEST_DISABLE") == "1" {
+		s.logger.Info("noti-digest disabled via DENEB_NOTI_DIGEST_DISABLE")
+		return
+	}
+	stateDir, ok := s.productionStateDir(homeDir)
+	if !ok {
+		return
+	}
+	s.autonomousSvc.RegisterTask(wikiwork.NewNotiDigestTask(
+		s.chatHandler,
+		s.wikiStore,
+		s.activity,
+		s.logger,
+		filepath.Join(stateDir, wikiwork.NotiDigestStateFile),
+		filepath.Join(stateDir, phoneevents.LedgerDirname),
+		configresolve.WorkspaceDir(),
+	))
+	s.logger.Info("noti-digest task registered", "interval", wikiwork.NotiDigestInterval.String())
 }
 
 // registerWikiReviewTask wires post-write review and deterministic maintenance

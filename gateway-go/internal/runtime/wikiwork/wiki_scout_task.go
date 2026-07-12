@@ -29,14 +29,16 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
 // Compile-time interface compliance.
@@ -83,7 +85,7 @@ type wikiScoutState struct {
 
 // wikiScoutTask implements autonomous.PeriodicTask.
 type wikiScoutTask struct {
-	chatHandler *chat.Handler
+	chatHandler chatport.SyncRunner
 	wikiStore   *wiki.Store
 	activity    *monitoring.ActivityTracker
 	logger      *slog.Logger
@@ -91,6 +93,12 @@ type wikiScoutTask struct {
 	// workspaceDir locates the operator wiki brief (WIKI.md). The brief both
 	// steers question triage and supplies standing watch topics.
 	workspaceDir string
+	// turnMu serializes scout turns: the scheduled cycle and the
+	// post-research trigger run on different goroutines, and two concurrent
+	// turns rewriting the same rep page from stale reads could reintroduce a
+	// question bullet the other just removed. Nonblocking — the loser skips
+	// (its questions stay open and come back around).
+	turnMu sync.Mutex
 }
 
 // ScoutTask chases externally-answerable wiki open questions on the web.
@@ -98,7 +106,7 @@ type ScoutTask = wikiScoutTask
 
 // NewScoutTask constructs the autonomous external-scouting worker.
 func NewScoutTask(
-	chatHandler *chat.Handler,
+	chatHandler chatport.SyncRunner,
 	wikiStore *wiki.Store,
 	activity *monitoring.ActivityTracker,
 	logger *slog.Logger,
@@ -123,11 +131,13 @@ func (t *wikiScoutTask) Interval() time.Duration { return wikiScoutInterval }
 
 // Run executes one scheduled scouting cycle.
 func (t *wikiScoutTask) Run(ctx context.Context) error {
-	if t.chatHandler == nil || t.wikiStore == nil {
+	if t.chatHandler == nil || !t.chatHandler.ChatReady() || t.wikiStore == nil {
 		return fmt.Errorf("wiki-scout: chat handler or wiki store not available")
 	}
 
-	now := time.Now()
+	// Wiki dates (question bullets, prompt date) live in Deneb's canonical
+	// zone — server-local time would break the today-match at day boundaries.
+	now := dentime.Now()
 	state := t.loadState()
 	questions := t.selectQuestions(state, now)
 	brief := wiki.LoadWikiBrief(t.workspaceDir)
@@ -150,10 +160,10 @@ func (t *wikiScoutTask) Run(ctx context.Context) error {
 // flocked atomic write — worst case one question is presented twice, which
 // the cooldown then absorbs.
 func (t *wikiScoutTask) TriggerForPage(ctx context.Context, repPath string) {
-	if t.chatHandler == nil || t.wikiStore == nil {
+	if t.chatHandler == nil || !t.chatHandler.ChatReady() || t.wikiStore == nil {
 		return
 	}
-	now := time.Now()
+	now := dentime.Now()
 	fresh := t.collectFreshQuestions(repPath, now)
 	if len(fresh) == 0 {
 		return
@@ -178,6 +188,12 @@ func (t *wikiScoutTask) runTurn(
 	now time.Time,
 	reason string,
 ) error {
+	if !t.turnMu.TryLock() {
+		t.logger.Info("wiki-scout: turn already running, skipping", "reason", reason)
+		return nil
+	}
+	defer t.turnMu.Unlock()
+
 	// Defer to the user: the scout runs the main model and external web
 	// calls. A skipped turn costs nothing — the question stays open.
 	if t.activity != nil {
@@ -203,7 +219,9 @@ func (t *wikiScoutTask) runTurn(
 		t.logger.Warn("wiki-scout: failed to persist state", "error", serr)
 	}
 
-	result, err := t.chatHandler.SendSync(runCtx, wikiScoutSessionKey, prompt, "", &chat.SyncOptions{
+	result, err := t.chatHandler.RunSync(runCtx, chatport.SyncRequest{
+		SessionKey:       wikiScoutSessionKey,
+		Message:          prompt,
 		ToolPreset:       string(toolpreset.PresetWikiScout),
 		MaxHistoryTokens: 20_000,
 		// Background maintenance turn: keep the session transcript from
@@ -213,6 +231,9 @@ func (t *wikiScoutTask) runTurn(
 		// The prompt already carries the questions and steering; recall would
 		// only re-inject the same wiki context.
 		SkipRecall: true,
+		// The turn's context carries fetched untrusted web pages — arm the
+		// promptware taint gate (blocks exec-class tools; wiki writes stay).
+		GateUntrustedTools: true,
 	})
 	if err != nil {
 		return fmt.Errorf("wiki-scout: agent turn failed: %w", err)
