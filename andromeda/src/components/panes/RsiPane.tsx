@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import type { RSILayerView, RSILoopStatusResponse } from "@/types";
+import type {
+  RSILayerView,
+  RSILoopStatusResponse,
+  SelfCorrectionCandidate,
+  SelfImprovementCodingListResponse,
+  SkillLifecycleEvent,
+  SkillsLifecycleResponse,
+} from "@/types";
 import { callRpc } from "@/gateway";
 import { RSI_RPC } from "@/resources";
 import { serializeList } from "@/aiText";
@@ -49,7 +56,15 @@ function stateLabel(state: string | undefined): string {
   }
 }
 
-function LayerCard({ layer }: { layer: RSILayerView }) {
+function LayerCard({
+  layer,
+  lifecycle,
+  candidates,
+}: {
+  layer: RSILayerView;
+  lifecycle: SkillLifecycleEvent[];
+  candidates: SelfCorrectionCandidate[];
+}) {
   const [expanded, setExpanded] = useState(false);
   const tint = stateColor(layer.state);
   const hasDetail = !!layer.detail?.trim();
@@ -97,8 +112,96 @@ function LayerCard({ layer }: { layer: RSILayerView }) {
           {layer.detail}
         </div>
       )}
+      {expanded && layer.key === "L1" && (
+        <RsiDrill
+          header="최근 스킬 생애"
+          emptyText="최근 스킬 진화 이벤트 없음"
+          rows={lifecycle.slice(0, 6).map((e): [string, string] => [eventTypeLabel(e.type), eventText(e)])}
+        />
+      )}
+      {expanded && layer.key === "L4" && (
+        <RsiDrill
+          header="대기 중 코딩 후보"
+          emptyText="대기 중인 코딩 후보 없음"
+          rows={candidates
+            .slice(0, 6)
+            .map((c): [string, string] => [candidateStatusLabel(c.status), c.title || c.candidate || ""])}
+        />
+      )}
     </div>
   );
+}
+
+// A compact "recent detail" list inside an expanded layer card — the drill-in
+// that folds the Propus feed / coding queue into the hub.
+function RsiDrill({ header, rows, emptyText }: { header: string; rows: Array<[string, string]>; emptyText: string }) {
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: line }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: color.muted, marginBottom: 6 }}>{header}</div>
+      {rows.length === 0 ? (
+        <div style={{ fontSize: 12, color: color.muted }}>{emptyText}</div>
+      ) : (
+        rows.map(([label, text], i) => (
+          <div key={i} style={{ display: "flex", gap: 8, padding: "2px 0", alignItems: "baseline" }}>
+            <span style={{ fontSize: 11, color: color.muted, minWidth: 34 }}>{label}</span>
+            <span
+              style={{
+                fontSize: 12.5,
+                color: color.text,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                flex: 1,
+              }}
+            >
+              {text || "—"}
+            </span>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function eventTypeLabel(type?: string): string {
+  switch (type) {
+    case "evolved":
+      return "진화";
+    case "genesis":
+      return "생성";
+    case "evolve_rejected":
+      return "기각";
+    case "evolution_proposal":
+      return "제안";
+    case "confirmed":
+      return "확정";
+    case "rolled_back":
+      return "롤백";
+    default:
+      return type ?? "";
+  }
+}
+
+function eventText(e: SkillLifecycleEvent): string {
+  const name = e.skillName?.trim() || "(전역)";
+  return e.detail?.trim() ? `${name} · ${e.detail}` : name;
+}
+
+function candidateStatusLabel(status?: string): string {
+  switch (status) {
+    case "proposed":
+      return "제안";
+    case "accepted":
+      return "채택";
+    case "applied":
+      return "적용";
+    case "rejected":
+      return "기각";
+    case "superseded":
+      return "대체";
+    default:
+      return status || "제안";
+  }
 }
 
 export function RsiPane() {
@@ -106,6 +209,9 @@ export function RsiPane() {
   const [data, setData] = useState<RSILoopStatusResponse | null>(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
+  // Drill-down detail folded into the hub: L1 → Propus lifecycle, L4 → coding queue.
+  const [lifecycle, setLifecycle] = useState<SkillLifecycleEvent[]>([]);
+  const [candidates, setCandidates] = useState<SelfCorrectionCandidate[]>([]);
 
   // Reset spinner/error on each (re)connect as a render-phase adjustment, so the
   // effect stays free of synchronous setState (mirrors SkillsPane's PropusFeed).
@@ -128,6 +234,13 @@ export function RsiPane() {
       })
       .catch((e) => setErr(errText(e)))
       .finally(() => setLoading(false));
+    // Best-effort drill data — a failure here leaves the overview intact.
+    void callRpc<SkillsLifecycleResponse>(cfg, RSI_RPC.lifecycle, { limit: 12 })
+      .then((d) => setLifecycle(d.events ?? []))
+      .catch(() => setLifecycle([]));
+    void callRpc<SelfImprovementCodingListResponse>(cfg, RSI_RPC.coding, { limit: 8, status: "proposed" })
+      .then((d) => setCandidates(d.candidates ?? []))
+      .catch(() => setCandidates([]));
   }, [cfg, connected]);
 
   const aiText = useMemo(
@@ -158,7 +271,7 @@ export function RsiPane() {
             {data?.turning ?? 0}/{layers.length}개 루프 가동 중
           </div>
           {layers.map((l) => (
-            <LayerCard key={l.key} layer={l} />
+            <LayerCard key={l.key} layer={l} lifecycle={lifecycle} candidates={candidates} />
           ))}
         </>
       )}
