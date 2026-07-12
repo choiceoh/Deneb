@@ -43,7 +43,8 @@ func (s *Server) siteVisitOnLocation() func(string) {
 	s.siteVisitRecorderOnce.Do(func() {
 		s.siteVisitRecorder = wikiwork.NewSiteVisitRecorder(
 			s.wikiStore, s.logger,
-			filepath.Join(config.ResolveStateDir(), wikiwork.SiteVisitStateFile))
+			filepath.Join(config.ResolveStateDir(), wikiwork.SiteVisitStateFile),
+		)
 	})
 	return s.siteVisitRecorder.RecordFromLocationPayload
 }
