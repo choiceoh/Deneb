@@ -33,8 +33,10 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
   발사한다(fail-open — 스크립트 부재 시 배포는 정상 진행). 워치는 기본 600초 동안
   30초 간격으로 `/health`와 게이트웨이 저널 ERROR 수를 감시하고, health 연속 2회
   실패 또는 ERROR 예산(기본 30) 초과 시 **직전 바이너리(`dist/deneb-gateway.bak-prev`)
-  복원 + `systemctl --user restart`**로 자동 롤백한다 (git 무접촉; 다운그레이드
-  가드는 SIGUSR1 경로에만 있어 hard restart가 복원 바이너리를 부팅).
+  복원 + MainPID `kill -TERM`**(systemd `Restart=always`가 복원 바이너리를 재기동)으로
+  자동 롤백한다 (git 무접촉; 유닛이 `RefuseManualStop=yes`라 `systemctl restart`는
+  거부됨 — 2026-07-12 실측; 다운그레이드 가드는 SIGUSR1 경로에만 있어 hard restart가
+  복원 바이너리를 부팅).
 - 롤백된 head는 `~/.deneb/auto-deploy.regressed-head`에 기록되어 **더 새로운
   커밋이 main에 landing될 때까지** 재배포가 차단된다. 로그: `/tmp/deneb-deploy-watch.log`.
 - env: `DENEB_DEPLOY_WATCH_SEC`·`_POLL_SEC`·`_ERROR_BUDGET`. 이 워치가 RSI L4
