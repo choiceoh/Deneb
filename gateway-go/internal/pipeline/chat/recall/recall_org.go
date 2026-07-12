@@ -37,138 +37,243 @@ const recallOrgSourcePrior = 0.79
 // store resolves member names to wiki paths (nil skips the person link but still
 // surfaces org context). Graceful-empty on any error, like every recall source.
 func recallOrgEvidence(ctx context.Context, load func() (org.OrgTree, error), store *wiki.Store, message string) []recallEvidence {
-	if load == nil {
+	query, ok := prepareOrgRecallQuery(load, message)
+	if !ok {
 		return nil
 	}
-	msg := strings.TrimSpace(message)
-	if len([]rune(msg)) < 2 {
+	matches := matchOrgRecallEntities(ctx, query)
+	if matches.empty() {
 		return nil
+	}
+	candidates := scoreOrgRecallMatches(matches)
+	personPaths := resolveOrgPersonPaths(store, matches.members)
+	return outputOrgRecallEvidence(candidates, personPaths)
+}
+
+// orgRecallQuery is the source snapshot paired with the normalized message
+// that selected it. Source loading happens once before entity matching starts.
+type orgRecallQuery struct {
+	message string
+	tree    org.OrgTree
+}
+
+func prepareOrgRecallQuery(load func() (org.OrgTree, error), message string) (orgRecallQuery, bool) {
+	if load == nil {
+		return orgRecallQuery{}, false
+	}
+	message = strings.TrimSpace(message)
+	if len([]rune(message)) < 2 {
+		return orgRecallQuery{}, false
 	}
 	tree, err := load()
 	if err != nil || len(tree.Nodes) == 0 {
-		return nil
+		return orgRecallQuery{}, false
 	}
+	return orgRecallQuery{message: message, tree: tree}, true
+}
 
+type orgTreeIndex struct {
+	byID     map[string]org.OrgNode
+	maxDepth int
+}
+
+func newOrgTreeIndex(tree org.OrgTree) orgTreeIndex {
 	byID := make(map[string]org.OrgNode, len(tree.Nodes))
-	for _, n := range tree.Nodes {
-		byID[n.ID] = n
+	for _, node := range tree.Nodes {
+		byID[node.ID] = node
 	}
-	// deptPath walks ParentID to the root, joining node names with " · " so a row
-	// reads "탑솔라 · 기획조정실". Bounded by node count to defend against a cyclic
-	// chart (Validate rejects cycles on save, but recall must never hang on a
-	// hand-edited file that slipped through).
-	deptPath := func(n org.OrgNode) string {
-		parts := []string{n.Name}
-		seen := map[string]bool{n.ID: true}
-		cur := n
-		for i := 0; i < len(tree.Nodes); i++ {
-			p, ok := byID[cur.ParentID]
-			if !ok || seen[p.ID] {
-				break
-			}
-			parts = append([]string{p.Name}, parts...)
-			seen[p.ID] = true
-			cur = p
-		}
-		return strings.Join(parts, " · ")
-	}
+	return orgTreeIndex{byID: byID, maxDepth: len(tree.Nodes)}
+}
 
-	type memberHit struct {
-		name string
-		dept string
-		note string
+// departmentPath walks ParentID to the root, joining node names with " · ".
+// The node-count bound prevents a hand-edited cyclic chart from hanging recall.
+func (index orgTreeIndex) departmentPath(node org.OrgNode) string {
+	parts := []string{node.Name}
+	seen := map[string]bool{node.ID: true}
+	current := node
+	for i := 0; i < index.maxDepth; i++ {
+		parent, ok := index.byID[current.ParentID]
+		if !ok || seen[parent.ID] {
+			break
+		}
+		parts = append([]string{parent.Name}, parts...)
+		seen[parent.ID] = true
+		current = parent
 	}
-	var members []memberHit
-	var nodes []org.OrgNode
+	return strings.Join(parts, " · ")
+}
+
+type orgMemberMatch struct {
+	name       string
+	department string
+	role       string
+}
+
+type orgNodeMatch struct {
+	node       org.OrgNode
+	department string
+}
+
+type orgRecallMatches struct {
+	members []orgMemberMatch
+	nodes   []orgNodeMatch
+}
+
+func (matches orgRecallMatches) empty() bool {
+	return len(matches.members) == 0 && len(matches.nodes) == 0
+}
+
+func matchOrgRecallEntities(ctx context.Context, query orgRecallQuery) orgRecallMatches {
+	index := newOrgTreeIndex(query.tree)
+	matches := orgRecallMatches{}
 	seenMember := map[string]bool{}
 	seenNode := map[string]bool{}
 
-	for _, n := range tree.Nodes {
+	for _, node := range query.tree.Nodes {
 		if ctx.Err() != nil {
 			break
 		}
-		// Node named in the message → surface its members. Guard 2-rune node names
-		// (e.g. a bare "실") from false-matching common text.
-		if name := strings.TrimSpace(n.Name); len([]rune(name)) >= 2 && strings.Contains(msg, name) {
-			if !seenNode[n.ID] {
-				seenNode[n.ID] = true
-				nodes = append(nodes, n)
-			}
+		if matchesOrgNode(query.message, node.Name) && !seenNode[node.ID] {
+			seenNode[node.ID] = true
+			matches.nodes = append(matches.nodes, orgNodeMatch{
+				node:       node,
+				department: index.departmentPath(node),
+			})
 		}
-		for _, m := range n.Members {
-			name := strings.TrimSpace(m.Name)
-			// Proper names are ≥2 runes; requiring 3 for the containment test keeps a
-			// common 2-char string from matching mid-word. Most Korean full names are
-			// 3 runes, so this loses almost nothing while cutting false positives.
-			if len([]rune(name)) < 3 || !strings.Contains(msg, name) {
-				continue
-			}
-			if seenMember[name] {
+		for _, member := range node.Members {
+			name, matched := matchOrgMemberName(query.message, member.Name)
+			if !matched || seenMember[name] {
 				continue
 			}
 			seenMember[name] = true
-			members = append(members, memberHit{name: name, dept: deptPath(n), note: memberNote(m)})
+			matches.members = append(matches.members, orgMemberMatch{
+				name:       name,
+				department: index.departmentPath(node),
+				role:       memberNote(member),
+			})
 		}
 	}
+	return matches
+}
 
-	if len(members) == 0 && len(nodes) == 0 {
+func matchesOrgNode(message, rawName string) bool {
+	name := strings.TrimSpace(rawName)
+	return len([]rune(name)) >= 2 && strings.Contains(message, name)
+}
+
+func matchOrgMemberName(message, rawName string) (string, bool) {
+	name := strings.TrimSpace(rawName)
+	// Requiring 3 runes keeps common 2-rune strings from matching mid-word.
+	if len([]rune(name)) < 3 || !strings.Contains(message, name) {
+		return "", false
+	}
+	return name, true
+}
+
+func resolveOrgPersonPaths(store *wiki.Store, members []orgMemberMatch) map[string]string {
+	if store == nil || len(members) == 0 {
 		return nil
 	}
-
-	// Resolve every matched member's 인물 page in one batch (one disk scan).
-	var names []string
-	for _, mh := range members {
-		names = append(names, mh.name)
+	names := make([]string, 0, len(members))
+	for _, member := range members {
+		names = append(names, member.name)
 	}
-	var personPaths map[string]string
-	if store != nil {
-		personPaths = store.ResolvePersonPaths(names)
-	}
+	return store.ResolvePersonPaths(names)
+}
 
-	var evidence []recallEvidence
-	for _, mh := range members {
-		if len(evidence) >= recallOrgQuota {
-			break
-		}
-		src := personPaths[mh.name]
-		if src == "" {
-			src = "조직도: " + mh.name
-		}
-		note := mh.dept
-		if mh.note != "" {
-			note += " · " + mh.note
-		}
-		evidence = append(evidence, recallEvidence{
-			Kind:   "org",
-			Source: src,
-			Note:   note,
-			Score:  recallOrgSourcePrior,
+type orgRecallCandidateKind uint8
+
+const (
+	orgRecallMemberCandidate orgRecallCandidateKind = iota
+	orgRecallNodeCandidate
+)
+
+type orgRecallCandidate struct {
+	kind   orgRecallCandidateKind
+	score  float64
+	member orgMemberMatch
+	node   orgNodeMatch
+}
+
+// scoreOrgRecallMatches establishes source-local rank: members retain chart
+// order at the member prior, followed by nodes one score step lower.
+func scoreOrgRecallMatches(matches orgRecallMatches) []orgRecallCandidate {
+	candidates := make([]orgRecallCandidate, 0, len(matches.members)+len(matches.nodes))
+	for _, member := range matches.members {
+		candidates = append(candidates, orgRecallCandidate{
+			kind:   orgRecallMemberCandidate,
+			score:  recallOrgSourcePrior,
+			member: member,
 		})
 	}
-	for _, n := range nodes {
-		if len(evidence) >= recallOrgQuota {
-			break
-		}
-		names := make([]string, 0, len(n.Members))
-		for _, m := range n.Members {
-			if t := memberTitleShort(m); t != "" {
-				names = append(names, m.Name+t)
-			} else {
-				names = append(names, m.Name)
-			}
-		}
-		note := "구성원 " + fmt.Sprint(len(n.Members)) + "명"
-		if len(names) > 0 {
-			note += ": " + strings.Join(names, ", ")
-		}
-		evidence = append(evidence, recallEvidence{
-			Kind:   "org",
-			Source: "조직도: " + deptPath(n),
-			Note:   note,
-			Score:  recallOrgSourcePrior - 0.01, // a division row sits just below a person row
+	for _, node := range matches.nodes {
+		candidates = append(candidates, orgRecallCandidate{
+			kind:  orgRecallNodeCandidate,
+			score: recallOrgSourcePrior - 0.01,
+			node:  node,
 		})
+	}
+	return candidates
+}
+
+func outputOrgRecallEvidence(candidates []orgRecallCandidate, personPaths map[string]string) []recallEvidence {
+	if len(candidates) == 0 {
+		return nil
+	}
+	limit := len(candidates)
+	if limit > recallOrgQuota {
+		limit = recallOrgQuota
+	}
+	evidence := make([]recallEvidence, 0, limit)
+	for _, candidate := range candidates[:limit] {
+		switch candidate.kind {
+		case orgRecallMemberCandidate:
+			evidence = append(evidence, outputOrgMemberEvidence(candidate, personPaths))
+		case orgRecallNodeCandidate:
+			evidence = append(evidence, outputOrgNodeEvidence(candidate))
+		}
 	}
 	return evidence
+}
+
+func outputOrgMemberEvidence(candidate orgRecallCandidate, personPaths map[string]string) recallEvidence {
+	member := candidate.member
+	source := personPaths[member.name]
+	if source == "" {
+		source = "조직도: " + member.name
+	}
+	note := member.department
+	if member.role != "" {
+		note += " · " + member.role
+	}
+	return recallEvidence{
+		Kind:   "org",
+		Source: source,
+		Note:   note,
+		Score:  candidate.score,
+	}
+}
+
+func outputOrgNodeEvidence(candidate orgRecallCandidate) recallEvidence {
+	node := candidate.node
+	names := make([]string, 0, len(node.node.Members))
+	for _, member := range node.node.Members {
+		if title := memberTitleShort(member); title != "" {
+			names = append(names, member.Name+title)
+		} else {
+			names = append(names, member.Name)
+		}
+	}
+	note := "구성원 " + fmt.Sprint(len(node.node.Members)) + "명"
+	if len(names) > 0 {
+		note += ": " + strings.Join(names, ", ")
+	}
+	return recallEvidence{
+		Kind:   "org",
+		Source: "조직도: " + node.department,
+		Note:   note,
+		Score:  candidate.score,
+	}
 }
 
 // memberNote renders a member's 직급/직책 for a recall row: "전무 · 기획조정실장",

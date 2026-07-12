@@ -2,10 +2,15 @@ package recall
 
 import (
 	"context"
+	"errors"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // fakeOrg is a tiny two-level chart: 탑솔라 → 기획조정실(오선택 전무) → 모듈팀(차남두 부장).
@@ -27,44 +32,44 @@ func loadFake(t org.OrgTree) func() (org.OrgTree, error) {
 }
 
 func TestRecallOrgEvidence_MemberMatchWithDeptPath(t *testing.T) {
-	ev := recallOrgEvidence(context.Background(), loadFake(fakeOrg()), nil, "오선택 전무가 요즘 뭐 챙기지?")
-	if len(ev) != 1 {
-		t.Fatalf("want 1 org row, got %d: %+v", len(ev), ev)
-	}
-	if ev[0].Kind != "org" {
-		t.Errorf("Kind = %q, want org", ev[0].Kind)
-	}
-	// nil store → no person link, so Source is the org fallback label.
-	if !strings.Contains(ev[0].Source, "오선택") {
-		t.Errorf("Source = %q, want it to name 오선택", ev[0].Source)
-	}
-	// Note carries the full 부서 path + 직급/직책.
-	for _, want := range []string{"탑솔라", "기획조정실", "전무", "기획조정실장"} {
-		if !strings.Contains(ev[0].Note, want) {
-			t.Errorf("Note = %q, missing %q", ev[0].Note, want)
-		}
+	got := recallOrgEvidence(context.Background(), loadFake(fakeOrg()), nil, "오선택 전무가 요즘 뭐 챙기지?")
+	want := []recallEvidence{{
+		Kind:   "org",
+		Source: "조직도: 오선택",
+		Note:   "탑솔라 · 기획조정실 · 전무 · 기획조정실장",
+		Score:  recallOrgSourcePrior,
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("recallOrgEvidence() = %+v, want %+v", got, want)
 	}
 }
 
 func TestRecallOrgEvidence_NodeMatchListsMembers(t *testing.T) {
-	ev := recallOrgEvidence(context.Background(), loadFake(fakeOrg()), nil, "모듈팀은 누구누구야?")
-	if len(ev) == 0 {
-		t.Fatal("want a division row for 모듈팀, got none")
+	got := recallOrgEvidence(context.Background(), loadFake(fakeOrg()), nil, "모듈팀은 누구누구야?")
+	want := []recallEvidence{{
+		Kind:   "org",
+		Source: "조직도: 탑솔라 · 기획조정실 · 모듈팀",
+		Note:   "구성원 2명: 차남두 (부장), 김성훈 (이사)",
+		Score:  recallOrgSourcePrior - 0.01,
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("recallOrgEvidence() = %+v, want %+v", got, want)
 	}
-	// The 모듈팀 node row should list its members (차남두, 김성훈).
-	var found bool
-	for _, e := range ev {
-		if strings.Contains(e.Source, "모듈팀") {
-			found = true
-			for _, name := range []string{"차남두", "김성훈"} {
-				if !strings.Contains(e.Note, name) {
-					t.Errorf("모듈팀 row Note = %q, missing member %q", e.Note, name)
-				}
-			}
-		}
+}
+
+func TestRecallOrgEvidence_PersonPageReplacesFallbackSource(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+	person := wiki.NewPage("오선택 전무 (기획조정실장)", "인물", nil)
+	const personPath = "인물/오선택-전무-(기획조정실장).md"
+	if err := store.WritePage(personPath, person); err != nil {
+		t.Fatal(err)
 	}
-	if !found {
-		t.Errorf("no 모듈팀 division row in %+v", ev)
+
+	got := recallOrgEvidence(context.Background(), loadFake(fakeOrg()), store, "오선택 관련 현황")
+	if len(got) != 1 || got[0].Source != personPath {
+		t.Fatalf("recallOrgEvidence() = %+v, want person source %q", got, personPath)
 	}
 }
 
@@ -74,12 +79,37 @@ func TestRecallOrgEvidence_NoMatchIsEmpty(t *testing.T) {
 	}
 }
 
-func TestRecallOrgEvidence_QuotaBounds(t *testing.T) {
-	// A message naming many members must not exceed the quota.
-	msg := "오선택 차남두 김성훈 회의"
-	ev := recallOrgEvidence(context.Background(), loadFake(fakeOrg()), nil, msg)
-	if len(ev) > recallOrgQuota {
-		t.Errorf("got %d rows, exceeds quota %d", len(ev), recallOrgQuota)
+func TestRecallOrgEvidence_RanksMembersBeforeNodesWithinQuota(t *testing.T) {
+	got := recallOrgEvidence(context.Background(), loadFake(fakeOrg()), nil, "모듈팀 오선택 차남두 김성훈 회의")
+	if len(got) != recallOrgQuota {
+		t.Fatalf("got %d rows, want quota %d: %+v", len(got), recallOrgQuota, got)
+	}
+	wantSources := []string{"조직도: 오선택", "조직도: 차남두", "조직도: 김성훈"}
+	for i, want := range wantSources {
+		if got[i].Source != want || got[i].Score != recallOrgSourcePrior {
+			t.Errorf("row %d = %+v, want source %q with member score", i, got[i], want)
+		}
+		if strings.Contains(got[i].Source, "모듈팀") {
+			t.Errorf("node row outranked a matched member: %+v", got)
+		}
+	}
+}
+
+func TestRecallOrgEvidence_EntityLengthAndDuplicateFilters(t *testing.T) {
+	tree := org.OrgTree{Nodes: []org.OrgNode{
+		{ID: "first", Name: "팀", Members: []org.Member{{Name: "이수"}, {Name: "이수민", Rank: "과장"}}},
+		{ID: "second", Name: "지원팀", Members: []org.Member{{Name: "이수민", Position: "팀장"}}},
+	}}
+
+	got := recallOrgEvidence(context.Background(), loadFake(tree), nil, "팀 이수 이수민 확인")
+	want := []recallEvidence{{
+		Kind:   "org",
+		Source: "조직도: 이수민",
+		Note:   "팀 · 과장",
+		Score:  recallOrgSourcePrior,
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("recallOrgEvidence() = %+v, want first unique 3-rune member only: %+v", got, want)
 	}
 }
 
@@ -90,5 +120,25 @@ func TestRecallOrgEvidence_NilLoadOrEmpty(t *testing.T) {
 	empty := func() (org.OrgTree, error) { return org.OrgTree{}, nil }
 	if ev := recallOrgEvidence(context.Background(), empty, nil, "오선택"); ev != nil {
 		t.Errorf("empty tree must yield nil, got %+v", ev)
+	}
+	failed := func() (org.OrgTree, error) { return org.OrgTree{}, errors.New("org unavailable") }
+	if ev := recallOrgEvidence(context.Background(), failed, nil, "오선택"); ev != nil {
+		t.Errorf("load error must yield nil, got %+v", ev)
+	}
+}
+
+func TestRecallOrgEvidence_ShortQuerySkipsLoad(t *testing.T) {
+	loads := 0
+	load := func() (org.OrgTree, error) {
+		loads++
+		return fakeOrg(), nil
+	}
+	for _, message := range []string{"", " ", "가"} {
+		if got := recallOrgEvidence(context.Background(), load, nil, message); got != nil {
+			t.Errorf("message %q returned %+v, want nil", message, got)
+		}
+	}
+	if loads != 0 {
+		t.Fatalf("short queries loaded org chart %d times, want 0", loads)
 	}
 }
