@@ -16,6 +16,16 @@ description: "프로젝트 구조 및 모듈 아키텍처 참조"
 - `Makefile` — build orchestration (Go + Kotlin gates; `make ci` does **not** cover `andromeda/` — that lane is `pnpm verify` + `.github/workflows/andromeda-ci.yml`).
 - Tests: Go tests `*_test.go` (colocated); Kotlin tests under `client-android/app/composeApp/src/*Test`; Andromeda tests via Vitest.
 
+## Development tools (multi-agent environment)
+
+The repo supports parallel coding agents with shared infrastructure:
+
+- **CodeGraph** (`.codegraph/`, gitignored) — SQLite symbol graph (~55K nodes) powering the `codegraph_explore` MCP tool. Auto-synced after edits via PostToolUse hooks. Config in `codegraph.json`; setup: `npm i -g @colbymchenry/codegraph && codegraph init`.
+- **rpcmap** (`scripts/dev/rpcmap.py`) — fills CodeGraph's blind spot: string-keyed indirection (RPC method → handler, tool name → handler, event name → event type). 277 mappings.
+- **Worktree isolation** — each agent gets its own worktree (`~/.zcode/`, `~/.codex/`, or Claude's `EnterWorktree`) on a namespaced branch to prevent collisions. Guards block main-checkout edits.
+- **Hook pipeline** — PreToolUse hooks (conflict detection via `clash`, rule guidance, CodeGraph nudges) and PostToolUse hooks (index sync) are shared across Claude Code, ZCode, and Codex. Configs: `.claude/settings.json`, `.zcode/config.json`, `~/.codex/hooks.json`.
+- Full guide: [docs/tools/zcode-environment.md](../tools/zcode-environment.md).
+
 ## Gateway Module Map (`gateway-go/internal/`, one-liners)
 
 Detailed per-file notes live in `docs/agent-rules/go-gateway.md`; this is the top-level orientation map.

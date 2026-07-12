@@ -27,10 +27,19 @@ Andromeda (desktop, Tauri) ───┘         │
 | `andromeda/` | TypeScript/Rust | Desktop workstation client (Tauri 2 + React 18 + Refine) on the same `miniapp.*` RPC + SSE surface |
 | `skills/` | Markdown | Filesystem-discovered skill plugins by category |
 
+## Multi-agent development environment
+
+The repo supports parallel coding agents (Claude Code, ZCode, Codex) with
+automatic worktree isolation, shared CodeGraph code intelligence, and a common
+hook pipeline (conflict detection, rule guidance, index sync). See
+[docs/tools/zcode-environment.md](docs/tools/zcode-environment.md) for the
+complete guide.
+
 ## Prerequisites
 
 - **Go** 1.25+
 - **NVIDIA DGX Spark** for GPU inference (optional — CPU fallback available)
+- **CodeGraph** for code intelligence: `npm i -g @colbymchenry/codegraph && codegraph init` (optional but recommended — powers the `codegraph_explore` MCP tool and symbol-graph queries)
 
 ## Build
 
