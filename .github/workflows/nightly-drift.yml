@@ -1,0 +1,225 @@
+# nightly-drift.yml — full-tree gate sweep of main, on a schedule.
+#
+# Why this exists: the per-PR workflows are path-gated (kotlin-lint is even
+# pull_request-only, and the Go lane lints in diff mode), so a gate violation
+# can land on main and lie dormant until an unrelated PR touches that lane and
+# inherits the red check. One session hit four of these in a row
+# (gofumpt on gateway-go, markdownlint, the tauri feature allowlist, Kotlin
+# import ordering). This workflow runs every lane's local gate over the whole
+# tree nightly and opens/updates a tracking issue on failure, so drift is
+# surfaced on main directly instead of taxing the next PR author.
+name: Nightly Drift Watch
+
+on:
+  schedule:
+    - cron: "0 18 * * *" # 03:00 KST, before the workday
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-drift
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  go-gate:
+    # Mirrors the local `make check` surfaces the PR lane misses: gofumpt over
+    # the full tree (ci.yml checks plain gofmt + diff-mode golangci only).
+    name: go (gofumpt + vet + test)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: gateway-go/go.sum
+
+      - name: gofumpt (full tree)
+        run: make go-fmt
+
+      - name: Vet
+        working-directory: gateway-go
+        run: go vet ./...
+
+      - name: Test
+        working-directory: gateway-go
+        run: CGO_ENABLED=0 go test -count=1 ./...
+
+  kotlin:
+    # Same gate as kotlin-lint.yml, which triggers on pull_request only —
+    # direct pushes to main skip it entirely. Nightly closes that hole.
+    name: kotlin (spotless + detekt + desktopTest + android compile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: client-android/app
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5.5.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: spotlessCheck
+        run: ./gradlew spotlessCheck --no-daemon
+
+      - name: detekt
+        run: ./gradlew detekt --no-daemon
+
+      - name: Full native client unit suite
+        run: ./gradlew desktopTest --no-daemon
+
+      - name: Native client integration contracts
+        run: ./gradlew :composeApp:integrationTest --no-daemon
+
+      - name: android compile (composeApp androidMain + androidApp fossRelease)
+        run: |
+          ./gradlew --no-daemon \
+            :composeApp:compileAndroidMain \
+            :androidApp:compileFossReleaseKotlin
+
+  andromeda:
+    name: andromeda (pnpm verify)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: andromeda
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          package_json_file: andromeda/package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: andromeda/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run lint
+      - run: pnpm run format:check
+      - run: pnpm run test
+      - run: pnpm run build
+
+  rust:
+    name: rust (tauri cargo check + clippy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: andromeda
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            librsvg2-dev \
+            wget
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: andromeda/src-tauri -> target
+
+      - name: Check Rust crate
+        run: cargo check --locked --manifest-path src-tauri/Cargo.toml
+
+      - name: Lint Rust crate
+        run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - name: Test Rust crate
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+
+  docs:
+    # markdownlint + spellcheck only — the link check hits external URLs and
+    # would page on other people's outages, so it stays out of the nightly.
+    name: docs (markdownlint + spellcheck)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install codespell
+        run: pip install --quiet codespell
+
+      - name: Markdown lint
+        run: make docs-lint
+
+      - name: Spellcheck
+        run: bash scripts/docs-spellcheck.sh
+
+  report:
+    # One open tracking issue, updated per failing night — not one issue per
+    # night. Quiet when green.
+    name: report drift
+    needs: [go-gate, kotlin, andromeda, rust, docs]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Open or update the drift issue
+        run: |
+          gh label create nightly-drift \
+            --description "Nightly full-tree gate sweep failures on main" \
+            --color D93F0B --force
+          body="Nightly Drift Watch가 main에서 게이트 실패를 감지했습니다: ${RUN_URL}
+
+          실패한 레인의 로그를 보고 main에서 직접 해소해 주세요 — 방치하면 해당 레인을 건드리는 다음 PR이 이 실패를 물려받습니다."
+          existing=$(gh issue list --label nightly-drift --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create \
+              --title "nightly drift: main 게이트 실패" \
+              --label nightly-drift \
+              --body "$body"
+          fi

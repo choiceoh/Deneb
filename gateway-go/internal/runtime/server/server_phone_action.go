@@ -24,7 +24,8 @@ import (
 func (s *Server) phoneEventLedgerInstance() *phoneevents.Ledger {
 	s.phoneEventLedgerOnce.Do(func() {
 		s.phoneEventLedger = phoneevents.NewLedger(
-			filepath.Join(config.ResolveStateDir(), phoneevents.LedgerDirname), s.logger)
+			filepath.Join(config.ResolveStateDir(), phoneevents.LedgerDirname), s.logger,
+		)
 	})
 	return s.phoneEventLedger
 }
@@ -42,7 +43,8 @@ func (s *Server) siteVisitOnLocation() func(string) {
 	s.siteVisitRecorderOnce.Do(func() {
 		s.siteVisitRecorder = wikiwork.NewSiteVisitRecorder(
 			s.wikiStore, s.logger,
-			filepath.Join(config.ResolveStateDir(), wikiwork.SiteVisitStateFile))
+			filepath.Join(config.ResolveStateDir(), wikiwork.SiteVisitStateFile),
+		)
 	})
 	return s.siteVisitRecorder.RecordFromLocationPayload
 }
