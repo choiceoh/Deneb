@@ -61,107 +61,157 @@ func (t *Tracker) FailureEvidenceClusters(limit int) []FailureClusterSummary {
 }
 
 func (t *Tracker) computeFailureEvidenceClustersLocked(now time.Time, limit int) []FailureClusterSummary {
-	if limit <= 0 {
-		limit = defaultFailureClusterLimit
-	}
 	cutoff := now.Add(-evolutionHealthWindow).UnixMilli()
-	clusters := map[string]*FailureClusterSummary{}
+	clusters := failureClusterGroups{}
 
-	if usage, err := jsonlstore.Load[UsageRecord](t.usagePath); err == nil {
-		for _, record := range usage {
-			isWorkout := record.Source == UsageSourceWorkout
-			if record.UsedAt < cutoff || record.Success || (!isWorkout && !isRealUsageRecord(record)) {
-				continue
-			}
-			trace := usageFailureTraceFromRecord(record)
-			if trace == nil || strings.TrimSpace(trace.Signature) == "" {
-				continue
-			}
-			// Model joins the exact-signature key: the same mechanism on two
-			// models is two clusters, because the fix is usually model-specific.
-			// Legacy rows without a model fold into a ""-model cluster.
-			model := strings.TrimSpace(record.Model)
-			kind := FailureClusterKindUsage
-			if isWorkout {
-				kind = FailureClusterKindWorkout
-			}
-			key := kind + "\x00" + record.SkillName + "\x00" + model + "\x00" + normalizedSelfHarnessSignature(trace.Signature)
-			c := clusters[key]
-			if c == nil {
-				c = &FailureClusterSummary{
-					Kind:           kind,
-					Skill:          record.SkillName,
-					Model:          model,
-					Signature:      trace.Signature,
-					TerminalCause:  trace.TerminalCause,
-					AgentMechanism: trace.AgentMechanism,
-				}
-				clusters[key] = c
-			}
-			c.Support++
-			if record.UsedAt >= c.LastAt {
-				c.LastAt = record.UsedAt
-				if example := singleLine(usageFailureTraceExample(*trace)); example != "" {
-					c.Example = example
-				}
-			}
+	for _, record := range loadAvailableFailureClusterRecords[UsageRecord](t.usagePath) {
+		if evidence, ok := usageFailureClusterEvidence(record, cutoff); ok {
+			clusters.add(evidence)
 		}
 	}
-
-	if entries, err := jsonlstore.Load[LifecycleLogEntry](t.logPath); err == nil {
-		for _, entry := range entries {
-			if entry.CreatedAt < cutoff || entry.Type != "evolve_rejected" {
-				continue
-			}
-			class := classifyEvolveRejection(entry.Reason)
-			key := FailureClusterKindRejection + "\x00" + entry.SkillName + "\x00" + class
-			c := clusters[key]
-			if c == nil {
-				c = &FailureClusterSummary{
-					Kind:      FailureClusterKindRejection,
-					Skill:     entry.SkillName,
-					Signature: class,
-				}
-				clusters[key] = c
-			}
-			c.Support++
-			if entry.CreatedAt >= c.LastAt {
-				c.LastAt = entry.CreatedAt
-				if example := singleLine(genesiscommon.TruncateRunes(strings.TrimSpace(entry.Reason), 160)); example != "" {
-					c.Example = example
-				}
-			}
+	for _, entry := range loadAvailableFailureClusterRecords[LifecycleLogEntry](t.logPath) {
+		if evidence, ok := rejectionFailureClusterEvidence(entry, cutoff); ok {
+			clusters.add(evidence)
 		}
 	}
+	return clusters.ranked(limit)
+}
 
-	out := make([]FailureClusterSummary, 0, len(clusters))
-	for _, c := range clusters {
-		out = append(out, *c)
+// loadAvailableFailureClusterRecords preserves the query's independent-source
+// degradation: an unreadable sidecar contributes no evidence, while records
+// from the other sidecar remain usable. The public query has no error channel.
+func loadAvailableFailureClusterRecords[T any](path string) []T {
+	records, err := jsonlstore.Load[T](path)
+	if err != nil {
+		return nil
 	}
-	// Support first (recurring mechanisms lead), then recency; the remaining
-	// keys only make ties deterministic.
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Support != out[j].Support {
-			return out[i].Support > out[j].Support
-		}
-		if out[i].LastAt != out[j].LastAt {
-			return out[i].LastAt > out[j].LastAt
-		}
-		if out[i].Kind != out[j].Kind {
-			return out[i].Kind < out[j].Kind
-		}
-		if out[i].Skill != out[j].Skill {
-			return out[i].Skill < out[j].Skill
-		}
-		if out[i].Model != out[j].Model {
-			return out[i].Model < out[j].Model
-		}
-		return out[i].Signature < out[j].Signature
+	return records
+}
+
+type failureClusterEvidence struct {
+	key        string
+	prototype  FailureClusterSummary
+	observedAt int64
+	example    string
+}
+
+func usageFailureClusterEvidence(record UsageRecord, cutoff int64) (failureClusterEvidence, bool) {
+	if !isUsageFailureClusterCandidate(record, cutoff) {
+		return failureClusterEvidence{}, false
+	}
+	trace := usageFailureTraceFromRecord(record)
+	if trace == nil || strings.TrimSpace(trace.Signature) == "" {
+		return failureClusterEvidence{}, false
+	}
+
+	kind := FailureClusterKindUsage
+	if record.Source == UsageSourceWorkout {
+		kind = FailureClusterKindWorkout
+	}
+	model := strings.TrimSpace(record.Model)
+	return failureClusterEvidence{
+		key: kind + "\x00" + record.SkillName + "\x00" + model + "\x00" +
+			normalizedSelfHarnessSignature(trace.Signature),
+		prototype: FailureClusterSummary{
+			Kind:           kind,
+			Skill:          record.SkillName,
+			Model:          model,
+			Signature:      trace.Signature,
+			TerminalCause:  trace.TerminalCause,
+			AgentMechanism: trace.AgentMechanism,
+		},
+		observedAt: record.UsedAt,
+		example:    singleLine(usageFailureTraceExample(*trace)),
+	}, true
+}
+
+func isUsageFailureClusterCandidate(record UsageRecord, cutoff int64) bool {
+	if record.UsedAt < cutoff || record.Success {
+		return false
+	}
+	if record.Source == UsageSourceWorkout {
+		return true
+	}
+	return isRealUsageRecord(record)
+}
+
+func rejectionFailureClusterEvidence(entry LifecycleLogEntry, cutoff int64) (failureClusterEvidence, bool) {
+	if entry.CreatedAt < cutoff || entry.Type != "evolve_rejected" {
+		return failureClusterEvidence{}, false
+	}
+	class := classifyEvolveRejection(entry.Reason)
+	return failureClusterEvidence{
+		key: FailureClusterKindRejection + "\x00" + entry.SkillName + "\x00" + class,
+		prototype: FailureClusterSummary{
+			Kind:      FailureClusterKindRejection,
+			Skill:     entry.SkillName,
+			Signature: class,
+		},
+		observedAt: entry.CreatedAt,
+		example: singleLine(
+			genesiscommon.TruncateRunes(strings.TrimSpace(entry.Reason), 160),
+		),
+	}, true
+}
+
+type failureClusterGroups map[string]*FailureClusterSummary
+
+func (groups failureClusterGroups) add(evidence failureClusterEvidence) {
+	cluster := groups[evidence.key]
+	if cluster == nil {
+		prototype := evidence.prototype
+		cluster = &prototype
+		groups[evidence.key] = cluster
+	}
+	cluster.Support++
+	if evidence.observedAt < cluster.LastAt {
+		return
+	}
+	cluster.LastAt = evidence.observedAt
+	if evidence.example != "" {
+		cluster.Example = evidence.example
+	}
+}
+
+func (groups failureClusterGroups) ranked(limit int) []FailureClusterSummary {
+	clusters := make([]FailureClusterSummary, 0, len(groups))
+	for _, cluster := range groups {
+		clusters = append(clusters, *cluster)
+	}
+	sort.Slice(clusters, func(i, j int) bool {
+		return failureClusterRanksBefore(clusters[i], clusters[j])
 	})
-	if len(out) > limit {
-		out = out[:limit]
+	limit = normalizedFailureClusterLimit(limit)
+	if len(clusters) > limit {
+		clusters = clusters[:limit]
 	}
-	return out
+	return clusters
+}
+
+func normalizedFailureClusterLimit(limit int) int {
+	if limit <= 0 {
+		return defaultFailureClusterLimit
+	}
+	return limit
+}
+
+func failureClusterRanksBefore(left, right FailureClusterSummary) bool {
+	if left.Support != right.Support {
+		return left.Support > right.Support
+	}
+	if left.LastAt != right.LastAt {
+		return left.LastAt > right.LastAt
+	}
+	if left.Kind != right.Kind {
+		return left.Kind < right.Kind
+	}
+	if left.Skill != right.Skill {
+		return left.Skill < right.Skill
+	}
+	if left.Model != right.Model {
+		return left.Model < right.Model
+	}
+	return left.Signature < right.Signature
 }
 
 // evolveRejectionClassMatchers is the SINGLE source of truth mapping an

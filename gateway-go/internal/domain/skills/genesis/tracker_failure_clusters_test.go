@@ -1,6 +1,9 @@
 package genesis
 
 import (
+	"fmt"
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -169,6 +172,116 @@ func TestFailureEvidenceClusters_ModelAxisSplits(t *testing.T) {
 	if seen["qwen3.5"] != 1 || seen[""] != 1 {
 		t.Fatalf("per-model split wrong: %+v", clusters)
 	}
+}
+
+func TestFailureEvidenceClusters_DeterministicRanking(t *testing.T) {
+	tr := newTestTracker(t)
+	now := time.UnixMilli(1_783_500_000_000)
+	tiedAt := now.Add(-time.Hour).UnixMilli()
+	usage := []UsageRecord{
+		clusterUsageRecord("recent", "", "terminal=timeout|mechanism=bounded-execution", now.UnixMilli(), UsageSourceReal),
+		clusterUsageRecord("beta", "", "terminal=timeout|mechanism=bounded-execution", tiedAt, UsageSourceReal),
+		clusterUsageRecord("alpha", " z ", "terminal=tool-error|mechanism=tool-boundary", tiedAt, UsageSourceReal),
+		clusterUsageRecord("alpha", "a", "terminal=timeout|mechanism=bounded-execution", tiedAt, UsageSourceReal),
+		clusterUsageRecord("alpha", "a", "terminal=missing-artifact|mechanism=artifact-recovery", tiedAt, UsageSourceReal),
+		clusterUsageRecord("alpha", "", "terminal=timeout|mechanism=bounded-execution", tiedAt, UsageSourceWorkout),
+	}
+	for _, record := range usage {
+		appendFunnel(t, tr.usagePath, record)
+	}
+	appendFunnel(t, tr.logPath, LifecycleLogEntry{
+		Type: "evolve_rejected", SkillName: "zeta", CreatedAt: tiedAt,
+		Reason: "judge score delta below threshold",
+	})
+
+	clusters := failureClustersForTest(tr, now, 20)
+	got := make([]string, 0, len(clusters))
+	for _, cluster := range clusters {
+		got = append(got, strings.Join([]string{cluster.Kind, cluster.Skill, cluster.Model, cluster.Signature}, "/"))
+	}
+	want := []string{
+		"usage-failure/recent//terminal=timeout|mechanism=bounded-execution",
+		"evolve-rejection/zeta//other",
+		"usage-failure/alpha/a/terminal=missing-artifact|mechanism=artifact-recovery",
+		"usage-failure/alpha/a/terminal=timeout|mechanism=bounded-execution",
+		"usage-failure/alpha/z/terminal=tool-error|mechanism=tool-boundary",
+		"usage-failure/beta//terminal=timeout|mechanism=bounded-execution",
+		"workout-failure/alpha//terminal=timeout|mechanism=bounded-execution",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ranked clusters = %#v, want %#v", got, want)
+	}
+}
+
+func TestFailureEvidenceClusters_DefaultAndExplicitLimitsUseRankedPrefix(t *testing.T) {
+	tr := newTestTracker(t)
+	now := time.UnixMilli(1_783_500_000_000)
+	for index := 0; index < 10; index++ {
+		appendFunnel(t, tr.usagePath, clusterUsageRecord(
+			fmt.Sprintf("skill-%02d", index), "", "terminal=timeout|mechanism=bounded-execution",
+			now.Add(-time.Duration(index)*time.Minute).UnixMilli(), UsageSourceReal,
+		))
+	}
+
+	all := failureClustersForTest(tr, now, 20)
+	defaulted := failureClustersForTest(tr, now, 0)
+	negative := failureClustersForTest(tr, now, -1)
+	limited := failureClustersForTest(tr, now, 3)
+	if len(all) != 10 || len(defaulted) != defaultFailureClusterLimit {
+		t.Fatalf("cluster counts all/default = %d/%d", len(all), len(defaulted))
+	}
+	if !reflect.DeepEqual(defaulted, negative) {
+		t.Fatalf("non-positive limits diverged: zero=%+v negative=%+v", defaulted, negative)
+	}
+	if !reflect.DeepEqual(limited, all[:3]) {
+		t.Fatalf("explicit limit did not preserve ranked prefix: got=%+v want=%+v", limited, all[:3])
+	}
+}
+
+func TestFailureEvidenceClusters_SourceReadErrorsDegradeIndependently(t *testing.T) {
+	now := time.UnixMilli(1_783_500_000_000)
+
+	t.Run("usage sidecar unavailable", func(t *testing.T) {
+		tr := newTestTracker(t)
+		if err := os.Mkdir(tr.usagePath, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		appendFunnel(t, tr.logPath, LifecycleLogEntry{
+			Type: "evolve_rejected", SkillName: "review", CreatedAt: now.UnixMilli(),
+			Reason: "Hermes patch-first gate rejected broad rewrite",
+		})
+		clusters := failureClustersForTest(tr, now, 20)
+		if len(clusters) != 1 || clusters[0].Kind != FailureClusterKindRejection {
+			t.Fatalf("lifecycle evidence was lost with usage read error: %+v", clusters)
+		}
+	})
+
+	t.Run("lifecycle sidecar unavailable", func(t *testing.T) {
+		tr := newTestTracker(t)
+		if err := os.Mkdir(tr.logPath, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		appendFunnel(t, tr.usagePath, clusterUsageRecord(
+			"review", "", "terminal=timeout|mechanism=bounded-execution", now.UnixMilli(), UsageSourceReal,
+		))
+		clusters := failureClustersForTest(tr, now, 20)
+		if len(clusters) != 1 || clusters[0].Kind != FailureClusterKindUsage {
+			t.Fatalf("usage evidence was lost with lifecycle read error: %+v", clusters)
+		}
+	})
+}
+
+func clusterUsageRecord(skill, model, signature string, usedAt int64, source string) UsageRecord {
+	return UsageRecord{
+		SkillName: skill, SessionKey: "client:test", Model: model, UsedAt: usedAt, Source: source,
+		FailureTrace: &UsageFailureTrace{Signature: signature, ErrorMsg: "failure evidence"},
+	}
+}
+
+func failureClustersForTest(tr *Tracker, now time.Time, limit int) []FailureClusterSummary {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	return tr.computeFailureEvidenceClustersLocked(now, limit)
 }
 
 // A signature-mismatch rejection whose evidence involves the common
