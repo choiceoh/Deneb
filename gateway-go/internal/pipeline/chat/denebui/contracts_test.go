@@ -26,12 +26,17 @@ func TestFenceRecognitionContract(t *testing.T) {
 		{name: "canonical", line: "```deneb-ui", want: true},
 		{name: "uppercase", line: "```DENEB-UI", want: true},
 		{name: "mixed case", line: "```Deneb-Ui", want: true},
-		{name: "surrounding spaces", line: "  ```deneb-ui  ", want: false},
+		{name: "surrounding spaces", line: "  ```deneb-ui  ", want: true},
 		{name: "four backticks tolerated", line: "````deneb-ui", want: true},
+		// Lenient tail match: models glue the opener to a prose sentence.
+		{name: "glued to prose", line: "가져올게요.```deneb-ui", want: true},
+		{name: "glued with space", line: "카드로 정리했어요. ```deneb-ui", want: true},
 		{name: "no info", line: "```", want: false},
 		{name: "json", line: "```json", want: false},
 		{name: "prefix only", line: "```deneb", want: false},
 		{name: "extra info", line: "```deneb-ui extra", want: false},
+		{name: "mid-sentence mention", line: "```deneb-ui 펜스를 쓰세요", want: false},
+		{name: "too few backticks", line: "프로즈``deneb-ui", want: false},
 		{name: "tilde fence", line: "~~~deneb-ui", want: false},
 		{name: "plain text", line: "deneb-ui", want: false},
 	}

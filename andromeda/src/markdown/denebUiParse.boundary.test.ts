@@ -44,6 +44,19 @@ describe("splitDenebUi boundaries", () => {
     const input = "```deneb-ui-extra\n<text>x</text>\n```";
     expect(splitDenebUi(input)).toEqual([{ kind: "md", text: input }]);
   });
+
+  it("recognizes an opener glued to a prose tail and keeps the prose", () => {
+    expect(splitDenebUi("소스들을 다시 가져올게요.```deneb-ui\n<text>hi</text>\n```\n끝.")).toEqual([
+      { kind: "md", text: "소스들을 다시 가져올게요." },
+      { kind: "ui", body: "<text>hi</text>" },
+      { kind: "md", text: "끝." },
+    ]);
+  });
+
+  it("leaves mid-sentence fence mentions as prose", () => {
+    const input = "```deneb-ui 펜스는 이렇게 씁니다\n본문";
+    expect(splitDenebUi(input)).toEqual([{ kind: "md", text: input }]);
+  });
 });
 
 describe("parseDenebUi legacy boundaries", () => {

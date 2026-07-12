@@ -126,6 +126,17 @@ class DenebUiHtmlTest {
     }
 
     @Test
+    fun `table sections unwrap keeping their rows`() {
+        // <thead>/<tbody> are HTML fluency: the wrappers unwrap and their row
+        // structurals must hoist to the table (not vanish with the wrapper).
+        val node = assertIs<TableNode>(
+            parseUi("<table><thead><tr><th>이름</th><th>값</th></tr></thead><tbody><tr><td>구리</td><td>9,540</td></tr></tbody></table>"),
+        )
+        assertEquals(listOf("이름", "값"), node.headers)
+        assertEquals(listOf(listOf("구리", "9,540")), node.rows)
+    }
+
+    @Test
     fun `action attributes map by precedence`() {
         val cb = assertIs<ButtonNode>(parseUi("""<button event="submit" data-kind="rsvp" collect="name,when">전송</button>"""))
         assertEquals("전송", cb.label)
@@ -165,6 +176,17 @@ class DenebUiHtmlTest {
         val card = assertIs<CardNode>(parseUi("<card>이건 <b>중요</b>한 일</card>"))
         assertEquals(1, card.children.size)
         assertEquals("이건 **중요**한 일", assertIs<TextNode>(card.children[0]).value)
+    }
+
+    @Test
+    fun `adjacent inline runs keep a separating space`() {
+        // Dropping the whitespace-only run would glue the markers
+        // ("**A****B**") and break the inline markdown pass.
+        val card = assertIs<CardNode>(parseUi("""<card><b>최종 결론:</b> <b>"지금 사라"</b></card>"""))
+        assertEquals(1, card.children.size)
+        assertEquals("""**최종 결론:** **"지금 사라"**""", assertIs<TextNode>(card.children[0]).value)
+        val text = assertIs<TextNode>(parseUi("<text><b>A</b> <b>B</b></text>"))
+        assertEquals("**A** **B**", text.value)
     }
 
     @Test

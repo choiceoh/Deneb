@@ -109,6 +109,23 @@ func TestParseHTML_Table(t *testing.T) {
 	}
 }
 
+func TestParseHTML_TableSectionsUnwrapKeepingRows(t *testing.T) {
+	// <thead>/<tbody> are HTML fluency: the wrappers unwrap and their row
+	// structurals must hoist to the table (not vanish with the wrapper).
+	root := mustParseHTML(t, `<table><thead><tr><th>이름</th><th>값</th></tr></thead><tbody><tr><td>구리</td><td>9,540</td></tr></tbody></table>`)
+	headers, _ := root["headers"].([]any)
+	rows, _ := root["rows"].([]any)
+	if len(headers) != 2 || headers[0] != "이름" {
+		t.Errorf("headers = %v", headers)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows = %v", rows)
+	}
+	if r0 := rows[0].([]any); r0[0] != "구리" || r0[1] != "9,540" {
+		t.Errorf("row0 = %v", r0)
+	}
+}
+
 func TestParseHTML_Actions(t *testing.T) {
 	root := mustParseHTML(t, `<button event="submit" data-kind="rsvp" collect="name,when">전송</button>`)
 	act, _ := root["action"].(map[string]any)
@@ -170,6 +187,40 @@ func TestParseHTML_InlineTagsMergeIntoTextFlow(t *testing.T) {
 	}
 	if got := ch[0].(map[string]any)["value"]; got != "이건 **중요**한 일" {
 		t.Errorf("value = %q", got)
+	}
+}
+
+func TestParseHTML_InlineRunsKeepSeparatingSpace(t *testing.T) {
+	// A whitespace-only run between two inline elements must survive as one
+	// space — dropping it glues the markers ("**A****B**") and breaks the
+	// renderers' inline markdown pass.
+	root := mustParseHTML(t, `<card><b>최종 결론:</b> <b>"지금 사라"</b></card>`)
+	ch := children(t, root)
+	if len(ch) != 1 {
+		t.Fatalf("children = %v, want single merged text", ch)
+	}
+	if got := ch[0].(map[string]any)["value"]; got != `**최종 결론:** **"지금 사라"**` {
+		t.Errorf("value = %q", got)
+	}
+	// Same flow inside a value slot.
+	txt := mustParseHTML(t, `<text><b>A</b> <b>B</b></text>`)
+	if got := txt["value"]; got != "**A** **B**" {
+		t.Errorf("text value = %q", got)
+	}
+}
+
+func TestParseHTML_ListOrderedOnlyWhenAsked(t *testing.T) {
+	ul := mustParseHTML(t, `<ul><li>하나</li><li>둘</li></ul>`)
+	if _, has := ul["ordered"]; has {
+		t.Errorf("<ul> must not be ordered, got %v", ul["ordered"])
+	}
+	ol := mustParseHTML(t, `<ol><li>하나</li></ol>`)
+	if ol["ordered"] != true {
+		t.Errorf("<ol> ordered = %v, want true", ol["ordered"])
+	}
+	attr := mustParseHTML(t, `<list ordered><li>하나</li></list>`)
+	if attr["ordered"] != true {
+		t.Errorf("<list ordered> ordered = %v, want true", attr["ordered"])
 	}
 }
 

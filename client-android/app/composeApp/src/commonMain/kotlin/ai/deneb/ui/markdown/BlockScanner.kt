@@ -23,6 +23,11 @@ import kotlinx.collections.immutable.toImmutableList
 internal object BlockScanner {
 
     private val FENCE_REGEX = Regex("""^(\s{0,3})(`{3,}|~{3,})\s*(.*?)\s*$""")
+
+    // A deneb-ui fence opener glued to the tail of a prose line ("…할게요.```deneb-ui").
+    // Group 1 = the prose prefix, group 2 = the fence opener. Line-final openers only,
+    // so prose that merely mentions the fence mid-sentence never matches.
+    private val DENEB_FENCE_TAIL_REGEX = Regex("""^(.*?)(`{3,}\s*deneb-ui)\s*$""", RegexOption.IGNORE_CASE)
     private val MATH_DISPLAY_INLINE_REGEX = Regex("""^\s*\$\$([\s\S]+?)\$\$\s*$""")
     private val MATH_DISPLAY_BRACKET_INLINE_REGEX = Regex("""^\s*\\\[([\s\S]+?)\\\]\s*$""")
     private val MATH_DISPLAY_DOLLAR_FENCE_REGEX = Regex("""^\s*\$\$\s*$""")
@@ -69,7 +74,7 @@ internal object BlockScanner {
 
     fun scan(text: String): ImmutableList<BlockNode> {
         val normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-        val rawLines = normalized.split("\n")
+        val rawLines = splitGluedDenebUiFences(normalized.split("\n"))
         val (lines, linkDefs) = extractLinkDefs(rawLines)
         val blocks = scanLines(lines, 0, lines.size, 0)
         return if (linkDefs.isEmpty()) blocks else resolveReferenceLinks(blocks, linkDefs)
@@ -244,6 +249,31 @@ internal object BlockScanner {
             i = next
         }
         return blocks.toImmutableList()
+    }
+
+    // Splits lines whose tail carries a glued deneb-ui fence opener so the fence is
+    // recognized and the prose prefix stays prose. Returns the input list untouched
+    // when nothing is glued (the common case).
+    private fun splitGluedDenebUiFences(lines: List<String>): List<String> {
+        var out: MutableList<String>? = null
+        for (i in lines.indices) {
+            val line = lines[i]
+            val prefix = gluedDenebUiPrefix(line)
+            if (prefix == null) {
+                out?.add(line)
+                continue
+            }
+            val o = out ?: lines.subList(0, i).toMutableList().also { out = it }
+            o.add(prefix)
+            o.add(line.substring(prefix.length))
+        }
+        return out ?: lines
+    }
+
+    private fun gluedDenebUiPrefix(line: String): String? {
+        if (line.length > MAX_LINE_REGEX_LEN || "```" !in line) return null
+        val m = DENEB_FENCE_TAIL_REGEX.matchEntire(line) ?: return null
+        return m.groupValues[1].takeIf { it.isNotBlank() }
     }
 
     // =========================================================================================

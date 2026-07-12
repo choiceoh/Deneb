@@ -23,6 +23,23 @@ func TestExtractFences(t *testing.T) {
 		}
 	})
 
+	t.Run("opener glued to prose tail", func(t *testing.T) {
+		// Models sometimes emit the fence without a newline after the sentence
+		// ("…가져올게요.```deneb-ui") — the opener must still be recognized.
+		text := "소스들을 다시 가져올게요.```deneb-ui\n<text>hi</text>\n```\n끝."
+		got := ExtractFences(text)
+		if len(got) != 1 || got[0] != "<text>hi</text>" {
+			t.Fatalf("glued opener not extracted: %#v", got)
+		}
+		if !HasFence(text) {
+			t.Errorf("HasFence should be true for glued opener")
+		}
+		// Mid-sentence mentions (text after the info string) stay prose.
+		if got := ExtractFences("```deneb-ui 펜스는 이렇게 씁니다\n본문"); len(got) != 0 {
+			t.Errorf("mid-sentence mention must not open a fence, got %#v", got)
+		}
+	})
+
 	t.Run("case-insensitive and multiple", func(t *testing.T) {
 		text := "```DENEB-UI\n{\"type\":\"text\"}\n```\nmid\n```deneb-ui\n{\"type\":\"divider\"}\n```"
 		got := ExtractFences(text)

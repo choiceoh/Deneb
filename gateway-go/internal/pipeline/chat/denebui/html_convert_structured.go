@@ -62,7 +62,10 @@ func convertStructuredElem(el *openElem, inner string, node map[string]any) (any
 	case "ul", "ol", "list":
 		node["type"] = "list"
 		putNodeID(node, a)
-		ordered := el.tag == "ol" || truthy(a["ordered"])
+		// Presence-checked: a missing attribute must not read as truthy("")
+		// (that rendered every <ul> numbered — TS/Kotlin parity).
+		_, hasOrdered := a["ordered"]
+		ordered := el.tag == "ol" || (hasOrdered && truthy(a["ordered"]))
 		if ordered {
 			node["ordered"] = true
 		}

@@ -122,12 +122,19 @@ func HasFence(text string) bool {
 	return false
 }
 
+// isDenebUIFenceOpen reports whether a (whitespace-trimmed) line opens a
+// deneb-ui fence. The fence normally occupies its own line, but models
+// sometimes glue it to the tail of a prose sentence ("…할게요.```deneb-ui") —
+// a tail match accepts that shape too, so the card still renders instead of
+// dumping raw HTML. Only a line-final opener counts: prose that merely
+// mentions the fence mid-sentence stays prose.
 func isDenebUIFenceOpen(line string) bool {
-	if !strings.HasPrefix(line, "```") {
+	line = strings.TrimRight(line, " \t")
+	if len(line) < 3+len(FenceInfo) || !strings.EqualFold(line[len(line)-len(FenceInfo):], FenceInfo) {
 		return false
 	}
-	info := strings.TrimSpace(strings.TrimLeft(line, "`"))
-	return strings.EqualFold(info, FenceInfo)
+	rest := strings.TrimRight(line[:len(line)-len(FenceInfo)], " \t")
+	return strings.HasSuffix(rest, "```")
 }
 
 func isFenceClose(line string) bool {

@@ -33,11 +33,22 @@
 
 ## 관용/자동 보정 (v2.1 — 모델 실수를 콘텐츠 보존으로 흡수)
 
+- **펜스 오프너 관용**: ```` ```deneb-ui ```` 오프너가 프로즈 문장 꼬리에 붙어도
+  (`…가져올게요.```deneb-ui`) 펜스로 인식 — 앞부분은 프로즈로 유지. **라인 끝
+  오프너만** 해당하며 문장 중간 언급(`​```deneb-ui 펜스는…`)은 프로즈로 남는다.
+  3구현 공통: Go `ExtractFences`/`HasFence` · TS `splitDenebUi` · Kotlin
+  `BlockScanner.splitGluedDenebUiFences`.
+- **인라인 런 사이 공백 보존**: 인라인 태그 사이의 공백-only 텍스트 런은 한 칸
+  공백으로 보존 (`<b>A</b> <b>B</b>` → `**A** **B**`) — 드롭하면 마커가 붙어
+  (`**A****B**`) 인라인 마크다운 렌더가 깨진다. 블록 자식 앞뒤의 공백은 레이아웃
+  공백으로 계속 무시.
 - **알 수 없는 태그: unwrap** — 노드는 안 만들되 자식(암시 텍스트 포함)을 부모로
   승격. 서브트리 소실 금지. 검증기는 Issue 유지 (드리프트 텔레메트리).
   알 수 없는 속성: 무시 (기존과 동일).
-- **제네릭 래퍼** (`div section article header footer main aside figure center nav`):
-  unwrap과 동일하되 Issue 없음 — 수용된 HTML 유창성.
+- **제네릭 래퍼** (`div section article header footer main aside figure center nav
+  thead tbody tfoot`): unwrap과 동일하되 Issue 없음 — 수용된 HTML 유창성.
+  unwrap은 자식 노드와 **structural 중간물(tr/td 등)도 함께 승격** —
+  `<thead>/<tbody>` 안의 행이 표에서 사라지지 않는다.
 - **인라인 서식 태그** (`b strong`→`**` · `i em`→`*` · `u s del strike mark small
   span sub sup`→맨몸 텍스트 · `a href`→`[라벨](url)`): 노드 대신 마크다운 마킹된
   텍스트 런으로 부모 텍스트 흐름에 병합 — 렌더러의 인라인 토크나이저가 그린다.
@@ -124,4 +135,7 @@ truncation(EOF 자동 닫힘) / 엔티티+`&#96;` 코드펜스 / table th+td / �
 내 `<` 문자 / div 래퍼 unwrap / 인라인 `<b>` 병합(`**`) / `<a>`+인라인 `<code>`
 병합 / badge 안 인라인 마커 억제 / 카드 안 마크다운 표→markdown 노드 /
 `<text>` 불릿 블록 승격 / h2·p 별칭 / progress `68%`→0.68 / point `1,200톤`→1200 /
-badge `red`→error / alert `warn`→warning / chart `column`→bar.
+badge `red`→error / alert `warn`→warning / chart `column`→bar /
+프로즈 꼬리에 붙은 펜스 오프너(+문장 중간 언급은 프로즈 유지) /
+인접 인라인 런 공백 보존(`**A** **B**`) / `<ul>` 비순서·`<ol>`/`ordered` 속성만 순서 /
+`<thead>/<tbody>` unwrap 시 행 보존.

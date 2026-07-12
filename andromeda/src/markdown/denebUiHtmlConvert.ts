@@ -28,10 +28,15 @@ export interface OpenElem {
   text: string[];
   /** Buffered implicit-text runs, flushed as one merged node. */
   pending: string[];
+  /**
+   * A whitespace-only run arrived after existing text; the next run keeps one
+   * separating space so inline merges don't glue ("**A** **B**").
+   */
+  pendingSpace: boolean;
 }
 
 export function newElem(tag: string, attrs: Record<string, string>): OpenElem {
-  return { tag, attrs, children: [], structs: [], text: [], pending: [] };
+  return { tag, attrs, children: [], structs: [], text: [], pending: [], pendingSpace: false };
 }
 
 export function convert(el: OpenElem): Node | Structural | null {

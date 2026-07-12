@@ -66,6 +66,24 @@ class DenebUiBlockIntegrationTest {
     }
 
     @Test
+    fun `opener glued to a prose tail still opens the fence and keeps the prose`() {
+        // Models sometimes emit the fence without a newline after the sentence
+        // ("…가져올게요.```deneb-ui") — the card must render, not dump raw HTML.
+        val md = "소스들을 다시 가져올게요.```deneb-ui\n{\"type\":\"alert\",\"message\":\"hi\"}\n```\n끝."
+        val blocks = parseMarkdown(md).blocks
+        assertEquals(3, blocks.size)
+        assertTrue(blocks[0] is Paragraph)
+        assertTrue(blocks[1] is DenebUiBlock)
+        assertTrue(blocks[2] is Paragraph)
+    }
+
+    @Test
+    fun `mid-sentence fence mention stays prose`() {
+        val blocks = parseMarkdown("```deneb-ui 펜스는 이렇게 씁니다").blocks
+        assertTrue(blocks.none { it is DenebUiBlock || it is DenebUiError || it is DenebUiPending })
+    }
+
+    @Test
     fun `split-block pattern with json fence is treated as deneb-ui`() {
         val md = """
             deneb-ui
