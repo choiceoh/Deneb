@@ -4,14 +4,11 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/lmtpd"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailbody"
 )
 
 const (
@@ -316,132 +313,6 @@ func (r *Repository) fallbackSearchPage(ctx context.Context, query, pageToken st
 		return r.fallback.SearchPage(ctx, query, pageToken, maxResults)
 	}
 	return nil, "", ErrArchiveUnavailable
-}
-
-type archiveRow struct {
-	summary gmail.MessageSummary
-	when    time.Time
-	uid     int
-}
-
-func (r *Repository) searchArchive(ctx context.Context, spec archiveQuery, pageToken string, maxResults int) ([]gmail.MessageSummary, string, error) {
-	if maxResults <= 0 {
-		maxResults = 25
-	}
-	offset, err := parseArchivePageToken(pageToken)
-	if err != nil {
-		return nil, "", err
-	}
-	fetchPerBox := offset + maxResults*archivePostFilterScanMultiplier + 1
-	if fetchPerBox < minArchiveFetchPerBox {
-		fetchPerBox = minArchiveFetchPerBox
-	}
-	if fetchPerBox > maxArchiveFetchPerBox {
-		fetchPerBox = maxArchiveFetchPerBox
-	}
-
-	c, err := dialIMAP(ctx, r.cfg.Addr, r.cfg.Timeout)
-	if err != nil {
-		return nil, "", err
-	}
-	defer c.close()
-	if err := c.login(r.cfg.User, r.cfg.Pass); err != nil {
-		return nil, "", err
-	}
-	defer c.logout()
-
-	var all []archiveRow
-	seen := map[string]bool{}
-	for _, mailbox := range archiveSearchMailboxes(r.cfg.Mailboxes, spec) {
-		mailbox = strings.TrimSpace(mailbox)
-		if mailbox == "" {
-			continue
-		}
-		if err := c.examine(mailbox); err != nil {
-			continue
-		}
-		uids, err := c.uidSearch(spec.Criteria)
-		if err != nil {
-			continue
-		}
-		uids = tailStrings(uids, fetchPerBox)
-		reverseStrings(uids)
-		msgs, err := c.uidFetchMessages(strings.Join(uids, ","))
-		if err != nil {
-			continue
-		}
-		for _, msg := range msgs {
-			uid := strings.TrimSpace(msg.UID)
-			if uid == "" {
-				continue
-			}
-			parsed, err := lmtpd.ParseMessage(msg.Raw, archiveLocator(mailbox, uid))
-			if err != nil || parsed == nil || parsed.Detail == nil {
-				continue
-			}
-			detail := parsed.Detail
-			id := strings.TrimSpace(detail.ID)
-			if id == "" {
-				id = archiveLocator(mailbox, uid)
-			}
-			if seen[id] {
-				continue
-			}
-			seen[id] = true
-			_ = r.state.RememberLocator(id, mailbox, uid)
-			st := r.state.Get(id)
-			if st.Trashed || (spec.InboxOnly && st.Archived) || (spec.DefaultView && st.Archived) {
-				continue
-			}
-			if spec.HasAttachment && len(detail.Attachments) == 0 {
-				continue
-			}
-			row := detailToSummary(detail, mailbox, st)
-			all = append(all, archiveRow{
-				summary: row,
-				when:    mailbody.ParseMailDate(detail.Date),
-				uid:     parseUID(uid),
-			})
-		}
-	}
-
-	sort.SliceStable(all, func(i, j int) bool {
-		if !all[i].when.Equal(all[j].when) {
-			return all[i].when.After(all[j].when)
-		}
-		return all[i].uid > all[j].uid
-	})
-	if offset >= len(all) {
-		return nil, "", nil
-	}
-	end := offset + maxResults
-	if end > len(all) {
-		end = len(all)
-	}
-	rows := make([]gmail.MessageSummary, 0, end-offset)
-	for _, row := range all[offset:end] {
-		rows = append(rows, row.summary)
-	}
-	next := ""
-	if end < len(all) {
-		next = archivePageTokenPrefix + strconv.Itoa(end)
-	}
-	return rows, next, nil
-}
-
-func parseArchivePageToken(token string) (int, error) {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return 0, nil
-	}
-	if !strings.HasPrefix(token, archivePageTokenPrefix) {
-		return 0, ErrArchiveUnsupportedQuery
-	}
-	n, err := strconv.Atoi(strings.TrimPrefix(token, archivePageTokenPrefix))
-	if err != nil || n < 0 {
-		return 0, ErrArchiveUnsupportedQuery
-	}
-	return n, nil
 }
 
 func (r *Repository) getArchiveParsed(ctx context.Context, messageID string) (*lmtpd.Message, error) {
