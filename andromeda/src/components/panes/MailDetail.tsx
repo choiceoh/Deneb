@@ -19,6 +19,7 @@ import {
 import type { Mail, MailAttachment } from "@/types";
 import { errText, fmtMailDate, senderName, text } from "@/format";
 import { formatBytes } from "@/components/panes/fileHelpers";
+import { Icon } from "@/components/Icon";
 import { useAsyncOnOpen } from "@/useAsyncOnOpen";
 import { useWorkspace } from "@/workspaceContext";
 import { Markdown } from "@/components/Markdown";
@@ -372,12 +373,12 @@ function AnalysisCard({ mailId }: { mailId: string }) {
         <>
           <div className="mail-card-line error">{err}</div>
           <button className="btn" onClick={() => void run()} disabled={!connected}>
-            🔍 이 메일 분석
+            <Icon name="search" size={14} /> 이 메일 분석
           </button>
         </>
       ) : (
         <button className="btn" onClick={() => void run()} disabled={!connected}>
-          🔍 이 메일 분석
+          <Icon name="search" size={14} /> 이 메일 분석
         </button>
       )}
     </div>

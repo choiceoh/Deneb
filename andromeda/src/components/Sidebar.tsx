@@ -36,6 +36,7 @@ export function Sidebar() {
           style={{ animationDelay: `${i * 26}ms` }}
           onClick={() => setView(p.key)}
           title={p.label}
+          aria-current={view === p.key ? "page" : undefined}
         >
           <span className="ico">
             <Icon name={p.key} />
@@ -50,6 +51,7 @@ export function Sidebar() {
         style={{ marginTop: "auto" }}
         onClick={() => setView("settings")}
         title={settings.label}
+        aria-current={view === "settings" ? "page" : undefined}
       >
         <span className="ico">
           <Icon name="settings" />

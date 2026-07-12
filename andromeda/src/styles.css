@@ -18,6 +18,7 @@
   /* surfaces */
   --panel: #ffffff;
   --panel-sunken: #f7f7f9;
+  --row-hover: #faf9f8;
 
   /* ink / text tiers */
   --ink: #1f2128;
@@ -1878,7 +1879,7 @@ textarea {
   transition: background 0.12s ease;
 }
 .dgrid tbody tr:hover {
-  background: #faf9f8;
+  background: var(--row-hover);
 }
 .dgrid tbody tr.clickable {
   cursor: pointer;
@@ -3218,7 +3219,7 @@ button.mail-attachment {
 .project-home-empty {
   margin: 0;
   color: var(--muted-2);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
 }
 

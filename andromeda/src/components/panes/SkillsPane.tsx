@@ -591,7 +591,16 @@ function LifecycleRow({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-expanded={open}
       onClick={() => setOpen((o) => !o)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setOpen((o) => !o);
+        }
+      }}
       style={{ padding: "8px 0", borderBottom: `1px solid ${color.line}`, cursor: "pointer" }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

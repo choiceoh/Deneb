@@ -105,23 +105,65 @@ export function Grid<T>({
 // Renders a notice (and nothing else) when the grid can't show rows yet; checks
 // error BEFORE empty so a failed RPC isn't misreported as "no data". Otherwise
 // renders its children (the table).
+//
+// The loading state shows a spinner (tool-spin); the error state shows a
+// retry button when onRetry is provided. Both carry role="status" +
+// aria-live="polite" so screen readers announce state transitions.
 export function GridNotice({
   query,
   count,
   empty,
   children,
+  onRetry,
 }: {
-  query: { isLoading: boolean; isError?: boolean; error?: unknown };
+  query: { isLoading: boolean; isError?: boolean; error?: unknown; refetch?: () => void };
   count: number;
   empty: string;
   children: ReactNode;
+  /** Optional retry handler. Defaults to query.refetch if available. */
+  onRetry?: () => void;
 }) {
   const { connected } = useWorkspace();
   const notice: CSSProperties = { ...muted, fontSize: 13 };
-  if (!connected) return <p style={notice}>미연결</p>;
-  if (query.isError) return <p style={{ fontSize: 13, color: color.danger }}>불러오기 실패: {errText(query.error)}</p>;
-  if (query.isLoading) return <p style={notice}>불러오는 중…</p>;
-  if (count === 0) return <p style={notice}>{empty}</p>;
+
+  if (!connected)
+    return (
+      <p style={notice} role="status" aria-live="polite">
+        미연결
+      </p>
+    );
+
+  if (query.isError) {
+    const retry = onRetry ?? query.refetch;
+    return (
+      <div style={{ fontSize: 13, color: color.danger, display: "flex", alignItems: "center", gap: 8 }}>
+        <span role="status" aria-live="polite">
+          불러오기 실패: {errText(query.error)}
+        </span>
+        {retry && (
+          <button className="row-btn" onClick={retry} style={{ color: "var(--clay)", flexShrink: 0 }} title="다시 시도">
+            다시 시도
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (query.isLoading)
+    return (
+      <p style={{ ...notice, display: "flex", alignItems: "center", gap: 6 }} role="status" aria-live="polite">
+        <span className="tool-spin" style={{ width: 12, height: 12, flexShrink: 0 }} />
+        불러오는 중…
+      </p>
+    );
+
+  if (count === 0)
+    return (
+      <p style={notice} role="status">
+        {empty}
+      </p>
+    );
+
   return <>{children}</>;
 }
 
