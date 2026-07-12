@@ -16,6 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/linkenrichment"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
@@ -72,6 +73,7 @@ type Handler struct {
 	subagent             *SubagentNotifier
 	subagentCleanupUnsub func()
 	steer                *SteerQueue // mid-run /steer notes for the main agent
+	linkEnrichment       *linkenrichment.Engine
 
 	// checkpointRoot is the directory where per-session file-edit snapshots
 	// are stored (e.g. "~/.deneb/checkpoints"). When non-empty, each agent
@@ -339,6 +341,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		pending:              NewPendingQueue(),
 		mergeWindow:          NewMergeWindowTracker(),
 		steer:                NewSteerQueue(),
+		linkEnrichment:       linkenrichment.New(linkenrichment.Config{Logger: logger}),
 		maxHistoryBytes:      cfg.MaxHistoryBytes,
 		maxHistoryCount:      cfg.MaxHistoryCount,
 		maxMessageBytes:      cfg.MaxMessageBytes,
