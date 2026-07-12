@@ -8,36 +8,9 @@ import (
 
 const nativeClientSessionPrefix = "client:"
 
-// chatWorkspaceSessionPrefix is the LEGACY 챗봇 workspace namespace
-// (chat:<uuid>). The 챗봇 mode was removed — no new chat: sessions are minted —
-// but old conversations persist on disk and must stay listed/readable in the
-// drawer, where they now behave as ordinary 업무 sessions.
-const chatWorkspaceSessionPrefix = "chat:"
-
 func isNativeClientSessionKey(sessionKey string) bool {
 	return strings.HasPrefix(sessionKey, nativeClientSessionPrefix) &&
 		strings.TrimPrefix(sessionKey, nativeClientSessionPrefix) != ""
-}
-
-// restorableTranscriptSession decides whether a transcript file found on disk
-// at startup should be woken back into the session manager. The live native
-// session shapes qualify: the 업무 home (client:main) and its explicit new
-// conversations (client:main:<id>), plus legacy 챗봇 conversations (chat:<uuid>)
-// which stay readable after the mode's removal. Retired shapes must stay dead
-// so dismissed/obsolete rows don't reappear in the drawer on the next restart —
-// the removed topic sessions (client:topic:*, gone since #1963) and the
-// pre-main client:<uuid> format both linger on disk but should never
-// resurrect. Matching bare isNativeClientSessionKey here is what kept reviving
-// them: the gateway restarts every few minutes on SIGUSR1, re-scanning the
-// transcript dir each time. All these sessions run on the "client" channel.
-// isChatWorkspaceSessionKey reports whether sessionKey belongs to the legacy
-// 챗봇 namespace (chat:<uuid>). Unlike the retired client:topic:* /
-// client:<uuid> shapes, chat: conversations persist transcripts exactly like
-// work sessions and stay user-visible after the mode's removal, so they must
-// survive the restart rescan.
-func isChatWorkspaceSessionKey(sessionKey string) bool {
-	return strings.HasPrefix(sessionKey, chatWorkspaceSessionPrefix) &&
-		strings.TrimPrefix(sessionKey, chatWorkspaceSessionPrefix) != ""
 }
 
 // isRestorableNativeSessionKey reports whether sessionKey is a currently-valid
