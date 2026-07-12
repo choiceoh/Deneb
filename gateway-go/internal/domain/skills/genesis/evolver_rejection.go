@@ -32,13 +32,30 @@ func (e *Evolver) recordRejectedSkillEdit(skillName, candidateBody, reason, sour
 	e.queueRepeatedPatchFirstReviewDraft(skillName, reason, source)
 }
 
+// rejectedEvolveDraftSource is the shared dedup signature for held-out
+// validation drafts: the full Source is this prefix + ":" + the rejection
+// source, and the reopen guard matches on the prefix.
+const rejectedEvolveDraftSource = "self-harness-rejected-evolve"
+
 func (e *Evolver) queueRejectedEvolveValidationDraft(skillName, reason, source string, audit HarnessEditAudit) {
 	reason = strings.TrimSpace(reason)
-	if reason == "" || e.tracker == nil {
+	skillName = strings.TrimSpace(skillName)
+	if reason == "" || skillName == "" || e.tracker == nil {
 		return
 	}
 	if !isSelfHarnessOrReplayRejection(reason) {
 		return
+	}
+	// Dedup: one open held-out draft per skill. Without this every rejected
+	// evolve for the same skill minted a fresh near-identical draft (4 duplicates
+	// observed in prod), clogging the self-correction queue. The sibling
+	// patch-first promoter already guards this — mirror it: a live/operator-ruled
+	// twin blocks, and only an APPLIED draft whose signature recurs after the
+	// cooldown ("the held-out case never stuck") re-opens.
+	if existing, err := e.tracker.RecentSelfCorrectionCandidates(skillName, "", 50); err == nil {
+		if selfCorrectionReopenBlocked(existing, rejectedEvolveDraftSource, time.Now().UnixMilli(), time.Now()) {
+			return
+		}
 	}
 	target := strings.TrimSpace(audit.TargetSignature)
 	if target == "" {
@@ -64,7 +81,7 @@ func (e *Evolver) queueRejectedEvolveValidationDraft(skillName, reason, source s
 		},
 		ProposedChange: "Review the rejected candidate and add a held-out SkillValidationCaseRecord (validation_replay.go contract) that fails the weak rewrite before any similar evolve is allowed.",
 		Risk:           "Do not auto-apply the rejected body; only convert stable observed behavior into a test/replay assertion.",
-		Source:         "self-harness-rejected-evolve:" + strings.TrimSpace(source),
+		Source:         rejectedEvolveDraftSource + ":" + strings.TrimSpace(source),
 	}); err != nil && e.logger != nil {
 		e.logger.Warn("evolver: rejected evolve validation draft failed",
 			"skill", skillName, "error", err)
