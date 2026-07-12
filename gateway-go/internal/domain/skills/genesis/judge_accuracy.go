@@ -157,7 +157,12 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 		ByClass:      map[string][2]int{},
 	}
 
-	pairs := buildJudgeDegradationPairs(t.Evolver.catalogEntries(), judgeBenchMaxPairs*metaBenchScale())
+	entries := t.Evolver.catalogEntries()
+	pairs := buildJudgeDegradationPairs(entries, judgeBenchMaxPairs*metaBenchScale())
+	// Subtle single-line degradations produce the honest judge misses the
+	// blatant meta-bench pairs never will — the actual P3 label food. Kept out
+	// of the meta-judge promotion gate on purpose (see judge_subtle_degradations.go).
+	pairs = append(pairs, buildSubtleJudgeDegradationPairs(entries, judgeBenchMaxPairs*metaBenchScale())...)
 	for _, pair := range pairs {
 		if ctx.Err() != nil {
 			return ctx.Err()
