@@ -113,12 +113,99 @@ func TestMetaEvolution_LedgerAndEvidence(t *testing.T) {
 	}
 
 	task := &MetaEvolutionTask{Tracker: tr}
-	evidence := task.assembleEvidence()
+	evidence := task.assembleEvidence(metaEpochProducer)
 	if !strings.Contains(evidence, "tightened scoring rubric") {
 		t.Fatalf("evidence lacks meta-experience memory:\n%s", evidence)
 	}
 	if !strings.Contains(evidence, "진화 스코어보드") {
 		t.Fatalf("evidence lacks health scoreboard:\n%s", evidence)
+	}
+}
+
+// P3 loop closure: the evaluator epoch grounds a judge-prompt revision on the
+// live judge's OWN recent misses (and false-rejects), scoped to the incumbent
+// judge version. The producer epoch never sees them; a clean judge yields
+// nothing; a version mismatch is excluded.
+func TestMetaEvolution_JudgeAccuracyEvidence(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := generation.NewMetaArtifacts(t.TempDir(), slog.Default())
+	task := &MetaEvolutionTask{Tracker: tr, Meta: meta}
+
+	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
+	version := meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
+
+	// Incumbent judge: caught every blatant section-drop, missed 3/5 subtle
+	// safety-drops, and has one suspected false-reject.
+	if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+		JudgeVersion: version,
+		Pairs:        9,
+		Correct:      6,
+		ByClass: map[string][2]int{
+			"section-drop": {4, 4}, // no miss — must not appear
+			"safety-drop":  {2, 5}, // 3 missed — must appear
+		},
+		FalseRejects: []FalseRejectExhibit{{Skill: "sk", RejectReason: "over-tightened"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A DIFFERENT judge version's misses must be ignored (may already be fixed).
+	if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+		JudgeVersion: "stale-version",
+		ByClass:      map[string][2]int{"imperative-drop": {0, 6}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	ev := task.assembleEvidence(metaEpochEvaluator)
+	if !strings.Contains(ev, "판정자 최근 오판") {
+		t.Fatalf("evaluator epoch lacks the P3 miss block:\n%s", ev)
+	}
+	if !strings.Contains(ev, "safety-drop") || !strings.Contains(ev, "3/5") {
+		t.Fatalf("evaluator epoch lost the missed class/count:\n%s", ev)
+	}
+	if strings.Contains(ev, "section-drop") {
+		t.Fatalf("a fully-caught class leaked into the miss block:\n%s", ev)
+	}
+	if strings.Contains(ev, "imperative-drop") {
+		t.Fatalf("a stale-version miss leaked in:\n%s", ev)
+	}
+	if !strings.Contains(ev, "false-reject") {
+		t.Fatalf("evaluator epoch lost the balancing false-reject signal:\n%s", ev)
+	}
+
+	// The producer epoch must NOT be grounded on judge misses (different target).
+	if prod := task.assembleEvidence(metaEpochProducer); strings.Contains(prod, "판정자 최근 오판") {
+		t.Fatalf("producer epoch was grounded on judge misses:\n%s", prod)
+	}
+}
+
+// A clean incumbent judge (no misses, no false-rejects) leaves the evaluator
+// epoch exactly as it was — the closure is a no-op until labels accumulate.
+func TestMetaEvolution_JudgeAccuracyEvidence_CleanJudge(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := generation.NewMetaArtifacts(t.TempDir(), slog.Default())
+	task := &MetaEvolutionTask{Tracker: tr, Meta: meta}
+	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
+	version := meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
+
+	if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+		JudgeVersion: version,
+		Pairs:        8,
+		Correct:      8,
+		ByClass:      map[string][2]int{"section-drop": {4, 4}, "safety-drop": {4, 4}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if ev := task.assembleEvidence(metaEpochEvaluator); strings.Contains(ev, "판정자 최근 오판") {
+		t.Fatalf("clean judge produced a miss block:\n%s", ev)
 	}
 }
 

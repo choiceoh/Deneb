@@ -27,6 +27,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +50,11 @@ const (
 // metaProposalMaxBytes caps a proposed artifact: prompts beyond this are a
 // smell (the compiled defaults are 2-5KB) and would bloat every evolve call.
 const metaProposalMaxBytes = 24 * 1024
+
+// judgeMissEvidenceRuns bounds how many recent judge-accuracy lane runs the
+// evaluator epoch reads to ground a judge-prompt revision on the judge's own
+// labeled mistakes (P3). 10 runs at the accelerated 4h cadence ≈ recent behavior.
+const judgeMissEvidenceRuns = 10
 
 // metaArtifactContracts are the deterministic anchors a proposed revision must
 // preserve per artifact — the response-schema markers the Go parsers depend
@@ -284,7 +290,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 		return nil
 	}
 
-	evidence := t.assembleEvidence()
+	evidence := t.assembleEvidence(epoch)
 	proposal, reason, err := t.propose(ctx, artifact, incumbent, evidence)
 	if err != nil {
 		logger.Warn("meta-evolution: proposal generation failed", "artifact", artifact, "error", err)
@@ -473,7 +479,10 @@ func (t *MetaEvolutionTask) nextEpoch() (string, string) {
 
 // assembleEvidence builds the compact evidence block the proposal prompt sees:
 // the 7d health scoreboard, low-yield levers, and the meta-experience ledger.
-func (t *MetaEvolutionTask) assembleEvidence() string {
+// For the evaluator epoch it also appends the live judge's own labeled mistakes
+// (P3), so a judge-prompt revision targets real blind spots (see
+// assembleJudgeAccuracyEvidence).
+func (t *MetaEvolutionTask) assembleEvidence(epoch string) string {
 	var b strings.Builder
 	h := t.Tracker.EvolutionHealth()
 	fmt.Fprintf(&b, "## 7일 진화 스코어보드\n- evolve %d건 (기각 %d, 롤백 %d, 확인 %d), confirmRate %.2f, falseAcceptRate %.2f (해소 %d건)\n",
@@ -503,6 +512,80 @@ func (t *MetaEvolutionTask) assembleEvidence() string {
 				p.Epoch, p.Artifact, p.FromVersion, p.ToVersion, common.TruncateRunes(p.Reason, 160), status)
 		}
 	}
+	if epoch == metaEpochEvaluator {
+		b.WriteString(t.assembleJudgeAccuracyEvidence())
+	}
+	return b.String()
+}
+
+// assembleJudgeAccuracyEvidence closes the P3 loop: it surfaces the LIVE judge's
+// recent labeled mistakes so an evaluator-epoch revision targets the judge's
+// ACTUAL blind spots instead of revising blind. Three safety properties:
+//   - No teaching-to-the-test: JudgeMissExhibit carries only the miss CLASS and
+//     skill, never the pair body, so the revision learns to catch a category of
+//     defect — it cannot memorize the exact bench pairs. And the misses are
+//     dominated by the SUBTLE classes (imperative-drop, safety-drop) while the
+//     evaluator gate scores BLATANT pairs (buildJudgeDegradationPairs) — disjoint
+//     corpora, so grounding cannot game the gate.
+//   - Balanced pressure: misses (judge too lenient) AND suspected false-rejects
+//     (judge too strict) are surfaced together with an explicit instruction to
+//     tighten WITHOUT raising false rejects — the degradation bench rewards
+//     rejecting defects and so cannot, alone, catch an over-strict judge.
+//   - Scoped to the CURRENT judge version: older-version misses may already be
+//     fixed. Returns "" when the incumbent judge has no recent misses or
+//     false-rejects, so a clean judge leaves the evaluator epoch unchanged.
+func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
+	if t.Tracker == nil || t.Meta == nil {
+		return ""
+	}
+	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
+	version := t.Meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
+	records, err := t.Tracker.RecentJudgeAccuracy(judgeMissEvidenceRuns)
+	if err != nil || len(records) == 0 {
+		return ""
+	}
+	byClass := map[string][2]int{} // class -> [missed, total]
+	falseRejects := 0
+	for _, rec := range records {
+		if rec.JudgeVersion != version {
+			continue // only the incumbent judge's own record is actionable
+		}
+		for cls, ct := range rec.ByClass {
+			cur := byClass[cls]
+			cur[0] += ct[1] - ct[0] // missed = total - correct
+			cur[1] += ct[1]
+			byClass[cls] = cur
+		}
+		falseRejects += len(rec.FalseRejects)
+	}
+	type classMiss struct {
+		name          string
+		missed, total int
+	}
+	var missed []classMiss
+	for name, ct := range byClass {
+		if ct[0] > 0 {
+			missed = append(missed, classMiss{name, ct[0], ct[1]})
+		}
+	}
+	if len(missed) == 0 && falseRejects == 0 {
+		return "" // incumbent judge is clean — nothing to co-evolve on
+	}
+	sort.Slice(missed, func(i, j int) bool {
+		if missed[i].missed != missed[j].missed {
+			return missed[i].missed > missed[j].missed // worst first
+		}
+		return missed[i].name < missed[j].name // deterministic tie-break
+	})
+	var b strings.Builder
+	b.WriteString("\n## 판정자 최근 오판 (P3 라벨 — 실제 결함 감지력은 높이되 false-reject는 늘리지 말 것)\n")
+	for _, m := range missed {
+		fmt.Fprintf(&b, "- %s: 최근 %d/%d 건 놓침 (이 유형의 열화를 통과시킴)\n", m.name, m.missed, m.total)
+	}
+	if falseRejects > 0 {
+		fmt.Fprintf(&b, "- 의심 false-reject: %d건 (기각했으나 실제로는 현재 본문보다 나았던 후보 — 과잉 엄격화 경계)\n", falseRejects)
+	}
+	b.WriteString("위 유형의 실제 결함 감지력을 높이되, 정상 개선을 기각하지 않도록 판정 기준을 정밀화하라 (과잉 기각은 진화를 정지시킨다).\n")
 	return b.String()
 }
 
