@@ -2,7 +2,9 @@ package genesis
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -309,5 +311,130 @@ func TestAccelerationKnobs(t *testing.T) {
 	t.Setenv("DENEB_SKILL_WORKOUT_INTERVAL_HOURS", "")
 	if w.Interval() != skillWorkoutInterval {
 		t.Fatalf("default workout interval = %v", w.Interval())
+	}
+}
+
+// P5-5: the operator-utility aggregate reads the ledger's Action field and
+// classifies 7d feed-card verdicts. Cycle records (Action=="") are excluded;
+// ancient entries fall outside the window; adoptionRate = adopted/(adopted+
+// rejected); an empty ledger yields a zero value (quiet, not broken).
+func TestOperatorUtilitySignals(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Empty ledger → zero value (fresh install is quiet).
+	if u := tr.OperatorUtilitySignals(); u.Adopted7d != 0 || u.Rejected7d != 0 || u.Reverted7d != 0 || u.AdoptionRate != 0 {
+		t.Fatalf("empty ledger utility = %+v", u)
+	}
+	// Ancient verdict (outside 7d) must be excluded.
+	if err := tr.LogMetaRevision(MetaRevisionRecord{Action: "adopted", Reason: "old", CreatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	// Fresh feed-card verdicts across all three action kinds + a cycle record
+	// (Action=="") that must NOT count as a verdict.
+	now := time.Now().UnixMilli()
+	for _, r := range []MetaRevisionRecord{
+		{Action: "", Reason: "cycle skipped", CreatedAt: now}, // not a verdict
+		{Action: "adopted", Reason: "operator adopted from feed card", CreatedAt: now},
+		{Action: "rejected", Reason: "operator rejected from feed card", CreatedAt: now},
+		{Action: "auto_adopted", Reason: "bench-gated auto-adoption", CreatedAt: now},
+		{Action: "operator_reverted", Reason: "operator reverted", CreatedAt: now},
+		{Action: "auto_reverted", Reason: "rollback watch fired", CreatedAt: now},
+	} {
+		if err := tr.LogMetaRevision(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	u := tr.OperatorUtilitySignals()
+	// adopted + auto_adopted = 2; rejected = 1; operator_reverted + auto_reverted = 2.
+	if u.Adopted7d != 2 || u.Rejected7d != 1 || u.Reverted7d != 2 {
+		t.Fatalf("7d counts = %+v (want adopted=2 rejected=1 reverted=2)", u)
+	}
+	// adoptionRate = 2/(2+1) ≈ 0.667.
+	if math.Abs(u.AdoptionRate-2.0/3.0) > 1e-9 {
+		t.Fatalf("adoptionRate = %.4f, want %.4f", u.AdoptionRate, 2.0/3.0)
+	}
+	if u.LastDecisionAt != now {
+		t.Fatalf("lastDecisionAt = %d, want %d", u.LastDecisionAt, now)
+	}
+}
+
+// P5-5: the evidence block surfaces the advisory verdict line when feed-card
+// decisions exist, and is absent (empty string) on a fresh install — the
+// data-gated-not-broken distinction. The block must be marked advisory so the
+// producer knows it is prose-grounding, not a gate.
+func TestMetaEvolution_OperatorUtilityEvidence(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := &MetaEvolutionTask{Tracker: tr}
+	// Fresh install: no verdicts → block is empty (quiet).
+	if ev := task.assembleOperatorUtilityEvidence(); ev != "" {
+		t.Fatalf("fresh install produced a utility block:\n%s", ev)
+	}
+	// With verdicts: the block appears in both epochs (advisory is epoch-agnostic).
+	now := time.Now().UnixMilli()
+	if err := tr.LogMetaRevision(MetaRevisionRecord{Action: "adopted", CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.LogMetaRevision(MetaRevisionRecord{Action: "rejected", CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	block := task.assembleOperatorUtilityEvidence()
+	if block == "" {
+		t.Fatal("utility block empty despite verdicts")
+	}
+	if !strings.Contains(block, "자문") || !strings.Contains(block, "게이트 아님") {
+		t.Fatalf("block missing advisory marker:\n%s", block)
+	}
+	if !strings.Contains(block, "채택 1") || !strings.Contains(block, "기각 1") {
+		t.Fatalf("block missing verdict counts:\n%s", block)
+	}
+	// adoptionRate should render (1/(1+1) = 50%).
+	if !strings.Contains(block, "50%") {
+		t.Fatalf("block missing adoption rate:\n%s", block)
+	}
+	// The full assembled evidence must carry the block in BOTH epochs.
+	for _, epoch := range []string{metaEpochProducer, metaEpochEvaluator} {
+		if ev := task.assembleEvidence(epoch); !strings.Contains(ev, "운영자 피드카드 결정") {
+			t.Fatalf("%s epoch evidence lacks utility block:\n%s", epoch, ev)
+		}
+	}
+}
+
+// P5-5: the advisory snapshot survives a JSON round-trip on the ledger record
+// — the audit trail records what the operator's verdicts looked like at each
+// cycle. A nil pointer (older records) must stay nil, not deserialize to a
+// zero struct, so the absence is distinguishable from "all zero".
+func TestMetaRevisionRecord_OperatorUtilityRoundTrip(t *testing.T) {
+	rec := MetaRevisionRecord{
+		Epoch: metaEpochProducer,
+		OperatorUtility: &OperatorUtilitySignals{
+			Adopted7d: 3, Rejected7d: 1, Reverted7d: 0, AdoptionRate: 0.75,
+		},
+	}
+	raw, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back MetaRevisionRecord
+	if err := json.Unmarshal(raw, &back); err != nil {
+		t.Fatal(err)
+	}
+	if back.OperatorUtility == nil || back.OperatorUtility.Adopted7d != 3 || back.OperatorUtility.AdoptionRate != 0.75 {
+		t.Fatalf("round-trip lost advisory data: %+v", back.OperatorUtility)
+	}
+	// A record without the field must deserialize to nil (absence ≠ zero).
+	legacy := []byte(`{"epoch":"producer","createdAt":1}`)
+	var legacyRec MetaRevisionRecord
+	if err := json.Unmarshal(legacy, &legacyRec); err != nil {
+		t.Fatal(err)
+	}
+	if legacyRec.OperatorUtility != nil {
+		t.Fatalf("legacy record got a non-nil utility: %+v", legacyRec.OperatorUtility)
 	}
 }

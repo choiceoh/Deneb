@@ -253,6 +253,17 @@ Five workstreams, in priority order:
    2604.23472 as the caution that closed mutual refinement without external
    grounding drifts.
 
+   **Status: first slice LANDED (feed-card advisory evidence).** The 7d
+   feed-card verdict aggregate (adopted/rejected/reverted + adoptionRate)
+   now flows into the meta-evidence block and the `MetaRevisionRecord`
+   ledger as an ADVISORY snapshot — the producer's prose is grounded on
+   operator-perceived utility while every deterministic gate stays
+   untouched. The aggregate is a read-side view of the existing `Action`
+   ledger field (zero new signal source, zero new dependency). Remaining:
+   runtime-health composite and quality-bench trends both live in
+   `scripts/audit/` (Python) with no Go reader and no time-series store —
+   wiring either is a cross-package slice (P5-5 next).
+
 **Graduation ladder.** Autonomy expands on track record, never on calendar.
 Staged locks and the evidence that flips them (thresholds are proposals,
 operator-tunable):

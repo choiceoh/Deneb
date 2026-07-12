@@ -100,6 +100,25 @@ type MetaRevisionRecord struct {
 	// Producer-epoch only: shadow-replay bench (CPE anchor preservation +
 	// AgentDevel flip gate over generated candidates).
 	BenchShadow *ProducerBenchOutcome `json:"benchShadow,omitempty"`
+	// OperatorUtility is ADVISORY-ONLY (never a gate input, P5-5): what the
+	// operator's feed-card accept/reject verdicts looked like at this cycle.
+	// Recorded for diagnosis/audit; the deterministic gates ignore it. Mirrors
+	// the subtle-vs-blatant judge-degradation split — informs the producer's
+	// prose, never decides adoption.
+	OperatorUtility *OperatorUtilitySignals `json:"operatorUtility,omitempty"`
+}
+
+// OperatorUtilitySignals summarizes 7d operator feed-card decisions for the
+// meta-evidence block. ADVISORY ONLY (P5-5): grounds the producer's prose on
+// operator-visible utility; no gate reads it. Feed-card decisions are already
+// ledgered as MetaRevisionRecord.Action entries (adopted/rejected/
+// operator_reverted) — this is a read-side aggregate, not a new signal source.
+type OperatorUtilitySignals struct {
+	Adopted7d      int     `json:"adopted7d"`
+	Rejected7d     int     `json:"rejected7d"`
+	Reverted7d     int     `json:"reverted7d"`
+	AdoptionRate   float64 `json:"adoptionRate"` // adopted/(adopted+rejected), 0 when no verdicts
+	LastDecisionAt int64   `json:"lastDecisionAt,omitempty"`
 }
 
 // metaRevisionLogPath mirrors the tracker's data-dir convention.
@@ -204,6 +223,43 @@ func (t *Tracker) MetaEvolutionHealth() MetaEvolutionHealth {
 	return out
 }
 
+// OperatorUtilitySignals summarizes 7d operator feed-card decisions from the
+// meta-experience ledger. ADVISORY ONLY (P5-5): surfaces what the operator
+// accepted/rejected/reverted to the meta-evidence block; never read by any
+// gate, drift brake, or promotion bench. Feed-card decisions are ledgered as
+// MetaRevisionRecord.Action entries — this aggregates that field.
+func (t *Tracker) OperatorUtilitySignals() OperatorUtilitySignals {
+	var out OperatorUtilitySignals
+	entries, err := t.RecentMetaRevisions(50)
+	if err != nil || len(entries) == 0 {
+		return out
+	}
+	cutoff := time.Now().Add(-7 * 24 * time.Hour).UnixMilli()
+	for _, e := range entries {
+		if e.CreatedAt < cutoff {
+			continue
+		}
+		switch e.Action {
+		case "adopted", "auto_adopted":
+			out.Adopted7d++
+		case "rejected":
+			out.Rejected7d++
+		case "operator_reverted", "auto_reverted":
+			out.Reverted7d++
+		default:
+			continue // cycle records (Action=="") are not feed-card verdicts
+		}
+		if e.CreatedAt > out.LastDecisionAt {
+			out.LastDecisionAt = e.CreatedAt
+		}
+	}
+	verdicts := out.Adopted7d + out.Rejected7d
+	if verdicts > 0 {
+		out.AdoptionRate = float64(out.Adopted7d) / float64(verdicts)
+	}
+	return out
+}
+
 // MetaEvolutionTask is the weekly slow-loop cycle. Registered like the other
 // genesis autonomous tasks; a dev/live-test instance writes only under its
 // isolated state dir, so no extra production gate is needed for propose-only.
@@ -231,6 +287,9 @@ type MetaEvolutionTask struct {
 	pendingBenchShadow    *ProducerBenchOutcome
 	pendingAdoptionHealth *MetaAdoptionHealth
 	pendingAction         string
+	// pendingOperatorUtility is the ADVISORY snapshot stashed for the cycle's
+	// ledger write (P5-5); set once in Run, copied into MetaRevisionRecord.
+	pendingOperatorUtility *OperatorUtilitySignals
 }
 
 // Name identifies the task in the autonomous scheduler.
@@ -272,23 +331,31 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 
 	record := func(proposed bool, toVersion, reason string) error {
 		err := t.Tracker.LogMetaRevision(MetaRevisionRecord{
-			Epoch:          epoch,
-			Artifact:       artifact,
-			FromVersion:    fromVersion,
-			ToVersion:      toVersion,
-			Proposed:       proposed,
-			Reason:         reason,
-			BenchIncumbent: t.pendingBenchIncumbent,
-			BenchProposal:  t.pendingBenchProposal,
-			BenchShadow:    t.pendingBenchShadow,
-			AdoptionHealth: t.pendingAdoptionHealth,
-			Action:         t.pendingAction,
+			Epoch:           epoch,
+			Artifact:        artifact,
+			FromVersion:     fromVersion,
+			ToVersion:       toVersion,
+			Proposed:        proposed,
+			Reason:          reason,
+			BenchIncumbent:  t.pendingBenchIncumbent,
+			BenchProposal:   t.pendingBenchProposal,
+			BenchShadow:     t.pendingBenchShadow,
+			AdoptionHealth:  t.pendingAdoptionHealth,
+			Action:          t.pendingAction,
+			OperatorUtility: t.pendingOperatorUtility,
 		})
 		if err != nil {
 			logger.Warn("meta-evolution: ledger write failed", "error", err)
 		}
 		return nil
 	}
+
+	// P5-5: snapshot operator-visible utility ONCE per cycle (ADVISORY — never
+	// a gate input). Computed before evidence assembly so the producer's prose
+	// AND the ledger record both see the same picture. Ground rule: the
+	// deterministic gates ignore this entirely.
+	util := t.Tracker.OperatorUtilitySignals()
+	t.pendingOperatorUtility = &util
 
 	evidence := t.assembleEvidence(epoch)
 	proposal, reason, err := t.propose(ctx, artifact, incumbent, evidence)
@@ -401,6 +468,7 @@ func (t *MetaEvolutionTask) recordWithBenches(record func(bool, string, string) 
 	defer func() {
 		t.pendingBenchIncumbent, t.pendingBenchProposal, t.pendingBenchShadow = nil, nil, nil
 		t.pendingAdoptionHealth, t.pendingAction = nil, ""
+		t.pendingOperatorUtility = nil
 	}()
 	return record(proposed, toVersion, reason)
 }
@@ -515,6 +583,32 @@ func (t *MetaEvolutionTask) assembleEvidence(epoch string) string {
 	if epoch == metaEpochEvaluator {
 		b.WriteString(t.assembleJudgeAccuracyEvidence())
 	}
+	b.WriteString(t.assembleOperatorUtilityEvidence())
+	return b.String()
+}
+
+// assembleOperatorUtilityEvidence grounds the producer's prose on what the
+// operator has actually accepted or rejected from the feed card (P5-5).
+// ADVISORY ONLY: this informs the LLM's prose about operator-perceived value;
+// the deterministic gates (contract + epoch benches) are unaffected. Empty on a
+// fresh install (no feed-card verdicts yet) so a young loop stays quiet — the
+// distinction between "no data yet" and "data exists" is the whole point.
+func (t *MetaEvolutionTask) assembleOperatorUtilityEvidence() string {
+	if t.Tracker == nil {
+		return ""
+	}
+	u := t.Tracker.OperatorUtilitySignals()
+	if u.Adopted7d == 0 && u.Rejected7d == 0 && u.Reverted7d == 0 {
+		return "" // no operator verdicts in the window — fresh install or quiet week
+	}
+	var b strings.Builder
+	b.WriteString("\n## 운영자 피드카드 결정 (자문 — 게이트 아님, P5-5)\n")
+	fmt.Fprintf(&b, "- 최근 7일: 채택 %d · 기각 %d · 되돌림 %d", u.Adopted7d, u.Rejected7d, u.Reverted7d)
+	if verdicts := u.Adopted7d + u.Rejected7d; verdicts > 0 {
+		fmt.Fprintf(&b, " (채택률 %.0f%%)", u.AdoptionRate*100)
+	}
+	b.WriteString("\n")
+	b.WriteString("- 이는 운영자가 체감한 효용 자문 신호 — 개선 방향의 정성 참고. 채택률이 낮으면 제안이 운영자 기대에 못 미쳤다는 뜻이나, 게이트 통과 여부와 무관.\n")
 	return b.String()
 }
 
