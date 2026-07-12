@@ -37,15 +37,27 @@ import (
 // proposed and suppressed until the next day). Shortened to a few hours so an
 // ignored queue is retried promptly while still not re-firing a cloud turn every
 // tick. Pairs with the mandatory-verdict contract in buildSelfCodingNudge, which
-// makes the turn actually act; a queue that STILL rots across retries is the gap
-// a future operator-escalation lane would close.
+// makes the turn actually act; a queue that STILL rots across retries trips the
+// escalation below (selfCodingEscalateAfterIgnored — lever C).
 const selfCodingRetryInterval = 2 * time.Hour
+
+// selfCodingEscalateAfterIgnored arms the operator-escalation block once this
+// many consecutive nudges consumed nothing (fingerprint unchanged from fire to
+// fire). Two ignored nudges ≈ 4h of queue rot at the retry interval — the
+// stall the mandatory-verdict contract alone cannot break when the model keeps
+// shortcutting to NO_REPLY (the lever-C gap noted above).
+const selfCodingEscalateAfterIgnored = 2
 
 // selfCodingNudgeState persists the last firing under the state dir
 // (~/.deneb/heartbeat-selfcoding.json).
 type selfCodingNudgeState struct {
 	LastFingerprint string `json:"lastFingerprint"`
 	LastNudgeAtMs   int64  `json:"lastNudgeAtMs"`
+	// IgnoredStreak counts consecutive nudges whose pending set came back
+	// unchanged at the next fire — the turn consumed nothing. Reset the
+	// moment the fingerprint moves; drives the escalation block in
+	// buildSelfCodingNudge.
+	IgnoredStreak int `json:"ignoredStreak,omitempty"`
 }
 
 func (t *heartbeatTask) selfCodingStatePath() string {
@@ -90,15 +102,27 @@ func (t *heartbeatTask) detectSelfCodingNudge(now time.Time) string {
 		now.After(last) && now.Sub(last) < selfCodingRetryInterval {
 		return ""
 	}
+	// Re-firing on an unchanged fingerprint means the previous nudge consumed
+	// nothing (see selfCodingRetryInterval); count those in a row so the
+	// contract can escalate instead of retrying silently forever (lever C).
+	ignored := 0
+	if st.LastNudgeAtMs > 0 && st.LastFingerprint == fingerprint {
+		ignored = st.IgnoredStreak + 1
+	}
 	if err := saveSelfCodingNudgeState(statePath, selfCodingNudgeState{
 		LastFingerprint: fingerprint,
 		LastNudgeAtMs:   now.UnixMilli(),
+		IgnoredStreak:   ignored,
 	}); err != nil {
 		t.logger.Warn("heartbeat: self-coding nudge state save failed, skipping nudge", "error", err)
 		return ""
 	}
-	t.logger.Info("heartbeat: self-coding review nudge fired", "proposed", count)
-	return buildSelfCodingNudge(count)
+	if ignored >= selfCodingEscalateAfterIgnored {
+		t.logger.Warn("heartbeat: self-coding nudges ignored repeatedly, escalating to operator report",
+			"proposed", count, "ignoredStreak", ignored)
+	}
+	t.logger.Info("heartbeat: self-coding review nudge fired", "proposed", count, "ignoredStreak", ignored)
+	return buildSelfCodingNudge(count, ignored)
 }
 
 // buildSelfCodingNudge renders the review contract the heartbeat turn receives.
@@ -113,8 +137,13 @@ func (t *heartbeatTask) detectSelfCodingNudge(now time.Time) string {
 // NO_REPLY with zero tool calls and leaving the queue untouched (2026-07-09).
 // NO_REPLY now governs only the user-facing message (send only when executive
 // judgment is warranted); it is not permission to skip the review itself.
-func buildSelfCodingNudge(count int) string {
-	return fmt.Sprintf(`[자가코딩 제안 검토] 자가개선 후보 %d건이 '제안됨' 상태로 대기 중입니다. 이번 턴에서 반드시 처리하고 기록하세요 (최대 2건, 나머지는 다음 점검).
+//
+// ignoredStreak ≥ selfCodingEscalateAfterIgnored appends the lever-C
+// escalation: the turn must end with a short operator report (overriding the
+// NO_REPLY default), so a queue the model keeps ignoring surfaces to a human
+// instead of rotting behind silent retries.
+func buildSelfCodingNudge(count, ignoredStreak int) string {
+	nudge := fmt.Sprintf(`[자가코딩 제안 검토] 자가개선 후보 %d건이 '제안됨' 상태로 대기 중입니다. 이번 턴에서 반드시 처리하고 기록하세요 (최대 2건, 나머지는 다음 점검).
 
 필수 절차 — 턴을 끝내기 전에 실제로 수행할 것:
 1) skill_lifecycle(action=status)로 pending self-corrections를 열고 각 후보의 evidence·targetFiles·risk를 읽으세요.
@@ -123,6 +152,12 @@ func buildSelfCodingNudge(count int) string {
 4) 안전하게 처리 못 할 후보도 방치 금지 — accepted(유효, 후속 필요) 또는 rejected(근거)로 판정해 '제안됨'에서 내보내세요.
 
 ★필수: 최소 1건에 skill_lifecycle(action=self_correction_review) 호출을 남긴 뒤 턴을 종료하세요. 판정을 하나도 기록하지 않고 NO_REPLY로 끝내면 큐가 그대로 남아 재점검만 반복 소모합니다. 사용자 메시지는 임원 판단이 필요한 발견일 때만 작성하고, 그 외에는 리뷰 기록을 마친 뒤 NO_REPLY 하세요.`, count)
+	if ignoredStreak >= selfCodingEscalateAfterIgnored {
+		nudge += fmt.Sprintf(`
+
+★에스컬레이션: 이 검토 넛지가 %d회 연속 아무 판정 없이 지나갔습니다(큐 변화 없음). 이번 턴은 침묵 종료 금지 — 위 절차를 수행한 뒤, 처리 결과(판정 요약) 또는 처리가 막힌 원인을 사용자에게 2~3문장으로 반드시 보고하세요. 이 보고는 NO_REPLY 규칙보다 우선합니다.`, ignoredStreak)
+	}
+	return nudge
 }
 
 func loadSelfCodingNudgeState(path string) selfCodingNudgeState {
