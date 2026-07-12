@@ -24,6 +24,9 @@ func newTestTracker(t *testing.T) *Tracker {
 		optimizerMemoryPath: filepath.Join(dir, "skill_optimizer_memory.json"),
 		validationPath:      filepath.Join(dir, "skill_validation_cases.jsonl"),
 		selfCorrectionPath:  filepath.Join(dir, "self_correction_candidates.jsonl"),
+		// Hermetic skills root: candidate target resolution must never probe
+		// the developer's real ~/.deneb/skills.
+		skillsRoot:          filepath.Join(dir, "skills"),
 		stats:               make(map[string]*usageAgg),
 		recentErrors:        make(map[string][]string),
 		recentFailureTraces: make(map[string][]UsageFailureTrace),

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -121,6 +122,77 @@ func trySkillRootFallback(path string, skillRoots []string) (string, []byte, boo
 	return "", nil, false
 }
 
+// underAnySkillRoot reports whether path sits strictly inside one of the
+// catalog roots. Shared scope guard for the skill fallbacks below — they must
+// never widen the read tool's reach beyond the already-allowed roots.
+func underAnySkillRoot(path string, skillRoots []string) bool {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	for _, root := range skillRoots {
+		root = strings.TrimSpace(root)
+		if root == "" {
+			continue
+		}
+		absRoot, err := filepath.Abs(root)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(absRoot, abs)
+		if err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+			return true
+		}
+	}
+	return false
+}
+
+// trySkillLayoutFallback resolves a SKILL.md miss caused by wrong NESTING
+// rather than wrong root: managed skills live flat (<root>/<name>), category-
+// nested (<root>/<cat>/<name>), or genesis-nested (<root>/genesis/<cat>/<name>),
+// and stale references (queued self-correction records, in-flight prompt
+// snapshots) often carry the flat form. When the missing path is a SKILL.md
+// under one of the skill roots, re-resolve the skill by its directory name
+// across every root's known layouts. Same scoping as trySkillRootFallback:
+// only after a failed read, only across the already-allowed catalog roots.
+func trySkillLayoutFallback(path string, skillRoots []string) (string, []byte, bool) {
+	if filepath.Base(path) != "SKILL.md" || !underAnySkillRoot(path, skillRoots) {
+		return "", nil, false
+	}
+	name := filepath.Base(filepath.Dir(path))
+	if name == "" || name == "." || name == string(filepath.Separator) {
+		return "", nil, false
+	}
+	for _, root := range skillRoots {
+		root = strings.TrimSpace(root)
+		if root == "" {
+			continue
+		}
+		if cand, ok := skills.FindSkillFile(root, name); ok {
+			if data, err := os.ReadFile(cand); err == nil {
+				return cand, data, true
+			}
+		}
+	}
+	return "", nil, false
+}
+
+// skillReadMissHint explains a SKILL.md read that failed in every catalog root
+// and layout: the skill was most likely archived/removed by curation — stale
+// references (queued records, the in-flight prompt snapshot) outlive the file
+// until the next index rebuild — or renamed. Pointing the model at the catalog
+// stops it from burning turns retrying path variants.
+func skillReadMissHint(path string, skillRoots []string) string {
+	if filepath.Base(path) != "SKILL.md" || !underAnySkillRoot(path, skillRoots) {
+		return ""
+	}
+	name := filepath.Base(filepath.Dir(path))
+	if name == "" || name == "." {
+		return ""
+	}
+	return fmt.Sprintf("skill %q not found under any skills catalog root — likely archived/removed by curation or renamed; check the current catalog with the skills tool (action=list) instead of retrying paths", name)
+}
+
 // ToolRead returns the file-read tool. extraReadRoots are directories outside
 // the workspace that reads may reach (read-only; currently the skills catalog —
 // the system prompt directs the model to read SKILL.md at those locations).
@@ -179,12 +251,25 @@ func ToolRead(defaultDir string, extraReadRoots ...string) toolctx.ToolFunc {
 			}
 		}
 		if err != nil {
+			// Wrong-nesting fallback: stale skill references (queued
+			// self-correction records, old prompt snapshots) carry the flat
+			// <root>/<name>/SKILL.md form while the skill lives category- or
+			// genesis-nested. Resolve by skill name across the catalog layouts
+			// before failing.
+			if altPath, altData, ok := trySkillLayoutFallback(path, extraReadRoots); ok {
+				path, data, err = altPath, altData, nil
+			}
+		}
+		if err != nil {
 			// A read on a directory is a common, benign LLM move (exploring, or a
 			// path that turned out to be a dir). Return the listing instead of a
 			// hard error — more useful, and it keeps the mistake out of the error
 			// stats (this hard error was the bulk of read's recorded failures).
 			if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
 				return listDirForRead(path, p.FilePath)
+			}
+			if hint := skillReadMissHint(path, extraReadRoots); hint != "" {
+				return "", fmt.Errorf("failed to read file: %w (%s)", err, hint)
 			}
 			return "", fmt.Errorf("failed to read file: %w", err)
 		}
