@@ -1,5 +1,25 @@
 # Changelog
 
+## [4.94.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.93.0...deneb-v4.94.0) (2026-07-12)
+
+
+### ✨ Features
+
+* **chat:** 인터랙티브 카드 발화 트리거 격상 — 결정 지점 기본화 + collect 필수 명시 ([#3545](https://github.com/choiceoh/Deneb/issues/3545)) ([24b7798](https://github.com/choiceoh/Deneb/commit/24b779859ac52f51dd466d736984f3a8923cbca7))
+* **genesis:** RSI P5-5 런타임 건강 자문 증거 — latency[#1](https://github.com/choiceoh/Deneb/issues/1) 신호 접지(게이트 불가침) ([#3540](https://github.com/choiceoh/Deneb/issues/3540)) ([ecfae43](https://github.com/choiceoh/Deneb/commit/ecfae432542daf9aba1c3a464d735375ae1af1d9))
+* **genesis:** RSI P5-5 코드베이스 건강 자문 증거 — quality-bench 접지(게이트 불가침) ([#3541](https://github.com/choiceoh/Deneb/issues/3541)) ([dcfb889](https://github.com/choiceoh/Deneb/commit/dcfb889ab3841e64ad314f398eb43aeca788f332))
+* **genesis:** 스킬 효용 기반 아카이브 — 수리불가 저성과 스킬 제거(가역), 유휴 커레이터의 사각 보완 ([#3547](https://github.com/choiceoh/Deneb/issues/3547)) ([5fdbd3c](https://github.com/choiceoh/Deneb/commit/5fdbd3cd026be5ea1bcef2724841df2a482b59e4))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** imePadding을 입력바로 이동 — scrollBy follow-scroll 제거, 마지막 메시지 자가 정렬 ([#3537](https://github.com/choiceoh/Deneb/issues/3537) 후속) ([#3542](https://github.com/choiceoh/Deneb/issues/3542)) ([407e847](https://github.com/choiceoh/Deneb/commit/407e847158ffc8d8ad8a04011a1229a879a0350a))
+* **chat:** 키보드 follow-scroll을 viewport 기반으로 — 마지막 메시지가 입력창 위로 완전히 올라옴 ([#3528](https://github.com/choiceoh/Deneb/issues/3528)) ([#3537](https://github.com/choiceoh/Deneb/issues/3537)) ([c2d8bcf](https://github.com/choiceoh/Deneb/commit/c2d8bcf2be44afe413562b2ad3f206e2c1fdbf87))
+* **deploy:** publish-apk가 fossRelease R8 매핑(mapping.prt)을 APK 옆에 게시 — 크래시 리트레이스 재빌드 제거 ([#3546](https://github.com/choiceoh/Deneb/issues/3546)) ([24ca3d6](https://github.com/choiceoh/Deneb/commit/24ca3d60406ed0e3241e9307e214635457a27c25))
+* **genesis:** 자가수정 후보의 유령 SKILL.md 경로 해소 — 실경로 해석 + read 레이아웃 폴백 ([#3544](https://github.com/choiceoh/Deneb/issues/3544)) ([ab352a7](https://github.com/choiceoh/Deneb/commit/ab352a7527ea9b9aa4904e99218e6c2c0505bc88))
+* **native:** 스트림 취소 크래시 잔여 표면 봉쇄 — 취소 가능한 HTTP 스코프 4곳에 teardown-tolerant CEH ([#3340](https://github.com/choiceoh/Deneb/issues/3340) 후속) ([#3538](https://github.com/choiceoh/Deneb/issues/3538)) ([28442df](https://github.com/choiceoh/Deneb/commit/28442dfc63e65a76e10a0f9f230a478a9cea7989))
+* **rsi:** 디스패치 즉시실패 시 마커 릴리스 — 환경 문제로 후보 소진 방지 ([#3543](https://github.com/choiceoh/Deneb/issues/3543)) ([9afef27](https://github.com/choiceoh/Deneb/commit/9afef27b2d818eec975e807d79991190f800f2e0))
+
 ## [4.93.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.92.0...deneb-v4.93.0) (2026-07-12)
 
 
