@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -179,13 +180,13 @@ internal fun FeedScreen(
                 }
 
                 else -> LazyColumn(Modifier.fillMaxSize()) {
-                    items(unread.size) { i ->
-                        FeedRowWithBody(unread[i], expandedId == unread[i].id, open, onRunAction, onAnswer) { actionItem = it }
+                    items(unread, key = { it.id }) { item ->
+                        FeedRowWithBody(item, expandedId == item.id, open, onRunAction, onAnswer) { actionItem = it }
                     }
                     if (read.isNotEmpty()) {
                         item { DenebSectionLabel("읽음", Modifier.padding(start = 12.dp)) }
-                        items(read.size) { i ->
-                            FeedRowWithBody(read[i], expandedId == read[i].id, open, onRunAction, onAnswer) { actionItem = it }
+                        items(read, key = { it.id }) { item ->
+                            FeedRowWithBody(item, expandedId == item.id, open, onRunAction, onAnswer) { actionItem = it }
                         }
                     }
                 }

@@ -58,6 +58,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -338,6 +340,8 @@ internal fun RenderCountdown(
     var remainingSeconds by remember { mutableStateOf<Long>(node.seconds.toLong()) }
     var expired by remember { mutableStateOf(false) }
     val currentOnCallback by rememberUpdatedState(onCallback)
+    val uriHandler = LocalUriHandler.current
+    val clipboardManager = LocalClipboardManager.current
 
     LaunchedEffect(targetMs) {
         while (true) {
@@ -358,9 +362,13 @@ internal fun RenderCountdown(
                                 toggleState[action.targetId] = !(toggleState[action.targetId] ?: true)
                             }
 
-                            is OpenUrlAction -> {}
+                            is OpenUrlAction -> {
+                                uriHandler.openUri(action.url)
+                            }
 
-                            is CopyToClipboardAction -> {}
+                            is CopyToClipboardAction -> {
+                                clipboardManager.setText(AnnotatedString(action.text))
+                            }
 
                             null -> {}
                         }
