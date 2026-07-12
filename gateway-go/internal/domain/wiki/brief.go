@@ -20,6 +20,7 @@
 package wiki
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +35,12 @@ const (
 	// a brief is a paragraph of steering, not a rulebook. Oversize content is
 	// truncated with a visible marker so the operator notices.
 	maxWikiBriefRunes = 2000
+	// maxWikiBriefReadBytes bounds the file read itself (4 bytes/rune worst
+	// case covers the full rune budget), so an accidentally huge or binary
+	// WIKI.md never costs a full-file allocation per background cycle. Any
+	// file over this cap necessarily exceeds the rune budget too, so the
+	// truncation marker still fires (and cuts off a torn trailing rune).
+	maxWikiBriefReadBytes = 4 * maxWikiBriefRunes
 )
 
 // LoadWikiBrief reads the workspace WIKI.md and returns its trimmed content,
@@ -44,7 +51,12 @@ func LoadWikiBrief(workspaceDir string) string {
 	if strings.TrimSpace(workspaceDir) == "" {
 		return ""
 	}
-	data, err := os.ReadFile(filepath.Join(workspaceDir, WikiBriefFileName))
+	f, err := os.Open(filepath.Join(workspaceDir, WikiBriefFileName))
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, maxWikiBriefReadBytes))
 	if err != nil {
 		return ""
 	}

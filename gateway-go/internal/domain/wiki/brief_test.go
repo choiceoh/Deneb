@@ -46,6 +46,21 @@ func TestLoadWikiBrief_ContentAndTruncation(t *testing.T) {
 	if n := len([]rune(got)); n > maxWikiBriefRunes+100 {
 		t.Errorf("truncated brief still oversized: %d runes", n)
 	}
+
+	// Way over the byte read cap (accidental huge paste): the bounded read
+	// must still yield valid truncated output with the marker, never the
+	// whole file.
+	huge := strings.Repeat("한글과 english mixed content\n", 4000) // ~100KB
+	if err := os.WriteFile(filepath.Join(dir, WikiBriefFileName), []byte(huge), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got = LoadWikiBrief(dir)
+	if !strings.Contains(got, "이하 생략") {
+		t.Error("huge brief missing truncation marker")
+	}
+	if n := len([]rune(got)); n > maxWikiBriefRunes+100 {
+		t.Errorf("huge brief not bounded: %d runes", n)
+	}
 }
 
 func TestWikiBriefSection(t *testing.T) {
