@@ -57,6 +57,13 @@ const maxMiniappChatStreamBodyBytes = 8 << 20 // 8 MiB
 // intermediaries (cloudflared, nginx) from idling the connection out.
 const chatStreamKeepaliveInterval = 15 * time.Second
 
+// chatStreamTurnDeadline hard-caps a DETACHED streamed turn so a run that
+// outlives its client connection can never run forever. It sits just above the
+// chat pipeline's own turn deadline (server.DefaultTurnDeadline = 5m; not
+// imported here to avoid a server→nativeapi→server cycle) so the run's own
+// deadline fires first with a cleaner error and this is only a backstop.
+const chatStreamTurnDeadline = 6 * time.Minute
+
 // chatStreamResult is the terminal payload of a streamed chat turn.
 type chatStreamResult struct {
 	Text     string
@@ -139,7 +146,18 @@ func (s *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// From here on the response is SSE — no more writeJSON.
-	ctx := clientauth.WithContext(r.Context(), identity)
+	//
+	// DETACH the agent run from the HTTP request lifecycle. The native client
+	// backgrounding (Android closes the SSE socket) cancels r.Context(); that
+	// must NOT kill the in-flight turn — the reported "background → answer lost,
+	// session ends" bug. The run instead rides the server shutdown context with
+	// a turn-deadline backstop, so it COMPLETES and persists to the session
+	// transcript even after the client drops; the client re-fetches it on resume.
+	// The live connection (r.Context()) still governs streaming + keepalive, and
+	// an explicit user stop aborts via the chat.abort RPC (CancelBySessionKey) —
+	// the connection teardown no longer stands in for it.
+	runCtx, cancelRun := context.WithTimeout(clientauth.WithContext(s.shutdownContext, identity), chatStreamTurnDeadline)
+	defer cancelRun()
 	runner := func(ctx context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
 		res, err := s.chatHandler.RunSyncStream(ctx, chatport.SyncRequest{
 			SessionKey: sessionKey,
@@ -164,14 +182,19 @@ func (s *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 		// doesn't replace the streamed body in the client's done frame.
 		return &chatStreamResult{Text: res.BestText, Model: res.Model, FellBack: res.FellBack}, nil
 	}
-	writeChatStreamSSE(ctx, w, sessionKey, runner, s.logger)
+	writeChatStreamSSE(runCtx, r.Context(), w, sessionKey, runner, s.logger)
 }
 
 // writeChatStreamSSE drives one chat turn and serializes its output as SSE.
 // All writes go through one mutex because a keepalive ticker emits comment
 // frames concurrently with the delta callbacks. The keepalive goroutine is
 // joined before the terminal frame so it can never write after this returns.
-func writeChatStreamSSE(ctx context.Context, w http.ResponseWriter, sessionKey string, run chatStreamRunner, logger *slog.Logger) {
+//
+// ctx runs the turn (detached from the client connection, so a background
+// disconnect doesn't kill it); connCtx tracks the live client connection so the
+// keepalive stops the moment the client drops. Writes after a disconnect fail
+// harmlessly (best-effort) while the detached run finishes and persists.
+func writeChatStreamSSE(ctx, connCtx context.Context, w http.ResponseWriter, sessionKey string, run chatStreamRunner, logger *slog.Logger) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		// net/http's ResponseWriter is always a Flusher; this only trips with a
@@ -226,7 +249,7 @@ func writeChatStreamSSE(ctx context.Context, w http.ResponseWriter, sessionKey s
 			select {
 			case <-stop:
 				return
-			case <-ctx.Done():
+			case <-connCtx.Done():
 				return
 			case <-ticker.C:
 				mu.Lock()
