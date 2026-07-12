@@ -7,6 +7,9 @@
     "**/*.bundle.js",
     "**/testdata/fuzz/**",
     "**/__snapshots__/**",
-    "**/*.snap"
+    "**/*.snap",
+    "**/*_gen.go",
+    "**/generated/**",
+    "**/src/gen/**"
   ]
 }
