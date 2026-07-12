@@ -207,6 +207,13 @@ Five workstreams, in priority order:
    (ground rule 3). Refs: DemoEvolve 2605.24539, SkillFlow 2604.17308,
    EvoAgentBench 2607.05202.
 
+   *Slice-2 LANDED (EnvDigest wiring).* The curriculum producer now sees the
+   operator's active work (recent feed-item titles) and wiki environment
+   (active counterparty domains) via the `EnvDigest` closure — demand mining
+   widens beyond tracker-local evidence to target real environment gaps. No
+   new data assembly (existing `workFeedStore.List` + `wikiStore.
+   ActiveCounterpartyDomains` primitives); genesis stays a leaf.
+
 2. **Calibration campaign — run the #3461 knobs, bounded (operator lever,
    zero new code).** Weekly meta cadence gives the slow loop ~4 fitness
    points a month; the benches and e-process are starved by default cadence,
