@@ -15,7 +15,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 	minimodule "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/module"
@@ -116,7 +115,7 @@ func (s *Server) orgDeps() handlerminiapp.OrgDeps {
 
 // orgContactLookup builds the name → (phones, emails) enrichment used by
 // miniapp.org.get. It matches a member's display name to the address book the
-// same way the people directory does — via wiki.NormalizePersonName, which peels
+// same way the people directory does — via contacts.NormalizePersonName, which peels
 // honorific/role suffixes and affiliation parentheticals so "김민준 부장" matches
 // the contact "김민준" (exact on the normalized key; no substring matching, which
 // would mis-pair "이수" with "이수민").
@@ -133,12 +132,12 @@ func orgContactLookup(store *contacts.Store) func(name string) (phones, emails [
 		return nil
 	}
 	return func(name string) (phones, emails []string) {
-		key := wiki.NormalizePersonName(name)
+		key := contacts.NormalizePersonName(name)
 		if key == "" {
 			return nil, nil
 		}
 		for _, c := range store.All() {
-			if wiki.NormalizePersonName(c.Name) != key {
+			if contacts.NormalizePersonName(c.Name) != key {
 				continue
 			}
 			phones = appendDedup(phones, c.Phones)

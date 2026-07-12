@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
@@ -339,7 +340,7 @@ func mergeWikiPeople(rows []PersonRow, people []wikiPerson) []PersonRow {
 		}
 		// First page wins a contested key, same as contacts sync's
 		// listPeopleByName; ≥2 runes so a degenerate title can't match.
-		key := wiki.NormalizePersonName(wp.title)
+		key := contacts.NormalizePersonName(wp.title)
 		if len([]rune(key)) >= 2 {
 			if _, ok := byName[key]; !ok {
 				byName[key] = i
@@ -351,7 +352,7 @@ func mergeWikiPeople(rows []PersonRow, people []wikiPerson) []PersonRow {
 	for ri := range rows {
 		idx, ok := byEmail[strings.ToLower(rows[ri].Email)]
 		if !ok {
-			key := wiki.NormalizePersonName(rows[ri].Name)
+			key := contacts.NormalizePersonName(rows[ri].Name)
 			if len([]rune(key)) < 2 {
 				continue
 			}

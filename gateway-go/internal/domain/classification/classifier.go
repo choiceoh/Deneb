@@ -20,7 +20,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 )
 
 // Lane is the part bucket an item is sorted into.
@@ -100,7 +100,7 @@ func validLane(s Lane) bool {
 
 // Rules is the data-driven mapping from work signals to lanes. Every map is
 // keyed by a *normalized* form (see normalization in Classify): person names go
-// through wiki.NormalizePersonName, companies/keywords are lowercased + space-
+// through contacts.NormalizePersonName, companies/keywords are lowercased + space-
 // stripped. Loaded from JSON at runtime; the zero value (all-nil) is a valid
 // empty ruleset that classifies everything as LaneUnclassified.
 type Rules struct {
@@ -163,7 +163,7 @@ func (r Rules) Classify(sig Signals) (Lane, Confidence) {
 }
 
 // matchPerson resolves people against the person→lane map. Each name is
-// normalized with the same wiki helper the contacts sync and mail-sender lookup
+// normalized with the same contacts helper the sync and mail-sender lookup
 // use, so "김민준 부장" and "김민준대표님" both match a "김민준" rule. To stay
 // deterministic when several attendees map to *different* lanes, candidate lanes
 // are collected and the lexicographically smallest lane key wins (a stable,
@@ -175,7 +175,7 @@ func matchPerson(m map[string]Lane, people []string) (Lane, bool) {
 	var hits []Lane
 	seen := map[Lane]bool{}
 	for _, name := range people {
-		key := wiki.NormalizePersonName(name)
+		key := contacts.NormalizePersonName(name)
 		if len([]rune(key)) < 2 {
 			continue // too short/ambiguous to match a person
 		}
@@ -261,25 +261,15 @@ func pickLane(hits []Lane) (Lane, bool) {
 
 // normalizeCompany reduces a 거래처/firm name to a match key: lowercase, all
 // whitespace removed. Mirrors the key form used when the rules JSON is loaded so
-// lookups line up. (Intentionally simpler than NormalizePersonName — firms carry
+// lookups line up. (Intentionally simpler than contacts.NormalizePersonName — firms carry
 // no honorifics to peel.)
 func normalizeCompany(s string) string {
 	return strings.ToLower(strings.Join(strings.Fields(s), ""))
 }
 
-// NormalizePersonName returns the person match-key form used by every rule
-// source (the loader's JSON merge and Classify's lookup): the shared wiki
-// normalization (honorific peel + space strip + lowercase). Exported so an
-// alternate rule producer — e.g. the org chart's DeriveRules — keys its
-// PersonToLane entries identically, instead of re-implementing (and drifting
-// from) the matcher's key form.
-func NormalizePersonName(s string) string {
-	return wiki.NormalizePersonName(s)
-}
-
 // NormalizeCompany returns the company match-key form (lowercase +
-// whitespace-stripped) used by CompanyToLane lookups. Exported for the same
-// single-source-of-truth reason as NormalizePersonName.
+// whitespace-stripped) used by CompanyToLane lookups. Exported so alternate
+// rule producers key CompanyToLane entries identically.
 func NormalizeCompany(s string) string {
 	return normalizeCompany(s)
 }

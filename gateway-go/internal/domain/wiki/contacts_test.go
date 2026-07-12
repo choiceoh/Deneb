@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	contactdomain "github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -110,27 +111,6 @@ func TestEnrichContacts_Idempotent(t *testing.T) {
 	}
 }
 
-func TestNormalizePersonName(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"김민준", "김민준"},
-		{"김민준 부장", "김민준"},
-		{"김민준부장", "김민준"},
-		{"김민준 (탑솔라)", "김민준"},
-		{"홍길동 대표이사", "홍길동"},
-		{"홍길동님", "홍길동"},
-		{"김대표님", "김대표"}, // 2-rune floor: must not collapse to "김"
-		{"John Doe", "johndoe"},
-		{"이수민", "이수민"}, // must stay distinct from "이수"
-		{"", ""},
-		{"민", "민"},
-	}
-	for _, c := range cases {
-		if got := NormalizePersonName(c.in); got != c.want {
-			t.Errorf("NormalizePersonName(%q) = %q, want %q", c.in, got, c.want)
-		}
-	}
-}
-
 func TestUpsertSection(t *testing.T) {
 	// Replace an existing section, preserve the others and their order.
 	body := "서문 문단.\n\n## 메모\n기존 메모.\n\n## 연락처\n- 전화: old-number\n"
@@ -175,7 +155,7 @@ func TestEnrichPeople_EnrichExistingAndCreateLinked(t *testing.T) {
 		t.Fatalf("WritePage person: %v", err)
 	}
 
-	book := []Contact{
+	book := []contactdomain.Contact{
 		{Name: "김민준 부장", Phones: []string{"010-1234-5678"}, Emails: []string{"minjun@topsolar.kr"}, Org: "탑솔라"},
 		{Name: "박서연", Phones: []string{"010-2222-3333"}, Org: "데네브"},
 		{Name: "낯선거래처", Phones: []string{"010-9999-9999"}},
@@ -220,7 +200,7 @@ func TestEnrichPeople_EnrichExistingAndCreateLinked(t *testing.T) {
 	}
 
 	// createMissing=false must NOT create a page for an unmade contact.
-	res, err = store.EnrichPeople([]string{"박지훈"}, []Contact{{Name: "박지훈", Phones: []string{"010-5555-6666"}}}, false)
+	res, err = store.EnrichPeople([]string{"박지훈"}, []contactdomain.Contact{{Name: "박지훈", Phones: []string{"010-5555-6666"}}}, false)
 	if err != nil {
 		t.Fatalf("EnrichPeople no-create: %v", err)
 	}
@@ -239,7 +219,7 @@ func TestCreatePersonPage_StandardForm(t *testing.T) {
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
-	if _, err := store.EnrichPeople([]string{"임형철"}, []Contact{
+	if _, err := store.EnrichPeople([]string{"임형철"}, []contactdomain.Contact{
 		{Name: "임형철", Phones: []string{"010-1234-5678"}, Emails: []string{"lim@trinasolar.com"}, Org: "Trinasolar"},
 	}, true); err != nil {
 		t.Fatalf("EnrichPeople: %v", err)

@@ -214,7 +214,7 @@ type fakeContactBook map[string]struct {
 func (b fakeContactBook) lookup(name string) (phones, emails []string) {
 	// The book is keyed by raw display name here; matching uses simple title
 	// peeling so "김민준 부장" finds "김민준". This is a deliberately small stand-in
-	// for wiki.NormalizePersonName (which the real wiring uses) — enough to prove
+	// for contacts.NormalizePersonName (which the real wiring uses) — enough to prove
 	// the handler attaches whatever the lookup returns.
 	for _, suffix := range []string{"", " 부장", " 대표", "님"} {
 		trimmed := name
@@ -271,7 +271,7 @@ func TestOrgGet_EnrichesMatchingMember(t *testing.T) {
 func TestOrgGet_EnrichMatchesAcrossTitleSuffix(t *testing.T) {
 	// The member is "김철수 부장" but the contact is bare "김철수": the title-peeling
 	// match still attaches the contact (the production wiring uses
-	// wiki.NormalizePersonName for the same effect).
+	// contacts.NormalizePersonName for the same effect).
 	book := fakeContactBook{
 		"김철수": {phones: []string{"010-3333-4444"}},
 	}

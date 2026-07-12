@@ -17,6 +17,9 @@
   소유하고, 실제 적용은 `dreamer_apply.go`가 담당한다.
 - 프로젝트 상태 변경은 `project_status.go`, 거래 레코드는 `deal_records.go`와
   `deal_records_query.go`, 연락처 보강은 `contacts.go`에서 시작한다.
+- 주소록 DTO와 사람 이름 match-key는 `internal/domain/contacts`가 정본이다.
+  `contacts.go`는 그 좁은 계약을 소비해 큐레이션된 인물 페이지만 보강하며 별도
+  Contact 타입이나 이름 정규화 규칙을 만들지 않는다.
 
 ## 의존 방향과 불변조건
 

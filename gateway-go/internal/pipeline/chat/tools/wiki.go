@@ -554,7 +554,7 @@ func autoRecordPeople(store *wiki.Store, contactsStore *contacts.Store, page *wi
 	if store == nil || contactsStore == nil || contactsStore.Count() == 0 || page == nil {
 		return ""
 	}
-	book := contactsToWiki(contactsStore.All())
+	book := contactsStore.All()
 	if len(book) == 0 {
 		return ""
 	}
@@ -581,16 +581,6 @@ func autoRecordPeople(store *wiki.Store, contactsStore *contacts.Store, page *wi
 		return ""
 	}
 	return " · " + strings.Join(notes, " · ")
-}
-
-// contactsToWiki adapts address-book entries to the wiki package's own Contact
-// shape (the two packages keep separate types to stay decoupled).
-func contactsToWiki(in []contacts.Contact) []wiki.Contact {
-	out := make([]wiki.Contact, 0, len(in))
-	for _, c := range in {
-		out = append(out, wiki.Contact{Name: c.Name, Phones: c.Phones, Emails: c.Emails, Org: c.Org})
-	}
-	return out
 }
 
 func wikiLog(_ string, store *wiki.Store, content string) (string, error) {

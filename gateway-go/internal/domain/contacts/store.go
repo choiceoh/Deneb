@@ -18,8 +18,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
-// Contact is one address-book entry synced from the native client. The shape
-// matches the client's ContactData and the gateway's wiki.Contact.
+// Contact is one address-book entry synced from the native client. It is the
+// canonical domain shape shared with curated wiki-person enrichment.
 type Contact struct {
 	Name   string   `json:"name"`
 	Phones []string `json:"phones,omitempty"`

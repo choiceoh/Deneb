@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	contactdomain "github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -12,7 +13,7 @@ func TestEnrichEmployeePages(t *testing.T) {
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
-	book := []Contact{
+	book := []contactdomain.Contact{
 		{Name: "강동민", Emails: []string{"kangdm@topsolar.kr"}, Org: "탑솔라"},     // ours → page
 		{Name: "고건", Emails: []string{"go@topsolar.kr"}, Org: "탑솔라"},          // ours
 		{Name: "고건 주임", Emails: []string{"go@topsolar.kr"}, Org: "탑솔라"},       // 직급 변형 → same page
@@ -56,7 +57,7 @@ func TestEnrichDealMentionedPages(t *testing.T) {
 		t.Fatalf("WritePage deal: %v", err)
 	}
 
-	book := []Contact{
+	book := []contactdomain.Contact{
 		{Name: "임형철", Emails: []string{"lim@trinasolar.com"}, Org: "Trina"}, // external + named → page
 		{Name: "최종원", Emails: []string{"jc@longigroup.com"}, Org: "LONGi"},  // external + named → page
 		{Name: "강동민", Emails: []string{"kangdm@topsolar.kr"}, Org: "탑솔라"},   // our staff → NOT here (EmployeePages' job)
@@ -102,7 +103,7 @@ func TestEnrichPersonEmails(t *testing.T) {
 		}
 	}
 
-	book := []Contact{
+	book := []contactdomain.Contact{
 		{Name: "오선택 전무", Emails: []string{"osontaek@topsolar.kr"}, Org: "탑솔라"},
 		{Name: "김성훈", Emails: []string{"sunghoon.kim@marsh.com"}, Org: "Marsh"},
 		{Name: "김성훈", Emails: []string{"akim@bohae.co.kr"}, Org: "보해"},
@@ -158,7 +159,7 @@ func TestEnrichPersonEmails(t *testing.T) {
 // keep both addresses) from 동명이인 (different people — distinct phones, flag).
 func TestIdentityEmails_JobChangeVsHomonym(t *testing.T) {
 	// 이직: same 010 mobile across two employers → one identity, union both emails.
-	move := []Contact{
+	move := []contactdomain.Contact{
 		{Name: "김이직", Phones: []string{"010-1111-2222"}, Emails: []string{"a@oldco.com"}, Org: "Old"},
 		{Name: "김이직", Phones: []string{"010-1111-2222", "02-333-4444"}, Emails: []string{"a@newco.kr"}, Org: "New"},
 	}
@@ -171,7 +172,7 @@ func TestIdentityEmails_JobChangeVsHomonym(t *testing.T) {
 	}
 
 	// 동명이인: two employers, DIFFERENT phones → ambiguous, no address.
-	homonym := []Contact{
+	homonym := []contactdomain.Contact{
 		{Name: "김성훈", Phones: []string{"010-2790-3500"}, Emails: []string{"x@marsh.com"}, Org: "Marsh"},
 		{Name: "김성훈", Phones: []string{"010-3490-9563"}, Emails: []string{"y@bohae.co.kr"}, Org: "보해"},
 	}

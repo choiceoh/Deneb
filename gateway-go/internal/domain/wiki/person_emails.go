@@ -11,6 +11,8 @@ package wiki
 import (
 	"strings"
 	"unicode"
+
+	contactdomain "github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 )
 
 // EnrichEmployeePages creates an 인물 page for every address-book contact whose
@@ -19,11 +21,11 @@ import (
 // External people stay curated by mention (the dreamer), so this never floods the
 // category with the whole phone book. Reuses EnrichPeople(createMissing): existing
 // pages are enriched in place (not duplicated), and 직급 variants of one name
-// ("고건", "고건 주임") collapse via NormalizePersonName. Measured: +220 staff stubs
+// ("고건", "고건 주임") collapse via contacts.NormalizePersonName. Measured: +220 staff stubs
 // held R@8 at 99% (a bare page text-matches only its own name), so surfacing them
 // needs no retrieval gate. Names that don't start with a letter (junk contact
 // rows like "#이성기…") are skipped.
-func (s *Store) EnrichEmployeePages(book []Contact, ourDomains []string) (PeopleEnrichResult, error) {
+func (s *Store) EnrichEmployeePages(book []contactdomain.Contact, ourDomains []string) (PeopleEnrichResult, error) {
 	if len(book) == 0 || len(ourDomains) == 0 {
 		return PeopleEnrichResult{}, nil
 	}
@@ -71,7 +73,7 @@ func (s *Store) EnrichEmployeePages(book []Contact, ourDomains []string) (People
 // job and everyone else stays mention-curated by the dreamer. A name shared by
 // 동명이인 (최종원 = SK vs LONGi) still resolves to one page; its identity email is
 // left for EnrichPersonEmails to flag, not guessed here.
-func (s *Store) EnrichDealMentionedPages(book []Contact, ourDomains []string) (PeopleEnrichResult, error) {
+func (s *Store) EnrichDealMentionedPages(book []contactdomain.Contact, ourDomains []string) (PeopleEnrichResult, error) {
 	if len(book) == 0 {
 		return PeopleEnrichResult{}, nil
 	}
@@ -142,7 +144,7 @@ func personPageName(name string) string {
 
 // hasCompanyEmailOutside reports whether the contact has a non-freemail email at
 // a domain NOT in ourDomains — an external company address.
-func hasCompanyEmailOutside(c Contact, ourDomains map[string]bool) bool {
+func hasCompanyEmailOutside(c contactdomain.Contact, ourDomains map[string]bool) bool {
 	for _, e := range c.Emails {
 		at := strings.LastIndex(e, "@")
 		if at < 0 || at+1 >= len(e) {
@@ -187,14 +189,14 @@ type PersonEmailResult struct {
 // addresses; a page whose name matches homonyms at distinct companies is skipped
 // and flagged (a human splits it — see the person-homonym-conflation memory).
 // Best-effort: one unwritable page never aborts the rest.
-func (s *Store) EnrichPersonEmails(book []Contact) (PersonEmailResult, error) {
+func (s *Store) EnrichPersonEmails(book []contactdomain.Contact) (PersonEmailResult, error) {
 	var res PersonEmailResult
 	if len(book) == 0 {
 		return res, nil
 	}
-	byName := make(map[string][]Contact)
+	byName := make(map[string][]contactdomain.Contact)
 	for _, c := range book {
-		key := NormalizePersonName(c.Name)
+		key := contactdomain.NormalizePersonName(c.Name)
 		if len([]rune(key)) < 2 {
 			continue
 		}
@@ -226,7 +228,7 @@ func (s *Store) EnrichPersonEmails(book []Contact) (PersonEmailResult, error) {
 // same person (same company, or only a personal-mail domain differs) — yields the
 // union of their emails. Contacts at two or more DISTINCT company (non-freemail)
 // domains are 동명이인: no single identity, so ambiguous=true and no addresses.
-func identityEmails(cs []Contact) (emails []string, ambiguous bool) {
+func identityEmails(cs []contactdomain.Contact) (emails []string, ambiguous bool) {
 	if len(cs) == 0 {
 		return nil, false
 	}
@@ -265,7 +267,7 @@ func identityEmails(cs []Contact) (emails []string, ambiguous bool) {
 // a common phone number — the signal that they are one person (a 이직 job move
 // keeps the mobile), not homonyms. Digits-only compare; numbers under 9 digits are
 // ignored as too short to be a reliable identity key.
-func contactsSharePhone(cs []Contact) bool {
+func contactsSharePhone(cs []contactdomain.Contact) bool {
 	owners := make(map[string]int)
 	for _, c := range cs {
 		seen := make(map[string]bool)

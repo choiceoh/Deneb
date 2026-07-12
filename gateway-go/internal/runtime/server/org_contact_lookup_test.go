@@ -1,7 +1,7 @@
 package server
 
 // Tests for orgContactLookup — the miniapp.org.get member enrichment wiring that
-// matches org-chart member names to the contacts store via wiki.NormalizePersonName.
+// matches org-chart member names to the contacts store via contacts.NormalizePersonName.
 //
 // FAKE names/numbers only — never real contacts.
 

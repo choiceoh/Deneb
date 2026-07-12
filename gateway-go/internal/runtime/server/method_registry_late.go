@@ -117,7 +117,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				// disambiguates 동명이인 the name cannot. Best-effort (a bonus alongside
 				// the 연락처 body enrichment); homonyms are flagged, not guessed.
 				var p struct {
-					Contacts []wiki.Contact `json:"contacts"`
+					Contacts []contacts.Contact `json:"contacts"`
 				}
 				if json.Unmarshal(contactsJSON, &p) == nil {
 					// Give our own staff (company-domain contacts) an 인물 page even without

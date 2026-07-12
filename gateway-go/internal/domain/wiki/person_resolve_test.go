@@ -12,7 +12,7 @@ func TestResolvePersonPaths(t *testing.T) {
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
-	// A real page carries a 직급 in its title; NormalizePersonName strips it so a
+	// A real page carries a 직급 in its title; contacts.NormalizePersonName strips it so a
 	// bare org-member name ("오선택") resolves to the 직급-suffixed page.
 	osk := NewPage("오선택 전무 (기획조정실장)", "인물", nil)
 	if err := store.WritePage("인물/오선택-전무-(기획조정실장).md", osk); err != nil {
