@@ -158,11 +158,10 @@ type Server struct {
 	siteVisitRecorder     *wikiwork.SiteVisitRecorder
 	siteVisitRecorderOnce sync.Once
 
-	// fleetAlerts dedups SparkFleet webhook alerts so a standing condition (e.g.
-	// "low memory headroom: srv2" re-emitted every heartbeat) does not push the
-	// same notification to the operator's phone every few minutes. See
-	// server_http_fleet_hook.go.
-	fleetAlerts *fleetAlertGate
+	// alertGate is the process-wide cooldown shared by external Fleet alerts and
+	// the observatory watchdog. One instance for the server lifetime prevents a
+	// route rebuild or repeated watchdog tick from resetting suppression state.
+	alertGate *proactive.AlertGate
 
 	// pushTokenStore holds native-client FCM registration IDs (durable). The
 	// registration RPCs (miniapp.push.register/unregister) write here regardless
@@ -338,7 +337,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		logger:              slog.Default(),
 		pushHub:             proactive.NewHub(),
 		phoneActions:        newPhoneActionAwaiter(),
-		fleetAlerts:         newFleetAlertGate(),
+		alertGate:           proactive.NewAlertGate(),
 		SessionManager: &SessionManager{
 			sessions:       session.NewManager(),
 			abortMemory:    arSession.NewAbortMemory(2000),

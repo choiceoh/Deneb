@@ -1,4 +1,5 @@
-// Package gatewayhttp owns the gateway's client-facing HTTP adapter wiring.
+// Package gatewayhttp owns the gateway's client-facing and integration-facing
+// HTTP adapter wiring.
 //
 // Business handlers remain in their owning packages; this package only turns
 // the server's narrow runtime capabilities into stable routes and middleware.
@@ -37,6 +38,15 @@ type Config struct {
 	AttachmentFactory func() (MailAttachmentClient, error)
 	Fleet             *sparkfleet.Client
 	Version           string
+}
+
+// FleetAlertConfig is the narrow composition contract for SparkFleet's
+// loopback webhook. Delivery and cooldown ownership remain outside the HTTP
+// adapter; this package only binds them to the stable route.
+type FleetAlertConfig struct {
+	Gate    fleetapi.AlertGate
+	Publish func(title, body string)
+	Logger  *slog.Logger
 }
 
 // RegisterRoutes registers the native-client, app-update, fleet, and MCP
@@ -93,6 +103,17 @@ func RegisterRoutes(mux *http.ServeMux, cfg Config) {
 		"/api/v1/miniapp/gmail/attachment",
 		"/api/v1/files/download",
 	)
+}
+
+// RegisterFleetAlertRoute binds the SparkFleet webhook at its historical
+// registration point. Keeping this separate from RegisterRoutes lets the
+// server preserve the existing eval → Fleet hook → observatory route order.
+func RegisterFleetAlertRoute(mux *http.ServeMux, cfg FleetAlertConfig) {
+	mux.Handle("POST /api/hooks/fleet", fleetapi.NewAlertHook(fleetapi.AlertHookConfig{
+		Gate:    cfg.Gate,
+		Publish: cfg.Publish,
+		Logger:  cfg.Logger,
+	}))
 }
 
 // WithCORS lets browser clients reach the token-authenticated client surface.

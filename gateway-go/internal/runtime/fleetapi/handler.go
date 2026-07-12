@@ -1,3 +1,5 @@
+// Package fleetapi owns the authenticated SparkFleet proxy and the loopback
+// webhook adapter that turns Fleet operational events into native alerts.
 package fleetapi
 
 import (

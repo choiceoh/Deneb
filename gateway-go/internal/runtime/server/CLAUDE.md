@@ -12,8 +12,11 @@ root다. 제품 규칙을 구현하는 곳이 아니라, 소유 패키지의 좁
   종료, drain 경계를 소유한다.
 - `server_http_routing.go`의 `Server.buildMux`가 HTTP route의 단일 등록 지점이다.
   네이티브 클라이언트·앱 업데이트·Fleet·MCP route와 CORS 조립은
-  `../gatewayhttp/routes.go`의 `gatewayhttp.RegisterRoutes`와 `WithCORS`가
-  소유하며, server는 좁은 `gatewayhttp.Config`만 채운다.
+  `../gatewayhttp/routes.go`의 `gatewayhttp.RegisterRoutes`,
+  `RegisterFleetAlertRoute`, `WithCORS`가
+  소유하며, server는 좁은 `gatewayhttp.Config`만 채운다. SparkFleet webhook의
+  decode·loopback 검증은 `../fleetapi/alert_hook.go`, 공용 cooldown은
+  `../proactive/alert_gate.go`가 소유하고 server는 같은 gate 인스턴스만 주입한다.
 - `gateway_hub.go`의 `Server.buildHub`가 RPC 서비스 컨테이너를 만든다.
 - `method_registry.go`의 `Server.registerEarlyMethods`,
   `method_registry_late.go`의 `Server.registerLateMethods`,

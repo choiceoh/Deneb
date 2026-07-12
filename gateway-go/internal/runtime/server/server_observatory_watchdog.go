@@ -12,8 +12,8 @@ import (
 
 const (
 	// observatoryWatchdogInterval is how often we check our own improvement
-	// loops. The fleetAlertGate suppresses unchanged repeats, so a tight tick
-	// sharpens detection latency without spamming.
+	// loops. The shared proactive AlertGate suppresses unchanged repeats, so a
+	// tight tick sharpens detection latency without spamming.
 	observatoryWatchdogInterval = 30 * time.Minute
 	// observatoryWatchdogStartDelay lets boot transients settle before the first
 	// check — a just-restarted gateway has not re-touched every loop's state yet.
@@ -75,7 +75,7 @@ func (s *Server) observatoryWatchdogTick(now time.Time) {
 	}()
 	rep := observatory.Snapshot(config.ResolveStateDir(), now)
 	for _, a := range watchdogAlerts(rep, observatoryFailAlertThreshold) {
-		if s.fleetAlerts != nil && !s.fleetAlerts.shouldRelay(a.Title, a.Level, now) {
+		if s.alertGate != nil && !s.alertGate.ShouldRelay(a.Title, a.Level, now) {
 			continue
 		}
 		if s.pushHub != nil {
@@ -88,7 +88,7 @@ func (s *Server) observatoryWatchdogTick(now time.Time) {
 // runObservatoryWatchdog periodically checks whether Deneb's own improvement
 // loops have gone silent — the dreamer/skill-curator/config-audit deaths that
 // rotted unnoticed for weeks. It mirrors the fleet hook (which exists for the
-// same reason: a silent SparkFleet death), gated by [fleetAlertGate] against the
+// same reason: a silent SparkFleet death), gated by [proactive.AlertGate] against the
 // over-notification the project forbids. Stops when ctx is canceled.
 func (s *Server) runObservatoryWatchdog(ctx context.Context) {
 	select {
