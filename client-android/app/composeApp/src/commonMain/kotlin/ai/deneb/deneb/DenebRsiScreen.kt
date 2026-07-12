@@ -2,6 +2,8 @@ package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.RSILayerView
 import ai.deneb.deneb.generated.RSILoopStatusResponse
+import ai.deneb.deneb.generated.SelfCorrectionCandidate
+import ai.deneb.deneb.generated.SkillLifecycleEvent
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
@@ -25,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -71,6 +74,11 @@ fun DenebRsiScreen(
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var status by remember { mutableStateOf<RSILoopStatusResponse?>(null) }
+    // Drill-down detail: the L1 card expands into the Propus lifecycle feed, the
+    // L4 card into the coding-candidate queue — so this screen is the single
+    // self-improvement hub (overview + drill-in), not a fourth scattered surface.
+    var lifecycle by remember { mutableStateOf<List<SkillLifecycleEvent>>(emptyList()) }
+    var candidates by remember { mutableStateOf<List<SelfCorrectionCandidate>>(emptyList()) }
     // null = load in flight, true = ok, false = fetch failed (mirrors DenebDashboardScreen).
     var loadOk by remember { mutableStateOf<Boolean?>(null) }
     var refreshing by remember { mutableStateOf(false) }
@@ -84,6 +92,9 @@ fun DenebRsiScreen(
         } else {
             status = fetched
             loadOk = true
+            // Best-effort drill data — a failure here leaves the overview intact.
+            lifecycle = client.fetchSkillLifecycle(limit = 12) ?: emptyList()
+            candidates = client.fetchSelfImprovementCodingCandidates(limit = 8, status = "proposed") ?: emptyList()
         }
     }
     LaunchedEffect(Unit) { load() }
@@ -118,7 +129,7 @@ fun DenebRsiScreen(
 
                     s == null || s.layers.isEmpty() -> DenebEmpty("표시할 자가개선 상태가 없습니다.")
 
-                    else -> RsiStatusContent(s)
+                    else -> RsiStatusContent(s, lifecycle, candidates)
                 }
                 Spacer(Modifier.height(24.dp))
             }
@@ -135,7 +146,11 @@ fun DenebRsiScreen(
  * fetch + state.
  */
 @Composable
-internal fun RsiStatusContent(status: RSILoopStatusResponse) {
+internal fun RsiStatusContent(
+    status: RSILoopStatusResponse,
+    lifecycle: List<SkillLifecycleEvent> = emptyList(),
+    candidates: List<SelfCorrectionCandidate> = emptyList(),
+) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         Text(
             text = "${status.turning}/${status.layers.size}개 루프 가동 중",
@@ -144,7 +159,7 @@ internal fun RsiStatusContent(status: RSILoopStatusResponse) {
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
         )
         status.layers.forEach { layer ->
-            RsiLayerCard(layer)
+            RsiLayerCard(layer, lifecycle, candidates)
             Spacer(Modifier.height(18.dp))
         }
     }
@@ -156,7 +171,11 @@ internal fun RsiStatusContent(status: RSILoopStatusResponse) {
  *  chevron. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RsiLayerCard(layer: RSILayerView) {
+private fun RsiLayerCard(
+    layer: RSILayerView,
+    lifecycle: List<SkillLifecycleEvent> = emptyList(),
+    candidates: List<SelfCorrectionCandidate> = emptyList(),
+) {
     var expanded by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
     val hasDetail = layer.detail.isNotBlank()
@@ -224,10 +243,83 @@ private fun RsiLayerCard(layer: RSILayerView) {
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 16.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = if (layer.key == "L1" || layer.key == "L4") 8.dp else 16.dp),
             )
+            // Drill-in: L1 → recent Propus lifecycle, L4 → coding-candidate queue.
+            when (layer.key) {
+                "L1" -> RsiDrillSection(
+                    "최근 스킬 생애",
+                    lifecycle.take(6).map { rsiEventTypeLabel(it.type) to rsiEventText(it) },
+                    "최근 스킬 진화 이벤트 없음",
+                )
+
+                "L4" -> RsiDrillSection(
+                    "대기 중 코딩 후보",
+                    candidates.take(6).map { rsiCandidateStatusLabel(it.status) to it.title.ifBlank { it.candidate } },
+                    "대기 중인 코딩 후보 없음",
+                )
+
+                else -> {}
+            }
         }
     }
+}
+
+/** A compact "recent detail" list inside an expanded layer card — the drill-in
+ *  that folds the Propus feed / coding queue into the hub. Each row is a short
+ *  label chip + a one-line text. */
+@Composable
+private fun RsiDrillSection(header: String, rows: List<Pair<String, String>>, emptyText: String) {
+    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+        Text(header, style = DenebType.sectionLabel, color = denebHint(), modifier = Modifier.padding(bottom = 4.dp))
+        if (rows.isEmpty()) {
+            Text(emptyText, style = DenebType.meta, color = denebHint())
+        } else {
+            rows.forEach { (label, text) ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
+                    Text(
+                        text = label,
+                        style = DenebType.meta,
+                        color = denebHint(),
+                        maxLines = 1,
+                        modifier = Modifier.width(52.dp).padding(end = 8.dp),
+                    )
+                    Text(
+                        text = text.ifBlank { "—" },
+                        style = DenebType.rowSubtitle,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun rsiEventTypeLabel(type: String): String = when (type) {
+    "evolved" -> "진화"
+    "genesis" -> "생성"
+    "evolve_rejected" -> "기각"
+    "evolution_proposal" -> "제안"
+    "confirmed" -> "확정"
+    "rolled_back" -> "롤백"
+    else -> type
+}
+
+private fun rsiEventText(e: SkillLifecycleEvent): String {
+    val name = e.skillName.ifBlank { "(전역)" }
+    return if (e.detail.isNotBlank()) "$name · ${e.detail}" else name
+}
+
+private fun rsiCandidateStatusLabel(status: String): String = when (status) {
+    "proposed" -> "제안"
+    "accepted" -> "채택"
+    "applied" -> "적용"
+    "rejected" -> "기각"
+    "superseded" -> "대체"
+    else -> status.ifBlank { "제안" }
 }
 
 /** A colored pill for the layer state — the LIVE/DATA-GATED/STARVED/FROZEN/IDLE
