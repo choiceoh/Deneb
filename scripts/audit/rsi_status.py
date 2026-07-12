@@ -43,6 +43,18 @@ DEFAULT_DATA_DIR = os.path.expanduser("~/.deneb/data")
 WINDOW_DAYS = 7
 DAY_MS = 24 * 60 * 60 * 1000
 
+# e-process cutover graduation thresholds (must match
+# tracker_eprocess_cutover.go): observation-mode baseline-test labels justify
+# handing rollback firing to the anytime-valid test at n>=20 with >=90%
+# legacy agreement. Labels accumulate over the whole ledger history — a
+# windowed count would starve the evidence at organic cadence.
+EPROCESS_CUTOVER_MIN_LABELS = 20
+EPROCESS_CUTOVER_MIN_AGREEMENT = 0.90
+
+# Organic false-accept mining window (must match judge_accuracy.go): rollbacks
+# are scarce at organic cadence, so real-usage P3 labels use a 30d window.
+ORGANIC_FALSE_ACCEPT_WINDOW_DAYS = 30
+
 # Degradation classes the judge-accuracy lane replays. The BLATANT ones a
 # competent judge always catches (so 0 misses there means nothing); the SUBTLE
 # ones are the ones that actually produce labeled misses (P3 fuel).
@@ -112,6 +124,7 @@ def assess_l1(events: list[dict], now_ms: int) -> LayerStatus:
         if bucket:
             counts[bucket] += 1
     metrics = dict(counts)
+    metrics.update(_eprocess_readiness(events))
     committed = counts["evolved"] + counts["genesis"]
     if sum(counts.values()) == 0:
         return LayerStatus("L1", "skill evolution", IDLE, metrics,
@@ -122,6 +135,43 @@ def assess_l1(events: list[dict], now_ms: int) -> LayerStatus:
                            f"{counts['proposal']} proposals / {counts['rejected']} rejected (7d)")
     return LayerStatus("L1", "skill evolution", DATA_GATED, metrics,
                        f"{counts['proposal']} proposals but 0 committed — candidates not clearing the gate")
+
+
+def _eprocess_readiness(events: list[dict]) -> dict:
+    """Score observation-mode baseline-test labels against the cutover
+    graduation thresholds (mirrors Tracker.EProcessCutoverReadiness)."""
+    labels = disagreements = 0
+    for e in events:
+        bt = e.get("baselineTest")
+        if not isinstance(bt, dict):
+            continue
+        labels += 1
+        if bt.get("disagreement"):
+            disagreements += 1
+    agreement = (labels - disagreements) / labels if labels else 0.0
+    return {
+        "eprocess_labels": labels,
+        "eprocess_disagreements": disagreements,
+        "eprocess_agreement": round(agreement, 4),
+        "eprocess_cutover_ready": labels >= EPROCESS_CUTOVER_MIN_LABELS
+        and agreement >= EPROCESS_CUTOVER_MIN_AGREEMENT,
+    }
+
+
+def _organic_false_accepts(events: list[dict], now_ms: int) -> int:
+    """Count real-usage judge false-accept labels: baseline-CONFIRMED rollbacks
+    (the e-process agreed the failure rate rose) in the 30d window (mirrors
+    Tracker.OrganicFalseAccepts). A threshold-only rollback with a quiet
+    e-process is a disagreement label, never P3 food."""
+    cutoff = now_ms - ORGANIC_FALSE_ACCEPT_WINDOW_DAYS * DAY_MS
+    count = 0
+    for e in events:
+        if e.get("type") != "evolve_rolled_back" or not _within(e.get("createdAt"), cutoff):
+            continue
+        bt = e.get("baselineTest")
+        if isinstance(bt, dict) and bt.get("reject"):
+            count += 1
+    return count
 
 
 def assess_l2(revisions: list[dict], frozen: bool, now_ms: int) -> LayerStatus:
@@ -155,8 +205,9 @@ def assess_l2(revisions: list[dict], frozen: bool, now_ms: int) -> LayerStatus:
                        f"{reverted} reverted (14d), last {last}")
 
 
-def assess_l3(runs: list[dict], now_ms: int) -> LayerStatus:
-    """Verifier co-evolution (P3) — judge-accuracy lane misses are the fuel."""
+def assess_l3(runs: list[dict], genesis_events: list[dict], now_ms: int) -> LayerStatus:
+    """Verifier co-evolution (P3) — judge-accuracy lane misses plus organic
+    (real-usage) false-accept labels are the fuel."""
     cutoff = now_ms - WINDOW_DAYS * DAY_MS
     recent = [r for r in runs if _within(r.get("createdAt"), cutoff)]
     if not recent:
@@ -170,16 +221,18 @@ def assess_l3(runs: list[dict], now_ms: int) -> LayerStatus:
         false_rejects += len(r.get("falseRejects") or [])
         classes_seen.update((r.get("byClass") or {}).keys())
     subtle_deployed = bool(classes_seen & SUBTLE_CLASSES)
+    organic = _organic_false_accepts(genesis_events, now_ms)
     metrics = {
         "runs": len(recent),
         "misses": misses,
         "false_rejects": false_rejects,
+        "organic_false_accepts_30d": organic,
         "subtle_probes_deployed": subtle_deployed,
     }
-    if misses > 0 or false_rejects > 0:
+    if misses > 0 or false_rejects > 0 or organic > 0:
         return LayerStatus("L3", "verifier co-evolution", LIVE, metrics,
-                           f"{misses} judge misses + {false_rejects} false-rejects over {len(recent)} runs "
-                           "— P3 fuel accumulating for evaluator-epoch grounding")
+                           f"{misses} judge misses + {false_rejects} false-rejects + {organic} organic labels "
+                           f"over {len(recent)} runs — P3 fuel accumulating for evaluator-epoch grounding")
     if not subtle_deployed:
         return LayerStatus("L3", "verifier co-evolution", DATA_GATED, metrics,
                            f"{len(recent)} runs, judge caught every BLATANT defect and subtle probes "
@@ -284,7 +337,7 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
     return [
         assess_l1(genesis, now_ms),
         assess_l2(revisions, frozen, now_ms),
-        assess_l3(judge, now_ms),
+        assess_l3(judge, genesis, now_ms),
         assess_l4(candidates, dispatch_total, dispatch_today),
     ]
 

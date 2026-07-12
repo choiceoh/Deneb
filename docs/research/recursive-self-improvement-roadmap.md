@@ -74,7 +74,12 @@ its disagreement labels justify cutover (P3 precondition #1).
   bug that in-flight rollback watches evaporate on SIGUSR1 restarts.
   *Landed: #3434 (primitive + watch persistence), #3439 (observation-mode
   wiring — legacy threshold still owns firing; `baselineTest` disagreement
-  labels accumulate in the lifecycle ledger as cutover evidence).*
+  labels accumulate in the lifecycle ledger as cutover evidence). Cutover
+  mechanism landed 2026-07-12: `EProcessCutoverReadiness` scores the labels
+  against the ladder thresholds (n≥20, agreement≥90%) on `rsi_status`
+  (Go + py), and `DENEB_EPROCESS_OWNS_ROLLBACK=1` hands firing to the
+  e-process — both verdicts stay recorded post-cutover, so labeling never
+  stops and the flip is auditable/reversible.*
 - **Flip gates + held-out isolation** (AgentDevel): pass→fail regressions
   block promotion regardless of aggregate score movement.
   *Landed: #3445 (per-case flip gate ahead of the aggregate/min-delta
@@ -101,15 +106,19 @@ its disagreement labels justify cutover (P3 precondition #1).
 
 ### P2 — Slow loop (revised: deterministic bench primary, health delta advisory)
 
-**Status (2026-07-11): scaffold + both epoch benches LANDED, propose-only.**
-Weekly `MetaEvolutionTask` (#3448) alternates producer/evaluator epochs,
-assembles evidence (7d scoreboard, low-yield levers, meta-experience ledger)
-and writes gated proposals as `<artifact>.proposed` + ledger entries — never
-touching live artifacts. Evaluator-epoch fitness = judge-degradation gold
-pairs (#3449); producer-epoch fitness = shadow-replay flip bench (#3450).
-First live cycle verified in production (2026-07-11 19:56 KST: producer
-epoch proposed quantifying evolve rule 14). Remaining: accumulate real
-weekly-cycle bench data, then flip gated proposals to auto-adoption.
+**Status (2026-07-12): scaffold + both epoch benches LANDED; bench-gated
+AUTO-ADOPTION is the default.** Weekly `MetaEvolutionTask` (#3448) alternates
+producer/evaluator epochs, assembles evidence (7d scoreboard, low-yield
+levers, meta-experience ledger) and runs every proposal through the
+deterministic gate chain (contract gate + epoch bench). Evaluator-epoch
+fitness = judge-degradation gold pairs (#3449); producer-epoch fitness =
+shadow-replay flip bench (#3450). A bench-cleared proposal auto-adopts
+(operator mandate 2026-07-11; kill switch `DENEB_META_AUTO_ADOPT=0`), arms
+the meta rollback watch, and surfaces a post-hoc revert veto on the feed
+card; the drift self-brake (`evolution_drift.go`) freezes auto-adoption back
+to propose-only on reward-hacking signals. First live cycle verified in
+production (2026-07-11 19:56 KST: producer epoch proposed quantifying evolve
+rule 14).
 
 A weekly autonomous task proposes ONE meta-artifact revision per cycle. The
 original fitness design ("EvolutionHealthSummary deltas + auto-revert") was
@@ -139,6 +148,15 @@ real usage = false-reject. Feed these as few-shot exhibits into the judge
 prompt artifact (P1) and auto-expand the validation-case corpus from the same
 events (the backfill machinery exists). The judge improves on the same slow
 cadence as P2, never mid-window.
+
+**First organic-label slice landed 2026-07-12:** `OrganicFalseAccepts` mines
+the lifecycle ledger for baseline-CONFIRMED rollbacks (the e-process agreed
+the failure rate rose — the deterministic filter satisfying precondition #1
+below until full cutover), attributes each to the accepting judge-artifact
+version via the provenance certificate (#3433), and feeds them into the
+evaluator-epoch evidence alongside the synthetic misses — scoped to the
+incumbent judge, surfaced on `rsi_status` L3 (실전 라벨). Real-usage labels now
+flow; volume still depends on evolve throughput (P5-1/P5-2).
 
 Label quality is triple-threatened (2026H1 sweep) — three preconditions:
 
@@ -300,7 +318,7 @@ operator-tunable):
 |---|---|---|
 | runtime-error source not dispatchable (#3491 staging) | first 3–5 mined candidates review clean (no hallucinated signatures) | allowlist flip in coding-dispatch.sh + rsi_status L4_SOURCES |
 | ~~health-finding source not dispatchable~~ **GRADUATED 2026-07-12** | first batch (7) reviewed clean: finding IDs deterministic + independently reproduced at HEAD, no hallucinated signatures, remediation directions actionable with the safety contract embedded; wiki pair ([1] volatile-contract / [6] volatile-hub) dedups via the reproduce-at-HEAD precheck; two doctrine-tension candidates (runtime/server fan-out = composition root, toolctx co-change = designed leaf) rely on the dispatch bail-out clause | flipped: coding-dispatch.sh + rsi_status (py & Go) |
-| e-process observation mode (#3439) | disagreement labels n≥20, legacy-agreement ≥90% | cutover: e-process owns rollback firing |
+| e-process observation mode (#3439) | disagreement labels n≥20, legacy-agreement ≥90% — readiness now computed live (`EProcessCutoverReadiness`, rsi_status L1) | cutover mechanism landed 2026-07-12: set `DENEB_EPROCESS_OWNS_ROLLBACK=1` when readiness reads ready |
 | L4 daily dispatch cap = 2 | N dispatches with 0 deploy-watch rollbacks and ≥50% land rate | raise DENEB_DISPATCH_DAILY_CAP |
 | deploy-watch = binary rollback only | one rollback exercised end-to-end (real or fire-drill) | open the source auto-apply tier per the L4 note |
 | ~~calibration knobs at defaults~~ **WINDOW OPEN 2026-07-12 → close by 2026-08-23** | operator opened the P5-2 window (meta=2d, judge-accuracy=4h, watch-max-age=5d, bench-scale=2, curriculum=24h) | drop-in `~/.config/systemd/user/deneb-gateway.service.d/rsi-calibration.conf`; revert = delete + daemon-reload + restart |
