@@ -1,5 +1,27 @@
 # Changelog
 
+## [4.90.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.89.0...deneb-v4.90.0) (2026-07-12)
+
+
+### ✨ Features
+
+* **audit:** RSI 루프 상태 계기판 — 층별 LIVE/DATA-GATED/STARVED 정직 분류 ([#3485](https://github.com/choiceoh/Deneb/issues/3485)) ([4b7c308](https://github.com/choiceoh/Deneb/commit/4b7c3084827e96462e76ffa5595497adb2f9bb01))
+* **genesis:** P3 데이터게이트 해소 — 미묘 열화로 정직한 judge miss 생산(깊이) ([#3482](https://github.com/choiceoh/Deneb/issues/3482)) ([a265085](https://github.com/choiceoh/Deneb/commit/a265085e4b71a119cd2d321b27c6d2477325ec03))
+* **genesis:** P3 루프 폐쇄 — evaluator epoch가 판정자 자기 오판을 grounding으로 소비(깊이) ([#3483](https://github.com/choiceoh/Deneb/issues/3483)) ([450c4e8](https://github.com/choiceoh/Deneb/commit/450c4e8ee7e5d0abd6043460e13a6c9536b16eef))
+* **genesis:** 적대적 커버리지 폭 넓히기 — 행동적(도구 참조) 변이 + 레인 등록(활성화) ([#3480](https://github.com/choiceoh/Deneb/issues/3480)) ([1e27a75](https://github.com/choiceoh/Deneb/commit/1e27a755744abab6d7a3735655a78ecf5442c926))
+
+
+### 🐛 Bug Fixes
+
+* **genesis:** 리뷰어 피드백 배치 — download-token verify fail-closed·watch-expired mu·오퍼레이터 채택 롤백워치·메타 헤더/로드맵 정합 ([#3479](https://github.com/choiceoh/Deneb/issues/3479)) ([0663f48](https://github.com/choiceoh/Deneb/commit/0663f489090711d3f062f2690d3824dc902a46ef))
+* **native:** M1 배터리 모드 §3.1 잔여 해소 — sync 드레인 · 활성 스트림 FGS 유지 · FCM 전달 게이트 ([#3478](https://github.com/choiceoh/Deneb/issues/3478)) ([9055b89](https://github.com/choiceoh/Deneb/commit/9055b8922f659e197195cecdb757f61cd591f496))
+* **zcode:** guard finds worktree without session ID ([#3486](https://github.com/choiceoh/Deneb/issues/3486)) ([b2aae2d](https://github.com/choiceoh/Deneb/commit/b2aae2d43cdd46290ac7b64b336a3bab073c1e4c))
+
+
+### 🔧 Internal
+
+* raise code health with typed boundaries and maintainable tests ([#3481](https://github.com/choiceoh/Deneb/issues/3481)) ([2af4ef2](https://github.com/choiceoh/Deneb/commit/2af4ef29991779f94f0b999c2bd41994c8700e90))
+
 ## [4.89.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.88.0...deneb-v4.89.0) (2026-07-12)
 
 
