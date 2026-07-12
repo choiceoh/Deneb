@@ -1,9 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
 func TestPathHitRequiresSegmentBoundary(t *testing.T) {
@@ -41,5 +49,244 @@ func TestLoadGoldSkipsCommentsAndCountsMalformedRows(t *testing.T) {
 	}
 	if len(cases) != 2 || malformed != 1 || cases[1].ID != "two" {
 		t.Fatalf("cases=%#v malformed=%d", cases, malformed)
+	}
+}
+
+func TestRunCLIParseExitAndErrorCharacteristics(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		args       []string
+		wantCode   int
+		wantStderr string
+	}{
+		{name: "missing wiki", wantCode: 1, wantStderr: "recall-bench: --wiki required\n"},
+		{name: "unknown flag", args: []string{"--unknown"}, wantCode: 2, wantStderr: "flag provided but not defined: -unknown"},
+		{name: "help", args: []string{"-h"}, wantCode: 0, wantStderr: "Usage of recall-bench:"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := runCLI("recall-bench", tt.args, &stdout, &stderr, unopenedRunDependencies())
+			if code != tt.wantCode {
+				t.Fatalf("exit code = %d, want %d", code, tt.wantCode)
+			}
+			if !strings.Contains(stderr.String(), tt.wantStderr) {
+				t.Fatalf("stderr = %q, want %q", stderr.String(), tt.wantStderr)
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("stdout = %q, want empty", stdout.String())
+			}
+		})
+	}
+}
+
+func TestRunCLIPreservesScoringAndSearchErrorPolicy(t *testing.T) {
+	t.Parallel()
+	store := &fakeBenchmarkStore{
+		results: map[string][]wiki.SearchResult{
+			"alpha": {{Path: "projects/alpha.md"}},
+			"beta":  {{Path: "projects/wrong.md"}, {Path: "projects/beta.md"}},
+			"miss": {
+				{Path: "projects/wrong-a.md"},
+				{Path: "projects/wrong-b.md"},
+				{Path: "projects/wrong-c.md"},
+			},
+		},
+		searchErrs: map[string]error{"broken": errors.New("backend down")},
+	}
+	embedder := &fakeBenchmarkEmbedder{}
+	cases := []goldCase{
+		{ID: "one", Question: "alpha", GoldPaths: []string{"projects/alpha.md"}},
+		{ID: "two", Question: "beta", GoldPaths: []string{"projects/beta.md"}},
+		{ID: "three", Question: "miss", GoldPaths: []string{"projects/wanted.md"}},
+		{ID: "skip", Question: "no gold"},
+		{ID: "error", Question: "broken", GoldPaths: []string{"projects/broken.md"}},
+	}
+	deps := successfulRunDependencies(store, embedder, cases)
+
+	var stdout, stderr bytes.Buffer
+	code := runCLI("recall-bench", []string{
+		"--wiki", "wiki-copy", "--diary", "diary-copy", "--gold", "gold.jsonl", "--k", "2", "-v",
+	}, &stdout, &stderr, deps)
+
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("exit=%d stderr=%q", code, stderr.String())
+	}
+	for _, want := range []string{
+		"== recall-bench  fusion=rrf(default)  graph_boost=false  semantic=false  K=2  cases=5\n",
+		"gold=[projects/wanted.md]  got=[projects/wrong-a.md projects/wrong-b.md projects/wrong-c.md]",
+		"recall-bench: 1 search error(s) excluded from the metric\n",
+		"RECALL_BENCH hit@1=1 hit@2=2 total=3 p@1=33.3% r@2=66.7% mrr=0.500 fusion=rrf(default)\n",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
+		}
+	}
+	if !store.closed {
+		t.Fatal("store was not closed after successful run")
+	}
+	if embedder.healthChecks != 41 {
+		t.Fatalf("embedding health checks = %d, want 41", embedder.healthChecks)
+	}
+}
+
+func TestRunCLIPreservesSemanticWarmFailureAndCleanup(t *testing.T) {
+	t.Parallel()
+	store := &fakeBenchmarkStore{warmErr: errors.New("warm failed")}
+	embedder := &fakeBenchmarkEmbedder{healthy: true}
+	deps := successfulRunDependencies(store, embedder, nil)
+	deps.loadCases = func(string) ([]goldCase, int, error) {
+		t.Fatal("gold loaded after semantic warm failure")
+		return nil, 0, nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := runCLI("recall-bench", []string{"--wiki", "wiki-copy"}, &stdout, &stderr, deps)
+
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	want := "recall-bench: semantic warm FAILED (warm failed) — metrics would be BM25-degraded\n"
+	if stderr.String() != want {
+		t.Fatalf("stderr = %q, want %q", stderr.String(), want)
+	}
+	if !store.closed || store.embedder != embedder {
+		t.Fatalf("cleanup/embedder: closed=%v embedder=%T", store.closed, store.embedder)
+	}
+}
+
+func TestRunCLIPreservesGoldAndZeroScoreErrors(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		cases      []goldCase
+		malformed  int
+		searchErrs map[string]error
+		wantError  string
+	}{
+		{
+			name:      "malformed gold",
+			malformed: 2,
+			wantError: "recall-bench: 2 malformed gold row(s) in gold.jsonl — fix or remove them\n",
+		},
+		{
+			name:       "zero scored",
+			cases:      []goldCase{{ID: "skip"}, {ID: "error", Question: "broken", GoldPaths: []string{"p.md"}}},
+			searchErrs: map[string]error{"broken": errors.New("backend down")},
+			wantError:  "recall-bench: 0 cases scored (empty/comment-only gold, all rows lack gold_paths, or 1 search error(s))\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &fakeBenchmarkStore{searchErrs: tt.searchErrs}
+			deps := successfulRunDependencies(store, &fakeBenchmarkEmbedder{}, tt.cases)
+			deps.loadCases = func(string) ([]goldCase, int, error) {
+				return tt.cases, tt.malformed, nil
+			}
+			var stdout, stderr bytes.Buffer
+			code := runCLI("recall-bench", []string{"--wiki", "wiki-copy", "--gold", "gold.jsonl"}, &stdout, &stderr, deps)
+			if code != 1 || stderr.String() != tt.wantError {
+				t.Fatalf("exit=%d stderr=%q", code, stderr.String())
+			}
+			if !store.closed {
+				t.Fatal("store was not closed on error")
+			}
+		})
+	}
+}
+
+func TestResolveFusionReportsEffectiveGraphState(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, fusion, graph string
+		semantic            bool
+		wantFusion          string
+		wantGraph           bool
+	}{
+		{name: "default semantic", semantic: true, wantFusion: "rrf(default)", wantGraph: true},
+		{name: "lexical fallback", semantic: false, wantFusion: "rrf(default)", wantGraph: false},
+		{name: "additive ignores graph", fusion: "additive", semantic: true, wantFusion: "additive", wantGraph: false},
+		{name: "explicit graph off", graph: "off", semantic: true, wantFusion: "rrf(default)", wantGraph: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			getenv := func(key string) string {
+				if key == "DENEB_WIKI_FUSION" {
+					return tt.fusion
+				}
+				return tt.graph
+			}
+			fusion, graph := resolveFusion(getenv, tt.semantic)
+			if fusion != tt.wantFusion || graph != tt.wantGraph {
+				t.Fatalf("resolveFusion() = (%q, %v), want (%q, %v)", fusion, graph, tt.wantFusion, tt.wantGraph)
+			}
+		})
+	}
+}
+
+type fakeBenchmarkStore struct {
+	results    map[string][]wiki.SearchResult
+	searchErrs map[string]error
+	warmErr    error
+	embedder   wiki.Embedder
+	closed     bool
+}
+
+func (s *fakeBenchmarkStore) Close() error {
+	s.closed = true
+	return nil
+}
+
+func (s *fakeBenchmarkStore) SetEmbedder(embedder wiki.Embedder) {
+	s.embedder = embedder
+}
+
+func (s *fakeBenchmarkStore) WarmSemanticIndex(context.Context) error {
+	return s.warmErr
+}
+
+func (s *fakeBenchmarkStore) Search(_ context.Context, query string, _ int) ([]wiki.SearchResult, error) {
+	if err := s.searchErrs[query]; err != nil {
+		return nil, err
+	}
+	return s.results[query], nil
+}
+
+type fakeBenchmarkEmbedder struct {
+	healthy      bool
+	healthChecks int
+}
+
+func (e *fakeBenchmarkEmbedder) Embed(context.Context, []string) ([][]float32, error) {
+	return nil, nil
+}
+
+func (e *fakeBenchmarkEmbedder) IsHealthy() bool {
+	e.healthChecks++
+	return e.healthy
+}
+
+func successfulRunDependencies(
+	store benchmarkStore,
+	embedder wiki.Embedder,
+	cases []goldCase,
+) runDependencies {
+	return runDependencies{
+		openStore: func(string, string) (benchmarkStore, error) { return store, nil },
+		newEmbedder: func(*slog.Logger) wiki.Embedder {
+			return embedder
+		},
+		loadCases: func(string) ([]goldCase, int, error) { return cases, 0, nil },
+		getenv:    func(string) string { return "" },
+		sleep:     func(time.Duration) {},
+	}
+}
+
+func unopenedRunDependencies() runDependencies {
+	return runDependencies{
+		openStore: func(string, string) (benchmarkStore, error) {
+			panic("store opened during parse-only CLI path")
+		},
 	}
 }

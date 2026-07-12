@@ -22,8 +22,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"time"
@@ -89,143 +91,287 @@ func indexOf(s, sub string) int {
 }
 
 func main() {
-	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "recall-bench:", err)
-		os.Exit(1)
+	if code := run(); code != 0 {
+		os.Exit(code)
 	}
 }
 
-// run holds the body so os.Exit lives only in main — a deferred store.Close then
-// always runs (gocritic exitAfterDefer). All fatal paths return an error.
-func run() error {
-	wikiDir := flag.String("wiki", "", "wiki directory (a COPY of prod)")
-	diaryDir := flag.String("diary", "", "diary directory")
-	goldPath := flag.String("gold", os.ExpandEnv("$HOME/.deneb/wiki-qa-gold.jsonl"), "gold-set JSONL")
-	k := flag.Int("k", 8, "hit@K")
-	verbose := flag.Bool("v", false, "print per-case ✓/✗")
-	flag.Parse()
-	if *wikiDir == "" {
+type benchmarkConfig struct {
+	wikiDir  string
+	diaryDir string
+	goldPath string
+	k        int
+	verbose  bool
+}
+
+type parseOutcome struct {
+	done     bool
+	exitCode int
+}
+
+type benchmarkStore interface {
+	Close() error
+	SetEmbedder(wiki.Embedder)
+	WarmSemanticIndex(context.Context) error
+	Search(context.Context, string, int) ([]wiki.SearchResult, error)
+}
+
+type runDependencies struct {
+	openStore   func(wikiDir, diaryDir string) (benchmarkStore, error)
+	newEmbedder func(*slog.Logger) wiki.Embedder
+	loadCases   func(string) ([]goldCase, int, error)
+	getenv      func(string) string
+	sleep       func(time.Duration)
+}
+
+func defaultRunDependencies() runDependencies {
+	return runDependencies{
+		openStore: func(wikiDir, diaryDir string) (benchmarkStore, error) {
+			return wiki.NewStore(wikiDir, diaryDir)
+		},
+		newEmbedder: func(logger *slog.Logger) wiki.Embedder {
+			return embedding.New("", logger)
+		},
+		loadCases: loadGold,
+		getenv:    os.Getenv,
+		sleep:     time.Sleep,
+	}
+}
+
+// run owns only process I/O and exit-code selection. Benchmark stages return
+// before main calls os.Exit, so resource cleanup always completes.
+func run() int {
+	return runCLI(os.Args[0], os.Args[1:], os.Stdout, os.Stderr, defaultRunDependencies())
+}
+
+func runCLI(program string, args []string, stdout, stderr io.Writer, deps runDependencies) int {
+	cfg, outcome := parseBenchmarkConfig(program, args, stderr)
+	if outcome.done {
+		return outcome.exitCode
+	}
+	if err := validateBenchmarkConfig(cfg); err != nil {
+		fmt.Fprintln(stderr, "recall-bench:", err)
+		return 1
+	}
+	if err := runBenchmark(context.Background(), cfg, stdout, stderr, deps); err != nil {
+		fmt.Fprintln(stderr, "recall-bench:", err)
+		return 1
+	}
+	return 0
+}
+
+func parseBenchmarkConfig(program string, args []string, stderr io.Writer) (benchmarkConfig, parseOutcome) {
+	fs := flag.NewFlagSet(program, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	var cfg benchmarkConfig
+	fs.StringVar(&cfg.wikiDir, "wiki", "", "wiki directory (a COPY of prod)")
+	fs.StringVar(&cfg.diaryDir, "diary", "", "diary directory")
+	fs.StringVar(&cfg.goldPath, "gold", os.ExpandEnv("$HOME/.deneb/wiki-qa-gold.jsonl"), "gold-set JSONL")
+	fs.IntVar(&cfg.k, "k", 8, "hit@K")
+	fs.BoolVar(&cfg.verbose, "v", false, "print per-case ✓/✗")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return cfg, parseOutcome{done: true}
+		}
+		return cfg, parseOutcome{done: true, exitCode: 2}
+	}
+	return cfg, parseOutcome{}
+}
+
+func validateBenchmarkConfig(cfg benchmarkConfig) error {
+	if cfg.wikiDir == "" {
 		return fmt.Errorf("--wiki required")
 	}
+	return nil
+}
 
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	ctx := context.Background()
-
-	store, err := wiki.NewStore(*wikiDir, *diaryDir)
+func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Writer, deps runDependencies) error {
+	logger := slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	store, err := deps.openStore(cfg.wikiDir, cfg.diaryDir)
 	if err != nil {
 		return fmt.Errorf("open wiki: %w", err)
 	}
 	defer store.Close()
 
-	emb := embedding.New("", logger)
-	// Wait for the embedding server so semantic fusion actually runs (else this
-	// silently measures BM25-only). Bounded — degrade to lexical if never up.
-	for i := 0; i < 40 && !emb.IsHealthy(); i++ {
-		time.Sleep(250 * time.Millisecond)
-	}
-	semantic := emb.IsHealthy()
-	// A partial semantic index makes Search silently fall back to BM25 for some
-	// cases, so the reported RRF/additive numbers would no longer measure the
-	// fusion under test. Fail loudly rather than emit comparable-looking metrics.
-	if semantic {
-		store.SetEmbedder(emb)
-		if err := store.WarmSemanticIndex(ctx); err != nil {
-			return fmt.Errorf("semantic warm FAILED (%w) — metrics would be BM25-degraded", err)
-		}
-	}
-
-	cases, skipped, err := loadGold(*goldPath)
+	semantic, err := prepareSemantic(ctx, store, deps.newEmbedder(logger), deps.sleep)
 	if err != nil {
-		return fmt.Errorf("gold: %w", err)
+		return err
 	}
-	// Malformed gold rows silently shrink the denominator and can hide a
-	// regression — this tool justifies ranking changes, so refuse to run on
-	// corrupt gold data instead of quietly dropping cases.
-	if skipped > 0 {
-		return fmt.Errorf("%d malformed gold row(s) in %s — fix or remove them", skipped, *goldPath)
+	cases, err := loadValidatedCases(cfg.goldPath, deps.loadCases)
+	if err != nil {
+		return err
 	}
+	fusion, graphBoost := resolveFusion(deps.getenv, semantic)
+	writeBenchmarkHeader(stdout, cfg, fusion, graphBoost, semantic, len(cases))
 
-	fusion := os.Getenv("DENEB_WIKI_FUSION")
+	result := evaluateCases(ctx, store, cases, cfg.k, cfg.verbose, stdout)
+	if err := result.validate(); err != nil {
+		return err
+	}
+	writeBenchmarkResult(stdout, cfg.k, fusion, result)
+	return nil
+}
+
+func prepareSemantic(
+	ctx context.Context,
+	store benchmarkStore,
+	embedder wiki.Embedder,
+	sleep func(time.Duration),
+) (bool, error) {
+	semantic := waitForHealthyEmbedder(embedder, sleep)
+	if !semantic {
+		return false, nil
+	}
+	store.SetEmbedder(embedder)
+	if err := store.WarmSemanticIndex(ctx); err != nil {
+		return false, fmt.Errorf("semantic warm FAILED (%w) — metrics would be BM25-degraded", err)
+	}
+	return true, nil
+}
+
+func waitForHealthyEmbedder(embedder wiki.Embedder, sleep func(time.Duration)) bool {
+	if embedder == nil {
+		return false
+	}
+	for range 40 {
+		if embedder.IsHealthy() {
+			return true
+		}
+		sleep(250 * time.Millisecond)
+	}
+	return embedder.IsHealthy()
+}
+
+func loadValidatedCases(
+	path string,
+	load func(string) ([]goldCase, int, error),
+) ([]goldCase, error) {
+	cases, malformed, err := load(path)
+	if err != nil {
+		return nil, fmt.Errorf("gold: %w", err)
+	}
+	// Malformed rows silently shrink the denominator and can hide a regression.
+	if malformed > 0 {
+		return nil, fmt.Errorf("%d malformed gold row(s) in %s — fix or remove them", malformed, path)
+	}
+	return cases, nil
+}
+
+func resolveFusion(getenv func(string) string, semantic bool) (string, bool) {
+	configured := getenv("DENEB_WIKI_FUSION")
+	fusion := configured
 	if fusion == "" {
 		fusion = "rrf(default)"
 	}
-	// The additive rollback path ignores graph paths, so graph-boost is only
-	// actually active on the RRF path with a healthy embedder — report the real
-	// state, not just the env var, so additive-vs-graph comparisons aren't
-	// mislabeled.
-	graphBoost := os.Getenv("DENEB_WIKI_FUSION") != "additive" &&
-		os.Getenv("DENEB_WIKI_GRAPH_BOOST") != "off" && semantic
-	fmt.Printf("== recall-bench  fusion=%s  graph_boost=%v  semantic=%v  K=%d  cases=%d\n", fusion, graphBoost, semantic, *k, len(cases))
+	// Additive ignores graph paths; RRF graph boost additionally requires a
+	// healthy semantic index and an enabled graph flag.
+	graphBoost := configured != "additive" && getenv("DENEB_WIKI_GRAPH_BOOST") != "off" && semantic
+	return fusion, graphBoost
+}
 
-	var hit1, hitK, scored, searchErrs int
-	var mrrSum float64
+type benchmarkResult struct {
+	hit1       int
+	hitK       int
+	scored     int
+	searchErrs int
+	mrrSum     float64
+}
+
+func evaluateCases(
+	ctx context.Context,
+	store benchmarkStore,
+	cases []goldCase,
+	k int,
+	verbose bool,
+	stdout io.Writer,
+) benchmarkResult {
+	var result benchmarkResult
 	for _, c := range cases {
 		if len(c.GoldPaths) == 0 {
 			continue
 		}
-		results, err := store.Search(ctx, c.Question, *k)
+		matches, err := store.Search(ctx, c.Question, k)
 		if err != nil {
-			// A backend/search error is not a recall miss — exclude it from the
-			// denominator and surface the count, don't dilute P@K silently.
-			searchErrs++
+			result.searchErrs++
 			continue
 		}
-		scored++
-		rank := -1
-		for i, r := range results {
-			if i >= *k {
-				break
-			}
-			for _, g := range c.GoldPaths {
-				if pathHit(g, r.Path) {
-					rank = i
-					break
-				}
-			}
-			if rank != -1 {
-				break
-			}
+		rank := findGoldRank(matches, c.GoldPaths, k)
+		result.record(rank)
+		if verbose {
+			writeCaseResult(stdout, c, matches, rank)
 		}
-		mark := "✗"
-		if rank == 0 {
-			hit1++
+	}
+	return result
+}
+
+func findGoldRank(results []wiki.SearchResult, goldPaths []string, k int) int {
+	for i, result := range results {
+		if i >= k {
+			break
 		}
-		if rank != -1 {
-			hitK++
-			mrrSum += 1.0 / float64(rank+1)
-			mark = fmt.Sprintf("✓@%d", rank+1)
-		}
-		if *verbose {
-			fmt.Printf("  %-3s %-16s %s\n", mark, c.ID, c.Question)
-			// On a miss, show what WAS retrieved (top 3) vs the gold — the fastest
-			// way to tell a real retrieval failure from a stale gold path.
-			if rank == -1 {
-				top := make([]string, 0, 3)
-				for i, r := range results {
-					if i >= 3 {
-						break
-					}
-					top = append(top, r.Path)
-				}
-				fmt.Printf("        gold=%v  got=%v\n", c.GoldPaths, top)
+		for _, gold := range goldPaths {
+			if pathHit(gold, result.Path) {
+				return i
 			}
 		}
 	}
+	return -1
+}
 
-	// No scored cases → mrr would be NaN and the RECALL_BENCH row would poison any
-	// comparison. Fail instead of emitting a metric off zero cases.
-	if scored == 0 {
-		return fmt.Errorf("0 cases scored (empty/comment-only gold, all rows lack gold_paths, or %d search error(s))", searchErrs)
+func (r *benchmarkResult) record(rank int) {
+	r.scored++
+	if rank == 0 {
+		r.hit1++
+	}
+	if rank >= 0 {
+		r.hitK++
+		r.mrrSum += 1.0 / float64(rank+1)
+	}
+}
+
+func (r benchmarkResult) validate() error {
+	if r.scored == 0 {
+		return fmt.Errorf("0 cases scored (empty/comment-only gold, all rows lack gold_paths, or %d search error(s))", r.searchErrs)
+	}
+	return nil
+}
+
+func writeCaseResult(out io.Writer, c goldCase, results []wiki.SearchResult, rank int) {
+	mark := "✗"
+	if rank >= 0 {
+		mark = fmt.Sprintf("✓@%d", rank+1)
+	}
+	fmt.Fprintf(out, "  %-3s %-16s %s\n", mark, c.ID, c.Question)
+	if rank == -1 {
+		fmt.Fprintf(out, "        gold=%v  got=%v\n", c.GoldPaths, topResultPaths(results, 3))
+	}
+}
+
+func topResultPaths(results []wiki.SearchResult, limit int) []string {
+	top := make([]string, 0, limit)
+	for i, result := range results {
+		if i >= limit {
+			break
+		}
+		top = append(top, result.Path)
+	}
+	return top
+}
+
+func writeBenchmarkHeader(out io.Writer, cfg benchmarkConfig, fusion string, graphBoost, semantic bool, cases int) {
+	fmt.Fprintf(out, "== recall-bench  fusion=%s  graph_boost=%v  semantic=%v  K=%d  cases=%d\n",
+		fusion, graphBoost, semantic, cfg.k, cases)
+}
+
+func writeBenchmarkResult(out io.Writer, k int, fusion string, result benchmarkResult) {
+	if result.searchErrs > 0 {
+		fmt.Fprintf(out, "recall-bench: %d search error(s) excluded from the metric\n", result.searchErrs)
 	}
 	pct := func(n int) float64 {
-		return 100 * float64(n) / float64(scored)
+		return 100 * float64(n) / float64(result.scored)
 	}
-	if searchErrs > 0 {
-		fmt.Printf("recall-bench: %d search error(s) excluded from the metric\n", searchErrs)
-	}
-	fmt.Printf("RECALL_BENCH hit@1=%d hit@%d=%d total=%d p@1=%.1f%% r@%d=%.1f%% mrr=%.3f fusion=%s\n",
-		hit1, *k, hitK, scored, pct(hit1), *k, pct(hitK), mrrSum/float64(scored), fusion)
-	return nil
+	fmt.Fprintf(out, "RECALL_BENCH hit@1=%d hit@%d=%d total=%d p@1=%.1f%% r@%d=%.1f%% mrr=%.3f fusion=%s\n",
+		result.hit1, k, result.hitK, result.scored, pct(result.hit1), k, pct(result.hitK), result.mrrSum/float64(result.scored), fusion)
 }
 
 // loadGold parses the gold JSONL, returning the cases and the count of malformed
