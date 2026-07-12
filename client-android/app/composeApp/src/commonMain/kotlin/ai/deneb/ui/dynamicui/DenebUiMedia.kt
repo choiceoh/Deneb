@@ -2,23 +2,18 @@
 
 package ai.deneb.ui.dynamicui
 
-import ai.deneb.ui.handCursor
+import ai.deneb.ui.denebOnSuccessContainer
+import ai.deneb.ui.denebOnWarningContainer
+import ai.deneb.ui.markdown.CodeFenceBlock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -139,14 +134,11 @@ import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -155,18 +147,12 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import deneb.composeapp.generated.resources.Res
-import deneb.composeapp.generated.resources.deneb_ui_code_copy
-import org.jetbrains.compose.resources.stringResource
 
 /**
  * Drawn / monospace components of the deneb-ui renderer: canvas charts, code
@@ -356,8 +342,17 @@ internal fun RenderIcon(node: IconNode) {
     if (imageVector != null) {
         val color = when (node.color) {
             "primary" -> MaterialTheme.colorScheme.primary
+
             "secondary" -> MaterialTheme.colorScheme.secondary
+
             "error" -> MaterialTheme.colorScheme.error
+
+            // Status tints, mirroring RenderText: a check icon next to a
+            // success line should carry the same voice as the text.
+            "success" -> denebOnSuccessContainer()
+
+            "warning" -> denebOnWarningContainer()
+
             else -> MaterialTheme.colorScheme.onSurface
         }
         Icon(
@@ -376,47 +371,11 @@ internal fun RenderIcon(node: IconNode) {
 
 @Composable
 internal fun RenderCode(node: CodeNode) {
-    val clipboardManager = LocalClipboardManager.current
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(8.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Box(Modifier.padding(12.dp)) {
-            Column {
-                if (node.language != null) {
-                    Text(
-                        text = node.language,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 4.dp, end = 32.dp),
-                    )
-                }
-                Text(
-                    text = node.code,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.horizontalScroll(rememberScrollState()).padding(end = 32.dp),
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .handCursor()
-                    .clickable { clipboardManager.setText(AnnotatedString(node.code)) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.ContentCopy,
-                    contentDescription = stringResource(Res.string.deneb_ui_code_copy),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-        }
-    }
+    // Same chrome as a chat-prose code fence (header strip with language +
+    // copy-with-check, hairline, syntax highlighting) — the old bespoke block
+    // floated the copy icon over the code and had no highlighting, so a card's
+    // code read visibly poorer than the identical fence in prose.
+    CodeFenceBlock(language = node.language, code = node.code)
 }
 
 internal fun resolveIcon(name: String): ImageVector? = when (name) {

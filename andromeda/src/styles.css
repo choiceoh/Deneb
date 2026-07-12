@@ -4362,6 +4362,18 @@ button.mail-attachment {
   stroke-linejoin: round;
   stroke-linecap: round;
 }
+.dui-line-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.dui-line-area {
+  fill: var(--accent);
+  opacity: 0.13;
+}
+.dui-line-halo {
+  fill: var(--accent);
+  opacity: 0.22;
+}
 .dui-line-dot {
   fill: var(--accent);
 }
@@ -4377,6 +4389,9 @@ button.mail-attachment {
   color: var(--muted-2);
 }
 .dui-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
   padding: 10px 12px;
   border-radius: var(--radius-ctl);
   font-size: 12.5px;
@@ -4384,6 +4399,35 @@ button.mail-attachment {
   border: 1px solid var(--line-2);
   background: var(--panel);
   color: var(--ink-2);
+}
+/* severity glyph disc (✓/!/✕/i) — alerts scan by shape, not color alone */
+.dui-alert-glyph {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--panel);
+  background: var(--ink-2);
+}
+.dui-alert.success .dui-alert-glyph {
+  background: #3f6b54;
+}
+.dui-alert.warning .dui-alert-glyph {
+  background: #8a5a14;
+}
+.dui-alert.error .dui-alert-glyph {
+  background: var(--due);
+}
+.dui-alert-body {
+  min-width: 0;
+  flex: 1;
 }
 .dui-alert-title {
   font-weight: 600;
@@ -4457,6 +4501,99 @@ button.mail-attachment {
   font-size: 12px;
   font-style: italic;
   color: var(--muted-2);
+}
+/* text/icon status tints — hexes match the badge tints above */
+.dui-text.primary,
+.dui-icon.primary {
+  color: var(--accent-deep);
+}
+.dui-text.secondary,
+.dui-icon.secondary {
+  color: var(--muted);
+}
+.dui-text.success,
+.dui-icon.success {
+  color: #3f8f57;
+}
+.dui-text.warning,
+.dui-icon.warning {
+  color: #b3701c;
+}
+.dui-text.error,
+.dui-icon.error {
+  color: #c04a44;
+}
+.dui-icon {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+/* Entrance: root-level nodes rise in one after another (dealt-hand — native
+   parity). Direct children of the root column only; nested containers
+   animating too would cascade into noise. Streamed re-renders reuse DOM
+   nodes (stable keys), so already-visible nodes never replay. */
+@keyframes dui-rise {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes dui-pending-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+/* Charts draw themselves in (native parity): bars grow from zero width, the
+   line trims along its length (pathLength=1 normalizes the dash units). */
+@keyframes dui-bar-grow {
+  from {
+    width: 0;
+  }
+}
+@keyframes dui-line-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .dui > .dui-col > *,
+  .dui > .dui-card {
+    animation: dui-rise 0.3s var(--ease) backwards;
+  }
+  .dui-bar-fill {
+    animation: dui-bar-grow 0.5s var(--ease);
+  }
+  .dui-line-path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: dui-line-draw 0.7s var(--ease) 80ms forwards;
+  }
+  .dui > .dui-col > *:nth-child(2) {
+    animation-delay: 50ms;
+  }
+  .dui > .dui-col > *:nth-child(3) {
+    animation-delay: 100ms;
+  }
+  .dui > .dui-col > *:nth-child(4) {
+    animation-delay: 150ms;
+  }
+  .dui > .dui-col > *:nth-child(5) {
+    animation-delay: 200ms;
+  }
+  .dui > .dui-col > *:nth-child(n + 6) {
+    animation-delay: 240ms;
+  }
+  .dui-pending {
+    animation: dui-pending-pulse 1.6s ease-in-out infinite;
+  }
 }
 
 @media (max-width: 860px) {

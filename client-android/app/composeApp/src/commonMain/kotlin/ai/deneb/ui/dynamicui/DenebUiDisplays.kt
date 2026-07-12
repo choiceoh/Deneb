@@ -98,8 +98,17 @@ internal fun RenderText(node: TextNode) {
     }
     val color = when (node.color) {
         "primary" -> MaterialTheme.colorScheme.primary
+
         "secondary" -> MaterialTheme.colorScheme.secondary
+
         "error" -> MaterialTheme.colorScheme.error
+
+        // Status voice for prose ("전 현장 정상 가동"): the same on-container
+        // pair RenderStat's trend text already uses on plain surface.
+        "success" -> denebOnSuccessContainer()
+
+        "warning" -> denebOnWarningContainer()
+
         else -> MaterialTheme.colorScheme.onSurface
     }
     Text(
