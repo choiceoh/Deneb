@@ -2901,6 +2901,14 @@ class MiniappWireFieldBoundaryContractTest {
             expectation = Expectation.Exact,
         ),
         fieldContract(
+            name = "RSILayerView.detail",
+            serializer = RSILayerView.serializer(),
+            field = "detail",
+            valid = boundaryText,
+            invalid = JsonObject(emptyMap()),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
             name = "RSILayerView.metrics",
             serializer = RSILayerView.serializer(),
             field = "metrics",

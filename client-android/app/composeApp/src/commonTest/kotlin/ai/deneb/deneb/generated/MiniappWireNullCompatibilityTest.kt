@@ -2170,6 +2170,12 @@ class MiniappWireNullCompatibilityTest {
             field = "diagnosis",
         ),
         nullContract(
+            name = "RSILayerView.detail",
+            serializer = RSILayerView.serializer(),
+            empty = RSILayerView(),
+            field = "detail",
+        ),
+        nullContract(
             name = "RSILayerView.metrics",
             serializer = RSILayerView.serializer(),
             empty = RSILayerView(),

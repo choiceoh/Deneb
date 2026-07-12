@@ -358,7 +358,7 @@ class MiniappWireDescriptorContractTest {
             name = "RSILayerView",
             serializer = RSILayerView.serializer(),
             empty = RSILayerView(),
-            fields = listOf("key", "title", "state", "diagnosis", "metrics"),
+            fields = listOf("key", "title", "state", "diagnosis", "detail", "metrics"),
         ),
         contract(
             name = "RSILoopStatusResponse",

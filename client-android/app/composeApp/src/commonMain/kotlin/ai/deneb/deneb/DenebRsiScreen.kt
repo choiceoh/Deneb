@@ -14,6 +14,7 @@ import ai.deneb.ui.denebOnWarningContainer
 import ai.deneb.ui.denebSuccessContainer
 import ai.deneb.ui.denebWarningContainer
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -149,13 +150,25 @@ internal fun RsiStatusContent(status: RSILoopStatusResponse) {
     }
 }
 
-/** One loop layer: header (key · title + state badge), diagnosis, metric chips. */
+/** One loop layer: header (key · title + state badge), diagnosis, metric chips.
+ *  Tapping the card (when it carries a detail) expands a Korean explanation of
+ *  what the loop does — the "눌러서 상세" affordance the card header hints with a
+ *  chevron. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RsiLayerCard(layer: RSILayerView) {
+    var expanded by remember { mutableStateOf(false) }
+    val haptics = rememberHaptics()
+    val hasDetail = layer.detail.isNotBlank()
     DenebGroup {
         Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp),
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = hasDetail) {
+                    haptics.tap()
+                    expanded = !expanded
+                }
+                .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -167,6 +180,14 @@ private fun RsiLayerCard(layer: RSILayerView) {
                 modifier = Modifier.weight(1f),
             )
             RsiStateBadge(layer.state)
+            if (hasDetail) {
+                Text(
+                    text = if (expanded) "⌃" else "⌄",
+                    style = DenebType.meta,
+                    color = denebHint(),
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
         }
         if (layer.diagnosis.isNotBlank()) {
             Text(
@@ -180,7 +201,7 @@ private fun RsiLayerCard(layer: RSILayerView) {
         }
         if (layer.metrics.isNotEmpty()) {
             FlowRow(
-                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 16.dp),
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = if (expanded && hasDetail) 10.dp else 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -195,6 +216,16 @@ private fun RsiLayerCard(layer: RSILayerView) {
                     }
                 }
             }
+        }
+        if (expanded && hasDetail) {
+            Text(
+                text = layer.detail,
+                style = DenebType.rowSubtitle,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 16.dp),
+            )
         }
     }
 }
@@ -232,8 +263,15 @@ private fun RsiStateBadge(state: String) {
             fg = denebHint()
         }
     }
+    val label = when (state) {
+        "LIVE" -> "가동 중"
+        "DATA-GATED" -> "데이터 대기"
+        "STARVED" -> "연료 부족"
+        "FROZEN" -> "동결"
+        else -> "휴면"
+    }
     Text(
-        text = state,
+        text = label,
         style = DenebType.meta,
         color = fg,
         modifier = Modifier

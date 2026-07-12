@@ -2263,6 +2263,11 @@ class MiniappWireValueContractTest {
                     expectation = Expectation.Exact,
                 ),
                 fieldValue(
+                    name = "detail",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
                     name = "metrics",
                     value = objectList,
                     expectation = Expectation.ObjectList,

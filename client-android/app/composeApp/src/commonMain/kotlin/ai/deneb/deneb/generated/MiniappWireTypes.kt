@@ -619,6 +619,7 @@ data class RSILayerView(
     val title: String = "",
     val state: String = "",
     val diagnosis: String = "",
+    val detail: String = "",
     val metrics: List<RSIMetricView> = emptyList(),
 )
 

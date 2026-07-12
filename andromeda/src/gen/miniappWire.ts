@@ -512,6 +512,7 @@ export interface RSILayerView {
   title?: string
   state?: string
   diagnosis?: string
+  detail?: string
   metrics?: RSIMetricView[]
 }
 

@@ -34,6 +34,7 @@ type RSILayerView struct {
 	Title     string          `json:"title"`
 	State     string          `json:"state"`
 	Diagnosis string          `json:"diagnosis"`
+	Detail    string          `json:"detail,omitempty"`
 	Metrics   []RSIMetricView `json:"metrics,omitempty"`
 }
 
@@ -62,7 +63,7 @@ func rsiStatus(deps RSIStatusDeps) rpcutil.HandlerFunc {
 		resp := RSILoopStatusResponse{Turning: st.Turning}
 		resp.Layers = make([]RSILayerView, 0, len(st.Layers))
 		for _, l := range st.Layers {
-			view := RSILayerView{Key: l.Key, Title: l.Title, State: l.State, Diagnosis: l.Diagnosis}
+			view := RSILayerView{Key: l.Key, Title: l.Title, State: l.State, Diagnosis: l.Diagnosis, Detail: l.Detail}
 			if len(l.Metrics) > 0 {
 				view.Metrics = make([]RSIMetricView, 0, len(l.Metrics))
 				for _, m := range l.Metrics {
