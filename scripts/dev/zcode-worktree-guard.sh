@@ -37,16 +37,34 @@ BRANCH=$(cd "$ROOT" && git rev-parse --abbrev-ref HEAD 2>/dev/null) || exit 0
 [[ "$BRANCH" == "main" ]] || exit 0
 
 # ── Block: editing main checkout on main branch ───────────────────────────
-# Find this session's worktree path to guide the agent there.
+# Find a zcode worktree to guide the agent to.  CLAUDE_SESSION_ID is the
+# first choice, but it may not be injected into the PreToolUse env.  Fall
+# back to: stdin JSON session_id → most-recently-created zcode worktree.
 SESSION_ID="${CLAUDE_SESSION_ID:-}"
+if [[ -z "$SESSION_ID" ]]; then
+    # Try stdin payload (ZCode hook input JSON).
+    STDIN_SID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+    [[ -n "$STDIN_SID" ]] && SESSION_ID="$STDIN_SID"
+fi
+
+WT_BASE="$HOME/.zcode/worktrees/Deneb"
+WT_PATH=""
+if [[ -n "$SESSION_ID" && -d "$WT_BASE/$SESSION_ID" ]]; then
+    WT_PATH="$WT_BASE/$SESSION_ID"
+elif [[ -d "$WT_BASE" ]]; then
+    # Fallback: pick the most recently modified zcode worktree.  ls -t sorts
+    # by mtime; head -1 takes the newest.  This is robust even when the
+    # session ID is unavailable (e.g., env not propagated to PreToolUse).
+    WT_PATH=$(ls -dt "$WT_BASE"/*/ 2>/dev/null | head -1)
+    WT_PATH=${WT_PATH%/}  # strip trailing slash
+fi
+
 WT_HINT=""
-if [[ -n "$SESSION_ID" ]]; then
-    WT_PATH="$HOME/.zcode/worktrees/Deneb/$SESSION_ID"
-    if [[ -d "$WT_PATH" ]]; then
-        WT_HINT=$'\n\n→ 즉시 워크트리로 진입 후 같은 편집 재시도:\n  cd '"$WT_PATH"
-    else
-        WT_HINT=$'\n\n→ 워크트리가 아직 없습니다. 수동 생성 후 진입:\n  git worktree add -b zcode/'"$SESSION_ID"' '"$WT_PATH"' main && cd '"$WT_PATH"
-    fi
+if [[ -n "$WT_PATH" && -d "$WT_PATH" ]]; then
+    WT_HINT=$'\n\n→ 즉시 워크트리로 진입 후 같은 편집 재시도:\n  cd '"$WT_PATH"
+else
+    # No worktree exists at all — likely SessionStart didn't fire or failed.
+    WT_HINT=$'\n\n→ 워크트리가 없습니다. 생성 후 진입:\n  bash scripts/dev/zcode-worktree-init.sh'
 fi
 
 cat >&2 <<EOF
