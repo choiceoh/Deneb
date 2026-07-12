@@ -72,11 +72,19 @@ func wikiIngest(ctx context.Context, store *wiki.Store, rawURL, project, titleOv
 
 	// Project linkage is validated against an existing 대표페이지 so a typo'd
 	// project name can't mint a phantom folder; unknown → global bucket.
+	// ResolveProjectRep accepts every transition-era rep form (folder rep,
+	// legacy flat rep, display title) and returns the canonical folder name —
+	// so a legacy project or a title-vs-folder mismatch still links instead
+	// of silently falling back to the global bucket.
 	projectNote := ""
+	repPath := ""
 	if project != "" {
-		if _, rerr := store.ReadPage(wiki.RepPagePath(project)); rerr != nil {
+		name, rep, rerr := store.ResolveProjectRep(project)
+		if rerr != nil {
 			projectNote = fmt.Sprintf("\n(프로젝트 '%s'의 대표페이지가 없어 전역 자료 버킷에 저장했습니다 — 프로젝트명을 확인하세요.)", project)
 			project = ""
+		} else {
+			project, repPath = name, rep
 		}
 	}
 
@@ -161,7 +169,10 @@ func wikiIngest(ctx context.Context, store *wiki.Store, rawURL, project, titleOv
 		Body: buildMaterialBody(normalized, origin, summary, note, metaRow, text),
 	}
 	if project != "" {
-		page.Meta.Related = []string{wiki.RepPagePath(project)}
+		// repPath is the rep form that actually exists (folder or legacy
+		// flat) — linking the folder path for a legacy project would mint a
+		// dead related link.
+		page.Meta.Related = []string{repPath}
 	}
 	if err := store.WritePage(path, page); err != nil {
 		return "", fmt.Errorf("자료 페이지 쓰기 실패: %w", err)

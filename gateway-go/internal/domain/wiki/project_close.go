@@ -40,6 +40,16 @@ type ReopenResult struct {
 // first, the legacy flat page as fallback. Unlike KnownProjects this looks at
 // the disk directly, so it finds CLOSED (archived) projects too — reopen needs
 // exactly that.
+// ResolveProjectRep resolves a project reference (folder name, legacy flat
+// name, rep-page path, or display title) to its canonical name and the rep
+// page path that actually exists. Exported for write paths that must accept
+// every rep form the transition-era wiki contains — e.g. ingest project
+// linking, where validating only the folder form silently dropped legacy
+// flat projects into the global bucket.
+func (s *Store) ResolveProjectRep(ref string) (name, repPath string, err error) {
+	return s.resolveProjectRep(ref)
+}
+
 func (s *Store) resolveProjectRep(ref string) (name, repPath string, err error) {
 	ref = strings.ReplaceAll(strings.TrimSpace(ref), "\\", "/")
 	if ref == "" {
