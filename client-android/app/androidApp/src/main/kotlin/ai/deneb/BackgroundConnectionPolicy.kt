@@ -125,6 +125,7 @@ class BackgroundConnectionPolicy(
         if (BACKGROUND_DOZE_ENABLED) {
             when {
                 foreground -> daemonController.start()
+
                 // Active-stream exception (battery doc §3.1): stopping the
                 // foreground service mid-turn kills the in-flight chat/stream
                 // POST's process + network keepalive — the FCM handoff covers
@@ -134,6 +135,7 @@ class BackgroundConnectionPolicy(
                 // Never start() from background: Android 12+ blocks background
                 // FGS starts, and a turn can only begin while foregrounded.
                 chatStreamActive -> Unit
+
                 else -> daemonController.stop()
             }
         }
