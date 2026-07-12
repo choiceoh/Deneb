@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.66](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.65...andromeda-v0.0.66) (2026-07-12)
+
+
+### ✨ Features
+
+* **genesis:** RSI P2 — 피드 카드 원탭 채택/기각 ([#3456](https://github.com/choiceoh/Deneb/issues/3456)) ([8bc8252](https://github.com/choiceoh/Deneb/commit/8bc825266075a5112a7b04e5d011f3159a067151))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** [#3438](https://github.com/choiceoh/Deneb/issues/3438) 플레이크 2건 탈레이스 — attach 재진입·ProjectHome AI 투영 비동기 단언을 waitFor로 ([#3442](https://github.com/choiceoh/Deneb/issues/3442)) ([5f1e807](https://github.com/choiceoh/Deneb/commit/5f1e807a53b04445bc2d5c4ad0ce9038616cbbb0))
+
 ## [0.0.65](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.64...andromeda-v0.0.65) (2026-07-11)
 
 

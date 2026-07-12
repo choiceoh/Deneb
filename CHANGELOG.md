@@ -1,5 +1,47 @@
 # Changelog
 
+## [4.89.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.88.0...deneb-v4.89.0) (2026-07-12)
+
+
+### ✨ Features
+
+* **deploy:** RSI L4 완전자동화 발판 — 배포 롤백 워치 + 코딩 디스패치(오퍼레이터 활성) ([#3465](https://github.com/choiceoh/Deneb/issues/3465)) ([1b017eb](https://github.com/choiceoh/Deneb/commit/1b017ebb0c17c6ca539321237d2584e5741257a9))
+* **gateway:** APK 다운로드 단명 서명 토큰 — 장수 클라 토큰의 URL 노출 제거 ([#3455](https://github.com/choiceoh/Deneb/issues/3455)) ([18a6797](https://github.com/choiceoh/Deneb/commit/18a6797eb007c3b2cd8177ff5e1d1ef0eff6fb62))
+* **genesis:** ①behavioral 검증 승격 — reproduction oracle이 실패 트레이스 tool 데이터로 behavioral 어서션 자동 저작 ([#3471](https://github.com/choiceoh/Deneb/issues/3471)) ([ac6a2a3](https://github.com/choiceoh/Deneb/commit/ac6a2a3081c6f39a37c77526f8234dff34b02680))
+* **genesis:** L4 조건부 개방 — 게이트웨이 소스 자가편집 표면 선언 + 수용 게이트 회로 격리 (오퍼레이터 승인 2026-07-12) ([#3464](https://github.com/choiceoh/Deneb/issues/3464)) ([bab9784](https://github.com/choiceoh/Deneb/commit/bab978479241cb7ee6508f8cf78c00f31a4a0d18))
+* **genesis:** P3 라벨 식량 공장 — judge-accuracy 상설 레인(심은결함 재생+false-reject 채굴) + charter 동결(전제③) ([#3463](https://github.com/choiceoh/Deneb/issues/3463)) ([a1cdbc7](https://github.com/choiceoh/Deneb/commit/a1cdbc7532882ec44126e469697bb9626e0838ae))
+* **genesis:** RSI P1.5 — reproduction oracle(SEA Alg 8) + 메타 아티팩트 사이드카 리프레시 ([#3446](https://github.com/choiceoh/Deneb/issues/3446)) ([2ddfc5e](https://github.com/choiceoh/Deneb/commit/2ddfc5e51bab38ab252cbf78cf5640799f01c423))
+* **genesis:** RSI P1.5 — 케이스 단위 flip gate(상쇄 회귀 차단) ([#3445](https://github.com/choiceoh/Deneb/issues/3445)) ([0ed91be](https://github.com/choiceoh/Deneb/commit/0ed91be120566b9c08bf478fc0adadad3705e362))
+* **genesis:** RSI P2 — judge-degradation 벤치(BabelJudge) — evaluator epoch 제안의 결정적 fitness ([#3449](https://github.com/choiceoh/Deneb/issues/3449)) ([9aaaf09](https://github.com/choiceoh/Deneb/commit/9aaaf0985c6d11ad956db28a0da40425031c7467))
+* **genesis:** RSI P2 — producer shadow-replay 벤치 — 두 프롬프트가 생성한 후보를 held-out flip으로 비교 ([#3450](https://github.com/choiceoh/Deneb/issues/3450)) ([915e10b](https://github.com/choiceoh/Deneb/commit/915e10baf9674d6c92d2d17c97da139959a7030d))
+* **genesis:** RSI P2 — 피드 카드 원탭 채택/기각 ([#3456](https://github.com/choiceoh/Deneb/issues/3456)) ([8bc8252](https://github.com/choiceoh/Deneb/commit/8bc825266075a5112a7b04e5d011f3159a067151))
+* **genesis:** RSI P2 관측성 — 메타 제안을 작업 피드 카드 + /health 스코어보드로 표면화 ([#3453](https://github.com/choiceoh/Deneb/issues/3453)) ([6094df6](https://github.com/choiceoh/Deneb/commit/6094df6b64215a8c44d868b4af5549fc5f1172c6))
+* **genesis:** RSI P2 완결 — 벤치 게이트 자동 채택 + 메타 롤백 워치 (오퍼레이터 승인 제거) ([#3459](https://github.com/choiceoh/Deneb/issues/3459)) ([73d6e54](https://github.com/choiceoh/Deneb/commit/73d6e541a463b57249e30b9ccd759eb8e1f08caa))
+* **genesis:** RSI P2 착수 — 주간 meta-evolution 슬로우 루프(propose-only) + 메타 경험 원장 ([#3448](https://github.com/choiceoh/Deneb/issues/3448)) ([a0be72f](https://github.com/choiceoh/Deneb/commit/a0be72f8786cc72165e24349dcf7751d193cf4b3))
+* **genesis:** RSI P4 착수 — 스킬+도구 번들 페어링(propose-only) — evolve skip의 tool_gap 선언을 코딩 후보와 짝지음 ([#3452](https://github.com/choiceoh/Deneb/issues/3452)) ([1e8c9d2](https://github.com/choiceoh/Deneb/commit/1e8c9d22983315c7f293f6f2525a7ed71d6585fa))
+* **genesis:** RSI 캘리브레이션 가속 노브 — 메타 주기·workout 주기·벤치 스케일 env ([#3461](https://github.com/choiceoh/Deneb/issues/3461)) ([263a418](https://github.com/choiceoh/Deneb/commit/263a418d5d19f059fdc89dc294f8b89c01052a43))
+* **genesis:** 과거 챗 아카이브 스윕 노브 — validation-backfill 창·세션·목표 env (+ gofumpt 승계분 11파일) ([#3462](https://github.com/choiceoh/Deneb/issues/3462)) ([2cbb362](https://github.com/choiceoh/Deneb/commit/2cbb36208990c953352b437ad098b60d1be74c68))
+* **genesis:** 라벨 파이프라인 가속 — 시간 기반 워치 해소 + rsi-backtest CLI (해소 0건 병목 수리) ([#3460](https://github.com/choiceoh/Deneb/issues/3460)) ([e9b8be8](https://github.com/choiceoh/Deneb/commit/e9b8be88dc2b30946e94e02c89870b067f266767))
+* **genesis:** 적대적 커버리지 프로브 — 결정적 섹션-드롭 변이로 약한 held-out 케이스 자동 강화 ([#3473](https://github.com/choiceoh/Deneb/issues/3473)) ([3dc5927](https://github.com/choiceoh/Deneb/commit/3dc59270701a75faaa10f2e5fbe836a73e3bc9f8))
+* **genesis:** 진화 궤적 자가감사(자기 브레이크) — 드리프트 감지 시 자동 채택 동결 + genesis 서브시스템 가이드 ([#3470](https://github.com/choiceoh/Deneb/issues/3470)) ([e206ac0](https://github.com/choiceoh/Deneb/commit/e206ac0ae2ee752e31926d9458ad0c763f6703b7))
+* **genesis:** 첫 메타 제안 채택(업스트림) — evolve 규칙14 정량화 + 계약 게이트 tool_gap 앵커 ([#3454](https://github.com/choiceoh/Deneb/issues/3454)) ([2a9a741](https://github.com/choiceoh/Deneb/commit/2a9a741830b15d25df4ce4767374c5a34b4ed2ac))
+* **zcode:** Claude 인프라 완전 패리티 — codegraph MCP 배선·CLAUDE.md 규칙 연결·clash 충돌 검사·pre-commit 게이트 ([5f6cbc2](https://github.com/choiceoh/Deneb/commit/5f6cbc27ee4e4dd30c7ac1c0723adb8c6399f313))
+* **zcode:** 워크트리 진입 자동화 — init 훅 additionalContext 강화·가드 안내 개선·git stdout 정리 ([824222f](https://github.com/choiceoh/Deneb/commit/824222fad78178e002bde471599b463fa8fc3043))
+* **zcode:** 자동 워크트리 격리 환경 + Claude 훅 브릿지 (CodeGraph 유도·경로별 룰 게이트) ([834cc02](https://github.com/choiceoh/Deneb/commit/834cc022d29f28e733937b5242b847deb60d4f98))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** [#3438](https://github.com/choiceoh/Deneb/issues/3438) 플레이크 2건 탈레이스 — attach 재진입·ProjectHome AI 투영 비동기 단언을 waitFor로 ([#3442](https://github.com/choiceoh/Deneb/issues/3442)) ([5f1e807](https://github.com/choiceoh/Deneb/commit/5f1e807a53b04445bc2d5c4ad0ce9038616cbbb0))
+* **deploy:** coding-dispatch 큐 파일명·병합·실행비트 수정 (배차 무동작 버그) ([#3469](https://github.com/choiceoh/Deneb/issues/3469)) ([f08af84](https://github.com/choiceoh/Deneb/commit/f08af846c8dd36833df2b1fdfb458f600d1705c2))
+* **health:** responsibility-cochange가 컴포지션 루트(배선 계층)를 오탐하는 것 수정 ([#3474](https://github.com/choiceoh/Deneb/issues/3474)) ([3a74382](https://github.com/choiceoh/Deneb/commit/3a743821e4af76204d7cc6bc9e0f6cd2ac2a961b))
+
+
+### 🔧 Internal
+
+* **chat:** split run_prepare.go under the 700-LOC rule ([#3458](https://github.com/choiceoh/Deneb/issues/3458)) ([8bef3b4](https://github.com/choiceoh/Deneb/commit/8bef3b43995cad54adf1a7300a6eec3e23919ddb))
+* improve runtime boundaries and code health ([#3457](https://github.com/choiceoh/Deneb/issues/3457)) ([1bd4c6f](https://github.com/choiceoh/Deneb/commit/1bd4c6f09443ec45e12970e1bced780a6a9086cb))
+
 ## [4.88.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.87.0...deneb-v4.88.0) (2026-07-11)
 
 
