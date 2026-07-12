@@ -22,6 +22,7 @@ import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.precomputeMarkdownAsync
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
@@ -33,6 +34,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -209,22 +211,12 @@ internal fun ChatMessageList(
                             lastVisible.offset + lastVisible.size <= info.viewportEndOffset + 240
                         )
                     if (ownSendOrInstall || nearBottom) {
-                        // Pin the newest item to the BOTTOM (Int.MAX_VALUE offset), not
-                        // its top — a fresh send/reply should rest just above the input
-                        // bar like every chat. Matches the streaming autoscroll and the
-                        // scroll-to-bottom button.
-                        listState.scrollToItem(history.lastIndex, Int.MAX_VALUE)
-                        // The list carries trailing NON-history rows below the last
-                        // message — the "loading" waiting row while a reply is pending,
-                        // the "error" row — so right after a send, history.lastIndex is
-                        // not the list's last row and the waiting row stays cut off
-                        // under the input bar ("완전히 밑까지 안 내려옴"). The first snap
-                        // has composed/measured the tail; re-snap to the true last row,
-                        // same as the streaming follow and the scroll-to-bottom button.
-                        val lastRow = listState.layoutInfo.totalItemsCount - 1
-                        if (lastRow > history.lastIndex) {
-                            listState.scrollToItem(lastRow, Int.MAX_VALUE)
-                        }
+                        // Land on the true last row (trailing NON-history rows — the
+                        // "loading" waiting row, the "error" row — sit below the last
+                        // message, so history.lastIndex isn't the list's last row) AND
+                        // clear the bottom contentPadding so the newest line rests just
+                        // above the floating input bar. scrollToTrueBottom handles both.
+                        listState.scrollToTrueBottom(bottomOverlayHeightPx)
                     }
                     val lastMessage = history.last()
                     if (uiState.isSpeechOutputEnabled && lastMessage.role == History.Role.ASSISTANT) {
@@ -444,8 +436,9 @@ internal fun ChatMessageList(
             // and far less layout churn on the hot streaming path.
             LaunchedEffect(streamingLen / 48, uiState.isLoading) {
                 if (uiState.isLoading && isNearBottom) {
-                    val total = listState.layoutInfo.totalItemsCount
-                    if (total > 0) listState.scrollToItem(total - 1, Int.MAX_VALUE)
+                    // Land on the true last row AND clear the input-bar contentPadding
+                    // so the streaming tokens' newest line isn't clipped under the bar.
+                    listState.scrollToTrueBottom(bottomOverlayHeightPx)
                 }
             }
 
@@ -657,15 +650,10 @@ internal fun ChatMessageList(
                             .handCursor(),
                         onClick = {
                             componentScope.launch {
-                                val totalItems = listState.layoutInfo.totalItemsCount
-                                if (totalItems > 0) {
-                                    // Land on the true bottom, not the last item's top: a single
-                                    // tall final message (e.g. a long report) would otherwise leave
-                                    // its top pinned to the viewport — the button would appear to do
-                                    // nothing. The large scrollOffset pins the item's bottom edge to
-                                    // the viewport bottom (same idiom as the streaming follow above).
-                                    listState.animateScrollToItem(totalItems - 1, Int.MAX_VALUE)
-                                }
+                                // Lands on the true bottom AND clears the input-bar contentPadding
+                                // (animate, since this is a user tap) so the newest line rests just
+                                // above the bar — not clipped under it. No-ops when the list is empty.
+                                listState.scrollToTrueBottom(bottomOverlayHeightPx, animate = true)
                             }
                         },
                     ) {
@@ -726,4 +714,33 @@ private fun rememberExecutingTools(history: ImmutableList<History>): ExecutingTo
         }
     }
     return state
+}
+
+/**
+ * Scroll the list so the true last row's bottom edge rests exactly above the
+ * floating input bar — i.e. the last visible line isn't clipped under it.
+ *
+ * [LazyListState.scrollToItem] with `Int.MAX_VALUE` pins the last item's bottom
+ * to the viewport's physical bottom, which IGNORES the list's bottom
+ * contentPadding (the input-bar height). The newest line then sits under the
+ * floating input bar ("완벽하게 밑까지 안 내려옴"). After pinning the item's
+ * bottom, scroll DOWN by the contentPadding so the last line clears the bar.
+ *
+ * `animate` picks [androidx.compose.foundation.lazy.LazyListState.animateScrollBy]
+ * for the user-driven scroll-to-bottom button (smooth) vs the instant
+ * [androidx.compose.foundation.lazy.LazyListState.scrollBy] for programmatic
+ * follow-scrolls (streaming / on-send) that already ride their own cadence.
+ */
+private suspend fun LazyListState.scrollToTrueBottom(
+    contentPaddingBottomPx: Int,
+    animate: Boolean = false,
+) {
+    val total = layoutInfo.totalItemsCount
+    if (total <= 0) return
+    scrollToItem(total - 1, Int.MAX_VALUE)
+    if (contentPaddingBottomPx > 0) {
+        // scrollToItem to the last row measured the tail; only now can we know it
+        // exists. Scroll the contentPadding gap so the last line clears the input bar.
+        if (animate) animateScrollBy(contentPaddingBottomPx.toFloat()) else scrollBy(contentPaddingBottomPx.toFloat())
+    }
 }
