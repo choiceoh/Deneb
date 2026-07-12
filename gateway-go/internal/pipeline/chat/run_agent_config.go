@@ -289,8 +289,8 @@ func copyMaxToolCallAttempts(value *int) *int {
 	if value == nil {
 		return nil
 	}
-	copy := *value
-	return &copy
+	cloned := *value
+	return &cloned
 }
 
 func resolveAgentThinking(params RunParams, cachedSession *session.Session) *llm.ThinkingConfig {

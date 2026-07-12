@@ -84,7 +84,7 @@ func probeOpenAIError(payload json.RawMessage) (json.RawMessage, bool) {
 // translateOpenAIStream reads OpenAI SSE chunks from rawEvents and emits
 // Anthropic-style StreamEvents to out.
 func (c *Client) translateOpenAIStream(ctx context.Context, rawEvents <-chan StreamEvent, out chan<- StreamEvent) {
-	translator := newOpenAIStreamTranslator(c, ctx, out)
+	translator := newOpenAIStreamTranslator(ctx, c, out)
 	translator.run(rawEvents)
 }
 
@@ -99,7 +99,7 @@ type openAIStreamTranslator struct {
 	rawBytes        int
 }
 
-func newOpenAIStreamTranslator(client *Client, ctx context.Context, out chan<- StreamEvent) *openAIStreamTranslator {
+func newOpenAIStreamTranslator(ctx context.Context, client *Client, out chan<- StreamEvent) *openAIStreamTranslator {
 	return &openAIStreamTranslator{
 		client:     client,
 		ctx:        ctx,
@@ -155,6 +155,8 @@ func (t *openAIStreamTranslator) handleRawEvent(raw StreamEvent) bool {
 		return true
 	case openAIChunkStop:
 		return false
+	case openAIChunkProcess:
+		// Continue with the decoded chunk below.
 	}
 
 	t.chunkCount++
