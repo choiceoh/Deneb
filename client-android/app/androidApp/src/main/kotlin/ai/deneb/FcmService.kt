@@ -30,6 +30,10 @@ class FcmService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
+        // The radio is already awake for this delivery — piggyback a home-widget
+        // refresh (throttled, no-op without a placed widget) so the widget stays
+        // fresh without its own alarm wakeups.
+        WidgetRefresher.requestRefresh(this)
         // Data-first (current gateway); the notification-payload fallback keeps
         // an older gateway build working during a version skew window.
         val title = message.data["title"] ?: message.notification?.title ?: "데네브"
