@@ -493,6 +493,48 @@ internal fun renderCardCorpus() {
     println("card corpus rendered: $rendered/${files.size} -> /tmp/deneb-render/corpus_*.png")
 }
 
+// Message-corpus audit: DENEB_RENDER_MSGS_DIR renders each *.txt as a FULL
+// assistant message through MarkdownContent (prose blocks + any embedded
+// fences) at phone width — the vertical-rhythm loop over real replies, where
+// the card-corpus var above audits fence bodies alone. Same rules: data stays
+// out of the repo; absent env var = no-op.
+internal fun renderMessageCorpus() {
+    val dir = System.getenv("DENEB_RENDER_MSGS_DIR")?.takeIf { it.isNotBlank() } ?: return
+    val files = File(dir).listFiles { f -> f.extension == "txt" }?.sortedBy { it.name } ?: return
+    var rendered = 0
+    for (f in files) {
+        val text = f.readText().trim()
+        if (text.isEmpty()) continue
+        val height = (400 + f.length().toInt() / 2).coerceIn(800, 6000)
+        renderMessageDoc("msg_${f.nameWithoutExtension}.png", ai.deneb.ui.DarkColorScheme, text, height)
+        rendered++
+    }
+    println("message corpus rendered: $rendered/${files.size} -> /tmp/deneb-render/msg_*.png")
+}
+
+private fun renderMessageDoc(name: String, scheme: ColorScheme, text: String, height: Int) {
+    // Pre-parse like the chat path (document overload): the string overload
+    // parses >2K bodies async on a background core, and this scene captures a
+    // single frame — a long reply would snapshot blank mid-parse.
+    val doc = ai.deneb.ui.markdown.parseMarkdown(text)
+    val scene = ImageComposeScene(width = 824, height = height, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.width(412.dp)) {
+                    CompositionLocalProvider(LocalDenebUiMotion provides false) {
+                        MarkdownContent(document = doc, modifier = Modifier.fillMaxWidth().padding(16.dp))
+                    }
+                }
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
 internal fun eveningLetterNode(): DenebUiNode = parseLetterHtml(
     """
     <column>
