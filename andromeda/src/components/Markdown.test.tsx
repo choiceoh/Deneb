@@ -39,6 +39,22 @@ describe("Markdown", () => {
     expect(screen.getByRole("cell", { name: "A" })).toBeInTheDocument();
   });
 
+  it("right-aligns a marker-less all-numeric column; explicit markers win", () => {
+    // 수량 column: every cell digit-led, no ':---:' marker → auto right-align
+    // with tabular figures. 단가 column: explicit ':---' (left) marker → kept.
+    render(
+      <Markdown text={"| 현장 | 수량 | 단가 |\n| --- | --- | :--- |\n| 화성 | 12 | 1,200 |\n| 부산 | 4 | 900 |"} />,
+    );
+    const qty = screen.getByRole("cell", { name: "12" });
+    expect(qty.style.textAlign).toBe("right");
+    expect(qty.className).toBe("md-num");
+    const price = screen.getByRole("cell", { name: "1,200" });
+    expect(price.style.textAlign).toBe("left");
+    expect(price.className).toBe("");
+    // The entity column stays start-aligned.
+    expect((screen.getByRole("cell", { name: "화성" }) as HTMLElement).style.textAlign).toBe("");
+  });
+
   it("renders plain text as a single paragraph", () => {
     render(<Markdown text="그냥 텍스트" />);
     expect(screen.getByText("그냥 텍스트").tagName).toBe("P");
