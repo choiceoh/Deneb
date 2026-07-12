@@ -26,13 +26,13 @@ import (
 const (
 	// heartbeatAutoApplyEnv is the operator lever (default off).
 	heartbeatAutoApplyEnv = "DENEB_HEARTBEAT_AUTO_APPLY"
-	// heartbeatAutoApplyBackup keeps the pre-apply contract for the anomaly
-	// watch and the operator (distinct from heartbeat_update's .prev, which
-	// the agent's own updates overwrite every turn).
-	heartbeatAutoApplyBackup = "HEARTBEAT.md.autoapply.bak"
-	// heartbeatAutoApplyMarker persists the in-flight anomaly watch across
-	// restarts (same argument as the skill evolve watch persistence).
-	heartbeatAutoApplyMarker = "HEARTBEAT.md.autoapply.json"
+	// heartbeatAutoApplyBackupSuffix keeps the pre-apply contract for the
+	// anomaly watch and the operator (distinct from heartbeat_update's .prev,
+	// which the agent's own updates overwrite every turn).
+	heartbeatAutoApplyBackupSuffix = ".autoapply.bak"
+	// heartbeatAutoApplyMarkerSuffix persists the in-flight anomaly watch
+	// across restarts (same argument as the skill evolve watch persistence).
+	heartbeatAutoApplyMarkerSuffix = ".autoapply.json"
 	// heartbeatAutoApplyRollbackThreshold is K consecutive failed heartbeat
 	// turns after an apply before the backup is restored.
 	heartbeatAutoApplyRollbackThreshold = 3
@@ -74,7 +74,7 @@ func MaybeAutoApplyCandidate(ctx context.Context, heartbeatPath, fixturePath, ca
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return false, verdict, fmt.Errorf("heartbeat auto-apply: read live contract: %w", err)
 	}
-	backupPath := heartbeatPath + ".autoapply.bak"
+	backupPath := heartbeatPath + heartbeatAutoApplyBackupSuffix
 	if err := os.WriteFile(backupPath, current, 0o644); err != nil {
 		return false, verdict, fmt.Errorf("heartbeat auto-apply: backup write: %w", err)
 	}
@@ -83,7 +83,7 @@ func MaybeAutoApplyCandidate(ctx context.Context, heartbeatPath, fixturePath, ca
 	}
 	marker := autoApplyMarker{AppliedAt: time.Now().UnixMilli(), BackupPath: backupPath}
 	if raw, merr := json.Marshal(marker); merr == nil {
-		if werr := os.WriteFile(heartbeatPath+".autoapply.json", raw, 0o644); werr != nil {
+		if werr := os.WriteFile(heartbeatPath+heartbeatAutoApplyMarkerSuffix, raw, 0o644); werr != nil {
 			logger.Warn("heartbeat auto-apply: marker write failed (anomaly watch disarmed)", "error", werr)
 		}
 	}
@@ -102,7 +102,7 @@ func noteHeartbeatTurnOutcome(heartbeatPath string, ok bool, logger *slog.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
-	markerPath := heartbeatPath + ".autoapply.json"
+	markerPath := heartbeatPath + heartbeatAutoApplyMarkerSuffix
 	raw, err := os.ReadFile(markerPath)
 	if err != nil {
 		return // no in-flight watch
