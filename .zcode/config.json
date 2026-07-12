@@ -44,7 +44,12 @@
               "command": "bash \"${ZCODE_PROJECT_DIR}/scripts/dev/zcode-hook-bridge.sh\" \"${ZCODE_PROJECT_DIR}/scripts/dev/claude-rules-gate.py\"",
               "timeout": 10,
               "statusMessage": "rules-gate: 경로별 룰 첫 접촉 안내"
-            },
+            }
+          ]
+        },
+        {
+          "matcher": "Read|Edit|Write|MultiEdit",
+          "hooks": [
             {
               "type": "command",
               "command": "bash \"${ZCODE_PROJECT_DIR}/scripts/dev/zcode-hook-bridge.sh\" \"${ZCODE_PROJECT_DIR}/scripts/dev/codegraph-remind.py\"",
