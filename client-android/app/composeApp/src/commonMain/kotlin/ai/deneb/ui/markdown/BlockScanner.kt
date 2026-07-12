@@ -24,10 +24,17 @@ internal object BlockScanner {
 
     private val FENCE_REGEX = Regex("""^(\s{0,3})(`{3,}|~{3,})\s*(.*?)\s*$""")
 
-    // A deneb-ui fence opener glued to the tail of a prose line ("…할게요.```deneb-ui").
-    // Group 1 = the prose prefix, group 2 = the fence opener. Line-final openers only,
-    // so prose that merely mentions the fence mid-sentence never matches.
-    private val DENEB_FENCE_TAIL_REGEX = Regex("""^(.*?)(`{3,}\s*deneb-ui)\s*$""", RegexOption.IGNORE_CASE)
+    // A deneb-ui fence opener glued to a prose tail ("…할게요.```deneb-ui") and/or running
+    // straight into the first tag ("…```deneb-ui<column>"). Group 1 = prose prefix,
+    // group 2 = fence opener, group 3 = glued body start — accepted only when it begins
+    // with '<', so prose that merely mentions the fence mid-sentence never matches.
+    private val DENEB_FENCE_TAIL_REGEX =
+        Regex("""^(.*?)(`{3,}[ \t]*deneb-ui)[ \t]*(<.*)?$""", RegexOption.IGNORE_CASE)
+
+    // A ``` run inside an HTML deneb-ui body can only be the closing fence: HTML bodies
+    // escape backticks as &#96; per the authoring contract. Legacy JSON bodies keep the
+    // strict own-line close (their string values may carry ```).
+    private val BACKTICK_RUN_REGEX = Regex("""`{3,}""")
     private val MATH_DISPLAY_INLINE_REGEX = Regex("""^\s*\$\$([\s\S]+?)\$\$\s*$""")
     private val MATH_DISPLAY_BRACKET_INLINE_REGEX = Regex("""^\s*\\\[([\s\S]+?)\\\]\s*$""")
     private val MATH_DISPLAY_DOLLAR_FENCE_REGEX = Regex("""^\s*\$\$\s*$""")
@@ -251,29 +258,110 @@ internal object BlockScanner {
         return blocks.toImmutableList()
     }
 
-    // Splits lines whose tail carries a glued deneb-ui fence opener so the fence is
-    // recognized and the prose prefix stays prose. Returns the input list untouched
-    // when nothing is glued (the common case).
+    // Normalizes deneb-ui fences that models glue onto prose lines, so the line-based
+    // scanner sees canonical own-line fences: a glued opener (with an optional glued
+    // body start) splits into separate lines, and inside an HTML deneb-ui body a glued
+    // ``` run splits into a proper close line + trailing prose. Other code fences are
+    // never touched. Returns the input list unchanged when nothing is glued.
     private fun splitGluedDenebUiFences(lines: List<String>): List<String> {
-        var out: MutableList<String>? = null
-        for (i in lines.indices) {
-            val line = lines[i]
-            val prefix = gluedDenebUiPrefix(line)
-            if (prefix == null) {
-                out?.add(line)
-                continue
+        if (lines.none { it.length <= MAX_LINE_REGEX_LEN && "```" in it }) return lines
+        val out = ArrayList<String>(lines.size + 4)
+        var changed = false
+        var state = FenceState.OUTSIDE
+        var htmlDecided = false
+        var isHtml = false
+        var otherChar = ' '
+        var otherLen = 0
+        for (line in lines) {
+            val fm = if (line.length <= MAX_LINE_REGEX_LEN) FENCE_REGEX.matchEntire(line) else null
+            when (state) {
+                FenceState.OTHER_FENCE -> {
+                    val f = fm?.groupValues?.get(2)
+                    if (f != null && f[0] == otherChar && f.length >= otherLen && fm.groupValues[3].isBlank()) {
+                        state = FenceState.OUTSIDE
+                    }
+                    out.add(line)
+                }
+
+                FenceState.DENEB_BODY -> {
+                    if (fm != null && fm.groupValues[2][0] == '`' && fm.groupValues[3].isBlank()) {
+                        state = FenceState.OUTSIDE
+                        out.add(line)
+                        continue
+                    }
+                    if (!htmlDecided && line.isNotBlank()) {
+                        isHtml = line.trimStart().startsWith("<")
+                        htmlDecided = true
+                    }
+                    val run = if (isHtml && line.length <= MAX_LINE_REGEX_LEN) BACKTICK_RUN_REGEX.find(line) else null
+                    if (run != null) {
+                        emitSplitClose(out, line, run)
+                        changed = true
+                        state = FenceState.OUTSIDE
+                    } else {
+                        out.add(line)
+                    }
+                }
+
+                FenceState.OUTSIDE -> {
+                    // The glued-opener match runs BEFORE the plain fence match:
+                    // a start-of-line one-liner ("```deneb-ui<text>…") also
+                    // matches FENCE_REGEX (with the tag glued into the info
+                    // string) and would otherwise open a bogus "other" fence.
+                    val tail =
+                        if (line.length <= MAX_LINE_REGEX_LEN && "```" in line) {
+                            DENEB_FENCE_TAIL_REGEX.matchEntire(line)
+                        } else {
+                            null
+                        }
+                    if (tail != null && (tail.groupValues[1].isNotBlank() || tail.groupValues[3].isNotEmpty())) {
+                        val prefix = tail.groupValues[1]
+                        val bodyStart = tail.groupValues[3]
+                        if (prefix.isNotBlank()) out.add(prefix)
+                        out.add(tail.groupValues[2])
+                        changed = true
+                        state = FenceState.DENEB_BODY
+                        htmlDecided = bodyStart.isNotEmpty()
+                        isHtml = htmlDecided
+                        if (bodyStart.isNotEmpty()) {
+                            val run = BACKTICK_RUN_REGEX.find(bodyStart)
+                            if (run != null) {
+                                emitSplitClose(out, bodyStart, run)
+                                state = FenceState.OUTSIDE
+                            } else {
+                                out.add(bodyStart)
+                            }
+                        }
+                        continue
+                    }
+                    if (fm != null) {
+                        val info = fm.groupValues[3].trim()
+                        if (info.equals("deneb-ui", ignoreCase = true) && fm.groupValues[2][0] == '`') {
+                            state = FenceState.DENEB_BODY
+                            htmlDecided = false
+                            isHtml = false
+                        } else if (info.isNotBlank() || fm.groupValues[2].isNotEmpty()) {
+                            state = FenceState.OTHER_FENCE
+                            otherChar = fm.groupValues[2][0]
+                            otherLen = fm.groupValues[2].length
+                        }
+                    }
+                    out.add(line)
+                }
             }
-            val o = out ?: lines.subList(0, i).toMutableList().also { out = it }
-            o.add(prefix)
-            o.add(line.substring(prefix.length))
         }
-        return out ?: lines
+        return if (changed) out else lines
     }
 
-    private fun gluedDenebUiPrefix(line: String): String? {
-        if (line.length > MAX_LINE_REGEX_LEN || "```" !in line) return null
-        val m = DENEB_FENCE_TAIL_REGEX.matchEntire(line) ?: return null
-        return m.groupValues[1].takeIf { it.isNotBlank() }
+    private enum class FenceState { OUTSIDE, DENEB_BODY, OTHER_FENCE }
+
+    // Splits "body```suffix" into body line + own-line close + trailing prose line.
+    private fun emitSplitClose(out: MutableList<String>, line: String, run: MatchResult) {
+        val pre = line.substring(0, run.range.first)
+        if (pre.isNotBlank()) out.add(pre)
+        out.add("```")
+        val suffix = line.substring(run.range.last + 1)
+        if (suffix.isNotBlank()) out.add(suffix)
     }
 
     // =========================================================================================

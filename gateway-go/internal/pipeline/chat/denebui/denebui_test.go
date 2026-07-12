@@ -40,6 +40,41 @@ func TestExtractFences(t *testing.T) {
 		}
 	})
 
+	t.Run("closer glued to HTML body tail", func(t *testing.T) {
+		// The symmetric habit: no newline before the closing fence. HTML
+		// bodies escape backticks (&#96;), so a raw ``` run can only close.
+		text := "카드.```deneb-ui\n<text>hi</text>```\n뒤 프로즈는 카드 밖."
+		got := ExtractFences(text)
+		if len(got) != 1 || got[0] != "<text>hi</text>" {
+			t.Fatalf("glued closer not split: %#v", got)
+		}
+	})
+
+	t.Run("one-liner fence", func(t *testing.T) {
+		got := ExtractFences("프로즈.```deneb-ui<text>hi</text>``` 끝.")
+		if len(got) != 1 || got[0] != "<text>hi</text>" {
+			t.Fatalf("one-liner fence = %#v", got)
+		}
+		// Start-of-line one-liner: no prose prefix, tag glued to the opener.
+		got = ExtractFences("```deneb-ui<text>hi</text>```")
+		if len(got) != 1 || got[0] != "<text>hi</text>" {
+			t.Fatalf("start-of-line one-liner = %#v", got)
+		}
+		if !HasFence("프로즈.```deneb-ui<column>") {
+			t.Errorf("HasFence should accept an opener with a glued body tag")
+		}
+	})
+
+	t.Run("legacy JSON body keeps strict close", func(t *testing.T) {
+		// JSON string values may legitimately contain ``` (markdown values);
+		// only an own-line close ends a legacy body.
+		text := "```deneb-ui\n{\"type\":\"markdown\",\"value\":\"a```b\"}\n```"
+		got := ExtractFences(text)
+		if len(got) != 1 || got[0] != "{\"type\":\"markdown\",\"value\":\"a```b\"}" {
+			t.Fatalf("legacy body mangled: %#v", got)
+		}
+	})
+
 	t.Run("case-insensitive and multiple", func(t *testing.T) {
 		text := "```DENEB-UI\n{\"type\":\"text\"}\n```\nmid\n```deneb-ui\n{\"type\":\"divider\"}\n```"
 		got := ExtractFences(text)

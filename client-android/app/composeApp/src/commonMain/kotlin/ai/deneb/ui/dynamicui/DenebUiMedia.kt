@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -54,6 +56,7 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Eco
@@ -67,7 +70,9 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Healing
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.Image
@@ -87,6 +92,7 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MilitaryTech
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Payments
@@ -469,7 +475,7 @@ internal fun resolveIcon(name: String): ImageVector? = when (name) {
     "redo" -> Icons.AutoMirrored.Filled.Redo
     "filter", "filter_list" -> Icons.Filled.FilterList
     "sort" -> Icons.AutoMirrored.Filled.Sort
-    "swap", "swap_horiz" -> Icons.Filled.SwapHoriz
+    "swap", "swap_horiz", "compare", "vs" -> Icons.Filled.SwapHoriz
     "sync" -> Icons.Filled.Sync
     "wifi" -> Icons.Filled.Wifi
     "bluetooth" -> Icons.Filled.Bluetooth
@@ -495,6 +501,12 @@ internal fun resolveIcon(name: String): ImageVector? = when (name) {
     "emoji_events", "trophy" -> Icons.Filled.EmojiEvents
     "military_tech", "medal" -> Icons.Filled.MilitaryTech
     "workspace_premium", "premium" -> Icons.Filled.WorkspacePremium
+    "video", "movie", "film" -> Icons.Filled.Movie
+    "message", "chat", "comment" -> Icons.AutoMirrored.Filled.Chat
+    "document", "doc", "file", "description" -> Icons.Filled.Description
+    "folder" -> Icons.Filled.Folder
+    "history" -> Icons.Filled.History
+    "help", "question" -> Icons.AutoMirrored.Filled.HelpOutline
     else -> null
 }
 

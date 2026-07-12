@@ -12,11 +12,18 @@ import { parseDenebUiHtml } from "./denebUiHtml";
 export type Node = any;
 
 // Lenient opener: the fence normally occupies its own line, but models
-// sometimes glue it to the tail of a prose sentence ("…가져올게요.```deneb-ui").
-// Group 1 captures that prose prefix so it stays markdown. Only a line-final
-// opener counts: mid-sentence mentions (text after the info string) stay prose.
-const FENCE_OPEN = /^(.*?)`{3,}\s*deneb-ui\s*$/i;
-const FENCE_CLOSE = /^```\s*$/;
+// sometimes glue it to the tail of a prose sentence ("…가져올게요.```deneb-ui")
+// or run straight into the first tag ("…```deneb-ui<column>"). Group 1
+// captures the prose prefix so it stays markdown; group 2 captures a glued
+// body start — accepted only when it begins with "<", so mid-sentence
+// mentions of the fence stay prose.
+const FENCE_OPEN = /^(.*?)`{3,}\s*deneb-ui\s*(<.*)?$/i;
+const FENCE_CLOSE = /^`{3,}\s*$/;
+// A ``` run glued into an HTML body line closes the fence: HTML bodies escape
+// backticks as &#96; per the authoring contract, so a raw run can only be the
+// close. Legacy JSON bodies keep the strict own-line close (their string
+// values may carry ```).
+const CLOSE_RUN = /`{3,}/;
 
 export type UiSegment =
   | { kind: "md"; text: string }
@@ -44,12 +51,32 @@ export function splitDenebUi(text: string): UiSegment[] {
       flush();
       const body: string[] = [];
       let closed = false;
-      for (i++; i < lines.length; i++) {
-        if (FENCE_CLOSE.test(lines[i].trim())) {
-          closed = true;
-          break;
+      let isHtml = open[2] != null;
+      let htmlDecided = isHtml;
+      // Consumes one body line; splits a glued ``` close out of HTML bodies.
+      const consume = (line: string): boolean => {
+        if (FENCE_CLOSE.test(line.trim())) return true;
+        if (!htmlDecided && line.trim()) {
+          isHtml = line.trimStart().startsWith("<");
+          htmlDecided = true;
         }
-        body.push(lines[i]);
+        if (isHtml) {
+          const run = CLOSE_RUN.exec(line);
+          if (run) {
+            const pre = line.slice(0, run.index);
+            if (pre.trim()) body.push(pre);
+            const suffix = line.slice(run.index + run[0].length);
+            if (suffix.trim()) md.push(suffix); // prose after the glued close
+            return true;
+          }
+        }
+        body.push(line);
+        return false;
+      };
+      if (open[2] != null) closed = consume(open[2]);
+      for (; !closed && i + 1 < lines.length;) {
+        i++;
+        closed = consume(lines[i]);
       }
       if (!closed) {
         segs.push({ kind: "ui-pending", body: body.join("\n") });

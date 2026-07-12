@@ -1,5 +1,6 @@
 package ai.deneb.ui.components
 
+import ai.deneb.ui.DenebMotion
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -27,8 +28,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-
-import ai.deneb.ui.DenebMotion
 
 /**
  * Shimmer placeholder fill — a soft base tint with a highlight band sweeping
