@@ -3,6 +3,7 @@ package ai.deneb
 import ai.deneb.data.DataRepository
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.deneb.ingestEvent
+import ai.deneb.network.httpTeardownTolerantHandler
 import android.app.Notification
 import android.app.NotificationManager
 import android.os.Build
@@ -45,7 +46,11 @@ import org.koin.java.KoinJavaComponent.inject
  */
 class DenebNotificationListenerService : NotificationListenerService() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // onDestroy's scope.cancel() can catch an ingestEvent RPC mid-flight — the
+    // handler keeps that stream teardown from crashing the app.
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default + httpTeardownTolerantHandler("NotificationListener"),
+    )
     private val repository: DataRepository by inject(DataRepository::class.java)
 
     override fun onNotificationPosted(sbn: StatusBarNotification?, rankingMap: RankingMap?) {

@@ -4,6 +4,7 @@ import ai.deneb.DenebLog
 import ai.deneb.SandboxSessions
 import ai.deneb.TerminalLine
 import ai.deneb.data.ConversationStorage
+import ai.deneb.network.httpTeardownTolerantHandler
 import android.content.Context
 import android.os.Build
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -28,7 +29,11 @@ class LinuxSandboxManager(
     private val conversationStorage: ConversationStorage,
 ) {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // cancel() aborts a mid-download rootfs fetch (ktor Android engine) — the
+    // handler keeps that stream teardown from crashing the app.
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + httpTeardownTolerantHandler("LinuxSandbox"),
+    )
     private var currentJob: Job? = null
     private val _state = MutableStateFlow<SandboxState>(SandboxState.NotInstalled)
     val state: StateFlow<SandboxState> = _state
