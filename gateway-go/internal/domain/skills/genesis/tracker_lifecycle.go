@@ -331,6 +331,20 @@ func (t *Tracker) LogCrossSkillRegression(sourceSkill, neighborSkill, reason str
 	})
 }
 
+// LogGateExploit records that a synthetic exploit-shaped candidate PASSED the
+// deterministic preflight (adversarial gate-trap probe, 2605.20744) — a
+// gate-integrity alarm, never an accepted edit (the trap is never committed).
+func (t *Tracker) LogGateExploit(skillName, reason string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return jsonlstore.Append(t.logPath, evolveLogEntry{
+		Type:      "gate_exploit",
+		SkillName: skillName,
+		Reason:    reason,
+		CreatedAt: time.Now().UnixMilli(),
+	})
+}
+
 // RecentLifecycleLog returns recent genesis/proposal events, newest first.
 func (t *Tracker) RecentLifecycleLog(limit int) ([]LifecycleLogEntry, error) {
 	t.mu.Lock()
