@@ -34,14 +34,25 @@ OLD = NOW - 90 * DAY  # outside every window
 
 
 class L1Test(unittest.TestCase):
-    def test_evolves_are_live(self):
-        s = assess_l1([{"createdAt": RECENT, "event": "evolved"},
-                       {"createdAt": RECENT, "event": "confirmed"}], NOW)
+    def test_committed_evolves_are_live(self):
+        # Real genesis-log schema keys by `type`, not event/action.
+        s = assess_l1([{"createdAt": RECENT, "type": "evolved"},
+                       {"createdAt": RECENT, "type": "genesis"},
+                       {"createdAt": RECENT, "type": "evolution_proposal"}], NOW)
         self.assertEqual(s.state, LIVE)
         self.assertEqual(s.metrics["evolved"], 1)
+        self.assertEqual(s.metrics["genesis"], 1)
+        self.assertEqual(s.metrics["proposal"], 1)
+
+    def test_proposals_without_commits_is_data_gated(self):
+        # The lane is active but nothing clears the gate — DATA-GATED, not IDLE.
+        s = assess_l1([{"createdAt": RECENT, "type": "evolution_proposal"},
+                       {"createdAt": RECENT, "type": "evolve_rejected"}], NOW)
+        self.assertEqual(s.state, DATA_GATED)
+        self.assertEqual(s.metrics["rejected"], 1)
 
     def test_no_recent_events_is_idle(self):
-        s = assess_l1([{"createdAt": OLD, "event": "evolved"}], NOW)
+        s = assess_l1([{"createdAt": OLD, "type": "evolved"}], NOW)
         self.assertEqual(s.state, IDLE)
 
 
@@ -136,7 +147,7 @@ class AssessAndCliTest(unittest.TestCase):
 
     def test_assess_end_to_end_and_json_cli(self):
         with tempfile.TemporaryDirectory() as data_dir:
-            self._write(data_dir, "skill_genesis_log.jsonl", [{"createdAt": RECENT, "event": "evolved"}])
+            self._write(data_dir, "skill_genesis_log.jsonl", [{"createdAt": RECENT, "type": "evolved"}])
             self._write(data_dir, "judge_accuracy_log.jsonl",
                         [{"createdAt": RECENT, "pairs": 12, "correct": 12,
                           "byClass": {"section-drop": [3, 3]}, "misses": []}])

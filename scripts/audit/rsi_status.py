@@ -89,26 +89,38 @@ def _within(created_ms: Any, cutoff_ms: int) -> bool:
 
 
 def assess_l1(events: list[dict], now_ms: int) -> LayerStatus:
-    """Skill evolution — lifecycle events in the 7d window."""
+    """Skill evolution — genesis-log lifecycle events in the 7d window.
+
+    The ledger keys each record by ``type`` (evolved, evolve_rejected,
+    evolution_proposal, genesis). Post-evolve confirmations/rollbacks, when they
+    occur, ride the usage rollback watch (tracker_usage), not this log — so
+    "turning" is measured by committed evolves and new skills, not confirmations.
+    """
     cutoff = now_ms - WINDOW_DAYS * DAY_MS
-    counts = {"evolved": 0, "confirmed": 0, "rolled_back": 0, "rejected": 0}
+    type_bucket = {
+        "evolved": "evolved",
+        "genesis": "genesis",
+        "evolution_proposal": "proposal",
+        "evolve_rejected": "rejected",
+    }
+    counts = {"evolved": 0, "genesis": 0, "proposal": 0, "rejected": 0}
     for e in events:
         if not _within(e.get("createdAt"), cutoff):
             continue
-        ev = e.get("event") or e.get("action") or ""
-        if ev in counts:
-            counts[ev] += 1
+        bucket = type_bucket.get(e.get("type") or "")
+        if bucket:
+            counts[bucket] += 1
     metrics = dict(counts)
-    total = sum(counts.values())
-    if total == 0:
+    committed = counts["evolved"] + counts["genesis"]
+    if sum(counts.values()) == 0:
         return LayerStatus("L1", "skill evolution", IDLE, metrics,
-                           "no lifecycle events in 7d — evolver lane idle or no low-yield skills")
-    if counts["evolved"] > 0 or counts["confirmed"] > 0:
+                           "no genesis-log events in 7d — evolver/genesis lanes idle")
+    if committed > 0:
         return LayerStatus("L1", "skill evolution", LIVE, metrics,
-                           f"{counts['evolved']} evolved / {counts['confirmed']} confirmed / "
-                           f"{counts['rolled_back']} rolled back / {counts['rejected']} rejected (7d)")
+                           f"{counts['evolved']} evolved / {counts['genesis']} new skills / "
+                           f"{counts['proposal']} proposals / {counts['rejected']} rejected (7d)")
     return LayerStatus("L1", "skill evolution", DATA_GATED, metrics,
-                       "activity present but no evolves committed — candidates not clearing the gate")
+                       f"{counts['proposal']} proposals but 0 committed — candidates not clearing the gate")
 
 
 def assess_l2(revisions: list[dict], frozen: bool, now_ms: int) -> LayerStatus:
