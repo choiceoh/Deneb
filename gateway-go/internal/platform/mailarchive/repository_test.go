@@ -453,18 +453,32 @@ func (f *fakeRepositoryFallback) GetAttachment(ctx context.Context, messageID, a
 }
 
 type testIMAPArchive struct {
-	addr string
-	ln   net.Listener
-	msgs map[string]map[string][]byte
+	addr          string
+	ln            net.Listener
+	msgs          map[string]map[string][]byte
+	rejectExamine map[string]bool
 }
 
 func newTestIMAPArchive(t *testing.T, msgs map[string]map[string][]byte) *testIMAPArchive {
+	return newTestIMAPArchiveRejecting(t, msgs, nil)
+}
+
+func newTestIMAPArchiveRejecting(t *testing.T, msgs map[string]map[string][]byte, mailboxes []string) *testIMAPArchive {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	srv := &testIMAPArchive{addr: ln.Addr().String(), ln: ln, msgs: msgs}
+	rejectExamine := make(map[string]bool, len(mailboxes))
+	for _, mailbox := range mailboxes {
+		rejectExamine[mailbox] = true
+	}
+	srv := &testIMAPArchive{
+		addr:          ln.Addr().String(),
+		ln:            ln,
+		msgs:          msgs,
+		rejectExamine: rejectExamine,
+	}
 	go srv.serve()
 	t.Cleanup(func() { _ = ln.Close() })
 	return srv
@@ -496,7 +510,12 @@ func (s *testIMAPArchive) handle(conn net.Conn) {
 		case strings.HasPrefix(upper, "LOGIN "):
 			_, _ = fmt.Fprintf(conn, "%s OK login\r\n", tag)
 		case strings.HasPrefix(upper, "EXAMINE "):
-			mailbox = unquoteIMAPArg(strings.TrimSpace(cmd[len("EXAMINE "):]))
+			requested := unquoteIMAPArg(strings.TrimSpace(cmd[len("EXAMINE "):]))
+			if s.rejectExamine[requested] {
+				_, _ = fmt.Fprintf(conn, "%s NO unavailable\r\n", tag)
+				continue
+			}
+			mailbox = requested
 			_, _ = fmt.Fprintf(conn, "* %d EXISTS\r\n%s OK examine\r\n", len(s.msgs[mailbox]), tag)
 		case strings.HasPrefix(upper, "UID SEARCH "):
 			uids := s.searchUIDs(mailbox, cmd[len("UID SEARCH "):])

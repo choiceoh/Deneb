@@ -12,6 +12,9 @@ thread/sender 문맥을, native mail UI에는 Gmail-like repository 계약을
 - `repository.go`의 `Repository`, `RepositoryOptions`,
   `NewRepository`, `Repository.SearchPage`, `Repository.GetMessage`가
   native client용 Gmail-like 읽기 계약을 소유한다.
+- `repository_search.go`가 archive query plan, mailbox scan, overlay/attachment
+  filter, 정렬·page token 결정을 소유한다. 동작 변경은
+  `repository_search_test.go`의 검색 특성 테스트에서 먼저 고정한다.
 - `state.go`의 `StateStore`와 `NewStateStore`가 read/archive/trash와
   archive locator의 로컬 overlay를 영속한다.
 - `context.go`의 `ReadContextMessage`, `SearchContextMessages`,
@@ -33,7 +36,8 @@ thread/sender 문맥을, native mail UI에는 Gmail-like repository 계약을
 - imported mail의 날짜 범위는 Date header 기준 `SENTSINCE/SENTBEFORE`다.
   INTERNALDATE로 되돌리면 bulk import가 일자별 조회에서 사라진다.
 - 지원하지 않는 Gmail query는 bounded recent view로 명시적으로 degrade하고
-  장애를 빈 inbox 성공으로 숨기지 않는다.
+  mailbox candidate scan은 상한을 지킨다. 일부 mailbox 실패는 다른 mailbox가
+  완료됐을 때만 degrade하며, 전부 실패한 장애를 빈 inbox 성공으로 숨기지 않는다.
 - read/archive/trash는 `StateStore` overlay 계약을 통해 적용한다. IMAP
   원본 mutation으로 의미를 바꾸지 않는다.
 
