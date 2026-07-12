@@ -436,6 +436,22 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 			false, "", "proposal write failed: "+werr.Error())
 	}
 	toVersion := generation.ContentSHA256(strings.TrimSpace(proposal))[:12]
+	// Low-confidence routing (ANCHOR 2606.06114 — human intervention is most
+	// valuable at output verification): a proposal the bench CLEARED but could
+	// not show improving (margin <= 0) is not auto-adopted; it surfaces as a
+	// propose-only feed card requesting an explicit operator verdict. Scarce
+	// operator attention goes exactly to the adoptions the deterministic
+	// evidence cannot decide. Benchless cycles keep their documented behavior.
+	lowConfidence := metaLowConfidenceReason(benchIncumbent, benchProposal, benchShadow)
+	if lowConfidence != "" {
+		logger.Info("meta-evolution: revision routed to operator verdict (bench-cleared but low-confidence)",
+			"artifact", artifact, "epoch", epoch, "margin", lowConfidence)
+		if t.OnProposal != nil {
+			t.OnProposal(artifact, epoch, reason, path, false)
+		}
+		return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow,
+			true, toVersion, reason+" [저신뢰: "+lowConfidence+" — 운영자 verdict 대기]")
+	}
 	if metaAutoAdoptEnabled() && !t.Tracker.AutoAdoptFrozen() {
 		// Operator mandate (2026-07-11): the deterministic gate chain (contract
 		// + epoch bench) IS the approver. Adopt immediately; the ledger health
@@ -751,6 +767,20 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 	}
 	b.WriteString("위 유형의 실제 결함 감지력을 높이되, 정상 개선을 기각하지 않도록 판정 기준을 정밀화하라 (과잉 기각은 진화를 정지시킨다).\n")
 	return b.String()
+}
+
+// metaLowConfidenceReason reports why a bench-cleared proposal is still not
+// confident enough to auto-adopt (margin <= 0 on the epoch bench that ran),
+// or "" when the evidence shows a measurable improvement. Pure — the
+// deterministic half of the low-confidence routing decision.
+func metaLowConfidenceReason(inc, prop *JudgeBenchOutcome, shadow *ProducerBenchOutcome) string {
+	if inc != nil && prop != nil && prop.Rate() <= inc.Rate() {
+		return fmt.Sprintf("judge bench margin %.2f→%.2f (no measurable improvement)", inc.Rate(), prop.Rate())
+	}
+	if shadow != nil && shadow.ProposalScore <= shadow.IncumbentScore {
+		return fmt.Sprintf("shadow bench margin %.2f→%.2f (no measurable improvement)", shadow.IncumbentScore, shadow.ProposalScore)
+	}
+	return ""
 }
 
 // metaProposalResp is the producer's verdict for a meta cycle.

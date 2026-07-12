@@ -586,3 +586,27 @@ func TestMetaEvolution_QualityBenchEvidence(t *testing.T) {
 		}
 	}
 }
+
+// Low-confidence routing (ANCHOR 2606.06114): a bench that cannot show a
+// measurable improvement (margin <= 0) routes the adoption to the operator;
+// an improving bench (or a benchless cycle) does not.
+func TestMetaLowConfidenceReason(t *testing.T) {
+	worse := &JudgeBenchOutcome{Correct: 8, Total: 10}
+	same := &JudgeBenchOutcome{Correct: 8, Total: 10}
+	better := &JudgeBenchOutcome{Correct: 9, Total: 10}
+	if metaLowConfidenceReason(worse, same, nil) == "" {
+		t.Fatal("equal judge margin must be low-confidence")
+	}
+	if metaLowConfidenceReason(worse, better, nil) != "" {
+		t.Fatal("improving judge margin must be confident")
+	}
+	if metaLowConfidenceReason(nil, nil, &ProducerBenchOutcome{IncumbentScore: 0.6, ProposalScore: 0.6}) == "" {
+		t.Fatal("flat shadow margin must be low-confidence")
+	}
+	if metaLowConfidenceReason(nil, nil, &ProducerBenchOutcome{IncumbentScore: 0.5, ProposalScore: 0.7}) != "" {
+		t.Fatal("improving shadow margin must be confident")
+	}
+	if metaLowConfidenceReason(nil, nil, nil) != "" {
+		t.Fatal("benchless cycle keeps documented behavior (not routed)")
+	}
+}
