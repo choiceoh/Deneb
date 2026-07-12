@@ -22,7 +22,6 @@ import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.precomputeMarkdownAsync
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,7 +51,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment.Companion.BottomCenter
 import androidx.compose.ui.Alignment.Companion.CenterEnd
 import androidx.compose.ui.Alignment.Companion.CenterHorizontally
@@ -80,7 +78,6 @@ import deneb.composeapp.generated.resources.tool_footprint
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import nl.marc_apps.tts.TextToSpeechInstance
 import nl.marc_apps.tts.errors.TextToSpeechSynthesisInterruptedError
@@ -449,33 +446,12 @@ internal fun ChatMessageList(
                 }
             }
 
-            // Keyboard follow-scroll: when the soft keyboard opens, the floating
-            // input bar rises with it (imePadding), shrinking the list viewport from
-            // the bottom. LazyColumn pins the top item on a viewport resize, so the
-            // newest message slides under the input bar. Scroll the list by the EXACT
-            // amount the viewport shrank so the last message rides up (and back down)
-            // glued to the keyboard's own animation curve.
-            //
-            // The viewport height is the source of truth — NOT the raw IME inset.
-            // Tracking WindowInsets.ime directly double-counts against imePadding:
-            // the layout consumes the nav-bar overlap, so raw IME != the px the
-            // viewport actually lost, which left the last message a few px shy of
-            // clearing the input bar ("덜 올라옴"). viewportSize already reflects
-            // what imePadding applied, so its delta matches the layout 1:1.
-            // snapshotFlow keeps this on the effect coroutine (no per-frame
-            // recomposition); near-bottom only, so a user scrolled up to re-read
-            // isn't yanked.
-            LaunchedEffect(listState) {
-                var prevHeight = listState.layoutInfo.viewportSize.height
-                snapshotFlow { listState.layoutInfo.viewportSize.height }
-                    .collect { current ->
-                        val shrinkage = prevHeight - current
-                        prevHeight = current
-                        if (shrinkage != 0 && isNearBottom) {
-                            listState.scrollBy(shrinkage.toFloat())
-                        }
-                    }
-            }
+            // Keyboard handling moved off scrollBy: imePadding now lives on the
+            // input bar, whose measured height (bar + IME) feeds this list's
+            // bottom contentPadding. LazyColumn self-aligns the last message
+            // above the bar as the keyboard opens — no manual scrollBy needed
+            // (it couldn't clear the scroll limit / contentPadding slack and
+            // left the last message a few px shy).
 
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 LazyColumn(

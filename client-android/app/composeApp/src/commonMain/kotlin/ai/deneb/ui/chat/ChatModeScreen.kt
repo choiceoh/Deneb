@@ -196,12 +196,16 @@ internal fun ChatModeScreen(
                             // black once the answer starts rendering. Drawn over the solid
                             // background but under the content (top bar / chat / input).
                             .generatingBackdrop(active = generatingActive)
-                            .navigationBarsPadding()
-                            // No statusBarsPadding here: the conversation fills the full
-                            // height and scrolls under the transparent status bar + the
-                            // floating top overlay below (statusBarsPadding moves onto that
-                            // overlay so its controls still clear the status bar).
-                            .imePadding(),
+                            .navigationBarsPadding(),
+                        // No statusBarsPadding here: the conversation fills the full
+                        // height and scrolls under the transparent status bar + the
+                        // floating top overlay below (statusBarsPadding moves onto that
+                        // overlay so its controls still clear the status bar).
+                        // imePadding lives on the input bar (see ChatInputOverlay) so
+                        // the bar's measured height — bar + keyboard — flows into the
+                        // list's bottom contentPadding and the last message self-aligns
+                        // above it, instead of a scrollBy follow-scroll that couldn't
+                        // clear the scroll limit and left a few px shy.
                     ) {
                         Column(Modifier.fillMaxSize()) {
                             ChatMessageList(
@@ -227,7 +231,11 @@ internal fun ChatModeScreen(
                             uiState = uiState,
                             questionInputText = questionInputText,
                             onQuestionInputTextChange = { questionInputText = it },
-                            modifier = Modifier.align(BottomCenter),
+                            // imePadding here (not on the root Box): the bar rises with
+                            // the keyboard, and its measured height (bar + IME) feeds the
+                            // list's bottom contentPadding so the last message rests
+                            // exactly above the bar — no scrollBy follow-scroll.
+                            modifier = Modifier.align(BottomCenter).imePadding(),
                             onHeightChange = { bottomOverlayHeightPx = it },
                         )
 
