@@ -5,8 +5,8 @@
 # 오퍼레이터 승인(2026-07-12, memory: source-self-edit-authorization): dev
 # 트리에서만 편집, 전체 게이트 그린일 때만 랜딩·핫스왑. 이 스크립트는 그
 # 계약의 배차원이다:
-#   1. ~/.deneb/data/skill_self_correction.jsonl에서 미배차 proposed 후보
-#      (scope=code, 증거 기반 Source) 최신 1건을 고른다.
+#   1. ~/.deneb/data/self_correction_candidates.jsonl에서 미배차 후보
+#      (scope=code, 증거 기반 Source, status=accepted 우선 → proposed) 1건을 고른다.
 #   2. 프로덕션 클론의 워크트리(~/deneb-agent-worktrees/<id>)를 만들고
 #   3. Claude Code를 -p(헤드리스)로 실행 — CLAUDE.md 게이트 규약이 세션에
 #      그대로 적용되고, 프롬프트가 랜딩까지 지시한다 (체크 그린 시 pr.sh land).
@@ -93,8 +93,16 @@ for line in open(queue, errors="replace"):
         cand[rid] = rec
     if rec.get("status"):
         status[rid] = rec["status"]
-for rid, rec in sorted(cand.items(), key=lambda kv: -(kv[1].get("createdAt") or 0)):
-    if status.get(rid, rec.get("status") or "proposed") != "proposed":
+# Dispatch order: review-endorsed (accepted) candidates first — the heartbeat
+# review lane actively accepts queue candidates it cannot implement itself
+# ("코딩 에이전트 후속", observed live 2026-07-12) — then unreviewed proposed,
+# newest within each tier. rejected/superseded/applied never dispatch.
+def pick_order(kv):
+    rid, rec = kv
+    st = status.get(rid, rec.get("status") or "proposed")
+    return (0 if st == "accepted" else 1, -(rec.get("createdAt") or 0))
+for rid, rec in sorted(cand.items(), key=pick_order):
+    if status.get(rid, rec.get("status") or "proposed") not in ("proposed", "accepted"):
         continue
     if rec.get("scope") != "code":
         continue

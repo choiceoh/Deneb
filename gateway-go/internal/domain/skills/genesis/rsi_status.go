@@ -205,13 +205,17 @@ func (t *Tracker) rsiAssessL4() RSILayer {
 			scope = "?"
 		}
 		byScope[scope]++
-		if scope == "code" && normalizeSelfCorrectionStatus(c.Status) == SelfCorrectionStatusProposed {
+		// proposed = unreviewed backlog; accepted = review-endorsed, awaiting
+		// implementation — both are live dispatch supply (the heartbeat review
+		// lane accepts candidates it cannot implement itself).
+		st := normalizeSelfCorrectionStatus(c.Status)
+		if scope == "code" && (st == SelfCorrectionStatusProposed || st == SelfCorrectionStatusAccepted) {
 			if rsiSourceDispatchable(c.Source) {
 				dispatchable++
 			} else {
-				// Proposed code candidate from a source not yet in the dispatch
-				// allowlist (runtime-error, health-finding, …): real L4 supply
-				// staged for review, not a wiring gap.
+				// Code candidate from a source not yet in the dispatch
+				// allowlist (runtime-error, …): real L4 supply staged for
+				// review, not a wiring gap.
 				staged++
 			}
 		}
