@@ -7,7 +7,7 @@
 //
 // The pure parser + tree helpers live in markdown/denebUiParse.ts; this file
 // holds the React rendering (DenebUi component + AssistantText stream wrapper).
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   type Node,
   coerce,
@@ -90,6 +90,53 @@ const ICON_GLYPHS: Record<string, IconName> = {
 const TIMELINE_RE = /^\d{1,2}:\d{2}\s*—\s*.+$/;
 /** Short "키 — 내용" lead (time, sender) rendered as a bold scan point. */
 const KEY_DASH_RE = /^(.{1,14}?) — ([\s\S]*)$/;
+
+/** First numeric run (commas/decimal allowed) inside a stat value. */
+const STAT_NUM_RE = /\d[\d,]*(?:\.\d+)?/;
+
+/** One frame of the stat count-up: the numeric run scaled by an eased
+ * [progress], prefix/suffix intact, decimal width and comma grouping matching
+ * the target. progress ≥ 1 returns the ORIGINAL string so exact metrics
+ * ("12.45%", 2-decimal FX) keep their full precision (native-parity rule). */
+export function statCountUpFrame(value: string, progress: number): string {
+  if (progress >= 1) return value;
+  const m = STAT_NUM_RE.exec(value);
+  if (!m) return value;
+  const target = Number(m[0].replace(/,/g, ""));
+  if (!Number.isFinite(target)) return value;
+  const decimals = m[0].includes(".") ? m[0].length - m[0].indexOf(".") - 1 : 0;
+  const eased = 1 - Math.pow(1 - Math.max(0, progress), 3); // fast-out-slow-in
+  const v = target * eased;
+  const s = m[0].includes(",")
+    ? v.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+    : v.toFixed(decimals);
+  return value.slice(0, m.index) + s + value.slice(m.index + m[0].length);
+}
+
+// Count-up entrance for stat values (native parity): the numeric run rolls
+// 0→target once (~600ms, rAF); tabular-nums in CSS keeps digits from
+// jittering. Static wherever motion is reduced or matchMedia is absent
+// (jsdom) — the same "pin motion off in static contexts" rule as the native
+// LocalDenebUiMotion switch.
+function StatValue({ value }: { value: string }) {
+  const motion =
+    typeof window.matchMedia === "function" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const [display, setDisplay] = useState(() => (motion ? statCountUpFrame(value, 0) : value));
+  useEffect(() => {
+    if (!motion) {
+      setDisplay(value);
+      return;
+    }
+    const t0 = performance.now();
+    let raf = requestAnimationFrame(function frame(now: number) {
+      const p = Math.min(1, (now - t0) / 600);
+      setDisplay(statCountUpFrame(value, p));
+      if (p < 1) raf = requestAnimationFrame(frame);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [value, motion]);
+  return <div className="dui-stat-value">{display}</div>;
+}
 
 // Render one agent-drawn UI block. Owns form + accordion-toggle state so a
 // callback's collectFrom can gather live input values.
@@ -356,7 +403,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         const trend = pos ? `▲ ${desc.replace(/^[+▲]\s*/, "")}` : neg ? `▼ ${desc.replace(/^[-−▼]\s*/, "")}` : desc;
         return (
           <div key={key} className="dui-stat">
-            <div className="dui-stat-value">{String(n.value || "")}</div>
+            <StatValue value={String(n.value || "")} />
             <div className="dui-stat-label">{String(n.label || "")}</div>
             {desc ? <div className={"dui-stat-desc" + (pos ? " pos" : neg ? " neg" : "")}>{trend}</div> : null}
           </div>
@@ -475,7 +522,9 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
                 <line className="dui-line-grid" x1={0} y1={plotBottom} x2={W} y2={plotBottom} />
                 <line className="dui-line-grid" x1={0} y1={midY} x2={W} y2={midY} />
                 <path className="dui-line-area" d={area} />
-                <path className="dui-line-path" d={d} />
+                {/* pathLength=1 normalizes the dash units so the CSS draw-in
+                    (stroke-dashoffset 1→0) works for any path length. */}
+                <path className="dui-line-path" d={d} pathLength={1} />
                 {nums.map((v, i) => {
                   const last = i === nums.length - 1;
                   return (

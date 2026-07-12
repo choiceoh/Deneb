@@ -5,6 +5,8 @@ import ai.deneb.getBackgroundDispatcher
 import ai.deneb.ui.components.LocalShowFullScreenImage
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
+import ai.deneb.ui.denebFadeEnter
+import ai.deneb.ui.denebFadeExit
 import ai.deneb.ui.denebShrinkOut
 import ai.deneb.ui.dynamicui.FrozenSubmission
 import ai.deneb.ui.dynamicui.toSpeakableText
@@ -260,48 +262,54 @@ internal fun BotMessage(
             copied = false
         }
     }
-    Row(Modifier.padding(horizontal = 8.dp)) {
-        SmallIconButton(
-            imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
-            contentDescription = if (copied) "복사됨" else "복사",
-            onClick = {
-                clipboard.setText(AnnotatedString(message))
-                copied = true
-            },
-        )
-        if (textToSpeech != null) {
-            val componentScope = rememberCoroutineScope()
+    // Actions reveal when the answer settles: a copy/regenerate row under a
+    // half-written reply invites acting on incomplete content. History rows
+    // compose with visible=true, so only the live streaming→done transition
+    // animates.
+    AnimatedVisibility(visible = !isStreaming, enter = denebFadeEnter, exit = denebFadeExit) {
+        Row(Modifier.padding(horizontal = 8.dp)) {
             SmallIconButton(
-                iconResource = if (isSpeaking) Res.drawable.ic_stop else Res.drawable.ic_volume_up,
-                contentDescription = stringResource(Res.string.bot_message_speech_content_description),
+                imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
+                contentDescription = if (copied) "복사됨" else "복사",
                 onClick = {
-                    componentScope.launch(getBackgroundDispatcher()) {
-                        textToSpeech.stop()
-                        if (isSpeaking) {
-                            setIsSpeaking(false)
-                        } else {
-                            setIsSpeaking(true)
-                            try {
-                                textToSpeech.say(text = message.toSpeakableText())
-                            } catch (ignore: TextToSpeechSynthesisInterruptedError) {
-                                // Expected interruption - no action needed
-                            } catch (e: Exception) {
-                                // Handle TTS errors gracefully (service failure, audio issues, etc.)
-                            }
-                            setIsSpeaking(false)
-                        }
-                    }
+                    clipboard.setText(AnnotatedString(message))
+                    copied = true
                 },
             )
+            if (textToSpeech != null) {
+                val componentScope = rememberCoroutineScope()
+                SmallIconButton(
+                    iconResource = if (isSpeaking) Res.drawable.ic_stop else Res.drawable.ic_volume_up,
+                    contentDescription = stringResource(Res.string.bot_message_speech_content_description),
+                    onClick = {
+                        componentScope.launch(getBackgroundDispatcher()) {
+                            textToSpeech.stop()
+                            if (isSpeaking) {
+                                setIsSpeaking(false)
+                            } else {
+                                setIsSpeaking(true)
+                                try {
+                                    textToSpeech.say(text = message.toSpeakableText())
+                                } catch (ignore: TextToSpeechSynthesisInterruptedError) {
+                                    // Expected interruption - no action needed
+                                } catch (e: Exception) {
+                                    // Handle TTS errors gracefully (service failure, audio issues, etc.)
+                                }
+                                setIsSpeaking(false)
+                            }
+                        }
+                    },
+                )
+            }
+            if (onRegenerate != null) {
+                SmallIconButton(
+                    iconResource = Res.drawable.ic_refresh,
+                    contentDescription = stringResource(Res.string.bot_message_regenerate_content_description),
+                    onClick = onRegenerate,
+                )
+            }
+            Spacer(Modifier.weight(1f))
         }
-        if (onRegenerate != null) {
-            SmallIconButton(
-                iconResource = Res.drawable.ic_refresh,
-                contentDescription = stringResource(Res.string.bot_message_regenerate_content_description),
-                onClick = onRegenerate,
-            )
-        }
-        Spacer(Modifier.weight(1f))
     }
 }
 

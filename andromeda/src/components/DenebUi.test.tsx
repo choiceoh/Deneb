@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { parseDenebUi, splitDenebUi } from "@/markdown/denebUiParse";
-import { AssistantText, DenebUi } from "./DenebUi";
+import { AssistantText, DenebUi, statCountUpFrame } from "./DenebUi";
 
 describe("deneb-ui parsing", () => {
   it("parses an object, wraps a bare array as a column, and accepts NDJSON", () => {
@@ -291,6 +291,18 @@ describe("deneb-ui renderer parity conventions", () => {
     expect(container.querySelectorAll("circle.dui-line-halo")).toHaveLength(1);
     // Values stay honest: every point keeps its label.
     expect(container.querySelectorAll("text.dui-line-val")).toHaveLength(3);
+  });
+
+  it("stat count-up frames keep decimals/grouping and settle on the exact original", () => {
+    // Settled frame IS the original string — exact metrics keep precision.
+    expect(statCountUpFrame("12.45%", 1)).toBe("12.45%");
+    // Zero frame keeps the decimal width and the prefix/suffix.
+    expect(statCountUpFrame("12.45%", 0)).toBe("0.00%");
+    expect(statCountUpFrame("381톤", 0)).toBe("0톤");
+    // Grouped targets stay grouped mid-flight.
+    expect(statCountUpFrame("1,386", 0.9999)).toContain(",");
+    // Non-numeric values pass through untouched.
+    expect(statCountUpFrame("—", 0.5)).toBe("—");
   });
 
   it("marks alerts with a severity glyph and gates unknown severities to info", () => {
