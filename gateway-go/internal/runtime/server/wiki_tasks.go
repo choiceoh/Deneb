@@ -103,6 +103,37 @@ func (s *Server) registerNotiDigestTask(homeDir string) {
 	s.logger.Info("noti-digest task registered", "interval", wikiwork.NotiDigestInterval.String())
 }
 
+// registerSupernoteDigestTask wires the Supernote (Manta) handwritten-note
+// ingestion: poll a Drive folder the device auto-syncs to → extract the note
+// text → consolidate into the wiki. Only for the production state dir; the
+// task itself no-ops until DENEB_SUPERNOTE_DRIVE_FOLDER_ID and Drive
+// credentials are configured.
+func (s *Server) registerSupernoteDigestTask(homeDir string) {
+	if s.chatHandler == nil || s.wikiStore == nil {
+		return
+	}
+	if os.Getenv("DENEB_SUPERNOTE_DISABLE") == "1" {
+		s.logger.Info("supernote-digest disabled via DENEB_SUPERNOTE_DISABLE")
+		return
+	}
+	stateDir, ok := s.productionStateDir(homeDir)
+	if !ok {
+		return
+	}
+	s.autonomousSvc.RegisterTask(wikiwork.NewSupernoteDigestTask(
+		s.chatHandler,
+		s.wikiStore,
+		s.activity,
+		s.logger,
+		filepath.Join(stateDir, wikiwork.SupernoteStateFile),
+		os.Getenv(wikiwork.DriveFolderEnv),
+		configresolve.WorkspaceDir(),
+	))
+	s.logger.Info("supernote-digest task registered",
+		"interval", wikiwork.SupernoteInterval.String(),
+		"configured", os.Getenv(wikiwork.DriveFolderEnv) != "")
+}
+
 // registerWikiReviewTask wires post-write review and deterministic maintenance
 // only for the production state directory.
 func (s *Server) registerWikiReviewTask(homeDir string) {

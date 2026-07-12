@@ -66,6 +66,13 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		// batched. Production state dir only.
 		s.registerNotiDigestTask(homeDir)
 
+		// Supernote digest: every 6h, poll the Drive folder the Manta tablet
+		// auto-syncs handwritten-note exports into, extract the on-device-
+		// recognized text, and consolidate it into the wiki (project logs,
+		// commitments, people). No-ops until the folder + Drive credentials
+		// are configured. Production state dir only.
+		s.registerSupernoteDigestTask(homeDir)
+
 		s.registerMeetingHarvestWorkflow(homeDir)
 
 		s.registerPlaudWorkflow(homeDir)
