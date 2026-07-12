@@ -3,7 +3,7 @@ package server
 import (
 	"testing"
 
-	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 // TestRestorableTranscriptSession pins the startup-restore filter to the live

@@ -75,264 +75,384 @@ func RestructureProjectLayout(store *Store, plan []RestructureOp, apply bool) (*
 		return nil, fmt.Errorf("wiki: restructure needs a store")
 	}
 	rep := &RestructureReport{}
-
-	// ---- snapshot ---------------------------------------------------------
-	paths, err := store.ListPages("")
+	state, err := loadRestructurePlanningState(store, rep)
 	if err != nil {
-		return nil, fmt.Errorf("wiki: restructure list pages: %w", err)
-	}
-	sort.Strings(paths)
-	pages := make(map[string]*Page, len(paths))
-	exists := make(map[string]bool, len(paths))
-	for _, p := range paths {
-		p = strings.ReplaceAll(p, "\\", "/")
-		page, perr := store.ReadPage(p)
-		if perr != nil || page == nil {
-			rep.Skipped = append(rep.Skipped, fmt.Sprintf("unreadable page: %s", p))
-			continue
-		}
-		pages[p] = page
-		exists[p] = true
-	}
-
-	var actions []restructureAction
-	today := time.Now().Format("2006-01-02")
-
-	// Simulated mutations keep later decisions consistent with earlier actions.
-	simMove := func(src, dst string) {
-		exists[src] = false
-		exists[dst] = true
-		pages[dst] = pages[src]
-		delete(pages, src)
-	}
-	simDelete := func(src string) {
-		exists[src] = false
-		delete(pages, src)
+		return nil, err
 	}
 
 	// ---- phase 1: operator plan ops ---------------------------------------
-	for i, op := range plan {
-		src := normalizePagePath(strings.TrimSpace(op.Source))
-		if src == "" || !exists[src] {
-			rep.Skipped = append(rep.Skipped, fmt.Sprintf("plan[%d] %s: source missing: %s", i, op.Op, op.Source))
-			continue
-		}
-		switch op.Op {
-		case "merge":
-			dst := normalizePagePath(strings.TrimSpace(op.Target))
-			if dst == "" || !exists[dst] {
-				rep.Skipped = append(rep.Skipped, fmt.Sprintf("plan[%d] merge: target missing: %s", i, op.Target))
-				continue
-			}
-			body := mergedBodyFor(pages[dst], pages[src])
-			actions = append(actions, restructureAction{
-				kind: "merge", source: src, target: dst,
-				mergedBody: body,
-				reason:     planReason(op),
-			})
-			// Keep the simulated target body in sync so a LATER merge into the
-			// same target chains on top of this one instead of clobbering it
-			// (each merge action carries the full body MergePage will write).
-			pages[dst].Body = body
-			simDelete(src)
-		case "move":
-			dst := normalizePagePath(strings.TrimSpace(op.Target))
-			if dst == "" || exists[dst] {
-				rep.Skipped = append(rep.Skipped, fmt.Sprintf("plan[%d] move: bad/occupied target: %s", i, op.Target))
-				continue
-			}
-			actions = append(actions, restructureAction{kind: "move", source: src, target: dst, reason: planReason(op)})
-			simMove(src, dst)
-		case "delete":
-			actions = append(actions, restructureAction{kind: "delete", source: src, reason: planReason(op)})
-			simDelete(src)
-		case "set-client":
-			if !IsProjectRepPage(src) {
-				rep.Skipped = append(rep.Skipped, fmt.Sprintf("plan[%d] set-client: not a 대표페이지: %s", i, op.Source))
-				continue
-			}
-			actions = append(actions, restructureAction{
-				kind: "set-client", source: src, target: strings.TrimSpace(op.Target),
-				reason: planReason(op),
-			})
-		case "fold-log":
-			project := strings.TrimSpace(op.Target)
-			if project == "" {
-				rep.Skipped = append(rep.Skipped, fmt.Sprintf("plan[%d] fold-log: empty project", i))
-				continue
-			}
-			logPath := LogPagePath(project)
-			if !exists[logPath] {
-				actions = append(actions, restructureAction{kind: "ensure-log", target: logPath, reason: "진행 로그 생성: " + project})
-				exists[logPath] = true
-				pages[logPath] = newLogPage(project)
-			}
-			srcPage := pages[src]
-			heading := fmt.Sprintf("## %s %s", pageDateOr(srcPage, today), strings.TrimSpace(srcPage.Meta.Title))
-			actions = append(actions, restructureAction{
-				kind: "merge", source: src, target: logPath,
-				mergedBody: strings.TrimSpace(pages[logPath].Body) + "\n\n" + heading + "\n\n" + strings.TrimSpace(srcPage.Body),
-				reason:     planReason(op),
-			})
-			pages[logPath].Body = strings.TrimSpace(pages[logPath].Body) + "\n\n" + heading + "\n\n" + strings.TrimSpace(srcPage.Body)
-			simDelete(src)
-		default:
-			rep.Skipped = append(rep.Skipped, fmt.Sprintf("plan[%d]: unknown op %q", i, op.Op))
-		}
-	}
+	state.applyOperatorPlan(plan)
 
 	// ---- phase 2: mail-analysis relocation (rule-based) --------------------
-	projectNames := knownProjectNameSet(exists)
-	for _, p := range sortedKeys(pages) {
-		if !exists[p] {
-			continue
-		}
-		page := pages[p]
-		if !isMailAnalysisArtifact(p, page) {
-			continue
-		}
-		project := resolveMailProject(p, page, projectNames)
-		dst := MailAnalysisPagePath(project, strings.TrimSuffix(path.Base(p), ".md"))
-		if dst == p {
-			continue // already in place
-		}
-		if exists[dst] {
-			if samePageContent(page, pages[dst]) {
-				actions = append(actions, restructureAction{kind: "delete", source: p, reason: "동일 내용 중복 (이미 " + dst + " 존재)"})
-				simDelete(p)
-			} else {
-				rep.Skipped = append(rep.Skipped, fmt.Sprintf("mail-analysis collision (내용 상이): %s vs %s", p, dst))
-			}
-			continue
-		}
-		actions = append(actions, restructureAction{kind: "move", source: p, target: dst, reason: "메일분석 슬롯 정리"})
-		simMove(p, dst)
-	}
+	state.planMailAnalysisRelocation()
 
 	// ---- phase 3: legacy flat 대표페이지 → in-folder slot -------------------
-	for _, p := range sortedKeys(pages) {
-		if !exists[p] {
-			continue
-		}
-		name, ok := ProjectNameOf(p)
-		if !ok || len(splitProjectPath(p)) != 1 {
-			continue // not a flat project page
-		}
-		dst := RepPagePath(name)
-		if exists[dst] {
-			rep.Skipped = append(rep.Skipped, fmt.Sprintf("flat page needs merge decision (대표.md 이미 존재): %s vs %s", p, dst))
-			continue
-		}
-		actions = append(actions, restructureAction{kind: "move", source: p, target: dst, reason: "대표페이지 폴더 이관"})
-		simMove(p, dst)
-	}
+	state.planFlatRepresentativeMoves()
 
 	// ---- phase 4: project folders missing a 대표페이지 get a minimal one ------
 	// Without this, a folder-only project (all 39 production folders predate rep
 	// pages) would vanish from KnownProjects — candidates, digests, research.
 	// The dreamer/research cycles fill the skeleton afterwards.
-	folderHasRep := make(map[string]bool)
-	folderHasAny := make(map[string]bool)
-	for p, ok := range exists {
-		if !ok {
-			continue
-		}
-		name, has := ProjectNameOf(p)
-		if !has || len(splitProjectPath(p)) < 2 {
-			continue
-		}
-		folderHasAny[name] = true
-		if IsProjectRepPage(p) {
-			folderHasRep[name] = true
-		}
-	}
-	for _, name := range sortedBoolKeys(folderHasAny) {
-		if folderHasRep[name] {
-			continue
-		}
-		repPath := RepPagePath(name)
-		actions = append(actions, restructureAction{kind: "ensure-rep", target: repPath, reason: "대표페이지 없는 프로젝트 폴더: " + name})
-		exists[repPath] = true
-		pages[repPath] = newRepPage(name)
-	}
+	state.planMissingRepresentatives()
 
 	// ---- render report ------------------------------------------------------
-	for _, a := range actions {
-		switch a.kind {
-		case "merge":
-			rep.Actions = append(rep.Actions, fmt.Sprintf("merge  %s → %s (%s)", a.source, a.target, a.reason))
-		case "move":
-			rep.Actions = append(rep.Actions, fmt.Sprintf("move   %s → %s (%s)", a.source, a.target, a.reason))
-		case "delete":
-			rep.Actions = append(rep.Actions, fmt.Sprintf("delete %s (%s)", a.source, a.reason))
-		case "ensure-log", "ensure-rep":
-			rep.Actions = append(rep.Actions, fmt.Sprintf("create %s (%s)", a.target, a.reason))
-		case "set-client":
-			rep.Actions = append(rep.Actions, fmt.Sprintf("client %s ← %q (%s)", a.source, a.target, a.reason))
-		}
-	}
+	rep.Actions = renderRestructureActions(state.actions)
 	if !apply {
 		return rep, nil
 	}
 
 	// ---- execute ------------------------------------------------------------
-	for _, a := range actions {
-		var err error
-		switch a.kind {
-		case "merge":
-			_, err = store.MergePage(a.target, a.source, a.mergedBody, MergeOptions{})
-			if err == nil {
-				rep.Merged++
-			}
-		case "move":
-			err = store.MovePage(a.source, a.target)
-			if err == nil {
-				rep.Moved++
-			}
-		case "delete":
-			err = store.DeletePage(a.source)
-			if err == nil {
-				rep.Deleted++
-			}
-		case "ensure-log":
-			project, _ := ProjectNameOf(a.target)
-			err = store.UpdatePage(a.target, func(existing *Page) (*Page, error) {
-				if existing != nil {
-					return nil, nil // already there — no-op
-				}
-				return newLogPage(project), nil
-			})
-		case "ensure-rep":
-			project, _ := ProjectNameOf(a.target)
-			err = store.UpdatePage(a.target, func(existing *Page) (*Page, error) {
-				if existing != nil {
-					return nil, nil // already there — no-op
-				}
-				return newRepPage(project), nil
-			})
-		case "set-client":
-			client := normalizeClientName(a.target)
-			err = store.UpdatePage(a.source, func(existing *Page) (*Page, error) {
-				if existing == nil {
-					return nil, fmt.Errorf("대표페이지 없음: %s", a.source)
-				}
-				if existing.Meta.Client == client {
-					return nil, nil // already set — no-op keeps mtime stable
-				}
-				existing.Meta.Client = client
-				return existing, nil // deliberately no Updated re-stamp
-			})
-		}
-		if err != nil {
-			rep.Errors = append(rep.Errors, fmt.Sprintf("%s %s: %v", a.kind, a.source, err))
-		}
-	}
+	executeRestructureActions(store, state.actions, rep)
 	rep.Applied = true
 	removeEmptyDirs(store.Dir())
 	if err := store.RebuildIndex(); err != nil {
 		rep.Errors = append(rep.Errors, fmt.Sprintf("rebuild index: %v", err))
 	}
 	return rep, nil
+}
+
+// restructurePlanningState is the in-memory migration simulation shared by all
+// planning phases. Each phase mutates this snapshot so later decisions observe
+// earlier moves, merges, deletes, and skeleton creation without touching disk.
+type restructurePlanningState struct {
+	pages   map[string]*Page
+	exists  map[string]bool
+	actions []restructureAction
+	report  *RestructureReport
+	today   string
+}
+
+func loadRestructurePlanningState(store *Store, report *RestructureReport) (*restructurePlanningState, error) {
+	paths, err := store.ListPages("")
+	if err != nil {
+		return nil, fmt.Errorf("wiki: restructure list pages: %w", err)
+	}
+	sort.Strings(paths)
+	state := &restructurePlanningState{
+		pages:  make(map[string]*Page, len(paths)),
+		exists: make(map[string]bool, len(paths)),
+		report: report,
+	}
+	for _, relPath := range paths {
+		relPath = strings.ReplaceAll(relPath, "\\", "/")
+		page, readErr := store.ReadPage(relPath)
+		if readErr != nil || page == nil {
+			report.Skipped = append(report.Skipped, fmt.Sprintf("unreadable page: %s", relPath))
+			continue
+		}
+		state.pages[relPath] = page
+		state.exists[relPath] = true
+	}
+	state.today = time.Now().Format("2006-01-02")
+	return state, nil
+}
+
+func (s *restructurePlanningState) simulateMove(source, target string) {
+	s.exists[source] = false
+	s.exists[target] = true
+	s.pages[target] = s.pages[source]
+	delete(s.pages, source)
+}
+
+func (s *restructurePlanningState) simulateDelete(source string) {
+	s.exists[source] = false
+	delete(s.pages, source)
+}
+
+func (s *restructurePlanningState) applyOperatorPlan(plan []RestructureOp) {
+	for index, op := range plan {
+		s.applyOperatorPlanOp(index, op)
+	}
+}
+
+func (s *restructurePlanningState) applyOperatorPlanOp(index int, op RestructureOp) {
+	source := normalizePagePath(strings.TrimSpace(op.Source))
+	if source == "" || !s.exists[source] {
+		s.report.Skipped = append(s.report.Skipped,
+			fmt.Sprintf("plan[%d] %s: source missing: %s", index, op.Op, op.Source))
+		return
+	}
+	switch op.Op {
+	case "merge":
+		s.planOperatorMerge(index, op, source)
+	case "move":
+		s.planOperatorMove(index, op, source)
+	case "delete":
+		s.actions = append(s.actions, restructureAction{kind: "delete", source: source, reason: planReason(op)})
+		s.simulateDelete(source)
+	case "set-client":
+		s.planOperatorSetClient(index, op, source)
+	case "fold-log":
+		s.planOperatorFoldLog(index, op, source)
+	default:
+		s.report.Skipped = append(s.report.Skipped, fmt.Sprintf("plan[%d]: unknown op %q", index, op.Op))
+	}
+}
+
+func (s *restructurePlanningState) planOperatorMerge(index int, op RestructureOp, source string) {
+	target := normalizePagePath(strings.TrimSpace(op.Target))
+	if target == "" || !s.exists[target] {
+		s.report.Skipped = append(s.report.Skipped,
+			fmt.Sprintf("plan[%d] merge: target missing: %s", index, op.Target))
+		return
+	}
+	body := mergedBodyFor(s.pages[target], s.pages[source])
+	s.actions = append(s.actions, restructureAction{
+		kind: "merge", source: source, target: target,
+		mergedBody: body,
+		reason:     planReason(op),
+	})
+	// A later merge into the same target must include this earlier merge.
+	s.pages[target].Body = body
+	s.simulateDelete(source)
+}
+
+func (s *restructurePlanningState) planOperatorMove(index int, op RestructureOp, source string) {
+	target := normalizePagePath(strings.TrimSpace(op.Target))
+	if target == "" || s.exists[target] {
+		s.report.Skipped = append(s.report.Skipped,
+			fmt.Sprintf("plan[%d] move: bad/occupied target: %s", index, op.Target))
+		return
+	}
+	s.actions = append(s.actions, restructureAction{
+		kind: "move", source: source, target: target, reason: planReason(op),
+	})
+	s.simulateMove(source, target)
+}
+
+func (s *restructurePlanningState) planOperatorSetClient(index int, op RestructureOp, source string) {
+	if !IsProjectRepPage(source) {
+		s.report.Skipped = append(s.report.Skipped,
+			fmt.Sprintf("plan[%d] set-client: not a 대표페이지: %s", index, op.Source))
+		return
+	}
+	s.actions = append(s.actions, restructureAction{
+		kind: "set-client", source: source, target: strings.TrimSpace(op.Target),
+		reason: planReason(op),
+	})
+}
+
+func (s *restructurePlanningState) planOperatorFoldLog(index int, op RestructureOp, source string) {
+	project := strings.TrimSpace(op.Target)
+	if project == "" {
+		s.report.Skipped = append(s.report.Skipped, fmt.Sprintf("plan[%d] fold-log: empty project", index))
+		return
+	}
+	logPath := LogPagePath(project)
+	if !s.exists[logPath] {
+		s.actions = append(s.actions, restructureAction{
+			kind: "ensure-log", target: logPath, reason: "진행 로그 생성: " + project,
+		})
+		s.exists[logPath] = true
+		s.pages[logPath] = newLogPage(project)
+	}
+	sourcePage := s.pages[source]
+	heading := fmt.Sprintf("## %s %s", pageDateOr(sourcePage, s.today), strings.TrimSpace(sourcePage.Meta.Title))
+	mergedBody := strings.TrimSpace(s.pages[logPath].Body) + "\n\n" + heading + "\n\n" + strings.TrimSpace(sourcePage.Body)
+	s.actions = append(s.actions, restructureAction{
+		kind: "merge", source: source, target: logPath,
+		mergedBody: mergedBody,
+		reason:     planReason(op),
+	})
+	s.pages[logPath].Body = mergedBody
+	s.simulateDelete(source)
+}
+
+func (s *restructurePlanningState) planMailAnalysisRelocation() {
+	projectNames := knownProjectNameSet(s.exists)
+	for _, relPath := range sortedKeys(s.pages) {
+		s.planMailAnalysisPage(relPath, projectNames)
+	}
+}
+
+func (s *restructurePlanningState) planMailAnalysisPage(relPath string, projectNames map[string]bool) {
+	if !s.exists[relPath] {
+		return
+	}
+	page := s.pages[relPath]
+	if !isMailAnalysisArtifact(relPath, page) {
+		return
+	}
+	project := resolveMailProject(relPath, page, projectNames)
+	target := MailAnalysisPagePath(project, strings.TrimSuffix(path.Base(relPath), ".md"))
+	if target == relPath {
+		return
+	}
+	if s.exists[target] {
+		s.planMailAnalysisCollision(relPath, target, page)
+		return
+	}
+	s.actions = append(s.actions, restructureAction{
+		kind: "move", source: relPath, target: target, reason: "메일분석 슬롯 정리",
+	})
+	s.simulateMove(relPath, target)
+}
+
+func (s *restructurePlanningState) planMailAnalysisCollision(source, target string, page *Page) {
+	if samePageContent(page, s.pages[target]) {
+		s.actions = append(s.actions, restructureAction{
+			kind: "delete", source: source, reason: "동일 내용 중복 (이미 " + target + " 존재)",
+		})
+		s.simulateDelete(source)
+		return
+	}
+	s.report.Skipped = append(s.report.Skipped,
+		fmt.Sprintf("mail-analysis collision (내용 상이): %s vs %s", source, target))
+}
+
+func (s *restructurePlanningState) planFlatRepresentativeMoves() {
+	for _, relPath := range sortedKeys(s.pages) {
+		s.planFlatRepresentativeMove(relPath)
+	}
+}
+
+func (s *restructurePlanningState) planFlatRepresentativeMove(relPath string) {
+	if !s.exists[relPath] {
+		return
+	}
+	project, ok := ProjectNameOf(relPath)
+	if !ok || len(splitProjectPath(relPath)) != 1 {
+		return
+	}
+	target := RepPagePath(project)
+	if s.exists[target] {
+		s.report.Skipped = append(s.report.Skipped,
+			fmt.Sprintf("flat page needs merge decision (대표.md 이미 존재): %s vs %s", relPath, target))
+		return
+	}
+	s.actions = append(s.actions, restructureAction{
+		kind: "move", source: relPath, target: target, reason: "대표페이지 폴더 이관",
+	})
+	s.simulateMove(relPath, target)
+}
+
+func (s *restructurePlanningState) planMissingRepresentatives() {
+	folderHasAny, folderHasRep := s.projectFolderCoverage()
+	for _, project := range sortedBoolKeys(folderHasAny) {
+		if folderHasRep[project] {
+			continue
+		}
+		target := RepPagePath(project)
+		s.actions = append(s.actions, restructureAction{
+			kind: "ensure-rep", target: target, reason: "대표페이지 없는 프로젝트 폴더: " + project,
+		})
+		s.exists[target] = true
+		s.pages[target] = newRepPage(project)
+	}
+}
+
+func (s *restructurePlanningState) projectFolderCoverage() (map[string]bool, map[string]bool) {
+	folderHasAny := make(map[string]bool)
+	folderHasRep := make(map[string]bool)
+	for relPath, exists := range s.exists {
+		if !exists {
+			continue
+		}
+		project, ok := ProjectNameOf(relPath)
+		if !ok || len(splitProjectPath(relPath)) < 2 {
+			continue
+		}
+		folderHasAny[project] = true
+		if IsProjectRepPage(relPath) {
+			folderHasRep[project] = true
+		}
+	}
+	return folderHasAny, folderHasRep
+}
+
+func renderRestructureActions(actions []restructureAction) []string {
+	var rendered []string
+	for _, action := range actions {
+		switch action.kind {
+		case "merge":
+			rendered = append(rendered, fmt.Sprintf("merge  %s → %s (%s)", action.source, action.target, action.reason))
+		case "move":
+			rendered = append(rendered, fmt.Sprintf("move   %s → %s (%s)", action.source, action.target, action.reason))
+		case "delete":
+			rendered = append(rendered, fmt.Sprintf("delete %s (%s)", action.source, action.reason))
+		case "ensure-log", "ensure-rep":
+			rendered = append(rendered, fmt.Sprintf("create %s (%s)", action.target, action.reason))
+		case "set-client":
+			rendered = append(rendered, fmt.Sprintf("client %s ← %q (%s)", action.source, action.target, action.reason))
+		}
+	}
+	return rendered
+}
+
+func executeRestructureActions(store *Store, actions []restructureAction, report *RestructureReport) {
+	for _, action := range actions {
+		if err := executeRestructureAction(store, action); err != nil {
+			report.Errors = append(report.Errors,
+				fmt.Sprintf("%s %s: %v", action.kind, action.source, err))
+			continue
+		}
+		countAppliedRestructureAction(report, action.kind)
+	}
+}
+
+func executeRestructureAction(store *Store, action restructureAction) error {
+	switch action.kind {
+	case "merge":
+		_, err := store.MergePage(action.target, action.source, action.mergedBody, MergeOptions{})
+		return err
+	case "move":
+		return store.MovePage(action.source, action.target)
+	case "delete":
+		return store.DeletePage(action.source)
+	case "ensure-log":
+		return ensureRestructureLogPage(store, action.target)
+	case "ensure-rep":
+		return ensureRestructureRepPage(store, action.target)
+	case "set-client":
+		return setRestructureClient(store, action.source, action.target)
+	default:
+		return nil
+	}
+}
+
+func countAppliedRestructureAction(report *RestructureReport, kind string) {
+	switch kind {
+	case "merge":
+		report.Merged++
+	case "move":
+		report.Moved++
+	case "delete":
+		report.Deleted++
+	}
+}
+
+func ensureRestructureLogPage(store *Store, target string) error {
+	project, _ := ProjectNameOf(target)
+	return store.UpdatePage(target, func(existing *Page) (*Page, error) {
+		if existing != nil {
+			return nil, nil
+		}
+		return newLogPage(project), nil
+	})
+}
+
+func ensureRestructureRepPage(store *Store, target string) error {
+	project, _ := ProjectNameOf(target)
+	return store.UpdatePage(target, func(existing *Page) (*Page, error) {
+		if existing != nil {
+			return nil, nil
+		}
+		return newRepPage(project), nil
+	})
+}
+
+func setRestructureClient(store *Store, source, rawClient string) error {
+	client := normalizeClientName(rawClient)
+	return store.UpdatePage(source, func(existing *Page) (*Page, error) {
+		if existing == nil {
+			return nil, fmt.Errorf("대표페이지 없음: %s", source)
+		}
+		if existing.Meta.Client == client {
+			return nil, nil
+		}
+		existing.Meta.Client = client
+		return existing, nil
+	})
 }
 
 // removeEmptyDirs prunes directories the moves emptied (legacy mail-analyses/

@@ -7,8 +7,9 @@
 // Built once in server.New() via NewGatewayHub(), passed to method registration.
 // Handler packages never import this type; they receive Deps structs instead.
 //
-// Fields are private; read-only accessors are provided. Only Chat has a setter
-// (late-bound during registration phases).
+// Fields are private; read-only accessors are provided. The concrete chat
+// pipeline remains owned by the server composition root instead of being
+// duplicated in this RPC service container.
 package rpcutil
 
 import (
@@ -22,13 +23,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 // Registration phase constants. Phases must advance in order:
@@ -51,7 +51,7 @@ type HubConfig struct {
 	Sessions  *session.Manager
 	Processes *process.Manager
 
-	// Agent pipeline (Chat is late-bound via SetChat).
+	// Agent pipeline bookkeeping.
 	JobTracker *agent.JobTracker
 
 	// Scheduling.
@@ -79,8 +79,7 @@ type GatewayHub struct {
 	sessions  *session.Manager
 	processes *process.Manager
 
-	// Agent pipeline.
-	chat       *chat.Handler // nil until SetChat (late phase).
+	// Agent pipeline bookkeeping.
 	jobTracker *agent.JobTracker
 
 	// local AI hub — centralized local LLM request management.
@@ -153,9 +152,6 @@ func (h *GatewayHub) Sessions() *session.Manager { return h.sessions }
 // Processes returns the managed-process registry.
 func (h *GatewayHub) Processes() *process.Manager { return h.processes }
 
-// Chat returns the late-bound chat handler, or nil before the session phase.
-func (h *GatewayHub) Chat() *chat.Handler { return h.chat }
-
 // JobTracker returns the background agent job tracker.
 func (h *GatewayHub) JobTracker() *agent.JobTracker { return h.jobTracker }
 
@@ -209,15 +205,6 @@ func (h *GatewayHub) SetContactsStore(s *contacts.Store) { h.contactsStore = s }
 
 // SetInsights sets the insights engine (created during early registration phase).
 func (h *GatewayHub) SetInsights(e *insights.Engine) { h.insights = e }
-
-// SetChat sets the chat handler. Panics if called before PhaseSession,
-// ensuring the chat handler is actually created before being wired.
-func (h *GatewayHub) SetChat(c *chat.Handler) {
-	if h.phase < PhaseSession {
-		panic("GatewayHub.SetChat called before PhaseSession — chatHandler not yet created")
-	}
-	h.chat = c
-}
 
 // --- Broadcast ---
 
@@ -287,7 +274,6 @@ func (h *GatewayHub) Validate() error {
 	// Optional (nil-safe or late-bound):
 	//   InternalHooks — explicitly nil-safe in handlers
 	//   CronPersistLog — optional run log
-	//   Chat — late-bound via SetChat
 	//   Version — empty string is valid
 
 	if len(missing) > 0 {

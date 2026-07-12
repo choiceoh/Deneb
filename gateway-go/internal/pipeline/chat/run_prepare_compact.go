@@ -13,11 +13,11 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 // assembleMessages builds the final message list from prebuilt messages, transcript
@@ -157,169 +157,27 @@ func compactTurnMessages(ctx context.Context, params RunParams, deps runDeps, mr
 	// raw history would not fit the window. Re-prefill behaviour is unchanged
 	// (the summary still lands one turn later); only the STW is removed. See
 	// polaris.Engine.CompactInBackground and prompt-cache.md §1.5.
-	if bridge, ok := deps.transcript.(*polaris.Bridge); ok && summarizer != nil {
-		engine := bridge.Engine()
-		currentTokens := compact.EstimateMessagesTokens(messages)
-		softThreshold := int(float64(contextBudget) * compact.DefaultLLMThresholdPct)
-		ceiling := contextWindowCeiling(deps, mr.providerID, mr.model)
-		deferEligible := currentTokens > softThreshold &&
-			ceiling > contextBudget && // model window clearly exceeds the budget
-			currentTokens <= ceiling && // raw history fits the window with reserve
-			engine.HasSummaries(params.SessionKey) // past bootstrap; tail is assembled raw
-		if deferEligible {
-			engine.CompactInBackground(
-				deps.callbacks.shutdownCtx, params.SessionKey, summarizer, contextBudget,
-				deps.memory.Embedding, buildAnchorKeywords(deps.memory.Wiki), buildLearnedGuidelines(),
-			)
-			// Belt-and-suspenders: never ship an orphan tool pair at the
-			// assembly's coverage boundary (e.g. a prior chunk-boundary
-			// leftover). No-op — byte-identical, APC-stable — when already
-			// balanced; operates on this turn's working list, not the store.
-			messages = compact.BalanceToolBlocks(messages)
-			polarisCancel()
-			logger.Info("polaris: deferred compaction to background (turn runs on raw context)",
-				"session", params.SessionKey, "tokens", currentTokens,
-				"budget", contextBudget, "ceiling", ceiling)
-			return messages
-		}
+	if deferredMessages, deferred := deferCompactionToBackground(
+		params, deps, mr, messages, summarizer, contextBudget, logger,
+	); deferred {
+		polarisCancel()
+		return deferredMessages
 	}
 
 	// STW: pre-check if LLM compaction will likely fire.
 	// Signal the user before the (potentially slow) summarization starts.
-	var compactTypingDone chan struct{}
-	var compactStart time.Time
-	if hooks != nil && summarizer != nil {
-		currentTokens := compact.EstimateMessagesTokens(messages)
-		threshold := int(float64(contextBudget) * compact.DefaultLLMThresholdPct)
-		if currentTokens > threshold {
-			compactStart = time.Now()
-			logger.Info("pipeline: STW compaction starting",
-				"tokens", currentTokens, "budget", contextBudget,
-				"ratio", fmt.Sprintf("%.1f%%", float64(currentTokens)/float64(contextBudget)*100))
-			if hooks.typingFn != nil {
-				compactTypingDone = make(chan struct{})
-				typingFn := hooks.typingFn
-				typingLogger := logger
-				go func() {
-					defer func() {
-						if r := recover(); r != nil {
-							typingLogger.Error("panic in compaction typing loop", "panic", r)
-						}
-					}()
-					ticker := time.NewTicker(5 * time.Second)
-					defer ticker.Stop()
-					for {
-						select {
-						case <-compactTypingDone:
-							return
-						case <-ctx.Done():
-							return
-						case <-ticker.C:
-							typingFn()
-						}
-					}
-				}()
-			}
-		}
-	}
+	compactTypingDone, compactStart := startCompactionStatus(
+		ctx, messages, contextBudget, summarizer, hooks, logger,
+	)
 
-	var polarisResult compact.Result
-	if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
-		engine := bridge.Engine()
-		if deps.memory.Embedding != nil {
-			engine.SetEmbedder(deps.memory.Embedding)
-		}
-		if deps.briefcaseMode {
-			engine.SetAnchorKeywords(nil)
-			engine.SetLearnedGuidelines(nil)
-		} else {
-			engine.SetAnchorKeywords(buildAnchorKeywords(deps.memory.Wiki))
-			engine.SetLearnedGuidelines(buildLearnedGuidelines())
-		}
-		messages, polarisResult = engine.CompactAndPersist(polarisCtx, params.SessionKey, messages, summarizer, contextBudget)
-
-		// Proactive condensation: when a new leaf summary was persisted,
-		// trigger background condensation to merge leaves into higher-level nodes.
-		// Runs in its own goroutine with a bounded timeout so it cannot
-		// outlive sensible lifetime and cannot take down the process on panic.
-		if polarisResult.LLMCompacted && summarizer != nil {
-			condSummarizer := summarizer // capture for goroutine
-			sessionKey := params.SessionKey
-			condLogger := logger
-			// Decouple from the request ctx so Condense outlives the agent turn,
-			// but derive from the server shutdown ctx so a graceful shutdown
-			// cancels it. Falls back to Background if shutdownCtx isn't wired
-			// yet (e.g. in tests) — still bounded by the timeout below.
-			parentCtx := deps.callbacks.shutdownCtx
-			if parentCtx == nil {
-				parentCtx = context.Background()
-			}
-			go func() { //nolint:gosec // G118 — decoupled from request ctx on purpose; bounded timeout below
-				defer func() {
-					if r := recover(); r != nil {
-						condLogger.Error("panic in background condense", "session", sessionKey, "panic", r)
-					}
-				}()
-				// Bounded by a 5-minute timeout so it cannot leak forever.
-				condCtx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
-				defer cancel()
-				if err := engine.Condense(condCtx, sessionKey, condSummarizer); err != nil {
-					condLogger.Warn("background condense failed", "session", sessionKey, "error", err)
-				}
-			}()
-		}
-	} else {
-		cfg := compact.NewConfig(contextBudget)
-		cfg.Embedder = deps.memory.Embedding
-		// Incremental recompaction: feed the prior summary so the LLM tier
-		// UPDATES it (In Progress → Done) instead of re-summarizing from
-		// scratch, then store the new summary for next time. In-memory on
-		// the session; a /reset (new Session) or restart clears it.
-		var compSession *session.Session
-		if deps.sessions != nil {
-			compSession = deps.sessions.Get(params.SessionKey)
-		}
-		if compSession != nil {
-			cfg.PreviousSummary = compSession.PreviousCompactionSummary
-		}
-		messages, polarisResult = compact.Compact(polarisCtx, cfg, messages, summarizer, logger)
-		if compSession != nil && polarisResult.Summary != "" {
-			compSession.PreviousCompactionSummary = polarisResult.Summary
-		}
-	}
+	messages, polarisResult := runPolarisCompaction(
+		polarisCtx, params, deps, messages, summarizer, contextBudget, logger,
+	)
 	polarisCancel()
 
-	if compactTypingDone != nil {
-		close(compactTypingDone)
-	}
-	if !compactStart.IsZero() {
-		logger.Info("pipeline: STW compaction done",
-			"durationMs", time.Since(compactStart).Milliseconds())
-	}
+	finishCompactionStatus(compactTypingDone, compactStart, logger)
 
-	if polarisResult.MicroPruned > 0 || polarisResult.LLMCompacted || polarisResult.EmbeddingCompacted || polarisResult.RecencyCompacted || polarisResult.EmergencyEvicted > 0 {
-		var tier string
-		switch {
-		case polarisResult.EmergencyEvicted > 0:
-			tier = "emergency"
-		case polarisResult.LLMCompacted:
-			tier = "tier1-llm"
-		case polarisResult.EmbeddingCompacted:
-			tier = "tier2-embedding-mmr"
-		case polarisResult.RecencyCompacted:
-			tier = "tier3-recency"
-		default:
-			tier = "micro"
-		}
-		attrs := []any{"tokensBefore", polarisResult.TokensBefore, "tokensAfter", polarisResult.TokensAfter}
-		if polarisResult.MicroPruned > 0 {
-			attrs = append(attrs, "pruned", polarisResult.MicroPruned)
-		}
-		if polarisResult.EmergencyEvicted > 0 {
-			attrs = append(attrs, "evicted", polarisResult.EmergencyEvicted)
-		}
-		logger.Info("polaris "+tier+" compaction", attrs...)
-	}
+	logCompactionResult(logger, polarisResult)
 
 	// P4: mark the session so the next turn's system prompt includes
 	// a one-time reminder that summaries are present in history.
@@ -334,22 +192,284 @@ func compactTurnMessages(ctx context.Context, params RunParams, deps runDeps, mr
 	// know why a turn later fails, rather than blaming only the LLM.
 	// Skip when budget is unset/zero (e.g. boot session, subagent) —
 	// the inequality is trivially true and the warning becomes noise.
-	if contextBudget > 0 && polarisResult.TokensBefore > contextBudget && polarisResult.TokensAfter > contextBudget {
-		logger.Warn("polaris: compaction failed to reduce below budget",
-			"session", params.SessionKey,
-			"tokensBefore", polarisResult.TokensBefore,
-			"tokensAfter", polarisResult.TokensAfter,
-			"budget", contextBudget)
-		if deps.broadcast != nil {
-			deps.broadcast("chat.compaction_degraded", ChatCompactionDegradedEvent{
-				Session:      params.SessionKey,
-				TokensBefore: polarisResult.TokensBefore,
-				TokensAfter:  polarisResult.TokensAfter,
-				Budget:       contextBudget,
-			})
+	reportCompactionDegraded(params, deps, contextBudget, polarisResult, logger)
+	return messages
+}
+
+func deferCompactionToBackground(
+	params RunParams,
+	deps runDeps,
+	mr modelResolution,
+	messages []llm.Message,
+	summarizer compact.Summarizer,
+	contextBudget int,
+	logger *slog.Logger,
+) ([]llm.Message, bool) {
+	bridge, ok := deps.transcript.(*polaris.Bridge)
+	if !ok || summarizer == nil {
+		return nil, false
+	}
+	engine := bridge.Engine()
+	currentTokens := compact.EstimateMessagesTokens(messages)
+	softThreshold := int(float64(contextBudget) * compact.DefaultLLMThresholdPct)
+	ceiling := contextWindowCeiling(deps, mr.providerID, mr.model)
+	eligible := currentTokens > softThreshold &&
+		ceiling > contextBudget &&
+		currentTokens <= ceiling &&
+		engine.HasSummaries(params.SessionKey)
+	if !eligible {
+		return nil, false
+	}
+
+	engine.CompactInBackground(
+		deps.callbacks.shutdownCtx,
+		params.SessionKey,
+		summarizer,
+		contextBudget,
+		deps.memory.Embedding,
+		buildAnchorKeywords(deps.memory.Wiki),
+		buildLearnedGuidelines(),
+	)
+	// Never ship an orphan tool pair at the assembly coverage boundary. This
+	// operates on the current turn only and is byte-identical when balanced.
+	balanced := compact.BalanceToolBlocks(messages)
+	logger.Info("polaris: deferred compaction to background (turn runs on raw context)",
+		"session", params.SessionKey,
+		"tokens", currentTokens,
+		"budget", contextBudget,
+		"ceiling", ceiling)
+	return balanced, true
+}
+
+func startCompactionStatus(
+	ctx context.Context,
+	messages []llm.Message,
+	contextBudget int,
+	summarizer compact.Summarizer,
+	hooks *compactionHooks,
+	logger *slog.Logger,
+) (chan struct{}, time.Time) {
+	if hooks == nil || summarizer == nil {
+		return nil, time.Time{}
+	}
+	currentTokens := compact.EstimateMessagesTokens(messages)
+	threshold := int(float64(contextBudget) * compact.DefaultLLMThresholdPct)
+	if currentTokens <= threshold {
+		return nil, time.Time{}
+	}
+	started := time.Now()
+	logger.Info("pipeline: STW compaction starting",
+		"tokens", currentTokens,
+		"budget", contextBudget,
+		"ratio", fmt.Sprintf("%.1f%%", float64(currentTokens)/float64(contextBudget)*100))
+	if hooks.typingFn == nil {
+		return nil, started
+	}
+	done := make(chan struct{})
+	go runCompactionTypingLoop(ctx, done, hooks.typingFn, logger)
+	return done, started
+}
+
+func runCompactionTypingLoop(
+	ctx context.Context,
+	done <-chan struct{},
+	typingFn func(),
+	logger *slog.Logger,
+) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			logger.Error("panic in compaction typing loop", "panic", recovered)
+		}
+	}()
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			typingFn()
 		}
 	}
-	return messages
+}
+
+func finishCompactionStatus(done chan struct{}, started time.Time, logger *slog.Logger) {
+	if done != nil {
+		close(done)
+	}
+	if !started.IsZero() {
+		logger.Info("pipeline: STW compaction done", "durationMs", time.Since(started).Milliseconds())
+	}
+}
+
+func runPolarisCompaction(
+	ctx context.Context,
+	params RunParams,
+	deps runDeps,
+	messages []llm.Message,
+	summarizer compact.Summarizer,
+	contextBudget int,
+	logger *slog.Logger,
+) ([]llm.Message, compact.Result) {
+	if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
+		return compactWithPolarisBridge(
+			ctx, bridge.Engine(), params, deps, messages, summarizer, contextBudget, logger,
+		)
+	}
+	return compactWithoutPolarisBridge(ctx, params, deps, messages, summarizer, contextBudget, logger)
+}
+
+func compactWithPolarisBridge(
+	ctx context.Context,
+	engine *polaris.Engine,
+	params RunParams,
+	deps runDeps,
+	messages []llm.Message,
+	summarizer compact.Summarizer,
+	contextBudget int,
+	logger *slog.Logger,
+) ([]llm.Message, compact.Result) {
+	configurePolarisEngine(engine, deps)
+	compacted, result := engine.CompactAndPersist(
+		ctx, params.SessionKey, messages, summarizer, contextBudget,
+	)
+	if result.LLMCompacted && summarizer != nil {
+		schedulePolarisCondensation(engine, params.SessionKey, deps.callbacks.shutdownCtx, summarizer, logger)
+	}
+	return compacted, result
+}
+
+func configurePolarisEngine(engine *polaris.Engine, deps runDeps) {
+	if deps.memory.Embedding != nil {
+		engine.SetEmbedder(deps.memory.Embedding)
+	}
+	if deps.briefcaseMode {
+		engine.SetAnchorKeywords(nil)
+		engine.SetLearnedGuidelines(nil)
+		return
+	}
+	engine.SetAnchorKeywords(buildAnchorKeywords(deps.memory.Wiki))
+	engine.SetLearnedGuidelines(buildLearnedGuidelines())
+}
+
+func schedulePolarisCondensation(
+	engine *polaris.Engine,
+	sessionKey string,
+	parentCtx context.Context,
+	summarizer compact.Summarizer,
+	logger *slog.Logger,
+) {
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	go condensePolarisInBackground(engine, sessionKey, parentCtx, summarizer, logger) //nolint:gosec // G118 -- shutdown-derived and timeout-bounded
+}
+
+func condensePolarisInBackground(
+	engine *polaris.Engine,
+	sessionKey string,
+	parentCtx context.Context,
+	summarizer compact.Summarizer,
+	logger *slog.Logger,
+) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			logger.Error("panic in background condense", "session", sessionKey, "panic", recovered)
+		}
+	}()
+	ctx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
+	defer cancel()
+	if err := engine.Condense(ctx, sessionKey, summarizer); err != nil {
+		logger.Warn("background condense failed", "session", sessionKey, "error", err)
+	}
+}
+
+func compactWithoutPolarisBridge(
+	ctx context.Context,
+	params RunParams,
+	deps runDeps,
+	messages []llm.Message,
+	summarizer compact.Summarizer,
+	contextBudget int,
+	logger *slog.Logger,
+) ([]llm.Message, compact.Result) {
+	cfg := compact.NewConfig(contextBudget)
+	cfg.Embedder = deps.memory.Embedding
+	compSession := compactionSession(deps, params.SessionKey)
+	if compSession != nil {
+		cfg.PreviousSummary = compSession.PreviousCompactionSummary
+	}
+	compacted, result := compact.Compact(ctx, cfg, messages, summarizer, logger)
+	if compSession != nil && result.Summary != "" {
+		compSession.PreviousCompactionSummary = result.Summary
+	}
+	return compacted, result
+}
+
+func compactionSession(deps runDeps, sessionKey string) *session.Session {
+	if deps.sessions == nil {
+		return nil
+	}
+	return deps.sessions.Get(sessionKey)
+}
+
+func logCompactionResult(logger *slog.Logger, result compact.Result) {
+	tier, ok := compactionTier(result)
+	if !ok {
+		return
+	}
+	attrs := []any{"tokensBefore", result.TokensBefore, "tokensAfter", result.TokensAfter}
+	if result.MicroPruned > 0 {
+		attrs = append(attrs, "pruned", result.MicroPruned)
+	}
+	if result.EmergencyEvicted > 0 {
+		attrs = append(attrs, "evicted", result.EmergencyEvicted)
+	}
+	logger.Info("polaris "+tier+" compaction", attrs...)
+}
+
+func compactionTier(result compact.Result) (string, bool) {
+	switch {
+	case result.EmergencyEvicted > 0:
+		return "emergency", true
+	case result.LLMCompacted:
+		return "tier1-llm", true
+	case result.EmbeddingCompacted:
+		return "tier2-embedding-mmr", true
+	case result.RecencyCompacted:
+		return "tier3-recency", true
+	case result.MicroPruned > 0:
+		return "micro", true
+	default:
+		return "", false
+	}
+}
+
+func reportCompactionDegraded(
+	params RunParams,
+	deps runDeps,
+	contextBudget int,
+	result compact.Result,
+	logger *slog.Logger,
+) {
+	if contextBudget <= 0 || result.TokensBefore <= contextBudget || result.TokensAfter <= contextBudget {
+		return
+	}
+	logger.Warn("polaris: compaction failed to reduce below budget",
+		"session", params.SessionKey,
+		"tokensBefore", result.TokensBefore,
+		"tokensAfter", result.TokensAfter,
+		"budget", contextBudget)
+	if deps.broadcast != nil {
+		deps.broadcast("chat.compaction_degraded", ChatCompactionDegradedEvent{
+			Session:      params.SessionKey,
+			TokensBefore: result.TokensBefore,
+			TokensAfter:  result.TokensAfter,
+			Budget:       contextBudget,
+		})
+	}
 }
 
 // finalizePrompt applies budget optimization and tier-1 wiki injection to the

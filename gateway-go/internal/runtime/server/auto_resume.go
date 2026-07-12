@@ -3,7 +3,8 @@ package server
 // auto_resume: resumes agent runs that were interrupted by a gateway crash
 // or restart. Driven by persistent "run markers" under <denebDir>/run_markers/.
 //
-// Marker lifecycle (see internal/runtime/session/run_marker.go):
+// Marker lifecycle (model: internal/domain/session, persistence:
+// internal/runtime/sessionstore):
 //   - PhaseStart  → Write(marker). initRunMarkerLifecycle wires this on the
 //                   session EventBus.
 //   - Terminal    → Delete(marker). Same listener.
@@ -35,9 +36,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/sessionstore"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
@@ -76,12 +78,12 @@ const (
 
 // runMarkerStore returns the server's marker store, lazily constructing
 // it on first use. The store lives under <denebDir>/run_markers/.
-func (s *Server) runMarkerStore() *session.RunMarkerStore {
+func (s *Server) runMarkerStore() *sessionstore.RunMarkerStore {
 	s.resumeMu.Lock()
 	defer s.resumeMu.Unlock()
 	if s.markerStore == nil {
 		base := filepath.Join(s.denebDir, "run_markers")
-		s.markerStore = session.NewRunMarkerStore(base)
+		s.markerStore = sessionstore.NewRunMarkerStore(base)
 	}
 	return s.markerStore
 }

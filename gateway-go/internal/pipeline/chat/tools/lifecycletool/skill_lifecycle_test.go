@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 )
 
 type fakeSkillLifecycleBackend struct {
@@ -21,54 +23,63 @@ type fakeSkillLifecycleBackend struct {
 	shadowReplay   HeartbeatShadowReplayRequest
 }
 
-func (f *fakeSkillLifecycleBackend) ProposeSkillEvolution(_ context.Context, req SkillEvolutionProposalRequest) (any, error) {
+func (f *fakeSkillLifecycleBackend) ProposeSkillEvolution(_ context.Context, req SkillEvolutionProposalRequest) (SkillEvolutionProposalResult, error) {
 	f.proposal = req
-	return map[string]any{"ok": true, "route": req.Route, "executed": req.Execute}, nil
+	return SkillEvolutionProposalResult{OK: true, Candidate: req.Candidate, Route: req.Route, Executed: req.Execute}, nil
 }
 
-func (f *fakeSkillLifecycleBackend) RunSkillGenesis(_ context.Context, req SkillGenesisRequest) (any, error) {
+func (f *fakeSkillLifecycleBackend) RunSkillGenesis(_ context.Context, req SkillGenesisRequest) (SkillGenesisResult, error) {
 	f.genesis = req
-	return map[string]any{"ok": true, "source": req.SessionKey}, nil
+	return SkillGenesisResult{OK: true, Source: req.SessionKey}, nil
 }
 
-func (f *fakeSkillLifecycleBackend) RunSkillEvolution(_ context.Context, req SkillEvolutionRequest) (any, error) {
+func (f *fakeSkillLifecycleBackend) RunSkillEvolution(_ context.Context, req SkillEvolutionRequest) (SkillEvolutionResult, error) {
 	f.evolve = req
-	return map[string]any{"ok": true, "skillName": req.SkillName}, nil
+	return SkillEvolutionResult{OK: true, Result: &genesis.EvolveResult{SkillName: req.SkillName}}, nil
 }
 
-func (f *fakeSkillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req SkillLifecycleStatusRequest) (any, error) {
+func (f *fakeSkillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req SkillLifecycleStatusRequest) (SkillLifecycleStatusResult, error) {
 	f.status = req
-	return map[string]any{"ok": true, "limit": req.Limit, "skillName": req.SkillName}, nil
+	return SkillLifecycleStatusResult{
+		Overview: SkillLifecycleOverview{Unavailable: &SkillLifecycleUnavailableOverview{
+			State: "unavailable", Scope: "skill", SkillName: req.SkillName, NextActions: []string{},
+		}},
+		OK:        true,
+		SkillName: req.SkillName,
+		Limit:     fakeLifecycleValue(req.Limit),
+	}, nil
 }
 
-func (f *fakeSkillLifecycleBackend) RunSkillCuratorAction(_ context.Context, req SkillCuratorActionRequest) (any, error) {
+func (f *fakeSkillLifecycleBackend) RunSkillCuratorAction(_ context.Context, req SkillCuratorActionRequest) (SkillCuratorActionResult, error) {
 	f.curator = req
-	return map[string]any{"ok": true, "action": req.Action, "skillName": req.SkillName}, nil
+	return SkillCuratorActionResult{OK: true, Action: fakeLifecycleValue(req.Action), SkillName: fakeLifecycleValue(req.SkillName)}, nil
 }
 
-func (f *fakeSkillLifecycleBackend) RecordSkillValidationCase(_ context.Context, req SkillValidationCaseRequest) (any, error) {
+func (f *fakeSkillLifecycleBackend) RecordSkillValidationCase(_ context.Context, req SkillValidationCaseRequest) (SkillValidationCaseResult, error) {
 	f.validationCase = req
-	return map[string]any{"ok": true, "skillName": req.SkillName, "id": req.ID}, nil
+	return SkillValidationCaseResult{OK: true, SkillName: fakeLifecycleValue(req.SkillName), ID: fakeLifecycleValue(req.ID)}, nil
 }
 
-func (f *fakeSkillLifecycleBackend) RecordSkillValidationCaseFromSession(_ context.Context, req SkillValidationCaseFromSessionRequest) (any, error) {
+func (f *fakeSkillLifecycleBackend) RecordSkillValidationCaseFromSession(_ context.Context, req SkillValidationCaseFromSessionRequest) (SkillValidationCaseFromSessionResult, error) {
 	f.fromSession = req
-	return map[string]any{"ok": true, "skillName": req.SkillName, "id": req.ID, "sessionKey": req.SessionKey}, nil
+	return SkillValidationCaseFromSessionResult{
+		OK: true, SkillName: fakeLifecycleValue(req.SkillName), ID: fakeLifecycleValue(req.ID), SessionKey: fakeLifecycleValue(req.SessionKey),
+	}, nil
 }
 
-func (f *fakeSkillLifecycleBackend) BackfillSkillValidationCases(_ context.Context, req SkillValidationBackfillRequest) (any, error) {
+func (f *fakeSkillLifecycleBackend) BackfillSkillValidationCases(_ context.Context, req SkillValidationBackfillRequest) (SkillValidationBackfillResult, error) {
 	f.backfill = req
-	return map[string]any{"ok": true, "skillName": req.SkillName, "limit": req.Limit, "sessionKey": req.SessionKey}, nil
+	return SkillValidationBackfillResult{OK: true, SkillName: fakeLifecycleValue(req.SkillName), Limit: fakeLifecycleValue(req.Limit)}, nil
 }
 
-func (f *fakeSkillLifecycleBackend) RecordSelfCorrectionCandidate(_ context.Context, req SkillSelfCorrectionCandidateRequest) (any, error) {
+func (f *fakeSkillLifecycleBackend) RecordSelfCorrectionCandidate(_ context.Context, req SkillSelfCorrectionCandidateRequest) (SkillSelfCorrectionCandidateResult, error) {
 	f.selfCorrection = req
-	return map[string]any{"ok": true, "title": req.Title, "scope": req.Scope}, nil
+	return SkillSelfCorrectionCandidateResult{OK: true, Candidate: &genesis.SelfCorrectionCandidateRecord{Title: req.Title, Scope: req.Scope}}, nil
 }
 
-func (f *fakeSkillLifecycleBackend) ReviewSelfCorrectionCandidate(_ context.Context, req SkillSelfCorrectionReviewRequest) (any, error) {
+func (f *fakeSkillLifecycleBackend) ReviewSelfCorrectionCandidate(_ context.Context, req SkillSelfCorrectionReviewRequest) (SkillSelfCorrectionReviewResult, error) {
 	f.selfReview = req
-	return map[string]any{"ok": true, "id": req.ID, "status": req.Status}, nil
+	return SkillSelfCorrectionReviewResult{OK: true, Review: &genesis.SelfCorrectionCandidateRecord{ID: req.ID, Status: req.Status}}, nil
 }
 
 func TestToolSkillLifecyclePropose(t *testing.T) {
@@ -336,7 +347,11 @@ func mustJSONSkillLifecycle(t *testing.T, v any) json.RawMessage {
 	return data
 }
 
-func (f *fakeSkillLifecycleBackend) HeartbeatShadowReplay(_ context.Context, req HeartbeatShadowReplayRequest) (any, error) {
+func (f *fakeSkillLifecycleBackend) HeartbeatShadowReplay(_ context.Context, req HeartbeatShadowReplayRequest) (HeartbeatShadowReplayResult, error) {
 	f.shadowReplay = req
-	return map[string]any{"ok": true, "dryRun": true}, nil
+	return HeartbeatShadowReplayResult{OK: true, DryRun: true}, nil
+}
+
+func fakeLifecycleValue[T any](value T) *T {
+	return &value
 }

@@ -112,6 +112,32 @@ class ModelPoolTests(unittest.TestCase):
         self.assertEqual(bge._pool.qsize(), 0)
         self.assertEqual(bge._pool_size, 0)
 
+    def test_load_model_failure_rolls_back_pool_and_executor_atomically(self) -> None:
+        previous_context = object()
+        previous_executor = object()
+        bge._pool.put(previous_context)
+        bge._pool_size = 1
+        bge._executor = previous_executor
+
+        loaded_context = object()
+        llama = mock.Mock(
+            side_effect=[loaded_context, RuntimeError("second context failed")]
+        )
+        module = types.ModuleType("llama_cpp")
+        module.Llama = llama
+
+        with mock.patch.dict(sys.modules, {"llama_cpp": module}):
+            with mock.patch.object(bge, "_silence_llama_logs"):
+                with mock.patch.object(bge.os.path, "exists", return_value=True):
+                    with self.assertRaisesRegex(RuntimeError, "second context failed"):
+                        bge.load_model(n_gpu_layers=23, pool_size=3)
+
+        self.assertEqual(llama.call_count, 2)
+        self.assertEqual(bge._pool_size, 1)
+        self.assertIs(bge._executor, previous_executor)
+        self.assertEqual(bge._pool.qsize(), 1)
+        self.assertIs(bge._pool.get(), previous_context)
+
     def test_load_model_builds_independent_contexts_and_matching_executor(self) -> None:
         contexts = [object(), object(), object()]
         llama = mock.Mock(side_effect=contexts)

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 // RunOutcome represents the result of a cron job execution.

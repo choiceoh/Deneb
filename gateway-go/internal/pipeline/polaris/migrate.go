@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 // MigrateSession backfills the LCM store from the legacy JSONL transcript.
@@ -12,7 +12,7 @@ import (
 // only the delta (new messages since last migration) is imported.
 //
 // Called lazily on first session access via Bridge, not eagerly at startup.
-func MigrateSession(legacy toolctx.TranscriptStore, store *Store, sessionKey string, logger *slog.Logger) error {
+func MigrateSession(legacy chatport.TranscriptStore, store *Store, sessionKey string, logger *slog.Logger) error {
 	polarisCount, err := store.MessageCount(sessionKey)
 	if err != nil {
 		return fmt.Errorf("polaris migrate: count: %w", err)

@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 // parseSSEEvents splits an SSE body into (event, dataJSON) pairs, skipping
@@ -114,10 +114,10 @@ func TestWriteChatStreamSSE_ToolAndThinkingFrames(t *testing.T) {
 	run := func(_ context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
 		sinks.Thinking("발신인 이력을 대조")
 		sinks.Thinking("")
-		sinks.Tool(chat.ToolStreamEvent{State: "started", Tool: "gmail", ToolUseID: "tu_1", Detail: "아르고에너지"})
-		sinks.Tool(chat.ToolStreamEvent{State: "completed", Tool: "gmail", ToolUseID: "tu_1", IsError: true})
+		sinks.Tool(chatport.ToolStreamEvent{State: "started", Tool: "gmail", ToolUseID: "tu_1", Detail: "아르고에너지"})
+		sinks.Tool(chatport.ToolStreamEvent{State: "completed", Tool: "gmail", ToolUseID: "tu_1", IsError: true})
 		sinks.Delta("메일 3통이 도착했습니다")
-		sinks.Tool(chat.ToolStreamEvent{}) // empty tool name must be dropped, not framed
+		sinks.Tool(chatport.ToolStreamEvent{}) // empty tool name must be dropped, not framed
 		return &chatStreamResult{Text: "메일 3통이 도착했습니다", Model: "step3p7"}, nil
 	}
 	writeChatStreamSSE(context.Background(), rec, "client:test", run, nil)

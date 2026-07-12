@@ -3,7 +3,7 @@ package server
 import (
 	"strings"
 
-	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 const nativeClientSessionPrefix = "client:"

@@ -50,6 +50,7 @@ import (
 	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 	minifiles "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/files"
 	miniknowledge "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/knowledge"
+	minimodule "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/module"
 	minischedule "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/schedule"
 	handlerinsights "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/insights"
 	handlermail "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail"
@@ -249,6 +250,36 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 	s.marketCache = market.NewCache()
 	marketCache := s.marketCache
 
+	// Independently owned native-client capabilities. Build their combined
+	// method set before the registration table so ownership collisions fail
+	// through this function's normal startup error boundary.
+	miniappMethods, err := minimodule.Methods(minimodule.Dependencies{
+		Sync:      minimodule.SyncDeps{Store: s.nativeSyncStore},
+		Dashboard: s.dashboardDeps(),
+		Sessions: minimodule.SessionsDeps{
+			Manager: hub.Sessions(),
+			Transcripts: func() (minimodule.TranscriptLoader, error) {
+				if s.toolDeps == nil || s.toolDeps.Sessions.Transcript == nil {
+					return nil, errTranscriptUnavailable
+				}
+				return s.toolDeps.Sessions.Transcript, nil
+			},
+		},
+		Contacts: minimodule.ContactsDeps{
+			Store: func() (*contacts.Store, error) {
+				cs := hub.ContactsStore()
+				if cs == nil {
+					return nil, errors.New("contacts store not configured")
+				}
+				return cs, nil
+			},
+		},
+		Market: minimodule.MarketDeps{Fetch: marketCache.Summary},
+	})
+	if err != nil {
+		return fmt.Errorf("server init: miniapp module: %w", err)
+	}
+
 	// Table-driven domain registration: one slice, one loop.
 	// Deps assembled inline from hub accessors — no adapter layer.
 	domains := []map[string]rpcutil.HandlerFunc{
@@ -403,9 +434,7 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 			},
 		}),
-		handlerminiapp.SyncMethods(handlerminiapp.SyncDeps{
-			Store: s.nativeSyncStore,
-		}),
+		miniappMethods,
 		// Native-client FCM device-token registration. Always available (tokens
 		// accumulate even before the FCM sender is configured); the proactive
 		// fallback that consumes them is wired separately via s.pushNotifier.
@@ -439,7 +468,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				return configresolve.LoadProviderConfigs(s.logger)
 			},
 		}).Methods(),
-
 		// Native local file browser (miniapp.files.{list,search,share,upload}):
 		// list/search/share/upload over the on-box file store (filestore). share
 		// mints a signed download link (fileshare); a nil store (open error)
@@ -534,14 +562,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			Local:     resolveLocalCalendar(s.logger),
 			Proposals: resolveCalendarProposals(s.logger),
 		}),
-
-		// Mini App part-status dashboard (miniapp.dashboard.lanes). Groups work
-		// items (calendar + work feed in this 1차 scope) into the operator's
-		// managed parts via the rule-based classifier. The classifier roster is
-		// loaded from {stateDir}/classification_rules.json (operator data, never
-		// in the repo); each source is nil-tolerant so a down Google calendar or
-		// absent feed degrades that lane only, not the whole dashboard.
-		handlerminiapp.DashboardMethods(s.dashboardDeps()),
 
 		// Mini App project digests (miniapp.project.digests). Each active
 		// project's latest-progress digest lives ON its 대표페이지 (프로젝트/<name>.md)
@@ -693,21 +713,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			ApplyNow:   prompt.Cache.ClearAllTopicSnapshots,
 		}),
 
-		// Mini App sessions recent + transcript (miniapp.sessions.*).
-		// Transcripts is a lazy factory that reaches into s.toolDeps
-		// once chat init runs (between early and late phase) so it is
-		// safe to register here; calls before chat init resolve to
-		// UNAVAILABLE which is fine for boot-time noise.
-		handlerminiapp.SessionsMethods(handlerminiapp.SessionsDeps{
-			Manager: hub.Sessions(),
-			Transcripts: func() (handlerminiapp.TranscriptLoader, error) {
-				if s.toolDeps == nil || s.toolDeps.Sessions.Transcript == nil {
-					return nil, errTranscriptUnavailable
-				}
-				return s.toolDeps.Sessions.Transcript, nil
-			},
-		}),
-
 		// Mini App Gmail sender context (miniapp.gmail.sender_context).
 		// Combines Gmail recent-activity query, wiki memory lookup, and
 		// wiki-graph traversal (graphify CLI) so the Mini App detail
@@ -748,27 +753,6 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return store, nil
 			},
-		}),
-
-		// Mini App full address-book list (miniapp.contacts.list): the raw
-		// contacts.json mirror for the native 전체 연락처 browser, sectioned
-		// alphabetically on the client. Distinct from people.list (ranked Gmail
-		// counterparties). UNAVAILABLE when the store isn't configured.
-		handlerminiapp.ContactsMethods(handlerminiapp.ContactsDeps{
-			Store: func() (*contacts.Store, error) {
-				cs := hub.ContactsStore()
-				if cs == nil {
-					return nil, errors.New("contacts store not configured")
-				}
-				return cs, nil
-			},
-		}),
-
-		// 시장 시세 (miniapp.market.summary): 원/달러·코스피·WTI 유가·구리 for the 오늘
-		// dashboard's opt-in 시장 card. Keyless Yahoo Finance, 10m cache, serves a
-		// stale snapshot on upstream failure rather than erroring the dashboard.
-		handlerminiapp.MarketMethods(handlerminiapp.MarketDeps{
-			Fetch: marketCache.Summary,
 		}),
 
 		// Mini App skills list/detail/write surface + Propus feed

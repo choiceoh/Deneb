@@ -13,7 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modeltuner"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -124,21 +124,21 @@ var miniappProbeClient = &http.Client{Timeout: miniappModelHealthTimeout}
 // Controller owns model-picker discovery, health, selection, and persistence.
 type Controller struct {
 	modelRegistry               *modelrole.Registry
-	chatHandler                 *chat.Handler
+	chatHandler                 chatport.ModelController
 	logger                      *slog.Logger
 	roleHealthVerdicts          func() map[string]string
 	refreshCodingModelConsumers func()
-	providerConfigs             func() map[string]chat.ProviderConfig
+	providerConfigs             func() map[string]chatport.ProviderConfig
 }
 
 // ControllerConfig contains the live model-system boundaries used by Controller.
 type ControllerConfig struct {
 	Registry                    *modelrole.Registry
-	ChatHandler                 *chat.Handler
+	ChatHandler                 chatport.ModelController
 	Logger                      *slog.Logger
 	RoleHealthVerdicts          func() map[string]string
 	RefreshCodingModelConsumers func()
-	ProviderConfigs             func() map[string]chat.ProviderConfig
+	ProviderConfigs             func() map[string]chatport.ProviderConfig
 }
 
 // NewController constructs a model-picker controller.
@@ -151,6 +151,10 @@ func NewController(cfg ControllerConfig) *Controller {
 		refreshCodingModelConsumers: cfg.RefreshCodingModelConsumers,
 		providerConfigs:             cfg.ProviderConfigs,
 	}
+}
+
+func (s *Controller) chatReady() bool {
+	return s.chatHandler != nil && s.chatHandler.ChatReady()
 }
 
 // Methods returns the complete miniapp model-picker RPC domain.
@@ -170,7 +174,7 @@ func (s *Controller) Methods() map[string]rpcutil.HandlerFunc {
 }
 
 func (s *Controller) currentMiniappModel() string {
-	if s.chatHandler != nil {
+	if s.chatReady() {
 		if m := s.chatHandler.DefaultModel(); m != "" {
 			return m
 		}
@@ -280,7 +284,7 @@ func (s *Controller) setMiniappModel(ctx context.Context, role, requested string
 	// Apply in-memory so the change takes effect without a gateway restart.
 	switch role {
 	case "main":
-		if s.chatHandler == nil {
+		if !s.chatReady() {
 			return "", rpcerr.Unavailable("chat handler is not ready")
 		}
 		s.chatHandler.SetDefaultModel(modelID)
@@ -319,7 +323,7 @@ func (s *Controller) roleMiniappModels() []handlerminiapp.RoleModel {
 			Model: s.modelRegistry.FullModelID(r),
 		})
 	}
-	if s.chatHandler != nil {
+	if s.chatReady() {
 		if m := s.chatHandler.DefaultModel(); m != "" {
 			out[0].Model = m
 		}
@@ -348,7 +352,7 @@ func (s *Controller) mainModelHasVision() bool {
 		return true
 	}
 	main := s.modelRegistry.FullModelID(modelrole.RoleMain)
-	if s.chatHandler != nil {
+	if s.chatReady() {
 		if m := s.chatHandler.DefaultModel(); m != "" {
 			main = m // reflect a live /model switch this session
 		}
@@ -376,7 +380,7 @@ func (s *Controller) addMiniappCustomModel(ctx context.Context, endpoint, model 
 	localModelCache.builtAt = time.Time{}
 	localModelCache.mu.Unlock()
 
-	if s.chatHandler != nil {
+	if s.chatReady() {
 		if s.providerConfigs != nil {
 			s.chatHandler.SetProviderConfigs(s.providerConfigs())
 		}
@@ -453,7 +457,7 @@ func (s *Controller) deleteMiniappCustomModel(_ context.Context, id string) (han
 			// chat default drives currentMiniappModel(), while the registry
 			// feeds the picker's 역할 section — leaving the registry stale
 			// would keep the just-deleted model visible there.
-			if s.chatHandler != nil {
+			if s.chatReady() {
 				s.chatHandler.SetDefaultModel(defaultModel)
 			}
 			if s.modelRegistry != nil {
@@ -485,7 +489,7 @@ func (s *Controller) deleteMiniappCustomModel(_ context.Context, id string) (han
 		}
 	}
 
-	if s.chatHandler != nil {
+	if s.chatReady() {
 		if s.providerConfigs != nil {
 			s.chatHandler.SetProviderConfigs(s.providerConfigs())
 		}

@@ -45,8 +45,8 @@ const heartbeatShadowSystemPrompt = `당신은 Deneb의 하트비트 점검 턴�
 아래 자가 점검 메시지에 대해, 실제 턴이 사용자에게 남길 최종 텍스트만 출력하세요.
 알릴 것이 없으면 정확히 NO_REPLY 한 단어만 출력하세요.`
 
-// heartbeatShadowFixtureResult is one fixture's paired outcome.
-type heartbeatShadowFixtureResult struct {
+// ShadowReplayFixtureResult is one fixture's paired outcome.
+type ShadowReplayFixtureResult struct {
 	FiredAt       int64  `json:"firedAt"`
 	Split         string `json:"split"` // "held-in" | "held-out"
 	Quiet         bool   `json:"quiet"` // recorded real outcome was NO_REPLY
@@ -55,30 +55,30 @@ type heartbeatShadowFixtureResult struct {
 	Note          string `json:"note,omitempty"`
 }
 
-// heartbeatShadowReport is the dry-run verdict: pass counts per split for the
+// ShadowReplayReport is the dry-run verdict: pass counts per split for the
 // as-fired contracts vs the candidate, the no-trade-off decision, and
 // per-fixture rows for auditability.
-type heartbeatShadowReport struct {
-	OK                bool                           `json:"ok"`
-	Verdict           string                         `json:"verdict"` // "accept" | "reject" | "insufficient-corpus"
-	Reason            string                         `json:"reason"`
-	Fixtures          int                            `json:"fixtures"`
-	HeldInOriginal    int                            `json:"heldInOriginal"`
-	HeldInCandidate   int                            `json:"heldInCandidate"`
-	HeldInTotal       int                            `json:"heldInTotal"`
-	HeldOutOriginal   int                            `json:"heldOutOriginal"`
-	HeldOutCandidate  int                            `json:"heldOutCandidate"`
-	HeldOutTotal      int                            `json:"heldOutTotal"`
-	Results           []heartbeatShadowFixtureResult `json:"results,omitempty"`
-	DryRun            bool                           `json:"dryRun"` // always true in P1
-	ContractDriftNote string                         `json:"contractDriftNote,omitempty"`
+type ShadowReplayReport struct {
+	OK                bool                        `json:"ok"`
+	Verdict           string                      `json:"verdict"` // "accept" | "reject" | "insufficient-corpus"
+	Reason            string                      `json:"reason"`
+	Fixtures          int                         `json:"fixtures"`
+	HeldInOriginal    int                         `json:"heldInOriginal"`
+	HeldInCandidate   int                         `json:"heldInCandidate"`
+	HeldInTotal       int                         `json:"heldInTotal"`
+	HeldOutOriginal   int                         `json:"heldOutOriginal"`
+	HeldOutCandidate  int                         `json:"heldOutCandidate"`
+	HeldOutTotal      int                         `json:"heldOutTotal"`
+	Results           []ShadowReplayFixtureResult `json:"results,omitempty"`
+	DryRun            bool                        `json:"dryRun"` // always true in P1
+	ContractDriftNote string                      `json:"contractDriftNote,omitempty"`
 }
 
 // runHeartbeatShadowReplay loads the newest usable fixtures, splits them
 // held-in/held-out by time (older half in), replays original vs candidate,
 // and applies the no-trade-off acceptance rule over verifier pass counts.
-func runHeartbeatShadowReplay(ctx context.Context, fixturePath, candidate string, limit int, complete shadowCompleteFunc) (heartbeatShadowReport, error) {
-	report := heartbeatShadowReport{DryRun: true}
+func runHeartbeatShadowReplay(ctx context.Context, fixturePath, candidate string, limit int, complete shadowCompleteFunc) (ShadowReplayReport, error) {
+	report := ShadowReplayReport{DryRun: true}
 	candidate = strings.TrimSpace(candidate)
 	if candidate == "" {
 		return report, fmt.Errorf("heartbeat shadow replay: candidate content is required")
@@ -138,7 +138,7 @@ func runHeartbeatShadowReplay(ctx context.Context, fixturePath, candidate string
 
 		origOut, origErr := complete(ctx, heartbeatShadowSystemPrompt, heartbeatShadowTrigger(f, f.HeartbeatMD))
 		candOut, candErr := complete(ctx, heartbeatShadowSystemPrompt, heartbeatShadowTrigger(f, candidate))
-		result := heartbeatShadowFixtureResult{FiredAt: f.FiredAt, Split: split, Quiet: quiet}
+		result := ShadowReplayFixtureResult{FiredAt: f.FiredAt, Split: split, Quiet: quiet}
 		result.OriginalPass, _ = verifyHeartbeatShadowOutput(quiet, origOut, origErr)
 		var note string
 		result.CandidatePass, note = verifyHeartbeatShadowOutput(quiet, candOut, candErr)
@@ -185,7 +185,7 @@ func runHeartbeatShadowReplay(ctx context.Context, fixturePath, candidate string
 
 // RunShadowReplay compares a candidate HEARTBEAT.md body against recorded
 // production fixtures without applying it.
-func RunShadowReplay(ctx context.Context, fixturePath, candidate string, limit int, complete ShadowCompleteFunc) (any, error) {
+func RunShadowReplay(ctx context.Context, fixturePath, candidate string, limit int, complete ShadowCompleteFunc) (ShadowReplayReport, error) {
 	return runHeartbeatShadowReplay(ctx, fixturePath, candidate, limit, complete)
 }
 

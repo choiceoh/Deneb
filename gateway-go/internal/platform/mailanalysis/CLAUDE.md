@@ -60,3 +60,13 @@ service.go (주기 폴 / 외부 트리거)
 - **cron 트리거 회귀 이력**: bind·잡이름404·배포폭풍 in-flight abort 3회. cron 복원은 `deliverableLen>0`까지 라이브 검증([project_kakao_mail_pipeline]).
 - **dev가 prod cron 공유 실행** → 라이브 검증 시 prod 부수효과(위키 쓰기 등). 검증 후 즉시 stop([reference_livetest_dev_cron_shared]).
 - **무응답 실패는 `Error`+broadcast**(`docs/agent-rules/logging.md`) — 분석 결과가 사용자에게 안 닿으면 평상 로그에 묻히면 안 된다.
+
+## 집중 검증
+
+메일 분석 단계나 `AnalyzeEmailPipeline` 계약을 바꾼 뒤에는 실제 패키지 테스트를
+캐시 없이 실행한다.
+
+`cd gateway-go && go test -count=1 ./internal/platform/mailanalysis`
+
+모델 호출을 수정한 테스트는 stage-1 추출과 stage-2 합성의 역할 경계, 원문
+인용 검증, 사용자 전달 실패 표면을 각각 관찰해야 한다.

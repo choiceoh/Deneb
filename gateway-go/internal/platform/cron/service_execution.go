@@ -2,13 +2,9 @@ package cron
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 // --- Job execution (mirrors execute-job.ts, job-result.ts) ---
@@ -83,26 +79,8 @@ func (s *Service) markPendingRerun(jobID, why string) {
 }
 
 func (s *Service) runJobOnce(ctx context.Context, job StoreJob, trigger triggerSource) RunOutcome {
-	// Per-job execution guard: skip if this job is already running.
-	if _, loaded := s.runningJobs.LoadOrStore(job.ID, true); loaded {
-		s.logger.Info("cron job already running, skipping", "id", job.ID)
-		s.runLog.Append(RunLogEntry{ //nolint:errcheck // best-effort
-			Ts:     time.Now().UnixMilli(),
-			JobID:  job.ID,
-			Action: "skipped",
-			Status: "skipped",
-			Error:  "concurrent execution prevented",
-		})
-		// The dropped trigger is otherwise lost — for trigger-per-event jobs
-		// (mail watch) that means the event's analysis never happens. Queue a
-		// rerun for the owning executor's post-run consumption loop.
-		s.markPendingRerun(job.ID, "overlap trigger skipped")
-		return RunOutcome{
-			Status:    "skipped",
-			Error:     "job already running",
-			StartedAt: time.Now().UnixMilli(),
-			EndedAt:   time.Now().UnixMilli(),
-		}
+	if outcome, acquired := s.beginCronJobRun(job); !acquired {
+		return outcome
 	}
 	defer s.runningJobs.Delete(job.ID)
 
@@ -110,246 +88,10 @@ func (s *Service) runJobOnce(ctx context.Context, job StoreJob, trigger triggerS
 	if fresh := s.store.Job(job.ID); fresh != nil {
 		job = *fresh
 	}
-
-	startedAt := time.Now().UnixMilli()
-	s.emit(CronEvent{Type: "job_started", JobID: job.ID})
-
-	// Apply timeout (mirrors timeout-policy.ts).
-	timeoutMs := ResolveCronJobTimeoutMs(job)
-	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
-	defer cancel()
-
-	// Resolve delivery target.
-	deliveryCfg := job.Delivery
-	target, targetErr := ResolveDeliveryTarget(deliveryCfg, s.cfg.DefaultChannel, s.cfg.DefaultTo)
-
-	// Build agent turn params.
-	command := resolveJobCommand(job)
-	sessionKey := fmt.Sprintf("cron:%s:%d", job.ID, startedAt)
-
-	var outcome RunOutcome
-
-	if targetErr != nil && !isBestEffort(deliveryCfg) { //nolint:gocritic // ifElseChain — complex branching
-		outcome = RunOutcome{
-			Status:     "error",
-			Error:      fmt.Sprintf("delivery target error: %s", targetErr),
-			StartedAt:  startedAt,
-			EndedAt:    time.Now().UnixMilli(),
-			DurationMs: time.Now().UnixMilli() - startedAt,
-		}
-	} else if s.agent != nil {
-		// Create cron run session in session.Manager if available.
-		sessionKind := session.KindCron
-		if job.SessionTarget == SessionTargetSubagent && s.cfg.TranscriptCloner != nil && s.cfg.MainSessionKey != "" {
-			if err := s.cfg.TranscriptCloner.CloneRecent(s.cfg.MainSessionKey, sessionKey, 20); err != nil {
-				s.logger.Warn("cron session transcript clone failed", "jobId", job.ID, "error", err)
-			}
-		}
-		if s.cfg.Sessions != nil {
-			s.cfg.Sessions.Create(sessionKey, sessionKind)
-		}
-
-		// Retry loop: attempt up to retryCount+1 times with exponential backoff.
-		maxRetries := job.Payload.RetryCount
-		if maxRetries < 0 {
-			maxRetries = 0
-		}
-		if maxRetries > 3 {
-			maxRetries = 3
-		}
-		retryBackoff := job.Payload.RetryBackoffMs
-		if retryBackoff <= 0 {
-			retryBackoff = 5000
-		}
-
-		var output string
-		var runErr error
-		retriesUsed := 0
-
-		for attempt := 0; attempt <= maxRetries; attempt++ {
-			output, runErr = s.agent.RunAgentTurn(runCtx, AgentTurnParams{
-				SessionKey:  sessionKey,
-				SessionKind: sessionKind,
-				AgentID:     job.AgentID,
-				Command:     command,
-				Channel:     safeStr(target, func(t *DeliveryTarget) string { return t.Channel }),
-				To:          safeStr(target, func(t *DeliveryTarget) string { return t.To }),
-				AccountID:   safeStr(target, func(t *DeliveryTarget) string { return t.AccountID }),
-				ThreadID:    safeStr(target, func(t *DeliveryTarget) string { return t.ThreadID }),
-				Thinking:    job.Payload.Thinking,
-			})
-			if runErr == nil {
-				break
-			}
-			// Don't retry on context cancellation/timeout.
-			if runCtx.Err() != nil {
-				break
-			}
-			if attempt < maxRetries {
-				retriesUsed++
-				backoff := time.Duration(retryBackoff<<uint(attempt)) * time.Millisecond
-				if backoff > 60*time.Second {
-					backoff = 60 * time.Second
-				}
-				s.logger.Info("cron job retrying", "id", job.ID, "attempt", attempt+2, "of", maxRetries+1, "backoff", backoff)
-				select {
-				case <-runCtx.Done():
-					runErr = runCtx.Err()
-				case <-time.After(backoff):
-				}
-				if runCtx.Err() != nil {
-					break
-				}
-			}
-		}
-
-		if runErr != nil {
-			status := "error"
-			errMsg := runErr.Error()
-			if errors.Is(runErr, ErrTurnAborted) {
-				// Infra churn (a restart killed the turn), not a job fault:
-				// applyJobResult queues a rerun and skips the error counter so
-				// a deploy storm cannot auto-disable a healthy job.
-				status = "aborted"
-			} else if runCtx.Err() == context.DeadlineExceeded {
-				status = "timeout"
-				elapsed := time.Duration(time.Now().UnixMilli()-startedAt) * time.Millisecond
-				timeoutDur := time.Duration(timeoutMs) * time.Millisecond
-				errMsg = fmt.Sprintf("timeout after %s (limit: %s)", elapsed.Round(time.Second), timeoutDur.Round(time.Second))
-			}
-			outcome = RunOutcome{
-				Status:     status,
-				Error:      errMsg,
-				Retries:    retriesUsed,
-				StartedAt:  startedAt,
-				EndedAt:    time.Now().UnixMilli(),
-				DurationMs: time.Now().UnixMilli() - startedAt,
-			}
-		} else {
-			// Wait for descendant subagents if the output looks like an interim ack.
-			output = pollSubagentOutputs(runCtx, s.cfg.SubagentPoller, sessionKey, output)
-
-			// Deliver output to target channel.
-			//
-			// Preferred path: hand the analysis off to the main user session
-			// so the main agent is the literal sender and the main session
-			// transcript records the proactive turn (see
-			// ServiceConfig.MainSessionHandoff). Falls back to direct
-			// delivery if no handoff is configured, the handoff declines
-			// (handled=false), or the handoff errors.
-			var deliveryResult *DeliveryResult
-			if output != "" && target != nil {
-				stripped := tokens.StripHeartbeatToken(output, tokens.StripModeHeartbeat, tokens.DefaultHeartbeatAckChars)
-				if !stripped.ShouldSkip {
-					deliveryText := output
-					if stripped.DidStrip && stripped.Text != "" {
-						deliveryText = stripped.Text
-					}
-
-					if s.cfg.MainSessionHandoff != nil {
-						handled, herr := s.cfg.MainSessionHandoff(runCtx, target.Channel, target.To, job.ID, deliveryText)
-						switch {
-						case herr != nil:
-							// A real delivery failure — the relay errored (e.g. the
-							// transcript append failed). Record it as not-delivered so
-							// the promote-to-error path below fires: status becomes
-							// "error", consecutive failures count toward auto-disable,
-							// and a failure alert can go out. Without this the run was
-							// logged "ok" and the user silently lost the report.
-							// A bare handled=false with no error is an intentional
-							// suppression (NO_REPLY / the "nothing to report" noise
-							// floor in proactive_relay.go) and correctly stays "ok".
-							s.logger.Warn("cron main-session handoff failed",
-								"jobId", job.ID,
-								"channel", target.Channel,
-								"to", target.To,
-								"error", herr)
-							deliveryResult = &DeliveryResult{
-								Delivered: false,
-								Channel:   target.Channel,
-								To:        target.To,
-								Error:     herr.Error(),
-							}
-						case handled:
-							// Main session delivered to the user. Record
-							// delivery as successful from cron's point of
-							// view — the main session owns retry/visibility
-							// from here.
-							deliveryResult = &DeliveryResult{
-								Delivered: true,
-								Channel:   target.Channel,
-								To:        target.To,
-							}
-						}
-					}
-				}
-			}
-
-			// Promote to error status when a required delivery failed.
-			// Without this, consecutive delivery failures never trigger the
-			// auto-disable path (10 errors → job disabled) and the user
-			// keeps losing cron output silently.
-			status := "ok"
-			errMsg := ""
-			if deliveryResult != nil && !deliveryResult.Delivered && !isBestEffort(deliveryCfg) {
-				status = "error"
-				errMsg = "delivery failed: " + deliveryResult.Error
-			}
-			outcome = RunOutcome{
-				Status:     status,
-				Error:      errMsg,
-				Output:     output,
-				Delivery:   deliveryResult,
-				Retries:    retriesUsed,
-				StartedAt:  startedAt,
-				EndedAt:    time.Now().UnixMilli(),
-				DurationMs: time.Now().UnixMilli() - startedAt,
-			}
-		}
-	} else {
-		outcome = RunOutcome{
-			Status:     "error",
-			Error:      "no agent runner configured",
-			StartedAt:  startedAt,
-			EndedAt:    time.Now().UnixMilli(),
-			DurationMs: time.Now().UnixMilli() - startedAt,
-		}
-	}
-
-	// Apply result to job state; run-level details live in the session.
-	s.applyJobResult(job, outcome, sessionKey, trigger)
-
-	// Send failure alert if configured and conditions are met. Delivery goes
-	// through the main-session handoff (native client), so it requires that
-	// callback to be wired rather than a Telegram plugin.
-	if s.cfg.MainSessionHandoff != nil && ShouldSendFailureAlert(job.State, job.FailureAlert, outcome.Status, time.Now().UnixMilli()) {
-		s.sendFailureAlert(ctx, job, outcome)
-	}
-
-	// Log run with delivery status and retry count.
-	logEntry := RunLogEntry{
-		Ts:          time.Now().UnixMilli(),
-		JobID:       job.ID,
-		Action:      "finished",
-		Status:      outcome.Status,
-		Error:       outcome.Error,
-		Summary:     PickSummaryFromOutput(outcome.Output),
-		DurationMs:  outcome.DurationMs,
-		NextRunAtMs: ComputeNextRunAtMs(job.Schedule, time.Now().UnixMilli()),
-		Retries:     outcome.Retries,
-	}
-	if outcome.Delivery != nil {
-		logEntry.Delivered = outcome.Delivery.Delivered
-		if outcome.Delivery.Delivered {
-			logEntry.DeliveryStatus = "delivered"
-		} else {
-			logEntry.DeliveryStatus = "not-delivered"
-			logEntry.DeliveryError = outcome.Delivery.Error
-		}
-	}
-	s.runLog.Append(logEntry) //nolint:errcheck // best-effort
-
-	s.emit(CronEvent{Type: "job_finished", JobID: job.ID, Status: outcome.Status})
+	run := s.newCronJobRun(ctx, job, trigger)
+	defer run.close()
+	outcome := run.execute()
+	run.finalize(outcome)
 	return outcome
 }
 

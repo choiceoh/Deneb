@@ -18,7 +18,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 // subagentParentTerminatedReason marks children killed by the cascade so the

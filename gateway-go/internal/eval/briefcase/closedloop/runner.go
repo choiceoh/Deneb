@@ -1,6 +1,5 @@
-// Package closedloop composes the Deneb-Briefcase executor, hidden checkpoint
-// supervisor, information firewall, and public user simulator. The dependency
-// direction is intentional: the lower-level runtime never imports the grader.
+// Package closedloop composes a port-injected Deneb-Briefcase executor, hidden
+// checkpoint supervisor, information firewall, and public user simulator.
 package closedloop
 
 import (
@@ -23,8 +22,9 @@ import (
 	"unicode/utf8"
 
 	casepack "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase"
+	feedbackcontract "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase/feedback"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase/runcontract"
 	evalbriefcase "github.com/choiceoh/deneb/gateway-go/internal/eval/briefcase"
-	runtimebriefcase "github.com/choiceoh/deneb/gateway-go/internal/runtime/briefcase"
 )
 
 const ResultSchemaVersion = "deneb-briefcase-loop/v1"
@@ -53,11 +53,19 @@ const (
 
 type Config struct {
 	Pack                          *casepack.Pack
-	Harness                       *runtimebriefcase.ChatHarness
+	Executor                      Executor
 	SupervisorPlanSource          []byte
 	SupervisorPlanSourceSHA256    string
 	UserSimulatorPlanSource       []byte
 	UserSimulatorPlanSourceSHA256 string
+}
+
+// Executor is the only runtime capability required by the closed-loop
+// evaluator. The command composition root injects the concrete ChatHarness.
+type Executor interface {
+	Binding() (runcontract.HarnessBinding, error)
+	Run(context.Context) (*runcontract.RunResult, error)
+	Continue(context.Context, string, string) (*runcontract.RunResult, error)
 }
 
 type CycleResult struct {
@@ -99,8 +107,8 @@ type Result struct {
 	BestCycle                     int                              `json:"bestCycle,omitempty"`
 	BestScore                     float64                          `json:"bestScore"`
 	Cycles                        []CycleResult                    `json:"cycles"`
-	Run                           *runtimebriefcase.RunResult      `json:"run,omitempty"`
-	BestRun                       *runtimebriefcase.RunResult      `json:"bestRun,omitempty"`
+	Run                           *runcontract.RunResult           `json:"run,omitempty"`
+	BestRun                       *runcontract.RunResult           `json:"bestRun,omitempty"`
 	SupervisorAudit               SupervisorAudit                  `json:"supervisorAudit"`
 }
 
@@ -108,17 +116,17 @@ type Runner struct {
 	mu         sync.Mutex
 	started    bool
 	pack       *casepack.Pack
-	harness    *runtimebriefcase.ChatHarness
+	executor   Executor
 	supervisor *evalbriefcase.Supervisor
-	simulator  runtimebriefcase.UserSimulator
-	firewall   *runtimebriefcase.FeedbackFirewall
-	bestRun    *runtimebriefcase.RunResult
+	simulator  feedbackcontract.UserSimulator
+	firewall   *feedbackcontract.FeedbackFirewall
+	bestRun    *runcontract.RunResult
 	result     Result
 }
 
 func New(cfg Config) (*Runner, error) {
-	if cfg.Pack == nil || cfg.Harness == nil {
-		return nil, closedLoopError("pack and harness are required")
+	if cfg.Pack == nil || cfg.Executor == nil {
+		return nil, closedLoopError("pack and executor are required")
 	}
 	if err := casepack.Validate(cfg.Pack); err != nil {
 		return nil, closedLoopError("casepack is invalid")
@@ -131,12 +139,12 @@ func New(cfg Config) (*Runner, error) {
 		return nil, closedLoopError("casepack changed after authentication")
 	}
 	cfg.Pack = authenticatedPack
-	binding, err := cfg.Harness.Binding()
+	binding, err := cfg.Executor.Binding()
 	if err != nil {
 		return nil, err
 	}
 	if binding.CaseID != cfg.Pack.Manifest.CaseID || binding.CasepackSHA256 != cfg.Pack.Digest || binding.Seed != cfg.Pack.Manifest.Seed {
-		return nil, closedLoopError("harness does not match the authenticated casepack")
+		return nil, closedLoopError("executor does not match the authenticated casepack")
 	}
 	var supervisorPlan evalbriefcase.SupervisorPlan
 	if err := decodeBoundSealedSource(cfg.Pack, cfg.SupervisorPlanSourceSHA256, cfg.SupervisorPlanSource, supervisorSourceRef, &supervisorPlan, "supervisor plan"); err != nil {
@@ -155,8 +163,8 @@ func New(cfg Config) (*Runner, error) {
 	if err := verifySupervisorBinding(supervisorPlan.Fingerprint, binding); err != nil {
 		return nil, err
 	}
-	var simulator runtimebriefcase.UserSimulator
-	var userPlan runtimebriefcase.UserSimulatorPlan
+	var simulator feedbackcontract.UserSimulator
+	var userPlan feedbackcontract.UserSimulatorPlan
 	if cfg.Pack.Manifest.RunPolicy.MaxFollowUps > 0 {
 		if err := decodeBoundSealedSource(cfg.Pack, cfg.UserSimulatorPlanSourceSHA256, cfg.UserSimulatorPlanSource, userSimulatorSourceRef, &userPlan, "user simulator plan"); err != nil {
 			return nil, err
@@ -164,20 +172,20 @@ func New(cfg Config) (*Runner, error) {
 		if userPlan.CaseID != cfg.Pack.Manifest.CaseID {
 			return nil, closedLoopError("user simulator caseId does not match the signed case")
 		}
-		simulator, err = runtimebriefcase.NewScriptedUserSimulator(userPlan, cfg.Pack.Manifest.RunPolicy.MaxFollowUps)
+		simulator, err = feedbackcontract.NewScriptedUserSimulator(userPlan, cfg.Pack.Manifest.RunPolicy.MaxFollowUps)
 		if err != nil {
 			return nil, err
 		}
 	} else if len(cfg.UserSimulatorPlanSource) != 0 || cfg.UserSimulatorPlanSourceSHA256 != "" {
 		return nil, closedLoopError("user simulator source is forbidden when no follow-ups are signed")
 	}
-	var firewall *runtimebriefcase.FeedbackFirewall
+	var firewall *feedbackcontract.FeedbackFirewall
 	if cfg.Pack.Manifest.RunPolicy.MaxFollowUps > 0 {
 		hidden, err := HiddenFeedbackInputs(cfg.Pack, supervisorPlan, cfg.UserSimulatorPlanSourceSHA256, cfg.SupervisorPlanSourceSHA256)
 		if err != nil {
 			return nil, err
 		}
-		firewall, err = runtimebriefcase.NewFeedbackFirewall(hidden, runtimebriefcase.FeedbackLimits{})
+		firewall, err = feedbackcontract.NewFeedbackFirewall(hidden, feedbackcontract.FeedbackLimits{})
 		if err != nil {
 			return nil, err
 		}
@@ -189,7 +197,7 @@ func New(cfg Config) (*Runner, error) {
 				return nil, err
 			}
 		}
-		firewall, err = runtimebriefcase.NewFeedbackFirewall(hidden, runtimebriefcase.FeedbackLimits{})
+		firewall, err = feedbackcontract.NewFeedbackFirewall(hidden, feedbackcontract.FeedbackLimits{})
 		if err != nil {
 			return nil, err
 		}
@@ -200,7 +208,7 @@ func New(cfg Config) (*Runner, error) {
 	}
 	return &Runner{
 		pack:       cfg.Pack,
-		harness:    cfg.Harness,
+		executor:   cfg.Executor,
 		supervisor: supervisor,
 		simulator:  simulator,
 		firewall:   firewall,
@@ -245,7 +253,7 @@ func validateSupervisorArtifactBindings(pack *casepack.Pack, plan evalbriefcase.
 	return nil
 }
 
-func verifySupervisorBinding(fingerprint evalbriefcase.SupervisorFingerprint, binding runtimebriefcase.HarnessBinding) error {
+func verifySupervisorBinding(fingerprint evalbriefcase.SupervisorFingerprint, binding runcontract.HarnessBinding) error {
 	comparisons := []struct {
 		name string
 		want string
@@ -265,11 +273,11 @@ func verifySupervisorBinding(fingerprint evalbriefcase.SupervisorFingerprint, bi
 	}
 	for _, comparison := range comparisons {
 		if comparison.want != "" && comparison.want != comparison.got {
-			return closedLoopError("supervisor " + comparison.name + " does not match the executor harness")
+			return closedLoopError("supervisor " + comparison.name + " does not match the executor")
 		}
 	}
 	if fingerprint.Seed != 0 && fingerprint.Seed != binding.Seed {
-		return closedLoopError("supervisor seed does not match the executor harness")
+		return closedLoopError("supervisor seed does not match the executor")
 	}
 	return nil
 }
@@ -295,7 +303,7 @@ func (r *Runner) Run(ctx context.Context) (*Result, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(r.pack.Manifest.RunPolicy.TimeoutSeconds)*time.Second)
 	defer cancel()
 
-	run, err := r.harness.Run(ctx)
+	run, err := r.executor.Run(ctx)
 	if err != nil {
 		r.result.Decision = evalbriefcase.SupervisorFail
 		r.result.Termination = terminationForExecutorError(ctx, err)
@@ -391,7 +399,7 @@ func (r *Runner) Run(ctx context.Context) (*Result, error) {
 		sum := sha256.Sum256([]byte(feedback))
 		cycleRecord.FeedbackSHA256 = hex.EncodeToString(sum[:])
 
-		nextRun, continueErr := r.harness.Continue(ctx, fmt.Sprintf("simulator-followup-%d", public.Cycle), feedback)
+		nextRun, continueErr := r.executor.Continue(ctx, fmt.Sprintf("simulator-followup-%d", public.Cycle), feedback)
 		if continueErr != nil {
 			r.result.Decision = evalbriefcase.SupervisorFail
 			r.result.Termination = terminationForExecutorError(ctx, continueErr)
@@ -404,12 +412,12 @@ func (r *Runner) Run(ctx context.Context) (*Result, error) {
 	}
 }
 
-func (r *Runner) buildHandoff(public evalbriefcase.SupervisorPublicResult, run *runtimebriefcase.RunResult) (runtimebriefcase.SimulatorHandoff, error) {
+func (r *Runner) buildHandoff(public evalbriefcase.SupervisorPublicResult, run *runcontract.RunResult) (feedbackcontract.SimulatorHandoff, error) {
 	trajectory, err := visibleTrajectory(r.pack, run, r.result.Cycles)
 	if err != nil {
-		return runtimebriefcase.SimulatorHandoff{}, err
+		return feedbackcontract.SimulatorHandoff{}, err
 	}
-	return r.firewall.BuildHandoff(runtimebriefcase.SimulatorHandoffInput{
+	return r.firewall.BuildHandoff(feedbackcontract.SimulatorHandoffInput{
 		VerdictCategory:            verdictCategory(public.Decision),
 		Recoverable:                public.Recoverable,
 		ScoreBand:                  scoreBand(public),
@@ -418,7 +426,7 @@ func (r *Runner) buildHandoff(public evalbriefcase.SupervisorPublicResult, run *
 	})
 }
 
-func (r *Runner) finish(run *runtimebriefcase.RunResult) {
+func (r *Runner) finish(run *runcontract.RunResult) {
 	r.result.Run = run
 	r.result.BestRun = r.bestRun
 	diagnostics := r.supervisor.HiddenDiagnostics()
@@ -427,7 +435,7 @@ func (r *Runner) finish(run *runtimebriefcase.RunResult) {
 	r.result.SupervisorAudit = auditFromHidden(diagnostics)
 }
 
-func (r *Runner) snapshotCycleRun(ctx context.Context, run *runtimebriefcase.RunResult, cycle int) (*runtimebriefcase.RunResult, error) {
+func (r *Runner) snapshotCycleRun(ctx context.Context, run *runcontract.RunResult, cycle int) (*runcontract.RunResult, error) {
 	if run == nil || strings.TrimSpace(run.ArtifactRoot) == "" {
 		return nil, closedLoopError("cycle run has no artifact root")
 	}
@@ -438,7 +446,7 @@ func (r *Runner) snapshotCycleRun(ctx context.Context, run *runtimebriefcase.Run
 	if err != nil {
 		return nil, fmt.Errorf("closed loop: clone cycle run: %w", err)
 	}
-	var snapshot runtimebriefcase.RunResult
+	var snapshot runcontract.RunResult
 	if err := json.Unmarshal(data, &snapshot); err != nil {
 		return nil, fmt.Errorf("closed loop: clone cycle run: %w", err)
 	}
@@ -545,8 +553,8 @@ func auditFromHidden(hidden evalbriefcase.SupervisorHiddenDiagnostics) Superviso
 
 // HiddenFeedbackInputs derives deny tokens from the sealed supervisor plan and
 // all sealed case sources. It does not include public executor output.
-func HiddenFeedbackInputs(pack *casepack.Pack, plan evalbriefcase.SupervisorPlan, _ ...string) (runtimebriefcase.HiddenFeedbackInputs, error) {
-	var hidden runtimebriefcase.HiddenFeedbackInputs
+func HiddenFeedbackInputs(pack *casepack.Pack, plan evalbriefcase.SupervisorPlan, _ ...string) (feedbackcontract.HiddenFeedbackInputs, error) {
+	var hidden feedbackcontract.HiddenFeedbackInputs
 	sealedContentBytes := int64(0)
 	if pack != nil {
 		for _, source := range pack.Manifest.Sources {
@@ -561,18 +569,18 @@ func HiddenFeedbackInputs(pack *casepack.Pack, plan evalbriefcase.SupervisorPlan
 				continue
 			}
 			if !isFirewallContentRole(source.SourceRef) {
-				return runtimebriefcase.HiddenFeedbackInputs{}, fmt.Errorf("closed loop: sealed source %q must declare a scannable briefcase grader, device, or gold role", source.ID)
+				return feedbackcontract.HiddenFeedbackInputs{}, fmt.Errorf("closed loop: sealed source %q must declare a scannable briefcase grader, device, or gold role", source.ID)
 			}
 			info, err := os.Lstat(filepath.Join(pack.Root, filepath.FromSlash(source.Path)))
 			if err != nil || !info.Mode().IsRegular() || info.Size() > maxSealedPlanBytes || sealedContentBytes+info.Size() > maxSealedPlanBytes {
-				return runtimebriefcase.HiddenFeedbackInputs{}, fmt.Errorf("closed loop: sealed firewall inputs exceed %d bytes", maxSealedPlanBytes)
+				return feedbackcontract.HiddenFeedbackInputs{}, fmt.Errorf("closed loop: sealed firewall inputs exceed %d bytes", maxSealedPlanBytes)
 			}
 			content, err := pack.ReadFile(source.Path)
 			if err != nil {
-				return runtimebriefcase.HiddenFeedbackInputs{}, fmt.Errorf("closed loop: read sealed source for firewall: %w", err)
+				return feedbackcontract.HiddenFeedbackInputs{}, fmt.Errorf("closed loop: read sealed source for firewall: %w", err)
 			}
 			if !utf8.Valid(content) {
-				return runtimebriefcase.HiddenFeedbackInputs{}, fmt.Errorf("closed loop: sealed firewall source %q is not valid UTF-8", source.ID)
+				return feedbackcontract.HiddenFeedbackInputs{}, fmt.Errorf("closed loop: sealed firewall source %q is not valid UTF-8", source.ID)
 			}
 			sealedContentBytes += int64(len(content))
 			hidden.SealedContents = append(hidden.SealedContents, string(content))
@@ -715,7 +723,7 @@ func canonicalJSONNumber(number json.Number) string {
 	return canonical
 }
 
-func visibleTrajectory(pack *casepack.Pack, run *runtimebriefcase.RunResult, cycles []CycleResult) ([]string, error) {
+func visibleTrajectory(pack *casepack.Pack, run *runcontract.RunResult, cycles []CycleResult) ([]string, error) {
 	const maxItems = 24
 	if pack == nil || run == nil {
 		return []string{"Executor produced no completed public turn."}, nil
@@ -771,7 +779,7 @@ func visibleTrajectory(pack *casepack.Pack, run *runtimebriefcase.RunResult, cyc
 	return items, nil
 }
 
-func visibleArtifacts(pack *casepack.Pack, run *runtimebriefcase.RunResult) []runtimebriefcase.VisibleArtifactSummary {
+func visibleArtifacts(pack *casepack.Pack, run *runcontract.RunResult) []feedbackcontract.VisibleArtifactSummary {
 	const maxItems = 48
 	if pack == nil || run == nil || strings.TrimSpace(run.ArtifactRoot) == "" {
 		return nil
@@ -780,23 +788,23 @@ func visibleArtifacts(pack *casepack.Pack, run *runtimebriefcase.RunResult) []ru
 	if len(artifacts) > maxItems {
 		artifacts = artifacts[:maxItems]
 	}
-	out := make([]runtimebriefcase.VisibleArtifactSummary, 0, len(artifacts))
+	out := make([]feedbackcontract.VisibleArtifactSummary, 0, len(artifacts))
 	for index, artifact := range artifacts {
-		summary := runtimebriefcase.VisibleArtifactSummary{Label: fmt.Sprintf("artifact-%d", index+1)}
+		summary := feedbackcontract.VisibleArtifactSummary{Label: fmt.Sprintf("artifact-%d", index+1)}
 		path := filepath.Join(run.ArtifactRoot, filepath.FromSlash(artifact.Path))
 		info, err := os.Lstat(path)
 		switch {
 		case errors.Is(err, os.ErrNotExist):
-			summary.Status = runtimebriefcase.ArtifactMissing
+			summary.Status = feedbackcontract.ArtifactMissing
 			summary.Summary = "Declared artifact is not present."
 		case err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular():
-			summary.Status = runtimebriefcase.ArtifactUnreadable
+			summary.Status = feedbackcontract.ArtifactUnreadable
 			summary.Summary = "Declared artifact is not a readable regular file."
 		case artifact.MaxBytes > 0 && info.Size() > artifact.MaxBytes:
-			summary.Status = runtimebriefcase.ArtifactAvailable
+			summary.Status = feedbackcontract.ArtifactAvailable
 			summary.Summary = "Declared artifact is present but exceeds its public size limit."
 		default:
-			summary.Status = runtimebriefcase.ArtifactAvailable
+			summary.Status = feedbackcontract.ArtifactAvailable
 			summary.Summary = "Declared artifact is present."
 		}
 		out = append(out, summary)
@@ -804,7 +812,7 @@ func visibleArtifacts(pack *casepack.Pack, run *runtimebriefcase.RunResult) []ru
 	return out
 }
 
-func latestExecutorTurnID(run *runtimebriefcase.RunResult) string {
+func latestExecutorTurnID(run *runcontract.RunResult) string {
 	if run == nil {
 		return ""
 	}
@@ -817,30 +825,30 @@ func latestExecutorTurnID(run *runtimebriefcase.RunResult) string {
 	return ""
 }
 
-func verdictCategory(decision evalbriefcase.SupervisorDecision) runtimebriefcase.VerdictCategory {
+func verdictCategory(decision evalbriefcase.SupervisorDecision) feedbackcontract.VerdictCategory {
 	switch decision {
 	case evalbriefcase.SupervisorPass:
-		return runtimebriefcase.VerdictSatisfactory
+		return feedbackcontract.VerdictSatisfactory
 	case evalbriefcase.SupervisorContinue:
-		return runtimebriefcase.VerdictNeedsRevision
+		return feedbackcontract.VerdictNeedsRevision
 	case evalbriefcase.SupervisorFail:
-		return runtimebriefcase.VerdictBlocked
+		return feedbackcontract.VerdictBlocked
 	default:
-		return runtimebriefcase.VerdictCannotAssess
+		return feedbackcontract.VerdictCannotAssess
 	}
 }
 
-func scoreBand(result evalbriefcase.SupervisorPublicResult) runtimebriefcase.ScoreBand {
+func scoreBand(result evalbriefcase.SupervisorPublicResult) feedbackcontract.ScoreBand {
 	if result.Decision == evalbriefcase.SupervisorFail {
-		return runtimebriefcase.ScoreBandUnavailable
+		return feedbackcontract.ScoreBandUnavailable
 	}
 	if result.Score >= 0.8 {
-		return runtimebriefcase.ScoreBandHigh
+		return feedbackcontract.ScoreBandHigh
 	}
 	if result.Score >= 0.4 {
-		return runtimebriefcase.ScoreBandMedium
+		return feedbackcontract.ScoreBandMedium
 	}
-	return runtimebriefcase.ScoreBandLow
+	return feedbackcontract.ScoreBandLow
 }
 
 func terminationForExecutorError(ctx context.Context, err error) Termination {
@@ -850,7 +858,7 @@ func terminationForExecutorError(ctx context.Context, err error) Termination {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return TerminationTurnTimeout
 	}
-	if errors.Is(err, runtimebriefcase.ErrTurnTimeout) {
+	if errors.Is(err, runcontract.ErrTurnTimeout) {
 		return TerminationTurnTimeout
 	}
 	return TerminationExecutorError

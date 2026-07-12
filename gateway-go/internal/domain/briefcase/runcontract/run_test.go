@@ -1,0 +1,62 @@
+package runcontract
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
+
+func TestRunContractProvenanceAndWireRoundTrip(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	run := &RunResult{
+		SchemaVersion:    RunSchemaVersion,
+		RunID:            "run-1",
+		CaseID:           "case-1",
+		CasepackSHA256:   digest,
+		Model:            "executor-model",
+		ProviderModel:    "served-model",
+		APIMode:          "openai",
+		Arm:              ArmMemoryAssisted,
+		RecallMode:       "enabled",
+		ToolSchemaSHA256: digest,
+		EndpointSHA256:   digest,
+		BuildSHA256:      digest,
+		Episodes: []EpisodeResult{{
+			EpisodeID: "turn-1", Text: "answer", Model: "executor-model",
+			ProviderModel: "served-model", StopReason: "end_turn", SystemPromptSHA256: digest,
+		}},
+		State: json.RawMessage(`{"ok":true}`),
+	}
+	if err := SetRunProvenance(run); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateRunProvenance(run); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded RunResult
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.RunID != "run-1" || decoded.Arm != ArmMemoryAssisted || LatestExecutorText(&decoded) != "answer" {
+		t.Fatalf("wire round trip changed run: %#v", decoded)
+	}
+}
+
+func TestCloneRunResultOwnsMutableEvidence(t *testing.T) {
+	run := &RunResult{
+		Episodes:     []EpisodeResult{{ReleasedSource: []string{"source-1"}}},
+		DeviceLedger: []DeviceActionRecord{{Payload: json.RawMessage(`{"a":1}`)}},
+		State:        json.RawMessage(`{"state":1}`),
+	}
+	clone := CloneRunResult(run)
+	clone.Episodes[0].ReleasedSource[0] = "changed"
+	clone.DeviceLedger[0].Payload[2] = 'b'
+	clone.State[2] = 'x'
+	if run.Episodes[0].ReleasedSource[0] != "source-1" || string(run.DeviceLedger[0].Payload) != `{"a":1}` || string(run.State) != `{"state":1}` {
+		t.Fatalf("clone mutated source: %#v", run)
+	}
+}

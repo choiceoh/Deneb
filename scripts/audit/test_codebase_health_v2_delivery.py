@@ -12,6 +12,43 @@ from test_codebase_health_v2_support import GitFixture
 
 
 class DeliveryCapabilityTests(unittest.TestCase):
+    def test_git_spawn_error_returns_required_unavailable_evidence(self) -> None:
+        with mock.patch.object(
+            delivery.subprocess,
+            "run",
+            side_effect=OSError("git executable unavailable"),
+        ):
+            pillars, evidence = delivery.evaluate(Path("/fixture"))
+
+        self.assertEqual(pillars, [])
+        self.assertEqual(len(evidence), 1)
+        self.assertEqual(evidence[0].status, "unavailable")
+        self.assertTrue(evidence[0].required)
+        self.assertIn("tracked-file inventory unavailable", evidence[0].detail)
+
+    def test_workflow_read_error_is_skipped_without_false_gate_evidence(self) -> None:
+        tracked = frozenset({".github/workflows/verify.yml"})
+        workflow = """\
+name: quality
+on: push
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: go test ./...
+"""
+        with GitFixture() as fixture:
+            fixture.write(".github/workflows/verify.yml", workflow)
+            fixture.track()
+            with mock.patch.object(
+                Path,
+                "read_text",
+                side_effect=OSError("workflow vanished"),
+            ):
+                workflows = delivery._read_workflows(fixture.root, tracked)
+
+        self.assertEqual(workflows, {})
+
     def test_only_executable_failure_prevention_commands_are_scored(self) -> None:
         fake_workflow = """\
 # gofmt; go build; go test -tags=integration; pnpm exec playwright test

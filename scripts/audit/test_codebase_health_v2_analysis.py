@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from test_codebase_health_v2_support import (
@@ -10,7 +11,7 @@ from test_codebase_health_v2_support import (
     architecture_pillars as _architecture_pillars,
     pillar as _pillar,
 )
-from health_v2 import inventory, operations, testing
+from health_v2 import ai_readiness, history, inventory, operations, testing
 
 
 class StaticAnalysisFixtureTests(unittest.TestCase):
@@ -40,6 +41,275 @@ func TestWidgetReturnsAnotherValue(t *testing.T) {
     }
 }
 """
+
+    def test_python_centralized_import_maps_risk_to_production_package(self) -> None:
+        source = """\
+import subprocess
+
+def execute(path):
+    process = subprocess.run(["tool"], check=False)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(str(process.returncode))
+    if process.returncode:
+        raise ValueError("command failed")
+"""
+        unrelated = """\
+def test_unrelated_returns_value():
+    assert 1 == 1
+"""
+        direct_source = """\
+import subprocess
+
+def call_tool():
+    process = subprocess.run(["tool"], check=False)
+    if process.returncode:
+        raise RuntimeError("tool failed")
+    return process.stdout
+"""
+        direct_test = """\
+import runpy
+from unittest import mock
+
+def test_mock_transport_failure_returns_error():
+    with mock.patch("subprocess.run", side_effect=OSError("spawn failed")):
+        try:
+            runpy.run_path("scripts/mock_transport.py")["call_tool"]()
+        except OSError as error:
+            assert "spawn failed" in str(error)
+"""
+        linked = """\
+import tempfile
+from unittest import mock
+
+from health_v2 import runner
+
+def test_execute_rejects_invalid_process_error_without_tmp_write():
+    with tempfile.TemporaryDirectory() as folder:
+        with mock.patch.object(runner.subprocess, "run", side_effect=OSError("failed")):
+            try:
+                runner.execute(folder)
+            except OSError:
+                pass
+        assert folder
+"""
+        with _GitFixture() as fixture:
+            fixture.write("scripts/audit/health_v2/runner.py", source)
+            fixture.write("scripts/mock_transport.py", direct_source)
+            fixture.write("scripts/dev/test_unrelated.py", unrelated)
+            fixture.track()
+            before, _ = testing.evaluate(fixture.root)
+
+            fixture.write("scripts/audit/test_codebase_health_v2_runner.py", linked)
+            fixture.write("scripts/dev/test_mock_transport.py", direct_test)
+            fixture.track()
+            after, _ = testing.evaluate(fixture.root)
+
+        before_risk = _pillar(before, "test-effectiveness").metrics["risk_obligations"]
+        after_risk = _pillar(after, "test-effectiveness").metrics["risk_obligations"]
+        self.assertEqual((before_risk["satisfied"], before_risk["total"]), (0, 5))
+        self.assertEqual((after_risk["satisfied"], after_risk["total"]), (5, 5))
+
+    def test_kotlin_import_requires_a_per_case_production_call(self) -> None:
+        source = """\
+package example.transport
+
+import io.ktor.client.HttpClient
+
+class RemoteGateway {
+    fun fetch(): String = "ok"
+}
+"""
+        unused_import = """\
+package example.contracts
+
+import example.transport.RemoteGateway
+import kotlin.test.Test
+import kotlin.test.assertFailsWith
+
+class RemoteGatewayContractTest {
+    @Test
+    fun remoteGatewayRejectsHttpErrorWithMockEngine() {
+        // RemoteGateway() in a comment must not create production linkage.
+        assertFailsWith<IllegalStateException> { error("stub") }
+    }
+}
+"""
+        called_subject = """\
+package example.contracts
+
+import example.transport.RemoteGateway
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+class RemoteGatewayContractTest {
+    @Test
+    fun remoteGatewayRejectsHttpErrorWithMockEngine() {
+        val gateway = RemoteGateway()
+        assertEquals("ok", gateway.fetch())
+    }
+}
+"""
+        with _GitFixture() as fixture:
+            fixture.write(
+                "client-android/app/composeApp/src/commonMain/kotlin/example/transport/RemoteGateway.kt",
+                source,
+            )
+            fixture.write(
+                "client-android/app/composeApp/src/commonTest/kotlin/example/contracts/RemoteGatewayContractTest.kt",
+                unused_import,
+            )
+            fixture.track()
+            before, _ = testing.evaluate(fixture.root)
+
+            fixture.write(
+                "client-android/app/composeApp/src/commonTest/kotlin/example/contracts/RemoteGatewayContractTest.kt",
+                called_subject,
+            )
+            fixture.track()
+            after, _ = testing.evaluate(fixture.root)
+
+        before_effective = _pillar(before, "test-effectiveness").metrics
+        after_effective = _pillar(after, "test-effectiveness").metrics
+        self.assertEqual(
+            before_effective["risk_obligations"]["by_language"]["kotlin"],
+            {"satisfied": 0, "total": 1, "score": 0.0},
+        )
+        self.assertEqual(
+            after_effective["risk_obligations"]["by_language"]["kotlin"],
+            {"satisfied": 1, "total": 1, "score": 100.0},
+        )
+        self.assertEqual(before_effective["subject_locality"]["by_language"]["kotlin"], 0.0)
+        self.assertEqual(after_effective["subject_locality"]["by_language"]["kotlin"], 100.0)
+
+    def test_kotlin_extension_function_is_a_discoverable_subject(self) -> None:
+        source = """\
+package example.client
+
+class RemoteClient
+
+fun RemoteClient.refreshModels(): String = "ready"
+"""
+        test = """\
+package example.client
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+class AdminContractTest {
+    @Test
+    fun refreshModelsReturnsReadyState() {
+        assertEquals("ready", RemoteClient().refreshModels())
+    }
+}
+"""
+        with _GitFixture() as fixture:
+            fixture.write(
+                "client-android/app/composeApp/src/commonMain/kotlin/example/client/RemoteClientExtensions.kt",
+                source,
+            )
+            fixture.write(
+                "client-android/app/composeApp/src/commonTest/kotlin/example/client/AdminContractTest.kt",
+                test,
+            )
+            fixture.track()
+            pillars, _ = testing.evaluate(fixture.root)
+
+        locality = _pillar(pillars, "test-effectiveness").metrics["subject_locality"]
+        self.assertEqual(locality["by_language"]["kotlin"], 100.0)
+
+    def test_generated_suite_contributes_one_effective_shape_only(self) -> None:
+        source = """\
+package example.wire
+
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class WireRecord(val value: String = "")
+"""
+        generated_test = """\
+// Code generated by scripts/gen_wire.py; DO NOT EDIT.
+package example.wire
+
+import kotlin.test.Test
+import kotlin.test.assertFailsWith
+
+class WireRecordGeneratedContractTest {
+    @Test
+    fun wireRecordInvalidDecodeRejectsWrongShape() {
+        WireRecord()
+        assertFailsWith<IllegalArgumentException> { error("invalid decode") }
+    }
+
+    @Test
+    fun clonedRowInvalidDecodeRejectsWrongShape() {
+        WireRecord()
+        assertFailsWith<IllegalArgumentException> { error("invalid decode") }
+    }
+}
+"""
+        with _GitFixture() as fixture:
+            fixture.write(
+                "client-android/app/composeApp/src/commonMain/kotlin/example/wire/WireRecord.kt",
+                source,
+            )
+            fixture.write("scripts/gen_wire.py", "# deterministic fixture generator\n")
+            fixture.write(
+                "Makefile",
+                "wire-check:\n\tpython3 scripts/gen_wire.py --check\n",
+            )
+            fixture.track()
+            before, _ = testing.evaluate(fixture.root)
+
+            fixture.write(
+                "client-android/app/composeApp/src/commonTest/kotlin/example/wire/WireRecordGeneratedContractTest.kt",
+                generated_test,
+            )
+            fixture.track()
+            after, _ = testing.evaluate(fixture.root)
+
+        before_effective = _pillar(before, "test-effectiveness").metrics
+        after_effective = _pillar(after, "test-effectiveness").metrics
+        before_maintainable = _pillar(before, "test-maintainability").metrics
+        after_maintainable = _pillar(after, "test-maintainability").metrics
+        self.assertEqual(after_effective["test_cases_by_language"]["kotlin"], 1)
+        self.assertEqual(after_effective["generated_contract_shapes"], 1)
+        self.assertEqual(
+            after_effective["risk_obligations"]["by_language"]["kotlin"],
+            {"satisfied": 1, "total": 1, "score": 100.0},
+        )
+        self.assertEqual(after_effective["subject_locality"]["by_language"]["kotlin"], 100.0)
+        self.assertEqual(
+            before_maintainable["semantic_shape_uniqueness"],
+            after_maintainable["semantic_shape_uniqueness"],
+        )
+        self.assertEqual(after_maintainable["generated_tests_excluded"], 1)
+
+    def test_history_timeout_returns_unavailable_facts_instead_of_raising(self) -> None:
+        timeout = history.subprocess.TimeoutExpired(["git", "log"], timeout=30)
+        with mock.patch.object(history.subprocess, "run", side_effect=timeout):
+            facts = history.collect_history(Path("/fixture"))
+
+        self.assertFalse(facts.available)
+        self.assertEqual(facts.commits, ())
+        self.assertIn("git history unavailable", facts.detail)
+        self.assertIn("timed out", facts.detail)
+
+    def test_ai_tracked_files_git_error_returns_unavailable_inventory(self) -> None:
+        failed = mock.Mock(returncode=128, stdout=b"")
+        with mock.patch.object(
+            ai_readiness.subprocess,
+            "run",
+            return_value=failed,
+        ) as run:
+            tracked = ai_readiness._tracked_files(Path("/fixture"))
+
+        self.assertIsNone(tracked)
+        run.assert_called_once_with(
+            ["git", "-C", "/fixture", "ls-files", "-z"],
+            capture_output=True,
+            check=False,
+            timeout=8,
+        )
 
     def test_cloned_asserted_shapes_do_not_manufacture_confidence(self) -> None:
         with _GitFixture() as fixture:

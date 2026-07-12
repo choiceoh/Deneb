@@ -25,11 +25,15 @@ class _Capability:
 
 
 def _tracked_files(root: Path) -> frozenset[str] | None:
-    process = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-z"],
-        capture_output=True,
-        check=False,
-    )
+    try:
+        process = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z"],
+            capture_output=True,
+            check=False,
+            timeout=8,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
     if process.returncode != 0:
         return None
     return frozenset(
@@ -399,7 +403,6 @@ def _read_workflows(
     tracked = _tracked_files(root) if tracked is None else tracked
     if tracked is None:
         return {}
-    folder = root / ".github" / "workflows"
     workflows: dict[str, str] = {}
     paths = sorted(
         root / relative
@@ -410,7 +413,12 @@ def _read_workflows(
     for path in paths:
         if not path.is_file():
             continue
-        raw = path.read_text(encoding="utf-8", errors="replace")
+        try:
+            raw = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            # A tracked workflow may disappear between inventory and read in a
+            # concurrently changing checkout. It cannot count as gate evidence.
+            continue
         if not _workflow_gate_scope(raw):
             continue
         executable = _expand_local_references(

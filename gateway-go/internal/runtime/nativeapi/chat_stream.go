@@ -40,7 +40,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeauth"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
 )
@@ -70,7 +70,7 @@ type chatStreamResult struct {
 // serialized by the SSE writer's mutex).
 type chatStreamSinks struct {
 	Delta    func(delta string)
-	Tool     func(ev chat.ToolStreamEvent)
+	Tool     func(ev chatport.ToolStreamEvent)
 	Thinking func(preview string)
 }
 
@@ -133,7 +133,7 @@ func (s *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sessionKey := handlerchat.DefaultSessionKey(reqBody.SessionKey)
-	if s.chatHandler == nil {
+	if s.chatHandler == nil || !s.chatHandler.ChatReady() {
 		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "chat handler not ready"})
 		return
 	}
@@ -141,8 +141,11 @@ func (s *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 	// From here on the response is SSE — no more writeJSON.
 	ctx := clientauth.WithContext(r.Context(), identity)
 	runner := func(ctx context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
-		res, err := s.chatHandler.SendSyncStream(ctx, sessionKey, reqBody.Message, strings.TrimSpace(reqBody.Model), &chat.SyncOptions{
-			Delivery: &chat.DeliveryContext{Channel: handlerchat.NativeClientChannel, To: sessionKey},
+		res, err := s.chatHandler.RunSyncStream(ctx, chatport.SyncRequest{
+			SessionKey: sessionKey,
+			Message:    reqBody.Message,
+			Model:      strings.TrimSpace(reqBody.Model),
+			Delivery:   &chatport.DeliveryContext{Channel: handlerchat.NativeClientChannel, To: sessionKey},
 			// The reply text is streamed here, not pushed via the message tool.
 			AutoDeliveredOutput: true,
 			SkipRecall:          reqBody.SkipRecall,
@@ -159,7 +162,7 @@ func (s *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 		// BestText (not res.Text) so a tool wrap-up final turn — e.g. the agent
 		// writing its answer to the wiki and closing with "위키에 기록했습니다" —
 		// doesn't replace the streamed body in the client's done frame.
-		return &chatStreamResult{Text: res.BestText(), Model: res.Model, FellBack: res.FellBack}, nil
+		return &chatStreamResult{Text: res.BestText, Model: res.Model, FellBack: res.FellBack}, nil
 	}
 	writeChatStreamSSE(ctx, w, sessionKey, runner, s.logger)
 }
@@ -241,7 +244,7 @@ func writeChatStreamSSE(ctx context.Context, w http.ResponseWriter, sessionKey s
 			}
 			writeEvent("delta", map[string]string{"delta": delta})
 		},
-		Tool: func(ev chat.ToolStreamEvent) {
+		Tool: func(ev chatport.ToolStreamEvent) {
 			if ev.Tool == "" {
 				return
 			}

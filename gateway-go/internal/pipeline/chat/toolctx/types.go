@@ -9,6 +9,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 // ToolFunc is an adapter to use ordinary functions as tool executors.
@@ -65,159 +67,29 @@ type MessageDeleter func(ctx context.Context, delivery *DeliveryContext, msgID s
 // On subsequent calls, it edits the message with the given ID.
 type DraftEditFunc func(ctx context.Context, delivery *DeliveryContext, msgID string, text string) (newMsgID string, err error)
 
-// ProviderConfig holds credentials and endpoint for an LLM provider.
-type ProviderConfig struct {
-	APIKey string `json:"apiKey"`
-	// APIKeyRef is deprecated and inert: 1Password secret-reference resolution
-	// has been removed. The field is retained only so a stale apiKeyRef in
-	// deneb.json can be detected and a one-time warning emitted (see
-	// resolveProviderAPIKey). Use a plain apiKey or an env var instead.
-	APIKeyRef string `json:"apiKeyRef,omitempty"`
-	BaseURL   string `json:"baseUrl"`
-	API       string `json:"api"` // "openai" (default)
+// ProviderConfig is the stable provider configuration owned by chatport.
+type ProviderConfig = chatport.ProviderConfig
 
-	// Headers are extra HTTP headers sent on every request to this
-	// provider. Use this to set a custom User-Agent or other headers an
-	// endpoint requires (some coding-subscription endpoints key access
-	// off the client identifier). Values override the client defaults.
-	Headers map[string]string `json:"headers,omitempty"`
+// RoutingConfig is the stable routing override owned by chatport.
+type RoutingConfig = chatport.RoutingConfig
 
-	// Capability overrides. Absent fields (zero/nil) keep the built-in
-	// defaults — see internal/ai/modelcaps and
-	// modelrole.Registry.CapabilityForModel for the layering.
-	ContextWindow int   `json:"contextWindow,omitempty"` // context length in tokens
-	Reasoning     *bool `json:"reasoning,omitempty"`     // genuine reasoning-endpoint model
-	Vision        *bool `json:"vision,omitempty"`        // false → strip image blocks before sending
-	PromptCache   *bool `json:"promptCache,omitempty"`   // false → strip cache_control markers
+// DeliveryContext is the stable channel-routing contract owned by chatport.
+type DeliveryContext = chatport.DeliveryContext
 
-	// Sampling overrides layered over the builtin per-model profile
-	// (modelrole.ProfileFor) by modelrole.Registry.ProfileForModel. Applied
-	// only when the request itself does not specify the parameter.
-	Temperature *float64 `json:"temperature,omitempty"`
-	TopP        *float64 `json:"topP,omitempty"`
-	TopK        *int     `json:"topK,omitempty"`
+// Transcript wire types are owned by chatport. Aliases keep the established
+// toolctx API source- and JSON-compatible while Polaris and compaction depend
+// on the neutral contract directly.
+type ChatMessage = chatport.ChatMessage
+type ChatAttachment = chatport.ChatAttachment
 
-	// Routing overrides the per-model effort-router policy, layered over the
-	// builtin profile by modelrole.Registry.RoutingProfileForModel. Absent
-	// (nil) keeps the builtin behavior — see internal/ai/router.
-	Routing *RoutingConfig `json:"routing,omitempty"`
-}
-
-// RoutingConfig is the deneb.json models.providers.<id>.routing block: optional
-// per-model effort-router tuning. Every field is a pointer so an absent or
-// partial block only overrides what it names; the rest stays at the builtin
-// default (router.DefaultProfile + the model's capability toggle).
-type RoutingConfig struct {
-	Enabled           *bool   `json:"enabled,omitempty"`           // master switch for this model's routing
-	ToggleKwarg       *string `json:"toggleKwarg,omitempty"`       // chat_template_kwargs off-switch name
-	MaxSimpleRunes    *int    `json:"maxSimpleRunes,omitempty"`    // turn-0 query-length gate (volume lever)
-	StepCeilingTurn   *int    `json:"stepCeilingTurn,omitempty"`   // ceiling turn after which thinking reverts
-	ObservationRunes  *int    `json:"observationRunes,omitempty"`  // single tool-result size that reverts
-	CumulativeRunes   *int    `json:"cumulativeRunes,omitempty"`   // whole-run tool-output size that reverts
-	HeavyHistoryRunes *int    `json:"heavyHistoryRunes,omitempty"` // assistant-message length marking context heavy
-}
-
-// DeliveryContext carries channel routing information for a chat message.
-type DeliveryContext struct {
-	Channel    string `json:"channel,omitempty"`
-	To         string `json:"to,omitempty"`
-	AccountID  string `json:"accountId,omitempty"`
-	ThreadID   string `json:"threadId,omitempty"`
-	MessageID  string `json:"messageId,omitempty"`  // triggering message ID for reply threading
-	DraftMsgID string `json:"draftMsgId,omitempty"` // draft streaming message ID for edit-in-place on completion
-}
-
-// ChatMessage represents a message in a session transcript.
-// Content is json.RawMessage so it can hold either a plain JSON string
-// (legacy text-only) or an array of ContentBlocks (rich format with
-// tool_use, tool_result, thinking blocks). Use TextContent() to extract
-// text, NewTextChatMessage() to construct text-only messages.
-type ChatMessage struct {
-	Role        string           `json:"role"`
-	Content     json.RawMessage  `json:"content,omitempty"`
-	Attachments []ChatAttachment `json:"attachments,omitempty"`
-	Timestamp   int64            `json:"timestamp,omitempty"`
-	ParentID    string           `json:"parentId,omitempty"`
-	ID          string           `json:"id,omitempty"`
-}
-
-// NewTextChatMessage creates a ChatMessage with text-only content.
+// NewTextChatMessage preserves the legacy toolctx constructor surface.
 func NewTextChatMessage(role, text string, ts int64) ChatMessage {
-	return ChatMessage{
-		Role:      role,
-		Content:   MarshalJSONString(text),
-		Timestamp: ts,
-	}
+	return chatport.NewTextChatMessage(role, text, ts)
 }
 
-// TextContent extracts a plain text string from Content.
-// If Content is a JSON string, returns the unquoted string.
-// If Content is a ContentBlock array, joins all text block values.
-// Returns "" if Content is nil or empty.
-func (m *ChatMessage) TextContent() string {
-	if len(m.Content) == 0 {
-		return ""
-	}
-	// Try JSON string first (most common, legacy format).
-	var s string
-	if err := json.Unmarshal(m.Content, &s); err == nil {
-		return s
-	}
-	// Try ContentBlock array (rich format).
-	var blocks []struct {
-		Type string `json:"type"`
-		Text string `json:"text,omitempty"`
-	}
-	if err := json.Unmarshal(m.Content, &blocks); err == nil {
-		var texts []string
-		for _, b := range blocks {
-			if b.Type == "text" && b.Text != "" {
-				texts = append(texts, b.Text)
-			}
-		}
-		if len(texts) > 0 {
-			return joinTexts(texts)
-		}
-	}
-	// Fallback: return raw content as string (shouldn't happen).
-	return string(m.Content)
-}
-
-// HasContent returns true if Content is non-empty.
-func (m *ChatMessage) HasContent() bool {
-	if len(m.Content) == 0 {
-		return false
-	}
-	// Check if it's an empty JSON string ("").
-	return string(m.Content) != `""`
-}
-
-// MarshalJSONString returns s as a JSON-encoded string (with quotes).
+// MarshalJSONString preserves the legacy toolctx helper surface.
 func MarshalJSONString(s string) json.RawMessage {
-	data, _ := json.Marshal(s)
-	return data
-}
-
-// joinTexts joins text fragments with newlines.
-func joinTexts(texts []string) string {
-	if len(texts) == 1 {
-		return texts[0]
-	}
-	result := texts[0]
-	for _, t := range texts[1:] {
-		result += "\n\n" + t
-	}
-	return result
-}
-
-// ChatAttachment represents an attachment on a chat message.
-type ChatAttachment struct {
-	Type     string `json:"type"` // "image", "file", "audio", "video"
-	MimeType string `json:"mimeType,omitempty"`
-	URL      string `json:"url,omitempty"`
-	Data     string `json:"data,omitempty"` // base64-encoded content
-	Name     string `json:"name,omitempty"`
-	Size     int64  `json:"size,omitempty"`
+	return chatport.MarshalJSONString(s)
 }
 
 // AbortEntry tracks an active abort controller for a running chat session.
@@ -236,27 +108,6 @@ type AbortEntry struct {
 // mediaType is one of: photo, document, video, audio, voice (empty = auto-detect).
 type MediaSendFunc func(ctx context.Context, delivery *DeliveryContext, filePath, mediaType, caption string, silent bool) error
 
-// SearchResult holds matching messages from a single session.
-type SearchResult struct {
-	SessionKey string       `json:"sessionKey"`
-	Matches    []MatchedMsg `json:"matches"`
-}
-
-// MatchedMsg is a single matching message with surrounding context.
-type MatchedMsg struct {
-	Index   int           `json:"index"`   // position in transcript
-	Message ChatMessage   `json:"message"` // the matched message
-	Context []ChatMessage `json:"context"` // surrounding messages (+-1)
-}
-
-// TranscriptStore loads and persists session transcripts.
-type TranscriptStore interface {
-	Load(sessionKey string, limit int) ([]ChatMessage, int, error)
-	Append(sessionKey string, msg ChatMessage) error
-	Delete(sessionKey string) error
-	ListKeys() ([]string, error)
-	Search(query string, maxResults int) ([]SearchResult, error)
-	// CloneRecent copies the most recent `limit` messages from srcKey to dstKey.
-	// Used for subagent cron sessions that inherit conversation context.
-	CloneRecent(srcKey, dstKey string, limit int) error
-}
+type SearchResult = chatport.SearchResult
+type MatchedMsg = chatport.MatchedMsg
+type TranscriptStore = chatport.TranscriptStore

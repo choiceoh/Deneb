@@ -12,7 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	chatpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -98,7 +98,7 @@ func buildTodayFeedDigest(items []workfeed.Item, now time.Time) string {
 //
 // Registered late (needs the chat handler); see method_registry.go.
 func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
-	if deps.Chat == nil {
+	if deps.Chat == nil || !deps.Chat.ChatReady() {
 		return nil
 	}
 	m := map[string]rpcutil.HandlerFunc{
@@ -217,8 +217,8 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		recordWorkFeed(deps, workfeed.Item{
 			Source:     workfeed.SourceCaptureImage,
 			Title:      "공유 이미지",
-			Summary:    workfeed.Preview(res.BestText(), 180),
-			Body:       res.BestText(),
+			Summary:    workfeed.Preview(res.BestText, 180),
+			Body:       res.BestText,
 			SessionKey: sessionKey,
 		})
 		return rpcutil.RespondOK(req.ID, map[string]any{
@@ -431,8 +431,8 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 		recordWorkFeed(deps, workfeed.Item{
 			Source:     workfeed.SourceCaptureAudio,
 			Title:      "공유 녹음",
-			Summary:    workfeed.Preview(res.BestText(), 180),
-			Body:       res.BestText(),
+			Summary:    workfeed.Preview(res.BestText, 180),
+			Body:       res.BestText,
 			SessionKey: sessionKey,
 		})
 		return rpcutil.RespondOK(req.ID, map[string]any{
@@ -444,9 +444,11 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 	}
 }
 
-func sendUntrustedCapture(ctx context.Context, deps Deps, sessionKey, message string) (*chatpkg.SyncResult, error) {
-	return deps.Chat.SendSync(ctx, sessionKey, message, "", &chatpkg.SyncOptions{
-		Delivery:            &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
+func sendUntrustedCapture(ctx context.Context, deps Deps, sessionKey, message string) (*chatport.SyncResult, error) {
+	return deps.Chat.RunSync(ctx, chatport.SyncRequest{
+		SessionKey:          sessionKey,
+		Message:             message,
+		Delivery:            &chatport.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 		AutoDeliveredOutput: true,
 		GateUntrustedTools:  true,
 	})
@@ -536,8 +538,8 @@ func recordWorkFeed(deps Deps, item workfeed.Item) {
 //   - falls back to the raw capture card when the analysis is too thin to be a
 //     deliverable (PublishDeliverable suppressed it) or PublishDeliverable is
 //     unwired, so a shared document is never silently dropped.
-func cardCapturedDocument(deps Deps, sessionKey string, res *chatpkg.SyncResult, turnStartMs int64) {
-	body := res.BestText()
+func cardCapturedDocument(deps Deps, sessionKey string, res *chatport.SyncResult, turnStartMs int64) {
+	body := res.BestText
 	if alreadyCardedThisTurn(deps, sessionKey, turnStartMs) {
 		return
 	}
@@ -644,8 +646,11 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 			}
 		}
 
-		res, err := deps.Chat.SendSync(ctx, sessionKey, p.Message, strings.TrimSpace(p.Model), &chatpkg.SyncOptions{
-			Delivery: &chatpkg.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
+		res, err := deps.Chat.RunSync(ctx, chatport.SyncRequest{
+			SessionKey: sessionKey,
+			Message:    p.Message,
+			Model:      strings.TrimSpace(p.Model),
+			Delivery:   &chatport.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 			// The reply text is returned here, not pushed via the message tool.
 			AutoDeliveredOutput: true,
 			SkipRecall:          p.SkipRecall,
@@ -660,7 +665,7 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			// BestText so a tool wrap-up final turn (e.g. "위키에 기록했습니다"
 			// after writing the answer to the wiki) doesn't replace the real body.
-			"text":       res.BestText(),
+			"text":       res.BestText,
 			"model":      res.Model,
 			"fellBack":   res.FellBack,
 			"sessionKey": sessionKey,

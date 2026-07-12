@@ -152,9 +152,17 @@ fi
 # Accept both the new deneb-<code>-<sha> filenames and the legacy
 # deneb-<name>-<code>-<sha> ones still lingering in the serve dir: the optional
 # leading group only matches a dotted version, so <code> is the first dot-less int.
-SERVE_MAX="$(ls "$APK_DIR"/deneb-*.apk 2>/dev/null \
-  | grep -oE 'deneb-([0-9]+\.[0-9.]+-)?[0-9]+-' | grep -oE '[0-9]+-$' | tr -d '-' \
-  | sort -n | tail -1 || true)"
+SERVE_MAX="$(
+  for apk in "$APK_DIR"/deneb-*.apk; do
+    [ -e "$apk" ] || continue
+    basename "$apk"
+  done \
+    | grep -oE 'deneb-([0-9]+\.[0-9.]+-)?[0-9]+-' \
+    | grep -oE '[0-9]+-$' \
+    | tr -d '-' \
+    | sort -n \
+    | tail -1 || true
+)"
 VERSION_CODE=$(( ${SERVE_MAX:-0} + 1 ))
 if [ "$VERSION_CODE" -lt "$LIBS_VERSION_CODE" ]; then
   VERSION_CODE="$LIBS_VERSION_CODE"

@@ -18,17 +18,17 @@ type ToolFunc = toolctx.ToolFunc
 // supplies the actual genesis/evolution implementation after those services
 // have been initialized.
 type SkillLifecycleBackend interface {
-	ProposeSkillEvolution(context.Context, SkillEvolutionProposalRequest) (any, error)
-	RunSkillGenesis(context.Context, SkillGenesisRequest) (any, error)
-	RunSkillEvolution(context.Context, SkillEvolutionRequest) (any, error)
-	SkillLifecycleStatus(context.Context, SkillLifecycleStatusRequest) (any, error)
-	RunSkillCuratorAction(context.Context, SkillCuratorActionRequest) (any, error)
-	RecordSkillValidationCase(context.Context, SkillValidationCaseRequest) (any, error)
-	RecordSkillValidationCaseFromSession(context.Context, SkillValidationCaseFromSessionRequest) (any, error)
-	BackfillSkillValidationCases(context.Context, SkillValidationBackfillRequest) (any, error)
-	RecordSelfCorrectionCandidate(context.Context, SkillSelfCorrectionCandidateRequest) (any, error)
-	ReviewSelfCorrectionCandidate(context.Context, SkillSelfCorrectionReviewRequest) (any, error)
-	HeartbeatShadowReplay(context.Context, HeartbeatShadowReplayRequest) (any, error)
+	ProposeSkillEvolution(context.Context, SkillEvolutionProposalRequest) (SkillEvolutionProposalResult, error)
+	RunSkillGenesis(context.Context, SkillGenesisRequest) (SkillGenesisResult, error)
+	RunSkillEvolution(context.Context, SkillEvolutionRequest) (SkillEvolutionResult, error)
+	SkillLifecycleStatus(context.Context, SkillLifecycleStatusRequest) (SkillLifecycleStatusResult, error)
+	RunSkillCuratorAction(context.Context, SkillCuratorActionRequest) (SkillCuratorActionResult, error)
+	RecordSkillValidationCase(context.Context, SkillValidationCaseRequest) (SkillValidationCaseResult, error)
+	RecordSkillValidationCaseFromSession(context.Context, SkillValidationCaseFromSessionRequest) (SkillValidationCaseFromSessionResult, error)
+	BackfillSkillValidationCases(context.Context, SkillValidationBackfillRequest) (SkillValidationBackfillResult, error)
+	RecordSelfCorrectionCandidate(context.Context, SkillSelfCorrectionCandidateRequest) (SkillSelfCorrectionCandidateResult, error)
+	ReviewSelfCorrectionCandidate(context.Context, SkillSelfCorrectionReviewRequest) (SkillSelfCorrectionReviewResult, error)
+	HeartbeatShadowReplay(context.Context, HeartbeatShadowReplayRequest) (HeartbeatShadowReplayResult, error)
 }
 
 // HeartbeatShadowReplayRequest carries a candidate HEARTBEAT.md body for a
@@ -228,7 +228,7 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 		)
 		switch p.Action {
 		case "propose":
-			result, err = backend.ProposeSkillEvolution(ctx, SkillEvolutionProposalRequest{
+			result, err = eraseSkillLifecycleResult(backend.ProposeSkillEvolution(ctx, SkillEvolutionProposalRequest{
 				Candidate:    p.Candidate,
 				Evidence:     p.Evidence,
 				Route:        p.Route,
@@ -237,34 +237,34 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 				DreamSummary: p.DreamSummary,
 				SkillName:    p.SkillName,
 				Execute:      p.Execute,
-			})
+			}))
 		case "genesis":
-			result, err = backend.RunSkillGenesis(ctx, SkillGenesisRequest{
+			result, err = eraseSkillLifecycleResult(backend.RunSkillGenesis(ctx, SkillGenesisRequest{
 				SessionKey:   p.SessionKey,
 				DreamSummary: p.DreamSummary,
-			})
+			}))
 		case "evolve":
-			result, err = backend.RunSkillEvolution(ctx, SkillEvolutionRequest{
+			result, err = eraseSkillLifecycleResult(backend.RunSkillEvolution(ctx, SkillEvolutionRequest{
 				SkillName: p.SkillName,
 				Finding:   p.Finding,
-			})
+			}))
 		case "heartbeat_shadow_replay":
-			result, err = backend.HeartbeatShadowReplay(ctx, HeartbeatShadowReplayRequest{
+			result, err = eraseSkillLifecycleResult(backend.HeartbeatShadowReplay(ctx, HeartbeatShadowReplayRequest{
 				Candidate: p.Candidate,
 				Limit:     p.Limit,
-			})
+			}))
 		case "status":
-			result, err = backend.SkillLifecycleStatus(ctx, SkillLifecycleStatusRequest{
+			result, err = eraseSkillLifecycleResult(backend.SkillLifecycleStatus(ctx, SkillLifecycleStatusRequest{
 				SkillName: p.SkillName,
 				Limit:     p.Limit,
-			})
+			}))
 		case "pin", "unpin", "archive", "restore":
-			result, err = backend.RunSkillCuratorAction(ctx, SkillCuratorActionRequest{
+			result, err = eraseSkillLifecycleResult(backend.RunSkillCuratorAction(ctx, SkillCuratorActionRequest{
 				Action:    p.Action,
 				SkillName: p.SkillName,
-			})
+			}))
 		case "validation_case":
-			result, err = backend.RecordSkillValidationCase(ctx, SkillValidationCaseRequest{
+			result, err = eraseSkillLifecycleResult(backend.RecordSkillValidationCase(ctx, SkillValidationCaseRequest{
 				SkillName:           p.SkillName,
 				ID:                  p.ID,
 				Description:         p.Description,
@@ -274,9 +274,9 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 				RequiredHeadings:    p.RequiredHeadings,
 				Replay:              p.Replay,
 				Source:              p.Source,
-			})
+			}))
 		case "validation_case_from_session":
-			result, err = backend.RecordSkillValidationCaseFromSession(ctx, SkillValidationCaseFromSessionRequest{
+			result, err = eraseSkillLifecycleResult(backend.RecordSkillValidationCaseFromSession(ctx, SkillValidationCaseFromSessionRequest{
 				SkillName:           p.SkillName,
 				SessionKey:          p.SessionKey,
 				ID:                  p.ID,
@@ -287,9 +287,9 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 				RequiredHeadings:    p.RequiredHeadings,
 				Replay:              p.Replay,
 				Source:              p.Source,
-			})
+			}))
 		case "validation_backfill":
-			result, err = backend.BackfillSkillValidationCases(ctx, SkillValidationBackfillRequest{
+			result, err = eraseSkillLifecycleResult(backend.BackfillSkillValidationCases(ctx, SkillValidationBackfillRequest{
 				SkillName:    p.SkillName,
 				SessionKey:   p.SessionKey,
 				Limit:        p.Limit,
@@ -297,9 +297,9 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 				FrontierTier: p.FrontierTier,
 				Replay:       p.Replay,
 				Source:       p.Source,
-			})
+			}))
 		case "self_correction":
-			result, err = backend.RecordSelfCorrectionCandidate(ctx, SkillSelfCorrectionCandidateRequest{
+			result, err = eraseSkillLifecycleResult(backend.RecordSelfCorrectionCandidate(ctx, SkillSelfCorrectionCandidateRequest{
 				ID:             p.ID,
 				Scope:          p.Scope,
 				SkillName:      p.SkillName,
@@ -312,14 +312,14 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 				ProposedChange: p.ProposedChange,
 				Risk:           p.Risk,
 				Source:         p.Source,
-			})
+			}))
 		case "self_correction_review":
-			result, err = backend.ReviewSelfCorrectionCandidate(ctx, SkillSelfCorrectionReviewRequest{
+			result, err = eraseSkillLifecycleResult(backend.ReviewSelfCorrectionCandidate(ctx, SkillSelfCorrectionReviewRequest{
 				ID:         p.ID,
 				Status:     p.Status,
 				Reviewer:   p.Reviewer,
 				ReviewNote: p.ReviewNote,
-			})
+			}))
 		default:
 			return "action은 propose, genesis, evolve, status, self_correction, self_correction_review, validation_case, validation_case_from_session, validation_backfill, heartbeat_shadow_replay, pin, unpin, archive, restore 중 하나를 지정하세요.", nil
 		}
@@ -332,6 +332,15 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 		}
 		return string(data), nil
 	}
+}
+
+// eraseSkillLifecycleResult is the single adapter from typed lifecycle results
+// to the chat tool's JSON-marshalling surface.
+func eraseSkillLifecycleResult[T any](result T, err error) (any, error) {
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // SkillLifecycleToolSchema returns the JSON schema for the late-bound Propus

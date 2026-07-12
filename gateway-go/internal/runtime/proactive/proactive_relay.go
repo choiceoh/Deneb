@@ -8,14 +8,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
+	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
-	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 )
 
 const (
@@ -250,7 +250,7 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 	// isContentlessProactive below only catches the chatty prose variants
 	// ("메일이 없습니다" etc.); the bare token needs this explicit strip.
 	origLen := len(content) // raw body size, recorded on every relay decision
-	if content = chat.StripSilentToken(content); strings.TrimSpace(content) == "" {
+	if content = tokens.StripSilentToken(content, tokens.SilentReplyToken); strings.TrimSpace(content) == "" {
 		d.logProactive("suppressed", "silent_token", origLen, "")
 		return false, nil
 	}

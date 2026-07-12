@@ -245,6 +245,76 @@ func TestGraphContext_ProjectFamilyEdges(t *testing.T) {
 	}
 }
 
+// TestGraphScoreMap_PreservesPhasePrecedenceAndBoundaries locks the orchestration
+// seams used by the named edge helpers: equal-score authored edges keep the
+// earlier Related relation, mention scoring is opt-in, and cancellation stops
+// record loading before a partial graph is returned.
+func TestGraphScoreMap_PreservesPhasePrecedenceAndBoundaries(t *testing.T) {
+	store, err := NewStore(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, store, "seed.md", &Page{
+		Meta: Frontmatter{Title: "시드", Related: []string{"target.md"}},
+		Body: "[[target.md]]와 언급 후보를 함께 본다.",
+	})
+	mustWrite(t, store, "target.md", &Page{
+		Meta: Frontmatter{Title: "타깃"},
+		Body: "명시 연결 대상",
+	})
+	mustWrite(t, store, "mention.md", &Page{
+		Meta: Frontmatter{Title: "언급 후보"},
+		Body: "본문 언급으로만 연결되는 대상",
+	})
+
+	find := func(recs []graphRec, path string) int {
+		t.Helper()
+		for i := range recs {
+			if recs[i].relPath == path {
+				return i
+			}
+		}
+		t.Fatalf("record %q not found in %+v", path, recs)
+		return -1
+	}
+
+	recs, seed, withoutMentions, err := store.graphScoreMap(
+		context.Background(), "", false, "seed.md",
+	)
+	if err != nil || seed != find(recs, "seed.md") {
+		t.Fatalf("seed resolution failed: seed=%d err=%v", seed, err)
+	}
+	target := find(recs, "target.md")
+	if edge := withoutMentions[target]; edge == nil || edge.score != 1.0 || edge.relation != "관련" {
+		t.Fatalf("equal-score link must not replace earlier Related edge: %+v", edge)
+	}
+	mention := find(recs, "mention.md")
+	if edge := withoutMentions[mention]; edge != nil {
+		t.Fatalf("mention edge present while disabled: %+v", edge)
+	}
+
+	recs, _, withMentions, err := store.graphScoreMap(
+		context.Background(), "", true, "seed.md",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target = find(recs, "target.md")
+	if edge := withMentions[target]; edge == nil || edge.relation != "관련" {
+		t.Fatalf("later phases must preserve the strongest earlier relation: %+v", edge)
+	}
+	mention = find(recs, "mention.md")
+	if edge := withMentions[mention]; edge == nil || edge.score != 0.7 || edge.relation != "언급" {
+		t.Fatalf("enabled forward mention edge = %+v, want score 0.7 relation 언급", edge)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, _, err := store.graphScoreMap(ctx, "", true, "seed.md"); err != context.Canceled {
+		t.Fatalf("cancelled load error = %v, want context.Canceled", err)
+	}
+}
+
 // TestSemanticNeighborLabel pins the deterministic path/category → kind rules:
 // 프로젝트/ layout slots are authoritative, other pages fall back to category
 // then top-level folder, and meaningless kinds (기타, root files) return "".

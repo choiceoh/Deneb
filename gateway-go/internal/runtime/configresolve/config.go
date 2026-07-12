@@ -9,13 +9,13 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 // LoadProviderConfigs reads configured chat providers from the default config path.
-func LoadProviderConfigs(logger *slog.Logger) map[string]chat.ProviderConfig {
+func LoadProviderConfigs(logger *slog.Logger) map[string]chatport.ProviderConfig {
 	snapshot, err := config.LoadConfigFromDefaultPath()
 	if err != nil || !snapshot.Valid || snapshot.Raw == "" {
 		return nil
@@ -23,7 +23,7 @@ func LoadProviderConfigs(logger *slog.Logger) map[string]chat.ProviderConfig {
 
 	var root struct {
 		Models struct {
-			Providers map[string]chat.ProviderConfig `json:"providers"`
+			Providers map[string]chatport.ProviderConfig `json:"providers"`
 		} `json:"models"`
 	}
 	if err := json.Unmarshal([]byte(snapshot.Raw), &root); err != nil {
@@ -78,7 +78,7 @@ func ProviderCatalog(logger *slog.Logger) map[string]modelrole.ProviderResolved 
 // field-identical pointer bags; the split mirrors the existing
 // ProviderConfig/ProviderResolved boundary so modelrole stays free of the
 // config package. Nil in, nil out.
-func convertRoutingConfig(r *chat.RoutingConfig) *modelrole.RoutingOverride {
+func convertRoutingConfig(r *chatport.RoutingConfig) *modelrole.RoutingOverride {
 	if r == nil {
 		return nil
 	}

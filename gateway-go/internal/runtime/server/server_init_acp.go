@@ -4,7 +4,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 // initACPSubsystem sets up the ACP (Agent Control Plane) registry, bindings,

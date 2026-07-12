@@ -33,7 +33,7 @@ func getSilentExactRegex(token string) *regexp.Regexp {
 		return re
 	}
 	escaped := regexp.QuoteMeta(token)
-	re = regexp.MustCompile(`^\s*` + escaped + `\s*$`)
+	re = regexp.MustCompile(`^\s*` + escaped + `[^a-zA-Z0-9]*$`)
 	silentExactMu.Lock()
 	silentExactRe[token] = re
 	silentExactMu.Unlock()
@@ -48,7 +48,7 @@ func getSilentTrailingRegex(token string) *regexp.Regexp {
 		return re
 	}
 	escaped := regexp.QuoteMeta(token)
-	re = regexp.MustCompile(`(?:^|\s+|\*+)` + escaped + `\s*$`)
+	re = regexp.MustCompile(`(?:^|\s+|\*+)` + escaped + `[^a-zA-Z0-9]*$`)
 	silentTrailingMu.Lock()
 	silentTrailingRe[token] = re
 	silentTrailingMu.Unlock()

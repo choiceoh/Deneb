@@ -410,7 +410,7 @@ func runClosedLoop(args []string, stdout, stderr io.Writer) (returnErr error) {
 		}
 	}()
 	runner, err := closedloop.New(closedloop.Config{
-		Pack: pack, Harness: harness,
+		Pack: pack, Executor: harness,
 		SupervisorPlanSource:          supervisorData,
 		SupervisorPlanSourceSHA256:    supervisorSourceDigest,
 		UserSimulatorPlanSource:       userData,
@@ -782,110 +782,234 @@ func validateCompletedRun(pack *casepack.Pack, result runtimebriefcase.RunResult
 	if err := validateDevicePlanBinding(pack, result); err != nil {
 		return err
 	}
-	manifestEpisodes := pack.Manifest.Episodes
-	if len(result.Episodes) < len(manifestEpisodes) {
+	manifest := pack.Manifest
+	if err := validateCompletedRunLength(len(manifest.Episodes), len(result.Episodes), manifest.RunPolicy.MaxFollowUps); err != nil {
+		return err
+	}
+	budget := completedRunBudget{turns: manifest.RunPolicy.MaxTurns, outputTokens: manifest.RunPolicy.MaxTokens}
+	budget, err := validateTimelineEpisodes(pack, result, indexRunSources(manifest.Sources), budget)
+	if err != nil {
+		return err
+	}
+	return validateFollowUpEpisodes(pack, result, budget)
+}
+
+type completedRunBudget struct {
+	turns        int
+	outputTokens int64
+}
+
+func validateCompletedRunLength(timelineEpisodes, runEpisodes, maxFollowUps int) error {
+	if runEpisodes < timelineEpisodes {
 		return errors.New("run result is a partial timeline and cannot be scored")
 	}
-	if followUps := len(result.Episodes) - len(manifestEpisodes); followUps > pack.Manifest.RunPolicy.MaxFollowUps {
+	if runEpisodes-timelineEpisodes > maxFollowUps {
 		return errors.New("run result exceeds the signed follow-up budget")
 	}
-	sources := make(map[string]casepack.Source, len(pack.Manifest.Sources))
-	for _, source := range pack.Manifest.Sources {
-		sources[source.ID] = source
+	return nil
+}
+
+func indexRunSources(sources []casepack.Source) map[string]casepack.Source {
+	indexed := make(map[string]casepack.Source, len(sources))
+	for _, source := range sources {
+		indexed[source.ID] = source
 	}
-	remainingTurns := pack.Manifest.RunPolicy.MaxTurns
-	remainingOutputTokens := pack.Manifest.RunPolicy.MaxTokens
-	consumeBudget := func(label string, episode runtimebriefcase.EpisodeResult) error {
-		if episode.Turns <= 0 || episode.OutputTokens < 0 || ((episode.Text != "" || episode.AllText != "") && episode.OutputTokens == 0) {
-			return fmt.Errorf("run result %s has invalid budget accounting", label)
-		}
-		if episode.Turns > remainingTurns || int64(episode.OutputTokens) > remainingOutputTokens {
-			return errors.New("run result exceeds the signed cumulative model budget")
-		}
-		remainingTurns -= episode.Turns
-		remainingOutputTokens -= int64(episode.OutputTokens)
-		return nil
+	return indexed
+}
+
+func consumeCompletedRunBudget(budget completedRunBudget, label string, episode runtimebriefcase.EpisodeResult) (completedRunBudget, error) {
+	if episode.Turns <= 0 || episode.OutputTokens < 0 || ((episode.Text != "" || episode.AllText != "") && episode.OutputTokens == 0) {
+		return budget, fmt.Errorf("run result %s has invalid budget accounting", label)
 	}
-	for index, expected := range manifestEpisodes {
+	if episode.Turns > budget.turns || int64(episode.OutputTokens) > budget.outputTokens {
+		return budget, errors.New("run result exceeds the signed cumulative model budget")
+	}
+	budget.turns -= episode.Turns
+	budget.outputTokens -= int64(episode.OutputTokens)
+	return budget, nil
+}
+
+func validateTimelineEpisodes(
+	pack *casepack.Pack,
+	result runtimebriefcase.RunResult,
+	sources map[string]casepack.Source,
+	budget completedRunBudget,
+) (completedRunBudget, error) {
+	for index, expected := range pack.Manifest.Episodes {
 		actual := result.Episodes[index]
-		if actual.EpisodeID != expected.ID || actual.Phase != "timeline" {
-			return fmt.Errorf("run result timeline episode %d does not match signed episode %q", index+1, expected.ID)
+		if err := validateTimelineHeader(index, expected, actual); err != nil {
+			return budget, err
 		}
-		if actual.At != expected.At.UTC().Format(time.RFC3339Nano) {
-			return fmt.Errorf("run result episode %q timestamp does not match the signed timeline", expected.ID)
-		}
-		released := make([]string, 0, len(expected.ReleaseSourceIDs))
-		withheld := make([]string, 0, len(expected.ReleaseSourceIDs))
-		for _, sourceID := range expected.ReleaseSourceIDs {
-			source := sources[sourceID]
-			if result.Arm == runtimebriefcase.ArmRawPrimary && source.Memory {
-				withheld = append(withheld, sourceID)
-			} else {
-				released = append(released, sourceID)
-			}
-		}
+		released, withheld := expectedReleaseOutcome(expected, sources, result.Arm)
 		if !sameStrings(actual.ReleasedSource, released) || !sameStrings(actual.WithheldSource, withheld) {
-			return fmt.Errorf("run result episode %q release outcome does not match the signed arm", expected.ID)
+			return budget, fmt.Errorf("run result episode %q release outcome does not match the signed arm", expected.ID)
 		}
 		if expected.Kind == casepack.EpisodeEvent {
-			if actual.InputSHA256 != "" || actual.SystemPromptSHA256 != "" || actual.Model != "" || actual.ProviderModel != "" ||
-				actual.Text != "" || actual.AllText != "" || actual.StopReason != "" || actual.InputTokens != 0 || actual.OutputTokens != 0 {
-				return fmt.Errorf("run result event %q contains executor output", expected.ID)
+			if eventExecutorOutput(actual) != (eventOutput{}) {
+				return budget, fmt.Errorf("run result event %q contains executor output", expected.ID)
 			}
 			continue
 		}
-		if err := consumeBudget(fmt.Sprintf("episode %q", expected.ID), actual); err != nil {
-			return err
-		}
-		if expected.Input == nil {
-			return fmt.Errorf("signed executable episode %q has no input", expected.ID)
-		}
-		input, err := pack.ReadFile(expected.Input.Path)
+		var err error
+		budget, err = consumeCompletedRunBudget(budget, fmt.Sprintf("episode %q", expected.ID), actual)
 		if err != nil {
-			return fmt.Errorf("read signed episode %q input: %w", expected.ID, err)
+			return budget, err
 		}
-		normalized := chat.SanitizeInput(string(input))
+		normalized, err := readNormalizedEpisodeInput(pack, expected)
+		if err != nil {
+			return budget, err
+		}
 		if normalized == "" || actual.InputSHA256 != casepack.DigestBytes([]byte(normalized)) {
-			return fmt.Errorf("run result episode %q normalized input digest does not match", expected.ID)
+			return budget, fmt.Errorf("run result episode %q normalized input digest does not match", expected.ID)
 		}
-		if actual.Model != result.Model || actual.ProviderModel != result.ProviderModel || actual.StopReason != "end_turn" || !lowerSHA256(actual.SystemPromptSHA256) {
-			return fmt.Errorf("run result episode %q executor provenance does not match the run", expected.ID)
+		if !validExecutorProvenance(actual, result) {
+			return budget, fmt.Errorf("run result episode %q executor provenance does not match the run", expected.ID)
 		}
 	}
+	return budget, nil
+}
 
-	lastAt := pack.Manifest.FrozenNow
-	if len(manifestEpisodes) > 0 {
-		lastAt = manifestEpisodes[len(manifestEpisodes)-1].At
+func validateTimelineHeader(index int, expected casepack.Episode, actual runtimebriefcase.EpisodeResult) error {
+	if actual.EpisodeID != expected.ID || actual.Phase != "timeline" {
+		return fmt.Errorf("run result timeline episode %d does not match signed episode %q", index+1, expected.ID)
 	}
-	var scriptedFollowUps []runtimebriefcase.ScriptedFollowUp
-	if len(result.Episodes) > len(manifestEpisodes) {
-		plan, err := loadSignedUserSimulatorPlan(pack)
-		if err != nil {
+	if actual.At != expected.At.UTC().Format(time.RFC3339Nano) {
+		return fmt.Errorf("run result episode %q timestamp does not match the signed timeline", expected.ID)
+	}
+	return nil
+}
+
+func expectedReleaseOutcome(
+	expected casepack.Episode,
+	sources map[string]casepack.Source,
+	arm runtimebriefcase.Arm,
+) (released, withheld []string) {
+	released = make([]string, 0, len(expected.ReleaseSourceIDs))
+	withheld = make([]string, 0, len(expected.ReleaseSourceIDs))
+	for _, sourceID := range expected.ReleaseSourceIDs {
+		if source := sources[sourceID]; arm == runtimebriefcase.ArmRawPrimary && source.Memory {
+			withheld = append(withheld, sourceID)
+		} else {
+			released = append(released, sourceID)
+		}
+	}
+	return released, withheld
+}
+
+type eventOutput struct {
+	inputSHA256        string
+	systemPromptSHA256 string
+	model              string
+	providerModel      string
+	text               string
+	allText            string
+	stopReason         string
+	inputTokens        int
+	outputTokens       int
+}
+
+func eventExecutorOutput(episode runtimebriefcase.EpisodeResult) eventOutput {
+	return eventOutput{
+		inputSHA256:        episode.InputSHA256,
+		systemPromptSHA256: episode.SystemPromptSHA256,
+		model:              episode.Model,
+		providerModel:      episode.ProviderModel,
+		text:               episode.Text,
+		allText:            episode.AllText,
+		stopReason:         episode.StopReason,
+		inputTokens:        episode.InputTokens,
+		outputTokens:       episode.OutputTokens,
+	}
+}
+
+func readNormalizedEpisodeInput(pack *casepack.Pack, expected casepack.Episode) (string, error) {
+	if expected.Input == nil {
+		return "", fmt.Errorf("signed executable episode %q has no input", expected.ID)
+	}
+	input, err := pack.ReadFile(expected.Input.Path)
+	if err != nil {
+		return "", fmt.Errorf("read signed episode %q input: %w", expected.ID, err)
+	}
+	return chat.SanitizeInput(string(input)), nil
+}
+
+type executorProvenance struct {
+	model         string
+	providerModel string
+	stopReason    string
+}
+
+func validExecutorProvenance(actual runtimebriefcase.EpisodeResult, result runtimebriefcase.RunResult) bool {
+	got := executorProvenance{model: actual.Model, providerModel: actual.ProviderModel, stopReason: actual.StopReason}
+	want := executorProvenance{model: result.Model, providerModel: result.ProviderModel, stopReason: "end_turn"}
+	return got == want && lowerSHA256(actual.SystemPromptSHA256)
+}
+
+func validateFollowUpEpisodes(pack *casepack.Pack, result runtimebriefcase.RunResult, budget completedRunBudget) error {
+	timelineCount := len(pack.Manifest.Episodes)
+	followUps := result.Episodes[timelineCount:]
+	if len(followUps) == 0 {
+		return nil
+	}
+	plan, err := loadSignedUserSimulatorPlan(pack)
+	if err != nil {
+		return err
+	}
+	lastAt := pack.Manifest.FrozenNow
+	if timelineCount > 0 {
+		lastAt = pack.Manifest.Episodes[timelineCount-1].At
+	}
+	for index, actual := range followUps {
+		cycle := index + 1
+		if err := validateFollowUpHeader(cycle, lastAt, actual); err != nil {
 			return err
 		}
-		scriptedFollowUps = plan.FollowUps
-	}
-	for index, actual := range result.Episodes[len(manifestEpisodes):] {
-		cycle := index + 1
-		if actual.EpisodeID != fmt.Sprintf("simulator-followup-%d", cycle) || actual.Phase != "follow-up" || actual.Cycle != cycle {
-			return fmt.Errorf("run result follow-up %d has invalid phase or cycle", cycle)
-		}
-		at, err := time.Parse(time.RFC3339Nano, actual.At)
-		if err != nil || !at.Equal(lastAt) {
-			return fmt.Errorf("run result follow-up %d has an invalid timestamp", cycle)
-		}
-		message := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(scriptedFollowUps[index].Message, "\r\n", "\n"), "\r", "\n"))
-		wantInput := casepack.DigestBytes([]byte(chat.SanitizeInput(message)))
-		if actual.InputSHA256 != wantInput || !lowerSHA256(actual.SystemPromptSHA256) || actual.Model != result.Model ||
-			actual.ProviderModel != result.ProviderModel || actual.StopReason != "end_turn" ||
-			len(actual.ReleasedSource) != 0 || len(actual.WithheldSource) != 0 {
+		wantInput := followUpInputDigest(plan.FollowUps[index].Message)
+		if !validFollowUpProvenance(actual, result, wantInput) {
 			return fmt.Errorf("run result follow-up %d provenance is invalid", cycle)
 		}
-		if err := consumeBudget(fmt.Sprintf("follow-up %d", cycle), actual); err != nil {
+		budget, err = consumeCompletedRunBudget(budget, fmt.Sprintf("follow-up %d", cycle), actual)
+		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func validateFollowUpHeader(cycle int, lastAt time.Time, actual runtimebriefcase.EpisodeResult) error {
+	if actual.EpisodeID != fmt.Sprintf("simulator-followup-%d", cycle) || actual.Phase != "follow-up" || actual.Cycle != cycle {
+		return fmt.Errorf("run result follow-up %d has invalid phase or cycle", cycle)
+	}
+	at, err := time.Parse(time.RFC3339Nano, actual.At)
+	if err != nil || !at.Equal(lastAt) {
+		return fmt.Errorf("run result follow-up %d has an invalid timestamp", cycle)
+	}
+	return nil
+}
+
+func followUpInputDigest(message string) string {
+	message = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(message, "\r\n", "\n"), "\r", "\n"))
+	return casepack.DigestBytes([]byte(chat.SanitizeInput(message)))
+}
+
+type followUpProvenance struct {
+	model           string
+	providerModel   string
+	stopReason      string
+	releasedSources int
+	withheldSources int
+}
+
+func validFollowUpProvenance(actual runtimebriefcase.EpisodeResult, result runtimebriefcase.RunResult, wantInput string) bool {
+	if actual.InputSHA256 != wantInput || !lowerSHA256(actual.SystemPromptSHA256) {
+		return false
+	}
+	got := followUpProvenance{
+		model: actual.Model, providerModel: actual.ProviderModel, stopReason: actual.StopReason,
+		releasedSources: len(actual.ReleasedSource), withheldSources: len(actual.WithheldSource),
+	}
+	want := followUpProvenance{model: result.Model, providerModel: result.ProviderModel, stopReason: "end_turn"}
+	return got == want
 }
 
 func validateDevicePlanBinding(pack *casepack.Pack, result runtimebriefcase.RunResult) error {

@@ -82,6 +82,43 @@ func TestConsumeStreamInto_ProviderModelIsStableWithinTurn(t *testing.T) {
 	})
 }
 
+func TestRunAgent_RequireProviderModelAcrossTurns(t *testing.T) {
+	t.Run("missing model fails before completion", func(t *testing.T) {
+		events := buildTextTurnEvents("answer", 1, 1)
+		events[0] = llm.StreamEvent{
+			Type:    "message_start",
+			Payload: json.RawMessage(`{"message":{"usage":{"input_tokens":1}}}`),
+		}
+		streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{events}}
+
+		_, err := RunAgent(context.Background(), AgentConfig{
+			MaxTurns: 1, MaxTokens: 32, RequireProviderModel: true,
+		}, []llm.Message{llm.NewTextMessage("user", "hi")}, streamer, nil, StreamHooks{}, nil, nil)
+		if err == nil || !strings.Contains(err.Error(), "did not report a model identifier") {
+			t.Fatalf("error = %v, want missing provider-model failure", err)
+		}
+	})
+
+	t.Run("model change between turns fails closed", func(t *testing.T) {
+		first := buildToolUseTurnEventsWithNames([]toolUseSpec{{
+			id: "toolu_1", name: "read", inputJSON: `{}`,
+		}}, 1, 1)
+		second := buildTextTurnEvents("answer", 1, 1)
+		second[0] = llm.StreamEvent{
+			Type:    "message_start",
+			Payload: json.RawMessage(`{"message":{"model":"other-model","usage":{"input_tokens":1}}}`),
+		}
+		streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{first, second}}
+
+		_, err := RunAgent(context.Background(), AgentConfig{
+			MaxTurns: 2, MaxTokens: 32, RequireProviderModel: true,
+		}, []llm.Message{llm.NewTextMessage("user", "read")}, streamer, newFakeToolExecutor(), StreamHooks{}, nil, nil)
+		if err == nil || !strings.Contains(err.Error(), `provider model changed from "test-model" to "other-model"`) {
+			t.Fatalf("error = %v, want cross-turn provider-model failure", err)
+		}
+	})
+}
+
 func TestRunAgent_RequireExplicitStopReason(t *testing.T) {
 	streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{{
 		messageStartEvent(1), contentBlockStartEvent(0, "text", ""), textDeltaEvent(0, "answer"),

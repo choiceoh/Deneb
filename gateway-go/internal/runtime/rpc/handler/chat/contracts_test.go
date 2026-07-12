@@ -14,7 +14,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	chatpkg "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -456,7 +456,7 @@ func TestAlreadyCardedThisTurnContract(t *testing.T) {
 }
 
 func TestCardCapturedDocumentFallbackAndPublishContract(t *testing.T) {
-	result := &chatpkg.SyncResult{Text: "analysis body", DeliverableText: "final body"}
+	result := &chatport.SyncResult{Text: "analysis body", DeliverableText: "final body", BestText: "final body"}
 	t.Run("nil feed is safe", func(t *testing.T) {
 		cardCapturedDocument(Deps{}, "client:main", result, 0)
 	})
@@ -467,7 +467,7 @@ func TestCardCapturedDocumentFallbackAndPublishContract(t *testing.T) {
 			t.Fatalf("items = %+v", feed.items)
 		}
 		item := feed.items[0]
-		if item.Source != workfeed.SourceCaptureDocument || item.Title != "공유 문서" || item.Body != result.BestText() || item.SessionKey != "client:main" {
+		if item.Source != workfeed.SourceCaptureDocument || item.Title != "공유 문서" || item.Body != result.BestText || item.SessionKey != "client:main" {
 			t.Fatalf("item = %+v", item)
 		}
 	})
@@ -481,7 +481,7 @@ func TestCardCapturedDocumentFallbackAndPublishContract(t *testing.T) {
 				return true, nil
 			},
 		}, "client:main", result, 0)
-		if publishedBody != result.BestText() || len(feed.items) != 0 {
+		if publishedBody != result.BestText || len(feed.items) != 0 {
 			t.Fatalf("published=%q items=%+v", publishedBody, feed.items)
 		}
 	})

@@ -1,6 +1,6 @@
-// Package chatport defines shared interfaces and types for the chat ↔ autoreply
-// boundary. Both packages depend on chatport (a leaf package with zero intra-project
-// imports), preventing compile-time circular dependencies.
+// Package chatport defines stable interfaces and transport-neutral types at the
+// chat pipeline boundary. Chat, autoreply, and runtime consumers depend on this
+// leaf package instead of importing one another's implementations.
 package chatport
 
 // TypingSignaler abstracts phase-aware typing indicator dispatch.

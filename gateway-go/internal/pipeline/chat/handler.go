@@ -14,11 +14,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
@@ -167,50 +168,10 @@ type TopicResolver interface {
 	Dir() string
 }
 
-// SkillNudger is the chat-side interface the server's genesis.Nudger
-// satisfies. Keeps chat free of any domain import.
-type SkillNudger interface {
-	// Enabled reports whether the nudger is configured to fire.
-	Enabled() bool
-	// OnToolCalls is called after each turn with the number of tool
-	// invocations that completed in that turn and a snapshot of the
-	// session state. Implementations must not block — the chat pipeline
-	// calls this synchronously on the run goroutine.
-	OnToolCalls(ctx context.Context, sessionKey string, delta int, snapshot SkillNudgeSnapshot)
-	// Reset clears the per-session counter; call on session end/abort.
-	Reset(sessionKey string)
-}
-
-// SkillNudgeSnapshot is the minimal projection of an agent run the
-// nudger needs to evaluate "is this skill-worthy?".
-type SkillNudgeSnapshot struct {
-	Turns          int
-	ToolActivities []SkillNudgeToolActivity
-	AllText        string
-	Label          string
-	Model          string
-}
-
-// SkillNudgeToolActivity mirrors the tool activity record the nudger
-// uses. Intentionally decoupled from agent.ToolActivity so chat doesn't
-// leak domain types outward.
-type SkillNudgeToolActivity struct {
-	Name    string
-	IsError bool
-}
-
-// SkillUsageRecorder is the chat-side interface the server's genesis.Tracker
-// satisfies (via adapter). The run loop calls it per turn to record that the
-// agent consulted a skill and whether that turn succeeded; this populates the
-// usage stats the Evolver's SkillsNeedingEvolution(minUses, maxSuccessRate)
-// gate reads, so Propus converges on skills that actually
-// fail rather than evolving blind. Keeps chat free of any domain import.
-type SkillUsageRecorder interface {
-	// RecordSkillUse logs one skill-consult outcome. Must not block — the chat
-	// pipeline calls it synchronously on the run goroutine (the genesis
-	// implementation does a cheap JSONL append).
-	RecordSkillUse(sessionKey, skillName string, success bool, errMsg, model string)
-}
+type SkillNudger = chatport.SkillNudger
+type SkillNudgeSnapshot = chatport.SkillNudgeSnapshot
+type SkillNudgeToolActivity = chatport.SkillNudgeToolActivity
+type SkillUsageRecorder = chatport.SkillUsageRecorder
 
 // HandlerConfig configures the chat handler.
 type HandlerConfig struct {

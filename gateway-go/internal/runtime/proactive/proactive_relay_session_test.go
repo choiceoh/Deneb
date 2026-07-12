@@ -3,7 +3,7 @@ package proactive
 import (
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 // A proactive delivery to a brand-new sub-session must register that session

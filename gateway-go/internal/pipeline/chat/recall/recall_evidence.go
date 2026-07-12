@@ -13,27 +13,13 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/pkg/promptguard"
 )
 
-// FileRecallHit is one file-store semantic-search hit surfaced to the recall
-// preflight. It is a transport-neutral shape (no knowledge/filestore types) so
-// the core chat package stays off those import paths; the server adapts the
-// files knowledge adapter to FileRecallFunc.
-type FileRecallHit struct {
-	Path       string  // store path display, e.g. "/메일/계약서.pdf"
-	Snippet    string  // best-matching chunk
-	Score      float64 // best-chunk cosine (BGE-M3 band, ~0.73–0.86 for relevant)
-	ModifiedAt int64   // unix milli; 0 when unknown
-}
-
-// FileRecallFunc runs a hybrid (lexical + semantic) search over the on-box file
-// store and returns up to limit hits. Injected by the server (closing over the
-// shared file semantic index); nil disables the files recall source. It must be
-// degradation-safe: a down embedding server returns an empty slice, never an
-// error.
-type FileRecallFunc func(ctx context.Context, query string, limit int) []FileRecallHit
+type FileRecallHit = chatport.FileRecallHit
+type FileRecallFunc = chatport.FileRecallFunc
 
 // recallFileSource gates how many file hits a single turn's recall may carry.
 // Files are a high-precision but easily-overweighted source: the index's 0.73

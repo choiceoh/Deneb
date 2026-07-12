@@ -10,10 +10,9 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -35,8 +34,18 @@ type Deps struct {
 
 // ExecDeps holds dependencies for native session execution and agent RPC methods.
 type ExecDeps struct {
-	Chat       *chat.Handler
+	Chat       ExecChat
 	JobTracker *agent.JobTracker
+}
+
+// ExecChat is the protocol-level session surface implemented by chat.Handler.
+// Keeping it consumer-owned prevents the RPC handler from importing the chat
+// pipeline implementation.
+type ExecChat interface {
+	ChatReady() bool
+	SessionsSend(context.Context, *protocol.RequestFrame) *protocol.ResponseFrame
+	SessionsSteer(context.Context, *protocol.RequestFrame) *protocol.ResponseFrame
+	SessionsAbort(context.Context, *protocol.RequestFrame) *protocol.ResponseFrame
 }
 
 // Methods returns all session management RPC handlers.
@@ -51,7 +60,7 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 // ExecMethods returns session execution and agent RPC handlers.
 // Returns nil if Chat is not available.
 func ExecMethods(deps ExecDeps) map[string]rpcutil.HandlerFunc {
-	if deps.Chat == nil {
+	if deps.Chat == nil || !deps.Chat.ChatReady() {
 		return nil
 	}
 

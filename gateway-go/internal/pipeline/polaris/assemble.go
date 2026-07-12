@@ -5,7 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 )
 
@@ -200,7 +200,7 @@ func sortByMsgStart(nodes []SummaryNode) {
 }
 
 // chatToLLM converts ChatMessage transcript entries to LLM messages.
-func chatToLLM(msgs []toolctx.ChatMessage) []llm.Message {
+func chatToLLM(msgs []chatport.ChatMessage) []llm.Message {
 	out := make([]llm.Message, 0, len(msgs))
 	for _, m := range msgs {
 		role := m.Role

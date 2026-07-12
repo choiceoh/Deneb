@@ -11,7 +11,7 @@ import (
 
 	casepack "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
 
 func TestRecordFixturePagingBoundsAndDeepMatch(t *testing.T) {

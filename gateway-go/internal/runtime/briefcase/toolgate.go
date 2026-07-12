@@ -8,18 +8,14 @@ import (
 	"sync"
 
 	casepack "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase/runcontract"
 )
 
 // ApprovalFunc is invoked only for signed tool rules whose decision is
 // approval. A nil callback denies every such call.
 type ApprovalFunc func(name, toolCallID string, input []byte) bool
 
-type ToolCallRecord struct {
-	Name        string `json:"name"`
-	ToolCallID  string `json:"toolCallId"`
-	InputSHA256 string `json:"inputSha256"`
-	Decision    string `json:"decision"`
-}
+type ToolCallRecord = runcontract.ToolCallRecord
 
 // ToolGate enforces a signed case tool policy at the Handler's BeforeToolCall
 // boundary. It reserves budget before execution, so errors and retries still

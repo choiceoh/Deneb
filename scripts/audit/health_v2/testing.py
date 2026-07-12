@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -28,6 +29,7 @@ from .testing_parsing import (
     RISK_RULES as _RISK_RULES,
     case_has_intent as _case_has_intent,
     hazards as _hazards,
+    has_observable_oracle as _has_observable_oracle,
     normalized_subject as _normalized_subject,
     risk_source_text as _risk_source_text,
     source_symbols as _source_symbols,
@@ -52,9 +54,127 @@ class _TestFile:
     line_count: int
     generated: bool = False
     cases: list[_Case] = field(default_factory=list)
+    target_units: tuple[str, ...] = ()
+    case_target_units: list[tuple[str, ...]] = field(default_factory=list)
     localized: list[bool] = field(default_factory=list)
     intentful: list[bool] = field(default_factory=list)
     hazards: tuple[str, ...] = ()
+
+
+def _python_imports(text: str) -> set[str]:
+    """Return absolute modules imported by a Python test.
+
+    Python behavior tests in this repository intentionally live in the central
+    ``scripts/audit`` and ``scripts/dev`` suites.  Their production subjects
+    can therefore be in a child package or another scripts directory rather
+    than beside the test file.  Imports provide a stronger link than physical
+    proximity, while syntax errors simply leave the conservative default unit.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return set()
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            modules.add(node.module)
+    return modules
+
+
+_KOTLIN_IMPORT_RE = re.compile(
+    r"(?m)^\s*import\s+"
+    r"([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)"
+    r"(?:\s+as\s+([A-Za-z_]\w*))?\s*$"
+)
+
+
+def _kotlin_import_targets(
+    text: str,
+    *,
+    source_units: set[str],
+    normalized_symbols_by_unit: dict[str, set[str]],
+) -> tuple[tuple[str, str], ...]:
+    """Resolve explicitly imported and callable Kotlin production subjects.
+
+    Kotlin multiplatform tests frequently live in a broad ``commonTest``
+    package while exercising a production type or top-level function imported
+    from another package. Package locality alone misses that relationship. An
+    import receives credit only when its owning production unit exists and the
+    imported top-level subject is a declared symbol; per-case call evidence is
+    checked separately so an unused or comment-only import cannot launder a
+    test into an unrelated production unit.
+    """
+    targets: set[tuple[str, str]] = set()
+    for match in _KOTLIN_IMPORT_RE.finditer(text):
+        qualified, alias = match.groups()
+        parts = qualified.split(".")
+        # An explicit import must leave at least one subject segment after the
+        # package. Wildcard imports are deliberately not credited.
+        for end in range(len(parts) - 1, 0, -1):
+            unit = f"kotlin:{'.'.join(parts[:end])}"
+            if unit not in source_units:
+                continue
+            subject = _normalized_subject(parts[end])
+            if subject not in normalized_symbols_by_unit.get(unit, set()):
+                break
+            targets.add((unit, alias or parts[-1]))
+            break
+    return tuple(sorted(targets))
+
+
+def _kotlin_called_subjects(text: str) -> set[str]:
+    code = _risk_source_text("kotlin", text)
+    return set(
+        re.findall(
+            r"\b([A-Za-z_]\w*)\b\s*(?:<[^>\n]+>\s*)?(?:\(|\.)",
+            code,
+        )
+    )
+
+
+def _test_target_units(
+    item: _TestFile,
+    *,
+    root: Path,
+    source_by_unit: dict[str, list[tuple[Path, str]]],
+    stems_by_unit: dict[str, set[str]],
+) -> tuple[str, ...]:
+    """Map a test to production units using explicit, deterministic links."""
+    targets = {item.unit}
+    if item.language != "python":
+        return (item.unit,)
+
+    stem = _test_stem(item.language, item.path)
+    stem_matches = {
+        unit
+        for unit, subjects in stems_by_unit.items()
+        if unit.startswith("python:")
+        and any(
+            len(subject) >= 5 and (stem == subject or stem.startswith(subject))
+            for subject in subjects
+        )
+    }
+    if len(stem_matches) == 1:
+        targets.update(stem_matches)
+
+    source_units = set(source_by_unit)
+    for module in _python_imports(item.text):
+        parts = module.split(".")
+        for base in (item.path.parent, root):
+            for end in range(len(parts), 0, -1):
+                candidate = base.joinpath(*parts[:end])
+                try:
+                    relative = candidate.relative_to(root).as_posix()
+                except ValueError:
+                    continue
+                unit = f"python:{relative}"
+                if unit in source_units:
+                    targets.add(unit)
+                    break
+
+    return tuple(sorted(targets))
 
 
 def _signal_finding(
@@ -191,12 +311,29 @@ def evaluate(root: Path) -> tuple[list[Pillar], list[Evidence]]:
             line_count=text.count("\n") + (1 if text else 0),
             generated=generated,
         )
-        if not generated:
-            item.cases = _test_cases(language, text)
+        parsed_cases = _test_cases(language, text)
+        if generated:
+            # A provenance-backed generated suite can carry one real runtime
+            # contract shape, but generated row volume must never manufacture
+            # effectiveness. Maintainability excludes the file entirely below.
+            selected = next((case for case in parsed_cases if case.oracle), None)
+            if selected is None and parsed_cases and _has_observable_oracle(language, text):
+                first = parsed_cases[0]
+                selected = _Case(
+                    name=first.name,
+                    body=first.body,
+                    shape=first.shape,
+                    oracle=True,
+                    risk_signals=first.risk_signals,
+                )
+            item.cases = [selected] if selected is not None else []
+        else:
+            item.cases = parsed_cases
             item.hazards = _hazards(language, text)
         tests.append(item)
 
-    active_tests = [item for item in tests if not item.generated]
+    effectiveness_tests = [item for item in tests if item.cases]
+    maintainability_tests = [item for item in tests if not item.generated]
     normalized_symbols_by_unit = {
         unit: {
             normalized
@@ -205,27 +342,83 @@ def evaluate(root: Path) -> tuple[list[Pillar], list[Evidence]]:
         }
         for unit, symbols in symbols_by_unit.items()
     }
-    for item in active_tests:
-        source_stems = stems_by_unit.get(item.unit, set())
-        stem = _test_stem(item.language, item.path)
-        subject_stems = source_stems | sibling_stems[item.path.parent]
-        file_local = any(
-            len(subject) >= 5 and (stem == subject or stem.startswith(subject))
-            for subject in subject_stems
+    for item in effectiveness_tests:
+        base_targets = _test_target_units(
+            item,
+            root=root,
+            source_by_unit=source_by_unit,
+            stems_by_unit=stems_by_unit,
         )
-        normalized_symbols = normalized_symbols_by_unit.get(item.unit, set())
+        kotlin_imports = (
+            _kotlin_import_targets(
+                item.text,
+                source_units=set(source_by_unit),
+                normalized_symbols_by_unit=normalized_symbols_by_unit,
+            )
+            if item.language == "kotlin"
+            else ()
+        )
+        kotlin_file_calls = (
+            _kotlin_called_subjects(item.text) if item.language == "kotlin" else set()
+        )
         for case in item.cases:
+            case_targets = set(base_targets)
+            kotlin_case_calls = (
+                _kotlin_called_subjects(case.body)
+                if item.language == "kotlin"
+                else set()
+            )
+            case_targets.update(
+                unit
+                for unit, reference in kotlin_imports
+                if reference in kotlin_case_calls
+            )
+            ordered_targets = tuple(sorted(case_targets))
+            item.case_target_units.append(ordered_targets)
+            source_stems = {
+                subject
+                for unit in ordered_targets
+                for subject in stems_by_unit.get(unit, set())
+            }
+            stem = _test_stem(item.language, item.path)
+            subject_stems = source_stems | sibling_stems[item.path.parent]
+            file_local = any(
+                len(subject) >= 5 and (stem == subject or stem.startswith(subject))
+                for subject in subject_stems
+            )
+            normalized_symbols = {
+                symbol
+                for unit in ordered_targets
+                for symbol in normalized_symbols_by_unit.get(unit, set())
+            }
             normalized_name = _normalized_subject(case.name)
             symbol_local = any(symbol in normalized_name for symbol in normalized_symbols)
-            item.localized.append(file_local or symbol_local)
+            generated_subject_call = item.generated and any(
+                symbol in kotlin_file_calls
+                for unit in ordered_targets
+                for symbol in symbols_by_unit.get(unit, set())
+            )
+            item.localized.append(file_local or symbol_local or generated_subject_call)
             item.intentful.append(_case_has_intent(case.name))
+        item.target_units = tuple(
+            sorted(
+                {
+                    unit
+                    for targets in item.case_target_units
+                    for unit in targets
+                }
+                or set(base_targets)
+            )
+        )
 
     # Production lanes define denominators. Deleting tests or defeating the
     # lightweight parser must make a lane score zero, not make it disappear.
     languages = sorted({unit.split(":", 1)[0] for unit in source_by_unit})
     case_counts_by_language = {
         language: sum(
-            len(item.cases) for item in active_tests if item.language == language
+            len(item.cases)
+            for item in effectiveness_tests
+            if item.language == language
         )
         for language in languages
     }
@@ -239,32 +432,55 @@ def evaluate(root: Path) -> tuple[list[Pillar], list[Evidence]]:
     ] = {}
 
     for language in languages:
-        lang_files = [
-            item for item in active_tests if item.language == language and item.cases
+        effective_files = [
+            item
+            for item in effectiveness_tests
+            if item.language == language and item.cases
         ]
-        groups: dict[tuple[str, str], list[tuple[_TestFile, int]]] = defaultdict(list)
-        totals_by_unit: dict[str, int] = defaultdict(int)
-        for item in lang_files:
+        effective_groups: dict[
+            tuple[str, str], list[tuple[_TestFile, int]]
+        ] = defaultdict(list)
+        for item in effective_files:
             for index, case in enumerate(item.cases):
-                groups[(item.unit, case.shape)].append((item, index))
+                effective_groups[(item.unit, case.shape)].append((item, index))
+        oracle_unique = localized_unique = 0
+        for members in effective_groups.values():
+            oracle_unique += all(item.cases[index].oracle for item, index in members)
+            localized_unique += all(item.localized[index] for item, index in members)
+        effective_denominator = max(len(effective_groups), 1)
+        oracle_by_language[language] = 100.0 * oracle_unique / effective_denominator
+        locality_by_language[language] = (
+            100.0 * localized_unique / effective_denominator
+        )
+
+        maintainable_files = [
+            item
+            for item in maintainability_tests
+            if item.language == language and item.cases
+        ]
+        maintainable_groups: dict[
+            tuple[str, str], list[tuple[_TestFile, int]]
+        ] = defaultdict(list)
+        totals_by_unit: dict[str, int] = defaultdict(int)
+        for item in maintainable_files:
+            for index, case in enumerate(item.cases):
+                maintainable_groups[(item.unit, case.shape)].append((item, index))
                 totals_by_unit[item.unit] += 1
-        shape_groups_by_language[language] = groups
-        unique_count = len(groups)
+        shape_groups_by_language[language] = maintainable_groups
+        unique_count = len(maintainable_groups)
         total_count = sum(totals_by_unit.values())
-        unique_by_unit = Counter(unit for unit, _ in groups)
+        unique_by_unit = Counter(unit for unit, _ in maintainable_groups)
         for unit, unit_total in totals_by_unit.items():
             duplicates = unit_total - unique_by_unit[unit]
             if duplicates:
-                representative = next(item.rel for item in lang_files if item.unit == unit)
+                representative = next(
+                    item.rel for item in maintainable_files if item.unit == unit
+                )
                 duplicate_units.append((duplicates, unit_total, representative))
-        oracle_unique = localized_unique = intent_unique = 0
-        for members in groups.values():
-            oracle_unique += all(item.cases[index].oracle for item, index in members)
-            localized_unique += all(item.localized[index] for item, index in members)
+        intent_unique = 0
+        for members in maintainable_groups.values():
             intent_unique += all(item.intentful[index] for item, index in members)
         denominator = max(unique_count, 1)
-        oracle_by_language[language] = 100.0 * oracle_unique / denominator
-        locality_by_language[language] = 100.0 * localized_unique / denominator
         intent_by_language[language] = 100.0 * intent_unique / denominator
         uniqueness_by_language[language] = 100.0 * unique_count / max(total_count, 1)
 
@@ -275,8 +491,15 @@ def evaluate(root: Path) -> tuple[list[Pillar], list[Evidence]]:
     missing_obligations: list[tuple[str, str, str]] = []
     obligation_by_language: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     cases_by_unit: dict[str, list[_Case]] = defaultdict(list)
-    for item in active_tests:
-        cases_by_unit[item.unit].extend(item.cases)
+    for item in effectiveness_tests:
+        for index, case in enumerate(item.cases):
+            targets = (
+                item.case_target_units[index]
+                if index < len(item.case_target_units)
+                else item.target_units
+            )
+            for unit in targets:
+                cases_by_unit[unit].append(case)
     for unit, sources in source_by_unit.items():
         language = unit.split(":", 1)[0]
         for rule in _RISK_RULES[language]:
@@ -344,7 +567,7 @@ def evaluate(root: Path) -> tuple[list[Pillar], list[Evidence]]:
     if worst_oracle < 90:
         weak = [
             item.rel
-            for item in active_tests
+            for item in effectiveness_tests
             if item.language == worst_oracle_language
             and item.cases
             and not any(case.oracle for case in item.cases)
@@ -369,7 +592,7 @@ def evaluate(root: Path) -> tuple[list[Pillar], list[Evidence]]:
     if worst_locality < 80:
         weak = [
             item.rel
-            for item in active_tests
+            for item in effectiveness_tests
             if item.language == worst_locality_language
             and item.cases
             and item.localized
@@ -392,14 +615,18 @@ def evaluate(root: Path) -> tuple[list[Pillar], list[Evidence]]:
 
     size_by_language = {
         language: max(
-            (item.line_count for item in active_tests if item.language == language),
+            (
+                item.line_count
+                for item in maintainability_tests
+                if item.language == language
+            ),
             default=0,
         )
         for language in languages
     }
     uniqueness_score = _language_average(uniqueness_by_language)
     intent_score = _language_average(intent_by_language)
-    hazard_files = [item for item in active_tests if item.hazards]
+    hazard_files = [item for item in maintainability_tests if item.hazards]
     isolation_by_language: dict[str, float] = {}
     unsafe_shapes_by_language: dict[str, int] = {}
     for language in languages:
@@ -423,7 +650,7 @@ def evaluate(root: Path) -> tuple[list[Pillar], list[Evidence]]:
         uniqueness_by_language
     )
     if worst_uniqueness < 85:
-        test_languages = {item.rel: item.language for item in active_tests}
+        test_languages = {item.rel: item.language for item in maintainability_tests}
         lane_duplicates = [
             row
             for row in duplicate_units
@@ -448,7 +675,7 @@ def evaluate(root: Path) -> tuple[list[Pillar], list[Evidence]]:
     oversize = sorted(
         (
             (item.line_count, item.rel)
-            for item in active_tests
+            for item in maintainability_tests
             if item.line_count > TEST_SIZE_SOFT
         ),
         reverse=True,
@@ -459,7 +686,7 @@ def evaluate(root: Path) -> tuple[list[Pillar], list[Evidence]]:
     if worst_intent < 75:
         weak = [
             item.rel
-            for item in active_tests
+            for item in maintainability_tests
             if item.language == worst_intent_language
             and item.cases
             and item.intentful
@@ -551,8 +778,11 @@ def evaluate(root: Path) -> tuple[list[Pillar], list[Evidence]]:
                     key: round(value, 1) for key, value in locality_by_language.items()
                 },
             },
-            "test_cases": sum(len(item.cases) for item in active_tests),
+            "test_cases": sum(len(item.cases) for item in effectiveness_tests),
             "test_cases_by_language": case_counts_by_language,
+            "generated_contract_shapes": sum(
+                len(item.cases) for item in tests if item.generated
+            ),
         },
         findings=effectiveness_findings,
     )
@@ -584,7 +814,7 @@ def evaluate(root: Path) -> tuple[list[Pillar], list[Evidence]]:
             "isolation": {
                 "score": round(isolation_score, 1),
                 "hazard_files": len(hazard_files),
-                "files": len(active_tests),
+                "files": len(maintainability_tests),
                 "unsafe_unique_shapes": sum(unsafe_shapes_by_language.values()),
                 "unique_shapes": sum(
                     len(shape_groups_by_language.get(language, {}))
@@ -603,7 +833,8 @@ def evaluate(root: Path) -> tuple[list[Pillar], list[Evidence]]:
         Evidence(
             "static-test-inventory",
             "measured",
-            f"{len(active_tests)} test files, {sum(case_counts_by_language.values())} cases; "
+            f"{len(effectiveness_tests)} effectiveness test files, "
+            f"{sum(case_counts_by_language.values())} cases; "
             + ", ".join(
                 f"{language}={case_counts_by_language[language]}"
                 for language in languages
@@ -613,7 +844,9 @@ def evaluate(root: Path) -> tuple[list[Pillar], list[Evidence]]:
         Evidence(
             "generated-test-provenance",
             "measured",
-            f"excluded={sum(item.generated for item in tests)}, unproven_markers={len(unproven_generated)}",
+            f"effectiveness_shapes={sum(len(item.cases) for item in tests if item.generated)}, "
+            f"maintainability_excluded={sum(item.generated for item in tests)}, "
+            f"unproven_markers={len(unproven_generated)}",
         ),
     ]
     return [effectiveness, maintainability], evidence

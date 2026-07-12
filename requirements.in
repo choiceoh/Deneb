@@ -1,0 +1,6 @@
+# Runtime dependencies for scripts/deploy/bge-m3-server.py.
+# llama-cpp-python is built separately with the target host's CUDA architecture.
+fastapi==0.139.0
+numpy==2.5.1
+pydantic==2.13.4
+uvicorn==0.51.0

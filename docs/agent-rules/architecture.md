@@ -30,7 +30,7 @@ Detailed per-file notes live in `docs/agent-rules/go-gateway.md`; this is the to
 
 ## Key Architectural Flows
 
-1. **Gateway startup:** `gateway-go/cmd/gateway/main.go` -> `internal/runtime/server` (HTTP + SSE) -> `internal/runtime/rpc` (dispatch) -> `internal/runtime/session` (state). There is no channel plugin (the Telegram bot was retired in PR #1922).
+1. **Gateway startup:** `gateway-go/cmd/gateway/main.go` -> `internal/runtime/server` (HTTP + SSE) -> `internal/runtime/rpc` (dispatch) -> `internal/domain/session` (state). There is no channel plugin (the Telegram bot was retired in PR #1922).
 2. **Clients:** both the native client (`client-android/`) and Andromeda (`andromeda/`) talk to the gateway over the `miniapp.*` RPC surface (`POST /api/v1/miniapp/rpc`, `X-Deneb-Client-Token`) plus SSE streams. Wire types for both are generated from Go `//deneb:wire` structs (`docs/agent-rules/generated-code.md`).
 
 ## Cross-Cutting Concerns

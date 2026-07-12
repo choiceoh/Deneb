@@ -4,7 +4,7 @@ import (
 	"log/slog"
 
 	subagentnotify "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/subagent"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 // SubagentNotifier routes completed child results back to their parent.

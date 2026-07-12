@@ -47,6 +47,42 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  python:
+    name: Python support tooling
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install hash-locked Python dependencies
+        run: >-
+          python -m pip install --require-hashes
+          -r requirements.lock
+          -r requirements-dev.lock
+
+      - name: Static analysis for Python support tooling
+        run: make python-lint
+
+      - name: Test all Python support tooling
+        run: make python-test
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes shellcheck
+
+      - name: Static analysis for operational shell
+        run: make shell-lint
+
+      - name: Test operational shell contracts
+        run: make shell-behavior-test
+
   # Detect docs-only changes to skip heavy jobs.
   docs-scope:
     runs-on: ubuntu-24.04-arm
@@ -138,6 +174,14 @@ jobs:
 
       - name: Test (integration)
         run: CGO_ENABLED=0 go test -count=1 -tags=integration ./...
+
+      - name: Race test (concurrency core)
+        run: >-
+          CGO_ENABLED=1 go test -race -count=1
+          ./internal/core/corecache
+          ./internal/ai/provider
+          ./internal/pipeline/chat/streaming
+          ./internal/runtime/events
 
       - name: Build gateway binary
         run: CGO_ENABLED=0 go build -o gateway ./cmd/gateway/

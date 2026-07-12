@@ -51,6 +51,8 @@ jobs:
       - run: pnpm run lint
       - run: pnpm run format:check
       - run: pnpm run test
+      - name: Mock gateway integration contract
+        run: pnpm run test:integration
       - run: pnpm run build
 
   wire-drift:

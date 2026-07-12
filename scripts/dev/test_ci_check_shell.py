@@ -108,14 +108,22 @@ class CICheckShellTests(unittest.TestCase):
         self.assertIn("make ci ARGS=--go", proc.stderr)
         self.assertEqual(self.calls(), [])
 
-    def test_audit_lane_success_has_one_gate_summary_and_cleans_logs(self) -> None:
+    def test_audit_lane_runs_all_three_health_gates_and_cleans_logs(self) -> None:
         proc = self.invoke("--audit")
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn("1 gates, selected lanes run in parallel", proc.stdout)
-        self.assertIn("runtime-health-test PASS", proc.stdout)
-        self.assertIn("1 passed, 0 failed", proc.stdout)
+        self.assertIn("3 gates, selected lanes run in parallel", proc.stdout)
+        for gate in ("runtime-health-test", "health-v2-test", "health-v2-check"):
+            self.assertRegex(proc.stdout, rf"{gate}\s+PASS")
+        self.assertIn("3 passed, 0 failed", proc.stdout)
         self.assertIn("make ci PASSED", proc.stdout)
-        self.assertEqual(self.calls(), ["make runtime-health-test"])
+        self.assertEqual(
+            self.calls(),
+            [
+                "make runtime-health-test",
+                "make health-v2-test",
+                "make health-v2-check",
+            ],
+        )
         self.assertEqual(list(self.root.glob("deneb-ci-check.*")), [])
 
     def test_audit_failure_surfaces_unparsed_log_and_preserves_scratch_path(self) -> None:
@@ -187,7 +195,7 @@ class CICheckShellTests(unittest.TestCase):
             ),
         )
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn("Go:run  Kotlin:skip  Audit:skip", proc.stdout)
+        self.assertIn("Go:run  Kotlin:skip  Audit:run", proc.stdout)
         self.assertIn("go-test", proc.stdout)
         self.assertIn("make go-test-cached", self.calls())
         self.assertNotIn("make go-test", self.calls())
@@ -202,7 +210,11 @@ class CICheckShellTests(unittest.TestCase):
         self.assertIn("Go:skip  Kotlin:skip  Audit:run", proc.stdout)
         self.assertEqual(
             [call for call in self.calls() if call.startswith("make ")],
-            ["make runtime-health-test"],
+            [
+                "make runtime-health-test",
+                "make health-v2-test",
+                "make health-v2-check",
+            ],
         )
 
     def test_unresolvable_fast_base_warns_and_runs_all_lanes(self) -> None:
@@ -210,7 +222,7 @@ class CICheckShellTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("can't resolve 'origin/main' merge-base", proc.stderr)
         self.assertIn("Go:run  Kotlin:run  Audit:run", proc.stdout)
-        self.assertIn("10 passed, 0 failed", proc.stdout)
+        self.assertIn("12 passed, 0 failed", proc.stdout)
         make_calls = [call for call in self.calls() if call.startswith("make ")]
         self.assertIn("make go-test-cached", make_calls)
         self.assertIn("make kotlin-android-compile", make_calls)

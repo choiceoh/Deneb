@@ -36,7 +36,7 @@
 
 | # | Hermes | 목적 | Deneb 대응 | 상태 | 비고 |
 |---|---|---|---|---|---|
-| 1 | `hermes_state.py:SessionDB` (~1600 LOC, SQLite schema: sessions/messages/tool_calls tables) | 크로스-세션 영속 대화 이력 | `internal/domain/transcript/writer.go` (JSONL) + `internal/runtime/session/` (in-memory lifecycle) | 🔄 | Hermes: SQLite. Deneb: JSONL + 메모리. 단일 유저라 FTS5 cross-session 검색 덜 중요. 그러나 **Wiki 검색은 FTS5 사용** (섹션 3 참고). |
+| 1 | `hermes_state.py:SessionDB` (~1600 LOC, SQLite schema: sessions/messages/tool_calls tables) | 크로스-세션 영속 대화 이력 | `internal/domain/transcript/writer.go` (JSONL) + `internal/domain/session/` (in-memory lifecycle) | 🔄 | Hermes: SQLite. Deneb: JSONL + 메모리. 단일 유저라 FTS5 cross-session 검색 덜 중요. 그러나 **Wiki 검색은 FTS5 사용** (섹션 3 참고). |
 | 2 | `messages_fts` FTS5 virtual table + triggers | 세션 메시지 전문 검색 | Wiki FTS5만 (`internal/domain/wiki/search.go`). 트랜스크립트 전용 FTS5 없음 | ⚠️ | Hermes `session_search` 툴 같은 사용자 대면 검색 없음. 필요 시 JSONL → 경량 인덱스 빌드 가능. |
 | 3 | `search_messages()` snippet 하이라이트 | `>>>match<<<` 마킹 context | 없음 | ❌ | 도입 시 낮은 복잡도. `pkg/textsearch/` 재사용 가능. |
 | 4 | Session 복원/브랜치/undo | 과거 세션 이어가기 | `internal/runtime/server/session_restore.go` | ✅ | JSONL 기반 재구성. 동일 기능. |

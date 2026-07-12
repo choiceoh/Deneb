@@ -3,6 +3,8 @@ package wiki
 import (
 	"context"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -284,5 +286,63 @@ func TestApplyUpdates_LogReroutesAfterDedup(t *testing.T) {
 	}
 	if pg, _ := store.ReadPage(LogPagePath("해밀고흥-솔라팜모듈")); pg != nil {
 		t.Error("log must not be filed under the duplicate slug-variant folder")
+	}
+}
+
+// TestApplyUpdates_PreservesBatchPartialSuccessOrder pins the side-effect
+// boundaries around a failed page write. Progress-log rerouting happens before
+// the main page write, so that log survives; supersede marking happens after a
+// successful write, so it must not run. A later update in the same batch still
+// succeeds and contributes to the counters.
+func TestApplyUpdates_PreservesBatchPartialSuccessOrder(t *testing.T) {
+	store, err := NewStore(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wd := NewWikiDreamer(store, nil, "", Config{Enabled: true}, slog.Default())
+
+	if err := store.WritePage("업무/기존.md", &Page{
+		Meta: Frontmatter{Title: "기존 문서", Category: "업무"},
+		Body: "대체 전 사실",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A directory at the final page path makes the representative-page write
+	// fail while leaving its parent available for the earlier 로그.md reroute.
+	failedRep := RepPagePath("실패프로젝트")
+	if err := os.MkdirAll(filepath.Join(store.Dir(), failedRep), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	created, updated, userPages, oversized := wd.applyUpdates(context.Background(), []wikiUpdate{
+		{
+			Action: "create", Path: failedRep, Title: "실패프로젝트",
+			Category: "프로젝트", Supersedes: flexStringList{"업무/기존.md"},
+			Content: "대표 본문\n\n## 진행 로그\n- 2026-07-12: 로그는 먼저 보존",
+		},
+		{
+			Action: "create", Path: "업무/후속-성공.md", Title: "후속 성공",
+			Category: "업무", Content: "앞선 실패 뒤에도 저장되는 사실",
+		},
+	})
+	if created != 1 || updated != 0 || userPages != 0 || len(oversized) != 0 {
+		t.Fatalf("result = created:%d updated:%d user:%d oversized:%v, want 1/0/0/[]",
+			created, updated, userPages, oversized)
+	}
+
+	logPage, err := store.ReadPage(LogPagePath("실패프로젝트"))
+	if err != nil || logPage == nil || !strings.Contains(logPage.Body, "로그는 먼저 보존") {
+		t.Fatalf("pre-write log side effect must survive the page failure: page=%v err=%v", logPage, err)
+	}
+	oldPage, err := store.ReadPage("업무/기존.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oldPage.Meta.SupersededBy != "" {
+		t.Fatalf("failed write must not mark superseded, got %q", oldPage.Meta.SupersededBy)
+	}
+	if page, err := store.ReadPage("업무/후속-성공.md"); err != nil || page == nil {
+		t.Fatalf("later batch item must still succeed: page=%v err=%v", page, err)
 	}
 }

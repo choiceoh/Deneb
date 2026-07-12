@@ -5,6 +5,60 @@ import "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/lifecy
 // SkillLifecycleBackend executes Deneb's closed-loop skill lifecycle.
 type SkillLifecycleBackend = lifecycletool.SkillLifecycleBackend
 
+// HeartbeatShadowReplayResult reports a dry-run heartbeat comparison.
+type HeartbeatShadowReplayResult = lifecycletool.HeartbeatShadowReplayResult
+
+// HeartbeatShadowReplayFixtureResult is one heartbeat replay comparison.
+type HeartbeatShadowReplayFixtureResult = lifecycletool.HeartbeatShadowReplayFixtureResult
+
+// SkillEvolutionProposalResult reports a proposal and optional execution.
+type SkillEvolutionProposalResult = lifecycletool.SkillEvolutionProposalResult
+
+// SkillEvolutionProposalExecutionResult is the proposal execution result union.
+type SkillEvolutionProposalExecutionResult = lifecycletool.SkillEvolutionProposalExecutionResult
+
+// SkillGenesisResult reports a generated skill or intentional skip.
+type SkillGenesisResult = lifecycletool.SkillGenesisResult
+
+// SkillEvolutionResult reports one skill evolution attempt.
+type SkillEvolutionResult = lifecycletool.SkillEvolutionResult
+
+// SkillLifecycleStatusResult reports typed Propus lifecycle state.
+type SkillLifecycleStatusResult = lifecycletool.SkillLifecycleStatusResult
+
+// SkillLifecycleOverview wraps operational or unavailable Propus state.
+type SkillLifecycleOverview = lifecycletool.SkillLifecycleOverview
+
+// SkillLifecycleUnavailableOverview is the minimal unconfigured state.
+type SkillLifecycleUnavailableOverview = lifecycletool.SkillLifecycleUnavailableOverview
+
+// SkillLifecycleStats is the skill/global status stats union.
+type SkillLifecycleStats = lifecycletool.SkillLifecycleStats
+
+// SkillCuratorActionResult reports a curator transition.
+type SkillCuratorActionResult = lifecycletool.SkillCuratorActionResult
+
+// SkillCuratorResult is the single-record/list curator result union.
+type SkillCuratorResult = lifecycletool.SkillCuratorResult
+
+// SkillValidationCaseResult reports a recorded validation case.
+type SkillValidationCaseResult = lifecycletool.SkillValidationCaseResult
+
+// SkillValidationCaseFromSessionResult reports transcript-derived validation.
+type SkillValidationCaseFromSessionResult = lifecycletool.SkillValidationCaseFromSessionResult
+
+// SkillValidationBackfillResult reports transcript validation backfill.
+type SkillValidationBackfillResult = lifecycletool.SkillValidationBackfillResult
+
+// SkillValidationBackfillDetail is one scanned transcript outcome.
+type SkillValidationBackfillDetail = lifecycletool.SkillValidationBackfillDetail
+
+// SkillSelfCorrectionCandidateResult reports a queued correction.
+type SkillSelfCorrectionCandidateResult = lifecycletool.SkillSelfCorrectionCandidateResult
+
+// SkillSelfCorrectionReviewResult reports a correction review.
+type SkillSelfCorrectionReviewResult = lifecycletool.SkillSelfCorrectionReviewResult
+
 // HeartbeatShadowReplayRequest carries a heartbeat candidate for dry-run replay.
 type HeartbeatShadowReplayRequest = lifecycletool.HeartbeatShadowReplayRequest
 

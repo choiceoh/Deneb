@@ -136,6 +136,45 @@ func TestToolMailArchiveStoreListSearchAndReadJSON(t *testing.T) {
 	}
 }
 
+func TestToolMailArchiveDispatchCharacterization(t *testing.T) {
+	now := time.Now()
+	message := archiveFixture("one", "Alpha 견적", "첫 번째 본문", now)
+	store := newArchiveStore(t, message)
+
+	// Invalid input historically falls back to the zero-value list action.
+	listed, err := callArchiveTool(t, store, `{`)
+	if err != nil {
+		t.Fatalf("invalid JSON fallback: %v", err)
+	}
+	if !strings.Contains(listed, "오늘 수신 메일") || !strings.Contains(listed, message.Subject) {
+		t.Fatalf("invalid JSON fallback output = %q", listed)
+	}
+
+	thread, err := callArchiveTool(t, store, `{"action":"thread","message_id":"INBOX:one","as_json":true}`)
+	if err != nil {
+		t.Fatalf("thread: %v", err)
+	}
+	var threaded mailArchiveResponse
+	if err := json.Unmarshal([]byte(thread), &threaded); err != nil {
+		t.Fatalf("thread JSON: %v\n%s", err, thread)
+	}
+	if threaded.Action != "thread" || threaded.Count != 1 || threaded.Messages[0].ID != message.ID {
+		t.Fatalf("thread response = %+v", threaded)
+	}
+
+	history, err := callArchiveTool(t, store, `{"action":"history","query":"Alpha","as_json":true}`)
+	if err != nil {
+		t.Fatalf("history alias: %v", err)
+	}
+	var historical mailArchiveResponse
+	if err := json.Unmarshal([]byte(history), &historical); err != nil {
+		t.Fatalf("history JSON: %v\n%s", err, history)
+	}
+	if historical.Action != "project_history" || historical.History == nil {
+		t.Fatalf("history response = %+v", historical)
+	}
+}
+
 func TestMailArchiveScalarHelpers(t *testing.T) {
 	if got := mailArchiveMailboxLabel(nil); got != "all" {
 		t.Fatalf("mailbox nil = %q", got)

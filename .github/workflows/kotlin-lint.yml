@@ -8,9 +8,8 @@
 #   - detekt: bug catchers only (config/detekt.yml; style rulesets are off,
 #     accepted pre-existing findings live in config/detekt-baseline.xml —
 #     baseline updates need operator approval per docs/agent-rules/testing.md)
-#   - desktopTest smoke subset: stable shared/common logic tests on the desktop
-#     JVM path so client regressions are caught before merge without inheriting
-#     the currently flaky chat-viewmodel suite
+#   - full desktopTest: every deterministic shared/common and desktop JVM test,
+#     including generated wire compatibility contracts
 #   - android compile: :composeApp:compileAndroidMain + :androidApp:compileFossReleaseKotlin.
 #     compileKotlinDesktop only type-checks the desktop source set, so commonMain
 #     code that resolves only on the Android target (#2698) and stale androidApp
@@ -37,7 +36,7 @@ permissions:
 
 jobs:
   lint:
-    name: spotless + detekt + desktopTest smoke
+    name: spotless + detekt + full desktopTest
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -63,14 +62,11 @@ jobs:
       - name: detekt
         run: ./gradlew detekt --no-daemon
 
-      - name: desktopTest smoke subset
-        run: |
-          ./gradlew desktopTest --no-daemon \
-            --tests 'ai.deneb.data.TaskStoreMigrationTest*' \
-            --tests 'ai.deneb.data.CronExpressionTest*' \
-            --tests 'ai.deneb.deneb.generated.MiniappWireTypesTest*' \
-            --tests 'ai.deneb.data.AttachmentRouteTest*' \
-            --tests 'ai.deneb.network.UiErrorTest*'
+      - name: Full native client unit suite
+        run: ./gradlew desktopTest --no-daemon
+
+      - name: Native client integration contracts
+        run: ./gradlew :composeApp:integrationTest --no-daemon
 
       # Android compile gate — catches breaks the desktop path cannot see (see the
       # file header). ubuntu-latest pre-sets ANDROID_HOME, so no SDK setup step.

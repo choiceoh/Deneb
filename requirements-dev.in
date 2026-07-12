@@ -1,0 +1,2 @@
+# Python quality tooling used by CI.
+ruff==0.15.21

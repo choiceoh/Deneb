@@ -127,74 +127,74 @@ func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SkillLifecycleStatus: %v", err)
 	}
-	got := gotAny.(map[string]any)
-	system := got["system"].(map[string]any)
-	if system["name"] != "Propus" || system["tool"] != "skill_lifecycle" || system["scope"] != "skill" {
+	got := gotAny
+	system := got.System
+	if system.Name != "Propus" || system.Tool != "skill_lifecycle" || system.Scope != "skill" {
 		t.Fatalf("unexpected Propus system status: %+v", system)
 	}
-	if system["version"] != propus.PropusDoctrine().Version {
+	if system.Version != propus.PropusDoctrine().Version {
 		t.Fatalf("unexpected Propus doctrine version: %+v", system)
 	}
-	sourcePapers := system["sourcePapers"].([]string)
+	sourcePapers := system.SourcePapers
 	if len(sourcePapers) != len(propus.PropusDoctrine().SourceIDs()) ||
 		sourcePapers[0] != "arxiv:2602.20867" ||
 		sourcePapers[len(sourcePapers)-1] != "hermes:agent-self-evolution" {
 		t.Fatalf("unexpected source papers: %+v", sourcePapers)
 	}
-	filteredSources := system["filteredSources"].([]string)
+	filteredSources := system.FilteredSources
 	if len(filteredSources) != 1 || filteredSources[0] != "arxiv:2606.15363" {
 		t.Fatalf("unexpected filtered sources: %+v", filteredSources)
 	}
-	overview := got["overview"].(map[string]any)
-	if overview["state"] != "needs_review" ||
-		overview["pendingSelfCorrections"] != 1 ||
-		overview["openOpportunities"] != 1 ||
-		overview["validationCases"] != 0 {
+	overview := got.Overview.Operational
+	if overview == nil || overview.State != "needs_review" ||
+		overview.PendingSelfCorrections != 1 ||
+		overview.OpenOpportunities != 1 ||
+		overview.ValidationCases != 0 {
 		t.Fatalf("unexpected Propus overview: %+v", overview)
 	}
-	nextActions := overview["nextActions"].([]string)
+	nextActions := overview.NextActions
 	if len(nextActions) < 3 ||
 		nextActions[0] != "review_pending_self_corrections" {
 		t.Fatalf("unexpected Propus next actions: %+v", nextActions)
 	}
 	requireStringSliceContains(t, nextActions, "record_validation_case_from_session")
 	requireStringSliceContains(t, nextActions, "triage_opportunity_backlog")
-	coverage := overview["doctrineCoverage"].(map[string]any)
-	if coverage["state"] != "partial" || coverage["sourcePolicy"] != "core_sources_only_filtered_sources_not_gates" {
+	coverage := overview.DoctrineCoverage
+	if coverage.State != "partial" || coverage.SourcePolicy != "core_sources_only_filtered_sources_not_gates" {
 		t.Fatalf("unexpected doctrine coverage: %+v", coverage)
 	}
-	requireStringSliceContains(t, coverage["covered"].([]string), "exploration_backlog_available")
-	requireStringSliceContains(t, coverage["gaps"].([]string), "missing_held_out_validation_corpus")
-	requireStringSliceContains(t, coverage["gaps"].([]string), "apex_mixed_frontier_unmeasured")
-	coverageFiltered := coverage["filteredSources"].([]string)
+	requireStringSliceContains(t, coverage.Covered, "exploration_backlog_available")
+	requireStringSliceContains(t, coverage.Gaps, "missing_held_out_validation_corpus")
+	requireStringSliceContains(t, coverage.Gaps, "apex_mixed_frontier_unmeasured")
+	coverageFiltered := coverage.FilteredSources
 	if len(coverageFiltered) != 1 || coverageFiltered[0] != "arxiv:2606.15363" {
 		t.Fatalf("unexpected coverage filtered sources: %+v", coverageFiltered)
 	}
-	recent := got["recent"].([]genesis.LifecycleLogEntry)
+	recent := *got.Recent
 	if len(recent) != 2 {
 		t.Fatalf("expected 2 deploy-helper lifecycle entries, got %+v", recent)
 	}
-	stats := got["stats"].(*genesis.UsageStats)
+	stats := got.Stats.Skill
 	if stats.SkillName != "deploy-helper" || stats.TotalUses != 1 || stats.SuccessRate != 0 {
 		t.Fatalf("unexpected stats: %+v", stats)
 	}
-	quality := got["usageQuality"].(genesis.UsageQualitySummary)
+	quality := *got.UsageQuality
 	if quality.SkillName != "deploy-helper" || quality.TotalRecords != 2 || quality.CountedRecords != 1 || quality.IgnoredUnactionableLegacyFailures != 1 {
 		t.Fatalf("unexpected usage quality: %+v", quality)
 	}
-	curator := got["curator"].([]genesis.SkillCuratorRecord)
+	curator := *got.Curator
 	if len(curator) != 1 || curator[0].SkillName != "deploy-helper" {
 		t.Fatalf("unexpected curator report: %+v", curator)
 	}
-	rejected := got["rejectedEdits"].([]genesis.RejectedSkillEditRecord)
+	rejected := *got.RejectedEdits
 	if len(rejected) != 1 || rejected[0].Reason != "invented command" {
 		t.Fatalf("unexpected rejected edits: %+v", rejected)
 	}
-	opportunities := got["opportunities"].([]genesis.SkillOpportunityRecord)
+	opportunities := *got.Opportunities
 	if len(opportunities) != 1 || opportunities[0].Candidate != "repeatable deploy fix" {
 		t.Fatalf("unexpected opportunities: %+v", opportunities)
 	}
-	selfCorrections := got["selfCorrectionCandidates"].([]genesis.SelfCorrectionCandidateRecord)
+	selfCorrections := *got.SelfCorrectionCandidates
 	if len(selfCorrections) != 1 || selfCorrections[0].SkillName != "deploy-helper" {
 		t.Fatalf("unexpected self-correction candidates: %+v", selfCorrections)
 	}
@@ -206,16 +206,16 @@ func TestSkillLifecycleStatusIdentifiesPropusWhenTrackerMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SkillLifecycleStatus: %v", err)
 	}
-	got := gotAny.(map[string]any)
-	if got["ok"] != false {
+	got := gotAny
+	if got.OK {
 		t.Fatalf("expected unavailable status, got %+v", got)
 	}
-	system := got["system"].(map[string]any)
-	if system["name"] != "Propus" || system["scope"] != "global" {
+	system := got.System
+	if system.Name != "Propus" || system.Scope != "global" {
 		t.Fatalf("unexpected Propus system status: %+v", system)
 	}
-	overview := got["overview"].(map[string]any)
-	if overview["state"] != "unavailable" {
+	overview := got.Overview.Unavailable
+	if overview == nil || overview.State != "unavailable" {
 		t.Fatalf("unexpected unavailable overview: %+v", overview)
 	}
 }
@@ -244,18 +244,18 @@ func TestSkillLifecycleStatusKeepsPartialStateWhenRejectedEditsUnreadable(t *tes
 	if err != nil {
 		t.Fatalf("SkillLifecycleStatus should return partial state: %v", err)
 	}
-	got := gotAny.(map[string]any)
-	if got["ok"] != true {
+	got := gotAny
+	if !got.OK {
 		t.Fatalf("expected ok partial status, got %+v", got)
 	}
-	recent := got["recent"].([]genesis.LifecycleLogEntry)
+	recent := *got.Recent
 	if len(recent) != 1 || recent[0].SkillName != "deploy-helper" {
 		t.Fatalf("expected lifecycle log to remain available, got %+v", recent)
 	}
-	if rejected, ok := got["rejectedEdits"].([]genesis.RejectedSkillEditRecord); !ok || len(rejected) != 0 {
-		t.Fatalf("expected empty rejected edits on sidecar error, got %#v", got["rejectedEdits"])
+	if got.RejectedEdits == nil || len(*got.RejectedEdits) != 0 {
+		t.Fatalf("expected empty rejected edits on sidecar error, got %#v", got.RejectedEdits)
 	}
-	if errText, ok := got["rejectedEditsError"].(string); !ok || !strings.Contains(errText, "load rejected edits") {
+	if !strings.Contains(got.RejectedEditsError, "load rejected edits") {
 		t.Fatalf("expected rejectedEditsError, got %+v", got)
 	}
 }
@@ -277,8 +277,8 @@ func TestSkillLifecycleStatusIncludesOptimizerMemory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SkillLifecycleStatus: %v", err)
 	}
-	got := gotAny.(map[string]any)
-	memory := got["optimizerMemory"].(genesis.SkillOptimizerMemoryEntry)
+	got := gotAny
+	memory := *got.OptimizerMemory
 	if memory.AcceptedCount != 1 || memory.RejectedCount != 1 {
 		t.Fatalf("unexpected optimizer memory counts: %+v", memory)
 	}
@@ -330,8 +330,8 @@ func TestSkillLifecycleValidationCaseRecordsAndStatusSurfacesIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SkillLifecycleStatus: %v", err)
 	}
-	got := gotAny.(map[string]any)
-	cases := got["validationCases"].([]genesis.SkillValidationCaseRecord)
+	got := gotAny
+	cases := *got.ValidationCases
 	if len(cases) != 1 || cases[0].ID != "safe-wrapper" || cases[0].Source != "operator" {
 		t.Fatalf("unexpected validation cases: %+v", cases)
 	}
@@ -350,7 +350,7 @@ func TestSkillLifecycleValidationCaseRecordsAndStatusSurfacesIt(t *testing.T) {
 		!cases[0].Replay.RequireOrder {
 		t.Fatalf("unexpected replay case: %+v", cases[0].Replay)
 	}
-	summary := got["validationCaseSummary"].(genesis.SkillValidationCaseSummary)
+	summary := *got.ValidationCaseSummary
 	if summary.SkillName != "topsolar-db" ||
 		summary.RawRecords != 1 ||
 		summary.UniqueRecords != 1 ||
@@ -432,10 +432,13 @@ func TestSkillLifecycleStatusRequiresTieredApexFrontierEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SkillLifecycleStatus: %v", err)
 	}
-	got := gotAny.(map[string]any)
-	overview := got["overview"].(map[string]any)
-	coverage := overview["doctrineCoverage"].(map[string]any)
-	if coverage["state"] != "covered" {
+	got := gotAny
+	overview := got.Overview.Operational
+	if overview == nil {
+		t.Fatal("expected operational overview")
+	}
+	coverage := overview.DoctrineCoverage
+	if coverage.State != "covered" {
 		t.Fatalf("expected covered doctrine coverage, got %+v", coverage)
 	}
 	for _, want := range []string{
@@ -444,12 +447,12 @@ func TestSkillLifecycleStatusRequiresTieredApexFrontierEvidence(t *testing.T) {
 		"apex_mixed_frontier_with_easy_anchor",
 		"exploration_backlog_available",
 	} {
-		requireStringSliceContains(t, coverage["covered"].([]string), want)
+		requireStringSliceContains(t, coverage.Covered, want)
 	}
-	if gaps := coverage["gaps"].([]string); len(gaps) != 0 {
+	if gaps := coverage.Gaps; len(gaps) != 0 {
 		t.Fatalf("expected no doctrine coverage gaps, got %+v", gaps)
 	}
-	if coverage["easyAnchorCases"] != 1 || coverage["mixedFrontierCases"] != 1 {
+	if coverage.EasyAnchorCases != 1 || coverage.MixedFrontierCases != 1 {
 		t.Fatalf("unexpected frontier coverage counts: %+v", coverage)
 	}
 }
@@ -480,8 +483,8 @@ func TestSkillLifecycleValidationCaseFromSessionExtractsToolTrace(t *testing.T) 
 	if err != nil {
 		t.Fatalf("RecordSkillValidationCaseFromSession: %v", err)
 	}
-	got := gotAny.(map[string]any)
-	if got["expectedToolCalls"] != 1 || got["forbiddenToolCalls"] != 0 || got["requiredTools"] != 1 {
+	got := gotAny
+	if *got.ExpectedToolCalls != 1 || *got.ForbiddenToolCalls != 0 || *got.RequiredTools != 1 {
 		t.Fatalf("unexpected extraction result: %+v", got)
 	}
 
@@ -492,8 +495,8 @@ func TestSkillLifecycleValidationCaseFromSessionExtractsToolTrace(t *testing.T) 
 	if err != nil {
 		t.Fatalf("SkillLifecycleStatus: %v", err)
 	}
-	status := statusAny.(map[string]any)
-	cases := status["validationCases"].([]genesis.SkillValidationCaseRecord)
+	status := statusAny
+	cases := *status.ValidationCases
 	if len(cases) != 1 {
 		t.Fatalf("expected 1 validation case, got %+v", cases)
 	}
@@ -535,8 +538,8 @@ func TestSkillLifecycleValidationCaseFromSessionSeparatesErroredToolTrace(t *tes
 	if err != nil {
 		t.Fatalf("RecordSkillValidationCaseFromSession: %v", err)
 	}
-	got := gotAny.(map[string]any)
-	if got["expectedToolCalls"] != 1 || got["forbiddenToolCalls"] != 1 || got["requiredTools"] != 1 {
+	got := gotAny
+	if *got.ExpectedToolCalls != 1 || *got.ForbiddenToolCalls != 1 || *got.RequiredTools != 1 {
 		t.Fatalf("unexpected extraction result: %+v", got)
 	}
 
@@ -580,8 +583,8 @@ func TestSkillLifecycleValidationCaseFromSessionSkipsWeakAutomaticTrace(t *testi
 	if err != nil {
 		t.Fatalf("RecordSkillValidationCaseFromSession should skip weak automatic cases: %v", err)
 	}
-	got := gotAny.(map[string]any)
-	if got["skip"] != true {
+	got := gotAny
+	if !got.Skip {
 		t.Fatalf("expected weak automatic trace to be skipped, got %+v", got)
 	}
 	summary, err := tracker.ValidationCaseSummary("srv1-ops")
@@ -621,11 +624,11 @@ func TestSkillLifecycleValidationBackfillScansSessionsAndSkipsWeak(t *testing.T)
 	if err != nil {
 		t.Fatalf("BackfillSkillValidationCases: %v", err)
 	}
-	got := gotAny.(map[string]any)
-	if got["scanned"] != 2 || got["recorded"] != 1 || got["skipped"] != 1 {
+	got := gotAny
+	if *got.Scanned != 2 || *got.Recorded != 1 || *got.Skipped != 1 {
 		t.Fatalf("unexpected backfill result: %+v", got)
 	}
-	summary := got["validationCaseSummary"].(genesis.SkillValidationCaseSummary)
+	summary := *got.ValidationCaseSummary
 	if summary.SkillName != "srv1-ops" || summary.RawRecords != 1 || summary.UniqueRecords != 1 || summary.AutomaticRecords != 1 {
 		t.Fatalf("unexpected backfill validation summary: %+v", summary)
 	}
@@ -680,10 +683,10 @@ func TestSkillLifecycleLogProposalStoresActualExecutionAndTruncates(t *testing.T
 		Candidate: "manual create route",
 		Route:     "create",
 		Execute:   true,
-	}, "create", map[string]any{
-		"ok":        true,
-		"executed":  false,
-		"largeText": strings.Repeat("x", skillLifecycleMaxProposalResultBytes+100),
+	}, "create", chattools.SkillEvolutionProposalResult{
+		OK:        true,
+		Candidate: strings.Repeat("x", skillLifecycleMaxProposalResultBytes+100),
+		Route:     "create",
 	})
 
 	entries, err := tracker.RecentLifecycleLog(1)
@@ -718,8 +721,8 @@ func TestSkillLifecycleSelfCorrectionRecordReviewAndStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RecordSelfCorrectionCandidate: %v", err)
 	}
-	got := gotAny.(map[string]any)
-	rec := got["candidate"].(genesis.SelfCorrectionCandidateRecord)
+	got := gotAny
+	rec := *got.Candidate
 	if rec.ID == "" || rec.Status != genesis.SelfCorrectionStatusProposed {
 		t.Fatalf("unexpected candidate: %+v", rec)
 	}
@@ -728,8 +731,8 @@ func TestSkillLifecycleSelfCorrectionRecordReviewAndStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SkillLifecycleStatus: %v", err)
 	}
-	status := statusAny.(map[string]any)
-	pending := status["selfCorrectionCandidates"].([]genesis.SelfCorrectionCandidateRecord)
+	status := statusAny
+	pending := *status.SelfCorrectionCandidates
 	if len(pending) != 1 || pending[0].ID != rec.ID {
 		t.Fatalf("expected pending candidate in status, got %+v", pending)
 	}
@@ -746,8 +749,8 @@ func TestSkillLifecycleSelfCorrectionRecordReviewAndStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SkillLifecycleStatus after review: %v", err)
 	}
-	status = statusAny.(map[string]any)
-	pending = status["selfCorrectionCandidates"].([]genesis.SelfCorrectionCandidateRecord)
+	status = statusAny
+	pending = *status.SelfCorrectionCandidates
 	if len(pending) != 0 {
 		t.Fatalf("reviewed candidate should leave pending status view, got %+v", pending)
 	}
@@ -781,8 +784,8 @@ func TestSkillLifecycleCuratorActionsPinArchiveRestore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("archive: %v", err)
 	}
-	got := gotAny.(map[string]any)
-	rec := got["curator"].(genesis.SkillCuratorRecord)
+	got := gotAny
+	rec := *got.Curator.Record
 	if rec.State != genesis.SkillCuratorStateArchived || rec.ArchivedAt == 0 {
 		t.Fatalf("expected archived record, got %+v", rec)
 	}
@@ -794,8 +797,8 @@ func TestSkillLifecycleCuratorActionsPinArchiveRestore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("restore: %v", err)
 	}
-	got = gotAny.(map[string]any)
-	rec = got["curator"].(genesis.SkillCuratorRecord)
+	got = gotAny
+	rec = *got.Curator.Record
 	if rec.State != genesis.SkillCuratorStateActive || rec.ArchivedAt != 0 {
 		t.Fatalf("expected restored active record, got %+v", rec)
 	}
@@ -817,12 +820,8 @@ func TestProposeSkillEvolution_NoOpWithoutCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no-op without candidate should succeed, got: %v", err)
 	}
-	m, ok := res.(map[string]any)
-	if !ok {
-		t.Fatalf("expected map result, got %T", res)
-	}
-	if m["route"] != "no-op" {
-		t.Errorf("expected route=no-op, got %v", m["route"])
+	if res.Route != "no-op" {
+		t.Errorf("expected route=no-op, got %v", res.Route)
 	}
 }
 
@@ -879,12 +878,8 @@ func TestProposeSkillEvolution_LogsProposalIndependentOfExecution(t *testing.T) 
 	if err != nil {
 		t.Fatalf("ProposeSkillEvolution: %v", err)
 	}
-	m, ok := res.(map[string]any)
-	if !ok {
-		t.Fatalf("expected map result, got %T", res)
-	}
-	if m["ok"] != false {
-		t.Fatalf("expected ok=false when evolver unconfigured (execution should fail), got %v", m["ok"])
+	if res.OK {
+		t.Fatalf("expected ok=false when evolver unconfigured (execution should fail), got %v", res.OK)
 	}
 
 	// The proposal must be durable even though execution failed.

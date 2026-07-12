@@ -10,9 +10,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/review"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
-	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/lifecycletool"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
@@ -21,8 +21,8 @@ type chatNudgerAdapter struct {
 	inner *review.Nudger
 }
 
-// NewChatNudgerAdapter adapts a review nudger to the chat.SkillNudger boundary.
-func NewChatNudgerAdapter(n *review.Nudger) chat.SkillNudger {
+// NewChatNudgerAdapter adapts a review nudger to the stable chat port.
+func NewChatNudgerAdapter(n *review.Nudger) chatport.SkillNudger {
 	return &chatNudgerAdapter{inner: n}
 }
 
@@ -30,7 +30,7 @@ func NewChatNudgerAdapter(n *review.Nudger) chat.SkillNudger {
 func (a *chatNudgerAdapter) Enabled() bool { return a.inner.Enabled() }
 
 // OnToolCalls records a tool-call delta for skill nudging.
-func (a *chatNudgerAdapter) OnToolCalls(ctx context.Context, sessionKey string, delta int, snap chat.SkillNudgeSnapshot) {
+func (a *chatNudgerAdapter) OnToolCalls(ctx context.Context, sessionKey string, delta int, snap chatport.SkillNudgeSnapshot) {
 	activities := make([]generation.ToolActivity, 0, len(snap.ToolActivities))
 	for _, t := range snap.ToolActivities {
 		activities = append(activities, generation.ToolActivity{
@@ -57,8 +57,8 @@ type chatUsageRecorderAdapter struct {
 	replayEnabled bool
 }
 
-// NewChatUsageRecorder adapts a genesis tracker to chat.SkillUsageRecorder.
-func NewChatUsageRecorder(t *genesis.Tracker, transcripts toolctx.TranscriptStore, logger *slog.Logger, replayEnabled bool) chat.SkillUsageRecorder {
+// NewChatUsageRecorder adapts a genesis tracker to chatport.SkillUsageRecorder.
+func NewChatUsageRecorder(t *genesis.Tracker, transcripts toolctx.TranscriptStore, logger *slog.Logger, replayEnabled bool) chatport.SkillUsageRecorder {
 	return &chatUsageRecorderAdapter{inner: t, transcripts: transcripts, logger: logger, replayEnabled: replayEnabled}
 }
 

@@ -87,6 +87,68 @@ func TestFtypFallback(t *testing.T) {
 	assertMIME(t, data, "video/mp4")
 }
 
+func TestDetectMIMERecognizesEveryLeadingByteFamily(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+		want string
+	}{
+		{"mpeg frame sync", []byte{0xFF, 0xF3, 0x80, 0x00}, "audio/mpeg"},
+		{"gif87a", []byte("GIF87a"), "image/gif"},
+		{"webp riff", append([]byte("RIFF0000"), []byte("WEBP")...), "image/webp"},
+		{"wave riff", append([]byte("RIFF0000"), []byte("WAVE")...), "audio/wav"},
+		{"icon", []byte{0x00, 0x00, 0x01, 0x00}, "image/x-icon"},
+		{"bitmap", []byte("BM00"), "image/bmp"},
+		{"id3 audio", []byte("ID3\x04"), "audio/mpeg"},
+		{"little endian tiff", []byte{'I', 'I', 0x2A, 0x00}, "image/tiff"},
+		{"big endian tiff", []byte{'M', 'M', 0x00, 0x2A}, "image/tiff"},
+		{"ogg", []byte("OggS"), "audio/ogg"},
+		{"flac", []byte("fLaC"), "audio/flac"},
+		{"webm", []byte{0x1A, 0x45, 0xDF, 0xA3}, "video/webm"},
+		{"pdf", []byte("%PDF"), "application/pdf"},
+		{"gzip", []byte{0x1F, 0x8B, 0x08, 0x00}, "application/gzip"},
+		{"json array", []byte("[1] "), "application/json"},
+		{"xml declaration", []byte("<?xml version=\"1.0\"?>"), "application/xml"},
+		{"svg", []byte("<svg></svg>"), "application/xml"},
+		{"html doctype", []byte("<!DOCTYPE html>"), "text/html"},
+		{"uppercase html", []byte("<HTML></HTML>"), "text/html"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertMIME(t, tt.data, tt.want)
+		})
+	}
+}
+
+func TestDetectMIMEReturnsOctetStreamForTruncatedOrInvalidFamilies(t *testing.T) {
+	for _, data := range [][]byte{
+		nil,
+		[]byte("GIF8"),
+		[]byte("RIFF-not-wave"),
+		{0x89, 'N', 'O', 'T'},
+		[]byte("<not-supported>"),
+	} {
+		assertMIME(t, data, "application/octet-stream")
+	}
+}
+
+var detectedMIME string
+
+func TestDetectMIMEKeepsRepresentativePathsAllocationFree(t *testing.T) {
+	for _, data := range [][]byte{
+		{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+		[]byte("RIFF0000WEBP"),
+		{0x00, 0x00, 0x00, 0x1C, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'},
+		[]byte("unknown payload"),
+	} {
+		if allocations := testing.AllocsPerRun(1000, func() {
+			detectedMIME = DetectMIME(data)
+		}); allocations != 0 {
+			t.Fatalf("DetectMIME(%x) allocations = %v, want 0", data, allocations)
+		}
+	}
+}
+
 func assertMIME(t *testing.T, data []byte, expected string) {
 	t.Helper()
 	got := DetectMIME(data)

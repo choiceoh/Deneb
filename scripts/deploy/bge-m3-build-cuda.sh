@@ -22,6 +22,8 @@
 set -euo pipefail
 
 VENV="${BGE_GPU_VENV:-$HOME/.deneb/bge-gpu-venv}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+RUNTIME_REQUIREMENTS="${BGE_RUNTIME_REQUIREMENTS:-$SCRIPT_DIR/../../requirements.lock}"
 LLAMA_CPP_VERSION="${LLAMA_CPP_VERSION:-0.3.16}"
 # GB10 = Blackwell, compute capability 12.1 → CMAKE_CUDA_ARCHITECTURES=121.
 # Override for a different GPU: `nvidia-smi --query-gpu=compute_cap --format=csv,noheader`
@@ -37,8 +39,11 @@ nvidia-smi --query-gpu=name,compute_cap --format=csv,noheader | head -1
 echo "── venv @ $VENV"
 [ -d "$VENV" ] || python3 -m venv "$VENV"
 "$VENV/bin/pip" install --quiet --upgrade pip
-# Runtime deps for bge-m3-server.py (FastAPI app + numpy). Binary wheels — fast.
-"$VENV/bin/pip" install --quiet fastapi uvicorn pydantic numpy
+# Runtime deps for bge-m3-server.py are fully pinned, including transitive
+# wheels and hashes. llama-cpp-python remains the target-specific source build
+# below because its CUDA architecture cannot be represented by a portable lock.
+[ -f "$RUNTIME_REQUIREMENTS" ] || { echo "ERROR: runtime lock not found: $RUNTIME_REQUIREMENTS"; exit 1; }
+"$VENV/bin/pip" install --quiet --require-hashes -r "$RUNTIME_REQUIREMENTS"
 
 echo "── building llama-cpp-python $LLAMA_CPP_VERSION with CUDA (sm_$CUDA_ARCH) — this compiles the ggml-cuda kernels, ~15-40min on aarch64"
 export PATH="$CUDA_HOME/bin:$PATH"

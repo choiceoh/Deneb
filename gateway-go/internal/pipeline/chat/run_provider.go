@@ -22,145 +22,167 @@ const runtimeAuthTimeout = 15 * time.Second
 // ctx is the turn's request context; runtime auth (token exchange) is bounded
 // by runtimeAuthTimeout under it.
 func resolveClient(ctx context.Context, deps runDeps, providerID string, logger *slog.Logger) *llm.Client {
-	// 1. Try provider config from deneb.json.
-	if deps.providerConfigs != nil && providerID != "" {
-		if cfg, ok := deps.providerConfigs[providerID]; ok {
-			baseURL := strings.TrimSpace(provider.ExpandEnvVars(cfg.BaseURL))
-			if baseURL == "" {
-				baseURL = resolveDefaultBaseURL(providerID)
-			}
-			apiKey := resolveProviderAPIKey(providerID, cfg, logger)
+	if client := configuredProviderClient(ctx, deps, providerID, logger); client != nil {
+		return client
+	}
+	if client := managedProviderClient(ctx, deps, providerID, logger); client != nil {
+		return client
+	}
+	if client := registryProviderClient(deps, providerID, logger); client != nil {
+		return client
+	}
+	return deps.llmClient
+}
 
-			// Apply provider runtime auth override (e.g., token exchange).
-			if deps.providerRuntime != nil && providerID != "" {
-				authCtx, authCancel := context.WithTimeout(ctx, runtimeAuthTimeout)
-				authResult, err := deps.providerRuntime.PrepareRuntimeAuth(
-					authCtx, providerID,
-					provider.RuntimeAuthContext{
-						Provider: providerID,
-						APIKey:   apiKey,
-					},
-				)
-				authCancel()
-				if err != nil {
-					logger.Warn("provider runtime auth failed", "provider", providerID, "error", err)
-				} else if authResult != nil {
-					if authResult.APIKey != "" {
-						apiKey = authResult.APIKey
-					}
-					if authResult.BaseURL != "" {
-						baseURL = authResult.BaseURL
-					}
-				}
-			}
-
-			if baseURL == "" {
-				logger.Warn("provider config missing base URL", "provider", providerID)
-			} else {
-				opts := []llm.ClientOption{llm.WithLogger(logger)}
-				if mode := apiModeFor(providerID, cfg.API); mode != "" {
-					opts = append(opts, llm.WithAPIMode(mode))
-				}
-				if scheme := modelrole.ResolveAuthScheme(providerID); scheme != "" {
-					opts = append(opts, llm.WithAuthScheme(scheme))
-				}
-				// Built-in coding-agent headers for subscription providers,
-				// with explicit `headers` from the config taking precedence.
-				headers := modelrole.DefaultHeaders(providerID)
-				for k, v := range cfg.Headers {
-					if headers == nil {
-						headers = make(map[string]string, len(cfg.Headers))
-					}
-					headers[k] = v
-				}
-				if len(headers) > 0 {
-					opts = append(opts, llm.WithHeaders(headers))
-				}
-				client := llm.NewClient(baseURL, apiKey, opts...)
-				logger.Info("using provider from config",
-					"provider", providerID, "apiMode", apiModeFor(providerID, cfg.API))
-				return client
-			}
-		}
+// configuredProviderClient resolves the highest-priority deneb.json provider
+// entry. A configured entry with no usable endpoint deliberately returns nil so
+// managed credentials and registry clients retain their historical fallback.
+func configuredProviderClient(ctx context.Context, deps runDeps, providerID string, logger *slog.Logger) *llm.Client {
+	if deps.providerConfigs == nil || providerID == "" {
+		return nil
+	}
+	cfg, ok := deps.providerConfigs[providerID]
+	if !ok {
+		return nil
 	}
 
-	// 2. Try auth manager.
-	if deps.authManager != nil {
-		target := providerID
-		if target == "" {
-			target = "zai" // Default provider: Z.ai Coding Plan (OpenAI-compatible).
-		}
-		cred := deps.authManager.Resolve(target, "")
-		if cred != nil && !cred.IsExpired() && cred.APIKey != "" {
-			base := cred.BaseURL
-			apiKey := cred.APIKey
-			if base == "" {
-				base = resolveDefaultBaseURL(target)
-			}
-
-			// Apply provider runtime auth override on auth-manager credentials.
-			if deps.providerRuntime != nil {
-				authCtx, authCancel := context.WithTimeout(ctx, runtimeAuthTimeout)
-				authResult, err := deps.providerRuntime.PrepareRuntimeAuth(
-					authCtx, target,
-					provider.RuntimeAuthContext{
-						Provider: target,
-						APIKey:   apiKey,
-					},
-				)
-				authCancel()
-				if err != nil {
-					logger.Warn("provider runtime auth failed", "provider", target, "error", err)
-				} else if authResult != nil {
-					if authResult.APIKey != "" {
-						apiKey = authResult.APIKey
-					}
-					if authResult.BaseURL != "" {
-						base = authResult.BaseURL
-					}
-				}
-			}
-
-			opts := []llm.ClientOption{llm.WithLogger(logger)}
-			if mode := apiModeFor(target, ""); mode != "" {
-				opts = append(opts, llm.WithAPIMode(mode))
-			}
-			if scheme := modelrole.ResolveAuthScheme(target); scheme != "" {
-				opts = append(opts, llm.WithAuthScheme(scheme))
-			}
-			if h := modelrole.DefaultHeaders(target); len(h) > 0 {
-				opts = append(opts, llm.WithHeaders(h))
-			}
-			return llm.NewClient(base, apiKey, opts...)
-		}
+	credentials := providerClientCredentials{
+		baseURL: strings.TrimSpace(provider.ExpandEnvVars(cfg.BaseURL)),
+		apiKey:  resolveProviderAPIKey(providerID, cfg, logger),
+	}
+	if credentials.baseURL == "" {
+		credentials.baseURL = resolveDefaultBaseURL(providerID)
+	}
+	credentials = prepareRuntimeProviderCredentials(ctx, deps.providerRuntime, providerID, credentials, logger)
+	if credentials.baseURL == "" {
+		logger.Warn("provider config missing base URL", "provider", providerID)
+		return nil
 	}
 
-	// 3. Try registry: the modelrole.Registry has cached clients for known
-	// provider/role mappings (vllm, google, localai, etc.) with correct base
-	// URLs and API keys. This covers model-switch scenarios (e.g., /model
-	// vllm/gemma4) where providerConfigs and authManager have no entry.
-	if deps.registry != nil && providerID != "" {
-		for _, role := range []modelrole.Role{modelrole.RoleMain, modelrole.RoleLightweight, modelrole.RoleFallback} {
-			cfg := deps.registry.Config(role)
-			if cfg.ProviderID == providerID {
-				if client := deps.registry.Client(role); client != nil {
-					logger.Info("using provider from registry", "provider", providerID, "role", string(role))
-					return client
-				}
-			}
-		}
+	mode := apiModeFor(providerID, cfg.API)
+	client := newResolvedProviderClient(providerID, credentials, mode, cfg.Headers, logger)
+	logger.Info("using provider from config", "provider", providerID, "apiMode", mode)
+	return client
+}
 
-		// No role matches — build a client for the known provider on
-		// demand. Covers /model switches (e.g. the quick-change keyboard)
-		// to a built-in provider outside the three configured roles.
-		if client := deps.registry.ClientForProvider(providerID); client != nil {
-			logger.Info("using built-in provider", "provider", providerID)
+// managedProviderClient resolves credentials maintained by AuthManager. An
+// empty provider ID keeps the established Z.ai default before runtime auth is
+// applied.
+func managedProviderClient(ctx context.Context, deps runDeps, providerID string, logger *slog.Logger) *llm.Client {
+	if deps.authManager == nil {
+		return nil
+	}
+	target := providerID
+	if target == "" {
+		target = "zai"
+	}
+	credential := deps.authManager.Resolve(target, "")
+	if credential == nil || credential.IsExpired() || credential.APIKey == "" {
+		return nil
+	}
+
+	credentials := providerClientCredentials{baseURL: credential.BaseURL, apiKey: credential.APIKey}
+	if credentials.baseURL == "" {
+		credentials.baseURL = resolveDefaultBaseURL(target)
+	}
+	credentials = prepareRuntimeProviderCredentials(ctx, deps.providerRuntime, target, credentials, logger)
+	return newResolvedProviderClient(target, credentials, apiModeFor(target, ""), nil, logger)
+}
+
+type providerClientCredentials struct {
+	baseURL string
+	apiKey  string
+}
+
+// prepareRuntimeProviderCredentials applies an optional token exchange without
+// changing source priority. Errors remain warnings and leave the original
+// credentials intact, matching the previous best-effort behavior.
+func prepareRuntimeProviderCredentials(
+	ctx context.Context,
+	runtime *provider.ProviderRuntimeResolver,
+	providerID string,
+	credentials providerClientCredentials,
+	logger *slog.Logger,
+) providerClientCredentials {
+	if runtime == nil {
+		return credentials
+	}
+	authCtx, authCancel := context.WithTimeout(ctx, runtimeAuthTimeout)
+	authResult, err := runtime.PrepareRuntimeAuth(authCtx, providerID, provider.RuntimeAuthContext{
+		Provider: providerID,
+		APIKey:   credentials.apiKey,
+	})
+	authCancel()
+	if err != nil {
+		logger.Warn("provider runtime auth failed", "provider", providerID, "error", err)
+		return credentials
+	}
+	if authResult == nil {
+		return credentials
+	}
+	if authResult.APIKey != "" {
+		credentials.apiKey = authResult.APIKey
+	}
+	if authResult.BaseURL != "" {
+		credentials.baseURL = authResult.BaseURL
+	}
+	return credentials
+}
+
+func newResolvedProviderClient(
+	providerID string,
+	credentials providerClientCredentials,
+	apiMode string,
+	configuredHeaders map[string]string,
+	logger *slog.Logger,
+) *llm.Client {
+	opts := []llm.ClientOption{llm.WithLogger(logger)}
+	if apiMode != "" {
+		opts = append(opts, llm.WithAPIMode(apiMode))
+	}
+	if scheme := modelrole.ResolveAuthScheme(providerID); scheme != "" {
+		opts = append(opts, llm.WithAuthScheme(scheme))
+	}
+	if headers := resolvedProviderHeaders(providerID, configuredHeaders); len(headers) > 0 {
+		opts = append(opts, llm.WithHeaders(headers))
+	}
+	return llm.NewClient(credentials.baseURL, credentials.apiKey, opts...)
+}
+
+// resolvedProviderHeaders layers explicit configuration over fresh built-in
+// headers so caller-owned maps and modelrole defaults are never mutated.
+func resolvedProviderHeaders(providerID string, configured map[string]string) map[string]string {
+	headers := modelrole.DefaultHeaders(providerID)
+	for key, value := range configured {
+		if headers == nil {
+			headers = make(map[string]string, len(configured))
+		}
+		headers[key] = value
+	}
+	return headers
+}
+
+// registryProviderClient selects cached role clients in the established
+// main→lightweight→fallback order, then asks the registry for an on-demand
+// built-in provider client.
+func registryProviderClient(deps runDeps, providerID string, logger *slog.Logger) *llm.Client {
+	if deps.registry == nil || providerID == "" {
+		return nil
+	}
+	for _, role := range []modelrole.Role{modelrole.RoleMain, modelrole.RoleLightweight, modelrole.RoleFallback} {
+		if deps.registry.Config(role).ProviderID != providerID {
+			continue
+		}
+		if client := deps.registry.Client(role); client != nil {
+			logger.Info("using provider from registry", "provider", providerID, "role", string(role))
 			return client
 		}
 	}
-
-	// 4. Fall back to pre-configured client.
-	return deps.llmClient
+	if client := deps.registry.ClientForProvider(providerID); client != nil {
+		logger.Info("using built-in provider", "provider", providerID)
+		return client
+	}
+	return nil
 }
 
 func resolveProviderAPIKey(providerID string, cfg ProviderConfig, logger *slog.Logger) string {

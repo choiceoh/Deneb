@@ -340,82 +340,97 @@ func firstMatch(text string, patterns ...*regexp.Regexp) string {
 // article sections, FAQ content, product info, etc.
 func extractJSONLD(html string, meta *webFetchMeta) {
 	matches := jsonLDRe.FindAllStringSubmatch(html, 5)
-	for _, m := range matches {
-		if len(m) < 2 {
+	for _, match := range matches {
+		data, ok := decodeJSONLDMatch(match)
+		if !ok {
 			continue
 		}
-		raw := strings.TrimSpace(m[1])
-		if raw == "" {
-			continue
-		}
+		applyJSONLDMetadata(meta, data)
+	}
+}
 
-		var data map[string]any
-		if err := json.Unmarshal([]byte(raw), &data); err != nil {
-			// Try as array (some sites wrap in []).
-			var arr []map[string]any
-			if json.Unmarshal([]byte(raw), &arr) == nil && len(arr) > 0 {
-				data = arr[0]
-			} else {
-				continue
-			}
-		}
+// decodeJSONLDMatch accepts the two shapes seen in the wild: one object, or an
+// array whose first object is the page's primary structured-data record.
+func decodeJSONLDMatch(match []string) (map[string]any, bool) {
+	if len(match) < 2 {
+		return nil, false
+	}
+	raw := strings.TrimSpace(match[1])
+	if raw == "" {
+		return nil, false
+	}
+	var object map[string]any
+	if json.Unmarshal([]byte(raw), &object) == nil {
+		return object, true
+	}
+	var array []map[string]any
+	if json.Unmarshal([]byte(raw), &array) != nil || len(array) == 0 {
+		return nil, false
+	}
+	return array[0], true
+}
 
-		// Fill in missing metadata from JSON-LD.
-		if meta.Title == "" {
-			if v, ok := data["headline"].(string); ok && v != "" {
-				meta.Title = v
-			} else if v, ok := data["name"].(string); ok && v != "" {
-				meta.Title = v
-			}
-		}
-		if meta.Description == "" {
-			if v, ok := data["description"].(string); ok && v != "" {
-				meta.Description = v
-			}
-		}
-		if meta.Published == "" {
-			if v, ok := data["datePublished"].(string); ok && v != "" {
-				meta.Published = v
-			}
-		}
-		if meta.Author == "" {
-			switch a := data["author"].(type) {
-			case string:
-				meta.Author = a
-			case map[string]any:
-				if name, ok := a["name"].(string); ok {
-					meta.Author = name
-				}
-			case []any:
-				if len(a) > 0 {
-					if m, ok := a[0].(map[string]any); ok {
-						if name, ok := m["name"].(string); ok {
-							meta.Author = name
-						}
-					}
-				}
-			}
-		}
-		if meta.SiteName == "" {
-			if pub, ok := data["publisher"].(map[string]any); ok {
-				if name, ok := pub["name"].(string); ok {
-					meta.SiteName = name
-				}
-			}
-		}
-
-		// Store first JSON-LD @type for content classification.
-		if meta.OGType == "" {
-			if v, ok := data["@type"].(string); ok && v != "" {
-				meta.OGType = "ld:" + v
-			}
-		}
-
-		// Extract word count if available (useful for token estimation).
-		if wc, ok := data["wordCount"].(float64); ok && wc > 0 {
-			meta.WordCount = int(wc)
+// applyJSONLDMetadata keeps authored/meta-tag values authoritative. JSON-LD
+// fills only missing text fields, while a later positive wordCount retains the
+// historical last-valid-block behavior.
+func applyJSONLDMetadata(meta *webFetchMeta, data map[string]any) {
+	if meta.Title == "" {
+		meta.Title = firstJSONLDString(data, "headline", "name")
+	}
+	if meta.Description == "" {
+		meta.Description = firstJSONLDString(data, "description")
+	}
+	if meta.Published == "" {
+		meta.Published = firstJSONLDString(data, "datePublished")
+	}
+	if meta.Author == "" {
+		meta.Author = jsonLDAuthorName(data["author"])
+	}
+	if meta.SiteName == "" {
+		meta.SiteName = jsonLDNamedObject(data["publisher"])
+	}
+	if meta.OGType == "" {
+		if contentType := firstJSONLDString(data, "@type"); contentType != "" {
+			meta.OGType = "ld:" + contentType
 		}
 	}
+	if wordCount, ok := data["wordCount"].(float64); ok && wordCount > 0 {
+		meta.WordCount = int(wordCount)
+	}
+}
+
+func firstJSONLDString(data map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := data[key].(string); ok && value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func jsonLDAuthorName(author any) string {
+	switch value := author.(type) {
+	case string:
+		return value
+	case map[string]any:
+		return jsonLDNamedObject(value)
+	case []any:
+		if len(value) == 0 {
+			return ""
+		}
+		return jsonLDNamedObject(value[0])
+	default:
+		return ""
+	}
+}
+
+func jsonLDNamedObject(value any) string {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return ""
+	}
+	name, _ := object["name"].(string)
+	return name
 }
 
 // --- Enhanced quality signal detection ---

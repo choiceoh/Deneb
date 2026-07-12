@@ -13,7 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/usage"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 

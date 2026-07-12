@@ -1,37 +1,92 @@
 # genesis — recursive self-improvement subsystem
 
-Deneb의 자가개선 루프. 스킬을 진화시키고(L1), 진화시키는 *절차 자체*를 진화시키며(L2), 판정자를 공진화시킨다(L3). 정본 설계는 `docs/research/recursive-self-improvement-roadmap.md`.
+Deneb의 자가개선 루프. 스킬을 진화시키고(L1), 진화시키는 절차 자체를
+진화시키며(L2), 판정자를 공진화시킨다(L3). 정본 설계는
+`docs/research/recursive-self-improvement-roadmap.md`다.
 
-## 불가침 원칙 (먼저 읽을 것)
+## 불가침 원칙
 
-- **LLM은 생산만, 판정은 결정적 Go.** LLM은 후보 body·검증 케이스·exhibit를 만들 뿐, accept/reject/adopt/rollback 결정은 전부 결정적 Go다. 수용 메커니즘은 그것이 수용하는 것에 의해 최적화되면 안 된다 (2026H1 스윕 만장일치).
-- **수용 게이트 회로 = forbidden self-edit surface.** `surfaces.go`의 `acceptance-machinery` 목록(validation_engine·eprocess·meta 벤치·judge_accuracy·tracker_usage·surfaces·meta_evolution)은 자가개선 큐가 record-time 기각. 사람 PR로만 변경.
-- **자기 브레이크.** `evolution_drift.go`가 원장을 읽어 reward-hacking 드리프트(judge 물러짐·채택 다양성 붕괴·롤백 급증·verifier 파손)를 감지하면 자동 채택을 동결(propose-only 복귀)한다.
+- **LLM은 생산만, 판정은 결정적 Go.** LLM은 후보 body·검증 케이스·exhibit를
+  만들 뿐 accept/reject/adopt/rollback 결정은 결정적 Go가 내린다.
+- **수용 게이트 회로는 forbidden self-edit surface다.** `surfaces.go`의
+  `acceptance-machinery` 목록(validation_engine·eprocess·meta 벤치·
+  judge_accuracy·tracker_usage·surfaces·meta_evolution)은 자가개선 큐가
+  record-time에 기각하며 사람 PR로만 변경한다.
+- **자기 브레이크를 보존한다.** `evolution_drift.go`가 reward-hacking 드리프트
+  (judge 완화·채택 다양성 붕괴·롤백 급증·verifier 파손)를 감지하면 자동 채택을
+  동결하고 propose-only로 복귀한다.
 
 ## 층 지도
 
 | 층 | 하는 일 | 주 파일 |
 |---|---|---|
-| **L1 스킬 진화** | 저성과 SKILL.md body 재작성 (bounded patch + judge + held-out replay + 롤백 워치) | `evolver*.go`, `tracker*.go` |
-| **L2 메타 진화 (slow loop)** | evolve/judge 프롬프트 자체를 주간 개정 → epoch별 벤치 게이트 → 자동 채택 + 롤백 워치 | `meta_evolution.go`, `meta_judge_bench.go`(evaluator epoch=열화 골드페어), `meta_producer_bench.go`(producer epoch=shadow-replay flip) |
-| **L3 verifier 공진화 (준비 중)** | judge가 라벨된 오판으로 학습; 라벨은 판정 정확도 레인이 결정적 생산 | `judge_accuracy.go`(심은결함 재생 + false-reject 채굴), charter 동결 = `tracker_validation_cases.go` `IsCharterCase` |
+| **L1 스킬 진화** | 저성과 SKILL.md body 재작성 | `evolver*.go`, `tracker*.go` |
+| **L2 메타 진화** | evolve/judge 프롬프트를 주간 개정하고 epoch 벤치로 채택·롤백 | `meta_evolution.go`, `meta_judge_bench.go`, `meta_producer_bench.go` |
+| **L3 verifier 공진화** | 라벨된 judge 오판과 심은 결함을 재생 | `judge_accuracy.go`, `tracker_validation_cases.go`의 `IsCharterCase` |
 
-## 게이트 스택 (evolve 1건이 통과하는 순서)
+## 진입점과 책임
 
-1. behavioral replay (`validation_replay.go`) — 실행기로 도구 호출 재생, 회귀 시 기각
-2. 결정적 selection preflight (bounded edit + self-harness audit)
-3. held-out 검증 (`validation_engine.go`) — visible/blind 풀 분리, **케이스 단위 flip gate**(옛 케이스 깨면 집계 이득 무관 기각)
-4. LLM self-test judge (+ teacher 에스컬레이션)
-5. K-후보 중 held-out margin 최고 커밋
-6. post-evolve 롤백 워치 (`tracker_usage.go`) — N일 미해소 시 시간 기반 confirm/expire
+- `tracker.go`의 `Tracker`와 `NewTracker`가 사용·실패·후보 상태의 append-only
+  기록과 재구축을 소유한다. `tracker_*.go`는 기록 종류별 조회와 상태 전이를
+  나눈다.
+- `evolver.go`의 `Evolver`와 `NewEvolver`가 후보 평가, 적용, 회귀 롤백을
+  오케스트레이션한다. 단계별 결정은 `evolver_*.go`에 둔다.
+- `curator.go`의 `SkillCuratorTask`는 반복 신호를 큐레이션하고,
+  `workout.go`의 `SkillWorkoutTask`는 기존 스킬을 실행 증거로 점검한다.
+- `meta_evolution.go`와 `meta_*_bench.go`는 evolution 자체의 품질을 평가하며
+  제품 런타임과 분리된 평가 계약으로 유지한다.
 
-## 영속 (전부 append-only JSONL, `~/.deneb/data/`)
+## 게이트 순서
 
-`skill_usage.jsonl`(사용) · `skill_genesis_log.jsonl`(lifecycle: evolved/confirmed/rolled_back/…) · `skill_validation_cases.jsonl` · `skill_rejected_edits.jsonl` · `meta_evolution_log.jsonl`(메타 경험 원장 — 다음 사이클이 읽음) · `judge_accuracy_log.jsonl`(L3 라벨) · `auto_adopt_freeze.json`(자기 브레이크 마커). `Tracker`가 이 파일들과 기동 시 재구축하는 인메모리 집계를 소유.
+1. `validation_replay.go`의 behavioral replay
+2. bounded edit와 self-harness audit의 결정적 selection preflight
+3. `validation_engine.go`의 visible/blind held-out 및 케이스 단위 flip gate
+4. LLM self-test judge와 teacher escalation
+5. K개 후보 중 held-out margin이 가장 높은 후보 커밋
+6. `tracker_usage.go`의 post-evolve rollback watch
+
+후보는 검증 증거 없이 적용 상태로 건너뛸 수 없다. 채택·거절·롤백 순서와
+감사 기록을 바꾸거나 집계 이득으로 기존 케이스 회귀를 상쇄하면 안 된다.
+
+## 의존 방향과 데이터
+
+- `Tracker`가 수명주기 상태의 단일 소스다. 런타임이나 도구가 tracker 파일을
+  직접 수정하거나 별도 상태 enum을 만들지 않는다.
+- LLM 응답은 제안 입력일 뿐 계약이 아니다. 파싱·검증된 구조만 `Tracker`에
+  전달하고 자유 형식 값을 공개 API로 확산하지 않는다.
+- `runtime/server` 배선이나 chat tool을 이 도메인으로 역수입하지 않는다. 필요한
+  실행 능력은 좁은 함수 또는 인터페이스로 주입한다.
+- 영속 파일은 `~/.deneb/data/` 아래 append-only JSONL이다. 주요 원장은
+  `skill_usage.jsonl`, `skill_genesis_log.jsonl`, `skill_validation_cases.jsonl`,
+  `skill_rejected_edits.jsonl`, `meta_evolution_log.jsonl`,
+  `judge_accuracy_log.jsonl`이며 자기 브레이크 마커는 `auto_adopt_freeze.json`이다.
 
 ## 함정
 
-- **Tracker는 DENEB_STATE_DIR 무관하게 `~/.deneb`에 쓴다** — dev/live-test 인스턴스가 프로덕션 skill_usage.jsonl을 공유(읽기 위주 위험 수용). workout·judge-accuracy 등 라이브 모델 호출+합성 쓰기 레인은 프로덕션-state 게이트로 격리.
-- **합성 소스(workout)는 real과 격리** — `UsageSourceWorkout`은 evidence-only, 실사용 통계 오염 금지. 자기오염 방지의 핵심.
-- **EvolutionHealth는 60s 캐시** — 안전 감시자(drift audit)는 캐시 우회 fresh compute를 쓴다.
-- **가속 노브** (캘리브레이션): `DENEB_META_EVOLUTION_INTERVAL_DAYS`·`DENEB_SKILL_WATCH_MAX_AGE_DAYS`·`DENEB_META_BENCH_SCALE`·`DENEB_JUDGE_ACCURACY_INTERVAL_HOURS`. 킬 스위치 `DENEB_META_AUTO_ADOPT=0`.
+- `Tracker`는 `DENEB_STATE_DIR`와 무관하게 `~/.deneb`에 쓴다. workout과
+  judge-accuracy처럼 합성 쓰기와 라이브 모델 호출을 하는 lane은 production-state
+  gate로 격리한다.
+- `UsageSourceWorkout`은 evidence-only다. 합성 사용량을 실제 사용 통계에 섞지
+  않는다.
+- `EvolutionHealth`는 60초 캐시지만 drift audit은 fresh compute를 사용한다.
+- 캘리브레이션 노브는 `DENEB_META_EVOLUTION_INTERVAL_DAYS`,
+  `DENEB_SKILL_WATCH_MAX_AGE_DAYS`, `DENEB_META_BENCH_SCALE`,
+  `DENEB_JUDGE_ACCURACY_INTERVAL_HOURS`이며 킬 스위치는
+  `DENEB_META_AUTO_ADOPT=0`이다.
+
+## 변경과 검증
+
+새 전이나 평가 신호를 추가할 때 정상, 거절, 재시작 복원, 중복 실행 멱등성을
+해당 `*_test.go`에 함께 추가한다. 테스트는 실제 `Tracker` 또는 `Evolver` 심볼을
+통해 행동을 관찰해야 한다.
+
+집중 검증:
+
+`cd gateway-go && go test ./internal/domain/skills/genesis/...`
+
+루트 패키지만 반복할 때:
+
+`cd gateway-go && go test -count=1 ./internal/domain/skills/genesis`
+
+evolution 적용 로직은 rollback, self-correction funnel, held-out flip gate까지 같은
+명령에서 통과시킨다.

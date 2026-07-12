@@ -13,12 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/classification"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	minimodule "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/module"
 	minischedule "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/schedule"
 )
 
@@ -67,20 +67,18 @@ func (d dashboardCalendarSource) ListRange(ctx context.Context, from, to time.Ti
 // {stateDir}/classification_rules.json (or keyword defaults), and org.LoadLanes
 // → nil so the handler uses its hardcoded part set. Both are always non-nil so
 // the dashboard always registers and always renders a part skeleton.
-func (s *Server) dashboardDeps() handlerminiapp.DashboardDeps {
-	var wf handlerminiapp.DashboardWorkFeedSource
+func (s *Server) dashboardDeps() minimodule.DashboardDeps {
+	var wf minimodule.DashboardWorkFeedSource
 	if nwf := s.nativeWorkFeedStore(); nwf != nil {
 		wf = nwf
 	}
-	return handlerminiapp.DashboardDeps{
-		Rules: func() (classification.Rules, error) { return org.LoadRules() },
-		Lanes: func() ([]org.LaneDef, error) { return org.LoadLanes() },
-		Calendar: dashboardCalendarSource{
+	return minimodule.OrgDashboardDeps(
+		dashboardCalendarSource{
 			client: func() (minischedule.CalendarClient, error) { return calendar.DefaultClient() },
 			local:  resolveLocalCalendar(s.logger),
 		},
-		WorkFeed: wf,
-	}
+		wf,
+	)
 }
 
 // orgDeps assembles the production OrgDeps for the miniapp.org.* editor. Load

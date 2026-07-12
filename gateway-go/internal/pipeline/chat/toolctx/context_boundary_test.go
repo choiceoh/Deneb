@@ -641,12 +641,6 @@ func TestChatMessageTextAndContentBoundaries(t *testing.T) {
 	if got := string(MarshalJSONString("line\n☃")); got != `"line\n☃"` {
 		t.Fatalf("MarshalJSONString = %q", got)
 	}
-	if got := joinTexts([]string{"only"}); got != "only" {
-		t.Fatalf("joinTexts one = %q", got)
-	}
-	if got := joinTexts([]string{"one", "two", "three"}); got != "one\n\ntwo\n\nthree" {
-		t.Fatalf("joinTexts many = %q", got)
-	}
 }
 
 func assertToolctxEventually(t *testing.T, predicate func() bool) {

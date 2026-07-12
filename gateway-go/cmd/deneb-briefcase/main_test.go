@@ -340,6 +340,138 @@ func TestValidateCompletedRunRejectsOverflowSizedEpisodeBudget(t *testing.T) {
 	}
 }
 
+func TestValidateCompletedRunPreservesValidationOrder(t *testing.T) {
+	pack, err := casepack.LoadDir(portableSmokeCaseDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*runtimebriefcase.RunResult)
+		want   string
+	}{
+		{
+			name: "device binding precedes timeline size",
+			mutate: func(result *runtimebriefcase.RunResult) {
+				result.DevicePlanSHA256 = strings.Repeat("a", 64)
+				result.DevicePlanSourceSHA256 = strings.Repeat("b", 64)
+				result.Episodes = nil
+			},
+			want: "run result declares a device plan that is absent from the signed casepack",
+		},
+		{
+			name:   "partial timeline precedes episode validation",
+			mutate: func(result *runtimebriefcase.RunResult) { result.Episodes = nil },
+			want:   "run result is a partial timeline and cannot be scored",
+		},
+		{
+			name: "follow-up count precedes timeline validation",
+			mutate: func(result *runtimebriefcase.RunResult) {
+				result.Episodes[0].EpisodeID = "wrong"
+				result.Episodes = append(result.Episodes, runtimebriefcase.EpisodeResult{}, runtimebriefcase.EpisodeResult{}, runtimebriefcase.EpisodeResult{})
+			},
+			want: "run result exceeds the signed follow-up budget",
+		},
+		{
+			name: "timeline identity precedes timestamp",
+			mutate: func(result *runtimebriefcase.RunResult) {
+				result.Episodes[0].EpisodeID = "wrong"
+				result.Episodes[0].At = "bad"
+			},
+			want: `run result timeline episode 1 does not match signed episode "budget-update"`,
+		},
+		{
+			name: "timeline timestamp precedes release outcome",
+			mutate: func(result *runtimebriefcase.RunResult) {
+				result.Episodes[0].At = "bad"
+				result.Episodes[0].ReleasedSource = nil
+			},
+			want: `run result episode "budget-update" timestamp does not match the signed timeline`,
+		},
+		{
+			name: "release outcome precedes budget accounting",
+			mutate: func(result *runtimebriefcase.RunResult) {
+				result.Episodes[0].ReleasedSource = nil
+				result.Episodes[0].Turns = 0
+			},
+			want: `run result episode "budget-update" release outcome does not match the signed arm`,
+		},
+		{
+			name: "budget accounting precedes input and provenance",
+			mutate: func(result *runtimebriefcase.RunResult) {
+				result.Episodes[0].Turns = 0
+				result.Episodes[0].InputSHA256 = "bad"
+				result.Episodes[0].Model = "wrong"
+			},
+			want: `run result episode "budget-update" has invalid budget accounting`,
+		},
+		{
+			name: "input digest precedes executor provenance",
+			mutate: func(result *runtimebriefcase.RunResult) {
+				result.Episodes[0].InputSHA256 = "bad"
+				result.Episodes[0].Model = "wrong"
+			},
+			want: `run result episode "budget-update" normalized input digest does not match`,
+		},
+		{
+			name: "timeline provenance precedes follow-up validation",
+			mutate: func(result *runtimebriefcase.RunResult) {
+				result.Episodes[0].Model = "wrong"
+				followUp := scoreFollowUpEpisode(t, pack, 1)
+				followUp.EpisodeID = "wrong"
+				result.Episodes = append(result.Episodes, followUp)
+			},
+			want: `run result episode "budget-update" executor provenance does not match the run`,
+		},
+		{
+			name: "follow-up identity precedes timestamp",
+			mutate: func(result *runtimebriefcase.RunResult) {
+				followUp := scoreFollowUpEpisode(t, pack, 1)
+				followUp.EpisodeID = "wrong"
+				followUp.At = "bad"
+				result.Episodes = append(result.Episodes, followUp)
+			},
+			want: "run result follow-up 1 has invalid phase or cycle",
+		},
+		{
+			name: "follow-up timestamp precedes provenance",
+			mutate: func(result *runtimebriefcase.RunResult) {
+				followUp := scoreFollowUpEpisode(t, pack, 1)
+				followUp.At = "bad"
+				followUp.InputSHA256 = "bad"
+				result.Episodes = append(result.Episodes, followUp)
+			},
+			want: "run result follow-up 1 has an invalid timestamp",
+		},
+		{
+			name: "follow-up provenance precedes budget accounting",
+			mutate: func(result *runtimebriefcase.RunResult) {
+				followUp := scoreFollowUpEpisode(t, pack, 1)
+				followUp.InputSHA256 = "bad"
+				followUp.Turns = 0
+				result.Episodes = append(result.Episodes, followUp)
+			},
+			want: "run result follow-up 1 provenance is invalid",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := runtimebriefcase.RunResult{
+				Arm:   runtimebriefcase.ArmMemoryAssisted,
+				Model: "test-model", ProviderModel: "served-test-model",
+				Episodes: []runtimebriefcase.EpisodeResult{scoreTimelineEpisode(t, pack, "answer")},
+			}
+			tt.mutate(&result)
+			err := validateCompletedRun(pack, result)
+			if err == nil || err.Error() != tt.want {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestDecodeJSONFileRejectsUnknownAndSymlink(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "plan.json")
@@ -380,6 +512,34 @@ func scoreTimelineEpisode(t *testing.T, pack *casepack.Pack, text string) runtim
 		Turns:          1,
 		OutputTokens:   10,
 		ReleasedSource: append([]string(nil), episode.ReleaseSourceIDs...),
+	}
+}
+
+func scoreFollowUpEpisode(t *testing.T, pack *casepack.Pack, cycle int) runtimebriefcase.EpisodeResult {
+	t.Helper()
+	plan, err := loadSignedUserSimulatorPlan(pack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cycle <= 0 || cycle > len(plan.FollowUps) {
+		t.Fatalf("follow-up cycle %d outside plan of %d", cycle, len(plan.FollowUps))
+	}
+	message := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(plan.FollowUps[cycle-1].Message, "\r\n", "\n"), "\r", "\n"))
+	lastAt := pack.Manifest.FrozenNow
+	if episodes := pack.Manifest.Episodes; len(episodes) > 0 {
+		lastAt = episodes[len(episodes)-1].At
+	}
+	return runtimebriefcase.EpisodeResult{
+		EpisodeID: fmt.Sprintf("simulator-followup-%d", cycle),
+		Phase:     "follow-up", Cycle: cycle, At: lastAt.UTC().Format(time.RFC3339Nano),
+		InputSHA256:        casepack.DigestBytes([]byte(chat.SanitizeInput(message))),
+		SystemPromptSHA256: strings.Repeat("6", 64),
+		Text:               "follow-up answer",
+		Model:              "test-model",
+		ProviderModel:      "served-test-model",
+		StopReason:         "end_turn",
+		Turns:              1,
+		OutputTokens:       10,
 	}
 }
 

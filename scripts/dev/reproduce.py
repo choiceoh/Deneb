@@ -23,15 +23,12 @@ Usage:
 
 """
 
-import json
 import asyncio
 import sys
-import time
 import argparse
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 # Add scripts dir to path for shared modules (mock_native_client lives
 # under scripts/, this file under scripts/dev/).

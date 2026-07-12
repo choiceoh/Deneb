@@ -335,10 +335,14 @@ func (s *Server) registerSkillLifecycleTool() {
 			return lwClient.Complete(ctx, req)
 		}
 	}
-	var shadowReplay func(context.Context, string, int) (any, error)
+	var shadowReplay func(context.Context, string, int) (chattools.HeartbeatShadowReplayResult, error)
 	if fixturePath != "" && shadowComplete != nil {
-		shadowReplay = func(ctx context.Context, candidate string, limit int) (any, error) {
-			return runtimeheartbeat.RunShadowReplay(ctx, fixturePath, candidate, limit, shadowComplete)
+		shadowReplay = func(ctx context.Context, candidate string, limit int) (chattools.HeartbeatShadowReplayResult, error) {
+			report, err := runtimeheartbeat.RunShadowReplay(ctx, fixturePath, candidate, limit, shadowComplete)
+			if err != nil {
+				return chattools.HeartbeatShadowReplayResult{}, err
+			}
+			return heartbeatShadowReplayToolResult(report), nil
 		}
 	}
 	backend := skilllifecycle.NewBackend(skilllifecycle.BackendConfig{
@@ -364,6 +368,35 @@ func (s *Server) registerSkillLifecycleTool() {
 		Fn:          chattools.ToolSkillLifecycle(backend),
 		Deferred:    true,
 	})
+}
+
+func heartbeatShadowReplayToolResult(report runtimeheartbeat.ShadowReplayReport) chattools.HeartbeatShadowReplayResult {
+	results := make([]chattools.HeartbeatShadowReplayFixtureResult, 0, len(report.Results))
+	for _, result := range report.Results {
+		results = append(results, chattools.HeartbeatShadowReplayFixtureResult{
+			FiredAt:       result.FiredAt,
+			Split:         result.Split,
+			Quiet:         result.Quiet,
+			OriginalPass:  result.OriginalPass,
+			CandidatePass: result.CandidatePass,
+			Note:          result.Note,
+		})
+	}
+	return chattools.HeartbeatShadowReplayResult{
+		OK:                report.OK,
+		Verdict:           report.Verdict,
+		Reason:            report.Reason,
+		Fixtures:          report.Fixtures,
+		HeldInOriginal:    report.HeldInOriginal,
+		HeldInCandidate:   report.HeldInCandidate,
+		HeldInTotal:       report.HeldInTotal,
+		HeldOutOriginal:   report.HeldOutOriginal,
+		HeldOutCandidate:  report.HeldOutCandidate,
+		HeldOutTotal:      report.HeldOutTotal,
+		Results:           results,
+		DryRun:            report.DryRun,
+		ContractDriftNote: report.ContractDriftNote,
+	}
 }
 
 // registerGenesisAutonomousTasks registers periodic background tasks for genesis.

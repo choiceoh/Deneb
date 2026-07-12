@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from test_shell_support import REPO_ROOT, isolated_env, run_script, write_executable
+from test_shell_support import isolated_env, run_script, write_executable
 
 AUTO_LOG = Path("/tmp/deneb-auto-deploy.log")
 AUTO_LOCK = Path("/tmp/deneb-auto-deploy.lock")

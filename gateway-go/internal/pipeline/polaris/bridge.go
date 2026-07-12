@@ -6,11 +6,11 @@ import (
 	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 // Compile-time interface compliance.
-var _ toolctx.TranscriptStore = (*Bridge)(nil)
+var _ chatport.TranscriptStore = (*Bridge)(nil)
 
 // Bridge wraps an existing TranscriptStore and dual-writes to the Polaris Store.
 // It implements the TranscriptStore interface as a drop-in replacement.
@@ -19,7 +19,7 @@ var _ toolctx.TranscriptStore = (*Bridge)(nil)
 // messages into the Polaris store (idempotent). Subsequent Appends dual-write
 // to both stores.
 type Bridge struct {
-	legacy            toolctx.TranscriptStore
+	legacy            chatport.TranscriptStore
 	store             *Store
 	engine            *Engine
 	logger            *slog.Logger
@@ -41,7 +41,7 @@ type BridgeOptions struct {
 
 // NewBridge wraps a legacy TranscriptStore with Polaris dual-write.
 // Creates a long-lived Engine with circuit breaker for the lifecycle of the Bridge.
-func NewBridge(legacy toolctx.TranscriptStore, store *Store, logger *slog.Logger) *Bridge {
+func NewBridge(legacy chatport.TranscriptStore, store *Store, logger *slog.Logger) *Bridge {
 	return NewBridgeWithOptions(legacy, store, logger, BridgeOptions{})
 }
 
@@ -49,7 +49,7 @@ func NewBridge(legacy toolctx.TranscriptStore, store *Store, logger *slog.Logger
 // persistence behavior. Production callers should normally use NewBridge;
 // isolated evaluators can opt into fail-closed persistence.
 func NewBridgeWithOptions(
-	legacy toolctx.TranscriptStore,
+	legacy chatport.TranscriptStore,
 	store *Store,
 	logger *slog.Logger,
 	options BridgeOptions,
@@ -70,7 +70,7 @@ func (b *Bridge) Store() *Store { return b.store }
 func (b *Bridge) Engine() *Engine { return b.engine }
 
 // Load delegates to the legacy store and triggers lazy migration.
-func (b *Bridge) Load(sessionKey string, limit int) ([]toolctx.ChatMessage, int, error) {
+func (b *Bridge) Load(sessionKey string, limit int) ([]chatport.ChatMessage, int, error) {
 	if err := b.ensureMigrated(sessionKey); err != nil {
 		return nil, 0, err
 	}
@@ -78,7 +78,7 @@ func (b *Bridge) Load(sessionKey string, limit int) ([]toolctx.ChatMessage, int,
 }
 
 // Append writes to both legacy JSONL and Polaris file store.
-func (b *Bridge) Append(sessionKey string, msg toolctx.ChatMessage) error {
+func (b *Bridge) Append(sessionKey string, msg chatport.ChatMessage) error {
 	// A strict bridge must establish the legacy prefix before it dual-writes a
 	// new tail message. Otherwise a fresh Bridge over an existing transcript
 	// could place the new message at Polaris index zero and make the subsequent
@@ -122,7 +122,7 @@ func (b *Bridge) ListKeys() ([]string, error) {
 }
 
 // Search delegates to the legacy store.
-func (b *Bridge) Search(query string, maxResults int) ([]toolctx.SearchResult, error) {
+func (b *Bridge) Search(query string, maxResults int) ([]chatport.SearchResult, error) {
 	return b.legacy.Search(query, maxResults)
 }
 

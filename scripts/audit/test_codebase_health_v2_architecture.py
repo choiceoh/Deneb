@@ -26,6 +26,49 @@ func TestWidgetValue(t *testing.T) {
 }
 """
 
+    def test_typed_ports_are_not_counted_as_dynamic_contracts(self) -> None:
+        source = """\
+package widget
+
+type Reader interface {
+    Read([]byte) (int, error)
+}
+
+type Empty interface{}
+type Payload any
+"""
+        code = inventory._mask_literals(inventory._remove_comments(source))
+
+        exported, dynamic = inventory._exported_contract_counts(code)
+
+        self.assertEqual(exported, 3)
+        self.assertEqual(dynamic, 2)
+
+    def test_universal_generic_constraints_are_not_dynamic_values(self) -> None:
+        source = """\
+package widget
+
+func Decode[T any](raw []byte) (T, error) { var zero T; return zero, nil }
+func Identity[T interface{}](value T) T { return value }
+
+type Box[T any] struct {
+    Value T
+}
+
+type DynamicBox[T any] struct {
+    Value any
+}
+
+func DynamicInput[T any](value any) T { var zero T; return zero }
+func DynamicMap[T ~map[string]any](value T) T { return value }
+"""
+        code = inventory._mask_literals(inventory._remove_comments(source))
+
+        exported, dynamic = inventory._exported_contract_counts(code)
+
+        self.assertEqual(exported, 6)
+        self.assertEqual(dynamic, 3)
+
     def test_rubric_weights_include_ai_change_readiness_and_total_one_hundred(
         self,
     ) -> None:

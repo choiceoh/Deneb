@@ -3,8 +3,15 @@ package cron
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
+
+type executionAgentFunc func(context.Context, AgentTurnParams) (string, error)
+
+func (f executionAgentFunc) RunAgentTurn(ctx context.Context, params AgentTurnParams) (string, error) {
+	return f(ctx, params)
+}
 
 // A cron run whose delivery handoff ERRORS must be recorded as status="error",
 // not "ok". Before the fix the promote-to-error branch was dead — deliveryResult
@@ -82,5 +89,89 @@ func TestExecuteJob_HandoffOutcomeStatus(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRunJobOnce_FinalizationOrder(t *testing.T) {
+	svc, agent := newTestService(t)
+	agent.output = "완료 보고"
+	job := StoreJob{
+		ID:       "ordered",
+		Name:     "ordered",
+		Enabled:  true,
+		Schedule: StoreSchedule{Kind: "every", EveryMs: 60_000},
+		Payload:  StorePayload{Kind: "agentTurn", Message: "run"},
+		Delivery: &JobDeliveryConfig{Channel: "client", To: "main"},
+		State:    JobState{ConsecutiveErrors: 2},
+	}
+	if err := svc.store.AddJob(job); err != nil {
+		t.Fatal(err)
+	}
+
+	var order []string
+	stateCommitted := false
+	logCommitted := false
+	svc.SetMainSessionHandoff(func(context.Context, string, string, string, string) (bool, error) {
+		order = append(order, "delivery")
+		return true, nil
+	})
+	svc.OnEvent(func(event CronEvent) {
+		switch event.Type {
+		case "job_started":
+			order = append(order, "started")
+		case "job_finished":
+			stored := svc.store.Job(job.ID)
+			stateCommitted = stored != nil && stored.State.ConsecutiveErrors == 0 && stored.State.LastDeliveryStatus == "delivered"
+			page := svc.runLog.ReadPage(job.ID, RunLogReadOpts{})
+			logCommitted = len(page.Entries) == 1 && page.Entries[0].Status == "ok" && page.Entries[0].DeliveryStatus == "delivered"
+			order = append(order, "finished")
+		}
+	})
+
+	outcome := svc.runJobOnce(context.Background(), job, triggerManual)
+	if outcome.Status != "ok" || outcome.Delivery == nil || !outcome.Delivery.Delivered {
+		t.Fatalf("outcome = %+v", outcome)
+	}
+	if got := strings.Join(order, ","); got != "started,delivery,finished" {
+		t.Fatalf("stage order = %q", got)
+	}
+	if !stateCommitted || !logCommitted {
+		t.Fatalf("finished event observed state/log before commit: state=%v log=%v", stateCommitted, logCommitted)
+	}
+}
+
+func TestRunJobOnce_CallerCancellationIsRecordedWithoutRetry(t *testing.T) {
+	svc, _ := newTestService(t)
+	svc.SetAgentRunner(executionAgentFunc(func(ctx context.Context, _ AgentTurnParams) (string, error) {
+		return "", ctx.Err()
+	}))
+	job := StoreJob{
+		ID:       "canceled",
+		Name:     "canceled",
+		Enabled:  true,
+		Schedule: StoreSchedule{Kind: "every", EveryMs: 60_000},
+		Payload:  StorePayload{Kind: "agentTurn", Message: "run", RetryCount: 3, RetryBackoffMs: 1},
+		Delivery: &JobDeliveryConfig{BestEffort: true},
+	}
+	if err := svc.store.AddJob(job); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	outcome := svc.runJobOnce(ctx, job, triggerManual)
+	if outcome.Status != "error" || !strings.Contains(outcome.Error, context.Canceled.Error()) {
+		t.Fatalf("canceled outcome = %+v", outcome)
+	}
+	if outcome.Retries != 0 {
+		t.Fatalf("canceled retries = %d, want 0", outcome.Retries)
+	}
+	stored := svc.store.Job(job.ID)
+	if stored == nil || stored.State.ConsecutiveErrors != 1 {
+		t.Fatalf("canceled state = %+v", stored)
+	}
+	page := svc.runLog.ReadPage(job.ID, RunLogReadOpts{})
+	if len(page.Entries) != 1 || page.Entries[0].Status != "error" {
+		t.Fatalf("canceled run log = %+v", page.Entries)
 	}
 }
