@@ -10,11 +10,37 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
+
+// TestSubstituteRunMarketTokens locks the async finalize chokepoint: the SSE
+// done frame, aggregate transcript write, channel reply, LastOutput, and the
+// work-feed publisher all read Text/AllText/DeliverableText after this call,
+// so none of them can surface raw "{{market:...}}" template syntax.
+func TestSubstituteRunMarketTokens(t *testing.T) {
+	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
+	result := &agent.AgentResult{
+		Text:            "오늘 환율은 {{market:usd_krw}}원입니다.",
+		AllText:         "잠시 확인할게요.\n\n오늘 환율은 {{market:usd_krw}}원입니다.",
+		DeliverableText: "오늘 환율은 {{market:usd_krw}}원입니다.",
+	}
+
+	substituteRunMarketTokens(result)
+
+	if result.Text != "오늘 환율은 1,531원입니다." {
+		t.Errorf("Text = %q, want substituted display value", result.Text)
+	}
+	if result.AllText != "잠시 확인할게요.\n\n오늘 환율은 1,531원입니다." {
+		t.Errorf("AllText = %q, want substituted display value", result.AllText)
+	}
+	if result.DeliverableText != "오늘 환율은 1,531원입니다." {
+		t.Errorf("DeliverableText = %q, want substituted display value", result.DeliverableText)
+	}
+}
 
 func TestShouldForceExternalDeliveryFailureNotice(t *testing.T) {
 	delivery := &DeliveryContext{Channel: "telegram", To: "telegram:123"}

@@ -16,6 +16,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
@@ -635,12 +636,14 @@ func reasoningSandwichThinking(base *llm.ThinkingConfig, maxTokens int, gate *ve
 //
 // Assistant messages are sanitized via sanitizeAssistantForTranscript before
 // persistence: the silent-reply token (NO_REPLY) is stripped from text blocks,
-// and messages that end up with no substance (all empty text, no tool_use /
-// tool_result / thinking / image blocks) are dropped entirely. Without this,
-// an assistant turn whose only text was "NO_REPLY" would be persisted with
-// that literal token, and the model on the next turn would see it in history
-// and hallucinate that it had replied — the "대답 안 하고 대답했다고 생각하는
-// 경향" bug.
+// market letter tokens ("{{market:usd_krw}}") are substituted with their
+// recorded display values (skipped in Briefcase — deterministic runs must not
+// read time-sensitive process-global caches), and messages that end up with no
+// substance (all empty text, no tool_use / tool_result / thinking / image
+// blocks) are dropped entirely. Without the NO_REPLY strip, an assistant turn
+// whose only text was "NO_REPLY" would be persisted with that literal token,
+// and the model on the next turn would see it in history and hallucinate that
+// it had replied — the "대답 안 하고 대답했다고 생각하는 경향" bug.
 func buildMessagePersister(
 	deps runDeps,
 	params RunParams,
@@ -656,7 +659,7 @@ func buildMessagePersister(
 	return func(msg llm.Message) {
 		content := msg.Content
 		if msg.Role == "assistant" {
-			sanitized, skip := sanitizeAssistantForTranscript(content)
+			sanitized, skip := sanitizeAssistantForTranscript(content, !deps.briefcaseMode)
 			if skip {
 				logger.Info("skipping persist of empty assistant turn",
 					"session", params.SessionKey,
@@ -712,13 +715,32 @@ func verifyGateObservingPersister(inner func(msg llm.Message), gate *verifyGateS
 // message at all — it would only pollute transcript history and confuse the
 // model into thinking it replied when it did not.
 //
+// When substituteMarketTokens is true, market letter tokens
+// ("{{market:usd_krw}}") in text blocks are also replaced with their recorded
+// display values (market.SubstituteLetterTokens). This is the per-turn persist
+// chokepoint for streamed/async runs: a turn that mimics the morning-letter
+// skeleton (2026-07-11 production transcript, client:main) would otherwise
+// persist raw template syntax and the native card would render it verbatim.
+// Sibling substitutions: SyncResult.BestText (sync RPC response),
+// substituteRunMarketTokens (async finalize), proactive relay
+// (prepareProactiveDelivery). Thinking/tool blocks are never touched.
+// Deterministic Briefcase runs pass false — process-global, time-sensitive
+// presentation caches must not change score-visible bytes (BestTextRaw rule).
+//
 // "Substance" = any non-text block (tool_use, tool_result, thinking, image),
 // or a text block with non-empty content after stripping.
-func sanitizeAssistantForTranscript(content json.RawMessage) (json.RawMessage, bool) {
+func sanitizeAssistantForTranscript(content json.RawMessage, substituteMarketTokens bool) (json.RawMessage, bool) {
+	sanitizeText := func(s string) string {
+		s = StripSilentToken(s)
+		if substituteMarketTokens {
+			s = market.SubstituteLetterTokens(s)
+		}
+		return s
+	}
 	// Text-form message: Content is a JSON-encoded string.
 	var text string
 	if err := json.Unmarshal(content, &text); err == nil {
-		stripped := StripSilentToken(text)
+		stripped := sanitizeText(text)
 		if stripped == "" {
 			return nil, true
 		}
@@ -740,7 +762,7 @@ func sanitizeAssistantForTranscript(content json.RawMessage) (json.RawMessage, b
 	hasSubstance := false
 	for i := range blocks {
 		if blocks[i].Type == "text" {
-			stripped := StripSilentToken(blocks[i].Text)
+			stripped := sanitizeText(blocks[i].Text)
 			if stripped != blocks[i].Text {
 				blocks[i].Text = stripped
 				changed = true

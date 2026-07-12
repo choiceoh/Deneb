@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
@@ -30,6 +31,8 @@ func handleRunSuccess(
 	now int64,
 ) {
 	isSilent := applySilentReplyPolicy(params, result, logger)
+
+	substituteRunMarketTokens(result)
 
 	persistAggregateAssistantText(params, deps, result, now, logger)
 
@@ -208,6 +211,26 @@ func applySilentReplyPolicy(params RunParams, result *agent.AgentResult, logger 
 			"channel", params.Delivery.Channel)
 	}
 	return isSilent
+}
+
+// substituteRunMarketTokens replaces market letter tokens ("{{market:usd_krw}}")
+// in the finishing run's text fields with their recorded display values, before
+// any consumer reads them: the aggregate transcript write, the SSE done frame
+// the native card settles to, the channel reply, session LastOutput, and the
+// work-feed publisher. A streamed/async turn that mimics the morning-letter
+// skeleton (2026-07-11 production transcript, client:main) would otherwise
+// surface raw template syntax as "{{market:usd_krw}}원". Sibling substitutions:
+// SyncResult.BestText (sync RPC response), sanitizeAssistantForTranscript
+// (per-turn persist), proactive relay (prepareProactiveDelivery).
+//
+// Mutating the current turn's result at finalize follows the
+// applySilentReplyPolicy precedent — prompt-cache Rule A governs messages
+// already sent to the LLM, not the finishing turn's outputs. Async-only path
+// (handleRunSuccess), so Briefcase determinism is unaffected.
+func substituteRunMarketTokens(result *agent.AgentResult) {
+	result.Text = market.SubstituteLetterTokens(result.Text)
+	result.AllText = market.SubstituteLetterTokens(result.AllText)
+	result.DeliverableText = market.SubstituteLetterTokens(result.DeliverableText)
 }
 
 // persistAggregateAssistantText persists the run's accumulated text as one
