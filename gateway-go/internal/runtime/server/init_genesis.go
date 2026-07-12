@@ -457,6 +457,16 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 				Tracker: s.genesisTracker,
 				Logger:  s.logger,
 			})
+			// Adversarial coverage: deterministically mutate each skill body
+			// (section drops, tool-reference drops) and author the held-out
+			// cases that catch uncaught mutations — "harder tests, found
+			// automatically". No LLM; prod-gated because it writes shared
+			// validation state.
+			s.autonomousSvc.RegisterTask(&genesis.AdversarialCoverageTask{
+				Evolver: s.genesisEvolver,
+				Tracker: s.genesisTracker,
+				Logger:  s.logger,
+			})
 		}
 		if replayExecutorEnabled() && isProdState {
 			workoutEngine := genesis.NewSkillValidationEngine(s.genesisTracker, s.logger)

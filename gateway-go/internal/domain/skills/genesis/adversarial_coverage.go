@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -155,6 +156,99 @@ func aggregatePassed(scores []validationCaseScore) int {
 	return total
 }
 
+// skillToolRefPattern matches a tool/command identifier the skill body relies
+// on: a snake_case token (the Deneb tool convention — wiki_search, mail_archive,
+// code_action). The underscore requirement keeps ordinary prose words out.
+var skillToolRefPattern = regexp.MustCompile(`[a-z][a-z0-9]*_[a-z0-9_]+`)
+
+// extractToolRefs returns the distinct snake_case tool identifiers referenced in
+// the body, in first-seen order.
+func extractToolRefs(body string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, m := range skillToolRefPattern.FindAllString(strings.ToLower(body), -1) {
+		if _, ok := seen[m]; ok {
+			continue
+		}
+		seen[m] = struct{}{}
+		out = append(out, m)
+	}
+	return out
+}
+
+// dropLinesMentioning removes every line of body that contains token (case-
+// insensitive) — the behavioral mutation: the skill no longer names the tool it
+// relied on.
+func dropLinesMentioning(body, token string) string {
+	token = strings.ToLower(token)
+	lines := strings.Split(body, "\n")
+	kept := lines[:0]
+	for _, line := range lines {
+		if strings.Contains(strings.ToLower(line), token) {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
+}
+
+// probeBehavioralCoverageGaps is the structural probe's behavioral sibling:
+// instead of dropping a section it drops the lines that name a tool the skill
+// relies on, then asks the case set to catch the loss. An uncaught tool-drop
+// means the tool contract is unprotected — author a RequiredTools case, which
+// the deterministic scorer checks against the body AND the executor gate checks
+// against the real tool-call plan (so the case tests behavior, not just prose).
+// Only tools NOT already asserted by an existing case are probed.
+func probeBehavioralCoverageGaps(skillName, body string, cases []SkillValidationCaseRecord) []SkillValidationCaseRecord {
+	body = skillBodyOnly(body)
+	tools := extractToolRefs(body)
+	if len(tools) == 0 {
+		return nil
+	}
+
+	protected := map[string]struct{}{}
+	for _, tc := range cases {
+		for _, tool := range tc.Replay.RequiredTools {
+			protected[strings.ToLower(strings.TrimSpace(tool))] = struct{}{}
+		}
+	}
+
+	basePassed := aggregatePassed(scoreSkillValidationCasesByCase(body, cases))
+
+	var authored []SkillValidationCaseRecord
+	for _, tool := range tools {
+		if len(authored) >= adversarialCoverageMaxPerSkill {
+			break
+		}
+		if _, ok := protected[tool]; ok {
+			continue
+		}
+		mutated := dropLinesMentioning(body, tool)
+		if strings.TrimSpace(mutated) == strings.TrimSpace(body) {
+			continue
+		}
+		if aggregatePassed(scoreSkillValidationCasesByCase(mutated, cases)) < basePassed {
+			continue // already caught — good coverage
+		}
+		newCase := SkillValidationCaseRecord{
+			SkillName:   skillName,
+			ID:          fmt.Sprintf("advtool-%s-%s", skillName, tool),
+			Description: "adversarial coverage: tool \"" + tool + "\" was unprotected",
+			Replay: SkillReplayCaseRecord{
+				Input:         "exercise the skill's use of tool " + tool,
+				RequiredTools: []string{tool},
+			},
+			Source:       "adversarial-coverage",
+			FrontierTier: "hard",
+		}
+		probe := []SkillValidationCaseRecord{newCase}
+		if scoreSkillValidationCases(body, probe).casePasses() && !scoreSkillValidationCases(mutated, probe).casePasses() {
+			authored = append(authored, newCase)
+		}
+	}
+	return authored
+}
+
 // AdversarialCoverageTask is the standing lane that probes coverage gaps across
 // actively-used skills and authors the missing cases. Deterministic and
 // LLM-free, so it runs cheaply and idempotently; the tracker's weak-case filter
@@ -201,7 +295,11 @@ func (t *AdversarialCoverageTask) Run(ctx context.Context) error {
 		if err != nil {
 			continue
 		}
-		for _, nc := range probeStructuralCoverageGaps(skill, string(raw), cases) {
+		probes := append(
+			probeStructuralCoverageGaps(skill, string(raw), cases),
+			probeBehavioralCoverageGaps(skill, string(raw), cases)...,
+		)
+		for _, nc := range probes {
 			if rerr := t.Tracker.RecordSkillValidationCase(nc); rerr != nil {
 				logger.Debug("adversarial-coverage: authored case rejected by tracker filter",
 					"skill", skill, "error", rerr)
@@ -211,7 +309,7 @@ func (t *AdversarialCoverageTask) Run(ctx context.Context) error {
 		}
 	}
 	if authored > 0 {
-		logger.Info("adversarial-coverage: authored held-out cases for uncaught section drops",
+		logger.Info("adversarial-coverage: authored held-out cases for uncaught section/tool drops",
 			"count", authored)
 	}
 	return nil

@@ -99,3 +99,82 @@ func fmtSection(b *strings.Builder, i int) {
 	b.WriteByte(byte('A' + i))
 	b.WriteString("\n내용 줄.\n")
 }
+
+const advToolBody = `# 배포 스킬
+
+## Procedure
+1. wiki_search 로 관련 위키를 찾는다.
+2. mail_archive 로 첨부를 확인한다.
+3. 결과를 종합한다.`
+
+// The behavioral probe authors a discriminative RequiredTools case for a tool
+// whose removal the existing case set fails to catch, and stays quiet where a
+// case already protects the tool.
+func TestProbeBehavioralCoverageGaps(t *testing.T) {
+	t.Run("uncaught tool drop is authored as a RequiredTools case", func(t *testing.T) {
+		// Only 'mail_archive' is protected (via a required substring); dropping
+		// 'wiki_search' goes undetected.
+		cases := []SkillValidationCaseRecord{
+			{SkillName: "sk", ID: "c1", RequiredSubstrings: []string{"mail_archive"}},
+		}
+		got := probeBehavioralCoverageGaps("sk", advToolBody, cases)
+		if len(got) == 0 {
+			t.Fatal("no behavioral gap authored despite unprotected tool")
+		}
+		var names []string
+		for _, c := range got {
+			if c.Source != "adversarial-coverage" || len(c.Replay.RequiredTools) != 1 {
+				t.Fatalf("malformed behavioral case: %+v", c)
+			}
+			names = append(names, c.Replay.RequiredTools[0])
+			// Discriminative: passes on the good body, and the case is
+			// behaviorally evaluable (executor gate can pick it up).
+			if !scoreSkillValidationCases(advToolBody, []SkillValidationCaseRecord{c}).casePasses() {
+				t.Fatalf("authored case fails on the good body: %+v", c)
+			}
+			if !replayBehaviorEvaluable(c.Replay) {
+				t.Fatalf("authored behavioral case is not executor-evaluable: %+v", c)
+			}
+		}
+		if !contains(names, "wiki_search") {
+			t.Fatalf("expected wiki_search authored, got %v", names)
+		}
+		if contains(names, "mail_archive") {
+			t.Fatal("re-authored a tool the case set already catches")
+		}
+	})
+
+	t.Run("tool already required is not re-authored", func(t *testing.T) {
+		cases := []SkillValidationCaseRecord{
+			{SkillName: "sk", ID: "c1", Replay: SkillReplayCaseRecord{RequiredTools: []string{"wiki_search", "mail_archive"}}},
+		}
+		if got := probeBehavioralCoverageGaps("sk", advToolBody, cases); len(got) != 0 {
+			t.Fatalf("authored despite protected tools: %+v", got)
+		}
+	})
+
+	t.Run("prose without snake_case tools yields nothing", func(t *testing.T) {
+		if got := probeBehavioralCoverageGaps("sk", "# S\n\n본문에 도구 없음.", nil); len(got) != 0 {
+			t.Fatalf("false tool detected: %+v", got)
+		}
+	})
+}
+
+func TestExtractToolRefs(t *testing.T) {
+	got := extractToolRefs("use wiki_search then Mail_Archive; skip plainword and CamelCase")
+	if !contains(got, "wiki_search") || !contains(got, "mail_archive") {
+		t.Fatalf("tool extraction = %v", got)
+	}
+	if contains(got, "plainword") || contains(got, "camelcase") {
+		t.Fatalf("non-tool token extracted: %v", got)
+	}
+}
+
+func contains(s []string, v string) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
