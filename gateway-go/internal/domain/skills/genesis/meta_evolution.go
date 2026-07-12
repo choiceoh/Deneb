@@ -649,31 +649,41 @@ func (t *MetaEvolutionTask) assembleOperatorUtilityEvidence() string {
 //     tighten WITHOUT raising false rejects — the degradation bench rewards
 //     rejecting defects and so cannot, alone, catch an over-strict judge.
 //   - Scoped to the CURRENT judge version: older-version misses may already be
-//     fixed. Returns "" when the incumbent judge has no recent misses or
-//     false-rejects, so a clean judge leaves the evaluator epoch unchanged.
+//     fixed. Returns "" when the incumbent judge has no recent misses,
+//     false-rejects, or organic false-accepts (baseline-confirmed rollbacks of
+//     evolves it accepted), so a clean judge leaves the evaluator epoch
+//     unchanged.
 func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 	if t.Tracker == nil || t.Meta == nil {
 		return ""
 	}
 	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
 	version := t.Meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
-	records, err := t.Tracker.RecentJudgeAccuracy(judgeMissEvidenceRuns)
-	if err != nil || len(records) == 0 {
-		return ""
-	}
 	byClass := map[string][2]int{} // class -> [missed, total]
 	falseRejects := 0
-	for _, rec := range records {
-		if rec.JudgeVersion != version {
-			continue // only the incumbent judge's own record is actionable
+	if records, err := t.Tracker.RecentJudgeAccuracy(judgeMissEvidenceRuns); err == nil {
+		for _, rec := range records {
+			if rec.JudgeVersion != version {
+				continue // only the incumbent judge's own record is actionable
+			}
+			for cls, ct := range rec.ByClass {
+				cur := byClass[cls]
+				cur[0] += ct[1] - ct[0] // missed = total - correct
+				cur[1] += ct[1]
+				byClass[cls] = cur
+			}
+			falseRejects += len(rec.FalseRejects)
 		}
-		for cls, ct := range rec.ByClass {
-			cur := byClass[cls]
-			cur[0] += ct[1] - ct[0] // missed = total - correct
-			cur[1] += ct[1]
-			byClass[cls] = cur
+	}
+	// Organic labels — the REAL-usage half of the P3 food supply: baseline-
+	// confirmed rollbacks whose accepting judge is the incumbent. A superseded
+	// judge's mistake may already be fixed — same scoping rule as the
+	// synthetic misses above.
+	var organic []OrganicFalseAccept
+	for _, o := range t.Tracker.OrganicFalseAccepts(organicFalseAcceptWindow, judgeAccuracyMaxExhibits) {
+		if o.JudgeVersion == version {
+			organic = append(organic, o)
 		}
-		falseRejects += len(rec.FalseRejects)
 	}
 	type classMiss struct {
 		name          string
@@ -685,7 +695,7 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 			missed = append(missed, classMiss{name, ct[0], ct[1]})
 		}
 	}
-	if len(missed) == 0 && falseRejects == 0 {
+	if len(missed) == 0 && falseRejects == 0 && len(organic) == 0 {
 		return "" // incumbent judge is clean — nothing to co-evolve on
 	}
 	sort.Slice(missed, func(i, j int) bool {
@@ -698,6 +708,14 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 	b.WriteString("\n## 판정자 최근 오판 (P3 라벨 — 실제 결함 감지력은 높이되 false-reject는 늘리지 말 것)\n")
 	for _, m := range missed {
 		fmt.Fprintf(&b, "- %s: 최근 %d/%d 건 놓침 (이 유형의 열화를 통과시킴)\n", m.name, m.missed, m.total)
+	}
+	if len(organic) > 0 {
+		names := make([]string, 0, len(organic))
+		for _, o := range organic {
+			names = append(names, o.Skill)
+		}
+		fmt.Fprintf(&b, "- 실전 false-accept %d건: %s — 판정자가 통과시킨 evolve가 실사용에서 롤백됨 (baseline-aware 확인, 최근 30일)\n",
+			len(organic), strings.Join(names, ", "))
 	}
 	if falseRejects > 0 {
 		fmt.Fprintf(&b, "- 의심 false-reject: %d건 (기각했으나 실제로는 현재 본문보다 나았던 후보 — 과잉 엄격화 경계)\n", falseRejects)

@@ -180,9 +180,12 @@ type evolveWatch struct {
 	baselineUses  int
 	baselineFails int
 	// ep runs the baseline-aware anytime-valid test alongside the legacy
-	// absolute threshold — OBSERVATION MODE (RSI P1.5, PACE): it never fires
-	// the rollback yet; its verdict is recorded on the resolving lifecycle
-	// entry so weeks of agreement/disagreement labels decide the switch.
+	// absolute threshold (RSI P1.5, PACE). Default: OBSERVATION MODE — the
+	// legacy threshold owns firing while ep's verdict is recorded on every
+	// resolving lifecycle entry as an agreement/disagreement label. Once the
+	// labels justify it (EProcessCutoverReadiness), the operator flips
+	// DENEB_EPROCESS_OWNS_ROLLBACK=1 and ep owns the firing decision — with
+	// the threshold verdict still recorded, so labeling never stops.
 	ep *EProcess
 	// createdAt (unix millis) starts the time-based resolution clock: a watch
 	// on a rarely-used skill would otherwise stay open forever (backtest

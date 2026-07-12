@@ -103,6 +103,7 @@ func (t *Tracker) rsiAssessL1() RSILayer {
 		{"신규 스킬", strconv.Itoa(h.Genesis7d)},
 		{"기각", strconv.Itoa(h.EvolveRejected7d)},
 		{"확정률", fmt.Sprintf("%.0f%%", h.ConfirmRate*100)},
+		{"e-process", rsiEProcessValue(t.EProcessCutoverReadiness())},
 	}
 	base := RSILayer{Key: "L1", Title: "스킬 진화", Metrics: metrics}
 	switch {
@@ -171,16 +172,18 @@ func (t *Tracker) rsiAssessL3() RSILayer {
 	if runs == 0 {
 		return RSILayer{Key: "L3", Title: "판정자 공진화", State: RSIStateIdle, Diagnosis: "판정 정확도 레인이 최근 7일간 실행되지 않았습니다"}
 	}
+	organic := len(t.OrganicFalseAccepts(organicFalseAcceptWindow, 50))
 	metrics := []RSIMetricKV{
 		{"실행(7일)", strconv.Itoa(runs)},
 		{"판정 놓침", strconv.Itoa(misses)},
 		{"오기각", strconv.Itoa(falseRejects)},
+		{"실전 라벨(30일)", strconv.Itoa(organic)},
 	}
 	base := RSILayer{Key: "L3", Title: "판정자 공진화", Metrics: metrics}
 	switch {
-	case misses > 0 || falseRejects > 0:
+	case misses > 0 || falseRejects > 0 || organic > 0:
 		base.State = RSIStateLive
-		base.Diagnosis = fmt.Sprintf("%d회 실행에서 판정 놓침 %d + 오기각 %d — P3 학습 연료 축적 중", runs, misses, falseRejects)
+		base.Diagnosis = fmt.Sprintf("%d회 실행에서 판정 놓침 %d + 오기각 %d + 실전 라벨 %d — P3 학습 연료 축적 중", runs, misses, falseRejects, organic)
 	case !subtleDeployed:
 		base.State = RSIStateDataGated
 		base.Diagnosis = fmt.Sprintf("%d회 실행; 판정자가 명백한 결함은 모두 잡았고 미묘 프로브는 아직 원장에 없습니다", runs)
@@ -242,6 +245,22 @@ func (t *Tracker) rsiAssessL4() RSILayer {
 		base.Diagnosis = fmt.Sprintf("후보 %d건(%s)이지만 배차 가능한 코드 후보가 아직 없습니다", len(cands), rsiScopeSummary(byScope))
 	}
 	return base
+}
+
+// rsiEProcessValue formats the L1 e-process cutover metric: who owns rollback
+// firing, and how the observation-mode label evidence stands against the
+// graduation thresholds (n>=20, agreement>=90%).
+func rsiEProcessValue(r EProcessCutoverReadiness) string {
+	switch {
+	case r.EProcessOwner:
+		return fmt.Sprintf("발화 소유 (라벨 n=%d)", r.Labels)
+	case r.Ready:
+		return fmt.Sprintf("컷오버 준비 완료 (n=%d · 합치 %.0f%%)", r.Labels, r.AgreementRate*100)
+	case r.Labels == 0:
+		return "관측 중 (라벨 없음)"
+	default:
+		return fmt.Sprintf("관측 n=%d · 합치 %.0f%%", r.Labels, r.AgreementRate*100)
+	}
 }
 
 func rsiSourceDispatchable(source string) bool {

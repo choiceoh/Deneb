@@ -185,6 +185,50 @@ func TestMetaEvolution_JudgeAccuracyEvidence(t *testing.T) {
 	}
 }
 
+// Organic labels (real-usage false-accepts) ground the evaluator epoch even
+// when the synthetic lane has nothing: a baseline-confirmed rollback of an
+// evolve the INCUMBENT judge accepted must appear; one accepted by a stale
+// judge version must not.
+func TestMetaEvolution_JudgeAccuracyEvidence_OrganicLabels(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := generation.NewMetaArtifacts(t.TempDir(), slog.Default())
+	task := &MetaEvolutionTask{Tracker: tr, Meta: meta}
+	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
+	version := meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
+
+	rollback := func(skill, judgeVersion string) {
+		t.Helper()
+		if err := tr.LogEvolveWithProvenance(skill, "1.1", "d", HarnessEditAudit{},
+			&EvolveProvenance{JudgeArtifactVersion: judgeVersion}); err != nil {
+			t.Fatal(err)
+		}
+		tr.mu.Lock()
+		tr.pendingBaselineTest[skill] = &RollbackBaselineTest{Reject: true}
+		tr.mu.Unlock()
+		if err := tr.LogEvolveRolledBack(skill); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rollback("sk-live", version)
+	rollback("sk-stale", "superseded-version")
+
+	ev := task.assembleEvidence(context.Background(), metaEpochEvaluator)
+	if !strings.Contains(ev, "실전 false-accept 1건") || !strings.Contains(ev, "sk-live") {
+		t.Fatalf("evaluator epoch lost the organic false-accept label:\n%s", ev)
+	}
+	if strings.Contains(ev, "sk-stale") {
+		t.Fatalf("a stale-judge organic label leaked in:\n%s", ev)
+	}
+	// The producer epoch stays ungrounded on judge labels (different target).
+	if prod := task.assembleEvidence(context.Background(), metaEpochProducer); strings.Contains(prod, "실전 false-accept") {
+		t.Fatalf("producer epoch was grounded on organic labels:\n%s", prod)
+	}
+}
+
 // A clean incumbent judge (no misses, no false-rejects) leaves the evaluator
 // epoch exactly as it was — the closure is a no-op until labels accumulate.
 func TestMetaEvolution_JudgeAccuracyEvidence_CleanJudge(t *testing.T) {

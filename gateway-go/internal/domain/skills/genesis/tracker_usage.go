@@ -157,16 +157,18 @@ func (t *Tracker) saveWatchesLocked() {
 	}
 }
 
-// stashBaselineTestLocked captures the observation-mode verdict at the moment
-// a watch resolves (caller holds t.mu). rollbackFired distinguishes the two
-// disagreement classes: threshold-fired-but-test-quiet (possible false
-// rollback) vs test-rejected-but-threshold-confirmed (possible missed
-// regression).
-func (t *Tracker) stashBaselineTestLocked(skill string, w *evolveWatch, rollbackFired bool) {
+// stashBaselineTestLocked captures the dual verdict at the moment a watch
+// resolves (caller holds t.mu). The disagreement label always compares the
+// LEGACY threshold verdict against the anytime-valid test's verdict —
+// regardless of which mechanism owns firing — so labels keep accumulating
+// after cutover: threshold-fired-but-test-quiet (possible false rollback) vs
+// test-rejected-but-threshold-quiet (possible missed regression).
+func (t *Tracker) stashBaselineTestLocked(skill string, w *evolveWatch) {
 	if w == nil || w.ep == nil {
 		return
 	}
 	reject := w.ep.Reject()
+	thresholdFired := t.rollbackThreshold > 0 && w.postFails >= t.rollbackThreshold
 	if t.pendingBaselineTest == nil { // struct-literal construction in tests
 		t.pendingBaselineTest = make(map[string]*RollbackBaselineTest)
 	}
@@ -175,7 +177,7 @@ func (t *Tracker) stashBaselineTestLocked(skill string, w *evolveWatch, rollback
 		N:            w.ep.N,
 		Reject:       reject,
 		Baseline:     w.ep.Baseline,
-		Disagreement: rollbackFired != reject,
+		Disagreement: thresholdFired != reject,
 	}
 }
 
@@ -199,11 +201,21 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 	}
 	w.ep.Observe(!r.Success)
 	t.saveWatchesLocked()
-	// Regression: threshold failures within the window — fire the rollback.
-	if w.postFails >= t.rollbackThreshold {
-		t.stashBaselineTestLocked(r.SkillName, w, true)
+	// Regression: the OWNING test fired — roll back. Legacy owner (default):
+	// threshold failures within the window. After cutover
+	// (DENEB_EPROCESS_OWNS_ROLLBACK=1, graduation ladder) the anytime-valid
+	// e-process owns the decision (baseline-aware, PACE); the legacy threshold
+	// verdict is still recorded on the resolving entry as a disagreement label.
+	owner := "threshold"
+	fire := w.postFails >= t.rollbackThreshold
+	if eProcessOwnsRollback() && w.ep != nil {
+		owner = "eprocess"
+		fire = w.ep.Reject()
+	}
+	if fire {
+		t.stashBaselineTestLocked(r.SkillName, w)
 		recurred := w.recurred
-		threshold := t.rollbackThreshold // capture under the lock; the goroutine must not read t.* fields
+		fails := w.postFails // capture under the lock; the goroutine must not read t.* or w fields
 		delete(t.postEvolve, r.SkillName)
 		t.saveWatchesLocked()
 		fn := t.rollback
@@ -215,8 +227,8 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 				}
 			}()
 			if t.logger != nil {
-				t.logger.Info("genesis: post-evolve regression window tripped, rolling back",
-					"skill", skill, "fails", threshold, "targetRecurrences", recurred)
+				t.logger.Info("genesis: post-evolve regression tripped, rolling back",
+					"skill", skill, "fails", fails, "owner", owner, "targetRecurrences", recurred)
 			}
 			fn(skill)
 		}()
@@ -228,7 +240,7 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 	// rollback event, never an "it held up" event. Now every shipped evolve ends
 	// in either evolve_rolled_back or evolve_confirmed.
 	if w.postUses >= t.rollbackWindowLocked() {
-		t.stashBaselineTestLocked(r.SkillName, w, false)
+		t.stashBaselineTestLocked(r.SkillName, w)
 		uses, fails, recurred := w.postUses, w.postFails, w.recurred
 		audit := w.audit
 		skill := r.SkillName
@@ -287,12 +299,15 @@ func (t *Tracker) ResolveStaleWatches(maxAge time.Duration) int {
 			delete(t.postEvolve, skill)
 			continue
 		}
-		// A watch at/over the failure threshold cannot be stale (the fire path
-		// resolves it on the use that crossed it) — guard anyway.
-		if t.rollbackThreshold > 0 && w.postFails >= t.rollbackThreshold {
+		// Under legacy ownership a watch at/over the failure threshold cannot
+		// be stale (the fire path resolves it on the crossing use) — guard
+		// anyway. Under e-process ownership it CAN: the threshold crossed but
+		// the baseline-aware test never rejected, which is exactly a survived
+		// watch — fall through to confirm (with a disagreement label).
+		if !eProcessOwnsRollback() && t.rollbackThreshold > 0 && w.postFails >= t.rollbackThreshold {
 			continue
 		}
-		t.stashBaselineTestLocked(skill, w, false)
+		t.stashBaselineTestLocked(skill, w)
 		confirms = append(confirms, confirmJob{skill, w.audit, w.postUses, w.postFails, w.recurred})
 		delete(t.postEvolve, skill)
 	}

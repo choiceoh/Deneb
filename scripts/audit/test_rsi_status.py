@@ -55,6 +55,27 @@ class L1Test(unittest.TestCase):
         s = assess_l1([{"createdAt": OLD, "type": "evolved"}], NOW)
         self.assertEqual(s.state, IDLE)
 
+    def test_eprocess_readiness_counts_all_history(self):
+        # 20 baseline-test labels with 1 disagreement (95% agreement) → ready.
+        # Labels are counted over the WHOLE ledger (old entries included) —
+        # the ladder evidence accumulates, it does not expire.
+        events = [{"createdAt": OLD, "type": "evolve_rolled_back",
+                   "baselineTest": {"reject": True, "disagreement": i == 0}}
+                  for i in range(20)]
+        events.append({"createdAt": RECENT, "type": "evolved"})
+        s = assess_l1(events, NOW)
+        self.assertEqual(s.metrics["eprocess_labels"], 20)
+        self.assertEqual(s.metrics["eprocess_disagreements"], 1)
+        self.assertTrue(s.metrics["eprocess_cutover_ready"])
+
+    def test_eprocess_readiness_needs_agreement_and_n(self):
+        # n=19 all-agree: below the floor. n=20 at 85%: below agreement bar.
+        base = {"createdAt": OLD, "type": "evolve_confirmed"}
+        n19 = [dict(base, baselineTest={"disagreement": False}) for _ in range(19)]
+        self.assertFalse(assess_l1(n19, NOW).metrics["eprocess_cutover_ready"])
+        n20_noisy = [dict(base, baselineTest={"disagreement": i < 3}) for i in range(20)]
+        self.assertFalse(assess_l1(n20_noisy, NOW).metrics["eprocess_cutover_ready"])
+
 
 class L2Test(unittest.TestCase):
     def test_freeze_wins(self):
@@ -80,7 +101,7 @@ class L3Test(unittest.TestCase):
         s = assess_l3([{"createdAt": RECENT, "pairs": 12, "correct": 12,
                         "byClass": {"section-drop": [3, 3], "fake-tool": [3, 3],
                                     "truncation": [3, 3], "overfit": [3, 3]},
-                        "misses": []}], NOW)
+                        "misses": []}], [], NOW)
         self.assertEqual(s.state, DATA_GATED)
         self.assertFalse(s.metrics["subtle_probes_deployed"])
         self.assertIn("subtle", s.diagnosis.lower())
@@ -89,17 +110,34 @@ class L3Test(unittest.TestCase):
         s = assess_l3([{"createdAt": RECENT, "pairs": 8, "correct": 6,
                         "byClass": {"safety-drop": [2, 4], "section-drop": [4, 4]},
                         "misses": [{"skill": "sk", "degradation": "safety-drop", "verdict": "passed_defect"},
-                                   {"skill": "sk", "degradation": "safety-drop", "verdict": "passed_defect"}]}], NOW)
+                                   {"skill": "sk", "degradation": "safety-drop", "verdict": "passed_defect"}]}], [], NOW)
         self.assertEqual(s.state, LIVE)
         self.assertEqual(s.metrics["misses"], 2)
 
     def test_false_reject_only_is_live(self):
         s = assess_l3([{"createdAt": RECENT, "byClass": {"safety-drop": [4, 4]},
-                        "falseRejects": [{"skill": "sk"}]}], NOW)
+                        "falseRejects": [{"skill": "sk"}]}], [], NOW)
         self.assertEqual(s.state, LIVE)
 
+    def test_organic_false_accepts_are_live_fuel(self):
+        # A baseline-CONFIRMED rollback (e-process agreed) is a real-usage P3
+        # label; a baseline-quiet rollback is a disagreement label, not fuel.
+        runs = [{"createdAt": RECENT, "pairs": 8, "correct": 8,
+                 "byClass": {"safety-drop": [4, 4]}, "misses": []}]
+        genesis = [
+            {"createdAt": RECENT, "type": "evolve_rolled_back",
+             "baselineTest": {"reject": True, "disagreement": False}},
+            {"createdAt": RECENT, "type": "evolve_rolled_back",
+             "baselineTest": {"reject": False, "disagreement": True}},
+            {"createdAt": OLD, "type": "evolve_rolled_back",  # outside 30d
+             "baselineTest": {"reject": True, "disagreement": False}},
+        ]
+        s = assess_l3(runs, genesis, NOW)
+        self.assertEqual(s.state, LIVE)
+        self.assertEqual(s.metrics["organic_false_accepts_30d"], 1)
+
     def test_no_runs_is_idle(self):
-        self.assertEqual(assess_l3([], NOW).state, IDLE)
+        self.assertEqual(assess_l3([], [], NOW).state, IDLE)
 
 
 class L4Test(unittest.TestCase):

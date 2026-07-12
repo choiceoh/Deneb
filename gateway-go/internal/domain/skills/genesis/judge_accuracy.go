@@ -45,7 +45,67 @@ const (
 	falseRejectMargin = 10.0
 	// falseRejectPerSkill bounds mined rejected edits per skill per run.
 	falseRejectPerSkill = 3
+	// organicFalseAcceptWindow bounds how far back real-usage rollback labels
+	// are mined. Rollbacks are scarce at organic cadence (a handful per month),
+	// so the window is deliberately wider than the 7d health window.
+	organicFalseAcceptWindow = 30 * 24 * time.Hour
 )
+
+// OrganicFalseAccept is one REAL-usage judge false-accept label: the judge
+// passed a candidate, the evolve shipped, and the post-evolve watch rolled it
+// back. Counted only when the baseline-aware e-process AGREED the failure
+// rate rose (BaselineTest.Reject) — the deterministic filter for the PACE
+// precondition that baseline-blind rollbacks mislabel (roadmap P3 #1): a
+// threshold-only rollback with a quiet e-process stays a disagreement label,
+// never P3 food.
+type OrganicFalseAccept struct {
+	Skill        string `json:"skill"`
+	JudgeVersion string `json:"judgeVersion,omitempty"`
+	RolledBackAt int64  `json:"rolledBackAt"`
+}
+
+// OrganicFalseAccepts mines the lifecycle ledger for baseline-confirmed
+// rollbacks within the window, attributing each to the judge-artifact version
+// that accepted the evolve (the preceding "evolved" entry's provenance
+// certificate, RSI P1.5). Newest first, capped at limit. A rollback whose
+// accepting evolve carried no provenance yields an empty JudgeVersion — the
+// consumer's incumbent-version filter then excludes it (unattributable labels
+// are not actionable evidence).
+func (t *Tracker) OrganicFalseAccepts(window time.Duration, limit int) []OrganicFalseAccept {
+	entries, err := jsonlstore.Load[LifecycleLogEntry](t.logPath)
+	if err != nil {
+		return nil
+	}
+	cutoff := time.Now().Add(-window).UnixMilli()
+	judgeBySkill := map[string]string{}
+	var out []OrganicFalseAccept
+	for _, e := range entries { // chronological
+		switch e.Type {
+		case "evolved":
+			v := ""
+			if e.Provenance != nil {
+				v = e.Provenance.JudgeArtifactVersion
+			}
+			judgeBySkill[e.SkillName] = v
+		case "evolve_rolled_back":
+			if e.CreatedAt < cutoff || e.BaselineTest == nil || !e.BaselineTest.Reject {
+				continue
+			}
+			out = append(out, OrganicFalseAccept{
+				Skill:        e.SkillName,
+				JudgeVersion: judgeBySkill[e.SkillName],
+				RolledBackAt: e.CreatedAt,
+			})
+		}
+	}
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 { // newest first
+		out[i], out[j] = out[j], out[i]
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
 
 // JudgeMissExhibit is one wrong verdict on a planted defect — few-shot food
 // for P3 judge evolution.
