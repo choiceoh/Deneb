@@ -6,6 +6,9 @@ import ai.deneb.deneb.generated.DashboardItem
 import ai.deneb.deneb.generated.LaneOut
 import ai.deneb.deneb.generated.MemberOut
 import ai.deneb.deneb.generated.OrgNodeOut
+import ai.deneb.deneb.generated.RSILayerView
+import ai.deneb.deneb.generated.RSILoopStatusResponse
+import ai.deneb.deneb.generated.RSIMetricView
 import ai.deneb.deneb.generated.SelfCorrectionCandidate
 import ai.deneb.deneb.generated.SelfImprovementCodingFunnel
 import ai.deneb.deneb.generated.SelfImprovementCodingListResponse
@@ -239,6 +242,59 @@ internal val sampleDashboard = listOf(
         name = "미분류",
         items = listOf(
             DashboardItem("무림 울산공장 풍력 검토안", "박종원 부장 — 담당 파트 미지정", "proactive", "workfeed", "wf4", System.currentTimeMillis() + 50 * 3_600_000L),
+        ),
+    ),
+)
+
+// Mirrors a real prod snapshot so the preview exercises every state badge color
+// (LIVE / DATA-GATED / STARVED) and metric layout.
+internal val sampleRsi = RSILoopStatusResponse(
+    turning = 2,
+    layers = listOf(
+        RSILayerView(
+            key = "L1",
+            title = "skill evolution",
+            state = "LIVE",
+            diagnosis = "3 evolved · 2 new skills · 5 rejected this week",
+            metrics = listOf(
+                RSIMetricView("evolved (7d)", "3"),
+                RSIMetricView("new skills", "2"),
+                RSIMetricView("rejected", "5"),
+                RSIMetricView("confirm rate", "62%"),
+            ),
+        ),
+        RSILayerView(
+            key = "L2",
+            title = "meta-evolution",
+            state = "LIVE",
+            diagnosis = "1 slow-loop revision · 1 proposed this week (last: producer)",
+            metrics = listOf(
+                RSIMetricView("revisions (7d)", "1"),
+                RSIMetricView("proposed", "1"),
+                RSIMetricView("last epoch", "producer"),
+            ),
+        ),
+        RSILayerView(
+            key = "L3",
+            title = "verifier co-evolution",
+            state = "DATA-GATED",
+            diagnosis = "4 runs; the judge caught every blatant defect and subtle probes are not in the ledger yet",
+            metrics = listOf(
+                RSIMetricView("lane runs (7d)", "4"),
+                RSIMetricView("judge misses", "0"),
+                RSIMetricView("false-rejects", "0"),
+            ),
+        ),
+        RSILayerView(
+            key = "L4",
+            title = "source self-edit",
+            state = "STARVED",
+            diagnosis = "13 candidates (skill:9, test:4) but none are dispatchable code candidates yet",
+            metrics = listOf(
+                RSIMetricView("candidates", "13"),
+                RSIMetricView("code-scope", "0"),
+                RSIMetricView("dispatchable", "0"),
+            ),
         ),
     ),
 )

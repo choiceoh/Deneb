@@ -204,6 +204,8 @@ fun main() {
     renderScreen("workfeed_answer_light.png", "workfeed_answer", LightColorScheme, 480, 720)
     renderScreen("dashboard_dark.png", "dashboard", DarkColorScheme, 824, 1900)
     renderScreen("dashboard_light.png", "dashboard", LightColorScheme, 824, 1900)
+    renderScreen("rsi_dark.png", "rsi", DarkColorScheme, 824, 1500)
+    renderScreen("rsi_light.png", "rsi", LightColorScheme, 824, 1500)
     renderScreen("org_chart_dark.png", "org_chart", DarkColorScheme, 824, 1500)
     renderScreen("org_chart_light.png", "org_chart", LightColorScheme, 824, 1500)
     renderScreen("org_chart_edit_light.png", "org_chart_edit", LightColorScheme, 824, 1500)
