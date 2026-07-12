@@ -284,6 +284,10 @@ type MetaEvolutionTask struct {
 	// into the meta-evidence block (RSI P5-5). Grounds the producer's prose on
 	// operator-experienced runtime utility; no gate reads it. Nil = skip.
 	RuntimeHealth func(ctx context.Context) string
+	// QualityBench, when set, injects a compact codebase-health summary
+	// (overall score, weakest pillars) as ADVISORY evidence (RSI P5-5). Grounds
+	// the producer on structural quality; no gate reads it. Nil = skip.
+	QualityBench func(ctx context.Context) string
 
 	// pending bench outcomes for the in-flight cycle's ledger write (set via
 	// recordWithBench; Run is single-flight per task so no locking needed).
@@ -591,6 +595,13 @@ func (t *MetaEvolutionTask) assembleEvidence(ctx context.Context, epoch string) 
 	if t.RuntimeHealth != nil {
 		if line := strings.TrimSpace(t.RuntimeHealth(ctx)); line != "" {
 			b.WriteString("\n## 런타임 건강 (자문 — 게이트 아님, P5-5)\n")
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+	if t.QualityBench != nil {
+		if line := strings.TrimSpace(t.QualityBench(ctx)); line != "" {
+			b.WriteString("\n## 코드베이스 건강 (자문 — 게이트 아님, P5-5)\n")
 			b.WriteString(line)
 			b.WriteString("\n")
 		}
