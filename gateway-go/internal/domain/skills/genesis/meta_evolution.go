@@ -210,6 +210,9 @@ type MetaEvolutionTask struct {
 	// OnReverted, when set, notifies the operator that the meta rollback watch
 	// reverted an adoption.
 	OnReverted func(artifact, reason string)
+	// OnDriftFreeze, when set, notifies the operator when the self-brake
+	// engages or releases (auto-adopt freeze transition).
+	OnDriftFreeze func(frozen bool, reasons []string)
 
 	// pending bench outcomes for the in-flight cycle's ledger write (set via
 	// recordWithBench; Run is single-flight per task so no locking needed).
@@ -247,6 +250,10 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	}
 
 	t.maybeRevertAdoption(logger)
+	// Self-brake: read the ledgers for reward-hacking/drift signals and freeze
+	// auto-adoption if the trajectory has gone bad (meta-monitor). Transition
+	// surfaces to the operator via OnDriftFreeze.
+	t.Tracker.RunEvolutionDriftAudit(t.OnDriftFreeze)
 
 	epoch, artifact := t.nextEpoch()
 	fallback := generation.DefaultMetaArtifacts()[artifact]
@@ -343,7 +350,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 			false, "", "proposal write failed: "+werr.Error())
 	}
 	toVersion := generation.ContentSHA256(strings.TrimSpace(proposal))[:12]
-	if metaAutoAdoptEnabled() {
+	if metaAutoAdoptEnabled() && !t.Tracker.AutoAdoptFrozen() {
 		// Operator mandate (2026-07-11): the deterministic gate chain (contract
 		// + epoch bench) IS the approver. Adopt immediately; the ledger health
 		// snapshot arms the revert watch and the feed card carries a post-hoc

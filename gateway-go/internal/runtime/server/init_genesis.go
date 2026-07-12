@@ -405,8 +405,9 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// Surface each revision as a work-feed card (auto-adopted
 			// notification with 되돌리기 veto, or the propose-only decision card
 			// when the kill switch is off), and revert-watch notifications.
-			OnProposal: s.postMetaProposalCard,
-			OnReverted: s.postMetaRevertedCard,
+			OnProposal:    s.postMetaProposalCard,
+			OnReverted:    s.postMetaRevertedCard,
+			OnDriftFreeze: s.postDriftFreezeCard,
 		})
 		s.autonomousSvc.RegisterTask(&genesis.SkillCuratorTask{
 			Tracker: s.genesisTracker,

@@ -80,6 +80,38 @@ func (s *Server) postMetaProposalCard(artifact, epoch, reason, path string, adop
 	}
 }
 
+// postDriftFreezeCard notifies the operator that the evolution self-brake
+// engaged or released (auto-adopt freeze transition).
+func (s *Server) postDriftFreezeCard(frozen bool, reasons []string) {
+	nf := s.nativeWorkFeedStore()
+	if nf == nil {
+		return
+	}
+	var title, body string
+	if frozen {
+		title = "⚠️ 자가개선 자동 채택 동결 (자기 브레이크)"
+		signalList := "- " + strings.Join(reasons, "\n- ")
+		body = fmt.Sprintf(`진화 궤적 자가감사가 드리프트 신호를 감지해 메타 아티팩트 자동 채택을 동결했습니다. 제안은 계속 생성되지만 채택은 다시 사람 결정(propose-only)으로 돌아갑니다.
+
+감지 신호:
+%s
+
+궤적이 회복되면(다음 사이클 재감사) 자동으로 해제됩니다. 즉시 해제하려면 ~/.deneb/data/auto_adopt_freeze.json 을 지우세요.`, signalList)
+	} else {
+		title = "자가개선 자동 채택 재개"
+		body = "진화 궤적이 회복되어 자기 브레이크가 풀렸습니다 — 벤치 통과 제안이 다시 자동 채택됩니다."
+	}
+	if _, err := nf.Append(workfeed.Item{
+		Source:  metaProposalSource,
+		Title:   title,
+		Summary: "메타 자동 채택 " + map[bool]string{true: "동결", false: "재개"}[frozen],
+		Body:    body,
+		Status:  "unread",
+	}); err != nil {
+		s.logger.Warn("drift freeze 카드 생성 실패", "frozen", frozen, "error", err)
+	}
+}
+
 // postMetaRevertedCard notifies the operator that the meta rollback watch
 // reverted an adoption. Informational — no decision required.
 func (s *Server) postMetaRevertedCard(artifact, reason string) {

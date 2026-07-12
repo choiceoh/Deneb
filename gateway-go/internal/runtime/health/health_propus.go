@@ -68,6 +68,9 @@ func Propus(tracker *genesis.Tracker) (map[string]any, bool) {
 
 	// RSI P2 slow loop: the weekly meta-evolution cycle and its propose-only
 	// output, so a silent slow loop (or a waiting .proposed) is visible here.
+	if tracker.AutoAdoptFrozen() {
+		section["auto_adopt_frozen"] = true
+	}
 	meta := tracker.MetaEvolutionHealth()
 	section["meta_revisions_7d"] = meta.Revisions7d
 	section["meta_proposed_7d"] = meta.Proposed7d

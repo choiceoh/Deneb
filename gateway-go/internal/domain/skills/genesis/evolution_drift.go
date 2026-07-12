@@ -1,0 +1,213 @@
+package genesis
+
+// Evolution-trajectory self-audit — the meta-monitor / self-brake.
+//
+// Auto-adoption (#3459) and the L4 coding loop run without a human in the
+// accept path. The remaining safety gap (the external assessment's sharpest
+// safety point): the ledgers accumulate but nothing READS them to ask "is my
+// improvement process drifting toward reward-hacking — is the judge quietly
+// going soft, are adoptions collapsing onto one narrow pattern, are accepted
+// evolves regressing?" This audit reads the existing ledgers deterministically
+// and, when a composite drift signal crosses threshold, FREEZES auto-adoption
+// (falls back to propose-only, human decides) and ledgers the reason.
+//
+// Deterministic Go over data we already collect; no LLM. The brake is a
+// persisted marker so it survives restarts and is auditable — a loop that has
+// started to game its own metrics stops promoting itself automatically until
+// an operator (or a recovered trajectory) clears it.
+
+import (
+	"fmt"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
+)
+
+const (
+	// driftMinResolved gates every rate signal: below this the sample is too
+	// thin to call drift (a 1/1 is not a trend).
+	driftMinResolved = 4
+	// driftFalseAcceptCeil — judge accepting this fraction of bad evolves
+	// (rolled back / resolved) is a soft judge.
+	driftFalseAcceptCeil = 0.50
+	// driftMetaRevertCeil — this fraction of recent meta-adoptions getting
+	// reverted means the slow loop is adopting regressions.
+	driftMetaRevertCeil = 0.50
+	// driftJudgeAccuracyFloor — a judge-accuracy run below this (fails half the
+	// planted defects) means the verifier itself is broken/soft.
+	driftJudgeAccuracyFloor = 0.50
+	// driftMonotonyStreak — this many consecutive meta-adoptions targeting the
+	// SAME artifact (no revert between) is a loop optimizing one narrow lever:
+	// diversity collapse, the classic reward-hacking tell.
+	driftMonotonyStreak = 3
+)
+
+// DriftSignal is one tripped drift condition.
+type DriftSignal struct {
+	Kind   string  `json:"kind"`
+	Detail string  `json:"detail"`
+	Value  float64 `json:"value,omitempty"`
+}
+
+// DriftVerdict is the audit outcome. Frozen true means auto-adoption should
+// fall back to propose-only until the trajectory recovers or an operator
+// clears the marker.
+type DriftVerdict struct {
+	CreatedAt int64         `json:"createdAt"`
+	Frozen    bool          `json:"frozen"`
+	Signals   []DriftSignal `json:"signals,omitempty"`
+	// Snapshot of the inputs, for the audit trail.
+	FalseAcceptRate float64 `json:"falseAcceptRate"`
+	ConfirmRate     float64 `json:"confirmRate"`
+	Resolved        int     `json:"resolved"`
+}
+
+// autoAdoptFreezePath is the self-brake marker: present ⇒ auto-adopt frozen.
+func (t *Tracker) autoAdoptFreezePath() string {
+	return filepath.Join(filepath.Dir(t.logPath), "auto_adopt_freeze.json")
+}
+
+// AutoAdoptFrozen reports whether the self-brake is engaged (marker present).
+func (t *Tracker) AutoAdoptFrozen() bool {
+	verdicts, err := jsonlstore.Load[DriftVerdict](t.autoAdoptFreezePath())
+	if err != nil || len(verdicts) == 0 {
+		return false
+	}
+	return verdicts[len(verdicts)-1].Frozen
+}
+
+// AuditEvolutionDrift computes the drift verdict from the ledgers. Pure read;
+// the caller decides whether to persist/act. judgeRuns may be nil (judge
+// accuracy is one of several signals, not required).
+func (t *Tracker) AuditEvolutionDrift() DriftVerdict {
+	// Fresh compute, not the 60s-cached EvolutionHealth(): the self-brake must
+	// react to the current trajectory, never a stale snapshot.
+	t.mu.Lock()
+	h := t.computeEvolutionHealthLocked(time.Now())
+	t.mu.Unlock()
+	v := DriftVerdict{
+		FalseAcceptRate: h.FalseAcceptRate,
+		ConfirmRate:     h.ConfirmRate,
+		Resolved:        h.ResolvedEvolves7d,
+	}
+
+	// Signal 1: judge going soft (accepting bad evolves).
+	if h.ResolvedEvolves7d >= driftMinResolved && h.FalseAcceptRate >= driftFalseAcceptCeil {
+		v.Signals = append(v.Signals, DriftSignal{
+			Kind:   "judge_soft",
+			Detail: fmt.Sprintf("falseAcceptRate %.2f over %d resolved evolves", h.FalseAcceptRate, h.ResolvedEvolves7d),
+			Value:  h.FalseAcceptRate,
+		})
+	}
+
+	// Signals 2 & 3 read the meta-evolution ledger.
+	if revs, err := t.RecentMetaRevisions(20); err == nil {
+		adopted, reverted, streak := driftMetaCounts(revs)
+		if adopted >= 2 && float64(reverted)/float64(adopted) >= driftMetaRevertCeil {
+			v.Signals = append(v.Signals, DriftSignal{
+				Kind:   "meta_revert_spike",
+				Detail: fmt.Sprintf("%d of %d recent meta-adoptions reverted", reverted, adopted),
+				Value:  float64(reverted) / float64(adopted),
+			})
+		}
+		if streak >= driftMonotonyStreak {
+			v.Signals = append(v.Signals, DriftSignal{
+				Kind:   "adoption_monotony",
+				Detail: fmt.Sprintf("%d consecutive adoptions of the same artifact (diversity collapse)", streak),
+				Value:  float64(streak),
+			})
+		}
+	}
+
+	// Signal 4: the verifier itself failing planted defects.
+	if runs, err := t.RecentJudgeAccuracy(1); err == nil && len(runs) == 1 && runs[0].Pairs > 0 {
+		rate := float64(runs[0].Correct) / float64(runs[0].Pairs)
+		if rate < driftJudgeAccuracyFloor {
+			v.Signals = append(v.Signals, DriftSignal{
+				Kind:   "verifier_broken",
+				Detail: fmt.Sprintf("judge caught only %.0f%% of planted defects", rate*100),
+				Value:  rate,
+			})
+		}
+	}
+
+	v.Frozen = len(v.Signals) > 0
+	return v
+}
+
+// driftMetaCounts walks the meta-revision ledger (newest first) and returns
+// how many of the recent lifecycle records are adoptions, how many are
+// reverts, and the current same-artifact adoption streak from the newest end.
+func driftMetaCounts(revs []MetaRevisionRecord) (adopted, reverted, streak int) {
+	var streakArtifact string
+	streakActive := true
+	for _, r := range revs { // newest first
+		switch r.Action {
+		case "auto_adopted", "adopted":
+			adopted++
+			if streakActive {
+				if streakArtifact == "" {
+					streakArtifact = r.Artifact
+					streak = 1
+				} else if r.Artifact == streakArtifact {
+					streak++
+				} else {
+					streakActive = false
+				}
+			}
+		case "auto_reverted", "operator_reverted":
+			reverted++
+			// A revert interrupts the "unbroken adoption streak" reading.
+			streakActive = false
+		}
+	}
+	return adopted, reverted, streak
+}
+
+// RunEvolutionDriftAudit computes the verdict, persists a freeze/clear
+// transition to the marker + lifecycle ledger, and returns the verdict. It is
+// idempotent: it only writes on a state CHANGE (clear→frozen or frozen→clear)
+// so the log stays readable. onTransition, if set, fires once per change
+// (feed-card surface).
+func (t *Tracker) RunEvolutionDriftAudit(onTransition func(frozen bool, reasons []string)) DriftVerdict {
+	v := t.AuditEvolutionDrift()
+	v.CreatedAt = time.Now().UnixMilli()
+	was := t.AutoAdoptFrozen()
+	if v.Frozen == was {
+		return v // no transition — don't spam the marker log
+	}
+	if err := jsonlstore.Append(t.autoAdoptFreezePath(), v); err != nil {
+		if t.logger != nil {
+			t.logger.Warn("drift audit: marker write failed", "error", err)
+		}
+		return v
+	}
+	reasons := make([]string, 0, len(v.Signals))
+	for _, s := range v.Signals {
+		reasons = append(reasons, s.Kind+": "+s.Detail)
+	}
+	reason := "trajectory recovered — auto-adopt resumed"
+	if v.Frozen {
+		reason = "auto-adopt FROZEN (self-brake): " + strings.Join(reasons, "; ")
+	}
+	if err := jsonlstore.Append(t.logPath, evolveLogEntry{
+		Type:      "auto_adopt_freeze_change",
+		Reason:    reason,
+		CreatedAt: v.CreatedAt,
+	}); err != nil && t.logger != nil {
+		t.logger.Warn("drift audit: lifecycle write failed", "error", err)
+	}
+	if t.logger != nil {
+		if v.Frozen {
+			t.logger.Warn("evolution drift audit: SELF-BRAKE engaged", "reasons", reasons)
+		} else {
+			t.logger.Info("evolution drift audit: trajectory recovered, auto-adopt resumed")
+		}
+	}
+	if onTransition != nil {
+		onTransition(v.Frozen, reasons)
+	}
+	return v
+}
