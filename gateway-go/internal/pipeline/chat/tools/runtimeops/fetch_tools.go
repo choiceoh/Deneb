@@ -28,151 +28,248 @@ type FetchToolsRegistry interface {
 // ToolFetchTools returns a tool that activates deferred tools and returns their schemas.
 func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		if ctx == nil {
-			return "", fmt.Errorf("fetch_tools requires a context")
+		return runFetchTools(ctx, input, registry)
+	}
+}
+
+func runFetchTools(ctx context.Context, input json.RawMessage, registry FetchToolsRegistry) (string, error) {
+	if err := validateFetchToolsContext(ctx); err != nil {
+		return "", err
+	}
+	request, err := parseFetchToolsRequest(input)
+	if err != nil {
+		return "", err
+	}
+
+	access := fetchToolAccessFromContext(ctx)
+	names := selectFetchToolNames(request, registry, access)
+	if request.selectsByQuery() && len(names) == 0 {
+		return fmt.Sprintf("No deferred tools match query %q.", request.Query), nil
+	}
+
+	activation := toolctx.DeferredActivationFromContext(ctx)
+	report, err := buildFetchToolsReport(ctx, names, registry, access, activation)
+	if err != nil {
+		return "", err
+	}
+	return report.finalize(ctx, activation)
+}
+
+type fetchToolsRequest struct {
+	Names []string `json:"names"`
+	Query string   `json:"query"`
+}
+
+func validateFetchToolsContext(ctx context.Context) error {
+	if ctx == nil {
+		return fmt.Errorf("fetch_tools requires a context")
+	}
+	return ctx.Err()
+}
+
+func parseFetchToolsRequest(input json.RawMessage) (fetchToolsRequest, error) {
+	var request fetchToolsRequest
+	if err := jsonutil.UnmarshalInto("fetch_tools params", input, &request); err != nil {
+		return fetchToolsRequest{}, err
+	}
+	request.Query = strings.TrimSpace(request.Query)
+	if len(request.Names) == 0 && request.Query == "" {
+		return fetchToolsRequest{}, fmt.Errorf("names or query is required")
+	}
+	return request, nil
+}
+
+func (r fetchToolsRequest) selectsByQuery() bool {
+	return r.Query != "" && len(r.Names) == 0
+}
+
+// fetchToolAccess keeps preset filtering identical across catalog search and
+// explicit-name activation. A nil allow-list means an unrestricted run.
+type fetchToolAccess struct {
+	allowed map[string]struct{}
+}
+
+func fetchToolAccessFromContext(ctx context.Context) fetchToolAccess {
+	preset := toolpreset.Preset(toolctx.ToolPresetFromContext(ctx))
+	return fetchToolAccess{allowed: toolpreset.AllowedTools(preset)}
+}
+
+func (a fetchToolAccess) allows(name string) bool {
+	if a.allowed == nil {
+		return true
+	}
+	_, ok := a.allowed[name]
+	return ok
+}
+
+// selectFetchToolNames gives explicit names precedence. Query selection ranks
+// whole-token matches, then appends substring-only matches as a recall floor.
+func selectFetchToolNames(request fetchToolsRequest, registry FetchToolsRegistry, access fetchToolAccess) []string {
+	if !request.selectsByQuery() {
+		return request.Names
+	}
+	docs := deferredToolSearchDocs(registry, access)
+	ranked := bm25Rank(request.Query, docs)
+	return appendSubstringMatches(ranked, request.Query, docs)
+}
+
+func deferredToolSearchDocs(registry FetchToolsRegistry, access fetchToolAccess) []searchDoc {
+	summaries := registry.DeferredSummaries()
+	docs := make([]searchDoc, 0, len(summaries))
+	for _, summary := range summaries {
+		if access.allows(summary.Name) {
+			docs = append(docs, deferredToolSearchDoc(registry, summary))
 		}
+	}
+	return docs
+}
+
+func deferredToolSearchDoc(registry FetchToolsRegistry, summary toolctx.DeferredToolSummary) searchDoc {
+	tokens := append(tokenize(summary.Name), tokenize(summary.Description)...)
+	if def, ok := registry.DeferredToolDef(summary.Name); ok {
+		for _, parameterName := range extractParamNames(def.InputSchema) {
+			tokens = append(tokens, tokenize(parameterName)...)
+		}
+	}
+	return searchDoc{
+		name:     summary.Name,
+		tokens:   tokens,
+		fallback: strings.ToLower(summary.Name + " " + summary.Description),
+	}
+}
+
+func appendSubstringMatches(names []string, query string, docs []searchDoc) []string {
+	seen := make(map[string]bool, len(names))
+	for _, name := range names {
+		seen[name] = true
+	}
+	query = strings.ToLower(query)
+	for _, doc := range docs {
+		if !seen[doc.name] && strings.Contains(doc.fallback, query) {
+			names = append(names, doc.name)
+			seen[doc.name] = true
+		}
+	}
+	return names
+}
+
+type fetchToolDecision uint8
+
+const (
+	fetchToolUnavailable fetchToolDecision = iota
+	fetchToolNotFound
+	fetchToolAlreadyActive
+	fetchToolActivate
+)
+
+type fetchToolResolution struct {
+	name     string
+	def      toolctx.ToolDef
+	decision fetchToolDecision
+}
+
+func resolveFetchTool(
+	name string,
+	registry FetchToolsRegistry,
+	access fetchToolAccess,
+	activation *toolctx.DeferredActivation,
+) fetchToolResolution {
+	if !access.allows(name) {
+		return fetchToolResolution{name: name, decision: fetchToolUnavailable}
+	}
+	def, ok := registry.DeferredToolDef(name)
+	if !ok {
+		return fetchToolResolution{name: name, decision: fetchToolNotFound}
+	}
+	// The active snapshot only advances between turns. A same-turn duplicate
+	// deliberately returns its schema again, while a prior-turn activation does not.
+	if activation != nil && activation.IsActive(name) {
+		return fetchToolResolution{name: name, decision: fetchToolAlreadyActive}
+	}
+	return fetchToolResolution{name: name, def: def, decision: fetchToolActivate}
+}
+
+type fetchToolsReport struct {
+	output        strings.Builder
+	activated     []string
+	alreadyActive []string
+}
+
+func buildFetchToolsReport(
+	ctx context.Context,
+	names []string,
+	registry FetchToolsRegistry,
+	access fetchToolAccess,
+	activation *toolctx.DeferredActivation,
+) (*fetchToolsReport, error) {
+	report := &fetchToolsReport{}
+	for _, name := range names {
 		if err := ctx.Err(); err != nil {
-			return "", err
+			return nil, err
 		}
-		var p struct {
-			Names []string `json:"names"`
-			Query string   `json:"query"`
-		}
-		if err := jsonutil.UnmarshalInto("fetch_tools params", input, &p); err != nil {
-			return "", err
-		}
+		report.add(resolveFetchTool(name, registry, access, activation))
+	}
+	return report, nil
+}
 
-		p.Query = strings.TrimSpace(p.Query)
-		if len(p.Names) == 0 && p.Query == "" {
-			return "", fmt.Errorf("names or query is required")
-		}
+func (r *fetchToolsReport) add(resolution fetchToolResolution) {
+	switch resolution.decision {
+	case fetchToolUnavailable:
+		fmt.Fprintf(&r.output, "- %s: not available under the current tool preset\n", resolution.name)
+	case fetchToolNotFound:
+		fmt.Fprintf(&r.output, "- %s: not found or not a deferred tool\n", resolution.name)
+	case fetchToolAlreadyActive:
+		r.alreadyActive = append(r.alreadyActive, resolution.name)
+	case fetchToolActivate:
+		r.activated = append(r.activated, resolution.name)
+		r.writeSchema(resolution.def)
+	}
+}
 
-		// Preset-restricted runs only see and activate allowed tools. The
-		// system prompt already hides disallowed deferred tools, but the
-		// query path below searches the full registry — without this filter
-		// a restricted sub-agent could surface and "activate" a tool that
-		// Execute then rejects, wasting a turn on a false "you can now call
-		// them directly". nil allowed = no restriction.
-		allowed := toolpreset.AllowedTools(toolpreset.Preset(toolctx.ToolPresetFromContext(ctx)))
-		isAllowed := func(name string) bool {
-			if allowed == nil {
-				return true
-			}
-			_, ok := allowed[name]
-			return ok
-		}
+func (r *fetchToolsReport) writeSchema(def toolctx.ToolDef) {
+	fmt.Fprintf(&r.output, "## %s\n%s\n", def.Name, def.Description)
+	if def.InputSchema != nil {
+		schemaJSON, _ := json.MarshalIndent(def.InputSchema, "", "  ")
+		fmt.Fprintf(&r.output, "```json\n%s\n```\n", schemaJSON)
+	}
+	r.output.WriteString("\n")
+}
 
-		// If query is provided, search deferred tools by keyword. Rank with
-		// BM25 over name + description + parameter names so the most relevant
-		// tools come first, then union in any literal substring matches so the
-		// recall floor of the old substring search is preserved (e.g. "book"
-		// still surfaces "notebook" when BM25's whole-token match misses).
-		if p.Query != "" && len(p.Names) == 0 {
-			summaries := registry.DeferredSummaries()
-			docs := make([]searchDoc, 0, len(summaries))
-			for _, s := range summaries {
-				if !isAllowed(s.Name) {
-					continue
-				}
-				tokens := append(tokenize(s.Name), tokenize(s.Description)...)
-				if def, ok := registry.DeferredToolDef(s.Name); ok {
-					for _, pn := range extractParamNames(def.InputSchema) {
-						tokens = append(tokens, tokenize(pn)...)
-					}
-				}
-				docs = append(docs, searchDoc{
-					name:     s.Name,
-					tokens:   tokens,
-					fallback: strings.ToLower(s.Name + " " + s.Description),
-				})
-			}
+func (r *fetchToolsReport) finalize(ctx context.Context, activation *toolctx.DeferredActivation) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	r.publishActivation(ctx, activation)
+	r.appendActivationNotices()
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	return r.output.String(), nil
+}
 
-			p.Names = bm25Rank(p.Query, docs)
-			// Append substring matches not already surfaced by BM25, ordered
-			// after the ranked hits.
-			seen := make(map[string]bool, len(p.Names))
-			for _, name := range p.Names {
-				seen[name] = true
-			}
-			q := strings.ToLower(p.Query)
-			for _, d := range docs {
-				if !seen[d.name] && strings.Contains(d.fallback, q) {
-					p.Names = append(p.Names, d.name)
-					seen[d.name] = true
-				}
-			}
-			if len(p.Names) == 0 {
-				return fmt.Sprintf("No deferred tools match query %q.", p.Query), nil
-			}
-		}
+func (r *fetchToolsReport) publishActivation(ctx context.Context, activation *toolctx.DeferredActivation) {
+	if activation != nil && len(r.activated) > 0 {
+		activation.Activate(r.activated)
+	}
+	// Structured replay evidence is the code-only half of the text notices.
+	// Already-active names re-anchor state after older evidence is summarized.
+	if names := r.replayEvidence(); len(names) > 0 {
+		toolmeta.Set(ctx, "activatedTools", names)
+	}
+}
 
-		// Activate and collect schema descriptions.
-		da := toolctx.DeferredActivationFromContext(ctx)
+func (r *fetchToolsReport) replayEvidence() []string {
+	names := make([]string, 0, len(r.activated)+len(r.alreadyActive))
+	names = append(names, r.activated...)
+	return append(names, r.alreadyActive...)
+}
 
-		var sb strings.Builder
-		var activated, alreadyActive []string
-		for _, name := range p.Names {
-			if err := ctx.Err(); err != nil {
-				return "", err
-			}
-			if !isAllowed(name) {
-				fmt.Fprintf(&sb, "- %s: not available under the current tool preset\n", name)
-				continue
-			}
-			def, ok := registry.DeferredToolDef(name)
-			if !ok {
-				fmt.Fprintf(&sb, "- %s: not found or not a deferred tool\n", name)
-				continue
-			}
-			// Already-active short-circuit: the schema is already injected into
-			// the Tools array (and the prior fetch_tools result is compaction-
-			// protected), so re-emitting the full schema only duplicates it in
-			// history. Production measurement (2026-07-05, 14d agent-logs): 20%
-			// of fetch_tools calls were same-input repeats, up to 7 in one run.
-			if da != nil && da.IsActive(name) {
-				alreadyActive = append(alreadyActive, name)
-				continue
-			}
-			activated = append(activated, name)
-
-			// Format schema for LLM readability.
-			fmt.Fprintf(&sb, "## %s\n%s\n", def.Name, def.Description)
-			if def.InputSchema != nil {
-				schemaJSON, _ := json.MarshalIndent(def.InputSchema, "", "  ")
-				fmt.Fprintf(&sb, "```json\n%s\n```\n", schemaJSON)
-			}
-			sb.WriteString("\n")
-		}
-
-		if err := ctx.Err(); err != nil {
-			return "", err
-		}
-		if da != nil && len(activated) > 0 {
-			da.Activate(activated)
-		}
-		// Structured replay evidence (server-attached, unforgeable by output
-		// content) — the code half of the text notices below. Already-active
-		// names are included: they re-anchor the state after older evidence
-		// was summarized away. See chat/deferred_replay.go.
-		if len(activated)+len(alreadyActive) > 0 {
-			toolmeta.Set(ctx, "activatedTools", append(append([]string{}, activated...), alreadyActive...))
-		}
-
-		if len(alreadyActive) > 0 {
-			// Shared format (toolctx/activation_notice.go): also replay evidence,
-			// re-anchoring activation after old evidence was summarized away.
-			sb.WriteString(toolctx.FormatAlreadyActiveNotice(alreadyActive))
-			sb.WriteString("\n")
-		}
-		if len(activated) > 0 {
-			// Exact shared format (toolctx/activation_notice.go): the next run's
-			// history replay re-derives activation state from this sentence.
-			sb.WriteString(toolctx.FormatFetchActivationNotice(activated))
-		}
-
-		if err := ctx.Err(); err != nil {
-			return "", err
-		}
-		return sb.String(), nil
+func (r *fetchToolsReport) appendActivationNotices() {
+	if len(r.alreadyActive) > 0 {
+		r.output.WriteString(toolctx.FormatAlreadyActiveNotice(r.alreadyActive))
+		r.output.WriteString("\n")
+	}
+	if len(r.activated) > 0 {
+		r.output.WriteString(toolctx.FormatFetchActivationNotice(r.activated))
 	}
 }

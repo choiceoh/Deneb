@@ -3,11 +3,13 @@ package runtimeops
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/pkg/toolmeta"
 )
 
 // fakeFetchRegistry implements FetchToolsRegistry, mirroring the real
@@ -149,12 +151,34 @@ func TestFetchTools_ByQuery_UnionBM25AndSubstring(t *testing.T) {
 	assertActivated(t, out, "notebook") // substring-only match, unioned in
 }
 
-// A whitespace-only query is rejected just like an empty one.
-func TestFetchTools_BlankQueryRejected(t *testing.T) {
+func TestFetchTools_RequestValidationErrors(t *testing.T) {
 	reg := &fakeFetchRegistry{defs: map[string]toolctx.ToolDef{}}
 	fn := ToolFetchTools(reg)
-	if _, err := fn(context.Background(), mustJSON(t, map[string]any{"query": "   "})); err == nil {
-		t.Fatalf("expected error for whitespace-only query")
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	tests := []struct {
+		name    string
+		ctx     context.Context
+		input   json.RawMessage
+		wantErr string
+	}{
+		{name: "nil context precedes parsing", input: json.RawMessage(`{"names":`), wantErr: "fetch_tools requires a context"},
+		{name: "canceled context precedes parsing", ctx: canceled, input: json.RawMessage(`{"names":`), wantErr: "context canceled"},
+		{name: "malformed JSON", ctx: context.Background(), input: json.RawMessage(`{"names":`), wantErr: "parse fetch_tools params: unexpected end of JSON input"},
+		{name: "missing selector", ctx: context.Background(), input: json.RawMessage(`{}`), wantErr: "names or query is required"},
+		{name: "blank query", ctx: context.Background(), input: mustJSON(t, map[string]any{"query": "   "}), wantErr: "names or query is required"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := fn(tt.ctx, tt.input)
+			if err == nil || err.Error() != tt.wantErr {
+				t.Fatalf("error = %v, want %q", err, tt.wantErr)
+			}
+			if out != "" {
+				t.Fatalf("output = %q, want empty on validation error", out)
+			}
+		})
 	}
 }
 
@@ -239,6 +263,83 @@ func TestFetchTools_AlreadyActiveShortCircuit(t *testing.T) {
 		t.Fatalf("expected already-active pointer for mail_archive, got: %s", out)
 	}
 	assertActivated(t, out, "cron")
+}
+
+func TestFetchTools_MixedSelectionReportsSchemaActivationAndErrors(t *testing.T) {
+	reg := &fakeFetchRegistry{
+		defs: map[string]toolctx.ToolDef{
+			"contacts": {
+				Name:        "contacts",
+				Description: "Find people",
+				Deferred:    true,
+			},
+			"cron": {
+				Name:        "cron",
+				Description: "Schedule jobs",
+				Deferred:    true,
+			},
+			"mail_archive": {
+				Name:        "mail_archive",
+				Description: "Read mail",
+				Deferred:    true,
+				InputSchema: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"query": map[string]any{"type": "string"},
+					},
+					"required": []string{"query"},
+				},
+			},
+		},
+	}
+	activation := toolctx.NewDeferredActivation()
+	activation.Seed([]string{"contacts"})
+	collector := toolmeta.NewCollector()
+	ctx := toolctx.WithToolPreset(context.Background(), "researcher")
+	ctx = toolctx.WithDeferredActivation(ctx, activation)
+	ctx = toolmeta.WithCollector(ctx, collector)
+
+	out, err := ToolFetchTools(reg)(ctx, mustJSON(t, map[string]any{
+		"names": []string{"cron", "graphify", "contacts", "mail_archive"},
+		"query": "schedule jobs",
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "" +
+		"- cron: not available under the current tool preset\n" +
+		"- graphify: not found or not a deferred tool\n" +
+		"## mail_archive\n" +
+		"Read mail\n" +
+		"```json\n" +
+		"{\n" +
+		"  \"properties\": {\n" +
+		"    \"query\": {\n" +
+		"      \"type\": \"string\"\n" +
+		"    }\n" +
+		"  },\n" +
+		"  \"required\": [\n" +
+		"    \"query\"\n" +
+		"  ],\n" +
+		"  \"type\": \"object\"\n" +
+		"}\n" +
+		"```\n\n" +
+		"Already active (schema loaded, no re-fetch needed): contacts. Call them directly.\n" +
+		"Activated 1 tool(s): mail_archive. You can now call them directly."
+	if out != want {
+		t.Fatalf("output:\n--- got ---\n%s\n--- want ---\n%s", out, want)
+	}
+
+	if got := activation.ActivatedNames(); !slices.Equal(got, []string{"contacts", "mail_archive"}) {
+		t.Fatalf("activated names = %v, want [contacts mail_archive]", got)
+	}
+	var metadataNames []string
+	if !toolmeta.Get(collector.JSON(), "activatedTools", &metadataNames) {
+		t.Fatalf("activatedTools metadata missing: %s", collector.JSON())
+	}
+	if !slices.Equal(metadataNames, []string{"mail_archive", "contacts"}) {
+		t.Fatalf("activatedTools metadata = %v, want [mail_archive contacts]", metadataNames)
+	}
 }
 
 // Without an executor drain in between, a same-turn duplicate still returns
