@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.70](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.69...andromeda-v0.0.70) (2026-07-12)
+
+
+### ✨ Features
+
+* **andromeda:** RSI 허브 드릴다운 — L1/L4 카드 인라인 상세 ([#3509](https://github.com/choiceoh/Deneb/issues/3509)) ([45157f4](https://github.com/choiceoh/Deneb/commit/45157f4d133d7e4c8c720e72722e6d4ca2a9a124))
+* **andromeda:** 데스크톱 표 정합 — fit-first 랩·어절 줄바꿈·숫자 열 자동 정렬·tabular figures ([#3517](https://github.com/choiceoh/Deneb/issues/3517)) ([e0ba611](https://github.com/choiceoh/Deneb/commit/e0ba611fbf14aab87bd2a44c31b18e046aa47bca))
+* **rsi:** P5 선제 L4 공급 — health-finding 마이너 + record RPC + staged 가시성 ([#3528](https://github.com/choiceoh/Deneb/issues/3528)) ([f17d98f](https://github.com/choiceoh/Deneb/commit/f17d98ff119b0baf71025ab765c1a5db5d22d2a3))
+
 ## [0.0.69](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.68...andromeda-v0.0.69) (2026-07-12)
 
 
