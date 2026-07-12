@@ -9,6 +9,9 @@ session 상태는 주입된 infra/domain service가 소유한다.
 - `exec.go`의 `ToolExec`, `ToolProcess`가 foreground/background command와 managed
   process 제어를 제공한다. `exec_safety.go`의 `CheckCatastrophicCommand`,
   `CheckDestructiveCommand`가 실행 전 안전 판정을 소유한다.
+- `exec_safety.go`의 `ExecCommandPreservesRunCache`는 shell pipeline을
+  `parseExecCacheStages`로 분류하고 각 stage의 cache 보존 가능성을 판정한다.
+  빈 stage·chaining·substitution·미인식 command는 무효화 방향으로 fail-closed한다.
 - `sessions_tool.go`의 `ToolSessions`, `ToolSessionsSpawn`과
   `subagents_tool.go`의 `ToolSubagents`가 session 조회·생성·결과 회수를 담당한다.
 - `fetch_tools.go`의 `FetchToolsRegistry`, `ToolFetchTools`가 deferred schema
@@ -25,6 +28,9 @@ session 상태는 주입된 infra/domain service가 소유한다.
   secret이 제거된 환경 위에 명시 인자만 합친다. timeout은 10분 상한이다.
 - output 원본의 truncation/spillover는 registry 한 곳에서만 적용한다. 이 패키지에서
   먼저 잘라 중간 결과를 유실시키면 안 된다.
+- exec run-cache는 pipeline의 모든 stage가 읽기 전용으로 증명될 때만
+  보존한다. parser 실패나 모호한 flag를 실행 실패와 혼동해 cache를
+  남기지 말고, workspace mutation 가능성으로 처리한다.
 - session spawn은 depth, 동시성, role 가용성, tool preset을 검증하고 terminal child를
   cap에 포함하지 않는다. deferred activation은 등록된 deferred tool과 허용된 preset만
   노출한다.
@@ -34,6 +40,7 @@ session 상태는 주입된 infra/domain service가 소유한다.
 ## 테스트와 집중 검증
 
 - `exec_safety_test.go`의 `TestCheckCatastrophicCommand`와
+  `TestExecCacheClassificationSeparatesParsingFromMutationDecision`,
   `contracts_test.go`의 `TestToolExecFallbackValidationStructuredAndHints`가 두 실행
   경로의 안전성을 검증한다.
 - `sessions_tool_test.go`의 `TestSessionsSpawn_RejectsBeyondMaxDepth`,
