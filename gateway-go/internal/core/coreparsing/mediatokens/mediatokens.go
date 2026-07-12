@@ -34,98 +34,8 @@ func Parse(raw string) Result {
 		return Result{Text: trimmedRaw}
 	}
 
-	hasFenceMarkers := strings.Contains(trimmedRaw, "```") || strings.Contains(trimmedRaw, "~~~")
-	var fenceSpans []coremarkdown.FenceSpan
-	if hasFenceMarkers {
-		fenceSpans = coremarkdown.DetectFences(trimmedRaw)
-	}
-
-	lines := strings.Split(trimmedRaw, "\n")
-	var keptLines []string
-	var media []string
-	foundMediaToken := false
-	lineOffset := 0
-
-	for _, line := range lines {
-		// Skip MEDIA extraction inside fenced code blocks.
-		if hasFenceMarkers && isInsideFence(fenceSpans, lineOffset) {
-			keptLines = append(keptLines, line)
-			lineOffset += len(line) + 1
-			continue
-		}
-
-		trimmedStart := strings.TrimLeft(line, " \t")
-		if len(trimmedStart) < len("MEDIA:") || !strings.EqualFold(trimmedStart[:len("MEDIA:")], "MEDIA:") {
-			keptLines = append(keptLines, line)
-			lineOffset += len(line) + 1
-			continue
-		}
-
-		// Extract payload after "MEDIA:".
-		payload := strings.TrimSpace(trimmedStart[6:])
-		// Strip optional wrapping backtick.
-		payload = strings.TrimPrefix(payload, "`")
-		payload = strings.TrimSuffix(payload, "`")
-		payload = strings.TrimSpace(payload)
-
-		if payload == "" {
-			keptLines = append(keptLines, line)
-			lineOffset += len(line) + 1
-			continue
-		}
-
-		anyValid := false
-
-		// Stage 1: Try unwrapping quoted payload.
-		unquoted, payloadWasQuoted := tryUnwrapQuoted(payload)
-		if payloadWasQuoted {
-			candidate := cleanCandidate(unquoted)
-			normalized := normalizeMediaSource(candidate)
-			if isValidMediaAllowSpaces(normalized) || isBareFilename(normalized) {
-				media = append(media, normalized)
-				anyValid = true
-				foundMediaToken = true
-			}
-		}
-
-		// Stage 2: Try each space-separated part.
-		if !anyValid && !payloadWasQuoted {
-			for _, part := range strings.Fields(payload) {
-				candidate := cleanCandidate(part)
-				normalized := normalizeMediaSource(candidate)
-				if isValidMedia(normalized) {
-					media = append(media, normalized)
-					anyValid = true
-					foundMediaToken = true
-				}
-			}
-		}
-
-		// Stage 3: Fallback — try entire payload as a single path.
-		if !anyValid {
-			candidate := cleanCandidate(payload)
-			normalized := normalizeMediaSource(candidate)
-			if isValidMediaAllowSpaces(normalized) || isBareFilename(normalized) {
-				media = append(media, normalized)
-				foundMediaToken = true
-				anyValid = true
-			}
-		}
-
-		if !anyValid {
-			candidate := cleanCandidate(payload)
-			if isLikelyLocalPath(candidate) {
-				foundMediaToken = true
-				// Drop the line.
-			} else {
-				keptLines = append(keptLines, line)
-			}
-		}
-
-		lineOffset += len(line) + 1
-	}
-
-	cleanedText := strings.Join(keptLines, "\n")
+	scan := scanMediaLines(trimmedRaw)
+	cleanedText := strings.Join(scan.keptLines, "\n")
 	cleanedText = collapseWhitespace(cleanedText)
 
 	// Strip [[audio_as_voice]] tag.
@@ -135,9 +45,9 @@ func Parse(raw string) Result {
 	}
 	cleanedText = strings.TrimSpace(cleanedText)
 
-	if len(media) == 0 {
+	if len(scan.mediaURLs) == 0 {
 		text := trimmedRaw
-		if foundMediaToken || audioAsVoice {
+		if scan.foundMediaToken || audioAsVoice {
 			text = cleanedText
 		}
 		return Result{Text: text, AudioAsVoice: audioAsVoice}
@@ -145,9 +55,107 @@ func Parse(raw string) Result {
 
 	return Result{
 		Text:         cleanedText,
-		MediaURLs:    media,
+		MediaURLs:    scan.mediaURLs,
 		AudioAsVoice: audioAsVoice,
 	}
+}
+
+type mediaScan struct {
+	keptLines       []string
+	mediaURLs       []string
+	foundMediaToken bool
+}
+
+type mediaLineDecision struct {
+	keep            bool
+	mediaURLs       []string
+	foundMediaToken bool
+}
+
+func scanMediaLines(text string) mediaScan {
+	hasFenceMarkers := strings.Contains(text, "```") || strings.Contains(text, "~~~")
+	var fenceSpans []coremarkdown.FenceSpan
+	if hasFenceMarkers {
+		fenceSpans = coremarkdown.DetectFences(text)
+	}
+
+	var scan mediaScan
+	lineOffset := 0
+	for _, line := range strings.Split(text, "\n") {
+		decision := mediaLineDecision{keep: true}
+		if !hasFenceMarkers || !isInsideFence(fenceSpans, lineOffset) {
+			decision = decideMediaLine(line)
+		}
+		if decision.keep {
+			scan.keptLines = append(scan.keptLines, line)
+		}
+		scan.mediaURLs = append(scan.mediaURLs, decision.mediaURLs...)
+		scan.foundMediaToken = scan.foundMediaToken || decision.foundMediaToken
+		lineOffset += len(line) + 1
+	}
+	return scan
+}
+
+func decideMediaLine(line string) mediaLineDecision {
+	payload, ok := mediaPayload(line)
+	if !ok || payload == "" {
+		return mediaLineDecision{keep: true}
+	}
+
+	if mediaURLs := parseMediaPayload(payload); len(mediaURLs) > 0 {
+		return mediaLineDecision{mediaURLs: mediaURLs, foundMediaToken: true}
+	}
+	if isLikelyLocalPath(cleanCandidate(payload)) {
+		return mediaLineDecision{foundMediaToken: true}
+	}
+	return mediaLineDecision{keep: true}
+}
+
+func mediaPayload(line string) (string, bool) {
+	trimmedStart := strings.TrimLeft(line, " \t")
+	if len(trimmedStart) < len("MEDIA:") || !strings.EqualFold(trimmedStart[:len("MEDIA:")], "MEDIA:") {
+		return "", false
+	}
+
+	payload := strings.TrimSpace(trimmedStart[len("MEDIA:"):])
+	payload = strings.TrimPrefix(payload, "`")
+	payload = strings.TrimSuffix(payload, "`")
+	return strings.TrimSpace(payload), true
+}
+
+func parseMediaPayload(payload string) []string {
+	if unquoted, quoted := tryUnwrapQuoted(payload); quoted {
+		if normalized, valid := normalizeWholeCandidate(unquoted); valid {
+			return []string{normalized}
+		}
+	} else if mediaURLs := parseMediaFields(payload); len(mediaURLs) > 0 {
+		return mediaURLs
+	}
+
+	if normalized, valid := normalizeWholeCandidate(payload); valid {
+		return []string{normalized}
+	}
+	return nil
+}
+
+func parseMediaFields(payload string) []string {
+	var mediaURLs []string
+	for _, part := range strings.Fields(payload) {
+		if normalized, valid := normalizeFieldCandidate(part); valid {
+			mediaURLs = append(mediaURLs, normalized)
+		}
+	}
+	return mediaURLs
+}
+
+func normalizeWholeCandidate(raw string) (string, bool) {
+	normalized := normalizeMediaSource(cleanCandidate(raw))
+	return normalized, isValidMediaAllowSpaces(normalized) || isBareFilename(normalized)
+}
+
+func normalizeFieldCandidate(raw string) (string, bool) {
+	normalized := normalizeMediaSource(cleanCandidate(raw))
+	return normalized, isValidMedia(normalized)
 }
 
 // containsIgnoreCase checks if s contains substr (case-insensitive).
