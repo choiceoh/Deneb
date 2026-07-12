@@ -52,6 +52,19 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/dev/zcode-codegraph-sync.sh\"",
+            "timeout": 5,
+            "statusMessage": "codegraph: 편집 후 인덱스 자동동기"
+          }
+        ]
+      }
     ]
   }
 }

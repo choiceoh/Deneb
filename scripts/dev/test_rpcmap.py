@@ -57,16 +57,31 @@ class MapExtractionTests(unittest.TestCase):
                 package chat
                 var ignored = ToolDef{ Name: "test-only", Fn: TestTool( }
             """,
+            "gateway-go/internal/pipeline/chat/broadcast.go": """
+                package chat
+                func emit() {
+                    broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{})
+                    broadcast("sessions.changed", SessionsChangedEvent{})
+                }
+            """,
+            "gateway-go/internal/runtime/health.go": """
+                package runtime
+                func notify() {
+                    broadcast("model.role_health", map[string]any{})
+                }
+            """,
         })
 
     def test_go_file_discovery_excludes_tests_and_non_go_files(self) -> None:
         found = [Path(path).relative_to(self.root).as_posix() for path in rpcmap._go_files(
-            str(self.root), rpcmap.RPC_DIRS + rpcmap.TOOL_DIRS
+            str(self.root), rpcmap.RPC_DIRS + rpcmap.TOOL_DIRS + rpcmap.EVENT_DIRS
         )]
         self.assertEqual(
             sorted(found),
             [
+                "gateway-go/internal/pipeline/chat/broadcast.go",
                 "gateway-go/internal/pipeline/chat/tools.go",
+                "gateway-go/internal/runtime/health.go",
                 "gateway-go/internal/runtime/rpc/methods.go",
             ],
         )
@@ -85,6 +100,14 @@ class MapExtractionTests(unittest.TestCase):
             [(name, handler) for name, handler, _path, _line in result["tool"]],
             [("mail", "MailTool"), ("wiki", "ToolWiki")],
         )
+        self.assertEqual(
+            sorted((name, handler) for name, handler, _p, _l in result["event"]),
+            [
+                ("chat.delivery_failed", "ChatDeliveryFailedEvent"),
+                ("model.role_health", "map"),
+                ("sessions.changed", "SessionsChangedEvent"),
+            ],
+        )
         self.assertTrue(all(not path.startswith("/") for rows in result.values() for _, _, path, _ in rows))
 
     def test_tool_pattern_never_crosses_a_closing_struct_brace(self) -> None:
@@ -96,12 +119,14 @@ class MapExtractionTests(unittest.TestCase):
     def test_result_is_stably_sorted_and_deduplicated_even_if_file_walk_repeats(self) -> None:
         rpc_file = self.root / "gateway-go/internal/runtime/rpc/methods.go"
         tool_file = self.root / "gateway-go/internal/pipeline/chat/tools.go"
+        event_file = self.root / "gateway-go/internal/pipeline/chat/broadcast.go"
         with mock.patch.object(
             rpcmap,
             "_go_files",
             side_effect=[
                 [str(rpc_file), str(rpc_file)],
                 [str(tool_file), str(tool_file)],
+                [str(event_file), str(event_file)],
             ],
         ):
             result = rpcmap.build_map(str(self.root))
@@ -109,6 +134,7 @@ class MapExtractionTests(unittest.TestCase):
         self.assertEqual(len(result["tool"]), 2)
         self.assertEqual(result["rpc"], sorted(result["rpc"]))
         self.assertEqual(result["tool"], sorted(result["tool"]))
+        self.assertEqual(result["event"], sorted(result["event"]))
 
     def test_formatter_preserves_handler_file_line_and_followup_command(self) -> None:
         formatted = rpcmap._fmt(
@@ -134,6 +160,9 @@ class CLIContractTests(unittest.TestCase):
             ("mail", "mailTool", "pipeline/mail.go", 5),
             ("wiki", "wikiTool", "pipeline/wiki.go", 7),
         ],
+        "event": [
+            ("chat.delivery_failed", "ChatDeliveryFailedEvent", "pipeline/chat.go", 15),
+        ],
     }
 
     def invoke(self, args):
@@ -144,7 +173,7 @@ class CLIContractTests(unittest.TestCase):
         rc, stdout, stderr = self.invoke([])
         self.assertEqual(rc, 2)
         self.assertEqual(stdout, "")
-        self.assertIn("3 RPC methods, 2 tools indexed", stderr)
+        self.assertIn("3 RPC methods, 2 tools, 1 events indexed", stderr)
         self.assertIn("Give a name", stderr)
 
     def test_exact_name_wins_over_longer_substring_matches(self) -> None:
@@ -157,6 +186,7 @@ class CLIContractTests(unittest.TestCase):
         mapping = {
             "rpc": [("miniapp.mail.send", "shared", "rpc.go", 1)],
             "tool": [("mail-send", "shared", "tool.go", 2)],
+            "event": [],
         }
         with mock.patch.object(rpcmap, "build_map", return_value=mapping):
             rc, stdout, stderr = invoke_main(rpcmap, ["--handler", "shared"])
@@ -174,7 +204,7 @@ class CLIContractTests(unittest.TestCase):
         rc, stdout, stderr = self.invoke(["--list", "--json"])
         self.assertEqual((rc, stderr), (0, ""))
         payload = json.loads(stdout)
-        self.assertEqual([row["kind"] for row in payload], ["rpc", "rpc", "rpc", "tool", "tool"])
+        self.assertEqual([row["kind"] for row in payload], ["rpc", "rpc", "rpc", "tool", "tool", "event"])
         self.assertEqual(payload[0], {
             "kind": "rpc",
             "name": "miniapp.gmail.list",
@@ -191,7 +221,7 @@ class CLIContractTests(unittest.TestCase):
     def test_text_miss_explains_static_runtime_limit(self) -> None:
         rc, stdout, stderr = self.invoke(["observatory.dynamic"])
         self.assertEqual((rc, stdout), (1, ""))
-        self.assertIn("no match. (3 RPC methods, 2 tools indexed)", stderr)
+        self.assertIn("no match. (3 RPC methods, 2 tools, 1 events indexed)", stderr)
         self.assertIn("런타임 합성", stderr)
 
     def test_real_help_entrypoint_preserves_cli_options(self) -> None:
