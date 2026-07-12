@@ -178,6 +178,101 @@ propose-only through the existing 자가코딩 review lane — source code remai
 forbidden self-edit surface. "Atomic" here means atomically *proposed and
 tracked*, not atomically applied.
 
+### P5 — Compounding (beyond structural completion)
+
+**Status: PROPOSED (2026-07-12).** P1–P4 built the machinery and the audit
+layer now reports it honestly; the binding constraint has moved from *missing
+components* to *compounding rate*. Measured throughput at proposal time:
+3 evolves + 2 genesis per 7d, 1 meta cycle, 0 resolved rollback watches,
+0 judge-miss labels, 0 L4 dispatches. RSI value compounds as
+(improvement per cycle) × (cycle rate) × (evolvable surface) × (label
+fidelity) — and every factor except fidelity is near its floor. The sober
+baseline applies: most evolutionary-agent "improvement" collapses into a few
+edit types (2605.20086), so raw cycle count alone does not compound either.
+Each workstream below pairs a throughput lever with a fidelity guard.
+
+Five workstreams, in priority order:
+
+1. **Demand generation — curriculum lane.** The pyramid's base is
+   signal-starved: one operator's organic usage yields ~3 underperformer
+   signals a week, and L2/L3/L4 all inherit the famine (labels are a function
+   of evolves). Extend the synthetic-but-honest pattern (workout /
+   adversarial-coverage / judge-accuracy) from *repair* to *growth*: a
+   curriculum task mines capability demand from the operator's actual
+   environment (wiki/workfeed domain entities, failed or declined requests,
+   skill-coverage gaps vs the business calendar), proposes NEW skills with
+   validation cases authored FIRST (reproduction-oracle pattern, SEA Alg 8),
+   and feeds genesis. Guard: curriculum-born skills carry a provenance flag so
+   real-usage stats never conflate synthetic demand with operator demand
+   (ground rule 3). Refs: DemoEvolve 2605.24539, SkillFlow 2604.17308,
+   EvoAgentBench 2607.05202.
+
+2. **Calibration campaign — run the #3461 knobs, bounded (operator lever,
+   zero new code).** Weekly meta cadence gives the slow loop ~4 fitness
+   points a month; the benches and e-process are starved by default cadence,
+   not by design. For a bounded 4–6 week window:
+   `DENEB_META_EVOLUTION_INTERVAL_DAYS=2`,
+   `DENEB_JUDGE_ACCURACY_INTERVAL_HOURS=4`,
+   `DENEB_SKILL_WATCH_MAX_AGE_DAYS=5`, `DENEB_META_BENCH_SCALE=2`; revert
+   when per-epoch bench n≥10. One-change-per-window survives at any cadence
+   (RQGM); the drift brake and meta rollback watch contain the added risk.
+   Cheapest ~3–5x on loop frequency available.
+
+3. **Proactive L4 supply — self-renovation, not just self-repair.** All
+   live code-candidate sources are reactive (runtime errors, tool gaps,
+   harness rejections): a healthy gateway produces nothing, so L4 idles
+   exactly when a self-improving system should be renovating. Add
+   deterministic, evidence-bearing proactive miners that file propose-only
+   scope=code candidates through the existing review lane: codebase-health
+   structural findings (e.g. the volatile-contract blast 1033 on domain/wiki
+   that 2026-07-12's session diagnosed by hand), runtime-health standing
+   weaknesses (latency #1), deadcode-audit deltas. Every candidate carries
+   the bench finding ID + evidence so review stays deterministic. Refs:
+   Meta-Harness 2603.28052, Agentic Harness Engineering 2604.25850, Bilevel
+   Autoresearch 2603.23420 (outer loop reads the inner loop's own code and
+   traces — ~5x in their setting).
+
+4. **Recursion-surface widening — externalize more of the generative half
+   (P1 pattern, one artifact per window).** L2 can only improve what is an
+   artifact; today that is three prompts. Candidates in order:
+   failure-analysis prompt, exemplar-retrieval policy (GRAO K/selection),
+   curriculum prompt (from workstream 1), the dispatch prompt embedded in
+   coding-dispatch.sh. The acceptance circuit stays frozen (unanimous 2026H1)
+   — width grows only on the proposal side, and each new artifact ships with
+   a compiled fallback + sidecar refresh (#3446) and enters the
+   meta-experience ledger. Ref: PACE 2605.23019 (prompts AND control logic on
+   the slow timescale).
+
+5. **Outer-loop fitness — ground L2 in operator-visible utility.**
+   Gate-passage rates are proxies; the top-level signal should be utility the
+   operator experiences: feed-card accept/reject (#3456 already ledgers it),
+   quality-bench trends, runtime-health composite. Wire these as ADVISORY
+   evidence into meta epochs first; promotion to a gate only after label
+   fidelity is proven — PACE's false-accept lesson applies one level up.
+   Refs: Adaptive Auto-Harness 2606.01770 (gap decomposition); Escher-Loop
+   2604.23472 as the caution that closed mutual refinement without external
+   grounding drifts.
+
+**Graduation ladder.** Autonomy expands on track record, never on calendar.
+Staged locks and the evidence that flips them (thresholds are proposals,
+operator-tunable):
+
+| Lock (today) | Evidence to graduate | Action |
+|---|---|---|
+| runtime-error source not dispatchable (#3491 staging) | first 3–5 mined candidates review clean (no hallucinated signatures) | allowlist flip in coding-dispatch.sh + rsi_status L4_SOURCES |
+| e-process observation mode (#3439) | disagreement labels n≥20, legacy-agreement ≥90% | cutover: e-process owns rollback firing |
+| L4 daily dispatch cap = 2 | N dispatches with 0 deploy-watch rollbacks and ≥50% land rate | raise DENEB_DISPATCH_DAILY_CAP |
+| deploy-watch = binary rollback only | one rollback exercised end-to-end (real or fire-drill) | open the source auto-apply tier per the L4 note |
+| calibration knobs at defaults | operator opens the P5-2 window | env drop-in on the gateway service |
+
+**Sobriety guards (what "beyond" must not become).** 2605.20086 (most
+evolved "improvements" are a few edit types) and 2607.04277 (sustained RSI
+needs introspection current LLMs lack) bound expectations. The
+countermeasures stay load-bearing: honest usage-source separation,
+deterministic acceptance, the drift brake, and the independent auditor
+(rsi-loop-audit). A P5 workstream that cannot show its gain in held-out,
+operator-grounded numbers is theater and gets cut.
+
 ## Ground rules carried over
 
 1. Deterministic gates and safety surfaces are never self-editable (P1
