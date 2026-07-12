@@ -446,6 +446,11 @@ internal fun uiGalleryNode(): DenebUiNode = parseLetterHtml(
         <row><badge color="success">완료</badge><badge color="warning">지연 위험</badge><badge color="error">중단</badge><badge>기본</badge></row>
         <alert severity="warning" title="영광 도오리 민원">**약 3일 지연** 예상 — 작업 재개 협의 중.</alert>
         <alert severity="info" title="장마 대비">전 현장 24시간 비상대응체계 재확인 완료.</alert>
+        <row><icon name="check_circle" color="success" size="16"/><text color="success">**전 현장 정상 가동** — 금주 안전사고 0건</text></row>
+        <row><icon name="warning" color="warning" size="16"/><text color="warning">비금도 자재 입고 지연 — 월요일 재확인</text></row>
+        <code language="sql">SELECT site, SUM(tons) AS total
+FROM weekly_output GROUP BY site
+ORDER BY total DESC;</code>
         <blockquote source="주간회의">발전소는 **가성비와 품질** 기준을 지켜 짓는다.</blockquote>
         <!-- Inverted slider range (min>max): guards against the coerceIn
              crash — this line would blank the whole render before the fix. -->

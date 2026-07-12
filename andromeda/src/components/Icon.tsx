@@ -40,7 +40,9 @@ export type IconName =
   | "chevron-up"
   | "expand-panel"
   | "collapse-panel"
-  | "printer";
+  | "printer"
+  | "warning"
+  | "coin";
 
 const PATHS: Record<IconName, ReactNode> = {
   today: (
@@ -204,6 +206,18 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M17 9V5a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v4" />
       <path d="M17 17h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2" />
       <rect x="7" y="13" width="10" height="8" rx="1.5" />
+    </>
+  ),
+  warning: (
+    <>
+      <path d="M10.3 4.6a2 2 0 0 1 3.4 0l7.5 13a2 2 0 0 1-1.7 3H4.5a2 2 0 0 1-1.7-3z" />
+      <path d="M12 9.6v4.2M12 17.2v.1" />
+    </>
+  ),
+  coin: (
+    <>
+      <circle cx="12" cy="12" r="8.2" />
+      <path d="M14.5 9.3a2.4 2.4 0 0 0-2-1h-.9a2.2 2.2 0 0 0 0 4.4h.8a2.2 2.2 0 0 1 0 4.4h-.9a2.4 2.4 0 0 1-2-1M12 6.7v1.6M12 15.7v1.6" />
     </>
   ),
 };

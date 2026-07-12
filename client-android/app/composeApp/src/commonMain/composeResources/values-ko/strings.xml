@@ -112,7 +112,6 @@
     <string name="tool_fetch_url_description">URL을 가져와서 응답 본문을 에이전트에 반환합니다</string>
     <string name="tool_fetch_url_name">URL 가져오기</string>
     <string name="deneb_ui_render_failed">UI 렌더링에 실패했습니다</string>
-    <string name="deneb_ui_code_copy">복사</string>
     <string name="image_viewer_close">닫기</string>
     <string name="image_viewer_save">이미지 저장</string>
     <string name="image_viewer_share">이미지 공유</string>

@@ -135,7 +135,9 @@ function renderInline(text: string, key: string): ReactNode[] {
 }
 
 // A fenced code block: language label + copy affordance over a monospaced pre.
-function CodeBlock({ lang, text }: { lang: string; text: string }) {
+// Exported for DenebUi's <code> node so a card's code carries the same chrome
+// as the identical fence in prose.
+export function CodeBlock({ lang, text }: { lang: string; text: string }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     try {

@@ -118,7 +118,6 @@
     <string name="notification_channel_name">AI Notifications</string>
     <string name="notification_channel_description">Notifications sent by AI assistant</string>
     <string name="deneb_ui_render_failed">Failed to render UI</string>
-    <string name="deneb_ui_code_copy">Copy</string>
     <string name="image_viewer_close">Close</string>
     <string name="image_viewer_save">Save image</string>
     <string name="image_viewer_share">Share image</string>

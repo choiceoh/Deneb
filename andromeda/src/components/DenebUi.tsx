@@ -17,7 +17,8 @@ import {
   splitDenebUi,
   TEXT_STYLE,
 } from "@/markdown/denebUiParse";
-import { Markdown } from "./Markdown";
+import { Icon, type IconName } from "./Icon";
+import { CodeBlock, Markdown } from "./Markdown";
 import { renderInline } from "./renderInline";
 
 // --- deneb-ui text conventions (parity with the native renderer) ---
@@ -25,6 +26,65 @@ import { renderInline } from "./renderInline";
 /** Supported badge tint classes — attr values are model-authored, so gate
  * them against class injection into global CSS (review catch on #3235). */
 const BADGE_TINTS = new Set(["success", "warning", "error", "primary", "secondary"]);
+
+/** text/icon status tints (same gate rationale as BADGE_TINTS). Mirrors the
+ * native renderer's color mapping so a status-toned line reads identically
+ * on phone and desktop. */
+const TEXT_TINTS = new Set(["primary", "secondary", "error", "success", "warning"]);
+
+/** Alert severities with dedicated styling — anything else renders as info. */
+const ALERT_SEVERITIES = new Set(["info", "success", "warning", "error"]);
+
+/** deneb-ui icon vocabulary (the Material-ish names the authoring contract
+ * teaches) → the andromeda line-icon catalog. Covers the section-header set
+ * the letters/briefings actually emit; unknown names fall back to emoji text
+ * or nothing (native parity). */
+const ICON_GLYPHS: Record<string, IconName> = {
+  calendar: "calendar",
+  date_range: "calendar",
+  schedule: "calendar",
+  mail: "mail",
+  email: "mail",
+  sunny: "today",
+  weather: "today",
+  alarm: "crons",
+  clock: "crons",
+  access_time: "crons",
+  timer: "crons",
+  person: "people",
+  group: "people",
+  account_circle: "people",
+  search: "search",
+  settings: "settings",
+  check: "check",
+  done: "check",
+  check_circle: "check",
+  task: "check",
+  task_alt: "check",
+  warning: "warning",
+  payments: "coin",
+  credit_card: "coin",
+  savings: "coin",
+  money: "coin",
+  bar_chart: "progress",
+  chart: "progress",
+  analytics: "progress",
+  dashboard: "progress",
+  trending_up: "workfeed",
+  show_chart: "workfeed",
+  notifications: "bell",
+  code: "code",
+  terminal: "code",
+  attach_file: "attach",
+  attachment: "attach",
+  add: "plus",
+  delete: "trash",
+  refresh: "refresh",
+  sync: "refresh",
+  send: "send",
+  work: "projects",
+  business: "projects",
+};
 
 /** "HH:MM — 제목" schedule item — such lists render as a timeline. */
 const TIMELINE_RE = /^\d{1,2}:\d{2}\s*—\s*.+$/;
@@ -227,12 +287,16 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         );
       }
       // --- content ---
-      case "text":
+      case "text": {
+        const tint = TEXT_TINTS.has(String(n.color)) ? String(n.color) : "";
+        const base: React.CSSProperties = { ...(TEXT_STYLE[n.style as string] ?? TEXT_STYLE.body) };
+        if (tint) delete base.color; // the tint class owns the color
         return (
           <div
             key={key}
+            className={"dui-text" + (tint ? ` ${tint}` : "")}
             style={{
-              ...(TEXT_STYLE[n.style as string] ?? TEXT_STYLE.body),
+              ...base,
               ...(n.bold ? { fontWeight: 600 } : null),
               ...(n.italic ? { fontStyle: "italic" } : null),
               lineHeight: 1.5,
@@ -241,14 +305,36 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
             {renderInline(String(n.value || n.text || ""), key)}
           </div>
         );
+      }
       case "markdown":
         return <Markdown key={key} text={String(n.value || n.text || "")} />;
       case "code":
-        return (
-          <pre key={key} className="dui-code">
-            <code>{String(n.code || "")}</code>
-          </pre>
-        );
+        // Same chrome as a chat-prose code fence (language bar + copy) — the
+        // bespoke bare <pre> read visibly poorer than the identical fence in
+        // prose, and dropped the language label entirely.
+        return <CodeBlock key={key} lang={String(n.language || "")} text={String(n.code || "")} />;
+      case "icon": {
+        const nm = String(n.name || "");
+        const glyph = ICON_GLYPHS[nm];
+        const sz = Math.min(Math.max(Number(n.size) || 16, 12), 28);
+        if (glyph) {
+          const tint = TEXT_TINTS.has(String(n.color)) ? ` ${String(n.color)}` : "";
+          return (
+            <span key={key} className={"dui-icon" + tint}>
+              <Icon name={glyph} size={sz} />
+            </span>
+          );
+        }
+        // Emoji "icon names" ("⚠️") have no vector — render the emoji itself;
+        // unknown plain names render nothing (both native parity). Previously
+        // EVERY icon fell through to null, so card section headers lost their
+        // glyph on desktop.
+        return /\p{Extended_Pictographic}/u.test(nm) ? (
+          <span key={key} style={{ fontSize: sz, lineHeight: 1 }}>
+            {nm}
+          </span>
+        ) : null;
+      }
       case "quote":
         return (
           <blockquote key={key} className="dui-quote">
@@ -359,9 +445,20 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
           const W = 320;
           const H = 92;
           const PAD = 10;
+          const plotBottom = H - PAD;
           const xAt = (i: number) => PAD + (i * (W - 2 * PAD)) / (nums.length - 1);
-          const yAt = (v: number) => H - PAD - ((v - lo) / (hi - lo)) * (H - 2 * PAD - 12);
-          const points = nums.map((v, i) => `${xAt(i)},${yAt(v)}`).join(" ");
+          const yAt = (v: number) => plotBottom - ((v - lo) / (hi - lo)) * (H - 2 * PAD - 12);
+          // Smooth cubic through the points (midpoint control handles — stays
+          // inside the data envelope) with a soft area wash underneath and a
+          // halo on the newest point, mirroring the native canvas chart. The
+          // points stay honest: each carries its real value label.
+          let d = `M${xAt(0)},${yAt(nums[0])}`;
+          for (let i = 1; i < nums.length; i++) {
+            const mx = (xAt(i - 1) + xAt(i)) / 2;
+            d += ` C${mx},${yAt(nums[i - 1])} ${mx},${yAt(nums[i])} ${xAt(i)},${yAt(nums[i])}`;
+          }
+          const area = `${d} L${xAt(nums.length - 1)},${plotBottom} L${xAt(0)},${plotBottom} Z`;
+          const midY = (yAt(hi) + plotBottom) / 2;
           const summary = nums.map((v, i) => `${labels[i] ?? i + 1} ${v}`).join(", ");
           return (
             <div key={key} className="dui-chart">
@@ -373,15 +470,25 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
                 role="img"
                 aria-label={`${String(n.label ?? "line chart")}: ${summary}`}
               >
-                <polyline className="dui-line-path" points={points} />
-                {nums.map((v, i) => (
-                  <g key={i}>
-                    <circle className="dui-line-dot" cx={xAt(i)} cy={yAt(v)} r={3} />
-                    <text className="dui-line-val" x={xAt(i)} y={yAt(v) - 7} textAnchor="middle">
-                      {String(values[i] ?? "")}
-                    </text>
-                  </g>
-                ))}
+                {/* Baseline + one mid gridline: enough scaffolding to read
+                    scale without turning the card into a spreadsheet. */}
+                <line className="dui-line-grid" x1={0} y1={plotBottom} x2={W} y2={plotBottom} />
+                <line className="dui-line-grid" x1={0} y1={midY} x2={W} y2={midY} />
+                <path className="dui-line-area" d={area} />
+                <path className="dui-line-path" d={d} />
+                {nums.map((v, i) => {
+                  const last = i === nums.length - 1;
+                  return (
+                    <g key={i}>
+                      {/* The newest point is the reader's answer — halo it. */}
+                      {last ? <circle className="dui-line-halo" cx={xAt(i)} cy={yAt(v)} r={7} /> : null}
+                      <circle className="dui-line-dot" cx={xAt(i)} cy={yAt(v)} r={last ? 4 : 3} />
+                      <text className="dui-line-val" x={xAt(i)} y={yAt(v) - 7} textAnchor="middle">
+                        {String(values[i] ?? "")}
+                      </text>
+                    </g>
+                  );
+                })}
               </svg>
               {labels.length > 0 ? (
                 <div className="dui-line-axis">
@@ -409,14 +516,25 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         );
       }
       // --- feedback ---
-      case "alert":
+      case "alert": {
+        // Whitelist the class the same way BADGE_TINTS gates badges; the
+        // severity glyph (✓/!/✕/i in a currentColor disc) mirrors the native
+        // AlertIcon so alerts scan by shape, not color alone.
+        const sev = ALERT_SEVERITIES.has(String(n.severity)) ? String(n.severity) : "info";
+        const glyph = sev === "success" ? "✓" : sev === "warning" ? "!" : sev === "error" ? "✕" : "i";
         return (
-          <div key={key} className={`dui-alert ${String(n.severity || "info")}`}>
-            {n.title ? <div className="dui-alert-title">{renderInline(String(n.title), `${key}.t`)}</div> : null}
-            {/* Alert bodies are prose — models emphasize inline ("**중요**: …"). */}
-            <div>{renderInline(String(n.message || ""), key)}</div>
+          <div key={key} className={`dui-alert ${sev}`}>
+            <span className="dui-alert-glyph" aria-hidden="true">
+              {glyph}
+            </span>
+            <div className="dui-alert-body">
+              {n.title ? <div className="dui-alert-title">{renderInline(String(n.title), `${key}.t`)}</div> : null}
+              {/* Alert bodies are prose — models emphasize inline ("**중요**: …"). */}
+              <div>{renderInline(String(n.message || ""), key)}</div>
+            </div>
           </div>
         );
+      }
       case "progress": {
         const v = typeof n.value === "number" ? Math.max(0, Math.min(1, n.value)) : null;
         return (

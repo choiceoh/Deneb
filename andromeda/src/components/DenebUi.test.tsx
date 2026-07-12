@@ -241,5 +241,66 @@ describe("deneb-ui renderer parity conventions", () => {
     };
     const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
     expect(container.querySelector(".dui-card-hd-label")?.textContent).toBe("오늘 일정");
+    // The header icon actually draws (icons used to fall through to null).
+    expect(container.querySelector(".dui-card-hd .dui-icon svg")).not.toBeNull();
+  });
+
+  it("tints status-colored text, gates unknown tints", () => {
+    const spec = {
+      type: "column",
+      children: [
+        { type: "text", color: "success", value: "정상 가동" },
+        { type: "text", color: "x); background:red", value: "주입 시도" },
+      ],
+    };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    const tinted = container.querySelector(".dui-text.success");
+    expect(tinted?.textContent).toBe("정상 가동");
+    // Unknown color values never reach the class attribute.
+    const other = Array.from(container.querySelectorAll(".dui-text")).at(1);
+    expect(other?.className).toBe("dui-text");
+  });
+
+  it("renders emoji icon names as text and unknown names as nothing", () => {
+    const spec = {
+      type: "row",
+      children: [
+        { type: "icon", name: "⚠️", size: 16 },
+        { type: "icon", name: "no_such_glyph", size: 16 },
+      ],
+    };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    expect(container.textContent).toContain("⚠️");
+    expect(container.querySelectorAll(".dui-icon")).toHaveLength(0);
+  });
+
+  it("renders a code node with the shared code-fence chrome (language + copy)", () => {
+    const spec = { type: "code", language: "sql", code: "SELECT 1;" };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    expect(container.querySelector(".md-codeblock")).not.toBeNull();
+    expect(container.querySelector(".md-codelang")?.textContent).toBe("sql");
+    expect(screen.getByRole("button", { name: "코드 복사" })).toBeInTheDocument();
+    expect(container.querySelector("code")?.textContent).toBe("SELECT 1;");
+  });
+
+  it("draws the line chart as a smooth path with an area wash and a newest-point halo", () => {
+    const spec = { type: "chart", chartType: "line", labels: ["a", "b", "c"], values: [1, 3, 2] };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    expect(container.querySelector("path.dui-line-path")?.getAttribute("d")).toContain("C");
+    expect(container.querySelector("path.dui-line-area")).not.toBeNull();
+    expect(container.querySelectorAll("circle.dui-line-halo")).toHaveLength(1);
+    // Values stay honest: every point keeps its label.
+    expect(container.querySelectorAll("text.dui-line-val")).toHaveLength(3);
+  });
+
+  it("marks alerts with a severity glyph and gates unknown severities to info", () => {
+    const { container } = render(
+      <DenebUi spec={{ type: "alert", severity: 'x"); inject', message: "본문" }} onSubmit={() => {}} />,
+    );
+    const alert = container.querySelector(".dui-alert");
+    expect(alert?.className).toBe("dui-alert info");
+    expect(alert?.querySelector(".dui-alert-glyph")?.textContent).toBe("i");
+    const warn = render(<DenebUi spec={{ type: "alert", severity: "success", message: "완료" }} onSubmit={() => {}} />);
+    expect(warn.container.querySelector(".dui-alert-glyph")?.textContent).toBe("✓");
   });
 });
