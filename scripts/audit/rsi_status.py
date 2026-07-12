@@ -218,7 +218,10 @@ def assess_l4(rows: list[dict], dispatch_total: int, dispatch_today: int) -> Lay
         scope = rec.get("scope") or "?"
         by_scope[scope] = by_scope.get(scope, 0) + 1
         src = rec.get("source") or ""
-        if scope == "code" and st == "proposed":
+        # proposed = unreviewed backlog; accepted = review-endorsed, awaiting
+        # implementation — both are live dispatch supply (the heartbeat review
+        # lane accepts candidates it cannot implement itself).
+        if scope == "code" and st in ("proposed", "accepted"):
             if src.startswith(L4_SOURCES):
                 dispatchable += 1
             else:

@@ -160,6 +160,32 @@ func TestRSIStatus_L4LiveWithStagedExtras(t *testing.T) {
 	}
 }
 
+// Review-endorsed (accepted) candidates are live dispatch supply, not settled:
+// the heartbeat review lane accepts candidates it cannot implement itself, and
+// the dispatcher picks them first (2026-07-12 status-contract fix).
+func TestRSIStatus_L4AcceptedCountsDispatchable(t *testing.T) {
+	tr := newTestTracker(t)
+	rec, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "codebase-health",
+		Title: "structural finding: fanout", Source: "health-finding:fanout-hotspot:aa",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tr.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
+		ID: rec.ID, Status: SelfCorrectionStatusAccepted, ReviewNote: "코딩 에이전트 후속",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
+	if l.State != RSIStateLive {
+		t.Fatalf("L4 = %s, want LIVE (%s)", l.State, l.Diagnosis)
+	}
+	if got := rsiMetricValue(l.Metrics, "배차 가능"); got != "1" {
+		t.Fatalf("dispatchable metric = %q, want 1 (%+v)", got, l.Metrics)
+	}
+}
+
 func rsiMetricValue(metrics []RSIMetricKV, label string) string {
 	for _, m := range metrics {
 		if m.Label == label {

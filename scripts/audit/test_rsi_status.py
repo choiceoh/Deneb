@@ -169,6 +169,20 @@ class L4Test(unittest.TestCase):
         self.assertEqual(s.metrics["staged"], 1)
         self.assertEqual(s.metrics["staged_sources"], {"runtime-error": 1})
 
+    def test_accepted_candidate_is_dispatch_supply(self):
+        # Review-endorsed (accepted) candidates are LIVE dispatch supply, not
+        # settled: the heartbeat review lane accepts queue candidates it cannot
+        # implement itself (observed live 2026-07-12), and the dispatcher picks
+        # them first. rejected/applied still settle.
+        rows = [
+            {"type": "self_correction_candidate", "id": "h1", "scope": "code",
+             "status": "proposed", "source": "health-finding:x"},
+            {"id": "h1", "status": "accepted"},
+        ]
+        s = assess_l4(rows, dispatch_total=0, dispatch_today=0)
+        self.assertEqual(s.state, LIVE)
+        self.assertEqual(s.metrics["dispatchable"], 1)
+
     def test_reviewed_staged_candidate_stops_counting(self):
         # A rejected staged candidate is settled, not awaiting graduation.
         rows = [

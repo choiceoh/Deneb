@@ -44,8 +44,8 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
 
 ## 코딩 디스패치 (RSI L4 실행 레인 — 오퍼레이터 활성 필요)
 
-- `scripts/dev/coding-dispatch.sh`: 자기교정 큐(`~/.deneb/data/skill_self_correction.jsonl`)의
-  미배차 proposed 소스 후보(scope=code, 증거 기반 Source) 1건을 골라 프로덕션
+- `scripts/dev/coding-dispatch.sh`: 자기교정 큐(`~/.deneb/data/self_correction_candidates.jsonl`)의
+  미배차 소스 후보(scope=code, 증거 기반 Source, 리뷰 승인 accepted 우선 → proposed) 1건을 골라 프로덕션
   클론의 새 워크트리에서 **Claude Code 헤드리스**(`~/.claude/remote/ccd-cli/` 최신)로
   구현을 배차한다. 세션 프롬프트가 CLAUDE.md 게이트 준수 + 그린 시 `pr.sh land`
   랜딩까지 지시하며, 배차 마커(`~/.deneb/data/coding_dispatch/<id>.json`)와 일일
