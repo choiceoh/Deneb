@@ -66,6 +66,10 @@ class PublishAPKShellTests(unittest.TestCase):
             code=""; for arg in "$@"; do [[ "$arg" == -PdenebVersionCode=* ]] && code="${arg#*=}"; done
             if [[ "$*" == *packageFossReleaseUniversalApk* ]]; then
               out="androidApp/build/outputs/apk_from_bundle/fossRelease/androidApp-foss-release-universal.apk"
+              if [[ "${CREATE_MAPPING:-1}" == 1 ]]; then
+                mkdir -p androidApp/build/outputs/mapping/fossRelease
+                printf 'prt-%s\n' "$code" > androidApp/build/outputs/mapping/fossRelease/mapping.prt
+              fi
             else
               out="androidApp/build/outputs/apk/foss/debug/deneb-${code}-${DENEB_BUILD_SHA}-fossDebug.apk"
             fi
@@ -87,6 +91,7 @@ class PublishAPKShellTests(unittest.TestCase):
             "FLOCK_RC": "0",
             "GRADLE_RC": "0",
             "CREATE_APK": "1",
+            "CREATE_MAPPING": "1",
             "NATIVE_START_RC": "0",
             "NATIVE_STOP_RC": "0",
             "SMOKE_RC": "0",
@@ -179,6 +184,37 @@ class PublishAPKShellTests(unittest.TestCase):
         self.assertIn(f"KEYSTORE={self.root / 'release.p12'} ALIAS=deneb-release", calls)
         artifact = self.apk_dir / "deneb-600-deadbeef-fossRelease.apk"
         self.assertEqual(artifact.read_text(), "apk-600\n")
+
+    def test_release_r8_mapping_is_published_next_to_apk(self) -> None:
+        signing = self.signing_env()
+        proc = self.invoke(env=self.env(
+            DENEB_APK_VARIANT="fossRelease",
+            DENEB_APK_SIGNING_ENV=str(signing),
+        ))
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        mapping = self.apk_dir / "deneb-600-deadbeef-fossRelease.mapping.prt"
+        self.assertEqual(mapping.read_text(), "prt-600\n")
+        self.assertIn(f"map  -> {mapping}", proc.stdout)
+
+    def test_missing_release_mapping_warns_but_still_publishes(self) -> None:
+        signing = self.signing_env()
+        proc = self.invoke("notes", env=self.env(
+            DENEB_APK_VARIANT="fossRelease",
+            DENEB_APK_SIGNING_ENV=str(signing),
+            CREATE_MAPPING="0",
+        ))
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("publishing WITHOUT the R8 mapping", proc.stderr)
+        self.assertTrue((self.apk_dir / "deneb-600-deadbeef-fossRelease.apk").exists())
+        manifest = json.loads((self.apk_dir / "version.json").read_text())
+        self.assertEqual(manifest["code"], 600)
+        self.assertFalse(any(self.apk_dir.glob("*.mapping.prt")))
+
+    def test_debug_variant_publishes_without_mapping_or_mapping_warning(self) -> None:
+        proc = self.invoke()
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertFalse(any(self.apk_dir.glob("*.mapping.prt")))
+        self.assertNotIn("mapping", proc.stdout + proc.stderr)
 
     def test_google_services_is_injected_when_present_and_removed_when_absent(self) -> None:
         google = self.root / "google-services.json"
