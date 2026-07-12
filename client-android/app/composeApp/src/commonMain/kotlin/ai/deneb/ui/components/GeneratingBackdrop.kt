@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import ai.deneb.ui.DenebMotion
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -89,8 +90,8 @@ fun Modifier.generatingBackdrop(active: Boolean): Modifier {
 
     val intensity by animateFloatAsState(
         targetValue = if (show) 1f else 0f,
-        // Charge up quickly, dissolve slowly so it overlaps the answer's first lines.
-        animationSpec = tween(durationMillis = if (show) 450 else 850, easing = LinearEasing),
+        // Charge up quickly (DurationSlow), dissolve slowly so it overlaps the answer's first lines.
+        animationSpec = tween(durationMillis = if (show) DenebMotion.DurationSlow else 850, easing = LinearEasing),
         label = "generatingBackdropIntensity",
     )
     // Elapsed-seconds clock, reset to 0 (blue) each time it (re)starts. Keyed on `show`
