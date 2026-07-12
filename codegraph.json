@@ -10,6 +10,11 @@
     "**/*.snap",
     "**/*_gen.go",
     "**/generated/**",
-    "**/src/gen/**"
+    "**/src/gen/**",
+    "**/.run/**",
+    "**/AndroidManifest.xml",
+    "**/composeResources/**",
+    "**/mockServiceWorker.js",
+    "**/config/detekt-baseline.xml"
   ]
 }
