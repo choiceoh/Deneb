@@ -152,6 +152,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				ShutdownContext: s.ShutdownCtx(),
 				Logger:          s.logger,
 				Ledger:          s.phoneEventLedgerInstance(),
+				OnLocationPlace: s.siteVisitOnLocation(),
 				ResolvePhoneAction: func(res phoneevents.ActionResult) bool {
 					if s.phoneActions == nil {
 						return false

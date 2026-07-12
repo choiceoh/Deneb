@@ -4,11 +4,13 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.Geocoder
 import android.location.Location
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import java.util.Locale
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.koin.java.KoinJavaComponent
 import kotlin.coroutines.resume
@@ -46,10 +48,39 @@ actual suspend fun readCurrentLocation(): String? {
         append("\"longitude\":").append(location.longitude).append(",")
         append("\"accuracy\":").append(location.accuracy).append(",")
         append("\"provider\":\"").append(location.provider ?: "fused").append("\"")
+        // On-device reverse geocoding: the gateway matches this Korean admin
+        // string ("전라북도 군산시 옥구읍 수산리") against project 현장 to log a
+        // site visit. Best-effort — omitted on failure (no network, no result).
+        reverseGeocode(context, location.latitude, location.longitude)?.let {
+            append(",\"place\":\"").append(jsonEscape(it)).append("\"")
+        }
         readBatteryJson(context)?.let { append(",\"battery\":").append(it) }
         append("}")
     }
 }
+
+/**
+ * Reverse-geocode a fix to a compact Korean administrative string using the
+ * on-device [Geocoder] (no API key, works offline for cached areas). Joins the
+ * admin components most likely to match a stored 현장 — adminArea (도), locality
+ * (시/군), subLocality (읍/면/동), thoroughfare/feature (리) — deduped. Returns
+ * null when geocoding is unavailable or yields nothing.
+ */
+@Suppress("DEPRECATION") // getFromLocation(lat,lng,n) is deprecated on API 33+ but works on all; the async variant adds callback complexity for a best-effort field
+private fun reverseGeocode(context: Context, lat: Double, lng: Double): String? = runCatching {
+    if (!Geocoder.isPresent()) return null
+    val addr = Geocoder(context, Locale.KOREA).getFromLocation(lat, lng, 1)?.firstOrNull() ?: return null
+    listOfNotNull(addr.adminArea, addr.subAdminArea, addr.locality, addr.subLocality, addr.thoroughfare, addr.featureName)
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
+        .joinToString(" ")
+        .ifBlank { null }
+}.getOrNull()
+
+/** Escapes a string for embedding as a JSON string value (quotes/backslashes/newlines). */
+private fun jsonEscape(s: String): String =
+    s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ").replace("\r", " ")
 
 /**
  * Battery status as a compact JSON object, embedded in the location fix so the

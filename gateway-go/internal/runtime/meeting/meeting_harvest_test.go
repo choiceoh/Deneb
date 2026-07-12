@@ -21,6 +21,50 @@ func harvestTestMatcher(text string) string {
 	return ""
 }
 
+// TestRecordAttendances pins the silent attendance pass: it records every
+// matched, ended meeting once — no ask cap, deduped across ticks — and never
+// touches personal/unmatched events.
+func TestRecordAttendances(t *testing.T) {
+	now := time.Date(2026, 7, 6, 14, 0, 0, 0, harvestKST)
+	mk := func(id, summary string, endedAgo time.Duration) calendar.Event {
+		end := now.Add(-endedAgo)
+		return calendar.Event{
+			ID: id, Summary: summary,
+			Start: end.Add(-time.Hour), End: end, Status: "confirmed",
+		}
+	}
+	m1 := mk("m1", "영산고 발주 미팅", 30*time.Minute)
+	m2 := mk("m2", "영산고 시공 미팅", 90*time.Minute)
+	personal := mk("p", "치과 예약", 30*time.Minute)
+	events := []calendar.Event{m1, m2, personal}
+
+	var recorded []string
+	s := &meetingHarvestService{
+		matchTarget: harvestTestMatcher,
+		displayLoc:  harvestKST,
+		logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		state:       meetingHarvestState{Version: 1, Asked: map[string]int64{}},
+		recordAttendance: func(target string, ev calendar.Event) {
+			recorded = append(recorded, ev.ID+":"+target)
+		},
+	}
+
+	s.recordAttendances(now, events)
+	if len(recorded) != 2 {
+		t.Fatalf("recorded %v, want 2 matched meetings (personal excluded)", recorded)
+	}
+
+	// A second tick records nothing new (deduped by event key).
+	before := len(recorded)
+	s.recordAttendances(now, events)
+	if len(recorded) != before {
+		t.Errorf("re-recorded on second tick: %v", recorded)
+	}
+
+	// No recorder wired → no-op, no panic.
+	(&meetingHarvestService{matchTarget: harvestTestMatcher}).recordAttendances(now, events)
+}
+
 func TestDecideHarvests(t *testing.T) {
 	now := time.Date(2026, 7, 6, 14, 0, 0, 0, harvestKST)
 	mk := func(id, summary string, endedAgo time.Duration) calendar.Event {

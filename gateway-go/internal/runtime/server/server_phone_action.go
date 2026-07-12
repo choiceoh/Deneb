@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
 )
 
 // phoneEventLedgerInstance lazily creates the shared notification ledger.
@@ -26,6 +27,22 @@ func (s *Server) phoneEventLedgerInstance() *phoneevents.Ledger {
 			filepath.Join(config.ResolveStateDir(), phoneevents.LedgerDirname), s.logger)
 	}
 	return s.phoneEventLedger
+}
+
+// siteVisitOnLocation lazily builds the site-visit recorder and returns its
+// location callback for phoneevents.Config.OnLocationPlace. nil wiki store ⇒
+// nil callback (site-visit recording off). Both phone-event doors share the
+// one recorder, created during single-threaded startup wiring.
+func (s *Server) siteVisitOnLocation() func(string) {
+	if s.wikiStore == nil {
+		return nil
+	}
+	if s.siteVisitRecorder == nil {
+		s.siteVisitRecorder = wikiwork.NewSiteVisitRecorder(
+			s.wikiStore, s.logger,
+			filepath.Join(config.ResolveStateDir(), wikiwork.SiteVisitStateFile))
+	}
+	return s.siteVisitRecorder.RecordFromLocationPayload
 }
 
 // phoneActionConfirmWait bounds how long a phone_write dispatch waits for the

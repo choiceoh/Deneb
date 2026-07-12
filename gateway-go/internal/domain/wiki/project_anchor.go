@@ -143,15 +143,59 @@ func uniqueProjectIn(hay string, projects []ProjectRef) (ProjectRef, bool) {
 // in MatchProjectsInText (limit-capped); exactly-one consumers must resolve
 // through UniqueProjectInText, where same-length client-key hits across
 // distinct projects tie and yield no pick.
+// MatchProjectSite matches place text against project 현장(sites) ONLY — never
+// the project name or client. The location→site-visit recorder needs this
+// precision: matching on name/client would falsely "visit" a project just
+// because the geocoded place shares a token with its name (a project literally
+// named "군산" would match every 군산 location). Returns the project whose site
+// key is the longest (most specific) match, the matched key, and ok=false when
+// no site matches. Deterministic, active projects only.
+func (s *Store) MatchProjectSite(place string) (ProjectRef, string, bool) {
+	if s == nil {
+		return ProjectRef{}, "", false
+	}
+	hay := normalizeTitleKey(place)
+	if hay == "" {
+		return ProjectRef{}, "", false
+	}
+	bestRef := ProjectRef{}
+	bestKey := ""
+	for _, ref := range s.knownProjects() {
+		for _, site := range ref.Sites {
+			for _, cand := range siteMatchCandidates(site) {
+				key := normalizeTitleKey(cand)
+				if utf8.RuneCountInString(key) < minProjectKeyRunes {
+					continue
+				}
+				if strings.Contains(hay, key) &&
+					utf8.RuneCountInString(key) > utf8.RuneCountInString(bestKey) {
+					bestKey = key
+					bestRef = ref
+				}
+			}
+		}
+	}
+	return bestRef, bestKey, bestKey != ""
+}
+
+// siteMatchCandidates returns the match keys for one 현장 value: the full site
+// string plus its trailing administrative unit ("전북 군산시 옥구읍 수산리" →
+// [full, "수산리"]), the latter being what a geocoded place most reliably
+// shares with the stored site.
+func siteMatchCandidates(site string) []string {
+	out := []string{site}
+	if fields := strings.Fields(site); len(fields) > 1 {
+		out = append(out, fields[len(fields)-1])
+	}
+	return out
+}
+
 func bestProjectKeyIn(hay string, ref ProjectRef) string {
 	best := ""
 	name, _ := ProjectNameOf(ref.Path)
 	cands := []string{ref.Name, name, ref.Client}
 	for _, site := range ref.Sites {
-		cands = append(cands, site)
-		if fields := strings.Fields(site); len(fields) > 1 {
-			cands = append(cands, fields[len(fields)-1])
-		}
+		cands = append(cands, siteMatchCandidates(site)...)
 	}
 	for _, cand := range cands {
 		key := normalizeTitleKey(cand)
