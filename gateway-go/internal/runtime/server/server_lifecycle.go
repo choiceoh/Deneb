@@ -69,7 +69,8 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		// turn completes. Long-lived streaming routes (SSE chat/stream and the
 		// persistent events channel) and large file downloads (APK, Gmail
 		// attachments) legitimately outlast this and lift it per-response via
-		// disableWriteDeadline; the backstop still covers every ordinary handler.
+		// the disableWriteDeadline helpers in nativeapi/appupdate; the backstop
+		// still covers every ordinary handler.
 		WriteTimeout: 2 * DefaultTurnDeadline,
 		BaseContext: func(l net.Listener) context.Context {
 			return ctx
@@ -325,15 +326,6 @@ func (s *Server) doShutdown() error {
 	stopWithTimeout(5*time.Second, "bgWg.Wait", s.logger, s.bgWg.Wait)
 
 	return httpErr
-}
-
-// disableWriteDeadline lifts the server's global WriteTimeout for a single
-// long-lived or large response: a persistent SSE stream, a streamed agent turn,
-// or a file download that can legitimately outlast the backstop. The timeout
-// still applies to every ordinary request/response handler. Best-effort — a
-// ResponseWriter that doesn't support deadlines (a test double) is left as-is.
-func disableWriteDeadline(w http.ResponseWriter) {
-	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 }
 
 // stopWithTimeout runs fn in a goroutine and waits up to d for it to finish.
