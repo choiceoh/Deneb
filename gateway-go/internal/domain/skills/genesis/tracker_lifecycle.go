@@ -266,6 +266,12 @@ func (t *Tracker) LogEvolveConfirmed(skillName string, audit HarnessEditAudit, c
 // real uses — closed for hygiene, but deliberately a distinct type so it never
 // counts as confirmed (no evidence) nor rolled back in health statistics.
 func (t *Tracker) LogEvolveWatchExpired(skillName string) error {
+	// Hold t.mu like every other lifecycle writer in this file: the mutex
+	// serializes JSONL appends to t.logPath so a concurrent writer cannot
+	// interleave a partial record (reviewer feedback, #3460). Callers
+	// (ResolveStaleWatches) release the lock before invoking this.
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	return jsonlstore.Append(t.logPath, evolveLogEntry{
 		Type:      "evolve_watch_expired",
 		SkillName: skillName,

@@ -157,7 +157,7 @@ Label quality is triple-threatened (2026H1 sweep) — three preconditions:
 
 **Status: conditionally OPEN.** The operator lifted the blanket
 source-self-edit prohibition: the loop may now target gateway source as a
-DECLARED propose-only surface (`genesis/surfaces.go`), with the execution
+DECLARED propose-only surface (`gateway-go/internal/domain/skills/genesis/surfaces/surfaces.go`), with the execution
 contract *dev-worktree edit → full gates green → PR → CI green → land →
 auto-deploy hot-swap* and no human approval step. Three exclusions survive
 the opening: security CODEOWNERS paths, the prompt-cache invariants, and the

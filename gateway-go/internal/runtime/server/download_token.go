@@ -61,6 +61,13 @@ func mintDownloadToken(purpose, name string, ttl time.Duration) string {
 
 // verifyDownloadToken checks signature, expiry, and file binding.
 func verifyDownloadToken(purpose, name, token string) bool {
+	// Fail closed if the per-process signing key never initialized (crypto/rand
+	// failure): with an empty HMAC key an attacker could forge a valid MAC.
+	// mintDownloadToken already refuses to issue in this state; verify must too
+	// (reviewer feedback, #3455/#3456).
+	if len(downloadTokenSigningKey()) == 0 {
+		return false
+	}
 	expStr, macHex, ok := strings.Cut(strings.TrimSpace(token), ".")
 	if !ok || name == "" {
 		return false

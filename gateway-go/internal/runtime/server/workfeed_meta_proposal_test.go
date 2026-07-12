@@ -54,6 +54,11 @@ func TestHandleMetaProposalAction(t *testing.T) {
 		if err != nil || len(ledger) != 1 || ledger[0].Action != "adopted" || ledger[0].ToVersion == "" {
 			t.Fatalf("ledger = %+v, err=%v", ledger, err)
 		}
+		// The operator adoption must carry a health snapshot so the meta
+		// rollback watch covers it too (#3459).
+		if ledger[0].AdoptionHealth == nil {
+			t.Fatal("operator adoption missing AdoptionHealth snapshot — revert watch cannot cover it")
+		}
 	})
 
 	t.Run("reject discards the proposal and keeps the live artifact", func(t *testing.T) {
