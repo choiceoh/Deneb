@@ -95,6 +95,12 @@ revision의 format, vet, lint, test, race 실행 결과다. Fast 프로필에서
 - Complexity와 runtime fast 검사는 compiler AST를 대신하는 보수적 proxy다. 낮은
   신뢰의 정규식 hit는 감점하지 않고, 실제 error chain 손실·library fatal처럼
   원인이 좁혀지는 신호만 점수화한다.
+- Git 이력 측정은 체크아웃 깊이에 중립이어야 한다. Shallow clone은 경계 커밋을
+  parent 없는 커밋으로 보여 400-커밋 윈도를 자르고 전체 트리를 가짜 bulk
+  커밋으로 노출하므로, 윈도가 shallow 경계에 닿으면 history를 `unavailable`
+  측정 실패로 처리하고 `git fetch --unshallow`를 안내한다. 같은 revision이
+  체크아웃 깊이에 따라 다른 점수를 조용히 만들지 않기 위한 것이다. CI는
+  `fetch-depth: 0` 풀 히스토리로 측정한다.
 
 ## Finding 계약
 
