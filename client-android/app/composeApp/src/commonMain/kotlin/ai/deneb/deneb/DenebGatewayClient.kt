@@ -125,10 +125,18 @@ class DenebGatewayClient private constructor(
 
     // True while ask() drives a turn. Background transcript reconciles (events
     // stream reconnect) must not touch the view then — the live stream, or its
-    // stream-failure recovery, owns it. Volatile: read from the daemon's events
-    // coroutine on another thread; the worst race is one skipped reconcile.
-    @Volatile
-    internal var askActive = false
+    // stream-failure recovery, owns it. Backed by a StateFlow (replacing the old
+    // @Volatile var — StateFlow.value reads are equally atomic, worst race is
+    // still one skipped reconcile) so the Android BackgroundConnectionPolicy can
+    // observe it and hold the foreground service open until an in-flight turn
+    // completes (M1 active-stream exception, battery doc §3.1).
+    private val _chatTurnActive = MutableStateFlow(false)
+    val chatTurnActive: StateFlow<Boolean> = _chatTurnActive
+    internal var askActive: Boolean
+        get() = _chatTurnActive.value
+        set(value) {
+            _chatTurnActive.value = value
+        }
     internal var historyEpoch = 0L
     internal val nativeSyncGate = Mutex()
     internal var nativeSyncCursor = appSettings.settings.getLong(KEY_SYNC_CURSOR, 0L)

@@ -10,6 +10,11 @@ import android.os.Looper
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 /**
  * Coordinates when the phone holds its gateway SSE connection and foreground
@@ -42,14 +47,18 @@ class BackgroundConnectionPolicy(
     context: Context,
     private val taskScheduler: TaskScheduler,
     private val daemonController: DaemonController,
+    private val chatTurnActive: StateFlow<Boolean>? = null,
 ) {
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    // Only ever read/written on the main thread (lifecycle callbacks and the
-    // main-posted connectivity reconcile), so no synchronization is needed.
+    // Only ever read/written on the main thread (lifecycle callbacks, the
+    // main-posted connectivity reconcile, and the Main-dispatched chat-turn
+    // collector), so no synchronization is needed.
     private var foreground = false
+    private var chatStreamActive = false
 
     /** Registers the lifecycle and connectivity observers. Call once, from onCreate. */
     fun install() {
@@ -73,6 +82,18 @@ class BackgroundConnectionPolicy(
                     ) = postReconcile()
                 },
             )
+        }
+        // M1 active-stream exception: track in-flight chat turns so backgrounding
+        // mid-turn doesn't tear down the foreground service under the stream.
+        // Collected on Main so chatStreamActive stays on the same thread as the
+        // lifecycle/connectivity state above.
+        chatTurnActive?.let { flow ->
+            scope.launch {
+                flow.collect { active ->
+                    chatStreamActive = active
+                    reconcile()
+                }
+            }
         }
     }
 
@@ -102,7 +123,19 @@ class BackgroundConnectionPolicy(
         if (sseDesired) taskScheduler.start() else taskScheduler.stop()
 
         if (BACKGROUND_DOZE_ENABLED) {
-            if (foreground) daemonController.start() else daemonController.stop()
+            when {
+                foreground -> daemonController.start()
+                // Active-stream exception (battery doc §3.1): stopping the
+                // foreground service mid-turn kills the in-flight chat/stream
+                // POST's process + network keepalive — the FCM handoff covers
+                // proactive events only, not a user-initiated stream. Hold the
+                // already-running service; when the turn settles the chat-turn
+                // collector re-runs this reconcile and the stop below fires.
+                // Never start() from background: Android 12+ blocks background
+                // FGS starts, and a turn can only begin while foregrounded.
+                chatStreamActive -> Unit
+                else -> daemonController.stop()
+            }
         }
     }
 

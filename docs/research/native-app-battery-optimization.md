@@ -65,9 +65,9 @@
 | ✅ | **스케줄러 취소 누락** | FGS 종료만으론 SSE 안 끊김 — `TaskScheduler` 가 process-lifetime scope+pushJob 소유, `ChatViewModel` 도 `start()` 호출 | → `TaskScheduler.stop()` + `BackgroundConnectionPolicy` 가 단일 소유 (이 PR) |
 | 🔲 | **서버 크리덴셜 게이트** | `push.Config.Enabled()` 는 `CredentialsFile` 필요(`push/config.go`) | 클라 google-services 있어도 서버 크리덴셜 없으면 발송 0 → M1 게이트에 서버 크리덴셜 확인 포함 |
 | 🔲 | **acked 토큰 게이트** | `FcmRegistration` 은 best-effort·실패 삼킴, `Notifier.DeliverFallback` 은 토큰 store 비면 early-return(`notifier.go:79-86`) | 토큰 등록이 조용히 실패하면 폴백 타깃 0 → M1 게이트는 **확인된 등록 토큰**(또는 test push 성공) 요구 |
-| 🔲 | **sync 페이지 캡** | `pages < 4` × `limit=100`(`DenebGatewayClient.kt:1001-1026`) | >400 백로그면 복귀 1회로 미드레인 → `hasMore` 까지 루프 |
+| ✅ | **sync 페이지 캡** (2026-07-12 구현) | `pages < 4` × `limit=100`(현 `DenebClientWorkfeed.kt`) | → `hasMore==false` 까지 드레인, 캡은 40페이지(서버 보존 ~3,000 이벤트 초과) 폭주 가드로만 잔존 |
 | 🔲 | **네이티브-sync 보존 한도** | 서버가 `native_sync.jsonl` 5MB 초과 시 최근 3,000 이벤트만 유지(`nativesync/store.go:16-24,121-131`); 커서가 잘린 tail 밑이면 `Pull` 이 못 돌려줌 | 며칠/바쁜 구간 백그라운드면 stale 커서가 이벤트 영구 누락 → 보존 확대 또는 **snapshot/full-refresh** 경로 |
-| 🔲 | **활성 chat 스트림** | FGS 종료가 in-flight 스트림 keepalive 절단(`ChatViewModel.kt`, `DenebGatewayClient.kt:451-463`) | 잠금 시 진행 중 답변 중단 → 활성 전송 예외 |
+| ✅ | **활성 chat 스트림** (2026-07-12 구현) | FGS 종료가 in-flight 스트림 keepalive 절단 | → `askActive` 를 StateFlow(`chatTurnActive`)로 승격, `BackgroundConnectionPolicy` 가 턴 완료까지 이미-실행 중인 FGS 를 유지(백그라운드 start 는 안 함 — Android 12+ 제약), 턴 정착 시 collector 가 reconcile 재실행 → 정상 teardown |
 | 🔲 | **FCM 알림 탭 라우팅** | killed/백그라운드 시 notification payload 는 `onMessageReceived` 안 탐 → `sendProactiveReportNotification`(=`EXTRA_OPEN_WORK_TOPIC` 부여) 우회; `handleDeepLinkIntent` 는 그 extra 만 반응, FCM `data["kind"]` 무시 | FCM 알림 탭이 업무토픽 대신 기본 런처 열림 → FCM click-action/data-intent 딥링크 핸들러 |
 
 ### M2 — 연결성 인지 재연결 (NetworkCallback) ★저위험 보완
@@ -127,7 +127,7 @@
 
 **C — M1/M4 (Kotlin, ★ON — `BACKGROUND_DOZE_ENABLED=true`)**: 같은 policy 가 백그라운드 시 SSE+FGS 를 내려 Doze 진입시키고 백그라운드 전달을 FCM 에 위임. **운영자 결정으로 활성화**(배터리 우선; §3.1 🔲 잔여 엣지케이스는 증상 발생 시 수정). A 로 게이트웨이 측 핵심 갭(이미지/에러/플릿 폴백·per-mobile 술어·스케줄러 취소)은 이미 닫혔다. 되돌리려면 플래그 false 한 줄(M2 는 그대로 유지).
 
-> ⚠️ **검증 한계 + 잔여 위험**: 이 환경엔 Android SDK·실기기가 없어 Kotlin(B/C)은 로컬 컴파일/lint/동작검증 불가 → PR CI(`kotlin-lint`/`android-compile`)가 컴파일·lint 게이트. **실제 배터리/Doze/FCM 동작은 S26 에서 확인 권장**. M1-ON 의 잔여 위험(§3.1 🔲): ①게이트웨이에 FCM 크리덴셜 없으면 백그라운드 알림 0(가장 먼저 확인) ②며칠+busy 백그라운드면 sync 누락(보존/페이지) ③FCM 알림 탭이 업무토픽 대신 런처 ④백그라운드 진입 중 진행 중 채팅 스트림 라이브뷰 끊김(결과는 서버 transcript 에 남아 복귀 시 노출). 증상 보이면 해당 fast-follow.
+> ⚠️ **검증 한계 + 잔여 위험**: 이 환경엔 Android SDK·실기기가 없어 Kotlin(B/C)은 로컬 컴파일/lint/동작검증 불가 → PR CI(`kotlin-lint`/`android-compile`)가 컴파일·lint 게이트. **실제 배터리/Doze/FCM 동작은 S26 에서 확인 권장**. M1-ON 의 잔여 위험(§3.1 🔲): ①게이트웨이에 FCM 크리덴셜 없으면 백그라운드 알림 0(가장 먼저 확인) ②며칠+busy 백그라운드면 sync 누락 — **서버 보존 한도(~3,000 이벤트)만 잔존**(페이지 캡은 2026-07-12 해제, snapshot/full-refresh 경로는 미구현) ③FCM 알림 탭이 업무토픽 대신 런처. ~~④활성 채팅 스트림 절단~~(2026-07-12 수정 — 턴 완료까지 FGS 유지). 증상 보이면 해당 fast-follow.
 
 ---
 
