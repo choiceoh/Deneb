@@ -55,8 +55,8 @@ import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Eco
@@ -91,8 +91,8 @@ import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MilitaryTech
-import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Payments
@@ -501,7 +501,6 @@ internal fun resolveIcon(name: String): ImageVector? = when (name) {
     "emoji_events", "trophy" -> Icons.Filled.EmojiEvents
     "military_tech", "medal" -> Icons.Filled.MilitaryTech
     "workspace_premium", "premium" -> Icons.Filled.WorkspacePremium
-    // Common names models reach for that had no mapping (rendered blank).
     "video", "movie", "film" -> Icons.Filled.Movie
     "message", "chat", "comment" -> Icons.AutoMirrored.Filled.Chat
     "document", "doc", "file", "description" -> Icons.Filled.Description

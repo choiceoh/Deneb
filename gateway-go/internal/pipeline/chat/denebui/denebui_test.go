@@ -55,6 +55,11 @@ func TestExtractFences(t *testing.T) {
 		if len(got) != 1 || got[0] != "<text>hi</text>" {
 			t.Fatalf("one-liner fence = %#v", got)
 		}
+		// Start-of-line one-liner: no prose prefix, tag glued to the opener.
+		got = ExtractFences("```deneb-ui<text>hi</text>```")
+		if len(got) != 1 || got[0] != "<text>hi</text>" {
+			t.Fatalf("start-of-line one-liner = %#v", got)
+		}
 		if !HasFence("프로즈.```deneb-ui<column>") {
 			t.Errorf("HasFence should accept an opener with a glued body tag")
 		}

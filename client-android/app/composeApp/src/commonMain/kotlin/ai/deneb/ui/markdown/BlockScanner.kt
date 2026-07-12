@@ -304,6 +304,36 @@ internal object BlockScanner {
                 }
 
                 FenceState.OUTSIDE -> {
+                    // The glued-opener match runs BEFORE the plain fence match:
+                    // a start-of-line one-liner ("```deneb-ui<text>…") also
+                    // matches FENCE_REGEX (with the tag glued into the info
+                    // string) and would otherwise open a bogus "other" fence.
+                    val tail =
+                        if (line.length <= MAX_LINE_REGEX_LEN && "```" in line) {
+                            DENEB_FENCE_TAIL_REGEX.matchEntire(line)
+                        } else {
+                            null
+                        }
+                    if (tail != null && (tail.groupValues[1].isNotBlank() || tail.groupValues[3].isNotEmpty())) {
+                        val prefix = tail.groupValues[1]
+                        val bodyStart = tail.groupValues[3]
+                        if (prefix.isNotBlank()) out.add(prefix)
+                        out.add(tail.groupValues[2])
+                        changed = true
+                        state = FenceState.DENEB_BODY
+                        htmlDecided = bodyStart.isNotEmpty()
+                        isHtml = htmlDecided
+                        if (bodyStart.isNotEmpty()) {
+                            val run = BACKTICK_RUN_REGEX.find(bodyStart)
+                            if (run != null) {
+                                emitSplitClose(out, bodyStart, run)
+                                state = FenceState.OUTSIDE
+                            } else {
+                                out.add(bodyStart)
+                            }
+                        }
+                        continue
+                    }
                     if (fm != null) {
                         val info = fm.groupValues[3].trim()
                         if (info.equals("deneb-ui", ignoreCase = true) && fm.groupValues[2][0] == '`') {
@@ -315,36 +345,8 @@ internal object BlockScanner {
                             otherChar = fm.groupValues[2][0]
                             otherLen = fm.groupValues[2].length
                         }
-                        out.add(line)
-                        continue
                     }
-                    val tail =
-                        if (line.length <= MAX_LINE_REGEX_LEN && "```" in line) {
-                            DENEB_FENCE_TAIL_REGEX.matchEntire(line)
-                        } else {
-                            null
-                        }
-                    if (tail == null) {
-                        out.add(line)
-                        continue
-                    }
-                    val prefix = tail.groupValues[1]
-                    val bodyStart = tail.groupValues[3]
-                    if (prefix.isNotBlank()) out.add(prefix)
-                    out.add(tail.groupValues[2])
-                    changed = true
-                    state = FenceState.DENEB_BODY
-                    htmlDecided = bodyStart.isNotEmpty()
-                    isHtml = htmlDecided
-                    if (bodyStart.isNotEmpty()) {
-                        val run = BACKTICK_RUN_REGEX.find(bodyStart)
-                        if (run != null) {
-                            emitSplitClose(out, bodyStart, run)
-                            state = FenceState.OUTSIDE
-                        } else {
-                            out.add(bodyStart)
-                        }
-                    }
+                    out.add(line)
                 }
             }
         }

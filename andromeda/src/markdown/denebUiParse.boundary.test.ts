@@ -74,6 +74,10 @@ describe("splitDenebUi boundaries", () => {
     ]);
   });
 
+  it("handles a start-of-line one-liner fence", () => {
+    expect(splitDenebUi("```deneb-ui<text>hi</text>```")).toEqual([{ kind: "ui", body: "<text>hi</text>" }]);
+  });
+
   it("keeps the strict own-line close for legacy JSON bodies", () => {
     // JSON string values may legitimately contain ``` (markdown values).
     const body = '{"type":"markdown","value":"a```b"}';

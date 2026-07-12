@@ -98,6 +98,14 @@ class DenebUiBlockIntegrationTest {
     }
 
     @Test
+    fun `start-of-line one-liner fence is a card, not a code fence`() {
+        // Also matches FENCE_REGEX with the tag glued into the info string —
+        // the glued-opener split must win over the plain fence match.
+        val block = parseMarkdown("```deneb-ui<text>hi</text>```").blocks.single()
+        assertTrue(block is DenebUiBlock)
+    }
+
+    @Test
     fun `legacy JSON body keeps the strict own-line close`() {
         // JSON string values may legitimately contain ``` (markdown values).
         val md = "```deneb-ui\n{\"type\":\"markdown\",\"value\":\"a```b\"}\n```"
