@@ -24,7 +24,8 @@ import (
 func (s *Server) phoneEventLedgerInstance() *phoneevents.Ledger {
 	s.phoneEventLedgerOnce.Do(func() {
 		s.phoneEventLedger = phoneevents.NewLedger(
-			filepath.Join(config.ResolveStateDir(), phoneevents.LedgerDirname), s.logger)
+			filepath.Join(config.ResolveStateDir(), phoneevents.LedgerDirname), s.logger,
+		)
 	})
 	return s.phoneEventLedger
 }
