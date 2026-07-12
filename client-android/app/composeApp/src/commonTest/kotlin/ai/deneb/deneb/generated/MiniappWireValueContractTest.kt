@@ -2239,6 +2239,75 @@ class MiniappWireValueContractTest {
             invalidValue = JsonObject(emptyMap()),
         ),
         wireContract(
+            name = "RSILayerView",
+            serializer = RSILayerView.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "key",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "title",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "state",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "diagnosis",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "metrics",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+            ),
+            invalidField = "key",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "RSILoopStatusResponse",
+            serializer = RSILoopStatusResponse.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "layers",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "turning",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "layers",
+            invalidValue = JsonObject(mapOf("not" to JsonPrimitive("a-list"))),
+        ),
+        wireContract(
+            name = "RSIMetricView",
+            serializer = RSIMetricView.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "label",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "value",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "label",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
             name = "RoleModel",
             serializer = RoleModel.serializer(),
             fields = listOf(

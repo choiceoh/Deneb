@@ -355,6 +355,24 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("q", "a"),
         ),
         contract(
+            name = "RSILayerView",
+            serializer = RSILayerView.serializer(),
+            empty = RSILayerView(),
+            fields = listOf("key", "title", "state", "diagnosis", "metrics"),
+        ),
+        contract(
+            name = "RSILoopStatusResponse",
+            serializer = RSILoopStatusResponse.serializer(),
+            empty = RSILoopStatusResponse(),
+            fields = listOf("layers", "turning"),
+        ),
+        contract(
+            name = "RSIMetricView",
+            serializer = RSIMetricView.serializer(),
+            empty = RSIMetricView(),
+            fields = listOf("label", "value"),
+        ),
+        contract(
             name = "RoleModel",
             serializer = RoleModel.serializer(),
             empty = RoleModel(),

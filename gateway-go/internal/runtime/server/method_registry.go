@@ -833,6 +833,19 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 			LastNudgeAtMs: runtimeheartbeat.LastSelfCodingNudgeAtMillis,
 		}),
 
+		// Mini App recursive-self-improvement loop status (miniapp.rsi.status).
+		// The user-facing window onto the four RSI layers (L1 skill evolution,
+		// L2 meta-evolution, L3 verifier co-evolution, L4 source self-edit) with
+		// each layer's honest LIVE/DATA-GATED/STARVED/FROZEN/IDLE state.
+		handlerminiapp.RSIStatusMethods(handlerminiapp.RSIStatusDeps{
+			Status: func() genesis.RSILoopStatus {
+				if s.genesisTracker == nil {
+					return genesis.RSILoopStatus{}
+				}
+				return s.genesisTracker.RSIStatus()
+			},
+		}),
+
 		// Mini App unified search (miniapp.search.all). Single entry
 		// point that fans out to wiki + diary + people in parallel.
 		// Replaces the per-domain home menu entries — there's now one
