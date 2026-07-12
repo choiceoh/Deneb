@@ -22,6 +22,7 @@ import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.precomputeMarkdownAsync
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +52,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment.Companion.BottomCenter
 import androidx.compose.ui.Alignment.Companion.CenterEnd
 import androidx.compose.ui.Alignment.Companion.CenterHorizontally
@@ -78,6 +80,7 @@ import deneb.composeapp.generated.resources.tool_footprint
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import nl.marc_apps.tts.TextToSpeechInstance
 import nl.marc_apps.tts.errors.TextToSpeechSynthesisInterruptedError
@@ -446,12 +449,47 @@ internal fun ChatMessageList(
                 }
             }
 
-            // Keyboard handling moved off scrollBy: imePadding now lives on the
-            // input bar, whose measured height (bar + IME) feeds this list's
-            // bottom contentPadding. LazyColumn self-aligns the last message
-            // above the bar as the keyboard opens — no manual scrollBy needed
-            // (it couldn't clear the scroll limit / contentPadding slack and
-            // left the last message a few px shy).
+            // Keyboard follow-scroll: the root Box's imePadding shrinks this list's
+            // viewport as the keyboard opens. LazyColumn pins the top item on a resize,
+            // so the newest message slides under the input bar. Track the viewport
+            // height (the source of truth — NOT raw WindowInsets.ime, which double-
+            // counts against imePadding's consumed nav-bar overlap) and scroll the list
+            // by exactly the px it lost.
+            //
+            // scrollBy alone isn't enough: at the list's scroll limit (last message
+            // near the end) it can't advance the full delta, and the bottom
+            // contentPadding (input-bar height) is consumed first — leaving the last
+            // message a few px shy (#3537). So after the frame-by-frame scrollBy tracks
+            // the keyboard's own curve, a scrollToItem(last) with a negative offset
+            // snaps the newest message to rest exactly above the input bar, clearing
+            // whatever the bounded scrollBy couldn't. snapshotFlow keeps this on the
+            // effect coroutine (no per-frame recomposition); near-bottom only, so a
+            // user scrolled up to re-read isn't yanked.
+            LaunchedEffect(listState, bottomOverlayHeightPx) {
+                var prevHeight = listState.layoutInfo.viewportSize.height
+                snapshotFlow { listState.layoutInfo.viewportSize.height }
+                    .collect { current ->
+                        val shrinkage = prevHeight - current
+                        prevHeight = current
+                        if (shrinkage > 0 && isNearBottom) {
+                            // Ride the keyboard's animation curve frame-by-frame. scrollBy
+                            // returns how far it actually advanced — at the list's scroll
+                            // limit (last message near the end) it falls short of the full
+                            // delta, and the bottom contentPadding (input-bar height) is
+                            // consumed first. When that happens, snap the newest message to
+                            // rest exactly above the input bar instead of leaving it a few
+                            // px shy (#3537). The snap only fires on the shortfall, so the
+                            // common case tracks the keyboard smoothly frame-by-frame.
+                            val advanced = listState.scrollBy(shrinkage.toFloat())
+                            if (advanced < shrinkage) {
+                                val total = listState.layoutInfo.totalItemsCount
+                                if (total > 0) {
+                                    listState.scrollToItem(total - 1, -bottomOverlayHeightPx)
+                                }
+                            }
+                        }
+                    }
+            }
 
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 LazyColumn(
