@@ -106,6 +106,51 @@ func TestDetectSelfImproveSweep_FireThrottleRefire(t *testing.T) {
 	}
 }
 
+// Two consecutive nudges with zero queue movement escalate the third fire to a
+// mandatory operator report; queue activity between fires marks a yield (the
+// nudge — or any capture path — fed the queue), resetting the streak.
+func TestDetectSelfImproveSweep_EscalatesAfterIgnoredNudges(t *testing.T) {
+	proposed := 0
+	task := &heartbeatTask{
+		homeDir:            t.TempDir(),
+		logger:             slog.New(slog.NewTextHandler(io.Discard, nil)),
+		proposedSelfCoding: func() (int, string) { return proposed, "" },
+		selfImproveSignals: func() (genesis.SelfCorrectionFunnelSummary, int) {
+			return genesis.SelfCorrectionFunnelSummary{Rejections7d: 3, PromotableRejections7d: 1}, 0
+		},
+	}
+	now := time.Now()
+	step := selfImproveSweepMinInterval + time.Minute
+
+	first := task.detectSelfImproveSweepNudge(now)
+	second := task.detectSelfImproveSweepNudge(now.Add(step))
+	third := task.detectSelfImproveSweepNudge(now.Add(2 * step))
+	if first == "" || second == "" || third == "" {
+		t.Fatal("all three sweeps should fire while signals persist")
+	}
+	if strings.Contains(first, "★에스컬레이션") || strings.Contains(second, "★에스컬레이션") {
+		t.Error("escalation must not appear before the ignored threshold")
+	}
+	if !strings.Contains(third, "★에스컬레이션") || !strings.Contains(third, "2회 연속") {
+		t.Errorf("third consecutive ignored nudge should escalate:\n%s", third)
+	}
+
+	// Queue activity while the nudge is outstanding marks a yield: the next
+	// fire is a fresh start, not a deeper streak.
+	proposed = 1
+	if got := task.detectSelfImproveSweepNudge(now.Add(2*step + time.Hour)); got != "" {
+		t.Fatalf("busy queue must not sweep, got %q", got)
+	}
+	proposed = 0
+	fourth := task.detectSelfImproveSweepNudge(now.Add(3 * step))
+	if fourth == "" {
+		t.Fatal("sweep should fire again once the queue drains")
+	}
+	if strings.Contains(fourth, "★에스컬레이션") {
+		t.Errorf("yield must reset the ignored streak:\n%s", fourth)
+	}
+}
+
 func TestDetectSelfImproveSweep_QuietPaths(t *testing.T) {
 	// Queue not empty → the review lane owns the tick.
 	busy := sweepTask(t, 2, genesis.SelfCorrectionFunnelSummary{Rejections7d: 3}, 1)

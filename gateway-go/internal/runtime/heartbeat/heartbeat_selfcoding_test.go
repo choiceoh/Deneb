@@ -53,6 +53,38 @@ func TestDetectSelfCodingNudge_FireThrottleRefire(t *testing.T) {
 	}
 }
 
+// Consecutive re-fires on an unchanged fingerprint (the turn consumed nothing)
+// escalate to a mandatory operator report; fingerprint movement resets the
+// streak.
+func TestDetectSelfCodingNudge_EscalatesAfterIgnoredNudges(t *testing.T) {
+	task := selfCodingTask(t, 2, "2:sc-a:100")
+	now := time.Now()
+	step := selfCodingRetryInterval + time.Minute
+
+	first := task.detectSelfCodingNudge(now)
+	second := task.detectSelfCodingNudge(now.Add(step))
+	third := task.detectSelfCodingNudge(now.Add(2 * step))
+	if first == "" || second == "" || third == "" {
+		t.Fatal("all three nudges should fire past the retry window")
+	}
+	if strings.Contains(first, "★에스컬레이션") || strings.Contains(second, "★에스컬레이션") {
+		t.Error("escalation must not appear before the ignored threshold")
+	}
+	if !strings.Contains(third, "★에스컬레이션") || !strings.Contains(third, "2회 연속") {
+		t.Errorf("third fire on an unchanged set should escalate:\n%s", third)
+	}
+
+	// Progress (fingerprint moved) resets the streak at the very next fire.
+	task.proposedSelfCoding = func() (int, string) { return 1, "1:sc-b:200" }
+	fourth := task.detectSelfCodingNudge(now.Add(2*step + time.Minute))
+	if fourth == "" {
+		t.Fatal("changed pending set should fire immediately")
+	}
+	if strings.Contains(fourth, "★에스컬레이션") {
+		t.Errorf("fingerprint movement must reset the ignored streak:\n%s", fourth)
+	}
+}
+
 func TestDetectSelfCodingNudge_QuietPaths(t *testing.T) {
 	// No counter wired (tracker absent) → lane disabled.
 	bare := &heartbeatTask{homeDir: t.TempDir(), logger: slog.Default()}

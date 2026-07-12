@@ -143,7 +143,21 @@ func (s *Server) initGenesisServices() {
 
 	// Install an adapter so the chat handler can invoke the nudger
 	// without importing the genesis package (dependency inversion).
-	if s.chatHandler != nil && s.genesisNudger.Enabled() {
+	//
+	// Production-state gated (same invariant as the idle-review lane and
+	// workout): the genesis tracker writes to homeDir/.deneb regardless of
+	// DENEB_STATE_DIR, so a dev/live-test instance's chat sessions would fire
+	// fenced reviews that write review liveness and proposals into the
+	// production Propus sidecar. Observed 2026-07-11: a dev-origin review
+	// completion reset production review_age and pushed the idle backstop's
+	// first fire out by its full 6h staleness window. An explicit
+	// DENEB_SKILL_NUDGE_INTERVAL overrides the gate so nudger behavior stays
+	// live-testable (e.g. puppet mode) when that is the point of the test.
+	nudgerHome, _ := os.UserHomeDir()
+	_, nudgerProdState := s.productionStateDir(nudgerHome)
+	if !nudgerProdState && os.Getenv("DENEB_SKILL_NUDGE_INTERVAL") == "" {
+		s.logger.Info("genesis: skill nudger disabled (non-production state dir; set DENEB_SKILL_NUDGE_INTERVAL to force)")
+	} else if s.chatHandler != nil && s.genesisNudger.Enabled() {
 		s.chatHandler.SetSkillNudger(skilllifecycle.NewChatNudgerAdapter(s.genesisNudger))
 	}
 	// Usage attribution is independent of the nudger: even with the nudger

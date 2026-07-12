@@ -37,10 +37,28 @@ const selfImproveSweepMinInterval = 12 * time.Hour
 // reachable via skill_lifecycle(action=status).
 const sweepEvidenceClusterLimit = 5
 
+// selfImproveEscalateAfterIgnored arms the operator-escalation block once this
+// many consecutive sweep nudges came and went with zero queue movement. At the
+// 12h interval that is ≥24h of persistent zero yield while signals sit
+// unconsumed (observed 2026-07-10/11: two consecutive sweep turns returned
+// NO_REPLY with zero tool calls). Whether the model is shortcutting or the
+// signals are genuinely unpromotable, that state is operator-relevant — the
+// escalated turn must say which it is.
+const selfImproveEscalateAfterIgnored = 2
+
 // selfImproveSweepState persists the last firing under the state dir
 // (~/.deneb/heartbeat-selfimprove-sweep.json).
 type selfImproveSweepState struct {
 	LastNudgeAt time.Time `json:"lastNudgeAt"`
+	// YieldedSinceLastNudge flips true when the queue shows proposed
+	// candidates after a nudge — the sweep (or any capture path) fed the
+	// queue, so the outstanding nudge was not ignored. Read at the next fire
+	// to drive IgnoredStreak.
+	YieldedSinceLastNudge bool `json:"yieldedSinceLastNudge,omitempty"`
+	// IgnoredStreak counts consecutive nudges with no queue activity at all
+	// before the next fire; drives the escalation block in
+	// buildSelfImproveSweepNudge.
+	IgnoredStreak int `json:"ignoredStreak,omitempty"`
 }
 
 func (t *heartbeatTask) selfImproveSweepStatePath() string {
@@ -57,7 +75,11 @@ func (t *heartbeatTask) detectSelfImproveSweepNudge(now time.Time) string {
 		return ""
 	}
 	if count, _ := t.proposedSelfCoding(); count > 0 {
-		return "" // queue not starved — the review lane owns this tick
+		// Queue not starved — the review lane owns this tick. Any queue
+		// activity while a nudge is outstanding also proves that nudge was
+		// not ignored, so mark the yield for the escalation streak.
+		t.markSelfImproveSweepYield()
+		return ""
 	}
 	statePath := t.selfImproveSweepStatePath()
 	st := loadSelfImproveSweepState(statePath)
@@ -82,13 +104,47 @@ func (t *heartbeatTask) detectSelfImproveSweepNudge(now time.Time) string {
 	if funnel.Rejections7d <= 0 && recurrences <= 0 && len(clusters) == 0 {
 		return "" // nothing to mine — an empty sweep turn would only invent noise
 	}
-	if err := saveSelfImproveSweepState(statePath, selfImproveSweepState{LastNudgeAt: now}); err != nil {
+	// A prior nudge with no queue movement since (no yield observed on any
+	// tick) counts as ignored; consecutive ignores escalate below (lever C).
+	ignored := 0
+	if !st.LastNudgeAt.IsZero() && !st.YieldedSinceLastNudge {
+		ignored = st.IgnoredStreak + 1
+	}
+	if err := saveSelfImproveSweepState(statePath, selfImproveSweepState{
+		LastNudgeAt:   now,
+		IgnoredStreak: ignored,
+	}); err != nil {
 		t.logger.Warn("heartbeat: self-improve sweep state save failed, skipping nudge", "error", err)
 		return ""
 	}
+	if ignored >= selfImproveEscalateAfterIgnored {
+		t.logger.Warn("heartbeat: self-improve sweep nudges ignored repeatedly, escalating to operator report",
+			"ignoredStreak", ignored)
+	}
 	t.logger.Info("heartbeat: self-improvement sweep nudge fired",
-		"rejections7d", funnel.Rejections7d, "recurrences7d", recurrences, "clusters", len(clusters))
-	return buildSelfImproveSweepNudge(funnel, recurrences, clusters)
+		"rejections7d", funnel.Rejections7d, "recurrences7d", recurrences, "clusters", len(clusters),
+		"ignoredStreak", ignored)
+	return buildSelfImproveSweepNudge(funnel, recurrences, clusters, ignored)
+}
+
+// markSelfImproveSweepYield records that proposed candidates appeared while a
+// sweep nudge was outstanding — the nudge (or any capture path) fed the queue,
+// so the next fire must not count it as ignored. Write-once per nudge: the
+// flag only flips false→true, so busy ticks after the first cost no state
+// write; each fire resets it.
+func (t *heartbeatTask) markSelfImproveSweepYield() {
+	if t.homeDir == "" {
+		return
+	}
+	statePath := t.selfImproveSweepStatePath()
+	st := loadSelfImproveSweepState(statePath)
+	if st.LastNudgeAt.IsZero() || st.YieldedSinceLastNudge {
+		return
+	}
+	st.YieldedSinceLastNudge = true
+	if err := saveSelfImproveSweepState(statePath, st); err != nil {
+		t.logger.Warn("heartbeat: self-improve sweep yield mark failed", "error", err)
+	}
 }
 
 // buildSelfImproveSweepNudge renders the generator contract. Scope discipline
@@ -96,7 +152,16 @@ func (t *heartbeatTask) detectSelfImproveSweepNudge(now time.Time) string {
 // skill_lifecycle), never edit repository code from a heartbeat turn. The
 // evidence bundle (Self-Harness weakness mining) leads so the turn targets
 // recurring cross-case mechanisms, not isolated anecdotes.
-func buildSelfImproveSweepNudge(funnel genesis.SelfCorrectionFunnelSummary, recurrences int, clusters []genesis.FailureClusterSummary) string {
+//
+// The contract is MANDATORY-ACTION, mirroring buildSelfCodingNudge: the prior
+// wording closed with "보고는 임원 판단이 필요한 발견일 때만(기본 NO_REPLY)",
+// and the model took the default as a shortcut — two consecutive sweep turns
+// (2026-07-10 22:42, 2026-07-11 11:05) returned NO_REPLY with zero tool calls,
+// leaving the signals unconsumed. NO_REPLY now governs only the user-facing
+// message; the status check itself is not skippable. ignoredStreak ≥
+// selfImproveEscalateAfterIgnored appends the lever-C escalation demanding a
+// short operator report instead of another silent pass.
+func buildSelfImproveSweepNudge(funnel genesis.SelfCorrectionFunnelSummary, recurrences int, clusters []genesis.FailureClusterSummary, ignoredStreak int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[자가개선 스윕] 자가개선 후보 큐는 비어 있지만 최근 7일 신호가 쌓여 있습니다: evolve 거절 %d건(승격자격 %d) · 수정 재발 %d건.",
 		funnel.Rejections7d, funnel.PromotableRejections7d, recurrences)
@@ -111,7 +176,14 @@ func buildSelfImproveSweepNudge(funnel genesis.SelfCorrectionFunnelSummary, recu
 이번 점검에서 후보를 직접 발굴하세요:
 1) skill_lifecycle(action=status)로 self-harness 신호·최근 거절 사유·실패 패턴을 확인하세요` + clusterStartHint(clusters) + `.
 2) 반복 메커니즘(지지도 있는 클러스터) 중 좁은 변경으로 고칠 수 있는 것을 skill_lifecycle(action=self_correction_propose)로 최대 2건 제안하세요 — evidence에 클러스터 시그니처·지지도를 인용하고 targetFiles·risk를 채우며, 저장소 코드 수정이 필요한 건은 제안 기록만 남기세요.
-3) 단발 사례이거나 addressable하지 않으면 제안하지 마세요 — 억지 후보는 필터 정밀도를 망칩니다. 보고는 임원 판단이 필요한 발견일 때만(기본 NO_REPLY).`)
+3) 단발 사례이거나 addressable하지 않으면 제안하지 마세요 — 억지 후보는 필터 정밀도를 망칩니다.
+
+★필수: 도구 호출 없이 이 넛지를 지나치지 마세요 — 최소 1)의 status 확인은 실제로 수행한 뒤 제안 여부를 판단하세요. 판단 없이 NO_REPLY로 끝내면 같은 신호로 재점검만 반복 소모합니다. 사용자 메시지는 임원 판단이 필요한 발견일 때만 작성하고, 그 외에는 검토를 마친 뒤 NO_REPLY 하세요.`)
+	if ignoredStreak >= selfImproveEscalateAfterIgnored {
+		fmt.Fprintf(&b, `
+
+★에스컬레이션: 이 스윕 넛지가 %d회 연속 후보 0건으로 지나갔습니다. 이번 턴은 침묵 종료 금지 — 신호를 실제 검토한 결과(제안 건수, 또는 승격 자격 미달인 이유 요약)를 사용자에게 2~3문장으로 반드시 보고하세요. 이 보고는 NO_REPLY 규칙보다 우선합니다.`, ignoredStreak)
+	}
 	return b.String()
 }
 

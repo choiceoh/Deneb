@@ -339,7 +339,9 @@ scripts/dev/puppet.sh stop                   # 게이트웨이 + 브로커 정�
   새는 응답이 없고, 백그라운드 LLM 호출(스킬 넛저 리뷰·드리밍 등)도 `pending`에
   그대로 드러난다. **role별 시트 별칭**(`main-seat`/`coding-seat`/...)이 pending의
   model 필드에 찍히므로 어느 role의 호출인지 즉시 식별된다 — 예: 도구를 몇 번
-  실행하면 스킬 넛저의 백그라운드 리뷰가 `coding-seat`로 나타난다. 짧은 reply나
+  실행하면 스킬 넛저의 백그라운드 리뷰가 `coding-seat`로 나타난다(단 dev/비프로드
+  state dir에선 넛저가 기본 비활성 — genesis sidecar 오염 방지 게이트.
+  `DENEB_SKILL_NUDGE_INTERVAL` export로 강제 활성화). 짧은 reply나
   `fail ID`로 정리하면 된다.
 + **`show`의 시스템 프롬프트 해시**: 헤더의 `sys=<해시>`가 직전 요청과 비교되어
   `(unchanged since rN)`/`(CHANGED vs rN)`으로 표시된다 — 캐시 프리픽스 안정성
