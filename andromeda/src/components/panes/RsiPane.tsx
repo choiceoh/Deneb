@@ -32,11 +32,33 @@ function stateColor(state: string | undefined): string {
   }
 }
 
+// State → Korean badge label (the app is Korean-first; the enum stays English for
+// color logic).
+function stateLabel(state: string | undefined): string {
+  switch (state) {
+    case "LIVE":
+      return "가동 중";
+    case "DATA-GATED":
+      return "데이터 대기";
+    case "STARVED":
+      return "연료 부족";
+    case "FROZEN":
+      return "동결";
+    default:
+      return "휴면";
+  }
+}
+
 function LayerCard({ layer }: { layer: RSILayerView }) {
+  const [expanded, setExpanded] = useState(false);
   const tint = stateColor(layer.state);
+  const hasDetail = !!layer.detail?.trim();
   return (
     <div style={{ border: line, borderRadius: 8, padding: "12px 14px", marginBottom: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div
+        onClick={hasDetail ? () => setExpanded((e) => !e) : undefined}
+        style={{ display: "flex", alignItems: "center", gap: 8, cursor: hasDetail ? "pointer" : "default" }}
+      >
         <span style={{ fontWeight: 600, fontSize: 14, color: color.text, flex: 1 }}>
           {layer.key ?? ""} · {layer.title ?? ""}
         </span>
@@ -51,8 +73,9 @@ function LayerCard({ layer }: { layer: RSILayerView }) {
             whiteSpace: "nowrap",
           }}
         >
-          {layer.state ?? ""}
+          {stateLabel(layer.state)}
         </span>
+        {hasDetail && <span style={{ fontSize: 11, color: color.muted }}>{expanded ? "⌃" : "⌄"}</span>}
       </div>
       {layer.diagnosis && (
         <div style={{ fontSize: 12.5, color: color.text2, marginTop: 6, lineHeight: 1.5 }}>{layer.diagnosis}</div>
@@ -65,6 +88,13 @@ function LayerCard({ layer }: { layer: RSILayerView }) {
               <div style={{ fontSize: 11, color: color.muted }}>{m.label ?? ""}</div>
             </div>
           ))}
+        </div>
+      )}
+      {expanded && hasDetail && (
+        <div
+          style={{ fontSize: 12.5, color: color.text, marginTop: 10, paddingTop: 10, borderTop: line, lineHeight: 1.6 }}
+        >
+          {layer.detail}
         </div>
       )}
     </div>
