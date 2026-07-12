@@ -20,7 +20,7 @@ globs:
 프로젝트/<프로젝트명>/
 ├── 대표.md      ← 대표페이지: 현재 상태·개요·핵심 사실 (digest/status/candidate 대상)
 ├── 로그.md      ← 진행 로그: 사건·회의·결재는 새 페이지가 아니라 여기에 날짜와 함께 append
-│                  섹션 제목 문법: '## [YYYY-MM-DD] <op> | <주제>' (op: 회의/결정/발주/이슈/ingest …)
+│                  섹션 제목 문법: '## [YYYY-MM-DD] <op> | <주제>' (op: 회의/결정/발주/이슈/ingest/질문해결/질문폐기 …)
 ├── 기자재/      ← 케이블·모듈 등 자재 문서
 ├── 메일분석/    ← 메일 1통 = 1페이지 (시스템 자동 생성; 손으로 만들지 말 것)
 ├── 자료/        ← 외부 소스(URL·유튜브) 캡처, 소스 1개 = 1페이지 (wiki action="ingest"가 생성;
@@ -134,6 +134,62 @@ globs:
   제안" 불릿 1개 (분기당 1회 멱등, ref=`dormant:YYYYQn`). **자동 종결은 절대 없음.**
 - 주의: 종결된 프로젝트로 오는 새 메일은 자동 연결되지 않는다(미분류 버킷행) —
   뒤늦은 정산 메일이 예상되면 종결을 늦추거나 재개로 되살린다.
+
+## 운영자 위키 브리프 (워크스페이스 WIKI.md)
+
+- **워크스페이스 `WIKI.md`** (USER.md·MEMORY.md 옆) = 운영자가 직접 편집하는 위키 유지보수 조향 파일
+  (OpenWiki의 wiki-brief 패턴 도입, 2026-07). 드리머 합성 프롬프트와 위키 리서치 프롬프트가
+  **매 사이클 재읽기**로 주입한다 (`wiki/brief.go`: `LoadWikiBrief`+`WikiBriefSection` — 렌더러 단일).
+- 용도: "무엇에 집중/무시할지"의 조향만. **레이아웃 불변식(카테고리·슬롯·추측 금지)은 브리프가
+  못 뒤집는다** — 주입 섹션에 우선순위가 명시돼 있다. 파일 없음/빈 파일 = 조향 없음(내장 규칙만).
+- 예산 2,000룬 초과분은 잘리고 마커가 남는다 — 브리프는 문단 수준으로 짧게.
+- **챗 컨텍스트 파일이 아니다**: `contextFileNames`에 없으므로 세션 프롬프트·프롬프트 캐시 경로에
+  절대 들어가지 않는다 (백그라운드 유지보수 프롬프트 전용). 컨텍스트 파일로 승격 금지.
+
+## 위키 스카우트 (외부 능동 수집 — wiki-research의 쌍둥이)
+
+- **wiki-scout 태스크** (`runtime/wikiwork/wiki_scout_task.go`, 12h): 대표페이지들의 **외부성
+  미해결 질문**(2일 이상 경과, 사이클당 최대 3건, 시도 후 3일 쿨다운)과 WIKI.md 브리프 관심 주제를
+  대상으로 웹 접근 포함 바운드 턴 1회. 질문도 브리프도 없으면 사이클 스킵. OpenWiki의 능동 커넥터
+  수집 패턴 도입(2026-07). **즉시 트리거**: wiki-research 턴이 오늘 날짜 미해결 질문을 새로 쓰면
+  (내부 소스로 못 닫았다는 뜻) 리서치 직후 `TriggerForPage`가 나이 게이트 없이 바로 1회 스카우트.
+- **`PresetWikiScout`는 의도적으로 좁다** (`web`·`wiki`·`fetch_tools`뿐): 스카우트 컨텍스트에는
+  신뢰 불가 웹 페이지가 실리므로 개인 메모리 표면(mail_archive·contacts·polaris·graphify)과 파일
+  읽기가 같은 턴에서 닿으면 주입 시 유출 표면이 된다 — researcher 표면 재사용 금지.
+- **쓰기 표면 3개 고정** (웹 텍스트가 정본 상태에 직접 스미지 않게): ① 근거 URL → `wiki ingest`
+  자료 페이지(주입 방어·멱등 그대로 적용), ② 로그.md `질문해결` op append, ③ 대표페이지 미해결
+  질문 **불릿 제거만**. 대표페이지 본문(현재 상태 등) 통합은 내부 wiki-research 몫 — 스카우트가
+  본문을 만지면 안 된다. wiki-research가 웹을 뺀 이유(큐레이션 오염)는 이 분리로 해소된다.
+- 게이트: 프로덕션 상태 디렉토리 전용, `DENEB_WIKI_SCOUT_DISABLE=1`로 비활성, 사용자 활동 중 스킵.
+  상태는 `wiki-scout-state.json`(질문별 마지막 시도 시각, 60일 프룬). 위키 날짜 비교·표기는
+  `dentime.Now()`(KST 정본 시계) — 서버 로컬 시계 금지.
+- **공유 유지보수 락**(`scout.MaintenanceLock()` → `research.SetMaintenanceLock`): scout와 research가
+  같은 `*sync.Mutex`를 TryLock으로 잡아 **scout-vs-scout + scout-vs-research** 쓰기 경합을 막는다
+  (전이 락이 아니면 두 턴이 같은 대표페이지를 stale read 후 full-body 재작성해 서로의 미해결 질문
+  편집을 덮어씀). research는 자기 턴 앞뒤로 락을 잡고, post-research 트리거 **전에 반드시 해제**
+  (scout가 같은 락을 재획득 — 안 그러면 데드락). 락을 못 잡은 사이클은 스킵(다음 회차 복귀).
+- **도구 표면 좁힘**(`PresetWikiScout` = `web`·`wiki`·`fetch_tools`만): 신뢰 불가 웹 페이지가 컨텍스트에
+  실리므로 개인 메모리 도구 배제. `wiki(action="ingest")` 페치는 **SSRF-safe 다이얼러**
+  (`media.SSRFSafeDialer` — loopback/LAN/link-local 거부, 리다이렉트·DNS 리바인딩 포함)로만.
+- **주입 방어 계층**: 요약 프롬프트 가드 + 저장 원문 발췌/fail-open 블록쿼트 펜싱 + `GateUntrustedTools`
+  (exec류 차단, wiki 쓰기는 허용) — scout·noti-digest 둘 다 무장.
+
+## 노티 다이제스트 (휴대폰 알림 → 기억)
+
+- **레저** (`runtime/phoneevents/ledger.go`): 판단 경로(휴대폰 이벤트 판단 턴은 의도적 ephemeral)와
+  무관하게 notification/sms 이벤트를 redact+바운드 후 `<state>/phone-events/YYYY-MM-DD.jsonl`에
+  append. tiny 게이트 **앞**에서 기록 — 게이트는 푸시 가치 기준이지 기억 가치 기준이 아니다
+  (카톡 "발주 밀림"은 NO_REPLY가 정답이지만 프로젝트 로그감). 보존 30일 자동 프룬.
+  **OTP·보안코드 제외**: 인증번호류 키워드+짧은 숫자코드가 함께 있으면 레저에 적재하지 않음
+  (append가 tiny 게이트 앞이라 온디바이스 블록리스트를 통과한 OTP가 raw로 남는 걸 방지).
+- **noti-digest 태스크** (`runtime/wikiwork/noti_digest_task.go`, 12h): 미소비 레저 테일(런 단위
+  16K룬 예산, 라인 경계 오프셋 커밋)을 **wiki 전용 프리셋**(`PresetNotiDigest` = `wiki`·`fetch_tools`만
+  — 웹 없음 + 개인 메모리 스토어 없음: 악성 알림이 사적 데이터를 읽어 wiki 쓰기로 영속화하는 경로
+  차단)의 턴 1회로 위키에 소화. 알림 텍스트는 프롬프트 조립 전 **라인 펜싱**(delimiter 무력화·개행
+  평탄화)으로 데이터 블록 탈출 방지. 쓰기 표면: 프로젝트 로그.md op append + 기존 인물 페이지
+  update만 — 새 페이지·대표페이지 본문 수정 금지. 광고·OTP·잡담은 버림.
+- 오프셋은 **성공한 턴 뒤에만** 전진(일시 장애로 내용 유실 금지), 연속 3회 실패 시 강제 전진(독배치가
+  파이프라인을 못 박게). 게이트: 프로덕션 전용, `DENEB_NOTI_DIGEST_DISABLE=1`, 사용자 활동 중 스킵.
 
 ## 중복 방어 3겹 (모두 `FindSimilarPages` 공유 — ID·코드·슬러그·FTS 제목 신호)
 

@@ -151,6 +151,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				Relay:           &s.proactiveRelay,
 				ShutdownContext: s.ShutdownCtx(),
 				Logger:          s.logger,
+				Ledger:          s.phoneEventLedgerInstance(),
 				ResolvePhoneAction: func(res phoneevents.ActionResult) bool {
 					if s.phoneActions == nil {
 						return false

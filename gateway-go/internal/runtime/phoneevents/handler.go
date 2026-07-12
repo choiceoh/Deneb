@@ -55,6 +55,10 @@ type Config struct {
 	ResolvePhoneAction func(ActionResult) bool
 	ShutdownContext    context.Context
 	Logger             *slog.Logger
+	// Ledger records notification/sms events for later wiki digestion
+	// (ledger.go). nil disables recording; the judgment path is unaffected
+	// either way.
+	Ledger *Ledger
 }
 
 // Handler accepts phone telemetry and runs proactive judgment turns.
@@ -64,6 +68,7 @@ type Handler struct {
 	resolvePhoneAction func(ActionResult) bool
 	shutdownContext    context.Context
 	logger             *slog.Logger
+	ledger             *Ledger
 }
 
 // New creates a phone-event handler.
@@ -78,6 +83,7 @@ func New(cfg Config) *Handler {
 		resolvePhoneAction: cfg.ResolvePhoneAction,
 		shutdownContext:    shutdownContext,
 		logger:             cfg.Logger,
+		ledger:             cfg.Ledger,
 	}
 }
 
@@ -393,6 +399,15 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 	source = strings.TrimSpace(source)
 	if source == "" {
 		source = "(미상)"
+	}
+	// Ledger BEFORE the tiny gate: the gate is tuned for push-worthiness, not
+	// memory-worthiness — a "routine" KakaoTalk work message is correctly
+	// NO_REPLY yet still belongs in the project log. The noti-digest task
+	// applies the memory-side noise rules on its own cadence. Gmail already
+	// returned above (mail pipeline is that inbox's memory path), and
+	// context/clipboard are intentional user actions, not ambient signal.
+	if notificationLikeEvent(eventType) {
+		s.ledger.Append(eventType, source, text)
 	}
 	command := fmt.Sprintf(phoneEventPromptTmpl,
 		phoneEventKindLabel(eventType), source, text,

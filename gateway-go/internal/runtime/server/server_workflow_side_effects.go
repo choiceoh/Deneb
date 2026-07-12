@@ -36,19 +36,35 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		// instances (DENEB_STATE_DIR=/tmp/...) must not ship archives.
 		s.registerMemoryBackupTask(homeDir)
 
+		// Wiki scout: every 12h, take stale project open questions plus the
+		// operator's WIKI.md brief topics and run one bounded agent turn WITH
+		// web access to chase externally-answerable answers. Findings persist
+		// only via wiki ingest (자료) + 로그.md '질문해결' ops — rep-page body
+		// stays untouched. Production state dir only.
+		scout := s.registerWikiScoutTask(homeDir)
+
 		// Project-wiki deep research: every 6h, pick one 프로젝트 page and run an
 		// agent turn that re-investigates it from Deneb's own internal sources
 		// (mail archive, polaris recall, knowledge graph, contacts, linked wiki
 		// pages) and updates it in place. Internal-only (no web), silent, and
 		// round-robin across project pages. Production state dir only — see
-		// registerWikiResearchTask.
-		s.registerWikiResearchTask(homeDir)
+		// registerWikiResearchTask. The scout handle wires the immediate
+		// post-cycle trigger: a fresh open question goes external right after
+		// the internal pass fails to answer it, not next scheduled cycle.
+		s.registerWikiResearchTask(homeDir, scout)
 
 		// Wiki reviewer: every 2h, review pages created/updated since the last
 		// pass for near-duplicates (skill-reviewer pattern for memory writes) —
 		// deterministic candidate gather → one lightweight JSON verdict →
 		// capped, git-snapshotted merges. Production state dir only.
 		s.registerWikiReviewTask(homeDir)
+
+		// Notification digest: every 12h, consume the phone-notification raw
+		// ledger (phoneevents/ledger.go — KakaoTalk/approval/SMS events the
+		// ephemeral judgment path would otherwise evaporate) into the wiki via
+		// one internal-only agent turn. Alerting stays instant; memory is
+		// batched. Production state dir only.
+		s.registerNotiDigestTask(homeDir)
 
 		s.registerMeetingHarvestWorkflow(homeDir)
 

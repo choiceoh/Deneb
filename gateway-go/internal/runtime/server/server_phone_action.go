@@ -5,13 +5,28 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 )
+
+// phoneEventLedgerInstance lazily creates the shared notification ledger.
+// Both phone-event construction sites (method_registry_late.go RPC bridge and
+// server_http_routing.go loopback) run during single-threaded startup wiring,
+// so plain lazy init is race-free here.
+func (s *Server) phoneEventLedgerInstance() *phoneevents.Ledger {
+	if s.phoneEventLedger == nil {
+		s.phoneEventLedger = phoneevents.NewLedger(
+			filepath.Join(config.ResolveStateDir(), phoneevents.LedgerDirname), s.logger)
+	}
+	return s.phoneEventLedger
+}
 
 // phoneActionConfirmWait bounds how long a phone_write dispatch waits for the
 // app's execution report before degrading to dispatched-unconfirmed

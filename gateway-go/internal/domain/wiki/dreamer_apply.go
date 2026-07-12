@@ -188,7 +188,11 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 		}
 	}
 
-	prompt := buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, diaryContent)
+	// Operator steering (WIKI.md): re-read every cycle so a brief edit takes
+	// effect on the very next dream without a restart (see brief.go).
+	briefSection := WikiBriefSection(LoadWikiBrief(wd.workspaceDir))
+
+	prompt := buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, briefSection, diaryContent)
 
 	resp, err := wd.client.Complete(ctx,
 		wd.llmRequest("You are a wiki knowledge base maintainer. Respond only with a JSON array.", prompt, wd.synthesisBudget()))
@@ -227,7 +231,7 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 	return updates, partial, nil
 }
 
-func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, diaryContent string) string {
+func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, briefSection, diaryContent string) string {
 	return fmt.Sprintf(`당신은 위키 지식베이스 관리자입니다. 아래 일지 내용을 분석하여 위키 페이지를 생성하거나 업데이트할 지시사항을 JSON 배열로 반환하세요.
 
 ## 현재 위키 인덱스
@@ -235,7 +239,7 @@ func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, di
 
 ## 최근 처리 이력
 %s
-%s
+%s%s
 ## 새 일지 내용
 %s
 
@@ -284,7 +288,7 @@ func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, di
 - kinds: **프로젝트 대표페이지 전용** — 2단 고정 체계 "1차" 또는 "1차/2차" (복수 허용): 태양광(발전소 사업 — 시공·개발·인허가 포함; 2차: 토지/루프탑/수상/ESS — ESS 사업도 태양광), 기자재(2차: 모듈/인버터/케이블/기타), 풍력(2차: 육상/해상), 기타(2차: 용역/협력). 2차를 모르면 1차만, 확인되면 세분화. 어휘 밖 값은 무시됨
 - 업데이트가 불필요하면 빈 배열 [] 반환
 
-JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, processedHistory, polarisSection, diaryContent)
+JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, processedHistory, polarisSection, briefSection, diaryContent)
 }
 
 // newPageFromUpdate stamps a fresh Page with the meta carried by a wikiUpdate:

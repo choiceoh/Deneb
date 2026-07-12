@@ -14,6 +14,8 @@ const (
 	PresetImplementer  Preset = "implementer"   // spawn preset: researcher + file mutation + shell
 	PresetVerifier     Preset = "verifier"      // spawn preset: read + build/test execution
 	PresetWikiResearch Preset = "wiki-research" // autonomous wiki refresh: researcher minus web (internal sources only)
+	PresetWikiScout    Preset = "wiki-scout"    // autonomous external scouting: web + wiki only
+	PresetNotiDigest   Preset = "noti-digest"   // autonomous notification digest: wiki only (no external, no personal stores)
 	PresetCoding       Preset = "coding"        // 코드모드 (code: sessions): worktree coding, no 업무 memory/personal-data tools
 	PresetBriefcase    Preset = "briefcase"     // isolated Deneb-Briefcase evaluation world
 )
@@ -109,6 +111,34 @@ var researcherTools = toSet(
 // keeps its write sub-action so the turn can persist the refresh.
 var wikiResearchTools = without(researcherTools, "web")
 
+// wikiScoutTools backs the autonomous external-scouting task
+// (wiki_scout_task.go). Deliberately NARROW, not the researcher surface: the
+// scout's context carries fetched untrusted web pages, and the background
+// SendSync path has no untrusted-origin tool gate — so the personal-memory
+// surfaces (mail_archive/contacts/polaris/graphify) and file reads must not
+// be reachable from the same turn, or a prompt-injected page could steer
+// internal reads and leak them through a later web query. web is the job;
+// wiki stays for the three permitted writes (자료 ingest / 로그 op / 미해결
+// 질문 불릿 제거) and wiki reads, which are the scout's working set anyway.
+var wikiScoutTools = toSet(
+	"web",
+	"wiki",
+	"fetch_tools",
+)
+
+// notiDigestTools backs the notification-digest task (noti_digest_task.go).
+// The batch content is raw third-party app text (KakaoTalk/SMS/e-approval), so
+// the turn must reach NO personal-memory store: mail_archive, contacts,
+// graphify, polaris, and knowledge are all withheld, or a malicious
+// notification could steer the turn into reading private data and persisting
+// it through a wiki write (GateUntrustedTools only blocks exec-class tools).
+// wiki alone covers the whole job — read to find the project, write the 로그
+// op / person update.
+var notiDigestTools = toSet(
+	"wiki",
+	"fetch_tools",
+)
+
 // implementerTools: researcher + file mutation + shell — the "do the work"
 // preset for delegated changes that end in artifacts, not just findings.
 var implementerTools = union(researcherTools, toSet(
@@ -176,6 +206,10 @@ func AllowedTools(preset Preset) map[string]struct{} {
 		return verifierTools
 	case PresetWikiResearch:
 		return wikiResearchTools
+	case PresetWikiScout:
+		return wikiScoutTools
+	case PresetNotiDigest:
+		return notiDigestTools
 	case PresetCoding:
 		return codingTools
 	case PresetBriefcase:
@@ -190,7 +224,7 @@ func IsValid(preset Preset) bool {
 	switch preset {
 	case PresetNone, PresetConversation, PresetBoot, PresetSelfReview,
 		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch,
-		PresetCoding, PresetBriefcase:
+		PresetWikiScout, PresetNotiDigest, PresetCoding, PresetBriefcase:
 		return true
 	default:
 		return false
@@ -202,7 +236,7 @@ func KnownPresets() []Preset {
 	return []Preset{
 		PresetConversation, PresetBoot, PresetSelfReview,
 		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch,
-		PresetCoding, PresetBriefcase,
+		PresetWikiScout, PresetNotiDigest, PresetCoding, PresetBriefcase,
 	}
 }
 

@@ -9,12 +9,14 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
 func testWikiLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
 func TestWikiResearchConstructionAndDisabledRun(t *testing.T) {
-	task := NewResearchTask(nil, nil, nil, nil, filepath.Join(t.TempDir(), "state.json"))
+	task := NewResearchTask(nil, nil, nil, nil, filepath.Join(t.TempDir(), "state.json"), "")
 	if task == nil {
 		t.Fatal("NewResearchTask returned nil")
 	}
@@ -67,6 +69,49 @@ func TestWikiResearchBuildPromptBoundaryMatrix(t *testing.T) {
 				t.Error("background delivery guard missing")
 			}
 		})
+	}
+}
+
+// TestWikiResearchPromptOpenQuestionLifecycle pins the answered/retired audit
+// trail (OpenWiki's Answered/Stale pattern): resolved questions leave a
+// '질문해결' log op with evidence, obsolete ones a '질문폐기' op with a reason,
+// and "couldn't find the answer" is explicitly not a retirement reason.
+func TestWikiResearchPromptOpenQuestionLifecycle(t *testing.T) {
+	task := &wikiResearchTask{}
+	got := task.buildPrompt(&wikiResearchCandidate{path: "프로젝트/a/대표.md"})
+	for _, want := range []string{
+		"질문해결 | ",
+		"질문폐기 | ",
+		"답을 못 찾았다는 이유로는 폐기하지 마세요",
+		"흔적 없이 증발",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("prompt missing open-question lifecycle rule %q", want)
+		}
+	}
+}
+
+// TestWikiResearchPromptOperatorBrief pins the WIKI.md steering injection:
+// present brief content reaches the research prompt; an unset workspace adds
+// no section.
+func TestWikiResearchPromptOperatorBrief(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, wiki.WikiBriefFileName),
+		[]byte("풍력 인허가 진행에 집중"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	task := &wikiResearchTask{workspaceDir: dir}
+	got := task.buildPrompt(&wikiResearchCandidate{path: "프로젝트/a/대표.md"})
+	if !strings.Contains(got, "풍력 인허가 진행에 집중") {
+		t.Error("prompt missing operator brief content")
+	}
+	if !strings.Contains(got, "운영자 위키 지침") {
+		t.Error("prompt missing brief section heading")
+	}
+
+	bare := (&wikiResearchTask{}).buildPrompt(&wikiResearchCandidate{path: "p"})
+	if strings.Contains(bare, "운영자 위키 지침") {
+		t.Error("unset workspace must not inject a brief section")
 	}
 }
 

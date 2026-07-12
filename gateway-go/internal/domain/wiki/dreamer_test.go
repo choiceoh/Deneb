@@ -227,7 +227,7 @@ func TestParseWikiUpdates_NonArrayIsError(t *testing.T) {
 }
 
 func TestBuildWikiSynthesisPromptIncludesCompoundingRules(t *testing.T) {
-	prompt := buildWikiSynthesisPrompt("index", "history", "", "diary")
+	prompt := buildWikiSynthesisPrompt("index", "history", "", "", "diary")
 	for _, want := range []string{
 		"상호링크",
 		"모순/갱신",
@@ -252,7 +252,7 @@ func TestBuildWikiSynthesisPromptIncludesCompoundingRules(t *testing.T) {
 // keep the profile conservative + operator-reviewable. The facet taxonomy
 // (소통/리듬/포맷/성향/컨텍스트) keeps 사용자 pages small and per-axis.
 func TestBuildWikiSynthesisPromptIncludesPreferenceRules(t *testing.T) {
-	prompt := buildWikiSynthesisPrompt("index", "history", "", "diary")
+	prompt := buildWikiSynthesisPrompt("index", "history", "", "", "diary")
 	for _, want := range []string{
 		"working-style 추론", // behavioral abstraction directive present
 		"2회 이상 반복",         // recurrence gate for inferred rules (no single-shot / speculative inference)

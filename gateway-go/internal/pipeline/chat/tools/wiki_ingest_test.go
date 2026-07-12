@@ -62,7 +62,36 @@ func TestMaterialFilename(t *testing.T) {
 
 // TestFetchWebText exercises the stdlib HTML stripper: title, script/style
 // removal, entity decoding, and the non-HTML content-type rejection.
+// withPlainIngestClient swaps the SSRF-safe ingest client for a plain one for
+// the test's duration: httptest binds to 127.0.0.1, which the production SSRF
+// dialer correctly rejects (that rejection is asserted in
+// TestIngestHTTPClientRejectsLoopback).
+func withPlainIngestClient(t *testing.T) {
+	t.Helper()
+	orig := ingestHTTPClient
+	ingestHTTPClient = func() *http.Client { return &http.Client{Timeout: ingestFetchTimeout} }
+	t.Cleanup(func() { ingestHTTPClient = orig })
+}
+
+// TestIngestHTTPClientRejectsLoopback pins the SSRF guard: the production
+// ingest client must refuse to fetch a loopback address, so a prompt-injected
+// page cannot make the gateway ingest internal endpoints.
+func TestIngestHTTPClientRejectsLoopback(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("secret internal data"))
+	}))
+	defer srv.Close()
+	_, _, err := fetchWebText(context.Background(), srv.URL) // 127.0.0.1
+	if err == nil {
+		t.Fatal("ingest fetched a loopback URL — SSRF guard not active")
+	}
+	if !strings.Contains(err.Error(), "SSRF") && !strings.Contains(err.Error(), "private") {
+		t.Errorf("expected SSRF/private rejection, got: %v", err)
+	}
+}
+
 func TestFetchWebText(t *testing.T) {
+	withPlainIngestClient(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/page":
@@ -100,6 +129,7 @@ func TestFetchWebText(t *testing.T) {
 // HTTP server, with the summarizer stubbed: page creation, idempotent dedup,
 // project routing (existing vs unknown project), and the 로그 op-prefix append.
 func TestWikiIngest_EndToEnd(t *testing.T) {
+	withPlainIngestClient(t)
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -179,7 +209,72 @@ func TestWikiIngest_EndToEnd(t *testing.T) {
 
 // TestWikiIngest_SummaryFailOpen: an LLM outage must not lose the capture —
 // the page lands with the excerpt fallback.
+// TestWikiIngest_LegacyFlatRepLinks pins the Codex-review fix: a project whose
+// rep page is still the legacy flat form (프로젝트/<name>.md) must link the
+// ingest into the project (folder 자료 slot + 로그 op + related to the flat
+// rep), not silently fall back to the global bucket.
+func TestWikiIngest_LegacyFlatRepLinks(t *testing.T) {
+	withPlainIngestClient(t)
+	dir := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><head><title>모듈 단가 동향</title></head><body><p>단가 하락세.</p></body></html>`))
+	}))
+	defer srv.Close()
+
+	origSummarize := ingestSummarize
+	t.Cleanup(func() { ingestSummarize = origSummarize })
+	ingestSummarize = func(_ context.Context, _, _ string, _ int, _ ...map[string]any) (string, error) {
+		return "모듈 단가 하락세\n- 하락\n적용: 발주 시점 판단", nil
+	}
+
+	legacyRep := "프로젝트/구프로젝트.md"
+	rep := &wiki.Page{Meta: wiki.Frontmatter{Title: "구프로젝트", Category: "프로젝트"}, Body: "## 현재 상태\n"}
+	if err := store.WritePage(legacyRep, rep); err != nil {
+		t.Fatalf("seed legacy rep: %v", err)
+	}
+
+	out, err := wikiIngest(context.Background(), store, srv.URL, "구프로젝트", "", "", false)
+	if err != nil {
+		t.Fatalf("wikiIngest: %v", err)
+	}
+	if strings.Contains(out, "전역 자료 버킷") {
+		t.Fatalf("legacy flat rep fell back to global bucket: %q", out)
+	}
+	if !strings.Contains(out, "프로젝트/구프로젝트/자료/") {
+		t.Fatalf("material not filed under the project: %q", out)
+	}
+	if !strings.Contains(out, "로그: 프로젝트/구프로젝트/로그.md") {
+		t.Fatalf("ingest log not appended for legacy project: %q", out)
+	}
+
+	// Related must point at the rep form that exists (the flat page), not a
+	// dead folder path.
+	matPath := ""
+	pages, _ := store.ListPages("프로젝트")
+	for _, p := range pages {
+		if strings.HasPrefix(p, "프로젝트/구프로젝트/자료/") {
+			matPath = p
+		}
+	}
+	if matPath == "" {
+		t.Fatal("material page not found")
+	}
+	mat, err := store.ReadPage(matPath)
+	if err != nil {
+		t.Fatalf("read material: %v", err)
+	}
+	if len(mat.Meta.Related) != 1 || mat.Meta.Related[0] != legacyRep {
+		t.Errorf("related=%v, want [%s]", mat.Meta.Related, legacyRep)
+	}
+}
+
 func TestWikiIngest_SummaryFailOpen(t *testing.T) {
+	withPlainIngestClient(t)
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

@@ -30,6 +30,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
@@ -90,6 +91,20 @@ type wikiResearchTask struct {
 	activity    *monitoring.ActivityTracker
 	logger      *slog.Logger
 	statePath   string
+	// workspaceDir locates the operator wiki brief (WIKI.md — wiki.LoadWikiBrief).
+	// Empty disables brief injection.
+	workspaceDir string
+	// postCycleScout, when set, fires after each successful research turn with
+	// the refreshed page path. The wiki-scout task hooks in here so a question
+	// the internal pass just wrote down ("searched everything internal, no
+	// answer") goes external immediately instead of waiting out the scheduled
+	// scout cycle. nil = no immediate trigger.
+	postCycleScout func(ctx context.Context, repPath string)
+	// maintMu is the shared wiki-maintenance lock (scout.MaintenanceLock).
+	// Held around this task's mutating turn so a scheduled scout turn can't
+	// concurrently rewrite the same rep page. Released BEFORE postCycleScout
+	// fires (the scout re-acquires it itself). nil disables the guard.
+	maintMu *sync.Mutex
 }
 
 // ResearchTask refreshes project wiki pages from Deneb's internal sources.
@@ -102,14 +117,28 @@ func NewResearchTask(
 	activity *monitoring.ActivityTracker,
 	logger *slog.Logger,
 	statePath string,
+	workspaceDir string,
 ) *ResearchTask {
 	return &wikiResearchTask{
-		chatHandler: chatHandler,
-		wikiStore:   wikiStore,
-		activity:    activity,
-		logger:      logger,
-		statePath:   statePath,
+		chatHandler:  chatHandler,
+		wikiStore:    wikiStore,
+		activity:     activity,
+		logger:       logger,
+		statePath:    statePath,
+		workspaceDir: workspaceDir,
 	}
+}
+
+// SetPostCycleScout wires the immediate external-scout trigger (see the
+// postCycleScout field). Called once at registration, before the task runs.
+func (t *wikiResearchTask) SetPostCycleScout(fn func(ctx context.Context, repPath string)) {
+	t.postCycleScout = fn
+}
+
+// SetMaintenanceLock shares the wiki-maintenance lock with the scout so their
+// mutating turns can't overlap. Called once at registration.
+func (t *wikiResearchTask) SetMaintenanceLock(mu *sync.Mutex) {
+	t.maintMu = mu
 }
 
 // Name returns the component's stable scheduler name.
@@ -161,6 +190,25 @@ func (t *wikiResearchTask) runOne(ctx context.Context) (string, bool, error) {
 		return "", false, nil
 	}
 
+	// Serialize this mutating turn against the scout (shared lock). Acquired
+	// after target selection so a no-op selection never holds it; released
+	// before the post-cycle scout trigger, which re-acquires it itself.
+	maintHeld := false
+	if t.maintMu != nil {
+		if !t.maintMu.TryLock() {
+			t.logger.Info("wiki-research: skipped, wiki maintenance lock busy")
+			return "", false, nil
+		}
+		maintHeld = true
+	}
+	releaseMaint := func() {
+		if maintHeld {
+			t.maintMu.Unlock()
+			maintHeld = false
+		}
+	}
+	defer releaseMaint() // backstop; the success path releases earlier
+
 	runCtx, cancel := context.WithTimeout(ctx, wikiResearchTurnTimeout)
 	defer cancel()
 
@@ -210,6 +258,17 @@ func (t *wikiResearchTask) runOne(ctx context.Context) (string, bool, error) {
 		"skeleton", target.skeleton,
 		"output_len", len(result.Text),
 	)
+
+	// Release the maintenance lock before triggering the scout — the scout's
+	// runTurn re-acquires the same lock, so holding it here would deadlock.
+	releaseMaint()
+
+	// Hand the refreshed page to the external scout: it no-ops unless the
+	// turn above added open questions dated today. Sequential on purpose —
+	// one background lane, no goroutine fan-out for a rare bounded turn.
+	if t.postCycleScout != nil {
+		t.postCycleScout(ctx, target.path)
+	}
 	return target.path, target.skeleton, nil
 }
 
@@ -307,6 +366,9 @@ func (t *wikiResearchTask) buildPrompt(c *wikiResearchCandidate) string {
 	if c.skeleton {
 		b.WriteString("주의: 이 페이지는 레이아웃 이관으로 만든 빈 스켈레톤입니다. 같은 폴더의 하위 문서(로그·메일분석·상세)와 내부 소스를 종합해 요약·핵심 사실을 처음부터 채우세요.\n")
 	}
+	// Operator steering (WIKI.md): re-read every cycle so a brief edit takes
+	// effect on the next research turn without a restart (see wiki/brief.go).
+	b.WriteString(wiki.WikiBriefSection(wiki.LoadWikiBrief(t.workspaceDir)))
 	b.WriteString(`
 이 페이지의 주제에 대해 내부 소스만으로 심층 리서치를 수행해 페이지를 최신화하세요. 외부 웹 검색은 하지 않습니다 (도구에 없음).
 
@@ -325,7 +387,8 @@ func (t *wikiResearchTask) buildPrompt(c *wikiResearchCandidate) string {
    - kinds(특성): 비어 있으면 2단 체계 "1차/2차"로 기입하세요 — 태양광(발전소 사업 — 시공·개발·인허가 포함; 2차: 토지/루프탑/수상/ESS — ESS 사업도 태양광), 기자재(모듈/인버터/케이블/기타), 풍력(육상/해상), 기타(용역/협력). 2차가 불명확하면 1차만, 1차만 있는 기존 값에 2차가 확인되면 세분화(예: 태양광 → 태양광/루프탑). 명백한 것만(추측 금지)
 4. 대상 페이지의 "## 미해결 질문" 섹션을 관리합니다:
    - 내부 소스를 다 뒤져도 답을 못 찾은, 이 프로젝트 진행에 실제로 중요한 질문이 있으면 "- YYYY-MM-DD 질문" 형식 불릿으로 추가 (섹션 전체 최대 5개, 이미 있는 질문과 중복 금지, 사소한 질문은 넣지 않음)
-   - 이번 리서치에서 답이 확인된 기존 질문은 섹션에서 제거하고 그 답을 본문/로그에 반영
+   - 이번 리서치에서 답이 확인된 기존 질문은 섹션에서 제거하고 답을 본문에 반영하되, 로그.md에 '## [YYYY-MM-DD] 질문해결 | <질문 요지>' 섹션으로 답과 근거([[페이지]] 링크)를 함께 남기세요 — 질문이 흔적 없이 증발하면 안 됩니다
+   - 정황 변화로 더 이상 이 프로젝트 진행에 중요하지 않아진 질문은 섹션에서 제거하고 로그.md에 '## [YYYY-MM-DD] 질문폐기 | <질문 요지>' 섹션으로 폐기 사유 한 줄을 남기세요. 단지 답을 못 찾았다는 이유로는 폐기하지 마세요 — 그런 질문은 그대로 둬서 승격되게 합니다
    - 기존 불릿의 날짜는 절대 갱신하지 마세요 (오래된 날짜가 승격 신호입니다)
 5. 새 사실도 없고 미해결 질문 변경도 없으면 페이지를 건드리지 말고 조용히 종료합니다. 형식만 바꾸는 불필요한 재작성 금지.
 

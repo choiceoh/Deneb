@@ -33,6 +33,7 @@ func (s *Server) buildMux() *http.ServeMux {
 			Relay:           &s.proactiveRelay,
 			ShutdownContext: s.ShutdownCtx(),
 			Logger:          s.logger,
+			Ledger:          s.phoneEventLedgerInstance(),
 			ResolvePhoneAction: func(res phoneevents.ActionResult) bool {
 				if s.phoneActions == nil {
 					return false

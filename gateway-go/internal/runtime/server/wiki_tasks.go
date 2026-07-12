@@ -7,12 +7,16 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
 )
 
 // registerWikiResearchTask wires the project-wiki refresh only for the
-// production state directory.
-func (s *Server) registerWikiResearchTask(homeDir string) {
+// production state directory. scout (nil when disabled) receives an immediate
+// trigger after each research turn so freshly written open questions go
+// external without waiting for the scheduled scout cycle.
+func (s *Server) registerWikiResearchTask(homeDir string, scout *wikiwork.ScoutTask) {
 	if s.chatHandler == nil || s.wikiStore == nil {
 		return
 	}
@@ -24,14 +28,79 @@ func (s *Server) registerWikiResearchTask(homeDir string) {
 	if !ok {
 		return
 	}
-	s.autonomousSvc.RegisterTask(wikiwork.NewResearchTask(
+	task := wikiwork.NewResearchTask(
 		s.chatHandler,
 		s.wikiStore,
 		s.activity,
 		s.logger,
 		filepath.Join(stateDir, wikiwork.ResearchStateFile),
+		configresolve.WorkspaceDir(),
+	)
+	if scout != nil {
+		task.SetPostCycleScout(scout.TriggerForPage)
+		// Share the scout's maintenance lock so a scheduled research turn and
+		// a scheduled scout turn never rewrite the same rep page concurrently.
+		task.SetMaintenanceLock(scout.MaintenanceLock())
+	}
+	s.autonomousSvc.RegisterTask(task)
+	s.logger.Info("wiki-research task registered",
+		"interval", wikiwork.ResearchInterval.String(), "scoutTrigger", scout != nil)
+}
+
+// registerWikiScoutTask wires the external-scouting twin of wiki-research
+// (open questions + WIKI.md brief topics → bounded web turn) only for the
+// production state directory. Returns the task (nil when disabled) so the
+// research task can wire its immediate post-cycle trigger.
+func (s *Server) registerWikiScoutTask(homeDir string) *wikiwork.ScoutTask {
+	if s.chatHandler == nil || s.wikiStore == nil {
+		return nil
+	}
+	if os.Getenv("DENEB_WIKI_SCOUT_DISABLE") == "1" {
+		s.logger.Info("wiki-scout disabled via DENEB_WIKI_SCOUT_DISABLE")
+		return nil
+	}
+	stateDir, ok := s.productionStateDir(homeDir)
+	if !ok {
+		return nil
+	}
+	task := wikiwork.NewScoutTask(
+		s.chatHandler,
+		s.wikiStore,
+		s.activity,
+		s.logger,
+		filepath.Join(stateDir, wikiwork.ScoutStateFile),
+		configresolve.WorkspaceDir(),
+	)
+	s.autonomousSvc.RegisterTask(task)
+	s.logger.Info("wiki-scout task registered", "interval", wikiwork.ScoutInterval.String())
+	return task
+}
+
+// registerNotiDigestTask wires the phone-notification ledger digestion (the
+// memory half of phone sensing — the judgment path stays ephemeral) only for
+// the production state directory.
+func (s *Server) registerNotiDigestTask(homeDir string) {
+	if s.chatHandler == nil || s.wikiStore == nil {
+		return
+	}
+	if os.Getenv("DENEB_NOTI_DIGEST_DISABLE") == "1" {
+		s.logger.Info("noti-digest disabled via DENEB_NOTI_DIGEST_DISABLE")
+		return
+	}
+	stateDir, ok := s.productionStateDir(homeDir)
+	if !ok {
+		return
+	}
+	s.autonomousSvc.RegisterTask(wikiwork.NewNotiDigestTask(
+		s.chatHandler,
+		s.wikiStore,
+		s.activity,
+		s.logger,
+		filepath.Join(stateDir, wikiwork.NotiDigestStateFile),
+		filepath.Join(stateDir, phoneevents.LedgerDirname),
+		configresolve.WorkspaceDir(),
 	))
-	s.logger.Info("wiki-research task registered", "interval", wikiwork.ResearchInterval.String())
+	s.logger.Info("noti-digest task registered", "interval", wikiwork.NotiDigestInterval.String())
 }
 
 // registerWikiReviewTask wires post-write review and deterministic maintenance
