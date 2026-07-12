@@ -10,9 +10,9 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import java.util.Locale
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.koin.java.KoinJavaComponent
+import java.util.Locale
 import kotlin.coroutines.resume
 
 /**
@@ -79,8 +79,7 @@ private fun reverseGeocode(context: Context, lat: Double, lng: Double): String? 
 }.getOrNull()
 
 /** Escapes a string for embedding as a JSON string value (quotes/backslashes/newlines). */
-private fun jsonEscape(s: String): String =
-    s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ").replace("\r", " ")
+private fun jsonEscape(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ").replace("\r", " ")
 
 /**
  * Battery status as a compact JSON object, embedded in the location fix so the
