@@ -1683,7 +1683,21 @@ textarea {
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   text-align: left;
-  white-space: nowrap;
+  vertical-align: top;
+  /* Fit-first: cells wrap instead of hiding the right columns behind a
+     horizontal scroll (the native fit-vs-scroll lesson — narrow chat panels
+     lost the rightmost column entirely). keep-all wraps Korean at 어절
+     boundaries; break-word is the safety valve for spaceless runs (URLs).
+     Genuinely wide tables still scroll via the block-level overflow-x. */
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+/* Auto-numeric columns (no ':---:' marker, every cell digit-led) — digits
+   align vertically down the column. */
+.md-table th.md-num,
+.md-table td.md-num {
+  font-variant-numeric: tabular-nums;
 }
 .md-table th:last-child,
 .md-table td:last-child {

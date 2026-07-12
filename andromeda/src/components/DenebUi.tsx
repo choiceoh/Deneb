@@ -458,12 +458,13 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
           return cells.length > 0 && cells.every((c) => /^[-−]?\d/.test(c.replace(/^[*_~`\s]+/, "")));
         });
         const align = (i: number): React.CSSProperties | undefined => (numeric[i] ? { textAlign: "right" } : undefined);
+        const numClass = (i: number): string | undefined => (numeric[i] ? "md-num" : undefined);
         return (
           <table key={key} className="md-table">
             <thead>
               <tr>
                 {headers.map((h, i) => (
-                  <th key={i} style={align(i)}>
+                  <th key={i} className={numClass(i)} style={align(i)}>
                     {renderInline(String(h), `${key}.h${i}`)}
                   </th>
                 ))}
@@ -473,7 +474,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
               {rows.map((r, ri) => (
                 <tr key={ri}>
                   {(Array.isArray(r) ? r : []).map((c, ci) => (
-                    <td key={ci} style={align(ci)}>
+                    <td key={ci} className={numClass(ci)} style={align(ci)}>
                       {renderInline(String(c), `${key}.r${ri}.${ci}`)}
                     </td>
                   ))}

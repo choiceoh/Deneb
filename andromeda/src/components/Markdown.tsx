@@ -15,9 +15,9 @@
 // KaTeX's own span/MathML markup is produced. We render our own GFM rather than
 // pulling react-markdown + remark (and its build-script supply-chain gate); KaTeX
 // is the single math dependency.
-import { type CSSProperties, type ReactNode, useState } from "react";
+import { type CSSProperties, type ReactNode, useMemo, useState } from "react";
 import katex from "katex";
-import { type Align, type Block, type ListItem, parseBlocks } from "@/markdown/parse";
+import { type Block, type ListItem, parseBlocks } from "@/markdown/parse";
 import { Icon } from "./Icon";
 
 // Only these schemes render as live links/images; anything else stays plain text
@@ -222,37 +222,53 @@ function renderBlock(b: Block, key: string): ReactNode {
         />
       );
     case "table":
-      return (
-        <table key={key} className="md-table">
-          <thead>
-            <tr>
-              {b.header.map((h, j) => (
-                <th key={j} style={alignStyle(b.align[j])}>
-                  {renderInline(h, `${key}-h${j}`)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {b.rows.map((row, r) => (
-              <tr key={r}>
-                {row.map((c, j) => (
-                  <td key={j} style={alignStyle(b.align[j])}>
-                    {renderInline(c, `${key}-${r}-${j}`)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      );
+      return <MdTable key={key} block={b} blockKey={key} />;
     case "para":
       return <p key={key}>{renderInline(b.text, key)}</p>;
   }
 }
 
-function alignStyle(a: Align): CSSProperties | undefined {
-  return a ? { textAlign: a } : undefined;
+// Markdown table with auto-numeric columns: models rarely write ':---:'
+// alignment markers, so a marker-less column whose every cell starts with a
+// digit right-aligns with tabular figures — explicit markers always win
+// (native MarkdownTables parity, 2026-07-12 production-corpus lesson).
+function MdTable({ block, blockKey }: { block: Extract<Block, { type: "table" }>; blockKey: string }) {
+  const numeric = useMemo(
+    () =>
+      block.header.map((_, j) => {
+        if (block.align[j]) return false;
+        const cells = block.rows.map((r) => (r[j] ?? "").trim()).filter(Boolean);
+        return cells.length > 0 && cells.every((c) => /^[-−]?\d/.test(c.replace(/^[*_~`\s]+/, "")));
+      }),
+    [block],
+  );
+  const cellStyle = (j: number): CSSProperties | undefined =>
+    block.align[j] ? { textAlign: block.align[j] } : numeric[j] ? { textAlign: "right" } : undefined;
+  const cellClass = (j: number): string | undefined => (numeric[j] ? "md-num" : undefined);
+  return (
+    <table className="md-table">
+      <thead>
+        <tr>
+          {block.header.map((h, j) => (
+            <th key={j} className={cellClass(j)} style={cellStyle(j)}>
+              {renderInline(h, `${blockKey}-h${j}`)}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {block.rows.map((row, r) => (
+          <tr key={r}>
+            {row.map((c, j) => (
+              <td key={j} className={cellClass(j)} style={cellStyle(j)}>
+                {renderInline(c, `${blockKey}-${r}-${j}`)}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }
 
 // Render Markdown text as safe React nodes. Plain text with no Markdown renders
