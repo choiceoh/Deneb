@@ -592,6 +592,15 @@ func (t *MetaEvolutionTask) assembleEvidence(ctx context.Context, epoch string) 
 	if epoch == metaEpochEvaluator {
 		b.WriteString(t.assembleJudgeAccuracyEvidence())
 	}
+	if spots := t.Tracker.LabelerBlindSpots(evolutionHealthWindow); len(spots) > 0 {
+		// Blind Curator (2607.07436): confirmed-clean skills that fail their own
+		// workout cases = usage-labeler false-pass suspects. ADVISORY — grounds
+		// the producer on label-fidelity risk; no gate reads it.
+		b.WriteString("\n## 라벨러 사각 의심 (자문 — 게이트 아님; 실사용 라벨은 성공인데 자체 held-out 케이스는 실패)\n")
+		for _, s := range spots {
+			fmt.Fprintf(&b, "- %s: 워크아웃 실패 케이스 %d건 (confirm은 통과)\n", s.Skill, s.FailedCases)
+		}
+	}
 	if t.RuntimeHealth != nil {
 		if line := strings.TrimSpace(t.RuntimeHealth(ctx)); line != "" {
 			b.WriteString("\n## 런타임 건강 (자문 — 게이트 아님, P5-5)\n")
