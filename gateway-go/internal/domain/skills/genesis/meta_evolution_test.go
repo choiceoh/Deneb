@@ -480,3 +480,34 @@ func TestMetaEvolution_RuntimeHealthEvidence(t *testing.T) {
 		}
 	}
 }
+
+// P5-5: the codebase-health advisory block appears when QualityBench is wired
+// and returns non-empty; absent when nil or empty. Both epochs carry it.
+func TestMetaEvolution_QualityBenchEvidence(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Nil closure → absent.
+	nilTask := &MetaEvolutionTask{Tracker: tr}
+	if ev := nilTask.assembleEvidence(context.Background(), metaEpochProducer); strings.Contains(ev, "코드베이스 건강") {
+		t.Fatalf("nil QualityBench produced a block")
+	}
+	// Non-empty → present in both epochs.
+	wired := &MetaEvolutionTask{
+		Tracker: tr,
+		QualityBench: func(context.Context) string {
+			return "- 종합 82.7, 약한 기둥: change-locality 55"
+		},
+	}
+	for _, epoch := range []string{metaEpochProducer, metaEpochEvaluator} {
+		ev := wired.assembleEvidence(context.Background(), epoch)
+		if !strings.Contains(ev, "코드베이스 건강") {
+			t.Fatalf("%s epoch lacks quality-bench block", epoch)
+		}
+		if !strings.Contains(ev, "82.7") {
+			t.Fatalf("%s epoch lost closure content", epoch)
+		}
+	}
+}

@@ -462,6 +462,10 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// error/timeout/tool-error rates). Sourced from the shared agentlog
 			// writer; no gate reads it.
 			RuntimeHealth: s.metaRuntimeHealthEvidence,
+			// RSI P5-5: advisory codebase-health evidence — grounds the producer's
+			// prose on the accepted structural quality state (overall score,
+			// weakest pillars). Sourced from the checked-in health-v2 baseline.
+			QualityBench: s.metaQualityBenchEvidence,
 		})
 		s.autonomousSvc.RegisterTask(&genesis.SkillCuratorTask{
 			Tracker: s.genesisTracker,

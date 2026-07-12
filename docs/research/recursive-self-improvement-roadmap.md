@@ -276,8 +276,21 @@ Five workstreams, in priority order:
    `RuntimeHealth` closure — no new persistence (reads the existing
    `agentlog.Writer.AggregateByModel`), no leaf-package break. The latency
    signal ("latency #1" at proposal time) now grounds the producer's prose.
-   Remaining: quality-bench trends live in `scripts/audit/` (Python) with no
-   Go reader and no time-series store — a cross-package slice (P5-5 next).
+
+   **Third slice LANDED (codebase-health advisory evidence).** The accepted
+   health-v2 baseline (overall score, weakest pillars, accepted finding count)
+   flows into the meta-evidence block via a `QualityBench` closure reading the
+   checked-in baseline JSON. No live Python bench run in-process (leaf-package
+   boundary preserved); the baseline IS the contract surface. The producer
+   now sees "codebase at 82.7, weakest: change-locality 55, responsibility
+   52.6" as standing context.
+
+   All three operator-visible signals (feed-card, runtime-health,
+   codebase-health) now ground the meta producer's prose. A live delta-vs-
+   baseline (current run − baseline) for codebase-health would need either a
+   Python-in-process bench (forbidden by the leaf boundary) or a cached
+   snapshot written by an external script — a follow-up if the accepted-state
+   advisory proves useful.
 
 **Graduation ladder.** Autonomy expands on track record, never on calendar.
 Staged locks and the evidence that flips them (thresholds are proposals,
