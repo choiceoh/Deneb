@@ -554,6 +554,10 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 				Evolver: s.genesisEvolver,
 				Tracker: s.genesisTracker,
 				Logger:  s.logger,
+				// RSI P5-1 slice-2: widen demand mining beyond tracker-local
+				// evidence — the producer sees the operator's active work
+				// (feed items) and wiki environment (counterparty domains).
+				EnvDigest: s.curriculumEnvDigest,
 			})
 		}
 		if replayExecutorEnabled() && isProdState {
