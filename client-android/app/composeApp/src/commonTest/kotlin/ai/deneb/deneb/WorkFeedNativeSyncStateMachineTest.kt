@@ -598,15 +598,29 @@ class WorkFeedNativeSyncStateMachineTest {
     }
 
     @Test
-    fun maliciousEndlessPaginationIsCappedAtFourPages() = runTest {
+    fun backlogBeyondFourPagesDrainsFullyInOneResume() = runTest {
+        // Regression guard for the old 4-page cap (max 400 events): a long
+        // background stretch must catch up in ONE resume, not silently stop.
         val f = gatewayClientFixture()
         f.prepareSuccessfulSync()
-        (1L..4L).forEach { cursor -> f.transport.enqueueRpc(syncPayload(cursor, hasMore = true)) }
+        (1L..6L).forEach { cursor -> f.transport.enqueueRpc(syncPayload(cursor, hasMore = cursor < 6L)) }
 
         assertTrue(f.client.syncNativeState())
 
-        assertEquals(4, f.transport.requests.size)
-        assertEquals(4L, f.client.nativeSyncCursor)
+        assertEquals(6, f.transport.requests.size)
+        assertEquals(6L, f.client.nativeSyncCursor)
+    }
+
+    @Test
+    fun maliciousEndlessPaginationIsCappedAtFortyPages() = runTest {
+        val f = gatewayClientFixture()
+        f.prepareSuccessfulSync()
+        (1L..45L).forEach { cursor -> f.transport.enqueueRpc(syncPayload(cursor, hasMore = true)) }
+
+        assertTrue(f.client.syncNativeState())
+
+        assertEquals(40, f.transport.requests.size)
+        assertEquals(40L, f.client.nativeSyncCursor)
     }
 
     @Test

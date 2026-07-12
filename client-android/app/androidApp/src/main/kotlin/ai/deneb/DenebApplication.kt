@@ -1,7 +1,9 @@
 package ai.deneb
 
+import ai.deneb.data.DataRepository
 import ai.deneb.data.TaskScheduler
 import ai.deneb.deneb.DENEB_VERSION_CODE
+import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.sandbox.sandboxModule
 import android.app.Application
 import org.koin.android.ext.android.inject
@@ -12,6 +14,7 @@ class DenebApplication : Application() {
 
     private val taskScheduler: TaskScheduler by inject()
     private val daemonController: DaemonController by inject()
+    private val repository: DataRepository by inject()
 
     override fun onCreate() {
         super.onCreate()
@@ -27,8 +30,15 @@ class DenebApplication : Application() {
         // Battery: the policy owns the app-foreground observer (formerly inline
         // here — it tracks foreground state so the scheduler only raises a tray
         // notification when the in-app banner isn't visible) PLUS the connectivity
-        // gate (M2) and the flag-gated background-Doze teardown (M1/M4). See
-        // BackgroundConnectionPolicy.
-        BackgroundConnectionPolicy(this, taskScheduler, daemonController).install()
+        // gate (M2) and the flag-gated background-Doze teardown (M1/M4) with the
+        // active-chat-stream hold. See BackgroundConnectionPolicy.
+        val gatewayClient = repository as? DenebGatewayClient
+        BackgroundConnectionPolicy(
+            this,
+            taskScheduler,
+            daemonController,
+            gatewayClient?.chatTurnActive,
+            gatewayClient?.fcmDeliveryReady,
+        ).install()
     }
 }

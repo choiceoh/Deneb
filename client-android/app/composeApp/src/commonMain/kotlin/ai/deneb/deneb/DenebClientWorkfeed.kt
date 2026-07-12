@@ -111,7 +111,13 @@ suspend fun DenebGatewayClient.syncNativeState(): Boolean {
         var cursor = nativeSyncCursor
         var keepGoing = true
         var pages = 0
-        while (keepGoing && pages < 4) {
+        // Drain until the server reports no more (hasMore==false). The page cap is
+        // a runaway guard only, sized above the server's retention window (~3,000
+        // events, nativesync/store.go) so a long background stretch catches up in
+        // ONE resume instead of silently stopping at 400 events (the old cap of 4
+        // pages — M1's known loss window, battery doc §3.1). The non-advancing
+        // cursor check below still breaks any pathological server loop early.
+        while (keepGoing && pages < 40) {
             val payload = callRpc<NativeSyncPayload>(
                 "miniapp.sync.pull",
                 buildJsonObject {

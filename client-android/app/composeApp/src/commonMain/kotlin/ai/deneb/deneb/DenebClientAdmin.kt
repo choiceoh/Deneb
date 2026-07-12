@@ -36,6 +36,7 @@ import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -473,17 +474,28 @@ suspend fun DenebGatewayClient.checkUpdate(): UpdateInfo? {
  * Doze). Best-effort and idempotent — the gateway dedups by token — so it is
  * cheap to call on every foreground. Returns true on success. Android-only
  * caller, but the RPC itself is platform-agnostic so this lives in commonMain.
+ *
+ * A definitive response also refreshes [DenebGatewayClient.fcmDeliveryReady]
+ * from the gateway's `delivery` field (false on older gateways that omit it —
+ * conservative: unknown delivery keeps background SSE alive). No response
+ * (offline / RPC error) leaves the last persisted answer untouched.
  */
 suspend fun DenebGatewayClient.registerPushToken(token: String, platform: String): Boolean {
     if (token.isBlank()) return false
-    return rpcWrite(
+    val payload = callRpc<PushRegisterPayload>(
         "miniapp.push.register",
         buildJsonObject {
             put("token", token)
             put("platform", platform)
         },
-    ) == null
+    ) ?: return false
+    _fcmDeliveryReady.value = payload.delivery
+    appSettings.settings.putBoolean(DenebGatewayClient.KEY_FCM_DELIVERY, payload.delivery)
+    return payload.ok
 }
+
+@Serializable
+internal data class PushRegisterPayload(val ok: Boolean = false, val delivery: Boolean = false)
 
 /** Removes a device token (e.g. on sign-out / token invalidation). */
 suspend fun DenebGatewayClient.unregisterPushToken(token: String): Boolean {

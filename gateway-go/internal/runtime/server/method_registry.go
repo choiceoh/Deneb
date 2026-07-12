@@ -438,8 +438,12 @@ func (s *Server) registerEarlyMethods(hub *rpcutil.GatewayHub, denebDir string) 
 		// Native-client FCM device-token registration. Always available (tokens
 		// accumulate even before the FCM sender is configured); the proactive
 		// fallback that consumes them is wired separately via s.pushNotifier.
+		// DeliveryEnabled tells the client whether that sender actually exists,
+		// so it can keep background SSE alive instead of trusting a dormant FCM
+		// handoff (battery doc §3.1 acked-token/server-credential gate).
 		handlerminiapp.PushMethods(handlerminiapp.PushDeps{
-			Store: s.pushTokenStore,
+			Store:           s.pushTokenStore,
+			DeliveryEnabled: func() bool { return s.pushNotifier != nil },
 		}),
 		// Wormhole router status + feature toggles (config path / URL resolved
 		// from env, defaulting to the on-host single-machine layout).
