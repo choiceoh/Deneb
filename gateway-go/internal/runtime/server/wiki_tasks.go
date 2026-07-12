@@ -38,6 +38,9 @@ func (s *Server) registerWikiResearchTask(homeDir string, scout *wikiwork.ScoutT
 	)
 	if scout != nil {
 		task.SetPostCycleScout(scout.TriggerForPage)
+		// Share the scout's maintenance lock so a scheduled research turn and
+		// a scheduled scout turn never rewrite the same rep page concurrently.
+		task.SetMaintenanceLock(scout.MaintenanceLock())
 	}
 	s.autonomousSvc.RegisterTask(task)
 	s.logger.Info("wiki-research task registered",

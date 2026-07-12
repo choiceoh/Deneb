@@ -30,6 +30,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
@@ -99,6 +100,11 @@ type wikiResearchTask struct {
 	// answer") goes external immediately instead of waiting out the scheduled
 	// scout cycle. nil = no immediate trigger.
 	postCycleScout func(ctx context.Context, repPath string)
+	// maintMu is the shared wiki-maintenance lock (scout.MaintenanceLock).
+	// Held around this task's mutating turn so a scheduled scout turn can't
+	// concurrently rewrite the same rep page. Released BEFORE postCycleScout
+	// fires (the scout re-acquires it itself). nil disables the guard.
+	maintMu *sync.Mutex
 }
 
 // ResearchTask refreshes project wiki pages from Deneb's internal sources.
@@ -127,6 +133,12 @@ func NewResearchTask(
 // postCycleScout field). Called once at registration, before the task runs.
 func (t *wikiResearchTask) SetPostCycleScout(fn func(ctx context.Context, repPath string)) {
 	t.postCycleScout = fn
+}
+
+// SetMaintenanceLock shares the wiki-maintenance lock with the scout so their
+// mutating turns can't overlap. Called once at registration.
+func (t *wikiResearchTask) SetMaintenanceLock(mu *sync.Mutex) {
+	t.maintMu = mu
 }
 
 // Name returns the component's stable scheduler name.
@@ -178,6 +190,25 @@ func (t *wikiResearchTask) runOne(ctx context.Context) (string, bool, error) {
 		return "", false, nil
 	}
 
+	// Serialize this mutating turn against the scout (shared lock). Acquired
+	// after target selection so a no-op selection never holds it; released
+	// before the post-cycle scout trigger, which re-acquires it itself.
+	maintHeld := false
+	if t.maintMu != nil {
+		if !t.maintMu.TryLock() {
+			t.logger.Info("wiki-research: skipped, wiki maintenance lock busy")
+			return "", false, nil
+		}
+		maintHeld = true
+	}
+	releaseMaint := func() {
+		if maintHeld {
+			t.maintMu.Unlock()
+			maintHeld = false
+		}
+	}
+	defer releaseMaint() // backstop; the success path releases earlier
+
 	runCtx, cancel := context.WithTimeout(ctx, wikiResearchTurnTimeout)
 	defer cancel()
 
@@ -227,6 +258,10 @@ func (t *wikiResearchTask) runOne(ctx context.Context) (string, bool, error) {
 		"skeleton", target.skeleton,
 		"output_len", len(result.Text),
 	)
+
+	// Release the maintenance lock before triggering the scout — the scout's
+	// runTurn re-acquires the same lock, so holding it here would deadlock.
+	releaseMaint()
 
 	// Hand the refreshed page to the external scout: it no-ops unless the
 	// turn above added open questions dated today. Sequential on purpose —

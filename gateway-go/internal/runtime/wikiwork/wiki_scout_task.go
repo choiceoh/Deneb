@@ -93,12 +93,13 @@ type wikiScoutTask struct {
 	// workspaceDir locates the operator wiki brief (WIKI.md). The brief both
 	// steers question triage and supplies standing watch topics.
 	workspaceDir string
-	// turnMu serializes scout turns: the scheduled cycle and the
-	// post-research trigger run on different goroutines, and two concurrent
-	// turns rewriting the same rep page from stale reads could reintroduce a
-	// question bullet the other just removed. Nonblocking — the loser skips
-	// (its questions stay open and come back around).
-	turnMu sync.Mutex
+	// maintMu serializes wiki-mutating background maintenance turns. It guards
+	// scout-vs-scout (scheduled cycle vs post-research trigger) AND, because
+	// the SAME lock is shared with the wiki-research task, scout-vs-research:
+	// two concurrent turns reading then full-body-rewriting the same rep page
+	// would clobber each other's 미해결 질문 edits. Nonblocking (TryLock) — the
+	// loser skips its cycle; the work comes back around. Always non-nil.
+	maintMu *sync.Mutex
 }
 
 // ScoutTask chases externally-answerable wiki open questions on the web.
@@ -120,8 +121,13 @@ func NewScoutTask(
 		logger:       logger,
 		statePath:    statePath,
 		workspaceDir: workspaceDir,
+		maintMu:      &sync.Mutex{},
 	}
 }
+
+// MaintenanceLock returns the shared wiki-maintenance lock so the wiki-research
+// task can serialize its writes against the scout's (SetMaintenanceLock).
+func (t *wikiScoutTask) MaintenanceLock() *sync.Mutex { return t.maintMu }
 
 // Name returns the component's stable scheduler name.
 func (t *wikiScoutTask) Name() string { return "wiki-scout" }
@@ -188,11 +194,11 @@ func (t *wikiScoutTask) runTurn(
 	now time.Time,
 	reason string,
 ) error {
-	if !t.turnMu.TryLock() {
-		t.logger.Info("wiki-scout: turn already running, skipping", "reason", reason)
+	if !t.maintMu.TryLock() {
+		t.logger.Info("wiki-scout: skipped, wiki maintenance lock busy", "reason", reason)
 		return nil
 	}
-	defer t.turnMu.Unlock()
+	defer t.maintMu.Unlock()
 
 	// Defer to the user: the scout runs the main model and external web
 	// calls. A skipped turn costs nothing — the question stays open.

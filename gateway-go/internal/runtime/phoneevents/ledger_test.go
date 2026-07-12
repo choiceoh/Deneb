@@ -93,6 +93,53 @@ func TestLedgerRedactsAndBounds(t *testing.T) {
 	}
 }
 
+func TestLedgerSkipsOTP(t *testing.T) {
+	dir := t.TempDir()
+	l := NewLedger(dir, testLedgerLogger())
+	// OTP / security-code notifications must not persist to the raw ledger.
+	l.Append("sms", "네이버", "[네이버] 인증번호 [382910] 를 입력하세요")
+	l.Append("notification", "은행", "verification code: 4821")
+	l.Append("sms", "OTP", "귀하의 OTP는 993birds ... 코드 55213 입니다")
+	// A normal work message with a number that is NOT an OTP stays.
+	l.Append("notification", "카카오톡/업무방", "발주 2건 다음 주로 연기")
+
+	tail, err := ReadLedgerTail(dir, nil, 100_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tail.Entries) != 1 {
+		t.Fatalf("entries=%d, want 1 (OTPs skipped)", len(tail.Entries))
+	}
+	if !strings.Contains(tail.Entries[0].Text, "발주") {
+		t.Errorf("wrong entry survived: %q", tail.Entries[0].Text)
+	}
+}
+
+func TestIsSensitiveNotification(t *testing.T) {
+	sensitive := []string{
+		"인증번호 123456",
+		"인증 번호 [4821]",
+		"verification code 8891",
+		"your one-time passcode is 4821",
+		"보안코드 55213 입니다",
+	}
+	for _, s := range sensitive {
+		if !isSensitiveNotification(s) {
+			t.Errorf("expected sensitive: %q", s)
+		}
+	}
+	benign := []string{
+		"발주 2건 다음 주로 연기",              // work message, no OTP keyword
+		"인증번호를 재발급 받으려면 앱을 여세요", // keyword but no code
+		"회의 시간 3시로 변경",                 // number but no keyword
+	}
+	for _, s := range benign {
+		if isSensitiveNotification(s) {
+			t.Errorf("expected benign: %q", s)
+		}
+	}
+}
+
 func TestLedgerPruneOldFiles(t *testing.T) {
 	dir := t.TempDir()
 	old := time.Now().AddDate(0, 0, -(ledgerRetentionDays + 5)).Format("2006-01-02")

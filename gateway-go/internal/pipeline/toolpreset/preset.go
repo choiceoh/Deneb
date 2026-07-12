@@ -14,7 +14,8 @@ const (
 	PresetImplementer  Preset = "implementer"   // spawn preset: researcher + file mutation + shell
 	PresetVerifier     Preset = "verifier"      // spawn preset: read + build/test execution
 	PresetWikiResearch Preset = "wiki-research" // autonomous wiki refresh: researcher minus web (internal sources only)
-	PresetWikiScout    Preset = "wiki-scout"    // autonomous external scouting: researcher surface incl. web
+	PresetWikiScout    Preset = "wiki-scout"    // autonomous external scouting: web + wiki only
+	PresetNotiDigest   Preset = "noti-digest"   // autonomous notification digest: wiki only (no external, no personal stores)
 	PresetCoding       Preset = "coding"        // 코드모드 (code: sessions): worktree coding, no 업무 memory/personal-data tools
 	PresetBriefcase    Preset = "briefcase"     // isolated Deneb-Briefcase evaluation world
 )
@@ -125,6 +126,19 @@ var wikiScoutTools = toSet(
 	"fetch_tools",
 )
 
+// notiDigestTools backs the notification-digest task (noti_digest_task.go).
+// The batch content is raw third-party app text (KakaoTalk/SMS/e-approval), so
+// the turn must reach NO personal-memory store: mail_archive, contacts,
+// graphify, polaris, and knowledge are all withheld, or a malicious
+// notification could steer the turn into reading private data and persisting
+// it through a wiki write (GateUntrustedTools only blocks exec-class tools).
+// wiki alone covers the whole job — read to find the project, write the 로그
+// op / person update.
+var notiDigestTools = toSet(
+	"wiki",
+	"fetch_tools",
+)
+
 // implementerTools: researcher + file mutation + shell — the "do the work"
 // preset for delegated changes that end in artifacts, not just findings.
 var implementerTools = union(researcherTools, toSet(
@@ -194,6 +208,8 @@ func AllowedTools(preset Preset) map[string]struct{} {
 		return wikiResearchTools
 	case PresetWikiScout:
 		return wikiScoutTools
+	case PresetNotiDigest:
+		return notiDigestTools
 	case PresetCoding:
 		return codingTools
 	case PresetBriefcase:
@@ -208,7 +224,7 @@ func IsValid(preset Preset) bool {
 	switch preset {
 	case PresetNone, PresetConversation, PresetBoot, PresetSelfReview,
 		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch,
-		PresetWikiScout, PresetCoding, PresetBriefcase:
+		PresetWikiScout, PresetNotiDigest, PresetCoding, PresetBriefcase:
 		return true
 	default:
 		return false
@@ -220,7 +236,7 @@ func KnownPresets() []Preset {
 	return []Preset{
 		PresetConversation, PresetBoot, PresetSelfReview,
 		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch,
-		PresetWikiScout, PresetCoding, PresetBriefcase,
+		PresetWikiScout, PresetNotiDigest, PresetCoding, PresetBriefcase,
 	}
 }
 

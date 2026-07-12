@@ -25,7 +25,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
-	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 const (
@@ -304,6 +303,25 @@ var (
 	spaceRunsRe = regexp.MustCompile(`[ \t]{2,}`)
 )
 
+// ingestHTTPClient builds the ingest fetch client with an SSRF-safe dialer:
+// wiki ingest accepts an arbitrary http(s) URL (the wiki-scout runs it over
+// attacker-influenced web text), so a prompt-injected page could otherwise
+// ask the gateway to fetch loopback/LAN/metadata endpoints and persist the
+// response as a 자료 page. media.SSRFSafeDialer resolves and rejects private/
+// link-local IPs at dial time, which also covers redirect targets and DNS
+// rebinding (each hop re-dials). Redirects are still bounded by the stdlib
+// default (10) and every hop passes through the same dialer.
+//
+// Indirected so tests can substitute a plain client (httptest binds to
+// 127.0.0.1, which the SSRF dialer correctly rejects). The loopback rejection
+// itself is asserted directly against the production factory in a test.
+var ingestHTTPClient = func() *http.Client {
+	return &http.Client{
+		Timeout:   ingestFetchTimeout,
+		Transport: &http.Transport{DialContext: media.SSRFSafeDialer()},
+	}
+}
+
 // fetchWebText GETs the URL (bounded) and reduces HTML to plain text with a
 // stdlib-only stripper — good enough for capture+FTS; not a readability engine
 // (tools/ must not import chat/web, and x/net isn't a module dependency).
@@ -316,7 +334,7 @@ func fetchWebText(ctx context.Context, target string) (title, text string, err e
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Deneb-Wiki-Ingest/1.0)")
 	req.Header.Set("Accept-Language", "ko, en;q=0.8")
-	resp, err := httputil.NewClient(ingestFetchTimeout).Do(req)
+	resp, err := ingestHTTPClient().Do(req)
 	if err != nil {
 		return "", "", err
 	}

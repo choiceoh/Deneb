@@ -161,9 +161,18 @@ globs:
   질문 **불릿 제거만**. 대표페이지 본문(현재 상태 등) 통합은 내부 wiki-research 몫 — 스카우트가
   본문을 만지면 안 된다. wiki-research가 웹을 뺀 이유(큐레이션 오염)는 이 분리로 해소된다.
 - 게이트: 프로덕션 상태 디렉토리 전용, `DENEB_WIKI_SCOUT_DISABLE=1`로 비활성, 사용자 활동 중 스킵.
-  상태는 `wiki-scout-state.json`(질문별 마지막 시도 시각, 60일 프룬). 턴은 `turnMu`(TryLock)로
-  직렬화 — 스케줄 사이클과 post-research 트리거가 같은 대표페이지를 동시에 고쳐 쓰지 못한다.
-  위키 날짜 비교·표기는 `dentime.Now()`(KST 정본 시계) — 서버 로컬 시계 금지.
+  상태는 `wiki-scout-state.json`(질문별 마지막 시도 시각, 60일 프룬). 위키 날짜 비교·표기는
+  `dentime.Now()`(KST 정본 시계) — 서버 로컬 시계 금지.
+- **공유 유지보수 락**(`scout.MaintenanceLock()` → `research.SetMaintenanceLock`): scout와 research가
+  같은 `*sync.Mutex`를 TryLock으로 잡아 **scout-vs-scout + scout-vs-research** 쓰기 경합을 막는다
+  (전이 락이 아니면 두 턴이 같은 대표페이지를 stale read 후 full-body 재작성해 서로의 미해결 질문
+  편집을 덮어씀). research는 자기 턴 앞뒤로 락을 잡고, post-research 트리거 **전에 반드시 해제**
+  (scout가 같은 락을 재획득 — 안 그러면 데드락). 락을 못 잡은 사이클은 스킵(다음 회차 복귀).
+- **도구 표면 좁힘**(`PresetWikiScout` = `web`·`wiki`·`fetch_tools`만): 신뢰 불가 웹 페이지가 컨텍스트에
+  실리므로 개인 메모리 도구 배제. `wiki(action="ingest")` 페치는 **SSRF-safe 다이얼러**
+  (`media.SSRFSafeDialer` — loopback/LAN/link-local 거부, 리다이렉트·DNS 리바인딩 포함)로만.
+- **주입 방어 계층**: 요약 프롬프트 가드 + 저장 원문 발췌/fail-open 블록쿼트 펜싱 + `GateUntrustedTools`
+  (exec류 차단, wiki 쓰기는 허용) — scout·noti-digest 둘 다 무장.
 
 ## 노티 다이제스트 (휴대폰 알림 → 기억)
 
@@ -171,10 +180,14 @@ globs:
   무관하게 notification/sms 이벤트를 redact+바운드 후 `<state>/phone-events/YYYY-MM-DD.jsonl`에
   append. tiny 게이트 **앞**에서 기록 — 게이트는 푸시 가치 기준이지 기억 가치 기준이 아니다
   (카톡 "발주 밀림"은 NO_REPLY가 정답이지만 프로젝트 로그감). 보존 30일 자동 프룬.
+  **OTP·보안코드 제외**: 인증번호류 키워드+짧은 숫자코드가 함께 있으면 레저에 적재하지 않음
+  (append가 tiny 게이트 앞이라 온디바이스 블록리스트를 통과한 OTP가 raw로 남는 걸 방지).
 - **noti-digest 태스크** (`runtime/wikiwork/noti_digest_task.go`, 12h): 미소비 레저 테일(런 단위
-  16K룬 예산, 라인 경계 오프셋 커밋)을 **내부 전용 프리셋**(`PresetWikiResearch` — 웹 없음: 제3자
-  텍스트가 유출 채널을 갖지 못하게)의 턴 1회로 위키에 소화. 쓰기 표면: 프로젝트 로그.md op append +
-  기존 인물 페이지 update만 — 새 페이지·대표페이지 본문 수정 금지. 광고·OTP·잡담은 버림.
+  16K룬 예산, 라인 경계 오프셋 커밋)을 **wiki 전용 프리셋**(`PresetNotiDigest` = `wiki`·`fetch_tools`만
+  — 웹 없음 + 개인 메모리 스토어 없음: 악성 알림이 사적 데이터를 읽어 wiki 쓰기로 영속화하는 경로
+  차단)의 턴 1회로 위키에 소화. 알림 텍스트는 프롬프트 조립 전 **라인 펜싱**(delimiter 무력화·개행
+  평탄화)으로 데이터 블록 탈출 방지. 쓰기 표면: 프로젝트 로그.md op append + 기존 인물 페이지
+  update만 — 새 페이지·대표페이지 본문 수정 금지. 광고·OTP·잡담은 버림.
 - 오프셋은 **성공한 턴 뒤에만** 전진(일시 장애로 내용 유실 금지), 연속 3회 실패 시 강제 전진(독배치가
   파이프라인을 못 박게). 게이트: 프로덕션 전용, `DENEB_NOTI_DIGEST_DISABLE=1`, 사용자 활동 중 스킵.
 

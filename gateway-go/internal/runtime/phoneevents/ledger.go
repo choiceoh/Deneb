@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -73,10 +74,34 @@ func NewLedger(dir string, logger *slog.Logger) *Ledger {
 	return &Ledger{dir: dir, logger: logger}
 }
 
+// otpKeywordRE matches the words that mark a one-time-code / security
+// notification (Korean + English). ledgerMaskRE masks the accompanying short
+// numeric code so an OTP that slips past the keyword gate is not stored raw.
+var (
+	otpKeywordRE = regexp.MustCompile(`(?i)인증\s?번호|인증\s?코드|확인\s?코드|보안\s?코드|일회용\s?비밀번호|verification code|one[- ]?time|\bOTP\b|passcode`)
+	// A 4–8 digit run bounded by non-digits — the shape of a verification code.
+	ledgerCodeRE = regexp.MustCompile(`(^|[^0-9])([0-9]{4,8})([^0-9]|$)`)
+)
+
+// isSensitiveNotification reports whether text looks like a one-time-code or
+// security-code notification that must not be persisted to the 30-day ledger.
+// The append now runs before the tiny push-worthiness gate, so an OTP SMS or
+// banking notification the on-device blocklist missed would otherwise land
+// raw; the redactor masks known secret patterns but not bare numeric OTPs.
+// Conservative by design: an OTP keyword AND a short numeric code together.
+func isSensitiveNotification(text string) bool {
+	return otpKeywordRE.MatchString(text) && ledgerCodeRE.MatchString(text)
+}
+
 // Append records one event. Failures are logged and swallowed — the ledger
 // must never break the judgment path it shadows.
 func (l *Ledger) Append(eventType, source, text string) {
 	if l == nil {
+		return
+	}
+	// Never persist one-time-codes / security codes to the raw ledger. The
+	// alert path still judges them (they just aren't remembered).
+	if isSensitiveNotification(text) {
 		return
 	}
 	// Deneb-canonical clock: day-file naming and entry timestamps are

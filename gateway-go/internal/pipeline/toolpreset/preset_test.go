@@ -95,6 +95,33 @@ func TestAllowedTools_WikiScout(t *testing.T) {
 	}
 }
 
+func TestAllowedTools_NotiDigest(t *testing.T) {
+	allowed := AllowedTools(PresetNotiDigest)
+	if allowed == nil {
+		t.Fatal("noti-digest preset should return non-nil allowed set")
+	}
+	// wiki-only: read to find the project, write the 로그 op / person update.
+	for _, name := range []string{"wiki", "fetch_tools"} {
+		if _, ok := allowed[name]; !ok {
+			t.Errorf("noti-digest preset should include %q", name)
+		}
+	}
+	// Batch content is raw third-party app text — no web channel and NO
+	// personal-memory store may be reachable, or a malicious notification
+	// could read private data and persist it through a wiki write.
+	for _, name := range []string{
+		"web",
+		"mail_archive", "contacts", "graphify", "polaris", "knowledge",
+		"read", "grep", "read_spillover",
+		"write", "edit", "exec", "process",
+		"message", "send_file", "sessions_spawn",
+	} {
+		if _, ok := allowed[name]; ok {
+			t.Errorf("noti-digest preset must NOT include %q", name)
+		}
+	}
+}
+
 func TestAllowedTools_WikiResearch(t *testing.T) {
 	allowed := AllowedTools(PresetWikiResearch)
 	if allowed == nil {
@@ -260,8 +287,8 @@ func TestIsValid(t *testing.T) {
 
 func TestKnownPresets(t *testing.T) {
 	presets := KnownPresets()
-	if len(presets) != 10 {
-		t.Errorf("got %d, want 10 known presets", len(presets))
+	if len(presets) != 11 {
+		t.Errorf("got %d, want 11 known presets", len(presets))
 	}
 	for _, p := range presets {
 		if AllowedTools(p) == nil {

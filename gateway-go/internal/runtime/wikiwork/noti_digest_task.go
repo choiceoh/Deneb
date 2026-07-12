@@ -10,10 +10,12 @@
 // ephemeral; memory is batched and durable — the OpenWiki deterministic-pull /
 // synthesis-run split, applied to the phone connector.
 //
-// Tool surface: PresetWikiResearch (internal-only, NO web). Notification text
-// is third-party content, so the digesting turn must have no external channel
-// a hostile message could exfiltrate through — same reasoning as the scout's
-// narrowed preset, from the opposite direction.
+// Tool surface: PresetNotiDigest (wiki + fetch_tools only). Notification text
+// is third-party content, so the turn must reach neither an external channel
+// (no web) NOR any personal-memory store (no mail_archive/contacts/graphify/
+// polaris/knowledge) — a hostile message must not read private data and
+// persist it through a wiki write. wiki alone covers the job: read to find the
+// project, write the 로그 op / person update.
 //
 // Offsets advance only after a successful turn (content must not be lost to a
 // transient failure), with a bounded failure streak that force-advances so a
@@ -26,6 +28,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -147,7 +150,7 @@ func (t *notiDigestTask) Run(ctx context.Context) error {
 	_, serr := t.chatHandler.RunSync(runCtx, chatport.SyncRequest{
 		SessionKey:       notiDigestSessionKey,
 		Message:          prompt,
-		ToolPreset:       string(toolpreset.PresetWikiResearch),
+		ToolPreset:       string(toolpreset.PresetNotiDigest),
 		MaxHistoryTokens: 20_000,
 		// Background maintenance turn — ephemeral session, no recall preflight
 		// (the prompt carries the batch; wiki context comes via tools).
@@ -201,7 +204,12 @@ func (t *notiDigestTask) buildPrompt(entries []phoneevents.LedgerEntry, truncate
 		if parsed, err := time.Parse(time.RFC3339, e.TS); err == nil {
 			ts = parsed.Format("01-02 15:04")
 		}
-		b.WriteString(fmt.Sprintf("[%s] %s: %s\n", ts, e.Source, strings.ReplaceAll(e.Text, "\n", " / ")))
+		// Fence third-party text: neutralize any literal block delimiter or
+		// instruction-shaped line so a notification containing "</알림 목록>"
+		// (or a fake new directive) cannot escape the data block and steer the
+		// turn. Each entry is one line, source and text both sanitized.
+		b.WriteString(fmt.Sprintf("[%s] %s: %s\n",
+			ts, fenceNotifText(e.Source), fenceNotifText(e.Text)))
 	}
 	b.WriteString("</알림 목록>\n")
 	b.WriteString(`
@@ -219,6 +227,20 @@ func (t *notiDigestTask) buildPrompt(entries []phoneevents.LedgerEntry, truncate
 
 이것은 사용자에게 보내는 응답이 아니라 백그라운드 메모리 유지보수 작업입니다. 사용자에게 알리지 마세요.`)
 	return b.String()
+}
+
+// notifDelimiterRE matches the digest block delimiters (with optional
+// surrounding whitespace) so a notification body cannot forge the fence.
+var notifDelimiterRE = regexp.MustCompile(`(?i)<\s*/?\s*알림\s*목록\s*>`)
+
+// fenceNotifText flattens a notification field to a single inert line: newlines
+// become " / " (each entry is one line), and any literal block delimiter is
+// defanged so embedded "</알림 목록>" can't break out of the data block.
+func fenceNotifText(s string) string {
+	s = notifDelimiterRE.ReplaceAllString(s, "⟦알림목록⟧")
+	s = strings.ReplaceAll(s, "\n", " / ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	return s
 }
 
 func (t *notiDigestTask) loadState() *notiDigestState {

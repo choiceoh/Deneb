@@ -62,7 +62,36 @@ func TestMaterialFilename(t *testing.T) {
 
 // TestFetchWebText exercises the stdlib HTML stripper: title, script/style
 // removal, entity decoding, and the non-HTML content-type rejection.
+// withPlainIngestClient swaps the SSRF-safe ingest client for a plain one for
+// the test's duration: httptest binds to 127.0.0.1, which the production SSRF
+// dialer correctly rejects (that rejection is asserted in
+// TestIngestHTTPClientRejectsLoopback).
+func withPlainIngestClient(t *testing.T) {
+	t.Helper()
+	orig := ingestHTTPClient
+	ingestHTTPClient = func() *http.Client { return &http.Client{Timeout: ingestFetchTimeout} }
+	t.Cleanup(func() { ingestHTTPClient = orig })
+}
+
+// TestIngestHTTPClientRejectsLoopback pins the SSRF guard: the production
+// ingest client must refuse to fetch a loopback address, so a prompt-injected
+// page cannot make the gateway ingest internal endpoints.
+func TestIngestHTTPClientRejectsLoopback(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("secret internal data"))
+	}))
+	defer srv.Close()
+	_, _, err := fetchWebText(context.Background(), srv.URL) // 127.0.0.1
+	if err == nil {
+		t.Fatal("ingest fetched a loopback URL — SSRF guard not active")
+	}
+	if !strings.Contains(err.Error(), "SSRF") && !strings.Contains(err.Error(), "private") {
+		t.Errorf("expected SSRF/private rejection, got: %v", err)
+	}
+}
+
 func TestFetchWebText(t *testing.T) {
+	withPlainIngestClient(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/page":
@@ -100,6 +129,7 @@ func TestFetchWebText(t *testing.T) {
 // HTTP server, with the summarizer stubbed: page creation, idempotent dedup,
 // project routing (existing vs unknown project), and the 로그 op-prefix append.
 func TestWikiIngest_EndToEnd(t *testing.T) {
+	withPlainIngestClient(t)
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -184,6 +214,7 @@ func TestWikiIngest_EndToEnd(t *testing.T) {
 // ingest into the project (folder 자료 slot + 로그 op + related to the flat
 // rep), not silently fall back to the global bucket.
 func TestWikiIngest_LegacyFlatRepLinks(t *testing.T) {
+	withPlainIngestClient(t)
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -243,6 +274,7 @@ func TestWikiIngest_LegacyFlatRepLinks(t *testing.T) {
 }
 
 func TestWikiIngest_SummaryFailOpen(t *testing.T) {
+	withPlainIngestClient(t)
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

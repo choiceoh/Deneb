@@ -170,6 +170,41 @@ func TestWikiScoutTriggerForPageNoDeps(t *testing.T) {
 	(&wikiScoutTask{}).TriggerForPage(context.Background(), "프로젝트/a/대표.md")
 }
 
+// TestWikiScoutResearchShareMaintenanceLock pins the shared-lock wiring: the
+// scout exposes its maintenance lock, and while it is held the research task's
+// TryLock-based guard would skip. This is the scout-vs-research serialization
+// Codex flagged (turnMu alone only covered scout-vs-scout).
+func TestWikiScoutResearchShareMaintenanceLock(t *testing.T) {
+	scout := NewScoutTask(nil, nil, nil, testWikiLogger(),
+		filepath.Join(t.TempDir(), "scout.json"), "")
+	lock := scout.MaintenanceLock()
+	if lock == nil {
+		t.Fatal("scout maintenance lock is nil")
+	}
+	research := NewResearchTask(nil, nil, nil, testWikiLogger(),
+		filepath.Join(t.TempDir(), "research.json"), "")
+	research.SetMaintenanceLock(lock)
+	if research.maintMu != lock {
+		t.Fatal("research did not adopt the scout's maintenance lock")
+	}
+	// Held lock ⇒ the other task's TryLock fails (would skip its cycle).
+	lock.Lock()
+	if research.maintMu.TryLock() {
+		research.maintMu.Unlock()
+		t.Error("research acquired a held maintenance lock")
+	}
+	if scout.maintMu.TryLock() {
+		scout.maintMu.Unlock()
+		t.Error("scout acquired a held maintenance lock")
+	}
+	lock.Unlock()
+	// Released ⇒ acquirable again.
+	if !research.maintMu.TryLock() {
+		t.Error("research could not acquire a released lock")
+	}
+	research.maintMu.Unlock()
+}
+
 // TestWikiScoutPromptCarriesIngestProjectValue pins the Codex-review fix: the
 // prompt must carry the stable folder name for wiki ingest project= linking,
 // since the displayed project label can be a differing frontmatter title.
