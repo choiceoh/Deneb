@@ -19,6 +19,7 @@ import ai.deneb.deneb.selectDenebModelInstance
 import ai.deneb.deneb.sendWorkFeedFeedback
 import ai.deneb.deneb.syncNativeStateAsync
 import ai.deneb.getBackgroundDispatcher
+import ai.deneb.network.httpTeardownTolerantHandler
 import ai.deneb.network.toUiError
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -99,6 +100,13 @@ class ChatViewModel(
         discardSmsDraft = ::discardSmsDraft,
         refreshConversations = { dataRepository.loadConversations() },
     )
+
+    // In the context of every job that can be cancel()ed while a gateway request
+    // streams (stop button, conversation switch, delete-undo, VM clear): without
+    // it the platform-okhttp teardown exception reaches the uncaught handler and
+    // kills the app — crash reporter build 614, stop tapped mid-stream. See
+    // httpTeardownTolerantHandler.
+    private val teardownHandler = httpTeardownTolerantHandler("ChatViewModel")
     private var currentJob: Job? = null
     private var pendingConversationDeleteJob: Job? = null
     private val _state = MutableStateFlow(
@@ -284,7 +292,7 @@ class ChatViewModel(
         // Capture files before launching coroutine to avoid race with files being cleared
         val files = presetFiles ?: _state.value.files
 
-        currentJob = viewModelScope.launch(backgroundDispatcher) {
+        currentJob = viewModelScope.launch(backgroundDispatcher + teardownHandler) {
             _state.update {
                 it.copy(
                     isLoading = true,
@@ -501,7 +509,7 @@ class ChatViewModel(
     private fun deleteConversation(id: String) {
         commitPendingConversationDeletion()
         _state.update { it.copy(pendingConversationDeletion = id) }
-        pendingConversationDeleteJob = viewModelScope.launch(backgroundDispatcher) {
+        pendingConversationDeleteJob = viewModelScope.launch(backgroundDispatcher + teardownHandler) {
             delay(4.seconds)
             dataRepository.deleteConversation(id)
             _state.update { it.copy(pendingConversationDeletion = null) }
@@ -519,7 +527,9 @@ class ChatViewModel(
         pendingConversationDeleteJob = null
         val pendingId = _state.value.pendingConversationDeletion ?: return
         _state.update { it.copy(pendingConversationDeletion = null) }
-        viewModelScope.launch(backgroundDispatcher) {
+        // onCleared() lands here and then cancels viewModelScope, which can catch
+        // this delete RPC mid-flight — teardown-tolerant like the other jobs.
+        viewModelScope.launch(backgroundDispatcher + teardownHandler) {
             dataRepository.deleteConversation(pendingId)
         }
     }

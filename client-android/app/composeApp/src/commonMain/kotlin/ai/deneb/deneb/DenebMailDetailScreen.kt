@@ -4,6 +4,7 @@ package ai.deneb.deneb
 
 import ai.deneb.decodeToImageBitmap
 import ai.deneb.getBackgroundDispatcher
+import ai.deneb.network.httpTeardownTolerantHandler
 import ai.deneb.openUrl
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
@@ -75,6 +76,11 @@ import kotlinx.coroutines.withContext
 /** Image attachments above this size stay download-only chips (no inline decode). */
 private const val MAIL_IMAGE_PREVIEW_MAX_BYTES = 8 * 1024 * 1024
 
+// Leaving the screen (or a messageId swap) cancels the load/analysis coroutines
+// mid-RPC; the handler keeps the platform-okhttp stream teardown from crashing
+// the app. See httpTeardownTolerantHandler.
+private val mailTeardownHandler = httpTeardownTolerantHandler("MailDetail")
+
 /**
  * Full Gmail message + reading surface. On open it marks read and fetches any
  * cached analysis instantly (no LLM). Actions are deliberately minimal: trash
@@ -94,7 +100,7 @@ fun DenebMailDetailScreen(
     onOpenWiki: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
-    val scope = rememberCoroutineScope()
+    val scope = rememberCoroutineScope { mailTeardownHandler }
     val haptics = rememberHaptics()
     var detail by remember(messageId) { mutableStateOf<MailDetail?>(null) }
     var analysis by remember(messageId) { mutableStateOf<MailAnalysis?>(null) }
@@ -144,7 +150,7 @@ fun DenebMailDetailScreen(
             }
         }
     }
-    LaunchedEffect(messageId) { load() }
+    LaunchedEffect(messageId) { withContext(mailTeardownHandler) { load() } }
 
     fun runAnalysis(force: Boolean) {
         scope.launch {
