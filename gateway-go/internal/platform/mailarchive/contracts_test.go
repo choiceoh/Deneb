@@ -2,229 +2,20 @@ package mailarchive
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
-	"os"
-	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive/overlay"
 )
-
-func TestStateStorePersistenceContract(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "nested", "state.json")
-	store := NewStateStore(path)
-	if got := store.Get("missing"); got != (MessageState{}) {
-		t.Fatalf("missing state = %+v", got)
-	}
-	if store.Known("missing") {
-		t.Fatal("missing id reported known")
-	}
-	if got := store.Snapshot(); got == nil || len(got) != 0 {
-		t.Fatalf("initial snapshot = %#v, want empty non-nil map", got)
-	}
-
-	if err := store.RememberLocator("message-1", "INBOX", "42"); err != nil {
-		t.Fatal(err)
-	}
-	located := store.Get("message-1")
-	if located.Mailbox != "INBOX" || located.UID != "42" {
-		t.Fatalf("locator = %+v", located)
-	}
-	if located.Read || located.Archived || located.Trashed || located.UpdatedAtMS != 0 {
-		t.Fatalf("locator write mutated flags = %+v", located)
-	}
-
-	before := time.Now().UnixMilli()
-	if err := store.MarkRead("message-1"); err != nil {
-		t.Fatal(err)
-	}
-	read := store.Get("message-1")
-	if !read.Read || read.Archived || read.Trashed {
-		t.Fatalf("read state = %+v", read)
-	}
-	if read.UpdatedAtMS < before || read.UpdatedAtMS > time.Now().UnixMilli() {
-		t.Fatalf("read update timestamp = %d", read.UpdatedAtMS)
-	}
-	if read.Mailbox != "INBOX" || read.UID != "42" {
-		t.Fatalf("read lost locator = %+v", read)
-	}
-
-	if err := store.MarkArchived("message-1"); err != nil {
-		t.Fatal(err)
-	}
-	archived := store.Get("message-1")
-	if !archived.Read || !archived.Archived || archived.Trashed {
-		t.Fatalf("archived state = %+v", archived)
-	}
-
-	if err := store.MarkTrashed("message-1"); err != nil {
-		t.Fatal(err)
-	}
-	trashed := store.Get("message-1")
-	if !trashed.Read || !trashed.Archived || !trashed.Trashed {
-		t.Fatalf("trashed state = %+v", trashed)
-	}
-
-	// A fresh store instance must reconstruct the same overlay from disk.
-	reopened := NewStateStore(path)
-	if got := reopened.Get("message-1"); got != trashed {
-		t.Fatalf("reopened state = %+v, want %+v", got, trashed)
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := info.Mode().Perm(); got != 0o600 {
-		t.Fatalf("state file mode = %o, want 600", got)
-	}
-	dirInfo, err := os.Stat(filepath.Dir(path))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := dirInfo.Mode().Perm(); got&0o077 != 0 {
-		t.Fatalf("state directory mode = %o", got)
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !json.Valid(raw) || !bytes.HasSuffix(raw, []byte("\n")) {
-		t.Fatalf("state file is not newline-terminated JSON: %q", raw)
-	}
-}
-
-func TestStateStoreNilEmptyAndInvalidInputContract(t *testing.T) {
-	var nilStore *StateStore
-	if got := nilStore.Get("id"); got != (MessageState{}) {
-		t.Fatalf("nil get = %+v", got)
-	}
-	if nilStore.Known("id") {
-		t.Fatal("nil store reported known")
-	}
-	if got := nilStore.Snapshot(); got != nil {
-		t.Fatalf("nil snapshot = %#v", got)
-	}
-	for name, action := range map[string]func() error{
-		"remember": func() error { return nilStore.RememberLocator("id", "INBOX", "1") },
-		"read":     func() error { return nilStore.MarkRead("id") },
-		"archive":  func() error { return nilStore.MarkArchived("id") },
-		"trash":    func() error { return nilStore.MarkTrashed("id") },
-	} {
-		t.Run(name, func(t *testing.T) {
-			if err := action(); err != nil {
-				t.Fatal(err)
-			}
-		})
-	}
-
-	path := filepath.Join(t.TempDir(), "state.json")
-	store := NewStateStore(path)
-	for name, action := range map[string]func() error{
-		"empty locator id":      func() error { return store.RememberLocator("", "INBOX", "1") },
-		"empty locator mailbox": func() error { return store.RememberLocator("id", "", "1") },
-		"empty locator uid":     func() error { return store.RememberLocator("id", "INBOX", "") },
-		"empty read id":         func() error { return store.MarkRead("") },
-		"empty archive id":      func() error { return store.MarkArchived("") },
-		"empty trash id":        func() error { return store.MarkTrashed("") },
-	} {
-		t.Run(name, func(t *testing.T) {
-			if err := action(); err != nil {
-				t.Fatal(err)
-			}
-		})
-	}
-	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("invalid no-op created state file: %v", err)
-	}
-
-	if err := os.WriteFile(path, []byte("not json"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if got := store.Snapshot(); len(got) != 0 {
-		t.Fatalf("corrupt file snapshot = %+v", got)
-	}
-	if err := store.MarkRead("recovered"); err != nil {
-		t.Fatal(err)
-	}
-	if !store.Get("recovered").Read {
-		t.Fatal("store did not recover from invalid JSON")
-	}
-}
-
-func TestStateStoreSnapshotIsIndependent(t *testing.T) {
-	store := NewStateStore(filepath.Join(t.TempDir(), "state.json"))
-	if err := store.RememberLocator("id", "INBOX", "9"); err != nil {
-		t.Fatal(err)
-	}
-	first := store.Snapshot()
-	first["id"] = MessageState{Mailbox: "tampered", UID: "0"}
-	first["injected"] = MessageState{Read: true}
-	second := store.Snapshot()
-	if got := second["id"]; got.Mailbox != "INBOX" || got.UID != "9" {
-		t.Fatalf("snapshot mutation leaked into store: %+v", got)
-	}
-	if _, exists := second["injected"]; exists {
-		t.Fatal("injected snapshot entry leaked into store")
-	}
-}
-
-func TestStateStoreConcurrentUpdatesPreserveEveryMessage(t *testing.T) {
-	store := NewStateStore(filepath.Join(t.TempDir(), "state.json"))
-	const workers = 16
-	const messagesPerWorker = 20
-	var wg sync.WaitGroup
-	for worker := range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := range messagesPerWorker {
-				id := fmt.Sprintf("message-%02d-%02d", worker, i)
-				if err := store.RememberLocator(id, "INBOX", fmt.Sprintf("%d", worker*messagesPerWorker+i)); err != nil {
-					t.Errorf("remember %s: %v", id, err)
-					return
-				}
-				if err := store.MarkRead(id); err != nil {
-					t.Errorf("read %s: %v", id, err)
-					return
-				}
-			}
-		}()
-	}
-	wg.Wait()
-	snapshot := store.Snapshot()
-	want := workers * messagesPerWorker
-	if len(snapshot) != want {
-		t.Fatalf("snapshot size = %d, want %d", len(snapshot), want)
-	}
-	for id, state := range snapshot {
-		if !state.Read || state.Mailbox != "INBOX" || state.UID == "" {
-			t.Fatalf("incomplete state %s: %+v", id, state)
-		}
-	}
-}
-
-func TestStateStoreFilesystemFailureIsReturned(t *testing.T) {
-	root := t.TempDir()
-	blocker := filepath.Join(root, "blocker")
-	if err := os.WriteFile(blocker, []byte("file"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	store := NewStateStore(filepath.Join(blocker, "state.json"))
-	if err := store.MarkRead("id"); err == nil {
-		t.Fatal("write through regular-file parent succeeded")
-	}
-}
 
 func TestMailboxSelectionContractMatrix(t *testing.T) {
 	tests := []struct {
@@ -759,13 +550,13 @@ func TestArchiveLabelOverlayContract(t *testing.T) {
 	tests := []struct {
 		name    string
 		mailbox string
-		state   MessageState
+		state   overlay.MessageState
 		want    []string
 	}{
 		{name: "fresh inbox", mailbox: "INBOX", want: []string{"INBOX", "UNREAD"}},
-		{name: "read inbox", mailbox: "INBOX", state: MessageState{Read: true}, want: []string{"INBOX"}},
-		{name: "archived inbox", mailbox: "INBOX", state: MessageState{Archived: true}, want: []string{}},
-		{name: "trash wins", mailbox: "INBOX", state: MessageState{Read: true, Archived: true, Trashed: true}, want: []string{"TRASH"}},
+		{name: "read inbox", mailbox: "INBOX", state: overlay.MessageState{Read: true}, want: []string{"INBOX"}},
+		{name: "archived inbox", mailbox: "INBOX", state: overlay.MessageState{Archived: true}, want: []string{}},
+		{name: "trash wins", mailbox: "INBOX", state: overlay.MessageState{Read: true, Archived: true, Trashed: true}, want: []string{"TRASH"}},
 		{name: "archive mailbox", mailbox: "Archive", want: []string{}},
 		{name: "case insensitive inbox", mailbox: " inbox ", want: []string{"INBOX", "UNREAD"}},
 	}
@@ -891,7 +682,7 @@ func TestUIDHelpersContract(t *testing.T) {
 }
 
 func TestNativeOverlayStatusContract(t *testing.T) {
-	snapshot := map[string]MessageState{
+	snapshot := map[string]overlay.MessageState{
 		"fresh":    {},
 		"read":     {Read: true},
 		"archived": {Read: true, Archived: true},
