@@ -127,16 +127,6 @@ func (t *wikiScoutTask) Run(ctx context.Context) error {
 		return fmt.Errorf("wiki-scout: chat handler or wiki store not available")
 	}
 
-	// Defer to the user: the scout runs the main model and external web
-	// calls. Round-robin state means a skipped cycle costs nothing.
-	if t.activity != nil {
-		idle := time.Duration(time.Now().UnixMilli()-t.activity.LastActivityAt()) * time.Millisecond
-		if idle < 5*time.Minute {
-			t.logger.Info("wiki-scout: skipped, user active", "idle", idle.Round(time.Second))
-			return nil
-		}
-	}
-
 	now := time.Now()
 	state := t.loadState()
 	questions := t.selectQuestions(state, now)
@@ -144,6 +134,58 @@ func (t *wikiScoutTask) Run(ctx context.Context) error {
 	if len(questions) == 0 && brief == "" {
 		t.logger.Debug("wiki-scout: no eligible questions and no brief, skipping")
 		return nil
+	}
+	return t.runTurn(ctx, questions, brief, state, now, "scheduled")
+}
+
+// TriggerForPage runs one immediate scouting turn for open questions dated
+// today on repPath. The research task calls this right after its internal
+// turn: a question the internal pass just wrote down means "searched every
+// internal source, no answer" — the externally-answerable ones should go to
+// the web now, not after the scheduled cycle's age gate. No-ops quietly when
+// the page has no fresh questions (the common case) or deps are missing.
+//
+// Concurrency: this runs on the research task's goroutine and may interleave
+// with a scheduled Run. The attempt state is last-writer-wins through the
+// flocked atomic write — worst case one question is presented twice, which
+// the cooldown then absorbs.
+func (t *wikiScoutTask) TriggerForPage(ctx context.Context, repPath string) {
+	if t.chatHandler == nil || t.wikiStore == nil {
+		return
+	}
+	now := time.Now()
+	fresh := t.collectFreshQuestions(repPath, now)
+	if len(fresh) == 0 {
+		return
+	}
+	state := t.loadState()
+	fresh = filterScoutCooldown(fresh, state, now)
+	if len(fresh) == 0 {
+		return
+	}
+	if err := t.runTurn(ctx, fresh, wiki.LoadWikiBrief(t.workspaceDir), state, now, "post-research"); err != nil {
+		t.logger.Warn("wiki-scout: post-research trigger failed", "page", repPath, "error", err)
+	}
+}
+
+// runTurn executes one bounded scouting turn over the given questions —
+// shared by the scheduled cycle and the post-research trigger.
+func (t *wikiScoutTask) runTurn(
+	ctx context.Context,
+	questions []wiki.OpenQuestion,
+	brief string,
+	state *wikiScoutState,
+	now time.Time,
+	reason string,
+) error {
+	// Defer to the user: the scout runs the main model and external web
+	// calls. A skipped turn costs nothing — the question stays open.
+	if t.activity != nil {
+		idle := time.Duration(now.UnixMilli()-t.activity.LastActivityAt()) * time.Millisecond
+		if idle < 5*time.Minute {
+			t.logger.Info("wiki-scout: skipped, user active", "reason", reason, "idle", idle.Round(time.Second))
+			return nil
+		}
 	}
 
 	runCtx, cancel := context.WithTimeout(ctx, wikiScoutTurnTimeout)
@@ -178,10 +220,11 @@ func (t *wikiScoutTask) Run(ctx context.Context) error {
 
 	// Snapshot the wiki dir so this cycle's writes (if any) are an isolated,
 	// revertible point alongside dream/research/backup snapshots.
-	t.wikiStore.SnapshotGit(ctx, "wiki-scout: external scouting cycle")
+	t.wikiStore.SnapshotGit(ctx, "wiki-scout: external scouting ("+reason+")")
 
 	t.logger.Info(
-		"wiki-scout cycle completed",
+		"wiki-scout turn completed",
+		"reason", reason,
 		"questions", len(questions),
 		"brief", brief != "",
 		"output_len", len(result.Text),
@@ -194,9 +237,47 @@ func (t *wikiScoutTask) Run(ctx context.Context) error {
 // order). Archived projects are already excluded by the collector.
 func (t *wikiScoutTask) selectQuestions(state *wikiScoutState, now time.Time) []wiki.OpenQuestion {
 	all := wiki.CollectStaleOpenQuestions(t.wikiStore.Dir(), wikiScoutMinQuestionAgeDays, now)
+	return filterScoutCooldown(all, state, now)
+}
+
+// collectFreshQuestions returns repPath's open questions dated today — the
+// ones a just-finished research turn added. Archived/superseded pages and
+// non-rep paths yield nothing.
+func (t *wikiScoutTask) collectFreshQuestions(repPath string, now time.Time) []wiki.OpenQuestion {
+	if !wiki.IsProjectRepPage(repPath) {
+		return nil
+	}
+	page, err := t.wikiStore.ReadPage(repPath)
+	if err != nil || page == nil || page.Meta.Archived || strings.TrimSpace(page.Meta.SupersededBy) != "" {
+		return nil
+	}
+	project, _ := wiki.ProjectNameOf(repPath)
+	if title := strings.TrimSpace(page.Meta.Title); title != "" {
+		project = title
+	}
+	today := now.Format("2006-01-02")
+	var out []wiki.OpenQuestion
+	for _, item := range wiki.OpenQuestionsIn(page.Body) {
+		if item.Asked != today {
+			continue
+		}
+		out = append(out, wiki.OpenQuestion{
+			Project:  project,
+			Question: item.Question,
+			Asked:    item.Asked,
+			AgeDays:  0,
+			Path:     repPath,
+		})
+	}
+	return out
+}
+
+// filterScoutCooldown drops questions attempted within the retry cooldown and
+// caps the result at wikiScoutMaxQuestions, preserving input order.
+func filterScoutCooldown(qs []wiki.OpenQuestion, state *wikiScoutState, now time.Time) []wiki.OpenQuestion {
 	cutoff := now.Add(-wikiScoutRetryAfter).UnixMilli()
 	var out []wiki.OpenQuestion
-	for _, q := range all {
+	for _, q := range qs {
 		if state.Attempted[scoutQuestionKey(q)] > cutoff {
 			continue
 		}
@@ -220,7 +301,12 @@ func (t *wikiScoutTask) buildPrompt(questions []wiki.OpenQuestion, brief string,
 			if q.AgeDays >= 0 {
 				age = fmt.Sprintf(", %d일 경과", q.AgeDays)
 			}
-			b.WriteString(fmt.Sprintf("- [%s] %s (페이지: %s%s)\n", q.Project, q.Question, q.Path, age))
+			// The displayed project label is the frontmatter title, which can
+			// differ from the folder name that wiki ingest validates — carry
+			// the folder explicitly so project= links never miss.
+			folder, _ := wiki.ProjectNameOf(q.Path)
+			b.WriteString(fmt.Sprintf("- [%s] %s (페이지: %s%s, ingest project 값: %q)\n",
+				q.Project, q.Question, q.Path, age, folder))
 		}
 		b.WriteString("\n")
 	}
@@ -233,7 +319,7 @@ func (t *wikiScoutTask) buildPrompt(questions []wiki.OpenQuestion, brief string,
 
 1. 각 질문에 대해 먼저 외부성 판단: 웹 검색으로 답할 수 있는 성격(시세·제품 사양·업체 정보·정책/공고 등)이면 web 도구로 검색·확인하고, 내부 정보(우리 결정·거래 조건 등)라야 답할 수 있는 질문이면 건너뜁니다.
 2. 신뢰할 만한 출처에서 답을 확인한 경우에만:
-   - 근거 출처를 wiki(action="ingest", query=출처URL, project=프로젝트명)으로 자료 페이지로 영속화합니다
+   - 근거 출처를 wiki(action="ingest", query=출처URL, project=...)으로 자료 페이지로 영속화합니다. project=에는 질문 항목에 표기된 'ingest project 값'을 **그대로** 사용하세요 (표시 이름이 아니라 폴더명 — 다르면 전역 버킷으로 빠져 로그 연결이 끊깁니다)
    - 그 프로젝트 로그.md에 '## [YYYY-MM-DD] 질문해결 | <질문 요지>' 섹션을 append하고 답 요지와 자료 페이지 [[링크]]를 남깁니다
    - 대표페이지의 '## 미해결 질문' 섹션에서 해당 불릿만 제거합니다 (다른 불릿의 날짜·내용은 그대로)
 3. **대표페이지의 다른 본문(현재 상태·핵심 사실 등)은 절대 수정하지 마세요** — 확인된 사실의 본문 통합은 내부 리서치 태스크의 몫입니다. 이 턴의 쓰기 표면은 자료 ingest + 로그.md append + 미해결 질문 불릿 제거, 이 셋뿐입니다.

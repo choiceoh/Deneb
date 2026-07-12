@@ -12,8 +12,10 @@ import (
 )
 
 // registerWikiResearchTask wires the project-wiki refresh only for the
-// production state directory.
-func (s *Server) registerWikiResearchTask(homeDir string) {
+// production state directory. scout (nil when disabled) receives an immediate
+// trigger after each research turn so freshly written open questions go
+// external without waiting for the scheduled scout cycle.
+func (s *Server) registerWikiResearchTask(homeDir string, scout *wikiwork.ScoutTask) {
 	if s.chatHandler == nil || s.wikiStore == nil {
 		return
 	}
@@ -25,41 +27,49 @@ func (s *Server) registerWikiResearchTask(homeDir string) {
 	if !ok {
 		return
 	}
-	s.autonomousSvc.RegisterTask(wikiwork.NewResearchTask(
+	task := wikiwork.NewResearchTask(
 		s.chatHandler,
 		s.wikiStore,
 		s.activity,
 		s.logger,
 		filepath.Join(stateDir, wikiwork.ResearchStateFile),
 		configresolve.WorkspaceDir(),
-	))
-	s.logger.Info("wiki-research task registered", "interval", wikiwork.ResearchInterval.String())
+	)
+	if scout != nil {
+		task.SetPostCycleScout(scout.TriggerForPage)
+	}
+	s.autonomousSvc.RegisterTask(task)
+	s.logger.Info("wiki-research task registered",
+		"interval", wikiwork.ResearchInterval.String(), "scoutTrigger", scout != nil)
 }
 
 // registerWikiScoutTask wires the external-scouting twin of wiki-research
 // (open questions + WIKI.md brief topics → bounded web turn) only for the
-// production state directory.
-func (s *Server) registerWikiScoutTask(homeDir string) {
+// production state directory. Returns the task (nil when disabled) so the
+// research task can wire its immediate post-cycle trigger.
+func (s *Server) registerWikiScoutTask(homeDir string) *wikiwork.ScoutTask {
 	if s.chatHandler == nil || s.wikiStore == nil {
-		return
+		return nil
 	}
 	if os.Getenv("DENEB_WIKI_SCOUT_DISABLE") == "1" {
 		s.logger.Info("wiki-scout disabled via DENEB_WIKI_SCOUT_DISABLE")
-		return
+		return nil
 	}
 	stateDir, ok := s.productionStateDir(homeDir)
 	if !ok {
-		return
+		return nil
 	}
-	s.autonomousSvc.RegisterTask(wikiwork.NewScoutTask(
+	task := wikiwork.NewScoutTask(
 		s.chatHandler,
 		s.wikiStore,
 		s.activity,
 		s.logger,
 		filepath.Join(stateDir, wikiwork.ScoutStateFile),
 		configresolve.WorkspaceDir(),
-	))
+	)
+	s.autonomousSvc.RegisterTask(task)
 	s.logger.Info("wiki-scout task registered", "interval", wikiwork.ScoutInterval.String())
+	return task
 }
 
 // registerWikiReviewTask wires post-write review and deterministic maintenance

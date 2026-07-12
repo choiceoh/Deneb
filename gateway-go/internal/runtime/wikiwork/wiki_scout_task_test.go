@@ -130,6 +130,66 @@ func TestWikiScoutBuildPrompt(t *testing.T) {
 	}
 }
 
+// TestWikiScoutCollectFreshQuestions pins the post-research trigger's input:
+// only today-dated bullets on a live rep page qualify; old bullets, archived
+// pages, and non-rep paths yield nothing.
+func TestWikiScoutCollectFreshQuestions(t *testing.T) {
+	dir := t.TempDir()
+	wikiDir := filepath.Join(dir, "wiki")
+	now := time.Now()
+	today := now.Format("2006-01-02")
+	old := now.AddDate(0, 0, -5).Format("2006-01-02")
+	writeScoutRepPage(t, wikiDir, "alpha",
+		"## 미해결 질문\n- "+today+" 오늘 새 질문\n- "+old+" 옛 질문\n")
+
+	store, err := wiki.NewStore(wikiDir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := &wikiScoutTask{wikiStore: store, logger: testWikiLogger()}
+
+	got := task.collectFreshQuestions("프로젝트/alpha/대표.md", now)
+	if len(got) != 1 || got[0].Question != "오늘 새 질문" {
+		t.Fatalf("fresh questions=%+v, want only today's", got)
+	}
+	if got[0].AgeDays != 0 || got[0].Path != "프로젝트/alpha/대표.md" {
+		t.Errorf("fresh question fields=%+v", got[0])
+	}
+
+	if qs := task.collectFreshQuestions("프로젝트/alpha/로그.md", now); qs != nil {
+		t.Errorf("non-rep path yielded %+v", qs)
+	}
+	if qs := task.collectFreshQuestions("프로젝트/none/대표.md", now); qs != nil {
+		t.Errorf("missing page yielded %+v", qs)
+	}
+}
+
+// TestWikiScoutTriggerForPageNoDeps pins that the trigger is safe to call
+// with missing dependencies (it must never panic on the research goroutine).
+func TestWikiScoutTriggerForPageNoDeps(t *testing.T) {
+	(&wikiScoutTask{}).TriggerForPage(context.Background(), "프로젝트/a/대표.md")
+}
+
+// TestWikiScoutPromptCarriesIngestProjectValue pins the Codex-review fix: the
+// prompt must carry the stable folder name for wiki ingest project= linking,
+// since the displayed project label can be a differing frontmatter title.
+func TestWikiScoutPromptCarriesIngestProjectValue(t *testing.T) {
+	task := &wikiScoutTask{}
+	now := time.Date(2026, 7, 12, 9, 0, 0, 0, time.UTC)
+	got := task.buildPrompt([]wiki.OpenQuestion{{
+		Project:  "알파 태양광 (표시 제목)",
+		Question: "단가 확인",
+		AgeDays:  3,
+		Path:     "프로젝트/alpha/대표.md",
+	}}, "", now)
+	if !strings.Contains(got, `ingest project 값: "alpha"`) {
+		t.Error("prompt missing stable folder value for ingest project=")
+	}
+	if !strings.Contains(got, "그대로") {
+		t.Error("prompt missing use-verbatim instruction for project=")
+	}
+}
+
 // TestWikiScoutStateBoundary pins state round-trip, corrupt-file recovery,
 // and prune bounding.
 func TestWikiScoutStateBoundary(t *testing.T) {

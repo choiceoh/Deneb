@@ -93,6 +93,12 @@ type wikiResearchTask struct {
 	// workspaceDir locates the operator wiki brief (WIKI.md — wiki.LoadWikiBrief).
 	// Empty disables brief injection.
 	workspaceDir string
+	// postCycleScout, when set, fires after each successful research turn with
+	// the refreshed page path. The wiki-scout task hooks in here so a question
+	// the internal pass just wrote down ("searched everything internal, no
+	// answer") goes external immediately instead of waiting out the scheduled
+	// scout cycle. nil = no immediate trigger.
+	postCycleScout func(ctx context.Context, repPath string)
 }
 
 // ResearchTask refreshes project wiki pages from Deneb's internal sources.
@@ -115,6 +121,12 @@ func NewResearchTask(
 		statePath:    statePath,
 		workspaceDir: workspaceDir,
 	}
+}
+
+// SetPostCycleScout wires the immediate external-scout trigger (see the
+// postCycleScout field). Called once at registration, before the task runs.
+func (t *wikiResearchTask) SetPostCycleScout(fn func(ctx context.Context, repPath string)) {
+	t.postCycleScout = fn
 }
 
 // Name returns the component's stable scheduler name.
@@ -215,6 +227,13 @@ func (t *wikiResearchTask) runOne(ctx context.Context) (string, bool, error) {
 		"skeleton", target.skeleton,
 		"output_len", len(result.Text),
 	)
+
+	// Hand the refreshed page to the external scout: it no-ops unless the
+	// turn above added open questions dated today. Sequential on purpose —
+	// one background lane, no goroutine fan-out for a rare bounded turn.
+	if t.postCycleScout != nil {
+		t.postCycleScout(ctx, target.path)
+	}
 	return target.path, target.skeleton, nil
 }
 

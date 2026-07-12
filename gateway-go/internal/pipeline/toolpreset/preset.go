@@ -111,12 +111,19 @@ var researcherTools = toSet(
 var wikiResearchTools = without(researcherTools, "web")
 
 // wikiScoutTools backs the autonomous external-scouting task
-// (wiki_scout_task.go): the full researcher surface INCLUDING web — the
-// scout's whole job is answering externally-answerable open questions and
-// watching operator brief topics on the web. Curated-memory pollution is
-// prevented by the scout's write discipline (자료 ingest + 로그 op only, rep
-// page body untouched), not by dropping the web tool as wiki-research does.
-var wikiScoutTools = researcherTools
+// (wiki_scout_task.go). Deliberately NARROW, not the researcher surface: the
+// scout's context carries fetched untrusted web pages, and the background
+// SendSync path has no untrusted-origin tool gate — so the personal-memory
+// surfaces (mail_archive/contacts/polaris/graphify) and file reads must not
+// be reachable from the same turn, or a prompt-injected page could steer
+// internal reads and leak them through a later web query. web is the job;
+// wiki stays for the three permitted writes (자료 ingest / 로그 op / 미해결
+// 질문 불릿 제거) and wiki reads, which are the scout's working set anyway.
+var wikiScoutTools = toSet(
+	"web",
+	"wiki",
+	"fetch_tools",
+)
 
 // implementerTools: researcher + file mutation + shell — the "do the work"
 // preset for delegated changes that end in artifacts, not just findings.

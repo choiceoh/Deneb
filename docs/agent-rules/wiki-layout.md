@@ -150,8 +150,12 @@ globs:
 
 - **wiki-scout 태스크** (`runtime/wikiwork/wiki_scout_task.go`, 12h): 대표페이지들의 **외부성
   미해결 질문**(2일 이상 경과, 사이클당 최대 3건, 시도 후 3일 쿨다운)과 WIKI.md 브리프 관심 주제를
-  대상으로 **웹 접근 포함**(`PresetWikiScout` = researcher 표면 그대로) 바운드 턴 1회.
-  질문도 브리프도 없으면 사이클 스킵. OpenWiki의 능동 커넥터 수집 패턴 도입(2026-07).
+  대상으로 웹 접근 포함 바운드 턴 1회. 질문도 브리프도 없으면 사이클 스킵. OpenWiki의 능동 커넥터
+  수집 패턴 도입(2026-07). **즉시 트리거**: wiki-research 턴이 오늘 날짜 미해결 질문을 새로 쓰면
+  (내부 소스로 못 닫았다는 뜻) 리서치 직후 `TriggerForPage`가 나이 게이트 없이 바로 1회 스카우트.
+- **`PresetWikiScout`는 의도적으로 좁다** (`web`·`wiki`·`fetch_tools`뿐): 스카우트 컨텍스트에는
+  신뢰 불가 웹 페이지가 실리므로 개인 메모리 표면(mail_archive·contacts·polaris·graphify)과 파일
+  읽기가 같은 턴에서 닿으면 주입 시 유출 표면이 된다 — researcher 표면 재사용 금지.
 - **쓰기 표면 3개 고정** (웹 텍스트가 정본 상태에 직접 스미지 않게): ① 근거 URL → `wiki ingest`
   자료 페이지(주입 방어·멱등 그대로 적용), ② 로그.md `질문해결` op append, ③ 대표페이지 미해결
   질문 **불릿 제거만**. 대표페이지 본문(현재 상태 등) 통합은 내부 wiki-research 몫 — 스카우트가

@@ -67,6 +67,34 @@ func TestAllowedTools_Researcher(t *testing.T) {
 	}
 }
 
+func TestAllowedTools_WikiScout(t *testing.T) {
+	allowed := AllowedTools(PresetWikiScout)
+	if allowed == nil {
+		t.Fatal("wiki-scout preset should return non-nil allowed set")
+	}
+	// web is the job; wiki carries the three permitted writes (자료 ingest /
+	// 로그 op / 미해결 질문 불릿 제거) plus wiki reads.
+	for _, name := range []string{"web", "wiki", "fetch_tools"} {
+		if _, ok := allowed[name]; !ok {
+			t.Errorf("wiki-scout preset should include %q", name)
+		}
+	}
+	// The scout's context carries fetched untrusted web pages and the
+	// background path has no untrusted-origin tool gate — personal-memory
+	// surfaces and file reads must be unreachable from the same turn so a
+	// prompt-injected page cannot steer internal reads or leak them.
+	for _, name := range []string{
+		"mail_archive", "contacts", "graphify", "polaris", "knowledge",
+		"read", "grep", "read_spillover",
+		"write", "edit", "exec", "process",
+		"message", "send_file", "sessions_spawn",
+	} {
+		if _, ok := allowed[name]; ok {
+			t.Errorf("wiki-scout preset must NOT include %q", name)
+		}
+	}
+}
+
 func TestAllowedTools_WikiResearch(t *testing.T) {
 	allowed := AllowedTools(PresetWikiResearch)
 	if allowed == nil {
