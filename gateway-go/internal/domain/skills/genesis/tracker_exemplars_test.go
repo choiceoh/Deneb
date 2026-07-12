@@ -89,3 +89,28 @@ func TestEvolutionHealth_FalseAcceptScoreboard(t *testing.T) {
 		t.Fatalf("rates must complement: %v + %v", h.ConfirmRate, h.FalseAcceptRate)
 	}
 }
+
+// Mechanism-level fallback (ToE 2606.06960): when no confirmed evolve matches
+// the exact signature, one sharing the mechanism=… component still surfaces;
+// unrelated mechanisms stay excluded.
+func TestConfirmedEvolveExemplars_MechanismFallback(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.LogEvolveConfirmed("sk-donor", HarnessEditAudit{
+		TargetSignature: "terminal=timeout|mechanism=tool-plan-drift",
+	}, true); err != nil {
+		t.Fatal(err)
+	}
+	// Different terminal, same mechanism → only the fallback can find it.
+	got, err := tr.ConfirmedEvolveExemplars([]string{"terminal=crash|mechanism=tool-plan-drift"}, "sk-target", 3)
+	if err != nil || len(got) != 1 || got[0].SkillName != "sk-donor" {
+		t.Fatalf("mechanism fallback missed the donor: %+v err=%v", got, err)
+	}
+	// No shared mechanism → nothing.
+	if got, _ := tr.ConfirmedEvolveExemplars([]string{"terminal=crash|mechanism=other"}, "sk-target", 3); len(got) != 0 {
+		t.Fatalf("unrelated mechanism must not match: %+v", got)
+	}
+}

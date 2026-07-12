@@ -129,11 +129,15 @@ type FalseRejectExhibit struct {
 // defects plus mined false-reject suspects, attributed to the judge prompt
 // version so P3 can segment labels per verifier revision.
 type JudgeAccuracyRecord struct {
-	CreatedAt    int64                `json:"createdAt"`
-	JudgeVersion string               `json:"judgeVersion"`
-	Pairs        int                  `json:"pairs"`
-	Correct      int                  `json:"correct"`
-	ByClass      map[string][2]int    `json:"byClass,omitempty"` // degradation -> [correct, total]
+	CreatedAt    int64             `json:"createdAt"`
+	JudgeVersion string            `json:"judgeVersion"`
+	Pairs        int               `json:"pairs"`
+	Correct      int               `json:"correct"`
+	ByClass      map[string][2]int `json:"byClass,omitempty"` // degradation -> [correct, total]
+	// ByCategory segments accuracy by skill CATEGORY (evaluator preference
+	// collapse, arXiv 2606.16682 — a category-local bias hides in the
+	// aggregate; segmenting makes it visible before it corrupts selection).
+	ByCategory   map[string][2]int    `json:"byCategory,omitempty"` // category -> [correct, total]
 	Misses       []JudgeMissExhibit   `json:"misses,omitempty"`
 	FalseRejects []FalseRejectExhibit `json:"falseRejects,omitempty"`
 }
@@ -215,6 +219,7 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 	rec := JudgeAccuracyRecord{
 		JudgeVersion: t.Meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback),
 		ByClass:      map[string][2]int{},
+		ByCategory:   map[string][2]int{},
 	}
 
 	entries := t.Evolver.catalogEntries()
@@ -230,6 +235,12 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 		rec.Pairs++
 		cls := rec.ByClass[pair.Degradation]
 		cls[1]++
+		category := pair.Category
+		if category == "" {
+			category = "(uncategorized)"
+		}
+		cat := rec.ByCategory[category]
+		cat[1]++
 		v, err := verdict(ctx, judgePrompt, pair.Original, pair.Degraded)
 		switch {
 		case err != nil:
@@ -241,8 +252,10 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 		default:
 			rec.Correct++
 			cls[0]++
+			cat[0]++
 		}
 		rec.ByClass[pair.Degradation] = cls
+		rec.ByCategory[category] = cat
 	}
 	if len(rec.Misses) > judgeAccuracyMaxExhibits {
 		rec.Misses = rec.Misses[:judgeAccuracyMaxExhibits]

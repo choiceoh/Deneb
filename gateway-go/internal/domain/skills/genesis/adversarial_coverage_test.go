@@ -1,8 +1,11 @@
 package genesis
 
 import (
+	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 )
 
 const advBody = `# 배포 스킬
@@ -177,4 +180,31 @@ func contains(s []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// Gate-exploit trap (2605.20744): the substring-stuffed candidate must be
+// REJECTED by the real preflight — a pass is the alarm condition.
+func TestProbeGateExploitTrap_RejectedByPreflight(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := NewEvolver(nil, skills.NewCatalog(nil), tr, "", nil)
+	original := strings.Repeat("# 스킬\n\n## 절차\n실제 내용이 담긴 문단이다. ", 30)
+	cases := []SkillValidationCaseRecord{{
+		SkillName:          "sk",
+		RequiredSubstrings: []string{"필수 문구 하나", "필수 문구 둘"},
+	}}
+	if err := tr.RecordSkillValidationCase(cases[0]); err != nil {
+		t.Fatal(err)
+	}
+	exploitable, _ := probeGateExploitTrap(e, "sk", original, cases)
+	if exploitable {
+		t.Fatal("substring-stuffed trap must NOT clear the deterministic preflight")
+	}
+	// No required substrings anywhere → no trap to build → never exploitable.
+	if got, _ := probeGateExploitTrap(e, "sk", original, nil); got {
+		t.Fatal("empty case set must yield no trap")
+	}
 }

@@ -41,6 +41,7 @@ const (
 // a known, mechanically applied defect.
 type judgeBenchPair struct {
 	Skill       string
+	Category    string
 	Degradation string
 	Original    string
 	Degraded    string
@@ -133,6 +134,7 @@ func buildJudgeDegradationPairs(entries []skills.SkillEntry, limit int) []judgeB
 			}
 			pairs = append(pairs, judgeBenchPair{
 				Skill:       entry.Skill.Name,
+				Category:    entry.Skill.Category,
 				Degradation: d.name,
 				Original:    body,
 				Degraded:    degraded,

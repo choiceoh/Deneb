@@ -436,6 +436,22 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 			false, "", "proposal write failed: "+werr.Error())
 	}
 	toVersion := generation.ContentSHA256(strings.TrimSpace(proposal))[:12]
+	// Low-confidence routing (ANCHOR 2606.06114 — human intervention is most
+	// valuable at output verification): a proposal the bench CLEARED but could
+	// not show improving (margin <= 0) is not auto-adopted; it surfaces as a
+	// propose-only feed card requesting an explicit operator verdict. Scarce
+	// operator attention goes exactly to the adoptions the deterministic
+	// evidence cannot decide. Benchless cycles keep their documented behavior.
+	lowConfidence := metaLowConfidenceReason(benchIncumbent, benchProposal, benchShadow)
+	if lowConfidence != "" {
+		logger.Info("meta-evolution: revision routed to operator verdict (bench-cleared but low-confidence)",
+			"artifact", artifact, "epoch", epoch, "margin", lowConfidence)
+		if t.OnProposal != nil {
+			t.OnProposal(artifact, epoch, reason, path, false)
+		}
+		return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow,
+			true, toVersion, reason+" [저신뢰: "+lowConfidence+" — 운영자 verdict 대기]")
+	}
 	if metaAutoAdoptEnabled() && !t.Tracker.AutoAdoptFrozen() {
 		// Operator mandate (2026-07-11): the deterministic gate chain (contract
 		// + epoch bench) IS the approver. Adopt immediately; the ledger health
@@ -592,6 +608,15 @@ func (t *MetaEvolutionTask) assembleEvidence(ctx context.Context, epoch string) 
 	if epoch == metaEpochEvaluator {
 		b.WriteString(t.assembleJudgeAccuracyEvidence())
 	}
+	if spots := t.Tracker.LabelerBlindSpots(evolutionHealthWindow); len(spots) > 0 {
+		// Blind Curator (2607.07436): confirmed-clean skills that fail their own
+		// workout cases = usage-labeler false-pass suspects. ADVISORY — grounds
+		// the producer on label-fidelity risk; no gate reads it.
+		b.WriteString("\n## 라벨러 사각 의심 (자문 — 게이트 아님; 실사용 라벨은 성공인데 자체 held-out 케이스는 실패)\n")
+		for _, s := range spots {
+			fmt.Fprintf(&b, "- %s: 워크아웃 실패 케이스 %d건 (confirm은 통과)\n", s.Skill, s.FailedCases)
+		}
+	}
 	if t.RuntimeHealth != nil {
 		if line := strings.TrimSpace(t.RuntimeHealth(ctx)); line != "" {
 			b.WriteString("\n## 런타임 건강 (자문 — 게이트 아님, P5-5)\n")
@@ -659,7 +684,8 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 	}
 	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
 	version := t.Meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
-	byClass := map[string][2]int{} // class -> [missed, total]
+	byClass := map[string][2]int{}    // class -> [missed, total]
+	byCategory := map[string][2]int{} // skill category -> [missed, total]
 	falseRejects := 0
 	if records, err := t.Tracker.RecentJudgeAccuracy(judgeMissEvidenceRuns); err == nil {
 		for _, rec := range records {
@@ -671,6 +697,12 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 				cur[0] += ct[1] - ct[0] // missed = total - correct
 				cur[1] += ct[1]
 				byClass[cls] = cur
+			}
+			for cat, ct := range rec.ByCategory {
+				cur := byCategory[cat]
+				cur[0] += ct[1] - ct[0]
+				cur[1] += ct[1]
+				byCategory[cat] = cur
 			}
 			falseRejects += len(rec.FalseRejects)
 		}
@@ -717,11 +749,38 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 		fmt.Fprintf(&b, "- 실전 false-accept %d건: %s — 판정자가 통과시킨 evolve가 실사용에서 롤백됨 (baseline-aware 확인, 최근 30일)\n",
 			len(organic), strings.Join(names, ", "))
 	}
+	// Category-local bias (evaluator preference collapse, 2606.16682): a
+	// category whose misses concentrate must be named so the revision fixes
+	// the category blind spot, not just the aggregate.
+	var skewed []string
+	for cat, ct := range byCategory {
+		if ct[0] > 0 {
+			skewed = append(skewed, fmt.Sprintf("%s %d/%d", cat, ct[0], ct[1]))
+		}
+	}
+	if len(skewed) > 0 {
+		sort.Strings(skewed)
+		fmt.Fprintf(&b, "- 카테고리별 놓침 분포: %s (한 카테고리 편중 = 국소 편향 신호)\n", strings.Join(skewed, " · "))
+	}
 	if falseRejects > 0 {
 		fmt.Fprintf(&b, "- 의심 false-reject: %d건 (기각했으나 실제로는 현재 본문보다 나았던 후보 — 과잉 엄격화 경계)\n", falseRejects)
 	}
 	b.WriteString("위 유형의 실제 결함 감지력을 높이되, 정상 개선을 기각하지 않도록 판정 기준을 정밀화하라 (과잉 기각은 진화를 정지시킨다).\n")
 	return b.String()
+}
+
+// metaLowConfidenceReason reports why a bench-cleared proposal is still not
+// confident enough to auto-adopt (margin <= 0 on the epoch bench that ran),
+// or "" when the evidence shows a measurable improvement. Pure — the
+// deterministic half of the low-confidence routing decision.
+func metaLowConfidenceReason(inc, prop *JudgeBenchOutcome, shadow *ProducerBenchOutcome) string {
+	if inc != nil && prop != nil && prop.Rate() <= inc.Rate() {
+		return fmt.Sprintf("judge bench margin %.2f→%.2f (no measurable improvement)", inc.Rate(), prop.Rate())
+	}
+	if shadow != nil && shadow.ProposalScore <= shadow.IncumbentScore {
+		return fmt.Sprintf("shadow bench margin %.2f→%.2f (no measurable improvement)", shadow.IncumbentScore, shadow.ProposalScore)
+	}
+	return ""
 }
 
 // metaProposalResp is the producer's verdict for a meta cycle.

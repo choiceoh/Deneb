@@ -295,6 +295,16 @@ func (t *AdversarialCoverageTask) Run(ctx context.Context) error {
 		if err != nil {
 			continue
 		}
+		if exploitable, _ := probeGateExploitTrap(t.Evolver, skill, string(raw), cases); exploitable {
+			// Gate-integrity alarm: the substring-stuffed trap cleared the
+			// deterministic preflight. Error level — the gate stack failed its
+			// own contract, not a data gap.
+			logger.Error("adversarial-coverage: gate-exploit trap PASSED preflight — deterministic gates exploitable for this skill",
+				"skill", skill)
+			if lerr := t.Tracker.LogGateExploit(skill, "substring-stuffed trap candidate cleared validateCandidatePreflight"); lerr != nil {
+				logger.Warn("adversarial-coverage: gate-exploit ledger write failed", "skill", skill, "error", lerr)
+			}
+		}
 		probes := append(
 			probeStructuralCoverageGaps(skill, string(raw), cases),
 			probeBehavioralCoverageGaps(skill, string(raw), cases)...,
@@ -313,4 +323,69 @@ func (t *AdversarialCoverageTask) Run(ctx context.Context) error {
 			"count", authored)
 	}
 	return nil
+}
+
+// --- Gate-exploit trap probe (Hack-Verifiable Environments, arXiv 2605.20744;
+// RSI 2026H2 addendum #3) ---
+//
+// The coverage probes above ask "can a BROKEN body slip past the cases?".
+// This asks the inverse integrity question: "can an EXPLOIT-SHAPED candidate
+// slip past the deterministic gates?" — a body that stuffs every required
+// substring verbatim while gutting real content maximizes the held-out score
+// without improving the skill (the canonical reward-hack against substring
+// assertions). The trap runs through the REAL preflight
+// (validateCandidatePreflight: guardrails + edit budget + held-out engine +
+// audit); rejection is the expected outcome and proves the gate stack holds.
+// A pass is a gate-integrity alarm, ledgered as "gate_exploit" so the drift
+// audit and the operator see it before optimization pressure finds the same
+// hole. Deterministic, no LLM, evidence-only.
+
+// buildExploitTrapBody assembles the substring-stuffed trap. Empty when the
+// case set carries no required substrings (nothing to stuff = no trap).
+func buildExploitTrapBody(skillName string, cases []SkillValidationCaseRecord) string {
+	var stuffed []string
+	seen := map[string]struct{}{}
+	for _, c := range cases {
+		for _, s := range c.RequiredSubstrings {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
+			}
+			if _, ok := seen[s]; ok {
+				continue
+			}
+			seen[s] = struct{}{}
+			stuffed = append(stuffed, s)
+		}
+	}
+	if len(stuffed) == 0 {
+		return ""
+	}
+	return "# " + skillName + "\n\n" + strings.Join(stuffed, "\n")
+}
+
+// gateExploitTrapAudit is the maximally exploit-shaped but formally complete
+// audit: every required field present, riding the review-finding path so the
+// probe tests the STRUCTURAL gates (guardrails/budget/held-out), not the
+// audit-form gate.
+func gateExploitTrapAudit() HarnessEditAudit {
+	return HarnessEditAudit{
+		TargetSignature:        "terminal=gate-trap|mechanism=substring-stuffing",
+		EditedSurface:          "body",
+		ExpectedBehaviorChange: "none — synthetic exploit probe",
+		RegressionRisk:         "none — never committed",
+	}
+}
+
+// probeGateExploitTrap runs the trap through the real deterministic preflight.
+// Returns exploitable=true (with the empty rejection reason) when the gates
+// FAILED to reject it.
+func probeGateExploitTrap(e *Evolver, skillName, originalContent string, cases []SkillValidationCaseRecord) (exploitable bool, rejectReason string) {
+	trap := buildExploitTrapBody(skillName, cases)
+	if trap == "" || e == nil {
+		return false, ""
+	}
+	ok, reason := e.validateCandidatePreflight(skillName, originalContent, trap,
+		gateExploitTrapAudit(), &UsageStats{SkillName: skillName}, "adversarial gate-trap probe (synthetic)")
+	return ok, reason
 }

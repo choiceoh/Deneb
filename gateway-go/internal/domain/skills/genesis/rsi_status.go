@@ -104,6 +104,7 @@ func (t *Tracker) rsiAssessL1() RSILayer {
 		{"기각", strconv.Itoa(h.EvolveRejected7d)},
 		{"확정률", fmt.Sprintf("%.0f%%", h.ConfirmRate*100)},
 		{"e-process", rsiEProcessValue(t.EProcessCutoverReadiness())},
+		{"라벨러 사각", strconv.Itoa(len(t.LabelerBlindSpots(evolutionHealthWindow)))},
 	}
 	base := RSILayer{Key: "L1", Title: "스킬 진화", Metrics: metrics}
 	switch {

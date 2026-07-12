@@ -184,6 +184,24 @@ func (t *Tracker) ConfirmedEvolveExemplars(signatures []string, excludeSkill str
 	if err != nil {
 		return nil, err
 	}
+	out := confirmedExemplarsMatching(entries, wanted, excludeSkill, limit)
+	// Mechanism-level fallback (ToE 2606.06960 / Experience Graphs 2606.29823
+	// — RSI 2026H2 addendum #6): at organic volume an exact-signature repeat
+	// is rare, so the precise pass often finds nothing. Retry on the
+	// mechanism=… component — the same key the failure clusters group by — so
+	// a confirmed fix for the same failure MECHANISM still reaches the prompt.
+	// Precise matches always win; the fallback only fills an empty result.
+	if len(out) == 0 {
+		if mech := signatureMechanisms(wanted); len(mech) > 0 {
+			out = confirmedExemplarsMatching(entries, mech, excludeSkill, limit)
+		}
+	}
+	return out, nil
+}
+
+// confirmedExemplarsMatching scans newest-first confirmed evolves whose target
+// signature matches any of wanted (substring semantics, SignatureMatches).
+func confirmedExemplarsMatching(entries []LifecycleLogEntry, wanted []string, excludeSkill string, limit int) []ConfirmedEvolveExemplar {
 	var out []ConfirmedEvolveExemplar
 	for _, e := range entries { // newest first
 		if e.Type != "evolve_confirmed" || e.SkillName == excludeSkill || e.SelfHarnessAudit == nil {
@@ -208,5 +226,26 @@ func (t *Tracker) ConfirmedEvolveExemplars(signatures []string, excludeSkill str
 			break
 		}
 	}
-	return out, nil
+	return out
+}
+
+// signatureMechanisms extracts the distinct mechanism=… components from
+// normalized signatures ("terminal=x|mechanism=y" form); empty for signatures
+// without one.
+func signatureMechanisms(signatures []string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, sig := range signatures {
+		for _, part := range strings.Split(sig, "|") {
+			if !strings.HasPrefix(part, "mechanism=") || part == "mechanism=" {
+				continue
+			}
+			if _, ok := seen[part]; ok {
+				continue
+			}
+			seen[part] = struct{}{}
+			out = append(out, part)
+		}
+	}
+	return out
 }

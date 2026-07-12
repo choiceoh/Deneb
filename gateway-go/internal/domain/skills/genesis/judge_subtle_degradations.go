@@ -129,6 +129,7 @@ func buildSubtleJudgeDegradationPairs(entries []skills.SkillEntry, limit int) []
 			}
 			pairs = append(pairs, judgeBenchPair{
 				Skill:       entry.Skill.Name,
+				Category:    entry.Skill.Category,
 				Degradation: d.name,
 				Original:    body,
 				Degraded:    degraded,
