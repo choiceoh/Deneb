@@ -7,6 +7,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
+	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -180,6 +181,13 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 			Source:              "reproduction-oracle",
 			FrontierTier:        "hard",
 		}
+		// ① Behavioral enrichment: string assertions only test "does the body
+		// SAY X". When the targeted failure named a concrete tool call, attach a
+		// behavioral replay assertion so the strongest gate (executor-based
+		// EvaluateBehavior) also tests "does the skill make the agent DO X". Free
+		// (tool data already lives in the failure trace); the oracle check below
+		// scores strings only, so this never corrupts the fails-on-original test.
+		enrichReproductionWithBehavior(reproduction, stats)
 	}
 	return evaluatedCandidate{
 		body:         candidateBody,
@@ -277,7 +285,15 @@ func (e *Evolver) adoptReproductionCase(skillName, originalContent, candidateBod
 	if rc == nil || e.tracker == nil {
 		return
 	}
-	cases := []SkillValidationCaseRecord{*rc}
+	// The fails-on-original / passes-on-candidate determination scores STRING
+	// assertions only. Behavioral replay assertions (attached by
+	// enrichReproductionWithBehavior) are for the executor gate — scoring them
+	// against the static body trace here would wrongly drop a good case when the
+	// candidate legitimately still names the failing tool (the fix is usually a
+	// corrected call, not tool removal). They ride onto the recorded case below.
+	stringOnly := *rc
+	stringOnly.Replay = SkillReplayCaseRecord{}
+	cases := []SkillValidationCaseRecord{stringOnly}
 	origScore := scoreSkillValidationCases(skillBodyOnly(originalContent), cases)
 	candScore := scoreSkillValidationCases(candidateBody, cases)
 	if origScore.Total == 0 {
@@ -437,4 +453,36 @@ func hasSufficientEvolutionEvidence(stats *UsageStats, reviewFinding string) boo
 		stats.TotalUses >= skillEvolutionMinEvidenceUses &&
 		stats.FailureCount >= skillEvolutionMinEvidenceFailures &&
 		(len(stats.RecentErrors) > 0 || len(stats.RecentFailureTraces) > 0)
+}
+
+// enrichReproductionWithBehavior attaches a behavioral replay assertion to a
+// producer-authored reproduction case when the skill's targeted failure trace
+// names a concrete failing tool call. The failed invocation becomes a
+// ForbiddenToolCall (the corrected skill should no longer drive the agent into
+// that failing call) plus a forbidden-action signature, and the trace supplies
+// the task input to simulate — so the case is behaviorally evaluable by the
+// executor gate, not just prose-matched. Best-effort and additive: a trace
+// without a tool defect leaves the case string-only.
+func enrichReproductionWithBehavior(rc *SkillValidationCaseRecord, stats *UsageStats) {
+	if rc == nil || stats == nil {
+		return
+	}
+	for _, tr := range stats.RecentFailureTraces {
+		tool := strings.TrimSpace(tr.ToolName)
+		if tool == "" || !tr.ToolError {
+			continue
+		}
+		call := SkillReplayToolCallRecord{Name: tool, FixtureError: true}
+		if frag := strings.TrimSpace(tr.ToolInput); frag != "" {
+			call.InputIncludes = []string{genesiscommon.TruncateRunes(frag, 80)}
+		}
+		rc.Replay.ForbiddenToolCalls = append(rc.Replay.ForbiddenToolCalls, call)
+		if sig := strings.TrimSpace(tr.Signature); sig != "" {
+			rc.Replay.ForbiddenActions = append(rc.Replay.ForbiddenActions, genesiscommon.TruncateRunes(sig, 80))
+		}
+		if rc.Replay.Input == "" {
+			rc.Replay.Input = "reproduce the failure that named tool " + tool
+		}
+		return // one behavioral assertion per case is enough signal
+	}
 }
