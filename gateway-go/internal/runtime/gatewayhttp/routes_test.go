@@ -59,6 +59,37 @@ func TestRegisterRoutesPreservesClientMethodBoundaries(t *testing.T) {
 	}
 }
 
+func TestRegisterFleetAlertRoutePreservesMethodAndPublisher(t *testing.T) {
+	mux := http.NewServeMux()
+	var gotTitle, gotBody string
+	RegisterFleetAlertRoute(mux, FleetAlertConfig{
+		Publish: func(title, body string) {
+			gotTitle, gotBody = title, body
+		},
+		Logger: discardLogger(),
+	})
+
+	get := httptest.NewRequest(http.MethodGet, "/api/hooks/fleet", nil)
+	get.RemoteAddr = "127.0.0.1:5555"
+	getRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(getRecorder, get)
+	if getRecorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET status = %d, want 405", getRecorder.Code)
+	}
+
+	post := httptest.NewRequest(http.MethodPost, "/api/hooks/fleet",
+		strings.NewReader(`{"level":"warn","title":"node warm","message":"temperature rising"}`))
+	post.RemoteAddr = "127.0.0.1:5555"
+	postRecorder := httptest.NewRecorder()
+	mux.ServeHTTP(postRecorder, post)
+	if postRecorder.Code != http.StatusOK {
+		t.Fatalf("POST status = %d, want 200; body=%s", postRecorder.Code, postRecorder.Body.String())
+	}
+	if gotTitle != "⚠️ 플릿 · node warm" || gotBody != "temperature rising" {
+		t.Fatalf("published alert = (%q, %q)", gotTitle, gotBody)
+	}
+}
+
 func TestWithCORSAnswersPreflightBeforeAuthentication(t *testing.T) {
 	nextCalled := false
 	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {

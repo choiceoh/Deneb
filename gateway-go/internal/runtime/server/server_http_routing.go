@@ -6,6 +6,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/gatewayhttp"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 )
 
 // buildMux configures HTTP routing for health, RPC/WS, API, hooks, and plugin routes.
@@ -55,7 +56,17 @@ func (s *Server) buildMux() *http.ServeMux {
 	// wormhole model. Client-token guarded. See server_http_eval.go.
 	mux.HandleFunc("POST /api/eval/extract", s.handleEvalExtract)
 	// SparkFleet webhook → native push (loopback-only, like /api/event/ingest).
-	mux.HandleFunc("POST /api/hooks/fleet", s.handleFleetHook)
+	gatewayhttp.RegisterFleetAlertRoute(mux, gatewayhttp.FleetAlertConfig{
+		Gate: s.alertGate,
+		Publish: func(title, body string) {
+			proactive.PublishWithFallback(s.pushHub, s.pushNotifier, proactive.Event{
+				Title: title,
+				Body:  body,
+				Kind:  proactive.PushKindFleet,
+			})
+		},
+		Logger: s.logger,
+	})
 	// Self-improvement telemetry digest for an agent/puppeteer (loopback-only).
 	mux.HandleFunc("GET /api/observatory", s.handleObservatory)
 

@@ -138,8 +138,9 @@ func TestFleetPathAllowedJobCancel(t *testing.T) {
 
 // The fleet webhook relays SparkFleet's generic alerts to connected clients,
 // loopback-only.
-func TestFleetHook(t *testing.T) {
-	s := &Server{logger: slog.Default(), pushHub: proactive.NewHub()}
+func TestFleetHookRoute(t *testing.T) {
+	s := &Server{logger: slog.Default(), pushHub: proactive.NewHub(), alertGate: proactive.NewAlertGate()}
+	mux := s.buildMux()
 	ch, unsub := s.pushHub.Subscribe(proactive.KindMobile)
 	defer unsub()
 
@@ -147,7 +148,7 @@ func TestFleetHook(t *testing.T) {
 		strings.NewReader(`{"source":"sparkfleet","level":"bad","title":"node down: srv3","message":"ssh unreachable"}`))
 	req.RemoteAddr = "127.0.0.1:5555"
 	w := httptest.NewRecorder()
-	s.handleFleetHook(w, req)
+	mux.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("hook: %d %s", w.Code, w.Body.String())
 	}
@@ -163,11 +164,27 @@ func TestFleetHook(t *testing.T) {
 		t.Fatal("no push frame published")
 	}
 
+	// The route reuses the server's process-wide gate. A repeated standing
+	// condition is acknowledged but does not emit another push.
+	req = httptest.NewRequest(http.MethodPost, "/api/hooks/fleet",
+		strings.NewReader(`{"source":"sparkfleet","level":"bad","title":"node down: srv3","message":"ssh unreachable"}`))
+	req.RemoteAddr = "127.0.0.1:5555"
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"suppressed":true`) {
+		t.Fatalf("duplicate hook: %d %s", w.Code, w.Body.String())
+	}
+	select {
+	case ev := <-ch:
+		t.Fatalf("duplicate alert was pushed: %+v", ev)
+	default:
+	}
+
 	// Non-loopback callers are refused (SparkFleet posts from this host).
 	req = httptest.NewRequest(http.MethodPost, "/api/hooks/fleet", strings.NewReader(`{"title":"x"}`))
 	req.RemoteAddr = "100.105.145.6:5555"
 	w = httptest.NewRecorder()
-	s.handleFleetHook(w, req)
+	mux.ServeHTTP(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Errorf("non-loopback: got %d want 403", w.Code)
 	}
