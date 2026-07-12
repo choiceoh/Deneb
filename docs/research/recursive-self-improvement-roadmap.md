@@ -362,3 +362,9 @@ recommendation is keep-frozen, feed the loop instead.
   deep-mapped against this codebase): `rsi-research-2026h1.md` — includes the
   per-paper code-change mappings and the five next-commit candidates this
   revision draws from.
+- Post-sweep addendum (2026-07-12, papers the sweep missed or that appeared
+  after its cutoff): `rsi-research-2026h2-addendum.md` — 6 deep mappings
+  (Blind Curator labeler blind-spot, RSEA heartbeat auto-apply readiness,
+  memory-consolidation immunity validation, evaluator-collapse segmentation,
+  ToE exemplar structuring, ANCHOR low-confidence verdict routing) + a ranked
+  next-commit list.
