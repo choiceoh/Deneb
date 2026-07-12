@@ -125,6 +125,9 @@ type Tracker struct {
 	optimizerMemoryPath string
 	validationPath      string
 	selfCorrectionPath  string
+	// skillsRoot overrides the managed skills root used to resolve candidate
+	// target paths (tests); empty means skills.DefaultManagedSkillsDir().
+	skillsRoot string
 
 	// In-memory aggregated stats, rebuilt from JSONL on startup.
 	stats               map[string]*usageAgg

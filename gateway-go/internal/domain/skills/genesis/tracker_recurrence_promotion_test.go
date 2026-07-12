@@ -1,6 +1,8 @@
 package genesis
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -105,5 +107,63 @@ func TestPromoteTargetRecurrence_BelowThresholdStaysQuiet(t *testing.T) {
 	}
 	if promoted != 0 {
 		t.Fatalf("single recurrence promoted (%d), want 0 — one flake must not fire", promoted)
+	}
+}
+
+// TestPromoteTargetRecurrence_ResolvesGenesisNestedTarget guards the target-path
+// contract: a genesis skill lives at <root>/genesis/<category>/<name>/SKILL.md,
+// and the promoted candidate must point there — the earlier naive root+name
+// join recorded phantom targets (~/.deneb/skills/<name>/SKILL.md) that sent the
+// consuming session to a nonexistent file.
+func TestPromoteTargetRecurrence_ResolvesGenesisNestedTarget(t *testing.T) {
+	tr := newTestTracker(t)
+	skillMD := filepath.Join(tr.skillsRoot, "genesis", "productivity", "deploy-helper", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(skillMD), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(skillMD, []byte("---\nname: deploy-helper\n---\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	seedRecurrence(t, tr, 2)
+
+	if _, err := tr.PromoteTargetRecurrenceCandidates(); err != nil {
+		t.Fatalf("PromoteTargetRecurrenceCandidates: %v", err)
+	}
+	cands, err := tr.RecentSelfCorrectionCandidates("deploy-helper", SelfCorrectionStatusProposed, 10)
+	if err != nil || len(cands) != 1 {
+		t.Fatalf("candidates: %v %+v", err, cands)
+	}
+	cand := cands[0]
+	if len(cand.TargetFiles) != 2 || cand.TargetFiles[0] != skillMD {
+		t.Fatalf("TargetFiles = %v, want first entry %q", cand.TargetFiles, skillMD)
+	}
+	if strings.Contains(cand.Evidence, skillTargetMissingNote) {
+		t.Fatalf("evidence flags a missing skill file although it exists: %q", cand.Evidence)
+	}
+}
+
+// TestPromoteTargetRecurrence_MissingSkillFileDropsTargetAndNotes guards the
+// archived/removed case: when the skill has no SKILL.md anywhere under the
+// managed root, the candidate must NOT carry a guessed path — only the
+// validation-cases ledger — and the evidence must say why.
+func TestPromoteTargetRecurrence_MissingSkillFileDropsTargetAndNotes(t *testing.T) {
+	tr := newTestTracker(t)
+	seedRecurrence(t, tr, 2)
+
+	if _, err := tr.PromoteTargetRecurrenceCandidates(); err != nil {
+		t.Fatalf("PromoteTargetRecurrenceCandidates: %v", err)
+	}
+	cands, err := tr.RecentSelfCorrectionCandidates("deploy-helper", SelfCorrectionStatusProposed, 10)
+	if err != nil || len(cands) != 1 {
+		t.Fatalf("candidates: %v %+v", err, cands)
+	}
+	cand := cands[0]
+	for _, target := range cand.TargetFiles {
+		if strings.Contains(target, "SKILL.md") {
+			t.Fatalf("candidate carries a guessed SKILL.md target for a skill absent on disk: %v", cand.TargetFiles)
+		}
+	}
+	if !strings.Contains(cand.Evidence, skillTargetMissingNote) {
+		t.Fatalf("evidence lacks the missing-skill note: %q", cand.Evidence)
 	}
 }

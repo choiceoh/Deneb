@@ -3,9 +3,12 @@ package genesis
 import (
 	"fmt"
 	"hash/fnv"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
@@ -54,6 +57,36 @@ const (
 	failureClusterScanLimit = 50
 )
 
+// skillTargetMissingNote is appended to candidate evidence when the owning
+// skill has no SKILL.md on disk — the skill was archived/removed (curation) or
+// renamed after the failures were recorded. The candidate then deliberately
+// carries no SKILL.md target: a guessed path sends the consumer to a
+// nonexistent file (the exact ghost-read failure this note replaced).
+const skillTargetMissingNote = "skill file not found under the managed skills root (archived/removed?) — verify with the skills tool before editing"
+
+// resolveSkillTarget returns the ~-compacted SKILL.md path for skillName,
+// resolved against the real on-disk nesting under the managed skills root
+// (flat, category, genesis/<category> — see skills.FindSkillFile). The
+// previous naive root+name join recorded phantom targets like
+// ~/.deneb/skills/<name>/SKILL.md while genesis skills live two levels deeper.
+func (t *Tracker) resolveSkillTarget(skillName string) (string, bool) {
+	root := t.skillsRoot
+	if root == "" {
+		root = skills.DefaultManagedSkillsDir()
+	}
+	p, ok := skills.FindSkillFile(root, skillName)
+	if !ok {
+		return "", false
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		if rel, relErr := filepath.Rel(home, p); relErr == nil &&
+			rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "~/" + filepath.ToSlash(rel), true
+		}
+	}
+	return p, true
+}
+
 // PromoteTargetRecurrenceCandidates converts fresh target-recurrence signals
 // into proposed self-correction candidates. Idempotent per (skill, signature):
 // once promoted, that signature never re-promotes regardless of review outcome
@@ -84,6 +117,14 @@ func (t *Tracker) PromoteTargetRecurrenceCandidates() (int, error) {
 		if selfCorrectionReopenBlocked(existing, source, rec.lastAt, now) {
 			continue
 		}
+		evidence := fmt.Sprintf("signature=%s; recurrences(window)=%d; lastAt=%s",
+			rec.signature, rec.recurrences, time.UnixMilli(rec.lastAt).Format(time.RFC3339))
+		targets := []string{"~/.deneb/data/skill_validation_cases.jsonl"}
+		if p, ok := t.resolveSkillTarget(rec.skill); ok {
+			targets = append([]string{p}, targets...)
+		} else {
+			evidence += "\n" + skillTargetMissingNote
+		}
 		if _, err := t.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 			Scope:     "skill",
 			SkillName: rec.skill,
@@ -92,12 +133,8 @@ func (t *Tracker) PromoteTargetRecurrenceCandidates() (int, error) {
 				"The last accepted evolve for %s targeted failure signature %q, but the signature recurred %d times in real usage after the evolve — the fix did not stick.",
 				rec.skill, rec.signature, rec.recurrences,
 			),
-			Evidence: fmt.Sprintf("signature=%s; recurrences(window)=%d; lastAt=%s",
-				rec.signature, rec.recurrences, time.UnixMilli(rec.lastAt).Format(time.RFC3339)),
-			TargetFiles: []string{
-				"~/.deneb/skills/" + rec.skill + "/SKILL.md",
-				"~/.deneb/data/skill_validation_cases.jsonl",
-			},
+			Evidence:       evidence,
+			TargetFiles:    targets,
 			ProposedChange: "Re-evolve the skill against this recurrence evidence, or pin the signature as a held-out validation case so the next evolve cannot be accepted without actually fixing it.",
 			Risk:           "Deterministic promotion from usage traces; signature matching is fuzzy substring — confirm the recurrences share the root cause before re-evolving.",
 			Source:         source,
@@ -189,16 +226,22 @@ func (t *Tracker) PromoteFailureClusterCandidates() (int, error) {
 		scope := "test"
 		targets := []string{"~/.deneb/data/skill_validation_cases.jsonl"}
 		title := "Recurring failure cluster: " + signature
+		skillFileNote := ""
 		if skill != "" {
 			scope = "skill"
-			targets = append([]string{"~/.deneb/skills/" + skill + "/SKILL.md"}, targets...)
 			title = "Recurring failure in " + skill + ": " + signature
+			if p, ok := t.resolveSkillTarget(skill); ok {
+				targets = append([]string{p}, targets...)
+			} else {
+				skillFileNote = "\n" + skillTargetMissingNote
+			}
 		}
 		evidence := fmt.Sprintf("kind=%s; support=%d; lastAt=%s",
 			c.Kind, c.Support, time.UnixMilli(c.LastAt).Format(time.RFC3339))
 		if ex := strings.TrimSpace(c.Example); ex != "" {
 			evidence += "\nexample: " + ex
 		}
+		evidence += skillFileNote
 		if _, err := t.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 			Scope:     scope,
 			SkillName: skill,
