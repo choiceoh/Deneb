@@ -10,6 +10,10 @@
 # Concurrent publishes still race on version.json itself, but every APK is
 # preserved by its hash, so any specific build stays retrievable by URL.
 #
+# fossRelease also publishes the R8 mapping (mapping.prt) next to the APK, so
+# crash stacks from any published build stay retraceable without rebuilding
+# the exact commit.
+#
 # Before building, it runs the native live-app smoke (native-app-smoke.sh) as a
 # gate: that smoke walks the real screens in the Compose Desktop build of the
 # same commonMain code the APK ships, catching render-time crashes that
@@ -214,6 +218,25 @@ fi
 mkdir -p "$APK_DIR"
 cp "$APK_PATH" "$APK_DIR/$APK_NAME"
 
+# Preserve the R8 mapping next to the APK. Without it, retracing a production
+# crash stack means rebuilding the exact commit just to regenerate the mapping
+# (the 2026-07-12 triage of builds 609/611/614 did exactly that, per build).
+# AGP 9.2 emits the partition format (mapping.prt); retrace with d8's
+# `com.android.tools.r8.retrace.Retrace --partition-map` — the standalone
+# cmdline-tools retrace (8.2.33) cannot parse .prt. A missing mapping is a
+# warning, not a block: the APK is still worth publishing without it.
+MAPPING_NAME=""
+if [ "$VARIANT" = "fossRelease" ]; then
+  MAPPING_PATH="androidApp/build/outputs/mapping/fossRelease/mapping.prt"
+  if [ -f "$MAPPING_PATH" ]; then
+    MAPPING_NAME="${APK_NAME%.apk}.mapping.prt"
+    cp "$MAPPING_PATH" "$APK_DIR/$MAPPING_NAME"
+  else
+    echo "WARNING: $MAPPING_PATH not found — publishing WITHOUT the R8 mapping" >&2
+    echo "         (retracing this build's crash stacks will need a rebuild at this commit)" >&2
+  fi
+fi
+
 # Escape backslashes and double quotes so arbitrary notes stay valid JSON.
 NOTES_ESC="${NOTES//\\/\\\\}"
 NOTES_ESC="${NOTES_ESC//\"/\\\"}"
@@ -228,4 +251,7 @@ EOF
 
 echo "published $APK_NAME"
 echo "  apk  -> $APK_DIR/$APK_NAME"
+if [ -n "$MAPPING_NAME" ]; then
+  echo "  map  -> $APK_DIR/$MAPPING_NAME"
+fi
 echo "  json -> $APK_DIR/version.json (url=$BASE_URL/$APK_NAME)"
