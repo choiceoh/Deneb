@@ -21,8 +21,11 @@ object WidgetRefresher {
     // notification. Benign race on the timestamp: worst case one extra refresh.
     private const val MIN_INTERVAL_MS = 5 * 60 * 1000L
 
+    // Starts one interval in the past so the first call always passes. NOT
+    // Long.MIN_VALUE: `now - MIN_VALUE` overflows to a large negative, which
+    // would trip the throttle on the very first call and never recover.
     @Volatile
-    private var lastRefreshElapsed = Long.MIN_VALUE
+    private var lastRefreshElapsed = -MIN_INTERVAL_MS
 
     fun requestRefresh(context: Context) {
         val appContext = context.applicationContext
