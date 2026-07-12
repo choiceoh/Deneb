@@ -51,6 +51,9 @@ things it shouldn't.
 | `curriculum.go` | Demand-generation lane (RSI P5-1) — coverage-gap mining; files route=genesis opportunities with validation cases authored first (source=`curriculum`, propose-only) |
 | `tracker_self_correction.go` | Self-correction candidate record/query + forbidden-surface gate |
 | `tracker_recurrence_promotion.go` | Recurrence/cluster → self-correction candidate promotion |
+| `meta_evolution.go` | L2 slow loop — weekly meta-artifact revision (evolve/judge prompts) with epoch benches, auto-adopt + rollback watch |
+| `runtime_error_mining.go` | L4 proactive source — recurring code-actionable errors → propose-only scope=code candidates |
+| `rsi_status.go` | RSI loop-status snapshot (`miniapp.rsi.status`) — L1–L4 layer state classification |
 
 ## Surface Tiers (`editable_surfaces.go`)
 
@@ -94,6 +97,48 @@ Deterministic promotion lives in `tracker_recurrence_promotion.go`:
   after a cooldown once the same signature recurs (fixed-but-still-failing);
   **rejected** never reopens (operator veto is respected). Per-tick promotion is
   capped. (PR #3367; drain-side hardening PR #3380.)
+
+## Meta-Evolution (L2) — the Slow Loop
+
+Distinct from L1 skill evolution: `MetaEvolutionTask` (`meta_evolution.go`) is a
+**weekly** task that revises the evolve/judge system prompts *themselves* — the
+improvement procedure is an evolvable artifact. Producer and evaluator epochs
+alternate (one change per window).
+
+- **Evidence block** (`assembleEvidence`): the producer sees the 7d evolution
+  scoreboard, low-yield levers, the meta-experience ledger (prior revisions +
+  outcomes), and — for evaluator epochs — the live judge's labeled misses (P3).
+- **Advisory grounding** (RSI P5-5): three operator-utility signals inform the
+  producer's prose but **no gate reads them**:
+  - feed-card accept/reject 7d (`OperatorUtilitySignals`, from the `Action` ledger)
+  - runtime health — p95 latency, error/timeout rates (`RuntimeHealth` closure)
+  - codebase health — overall score, weakest pillars (`QualityBench` closure)
+- **Gates** (deterministic, inviolate): contract gate (`metaArtifactContracts`) →
+  epoch-specific bench (judge-degradation gold pairs for evaluator, producer
+  shadow-replay for producer) → auto-adopt with rollback watch. The drift
+  self-brake (`evolution_drift.go`) freezes auto-adoption on reward-hacking
+  trajectories.
+- **Ledger**: `meta_evolution_log.jsonl` — every cycle records benches, adoption
+  health, and the advisory snapshot for audit.
+
+## Source Self-Edit (L4) — Proactive Code Candidates
+
+The L4 lane files propose-only scope=code self-correction candidates targeting
+gateway source. It is **conditionally open** (operator-authorized 2026-07-12):
+the source surface is a declared propose-only editable surface, but the
+acceptance machinery stays forbidden at record time.
+
+- **Reactive sources** (built): `evolver_tool_gap.go` (evolve declares a missing
+  tool), `runtime_error_mining.go` (recurring code-actionable error signatures).
+- **Proactive source** (scripts-side): `scripts/audit/health_finding_miner.py`
+  mines codebase-health structural findings + runtime-health standing weaknesses,
+  filing via the `miniapp.self_improvement_coding.record` RPC. Deliberately NOT
+  a gateway PeriodicTask — the inputs (git checkout, journald) live outside the
+  serving process.
+- **Staged dispatch**: the source namespaces (`runtime-error`, `health-finding`,
+  `evolve-tool-gap`, `self-harness`) are NOT all in coding-dispatch.sh's
+  allowlist yet — candidates accumulate for review before the dispatch flip
+  (graduation ladder in the roadmap).
 
 ## Gotchas & Invariants
 

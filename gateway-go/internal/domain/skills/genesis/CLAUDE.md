@@ -23,6 +23,22 @@ Deneb의 자가개선 루프. 스킬을 진화시키고(L1), 진화시키는 절
 | **L1 스킬 진화** | 저성과 SKILL.md body 재작성 | `evolver*.go`, `tracker*.go` |
 | **L2 메타 진화** | evolve/judge 프롬프트를 주간 개정하고 epoch 벤치로 채택·롤백 | `meta_evolution.go`, `meta_judge_bench.go`, `meta_producer_bench.go` |
 | **L3 verifier 공진화** | 라벨된 judge 오판과 심은 결함을 재생 | `judge_accuracy.go`, `tracker_validation_cases.go`의 `IsCharterCase` |
+| **L4 소스 자가편집** | 근거 있는 코드 후보를 코딩 레인에 제안(propose-only) | `runtime_error_mining.go`, `evolver_tool_gap.go`, `surfaces/surfaces.go` |
+
+## L2 자문 증거 (ADVISORY — 게이트 불가침)
+
+메타 진화의 `assembleEvidence()`는 운영자가 체감하는 효용을 세 자문 신호로
+받는다 (RSI P5-5). 이들은 생성자 산문을 접지할 뿐 **어떤 게이트도 읽지 않는다**
+— subtle-vs-blatant judge-degradation 분리와 같은 "informs vs decides" 패턴.
+
+| 신호 | 소스 | 주입 |
+|---|---|---|
+| feed-card 수락/기각 | `MetaRevisionRecord.Action` 원장 | `assembleOperatorUtilityEvidence()` |
+| 런타임 건강 (latency#1) | `agentlog.Writer.AggregateByModel` | `RuntimeHealth` 클로저 (서버 주입) |
+| 코드베이스 건강 | `health-v2-baseline.json` | `QualityBench` 클로저 (서버 주입) |
+
+세 신호 모두 기존 데이터 소스의 읽기 전용 뷰이며, genesis는 리프 패키지로
+유지된다 (agentlog/baseline 지식은 서버 클로저가 소유).
 
 ## 진입점과 책임
 

@@ -17,6 +17,16 @@
 //     mistakes. Its label substrate is grown deterministically by the
 //     judge-accuracy lane (planted-defect replay + false-reject mining). See
 //     judge_accuracy.go.
+//   - L4 source self-edit (operator-authorized): evidence-bearing code
+//     candidates (runtime-error mining, tool gaps) file propose-only
+//     scope=code corrections through the review lane. The source surface is a
+//     declared propose-only editable surface; the acceptance machinery stays
+//     forbidden. See runtime_error_mining.go, evolver_tool_gap.go.
+//
+// The L2 meta-evidence block (assembleEvidence) is grounded by ADVISORY
+// operator-utility signals — feed-card verdicts, runtime health (p95 latency),
+// and codebase-health baseline score. These inform the producer's prose but no
+// gate reads them; the deterministic acceptance circuit stays pure.
 //
 // # Invariants
 //
