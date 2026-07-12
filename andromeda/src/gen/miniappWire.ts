@@ -507,6 +507,24 @@ export interface QATurn {
   a?: string
 }
 
+export interface RSILayerView {
+  key?: string
+  title?: string
+  state?: string
+  diagnosis?: string
+  metrics?: RSIMetricView[]
+}
+
+export interface RSILoopStatusResponse {
+  layers?: RSILayerView[]
+  turning?: number
+}
+
+export interface RSIMetricView {
+  label?: string
+  value?: string
+}
+
 export interface RoleModel {
   role?: string
   model?: string

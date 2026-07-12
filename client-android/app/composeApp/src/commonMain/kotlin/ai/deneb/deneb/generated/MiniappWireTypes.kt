@@ -614,6 +614,30 @@ data class QATurn(
 
 @Immutable
 @Serializable
+data class RSILayerView(
+    val key: String = "",
+    val title: String = "",
+    val state: String = "",
+    val diagnosis: String = "",
+    val metrics: List<RSIMetricView> = emptyList(),
+)
+
+@Immutable
+@Serializable
+data class RSILoopStatusResponse(
+    val layers: List<RSILayerView> = emptyList(),
+    val turning: Int = 0,
+)
+
+@Immutable
+@Serializable
+data class RSIMetricView(
+    val label: String = "",
+    val value: String = "",
+)
+
+@Immutable
+@Serializable
 data class RoleModel(
     val role: String = "",
     val model: String = "",

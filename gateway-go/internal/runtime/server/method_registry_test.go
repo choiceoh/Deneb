@@ -170,6 +170,10 @@ var requiredMethods = []string{
 	// (org.LoadRules falls back to the legacy classification path), so this
 	// registers unconditionally even when no data source is wired in tests.
 	"miniapp.dashboard.lanes",
+	// RSI loop-status window (native + andromeda). The Status closure is always
+	// non-nil (it degrades to an empty snapshot when the tracker is unwired), so
+	// the read handler registers unconditionally.
+	"miniapp.rsi.status",
 	// Project digests — the store is a stateless dir wrapper (always non-nil),
 	// so the read handler registers unconditionally (empty until the dream
 	// cycle writes the first digest).
