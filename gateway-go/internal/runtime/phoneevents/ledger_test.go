@@ -129,9 +129,9 @@ func TestIsSensitiveNotification(t *testing.T) {
 		}
 	}
 	benign := []string{
-		"발주 2건 다음 주로 연기",              // work message, no OTP keyword
+		"발주 2건 다음 주로 연기",        // work message, no OTP keyword
 		"인증번호를 재발급 받으려면 앱을 여세요", // keyword but no code
-		"회의 시간 3시로 변경",                 // number but no keyword
+		"회의 시간 3시로 변경",          // number but no keyword
 	}
 	for _, s := range benign {
 		if isSensitiveNotification(s) {

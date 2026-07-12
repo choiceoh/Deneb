@@ -52,6 +52,11 @@ func TestNotiDigestBuildPrompt(t *testing.T) {
 		"로그.md에 '## [YYYY-MM-DD]",
 		"새 페이지를 만들지 마세요",
 		"대표페이지 본문도 직접 수정하지 마세요",
+		// per-kind guidance: e-approval status changes and missed calls
+		"전자결재",
+		"결재 상태 변화",
+		"부재중 전화",
+		"모르는 번호·스팸",
 		"전자결재 알림은 반드시 프로젝트 로그로",
 		"운영자 위키 지침",
 		"다음 사이클에 이어집니다",
