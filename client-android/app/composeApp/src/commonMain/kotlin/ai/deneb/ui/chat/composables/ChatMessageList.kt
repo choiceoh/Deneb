@@ -27,11 +27,9 @@ import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -453,21 +451,28 @@ internal fun ChatMessageList(
 
             // Keyboard follow-scroll: when the soft keyboard opens, the floating
             // input bar rises with it (imePadding), shrinking the list viewport from
-            // the bottom. Track the IME inset frame-by-frame and scroll the list by
-            // the exact delta so the newest message rides up (and back down) glued to
-            // the keyboard's own animation curve — smooth, not the stepped snaps a
-            // bucketed scrollToItem gives. snapshotFlow keeps this on the effect
-            // coroutine (no per-frame recomposition); near-bottom only, so a user
-            // scrolled up to re-read isn't yanked.
-            val imeInsets = WindowInsets.ime
-            LaunchedEffect(listState, imeInsets) {
-                var prev = imeInsets.getBottom(topOverlayDensity)
-                snapshotFlow { imeInsets.getBottom(topOverlayDensity) }
+            // the bottom. LazyColumn pins the top item on a viewport resize, so the
+            // newest message slides under the input bar. Scroll the list by the EXACT
+            // amount the viewport shrank so the last message rides up (and back down)
+            // glued to the keyboard's own animation curve.
+            //
+            // The viewport height is the source of truth — NOT the raw IME inset.
+            // Tracking WindowInsets.ime directly double-counts against imePadding:
+            // the layout consumes the nav-bar overlap, so raw IME != the px the
+            // viewport actually lost, which left the last message a few px shy of
+            // clearing the input bar ("덜 올라옴"). viewportSize already reflects
+            // what imePadding applied, so its delta matches the layout 1:1.
+            // snapshotFlow keeps this on the effect coroutine (no per-frame
+            // recomposition); near-bottom only, so a user scrolled up to re-read
+            // isn't yanked.
+            LaunchedEffect(listState) {
+                var prevHeight = listState.layoutInfo.viewportSize.height
+                snapshotFlow { listState.layoutInfo.viewportSize.height }
                     .collect { current ->
-                        val delta = current - prev
-                        prev = current
-                        if (delta != 0 && isNearBottom) {
-                            listState.scrollBy(delta.toFloat())
+                        val shrinkage = prevHeight - current
+                        prevHeight = current
+                        if (shrinkage != 0 && isNearBottom) {
+                            listState.scrollBy(shrinkage.toFloat())
                         }
                     }
             }
