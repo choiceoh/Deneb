@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.67](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.66...andromeda-v0.0.67) (2026-07-12)
+
+
+### 🔧 Internal
+
+* raise code health with typed boundaries and maintainable tests ([#3481](https://github.com/choiceoh/Deneb/issues/3481)) ([2af4ef2](https://github.com/choiceoh/Deneb/commit/2af4ef29991779f94f0b999c2bd41994c8700e90))
+
 ## [0.0.66](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.65...andromeda-v0.0.66) (2026-07-12)
 
 
