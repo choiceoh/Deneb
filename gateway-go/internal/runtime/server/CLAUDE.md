@@ -24,6 +24,9 @@ root다. 제품 규칙을 구현하는 곳이 아니라, 소유 패키지의 좁
   소유한다.
 - `server_workflow_side_effects.go`의 `Server.registerWorkflowSideEffects`는 RPC가
   아닌 자율 작업과 notifier의 최종 연결 지점이다.
+- `../modelmaintenance/suite.go`의 `modelmaintenance.New`가 모델 튜닝,
+  회귀 감시, 선택적 압축 튜너의 생성 순서와 관측 adapter를 소유한다. server는
+  `Suite.Tasks()`를 등록하고 `Suite.PromptTuner()`만 RPC에 노출한다.
 
 ## 의존 방향과 불변조건
 
@@ -38,6 +41,8 @@ root다. 제품 규칙을 구현하는 곳이 아니라, 소유 패키지의 좁
   hub에 새 비즈니스 메서드를 추가하거나 별도 배선 위치를 만들지 않는다.
 - route와 RPC method 이름은 각각 `buildMux`와 method registry가 단일 소스다.
   다른 초기화 파일에서 중복 등록하지 않는다.
+- 모델 유지관리 task를 server에서 직접 생성하지 않는다. task 활성화 조건,
+  순서, 저장소와 telemetry adapter 변경은 `runtime/modelmaintenance`에서 한다.
 
 ## 변경과 검증
 
@@ -48,6 +53,9 @@ root다. 제품 규칙을 구현하는 곳이 아니라, 소유 패키지의 좁
 
 RPC 또는 HTTP 표면을 바꿨다면 추가로 관련 handler 패키지 테스트를 실행하고,
 백그라운드 작업 변경은 취소된 context에서 종료되는지 테스트로 증명한다.
+모델 튜닝·회귀 감시·압축 튜너 배선을 바꿨다면
+`go test -race ./internal/runtime/modelmaintenance ./internal/runtime/server`로
+task 순서와 RPC에 노출되는 tuner 인스턴스가 같은지 함께 검증한다.
 클라이언트 HTTP 조립을 바꿨다면
 `go test ./internal/runtime/gatewayhttp ./internal/runtime/nativeapi ./internal/runtime/server`
 로 method boundary와 인증 전 CORS preflight를 함께 확인한다.
