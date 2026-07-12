@@ -99,7 +99,11 @@ for rid, rec in sorted(cand.items(), key=lambda kv: -(kv[1].get("createdAt") or 
     if rec.get("scope") != "code":
         continue
     src = rec.get("source") or ""
-    if not (src.startswith("evolve-tool-gap") or src.startswith("self-harness")):
+    # health-finding graduated 2026-07-12: first mined batch (7) reviewed clean
+    # (findings reproduce at HEAD, deterministic evidence, remediation directions
+    # actionable) — roadmap P5 graduation ladder. runtime-error stays staged.
+    if not (src.startswith("evolve-tool-gap") or src.startswith("self-harness")
+            or src.startswith("health-finding")):
         continue
     if os.path.exists(os.path.join(dispatch_dir, rid + ".json")):
         continue

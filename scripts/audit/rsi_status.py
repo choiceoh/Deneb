@@ -51,8 +51,9 @@ SUBTLE_CLASSES = frozenset({"imperative-drop", "safety-drop"})
 
 # L4 dispatch supply contract (must match scripts/dev/coding-dispatch.sh): a
 # candidate is dispatchable only if it is a proposed, code-scope correction from
-# an evidence-bearing source.
-L4_SOURCES = ("evolve-tool-gap", "self-harness")
+# an evidence-bearing source. health-finding graduated 2026-07-12 (first batch
+# reviewed clean); runtime-error stays staged until its own batch review.
+L4_SOURCES = ("evolve-tool-gap", "self-harness", "health-finding")
 
 LIVE, DATA_GATED, STARVED, FROZEN, IDLE = "LIVE", "DATA-GATED", "STARVED", "FROZEN", "IDLE"
 

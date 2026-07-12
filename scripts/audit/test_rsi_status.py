@@ -137,24 +137,37 @@ class L4Test(unittest.TestCase):
 
     def test_staged_non_dispatch_code_supply_is_visible(self):
         # Proposed code candidates from sources outside the dispatch allowlist
-        # (runtime-error #3491, health-finding P5-ws3) are staged supply. The
-        # layer stays STARVED (nothing dispatchable) but must count them and
-        # must NOT claim "no source produces code candidates".
+        # (runtime-error #3491) are staged supply. The layer stays STARVED
+        # (nothing dispatchable) but must count them and must NOT claim "no
+        # source produces code candidates".
         rows = [
             {"type": "self_correction_candidate", "id": "r1", "scope": "code",
              "status": "proposed", "source": "runtime-error:abc123"},
-            {"type": "self_correction_candidate", "id": "h1", "scope": "code",
-             "status": "proposed", "source": "health-finding:volatile-hub:46a381ef4981"},
         ]
         s = assess_l4(rows, dispatch_total=0, dispatch_today=0)
         self.assertEqual(s.state, STARVED)
         self.assertEqual(s.metrics["dispatchable"], 0)
-        self.assertEqual(s.metrics["staged"], 2)
-        self.assertEqual(s.metrics["staged_sources"],
-                         {"runtime-error": 1, "health-finding": 1})
+        self.assertEqual(s.metrics["staged"], 1)
+        self.assertEqual(s.metrics["staged_sources"], {"runtime-error": 1})
         self.assertIn("staged", s.diagnosis)
         self.assertIn("allowlist graduation", s.diagnosis)
         self.assertNotIn("wiring gap", s.diagnosis)
+
+    def test_health_finding_graduated_to_dispatchable(self):
+        # Graduation regression (2026-07-12): health-finding cleared its first
+        # batch review, so its candidates count DISPATCHABLE and turn L4 LIVE —
+        # while runtime-error next to it stays staged.
+        rows = [
+            {"type": "self_correction_candidate", "id": "h1", "scope": "code",
+             "status": "proposed", "source": "health-finding:volatile-hub:46a381ef4981"},
+            {"type": "self_correction_candidate", "id": "r1", "scope": "code",
+             "status": "proposed", "source": "runtime-error:abc123"},
+        ]
+        s = assess_l4(rows, dispatch_total=0, dispatch_today=0)
+        self.assertEqual(s.state, LIVE)
+        self.assertEqual(s.metrics["dispatchable"], 1)
+        self.assertEqual(s.metrics["staged"], 1)
+        self.assertEqual(s.metrics["staged_sources"], {"runtime-error": 1})
 
     def test_reviewed_staged_candidate_stops_counting(self):
         # A rejected staged candidate is settled, not awaiting graduation.

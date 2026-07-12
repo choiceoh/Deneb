@@ -45,9 +45,10 @@ const (
 var rsiSubtleDegradationClasses = map[string]bool{"imperative-drop": true, "safety-drop": true}
 
 // rsiDispatchSources mirrors coding-dispatch.sh's accepted candidate sources: a
-// code candidate from any other source is not yet dispatchable (the runtime-
-// error source is deliberately excluded until its allowlist flip).
-var rsiDispatchSources = []string{"evolve-tool-gap", "self-harness"}
+// code candidate from any other source is not yet dispatchable. health-finding
+// graduated 2026-07-12 (first mined batch reviewed clean — roadmap P5 ladder);
+// the runtime-error source stays staged until its own batch review.
+var rsiDispatchSources = []string{"evolve-tool-gap", "self-harness", "health-finding"}
 
 // rsiLayerDetails is the per-layer "what is this loop" explanation the viewers
 // reveal on tap — static role text, keyed by layer.

@@ -269,11 +269,11 @@ operator-tunable):
 | Lock (today) | Evidence to graduate | Action |
 |---|---|---|
 | runtime-error source not dispatchable (#3491 staging) | first 3–5 mined candidates review clean (no hallucinated signatures) | allowlist flip in coding-dispatch.sh + rsi_status L4_SOURCES |
-| health-finding source not dispatchable (P5-ws3 first slice) | first mined batch reviews clean (findings reproduce at HEAD, remediation directions actionable) | allowlist flip in coding-dispatch.sh + rsi_status L4_SOURCES |
+| ~~health-finding source not dispatchable~~ **GRADUATED 2026-07-12** | first batch (7) reviewed clean: finding IDs deterministic + independently reproduced at HEAD, no hallucinated signatures, remediation directions actionable with the safety contract embedded; wiki pair ([1] volatile-contract / [6] volatile-hub) dedups via the reproduce-at-HEAD precheck; two doctrine-tension candidates (runtime/server fan-out = composition root, toolctx co-change = designed leaf) rely on the dispatch bail-out clause | flipped: coding-dispatch.sh + rsi_status (py & Go) |
 | e-process observation mode (#3439) | disagreement labels n≥20, legacy-agreement ≥90% | cutover: e-process owns rollback firing |
 | L4 daily dispatch cap = 2 | N dispatches with 0 deploy-watch rollbacks and ≥50% land rate | raise DENEB_DISPATCH_DAILY_CAP |
 | deploy-watch = binary rollback only | one rollback exercised end-to-end (real or fire-drill) | open the source auto-apply tier per the L4 note |
-| calibration knobs at defaults | operator opens the P5-2 window | env drop-in on the gateway service |
+| ~~calibration knobs at defaults~~ **WINDOW OPEN 2026-07-12 → close by 2026-08-23** | operator opened the P5-2 window (meta=2d, judge-accuracy=4h, watch-max-age=5d, bench-scale=2, curriculum=24h) | drop-in `~/.config/systemd/user/deneb-gateway.service.d/rsi-calibration.conf`; revert = delete + daemon-reload + restart |
 
 **Sobriety guards (what "beyond" must not become).** 2605.20086 (most
 evolved "improvements" are a few edit types) and 2607.04277 (sustained RSI
