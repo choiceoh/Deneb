@@ -43,10 +43,18 @@ FILE_PATH=$(echo "$INPUT" | jq -r '
 # ── File-path gate (primary): pass if the target is inside any worktree ───
 # WT_BASE holds every agent worktree root. A target beneath it is isolated by
 # construction, so it can never collide with the main checkout regardless of
-# the current cwd.
+# the current cwd.  Relative paths are resolved against cwd first, then the
+# project dir, so "./scripts/dev/x.sh" from a worktree-resident cwd still
+# resolves correctly.
 WT_BASE="$HOME/.zcode/worktrees"
 if [[ -n "$FILE_PATH" ]]; then
-    case "$(cd "$FILE_PATH" 2>/dev/null && pwd || echo "$FILE_PATH")" in
+    # Normalize: resolve relative paths to absolute.
+    RESOLVED="$FILE_PATH"
+    if [[ "$FILE_PATH" != /* ]]; then
+        BASE_DIR="${CLAUDE_PROJECT_DIR:-${ZCODE_PROJECT_DIR:-$(pwd)}}"
+        RESOLVED="$BASE_DIR/$FILE_PATH"
+    fi
+    case "$(cd "$RESOLVED" 2>/dev/null && pwd || echo "$RESOLVED")" in
         "$WT_BASE"/*)
             exit 0
             ;;

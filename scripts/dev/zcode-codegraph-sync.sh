@@ -1,17 +1,40 @@
 #!/bin/bash
 # PostToolUse hook (Write|Edit|MultiEdit): background codegraph sync after edits.
 #
-# CodeGraph's file-watcher daemon is inactive in some versions (1.4.x), so the
-# index can drift from the working tree after edits.  This hook runs
-# `codegraph sync` in the background after each Write/Edit/MultiEdit so the
-# index stays fresh (<0.5s, detached — never blocks the session).
+# The file-watcher daemon is active in CodeGraph 1.4.1+, but this hook remains
+# as a belt-and-suspenders sync to guarantee the index reflects the latest
+# edit.  It runs `codegraph sync` in the background (<0.5s, detached — never
+# blocks the session).
+#
+# Root resolution: the edited file's path (from tool_input.file_path) is the
+# primary signal — under ZCode the cwd/CLAUDE_PROJECT_DIR points at the main
+# checkout, so using it would sync the WRONG index (main's, not the
+# worktree's).  We walk up from the file to find the .codegraph root.
 #
 # Fail-open: any error exits 0 so tool use is never blocked.
 set -uo pipefail
 
-# ── Resolve repo root ─────────────────────────────────────────────────────
-ROOT="${CLAUDE_PROJECT_DIR:-${ZCODE_PROJECT_DIR:-$(pwd)}}"
-ROOT=$(cd "$ROOT" 2>/dev/null && pwd) || exit 0
+# ── Resolve root from the edited file path ────────────────────────────────
+INPUT=$(cat)
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' 2>/dev/null)
+
+ROOT=""
+if [[ -n "$FILE_PATH" ]]; then
+    # Walk up from the file to find the enclosing .codegraph directory.
+    DIR=$(cd "$(dirname "$FILE_PATH")" 2>/dev/null && pwd) || DIR=""
+    while [[ -n "$DIR" ]] && [[ "$DIR" != "/" ]]; do
+        if [[ -d "$DIR/.codegraph" ]]; then
+            ROOT="$DIR"
+            break
+        fi
+        DIR=$(dirname "$DIR")
+    done
+fi
+# Fallback: project dir env (main checkout — last resort, may be wrong root).
+if [[ -z "$ROOT" ]]; then
+    ROOT="${CLAUDE_PROJECT_DIR:-${ZCODE_PROJECT_DIR:-$(pwd)}}"
+    ROOT=$(cd "$ROOT" 2>/dev/null && pwd) || exit 0
+fi
 [[ -d "$ROOT/.codegraph" ]] || exit 0  # no index → nothing to sync
 
 # ── Find codegraph binary ─────────────────────────────────────────────────
