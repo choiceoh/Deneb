@@ -1,12 +1,31 @@
 package curriculumenv
 
 import (
+	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 )
+
+// TestMain pins the calendar source to empty by default so the feed/wiki tests
+// stay deterministic (the real localcal.Default() would otherwise leak the
+// host's calendar into the digest). Calendar-specific tests override it.
+func TestMain(m *testing.M) {
+	upcomingCalEvents = func(time.Time, time.Time) []calendar.Event { return nil }
+	os.Exit(m.Run())
+}
+
+// withEvents overrides the calendar source for one test and restores it.
+func withEvents(t *testing.T, fn func(from, to time.Time) []calendar.Event) {
+	t.Helper()
+	prev := upcomingCalEvents
+	upcomingCalEvents = fn
+	t.Cleanup(func() { upcomingCalEvents = prev })
+}
 
 // fakeFeed is an in-memory FeedLister so the digest test needs no real store.
 type fakeFeed struct {
@@ -106,8 +125,36 @@ func (c cutoffCapture) ActiveCounterpartyDomains(cutoff string) map[string]struc
 	return nil
 }
 
-var errBoom = fakeErr("boom")
+var errBoom = errors.New("boom")
 
-type fakeErr string
+// The digest surfaces upcoming business-calendar commitments (P5-1 forward
+// demand), skipping untitled holds.
+func TestDigest_UpcomingCalendar(t *testing.T) {
+	withEvents(t, func(from, to time.Time) []calendar.Event {
+		return []calendar.Event{
+			{Summary: "ACME 계약 협상 미팅", Start: from.Add(24 * time.Hour)},
+			{Summary: "", Start: from.Add(48 * time.Hour)}, // untitled — dropped
+			{Summary: "분기 실적 발표 준비", Start: from.Add(72 * time.Hour)},
+		}
+	})
+	got := Digest(Sources{})
+	if !strings.Contains(got, "다가오는 일정") {
+		t.Fatalf("digest missing upcoming-calendar section:\n%s", got)
+	}
+	if !strings.Contains(got, "ACME 계약 협상 미팅") || !strings.Contains(got, "분기 실적 발표 준비") {
+		t.Fatalf("digest missing a titled commitment:\n%s", got)
+	}
+	if n := strings.Count(got, "\n- "); n != 2 {
+		t.Fatalf("expected 2 event bullets (untitled dropped), got %d:\n%s", n, got)
+	}
+}
 
-func (e fakeErr) Error() string { return string(e) }
+// A calendar window with only untitled holds carries no demand → no section.
+func TestDigest_UntitledCalendarOmitted(t *testing.T) {
+	withEvents(t, func(from, to time.Time) []calendar.Event {
+		return []calendar.Event{{Summary: "   ", Start: from.Add(time.Hour)}}
+	})
+	if got := Digest(Sources{}); got != "" {
+		t.Fatalf("untitled-only calendar should yield empty digest, got %q", got)
+	}
+}

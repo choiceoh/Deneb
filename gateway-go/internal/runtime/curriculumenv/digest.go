@@ -19,16 +19,36 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 )
 
-// domainWindow bounds how far back the wiki-domain lookback reaches.
-const domainWindow = 7 * 24 * time.Hour
+// domainWindow bounds how far back the wiki-domain lookback reaches;
+// forwardWindow bounds how far ahead upcoming commitments are read.
+const (
+	domainWindow  = 7 * 24 * time.Hour
+	forwardWindow = 14 * 24 * time.Hour
+)
 
-// feedCap / domainCap bound each section so the digest stays compact.
+// feedCap / domainCap / eventCap bound each section so the digest stays compact.
 const (
 	feedCap   = 20
 	domainCap = 15
+	eventCap  = 15
 )
+
+// upcomingCalEvents returns business-calendar events overlapping [from, to).
+// It reads the process-wide local calendar directly (localcal is a singleton,
+// unlike the server-held feed/wiki stores) — kept here so the calendar demand
+// source needs no composition-root change. A package var so tests inject a
+// fixture; nil-tolerant.
+var upcomingCalEvents = func(from, to time.Time) []calendar.Event {
+	store, err := localcal.Default()
+	if err != nil || store == nil {
+		return nil
+	}
+	return store.ListRange(from, to)
+}
 
 // FeedLister is the narrow slice of the workfeed store the digest needs.
 // *workfeed.Store satisfies it structurally.
@@ -95,6 +115,33 @@ func Digest(s Sources) string {
 			}
 			fmt.Fprintf(&b, "활성 위키 상대 도메인(최대 15): %s\n", strings.Join(sorted, " · "))
 		}
+	}
+
+	// Forward-looking demand: upcoming business-calendar commitments (skill-
+	// coverage gaps vs the calendar, RSI P5-1). The producer infers which
+	// capabilities imminent commitments will need; the curriculum lane's 12-rune
+	// verbatim-quote grounding gate keeps a proposal tied to a real event
+	// summary, so this is demand grounding, not free invention. Untitled holds
+	// carry no demand signal and are skipped.
+	from := now()
+	var events []string
+	for _, ev := range upcomingCalEvents(from, from.Add(forwardWindow)) {
+		summary := strings.TrimSpace(ev.Summary)
+		if summary == "" {
+			continue
+		}
+		events = append(events, fmt.Sprintf("- %s: %s", ev.Start.Format("01-02"), truncRunes(summary, 80)))
+		if len(events) >= eventCap {
+			break
+		}
+	}
+	if len(events) > 0 {
+		if b.Len() > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString("다가오는 일정(스킬 커버리지 갭 후보, 최대 15):\n")
+		b.WriteString(strings.Join(events, "\n"))
+		b.WriteString("\n")
 	}
 
 	return strings.TrimSpace(b.String())
