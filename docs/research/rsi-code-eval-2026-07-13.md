@@ -10,6 +10,12 @@
 > 9bec273 (HEAD at audit time). This is a dated assessment, not a live status
 > surface — current counters come from `scripts/audit/rsi-status.py`.
 
+> **Resolution (same PR):** every Critical, High, and Medium finding below was
+> fixed in this PR with accompanying regression tests; deterministic gates and
+> the acceptor were hardened fail-closed. This section preserves the original
+> as-of-audit assessment — read each finding as "diagnosed here, fixed in this
+> PR" rather than an open item.
+
 ## Verdict in one paragraph
 
 The architecture is real and the documentation is unusually honest: of ~40
