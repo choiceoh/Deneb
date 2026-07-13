@@ -254,8 +254,22 @@ Five workstreams, in priority order:
    business calendar"): the producer infers which capabilities imminent
    commitments will need, and the 12-rune verbatim-quote grounding gate keeps a
    proposal tied to a real event summary. Landing it in `curriculumenv` (not
-   `server`) kept the change off the overloaded composition root. Remaining
-   unbuilt P5-1 demand source: declined/failed-request mining.
+   `server`) kept the change off the overloaded composition root.
+
+   *Slice-4 LANDED (failed-request mining) — the demand-source set named by
+   this workstream is now complete.* `agentlog.FailedUserRequests` joins
+   `run.error` entries to their run's user message within REAL client
+   sessions (`client:*`; the live-test synthetic `client:lt-*` prefix and
+   `system:*`/`cron:*` sessions are excluded at the source — ground rule 3),
+   dedups retries, and the digest renders each as a QUOTED request + error
+   head over a 14d window (failures are scarce at single-operator cadence) —
+   the strongest demand evidence available, since the environment already
+   asked in its own words and the verbatim-quote gate can bind a proposal to
+   the exact ask. Deliberate scope cut: agent-DECLINED requests ("that
+   capability doesn't exist") are not deterministically detectable from a
+   normally-completed run and would need LLM inference over transcripts —
+   excluded to keep the lane deterministic; revisit only with a labeled
+   decline signal.
 
 2. **Calibration campaign — run the #3461 knobs, bounded (operator lever,
    zero new code).** Weekly meta cadence gives the slow loop ~4 fitness

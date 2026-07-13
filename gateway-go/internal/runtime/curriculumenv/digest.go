@@ -7,9 +7,10 @@
 //
 // The curriculum producer reads this digest to widen demand mining beyond
 // tracker-local evidence: it sees what the operator is ACTUALLY working on
-// (recent feed items) and the wiki domains in play, so proposed capabilities
-// target real environment gaps, not catalog-internal rearrangement. Genesis
-// stays a leaf — the closure server injects owns all workfeed/wiki knowledge.
+// (recent feed items), the wiki domains in play, upcoming commitments, and
+// requests that FAILED outright, so proposed capabilities target real
+// environment gaps, not catalog-internal rearrangement. Genesis stays a leaf
+// — the closure server injects owns all workfeed/wiki/agentlog knowledge.
 package curriculumenv
 
 import (
@@ -18,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
@@ -25,16 +27,22 @@ import (
 
 // domainWindow bounds how far back the wiki-domain lookback reaches;
 // forwardWindow bounds how far ahead upcoming commitments are read.
+// failedWindow bounds the failed-request lookback — failures are scarce at
+// single-operator cadence (a handful per month), so the window is wider than
+// the 7d domain lookback, same rationale as genesis' organic-label window.
 const (
 	domainWindow  = 7 * 24 * time.Hour
 	forwardWindow = 14 * 24 * time.Hour
+	failedWindow  = 14 * 24 * time.Hour
 )
 
-// feedCap / domainCap / eventCap bound each section so the digest stays compact.
+// feedCap / domainCap / eventCap / failedCap bound each section so the digest
+// stays compact.
 const (
 	feedCap   = 20
 	domainCap = 15
 	eventCap  = 15
+	failedCap = 8
 )
 
 // upcomingCalEvents returns business-calendar events overlapping [from, to).
@@ -62,16 +70,23 @@ type WikiDomainSource interface {
 	ActiveCounterpartyDomains(cutoff string) map[string]struct{}
 }
 
-// Sources are the injected environment stores the digest reads (feed + wiki).
-// Every field is nil-tolerant (early/late binding): a nil source drops its
-// section. Now defaults to time.Now when unset. Note the upcoming-calendar
-// section is NOT injected here — it reads the process-wide localcal singleton
-// via upcomingCalEvents — so an all-nil Sources can still yield a non-empty
-// digest when the operator has upcoming commitments.
+// FailedRequestSource is the narrow slice of the agent behavioral log the
+// digest needs. *agentlog.Writer satisfies it structurally.
+type FailedRequestSource interface {
+	FailedUserRequests(sinceMs int64, limit int) []agentlog.FailedRequest
+}
+
+// Sources are the injected environment stores the digest reads (feed + wiki +
+// agent behavioral log). Every field is nil-tolerant (early/late binding): a
+// nil source drops its section. Now defaults to time.Now when unset. Note the
+// upcoming-calendar section is NOT injected here — it reads the process-wide
+// localcal singleton via upcomingCalEvents — so an all-nil Sources can still
+// yield a non-empty digest when the operator has upcoming commitments.
 type Sources struct {
-	Feed FeedLister
-	Wiki WikiDomainSource
-	Now  func() time.Time
+	Feed     FeedLister
+	Wiki     WikiDomainSource
+	AgentLog FailedRequestSource
+	Now      func() time.Time
 }
 
 // Digest formats a compact environment summary: recent feed-item titles (active
@@ -144,6 +159,30 @@ func Digest(s Sources) string {
 		fmt.Fprintf(&b, "다가오는 일정(스킬 커버리지 갭 후보, 최대 %d):\n", eventCap)
 		b.WriteString(strings.Join(events, "\n"))
 		b.WriteString("\n")
+	}
+
+	// Explicit failed demand: real user requests that errored mid-run — the
+	// operator already asked for this in their own words and the agent could
+	// not complete it. The strongest demand evidence in the digest (no
+	// inference needed); rendered with the request text so the curriculum's
+	// 12-rune verbatim-quote grounding gate can bind a proposal to the actual
+	// ask. Live-test synthetic sessions are excluded at the source
+	// (agentlog.FailedUserRequests).
+	if s.AgentLog != nil {
+		failed := s.AgentLog.FailedUserRequests(now().Add(-failedWindow).UnixMilli(), failedCap)
+		if len(failed) > 0 {
+			if b.Len() > 0 {
+				b.WriteString("\n")
+			}
+			fmt.Fprintf(&b, "최근 실패한 요청(명시적 능력 갭, 최대 %d):\n", failedCap)
+			for _, r := range failed {
+				line := fmt.Sprintf("- %s: \"%s\"", time.UnixMilli(r.Ts).Format("01-02"), truncRunes(r.Message, 80))
+				if e := strings.TrimSpace(r.Error); e != "" {
+					line += " — 오류: " + truncRunes(e, 60)
+				}
+				b.WriteString(line + "\n")
+			}
+		}
 	}
 
 	return strings.TrimSpace(b.String())

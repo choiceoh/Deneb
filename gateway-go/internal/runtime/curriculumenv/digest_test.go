@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 )
@@ -41,6 +42,19 @@ func (f fakeFeed) List(int, bool) ([]workfeed.Item, int, error) {
 type fakeWiki map[string]struct{}
 
 func (f fakeWiki) ActiveCounterpartyDomains(string) map[string]struct{} { return f }
+
+// fakeFailed is an in-memory FailedRequestSource capturing the window it got.
+type fakeFailed struct {
+	reqs    []agentlog.FailedRequest
+	sinceMs *int64
+}
+
+func (f fakeFailed) FailedUserRequests(sinceMs int64, _ int) []agentlog.FailedRequest {
+	if f.sinceMs != nil {
+		*f.sinceMs = sinceMs
+	}
+	return f.reqs
+}
 
 // truncRunes caps at n runes with an ellipsis (Korean runes count as 1 each).
 func TestTruncRunes(t *testing.T) {
@@ -101,6 +115,41 @@ func TestDigest_FeedErrorDropsSection(t *testing.T) {
 func TestDigest_Empty(t *testing.T) {
 	if got := Digest(Sources{}); got != "" {
 		t.Fatalf("empty sources should yield empty digest, got %q", got)
+	}
+}
+
+// The digest surfaces recent failed user requests — quoted so the curriculum
+// grounding gate can bind a proposal to the actual ask — and honors the
+// 14d window; an empty source stays silent.
+func TestDigest_FailedRequests(t *testing.T) {
+	var gotSince int64
+	src := Sources{
+		AgentLog: fakeFailed{
+			reqs: []agentlog.FailedRequest{
+				{Message: "위키에서 발주서 초안 뽑아줘", Error: "stream stall", Ts: time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC).UnixMilli()},
+				{Message: "지난달 매출 정리해줘", Ts: time.Date(2026, 7, 9, 9, 0, 0, 0, time.UTC).UnixMilli()},
+			},
+			sinceMs: &gotSince,
+		},
+		Now: func() time.Time { return time.Date(2026, 7, 13, 0, 0, 0, 0, time.UTC) },
+	}
+	got := Digest(src)
+	if !strings.Contains(got, "실패한 요청") {
+		t.Fatalf("digest missing failed-request section:\n%s", got)
+	}
+	if !strings.Contains(got, `"위키에서 발주서 초안 뽑아줘" — 오류: stream stall`) {
+		t.Fatalf("failed request must be quoted with its error:\n%s", got)
+	}
+	if !strings.Contains(got, `"지난달 매출 정리해줘"`) || strings.Contains(got, "정리해줘\" — 오류") {
+		t.Fatalf("error-less failure must render without an error suffix:\n%s", got)
+	}
+	want := time.Date(2026, 6, 29, 0, 0, 0, 0, time.UTC).UnixMilli() // Now - 14d
+	if gotSince != want {
+		t.Fatalf("failed-request window = %d, want %d (Now - 14d)", gotSince, want)
+	}
+
+	if got := Digest(Sources{AgentLog: fakeFailed{}}); got != "" {
+		t.Fatalf("no failures should keep the digest silent, got %q", got)
 	}
 }
 
