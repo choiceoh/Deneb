@@ -34,7 +34,17 @@ func reportDenebUICardHealth(text, sessionKey string, logger *slog.Logger) {
 		}
 		return
 	}
-	for i, body := range denebui.ExtractFences(text) {
+	// The card-authored counterpart to the adoption-miss signal: one Info per turn
+	// that DID ship a card, so `card-authored vs adoption-miss` is a real journald
+	// ratio (the adoption RATE this file documents). Previously the denominator was
+	// unlogged — a schema-valid card with no advisories emitted nothing — so the
+	// rate was uncomputable despite the comment above claiming it. Per-turn (not
+	// per-block) to match the per-turn miss signal: N cards in one turn is still one
+	// adoption, so the numerator stays a turn count.
+	fences := denebui.ExtractFences(text)
+	logger.Info("deneb-ui card authored",
+		"session", sessionKey, "blocks", len(fences), "runes", utf8.RuneCountInString(text))
+	for i, body := range fences {
 		issues, err := denebui.Validate(body)
 		switch {
 		case err != nil:
