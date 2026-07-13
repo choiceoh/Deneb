@@ -1,0 +1,34 @@
+name: SOP Miner Dry-Run (srv4)
+
+# 수동 전용: 게이트웨이 호스트(gx10 러너 = srv4)에서 sop-miner를 --dry-run으로
+# 실행해 실측 트랜스크립트 채굴 결과를 확인한다. 읽기 전용 — 아무것도 파일링하지
+# 않고(--dry-run), 게이트웨이 RPC도 호출하지 않는다. 러너 유저의
+# ~/.deneb/transcripts 가 곧 프로덕션 트랜스크립트다 (publish-apk와 동일 전제:
+# 러너가 게이트웨이와 같은 호스트·같은 유저).
+# fork PR에서는 절대 돌지 않는다 (workflow_dispatch 전용 + self-hosted).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    runs-on: [self-hosted, gx10]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Mine transcripts (dry-run, files nothing)
+        run: |
+          set -euo pipefail
+          cd scripts/audit
+          python3 sop-miner.py --dry-run --json | tee /tmp/sop-miner-dryrun.json
+      - name: Summary
+        run: |
+          {
+            echo "## SOP miner dry-run (srv4)"
+            echo '```json'
+            cat /tmp/sop-miner-dryrun.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

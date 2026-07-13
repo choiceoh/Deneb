@@ -28,6 +28,9 @@ jobs:
       andromeda-release-created: ${{ steps.release.outputs['andromeda--release_created'] }}
       andromeda-tag: ${{ steps.release.outputs['andromeda--tag_name'] }}
       andromeda-release-id: ${{ steps.release.outputs['andromeda--id'] }}
+      # 릴리즈 PR 브랜치(생성/갱신 시) — cargo-lock 재생성 잡이 소비.
+      prs-created: ${{ steps.release.outputs.prs_created }}
+      release-pr: ${{ steps.release.outputs.pr }}
     steps:
       - uses: googleapis/release-please-action@v5
         id: release
@@ -41,6 +44,37 @@ jobs:
         env:
           OUTPUTS: ${{ toJSON(steps.release.outputs) }}
         run: echo "$OUTPUTS"
+
+  release-pr-cargo-lock:
+    # release-please는 extra-files로 andromeda/src-tauri/Cargo.toml 버전만 올리고
+    # Cargo.lock을 재생성하지 못한다 → 릴리즈 커밋이 머지될 때마다 main의
+    # `cargo check --locked`(rust 체크)가 깨졌다 (0.0.70 #3552, 0.0.71 #3557 재발).
+    # 릴리즈 PR 브랜치 위에서 lock을 재생성해 커밋하므로 파손이 main에 못 닿는다.
+    # release-please가 브랜치를 force-push로 갱신하면 이 커밋은 사라지지만, 다음
+    # main push의 이 잡이 다시 붙인다(자가 치유).
+    needs: release-please
+    if: needs.release-please.outputs.prs-created == 'true' && needs.release-please.outputs.release-pr != ''
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ fromJSON(needs.release-please.outputs.release-pr).headBranchName }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Regenerate andromeda Cargo.lock for the version bump
+        run: cargo update --workspace --manifest-path andromeda/src-tauri/Cargo.toml
+      - name: Commit lock to the release PR branch (if changed)
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- andromeda/src-tauri/Cargo.lock; then
+            echo "Cargo.lock already in sync"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add andromeda/src-tauri/Cargo.lock
+          git commit -m "chore(andromeda): regenerate Cargo.lock for release version bump"
+          git push
 
   post-release:
     needs: release-please
