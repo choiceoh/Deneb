@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.0.76](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.75...andromeda-v0.0.76) (2026-07-13)
+
+
+### ✨ Features
+
+* **andromeda:** RSI Pane 강화 — 진화 건강 카드·L2/L3 드릴·L4 후보 소스·자동배차 칩·상세 모달 ([#3595](https://github.com/choiceoh/Deneb/issues/3595)) ([e98e07a](https://github.com/choiceoh/Deneb/commit/e98e07ae9b2abf1d7bf7a7a44fda6fd8f445d109))
+* close recursive self-improvement feedback loops ([#3622](https://github.com/choiceoh/Deneb/issues/3622)) ([2142504](https://github.com/choiceoh/Deneb/commit/2142504306cb785d6e8a8996f86aec7a70c38dad))
+* **rsi:** 자가교정 루프 관측성·안정성 업그레이드 + 워크트리 가드 파일 경로 인식 ([#3605](https://github.com/choiceoh/Deneb/issues/3605)) ([188c400](https://github.com/choiceoh/Deneb/commit/188c4007c207fda19d731f77b52690044cb9bb3f))
+
+
+### 🐛 Bug Fixes
+
+* **genesis:** RSI 상태·표면 티어·재오픈 캡 Go/Python 패리티 복구 ([#3610](https://github.com/choiceoh/Deneb/issues/3610)) ([0e8950e](https://github.com/choiceoh/Deneb/commit/0e8950ebe80fe338faa99e60026c13cdcc85f19e))
+* **rsi:** L4 배차 교착·accepted 백로그 가시성·스윕 억제 ([#3612](https://github.com/choiceoh/Deneb/issues/3612)) ([680ec36](https://github.com/choiceoh/Deneb/commit/680ec36742de561eab32f0bb282ff9c4bfb82112))
+* **rsi:** 미흡수 봇 리뷰 지적 흡수 — L4 배차·스윕·Cursor 가드·RSI UI ([#3618](https://github.com/choiceoh/Deneb/issues/3618)) ([7fc2580](https://github.com/choiceoh/Deneb/commit/7fc2580657e7bfd0f8e92f6848e0727b915958d9))
+
 ## [0.0.75](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.74...andromeda-v0.0.75) (2026-07-13)
 
 
