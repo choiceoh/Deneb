@@ -88,6 +88,8 @@ if [[ -n "${1:-}" && -d "${1:-}" ]]; then
 fi
 
 ROOT="$(pick_root ${FALLBACK_ARG:+"$FALLBACK_ARG"})"
+export CODEGRAPH_MCP_TOOLS="${CODEGRAPH_MCP_TOOLS:-explore,node,search,impact,callers,callees}"
+
 CG="$(resolve_cg)" || {
   echo "codegraph not found (install: npm i -g @colbymchenry/codegraph)" >&2
   exit 127

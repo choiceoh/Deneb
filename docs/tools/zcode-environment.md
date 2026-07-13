@@ -103,8 +103,19 @@ The index excludes generated code, XML resources, and other noise via `codegraph
 | `**/composeResources/**` | Vector drawables, string resources |
 | `**/mockServiceWorker.js` | MSW test mock |
 | `**/config/detekt-baseline.xml` | Detekt lint baseline |
+| `scripts/audit/**` | Audit scripts (CAPS constants collide with symbols) |
+| `scripts/dev/**` | Dev hooks/helpers (not product source) |
+| `**/testdata/**` | Test fixtures |
+| `**/changelog.d/**` | Native changelog fragments |
 
-After cleanup: **54,771 nodes**, **0 noise** from generated/resource files.
+After cleanup (post-precision excludes): ~**54.6K nodes**; audit/dev script constants removed from the graph.
+
+Precision notes (Deneb):
+
+- CLI/MCP `query`/`node`/`callers` pin exact symbols; `explore` may camelCase-split (`GatewayHub` → `Hub`/`GatewayTab`) — prefer `node` for a single known symbol.
+- MCP exposes `explore,node,search,impact,callers,callees` via `CODEGRAPH_MCP_TOOLS` in `codegraph-serve.sh` / `cursor-codegraph-serve.sh`.
+- `codegraph.json` excludes audit/dev scripts and generated/resource noise; re-index after changes.
+- Runtime: CodeGraph **1.4.1+** (`npm i -g @colbymchenry/codegraph@1.4.1`).
 
 ### Auto-sync
 

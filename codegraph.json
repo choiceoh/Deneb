@@ -5,6 +5,7 @@
     "**/*.min.js",
     "**/*.min.css",
     "**/*.bundle.js",
+    "**/testdata/**",
     "**/testdata/fuzz/**",
     "**/__snapshots__/**",
     "**/*.snap",
@@ -15,6 +16,16 @@
     "**/AndroidManifest.xml",
     "**/composeResources/**",
     "**/mockServiceWorker.js",
-    "**/config/detekt-baseline.xml"
+    "**/config/detekt-baseline.xml",
+    "**/changelog.d/**",
+    "scripts/audit/**",
+    "scripts/dev/**",
+    "docs/reference/**",
+    "docs/assets/**",
+    "**/.tmp/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/.gradle/**"
   ]
 }

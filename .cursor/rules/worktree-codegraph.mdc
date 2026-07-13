@@ -11,5 +11,11 @@ alwaysApply: true
   2. `git checkout cursor/<session-id>` with `working_directory` = worktree (undoes branch rewrite to `main`)
 - After entry: all Shell/Write/StrReplace/Delete stay under the worktree root.
 - Main checkout (`main`) edits are blocked by `cursor-worktree-guard` (`failClosed`).
-- Structure/relation/blast-radius: MCP **codegraph_explore** (or CLI `codegraph callers|impact|node`) before multi-file grep/Read.
+
+## CodeGraph precision
+
+- Prefer **exact PascalCase/camelCase symbol names** in queries — not NL prose (`"how does gateway hub work"` tokenizes into noisy `gateway`/`hub` hits).
+- Pin with filters when needed: `name:GatewayHub path:gateway-go` or MCP `codegraph_node` / CLI `codegraph node|callers|impact`.
+- Keep `codegraph_explore` `maxFiles` low (3–6) for symbol lookups; raise only for area surveys.
+- Available MCP tools: `explore`, `node`, `search`, `impact`, `callers`, `callees` (`CODEGRAPH_MCP_TOOLS`).
 - String-keyed RPC/tool/event names: `scripts/dev/rpcmap.py <name>` then `codegraph node <handler>`.
