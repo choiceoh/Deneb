@@ -138,9 +138,10 @@ def main():
         if not is_defined_symbol(pat, root):
             return 0  # not a known symbol → let the text search run
         msg = [
-            f"[codegraph] '{pat}'는 코드 심볼입니다 (CodeGraph 인덱스에 정의 존재). 관계·구조 질문이면 텍스트 grep보다:",
-            f"  · MCP 툴 codegraph_explore \"{pat} 관련 질문\"  (호출자·호출대상·블래스트 반경을 한 번에)",
-            f"  · 또는 CLI: codegraph callers {pat}  ·  codegraph impact {pat}  ·  codegraph node {pat}",
+            f"[codegraph] '{pat}'는 코드 심볼입니다 (CodeGraph 인덱스에 정의 존재). 텍스트 grep보다:",
+            f"  · MCP codegraph_node / CLI: codegraph node {pat}   (정의·멤버·트레일 — 단일 심볼 기본)",
+            f"  · codegraph callers {pat}  ·  codegraph impact {pat}",
+            f"  · 영역 조사만 explore (단일 심볼 explore는 Hub/유사명 노이즈 가능)",
             "텍스트 문자열 검색이 목적이면 같은 검색을 그대로 재실행하세요 (세션당 1회만 안내).",
         ]
     elif DOTTED_METHOD.match(pat) and resolves_via_rpcmap(pat, root):

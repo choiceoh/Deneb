@@ -58,29 +58,29 @@
 
 | 상황 (이러면 grep/Read 전에) | 쓰는 것 |
 |---|---|
-| 낯선 코드/서브시스템 이해 착수 · "어디서 X 하나 / 어떻게 엮이나" | `codegraph_explore "설명"` (지형을 one-shot으로) |
+| 낯선 코드/서브시스템 이해 착수 · "어디서 X 하나 / 어떻게 엮이나" | `codegraph_explore` 영역 조사 (다중 토큰·짧은 설명, `maxFiles` 3–6) |
+| **알려진 심볼 하나** (정의·멤버·트레일) | `codegraph node SYMBOL` / MCP `codegraph_node` — **정확한 심볼엔 explore보다 우선** |
 | **소스 심볼 편집 착수 전** — 바꾸면 뭐 깨지나 | `codegraph impact SYMBOL` (블래스트 반경) |
 | "이 함수/타입 누가 쓰나" (리팩터·시그니처 변경) | `codegraph callers SYMBOL` |
-| 이 심볼 정의+호출자+피호출자 한눈에 | `codegraph node SYMBOL` |
-| 이름 조각으로 정의 찾기 | `codegraph query NAME` |
+| 이름 조각으로 정의 찾기 | `codegraph query NAME` (`--kind`로 좁히기) |
 
-원칙: **모르는 코드에 손대기 전 `codegraph_explore` 먼저** — 파일을 여러 개 Read 하며 관계를 머릿속으로 재구성하지 말고, 관계·소스·블래스트를 한 번에 받는다. 심볼 이름을 grep하려는 순간이면 거의 항상 CodeGraph 쿼리가 정답(훅이 그때 유도한다).
+원칙: **모르는 영역은 explore, 이미 이름이 있는 심볼은 node/callers/impact**. explore에 단일 PascalCase만 넣으면 camelCase 분해(`GatewayHub`→`Hub`/`GatewayTab`)로 노이즈가 섞일 수 있다 — 그 경우 node로 핀. 심볼 이름을 grep하려는 순간이면 CodeGraph(훅이 유도).
 
-- **MCP 기본 툴 `codegraph_explore`** — "먼저 호출". 질문/편집 대상 영역의 관련 심볼 소스 + 호출 경로 + 블래스트 반경(테스트 커버리지 경고 포함)을 one-shot으로.
+- **MCP 툴** (`CODEGRAPH_MCP_TOOLS=explore,node,search,impact,callers,callees`): 영역 조사=`explore`, 심볼 핀=`node`/`search`, 변경 영향=`impact`/`callers`.
 - **CLI**(같은 그래프, 셸에서 쓸 때):
 
 ```bash
+codegraph node     SYMBOL    # 정의+멤버+트레일 (심볼 핀 — 기본 선택)
 codegraph callers  SYMBOL    # 호출자 (동적 디스패치 포함)
 codegraph callees  SYMBOL    # 이 심볼이 부르는 것
 codegraph impact   SYMBOL    # 변경 블래스트 반경(영향 심볼)
-codegraph explore  "질문..."  # codegraph_explore와 동일 출력 (one-shot)
-codegraph node     SYMBOL    # 한 심볼의 소스 + 호출자/피호출자 트레일
-codegraph query    NAME      # 이름으로 심볼 검색
+codegraph query    NAME      # 이름 검색 (정확; explore보다 덜 퍼짐)
+codegraph explore  "영역..."  # 지형 one-shot (다중 토큰; --max-files 낮게)
 ```
 
 - **인덱스는 로컬 `.codegraph/`**(SQLite, gitignore됨)에 저장, **PostToolUse 훅(`zcode-codegraph-sync.sh`)이 편집 후 백그라운드에서 `codegraph sync` 실행**(<0.5s) — 수동 명령 불필요, 항상 신선. Claude·ZCode 양쪽에 배선. Go·Kotlin·TypeScript·Rust 등 전부 인덱싱.
 - **새 워크트리는 SessionStart 훅(`codegraph-autoindex.py`)이 자동 준비** — 형제 워크트리 인덱스를 복사+`sync`(<1s)하거나 없으면 풀 init, 백그라운드라 세션 지연 0. 즉 워크트리마다 손수 `codegraph init` 할 필요 없다. ZCode 워크트리도 `zcode-worktree-init.sh`가 메인 체크아웃의 인덱스를 복사+`sync`로 동일하게 준비.
-- 설치/재빌드: `npm i -g @colbymchenry/codegraph` → `codegraph init`. 재인덱싱은 `codegraph index`, MCP 재배선은 `codegraph install`. GPU·컴파일 불필요(aarch64 네이티브). 상세는 메모리 [[codegraph-adoption]] 참조.
+- 설치/재빌드: `npm i -g @colbymchenry/codegraph@1.4.1` → `codegraph init` (정밀도·explore NL 수정 포함). 재인덱싱은 `codegraph index`, MCP 재배선은 `codegraph install`. GPU·컴파일 불필요(aarch64 네이티브). 상세는 메모리 [[codegraph-adoption]] 참조.
 - 문자열-키 간접참조(RPC 메서드명·툴명·이벤트명 → 핸들러/이벤트 타입)는 CodeGraph가 못 잇는 엣지(static-analysis frontier). **`scripts/dev/rpcmap.py`가 결정적으로 채운다**: `rpcmap <메서드명|툴명|이벤트명>` → 핸들러+파일:라인+`codegraph node` 힌트 (예: `rpcmap miniapp.people.list`→`peopleList (people.go:91)`, `rpcmap wiki`→`ToolWiki`, `rpcmap chat.delivery_failed`→`ChatDeliveryFailedEvent`). 역방향 `rpcmap --handler <이름>`, 전체는 `rpcmap --list`. 핸들러를 얻으면 `codegraph node <핸들러>`로 소스+호출자/피호출자. (점 있는 메서드명을 grep하면 훅이 rpcmap으로 유도한다.)
 - 주의: CodeGraph는 **소스 코드 전용**. 위키/업무 지식 그래프는 별개 도구(`graphify` 챗 툴 → `~/.deneb/wiki-graph`)이며 이걸로 대체 불가.
 
