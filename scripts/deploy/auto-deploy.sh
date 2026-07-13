@@ -80,11 +80,20 @@ record_unverified() {
     mv -f "$tmp" "$UNVERIFIED_FILE"
 }
 
+watcher_pid_alive() {
+    local pid="$1"
+    [[ "$pid" =~ ^[1-9][0-9]*$ ]] && kill -0 "$pid" 2>/dev/null
+}
+
 accept_ready_watch() {
     local head="$1" ready_head="" ready_pid=""
     [[ -f "$WATCH_READY_FILE" ]] || return 1
     read -r ready_head ready_pid _ < "$WATCH_READY_FILE" || return 1
     [[ "$ready_head" == "$head" ]] || return 1
+    if ! watcher_pid_alive "$ready_pid"; then
+        rm -f "$WATCH_READY_FILE"
+        return 1
+    fi
     rm -f "$UNVERIFIED_FILE"
     log "deploy-watch acknowledged for ${head:0:10} (pid ${ready_pid:-unknown})"
     return 0
@@ -136,10 +145,12 @@ start_deploy_watch() {
     while (( SECONDS <= deadline )); do
         if [[ -f "$WATCH_READY_FILE" ]]; then
             read -r ready_head ready_pid _ < "$WATCH_READY_FILE" || true
-            if [[ "$ready_head" == "$head" ]]; then
+            if [[ "$ready_head" == "$head" ]] && watcher_pid_alive "$ready_pid"; then
                 rm -f "$UNVERIFIED_FILE"
                 log "deploy-watch active for ${head:0:10} (pid ${ready_pid:-unknown}, unit $watcher_unit)"
                 return 0
+            elif [[ "$ready_head" == "$head" ]]; then
+                rm -f "$WATCH_READY_FILE"
             fi
         fi
         sleep 0.1

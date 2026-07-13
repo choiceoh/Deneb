@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -263,12 +264,22 @@ class AutoDeployShellTests(unittest.TestCase):
     def test_late_watch_ack_clears_unverified_without_launching_duplicate(self) -> None:
         (self.state / "auto-deploy.deployed-head").write_text("same333\n")
         (self.state / "auto-deploy.unverified-head").write_text("same333 1999 watcher_not_ready\n")
-        (self.state / "deploy-watch.ready").write_text("same333 4242 2000\n")
+        (self.state / "deploy-watch.ready").write_text(f"same333 {os.getpid()} 2000\n")
         proc = self.invoke(self.env(GIT_LOCAL_HEAD="same333", GIT_REMOTE_HEAD="same333"))
         self.assertEqual(proc.returncode, 0)
         self.assertFalse((self.state / "auto-deploy.unverified-head").exists())
         self.assertNotIn("watch head=", self.call_text())
         self.assertIn("deploy-watch acknowledged for same333", self.log_text())
+
+    def test_stale_watch_ack_is_removed_and_replaced(self) -> None:
+        (self.state / "auto-deploy.deployed-head").write_text("same333\n")
+        (self.state / "auto-deploy.unverified-head").write_text("same333 1999 watcher_not_ready\n")
+        (self.state / "deploy-watch.ready").write_text("same333 999999 2000\n")
+        proc = self.invoke(self.env(GIT_LOCAL_HEAD="same333", GIT_REMOTE_HEAD="same333"))
+        self.assertEqual(proc.returncode, 0)
+        self.assertFalse((self.state / "auto-deploy.unverified-head").exists())
+        self.assertEqual(self.call_text().count("watch head=same333"), 1)
+        self.assertIn("deploy-watch active for same333", self.log_text())
 
     def test_recent_failed_remote_head_is_throttled(self) -> None:
         (self.state / "auto-deploy.failed-head").write_text("remote222 1900\n")
