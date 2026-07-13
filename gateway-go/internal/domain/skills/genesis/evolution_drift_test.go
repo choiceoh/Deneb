@@ -116,12 +116,76 @@ func TestAuditEvolutionDrift(t *testing.T) {
 
 	t.Run("broken verifier (failed planted defects) freezes", func(t *testing.T) {
 		tr := driftTracker(t)
+		// No ByClass breakdown (legacy record) — the aggregate fallback path.
 		if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{Pairs: 12, Correct: 4}); err != nil {
 			t.Fatal(err)
 		}
 		v := tr.AuditEvolutionDrift()
 		if !v.Frozen || !hasSignal(v, "verifier_broken") {
 			t.Fatalf("broken verifier not detected: %+v", v.Signals)
+		}
+	})
+
+	t.Run("must-catch misses trip verifier_broken even when the aggregate looks fine", func(t *testing.T) {
+		tr := driftTracker(t)
+		// Blatant 1/4 caught is breakage; the passing subtle probes hold the
+		// aggregate at 6/9 = 0.67, which the old all-class rate would miss.
+		if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+			Pairs: 9, Correct: 6,
+			ByClass: map[string][2]int{
+				"section-drop":    {1, 1},
+				"fake-tool":       {0, 1},
+				"truncation":      {0, 1},
+				"overfit":         {0, 1},
+				"imperative-drop": {3, 3},
+				"safety-drop":     {2, 2},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		v := tr.AuditEvolutionDrift()
+		if !v.Frozen || !hasSignal(v, "verifier_broken") {
+			t.Fatalf("must-catch misses not detected: %+v", v.Signals)
+		}
+	})
+
+	t.Run("weaken-tier misses alone do not trip verifier_broken", func(t *testing.T) {
+		tr := driftTracker(t)
+		// Curriculum-ladder run (#3602): every blatant probe caught, every
+		// tier-3 weaken probe missed. The aggregate 4/10 = 0.40 sits under the
+		// floor — scoring must-catch classes only keeps the healthy judge
+		// unfrozen (weaken misses are P3 fuel, not breakage).
+		if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+			Pairs: 10, Correct: 4,
+			ByClass: map[string][2]int{
+				"section-drop":      {1, 1},
+				"fake-tool":         {1, 1},
+				"truncation":        {1, 1},
+				"overfit":           {1, 1},
+				"imperative-weaken": {0, 3},
+				"scope-narrow":      {0, 3},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if v := tr.AuditEvolutionDrift(); hasSignal(v, "verifier_broken") {
+			t.Fatalf("weaken-tier misses tripped verifier_broken: %+v", v.Signals)
+		}
+	})
+
+	t.Run("run with no must-catch pairs yields no verifier evidence", func(t *testing.T) {
+		tr := driftTracker(t)
+		if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+			Pairs: 4, Correct: 0,
+			ByClass: map[string][2]int{
+				"imperative-drop": {0, 2},
+				"safety-drop":     {0, 2},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if v := tr.AuditEvolutionDrift(); hasSignal(v, "verifier_broken") {
+			t.Fatalf("subtle-only run tripped verifier_broken: %+v", v.Signals)
 		}
 	})
 }

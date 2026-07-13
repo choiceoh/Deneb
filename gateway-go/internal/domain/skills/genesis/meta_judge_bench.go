@@ -13,7 +13,6 @@ package genesis
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -95,53 +94,24 @@ func degradeOverfit(body string) (string, bool) {
 	return body + "\n\n주의: 이 절차는 PR #3448 및 에러 문자열 'x509: certificate expired 2026-07-11'이 재현된 세션에서만 유효하다.", true
 }
 
+// blatantJudgeDegradations is the tier-1 MUST-CATCH class table: mechanical,
+// unmistakable defects a competent judge rejects every run. The meta-judge
+// promotion gate benches only these, and the drift audit's verifier_broken
+// signal (evolution_drift.go) scores the live judge on exactly these class
+// names — a blatant miss is verifier breakage, a subtle/weaken miss is P3
+// fuel — so gate and audit stay coupled through this table.
+var blatantJudgeDegradations = []namedDegradation{
+	{"section-drop", degradeDropLastSection},
+	{"fake-tool", degradeFakeTool},
+	{"truncation", degradeTruncate},
+	{"overfit", degradeOverfit},
+}
+
 // buildJudgeDegradationPairs constructs gold pairs from catalog skill bodies.
 // Deterministic: iterates entries in catalog order, applies each degradation
 // in a fixed order, stops at limit.
 func buildJudgeDegradationPairs(entries []skills.SkillEntry, limit int) []judgeBenchPair {
-	if limit <= 0 {
-		limit = judgeBenchMaxPairs
-	}
-	degradations := []struct {
-		name  string
-		apply func(string) (string, bool)
-	}{
-		{"section-drop", degradeDropLastSection},
-		{"fake-tool", degradeFakeTool},
-		{"truncation", degradeTruncate},
-		{"overfit", degradeOverfit},
-	}
-	pairs := make([]judgeBenchPair, 0, limit)
-	for _, entry := range entries {
-		if len(pairs) >= limit {
-			break
-		}
-		raw, err := os.ReadFile(entry.Skill.FilePath)
-		if err != nil {
-			continue
-		}
-		body := strings.TrimSpace(skillBodyOnly(string(raw)))
-		if len([]rune(body)) < judgeBenchMinBodyRunes {
-			continue
-		}
-		for _, d := range degradations {
-			if len(pairs) >= limit {
-				break
-			}
-			degraded, ok := d.apply(body)
-			if !ok || strings.TrimSpace(degraded) == body {
-				continue
-			}
-			pairs = append(pairs, judgeBenchPair{
-				Skill:       entry.Skill.Name,
-				Category:    entry.Skill.Category,
-				Degradation: d.name,
-				Original:    body,
-				Degraded:    degraded,
-			})
-		}
-	}
-	return pairs
+	return buildDegradationPairsWith(entries, limit, blatantJudgeDegradations)
 }
 
 // judgeBenchVerdictFn executes ONE judge verdict with an explicit system
