@@ -1,0 +1,34 @@
+name: Deadcode Finding Miner Dry-Run (srv4)
+
+# 수동 전용: 게이트웨이 호스트(gx10 러너 = srv4)에서 deadcode-finding-miner를
+# --dry-run으로 실행해, deadcode-audit 델타가 어떤 propose-only 코드 후보로
+# 채굴되는지 실측한다. 읽기 전용 — 아무것도 파일링하지 않고(--dry-run), 게이트웨이
+# RPC로 기록하지도 않는다(dry-run은 dedup 없이 계획만 출력). deadcode-audit은
+# whole-program 도달성 분석이라 ~1-2분 걸린다.
+# fork PR에서는 절대 돌지 않는다 (workflow_dispatch 전용 + self-hosted).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    runs-on: [self-hosted, gx10]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Mine deadcode deltas (dry-run, files nothing)
+        run: |
+          set -euo pipefail
+          cd scripts/audit
+          python3 deadcode-finding-miner.py --dry-run --json | tee /tmp/deadcode-finding-dryrun.json
+      - name: Summary
+        run: |
+          {
+            echo "## Deadcode finding miner dry-run (srv4)"
+            echo '```json'
+            cat /tmp/deadcode-finding-dryrun.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -130,15 +130,18 @@ acceptance machinery stays forbidden at record time.
 
 - **Reactive sources** (built): `evolver_tool_gap.go` (evolve declares a missing
   tool), `runtime_error_mining.go` (recurring code-actionable error signatures).
-- **Proactive source** (scripts-side): `scripts/audit/health_finding_miner.py`
-  mines codebase-health structural findings + runtime-health standing weaknesses,
-  filing via the `miniapp.self_improvement_coding.record` RPC. Deliberately NOT
-  a gateway PeriodicTask — the inputs (git checkout, journald) live outside the
-  serving process.
+- **Proactive sources** (scripts-side): `scripts/audit/health_finding_miner.py`
+  mines codebase-health structural findings + runtime-health standing weaknesses;
+  `scripts/audit/deadcode_finding_miner.py` mines `deadcode-audit.sh` deltas
+  (newly-orphaned functions absent from the baseline). Both file via the
+  `miniapp.self_improvement_coding.record` RPC and share one RPC/reopen/cap edge
+  (imported from the health miner so they cannot drift). Deliberately NOT gateway
+  PeriodicTasks — the inputs (git checkout, journald, whole-program reachability)
+  live outside the serving process.
 - **Staged dispatch**: the source namespaces (`runtime-error`, `health-finding`,
-  `evolve-tool-gap`, `self-harness`) are NOT all in coding-dispatch.sh's
-  allowlist yet — candidates accumulate for review before the dispatch flip
-  (graduation ladder in the roadmap).
+  `deadcode-finding`, `evolve-tool-gap`, `self-harness`) are NOT all in
+  coding-dispatch.sh's allowlist yet — candidates accumulate for review before
+  the dispatch flip (graduation ladder in the roadmap).
 
 ## Gotchas & Invariants
 
