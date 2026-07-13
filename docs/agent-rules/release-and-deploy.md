@@ -55,6 +55,8 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
   구현을 배차한다. 세션 프롬프트가 CLAUDE.md 게이트 준수 + 그린 시 `pr.sh land`
   랜딩까지 지시하며, 배차 마커(`~/.deneb/data/coding_dispatch/<id>.json`)와 일일
   상한(`DENEB_DISPATCH_DAILY_CAP`, 기본 2)이 재배차·토큰 예산을 통제한다.
+  systemd의 제한된 PATH에서는 `DENEB_DISPATCH_GH_BIN`으로 GitHub CLI 경로도
+  명시해, squash merge 결과가 L4 결과 장부에 `landed`로 기록되게 한다.
 - **상설화(타이머)는 자동 설치하지 않는다** — 무인 자율 코딩 루프의 스위치는
   오퍼레이터가 직접 켠다. 수동 1회 실행: `scripts/dev/coding-dispatch.sh`.
   상설 활성(오퍼레이터, srv4에서 1회):
@@ -67,6 +69,7 @@ Description=Deneb RSI L4 coding dispatch (self-correction queue -> Codex headles
 [Service]
 Type=oneshot
 Environment=DENEB_DISPATCH_CODEX_BIN=%h/.local/bin/codex
+Environment=DENEB_DISPATCH_GH_BIN=%h/.local/bin/gh
 ExecStart=%h/deneb/scripts/dev/coding-dispatch.sh
 UNIT
 cat > ~/.config/systemd/user/deneb-coding-dispatch.timer <<'UNIT'
