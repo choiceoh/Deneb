@@ -36,7 +36,16 @@ globs: ["gateway-go/internal/pipeline/chat/denebui/**", "gateway-go/cmd/denebui-
 - 모닝레터: `skills/productivity/morning-letter/SKILL.md` 스켈레톤 —
   `letter_card_test.go` 상수와 **동기 유지**(테스트가 서버측 게이트).
 - 서버 조립: `denebui/collapsed.go` (`CollapsedReportFence`) — raw-text 본문의
-  백틱은 반드시 `&#96;` 이스케이프(바깥 펜스 조기종료 차단).
+  백틱은 반드시 `&#96;` 이스케이프(바깥 펜스 조기종료 차단). 단 **생산자가 이미
+  카드로 저작한 본문(```deneb-ui로 시작)은 relay가 아코디언 래핑을 생략**하고
+  verbatim 전달한다 (`proactive_relay.go` collapse 분기).
+- 메일 분석 (능동): `mailanalysis/analyzer.go` `analysisSystemPrompt` +
+  `DefaultPrompt` — 구조적 보고는 카드 도입부. 시스템 프롬프트 쪽 계약이
+  운영자 커스텀 프롬프트 파일과 무관하게 적용되는 정본.
+- 하트비트 보고 (능동): `heartbeat/heartbeat_task.go` `heartbeatTriggerTemplate`
+  — 비 NO_REPLY 보고는 카드 기본, 결정 요청은 인터랙티브 카드.
+- 채택률 관측: `run_lifecycle.go` `looksStructuredWithoutCard` — 카드 없이
+  구조적 형태로 나간 턴을 Info 로그("deneb-ui adoption miss")로 계수.
 
 ## 관찰/검증 사슬
 

@@ -268,7 +268,12 @@ JSON으로 응답하세요:
 // SourceEmailAnalysis is the fact source identifier for email-derived facts.
 const SourceEmailAnalysis = "email_analysis"
 
-const finalAnalysisSystem = `당신은 이메일 분석 어시스턴트입니다. 이메일 본문, 이전 메일 맥락, 관련 기억을 종합하여 깊이 있는 분석을 제공합니다. 모든 섹션 제목·라벨은 한국어로 쓰세요 ('Primary Analysis', 'Summary', 'Action Items' 같은 영문 라벨 금지). ` + emojiRestraint
+const finalAnalysisSystem = `당신은 이메일 분석 어시스턴트입니다. 이메일 본문, 이전 메일 맥락, 관련 기억을 종합하여 깊이 있는 분석을 제공합니다. 모든 섹션 제목·라벨은 한국어로 쓰세요 ('Primary Analysis', 'Summary', 'Action Items' 같은 영문 라벨 금지). ` +
+	// Card-first reporting must ride the multi-stage pipeline's FINAL synthesis
+	// too — analysisSystemPrompt only covers the single-call fallback, so an
+	// operator-customized prompt file would otherwise ship plain prose.
+	"보고가 구조적(중요도·수치·기한·다음 행동)이면 도입부를 deneb-ui 카드 한 블록으로 시작하세요 — 여는 펜스는 ```deneb-ui 한 줄 그대로(그 줄 뒤에 다른 글자 금지), 다음 줄부터 루트 <column> 하나. 카드 안에는 백틱을 쓰지 마세요. " +
+	emojiRestraint
 
 const finalAnalysisPrompt = `%s
 ## 이메일 원문
