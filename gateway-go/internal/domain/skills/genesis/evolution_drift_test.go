@@ -2,6 +2,7 @@ package genesis
 
 import (
 	"log/slog"
+	"os"
 	"testing"
 )
 
@@ -221,6 +222,36 @@ func TestRunEvolutionDriftAudit_Transitions(t *testing.T) {
 	if len(transitions) != 2 || transitions[1] {
 		t.Fatalf("release transition not fired: %v", transitions)
 	}
+}
+
+// H5: the self-brake must fail CLOSED. An unreadable/corrupt marker, or a
+// present-but-empty one, reads as frozen — a loop that cannot read its own
+// brake must not default to "go".
+func TestAutoAdoptFrozen_FailsClosed(t *testing.T) {
+	t.Run("corrupt marker reads frozen", func(t *testing.T) {
+		tr := driftTracker(t)
+		if err := os.WriteFile(tr.autoAdoptFreezePath(), []byte("{not json\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if !tr.AutoAdoptFrozen() {
+			t.Fatal("corrupt freeze marker must fail closed (frozen)")
+		}
+	})
+	t.Run("present-but-empty marker reads frozen", func(t *testing.T) {
+		tr := driftTracker(t)
+		if err := os.WriteFile(tr.autoAdoptFreezePath(), []byte(""), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if !tr.AutoAdoptFrozen() {
+			t.Fatal("empty freeze marker must fail closed (frozen)")
+		}
+	})
+	t.Run("absent marker reads not-frozen", func(t *testing.T) {
+		tr := driftTracker(t)
+		if tr.AutoAdoptFrozen() {
+			t.Fatal("absent marker (fresh install) must read not-frozen")
+		}
+	})
 }
 
 func hasSignal(v DriftVerdict, kind string) bool {

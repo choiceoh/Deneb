@@ -51,6 +51,37 @@ func TestEProcess_Tables(t *testing.T) {
 			t.Fatalf("ceil clamp: %+v", q)
 		}
 	})
+	t.Run("min reject observations bounds the fastest rejection path", func(t *testing.T) {
+		var nilP *EProcess
+		if nilP.MinRejectObservations() != 0 {
+			t.Fatal("nil receiver must report 0")
+		}
+		for _, baseline := range []float64{0, 0.25, 0.5, 0.9} {
+			p := NewEProcess(0.05, baseline)
+			minObs := p.MinRejectObservations()
+			if minObs < 2 {
+				t.Fatalf("baseline %v: implausible bound %d", baseline, minObs)
+			}
+			// minObs-1 consecutive failures must NOT reject; minObs must.
+			q := NewEProcess(0.05, baseline)
+			for i := 0; i < minObs-1; i++ {
+				q.Observe(true)
+			}
+			if q.Reject() {
+				t.Fatalf("baseline %v: rejected at %d < MinRejectObservations %d", baseline, q.N, minObs)
+			}
+			q.Observe(true)
+			if !q.Reject() {
+				t.Fatalf("baseline %v: all-fail stream of MinRejectObservations %d did not reject (E=%v)", baseline, minObs, q.E)
+			}
+		}
+		// Pin the production-relevant value: clean pre-evolve baseline clamps
+		// to the floor, where the fastest rejection path is 8 observations —
+		// the number the confirm window must accommodate (RSI eval C1).
+		if got := NewEProcess(DefaultEProcessAlpha, 0).MinRejectObservations(); got != 8 {
+			t.Fatalf("floor-baseline MinRejectObservations = %d, want 8", got)
+		}
+	})
 	t.Run("state survives serialization", func(t *testing.T) {
 		p := NewEProcess(0.05, 0.2)
 		p.Observe(true)

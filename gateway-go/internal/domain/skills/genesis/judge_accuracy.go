@@ -449,7 +449,17 @@ func (t *JudgeAccuracyTask) mineFalseRejects() []falseRejectExhibit {
 	for _, entry := range t.Evolver.catalogEntries() {
 		skill := entry.Skill.Name
 		cases, err := t.Tracker.RecentSkillValidationCases(skill, producerBenchCaseLimit)
-		if err != nil || !hasScorableValidationCase(cases) {
+		if err != nil {
+			continue
+		}
+		// Charter exclusion (P3 precondition #3): false-reject exhibits are a
+		// verifier co-evolution training surface, so the frozen charter slice
+		// must NOT feed them — it stays a held-out measuring stick the judge
+		// never trains against. This is the first live consumer to honor the
+		// IsCharterCase contract (RSI code eval M5). Benches still SCORE charter
+		// cases elsewhere; only this training-surface read excludes them.
+		cases = excludeCharterCases(cases)
+		if !hasScorableValidationCase(cases) {
 			continue
 		}
 		raw, err := os.ReadFile(entry.Skill.FilePath)

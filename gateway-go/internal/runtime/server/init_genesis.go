@@ -607,6 +607,6 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 		// Post-evolve rollback: revert an evolution that regresses (N consecutive
 		// post-evolve failures restore the skill from its backup). Closes the
 		// evolve loop — generate -> gate -> cross-model judge -> watch -> revert.
-		s.genesisTracker.SetRollback(s.genesisEvolver.RollbackSkill, genesis.DefaultRollbackThreshold)
+		s.genesisTracker.SetRollback(s.genesisEvolver.RollbackSkillWithResult, genesis.DefaultRollbackThreshold)
 	}
 }

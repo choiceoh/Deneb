@@ -148,7 +148,7 @@ type Tracker struct {
 	// (windowed, not strict-consecutive, so an alternating pass/fail regression
 	// still trips it). Guarded by mu. postEvolve is empty at startup (populated
 	// only by runtime LogEvolve), so replaying usage history never rolls back.
-	rollback          func(skillName string)
+	rollback          func(skillName string) bool
 	rollbackThreshold int
 	postEvolve        map[string]*evolveWatch
 	// pendingBaselineTest stashes the e-process verdict captured under lock at
@@ -307,16 +307,29 @@ func isReviewUsageRecord(r UsageRecord) bool {
 	}
 }
 
+// realUsageSources is the ALLOWLIST of source tags that count as genuine use.
+// Fail closed by construction: an empty source is the legacy/RPC real path
+// (records on disk from before source tagging, plus the usage-record RPC), and
+// UsageSourceReal is the explicit tag; every OTHER non-empty tag — workout,
+// review-*, curriculum, or any future lane that forgets it should be excluded —
+// is NOT real. The previous exclusion-list form silently counted an unknown
+// new tag as real (RSI code eval M3).
+var realUsageSources = map[string]bool{
+	"":              true, // legacy on-disk + usage-record RPC (untagged real use)
+	UsageSourceReal: true,
+}
+
 // isRealUsageRecord reports whether r reflects a genuine, fair execution of the
-// skill — the only signal the evolver's success-rate gate should see. Excluded:
-// records explicitly tagged as a review source, the skill-review fork's own
-// sessions (legacy records carry no Source, so fall back to the session prefix),
-// consult-infrastructure failures (the skill could not even be loaded), and
-// legacy empty failures with no actionable session/error evidence.
+// skill — the only signal the evolver's success-rate gate should see. A source
+// tag outside the real allowlist is excluded outright; within it, review-fork
+// sessions (legacy records carry no Source, so fall back to the session
+// prefix), consult-infrastructure failures (the skill could not even be
+// loaded), and legacy empty failures with no actionable evidence are also
+// excluded.
 func isRealUsageRecord(r UsageRecord) bool {
-	if r.Source == UsageSourceWorkout {
-		// Synthetic exercise (workout.go): evidence for clustering only — it
-		// must never move success rates, curator stats, or bench backfill.
+	if !realUsageSources[r.Source] {
+		// Any tagged non-real lane (workout, review-*, curriculum, unknown
+		// future source): evidence for clustering at most, never success rate.
 		return false
 	}
 	if isReviewUsageRecord(r) {

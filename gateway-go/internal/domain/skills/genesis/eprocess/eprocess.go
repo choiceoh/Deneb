@@ -13,6 +13,8 @@ package eprocess
 // gates' behavior is unchanged until a follow-up threads it through the
 // rollback watch and champion confirmation.
 
+import "math"
+
 // Deterministic test/betting parameters — Go constants by the P1 invariant
 // (the deterministic half of the pipeline is not self-editable).
 const (
@@ -81,4 +83,22 @@ func (p *EProcess) Observe(fail bool) {
 // Reject reports whether evidence crossed the anytime-valid threshold 1/alpha.
 func (p *EProcess) Reject() bool {
 	return p != nil && p.E >= 1/p.Alpha
+}
+
+// MinRejectObservations returns the smallest observation count at which
+// rejection is attainable at all — the length of the fastest possible path to
+// E >= 1/alpha (consecutive failures from a fresh start at this baseline). A
+// watch whose observation window is shorter than this can NEVER reject: the
+// window resolves first, every "disagreement" label it emits is degenerate,
+// and — under e-process ownership — rollback silently stops firing. The
+// tracker sizes the confirm window and marks label fairness with this bound.
+func (p *EProcess) MinRejectObservations() int {
+	if p == nil {
+		return 0
+	}
+	perFail := math.Log(1 + eProcessBet*(1-p.Baseline))
+	if perFail <= 0 {
+		return math.MaxInt32 // unreachable under the clamps; defensive
+	}
+	return int(math.Ceil(math.Log(1/p.Alpha) / perFail))
 }

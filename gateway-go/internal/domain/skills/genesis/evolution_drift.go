@@ -18,6 +18,7 @@ package genesis
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -72,13 +73,33 @@ func (t *Tracker) autoAdoptFreezePath() string {
 	return filepath.Join(filepath.Dir(t.logPath), "auto_adopt_freeze.json")
 }
 
-// AutoAdoptFrozen reports whether the self-brake is engaged (marker present).
+// AutoAdoptFrozen reports whether the self-brake is engaged. Fail CLOSED: the
+// one component whose job is to halt the loop under adversarial drift must not
+// default to "go" when it cannot read its own marker (RSI code eval H5). An
+// unreadable marker, or a present-but-unparseable one, reads as frozen; only a
+// genuinely ABSENT marker (fresh install, or a real clear transition) reads as
+// not-frozen.
 func (t *Tracker) AutoAdoptFrozen() bool {
-	verdicts, err := jsonlstore.Load[DriftVerdict](t.autoAdoptFreezePath())
-	if err != nil || len(verdicts) == 0 {
-		return false
+	path := t.autoAdoptFreezePath()
+	verdicts, err := jsonlstore.Load[DriftVerdict](path)
+	if err != nil {
+		if t.logger != nil {
+			t.logger.Warn("drift brake: freeze marker unreadable, failing closed (frozen)", "error", err)
+		}
+		return true
 	}
-	return verdicts[len(verdicts)-1].Frozen
+	if len(verdicts) > 0 {
+		return verdicts[len(verdicts)-1].Frozen
+	}
+	// Zero records with no error: absent file (allow) vs present-but-empty or
+	// all-lines-corrupt (jsonlstore skips bad lines silently) → fail closed.
+	if _, statErr := os.Stat(path); statErr == nil {
+		if t.logger != nil {
+			t.logger.Warn("drift brake: freeze marker present but held no verdict, failing closed (frozen)")
+		}
+		return true
+	}
+	return false
 }
 
 // AuditEvolutionDrift computes the drift verdict from the ledgers. Pure read;

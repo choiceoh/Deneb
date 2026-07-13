@@ -39,6 +39,56 @@ MIN_ARTIFACT_BYTES = 200
 # Exit code meaning "artifact unavailable — defer this dispatch, burn nothing".
 DEFER_EXIT = 3
 
+# Defense-in-depth for the acceptor boundary (RSI code eval C2/F1): the
+# record-time surface gate only sees structured targetFiles, so a candidate
+# whose PROSE names acceptance machinery would otherwise flow verbatim into a
+# headless session with landing authority. Any mention of these basenames in
+# the candidate text defers the dispatch to operator review — conservative on
+# purpose; a legitimate candidate discussing a gate file still deserves a
+# human eye before an unattended session edits near it. Pinned against the
+# forbidden surface whitelist in surfaces.go by test_dispatch_prompt.py.
+FORBIDDEN_SURFACE_BASENAMES = (
+    "validation_engine.go",
+    "validation_replay.go",
+    "eprocess.go",
+    "meta_judge_bench.go",
+    "meta_producer_bench.go",
+    "meta_genesis_bench.go",
+    "meta_evolution.go",
+    "judge_accuracy.go",
+    "surfaces.go",
+    "tracker_usage.go",
+    "tracker_self_correction.go",
+    "tracker_eprocess_cutover.go",
+    "evolution_drift.go",
+    "rsi_ladder.go",
+    "ladder_watch.go",
+    "graduation_state.go",
+    "coding-dispatch.sh",
+    "dispatch_prompt.py",
+    "dispatch_outcome.py",
+    "prompt_cache.go",
+    "cache_breakpoints.go",
+    "tier1_cache.go",
+    "prompt_snapshot_persist.go",
+    "dependabot.yml",
+    "codeql.yml",
+)
+
+
+def forbidden_surface_mentions(candidate: dict) -> list[str]:
+    """Forbidden-surface basenames mentioned anywhere in the candidate's
+    free text or structured targets (case-insensitive)."""
+    fields = [
+        str(candidate.get(k, ""))
+        for k in ("title", "skillName", "candidate", "proposedChange", "evidence", "risk")
+    ]
+    targets = candidate.get("targetFiles")
+    if isinstance(targets, list):
+        fields.extend(str(x) for x in targets)
+    blob = "\n".join(fields).lower()
+    return [name for name in FORBIDDEN_SURFACE_BASENAMES if name in blob]
+
 
 def resolve_contract(meta_dir: Path) -> tuple[str, str] | None:
     """Return (contract_text, sha12) or None when the artifact is unusable."""
@@ -78,6 +128,13 @@ def main() -> int:
     args = ap.parse_args()
 
     candidate = json.load(sys.stdin)
+    if mentions := forbidden_surface_mentions(candidate):
+        print(
+            f"candidate {candidate.get('id')} mentions forbidden acceptance "
+            f"surfaces {mentions} — deferring to operator review (no marker burned)",
+            file=sys.stderr,
+        )
+        return DEFER_EXIT
     resolved = resolve_contract(Path(args.meta_dir))
     if resolved is None:
         print(

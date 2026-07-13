@@ -42,7 +42,7 @@ func newTestTracker(t *testing.T) *Tracker {
 func TestPostEvolveRollback_FiresWhenFailuresReachThreshold(t *testing.T) {
 	tr := newTestTracker(t)
 	fired := make(chan string, 1)
-	tr.SetRollback(func(s string) { fired <- s }, 3)
+	tr.SetRollback(func(s string) bool { fired <- s; return true }, 3)
 
 	if err := tr.LogEvolve("deploy-helper", "1.0.1", "tighten steps"); err != nil {
 		t.Fatalf("LogEvolve: %v", err)
@@ -78,7 +78,7 @@ func TestPostEvolveRollback_FiresWhenFailuresReachThreshold(t *testing.T) {
 func TestPostEvolveRollback_FiresOnInterleavedFailures(t *testing.T) {
 	tr := newTestTracker(t)
 	fired := make(chan string, 1)
-	tr.SetRollback(func(s string) { fired <- s }, 3)
+	tr.SetRollback(func(s string) bool { fired <- s; return true }, 3)
 
 	if err := tr.LogEvolve("deploy-helper", "1.0.1", "tighten steps"); err != nil {
 		t.Fatalf("LogEvolve: %v", err)
@@ -113,13 +113,96 @@ func TestPostEvolveRollback_FiresOnInterleavedFailures(t *testing.T) {
 	}
 }
 
+// M3 regression pin: the usage-source gate is an allowlist. Empty (legacy/RPC)
+// and "real" count; every other tag — including an unknown FUTURE lane that
+// forgets to be excluded — does NOT, so it can never pollute the success rate.
+func TestIsRealUsageRecord_AllowlistFailsClosed(t *testing.T) {
+	real := []string{"", UsageSourceReal}
+	for _, s := range real {
+		if !isRealUsageRecord(UsageRecord{SkillName: "sk", SessionKey: "client:t", Success: true, Source: s}) {
+			t.Fatalf("source %q must count as real", s)
+		}
+	}
+	notReal := []string{UsageSourceWorkout, UsageSourceReviewVerdict, UsageSourceReviewConsult, "curriculum", "sandbox-shadow-2027"}
+	for _, s := range notReal {
+		if isRealUsageRecord(UsageRecord{SkillName: "sk", SessionKey: "client:t", Success: true, Source: s}) {
+			t.Fatalf("source %q must NOT count as real (allowlist fails closed)", s)
+		}
+	}
+}
+
+// H3 regression pin: when the rollback callback reports failure (missing
+// backup, write error), the tracker records a distinct evolve_rollback_failed
+// entry — NOT evolve_rolled_back — and drops the stashed baseline label so it
+// cannot mislabel a later resolution of the same skill.
+func TestPostEvolveRollback_FailedCallbackRecordsAndClearsStash(t *testing.T) {
+	tr := newTestTracker(t)
+	done := make(chan struct{}, 1)
+	// Callback reports failure every time (as RollbackSkillWithResult does on
+	// a missing backup).
+	tr.SetRollback(func(string) bool { done <- struct{}{}; return false }, 3)
+
+	if err := tr.LogEvolve("sk", "1.0.1", "d"); err != nil {
+		t.Fatal(err)
+	}
+	rec := func() {
+		if err := tr.RecordUsage(UsageRecord{SkillName: "sk", SessionKey: "client:t", Success: false, ErrorMsg: "boom"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec()
+	rec()
+	rec() // 3 fails → fire
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("rollback callback never fired")
+	}
+	// Give the failure handler (runs after the callback in the same goroutine)
+	// a moment to write.
+	deadline := time.Now().Add(2 * time.Second)
+	var failed, rolledBack bool
+	for time.Now().Before(deadline) {
+		entries, err := tr.RecentLifecycleLog(20)
+		if err != nil {
+			t.Fatal(err)
+		}
+		failed, rolledBack = false, false
+		for _, e := range entries {
+			switch e.Type {
+			case "evolve_rollback_failed":
+				failed = true
+			case "evolve_rolled_back":
+				rolledBack = true
+			}
+		}
+		if failed {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !failed {
+		t.Fatal("failed rollback left no evolve_rollback_failed record")
+	}
+	if rolledBack {
+		t.Fatal("failed rollback must not be logged as a real evolve_rolled_back")
+	}
+	// The stash must be cleared so a later resolution cannot inherit it.
+	tr.mu.Lock()
+	_, stillStashed := tr.pendingBaselineTest["sk"]
+	tr.mu.Unlock()
+	if stillStashed {
+		t.Fatal("stashed baseline label not cleared after failed rollback (H3)")
+	}
+}
+
 // TestPostEvolveRollback_ProvenSkillStopsWatch verifies that an evolve which
 // survives the observation window below the failure threshold is no longer
 // watched, so a later failure burst does not spuriously revert it.
 func TestPostEvolveRollback_ProvenSkillStopsWatch(t *testing.T) {
 	tr := newTestTracker(t)
 	fired := make(chan string, 1)
-	tr.SetRollback(func(s string) { fired <- s }, 3)
+	tr.SetRollback(func(s string) bool { fired <- s; return true }, 3)
 
 	if err := tr.LogEvolve("deploy-helper", "1.0.1", "tighten steps"); err != nil {
 		t.Fatalf("LogEvolve: %v", err)
@@ -133,10 +216,12 @@ func TestPostEvolveRollback_ProvenSkillStopsWatch(t *testing.T) {
 			t.Fatalf("RecordUsage: %v", err)
 		}
 	}
-	// One failure, then enough successes to fill the window (threshold*2 = 6
-	// uses) without reaching 3 failures — the watch proves out and clears.
+	// One failure, then enough successes to fill the window without reaching
+	// 3 failures — the watch proves out and clears. The window is the
+	// C1-extended one: max(threshold*2, e-process MinRejectObservations),
+	// which is 8 uses at the clamped-floor baseline of a fresh skill.
 	rec(false)
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 7; i++ {
 		rec(true)
 	}
 	// Watch is cleared now; a later failure burst must not roll back.
@@ -1414,7 +1499,7 @@ func TestUsageQualitySummaryReportsIgnoredRecords(t *testing.T) {
 func TestPostEvolveRollback_IgnoresConsultInfraFailures(t *testing.T) {
 	tr := newTestTracker(t)
 	fired := make(chan string, 1)
-	tr.SetRollback(func(s string) { fired <- s }, 3)
+	tr.SetRollback(func(s string) bool { fired <- s; return true }, 3)
 	if err := tr.LogEvolve("email-analysis", "1.1.3", "tighten steps"); err != nil {
 		t.Fatalf("LogEvolve: %v", err)
 	}

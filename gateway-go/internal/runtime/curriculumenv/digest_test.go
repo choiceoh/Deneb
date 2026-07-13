@@ -153,6 +153,30 @@ func TestDigest_FailedRequests(t *testing.T) {
 	}
 }
 
+// M6: the failed-request section — the strongest demand evidence — must render
+// BEFORE feed/domain/calendar so a downstream rune-budget truncation cannot
+// silently starve it.
+func TestDigest_FailedRequestsRenderFirst(t *testing.T) {
+	src := Sources{
+		AgentLog: fakeFailed{reqs: []agentlog.FailedRequest{
+			{Message: "실패한 능력 요청", Error: "no capability", Ts: time.Date(2026, 7, 12, 9, 0, 0, 0, time.UTC).UnixMilli()},
+		}},
+		Feed: fakeFeed{items: []workfeed.Item{{Title: "피드 항목 하나"}}},
+		Wiki: fakeWiki{"acme.com": {}},
+		Now:  func() time.Time { return time.Date(2026, 7, 13, 0, 0, 0, 0, time.UTC) },
+	}
+	got := Digest(src)
+	failedAt := strings.Index(got, "실패한 요청")
+	feedAt := strings.Index(got, "업무 피드")
+	domainAt := strings.Index(got, "위키 상대 도메인")
+	if failedAt < 0 || feedAt < 0 || domainAt < 0 {
+		t.Fatalf("expected all three sections present:\n%s", got)
+	}
+	if !(failedAt < feedAt && failedAt < domainAt) {
+		t.Fatalf("failed-request section must render first (failed=%d feed=%d domain=%d):\n%s", failedAt, feedAt, domainAt, got)
+	}
+}
+
 // The injected clock feeds the wiki cutoff (a fixed Now keeps the test
 // deterministic and proves Now is honored).
 func TestDigest_InjectedClock(t *testing.T) {

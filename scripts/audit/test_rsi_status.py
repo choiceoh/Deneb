@@ -64,7 +64,7 @@ class L1Test(unittest.TestCase):
         # Labels are counted over the WHOLE ledger (old entries included) —
         # the ladder evidence accumulates, it does not expire.
         events = [{"createdAt": OLD, "type": "evolve_rolled_back",
-                   "baselineTest": {"reject": True, "disagreement": i == 0}}
+                   "baselineTest": {"reject": True, "rejectReachable": True, "disagreement": i == 0}}
                   for i in range(20)]
         events.append({"createdAt": RECENT, "type": "evolved"})
         s = assess_l1(events, NOW)
@@ -75,10 +75,22 @@ class L1Test(unittest.TestCase):
     def test_eprocess_readiness_needs_agreement_and_n(self):
         # n=19 all-agree: below the floor. n=20 at 85%: below agreement bar.
         base = {"createdAt": OLD, "type": "evolve_confirmed"}
-        n19 = [dict(base, baselineTest={"disagreement": False}) for _ in range(19)]
+        n19 = [dict(base, baselineTest={"rejectReachable": True, "disagreement": False}) for _ in range(19)]
         self.assertFalse(assess_l1(n19, NOW).metrics["eprocess_cutover_ready"])
-        n20_noisy = [dict(base, baselineTest={"disagreement": i < 3}) for i in range(20)]
+        n20_noisy = [dict(base, baselineTest={"rejectReachable": True, "disagreement": i < 3}) for i in range(20)]
         self.assertFalse(assess_l1(n20_noisy, NOW).metrics["eprocess_cutover_ready"])
+
+    def test_eprocess_readiness_excludes_unreachable_labels(self):
+        # Labels recorded while rejection was mathematically unreachable
+        # (rejectReachable false/absent) are excluded from the count — matching
+        # the Go filter, so the dashboard cannot show a false READY (Codex).
+        events = [{"createdAt": OLD, "type": "evolve_rolled_back",
+                   "baselineTest": {"disagreement": False}}  # no rejectReachable → unfair
+                  for _ in range(25)]
+        s = assess_l1(events, NOW)
+        self.assertEqual(s.metrics["eprocess_labels"], 0)
+        self.assertEqual(s.metrics["eprocess_unfair_labels"], 25)
+        self.assertFalse(s.metrics["eprocess_cutover_ready"])
 
 
 class L2Test(unittest.TestCase):
@@ -437,6 +449,39 @@ class LadderTest(unittest.TestCase):
         ready = assess_ladder([], [], [], {"landed": 5})
         self.assertEqual(ready.state, LIVE)
         self.assertEqual(turning([ready]), 0)
+
+    def test_markdown_denominator_excludes_grad(self):
+        # H4: the markdown "Turning: n/N" denominator must exclude the GRAD
+        # dashboard, matching print_summary and the "never counts toward the
+        # headline" contract — it previously used len(layers) (N+1).
+        l1 = assess_l1([{"createdAt": RECENT, "type": "evolved"}], NOW)
+        grad = assess_ladder([], [], [], {"landed": 5})
+        doc = render_markdown([l1, grad], NOW, "/tmp/deneb-data")
+        self.assertIn("**Turning: 1/1**", doc)
+
+
+class MirrorParityTest(unittest.TestCase):
+    """The Go (rsi_ladder.go / rsi_status.go) and Python mirrors classify the
+    same ledgers; a drifted constant made them disagree by a day (H4). Pin the
+    load-bearing shared constants against the Go source so they cannot drift
+    silently again."""
+
+    def _go_source(self, rel: str) -> str:
+        import pathlib
+        return (pathlib.Path(__file__).resolve().parents[2] / rel).read_text(encoding="utf-8")
+
+    def test_calibration_window_constant_matches_go(self):
+        import datetime
+        import re
+        go = self._go_source(
+            "gateway-go/internal/domain/skills/genesis/rsi_ladder.go")
+        m = re.search(
+            r"ladderCalibrationOpenedMs\s*=\s*time\.Date\((\d+),\s*(\d+),\s*(\d+),",
+            go)
+        self.assertIsNotNone(m, "ladderCalibrationOpenedMs not found in rsi_ladder.go")
+        y, mo, d = (int(g) for g in m.groups())
+        want = int(datetime.datetime(y, mo, d, tzinfo=datetime.timezone.utc).timestamp() * 1000)
+        self.assertEqual(LADDER_CALIBRATION_OPENED_MS, want)
 
 
 if __name__ == "__main__":

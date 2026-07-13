@@ -131,6 +131,58 @@ class DispatchPromptTest(unittest.TestCase):
             self.assertEqual(rc, dispatch_prompt.DEFER_EXIT)
             self.assertFalse(marker.exists())
 
+    def test_forbidden_surface_mention_defers(self):
+        # C2 defense-in-depth: prose naming acceptance machinery must never
+        # reach a headless session with landing authority — defer, no marker.
+        with TemporaryDirectory() as td:
+            meta = Path(td) / "meta"
+            meta.mkdir()
+            (meta / dispatch_prompt.ARTIFACT_NAME).write_text(
+                CONTRACT, encoding="utf-8"
+            )
+            marker = Path(td) / "m.json"
+            bad = dict(CANDIDATE)
+            bad["proposedChange"] = "validation_engine.go의 flip gate 완화"
+            rc, prompt, err = run_main(meta, marker, bad)
+            self.assertEqual(rc, dispatch_prompt.DEFER_EXIT)
+            self.assertEqual(prompt, "")
+            self.assertFalse(marker.exists(), "defer must not burn the marker")
+            self.assertIn("forbidden acceptance surfaces", err)
+            # Structured targets are scanned too.
+            bad2 = dict(CANDIDATE)
+            bad2["targetFiles"] = ["scripts/dev/coding-dispatch.sh"]
+            rc2, _, err2 = run_main(meta, marker, bad2)
+            self.assertEqual(rc2, dispatch_prompt.DEFER_EXIT)
+            self.assertIn("coding-dispatch.sh", err2)
+
+    def test_forbidden_basenames_cover_go_whitelist(self):
+        # Every basename in the Go forbidden surface whitelist must be in the
+        # scripts-side guard so the two cannot drift (same pinning pattern as
+        # the artifact name below).
+        go_src = (
+            Path(__file__).resolve().parents[2]
+            / "gateway-go/internal/domain/skills/genesis/surfaces/surfaces.go"
+        ).read_text(encoding="utf-8")
+        forbidden_blocks = re.findall(
+            r"Tier: SurfaceTierForbidden,\s*Patterns: \[\]string\{(.*?)\}",
+            go_src,
+            re.S,
+        )
+        self.assertTrue(forbidden_blocks, "no forbidden pattern blocks found in surfaces.go")
+        for block in forbidden_blocks:
+            for pattern in re.findall(r'"([^"]+)"', block):
+                basename = pattern.rsplit("/", 1)[-1]
+                if basename in ("pr.sh", "ci.yml"):
+                    # pr.sh/ci.yml are legitimate words in candidate prose
+                    # (the contract itself mandates pr.sh land) — guarded by
+                    # the record-time surface gate instead.
+                    continue
+                self.assertIn(
+                    basename,
+                    dispatch_prompt.FORBIDDEN_SURFACE_BASENAMES,
+                    f"surfaces.go forbidden pattern {pattern} missing from dispatch guard",
+                )
+
     def test_artifact_name_matches_go_registry(self):
         # The gateway materializes the artifact this script consumes; the two
         # sides name it independently, so pin the parity against the Go source.

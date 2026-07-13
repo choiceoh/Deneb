@@ -165,6 +165,21 @@ func IsCharterCase(rec SkillValidationCaseRecord) bool {
 	return h.Sum32()%4 == 0
 }
 
+// excludeCharterCases drops the frozen charter slice from a case set bound for
+// a verifier co-evolution TRAINING surface (false-reject mining, few-shot
+// exhibit selection). Scoring/bench paths keep the full corpus — only training
+// inputs are filtered, which is the whole point of the held-out charter.
+func excludeCharterCases(cases []SkillValidationCaseRecord) []SkillValidationCaseRecord {
+	out := cases[:0:0]
+	for _, c := range cases {
+		if IsCharterCase(c) {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
 // RecentSkillValidationCasesPool is RecentSkillValidationCases restricted to
 // one partition pool: blind=true → held-out gate pool, blind=false → visible
 // contract pool.

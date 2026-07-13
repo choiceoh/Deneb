@@ -99,11 +99,37 @@ func Digest(s Sources) string {
 	}
 	var b strings.Builder
 
+	// Explicit failed demand FIRST (RSI code eval M6): this is the strongest
+	// demand evidence — the operator already asked in their own words and the
+	// agent could not complete it — and the consumer
+	// (curriculum.assembleDemandEvidence) truncates the digest to a rune
+	// budget. Rendering it last meant a busy feed+calendar silently starved
+	// it. Real user requests that errored mid-run, rendered with the request
+	// text so the 12-rune verbatim-quote grounding gate can bind a proposal to
+	// the actual ask. Live-test synthetic sessions are excluded at the source
+	// (agentlog.FailedUserRequests).
+	if s.AgentLog != nil {
+		failed := s.AgentLog.FailedUserRequests(now().Add(-failedWindow).UnixMilli(), failedCap)
+		if len(failed) > 0 {
+			fmt.Fprintf(&b, "최근 실패한 요청(명시적 능력 갭, 최대 %d):\n", failedCap)
+			for _, r := range failed {
+				line := fmt.Sprintf("- %s: \"%s\"", time.UnixMilli(r.Ts).Format("01-02"), truncRunes(r.Message, 80))
+				if e := strings.TrimSpace(r.Error); e != "" {
+					line += " — 오류: " + truncRunes(e, 60)
+				}
+				b.WriteString(line + "\n")
+			}
+		}
+	}
+
 	// Active work: recent feed items (titles only — the producer needs the
 	// shape of what's happening, not detail).
 	if s.Feed != nil {
 		items, _, err := s.Feed.List(feedCap, false)
 		if err == nil && len(items) > 0 {
+			if b.Len() > 0 {
+				b.WriteString("\n")
+			}
 			fmt.Fprintf(&b, "최근 업무 피드(최대 %d):\n", feedCap)
 			for _, item := range items {
 				if title := strings.TrimSpace(item.Title); title != "" {
@@ -159,30 +185,6 @@ func Digest(s Sources) string {
 		fmt.Fprintf(&b, "다가오는 일정(스킬 커버리지 갭 후보, 최대 %d):\n", eventCap)
 		b.WriteString(strings.Join(events, "\n"))
 		b.WriteString("\n")
-	}
-
-	// Explicit failed demand: real user requests that errored mid-run — the
-	// operator already asked for this in their own words and the agent could
-	// not complete it. The strongest demand evidence in the digest (no
-	// inference needed); rendered with the request text so the curriculum's
-	// 12-rune verbatim-quote grounding gate can bind a proposal to the actual
-	// ask. Live-test synthetic sessions are excluded at the source
-	// (agentlog.FailedUserRequests).
-	if s.AgentLog != nil {
-		failed := s.AgentLog.FailedUserRequests(now().Add(-failedWindow).UnixMilli(), failedCap)
-		if len(failed) > 0 {
-			if b.Len() > 0 {
-				b.WriteString("\n")
-			}
-			fmt.Fprintf(&b, "최근 실패한 요청(명시적 능력 갭, 최대 %d):\n", failedCap)
-			for _, r := range failed {
-				line := fmt.Sprintf("- %s: \"%s\"", time.UnixMilli(r.Ts).Format("01-02"), truncRunes(r.Message, 80))
-				if e := strings.TrimSpace(r.Error); e != "" {
-					line += " — 오류: " + truncRunes(e, 60)
-				}
-				b.WriteString(line + "\n")
-			}
-		}
 	}
 
 	return strings.TrimSpace(b.String())

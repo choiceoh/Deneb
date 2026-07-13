@@ -152,6 +152,39 @@ func indexFold(s, token string) int {
 	return -1
 }
 
+// negationTokens are the words whose presence immediately around a weaken
+// token flips the swap from "loosens a rule" to "leaves the rule intact".
+var negationTokens = []string{"not ", "n't ", "아니", "말 ", "마.", "마,", "마 ", "않"}
+
+// weakenNegationAdjacent reports whether the token at [idx, idx+tokenLen) sits
+// in a negated context where the imperative/scope swap would NOT weaken the
+// rule (e.g. "must not", "never ... not", Korean "하지 마"). Deterministic and
+// conservative: it scans a small window on both sides. False positives only
+// cost one skipped probe (the lane tries the next line/token), so over-
+// skipping is strictly safer than emitting a mislabeled pair.
+func weakenNegationAdjacent(line string, idx, tokenLen int) bool {
+	// Right side: text immediately after the token (e.g. "must NOT").
+	after := strings.ToLower(strings.TrimLeft(line[idx+tokenLen:], " "))
+	for _, neg := range negationTokens {
+		if strings.HasPrefix(after, strings.TrimSpace(neg)) {
+			return true
+		}
+	}
+	// Left side: a negation within the ~12 bytes before the token
+	// (e.g. "do not always", "not never").
+	start := idx - 12
+	if start < 0 {
+		start = 0
+	}
+	before := strings.ToLower(line[start:idx])
+	for _, neg := range negationTokens {
+		if strings.Contains(before, strings.TrimSpace(neg)) {
+			return true
+		}
+	}
+	return false
+}
+
 // weakenFirstLineMatching applies the first applicable swap to the first
 // substantive line carrying a swap's token — one line, one token, in place.
 // A leading capital on the matched token is preserved on the replacement so
@@ -166,6 +199,16 @@ func weakenFirstLineMatching(body string, swaps [][2]string) (string, bool) {
 		for _, sw := range swaps {
 			idx := indexFold(line, sw[0])
 			if idx < 0 {
+				continue
+			}
+			// Honesty invariant (RSI code eval M5): a weaken swap is only a real
+			// enforcement loss in an AFFIRMATIVE context. In a negated one the
+			// swap preserves the constraint — "must not commit" → "may not
+			// commit" is still a prohibition, so a judge that passes the pair is
+			// CORRECT, yet the old code ledgered it as a missed defect and fed
+			// that noise to the evaluator epoch. Skip a negation-adjacent match
+			// and try the next token/line.
+			if weakenNegationAdjacent(line, idx, len(sw[0])) {
 				continue
 			}
 			repl := sw[1]

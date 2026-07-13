@@ -141,6 +141,61 @@ func TestWeakenJudgeDegradations(t *testing.T) {
 	}
 }
 
+// M5 honesty invariant: a weaken swap in a NEGATED context does not weaken the
+// rule ("must not commit" → "may not commit" is still a prohibition), so it
+// must be skipped rather than emitted as a mislabeled defect pair.
+func TestWeaken_SkipsNegationAdjacentContext(t *testing.T) {
+	// Only line carries "must" inside "must not" → no honest weakening → skip.
+	negated := "This intro line is long enough to pass the floor.\nYou must not commit secrets to the repository ever."
+	if got, ok := weakenFirstLineMatching(negated, imperativeWeakenSwaps); ok {
+		t.Fatalf("weaken emitted a pair for a negated imperative (still a prohibition): %q", got)
+	}
+	// A later affirmative line is still eligible — the guard skips the token,
+	// not the whole run.
+	mixed := "This intro line is long enough to pass the floor.\nYou must not commit secrets here at all.\nYou must always verify the deploy target first now."
+	got, ok := weakenFirstLineMatching(mixed, imperativeWeakenSwaps)
+	if !ok {
+		t.Fatal("weaken must still find the later affirmative rule line")
+	}
+	if !strings.Contains(got, "may always") && !strings.Contains(got, "must usually") {
+		t.Fatalf("weaken did not dilute the affirmative line: %q", got)
+	}
+	if strings.Contains(got, "may not commit") {
+		t.Fatal("weaken diluted the negated prohibition (honesty invariant broken)")
+	}
+}
+
+// M5 charter wiring: the first live co-evolution training-surface consumer
+// (false-reject mining) must exclude the frozen charter slice.
+func TestExcludeCharterCases(t *testing.T) {
+	// Build enough cases that the ~25% charter hash selects at least one.
+	var cases []SkillValidationCaseRecord
+	for i := 0; i < 40; i++ {
+		cases = append(cases, SkillValidationCaseRecord{
+			SkillName: "sk", ID: "case-" + string(rune('a'+i%26)) + string(rune('0'+i%10)),
+			Description: "case number " + string(rune('a'+i%26)),
+		})
+	}
+	var charterIn int
+	for _, c := range cases {
+		if IsCharterCase(c) {
+			charterIn++
+		}
+	}
+	if charterIn == 0 {
+		t.Skip("no charter case selected in this fixture — hash-dependent")
+	}
+	filtered := excludeCharterCases(cases)
+	if len(filtered) != len(cases)-charterIn {
+		t.Fatalf("excludeCharterCases kept %d, want %d", len(filtered), len(cases)-charterIn)
+	}
+	for _, c := range filtered {
+		if IsCharterCase(c) {
+			t.Fatal("charter case survived the co-evolution training filter")
+		}
+	}
+}
+
 // Pair construction over a catalog: subtle pairs are built for the real body,
 // stubs are skipped, the limit is honored, and construction is deterministic.
 func TestBuildSubtleJudgeDegradationPairs(t *testing.T) {

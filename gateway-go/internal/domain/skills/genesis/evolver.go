@@ -98,6 +98,17 @@ type Evolver struct {
 	// trigger can't overlap (TryLock: a second concurrent caller skips).
 	runMu sync.Mutex
 
+	// skillLocks serializes evolves of the SAME skill across ALL entry points
+	// (periodic, review fork, manual RPC). runMu only guards the periodic
+	// cycle, so a review/RPC evolve could previously read-gate-write the same
+	// file concurrently with the periodic one — last-writer-wins on the body,
+	// and the backup could capture an intermediate version, corrupting
+	// rollback (RSI code eval M4). Different skills never contend. Guarded by
+	// skillLocksMu; the per-skill mutex is a leaf (never held across another
+	// lock acquisition).
+	skillLocksMu sync.Mutex
+	skillLocks   map[string]*sync.Mutex
+
 	// meta resolves prompt artifacts (RSI P1); nil → compiled-in prompts.
 	meta *generation.MetaArtifacts
 
@@ -120,7 +131,39 @@ func NewEvolver(llmClient *llm.Client, catalog *skills.Catalog, tracker *Tracker
 		model:            model,
 		logger:           logger,
 		selfTest:         envBool("DENEB_SKILL_EVOLVE_SELFTEST", true),
+		skillLocks:       make(map[string]*sync.Mutex),
 	}
+}
+
+// lockSkill serializes evolves of one skill across every entry point. Returns
+// the unlock func. Different skills never contend; the per-skill mutex is a
+// leaf lock.
+func (e *Evolver) lockSkill(skillName string) func() {
+	e.skillLocksMu.Lock()
+	mu := e.skillLocks[skillName]
+	if mu == nil {
+		mu = &sync.Mutex{}
+		if e.skillLocks == nil {
+			e.skillLocks = make(map[string]*sync.Mutex)
+		}
+		e.skillLocks[skillName] = mu
+	}
+	e.skillLocksMu.Unlock()
+	mu.Lock()
+	return mu.Unlock
+}
+
+// lockSkillMutex returns the per-skill mutex identity without locking it —
+// test seam for asserting the map keys by skill.
+func (e *Evolver) lockSkillMutex(skillName string) *sync.Mutex {
+	e.skillLocksMu.Lock()
+	defer e.skillLocksMu.Unlock()
+	mu := e.skillLocks[skillName]
+	if mu == nil {
+		mu = &sync.Mutex{}
+		e.skillLocks[skillName] = mu
+	}
+	return mu
 }
 
 // SetLowConfidenceObserver registers the post-commit sink for accepted skill
@@ -257,6 +300,12 @@ func (e *Evolver) thinkingOff(model string) *llm.ThinkingConfig {
 // evolver proceed even with no usage data — usage-stat-driven evolution
 // otherwise never fires because skill usage is sparsely recorded.
 func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding string) (*EvolveResult, error) {
+	// Hold the per-skill lock for the WHOLE operation (M4). Direct callers
+	// (review fork, RPC) lock here; the periodic lane locks around round 1 +
+	// its burst in EvolveUnderperformers, so a burst continuation stays
+	// serialized against a concurrent direct evolve (Codex review).
+	unlock := e.lockSkill(skillName)
+	defer unlock()
 	return e.evolveSkill(ctx, skillName, reviewFinding, false)
 }
 
@@ -268,6 +317,10 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 // may proceed on that bench alone; the per-round held-out + judge + rollback
 // gates decide dryness. Uncovered skills keep the conservative gate (burst
 // stops after round 1) so nothing churns on judge opinion without a bench.
+// evolveSkill is the lock-free core (M4): every caller MUST already hold the
+// per-skill lock (EvolveSkill for direct callers; EvolveUnderperformers around
+// round 1 + burst). Acquiring it here would either deadlock the periodic lane
+// (which locks around the whole burst) or leave burst rounds unserialized.
 func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding string, burstContinuation bool) (*EvolveResult, error) {
 	if e.catalog == nil {
 		return nil, fmt.Errorf("evolver: catalog not configured")
@@ -631,26 +684,35 @@ func (e *Evolver) EvolveUnderperformers(ctx context.Context) ([]EvolveResult, er
 		if ctx.Err() != nil {
 			break
 		}
-		result, err := e.EvolveSkill(ctx, candidate.SkillName, "")
-		if err != nil {
-			e.logger.Warn("evolver: failed to evolve",
-				"skill", candidate.SkillName, "error", err)
-			results = append(results, EvolveResult{
-				SkillName: candidate.SkillName,
-				Evolved:   false,
-				Reason:    err.Error(),
-			})
-			continue
-		}
-		if result != nil {
-			results = append(results, e.runEvolveBurst(ctx, candidate.SkillName, *result,
+		// Hold the per-skill lock for round 1 AND the burst continuation, so a
+		// concurrent direct/RPC evolve of the same skill cannot interleave a
+		// read-gate-write with a burst round (Codex review of M4). The lock is
+		// released before the next candidate. A closure bounds the defer to
+		// this iteration.
+		results = append(results, func() []EvolveResult {
+			unlock := e.lockSkill(candidate.SkillName)
+			defer unlock()
+			result, err := e.evolveSkill(ctx, candidate.SkillName, "", false)
+			if err != nil {
+				e.logger.Warn("evolver: failed to evolve",
+					"skill", candidate.SkillName, "error", err)
+				return []EvolveResult{{
+					SkillName: candidate.SkillName,
+					Evolved:   false,
+					Reason:    err.Error(),
+				}}
+			}
+			if result == nil {
+				return nil
+			}
+			return e.runEvolveBurst(ctx, candidate.SkillName, *result,
 				func(ctx context.Context, name string) (*EvolveResult, error) {
 					// burstContinuation=true: rounds 2+ ride the held-out bench of
 					// a covered skill (A4 — otherwise the evidence gate makes burst
-					// inert after round 1).
+					// inert after round 1). Lock already held for the whole burst.
 					return e.evolveSkill(ctx, name, "", true)
-				})...)
-		}
+				})
+		}()...)
 	}
 	return results, nil //nolint:nilerr // individual skill errors collected in results, not propagated
 }

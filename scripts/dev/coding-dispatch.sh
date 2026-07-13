@@ -363,6 +363,7 @@ abandon_after = int(sys.argv[4])
 skip = {s for s in (sys.argv[5] if len(sys.argv) > 5 else "").split(",") if s}
 sys.path.insert(0, script_dir)
 import dispatch_outcome
+import dispatch_prompt
 # Executed graduation-ladder unlocks admit staged sources at runtime (rows
 # keyed "source:<prefix>" in ~/.deneb/data/graduation_state.json — the same
 # file genesis rsiSourceDispatchable and rsi_status.py read, so the three
@@ -404,9 +405,21 @@ for rid, rec in sorted(cand.items(), key=pick_order):
     if rec.get("scope") != "code":
         continue
     src = rec.get("source") or ""
-    if not (src.startswith("evolve-tool-gap") or src.startswith("self-harness")
-            or src.startswith("health-finding") or src.startswith("tool-quality")
-            or any(src.startswith(g) for g in graduated_sources)):
+    # Namespace match must be separator-aware: bare startswith let any caller
+    # self-select auto-dispatch by prefixing a graduated namespace
+    # ("health-finding-x") — RSI code eval M7.
+    def ns_match(val, ns):
+        return val == ns or val.startswith(ns + ":")
+    allowed = ("evolve-tool-gap", "self-harness", "health-finding", "tool-quality")
+    if not (any(ns_match(src, ns) for ns in allowed) or any(ns_match(src, g) for g in graduated_sources)):
+        continue
+    # A candidate whose prose names acceptance machinery must NOT be
+    # auto-dispatched — but it also must not starve the queue by being
+    # re-picked every tick only to DEFER at prompt composition (the prompt-side
+    # guard is defense-in-depth, not the selection gate). Skip it here so
+    # lower-priority safe candidates still run; it stays queued for operator
+    # review (Codex review of RSI eval C2).
+    if dispatch_prompt.forbidden_surface_mentions(rec):
         continue
     phase = dispatch_phase.get(rid, "")
     if phase in ("started", "pr_opened", "merged", "deployed", "watch_passed"):

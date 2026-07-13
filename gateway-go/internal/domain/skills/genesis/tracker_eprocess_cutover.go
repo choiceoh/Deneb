@@ -54,7 +54,13 @@ type eProcessCutoverReadiness struct {
 	Labels        int     `json:"labels"`
 	Disagreements int     `json:"disagreements"`
 	AgreementRate float64 `json:"agreementRate"`
-	Ready         bool    `json:"ready"`
+	// UnfairLabels counts ledger labels recorded while the e-process could
+	// not possibly have rejected (RejectReachable=false, incl. all labels
+	// from before the C1 window fix). They are excluded from Labels and the
+	// agreement rate — counting them made readiness measure the confirm
+	// rate instead of mechanism agreement — but stay visible for audit.
+	UnfairLabels int  `json:"unfairLabels,omitempty"`
+	Ready        bool `json:"ready"`
 	// EProcessOwner mirrors the DENEB_EPROCESS_OWNS_ROLLBACK knob so status
 	// surfaces can distinguish "ready, awaiting the flip" from "flipped".
 	EProcessOwner bool `json:"eProcessOwner"`
@@ -72,6 +78,10 @@ func (t *Tracker) eProcessCutoverReadiness() eProcessCutoverReadiness {
 	}
 	for _, e := range entries {
 		if e.BaselineTest == nil {
+			continue
+		}
+		if !e.BaselineTest.RejectReachable {
+			out.UnfairLabels++
 			continue
 		}
 		out.Labels++

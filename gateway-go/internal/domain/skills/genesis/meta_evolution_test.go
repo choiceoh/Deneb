@@ -3,14 +3,78 @@ package genesis
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"math"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 )
+
+// H1 regression pin: a producer-epoch proposal must NEVER auto-adopt when no
+// producer shadow generator is wired (primary client nil, propose succeeded
+// via the teacher fallback). Before the fix the bench block was skipped and
+// the proposal fell through to unbenched auto-adoption; the evaluator and
+// genesis epochs already dropped in the same situation.
+func TestMetaEvolution_ProducerDropsWithoutShadowGenerator(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Teacher returns a gate-passing evolve-prompt revision (all response
+	// schema anchors preserved). Primary is nil → producerShadowExecutor nil.
+	revised := "# evolve\n건전한 개정. 반드시 JSON: " +
+		`"skip" "changes" "body" "new_version" "target_signature" "reproduction_case" "tool_gap"` +
+		"\n" + strings.Repeat("추가 지침 문장. ", 20)
+	payload, _ := json.Marshal(map[string]any{"skip": false, "revised_prompt": revised})
+	teacher := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeTestSSEJSON(t, w, string(payload))
+	}))
+	defer teacher.Close()
+
+	e := NewEvolver(nil, skills.NewCatalog(nil), tr, "", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	e.SetTeacher(llm.NewClient(teacher.URL, "test-key"), "teacher")
+
+	metaDir := filepath.Join(t.TempDir(), "meta")
+	meta := generation.NewMetaArtifacts(metaDir, slog.Default())
+	meta.MaterializeDefaults(nil) // seed compiled defaults incl. the evolve prompt
+
+	adopted := false
+	task := &MetaEvolutionTask{
+		Tracker: tr, Meta: meta, Evolver: e, Logger: slog.Default(),
+		OnProposal: func(_, _, _, _ string, isAdoption bool) {
+			if isAdoption {
+				adopted = true
+			}
+		},
+	}
+	// nextEpoch on a fresh ledger returns producer.
+	if epoch, _ := task.nextEpoch(); epoch != metaEpochProducer {
+		t.Fatalf("precondition: first epoch = %q, want producer", epoch)
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if adopted {
+		t.Fatal("producer epoch auto-adopted with no shadow bench (H1)")
+	}
+	ledger, err := tr.RecentMetaRevisions(5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ledger) == 0 || !strings.Contains(ledger[0].Reason, "producer bench unavailable") {
+		t.Fatalf("expected a drop record, ledger head = %+v", ledger)
+	}
+}
 
 // The deterministic contract gate is what stands between an LLM proposal and
 // the .proposed file — it must reject schema-breaking, oversized, and no-op

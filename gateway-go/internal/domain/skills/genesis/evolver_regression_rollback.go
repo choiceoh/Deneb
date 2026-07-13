@@ -231,7 +231,19 @@ func (e *Evolver) RollbackSkillWithResult(skillName string) bool {
 		e.logger.Error("evolver: rollback write failed", "skill", skillName, "error", err)
 		return false
 	}
-	e.logger.Info("evolver: skill rolled back after consecutive post-evolve failures", "skill", skillName)
+	// Re-register the restored version in the catalog, mirroring the evolve
+	// commit path (evolver_candidate_eval.go). Without this the in-memory
+	// entry keeps the reverted-away version, so a later liveness check
+	// (workfeed_meta_proposal.go: entry.Skill.Version != version) reads stale
+	// and a no-op backup restore succeeds — double-counting one judge mistake
+	// as both an organic AND an operator false-accept label (RSI code eval H2).
+	restored := *entry
+	if v, ok := skills.ParseFrontmatter(string(prev))["version"]; ok && v != "" {
+		restored.Skill.Version = v
+	}
+	e.catalog.Register(restored)
+	e.logger.Info("evolver: skill rolled back after consecutive post-evolve failures",
+		"skill", skillName, "restoredVersion", restored.Skill.Version)
 	if e.tracker != nil {
 		if err := e.tracker.LogEvolveRolledBack(skillName); err != nil {
 			e.logger.Warn("evolver: rollback lifecycle log failed", "skill", skillName, "error", err)
