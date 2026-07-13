@@ -614,6 +614,22 @@ data class QATurn(
 
 @Immutable
 @Serializable
+data class RSIHealthView(
+    val evolves7d: Int = 0,
+    val confirmed7d: Int = 0,
+    val rejected7d: Int = 0,
+    val rolledBack7d: Int = 0,
+    val genesis7d: Int = 0,
+    val confirmRate: Double = 0.0,
+    val falseAcceptRate: Double = 0.0,
+    val resolvedEvolves7d: Int = 0,
+    val thrash: Boolean = false,
+    val autoAdoptFrozen: Boolean = false,
+    val metaRevisions7d: Int = 0,
+)
+
+@Immutable
+@Serializable
 data class RSILayerView(
     val key: String = "",
     val title: String = "",
@@ -628,6 +644,7 @@ data class RSILayerView(
 data class RSILoopStatusResponse(
     val layers: List<RSILayerView> = emptyList(),
     val turning: Int = 0,
+    val health: RSIHealthView = RSIHealthView(),
 )
 
 @Immutable
@@ -689,6 +706,7 @@ data class SelfCorrectionCandidate(
     val proposedChange: String = "",
     val risk: String = "",
     val source: String = "",
+    val autoDispatch: Boolean = false,
     val reviewer: String = "",
     val reviewNote: String = "",
     val evidenceKinds: List<String> = emptyList(),

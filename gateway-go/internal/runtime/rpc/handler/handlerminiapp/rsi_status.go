@@ -23,6 +23,26 @@ type RSIStatusDeps struct {
 type RSILoopStatusResponse struct {
 	Layers  []RSILayerView `json:"layers"`
 	Turning int            `json:"turning"`
+	Health  RSIHealthView  `json:"health"`
+}
+
+// RSIHealthView is the structured evolution-health scoreboard (numeric fields
+// behind the layer diagnoses) so clients can draw a real scoreboard instead of
+// parsing preformatted metric strings.
+//
+//deneb:wire
+type RSIHealthView struct {
+	Evolves7d         int     `json:"evolves7d"`
+	Confirmed7d       int     `json:"confirmed7d"`
+	Rejected7d        int     `json:"rejected7d"`
+	RolledBack7d      int     `json:"rolledBack7d"`
+	Genesis7d         int     `json:"genesis7d"`
+	ConfirmRate       float64 `json:"confirmRate"`
+	FalseAcceptRate   float64 `json:"falseAcceptRate"`
+	ResolvedEvolves7d int     `json:"resolvedEvolves7d"`
+	Thrash            bool    `json:"thrash"`
+	AutoAdoptFrozen   bool    `json:"autoAdoptFrozen"`
+	MetaRevisions7d   int     `json:"metaRevisions7d"`
 }
 
 // RSILayerView is one loop layer's classified state. State is one of LIVE,
@@ -60,7 +80,22 @@ func rsiStatus(deps RSIStatusDeps) rpcutil.HandlerFunc {
 	type params struct{}
 	return bindAuthenticatedOptional[params](func(_ context.Context, req *protocol.RequestFrame, _ params) *protocol.ResponseFrame {
 		st := deps.Status()
-		resp := RSILoopStatusResponse{Turning: st.Turning}
+		resp := RSILoopStatusResponse{
+			Turning: st.Turning,
+			Health: RSIHealthView{
+				Evolves7d:         st.Health.Evolves7d,
+				Confirmed7d:       st.Health.Confirmed7d,
+				Rejected7d:        st.Health.Rejected7d,
+				RolledBack7d:      st.Health.RolledBack7d,
+				Genesis7d:         st.Health.Genesis7d,
+				ConfirmRate:       st.Health.ConfirmRate,
+				FalseAcceptRate:   st.Health.FalseAcceptRate,
+				ResolvedEvolves7d: st.Health.ResolvedEvolves7d,
+				Thrash:            st.Health.Thrash,
+				AutoAdoptFrozen:   st.Health.AutoAdoptFrozen,
+				MetaRevisions7d:   st.Health.MetaRevisions7d,
+			},
+		}
 		resp.Layers = make([]RSILayerView, 0, len(st.Layers))
 		for _, l := range st.Layers {
 			view := RSILayerView{Key: l.Key, Title: l.Title, State: l.State, Diagnosis: l.Diagnosis, Detail: l.Detail}

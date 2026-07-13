@@ -2239,6 +2239,69 @@ class MiniappWireValueContractTest {
             invalidValue = JsonObject(emptyMap()),
         ),
         wireContract(
+            name = "RSIHealthView",
+            serializer = RSIHealthView.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "evolves7d",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "confirmed7d",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "rejected7d",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "rolledBack7d",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "genesis7d",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "confirmRate",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "falseAcceptRate",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "resolvedEvolves7d",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "thrash",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "autoAdoptFrozen",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "metaRevisions7d",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "evolves7d",
+            invalidValue = JsonPrimitive("not-an-int"),
+        ),
+        wireContract(
             name = "RSILayerView",
             serializer = RSILayerView.serializer(),
             fields = listOf(
@@ -2289,6 +2352,11 @@ class MiniappWireValueContractTest {
                     name = "turning",
                     value = JsonPrimitive(Int.MAX_VALUE),
                     expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "health",
+                    value = JsonObject(emptyMap()),
+                    expectation = Expectation.Object,
                 ),
             ),
             invalidField = "layers",
@@ -2491,6 +2559,11 @@ class MiniappWireValueContractTest {
                 fieldValue(
                     name = "source",
                     value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "autoDispatch",
+                    value = JsonPrimitive(true),
                     expectation = Expectation.Exact,
                 ),
                 fieldValue(

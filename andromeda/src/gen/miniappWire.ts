@@ -507,6 +507,20 @@ export interface QATurn {
   a?: string
 }
 
+export interface RSIHealthView {
+  evolves7d?: number
+  confirmed7d?: number
+  rejected7d?: number
+  rolledBack7d?: number
+  genesis7d?: number
+  confirmRate?: number
+  falseAcceptRate?: number
+  resolvedEvolves7d?: number
+  thrash?: boolean
+  autoAdoptFrozen?: boolean
+  metaRevisions7d?: number
+}
+
 export interface RSILayerView {
   key?: string
   title?: string
@@ -519,6 +533,7 @@ export interface RSILayerView {
 export interface RSILoopStatusResponse {
   layers?: RSILayerView[]
   turning?: number
+  health?: RSIHealthView
 }
 
 export interface RSIMetricView {
@@ -568,6 +583,7 @@ export interface SelfCorrectionCandidate {
   proposedChange?: string
   risk?: string
   source?: string
+  autoDispatch?: boolean
   reviewer?: string
   reviewNote?: string
   evidenceKinds?: string[]

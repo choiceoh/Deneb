@@ -61,11 +61,13 @@ ORGANIC_FALSE_ACCEPT_WINDOW_DAYS = 30
 BLATANT_CLASSES = frozenset({"section-drop", "fake-tool", "truncation", "overfit"})
 SUBTLE_CLASSES = frozenset({"imperative-drop", "safety-drop"})
 
-# L4 dispatch supply contract (must match scripts/dev/coding-dispatch.sh): a
-# candidate is dispatchable only if it is a proposed, code-scope correction from
-# an evidence-bearing source. health-finding graduated 2026-07-12 (first batch
-# reviewed clean); runtime-error stays staged until its own batch review.
-L4_SOURCES = ("evolve-tool-gap", "self-harness", "health-finding")
+# L4 dispatch supply contract (must match scripts/dev/coding-dispatch.sh and
+# genesis/rsi_status.go rsiDispatchSources): a candidate is dispatchable only if
+# it is a proposed, code-scope correction from an evidence-bearing source.
+# health-finding graduated 2026-07-12 (first batch reviewed clean); tool-quality
+# graduated 2026-07-13 (operator directive); runtime-error and deadcode-finding
+# stay staged until their own batch review.
+L4_SOURCES = ("evolve-tool-gap", "self-harness", "health-finding", "tool-quality")
 
 LIVE, DATA_GATED, STARVED, FROZEN, IDLE = "LIVE", "DATA-GATED", "STARVED", "FROZEN", "IDLE"
 
