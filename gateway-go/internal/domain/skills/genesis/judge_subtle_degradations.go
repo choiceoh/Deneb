@@ -152,37 +152,53 @@ func indexFold(s, token string) int {
 	return -1
 }
 
-// negationTokens are the words whose presence immediately around a weaken
-// token flips the swap from "loosens a rule" to "leaves the rule intact".
-var negationTokens = []string{"not ", "n't ", "아니", "말 ", "마.", "마,", "마 ", "않"}
-
 // weakenNegationAdjacent reports whether the token at [idx, idx+tokenLen) sits
-// in a negated context where the imperative/scope swap would NOT weaken the
-// rule (e.g. "must not", "never ... not", Korean "하지 마"). Deterministic and
-// conservative: it scans a small window on both sides. False positives only
-// cost one skipped probe (the lane tries the next line/token), so over-
-// skipping is strictly safer than emitting a mislabeled pair.
+// in an ENGLISH negated context where the imperative swap would NOT weaken the
+// rule: "must not commit" → "may not commit" is still a prohibition. ONLY
+// English imperatives (must/always/never) can be inverted this way; Korean
+// adverb swaps (반드시→가급적, 절대→되도록) weaken the adverb regardless of a
+// following negative verb ending, so they are never guarded. The old code
+// scanned for bare "말"/"않" substrings and false-skipped every "정말"/"얼마"
+// line (3rd-review M5). Rune-safe throughout.
 func weakenNegationAdjacent(line string, idx, tokenLen int) bool {
-	// Right side: text immediately after the token (e.g. "must NOT").
+	// Korean/non-ASCII tokens are never inverted by an English negation.
+	if !isASCIIWordToken(line[idx : idx+tokenLen]) {
+		return false
+	}
+	// Right side: an English negation immediately after the token ("must NOT").
 	after := strings.ToLower(strings.TrimLeft(line[idx+tokenLen:], " "))
-	for _, neg := range negationTokens {
-		if strings.HasPrefix(after, strings.TrimSpace(neg)) {
-			return true
+	if strings.HasPrefix(after, "not ") || strings.HasPrefix(after, "not.") ||
+		strings.HasPrefix(after, "not,") || strings.HasPrefix(after, "n't") {
+		return true
+	}
+	// Left side: an English negation just before the token ("do not always").
+	// Rune-safe: back up whole runes, not bytes, then look for a standalone
+	// " not " in the lowercased window.
+	before := strings.ToLower(lastRunes(line[:idx], 8))
+	return strings.Contains(before, "not ") || strings.HasSuffix(strings.TrimRight(before, " "), "n't")
+}
+
+// isASCIIWordToken reports whether s is entirely ASCII letters/space — the
+// shape of the English imperative swap tokens ("must ", "always ", "never ").
+func isASCIIWordToken(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r > 127 {
+			return false
 		}
 	}
-	// Left side: a negation within the ~12 bytes before the token
-	// (e.g. "do not always", "not never").
-	start := idx - 12
-	if start < 0 {
-		start = 0
+	return true
+}
+
+// lastRunes returns up to the last n runes of s (rune-safe tail slice).
+func lastRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
 	}
-	before := strings.ToLower(line[start:idx])
-	for _, neg := range negationTokens {
-		if strings.Contains(before, strings.TrimSpace(neg)) {
-			return true
-		}
-	}
-	return false
+	return string(r[len(r)-n:])
 }
 
 // weakenFirstLineMatching applies the first applicable swap to the first

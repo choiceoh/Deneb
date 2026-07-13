@@ -198,6 +198,49 @@ func TestEProcessCutoverReadiness(t *testing.T) {
 	}
 }
 
+// C1-D1 guard: a pure-CONFIRM population (no rollback labels) is agreement-
+// biased ~1.0 by construction — the legacy owner fires rollbacks before the
+// e-process can reject, so the only fair labels are long-survived confirms.
+// Readiness must NOT green on that: it requires >=1 fair rollback label so
+// agreement was measured against a case the mechanisms could disagree on.
+func TestEProcessCutoverReadiness_PureConfirmsNotReady(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 25 fair, agreeing CONFIRM labels (no rollbacks).
+	for i := 0; i < 25; i++ {
+		tr.mu.Lock()
+		tr.pendingBaselineTest["sk"] = &RollbackBaselineTest{Reject: false, RejectReachable: true, Disagreement: false}
+		tr.mu.Unlock()
+		if err := tr.LogEvolveConfirmed("sk", HarnessEditAudit{}, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := tr.eProcessCutoverReadiness()
+	if r.Labels < 20 || r.AgreementRate < 0.9 {
+		t.Fatalf("precondition: expected n>=20 agreeing confirms: %+v", r)
+	}
+	if r.FairRollbacks != 0 {
+		t.Fatalf("confirm-only population must have 0 fair rollbacks: %+v", r)
+	}
+	if r.Ready {
+		t.Fatalf("pure-confirm agreement must NOT read ready (C1-D1): %+v", r)
+	}
+	// One fair rollback label unlocks readiness (agreement now tested against a
+	// disagreement-capable case).
+	tr.mu.Lock()
+	tr.pendingBaselineTest["sk"] = &RollbackBaselineTest{Reject: true, RejectReachable: true, Disagreement: false}
+	tr.mu.Unlock()
+	if err := tr.LogEvolveRolledBack("sk"); err != nil {
+		t.Fatal(err)
+	}
+	if r := tr.eProcessCutoverReadiness(); !r.Ready || r.FairRollbacks != 1 {
+		t.Fatalf("one fair rollback + n>=20 agreeing must be ready: %+v", r)
+	}
+}
+
 // C1 regression pin: at the PRODUCTION rollback threshold (3), a hard
 // regression must still fire under e-process ownership. Before the confirm
 // window was extended to MinRejectObservations, the 6-use window closed at

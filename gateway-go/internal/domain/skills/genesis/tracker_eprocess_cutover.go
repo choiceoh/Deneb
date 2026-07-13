@@ -24,11 +24,25 @@ import (
 )
 
 // Ladder thresholds (roadmap graduation ladder): observation labels justify
-// cutover at n>=20 with legacy agreement >=90%. Deterministic Go by the P1
-// invariant — the acceptance circuit is never self-editable.
+// cutover at n>=20 with legacy agreement >=90%, AND at least one fair ROLLBACK
+// label (see below). Deterministic Go by the P1 invariant — the acceptance
+// circuit is never self-editable.
 const (
 	eProcessCutoverMinLabels    = 20
 	eProcessCutoverMinAgreement = 0.90
+	// eProcessCutoverMinFairRollbacks guards the agreement-bias the 3rd review
+	// found (C1-D1): under legacy ownership a rollback fires at postFails>=
+	// threshold, i.e. before the e-process reaches MinRejectObservations, so
+	// almost every FAIR (RejectReachable) label is a long-survived CONFIRM
+	// where both mechanisms are quiet — agreement is then ~1.0 by construction,
+	// not because the e-process was shown to fire correctly. Requiring at least
+	// one fair rollback label means the agreement rate was measured against a
+	// population that includes a case the mechanisms could actually disagree
+	// on, so Ready cannot false-green on pure confirms. At threshold 3 this is
+	// structurally near-unreachable, which is the honest answer: data-driven
+	// cutover isn't available at that cadence, so the flip stays an explicit
+	// operator decision via DENEB_EPROCESS_OWNS_ROLLBACK.
+	eProcessCutoverMinFairRollbacks = 1
 )
 
 // eProcessOwnsRollback reports whether rollback firing belongs to the
@@ -59,8 +73,13 @@ type eProcessCutoverReadiness struct {
 	// from before the C1 window fix). They are excluded from Labels and the
 	// agreement rate — counting them made readiness measure the confirm
 	// rate instead of mechanism agreement — but stay visible for audit.
-	UnfairLabels int  `json:"unfairLabels,omitempty"`
-	Ready        bool `json:"ready"`
+	UnfairLabels int `json:"unfairLabels,omitempty"`
+	// FairRollbacks is the subset of Labels that came from a rollback
+	// resolution (a case the legacy threshold and the e-process could actually
+	// disagree on). Ready requires at least one — otherwise agreement is
+	// measured on a pure-confirm population and is trivially ~1.0 (C1-D1).
+	FairRollbacks int  `json:"fairRollbacks,omitempty"`
+	Ready         bool `json:"ready"`
 	// EProcessOwner mirrors the DENEB_EPROCESS_OWNS_ROLLBACK knob so status
 	// surfaces can distinguish "ready, awaiting the flip" from "flipped".
 	EProcessOwner bool `json:"eProcessOwner"`
@@ -88,10 +107,15 @@ func (t *Tracker) eProcessCutoverReadiness() eProcessCutoverReadiness {
 		if e.BaselineTest.Disagreement {
 			out.Disagreements++
 		}
+		if e.Type == "evolve_rolled_back" {
+			out.FairRollbacks++
+		}
 	}
 	if out.Labels > 0 {
 		out.AgreementRate = float64(out.Labels-out.Disagreements) / float64(out.Labels)
 	}
-	out.Ready = out.Labels >= eProcessCutoverMinLabels && out.AgreementRate >= eProcessCutoverMinAgreement
+	out.Ready = out.Labels >= eProcessCutoverMinLabels &&
+		out.AgreementRate >= eProcessCutoverMinAgreement &&
+		out.FairRollbacks >= eProcessCutoverMinFairRollbacks
 	return out
 }

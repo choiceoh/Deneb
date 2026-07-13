@@ -153,19 +153,21 @@ func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candida
 	if engine := e.skillValidationEngine(); engine != nil {
 		result, err := engine.ValidateCandidate(skillName, originalContent, candidateBody)
 		if err != nil {
-			// Fail CLOSED when a real regression check was supposed to run:
-			// `covered` means scorable cases exist, so an engine error here is
-			// the held-out gate silently not running — exactly the case that
-			// must reject, not wave through (RSI code eval M2). With no
-			// scorable cases there is nothing to evaluate, so the error is a
-			// benign no-op and the candidate proceeds to the other gates.
+			// Fail CLOSED on ANY engine error — do NOT condition on `covered`.
+			// `covered` is derived from the SAME validation-store read the engine
+			// uses (validationCasesForCoverage → RecentSkillValidationCases →
+			// jsonlstore.Load(t.validationPath)), so a store read failure makes
+			// covered=false AND errors the engine, and a `if covered` gate would
+			// wave the candidate straight through — the exact fail-OPEN M2 meant
+			// to close (3rd-review defect). An engine error is specifically a
+			// store IO/scan failure: an ABSENT validation file returns (nil,nil)
+			// with no error (jsonlstore os.IsNotExist), so a genuinely uncovered
+			// skill still proceeds — only an unreadable EXISTING store rejects.
 			if e.logger != nil {
-				e.logger.Warn("evolver: held-out validation engine unavailable",
-					"skill", skillName, "covered", covered, "error", err)
+				e.logger.Warn("evolver: held-out validation engine error — failing closed",
+					"skill", skillName, "error", err)
 			}
-			if covered {
-				return false, "held-out validation engine error on a covered skill (failing closed): " + err.Error()
-			}
+			return false, "held-out validation engine error (failing closed): " + err.Error()
 		} else if result.Evaluated && !result.Pass {
 			return false, result.Reason
 		}

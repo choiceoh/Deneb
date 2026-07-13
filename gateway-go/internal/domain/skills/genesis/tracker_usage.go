@@ -271,7 +271,9 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 // rollbackWindowLocked is the number of post-evolve real uses observed before an
 // evolve that has not hit the failure threshold is considered proven and its
 // watch cleared. Twice the threshold, so reaching the threshold means at least a
-// ~50% failure rate over the window. Caller holds t.mu.
+// ~50% failure rate over the window. This is the LEGACY-owner window and stays
+// exactly 2×threshold — a rollback under legacy ownership fires at postFails>=
+// threshold, i.e. ~50% of the window. Caller holds t.mu.
 func (t *Tracker) rollbackWindowLocked() int {
 	if t.rollbackThreshold <= 0 {
 		return 0
@@ -279,17 +281,25 @@ func (t *Tracker) rollbackWindowLocked() int {
 	return t.rollbackThreshold * 2
 }
 
-// rollbackWindowForWatchLocked extends the confirm window so the watch's
-// e-process gets a fair chance to reject before the window closes (RSI code
-// eval C1: at production threshold 3 the 6-use window closed at E≈10.4 < 20,
-// so Reject() was mathematically unreachable and a cutover would have turned
-// rollback off entirely). The extension is per-watch because the fastest
-// path to rejection depends on the clamped baseline. Sparse-usage watches
-// are unaffected: ResolveStaleWatches still closes them by age. Caller holds
-// t.mu.
+// rollbackWindowForWatchLocked returns the confirm window for one watch.
+//
+// Under LEGACY ownership (default) it is exactly rollbackWindowLocked() — the
+// C1 window extension was gated behind e-process ownership after the 3rd
+// review found that unconditionally widening it to MinRejectObservations
+// changed the default confirm/rollback behavior (a watch that used to confirm
+// at 6 uses could roll back at 7-8) and broke the "~50% over the window"
+// invariant on the default path.
+//
+// Under E-PROCESS ownership (DENEB_EPROCESS_OWNS_ROLLBACK=1) the window is
+// widened to at least MinRejectObservations so the anytime-valid test actually
+// has a chance to reject before the window closes (the original C1 fix: at
+// threshold 3 the 6-use window closed at E≈10.4 < 20, making Reject()
+// unreachable and silently disabling rollback after cutover). This only
+// affects the path the operator explicitly flipped. Sparse-usage watches are
+// unaffected: ResolveStaleWatches still closes them by age. Caller holds t.mu.
 func (t *Tracker) rollbackWindowForWatchLocked(w *evolveWatch) int {
 	window := t.rollbackWindowLocked()
-	if w == nil || w.ep == nil || window == 0 {
+	if w == nil || w.ep == nil || window == 0 || !eProcessOwnsRollback() {
 		return window
 	}
 	if minObs := w.ep.MinRejectObservations(); minObs > window {

@@ -159,6 +159,16 @@ func (t *CurriculumTask) Run(ctx context.Context) error {
 	}
 
 	demandEvidence, groundingCorpus := t.assembleDemandEvidence(ctx, catalog, backlog)
+	// Every proposal must ground on environment-derived demand (below). If there
+	// is no such signal — a fresh install, or an environment with no feed/wiki/
+	// calendar/failed-request activity — the grounding gate would reject 100% of
+	// proposals, so calling the teacher model first only burns a token budget to
+	// throw the result away (3rd-review M6). Skip the cycle before the LLM call;
+	// the lane resumes the moment the environment produces a demand signal.
+	if strings.TrimSpace(groundingCorpus) == "" {
+		logger.Info("curriculum: no environment demand signal — skipping cycle (no LLM call)")
+		return nil
+	}
 	resp, err := propose(ctx, demandEvidence)
 	if err != nil {
 		logger.Warn("curriculum: propose failed", "error", err)
