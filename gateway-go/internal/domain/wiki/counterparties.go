@@ -6,7 +6,7 @@
 // Source of truth: every analyzed mail the analyzer linked to a project lands
 // at 프로젝트/<project>/메일분석/<msgID>.md with the sender's domain as a
 // frontmatter tag (wiki_mail_analysis.go buildMailAnalysisPage). That makes
-// the in-memory index sufficient — no page-body reads — and "recent
+// the in-memory Index sufficient — no page-body reads — and "recent
 // project-linked mail from this domain" a cheap, deterministic definition of
 // an active business relationship. Freemail domains are excluded: a
 // gmail.com/naver.com tag identifies a person, not a counterparty company, and
@@ -41,9 +41,9 @@ var freemailDomains = map[string]struct{}{
 	"protonmail.com": {},
 }
 
-// IsFreemailDomain reports whether a (lowercased or not) mail domain is a
+// isFreemailDomain reports whether a (lowercased or not) mail domain is a
 // consumer host that must never count as a counterparty identity.
-func IsFreemailDomain(domain string) bool {
+func isFreemailDomain(domain string) bool {
 	_, ok := freemailDomains[strings.ToLower(strings.TrimSpace(domain))]
 	return ok
 }
@@ -53,22 +53,22 @@ func IsFreemailDomain(domain string) bool {
 // lexical compare — Created is the analysis day and, unlike Updated, is not
 // re-stamped by later metadata churn such as ReclassifyUnlinkedMailAnalyses
 // moving an old mail into a project, which would wrongly re-activate a stale
-// sender domain for the whole window). Created is persisted in the index.md
+// sender domain for the whole window). Created is persisted in the Index.md
 // TSV, so it survives gateway restarts; entries without it (parsed from a
-// pre-created-column index.md) fall back to Updated. Freemail domains are
+// pre-created-column Index.md) fall back to Updated. Freemail domains are
 // excluded.
 // The iteration happens under the store's read lock (the returned map is a
-// fresh copy): index entries are mutated in place by writers, so callers
-// must never walk the live index themselves — use Store.SnapshotEntries
+// fresh copy): Index entries are mutated in place by writers, so callers
+// must never walk the live Index themselves — use Store.SnapshotEntries
 // (same contract as Tier1Pages).
 func (s *Store) ActiveCounterpartyDomains(cutoff string) map[string]struct{} {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make(map[string]struct{})
-	if s.index == nil {
+	if s.Index == nil {
 		return out
 	}
-	for path, entry := range s.index.Entries {
+	for path, entry := range s.Index.Entries {
 		if _, ok := ProjectOfLinkedMailAnalysis(path); !ok {
 			continue
 		}
@@ -83,7 +83,7 @@ func (s *Store) ActiveCounterpartyDomains(cutoff string) map[string]struct{} {
 			d := strings.ToLower(strings.TrimSpace(tag))
 			// Mail-analysis tags carry exactly the sender domain; a defensive
 			// dot check keeps any future non-domain tag out of the set.
-			if d == "" || !strings.Contains(d, ".") || IsFreemailDomain(d) {
+			if d == "" || !strings.Contains(d, ".") || isFreemailDomain(d) {
 				continue
 			}
 			out[d] = struct{}{}
@@ -101,17 +101,17 @@ const maxCounterpartyProjects = 3
 // active project first, capped at maxCounterpartyProjects. Same window,
 // created-date, and freemail rules as ActiveCounterpartyDomains (the walks are
 // kept separate on purpose: this one carries per-project recency bookkeeping
-// the boolean set never needs). Deterministic wiki-index walk under the read
+// the boolean set never needs). Deterministic wiki-Index walk under the read
 // lock; feeds the mail-analysis party anchor's counterparty labels.
 func (s *Store) CounterpartyProjects(cutoff string) map[string][]string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if s.index == nil {
+	if s.Index == nil {
 		return map[string][]string{}
 	}
 	// domain → project → latest created (for recency ordering).
 	latest := map[string]map[string]string{}
-	for path, entry := range s.index.Entries {
+	for path, entry := range s.Index.Entries {
 		project, ok := ProjectOfLinkedMailAnalysis(path)
 		if !ok {
 			continue
@@ -125,7 +125,7 @@ func (s *Store) CounterpartyProjects(cutoff string) map[string][]string {
 		}
 		for _, tag := range entry.Tags {
 			d := strings.ToLower(strings.TrimSpace(tag))
-			if d == "" || !strings.Contains(d, ".") || IsFreemailDomain(d) {
+			if d == "" || !strings.Contains(d, ".") || isFreemailDomain(d) {
 				continue
 			}
 			m := latest[d]

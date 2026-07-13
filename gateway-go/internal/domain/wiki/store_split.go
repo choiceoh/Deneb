@@ -156,4 +156,4 @@ func sectionSlug(heading string) string {
 	return slug
 }
 
-// pruneGhostEntries removes index entries whose files no longer exist on disk.
+// pruneGhostEntries removes Index entries whose files no longer exist on disk.

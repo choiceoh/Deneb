@@ -37,9 +37,9 @@ func (s *Store) ListPages(category string) ([]string, error) {
 		if filepath.Ext(path) != ".md" {
 			return nil
 		}
-		// Skip index and log files.
+		// Skip Index and log files.
 		base := filepath.Base(path)
-		if base == "index.md" || base == "_index.md" || base == "log.md" {
+		if base == "Index.md" || base == "_index.md" || base == "log.md" {
 			return nil
 		}
 		rel, _ := filepath.Rel(s.dir, path)
@@ -70,7 +70,7 @@ func isNonPageDir(name string) bool {
 		lower == "bak"
 }
 
-// SnapshotIndex returns a deep copy of the cached master index, safe to walk,
+// SnapshotIndex returns a deep copy of the cached master Index, safe to walk,
 // render, or marshal without holding any lock.
 //
 // There is deliberately NO accessor returning the live *Index: writers mutate
@@ -83,57 +83,57 @@ func isNonPageDir(name string) bool {
 func (s *Store) SnapshotIndex() *Index {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.index.Clone()
+	return s.Index.Clone()
 }
 
-// SnapshotEntries returns a deep copy of the master index's entry map (slice
+// SnapshotEntries returns a deep copy of the master Index's entry map (slice
 // fields included, so no aliasing with live entries). The read primitive for
-// every index walker outside the store's own locked internals.
+// every Index walker outside the store's own locked internals.
 func (s *Store) SnapshotEntries() map[string]IndexEntry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return cloneIndexEntries(s.index.Entries)
+	return cloneIndexEntries(s.Index.Entries)
 }
 
-// LastProcessed returns the master index's diary high-water cursor.
+// LastProcessed returns the master Index's diary high-water cursor.
 func (s *Store) LastProcessed() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.index.LastProcessed
+	return s.Index.LastProcessed
 }
 
-// SetLastProcessedAndSave advances the master index's LastProcessed cursor
+// SetLastProcessedAndSave advances the master Index's LastProcessed cursor
 // (when date is non-empty; empty keeps the current cursor) and persists the
-// index. The locked write path for the dreamer's end-of-cycle cursor save —
-// mutating the cursor through a raw index pointer and calling Save (whose
+// Index. The locked write path for the dreamer's end-of-cycle cursor save —
+// mutating the cursor through a raw Index pointer and calling Save (whose
 // Render walks the entry map) would race concurrent page writers.
 func (s *Store) SetLastProcessedAndSave(date string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if date != "" {
-		s.index.LastProcessed = date
+		s.Index.LastProcessed = date
 	}
-	return s.index.Save(filepath.Join(s.dir, "index.md"))
+	return s.Index.Save(filepath.Join(s.dir, "Index.md"))
 }
 
-// RebuildIndex rescans every page from disk and replaces the cached master index
+// RebuildIndex rescans every page from disk and replaces the cached master Index
 // with a fresh one built from that scan, preserving LastProcessed.
 //
 // It holds writeMu across the whole scan + swap. That makes the disk state it
 // reads a consistent snapshot: because every page writer
 // (WritePage/UpdatePage/DeletePage/MarkSuperseded/MergePage/SplitPage/...)
-// serializes on writeMu, none can land a file-write + index-update in the window
+// serializes on writeMu, none can land a file-write + Index-update in the window
 // between this scan and its swap. Without the lock, a write completing mid-scan
-// would have its index entry silently dropped by the wholesale swap — the
-// on-disk page stays correct, but the cached index goes transiently stale until
-// the next write/rebuild self-heals it. That is the same "index agrees with
+// would have its Index entry silently dropped by the wholesale swap — the
+// on-disk page stays correct, but the cached Index goes transiently stale until
+// the next write/rebuild self-heals it. That is the same "Index agrees with
 // disk" invariant writeMu exists to hold.
 //
 // The critical section spans reading all pages from disk, so it blocks other
 // writers for the rebuild's duration. That tradeoff is acceptable here: the wiki
 // is a single-user store of at most a few hundred small pages (tens of ms to
 // parse), and RebuildIndex runs only from the background dream cycle, never the
-// chat hot path. (The pre-existing swap already blocked all index readers under
+// chat hot path. (The pre-existing swap already blocked all Index readers under
 // s.mu for the same instant; this only extends serialization to the rarer
 // writers, and only while a background dream is mid-rebuild.)
 func (s *Store) RebuildIndex() error {
@@ -149,17 +149,17 @@ func (s *Store) RebuildIndex() error {
 	for _, relPath := range pages {
 		page, err := s.ReadPage(relPath)
 		if err != nil {
-			continue // unreadable/parse error: skip, leave it out of the index
+			continue // unreadable/parse error: skip, leave it out of the Index
 		}
 		newIdx.UpdateEntry(relPath, page)
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// Carry forward the diary high-water cursor from the index being replaced.
-	newIdx.LastProcessed = s.index.LastProcessed
-	s.index = newIdx
-	return newIdx.Save(filepath.Join(s.dir, "index.md"))
+	// Carry forward the diary high-water cursor from the Index being replaced.
+	newIdx.LastProcessed = s.Index.LastProcessed
+	s.Index = newIdx
+	return newIdx.Save(filepath.Join(s.dir, "Index.md"))
 }
 
 // Tier1Pages returns all non-archived pages with importance >= minImportance,

@@ -1,13 +1,13 @@
-// semantic.go — optional dense-vector (embedding) index over wiki pages.
+// semantic.go — optional dense-vector (embedding) Index over wiki pages.
 //
 // BM25 (search.go) finds pages by keyword overlap; it misses pages that are
 // *about* the query but phrase it differently ("이 거래 위험요인" vs a page whose
-// summary says "납기 지연 가능성"). This index embeds each page once (cached by
+// summary says "납기 지연 가능성"). This Index embeds each page once (cached by
 // content hash) and ranks by cosine similarity, so Search can blend lexical and
 // semantic hits.
 //
 // Everything here degrades silently: no embedder, an unhealthy embedding
-// server, or an embed error all fall back to pure BM25. The index is in-memory
+// server, or an embed error all fall back to pure BM25. The Index is in-memory
 // and lazy — it (re)embeds only pages whose content changed, on the first
 // semantic query and whenever pages are touched.
 package wiki
@@ -54,7 +54,7 @@ type cachedVec struct {
 	vec  []float32
 }
 
-// semanticIndex is an in-memory, lazily-maintained vector index over wiki pages.
+// semanticIndex is an in-memory, lazily-maintained vector Index over wiki pages.
 // Vectors are mirrored to an on-disk cache (semanticCacheFile) so the frequent
 // gateway restarts don't force a full re-embed of the wiki on the first
 // semantic query after every boot.
@@ -174,7 +174,7 @@ func (s *Store) SetEmbedder(e Embedder) {
 }
 
 // SearchDiarySemanticBatch returns semantic (cosine-ranked) diary hits per query,
-// index-aligned with queries — the dense-vector complement to SearchDiary's BM25.
+// Index-aligned with queries — the dense-vector complement to SearchDiary's BM25.
 // Score is the raw cosine (0–1); the recall layer applies the diary source prior.
 // Empty when no embedder is wired, so callers keep pure BM25.
 func (s *Store) SearchDiarySemanticBatch(ctx context.Context, queries []string, limit int) [][]DiaryHit {
@@ -320,7 +320,7 @@ func (s *Store) searchSemantic(ctx context.Context, query string, limit int) []S
 // searchSemanticWithVec ranks pages by cosine to a PRE-COMPUTED query vector —
 // the scan half of searchSemantic, split out so SearchBatch can embed every
 // query in one request (fanned across the server's context pool) and reuse each
-// vector here. Returns nil for an empty vector or a disabled index.
+// vector here. Returns nil for an empty vector or a disabled Index.
 func (s *Store) searchSemanticWithVec(qv []float32, limit int) []SearchResult {
 	if s.sem == nil || len(qv) == 0 {
 		return nil
@@ -372,7 +372,7 @@ func (s *Store) embedQueriesBatch(ctx context.Context, queries []string) [][]flo
 	}
 	s.sem.refreshAsync(s)
 
-	// Embed only the long-enough queries; remember each one's original index so
+	// Embed only the long-enough queries; remember each one's original Index so
 	// the returned vectors realign with the caller's query slice.
 	idx := make([]int, 0, len(queries))
 	texts := make([]string, 0, len(queries))
@@ -397,7 +397,7 @@ func (s *Store) embedQueriesBatch(ctx context.Context, queries []string) [][]flo
 }
 
 // refresh re-embeds pages whose content changed and drops deleted ones. Holds
-// the index mutex only around map mutations, not around the network call.
+// the Index mutex only around map mutations, not around the network call.
 // Any mutation (even partial progress before a batch error) is mirrored to the
 // on-disk cache so the work survives the next restart.
 func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) {

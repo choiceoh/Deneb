@@ -45,7 +45,7 @@ type VerifyFix struct {
 // done or slipped, and analysis stops treating a passed deadline as upcoming.
 func (wd *WikiDreamer) verifyPages(ctx context.Context) []VerifyFinding {
 	// Snapshot once: the detectors below walk the entries (and the LLM pass
-	// holds them across a network call) — iterating the live index map would
+	// holds them across a network call) — iterating the live Index map would
 	// race concurrent page writers.
 	entries := wd.store.SnapshotEntries()
 	if len(entries) < 2 {
@@ -66,7 +66,7 @@ func (wd *WikiDreamer) verifyPages(ctx context.Context) []VerifyFinding {
 	findings = append(findings, wd.detectStaleDeadlines()...)
 
 	// 5d: Long-superseded pages get archived (pure computation). Supersession is
-	// a soft flag — without this, superseded zombies pile up in search/index
+	// a soft flag — without this, superseded zombies pile up in search/Index
 	// forever (they were a third of the 2026-07 duplicate mess's long tail).
 	findings = append(findings, wd.detectStaleSuperseded()...)
 
@@ -114,7 +114,7 @@ func (wd *WikiDreamer) detectUnrecalled() []VerifyFinding {
 			break
 		}
 		rp = filepath.ToSlash(rp) // ListPages walks with the OS separator
-		// Category gate: 사용자/시스템 are policy/config, 인물 is a directory
+		// Category gate: 사용자/시스템 are policy/Config, 인물 is a directory
 		// consulted by name resolution — absence of a recall hit there does not
 		// mean dead. 메일분석 has its own retention detector (5e).
 		switch categoryFromPath(rp) {
@@ -204,7 +204,7 @@ func (wd *WikiDreamer) enrichRelatedLinks(ctx context.Context) int {
 }
 
 // detectStaleDeadlines flags pages whose frontmatter `due` (YYYY-MM-DD) is in
-// the past. Reads pages directly because the index doesn't carry the due field.
+// the past. Reads pages directly because the Index doesn't carry the due field.
 // Pure computation, no LLM.
 func (wd *WikiDreamer) detectStaleDeadlines() []VerifyFinding {
 	relPaths, err := wd.store.ListPages("")
@@ -330,7 +330,7 @@ type pageRef struct {
 }
 
 // detectDuplicates finds pages with identical or very similar titles/IDs.
-// entries is an index snapshot (Store.SnapshotEntries).
+// entries is an Index snapshot (Store.SnapshotEntries).
 func detectDuplicates(entries map[string]IndexEntry) []VerifyFinding {
 	pages := make([]pageRef, 0, len(entries))
 	for path, entry := range entries {
@@ -359,7 +359,7 @@ func detectDuplicates(entries map[string]IndexEntry) []VerifyFinding {
 			// root of the 2026-06 mail-analysis mis-merge: 14 pages each swallowed a
 			// different-ID mail because their titles normalized equal.
 			if IsMailAnalysisPath(a.path) || IsMailAnalysisPath(b.path) {
-				if MailAnalysisMsgID(a.path) != MailAnalysisMsgID(b.path) {
+				if mailAnalysisMsgID(a.path) != mailAnalysisMsgID(b.path) {
 					continue
 				}
 			}
@@ -447,7 +447,7 @@ type misclassificationResult struct {
 }
 
 // detectMisclassifications sends page list to LLM to find category errors.
-// entries is an index snapshot (Store.SnapshotEntries).
+// entries is an Index snapshot (Store.SnapshotEntries).
 func (wd *WikiDreamer) detectMisclassifications(ctx context.Context, entries map[string]IndexEntry) []VerifyFinding {
 	var lines []string
 	for path, entry := range entries {

@@ -36,7 +36,7 @@ type ContactEnrichResult struct {
 // detail is searchable — without changing what the wiki is about.
 //
 // Re-syncing is idempotent: an unchanged "## 연락처" section is left as-is so the
-// page's Updated date and the search index don't churn.
+// page's Updated date and the search Index don't churn.
 func (s *Store) EnrichContacts(contactsJSON []byte) (ContactEnrichResult, error) {
 	var payload contactsPayload
 	if err := json.Unmarshal(contactsJSON, &payload); err != nil {
@@ -188,7 +188,7 @@ func mergeContactsByName(book []contactdomain.Contact) map[string]*contactdomain
 
 // listPeopleByName indexes the existing 인물 pages by normalized title. Pages are
 // listed straight off disk via the 인물/ directory rather than the in-memory
-// index, which can be stale or miss the category for older pages (it's rebuilt
+// Index, which can be stale or miss the category for older pages (it's rebuilt
 // on startup) and silently dropped every candidate; ListPages + ReadPage is
 // authoritative. ReadPage/WritePage take the store lock themselves, so callers
 // hold no lock while iterating.

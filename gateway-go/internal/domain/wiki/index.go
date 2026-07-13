@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
-// Index is the master wiki index (index.md).
+// Index is the master wiki Index (Index.md).
 // It maps page paths to metadata for fast LLM navigation.
 type Index struct {
 	Entries       map[string]IndexEntry // relPath -> entry
@@ -19,7 +19,7 @@ type Index struct {
 	GeneratedAt   string                // ISO timestamp of last generation
 }
 
-// IndexEntry is a single entry in the master index.
+// IndexEntry is a single entry in the master Index.
 type IndexEntry struct {
 	ID         string
 	Title      string
@@ -33,24 +33,24 @@ type IndexEntry struct {
 	// Updated it is immutable across moves/reclassification, so recency
 	// windows that must not re-trigger on metadata churn key off it (e.g.
 	// ActiveCounterpartyDomains). Persisted as the trailing TSV column so it
-	// survives a gateway restart (NewStore restores from index.md); empty only
-	// for entries parsed from a pre-created-column index.md — callers fall
+	// survives a gateway restart (NewStore restores from Index.md); empty only
+	// for entries parsed from a pre-created-column Index.md — callers fall
 	// back to Updated.
 	Created    string // YYYY-MM-DD
 	Type       string // concept, entity, source, comparison, log
 	Confidence string // high, medium, low
 }
 
-// NewIndex creates an empty index.
+// NewIndex creates an empty Index.
 func NewIndex() *Index {
 	return &Index{
 		Entries: make(map[string]IndexEntry),
 	}
 }
 
-// Clone returns a deep copy of the index (entry map and slice fields
+// Clone returns a deep copy of the Index (entry map and slice fields
 // included). Backs Store.SnapshotIndex — the copy is what makes lock-free
-// walking/rendering safe while writers mutate the live index in place.
+// walking/rendering safe while writers mutate the live Index in place.
 func (idx *Index) Clone() *Index {
 	if idx == nil {
 		return nil
@@ -74,8 +74,8 @@ func cloneIndexEntries(in map[string]IndexEntry) map[string]IndexEntry {
 	return out
 }
 
-// UpdateEntry adds or updates an index entry from a page. Slice fields are
-// copied — storing the caller's live Tags/Related slices would alias the index
+// UpdateEntry adds or updates an Index entry from a page. Slice fields are
+// copied — storing the caller's live Tags/Related slices would alias the Index
 // entry to memory the caller may keep mutating after the write returns.
 func (idx *Index) UpdateEntry(relPath string, page *Page) {
 	idx.Entries[relPath] = IndexEntry{
@@ -93,12 +93,12 @@ func (idx *Index) UpdateEntry(relPath string, page *Page) {
 	}
 }
 
-// RemoveEntry removes a page from the index.
+// RemoveEntry removes a page from the Index.
 func (idx *Index) RemoveEntry(relPath string) {
 	delete(idx.Entries, relPath)
 }
 
-// Render produces the index.md content in TSV format for machine parsing.
+// Render produces the Index.md content in TSV format for machine parsing.
 func (idx *Index) Render() string {
 	var sb strings.Builder
 	sb.WriteString("# 위키 인덱스\n\n")
@@ -155,7 +155,7 @@ func (idx *Index) Render() string {
 			// render-computed backlinks) so every older field keeps its
 			// position — old parsers and old files stay compatible; ParseIndex
 			// tolerates their absence. Without the related column the
-			// in-memory Related lists evaporate on every restart (index.md is
+			// in-memory Related lists evaporate on every restart (Index.md is
 			// what NewStore reloads), leaving backlink diffs, reference
 			// repointing, and the backlinks count blind until the next full
 			// RebuildIndex.
@@ -227,22 +227,22 @@ func parseRelatedTSV(field string) []string {
 	return out
 }
 
-// Save writes the index to disk.
+// Save writes the Index to disk.
 func (idx *Index) Save(path string) error {
 	idx.GeneratedAt = dentime.Now().Format(time.RFC3339)
 	data := idx.Render()
 	tmp := path + ".tmp"
 	if err := writeFileSync(tmp, []byte(data), 0o644); err != nil {
-		return fmt.Errorf("wiki: write index tmp: %w", err)
+		return fmt.Errorf("wiki: write Index tmp: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		os.Remove(tmp)
-		return fmt.Errorf("wiki: rename index: %w", err)
+		return fmt.Errorf("wiki: rename Index: %w", err)
 	}
 	return nil
 }
 
-// ParseIndex reads and parses an existing index.md.
+// ParseIndex reads and parses an existing Index.md.
 // Supports both TSV format (new) and markdown list format (legacy).
 func ParseIndex(path string) (*Index, error) {
 	data, err := os.ReadFile(path)

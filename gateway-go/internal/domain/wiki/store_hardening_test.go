@@ -519,7 +519,7 @@ func TestPruneDeadRelatedLinks_KeepsPagesMissingFromStaleIndex(t *testing.T) {
 
 	// Simulate a stale index: B's entry vanishes while the file stays on disk.
 	store.mu.Lock()
-	delete(store.index.Entries, "기타/b.md")
+	delete(store.Index.Entries, "기타/b.md")
 	store.mu.Unlock()
 
 	if _, err := store.PruneDeadRelatedLinks(); err != nil {

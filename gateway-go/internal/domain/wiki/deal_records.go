@@ -22,7 +22,7 @@ import (
 )
 
 // dealRecordsFile is the append-only typed-deal ledger, a sibling of the prose
-// 거래 pages. The dot prefix + .jsonl suffix keep it out of the .md page index.
+// 거래 pages. The dot prefix + .jsonl suffix keep it out of the .md page Index.
 const dealRecordsFile = ".deals.jsonl"
 
 // DealRecord is one filed business document as typed, computable fields — the

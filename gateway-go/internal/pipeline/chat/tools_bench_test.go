@@ -96,18 +96,20 @@ func BenchmarkPreSerialize_vs_RawMarshal(b *testing.B) {
 	}
 
 	b.Run("map_marshal", func(b *testing.B) {
-		t := llm.Tool{Name: "test", Description: "test tool", InputSchema: schema}
+		t := llm.Tool{Name: "test", Description: "test tool"}
+		t.SetInputSchema(schema)
 		b.ResetTimer()
 		b.ReportAllocs()
 		for range b.N {
-			if _, err := json.Marshal(t.InputSchema); err != nil {
+			if _, err := json.Marshal(t.RawInputSchema); err != nil {
 				b.Fatal(err)
 			}
 		}
 	})
 
 	b.Run("pre_serialized", func(b *testing.B) {
-		t := llm.Tool{Name: "test", Description: "test tool", InputSchema: schema}
+		t := llm.Tool{Name: "test", Description: "test tool"}
+		t.SetInputSchema(schema)
 		t.PreSerialize()
 		b.ResetTimer()
 		b.ReportAllocs()

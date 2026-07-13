@@ -132,10 +132,10 @@ type dreamApplySummary struct {
 //  1. Scan unprocessed diary entries
 //  2. LLM synthesis: identify which wiki pages to create/update
 //  3. Apply page updates
-//  4. Rebuild index
+//  4. Rebuild Index
 type WikiDreamer struct {
 	store  *Store
-	config Config
+	Config Config
 	client *llm.Client
 	model  string
 	logger *slog.Logger
@@ -166,7 +166,7 @@ type WikiDreamer struct {
 
 	// openLoopSink receives unfulfilled commitments extracted each cycle
 	// (see open_loops.go). nil disables the extraction pass.
-	openLoopSink func(ctx context.Context, loops []OpenLoop) (int, error)
+	openLoopSink func(ctx context.Context, loops []openLoop) (int, error)
 
 	// personDirectory supplies the address-book snapshot for mention-driven
 	// 인물 page seeding (see person_seed.go). nil disables seeding.
@@ -192,7 +192,7 @@ type WikiDreamer struct {
 func NewWikiDreamer(store *Store, client *llm.Client, model string, cfg Config, logger *slog.Logger) *WikiDreamer {
 	wd := &WikiDreamer{
 		store:  store,
-		config: cfg,
+		Config: cfg,
 		client: client,
 		model:  model,
 		logger: logger,
@@ -482,7 +482,7 @@ func (wd *WikiDreamer) synthesizeDreamCycle(ctx context.Context, cycle *dreamCyc
 	cycle.report.WikiUpdatesProposed = len(updates)
 
 	// Offline self-critique (P3): a second, cheap model pass drops proposals that
-	// duplicate the index or add no knowledge, before they reach the store.
+	// duplicate the Index or add no knowledge, before they reach the store.
 	updates, dropped := wd.critiqueUpdates(ctx, updates)
 	cycle.report.CritiqueDropped = dropped
 
@@ -597,7 +597,7 @@ func (wd *WikiDreamer) applyDreamUserDirectives(cycle *dreamCycle) {
 
 func (wd *WikiDreamer) rebuildAndVerifyDreamWiki(ctx context.Context, cycle *dreamCycle) {
 	if err := wd.rebuildIndex(); err != nil {
-		cycle.addPhaseError("index-rebuild: %v", err)
+		cycle.addPhaseError("Index-rebuild: %v", err)
 	}
 
 	findings := wd.verifyPages(ctx)
@@ -616,7 +616,7 @@ func (wd *WikiDreamer) rebuildAndVerifyDreamWiki(ctx context.Context, cycle *dre
 	wd.logger.Info("wiki-dream: verification", "findings", len(findings), "autoApplied", applied)
 	if applied > 0 {
 		if err := wd.rebuildIndex(); err != nil {
-			cycle.addPhaseError("index-rebuild after auto-fix: %v", err)
+			cycle.addPhaseError("Index-rebuild after auto-fix: %v", err)
 		}
 	}
 }
@@ -694,7 +694,7 @@ func dreamProgressCursor(scan *diaryScanResult, heldOffsets bool, now time.Time)
 func (wd *WikiDreamer) persistDreamProgress(cycle *dreamCycle, heldOffsets bool) {
 	cursor := dreamProgressCursor(cycle.scan, heldOffsets, time.Now())
 	if err := wd.store.SetLastProcessedAndSave(cursor); err != nil {
-		cycle.addPhaseError("index-save: %v", err)
+		cycle.addPhaseError("Index-save: %v", err)
 	}
 	if cycle.scan == nil {
 		return
@@ -741,5 +741,5 @@ func (wd *WikiDreamer) completeDreamCycle(ctx context.Context, cycle *dreamCycle
 }
 
 // scanDiaries reads diary bytes that have not yet been consolidated. The
-// primary cursor is a per-file byte offset; index.LastProcessed is only a
+// primary cursor is a per-file byte offset; Index.LastProcessed is only a
 // legacy migration hint for old diaries that predate the cursor file.

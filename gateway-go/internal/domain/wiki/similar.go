@@ -56,7 +56,7 @@ func (s *Store) FindSimilarPages(ctx context.Context, q SimilarQuery, limit int)
 		return len(hits) >= limit
 	}
 
-	// Snapshot: the walks below must not iterate the live index map while
+	// Snapshot: the walks below must not iterate the live Index map while
 	// writers mutate it in place (concurrent map iteration and write is fatal).
 	entries := s.SnapshotEntries()
 

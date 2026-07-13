@@ -53,7 +53,7 @@ type diarySearchDB struct {
 	mu   sync.RWMutex
 	meta map[string]*diaryEntryMeta // docID -> entry metadata
 
-	// sem is the optional dense-vector index over diary entries (one vector per
+	// sem is the optional dense-vector Index over diary entries (one vector per
 	// entry, keyed by docID). nil until attachSemantic wires an embedder; when
 	// present, search blends cosine hits with BM25 so a paraphrased recall
 	// ("작년에 곡성 납기 얘기") finds an entry whose words differ from the query.
@@ -67,7 +67,7 @@ func newDiarySearchDB() *diarySearchDB {
 	}
 }
 
-// attachSemantic wires (or clears, on nil embedder) the diary semantic index.
+// attachSemantic wires (or clears, on nil embedder) the diary semantic Index.
 // The vector cache lives beside the diary files. Idempotent; called from
 // Store.SetEmbedder.
 func (d *diarySearchDB) attachSemantic(e embedindex.Embedder, cachePath string) {
@@ -97,7 +97,7 @@ func (d *diarySearchDB) semanticItems() []embedindex.Item {
 }
 
 // searchSemanticBatch embeds every query in one request and returns per-query
-// diary hits ranked by cosine (Score = cosine, 0–1), index-aligned with queries.
+// diary hits ranked by cosine (Score = cosine, 0–1), Index-aligned with queries.
 // Kicks a background re-embed of changed entries first, then scans current
 // vectors — so a fresh entry never stalls the recall budget. Returns nil when
 // semantic is disabled, leaving the caller on pure BM25.
@@ -140,7 +140,7 @@ func (d *diarySearchDB) warmSemantic(ctx context.Context) error {
 	return d.sem.Warm(ctx, d.semanticItems)
 }
 
-// closeSemantic stops the diary semantic index (used by Store.Close).
+// closeSemantic stops the diary semantic Index (used by Store.Close).
 func (d *diarySearchDB) closeSemantic() {
 	if d != nil && d.sem != nil {
 		d.sem.Close()
@@ -149,7 +149,7 @@ func (d *diarySearchDB) closeSemantic() {
 
 // diaryDocID encodes filename + header into a doc ID. AppendDiaryTo uses
 // HH:MM precision, and a chat session routinely lands several entries in the
-// same minute — colliding IDs used to *replace* each other in the index, so
+// same minute — colliding IDs used to *replace* each other in the Index, so
 // every same-minute entry but the last silently vanished from recall (the
 // on-disk file kept them all). upsertEntry merges on collision instead.
 func diaryDocID(file, header string) string {

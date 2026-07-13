@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	// OpenQuestionsHeading is the H2 section holding a project's open questions.
-	OpenQuestionsHeading = "미해결 질문"
+	// openQuestionsHeading is the H2 section holding a project's open questions.
+	openQuestionsHeading = "미해결 질문"
 	// maxOpenQuestionItems bounds how many bullets are read per page — the
 	// research prompt keeps the section at ≤5, this is the parser's hard cap.
 	maxOpenQuestionItems = 8
@@ -51,7 +51,7 @@ func OpenQuestionsIn(body string) []OpenQuestionItem {
 	var out []OpenQuestionItem
 	_, sections := (&Page{Body: body}).SplitByH2()
 	for _, sec := range sections {
-		if !strings.EqualFold(strings.TrimSpace(sec.Heading), OpenQuestionsHeading) {
+		if !strings.EqualFold(strings.TrimSpace(sec.Heading), openQuestionsHeading) {
 			continue
 		}
 		for _, ln := range strings.Split(sec.Content, "\n") {

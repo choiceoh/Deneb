@@ -13,7 +13,7 @@ import (
 )
 
 // AppendDiary appends a timestamped entry to today's diary file and updates
-// the in-memory diary search index so the new entry is immediately recallable.
+// the in-memory diary search Index so the new entry is immediately recallable.
 // Safe to call from any goroutine.
 //
 // Callers that go through the package-level AppendDiaryTo (mailanalysis,
@@ -26,9 +26,9 @@ func (s *Store) AppendDiary(content string) error {
 	}
 	if s.diaryFTS != nil && content != "" {
 		// Recreate the same (file, header, redacted-content, timestamp)
-		// AppendDiaryTo just persisted, then push it into the index. Using
+		// AppendDiaryTo just persisted, then push it into the Index. Using
 		// time.Now() once here can drift a microsecond from AppendDiaryTo,
-		// but both round to the same HH:MM doc ID so the index is correct.
+		// but both round to the same HH:MM doc ID so the Index is correct.
 		now := time.Now()
 		file := "diary-" + now.Format("2006-01-02") + ".md"
 		header := now.Format("15:04")
@@ -189,7 +189,7 @@ func (s *Store) Close() error {
 }
 
 func (s *Store) loadOrCreateIndex() (*Index, error) {
-	indexPath := filepath.Join(s.dir, "index.md")
+	indexPath := filepath.Join(s.dir, "Index.md")
 	idx, err := ParseIndex(indexPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -204,7 +204,7 @@ func (s *Store) loadOrCreateIndex() (*Index, error) {
 
 func (s *Store) pruneGhostEntries() {
 	var ghosts []string
-	for relPath := range s.index.Entries {
+	for relPath := range s.Index.Entries {
 		abs := filepath.Join(s.dir, relPath)
 		if _, err := os.Stat(abs); os.IsNotExist(err) {
 			ghosts = append(ghosts, relPath)
@@ -214,17 +214,17 @@ func (s *Store) pruneGhostEntries() {
 		return
 	}
 	for _, g := range ghosts {
-		delete(s.index.Entries, g)
+		delete(s.Index.Entries, g)
 	}
-	_ = s.index.Save(filepath.Join(s.dir, "index.md")) // best-effort: index save is non-critical
+	_ = s.Index.Save(filepath.Join(s.dir, "Index.md")) // best-effort: Index save is non-critical
 }
 
 // adoptOrphanPages indexes pages that exist on disk but are missing from the
-// master index — pruneGhostEntries' other half. A crash in the window between
-// a page's file write and its index save (they are two separate disk writes)
+// master Index — pruneGhostEntries' other half. A crash in the window between
+// a page's file write and its Index save (they are two separate disk writes)
 // leaves the page findable by FTS (rebuilt from disk on startup) yet invisible
-// to every index consumer until the next dream-cycle RebuildIndex. Runs once
-// at NewStore, before any concurrency, so it touches s.index directly. Cost is
+// to every Index consumer until the next dream-cycle RebuildIndex. Runs once
+// at NewStore, before any concurrency, so it touches s.Index directly. Cost is
 // bounded: one walk (ListPages) plus a parse of only the missing pages.
 func (s *Store) adoptOrphanPages() {
 	pages, err := s.ListPages("")
@@ -234,21 +234,21 @@ func (s *Store) adoptOrphanPages() {
 	adopted := 0
 	for _, rel := range pages {
 		rel = filepath.ToSlash(rel)
-		if _, ok := s.index.Entries[rel]; ok {
+		if _, ok := s.Index.Entries[rel]; ok {
 			continue
 		}
 		page, perr := s.ReadPage(rel)
 		if perr != nil {
 			continue // unreadable/parse error: leave it out, same as RebuildIndex
 		}
-		s.index.UpdateEntry(rel, page)
+		s.Index.UpdateEntry(rel, page)
 		adopted++
 	}
 	if adopted == 0 {
 		return
 	}
-	slog.Info("wiki: adopted orphan pages into master index", "count", adopted)
-	_ = s.index.Save(filepath.Join(s.dir, "index.md")) // best-effort: index save is non-critical
+	slog.Info("wiki: adopted orphan pages into master Index", "count", adopted)
+	_ = s.Index.Save(filepath.Join(s.dir, "Index.md")) // best-effort: Index save is non-critical
 }
 
 func ensureDirs(dir string) error {

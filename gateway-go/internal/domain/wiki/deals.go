@@ -67,7 +67,7 @@ func (s *Store) UpsertDealPage(in DealPageInput, now time.Time) (relPath string,
 	err = s.UpdatePage(relPath, func(existing *Page) (*Page, error) {
 		if existing != nil {
 			// Already filed this exact document → no-op (keeps Updated stable so a
-			// re-analysis doesn't churn the index). Returning nil skips the write.
+			// re-analysis doesn't churn the Index). Returning nil skips the write.
 			if ref := strings.TrimSpace(in.SourceRef); ref != "" && strings.Contains(existing.Body, dealRefMarker(ref)) {
 				return nil, nil
 			}

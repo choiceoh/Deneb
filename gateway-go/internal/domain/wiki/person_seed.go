@@ -54,7 +54,7 @@ func (wd *WikiDreamer) seedPersonPages(_ context.Context, input string) int {
 		return 0
 	}
 
-	// Snapshot — never walk the live index map (writers mutate it in place).
+	// Snapshot — never walk the live Index map (writers mutate it in place).
 	entries := wd.store.SnapshotEntries()
 	existingTitle := make(map[string]bool, len(entries))
 	for _, e := range entries {

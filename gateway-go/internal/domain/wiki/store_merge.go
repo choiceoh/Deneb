@@ -60,7 +60,7 @@ type MergeResult struct {
 // keeps its identity (title, category, path) and takes mergedBody as its new
 // body; the two pages' frontmatter is unioned (see mergeFrontmatterInto); every
 // other page that referenced source is repointed to target; and source is
-// removed from disk, the master index, and the search index.
+// removed from disk, the master Index, and the search Index.
 //
 // mergedBody is supplied by the caller (LLM-synthesized, or a plain
 // concatenation fallback) so this method carries no LLM dependency — the domain
@@ -121,9 +121,9 @@ func (s *Store) mergePageLocked(targetPath, sourcePath string, bodyFn func(targe
 		return MergeResult{}, fmt.Errorf("wiki: read merge source %q: %w", sourcePath, err)
 	}
 
-	// Collect every page that references source. The index scan is the source
+	// Collect every page that references source. The Index scan is the source
 	// of truth (robust against backlink-mirror drift); source's own Related is
-	// folded in too in case the index lags. target/source/blank are excluded.
+	// folded in too in case the Index lags. target/source/blank are excluded.
 	refSet := make(map[string]struct{})
 	for _, p := range s.findPagesReferencingPath(sourcePath) {
 		refSet[p] = struct{}{}
@@ -178,7 +178,7 @@ func (s *Store) mergePageLocked(targetPath, sourcePath string, bodyFn func(targe
 	}, nil
 }
 
-// findPagesReferencingPath scans the master index for every page (other than
+// findPagesReferencingPath scans the master Index for every page (other than
 // relPath itself) whose Related list contains relPath. Index-based so it sees
 // all inbound references regardless of any backlink-mirror drift. Matching is
 // on normalized paths — a related entry written without the ".md" extension
@@ -188,7 +188,7 @@ func (s *Store) findPagesReferencingPath(relPath string) []string {
 	defer s.mu.RUnlock()
 	want := normalizePagePath(relPath)
 	var out []string
-	for path, entry := range s.index.Entries {
+	for path, entry := range s.Index.Entries {
 		if path == want {
 			continue
 		}

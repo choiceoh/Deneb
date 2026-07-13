@@ -7,7 +7,7 @@ import (
 )
 
 // HotwordHints builds a comma-separated proper-noun bias list for speech
-// recognition (VibeVoice-ASR's `hotwords`) from the wiki index: each page's
+// recognition (VibeVoice-ASR's `hotwords`) from the wiki Index: each page's
 // title plus its tags — the company names, people, places, and domain terms the
 // user actually works with, which are exactly what bare ASR mis-hears
 // (탑솔라→팝솔라, 에코프로, 석문호, 케이원일렉트릭, …). Named entities
@@ -18,8 +18,8 @@ func (s *Store) HotwordHints(maxTerms int) string {
 		maxTerms = 200
 	}
 	s.mu.RLock()
-	entries := make([]IndexEntry, 0, len(s.index.Entries))
-	for _, e := range s.index.Entries {
+	entries := make([]IndexEntry, 0, len(s.Index.Entries))
+	for _, e := range s.Index.Entries {
 		entries = append(entries, e)
 	}
 	s.mu.RUnlock()

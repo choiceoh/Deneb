@@ -109,9 +109,9 @@ func (s *Store) FoldDuplicate(keep, fold string) error {
 	// buckets) still pass. Detectors also filter this upstream; this is the
 	// last-line guarantee at the shared merge chokepoint.
 	if IsMailAnalysisPath(keep) && IsMailAnalysisPath(fold) &&
-		MailAnalysisMsgID(keep) != MailAnalysisMsgID(fold) {
+		mailAnalysisMsgID(keep) != mailAnalysisMsgID(fold) {
 		return fmt.Errorf("wiki: refusing to fold two distinct mail analyses (%s ≠ %s) — 메일 1통 = 1페이지",
-			MailAnalysisMsgID(keep), MailAnalysisMsgID(fold))
+			mailAnalysisMsgID(keep), mailAnalysisMsgID(fold))
 	}
 
 	s.writeMu.Lock()
@@ -142,7 +142,7 @@ func (s *Store) archivePage(relPath string) error {
 
 // exactDupFinding builds a high-confidence duplicate finding with a merge Fix,
 // keeping the higher-importance page (a later Updated date breaks ties) and
-// folding the other into it. entries is an index snapshot (Store.SnapshotEntries).
+// folding the other into it. entries is an Index snapshot (Store.SnapshotEntries).
 func exactDupFinding(entries map[string]IndexEntry, pathA, pathB, detail string) VerifyFinding {
 	keep, fold := pathA, pathB
 	if dupKeepSecond(entries, pathA, pathB) {

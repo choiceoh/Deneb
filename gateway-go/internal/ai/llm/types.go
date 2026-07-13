@@ -384,17 +384,31 @@ type CacheControl struct {
 type Tool struct {
 	Name           string          `json:"name"`
 	Description    string          `json:"description"`
-	InputSchema    map[string]any  `json:"-"`                       // programmatic access; excluded from JSON
+	inputSchema    map[string]any  // programmatic access; excluded from JSON; use SetInputSchema or RawInputSchema
 	RawInputSchema json.RawMessage `json:"input_schema"`            // pre-serialized; used in API requests
 	CacheControl   *CacheControl   `json:"cache_control,omitempty"` // prompt caching
 }
 
-// PreSerialize computes RawInputSchema from InputSchema if not already set.
-// This is called automatically by ToolRegistry.buildLLMToolsLocked but can
-// also be called manually for tools constructed outside the registry.
+// SetInputSchema attaches a programmatic schema and pre-serializes it into
+// RawInputSchema so the wire path never re-marshals via reflection. This is
+// the single construction-time entry point for callers that build a Tool with
+// a map[string]any schema; direct field access is intentionally unexported.
+func (t *Tool) SetInputSchema(schema map[string]any) {
+	if schema == nil {
+		return
+	}
+	t.inputSchema = schema
+	if t.RawInputSchema == nil {
+		t.RawInputSchema, _ = json.Marshal(schema) // best-effort: marshal of known-good schema cannot fail
+	}
+}
+
+// PreSerialize computes RawInputSchema from inputSchema if not already set.
+// Kept for callers that set the field before it was unexported; SetInputSchema
+// now does this inline, but PreSerialize remains a no-op-safe fallback.
 func (t *Tool) PreSerialize() {
-	if t.InputSchema != nil && t.RawInputSchema == nil {
-		t.RawInputSchema, _ = json.Marshal(t.InputSchema) // best-effort: marshal of known-good schema cannot fail
+	if t.inputSchema != nil && t.RawInputSchema == nil {
+		t.RawInputSchema, _ = json.Marshal(t.inputSchema) // best-effort: marshal of known-good schema cannot fail
 	}
 }
 

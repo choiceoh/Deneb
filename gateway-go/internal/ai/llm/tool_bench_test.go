@@ -42,8 +42,8 @@ func buildToolList(n int) []Tool {
 		tools[i] = Tool{
 			Name:        "tool_" + string(rune('a'+i%26)),
 			Description: "Sample tool for benchmarking with a realistic description length",
-			InputSchema: sampleSchema(),
 		}
+		tools[i].SetInputSchema(sampleSchema())
 	}
 	return tools
 }
@@ -102,9 +102,8 @@ func TestPreSerialize(t *testing.T) {
 	tool := Tool{
 		Name:        "test",
 		Description: "test tool",
-		InputSchema: sampleSchema(),
 	}
-	tool.PreSerialize()
+	tool.SetInputSchema(sampleSchema())
 
 	if tool.RawInputSchema == nil {
 		t.Fatal("RawInputSchema should not be nil after PreSerialize")
@@ -131,9 +130,8 @@ func TestPreSerialize_Idempotent(t *testing.T) {
 	tool := Tool{
 		Name:        "test",
 		Description: "test tool",
-		InputSchema: sampleSchema(),
 	}
-	tool.PreSerialize()
+	tool.SetInputSchema(sampleSchema())
 	first := string(tool.RawInputSchema)
 
 	tool.PreSerialize() // should not change
@@ -146,9 +144,8 @@ func TestTool_MarshalJSON_PreSerialized(t *testing.T) {
 	tool := Tool{
 		Name:        "test",
 		Description: "test tool",
-		InputSchema: sampleSchema(),
 	}
-	tool.PreSerialize()
+	tool.SetInputSchema(sampleSchema())
 
 	data := testutil.Must(json.Marshal(tool))
 

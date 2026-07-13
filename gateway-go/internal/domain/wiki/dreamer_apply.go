@@ -1,6 +1,6 @@
 // dreamer_apply.go — synthesis and application of a dream cycle: the LLM
 // call that turns diary content into wikiUpdate proposals (synthesize) and
-// the apply pass that writes/merges pages, rebuilds the index, and merges
+// the apply pass that writes/merges pages, rebuilds the Index, and merges
 // tags/related lists. Split from dreamer.go (WikiDreamer core).
 package wiki
 
@@ -245,7 +245,7 @@ func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, br
 }
 
 // buildWikiSynthesisPromptWithRules assembles the synthesis prompt with a
-// caller-supplied rules block. The dynamic sections (index/history/anchors/
+// caller-supplied rules block. The dynamic sections (Index/history/anchors/
 // diary) stay in Go; only the tunable rules text is externalizable, so a
 // slow-loop or operator can evolve the synthesis policy without a rebuild
 // (loadWikiSynthesisRules). buildWikiSynthesisPrompt passes the built-in default.
@@ -442,7 +442,7 @@ func newPageFromUpdate(u wikiUpdate, code string) *Page {
 // Returns (created, updated) counts, the 사용자-category subset of those writes
 // (userPages — the user model), and paths of oversized pages.
 func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (created, updated, userPages int, oversized []string) {
-	maxBytes := wd.config.MaxPageBytes
+	maxBytes := wd.Config.MaxPageBytes
 	// Snapshot existing codes once so filings inherit their project's frozen code
 	// (and new-project mints stay collision-free across this batch).
 	codeIdx := wd.buildCodeIndex()
@@ -727,10 +727,10 @@ func (wd *WikiDreamer) splitOversizedDreamPage(path string, maxBytes int) (int, 
 	return len(subPaths), false
 }
 
-// rebuildIndex scans all wiki pages and rebuilds the master index. It delegates
-// to Store.RebuildIndex, which holds writeMu so the disk scan + index swap is a
+// rebuildIndex scans all wiki pages and rebuilds the master Index. It delegates
+// to Store.RebuildIndex, which holds writeMu so the disk scan + Index swap is a
 // consistent snapshot — a page write completing concurrently (wiki-research
-// turn, mail analysis) can't have its index entry dropped by the wholesale swap.
+// turn, mail analysis) can't have its Index entry dropped by the wholesale swap.
 func (wd *WikiDreamer) rebuildIndex() error {
 	return wd.store.RebuildIndex()
 }

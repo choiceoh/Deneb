@@ -1,7 +1,7 @@
 // dreamer_critique.go — the offline self-critique pass (P3 verifier 공진화).
 //
 // Synthesis is one shot; the deterministic apply guards catch only structural
-// violations, not "this proposal restates a fact the index already has" or
+// violations, not "this proposal restates a fact the Index already has" or
 // "this is trivia not worth a page." An online chat turn cannot afford a second
 // model round-trip to judge that, but the dream cycle is offline with a 10-minute
 // budget — so it can. This is a PRECISION FILTER, not a gate: it fails open on
@@ -24,7 +24,7 @@ const (
 	// critiqueMinUpdates skips the pass for tiny batches: one or two proposals
 	// are not worth a model call, and the guards + verify already cover them.
 	critiqueMinUpdates = 3
-	// critiqueMaxTokens budgets the verdict array (short: index + verdict +
+	// critiqueMaxTokens budgets the verdict array (short: Index + verdict +
 	// reason per proposal). llmRequest's headroom mode scales it on reasoning
 	// models with no thinking off-switch.
 	critiqueMaxTokens = 1500
@@ -38,13 +38,13 @@ const critiqueSystem = "You are a wiki knowledge-base editor reviewing proposed 
 // critiqueVerdict is one LLM judgment on a proposed update, keyed by the
 // proposal's position in the list shown to the critic.
 type critiqueVerdict struct {
-	Index   int    `json:"index"`
+	Index   int    `json:"Index"`
 	Verdict string `json:"verdict"` // "keep" | "drop"
 	Reason  string `json:"reason"`
 }
 
 // critiqueUpdates precision-filters freshly synthesized proposals against the
-// current index. Returns the surviving updates and the number dropped. Fail-open
+// current Index. Returns the surviving updates and the number dropped. Fail-open
 // on every error path — the proposals pass through unfiltered rather than risk
 // losing a good cycle to a flaky critic.
 func (wd *WikiDreamer) critiqueUpdates(ctx context.Context, updates []wikiUpdate) ([]wikiUpdate, int) {
@@ -80,8 +80,8 @@ func (wd *WikiDreamer) critiqueUpdates(ctx context.Context, updates []wikiUpdate
 	return kept, dropped
 }
 
-// buildCritiquePrompt renders the numbered proposal list + the current index and
-// asks for a keep/drop verdict per index. Only the fields that decide value are
+// buildCritiquePrompt renders the numbered proposal list + the current Index and
+// asks for a keep/drop verdict per Index. Only the fields that decide value are
 // shown (action/path/title/summary + a content snippet) to keep the call cheap.
 func buildCritiquePrompt(updates []wikiUpdate, indexContent string) string {
 	var sb strings.Builder
@@ -110,7 +110,7 @@ func buildCritiquePrompt(updates []wikiUpdate, indexContent string) string {
 ## 제안 목록
 %s
 
-각 제안에 대해 JSON 배열로만 응답: [{"index":0,"verdict":"keep|drop","reason":"짧은 근거"}]
+각 제안에 대해 JSON 배열로만 응답: [{"Index":0,"verdict":"keep|drop","reason":"짧은 근거"}]
 다른 텍스트 없이 배열만.`, indexContent, sb.String())
 }
 

@@ -75,7 +75,7 @@ func codeFolderKey(rp string) string {
 }
 
 // resolveCode returns the code a filing should carry, and records any mint in the
-// index so later filings in the same batch stay collision-free. Only project
+// Index so later filings in the same batch stay collision-free. Only project
 // pages (filed under 프로젝트/) are coded; everything else returns "".
 func (ci *codeIndex) resolveCode(u wikiUpdate) string {
 	if !strings.HasPrefix(u.Path, "프로젝트/") {

@@ -32,10 +32,10 @@ import (
 // project label always names a real, navigable bucket — not free LLM text.
 const projectCategoryPrefix = "프로젝트"
 
-// ProjectDigest is one project's latest-progress roll-up for the cycle. Path is
+// projectDigest is one project's latest-progress roll-up for the cycle. Path is
 // resolved from the digest's project label against the real taxonomy (not from
 // the LLM) and names the 대표페이지 the roll-up is written to.
-type ProjectDigest struct {
+type projectDigest struct {
 	Project  string   `json:"project"`       // project name (must match a known 프로젝트/<name> page)
 	Headline string   `json:"headline"`      // one-line current status (Korean)
 	Bullets  []string `json:"bullets"`       // 2-3 concrete recent developments
@@ -62,7 +62,7 @@ const projectDigestTimeout = 2 * time.Minute
 // input, anchored to the real 프로젝트/ taxonomy so a hallucinated or misspelled
 // project label can't produce a dead drill-down or a stray page. Each kept
 // digest carries the resolved 대표페이지 Path.
-func (wd *WikiDreamer) extractProjectDigests(ctx context.Context, content string) ([]ProjectDigest, error) {
+func (wd *WikiDreamer) extractProjectDigests(ctx context.Context, content string) ([]projectDigest, error) {
 	if wd.client == nil || wd.store == nil || strings.TrimSpace(content) == "" {
 		return nil, nil
 	}
@@ -111,7 +111,7 @@ func (wd *WikiDreamer) extractProjectDigests(ctx context.Context, content string
 	}
 	// Hard guard: keep only digests whose project is a real page, regardless of
 	// what the model emitted, and attach its resolved path.
-	kept := make([]ProjectDigest, 0, len(digests))
+	kept := make([]projectDigest, 0, len(digests))
 	for _, d := range digests {
 		path, ok := byName[strings.TrimSpace(d.Project)]
 		if !ok {
@@ -130,7 +130,7 @@ func (wd *WikiDreamer) extractProjectDigests(ctx context.Context, content string
 // (headline first, then bullets). Returns how many pages were updated. now is
 // injected for deterministic tests. Best-effort: a per-page write failure logs
 // and is skipped, never aborting the others.
-func (wd *WikiDreamer) applyProjectDigests(digests []ProjectDigest, now time.Time) int {
+func (wd *WikiDreamer) applyProjectDigests(digests []projectDigest, now time.Time) int {
 	wrote := 0
 	for _, d := range digests {
 		if d.Path == "" {
@@ -171,7 +171,7 @@ func formatProjectList(names []string) string {
 
 // parseProjectDigests decodes the extraction response: fences stripped, capped,
 // empty entries dropped, bullets bounded, free text redacted.
-func parseProjectDigests(text string) ([]ProjectDigest, error) {
+func parseProjectDigests(text string) ([]projectDigest, error) {
 	text = strings.TrimSpace(text)
 	if strings.HasPrefix(text, "```") {
 		if idx := strings.Index(text[3:], "\n"); idx >= 0 {
@@ -183,7 +183,7 @@ func parseProjectDigests(text string) ([]ProjectDigest, error) {
 	if text == "" {
 		return nil, nil
 	}
-	var digests []ProjectDigest
+	var digests []projectDigest
 	if err := json.Unmarshal([]byte(text), &digests); err != nil {
 		return nil, fmt.Errorf("parse project digests: %w (raw: %.200s)", err, text)
 	}

@@ -182,8 +182,8 @@ func rankNeighbors(recs []graphRec, best map[int]*graphNeighbor, maxNeighbors in
 }
 
 // graphScoreMap builds the in-memory wiki graph for `query` and returns every
-// connected page's best one-hop neighbor (keyed by rec index), the resolved
-// recs, and the seed index (seed<0 when nothing matches). includeMentions
+// connected page's best one-hop neighbor (keyed by rec Index), the resolved
+// recs, and the seed Index (seed<0 when nothing matches). includeMentions
 // toggles the body-mention pass so its contribution can be measured and tuned
 // (graph_bench_test.go) independently of explicit Related[] edges and tags.
 // seedOverride, when non-empty, pins the seed to that exact page path instead of
@@ -507,7 +507,7 @@ const graphEmbedWeight = 0.5
 // the case lexical signals miss (영광 and 비금도 are both cable projects but link
 // to each other only in prose). Best-effort: a missing, unhealthy, or
 // un-refreshable embedder leaves the token-only ranking untouched (no
-// regression). Mirrors searchSemantic's safe access — refresh outside the index
+// regression). Mirrors searchSemantic's safe access — refresh outside the Index
 // lock, snapshot vectors under it.
 func (s *Store) applyEmbeddingRerank(ctx context.Context, recs []graphRec, seed int, best map[int]*graphNeighbor) {
 	if s.sem == nil || s.sem.embedder == nil || !s.sem.embedder.IsHealthy() {
@@ -608,7 +608,7 @@ func semanticNeighborLabel(rec graphRec) string {
 			return "거래처"
 		case IsMailAnalysisPath(p):
 			return "메일"
-		case len(seg) >= 2 && seg[1] == EquipmentDir:
+		case len(seg) >= 2 && seg[1] == equipmentDir:
 			return "기자재"
 		case len(seg) == 2 && seg[1] == LogPageFile:
 			return "로그"

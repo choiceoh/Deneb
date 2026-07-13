@@ -268,7 +268,7 @@ func (b *graphSnapshotBuilder) addSharedTagEdges() {
 func (b *graphSnapshotBuilder) addTagPairs(tag string, ids []string) {
 	for left := 0; left < len(ids); left++ {
 		for right := left + 1; right < len(ids); right++ {
-			b.addEdge(ids[left], ids[right], "tag:"+tag, "INFERRED", 0.5, 0.5, "index.md")
+			b.addEdge(ids[left], ids[right], "tag:"+tag, "INFERRED", 0.5, 0.5, "Index.md")
 		}
 	}
 }

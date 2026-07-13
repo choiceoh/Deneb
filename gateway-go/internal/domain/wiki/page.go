@@ -67,7 +67,7 @@ type Frontmatter struct {
 	// [부서]-[고객]-[거래타입]-[순번], all 3-char (e.g. "pl3-tri-mod-001").
 	// Unlike the path/folder/title (mutable views), the code never changes once
 	// minted, so cross-references that point at the code survive renames and
-	// reclassification. Resolved by graph_query's byCode index. Empty for
+	// reclassification. Resolved by graph_query's byCode Index. Empty for
 	// non-project pages (인물/시스템/업무/…).
 	Code string
 	// PID is the frozen person identity code for 인물 pages: p-[그룹]-[순번]
@@ -78,7 +78,7 @@ type Frontmatter struct {
 	// non-person pages and people not yet coded.
 	PID      string
 	Title    string
-	Summary  string // one-line description for index-level filtering (~80 chars)
+	Summary  string // one-line description for Index-level filtering (~80 chars)
 	Category string
 	Tags     []string
 	Related  []string
@@ -245,7 +245,7 @@ func (p *Page) Render() []byte {
 }
 
 // sanitizeScalar makes a value safe to emit as a single-line "key: value"
-// frontmatter scalar: newlines collapse to spaces (mirroring index.go's
+// frontmatter scalar: newlines collapse to spaces (mirroring Index.go's
 // sanitizeTSV — a raw "\n" would prematurely end the line and shred every
 // following field into the body).
 func sanitizeScalar(s string) string {
@@ -305,7 +305,7 @@ func WritePageFile(path string, page *Page) error {
 }
 
 // writeFileSync writes data and fsyncs before close. Wiki pages and the master
-// index are the agent's long-term memory; tmp+rename alone leaves write/rename
+// Index are the agent's long-term memory; tmp+rename alone leaves write/rename
 // ordering to the kernel, so a power loss right after the rename could surface
 // a truncated file. The fsync closes that window at the cost of ~1ms per write.
 func writeFileSync(path string, data []byte, perm os.FileMode) error {
@@ -523,7 +523,7 @@ func splitFrontmatter(data []byte) (meta []byte, body string, err error) {
 //
 // LLM-synthesized page content (WikiDreamer) and agent-supplied bodies
 // sometimes begin with their own "---\nkey: value\n---" block — the model
-// mimics the page format it saw in the index. If that text is stored as a
+// mimics the page format it saw in the Index. If that text is stored as a
 // Page.Body it round-trips into a *second* on-disk frontmatter, since Render
 // always prepends one more from Page.Meta. Repeated dream/merge passes then
 // stack the blocks, and ParsePage (which only strips the first) mis-reads the

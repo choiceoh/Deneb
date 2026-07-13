@@ -21,7 +21,7 @@ import (
 )
 
 // recallHitsFile is the append-only recall-utility ledger, a sibling of the
-// prose pages. The dot prefix + .jsonl suffix keep it out of the .md page index
+// prose pages. The dot prefix + .jsonl suffix keep it out of the .md page Index
 // (same discipline as .deals.jsonl / .diary-process-state.json).
 const recallHitsFile = ".recall-hits.jsonl"
 

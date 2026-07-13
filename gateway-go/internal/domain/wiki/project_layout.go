@@ -35,19 +35,19 @@ const (
 	RepPageFile = "대표.md"
 	// LogPageFile is the progress-log filename inside a project folder.
 	LogPageFile = "로그.md"
-	// EquipmentDir is the per-project equipment/material sub-folder.
-	EquipmentDir = "기자재"
+	// equipmentDir is the per-project equipment/material sub-folder.
+	equipmentDir = "기자재"
 	// MailAnalysisDir is the per-project mail-analysis sub-folder, and also the
 	// category-level bucket (프로젝트/메일분석/) for analyses with no linked project.
 	MailAnalysisDir = "메일분석"
-	// MaterialDir is the per-project ingested-source sub-folder (URL/영상 자료,
+	// materialDir is the per-project ingested-source sub-folder (URL/영상 자료,
 	// one page per source URL — wiki tool action="ingest"), and also the
 	// category-level bucket (프로젝트/자료/) for sources with no linked project.
-	MaterialDir = "자료"
-	// MeetingDir is the per-project meeting-record sub-folder (one page per
+	materialDir = "자료"
+	// meetingDir is the per-project meeting-record sub-folder (one page per
 	// Plaud recording — plaud_recordings.go), and also the category-level
 	// bucket (프로젝트/회의록/) for meetings linked to no project.
-	MeetingDir = "회의록"
+	meetingDir = "회의록"
 	// legacyMailAnalysisDir is the pre-migration global mail-analysis bucket.
 	legacyMailAnalysisDir = "mail-analyses"
 	// dealDir is the category-level per-counterparty deal ledger.
@@ -60,13 +60,13 @@ var reservedProjectDirs = map[string]bool{
 	dealDir:               true,
 	MailAnalysisDir:       true,
 	legacyMailAnalysisDir: true,
-	MaterialDir:           true,
-	MeetingDir:            true,
+	materialDir:           true,
+	meetingDir:            true,
 }
 
-// IsReservedProjectDir reports whether name is a category-level raw-data bucket
+// isReservedProjectDir reports whether name is a category-level raw-data bucket
 // under 프로젝트/ (거래, 메일분석, legacy mail-analyses) rather than a project folder.
-func IsReservedProjectDir(name string) bool { return reservedProjectDirs[name] }
+func isReservedProjectDir(name string) bool { return reservedProjectDirs[name] }
 
 // splitProjectPath breaks a slash-normalized wiki path under 프로젝트/ into its
 // path segments after the category ("프로젝트/a/b.md" → ["a","b.md"]). Returns nil
@@ -107,9 +107,9 @@ func MailAnalysisPagePath(project, msgID string) string {
 // category-level unlinked bucket 프로젝트/자료/.
 func MaterialPagePath(project, filename string) string {
 	if project == "" {
-		return projectCategoryPrefix + "/" + MaterialDir + "/" + filename
+		return projectCategoryPrefix + "/" + materialDir + "/" + filename
 	}
-	return projectCategoryPrefix + "/" + project + "/" + MaterialDir + "/" + filename
+	return projectCategoryPrefix + "/" + project + "/" + materialDir + "/" + filename
 }
 
 // MeetingPagePath maps a meeting-record filename to its wiki page path: under
@@ -117,9 +117,9 @@ func MaterialPagePath(project, filename string) string {
 // category-level unlinked bucket 프로젝트/회의록/.
 func MeetingPagePath(project, filename string) string {
 	if project == "" {
-		return projectCategoryPrefix + "/" + MeetingDir + "/" + filename
+		return projectCategoryPrefix + "/" + meetingDir + "/" + filename
 	}
-	return projectCategoryPrefix + "/" + project + "/" + MeetingDir + "/" + filename
+	return projectCategoryPrefix + "/" + project + "/" + meetingDir + "/" + filename
 }
 
 // ProjectOfLinkedMailAnalysis returns the owning project of a PROJECT-LINKED
@@ -132,7 +132,7 @@ func ProjectOfLinkedMailAnalysis(relPath string) (string, bool) {
 	if len(seg) != 3 || seg[1] != MailAnalysisDir || !strings.HasSuffix(seg[2], ".md") {
 		return "", false
 	}
-	if seg[0] == "" || IsReservedProjectDir(seg[0]) {
+	if seg[0] == "" || isReservedProjectDir(seg[0]) {
 		return "", false
 	}
 	return seg[0], true
@@ -146,9 +146,9 @@ func IsProjectRepPage(relPath string) bool {
 	switch len(seg) {
 	case 1: // legacy flat 대표페이지: 프로젝트/<name>.md (reserved names are buckets, not projects)
 		name := strings.TrimSuffix(seg[0], ".md")
-		return strings.HasSuffix(seg[0], ".md") && name != "" && !IsReservedProjectDir(name)
+		return strings.HasSuffix(seg[0], ".md") && name != "" && !isReservedProjectDir(name)
 	case 2:
-		return !IsReservedProjectDir(seg[0]) && seg[1] == RepPageFile
+		return !isReservedProjectDir(seg[0]) && seg[1] == RepPageFile
 	default:
 		return false
 	}
@@ -162,12 +162,12 @@ func ProjectNameOf(relPath string) (string, bool) {
 	switch {
 	case len(seg) == 1 && strings.HasSuffix(seg[0], ".md"): // legacy flat 대표페이지
 		name := strings.TrimSuffix(seg[0], ".md")
-		if name == "" || IsReservedProjectDir(name) {
+		if name == "" || isReservedProjectDir(name) {
 			return "", false
 		}
 		return name, true
 	case len(seg) >= 2:
-		if IsReservedProjectDir(seg[0]) {
+		if isReservedProjectDir(seg[0]) {
 			return "", false
 		}
 		return seg[0], true
@@ -195,11 +195,11 @@ func IsProjectRawDataPath(relPath string) bool {
 	if len(seg) < 2 {
 		return false
 	}
-	if IsReservedProjectDir(seg[0]) {
+	if isReservedProjectDir(seg[0]) {
 		return true
 	}
 	// Per-project raw slots: 프로젝트/<name>/{메일분석,자료,회의록}/... (and legacy nesting).
-	return seg[1] == MailAnalysisDir || seg[1] == legacyMailAnalysisDir || seg[1] == MaterialDir || seg[1] == MeetingDir
+	return seg[1] == MailAnalysisDir || seg[1] == legacyMailAnalysisDir || seg[1] == materialDir || seg[1] == meetingDir
 }
 
 // NormalizeProjectPagePath enforces the project layout's path shape on a write:
@@ -226,7 +226,7 @@ func NormalizeProjectPagePath(relPath string) string {
 		return RepPagePath(name)
 	case len(seg) == 2: // 프로젝트/<name>/<file>.md — canonical detail/slot
 		return relPath
-	case seg[1] == EquipmentDir || seg[1] == MailAnalysisDir || seg[1] == legacyMailAnalysisDir || seg[1] == MaterialDir || seg[1] == MeetingDir:
+	case seg[1] == equipmentDir || seg[1] == MailAnalysisDir || seg[1] == legacyMailAnalysisDir || seg[1] == materialDir || seg[1] == meetingDir:
 		if len(seg) == 3 { // canonical slot file
 			return relPath
 		}
@@ -308,7 +308,7 @@ func (s *Store) CleanNewProjectRepPath(path string) string {
 // (per-project 자료/ or the category-level 프로젝트/자료/). Path-shape only.
 func IsMaterialPath(relPath string) bool {
 	p := "/" + filepath.ToSlash(strings.TrimSpace(relPath))
-	return strings.Contains(p, "/"+MaterialDir+"/")
+	return strings.Contains(p, "/"+materialDir+"/")
 }
 
 // IsMailAnalysisPath reports whether relPath sits in any mail-analysis bucket
@@ -320,13 +320,13 @@ func IsMailAnalysisPath(relPath string) bool {
 		strings.Contains(p, "/"+legacyMailAnalysisDir+"/")
 }
 
-// MailAnalysisMsgID returns a mail-analysis page's identifying Gmail message ID,
+// mailAnalysisMsgID returns a mail-analysis page's identifying Gmail message ID,
 // which the mail sink encodes as the filename stem (메일 1통 = 1페이지 — see
 // MailAnalysisPagePath). Empty for non-mail pages. Two mail-analysis pages are
 // the SAME mail iff this matches: a shared subject line does NOT make them one
 // (reply chains, re-sends, and vendor notifications routinely repeat a subject),
 // so subject-similarity dedup must never fold two differing IDs together.
-func MailAnalysisMsgID(relPath string) string {
+func mailAnalysisMsgID(relPath string) string {
 	if !IsMailAnalysisPath(relPath) {
 		return ""
 	}

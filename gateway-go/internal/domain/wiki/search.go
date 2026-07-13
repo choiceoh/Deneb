@@ -1,5 +1,5 @@
 // search.go — In-memory full-text search for wiki pages.
-// Replaces SQLite FTS5 with a pure Go textsearch index.
+// Replaces SQLite FTS5 with a pure Go textsearch Index.
 package wiki
 
 import (
@@ -24,7 +24,7 @@ type SearchResult struct {
 	Score   float64 // relevance score (0-1)
 }
 
-// searchDB manages the in-memory FTS index for wiki pages.
+// searchDB manages the in-memory FTS Index for wiki pages.
 type searchDB struct {
 	idx        *textsearch.Index
 	mu         sync.RWMutex
@@ -46,7 +46,7 @@ func newSearchDB(now func() time.Time, fieldBoost float64) *searchDB {
 	return &searchDB{idx: textsearch.New(), validity: make(map[string]float64), now: now, fieldBoost: fieldBoost}
 }
 
-// indexPage upserts a page into the search index.
+// indexPage upserts a page into the search Index.
 func (s *searchDB) indexPage(relPath string, page *Page) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -56,7 +56,7 @@ func (s *searchDB) indexPage(relPath string, page *Page) {
 	}
 }
 
-// removePage removes a page from the search index.
+// removePage removes a page from the search Index.
 func (s *searchDB) removePage(relPath string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -130,7 +130,7 @@ func (s *searchDB) search(_ context.Context, query string, limit int) ([]SearchR
 }
 
 // queryMaxRarity returns the highest corpus-rarity (0–1) among the query's
-// tokens that exist in the index (see textsearch.QueryMaxRarity). Used to gate
+// tokens that exist in the Index (see textsearch.QueryMaxRarity). Used to gate
 // the lexical (BM25) recall leak: a query whose only matchable tokens are
 // corpus-common (rarity below bm25RarityFloor) cannot anchor a trustworthy
 // BM25-only hit.
@@ -150,14 +150,14 @@ func (s *searchDB) docCount() int {
 	return s.idx.Len()
 }
 
-// rebuildIndex clears and rebuilds the index from all .md files in dir.
+// rebuildIndex clears and rebuilds the Index from all .md files in dir.
 func (s *searchDB) rebuildIndex(dir string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.idx.Clear()
-	// Rebuild the validity map alongside the FTS index. This is the ONLY
-	// index path a restart takes, and archived/superseded pages are never
+	// Rebuild the validity map alongside the FTS Index. This is the ONLY
+	// Index path a restart takes, and archived/superseded pages are never
 	// rewritten afterwards — leaving validity empty here made every staleness
 	// demotion a silent no-op for the whole process lifetime (year-old
 	// archived facts outranked current pages until the next in-process write
@@ -170,7 +170,7 @@ func (s *searchDB) rebuildIndex(dir string) error {
 		}
 		if info.IsDir() {
 			// Prune backup/hidden dirs so their pages never enter the search
-			// index — same rule as ListPages (store.go), so search and the
+			// Index — same rule as ListPages (store.go), so search and the
 			// person/project lists agree on what a real page is.
 			if path != dir && isNonPageDir(info.Name()) {
 				return filepath.SkipDir
@@ -181,7 +181,7 @@ func (s *searchDB) rebuildIndex(dir string) error {
 			return nil
 		}
 		base := filepath.Base(path)
-		if base == "index.md" || base == "_index.md" || base == "log.md" {
+		if base == "Index.md" || base == "_index.md" || base == "log.md" {
 			return nil
 		}
 		rel, _ := filepath.Rel(dir, path)
@@ -189,7 +189,7 @@ func (s *searchDB) rebuildIndex(dir string) error {
 		if err != nil {
 			// An unparseable page is functionally deleted: it stays on disk but
 			// never appears in search again. Surface it instead of hiding it.
-			slog.Warn("wiki: unparseable page skipped during search index rebuild",
+			slog.Warn("wiki: unparseable page skipped during search Index rebuild",
 				"path", rel, "error", err)
 			return nil //nolint:nilerr // skip unparseable files
 		}
@@ -213,7 +213,7 @@ const wikiFieldBoost = 2.5
 // wikiFieldBoostValue returns the identity-field boost, honoring the
 // DENEB_WIKI_FIELD_BOOST override (mirrors semanticOnlyFloorValue). Malformed
 // or non-positive overrides fall back to the default. Weights are baked at
-// index time, so a changed override takes effect on the next index rebuild
+// Index time, so a changed override takes effect on the next Index rebuild
 // (gateway restart) — same lifecycle as the other search knobs.
 func wikiFieldBoostValue() float64 {
 	if v := os.Getenv("DENEB_WIKI_FIELD_BOOST"); v != "" {
@@ -248,19 +248,19 @@ func searchablePageFieldsWithBoost(page *Page, boost float64) []textsearch.Field
 		// own vocabulary differs (예: cue "계약금" ↔ 본문 "선수금"). Hidden: cues
 		// are retrieval anchors, never content — without it a cue-only match
 		// surfaced the raw cue text as the result "match" snippet (recall
-		// evidence, memory search), presenting index metadata as page content.
+		// evidence, memory search), presenting Index metadata as page content.
 		{Text: strings.Join(page.Meta.Cues, " "), Weight: boost, Hidden: true},
 		{Text: page.Body, Weight: 1},
 	}
 }
 
-// close is a no-op (in-memory index, nothing to close).
+// close is a no-op (in-memory Index, nothing to close).
 func (s *searchDB) close() error {
 	return nil
 }
 
 // Search runs a search across wiki pages. With no embedder configured it is
-// pure BM25 (exact prior behavior). When a semantic index is attached and the
+// pure BM25 (exact prior behavior). When a semantic Index is attached and the
 // embedding server is healthy, it blends BM25 with dense-vector neighbors so a
 // query also finds pages by meaning. Semantic degradation (server down, embed
 // error) silently falls back to the BM25 result.
@@ -355,7 +355,7 @@ func truncateResults(results []SearchResult, limit int) []SearchResult {
 // request, so the embedding server fans the query vectors across its context
 // pool instead of a per-query round-trip serializing on one. Each query's
 // BM25/rarity/blend/validity path is IDENTICAL to Search — only the semantic
-// query embed is shared. Returns one result slice per query, index-aligned with
+// query embed is shared. Returns one result slice per query, Index-aligned with
 // queries (a query too short to embed, or the embedder being down, transparently
 // degrades that query to pure BM25, exactly like Search). The recall preflight
 // is the caller: it issues 2-3 wiki queries per turn.

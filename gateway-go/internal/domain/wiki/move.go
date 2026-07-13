@@ -1,7 +1,7 @@
 // move.go — Store.MovePage: relocate a wiki page to a new path (and thus a new
 // category, since the bucket is the path's leading directory — Stats uses
-// filepath.Dir). Composed from Read + Write + Delete so the FTS index, the
-// master index, and backlinks all stay consistent exactly the way every other
+// filepath.Dir). Composed from Read + Write + Delete so the FTS Index, the
+// master Index, and backlinks all stay consistent exactly the way every other
 // write path maintains them.
 package wiki
 

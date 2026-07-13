@@ -64,7 +64,7 @@ func (s *Store) resolveProjectRep(ref string) (name, repPath string, err error) 
 	// already rejected the ref (reserved bucket like 프로젝트/거래/…, or another
 	// category), and letting "거래/탑솔라" through would make the legacy lookup
 	// below treat the 거래 ledger page as a rep page and archive it.
-	if name == "" || strings.Contains(name, "/") || IsReservedProjectDir(name) {
+	if name == "" || strings.Contains(name, "/") || isReservedProjectDir(name) {
 		return "", "", fmt.Errorf("wiki: %q is not a project", ref)
 	}
 	if _, rerr := s.ReadPage(RepPagePath(name)); rerr == nil {
@@ -227,7 +227,7 @@ func (s *Store) ReopenProject(ref string, now time.Time) (ReopenResult, error) {
 // capped per call. Never closes anything itself. Returns flagged rep paths.
 //
 // Activity basis: the newest Updated date across the project's pages, read
-// from the master index (no page I/O). The flag bullet itself stamps Updated,
+// from the master Index (no page I/O). The flag bullet itself stamps Updated,
 // so a flagged project naturally leaves the dormant set until next quarter.
 func (s *Store) FlagDormantProjects(now time.Time, maxFlags int) []string {
 	if maxFlags <= 0 {
@@ -236,7 +236,7 @@ func (s *Store) FlagDormantProjects(now time.Time, maxFlags int) []string {
 	cutoff := now.AddDate(0, 0, -DormantAfterDays).Format("2006-01-02")
 	quarter := fmt.Sprintf("dormant:%dQ%d", now.Year(), (int(now.Month())-1)/3+1)
 
-	// Snapshot — never walk the live index map (writers mutate it in place).
+	// Snapshot — never walk the live Index map (writers mutate it in place).
 	lastByFolder := make(map[string]string) // 프로젝트/<name> → newest Updated
 	for path, entry := range s.SnapshotEntries() {
 		folder, ok := ProjectFolderOf(path)

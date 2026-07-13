@@ -653,9 +653,8 @@ func toLLMTool(def ToolDef) llm.Tool {
 	tool := llm.Tool{
 		Name:        def.Name,
 		Description: def.Description,
-		InputSchema: schema,
 	}
-	tool.PreSerialize()
+	tool.SetInputSchema(schema)
 	return tool
 }
 
