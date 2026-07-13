@@ -105,6 +105,18 @@ def read_jsonl(path: str) -> list[dict]:
     return out
 
 
+def _auto_adopt_frozen(path: str) -> bool:
+    """True when the last auto-adopt freeze verdict has frozen=true.
+
+    Mirrors genesis.Tracker.AutoAdoptFrozen: the path is JSONL (despite the
+    .json suffix), and an unfreeze row (frozen:false) clears the brake.
+    """
+    rows = read_jsonl(path)
+    if not rows:
+        return False
+    return bool(rows[-1].get("frozen"))
+
+
 def _within(created_ms: Any, cutoff_ms: int) -> bool:
     return isinstance(created_ms, (int, float)) and created_ms >= cutoff_ms
 
@@ -350,7 +362,10 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
     revisions = read_jsonl(os.path.join(data_dir, "meta_evolution_log.jsonl"))
     judge = read_jsonl(os.path.join(data_dir, "judge_accuracy_log.jsonl"))
     candidates = read_jsonl(os.path.join(data_dir, "self_correction_candidates.jsonl"))
-    frozen = os.path.exists(os.path.join(data_dir, "auto_adopt_freeze.json"))
+    # Mirror genesis.Tracker.AutoAdoptFrozen: the freeze file is JSONL of
+    # DriftVerdict rows; only the LAST record's frozen bool matters. Presence
+    # alone used to force FROZEN forever after an unfreeze write (frozen:false).
+    frozen = _auto_adopt_frozen(os.path.join(data_dir, "auto_adopt_freeze.json"))
 
     dispatch_dir = os.path.join(data_dir, "coding_dispatch")
     dispatch_total = dispatch_today = 0

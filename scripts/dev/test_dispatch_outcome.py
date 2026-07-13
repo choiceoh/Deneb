@@ -105,5 +105,46 @@ class MarkerRewriteTest(unittest.TestCase):
             self.assertFalse(missing.exists())
 
 
+class BlocksRedispatchTest(unittest.TestCase):
+    def _write(self, td: str, name: str, body: dict) -> Path:
+        path = Path(td) / name
+        path.write_text(json.dumps(body) + "\n")
+        return path
+
+    def test_missing_marker_does_not_block(self):
+        self.assertFalse(dispatch_outcome.blocks_redispatch("/no/such/marker.json"))
+
+    def test_landed_and_attempted_block(self):
+        with TemporaryDirectory() as td:
+            for outcome in ("landed", "attempted"):
+                path = self._write(td, f"{outcome}.json", {"id": "x", "outcome": outcome})
+                self.assertTrue(dispatch_outcome.blocks_redispatch(path), outcome)
+
+    def test_terminal_failures_allow_retry(self):
+        with TemporaryDirectory() as td:
+            for outcome in ("declined", "failed", "timeout"):
+                path = self._write(td, f"{outcome}.json", {"id": "x", "outcome": outcome})
+                self.assertFalse(dispatch_outcome.blocks_redispatch(path), outcome)
+
+    def test_outcome_less_fresh_blocks_abandoned_releases(self):
+        # Live bug 2026-07-13: crash before outcome accounting left a marker
+        # that permanently starved the pick lane.
+        with TemporaryDirectory() as td:
+            path = self._write(td, "hang.json", {"id": "sc-hang", "promptVersion": "abc"})
+            now = path.stat().st_mtime
+            self.assertTrue(
+                dispatch_outcome.blocks_redispatch(path, now_sec=now + 60, abandon_after_sec=7200)
+            )
+            self.assertFalse(
+                dispatch_outcome.blocks_redispatch(path, now_sec=now + 7201, abandon_after_sec=7200)
+            )
+
+    def test_corrupt_marker_blocks(self):
+        with TemporaryDirectory() as td:
+            path = Path(td) / "bad.json"
+            path.write_text("{not-json\n")
+            self.assertTrue(dispatch_outcome.blocks_redispatch(path))
+
+
 if __name__ == "__main__":
     unittest.main()

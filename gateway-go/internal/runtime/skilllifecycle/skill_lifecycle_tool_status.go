@@ -225,15 +225,32 @@ func (b *skillLifecycleBackend) recentSkillOpportunities(skillName string, limit
 }
 
 func (b *skillLifecycleBackend) recentSelfCorrectionCandidates(skillName string, limit int) ([]genesis.SelfCorrectionCandidateRecord, string) {
-	candidates, err := b.tracker.RecentSelfCorrectionCandidates(skillName, genesis.SelfCorrectionStatusProposed, limit)
-	if err == nil {
-		return candidates, ""
+	// Open backlog only: proposed (awaiting review) + accepted (L4 dispatchable).
+	// Filtering to proposed alone hid the accepted code backlog that the
+	// heartbeat review lane endorses for coding-dispatch (observed 2026-07-13).
+	if limit <= 0 {
+		limit = 20
 	}
-	if b.logger != nil {
-		b.logger.Warn("skill lifecycle: self-correction candidates unavailable",
-			"skill", skillName, "error", err)
+	// Over-fetch so a burst of rejected/applied rows cannot crowd out open ones.
+	all, err := b.tracker.RecentSelfCorrectionCandidates(skillName, "", limit*4)
+	if err != nil {
+		if b.logger != nil {
+			b.logger.Warn("skill lifecycle: self-correction candidates unavailable",
+				"skill", skillName, "error", err)
+		}
+		return []genesis.SelfCorrectionCandidateRecord{}, err.Error()
 	}
-	return []genesis.SelfCorrectionCandidateRecord{}, err.Error()
+	out := make([]genesis.SelfCorrectionCandidateRecord, 0, limit)
+	for _, rec := range all {
+		switch rec.Status {
+		case genesis.SelfCorrectionStatusProposed, genesis.SelfCorrectionStatusAccepted:
+			out = append(out, rec)
+		}
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, ""
 }
 
 func propusUnavailableOverview(skillName string) chattools.SkillLifecycleOverview {

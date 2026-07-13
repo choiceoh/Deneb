@@ -11,7 +11,10 @@
 #   3. Claude Code를 -p(헤드리스)로 실행 — CLAUDE.md 게이트 규약이 세션에
 #      그대로 적용되고, 프롬프트가 랜딩까지 지시한다 (체크 그린 시 pr.sh land).
 #   4. 배차 마커(~/.deneb/data/coding_dispatch/<id>.json)로 재배차를 막고
-#      일일 배차 상한으로 토큰 예산을 지킨다.
+#      일일 배차 상한으로 토큰 예산을 지킨다. 마커 파일 존재만으로는 영구
+#      스킵하지 않는다 — landed/attempted만 차단, declined/failed/timeout은
+#      재시도, outcome 없는 마커는 세션 타임아웃 경과 후 포기(abandoned)로
+#      본다 (dispatch_outcome.blocks_redispatch).
 #
 # 안전:
 # - 항상 exit 0 (systemd 타이머 컨벤션). flock 단일 인스턴스 + 세션 타임아웃.
@@ -91,10 +94,16 @@ main() {
 
     # Newest undispatched proposed code candidate with an evidence-bearing
     # source. jq-free: python3 is guaranteed on this host (deploy scripts use it).
+    # Marker skip semantics live in dispatch_outcome.blocks_redispatch — existence
+    # alone is NOT enough (observed 2026-07-13: outcome-less crash markers and
+    # declined/failed/timeout permanently starved the L4 drain).
     local pick
-    pick=$(python3 - "$QUEUE_FILE" "$DISPATCH_DIR" <<'PYEOF'
+    pick=$(python3 - "$QUEUE_FILE" "$DISPATCH_DIR" "$script_dir" "$SESSION_TIMEOUT" <<'PYEOF'
 import json, os, sys
-queue, dispatch_dir = sys.argv[1], sys.argv[2]
+queue, dispatch_dir, script_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+abandon_after = int(sys.argv[4])
+sys.path.insert(0, script_dir)
+import dispatch_outcome
 # A self_correction_review row is a STATUS DELTA ({id,status,...}), not a full
 # record — merge its status onto the candidate rather than replacing it, or the
 # candidate's scope/source/title get wiped and nothing ever matches.
@@ -141,7 +150,9 @@ for rid, rec in sorted(cand.items(), key=pick_order):
     if not (src.startswith("evolve-tool-gap") or src.startswith("self-harness")
             or src.startswith("health-finding") or src.startswith("tool-quality")):
         continue
-    if os.path.exists(os.path.join(dispatch_dir, rid + ".json")):
+    if dispatch_outcome.blocks_redispatch(
+            os.path.join(dispatch_dir, rid + ".json"),
+            abandon_after_sec=abandon_after):
         continue
     print(json.dumps(rec, ensure_ascii=False))
     break
@@ -159,6 +170,15 @@ PYEOF
 
     local wt="$WORKTREE_ROOT/dispatch-$cid"
     mkdir -p "$WORKTREE_ROOT"
+    # A leftover directory that is NOT a registered git worktree (crash mid-
+    # add, manual rm of .git, etc.) used to short-circuit creation forever —
+    # `[[ -d $wt ]]` skipped the add path and the session ran against a stale
+    # or empty tree. Validate against `git worktree list` and wipe impostors.
+    if [[ -d "$wt" ]] && ! git -C "$PROD_DIR" worktree list --porcelain 2>/dev/null \
+            | grep -Fxq "worktree $wt"; then
+        log "stale worktree dir (not registered) — removing $wt"
+        rm -rf "$wt"
+    fi
     if [[ ! -d "$wt" ]]; then
         # Orphan-branch recovery: a prior crash can leave refs/heads/dispatch/$cid
         # without a worktree. `worktree add -b` then fails forever on the same
