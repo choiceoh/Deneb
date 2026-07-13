@@ -266,19 +266,16 @@ internal fun RenderTable(node: TableNode) {
     // ("**1**" is one digit) in CJK-aware display units; 9dp per unit is
     // generous so a digit never wraps. All-tiny tables keep the weight layout
     // so they still span the card.
-    val tinyUnits = IntArray(columnCount) { index ->
-        var units = displayUnits(bareCellText(node.headers.getOrNull(index)))
-        for (row in node.rows) {
-            units = maxOf(units, displayUnits(bareCellText(row.getOrNull(index))))
-        }
-        units
+    // Header and cell widths measured separately (marker-stripped, CJK-aware units).
+    // Detection keys off CELL data only: a numbering column whose cells are tiny
+    // ("1".."5") is tiny even when its label is a short WORD ("단계", 순번). Width sizes
+    // the wider of digits and header — but at DIFFERENT rates: digits a generous 9dp
+    // (never wrap a figure), a word header the normal 6dp text rate. The old single
+    // 9dp/unit over the header left "단계" (4 units → 36dp) still too wide even after it
+    // became tiny (2026-07 operator screenshots: #-column narrowed, 단계-column didn't).
+    val headerUnits = IntArray(columnCount) { index ->
+        displayUnits(bareCellText(node.headers.getOrNull(index)))
     }
-    // Detection keys off the CELL DATA only (header excluded): a numbering column
-    // whose cells are tiny ("1".."5") is tiny even when its label is a short WORD
-    // ("단계", 순번). The old header-inclusive test left "단계" (header 4 units) taking
-    // a full weight share — a fifth of the card — while "#" (header 1 unit) narrowed
-    // correctly (2026-07-13 production screenshot). The WIDTH above still covers the
-    // header so the label fits.
     val cellUnits = IntArray(columnCount) { index ->
         var units = 0
         for (row in node.rows) {
@@ -288,7 +285,11 @@ internal fun RenderTable(node: TableNode) {
     }
     val tinyColumn = BooleanArray(columnCount) { cellUnits[it] in 1..3 }
     if (tinyColumn.all { it }) tinyColumn.fill(false)
-    fun RowScope.cellWidth(index: Int): Modifier = if (tinyColumn[index]) Modifier.width((tinyUnits[index] * 9 + 4).dp) else Modifier.weight(columnWeight(index))
+    fun RowScope.cellWidth(index: Int): Modifier = if (tinyColumn[index]) {
+        Modifier.width((maxOf(cellUnits[index] * 9, headerUnits[index] * 6) + 4).dp)
+    } else {
+        Modifier.weight(columnWeight(index))
+    }
     val hairline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
 
     // Dense tables (3+ columns) drop one type rung so a narrow column fits
