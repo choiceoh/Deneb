@@ -520,6 +520,15 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 				Tracker: s.genesisTracker,
 				Logger:  s.logger,
 			})
+			// Graduation-ladder watch: fires a feed card once per row
+			// transition into READY (evidence met — operator decision
+			// available). Prod-gated: writes the shared snapshot and posts
+			// operator-facing cards.
+			s.autonomousSvc.RegisterTask(&genesis.LadderWatchTask{
+				Tracker: s.genesisTracker,
+				Logger:  s.logger,
+				OnReady: s.postLadderReadyCard,
+			})
 			// Adversarial coverage: deterministically mutate each skill body
 			// (section drops, tool-reference drops) and author the held-out
 			// cases that catch uncaught mutations — "harder tests, found
