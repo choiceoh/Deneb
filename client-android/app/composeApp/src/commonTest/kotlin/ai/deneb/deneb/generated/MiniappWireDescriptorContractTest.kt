@@ -412,7 +412,7 @@ class MiniappWireDescriptorContractTest {
             name = "SelfImprovementCodingFunnel",
             serializer = SelfImprovementCodingFunnel.serializer(),
             empty = SelfImprovementCodingFunnel(),
-            fields = listOf("lastCaptureAt", "lastReviewAt", "rejections7d", "promotableRejections7d", "lastRejectionAt", "lastNudgeAt"),
+            fields = listOf("lastCaptureAt", "lastReviewAt", "rejections7d", "promotableRejections7d", "lastRejectionAt", "lastNudgeAt", "proposed7d", "verdicted7d", "applied7d", "conversionRate", "meanTimeToVerdictMs", "reopens7d"),
         ),
         contract(
             name = "SelfImprovementCodingListResponse",

@@ -82,6 +82,13 @@ type SelfImprovementCodingFunnel struct {
 	PromotableRejections7d int   `json:"promotableRejections7d,omitempty"`
 	LastRejectionAt        int64 `json:"lastRejectionAt,omitempty"`
 	LastNudgeAt            int64 `json:"lastNudgeAt,omitempty"`
+	// ── Closure side (loop-closing health) ──
+	Proposed7d          int     `json:"proposed7d,omitempty"`
+	Verdicted7d         int     `json:"verdicted7d,omitempty"`
+	Applied7d           int     `json:"applied7d,omitempty"`
+	ConversionRate      float64 `json:"conversionRate,omitempty"`
+	MeanTimeToVerdictMs int64   `json:"meanTimeToVerdictMs,omitempty"`
+	Reopens7d           int     `json:"reopens7d,omitempty"`
 }
 
 // SelfImprovementCodingListResponse is the miniapp.self_improvement_coding.list
@@ -216,6 +223,12 @@ func selfImprovementCodingFunnel(deps SelfImprovementCodingDeps) SelfImprovement
 			Rejections7d:           f.Rejections7d,
 			PromotableRejections7d: f.PromotableRejections7d,
 			LastRejectionAt:        f.LastRejectionAt,
+			Proposed7d:             f.Proposed7d,
+			Verdicted7d:            f.Verdicted7d,
+			Applied7d:              f.Applied7d,
+			ConversionRate:         f.ConversionRate,
+			MeanTimeToVerdictMs:    f.MeanTimeToVerdictMs,
+			Reopens7d:              f.Reopens7d,
 		}
 	}
 	if deps.LastNudgeAtMs != nil {

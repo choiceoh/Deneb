@@ -724,6 +724,12 @@ data class SelfImprovementCodingFunnel(
     val promotableRejections7d: Int = 0,
     val lastRejectionAt: Long = 0L,
     val lastNudgeAt: Long = 0L,
+    val proposed7d: Int = 0,
+    val verdicted7d: Int = 0,
+    val applied7d: Int = 0,
+    val conversionRate: Double = 0.0,
+    val meanTimeToVerdictMs: Long = 0L,
+    val reopens7d: Int = 0,
 )
 
 @Immutable
