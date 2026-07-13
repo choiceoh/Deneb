@@ -17,6 +17,7 @@ import unittest
 from tool_quality_miner import (
     MIN_CALLS,
     SOURCE_PREFIX,
+    latency_candidates,
     main,
     tool_quality_candidates,
 )
@@ -26,13 +27,13 @@ def behavior(**overrides):
     report = {
         "tools": [
             # over the error bar, high volume — should rank first (most impact)
-            {"name": "web", "calls": 200, "errors": 60, "repaired": 2},
+            {"name": "web", "calls": 200, "errors": 60, "repaired": 2, "avgMs": 3000},
             # over the repair bar only
-            {"name": "exec", "calls": 100, "errors": 3, "repaired": 18},
+            {"name": "exec", "calls": 100, "errors": 3, "repaired": 18, "avgMs": 2000},
             # healthy — below both bars
-            {"name": "read", "calls": 500, "errors": 5, "repaired": 1},
+            {"name": "read", "calls": 500, "errors": 5, "repaired": 1, "avgMs": 400},
             # over the error bar by rate but below MIN_CALLS — noise, dropped
-            {"name": "asr", "calls": 4, "errors": 3, "repaired": 0},
+            {"name": "asr", "calls": 4, "errors": 3, "repaired": 0, "avgMs": 100},
         ],
     }
     report.update(overrides)
@@ -42,17 +43,17 @@ def behavior(**overrides):
 class CandidateTest(unittest.TestCase):
     def test_only_offenders_above_min_calls(self):
         cands = tool_quality_candidates(behavior()["tools"])
-        names = [c["source"].split(":", 1)[1] for c in cands]
+        names = [c["source"].split(":")[1] for c in cands]
         self.assertEqual(set(names), {"web", "exec"})  # read healthy, asr too few calls
 
     def test_ranked_by_impact(self):
         cands = tool_quality_candidates(behavior()["tools"])
         # web: (0.30+0.01)*200=62 ; exec: (0.03+0.18)*100=21 → web first
-        self.assertEqual(cands[0]["source"], f"{SOURCE_PREFIX}:web")
+        self.assertEqual(cands[0]["source"], f"{SOURCE_PREFIX}:web:desc")
 
     def test_evidence_carries_exact_stats(self):
         cands = tool_quality_candidates(behavior()["tools"])
-        web = next(c for c in cands if c["source"].endswith(":web"))
+        web = next(c for c in cands if c["source"].endswith(":web:desc"))
         self.assertIn("calls=200", web["evidence"])
         self.assertIn("errors=60", web["evidence"])
         self.assertEqual(web["scope"], "code")
@@ -66,6 +67,37 @@ class CandidateTest(unittest.TestCase):
         a = tool_quality_candidates(behavior()["tools"])
         b = tool_quality_candidates(behavior()["tools"])
         self.assertEqual([c["source"] for c in a], [c["source"] for c in b])
+
+
+class LatencyTest(unittest.TestCase):
+    def test_over_ceiling_flags(self):
+        # read's ceiling is 800ms; 2000ms avg over enough calls is over-ceiling.
+        recent = [{"name": "read", "calls": 100, "avgMs": 2000}]
+        cands = latency_candidates(recent, {"read": {"avgMs": 1900}})
+        self.assertEqual(len(cands), 1)
+        self.assertEqual(cands[0]["source"], f"{SOURCE_PREFIX}:read:latency")
+        self.assertIn("avgMs=2000", cands[0]["evidence"])
+
+    def test_regression_flags_even_under_ceiling(self):
+        # web ceiling is 12000ms; 9000ms is under it, but it doubled vs baseline.
+        recent = [{"name": "web", "calls": 50, "avgMs": 9000}]
+        cands = latency_candidates(recent, {"web": {"avgMs": 4000}})
+        self.assertEqual(len(cands), 1)
+        self.assertIn("regressed", cands[0]["candidate"])
+
+    def test_inherently_slow_but_stable_not_flagged(self):
+        # web at 10000ms is under its 12000ms ceiling and steady vs baseline → OK.
+        recent = [{"name": "web", "calls": 50, "avgMs": 10000}]
+        self.assertEqual(latency_candidates(recent, {"web": {"avgMs": 9500}}), [])
+
+    def test_low_volume_not_flagged(self):
+        recent = [{"name": "read", "calls": MIN_CALLS - 1, "avgMs": 9000}]
+        self.assertEqual(latency_candidates(recent, {}), [])
+
+    def test_latency_source_distinct_from_desc(self):
+        # The :latency and :desc sources for one tool must not prefix-collide.
+        lat = latency_candidates([{"name": "web", "calls": 100, "avgMs": 20000}], {})
+        self.assertEqual(lat[0]["source"], f"{SOURCE_PREFIX}:web:latency")
 
 
 class CliDryRunTest(unittest.TestCase):

@@ -110,8 +110,14 @@ for rid, rec in sorted(cand.items(), key=pick_order):
     # health-finding graduated 2026-07-12: first mined batch (7) reviewed clean
     # (findings reproduce at HEAD, deterministic evidence, remediation directions
     # actionable) — roadmap P5 graduation ladder. runtime-error stays staged.
+    # tool-quality graduated 2026-07-13 by DIRECT OPERATOR DIRECTIVE ("노브를
+    # 켜버려") ahead of the usual reviewed-batch gate: its candidates are
+    # description/schema clarifications and per-tool latency (:desc / :latency),
+    # both narrow and gated by the same land-time stack (make check + live-test +
+    # CI). The tool-quality-dryrun workflow previews what it would file before any
+    # real mine. deadcode-finding stays staged.
     if not (src.startswith("evolve-tool-gap") or src.startswith("self-harness")
-            or src.startswith("health-finding")):
+            or src.startswith("health-finding") or src.startswith("tool-quality")):
         continue
     if os.path.exists(os.path.join(dispatch_dir, rid + ".json")):
         continue

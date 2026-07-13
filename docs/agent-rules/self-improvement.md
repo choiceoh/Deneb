@@ -144,10 +144,14 @@ acceptance machinery stays forbidden at record time.
   Deliberately NOT gateway PeriodicTasks — the inputs (git checkout, journald,
   whole-program reachability, agentlog aggregate) live outside the serving
   process or are already exposed as a read-only RPC.
-- **Staged dispatch**: the source namespaces (`runtime-error`, `health-finding`,
-  `deadcode-finding`, `tool-quality`, `evolve-tool-gap`, `self-harness`) are NOT
-  all in coding-dispatch.sh's allowlist yet — candidates accumulate for review before
-  the dispatch flip (graduation ladder in the roadmap).
+- **Dispatch graduation (ladder)**: coding-dispatch.sh auto-dispatches only
+  allowlisted source namespaces. **Graduated** (auto-dispatch → land through the
+  full gate stack): `evolve-tool-gap`, `self-harness`, `health-finding`
+  (2026-07-12, first batch reviewed clean), and `tool-quality` (2026-07-13, by
+  direct operator directive ahead of a reviewed batch — narrow description/perf
+  candidates, previewable via the tool-quality-dryrun workflow). **Staged** (file
+  for review, no auto-dispatch): `runtime-error`, `deadcode-finding`. The flip is
+  a one-line allowlist edit — a deliberate operator decision, never automatic.
 
 ## Gotchas & Invariants
 

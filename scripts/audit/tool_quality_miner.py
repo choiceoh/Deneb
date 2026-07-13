@@ -21,13 +21,22 @@ blocked`, already aggregated server-side. Zero gateway changes; the miner just
 reads that JSON (same RPC-edge pattern as health_finding_miner / sop_miner, from
 which the RPC + reopen + cap machinery is imported so the miners cannot drift).
 
+Two candidate kinds, both scope=code:
+  - `:desc` — a tool with a high error or malformed-arg repair rate (its
+    description/schema misleads the model);
+  - `:latency` — a tool slower than its per-tool ceiling OR regressed vs its
+    baseline window (a performance defect in the tool's implementation).
+
 Safety (mirrors the template lane):
 
-  - Propose-only: the `tool-quality` source namespace is deliberately NOT in
-    coding-dispatch.sh's allowlist. Candidates stage for review; the allowlist
-    flip is a separate graduation (roadmap ladder).
-  - A candidate proposes a DESCRIPTION/SCHEMA clarification only — never
-    removing a tool or widening its permission surface.
+  - `tool-quality` is GRADUATED into coding-dispatch.sh's allowlist (operator
+    directive 2026-07-13): its candidates auto-dispatch to the coding lane and
+    land through the same gate stack (make check + live-test + CI green). The
+    tool-quality-dryrun workflow previews what it would file. The miner itself
+    still only runs on demand / by workflow, so the operator controls the flow.
+  - A `:desc` candidate proposes a DESCRIPTION/SCHEMA clarification only and a
+    `:latency` candidate an implementation perf fix — never removing a tool or
+    widening its permission surface.
   - Dedup/reopen mirrors genesis selfCorrectionReopenBlocked; the source id is
     stable per tool name so an applied fix must actually lower the rate before
     the same tool re-files.
@@ -69,6 +78,26 @@ REPAIR_RATE = 0.10
 
 MAX_PER_RUN = 2
 WINDOW_DAYS = 30
+RECENT_DAYS = 7
+
+# Latency ("too slow") is a PERFORMANCE signal, judged two ways so an inherently
+# heavy tool (web/asr) is not mistaken for a regression:
+#   1. per-tool expected-absolute ceiling — "slower than we expect for THIS
+#      tool" (fair across tool kinds; web is allowed to be slow, read is not);
+#   2. regression vs its own baseline window — "got materially slower than it
+#      used to be" (catches degradation regardless of the absolute).
+# A tool trips the latency trigger on EITHER. Both knobs are tunable — the
+# ceilings below are conservative starting guesses; calibrate from a dry-run.
+LATENCY_REGRESSION_FACTOR = 1.5
+DEFAULT_EXPECTED_MS = 3000
+EXPECTED_MS = {
+    # fast local operations
+    "read": 800, "write": 800, "edit": 800, "grep": 1500, "glob": 1500,
+    "sessions": 1500, "calendar": 2000, "wiki": 2500, "knowledge": 2500,
+    "mail_archive": 2500,
+    # inherently heavy — generous ceilings so normal use is not flagged
+    "exec": 6000, "web": 12000, "asr": 20000, "paddleocr": 20000,
+}
 
 # The registration hub is the entry point for a reviewer/coding-lane to locate
 # the offending ToolDef.Description; the evidence names the exact tool.
@@ -143,7 +172,75 @@ def tool_quality_candidates(tools: list[dict[str, Any]]) -> list[dict[str, Any]]
                 f"formats, and when-to-use so the model stops misusing it."
             ),
             "risk": _RISK_NOTE,
-            "source": f"{SOURCE_PREFIX}:{name}",
+            # :desc suffix so a description candidate and a :latency candidate for
+            # the same tool never prefix-collide under startswith dedup matching.
+            "source": f"{SOURCE_PREFIX}:{name}:desc",
+        }))
+    scored.sort(key=lambda s: (-s[0], str(s[1]["source"])))
+    return [c for _, c in scored]
+
+
+_PERF_RISK_NOTE = (
+    "propose-only; investigate the tool's implementation for the latency source "
+    "(unbounded work, missing cache, serial where parallel is safe) — never widen "
+    "its permission surface or weaken its result. Re-run observe.behavior after the "
+    "change and confirm the latency recovers before landing."
+)
+
+
+def latency_candidates(recent: list[dict[str, Any]],
+                       baseline: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    """Tools that are too slow — over their per-tool ceiling OR regressed vs
+    their own baseline window — as propose-only perf candidates, worst-impact
+    first. `baseline` is the prior-window ToolStat indexed by name.
+    """
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for t in recent:
+        name = str(t.get("name") or "").strip()
+        calls = int(t.get("calls") or 0)
+        if not name or calls < MIN_CALLS:
+            continue
+        avg = int(t.get("avgMs") or 0)
+        if avg <= 0:
+            continue
+        ceiling = EXPECTED_MS.get(name, DEFAULT_EXPECTED_MS)
+        base_avg = int((baseline.get(name) or {}).get("avgMs") or 0)
+        over_ceiling = avg > ceiling
+        regressed = base_avg > 0 and avg > LATENCY_REGRESSION_FACTOR * base_avg
+        if not (over_ceiling or regressed):
+            continue
+        why = []
+        if over_ceiling:
+            why.append(f"{avg}ms avg > {ceiling}ms expected")
+        if regressed:
+            why.append(f"regressed {base_avg}ms→{avg}ms (×{avg / base_avg:.1f})")
+        head = "; ".join(why)
+        # Impact = how far over the ceiling, weighted by call volume.
+        impact = max(avg - ceiling, avg - base_avg, 1) * calls
+        scored.append((impact, {
+            "scope": "code",
+            "skillName": "tool-quality",
+            "title": f"tool latency: {name} slow ({head})",
+            "candidate": (
+                f"The '{name}' tool is too slow over {calls} calls — {head}. Latency this "
+                f"far above the tool's expectation (or a clear regression) is a performance "
+                f"defect in the tool's implementation, not a description problem."
+            ),
+            "evidence": (
+                f"observe.behavior {RECENT_DAYS}d vs {WINDOW_DAYS}d baseline: {name} "
+                f"calls={calls} avgMs={avg} ceiling={ceiling} baselineAvgMs={base_avg}"
+            ),
+            "reason": "agentlog tool-latency signal — tool slower than its per-tool ceiling "
+                      "or regressed vs its baseline (RSI surface expansion — tool perf)",
+            "targetFiles": [],  # impl file varies per tool; the proposedChange points the way
+            "proposedChange": (
+                f"Find the '{name}' tool implementation (grep the tool name in "
+                f"internal/pipeline/chat/tools) and reduce its latency: bound the work, add "
+                f"or fix caching, or parallelize safe steps. Confirm avgMs recovers below "
+                f"{ceiling}ms via observe.behavior after the change."
+            ),
+            "risk": _PERF_RISK_NOTE,
+            "source": f"{SOURCE_PREFIX}:{name}:latency",
         }))
     scored.sort(key=lambda s: (-s[0], str(s[1]["source"])))
     return [c for _, c in scored]
@@ -162,12 +259,19 @@ def fetch_behavior(base_url: str, token: str, days: int) -> dict[str, Any]:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--behavior-report",
-                        help="pre-fetched observe.behavior JSON (skips the live RPC)")
+                        help="pre-fetched observe.behavior JSON for the baseline window "
+                             "(skips the live RPC)")
+    parser.add_argument("--recent-report",
+                        help="pre-fetched observe.behavior JSON for the recent window "
+                             "(latency regression numerator; skips the live RPC)")
     parser.add_argument("--url", default=os.environ.get("DENEB_GATEWAY_URL", DEFAULT_GATEWAY_URL),
                         help="gateway base URL (env DENEB_GATEWAY_URL)")
     parser.add_argument("--token", default=os.environ.get("DENEB_CLIENT_TOKEN", ""),
                         help="client token (reads ~/.deneb/client_token if unset)")
-    parser.add_argument("--days", type=int, default=WINDOW_DAYS, help="behavior window in days")
+    parser.add_argument("--days", type=int, default=WINDOW_DAYS,
+                        help="baseline behavior window in days (error/repair rates + latency baseline)")
+    parser.add_argument("--recent-days", type=int, default=RECENT_DAYS,
+                        help="recent behavior window in days (latency regression numerator)")
     parser.add_argument("--max", type=int, default=MAX_PER_RUN, help="per-run cap on candidates")
     parser.add_argument("--dry-run", action="store_true",
                         help="build and print the filing plan; record nothing")
@@ -189,18 +293,31 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
                 token = handle.read().strip()
 
     base_url = args.url.rstrip("/")
-    try:
-        if args.behavior_report:
-            with open(args.behavior_report, encoding="utf-8") as handle:
-                behavior = json.load(handle)
+
+    def load(report_path: str | None, days: int) -> list[dict[str, Any]]:
+        if report_path:
+            with open(report_path, encoding="utf-8") as handle:
+                data = json.load(handle)
         else:
-            behavior = fetch_behavior(base_url, token, args.days)
+            data = fetch_behavior(base_url, token, days)
+        tools = data.get("tools") if isinstance(data, dict) else None
+        return tools if isinstance(tools, list) else []
+
+    try:
+        baseline = load(args.behavior_report, args.days)
     except (OSError, ValueError, GatewayError) as exc:
         print(f"behavior source unavailable: {exc}", file=err)
         return 1
-    tools = behavior.get("tools") if isinstance(behavior, dict) else None
-    if not isinstance(tools, list):
-        tools = []
+    # Recent window drives the latency-regression numerator. If it is
+    # unavailable, latency falls back to the per-tool ceiling on the baseline
+    # window alone (still catches persistent slowness), never crashes.
+    try:
+        recent = load(args.recent_report, args.recent_days)
+    except (OSError, ValueError, GatewayError) as exc:
+        print(f"recent window unavailable — latency uses ceiling only: {exc}", file=err)
+        recent = baseline
+
+    baseline_index = {str(t.get("name") or ""): t for t in baseline}
 
     now_ms = int(time.time() * 1000)
     try:
@@ -212,8 +329,8 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
         print(f"gateway unreachable — DRY-RUN continues WITHOUT dedup: {exc}", file=err)
         existing = []
 
-    to_file, skipped = select_candidates(
-        tool_quality_candidates(tools), existing, now_ms, max(args.max, 0))
+    candidates = tool_quality_candidates(baseline) + latency_candidates(recent, baseline_index)
+    to_file, skipped = select_candidates(candidates, existing, now_ms, max(args.max, 0))
 
     filed: list[dict[str, str]] = []
     errors: list[str] = []
@@ -235,7 +352,7 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
         print(f"skip {cand['source']}: {reason}", file=out)
 
     summary = {
-        "tools": len(tools),
+        "tools": len(baseline),
         "planned": len(to_file),
         "filed": len(filed),
         "skipped": len(skipped),
