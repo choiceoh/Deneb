@@ -571,7 +571,7 @@ PYEOF
         release_owned_marker "$DISPATCH_DIR/$cid.json" "$attempt_id"
         release_clean_attempt "$wt" "$branch" || true
         log "instant failure — marker released for $cid (environment problem, not the candidate)"
-        record_runtime_status session_failed "instant environment failure rc=$rc" "$cid"
+        record_runtime_status environment_failed "instant environment failure rc=$rc" "$cid"
         exit 0
     fi
 
