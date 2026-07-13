@@ -11,6 +11,7 @@ import ai.deneb.ui.markdown.InlineTokenizer
 import ai.deneb.ui.markdown.MarkdownContent
 import ai.deneb.ui.markdown.toAnnotatedString
 import ai.deneb.ui.text.denebPhraseLineBreak
+import ai.deneb.ui.text.displayUnits
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -257,6 +259,24 @@ internal fun RenderTable(node: TableNode) {
         kotlin.math.sqrt(maxOf(avgRunes, headerRunes).coerceIn(4, 30).toFloat())
     }
     fun columnWeight(index: Int) = weights[index]
+    // Numbering-style columns ("#", "1".."99") take their intrinsic width
+    // instead of a weight share — the sqrt floor above otherwise hands a
+    // single-digit column a fifth of the card width (2026-07-13 fix, shared
+    // with the markdown table renderer). Width measures marker-stripped text
+    // ("**1**" is one digit) in CJK-aware display units; 9dp per unit is
+    // generous so a digit never wraps. All-tiny tables keep the weight layout
+    // so they still span the card.
+    val tinyUnits = IntArray(columnCount) { index ->
+        var units = displayUnits(bareCellText(node.headers.getOrNull(index)))
+        for (row in node.rows) {
+            units = maxOf(units, displayUnits(bareCellText(row.getOrNull(index))))
+        }
+        units
+    }
+    val tinyColumn = BooleanArray(columnCount) { tinyUnits[it] in 1..3 }
+    if (tinyColumn.all { it }) tinyColumn.fill(false)
+    fun RowScope.cellWidth(index: Int): Modifier =
+        if (tinyColumn[index]) Modifier.width((tinyUnits[index] * 9 + 4).dp) else Modifier.weight(columnWeight(index))
     val hairline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
 
     // Dense tables (3+ columns) drop one type rung so a narrow column fits
@@ -282,7 +302,7 @@ internal fun RenderTable(node: TableNode) {
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = if (numericColumn[index]) TextAlign.End else TextAlign.Start,
-                        modifier = Modifier.weight(columnWeight(index)),
+                        modifier = cellWidth(index),
                     )
                 }
             }
@@ -302,7 +322,7 @@ internal fun RenderTable(node: TableNode) {
                         text = denebUiInlineText(row.getOrElse(index) { "" }),
                         style = if (numericColumn[index]) numericCellStyle else cellStyle,
                         textAlign = if (numericColumn[index]) TextAlign.End else TextAlign.Start,
-                        modifier = Modifier.weight(columnWeight(index)),
+                        modifier = cellWidth(index),
                     )
                 }
             }
@@ -312,6 +332,11 @@ internal fun RenderTable(node: TableNode) {
         }
     }
 }
+
+// Marker-stripped cell text for column-width measurement — inline emphasis/code
+// markers ("**1**") render invisibly, so they must not count toward width.
+private fun bareCellText(cell: String?): String =
+    cell.orEmpty().trim().filterNot { it == '*' || it == '_' || it == '~' || it == '`' }
 
 @Composable
 internal fun RenderProgress(node: ProgressNode) {

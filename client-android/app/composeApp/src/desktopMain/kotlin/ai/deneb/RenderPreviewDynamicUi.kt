@@ -163,6 +163,12 @@ private val mdTableSample = """
 | 화성산단 RPS 2개소 | 100kW 계량반 | 12 | 7/10 |
 | 부산 썬탑 7호 | 200kW 저압반 | 4 | 7/14 |
 | 금호타이어 곡성화학공장 | 연계판넬 | 7 | 7/21 |
+
+| # | 기능 | 핵심 |
+|---|---|---|
+| 1 | 코워킹 스페이스 | 이메일·캘린더·웹 접근 권한으로 전체 워크플로우 자동 수행 |
+| 2 | 클라우드 실행 | 기기를 닫아도 작업 지속. 폰에서 실시간 모니터링 |
+| 3 | 예약 작업 | 실행 시간 지정. 예: 매주 일요 밤 미답 메일 정리 |
 """
 
 internal fun renderTableAB(name: String, scheme: ColorScheme) {
@@ -177,11 +183,17 @@ internal fun renderTableAB(name: String, scheme: ColorScheme) {
               <tr><td>부산 썬탑 7호</td><td>200kW 저압반</td><td>4</td><td>7/14</td></tr>
               <tr><td>금호타이어 곡성화학공장</td><td>연계판넬</td><td>7</td><td>7/21</td></tr>
             </table>
+            <table>
+              <tr><th>#</th><th>기능</th><th>핵심</th></tr>
+              <tr><td>1</td><td>코워킹 스페이스</td><td>이메일·캘린더·웹 접근 권한으로 자동 수행</td></tr>
+              <tr><td>2</td><td>클라우드 실행</td><td>기기를 닫아도 작업 지속</td></tr>
+              <tr><td>3</td><td>예약 작업</td><td>매주 일요 밤 미답 메일 정리</td></tr>
+            </table>
           </card>
         </column>
         """.trimIndent(),
     )
-    val scene = ImageComposeScene(width = 824, height = 1200, density = Density(2f)) {
+    val scene = ImageComposeScene(width = 824, height = 1900, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.width(412.dp).padding(16.dp)) {
