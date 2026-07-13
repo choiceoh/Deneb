@@ -60,8 +60,8 @@ func TestMetaProposalGate(t *testing.T) {
 	}
 }
 
-// Epoch alternation reads the meta-experience ledger: producer first, then
-// evaluator, then producer again — one half of the pipeline per window.
+// Epoch rotation reads the meta-experience ledger: producer, then evaluator,
+// then genesis, then back to producer — one part of the pipeline per window.
 func TestMetaEvolution_EpochAlternation(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
@@ -84,9 +84,23 @@ func TestMetaEvolution_EpochAlternation(t *testing.T) {
 	if err := tr.LogMetaRevision(MetaRevisionRecord{Epoch: epoch, Artifact: artifact, FromVersion: "bbb"}); err != nil {
 		t.Fatal(err)
 	}
+	epoch, artifact = task.nextEpoch()
+	if epoch != metaEpochGenesis || artifact != generation.MetaGenesisSystemPrompt {
+		t.Fatalf("third cycle = %s/%s, want genesis/genesis-prompt", epoch, artifact)
+	}
+	if err := tr.LogMetaRevision(MetaRevisionRecord{Epoch: epoch, Artifact: artifact, FromVersion: "ccc"}); err != nil {
+		t.Fatal(err)
+	}
 	epoch, _ = task.nextEpoch()
 	if epoch != metaEpochProducer {
-		t.Fatalf("third cycle = %s, want producer", epoch)
+		t.Fatalf("fourth cycle = %s, want producer (rotation wraps)", epoch)
+	}
+	// Operator adopt/reject records (Action != "") never consume an epoch.
+	if err := tr.LogMetaRevision(MetaRevisionRecord{Epoch: metaEpochGenesis, Artifact: artifact, Action: "adopted"}); err != nil {
+		t.Fatal(err)
+	}
+	if epoch, _ = task.nextEpoch(); epoch != metaEpochProducer {
+		t.Fatalf("action record consumed an epoch: %s", epoch)
 	}
 }
 
@@ -597,19 +611,19 @@ func TestMetaLowConfidenceReason(t *testing.T) {
 	worse := &JudgeBenchOutcome{Correct: 8, Total: 10}
 	same := &JudgeBenchOutcome{Correct: 8, Total: 10}
 	better := &JudgeBenchOutcome{Correct: 9, Total: 10}
-	if metaLowConfidenceReason(worse, same, nil) == "" {
+	if metaLowConfidenceReason(worse, same, nil, nil) == "" {
 		t.Fatal("equal judge margin must be low-confidence")
 	}
-	if metaLowConfidenceReason(worse, better, nil) != "" {
+	if metaLowConfidenceReason(worse, better, nil, nil) != "" {
 		t.Fatal("improving judge margin must be confident")
 	}
-	if metaLowConfidenceReason(nil, nil, &ProducerBenchOutcome{IncumbentScore: 0.6, ProposalScore: 0.6}) == "" {
+	if metaLowConfidenceReason(nil, nil, &ProducerBenchOutcome{IncumbentScore: 0.6, ProposalScore: 0.6}, nil) == "" {
 		t.Fatal("flat shadow margin must be low-confidence")
 	}
-	if metaLowConfidenceReason(nil, nil, &ProducerBenchOutcome{IncumbentScore: 0.5, ProposalScore: 0.7}) != "" {
+	if metaLowConfidenceReason(nil, nil, &ProducerBenchOutcome{IncumbentScore: 0.5, ProposalScore: 0.7}, nil) != "" {
 		t.Fatal("improving shadow margin must be confident")
 	}
-	if metaLowConfidenceReason(nil, nil, nil) != "" {
+	if metaLowConfidenceReason(nil, nil, nil, nil) != "" {
 		t.Fatal("benchless cycle keeps documented behavior (not routed)")
 	}
 }

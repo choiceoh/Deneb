@@ -21,7 +21,7 @@ Deneb의 자가개선 루프. 스킬을 진화시키고(L1), 진화시키는 절
 | 층 | 하는 일 | 주 파일 |
 |---|---|---|
 | **L1 스킬 진화** | 저성과 SKILL.md body 재작성 | `evolver*.go`, `tracker*.go` |
-| **L2 메타 진화** | evolve/judge 프롬프트를 주간 개정하고 epoch 벤치로 채택·롤백 | `meta_evolution.go`, `meta_judge_bench.go`, `meta_producer_bench.go` |
+| **L2 메타 진화** | evolve/judge/genesis 프롬프트를 epoch 회전으로 개정하고 벤치로 채택·롤백 | `meta_evolution.go`, `meta_judge_bench.go`, `meta_producer_bench.go`, `meta_genesis_bench.go` |
 | **L3 verifier 공진화** | 라벨된 judge 오판과 심은 결함을 재생 | `judge_accuracy.go`, `tracker_validation_cases.go`의 `IsCharterCase` |
 | **L4 소스 자가편집** | 근거 있는 코드 후보를 코딩 레인에 제안(propose-only) | `runtime_error_mining.go`, `evolver_tool_gap.go`, `surfaces/surfaces.go` |
 

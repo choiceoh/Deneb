@@ -39,12 +39,15 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// Meta-evolution epochs alternate which half of the pipeline may change in a
-// window: the producer prompt (candidate generation) or the evaluator prompt
-// (judge). Never both — cadence asymmetry and one-change-per-window (RQGM).
+// Meta-evolution epochs rotate which part of the pipeline may change in a
+// window: the producer prompt (evolve candidate generation), the evaluator
+// prompt (judge), or the genesis prompt (new-skill extraction — RSI P5-4
+// slice 2, the third artifact in the rotation). Never more than one —
+// cadence asymmetry and one-change-per-window (RQGM).
 const (
 	metaEpochProducer  = "producer"
 	metaEpochEvaluator = "evaluator"
+	metaEpochGenesis   = "genesis"
 )
 
 // metaProposalMaxBytes caps a proposed artifact: prompts beyond this are a
@@ -71,6 +74,9 @@ var metaArtifactContracts = map[string][]string{
 	},
 	generation.MetaSkillJudgeSystemPrompt: {
 		`"pass"`, `"original_score"`, `"candidate_score"`, `"reason"`,
+	},
+	generation.MetaGenesisSystemPrompt: {
+		`"skip"`, `"skill"`, `"name"`, `"category"`, `"description"`, `"body"`,
 	},
 }
 
@@ -100,6 +106,9 @@ type MetaRevisionRecord struct {
 	// Producer-epoch only: shadow-replay bench (CPE anchor preservation +
 	// AgentDevel flip gate over generated candidates).
 	BenchShadow *ProducerBenchOutcome `json:"benchShadow,omitempty"`
+	// Genesis-epoch only: genesis shadow bench (fixed scenarios scored by the
+	// production admissibility gate — RSI P5-4 slice 2).
+	BenchGenesis *GenesisBenchOutcome `json:"benchGenesis,omitempty"`
 	// OperatorUtility is ADVISORY-ONLY (never a gate input, P5-5): what the
 	// operator's feed-card accept/reject verdicts looked like at this cycle.
 	// Recorded for diagnosis/audit; the deterministic gates ignore it. Mirrors
@@ -288,12 +297,19 @@ type MetaEvolutionTask struct {
 	// (overall score, weakest pillars) as ADVISORY evidence (RSI P5-5). Grounds
 	// the producer on structural quality; no gate reads it. Nil = skip.
 	QualityBench func(ctx context.Context) string
+	// GenesisGen, when set, executes one genesis generation with an explicit
+	// system prompt on the PRODUCTION genesis model — the genesis-epoch shadow
+	// bench's executor (server wires generation.Service.ShadowGenerate). Nil
+	// drops genesis-epoch proposals (bench unavailable), mirroring the
+	// evaluator epoch's no-judge behavior.
+	GenesisGen genesisShadowGenFn
 
 	// pending bench outcomes for the in-flight cycle's ledger write (set via
 	// recordWithBench; Run is single-flight per task so no locking needed).
 	pendingBenchIncumbent *JudgeBenchOutcome
 	pendingBenchProposal  *JudgeBenchOutcome
 	pendingBenchShadow    *ProducerBenchOutcome
+	pendingBenchGenesis   *GenesisBenchOutcome
 	pendingAdoptionHealth *MetaAdoptionHealth
 	pendingAction         string
 	// pendingOperatorUtility is the ADVISORY snapshot stashed for the cycle's
@@ -349,6 +365,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 			BenchIncumbent:  t.pendingBenchIncumbent,
 			BenchProposal:   t.pendingBenchProposal,
 			BenchShadow:     t.pendingBenchShadow,
+			BenchGenesis:    t.pendingBenchGenesis,
 			AdoptionHealth:  t.pendingAdoptionHealth,
 			Action:          t.pendingAction,
 			OperatorUtility: t.pendingOperatorUtility,
@@ -429,6 +446,32 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 		}
 	}
 
+	// Genesis epoch: shadow-replay fixed session scenarios through both
+	// prompts and score the outputs with the production admissibility gate
+	// (RSI P5-4 slice 2). A flip on a scenario the incumbent handles cleanly
+	// rejects; without a wired generator the proposal is dropped — a
+	// genesis revision must never adopt unbenched (mirrors the evaluator
+	// epoch's no-judge behavior).
+	var benchGenesis *GenesisBenchOutcome
+	if epoch == metaEpochGenesis {
+		if t.GenesisGen == nil {
+			logger.Warn("meta-evolution: no genesis generator wired, genesis proposal dropped")
+			return record(false, "", "genesis bench unavailable: generator not wired")
+		}
+		out := runGenesisShadowBench(ctx, incumbent, proposal, genesisShadowScenarios(), t.GenesisGen)
+		benchGenesis = &out
+		t.pendingBenchGenesis = benchGenesis
+		if rejectReason := genesisBenchDecision(out); rejectReason != "" {
+			logger.Info("meta-evolution: proposal rejected by genesis shadow bench",
+				"artifact", artifact, "scenarios", out.Scenarios, "flips", out.Flips, "reason", rejectReason)
+			return t.recordWithBenches(record, nil, nil, nil,
+				false, "", "genesis bench rejected: "+rejectReason)
+		}
+		logger.Info("meta-evolution: proposal cleared genesis shadow bench",
+			"scenarios", out.Scenarios, "incumbentIssues", out.IncumbentIssues, "proposalIssues", out.ProposalIssues,
+			"incumbentSkips", out.IncumbentSkips, "proposalSkips", out.ProposalSkips)
+	}
+
 	path, werr := t.Meta.WriteProposal(artifact, proposal)
 	if werr != nil {
 		logger.Warn("meta-evolution: proposal write failed", "artifact", artifact, "error", werr)
@@ -442,7 +485,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	// propose-only feed card requesting an explicit operator verdict. Scarce
 	// operator attention goes exactly to the adoptions the deterministic
 	// evidence cannot decide. Benchless cycles keep their documented behavior.
-	lowConfidence := metaLowConfidenceReason(benchIncumbent, benchProposal, benchShadow)
+	lowConfidence := metaLowConfidenceReason(benchIncumbent, benchProposal, benchShadow, benchGenesis)
 	if lowConfidence != "" {
 		logger.Info("meta-evolution: revision routed to operator verdict (bench-cleared but low-confidence)",
 			"artifact", artifact, "epoch", epoch, "margin", lowConfidence)
@@ -494,6 +537,7 @@ func (t *MetaEvolutionTask) recordWithBenches(record func(bool, string, string) 
 	t.pendingBenchIncumbent, t.pendingBenchProposal, t.pendingBenchShadow = inc, prop, shadow
 	defer func() {
 		t.pendingBenchIncumbent, t.pendingBenchProposal, t.pendingBenchShadow = nil, nil, nil
+		t.pendingBenchGenesis = nil // set directly by the genesis-epoch branch
 		t.pendingAdoptionHealth, t.pendingAction = nil, ""
 		t.pendingOperatorUtility = nil
 	}()
@@ -554,8 +598,9 @@ func (t *MetaEvolutionTask) maybeRevertAdoption(logger *slog.Logger) {
 	}
 }
 
-// nextEpoch alternates producer/evaluator based on the last CYCLE entry —
-// operator adopt/reject records (Action != "") don't consume an epoch.
+// nextEpoch rotates producer → evaluator → genesis based on the last CYCLE
+// entry — operator adopt/reject records (Action != "") don't consume an
+// epoch. An unknown/legacy epoch value falls back to producer.
 func (t *MetaEvolutionTask) nextEpoch() (string, string) {
 	prior, err := t.Tracker.RecentMetaRevisions(10)
 	if err == nil {
@@ -563,8 +608,11 @@ func (t *MetaEvolutionTask) nextEpoch() (string, string) {
 			if p.Action != "" {
 				continue
 			}
-			if p.Epoch == metaEpochProducer {
+			switch p.Epoch {
+			case metaEpochProducer:
 				return metaEpochEvaluator, generation.MetaSkillJudgeSystemPrompt
+			case metaEpochEvaluator:
+				return metaEpochGenesis, generation.MetaGenesisSystemPrompt
 			}
 			break
 		}
@@ -609,6 +657,9 @@ func (t *MetaEvolutionTask) assembleEvidence(ctx context.Context, epoch string) 
 	}
 	if epoch == metaEpochEvaluator {
 		b.WriteString(t.assembleJudgeAccuracyEvidence())
+	}
+	if epoch == metaEpochGenesis {
+		b.WriteString(t.assembleGenesisEvidence())
 	}
 	if spots := t.Tracker.LabelerBlindSpots(evolutionHealthWindow); len(spots) > 0 {
 		// Blind Curator (2607.07436): confirmed-clean skills that fail their own
@@ -777,16 +828,52 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 	return b.String()
 }
 
+// assembleGenesisEvidence grounds a genesis-epoch revision on what the
+// genesis lane actually produced: 30d creation volume against catalog size.
+// Compact on purpose — the fixtures and the admissibility gate carry the
+// fitness signal; this block only tells the producer whether the lane is
+// starving (few creations → extraction criteria may be too strict) or
+// flooding (many → dedup/skip rules may be too loose).
+func (t *MetaEvolutionTask) assembleGenesisEvidence() string {
+	entries, err := t.Tracker.RecentLifecycleLog(400)
+	if err != nil {
+		return ""
+	}
+	cutoff := time.Now().Add(-30 * 24 * time.Hour).UnixMilli()
+	created := 0
+	for _, e := range entries {
+		if e.Type == "genesis" && e.CreatedAt >= cutoff {
+			created++
+		}
+	}
+	catalog := len(t.Evolver.catalogEntries())
+	var b strings.Builder
+	b.WriteString("\n## 제네시스 레인 (30일)\n")
+	fmt.Fprintf(&b, "- 신규 스킬 %d건 생성 · 현재 카탈로그 %d개\n", created, catalog)
+	b.WriteString("- 거부 기준(skip 규칙)과 Hermes 선택 순서는 레인의 정직성 계약이다 — 완화가 아니라 정밀화 방향으로만 제안하라.\n")
+	return b.String()
+}
+
 // metaLowConfidenceReason reports why a bench-cleared proposal is still not
 // confident enough to auto-adopt (margin <= 0 on the epoch bench that ran),
 // or "" when the evidence shows a measurable improvement. Pure — the
 // deterministic half of the low-confidence routing decision.
-func metaLowConfidenceReason(inc, prop *JudgeBenchOutcome, shadow *ProducerBenchOutcome) string {
+func metaLowConfidenceReason(inc, prop *JudgeBenchOutcome, shadow *ProducerBenchOutcome, gen *GenesisBenchOutcome) string {
 	if inc != nil && prop != nil && prop.Rate() <= inc.Rate() {
 		return fmt.Sprintf("judge bench margin %.2f→%.2f (no measurable improvement)", inc.Rate(), prop.Rate())
 	}
 	if shadow != nil && shadow.ProposalScore <= shadow.IncumbentScore {
 		return fmt.Sprintf("shadow bench margin %.2f→%.2f (no measurable improvement)", shadow.IncumbentScore, shadow.ProposalScore)
+	}
+	if gen != nil {
+		if gen.Scenarios == 0 {
+			return "genesis bench scored no scenario (skips or unparsable outputs on both sides)"
+		}
+		// Lower mean gate issues = better; equal (typically 0→0 on clean
+		// fixtures) is cleared-but-unproven — exactly the operator-verdict case.
+		if gen.ProposalIssues >= gen.IncumbentIssues {
+			return fmt.Sprintf("genesis bench margin %.2f→%.2f issues (no measurable improvement)", gen.IncumbentIssues, gen.ProposalIssues)
+		}
 	}
 	return ""
 }
