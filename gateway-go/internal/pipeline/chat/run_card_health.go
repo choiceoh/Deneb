@@ -64,16 +64,14 @@ func reportDenebUICardHealth(text, sessionKey string, logger *slog.Logger) {
 // authoring contract says should have been a card. Heuristic — it feeds an
 // Info observation, never a gate.
 func looksStructuredWithoutCard(text string) bool {
-	if strings.Contains(text, "|---") || strings.Contains(text, "| ---") {
-		return true
-	}
-	if utf8.RuneCountInString(text) < 400 {
-		return false
-	}
+	longAnswer := utf8.RuneCountInString(text) >= 400
 	bullets := 0
 	for _, line := range strings.Split(text, "\n") {
 		t := strings.TrimSpace(line)
-		if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") {
+		if isMarkdownTableSeparator(t) {
+			return true
+		}
+		if longAnswer && (strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ")) {
 			bullets++
 			if bullets >= 5 {
 				return true
@@ -81,4 +79,29 @@ func looksStructuredWithoutCard(text string) bool {
 		}
 	}
 	return false
+}
+
+// isMarkdownTableSeparator reports whether a trimmed line is a markdown table
+// separator row — pipe-delimited cells, each a dash run with optional
+// alignment colons (`---`, `:---`, `---:`, `:---:`). At least one cell must
+// carry >=3 dashes so a stray "|-|" doesn't count.
+func isMarkdownTableSeparator(line string) bool {
+	if !strings.Contains(line, "|") {
+		return false
+	}
+	threeDash := false
+	for _, cell := range strings.Split(strings.Trim(line, "|"), "|") {
+		c := strings.TrimSpace(cell)
+		if c == "" {
+			return false
+		}
+		dashes := strings.TrimSuffix(strings.TrimPrefix(c, ":"), ":")
+		if dashes == "" || strings.Count(dashes, "-") != len(dashes) {
+			return false
+		}
+		if len(dashes) >= 3 {
+			threeDash = true
+		}
+	}
+	return threeDash
 }
