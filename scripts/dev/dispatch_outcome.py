@@ -44,6 +44,8 @@ TIMEOUT_RC = 124  # coreutils timeout(1) convention
 BLOCKING_OUTCOMES = frozenset({"landed", "attempted"})
 REDISPATCH_OUTCOMES = frozenset({"declined", "failed", "timeout"})
 DEFAULT_ABANDON_AFTER_SEC = 7200
+ACTIVE_LEDGER_PHASES = frozenset({"started", "pr_opened", "merged", "deployed", "watch_passed"})
+RETRYABLE_LEDGER_PHASES = frozenset({"failed", "rolled_back"})
 
 
 def blocks_redispatch(
@@ -51,8 +53,14 @@ def blocks_redispatch(
     *,
     now_sec: float | None = None,
     abandon_after_sec: int = DEFAULT_ABANDON_AFTER_SEC,
+    authoritative_phase: str = "",
 ) -> bool:
     """True when the pick lane must skip this candidate because of its marker."""
+    phase = authoritative_phase.strip().lower()
+    if phase in ACTIVE_LEDGER_PHASES:
+        return True
+    if phase == "rolled_back":
+        return False
     path = Path(marker_path)
     if not path.is_file():
         return False

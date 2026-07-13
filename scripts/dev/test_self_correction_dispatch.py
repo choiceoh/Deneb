@@ -67,6 +67,25 @@ class SelfCorrectionDispatchTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(out.getvalue(), "sc-1\ta1\tmerged\tsha1\t\n")
 
+    def test_list_json_preserves_authoritative_dispatch_fields(self):
+        response = FakeResponse({
+            "ok": True,
+            "payload": {"candidates": [
+                {"id": "sc-1", "attemptId": "a1", "dispatchPhase": "started", "branch": "dispatch/a1"},
+                {"id": "sc-2", "attemptId": "a2", "dispatchPhase": "failed"},
+            ]},
+        })
+        out = io.StringIO()
+        with (
+            mock.patch.object(dispatch.urllib.request, "urlopen", return_value=response),
+            redirect_stdout(out),
+        ):
+            rc = dispatch.main(["list", "--phase", "started", "--json"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out.getvalue()), [{
+            "id": "sc-1", "attemptId": "a1", "dispatchPhase": "started", "branch": "dispatch/a1",
+        }])
+
 
 if __name__ == "__main__":
     unittest.main()

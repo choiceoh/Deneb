@@ -35,10 +35,23 @@ VERIFY = (
 # (the pillar score is unchanged) and every OTHER package remains fully scored.
 COMPOSITION_ROOT_COMPONENTS = frozenset({"runtime/server", "runtime/bootstrap"})
 
+# Exact transport facades also cross component boundaries by design: their one
+# responsibility is adapting several product capabilities onto one protocol
+# surface. Keep this list path-exact so feature packages nested below the seam
+# remain fully accountable for diffuse co-change.
+CROSS_COMPONENT_TRANSPORT_SEAMS = frozenset({
+    "internal/runtime/rpc/handler/handlerminiapp",
+})
+
 
 def is_composition_root(package_key: str) -> bool:
     """Report whether a package belongs to the wiring/composition-root layer."""
     return component_for(package_key) in COMPOSITION_ROOT_COMPONENTS
+
+
+def is_cross_component_seam(package_key: str) -> bool:
+    """Report exact wiring or transport seams whose job spans components."""
+    return is_composition_root(package_key) or package_key in CROSS_COMPONENT_TRANSPORT_SEAMS
 
 
 def _responsibility_cohesion(repo: RepositoryInventory) -> Pillar:
@@ -150,11 +163,10 @@ def _responsibility_cohesion(repo: RepositoryInventory) -> Pillar:
     for rate, package, multi, touches in sorted(cochange_rows, reverse=True)[:6]:
         if rate <= 0.25:
             continue
-        if is_composition_root(package):
-            # The wiring/composition root co-changes across components by design
-            # (single documented wiring seam); flagging it as diffuse
-            # responsibility is a false positive. Its rate still fed the subscore
-            # above, so this suppresses only the inapplicable finding.
+        if is_cross_component_seam(package):
+            # Wiring roots and exact transport facades co-change across
+            # components by design. Their rates still fed the subscore above,
+            # so this suppresses only the inapplicable finding.
             continue
         findings.append(
             _finding(

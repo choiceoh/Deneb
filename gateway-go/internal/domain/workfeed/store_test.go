@@ -377,6 +377,26 @@ func TestStoreRunActionAckSettlesDuplicateIDs(t *testing.T) {
 	}
 }
 
+func TestStoreRunActionEffectFailureLeavesCardUnsettled(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	if _, err := store.Append(Item{
+		ID: "verdict", Source: "genesis-evolve-verdict", Body: "confirm",
+		Actions: []Action{{ID: "evolve-verdict:confirm", Kind: ActionAck, Label: "Confirm"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	wantErr := errors.New("ledger unavailable")
+	if _, err := store.RunActionWithEffect("verdict", "evolve-verdict:confirm", func(Item, Action) error {
+		return wantErr
+	}); !errors.Is(err, wantErr) {
+		t.Fatalf("RunActionWithEffect error = %v, want %v", err, wantErr)
+	}
+	items, total, err := store.List(10, false)
+	if err != nil || total != 1 || len(items) != 1 || items[0].Status == StatusAcked {
+		t.Fatalf("failed effect consumed card: items=%+v total=%d err=%v", items, total, err)
+	}
+}
+
 func TestStoreRunActionTrashDeletes(t *testing.T) {
 	// 휴지통 permanently removes a card. It is a universal action (not in the item's
 	// action list), settles every id twin, and the item never re-surfaces — even

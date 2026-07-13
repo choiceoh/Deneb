@@ -30,7 +30,10 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
 ## 배포 롤백 워치 (deploy-watch)
 
 - `auto-deploy.sh`가 deploy OK 직후 `scripts/deploy/deploy-watch.sh`를 백그라운드로
-  발사한다(fail-open — 스크립트 부재 시 배포는 정상 진행). 워치는 기본 600초 동안
+  발사하고, 워치가 잠금을 인계받아 **동일 head를 감시 중이라고 확인할 때까지**
+  배포를 검증 완료로 보지 않는다. 스크립트 부재·인계 시간초과는
+  `~/.deneb/auto-deploy.unverified-head`에 남고 다음 no-op tick이 재시도한다.
+  워치는 기본 600초 동안
   30초 간격으로 `/health`와 게이트웨이 저널 ERROR 수를 감시하고, health 연속 2회
   실패 또는 ERROR 예산(기본 30) 초과 시 **직전 바이너리(`dist/deneb-gateway.bak-prev`)
   복원 + MainPID `kill -TERM`**(systemd `Restart=always`가 복원 바이너리를 재기동)으로
@@ -39,14 +42,16 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
   복원 바이너리를 부팅).
 - 롤백된 head는 `~/.deneb/auto-deploy.regressed-head`에 기록되어 **더 새로운
   커밋이 main에 landing될 때까지** 재배포가 차단된다. 로그: `/tmp/deneb-deploy-watch.log`.
-- env: `DENEB_DEPLOY_WATCH_SEC`·`_POLL_SEC`·`_ERROR_BUDGET`. 이 워치가 RSI L4
+- env: `DENEB_DEPLOY_WATCH_SEC`·`_POLL_SEC`·`_HANDOFF_SEC`·`_ERROR_BUDGET`,
+  자동 배포의 확인 제한은 `DENEB_DEPLOY_WATCH_START_SEC`. 이 워치가 RSI L4
   소스 자가편집의 auto-apply 전제 안전망이다 (docs/research 로드맵 L4 절).
 
 ## 코딩 디스패치 (RSI L4 실행 레인 — 오퍼레이터 활성 필요)
 
 - `scripts/dev/coding-dispatch.sh`: 자기교정 큐(`~/.deneb/data/self_correction_candidates.jsonl`)의
   미배차 소스 후보(scope=code, 증거 기반 Source, 리뷰 승인 accepted 우선 → proposed) 1건을 골라 프로덕션
-  클론의 새 워크트리에서 **Claude Code 헤드리스**(`~/.claude/remote/ccd-cli/` 최신)로
+  클론의 **시도별 고유 브랜치·워크트리**에서 **Claude Code 헤드리스**
+  (`~/.claude/remote/ccd-cli/` 최신)로
   구현을 배차한다. 세션 프롬프트가 CLAUDE.md 게이트 준수 + 그린 시 `pr.sh land`
   랜딩까지 지시하며, 배차 마커(`~/.deneb/data/coding_dispatch/<id>.json`)와 일일
   상한(`DENEB_DISPATCH_DAILY_CAP`, 기본 2)이 재배차·토큰 예산을 통제한다.
@@ -176,7 +181,7 @@ tar xzf runner.tar.gz
   --token <REG_TOKEN> --labels gx10 --name srv4-apk --unattended
 # idempotent append — 재실행해도 중복 없음 (.env 는 config.sh 가 만든 기존 항목 보존)
 grep -q '^ANDROID_HOME=' .env 2>/dev/null || echo 'ANDROID_HOME=/home/choiceoh/android-sdk' >> .env
-grep -q '^JAVA_HOME='    .env 2>/dev/null || echo 'JAVA_HOME=/usr/lib/jvm/java-21-openjdk-arm64' >> .env
+grep -q '^JAVA_HOME='    .env 2>/dev/null || echo 'JAVA_HOME=/usr/lib/jvm/java-21-openjdk-arm64' >> .env  # pragma: allowlist secret
 sudo ./svc.sh install choiceoh && sudo ./svc.sh start   # 재부팅 후 자동 상주
 ```
 

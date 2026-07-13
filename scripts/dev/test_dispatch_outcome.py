@@ -160,6 +160,23 @@ class BlocksRedispatchTest(unittest.TestCase):
             path.write_text("{not-json\n")
             self.assertTrue(dispatch_outcome.blocks_redispatch(path))
 
+    def test_authoritative_lifecycle_wins_over_stale_marker(self):
+        with TemporaryDirectory() as td:
+            path = self._write(td, "stale.json", {"id": "x", "outcome": "failed"})
+            for phase in ("started", "pr_opened", "merged", "deployed", "watch_passed"):
+                self.assertTrue(
+                    dispatch_outcome.blocks_redispatch(path, authoritative_phase=phase), phase
+                )
+            path.write_text(json.dumps({"id": "x", "outcome": "attempted"}) + "\n")
+            self.assertTrue(
+                dispatch_outcome.blocks_redispatch(path, authoritative_phase="failed"),
+                "failed lifecycle must not erase evidence of unlanded local work",
+            )
+            self.assertFalse(
+                dispatch_outcome.blocks_redispatch(path, authoritative_phase="rolled_back"),
+                "an observed rollback explicitly authorizes a fresh attempt",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

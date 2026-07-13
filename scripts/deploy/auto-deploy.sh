@@ -44,6 +44,8 @@ FAIL_FILE="$STATE_DIR/auto-deploy.failed-head"
 REGRESS_FILE="$STATE_DIR/auto-deploy.regressed-head"
 PREV_HEAD_FILE="$STATE_DIR/auto-deploy.prev-head"
 DIRTY_FAIL_FILE="$STATE_DIR/auto-deploy.dirty-failed"
+UNVERIFIED_FILE="$STATE_DIR/auto-deploy.unverified-head"
+WATCH_READY_FILE="${DENEB_DEPLOY_WATCH_READY_FILE:-$STATE_DIR/deploy-watch.ready}"
 PAUSE_FILE="${DENEB_AUTO_DEPLOY_PAUSE_FILE:-$STATE_DIR/auto-deploy.paused}"
 LOCK_FILE="/tmp/deneb-auto-deploy.lock"
 LOG_FILE="/tmp/deneb-auto-deploy.log"
@@ -52,6 +54,7 @@ RETRY_SEC="${DENEB_AUTO_DEPLOY_RETRY_SEC:-600}"
 # commit younger than this). A landing PR stack then produces ONE deploy
 # after it settles instead of one restart per merge. 0 disables the guard.
 QUIET_SEC="${DENEB_AUTO_DEPLOY_QUIET_SEC:-300}"
+WATCH_START_SEC="${DENEB_DEPLOY_WATCH_START_SEC:-15}"
 
 log() {
     printf '%s  %s\n' "$(date -Iseconds)" "$*" >> "$LOG_FILE"
@@ -67,6 +70,57 @@ record_dirty_failure() {
     local key="$1"
     mkdir -p "$STATE_DIR"
     printf '%s %s\n' "$key" "$(date +%s)" > "$DIRTY_FAIL_FILE"
+}
+
+record_unverified() {
+    local head="$1" reason="$2" tmp
+    mkdir -p "$STATE_DIR"
+    tmp="$UNVERIFIED_FILE.tmp.$$"
+    printf '%s %s %s\n' "$head" "$(date +%s)" "$reason" > "$tmp"
+    mv -f "$tmp" "$UNVERIFIED_FILE"
+}
+
+accept_ready_watch() {
+    local head="$1" ready_head="" ready_pid=""
+    [[ -f "$WATCH_READY_FILE" ]] || return 1
+    read -r ready_head ready_pid _ < "$WATCH_READY_FILE" || return 1
+    [[ "$ready_head" == "$head" ]] || return 1
+    rm -f "$UNVERIFIED_FILE"
+    log "deploy-watch acknowledged for ${head:0:10} (pid ${ready_pid:-unknown})"
+    return 0
+}
+
+start_deploy_watch() {
+    local head="$1" watcher="$PROD_DIR/scripts/deploy/deploy-watch.sh"
+    local watcher_pid ready_head="" deadline
+    rm -f "$WATCH_READY_FILE"
+    if [[ ! -x "$watcher" ]]; then
+        record_unverified "$head" "watcher_missing"
+        log "ERROR: deploy ${head:0:10} is unverified: deploy-watch executable missing"
+        return 1
+    fi
+
+    nohup "$watcher" "$head" >/dev/null 2>&1 &
+    watcher_pid=$!
+    deadline=$(( SECONDS + WATCH_START_SEC ))
+    while (( SECONDS <= deadline )); do
+        if [[ -f "$WATCH_READY_FILE" ]]; then
+            read -r ready_head _ < "$WATCH_READY_FILE" || true
+            if [[ "$ready_head" == "$head" ]]; then
+                rm -f "$UNVERIFIED_FILE"
+                log "deploy-watch active for ${head:0:10} (pid $watcher_pid)"
+                return 0
+            fi
+        fi
+        if ! kill -0 "$watcher_pid" 2>/dev/null; then
+            break
+        fi
+        sleep 0.1
+    done
+
+    record_unverified "$head" "watcher_not_ready"
+    log "ERROR: deploy ${head:0:10} is unverified: deploy-watch did not acknowledge within ${WATCH_START_SEC}s"
+    return 1
 }
 
 recent_failed_head() {
@@ -235,10 +289,19 @@ fi
 if [[ -z "$deployed_head" && "$local_head" == "$remote_head" ]]; then
     mkdir -p "$STATE_DIR"
     printf '%s\n' "$local_head" > "$STATE_FILE"
+    record_unverified "$local_head" "state_seeded"
+    start_deploy_watch "$local_head" || true
     exit 0
 fi
 
 if [[ "$local_head" == "$remote_head" && "$deployed_head" == "$remote_head" ]]; then
+    unverified_head=""
+    if [[ -f "$UNVERIFIED_FILE" ]]; then
+        read -r unverified_head _ < "$UNVERIFIED_FILE" || true
+    fi
+    if [[ "$unverified_head" == "$remote_head" ]]; then
+        accept_ready_watch "$remote_head" || start_deploy_watch "$remote_head" || true
+    fi
     # No-op ticks are common — stay quiet to keep the log readable.
     exit 0
 fi
@@ -291,13 +354,12 @@ if (( rc == 0 )); then
     printf '%s\n' "$deployed_now" > "$STATE_FILE"
     rm -f "$FAIL_FILE" "$DIRTY_FAIL_FILE"
     log "deploy OK (head now $deployed_now)"
-    # Post-swap rollback watch (L4 auto-apply precondition): detached so this
-    # tick's lock releases; the watch self-terminates on window end or when a
-    # newer deploy supersedes it. Fail-open — a missing watch never blocks.
-    if [[ -x "$PROD_DIR/scripts/deploy/deploy-watch.sh" ]]; then
-        nohup "$PROD_DIR/scripts/deploy/deploy-watch.sh" "$deployed_now" >/dev/null 2>&1 &
-        log "deploy-watch launched for ${deployed_now:0:10}"
-    fi
+    # Post-swap rollback watch (L4 auto-apply precondition): do not treat the
+    # deployment as verified until the detached watcher has acquired its lock
+    # and acknowledged this exact head. A failed handoff remains retryable on
+    # later no-op ticks and can never produce a watch_passed ledger event.
+    record_unverified "$deployed_now" "watcher_starting"
+    start_deploy_watch "$deployed_now" || true
 else
     record_failure "$remote_head"
     log "deploy FAILED (rc=$rc) — manual intervention may be required"

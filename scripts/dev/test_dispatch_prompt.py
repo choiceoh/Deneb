@@ -100,6 +100,25 @@ class DispatchPromptTest(unittest.TestCase):
             self.assertFalse(marker.exists(), "defer must not burn the marker")
             self.assertIn("deferring dispatch", err)
 
+    def test_retry_snapshots_prior_dispatch_time_and_charges_a_new_attempt(self):
+        with TemporaryDirectory() as td:
+            meta = Path(td) / "meta"
+            meta.mkdir()
+            (meta / dispatch_prompt.ARTIFACT_NAME).write_text(CONTRACT, encoding="utf-8")
+            marker = Path(td) / "sc-test-1234.json"
+            marker.write_text(json.dumps({
+                **CANDIDATE,
+                "attemptId": "attempt-0",
+                "outcome": "failed",
+                "dispatchedAt": 1000,
+            }) + "\n", encoding="utf-8")
+            with mock.patch("time.time", return_value=2):
+                rc, _, _ = run_main(meta, marker, CANDIDATE)
+            self.assertEqual(rc, 0)
+            rec = json.loads(marker.read_text(encoding="utf-8"))
+            self.assertEqual(rec["dispatchedAt"], 2000)
+            self.assertEqual(rec["attempts"][-1]["dispatchedAt"], 1000)
+
     def test_short_artifact_defers(self):
         with TemporaryDirectory() as td:
             meta = Path(td) / "meta"

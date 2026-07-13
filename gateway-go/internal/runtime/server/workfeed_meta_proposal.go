@@ -73,9 +73,9 @@ func (s *Server) postLowConfidenceEvolveCard(result genesis.EvolveResult) {
 // handleEvolveVerdictAction applies one settled low-confidence verdict and
 // writes an idempotent, version-attributed P3 label. A rollback is recorded
 // only when the exact card version is still live and restoration succeeds.
-func (s *Server) handleEvolveVerdictAction(item workfeed.Item, actionID string) {
+func (s *Server) handleEvolveVerdictAction(item workfeed.Item, actionID string) error {
 	if s.genesisTracker == nil || s.genesisEvolver == nil {
-		return
+		return fmt.Errorf("evolve verdict subsystem unavailable")
 	}
 	skill := strings.TrimSpace(item.Metadata["skill"])
 	version := strings.TrimSpace(item.Metadata["version"])
@@ -83,28 +83,28 @@ func (s *Server) handleEvolveVerdictAction(item workfeed.Item, actionID string) 
 	margin, err := strconv.ParseFloat(item.Metadata["judgeMargin"], 64)
 	if skill == "" || version == "" || decisionID == "" || err != nil {
 		s.logger.Warn("invalid low-confidence evolve verdict card", "ref", item.RefID)
-		return
+		return fmt.Errorf("invalid low-confidence evolve verdict card")
 	}
 	if _, settled := s.genesisTracker.OperatorJudgeVerdictByDecisionID(decisionID); settled {
-		return
+		return nil
 	}
 	verdict := genesis.OperatorJudgeVerdictConfirm
 	if actionID == evolveVerdictRollback {
 		if s.skillCatalog == nil {
-			return
+			return fmt.Errorf("skill catalog unavailable")
 		}
 		entry, ok := s.skillCatalog.Get(skill)
 		if !ok || entry.Skill.Version != version {
 			s.logger.Warn("stale evolve rollback verdict ignored", "skill", skill, "cardVersion", version)
-			return
+			return fmt.Errorf("stale evolve rollback verdict for %s@%s", skill, version)
 		}
 		if !s.genesisEvolver.RollbackSkillWithResult(skill) {
 			s.logger.Warn("operator evolve rollback failed", "skill", skill, "version", version)
-			return
+			return fmt.Errorf("operator evolve rollback failed for %s@%s", skill, version)
 		}
 		verdict = genesis.OperatorJudgeVerdictRollback
 	} else if actionID != evolveVerdictConfirm {
-		return
+		return fmt.Errorf("unsupported evolve verdict action %q", actionID)
 	}
 	if err := s.genesisTracker.LogOperatorJudgeVerdict(genesis.OperatorJudgeVerdict{
 		DecisionID:   decisionID,
@@ -115,7 +115,9 @@ func (s *Server) handleEvolveVerdictAction(item workfeed.Item, actionID string) 
 		JudgeMargin:  margin,
 	}); err != nil {
 		s.logger.Warn("operator judge verdict ledger write failed", "skill", skill, "error", err)
+		return fmt.Errorf("record operator judge verdict: %w", err)
 	}
+	return nil
 }
 
 // postMetaProposalCard surfaces one slow-loop revision in the work feed.

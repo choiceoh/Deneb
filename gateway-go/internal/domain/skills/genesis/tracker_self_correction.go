@@ -202,7 +202,11 @@ func (t *Tracker) RecordSelfCorrectionDispatch(record SelfCorrectionCandidateRec
 		return record, fmt.Errorf("genesis-tracker: self-correction candidate not found: %s", record.ID)
 	}
 	if current.DispatchPhase == record.DispatchPhase && current.AttemptID == record.AttemptID {
-		if !selfCorrectionDispatchAddsProvenance(current, record) {
+		adds, conflict := selfCorrectionDispatchProvenanceDelta(current, record)
+		if conflict != "" {
+			return record, fmt.Errorf("genesis-tracker: conflicting self-correction dispatch provenance: %s", conflict)
+		}
+		if !adds {
 			return record, nil // exact idempotent RPC retry
 		}
 		// Same phase may be enriched later (for example GitHub exposes the merge
@@ -212,6 +216,11 @@ func (t *Tracker) RecordSelfCorrectionDispatch(record SelfCorrectionCandidateRec
 			return record, fmt.Errorf("genesis-tracker: append self-correction dispatch enrichment: %w", err)
 		}
 		return record, nil
+	}
+	if current.AttemptID == record.AttemptID {
+		if _, conflict := selfCorrectionDispatchProvenanceDelta(current, record); conflict != "" {
+			return record, fmt.Errorf("genesis-tracker: conflicting self-correction dispatch provenance: %s", conflict)
+		}
 	}
 	if !validSelfCorrectionDispatchTransition(current.DispatchPhase, record.DispatchPhase) {
 		return record, fmt.Errorf("genesis-tracker: invalid self-correction dispatch transition %s -> %s", current.DispatchPhase, record.DispatchPhase)
@@ -232,13 +241,29 @@ func (t *Tracker) RecordSelfCorrectionDispatch(record SelfCorrectionCandidateRec
 	return record, nil
 }
 
-func selfCorrectionDispatchAddsProvenance(current, next SelfCorrectionCandidateRecord) bool {
+func selfCorrectionDispatchProvenanceDelta(current, next SelfCorrectionCandidateRecord) (bool, string) {
+	for _, field := range []struct {
+		name          string
+		current, next string
+	}{
+		{"branch", current.Branch, next.Branch},
+		{"prUrl", current.PRURL, next.PRURL},
+		{"commitSha", current.CommitSHA, next.CommitSHA},
+		{"deployHead", current.DeployHead, next.DeployHead},
+	} {
+		if field.current != "" && field.next != "" && field.current != field.next {
+			return false, fmt.Sprintf("%s changed from %q to %q", field.name, field.current, field.next)
+		}
+	}
+	if current.PRNumber > 0 && next.PRNumber > 0 && current.PRNumber != next.PRNumber {
+		return false, fmt.Sprintf("prNumber changed from %d to %d", current.PRNumber, next.PRNumber)
+	}
 	return (current.Branch == "" && next.Branch != "") ||
 		(current.PRNumber == 0 && next.PRNumber > 0) ||
 		(current.PRURL == "" && next.PRURL != "") ||
 		(current.CommitSHA == "" && next.CommitSHA != "") ||
 		(current.DeployHead == "" && next.DeployHead != "") ||
-		(current.OutcomeNote == "" && next.OutcomeNote != "")
+		(current.OutcomeNote == "" && next.OutcomeNote != ""), ""
 }
 
 // RecentSelfCorrectionCandidates returns the latest merged view of deferred
@@ -312,26 +337,38 @@ func mergeSelfCorrectionRecords(entries []SelfCorrectionCandidateRecord) map[str
 			if !ok {
 				continue
 			}
-			base.DispatchPhase = normalizeSelfCorrectionDispatchPhase(rec.DispatchPhase)
+			phase := normalizeSelfCorrectionDispatchPhase(rec.DispatchPhase)
+			newAttempt := phase == SelfCorrectionDispatchStarted && rec.AttemptID != "" &&
+				base.AttemptID != "" && rec.AttemptID != base.AttemptID
+			if newAttempt {
+				base.Branch = ""
+				base.PRNumber = 0
+				base.PRURL = ""
+				base.CommitSHA = ""
+				base.DeployHead = ""
+				base.OutcomeNote = ""
+			}
+			samePhase := base.DispatchPhase == phase && base.AttemptID == rec.AttemptID
+			base.DispatchPhase = phase
 			if rec.AttemptID != "" {
 				base.AttemptID = rec.AttemptID
 			}
-			if rec.Branch != "" {
+			if base.Branch == "" && rec.Branch != "" {
 				base.Branch = rec.Branch
 			}
-			if rec.PRNumber > 0 {
+			if base.PRNumber == 0 && rec.PRNumber > 0 {
 				base.PRNumber = rec.PRNumber
 			}
-			if rec.PRURL != "" {
+			if base.PRURL == "" && rec.PRURL != "" {
 				base.PRURL = rec.PRURL
 			}
-			if rec.CommitSHA != "" {
+			if base.CommitSHA == "" && rec.CommitSHA != "" {
 				base.CommitSHA = rec.CommitSHA
 			}
-			if rec.DeployHead != "" {
+			if base.DeployHead == "" && rec.DeployHead != "" {
 				base.DeployHead = rec.DeployHead
 			}
-			if rec.OutcomeNote != "" {
+			if rec.OutcomeNote != "" && (!samePhase || base.OutcomeNote == "") {
 				base.OutcomeNote = rec.OutcomeNote
 			}
 			if base.DispatchPhase == SelfCorrectionDispatchWatchPassed {
@@ -400,7 +437,11 @@ func validSelfCorrectionDispatchTransition(from, to string) bool {
 		return to == SelfCorrectionDispatchDeployed || to == SelfCorrectionDispatchFailed
 	case SelfCorrectionDispatchDeployed:
 		return to == SelfCorrectionDispatchWatchPassed || to == SelfCorrectionDispatchRolledBack
-	case SelfCorrectionDispatchFailed, SelfCorrectionDispatchRolledBack:
+	case SelfCorrectionDispatchFailed:
+		// A session can exit before GitHub exposes the PR. Late reconciliation
+		// may promote that same attempt from failed to its observed PR state.
+		return to == SelfCorrectionDispatchStarted || to == SelfCorrectionDispatchPROpened || to == SelfCorrectionDispatchMerged
+	case SelfCorrectionDispatchRolledBack:
 		return to == SelfCorrectionDispatchStarted
 	default:
 		return false // watch_passed is terminal

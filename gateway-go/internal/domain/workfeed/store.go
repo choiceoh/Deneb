@@ -117,6 +117,11 @@ type ActionResult struct {
 	RemoveFromFeed bool   `json:"removeFromFeed,omitempty"`
 }
 
+// ActionEffect runs a source-specific durable side effect before a terminal
+// action is persisted. Returning an error leaves the card unsettled so the
+// operator can retry instead of losing the decision.
+type ActionEffect func(item Item, action Action) error
+
 // Store persists work-feed items and action outcomes.
 type Store struct {
 	path string
@@ -442,6 +447,13 @@ func (s *Store) mutateItem(id string, update func(*Item, int64) bool) (Item, err
 
 // RunAction executes an allowed item action and records its result.
 func (s *Store) RunAction(itemID, actionID string) (ActionResult, error) {
+	return s.RunActionWithEffect(itemID, actionID, nil)
+}
+
+// RunActionWithEffect executes an allowed item action, requiring effect to
+// succeed before the resulting state is snapshotted. Effects must be
+// idempotent because a later snapshot failure leaves the action retryable.
+func (s *Store) RunActionWithEffect(itemID, actionID string, effect ActionEffect) (ActionResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -505,6 +517,11 @@ func (s *Store) RunAction(itemID, actionID string) (ActionResult, error) {
 		Item:       items[first],
 		Action:     action,
 		SessionKey: items[first].SessionKey,
+	}
+	if effect != nil {
+		if err := effect(items[first], action); err != nil {
+			return ActionResult{}, err
+		}
 	}
 	switch action.Kind {
 	case ActionOpen:

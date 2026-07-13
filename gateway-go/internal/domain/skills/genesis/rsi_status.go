@@ -30,16 +30,28 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	rsistatus "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/status"
 )
 
-// RSI layer states. These are machine keys (not display text) — the clients map
-// them to a color and a localized label.
+// Private aliases keep the engine implementation concise while exposing the
+// stable status read model from the narrow status subpackage.
+type (
+	// RSILoopStatus keeps the established handler port stable while the full
+	// read model lives in the narrow status package.
+	RSILoopStatus = rsistatus.LoopStatus
+	rsiLoopStatus = rsistatus.LoopStatus
+	rsiHealth     = rsistatus.Health
+	rsiLayer      = rsistatus.Layer
+	rsiMetric     = rsistatus.Metric
+)
+
 const (
-	RSIStateLive      = "LIVE"
-	RSIStateDataGated = "DATA-GATED"
-	RSIStateStarved   = "STARVED"
-	RSIStateFrozen    = "FROZEN"
-	RSIStateIdle      = "IDLE"
+	rsiStateLive      = rsistatus.StateLive
+	rsiStateDataGated = rsistatus.StateDataGated
+	rsiStateStarved   = rsistatus.StateStarved
+	rsiStateFrozen    = rsistatus.StateFrozen
+	rsiStateIdle      = rsistatus.StateIdle
 )
 
 // rsiSubtleDegradationClasses are the judge-degradation classes that actually
@@ -79,51 +91,10 @@ var rsiLayerDetails = map[string]string{
 	"GRAD": "자율성 졸업 사다리의 행별 증거를 상시 심사하고, 임계 충족 시 잠금 해제를 자동 실행하는 계기판입니다 (2026-07-14 위임). 모든 실행은 원장 기록과 재잠금 비토 카드를 남기며, 임계값 정책 자체는 루프가 편집할 수 없습니다.",
 }
 
-// RSILoopStatus is the whole recursive-self-improvement snapshot.
-type RSILoopStatus struct {
-	Layers  []RSILayer
-	Turning int // count of layers in LIVE or FROZEN
-	Health  RSIHealth
-}
-
-// RSIHealth is the structured evolution-health scoreboard behind the layer
-// diagnoses — the numeric fields the layer metric strings only render as text,
-// surfaced so clients can draw a real scoreboard (confirm/false-accept rates,
-// activity counts, self-brake state) instead of parsing preformatted strings.
-type RSIHealth struct {
-	Evolves7d         int     // L1 evolves in the window
-	Confirmed7d       int     // evolves that held up
-	Rejected7d        int     // evolves rejected at the gate
-	RolledBack7d      int     // evolves auto-reverted post-apply
-	Genesis7d         int     // new skills created
-	ConfirmRate       float64 // confirmed/(confirmed+rolledBack), 0..1
-	FalseAcceptRate   float64 // rolledBack/(confirmed+rolledBack) — judge going soft
-	ResolvedEvolves7d int     // sample size behind the two rates
-	Thrash            bool    // rapid evolve/rollback churn detected
-	AutoAdoptFrozen   bool    // L2 drift self-brake engaged
-	MetaRevisions7d   int     // L2 meta-artifact revisions in the window
-}
-
-// RSILayer is one loop layer's classified state with display metrics.
-type RSILayer struct {
-	Key       string
-	Title     string
-	State     string
-	Diagnosis string
-	Detail    string // static "what is this loop" explanation (revealed on tap)
-	Metrics   []RSIMetricKV
-}
-
-// RSIMetricKV is one display metric (label + preformatted value).
-type RSIMetricKV struct {
-	Label string
-	Value string
-}
-
 // RSIStatus composes the four layer assessments from the tracker's public
 // aggregates. It takes no lock of its own — each aggregate locks internally.
-func (t *Tracker) RSIStatus() RSILoopStatus {
-	layers := []RSILayer{t.rsiAssessL1(), t.rsiAssessL2(), t.rsiAssessL3(), t.rsiAssessL4(), t.rsiAssessLadder()}
+func (t *Tracker) RSIStatus() rsistatus.LoopStatus {
+	layers := []rsiLayer{t.rsiAssessL1(), t.rsiAssessL2(), t.rsiAssessL3(), t.rsiAssessL4(), t.rsiAssessLadder()}
 	turning := 0
 	for i := range layers {
 		layers[i].Detail = rsiLayerDetails[layers[i].Key]
@@ -132,16 +103,16 @@ func (t *Tracker) RSIStatus() RSILoopStatus {
 		if layers[i].Key == "GRAD" {
 			continue
 		}
-		if layers[i].State == RSIStateLive || layers[i].State == RSIStateFrozen {
+		if layers[i].State == rsiStateLive || layers[i].State == rsiStateFrozen {
 			turning++
 		}
 	}
 	eh := t.EvolutionHealth()
 	meta := t.MetaEvolutionHealth()
-	return RSILoopStatus{
+	return rsiLoopStatus{
 		Layers:  layers,
 		Turning: turning,
-		Health: RSIHealth{
+		Health: rsiHealth{
 			Evolves7d:         eh.Evolves7d,
 			Confirmed7d:       eh.EvolveConfirmed7d,
 			Rejected7d:        eh.EvolveRejected7d,
@@ -157,55 +128,55 @@ func (t *Tracker) RSIStatus() RSILoopStatus {
 	}
 }
 
-func (t *Tracker) rsiAssessL1() RSILayer {
+func (t *Tracker) rsiAssessL1() rsiLayer {
 	h := t.EvolutionHealth()
 	committed := h.Evolves7d + h.Genesis7d
-	metrics := []RSIMetricKV{
-		{"진화(7일)", strconv.Itoa(h.Evolves7d)},
-		{"신규 스킬", strconv.Itoa(h.Genesis7d)},
-		{"제안", strconv.Itoa(h.Proposals7d)},
-		{"기각", strconv.Itoa(h.EvolveRejected7d)},
-		{"확정률", fmt.Sprintf("%.0f%%", h.ConfirmRate*100)},
-		{"e-process", rsiEProcessValue(t.eProcessCutoverReadiness())},
-		{"라벨러 사각", strconv.Itoa(len(t.labelerBlindSpots(evolutionHealthWindow)))},
+	metrics := []rsiMetric{
+		{Label: "진화(7일)", Value: strconv.Itoa(h.Evolves7d)},
+		{Label: "신규 스킬", Value: strconv.Itoa(h.Genesis7d)},
+		{Label: "제안", Value: strconv.Itoa(h.Proposals7d)},
+		{Label: "기각", Value: strconv.Itoa(h.EvolveRejected7d)},
+		{Label: "확정률", Value: fmt.Sprintf("%.0f%%", h.ConfirmRate*100)},
+		{Label: "e-process", Value: rsiEProcessValue(t.eProcessCutoverReadiness())},
+		{Label: "라벨러 사각", Value: strconv.Itoa(len(t.labelerBlindSpots(evolutionHealthWindow)))},
 	}
-	base := RSILayer{Key: "L1", Title: "스킬 진화", Metrics: metrics}
+	base := rsiLayer{Key: "L1", Title: "스킬 진화", Metrics: metrics}
 	switch {
 	case committed > 0:
-		base.State = RSIStateLive
+		base.State = rsiStateLive
 		base.Diagnosis = fmt.Sprintf("이번 주 진화 %d · 신규 스킬 %d · 제안 %d · 기각 %d", h.Evolves7d, h.Genesis7d, h.Proposals7d, h.EvolveRejected7d)
 	case h.EvolveRejected7d > 0 || h.Proposals7d > 0:
 		// Proposals/rejections without commits = the lane is alive but gated
 		// (Python rsi_status assess_l1 parity). Counting only rejects previously
 		// left proposal-only weeks looking IDLE.
-		base.State = RSIStateDataGated
+		base.State = rsiStateDataGated
 		base.Diagnosis = fmt.Sprintf("제안 %d · 기각 %d — 후보는 있지만 이번 주 게이트를 통과한 진화가 없습니다", h.Proposals7d, h.EvolveRejected7d)
 	default:
-		base.State = RSIStateIdle
+		base.State = rsiStateIdle
 		base.Diagnosis = "최근 7일간 스킬 진화 활동이 없습니다"
 	}
 	return base
 }
 
-func (t *Tracker) rsiAssessL2() RSILayer {
+func (t *Tracker) rsiAssessL2() rsiLayer {
 	// Scoreboard stays on the 7d MetaEvolutionHealth window; LIVE/IDLE for the
 	// slow loop uses a 14d look-back (Python rsi_status assess_l2 parity — the
 	// weekly cadence would otherwise flip IDLE mid-week after a quiet 7d).
 	h := t.MetaEvolutionHealth()
-	metrics := []RSIMetricKV{
-		{"개정(7일)", strconv.Itoa(h.Revisions7d)},
-		{"제안(7일)", strconv.Itoa(h.Proposed7d)},
+	metrics := []rsiMetric{
+		{Label: "개정(7일)", Value: strconv.Itoa(h.Revisions7d)},
+		{Label: "제안(7일)", Value: strconv.Itoa(h.Proposed7d)},
 	}
 	if strings.TrimSpace(h.LastEpoch) != "" {
-		metrics = append(metrics, RSIMetricKV{"최근 에폭", h.LastEpoch})
+		metrics = append(metrics, rsiMetric{Label: "최근 에폭", Value: h.LastEpoch})
 	}
-	base := RSILayer{Key: "L2", Title: "메타 진화", Metrics: metrics}
+	base := rsiLayer{Key: "L2", Title: "메타 진화", Metrics: metrics}
 	switch {
 	case t.AutoAdoptFrozen():
-		base.State = RSIStateFrozen
+		base.State = rsiStateFrozen
 		base.Diagnosis = "드리프트 자기 브레이크 작동 — 자동 채택이 제안 전용으로 동결됐습니다"
 	case t.metaActivityIn(metaEvolutionAssessWindow):
-		base.State = RSIStateLive
+		base.State = rsiStateLive
 		// Diagnosis uses the SAME 14d window as LIVE/IDLE — quoting 7d scoreboard
 		// numbers here made a 10d-old weekly cycle read as "0 revisions" while
 		// the layer stayed LIVE (Python assess_l2 prints 14d counts).
@@ -217,7 +188,7 @@ func (t *Tracker) rsiAssessL2() RSILayer {
 		}
 		base.Diagnosis = diag
 	default:
-		base.State = RSIStateIdle
+		base.State = rsiStateIdle
 		base.Diagnosis = "최근 14일간 슬로우 루프 사이클이 없습니다 — 주간 주기를 기다리는 중"
 	}
 	return base
@@ -261,11 +232,11 @@ func (t *Tracker) metaCycleCountsIn(window time.Duration) (cycles, proposed, ado
 	return cycles, proposed, adopted, reverted
 }
 
-func (t *Tracker) rsiAssessL3() RSILayer {
+func (t *Tracker) rsiAssessL3() rsiLayer {
 	records, err := t.RecentJudgeAccuracy(20)
 	operatorLabels := len(t.RecentOperatorJudgeVerdicts(7*24*time.Hour, 100))
 	if err != nil || (len(records) == 0 && operatorLabels == 0) {
-		return RSILayer{Key: "L3", Title: "판정자 공진화", State: RSIStateIdle, Diagnosis: "판정 정확도 레인이 아직 실행되지 않았습니다"}
+		return rsiLayer{Key: "L3", Title: "판정자 공진화", State: rsiStateIdle, Diagnosis: "판정 정확도 레인이 아직 실행되지 않았습니다"}
 	}
 	cutoff := time.Now().Add(-7 * 24 * time.Hour).UnixMilli()
 	runs, misses, falseRejects := 0, 0, 0
@@ -287,38 +258,38 @@ func (t *Tracker) rsiAssessL3() RSILayer {
 		}
 	}
 	if runs == 0 && operatorLabels == 0 {
-		return RSILayer{Key: "L3", Title: "판정자 공진화", State: RSIStateIdle, Diagnosis: "판정 정확도 레인이 최근 7일간 실행되지 않았습니다"}
+		return rsiLayer{Key: "L3", Title: "판정자 공진화", State: rsiStateIdle, Diagnosis: "판정 정확도 레인이 최근 7일간 실행되지 않았습니다"}
 	}
 	organic := len(t.organicFalseAccepts(organicFalseAcceptWindow, 50))
-	metrics := []RSIMetricKV{
-		{"실행(7일)", strconv.Itoa(runs)},
-		{"판정 놓침", strconv.Itoa(misses)},
-		{"오기각", strconv.Itoa(falseRejects)},
-		{"실전 라벨(30일)", strconv.Itoa(organic)},
-		{"운영자 라벨(7일)", strconv.Itoa(operatorLabels)},
+	metrics := []rsiMetric{
+		{Label: "실행(7일)", Value: strconv.Itoa(runs)},
+		{Label: "판정 놓침", Value: strconv.Itoa(misses)},
+		{Label: "오기각", Value: strconv.Itoa(falseRejects)},
+		{Label: "실전 라벨(30일)", Value: strconv.Itoa(organic)},
+		{Label: "운영자 라벨(7일)", Value: strconv.Itoa(operatorLabels)},
 	}
-	base := RSILayer{Key: "L3", Title: "판정자 공진화", Metrics: metrics}
+	base := rsiLayer{Key: "L3", Title: "판정자 공진화", Metrics: metrics}
 	switch {
 	case misses > 0 || falseRejects > 0 || organic > 0 || operatorLabels > 0:
-		base.State = RSIStateLive
+		base.State = rsiStateLive
 		base.Diagnosis = fmt.Sprintf("%d회 실행에서 판정 놓침 %d + 오기각 %d + 실전 라벨 %d + 운영자 라벨 %d — P3 학습 연료 축적 중", runs, misses, falseRejects, organic, operatorLabels)
 	case !subtleDeployed:
-		base.State = RSIStateDataGated
+		base.State = rsiStateDataGated
 		base.Diagnosis = fmt.Sprintf("%d회 실행; 판정자가 명백한 결함은 모두 잡았고 미묘 프로브는 아직 원장에 없습니다", runs)
 	case weakenDeployed:
-		base.State = RSIStateDataGated
+		base.State = rsiStateDataGated
 		base.Diagnosis = fmt.Sprintf("격상된 약화 프로브까지 %d회 실행 모두 잡았습니다 — 판정자가 현행 프로브 최고 티어에서 강합니다", runs)
 	default:
-		base.State = RSIStateDataGated
+		base.State = rsiStateDataGated
 		base.Diagnosis = fmt.Sprintf("미묘 프로브가 있는 %d회 실행이지만 아직 놓침이 없습니다 — 판정자가 강하며, 포화 %d회 연속이면 약화 프로브로 격상됩니다", runs, judgeEscalationWindow)
 	}
 	return base
 }
 
-func (t *Tracker) rsiAssessL4() RSILayer {
+func (t *Tracker) rsiAssessL4() rsiLayer {
 	cands, err := t.RecentSelfCorrectionCandidates("", "", 300)
 	if err != nil {
-		return RSILayer{Key: "L4", Title: "소스 자가편집", State: RSIStateIdle, Diagnosis: "후보 저장소를 읽을 수 없습니다"}
+		return rsiLayer{Key: "L4", Title: "소스 자가편집", State: rsiStateIdle, Diagnosis: "후보 저장소를 읽을 수 없습니다"}
 	}
 	byScope := map[string]int{}
 	dispatchable := 0
@@ -326,6 +297,7 @@ func (t *Tracker) rsiAssessL4() RSILayer {
 	inFlight := 0
 	applied := 0
 	failed := 0
+	oldestPendingAt := int64(0)
 	for _, c := range cands {
 		scope := strings.TrimSpace(c.Scope)
 		if scope == "" {
@@ -333,7 +305,7 @@ func (t *Tracker) rsiAssessL4() RSILayer {
 		}
 		byScope[scope]++
 		// proposed = unreviewed backlog; accepted = review-endorsed, awaiting
-		// implementation — both are live dispatch supply (the heartbeat review
+		// implementation — both are queued dispatch supply (the heartbeat review
 		// lane accepts candidates it cannot implement itself).
 		st := normalizeSelfCorrectionStatus(c.Status)
 		if scope != "code" {
@@ -348,10 +320,21 @@ func (t *Tracker) rsiAssessL4() RSILayer {
 			applied++
 		case SelfCorrectionDispatchFailed, SelfCorrectionDispatchRolledBack:
 			failed++
+			if (phase == SelfCorrectionDispatchRolledBack || !t.DispatchMarkerBlocks(c.ID)) &&
+				(st == SelfCorrectionStatusProposed || st == SelfCorrectionStatusAccepted) &&
+				rsiSourceDispatchable(c.Source) {
+				dispatchable++
+				if c.CreatedAt > 0 && (oldestPendingAt == 0 || c.CreatedAt < oldestPendingAt) {
+					oldestPendingAt = c.CreatedAt
+				}
+			}
 		case "":
 			if st == SelfCorrectionStatusProposed || st == SelfCorrectionStatusAccepted {
 				if rsiSourceDispatchable(c.Source) {
 					dispatchable++
+					if c.CreatedAt > 0 && (oldestPendingAt == 0 || c.CreatedAt < oldestPendingAt) {
+						oldestPendingAt = c.CreatedAt
+					}
 				} else {
 					// Code candidate from a source not yet in the dispatch
 					// allowlist (runtime-error, …): real L4 supply staged for
@@ -362,37 +345,43 @@ func (t *Tracker) rsiAssessL4() RSILayer {
 		}
 	}
 	_, dispatchedToday := t.codingDispatchCounts()
-	metrics := []RSIMetricKV{
-		{"후보", strconv.Itoa(len(cands))},
-		{"코드 후보", strconv.Itoa(byScope["code"])},
-		{"배차 가능", strconv.Itoa(dispatchable)},
-		{"진행 중", strconv.Itoa(inFlight)},
-		{"감시 통과", strconv.Itoa(applied)},
-		{"실패/롤백", strconv.Itoa(failed)},
-		{"검토 대기(비배차)", strconv.Itoa(staged)},
-		{"오늘 배차", strconv.Itoa(dispatchedToday)},
+	runtime := t.codingDispatchRuntimeStatus()
+	metrics := []rsiMetric{
+		{Label: "후보", Value: strconv.Itoa(len(cands))},
+		{Label: "코드 후보", Value: strconv.Itoa(byScope["code"])},
+		{Label: "배차 가능", Value: strconv.Itoa(dispatchable)},
+		{Label: "진행 중", Value: strconv.Itoa(inFlight)},
+		{Label: "감시 통과", Value: strconv.Itoa(applied)},
+		{Label: "실패/롤백", Value: strconv.Itoa(failed)},
+		{Label: "검토 대기(비배차)", Value: strconv.Itoa(staged)},
+		{Label: "오늘 배차", Value: strconv.Itoa(dispatchedToday)},
+		{Label: "배차 틱", Value: rsiDispatchTickValue(runtime)},
+		{Label: "연속 배차 실패", Value: strconv.Itoa(runtime.ConsecutiveFailures)},
+		{Label: "최근 성공", Value: rsiAgeValue(runtime.LastSuccessfulAtMs)},
+		{Label: "최장 대기", Value: rsiAgeValue(oldestPendingAt)},
 	}
-	base := RSILayer{Key: "L4", Title: "소스 자가편집", Metrics: metrics}
+	base := rsiLayer{Key: "L4", Title: "소스 자가편집", Metrics: metrics}
 	switch {
 	case inFlight > 0:
-		base.State = RSIStateLive
+		base.State = rsiStateLive
 		base.Diagnosis = fmt.Sprintf("코드 후보 %d건이 PR·배포·롤백 감시 단계를 통과 중", inFlight)
-	case dispatchable > 0 || dispatchedToday > 0:
-		// dispatch_today keeps L4 LIVE after coding-dispatch drains the queue
-		// (Python rsi_status assess_l4 parity).
-		base.State = RSIStateLive
-		base.Diagnosis = fmt.Sprintf("배차 가능한 코드 후보 %d건 · 오늘 배차 %d건", dispatchable, dispatchedToday)
 	case applied > 0:
-		base.State = RSIStateLive
+		base.State = rsiStateLive
 		base.Diagnosis = fmt.Sprintf("소스 자가편집 %d건이 머지·배포 후 롤백 감시까지 통과", applied)
+	case dispatchable > 0 && runtime.ConsecutiveFailures > 0:
+		base.State = rsiStateStarved
+		base.Diagnosis = fmt.Sprintf("배차 대기 %d건 · 디스패처 %d회 연속 실패 (%s)", dispatchable, runtime.ConsecutiveFailures, rsiDispatchTickValue(runtime))
+	case dispatchable > 0:
+		base.State = rsiStateIdle
+		base.Diagnosis = fmt.Sprintf("배차 대기 %d건 · 아직 진행 중인 authoritative dispatch 없음 (%s)", dispatchable, rsiDispatchTickValue(runtime))
 	case len(cands) == 0:
-		base.State = RSIStateIdle
+		base.State = rsiStateIdle
 		base.Diagnosis = "아직 캡처된 자기교정 후보가 없습니다"
 	case staged > 0:
-		base.State = RSIStateStarved
+		base.State = rsiStateStarved
 		base.Diagnosis = fmt.Sprintf("비배차 소스의 코드 후보 %d건이 검토 대기 중 — 품질 리뷰 후 배차 소스로 졸업하면 배차됩니다", staged)
 	default:
-		base.State = RSIStateStarved
+		base.State = rsiStateStarved
 		base.Diagnosis = fmt.Sprintf("후보 %d건(%s)이지만 배차 가능한 코드 후보가 아직 없습니다", len(cands), rsiScopeSummary(byScope))
 	}
 	// Dispatch-outcome history (graduation-ladder evidence: the cap-raise row
@@ -402,6 +391,56 @@ func (t *Tracker) rsiAssessL4() RSILayer {
 		base.Diagnosis += note
 	}
 	return base
+}
+
+type codingDispatchRuntime struct {
+	LastTickAtMs        int64  `json:"lastTickAtMs"`
+	LastResult          string `json:"lastResult"`
+	Detail              string `json:"detail"`
+	CandidateID         string `json:"candidateId"`
+	LastDispatchAtMs    int64  `json:"lastDispatchAtMs"`
+	LastSuccessfulAtMs  int64  `json:"lastSuccessfulAtMs"`
+	ConsecutiveFailures int    `json:"consecutiveFailures"`
+}
+
+func (t *Tracker) codingDispatchRuntimeStatus() codingDispatchRuntime {
+	path := filepath.Join(filepath.Dir(t.selfCorrectionPath), "coding_dispatch_status.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return codingDispatchRuntime{}
+	}
+	var status codingDispatchRuntime
+	if json.Unmarshal(raw, &status) != nil {
+		return codingDispatchRuntime{}
+	}
+	return status
+}
+
+func rsiDispatchTickValue(status codingDispatchRuntime) string {
+	if strings.TrimSpace(status.LastResult) == "" {
+		return "기록 없음"
+	}
+	return status.LastResult + " · " + rsiAgeValue(status.LastTickAtMs)
+}
+
+func rsiAgeValue(atMs int64) string {
+	if atMs <= 0 {
+		return "없음"
+	}
+	age := time.Since(time.UnixMilli(atMs))
+	if age < 0 {
+		age = 0
+	}
+	switch {
+	case age < time.Minute:
+		return "방금"
+	case age < time.Hour:
+		return fmt.Sprintf("%d분 전", int(age.Minutes()))
+	case age < 24*time.Hour:
+		return fmt.Sprintf("%d시간 전", int(age.Hours()))
+	default:
+		return fmt.Sprintf("%d일 전", int(age.Hours()/24))
+	}
 }
 
 // codingDispatchCounts mirrors scripts/audit/rsi_status.py's coding_dispatch/

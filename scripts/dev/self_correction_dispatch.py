@@ -79,6 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     listing = sub.add_parser("list", help="print current candidates as tab-separated lifecycle rows")
     listing.add_argument("--phase", action="append", default=[])
+    listing.add_argument("--json", action="store_true", help="print matching candidate rows as JSON")
     return parser
 
 
@@ -113,10 +114,15 @@ def main(argv: list[str] | None = None) -> int:
             {"status": "all", "limit": 500},
         )
         phases = set(args.phase)
-        for candidate in payload.get("candidates") or []:
+        candidates = [
+            candidate for candidate in (payload.get("candidates") or [])
+            if not phases or str(candidate.get("dispatchPhase") or "") in phases
+        ]
+        if args.json:
+            print(json.dumps(candidates, ensure_ascii=False))
+            return 0
+        for candidate in candidates:
             phase = str(candidate.get("dispatchPhase") or "")
-            if phases and phase not in phases:
-                continue
             fields = (
                 candidate.get("id"),
                 candidate.get("attemptId"),

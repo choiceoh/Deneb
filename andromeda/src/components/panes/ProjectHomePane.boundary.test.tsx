@@ -207,7 +207,7 @@ describe("ProjectHomePane boundary behavior", () => {
       expect(screen.getByText("연결된 일정 없음")).toBeInTheDocument();
       expect(screen.getByText("연결된 할일 없음")).toBeInTheDocument();
       expect(screen.getByText("연결된 피드 없음")).toBeInTheDocument();
-      expect(screen.getByText("연결된 노트북 없음")).toBeInTheDocument();
+      expect(await screen.findByText("연결된 노트북 없음")).toBeInTheDocument();
     });
   });
 
