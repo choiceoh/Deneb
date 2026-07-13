@@ -5,9 +5,11 @@ alwaysApply: true
 
 # Cursor worktree + CodeGraph
 
-- SessionStart creates `~/.cursor/worktrees/Deneb/<session-id>` on `cursor/<session-id>`.
-- Scope **all** Shell (`working_directory`) and Write/StrReplace/Delete paths to that worktree.
-- Do **not** call `move_agent_to_root` into a git worktree — it can force the worktree onto `main`.
-- Main checkout (`~/deneb` or any main-branch primary checkout) edits are blocked by `cursor-worktree-guard`.
-- Structure/relation/blast-radius questions: use MCP **codegraph_explore** (or CLI `codegraph callers|impact|node`) before multi-file grep/Read.
+- SessionStart creates `~/.cursor/worktrees/Deneb/<session-id>` on `cursor/<session-id>` and writes `active-root`.
+- **First actions** when context says the worktree is ready (main checkout session):
+  1. `move_agent_to_root` → that worktree path (rebinds MCP/CodeGraph to the session tree)
+  2. `git checkout cursor/<session-id>` with `working_directory` = worktree (undoes branch rewrite to `main`)
+- After entry: all Shell/Write/StrReplace/Delete stay under the worktree root.
+- Main checkout (`main`) edits are blocked by `cursor-worktree-guard` (`failClosed`).
+- Structure/relation/blast-radius: MCP **codegraph_explore** (or CLI `codegraph callers|impact|node`) before multi-file grep/Read.
 - String-keyed RPC/tool/event names: `scripts/dev/rpcmap.py <name>` then `codegraph node <handler>`.
