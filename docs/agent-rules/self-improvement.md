@@ -133,14 +133,20 @@ acceptance machinery stays forbidden at record time.
 - **Proactive sources** (scripts-side): `scripts/audit/health_finding_miner.py`
   mines codebase-health structural findings + runtime-health standing weaknesses;
   `scripts/audit/deadcode_finding_miner.py` mines `deadcode-audit.sh` deltas
-  (newly-orphaned functions absent from the baseline). Both file via the
-  `miniapp.self_improvement_coding.record` RPC and share one RPC/reopen/cap edge
-  (imported from the health miner so they cannot drift). Deliberately NOT gateway
-  PeriodicTasks — the inputs (git checkout, journald, whole-program reachability)
-  live outside the serving process.
+  (newly-orphaned functions absent from the baseline);
+  `scripts/audit/tool_quality_miner.py` mines per-tool error/malformed-arg-repair
+  rates from the `miniapp.observe.behavior` aggregate and files the worst
+  offenders as tool-description/schema clarification candidates (the tool
+  descriptions are Go `ToolDef.Description` literals = the gateway-source
+  surface; this grounds the previously-unconsumed agentlog quality signal). All
+  file via the `miniapp.self_improvement_coding.record` RPC and share one
+  RPC/reopen/cap edge (imported from the health miner so they cannot drift).
+  Deliberately NOT gateway PeriodicTasks — the inputs (git checkout, journald,
+  whole-program reachability, agentlog aggregate) live outside the serving
+  process or are already exposed as a read-only RPC.
 - **Staged dispatch**: the source namespaces (`runtime-error`, `health-finding`,
-  `deadcode-finding`, `evolve-tool-gap`, `self-harness`) are NOT all in
-  coding-dispatch.sh's allowlist yet — candidates accumulate for review before
+  `deadcode-finding`, `tool-quality`, `evolve-tool-gap`, `self-harness`) are NOT
+  all in coding-dispatch.sh's allowlist yet — candidates accumulate for review before
   the dispatch flip (graduation ladder in the roadmap).
 
 ## Gotchas & Invariants
