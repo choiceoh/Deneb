@@ -2734,36 +2734,6 @@ class MiniappWireValueContractTest {
                     value = JsonPrimitive(Int.MAX_VALUE),
                     expectation = Expectation.Exact,
                 ),
-                fieldValue(
-                    name = "proposed7d",
-                    value = JsonPrimitive(Int.MAX_VALUE),
-                    expectation = Expectation.Exact,
-                ),
-                fieldValue(
-                    name = "verdicted7d",
-                    value = JsonPrimitive(Int.MAX_VALUE),
-                    expectation = Expectation.Exact,
-                ),
-                fieldValue(
-                    name = "applied7d",
-                    value = JsonPrimitive(Int.MAX_VALUE),
-                    expectation = Expectation.Exact,
-                ),
-                fieldValue(
-                    name = "conversionRate",
-                    value = JsonPrimitive(-12345.6789),
-                    expectation = Expectation.Exact,
-                ),
-                fieldValue(
-                    name = "meanTimeToVerdictMs",
-                    value = JsonPrimitive(Long.MAX_VALUE),
-                    expectation = Expectation.Exact,
-                ),
-                fieldValue(
-                    name = "reopens7d",
-                    value = JsonPrimitive(Int.MAX_VALUE),
-                    expectation = Expectation.Exact,
-                ),
             ),
             invalidField = "lastCaptureAt",
             invalidValue = JsonPrimitive("not-a-long"),
