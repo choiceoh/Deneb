@@ -458,9 +458,7 @@ export function RsiPane() {
         // Filtering to proposed alone hid the entire accepted L4 backlog
         // (observed 2026-07-13: 7 accepted health-finding candidates, drill empty).
         const pending = (d.candidates ?? []).filter(
-          (c) =>
-            (c.status === "proposed" || c.status === "accepted") &&
-            (!c.scope || c.scope === "code"),
+          (c) => (c.status === "proposed" || c.status === "accepted") && (!c.scope || c.scope === "code"),
         );
         setCandidates(pending.slice(0, 8));
       })

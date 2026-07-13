@@ -197,6 +197,7 @@ private val RSIHealthView.hasActivity: Boolean
 private fun RsiHealthCard(health: RSIHealthView) {
     if (!health.hasActivity) return
     fun pct(v: Double) = "${(v * 100).roundToInt()}%"
+
     // Rates are undefined with no resolved sample — show "—", not a misleading 0%
     // (andromeda HealthCard parity).
     fun rate(v: Double) = if (health.resolvedEvolves7d > 0) pct(v) else "—"
