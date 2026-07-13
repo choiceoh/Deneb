@@ -91,3 +91,86 @@ func TestMailArchiveSearchWidensPastDaysWindow(t *testing.T) {
 		t.Errorf("unbounded search must not carry the widen label:\n%s", out2)
 	}
 }
+
+func TestHasHangul(t *testing.T) {
+	cases := map[string]bool{
+		"황승민 한화생명":    true,
+		"진코 Jinko":    true, // mixed script → true
+		"Jinko EPC":   false,
+		"EPC O&M 250": false,
+		"":            false,
+		"ㅎㅇ":          true, // compatibility jamo
+	}
+	for in, want := range cases {
+		if got := hasHangul(in); got != want {
+			t.Errorf("hasHangul(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
+// A Korean text-search miss must NOT pay the CJK-blind IMAP fallback: the local
+// mirror is authoritative for Hangul (Dovecot has no CJK full-text index, so the
+// fallback is both slower and lower-recall). The tool trusts a 0-hit and skips
+// IMAP. An ASCII miss still falls back — IMAP TEXT matches Latin and may reach
+// mail not yet mirrored.
+func TestMailArchiveSearchGatesHangulFallback(t *testing.T) {
+	dir := t.TempDir()
+	s, err := mailstore.New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// One English-only message: the store is ready but nothing matches the probes.
+	if _, err := s.Put(mailarchive.ContextMessage{
+		ID: "m1", Locator: "INBOX:m1", Mailbox: "INBOX", UID: "m1",
+		MessageID: "<m1@x>", From: "a@example.com",
+		Subject: "Quarterly EPC report", Body: "Solar EPC scope only",
+		Date: time.Now().Format(time.RFC1123Z),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	newQuery := func(query string) (mailArchiveQuery, *bool, *bool, *int) {
+		usedIMAP, fallbackSkipped, storeHits := false, false, -1
+		q := mailArchiveQuery{
+			deps: MailArchiveDeps{Store: s},
+			args: mailArchiveArgs{Action: "search", Query: query},
+			// A dead archive addr makes any *attempted* fallback fail fast, so the
+			// test tells "skipped" (no error) apart from "attempted" (dial error).
+			cfg:             mailarchive.Config{Addr: "127.0.0.1:1", User: "u", Pass: "p"},
+			opts:            mailarchive.ContextOptions{Limit: 50},
+			storeReady:      true,
+			imapReady:       true,
+			usedIMAP:        &usedIMAP,
+			storeHits:       &storeHits,
+			fallbackSkipped: &fallbackSkipped,
+		}
+		return q, &usedIMAP, &fallbackSkipped, &storeHits
+	}
+
+	// Hangul miss → gated: no IMAP, no error.
+	qk, usedK, skipK, hitsK := newQuery("없는회사 한화생명")
+	if _, err := qk.search(context.Background()); err != nil {
+		t.Fatalf("hangul search must not error (fallback gated): %v", err)
+	}
+	if *usedK {
+		t.Error("hangul miss must NOT use IMAP fallback")
+	}
+	if !*skipK {
+		t.Error("hangul miss must record fallbackSkipped=true")
+	}
+	if *hitsK != 0 {
+		t.Errorf("expected storeHits=0, got %d", *hitsK)
+	}
+
+	// ASCII miss → not gated: fallback attempted (and errors on the dead addr).
+	qa, usedA, skipA, _ := newQuery("nonexistentcorp")
+	if _, err := qa.search(context.Background()); err == nil {
+		t.Error("ascii miss must attempt IMAP fallback and error on the dead addr")
+	}
+	if !*usedA {
+		t.Error("ascii miss must attempt IMAP fallback (usedIMAP=true)")
+	}
+	if *skipA {
+		t.Error("ascii miss must NOT set fallbackSkipped")
+	}
+}
