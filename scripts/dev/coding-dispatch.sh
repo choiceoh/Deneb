@@ -144,30 +144,25 @@ PYEOF
         fi
     fi
 
-    # Dispatch marker BEFORE the session (a crashed session must not redispatch
-    # forever; the marker carries the candidate for the audit trail).
-    printf '%s\n' "$pick" > "$DISPATCH_DIR/$cid.json"
-
-    local prompt
-    prompt=$(printf '%s' "$pick" | python3 -c "
-import json, sys
-r = json.load(sys.stdin)
-print(f'''자기교정 큐 후보를 구현하라 (RSI L4 자동 배차, id={r['id']}).
-
-## 후보
-- 제목: {r.get('title','')}
-- 스킬: {r.get('skillName','')}
-- 관찰: {r.get('candidate','')}
-- 제안 변경: {r.get('proposedChange','')}
-- 근거: {r.get('evidence','')}
-- 리스크 노트: {r.get('risk','')}
-
-## 계약 (오퍼레이터 승인 2026-07-12)
-- 이 워크트리에서만 편집. CLAUDE.md의 게이트 전부 준수: make check(또는 스코프 게이트) + 게이트웨이 동작 변경 시 live-test smoke까지.
-- 게이트 그린이면 scripts/committer로 커밋 → push → PR(본문 3섹션+푸터) → 체크 그린 대기 → scripts/dev/pr.sh land로 직접 랜딩.
-- 구현이 부적절하다고 판단되면(근거 부족·리스크 과다) 아무것도 랜딩하지 말고 판단 근거를 마지막 메시지로 남겨라.
-- 완료 후 skill_lifecycle 계열 상태 갱신은 불필요 — 배차 마커가 원장이다.''')
-")
+    # Prompt composition + dispatch marker live in dispatch_prompt.py: the
+    # contract half of the prompt is the externalized meta artifact
+    # (meta/dispatch-contract-prompt.md, RSI P5-4 — gateway materializes it
+    # from the compiled default), and the marker (written BEFORE the session,
+    # so a crashed session must not redispatch forever) carries promptVersion
+    # provenance. An unusable artifact defers the dispatch — candidate and
+    # daily-cap slot stay unburned until the gateway materializes it.
+    local script_dir prompt
+    script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+    if ! prompt=$(printf '%s' "$pick" | python3 "$script_dir/dispatch_prompt.py" \
+            --meta-dir "$STATE_DIR/skills/genesis/meta" \
+            --marker "$DISPATCH_DIR/$cid.json" 2>>"$LOG_FILE"); then
+        log "dispatch contract artifact unavailable — $cid deferred (no marker burned)"
+        exit 0
+    fi
+    if [[ -z "$prompt" ]]; then
+        log "empty dispatch prompt for $cid — deferred"
+        exit 0
+    fi
 
     log "dispatching $cid → $wt (claude $(basename "$claude_bin"), cap $((spent+1))/$DAILY_CAP today)"
     set +e

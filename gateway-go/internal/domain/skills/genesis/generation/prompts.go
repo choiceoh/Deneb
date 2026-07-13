@@ -207,3 +207,17 @@ const skillJudgeSystemPrompt = `당신은 AI 에이전트 스킬 개선의 품�
 {"pass": false, "original_score": 72, "candidate_score": 72, "reason": "거부 사유"}
 
 점수 차이가 2점 미만(개선 없음/퇴보)이면 pass=false. 단, 존재하지 않는 도구·안전성 저하·구조 파괴 같은 명백한 결함만 아니라면, 사소해 보여도 원본보다 나은 개선은 통과시켜라 — 나쁜 rewrite는 이후 사용 실패 시 자동 롤백된다.`
+
+// dispatchContractPrompt is the CONTRACT half of the L4 coding-dispatch
+// prompt (scripts/dev/coding-dispatch.sh → dispatch_prompt.py): the policy
+// text instructing the dispatched coding agent. The candidate-data half stays
+// script-side (data, not policy). Externalized as a meta artifact — RSI P5-4
+// slice 1, proposal-side recursion-surface widening: versioned, sidecar-
+// refreshed, operator-editable. NOT in the L2 epoch rotation: adoption of a
+// revision stays operator-side until a dispatch-outcome bench exists (the
+// deterministic gate a rotation entry requires).
+const dispatchContractPrompt = `## 계약 (오퍼레이터 승인 2026-07-12)
+- 이 워크트리에서만 편집. CLAUDE.md의 게이트 전부 준수: make check(또는 스코프 게이트) + 게이트웨이 동작 변경 시 live-test smoke까지.
+- 게이트 그린이면 scripts/committer로 커밋 → push → PR(본문 3섹션+푸터) → 체크 그린 대기 → scripts/dev/pr.sh land로 직접 랜딩.
+- 구현이 부적절하다고 판단되면(근거 부족·리스크 과다) 아무것도 랜딩하지 말고 판단 근거를 마지막 메시지로 남겨라.
+- 완료 후 skill_lifecycle 계열 상태 갱신은 불필요 — 배차 마커가 원장이다.`

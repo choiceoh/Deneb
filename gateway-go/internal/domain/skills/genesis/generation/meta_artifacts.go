@@ -25,6 +25,11 @@ const (
 	MetaGenesisJudgeSystemPrompt = "genesis-judge-system-prompt.md"
 	MetaEvolveSystemPrompt       = "evolve-system-prompt.md"
 	MetaSkillJudgeSystemPrompt   = "skill-judge-system-prompt.md"
+	// MetaDispatchContractPrompt is consumed OUTSIDE the gateway process by
+	// scripts/dev/dispatch_prompt.py (the L4 coding-dispatch lane) — the
+	// gateway only materializes/refreshes it. The name must stay in sync with
+	// that script's ARTIFACT_NAME (a scripts-side test asserts the parity).
+	MetaDispatchContractPrompt = "dispatch-contract-prompt.md"
 )
 
 // MetaArtifactMinBytes is the deterministic safety floor: a file shorter than
@@ -257,6 +262,7 @@ func DefaultMetaArtifacts() map[string]string {
 		MetaGenesisJudgeSystemPrompt: genesisJudgeSystemPrompt,
 		MetaEvolveSystemPrompt:       evolveSystemPrompt,
 		MetaSkillJudgeSystemPrompt:   skillJudgeSystemPrompt,
+		MetaDispatchContractPrompt:   dispatchContractPrompt,
 	}
 }
 
