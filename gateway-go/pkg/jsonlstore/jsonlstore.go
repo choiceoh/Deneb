@@ -42,6 +42,19 @@ func Load[T any](path string) ([]T, error) {
 	reader := bufio.NewReader(f)
 	for {
 		line, over, err := readBoundedLine(reader, maxLineBytes)
+		// A non-EOF read error (e.g. I/O failure mid-line) means the bytes
+		// returned for THIS line may be a truncated fragment — do not decode
+		// them (matching the old bufio.Scanner, which never yielded a partial
+		// token on a read error). Surface the error with whatever we already
+		// have. A clean io.EOF, by contrast, hands back a legitimate final
+		// unterminated record, which we still decode below.
+		if err != nil && !errors.Is(err, io.EOF) {
+			return items, fmt.Errorf("jsonlstore: read %s: %w", path, err)
+		}
+		// An oversize line (over) is dropped: only up to maxLineBytes is ever
+		// buffered before oversize is detected, and the unbounded remainder is
+		// drained without buffering — so a torn/merged/externally-corrupted
+		// giant line stays bounded in memory and does not stop the scan.
 		if len(line) > 0 && !over {
 			var item T
 			if uErr := json.Unmarshal(line, &item); uErr == nil {
@@ -49,14 +62,8 @@ func Load[T any](path string) ([]T, error) {
 			}
 			// Corrupt line (unmarshal failed) — skipped (partial writes).
 		}
-		// An oversize line (over) is dropped: its bytes were drained without
-		// buffering, so a torn/merged/externally-corrupted giant line costs no
-		// memory and does not stop the scan.
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return items, nil
-			}
-			return items, fmt.Errorf("jsonlstore: read %s: %w", path, err)
+		if err != nil { // io.EOF: the final record has been handled above.
+			return items, nil
 		}
 	}
 }

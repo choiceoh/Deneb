@@ -97,9 +97,11 @@ func TestLoadLineAtCeilingIsKept(t *testing.T) {
 	// A line up to maxLineBytes is still valid — only strictly larger lines are
 	// dropped, matching the prior scanner ceiling so nothing regresses.
 	path := filepath.Join(t.TempDir(), "ceiling.jsonl")
-	// Pad Name so the whole JSON line lands just under the ceiling.
-	pad := maxLineBytes - len(`{"name":"","value":1}`) - 8
-	item := record{Name: strings.Repeat("y", pad), Value: 7}
+	// Size Name so the marshaled line is exactly maxLineBytes. "y" never needs
+	// JSON escaping (1 byte each) and Value 7 is a single digit, so the fixed
+	// overhead is exactly the marshaling of a zero-length name with that value.
+	overhead := len(`{"name":"","value":7}`)
+	item := record{Name: strings.Repeat("y", maxLineBytes-overhead), Value: 7}
 	if err := Append(path, item); err != nil {
 		t.Fatal(err)
 	}
