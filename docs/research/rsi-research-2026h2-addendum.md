@@ -120,3 +120,60 @@ scarce operator interaction (the P5-5 signal is currently ~0/week).
    thin-margin adoptions request a verdict; densifies the P5-5 signal.
 6. **Cluster-keyed exemplar retrieval** (ToE/ExpGraphs) — pairs with the
    P5-4 retrieval-policy externalization.
+
+## Second pass (2026-07-12 저녁) — additional angles
+
+Follow-up sweep on angles the first pass did not mine: skill LIBRARIES
+(retrieval/acquisition/grounding), judge calibration mechanics, and the
+text-vs-code experience boundary. Dedup verified against both prior ID lists.
+
+### Deep mappings
+
+**BINEVAL — Ask, Don't Judge (2606.27226).** Decompose the judge verdict into
+atomic BINARY questions answered independently, then aggregate: calibrated,
+ceiling-free scores plus question-level feedback that directly drives
+evaluator-prompt refinement. Deneb's skill judge emits pass + scalar 0-100
+score pairs — scalars are exactly the miscalibration surface the
+judge-degradation bench keeps probing. Two adoption paths: (soft) feed the
+binary-question rubric as an exemplar direction into the next evaluator
+epoch — zero code; (hard) migrate the judge response schema to per-question
+verdicts — touches `metaArtifactContracts` anchors + the parser, so it is a
+reviewed code change, but yields question-level L3 labels (which QUESTION the
+judge got wrong, not just that it missed).
+
+**Source-grounding gate for curriculum skills — RESOURCE2SKILL (2606.29538) +
+SkillCenter (2607.07676).** Both ground acquired skills in sources;
+SkillCenter's defining rule: *"each retained claim maps to an exact quotation
+in its source."* Deneb's curriculum lane (P5-1) already authors validation
+cases first; its `evidence` field is free prose an LLM can hallucinate. The
+cheap deterministic honesty upgrade: require the proposal's evidence to QUOTE
+the environment digest verbatim and reject at record time on a failed
+substring check — the reproduction-oracle pattern applied to demand evidence.
+
+**SOP miner — EvoSOP (2607.07321) + Tool-Making in Low-Latency Systems
+(2607.08010) + Metis (2606.24151).** Convergent finding: promote REPEATED
+multi-step procedures into validated, versioned tools OFFLINE (pre-deployment
+pipeline, labeled cases from traces, fallback to raw generation), and convert
+text-experience to code only when reuse frequency justifies the cost (Metis'
+promotion rule; 42-62% latency and up-to-53% error reductions in production
+alarm triage). Deneb mapping: a deterministic transcript miner that detects
+recurring tool-call sequences (frequency-thresholded) and files propose-only
+scope=code L4 candidates proposing a composite tool, evidence = the observed
+traces — proactive L4 supply (P5-3) with the paper's frequency gate keeping
+it honest.
+
+### Noted
+
+| Paper | Takeaway |
+|---|---|
+| 2607.06283 skill-retrieval reranking | decomposition-guided rerank vs ambiguous name matching — revisit when the catalog outgrows the prompt index (today it fits) |
+| 2606.29823 Experience Graphs | ledgers as queryable DB with causal lineage (Meta KernelEvolve ~10x); JSONL + wiki-graph cover the near term — infra-heavy, note-only |
+
+### Second-pass candidates, in order
+
+1. **Curriculum evidence source-grounding gate** — deterministic verbatim-
+   quotation check on curriculum proposals (small; curriculum.go record gate).
+2. **Binary-question judge direction** — soft path first (evaluator-epoch
+   exemplar), schema migration as a reviewed follow-up.
+3. **SOP miner → composite-tool L4 candidates** — frequency-gated transcript
+   mining into the existing review lane (medium; new miner, no gate changes).
