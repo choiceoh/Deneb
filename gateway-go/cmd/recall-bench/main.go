@@ -15,6 +15,13 @@
 //
 //	go run ./cmd/recall-bench --wiki /scratch/wiki --diary /scratch/diary \
 //	  --gold ~/.deneb/wiki-qa-gold.jsonl --k 8
+//
+// --health adds recall's loop-closing signals (production ledger utility +
+// gold-set coverage of the live project roster + a composite recall-health
+// score); --emit-gold prints deterministic gold candidates for uncovered
+// projects. Both are default-off so the bare invocation stays a pure P@K tool.
+// The `make recall-health` target wires the wiki copy + --health end to end;
+// see health.go.
 package main
 
 import (
@@ -102,6 +109,12 @@ type benchmarkConfig struct {
 	goldPath string
 	k        int
 	verbose  bool
+	// health adds the loop-closing report (ledger utility + gold-set coverage +
+	// composite recall-health score) after the pure P@K result. emitGold prints
+	// deterministic gold candidates for uncovered projects. Both read-only over
+	// the wiki COPY; default off so `recall-bench` alone stays a pure P@K tool.
+	health   bool
+	emitGold bool
 }
 
 type parseOutcome struct {
@@ -169,6 +182,8 @@ func parseBenchmarkConfig(program string, args []string, stderr io.Writer) (benc
 	fs.StringVar(&cfg.goldPath, "gold", os.ExpandEnv("$HOME/.deneb/wiki-qa-gold.jsonl"), "gold-set JSONL")
 	fs.IntVar(&cfg.k, "k", 8, "hit@K")
 	fs.BoolVar(&cfg.verbose, "v", false, "print per-case ✓/✗")
+	fs.BoolVar(&cfg.health, "health", false, "add ledger-utility + gold coverage + composite recall-health score")
+	fs.BoolVar(&cfg.emitGold, "emit-gold", false, "print deterministic gold candidates for uncovered projects (implies -health)")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return cfg, parseOutcome{done: true}
@@ -209,7 +224,35 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 		return err
 	}
 	writeBenchmarkResult(stdout, cfg.k, fusion, result)
+
+	if cfg.health || cfg.emitGold {
+		reportRecallHealth(store, cases, result, cfg.emitGold, stdout, stderr)
+	}
 	return nil
+}
+
+// reportRecallHealth adds the loop-closing signals. Requires the store to expose
+// the production ledger + project roster (the real *wiki.Store does); a store
+// that does not is skipped with a note rather than failing the pure bench.
+func reportRecallHealth(
+	store benchmarkStore,
+	cases []goldCase,
+	result benchmarkResult,
+	emitGold bool,
+	stdout, stderr io.Writer,
+) {
+	hs, ok := store.(healthStore)
+	if !ok {
+		fmt.Fprintln(stderr, "recall-bench: store does not expose recall-health surface; skipping")
+		return
+	}
+	util := computeLedgerUtility(hs.RecallHitScoreCounts(time.Now()))
+	cov := computeGoldCoverage(cases, hs.KnownProjects())
+	health := computeRecallHealth(result, cov)
+	writeRecallHealth(stdout, &util, cov, health)
+	if emitGold && len(cov.uncovered) > 0 {
+		emitGoldCandidates(stdout, cov.uncovered)
+	}
 }
 
 func prepareSemantic(
