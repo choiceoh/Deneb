@@ -79,6 +79,14 @@ func TestStripNarrationHead(t *testing.T) {
 			want: "신규 메일 1건을 분석했습니다.\n\n---\n\n## 상세",
 		},
 		{
+			// A "N번" index in the preamble is narration, not a fact — the ordinal
+			// strip lets the head be recognized and peeled (parallel to the proactive
+			// isNarrationOnlyProactive fix). "1건" above (a count) stays content.
+			name: "head with N번 index is narration",
+			text: "이제 메일 9, 10번을 확인해 정리해.\n\n---\n\n## 상세\n내용",
+			want: "## 상세\n내용",
+		},
+		{
 			name: "head with colon label is content",
 			text: "임박: 미팅 준비가 필요합니다.\n\n## 상세",
 			want: "임박: 미팅 준비가 필요합니다.\n\n## 상세",

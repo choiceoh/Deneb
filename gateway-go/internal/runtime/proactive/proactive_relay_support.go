@@ -122,6 +122,20 @@ func containsMetaPreambleSignal(s string) bool {
 	return false
 }
 
+// ordinalIndexRe matches a Korean ordinal/index run — one or more digits
+// (optionally comma/space-separated, e.g. "9, 10") ending in the position marker
+// "번". These are references the narration itself makes to item positions ("메일
+// 9, 10번을 확인합니다"), NOT factual tells like amounts (3억), dates (6/25), or
+// counts (3건), which carry other unit markers and must stay treated as content.
+var ordinalIndexRe = regexp.MustCompile(`\d[\d,\s]*번`)
+
+// stripOrdinalIndices removes "N번"-style position references so the digit-based
+// factual-tell test in isNarrationOnlyProactive (and isNarrationSentenceLine's
+// executor twin) sees a bare next-step announcement for what it is.
+func stripOrdinalIndices(s string) string {
+	return ordinalIndexRe.ReplaceAllString(s, "")
+}
+
 // isNarrationOnlyProactive reports whether a proactive body is the model's own
 // working narration, a stray markup/tool fragment, or a bare generic label — with
 // no actual report. These leak as 업무 리포트 cards when a terminal turn emits
@@ -154,8 +168,11 @@ func isNarrationOnlyProactive(content string) bool {
 		return true
 	}
 	// A short, structureless paragraph with a narration signal and no factual tell
-	// (digit) is the model talking about its process, not reporting.
-	return !strings.ContainsAny(body, "0123456789") && containsMetaPreambleSignal(s)
+	// (a digit) is the model talking about its process, not reporting. Index
+	// references the narration makes to item positions — "메일 9, 10번을 확인합니다" —
+	// are not factual tells, so strip "N번" ordinals before the digit test; a real
+	// report's tells (amounts 3억, dates 6/25, counts 3건) survive unstripped.
+	return !strings.ContainsAny(stripOrdinalIndices(body), "0123456789") && containsMetaPreambleSignal(s)
 }
 
 // metaPreambleMaxRunes bounds how long a leading paragraph may be and still count

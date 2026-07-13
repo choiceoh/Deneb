@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -74,18 +75,26 @@ func stripNarrationHead(text string) string {
 	return text // no body boundary found
 }
 
+// ordinalIndexRe matches a Korean ordinal/index run — digits ending in the
+// position marker "번" ("메일 9, 10번"). Unlike counts (3건), amounts (3억), or
+// dates (6/25), a "N번" reference is the narration pointing at item positions,
+// not a factual-summary tell — so it is stripped before the digit check below.
+var ordinalIndexRe = regexp.MustCompile(`\d[\d,\s]*번`)
+
 // isNarrationSentenceLine reports whether a trimmed line could be model
 // self-narration rather than report content: a plain prose sentence that
 // starts with a letter and ends with sentence punctuation, carrying none of
 // the factual-summary tells (digits, colon labels). Markdown structure and
 // emoji-led content markers (📬/🔴) start with non-letters and fail the first
-// check, so they are always kept.
+// check, so they are always kept. "N번" position references are stripped first
+// so a next-step announcement citing mail indices ("메일 9, 10번을 확인해.") is
+// still seen as narration, while counts/amounts/dates keep it as content.
 func isNarrationSentenceLine(line string) bool {
 	first, _ := utf8.DecodeRuneInString(line)
 	if !unicode.IsLetter(first) {
 		return false
 	}
-	if strings.ContainsAny(line, ":：0123456789") {
+	if strings.ContainsAny(ordinalIndexRe.ReplaceAllString(line, ""), ":：0123456789") {
 		return false
 	}
 	last, _ := utf8.DecodeLastRuneInString(line)
