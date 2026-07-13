@@ -21,7 +21,16 @@ def resolve_codex(explicit: str = "") -> str | None:
     if candidate:
         path = Path(candidate).expanduser()
         return str(path) if path.is_file() and os.access(path, os.X_OK) else None
-    return shutil.which("codex")
+    from_path = shutil.which("codex")
+    if from_path:
+        return from_path
+
+    # systemd user services commonly inherit a minimal PATH that omits the
+    # standard per-user install directory used by the Codex installer.
+    user_install = Path.home() / ".local" / "bin" / "codex"
+    if user_install.is_file() and os.access(user_install, os.X_OK):
+        return str(user_install)
+    return None
 
 
 def build_command(codex: str, worktree: Path, prod_dir: Path) -> list[str]:
