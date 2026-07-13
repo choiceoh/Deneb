@@ -20,8 +20,8 @@ func TestMailArchivePath(t *testing.T) {
 		usedIMAP bool
 		want     string
 	}{
-		{"search", false, "store"},        // local store answered
-		{"search", true, "imap-fallback"}, // store miss → full IMAP fetch+parse
+		{"search", false, "store"},        // mirror answered (or a trusted miss)
+		{"search", true, "imap-fallback"}, // usedIMAP only in legacy no-mirror mode
 		{"read", true, "imap-fallback"},   // stale/older mail not in store
 		{"thread", false, "store"},        // in-memory thread graph
 		{"project_history", true, "imap-fallback"},
@@ -92,28 +92,12 @@ func TestMailArchiveSearchWidensPastDaysWindow(t *testing.T) {
 	}
 }
 
-func TestHasHangul(t *testing.T) {
-	cases := map[string]bool{
-		"황승민 한화생명":    true,
-		"진코 Jinko":    true, // mixed script → true
-		"Jinko EPC":   false,
-		"EPC O&M 250": false,
-		"":            false,
-		"ㅎㅇ":          true, // compatibility jamo
-	}
-	for in, want := range cases {
-		if got := hasHangul(in); got != want {
-			t.Errorf("hasHangul(%q) = %v, want %v", in, got, want)
-		}
-	}
-}
-
-// A Korean text-search miss must NOT pay the CJK-blind IMAP fallback: the local
-// mirror is authoritative for Hangul (Dovecot has no CJK full-text index, so the
-// fallback is both slower and lower-recall). The tool trusts a 0-hit and skips
-// IMAP. An ASCII miss still falls back — IMAP TEXT matches Latin and may reach
-// mail not yet mirrored.
-func TestMailArchiveSearchGatesHangulFallback(t *testing.T) {
+// search and project_history are mirror-authoritative: a store miss is NOT
+// re-queried over IMAP (the text-search fallback was removed — the archive IMAP
+// is a smaller, slower, CJK-blind corpus than the mirror). A miss returns empty
+// from the mirror with no IMAP round-trip, for Korean and ASCII alike. The legacy
+// no-mirror mode still uses IMAP as the primary source.
+func TestMailArchiveSearchNoIMAPFallbackWhenStoreReady(t *testing.T) {
 	dir := t.TempDir()
 	s, err := mailstore.New(dir)
 	if err != nil {
@@ -129,48 +113,41 @@ func TestMailArchiveSearchGatesHangulFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	newQuery := func(query string) (mailArchiveQuery, *bool, *bool, *int) {
-		usedIMAP, fallbackSkipped, storeHits := false, false, -1
+	// A dead archive addr: if search ever *attempted* IMAP the dial would error, so
+	// a nil error is proof no fallback was taken.
+	deadCfg := mailarchive.Config{Addr: "127.0.0.1:1", User: "u", Pass: "p"}
+
+	// Store ready → mirror-only for both scripts: no IMAP, no error, storeHits=0.
+	for _, query := range []string{"없는회사 한화생명", "nonexistentcorp"} {
+		usedIMAP, storeHits := false, -1
 		q := mailArchiveQuery{
-			deps: MailArchiveDeps{Store: s},
-			args: mailArchiveArgs{Action: "search", Query: query},
-			// A dead archive addr makes any *attempted* fallback fail fast, so the
-			// test tells "skipped" (no error) apart from "attempted" (dial error).
-			cfg:             mailarchive.Config{Addr: "127.0.0.1:1", User: "u", Pass: "p"},
-			opts:            mailarchive.ContextOptions{Limit: 50},
-			storeReady:      true,
-			imapReady:       true,
-			usedIMAP:        &usedIMAP,
-			storeHits:       &storeHits,
-			fallbackSkipped: &fallbackSkipped,
+			deps: MailArchiveDeps{Store: s}, args: mailArchiveArgs{Action: "search", Query: query},
+			cfg: deadCfg, opts: mailarchive.ContextOptions{Limit: 50},
+			storeReady: true, imapReady: true, usedIMAP: &usedIMAP, storeHits: &storeHits,
 		}
-		return q, &usedIMAP, &fallbackSkipped, &storeHits
+		if _, err := q.search(context.Background()); err != nil {
+			t.Fatalf("search(%q) must not error (no IMAP fallback): %v", query, err)
+		}
+		if usedIMAP {
+			t.Errorf("search(%q) must NOT use IMAP fallback", query)
+		}
+		if storeHits != 0 {
+			t.Errorf("search(%q) expected storeHits=0, got %d", query, storeHits)
+		}
 	}
 
-	// Hangul miss → gated: no IMAP, no error.
-	qk, usedK, skipK, hitsK := newQuery("없는회사 한화생명")
-	if _, err := qk.search(context.Background()); err != nil {
-		t.Fatalf("hangul search must not error (fallback gated): %v", err)
+	// Legacy no-mirror mode (storeReady=false): IMAP is the primary source, so
+	// search still reaches it (and here errors on the dead addr).
+	usedIMAP, storeHits := false, -1
+	q := mailArchiveQuery{
+		deps: MailArchiveDeps{Store: s}, args: mailArchiveArgs{Action: "search", Query: "anything"},
+		cfg: deadCfg, opts: mailarchive.ContextOptions{Limit: 50},
+		storeReady: false, imapReady: true, usedIMAP: &usedIMAP, storeHits: &storeHits,
 	}
-	if *usedK {
-		t.Error("hangul miss must NOT use IMAP fallback")
+	if _, err := q.search(context.Background()); err == nil {
+		t.Error("no-mirror mode must reach IMAP (and error on the dead addr)")
 	}
-	if !*skipK {
-		t.Error("hangul miss must record fallbackSkipped=true")
-	}
-	if *hitsK != 0 {
-		t.Errorf("expected storeHits=0, got %d", *hitsK)
-	}
-
-	// ASCII miss → not gated: fallback attempted (and errors on the dead addr).
-	qa, usedA, skipA, _ := newQuery("nonexistentcorp")
-	if _, err := qa.search(context.Background()); err == nil {
-		t.Error("ascii miss must attempt IMAP fallback and error on the dead addr")
-	}
-	if !*usedA {
-		t.Error("ascii miss must attempt IMAP fallback (usedIMAP=true)")
-	}
-	if *skipA {
-		t.Error("ascii miss must NOT set fallbackSkipped")
+	if !usedIMAP {
+		t.Error("no-mirror mode must set usedIMAP=true")
 	}
 }

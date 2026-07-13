@@ -22,10 +22,12 @@ import (
 type MailArchiveDeps struct {
 	Wiki     *wiki.Store
 	Calendar *toolctx.CalendarDeps
-	// Store is the local file-backed mail mirror. When present and populated it
-	// answers reads directly (no IMAP round-trip / re-parse); a miss or an empty
-	// store falls through to the IMAP archive below, so the tool works during and
-	// after backfill. nil = IMAP only (legacy behavior).
+	// Store is the local file-backed mail mirror and the authoritative corpus:
+	// when populated it answers list/search/project_history entirely from memory,
+	// and a miss is trusted — NOT re-queried over IMAP (the archive IMAP is a
+	// smaller, slower, CJK-blind rolling buffer). read/thread still fall through to
+	// IMAP on a miss (a cheap Message-ID/header lookup) and attachment always uses
+	// IMAP for bytes. An empty/nil store = IMAP-only legacy mode.
 	Store *mailstore.Store
 }
 
@@ -49,10 +51,10 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			Pass:      os.Getenv("DENEB_ARCHIVE_IMAP_PASS"),
 			Mailboxes: mailboxes,
 		}
-		// The local store answers reads on its own; IMAP is only the fallback for
-		// misses and attachment bytes. So the tool is usable when EITHER is ready —
-		// requiring IMAP creds even with a populated store would defeat the whole
-		// point (no per-call IMAP dependency).
+		// The local store answers on its own; IMAP serves only read/thread misses,
+		// attachment bytes, and the no-mirror legacy mode. So the tool is usable when
+		// EITHER is ready — requiring IMAP creds even with a populated store would
+		// defeat the whole point (no per-call IMAP dependency).
 		storeReady := deps.Store != nil && deps.Store.Len() > 0
 		imapReady := cfg.User != "" && cfg.Pass != ""
 		if !storeReady && !imapReady {
@@ -60,29 +62,26 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 		}
 
 		// Phase timing: attribute where a call's time went so "mail_archive is
-		// slow" is diagnosable straight from the log. usedIMAP flips true whenever
-		// the fast local store missed and we fell through to the full IMAP
-		// fetch+parse (the ~11s path — a large-mailbox TEXT scan); the attachment
-		// action is always IMAP fetch + OCR. fallbackSkipped flips true when a
-		// Korean store-miss deliberately did NOT fall back (the mirror is the
-		// authoritative CJK index — see skipHangulTextFallback). EVERY call logs at
-		// Info now, store hits included, so the log shows the full picture: a
-		// "path=store" line is a served-from-mirror call, not a missing one — and a
-		// store miss reads as storeHits=0 with either path=imap-fallback (paid) or
-		// fallbackSkipped=true (gated). durationMs at Info follows logging.md §5
-		// (latency belongs in an Info field, not Debug).
+		// slow" is diagnosable straight from the log. usedIMAP flips true only for
+		// the actions that still touch IMAP — read/thread on a store miss (a cheap
+		// Message-ID/header lookup) and attachment (always IMAP fetch + OCR), plus
+		// the legacy no-mirror mode. search / project_history are mirror-only now: a
+		// store miss is NOT re-run over IMAP (the text-search fallback was removed —
+		// the archive IMAP is a smaller, slower, CJK-blind corpus than the mirror).
+		// EVERY call logs at Info, store hits included, so the log shows the full
+		// picture: a "path=store" line is a served-from-mirror call, and a search
+		// miss reads as path=store with storeHits=0. durationMs at Info follows
+		// logging.md §5 (latency belongs in an Info field, not Debug).
 		start := time.Now()
 		loggedAction := args.Action
 		if loggedAction == "" {
 			loggedAction = "list"
 		}
 		usedIMAP := false
-		// storeHits records what the local store returned for a search before any
-		// IMAP fallback (-1 = the action never queried the store). It lets a
-		// fallback be attributed to store-not-ready vs a genuine zero-hit search —
-		// the two have opposite fixes.
+		// storeHits records what the local store returned for a search before it
+		// returned (-1 = the action never queried the store). storeHits=0 with
+		// path=store is a genuine mirror miss — there is no IMAP fallback for search.
 		storeHits := -1
-		fallbackSkipped := false
 		defer func() {
 			path := mailArchivePath(loggedAction, usedIMAP)
 			durMs := time.Since(start).Milliseconds()
@@ -92,7 +91,6 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			}
 			slog.Info("mail_archive", "action", loggedAction, "path", path, "durationMs", durMs,
 				"storeReady", storeReady, "storeLen", storeLen, "storeHits", storeHits,
-				"fallbackSkipped", fallbackSkipped,
 				"query", textutil.TruncateRunes(args.Query, 80, "\n... (이하 생략)"))
 		}()
 
@@ -106,16 +104,15 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			BodyRunes: mailArchiveBodyRunes(args.IncludeBody),
 		}
 		query := mailArchiveQuery{
-			deps:            deps,
-			args:            args,
-			mailboxes:       mailboxes,
-			cfg:             cfg,
-			opts:            opts,
-			storeReady:      storeReady,
-			imapReady:       imapReady,
-			usedIMAP:        &usedIMAP,
-			storeHits:       &storeHits,
-			fallbackSkipped: &fallbackSkipped,
+			deps:       deps,
+			args:       args,
+			mailboxes:  mailboxes,
+			cfg:        cfg,
+			opts:       opts,
+			storeReady: storeReady,
+			imapReady:  imapReady,
+			usedIMAP:   &usedIMAP,
+			storeHits:  &storeHits,
 		}
 
 		switch args.Action {
@@ -138,11 +135,12 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 }
 
 // mailArchivePath classifies which data path a mail_archive call took, for the
-// per-call phase-timing log: "store" = fast in-memory local hit (~ms); "attachment"
-// = always IMAP fetch + OCR; "imap-fallback" = the local store missed and the call
-// paid a live IMAP text search (the slow ~11s path — a linear body scan over the
-// large Gmail mailbox, since the archive Dovecot has no full-text index). Pure so
-// the classification is unit-testable.
+// per-call phase-timing log: "store" = in-memory mirror hit or miss (~ms; search
+// and project_history are mirror-only, so a miss is still "store"); "attachment"
+// = always IMAP fetch + OCR; "imap-fallback" = an IMAP round-trip — read/thread on
+// a store miss (a cheap Message-ID/header lookup) or the legacy no-mirror mode.
+// The slow ~11s text-search fallback was removed. Pure so the classification is
+// unit-testable.
 func mailArchivePath(action string, usedIMAP bool) string {
 	switch {
 	case action == "attachment":
