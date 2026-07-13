@@ -8,8 +8,8 @@
 #   1. ~/.deneb/data/self_correction_candidates.jsonl에서 미배차 후보
 #      (scope=code, 증거 기반 Source, status=accepted 우선 → proposed) 1건을 고른다.
 #   2. 프로덕션 클론의 시도별 워크트리(~/deneb-agent-worktrees/<attempt-id>)를 만들고
-#   3. Claude Code를 -p(헤드리스)로 실행 — CLAUDE.md 게이트 규약이 세션에
-#      그대로 적용되고, 프롬프트가 랜딩까지 지시한다 (체크 그린 시 pr.sh land).
+#   3. Codex CLI를 헤드리스로 실행 — CLAUDE.md 게이트 규약이 세션에 그대로
+#      적용되고, 프롬프트가 랜딩까지 지시한다 (체크 그린 시 pr.sh land).
 #   4. 배차 마커(~/.deneb/data/coding_dispatch/<id>.json)로 재배차를 막고
 #      일일 배차 상한으로 토큰 예산을 지킨다. 마커 파일 존재만으로는 영구
 #      스킵하지 않는다 — landed/attempted만 차단, declined/failed/timeout은
@@ -63,6 +63,28 @@ DISPATCH_EXECUTOR="$SCRIPT_DIR/coding_dispatch_executor.py"
 DISPATCH_STATUS_WRITER="$SCRIPT_DIR/coding_dispatch_status.py"
 DISPATCH_STATUS_FILE="$STATE_DIR/data/coding_dispatch_status.json"
 
+resolve_gh_bin() {
+    if [[ -n "${DENEB_DISPATCH_GH_BIN:-}" ]]; then
+        [[ -x "$DENEB_DISPATCH_GH_BIN" ]] || return 1
+        printf '%s\n' "$DENEB_DISPATCH_GH_BIN"
+        return 0
+    fi
+    if command -v gh >/dev/null 2>&1; then
+        command -v gh
+        return 0
+    fi
+    if [[ -x "$HOME/.local/bin/gh" ]]; then
+        printf '%s\n' "$HOME/.local/bin/gh"
+        return 0
+    fi
+    return 1
+}
+
+# systemd user services commonly omit ~/.local/bin from PATH. Keep GitHub
+# lookup explicit so a successfully merged squash PR cannot be recorded as a
+# failed or merely attempted dispatch just because the service PATH is narrow.
+GH_BIN=$(resolve_gh_bin || true)
+
 log() {
     printf '%s  %s\n' "$(date -Iseconds)" "$*" >> "$LOG_FILE"
 }
@@ -103,9 +125,9 @@ release_clean_attempt() {
 
 pr_json_for_branch() {
     local branch="$1"
-    command -v gh >/dev/null 2>&1 || return 1
+    [[ -n "$GH_BIN" ]] || return 1
     command -v jq >/dev/null 2>&1 || return 1
-    ( cd "$PROD_DIR" && gh pr list --head "$branch" --state all --limit 1 \
+    ( cd "$PROD_DIR" && "$GH_BIN" pr list --head "$branch" --state all --limit 1 \
         --json number,url,state,mergeCommit 2>/dev/null )
 }
 
@@ -200,7 +222,10 @@ PR_OUTCOME="none"
 record_pr_outcome() {
     local cid="$1" attempt="$2" branch="$3" rc="$4" elapsed="$5"
     local pr_json state number url merge_sha
-    pr_json=$(pr_json_for_branch "$branch" || true)
+    if ! pr_json=$(pr_json_for_branch "$branch"); then
+        PR_OUTCOME="unknown"
+        return 1
+    fi
     state=$(jq -r '.[0].state // empty' <<<"${pr_json:-[]}" 2>/dev/null || true)
     number=$(jq -r '.[0].number // 0' <<<"${pr_json:-[]}" 2>/dev/null || printf '0')
     url=$(jq -r '.[0].url // empty' <<<"${pr_json:-[]}" 2>/dev/null || true)
@@ -242,7 +267,7 @@ main() {
     # truncate — sorting AFTER age filter so five stale markers cannot starve
     # newer attempted ones (bot #3609). Also reprobe failed/timeout when the PR
     # later merged (OPEN-at-end sessions used to record failed before attempted).
-    if command -v gh >/dev/null 2>&1; then
+    if [[ -n "$GH_BIN" ]]; then
         local m mcid mstate mbranch
         while IFS= read -r m; do
             [[ -f "$m" ]] || continue
@@ -252,7 +277,7 @@ main() {
             mcid=$(basename "$m" .json)
             mbranch=$(jq -r '.branch // empty' "$m" 2>/dev/null || true)
             [[ -n "$mbranch" ]] || continue
-            mstate=$(cd "$PROD_DIR" && gh pr list --head "$mbranch" --state merged \
+            mstate=$(cd "$PROD_DIR" && "$GH_BIN" pr list --head "$mbranch" --state merged \
                 --json state --jq '.[0].state // ""' 2>/dev/null || true)
             if [[ "$mstate" == "MERGED" ]]; then
                 python3 "$script_dir/dispatch_outcome.py" --marker "$m" --rc 0 \
@@ -562,8 +587,8 @@ PYEOF
     # dispatch_outcome.py fold the verdict into the marker. Never fatal.
     local pr_state="" ahead=""
     git -C "$PROD_DIR" fetch origin main --quiet >>"$LOG_FILE" 2>&1 || true
-    if command -v gh >/dev/null 2>&1; then
-        pr_state=$(cd "$PROD_DIR" && gh pr list --head "$branch" --state all \
+    if [[ -n "$GH_BIN" ]]; then
+        pr_state=$(cd "$PROD_DIR" && "$GH_BIN" pr list --head "$branch" --state all \
             --json state --jq '.[0].state // ""' 2>/dev/null || true)
     fi
     ahead=$(git -C "$wt" rev-list --count origin/main..HEAD 2>/dev/null || echo "")
@@ -580,4 +605,6 @@ PYEOF
     exit 0
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi
