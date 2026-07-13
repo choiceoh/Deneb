@@ -463,7 +463,11 @@ LADDER_DISPATCH_MIN_LAND_RATE = 0.5
 LADDER_CALIBRATION_BENCH_TARGET = 10
 # P5-2 window opened 2026-07-12 (rsi-calibration.conf) — earlier bench samples
 # belong to the default-cadence era.
-LADDER_CALIBRATION_OPENED_MS = 1_783_900_800_000  # 2026-07-12T00:00:00Z
+# Must equal genesis.ladderCalibrationOpenedMs (rsi_ladder.go). Pinned by
+# test_rsi_status.test_calibration_window_constant_matches_go (RSI eval H4:
+# the two mirrors disagreed by one day — Go 07-12, py 07-13 — so bench rows
+# from Jul 12 counted toward READY in Go but not Python).
+LADDER_CALIBRATION_OPENED_MS = 1_783_814_400_000  # 2026-07-12T00:00:00Z
 
 LADDER_READY = "준비됨"
 LADDER_GROWING = "축적 중"
@@ -576,7 +580,12 @@ def render_markdown(layers: list[LayerStatus], now_ms: int, data_dir: str) -> st
         "",
         f"> Generated {generated} from `{os.path.abspath(data_dir)}`. Do not edit by hand.",
         "",
-        f"**Turning: {turning(layers)}/{len(layers)}**",
+        # Denominator excludes GRAD (the graduation dashboard is an evidence
+        # surface, not a loop) — matches print_summary's loop_count. Counting
+        # it here contradicted the "never counts toward the headline" contract
+        # in the one document the live-status contract calls authoritative
+        # (RSI eval H4).
+        f"**Turning: {turning(layers)}/{sum(1 for layer in layers if layer.key != 'GRAD')}**",
         "",
         "| Layer | State | Diagnosis |",
         "|---|---|---|",

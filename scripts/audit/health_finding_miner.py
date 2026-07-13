@@ -200,11 +200,15 @@ def runtime_candidates(runtime: dict[str, Any] | None) -> list[dict[str, Any]]:
 def reopen_blocked(existing: list[dict[str, Any]], source: str, now_ms: int) -> str | None:
     """Why a fresh filing for ``source`` is suppressed, or None to allow.
 
-    Matched by source prefix like the Go original. A live twin (proposed/
-    accepted) or an operator-ruled one (rejected/superseded) blocks; an APPLIED
-    twin re-opens only after the cooldown — the bench still reporting the
-    finding now IS the "recurred again" signal. Past REOPEN_CAP twins the
-    signature is permanently blocked (genesis selfCorrectionReopenCap parity).
+    Twin match is separator-aware (mirrors genesis
+    selfCorrectionSourceMatches): exact source, or the same source extended
+    past a ":". A bare prefix cross-blocked source ids that are prefixes of
+    one another, e.g. "…latency" vs "…latency-p99" (RSI code eval M7/F4).
+    A live twin (proposed/accepted) or an operator-ruled one (rejected/
+    superseded) blocks; an APPLIED twin re-opens only after the cooldown —
+    the bench still reporting the finding now IS the "recurred again" signal.
+    Past REOPEN_CAP twins the signature is permanently blocked (genesis
+    selfCorrectionReopenCap parity).
     """
     source = source.strip()
     if not source:
@@ -212,7 +216,8 @@ def reopen_blocked(existing: list[dict[str, Any]], source: str, now_ms: int) -> 
     newest: dict[str, Any] | None = None
     source_twins = 0
     for c in existing:
-        if not str(c.get("source") or "").startswith(source):
+        src = str(c.get("source") or "")
+        if not (src == source or src.startswith(source + ":")):
             continue
         source_twins += 1
         if newest is None or (c.get("createdAt") or 0) > (newest.get("createdAt") or 0):

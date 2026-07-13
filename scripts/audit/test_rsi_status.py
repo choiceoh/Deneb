@@ -410,6 +410,39 @@ class LadderTest(unittest.TestCase):
         self.assertEqual(ready.state, LIVE)
         self.assertEqual(turning([ready]), 0)
 
+    def test_markdown_denominator_excludes_grad(self):
+        # H4: the markdown "Turning: n/N" denominator must exclude the GRAD
+        # dashboard, matching print_summary and the "never counts toward the
+        # headline" contract — it previously used len(layers) (N+1).
+        l1 = assess_l1([{"createdAt": RECENT, "type": "evolved"}], NOW)
+        grad = assess_ladder([], [], [], {"landed": 5})
+        doc = render_markdown([l1, grad], NOW, "/tmp/deneb-data")
+        self.assertIn("**Turning: 1/1**", doc)
+
+
+class MirrorParityTest(unittest.TestCase):
+    """The Go (rsi_ladder.go / rsi_status.go) and Python mirrors classify the
+    same ledgers; a drifted constant made them disagree by a day (H4). Pin the
+    load-bearing shared constants against the Go source so they cannot drift
+    silently again."""
+
+    def _go_source(self, rel: str) -> str:
+        import pathlib
+        return (pathlib.Path(__file__).resolve().parents[2] / rel).read_text(encoding="utf-8")
+
+    def test_calibration_window_constant_matches_go(self):
+        import datetime
+        import re
+        go = self._go_source(
+            "gateway-go/internal/domain/skills/genesis/rsi_ladder.go")
+        m = re.search(
+            r"ladderCalibrationOpenedMs\s*=\s*time\.Date\((\d+),\s*(\d+),\s*(\d+),",
+            go)
+        self.assertIsNotNone(m, "ladderCalibrationOpenedMs not found in rsi_ladder.go")
+        y, mo, d = (int(g) for g in m.groups())
+        want = int(datetime.datetime(y, mo, d, tzinfo=datetime.timezone.utc).timestamp() * 1000)
+        self.assertEqual(LADDER_CALIBRATION_OPENED_MS, want)
+
 
 if __name__ == "__main__":
     unittest.main()
