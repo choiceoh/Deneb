@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.96.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.95.0...deneb-v4.96.0) (2026-07-13)
+
+
+### ✨ Features
+
+* **chat:** 능동형 deneb-ui 카드 2/2 — 하트비트 카드 규칙·저신뢰 verdict 사유·채택률 관측(run_card_health) ([#3561](https://github.com/choiceoh/Deneb/issues/3561)) ([573164d](https://github.com/choiceoh/Deneb/commit/573164d6da68cd16f37b20329d9ed70f21a953ed))
+* **proactive:** 능동형 deneb-ui 카드 1/2 — 메일분석 카드 계약(양경로) + relay 카드 바이패스 ([#3560](https://github.com/choiceoh/Deneb/issues/3560)) ([dd8320f](https://github.com/choiceoh/Deneb/commit/dd8320fdbdd0021b4387063d98b47ce1e23bec59))
+* **rsi:** 2차 패스 후보 3건 구현 — 커리큘럼 출처 접지 게이트 · BINEVAL 자문 방향 · SOP 마이너 ([#3557](https://github.com/choiceoh/Deneb/issues/3557)) ([715602b](https://github.com/choiceoh/Deneb/commit/715602b8942439a5ff99f0c83e1042b37b0ec93e))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** 리뷰 반영 — 표 구분행 셀 단위 파싱(정렬콜론 허용·산문 대시 오탐 제거) ([#3562](https://github.com/choiceoh/Deneb/issues/3562)) ([e73d4f7](https://github.com/choiceoh/Deneb/commit/e73d4f72465e4612cc3efa0e7eeda4cc9f1b273e))
+* **genesis:** 리뷰 반영 — 저신뢰 라우팅 사유 빈 reason 구분자 정리(annotateReason) ([#3563](https://github.com/choiceoh/Deneb/issues/3563)) ([b791e33](https://github.com/choiceoh/Deneb/commit/b791e33164b58f02967085685e228d5f77166c96))
+
 ## [4.95.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.94.0...deneb-v4.95.0) (2026-07-13)
 
 

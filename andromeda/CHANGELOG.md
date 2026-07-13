@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.72](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.71...andromeda-v0.0.72) (2026-07-13)
+
+
+### ✨ Features
+
+* **rsi:** 2차 패스 후보 3건 구현 — 커리큘럼 출처 접지 게이트 · BINEVAL 자문 방향 · SOP 마이너 ([#3557](https://github.com/choiceoh/Deneb/issues/3557)) ([715602b](https://github.com/choiceoh/Deneb/commit/715602b8942439a5ff99f0c83e1042b37b0ec93e))
+
 ## [0.0.71](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.70...andromeda-v0.0.71) (2026-07-13)
 
 
