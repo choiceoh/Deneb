@@ -1,8 +1,11 @@
 package genesis
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func rsiLayerByKey(layers []RSILayer, key string) RSILayer {
@@ -127,6 +130,61 @@ func TestRSIStatus_L1DataGatedOnRejectionsOnly(t *testing.T) {
 	}
 	if l := rsiLayerByKey(tr.RSIStatus().Layers, "L1"); l.State != RSIStateDataGated {
 		t.Fatalf("L1 = %s, want DATA-GATED", l.State)
+	}
+}
+
+// Proposals without commits are also DATA-GATED (Python assess_l1 parity) —
+// previously they fell through to IDLE because EvolutionHealth ignored
+// evolution_proposal events.
+func TestRSIStatus_L1DataGatedOnProposalsOnly(t *testing.T) {
+	tr := newTestTracker(t)
+	if err := tr.LogEvolutionProposal(EvolutionProposalRecord{
+		Candidate: "repeatable deploy fix", Route: "genesis",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	l := rsiLayerByKey(tr.RSIStatus().Layers, "L1")
+	if l.State != RSIStateDataGated {
+		t.Fatalf("L1 = %s, want DATA-GATED (%s)", l.State, l.Diagnosis)
+	}
+	if got := rsiMetricValue(l.Metrics, "제안"); got != "1" {
+		t.Fatalf("proposals metric = %q, want 1 (%+v)", got, l.Metrics)
+	}
+}
+
+// L2 LIVE uses a 14d look-back so a weekly revision older than 7d does not
+// flip the slow loop IDLE mid-week (Python assess_l2 parity).
+func TestRSIStatus_L2LiveWithin14dWindow(t *testing.T) {
+	tr := newTestTracker(t)
+	tenDaysAgo := time.Now().Add(-10 * 24 * time.Hour).UnixMilli()
+	if err := tr.LogMetaRevision(MetaRevisionRecord{
+		Epoch: metaEpochProducer, Artifact: "evolve.md", Proposed: true, CreatedAt: tenDaysAgo,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	l := rsiLayerByKey(tr.RSIStatus().Layers, "L2")
+	if l.State != RSIStateLive {
+		t.Fatalf("L2 = %s, want LIVE (%s)", l.State, l.Diagnosis)
+	}
+}
+
+// An empty queue with a coding-dispatch marker written today keeps L4 LIVE
+// (Python assess_l4 dispatch_today parity).
+func TestRSIStatus_L4LiveOnDispatchToday(t *testing.T) {
+	tr := newTestTracker(t)
+	dir := filepath.Join(filepath.Dir(tr.selfCorrectionPath), "coding_dispatch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sc-today.json"), []byte(`{"id":"sc-today"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
+	if l.State != RSIStateLive {
+		t.Fatalf("L4 = %s, want LIVE (%s)", l.State, l.Diagnosis)
+	}
+	if got := rsiMetricValue(l.Metrics, "오늘 배차"); got != "1" {
+		t.Fatalf("dispatched today metric = %q, want 1 (%+v)", got, l.Metrics)
 	}
 }
 

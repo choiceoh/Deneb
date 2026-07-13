@@ -2452,6 +2452,12 @@ class MiniappWireNullCompatibilityTest {
             field = "source",
         ),
         nullContract(
+            name = "SelfCorrectionCandidate.surface",
+            serializer = SelfCorrectionCandidate.serializer(),
+            empty = SelfCorrectionCandidate(),
+            field = "surface",
+        ),
+        nullContract(
             name = "SelfCorrectionCandidate.autoDispatch",
             serializer = SelfCorrectionCandidate.serializer(),
             empty = SelfCorrectionCandidate(),

@@ -406,7 +406,7 @@ class MiniappWireDescriptorContractTest {
             name = "SelfCorrectionCandidate",
             serializer = SelfCorrectionCandidate.serializer(),
             empty = SelfCorrectionCandidate(),
-            fields = listOf("id", "status", "scope", "skillName", "sessionKey", "title", "candidate", "evidence", "reason", "targetFiles", "proposedChange", "risk", "source", "autoDispatch", "reviewer", "reviewNote", "evidenceKinds", "reviewActions", "createdAt", "updatedAt"),
+            fields = listOf("id", "status", "scope", "skillName", "sessionKey", "title", "candidate", "evidence", "reason", "targetFiles", "proposedChange", "risk", "source", "surface", "autoDispatch", "reviewer", "reviewNote", "evidenceKinds", "reviewActions", "createdAt", "updatedAt"),
         ),
         contract(
             name = "SelfImprovementCodingFunnel",

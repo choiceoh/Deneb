@@ -35,13 +35,14 @@ unlike its template ``genesis/runtime_error_mining.go`` (#3491). Three reasons:
 
 Safety (mirrors the template lane):
 
-  - Propose-only: the ``health-finding`` source namespace is deliberately NOT
-    in coding-dispatch.sh's allowlist. Candidates accumulate for review; the
-    allowlist flip is a separate one-line graduation (roadmap ladder).
+  - Propose-only at record time (surface tier). The ``health-finding`` source
+    namespace graduated into coding-dispatch.sh's allowlist (2026-07-12); runtime
+    weaknesses still land with empty targetFiles until localized.
   - Dedup/reopen mirrors genesis ``selfCorrectionReopenBlocked``: one open
     candidate per finding; rejected/superseded twins never re-file (operator
     veto respected); an APPLIED twin re-files only after a cooldown while the
-    finding still shows in the bench ("the fix did not stick").
+    finding still shows in the bench ("the fix did not stick"); past
+    ``REOPEN_CAP`` twins the signature is permanently blocked.
   - Per-run caps bound queue growth; every candidate carries the bench finding
     ID plus the evidence string so review stays deterministic.
 
@@ -77,6 +78,10 @@ MAX_RUNTIME_PER_RUN = 1
 # window): an applied fix gets this long to prove itself before the same
 # finding may re-file.
 REOPEN_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000
+
+# Mirrors genesis selfCorrectionReopenCap: after this many twins for the same
+# source signature, auto-reopen stops permanently (operator must break the cycle).
+REOPEN_CAP = 5
 
 # Mirrors handlerminiapp lifecycleScanLimit — the deepest .list view available.
 LIST_LIMIT = 500
@@ -198,19 +203,24 @@ def reopen_blocked(existing: list[dict[str, Any]], source: str, now_ms: int) -> 
     Matched by source prefix like the Go original. A live twin (proposed/
     accepted) or an operator-ruled one (rejected/superseded) blocks; an APPLIED
     twin re-opens only after the cooldown — the bench still reporting the
-    finding now IS the "recurred again" signal.
+    finding now IS the "recurred again" signal. Past REOPEN_CAP twins the
+    signature is permanently blocked (genesis selfCorrectionReopenCap parity).
     """
     source = source.strip()
     if not source:
         return None
     newest: dict[str, Any] | None = None
+    source_twins = 0
     for c in existing:
         if not str(c.get("source") or "").startswith(source):
             continue
+        source_twins += 1
         if newest is None or (c.get("createdAt") or 0) > (newest.get("createdAt") or 0):
             newest = c
     if newest is None:
         return None
+    if source_twins > REOPEN_CAP:
+        return f"reopen cap exceeded ({source_twins} twins > {REOPEN_CAP})"
     status = str(newest.get("status") or "proposed").lower()
     if status != "applied":
         return f"{status} twin {newest.get('id')}"

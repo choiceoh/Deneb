@@ -3277,6 +3277,14 @@ class MiniappWireFieldBoundaryContractTest {
             expectation = Expectation.Exact,
         ),
         fieldContract(
+            name = "SelfCorrectionCandidate.surface",
+            serializer = SelfCorrectionCandidate.serializer(),
+            field = "surface",
+            valid = boundaryText,
+            invalid = JsonObject(emptyMap()),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
             name = "SelfCorrectionCandidate.autoDispatch",
             serializer = SelfCorrectionCandidate.serializer(),
             field = "autoDispatch",

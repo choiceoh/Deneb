@@ -124,6 +124,8 @@ func ClassifySurface(target string) EditableSurface {
 // ClassifyProposalSurfaces summarizes target files into a tier and forbidden list.
 // tier (the most restrictive wins for the summary; any forbidden target is
 // returned separately so the caller can reject the record outright).
+// An empty target list is still a proposal (runtime-health findings have no
+// single file yet) — default to propose-only rather than leaving Surface blank.
 func ClassifyProposalSurfaces(targets []string) (tier string, forbidden []string) {
 	tier = ""
 	for _, target := range targets {
@@ -135,6 +137,9 @@ func ClassifyProposalSurfaces(targets []string) (tier string, forbidden []string
 		if tier == "" || (tier == SurfaceTierAutoApply && surface.Tier == SurfaceTierProposeOnly) {
 			tier = surface.Tier
 		}
+	}
+	if tier == "" && len(forbidden) == 0 {
+		tier = undeclaredSurface.Tier
 	}
 	return tier, forbidden
 }

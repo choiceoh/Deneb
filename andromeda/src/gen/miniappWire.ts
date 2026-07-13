@@ -583,6 +583,7 @@ export interface SelfCorrectionCandidate {
   proposedChange?: string
   risk?: string
   source?: string
+  surface?: string
   autoDispatch?: boolean
   reviewer?: string
   reviewNote?: string

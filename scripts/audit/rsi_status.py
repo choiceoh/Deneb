@@ -293,7 +293,7 @@ def assess_l4(rows: list[dict], dispatch_total: int, dispatch_today: int) -> Lay
                 dispatchable += 1
             else:
                 # Proposed code candidate from a source not yet in the dispatch
-                # allowlist (runtime-error, health-finding, …): staged L4 supply
+                # allowlist (runtime-error, deadcode-finding, …): staged L4 supply
                 # awaiting review/graduation — real fuel, NOT a wiring gap.
                 staged += 1
                 prefix = src.split(":", 1)[0] if src else "(no source)"

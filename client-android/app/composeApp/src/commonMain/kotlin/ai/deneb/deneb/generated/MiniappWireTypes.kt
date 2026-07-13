@@ -706,6 +706,7 @@ data class SelfCorrectionCandidate(
     val proposedChange: String = "",
     val risk: String = "",
     val source: String = "",
+    val surface: String = "",
     val autoDispatch: Boolean = false,
     val reviewer: String = "",
     val reviewNote: String = "",

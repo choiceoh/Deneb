@@ -46,6 +46,9 @@ type SelfCorrectionCandidate struct {
 	ProposedChange string   `json:"proposedChange,omitempty"`
 	Risk           string   `json:"risk,omitempty"`
 	Source         string   `json:"source,omitempty"`
+	// Surface is the declared editable-surface tier summarizing TargetFiles
+	// (auto-apply / propose-only). Empty target lists default to propose-only.
+	Surface string `json:"surface,omitempty"`
 	// AutoDispatch is true when this candidate's source is graduated into the
 	// coding-dispatch allowlist — it auto-implements + lands through the gate
 	// stack rather than waiting for review. Clients label it 자동수리 vs 검토 대기.
@@ -252,6 +255,7 @@ func selfCorrectionCandidate(rec genesis.SelfCorrectionCandidateRecord) SelfCorr
 		ProposedChange: textutil.TruncateRunes(rec.ProposedChange, lifecycleTextMaxRunes, "…"),
 		Risk:           textutil.TruncateRunes(rec.Risk, lifecycleTextMaxRunes, "…"),
 		Source:         rec.Source,
+		Surface:        rec.Surface,
 		AutoDispatch:   rec.Scope == "code" && genesis.SourceAutoDispatches(rec.Source),
 		Reviewer:       rec.Reviewer,
 		ReviewNote:     textutil.TruncateRunes(rec.ReviewNote, lifecycleTextMaxRunes, "…"),
