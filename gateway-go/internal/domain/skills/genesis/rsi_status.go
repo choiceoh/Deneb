@@ -47,8 +47,16 @@ var rsiSubtleDegradationClasses = map[string]bool{"imperative-drop": true, "safe
 // rsiDispatchSources mirrors coding-dispatch.sh's accepted candidate sources: a
 // code candidate from any other source is not yet dispatchable. health-finding
 // graduated 2026-07-12 (first mined batch reviewed clean — roadmap P5 ladder);
-// the runtime-error source stays staged until its own batch review.
-var rsiDispatchSources = []string{"evolve-tool-gap", "self-harness", "health-finding"}
+// tool-quality graduated 2026-07-13 (operator directive); runtime-error and
+// deadcode-finding stay staged until their own batch review. MUST match the
+// allowlist in scripts/dev/coding-dispatch.sh (and scripts/audit/rsi_status.py).
+var rsiDispatchSources = []string{"evolve-tool-gap", "self-harness", "health-finding", "tool-quality"}
+
+// SourceAutoDispatches reports whether a self-correction candidate from this
+// source is on the auto-dispatch track (graduated into coding-dispatch.sh's
+// allowlist) vs staged for review. Exported for the miniapp wire projection so
+// clients can label each candidate 자동수리 vs 검토 대기.
+func SourceAutoDispatches(source string) bool { return rsiSourceDispatchable(source) }
 
 // rsiLayerDetails is the per-layer "what is this loop" explanation the viewers
 // reveal on tap — static role text, keyed by layer.
@@ -63,6 +71,25 @@ var rsiLayerDetails = map[string]string{
 type RSILoopStatus struct {
 	Layers  []RSILayer
 	Turning int // count of layers in LIVE or FROZEN
+	Health  RSIHealth
+}
+
+// RSIHealth is the structured evolution-health scoreboard behind the layer
+// diagnoses — the numeric fields the layer metric strings only render as text,
+// surfaced so clients can draw a real scoreboard (confirm/false-accept rates,
+// activity counts, self-brake state) instead of parsing preformatted strings.
+type RSIHealth struct {
+	Evolves7d         int     // L1 evolves in the window
+	Confirmed7d       int     // evolves that held up
+	Rejected7d        int     // evolves rejected at the gate
+	RolledBack7d      int     // evolves auto-reverted post-apply
+	Genesis7d         int     // new skills created
+	ConfirmRate       float64 // confirmed/(confirmed+rolledBack), 0..1
+	FalseAcceptRate   float64 // rolledBack/(confirmed+rolledBack) — judge going soft
+	ResolvedEvolves7d int     // sample size behind the two rates
+	Thrash            bool    // rapid evolve/rollback churn detected
+	AutoAdoptFrozen   bool    // L2 drift self-brake engaged
+	MetaRevisions7d   int     // L2 meta-artifact revisions in the window
 }
 
 // RSILayer is one loop layer's classified state with display metrics.
@@ -92,7 +119,25 @@ func (t *Tracker) RSIStatus() RSILoopStatus {
 			turning++
 		}
 	}
-	return RSILoopStatus{Layers: layers, Turning: turning}
+	eh := t.EvolutionHealth()
+	meta := t.MetaEvolutionHealth()
+	return RSILoopStatus{
+		Layers:  layers,
+		Turning: turning,
+		Health: RSIHealth{
+			Evolves7d:         eh.Evolves7d,
+			Confirmed7d:       eh.EvolveConfirmed7d,
+			Rejected7d:        eh.EvolveRejected7d,
+			RolledBack7d:      eh.EvolveRolledBack7d,
+			Genesis7d:         eh.Genesis7d,
+			ConfirmRate:       eh.ConfirmRate,
+			FalseAcceptRate:   eh.FalseAcceptRate,
+			ResolvedEvolves7d: eh.ResolvedEvolves7d,
+			Thrash:            eh.Thrash,
+			AutoAdoptFrozen:   t.AutoAdoptFrozen(),
+			MetaRevisions7d:   meta.Revisions7d,
+		},
+	}
 }
 
 func (t *Tracker) rsiAssessL1() RSILayer {

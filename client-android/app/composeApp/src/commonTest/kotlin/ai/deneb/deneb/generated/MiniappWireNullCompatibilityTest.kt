@@ -2146,6 +2146,72 @@ class MiniappWireNullCompatibilityTest {
             field = "a",
         ),
         nullContract(
+            name = "RSIHealthView.evolves7d",
+            serializer = RSIHealthView.serializer(),
+            empty = RSIHealthView(),
+            field = "evolves7d",
+        ),
+        nullContract(
+            name = "RSIHealthView.confirmed7d",
+            serializer = RSIHealthView.serializer(),
+            empty = RSIHealthView(),
+            field = "confirmed7d",
+        ),
+        nullContract(
+            name = "RSIHealthView.rejected7d",
+            serializer = RSIHealthView.serializer(),
+            empty = RSIHealthView(),
+            field = "rejected7d",
+        ),
+        nullContract(
+            name = "RSIHealthView.rolledBack7d",
+            serializer = RSIHealthView.serializer(),
+            empty = RSIHealthView(),
+            field = "rolledBack7d",
+        ),
+        nullContract(
+            name = "RSIHealthView.genesis7d",
+            serializer = RSIHealthView.serializer(),
+            empty = RSIHealthView(),
+            field = "genesis7d",
+        ),
+        nullContract(
+            name = "RSIHealthView.confirmRate",
+            serializer = RSIHealthView.serializer(),
+            empty = RSIHealthView(),
+            field = "confirmRate",
+        ),
+        nullContract(
+            name = "RSIHealthView.falseAcceptRate",
+            serializer = RSIHealthView.serializer(),
+            empty = RSIHealthView(),
+            field = "falseAcceptRate",
+        ),
+        nullContract(
+            name = "RSIHealthView.resolvedEvolves7d",
+            serializer = RSIHealthView.serializer(),
+            empty = RSIHealthView(),
+            field = "resolvedEvolves7d",
+        ),
+        nullContract(
+            name = "RSIHealthView.thrash",
+            serializer = RSIHealthView.serializer(),
+            empty = RSIHealthView(),
+            field = "thrash",
+        ),
+        nullContract(
+            name = "RSIHealthView.autoAdoptFrozen",
+            serializer = RSIHealthView.serializer(),
+            empty = RSIHealthView(),
+            field = "autoAdoptFrozen",
+        ),
+        nullContract(
+            name = "RSIHealthView.metaRevisions7d",
+            serializer = RSIHealthView.serializer(),
+            empty = RSIHealthView(),
+            field = "metaRevisions7d",
+        ),
+        nullContract(
             name = "RSILayerView.key",
             serializer = RSILayerView.serializer(),
             empty = RSILayerView(),
@@ -2192,6 +2258,12 @@ class MiniappWireNullCompatibilityTest {
             serializer = RSILoopStatusResponse.serializer(),
             empty = RSILoopStatusResponse(),
             field = "turning",
+        ),
+        nullContract(
+            name = "RSILoopStatusResponse.health",
+            serializer = RSILoopStatusResponse.serializer(),
+            empty = RSILoopStatusResponse(),
+            field = "health",
         ),
         nullContract(
             name = "RSIMetricView.label",
@@ -2378,6 +2450,12 @@ class MiniappWireNullCompatibilityTest {
             serializer = SelfCorrectionCandidate.serializer(),
             empty = SelfCorrectionCandidate(),
             field = "source",
+        ),
+        nullContract(
+            name = "SelfCorrectionCandidate.autoDispatch",
+            serializer = SelfCorrectionCandidate.serializer(),
+            empty = SelfCorrectionCandidate(),
+            field = "autoDispatch",
         ),
         nullContract(
             name = "SelfCorrectionCandidate.reviewer",

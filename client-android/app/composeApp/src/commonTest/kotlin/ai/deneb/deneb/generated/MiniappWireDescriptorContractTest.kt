@@ -355,6 +355,12 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("q", "a"),
         ),
         contract(
+            name = "RSIHealthView",
+            serializer = RSIHealthView.serializer(),
+            empty = RSIHealthView(),
+            fields = listOf("evolves7d", "confirmed7d", "rejected7d", "rolledBack7d", "genesis7d", "confirmRate", "falseAcceptRate", "resolvedEvolves7d", "thrash", "autoAdoptFrozen", "metaRevisions7d"),
+        ),
+        contract(
             name = "RSILayerView",
             serializer = RSILayerView.serializer(),
             empty = RSILayerView(),
@@ -364,7 +370,7 @@ class MiniappWireDescriptorContractTest {
             name = "RSILoopStatusResponse",
             serializer = RSILoopStatusResponse.serializer(),
             empty = RSILoopStatusResponse(),
-            fields = listOf("layers", "turning"),
+            fields = listOf("layers", "turning", "health"),
         ),
         contract(
             name = "RSIMetricView",
@@ -400,7 +406,7 @@ class MiniappWireDescriptorContractTest {
             name = "SelfCorrectionCandidate",
             serializer = SelfCorrectionCandidate.serializer(),
             empty = SelfCorrectionCandidate(),
-            fields = listOf("id", "status", "scope", "skillName", "sessionKey", "title", "candidate", "evidence", "reason", "targetFiles", "proposedChange", "risk", "source", "reviewer", "reviewNote", "evidenceKinds", "reviewActions", "createdAt", "updatedAt"),
+            fields = listOf("id", "status", "scope", "skillName", "sessionKey", "title", "candidate", "evidence", "reason", "targetFiles", "proposedChange", "risk", "source", "autoDispatch", "reviewer", "reviewNote", "evidenceKinds", "reviewActions", "createdAt", "updatedAt"),
         ),
         contract(
             name = "SelfImprovementCodingFunnel",
