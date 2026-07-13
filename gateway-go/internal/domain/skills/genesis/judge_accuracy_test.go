@@ -23,7 +23,7 @@ func accuracyFixture(t *testing.T) (*JudgeAccuracyTask, *Tracker) {
 	}
 	catalog := skills.NewCatalog(slog.Default())
 	dir := t.TempDir()
-	body := "# 스킬\n\n## When to Use\n" + fmt.Sprintf("%0400d", 0) + "\n\n## Procedure\n필수 절차 문구.\n\n## Verification\n검증."
+	body := "# 스킬\n\n## When to Use\n" + fmt.Sprintf("%0400d", 0) + "\n\n## Procedure\n필수 절차 문구를 빠짐없이 지켜 진행한다.\n\n## Verification\n검증."
 	path := filepath.Join(dir, "sk.md")
 	if err := os.WriteFile(path, []byte("---\nname: sk\nversion: 1.0.0\n---\n"+body), 0o644); err != nil {
 		t.Fatal(err)
@@ -71,6 +71,72 @@ func TestJudgeAccuracyTask_Run(t *testing.T) {
 	}
 	if rec.JudgeVersion == "" {
 		t.Fatal("judge version attribution missing")
+	}
+}
+
+// The probe curriculum ladder: weaken-tier pairs deploy only after
+// judgeEscalationWindow consecutive zero-miss drop-tier runs of the incumbent
+// judge; a drop-tier miss or a judge revision (version change) re-locks it.
+func TestJudgeAccuracyEscalation(t *testing.T) {
+	task, tr := accuracyFixture(t)
+	version := task.Meta.Version(generation.MetaSkillJudgeSystemPrompt,
+		generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt])
+	seed := func(v string, dropMissed int) {
+		t.Helper()
+		if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+			JudgeVersion: v, Pairs: 2, Correct: 2 - dropMissed,
+			ByClass: map[string][2]int{
+				"imperative-drop": {1 - dropMissed, 1},
+				"safety-drop":     {1, 1},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if task.weakenTierUnlocked(version) {
+		t.Fatal("weaken tier unlocked with no history")
+	}
+	for i := 0; i < judgeEscalationWindow-1; i++ {
+		seed(version, 0)
+	}
+	if task.weakenTierUnlocked(version) {
+		t.Fatal("weaken tier unlocked below the saturation window")
+	}
+	seed(version, 0)
+	if !task.weakenTierUnlocked(version) {
+		t.Fatal("weaken tier locked after a fully saturated window")
+	}
+	// Version scoping: a revised judge re-earns the tier from scratch.
+	if task.weakenTierUnlocked("revised-judge") {
+		t.Fatal("weaken tier unlocked for a judge version with no history")
+	}
+	// A drop-tier miss re-locks — the frontier moved back down.
+	seed(version, 1)
+	if task.weakenTierUnlocked(version) {
+		t.Fatal("weaken tier stayed unlocked past a drop-tier miss")
+	}
+	for i := 0; i < judgeEscalationWindow; i++ {
+		seed(version, 0)
+	}
+	if !task.weakenTierUnlocked(version) {
+		t.Fatal("weaken tier locked despite a fresh saturated window")
+	}
+
+	// End-to-end: an unlocked run replays weaken pairs through the identical
+	// verdict path and ledgers them under their own ByClass keys.
+	task.verdictFn = func(_ context.Context, _, _, _ string) (judgeVerdict, error) {
+		return judgeVerdict{Pass: false}, nil // catch everything
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	recs, err := tr.RecentJudgeAccuracy(1)
+	if err != nil || len(recs) != 1 {
+		t.Fatalf("ledger read failed: %+v err=%v", recs, err)
+	}
+	if ct := recs[0].ByClass["imperative-weaken"]; ct[1] == 0 {
+		t.Fatalf("escalated run carried no weaken pairs: %+v", recs[0].ByClass)
 	}
 }
 

@@ -41,8 +41,16 @@ const (
 
 // rsiSubtleDegradationClasses are the judge-degradation classes that actually
 // produce labeled misses (P3 fuel); a ledger with only blatant classes is
-// data-gated, not broken.
-var rsiSubtleDegradationClasses = map[string]bool{"imperative-drop": true, "safety-drop": true}
+// data-gated, not broken. Includes the escalated weaken tier (probe
+// curriculum ladder — deployed only after the drop tier saturates).
+var rsiSubtleDegradationClasses = map[string]bool{
+	"imperative-drop": true, "safety-drop": true,
+	"imperative-weaken": true, "scope-narrow": true,
+}
+
+// rsiWeakenDegradationClasses is the escalated tier subset — seeing one in
+// the ledger means the lane already probes at its current difficulty ceiling.
+var rsiWeakenDegradationClasses = map[string]bool{"imperative-weaken": true, "scope-narrow": true}
 
 // rsiDispatchSources mirrors coding-dispatch.sh's accepted candidate sources: a
 // code candidate from any other source is not yet dispatchable. health-finding
@@ -201,7 +209,7 @@ func (t *Tracker) rsiAssessL3() RSILayer {
 	}
 	cutoff := time.Now().Add(-7 * 24 * time.Hour).UnixMilli()
 	runs, misses, falseRejects := 0, 0, 0
-	subtleDeployed := false
+	subtleDeployed, weakenDeployed := false, false
 	for _, r := range records {
 		if r.CreatedAt < cutoff {
 			continue
@@ -212,6 +220,9 @@ func (t *Tracker) rsiAssessL3() RSILayer {
 		for cls := range r.ByClass {
 			if rsiSubtleDegradationClasses[cls] {
 				subtleDeployed = true
+			}
+			if rsiWeakenDegradationClasses[cls] {
+				weakenDeployed = true
 			}
 		}
 	}
@@ -233,9 +244,12 @@ func (t *Tracker) rsiAssessL3() RSILayer {
 	case !subtleDeployed:
 		base.State = RSIStateDataGated
 		base.Diagnosis = fmt.Sprintf("%d회 실행; 판정자가 명백한 결함은 모두 잡았고 미묘 프로브는 아직 원장에 없습니다", runs)
+	case weakenDeployed:
+		base.State = RSIStateDataGated
+		base.Diagnosis = fmt.Sprintf("격상된 약화 프로브까지 %d회 실행 모두 잡았습니다 — 판정자가 현행 프로브 최고 티어에서 강합니다", runs)
 	default:
 		base.State = RSIStateDataGated
-		base.Diagnosis = fmt.Sprintf("미묘 프로브가 있는 %d회 실행이지만 아직 놓침이 없습니다 — 현재 판정자가 강합니다", runs)
+		base.Diagnosis = fmt.Sprintf("미묘 프로브가 있는 %d회 실행이지만 아직 놓침이 없습니다 — 판정자가 강하며, 포화 %d회 연속이면 약화 프로브로 격상됩니다", runs, judgeEscalationWindow)
 	}
 	return base
 }

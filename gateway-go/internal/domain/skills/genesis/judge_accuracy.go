@@ -49,6 +49,15 @@ const (
 	// are mined. Rollbacks are scarce at organic cadence (a handful per month),
 	// so the window is deliberately wider than the 7d health window.
 	organicFalseAcceptWindow = 30 * 24 * time.Hour
+	// judgeEscalationWindow is how many ledgered runs of the INCUMBENT judge,
+	// each carrying drop-tier subtle pairs with zero drop-tier misses, unlock
+	// the harder in-place weaken tier (probe curriculum ladder — CoEvoSkills:
+	// a probe corpus the judge has fully outgrown produces zero labels
+	// forever, so difficulty must track judge strength). A drop-tier miss
+	// anywhere in the window re-locks the tier — the frontier moved back down,
+	// so the probe budget returns there. A judge revision resets the
+	// curriculum: version scoping means a fresh judge re-earns tier 3.
+	judgeEscalationWindow = 5
 )
 
 // OrganicFalseAccept is one REAL-usage judge false-accept label: the judge
@@ -228,6 +237,13 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 	// blatant meta-bench pairs never will — the actual P3 label food. Kept out
 	// of the meta-judge promotion gate on purpose (see judge_subtle_degradations.go).
 	pairs = append(pairs, buildSubtleJudgeDegradationPairs(entries, judgeBenchMaxPairs*metaBenchScale())...)
+	// Probe curriculum ladder: once the incumbent judge fully outgrows the
+	// drop tier, escalate to in-place weakening — otherwise the miss ledger
+	// flatlines at zero and the evaluator epochs starve (P3 fuel).
+	escalated := t.weakenTierUnlocked(rec.JudgeVersion)
+	if escalated {
+		pairs = append(pairs, buildWeakenJudgeDegradationPairs(entries, judgeBenchMaxPairs*metaBenchScale())...)
+	}
 	for _, pair := range pairs {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -272,8 +288,42 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 	}
 	logger.Info("judge-accuracy: lane run ledgered (P3 label food)",
 		"pairs", rec.Pairs, "correct", rec.Correct, "misses", len(rec.Misses),
-		"falseRejects", len(rec.FalseRejects), "judgeVersion", rec.JudgeVersion)
+		"falseRejects", len(rec.FalseRejects), "judgeVersion", rec.JudgeVersion,
+		"weakenTier", escalated)
 	return nil
+}
+
+// weakenTierUnlocked reports drop-tier saturation for the incumbent judge:
+// the newest judgeEscalationWindow lane runs attributed to judgeVersion each
+// carried at least one drop-tier pair and recorded zero drop-tier misses.
+// Fewer incumbent runs (including right after a judge revision) or any
+// drop-tier miss keeps the harder tier locked. Uses ByClass counts, which are
+// complete — the Misses exhibit list is capped and unusable for this.
+func (t *JudgeAccuracyTask) weakenTierUnlocked(judgeVersion string) bool {
+	records, err := t.Tracker.RecentJudgeAccuracy(judgeEscalationWindow * 4)
+	if err != nil || judgeVersion == "" {
+		return false
+	}
+	saturated := 0
+	for _, rec := range records { // newest first
+		if rec.JudgeVersion != judgeVersion {
+			continue
+		}
+		pairsSeen, missed := 0, 0
+		for _, cls := range subtleJudgeDegradations {
+			ct := rec.ByClass[cls.name]
+			pairsSeen += ct[1]
+			missed += ct[1] - ct[0]
+		}
+		if pairsSeen == 0 || missed > 0 {
+			return false
+		}
+		saturated++
+		if saturated >= judgeEscalationWindow {
+			return true
+		}
+	}
+	return false
 }
 
 // mineFalseRejects scores buffered rejected candidates against the CURRENT

@@ -28,10 +28,24 @@ package genesis
 // hard floor, and mixing harder-difficulty pairs into it would raise the bar on
 // legitimate judge revisions. The separation keeps the gate stable while the
 // lane gets harder food.
+//
+// The lane's probes form a CURRICULUM LADDER (CoEvoSkills: probe difficulty
+// must track verifier strength — a corpus the judge has fully outgrown
+// produces zero labels forever). Tier 2 is the drop classes below; tier 3 is
+// in-place WEAKENING (imperative-weaken, scope-narrow): the line survives,
+// its binding force does not — nothing is absent for a diff to catch, the
+// guarantee is simply gone. The lane deploys tier 3 only after the incumbent
+// judge saturates tier 2 (judge_accuracy.go weakenTierUnlocked). The honesty
+// invariant holds unchanged: a hard rule downgraded to a preference is the
+// same enforcement loss as the rule deleted, and a universal coverage claim
+// narrowed to a partial one no longer promises what the validated original
+// promised. Swaps whose harm would be debatable (tone, synonyms, emphasis)
+// are excluded.
 
 import (
 	"os"
 	"strings"
+	"unicode"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 )
@@ -47,6 +61,17 @@ var safetyNoteTokens = []string{"주의", "경고", "위험", "⚠️", "warning
 // load-bearing rule (a bare "주의:" heading fragment, a list bullet marker).
 const subtleDegradationMinLineRunes = 12
 
+// probeTargetLine reports whether a trimmed line is a legitimate probe
+// target: substantive body prose — not a blank, a heading (section-drop's
+// job, and the honesty invariant excludes structure loss), or a fragment too
+// short to carry a load-bearing rule.
+func probeTargetLine(trimmed string) bool {
+	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+		return false
+	}
+	return len([]rune(trimmed)) >= subtleDegradationMinLineRunes
+}
+
 // dropFirstLineMatching removes the first non-heading, substantive line that
 // contains any token (case-insensitive). Returns the mutated body and the
 // removed line; ok=false when no such line exists.
@@ -54,11 +79,8 @@ func dropFirstLineMatching(body string, tokens []string) (mutated, removed strin
 	lines := strings.Split(body, "\n")
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue // blanks and headings are section-drop's job, not this
-		}
-		if len([]rune(trimmed)) < subtleDegradationMinLineRunes {
-			continue // too short to be a load-bearing rule
+		if !probeTargetLine(trimmed) {
+			continue
 		}
 		low := strings.ToLower(line)
 		for _, tok := range tokens {
@@ -91,20 +113,130 @@ func degradeDropSafetyNote(body string) (string, bool) {
 	return strings.TrimSpace(mutated), true
 }
 
+// --- Tier 3: in-place weakening ---
+
+// imperativeWeakenSwaps dilute a hard-rule token in place: mandatory becomes
+// optional while the sentence stays grammatical. English tokens keep their
+// trailing space so substring traps (mustard, alway…) cannot fire.
+var imperativeWeakenSwaps = [][2]string{
+	{"반드시", "가급적"},
+	{"필수", "권장"},
+	{"절대", "되도록"},
+	{"항상", "보통"},
+	{"must ", "may "},
+	{"always ", "usually "},
+	{"never ", "rarely "},
+}
+
+// scopeNarrowSwaps shrink a universal quantifier to a partial one — coverage
+// the validated skill guaranteed is silently no longer promised. Trailing
+// spaces keep English tokens off substring traps (small/install/overall).
+var scopeNarrowSwaps = [][2]string{
+	{"모든 ", "일부 "},
+	{"전부 ", "일부 "},
+	{"every ", "some "},
+}
+
+// indexFold returns the byte index of the first case-insensitive occurrence
+// of token in s, scanning the ORIGINAL string so splice offsets are always
+// valid (strings.ToLower can shift byte offsets on exotic runes).
+func indexFold(s, token string) int {
+	if token == "" || len(s) < len(token) {
+		return -1
+	}
+	for i := 0; i+len(token) <= len(s); i++ {
+		if strings.EqualFold(s[i:i+len(token)], token) {
+			return i
+		}
+	}
+	return -1
+}
+
+// weakenFirstLineMatching applies the first applicable swap to the first
+// substantive line carrying a swap's token — one line, one token, in place.
+// A leading capital on the matched token is preserved on the replacement so
+// the mutation stays typographically clean. Returns ok=false when no
+// substantive line carries any token.
+func weakenFirstLineMatching(body string, swaps [][2]string) (string, bool) {
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if !probeTargetLine(strings.TrimSpace(line)) {
+			continue
+		}
+		for _, sw := range swaps {
+			idx := indexFold(line, sw[0])
+			if idx < 0 {
+				continue
+			}
+			repl := sw[1]
+			if r := []rune(line[idx:]); len(r) > 0 && unicode.IsUpper(r[0]) {
+				rr := []rune(repl)
+				rr[0] = unicode.ToUpper(rr[0])
+				repl = string(rr)
+			}
+			mutated := line[:idx] + repl + line[idx+len(sw[0]):]
+			if mutated == line {
+				continue
+			}
+			kept := append(append([]string{}, lines[:i]...), mutated)
+			kept = append(kept, lines[i+1:]...)
+			return strings.TrimSpace(strings.Join(kept, "\n")), true
+		}
+	}
+	return "", false
+}
+
+// degradeWeakenImperative dilutes one hard-rule token in place — the rule
+// text survives but no longer binds. Unambiguous regression, single token.
+func degradeWeakenImperative(body string) (string, bool) {
+	return weakenFirstLineMatching(body, imperativeWeakenSwaps)
+}
+
+// degradeNarrowScope shrinks one universal quantifier in place — coverage the
+// skill guaranteed becomes partial. Unambiguous regression, single token.
+func degradeNarrowScope(body string) (string, bool) {
+	return weakenFirstLineMatching(body, scopeNarrowSwaps)
+}
+
+// namedDegradation pairs a ByClass label with its body mutator.
+type namedDegradation struct {
+	name  string
+	apply func(string) (string, bool)
+}
+
+// subtleJudgeDegradations is the tier-2 (drop) class table. The escalation
+// gate (judge_accuracy.go weakenTierUnlocked) keys saturation on exactly
+// these class names, so the two stay coupled through this table.
+var subtleJudgeDegradations = []namedDegradation{
+	{"imperative-drop", degradeDropImperative},
+	{"safety-drop", degradeDropSafetyNote},
+}
+
+// weakenJudgeDegradations is the tier-3 (in-place weaken) class table,
+// deployed only on tier-2 saturation.
+var weakenJudgeDegradations = []namedDegradation{
+	{"imperative-weaken", degradeWeakenImperative},
+	{"scope-narrow", degradeNarrowScope},
+}
+
 // buildSubtleJudgeDegradationPairs mirrors buildJudgeDegradationPairs but with
-// the subtle single-line degradations above. Deterministic, catalog order,
+// the subtle single-line drop degradations. Deterministic, catalog order,
 // stops at limit. Shares the judgeBenchPair shape so the lane replays it
 // through the identical verdict path.
 func buildSubtleJudgeDegradationPairs(entries []skills.SkillEntry, limit int) []judgeBenchPair {
+	return buildDegradationPairsWith(entries, limit, subtleJudgeDegradations)
+}
+
+// buildWeakenJudgeDegradationPairs builds the escalated tier-3 pairs.
+func buildWeakenJudgeDegradationPairs(entries []skills.SkillEntry, limit int) []judgeBenchPair {
+	return buildDegradationPairsWith(entries, limit, weakenJudgeDegradations)
+}
+
+// buildDegradationPairsWith is the shared pair constructor both tiers use:
+// deterministic catalog order, min-body floor, no-op mutations skipped.
+func buildDegradationPairsWith(entries []skills.SkillEntry, limit int, degradations []namedDegradation) []judgeBenchPair {
 	if limit <= 0 {
 		limit = judgeBenchMaxPairs
-	}
-	degradations := []struct {
-		name  string
-		apply func(string) (string, bool)
-	}{
-		{"imperative-drop", degradeDropImperative},
-		{"safety-drop", degradeDropSafetyNote},
 	}
 	pairs := make([]judgeBenchPair, 0, limit)
 	for _, entry := range entries {

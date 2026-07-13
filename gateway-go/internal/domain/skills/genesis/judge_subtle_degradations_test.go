@@ -9,9 +9,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 )
 
-// subtleBody has one imperative-rule line and one safety-note line, each
-// load-bearing and padded past the min-body floor, so both subtle degradations
-// have a target.
+// subtleBody has one imperative-rule line, one safety-note line, and one
+// universal-quantifier line, each load-bearing and padded past the min-body
+// floor, so every subtle/weaken degradation has a target.
 func subtleBody() string {
 	return strings.TrimSpace(`# 테스트 스킬
 
@@ -22,6 +22,7 @@ func subtleBody() string {
 1. 데이터를 수집한다. ` + strings.Repeat("절차 상세 설명. ", 8) + `
 2. 보고서를 작성하기 전에 반드시 원본 데이터의 무결성을 재확인한다.
 3. 주의: 미검증 첨부는 절대 자동 발송 경로에 넣지 않는다.
+4. 발송 전 모든 수신자 주소를 명부와 대조해 확인한다.
 
 ## Verification
 결과를 검증한다. ` + strings.Repeat("검증 상세. ", 10))
@@ -88,6 +89,58 @@ func TestDropFirstLineMatching(t *testing.T) {
 	}
 }
 
+// Tier-3 weaken degradations mutate one token in place: the line survives
+// (line count preserved — nothing for a diff to find missing), the binding
+// force is diluted, and no other byte changes.
+func TestWeakenJudgeDegradations(t *testing.T) {
+	body := subtleBody()
+	wantLines := strings.Count(body, "\n")
+
+	imp, ok := degradeWeakenImperative(body)
+	if !ok {
+		t.Fatal("imperative-weaken found no rule line to dilute")
+	}
+	if strings.Count(imp, "\n") != wantLines {
+		t.Fatal("imperative-weaken changed the line count — must mutate in place")
+	}
+	if strings.Contains(imp, "반드시") || !strings.Contains(imp, "가급적") {
+		t.Fatalf("imperative-weaken did not dilute the hard-rule token: %q", imp)
+	}
+	if !strings.Contains(imp, "절대 자동 발송") {
+		t.Fatal("imperative-weaken touched more than the first matching line")
+	}
+
+	nar, ok := degradeNarrowScope(body)
+	if !ok {
+		t.Fatal("scope-narrow found no quantifier line to shrink")
+	}
+	if strings.Count(nar, "\n") != wantLines {
+		t.Fatal("scope-narrow changed the line count — must mutate in place")
+	}
+	if strings.Contains(nar, "모든 수신자") || !strings.Contains(nar, "일부 수신자") {
+		t.Fatalf("scope-narrow did not shrink the quantifier: %q", nar)
+	}
+
+	// English tokens: a leading capital is preserved so the mutation stays
+	// typographically clean, and trailing-space tokens dodge substring traps.
+	english := "This intro line is long enough to pass.\nNever skip the raw-data verification step here.\nInstall the tooling for every checks run."
+	weak, ok := weakenFirstLineMatching(english, imperativeWeakenSwaps)
+	if !ok || !strings.Contains(weak, "Rarely skip") {
+		t.Fatalf("English imperative-weaken failed: ok=%v %q", ok, weak)
+	}
+	if strings.Contains(weak, "rarely skip") {
+		t.Fatal("leading capital lost on the replacement token")
+	}
+	if _, ok := weakenFirstLineMatching("Install the overall small tool here today.", scopeNarrowSwaps); ok {
+		t.Fatal("substring trap: install/overall/small must not match quantifier tokens")
+	}
+
+	// No token anywhere → ok=false, never a fabricated pair.
+	if _, ok := degradeWeakenImperative("그냥 평범한 절차 설명입니다 여기는.\n두 번째 줄도 평범합니다 정말로."); ok {
+		t.Fatal("imperative-weaken reported a mutation with no token present")
+	}
+}
+
 // Pair construction over a catalog: subtle pairs are built for the real body,
 // stubs are skipped, the limit is honored, and construction is deterministic.
 func TestBuildSubtleJudgeDegradationPairs(t *testing.T) {
@@ -130,5 +183,22 @@ func TestBuildSubtleJudgeDegradationPairs(t *testing.T) {
 	}
 	if capped := buildSubtleJudgeDegradationPairs(entries, 1); len(capped) != 1 {
 		t.Fatalf("limit not honored: %d", len(capped))
+	}
+
+	// The escalated tier builds through the same constructor: both weaken
+	// classes for the real body, none for the stub.
+	weak := buildWeakenJudgeDegradationPairs(entries, 10)
+	if len(weak) != 2 {
+		t.Fatalf("weaken pairs = %d, want 2 (imperative-weaken + scope-narrow)", len(weak))
+	}
+	weakNames := map[string]bool{}
+	for _, p := range weak {
+		if p.Skill != "real" || p.Degraded == p.Original {
+			t.Fatalf("bad weaken pair: %+v", p)
+		}
+		weakNames[p.Degradation] = true
+	}
+	if !weakNames["imperative-weaken"] || !weakNames["scope-narrow"] {
+		t.Fatalf("missing a weaken class: %v", weakNames)
 	}
 }

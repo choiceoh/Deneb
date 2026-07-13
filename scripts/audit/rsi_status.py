@@ -59,7 +59,13 @@ ORGANIC_FALSE_ACCEPT_WINDOW_DAYS = 30
 # competent judge always catches (so 0 misses there means nothing); the SUBTLE
 # ones are the ones that actually produce labeled misses (P3 fuel).
 BLATANT_CLASSES = frozenset({"section-drop", "fake-tool", "truncation", "overfit"})
-SUBTLE_CLASSES = frozenset({"imperative-drop", "safety-drop"})
+SUBTLE_CLASSES = frozenset({"imperative-drop", "safety-drop", "imperative-weaken", "scope-narrow"})
+# Escalated tier (probe curriculum ladder): the lane deploys in-place weaken
+# probes only after the incumbent judge posts ESCALATION_WINDOW consecutive
+# zero-miss drop-tier runs (genesis/judge_accuracy.go weakenTierUnlocked —
+# keep both in sync).
+WEAKEN_CLASSES = frozenset({"imperative-weaken", "scope-narrow"})
+ESCALATION_WINDOW = 5
 
 # L4 dispatch supply contract (must match scripts/dev/coding-dispatch.sh and
 # genesis/rsi_status.go rsiDispatchSources): a candidate is dispatchable only if
@@ -223,6 +229,7 @@ def assess_l3(runs: list[dict], genesis_events: list[dict], now_ms: int) -> Laye
         false_rejects += len(r.get("falseRejects") or [])
         classes_seen.update((r.get("byClass") or {}).keys())
     subtle_deployed = bool(classes_seen & SUBTLE_CLASSES)
+    weaken_deployed = bool(classes_seen & WEAKEN_CLASSES)
     organic = _organic_false_accepts(genesis_events, now_ms)
     metrics = {
         "runs": len(recent),
@@ -230,6 +237,7 @@ def assess_l3(runs: list[dict], genesis_events: list[dict], now_ms: int) -> Laye
         "false_rejects": false_rejects,
         "organic_false_accepts_30d": organic,
         "subtle_probes_deployed": subtle_deployed,
+        "weaken_probes_deployed": weaken_deployed,
     }
     if misses > 0 or false_rejects > 0 or organic > 0:
         return LayerStatus("L3", "verifier co-evolution", LIVE, metrics,
@@ -239,9 +247,13 @@ def assess_l3(runs: list[dict], genesis_events: list[dict], now_ms: int) -> Laye
         return LayerStatus("L3", "verifier co-evolution", DATA_GATED, metrics,
                            f"{len(recent)} runs, judge caught every BLATANT defect and subtle probes "
                            "are not in the ledger yet — awaiting the subtle-degradation deploy")
+    if weaken_deployed:
+        return LayerStatus("L3", "verifier co-evolution", DATA_GATED, metrics,
+                           f"{len(recent)} runs, 0 misses even at the escalated weaken tier — "
+                           "judge is strong at the current probe ceiling")
     return LayerStatus("L3", "verifier co-evolution", DATA_GATED, metrics,
                        f"{len(recent)} runs with subtle probes but 0 misses — judge is currently strong; "
-                       "fuel appears when it slips")
+                       f"the lane escalates to weaken probes after {ESCALATION_WINDOW} saturated runs")
 
 
 def _merge_candidates(rows: list[dict]) -> tuple[dict[str, dict], dict[str, str]]:
