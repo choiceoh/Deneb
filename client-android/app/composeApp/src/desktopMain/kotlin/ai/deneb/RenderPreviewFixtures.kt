@@ -6,6 +6,7 @@ import ai.deneb.deneb.generated.DashboardItem
 import ai.deneb.deneb.generated.LaneOut
 import ai.deneb.deneb.generated.MemberOut
 import ai.deneb.deneb.generated.OrgNodeOut
+import ai.deneb.deneb.generated.RSIHealthView
 import ai.deneb.deneb.generated.RSILayerView
 import ai.deneb.deneb.generated.RSILoopStatusResponse
 import ai.deneb.deneb.generated.RSIMetricView
@@ -301,6 +302,19 @@ internal val sampleRsi = RSILoopStatusResponse(
             ),
         ),
     ),
+    health = RSIHealthView(
+        evolves7d = 3,
+        confirmed7d = 2,
+        rejected7d = 5,
+        rolledBack7d = 1,
+        genesis7d = 2,
+        confirmRate = 0.67,
+        falseAcceptRate = 0.33,
+        resolvedEvolves7d = 3,
+        thrash = false,
+        autoAdoptFrozen = true,
+        metaRevisions7d = 1,
+    ),
 )
 
 // The org chart (조직도): a group → 실/회사 → 팀 → 파트 hierarchy joined by parentId,
@@ -450,25 +464,41 @@ internal fun sampleSelfImprovementCodingQueue(now: Long) = SelfImprovementCoding
             id = "sc-coding-1",
             status = "proposed",
             scope = "code",
-            title = "MOSS식 소스 후보 상태 표면",
-            proposedChange = "자가개선 코딩 화면에서 코드 후보의 대기/적용/기각 상태를 분리해 표시",
-            evidence = "코딩 에이전트가 기록한 후보가 JSONL에만 남아 native에서 검토되지 않음",
-            risk = "적용 완료 이벤트와 후보가 섞이면 상태를 오해할 수 있음",
-            targetFiles = listOf("ConfigSelfImprovementCodingTab.kt", "self_improvement_coding.go"),
-            evidenceKinds = listOf("session", "evidence", "target_files", "risk"),
-            reviewActions = listOf("open_session", "inspect_target_files", "run_focused_validation", "mark_review_status"),
+            title = "도구 설명/스키마 품질: web (오류율 30%)",
+            proposedChange = "web 도구의 ToolDef.Description을 다듬어 반복 오사용을 줄인다",
+            evidence = "observe.behavior 30d: web calls=200 errors=60 (30%)",
+            risk = "propose-only; 설명만 다듬고 권한 표면은 넓히지 않는다",
+            source = "tool-quality:web:desc",
+            autoDispatch = true,
+            targetFiles = listOf("toolreg/core.go"),
+            evidenceKinds = listOf("evidence", "target_files", "risk"),
+            reviewActions = listOf("inspect_target_files", "run_focused_validation", "mark_review_status"),
             createdAt = now - 45 * 60_000L,
             updatedAt = now - 45 * 60_000L,
         ),
+        SelfCorrectionCandidate(
+            id = "sc-coding-2",
+            status = "proposed",
+            scope = "code",
+            title = "죽은 코드: orphanHelper",
+            proposedChange = "unreachable 함수를 삭제하거나 근거와 함께 베이스라인 처리",
+            evidence = "deadcode-audit NEW: internal/pipeline/chat/run_orphan.go :: orphanHelper",
+            source = "deadcode-finding:1a2b3c4d5e6f",
+            autoDispatch = false,
+            targetFiles = listOf("gateway-go/internal/pipeline/chat/run_orphan.go"),
+            evidenceKinds = listOf("evidence", "target_files"),
+            createdAt = now - 90 * 60_000L,
+            updatedAt = now - 90 * 60_000L,
+        ),
     ),
-    count = 1,
+    count = 2,
     statusCounts = listOf(
-        SelfImprovementCodingStatusCount(status = "proposed", count = 1),
+        SelfImprovementCodingStatusCount(status = "proposed", count = 2),
         SelfImprovementCodingStatusCount(status = "accepted", count = 0),
         SelfImprovementCodingStatusCount(status = "applied", count = 1),
         SelfImprovementCodingStatusCount(status = "rejected", count = 1),
         SelfImprovementCodingStatusCount(status = "superseded", count = 0),
-        SelfImprovementCodingStatusCount(status = "all", count = 3),
+        SelfImprovementCodingStatusCount(status = "all", count = 4),
     ),
     funnel = SelfImprovementCodingFunnel(
         lastCaptureAt = now - 4 * 86_400_000L,

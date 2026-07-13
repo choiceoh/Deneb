@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.deneb.generated.RSIHealthView
 import ai.deneb.deneb.generated.RSILayerView
 import ai.deneb.deneb.generated.RSILoopStatusResponse
 import ai.deneb.deneb.generated.SelfCorrectionCandidate
@@ -47,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 /**
@@ -158,11 +160,81 @@ internal fun RsiStatusContent(
             color = denebHint(),
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
         )
+        RsiHealthCard(status.health)
         status.layers.forEach { layer ->
             RsiLayerCard(layer, lifecycle, candidates)
             Spacer(Modifier.height(18.dp))
         }
     }
+}
+
+/** Evolution-health scoreboard (7-day) from `rsi.status.health`: the numeric
+ *  fields the layer diagnoses only render as prose. Skipped entirely when
+ *  nothing has happened — the layer cards already say IDLE, so an all-zero
+ *  scoreboard would be noise. Self-brake flags (thrash / auto-adopt frozen)
+ *  surface as warm insight chips so a paused loop is visible at a glance. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RsiHealthCard(health: RSIHealthView) {
+    val hasActivity = health.evolves7d > 0 || health.genesis7d > 0 ||
+        health.metaRevisions7d > 0 || health.thrash || health.autoAdoptFrozen
+    if (!hasActivity) return
+    fun pct(v: Double) = "${(v * 100).roundToInt()}%"
+    DenebGroup {
+        Text(
+            text = "진화 건강 (7일)",
+            style = DenebType.sectionLabel,
+            color = denebHint(),
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 8.dp),
+        )
+        FlowRow(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            RsiStat("확정률", pct(health.confirmRate))
+            RsiStat("오수용률", pct(health.falseAcceptRate), sub = "n=${health.resolvedEvolves7d}")
+            RsiStat("진화", health.evolves7d.toString())
+            RsiStat("확정", health.confirmed7d.toString())
+            RsiStat("롤백", health.rolledBack7d.toString())
+            RsiStat("신규 스킬", health.genesis7d.toString())
+            RsiStat("메타 개정", health.metaRevisions7d.toString())
+        }
+        if (health.thrash || health.autoAdoptFrozen) {
+            FlowRow(
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (health.autoAdoptFrozen) RsiFlagChip("메타 자동채택 동결")
+                if (health.thrash) RsiFlagChip("진화 쓰래싱")
+            }
+        }
+    }
+}
+
+/** One scoreboard tile: value over label, optional small sub (e.g. sample n). */
+@Composable
+private fun RsiStat(label: String, value: String, sub: String? = null) {
+    Column {
+        Text(text = value, style = DenebType.rowTitleStrong, color = MaterialTheme.colorScheme.onBackground)
+        Text(text = label, style = DenebType.meta, color = denebHint())
+        if (sub != null) Text(text = sub, style = DenebType.meta, color = denebHint())
+    }
+}
+
+/** Warm-insight self-brake flag chip (auto-adopt frozen / thrash) — a paused or
+ *  churning loop must be visible without reading the L2 diagnosis. */
+@Composable
+private fun RsiFlagChip(text: String) {
+    Text(
+        text = text,
+        style = DenebType.meta,
+        color = denebInsight(),
+        modifier = Modifier
+            .background(denebInsightContainer(), RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    )
 }
 
 /** One loop layer: header (key · title + state badge), diagnosis, metric chips.
