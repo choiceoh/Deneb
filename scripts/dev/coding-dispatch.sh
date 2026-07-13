@@ -193,7 +193,7 @@ for name in sorted(os.listdir(dispatch_dir)):
             run(["rm", "-rf", wt])
     run(["git", "-C", prod, "branch", "-D", branch])
     print(
-        f"abandon reclaim: released {cid} "
+        f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')}  abandon reclaim: released {cid} "
         f"(outcome-less age {int(age)}s ≥ {abandon_after}s)",
         flush=True,
     )
