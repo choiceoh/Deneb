@@ -449,10 +449,10 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 		if t.OnProposal != nil {
 			// The verdict card must say WHY the loop is asking instead of
 			// auto-adopting — the margin is the whole context for the decision.
-			t.OnProposal(artifact, epoch, reason+" — 저신뢰 라우팅: "+lowConfidence, path, false)
+			t.OnProposal(artifact, epoch, annotateReason(reason, "저신뢰 라우팅: "+lowConfidence), path, false)
 		}
 		return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow,
-			true, toVersion, reason+" [저신뢰: "+lowConfidence+" — 운영자 verdict 대기]")
+			true, toVersion, annotateReason(reason, "[저신뢰: "+lowConfidence+" — 운영자 verdict 대기]"))
 	}
 	if metaAutoAdoptEnabled() && !t.Tracker.AutoAdoptFrozen() {
 		// Operator mandate (2026-07-11): the deterministic gate chain (contract
@@ -789,6 +789,16 @@ func metaLowConfidenceReason(inc, prop *JudgeBenchOutcome, shadow *ProducerBench
 		return fmt.Sprintf("shadow bench margin %.2f→%.2f (no measurable improvement)", shadow.IncumbentScore, shadow.ProposalScore)
 	}
 	return ""
+}
+
+// annotateReason appends an annotation to a producer reason with a clean
+// delimiter — an empty reason must not produce a leading " — " in verdict
+// cards or the ledger.
+func annotateReason(reason, note string) string {
+	if strings.TrimSpace(reason) == "" {
+		return note
+	}
+	return reason + " — " + note
 }
 
 // metaProposalResp is the producer's verdict for a meta cycle.
