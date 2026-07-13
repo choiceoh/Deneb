@@ -39,6 +39,13 @@ describe("Markdown", () => {
     expect(screen.getByRole("cell", { name: "A" })).toBeInTheDocument();
   });
 
+  it("marks a 3+ column table dense so narrow Korean columns fit, but not a 2-column one", () => {
+    const three = render(<Markdown text={"| 현장 | 규격 | 수량 |\n| --- | --- | --- |\n| A | RPS | 12 |"} />);
+    expect(three.container.querySelector("table.md-table")).toHaveClass("md-table-dense");
+    const two = render(<Markdown text={"| 이름 | 값 |\n| --- | --- |\n| A | 1 |"} />);
+    expect(two.container.querySelector("table.md-table")).not.toHaveClass("md-table-dense");
+  });
+
   it("right-aligns a marker-less all-numeric column; explicit markers win", () => {
     // 수량 column: every cell digit-led, no ':---:' marker → auto right-align
     // with tabular figures. 단가 column: explicit ':---' (left) marker → kept.

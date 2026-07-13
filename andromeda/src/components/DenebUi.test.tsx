@@ -176,6 +176,20 @@ describe("deneb-ui renderer parity conventions", () => {
     expect((cells[0] as HTMLElement).style.textAlign).toBe("");
   });
 
+  it("marks a 3+ column table dense, but not a 2-column one", () => {
+    const three = render(
+      <DenebUi
+        spec={{ type: "table", headers: ["현장", "규격", "수량"], rows: [["화성", "RPS", "12"]] }}
+        onSubmit={() => {}}
+      />,
+    );
+    expect(three.container.querySelector("table.md-table")).toHaveClass("md-table-dense");
+    const two = render(
+      <DenebUi spec={{ type: "table", headers: ["현장", "수량"], rows: [["화성", "12"]] }} onSubmit={() => {}} />,
+    );
+    expect(two.container.querySelector("table.md-table")).not.toHaveClass("md-table-dense");
+  });
+
   it("renders inline emphasis inside table cells and keeps numeric align", () => {
     const spec = {
       type: "table",

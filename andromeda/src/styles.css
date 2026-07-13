@@ -1676,6 +1676,15 @@ textarea {
   border-spacing: 0;
   font-size: 0.92em;
 }
+/* Dense tables (3+ columns): a smaller type rung + tighter cells so narrow
+   columns fit whole Korean 어절 per line (native dense-mode parity). */
+.md-table-dense {
+  font-size: 0.82em;
+}
+.md-table-dense th,
+.md-table-dense td {
+  padding: 5px 7px;
+}
 .md-table th,
 .md-table td {
   padding: 7px 9px;
