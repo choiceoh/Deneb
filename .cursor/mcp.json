@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "codegraph": {
+      "type": "stdio",
+      "command": "bash",
+      "args": ["${workspaceFolder}/scripts/dev/codegraph-serve.sh"],
+      "env": {
+        "PATH": "${env:PATH}:${userHome}/.local/bin:${userHome}/.npm-global/bin"
+      }
+    }
+  }
+}
