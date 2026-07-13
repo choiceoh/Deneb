@@ -15,21 +15,21 @@ func curriculumFixture(t *testing.T, resp curriculumResp, catalog map[string]str
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A fixed environment signal — grounding now scans ONLY this digest, not
-	// the self-authored scaffolding (M6). The fixture quotes a verbatim slice
-	// of it so an admissible proposal clears the grounding gate.
-	const envSignal = "최근 실패한 요청(명시적 능력 갭): \"투자사 미팅 사전 브리프를 만들어줘\" — 오류: 해당 능력 없음"
+	// A fixed environment signal, shaped like a real failed-request bullet so
+	// the grounding corpus keeps the QUOTED MESSAGE (not the section header).
+	// The fixture quotes a slice of that message — the actual demand data.
+	const envDemand = "투자사 미팅 사전 브리프를 만들어줘"
+	const envSignal = "최근 실패한 요청(명시적 능력 갭):\n- 07-12: \"" + envDemand + "\" — 오류: 해당 능력 없음"
 	task := &CurriculumTask{
 		Tracker:   tr,
 		Logger:    slog.Default(),
 		EnvDigest: func(context.Context) string { return envSignal },
 		proposeFn: func(_ context.Context, _ string) (curriculumResp, error) {
-			// Ground the fixture's evidence in the ENVIRONMENT digest (the
-			// source-grounding gate requires a >=12-rune verbatim quote from
-			// the env-derived corpus, not the scaffolding).
+			// Ground the fixture's evidence in the actual demand data (not the
+			// scaffolding header) — the grounding gate needs a >=12-rune
+			// verbatim quote from the env-derived corpus.
 			out := resp
-			runes := []rune(envSignal)
-			out.Evidence = "인용: " + string(runes[:curriculumGroundingMinRunes+8])
+			out.Evidence = "인용: " + envDemand
 			return out, nil
 		},
 		catalogFn: func() map[string]string { return catalog },
@@ -215,6 +215,35 @@ func TestCurriculumSourceGrounding(t *testing.T) {
 	}
 }
 
+// Codex review: the grounding corpus keeps only demand DATA — bullet content
+// and the payload of a "header: data" line — never the static section headers,
+// so quoting a boilerplate header cannot satisfy grounding.
+func TestCurriculumGroundingLines_StripsHeaders(t *testing.T) {
+	digest := "최근 실패한 요청(명시적 능력 갭, 최대 5):\n" +
+		"- 07-12: \"투자사 미팅 브리프를 만들어줘\" — 오류: 없음\n" +
+		"\n활성 위키 상대 도메인(최대 10): acme.com · bohae.co.kr\n" +
+		"다가오는 일정(스킬 커버리지 갭 후보, 최대 5):\n" +
+		"- 07-15: 분기 실적 발표 준비"
+	corpus := curriculumGroundingLines(digest)
+	// Pure headers are gone.
+	if strings.Contains(corpus, "최근 실패한 요청") || strings.Contains(corpus, "다가오는 일정") {
+		t.Fatalf("section headers survived into the grounding corpus:\n%s", corpus)
+	}
+	// Demand data survives: quoted message, wiki domains, calendar summary.
+	for _, want := range []string{"투자사 미팅 브리프를 만들어줘", "acme.com · bohae.co.kr", "분기 실적 발표 준비"} {
+		if !strings.Contains(corpus, want) {
+			t.Fatalf("demand data %q missing from grounding corpus:\n%s", want, corpus)
+		}
+	}
+	// A proposal quoting only a header fails grounding; quoting data passes.
+	if reason := curriculumSourceGrounding("최근 실패한 요청(명시적 능력 갭", corpus); reason == "" {
+		t.Fatal("quoting a section header must NOT ground")
+	}
+	if reason := curriculumSourceGrounding("투자사 미팅 브리프를 만들어줘", corpus); reason != "" {
+		t.Fatalf("quoting real demand data must ground: %s", reason)
+	}
+}
+
 // M6: grounding scans ONLY the environment-derived corpus. A proposal quoting
 // the self-authored scaffolding (a section header, a catalog line) proves no
 // real demand and must be rejected; only a quote from the env digest grounds.
@@ -228,11 +257,13 @@ func TestCurriculumRun_GroundingRejectsScaffoldingQuote(t *testing.T) {
 			Description: "브리프", Input: "브리프 만들어줘", RequiredSubstrings: []string{"참석자", "안건"},
 		}},
 	}
+	// HOME before NewTracker: the tracker resolves ~/.deneb at construction, so
+	// setting HOME afterward would read the real user ledgers (Codex review).
+	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("HOME", t.TempDir())
 	task := &CurriculumTask{
 		Tracker: tr, Logger: slog.Default(),
 		EnvDigest: func(context.Context) string {

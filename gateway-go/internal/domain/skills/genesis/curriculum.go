@@ -282,13 +282,49 @@ func (t *CurriculumTask) assembleDemandEvidence(ctx context.Context, catalog map
 
 	if t.EnvDigest != nil {
 		if digest := strings.TrimSpace(t.EnvDigest(ctx)); digest != "" {
-			groundingCorpus = common.TruncateRunes(digest, 2000)
+			shown := common.TruncateRunes(digest, 2000)
 			b.WriteString("\n## 환경 요약\n")
-			b.WriteString(groundingCorpus)
+			b.WriteString(shown)
 			b.WriteString("\n")
+			// The producer SEES the formatted digest (with section headers), but
+			// grounding scans only the DEMAND DATA — bullet content and the data
+			// after a "header: data" line — never the static section headers.
+			// Quoting a boilerplate header ("최근 실패한 요청…:") proved no real
+			// demand (Codex review, extends RSI eval M6).
+			groundingCorpus = curriculumGroundingLines(shown)
 		}
 	}
 	return b.String(), groundingCorpus
+}
+
+// curriculumGroundingLines strips digest scaffolding to the environment data a
+// proposal must actually quote: bullet content ("- …" → "…") and the payload of
+// a "header: data" line (wiki domains). Pure header lines (ending in ":") carry
+// no demand and are dropped, so they cannot satisfy the grounding gate.
+func curriculumGroundingLines(digest string) string {
+	var out []string
+	for _, line := range strings.Split(digest, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(trimmed, "- "):
+			out = append(out, strings.TrimSpace(trimmed[2:]))
+		case strings.HasSuffix(trimmed, ":"):
+			continue // pure section header — no data
+		case strings.Contains(trimmed, ": "):
+			// "header: data" (e.g. the wiki-domains line) — keep only the data.
+			if idx := strings.Index(trimmed, ": "); idx >= 0 {
+				if data := strings.TrimSpace(trimmed[idx+2:]); data != "" {
+					out = append(out, data)
+				}
+			}
+		default:
+			out = append(out, trimmed)
+		}
+	}
+	return strings.Join(out, "\n")
 }
 
 // llmPropose asks the strongest wired model for one capability proposal.

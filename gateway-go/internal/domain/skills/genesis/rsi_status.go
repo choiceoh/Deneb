@@ -538,8 +538,12 @@ func rsiEProcessValue(r eProcessCutoverReadiness) string {
 
 func rsiSourceDispatchable(source string) bool {
 	source = strings.TrimSpace(source)
+	// Separator-aware, matching coding-dispatch.sh's picker exactly: an exact
+	// namespace or a "namespace:"-prefixed id. A bare prefix reported
+	// "health-finding-x" as dispatchable/LIVE even though the picker will never
+	// pick it — a false dashboard signal (Codex review of RSI eval M7).
 	for _, s := range rsiDispatchSources {
-		if strings.HasPrefix(source, s) {
+		if rsiSourceMatchesNamespace(source, s) {
 			return true
 		}
 	}
@@ -547,11 +551,18 @@ func rsiSourceDispatchable(source string) bool {
 	// (operator directive 2026-07-14); coding-dispatch.sh and rsi_status.py
 	// read the same state file so the three allowlists cannot drift.
 	for _, s := range graduatedDispatchSources() {
-		if s != "" && strings.HasPrefix(source, s) {
+		if s != "" && rsiSourceMatchesNamespace(source, s) {
 			return true
 		}
 	}
 	return false
+}
+
+// rsiSourceMatchesNamespace is the shared picker rule: exact namespace, or the
+// same namespace extended past a ":" (mirrors coding-dispatch.sh and genesis
+// selfCorrectionSourceMatches).
+func rsiSourceMatchesNamespace(source, ns string) bool {
+	return source == ns || strings.HasPrefix(source, ns+":")
 }
 
 func rsiScopeSummary(byScope map[string]int) string {
