@@ -15,6 +15,8 @@
 #      스킵하지 않는다 — landed/attempted만 차단, declined/failed/timeout은
 #      재시도, outcome 없는 마커는 세션 타임아웃 경과 후 포기(abandoned)로
 #      본다 (dispatch_outcome.blocks_redispatch).
+#   5. 기존 워크트리는 origin/main에 동기화(ahead==0일 때 reset --hard).
+#      셋업 실패 시 같은 틱에서 다음 후보로 넘어간다 (헤드오브큐 독성 방지).
 #
 # 안전:
 # - 항상 exit 0 (systemd 타이머 컨벤션). flock 단일 인스턴스 + 세션 타임아웃.
@@ -56,7 +58,8 @@ resolve_claude() {
 main() {
     exec 9>"$LOCK_FILE"
     if ! flock -n 9; then
-        exit 0 # a dispatch session is running
+        log "another dispatch holds the lock — idle"
+        exit 0
     fi
     mkdir -p "$DISPATCH_DIR"
     local script_dir
@@ -87,28 +90,41 @@ main() {
     today=$(date -u +%Y-%m-%d)
     spent=$(find "$DISPATCH_DIR" -name "*.json" -newermt "$today UTC" 2>/dev/null | wc -l)
     if (( spent >= DAILY_CAP )); then
+        log "daily cap reached ($spent/$DAILY_CAP UTC $today) — idle"
         exit 0
     fi
 
-    [[ -f "$QUEUE_FILE" ]] || exit 0
+    if [[ ! -f "$QUEUE_FILE" ]]; then
+        log "queue file missing — idle"
+        exit 0
+    fi
 
-    # Newest undispatched proposed code candidate with an evidence-bearing
-    # source. jq-free: python3 is guaranteed on this host (deploy scripts use it).
-    # Marker skip semantics live in dispatch_outcome.blocks_redispatch — existence
-    # alone is NOT enough (observed 2026-07-13: outcome-less crash markers and
-    # declined/failed/timeout permanently starved the L4 drain).
-    local pick
-    pick=$(python3 - "$QUEUE_FILE" "$DISPATCH_DIR" "$script_dir" "$SESSION_TIMEOUT" <<'PYEOF'
+    local claude_bin
+    if ! claude_bin=$(resolve_claude); then
+        log "no Claude Code binary available — idle"
+        exit 0
+    fi
+
+    mkdir -p "$WORKTREE_ROOT"
+
+    # Pick + setup may need more than one try in a single tick: a head-of-queue
+    # candidate whose worktree/branch setup fails used to exit 0 and starve the
+    # other dispatchable IDs until the next timer (live 2026-07-13: 4c2c454a
+    # failed at 20:22 and 22:22 while 6 siblings sat ready).
+    local pick="" cid="" wt="" skip_ids=""
+    local attempt
+    for attempt in 1 2 3 4 5; do
+        # Newest undispatched proposed/accepted code candidate with an evidence-
+        # bearing source. Marker skip: dispatch_outcome.blocks_redispatch.
+        # Optional argv[5]=comma-separated ids to skip this tick after setup fail.
+        pick=$(python3 - "$QUEUE_FILE" "$DISPATCH_DIR" "$script_dir" "$SESSION_TIMEOUT" "$skip_ids" <<'PYEOF'
 import json, os, sys
 queue, dispatch_dir, script_dir = sys.argv[1], sys.argv[2], sys.argv[3]
 abandon_after = int(sys.argv[4])
+skip = {s for s in (sys.argv[5] if len(sys.argv) > 5 else "").split(",") if s}
 sys.path.insert(0, script_dir)
 import dispatch_outcome
-# A self_correction_review row is a STATUS DELTA ({id,status,...}), not a full
-# record — merge its status onto the candidate rather than replacing it, or the
-# candidate's scope/source/title get wiped and nothing ever matches.
-cand = {}    # id -> full candidate record
-status = {}  # id -> latest status
+cand, status = {}, {}
 for line in open(queue, errors="replace"):
     line = line.strip()
     if not line:
@@ -124,29 +140,18 @@ for line in open(queue, errors="replace"):
         cand[rid] = rec
     if rec.get("status"):
         status[rid] = rec["status"]
-# Dispatch order: review-endorsed (accepted) candidates first — the heartbeat
-# review lane actively accepts queue candidates it cannot implement itself
-# ("코딩 에이전트 후속", observed live 2026-07-12) — then unreviewed proposed,
-# newest within each tier. rejected/superseded/applied never dispatch.
 def pick_order(kv):
     rid, rec = kv
     st = status.get(rid, rec.get("status") or "proposed")
     return (0 if st == "accepted" else 1, -(rec.get("createdAt") or 0))
 for rid, rec in sorted(cand.items(), key=pick_order):
+    if rid in skip:
+        continue
     if status.get(rid, rec.get("status") or "proposed") not in ("proposed", "accepted"):
         continue
     if rec.get("scope") != "code":
         continue
     src = rec.get("source") or ""
-    # health-finding graduated 2026-07-12: first mined batch (7) reviewed clean
-    # (findings reproduce at HEAD, deterministic evidence, remediation directions
-    # actionable) — roadmap P5 graduation ladder. runtime-error stays staged.
-    # tool-quality graduated 2026-07-13 by DIRECT OPERATOR DIRECTIVE ("노브를
-    # 켜버려") ahead of the usual reviewed-batch gate: its candidates are
-    # description/schema clarifications and per-tool latency (:desc / :latency),
-    # both narrow and gated by the same land-time stack (make check + live-test +
-    # CI). The tool-quality-dryrun workflow previews what it would file before any
-    # real mine. deadcode-finding stays staged.
     if not (src.startswith("evolve-tool-gap") or src.startswith("self-harness")
             or src.startswith("health-finding") or src.startswith("tool-quality")):
         continue
@@ -157,48 +162,74 @@ for rid, rec in sorted(cand.items(), key=pick_order):
     print(json.dumps(rec, ensure_ascii=False))
     break
 PYEOF
-    )
-    [[ -n "$pick" ]] || exit 0
-
-    local cid
-    cid=$(printf '%s' "$pick" | python3 -c "import json,sys;print(json.load(sys.stdin)['id'])")
-    local claude_bin
-    if ! claude_bin=$(resolve_claude); then
-        log "no Claude Code binary available; leaving candidate $cid queued"
-        exit 0
-    fi
-
-    local wt="$WORKTREE_ROOT/dispatch-$cid"
-    mkdir -p "$WORKTREE_ROOT"
-    # A leftover directory that is NOT a registered git worktree (crash mid-
-    # add, manual rm of .git, etc.) used to short-circuit creation forever —
-    # `[[ -d $wt ]]` skipped the add path and the session ran against a stale
-    # or empty tree. Validate against `git worktree list` and wipe impostors.
-    if [[ -d "$wt" ]] && ! git -C "$PROD_DIR" worktree list --porcelain 2>/dev/null \
-            | grep -Fxq "worktree $wt"; then
-        log "stale worktree dir (not registered) — removing $wt"
-        rm -rf "$wt"
-    fi
-    if [[ ! -d "$wt" ]]; then
-        # Orphan-branch recovery: a prior crash can leave refs/heads/dispatch/$cid
-        # without a worktree. `worktree add -b` then fails forever on the same
-        # head-of-queue candidate (observed 2026-07-13: sc-1783840100484-4c2c454a
-        # blocked the whole L4 drain). Attach the existing branch when present;
-        # if that fails, drop the stale ref and recreate from origin/main.
-        local branch="dispatch/$cid"
-        if git -C "$PROD_DIR" show-ref --verify --quiet "refs/heads/$branch"; then
-            if ! git -C "$PROD_DIR" worktree add "$wt" "$branch" >>"$LOG_FILE" 2>&1; then
-                log "stale dispatch branch $branch — recreating worktree"
-                git -C "$PROD_DIR" branch -D "$branch" >>"$LOG_FILE" 2>&1 || true
-                if ! git -C "$PROD_DIR" worktree add "$wt" -b "$branch" origin/main >>"$LOG_FILE" 2>&1; then
-                    log "worktree creation failed for $cid after branch reset"
-                    exit 0
-                fi
-            fi
-        elif ! git -C "$PROD_DIR" worktree add "$wt" -b "$branch" origin/main >>"$LOG_FILE" 2>&1; then
-            log "worktree creation failed for $cid"
+        )
+        if [[ -z "$pick" ]]; then
+            log "no dispatchable candidate (attempt=$attempt skip=${skip_ids:-none}) — idle"
             exit 0
         fi
+        cid=$(printf '%s' "$pick" | python3 -c "import json,sys;print(json.load(sys.stdin)['id'])")
+        wt="$WORKTREE_ROOT/dispatch-$cid"
+
+        # Unregistered leftover dir → wipe (crash mid-add / empty tree).
+        if [[ -d "$wt" ]] && ! git -C "$PROD_DIR" worktree list --porcelain 2>/dev/null \
+                | grep -Fxq "worktree $wt"; then
+            log "stale worktree dir (not registered) — removing $wt"
+            rm -rf "$wt"
+        fi
+
+        # Registered but abandoned worktrees can lag origin/main by dozens of
+        # commits (live 2026-07-13: ee440d82 was 73 behind). Reusing without a
+        # sync would land patches on an ancient base. When ahead==0, hard-reset
+        # to origin/main; when ahead>0 keep the in-progress commits.
+        if [[ -d "$wt" ]]; then
+            git -C "$PROD_DIR" fetch origin main --quiet >>"$LOG_FILE" 2>&1 || true
+            local ahead_existing
+            ahead_existing=$(git -C "$wt" rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
+            if [[ "$ahead_existing" == "0" ]]; then
+                if git -C "$wt" reset --hard origin/main >>"$LOG_FILE" 2>&1; then
+                    log "synced existing worktree $cid to origin/main"
+                else
+                    log "worktree sync failed for $cid — recreating"
+                    git -C "$PROD_DIR" worktree remove --force "$wt" >>"$LOG_FILE" 2>&1 || true
+                    rm -rf "$wt"
+                fi
+            else
+                log "reusing worktree $cid with $ahead_existing commit(s) ahead of origin/main"
+            fi
+        fi
+
+        if [[ ! -d "$wt" ]]; then
+            # Orphan-branch recovery (live 2026-07-13: 4c2c454a).
+            local branch="dispatch/$cid"
+            if git -C "$PROD_DIR" show-ref --verify --quiet "refs/heads/$branch"; then
+                if ! git -C "$PROD_DIR" worktree add "$wt" "$branch" >>"$LOG_FILE" 2>&1; then
+                    log "stale dispatch branch $branch — recreating worktree"
+                    git -C "$PROD_DIR" branch -D "$branch" >>"$LOG_FILE" 2>&1 || true
+                    if ! git -C "$PROD_DIR" worktree add "$wt" -b "$branch" origin/main >>"$LOG_FILE" 2>&1; then
+                        log "worktree creation failed for $cid after branch reset — try next"
+                        skip_ids="${skip_ids:+$skip_ids,}$cid"
+                        pick=""; cid=""; wt=""
+                        continue
+                    fi
+                fi
+            elif ! git -C "$PROD_DIR" worktree add "$wt" -b "$branch" origin/main >>"$LOG_FILE" 2>&1; then
+                log "worktree creation failed for $cid — try next"
+                skip_ids="${skip_ids:+$skip_ids,}$cid"
+                pick=""; cid=""; wt=""
+                continue
+            fi
+        fi
+
+        if [[ -d "$wt" ]]; then
+            break
+        fi
+        skip_ids="${skip_ids:+$skip_ids,}$cid"
+        pick=""; cid=""; wt=""
+    done
+
+    if [[ -z "$pick" || -z "$cid" || ! -d "$wt" ]]; then
+        log "setup exhausted after skips (${skip_ids:-none}) — idle"
+        exit 0
     fi
 
     # Prompt composition + dispatch marker live in dispatch_prompt.py: the
@@ -216,7 +247,10 @@ PYEOF
         exit 0
     fi
     if [[ -z "$prompt" ]]; then
-        log "empty dispatch prompt for $cid — deferred"
+        # dispatch_prompt writes the marker before printing; an empty prompt
+        # must not leave a blocking marker behind.
+        rm -f "$DISPATCH_DIR/$cid.json"
+        log "empty dispatch prompt for $cid — marker released, deferred"
         exit 0
     fi
 
