@@ -231,9 +231,16 @@ func TestSkillLifecycleStatusKeepsPartialStateWhenRejectedEditsUnreadable(t *tes
 		t.Fatalf("LogGenesis: %v", err)
 	}
 
+	// A directory where the sidecar file is expected is a genuine, root-proof
+	// unreadable store (open succeeds, the read returns EISDIR), so the load
+	// error still surfaces as a diagnostic while other state stays partial.
+	// (An oversize LINE is no longer a fatal read — jsonlstore now skips it as
+	// recoverable corruption, RSI 4th-review M2-#3 — so it can't stand in for
+	// an unreadable store here.)
 	rejectedPath := filepath.Join(home, ".deneb", "data", "skill_rejected_edits.jsonl")
-	if err := os.WriteFile(rejectedPath, []byte(strings.Repeat("x", 1<<20+1)+"\n"), 0o644); err != nil {
-		t.Fatalf("write oversized rejected edits sidecar: %v", err)
+	_ = os.Remove(rejectedPath)
+	if err := os.MkdirAll(rejectedPath, 0o755); err != nil {
+		t.Fatalf("make rejected edits sidecar unreadable: %v", err)
 	}
 
 	backend := &skillLifecycleBackend{tracker: tracker}
