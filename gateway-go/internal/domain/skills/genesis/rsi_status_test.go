@@ -8,13 +8,13 @@ import (
 	"time"
 )
 
-func rsiLayerByKey(layers []RSILayer, key string) RSILayer {
+func rsiLayerByKey(layers []rsiLayer, key string) rsiLayer {
 	for _, l := range layers {
 		if l.Key == key {
 			return l
 		}
 	}
-	return RSILayer{}
+	return rsiLayer{}
 }
 
 // SourceAutoDispatches is the single graduation predicate the L4 count and the
@@ -79,7 +79,7 @@ func TestRSIStatus_EmptyTrackerIsQuiet(t *testing.T) {
 		if st.Layers[i].Key != want {
 			t.Fatalf("layer %d key = %q, want %q", i, st.Layers[i].Key, want)
 		}
-		if st.Layers[i].State == RSIStateLive {
+		if st.Layers[i].State == rsiStateLive {
 			t.Fatalf("empty tracker layer %s must not be LIVE: %+v", want, st.Layers[i])
 		}
 	}
@@ -104,16 +104,22 @@ func TestRSIStatus_AllLayersLive(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{ // L4
+	l4, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{ // L4 supply
 		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "sk",
 		Title: "tool gap: wiki_search — sk", Source: "evolve-tool-gap",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tr.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{ // actual turn
+		ID: l4.ID, DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-live",
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	st := tr.RSIStatus()
 	for _, k := range []string{"L1", "L2", "L3", "L4"} {
-		if l := rsiLayerByKey(st.Layers, k); l.State != RSIStateLive {
+		if l := rsiLayerByKey(st.Layers, k); l.State != rsiStateLive {
 			t.Fatalf("layer %s = %s (want LIVE): %s", k, l.State, l.Diagnosis)
 		}
 	}
@@ -131,7 +137,7 @@ func TestRSIStatus_L3OperatorLabelIsLiveWithoutSyntheticRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	l := rsiLayerByKey(tr.RSIStatus().Layers, "L3")
-	if l.State != RSIStateLive || rsiMetricValue(l.Metrics, "운영자 라벨(7일)") != "1" {
+	if l.State != rsiStateLive || rsiMetricValue(l.Metrics, "운영자 라벨(7일)") != "1" {
 		t.Fatalf("L3 operator label status = %+v", l)
 	}
 }
@@ -143,7 +149,7 @@ func TestRSIStatus_L1DataGatedOnRejectionsOnly(t *testing.T) {
 	if err := tr.LogEvolveRejected("sk", "self-harness audit rejected"); err != nil {
 		t.Fatal(err)
 	}
-	if l := rsiLayerByKey(tr.RSIStatus().Layers, "L1"); l.State != RSIStateDataGated {
+	if l := rsiLayerByKey(tr.RSIStatus().Layers, "L1"); l.State != rsiStateDataGated {
 		t.Fatalf("L1 = %s, want DATA-GATED", l.State)
 	}
 }
@@ -159,7 +165,7 @@ func TestRSIStatus_L1DataGatedOnProposalsOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	l := rsiLayerByKey(tr.RSIStatus().Layers, "L1")
-	if l.State != RSIStateDataGated {
+	if l.State != rsiStateDataGated {
 		t.Fatalf("L1 = %s, want DATA-GATED (%s)", l.State, l.Diagnosis)
 	}
 	if got := rsiMetricValue(l.Metrics, "제안"); got != "1" {
@@ -180,7 +186,7 @@ func TestRSIStatus_L2LiveWithin14dWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	l := rsiLayerByKey(tr.RSIStatus().Layers, "L2")
-	if l.State != RSIStateLive {
+	if l.State != rsiStateLive {
 		t.Fatalf("L2 = %s, want LIVE (%s)", l.State, l.Diagnosis)
 	}
 	if !strings.Contains(l.Diagnosis, "(14일)") {
@@ -195,9 +201,9 @@ func TestRSIStatus_L2LiveWithin14dWindow(t *testing.T) {
 	}
 }
 
-// An empty queue with a coding-dispatch marker written today keeps L4 LIVE
-// (Python assess_l4 dispatch_today parity).
-func TestRSIStatus_L4LiveOnDispatchToday(t *testing.T) {
+// A marker receipt alone is not proof that the authoritative dispatch loop is
+// turning; only a lifecycle event may make L4 LIVE.
+func TestRSIStatus_L4MarkerTodayDoesNotClaimLive(t *testing.T) {
 	tr := newTestTracker(t)
 	dir := filepath.Join(filepath.Dir(tr.selfCorrectionPath), "coding_dispatch")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -207,8 +213,8 @@ func TestRSIStatus_L4LiveOnDispatchToday(t *testing.T) {
 		t.Fatal(err)
 	}
 	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
-	if l.State != RSIStateLive {
-		t.Fatalf("L4 = %s, want LIVE (%s)", l.State, l.Diagnosis)
+	if l.State != rsiStateIdle {
+		t.Fatalf("L4 = %s, want IDLE (%s)", l.State, l.Diagnosis)
 	}
 	if got := rsiMetricValue(l.Metrics, "오늘 배차"); got != "1" {
 		t.Fatalf("dispatched today metric = %q, want 1 (%+v)", got, l.Metrics)
@@ -228,7 +234,7 @@ func TestRSIStatus_L4StarvedOnNonDispatchableCode(t *testing.T) {
 		t.Fatal(err)
 	}
 	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
-	if l.State != RSIStateStarved {
+	if l.State != rsiStateStarved {
 		t.Fatalf("L4 = %s, want STARVED (%s)", l.State, l.Diagnosis)
 	}
 	if got := rsiMetricValue(l.Metrics, "검토 대기(비배차)"); got != "1" {
@@ -244,7 +250,8 @@ func TestRSIStatus_L4StarvedOnNonDispatchableCode(t *testing.T) {
 
 // Graduation regression (2026-07-12): health-finding cleared its first batch
 // review and is in the dispatch allowlist — its candidates count dispatchable
-// and turn L4 LIVE while a staged runtime-error next to it keeps counting.
+// while a staged runtime-error next to it keeps counting. Supply alone remains
+// IDLE until the authoritative dispatcher records a started lifecycle.
 func TestRSIStatus_L4HealthFindingGraduated(t *testing.T) {
 	tr := newTestTracker(t)
 	for _, rec := range []SelfCorrectionCandidateRecord{
@@ -262,8 +269,8 @@ func TestRSIStatus_L4HealthFindingGraduated(t *testing.T) {
 		}
 	}
 	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
-	if l.State != RSIStateLive {
-		t.Fatalf("L4 = %s, want LIVE (%s)", l.State, l.Diagnosis)
+	if l.State != rsiStateIdle {
+		t.Fatalf("L4 = %s, want IDLE (%s)", l.State, l.Diagnosis)
 	}
 	if got := rsiMetricValue(l.Metrics, "배차 가능"); got != "1" {
 		t.Fatalf("dispatchable metric = %q, want 1 (%+v)", got, l.Metrics)
@@ -273,9 +280,9 @@ func TestRSIStatus_L4HealthFindingGraduated(t *testing.T) {
 	}
 }
 
-// A dispatch-source candidate keeps L4 LIVE regardless of staged extras, and
-// staged still counts the non-dispatch supply next to it.
-func TestRSIStatus_L4LiveWithStagedExtras(t *testing.T) {
+// A dispatch-source candidate remains visible as queued supply alongside
+// staged extras without claiming that L4 is already turning.
+func TestRSIStatus_L4QueuedWithStagedExtras(t *testing.T) {
 	tr := newTestTracker(t)
 	for _, rec := range []SelfCorrectionCandidateRecord{
 		{Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "sk", Title: "tool gap: wiki_search — sk", Source: "evolve-tool-gap"},
@@ -286,15 +293,15 @@ func TestRSIStatus_L4LiveWithStagedExtras(t *testing.T) {
 		}
 	}
 	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
-	if l.State != RSIStateLive {
-		t.Fatalf("L4 = %s, want LIVE (%s)", l.State, l.Diagnosis)
+	if l.State != rsiStateIdle {
+		t.Fatalf("L4 = %s, want IDLE (%s)", l.State, l.Diagnosis)
 	}
 	if got := rsiMetricValue(l.Metrics, "검토 대기(비배차)"); got != "1" {
 		t.Fatalf("staged metric = %q, want 1 (%+v)", got, l.Metrics)
 	}
 }
 
-// Review-endorsed (accepted) candidates are live dispatch supply, not settled:
+// Review-endorsed (accepted) candidates are queued dispatch supply, not settled:
 // the heartbeat review lane accepts candidates it cannot implement itself, and
 // the dispatcher picks them first (2026-07-12 status-contract fix).
 func TestRSIStatus_L4AcceptedCountsDispatchable(t *testing.T) {
@@ -312,11 +319,65 @@ func TestRSIStatus_L4AcceptedCountsDispatchable(t *testing.T) {
 		t.Fatal(err)
 	}
 	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
-	if l.State != RSIStateLive {
-		t.Fatalf("L4 = %s, want LIVE (%s)", l.State, l.Diagnosis)
+	if l.State != rsiStateIdle {
+		t.Fatalf("L4 = %s, want IDLE (%s)", l.State, l.Diagnosis)
 	}
 	if got := rsiMetricValue(l.Metrics, "배차 가능"); got != "1" {
 		t.Fatalf("dispatchable metric = %q, want 1 (%+v)", got, l.Metrics)
+	}
+}
+
+func TestRSIStatus_L4DispatcherFailureSurfacesAsStarved(t *testing.T) {
+	tr := newTestTracker(t)
+	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "sk",
+		Title: "tool gap", Source: "self-harness:test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	statusPath := filepath.Join(filepath.Dir(tr.selfCorrectionPath), "coding_dispatch_status.json")
+	if err := os.WriteFile(statusPath, []byte(`{"lastTickAtMs":1,"lastResult":"setup_failed","detail":"branch conflict","consecutiveFailures":2}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
+	if l.State != rsiStateStarved || !strings.Contains(l.Diagnosis, "2회 연속 실패") {
+		t.Fatalf("dispatcher failure hidden: %+v", l)
+	}
+	if got := rsiMetricValue(l.Metrics, "배차 틱"); !strings.Contains(got, "setup_failed") {
+		t.Fatalf("dispatch tick metric = %q", got)
+	}
+}
+
+func TestRSIStatus_L4FailedAttemptOnlyRequeuesWithoutUnlandedWork(t *testing.T) {
+	tr := newTestTracker(t)
+	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		ID: "retry", Scope: "code", Status: SelfCorrectionStatusProposed,
+		Title: "retry", Source: "self-harness:test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, phase := range []string{SelfCorrectionDispatchStarted, SelfCorrectionDispatchFailed} {
+		if _, err := tr.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
+			ID: "retry", DispatchPhase: phase, AttemptID: "attempt-1",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(tr.dispatchMarkerDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(tr.dispatchMarkerDir(), "retry.json")
+	if err := os.WriteFile(marker, []byte(`{"id":"retry","outcome":"attempted"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := rsiMetricValue(tr.rsiAssessL4().Metrics, "배차 가능"); got != "0" {
+		t.Fatalf("unlanded work requeued: dispatchable=%s", got)
+	}
+	if err := os.WriteFile(marker, []byte(`{"id":"retry","outcome":"failed"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := rsiMetricValue(tr.rsiAssessL4().Metrics, "배차 가능"); got != "1" {
+		t.Fatalf("failed attempt did not requeue: dispatchable=%s", got)
 	}
 }
 
@@ -353,11 +414,11 @@ func TestRSIStatus_L4UsesDispatchLifecycleInsteadOfCountingMarkersAsQueued(t *te
 	record("failed", SelfCorrectionDispatchFailed)
 
 	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
-	if l.State != RSIStateLive {
+	if l.State != rsiStateLive {
 		t.Fatalf("L4 = %s, want LIVE (%s)", l.State, l.Diagnosis)
 	}
 	for label, want := range map[string]string{
-		"배차 가능": "0", "진행 중": "1", "감시 통과": "1", "실패/롤백": "1",
+		"배차 가능": "1", "진행 중": "1", "감시 통과": "1", "실패/롤백": "1",
 	} {
 		if got := rsiMetricValue(l.Metrics, label); got != want {
 			t.Fatalf("%s = %q, want %q (%+v)", label, got, want, l.Metrics)
@@ -365,7 +426,7 @@ func TestRSIStatus_L4UsesDispatchLifecycleInsteadOfCountingMarkersAsQueued(t *te
 	}
 }
 
-func rsiMetricValue(metrics []RSIMetricKV, label string) string {
+func rsiMetricValue(metrics []rsiMetric, label string) string {
 	for _, m := range metrics {
 		if m.Label == label {
 			return m.Value

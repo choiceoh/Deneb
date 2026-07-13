@@ -330,10 +330,15 @@ def assess_l4(
     outcomes: dict[str, int] | None = None,
     dispatched_ids: set[str] | None = None,
     grad_rows: dict | None = None,
+    runtime_status: dict[str, Any] | None = None,
+    now_ms: int | None = None,
+    marker_outcomes: dict[str, str] | None = None,
 ) -> LayerStatus:
     """Source self-edit — the coding-dispatch supply of code-scope candidates."""
     outcomes = outcomes or {}
     sources = _dispatchable_sources(grad_rows or {})
+    runtime_status = runtime_status or {}
+    marker_outcomes = marker_outcomes or {}
     cand = _merge_candidates(rows)
     dispatched_ids = dispatched_ids or set()
     by_scope: dict[str, int] = {}
@@ -341,6 +346,7 @@ def assess_l4(
     staged = 0
     in_flight = applied = failed = legacy_in_flight = 0
     staged_sources: dict[str, int] = {}
+    oldest_pending_at = 0
     for rid, rec in cand.items():
         st = rec.get("status") or "proposed"
         scope = rec.get("scope") or "?"
@@ -355,16 +361,29 @@ def assess_l4(
             continue
         if scope == "code" and phase in ("failed", "rolled_back"):
             failed += 1
+            outcome = marker_outcomes.get(rid, "")
+            if (
+                (phase == "rolled_back" or outcome not in ("landed", "attempted"))
+                and st in ("proposed", "accepted")
+                and src.startswith(sources)
+            ):
+                dispatchable += 1
+                created_at = int(rec.get("createdAt") or 0)
+                if created_at > 0 and (oldest_pending_at == 0 or created_at < oldest_pending_at):
+                    oldest_pending_at = created_at
             continue
         if scope == "code" and rid in dispatched_ids:
             legacy_in_flight += 1
             continue
         # proposed = unreviewed backlog; accepted = review-endorsed, awaiting
-        # implementation — both are live dispatch supply (the heartbeat review
+        # implementation — both are queued dispatch supply (the heartbeat review
         # lane accepts candidates it cannot implement itself).
         if scope == "code" and st in ("proposed", "accepted"):
             if src.startswith(sources):
                 dispatchable += 1
+                created_at = int(rec.get("createdAt") or 0)
+                if created_at > 0 and (oldest_pending_at == 0 or created_at < oldest_pending_at):
+                    oldest_pending_at = created_at
             else:
                 # Proposed code candidate from a source not yet in the dispatch
                 # allowlist (runtime-error, deadcode-finding, …): staged L4 supply
@@ -393,6 +412,13 @@ def assess_l4(
         "dispatched_today": dispatch_today,
         "dispatch_outcomes": outcomes,
         "land_rate": land_rate,
+        "last_tick_at_ms": int(runtime_status.get("lastTickAtMs") or 0),
+        "last_result": str(runtime_status.get("lastResult") or ""),
+        "last_successful_at_ms": int(runtime_status.get("lastSuccessfulAtMs") or 0),
+        "consecutive_failures": int(runtime_status.get("consecutiveFailures") or 0),
+        "oldest_pending_age_ms": (
+            max(0, now_ms - oldest_pending_at) if now_ms is not None and oldest_pending_at else 0
+        ),
     }
     outcome_note = ""
     if decided:
@@ -402,14 +428,24 @@ def assess_l4(
         return LayerStatus("L4", "source self-edit", LIVE, metrics,
                            f"{in_flight} candidates crossing PR/deploy/watch lifecycle"
                            + outcome_note)
-    if dispatchable > 0 or legacy_in_flight > 0 or dispatch_today > 0:
+    if legacy_in_flight > 0:
         return LayerStatus("L4", "source self-edit", LIVE, metrics,
-                           f"{dispatchable} dispatchable code candidates, "
                            f"{legacy_in_flight} legacy dispatches in flight"
                            + outcome_note)
     if applied > 0:
         return LayerStatus("L4", "source self-edit", LIVE, metrics,
                            f"{applied} source edits survived merged deployment rollback watch"
+                           + outcome_note)
+    if dispatchable > 0 and metrics["consecutive_failures"] > 0:
+        return LayerStatus("L4", "source self-edit", STARVED, metrics,
+                           f"{dispatchable} dispatchable code candidates, dispatcher failed "
+                           f"{metrics['consecutive_failures']} consecutive ticks "
+                           f"(last={metrics['last_result'] or 'unknown'})"
+                           + outcome_note)
+    if dispatchable > 0:
+        return LayerStatus("L4", "source self-edit", IDLE, metrics,
+                           f"{dispatchable} dispatchable code candidates queued; "
+                           "no authoritative dispatch is in flight"
                            + outcome_note)
     if len(cand) == 0:
         return LayerStatus("L4", "source self-edit", IDLE, metrics,
@@ -424,7 +460,7 @@ def assess_l4(
     scope_summary = ", ".join(f"{k}:{v}" for k, v in sorted(by_scope.items()))
     return LayerStatus("L4", "source self-edit", STARVED, metrics,
                        f"{len(cand)} candidates ({scope_summary}) but 0 are code-scope from "
-                       f"{'/'.join(L4_SOURCES)} — no source produces code candidates (wiring gap)"
+                       f"{'/'.join(sources)} — no source produces code candidates (wiring gap)"
                        + outcome_note)
 
 
@@ -442,6 +478,7 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
     dispatch_dir = os.path.join(data_dir, "coding_dispatch")
     dispatch_total = dispatch_today = 0
     outcomes: dict[str, int] = {}
+    marker_outcomes: dict[str, str] = {}
     dispatched_ids: set[str] = set()
     today_cutoff = now_ms - (now_ms % DAY_MS)
     try:
@@ -453,11 +490,14 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
             try:
                 with open(path, encoding="utf-8", errors="replace") as handle:
                     marker = json.load(handle)
-                if marker.get("id"):
-                    dispatched_ids.add(str(marker["id"]))
+                marker_id = str(marker.get("id") or name[:-5])
+                if marker_id:
+                    dispatched_ids.add(marker_id)
                 outcome = marker.get("outcome")
                 if outcome:
                     outcomes[outcome] = outcomes.get(outcome, 0) + 1
+                    if marker_id:
+                        marker_outcomes[marker_id] = str(outcome)
             except (OSError, json.JSONDecodeError, TypeError, AttributeError):
                 pass
             try:
@@ -469,13 +509,23 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
         pass
 
     grad_rows = _graduation_rows(os.path.join(data_dir, "graduation_state.json"))
+    runtime_status: dict[str, Any] = {}
+    try:
+        with open(os.path.join(data_dir, "coding_dispatch_status.json"), encoding="utf-8") as handle:
+            loaded = json.load(handle)
+            if isinstance(loaded, dict):
+                runtime_status = loaded
+    except (OSError, json.JSONDecodeError, TypeError):
+        pass
 
     return [
         assess_l1(genesis, now_ms),
         assess_l2(revisions, frozen, now_ms),
         assess_l3(judge, genesis, now_ms),
-        assess_l4(candidates, dispatch_total, dispatch_today, outcomes, dispatched_ids,
-                  grad_rows=grad_rows),
+        assess_l4(
+            candidates, dispatch_total, dispatch_today, outcomes, dispatched_ids,
+            grad_rows, runtime_status, now_ms, marker_outcomes,
+        ),
         assess_ladder(genesis, revisions, candidates, outcomes, grad_rows=grad_rows),
     ]
 

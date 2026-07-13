@@ -2,6 +2,7 @@ package genesis
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -23,7 +24,10 @@ func TestLadderWatch(t *testing.T) {
 	}
 
 	var fired []string
-	task.OnReady = func(title, detail string) { fired = append(fired, title+"|"+detail) }
+	task.OnReady = func(title, detail string) error {
+		fired = append(fired, title+"|"+detail)
+		return nil
+	}
 	if err := task.Run(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +68,8 @@ func TestLadderWatch(t *testing.T) {
 		t.Fatalf("re-earned READY must fire again: %v", fired)
 	}
 
-	// Snapshot file exists next to the ledgers; nil OnReady never panics.
+	// Snapshot file exists next to the ledgers. A missing delivery callback does
+	// not consume READY, so restoring the callback retries the transition.
 	if _, err := os.Stat(filepath.Join(filepath.Dir(tr.logPath), "ladder_watch_state.json")); err != nil {
 		t.Fatalf("snapshot missing: %v", err)
 	}
@@ -74,6 +79,37 @@ func TestLadderWatch(t *testing.T) {
 	}
 	if err := task.Run(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+	fired = nil
+	task.OnReady = func(title, detail string) error {
+		fired = append(fired, title+"|"+detail)
+		return nil
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(fired) != 1 {
+		t.Fatalf("READY transition consumed without a callback: %v", fired)
+	}
+
+	// A delivery error has the same retry contract.
+	if err := os.Remove(task.ladderWatchStatePath()); err != nil {
+		t.Fatal(err)
+	}
+	task.OnReady = func(string, string) error { return errors.New("feed unavailable") }
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	fired = nil
+	task.OnReady = func(title, detail string) error {
+		fired = append(fired, title+"|"+detail)
+		return nil
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(fired) != 1 {
+		t.Fatalf("failed READY delivery was not retried: %v", fired)
 	}
 }
 

@@ -203,12 +203,40 @@ class L4Test(unittest.TestCase):
         self.assertEqual(s.metrics["dispatchable"], 0)
         self.assertEqual(s.metrics["by_scope"], {"skill": 1, "test": 1})
 
-    def test_code_scope_from_dispatch_source_is_live(self):
+    def test_code_scope_from_dispatch_source_is_queued_until_dispatch_starts(self):
         rows = [{"type": "self_correction_candidate", "id": "c", "scope": "code",
                  "status": "proposed", "source": "evolve-tool-gap:xyz"}]
         s = assess_l4(rows, dispatch_total=0, dispatch_today=0)
-        self.assertEqual(s.state, LIVE)
+        self.assertEqual(s.state, IDLE)
         self.assertEqual(s.metrics["dispatchable"], 1)
+
+    def test_dispatcher_failures_make_queued_supply_starved(self):
+        rows = [{"type": "self_correction_candidate", "id": "c", "scope": "code",
+                 "status": "proposed", "source": "evolve-tool-gap:xyz", "createdAt": RECENT}]
+        status = {
+            "lastTickAtMs": RECENT,
+            "lastResult": "environment_failed",
+            "lastSuccessfulAtMs": 0,
+            "consecutiveFailures": 3,
+        }
+        s = assess_l4(rows, dispatch_total=0, dispatch_today=0,
+                      runtime_status=status, now_ms=NOW)
+        self.assertEqual(s.state, STARVED)
+        self.assertEqual(s.metrics["consecutive_failures"], 3)
+        self.assertEqual(s.metrics["oldest_pending_age_ms"], NOW - RECENT)
+        self.assertIn("environment_failed", s.diagnosis)
+
+    def test_failed_attempt_requeues_only_without_unlanded_work(self):
+        rows = [
+            {"type": "self_correction_candidate", "id": "c", "scope": "code",
+             "status": "proposed", "source": "self-harness:x"},
+            {"type": "self_correction_dispatch", "id": "c", "dispatchPhase": "failed",
+             "attemptId": "a1"},
+        ]
+        retry = assess_l4(rows, 1, 0, marker_outcomes={"c": "failed"})
+        self.assertEqual(retry.metrics["dispatchable"], 1)
+        blocked = assess_l4(rows, 1, 0, marker_outcomes={"c": "attempted"})
+        self.assertEqual(blocked.metrics["dispatchable"], 0)
 
     def test_status_delta_demotes_candidate(self):
         # A later status delta ({id,status}) must fold onto the candidate, not
@@ -282,8 +310,8 @@ class L4Test(unittest.TestCase):
 
     def test_health_finding_graduated_to_dispatchable(self):
         # Graduation regression (2026-07-12): health-finding cleared its first
-        # batch review, so its candidates count DISPATCHABLE and turn L4 LIVE —
-        # while runtime-error next to it stays staged.
+        # batch review, so its candidates count DISPATCHABLE and remain queued
+        # until an authoritative dispatch starts; runtime-error stays staged.
         rows = [
             {"type": "self_correction_candidate", "id": "h1", "scope": "code",
              "status": "proposed", "source": "health-finding:volatile-hub:46a381ef4981"},
@@ -291,13 +319,13 @@ class L4Test(unittest.TestCase):
              "status": "proposed", "source": "runtime-error:abc123"},
         ]
         s = assess_l4(rows, dispatch_total=0, dispatch_today=0)
-        self.assertEqual(s.state, LIVE)
+        self.assertEqual(s.state, IDLE)
         self.assertEqual(s.metrics["dispatchable"], 1)
         self.assertEqual(s.metrics["staged"], 1)
         self.assertEqual(s.metrics["staged_sources"], {"runtime-error": 1})
 
     def test_accepted_candidate_is_dispatch_supply(self):
-        # Review-endorsed (accepted) candidates are LIVE dispatch supply, not
+        # Review-endorsed (accepted) candidates are queued dispatch supply, not
         # settled: the heartbeat review lane accepts queue candidates it cannot
         # implement itself (observed live 2026-07-12), and the dispatcher picks
         # them first. rejected/applied still settle.
@@ -307,7 +335,7 @@ class L4Test(unittest.TestCase):
             {"id": "h1", "status": "accepted"},
         ]
         s = assess_l4(rows, dispatch_total=0, dispatch_today=0)
-        self.assertEqual(s.state, LIVE)
+        self.assertEqual(s.state, IDLE)
         self.assertEqual(s.metrics["dispatchable"], 1)
 
     def test_reviewed_staged_candidate_stops_counting(self):

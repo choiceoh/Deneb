@@ -15,7 +15,7 @@ func TestRSILadder(t *testing.T) {
 
 	// Empty evidence: every machine row accumulates, aggregate DATA-GATED.
 	l := tr.rsiAssessLadder()
-	if l.State != RSIStateDataGated || l.Key != "GRAD" {
+	if l.State != rsiStateDataGated || l.Key != "GRAD" {
 		t.Fatalf("empty ladder = %s/%s: %s", l.Key, l.State, l.Diagnosis)
 	}
 	if len(l.Metrics) != 5 {
@@ -62,7 +62,7 @@ func TestRSILadder(t *testing.T) {
 
 	// Aggregate flips LIVE and names the actionable rows.
 	l = tr.rsiAssessLadder()
-	if l.State != RSIStateLive || !strings.Contains(l.Diagnosis, "운영자 결정 가능") {
+	if l.State != rsiStateLive || !strings.Contains(l.Diagnosis, "운영자 결정 가능") {
 		t.Fatalf("ladder with READY rows = %s: %s", l.State, l.Diagnosis)
 	}
 }

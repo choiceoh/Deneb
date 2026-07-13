@@ -38,7 +38,7 @@ class AutoDeployShellTests(unittest.TestCase):
 
         write_executable(self.bin / "flock", """
             #!/usr/bin/env bash
-            printf 'flock %s\n' "$*" >> "$FAKE_CALLS"
+            printf 'flock %s\\n' "$*" >> "$FAKE_CALLS"
             exit "${FLOCK_RC:-0}"
         """)
         write_executable(self.bin / "date", """
@@ -51,7 +51,7 @@ class AutoDeployShellTests(unittest.TestCase):
         """)
         write_executable(self.bin / "git", """
             #!/usr/bin/env bash
-            printf 'git %s\n' "$*" >> "$FAKE_CALLS"
+            printf 'git %s\\n' "$*" >> "$FAKE_CALLS"
             case "$*" in
               "branch --show-current") echo "${GIT_BRANCH:-main}" ;;
               "diff --name-only --diff-filter=U") printf '%b' "${GIT_UNMERGED:-}" ;;
@@ -81,11 +81,31 @@ class AutoDeployShellTests(unittest.TestCase):
         """)
         write_executable(self.prod / "scripts/deploy/deploy.sh", """
             #!/usr/bin/env bash
-            printf 'deploy cwd=%s\n' "$PWD" >> "$FAKE_CALLS"
+            printf 'deploy cwd=%s\\n' "$PWD" >> "$FAKE_CALLS"
             if [[ "${DEPLOY_RC:-0}" == 0 ]]; then
               touch "$FAKE_DEPLOYED_MARKER"
             fi
             exit "${DEPLOY_RC:-0}"
+        """)
+        write_executable(self.prod / "scripts/deploy/deploy-watch.sh", """
+            #!/usr/bin/env bash
+            printf 'watch head=%s\\n' "$1" >> "$FAKE_CALLS"
+            if [[ "${WATCH_ACK:-1}" == 1 ]]; then
+              tmp="${DENEB_DEPLOY_WATCH_READY_FILE}.tmp.$$"
+              printf '%s %s %s\\n' "$1" "$$" "${FAKE_NOW:-2000}" > "$tmp"
+              mv -f "$tmp" "$DENEB_DEPLOY_WATCH_READY_FILE"
+              # Model the real long-running watcher without a timing race:
+              # stay alive until the parent consumes the handshake file.
+              for ((i = 0; i < 100; i++)); do
+                [[ -e "$DENEB_DEPLOY_WATCH_READY_FILE" ]] || exit "${WATCH_RC:-0}"
+                sleep 0.05
+              done
+            else
+              # A watcher that never acknowledges should exit promptly so the
+              # parent records an unverified deployment and retries next tick.
+              sleep "${WATCH_HOLD_SEC:-0.2}"
+            fi
+            exit "${WATCH_RC:-0}"
         """)
 
     def restore_tmp(self) -> None:
@@ -111,8 +131,11 @@ class AutoDeployShellTests(unittest.TestCase):
             "GIT_INDEX_DIRTY": "0",
             "DENEB_AUTO_DEPLOY_QUIET_SEC": "0",
             "DENEB_AUTO_DEPLOY_RETRY_SEC": "600",
+            "DENEB_DEPLOY_WATCH_READY_FILE": str(self.state / "deploy-watch.ready"),
+            "DENEB_DEPLOY_WATCH_START_SEC": "1",
             "FAKE_NOW": "2000",
             "DEPLOY_RC": "0",
+            "WATCH_ACK": "1",
         }
         defaults.update(values)
         return isolated_env(self.home, self.bin, **defaults)
@@ -218,6 +241,7 @@ class AutoDeployShellTests(unittest.TestCase):
             "same333",
         )
         self.assertNotIn("deploy cwd=", self.call_text())
+        self.assertIn("deploy-watch active for same333", self.log_text())
 
     def test_equal_local_remote_and_recorded_head_is_quiet_noop(self) -> None:
         (self.state / "auto-deploy.deployed-head").write_text("same333\n")
@@ -225,6 +249,16 @@ class AutoDeployShellTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(self.log_text(), "")
         self.assertNotIn("deploy cwd=", self.call_text())
+
+    def test_late_watch_ack_clears_unverified_without_launching_duplicate(self) -> None:
+        (self.state / "auto-deploy.deployed-head").write_text("same333\n")
+        (self.state / "auto-deploy.unverified-head").write_text("same333 1999 watcher_not_ready\n")
+        (self.state / "deploy-watch.ready").write_text("same333 4242 2000\n")
+        proc = self.invoke(self.env(GIT_LOCAL_HEAD="same333", GIT_REMOTE_HEAD="same333"))
+        self.assertEqual(proc.returncode, 0)
+        self.assertFalse((self.state / "auto-deploy.unverified-head").exists())
+        self.assertNotIn("watch head=", self.call_text())
+        self.assertIn("deploy-watch acknowledged for same333", self.log_text())
 
     def test_recent_failed_remote_head_is_throttled(self) -> None:
         (self.state / "auto-deploy.failed-head").write_text("remote222 1900\n")
@@ -255,6 +289,28 @@ class AutoDeployShellTests(unittest.TestCase):
         self.assertFalse((self.state / "auto-deploy.failed-head").exists())
         self.assertFalse((self.state / "auto-deploy.dirty-failed").exists())
         self.assertIn("deploy OK (head now remote222)", self.log_text())
+        self.assertIn("deploy-watch active for remote222", self.log_text())
+        self.assertFalse((self.state / "auto-deploy.unverified-head").exists())
+
+    def test_unacknowledged_watch_stays_unverified_and_noop_retries(self) -> None:
+        first = self.invoke(self.env(WATCH_ACK="0"))
+        self.assertEqual(first.returncode, 0)
+        self.assertEqual(
+            (self.state / "auto-deploy.unverified-head").read_text().split()[0],
+            "remote222",
+        )
+        self.assertIn("is unverified: deploy-watch did not acknowledge", self.log_text())
+        calls_after_first = self.call_text().count("watch head=remote222")
+
+        second = self.invoke(self.env(
+            GIT_LOCAL_HEAD="remote222",
+            GIT_REMOTE_HEAD="remote222",
+            WATCH_ACK="1",
+        ))
+        self.assertEqual(second.returncode, 0)
+        self.assertEqual(self.call_text().count("watch head=remote222"), calls_after_first + 1)
+        self.assertFalse((self.state / "auto-deploy.unverified-head").exists())
+        self.assertIn("deploy-watch active for remote222", self.log_text())
 
     def test_failed_deploy_is_recorded_and_same_head_is_not_retried_immediately(self) -> None:
         first = self.invoke(self.env(DEPLOY_RC="17"))

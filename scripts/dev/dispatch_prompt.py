@@ -91,7 +91,6 @@ def main() -> int:
     # Preserve prior outcome history across retries so land-rate accounting does
     # not collapse failed→landed into a single "landed" marker (bot #3614).
     attempts: list[dict] = []
-    dispatched_at = None
     marker_path = Path(args.marker)
     if marker_path.is_file():
         try:
@@ -112,20 +111,19 @@ def main() -> int:
                         "outcomeAt",
                         "outcomePrState",
                         "promptVersion",
+                        "dispatchedAt",
                     )
                     if k in prev
                 }
                 if snap:
                     attempts.append(snap)
-            if isinstance(prev.get("dispatchedAt"), (int, float)):
-                dispatched_at = int(prev["dispatchedAt"])
 
     marker = dict(candidate)
     marker["promptVersion"] = version
     marker["promptSource"] = "artifact"
     marker["attemptId"] = args.attempt_id
     marker["branch"] = args.branch
-    marker["dispatchedAt"] = dispatched_at or int(__import__("time").time() * 1000)
+    marker["dispatchedAt"] = int(__import__("time").time() * 1000)
     if attempts:
         marker["attempts"] = attempts[-10:]
     marker_path.write_text(

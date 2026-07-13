@@ -418,11 +418,9 @@ func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities 
 		}),
 		handlerminiapp.WormholeMethods(handlerminiapp.WormholeDeps{}),
 		handlerminiapp.WorkFeedMethods(handlerminiapp.WorkFeedDeps{
-			Store:           capabilities.nativeWorkFeed,
-			OnAnswer:        s.recordDealQuestionAnswer,
-			OnMetaProposal:  s.handleMetaProposalAction,
-			OnEvolveVerdict: s.handleEvolveVerdictAction,
-			OnLadder:        s.handleLadderCardAction,
+			Store:          capabilities.nativeWorkFeed,
+			OnAnswer:       s.recordDealQuestionAnswer,
+			OnMetaProposal: s.handleMetaProposalAction,
 		}),
 		// miniapp.models.* is deliberately registered in registerLateMethods:
 		// the picker snapshots the model registry and chat handler at creation.

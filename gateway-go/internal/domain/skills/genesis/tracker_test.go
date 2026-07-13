@@ -402,6 +402,88 @@ func TestSelfCorrectionDispatchSamePhaseCanEnrichMissingProvenance(t *testing.T)
 	}
 }
 
+func TestSelfCorrectionDispatchRejectsConflictingSamePhaseProvenance(t *testing.T) {
+	tracker := newTestTracker(t)
+	if _, err := tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		ID: "sc-conflict", Scope: "code", Title: "conflict", Source: "self-harness:test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []SelfCorrectionCandidateRecord{
+		{ID: "sc-conflict", DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-1", Branch: "dispatch/sc-conflict"},
+		{ID: "sc-conflict", DispatchPhase: SelfCorrectionDispatchPROpened, AttemptID: "attempt-1", PRNumber: 42, PRURL: "https://example.test/pr/42"},
+	} {
+		if _, err := tracker.RecordSelfCorrectionDispatch(event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
+		ID: "sc-conflict", DispatchPhase: SelfCorrectionDispatchPROpened, AttemptID: "attempt-1",
+		PRNumber: 99, PRURL: "https://example.test/pr/99", CommitSHA: "late-sha",
+	})
+	if err == nil || !strings.Contains(err.Error(), "conflicting self-correction dispatch provenance") {
+		t.Fatalf("conflicting enrichment accepted: %v", err)
+	}
+	rows, err := tracker.RecentSelfCorrectionCandidates("", "", 10)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows=%+v err=%v", rows, err)
+	}
+	if rows[0].PRNumber != 42 || rows[0].PRURL != "https://example.test/pr/42" || rows[0].CommitSHA != "" {
+		t.Fatalf("conflicting provenance corrupted folded row: %+v", rows[0])
+	}
+}
+
+func TestSelfCorrectionDispatchLatePRReconciliationPromotesFailedAttempt(t *testing.T) {
+	tracker := newTestTracker(t)
+	if _, err := tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		ID: "sc-late-pr", Scope: "code", Title: "late pr", Source: "self-harness:test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []SelfCorrectionCandidateRecord{
+		{ID: "sc-late-pr", DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-1", Branch: "dispatch/sc-late-pr-attempt-1"},
+		{ID: "sc-late-pr", DispatchPhase: SelfCorrectionDispatchFailed, AttemptID: "attempt-1", OutcomeNote: "PR not visible at session exit"},
+		{ID: "sc-late-pr", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1", Branch: "dispatch/sc-late-pr-attempt-1", PRNumber: 77, CommitSHA: "late-merge"},
+	} {
+		if _, err := tracker.RecordSelfCorrectionDispatch(event); err != nil {
+			t.Fatalf("record %+v: %v", event, err)
+		}
+	}
+	rows, err := tracker.RecentSelfCorrectionCandidates("", "", 10)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows=%+v err=%v", rows, err)
+	}
+	if rows[0].DispatchPhase != SelfCorrectionDispatchMerged || rows[0].PRNumber != 77 || rows[0].CommitSHA != "late-merge" {
+		t.Fatalf("late PR reconciliation did not promote failed attempt: %+v", rows[0])
+	}
+}
+
+func TestSelfCorrectionDispatchNewAttemptResetsPriorProvenance(t *testing.T) {
+	tracker := newTestTracker(t)
+	if _, err := tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		ID: "sc-retry", Scope: "code", Title: "retry", Source: "self-harness:test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []SelfCorrectionCandidateRecord{
+		{ID: "sc-retry", DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-1", Branch: "dispatch/sc-retry"},
+		{ID: "sc-retry", DispatchPhase: SelfCorrectionDispatchPROpened, AttemptID: "attempt-1", PRNumber: 42, PRURL: "https://example.test/pr/42"},
+		{ID: "sc-retry", DispatchPhase: SelfCorrectionDispatchFailed, AttemptID: "attempt-1", OutcomeNote: "session failed"},
+		{ID: "sc-retry", DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-2", Branch: "dispatch/sc-retry"},
+	} {
+		if _, err := tracker.RecordSelfCorrectionDispatch(event); err != nil {
+			t.Fatalf("record %+v: %v", event, err)
+		}
+	}
+	rows, err := tracker.RecentSelfCorrectionCandidates("", "", 10)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows=%+v err=%v", rows, err)
+	}
+	if rows[0].AttemptID != "attempt-2" || rows[0].PRNumber != 0 || rows[0].PRURL != "" || rows[0].OutcomeNote != "" {
+		t.Fatalf("retry inherited prior-attempt provenance: %+v", rows[0])
+	}
+}
+
 func TestSkillsNeedingEvolution_SkipsUntilNewRealFailureAfterAttempt(t *testing.T) {
 	tracker := newTestTracker(t)
 	beforeAttempt := time.Now().Add(-2 * time.Second).UnixMilli()

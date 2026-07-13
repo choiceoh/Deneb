@@ -1,14 +1,18 @@
 package server
 
 import (
+	"strings"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 )
 
 type nativeWorkFeedStore struct {
-	store *workfeed.Store
-	sync  *nativesync.Store
-	log   interface{ Error(string, ...any) }
+	store           *workfeed.Store
+	sync            *nativesync.Store
+	log             interface{ Error(string, ...any) }
+	onEvolveVerdict func(workfeed.Item, string) error
+	onLadderAction  func(workfeed.Item, string) error
 }
 
 func (s *Server) nativeWorkFeedStore() *nativeWorkFeedStore {
@@ -16,9 +20,11 @@ func (s *Server) nativeWorkFeedStore() *nativeWorkFeedStore {
 		return nil
 	}
 	return &nativeWorkFeedStore{
-		store: s.workFeedStore,
-		sync:  s.nativeSyncStore,
-		log:   s.logger,
+		store:           s.workFeedStore,
+		sync:            s.nativeSyncStore,
+		log:             s.logger,
+		onEvolveVerdict: s.handleEvolveVerdictAction,
+		onLadderAction:  s.handleLadderCardAction,
 	}
 }
 
@@ -90,7 +96,24 @@ func (s *nativeWorkFeedStore) Rewrite(id, newBody string) (workfeed.Item, error)
 
 // RunAction executes a declared item action and publishes its result.
 func (s *nativeWorkFeedStore) RunAction(itemID, actionID string) (workfeed.ActionResult, error) {
-	result, err := s.store.RunAction(itemID, actionID)
+	effect := func(item workfeed.Item, action workfeed.Action) error {
+		if s.onEvolveVerdict != nil && item.Source == evolveVerdictSource &&
+			strings.HasPrefix(action.ID, "evolve-verdict:") {
+			return s.onEvolveVerdict(item, action.ID)
+		}
+		if s.onLadderAction != nil && item.Source == ladderReadySource &&
+			strings.HasPrefix(action.ID, ladderActionRelockPrefix) {
+			return s.onLadderAction(item, action.ID)
+		}
+		return nil
+	}
+	return s.RunActionWithEffect(itemID, actionID, effect)
+}
+
+// RunActionWithEffect keeps source-specific operator decisions retryable until
+// their durable side effect succeeds, then publishes the settled result.
+func (s *nativeWorkFeedStore) RunActionWithEffect(itemID, actionID string, effect workfeed.ActionEffect) (workfeed.ActionResult, error) {
+	result, err := s.store.RunActionWithEffect(itemID, actionID, effect)
 	if err != nil {
 		return workfeed.ActionResult{}, err
 	}

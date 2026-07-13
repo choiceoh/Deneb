@@ -76,23 +76,23 @@ func (t *Tracker) ladderRows() []ladderRow {
 // state: LIVE when any row's evidence is READY (an operator decision is
 // actionable now), DATA-GATED otherwise (evidence still accumulating — the
 // honest steady state).
-func (t *Tracker) rsiAssessLadder() RSILayer {
+func (t *Tracker) rsiAssessLadder() rsiLayer {
 	rows := t.ladderRows()
-	metrics := make([]RSIMetricKV, 0, len(rows))
+	metrics := make([]rsiMetric, 0, len(rows))
 	var ready []string
 	for _, r := range rows {
-		metrics = append(metrics, RSIMetricKV{r.Title, r.State})
+		metrics = append(metrics, rsiMetric{Label: r.Title, Value: r.State})
 		if r.State == ladderStateReady {
 			ready = append(ready, fmt.Sprintf("%s(%s)", r.Title, r.Detail))
 		}
 	}
-	base := RSILayer{Key: "GRAD", Title: "졸업 사다리", Metrics: metrics}
+	base := rsiLayer{Key: "GRAD", Title: "졸업 사다리", Metrics: metrics}
 	if len(ready) > 0 {
-		base.State = RSIStateLive
+		base.State = rsiStateLive
 		base.Diagnosis = "증거 충족 — 운영자 결정 가능: " + strings.Join(ready, " · ")
 		return base
 	}
-	base.State = RSIStateDataGated
+	base.State = rsiStateDataGated
 	details := make([]string, 0, len(rows))
 	for _, r := range rows {
 		if r.State == ladderStateGrowing {

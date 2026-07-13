@@ -7,6 +7,7 @@ package server
 // allowlist edits done in a session, not chat actions).
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -16,11 +17,12 @@ import (
 const ladderReadySource = "genesis-ladder"
 
 // postLadderReadyCard surfaces one graduation-ladder row that just reached
-// READY. Best-effort: a feed failure must never affect the watch cycle.
-func (s *Server) postLadderReadyCard(title, detail string) {
+// READY. Delivery failure is returned so LadderWatch does not consume the
+// transition before the operator-facing card is durable.
+func (s *Server) postLadderReadyCard(title, detail string) error {
 	nf := s.nativeWorkFeedStore()
 	if nf == nil {
-		return
+		return errors.New("native work feed unavailable")
 	}
 	item := workfeed.Item{
 		Source:  ladderReadySource,
@@ -39,7 +41,9 @@ func (s *Server) postLadderReadyCard(title, detail string) {
 	}
 	if _, err := nf.Append(item); err != nil {
 		s.logger.Warn("ladder-ready card post failed", "row", title, "error", err)
+		return fmt.Errorf("post ladder-ready card: %w", err)
 	}
+	return nil
 }
 
 // ladderActionRelockPrefix carries the graduation row key in the action id:
@@ -74,19 +78,23 @@ func (s *Server) postGraduationCard(key, title, evidence string) {
 	}
 }
 
-// handleLadderCardAction applies the operator's 재잠금 veto from a graduation
-// card. Best-effort — the card has already settled.
-func (s *Server) handleLadderCardAction(_ workfeed.Item, actionID string) {
-	if s.genesisTracker == nil || !strings.HasPrefix(actionID, ladderActionRelockPrefix) {
-		return
+// handleLadderCardAction durably applies the operator's 재잠금 veto. An error
+// keeps the card unsettled so the operator can retry instead of losing the veto.
+func (s *Server) handleLadderCardAction(_ workfeed.Item, actionID string) error {
+	if s.genesisTracker == nil {
+		return errors.New("genesis tracker unavailable")
+	}
+	if !strings.HasPrefix(actionID, ladderActionRelockPrefix) {
+		return fmt.Errorf("unsupported ladder action %q", actionID)
 	}
 	key := strings.TrimPrefix(actionID, ladderActionRelockPrefix)
 	if key == "" {
-		return
+		return errors.New("graduation row key is empty")
 	}
 	if err := s.genesisTracker.RelockGraduation(key, "operator relocked from feed card"); err != nil {
 		s.logger.Warn("graduation relock failed", "row", key, "error", err)
-		return
+		return fmt.Errorf("relock graduation %s: %w", key, err)
 	}
 	s.logger.Info("graduation relocked from feed card", "row", key)
+	return nil
 }

@@ -23,6 +23,7 @@ PREV_HEAD_FILE="$STATE_DIR/auto-deploy.prev-head"
 REGRESS_FILE="$STATE_DIR/auto-deploy.regressed-head"
 LOCK_FILE="${DENEB_DEPLOY_WATCH_LOCK_FILE:-/tmp/deneb-deploy-watch.lock}"
 LOG_FILE="${DENEB_DEPLOY_WATCH_LOG_FILE:-/tmp/deneb-deploy-watch.log}"
+READY_FILE="${DENEB_DEPLOY_WATCH_READY_FILE:-$STATE_DIR/deploy-watch.ready}"
 GATEWAY_SERVICE="${DENEB_GATEWAY_SERVICE:-deneb-gateway.service}"
 PROD_PORT="${DENEB_PROD_PORT:-18789}"
 
@@ -42,6 +43,13 @@ TRACKED_ATTEMPTS=()
 
 log() {
     printf '%s  %s\n' "$(date -Iseconds)" "$*" >> "$LOG_FILE"
+}
+
+mark_ready() {
+    local tmp="$READY_FILE.tmp.$$"
+    mkdir -p "$(dirname "$READY_FILE")"
+    printf '%s %s %s\n' "$DEPLOYED_HEAD" "$$" "$(date +%s)" > "$tmp"
+    mv -f "$tmp" "$READY_FILE"
 }
 
 health_ok() {
@@ -167,6 +175,7 @@ main() {
         log "stale watcher acquired lock after a newer deploy; skipping ${DEPLOYED_HEAD:0:10}"
         exit 0
     fi
+    mark_ready
     track_dispatch_candidates
 
     local started_at deadline health_fails=0 errors

@@ -1,10 +1,10 @@
-"""Composition-root exemption for the responsibility-cochange finding.
+"""Cross-component seam classification for responsibility co-change.
 
-A dependency-injection / wiring root (runtime/server, runtime/bootstrap) touches
-many components in one change by design; flagging it as diffuse responsibility is
-a false positive. The exemption must be scoped: genuine leaf packages with high
-cross-component co-change still get flagged, and the root's rate still feeds the
-subscore so it cannot be used to hide churn.
+Dependency-injection roots and exact protocol facades touch many components in
+one change by design; flagging them as diffuse responsibility is a false
+positive. The classification must be scoped: genuine leaf packages with high
+cross-component co-change still get flagged, and every seam's rate still feeds
+the subscore so it cannot hide churn.
 """
 
 from __future__ import annotations
@@ -15,7 +15,9 @@ import unittest
 from health_v2 import architecture, inventory
 from health_v2.architecture_contracts import (
     COMPOSITION_ROOT_COMPONENTS,
+    CROSS_COMPONENT_TRANSPORT_SEAMS,
     is_composition_root,
+    is_cross_component_seam,
 )
 from test_codebase_health_v2_support import GitFixture
 
@@ -41,7 +43,7 @@ def _collect_cochange_fixture(files: dict[str, str]) -> inventory.RepositoryInve
             fixture.close()
 
 
-class CompositionRootExemptionTest(unittest.TestCase):
+class CrossComponentSeamTest(unittest.TestCase):
     def test_is_composition_root_recognizes_wiring_layer_only(self) -> None:
         self.assertTrue(is_composition_root("internal/runtime/server"))
         self.assertTrue(is_composition_root("internal/runtime/bootstrap"))
@@ -49,12 +51,22 @@ class CompositionRootExemptionTest(unittest.TestCase):
         self.assertFalse(is_composition_root("internal/runtime/rpc"))
         self.assertIn("runtime/server", COMPOSITION_ROOT_COMPONENTS)
 
+    def test_transport_seam_is_exact_and_does_not_exempt_nested_features(self) -> None:
+        seam = "internal/runtime/rpc/handler/handlerminiapp"
+        self.assertIn(seam, CROSS_COMPONENT_TRANSPORT_SEAMS)
+        self.assertTrue(is_cross_component_seam(seam))
+        self.assertFalse(is_cross_component_seam(seam + "/dashboard"))
+        self.assertFalse(is_cross_component_seam("internal/runtime/rpc/handler/mail"))
+
     def test_cochange_exemption_is_scoped_and_score_preserving(self) -> None:
         # Wiring root AND a domain leaf both cross a component boundary on every
         # commit (rate -> 1.0). One repo proves both properties.
         repo = _collect_cochange_fixture(
             {
                 "server": "gateway-go/internal/runtime/server/wire.go",
+                "transport": (
+                    "gateway-go/internal/runtime/rpc/handler/handlerminiapp/workfeed.go"
+                ),
                 "leaf": "gateway-go/internal/domain/leaf/impl.go",
                 "other": "gateway-go/internal/domain/other/impl.go",
             }
@@ -76,13 +88,17 @@ class CompositionRootExemptionTest(unittest.TestCase):
             flagged,
             "composition root must be exempt from the cochange finding",
         )
+        self.assertNotIn(
+            "handlerminiapp",
+            flagged,
+            "exact transport seam must be exempt from the cochange finding",
+        )
 
         # Score-preserving: the root's high rate still fed the tail subscore
         # (0-100, lower = worse), so the wiring layer cannot hide churn from the
         # pillar score.
         subscores = pillar.metrics.get("subscores", {})
         self.assertLess(subscores.get("cross_component_cochange_tail", 100.0), 100.0)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -52,9 +52,9 @@ func autoGraduateEnabled() bool {
 type LadderWatchTask struct {
 	Tracker *Tracker
 	Logger  *slog.Logger
-	// OnReady surfaces one row whose evidence just reached READY. Best-effort:
-	// surfacing failures never affect the snapshot write.
-	OnReady func(title, detail string)
+	// OnReady surfaces one row whose evidence just reached READY. A delivery
+	// error leaves that row below READY in the snapshot so the next run retries.
+	OnReady func(title, detail string) error
 	// OnGraduated surfaces one EXECUTED unlock (notification + 재잠금 veto).
 	OnGraduated func(key, title, evidence string)
 }
@@ -124,8 +124,14 @@ func (t *LadderWatchTask) Run(_ context.Context) error {
 		}
 		logger.Info("ladder-watch: row reached READY — surfacing operator decision",
 			"row", r.Title, "detail", r.Detail)
-		if t.OnReady != nil {
-			t.OnReady(r.Title, r.Detail)
+		if t.OnReady == nil {
+			logger.Warn("ladder-watch: READY delivery unavailable; transition remains retryable", "row", r.Title)
+			next[r.Title] = prev[r.Title]
+			continue
+		}
+		if err := t.OnReady(r.Title, r.Detail); err != nil {
+			logger.Warn("ladder-watch: READY delivery failed; transition remains retryable", "row", r.Title, "error", err)
+			next[r.Title] = prev[r.Title]
 		}
 	}
 	raw, err := json.Marshal(next)

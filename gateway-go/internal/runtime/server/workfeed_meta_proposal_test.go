@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -121,15 +122,64 @@ func TestLowConfidenceEvolveCardRecordsOperatorVerdict(t *testing.T) {
 	if item.Source != evolveVerdictSource || item.Metadata["decisionId"] != "email-analysis@1.0.1" || len(item.Actions) != 2 {
 		t.Fatalf("low-confidence card = %+v", item)
 	}
-	s.handleEvolveVerdictAction(item, evolveVerdictConfirm)
+	if err := s.handleEvolveVerdictAction(item, evolveVerdictConfirm); err != nil {
+		t.Fatal(err)
+	}
 	labels := tracker.RecentOperatorJudgeVerdicts(time.Hour, 5)
 	if len(labels) != 1 || labels[0].Verdict != genesis.OperatorJudgeVerdictConfirm || labels[0].JudgeMargin != margin {
 		t.Fatalf("operator labels = %+v", labels)
 	}
 	// A later tap on the opposite chip is a no-op: the first decision wins.
-	s.handleEvolveVerdictAction(item, evolveVerdictRollback)
+	if err := s.handleEvolveVerdictAction(item, evolveVerdictRollback); err != nil {
+		t.Fatal(err)
+	}
 	labels = tracker.RecentOperatorJudgeVerdicts(time.Hour, 5)
 	if len(labels) != 1 || labels[0].Verdict != genesis.OperatorJudgeVerdictConfirm {
 		t.Fatalf("settled verdict changed: %+v", labels)
+	}
+}
+
+func TestNativeWorkFeedVerdictFailureKeepsCardRetryable(t *testing.T) {
+	store := workfeed.NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	if _, err := store.Append(workfeed.Item{
+		ID: "verdict", Source: evolveVerdictSource,
+		Actions: []workfeed.Action{{ID: evolveVerdictConfirm, Kind: workfeed.ActionAck}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	wantErr := errors.New("verdict ledger unavailable")
+	feed := &nativeWorkFeedStore{
+		store:           store,
+		onEvolveVerdict: func(workfeed.Item, string) error { return wantErr },
+	}
+	if _, err := feed.RunAction("verdict", evolveVerdictConfirm); !errors.Is(err, wantErr) {
+		t.Fatalf("RunAction error = %v, want %v", err, wantErr)
+	}
+	items, total, err := store.List(10, false)
+	if err != nil || total != 1 || len(items) != 1 || items[0].Status == workfeed.StatusAcked {
+		t.Fatalf("failed verdict consumed card: items=%+v total=%d err=%v", items, total, err)
+	}
+}
+
+func TestNativeWorkFeedRelockFailureKeepsCardRetryable(t *testing.T) {
+	store := workfeed.NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	actionID := ladderActionRelockPrefix + "source:runtime-error"
+	if _, err := store.Append(workfeed.Item{
+		ID: "graduation", Source: ladderReadySource,
+		Actions: []workfeed.Action{{ID: actionID, Kind: workfeed.ActionAck}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	wantErr := errors.New("graduation ledger unavailable")
+	feed := &nativeWorkFeedStore{
+		store:          store,
+		onLadderAction: func(workfeed.Item, string) error { return wantErr },
+	}
+	if _, err := feed.RunAction("graduation", actionID); !errors.Is(err, wantErr) {
+		t.Fatalf("RunAction error = %v, want %v", err, wantErr)
+	}
+	items, total, err := store.List(10, false)
+	if err != nil || total != 1 || len(items) != 1 || items[0].Status == workfeed.StatusAcked {
+		t.Fatalf("failed relock consumed card: items=%+v total=%d err=%v", items, total, err)
 	}
 }

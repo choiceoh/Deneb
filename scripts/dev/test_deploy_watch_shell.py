@@ -26,6 +26,7 @@ class DeployWatchShellTest(unittest.TestCase):
             fake_bin.mkdir()
             log = root / "watch.log"
             lock = root / "watch.lock"
+            ready = state / "deploy-watch.ready"
             state_file = state / "auto-deploy.deployed-head"
             state_file.write_text("head-a\n", encoding="utf-8")
 
@@ -60,6 +61,7 @@ while True:
                 "DENEB_PROD_DIR": str(prod),
                 "DENEB_DEPLOY_WATCH_LOG_FILE": str(log),
                 "DENEB_DEPLOY_WATCH_LOCK_FILE": str(lock),
+                "DENEB_DEPLOY_WATCH_READY_FILE": str(ready),
                 "DENEB_DEPLOY_WATCH_SEC": "2",
                 "DENEB_DEPLOY_WATCH_POLL_SEC": "1",
                 "DENEB_DEPLOY_WATCH_HANDOFF_SEC": "5",
@@ -83,6 +85,7 @@ while True:
             self.assertIn("watch window clear for head-b", text)
             self.assertNotIn("unwatched", text)
             self.assertNotIn("handoff timed out", text)
+            self.assertEqual(ready.read_text(encoding="utf-8").split()[0], "head-b")
 
 
 if __name__ == "__main__":
