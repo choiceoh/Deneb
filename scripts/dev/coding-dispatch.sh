@@ -38,6 +38,8 @@ DAILY_CAP="${DENEB_DISPATCH_DAILY_CAP:-2}"
 SESSION_TIMEOUT="${DENEB_DISPATCH_TIMEOUT_SEC:-7200}"
 # Claude Code binary: newest installed ccd-cli unless overridden.
 CLAUDE_BIN="${DENEB_DISPATCH_CLAUDE_BIN:-}"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+DISPATCH_RPC="$SCRIPT_DIR/self_correction_dispatch.py"
 
 log() {
     printf '%s  %s\n' "$(date -Iseconds)" "$*" >> "$LOG_FILE"
@@ -48,13 +50,91 @@ resolve_claude() {
         printf '%s' "$CLAUDE_BIN"
         return 0
     fi
-    local newest
-    newest=$(ls -1 "$HOME/.claude/remote/ccd-cli/" 2>/dev/null | sort -V | tail -1 || true)
+    local newest candidate
+    newest=$(
+        for candidate in "$HOME/.claude/remote/ccd-cli/"*; do
+            [[ -x "$candidate" ]] && basename "$candidate"
+        done | sort -V | tail -1
+    )
     if [[ -n "$newest" && -x "$HOME/.claude/remote/ccd-cli/$newest" ]]; then
         printf '%s' "$HOME/.claude/remote/ccd-cli/$newest"
         return 0
     fi
     command -v claude 2>/dev/null || return 1
+}
+
+record_event() {
+    python3 "$DISPATCH_RPC" --state-dir "$STATE_DIR" record "$@" >>"$LOG_FILE" 2>&1
+}
+
+pr_json_for_branch() {
+    local branch="$1"
+    command -v gh >/dev/null 2>&1 || return 1
+    command -v jq >/dev/null 2>&1 || return 1
+    ( cd "$PROD_DIR" && gh pr list --head "$branch" --state all --limit 1 \
+        --json number,url,state,mergeCommit 2>/dev/null )
+}
+
+# A session can exit while GitHub checks are still finishing. Reconcile every
+# durable marker before selecting new work so an open PR that later merges does
+# not remain stuck at pr_opened forever. Tracker-side idempotency makes repeats
+# cheap and keeps this safe across timer restarts.
+reconcile_dispatches() {
+    local marker cid attempt branch pr_json state number url merge_sha
+    [[ -x "$DISPATCH_RPC" || -f "$DISPATCH_RPC" ]] || return 0
+    for marker in "$DISPATCH_DIR"/*.json; do
+        [[ -f "$marker" ]] || continue
+        command -v jq >/dev/null 2>&1 || return 0
+        cid=$(jq -r '.id // empty' "$marker")
+        attempt=$(jq -r '.attemptId // empty' "$marker")
+        branch=$(jq -r '.branch // empty' "$marker")
+        [[ -n "$cid" && -n "$attempt" && -n "$branch" ]] || continue # legacy marker
+        pr_json=$(pr_json_for_branch "$branch" || true)
+        [[ -n "$pr_json" ]] || continue
+        state=$(jq -r '.[0].state // empty' <<<"$pr_json")
+        number=$(jq -r '.[0].number // 0' <<<"$pr_json")
+        url=$(jq -r '.[0].url // empty' <<<"$pr_json")
+        merge_sha=$(jq -r '.[0].mergeCommit.oid // empty' <<<"$pr_json")
+        if [[ "$state" == "MERGED" && -n "$merge_sha" ]]; then
+            record_event --id "$cid" --phase merged --attempt-id "$attempt" --branch "$branch" \
+                --pr-number "$number" --pr-url "$url" --commit-sha "$merge_sha" \
+                --note "reconciled merged PR" || log "WARN: failed to reconcile merged dispatch $cid"
+        elif [[ "$state" == "OPEN" ]]; then
+            record_event --id "$cid" --phase pr_opened --attempt-id "$attempt" --branch "$branch" \
+                --pr-number "$number" --pr-url "$url" --note "reconciled open PR" \
+                || log "WARN: failed to reconcile open dispatch $cid"
+        fi
+    done
+}
+
+PR_OUTCOME="none"
+record_pr_outcome() {
+    local cid="$1" attempt="$2" branch="$3" rc="$4" elapsed="$5"
+    local pr_json state number url merge_sha
+    pr_json=$(pr_json_for_branch "$branch" || true)
+    state=$(jq -r '.[0].state // empty' <<<"${pr_json:-[]}" 2>/dev/null || true)
+    number=$(jq -r '.[0].number // 0' <<<"${pr_json:-[]}" 2>/dev/null || printf '0')
+    url=$(jq -r '.[0].url // empty' <<<"${pr_json:-[]}" 2>/dev/null || true)
+    merge_sha=$(jq -r '.[0].mergeCommit.oid // empty' <<<"${pr_json:-[]}" 2>/dev/null || true)
+    case "$state" in
+        MERGED)
+            PR_OUTCOME="merged"
+            record_event --id "$cid" --phase merged --attempt-id "$attempt" --branch "$branch" \
+                --pr-number "$number" --pr-url "$url" --commit-sha "$merge_sha" \
+                --note "dispatch session rc=$rc elapsed=${elapsed}s; PR merged"
+            ;;
+        OPEN)
+            PR_OUTCOME="open"
+            record_event --id "$cid" --phase pr_opened --attempt-id "$attempt" --branch "$branch" \
+                --pr-number "$number" --pr-url "$url" \
+                --note "dispatch session rc=$rc elapsed=${elapsed}s; PR open"
+            ;;
+        *)
+            PR_OUTCOME="failed"
+            record_event --id "$cid" --phase failed --attempt-id "$attempt" --branch "$branch" \
+                --note "dispatch session rc=$rc elapsed=${elapsed}s; no merged/open PR"
+            ;;
+    esac
 }
 
 main() {
@@ -64,8 +144,8 @@ main() {
         exit 0
     fi
     mkdir -p "$DISPATCH_DIR"
-    local script_dir
-    script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+    local script_dir="$SCRIPT_DIR"
+    reconcile_dispatches
 
     # Upgrade non-terminal outcomes first. Newest-first within 14d (mtime), then
     # truncate — sorting AFTER age filter so five stale markers cannot starve
@@ -348,10 +428,13 @@ PYEOF
     # so a crashed session must not redispatch forever) carries promptVersion
     # provenance. An unusable artifact defers the dispatch — candidate and
     # daily-cap slot stay unburned until the gateway materializes it.
-    local prompt
-    if ! prompt=$(printf '%s' "$pick" | python3 "$script_dir/dispatch_prompt.py" \
+    local prompt attempt_id branch
+    branch="dispatch/$cid"
+    attempt_id="$cid-$(date +%s)-$$"
+    if ! prompt=$(printf '%s' "$pick" | python3 "$SCRIPT_DIR/dispatch_prompt.py" \
             --meta-dir "$STATE_DIR/skills/genesis/meta" \
-            --marker "$DISPATCH_DIR/$cid.json" 2>>"$LOG_FILE"); then
+            --marker "$DISPATCH_DIR/$cid.json" \
+            --attempt-id "$attempt_id" --branch "$branch" 2>>"$LOG_FILE"); then
         log "dispatch contract artifact unavailable — $cid deferred (no marker burned)"
         exit 0
     fi
@@ -363,6 +446,14 @@ PYEOF
         exit 0
     fi
 
+    # Fail closed before spending an agent session: a dispatch without its
+    # authoritative start event would recreate the result-ledger gap.
+    if ! record_event --id "$cid" --phase started --attempt-id "$attempt_id" --branch "$branch" \
+            --note "coding dispatch started"; then
+        rm -f "$DISPATCH_DIR/$cid.json"
+        log "dispatch ledger unavailable — $cid deferred (marker released)"
+        exit 0
+    fi
     log "dispatching $cid → $wt (claude $(basename "$claude_bin"), cap $((spent+1))/$DAILY_CAP today)"
     set +e
     local started_at rc
@@ -373,13 +464,16 @@ PYEOF
     set -e
     local elapsed=$(( $(date +%s) - started_at ))
     log "dispatch $cid finished (rc=$rc, ${elapsed}s)"
+    if ! record_pr_outcome "$cid" "$attempt_id" "$branch" "$rc" "$elapsed"; then
+        log "WARN: failed to record terminal PR outcome for $cid"
+    fi
 
     # Instant failure (<60s, rc!=0) means the session never really started —
     # binary not logged in ("Not logged in", observed live 2026-07-12), missing
     # deps, etc. Burning the candidate AND a daily-cap slot on that would starve
     # the lane silently: release the marker and the worktree so the same
     # candidate re-dispatches once the environment is fixed.
-    if (( rc != 0 && elapsed < 60 )); then
+    if (( rc != 0 && elapsed < 60 )) && [[ "$PR_OUTCOME" == "failed" || "$PR_OUTCOME" == "none" ]]; then
         rm -f "$DISPATCH_DIR/$cid.json"
         git -C "$PROD_DIR" worktree remove --force "$wt" >>"$LOG_FILE" 2>&1 || true
         log "instant failure — marker released for $cid (environment problem, not the candidate)"

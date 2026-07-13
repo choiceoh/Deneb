@@ -28,6 +28,7 @@ from rsi_status import (
     assess_l4,
     main,
     turning,
+    render_markdown,
 )
 
 NOW = 1_700_000_000_000  # fixed clock (ms)
@@ -177,6 +178,16 @@ class L3Test(unittest.TestCase):
     def test_no_runs_is_idle(self):
         self.assertEqual(assess_l3([], [], NOW).state, IDLE)
 
+    def test_operator_verdict_is_live_fuel_without_synthetic_run(self):
+        s = assess_l3([{
+            "createdAt": RECENT,
+            "judgeVersion": "v1",
+            "operatorVerdicts": [{"decisionId": "sk@1.0.1", "verdict": "confirm"}],
+        }], [], NOW)
+        self.assertEqual(s.state, LIVE)
+        self.assertEqual(s.metrics["runs"], 0)
+        self.assertEqual(s.metrics["operator_labels_7d"], 1)
+
 
 class L4Test(unittest.TestCase):
     def test_skill_and_test_scope_only_is_starved(self):
@@ -225,6 +236,31 @@ class L4Test(unittest.TestCase):
         s = assess_l4(rows, dispatch_total=3, dispatch_today=0, outcomes={})
         self.assertIsNone(s.metrics["land_rate"])
         self.assertNotIn("land rate", s.diagnosis)
+
+    def test_dispatch_lifecycle_replaces_marker_guessing(self):
+        rows = [
+            {"type": "self_correction_candidate", "id": "flight", "scope": "code",
+             "status": "proposed", "source": "self-harness:x"},
+            {"type": "self_correction_dispatch", "id": "flight", "dispatchPhase": "started",
+             "attemptId": "a1"},
+            {"type": "self_correction_candidate", "id": "closed", "scope": "code",
+             "status": "accepted", "source": "self-harness:y"},
+            {"type": "self_correction_dispatch", "id": "closed", "dispatchPhase": "watch_passed",
+             "attemptId": "a2"},
+        ]
+        s = assess_l4(rows, dispatch_total=2, dispatch_today=0)
+        self.assertEqual(s.state, LIVE)
+        self.assertEqual(s.metrics["dispatchable"], 0)
+        self.assertEqual(s.metrics["in_flight"], 1)
+        self.assertEqual(s.metrics["applied"], 1)
+
+    def test_legacy_marker_id_is_not_double_counted_as_dispatchable(self):
+        rows = [{"type": "self_correction_candidate", "id": "legacy", "scope": "code",
+                 "status": "proposed", "source": "self-harness:x"}]
+        s = assess_l4(rows, dispatch_total=1, dispatch_today=0, dispatched_ids={"legacy"})
+        self.assertEqual(s.state, LIVE)
+        self.assertEqual(s.metrics["dispatchable"], 0)
+        self.assertEqual(s.metrics["legacy_in_flight"], 1)
 
     def test_staged_non_dispatch_code_supply_is_visible(self):
         # Proposed code candidates from sources outside the dispatch allowlist
@@ -321,6 +357,23 @@ class AssessAndCliTest(unittest.TestCase):
         layers = {layer.key: layer.state for layer in assess("/nonexistent/deneb/data", NOW)}
         self.assertEqual(layers.pop("GRAD"), DATA_GATED)  # ladder: evidence accumulating
         self.assertEqual(set(layers.values()), {IDLE})
+
+    def test_markdown_is_generated_from_the_same_snapshot(self):
+        layers = [assess_l1([{"createdAt": RECENT, "type": "evolved"}], NOW)]
+        doc = render_markdown(layers, NOW, "/tmp/deneb-data")
+        self.assertIn("# Deneb RSI live status", doc)
+        self.assertIn("**Turning: 1/1**", doc)
+        self.assertIn("| L1 — skill evolution | LIVE |", doc)
+        self.assertIn("Do not edit by hand", doc)
+
+    def test_cli_can_atomically_write_markdown(self):
+        with tempfile.TemporaryDirectory() as data_dir:
+            output = os.path.join(data_dir, "generated", "rsi-status.md")
+            rc = main(["--data-dir", data_dir, "--now-ms", str(NOW),
+                       "--write-markdown", output], stdout=io.StringIO(), stderr=io.StringIO())
+            self.assertEqual(rc, 0)
+            with open(output, encoding="utf-8") as handle:
+                self.assertIn("# Deneb RSI live status", handle.read())
 
 
 class LadderTest(unittest.TestCase):

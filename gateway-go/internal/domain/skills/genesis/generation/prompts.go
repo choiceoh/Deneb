@@ -220,4 +220,4 @@ const dispatchContractPrompt = `## 계약 (오퍼레이터 승인 2026-07-12)
 - 이 워크트리에서만 편집. CLAUDE.md의 게이트 전부 준수: make check(또는 스코프 게이트) + 게이트웨이 동작 변경 시 live-test smoke까지.
 - 게이트 그린이면 scripts/committer로 커밋 → push → PR(본문 3섹션+푸터) → 체크 그린 대기 → scripts/dev/pr.sh land로 직접 랜딩.
 - 구현이 부적절하다고 판단되면(근거 부족·리스크 과다) 아무것도 랜딩하지 말고 판단 근거를 마지막 메시지로 남겨라.
-- 완료 후 skill_lifecycle 계열 상태 갱신은 불필요 — 배차 마커가 원장이다.`
+- 배차·PR·머지 결과는 호출 스크립트가 tracker RPC 원장에 기록한다. skill_lifecycle 상태를 직접 조작하거나 배차 마커를 완료 증거로 간주하지 마라.`

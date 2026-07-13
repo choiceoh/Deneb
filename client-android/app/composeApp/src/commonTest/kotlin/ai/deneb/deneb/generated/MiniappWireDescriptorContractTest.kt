@@ -406,13 +406,13 @@ class MiniappWireDescriptorContractTest {
             name = "SelfCorrectionCandidate",
             serializer = SelfCorrectionCandidate.serializer(),
             empty = SelfCorrectionCandidate(),
-            fields = listOf("id", "status", "scope", "skillName", "sessionKey", "title", "candidate", "evidence", "reason", "targetFiles", "proposedChange", "risk", "source", "surface", "autoDispatch", "reviewer", "reviewNote", "evidenceKinds", "reviewActions", "createdAt", "updatedAt"),
+            fields = listOf("id", "status", "scope", "skillName", "sessionKey", "title", "candidate", "evidence", "reason", "targetFiles", "proposedChange", "risk", "source", "surface", "autoDispatch", "reviewer", "reviewNote", "evidenceKinds", "reviewActions", "dispatchPhase", "attemptId", "branch", "prNumber", "prUrl", "commitSha", "deployHead", "outcomeNote", "createdAt", "updatedAt"),
         ),
         contract(
             name = "SelfImprovementCodingFunnel",
             serializer = SelfImprovementCodingFunnel.serializer(),
             empty = SelfImprovementCodingFunnel(),
-            fields = listOf("lastCaptureAt", "lastReviewAt", "rejections7d", "promotableRejections7d", "lastRejectionAt", "lastNudgeAt", "proposed7d", "verdicted7d", "applied7d", "conversionRate", "meanTimeToVerdictMs", "reopens7d"),
+            fields = listOf("lastCaptureAt", "lastReviewAt", "rejections7d", "promotableRejections7d", "lastRejectionAt", "lastNudgeAt", "proposed7d", "verdicted7d", "applied7d", "conversionRate", "meanTimeToVerdictMs", "reopens7d", "pendingCount", "oldestPendingAgeMs", "dispatched7d", "watchPassed7d", "rolledBack7d"),
         ),
         contract(
             name = "SelfImprovementCodingListResponse",

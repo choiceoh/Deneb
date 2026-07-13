@@ -15,12 +15,21 @@ import (
 const (
 	SelfCorrectionTypeCandidate = "self_correction_candidate"
 	SelfCorrectionTypeReview    = "self_correction_review"
+	SelfCorrectionTypeDispatch  = "self_correction_dispatch"
 
 	SelfCorrectionStatusProposed   = "proposed"
 	SelfCorrectionStatusAccepted   = "accepted"
 	SelfCorrectionStatusRejected   = "rejected"
 	SelfCorrectionStatusSuperseded = "superseded"
 	SelfCorrectionStatusApplied    = "applied"
+
+	SelfCorrectionDispatchStarted     = "started"
+	SelfCorrectionDispatchPROpened    = "pr_opened"
+	SelfCorrectionDispatchMerged      = "merged"
+	SelfCorrectionDispatchDeployed    = "deployed"
+	SelfCorrectionDispatchWatchPassed = "watch_passed"
+	SelfCorrectionDispatchFailed      = "failed"
+	SelfCorrectionDispatchRolledBack  = "rolled_back"
 )
 
 // SelfCorrectionCandidateRecord is an append-only proposal for a future coding
@@ -48,8 +57,20 @@ type SelfCorrectionCandidateRecord struct {
 	Source         string `json:"source,omitempty"`
 	Reviewer       string `json:"reviewer,omitempty"`
 	ReviewNote     string `json:"reviewNote,omitempty"`
-	CreatedAt      int64  `json:"createdAt"`
-	UpdatedAt      int64  `json:"updatedAt,omitempty"`
+	// Dispatch fields are populated on self_correction_dispatch rows and folded
+	// onto the candidate read model. The review status and delivery status are
+	// deliberately separate: accepted means "approved to try"; applied means a
+	// merged deploy survived the rollback watch.
+	DispatchPhase string `json:"dispatchPhase,omitempty"`
+	AttemptID     string `json:"attemptId,omitempty"`
+	Branch        string `json:"branch,omitempty"`
+	PRNumber      int    `json:"prNumber,omitempty"`
+	PRURL         string `json:"prUrl,omitempty"`
+	CommitSHA     string `json:"commitSha,omitempty"`
+	DeployHead    string `json:"deployHead,omitempty"`
+	OutcomeNote   string `json:"outcomeNote,omitempty"`
+	CreatedAt     int64  `json:"createdAt"`
+	UpdatedAt     int64  `json:"updatedAt,omitempty"`
 }
 
 // RecordSelfCorrectionCandidate appends a deferred self-correction candidate.
@@ -125,23 +146,99 @@ func (t *Tracker) RecordSelfCorrectionReview(record SelfCorrectionCandidateRecor
 	if err != nil {
 		return record, fmt.Errorf("genesis-tracker: load self-correction candidates: %w", err)
 	}
-	found := false
-	for _, existing := range entries {
-		if existing.Type == SelfCorrectionTypeReview {
-			continue
-		}
-		if strings.TrimSpace(existing.ID) == record.ID {
-			found = true
-			break
-		}
-	}
+	current, found := mergedSelfCorrectionCandidate(entries, record.ID)
 	if !found {
 		return record, fmt.Errorf("genesis-tracker: self-correction candidate not found: %s", record.ID)
+	}
+	if current.Status == record.Status {
+		return record, nil // idempotent retry: do not inflate the append-only funnel
+	}
+	if !validSelfCorrectionStatusTransition(current.Status, record.Status) {
+		return record, fmt.Errorf("genesis-tracker: invalid self-correction status transition %s -> %s", current.Status, record.Status)
 	}
 	if err := jsonlstore.Append(t.selfCorrectionPath, record); err != nil {
 		return record, fmt.Errorf("genesis-tracker: append self-correction review: %w", err)
 	}
 	return record, nil
+}
+
+// RecordSelfCorrectionDispatch appends one delivery event for a coding
+// candidate. It is the authoritative result ledger; filesystem dispatch
+// markers remain only crash/idempotency guards and daily-budget receipts.
+// A watch_passed event is itself the applied verdict in the folded read model,
+// so closure is one durable append rather than two writes that could tear.
+func (t *Tracker) RecordSelfCorrectionDispatch(record SelfCorrectionCandidateRecord) (SelfCorrectionCandidateRecord, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	now := time.Now().UnixMilli()
+	record.Type = SelfCorrectionTypeDispatch
+	record.ID = strings.TrimSpace(record.ID)
+	record.DispatchPhase = normalizeSelfCorrectionDispatchPhase(record.DispatchPhase)
+	record.AttemptID = strings.TrimSpace(record.AttemptID)
+	record.Branch = strings.TrimSpace(record.Branch)
+	record.PRURL = strings.TrimSpace(record.PRURL)
+	record.CommitSHA = strings.TrimSpace(record.CommitSHA)
+	record.DeployHead = strings.TrimSpace(record.DeployHead)
+	record.OutcomeNote = strings.TrimSpace(record.OutcomeNote)
+	record.CreatedAt = now
+	record.UpdatedAt = now
+	if record.ID == "" {
+		return record, fmt.Errorf("genesis-tracker: self-correction dispatch id is required")
+	}
+	if record.DispatchPhase == "" {
+		return record, fmt.Errorf("genesis-tracker: invalid self-correction dispatch phase")
+	}
+	if record.AttemptID == "" {
+		return record, fmt.Errorf("genesis-tracker: self-correction dispatch attemptId is required")
+	}
+
+	entries, err := jsonlstore.Load[SelfCorrectionCandidateRecord](t.selfCorrectionPath)
+	if err != nil {
+		return record, fmt.Errorf("genesis-tracker: load self-correction candidates: %w", err)
+	}
+	current, found := mergedSelfCorrectionCandidate(entries, record.ID)
+	if !found {
+		return record, fmt.Errorf("genesis-tracker: self-correction candidate not found: %s", record.ID)
+	}
+	if current.DispatchPhase == record.DispatchPhase && current.AttemptID == record.AttemptID {
+		if !selfCorrectionDispatchAddsProvenance(current, record) {
+			return record, nil // exact idempotent RPC retry
+		}
+		// Same phase may be enriched later (for example GitHub exposes the merge
+		// SHA shortly after state first flips to MERGED). Append the missing
+		// provenance without advancing or inflating phase counters.
+		if err := jsonlstore.Append(t.selfCorrectionPath, record); err != nil {
+			return record, fmt.Errorf("genesis-tracker: append self-correction dispatch enrichment: %w", err)
+		}
+		return record, nil
+	}
+	if !validSelfCorrectionDispatchTransition(current.DispatchPhase, record.DispatchPhase) {
+		return record, fmt.Errorf("genesis-tracker: invalid self-correction dispatch transition %s -> %s", current.DispatchPhase, record.DispatchPhase)
+	}
+	if current.DispatchPhase != "" && record.DispatchPhase != SelfCorrectionDispatchStarted && current.AttemptID != record.AttemptID {
+		return record, fmt.Errorf("genesis-tracker: dispatch attempt changed inside lifecycle: %s -> %s", current.AttemptID, record.AttemptID)
+	}
+	if record.DispatchPhase == SelfCorrectionDispatchStarted && current.AttemptID == record.AttemptID {
+		return record, fmt.Errorf("genesis-tracker: retry must use a new dispatch attemptId")
+	}
+	if record.DispatchPhase == SelfCorrectionDispatchWatchPassed && current.Status != SelfCorrectionStatusApplied &&
+		!validSelfCorrectionStatusTransition(current.Status, SelfCorrectionStatusApplied) {
+		return record, fmt.Errorf("genesis-tracker: watched dispatch cannot close status %s as applied", current.Status)
+	}
+	if err := jsonlstore.Append(t.selfCorrectionPath, record); err != nil {
+		return record, fmt.Errorf("genesis-tracker: append self-correction dispatch: %w", err)
+	}
+	return record, nil
+}
+
+func selfCorrectionDispatchAddsProvenance(current, next SelfCorrectionCandidateRecord) bool {
+	return (current.Branch == "" && next.Branch != "") ||
+		(current.PRNumber == 0 && next.PRNumber > 0) ||
+		(current.PRURL == "" && next.PRURL != "") ||
+		(current.CommitSHA == "" && next.CommitSHA != "") ||
+		(current.DeployHead == "" && next.DeployHead != "") ||
+		(current.OutcomeNote == "" && next.OutcomeNote != "")
 }
 
 // RecentSelfCorrectionCandidates returns the latest merged view of deferred
@@ -160,6 +257,31 @@ func (t *Tracker) RecentSelfCorrectionCandidates(skillName, statusFilter string,
 		return nil, fmt.Errorf("genesis-tracker: load self-correction candidates: %w", err)
 	}
 
+	merged := mergeSelfCorrectionRecords(entries)
+
+	out := make([]SelfCorrectionCandidateRecord, 0, len(merged))
+	for _, rec := range merged {
+		if skillName != "" && rec.SkillName != skillName {
+			continue
+		}
+		if statusFilter != "" && rec.Status != statusFilter {
+			continue
+		}
+		out = append(out, rec)
+	}
+	sortSelfCorrectionCandidates(out)
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func mergedSelfCorrectionCandidate(entries []SelfCorrectionCandidateRecord, id string) (SelfCorrectionCandidateRecord, bool) {
+	rec, ok := mergeSelfCorrectionRecords(entries)[strings.TrimSpace(id)]
+	return rec, ok
+}
+
+func mergeSelfCorrectionRecords(entries []SelfCorrectionCandidateRecord) map[string]SelfCorrectionCandidateRecord {
 	merged := make(map[string]SelfCorrectionCandidateRecord)
 	for _, rec := range entries {
 		rec.ID = strings.TrimSpace(rec.ID)
@@ -185,7 +307,45 @@ func (t *Tracker) RecentSelfCorrectionCandidates(skillName, statusFilter string,
 				base.UpdatedAt = rec.UpdatedAt
 			}
 			merged[rec.ID] = base
-		default:
+		case SelfCorrectionTypeDispatch:
+			base, ok := merged[rec.ID]
+			if !ok {
+				continue
+			}
+			base.DispatchPhase = normalizeSelfCorrectionDispatchPhase(rec.DispatchPhase)
+			if rec.AttemptID != "" {
+				base.AttemptID = rec.AttemptID
+			}
+			if rec.Branch != "" {
+				base.Branch = rec.Branch
+			}
+			if rec.PRNumber > 0 {
+				base.PRNumber = rec.PRNumber
+			}
+			if rec.PRURL != "" {
+				base.PRURL = rec.PRURL
+			}
+			if rec.CommitSHA != "" {
+				base.CommitSHA = rec.CommitSHA
+			}
+			if rec.DeployHead != "" {
+				base.DeployHead = rec.DeployHead
+			}
+			if rec.OutcomeNote != "" {
+				base.OutcomeNote = rec.OutcomeNote
+			}
+			if base.DispatchPhase == SelfCorrectionDispatchWatchPassed {
+				base.Status = SelfCorrectionStatusApplied
+				base.Reviewer = "deploy-watch"
+				if base.ReviewNote == "" {
+					base.ReviewNote = "merged deployment survived rollback watch"
+				}
+			}
+			if rec.UpdatedAt > 0 {
+				base.UpdatedAt = rec.UpdatedAt
+			}
+			merged[rec.ID] = base
+		case "", SelfCorrectionTypeCandidate: // empty type is a legacy candidate row
 			rec.Type = SelfCorrectionTypeCandidate
 			rec.Status = normalizeSelfCorrectionStatus(rec.Status)
 			if rec.Status == "" {
@@ -197,22 +357,54 @@ func (t *Tracker) RecentSelfCorrectionCandidates(skillName, statusFilter string,
 			merged[rec.ID] = rec
 		}
 	}
+	return merged
+}
 
-	out := make([]SelfCorrectionCandidateRecord, 0, len(merged))
-	for _, rec := range merged {
-		if skillName != "" && rec.SkillName != skillName {
-			continue
-		}
-		if statusFilter != "" && rec.Status != statusFilter {
-			continue
-		}
-		out = append(out, rec)
+func validSelfCorrectionStatusTransition(from, to string) bool {
+	from = normalizeSelfCorrectionStatus(from)
+	to = normalizeSelfCorrectionStatus(to)
+	switch from {
+	case SelfCorrectionStatusProposed:
+		return to == SelfCorrectionStatusAccepted || to == SelfCorrectionStatusRejected ||
+			to == SelfCorrectionStatusSuperseded || to == SelfCorrectionStatusApplied
+	case SelfCorrectionStatusAccepted:
+		return to == SelfCorrectionStatusRejected || to == SelfCorrectionStatusSuperseded || to == SelfCorrectionStatusApplied
+	default:
+		return false // rejected/superseded/applied are terminal
 	}
-	sortSelfCorrectionCandidates(out)
-	if len(out) > limit {
-		out = out[:limit]
+}
+
+func normalizeSelfCorrectionDispatchPhase(phase string) string {
+	switch strings.ToLower(strings.TrimSpace(phase)) {
+	case SelfCorrectionDispatchStarted, SelfCorrectionDispatchPROpened,
+		SelfCorrectionDispatchMerged, SelfCorrectionDispatchDeployed,
+		SelfCorrectionDispatchWatchPassed, SelfCorrectionDispatchFailed,
+		SelfCorrectionDispatchRolledBack:
+		return strings.ToLower(strings.TrimSpace(phase))
+	default:
+		return ""
 	}
-	return out, nil
+}
+
+func validSelfCorrectionDispatchTransition(from, to string) bool {
+	from = normalizeSelfCorrectionDispatchPhase(from)
+	to = normalizeSelfCorrectionDispatchPhase(to)
+	switch from {
+	case "":
+		return to == SelfCorrectionDispatchStarted
+	case SelfCorrectionDispatchStarted:
+		return to == SelfCorrectionDispatchPROpened || to == SelfCorrectionDispatchMerged || to == SelfCorrectionDispatchFailed
+	case SelfCorrectionDispatchPROpened:
+		return to == SelfCorrectionDispatchMerged || to == SelfCorrectionDispatchFailed
+	case SelfCorrectionDispatchMerged:
+		return to == SelfCorrectionDispatchDeployed || to == SelfCorrectionDispatchFailed
+	case SelfCorrectionDispatchDeployed:
+		return to == SelfCorrectionDispatchWatchPassed || to == SelfCorrectionDispatchRolledBack
+	case SelfCorrectionDispatchFailed, SelfCorrectionDispatchRolledBack:
+		return to == SelfCorrectionDispatchStarted
+	default:
+		return false // watch_passed is terminal
+	}
 }
 
 func normalizeSelfCorrectionStatus(status string) string {

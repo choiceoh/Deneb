@@ -49,7 +49,9 @@ func TestBackupAndRollbackSkill(t *testing.T) {
 		catalog: cat,
 	}
 
-	e.RollbackSkill("foo")
+	if !e.RollbackSkillWithResult("foo") {
+		t.Fatal("rollback reported failure after restoring a valid backup")
+	}
 
 	got, err := os.ReadFile(skillFile)
 	if err != nil {
@@ -61,8 +63,50 @@ func TestBackupAndRollbackSkill(t *testing.T) {
 
 	// A skill with no backup is a safe no-op (does not crash or truncate).
 	cat.Register(skills.SkillEntry{Skill: skills.Skill{Name: "bar", FilePath: filepath.Join(dir, "missing", "SKILL.md")}})
-	e.RollbackSkill("bar")    // no backup → no-op
-	e.RollbackSkill("absent") // not in catalog → no-op
+	if e.RollbackSkillWithResult("bar") || e.RollbackSkillWithResult("absent") {
+		t.Fatal("missing backup/catalog entry reported a successful rollback")
+	}
+}
+
+func TestCommitEvaluatedCandidateSurfacesOnlyLowConfidenceJudgeMargins(t *testing.T) {
+	dir := t.TempDir()
+	skillFile := filepath.Join(dir, "SKILL.md")
+	original := "---\nname: foo\nversion: 1.0.0\n---\n\n# Foo\n\noriginal\n"
+	if err := os.WriteFile(skillFile, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e := &Evolver{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	var observed []EvolveResult
+	e.SetLowConfidenceObserver(func(result EvolveResult) { observed = append(observed, result) })
+	entry := &skills.SkillEntry{Skill: skills.Skill{Name: "foo", FilePath: skillFile, Version: "1.0.0"}}
+	origScore, lowScore := 70.0, 72.0
+	result, err := e.commitEvaluatedCandidate(entry, original, evaluatedCandidate{
+		body: "# Foo\n\nlow confidence improvement", newVersion: "1.0.1",
+		prov: EvolveProvenance{JudgeArtifactVersion: "judge-v1", JudgeScoreOriginal: &origScore, JudgeScoreCandidate: &lowScore},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.NeedsOperatorVerdict || result.JudgeMargin == nil || *result.JudgeMargin != 2 || len(observed) != 1 {
+		t.Fatalf("low-confidence result=%+v observed=%+v", result, observed)
+	}
+
+	current, err := os.ReadFile(skillFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry.Skill.Version = "1.0.1"
+	highScore := 74.0
+	result, err = e.commitEvaluatedCandidate(entry, string(current), evaluatedCandidate{
+		body: "# Foo\n\nhigh confidence improvement", newVersion: "1.0.2",
+		prov: EvolveProvenance{JudgeArtifactVersion: "judge-v1", JudgeScoreOriginal: &origScore, JudgeScoreCandidate: &highScore},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.NeedsOperatorVerdict || len(observed) != 1 {
+		t.Fatalf("high-confidence result=%+v observed=%+v", result, observed)
+	}
 }
 
 // TestPickCandidateJudge_AvoidsSameFamily verifies that a lightweight-produced

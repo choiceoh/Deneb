@@ -770,6 +770,17 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 			organic = append(organic, o)
 		}
 	}
+	operatorConfirms, operatorRollbacks := 0, 0
+	for _, verdict := range t.Tracker.RecentOperatorJudgeVerdicts(organicFalseAcceptWindow, judgeAccuracyMaxExhibits*4) {
+		if verdict.JudgeVersion != version {
+			continue
+		}
+		if verdict.Verdict == OperatorJudgeVerdictRollback {
+			operatorRollbacks++
+		} else if verdict.Verdict == OperatorJudgeVerdictConfirm {
+			operatorConfirms++
+		}
+	}
 	type classMiss struct {
 		name          string
 		missed, total int
@@ -780,7 +791,7 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 			missed = append(missed, classMiss{name, ct[0], ct[1]})
 		}
 	}
-	if len(missed) == 0 && falseRejects == 0 && len(organic) == 0 {
+	if len(missed) == 0 && falseRejects == 0 && len(organic) == 0 && operatorConfirms == 0 && operatorRollbacks == 0 {
 		return "" // incumbent judge is clean — nothing to co-evolve on
 	}
 	sort.Slice(missed, func(i, j int) bool {
@@ -801,6 +812,12 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 		}
 		fmt.Fprintf(&b, "- 실전 false-accept %d건: %s — 판정자가 통과시킨 evolve가 실사용에서 롤백됨 (baseline-aware 확인, 최근 30일)\n",
 			len(organic), strings.Join(names, ", "))
+	}
+	if operatorRollbacks > 0 {
+		fmt.Fprintf(&b, "- 운영자 확인 false-accept %d건: 저신뢰 evolve를 사람이 직접 되돌림 — 판정 경계를 강화할 실제 라벨\n", operatorRollbacks)
+	}
+	if operatorConfirms > 0 {
+		fmt.Fprintf(&b, "- 운영자 확인 true-accept %d건: 저신뢰 evolve를 사람이 유효하다고 확정 — 과잉 엄격화하지 말 것\n", operatorConfirms)
 	}
 	// Category-local bias (evaluator preference collapse, 2606.16682): a
 	// category whose misses concentrate must be named so the revision fixes

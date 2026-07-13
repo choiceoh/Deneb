@@ -267,13 +267,23 @@ func (e *Evolver) commitEvaluatedCandidate(entry *skills.SkillEntry, originalCon
 	// non-blocking: it never rolls back or fails the evolve, only observes.
 	e.detectCrossSkillRegression(entry.Skill.Name)
 
-	return &EvolveResult{
-		SkillName:   entry.Skill.Name,
-		Evolved:     true,
-		NewVersion:  newVersion,
-		Description: committedDescription,
-		Audit:       committedAudit.Ptr(),
-	}, nil
+	result := EvolveResult{
+		SkillName:    entry.Skill.Name,
+		Evolved:      true,
+		NewVersion:   newVersion,
+		Description:  committedDescription,
+		Audit:        committedAudit.Ptr(),
+		JudgeVersion: eval.prov.JudgeArtifactVersion,
+	}
+	if eval.prov.JudgeScoreOriginal != nil && eval.prov.JudgeScoreCandidate != nil {
+		margin := *eval.prov.JudgeScoreCandidate - *eval.prov.JudgeScoreOriginal
+		result.JudgeMargin = &margin
+		result.NeedsOperatorVerdict = margin <= skillLowConfidenceJudgeMaxDelta
+	}
+	if result.NeedsOperatorVerdict {
+		e.notifyLowConfidence(result)
+	}
+	return &result, nil
 }
 
 // adoptReproductionCase runs the deterministic reproduction oracle: the case is
@@ -401,7 +411,10 @@ func formatRecentErrors(errors []string) string {
 }
 
 const (
-	skillJudgeMinScoreDelta           = 2.0
+	skillJudgeMinScoreDelta = 2.0
+	// Borderline accepted candidates ship behind the existing rollback watch,
+	// but request an operator label for P3 verifier co-evolution.
+	skillLowConfidenceJudgeMaxDelta   = 3.0
 	skillEvolutionMinEvidenceUses     = 2
 	skillEvolutionMinEvidenceFailures = 2
 	skillEvolutionPromptCaseLimit     = 5

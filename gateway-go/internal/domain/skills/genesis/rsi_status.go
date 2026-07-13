@@ -263,7 +263,8 @@ func (t *Tracker) metaCycleCountsIn(window time.Duration) (cycles, proposed, ado
 
 func (t *Tracker) rsiAssessL3() RSILayer {
 	records, err := t.RecentJudgeAccuracy(20)
-	if err != nil || len(records) == 0 {
+	operatorLabels := len(t.RecentOperatorJudgeVerdicts(7*24*time.Hour, 100))
+	if err != nil || (len(records) == 0 && operatorLabels == 0) {
 		return RSILayer{Key: "L3", Title: "판정자 공진화", State: RSIStateIdle, Diagnosis: "판정 정확도 레인이 아직 실행되지 않았습니다"}
 	}
 	cutoff := time.Now().Add(-7 * 24 * time.Hour).UnixMilli()
@@ -285,7 +286,7 @@ func (t *Tracker) rsiAssessL3() RSILayer {
 			}
 		}
 	}
-	if runs == 0 {
+	if runs == 0 && operatorLabels == 0 {
 		return RSILayer{Key: "L3", Title: "판정자 공진화", State: RSIStateIdle, Diagnosis: "판정 정확도 레인이 최근 7일간 실행되지 않았습니다"}
 	}
 	organic := len(t.OrganicFalseAccepts(organicFalseAcceptWindow, 50))
@@ -294,12 +295,13 @@ func (t *Tracker) rsiAssessL3() RSILayer {
 		{"판정 놓침", strconv.Itoa(misses)},
 		{"오기각", strconv.Itoa(falseRejects)},
 		{"실전 라벨(30일)", strconv.Itoa(organic)},
+		{"운영자 라벨(7일)", strconv.Itoa(operatorLabels)},
 	}
 	base := RSILayer{Key: "L3", Title: "판정자 공진화", Metrics: metrics}
 	switch {
-	case misses > 0 || falseRejects > 0 || organic > 0:
+	case misses > 0 || falseRejects > 0 || organic > 0 || operatorLabels > 0:
 		base.State = RSIStateLive
-		base.Diagnosis = fmt.Sprintf("%d회 실행에서 판정 놓침 %d + 오기각 %d + 실전 라벨 %d — P3 학습 연료 축적 중", runs, misses, falseRejects, organic)
+		base.Diagnosis = fmt.Sprintf("%d회 실행에서 판정 놓침 %d + 오기각 %d + 실전 라벨 %d + 운영자 라벨 %d — P3 학습 연료 축적 중", runs, misses, falseRejects, organic, operatorLabels)
 	case !subtleDeployed:
 		base.State = RSIStateDataGated
 		base.Diagnosis = fmt.Sprintf("%d회 실행; 판정자가 명백한 결함은 모두 잡았고 미묘 프로브는 아직 원장에 없습니다", runs)
@@ -321,6 +323,9 @@ func (t *Tracker) rsiAssessL4() RSILayer {
 	byScope := map[string]int{}
 	dispatchable := 0
 	staged := 0
+	inFlight := 0
+	applied := 0
+	failed := 0
 	for _, c := range cands {
 		scope := strings.TrimSpace(c.Scope)
 		if scope == "" {
@@ -331,14 +336,28 @@ func (t *Tracker) rsiAssessL4() RSILayer {
 		// implementation — both are live dispatch supply (the heartbeat review
 		// lane accepts candidates it cannot implement itself).
 		st := normalizeSelfCorrectionStatus(c.Status)
-		if scope == "code" && (st == SelfCorrectionStatusProposed || st == SelfCorrectionStatusAccepted) {
-			if rsiSourceDispatchable(c.Source) {
-				dispatchable++
-			} else {
-				// Code candidate from a source not yet in the dispatch
-				// allowlist (runtime-error, …): real L4 supply staged for
-				// review, not a wiring gap.
-				staged++
+		if scope != "code" {
+			continue
+		}
+		phase := normalizeSelfCorrectionDispatchPhase(c.DispatchPhase)
+		switch phase {
+		case SelfCorrectionDispatchStarted, SelfCorrectionDispatchPROpened,
+			SelfCorrectionDispatchMerged, SelfCorrectionDispatchDeployed:
+			inFlight++
+		case SelfCorrectionDispatchWatchPassed:
+			applied++
+		case SelfCorrectionDispatchFailed, SelfCorrectionDispatchRolledBack:
+			failed++
+		case "":
+			if st == SelfCorrectionStatusProposed || st == SelfCorrectionStatusAccepted {
+				if rsiSourceDispatchable(c.Source) {
+					dispatchable++
+				} else {
+					// Code candidate from a source not yet in the dispatch
+					// allowlist (runtime-error, …): real L4 supply staged for
+					// review, not a wiring gap.
+					staged++
+				}
 			}
 		}
 	}
@@ -347,16 +366,25 @@ func (t *Tracker) rsiAssessL4() RSILayer {
 		{"후보", strconv.Itoa(len(cands))},
 		{"코드 후보", strconv.Itoa(byScope["code"])},
 		{"배차 가능", strconv.Itoa(dispatchable)},
+		{"진행 중", strconv.Itoa(inFlight)},
+		{"감시 통과", strconv.Itoa(applied)},
+		{"실패/롤백", strconv.Itoa(failed)},
 		{"검토 대기(비배차)", strconv.Itoa(staged)},
 		{"오늘 배차", strconv.Itoa(dispatchedToday)},
 	}
 	base := RSILayer{Key: "L4", Title: "소스 자가편집", Metrics: metrics}
 	switch {
+	case inFlight > 0:
+		base.State = RSIStateLive
+		base.Diagnosis = fmt.Sprintf("코드 후보 %d건이 PR·배포·롤백 감시 단계를 통과 중", inFlight)
 	case dispatchable > 0 || dispatchedToday > 0:
 		// dispatch_today keeps L4 LIVE after coding-dispatch drains the queue
 		// (Python rsi_status assess_l4 parity).
 		base.State = RSIStateLive
 		base.Diagnosis = fmt.Sprintf("배차 가능한 코드 후보 %d건 · 오늘 배차 %d건", dispatchable, dispatchedToday)
+	case applied > 0:
+		base.State = RSIStateLive
+		base.Diagnosis = fmt.Sprintf("소스 자가편집 %d건이 머지·배포 후 롤백 감시까지 통과", applied)
 	case len(cands) == 0:
 		base.State = RSIStateIdle
 		base.Diagnosis = "아직 캡처된 자기교정 후보가 없습니다"

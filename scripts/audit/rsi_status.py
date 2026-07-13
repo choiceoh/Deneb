@@ -32,6 +32,7 @@ stdlib-only and importable for deterministic tests; the CLI is
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 import sys
@@ -236,7 +237,13 @@ def assess_l3(runs: list[dict], genesis_events: list[dict], now_ms: int) -> Laye
     misses = 0
     false_rejects = 0
     classes_seen: set[str] = set()
+    operator_labels = 0
+    lane_runs = 0
     for r in recent:
+        operator_labels += len(r.get("operatorVerdicts") or [])
+        if not (r.get("pairs") or r.get("byClass") or r.get("falseRejects")):
+            continue
+        lane_runs += 1
         misses += len(r.get("misses") or [])
         false_rejects += len(r.get("falseRejects") or [])
         classes_seen.update((r.get("byClass") or {}).keys())
@@ -244,45 +251,56 @@ def assess_l3(runs: list[dict], genesis_events: list[dict], now_ms: int) -> Laye
     weaken_deployed = bool(classes_seen & WEAKEN_CLASSES)
     organic = _organic_false_accepts(genesis_events, now_ms)
     metrics = {
-        "runs": len(recent),
+        "runs": lane_runs,
         "misses": misses,
         "false_rejects": false_rejects,
         "organic_false_accepts_30d": organic,
+        "operator_labels_7d": operator_labels,
         "subtle_probes_deployed": subtle_deployed,
         "weaken_probes_deployed": weaken_deployed,
     }
-    if misses > 0 or false_rejects > 0 or organic > 0:
+    if misses > 0 or false_rejects > 0 or organic > 0 or operator_labels > 0:
         return LayerStatus("L3", "verifier co-evolution", LIVE, metrics,
-                           f"{misses} judge misses + {false_rejects} false-rejects + {organic} organic labels "
-                           f"over {len(recent)} runs — P3 fuel accumulating for evaluator-epoch grounding")
+                           f"{misses} judge misses + {false_rejects} false-rejects + {organic} organic labels + "
+                           f"{operator_labels} operator labels over {lane_runs} runs — P3 fuel accumulating")
     if not subtle_deployed:
         return LayerStatus("L3", "verifier co-evolution", DATA_GATED, metrics,
-                           f"{len(recent)} runs, judge caught every BLATANT defect and subtle probes "
+                           f"{lane_runs} runs, judge caught every BLATANT defect and subtle probes "
                            "are not in the ledger yet — awaiting the subtle-degradation deploy")
     if weaken_deployed:
         return LayerStatus("L3", "verifier co-evolution", DATA_GATED, metrics,
-                           f"{len(recent)} runs, 0 misses even at the escalated weaken tier — "
+                           f"{lane_runs} runs, 0 misses even at the escalated weaken tier — "
                            "judge is strong at the current probe ceiling")
     return LayerStatus("L3", "verifier co-evolution", DATA_GATED, metrics,
-                       f"{len(recent)} runs with subtle probes but 0 misses — judge is currently strong; "
+                       f"{lane_runs} runs with subtle probes but 0 misses — judge is currently strong; "
                        f"the lane escalates to weaken probes after {ESCALATION_WINDOW} saturated runs")
 
 
-def _merge_candidates(rows: list[dict]) -> tuple[dict[str, dict], dict[str, str]]:
-    """Fold status-delta rows onto full candidate records (coding-dispatch.sh
-    logic): a review row is {id,status,...}, not a full record, so status is
-    merged rather than replacing the candidate."""
+def _merge_candidates(rows: list[dict]) -> dict[str, dict]:
+    """Fold review and dispatch deltas onto full candidate records."""
     cand: dict[str, dict] = {}
-    status: dict[str, str] = {}
     for rec in rows:
         rid = rec.get("id") or ""
         if not rid:
             continue
         if rec.get("type") == "self_correction_candidate":
-            cand[rid] = rec
+            cand[rid] = dict(rec)
+            continue
+        current = cand.get(rid)
+        if current is None:
+            continue
         if rec.get("status"):
-            status[rid] = rec["status"]
-    return cand, status
+            current["status"] = rec["status"]
+        if rec.get("type") == "self_correction_dispatch":
+            for key in (
+                "dispatchPhase", "attemptId", "branch", "prNumber", "prUrl",
+                "commitSha", "deployHead", "outcomeNote",
+            ):
+                if rec.get(key) not in (None, "", 0):
+                    current[key] = rec[key]
+            if rec.get("dispatchPhase") == "watch_passed":
+                current["status"] = "applied"
+    return cand
 
 
 def assess_l4(
@@ -290,19 +308,35 @@ def assess_l4(
     dispatch_total: int,
     dispatch_today: int,
     outcomes: dict[str, int] | None = None,
+    dispatched_ids: set[str] | None = None,
 ) -> LayerStatus:
     """Source self-edit — the coding-dispatch supply of code-scope candidates."""
     outcomes = outcomes or {}
-    cand, status = _merge_candidates(rows)
+    cand = _merge_candidates(rows)
+    dispatched_ids = dispatched_ids or set()
     by_scope: dict[str, int] = {}
     dispatchable = 0
     staged = 0
+    in_flight = applied = failed = legacy_in_flight = 0
     staged_sources: dict[str, int] = {}
     for rid, rec in cand.items():
-        st = status.get(rid, rec.get("status") or "proposed")
+        st = rec.get("status") or "proposed"
         scope = rec.get("scope") or "?"
         by_scope[scope] = by_scope.get(scope, 0) + 1
         src = rec.get("source") or ""
+        phase = rec.get("dispatchPhase") or ""
+        if scope == "code" and phase in ("started", "pr_opened", "merged", "deployed"):
+            in_flight += 1
+            continue
+        if scope == "code" and phase == "watch_passed":
+            applied += 1
+            continue
+        if scope == "code" and phase in ("failed", "rolled_back"):
+            failed += 1
+            continue
+        if scope == "code" and rid in dispatched_ids:
+            legacy_in_flight += 1
+            continue
         # proposed = unreviewed backlog; accepted = review-endorsed, awaiting
         # implementation — both are live dispatch supply (the heartbeat review
         # lane accepts candidates it cannot implement itself).
@@ -329,6 +363,10 @@ def assess_l4(
         "dispatchable": dispatchable,
         "staged": staged,
         "staged_sources": staged_sources,
+        "in_flight": in_flight,
+        "applied": applied,
+        "failed_or_rolled_back": failed,
+        "legacy_in_flight": legacy_in_flight,
         "dispatched_total": dispatch_total,
         "dispatched_today": dispatch_today,
         "dispatch_outcomes": outcomes,
@@ -338,9 +376,18 @@ def assess_l4(
     if decided:
         parts = ", ".join(f"{k}:{v}" for k, v in sorted(outcomes.items()))
         outcome_note = f" · outcomes {parts} (land rate {land_rate:.0%})"
-    if dispatchable > 0 or dispatch_today > 0:
+    if in_flight > 0:
         return LayerStatus("L4", "source self-edit", LIVE, metrics,
-                           f"{dispatchable} dispatchable code candidates, {dispatch_today} dispatched today"
+                           f"{in_flight} candidates crossing PR/deploy/watch lifecycle"
+                           + outcome_note)
+    if dispatchable > 0 or legacy_in_flight > 0 or dispatch_today > 0:
+        return LayerStatus("L4", "source self-edit", LIVE, metrics,
+                           f"{dispatchable} dispatchable code candidates, "
+                           f"{legacy_in_flight} legacy dispatches in flight"
+                           + outcome_note)
+    if applied > 0:
+        return LayerStatus("L4", "source self-edit", LIVE, metrics,
+                           f"{applied} source edits survived merged deployment rollback watch"
                            + outcome_note)
     if len(cand) == 0:
         return LayerStatus("L4", "source self-edit", IDLE, metrics,
@@ -373,6 +420,7 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
     dispatch_dir = os.path.join(data_dir, "coding_dispatch")
     dispatch_total = dispatch_today = 0
     outcomes: dict[str, int] = {}
+    dispatched_ids: set[str] = set()
     today_cutoff = now_ms - (now_ms % DAY_MS)
     try:
         for name in os.listdir(dispatch_dir):
@@ -381,19 +429,19 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
             path = os.path.join(dispatch_dir, name)
             dispatch_total += 1
             try:
+                with open(path, encoding="utf-8", errors="replace") as handle:
+                    marker = json.load(handle)
+                if marker.get("id"):
+                    dispatched_ids.add(str(marker["id"]))
+                outcome = marker.get("outcome")
+                if outcome:
+                    outcomes[outcome] = outcomes.get(outcome, 0) + 1
+            except (OSError, json.JSONDecodeError, TypeError, AttributeError):
+                pass
+            try:
                 if os.path.getmtime(path) * 1000 >= today_cutoff:
                     dispatch_today += 1
             except OSError:
-                continue
-            # Outcome accounting (graduation-ladder evidence): each marker
-            # carries the session's observed outcome once dispatch_outcome.py
-            # recorded it; pre-accounting markers simply have none.
-            try:
-                with open(path, encoding="utf-8", errors="replace") as f:
-                    outcome = (json.load(f) or {}).get("outcome")
-                if outcome:
-                    outcomes[outcome] = outcomes.get(outcome, 0) + 1
-            except (OSError, json.JSONDecodeError):
                 continue
     except OSError:
         pass
@@ -402,7 +450,7 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
         assess_l1(genesis, now_ms),
         assess_l2(revisions, frozen, now_ms),
         assess_l3(judge, genesis, now_ms),
-        assess_l4(candidates, dispatch_total, dispatch_today, outcomes),
+        assess_l4(candidates, dispatch_total, dispatch_today, outcomes, dispatched_ids),
         assess_ladder(genesis, revisions, candidates, outcomes),
     ]
 
@@ -449,10 +497,10 @@ def assess_ladder(genesis_events: list[dict], revisions: list[dict],
         else:
             rows.append(("배차 캡 상향", LADDER_GROWING, detail))
 
-    cand, status = _merge_candidates(candidate_rows)
+    cand = _merge_candidates(candidate_rows)
     staged_sources: dict[str, int] = {}
-    for rid, rec in cand.items():
-        st = status.get(rid, rec.get("status") or "proposed")
+    for rec in cand.values():
+        st = rec.get("status") or "proposed"
         if rec.get("scope") != "code" or st not in ("proposed", "accepted"):
             continue
         src = rec.get("source") or ""
@@ -515,9 +563,57 @@ def print_summary(layers: list[LayerStatus], stream: TextIO) -> None:
     print("─" * 72, file=stream)
 
 
+def render_markdown(layers: list[LayerStatus], now_ms: int, data_dir: str) -> str:
+    """Render a point-in-time status document from canonical ledgers.
+
+    This is the only supported "current RSI status" document; architecture
+    docs intentionally contain no live counters that can silently go stale.
+    """
+    generated = datetime.datetime.fromtimestamp(
+        now_ms / 1000, tz=datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+    lines = [
+        "# Deneb RSI live status",
+        "",
+        f"> Generated {generated} from `{os.path.abspath(data_dir)}`. Do not edit by hand.",
+        "",
+        f"**Turning: {turning(layers)}/{len(layers)}**",
+        "",
+        "| Layer | State | Diagnosis |",
+        "|---|---|---|",
+    ]
+    for layer in layers:
+        diagnosis = layer.diagnosis.replace("|", "\\|").replace("\n", " ")
+        lines.append(f"| {layer.key} — {layer.title} | {layer.state} | {diagnosis} |")
+    lines.extend(["", "## Metrics", ""])
+    for layer in layers:
+        lines.extend([
+            f"### {layer.key}",
+            "",
+            "```json",
+            json.dumps(layer.metrics, ensure_ascii=False, indent=2, sort_keys=True),
+            "```",
+            "",
+        ])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _write_atomic(path: str, content: str) -> None:
+    path = os.path.abspath(os.path.expanduser(path))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        handle.write(content)
+    os.replace(tmp, path)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Deneb RSI loop-status surface.")
-    parser.add_argument("--json", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--json", action="store_true")
+    mode.add_argument("--markdown", action="store_true",
+                      help="render the live status document from ledgers")
+    parser.add_argument("--write-markdown", metavar="PATH",
+                        help="atomically refresh a generated status document")
     parser.add_argument("--data-dir", default=DEFAULT_DATA_DIR)
     parser.add_argument("--now-ms", type=int, default=None, help="override clock (tests)")
     return parser
@@ -529,6 +625,14 @@ def main(argv: list[str] | None = None, *, stdout: TextIO | None = None, stderr:
     err = stderr if stderr is not None else sys.stderr
     now_ms = args.now_ms if args.now_ms is not None else int(time.time() * 1000)
     layers = assess(args.data_dir, now_ms)
+
+    markdown = render_markdown(layers, now_ms, args.data_dir)
+    if args.write_markdown:
+        _write_atomic(args.write_markdown, markdown)
+
+    if args.markdown:
+        print(markdown, end="", file=out)
+        return 0
 
     if args.json:
         print(json.dumps(

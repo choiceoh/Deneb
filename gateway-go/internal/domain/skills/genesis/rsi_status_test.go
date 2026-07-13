@@ -122,6 +122,20 @@ func TestRSIStatus_AllLayersLive(t *testing.T) {
 	}
 }
 
+func TestRSIStatus_L3OperatorLabelIsLiveWithoutSyntheticRun(t *testing.T) {
+	tr := newTestTracker(t)
+	if err := tr.LogOperatorJudgeVerdict(OperatorJudgeVerdict{
+		DecisionID: "sk@1.0.1", Skill: "sk", Version: "1.0.1",
+		Verdict: OperatorJudgeVerdictConfirm, JudgeVersion: "v1", JudgeMargin: 1.0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	l := rsiLayerByKey(tr.RSIStatus().Layers, "L3")
+	if l.State != RSIStateLive || rsiMetricValue(l.Metrics, "운영자 라벨(7일)") != "1" {
+		t.Fatalf("L3 operator label status = %+v", l)
+	}
+}
+
 // L1 with only rejections (no committed evolve) is DATA-GATED, not IDLE and not
 // LIVE — the lane is active but nothing cleared the gate.
 func TestRSIStatus_L1DataGatedOnRejectionsOnly(t *testing.T) {
@@ -303,6 +317,51 @@ func TestRSIStatus_L4AcceptedCountsDispatchable(t *testing.T) {
 	}
 	if got := rsiMetricValue(l.Metrics, "배차 가능"); got != "1" {
 		t.Fatalf("dispatchable metric = %q, want 1 (%+v)", got, l.Metrics)
+	}
+}
+
+func TestRSIStatus_L4UsesDispatchLifecycleInsteadOfCountingMarkersAsQueued(t *testing.T) {
+	tr := newTestTracker(t)
+	makeCandidate := func(id string) {
+		t.Helper()
+		if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+			ID: id, Scope: "code", Title: id, Source: "self-harness:test",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record := func(id, phase string) {
+		t.Helper()
+		if _, err := tr.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
+			ID: id, DispatchPhase: phase, AttemptID: "attempt-" + id,
+		}); err != nil {
+			t.Fatalf("%s %s: %v", id, phase, err)
+		}
+	}
+
+	makeCandidate("in-flight")
+	record("in-flight", SelfCorrectionDispatchStarted)
+	makeCandidate("closed")
+	for _, phase := range []string{
+		SelfCorrectionDispatchStarted, SelfCorrectionDispatchMerged,
+		SelfCorrectionDispatchDeployed, SelfCorrectionDispatchWatchPassed,
+	} {
+		record("closed", phase)
+	}
+	makeCandidate("failed")
+	record("failed", SelfCorrectionDispatchStarted)
+	record("failed", SelfCorrectionDispatchFailed)
+
+	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
+	if l.State != RSIStateLive {
+		t.Fatalf("L4 = %s, want LIVE (%s)", l.State, l.Diagnosis)
+	}
+	for label, want := range map[string]string{
+		"배차 가능": "0", "진행 중": "1", "감시 통과": "1", "실패/롤백": "1",
+	} {
+		if got := rsiMetricValue(l.Metrics, label); got != want {
+			t.Fatalf("%s = %q, want %q (%+v)", label, got, want, l.Metrics)
+		}
 	}
 }
 

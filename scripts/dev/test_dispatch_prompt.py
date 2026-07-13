@@ -25,7 +25,8 @@ CONTRACT = (
     "- 이 워크트리에서만 편집. 게이트 전부 준수하며 검증까지 완료하라.\n"
     "- 게이트 그린이면 커밋 → push → PR → 체크 그린 대기 → 직접 랜딩하라.\n"
     "- 구현이 부적절하다고 판단되면 아무것도 랜딩하지 말고 근거를 남겨라.\n"
-    "- 완료 후 상태 갱신은 불필요 — 배차 마커가 원장이다."
+    "- 배차·PR·머지 결과는 호출 스크립트가 tracker RPC 원장에 기록한다. "
+    "skill_lifecycle 상태를 직접 조작하거나 배차 마커를 완료 증거로 간주하지 마라."
 )
 
 CANDIDATE = {
@@ -46,6 +47,10 @@ def run_main(meta_dir: Path, marker: Path, candidate: dict) -> tuple[int, str, s
         str(meta_dir),
         "--marker",
         str(marker),
+        "--attempt-id",
+        "attempt-1",
+        "--branch",
+        "dispatch/sc-test-1234",
     ]
     out, err = io.StringIO(), io.StringIO()
     stdin = io.StringIO(json.dumps(candidate, ensure_ascii=False))
@@ -74,13 +79,15 @@ class DispatchPromptTest(unittest.TestCase):
             self.assertIn("id=sc-test-1234", prompt)
             self.assertIn("- 제목: toolctx 캐시 무효화 수리", prompt)
             self.assertIn("## 계약", prompt)
-            self.assertIn("배차 마커가 원장이다", prompt)
+            self.assertIn("tracker RPC 원장에 기록한다", prompt)
             # Marker written with prompt provenance (RSI P1.5 attribution).
             rec = json.loads(marker.read_text(encoding="utf-8"))
             want = hashlib.sha256(CONTRACT.encode("utf-8")).hexdigest()[:12]
             self.assertEqual(rec["promptVersion"], want)
             self.assertEqual(rec["promptSource"], "artifact")
             self.assertEqual(rec["id"], "sc-test-1234")
+            self.assertEqual(rec["attemptId"], "attempt-1")
+            self.assertEqual(rec["branch"], "dispatch/sc-test-1234")
 
     def test_absent_artifact_defers_without_marker(self):
         with TemporaryDirectory() as td:

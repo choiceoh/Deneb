@@ -134,6 +134,24 @@ type FalseRejectExhibit struct {
 	RejectedAt   int64   `json:"rejectedAt"`
 }
 
+const (
+	OperatorJudgeVerdictConfirm  = "confirm"
+	OperatorJudgeVerdictRollback = "rollback"
+)
+
+// OperatorJudgeVerdict is a real human label on a borderline accepted evolve.
+// DecisionID makes action retries idempotent; JudgeVersion keeps P3 evidence
+// scoped to the evaluator artifact that made the original decision.
+type OperatorJudgeVerdict struct {
+	DecisionID   string  `json:"decisionId"`
+	Skill        string  `json:"skill"`
+	Version      string  `json:"version"`
+	Verdict      string  `json:"verdict"`
+	JudgeVersion string  `json:"judgeVersion"`
+	JudgeMargin  float64 `json:"judgeMargin"`
+	CreatedAt    int64   `json:"createdAt"`
+}
+
 // JudgeAccuracyRecord is one lane run: the live judge's accuracy over planted
 // defects plus mined false-reject suspects, attributed to the judge prompt
 // version so P3 can segment labels per verifier revision.
@@ -146,9 +164,10 @@ type JudgeAccuracyRecord struct {
 	// ByCategory segments accuracy by skill CATEGORY (evaluator preference
 	// collapse, arXiv 2606.16682 — a category-local bias hides in the
 	// aggregate; segmenting makes it visible before it corrupts selection).
-	ByCategory   map[string][2]int    `json:"byCategory,omitempty"` // category -> [correct, total]
-	Misses       []JudgeMissExhibit   `json:"misses,omitempty"`
-	FalseRejects []FalseRejectExhibit `json:"falseRejects,omitempty"`
+	ByCategory       map[string][2]int      `json:"byCategory,omitempty"` // category -> [correct, total]
+	Misses           []JudgeMissExhibit     `json:"misses,omitempty"`
+	FalseRejects     []FalseRejectExhibit   `json:"falseRejects,omitempty"`
+	OperatorVerdicts []OperatorJudgeVerdict `json:"operatorVerdicts,omitempty"`
 }
 
 // judgeAccuracyLogPath mirrors the tracker's data-dir convention.
@@ -158,14 +177,55 @@ func (t *Tracker) judgeAccuracyLogPath() string {
 
 // LogJudgeAccuracy appends one lane run to the P3 label ledger.
 func (t *Tracker) LogJudgeAccuracy(rec JudgeAccuracyRecord) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if rec.CreatedAt == 0 {
 		rec.CreatedAt = time.Now().UnixMilli()
 	}
 	return jsonlstore.Append(t.judgeAccuracyLogPath(), rec)
 }
 
+// LogOperatorJudgeVerdict appends one idempotent human label to the same P3
+// ledger as synthetic judge-accuracy runs, so meta-evolution reads one
+// version-attributed evidence stream.
+func (t *Tracker) LogOperatorJudgeVerdict(verdict OperatorJudgeVerdict) error {
+	verdict.DecisionID = strings.TrimSpace(verdict.DecisionID)
+	verdict.Skill = strings.TrimSpace(verdict.Skill)
+	verdict.Version = strings.TrimSpace(verdict.Version)
+	verdict.JudgeVersion = strings.TrimSpace(verdict.JudgeVersion)
+	if verdict.DecisionID == "" || verdict.Skill == "" || verdict.Version == "" {
+		return fmt.Errorf("genesis-tracker: operator judge verdict missing identity")
+	}
+	if verdict.Verdict != OperatorJudgeVerdictConfirm && verdict.Verdict != OperatorJudgeVerdictRollback {
+		return fmt.Errorf("genesis-tracker: invalid operator judge verdict %q", verdict.Verdict)
+	}
+	if verdict.CreatedAt == 0 {
+		verdict.CreatedAt = time.Now().UnixMilli()
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	entries, err := jsonlstore.Load[JudgeAccuracyRecord](t.judgeAccuracyLogPath())
+	if err != nil {
+		return fmt.Errorf("genesis-tracker: load judge accuracy: %w", err)
+	}
+	for _, entry := range entries {
+		for _, existing := range entry.OperatorVerdicts {
+			if existing.DecisionID == verdict.DecisionID {
+				return nil
+			}
+		}
+	}
+	return jsonlstore.Append(t.judgeAccuracyLogPath(), JudgeAccuracyRecord{
+		CreatedAt:        verdict.CreatedAt,
+		JudgeVersion:     verdict.JudgeVersion,
+		OperatorVerdicts: []OperatorJudgeVerdict{verdict},
+	})
+}
+
 // RecentJudgeAccuracy returns the newest lane runs, newest first.
 func (t *Tracker) RecentJudgeAccuracy(limit int) ([]JudgeAccuracyRecord, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if limit <= 0 {
 		limit = 10
 	}
@@ -175,9 +235,61 @@ func (t *Tracker) RecentJudgeAccuracy(limit int) ([]JudgeAccuracyRecord, error) 
 	}
 	out := make([]JudgeAccuracyRecord, 0, min(limit, len(entries)))
 	for i := len(entries) - 1; i >= 0 && len(out) < limit; i-- {
+		if entries[i].Pairs == 0 && len(entries[i].ByClass) == 0 && len(entries[i].FalseRejects) == 0 {
+			continue // operator-only labels have their own query below
+		}
 		out = append(out, entries[i])
 	}
 	return out, nil
+}
+
+// RecentOperatorJudgeVerdicts returns human labels in newest-first order.
+func (t *Tracker) RecentOperatorJudgeVerdicts(window time.Duration, limit int) []OperatorJudgeVerdict {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	entries, err := jsonlstore.Load[JudgeAccuracyRecord](t.judgeAccuracyLogPath())
+	if err != nil {
+		return nil
+	}
+	cutoff := time.Now().Add(-window).UnixMilli()
+	var out []OperatorJudgeVerdict
+	for i := len(entries) - 1; i >= 0; i-- {
+		for j := len(entries[i].OperatorVerdicts) - 1; j >= 0; j-- {
+			verdict := entries[i].OperatorVerdicts[j]
+			if verdict.CreatedAt < cutoff {
+				continue
+			}
+			out = append(out, verdict)
+			if limit > 0 && len(out) >= limit {
+				return out
+			}
+		}
+	}
+	return out
+}
+
+// OperatorJudgeVerdictByDecisionID finds an already-settled card decision.
+// Action handlers use it before any rollback side effect, so tapping the other
+// choice later cannot reverse a verdict that already won.
+func (t *Tracker) OperatorJudgeVerdictByDecisionID(decisionID string) (OperatorJudgeVerdict, bool) {
+	decisionID = strings.TrimSpace(decisionID)
+	if decisionID == "" {
+		return OperatorJudgeVerdict{}, false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	entries, err := jsonlstore.Load[JudgeAccuracyRecord](t.judgeAccuracyLogPath())
+	if err != nil {
+		return OperatorJudgeVerdict{}, false
+	}
+	for i := len(entries) - 1; i >= 0; i-- {
+		for j := len(entries[i].OperatorVerdicts) - 1; j >= 0; j-- {
+			if entries[i].OperatorVerdicts[j].DecisionID == decisionID {
+				return entries[i].OperatorVerdicts[j], true
+			}
+		}
+	}
+	return OperatorJudgeVerdict{}, false
 }
 
 // JudgeAccuracyTask is the standing lane. Registered production-gated (it
@@ -308,6 +420,9 @@ func (t *JudgeAccuracyTask) weakenTierUnlocked(judgeVersion string) bool {
 	for _, rec := range records { // newest first
 		if rec.JudgeVersion != judgeVersion {
 			continue
+		}
+		if rec.Pairs == 0 && len(rec.ByClass) == 0 {
+			continue // operator-only label, not a probe-curriculum run
 		}
 		pairsSeen, missed := 0, 0
 		for _, cls := range subtleJudgeDegradations {

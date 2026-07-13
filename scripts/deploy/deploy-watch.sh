@@ -21,13 +21,14 @@ STATE_DIR="${DENEB_STATE_DIR:-$HOME/.deneb}"
 STATE_FILE="$STATE_DIR/auto-deploy.deployed-head"
 PREV_HEAD_FILE="$STATE_DIR/auto-deploy.prev-head"
 REGRESS_FILE="$STATE_DIR/auto-deploy.regressed-head"
-LOCK_FILE="/tmp/deneb-deploy-watch.lock"
-LOG_FILE="/tmp/deneb-deploy-watch.log"
+LOCK_FILE="${DENEB_DEPLOY_WATCH_LOCK_FILE:-/tmp/deneb-deploy-watch.lock}"
+LOG_FILE="${DENEB_DEPLOY_WATCH_LOG_FILE:-/tmp/deneb-deploy-watch.log}"
 GATEWAY_SERVICE="${DENEB_GATEWAY_SERVICE:-deneb-gateway.service}"
 PROD_PORT="${DENEB_PROD_PORT:-18789}"
 
 WATCH_SEC="${DENEB_DEPLOY_WATCH_SEC:-600}"
 POLL_SEC="${DENEB_DEPLOY_WATCH_POLL_SEC:-30}"
+HANDOFF_SEC="${DENEB_DEPLOY_WATCH_HANDOFF_SEC:-$((POLL_SEC * 2 + 15))}"
 # Journal ERROR-line budget over the whole watch window. The gateway logs
 # operational warnings routinely; genuine regressions show up as repeated
 # ERROR lines (panic recoveries, failed subsystems), so the budget is loose.
@@ -35,6 +36,9 @@ ERROR_BUDGET="${DENEB_DEPLOY_WATCH_ERROR_BUDGET:-30}"
 HEALTH_FAILS_TO_ROLLBACK=2
 
 DEPLOYED_HEAD="${1:-}"
+DISPATCH_RPC="$PROD_DIR/scripts/dev/self_correction_dispatch.py"
+TRACKED_IDS=()
+TRACKED_ATTEMPTS=()
 
 log() {
     printf '%s  %s\n' "$(date -Iseconds)" "$*" >> "$LOG_FILE"
@@ -48,6 +52,46 @@ journal_errors_since() {
     local since="$1"
     journalctl --user -u "$GATEWAY_SERVICE" --since "$since" --no-pager 2>/dev/null \
         | grep -cE ' ERROR | level=ERROR |"level":"error"' || true
+}
+
+record_dispatch_event() {
+    python3 "$DISPATCH_RPC" --state-dir "$STATE_DIR" record "$@" >>"$LOG_FILE" 2>&1
+}
+
+# Carry every unresolved dispatch whose merged commit is included in this head.
+# "deployed" rows are inherited from a superseded watcher; "merged" rows cross
+# the deploy boundary here for the first time.
+track_dispatch_candidates() {
+    local cid attempt phase commit_sha _prior_head
+    [[ -f "$DISPATCH_RPC" ]] || return 0
+    while IFS=$'\t' read -r cid attempt phase commit_sha _prior_head; do
+        [[ -n "$cid" && -n "$attempt" && -n "$commit_sha" ]] || continue
+        if ! git -C "$PROD_DIR" merge-base --is-ancestor "$commit_sha" "$DEPLOYED_HEAD" 2>/dev/null; then
+            continue
+        fi
+        TRACKED_IDS+=("$cid")
+        TRACKED_ATTEMPTS+=("$attempt")
+        if [[ "$phase" == "merged" ]]; then
+            record_dispatch_event --id "$cid" --phase deployed --attempt-id "$attempt" \
+                --commit-sha "$commit_sha" --deploy-head "$DEPLOYED_HEAD" \
+                --note "candidate included in deployed main head" \
+                || log "WARN: failed to record deployed event for $cid"
+        fi
+    done < <(python3 "$DISPATCH_RPC" --state-dir "$STATE_DIR" list \
+        --phase merged --phase deployed 2>>"$LOG_FILE" || true)
+    if (( ${#TRACKED_IDS[@]} > 0 )); then
+        log "tracking ${#TRACKED_IDS[@]} self-correction dispatch(es) in ${DEPLOYED_HEAD:0:10}"
+    fi
+}
+
+record_tracked_candidates() {
+    local phase="$1" note="$2" i
+    [[ -f "$DISPATCH_RPC" ]] || return 0
+    for i in "${!TRACKED_IDS[@]}"; do
+        record_dispatch_event --id "${TRACKED_IDS[$i]}" --phase "$phase" \
+            --attempt-id "${TRACKED_ATTEMPTS[$i]}" --deploy-head "$DEPLOYED_HEAD" --note "$note" \
+            || log "WARN: failed to record $phase event for ${TRACKED_IDS[$i]}"
+    done
 }
 
 rollback() {
@@ -94,16 +138,30 @@ rollback() {
     if [[ -n "$prev_head" ]]; then
         printf '%s\n' "$prev_head" > "$STATE_FILE"
     fi
+    record_tracked_candidates rolled_back "$reason; binary restored to ${prev_head:0:10}"
     log "rollback OK: binary restored (head record → ${prev_head:0:10}); ${DEPLOYED_HEAD:0:10} blocked until a newer commit lands"
     return 0
 }
 
 main() {
     exec 9>"$LOCK_FILE"
-    if ! flock -n 9; then
-        log "another watch is active; deferring to it (head ${DEPLOYED_HEAD:0:10} unwatched)"
+    # Latest-head handoff: the prior watcher sees STATE_FILE change and yields;
+    # this watcher waits for that lock instead of exiting and leaving the new
+    # deployment unwatched.
+    if ! flock -w "$HANDOFF_SEC" 9; then
+        log "ERROR: watch handoff timed out for head ${DEPLOYED_HEAD:0:10} after ${HANDOFF_SEC}s"
         exit 0
     fi
+
+    if [[ -z "$DEPLOYED_HEAD" ]]; then
+        log "ERROR: deploy-watch requires a deployed head"
+        exit 0
+    fi
+    if [[ -f "$STATE_FILE" ]] && [[ "$(tr -d '[:space:]' < "$STATE_FILE")" != "$DEPLOYED_HEAD" ]]; then
+        log "stale watcher acquired lock after a newer deploy; skipping ${DEPLOYED_HEAD:0:10}"
+        exit 0
+    fi
+    track_dispatch_candidates
 
     local started_at deadline health_fails=0 errors
     started_at=$(date -Iseconds)
@@ -134,7 +192,9 @@ main() {
             exit 0
         fi
     done
-    log "watch window clear for ${DEPLOYED_HEAD:0:10} (errors=$(journal_errors_since "$started_at"))"
+    errors=$(journal_errors_since "$started_at")
+    record_tracked_candidates watch_passed "rollback watch clear; journal errors=$errors"
+    log "watch window clear for ${DEPLOYED_HEAD:0:10} (errors=$errors)"
     exit 0
 }
 

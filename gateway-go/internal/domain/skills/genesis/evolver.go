@@ -35,12 +35,15 @@ const DefaultRollbackThreshold = 3
 
 // EvolveResult describes the outcome of an evolution attempt.
 type EvolveResult struct {
-	SkillName   string            `json:"skillName"`
-	Evolved     bool              `json:"evolved"`
-	NewVersion  string            `json:"newVersion,omitempty"`
-	Description string            `json:"description,omitempty"`
-	Reason      string            `json:"reason,omitempty"` // when skipped
-	Audit       *HarnessEditAudit `json:"selfHarnessAudit,omitempty"`
+	SkillName            string            `json:"skillName"`
+	Evolved              bool              `json:"evolved"`
+	NewVersion           string            `json:"newVersion,omitempty"`
+	Description          string            `json:"description,omitempty"`
+	Reason               string            `json:"reason,omitempty"` // when skipped
+	Audit                *HarnessEditAudit `json:"selfHarnessAudit,omitempty"`
+	JudgeVersion         string            `json:"judgeVersion,omitempty"`
+	JudgeMargin          *float64          `json:"judgeMargin,omitempty"`
+	NeedsOperatorVerdict bool              `json:"needsOperatorVerdict,omitempty"`
 }
 
 // HarnessEditAudit is the Self-Harness transition metadata for a candidate
@@ -97,6 +100,10 @@ type Evolver struct {
 
 	// meta resolves prompt artifacts (RSI P1); nil → compiled-in prompts.
 	meta *generation.MetaArtifacts
+
+	// lowConfidenceObserver surfaces accepted-but-borderline judge verdicts to
+	// an operator without blocking the evolve. Guarded by configMu.
+	lowConfidenceObserver func(EvolveResult)
 }
 
 // NewEvolver creates a skill evolver. Self-test defaults on; disable with
@@ -113,6 +120,24 @@ func NewEvolver(llmClient *llm.Client, catalog *skills.Catalog, tracker *Tracker
 		model:            model,
 		logger:           logger,
 		selfTest:         envBool("DENEB_SKILL_EVOLVE_SELFTEST", true),
+	}
+}
+
+// SetLowConfidenceObserver registers the post-commit sink for accepted skill
+// evolves close to the judge admission boundary. It never participates in the
+// commit decision.
+func (e *Evolver) SetLowConfidenceObserver(fn func(EvolveResult)) {
+	e.configMu.Lock()
+	e.lowConfidenceObserver = fn
+	e.configMu.Unlock()
+}
+
+func (e *Evolver) notifyLowConfidence(result EvolveResult) {
+	e.configMu.RLock()
+	fn := e.lowConfidenceObserver
+	e.configMu.RUnlock()
+	if fn != nil {
+		fn(result)
 	}
 }
 

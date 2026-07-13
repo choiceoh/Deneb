@@ -589,6 +589,14 @@ export interface SelfCorrectionCandidate {
   reviewNote?: string
   evidenceKinds?: string[]
   reviewActions?: string[]
+  dispatchPhase?: string
+  attemptId?: string
+  branch?: string
+  prNumber?: number
+  prUrl?: string
+  commitSha?: string
+  deployHead?: string
+  outcomeNote?: string
   createdAt?: number
   updatedAt?: number
 }
@@ -606,6 +614,11 @@ export interface SelfImprovementCodingFunnel {
   conversionRate?: number
   meanTimeToVerdictMs?: number
   reopens7d?: number
+  pendingCount?: number
+  oldestPendingAgeMs?: number
+  dispatched7d?: number
+  watchPassed7d?: number
+  rolledBack7d?: number
 }
 
 export interface SelfImprovementCodingListResponse {

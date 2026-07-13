@@ -712,6 +712,14 @@ data class SelfCorrectionCandidate(
     val reviewNote: String = "",
     val evidenceKinds: List<String> = emptyList(),
     val reviewActions: List<String> = emptyList(),
+    val dispatchPhase: String = "",
+    val attemptId: String = "",
+    val branch: String = "",
+    val prNumber: Int = 0,
+    val prUrl: String = "",
+    val commitSha: String = "",
+    val deployHead: String = "",
+    val outcomeNote: String = "",
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
 )
@@ -731,6 +739,11 @@ data class SelfImprovementCodingFunnel(
     val conversionRate: Double = 0.0,
     val meanTimeToVerdictMs: Long = 0L,
     val reopens7d: Int = 0,
+    val pendingCount: Int = 0,
+    val oldestPendingAgeMs: Long = 0L,
+    val dispatched7d: Int = 0,
+    val watchPassed7d: Int = 0,
+    val rolledBack7d: Int = 0,
 )
 
 @Immutable

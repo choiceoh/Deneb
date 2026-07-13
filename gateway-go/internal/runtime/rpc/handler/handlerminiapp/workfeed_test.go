@@ -375,3 +375,26 @@ func TestWorkFeedActionRun_NonAnswerSkipsOnAnswer(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkFeedActionRun_EvolveVerdictRoutesOperatorLabel(t *testing.T) {
+	item := workfeed.Item{
+		ID: "v1", Source: "genesis-evolve-verdict",
+		Metadata: map[string]string{"skill": "email-analysis"},
+	}
+	calls := 0
+	deps := WorkFeedDeps{
+		Store: &fakeWorkFeedStore{runItem: item},
+		OnEvolveVerdict: func(got workfeed.Item, actionID string) {
+			calls++
+			if got.Metadata["skill"] != "email-analysis" || actionID != "evolve-verdict:confirm" {
+				t.Fatalf("callback args = %+v / %q", got, actionID)
+			}
+		},
+	}
+	resp := workFeedActionRun(deps)(authedCtx(), reqWith(t, "miniapp.workfeed.action.run", map[string]any{
+		"itemId": "v1", "actionId": "evolve-verdict:confirm",
+	}))
+	if !resp.OK || calls != 1 {
+		t.Fatalf("response ok=%v callback calls=%d error=%+v", resp.OK, calls, resp.Error)
+	}
+}
