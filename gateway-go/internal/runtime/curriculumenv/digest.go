@@ -62,10 +62,12 @@ type WikiDomainSource interface {
 	ActiveCounterpartyDomains(cutoff string) map[string]struct{}
 }
 
-// Sources are the environment stores the digest reads. Every field is
-// nil-tolerant (early/late binding): a nil source drops its section, and an
-// all-nil Sources yields "" so the curriculum prompt omits the block. Now
-// defaults to time.Now when unset.
+// Sources are the injected environment stores the digest reads (feed + wiki).
+// Every field is nil-tolerant (early/late binding): a nil source drops its
+// section. Now defaults to time.Now when unset. Note the upcoming-calendar
+// section is NOT injected here — it reads the process-wide localcal singleton
+// via upcomingCalEvents — so an all-nil Sources can still yield a non-empty
+// digest when the operator has upcoming commitments.
 type Sources struct {
 	Feed FeedLister
 	Wiki WikiDomainSource
@@ -87,7 +89,7 @@ func Digest(s Sources) string {
 	if s.Feed != nil {
 		items, _, err := s.Feed.List(feedCap, false)
 		if err == nil && len(items) > 0 {
-			b.WriteString("최근 업무 피드(최대 20):\n")
+			fmt.Fprintf(&b, "최근 업무 피드(최대 %d):\n", feedCap)
 			for _, item := range items {
 				if title := strings.TrimSpace(item.Title); title != "" {
 					fmt.Fprintf(&b, "- %s\n", truncRunes(title, 80))
@@ -113,7 +115,7 @@ func Digest(s Sources) string {
 			if b.Len() > 0 {
 				b.WriteString("\n")
 			}
-			fmt.Fprintf(&b, "활성 위키 상대 도메인(최대 15): %s\n", strings.Join(sorted, " · "))
+			fmt.Fprintf(&b, "활성 위키 상대 도메인(최대 %d): %s\n", domainCap, strings.Join(sorted, " · "))
 		}
 	}
 
@@ -139,7 +141,7 @@ func Digest(s Sources) string {
 		if b.Len() > 0 {
 			b.WriteString("\n")
 		}
-		b.WriteString("다가오는 일정(스킬 커버리지 갭 후보, 최대 15):\n")
+		fmt.Fprintf(&b, "다가오는 일정(스킬 커버리지 갭 후보, 최대 %d):\n", eventCap)
 		b.WriteString(strings.Join(events, "\n"))
 		b.WriteString("\n")
 	}
