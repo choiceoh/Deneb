@@ -171,6 +171,16 @@ func TestDetectSelfImproveSweep_QuietPaths(t *testing.T) {
 	}
 }
 
+// Accepted (not proposed) dispatchable code candidates are still a consumer
+// backlog — the generator sweep must stay quiet while coding-dispatch drains them.
+func TestDetectSelfImproveSweep_SuppressedWhenAcceptedDispatchBacklog(t *testing.T) {
+	task := sweepTask(t, 0, genesis.SelfCorrectionFunnelSummary{Rejections7d: 5}, 2)
+	task.dispatchBacklogSelfCoding = func() int { return 7 }
+	if got := task.detectSelfImproveSweepNudge(time.Now()); got != "" {
+		t.Fatalf("accepted dispatch backlog must suppress sweep, got %q", got)
+	}
+}
+
 // A future marker (clock skew, corrupted state) must not mute the lane.
 func TestDetectSelfImproveSweep_ClockSkewRecovers(t *testing.T) {
 	task := sweepTask(t, 0, genesis.SelfCorrectionFunnelSummary{Rejections7d: 1}, 0)
