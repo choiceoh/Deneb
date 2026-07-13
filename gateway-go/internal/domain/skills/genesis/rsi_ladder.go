@@ -9,10 +9,13 @@ package genesis
 // on every status read and surfaces it as a fifth pseudo-layer card
 // (Key "GRAD") the existing viewers render without wire changes.
 //
-// Invariant: the engine NEVER flips a lock. A row at READY means "evidence
-// thresholds met — the decision is now available to the operator"; the flip
-// itself stays a human action (allowlist edit, env knob, drop-in removal),
-// per the unanimous 2026H1 acceptance principle.
+// Execution model (operator delegated unlocks 2026-07-14): rows whose
+// compiled auto-threshold is met are EXECUTED by the watch
+// (ladder_watch.go) with a lifecycle ledger entry and a feed-card 재잠금
+// veto; READY marks rows awaiting evidence the loop cannot execute
+// (out-of-process flips, manual-drill evidence). The unanimous 2026H1
+// principle survives as: the loop exercises the policy, it never edits it —
+// this file is a forbidden self-edit surface.
 
 import (
 	"fmt"
@@ -102,7 +105,7 @@ func (t *Tracker) rsiAssessLadder() RSILayer {
 
 // ladderEProcessRow: e-process observation → rollback-firing ownership.
 func (t *Tracker) ladderEProcessRow() ladderRow {
-	r := t.EProcessCutoverReadiness()
+	r := t.eProcessCutoverReadiness()
 	switch {
 	case r.EProcessOwner:
 		return ladderRow{"e-process 컷오버", ladderStateDone, fmt.Sprintf("발화 소유 중 (라벨 n=%d)", r.Labels)}
@@ -114,10 +117,13 @@ func (t *Tracker) ladderEProcessRow() ladderRow {
 }
 
 // ladderDispatchCapRow: daily dispatch cap raise on measured land rate.
-// Deploy-watch rollbacks are not ledgered yet, so the "0 rollbacks" half of
-// the row stays a manual confirmation — the detail says so instead of
-// silently claiming it.
+// Deploy-watch rollbacks are ledgered (deploy_watch_log.jsonl) and consumed
+// by the AUTO path (ladder_watch autoGraduations); this display row shows
+// the land-rate evidence and reads 완료 once the unlock executed.
 func (t *Tracker) ladderDispatchCapRow() ladderRow {
+	if row := loadGraduationState().Rows[graduationDispatchCap]; row.Unlocked {
+		return ladderRow{"배차 캡 상향", ladderStateDone, fmt.Sprintf("실행됨 — 일일 캡 %d (자동 졸업)", row.Value)}
+	}
 	outcomes, decided, landed := rsiDispatchOutcomes(t.dispatchMarkerDir())
 	if decided == 0 {
 		return ladderRow{"배차 캡 상향", ladderStateGrowing, "판정된 배차 0건"}

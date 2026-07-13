@@ -183,7 +183,7 @@ type evolveWatch struct {
 	// absolute threshold (RSI P1.5, PACE). Default: OBSERVATION MODE — the
 	// legacy threshold owns firing while ep's verdict is recorded on every
 	// resolving lifecycle entry as an agreement/disagreement label. Once the
-	// labels justify it (EProcessCutoverReadiness), the operator flips
+	// labels justify it (eProcessCutoverReadiness), the operator flips
 	// DENEB_EPROCESS_OWNS_ROLLBACK=1 and ep owns the firing decision — with
 	// the threshold verdict still recorded, so labeling never stops.
 	ep *EProcess

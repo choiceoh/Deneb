@@ -100,6 +100,12 @@ rollback() {
     [[ -f "$PREV_HEAD_FILE" ]] && prev_head=$(tr -d '[:space:]' < "$PREV_HEAD_FILE")
 
     log "REGRESSION on head ${DEPLOYED_HEAD:0:10}: $reason — rolling back binary"
+    # Rollback ledger: the graduation ladder's dispatch-cap row requires "0
+    # deploy-watch rollbacks" as machine-readable evidence (genesis
+    # deployWatchRollbacks reads this file). Append-only, best-effort.
+    printf '{"ts":%s,"event":"rollback","head":"%s","reason":%s}\n' \
+        "$(date +%s%3N)" "$DEPLOYED_HEAD" "$(printf '%s' "$reason" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))')" \
+        >> "$HOME/.deneb/data/deploy_watch_log.jsonl" 2>>"$LOG_FILE" || true
     if [[ ! -f "$PROD_DIR/dist/deneb-gateway.bak-prev" ]]; then
         log "ERROR: no previous binary (dist/deneb-gateway.bak-prev) — cannot roll back automatically"
         return 1

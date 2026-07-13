@@ -60,34 +60,34 @@ const (
 	judgeEscalationWindow = 5
 )
 
-// OrganicFalseAccept is one REAL-usage judge false-accept label: the judge
+// organicFalseAccept is one REAL-usage judge false-accept label: the judge
 // passed a candidate, the evolve shipped, and the post-evolve watch rolled it
 // back. Counted only when the baseline-aware e-process AGREED the failure
 // rate rose (BaselineTest.Reject) — the deterministic filter for the PACE
 // precondition that baseline-blind rollbacks mislabel (roadmap P3 #1): a
 // threshold-only rollback with a quiet e-process stays a disagreement label,
 // never P3 food.
-type OrganicFalseAccept struct {
+type organicFalseAccept struct {
 	Skill        string `json:"skill"`
 	JudgeVersion string `json:"judgeVersion,omitempty"`
 	RolledBackAt int64  `json:"rolledBackAt"`
 }
 
-// OrganicFalseAccepts mines the lifecycle ledger for baseline-confirmed
+// organicFalseAccepts mines the lifecycle ledger for baseline-confirmed
 // rollbacks within the window, attributing each to the judge-artifact version
 // that accepted the evolve (the preceding "evolved" entry's provenance
 // certificate, RSI P1.5). Newest first, capped at limit. A rollback whose
 // accepting evolve carried no provenance yields an empty JudgeVersion — the
 // consumer's incumbent-version filter then excludes it (unattributable labels
 // are not actionable evidence).
-func (t *Tracker) OrganicFalseAccepts(window time.Duration, limit int) []OrganicFalseAccept {
+func (t *Tracker) organicFalseAccepts(window time.Duration, limit int) []organicFalseAccept {
 	entries, err := jsonlstore.Load[LifecycleLogEntry](t.logPath)
 	if err != nil {
 		return nil
 	}
 	cutoff := time.Now().Add(-window).UnixMilli()
 	judgeBySkill := map[string]string{}
-	var out []OrganicFalseAccept
+	var out []organicFalseAccept
 	for _, e := range entries { // chronological
 		switch e.Type {
 		case "evolved":
@@ -100,7 +100,7 @@ func (t *Tracker) OrganicFalseAccepts(window time.Duration, limit int) []Organic
 			if e.CreatedAt < cutoff || e.BaselineTest == nil || !e.BaselineTest.Reject {
 				continue
 			}
-			out = append(out, OrganicFalseAccept{
+			out = append(out, organicFalseAccept{
 				Skill:        e.SkillName,
 				JudgeVersion: judgeBySkill[e.SkillName],
 				RolledBackAt: e.CreatedAt,
@@ -116,17 +116,17 @@ func (t *Tracker) OrganicFalseAccepts(window time.Duration, limit int) []Organic
 	return out
 }
 
-// JudgeMissExhibit is one wrong verdict on a planted defect — few-shot food
+// judgeMissExhibit is one wrong verdict on a planted defect — few-shot food
 // for P3 judge evolution.
-type JudgeMissExhibit struct {
+type judgeMissExhibit struct {
 	Skill       string `json:"skill"`
 	Degradation string `json:"degradation"`
 	Verdict     string `json:"verdict"` // "passed_defect" | "score_inverted" | "error"
 }
 
-// FalseRejectExhibit is a buffered rejected candidate that outscores the
+// falseRejectExhibit is a buffered rejected candidate that outscores the
 // current body on the stored validation corpus.
-type FalseRejectExhibit struct {
+type falseRejectExhibit struct {
 	Skill        string  `json:"skill"`
 	RejectReason string  `json:"rejectReason"`
 	CurrentScore float64 `json:"currentScore"`
@@ -165,8 +165,8 @@ type JudgeAccuracyRecord struct {
 	// collapse, arXiv 2606.16682 — a category-local bias hides in the
 	// aggregate; segmenting makes it visible before it corrupts selection).
 	ByCategory       map[string][2]int      `json:"byCategory,omitempty"` // category -> [correct, total]
-	Misses           []JudgeMissExhibit     `json:"misses,omitempty"`
-	FalseRejects     []FalseRejectExhibit   `json:"falseRejects,omitempty"`
+	Misses           []judgeMissExhibit     `json:"misses,omitempty"`
+	FalseRejects     []falseRejectExhibit   `json:"falseRejects,omitempty"`
 	OperatorVerdicts []OperatorJudgeVerdict `json:"operatorVerdicts,omitempty"`
 }
 
@@ -372,11 +372,11 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 		v, err := verdict(ctx, judgePrompt, pair.Original, pair.Degraded)
 		switch {
 		case err != nil:
-			rec.Misses = append(rec.Misses, JudgeMissExhibit{Skill: pair.Skill, Degradation: pair.Degradation, Verdict: "error"})
+			rec.Misses = append(rec.Misses, judgeMissExhibit{Skill: pair.Skill, Degradation: pair.Degradation, Verdict: "error"})
 		case v.Pass:
-			rec.Misses = append(rec.Misses, JudgeMissExhibit{Skill: pair.Skill, Degradation: pair.Degradation, Verdict: "passed_defect"})
+			rec.Misses = append(rec.Misses, judgeMissExhibit{Skill: pair.Skill, Degradation: pair.Degradation, Verdict: "passed_defect"})
 		case v.OriginalScore != nil && v.CandidateScore != nil && *v.CandidateScore > *v.OriginalScore:
-			rec.Misses = append(rec.Misses, JudgeMissExhibit{Skill: pair.Skill, Degradation: pair.Degradation, Verdict: "score_inverted"})
+			rec.Misses = append(rec.Misses, judgeMissExhibit{Skill: pair.Skill, Degradation: pair.Degradation, Verdict: "score_inverted"})
 		default:
 			rec.Correct++
 			cls[0]++
@@ -444,8 +444,8 @@ func (t *JudgeAccuracyTask) weakenTierUnlocked(judgeVersion string) bool {
 // mineFalseRejects scores buffered rejected candidates against the CURRENT
 // skill body on stored validation cases. Deterministic; flags only a strict,
 // flip-free improvement beyond the margin.
-func (t *JudgeAccuracyTask) mineFalseRejects() []FalseRejectExhibit {
-	var out []FalseRejectExhibit
+func (t *JudgeAccuracyTask) mineFalseRejects() []falseRejectExhibit {
+	var out []falseRejectExhibit
 	for _, entry := range t.Evolver.catalogEntries() {
 		skill := entry.Skill.Name
 		cases, err := t.Tracker.RecentSkillValidationCases(skill, producerBenchCaseLimit)
@@ -495,7 +495,7 @@ func (t *JudgeAccuracyTask) mineFalseRejects() []FalseRejectExhibit {
 				continue
 			}
 			if rjs.Percent() >= cur.Percent()+falseRejectMargin {
-				out = append(out, FalseRejectExhibit{
+				out = append(out, falseRejectExhibit{
 					Skill:        skill,
 					RejectReason: common.TruncateRunes(rej.Reason, 160),
 					CurrentScore: cur.Percent(),

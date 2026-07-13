@@ -76,8 +76,15 @@ func DeclaredEditableSurfaces() []EditableSurface {
 				"gateway-go/internal/domain/skills/genesis/tracker_self_correction.go",
 				"gateway-go/internal/domain/skills/genesis/tracker_eprocess_cutover.go",
 				"gateway-go/internal/domain/skills/genesis/evolution_drift.go",
+				// Graduation machinery (operator delegated unlock EXECUTION
+				// 2026-07-14): the loop may exercise evidence-met unlocks, but
+				// the thresholds and the executor are policy — a loop that
+				// could edit them could grant itself autonomy without evidence.
+				"gateway-go/internal/domain/skills/genesis/rsi_ladder.go",
+				"gateway-go/internal/domain/skills/genesis/ladder_watch.go",
+				"gateway-go/internal/domain/skills/genesis/graduation_state.go",
 			},
-			Note: "deterministic accept/reject core (gates, benches, e-process, rollback watch, drift brake, record-time gate, this whitelist)",
+			Note: "deterministic accept/reject core (gates, benches, e-process, rollback watch, drift brake, graduation policy, record-time gate, this whitelist)",
 		},
 		{
 			// The scripts-side half of the same acceptor: the dispatch

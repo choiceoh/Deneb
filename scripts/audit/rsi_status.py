@@ -76,6 +76,26 @@ ESCALATION_WINDOW = 5
 # stay staged until their own batch review.
 L4_SOURCES = ("evolve-tool-gap", "self-harness", "health-finding", "tool-quality")
 
+GRADUATION_STATE_PATH = os.path.expanduser("~/.deneb/data/graduation_state.json")
+
+
+def _graduation_rows(path: str = "") -> dict:
+    """Executed graduation-ladder unlocks (loop-owned, operator directive
+    2026-07-14). Mirrors genesis/graduation_state.go; consumed by the
+    dispatchable predicate and the ladder display so Go/sh/py cannot drift."""
+    try:
+        with open(path or GRADUATION_STATE_PATH, encoding="utf-8") as fh:
+            rows = json.load(fh).get("rows") or {}
+        return rows if isinstance(rows, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _dispatchable_sources(rows: dict) -> tuple:
+    extra = tuple(k[len("source:"):] for k, v in rows.items()
+                  if k.startswith("source:") and isinstance(v, dict) and v.get("unlocked"))
+    return L4_SOURCES + extra
+
 LIVE, DATA_GATED, STARVED, FROZEN, IDLE = "LIVE", "DATA-GATED", "STARVED", "FROZEN", "IDLE"
 
 
@@ -309,9 +329,11 @@ def assess_l4(
     dispatch_today: int,
     outcomes: dict[str, int] | None = None,
     dispatched_ids: set[str] | None = None,
+    grad_rows: dict | None = None,
 ) -> LayerStatus:
     """Source self-edit — the coding-dispatch supply of code-scope candidates."""
     outcomes = outcomes or {}
+    sources = _dispatchable_sources(grad_rows or {})
     cand = _merge_candidates(rows)
     dispatched_ids = dispatched_ids or set()
     by_scope: dict[str, int] = {}
@@ -341,7 +363,7 @@ def assess_l4(
         # implementation — both are live dispatch supply (the heartbeat review
         # lane accepts candidates it cannot implement itself).
         if scope == "code" and st in ("proposed", "accepted"):
-            if src.startswith(L4_SOURCES):
+            if src.startswith(sources):
                 dispatchable += 1
             else:
                 # Proposed code candidate from a source not yet in the dispatch
@@ -446,12 +468,15 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
     except OSError:
         pass
 
+    grad_rows = _graduation_rows(os.path.join(data_dir, "graduation_state.json"))
+
     return [
         assess_l1(genesis, now_ms),
         assess_l2(revisions, frozen, now_ms),
         assess_l3(judge, genesis, now_ms),
-        assess_l4(candidates, dispatch_total, dispatch_today, outcomes, dispatched_ids),
-        assess_ladder(genesis, revisions, candidates, outcomes),
+        assess_l4(candidates, dispatch_total, dispatch_today, outcomes, dispatched_ids,
+                  grad_rows=grad_rows),
+        assess_ladder(genesis, revisions, candidates, outcomes, grad_rows=grad_rows),
     ]
 
 
@@ -476,12 +501,16 @@ LADDER_DONE = "완료"
 
 
 def assess_ladder(genesis_events: list[dict], revisions: list[dict],
-                  candidate_rows: list[dict], outcomes: dict[str, int]) -> LayerStatus:
+                  candidate_rows: list[dict], outcomes: dict[str, int],
+                  grad_rows: dict | None = None) -> LayerStatus:
     """Continuously score every machine-checkable graduation-ladder row."""
     rows: list[tuple[str, str, str]] = []  # (title, state, detail)
 
+    grad = grad_rows or {}
     ep = _eprocess_readiness(genesis_events)
-    if os.environ.get("DENEB_EPROCESS_OWNS_ROLLBACK") == "1":
+    ep_unlocked = (grad.get("eprocess-cutover") or {}).get("unlocked") \
+        and os.environ.get("DENEB_EPROCESS_OWNS_ROLLBACK") != "0"
+    if os.environ.get("DENEB_EPROCESS_OWNS_ROLLBACK") == "1" or ep_unlocked:
         rows.append(("e-process 컷오버", LADDER_DONE, f"발화 소유 중 (라벨 n={ep['eprocess_labels']})"))
     elif ep["eprocess_cutover_ready"]:
         rows.append(("e-process 컷오버", LADDER_READY,
@@ -489,9 +518,12 @@ def assess_ladder(genesis_events: list[dict], revisions: list[dict],
     else:
         rows.append(("e-process 컷오버", LADDER_GROWING, f"라벨 {ep['eprocess_labels']}/20"))
 
+    cap_row = grad.get("dispatch-cap") or {}
     decided = sum(outcomes.values())
     landed = outcomes.get("landed", 0)
-    if decided == 0:
+    if cap_row.get("unlocked"):
+        rows.append(("배차 캡 상향", LADDER_DONE, f"실행됨 — 일일 캡 {cap_row.get('value') or '?'} (자동 졸업)"))
+    elif decided == 0:
         rows.append(("배차 캡 상향", LADDER_GROWING, "판정된 배차 0건"))
     else:
         rate = landed / decided
@@ -508,7 +540,7 @@ def assess_ladder(genesis_events: list[dict], revisions: list[dict],
         if rec.get("scope") != "code" or st not in ("proposed", "accepted"):
             continue
         src = rec.get("source") or ""
-        if src.startswith(L4_SOURCES):
+        if src.startswith(_dispatchable_sources(grad)):
             continue
         prefix = src.split(":", 1)[0] if src else "(no source)"
         staged_sources[prefix] = staged_sources.get(prefix, 0) + 1

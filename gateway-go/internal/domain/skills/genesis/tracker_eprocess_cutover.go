@@ -5,7 +5,7 @@ package genesis
 // disagreement labels on every resolving watch; this file adds the two halves
 // the cutover itself was missing:
 //
-//  1. EProcessCutoverReadiness — the deterministic evidence summary (label
+//  1. eProcessCutoverReadiness — the deterministic evidence summary (label
 //     count, legacy-agreement rate) against the ladder thresholds, surfaced on
 //     miniapp.rsi.status so the operator SEES when evidence justifies the flip
 //     instead of re-mining JSONL by hand.
@@ -31,17 +31,26 @@ const (
 	eProcessCutoverMinAgreement = 0.90
 )
 
-// eProcessOwnsRollback reports whether the operator flipped rollback firing
-// over to the anytime-valid e-process (DENEB_EPROCESS_OWNS_ROLLBACK=1).
+// eProcessOwnsRollback reports whether rollback firing belongs to the
+// anytime-valid e-process: the operator env knob (always wins, "0" forces
+// legacy ownership even past an auto-graduation), or an executed
+// graduation-ladder unlock (operator directive 2026-07-14 — the loop may
+// flip its own pre-declared, evidence-met locks).
 func eProcessOwnsRollback() bool {
-	return os.Getenv("DENEB_EPROCESS_OWNS_ROLLBACK") == "1"
+	switch os.Getenv("DENEB_EPROCESS_OWNS_ROLLBACK") {
+	case "1":
+		return true
+	case "0":
+		return false
+	}
+	return graduationUnlocked(graduationEProcess)
 }
 
-// EProcessCutoverReadiness summarizes the observation-mode label evidence
+// eProcessCutoverReadiness summarizes the observation-mode label evidence
 // against the graduation thresholds. Labels accumulate over the loop's whole
 // history — a windowed count would starve the very evidence the ladder gates
 // on at organic (~3 evolves/week) cadence.
-type EProcessCutoverReadiness struct {
+type eProcessCutoverReadiness struct {
 	Labels        int     `json:"labels"`
 	Disagreements int     `json:"disagreements"`
 	AgreementRate float64 `json:"agreementRate"`
@@ -57,12 +66,12 @@ type EProcessCutoverReadiness struct {
 	EProcessOwner bool `json:"eProcessOwner"`
 }
 
-// EProcessCutoverReadiness scans the lifecycle ledger for entries carrying a
+// eProcessCutoverReadiness scans the lifecycle ledger for entries carrying a
 // baseline-test verdict and scores them against the ladder thresholds. Lock-
 // free like the other ledger readers (RecentJudgeAccuracy, RecentMetaRevisions):
 // jsonlstore.Load tolerates a concurrent append's partial tail line.
-func (t *Tracker) EProcessCutoverReadiness() EProcessCutoverReadiness {
-	out := EProcessCutoverReadiness{EProcessOwner: eProcessOwnsRollback()}
+func (t *Tracker) eProcessCutoverReadiness() eProcessCutoverReadiness {
+	out := eProcessCutoverReadiness{EProcessOwner: eProcessOwnsRollback()}
 	entries, err := jsonlstore.Load[LifecycleLogEntry](t.logPath)
 	if err != nil {
 		return out

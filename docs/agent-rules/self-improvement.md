@@ -150,8 +150,16 @@ acceptance machinery stays forbidden at record time.
   (2026-07-12, first batch reviewed clean), and `tool-quality` (2026-07-13, by
   direct operator directive ahead of a reviewed batch — narrow description/perf
   candidates, previewable via the tool-quality-dryrun workflow). **Staged** (file
-  for review, no auto-dispatch): `runtime-error`, `deadcode-finding`. The flip is
-  a one-line allowlist edit — a deliberate operator decision, never automatic.
+  for review, no auto-dispatch): `runtime-error`, `deadcode-finding`,
+  `sop-mining`. **Graduation execution is DELEGATED to the loop (operator
+  directive 2026-07-14)**: `LadderWatchTask` unlocks a staged source once the
+  review lane endorses it (accepted≥2, rejected=0 — a rejection is a standing
+  veto) by writing the shared graduation state
+  (`~/.deneb/data/graduation_state.json`, read by Go + sh + py allowlists), with
+  a lifecycle-ledger record and a feed-card 재잠금 veto. Kill switch
+  `DENEB_AUTO_GRADUATE=0`; the drift self-brake pauses execution; the
+  thresholds and the executor are forbidden self-edit surfaces (the loop
+  exercises the policy, never edits it).
 
 ## Gotchas & Invariants
 

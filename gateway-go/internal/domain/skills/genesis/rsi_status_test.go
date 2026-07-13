@@ -100,7 +100,7 @@ func TestRSIStatus_AllLayersLive(t *testing.T) {
 	if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{ // L3
 		JudgeVersion: "v1", Pairs: 4, Correct: 3,
 		ByClass: map[string][2]int{"safety-drop": {2, 3}},
-		Misses:  []JudgeMissExhibit{{Skill: "sk", Degradation: "safety-drop", Verdict: "passed_defect"}},
+		Misses:  []judgeMissExhibit{{Skill: "sk", Degradation: "safety-drop", Verdict: "passed_defect"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
