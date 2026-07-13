@@ -232,6 +232,17 @@ Five workstreams, in priority order:
    new data assembly (existing `workFeedStore.List` + `wikiStore.
    ActiveCounterpartyDomains` primitives); genesis stays a leaf.
 
+   *Slice-3 LANDED (calendar coverage-gap).* The digest — now owned by
+   `runtime/curriculumenv` (extracted from the server composition root, #3574)
+   — also surfaces upcoming business-calendar commitments (next 14d, titled
+   events only, read from the process-wide `localcal` store). This is the
+   forward-looking half of the demand signal ("skill-coverage gaps vs the
+   business calendar"): the producer infers which capabilities imminent
+   commitments will need, and the 12-rune verbatim-quote grounding gate keeps a
+   proposal tied to a real event summary. Landing it in `curriculumenv` (not
+   `server`) kept the change off the overloaded composition root. Remaining
+   unbuilt P5-1 demand source: declined/failed-request mining.
+
 2. **Calibration campaign — run the #3461 knobs, bounded (operator lever,
    zero new code).** Weekly meta cadence gives the slow loop ~4 fitness
    points a month; the benches and e-process are starved by default cadence,
