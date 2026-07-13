@@ -113,6 +113,14 @@ def deadcode_candidates(findings: list[tuple[str, str]]) -> list[dict[str, Any]]
     for file, symbol in findings:
         finding = f"{file} :: {symbol}"
         fid = hashlib.sha256(finding.encode()).hexdigest()[:12]
+        # deadcode-audit.sh cd's into gateway-go, so its paths are
+        # gateway-go-relative (cmd/..., internal/...). Other self-correction
+        # candidates carry repo-relative targets (gateway-go/internal/...), and
+        # the coding lane resolves targetFiles from the repo root — normalize so
+        # the candidate lands on the real file, not a non-existent repo-root
+        # path. The raw finding stays in evidence, and the source hash is over
+        # the raw finding so dedup is unaffected by this normalization.
+        target = file if file.startswith("gateway-go/") else f"gateway-go/{file}"
         out.append({
             "scope": "code",
             "skillName": "deadcode-audit",
@@ -126,7 +134,7 @@ def deadcode_candidates(findings: list[tuple[str, str]]) -> list[dict[str, Any]]
                 f"unreachable and it is absent from scripts/audit/deadcode-baseline.txt"
             ),
             "reason": "deadcode-audit delta — proactive L4 supply (RSI P5 ws3)",
-            "targetFiles": [file],
+            "targetFiles": [target],
             "proposedChange": (
                 f"Delete '{symbol}' and any now-orphaned helpers it solely referenced, "
                 f"then re-run scripts/audit/deadcode-audit.sh and confirm the finding "

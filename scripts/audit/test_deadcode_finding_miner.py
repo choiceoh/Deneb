@@ -24,12 +24,14 @@ from deadcode_finding_miner import (
 
 # A realistic deadcode-audit.sh stdout: a resolved (stale) block, then the NEW
 # findings block. Only the "+ " lines are defects.
+# deadcode-audit.sh cd's into gateway-go, so its paths are gateway-go-relative
+# (internal/..., cmd/...) — NOT repo-relative. The miner must normalize.
 AUDIT_OUTPUT = """\
 deadcode-audit: 1 baseline entries no longer dead (stale — refresh with --update):
-  - gateway-go/internal/old/gone.go :: OnceUsed
+  - internal/old/gone.go :: OnceUsed
 deadcode-audit: NEW dead code (2 findings):
-  + gateway-go/internal/pipeline/chat/run_orphan.go :: orphanHelper
-  + gateway-go/internal/runtime/server/stale.go :: (*Server).unusedMethod
+  + internal/pipeline/chat/run_orphan.go :: orphanHelper
+  + internal/runtime/server/stale.go :: (*Server).unusedMethod
 deadcode-audit: delete the code (preferred) or baseline it with operator approval.
 """
 
@@ -40,8 +42,8 @@ class ParseNewFindingsTest(unittest.TestCase):
     def test_only_new_block_is_parsed(self):
         findings = parse_new_findings(AUDIT_OUTPUT)
         self.assertEqual(findings, [
-            ("gateway-go/internal/pipeline/chat/run_orphan.go", "orphanHelper"),
-            ("gateway-go/internal/runtime/server/stale.go", "(*Server).unusedMethod"),
+            ("internal/pipeline/chat/run_orphan.go", "orphanHelper"),
+            ("internal/runtime/server/stale.go", "(*Server).unusedMethod"),
         ])
 
     def test_resolved_block_is_ignored(self):
@@ -52,7 +54,7 @@ class ParseNewFindingsTest(unittest.TestCase):
         self.assertEqual(parse_new_findings(CLEAN_OUTPUT), [])
 
     def test_dedup_and_sort_are_deterministic(self):
-        dup = AUDIT_OUTPUT + "  + gateway-go/internal/pipeline/chat/run_orphan.go :: orphanHelper\n"
+        dup = AUDIT_OUTPUT + "  + internal/pipeline/chat/run_orphan.go :: orphanHelper\n"
         self.assertEqual(parse_new_findings(dup), parse_new_findings(AUDIT_OUTPUT))
 
 
@@ -62,11 +64,17 @@ class CandidateTest(unittest.TestCase):
         self.assertEqual(len(cands), 2)
         c = cands[0]
         self.assertEqual(c["scope"], "code")
+        # gateway-go-relative audit path normalized to a repo-relative target so
+        # the coding lane lands on the real file, not a non-existent repo-root path.
         self.assertEqual(c["targetFiles"], ["gateway-go/internal/pipeline/chat/run_orphan.go"])
         self.assertTrue(c["source"].startswith(f"{SOURCE_PREFIX}:"))
         # The exact finding must be in the evidence for deterministic review.
-        self.assertIn("run_orphan.go :: orphanHelper", c["evidence"])
+        self.assertIn("internal/pipeline/chat/run_orphan.go :: orphanHelper", c["evidence"])
         self.assertIn("orphanHelper", c["title"])
+
+    def test_already_prefixed_path_not_double_prefixed(self):
+        cands = deadcode_candidates([("gateway-go/cmd/x/main.go", "dead")])
+        self.assertEqual(cands[0]["targetFiles"], ["gateway-go/cmd/x/main.go"])
 
     def test_source_is_stable_and_distinct(self):
         a = deadcode_candidates(parse_new_findings(AUDIT_OUTPUT))
