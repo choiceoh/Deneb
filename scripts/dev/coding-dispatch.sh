@@ -16,6 +16,8 @@
 #      재시도, outcome 없는 마커는 세션 타임아웃 경과 후 포기(abandoned)로
 #      본다 (dispatch_outcome.blocks_redispatch).
 #   5. 기존 워크트리는 origin/main에 동기화(ahead==0일 때 reset --hard).
+#      declined/failed/timeout 재시도는 이전 tip을 버리고 origin/main에서
+#      다시 깐다 (bot #3614: 워크트리만 지우고 브랜치 tip이 남는 스테일 재시도).
 #      셋업 실패 시 같은 틱에서 다음 후보로 넘어간다 (헤드오브큐 독성 방지).
 #
 # 안전:
@@ -212,6 +214,26 @@ PYEOF
         wt="$WORKTREE_ROOT/dispatch-$cid"
         local branch="dispatch/$cid"
 
+        # Retryable prior outcomes must not resume from a stale tip left behind
+        # after clean declined cleanup (bot #3614). Wipe worktree+branch and
+        # recreate from origin/main below.
+        local retry_refresh=0
+        if [[ -f "$DISPATCH_DIR/$cid.json" ]] \
+            && grep -qE '"outcome"[[:space:]]*:[[:space:]]*"(declined|failed|timeout)"' \
+                "$DISPATCH_DIR/$cid.json" 2>/dev/null; then
+            retry_refresh=1
+        fi
+        if [[ "$retry_refresh" -eq 1 ]]; then
+            if [[ -d "$wt" ]]; then
+                log "retryable outcome on $cid — discarding prior worktree/branch for origin/main refresh"
+                git -C "$PROD_DIR" worktree remove --force "$wt" >>"$LOG_FILE" 2>&1 || true
+                rm -rf "$wt"
+            fi
+            if git -C "$PROD_DIR" show-ref --verify --quiet "refs/heads/$branch"; then
+                git -C "$PROD_DIR" branch -D "$branch" >>"$LOG_FILE" 2>&1 || true
+            fi
+        fi
+
         # Unregistered leftover dir → wipe only after worktree list SUCCEEDS
         # (bot #3614: a bad PROD_DIR made list fail and rm -rf real trees).
         if [[ -d "$wt" ]]; then
@@ -231,6 +253,8 @@ PYEOF
         # Sync registered worktrees to origin/main when clean+ahead==0. Dirty
         # trees from failed/timeout sessions are preserved for inspection and
         # skipped this tick (bot #3615: reset --hard wiped uncommitted work).
+        # Note: retry_refresh already wiped above, so this path is first-attempt
+        # / in-flight / abandoned-outcome markers only.
         if [[ -d "$wt" ]]; then
             if ! git -C "$PROD_DIR" fetch origin main --quiet >>"$LOG_FILE" 2>&1; then
                 log "fetch origin/main failed — setup deferred for $cid"
@@ -263,7 +287,9 @@ PYEOF
         if [[ ! -d "$wt" ]]; then
             # Orphan-branch recovery. On attach of an existing branch with no
             # commits ahead, refresh to origin/main so retries do not land from
-            # a stale tip (bot #3614).
+            # a stale tip (bot #3614). Also: if show-ref misses a branch that
+            # still blocks `worktree add -b` (ghost ref / race), delete and
+            # recreate (live 2026-07-13: 4c2c454a).
             if git -C "$PROD_DIR" show-ref --verify --quiet "refs/heads/$branch"; then
                 if ! git -C "$PROD_DIR" worktree add "$wt" "$branch" >>"$LOG_FILE" 2>&1; then
                     log "stale dispatch branch $branch — recreating worktree"
@@ -283,10 +309,23 @@ PYEOF
                     fi
                 fi
             elif ! git -C "$PROD_DIR" worktree add "$wt" -b "$branch" origin/main >>"$LOG_FILE" 2>&1; then
-                log "worktree creation failed for $cid — try next"
-                skip_ids="${skip_ids:+$skip_ids,}$cid"
-                pick=""; cid=""; wt=""
-                continue
+                # Ghost branch: show-ref false but add -b still conflicts.
+                if git -C "$PROD_DIR" branch -D "$branch" >>"$LOG_FILE" 2>&1; then
+                    log "ghost dispatch branch $branch — deleted, recreating"
+                    if git -C "$PROD_DIR" worktree add "$wt" -b "$branch" origin/main >>"$LOG_FILE" 2>&1; then
+                        :
+                    else
+                        log "worktree creation failed for $cid after ghost cleanup — try next"
+                        skip_ids="${skip_ids:+$skip_ids,}$cid"
+                        pick=""; cid=""; wt=""
+                        continue
+                    fi
+                else
+                    log "worktree creation failed for $cid — try next"
+                    skip_ids="${skip_ids:+$skip_ids,}$cid"
+                    pick=""; cid=""; wt=""
+                    continue
+                fi
             fi
         fi
 

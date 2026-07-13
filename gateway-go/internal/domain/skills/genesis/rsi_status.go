@@ -409,15 +409,29 @@ func (t *Tracker) dispatchMarkerDir() string {
 }
 
 // DispatchMarkerBlocks reports whether coding-dispatch would skip this candidate
-// id: landed/attempted (or an in-flight marker with no outcome). declined/
-// failed/timeout remain unblocked so the sweep suppressor still sees retryable
-// backlog (bot review #3612).
+// id. Parity with scripts/dev/dispatch_outcome.blocks_redispatch:
+//
+//	landed / attempted          → block
+//	declined / failed / timeout → retryable (do not block)
+//	outcome-less / corrupt      → block until marker mtime is older than
+//	                               dispatchMarkerAbandonAfter (default = L4
+//	                               SESSION_TIMEOUT 2h); after that the pick
+//	                               lane may reclaim the id.
 func (t *Tracker) DispatchMarkerBlocks(id string) bool {
+	return t.dispatchMarkerBlocksAt(id, time.Now())
+}
+
+// dispatchMarkerAbandonAfter matches Python DEFAULT_ABANDON_AFTER_SEC / the
+// coding-dispatch SESSION_TIMEOUT default (7200).
+const dispatchMarkerAbandonAfter = 2 * time.Hour
+
+func (t *Tracker) dispatchMarkerBlocksAt(id string, now time.Time) bool {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return false
 	}
-	raw, err := os.ReadFile(filepath.Join(t.dispatchMarkerDir(), id+".json"))
+	path := filepath.Join(t.dispatchMarkerDir(), id+".json")
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return false
 	}
@@ -433,7 +447,11 @@ func (t *Tracker) DispatchMarkerBlocks(id string) bool {
 	case "declined", "failed", "timeout":
 		return false
 	default:
-		return true
+		info, err := os.Stat(path)
+		if err != nil {
+			return true
+		}
+		return now.Sub(info.ModTime()) < dispatchMarkerAbandonAfter
 	}
 }
 

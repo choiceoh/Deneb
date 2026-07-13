@@ -346,3 +346,54 @@ func TestRSIStatus_DispatchOutcomeNote(t *testing.T) {
 		t.Fatalf("no-outcome queue must not fabricate a rate: %s", d)
 	}
 }
+
+func TestDispatchMarkerBlocks_parityWithPython(t *testing.T) {
+	tr := newTestTracker(t)
+	dir := tr.dispatchMarkerDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(id, body string) string {
+		t.Helper()
+		path := filepath.Join(dir, id+".json")
+		if err := os.WriteFile(path, []byte(body+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	now := time.Now()
+	write("landed", `{"outcome":"landed"}`)
+	write("attempted", `{"outcome":"attempted"}`)
+	write("declined", `{"outcome":"declined"}`)
+	write("failed", `{"outcome":"failed"}`)
+	write("timeout", `{"outcome":"timeout"}`)
+	fresh := write("fresh", `{"id":"fresh"}`)
+	stale := write("stale", `{"id":"stale"}`)
+	if err := os.Chtimes(fresh, now, now); err != nil {
+		t.Fatal(err)
+	}
+	old := now.Add(-dispatchMarkerAbandonAfter - time.Minute)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		id   string
+		want bool
+	}{
+		{"", false},
+		{"missing", false},
+		{"landed", true},
+		{"attempted", true},
+		{"declined", false},
+		{"failed", false},
+		{"timeout", false},
+		{"fresh", true},
+		{"stale", false},
+	}
+	for _, tc := range cases {
+		if got := tr.dispatchMarkerBlocksAt(tc.id, now); got != tc.want {
+			t.Fatalf("%s: DispatchMarkerBlocks=%v want %v", tc.id, got, tc.want)
+		}
+	}
+}
