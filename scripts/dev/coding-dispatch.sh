@@ -14,7 +14,9 @@
 #      일일 배차 상한으로 토큰 예산을 지킨다. 마커 파일 존재만으로는 영구
 #      스킵하지 않는다 — landed/attempted만 차단, declined/failed/timeout은
 #      재시도, outcome 없는 마커는 세션 타임아웃 경과 후 포기(abandoned)로
-#      본다 (dispatch_outcome.blocks_redispatch).
+#      본다 (dispatch_outcome.blocks_redispatch). abandoned 마커·앞선 0의
+#      스테일 워크트리는 틱 시작 시 회수해 재배차가 origin/main에서 다시
+#      시작되게 한다 (live 2026-07-13: ee440d82 29h outcome-less + 80 behind).
 #   5. 기존 워크트리는 origin/main에 동기화(ahead==0일 때 reset --hard).
 #      declined/failed/timeout 재시도는 이전 tip을 버리고 origin/main에서
 #      다시 깐다 (bot #3614: 워크트리만 지우고 브랜치 tip이 남는 스테일 재시도).
@@ -146,6 +148,56 @@ main() {
     mkdir -p "$DISPATCH_DIR"
     local script_dir="$SCRIPT_DIR"
     reconcile_dispatches
+
+    # Reclaim abandoned outcome-less markers (age >= SESSION_TIMEOUT) and their
+    # worktrees/branches. Pick already unblocks them, but leaving the marker +
+    # 80-commit-behind tree around confuses operators and can strand a dirty
+    # or stale dir until that cid is picked (live ee440d82, 2026-07-13).
+    python3 - "$DISPATCH_DIR" "$SESSION_TIMEOUT" "$WORKTREE_ROOT" "$PROD_DIR" <<'PY' >>"$LOG_FILE" 2>&1
+import json, os, sys, time, subprocess
+dispatch_dir, abandon_after, wt_root, prod = sys.argv[1:5]
+abandon_after = int(abandon_after)
+now = time.time()
+
+def run(argv):
+    subprocess.run(argv, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+for name in sorted(os.listdir(dispatch_dir)):
+    if not name.endswith(".json"):
+        continue
+    path = os.path.join(dispatch_dir, name)
+    try:
+        age = now - os.path.getmtime(path)
+        with open(path, encoding="utf-8", errors="replace") as f:
+            rec = json.load(f)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        continue
+    if not isinstance(rec, dict):
+        continue
+    outcome = rec.get("outcome")
+    if isinstance(outcome, str) and outcome.strip():
+        continue
+    if age < abandon_after:
+        continue
+    cid = name[:-5]
+    wt = os.path.join(wt_root, f"dispatch-{cid}")
+    branch = f"dispatch/{cid}"
+    try:
+        os.remove(path)
+    except OSError as e:
+        print(f"abandon reclaim: marker delete failed for {cid}: {e}", flush=True)
+        continue
+    if os.path.isdir(wt):
+        run(["git", "-C", prod, "worktree", "remove", "--force", wt])
+        if os.path.isdir(wt):
+            run(["rm", "-rf", wt])
+    run(["git", "-C", prod, "branch", "-D", branch])
+    print(
+        f"abandon reclaim: released {cid} "
+        f"(outcome-less age {int(age)}s ≥ {abandon_after}s)",
+        flush=True,
+    )
+PY
 
     # Upgrade non-terminal outcomes first. Newest-first within 14d (mtime), then
     # truncate — sorting AFTER age filter so five stale markers cannot starve
