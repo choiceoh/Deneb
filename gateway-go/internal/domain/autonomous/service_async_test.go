@@ -15,6 +15,9 @@ type fakeDreamer struct {
 	runReport      *DreamReport
 	incrementCount int
 	runCount       int
+	// backlogRuns, when >0, makes each RunDream report MoreBacklog (and
+	// decrements) so a test can exercise the near-term drain re-trigger chain.
+	backlogRuns int
 }
 
 func (f *fakeDreamer) ShouldDream(context.Context) bool {
@@ -33,7 +36,17 @@ func (f *fakeDreamer) RunDream(context.Context) (*DreamReport, error) {
 	// cycle — a scheduling-dependent double-run that flaked CI ("got 2, want
 	// run count 1") while passing locally.
 	f.shouldDream = false
-	return f.runReport, f.runErr
+	report := f.runReport
+	if f.backlogRuns > 0 {
+		f.backlogRuns--
+		clone := DreamReport{}
+		if f.runReport != nil {
+			clone = *f.runReport
+		}
+		clone.MoreBacklog = true
+		report = &clone
+	}
+	return report, f.runErr
 }
 
 func (f *fakeDreamer) IncrementTurn(context.Context) {
@@ -299,6 +312,46 @@ func TestService_ConcurrentIncrementDreamTurn(t *testing.T) {
 	d.mu.Unlock()
 	if runCount != 1 {
 		t.Errorf("RunDream called %d times, want exactly 1", runCount)
+	}
+}
+
+// TestService_BacklogDrain_RetriggersUntilDrained verifies that a cycle
+// reporting MoreBacklog schedules a near-term re-run, and the chain stops once a
+// cycle reports the backlog drained — no infinite loop.
+func TestService_BacklogDrain_RetriggersUntilDrained(t *testing.T) {
+	restore := drainRetriggerDelay
+	drainRetriggerDelay = 5 * time.Millisecond
+	defer func() { drainRetriggerDelay = restore }()
+
+	svc := NewService(nil)
+	// First two cycles report backlog remaining; the third drains it.
+	d := &fakeDreamer{shouldDream: true, runReport: &DreamReport{DurationMs: 1}, backlogRuns: 2}
+	events := make(chan CycleEvent, 20)
+	svc.OnEvent(func(ev CycleEvent) { events <- ev })
+	setDreamerNoTimer(svc, d)
+
+	svc.IncrementDreamTurn(context.Background())
+
+	// Expect three completions: initial + two drains.
+	for i := 0; i < 3; i++ {
+		_ = waitForEvent(t, events, "dreaming_completed")
+	}
+	// Give any erroneous fourth re-trigger time to (not) fire.
+	time.Sleep(40 * time.Millisecond)
+
+	d.mu.Lock()
+	rc := d.runCount
+	streak := 0 // drainStreak should have reset once backlog cleared
+	d.mu.Unlock()
+	svc.mu.Lock()
+	streak = svc.drainStreak
+	svc.mu.Unlock()
+
+	if rc != 3 {
+		t.Errorf("runCount = %d, want 3 (initial + 2 drains, then stop)", rc)
+	}
+	if streak != 0 {
+		t.Errorf("drainStreak = %d, want 0 after backlog cleared", streak)
 	}
 }
 

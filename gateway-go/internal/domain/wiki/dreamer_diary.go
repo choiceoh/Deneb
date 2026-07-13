@@ -139,11 +139,36 @@ func (wd *WikiDreamer) scanDiaries(_ context.Context) (*diaryScanResult, error) 
 		return nil, nil
 	}
 	return &diaryScanResult{
-		Content:    sb.String(),
-		State:      state,
-		LatestDate: latestDate,
-		PriorFiles: priorFiles,
+		Content:     sb.String(),
+		State:       state,
+		LatestDate:  latestDate,
+		PriorFiles:  priorFiles,
+		MorePending: diaryBacklogRemains(diaryFiles, state),
 	}, nil
+}
+
+// diaryBacklogRemains reports whether any diary file still holds unconsumed
+// bytes after this scan hit the per-cycle cap: a file the loop never reached
+// (no state entry yet, non-empty) or one whose recorded offset trails its size.
+// Drives the service's near-term drain re-trigger.
+func diaryBacklogRemains(diaryFiles []os.DirEntry, state diaryProcessState) bool {
+	for _, entry := range diaryFiles {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		st, ok := state.Files[entry.Name()]
+		if !ok {
+			if info.Size() > 0 {
+				return true // never reached this file before the cap
+			}
+			continue
+		}
+		if st.Offset < info.Size() {
+			return true // partially consumed
+		}
+	}
+	return false
 }
 
 func diaryDateFromName(name string) string {

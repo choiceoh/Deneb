@@ -41,7 +41,28 @@ type DreamReport struct {
 	// WikiChangeSummary is a preformatted, human-readable block describing
 	// what this cycle changed (paths, git snapshot hash, diffstat, rollback
 	// hint). Appended verbatim to the dream notification.
-	WikiChangeSummary string   `json:"wikiChangeSummary,omitempty"`
-	DurationMs        int64    `json:"durationMs"`
-	PhaseErrors       []string `json:"phaseErrors,omitempty"`
+	WikiChangeSummary string `json:"wikiChangeSummary,omitempty"`
+	// QualityScore (0–100, 0 = not scored) grades this cycle's OUTPUT, not its
+	// volume: synthesis precision (proposals surviving guards), applied-update
+	// confidence, and recall utility (whether the pages the dreamer wrote in
+	// earlier cycles have since been pulled into a chat turn). Advisory — a
+	// rolling-window self-signal, never a CI ratchet. See dreamer_quality.go.
+	QualityScore float64 `json:"qualityScore,omitempty"`
+	// RecallHitPages is the count of distinct dreamer-managed pages that were
+	// recalled into a chat turn inside the score window — the raw utility signal
+	// behind QualityScore's utility axis.
+	RecallHitPages int `json:"recallHitPages,omitempty"`
+	// UnrecalledFindings counts cold pages (old + never recalled + low
+	// importance) verify flagged as archive candidates this cycle. Advisory.
+	UnrecalledFindings int `json:"unrecalledFindings,omitempty"`
+	// CritiqueDropped counts synthesis proposals the offline self-critique pass
+	// rejected before the apply stage (dreamer_critique.go). 0 when the pass is
+	// disabled or found nothing to drop.
+	CritiqueDropped int `json:"critiqueDropped,omitempty"`
+	// MoreBacklog is true when the cycle consumed a capped chunk and unprocessed
+	// diary/memory input remains — the autonomous service drains it with a
+	// near-term re-trigger instead of waiting the full interval.
+	MoreBacklog bool     `json:"moreBacklog,omitempty"`
+	DurationMs  int64    `json:"durationMs"`
+	PhaseErrors []string `json:"phaseErrors,omitempty"`
 }
