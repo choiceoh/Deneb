@@ -64,6 +64,8 @@ describe("App against the mock gateway (real stack)", () => {
 
   it("populates the AI model picker from miniapp.models.list", async () => {
     render(<App />);
+    // 우측 데네브 패널은 기본 접힘 — 우측 탭으로 열어야 패널 컨트롤이 보인다.
+    await userEvent.click(await screen.findByRole("button", { name: "Deneb 패널 열기" }));
     const picker = await screen.findByRole("combobox", { name: "모델 선택" });
     expect(within(picker).getByRole("option", { name: /Claude Opus 4.8/ })).toBeInTheDocument();
     expect(within(picker).getByRole("option", { name: /Qwen3 30B/ })).toBeInTheDocument();
@@ -71,6 +73,8 @@ describe("App against the mock gateway (real stack)", () => {
 
   it("loads a past conversation's transcript from the history drawer", async () => {
     render(<App />);
+    // 우측 데네브 패널은 기본 접힘 — 우측 탭으로 열어야 패널 컨트롤이 보인다.
+    await userEvent.click(await screen.findByRole("button", { name: "Deneb 패널 열기" }));
     await userEvent.click(await screen.findByRole("button", { name: "대화 기록" }));
     // sessions.recent rows render in the drawer. The hidden 채팅 탭 keeps its own
     // (identically-labelled) session column mounted and — now that it lists the
