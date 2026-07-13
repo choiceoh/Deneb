@@ -4205,15 +4205,15 @@ button.mail-attachment {
   background: var(--accent-soft);
   border-radius: 999px;
 }
+/* No tile box: inside a card, a bordered/filled container reads as an awkward
+   box-in-a-box (operator feedback, native RenderStat parity). A KPI is a clean
+   number + unit + label; the row's gap separates siblings — typography carries it. */
 .dui-stat {
   display: flex;
-  min-width: 112px;
+  min-width: 88px;
   flex-direction: column;
   gap: 2px;
-  padding: 9px 11px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-ctl);
-  background: var(--panel);
+  padding: 2px 4px;
 }
 .dui-stat-value {
   font-size: 21px;
