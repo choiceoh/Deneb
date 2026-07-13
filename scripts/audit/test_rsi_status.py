@@ -14,6 +14,8 @@ import tempfile
 import unittest
 
 from rsi_status import (
+    LADDER_CALIBRATION_OPENED_MS,
+    assess_ladder,
     DATA_GATED,
     FROZEN,
     IDLE,
@@ -25,6 +27,7 @@ from rsi_status import (
     assess_l3,
     assess_l4,
     main,
+    turning,
 )
 
 NOW = 1_700_000_000_000  # fixed clock (ms)
@@ -311,12 +314,48 @@ class AssessAndCliTest(unittest.TestCase):
             rc = main(["--json", "--data-dir", data_dir, "--now-ms", str(NOW)], stdout=out, stderr=io.StringIO())
             self.assertEqual(rc, 0)
             payload = json.loads(out.getvalue().split("DENEB_RSI_STATUS")[0])
-            self.assertEqual(len(payload["layers"]), 4)
-            self.assertEqual(payload["turning"], 1)  # only L1 live
+            self.assertEqual(len(payload["layers"]), 5)  # L1-L4 + GRAD ladder
+            self.assertEqual(payload["turning"], 1)  # only L1 live; GRAD never counts
 
     def test_missing_data_dir_is_all_idle_not_a_crash(self):
         layers = {layer.key: layer.state for layer in assess("/nonexistent/deneb/data", NOW)}
+        self.assertEqual(layers.pop("GRAD"), DATA_GATED)  # ladder: evidence accumulating
         self.assertEqual(set(layers.values()), {IDLE})
+
+
+class LadderTest(unittest.TestCase):
+    def test_empty_evidence_accumulates(self):
+        s = assess_ladder([], [], [], {})
+        self.assertEqual((s.key, s.state), ("GRAD", DATA_GATED))
+        self.assertEqual(len(s.metrics), 5)
+        self.assertIn("증거 축적 중", s.diagnosis)
+
+    def test_dispatch_and_staged_evidence_read_ready(self):
+        cands = [{"type": "self_correction_candidate", "id": "r1", "scope": "code",
+                  "status": "proposed", "source": "runtime-error:abcd"}]
+        s = assess_ladder([], [], cands, {"landed": 3, "declined": 2})
+        self.assertEqual(s.state, LIVE)
+        self.assertEqual(s.metrics["배차 캡 상향"], "준비됨")
+        self.assertEqual(s.metrics["스테이징 소스 졸업"], "준비됨")
+        self.assertIn("운영자 결정 가능", s.diagnosis)
+        # Below the land-rate floor the cap row keeps accumulating.
+        s = assess_ladder([], [], [], {"landed": 1, "failed": 4})
+        self.assertEqual(s.metrics["배차 캡 상향"], "축적 중")
+
+    def test_calibration_needs_every_epoch_at_target(self):
+        revs = [{"createdAt": LADDER_CALIBRATION_OPENED_MS + 1, "epoch": e,
+                 "benchShadow": {"skills": 1}} for e in ("producer",) * 10 + ("evaluator",) * 10]
+        s = assess_ladder([], revs, [], {})
+        self.assertEqual(s.metrics["캘리브레이션 창 종료"], "축적 중")
+        revs += [{"createdAt": LADDER_CALIBRATION_OPENED_MS + 1, "epoch": "genesis",
+                  "benchGenesis": {"scenarios": 3}}] * 10
+        s = assess_ladder([], revs, [], {})
+        self.assertEqual(s.metrics["캘리브레이션 창 종료"], "준비됨")
+
+    def test_ladder_never_counts_toward_turning(self):
+        ready = assess_ladder([], [], [], {"landed": 5})
+        self.assertEqual(ready.state, LIVE)
+        self.assertEqual(turning([ready]), 0)
 
 
 if __name__ == "__main__":

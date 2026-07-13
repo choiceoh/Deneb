@@ -403,19 +403,110 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
         assess_l2(revisions, frozen, now_ms),
         assess_l3(judge, genesis, now_ms),
         assess_l4(candidates, dispatch_total, dispatch_today, outcomes),
+        assess_ladder(genesis, revisions, candidates, outcomes),
     ]
 
 
-# A layer is "turning" for the headline count when it is not merely idle/starved.
+# --- Graduation-ladder dashboard (mirrors genesis/rsi_ladder.go) ---
+# Evidence thresholds for the machine-checkable ladder rows. The engine NEVER
+# flips a lock — READY means "evidence met, operator decision available".
+LADDER_DISPATCH_MIN_DECIDED = 5
+LADDER_DISPATCH_MIN_LAND_RATE = 0.5
+LADDER_CALIBRATION_BENCH_TARGET = 10
+# P5-2 window opened 2026-07-12 (rsi-calibration.conf) — earlier bench samples
+# belong to the default-cadence era.
+LADDER_CALIBRATION_OPENED_MS = 1_783_900_800_000  # 2026-07-12T00:00:00Z
+
+LADDER_READY = "준비됨"
+LADDER_GROWING = "축적 중"
+LADDER_MANUAL = "수동 판단"
+LADDER_DONE = "완료"
+
+
+def assess_ladder(genesis_events: list[dict], revisions: list[dict],
+                  candidate_rows: list[dict], outcomes: dict[str, int]) -> LayerStatus:
+    """Continuously score every machine-checkable graduation-ladder row."""
+    rows: list[tuple[str, str, str]] = []  # (title, state, detail)
+
+    ep = _eprocess_readiness(genesis_events)
+    if os.environ.get("DENEB_EPROCESS_OWNS_ROLLBACK") == "1":
+        rows.append(("e-process 컷오버", LADDER_DONE, f"발화 소유 중 (라벨 n={ep['eprocess_labels']})"))
+    elif ep["eprocess_cutover_ready"]:
+        rows.append(("e-process 컷오버", LADDER_READY,
+                     f"n={ep['eprocess_labels']}·합치 {ep['eprocess_agreement']:.0%} — 플립 결정 가능"))
+    else:
+        rows.append(("e-process 컷오버", LADDER_GROWING, f"라벨 {ep['eprocess_labels']}/20"))
+
+    decided = sum(outcomes.values())
+    landed = outcomes.get("landed", 0)
+    if decided == 0:
+        rows.append(("배차 캡 상향", LADDER_GROWING, "판정된 배차 0건"))
+    else:
+        rate = landed / decided
+        detail = f"판정 {decided}건·랜딩률 {rate:.0%}"
+        if decided >= LADDER_DISPATCH_MIN_DECIDED and rate >= LADDER_DISPATCH_MIN_LAND_RATE:
+            rows.append(("배차 캡 상향", LADDER_READY, detail + " — 롤백 0건은 수동 확인 후 캡 결정"))
+        else:
+            rows.append(("배차 캡 상향", LADDER_GROWING, detail))
+
+    cand, status = _merge_candidates(candidate_rows)
+    staged_sources: dict[str, int] = {}
+    for rid, rec in cand.items():
+        st = status.get(rid, rec.get("status") or "proposed")
+        if rec.get("scope") != "code" or st not in ("proposed", "accepted"):
+            continue
+        src = rec.get("source") or ""
+        if src.startswith(L4_SOURCES):
+            continue
+        prefix = src.split(":", 1)[0] if src else "(no source)"
+        staged_sources[prefix] = staged_sources.get(prefix, 0) + 1
+    if staged_sources:
+        parts = "·".join(f"{k} {v}건" for k, v in sorted(staged_sources.items()))
+        rows.append(("스테이징 소스 졸업", LADDER_READY, "첫 배치 리뷰 가능: " + parts))
+    else:
+        rows.append(("스테이징 소스 졸업", LADDER_GROWING, "스테이징 후보 0건 (마이너 대기)"))
+
+    benched: dict[str, int] = {}
+    for r in revisions:
+        if (r.get("createdAt") or 0) < LADDER_CALIBRATION_OPENED_MS or r.get("action"):
+            continue
+        if r.get("benchIncumbent") or r.get("benchShadow") or r.get("benchGenesis"):
+            epoch = r.get("epoch") or "?"
+            benched[epoch] = benched.get(epoch, 0) + 1
+    cal_detail = (f"epoch별 벤치 n: producer {benched.get('producer', 0)}"
+                  f"·evaluator {benched.get('evaluator', 0)}·genesis {benched.get('genesis', 0)}"
+                  f" (목표 각 {LADDER_CALIBRATION_BENCH_TARGET})")
+    if all(benched.get(e, 0) >= LADDER_CALIBRATION_BENCH_TARGET
+           for e in ("producer", "evaluator", "genesis")):
+        rows.append(("캘리브레이션 창 종료", LADDER_READY, cal_detail + " — 드롭인 제거 결정 가능"))
+    else:
+        rows.append(("캘리브레이션 창 종료", LADDER_GROWING, cal_detail))
+
+    rows.append(("소스 자동적용 티어", LADDER_MANUAL, "배포 롤백 1회 완주가 증거 — 운영자 판단 행"))
+
+    metrics = {title: state for title, state, _ in rows}
+    ready = [f"{t}({d})" for t, s, d in rows if s == LADDER_READY]
+    if ready:
+        return LayerStatus("GRAD", "graduation ladder", LIVE, metrics,
+                           "증거 충족 — 운영자 결정 가능: " + " · ".join(ready))
+    growing = " · ".join(f"{t}: {d}" for t, s, d in rows if s == LADDER_GROWING)
+    return LayerStatus("GRAD", "graduation ladder", DATA_GATED, metrics,
+                       "전 행 증거 축적 중 — " + growing)
+
+
+# A layer is "turning" for the headline count when it is not merely idle/
+# starved. The graduation-ladder dashboard (GRAD) is an evidence surface, not
+# a loop — it never counts toward the headline numerator or denominator.
 def turning(layers: list[LayerStatus]) -> int:
-    return sum(1 for layer in layers if layer.state in (LIVE, FROZEN))
+    return sum(1 for layer in layers if layer.key != "GRAD" and layer.state in (LIVE, FROZEN))
 
 
 _STATE_GLYPH = {LIVE: "●", DATA_GATED: "◐", STARVED: "○", FROZEN: "❄", IDLE: "·"}
 
 
 def print_summary(layers: list[LayerStatus], stream: TextIO) -> None:
-    print(f"\nRSI loop status  ({turning(layers)}/{len(layers)} turning)", file=stream)
+    loop_count = sum(1 for layer in layers if layer.key != "GRAD")
+    print(f"\nRSI loop status  ({turning(layers)}/{loop_count} turning)", file=stream)
     print("─" * 72, file=stream)
     for layer in layers:
         glyph = _STATE_GLYPH.get(layer.state, "?")

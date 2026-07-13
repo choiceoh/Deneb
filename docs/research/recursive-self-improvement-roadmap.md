@@ -413,6 +413,16 @@ Five workstreams, in priority order:
 Staged locks and the evidence that flips them (thresholds are proposals,
 operator-tunable):
 
+> **Ladder-readiness engine landed 2026-07-13** (`genesis/rsi_ladder.go` +
+> `rsi_status.py` mirror): every machine-checkable row below is now scored
+> CONTINUOUSLY against its evidence stream (e-process labels, dispatch-outcome
+> land rate, staged-source candidate counts, per-epoch bench samples since the
+> P5-2 window opened) and surfaced as a fifth "졸업 사다리" card (Key `GRAD`)
+> on `rsi_status` both sides — READY means "evidence met, operator decision
+> available", and the engine NEVER flips a lock itself. The card never counts
+> toward the L1–L4 "turning" headline. Non-ledgered evidence (deploy-watch
+> rollback drill) stays an explicit MANUAL row rather than a silent claim.
+
 | Lock (today) | Evidence to graduate | Action |
 |---|---|---|
 | runtime-error source not dispatchable (#3491 staging) | first 3–5 mined candidates review clean (no hallucinated signatures) | allowlist flip in coding-dispatch.sh + rsi_status L4_SOURCES |
