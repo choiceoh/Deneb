@@ -325,8 +325,11 @@ for rid, rec in sorted(cand.items(), key=pick_order):
     if rec.get("scope") != "code":
         continue
     src = rec.get("source") or ""
-    if not (src.startswith("evolve-tool-gap") or src.startswith("self-harness")
-            or src.startswith("health-finding") or src.startswith("tool-quality")):
+    # Namespace match must be separator-aware: bare startswith let any caller
+    # self-select auto-dispatch by prefixing a graduated namespace
+    # ("health-finding-x") — RSI code eval M7.
+    allowed = ("evolve-tool-gap", "self-harness", "health-finding", "tool-quality")
+    if not any(src == ns or src.startswith(ns + ":") for ns in allowed):
         continue
     if dispatch_outcome.blocks_redispatch(
             os.path.join(dispatch_dir, rid + ".json"),
