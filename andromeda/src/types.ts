@@ -92,7 +92,15 @@ export interface Cron {
 
 export interface WorkAction {
   id: string;
+  // Action semantics (ActionAnswer / ActionAck / dept: / meta:). Not read by the
+  // client — every chip settles server-side via workfeed.action.run(id); kept so a
+  // future affordance can branch on it. Sent by the gateway (workfeed.Action.Kind).
+  kind?: string;
   label: string;
+  // The turn text an ActionAnswer chip returns when tapped. The gateway echoes it
+  // back as the reply prompt, so the client routes on the returned {sessionKey,
+  // prompt}, not this — informational only.
+  prompt?: string;
   body?: string;
 }
 
@@ -104,6 +112,11 @@ export interface WorkItem {
   title?: string;
   body?: string;
   actions?: WorkAction[];
+  // The agent is waiting on an answer (a deal-team question, or a proactive turn
+  // that posed a question / offered ```choices). The gateway sets it (workfeed.
+  // Item.Question); the feed then shows answer chips (from actions) or a reply
+  // field. Authoritative signal — the old source-substring heuristic is a fallback.
+  question?: boolean;
   createdAtMs?: number;
   ackedAtMs?: number;
   readAtMs?: number; // set once the user opens (reads) the card; 0/undefined = unread

@@ -325,6 +325,48 @@ describe("WorkfeedPane boundary behavior", () => {
       expect(screen.queryByPlaceholderText("답변 입력…")).not.toBeInTheDocument();
     });
 
+    it("shows the free-text reply when the question flag is set even without a question source", async () => {
+      renderFeed([{ id: "flagged", source: "proactive", title: "선제 질문", question: true, createdAtMs: at(0, 9) }]);
+      await userEvent.click(await screen.findByText("선제 질문"));
+      expect(screen.getByPlaceholderText("답변 입력…")).toBeInTheDocument();
+    });
+
+    it("renders answer chips from actions and settles the tapped one via action.run, streaming the returned prompt", async () => {
+      installGateway(rpc, chats, {
+        "miniapp.workfeed.action.run": (params) =>
+          rpcReply({ sessionKey: "client:main:wf-verdict", prompt: `채택: ${params.actionId}`, removeFromFeed: true }),
+      });
+      renderFeed([
+        {
+          id: "verdict",
+          source: "genesis-meta",
+          title: "저신뢰 채택 판정",
+          body: "이 스킬 진화를 채택할까요?",
+          question: true,
+          actions: [
+            { id: "meta:adopt", label: "채택" },
+            { id: "meta:reject", label: "기각" },
+          ],
+          createdAtMs: at(0, 9),
+        },
+      ]);
+      await userEvent.click(await screen.findByText("저신뢰 채택 판정"));
+      const detail = screen.getByRole("region", { name: "피드 상세" });
+      // Chips take priority over the free-text field (native WorkFeedAnswerBlock parity).
+      expect(within(detail).queryByPlaceholderText("답변 입력…")).not.toBeInTheDocument();
+      expect(within(detail).getByRole("button", { name: "기각" })).toBeInTheDocument();
+      await userEvent.click(within(detail).getByRole("button", { name: "채택" }));
+      await waitFor(() =>
+        expect(lastRpc(rpc, "miniapp.workfeed.action.run")?.params).toEqual({
+          itemId: "verdict",
+          actionId: "meta:adopt",
+        }),
+      );
+      await waitFor(() =>
+        expect(chats).toEqual([{ message: "채택: meta:adopt", sessionKey: "client:main:wf-verdict" }]),
+      );
+    });
+
     it("trims answers, clears the field and delivers the returned prompt", async () => {
       renderFeed(todayItems);
       await userEvent.click(await screen.findByText("계약 승인 여부"));
