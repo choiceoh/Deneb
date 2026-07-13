@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import shutil
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -35,7 +36,13 @@ class CodingDispatchStatusTest(unittest.TestCase):
             gh.parent.mkdir(parents=True)
             gh.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             gh.chmod(0o755)
-            env = {"HOME": td, "PATH": "/usr/bin:/bin"}
+            isolated_bin = Path(td) / "bin"
+            isolated_bin.mkdir()
+            for tool in ("dirname", "python3"):
+                source = shutil.which(tool)
+                self.assertIsNotNone(source)
+                (isolated_bin / tool).symlink_to(source)
+            env = {"HOME": td, "PATH": str(isolated_bin)}
             proc = subprocess.run(
                 [
                     "/bin/bash",
