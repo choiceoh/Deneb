@@ -264,7 +264,14 @@ Five workstreams, in priority order:
    scripts-side miner, NOT a gateway PeriodicTask — the inputs (git checkout +
    history, journald) live outside the serving process, and the tracker stays
    the queue's single writer via the RPC (rationale in the module docstring).
-   deadcode-audit deltas remain follow-up.
+   *Second slice landed:* `scripts/audit/deadcode-finding-miner.py` mines
+   `deadcode-audit.sh` deltas (NEW dead code not in the checked-in baseline)
+   into `deadcode-finding:<hash>` propose-only candidates (cap 3/run),
+   importing the RPC edge + reopen/cap semantics from the health miner so the
+   two cannot drift; a `workflow_dispatch` dry-run job on the gx10 runner
+   (`.github/workflows/deadcode-finding-dryrun.yml`) exercises it on srv4.
+   The `deadcode-finding` source stays OUT of the coding-dispatch allowlist
+   (staged for review — the graduation flip is separate).
 
 4. **Recursion-surface widening — externalize more of the generative half
    (P1 pattern, one artifact per window).** L2 can only improve what is an
