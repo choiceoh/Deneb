@@ -18,7 +18,10 @@ func TestCurriculumEnvDigest_Wiring(t *testing.T) {
 	if _, err := store.Append(workfeed.Item{Source: "test", Title: "계약 검토 — NDA 초안"}); err != nil {
 		t.Fatal(err)
 	}
-	s := &Server{MemorySubsystem: &MemorySubsystem{workFeedStore: store}}
+	s := &Server{
+		MemorySubsystem:     &MemorySubsystem{workFeedStore: store},
+		AutonomousSubsystem: &AutonomousSubsystem{}, // always set in New(); agentLogWriter stays nil here
+	}
 	if got := s.curriculumEnvDigest(context.Background()); !strings.Contains(got, "계약 검토") {
 		t.Fatalf("wired feed store should reach the digest:\n%s", got)
 	}
@@ -26,7 +29,7 @@ func TestCurriculumEnvDigest_Wiring(t *testing.T) {
 
 // No stores wired (dev/test) → empty digest, quiet.
 func TestCurriculumEnvDigest_Empty(t *testing.T) {
-	s := &Server{MemorySubsystem: &MemorySubsystem{}}
+	s := &Server{MemorySubsystem: &MemorySubsystem{}, AutonomousSubsystem: &AutonomousSubsystem{}}
 	if got := s.curriculumEnvDigest(context.Background()); got != "" {
 		t.Fatalf("empty stores should yield empty digest, got %q", got)
 	}

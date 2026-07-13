@@ -20,5 +20,8 @@ func (s *Server) curriculumEnvDigest(_ context.Context) string {
 	if s.wikiStore != nil {
 		src.Wiki = s.wikiStore
 	}
+	if s.agentLogWriter != nil {
+		src.AgentLog = s.agentLogWriter
+	}
 	return curriculumenv.Digest(src)
 }
