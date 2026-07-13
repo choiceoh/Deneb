@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	chattranscript "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
 )
 
@@ -34,7 +34,7 @@ func TestStrictBridgeReturnsAppendFailure(t *testing.T) {
 			bridge := NewBridgeWithOptions(legacy, store, strictTestLogger(), BridgeOptions{
 				StrictPersistence: tc.strict,
 			})
-			err := bridge.Append(sessionKey, toolctx.NewTextChatMessage("user", "persist me", 1))
+			err := bridge.Append(sessionKey, toolport.NewTextChatMessage("user", "persist me", 1))
 			assertStrictBridgeError(t, err, tc.wantErrSub)
 
 			messages, total, loadErr := legacy.Load(sessionKey, 0)
@@ -53,14 +53,14 @@ func TestStrictBridgeMigratesLegacyPrefixBeforeAppend(t *testing.T) {
 
 	legacy := chattranscript.NewMemoryTranscriptStore()
 	const sessionKey = "append-after-legacy"
-	if err := legacy.Append(sessionKey, toolctx.NewTextChatMessage("user", "existing", 1)); err != nil {
+	if err := legacy.Append(sessionKey, toolport.NewTextChatMessage("user", "existing", 1)); err != nil {
 		t.Fatal(err)
 	}
 	store := newStrictTestStore(t)
 	bridge := NewBridgeWithOptions(legacy, store, strictTestLogger(), BridgeOptions{
 		StrictPersistence: true,
 	})
-	if err := bridge.Append(sessionKey, toolctx.NewTextChatMessage("assistant", "new tail", 2)); err != nil {
+	if err := bridge.Append(sessionKey, toolport.NewTextChatMessage("assistant", "new tail", 2)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -89,7 +89,7 @@ func TestStrictBridgeReturnsDeleteFailure(t *testing.T) {
 
 			legacy := chattranscript.NewMemoryTranscriptStore()
 			const sessionKey = "delete-failure"
-			if err := legacy.Append(sessionKey, toolctx.NewTextChatMessage("user", "remove me", 1)); err != nil {
+			if err := legacy.Append(sessionKey, toolport.NewTextChatMessage("user", "remove me", 1)); err != nil {
 				t.Fatal(err)
 			}
 			store := newStrictTestStore(t)
@@ -139,7 +139,7 @@ func TestStrictBridgeReturnsLazyMigrationFailureAndRetries(t *testing.T) {
 
 			legacy := chattranscript.NewMemoryTranscriptStore()
 			const sessionKey = "migration-failure"
-			if err := legacy.Append(sessionKey, toolctx.NewTextChatMessage("user", "migrate me", 1)); err != nil {
+			if err := legacy.Append(sessionKey, toolport.NewTextChatMessage("user", "migrate me", 1)); err != nil {
 				t.Fatal(err)
 			}
 			store := newStrictTestStore(t)
@@ -173,7 +173,7 @@ func TestDefaultBridgeKeepsBestEffortLazyMigration(t *testing.T) {
 
 	legacy := chattranscript.NewMemoryTranscriptStore()
 	const sessionKey = "best-effort-migration"
-	if err := legacy.Append(sessionKey, toolctx.NewTextChatMessage("user", "legacy remains authoritative", 1)); err != nil {
+	if err := legacy.Append(sessionKey, toolport.NewTextChatMessage("user", "legacy remains authoritative", 1)); err != nil {
 		t.Fatal(err)
 	}
 	store := newStrictTestStore(t)

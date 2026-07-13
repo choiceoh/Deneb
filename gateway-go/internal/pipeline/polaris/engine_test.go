@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
@@ -174,7 +174,7 @@ func TestCompactAndPersist_WithLLMCompaction(t *testing.T) {
 	// 32 messages × 5K = 160K tokens > 153K threshold.
 	bigText := makeString(10000) // ~5000 tokens (runes/2)
 	for i := 0; i < 32; i++ {
-		s.AppendMessage("s1", toolctx.ChatMessage{
+		s.AppendMessage("s1", toolport.ChatMessage{
 			Role:      "user",
 			Content:   marshalStr(bigText),
 			Timestamp: int64(i * 1000),

@@ -8,12 +8,12 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // spillFixture stores numbered lines ("line 1".."line N") and returns the tool
 // plus a session-decorated ctx (spillover access is session-scoped) and the ID.
-func spillFixture(t *testing.T, n int) (toolctx.ToolFunc, context.Context, string) {
+func spillFixture(t *testing.T, n int) (toolport.ToolFunc, context.Context, string) {
 	t.Helper()
 	store := agent.NewSpilloverStore(t.TempDir())
 	var b strings.Builder
@@ -24,11 +24,11 @@ func spillFixture(t *testing.T, n int) (toolctx.ToolFunc, context.Context, strin
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
-	ctx := toolctx.WithSessionKey(context.Background(), "client:test")
+	ctx := toolport.WithSessionKey(context.Background(), "client:test")
 	return ToolSpilloverRead(store), ctx, id
 }
 
-func callSpill(ctx context.Context, t *testing.T, fn toolctx.ToolFunc, params map[string]any) string {
+func callSpill(ctx context.Context, t *testing.T, fn toolport.ToolFunc, params map[string]any) string {
 	t.Helper()
 	raw, _ := json.Marshal(params)
 	out, err := fn(ctx, raw)
@@ -99,7 +99,7 @@ func TestSpilloverRead_CharBudget(t *testing.T) {
 		t.Fatalf("store: %v", err)
 	}
 	fn := ToolSpilloverRead(store)
-	ctx := toolctx.WithSessionKey(context.Background(), "client:test")
+	ctx := toolport.WithSessionKey(context.Background(), "client:test")
 
 	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "limit": 100})
 	if len(out) > spillPageMaxChars+2000 {
@@ -113,7 +113,7 @@ func TestSpilloverRead_CharBudget(t *testing.T) {
 // Access from a different session is refused (unchanged behavior).
 func TestSpilloverRead_SessionScoped(t *testing.T) {
 	fn, _, id := spillFixture(t, 10)
-	other := toolctx.WithSessionKey(context.Background(), "client:other")
+	other := toolport.WithSessionKey(context.Background(), "client:other")
 	raw, _ := json.Marshal(map[string]any{"spill_id": id})
 	if _, err := fn(other, raw); err == nil {
 		t.Fatal("expected cross-session access to be refused")

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 )
 
 // A finished sub-agent returns its stored output, auto-targeted when only one
@@ -14,7 +14,7 @@ import (
 // completion notification.
 func TestSubagentsResult_DoneReturnsLastOutput(t *testing.T) {
 	child := &session.Session{Key: "client:main:sub:1", Status: session.StatusDone, LastOutput: "분석 결과: 3건 발견"}
-	out, err := subagentsResult(&toolctx.SessionDeps{}, []*session.Session{child}, "")
+	out, err := subagentsResult(&tooldeps.SessionDeps{}, []*session.Session{child}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestSubagentsResult_DoneReturnsLastOutput(t *testing.T) {
 func TestSubagentsResult_RunningReportsNoResultYet(t *testing.T) {
 	now := time.Now().UnixMilli()
 	child := &session.Session{Key: "client:main:sub:1", Status: session.StatusRunning, StartedAt: &now}
-	out, err := subagentsResult(&toolctx.SessionDeps{}, []*session.Session{child}, "")
+	out, err := subagentsResult(&tooldeps.SessionDeps{}, []*session.Session{child}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestSubagentsResult_MultipleRequiresTarget(t *testing.T) {
 		{Key: "client:main:sub:1", Status: session.StatusDone, LastOutput: "A"},
 		{Key: "client:main:sub:2", Status: session.StatusDone, LastOutput: "B"},
 	}
-	out, err := subagentsResult(&toolctx.SessionDeps{}, children, "")
+	out, err := subagentsResult(&tooldeps.SessionDeps{}, children, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestSubagentsResult_FailedNoOutputShowsReason(t *testing.T) {
 	children := []*session.Session{
 		{Key: "client:main:sub:1", Status: session.StatusFailed, FailureReason: "컨텍스트 초과"},
 	}
-	out, err := subagentsResult(&toolctx.SessionDeps{}, children, "1")
+	out, err := subagentsResult(&tooldeps.SessionDeps{}, children, "1")
 	if err != nil {
 		t.Fatal(err)
 	}

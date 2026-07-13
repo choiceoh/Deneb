@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 )
 
 // stubFleet stands in for the SparkFleet control plane.
@@ -38,11 +38,11 @@ func stubFleet(t *testing.T) *httptest.Server {
 	return srv
 }
 
-func fleetDepsFor(rawURL string) *toolctx.FleetDeps {
-	return &toolctx.FleetDeps{BaseURL: func() string { return rawURL }, Token: func() string { return "" }}
+func fleetDepsFor(rawURL string) *tooldeps.FleetDeps {
+	return &tooldeps.FleetDeps{BaseURL: func() string { return rawURL }, Token: func() string { return "" }}
 }
 
-func runFleet(t *testing.T, d *toolctx.FleetDeps, args map[string]any) string {
+func runFleet(t *testing.T, d *tooldeps.FleetDeps, args map[string]any) string {
 	t.Helper()
 	in, _ := json.Marshal(args)
 	out, err := ToolFleet(d)(context.Background(), in)
@@ -54,7 +54,7 @@ func runFleet(t *testing.T, d *toolctx.FleetDeps, args map[string]any) string {
 
 func TestFleetTool_off(t *testing.T) {
 	// No base URL wired → integration off, every action a calm message (no error).
-	out := runFleet(t, &toolctx.FleetDeps{}, map[string]any{"action": "status"})
+	out := runFleet(t, &tooldeps.FleetDeps{}, map[string]any{"action": "status"})
 	if !strings.Contains(out, "꺼져") {
 		t.Errorf("expected off message, got %q", out)
 	}

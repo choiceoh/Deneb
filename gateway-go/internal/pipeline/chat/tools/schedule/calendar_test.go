@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 )
@@ -38,7 +38,7 @@ func newTestLocalCal(t *testing.T) *localcal.Store {
 	return store
 }
 
-func callCal(t *testing.T, d *toolctx.CalendarDeps, params map[string]any) string {
+func callCal(t *testing.T, d *tooldeps.CalendarDeps, params map[string]any) string {
 	t.Helper()
 	raw, _ := json.Marshal(params)
 	out, err := ToolCalendar(d)(context.Background(), raw)
@@ -62,9 +62,9 @@ func extractCalID(s string) string {
 }
 
 // readerWith returns deps with a Google reader + local store.
-func depsWith(reader toolctx.CalendarReader, local toolctx.LocalCalendar) *toolctx.CalendarDeps {
-	return &toolctx.CalendarDeps{
-		Client: func() (toolctx.CalendarReader, error) { return reader, nil },
+func depsWith(reader tooldeps.CalendarReader, local tooldeps.LocalCalendar) *tooldeps.CalendarDeps {
+	return &tooldeps.CalendarDeps{
+		Client: func() (tooldeps.CalendarReader, error) { return reader, nil },
 		Local:  local,
 	}
 }
@@ -94,7 +94,7 @@ func TestCalendar_ListMergesAndSorts(t *testing.T) {
 
 func TestCalendar_CreateGetUpdateDelete(t *testing.T) {
 	local := newTestLocalCal(t)
-	d := &toolctx.CalendarDeps{Local: local}
+	d := &tooldeps.CalendarDeps{Local: local}
 	start := time.Now().Add(24 * time.Hour).Truncate(time.Hour)
 
 	// Create.
@@ -142,7 +142,7 @@ func TestCalendar_CreateGetUpdateDelete(t *testing.T) {
 
 func TestCalendar_Capture(t *testing.T) {
 	local := newTestLocalCal(t)
-	d := &toolctx.CalendarDeps{Local: local}
+	d := &tooldeps.CalendarDeps{Local: local}
 	start := time.Now().Add(-2 * time.Hour).Truncate(time.Hour)
 
 	createOut := callCal(t, d, map[string]any{
@@ -164,7 +164,7 @@ func TestCalendar_Capture(t *testing.T) {
 
 func TestCalendar_Audit(t *testing.T) {
 	local := newTestLocalCal(t)
-	d := &toolctx.CalendarDeps{Local: local}
+	d := &tooldeps.CalendarDeps{Local: local}
 	// Tomorrow, inside the default 7-day window + 09–18 working hours.
 	base := time.Now().Add(24 * time.Hour)
 	day := time.Date(base.Year(), base.Month(), base.Day(), 0, 0, 0, 0, base.Location())
@@ -188,7 +188,7 @@ func TestCalendar_Audit(t *testing.T) {
 }
 
 func TestCalendar_AuditClean(t *testing.T) {
-	d := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	d := &tooldeps.CalendarDeps{Local: newTestLocalCal(t)}
 	out := callCal(t, d, map[string]any{"action": "audit"})
 	if !strings.Contains(out, "일정 양호") {
 		t.Errorf("empty calendar should audit clean, got:\n%s", out)
@@ -197,7 +197,7 @@ func TestCalendar_AuditClean(t *testing.T) {
 
 func TestCalendar_Timeline(t *testing.T) {
 	local := newTestLocalCal(t)
-	d := &toolctx.CalendarDeps{Local: local}
+	d := &tooldeps.CalendarDeps{Local: local}
 	day := time.Now().Add(48 * time.Hour)
 	mk := func(title string) {
 		start := time.Date(day.Year(), day.Month(), day.Day(), 10, 0, 0, 0, day.Location())
@@ -216,7 +216,7 @@ func TestCalendar_Timeline(t *testing.T) {
 }
 
 func TestCalendar_TimelineNeedsQuery(t *testing.T) {
-	d := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	d := &tooldeps.CalendarDeps{Local: newTestLocalCal(t)}
 	out := callCal(t, d, map[string]any{"action": "timeline"})
 	if !strings.Contains(out, "query") {
 		t.Errorf("expected a query-required hint, got:\n%s", out)
@@ -224,7 +224,7 @@ func TestCalendar_TimelineNeedsQuery(t *testing.T) {
 }
 
 func TestCalendar_TimelineRejectsBadRange(t *testing.T) {
-	d := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	d := &tooldeps.CalendarDeps{Local: newTestLocalCal(t)}
 	// Inverted from/to must be rejected, not silently widened to the default.
 	out := callCal(t, d, map[string]any{
 		"action": "timeline", "query": "현대차",
@@ -252,7 +252,7 @@ func TestCalendar_AuditPartialDataNotClean(t *testing.T) {
 
 func TestCalendar_RejectGoogleWrite(t *testing.T) {
 	local := newTestLocalCal(t)
-	d := &toolctx.CalendarDeps{Local: local}
+	d := &tooldeps.CalendarDeps{Local: local}
 
 	updOut := callCal(t, d, map[string]any{
 		"action": "update", "id": "g-readonly-1",
@@ -293,7 +293,7 @@ func TestCalendar_GetGoogleEvent(t *testing.T) {
 }
 
 func TestCalendar_UnknownAction(t *testing.T) {
-	d := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	d := &tooldeps.CalendarDeps{Local: newTestLocalCal(t)}
 	out := callCal(t, d, map[string]any{"action": "frobnicate"})
 	if !strings.Contains(out, "알 수 없는 액션") {
 		t.Errorf("expected unknown-action message, got:\n%s", out)
@@ -301,7 +301,7 @@ func TestCalendar_UnknownAction(t *testing.T) {
 }
 
 func TestCalendar_ListEmpty(t *testing.T) {
-	d := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	d := &tooldeps.CalendarDeps{Local: newTestLocalCal(t)}
 	out := callCal(t, d, map[string]any{"action": "list"})
 	if !strings.Contains(out, "일정이 없습니다") {
 		t.Errorf("expected empty message, got:\n%s", out)
@@ -345,7 +345,7 @@ func TestCalendarGlance(t *testing.T) {
 }
 
 func TestCalendarGlance_EmptyWhenNoSource(t *testing.T) {
-	if out := CalendarGlance(context.Background(), &toolctx.CalendarDeps{}, time.Now(), 3); out != "" {
+	if out := CalendarGlance(context.Background(), &tooldeps.CalendarDeps{}, time.Now(), 3); out != "" {
 		t.Errorf("expected empty glance with no source, got:\n%s", out)
 	}
 }
@@ -409,7 +409,7 @@ func TestCalendar_FreeSlotsAction(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	out := callCal(t, &toolctx.CalendarDeps{Local: local}, map[string]any{
+	out := callCal(t, &tooldeps.CalendarDeps{Local: local}, map[string]any{
 		"action": "free_slots",
 		"from":   dayStart.Format(time.RFC3339),
 		"to":     dayEnd.Format(time.RFC3339),
@@ -433,7 +433,7 @@ func TestCalendar_FreeSlotsSkipsWeekends(t *testing.T) {
 	}
 	dayStart := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, loc)
 	dayEnd := dayStart.Add(24 * time.Hour)
-	deps := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	deps := &tooldeps.CalendarDeps{Local: newTestLocalCal(t)}
 
 	out := callCal(t, deps, map[string]any{
 		"action": "free_slots",
@@ -464,7 +464,7 @@ func TestCalendar_FreeSlotsNarrowLunchWindowUntouched(t *testing.T) {
 		day = day.AddDate(0, 0, 1)
 	}
 	dayStart := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, loc)
-	out := callCal(t, &toolctx.CalendarDeps{Local: newTestLocalCal(t)}, map[string]any{
+	out := callCal(t, &tooldeps.CalendarDeps{Local: newTestLocalCal(t)}, map[string]any{
 		"action":    "free_slots",
 		"from":      dayStart.Format(time.RFC3339),
 		"to":        dayStart.Add(24 * time.Hour).Format(time.RFC3339),
@@ -485,14 +485,14 @@ func TestCalendar_ListFlagsConflicts(t *testing.T) {
 	if _, err := local.Create(localcal.CreateInput{Summary: "회의 B", Start: base.Add(30 * time.Minute), End: base.Add(90 * time.Minute)}); err != nil {
 		t.Fatalf("seed B: %v", err)
 	}
-	out := callCal(t, &toolctx.CalendarDeps{Local: local}, map[string]any{"action": "list"})
+	out := callCal(t, &tooldeps.CalendarDeps{Local: local}, map[string]any{"action": "list"})
 	if !strings.Contains(out, "겹치는 일정") || !strings.Contains(out, "회의 A") || !strings.Contains(out, "회의 B") {
 		t.Errorf("expected conflict flag for overlapping events:\n%s", out)
 	}
 }
 
 func TestCalendar_CreateRequiresFields(t *testing.T) {
-	d := &toolctx.CalendarDeps{Local: newTestLocalCal(t)}
+	d := &tooldeps.CalendarDeps{Local: newTestLocalCal(t)}
 	if out := callCal(t, d, map[string]any{"action": "create", "start": time.Now().Format(time.RFC3339)}); !strings.Contains(out, "summary") {
 		t.Errorf("expected summary-required, got:\n%s", out)
 	}
@@ -533,7 +533,7 @@ func TestCalendar_BriefShowsLinkAndDirective(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	// Explicit window so the test is deterministic regardless of wall-clock.
-	out := callCal(t, &toolctx.CalendarDeps{Local: local}, map[string]any{
+	out := callCal(t, &tooldeps.CalendarDeps{Local: local}, map[string]any{
 		"action": "brief",
 		"from":   start.Add(-time.Hour).Format(time.RFC3339),
 		"to":     start.Add(2 * time.Hour).Format(time.RFC3339),
@@ -560,7 +560,7 @@ func TestCalendar_PrepPullsLinkedContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	out := callCal(t, &toolctx.CalendarDeps{Local: local}, map[string]any{"action": "prep", "id": ev.ID})
+	out := callCal(t, &tooldeps.CalendarDeps{Local: local}, map[string]any{"action": "prep", "id": ev.ID})
 	if !strings.Contains(out, "미팅 준비") || !strings.Contains(out, "mail:abc123") || !strings.Contains(out, "mail_archive") {
 		t.Errorf("prep missing linked-context directive:\n%s", out)
 	}
@@ -576,7 +576,7 @@ func TestCalendar_PrepShowsDocs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	out := callCal(t, &toolctx.CalendarDeps{Local: local}, map[string]any{"action": "prep", "id": ev.ID})
+	out := callCal(t, &tooldeps.CalendarDeps{Local: local}, map[string]any{"action": "prep", "id": ev.ID})
 	if !strings.Contains(out, "관련 문서") || !strings.Contains(out, "ZTT_견적서.pdf") || !strings.Contains(out, "files") {
 		t.Errorf("prep should surface linked documents:\n%s", out)
 	}
@@ -596,7 +596,7 @@ func TestCalendar_PrepSkipsAllDayForNextMeeting(t *testing.T) {
 	if _, err := local.Create(localcal.CreateInput{Summary: "ZTT 미팅", Start: timedStart, End: timedStart.Add(time.Hour)}); err != nil {
 		t.Fatalf("seed timed: %v", err)
 	}
-	out := callCal(t, &toolctx.CalendarDeps{Local: local}, map[string]any{"action": "prep"})
+	out := callCal(t, &tooldeps.CalendarDeps{Local: local}, map[string]any{"action": "prep"})
 	if !strings.Contains(out, "ZTT 미팅") || strings.Contains(out, "휴가") {
 		t.Errorf("prep should target the next timed meeting, not the all-day block:\n%s", out)
 	}

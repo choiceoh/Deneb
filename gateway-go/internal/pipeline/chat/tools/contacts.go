@@ -8,7 +8,8 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // ToolContacts returns the address-book lookup tool. It reads the contacts store
@@ -18,7 +19,7 @@ import (
 // The store is read-only here: writes happen only via the contacts sync RPC, which
 // fully replaces the snapshot. A nil store (contacts sync never ran / init failed)
 // degrades to a clear Korean "unavailable" message rather than an error.
-func ToolContacts(d *toolctx.ContactsDeps) toolctx.ToolFunc {
+func ToolContacts(d *tooldeps.ContactsDeps) toolport.ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action string `json:"action"`

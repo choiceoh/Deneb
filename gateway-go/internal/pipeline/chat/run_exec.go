@@ -17,7 +17,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	notebooktool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
@@ -365,7 +366,7 @@ type runCompletionRecord struct {
 	fellBack       bool
 	effortRt       *effortRoute
 	effortDecision string
-	execStats      *toolctx.ToolExecStats
+	execStats      *toolport.ToolExecStats
 	runStart       time.Time
 	agentStart     time.Time
 }
@@ -582,7 +583,7 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 	if nbID, updated, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
 		if g, hit := cachedNotebookGrounding(params.SessionKey, nbID, updated); hit {
 			notebookGrounding = g
-		} else if g, gok := notebooktool.BuildNotebookGrounding(&toolctx.NotebookDeps{Store: deps.memory.Notebook, Wiki: deps.memory.Wiki}, nbID); gok {
+		} else if g, gok := notebooktool.BuildNotebookGrounding(&tooldeps.NotebookDeps{Store: deps.memory.Notebook, Wiki: deps.memory.Wiki}, nbID); gok {
 			notebookGrounding = g
 			storeNotebookGrounding(params.SessionKey, nbID, updated, g)
 		}
@@ -688,7 +689,7 @@ func activeGroundingNotebook(deps runDeps, sessionKey string) (id string, update
 	if deps.memory.Notebook == nil {
 		return "", 0, false
 	}
-	id = toolctx.ActiveNotebook(sessionKey)
+	id = toolport.ActiveNotebook(sessionKey)
 	if id == "" {
 		return "", 0, false
 	}

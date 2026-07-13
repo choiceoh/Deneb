@@ -16,14 +16,14 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // ToolWorkFeed returns the workfeed tool. store is the server's native-sync
-// teeing wrapper (toolctx.WorkFeedRW) so agent-side read/ack mirrors to the
+// teeing wrapper (tooldeps.WorkFeedRW) so agent-side read/ack mirrors to the
 // phone exactly like a tap in the app would; nil is guarded at registration.
-func ToolWorkFeed(store toolctx.WorkFeedRW) ToolFunc {
+func ToolWorkFeed(store tooldeps.WorkFeedRW) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action       string `json:"action"`
@@ -55,7 +55,7 @@ func ToolWorkFeed(store toolctx.WorkFeedRW) ToolFunc {
 	}
 }
 
-func workFeedList(store toolctx.WorkFeedRW, limit int, includeAcked bool) (string, error) {
+func workFeedList(store tooldeps.WorkFeedRW, limit int, includeAcked bool) (string, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -85,7 +85,7 @@ func workFeedList(store toolctx.WorkFeedRW, limit int, includeAcked bool) (strin
 	return b.String(), nil
 }
 
-func workFeedRead(store toolctx.WorkFeedRW, id string) (string, error) {
+func workFeedRead(store tooldeps.WorkFeedRW, id string) (string, error) {
 	if strings.TrimSpace(id) == "" {
 		return "", fmt.Errorf("workfeed read: id가 필요합니다")
 	}
@@ -119,7 +119,7 @@ func workFeedRead(store toolctx.WorkFeedRW, id string) (string, error) {
 	return b.String(), nil
 }
 
-func workFeedAck(store toolctx.WorkFeedRW, id string) (string, error) {
+func workFeedAck(store tooldeps.WorkFeedRW, id string) (string, error) {
 	if strings.TrimSpace(id) == "" {
 		return "", fmt.Errorf("workfeed ack: id가 필요합니다")
 	}
@@ -138,7 +138,7 @@ func workFeedAck(store toolctx.WorkFeedRW, id string) (string, error) {
 // The store dedups against the most recent identical card, so a re-run does not
 // pile up duplicates. The server's native-sync wrapper mirrors the created card
 // to the phone.
-func workFeedPublish(store toolctx.WorkFeedRW, title, summary, body, priority, refType, refID string) (string, error) {
+func workFeedPublish(store tooldeps.WorkFeedRW, title, summary, body, priority, refType, refID string) (string, error) {
 	title = strings.TrimSpace(title)
 	body = strings.TrimSpace(body)
 	if title == "" {

@@ -1,18 +1,18 @@
-package toolctx
+package toolport
 
 import "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 
-// FormatFetchActivationNotice preserves the toolctx compatibility surface.
+// FormatFetchActivationNotice preserves the toolport compatibility surface.
 func FormatFetchActivationNotice(names []string) string {
 	return chatport.FormatFetchActivationNotice(names)
 }
 
-// FormatSkillActivationNotice preserves the toolctx compatibility surface.
+// FormatSkillActivationNotice preserves the toolport compatibility surface.
 func FormatSkillActivationNotice(names []string) string {
 	return chatport.FormatSkillActivationNotice(names)
 }
 
-// FormatAlreadyActiveNotice preserves the toolctx compatibility surface.
+// FormatAlreadyActiveNotice preserves the toolport compatibility surface.
 func FormatAlreadyActiveNotice(names []string) string {
 	return chatport.FormatAlreadyActiveNotice(names)
 }

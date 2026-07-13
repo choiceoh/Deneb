@@ -202,7 +202,7 @@ type RunEndData struct {
 	// CacheHitToolCalls counts run-cache hits per tool name. A hit never
 	// reaches the tool fn, so turn.tool durations/output stats undercount
 	// real demand; this field closes the gap and measures whether the
-	// cacheable-tool set (toolctx cacheableTools) earns its keep.
+	// cacheable-tool set (toolport cacheableTools) earns its keep.
 	CacheHitToolCalls map[string]int `json:"cacheHitToolCalls,omitempty"`
 	// TruncatedToolCalls counts head/tail output truncations per tool name.
 	// Truncation happens inside the chat tool layer before the executor sees

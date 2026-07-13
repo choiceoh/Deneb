@@ -73,7 +73,7 @@ func ProviderCatalog(logger *slog.Logger) map[string]modelrole.ProviderResolved 
 	return out
 }
 
-// convertRoutingConfig maps the deneb.json routing block (toolctx JSON shape)
+// convertRoutingConfig maps the deneb.json routing block (toolport JSON shape)
 // to the registry's dependency-free RoutingOverride. The two structs are
 // field-identical pointer bags; the split mirrors the existing
 // ProviderConfig/ProviderResolved boundary so modelrole stays free of the

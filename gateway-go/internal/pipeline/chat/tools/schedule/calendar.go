@@ -29,7 +29,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 )
@@ -86,7 +87,7 @@ type calParams struct {
 
 // ToolCalendar returns the calendar tool. A nil deps (neither Google nor local
 // wired) is guarded at registration time, so here at least one source exists.
-func ToolCalendar(d *toolctx.CalendarDeps) toolctx.ToolFunc {
+func ToolCalendar(d *tooldeps.CalendarDeps) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p calParams
 		if err := json.Unmarshal(input, &p); err != nil {
@@ -123,7 +124,7 @@ func ToolCalendar(d *toolctx.CalendarDeps) toolctx.ToolFunc {
 
 // --- list ----------------------------------------------------------------
 
-func calActionList(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
+func calActionList(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) string {
 	from, to, errMsg := calResolveWindow(p.From, p.To, p.HoursAhead)
 	if errMsg != "" {
 		return errMsg
@@ -164,7 +165,7 @@ func calActionList(ctx context.Context, d *toolctx.CalendarDeps, p calParams) st
 // synthesize a human-readable brief. The link annotations come from the event
 // provenance (Source/SourceLabel/Kind) — so a meeting carries which mail it came
 // from, and the brief can say *why* it matters, not just *when*.
-func calActionBrief(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
+func calActionBrief(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) string {
 	from, to := calBriefWindow(p)
 	events, warn := calMerged(ctx, d, from, to)
 	if len(events) == 0 {
@@ -264,7 +265,7 @@ func calListRow(n int, e calendar.Event) string {
 
 // calActionGet returns rich detail for one event — the substrate for 미팅 준비:
 // time, location, full description, attendees with RSVP state, and the Meet link.
-func calActionGet(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
+func calActionGet(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) string {
 	ev, errMsg := calLookup(ctx, d, p.ID)
 	if errMsg != "" {
 		return errMsg
@@ -275,7 +276,7 @@ func calActionGet(ctx context.Context, d *toolctx.CalendarDeps, p calParams) str
 // calLookup resolves an event by id from the local store ("local:" prefix) or
 // Google. Returns (nil, errMsg) with a user-facing Korean message on any failure,
 // (event, "") on success. Shared by get and prep.
-func calLookup(ctx context.Context, d *toolctx.CalendarDeps, rawID string) (*calendar.Event, string) {
+func calLookup(ctx context.Context, d *tooldeps.CalendarDeps, rawID string) (*calendar.Event, string) {
 	id := strings.TrimSpace(rawID)
 	if id == "" {
 		return nil, "id는 필수입니다 (list로 일정 ID를 먼저 확인하세요)."
@@ -313,7 +314,7 @@ func calLookup(ctx context.Context, d *toolctx.CalendarDeps, rawID string) (*cal
 // directive to pull its linked-mail context (the Source link an analysis-generated
 // event carries) and build a prep checklist. With no id it targets the next
 // upcoming event, so "다음 미팅 준비해줘" works. The agent does the fetch + synthesis.
-func calActionPrep(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
+func calActionPrep(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) string {
 	var ev *calendar.Event
 	if strings.TrimSpace(p.ID) != "" {
 		got, errMsg := calLookup(ctx, d, p.ID)
@@ -348,7 +349,7 @@ func calActionPrep(ctx context.Context, d *toolctx.CalendarDeps, p calParams) st
 // record — the native-ownership lever a read-only Google calendar never allowed.
 // Delegation-aware: the user is a delegating executive, so only their own
 // follow-ups are surfaced; delegable execution stays in the minutes body.
-func calActionCapture(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
+func calActionCapture(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) string {
 	var ev *calendar.Event
 	if strings.TrimSpace(p.ID) != "" {
 		got, errMsg := calLookup(ctx, d, p.ID)
@@ -380,7 +381,7 @@ func calActionCapture(ctx context.Context, d *toolctx.CalendarDeps, p calParams)
 // calRecentEndedEvent returns the most recently ended timed meeting in the last
 // 24h, so "방금 회의 정리해줘" (capture with no id) targets the meeting that just
 // wrapped. All-day markers and not-yet-ended events are skipped.
-func calRecentEndedEvent(ctx context.Context, d *toolctx.CalendarDeps) *calendar.Event {
+func calRecentEndedEvent(ctx context.Context, d *tooldeps.CalendarDeps) *calendar.Event {
 	now := time.Now()
 	events, _ := calMerged(ctx, d, now.Add(-24*time.Hour), now)
 	var best *calendar.Event
@@ -398,7 +399,7 @@ func calRecentEndedEvent(ctx context.Context, d *toolctx.CalendarDeps) *calendar
 }
 
 // calNextEvent returns the soonest event from now (next 14 days), or nil.
-func calNextEvent(ctx context.Context, d *toolctx.CalendarDeps) *calendar.Event {
+func calNextEvent(ctx context.Context, d *tooldeps.CalendarDeps) *calendar.Event {
 	now := time.Now()
 	events, _ := calMerged(ctx, d, now, now.Add(14*24*time.Hour))
 	if len(events) == 0 {
@@ -467,7 +468,7 @@ func calDetail(e calendar.Event) string {
 
 // --- create / update -----------------------------------------------------
 
-func calActionCreate(d *toolctx.CalendarDeps, p calParams) string {
+func calActionCreate(d *tooldeps.CalendarDeps, p calParams) string {
 	if d.Local == nil {
 		return "로컬 캘린더를 사용할 수 없어 일정을 추가할 수 없습니다."
 	}
@@ -482,7 +483,7 @@ func calActionCreate(d *toolctx.CalendarDeps, p calParams) string {
 	return "일정을 추가했습니다.\n" + calDetail(ev)
 }
 
-func calActionUpdate(d *toolctx.CalendarDeps, p calParams) string {
+func calActionUpdate(d *tooldeps.CalendarDeps, p calParams) string {
 	id := strings.TrimSpace(p.ID)
 	if id == "" {
 		return "id는 필수입니다 (수정할 일정의 ID)."
@@ -539,7 +540,7 @@ func calParseInput(p calParams) (in localcal.CreateInput, errMsg string) {
 
 // --- delete --------------------------------------------------------------
 
-func calActionDelete(d *toolctx.CalendarDeps, p calParams) string {
+func calActionDelete(d *tooldeps.CalendarDeps, p calParams) string {
 	id := strings.TrimSpace(p.ID)
 	if id == "" {
 		return "id는 필수입니다 (삭제할 일정의 ID)."

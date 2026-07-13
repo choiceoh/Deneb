@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
 
@@ -36,7 +36,7 @@ import (
 // "[File: …]" header is still intact.
 func NewReadSkillConsultRecorder(registry *ToolRegistry) PostProcessor {
 	return func(ctx context.Context, _, output string) string {
-		if toolctx.ToolPresetFromContext(ctx) == string(toolpreset.PresetBriefcase) {
+		if toolport.ToolPresetFromContext(ctx) == string(toolpreset.PresetBriefcase) {
 			return output
 		}
 		resolved := cachedResolvedSkills()
@@ -44,7 +44,7 @@ func NewReadSkillConsultRecorder(registry *ToolRegistry) PostProcessor {
 		if name == "" {
 			return output
 		}
-		toolctx.SkillConsultLogFromContext(ctx).Add(name)
+		toolport.SkillConsultLogFromContext(ctx).Add(name)
 		return output + activateSkillRequiredTools(ctx, registry, name, resolved)
 	}
 }

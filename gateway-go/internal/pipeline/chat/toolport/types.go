@@ -1,9 +1,10 @@
-// Package toolctx provides shared types, context helpers, and dependency
-// definitions used across the chat tool subsystem (tools/, toolreg/, chat/).
+// Package toolport provides stable shared types and context helpers used across
+// the chat tool subsystem (tools/, toolreg/, chat/).
 //
 // This is a leaf package with zero intra-chat imports, enabling clean
-// dependency flow: tools/ -> toolctx/, toolreg/ -> toolctx/, chat/ -> toolctx/.
-package toolctx
+// dependency flow: tools/ -> toolport/, toolreg/ -> toolport/, chat/ -> toolport/.
+// Volatile domain/platform dependency bags live in sibling package tooldeps.
+package toolport
 
 import (
 	"context"
@@ -77,19 +78,19 @@ type RoutingConfig = chatport.RoutingConfig
 type DeliveryContext = chatport.DeliveryContext
 
 // Transcript wire types are owned by chatport. Aliases keep the established
-// toolctx API source- and JSON-compatible while Polaris and compaction depend
+// toolport API source- and JSON-compatible while Polaris and compaction depend
 // on the neutral contract directly.
 type (
 	ChatMessage    = chatport.ChatMessage
 	ChatAttachment = chatport.ChatAttachment
 )
 
-// NewTextChatMessage preserves the legacy toolctx constructor surface.
+// NewTextChatMessage preserves the legacy toolport constructor surface.
 func NewTextChatMessage(role, text string, ts int64) ChatMessage {
 	return chatport.NewTextChatMessage(role, text, ts)
 }
 
-// MarshalJSONString preserves the legacy toolctx helper surface.
+// MarshalJSONString preserves the legacy toolport helper surface.
 func MarshalJSONString(s string) json.RawMessage {
 	return chatport.MarshalJSONString(s)
 }

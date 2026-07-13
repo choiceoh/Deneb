@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 )
 
@@ -25,7 +25,7 @@ const timelineWindowDays = 90
 // project, person, place) as one chronological timeline, then directs the agent
 // to join the linked mail/wiki/deal context. Read-only guidance: the agent does
 // the cross-domain weave with its mail_archive / wiki / files tools.
-func calActionTimeline(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
+func calActionTimeline(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) string {
 	q := strings.TrimSpace(p.Query)
 	if q == "" {
 		return "타임라인을 만들 대상(거래처·프로젝트·인물·장소 등)을 query로 지정해줘."

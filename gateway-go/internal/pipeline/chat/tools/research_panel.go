@@ -13,12 +13,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // ConsultPanelFn is the server-injected fan-out engine (CoreToolDeps.ConsultPanel):
 // (system, prompt, models) → one answer per model. Empty models = all healthy.
-type ConsultPanelFn func(ctx context.Context, system, prompt string, models []string) []toolctx.PanelAnswer
+type ConsultPanelFn func(ctx context.Context, system, prompt string, models []string) []tooldeps.PanelAnswer
 
 // panelistSystem instructs each panelist to give a substantive, honest, Korean
 // answer. Kept short + identical for every model so the only variable is the
@@ -28,7 +29,7 @@ const panelistSystem = "당신은 리서치 패널의 한 패널리스트입니�
 // ToolResearchPanel returns the research_panel tool. consult is the server's
 // fan-out engine; a nil consult is rejected at registration so the Fn never
 // sees one, but it is guarded here too for safety.
-func ToolResearchPanel(consult ConsultPanelFn) toolctx.ToolFunc {
+func ToolResearchPanel(consult ConsultPanelFn) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		if consult == nil {
 			return "", fmt.Errorf("research panel unavailable: model router not wired")
@@ -58,7 +59,7 @@ func ToolResearchPanel(consult ConsultPanelFn) toolctx.ToolFunc {
 // formatPanelAnswers renders the panel for the agent-as-aggregator: a synthesis
 // directive up top, then each successful answer labeled by model + family +
 // latency, with failures listed compactly at the end.
-func formatPanelAnswers(question string, answers []toolctx.PanelAnswer) string {
+func formatPanelAnswers(question string, answers []tooldeps.PanelAnswer) string {
 	// Successes first (stable by model name); failures sink to the bottom.
 	sort.SliceStable(answers, func(i, j int) bool {
 		oi, oj := answers[i].Err == "", answers[j].Err == ""

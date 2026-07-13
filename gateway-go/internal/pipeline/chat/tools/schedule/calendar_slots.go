@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 )
 
@@ -52,7 +52,7 @@ type interval struct{ start, end time.Time }
 
 // calActionFreeSlots finds free gaps within working hours across a date range —
 // the "어디에 미팅 넣지?" answer. Pure logic over the merged event list.
-func calActionFreeSlots(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
+func calActionFreeSlots(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) string {
 	loc := calDisplayLoc()
 	now := time.Now().In(loc)
 
@@ -263,7 +263,7 @@ const (
 // the agent presents it and offers to create the protective blocks (and, for a
 // delegating executive, to send a 담당자 to delegable meetings instead). Pull-only,
 // so it adds no proactive notification.
-func calActionAudit(ctx context.Context, d *toolctx.CalendarDeps, p calParams) string {
+func calActionAudit(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) string {
 	loc := calDisplayLoc()
 	now := time.Now().In(loc)
 	from, to, errMsg := freeSlotsRange(p, now)

@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // TestRecordValidationCaseFromSuccessfulUse verifies the success mirror of the
@@ -17,7 +17,7 @@ import (
 func TestRecordValidationCaseFromSuccessfulUse(t *testing.T) {
 	tracker := newUsageRecorderTracker(t)
 	const sessionKey = "client:main:topsolar"
-	store := usageRecorderTranscriptStore{byKey: map[string][]toolctx.ChatMessage{
+	store := usageRecorderTranscriptStore{byKey: map[string][]toolport.ChatMessage{
 		sessionKey: {
 			{Role: "user", Content: json.RawMessage(`"탑솔라 프로젝트 현황 알려줘"`)},
 			{Role: "assistant", Content: json.RawMessage(`[
@@ -70,7 +70,7 @@ func TestRecordValidationCaseFromSuccessfulUse(t *testing.T) {
 func TestRecordValidationCaseFromSuccessfulUse_NoToolCallsSkipped(t *testing.T) {
 	tracker := newUsageRecorderTracker(t)
 	const sessionKey = "client:main:chat"
-	store := usageRecorderTranscriptStore{byKey: map[string][]toolctx.ChatMessage{
+	store := usageRecorderTranscriptStore{byKey: map[string][]toolport.ChatMessage{
 		sessionKey: {
 			{Role: "user", Content: json.RawMessage(`"그냥 인사"`)},
 			{Role: "assistant", Content: json.RawMessage(`"안녕하세요."`)},

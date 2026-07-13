@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -175,8 +175,8 @@ func TestAssembleContextFull_TokenBudgetTrimsOldestSummaries(t *testing.T) {
 }
 
 // blockMsg builds a ChatMessage whose Content is a raw content-block array.
-func blockMsg(role, blocksJSON string, ts int64) toolctx.ChatMessage {
-	return toolctx.ChatMessage{Role: role, Content: json.RawMessage(blocksJSON), Timestamp: ts}
+func blockMsg(role, blocksJSON string, ts int64) toolport.ChatMessage {
+	return toolport.ChatMessage{Role: role, Content: json.RawMessage(blocksJSON), Timestamp: ts}
 }
 
 func TestAssembleContextFull_RepairsDanglingToolUse(t *testing.T) {

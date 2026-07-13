@@ -9,11 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // AbortEntry describes one cancellable chat run.
-type AbortEntry = toolctx.AbortEntry
+type AbortEntry = toolport.AbortEntry
 
 // AbortTracker manages abort entries for active agent runs. Thread-safe.
 type AbortTracker struct {

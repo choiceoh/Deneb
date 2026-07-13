@@ -4,95 +4,95 @@ import (
 	"context"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
-// Context helpers — delegate to toolctx/ (the canonical definitions).
+// Context helpers — delegate to toolport/ (the canonical definitions).
 // These wrappers preserve backward compatibility for callers within chat/.
 
 // WithDeliveryContext attaches a DeliveryContext to ctx.
 func WithDeliveryContext(ctx context.Context, d *DeliveryContext) context.Context {
-	return toolctx.WithDeliveryContext(ctx, d)
+	return toolport.WithDeliveryContext(ctx, d)
 }
 
 // WithReplyFunc attaches a ReplyFunc to ctx.
 func WithReplyFunc(ctx context.Context, fn ReplyFunc) context.Context {
-	return toolctx.WithReplyFunc(ctx, fn)
+	return toolport.WithReplyFunc(ctx, fn)
 }
 
 // WithAutoDelivery marks a run whose final reply text is delivered by the
 // run-completion layer rather than the agent's in-loop message tool.
 func WithAutoDelivery(ctx context.Context) context.Context {
-	return toolctx.WithAutoDelivery(ctx)
+	return toolport.WithAutoDelivery(ctx)
 }
 
 // WithSessionKey attaches the session key to ctx.
 func WithSessionKey(ctx context.Context, key string) context.Context {
-	return toolctx.WithSessionKey(ctx, key)
+	return toolport.WithSessionKey(ctx, key)
 }
 
 // WithMediaSendFunc attaches a MediaSendFunc to ctx.
 func WithMediaSendFunc(ctx context.Context, fn MediaSendFunc) context.Context {
-	return toolctx.WithMediaSendFunc(ctx, fn)
+	return toolport.WithMediaSendFunc(ctx, fn)
 }
 
 // WithMaxUploadBytes attaches the channel-specific file upload limit to ctx.
 func WithMaxUploadBytes(ctx context.Context, n int64) context.Context {
-	return toolctx.WithMaxUploadBytes(ctx, n)
+	return toolport.WithMaxUploadBytes(ctx, n)
 }
 
 // WithTurnContext attaches a TurnContext to ctx for cross-tool result sharing.
 func WithTurnContext(ctx context.Context, tc *TurnContext) context.Context {
-	return toolctx.WithTurnContext(ctx, tc)
+	return toolport.WithTurnContext(ctx, tc)
 }
 
 // TurnContextFromContext extracts the TurnContext from ctx. Returns nil if not set.
 func TurnContextFromContext(ctx context.Context) *TurnContext {
-	return toolctx.TurnContextFromContext(ctx)
+	return toolport.TurnContextFromContext(ctx)
 }
 
 // WithRunCache attaches a RunCache to ctx for cross-turn result caching.
 func WithRunCache(ctx context.Context, rc *RunCache) context.Context {
-	return toolctx.WithRunCache(ctx, rc)
+	return toolport.WithRunCache(ctx, rc)
 }
 
 // RunCacheFromContext extracts the RunCache from ctx. Returns nil if not set.
 func RunCacheFromContext(ctx context.Context) *RunCache {
-	return toolctx.RunCacheFromContext(ctx)
+	return toolport.RunCacheFromContext(ctx)
 }
 
 // WithFileCache attaches a FileCache to ctx for cross-turn file read dedup.
 func WithFileCache(ctx context.Context, fc *agent.FileCache) context.Context {
-	return toolctx.WithFileCache(ctx, fc)
+	return toolport.WithFileCache(ctx, fc)
 }
 
 // WithToolPreset attaches a tool preset to ctx for execution-time enforcement.
 func WithToolPreset(ctx context.Context, preset string) context.Context {
-	return toolctx.WithToolPreset(ctx, preset)
+	return toolport.WithToolPreset(ctx, preset)
 }
 
-// SpawnFlag is a re-export of toolctx.SpawnFlag.
-type SpawnFlag = toolctx.SpawnFlag
+// SpawnFlag is a re-export of toolport.SpawnFlag.
+type SpawnFlag = toolport.SpawnFlag
 
 // NewSpawnFlag creates a new (unset) SpawnFlag.
 func NewSpawnFlag() *SpawnFlag {
-	return toolctx.NewSpawnFlag()
+	return toolport.NewSpawnFlag()
 }
 
 // WithSpawnFlag attaches a SpawnFlag to ctx.
 func WithSpawnFlag(ctx context.Context, f *SpawnFlag) context.Context {
-	return toolctx.WithSpawnFlag(ctx, f)
+	return toolport.WithSpawnFlag(ctx, f)
 }
 
-// DeferredActivation is a re-export of toolctx.DeferredActivation.
-type DeferredActivation = toolctx.DeferredActivation
+// DeferredActivation is a re-export of toolport.DeferredActivation.
+type DeferredActivation = toolport.DeferredActivation
 
 // NewDeferredActivation creates a new (empty) DeferredActivation tracker.
 func NewDeferredActivation() *DeferredActivation {
-	return toolctx.NewDeferredActivation()
+	return toolport.NewDeferredActivation()
 }
 
 // WithDeferredActivation attaches a DeferredActivation to ctx.
 func WithDeferredActivation(ctx context.Context, da *DeferredActivation) context.Context {
-	return toolctx.WithDeferredActivation(ctx, da)
+	return toolport.WithDeferredActivation(ctx, da)
 }

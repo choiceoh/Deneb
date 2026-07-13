@@ -5,7 +5,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // Params contains only the turn metadata required by recall preflight.
@@ -19,7 +19,7 @@ type Params struct {
 // Deps contains the optional recall evidence sources. Nil fields disable their source.
 type Deps struct {
 	Wiki         *wiki.Store
-	Transcript   toolctx.TranscriptStore
+	Transcript   toolport.TranscriptStore
 	FileRecall   FileRecallFunc
 	Org          func() (org.OrgTree, error)
 	Briefcase    bool

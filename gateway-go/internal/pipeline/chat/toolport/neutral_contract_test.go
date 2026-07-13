@@ -1,4 +1,4 @@
-package toolctx
+package toolport
 
 import (
 	"encoding/json"
@@ -27,7 +27,7 @@ func TestNeutralTranscriptAliasesPreserveWireAndHelpers(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(compatJSON) != string(neutralJSON) {
-		t.Fatalf("toolctx JSON = %s, neutral JSON = %s", compatJSON, neutralJSON)
+		t.Fatalf("toolport JSON = %s, neutral JSON = %s", compatJSON, neutralJSON)
 	}
 	if compat.TextContent() != neutral.TextContent() || !compat.HasContent() {
 		t.Fatalf("compat helper mismatch: %#v / %#v", compat, neutral)

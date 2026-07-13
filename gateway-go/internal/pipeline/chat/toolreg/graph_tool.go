@@ -1,12 +1,12 @@
 package toolreg
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 )
 
 // RegisterGraphTool registers the deferred graph-navigation tool.
-func RegisterGraphTool(registry toolctx.ToolRegistrar, workspaceDir string) {
+func RegisterGraphTool(registry toolport.ToolRegistrar, workspaceDir string) {
 	// Graphify: knowledge-graph queries over the wiki concept graph (people,
 	// projects, deals, decisions, etc.) built by the wiki dreamer each cycle.
 	// Deferred: at ~1,200 tokens this was the single largest eager tool on the
@@ -16,7 +16,7 @@ func RegisterGraphTool(registry toolctx.ToolRegistrar, workspaceDir string) {
 	// time — exactly when the model is about to use it. No automation prompt
 	// directs graphify by name, so the fetch round-trip only ever lands on
 	// interactive turns (cf. heartbeat_update's eager rationale).
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name: "graphify",
 		Description: "위키 지식 그래프 질의 (사람·프로젝트·거래·결정·선호 등 개념/관계 그래프, dreamer가 매 사이클 갱신). " +
 			"graph=\"wiki\"(기본, ~/.deneb/wiki-graph) | graph=\"code\"(코드 호출/import/contains 그래프, `graphify update .`로 빌드, workspace/graphify-out). " +

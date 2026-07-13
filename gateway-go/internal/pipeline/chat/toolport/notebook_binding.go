@@ -1,4 +1,4 @@
-package toolctx
+package toolport
 
 import (
 	"strings"
@@ -13,10 +13,10 @@ import (
 // the whole-corpus recall alongside it would dilute "이 자료 위주로" and compete
 // for the turn's input budget.
 //
-// Why this lives in toolctx (a leaf package): the notebook tool (the writer —
+// Why this lives in toolport (a leaf package): the notebook tool (the writer —
 // open/close actions) and the chat run pipeline (the readers — run_exec.go,
 // run_prepare.go, slash_dispatch.go) both need it. tools/ may not import chat/,
-// so a chat-package store would be unreachable from the tool. toolctx is the
+// so a chat-package store would be unreachable from the tool. toolport is the
 // shared leaf both already depend on, and it already holds comparable per-run
 // state (RunCache, TurnContext).
 //

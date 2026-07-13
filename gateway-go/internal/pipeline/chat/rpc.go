@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -366,11 +366,11 @@ func (h *Handler) History(_ context.Context, req *protocol.RequestFrame) *protoc
 		// drop tool_result blocks so raw tool output isn't shown as a bubble,
 		// and strip the baked "[<RFC3339>] " prefix so user bubbles show what
 		// was typed. Shared with miniapp.sessions.transcript — see
-		// toolctx/display.go.
-		msgs = toolctx.StripLinkEnrichmentForDisplay(msgs)
-		msgs = toolctx.StripToolResultBlocksForDisplay(msgs)
-		msgs = toolctx.StripUserMessageTimestampsForDisplay(msgs)
-		msgs = toolctx.TransliterateAssistantTextForDisplay(msgs)
+		// toolport/display.go.
+		msgs = toolport.StripLinkEnrichmentForDisplay(msgs)
+		msgs = toolport.StripToolResultBlocksForDisplay(msgs)
+		msgs = toolport.StripUserMessageTimestampsForDisplay(msgs)
+		msgs = toolport.TransliterateAssistantTextForDisplay(msgs)
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]any{
 			"messages": msgs,
 			"total":    total,

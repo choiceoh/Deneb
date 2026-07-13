@@ -9,7 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/lifecycletool"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
@@ -26,7 +26,7 @@ func (b *skillLifecycleBackend) RecordSelfCorrectionCandidate(ctx context.Contex
 		}, nil
 	}
 	if req.SessionKey == "" {
-		req.SessionKey = toolctx.SessionKeyFromContext(ctx)
+		req.SessionKey = toolport.SessionKeyFromContext(ctx)
 	}
 	// Default provenance: agent-proposed candidates were landing with an empty
 	// source (observed 2026-07-04), indistinguishable from legacy rows.
@@ -134,7 +134,7 @@ func (b *skillLifecycleBackend) RecordSkillValidationCaseFromSession(ctx context
 		}, nil
 	}
 	if req.SessionKey == "" {
-		req.SessionKey = toolctx.SessionKeyFromContext(ctx)
+		req.SessionKey = toolport.SessionKeyFromContext(ctx)
 	}
 	if strings.TrimSpace(req.SessionKey) == "" {
 		return chattools.SkillValidationCaseFromSessionResult{}, fmt.Errorf("sessionKey is required")

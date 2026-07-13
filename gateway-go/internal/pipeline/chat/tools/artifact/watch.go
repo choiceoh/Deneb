@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -49,7 +49,7 @@ const watchSystemPrompt = "당신은 영상을 분석하는 전문가입니다. 
 // ToolWatch returns a ToolFunc that watches (frames + subtitles + vision
 // analysis) a YouTube URL or a local video file. workspaceDir bounds local file
 // access; an empty string disables local-file watching (URL-only).
-func ToolWatch(workspaceDir string) toolctx.ToolFunc {
+func ToolWatch(workspaceDir string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p watchParams
 		if err := jsonutil.UnmarshalInto("watch params", input, &p); err != nil {

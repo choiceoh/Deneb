@@ -9,11 +9,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-var NewTextChatMessage = toolctx.NewTextChatMessage
+var NewTextChatMessage = toolport.NewTextChatMessage
 
 func TestFileTranscriptStore_AppendAndLoad(t *testing.T) {
 	dir := t.TempDir()
@@ -110,7 +110,7 @@ func TestFileTranscriptStore_RedactsRichBlocks(t *testing.T) {
 		{"type": "tool_use", "id": "tu_1", "name": "fs_read", "input": map[string]any{"path": ".env"}},
 	}
 	raw, _ := json.Marshal(blocks)
-	msg := toolctx.ChatMessage{
+	msg := toolport.ChatMessage{
 		Role:    "assistant",
 		Content: raw,
 	}

@@ -1,7 +1,7 @@
 package chat
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolreg"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/codeaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
@@ -37,7 +37,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// Deferred tool activation: fetch_tools lets the LLM load schemas on demand.
 	// Registered here (not in toolreg/) because it needs the chat-side
 	// ToolRegistry to satisfy FetchToolsRegistry (DeferredToolDef / DeferredSummaries).
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "fetch_tools",
 		Description: "Load full schemas for deferred tools so you can call them. Use names (exact) or query (keyword search). The activated tools become available on the next turn",
 		InputSchema: toolreg.FetchToolsSchema(),
@@ -54,7 +54,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// Main-only is preserved independently: absent from toolpreset, so restricted
 	// sub-agents cannot reach this primitive (the preset allowlist gates them
 	// regardless of eager/deferred).
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "code_action",
 		Description: codeaction.CodeActionDescription,
 		InputSchema: codeaction.CodeActionSchema(),

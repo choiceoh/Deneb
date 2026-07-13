@@ -11,7 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -92,7 +93,7 @@ type fleetDiagnosisView struct {
 
 // ToolFleet manages the SparkFleet control plane. A nil/empty base URL means the
 // integration is off, in which case every action returns a calm "off" message.
-func ToolFleet(d *toolctx.FleetDeps) toolctx.ToolFunc {
+func ToolFleet(d *tooldeps.FleetDeps) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action string `json:"action"`

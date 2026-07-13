@@ -18,7 +18,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -47,7 +47,7 @@ type SessionsLister interface {
 // can remove a dismissed conversation's history for good rather than just
 // hiding the live row. Lets tests provide a fake without standing up file I/O.
 type TranscriptLoader interface {
-	Load(sessionKey string, limit int) ([]toolctx.ChatMessage, int, error)
+	Load(sessionKey string, limit int) ([]toolport.ChatMessage, int, error)
 	Delete(sessionKey string) error
 }
 
@@ -129,12 +129,12 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 		// prefix so user bubbles show what was typed. The stored transcript is
 		// untouched. This RPC is what the native client actually loads its
 		// timeline from, so the strip must live here, not only on chat.history.
-		msgs = toolctx.StripLinkEnrichmentForDisplay(msgs)
-		msgs = toolctx.StripToolResultBlocksForDisplay(msgs)
-		msgs = toolctx.StripUserMessageTimestampsForDisplay(msgs)
+		msgs = toolport.StripLinkEnrichmentForDisplay(msgs)
+		msgs = toolport.StripToolResultBlocksForDisplay(msgs)
+		msgs = toolport.StripUserMessageTimestampsForDisplay(msgs)
 		// Read Sino-Korean Hanja in assistant prose as Hangul (報告書 → 보고서) —
 		// Chinese-lineage models sometimes emit it. Display-only; transcript intact.
-		msgs = toolctx.TransliterateAssistantTextForDisplay(msgs)
+		msgs = toolport.TransliterateAssistantTextForDisplay(msgs)
 
 		rows := make([]transcriptMsgOut, 0, len(msgs))
 		for _, m := range msgs {

@@ -1,4 +1,4 @@
-package toolctx
+package tooldeps
 
 import (
 	"context"
@@ -16,11 +16,15 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/process"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
 )
+
+// TranscriptStore is the stable transcript contract owned by chatport.
+type TranscriptStore = chatport.TranscriptStore
 
 // CoreToolDeps holds all dependencies for core agent tools.
 // It composes focused dep structs for each tool group.

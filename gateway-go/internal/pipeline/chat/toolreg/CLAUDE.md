@@ -1,8 +1,8 @@
 # Tool Registry 변경 지도
 
 이 패키지는 agent tool의 이름, 설명, JSON schema와 실행 constructor를 한
-`toolctx.ToolRegistrar`에 연결하는 배선 계층이다. 실행 동작은 `tools` 하위
-패키지가, 공용 계약은 `toolctx`가 소유하며 여기서는 등록 정책만 결정한다.
+`toolport.ToolRegistrar`에 연결하는 배선 계층이다. 실행 동작은 `tools` 하위
+패키지가, 공용 계약은 `toolport`가 소유하며 여기서는 등록 정책만 결정한다.
 
 ## 진입점과 소유권
 
@@ -21,10 +21,10 @@
 
 ## 의존 방향과 불변조건
 
-- 의존 방향은 `chat → toolreg → tools/toolctx`다. toolreg는 상위
-  `pipeline/chat` 패키지를 import하지 않으며, tool 구현을 이 패키지로 옮기지
-  않는다.
-- 등록되는 모든 `toolctx.ToolDef`는 유일하고 비어 있지 않은 이름·설명,
+- 의존 방향은 `chat → toolreg → tools/toolport`다. toolreg는 상위
+  `pipeline/chat` 패키지를 import하지 않으며, tool 구현이나 dependency bag
+  정의를 이 패키지로 옮기지 않는다. 도구 의존 bag은 `tooldeps`가 소유한다.
+- 등록되는 모든 `toolport.ToolDef`는 유일하고 비어 있지 않은 이름·설명,
   `type=object` schema, non-nil 함수가 반드시 함께 있어야 한다.
 - optional dependency가 없으면 해당 tool만 등록하지 않는다. 비어 있는
   구현을 노출하거나 eager/deferred 정책을 우회하지 않는다.

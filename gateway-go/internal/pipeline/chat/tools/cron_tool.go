@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
@@ -18,7 +19,7 @@ import (
 // ToolCron returns a tool function that manages cron jobs.
 // When Service is available, uses persistent storage with full cron expression support.
 // Falls back to basic Scheduler for in-memory operation.
-func ToolCron(d *toolctx.ChronoDeps) ToolFunc {
+func ToolCron(d *tooldeps.ChronoDeps) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action       string         `json:"action"`
@@ -185,7 +186,7 @@ func cronList(svc *cron.Service) (string, error) {
 	return sb.String(), nil
 }
 
-func cronAdd(ctx context.Context, d *toolctx.ChronoDeps, name, schedule, command string, enabled *bool, jobObj map[string]any, opts cronToolOpts) (string, error) {
+func cronAdd(ctx context.Context, d *tooldeps.ChronoDeps, name, schedule, command string, enabled *bool, jobObj map[string]any, opts cronToolOpts) (string, error) {
 	// Support nested job object.
 	if jobObj != nil {
 		if v, ok := jobObj["name"].(string); ok && name == "" {
@@ -255,7 +256,7 @@ func cronAdd(ctx context.Context, d *toolctx.ChronoDeps, name, schedule, command
 			// thread ID is captured too so a cron defined inside a forum topic
 			// produces its output in that same topic instead of leaking into
 			// General — the user-visible win of M4.
-			if delivery := toolctx.DeliveryFromContext(ctx); delivery != nil && delivery.To != "" {
+			if delivery := toolport.DeliveryFromContext(ctx); delivery != nil && delivery.To != "" {
 				job.Delivery = &cron.JobDeliveryConfig{
 					Channel:  delivery.Channel,
 					To:       delivery.To,
@@ -286,7 +287,7 @@ func cronAdd(ctx context.Context, d *toolctx.ChronoDeps, name, schedule, command
 	return "", fmt.Errorf("크론 서비스를 사용할 수 없습니다")
 }
 
-func cronUpdate(ctx context.Context, d *toolctx.ChronoDeps, jobID, name, schedule, command string, enabled *bool, opts cronToolOpts) (string, error) {
+func cronUpdate(ctx context.Context, d *tooldeps.ChronoDeps, jobID, name, schedule, command string, enabled *bool, opts cronToolOpts) (string, error) {
 	if jobID == "" {
 		return "", fmt.Errorf("jobId가 필요합니다. cron list로 ID를 확인하세요.")
 	}
@@ -355,7 +356,7 @@ func cronUpdate(ctx context.Context, d *toolctx.ChronoDeps, jobID, name, schedul
 	return "", fmt.Errorf("업데이트에는 영속 크론 서비스가 필요합니다 (사용 불가)")
 }
 
-func cronRemove(d *toolctx.ChronoDeps, jobID string) (string, error) {
+func cronRemove(d *tooldeps.ChronoDeps, jobID string) (string, error) {
 	if jobID == "" {
 		return "", fmt.Errorf("jobId가 필요합니다. cron list로 ID를 확인하세요.")
 	}
@@ -365,7 +366,7 @@ func cronRemove(d *toolctx.ChronoDeps, jobID string) (string, error) {
 	return fmt.Sprintf("✅ 크론 작업 **%s** 삭제 완료.", jobID), nil
 }
 
-func cronRun(ctx context.Context, d *toolctx.ChronoDeps, jobID string) (string, error) {
+func cronRun(ctx context.Context, d *tooldeps.ChronoDeps, jobID string) (string, error) {
 	if jobID == "" {
 		return "", fmt.Errorf("jobId가 필요합니다. cron list로 ID를 확인하세요.")
 	}
@@ -385,7 +386,7 @@ func cronRun(ctx context.Context, d *toolctx.ChronoDeps, jobID string) (string, 
 	return sb.String(), nil
 }
 
-func cronGet(d *toolctx.ChronoDeps, jobID string) (string, error) {
+func cronGet(d *tooldeps.ChronoDeps, jobID string) (string, error) {
 	if jobID == "" {
 		return "", fmt.Errorf("jobId가 필요합니다. cron list로 ID를 확인하세요.")
 	}
@@ -452,7 +453,7 @@ func cronGet(d *toolctx.ChronoDeps, jobID string) (string, error) {
 	return sb.String(), nil
 }
 
-func cronRuns(d *toolctx.ChronoDeps, jobID string, limit int) (string, error) {
+func cronRuns(d *tooldeps.ChronoDeps, jobID string, limit int) (string, error) {
 	if limit <= 0 {
 		limit = 10
 	}

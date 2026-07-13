@@ -9,7 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // Replay-input reconstruction split out of skill_lifecycle_tool.go (pure
@@ -294,7 +294,7 @@ func looksOpaqueReplayFragment(value string) bool {
 	return true
 }
 
-func buildSkillLifecycleSessionContext(store toolctx.TranscriptStore, sessionKey string) (generation.SessionContext, error) {
+func buildSkillLifecycleSessionContext(store toolport.TranscriptStore, sessionKey string) (generation.SessionContext, error) {
 	sctx := generation.SessionContext{Key: sessionKey}
 	if store == nil {
 		return sctx, nil
@@ -321,7 +321,7 @@ func buildSkillLifecycleSessionContext(store toolctx.TranscriptStore, sessionKey
 }
 
 // BuildSessionContext reconstructs the lifecycle review context for a session.
-func BuildSessionContext(store toolctx.TranscriptStore, sessionKey string) (generation.SessionContext, error) {
+func BuildSessionContext(store toolport.TranscriptStore, sessionKey string) (generation.SessionContext, error) {
 	return buildSkillLifecycleSessionContext(store, sessionKey)
 }
 

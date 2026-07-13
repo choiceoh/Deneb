@@ -10,7 +10,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/fileshare"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
@@ -46,7 +46,7 @@ type FilesSemanticSearchFunc func(ctx context.Context, query string, max int) ([
 // semanticSearch (optional) powers the search action's semantic=true mode by
 // ranking files by meaning (BGE-M3 vectors). Nil disables semantic search
 // gracefully — a semantic query then falls back to name/content matching.
-func ToolFiles(semanticSearch FilesSemanticSearchFunc) toolctx.ToolFunc {
+func ToolFiles(semanticSearch FilesSemanticSearchFunc) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p filesParams
 		if err := jsonutil.UnmarshalInto("files params", input, &p); err != nil {

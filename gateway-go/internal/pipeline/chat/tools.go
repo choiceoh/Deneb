@@ -13,7 +13,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
@@ -26,16 +26,16 @@ const (
 // ToolExecutor executes a named tool with JSON input and returns the result.
 type ToolExecutor = agent.ToolExecutor
 
-// Type aliases — canonical definitions are in toolctx/.
+// Type aliases — canonical definitions are in toolport/.
 type (
-	ToolFunc = toolctx.ToolFunc
-	ToolDef  = toolctx.ToolDef
+	ToolFunc = toolport.ToolFunc
+	ToolDef  = toolport.ToolDef
 )
 
 // Compile-time interface compliance.
 var (
-	_ agent.ToolExecutor    = (*ToolRegistry)(nil)
-	_ toolctx.ToolRegistrar = (*ToolRegistry)(nil)
+	_ agent.ToolExecutor     = (*ToolRegistry)(nil)
+	_ toolport.ToolRegistrar = (*ToolRegistry)(nil)
 )
 
 // ToolRegistry maps tool names to tool definitions (executor + schema + description).
@@ -109,7 +109,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	if !ok {
 		return "", r.unknownToolError(name)
 	}
-	presetName := toolctx.ToolPresetFromContext(ctx)
+	presetName := toolport.ToolPresetFromContext(ctx)
 	briefcasePreset := presetName == string(toolpreset.PresetBriefcase)
 
 	// Enforce tool preset: reject tools not in the allowed set.
@@ -125,7 +125,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 
 	// Dry-run: suppress side-effect tools (everything not on the read-only
 	// allowlist) before any execution machinery runs. See tool_dry_run.go.
-	if toolctx.ToolDryRunFromContext(ctx) {
+	if toolport.ToolDryRunFromContext(ctx) {
 		if _, safe := dryRunSafeTools[name]; !safe {
 			stub := dryRunStub(name)
 			// Keep the verify gate faithful in replays (review catch on
@@ -148,7 +148,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	if !briefcasePreset {
 		if repaired, didRepair := repairToolArguments(input); didRepair {
 			slog.Warn("repaired malformed tool-call arguments", "tool", name, "bytes", len(input))
-			toolctx.ToolExecStatsFromContext(ctx).RecordRepaired(name)
+			toolport.ToolExecStatsFromContext(ctx).RecordRepaired(name)
 			input = repaired
 		}
 	}
@@ -176,7 +176,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 		if cached, ok := rc.Get(cacheKey); ok {
 			// Registry-internal outcome — counted here because the tool fn
 			// never runs (see ToolExecStats).
-			toolctx.ToolExecStatsFromContext(ctx).RecordCacheHit(name)
+			toolport.ToolExecStatsFromContext(ctx).RecordCacheHit(name)
 			if wantCompress && cached != "" {
 				return compressToolOutput(ctx, name, cached, slog.Default()), nil
 			}
@@ -206,11 +206,11 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 		maxOutput = def.MaxOutput
 	}
 	if len(output) > maxOutput {
-		toolctx.ToolExecStatsFromContext(ctx).RecordTruncated(name)
+		toolport.ToolExecStatsFromContext(ctx).RecordTruncated(name)
 		var spillID string
 		// Spill full content to disk so the LLM can retrieve it via read_spillover.
 		if r.spillStore != nil {
-			sessionKey := toolctx.SessionKeyFromContext(ctx)
+			sessionKey := toolport.SessionKeyFromContext(ctx)
 			spillID, _ = r.spillStore.Store(sessionKey, name, output)
 		}
 		output = agent.TruncateHeadTail(output, maxOutput, spillID)
@@ -320,7 +320,7 @@ func invalidateCachesAfterTool(ctx context.Context, name string, input json.RawM
 				rc.Invalidate()
 			}
 		}
-		if fc := toolctx.FileCacheFromContext(ctx); fc != nil {
+		if fc := toolport.FileCacheFromContext(ctx); fc != nil {
 			if mutPath != "" {
 				fc.Invalidate(mutPath)
 			}
@@ -660,14 +660,14 @@ func toLLMTool(def ToolDef) llm.Tool {
 }
 
 // DeferredSummaries returns name+description for all deferred (non-hidden) tools.
-func (r *ToolRegistry) DeferredSummaries() []toolctx.DeferredToolSummary {
+func (r *ToolRegistry) DeferredSummaries() []toolport.DeferredToolSummary {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	var out []toolctx.DeferredToolSummary
+	var out []toolport.DeferredToolSummary
 	for _, name := range r.order {
 		def := r.tools[name]
 		if def.Deferred && !def.Hidden {
-			out = append(out, toolctx.DeferredToolSummary{
+			out = append(out, toolport.DeferredToolSummary{
 				Name:        def.Name,
 				Description: def.Description,
 			})

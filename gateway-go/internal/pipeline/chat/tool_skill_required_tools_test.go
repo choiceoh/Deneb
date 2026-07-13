@@ -6,14 +6,14 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 func requiredToolsRegistry() *ToolRegistry {
 	r := NewToolRegistry()
-	r.RegisterTool(toolctx.ToolDef{Name: "graphify", Description: "graph queries", Deferred: true})
-	r.RegisterTool(toolctx.ToolDef{Name: "notebook", Description: "notebook", Deferred: true})
-	r.RegisterTool(toolctx.ToolDef{Name: "exec", Description: "run a command"})
+	r.RegisterTool(toolport.ToolDef{Name: "graphify", Description: "graph queries", Deferred: true})
+	r.RegisterTool(toolport.ToolDef{Name: "notebook", Description: "notebook", Deferred: true})
+	r.RegisterTool(toolport.ToolDef{Name: "exec", Description: "run a command"})
 	return r
 }
 
@@ -29,8 +29,8 @@ func requiredToolsCatalog() []skills.PromptSkill {
 // exactly what was activated, and the DeferredActivation tracker receives it.
 func TestActivateSkillRequiredTools(t *testing.T) {
 	registry := requiredToolsRegistry()
-	da := toolctx.NewDeferredActivation()
-	ctx := toolctx.WithDeferredActivation(context.Background(), da)
+	da := toolport.NewDeferredActivation()
+	ctx := toolport.WithDeferredActivation(context.Background(), da)
 
 	notice := activateSkillRequiredTools(ctx, registry, "graph-analysis", requiredToolsCatalog())
 	if !strings.Contains(notice, "graphify") {
@@ -55,8 +55,8 @@ func TestActivateSkillRequiredTools_noOps(t *testing.T) {
 		t.Fatalf("nil DeferredActivation must no-op, got %q", got)
 	}
 
-	da := toolctx.NewDeferredActivation()
-	ctx := toolctx.WithDeferredActivation(context.Background(), da)
+	da := toolport.NewDeferredActivation()
+	ctx := toolport.WithDeferredActivation(context.Background(), da)
 	if got := activateSkillRequiredTools(ctx, registry, "plain-skill", catalog); got != "" {
 		t.Fatalf("skill without requires_tools must no-op, got %q", got)
 	}
@@ -78,8 +78,8 @@ func TestActivateSkillRequiredTools_noOps(t *testing.T) {
 	}
 
 	// Preset gate: the conversation preset does not allow graphify.
-	restricted := toolctx.WithToolPreset(
-		toolctx.WithDeferredActivation(context.Background(), toolctx.NewDeferredActivation()),
+	restricted := toolport.WithToolPreset(
+		toolport.WithDeferredActivation(context.Background(), toolport.NewDeferredActivation()),
 		"conversation",
 	)
 	if got := activateSkillRequiredTools(restricted, registry, "graph-analysis", catalog); got != "" {

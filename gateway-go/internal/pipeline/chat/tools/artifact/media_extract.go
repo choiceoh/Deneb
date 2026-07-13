@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -33,7 +33,7 @@ const (
 // hotwords supplies the wiki+contacts proper-noun bias the capture path
 // already uses (people/companies/deals); nil just skips the bias — the
 // operator's DENEB_ASR_HOTWORDS env is still merged downstream.
-func ToolTranscribe(hotwords func() string) toolctx.ToolFunc {
+func ToolTranscribe(hotwords func() string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Path     string `json:"path"`
@@ -68,7 +68,7 @@ func ToolTranscribe(hotwords func() string) toolctx.ToolFunc {
 // mail-attachment and notebook paths use, so images go to PaddleOCR-VL (with
 // tesseract fallback), born-digital PDFs to pdftotext with OCR fallback, and
 // office formats to their parsers.
-func ToolOCR() toolctx.ToolFunc {
+func ToolOCR() toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Path string `json:"path"`

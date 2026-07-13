@@ -9,7 +9,8 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 func newTestWikiStore(t *testing.T) *wiki.Store {
@@ -34,17 +35,17 @@ func newTestWikiStore(t *testing.T) *wiki.Store {
 	return store
 }
 
-func newTestNotebookTool(t *testing.T) (toolctx.ToolFunc, *toolctx.NotebookDeps) {
+func newTestNotebookTool(t *testing.T) (toolport.ToolFunc, *tooldeps.NotebookDeps) {
 	t.Helper()
 	store, err := notebook.NewStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("notebook.NewStore: %v", err)
 	}
-	deps := &toolctx.NotebookDeps{Store: store, Wiki: newTestWikiStore(t)}
+	deps := &tooldeps.NotebookDeps{Store: store, Wiki: newTestWikiStore(t)}
 	return ToolNotebook(deps), deps
 }
 
-func callNotebook(t *testing.T, fn toolctx.ToolFunc, payload map[string]any) string {
+func callNotebook(t *testing.T, fn toolport.ToolFunc, payload map[string]any) string {
 	t.Helper()
 	raw, _ := json.Marshal(payload)
 	out, err := fn(context.Background(), raw)
@@ -55,7 +56,7 @@ func callNotebook(t *testing.T, fn toolctx.ToolFunc, payload map[string]any) str
 }
 
 // extractID pulls the "id=<x>" token a create/add response embeds.
-func extractID(t *testing.T, deps *toolctx.NotebookDeps) string {
+func extractID(t *testing.T, deps *tooldeps.NotebookDeps) string {
 	t.Helper()
 	list := deps.Store.List()
 	if len(list) == 0 {
@@ -65,7 +66,7 @@ func extractID(t *testing.T, deps *toolctx.NotebookDeps) string {
 }
 
 func TestNotebookDisabledWhenNoStore(t *testing.T) {
-	fn := ToolNotebook(&toolctx.NotebookDeps{})
+	fn := ToolNotebook(&tooldeps.NotebookDeps{})
 	out := callNotebook(t, fn, map[string]any{"action": "list"})
 	if !strings.Contains(out, "비활성") {
 		t.Fatalf("expected disabled notice, got %q", out)

@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -21,7 +21,7 @@ type GenesisDeps struct {
 	Genesis     *generation.Service
 	Evolver     *genesis.Evolver
 	Tracker     *genesis.Tracker
-	Transcripts toolctx.TranscriptStore // optional: enables session-based genesis
+	Transcripts toolport.TranscriptStore // optional: enables session-based genesis
 }
 
 // GenesisMethods returns genesis-related RPC handler methods.
@@ -214,7 +214,7 @@ func skillsUsageReport(deps GenesisDeps) rpcutil.HandlerFunc {
 }
 
 // buildSessionContext loads transcript messages and extracts genesis-relevant data.
-func buildSessionContext(store toolctx.TranscriptStore, sessionKey string) (generation.SessionContext, error) {
+func buildSessionContext(store toolport.TranscriptStore, sessionKey string) (generation.SessionContext, error) {
 	sctx := generation.SessionContext{Key: sessionKey}
 	if store == nil {
 		return sctx, nil // degrade gracefully — generate with minimal context

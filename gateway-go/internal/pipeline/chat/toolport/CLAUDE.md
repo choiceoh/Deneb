@@ -1,16 +1,17 @@
-# Tool Context 계약 변경 지도
+# Tool Port 계약 변경 지도
 
 이 패키지는 chat tool 구현·등록·실행기가 함께 쓰는 가장 낮은 공유 계약
-계층이다. 실행 구현이나 등록 정책을 소유하지 않고, typed function/interface,
-dependency bag, per-turn context와 작은 동시성 안전 상태만 제공한다.
+계층이다. 실행 구현·등록 정책·도메인 의존 bag을 소유하지 않고, typed
+function/interface, per-turn context와 작은 동시성 안전 상태만 제공한다.
 
 ## 진입점과 책임
 
 - `types.go`의 `ToolFunc`, `ToolDef`, `ToolRegistrar`,
   `ToolExecutor`가 구현과 registry 사이의 핵심 포트다.
-- `deps.go`의 `CoreToolDeps`, `ProcessDeps`, `SessionDeps`,
-  `ChronoDeps`, `WikiDeps`, `CalendarDeps`가 composition root에서
-  tool constructor로 전달되는 의존 계약이다.
+- sibling `tooldeps/`의 `CoreToolDeps`, `ProcessDeps`, `SessionDeps`,
+  `ChronoDeps`, `WikiDeps`, `CalendarDeps`가 composition root에서 tool
+  constructor로 전달되는 의존 계약이다. 새 도메인/platform 의존은
+  `toolport`가 아니라 `tooldeps`에 둔다.
 - `context.go`의 `WithDeliveryContext`/`DeliveryFromContext`,
   `WithTurnContext`/`TurnContextFromContext`,
   `WithRunCache`/`RunCacheFromContext`가 typed context 접근 경계다.
@@ -25,8 +26,10 @@ dependency bag, per-turn context와 작은 동시성 안전 상태만 제공한�
 
 ## 의존 방향과 불변조건
 
-- `toolctx`는 chat subtree의 leaf다. `tools`, `toolreg`, chat root를
-  import하지 않으며 lower domain/platform 타입만 좁은 포트로 참조한다.
+- `toolport`는 chat subtree의 leaf다. `tools`, `toolreg`, chat root,
+  lower domain/platform package를 import하지 않는다.
+- `tooldeps`는 도구 wiring용 dependency bag의 소유자다. `toolport`는
+  `tooldeps`를 import하지 않는다.
 - context 값은 반드시 같은 파일의 `With*`/`*FromContext` 쌍으로
   읽고 쓴다. 외부 package가 key를 복제하거나 string key를 만들지 않는다.
 - `TurnContext`, `RunCache`, `ToolExecStats`처럼 여러 goroutine이
@@ -35,9 +38,6 @@ dependency bag, per-turn context와 작은 동시성 안전 상태만 제공한�
   노출하지 않게 한다.
 - mutation 분류와 cache invalidation은 한 계약이다. 새 write 도구를
   cacheable read로 분류하거나 path-scoped invalidation에서 누락하지 않는다.
-- `CoreToolDeps`에는 능력 포트와 데이터만 둔다. tool 구현, server 객체,
-  registration side effect를 넣어 dependency bag을 composition root로
-  바꾸지 않는다.
 - display helper는 RPC 응답용 message slice에만 적용한다.
   `StripToolResultBlocksForDisplay`는 새 slice를 만들지만 다른 helper는
   전달받은 slice를 제자리 수정할 수 있으므로 persisted message backing
@@ -48,4 +48,4 @@ dependency bag, per-turn context와 작은 동시성 안전 상태만 제공한�
 context 취소, concurrent wait/store, cache invalidation, defensive copy와
 display 원본 불변성을 테스트한다. 결정적 패키지 검증 명령은:
 
-`cd gateway-go && go test -count=1 ./internal/pipeline/chat/toolctx`
+`cd gateway-go && go test -count=1 ./internal/pipeline/chat/toolport`

@@ -5,18 +5,18 @@ import (
 	"context"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // RunParams holds all parameters for an async agent run.
 type Params struct {
 	SessionKey   string
 	Message      string
-	Attachments  []toolctx.ChatAttachment
+	Attachments  []toolport.ChatAttachment
 	Model        string // role name ("main", "lightweight", "fallback"); raw model ID only via /model override
 	System       string // system prompt override
 	ClientRunID  string
-	Delivery     *toolctx.DeliveryContext
+	Delivery     *toolport.DeliveryContext
 	WorkspaceDir string // per-channel workspace override (empty = use global default)
 
 	// Sampling parameters (from OpenAI-compatible API pass-through).

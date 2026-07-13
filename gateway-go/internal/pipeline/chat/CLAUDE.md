@@ -6,8 +6,9 @@
 
 | 경로 | 역할 | 의존 규칙 |
 |---|---|---|
-| `toolctx/` | 리프 패키지. 공유 타입(`ToolFunc`/`ToolDef`/`ToolRegistrar`/`ToolExecutor`), `TurnContext`/`RunCache`, dep 구조체(`CoreToolDeps`/`ProcessDeps`/`SessionDeps`/`ChronoDeps`), display 새니타이저(`display.go`) | chat 내부 import 0 |
-| `tools/` | 순수 도구 구현(fs/exec/git/mail_archive/calendar/wiki/web/asr/paddleocr/sessions/…). `toolctx/` 타입만 의존 | chat/ import 금지 |
+| `toolport/` | 리프 패키지. 공유 타입(`ToolFunc`/`ToolDef`/`ToolRegistrar`/`ToolExecutor`), `TurnContext`/`RunCache`, context helper, display 새니타이저(`display.go`) | chat 내부 import 0, domain/platform import 0 |
+| `tooldeps/` | 도구 wiring 의존 bag(`CoreToolDeps`/`ProcessDeps`/`SessionDeps`/`ChronoDeps`/`CalendarDeps` 등)과 capability port | tool 실행 타입·context helper 소유 금지 |
+| `tools/` | 순수 도구 구현(fs/exec/git/mail_archive/calendar/wiki/web/asr/paddleocr/sessions/…). `toolport/` 실행 계약과 `tooldeps/` 의존 bag을 소비 | chat/ import 금지 |
 | `toolreg/` | 도구 등록 허브. `core.go`의 `Register*Tools(...)`가 구현(tools/)+스키마(`tool_schemas_gen.go`)를 `ToolRegistrar`에 배선. `tool_schemas_gen.go`는 **생성물** | chat/ import 금지 |
 | `prompt/` | 시스템 프롬프트 조립(`system_prompt.go`), 컨텍스트 파일 로더(`context_files.go`), `prompt_cache.go`, 토픽지식(`topic_knowledge.go`), 예산(`budget.go`) | — |
 | `web/` | `web` 도구 백엔드: fetch/HTML 전처리/youtube/검색 escalate/stealth, singleflight+캐시 | — |
@@ -55,7 +56,7 @@ startAsyncRun (run_start.go)        # 세션 확보, abort ctx, buildRunDeps, go
 
 ## 함정 (이 서브트리 특유)
 
-- **레이어 의존 방향 엄수**: `toolctx/`(리프) ← `tools/` ← `toolreg/`. `tools/`·`toolreg/`는 **chat/를 import하지 않는다**. localai에 결합된 pilot 도구만 `toolreg_core.go`(얇은 래퍼)에서 별도 등록.
+- **레이어 의존 방향 엄수**: `toolport/`(안정 포트)와 `tooldeps/`(도구 의존 bag)를 `tools/`와 `toolreg/`가 소비한다. `tools/`·`toolreg/`는 **chat/를 import하지 않는다**. localai에 결합된 pilot 도구만 `toolreg_core.go`(얇은 래퍼)에서 별도 등록.
 - **회상·자동배달 지시문은 system이 아니라 마지막 user 메시지 꼬리로 주입**(`run_tail_inject.go`). per-turn 가변 바이트를 system에 넣으면 vLLM APC가 히스토리 전체를 무효화한다 — 근거/규칙: `docs/agent-rules/prompt-cache.md` §1.5.
 - **캐시 마커는 정확히 4개**(system 2 + trailing 2). 새 `cache_control` 추가 시 `cache_breakpoint_budget_test.go`가 먼저 빨개진다 — `docs/agent-rules/prompt-cache.md` §1.
 - **세션-동결 스냅샷**(tier1/context/topic)은 재시작 시 증발해 APC 재-prefill을 유발 → `prompt_snapshot_persist.go`가 persist/복원. `/reset`이 일괄 clear.

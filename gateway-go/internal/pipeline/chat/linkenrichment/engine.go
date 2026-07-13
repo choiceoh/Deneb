@@ -13,7 +13,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coreparsing/htmlmd"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coreparsing/urlextract"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/web"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
@@ -83,7 +83,7 @@ type linkContent struct {
 // after parallel chat preparation. Already-enriched and linkless messages
 // return nil so callers retain their normal persist-first path.
 func (engine *Engine) Start(ctx context.Context, message string, sanitize Sanitizer) Join {
-	if strings.Contains(message, toolctx.LinkEnrichmentHeader) {
+	if strings.Contains(message, toolport.LinkEnrichmentHeader) {
 		return nil
 	}
 	if len(urlextract.ExtractLinks(message, maxLinksPerMessage)) == 0 {
@@ -246,7 +246,7 @@ func formatLinkSummary(links []linkContent) string {
 		return ""
 	}
 	var summary strings.Builder
-	summary.WriteString("---\n" + toolctx.LinkEnrichmentHeader + "\n\n")
+	summary.WriteString("---\n" + toolport.LinkEnrichmentHeader + "\n\n")
 	summary.WriteString(strings.Join(parts, "\n\n"))
 	summary.WriteString("\n---")
 	return summary.String()

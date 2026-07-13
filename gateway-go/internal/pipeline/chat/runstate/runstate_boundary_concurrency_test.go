@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 func newBoundaryAbortEntry(sessionKey, clientRun string, expiresAt time.Time) (*AbortEntry, context.Context) {
@@ -434,7 +434,7 @@ func TestBoundaryPendingQueueLatestValueFieldMatrix(t *testing.T) {
 	want := Params{
 		SessionKey:           "client:main",
 		Message:              "latest",
-		Attachments:          []toolctx.ChatAttachment{{Name: "report.pdf", MimeType: "application/pdf"}},
+		Attachments:          []toolport.ChatAttachment{{Name: "report.pdf", MimeType: "application/pdf"}},
 		Model:                "main",
 		System:               "system override",
 		ClientRunID:          "run-latest",

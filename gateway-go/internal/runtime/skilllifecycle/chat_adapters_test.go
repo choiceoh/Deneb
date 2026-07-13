@@ -8,25 +8,25 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 type usageRecorderTranscriptStore struct {
-	msgs  []toolctx.ChatMessage
-	byKey map[string][]toolctx.ChatMessage
+	msgs  []toolport.ChatMessage
+	byKey map[string][]toolport.ChatMessage
 }
 
-func (s usageRecorderTranscriptStore) Append(string, toolctx.ChatMessage) error { return nil }
-func (s usageRecorderTranscriptStore) Load(key string, _ int) ([]toolctx.ChatMessage, int, error) {
+func (s usageRecorderTranscriptStore) Append(string, toolport.ChatMessage) error { return nil }
+func (s usageRecorderTranscriptStore) Load(key string, _ int) ([]toolport.ChatMessage, int, error) {
 	msgs := s.msgs
 	if s.byKey != nil {
 		msgs = s.byKey[key]
 	}
-	return append([]toolctx.ChatMessage(nil), msgs...), len(msgs), nil
+	return append([]toolport.ChatMessage(nil), msgs...), len(msgs), nil
 }
 func (s usageRecorderTranscriptStore) Delete(string) error         { return nil }
 func (s usageRecorderTranscriptStore) ListKeys() ([]string, error) { return nil, nil }
-func (s usageRecorderTranscriptStore) Search(string, int) ([]toolctx.SearchResult, error) {
+func (s usageRecorderTranscriptStore) Search(string, int) ([]toolport.SearchResult, error) {
 	return nil, nil
 }
 func (s usageRecorderTranscriptStore) CloneRecent(string, string, int) error { return nil }
@@ -43,7 +43,7 @@ func newUsageRecorderTracker(t *testing.T) *genesis.Tracker {
 
 func TestChatUsageRecorderAutoValidationCaseFromFailedUse(t *testing.T) {
 	tracker := newUsageRecorderTracker(t)
-	store := usageRecorderTranscriptStore{msgs: []toolctx.ChatMessage{
+	store := usageRecorderTranscriptStore{msgs: []toolport.ChatMessage{
 		{Role: "user", Content: json.RawMessage(`"srv1에서 실제 deneb-gateway 상태를 확인하고 개선"`)},
 		{Role: "assistant", Content: json.RawMessage(`[
 			{"type":"tool_use","id":"tu_1","name":"exec","input":{"cmd":"ssh srv1 systemctl --user status deneb-gateway.service","workdir":"/srv/deneb"}}
@@ -99,7 +99,7 @@ func TestChatUsageRecorderAutoValidationCaseFromFailedUse(t *testing.T) {
 func TestChatUsageRecorderAutoValidationCaseRefreshesRicherFailedUseTrace(t *testing.T) {
 	tracker := newUsageRecorderTracker(t)
 	sessionKey := "client:main:srv1"
-	store := usageRecorderTranscriptStore{byKey: map[string][]toolctx.ChatMessage{
+	store := usageRecorderTranscriptStore{byKey: map[string][]toolport.ChatMessage{
 		sessionKey: {
 			{Role: "user", Content: json.RawMessage(`"srv1에서 deneb-gateway 복구"`)},
 			{Role: "assistant", Content: json.RawMessage(`[
@@ -113,7 +113,7 @@ func TestChatUsageRecorderAutoValidationCaseRefreshesRicherFailedUseTrace(t *tes
 	rec := &chatUsageRecorderAdapter{inner: tracker, transcripts: store, logger: slog.Default()}
 
 	rec.recordValidationCaseFromFailedUse(sessionKey, "srv1-ops", "turn failed: local restart errored")
-	store.byKey[sessionKey] = []toolctx.ChatMessage{
+	store.byKey[sessionKey] = []toolport.ChatMessage{
 		{Role: "user", Content: json.RawMessage(`"srv1에서 deneb-gateway 복구"`)},
 		{Role: "assistant", Content: json.RawMessage(`[
 			{"type":"tool_use","id":"tu_1","name":"exec","input":{"cmd":"systemctl --user restart deneb-gateway.service"}},

@@ -13,12 +13,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coremedia"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/fileshare"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // ToolSendFile implements the send_file tool for delivering files to the user via channel.
-func ToolSendFile() toolctx.ToolFunc {
+func ToolSendFile() toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			FilePath string `json:"file_path"`
@@ -51,7 +51,7 @@ func ToolSendFile() toolctx.ToolFunc {
 
 		// Enforce the channel-specific upload limit injected at run start.
 		// Falls back to 50 MB when no channel limit is registered.
-		maxFileSize := toolctx.MaxUploadBytesFromContext(ctx)
+		maxFileSize := toolport.MaxUploadBytesFromContext(ctx)
 		if maxFileSize == 0 {
 			maxFileSize = 50 * 1024 * 1024 // safe default
 		}
@@ -67,12 +67,12 @@ func ToolSendFile() toolctx.ToolFunc {
 		}
 
 		// Get media send function from context.
-		sendFn := toolctx.MediaSendFuncFromContext(ctx)
+		sendFn := toolport.MediaSendFuncFromContext(ctx)
 		if sendFn == nil {
 			return "", fmt.Errorf("file delivery unavailable: channel not connected; do not claim the file is visible anywhere")
 		}
 
-		delivery := toolctx.DeliveryFromContext(ctx)
+		delivery := toolport.DeliveryFromContext(ctx)
 		if delivery == nil || delivery.Channel == "" || delivery.To == "" {
 			return "", fmt.Errorf("file delivery unavailable: no active delivery target; do not claim the file was shown anywhere")
 		}

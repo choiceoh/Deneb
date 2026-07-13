@@ -19,7 +19,7 @@ import (
 	casepack "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
 
@@ -211,7 +211,7 @@ func TestFixtureRegistryUsesVisibleRecordsAndOutputOnlyWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := toolctx.WithToolPreset(context.Background(), string(toolpreset.PresetBriefcase))
+	ctx := toolport.WithToolPreset(context.Background(), string(toolpreset.PresetBriefcase))
 	mail, err := registry.Execute(ctx, "mail_archive", json.RawMessage(`{"action":"search","query":"120"}`))
 	if err != nil || !strings.Contains(mail, "approved budget: 120") {
 		t.Fatalf("mail fixture = %q, %v", mail, err)
@@ -228,7 +228,7 @@ func TestFixtureRegistryUsesVisibleRecordsAndOutputOnlyWrites(t *testing.T) {
 	}
 	canceledBase, cancel := context.WithCancel(context.Background())
 	cancel()
-	canceled := toolctx.WithToolPreset(canceledBase, string(toolpreset.PresetBriefcase))
+	canceled := toolport.WithToolPreset(canceledBase, string(toolpreset.PresetBriefcase))
 	for _, tool := range []string{"mail_archive", "grep"} {
 		if _, err := registry.Execute(canceled, tool, json.RawMessage(`{"pattern":"budget","query":"budget"}`)); !errors.Is(err, context.Canceled) {
 			t.Fatalf("%s ignored canceled context: %v", tool, err)
@@ -298,7 +298,7 @@ func TestFixtureWikiSchemaOmitsAmbientActions(t *testing.T) {
 		}
 	}
 
-	ctx := toolctx.WithToolPreset(context.Background(), string(toolpreset.PresetBriefcase))
+	ctx := toolport.WithToolPreset(context.Background(), string(toolpreset.PresetBriefcase))
 	baseline, err := registry.Execute(ctx, "wiki", json.RawMessage(`{"query":""}`))
 	if err != nil {
 		t.Fatalf("baseline wiki fixture query: %v", err)
@@ -351,7 +351,7 @@ func TestFixtureRegistryRoutesPhoneWriteOnlyToDeviceTwin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := toolctx.WithToolPreset(context.Background(), string(toolpreset.PresetBriefcase))
+	ctx := toolport.WithToolPreset(context.Background(), string(toolpreset.PresetBriefcase))
 	first, err := registry.Execute(ctx, "phone_write", payload)
 	if err != nil || !strings.Contains(first, `"status":"confirmed"`) || !strings.Contains(first, "local-only") {
 		t.Fatalf("phone_write result = %q, %v", first, err)

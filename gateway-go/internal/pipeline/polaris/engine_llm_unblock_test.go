@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
@@ -76,7 +76,7 @@ func TestCompactAndPersist_SummariesExist_LLMTierStillFires(t *testing.T) {
 		if i%2 == 1 {
 			role = "assistant"
 		}
-		s.AppendMessage(sess, toolctx.ChatMessage{
+		s.AppendMessage(sess, toolport.ChatMessage{
 			Role:      role,
 			Content:   marshalStr(fmt.Sprintf("m%d %s", i, makeString(2200))),
 			Timestamp: int64(i * 1000),
@@ -160,13 +160,13 @@ func TestCompactAndPersist_PersistsJoinedChunkSummary(t *testing.T) {
 	big := func(i int) string { return fmt.Sprintf("BIG-%d %s", i, makeString(78_000)) } // ~39K tokens
 	var msgs []llm.Message
 	for i := 0; i < 2; i++ {
-		s.AppendMessage(sess, toolctx.ChatMessage{Role: "user", Content: marshalStr(big(i)), Timestamp: int64(i)})
+		s.AppendMessage(sess, toolport.ChatMessage{Role: "user", Content: marshalStr(big(i)), Timestamp: int64(i)})
 		msgs = append(msgs, llmMsg("user", big(i)))
 	}
 	for i := 0; i < 6; i++ {
 		q, a := fmt.Sprintf("q%d", i), fmt.Sprintf("a%d", i)
-		s.AppendMessage(sess, toolctx.ChatMessage{Role: "user", Content: marshalStr(q), Timestamp: int64(100 + i)})
-		s.AppendMessage(sess, toolctx.ChatMessage{Role: "assistant", Content: marshalStr(a), Timestamp: int64(100 + i)})
+		s.AppendMessage(sess, toolport.ChatMessage{Role: "user", Content: marshalStr(q), Timestamp: int64(100 + i)})
+		s.AppendMessage(sess, toolport.ChatMessage{Role: "assistant", Content: marshalStr(a), Timestamp: int64(100 + i)})
 		msgs = append(msgs, llmMsg("user", q), llmMsg("assistant", a))
 	}
 
@@ -209,13 +209,13 @@ func TestCompactAndPersist_SafetyTrimKeepsFences_TokensAfterAccurate(t *testing.
 	big := func(i int) string { return fmt.Sprintf("BIG-%d %s", i, makeString(39_000)) }
 	var msgs []llm.Message
 	for i := 0; i < 6; i++ {
-		s.AppendMessage(sess, toolctx.ChatMessage{Role: "user", Content: marshalStr(big(i)), Timestamp: int64(i)})
+		s.AppendMessage(sess, toolport.ChatMessage{Role: "user", Content: marshalStr(big(i)), Timestamp: int64(i)})
 		msgs = append(msgs, llmMsg("user", big(i)))
 	}
 	for i := 0; i < 6; i++ {
 		q, a := fmt.Sprintf("q%d", i), fmt.Sprintf("a%d", i)
-		s.AppendMessage(sess, toolctx.ChatMessage{Role: "user", Content: marshalStr(q), Timestamp: int64(100 + i)})
-		s.AppendMessage(sess, toolctx.ChatMessage{Role: "assistant", Content: marshalStr(a), Timestamp: int64(100 + i)})
+		s.AppendMessage(sess, toolport.ChatMessage{Role: "user", Content: marshalStr(q), Timestamp: int64(100 + i)})
+		s.AppendMessage(sess, toolport.ChatMessage{Role: "assistant", Content: marshalStr(a), Timestamp: int64(100 + i)})
 		msgs = append(msgs, llmMsg("user", q), llmMsg("assistant", a))
 	}
 
@@ -313,13 +313,13 @@ func TestBootstrap_PartialCoveragePersistsPartialRange(t *testing.T) {
 	// LLM threshold) + a 12-message fresh tail.
 	big := func(i int) string { return fmt.Sprintf("BIG-%d %s", i, makeString(39_000)) }
 	for i := 0; i < 6; i++ {
-		s.AppendMessage(sess, toolctx.ChatMessage{Role: "user", Content: marshalStr(big(i)), Timestamp: int64(i)})
+		s.AppendMessage(sess, toolport.ChatMessage{Role: "user", Content: marshalStr(big(i)), Timestamp: int64(i)})
 	}
 	var fresh []llm.Message
 	for i := 0; i < 6; i++ {
 		q, a := fmt.Sprintf("q%d", i), fmt.Sprintf("a%d", i)
-		s.AppendMessage(sess, toolctx.ChatMessage{Role: "user", Content: marshalStr(q), Timestamp: int64(100 + i)})
-		s.AppendMessage(sess, toolctx.ChatMessage{Role: "assistant", Content: marshalStr(a), Timestamp: int64(100 + i)})
+		s.AppendMessage(sess, toolport.ChatMessage{Role: "user", Content: marshalStr(q), Timestamp: int64(100 + i)})
+		s.AppendMessage(sess, toolport.ChatMessage{Role: "assistant", Content: marshalStr(a), Timestamp: int64(100 + i)})
 		fresh = append(fresh, llmMsg("user", q), llmMsg("assistant", a))
 	}
 

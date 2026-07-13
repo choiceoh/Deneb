@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // TestExecute_DryRunSuppressesSideEffectTools verifies the default-deny
@@ -25,7 +25,7 @@ func TestExecute_DryRunSuppressesSideEffectTools(t *testing.T) {
 		reg.Register(name, fake(name))
 	}
 
-	ctx := toolctx.WithToolDryRun(context.Background())
+	ctx := toolport.WithToolDryRun(context.Background())
 
 	// Allowlisted tools run for real.
 	for _, name := range []string{"grep", "read"} {
@@ -63,10 +63,10 @@ func TestExecute_DryRunSuppressesSideEffectTools(t *testing.T) {
 }
 
 func TestToolDryRunContext(t *testing.T) {
-	if toolctx.ToolDryRunFromContext(context.Background()) {
+	if toolport.ToolDryRunFromContext(context.Background()) {
 		t.Fatal("dry-run must default to false")
 	}
-	if !toolctx.ToolDryRunFromContext(toolctx.WithToolDryRun(context.Background())) {
+	if !toolport.ToolDryRunFromContext(toolport.WithToolDryRun(context.Background())) {
 		t.Fatal("dry-run flag not carried by context")
 	}
 }
@@ -84,7 +84,7 @@ func TestExecute_DryRunKeepsVerifyGateFaithful(t *testing.T) {
 	}
 
 	gate := &verifyGateState{}
-	ctx := WithVerifyGate(toolctx.WithToolDryRun(context.Background()), gate)
+	ctx := WithVerifyGate(toolport.WithToolDryRun(context.Background()), gate)
 
 	if _, err := reg.Execute(ctx, "write", json.RawMessage(`{"file_path":"a.go","content":"x"}`)); err != nil {
 		t.Fatal(err)

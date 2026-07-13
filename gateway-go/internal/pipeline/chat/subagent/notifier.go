@@ -25,7 +25,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/runstate"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
@@ -99,7 +99,7 @@ type SubagentNotifier struct {
 	startRun               func(reqID string, params RunParams, isSteer bool)
 	enqueuePend            func(sessionKey string, params RunParams)
 	getSessions            func() *session.Manager
-	delivery               func(string) *toolctx.DeliveryContext
+	delivery               func(string) *toolport.DeliveryContext
 	parentTerminatedReason string
 	unsubscribe            func()
 }
@@ -111,7 +111,7 @@ type SubagentNotifierDeps struct {
 	StartRun               func(reqID string, params RunParams, isSteer bool)
 	EnqueuePend            func(sessionKey string, params RunParams)
 	Sessions               func() *session.Manager
-	Delivery               func(string) *toolctx.DeliveryContext
+	Delivery               func(string) *toolport.DeliveryContext
 	ParentTerminatedReason string
 }
 
@@ -132,7 +132,7 @@ func NewSubagentNotifier(deps SubagentNotifierDeps) *SubagentNotifier {
 		sn.logger = slog.Default()
 	}
 	if sn.delivery == nil {
-		sn.delivery = func(string) *toolctx.DeliveryContext { return nil }
+		sn.delivery = func(string) *toolport.DeliveryContext { return nil }
 	}
 
 	sm := sn.getSessions()

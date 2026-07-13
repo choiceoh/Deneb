@@ -13,7 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -41,7 +41,7 @@ const proactiveStaleWindowMs = 48 * 60 * 60 * 1000
 //
 // This is the self-observation adapter: Propus or the operator
 // in chat ("방금 그 턴 왜 느렸어?") can read it without leaving the agent.
-func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Store, vllmBases func() []string) toolctx.ToolFunc {
+func ToolObserve(lc *observe.LogCapture, alog *agentlog.Writer, wf *workfeed.Store, vllmBases func() []string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action   string           `json:"action"`

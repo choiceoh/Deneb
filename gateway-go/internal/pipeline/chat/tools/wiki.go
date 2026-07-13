@@ -11,12 +11,13 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // ToolWiki returns the unified wiki knowledge base tool.
 // It replaces the memory tool when DENEB_WIKI_ENABLED is true.
-func ToolWiki(d *toolctx.WikiDeps, workspaceDir string) toolctx.ToolFunc {
+func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action     string   `json:"action"`

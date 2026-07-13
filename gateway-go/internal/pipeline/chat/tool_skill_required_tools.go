@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/pkg/toolmeta"
 )
@@ -37,7 +37,7 @@ func activateSkillRequiredTools(ctx context.Context, registry *ToolRegistry, ski
 	if registry == nil {
 		return ""
 	}
-	da := toolctx.DeferredActivationFromContext(ctx)
+	da := toolport.DeferredActivationFromContext(ctx)
 	if da == nil {
 		return ""
 	}
@@ -53,7 +53,7 @@ func activateSkillRequiredTools(ctx context.Context, registry *ToolRegistry, ski
 	}
 	// Same preset gate as fetch_tools: a restricted run must not activate a
 	// tool Execute would reject anyway. nil allowed = no restriction.
-	allowed := toolpreset.AllowedTools(toolpreset.Preset(toolctx.ToolPresetFromContext(ctx)))
+	allowed := toolpreset.AllowedTools(toolpreset.Preset(toolport.ToolPresetFromContext(ctx)))
 	var names []string
 	for _, name := range required {
 		if _, ok := registry.DeferredToolDef(name); !ok {
@@ -77,9 +77,9 @@ func activateSkillRequiredTools(ctx context.Context, registry *ToolRegistry, ski
 	// CONTAINS a notice-shaped string can no longer forge activation once
 	// readers prefer metadata (deferred_replay.go).
 	toolmeta.Set(ctx, "activatedTools", names)
-	// Exact shared format (toolctx/activation_notice.go): the model-facing
+	// Exact shared format (toolport/activation_notice.go): the model-facing
 	// half, and the replay fallback for pre-metadata transcripts.
-	return "\n\n" + toolctx.FormatSkillActivationNotice(names)
+	return "\n\n" + toolport.FormatSkillActivationNotice(names)
 }
 
 // NewSkillsReadToolsActivator returns the per-tool post-processor for the

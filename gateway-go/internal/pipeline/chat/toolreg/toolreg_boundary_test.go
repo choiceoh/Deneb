@@ -10,7 +10,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 type schemaCase struct {
@@ -391,7 +392,7 @@ func TestToolMaxOutputsContractAndFreshMap(t *testing.T) {
 
 func TestRegisterCoreToolsWithMinimalDependenciesHasValidUniqueContracts(t *testing.T) {
 	reg := &mockRegistrar{}
-	deps := &toolctx.CoreToolDeps{WorkspaceDir: t.TempDir()}
+	deps := &tooldeps.CoreToolDeps{WorkspaceDir: t.TempDir()}
 	RegisterCoreTools(reg, deps)
 	if len(reg.tools) < 25 {
 		t.Fatalf("minimal core registered only %d tools: %v", len(reg.tools), reg.toolNames())
@@ -429,7 +430,7 @@ func TestRegisterCoreToolsWithMinimalDependenciesHasValidUniqueContracts(t *test
 
 func TestRegisterCoreToolsDeferredPolicyMatchesOperationalIntent(t *testing.T) {
 	reg := &mockRegistrar{}
-	RegisterCoreTools(reg, &toolctx.CoreToolDeps{WorkspaceDir: t.TempDir()})
+	RegisterCoreTools(reg, &tooldeps.CoreToolDeps{WorkspaceDir: t.TempDir()})
 	deferred := map[string]bool{
 		"read": false, "write": false, "grep": false, "exec": false, "web": false,
 		"sessions_spawn": false, "heartbeat_update": false, "goal": false,
@@ -450,7 +451,7 @@ func TestRegisterCoreToolsDeferredPolicyMatchesOperationalIntent(t *testing.T) {
 }
 
 func TestWorkspaceRegistrationGroupsPreserveOrder(t *testing.T) {
-	noop := toolctx.ToolFunc(func(context.Context, json.RawMessage) (string, error) { return "", nil })
+	noop := toolport.ToolFunc(func(context.Context, json.RawMessage) (string, error) { return "", nil })
 	reg := &mockRegistrar{}
 	RegisterFileTools(reg, t.TempDir())
 	RegisterRuntimeOpsTools(reg, RuntimeOpsToolSet{
@@ -473,7 +474,7 @@ func TestRegistrationGroupsHaveExactNamesAndNoCrossGroupDuplicates(t *testing.T)
 		run  func(*mockRegistrar)
 		want []string
 	}
-	noop := toolctx.ToolFunc(func(context.Context, json.RawMessage) (string, error) { return "", nil })
+	noop := toolport.ToolFunc(func(context.Context, json.RawMessage) (string, error) { return "", nil })
 	groups := []group{
 		{name: "file", run: func(r *mockRegistrar) { RegisterFileTools(r, t.TempDir()) }, want: []string{"edit", "grep", "read", "write"}},
 		{name: "runtime-ops", run: func(r *mockRegistrar) {
@@ -481,11 +482,11 @@ func TestRegistrationGroupsHaveExactNamesAndNoCrossGroupDuplicates(t *testing.T)
 		}, want: []string{"fleet", "gateway", "observe"}},
 		{name: "graph", run: func(r *mockRegistrar) { RegisterGraphTool(r, t.TempDir()) }, want: []string{"graphify"}},
 		{name: "phone", run: func(r *mockRegistrar) { RegisterPhoneTools(r, nil) }, want: []string{"phone_read", "phone_write"}},
-		{name: "process", run: func(r *mockRegistrar) { RegisterProcessTools(r, &toolctx.ProcessDeps{WorkspaceDir: t.TempDir()}) }, want: []string{"exec", "process"}},
+		{name: "process", run: func(r *mockRegistrar) { RegisterProcessTools(r, &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()}) }, want: []string{"exec", "process"}},
 		{name: "web", run: func(r *mockRegistrar) { RegisterWebTools(r, nil) }, want: []string{"web"}},
-		{name: "session", run: func(r *mockRegistrar) { RegisterSessionTools(r, &toolctx.SessionDeps{}) }, want: []string{"sessions", "sessions_spawn", "subagents"}},
+		{name: "session", run: func(r *mockRegistrar) { RegisterSessionTools(r, &tooldeps.SessionDeps{}) }, want: []string{"sessions", "sessions_spawn", "subagents"}},
 		{name: "chrono", run: func(r *mockRegistrar) { RegisterChronoTools(r) }, want: []string{"message", "heartbeat_update", "todo"}},
-		{name: "routine", run: func(r *mockRegistrar) { RegisterRoutineTools(r, &toolctx.ChronoDeps{}, "", "", nil) }, want: []string{"cron", "evening_letter", "files", "morning_letter"}},
+		{name: "routine", run: func(r *mockRegistrar) { RegisterRoutineTools(r, &tooldeps.ChronoDeps{}, "", "", nil) }, want: []string{"cron", "evening_letter", "files", "morning_letter"}},
 		{name: "skills", run: func(r *mockRegistrar) { RegisterSkillsTools(r, nil, t.TempDir(), "", nil) }, want: []string{"skills"}},
 		{name: "media", run: func(r *mockRegistrar) { RegisterMediaTools(r, t.TempDir()) }, want: []string{"chart", "diagram", "send_file", "watch"}},
 	}
@@ -519,11 +520,11 @@ func TestOptionalRegistrationsSkipUnavailableDependencies(t *testing.T) {
 	}{
 		{name: "polaris nil", run: func(r *mockRegistrar) { RegisterPolarisTools(r, nil, nil) }},
 		{name: "knowledge nil", run: func(r *mockRegistrar) { RegisterKnowledgeTool(r, nil) }},
-		{name: "contacts empty", run: func(r *mockRegistrar) { RegisterContactsTool(r, &toolctx.ContactsDeps{}) }},
-		{name: "calendar empty", run: func(r *mockRegistrar) { RegisterCalendarTool(r, &toolctx.CalendarDeps{}) }},
-		{name: "wiki empty", run: func(r *mockRegistrar) { RegisterWikiTools(r, &toolctx.WikiDeps{}, t.TempDir()) }},
+		{name: "contacts empty", run: func(r *mockRegistrar) { RegisterContactsTool(r, &tooldeps.ContactsDeps{}) }},
+		{name: "calendar empty", run: func(r *mockRegistrar) { RegisterCalendarTool(r, &tooldeps.CalendarDeps{}) }},
+		{name: "wiki empty", run: func(r *mockRegistrar) { RegisterWikiTools(r, &tooldeps.WikiDeps{}, t.TempDir()) }},
 		{name: "notebook nil", run: func(r *mockRegistrar) { RegisterNotebookTool(r, nil) }},
-		{name: "notebook empty", run: func(r *mockRegistrar) { RegisterNotebookTool(r, &toolctx.NotebookDeps{}) }},
+		{name: "notebook empty", run: func(r *mockRegistrar) { RegisterNotebookTool(r, &tooldeps.NotebookDeps{}) }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -538,8 +539,8 @@ func TestOptionalRegistrationsSkipUnavailableDependencies(t *testing.T) {
 
 func TestCalendarRegistrationRequiresEitherReaderOrLocalStore(t *testing.T) {
 	reg := &mockRegistrar{}
-	RegisterCalendarTool(reg, &toolctx.CalendarDeps{
-		Client: func() (toolctx.CalendarReader, error) { return nil, nil },
+	RegisterCalendarTool(reg, &tooldeps.CalendarDeps{
+		Client: func() (tooldeps.CalendarReader, error) { return nil, nil },
 	})
 	if got := reg.toolNames(); !reflect.DeepEqual(got, []string{"calendar"}) {
 		t.Fatalf("reader-backed calendar names = %#v", got)
@@ -620,11 +621,11 @@ func TestToolDefinitionsCanBeInvokedWithCancelledContextWithoutRegistrationPanic
 	}
 	reg := &mockRegistrar{}
 	RegisterPhoneTools(reg, nil)
-	RegisterProcessTools(reg, &toolctx.ProcessDeps{WorkspaceDir: t.TempDir()})
+	RegisterProcessTools(reg, &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()})
 	RegisterWebTools(reg, nil)
-	RegisterSessionTools(reg, &toolctx.SessionDeps{})
+	RegisterSessionTools(reg, &tooldeps.SessionDeps{})
 	RegisterChronoTools(reg)
-	RegisterRoutineTools(reg, &toolctx.ChronoDeps{}, "", "", nil)
+	RegisterRoutineTools(reg, &tooldeps.ChronoDeps{}, "", "", nil)
 	RegisterSkillsTools(reg, nil, t.TempDir(), "", nil)
 	RegisterMediaTools(reg, t.TempDir())
 	for _, def := range reg.tools {

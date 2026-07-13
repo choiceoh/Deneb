@@ -45,7 +45,8 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/schedule"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
@@ -72,7 +73,7 @@ type ToolInvoker interface {
 type CodeActionDeps struct {
 	Invoker  ToolInvoker
 	Contacts *contacts.Store
-	Calendar *toolctx.CalendarDeps
+	Calendar *tooldeps.CalendarDeps
 	Wiki     *wiki.Store
 }
 
@@ -153,9 +154,9 @@ func sortedActionKeys(m map[string]bool) []string {
 // preset / TurnContext / run-cache propagate exactly as a top-level call would).
 type codeActionBridge struct {
 	invoker  ToolInvoker
-	contacts *contacts.Store       // optional; backs structured (as_json) contacts
-	calendar *toolctx.CalendarDeps // optional; backs structured calendar
-	wiki     *wiki.Store           // optional; backs structured wiki
+	contacts *contacts.Store        // optional; backs structured (as_json) contacts
+	calendar *tooldeps.CalendarDeps // optional; backs structured calendar
+	wiki     *wiki.Store            // optional; backs structured wiki
 	token    string
 	ctx      context.Context
 }
@@ -317,7 +318,7 @@ func caEventOf(e calendar.Event) caEvent {
 // calendarStructured answers read-only calendar actions with typed data. list
 // reuses schedule.MergeEvents (the same Google+local merge the text tool uses, so the two
 // can't diverge); get replicates the local:/google ID routing.
-func calendarStructured(ctx context.Context, d *toolctx.CalendarDeps, args map[string]any) (any, error) {
+func calendarStructured(ctx context.Context, d *tooldeps.CalendarDeps, args map[string]any) (any, error) {
 	action, _ := args["action"].(string)
 	switch strings.TrimSpace(action) {
 	case "list", "":
@@ -351,7 +352,7 @@ func calendarStructured(ctx context.Context, d *toolctx.CalendarDeps, args map[s
 
 // calStructGet resolves one event by ID, routing local: IDs to the local store
 // and others to the read-only Google client (mirrors calActionGet).
-func calStructGet(ctx context.Context, d *toolctx.CalendarDeps, id string) (*calendar.Event, error) {
+func calStructGet(ctx context.Context, d *tooldeps.CalendarDeps, id string) (*calendar.Event, error) {
 	if localcal.IsLocalID(id) {
 		if d.Local == nil {
 			return nil, fmt.Errorf("local calendar unavailable")
@@ -502,7 +503,7 @@ func writeBridgeJSON(w http.ResponseWriter, payload map[string]any) {
 // ToolCodeAction returns the code_action tool. d.Invoker is the read-only tool
 // surface (the chat registry) the bridge forwards to; the scratch dir is a
 // fresh system temp dir per run.
-func ToolCodeAction(d CodeActionDeps) toolctx.ToolFunc {
+func ToolCodeAction(d CodeActionDeps) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		if d.Invoker == nil {
 			return "", fmt.Errorf("code_action is unavailable")
