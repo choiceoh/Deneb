@@ -4243,10 +4243,15 @@ button.mail-attachment {
   color: #c04a44;
   background: rgba(229, 97, 92, 0.16);
 }
-.dui-badge.primary,
-.dui-badge.secondary {
+.dui-badge.primary {
   color: var(--accent-deep);
   background: var(--accent-soft);
+}
+/* secondary reads as the quieter sibling (native primary/secondaryContainer
+   split) — a neutral surface instead of the accent tint. */
+.dui-badge.secondary {
+  color: var(--muted-2);
+  background: var(--panel-sunken);
 }
 /* card section-label header (icon + caption first row) */
 .dui-card-hd {
@@ -4484,6 +4489,41 @@ button.mail-attachment {
   background: var(--accent);
   border-radius: 999px;
   transition: width 0.3s ease;
+}
+/* Indeterminate (value-less) progress: a fixed-width bar sliding across the
+   clipped track, instead of a frozen half-fill that reads as broken. */
+.dui-progress-fill.indeterminate {
+  width: 40%;
+  animation: dui-progress-indeterminate 1.2s ease-in-out infinite;
+}
+@keyframes dui-progress-indeterminate {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dui-progress-fill.indeterminate {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+.dui-countdown {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dui-countdown-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--ink);
+}
+.dui-countdown-value.expired {
+  color: var(--danger);
 }
 .dui-field {
   display: flex;

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { parseDenebUi, splitDenebUi } from "@/markdown/denebUiParse";
 import { AssistantText, DenebUi, statCountUpFrame } from "./DenebUi";
@@ -321,5 +321,60 @@ describe("deneb-ui renderer parity conventions", () => {
     expect(alert?.querySelector(".dui-alert-glyph")?.textContent).toBe("i");
     const warn = render(<DenebUi spec={{ type: "alert", severity: "success", message: "완료" }} onSubmit={() => {}} />);
     expect(warn.container.querySelector(".dui-alert-glyph")?.textContent).toBe("✓");
+  });
+});
+
+// Rendering-quality parity with the native renderer (the desktop nodes that
+// previously rendered barer than the phone).
+describe("DenebUi node rendering polish", () => {
+  it("ticks a countdown node down each second as MM:SS", () => {
+    vi.useFakeTimers();
+    try {
+      render(<DenebUi spec={{ type: "countdown", label: "마감", seconds: 90 }} onSubmit={() => {}} />);
+      expect(screen.getByText("01:30")).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(1000));
+      expect(screen.getByText("01:29")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("tints a countdown as expired at zero", () => {
+    vi.useFakeTimers();
+    try {
+      render(<DenebUi spec={{ type: "countdown", seconds: 1 }} onSubmit={() => {}} />);
+      act(() => vi.advanceTimersByTime(1000));
+      const value = screen.getByText("00:00");
+      expect(value).toHaveClass("expired");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders a value-less progress as an indeterminate bar, a valued one as a fill", () => {
+    const { container } = render(<DenebUi spec={{ type: "progress" }} onSubmit={() => {}} />);
+    expect(container.querySelector(".dui-progress-fill")).toHaveClass("indeterminate");
+    const valued = render(<DenebUi spec={{ type: "progress", value: 0.5 }} onSubmit={() => {}} />);
+    const fill = valued.container.querySelector(".dui-progress-fill");
+    expect(fill).not.toHaveClass("indeterminate");
+    expect(fill).toHaveStyle({ width: "50%" });
+  });
+
+  it("gives a secondary badge its own class, distinct from primary", () => {
+    const { container } = render(
+      <DenebUi spec={{ type: "badge", value: "보조", color: "secondary" }} onSubmit={() => {}} />,
+    );
+    const badge = container.querySelector(".dui-badge");
+    expect(badge).toHaveClass("secondary");
+    expect(badge).not.toHaveClass("primary");
+  });
+
+  it("builds up to two-word avatar initials and falls back to an icon, not a question mark", () => {
+    render(<DenebUi spec={{ type: "avatar", name: "John Doe" }} onSubmit={() => {}} />);
+    expect(screen.getByText("JD")).toBeInTheDocument();
+    const empty = render(<DenebUi spec={{ type: "avatar" }} onSubmit={() => {}} />);
+    const avatar = empty.container.querySelector(".dui-avatar");
+    expect(avatar?.textContent).toBe(""); // an icon, never a literal "?"
+    expect(avatar?.querySelector("svg")).toBeTruthy();
   });
 });

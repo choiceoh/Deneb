@@ -138,6 +138,34 @@ function StatValue({ value }: { value: string }) {
   return <div className="dui-stat-value">{display}</div>;
 }
 
+// Live countdown readout — parity with the native RenderCountdown: ticks every
+// second to H:MM:SS (or MM:SS under an hour) as a large tabular-nums number, with
+// an expiry tint at zero. The native also fires the node's action on expiry; the
+// desktop keeps the visual tick only (a proactive card's countdown is a display
+// element, and the feed renders cards non-interactively). Date.now lives in the
+// effect, never at render, so it stays purity-lint clean.
+function Countdown({ seconds, label }: { seconds: number; label: string }) {
+  const [remaining, setRemaining] = useState(() => Math.max(0, Math.floor(seconds)));
+  useEffect(() => {
+    const target = Date.now() + Math.max(0, Math.floor(seconds)) * 1000;
+    const tick = () => setRemaining(Math.max(0, Math.round((target - Date.now()) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [seconds]);
+  const two = (x: number) => String(x).padStart(2, "0");
+  const h = Math.floor(remaining / 3600);
+  const m = Math.floor((remaining % 3600) / 60);
+  const s = remaining % 60;
+  const formatted = h > 0 ? `${h}:${two(m)}:${two(s)}` : `${two(m)}:${two(s)}`;
+  return (
+    <div className="dui-countdown">
+      {label ? <div className="dui-stat-label">{label}</div> : null}
+      <div className={"dui-countdown-value" + (remaining <= 0 ? " expired" : "")}>{formatted}</div>
+    </div>
+  );
+}
+
 // Render one agent-drawn UI block. Owns form + accordion-toggle state so a
 // callback's collectFrom can gather live input values.
 export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: string) => void; busy?: boolean }) {
@@ -435,12 +463,24 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         ) : null;
       case "avatar": {
         const nm = String(n.name || "");
+        // Up to two-word initials ("John Doe" → "JD"), and a person icon — not a
+        // literal "?" — when there is neither image nor name (native parity).
+        const initials = nm
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((w) => w[0])
+          .join("")
+          .toUpperCase();
         return (
           <div key={key} className="dui-avatar" title={nm}>
             {/^https?:\/\//i.test(String(n.imageUrl || "")) ? (
               <img src={String(n.imageUrl)} alt={nm} />
+            ) : initials ? (
+              initials
             ) : (
-              (nm.trim()[0] ?? "?").toUpperCase()
+              <Icon name="people" size={16} />
             )}
           </div>
         );
@@ -618,20 +658,19 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
               </div>
             ) : null}
             <span className="dui-progress">
+              {/* value-less = indeterminate: an animated sliding bar (native uses
+                  Material's indeterminate indicator). The old static 40%/opacity
+                  fill read as a stuck/broken bar. */}
               <span
-                className="dui-progress-fill"
-                style={v == null ? { width: "40%", opacity: 0.5 } : { width: `${v * 100}%` }}
+                className={"dui-progress-fill" + (v == null ? " indeterminate" : "")}
+                style={v == null ? undefined : { width: `${v * 100}%` }}
               />
             </span>
           </div>
         );
       }
       case "countdown":
-        return (
-          <div key={key} className="dui-stat-label">
-            {String(n.label || "")} {n.seconds ? `· ${Number(n.seconds)}s` : ""}
-          </div>
-        );
+        return <Countdown key={key} seconds={Number(n.seconds) || 0} label={String(n.label || "")} />;
       // --- interactive ---
       case "button": {
         const variant = String(n.variant || "filled");
