@@ -51,6 +51,12 @@ const (
 	// cannot seed a skill, too long is a skill body smuggled past genesis.
 	curriculumBriefMinBytes = 40
 	curriculumBriefMaxBytes = 2000
+	// curriculumGroundingMinRunes is the minimum contiguous verbatim quote the
+	// evidence field must carry from the demand-evidence block (SkillCenter
+	// 2607.07676: "each retained claim maps to an exact quotation in its
+	// source" — RSI 2026H2 addendum, second pass #1). Long enough that a
+	// coincidental overlap ("스킬", "달력") cannot satisfy it.
+	curriculumGroundingMinRunes = 12
 )
 
 // curriculumSystemPrompt is a compiled constant on purpose (like the meta
@@ -64,6 +70,8 @@ const curriculumSystemPrompt = `당신은 비서실장 에이전트의 능력 �
 - 기존 스킬로 이미 가능한 것, 백로그에 이미 있는 것의 재제안 금지.
 - 막연한 능력("더 똑똑하게") 금지 — 트리거와 산출물이 구체적이어야 한다.
 - 확신이 없으면 반드시 skip=true. 제안 0개가 나쁜 제안 1개보다 낫다.
+- evidence 필드는 아래 증거 블록에서 그대로 복사한 인용(12자 이상 연속)을
+  반드시 포함해야 한다 — 인용 없는 주장(근거 발명)은 기각된다.
 - 검증 케이스를 먼저 설계한다: 각 케이스는 사용자 입력(input)과 관찰 가능한
   문자열 단언(required_substrings/forbidden_substrings)으로 스킬 없이도 채점
   가능해야 한다.
@@ -150,7 +158,8 @@ func (t *CurriculumTask) Run(ctx context.Context) error {
 		backlog = nil // fail-open: a torn backlog must not stop demand mining
 	}
 
-	resp, err := propose(ctx, t.assembleDemandEvidence(ctx, catalog, backlog))
+	demandEvidence := t.assembleDemandEvidence(ctx, catalog, backlog)
+	resp, err := propose(ctx, demandEvidence)
 	if err != nil {
 		logger.Warn("curriculum: propose failed", "error", err)
 		return nil
@@ -162,6 +171,10 @@ func (t *CurriculumTask) Run(ctx context.Context) error {
 	}
 	if reason := curriculumGate(resp, catalog, backlog, time.Now()); reason != "" {
 		logger.Info("curriculum: proposal rejected", "name", resp.Name, "reason", reason)
+		return nil
+	}
+	if reason := curriculumSourceGrounding(resp.Evidence, demandEvidence); reason != "" {
+		logger.Info("curriculum: proposal rejected (ungrounded evidence)", "name", resp.Name, "reason", reason)
 		return nil
 	}
 
@@ -358,4 +371,25 @@ func curriculumGate(resp curriculumResp, catalog map[string]string, backlog []Sk
 		}
 	}
 	return ""
+}
+
+// curriculumSourceGrounding is the deterministic honesty gate on the DEMAND
+// lane's evidence (SkillCenter source-grounding rule): the proposal's evidence
+// field must contain at least one contiguous verbatim quote (>=
+// curriculumGroundingMinRunes runes) from the demand-evidence block the
+// producer was shown. The lane that INVENTS demand must not be able to invent
+// its supporting evidence too — a hallucinated justification fails the
+// substring scan no matter how plausible it reads. Returns "" when grounded,
+// else the rejection reason. Pure.
+func curriculumSourceGrounding(evidenceField, evidenceInput string) string {
+	field := []rune(strings.TrimSpace(evidenceField))
+	if len(field) < curriculumGroundingMinRunes {
+		return fmt.Sprintf("evidence too short to ground (%d runes < %d)", len(field), curriculumGroundingMinRunes)
+	}
+	for i := 0; i+curriculumGroundingMinRunes <= len(field); i++ {
+		if strings.Contains(evidenceInput, string(field[i:i+curriculumGroundingMinRunes])) {
+			return ""
+		}
+	}
+	return fmt.Sprintf("evidence not grounded: no verbatim quote (>=%d runes) from the demand-evidence block", curriculumGroundingMinRunes)
 }
