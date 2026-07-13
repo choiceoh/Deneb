@@ -64,7 +64,7 @@ class L1Test(unittest.TestCase):
         # Labels are counted over the WHOLE ledger (old entries included) —
         # the ladder evidence accumulates, it does not expire.
         events = [{"createdAt": OLD, "type": "evolve_rolled_back",
-                   "baselineTest": {"reject": True, "disagreement": i == 0}}
+                   "baselineTest": {"reject": True, "rejectReachable": True, "disagreement": i == 0}}
                   for i in range(20)]
         events.append({"createdAt": RECENT, "type": "evolved"})
         s = assess_l1(events, NOW)
@@ -75,10 +75,22 @@ class L1Test(unittest.TestCase):
     def test_eprocess_readiness_needs_agreement_and_n(self):
         # n=19 all-agree: below the floor. n=20 at 85%: below agreement bar.
         base = {"createdAt": OLD, "type": "evolve_confirmed"}
-        n19 = [dict(base, baselineTest={"disagreement": False}) for _ in range(19)]
+        n19 = [dict(base, baselineTest={"rejectReachable": True, "disagreement": False}) for _ in range(19)]
         self.assertFalse(assess_l1(n19, NOW).metrics["eprocess_cutover_ready"])
-        n20_noisy = [dict(base, baselineTest={"disagreement": i < 3}) for i in range(20)]
+        n20_noisy = [dict(base, baselineTest={"rejectReachable": True, "disagreement": i < 3}) for i in range(20)]
         self.assertFalse(assess_l1(n20_noisy, NOW).metrics["eprocess_cutover_ready"])
+
+    def test_eprocess_readiness_excludes_unreachable_labels(self):
+        # Labels recorded while rejection was mathematically unreachable
+        # (rejectReachable false/absent) are excluded from the count — matching
+        # the Go filter, so the dashboard cannot show a false READY (Codex).
+        events = [{"createdAt": OLD, "type": "evolve_rolled_back",
+                   "baselineTest": {"disagreement": False}}  # no rejectReachable → unfair
+                  for _ in range(25)]
+        s = assess_l1(events, NOW)
+        self.assertEqual(s.metrics["eprocess_labels"], 0)
+        self.assertEqual(s.metrics["eprocess_unfair_labels"], 25)
+        self.assertFalse(s.metrics["eprocess_cutover_ready"])
 
 
 class L2Test(unittest.TestCase):

@@ -96,6 +96,14 @@ def _dispatchable_sources(rows: dict) -> tuple:
                   if k.startswith("source:") and isinstance(v, dict) and v.get("unlocked"))
     return L4_SOURCES + extra
 
+
+def _source_dispatchable(src: str, sources: tuple) -> bool:
+    """Separator-aware namespace match, matching coding-dispatch.sh's picker:
+    an exact namespace or a "namespace:"-prefixed id. A bare startswith
+    reported "health-finding-x" as dispatchable though the picker never picks
+    it (Codex review of RSI eval M7)."""
+    return any(src == ns or src.startswith(ns + ":") for ns in sources)
+
 LIVE, DATA_GATED, STARVED, FROZEN, IDLE = "LIVE", "DATA-GATED", "STARVED", "FROZEN", "IDLE"
 
 
@@ -180,11 +188,19 @@ def assess_l1(events: list[dict], now_ms: int) -> LayerStatus:
 
 def _eprocess_readiness(events: list[dict]) -> dict:
     """Score observation-mode baseline-test labels against the cutover
-    graduation thresholds (mirrors Tracker.EProcessCutoverReadiness)."""
-    labels = disagreements = 0
+    graduation thresholds (mirrors Tracker.eProcessCutoverReadiness)."""
+    labels = disagreements = unfair = 0
     for e in events:
         bt = e.get("baselineTest")
         if not isinstance(bt, dict):
+            continue
+        # A label recorded while the e-process could not possibly reject
+        # (rejectReachable=false, incl. every pre-C1-fix label that lacks the
+        # field) is not evidence of mechanism agreement — excluded, matching
+        # the Go filter, so the dashboard can't show a false READY (Codex
+        # review of RSI eval C1).
+        if not bt.get("rejectReachable"):
+            unfair += 1
             continue
         labels += 1
         if bt.get("disagreement"):
@@ -193,6 +209,7 @@ def _eprocess_readiness(events: list[dict]) -> dict:
     return {
         "eprocess_labels": labels,
         "eprocess_disagreements": disagreements,
+        "eprocess_unfair_labels": unfair,
         "eprocess_agreement": round(agreement, 4),
         "eprocess_cutover_ready": labels >= EPROCESS_CUTOVER_MIN_LABELS
         and agreement >= EPROCESS_CUTOVER_MIN_AGREEMENT,
@@ -363,7 +380,7 @@ def assess_l4(
         # implementation — both are live dispatch supply (the heartbeat review
         # lane accepts candidates it cannot implement itself).
         if scope == "code" and st in ("proposed", "accepted"):
-            if src.startswith(sources):
+            if _source_dispatchable(src, sources):
                 dispatchable += 1
             else:
                 # Proposed code candidate from a source not yet in the dispatch
@@ -540,7 +557,7 @@ def assess_ladder(genesis_events: list[dict], revisions: list[dict],
         if rec.get("scope") != "code" or st not in ("proposed", "accepted"):
             continue
         src = rec.get("source") or ""
-        if src.startswith(_dispatchable_sources(grad)):
+        if _source_dispatchable(src, _dispatchable_sources(grad)):
             continue
         prefix = src.split(":", 1)[0] if src else "(no source)"
         staged_sources[prefix] = staged_sources.get(prefix, 0) + 1
