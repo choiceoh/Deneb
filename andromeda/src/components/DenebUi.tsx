@@ -35,6 +35,20 @@ const TEXT_TINTS = new Set(["primary", "secondary", "error", "success", "warning
 /** Alert severities with dedicated styling — anything else renders as info. */
 const ALERT_SEVERITIES = new Set(["info", "success", "warning", "error"]);
 
+/** box contentAlignment → flex placement (native RenderBox parity). Layout only
+ * (no color), so inline style is fine; unknown values fall back to a plain column. */
+const BOX_ALIGN: Record<string, React.CSSProperties> = {
+  center: { alignItems: "center", justifyContent: "center" },
+  top: { alignItems: "center", justifyContent: "flex-start" },
+  bottom: { alignItems: "center", justifyContent: "flex-end" },
+  start: { alignItems: "flex-start" },
+  end: { alignItems: "flex-end" },
+  top_start: { alignItems: "flex-start", justifyContent: "flex-start" },
+  top_end: { alignItems: "flex-end", justifyContent: "flex-start" },
+  bottom_start: { alignItems: "flex-start", justifyContent: "flex-end" },
+  bottom_end: { alignItems: "flex-end", justifyContent: "flex-end" },
+};
+
 /** deneb-ui icon vocabulary (the Material-ish names the authoring contract
  * teaches) → the andromeda line-icon catalog. Covers the section-header set
  * the letters/briefings actually emit; unknown names fall back to emoji text
@@ -82,8 +96,44 @@ const ICON_GLYPHS: Record<string, IconName> = {
   refresh: "refresh",
   sync: "refresh",
   send: "send",
+  reply: "send",
+  forward: "send",
   work: "projects",
   business: "projects",
+  // Broadened coverage — more of the Material-ish vocab the authoring contract
+  // teaches, mapped to the closest existing andromeda glyph so section-header
+  // icons stop vanishing on desktop (full icon parity would need new vectors).
+  description: "files",
+  article: "files",
+  folder: "files",
+  folder_open: "files",
+  assignment: "todo",
+  checklist: "todo",
+  list: "todo",
+  list_alt: "todo",
+  event: "calendar",
+  event_note: "calendar",
+  done_all: "check",
+  verified: "check",
+  notifications_active: "bell",
+  notification_important: "bell",
+  campaign: "bell",
+  trending_down: "progress",
+  insights: "progress",
+  delete_forever: "trash",
+  delete_outline: "trash",
+  forum: "chat",
+  comment: "chat",
+  message: "chat",
+  chat_bubble: "chat",
+  update: "history",
+  restore: "history",
+  print: "printer",
+  add_circle: "plus",
+  cancel: "close",
+  groups: "people",
+  autorenew: "refresh",
+  cached: "refresh",
 };
 
 /** "HH:MM — 제목" schedule item — such lists render as a timeline. */
@@ -276,8 +326,10 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         );
       }
       case "box":
+        // Single-child alignment (native RenderBox contentAlignment); unknown /
+        // absent → a plain column.
         return (
-          <div key={key} className="dui-col">
+          <div key={key} className="dui-col" style={BOX_ALIGN[String(n.contentAlignment || "").toLowerCase()]}>
             {kids(n, key)}
           </div>
         );
@@ -457,10 +509,20 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
           </div>
         );
       }
-      case "image":
-        return /^https?:\/\//i.test(String(n.url || "")) ? (
-          <img key={key} className="dui-image" src={String(n.url)} alt={String(n.alt || "")} loading="lazy" />
+      case "image": {
+        const url = String(n.url || "");
+        if (/^https?:\/\//i.test(url)) {
+          return <img key={key} className="dui-image" src={url} alt={String(n.alt || "")} loading="lazy" />;
+        }
+        // Non-resolvable (relative/data) URL → a sized alt-text placeholder box
+        // instead of a silent hole (native always renders a sized image slot).
+        const alt = String(n.alt || "").trim();
+        return alt ? (
+          <div key={key} className="dui-image-alt" title={alt}>
+            {alt}
+          </div>
         ) : null;
+      }
       case "avatar": {
         const nm = String(n.name || "");
         // Up to two-word initials ("John Doe" → "JD"), and a person icon — not a
@@ -813,8 +875,12 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
           </div>
         );
       case "slider": {
-        const min = Number(n.min ?? 0);
-        const max = Number(n.max ?? 100);
+        // Normalize an inverted range (min>max) — the native coerces it, but a raw
+        // min>max yields a broken <input type="range"> on desktop.
+        const a = Number(n.min ?? 0);
+        const b = Number(n.max ?? 100);
+        const min = Math.min(a, b);
+        const max = Math.max(a, b);
         return (
           <label key={key} className="dui-field">
             {n.label ? (

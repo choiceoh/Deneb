@@ -390,4 +390,42 @@ describe("DenebUi node rendering polish", () => {
     expect(avatar?.textContent).toBe(""); // an icon, never a literal "?"
     expect(avatar?.querySelector("svg")).toBeTruthy();
   });
+
+  it("normalizes an inverted slider range (min>max)", () => {
+    const { container } = render(<DenebUi spec={{ type: "slider", id: "s", min: 100, max: 0 }} onSubmit={() => {}} />);
+    const input = container.querySelector('input[type="range"]') as HTMLInputElement;
+    expect(Number(input.min)).toBe(0);
+    expect(Number(input.max)).toBe(100);
+  });
+
+  it("renders an alt-text placeholder for a non-resolvable image url, an <img> for http", () => {
+    const { container } = render(
+      <DenebUi spec={{ type: "image", url: "/relative/x.png", alt: "견적서 미리보기" }} onSubmit={() => {}} />,
+    );
+    expect(container.querySelector(".dui-image-alt")?.textContent).toBe("견적서 미리보기");
+    expect(container.querySelector("img.dui-image")).toBeNull();
+    const ok = render(<DenebUi spec={{ type: "image", url: "https://x/y.png", alt: "z" }} onSubmit={() => {}} />);
+    expect(ok.container.querySelector("img.dui-image")).not.toBeNull();
+  });
+
+  it("aligns a box by contentAlignment", () => {
+    const { container } = render(
+      <DenebUi
+        spec={{ type: "box", contentAlignment: "center", children: [{ type: "text", value: "가운데" }] }}
+        onSubmit={() => {}}
+      />,
+    );
+    const centered = Array.from(container.querySelectorAll(".dui-col")).find(
+      (el) => (el as HTMLElement).style.alignItems === "center",
+    ) as HTMLElement | undefined;
+    expect(centered).toBeTruthy();
+    expect(centered!.style.justifyContent).toBe("center");
+  });
+
+  it("maps a broadened icon name to a glyph, and still renders nothing for a truly unknown name", () => {
+    const { container } = render(<DenebUi spec={{ type: "icon", name: "description" }} onSubmit={() => {}} />);
+    expect(container.querySelector(".dui-icon svg")).not.toBeNull();
+    const unknown = render(<DenebUi spec={{ type: "icon", name: "totally_unknown_xyz" }} onSubmit={() => {}} />);
+    expect(unknown.container.querySelector(".dui-icon")).toBeNull();
+  });
 });
