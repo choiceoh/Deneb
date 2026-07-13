@@ -245,8 +245,11 @@ function MdTable({ block, blockKey }: { block: Extract<Block, { type: "table" }>
   const cellStyle = (j: number): CSSProperties | undefined =>
     block.align[j] ? { textAlign: block.align[j] } : numeric[j] ? { textAlign: "right" } : undefined;
   const cellClass = (j: number): string | undefined => (numeric[j] ? "md-num" : undefined);
+  // Dense tables (3+ columns) drop the type one rung so narrow columns fit whole
+  // Korean 어절 per line — the native table's dense-mode parity (production lesson).
+  const colCount = Math.max(block.header.length, ...block.rows.map((r) => r.length), 0);
   return (
-    <table className="md-table">
+    <table className={"md-table" + (colCount >= 3 ? " md-table-dense" : "")}>
       <thead>
         <tr>
           {block.header.map((h, j) => (

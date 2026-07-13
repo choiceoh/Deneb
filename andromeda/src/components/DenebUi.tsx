@@ -562,7 +562,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         const align = (i: number): React.CSSProperties | undefined => (numeric[i] ? { textAlign: "right" } : undefined);
         const numClass = (i: number): string | undefined => (numeric[i] ? "md-num" : undefined);
         return (
-          <table key={key} className="md-table">
+          <table key={key} className={"md-table" + (colCount >= 3 ? " md-table-dense" : "")}>
             <thead>
               <tr>
                 {headers.map((h, i) => (
