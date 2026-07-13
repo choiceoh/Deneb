@@ -183,7 +183,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--url", default=os.environ.get("DENEB_GATEWAY_URL", DEFAULT_GATEWAY_URL),
                         help="gateway base URL (env DENEB_GATEWAY_URL)")
     parser.add_argument("--token", default=os.environ.get("DENEB_CLIENT_TOKEN", ""),
-                        help="client token (env DENEB_CLIENT_TOKEN)")
+                        help="client token (reads ~/.deneb/client_token if unset)")
     parser.add_argument("--max", type=int, default=MAX_PER_RUN,
                         help=f"per-run filing cap (default {MAX_PER_RUN})")
     parser.add_argument("--dry-run", action="store_true",
@@ -198,6 +198,16 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
     out = stdout if stdout is not None else sys.stdout
     err = stderr if stderr is not None else sys.stderr
 
+    # Token-file fallback + URL normalization mirror health_finding_miner so a
+    # bare invocation authenticates the same way across the audit miners.
+    token = args.token
+    if not token:
+        token_file = os.path.expanduser("~/.deneb/client_token")
+        if os.path.exists(token_file):
+            with open(token_file, encoding="utf-8") as handle:
+                token = handle.read().strip()
+    base_url = args.url.rstrip("/")
+
     now_ms = int(time.time() * 1000)
     cutoff_ms = now_ms - WINDOW_DAYS * 24 * 60 * 60 * 1000
     sequences = collect_sequences(args.transcripts, cutoff_ms)
@@ -209,10 +219,10 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
         return 0
 
     try:
-        existing = fetch_existing(args.url, args.token)
+        existing = fetch_existing(base_url, token)
         selected, skipped = select_candidates(candidates, existing, now_ms, args.max)
         filed = [
-            {"id": record_candidate(args.url, args.token, cand), "source": cand["source"]}
+            {"id": record_candidate(base_url, token, cand), "source": cand["source"]}
             for cand in selected
         ]
     except GatewayError as exc:

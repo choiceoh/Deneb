@@ -16,8 +16,8 @@ func curriculumFixture(t *testing.T, resp curriculumResp, catalog map[string]str
 		t.Fatal(err)
 	}
 	task := &CurriculumTask{
-		Tracker:   tr,
-		Logger:    slog.Default(),
+		Tracker: tr,
+		Logger:  slog.Default(),
 		proposeFn: func(_ context.Context, evidence string) (curriculumResp, error) {
 			// Ground the fixture's evidence in the assembled block (the
 			// source-grounding gate requires a >=12-rune verbatim quote).
