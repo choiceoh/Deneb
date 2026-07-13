@@ -10,7 +10,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -140,40 +139,6 @@ func maybeAutoPublishDeliverable(deps runDeps, params RunParams, result *agent.A
 		logger.Warn("auto-publish deliverable card failed", "session", params.SessionKey, "error", err)
 	case published:
 		logger.Info("auto-published deliverable card", "session", params.SessionKey)
-	}
-}
-
-// reportDenebUICardHealth validates any deneb-ui fences in the final reply and
-// logs schema violations. Warn (not Error): the client still renders a code
-// block, and the turn itself succeeded — but a rising Warn rate is the early
-// signal that a model swap or prompt drift broke card emission (the runtime
-// validator was previously wired only into tests and denebui-check).
-func reportDenebUICardHealth(text, sessionKey string, logger *slog.Logger) {
-	if text == "" || !denebui.HasFence(text) {
-		return
-	}
-	for i, body := range denebui.ExtractFences(text) {
-		issues, err := denebui.Validate(body)
-		switch {
-		case err != nil:
-			logger.Warn("deneb-ui card unparseable — client will show a code block",
-				"session", sessionKey, "block", i, "error", err)
-		case len(issues) > 0:
-			// Cap the detail: one line per turn is plenty for drift detection.
-			logger.Warn("deneb-ui card has schema issues",
-				"session", sessionKey, "block", i,
-				"issueCount", len(issues), "firstIssue", issues[0].String())
-		default:
-			// Schema-valid cards still get a composition read (조형 관례 —
-			// prose dumps, missing section headers): Info-level observation
-			// only, so the journal shows whether the authoring contract
-			// actually shapes production cards.
-			if adv := denebui.CompositionAdvisories(body); len(adv) > 0 {
-				logger.Info("deneb-ui card composition advisory",
-					"session", sessionKey, "block", i,
-					"advisories", strings.Join(adv, ","))
-			}
-		}
 	}
 }
 

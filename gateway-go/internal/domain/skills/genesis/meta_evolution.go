@@ -447,7 +447,9 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 		logger.Info("meta-evolution: revision routed to operator verdict (bench-cleared but low-confidence)",
 			"artifact", artifact, "epoch", epoch, "margin", lowConfidence)
 		if t.OnProposal != nil {
-			t.OnProposal(artifact, epoch, reason, path, false)
+			// The verdict card must say WHY the loop is asking instead of
+			// auto-adopting — the margin is the whole context for the decision.
+			t.OnProposal(artifact, epoch, reason+" — 저신뢰 라우팅: "+lowConfidence, path, false)
 		}
 		return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow,
 			true, toVersion, reason+" [저신뢰: "+lowConfidence+" — 운영자 verdict 대기]")
