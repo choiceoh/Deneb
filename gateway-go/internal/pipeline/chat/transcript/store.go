@@ -10,24 +10,24 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
-// Type aliases — canonical interface and result types are in toolctx/.
+// Type aliases — canonical interface and result types are in toolport/.
 type (
-	SearchResult    = toolctx.SearchResult
-	MatchedMsg      = toolctx.MatchedMsg
-	TranscriptStore = toolctx.TranscriptStore
-	ChatMessage     = toolctx.ChatMessage
+	SearchResult    = toolport.SearchResult
+	MatchedMsg      = toolport.MatchedMsg
+	TranscriptStore = toolport.TranscriptStore
+	ChatMessage     = toolport.ChatMessage
 )
 
-var newTextChatMessage = toolctx.NewTextChatMessage
+var newTextChatMessage = toolport.NewTextChatMessage
 
 // Compile-time interface compliance.
 var (
-	_ toolctx.TranscriptStore = (*FileTranscriptStore)(nil)
-	_ toolctx.TranscriptStore = (*MemoryTranscriptStore)(nil)
+	_ toolport.TranscriptStore = (*FileTranscriptStore)(nil)
+	_ toolport.TranscriptStore = (*MemoryTranscriptStore)(nil)
 )
 
 // FileTranscriptStore stores transcripts as JSONL files on disk.
@@ -146,7 +146,7 @@ func redactChatMessageContent(msg *ChatMessage) {
 	if err := json.Unmarshal(msg.Content, &s); err == nil {
 		r := redact.String(s)
 		if r != s {
-			msg.Content = toolctx.MarshalJSONString(r)
+			msg.Content = toolport.MarshalJSONString(r)
 		}
 		return
 	}

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // A thinking+tool_use-only assistant message (the common shape of tool-heavy
@@ -15,7 +15,7 @@ import (
 func TestIndexableText_ThinkingAndToolOnlyMessage(t *testing.T) {
 	content := `[{"type":"thinking","thinking":"주간보고는 /weekly로 트리거해야 한다"},` +
 		`{"type":"tool_use","id":"t1","name":"cron","input":{"action":"list"}}]`
-	msg := toolctx.ChatMessage{Role: "assistant", Content: json.RawMessage(content)}
+	msg := toolport.ChatMessage{Role: "assistant", Content: json.RawMessage(content)}
 
 	got := indexableText(msg)
 	if strings.Contains(got, `"type"`) || (strings.Contains(got, "{") && strings.Contains(got, `"thinking"`)) {
@@ -30,11 +30,11 @@ func TestIndexableText_ThinkingAndToolOnlyMessage(t *testing.T) {
 }
 
 func TestIndexableText_PlainAndTextBlocksUnchanged(t *testing.T) {
-	plain := toolctx.ChatMessage{Role: "user", Content: json.RawMessage(`"안녕하세요"`)}
+	plain := toolport.ChatMessage{Role: "user", Content: json.RawMessage(`"안녕하세요"`)}
 	if got := indexableText(plain); got != "안녕하세요" {
 		t.Errorf("plain string altered: %q", got)
 	}
-	rich := toolctx.ChatMessage{
+	rich := toolport.ChatMessage{
 		Role:    "assistant",
 		Content: json.RawMessage(`[{"type":"text","text":"결과 요약"}]`),
 	}
@@ -52,7 +52,7 @@ func TestSearchMessages_ThinkingContentSearchableWithCleanSnippet(t *testing.T) 
 	}
 	content := `[{"type":"thinking","thinking":"진코솔라 잔금 회신은 화요일까지"},` +
 		`{"type":"tool_use","id":"t1","name":"wiki","input":{"action":"search"}}]`
-	if err := store.AppendMessage("s1", toolctx.ChatMessage{
+	if err := store.AppendMessage("s1", toolport.ChatMessage{
 		Role: "assistant", Content: json.RawMessage(content), Timestamp: 1000,
 	}); err != nil {
 		t.Fatalf("AppendMessage: %v", err)

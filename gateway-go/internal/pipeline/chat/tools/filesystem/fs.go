@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -17,7 +17,7 @@ import (
 // --- Write tool ---
 
 // ToolWrite builds the workspace file-write tool.
-func ToolWrite(defaultDir string) toolctx.ToolFunc {
+func ToolWrite(defaultDir string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -45,7 +45,7 @@ func ToolWrite(defaultDir string) toolctx.ToolFunc {
 		}
 
 		// Staleness check: reject if the file changed since our last read.
-		if fc := toolctx.FileCacheFromContext(ctx); fc != nil {
+		if fc := toolport.FileCacheFromContext(ctx); fc != nil {
 			if err := fc.CheckStaleness(path); err != nil {
 				return "", err
 			}
@@ -53,7 +53,7 @@ func ToolWrite(defaultDir string) toolctx.ToolFunc {
 		}
 
 		// Pre-edit checkpoint so the user can roll back this write.
-		toolctx.SnapshotBeforeWrite(ctx, path, "write")
+		toolport.SnapshotBeforeWrite(ctx, path, "write")
 
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -68,7 +68,7 @@ func ToolWrite(defaultDir string) toolctx.ToolFunc {
 // --- Edit tool ---
 
 // ToolEdit builds the workspace file-edit tool.
-func ToolEdit(defaultDir string) toolctx.ToolFunc {
+func ToolEdit(defaultDir string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -101,7 +101,7 @@ func ToolEdit(defaultDir string) toolctx.ToolFunc {
 		}
 
 		// Staleness check: reject if the file changed since our last read.
-		fc := toolctx.FileCacheFromContext(ctx)
+		fc := toolport.FileCacheFromContext(ctx)
 		if fc != nil {
 			if err := fc.CheckStaleness(path); err != nil {
 				return "", err
@@ -124,7 +124,7 @@ func ToolEdit(defaultDir string) toolctx.ToolFunc {
 		// (regex / line-target / substring). Covers every write branch below
 		// — SnapshotBeforeWrite is nil-safe and dedupes by SHA-256, so a
 		// no-op edit doesn't spam the index.
-		toolctx.SnapshotBeforeWrite(ctx, path, "edit")
+		toolport.SnapshotBeforeWrite(ctx, path, "edit")
 
 		content := string(data)
 

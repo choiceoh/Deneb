@@ -15,7 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 )
 
@@ -354,10 +354,10 @@ func TestBoundaryPolarisTimeRangeMatrix(t *testing.T) {
 }
 
 func TestBoundarySerializeExpandMessagesBudgetMatrix(t *testing.T) {
-	msgs := []toolctx.ChatMessage{
-		toolctx.NewTextChatMessage("user", "hello", 1),
-		toolctx.NewTextChatMessage("assistant", "안녕하세요", 2),
-		toolctx.NewTextChatMessage("tool", "result", 3),
+	msgs := []toolport.ChatMessage{
+		toolport.NewTextChatMessage("user", "hello", 1),
+		toolport.NewTextChatMessage("assistant", "안녕하세요", 2),
+		toolport.NewTextChatMessage("tool", "result", 3),
 	}
 	full := "[user]: hello\n\n[assistant]: 안녕하세요\n\n[tool]: result\n\n"
 	tests := []struct {

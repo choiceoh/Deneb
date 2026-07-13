@@ -9,14 +9,15 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // ToolSubagents returns a tool that manages subagent sessions: listing active agents,
 // sending messages, and waiting for results via d.
-func ToolSubagents(d *toolctx.SessionDeps) toolctx.ToolFunc {
+func ToolSubagents(d *tooldeps.SessionDeps) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action  string `json:"action"`
@@ -34,7 +35,7 @@ func ToolSubagents(d *toolctx.SessionDeps) toolctx.ToolFunc {
 			return "Sub-agent management not available (session dependencies not wired).", nil
 		}
 
-		parentKey := toolctx.SessionKeyFromContext(ctx)
+		parentKey := toolport.SessionKeyFromContext(ctx)
 
 		// Gather children: sessions where SpawnedBy == parentKey.
 		allSessions := d.Manager.List()
@@ -114,7 +115,7 @@ func subagentsList(children []*session.Session) string {
 }
 
 // subagentsKill kills one or all child sessions.
-func subagentsKill(d *toolctx.SessionDeps, children []*session.Session, target string) (string, error) {
+func subagentsKill(d *tooldeps.SessionDeps, children []*session.Session, target string) (string, error) {
 	if target == "" {
 		return "Target is required. Use a sub-agent index, label, session key, or \"all\".", nil
 	}
@@ -145,7 +146,7 @@ func subagentsKill(d *toolctx.SessionDeps, children []*session.Session, target s
 }
 
 // subagentsSteer sends a steering message to a running child session.
-func subagentsSteer(d *toolctx.SessionDeps, children []*session.Session, target, message string) (string, error) {
+func subagentsSteer(d *tooldeps.SessionDeps, children []*session.Session, target, message string) (string, error) {
 	if d.SendFn == nil {
 		return "Steering not available (SessionSendFn not wired).", nil
 	}
@@ -197,7 +198,7 @@ func childLabel(c *session.Session) string {
 // the pull counterpart to the proactive completion notification: if the parent
 // missed the push (e.g. its turn ended before the notification channel drained),
 // it can still fetch the result here instead of re-doing the work.
-func subagentsResult(d *toolctx.SessionDeps, children []*session.Session, target string) (string, error) {
+func subagentsResult(d *tooldeps.SessionDeps, children []*session.Session, target string) (string, error) {
 	if len(children) == 0 {
 		return "No sub-agents.", nil
 	}

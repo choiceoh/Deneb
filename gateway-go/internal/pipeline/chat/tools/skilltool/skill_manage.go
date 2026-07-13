@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -26,7 +26,7 @@ import (
 type SkillManageInvalidateFn func()
 
 // ToolFunc is the canonical chat tool function type.
-type ToolFunc = toolctx.ToolFunc
+type ToolFunc = toolport.ToolFunc
 
 // ToolSkills creates the unified skills tool with action dispatch
 // (list/create/patch/delete/read/list_files/write_file/remove_file).
@@ -119,7 +119,7 @@ func toolSkillManage(getSnapshot SkillsSnapshotProvider, workspaceDir, bundledSk
 				// After resolution on purpose: a name that doesn't resolve is
 				// not a consult, and phantom names must not accrue usage stats
 				// (Add is nil-safe when no recorder is wired for this run).
-				toolctx.SkillConsultLogFromContext(ctx).Add(p.Name)
+				toolport.SkillConsultLogFromContext(ctx).Add(p.Name)
 				return skillRead(skillPath, p.FilePath)
 			case "list_files":
 				return skillListFiles(skillPath)

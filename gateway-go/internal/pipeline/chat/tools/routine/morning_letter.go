@@ -15,7 +15,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
@@ -38,7 +38,7 @@ type MorningLetterOpts struct {
 // Sections: weather (Gwangju), exchange rates, copper price, calendar, email,
 // deadlines (upcoming due dates scanned from wiki pages), open questions
 // (project 미해결 질문 that stayed open too long).
-func ToolMorningLetter(opts ...MorningLetterOpts) toolctx.ToolFunc {
+func ToolMorningLetter(opts ...MorningLetterOpts) toolport.ToolFunc {
 	var diaryDir, wikiDir string
 	if len(opts) > 0 {
 		diaryDir = opts[0].DiaryDir

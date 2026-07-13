@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 func writeArtifactFixture(t *testing.T, name string, data []byte) string {
@@ -25,7 +25,7 @@ func writeArtifactFixture(t *testing.T, name string, data []byte) string {
 	return path
 }
 
-func callArtifactTool(t *testing.T, ctx context.Context, fn toolctx.ToolFunc, params any) (string, error) {
+func callArtifactTool(ctx context.Context, t *testing.T, fn toolport.ToolFunc, params any) (string, error) {
 	t.Helper()
 	raw, err := json.Marshal(params)
 	if err != nil {
@@ -34,9 +34,9 @@ func callArtifactTool(t *testing.T, ctx context.Context, fn toolctx.ToolFunc, pa
 	return fn(ctx, raw)
 }
 
-func deliveryContext(ctx context.Context, delivery *toolctx.DeliveryContext, send toolctx.MediaSendFunc) context.Context {
-	ctx = toolctx.WithDeliveryContext(ctx, delivery)
-	ctx = toolctx.WithMediaSendFunc(ctx, send)
+func deliveryContext(ctx context.Context, delivery *toolport.DeliveryContext, send toolport.MediaSendFunc) context.Context {
+	ctx = toolport.WithDeliveryContext(ctx, delivery)
+	ctx = toolport.WithMediaSendFunc(ctx, send)
 	return ctx
 }
 
@@ -164,21 +164,21 @@ func TestReadMediaFileBoundaryAndProtection(t *testing.T) {
 func TestToolSendFileForwardsExactDeliveryContract(t *testing.T) {
 	t.Setenv("DENEB_ARCHIVE_SENT_FILES", "0")
 	path := writeArtifactFixture(t, "pixel.png", []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3})
-	delivery := &toolctx.DeliveryContext{Channel: "telegram", To: "chat-42", AccountID: "primary", ThreadID: "thread-7"}
+	delivery := &toolport.DeliveryContext{Channel: "telegram", To: "chat-42", AccountID: "primary", ThreadID: "thread-7"}
 	type sentCall struct {
-		delivery *toolctx.DeliveryContext
+		delivery *toolport.DeliveryContext
 		path     string
 		kind     string
 		caption  string
 		silent   bool
 	}
 	var got sentCall
-	ctx := deliveryContext(context.Background(), delivery, func(_ context.Context, d *toolctx.DeliveryContext, p, kind, caption string, silent bool) error {
+	ctx := deliveryContext(context.Background(), delivery, func(_ context.Context, d *toolport.DeliveryContext, p, kind, caption string, silent bool) error {
 		got = sentCall{delivery: d, path: p, kind: kind, caption: caption, silent: silent}
 		return nil
 	})
 
-	out, err := callArtifactTool(t, ctx, ToolSendFile(), map[string]any{
+	out, err := callArtifactTool(ctx, t, ToolSendFile(), map[string]any{
 		"file_path": path,
 		"caption":   "정확한 캡션",
 		"silent":    true,
@@ -198,12 +198,12 @@ func TestToolSendFileExplicitTypeWinsOverDetection(t *testing.T) {
 	t.Setenv("DENEB_ARCHIVE_SENT_FILES", "off")
 	path := writeArtifactFixture(t, "looks.png", []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a})
 	var gotType string
-	ctx := deliveryContext(context.Background(), &toolctx.DeliveryContext{Channel: "slack", To: "C1"},
-		func(_ context.Context, _ *toolctx.DeliveryContext, _, mediaType, _ string, _ bool) error {
+	ctx := deliveryContext(context.Background(), &toolport.DeliveryContext{Channel: "slack", To: "C1"},
+		func(_ context.Context, _ *toolport.DeliveryContext, _, mediaType, _ string, _ bool) error {
 			gotType = mediaType
 			return nil
 		})
-	_, err := callArtifactTool(t, ctx, ToolSendFile(), map[string]any{"file_path": path, "type": "document"})
+	_, err := callArtifactTool(ctx, t, ToolSendFile(), map[string]any{"file_path": path, "type": "document"})
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -216,11 +216,11 @@ func TestToolSendFileValidationOrderAvoidsCallback(t *testing.T) {
 	t.Setenv("DENEB_ARCHIVE_SENT_FILES", "0")
 	path := writeArtifactFixture(t, "large.bin", []byte("123456"))
 	var calls atomic.Int32
-	send := func(context.Context, *toolctx.DeliveryContext, string, string, string, bool) error {
+	send := func(context.Context, *toolport.DeliveryContext, string, string, string, bool) error {
 		calls.Add(1)
 		return nil
 	}
-	validDelivery := &toolctx.DeliveryContext{Channel: "telegram", To: "chat"}
+	validDelivery := &toolport.DeliveryContext{Channel: "telegram", To: "chat"}
 
 	tests := []struct {
 		name   string
@@ -231,16 +231,16 @@ func TestToolSendFileValidationOrderAvoidsCallback(t *testing.T) {
 		{name: "blank path", ctx: deliveryContext(context.Background(), validDelivery, send), params: map[string]any{}, want: "file_path is required"},
 		{name: "missing file", ctx: deliveryContext(context.Background(), validDelivery, send), params: map[string]any{"file_path": filepath.Join(t.TempDir(), "missing")}, want: "file not found"},
 		{name: "directory", ctx: deliveryContext(context.Background(), validDelivery, send), params: map[string]any{"file_path": t.TempDir()}, want: "path is a directory"},
-		{name: "size cap", ctx: toolctx.WithMaxUploadBytes(deliveryContext(context.Background(), validDelivery, send), 5), params: map[string]any{"file_path": path}, want: "file too large"},
-		{name: "no callback", ctx: toolctx.WithDeliveryContext(context.Background(), validDelivery), params: map[string]any{"file_path": path}, want: "channel not connected"},
-		{name: "nil delivery", ctx: toolctx.WithMediaSendFunc(context.Background(), send), params: map[string]any{"file_path": path}, want: "no active delivery target"},
-		{name: "empty channel", ctx: deliveryContext(context.Background(), &toolctx.DeliveryContext{To: "chat"}, send), params: map[string]any{"file_path": path}, want: "no active delivery target"},
-		{name: "empty recipient", ctx: deliveryContext(context.Background(), &toolctx.DeliveryContext{Channel: "telegram"}, send), params: map[string]any{"file_path": path}, want: "no active delivery target"},
+		{name: "size cap", ctx: toolport.WithMaxUploadBytes(deliveryContext(context.Background(), validDelivery, send), 5), params: map[string]any{"file_path": path}, want: "file too large"},
+		{name: "no callback", ctx: toolport.WithDeliveryContext(context.Background(), validDelivery), params: map[string]any{"file_path": path}, want: "channel not connected"},
+		{name: "nil delivery", ctx: toolport.WithMediaSendFunc(context.Background(), send), params: map[string]any{"file_path": path}, want: "no active delivery target"},
+		{name: "empty channel", ctx: deliveryContext(context.Background(), &toolport.DeliveryContext{To: "chat"}, send), params: map[string]any{"file_path": path}, want: "no active delivery target"},
+		{name: "empty recipient", ctx: deliveryContext(context.Background(), &toolport.DeliveryContext{Channel: "telegram"}, send), params: map[string]any{"file_path": path}, want: "no active delivery target"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			before := calls.Load()
-			_, err := callArtifactTool(t, tc.ctx, ToolSendFile(), tc.params)
+			_, err := callArtifactTool(tc.ctx, t, ToolSendFile(), tc.params)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("err = %v, want %q", err, tc.want)
 			}
@@ -265,12 +265,12 @@ func TestToolSendFileRejectsProtectedSymlinkBeforeSend(t *testing.T) {
 		t.Skipf("symlink unavailable: %v", err)
 	}
 	var called bool
-	ctx := deliveryContext(context.Background(), &toolctx.DeliveryContext{Channel: "x", To: "y"},
-		func(context.Context, *toolctx.DeliveryContext, string, string, string, bool) error {
+	ctx := deliveryContext(context.Background(), &toolport.DeliveryContext{Channel: "x", To: "y"},
+		func(context.Context, *toolport.DeliveryContext, string, string, string, bool) error {
 			called = true
 			return nil
 		})
-	_, err := callArtifactTool(t, ctx, ToolSendFile(), map[string]any{"file_path": alias})
+	_, err := callArtifactTool(ctx, t, ToolSendFile(), map[string]any{"file_path": alias})
 	if err == nil || !strings.Contains(err.Error(), "protected") {
 		t.Fatalf("protected symlink err = %v", err)
 	}
@@ -283,9 +283,9 @@ func TestToolSendFileReportsExternalFailureWithoutSuccessClaim(t *testing.T) {
 	t.Setenv("DENEB_ARCHIVE_SENT_FILES", "0")
 	path := writeArtifactFixture(t, "report.pdf", []byte("%PDF-1.7"))
 	wantErr := errors.New("remote upload rejected")
-	ctx := deliveryContext(context.Background(), &toolctx.DeliveryContext{Channel: "teams", To: "room"},
-		func(context.Context, *toolctx.DeliveryContext, string, string, string, bool) error { return wantErr })
-	out, err := callArtifactTool(t, ctx, ToolSendFile(), map[string]any{"file_path": path})
+	ctx := deliveryContext(context.Background(), &toolport.DeliveryContext{Channel: "teams", To: "room"},
+		func(context.Context, *toolport.DeliveryContext, string, string, string, bool) error { return wantErr })
+	out, err := callArtifactTool(ctx, t, ToolSendFile(), map[string]any{"file_path": path})
 	if err == nil || !strings.Contains(err.Error(), wantErr.Error()) || !strings.Contains(err.Error(), "was not confirmed") {
 		t.Fatalf("send failure = out %q, err %v", out, err)
 	}
@@ -300,12 +300,12 @@ func TestToolSendFilePropagatesCanceledContextToCallback(t *testing.T) {
 	parent, cancel := context.WithCancel(context.Background())
 	cancel()
 	callbackSawCanceled := false
-	ctx := deliveryContext(parent, &toolctx.DeliveryContext{Channel: "mail", To: "user"},
-		func(ctx context.Context, _ *toolctx.DeliveryContext, _ string, _ string, _ string, _ bool) error {
+	ctx := deliveryContext(parent, &toolport.DeliveryContext{Channel: "mail", To: "user"},
+		func(ctx context.Context, _ *toolport.DeliveryContext, _ string, _ string, _ string, _ bool) error {
 			callbackSawCanceled = errors.Is(ctx.Err(), context.Canceled)
 			return ctx.Err()
 		})
-	_, err := callArtifactTool(t, ctx, ToolSendFile(), map[string]any{"file_path": path})
+	_, err := callArtifactTool(ctx, t, ToolSendFile(), map[string]any{"file_path": path})
 	if !callbackSawCanceled {
 		t.Fatal("callback did not receive canceled context")
 	}
@@ -337,13 +337,13 @@ func TestToolSendFileConcurrentCallsKeepParametersIsolated(t *testing.T) {
 		mu   sync.Mutex
 		seen = make(map[string]string, count)
 	)
-	send := func(_ context.Context, _ *toolctx.DeliveryContext, path, _, caption string, _ bool) error {
+	send := func(_ context.Context, _ *toolport.DeliveryContext, path, _, caption string, _ bool) error {
 		mu.Lock()
 		seen[filepath.Base(path)] = caption
 		mu.Unlock()
 		return nil
 	}
-	ctx := deliveryContext(context.Background(), &toolctx.DeliveryContext{Channel: "telegram", To: "chat"}, send)
+	ctx := deliveryContext(context.Background(), &toolport.DeliveryContext{Channel: "telegram", To: "chat"}, send)
 
 	var wg sync.WaitGroup
 	errs := make(chan error, count)
@@ -425,10 +425,10 @@ func TestDeliverRenderedImageStateTransitions(t *testing.T) {
 		t.Fatal("delivery without channel unexpectedly succeeded")
 	}
 
-	delivery := &toolctx.DeliveryContext{Channel: "telegram", To: "chat"}
+	delivery := &toolport.DeliveryContext{Channel: "telegram", To: "chat"}
 	var calls int
 	ctx := deliveryContext(context.Background(), delivery,
-		func(_ context.Context, got *toolctx.DeliveryContext, gotPath, kind, caption string, silent bool) error {
+		func(_ context.Context, got *toolport.DeliveryContext, gotPath, kind, caption string, silent bool) error {
 			calls++
 			if got != delivery || gotPath != path || kind != "photo" || caption != "caption" || silent {
 				return fmt.Errorf("bad delivery payload")
@@ -450,10 +450,10 @@ func TestFinishRenderedImageSuccessAndFailureStates(t *testing.T) {
 		t.Fatalf("manual state = %q", out)
 	}
 
-	delivery := &toolctx.DeliveryContext{Channel: "telegram", To: "chat"}
+	delivery := &toolport.DeliveryContext{Channel: "telegram", To: "chat"}
 	var caption string
 	ctx := deliveryContext(context.Background(), delivery,
-		func(_ context.Context, _ *toolctx.DeliveryContext, _, _, gotCaption string, _ bool) error {
+		func(_ context.Context, _ *toolport.DeliveryContext, _, _, gotCaption string, _ bool) error {
 			caption = gotCaption
 			return nil
 		})
@@ -463,7 +463,7 @@ func TestFinishRenderedImageSuccessAndFailureStates(t *testing.T) {
 	}
 
 	failCtx := deliveryContext(context.Background(), delivery,
-		func(context.Context, *toolctx.DeliveryContext, string, string, string, bool) error {
+		func(context.Context, *toolport.DeliveryContext, string, string, string, bool) error {
 			return errors.New("channel down")
 		})
 	out = finishRenderedImage(failCtx, path, "다이어그램", true, "cap", "title")
@@ -474,15 +474,15 @@ func TestFinishRenderedImageSuccessAndFailureStates(t *testing.T) {
 
 func TestDeliveryCallbackCanObserveDeadline(t *testing.T) {
 	path := writeArtifactFixture(t, "x.txt", []byte("x"))
-	ctx := deliveryContext(context.Background(), &toolctx.DeliveryContext{Channel: "x", To: "y"},
-		func(ctx context.Context, _ *toolctx.DeliveryContext, _ string, _ string, _ string, _ bool) error {
+	ctx := deliveryContext(context.Background(), &toolport.DeliveryContext{Channel: "x", To: "y"},
+		func(ctx context.Context, _ *toolport.DeliveryContext, _ string, _ string, _ string, _ bool) error {
 			deadline, ok := ctx.Deadline()
 			if !ok || time.Until(deadline) <= 0 || time.Until(deadline) > 61*time.Second {
 				return fmt.Errorf("missing bounded send deadline")
 			}
 			return nil
 		})
-	if _, err := callArtifactTool(t, ctx, ToolSendFile(), map[string]any{"file_path": path}); err != nil {
+	if _, err := callArtifactTool(ctx, t, ToolSendFile(), map[string]any{"file_path": path}); err != nil {
 		t.Fatalf("send deadline: %v", err)
 	}
 }

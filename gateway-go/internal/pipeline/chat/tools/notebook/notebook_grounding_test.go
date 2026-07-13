@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 func TestBuildNotebookGroundingSoftAndStrict(t *testing.T) {
@@ -89,8 +89,8 @@ func TestNotebookOpenCloseBindsSession(t *testing.T) {
 	callNotebook(t, fn, map[string]any{"action": "add_source", "id": id, "kind": "note", "text": "견적가 1.2억"})
 
 	const sk = "client:test-notebook-open-close"
-	toolctx.ClearActiveNotebook(sk) // isolate from any prior test (package-global store)
-	ctx := toolctx.WithSessionKey(context.Background(), sk)
+	toolport.ClearActiveNotebook(sk) // isolate from any prior test (package-global store)
+	ctx := toolport.WithSessionKey(context.Background(), sk)
 
 	raw, _ := json.Marshal(map[string]any{"action": "open", "id": id})
 	out, err := fn(ctx, raw)
@@ -100,7 +100,7 @@ func TestNotebookOpenCloseBindsSession(t *testing.T) {
 	if !strings.Contains(out, "열림") {
 		t.Fatalf("open should confirm: %q", out)
 	}
-	if got := toolctx.ActiveNotebook(sk); got != id {
+	if got := toolport.ActiveNotebook(sk); got != id {
 		t.Fatalf("after open, ActiveNotebook = %q, want %q", got, id)
 	}
 
@@ -108,7 +108,7 @@ func TestNotebookOpenCloseBindsSession(t *testing.T) {
 	if _, err := fn(ctx, raw); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	if got := toolctx.ActiveNotebook(sk); got != "" {
+	if got := toolport.ActiveNotebook(sk); got != "" {
 		t.Fatalf("after close, ActiveNotebook = %q, want empty", got)
 	}
 }
@@ -222,7 +222,7 @@ func TestNotebookOpenDedicatedGuard(t *testing.T) {
 
 	// From a dedicated session for idA, opening a DIFFERENT notebook (idB) must
 	// be refused — not reported as a false success (the key-derived id wins).
-	ctx := toolctx.WithSessionKey(context.Background(), toolctx.NotebookSessionPrefix+idA)
+	ctx := toolport.WithSessionKey(context.Background(), toolport.NotebookSessionPrefix+idA)
 	raw, _ := json.Marshal(map[string]any{"action": "open", "id": idB})
 	out, err := fn(ctx, raw)
 	if err != nil {
@@ -231,7 +231,7 @@ func TestNotebookOpenDedicatedGuard(t *testing.T) {
 	if !strings.Contains(out, "전용 세션") {
 		t.Fatalf("opening a different notebook from a dedicated session should be refused: %q", out)
 	}
-	if got := toolctx.ActiveNotebook(toolctx.NotebookSessionPrefix + idA); got != idA {
+	if got := toolport.ActiveNotebook(toolport.NotebookSessionPrefix + idA); got != idA {
 		t.Fatalf("dedicated session must stay on its own notebook, got %q", got)
 	}
 }

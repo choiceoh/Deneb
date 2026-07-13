@@ -10,7 +10,7 @@ import (
 	"time"
 
 	casepack "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
 
@@ -57,7 +57,7 @@ func TestRecordFixturePagingBoundsAndDeepMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := toolctx.WithToolPreset(context.Background(), string(toolpreset.PresetBriefcase))
+	ctx := toolport.WithToolPreset(context.Background(), string(toolpreset.PresetBriefcase))
 
 	type page struct {
 		Count            int `json:"count"`

@@ -29,7 +29,7 @@ const notebookFetchMaxBytes = 4 << 20 // 4 MB
 // media.SSRFSafeDialer, which rejects loopback/link-local/metadata IPs at dial
 // time — including across redirects) and gmail.HTMLToText for HTML→text.
 // coresecurity.IsSafeURL is an early friendly reject for obviously-internal
-// refs; the dialer is the authoritative guard. Matches toolctx.SourceReader.
+// refs; the dialer is the authoritative guard. Matches tooldeps.SourceReader.
 //
 // This path is reachable by a prompt-injected agent (it processes untrusted
 // mail/web content), so SSRF safety here is load-bearing — do not swap in a
@@ -59,7 +59,7 @@ func FetchURL(ctx context.Context, rawURL string) (string, error) {
 
 // notebookReadMail reads a Gmail thread (by thread id) into formatted text.
 // Needs Gmail auth (DefaultClient); errors surface as a graceful add failure.
-// Matches toolctx.SourceReader.
+// Matches tooldeps.SourceReader.
 func notebookReadMail(ctx context.Context, threadID string) (string, error) {
 	c, err := gmail.DefaultClient()
 	if err != nil {

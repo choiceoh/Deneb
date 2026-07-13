@@ -13,7 +13,7 @@
 // activatedTools metadata the executor attaches to tool_result blocks
 // (pkg/toolmeta — server-attached, so tool output CONTENT cannot forge it),
 // and, for pre-metadata transcripts, the exact activation notices the writers
-// emit (toolctx/activation_notice.go), parsed only from results paired by
+// emit (toolport/activation_notice.go), parsed only from results paired by
 // tool_use_id to an activating tool's call — so a marker-shaped string inside
 // some unrelated tool output (a read of a log file, promptware) cannot seed
 // tools, and an unpaired call (run died before the result) proves nothing.
@@ -30,7 +30,7 @@ import (
 	"encoding/json"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/pkg/toolmeta"
 )
@@ -109,7 +109,7 @@ func replayActivatedTools(messages []llm.Message, registry *ToolRegistry, sessio
 			if !writerCalls[b.ToolUseID] {
 				continue
 			}
-			for _, name := range toolctx.ParseActivationNotices(b.Content) {
+			for _, name := range toolport.ParseActivationNotices(b.Content) {
 				admit(name)
 			}
 		}

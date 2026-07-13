@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -126,12 +126,12 @@ func (d GatewayDeps) now() time.Time {
 // `needs_approval` envelope on first call; the agent must relay confirmation
 // to the user and then invoke the `.confirmed` variant with the same
 // `action_token` to execute.
-func ToolGateway(repoDir string) toolctx.ToolFunc {
+func ToolGateway(repoDir string) toolport.ToolFunc {
 	return ToolGatewayWithDeps(repoDir, GatewayDeps{})
 }
 
 // ToolGatewayWithDeps is the injectable constructor used by tests.
-func ToolGatewayWithDeps(repoDir string, deps GatewayDeps) toolctx.ToolFunc {
+func ToolGatewayWithDeps(repoDir string, deps GatewayDeps) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action      string         `json:"action"`

@@ -10,7 +10,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
@@ -38,7 +38,7 @@ const skillReviewHistoryBudget = 32000
 
 type skillReviewFork struct {
 	chat        chatport.SyncRunner
-	transcripts toolctx.TranscriptStore
+	transcripts toolport.TranscriptStore
 	tracker     *genesis.Tracker
 	model       string
 	logger      *slog.Logger
@@ -49,7 +49,7 @@ type ReviewFork = skillReviewFork
 
 func newSkillReviewFork(
 	chatHandler chatport.SyncRunner,
-	transcripts toolctx.TranscriptStore,
+	transcripts toolport.TranscriptStore,
 	tracker *genesis.Tracker,
 	model string,
 	logger *slog.Logger,
@@ -66,7 +66,7 @@ func newSkillReviewFork(
 // NewReviewFork constructs the isolated skill-review runner.
 func NewReviewFork(
 	chatHandler chatport.SyncRunner,
-	transcripts toolctx.TranscriptStore,
+	transcripts toolport.TranscriptStore,
 	tracker *genesis.Tracker,
 	model string,
 	logger *slog.Logger,

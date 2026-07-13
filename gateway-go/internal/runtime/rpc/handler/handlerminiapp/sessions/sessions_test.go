@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -320,12 +320,12 @@ func TestSessionsMethods_TranscriptOptional(t *testing.T) {
 // --- transcript tests -----------------------------------------------------
 
 type fakeTranscriptLoader struct {
-	loadFn    func(key string, limit int) ([]toolctx.ChatMessage, int, error)
+	loadFn    func(key string, limit int) ([]toolport.ChatMessage, int, error)
 	deleted   []string // keys passed to Delete, in order
 	deleteErr error
 }
 
-func (f *fakeTranscriptLoader) Load(key string, limit int) ([]toolctx.ChatMessage, int, error) {
+func (f *fakeTranscriptLoader) Load(key string, limit int) ([]toolport.ChatMessage, int, error) {
 	if f.loadFn == nil {
 		return nil, 0, errors.New("Load not stubbed")
 	}
@@ -346,14 +346,14 @@ func transcriptDeps(loader TranscriptLoader) SessionsDeps {
 
 func TestSessionsTranscript_HappyPath(t *testing.T) {
 	loader := &fakeTranscriptLoader{
-		loadFn: func(key string, limit int) ([]toolctx.ChatMessage, int, error) {
+		loadFn: func(key string, limit int) ([]toolport.ChatMessage, int, error) {
 			if key != "telegram:123" {
 				t.Errorf("key = %q", key)
 			}
 			if limit != defaultTranscriptLimit {
 				t.Errorf("limit = %d, want %d", limit, defaultTranscriptLimit)
 			}
-			return []toolctx.ChatMessage{
+			return []toolport.ChatMessage{
 				// User messages are persisted with a baked "[<RFC3339>] "
 				// wall-clock prefix (run_exec.go) — bubbles must not show it.
 				{ID: "m1", Role: "user", Content: jsonRaw(`"[2026-06-12T15:30:00+09:00] 안녕"`), Timestamp: 1_700_000_000_000},
@@ -390,14 +390,14 @@ func TestSessionsTranscript_HappyPath(t *testing.T) {
 
 func TestSessionsTranscript_DecodesBlocks(t *testing.T) {
 	loader := &fakeTranscriptLoader{
-		loadFn: func(_ string, _ int) ([]toolctx.ChatMessage, int, error) {
+		loadFn: func(_ string, _ int) ([]toolport.ChatMessage, int, error) {
 			// Content as an array of ContentBlock-like objects.
 			content := jsonRaw(`[
 				{"type": "text", "text": "Hello"},
 				{"type": "tool_use", "name": "gmail"},
 				{"type": "text", "text": "After tool"}
 			]`)
-			return []toolctx.ChatMessage{
+			return []toolport.ChatMessage{
 				{ID: "m1", Role: "assistant", Content: content},
 			}, 1, nil
 		},
@@ -430,11 +430,11 @@ func TestSessionsTranscript_DecodesBlocks(t *testing.T) {
 // display sanitation chat.history applies.
 func TestSessionsTranscript_HidesToolMachineryAndEnrichment(t *testing.T) {
 	enriched := "이 링크 봐줘 https://example.com\n\n---\n" +
-		toolctx.LinkEnrichmentHeader + "\n\npage dump\n---"
+		toolport.LinkEnrichmentHeader + "\n\npage dump\n---"
 	loader := &fakeTranscriptLoader{
-		loadFn: func(_ string, _ int) ([]toolctx.ChatMessage, int, error) {
-			return []toolctx.ChatMessage{
-				toolctx.NewTextChatMessage("user", enriched, 0),
+		loadFn: func(_ string, _ int) ([]toolport.ChatMessage, int, error) {
+			return []toolport.ChatMessage{
+				toolport.NewTextChatMessage("user", enriched, 0),
 				{Role: "assistant", Content: jsonRaw(`[
 					{"type": "thinking", "thinking": "고민"},
 					{"type": "text", "text": "재시작해볼게요"},
@@ -443,7 +443,7 @@ func TestSessionsTranscript_HidesToolMachineryAndEnrichment(t *testing.T) {
 				{Role: "user", Content: jsonRaw(`[
 					{"type": "tool_result", "tool_use_id": "t1", "content": "choiceoh 2495893 ... /home/choiceoh/.claude/remote/srv/... ps dump"}
 				]`)},
-				toolctx.NewTextChatMessage("assistant", "완료했습니다.", 0),
+				toolport.NewTextChatMessage("assistant", "완료했습니다.", 0),
 			}, 4, nil
 		},
 	}
@@ -478,7 +478,7 @@ func TestSessionsTranscript_HidesToolMachineryAndEnrichment(t *testing.T) {
 func TestSessionsTranscript_LimitClamp(t *testing.T) {
 	var seenLimit int
 	loader := &fakeTranscriptLoader{
-		loadFn: func(_ string, limit int) ([]toolctx.ChatMessage, int, error) {
+		loadFn: func(_ string, limit int) ([]toolport.ChatMessage, int, error) {
 			seenLimit = limit
 			return nil, 0, nil
 		},
@@ -518,7 +518,7 @@ func TestSessionsTranscript_RequiresAuth(t *testing.T) {
 
 func TestSessionsTranscript_LoaderError(t *testing.T) {
 	loader := &fakeTranscriptLoader{
-		loadFn: func(_ string, _ int) ([]toolctx.ChatMessage, int, error) {
+		loadFn: func(_ string, _ int) ([]toolport.ChatMessage, int, error) {
 			return nil, 0, errors.New("io broken")
 		},
 	}

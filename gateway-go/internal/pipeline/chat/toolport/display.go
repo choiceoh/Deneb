@@ -10,10 +10,10 @@
 // systemd errors) surfaces in the chat as an ordinary bubble the user can even
 // quote. These helpers rewrite only the RPC response; the JSONL is untouched.
 //
-// They live in toolctx (not chat) because both the chat pipeline's History RPC
+// They live in toolport (not chat) because both the chat pipeline's History RPC
 // and handlerminiapp's sessions.transcript RPC return transcripts to the
 // client, and handlerminiapp deliberately depends only on this leaf package.
-package toolctx
+package toolport
 
 import (
 	"encoding/json"

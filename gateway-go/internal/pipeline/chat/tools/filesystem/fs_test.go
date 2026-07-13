@@ -9,20 +9,20 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-func callTool(t *testing.T, fn toolctx.ToolFunc, params any) (string, error) {
+func callTool(t *testing.T, fn toolport.ToolFunc, params any) (string, error) {
 	t.Helper()
 	raw := testutil.Must(json.Marshal(params))
 	return fn(context.Background(), json.RawMessage(raw))
 }
 
-func mustCallTool(t *testing.T, fn toolctx.ToolFunc, params any) string {
+func mustCallTool(t *testing.T, fn toolport.ToolFunc, params any) string {
 	t.Helper()
 	out := testutil.Must(callTool(t, fn, params))
 	return out
@@ -180,7 +180,7 @@ func (f *fakeCheckpointer) Snapshot(_ context.Context, path, reason string) erro
 func TestToolWrite_callsCheckpointerBeforeWrite(t *testing.T) {
 	tmp := t.TempDir()
 	fc := &fakeCheckpointer{}
-	ctx := toolctx.WithCheckpointer(context.Background(), fc)
+	ctx := toolport.WithCheckpointer(context.Background(), fc)
 
 	raw := testutil.Must(json.Marshal(map[string]any{
 		"file_path": "x/y.txt",

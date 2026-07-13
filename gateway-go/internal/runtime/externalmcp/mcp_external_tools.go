@@ -41,7 +41,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mcpclient"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
@@ -111,7 +111,7 @@ func parseMCPServerSpecs(raw string) ([]mcpServerSpec, error) {
 // respawn it).
 // Start creates configured MCP clients immediately and discovers their chat
 // tools asynchronously for the lifetime of shutdownCtx.
-func Start(shutdownCtx context.Context, registry toolctx.ToolRegistrar, logger *slog.Logger) map[string]*mcpclient.Client {
+func Start(shutdownCtx context.Context, registry toolport.ToolRegistrar, logger *slog.Logger) map[string]*mcpclient.Client {
 	raw := strings.TrimSpace(os.Getenv(mcpServersEnv))
 	if raw == "" {
 		return nil
@@ -164,7 +164,7 @@ func Start(shutdownCtx context.Context, registry toolctx.ToolRegistrar, logger *
 // chat tools under the spec's namespace, returning the registered names.
 // Pure with respect to process/IO so tests can drive it with fake tools.
 func registerMCPServerTools(
-	registry toolctx.ToolRegistrar,
+	registry toolport.ToolRegistrar,
 	spec mcpServerSpec,
 	tools []mcpclient.ToolInfo,
 	call func(ctx context.Context, name string, args json.RawMessage) (string, error),
@@ -180,7 +180,7 @@ func registerMCPServerTools(
 		name := clampToolName(spec.Name+"_"+sanitizeMCPToolName(t.Name), t.Name)
 		names = append(names, name)
 		remote := t.Name
-		registry.RegisterTool(toolctx.ToolDef{
+		registry.RegisterTool(toolport.ToolDef{
 			Name:        name,
 			Description: desc(t.Description),
 			InputSchema: t.InputSchema,

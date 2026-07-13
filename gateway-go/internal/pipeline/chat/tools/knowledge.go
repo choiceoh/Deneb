@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -18,7 +18,7 @@ import (
 //	recall  — federated search across all read backends, merged by score
 //	read    — fetch one document by its layered ref ("w:...")
 //	record  — write a wiki page (the only writable backend)
-func ToolKnowledge(router *knowledge.Router) toolctx.ToolFunc {
+func ToolKnowledge(router *knowledge.Router) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Op string `json:"op"`

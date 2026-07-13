@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/routine"
 )
 
@@ -49,8 +49,8 @@ func finishRenderedImage(ctx context.Context, pngPath, kind string, send bool, c
 
 // deliverRenderedImage sends a just-rendered PNG over the active channel.
 func deliverRenderedImage(ctx context.Context, pngPath, caption string) error {
-	sendFn := toolctx.MediaSendFuncFromContext(ctx)
-	delivery := toolctx.DeliveryFromContext(ctx)
+	sendFn := toolport.MediaSendFuncFromContext(ctx)
+	delivery := toolport.DeliveryFromContext(ctx)
 	if sendFn == nil || delivery == nil || delivery.Channel == "" || delivery.To == "" {
 		return fmt.Errorf("채널 미연결/배달 대상 없음")
 	}

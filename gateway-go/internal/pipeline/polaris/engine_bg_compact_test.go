@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -76,7 +76,7 @@ func seedSession(t *testing.T, s *Store, sess string, total, coverageEnd int) in
 		if i%2 == 1 {
 			role = "assistant"
 		}
-		testutil.NoError(t, s.AppendMessage(sess, toolctx.ChatMessage{
+		testutil.NoError(t, s.AppendMessage(sess, toolport.ChatMessage{
 			Role:      role,
 			Content:   marshalStr(fmt.Sprintf("m%d %s", i, makeString(2200))),
 			Timestamp: int64(i * 1000),
@@ -183,7 +183,7 @@ func TestCompactInBackground_PinnedCoverageExcludesConcurrentAppends(t *testing.
 	// The pass is now blocked inside Summarize. Append new messages concurrently
 	// — these must end up uncovered (indices past the pin).
 	for i := 40; i < 45; i++ {
-		testutil.NoError(t, s.AppendMessage(sess, toolctx.ChatMessage{
+		testutil.NoError(t, s.AppendMessage(sess, toolport.ChatMessage{
 			Role: "user", Content: marshalStr(fmt.Sprintf("APPENDED-%d", i)), Timestamp: int64(i * 1000),
 		}))
 	}
@@ -240,7 +240,7 @@ func TestCompactInBackground_BelowThresholdNoOp(t *testing.T) {
 	e, s := testEngine(t)
 	sess := "bg-small"
 	for i := 0; i < 6; i++ {
-		testutil.NoError(t, s.AppendMessage(sess, toolctx.ChatMessage{
+		testutil.NoError(t, s.AppendMessage(sess, toolport.ChatMessage{
 			Role: "user", Content: marshalStr(fmt.Sprintf("tiny%d", i)), Timestamp: int64(i),
 		}))
 	}

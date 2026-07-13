@@ -1,7 +1,7 @@
 # Runtime operations tool 변경 지도
 
 이 패키지는 agent가 현재 runtime을 관찰·제어하는 tool 구현을 소유한다. schema와
-등록 정책은 `toolreg`, 공용 실행 계약과 context 값은 `toolctx`, 실제 process와
+등록 정책은 `toolreg`, 공용 실행 계약과 context 값은 `toolport`, 실제 process와
 session 상태는 주입된 infra/domain service가 소유한다.
 
 ## 진입점과 소유권
@@ -21,7 +21,7 @@ session 상태는 주입된 infra/domain service가 소유한다.
 
 ## 의존 방향과 불변조건
 
-- 의존 방향은 `toolreg → tools/runtimeops → toolctx + domain/infra services`다.
+- 의존 방향은 `toolreg → tools/runtimeops → toolport + domain/infra services`다.
   runtimeops는 상위 `tools`나 `pipeline/chat`를 import하거나 자신을 등록하지 않는다.
 - `ToolExec`는 catastrophic command를 process-manager와 fallback 양쪽에서 실행 전에
   반드시 거절한다. in-place write는 checkpoint하고, workdir를 검증하며, child env는

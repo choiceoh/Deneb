@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 )
 
@@ -20,7 +20,7 @@ import (
 // calMerged returns Google + local events in [from, to) sorted by start. The
 // returned warn string is a non-fatal note (e.g. Google fetch failed but local
 // answered) so the agent still gets the events it can.
-func calMerged(ctx context.Context, d *toolctx.CalendarDeps, from, to time.Time) (merged []calendar.Event, warn string) {
+func calMerged(ctx context.Context, d *tooldeps.CalendarDeps, from, to time.Time) (merged []calendar.Event, warn string) {
 	if d.Client != nil {
 		client, err := d.Client()
 		if err != nil {
@@ -221,7 +221,7 @@ const calGlanceMax = 8
 // with relative day labels (오늘/내일/요일). Returns "" when there are no events
 // or no calendar source — the caller then injects no section. `now` carries the
 // display location (KST); callers pass time.Now().In(loc).
-func CalendarGlance(ctx context.Context, d *toolctx.CalendarDeps, now time.Time, days int) string {
+func CalendarGlance(ctx context.Context, d *tooldeps.CalendarDeps, now time.Time, days int) string {
 	if d == nil || (d.Client == nil && d.Local == nil) {
 		return ""
 	}

@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/toolmeta"
@@ -21,12 +21,12 @@ import (
 
 // FetchToolsRegistry is the subset of ToolRegistry needed by fetch_tools.
 type FetchToolsRegistry interface {
-	DeferredToolDef(name string) (toolctx.ToolDef, bool)
-	DeferredSummaries() []toolctx.DeferredToolSummary
+	DeferredToolDef(name string) (toolport.ToolDef, bool)
+	DeferredSummaries() []toolport.DeferredToolSummary
 }
 
 // ToolFetchTools returns a tool that activates deferred tools and returns their schemas.
-func ToolFetchTools(registry FetchToolsRegistry) toolctx.ToolFunc {
+func ToolFetchTools(registry FetchToolsRegistry) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		return runFetchTools(ctx, input, registry)
 	}
@@ -47,7 +47,7 @@ func runFetchTools(ctx context.Context, input json.RawMessage, registry FetchToo
 		return fmt.Sprintf("No deferred tools match query %q.", request.Query), nil
 	}
 
-	activation := toolctx.DeferredActivationFromContext(ctx)
+	activation := toolport.DeferredActivationFromContext(ctx)
 	report, err := buildFetchToolsReport(ctx, names, registry, access, activation)
 	if err != nil {
 		return "", err
@@ -90,7 +90,7 @@ type fetchToolAccess struct {
 }
 
 func fetchToolAccessFromContext(ctx context.Context) fetchToolAccess {
-	preset := toolpreset.Preset(toolctx.ToolPresetFromContext(ctx))
+	preset := toolpreset.Preset(toolport.ToolPresetFromContext(ctx))
 	return fetchToolAccess{allowed: toolpreset.AllowedTools(preset)}
 }
 
@@ -124,7 +124,7 @@ func deferredToolSearchDocs(registry FetchToolsRegistry, access fetchToolAccess)
 	return docs
 }
 
-func deferredToolSearchDoc(registry FetchToolsRegistry, summary toolctx.DeferredToolSummary) searchDoc {
+func deferredToolSearchDoc(registry FetchToolsRegistry, summary toolport.DeferredToolSummary) searchDoc {
 	tokens := append(tokenize(summary.Name), tokenize(summary.Description)...)
 	if def, ok := registry.DeferredToolDef(summary.Name); ok {
 		for _, parameterName := range extractParamNames(def.InputSchema) {
@@ -164,7 +164,7 @@ const (
 
 type fetchToolResolution struct {
 	name     string
-	def      toolctx.ToolDef
+	def      toolport.ToolDef
 	decision fetchToolDecision
 }
 
@@ -172,7 +172,7 @@ func resolveFetchTool(
 	name string,
 	registry FetchToolsRegistry,
 	access fetchToolAccess,
-	activation *toolctx.DeferredActivation,
+	activation *toolport.DeferredActivation,
 ) fetchToolResolution {
 	if !access.allows(name) {
 		return fetchToolResolution{name: name, decision: fetchToolUnavailable}
@@ -200,7 +200,7 @@ func buildFetchToolsReport(
 	names []string,
 	registry FetchToolsRegistry,
 	access fetchToolAccess,
-	activation *toolctx.DeferredActivation,
+	activation *toolport.DeferredActivation,
 ) (*fetchToolsReport, error) {
 	report := &fetchToolsReport{}
 	for _, name := range names {
@@ -226,7 +226,7 @@ func (r *fetchToolsReport) add(resolution fetchToolResolution) {
 	}
 }
 
-func (r *fetchToolsReport) writeSchema(def toolctx.ToolDef) {
+func (r *fetchToolsReport) writeSchema(def toolport.ToolDef) {
 	fmt.Fprintf(&r.output, "## %s\n%s\n", def.Name, def.Description)
 	if def.InputSchema != nil {
 		schemaJSON, _ := json.MarshalIndent(def.InputSchema, "", "  ")
@@ -235,7 +235,7 @@ func (r *fetchToolsReport) writeSchema(def toolctx.ToolDef) {
 	r.output.WriteString("\n")
 }
 
-func (r *fetchToolsReport) finalize(ctx context.Context, activation *toolctx.DeferredActivation) (string, error) {
+func (r *fetchToolsReport) finalize(ctx context.Context, activation *toolport.DeferredActivation) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -247,7 +247,7 @@ func (r *fetchToolsReport) finalize(ctx context.Context, activation *toolctx.Def
 	return r.output.String(), nil
 }
 
-func (r *fetchToolsReport) publishActivation(ctx context.Context, activation *toolctx.DeferredActivation) {
+func (r *fetchToolsReport) publishActivation(ctx context.Context, activation *toolport.DeferredActivation) {
 	if activation != nil && len(r.activated) > 0 {
 		activation.Activate(r.activated)
 	}
@@ -266,10 +266,10 @@ func (r *fetchToolsReport) replayEvidence() []string {
 
 func (r *fetchToolsReport) appendActivationNotices() {
 	if len(r.alreadyActive) > 0 {
-		r.output.WriteString(toolctx.FormatAlreadyActiveNotice(r.alreadyActive))
+		r.output.WriteString(toolport.FormatAlreadyActiveNotice(r.alreadyActive))
 		r.output.WriteString("\n")
 	}
 	if len(r.activated) > 0 {
-		r.output.WriteString(toolctx.FormatFetchActivationNotice(r.activated))
+		r.output.WriteString(toolport.FormatFetchActivationNotice(r.activated))
 	}
 }

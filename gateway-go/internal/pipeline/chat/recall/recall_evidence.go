@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/pkg/promptguard"
@@ -414,7 +414,7 @@ func recallNormalizeBM25(score float64) float64 {
 	return score / (score + 1)
 }
 
-func recallTranscriptEvidence(ctx context.Context, transcript toolctx.TranscriptStore, sessionKey, currentMessage string, queries []string) []recallEvidence {
+func recallTranscriptEvidence(ctx context.Context, transcript toolport.TranscriptStore, sessionKey, currentMessage string, queries []string) []recallEvidence {
 	if transcript == nil || len(queries) == 0 {
 		return nil
 	}
@@ -460,7 +460,7 @@ func recallTranscriptEvidence(ctx context.Context, transcript toolctx.Transcript
 	return evidence
 }
 
-func formatRecallTranscriptNote(match toolctx.MatchedMsg) string {
+func formatRecallTranscriptNote(match toolport.MatchedMsg) string {
 	text := strings.TrimSpace(match.Message.TextContent())
 	var contextParts []string
 	for _, ctxMsg := range match.Context {

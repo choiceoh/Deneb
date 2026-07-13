@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 func TestToolMessageSendRequiresConnectedChannel(t *testing.T) {
@@ -23,7 +23,7 @@ func TestToolMessageSendRequiresConnectedChannel(t *testing.T) {
 
 func TestToolMessageSendRequiresDeliveryTarget(t *testing.T) {
 	tool := ToolMessage()
-	ctx := toolctx.WithReplyFunc(context.Background(), func(ctx context.Context, delivery *toolctx.DeliveryContext, text string) error {
+	ctx := toolport.WithReplyFunc(context.Background(), func(ctx context.Context, delivery *toolport.DeliveryContext, text string) error {
 		t.Fatalf("replyFn should not be called without a delivery target")
 		return nil
 	})
@@ -39,7 +39,7 @@ func TestToolMessageSendRequiresDeliveryTarget(t *testing.T) {
 
 func TestToolMessageSendAutoDeliveryNoReplyFuncIsBenign(t *testing.T) {
 	tool := ToolMessage()
-	ctx := toolctx.WithAutoDelivery(context.Background())
+	ctx := toolport.WithAutoDelivery(context.Background())
 
 	out, err := tool(ctx, []byte(`{"action":"send","message":"hello"}`))
 	if err != nil {
@@ -52,8 +52,8 @@ func TestToolMessageSendAutoDeliveryNoReplyFuncIsBenign(t *testing.T) {
 
 func TestToolMessageSendAutoDeliveryNoDeliveryTargetIsBenign(t *testing.T) {
 	tool := ToolMessage()
-	ctx := toolctx.WithAutoDelivery(context.Background())
-	ctx = toolctx.WithReplyFunc(ctx, func(ctx context.Context, delivery *toolctx.DeliveryContext, text string) error {
+	ctx := toolport.WithAutoDelivery(context.Background())
+	ctx = toolport.WithReplyFunc(ctx, func(ctx context.Context, delivery *toolport.DeliveryContext, text string) error {
 		t.Fatalf("replyFn should not be called without a delivery target")
 		return nil
 	})
@@ -70,11 +70,11 @@ func TestToolMessageSendAutoDeliveryNoDeliveryTargetIsBenign(t *testing.T) {
 func TestToolMessageSendPropagatesDeliveryFailure(t *testing.T) {
 	tool := ToolMessage()
 	wantErr := errors.New("telegram client not connected")
-	ctx := toolctx.WithDeliveryContext(context.Background(), &toolctx.DeliveryContext{
+	ctx := toolport.WithDeliveryContext(context.Background(), &toolport.DeliveryContext{
 		Channel: "telegram",
 		To:      "telegram:123",
 	})
-	ctx = toolctx.WithReplyFunc(ctx, func(ctx context.Context, delivery *toolctx.DeliveryContext, text string) error {
+	ctx = toolport.WithReplyFunc(ctx, func(ctx context.Context, delivery *toolport.DeliveryContext, text string) error {
 		return wantErr
 	})
 
@@ -92,14 +92,14 @@ func TestToolMessageSendPropagatesDeliveryFailure(t *testing.T) {
 
 func TestToolMessageSendSuccessUsesCurrentDelivery(t *testing.T) {
 	tool := ToolMessage()
-	var gotDelivery *toolctx.DeliveryContext
+	var gotDelivery *toolport.DeliveryContext
 	var gotText string
 
-	ctx := toolctx.WithDeliveryContext(context.Background(), &toolctx.DeliveryContext{
+	ctx := toolport.WithDeliveryContext(context.Background(), &toolport.DeliveryContext{
 		Channel: "telegram",
 		To:      "telegram:123",
 	})
-	ctx = toolctx.WithReplyFunc(ctx, func(ctx context.Context, delivery *toolctx.DeliveryContext, text string) error {
+	ctx = toolport.WithReplyFunc(ctx, func(ctx context.Context, delivery *toolport.DeliveryContext, text string) error {
 		gotDelivery = delivery
 		gotText = text
 		return nil

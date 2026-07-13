@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -17,9 +17,9 @@ func testStore(t *testing.T) *Store {
 	return s
 }
 
-func textMsg(role, text string, ts int64) toolctx.ChatMessage {
+func textMsg(role, text string, ts int64) toolport.ChatMessage {
 	b, _ := json.Marshal(text)
-	return toolctx.ChatMessage{Role: role, Content: b, Timestamp: ts}
+	return toolport.ChatMessage{Role: role, Content: b, Timestamp: ts}
 }
 
 func TestAppendAndLoad(t *testing.T) {

@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/schedule"
 )
 
@@ -45,7 +45,7 @@ var calGlanceCache = struct {
 // NewCalendarGlanceFunc returns a glance provider over the given calendar deps,
 // or nil when no calendar source is wired (so the Handler leaves the feature
 // off). Cheap on cache hits; at most one bounded calendar fetch per day.
-func NewCalendarGlanceFunc(d *toolctx.CalendarDeps) CalendarGlanceFunc {
+func NewCalendarGlanceFunc(d *tooldeps.CalendarDeps) CalendarGlanceFunc {
 	if d == nil || (d.Client == nil && d.Local == nil) {
 		return nil
 	}

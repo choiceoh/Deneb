@@ -3,16 +3,16 @@ package chat
 import (
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	transcriptstore "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
 )
 
 // Transcript contracts remain available from chat while their persistence
 // implementations live in the focused transcript package.
 type (
-	SearchResult          = toolctx.SearchResult
-	MatchedMsg            = toolctx.MatchedMsg
-	TranscriptStore       = toolctx.TranscriptStore
+	SearchResult          = toolport.SearchResult
+	MatchedMsg            = toolport.MatchedMsg
+	TranscriptStore       = toolport.TranscriptStore
 	FileTranscriptStore   = transcriptstore.FileTranscriptStore
 	MemoryTranscriptStore = transcriptstore.MemoryTranscriptStore
 	CachedTranscriptStore = transcriptstore.CachedTranscriptStore

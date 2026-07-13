@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -33,13 +33,13 @@ const HeartbeatBackupName = "HEARTBEAT.md.prev"
 // and update progress, breaking the "repeat the same report every 30 minutes"
 // failure mode. Also usable from a normal user session ("add this to my
 // heartbeat") so the user can self-manage the file without leaving the chat.
-func ToolHeartbeatUpdate() toolctx.ToolFunc {
+func ToolHeartbeatUpdate() toolport.ToolFunc {
 	return toolHeartbeatUpdateWithHome("")
 }
 
 // toolHeartbeatUpdateWithHome is the testable variant: when homeDir is empty
 // it falls back to os.UserHomeDir() for production use; tests pass a tmpdir.
-func toolHeartbeatUpdateWithHome(homeDir string) toolctx.ToolFunc {
+func toolHeartbeatUpdateWithHome(homeDir string) toolport.ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Content string `json:"content"`

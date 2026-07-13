@@ -16,7 +16,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 )
 
 // Panel fans one prompt out to multiple healthy models for comparison.
@@ -53,7 +53,7 @@ const (
 // recorded per-answer (Err set, Answer empty) and never block the batch.
 //
 // Wired into CoreToolDeps.ConsultPanel; reached by the research_panel tool.
-func (s *Panel) Consult(ctx context.Context, system, prompt string, models []string) []toolctx.PanelAnswer {
+func (s *Panel) Consult(ctx context.Context, system, prompt string, models []string) []tooldeps.PanelAnswer {
 	reg := s.modelRegistry
 	if reg == nil {
 		return nil
@@ -75,7 +75,7 @@ func (s *Panel) Consult(ctx context.Context, system, prompt string, models []str
 		return nil
 	}
 
-	answers := make([]toolctx.PanelAnswer, len(models))
+	answers := make([]tooldeps.PanelAnswer, len(models))
 	sem := make(chan struct{}, panelMaxConcurrency)
 	var wg sync.WaitGroup
 	for i, m := range models {
@@ -99,7 +99,7 @@ func (s *Panel) Consult(ctx context.Context, system, prompt string, models []str
 				Messages:  []llm.Message{llm.NewTextMessage("user", prompt)},
 				MaxTokens: panelMaxTokens,
 			})
-			ans := toolctx.PanelAnswer{Model: model, Family: panelModelFamily(model), Ms: time.Since(start).Milliseconds()}
+			ans := tooldeps.PanelAnswer{Model: model, Family: panelModelFamily(model), Ms: time.Since(start).Milliseconds()}
 			switch {
 			case err != nil:
 				ans.Err = err.Error()

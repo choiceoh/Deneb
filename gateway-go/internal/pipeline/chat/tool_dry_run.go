@@ -1,6 +1,6 @@
 // tool_dry_run.go — side-effect suppression for eval/replay runs.
 //
-// When a run's context carries toolctx.WithToolDryRun, ToolRegistry.Execute
+// When a run's context carries toolport.WithToolDryRun, ToolRegistry.Execute
 // dispatches only tools on the read-only allowlist below; every other tool
 // returns a stub without its fn being invoked. This lets harnesses (behavioral
 // skill replay, prompt-regression turns, puppet rehearsals) drive the REAL

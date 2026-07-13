@@ -18,7 +18,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
 
@@ -88,7 +88,7 @@ type agentRunState struct {
 	spawnFlag          *SpawnFlag
 	verifyGate         *verifyGateState
 	deferredActivation *DeferredActivation
-	execStats          *toolctx.ToolExecStats
+	execStats          *toolport.ToolExecStats
 }
 
 func newAgentRunState(replayedDeferredTools []string) *agentRunState {
@@ -99,7 +99,7 @@ func newAgentRunState(replayedDeferredTools []string) *agentRunState {
 		spawnFlag:          NewSpawnFlag(),
 		verifyGate:         &verifyGateState{},
 		deferredActivation: NewDeferredActivation(),
-		execStats:          toolctx.NewToolExecStats(),
+		execStats:          toolport.NewToolExecStats(),
 	}
 	if len(replayedDeferredTools) > 0 {
 		state.deferredActivation.Seed(replayedDeferredTools)
@@ -121,9 +121,9 @@ func (s *agentRunState) turnInitializer(params RunParams, sessionToolPreset stri
 		ctx = WithDeferredActivation(ctx, s.deferredActivation)
 		ctx = WithSpawnFlag(ctx, s.spawnFlag)
 		ctx = WithVerifyGate(ctx, s.verifyGate)
-		ctx = toolctx.WithToolExecStats(ctx, s.execStats)
+		ctx = toolport.WithToolExecStats(ctx, s.execStats)
 		if params.ToolDryRun {
-			ctx = toolctx.WithToolDryRun(ctx)
+			ctx = toolport.WithToolDryRun(ctx)
 		}
 		if params.AutoDeliveredOutput {
 			ctx = WithAutoDelivery(ctx)
@@ -395,7 +395,7 @@ func buildAgentConfig(
 	acd agentConfigDeps,
 	resolvedModel string,
 	logger *slog.Logger,
-) (cfg agent.AgentConfig, spawnFlag *SpawnFlag, execStats *toolctx.ToolExecStats) {
+) (cfg agent.AgentConfig, spawnFlag *SpawnFlag, execStats *toolport.ToolExecStats) {
 	tools := buildAgentTools(acd.Tools, sessionToolPreset, acd.ReplayDeferredTools)
 	state := newAgentRunState(acd.ReplayDeferredTools)
 	policy := resolveAgentExecutionPolicy(params, deps, cachedSession, acd.MaxTokens)

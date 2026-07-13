@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -48,7 +48,7 @@ func TestToolRegistry_AutoSpillover_OverThreshold(t *testing.T) {
 		return big, nil
 	})
 
-	ctx := toolctx.WithSessionKey(context.Background(), "sess-auto")
+	ctx := toolport.WithSessionKey(context.Background(), "sess-auto")
 	result := testutil.Must(reg.Execute(ctx, "big", json.RawMessage(`{}`)))
 
 	if len(result) >= len(big) {
@@ -82,7 +82,7 @@ func TestToolRegistry_AutoSpillover_BelowThreshold(t *testing.T) {
 		return small, nil
 	})
 
-	ctx := toolctx.WithSessionKey(context.Background(), "sess-small")
+	ctx := toolport.WithSessionKey(context.Background(), "sess-small")
 	result := testutil.Must(reg.Execute(ctx, "small", json.RawMessage(`{}`)))
 
 	if result != small {

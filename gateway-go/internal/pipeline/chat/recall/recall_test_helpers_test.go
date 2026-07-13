@@ -4,19 +4,19 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 type testTranscriptStore struct {
 	mu       sync.Mutex
-	sessions map[string][]toolctx.ChatMessage
+	sessions map[string][]toolport.ChatMessage
 }
 
 func newTestTranscriptStore() *testTranscriptStore {
-	return &testTranscriptStore{sessions: make(map[string][]toolctx.ChatMessage)}
+	return &testTranscriptStore{sessions: make(map[string][]toolport.ChatMessage)}
 }
 
-func (s *testTranscriptStore) Load(sessionKey string, limit int) ([]toolctx.ChatMessage, int, error) {
+func (s *testTranscriptStore) Load(sessionKey string, limit int) ([]toolport.ChatMessage, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	msgs := s.sessions[sessionKey]
@@ -24,10 +24,10 @@ func (s *testTranscriptStore) Load(sessionKey string, limit int) ([]toolctx.Chat
 	if limit > 0 && len(msgs) > limit {
 		msgs = msgs[len(msgs)-limit:]
 	}
-	return append([]toolctx.ChatMessage(nil), msgs...), total, nil
+	return append([]toolport.ChatMessage(nil), msgs...), total, nil
 }
 
-func (s *testTranscriptStore) Append(sessionKey string, msg toolctx.ChatMessage) error {
+func (s *testTranscriptStore) Append(sessionKey string, msg toolport.ChatMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sessions[sessionKey] = append(s.sessions[sessionKey], msg)
@@ -51,14 +51,14 @@ func (s *testTranscriptStore) ListKeys() ([]string, error) {
 	return keys, nil
 }
 
-func (s *testTranscriptStore) Search(query string, maxResults int) ([]toolctx.SearchResult, error) {
+func (s *testTranscriptStore) Search(query string, maxResults int) ([]toolport.SearchResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	query = strings.ToLower(query)
-	var results []toolctx.SearchResult
+	var results []toolport.SearchResult
 	remaining := maxResults
 	for key, msgs := range s.sessions {
-		var matches []toolctx.MatchedMsg
+		var matches []toolport.MatchedMsg
 		for i := range msgs {
 			if remaining <= 0 {
 				break
@@ -73,15 +73,15 @@ func (s *testTranscriptStore) Search(query string, maxResults int) ([]toolctx.Se
 			if to > len(msgs) {
 				to = len(msgs)
 			}
-			matches = append(matches, toolctx.MatchedMsg{
+			matches = append(matches, toolport.MatchedMsg{
 				Index:   i,
 				Message: msgs[i],
-				Context: append([]toolctx.ChatMessage(nil), msgs[from:to]...),
+				Context: append([]toolport.ChatMessage(nil), msgs[from:to]...),
 			})
 			remaining--
 		}
 		if len(matches) > 0 {
-			results = append(results, toolctx.SearchResult{SessionKey: key, Matches: matches})
+			results = append(results, toolport.SearchResult{SessionKey: key, Matches: matches})
 		}
 		if remaining <= 0 {
 			break
@@ -97,6 +97,6 @@ func (s *testTranscriptStore) CloneRecent(srcKey, dstKey string, limit int) erro
 	if limit > 0 && len(msgs) > limit {
 		msgs = msgs[len(msgs)-limit:]
 	}
-	s.sessions[dstKey] = append([]toolctx.ChatMessage(nil), msgs...)
+	s.sessions[dstKey] = append([]toolport.ChatMessage(nil), msgs...)
 	return nil
 }

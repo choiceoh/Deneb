@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/process"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -56,7 +56,7 @@ func validateWorkdir(dir string) error {
 
 // ToolExec returns a tool that runs shell commands via procMgr with defaultDir as the
 // working directory when no explicit workdir is provided.
-func ToolExec(procMgr *process.Manager, defaultDir string) toolctx.ToolFunc {
+func ToolExec(procMgr *process.Manager, defaultDir string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Command    string            `json:"command"`
@@ -113,7 +113,7 @@ func ToolExec(procMgr *process.Manager, defaultDir string) toolctx.ToolFunc {
 				abs = filepath.Join(workDir, t)
 			}
 			if fi, err := os.Stat(abs); err == nil && fi.Mode().IsRegular() {
-				toolctx.SnapshotBeforeWrite(ctx, abs, "exec")
+				toolport.SnapshotBeforeWrite(ctx, abs, "exec")
 			}
 		}
 
@@ -282,7 +282,7 @@ func formatExecResult(r *process.ExecResult) string {
 // --- Process tool ---
 
 // ToolProcess returns the process inspection and control tool.
-func ToolProcess(procMgr *process.Manager) toolctx.ToolFunc {
+func ToolProcess(procMgr *process.Manager) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action    string `json:"action"`

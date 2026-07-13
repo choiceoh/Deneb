@@ -38,7 +38,7 @@ func handleRunSuccess(
 	if broadcaster != nil {
 		// Read Sino-Korean Hanja as Hangul for the done frame the client settles
 		// to (報告書 → 보고서). The persisted transcript keeps the raw text; the
-		// display read transliterates it (toolctx.TransliterateAssistantTextForDisplay).
+		// display read transliterates it (toolport.TransliterateAssistantTextForDisplay).
 		// stripReasoningLeak mirrors the sync path (buildSyncResult): without it
 		// the async done frame was the one surface that could still show leaked
 		// "[thinking]" delimiters.

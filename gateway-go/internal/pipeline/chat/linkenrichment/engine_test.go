@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
 
@@ -26,7 +26,7 @@ func TestEngineEnrichMessageUsesNativeYouTubeContent(t *testing.T) {
 	}
 
 	result := engine.enrichMessage(context.Background(), "이거 봐 https://youtu.be/dQw4w9WgXcQ")
-	for _, want := range []string{toolctx.LinkEnrichmentHeader, "테스트 영상", "테스트 채널", "인트로", "안녕하세요 영상 내용입니다"} {
+	for _, want := range []string{toolport.LinkEnrichmentHeader, "테스트 영상", "테스트 채널", "인트로", "안녕하세요 영상 내용입니다"} {
 		if !strings.Contains(result, want) {
 			t.Errorf("enriched output missing %q: %q", want, result)
 		}
@@ -111,7 +111,7 @@ func TestEngineStartEligibilityAndJoinFallbacks(t *testing.T) {
 	if join := engine.Start(context.Background(), "링크 없는 일반 질문", identitySanitizer); join != nil {
 		t.Fatal("linkless message started enrichment")
 	}
-	alreadyEnriched := "see https://example.com\n\n---\n" + toolctx.LinkEnrichmentHeader + "\n\nstuff\n---"
+	alreadyEnriched := "see https://example.com\n\n---\n" + toolport.LinkEnrichmentHeader + "\n\nstuff\n---"
 	if join := engine.Start(context.Background(), alreadyEnriched, identitySanitizer); join != nil {
 		t.Fatal("already-enriched message started enrichment")
 	}
@@ -122,7 +122,7 @@ func TestEngineStartEligibilityAndJoinFallbacks(t *testing.T) {
 		t.Fatal("linked message did not start enrichment")
 	}
 	got := join(context.Background())
-	if !strings.HasPrefix(got, message) || !strings.Contains(got, toolctx.LinkEnrichmentHeader) || !strings.Contains(got, "Fetched body") {
+	if !strings.HasPrefix(got, message) || !strings.Contains(got, toolport.LinkEnrichmentHeader) || !strings.Contains(got, "Fetched body") {
 		t.Fatalf("joined message lost content contract: %q", got)
 	}
 

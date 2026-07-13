@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
 
@@ -48,10 +48,10 @@ func TestBuildAgentConfig_OnTurnInitSetsSessionKeyAndPreset(t *testing.T) {
 	}
 	ctx := cfg.OnTurnInit(context.Background())
 
-	if got := toolctx.SessionKeyFromContext(ctx); got != "client:main" {
+	if got := toolport.SessionKeyFromContext(ctx); got != "client:main" {
 		t.Errorf("session key from OnTurnInit ctx = %q, want %q", got, "client:main")
 	}
-	if got := toolctx.ToolPresetFromContext(ctx); got != "researcher" {
+	if got := toolport.ToolPresetFromContext(ctx); got != "researcher" {
 		t.Errorf("tool preset from OnTurnInit ctx = %q, want %q", got, "researcher")
 	}
 }
@@ -219,12 +219,12 @@ func TestBuildAgentConfig_PreservesCombinedPolicyAndHookContracts(t *testing.T) 
 	}
 
 	ctx := cfg.OnTurnInit(context.Background())
-	if toolctx.SessionKeyFromContext(ctx) != params.SessionKey ||
-		toolctx.ToolPresetFromContext(ctx) != string(toolpreset.PresetBriefcase) ||
-		!toolctx.AutoDeliveryFromContext(ctx) || !toolctx.ToolDryRunFromContext(ctx) {
+	if toolport.SessionKeyFromContext(ctx) != params.SessionKey ||
+		toolport.ToolPresetFromContext(ctx) != string(toolpreset.PresetBriefcase) ||
+		!toolport.AutoDeliveryFromContext(ctx) || !toolport.ToolDryRunFromContext(ctx) {
 		t.Fatal("turn context lost run identity or delivery/dry-run policy")
 	}
-	if toolctx.SpawnFlagFromContext(ctx) != spawnFlag || toolctx.ToolExecStatsFromContext(ctx) != execStats {
+	if toolport.SpawnFlagFromContext(ctx) != spawnFlag || toolport.ToolExecStatsFromContext(ctx) != execStats {
 		t.Fatal("turn context did not retain the returned run-scoped state")
 	}
 	if verifyGateFromContext(ctx) == nil {
@@ -235,7 +235,7 @@ func TestBuildAgentConfig_PreservesCombinedPolicyAndHookContracts(t *testing.T) 
 	if heartbeat["turn"] != 4 || heartbeat["tokens"] != 321 {
 		t.Fatalf("heartbeat payload = %+v", heartbeat)
 	}
-	toolctx.SkillConsultLogFromContext(ctx).Add("risk-skill")
+	toolport.SkillConsultLogFromContext(ctx).Add("risk-skill")
 	cfg.OnToolTurn(4, []agent.ToolActivity{{Name: "read"}})
 	if len(usage.calls) != 1 || usage.calls[0].skill != "risk-skill" || usage.calls[0].model != "resolved-model" {
 		t.Fatalf("skill usage hook calls = %+v", usage.calls)

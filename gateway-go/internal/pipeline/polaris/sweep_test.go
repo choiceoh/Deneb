@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 func TestSweepExpired_RemovesOnlyStaleMessageFiles(t *testing.T) {
@@ -18,7 +18,7 @@ func TestSweepExpired_RemovesOnlyStaleMessageFiles(t *testing.T) {
 	}
 
 	// Stale session: message file + summary file, mtime pushed 60 days back.
-	if err := store.AppendMessage("cron:old:123", toolctx.ChatMessage{Role: "user", Content: json.RawMessage(`"오래된 작업"`)}); err != nil {
+	if err := store.AppendMessage("cron:old:123", toolport.ChatMessage{Role: "user", Content: json.RawMessage(`"오래된 작업"`)}); err != nil {
 		t.Fatalf("append: %v", err)
 	}
 	if err := os.WriteFile(store.summariesPath("cron:old:123"), []byte(`[]`), 0o644); err != nil {
@@ -35,7 +35,7 @@ func TestSweepExpired_RemovesOnlyStaleMessageFiles(t *testing.T) {
 	store.mu.Unlock()
 
 	// Fresh session: must survive.
-	if err := store.AppendMessage("client:main", toolctx.ChatMessage{Role: "user", Content: json.RawMessage(`"오늘 일정"`)}); err != nil {
+	if err := store.AppendMessage("client:main", toolport.ChatMessage{Role: "user", Content: json.RawMessage(`"오늘 일정"`)}); err != nil {
 		t.Fatalf("append fresh: %v", err)
 	}
 
@@ -59,7 +59,7 @@ func TestSweepExpired_SkipsLoadedSessionsAndDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}
-	if err := store.AppendMessage("client:main", toolctx.ChatMessage{Role: "user", Content: json.RawMessage(`"활성 세션"`)}); err != nil {
+	if err := store.AppendMessage("client:main", toolport.ChatMessage{Role: "user", Content: json.RawMessage(`"활성 세션"`)}); err != nil {
 		t.Fatalf("append: %v", err)
 	}
 	old := time.Now().Add(-90 * 24 * time.Hour)

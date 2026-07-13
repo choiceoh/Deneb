@@ -13,7 +13,8 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
@@ -50,7 +51,7 @@ type briefSource struct {
 // close returns to ordinary chat; mode toggles soft/strict grounding. brief is
 // the one-shot variant: it gathers every source's content and returns JSON for
 // the LLM to compose a grounded briefing that cites each claim inline ([S1]…).
-func ToolNotebook(d *toolctx.NotebookDeps) toolctx.ToolFunc {
+func ToolNotebook(d *tooldeps.NotebookDeps) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action      string `json:"action"`
@@ -116,7 +117,7 @@ func ToolNotebook(d *toolctx.NotebookDeps) toolctx.ToolFunc {
 
 // notebookForDeal returns (creating if needed) the deal's notebook and shows it.
 // This is how the agent resolves "탑솔라 딜 노트북" without tracking its id.
-func notebookForDeal(d *toolctx.NotebookDeps, dealRef, dealName string) (string, error) {
+func notebookForDeal(d *tooldeps.NotebookDeps, dealRef, dealName string) (string, error) {
 	if strings.TrimSpace(dealRef) == "" {
 		return "deal_ref를 지정하세요 (딜/프로젝트 식별자).", nil
 	}
@@ -131,7 +132,7 @@ func notebookForDeal(d *toolctx.NotebookDeps, dealRef, dealName string) (string,
 // then pin a source to it. The mail pipeline (deal extraction) and the native
 // "save to deal" action both flow through this — same deal_ref the wiki deal
 // page uses, so raw evidence and curated facts share one identity.
-func notebookPinToDeal(ctx context.Context, d *toolctx.NotebookDeps, dealRef, dealName, kind, ref, title, text string) (string, error) {
+func notebookPinToDeal(ctx context.Context, d *tooldeps.NotebookDeps, dealRef, dealName, kind, ref, title, text string) (string, error) {
 	if strings.TrimSpace(dealRef) == "" {
 		return "deal_ref를 지정하세요 (딜/프로젝트 식별자).", nil
 	}
@@ -142,7 +143,7 @@ func notebookPinToDeal(ctx context.Context, d *toolctx.NotebookDeps, dealRef, de
 	return notebookAddSource(ctx, d, nb.ID, kind, ref, title, text)
 }
 
-func notebookCreate(d *toolctx.NotebookDeps, name, description string) (string, error) {
+func notebookCreate(d *tooldeps.NotebookDeps, name, description string) (string, error) {
 	nb, err := d.Store.Create(name, description)
 	if err != nil {
 		return fmt.Sprintf("노트북 생성 실패: %v", err), nil
@@ -150,7 +151,7 @@ func notebookCreate(d *toolctx.NotebookDeps, name, description string) (string, 
 	return fmt.Sprintf("노트북 생성: %q (id=%s). `notebook(action=\"add_source\", id=%q, ...)` 로 자료를 핀하세요.", nb.Name, nb.ID, nb.ID), nil
 }
 
-func notebookList(d *toolctx.NotebookDeps) string {
+func notebookList(d *tooldeps.NotebookDeps) string {
 	nbs := d.Store.List()
 	if len(nbs) == 0 {
 		return "노트북 없음. `notebook(action=\"create\", name=\"...\")` 로 만드세요."
@@ -167,7 +168,7 @@ func notebookList(d *toolctx.NotebookDeps) string {
 	return sb.String()
 }
 
-func notebookShow(d *toolctx.NotebookDeps, id string) (string, error) {
+func notebookShow(d *tooldeps.NotebookDeps, id string) (string, error) {
 	nb, ok := d.Store.Get(id)
 	if !ok {
 		return notebookNotFound(id), nil
@@ -200,7 +201,7 @@ func notebookShow(d *toolctx.NotebookDeps, id string) (string, error) {
 	return sb.String(), nil
 }
 
-func notebookAddSource(ctx context.Context, d *toolctx.NotebookDeps, id, kind, ref, title, text string) (string, error) {
+func notebookAddSource(ctx context.Context, d *tooldeps.NotebookDeps, id, kind, ref, title, text string) (string, error) {
 	kind = strings.TrimSpace(kind)
 	// File + external sources are ingested into text at add time (snapshot), so
 	// the briefing/grounding reads them like a note and never re-fetches per turn.
@@ -254,7 +255,7 @@ func notebookAddSource(ctx context.Context, d *toolctx.NotebookDeps, id, kind, r
 	return fmt.Sprintf("자료 핀 완료: [%s] %s (%s)", src.Cite, label, src.Kind), nil
 }
 
-func notebookRemoveSource(d *toolctx.NotebookDeps, id, cite string) (string, error) {
+func notebookRemoveSource(d *tooldeps.NotebookDeps, id, cite string) (string, error) {
 	if strings.TrimSpace(cite) == "" {
 		return "source에 제거할 자료의 인용 태그(예: S2)를 지정하세요.", nil
 	}
@@ -267,7 +268,7 @@ func notebookRemoveSource(d *toolctx.NotebookDeps, id, cite string) (string, err
 	return fmt.Sprintf("자료 제거 완료: %s", cite), nil
 }
 
-func notebookDelete(d *toolctx.NotebookDeps, id string) (string, error) {
+func notebookDelete(d *tooldeps.NotebookDeps, id string) (string, error) {
 	if err := d.Store.Delete(id); err != nil {
 		if errors.Is(err, notebook.ErrNotFound) {
 			return notebookNotFound(id), nil
@@ -278,10 +279,10 @@ func notebookDelete(d *toolctx.NotebookDeps, id string) (string, error) {
 }
 
 // notebookOpen binds the current session to a notebook so every following turn
-// is grounded primarily in its pinned sources. The binding lives in toolctx
+// is grounded primarily in its pinned sources. The binding lives in toolport
 // (read by the chat run pipeline, which injects the grounding block on the tail
 // of the user message and suppresses the broad memory recall for bound turns).
-func notebookOpen(ctx context.Context, d *toolctx.NotebookDeps, id string) (string, error) {
+func notebookOpen(ctx context.Context, d *tooldeps.NotebookDeps, id string) (string, error) {
 	if strings.TrimSpace(id) == "" {
 		return "열 노트북의 id를 지정하세요 (또는 deal_ref). `notebook(action=\"list\")` 로 확인.", nil
 	}
@@ -289,17 +290,17 @@ func notebookOpen(ctx context.Context, d *toolctx.NotebookDeps, id string) (stri
 	if !ok {
 		return notebookNotFound(id), nil
 	}
-	sk := toolctx.SessionKeyFromContext(ctx)
+	sk := toolport.SessionKeyFromContext(ctx)
 	if sk == "" {
 		return "세션을 식별할 수 없어 노트북을 열 수 없습니다.", nil
 	}
 	// A dedicated "notebook:<id>" session is fixed to its own notebook by the
 	// session key — open cannot switch it (ActiveNotebook derives from the key).
 	// Guard so we don't report a false success for a different notebook.
-	if dedicated := toolctx.DedicatedNotebookID(sk); dedicated != "" && dedicated != nb.ID {
+	if dedicated := toolport.DedicatedNotebookID(sk); dedicated != "" && dedicated != nb.ID {
 		return fmt.Sprintf("이 대화는 노트북 전용 세션이라 다른 노트북(%q)을 열 수 없습니다 — 그 노트북은 해당 노트북 화면에서 여세요.", nb.Name), nil
 	}
-	toolctx.SetActiveNotebook(sk, nb.ID)
+	toolport.SetActiveNotebook(sk, nb.ID)
 	if len(nb.Sources) == 0 {
 		return fmt.Sprintf("📓 노트북 %q 을(를) 열었지만 아직 핀된 자료가 없습니다. `notebook(action=\"add_source\", id=%q, ...)` 로 자료를 추가하세요.", nb.Name, nb.ID), nil
 	}
@@ -308,22 +309,22 @@ func notebookOpen(ctx context.Context, d *toolctx.NotebookDeps, id string) (stri
 
 // notebookClose unbinds the current session, returning to ordinary chat.
 func notebookClose(ctx context.Context) string {
-	sk := toolctx.SessionKeyFromContext(ctx)
+	sk := toolport.SessionKeyFromContext(ctx)
 	if sk == "" {
 		return "세션을 식별할 수 없습니다."
 	}
 	// A dedicated "notebook:<id>" session derives its grounding from the session
 	// key itself, so it cannot be unbound from within — the user leaves it by
 	// navigating away in the app.
-	if toolctx.DedicatedNotebookID(sk) != "" {
+	if toolport.DedicatedNotebookID(sk) != "" {
 		return "이 대화는 노트북 전용 세션이라 여기서 닫을 수 없습니다 — 앱에서 다른 화면으로 나가면 일반 대화로 돌아갑니다."
 	}
-	toolctx.ClearActiveNotebook(sk)
+	toolport.ClearActiveNotebook(sk)
 	return "노트북을 닫았습니다 — 일반 모드로 돌아갑니다 (전체 메모리 회상 복귀)."
 }
 
 // notebookSetMode toggles a notebook's grounding strictness (soft/strict).
-func notebookSetMode(d *toolctx.NotebookDeps, id, mode string) (string, error) {
+func notebookSetMode(d *tooldeps.NotebookDeps, id, mode string) (string, error) {
 	if strings.TrimSpace(id) == "" {
 		return "그라운딩 모드를 바꿀 노트북 id를 지정하세요 (또는 deal_ref).", nil
 	}
@@ -367,7 +368,7 @@ const (
 // has no sources, so the caller injects nothing. The chat run pipeline calls
 // this each turn for a notebook-bound session (run_exec.go) — it is the session
 // analogue of notebookBrief's one-shot JSON.
-func BuildNotebookGrounding(d *toolctx.NotebookDeps, notebookID string) (string, bool) {
+func BuildNotebookGrounding(d *tooldeps.NotebookDeps, notebookID string) (string, bool) {
 	if d == nil || d.Store == nil || strings.TrimSpace(notebookID) == "" {
 		return "", false
 	}
@@ -438,7 +439,7 @@ func groundingLabelSuffix(label string) string {
 // The model composes the actual briefing on its turn — grounded ONLY in these
 // sources, citing each claim with the source's [S#] tag (the morning_letter
 // pattern: tool returns data, LLM synthesizes).
-func notebookBrief(d *toolctx.NotebookDeps, id, focus string) (string, error) {
+func notebookBrief(d *tooldeps.NotebookDeps, id, focus string) (string, error) {
 	nb, ok := d.Store.Get(id)
 	if !ok {
 		return notebookNotFound(id), nil
@@ -528,7 +529,7 @@ func clampIngestedText(s string) string {
 // (text, "") on success or ("", userMessage) when ref is empty, the reader is
 // unwired, errors, or yields nothing — the caller returns userMessage to the
 // agent and pins nothing.
-func ingestViaReader(ctx context.Context, read toolctx.SourceReader, ref, label, backend string) (text, userMsg string) {
+func ingestViaReader(ctx context.Context, read tooldeps.SourceReader, ref, label, backend string) (text, userMsg string) {
 	if strings.TrimSpace(ref) == "" {
 		return "", fmt.Sprintf("%s 자료는 ref가 필요합니다.", label)
 	}
@@ -613,7 +614,7 @@ func detectFileKind(path string, data []byte) string {
 
 // buildBriefSource resolves one source's content for a brief, truncated to
 // maxBytes and annotated with any read/staleness/truncation note.
-func buildBriefSource(d *toolctx.NotebookDeps, src notebook.Source, maxBytes int) briefSource {
+func buildBriefSource(d *tooldeps.NotebookDeps, src notebook.Source, maxBytes int) briefSource {
 	bs := briefSource{Cite: src.Cite, Kind: src.Kind, Ref: src.Ref, Title: src.Title}
 	switch src.Kind {
 	case notebook.KindNote, notebook.KindFile, notebook.KindURL, notebook.KindMail, notebook.KindDiary:

@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // ToolFunc is the canonical chat tool function type.
-type ToolFunc = toolctx.ToolFunc
+type ToolFunc = toolport.ToolFunc
 
 // SkillLifecycleBackend executes Propus, Deneb's closed-loop self-improvement
 // system. The tool name remains skill_lifecycle for compatibility.

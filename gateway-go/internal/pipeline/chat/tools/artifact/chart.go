@@ -27,7 +27,7 @@ import (
 
 	_ "embed"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/routine"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -95,7 +95,7 @@ type chartParams struct {
 }
 
 // ToolChart renders a chart to a PNG and returns its path for send_file.
-func ToolChart() toolctx.ToolFunc {
+func ToolChart() toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p chartParams
 		if err := jsonutil.UnmarshalInto("chart params", input, &p); err != nil {

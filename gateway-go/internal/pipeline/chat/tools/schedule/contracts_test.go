@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 )
 
@@ -651,7 +651,7 @@ func TestShortDurationContract(t *testing.T) {
 }
 
 func TestToolCalendarInputAndDispatchContract(t *testing.T) {
-	tool := ToolCalendar(&toolctx.CalendarDeps{})
+	tool := ToolCalendar(&tooldeps.CalendarDeps{})
 	if _, err := tool(context.Background(), json.RawMessage(`{"action":`)); err == nil || !strings.Contains(err.Error(), "parse input") {
 		t.Fatalf("malformed error = %v", err)
 	}
@@ -674,7 +674,7 @@ func TestCalendarGlanceNilAndEmptyContract(t *testing.T) {
 	if got := CalendarGlance(context.Background(), nil, now, 3); got != "" {
 		t.Fatalf("nil deps = %q", got)
 	}
-	if got := CalendarGlance(context.Background(), &toolctx.CalendarDeps{}, now, 3); got != "" {
+	if got := CalendarGlance(context.Background(), &tooldeps.CalendarDeps{}, now, 3); got != "" {
 		t.Fatalf("empty deps = %q", got)
 	}
 }

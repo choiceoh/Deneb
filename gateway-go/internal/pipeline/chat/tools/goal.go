@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/goals"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // ToolGoal returns the `goal` tool. It resolves the store at call time
@@ -23,7 +23,7 @@ func ToolGoal() ToolFunc {
 		if store == nil {
 			return "표준 목표 기능이 비활성화되어 있습니다.", nil
 		}
-		sessionKey := toolctx.SessionKeyFromContext(ctx)
+		sessionKey := toolport.SessionKeyFromContext(ctx)
 		if sessionKey == "" {
 			return "", fmt.Errorf("goal: 현재 세션을 확인할 수 없습니다")
 		}

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // EveningLetterOpts holds optional configuration for the evening letter tool.
@@ -26,7 +26,7 @@ type EveningLetterOpts struct {
 // The morning-only market sections (weather, FX, copper) are intentionally
 // dropped: those belong to a morning brief, not an evening review. The shared
 // section collectors and data types live in morning_letter.go.
-func ToolEveningLetter(opts ...EveningLetterOpts) toolctx.ToolFunc {
+func ToolEveningLetter(opts ...EveningLetterOpts) toolport.ToolFunc {
 	var diaryDir, wikiDir string
 	if len(opts) > 0 {
 		diaryDir = opts[0].DiaryDir

@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/reply"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/typing"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/checkpoint"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -53,7 +53,7 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	// not clobber one another.
 	if root := h.checkpointRoot; root != "" {
 		cpm := checkpoint.New(root, params.SessionKey)
-		runCtx = toolctx.WithCheckpointer(runCtx, checkpoint.NewToolAdapter(cpm))
+		runCtx = toolport.WithCheckpointer(runCtx, checkpoint.NewToolAdapter(cpm))
 	}
 
 	h.abort.Register(params.ClientRunID, &AbortEntry{

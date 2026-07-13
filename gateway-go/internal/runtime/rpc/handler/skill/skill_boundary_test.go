@@ -18,7 +18,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	infraprocess "github.com/choiceoh/deneb/gateway-go/internal/infra/process"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpctest"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -537,21 +537,21 @@ func TestWorkspaceDiscoverConfigAndEligibilityOverrideSemantics(t *testing.T) {
 func boolPointer(v bool) *bool { return &v }
 
 type transcriptStub struct {
-	msgs  []toolctx.ChatMessage
+	msgs  []toolport.ChatMessage
 	err   error
 	key   string
 	limit int
 }
 
-func (s *transcriptStub) Load(key string, limit int) ([]toolctx.ChatMessage, int, error) {
+func (s *transcriptStub) Load(key string, limit int) ([]toolport.ChatMessage, int, error) {
 	s.key, s.limit = key, limit
 	return s.msgs, len(s.msgs), s.err
 }
-func (*transcriptStub) Append(string, toolctx.ChatMessage) error           { return nil }
-func (*transcriptStub) Delete(string) error                                { return nil }
-func (*transcriptStub) ListKeys() ([]string, error)                        { return nil, nil }
-func (*transcriptStub) Search(string, int) ([]toolctx.SearchResult, error) { return nil, nil }
-func (*transcriptStub) CloneRecent(string, string, int) error              { return nil }
+func (*transcriptStub) Append(string, toolport.ChatMessage) error           { return nil }
+func (*transcriptStub) Delete(string) error                                 { return nil }
+func (*transcriptStub) ListKeys() ([]string, error)                         { return nil, nil }
+func (*transcriptStub) Search(string, int) ([]toolport.SearchResult, error) { return nil, nil }
+func (*transcriptStub) CloneRecent(string, string, int) error               { return nil }
 
 func TestBuildSessionContextNilFailureAndRichTranscript(t *testing.T) {
 	minimal, err := buildSessionContext(nil, "session:minimal")
@@ -569,11 +569,11 @@ func TestBuildSessionContextNilFailureAndRichTranscript(t *testing.T) {
 		t.Fatalf("Load args = %q, %d", failing.key, failing.limit)
 	}
 
-	store := &transcriptStub{msgs: []toolctx.ChatMessage{
-		toolctx.NewTextChatMessage("user", "please inspect", 1),
+	store := &transcriptStub{msgs: []toolport.ChatMessage{
+		toolport.NewTextChatMessage("user", "please inspect", 1),
 		{Role: "assistant", Content: json.RawMessage(`[{"type":"text","text":"working"},{"type":"tool_use","name":"read"},{"type":"tool_use","name":"grep"}]`)},
 		{Role: "assistant", Content: json.RawMessage(`[{"type":"tool_use","name":"read"},{"type":"tool_use","name":""}]`)},
-		toolctx.NewTextChatMessage("tool", "result", 4),
+		toolport.NewTextChatMessage("tool", "result", 4),
 		{Role: "assistant"},
 	}}
 	got, err := buildSessionContext(store, "session:rich")

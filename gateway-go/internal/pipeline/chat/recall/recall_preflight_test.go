@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 type testStrictErrorSink struct{ err error }
@@ -302,10 +302,10 @@ func TestBuildRecallPreflightUsesRecentDiaryForTopiclessRecall(t *testing.T) {
 
 func TestBuildRecallPreflightSearchesTranscript(t *testing.T) {
 	transcript := newTestTranscriptStore()
-	if err := transcript.Append("telegram:1", toolctx.NewTextChatMessage("user", "alpha 결정은 서버 preflight로 하기로 했다", 1000)); err != nil {
+	if err := transcript.Append("telegram:1", toolport.NewTextChatMessage("user", "alpha 결정은 서버 preflight로 하기로 했다", 1000)); err != nil {
 		t.Fatalf("Append old: %v", err)
 	}
-	if err := transcript.Append("telegram:1", toolctx.NewTextChatMessage("user", "전에 alpha 결정 기억나?", 2000)); err != nil {
+	if err := transcript.Append("telegram:1", toolport.NewTextChatMessage("user", "전에 alpha 결정 기억나?", 2000)); err != nil {
 		t.Fatalf("Append current: %v", err)
 	}
 
@@ -350,7 +350,7 @@ func TestBuildRecallPreflightSkipsEphemeralUser(t *testing.T) {
 // when SkipRecall is set — no work-context injection, no search latency.
 func TestBuildRecallPreflightSkipsWhenSkipRecall(t *testing.T) {
 	transcript := newTestTranscriptStore()
-	if err := transcript.Append("telegram:1", toolctx.NewTextChatMessage("user", "alpha 결정은 서버 preflight로 하기로 했다", 1000)); err != nil {
+	if err := transcript.Append("telegram:1", toolport.NewTextChatMessage("user", "alpha 결정은 서버 preflight로 하기로 했다", 1000)); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
 	out, _ := Build(
@@ -399,33 +399,33 @@ func TestFormatRecallNoEvidenceIsFenced(t *testing.T) {
 	}
 }
 
-// panickyTranscriptStore implements toolctx.TranscriptStore with a Search
+// panickyTranscriptStore implements toolport.TranscriptStore with a Search
 // that panics, to prove one broken recall source cannot take down the turn
 // (or the other sources) now that sources run in parallel goroutines.
 type panickyTranscriptStore struct{}
 
-func (panickyTranscriptStore) Load(string, int) ([]toolctx.ChatMessage, int, error) {
+func (panickyTranscriptStore) Load(string, int) ([]toolport.ChatMessage, int, error) {
 	return nil, 0, nil
 }
-func (panickyTranscriptStore) Append(string, toolctx.ChatMessage) error { return nil }
-func (panickyTranscriptStore) Delete(string) error                      { return nil }
-func (panickyTranscriptStore) ListKeys() ([]string, error)              { return nil, nil }
-func (panickyTranscriptStore) Search(string, int) ([]toolctx.SearchResult, error) {
+func (panickyTranscriptStore) Append(string, toolport.ChatMessage) error { return nil }
+func (panickyTranscriptStore) Delete(string) error                       { return nil }
+func (panickyTranscriptStore) ListKeys() ([]string, error)               { return nil, nil }
+func (panickyTranscriptStore) Search(string, int) ([]toolport.SearchResult, error) {
 	panic("transcript search exploded")
 }
 func (panickyTranscriptStore) CloneRecent(string, string, int) error { return nil }
 
-// slowTranscriptStore implements toolctx.TranscriptStore with a Search that
+// slowTranscriptStore implements toolport.TranscriptStore with a Search that
 // blocks past the preflight deadline, simulating a source cut mid-collection.
 type slowTranscriptStore struct{ delay time.Duration }
 
-func (slowTranscriptStore) Load(string, int) ([]toolctx.ChatMessage, int, error) {
+func (slowTranscriptStore) Load(string, int) ([]toolport.ChatMessage, int, error) {
 	return nil, 0, nil
 }
-func (slowTranscriptStore) Append(string, toolctx.ChatMessage) error { return nil }
-func (slowTranscriptStore) Delete(string) error                      { return nil }
-func (slowTranscriptStore) ListKeys() ([]string, error)              { return nil, nil }
-func (s slowTranscriptStore) Search(string, int) ([]toolctx.SearchResult, error) {
+func (slowTranscriptStore) Append(string, toolport.ChatMessage) error { return nil }
+func (slowTranscriptStore) Delete(string) error                       { return nil }
+func (slowTranscriptStore) ListKeys() ([]string, error)               { return nil, nil }
+func (s slowTranscriptStore) Search(string, int) ([]toolport.SearchResult, error) {
 	time.Sleep(s.delay)
 	return nil, nil
 }

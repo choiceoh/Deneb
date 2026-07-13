@@ -9,7 +9,8 @@ import (
 	"unicode"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -28,7 +29,7 @@ func Truncate(s string, maxLen int) string {
 // --- unified sessions tool ---
 
 // ToolSessions creates the unified sessions tool with action dispatch (list/history/search/send).
-func ToolSessions(d *toolctx.SessionDeps) toolctx.ToolFunc {
+func ToolSessions(d *tooldeps.SessionDeps) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action string `json:"action"`
@@ -60,7 +61,7 @@ func ToolSessions(d *toolctx.SessionDeps) toolctx.ToolFunc {
 // JSONL. Window totals via Aggregate, per-session table via
 // AggregateBySession. Tokens only: agentlog persists no dollar cost, so none
 // is invented here (per-tool histograms live in observe action=behavior).
-func toolSessionsStats(d *toolctx.SessionDeps) toolctx.ToolFunc {
+func toolSessionsStats(d *tooldeps.SessionDeps) toolport.ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		if d == nil || d.AgentLog == nil {
 			return "agent log가 배선되지 않아 통계를 낼 수 없습니다.", nil
@@ -113,9 +114,9 @@ func toolSessionsStats(d *toolctx.SessionDeps) toolctx.ToolFunc {
 // --- sessions list sub-action ---
 
 // toolSessionsList returns a tool function that lists active sessions.
-func toolSessionsList(sessions *session.Manager) toolctx.ToolFunc {
+func toolSessionsList(sessions *session.Manager) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		currentKey := toolctx.SessionKeyFromContext(ctx)
+		currentKey := toolport.SessionKeyFromContext(ctx)
 
 		if sessions == nil {
 			return fmt.Sprintf("Current session: %s\nSession manager not available.", currentKey), nil
@@ -169,7 +170,7 @@ func toolSessionsList(sessions *session.Manager) toolctx.ToolFunc {
 // --- sessions history sub-action ---
 
 // toolSessionsHistory returns a tool function that retrieves session transcript history.
-func toolSessionsHistory(transcript toolctx.TranscriptStore) toolctx.ToolFunc {
+func toolSessionsHistory(transcript toolport.TranscriptStore) toolport.ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			SessionKey string           `json:"sessionKey"`
@@ -216,7 +217,7 @@ func toolSessionsHistory(transcript toolctx.TranscriptStore) toolctx.ToolFunc {
 // --- sessions search sub-action ---
 
 // toolSessionsSearch returns a tool function that searches across session transcripts.
-func toolSessionsSearch(transcript toolctx.TranscriptStore) toolctx.ToolFunc {
+func toolSessionsSearch(transcript toolport.TranscriptStore) toolport.ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Query      string           `json:"query"`
@@ -398,11 +399,11 @@ func isSessionSearchSignalToken(token string) bool {
 	return len(runes) >= 2
 }
 
-func searchTranscriptExpanded(transcript toolctx.TranscriptStore, queries []string, maxResults int) ([]toolctx.SearchResult, error) {
+func searchTranscriptExpanded(transcript toolport.TranscriptStore, queries []string, maxResults int) ([]toolport.SearchResult, error) {
 	if transcript == nil || len(queries) == 0 || maxResults <= 0 {
 		return nil, nil
 	}
-	var results []toolctx.SearchResult
+	var results []toolport.SearchResult
 	sessionIndex := make(map[string]int)
 	seenMatches := make(map[string]struct{})
 	remaining := maxResults
@@ -423,7 +424,7 @@ func searchTranscriptExpanded(transcript toolctx.TranscriptStore, queries []stri
 			if !ok {
 				idx = len(results)
 				sessionIndex[hit.SessionKey] = idx
-				results = append(results, toolctx.SearchResult{SessionKey: hit.SessionKey})
+				results = append(results, toolport.SearchResult{SessionKey: hit.SessionKey})
 			}
 			for _, match := range hit.Matches {
 				key := fmt.Sprintf("%s#%d", hit.SessionKey, match.Index)
@@ -445,7 +446,7 @@ func searchTranscriptExpanded(transcript toolctx.TranscriptStore, queries []stri
 // --- sessions send sub-action ---
 
 // toolSessionsSend returns a tool function that sends a message to another session.
-func toolSessionsSend(d *toolctx.SessionDeps) toolctx.ToolFunc {
+func toolSessionsSend(d *tooldeps.SessionDeps) toolport.ToolFunc {
 	return func(_ context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			SessionKey string `json:"sessionKey"`
@@ -487,7 +488,7 @@ const (
 )
 
 // ToolSessionsSpawn returns a tool function that spawns a sub-agent session.
-func ToolSessionsSpawn(d *toolctx.SessionDeps) toolctx.ToolFunc {
+func ToolSessionsSpawn(d *tooldeps.SessionDeps) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Task       string `json:"task"`
@@ -535,7 +536,7 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) toolctx.ToolFunc {
 		}
 
 		// Create a unique session key for the sub-agent.
-		parentKey := toolctx.SessionKeyFromContext(ctx)
+		parentKey := toolport.SessionKeyFromContext(ctx)
 		label := p.Label
 		if label == "" {
 			label = "subagent"
@@ -592,7 +593,7 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) toolctx.ToolFunc {
 		}
 
 		// Signal the executor that a sub-agent was spawned in this run.
-		if flag := toolctx.SpawnFlagFromContext(ctx); flag != nil {
+		if flag := toolport.SpawnFlagFromContext(ctx); flag != nil {
 			flag.Set()
 		}
 
@@ -607,7 +608,7 @@ func ToolSessionsSpawn(d *toolctx.SessionDeps) toolctx.ToolFunc {
 	}
 }
 
-func sessionCodingDefaultModel(d *toolctx.SessionDeps) string {
+func sessionCodingDefaultModel(d *tooldeps.SessionDeps) string {
 	if d == nil {
 		return ""
 	}

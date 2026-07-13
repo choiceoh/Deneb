@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/toolmeta"
 )
 
@@ -16,22 +16,22 @@ import (
 // chat.ToolRegistry: DeferredToolDef/DeferredSummaries only surface tools that
 // are Deferred and not Hidden, so tests exercise a realistic catalog.
 type fakeFetchRegistry struct {
-	defs map[string]toolctx.ToolDef
+	defs map[string]toolport.ToolDef
 }
 
-func (f *fakeFetchRegistry) DeferredToolDef(name string) (toolctx.ToolDef, bool) {
+func (f *fakeFetchRegistry) DeferredToolDef(name string) (toolport.ToolDef, bool) {
 	d, ok := f.defs[name]
 	if !ok || !d.Deferred {
-		return toolctx.ToolDef{}, false
+		return toolport.ToolDef{}, false
 	}
 	return d, true
 }
 
-func (f *fakeFetchRegistry) DeferredSummaries() []toolctx.DeferredToolSummary {
-	var out []toolctx.DeferredToolSummary
+func (f *fakeFetchRegistry) DeferredSummaries() []toolport.DeferredToolSummary {
+	var out []toolport.DeferredToolSummary
 	for _, d := range f.defs {
 		if d.Deferred && !d.Hidden {
-			out = append(out, toolctx.DeferredToolSummary{Name: d.Name, Description: d.Description})
+			out = append(out, toolport.DeferredToolSummary{Name: d.Name, Description: d.Description})
 		}
 	}
 	// Stable order so map iteration doesn't make tests flaky.
@@ -63,7 +63,7 @@ func assertActivated(t *testing.T, out, name string) {
 
 func TestFetchTools_ByName(t *testing.T) {
 	reg := &fakeFetchRegistry{
-		defs: map[string]toolctx.ToolDef{
+		defs: map[string]toolport.ToolDef{
 			"mail_archive": {Name: "mail_archive", Description: "Read local mail archive", Deferred: true},
 		},
 	}
@@ -77,7 +77,7 @@ func TestFetchTools_ByName(t *testing.T) {
 
 func TestFetchTools_ByQuery(t *testing.T) {
 	reg := &fakeFetchRegistry{
-		defs: map[string]toolctx.ToolDef{
+		defs: map[string]toolport.ToolDef{
 			"mail_archive": {Name: "mail_archive", Description: "Read email from the local archive", Deferred: true},
 			"storage":      {Name: "storage", Description: "Object storage", Deferred: true},
 		},
@@ -96,7 +96,7 @@ func TestFetchTools_ByQuery(t *testing.T) {
 // Query matches a parameter name (not the name/description) via BM25 indexing.
 func TestFetchTools_ByQuery_ParamName(t *testing.T) {
 	reg := &fakeFetchRegistry{
-		defs: map[string]toolctx.ToolDef{
+		defs: map[string]toolport.ToolDef{
 			"storage": {
 				Name:        "storage",
 				Description: "Object store",
@@ -121,7 +121,7 @@ func TestFetchTools_ByQuery_ParamName(t *testing.T) {
 // Substring fallback fires when no whole token matches.
 func TestFetchTools_ByQuery_SubstringFallback(t *testing.T) {
 	reg := &fakeFetchRegistry{
-		defs: map[string]toolctx.ToolDef{
+		defs: map[string]toolport.ToolDef{
 			"notebook": {Name: "notebook", Description: "Deal notes", Deferred: true},
 		},
 	}
@@ -137,7 +137,7 @@ func TestFetchTools_ByQuery_SubstringFallback(t *testing.T) {
 // floor preserved).
 func TestFetchTools_ByQuery_UnionBM25AndSubstring(t *testing.T) {
 	reg := &fakeFetchRegistry{
-		defs: map[string]toolctx.ToolDef{
+		defs: map[string]toolport.ToolDef{
 			"book":     {Name: "book", Description: "book tool", Deferred: true},
 			"notebook": {Name: "notebook", Description: "notes", Deferred: true},
 		},
@@ -152,7 +152,7 @@ func TestFetchTools_ByQuery_UnionBM25AndSubstring(t *testing.T) {
 }
 
 func TestFetchTools_RequestValidationErrors(t *testing.T) {
-	reg := &fakeFetchRegistry{defs: map[string]toolctx.ToolDef{}}
+	reg := &fakeFetchRegistry{defs: map[string]toolport.ToolDef{}}
 	fn := ToolFetchTools(reg)
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -185,7 +185,7 @@ func TestFetchTools_RequestValidationErrors(t *testing.T) {
 // Non-deferred tools are not surfaced by query search.
 func TestFetchTools_NonDeferredExcluded(t *testing.T) {
 	reg := &fakeFetchRegistry{
-		defs: map[string]toolctx.ToolDef{
+		defs: map[string]toolport.ToolDef{
 			"read": {Name: "read", Description: "read a file", Deferred: false},
 		},
 	}
@@ -205,14 +205,14 @@ func TestFetchTools_NonDeferredExcluded(t *testing.T) {
 // tool Execute will reject.
 func TestFetchTools_PresetBlocksDisallowedName(t *testing.T) {
 	reg := &fakeFetchRegistry{
-		defs: map[string]toolctx.ToolDef{
+		defs: map[string]toolport.ToolDef{
 			"cron":         {Name: "cron", Description: "Schedule recurring jobs", Deferred: true},
 			"mail_archive": {Name: "mail_archive", Description: "Read local mail archive", Deferred: true},
 			"send_file":    {Name: "send_file", Description: "Send a file to the user", Deferred: true},
 		},
 	}
 	fn := ToolFetchTools(reg)
-	ctx := toolctx.WithToolPreset(context.Background(), "researcher")
+	ctx := toolport.WithToolPreset(context.Background(), "researcher")
 
 	out, err := fn(ctx, mustJSON(t, map[string]any{"names": []string{"cron", "send_file", "mail_archive"}}))
 	if err != nil {
@@ -233,15 +233,15 @@ func TestFetchTools_PresetBlocksDisallowedName(t *testing.T) {
 // pointer. A not-yet-active sibling in the same call still gets its schema.
 func TestFetchTools_AlreadyActiveShortCircuit(t *testing.T) {
 	reg := &fakeFetchRegistry{
-		defs: map[string]toolctx.ToolDef{
+		defs: map[string]toolport.ToolDef{
 			"mail_archive": {Name: "mail_archive", Description: "Read local mail archive", Deferred: true},
 			"cron":         {Name: "cron", Description: "Schedule recurring jobs", Deferred: true},
 		},
 	}
 	fn := ToolFetchTools(reg)
 
-	da := toolctx.NewDeferredActivation()
-	ctx := toolctx.WithDeferredActivation(context.Background(), da)
+	da := toolport.NewDeferredActivation()
+	ctx := toolport.WithDeferredActivation(context.Background(), da)
 
 	// Turn N: activate mail_archive; executor drains between turns.
 	out, err := fn(ctx, mustJSON(t, map[string]any{"names": []string{"mail_archive"}}))
@@ -267,7 +267,7 @@ func TestFetchTools_AlreadyActiveShortCircuit(t *testing.T) {
 
 func TestFetchTools_MixedSelectionReportsSchemaActivationAndErrors(t *testing.T) {
 	reg := &fakeFetchRegistry{
-		defs: map[string]toolctx.ToolDef{
+		defs: map[string]toolport.ToolDef{
 			"contacts": {
 				Name:        "contacts",
 				Description: "Find people",
@@ -292,11 +292,11 @@ func TestFetchTools_MixedSelectionReportsSchemaActivationAndErrors(t *testing.T)
 			},
 		},
 	}
-	activation := toolctx.NewDeferredActivation()
+	activation := toolport.NewDeferredActivation()
 	activation.Seed([]string{"contacts"})
 	collector := toolmeta.NewCollector()
-	ctx := toolctx.WithToolPreset(context.Background(), "researcher")
-	ctx = toolctx.WithDeferredActivation(ctx, activation)
+	ctx := toolport.WithToolPreset(context.Background(), "researcher")
+	ctx = toolport.WithDeferredActivation(ctx, activation)
 	ctx = toolmeta.WithCollector(ctx, collector)
 
 	out, err := ToolFetchTools(reg)(ctx, mustJSON(t, map[string]any{
@@ -346,14 +346,14 @@ func TestFetchTools_MixedSelectionReportsSchemaActivationAndErrors(t *testing.T)
 // the schema (the snapshot only updates between turns) — documented tradeoff.
 func TestFetchTools_SameTurnDuplicateStillReturnsSchema(t *testing.T) {
 	reg := &fakeFetchRegistry{
-		defs: map[string]toolctx.ToolDef{
+		defs: map[string]toolport.ToolDef{
 			"mail_archive": {Name: "mail_archive", Description: "Read local mail archive", Deferred: true},
 		},
 	}
 	fn := ToolFetchTools(reg)
 
-	da := toolctx.NewDeferredActivation()
-	ctx := toolctx.WithDeferredActivation(context.Background(), da)
+	da := toolport.NewDeferredActivation()
+	ctx := toolport.WithDeferredActivation(context.Background(), da)
 
 	if _, err := fn(ctx, mustJSON(t, map[string]any{"names": []string{"mail_archive"}})); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -367,12 +367,12 @@ func TestFetchTools_SameTurnDuplicateStillReturnsSchema(t *testing.T) {
 
 func TestFetchTools_PresetFiltersQueryResults(t *testing.T) {
 	reg := &fakeFetchRegistry{
-		defs: map[string]toolctx.ToolDef{
+		defs: map[string]toolport.ToolDef{
 			"cron": {Name: "cron", Description: "Schedule recurring jobs", Deferred: true},
 		},
 	}
 	fn := ToolFetchTools(reg)
-	ctx := toolctx.WithToolPreset(context.Background(), "researcher")
+	ctx := toolport.WithToolPreset(context.Background(), "researcher")
 
 	out, err := fn(ctx, mustJSON(t, map[string]any{"query": "schedule recurring"}))
 	if err != nil {

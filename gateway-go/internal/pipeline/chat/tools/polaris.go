@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // ToolPolaris creates the unified polaris tool with action dispatch (search/describe/expand).
-func ToolPolaris(store *polaris.Store, localAI LocalAIFunc) toolctx.ToolFunc {
+func ToolPolaris(store *polaris.Store, localAI LocalAIFunc) toolport.ToolFunc {
 	searchFn := toolPolarisSearch(store)
 	describeFn := toolPolarisDescribe(store)
 	expandFn := toolPolarisExpand(store, localAI)
@@ -38,7 +38,7 @@ func ToolPolaris(store *polaris.Store, localAI LocalAIFunc) toolctx.ToolFunc {
 }
 
 // toolPolarisSearch is the search sub-action: keyword search over compressed history.
-func toolPolarisSearch(store *polaris.Store) toolctx.ToolFunc {
+func toolPolarisSearch(store *polaris.Store) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Query      string `json:"query"`
@@ -54,7 +54,7 @@ func toolPolarisSearch(store *polaris.Store) toolctx.ToolFunc {
 			p.MaxResults = 10
 		}
 
-		sessionKey := toolctx.SessionKeyFromContext(ctx)
+		sessionKey := toolport.SessionKeyFromContext(ctx)
 		if sessionKey == "" {
 			return "세션 키를 확인할 수 없습니다.", nil
 		}
@@ -89,7 +89,7 @@ func toolPolarisSearch(store *polaris.Store) toolctx.ToolFunc {
 }
 
 // toolPolarisDescribe is the describe sub-action: overview of summary DAG structure.
-func toolPolarisDescribe(store *polaris.Store) toolctx.ToolFunc {
+func toolPolarisDescribe(store *polaris.Store) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			TimeRange string `json:"time_range"`
@@ -101,7 +101,7 @@ func toolPolarisDescribe(store *polaris.Store) toolctx.ToolFunc {
 			p.TimeRange = "all"
 		}
 
-		sessionKey := toolctx.SessionKeyFromContext(ctx)
+		sessionKey := toolport.SessionKeyFromContext(ctx)
 		if sessionKey == "" {
 			return "세션 키를 확인할 수 없습니다.", nil
 		}
@@ -149,7 +149,7 @@ func toolPolarisDescribe(store *polaris.Store) toolctx.ToolFunc {
 type LocalAIFunc func(ctx context.Context, system, user string, maxTokens int) (string, error)
 
 // toolPolarisExpand is the expand sub-action: restore raw messages from a summary.
-func toolPolarisExpand(store *polaris.Store, localAI LocalAIFunc) toolctx.ToolFunc {
+func toolPolarisExpand(store *polaris.Store, localAI LocalAIFunc) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			SummaryID int    `json:"summary_id"`
@@ -162,7 +162,7 @@ func toolPolarisExpand(store *polaris.Store, localAI LocalAIFunc) toolctx.ToolFu
 			return "summary_id가 필요합니다. polaris(action=describe)로 먼저 ID를 확인하세요.", nil
 		}
 
-		sessionKey := toolctx.SessionKeyFromContext(ctx)
+		sessionKey := toolport.SessionKeyFromContext(ctx)
 		if sessionKey == "" {
 			return "세션 키를 확인할 수 없습니다.", nil
 		}
@@ -240,7 +240,7 @@ func filterByTimeRange(nodes []polaris.SummaryNode, timeRange string, now time.T
 }
 
 // serializeExpandMessages converts ChatMessages to readable text, capped at maxChars.
-func serializeExpandMessages(msgs []toolctx.ChatMessage, maxChars int) string {
+func serializeExpandMessages(msgs []toolport.ChatMessage, maxChars int) string {
 	var sb strings.Builder
 	totalChars := 0
 	for _, m := range msgs {

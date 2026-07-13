@@ -12,7 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 )
 
@@ -37,17 +37,17 @@ func requireStringSliceContains(t *testing.T, values []string, want string) {
 }
 
 type skillLifecycleTranscriptStore struct {
-	msgs  []toolctx.ChatMessage
-	byKey map[string][]toolctx.ChatMessage
+	msgs  []toolport.ChatMessage
+	byKey map[string][]toolport.ChatMessage
 }
 
-func (s skillLifecycleTranscriptStore) Append(string, toolctx.ChatMessage) error { return nil }
-func (s skillLifecycleTranscriptStore) Load(sessionKey string, _ int) ([]toolctx.ChatMessage, int, error) {
+func (s skillLifecycleTranscriptStore) Append(string, toolport.ChatMessage) error { return nil }
+func (s skillLifecycleTranscriptStore) Load(sessionKey string, _ int) ([]toolport.ChatMessage, int, error) {
 	if s.byKey != nil {
-		msgs := append([]toolctx.ChatMessage(nil), s.byKey[sessionKey]...)
+		msgs := append([]toolport.ChatMessage(nil), s.byKey[sessionKey]...)
 		return msgs, len(msgs), nil
 	}
-	return append([]toolctx.ChatMessage(nil), s.msgs...), len(s.msgs), nil
+	return append([]toolport.ChatMessage(nil), s.msgs...), len(s.msgs), nil
 }
 func (s skillLifecycleTranscriptStore) Delete(string) error { return nil }
 func (s skillLifecycleTranscriptStore) ListKeys() ([]string, error) {
@@ -58,7 +58,7 @@ func (s skillLifecycleTranscriptStore) ListKeys() ([]string, error) {
 	return keys, nil
 }
 
-func (s skillLifecycleTranscriptStore) Search(string, int) ([]toolctx.SearchResult, error) {
+func (s skillLifecycleTranscriptStore) Search(string, int) ([]toolport.SearchResult, error) {
 	return nil, nil
 }
 func (s skillLifecycleTranscriptStore) CloneRecent(string, string, int) error { return nil }
@@ -466,7 +466,7 @@ func TestSkillLifecycleStatusRequiresTieredApexFrontierEvidence(t *testing.T) {
 
 func TestSkillLifecycleValidationCaseFromSessionExtractsToolTrace(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
-	store := skillLifecycleTranscriptStore{msgs: []toolctx.ChatMessage{
+	store := skillLifecycleTranscriptStore{msgs: []toolport.ChatMessage{
 		{Role: "user", Content: json.RawMessage(`"srv1에서 실제 deneb-gateway 상태를 확인하고 개선"`)},
 		{Role: "assistant", Content: json.RawMessage(`[
 			{"type":"tool_use","id":"tu_1","name":"exec","input":{"cmd":"ssh srv1 systemctl --user status deneb-gateway.service","workdir":"/srv/deneb"}}
@@ -524,7 +524,7 @@ func TestSkillLifecycleValidationCaseFromSessionExtractsToolTrace(t *testing.T) 
 
 func TestSkillLifecycleValidationCaseFromSessionSeparatesErroredToolTrace(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
-	store := skillLifecycleTranscriptStore{msgs: []toolctx.ChatMessage{
+	store := skillLifecycleTranscriptStore{msgs: []toolport.ChatMessage{
 		{Role: "user", Content: json.RawMessage(`"srv1 배포 상태 확인 후 필요하면 복구"`)},
 		{Role: "assistant", Content: json.RawMessage(`[
 			{"type":"tool_use","id":"tu_1","name":"exec","input":{"cmd":"systemctl --user restart deneb-gateway.service"}},
@@ -575,7 +575,7 @@ func TestSkillLifecycleValidationCaseFromSessionSeparatesErroredToolTrace(t *tes
 
 func TestSkillLifecycleValidationCaseFromSessionSkipsWeakAutomaticTrace(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
-	store := skillLifecycleTranscriptStore{msgs: []toolctx.ChatMessage{
+	store := skillLifecycleTranscriptStore{msgs: []toolport.ChatMessage{
 		{Role: "user", Content: json.RawMessage(`"상태 확인"`)},
 		{Role: "assistant", Content: json.RawMessage(`[
 			{"type":"tool_use","id":"tu_1","name":"exec","input":{}}
@@ -605,7 +605,7 @@ func TestSkillLifecycleValidationCaseFromSessionSkipsWeakAutomaticTrace(t *testi
 
 func TestSkillLifecycleValidationBackfillScansSessionsAndSkipsWeak(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
-	store := skillLifecycleTranscriptStore{byKey: map[string][]toolctx.ChatMessage{
+	store := skillLifecycleTranscriptStore{byKey: map[string][]toolport.ChatMessage{
 		"client:main:z-valid": {
 			{Role: "user", Content: json.RawMessage(`"srv1 상태를 확인"`)},
 			{Role: "assistant", Content: json.RawMessage(`[

@@ -9,14 +9,14 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // ToolGrep returns a tool that searches file contents using ripgrep with defaultDir as
 // the base search path when no explicit path is provided.
-func ToolGrep(defaultDir string) toolctx.ToolFunc {
+func ToolGrep(defaultDir string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Pattern      string `json:"pattern"`

@@ -14,7 +14,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 )
@@ -479,7 +479,7 @@ func TestCalendarStructured(t *testing.T) {
 		ID: "local:evt1", Summary: "탑솔라 미팅", Start: start, End: start.Add(time.Hour),
 		Location: "본사", Attendees: []calendar.Attendee{{Email: "a@x.com"}, {Email: "b@x.com"}},
 	}}}
-	d := &toolctx.CalendarDeps{Local: fake}
+	d := &tooldeps.CalendarDeps{Local: fake}
 
 	val, err := calendarStructured(context.Background(), d, map[string]any{"action": "list"})
 	if err != nil {
@@ -583,7 +583,7 @@ func TestCodeAction_StructuredCalendar(t *testing.T) {
 	fake := &fakeLocalCal{events: []calendar.Event{{
 		ID: "local:evt1", Summary: "탑솔라 미팅", Start: start, End: start.Add(time.Hour),
 	}}}
-	out := runCodeAction(t, CodeActionDeps{Invoker: &recordingInvoker{}, Calendar: &toolctx.CalendarDeps{Local: fake}}, `
+	out := runCodeAction(t, CodeActionDeps{Invoker: &recordingInvoker{}, Calendar: &tooldeps.CalendarDeps{Local: fake}}, `
 evs = deneb.calendar("list", as_json=True)
 print("TYPE", type(evs).__name__, "N", len(evs))
 print("TITLE", evs[0]["title"] if evs else "none")

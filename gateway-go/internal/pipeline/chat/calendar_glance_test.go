@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 )
 
 func TestNewCalendarGlanceFunc_NilWhenNoSource(t *testing.T) {
-	if fn := NewCalendarGlanceFunc(&toolctx.CalendarDeps{}); fn != nil {
+	if fn := NewCalendarGlanceFunc(&tooldeps.CalendarDeps{}); fn != nil {
 		t.Error("expected nil func when no calendar source is wired")
 	}
 	if fn := NewCalendarGlanceFunc(nil); fn != nil {
@@ -37,7 +37,7 @@ func TestNewCalendarGlanceFunc_BuildsAndFreezesPerDay(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	fn := NewCalendarGlanceFunc(&toolctx.CalendarDeps{Local: store})
+	fn := NewCalendarGlanceFunc(&tooldeps.CalendarDeps{Local: store})
 	if fn == nil {
 		t.Fatal("expected non-nil func")
 	}

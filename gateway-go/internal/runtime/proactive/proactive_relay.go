@@ -15,7 +15,7 @@ import (
 	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 const (
@@ -48,7 +48,7 @@ const (
 // and a matching assistant message is appended to the session transcript so a
 // follow-up user turn ("더 자세히 알려줘") has the proactive content in context.
 type proactiveRelayDeps struct {
-	transcriptStore toolctx.TranscriptStore
+	transcriptStore toolport.TranscriptStore
 	logger          interface{ Error(string, ...any) } // *slog.Logger subset
 
 	// behaviorLog records each relay decision (delivered/suppressed/dropped/
@@ -117,7 +117,7 @@ type Relay = proactiveRelayDeps
 // Deps contains the storage, push, observability, and presentation boundaries
 // required by Relay. Every optional boundary degrades independently.
 type Deps struct {
-	TranscriptStore toolctx.TranscriptStore
+	TranscriptStore toolport.TranscriptStore
 	Logger          interface{ Error(string, ...any) }
 	BehaviorLog     *agentlog.Writer
 	PushHub         *Hub
@@ -320,7 +320,7 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 				transcriptBody = denebui.CollapsedReportFence(title, collapsedReportBody(deliverBody, title, titleLine))
 			}
 		}
-		msg := toolctx.NewTextChatMessage("assistant", transcriptBody, time.Now().UnixMilli())
+		msg := toolport.NewTextChatMessage("assistant", transcriptBody, time.Now().UnixMilli())
 		if err := d.transcriptStore.Append(target, msg); err != nil {
 			if d.logger != nil {
 				d.logger.Error("proactive native relay: transcript append failed",
@@ -577,8 +577,8 @@ func (d proactiveRelayDeps) deliverNativeImage(caption string, pngBytes []byte) 
 	if d.transcriptStore == nil || len(pngBytes) == 0 {
 		return false, nil
 	}
-	msg := toolctx.NewTextChatMessage("assistant", caption, time.Now().UnixMilli())
-	msg.Attachments = []toolctx.ChatAttachment{{
+	msg := toolport.NewTextChatMessage("assistant", caption, time.Now().UnixMilli())
+	msg.Attachments = []toolport.ChatAttachment{{
 		Type:     "image",
 		MimeType: "image/png",
 		Data:     base64.StdEncoding.EncodeToString(pngBytes),

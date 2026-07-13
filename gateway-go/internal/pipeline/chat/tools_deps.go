@@ -1,38 +1,38 @@
 package chat
 
-import "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+import "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 
-// Type aliases — canonical definitions are in toolctx/.
+// Type aliases — canonical definitions are in tooldeps/.
 
 // CoreToolDeps holds all dependencies for core agent tools.
-type CoreToolDeps = toolctx.CoreToolDeps
+type CoreToolDeps = tooldeps.CoreToolDeps
 
 // ProcessDeps holds dependencies for exec and process management tools.
-type ProcessDeps = toolctx.ProcessDeps
+type ProcessDeps = tooldeps.ProcessDeps
 
 // SessionDeps holds dependencies for session management tools.
-type SessionDeps = toolctx.SessionDeps
+type SessionDeps = tooldeps.SessionDeps
 
 // ChronoDeps holds dependencies for the cron scheduling tool.
-type ChronoDeps = toolctx.ChronoDeps
+type ChronoDeps = tooldeps.ChronoDeps
 
 // WikiDeps holds dependencies for the wiki knowledge base tool.
-type WikiDeps = toolctx.WikiDeps
+type WikiDeps = tooldeps.WikiDeps
 
 // ContactsDeps holds dependencies for the contacts address-book tool.
-type ContactsDeps = toolctx.ContactsDeps
+type ContactsDeps = tooldeps.ContactsDeps
 
 // NotebookDeps holds dependencies for the notebook tool.
-type NotebookDeps = toolctx.NotebookDeps
+type NotebookDeps = tooldeps.NotebookDeps
 
 // CalendarDeps holds dependencies for the calendar tool.
-type CalendarDeps = toolctx.CalendarDeps
+type CalendarDeps = tooldeps.CalendarDeps
 
 // FleetDeps holds the SparkFleet base URL + token for the fleet tool.
-type FleetDeps = toolctx.FleetDeps
+type FleetDeps = tooldeps.FleetDeps
 
 // CalendarReader is the read-only Google calendar slice the calendar tool uses.
-type CalendarReader = toolctx.CalendarReader
+type CalendarReader = tooldeps.CalendarReader
 
 // LocalCalendar is the read/write local calendar store slice.
-type LocalCalendar = toolctx.LocalCalendar
+type LocalCalendar = tooldeps.LocalCalendar

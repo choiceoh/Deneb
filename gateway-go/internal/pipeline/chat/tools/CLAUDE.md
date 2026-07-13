@@ -1,14 +1,14 @@
 # Chat Tool 구현 변경 지도
 
 이 디렉터리는 agent가 호출하는 tool의 실행 구현을 소유한다. 도구의 공유
-함수형 계약은 `../toolctx`, 등록과 schema 연결은 `../toolreg`가 소유한다.
+함수형 계약은 `../toolport`, 등록과 schema 연결은 `../toolreg`가 소유한다.
 구현 파일이 자신을 등록하거나 chat turn 오케스트레이션을 import하지 않는다.
 
 ## 진입점과 책임
 
 - top-level `wiki.go`의 `ToolWiki`, `contacts.go`의 `ToolContacts`,
   `cron_tool.go`의 `ToolCron`, `message.go`의 `ToolMessage`처럼
-  `Tool*` constructor가 `toolctx.ToolFunc`를 반환하는 것이 기본 계약이다.
+  `Tool*` constructor가 `toolport.ToolFunc`를 반환하는 것이 기본 계약이다.
 - `filesystem/fs.go`의 `ToolWrite`, `ToolEdit`와
   `filesystem/read.go`의 `ToolRead`, `filesystem/fs_search.go`의
   `ToolGrep`가 workspace 파일 경계를 소유한다.
@@ -24,7 +24,7 @@
 
 ## 의존 방향과 불변조건
 
-- 의존 방향은 `toolreg → tools → toolctx/domain/platform`이다. tools에서
+- 의존 방향은 `toolreg → tools → toolport/domain/platform`이다. tools에서
   `pipeline/chat` root, prompt, tool registry를 import하지 않는다.
 - 새 도구는 구현만으로 끝나지 않는다. `../toolreg/core.go`에 constructor를
   배선하고 `../toolreg/tool_schemas.json`을 수정한 뒤 generator를 사용한다.
@@ -34,10 +34,10 @@
 - filesystem/exec 계열의 path guard, destructive-command 검사와 write 전
   checkpoint를 생략하지 않는다. 편의를 위해 별도 우회 constructor를 만들지
   않는다.
-- mutation 도구를 추가하면 `toolctx.IsMutationTool`과 run-cache 무효화
+- mutation 도구를 추가하면 `toolport.IsMutationTool`과 run-cache 무효화
   의미를 함께 검토한다. 변경 후 stale cached read가 남으면 안 된다.
 - tool 결과의 사용자 표시용 정제와 원본 실행 결과를 혼합하지 않는다.
-  display 정제는 `toolctx`, turn 후처리는 chat pipeline이 소유한다.
+  display 정제는 `toolport`, turn 후처리는 chat pipeline이 소유한다.
 
 ## 집중 검증
 

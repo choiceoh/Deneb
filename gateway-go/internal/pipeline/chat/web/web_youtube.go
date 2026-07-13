@@ -24,7 +24,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
@@ -99,7 +99,7 @@ func storeYouTubeTranscript(ctx context.Context, spill *agent.SpilloverStore, r 
 	if spill == nil {
 		return ""
 	}
-	sessionKey := toolctx.SessionKeyFromContext(ctx)
+	sessionKey := toolport.SessionKeyFromContext(ctx)
 	spillID, err := spill.Store(sessionKey, "web", media.FormatYouTubeResult(r))
 	if err != nil {
 		return ""

@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/review"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/lifecycletool"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
@@ -52,13 +52,13 @@ func (a *chatNudgerAdapter) Reset(sessionKey string) { a.inner.Reset(sessionKey)
 
 type chatUsageRecorderAdapter struct {
 	inner         *genesis.Tracker
-	transcripts   toolctx.TranscriptStore
+	transcripts   toolport.TranscriptStore
 	logger        *slog.Logger
 	replayEnabled bool
 }
 
 // NewChatUsageRecorder adapts a genesis tracker to chatport.SkillUsageRecorder.
-func NewChatUsageRecorder(t *genesis.Tracker, transcripts toolctx.TranscriptStore, logger *slog.Logger, replayEnabled bool) chatport.SkillUsageRecorder {
+func NewChatUsageRecorder(t *genesis.Tracker, transcripts toolport.TranscriptStore, logger *slog.Logger, replayEnabled bool) chatport.SkillUsageRecorder {
 	return &chatUsageRecorderAdapter{inner: t, transcripts: transcripts, logger: logger, replayEnabled: replayEnabled}
 }
 

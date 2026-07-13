@@ -2,14 +2,15 @@
 // implementations (from tools/) with their JSON schemas (from tool_schemas_gen.go)
 // and registering them into a ToolRegistrar (implemented by chat.ToolRegistry).
 //
-// Dependency flow: toolreg/ -> toolctx/ (types), toolreg/ -> tools/ (implementations).
+// Dependency flow: toolreg/ -> toolport/ (types), toolreg/ -> tools/ (implementations).
 // toolreg/ never imports chat/ — the chat package calls toolreg functions.
 package toolreg
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	mailtool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/mailarchive"
@@ -23,7 +24,7 @@ import (
 
 // RegisterCoreTools populates the tool registrar with all core agent tools.
 // It delegates to domain-specific Register*Tools functions.
-func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDeps) {
+func RegisterCoreTools(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 	RegisterFileTools(registry, deps.WorkspaceDir, deps.SkillsCatalogDirs...)
 	runtimeOps := RuntimeOpsToolSet{
 		Gateway: runtimeops.ToolGateway(deps.WorkspaceDir),
@@ -52,7 +53,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	// goal on a multi-step request. Once set, the server's goalTask advances it
 	// one run per idle tick, judges completion with the lightweight model, and a
 	// per-goal idempotency ledger blocks repeated destructive actions.
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "goal",
 		Description: "다단계·장기 작업을 여러 턴에 걸쳐 끝까지 진행해야 할 때 표준 목표(standing goal)를 설정·관리한다. action=set(목표 설정) | subgoal(완료 기준 추가) | status | pause | resume | stop. 설정하면 사용자가 자리를 비운 동안 자동으로 한 단계씩 진행하고 완료를 판정한다. 이미 실행한 작업은 멱등 가드로 중복되지 않는다.",
 		InputSchema: goalToolSchema(),
@@ -66,7 +67,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	// the fetch_tools hop — overusing code_action even for plain reads and
 	// dead-ending on attachments (the attachment action is off the bridge allowlist).
 	// Reads the on-box deneb-mailarchive store over loopback IMAP.
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "mail_archive",
 		Description: "받은 메일 조회 1순위 — 메일 분석·미팅 준비·프로젝트 과거 확인에 우선 사용. 자체 메일 아카이브(자동보관 수신 메일 + 과거 백필)를 조회해 ID/Locator를 얻고, 전체 스레드와 프로젝트 히스토리를 복원한다. action=list(오늘/최근 메일) | search(키워드) | read(Locator/ID 또는 query로 원문 열기) | thread(Message-ID/References 기반 전체 대화) | project_history(회사·프로젝트 키워드 시간선+스레드 후보).",
 		InputSchema: mailArchiveToolSchema(),
@@ -82,7 +83,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	// so interactive turns don't pay for the schema. nil ConsultPanel (no model
 	// registry / router wired) leaves the tool unregistered.
 	if deps.ConsultPanel != nil {
-		registry.RegisterTool(toolctx.ToolDef{
+		registry.RegisterTool(toolport.ToolDef{
 			Name:        "research_panel",
 			Description: "딥리서치·고위험 의사결정의 교차검증용 — 하나의 질문을 가동 중(헬시)인 모든 모델에게 병렬로 던져 모델별 답을 모아 온다(이종 모델 패널 팬아웃). 반환된 모델별 답을 당신이 직접 종합하라 — 서로 다른 계열이 합의하면 강한 신뢰, 모순은 명시하고, 자신만만한 답에 닻 내리지 말 것. 단순 사실질문엔 쓰지 마라(비용이 모델 수만큼 N배). models로 특정 모델만 지정 가능, 비우면 전체.",
 			InputSchema: researchPanelToolSchema(),
@@ -95,7 +96,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	// cards (native-sync-teeing wrapper, so agent reads/acks mirror to the
 	// phone). Deferred — needed only when reviewing past nudges. nil = feed off.
 	if deps.WorkFeedRW != nil {
-		registry.RegisterTool(toolctx.ToolDef{
+		registry.RegisterTool(toolport.ToolDef{
 			Name:        "workfeed",
 			Description: "작업 피드(업무 피드) 도구 — 카드를 조회·정리하고, 요청받은 산출물을 카드로 발행한다. action=list(미처리 카드 목록) | read(id로 본문 — 열람 표시 겸함) | ack(처리 완료 표시) | publish(문서·계약서 검토처럼 사용자가 요청한 산출물을 작업 피드 카드로 발행 — title+body 필수, 위키에만 묻지 말고 사용자에게 딜리버). '이번 주 능동 알림 뭐 보냈지'·'그 카드 처리 표시'에도 사용. 집계 통계는 observe action=proactive.",
 			InputSchema: workfeedToolSchema(),
@@ -107,7 +108,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	// Audio transcription: resident VibeVoice-ASR sidecar over a file on disk.
 	// Deferred — capture RPCs cover app-shared audio; this is for files the
 	// agent encounters itself (downloads, exec artifacts, file store).
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "transcribe",
 		Description: "디스크의 오디오 파일(회의 녹음·음성 메모, m4a/mp3/oga/wav 등 최대 60분)을 화자분리+타임스탬프로 전사한다 — '이 녹음 정리해줘'에 사용. hotwords로 거래처·인명 교정 힌트 추가 가능(주소록/위키 힌트 자동 병합). 앱에서 공유된 오디오는 이미 자동 전사되므로 이 도구는 경로로 받은 파일용.",
 		InputSchema: transcribeToolSchema(),
@@ -117,7 +118,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 
 	// Document/image text extraction over a file on disk (PaddleOCR-VL +
 	// tesseract fallback; born-digital PDFs via pdftotext). Deferred.
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "ocr",
 		Description: "디스크의 이미지·스캔 PDF·오피스 문서에서 텍스트를 추출한다(OCR) — 영수증 사진·스캔 계약서·팩스 PDF를 읽어야 할 때 사용. read 도구는 바이너리를 그대로 덤프하므로 이미지/스캔물은 반드시 이 도구로. 파일스토어 파일은 files action=analyze로도 가능.",
 		InputSchema: ocrToolSchema(),
@@ -128,7 +129,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	// Market quotes: same cache as the miniapp 오늘 dashboard (원/달러·코스피·
 	// WTI·구리, 10m TTL). Deferred; nil = dashboard cache not wired.
 	if deps.MarketSummary != nil {
-		registry.RegisterTool(toolctx.ToolDef{
+		registry.RegisterTool(toolport.ToolDef{
 			Name:        "market",
 			Description: "시장 시세 스냅샷 — 원/달러 환율·코스피·WTI 유가·구리(LME) 현재가와 전일 대비 등락. '환율 지금 얼마'·'구리 시세 어때' 류 질문에 사용. 인자 없음, 10분 캐시.",
 			InputSchema: marketToolSchema(),
@@ -140,7 +141,7 @@ func RegisterCoreTools(registry toolctx.ToolRegistrar, deps *toolctx.CoreToolDep
 	// Org chart (read-only): the operator-curated group→company→team tree with
 	// 직급/직책. Deferred; loads {stateDir}/org.json on demand — empty file just
 	// reports unset, so no dep/nil-guard needed.
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "org",
 		Description: "조직도 조회(읽기 전용) — '1팀 팀장 누구'·'회사 조직 어떻게 되지'·직급/직책 확인에 사용. query로 사람/팀/회사 이름 검색, 생략 시 전체 트리. 연락처(전화/메일)는 contacts 도구.",
 		InputSchema: orgToolSchema(),
@@ -171,15 +172,15 @@ func FetchToolsSchema() map[string]any { return fetchToolsToolSchema() }
 // (server_http_event_ingest.go) now teaches the fetch_tools step, and those
 // turns are background — a fetch round-trip there is cheap, while every
 // interactive turn stops paying for the schemas.
-func RegisterPhoneTools(registry toolctx.ToolRegistrar, send tools.PhoneActionFunc) {
-	registry.RegisterTool(toolctx.ToolDef{
+func RegisterPhoneTools(registry toolport.ToolRegistrar, send tools.PhoneActionFunc) {
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "phone_read",
 		Description: "'지금 어디'·'배터리 몇 %'·'방금 폰에서 뭐에 집중했나' 질문에 사용 — 사용자 스마트폰 위치·배터리·앱 사용 리듬 조회(앱이 밀어주는 상태 캐시 기반, SSH 불필요). what=location(최근 위치) | battery(배터리·충전 상태) | usage(최근 앱 사용 리듬). 캐시가 오래됐으면 앱에 갱신을 요청하고 잠시 후 재시도하라고 안내한다. 능동 판단 시 맥락 보강에도 사용하되, 사용 리듬만으로 알림을 만들지 않는다. 주소록은 `contacts` 도구.",
 		InputSchema: phoneReadToolSchema(),
 		Fn:          tools.ToolPhoneRead(send),
 		Deferred:    true,
 	})
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "phone_write",
 		Description: "사용자 스마트폰에 직접 작용한다(전부 인앱 실행, SSH 불필요). to — notify(알림 띄우기, text 필수·title 선택) | speak(음성으로 말하기, text) | clipboard(클립보드에 넣기, text) | open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(target=수신자,text) | dial(target=전화번호) | photo(카메라) | alarm(알람 설정, target=\"HH:MM\" 24h, text=라벨 — 일회성·Android 전용, 반복 알람 미지원) | timer(타이머, target=단위 포함 \"10m\"/\"90s\"/\"1h30m\", text=라벨 — 단위 없는 숫자 거부). 운전 중 음성 안내, 답을 클립보드에 꽂기, 링크/앱 열기, 메시지·전화·사진·알람·타이머.",
 		InputSchema: phoneWriteToolSchema(),
@@ -190,11 +191,11 @@ func RegisterPhoneTools(registry toolctx.ToolRegistrar, send tools.PhoneActionFu
 
 // RegisterPolarisTools registers the unified Polaris tool (search/describe/expand).
 // Called separately because the store and localAI are not part of CoreToolDeps.
-func RegisterPolarisTools(registry toolctx.ToolRegistrar, store *polaris.Store, localAI tools.LocalAIFunc) {
+func RegisterPolarisTools(registry toolport.ToolRegistrar, store *polaris.Store, localAI tools.LocalAIFunc) {
 	if store == nil {
 		return
 	}
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name: "polaris",
 		Description: "현재 세션의 압축된 과거 대화 회상 (모든 메시지가 SQLite FTS에 무손실 저장). " +
 			"사용자가 컨텍스트에 없는 합의·숫자·인물·결정 또는 '아까 그거'·'지난번에' 같은 참조를 언급하면 " +
@@ -213,11 +214,11 @@ func RegisterPolarisTools(registry toolctx.ToolRegistrar, store *polaris.Store, 
 //
 // Pass-through behavior: if router is nil (no backends configured) the tool
 // is not registered so the agent does not see a dead surface.
-func RegisterKnowledgeTool(registry toolctx.ToolRegistrar, router *knowledge.Router) {
+func RegisterKnowledgeTool(registry toolport.ToolRegistrar, router *knowledge.Router) {
 	if router == nil || len(router.Layers()) == 0 {
 		return
 	}
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name: "knowledge",
 		Description: "지식·기억 도구. 위키 지식베이스를 의미+키워드로 검색·조회·기록. " +
 			"op=recall(질의→의미 기반 검색, ref와 함께 머지) → " +
@@ -230,14 +231,14 @@ func RegisterKnowledgeTool(registry toolctx.ToolRegistrar, router *knowledge.Rou
 }
 
 // RegisterProcessTools registers exec and process management tools.
-func RegisterProcessTools(registry toolctx.ToolRegistrar, d *toolctx.ProcessDeps) {
-	registry.RegisterTool(toolctx.ToolDef{
+func RegisterProcessTools(registry toolport.ToolRegistrar, d *tooldeps.ProcessDeps) {
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "exec",
 		Description: "Run a shell command (bash -c). Default timeout 60s, max 10min. Use background=true for long tasks, then process to check",
 		InputSchema: execToolSchema(),
 		Fn:          runtimeops.ToolExec(d.Mgr, d.WorkspaceDir),
 	})
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "process",
 		Description: "Manage background exec sessions: list running, poll/log output, kill by sessionId",
 		InputSchema: processToolSchema(),
@@ -248,11 +249,11 @@ func RegisterProcessTools(registry toolctx.ToolRegistrar, d *toolctx.ProcessDeps
 
 // RegisterWebTools registers the unified web tool (search mode only).
 // spill (optional) lets the YouTube path offload full transcripts to disk.
-func RegisterWebTools(registry toolctx.ToolRegistrar, spill *agent.SpilloverStore) {
+func RegisterWebTools(registry toolport.ToolRegistrar, spill *agent.SpilloverStore) {
 	webCache := web.NewFetchCache()
 	localAI := web.NewLocalAIExtractor()
 
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "web",
 		Description: "Web access: search the web or fetch page content. Use query for keyword search, url for direct fetch",
 		InputSchema: webToolSchema(),
@@ -261,15 +262,15 @@ func RegisterWebTools(registry toolctx.ToolRegistrar, spill *agent.SpilloverStor
 }
 
 // RegisterSessionTools registers session management tools.
-func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps) {
-	registry.RegisterTool(toolctx.ToolDef{
+func RegisterSessionTools(registry toolport.ToolRegistrar, d *tooldeps.SessionDeps) {
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "sessions",
 		Description: "Sessions: list / history / search / send — other sessions' message logs, transcript keyword search, cross-session messaging",
 		InputSchema: sessionsToolSchema(),
 		Fn:          runtimeops.ToolSessions(d),
 		Deferred:    true,
 	})
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "sessions_spawn",
 		Description: "Spawn a sub-agent to work in parallel — use for long tasks, research, or when the user is waiting. Faster than doing it yourself",
 		InputSchema: sessionsSpawnToolSchema(),
@@ -280,7 +281,7 @@ func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps
 	// (subagent_notify.go). Its only live use is the edge-case steer/kill of a
 	// running child, so that rare turn fetches it. sessions_spawn stays eager: the
 	// prompt directs delegation by name and it must stay frictionless.
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "subagents",
 		Description: "Monitor and control sub-agents: list status, steer with messages, or kill. Defaults to list",
 		InputSchema: subagentsToolSchema(),
@@ -298,8 +299,8 @@ func RegisterSessionTools(registry toolctx.ToolRegistrar, d *toolctx.SessionDeps
 // time, exactly when the model has the tool in hand (graphify pattern). The boot
 // prompt is the one automation that names message, and it already runs with
 // fetch_tools in its preset.
-func RegisterChronoTools(registry toolctx.ToolRegistrar) {
-	registry.RegisterTool(toolctx.ToolDef{
+func RegisterChronoTools(registry toolport.ToolRegistrar) {
+	registry.RegisterTool(toolport.ToolDef{
 		Name: "message",
 		Description: "Send messages to the user's channel. Actions: send, reply, react, thread-reply. Use for proactive sends. " +
 			"**사용자가 방금 보낸 메시지에 대한 응답에는 절대 쓰지 마라** — 일반 응답은 턴의 최종 텍스트가 자동 전달된다. " +
@@ -308,7 +309,7 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 		Fn:          tools.ToolMessage(),
 		Deferred:    true,
 	})
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name: "heartbeat_update",
 		Description: "Overwrite ~/.deneb/HEARTBEAT.md with a new full content string. Pass empty content to clear the file. " +
 			"Used by the 30-minute autonomous heartbeat to retire completed/cancelled items, update progress notes, " +
@@ -322,7 +323,7 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 	// Deferred (2026-07-09): the native client owns the user's 할일 list
 	// (miniapp.todo.*) as the primary surface, and no prompt trigger names this
 	// tool — chat-side todo edits are occasional, so an "할일 추가/목록" turn fetches it.
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name: "todo",
 		Description: "Manage the user's 할일 (to-do) list — the SAME localtodo store the native client reads via miniapp.todo.*. " +
 			"Actions: list | add (needs title; optional due YYYY-MM-DD) | done (needs id; optional done=false to un-complete) | delete (needs id). " +
@@ -338,14 +339,14 @@ func RegisterChronoTools(registry toolctx.ToolRegistrar) {
 // Typical trigger: cron scheduler, daily routines, periodic checks.
 // diaryDir is the wiki diary directory for morning letter logging; wikiDir is
 // the wiki root for its deadline scan (either empty = that part disabled).
-func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.ChronoDeps, diaryDir, wikiDir string, filesSemanticSearch artifact.FilesSemanticSearchFunc) {
+func RegisterRoutineTools(registry toolport.ToolRegistrar, chrono *tooldeps.ChronoDeps, diaryDir, wikiDir string, filesSemanticSearch artifact.FilesSemanticSearchFunc) {
 	// Deferred (prompt audit 2026-06-12): ~590 wire tokens — the second-largest
 	// eager tool — for 11 interactive uses in 14 days. The scheduler itself runs
 	// server-side; this tool only manages jobs, so a "매일 아침에 …" turn pays one
 	// fetch round-trip instead of every turn paying the schema. No cron job
 	// prompt directs the cron tool by name (the static Tool Usage trigger line
 	// "for follow-ups use cron" stays, pointing at the deferred listing).
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "cron",
 		Description: "Schedule recurring jobs (cron expressions). Actions: status, list, add, update, remove, run, get, runs, wake",
 		InputSchema: cronToolSchema(),
@@ -353,7 +354,7 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 		Deferred:    true,
 	})
 
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "files",
 		Description: "파일 저장소 (로컬 디스크, 외부 클라우드 아님): list, search (이름·content=true로 내용, semantic=true로 의미 기반 벡터 검색), semantic_search (=search semantic=true), download (extract=true로 텍스트 추출 — PDF/이미지 OCR·Excel/Word/PowerPoint), upload (로컬 파일을 저장소에 저장), share (7일 유효 공유 링크), analyze (문서 내용 추출). 저장 위치: DENEB_FILES_DIR (기본 ~/.deneb/files). 인증 불필요.",
 		InputSchema: filesToolSchema(),
@@ -363,7 +364,7 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 	// Morning-letter data collection: six sections in parallel, raw JSON out;
 	// the agent composes the letter. Deferred like the other routine tools —
 	// the daily cron run loads it via fetch_tools, every other turn stays slim.
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "morning_letter",
 		Description: "모닝레터 데이터 수집: 날씨·환율·구리시세·오늘 일정·미읽음 메일·위키 마감(due) 6개 섹션을 병렬 수집해 raw JSON 반환. 편지 작성(어조·해석·우선순위)은 에이전트 몫. No parameters",
 		InputSchema: morningLetterToolSchema(),
@@ -376,7 +377,7 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 	// The output contract below used to live only in the retired evening-letter
 	// SKILL.md (#3059) — it rides the description now (full text arrives at
 	// fetch_tools time) so manual invocations keep the native card format.
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name: "evening_letter",
 		Description: "이브닝레터 데이터 수집: 일정(오늘+내일)·미처리 메일·임박 마감을 병렬 수집해 raw JSON 반환. " +
 			"모닝레터의 저녁 짝 — 시장데이터(날씨·환율·구리)는 제외. 편지 작성(회고·내일 준비·우선순위)은 에이전트 몫. " +
@@ -397,8 +398,8 @@ func RegisterRoutineTools(registry toolctx.ToolRegistrar, chrono *toolctx.Chrono
 
 // RegisterSkillsTools registers the unified skills tool
 // (list/create/patch/delete/read/list_files/write_file/remove_file).
-func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.SkillsSnapshotProvider, workspaceDir, bundledSkillsDir string, invalidateCache tools.SkillManageInvalidateFn) {
-	registry.RegisterTool(toolctx.ToolDef{
+func RegisterSkillsTools(registry toolport.ToolRegistrar, getSnapshot tools.SkillsSnapshotProvider, workspaceDir, bundledSkillsDir string, invalidateCache tools.SkillManageInvalidateFn) {
+	registry.RegisterTool(toolport.ToolDef{
 		Name: "skills",
 		Description: "Skill management: list (browse/search), create, patch, read, delete, list_files, write_file, remove_file. " +
 			"Use list when the current task might match a skill. Create reusable workflows from complex tasks.",
@@ -411,15 +412,15 @@ func RegisterSkillsTools(registry toolctx.ToolRegistrar, getSnapshot tools.Skill
 // RegisterMediaTools registers media tools: file delivery (send_file) and
 // video watching (watch). workspaceDir bounds the watch tool's local-file
 // access; an empty string restricts watch to YouTube URLs only.
-func RegisterMediaTools(registry toolctx.ToolRegistrar, workspaceDir string) {
-	registry.RegisterTool(toolctx.ToolDef{
+func RegisterMediaTools(registry toolport.ToolRegistrar, workspaceDir string) {
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "send_file",
 		Description: "Send a file to the user (auto-detects: photo/video/audio/document). Max 50 MB",
 		InputSchema: sendFileToolSchema(),
 		Fn:          artifact.ToolSendFile(),
 		Deferred:    true,
 	})
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name: "chart",
 		Description: "숫자 데이터를 보기 좋은 차트 이미지(PNG)로 그린다 — 추이(line)·누적(area)·비교(bar)·구성비(doughnut). " +
 			"표로 나열하기보다 한눈에 들어오는 게 나을 때(월별 추이, 거래처별 비교, 단계별 비율 등) 사용하라. " +
@@ -429,7 +430,7 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar, workspaceDir string) {
 		Fn:          artifact.ToolChart(),
 		Deferred:    true,
 	})
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name: "diagram",
 		Description: "구조·흐름·일정을 다이어그램 이미지(PNG)로 그린다 — 절차/관계/상태도는 flowchart(노드+화살표), 일정은 gantt(작업별 기간 막대), 연혁/이력/로드맵은 timeline(시점별 사건). " +
 			"인허가 절차, 결재 흐름, 프로젝트 일정, 회사 연혁처럼 말이나 표보다 그림이 나은 걸 설명할 때 쓴다. " +
@@ -439,7 +440,7 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar, workspaceDir string) {
 		Fn:          artifact.ToolDiagram(),
 		Deferred:    true,
 	})
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name: "watch",
 		Description: "Watch a video: extract frames + subtitles from a YouTube URL or local video file, " +
 			"then analyze with the vision model so you can actually SEE and HEAR the content. " +
@@ -455,7 +456,7 @@ func RegisterMediaTools(registry toolctx.ToolRegistrar, workspaceDir string) {
 // name/company search) over the contacts store mirrored from the native client's
 // contacts sync. Skipped when the store isn't wired so the agent doesn't see a
 // dead surface; a nil/empty store would otherwise reply "주소록이 비어 있습니다".
-func RegisterContactsTool(registry toolctx.ToolRegistrar, contactsDeps *toolctx.ContactsDeps) {
+func RegisterContactsTool(registry toolport.ToolRegistrar, contactsDeps *tooldeps.ContactsDeps) {
 	if contactsDeps.Store == nil {
 		return
 	}
@@ -466,7 +467,7 @@ func RegisterContactsTool(registry toolctx.ToolRegistrar, contactsDeps *toolctx.
 	// turn that fetches on demand. code_action's bridge still exposes it zero-hop.
 	// ASR hotword injection and wiki person enrichment read the store server-side,
 	// unaffected. Description leads with the trigger so the 80-rune summary is useful.
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name: "contacts",
 		Description: "'이 번호 누구?'·'010-xxxx 누구야'·'OOO 연락처/번호'처럼 주소록을 물으면 짐작 말고 호출 — " +
 			"전화번호로 인물 찾기(lookup) 또는 이름·회사로 검색(search). " +
@@ -481,11 +482,11 @@ func RegisterContactsTool(registry toolctx.ToolRegistrar, contactsDeps *toolctx.
 // + local events, and create/update/delete local events. Skipped when neither a
 // Google client factory nor a local store is wired, so the agent doesn't see a
 // dead surface. This is the chat-side twin of the miniapp.calendar.* RPC surface.
-func RegisterCalendarTool(registry toolctx.ToolRegistrar, calDeps *toolctx.CalendarDeps) {
+func RegisterCalendarTool(registry toolport.ToolRegistrar, calDeps *tooldeps.CalendarDeps) {
 	if calDeps.Client == nil && calDeps.Local == nil {
 		return
 	}
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name: "calendar",
 		Description: "캘린더 일정 조회·관리. list(다가오는 일정), get(상세 — 참석자·장소·Meet·메모, 미팅 준비용), create(추가), update(수정), delete(삭제). " +
 			"구글 캘린더(읽기)와 로컬 일정(읽기·쓰기)을 합쳐 보여주며 추가·수정·삭제는 로컬 일정에만 적용된다. " +
@@ -498,10 +499,10 @@ func RegisterCalendarTool(registry toolctx.ToolRegistrar, calDeps *toolctx.Calen
 // RegisterWikiTools registers wiki knowledge base tools for long-term knowledge
 // access (search, read, write, log). Project-specific tools provide structured
 // access to the "프로젝트" wiki category.
-func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDeps, workspaceDir string) {
+func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiDeps, workspaceDir string) {
 	// Wiki: unified knowledge base tool (search, read, write, log, daily, index, status).
 	if wikiDeps.Store != nil {
-		registry.RegisterTool(toolctx.ToolDef{
+		registry.RegisterTool(toolport.ToolDef{
 			Name:        "wiki",
 			Description: "LLM 위키 지식베이스: search (검색), read (페이지 읽기), index (목차), write (작성/수정), log (일지), daily (최근 일지), status (통계). 과거 결정/맥락/인물/프로젝트 등 장기 지식을 마크다운 위키로 관리. write 시 related/[[wikilink]]로 연결하고, 새 사실이 기존 페이지를 대체하면 supersedes로 stale 페이지를 표시한다. 본문에서 인물을 [[이름]]으로 링크하면 주소록에 있는 사람은 인물 페이지가 자동 생성·연락처 기록된다(인물 페이지를 직접 쓰면 그 사람 연락처도 자동 채워짐). ★프로젝트 문서 구조(고정): 프로젝트/<이름>/대표.md(대표페이지)·로그.md(진행 로그)·기자재/(자재 문서)·메일분석/(자동 생성). 사건·회의·결재 소식은 새 페이지를 만들지 말고 해당 프로젝트 로그.md에 날짜와 함께 append하고, 항상 write 전에 search로 기존 문서를 확인한다. 끝난 프로젝트는 사용자가 요청하면 close로 종결(보관+활성 목록 제외, 삭제 아님), reopen으로 재개",
 			InputSchema: wikiToolSchema(),
@@ -514,7 +515,7 @@ func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDep
 		// Deferred (2026-07-09): niche direct use, and code_action's bridge already
 		// exposes it zero-hop as "deals", so deferring strands nothing — a direct
 		// 거래 집계 turn fetches it. Description leads with the trigger phrases.
-		registry.RegisterTool(toolctx.ToolDef{
+		registry.RegisterTool(toolport.ToolDef{
 			Name:        "deal_ledger",
 			Description: "'총 거래액'·'올해 견적 몇 건'·'거래처별 합계' 류 거래 금액 집계 질문에 쓰는 정형 거래 원장 — 메일 분석이 파일한 거래 문서(견적·계약·세금계산서 등)의 타입드 기록에서 합계·건수·통화별 집계·기간 필터를 코드로 계산한다(위키 산문 눈대중 금지). 금액 미파싱 건은 합계에서 제외되고 원문과 함께 표기된다",
 			InputSchema: dealLedgerToolSchema(),
@@ -527,7 +528,7 @@ func RegisterWikiTools(registry toolctx.ToolRegistrar, wikiDeps *toolctx.WikiDep
 // RegisterNotebookTool registers the notebook tool — NotebookLM-style scoped
 // source collections for grounded, cited synthesis (딜/프로젝트 브리핑). Skipped
 // when the notebook store is unavailable.
-func RegisterNotebookTool(registry toolctx.ToolRegistrar, deps *toolctx.NotebookDeps) {
+func RegisterNotebookTool(registry toolport.ToolRegistrar, deps *tooldeps.NotebookDeps) {
 	if deps == nil || deps.Store == nil {
 		return
 	}
@@ -537,7 +538,7 @@ func RegisterNotebookTool(registry toolctx.ToolRegistrar, deps *toolctx.Notebook
 	// yet its schema was the 4th-largest eager tool (~2.6KB). Not on code_action's
 	// bridge and not named by any autonomous trigger, so a notebook turn fetches
 	// it. Description front-loads the WHEN so the 80-rune deferred summary is useful.
-	registry.RegisterTool(toolctx.ToolDef{
+	registry.RegisterTool(toolport.ToolDef{
 		Name:        "notebook",
 		Description: "딜/프로젝트 자료(메일·문서·메모)를 한데 모아 그 자료만으로 출처 추적 가능한 인용 브리핑을 만들 때 쓰는 NotebookLM식 노트북. action=create (노트북 생성) | list (목록) | show (자료 보기) | add_source (자료 핀: kind=wiki 위키페이지 또는 kind=note 붙여넣기 텍스트) | remove_source (자료 제거) | delete (노트북 삭제) | brief (핀된 자료에만 근거해 [S1] 형식 인용 브리핑 생성).",
 		InputSchema: notebookToolSchema(),

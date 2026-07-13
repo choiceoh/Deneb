@@ -17,7 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
@@ -370,7 +370,7 @@ func (s *Server) registerSkillLifecycleTool() {
 		Logger:       s.logger,
 		ShadowReplay: shadowReplay,
 	})
-	s.chatHandler.RegisterTool(toolctx.ToolDef{
+	s.chatHandler.RegisterTool(toolport.ToolDef{
 		Name: "skill_lifecycle",
 		Description: "Propus control plane for Deneb self-improvement (tool name kept as skill_lifecycle for compatibility): " +
 			"propose (record/route reusable workflow decisions), " +

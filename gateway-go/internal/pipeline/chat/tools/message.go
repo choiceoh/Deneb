@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -26,7 +26,7 @@ const llmSafetySendGuidance = " Do not tell the user the channel is down, do not
 // autoDeliverySkipNotice is returned (with a nil error) instead of a
 // send-failure error when the run is a scheduled/cron run whose final reply
 // text is delivered to the user's channel automatically by the run-completion
-// layer (toolctx.AutoDeliveryFromContext is true).
+// layer (toolport.AutoDeliveryFromContext is true).
 //
 // Returning a non-error result is deliberate. A tool *error* makes the LLM
 // treat the situation as a problem to surface, and it has historically
@@ -69,13 +69,13 @@ func ToolMessage() ToolFunc {
 			}
 
 			// Get reply function from context.
-			replyFn := toolctx.ReplyFuncFromContext(ctx)
+			replyFn := toolport.ReplyFuncFromContext(ctx)
 			if replyFn == nil {
 				// Scheduled/cron run: the deliverable is auto-delivered by the
 				// run-completion layer, so an unwired in-loop send is a no-op,
 				// not a failure. Report it benignly (nil error) so the model
 				// does not invent an outage report. See autoDeliverySkipNotice.
-				if toolctx.AutoDeliveryFromContext(ctx) {
+				if toolport.AutoDeliveryFromContext(ctx) {
 					return autoDeliverySkipNotice, nil
 				}
 				// IMPORTANT — phrasing matters: the LLM reads this error
@@ -90,13 +90,13 @@ func ToolMessage() ToolFunc {
 			}
 
 			// Build delivery context: use explicit params or fall back to current session delivery.
-			delivery := toolctx.DeliveryFromContext(ctx)
+			delivery := toolport.DeliveryFromContext(ctx)
 			if delivery == nil {
-				delivery = &toolctx.DeliveryContext{}
+				delivery = &toolport.DeliveryContext{}
 			}
 
 			// Override with explicit params if provided.
-			sendDelivery := &toolctx.DeliveryContext{
+			sendDelivery := &toolport.DeliveryContext{
 				Channel:   delivery.Channel,
 				To:        delivery.To,
 				AccountID: delivery.AccountID,
@@ -113,7 +113,7 @@ func ToolMessage() ToolFunc {
 				// ReplyFunc-nil branch above — the run-completion layer
 				// delivers the final text, so a missing in-loop target is
 				// not an outage.
-				if toolctx.AutoDeliveryFromContext(ctx) {
+				if toolport.AutoDeliveryFromContext(ctx) {
 					return autoDeliverySkipNotice, nil
 				}
 				// Same LLM-safety wording rationale as the ReplyFunc-nil branch
@@ -138,12 +138,12 @@ func ToolMessage() ToolFunc {
 				return "", fmt.Errorf("messageId is required for react action")
 			}
 
-			replyFn := toolctx.ReplyFuncFromContext(ctx)
+			replyFn := toolport.ReplyFuncFromContext(ctx)
 			if replyFn == nil {
 				return "", fmt.Errorf("in-loop reaction send is not wired in this run; the user channel itself is fine — skip the reaction and continue")
 			}
 
-			delivery := toolctx.DeliveryFromContext(ctx)
+			delivery := toolport.DeliveryFromContext(ctx)
 			if delivery == nil || delivery.Channel == "" || delivery.To == "" {
 				return "", fmt.Errorf("in-loop reaction send has no delivery target on this context; the user channel itself is fine — skip the reaction and continue")
 			}

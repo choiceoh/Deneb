@@ -3,15 +3,16 @@ package toolreg
 import (
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // mockRegistrar collects registered tools for assertion.
 type mockRegistrar struct {
-	tools []toolctx.ToolDef
+	tools []toolport.ToolDef
 }
 
-func (m *mockRegistrar) RegisterTool(def toolctx.ToolDef) {
+func (m *mockRegistrar) RegisterTool(def toolport.ToolDef) {
 	m.tools = append(m.tools, def)
 }
 
@@ -49,7 +50,7 @@ func TestRegisterFileToolsRegistersOnlyFileTools(t *testing.T) {
 
 func TestRegisterProcessTools_registersTools(t *testing.T) {
 	reg := &mockRegistrar{}
-	deps := &toolctx.ProcessDeps{WorkspaceDir: t.TempDir()}
+	deps := &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()}
 	RegisterProcessTools(reg, deps)
 
 	assertRegisteredContract(t, registeredTool(t, reg, "exec"), false)
@@ -58,7 +59,7 @@ func TestRegisterProcessTools_registersTools(t *testing.T) {
 
 func TestRegisterSessionToolsContracts(t *testing.T) {
 	reg := &mockRegistrar{}
-	RegisterSessionTools(reg, &toolctx.SessionDeps{})
+	RegisterSessionTools(reg, &tooldeps.SessionDeps{})
 
 	assertRegisteredContract(t, registeredTool(t, reg, "sessions"), true)
 	assertRegisteredContract(t, registeredTool(t, reg, "sessions_spawn"), false)
@@ -74,14 +75,14 @@ func TestRegisterHeartbeatContract(t *testing.T) {
 
 func TestRegisterScheduleAndRoutineTools(t *testing.T) {
 	calendarReg := &mockRegistrar{}
-	RegisterCalendarTool(calendarReg, &toolctx.CalendarDeps{
-		Client: func() (toolctx.CalendarReader, error) { return nil, nil },
+	RegisterCalendarTool(calendarReg, &tooldeps.CalendarDeps{
+		Client: func() (tooldeps.CalendarReader, error) { return nil, nil },
 	})
 	calendar := registeredTool(t, calendarReg, "calendar")
 	assertRegisteredContract(t, calendar, false)
 
 	routineReg := &mockRegistrar{}
-	RegisterRoutineTools(routineReg, &toolctx.ChronoDeps{}, t.TempDir(), t.TempDir(), nil)
+	RegisterRoutineTools(routineReg, &tooldeps.ChronoDeps{}, t.TempDir(), t.TempDir(), nil)
 	for _, name := range []string{"files", "morning_letter", "evening_letter"} {
 		def := registeredTool(t, routineReg, name)
 		assertRegisteredContract(t, def, true)
@@ -100,7 +101,7 @@ func TestRegisterMediaTools(t *testing.T) {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-func registeredTool(t *testing.T, registrar *mockRegistrar, name string) toolctx.ToolDef {
+func registeredTool(t *testing.T, registrar *mockRegistrar, name string) toolport.ToolDef {
 	t.Helper()
 	for _, def := range registrar.tools {
 		if def.Name == name {
@@ -108,10 +109,10 @@ func registeredTool(t *testing.T, registrar *mockRegistrar, name string) toolctx
 		}
 	}
 	t.Fatalf("tool %q was not registered", name)
-	return toolctx.ToolDef{}
+	return toolport.ToolDef{}
 }
 
-func assertRegisteredContract(t *testing.T, def toolctx.ToolDef, deferred bool) {
+func assertRegisteredContract(t *testing.T, def toolport.ToolDef, deferred bool) {
 	t.Helper()
 	if def.Fn == nil {
 		t.Fatalf("tool %q has no implementation", def.Name)

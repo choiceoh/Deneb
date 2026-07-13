@@ -11,7 +11,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/lifecycletool"
 )
 
@@ -26,7 +26,7 @@ type skillLifecycleBackend struct {
 	genesis     *generation.Service
 	evolver     *genesis.Evolver
 	tracker     *genesis.Tracker
-	transcripts toolctx.TranscriptStore
+	transcripts toolport.TranscriptStore
 	logger      *slog.Logger
 
 	// Heartbeat shadow-replay deps (P1, heartbeat_shadow_replay.go). Nil/empty
@@ -45,7 +45,7 @@ type BackendConfig struct {
 	Genesis      *generation.Service
 	Evolver      *genesis.Evolver
 	Tracker      *genesis.Tracker
-	Transcripts  toolctx.TranscriptStore
+	Transcripts  toolport.TranscriptStore
 	Logger       *slog.Logger
 	ShadowReplay func(ctx context.Context, candidate string, limit int) (chattools.HeartbeatShadowReplayResult, error)
 }
@@ -75,7 +75,7 @@ func (b *skillLifecycleBackend) HeartbeatShadowReplay(ctx context.Context, req c
 // ProposeSkillEvolution creates a skill-evolution proposal through the lifecycle backend.
 func (b *skillLifecycleBackend) ProposeSkillEvolution(ctx context.Context, req chattools.SkillEvolutionProposalRequest) (chattools.SkillEvolutionProposalResult, error) {
 	if req.SessionKey == "" {
-		req.SessionKey = toolctx.SessionKeyFromContext(ctx)
+		req.SessionKey = toolport.SessionKeyFromContext(ctx)
 	}
 	route := normalizeSkillLifecycleRoute(req.Route)
 	if route == "" {
@@ -156,7 +156,7 @@ func (b *skillLifecycleBackend) RunSkillGenesis(ctx context.Context, req chattoo
 		return chattools.SkillGenesisResult{}, fmt.Errorf("skill genesis is not configured")
 	}
 	if req.SessionKey == "" {
-		req.SessionKey = toolctx.SessionKeyFromContext(ctx)
+		req.SessionKey = toolport.SessionKeyFromContext(ctx)
 	}
 	if strings.TrimSpace(req.SessionKey) == "" && strings.TrimSpace(req.DreamSummary) == "" {
 		return chattools.SkillGenesisResult{}, fmt.Errorf("sessionKey or dreamSummary is required")

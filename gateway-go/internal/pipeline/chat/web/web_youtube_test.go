@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
 
@@ -84,7 +84,7 @@ func TestFormatYouTubeFallback_TruncatesAndReferencesSpillover(t *testing.T) {
 // The full transcript is stored to spillover and retrievable by ID.
 func TestStoreYouTubeTranscript_RoundTrip(t *testing.T) {
 	store := agent.NewSpilloverStore(t.TempDir())
-	ctx := toolctx.WithSessionKey(context.Background(), "sess-1")
+	ctx := toolport.WithSessionKey(context.Background(), "sess-1")
 	r := sampleResult(strings.Repeat("다", 4000))
 
 	spillID := storeYouTubeTranscript(ctx, store, r)

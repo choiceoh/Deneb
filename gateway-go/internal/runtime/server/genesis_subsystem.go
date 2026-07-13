@@ -5,7 +5,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/review"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // GenesisSubsystem groups skill genesis services: the genesis service
@@ -21,5 +21,5 @@ type GenesisSubsystem struct {
 	genesisEvolver     *genesis.Evolver
 	genesisNudger      *review.Nudger
 	skillCatalog       *skills.Catalog
-	genesisTranscripts toolctx.TranscriptStore
+	genesisTranscripts toolport.TranscriptStore
 }

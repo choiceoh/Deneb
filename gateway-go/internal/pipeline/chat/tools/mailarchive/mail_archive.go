@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
@@ -21,7 +21,7 @@ import (
 // MailArchiveDeps supplies archive readers and optional enrichment services.
 type MailArchiveDeps struct {
 	Wiki     *wiki.Store
-	Calendar *toolctx.CalendarDeps
+	Calendar *tooldeps.CalendarDeps
 	// Store is the local file-backed mail mirror and the authoritative corpus:
 	// when populated it answers list/search/project_history entirely from memory,
 	// and a miss is trusted — NOT re-queried over IMAP (the archive IMAP is a
@@ -292,7 +292,7 @@ func relatedArchiveWiki(ctx context.Context, store *wiki.Store, msg mailarchive.
 	return out
 }
 
-func relatedArchiveEvents(deps *toolctx.CalendarDeps, msg mailarchive.ContextMessage) []mailArchiveEventHit {
+func relatedArchiveEvents(deps *tooldeps.CalendarDeps, msg mailarchive.ContextMessage) []mailArchiveEventHit {
 	if deps == nil || deps.Local == nil {
 		return nil
 	}

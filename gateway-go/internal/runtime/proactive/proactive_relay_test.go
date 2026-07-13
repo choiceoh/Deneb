@@ -7,7 +7,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // recordingWorkFeed is a work-feed fake that records Append calls.
@@ -20,24 +20,24 @@ func (w *recordingWorkFeed) Append(it workfeed.Item) (workfeed.Item, error) {
 
 // recordingTranscriptStore is a TranscriptStore fake that records Append calls.
 type recordingTranscriptStore struct {
-	appends map[string][]toolctx.ChatMessage
+	appends map[string][]toolport.ChatMessage
 }
 
 func newRecordingTranscriptStore() *recordingTranscriptStore {
-	return &recordingTranscriptStore{appends: map[string][]toolctx.ChatMessage{}}
+	return &recordingTranscriptStore{appends: map[string][]toolport.ChatMessage{}}
 }
 
-func (s *recordingTranscriptStore) Append(sessionKey string, msg toolctx.ChatMessage) error {
+func (s *recordingTranscriptStore) Append(sessionKey string, msg toolport.ChatMessage) error {
 	s.appends[sessionKey] = append(s.appends[sessionKey], msg)
 	return nil
 }
 
-func (s *recordingTranscriptStore) Load(string, int) ([]toolctx.ChatMessage, int, error) {
+func (s *recordingTranscriptStore) Load(string, int) ([]toolport.ChatMessage, int, error) {
 	return nil, 0, nil
 }
 func (s *recordingTranscriptStore) Delete(string) error         { return nil }
 func (s *recordingTranscriptStore) ListKeys() ([]string, error) { return nil, nil }
-func (s *recordingTranscriptStore) Search(string, int) ([]toolctx.SearchResult, error) {
+func (s *recordingTranscriptStore) Search(string, int) ([]toolport.SearchResult, error) {
 	return nil, nil
 }
 func (s *recordingTranscriptStore) CloneRecent(string, string, int) error { return nil }

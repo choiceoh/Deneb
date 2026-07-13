@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -134,7 +134,7 @@ func TestCachedTranscriptStore_ReturnsCopy(t *testing.T) {
 	msgs, _, _ := cache.Load("s1", 0)
 
 	// Mutate returned slice.
-	msgs[0].Content = toolctx.MarshalJSONString("MUTATED")
+	msgs[0].Content = toolport.MarshalJSONString("MUTATED")
 
 	// Reload — should still see original.
 	msgs2, _, _ := cache.Load("s1", 0)

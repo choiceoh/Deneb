@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/linkenrichment"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 func TestStartLinkEnrichmentPreservesChatEligibilityGates(t *testing.T) {
@@ -59,7 +59,7 @@ func TestStartLinkEnrichmentUsesHandlerEngineAndChatSanitizer(t *testing.T) {
 		t.Fatal("eligible turn did not start link enrichment")
 	}
 	got := join(context.Background())
-	if !strings.HasPrefix(got, typed) || !strings.Contains(got, toolctx.LinkEnrichmentHeader) || !strings.Contains(got, "Fetched body") {
+	if !strings.HasPrefix(got, typed) || !strings.Contains(got, toolport.LinkEnrichmentHeader) || !strings.Contains(got, "Fetched body") {
 		t.Fatalf("joined message lost enrichment contract: %q", got)
 	}
 	if strings.ContainsRune(got, '\x00') {
@@ -94,10 +94,10 @@ func TestLinkEnrichmentDisplayRoundTrip(t *testing.T) {
 		t.Fatal("eligible turn did not start link enrichment")
 	}
 	messages := []ChatMessage{
-		toolctx.NewTextChatMessage("user", join(context.Background()), 0),
-		toolctx.NewTextChatMessage("assistant", "요약입니다.", 0),
+		toolport.NewTextChatMessage("user", join(context.Background()), 0),
+		toolport.NewTextChatMessage("assistant", "요약입니다.", 0),
 	}
-	got := toolctx.StripLinkEnrichmentForDisplay(messages)
+	got := toolport.StripLinkEnrichmentForDisplay(messages)
 	if got[0].TextContent() != typed || got[1].TextContent() != "요약입니다." {
 		t.Fatalf("display round-trip = %+v, want typed user text and unchanged assistant", got)
 	}

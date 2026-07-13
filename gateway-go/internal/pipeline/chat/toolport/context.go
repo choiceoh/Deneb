@@ -1,4 +1,4 @@
-package toolctx
+package toolport
 
 import (
 	"context"
@@ -170,7 +170,7 @@ func ToolPresetFromContext(ctx context.Context) string {
 
 // Checkpointer is a narrow interface for snapshotting a file prior to an
 // edit. Implemented by *pkg/checkpoint.CheckpointerAdapter (which wraps a
-// Manager). Defining it in toolctx/ avoids toolctx/ depending on pkg/checkpoint.
+// Manager). Defining it in toolport/ avoids toolport/ depending on pkg/checkpoint.
 //
 // Snapshot is invoked BEFORE the tool rewrites the target file; an error-free
 // return guarantees the agent can roll back the impending edit.

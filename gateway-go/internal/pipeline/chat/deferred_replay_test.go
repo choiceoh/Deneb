@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 func replayMsg(t *testing.T, role string, blocks []llm.ContentBlock) llm.Message {
@@ -37,16 +37,16 @@ func TestReplayActivatedTools(t *testing.T) {
 		{Role: "user", Content: json.RawMessage(`"그래프 봐줘"`)},
 		// Paired fetch_tools activation of graphify.
 		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t1", "fetch_tools")}),
-		replayMsg(t, "user", []llm.ContentBlock{toolResult("t1", toolctx.FormatFetchActivationNotice([]string{"graphify"}))}),
+		replayMsg(t, "user", []llm.ContentBlock{toolResult("t1", toolport.FormatFetchActivationNotice([]string{"graphify"}))}),
 		// Skill consult notice appended to a read result: notebook + exec (eager,
 		// must be dropped) + ghost (unknown, must be dropped).
 		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t2", "read")}),
 		replayMsg(t, "user", []llm.ContentBlock{toolResult("t2",
-			"[File: skills/x/SKILL.md | 3 lines]\n...\n\n"+toolctx.FormatSkillActivationNotice([]string{"notebook", "exec", "ghost"}))}),
+			"[File: skills/x/SKILL.md | 3 lines]\n...\n\n"+toolport.FormatSkillActivationNotice([]string{"notebook", "exec", "ghost"}))}),
 		// Marker-shaped text inside an unrelated tool's output must NOT seed:
 		// the result is paired to grep, not an activation writer.
 		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t3", "grep")}),
-		replayMsg(t, "user", []llm.ContentBlock{toolResult("t3", toolctx.FormatFetchActivationNotice([]string{"process"}))}),
+		replayMsg(t, "user", []llm.ContentBlock{toolResult("t3", toolport.FormatFetchActivationNotice([]string{"process"}))}),
 		// Unpaired fetch_tools call (run died before the result): proves nothing.
 		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t4", "fetch_tools")}),
 	}
@@ -64,7 +64,7 @@ func TestReplayActivatedTools_presetGate(t *testing.T) {
 	registry := requiredToolsRegistry()
 	history := []llm.Message{
 		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t1", "fetch_tools")}),
-		replayMsg(t, "user", []llm.ContentBlock{toolResult("t1", toolctx.FormatFetchActivationNotice([]string{"graphify"}))}),
+		replayMsg(t, "user", []llm.ContentBlock{toolResult("t1", toolport.FormatFetchActivationNotice([]string{"graphify"}))}),
 	}
 	// conversation preset does not allow graphify.
 	if got := replayActivatedTools(history, registry, "conversation"); got != nil {
@@ -98,7 +98,7 @@ func TestReplayActivatedTools_metadataFirst(t *testing.T) {
 		// notebook: metadata (empty of it) wins, text is not parsed.
 		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t2", "read")}),
 		replayMsg(t, "user", []llm.ContentBlock{withMeta(
-			toolResult("t2", toolctx.FormatSkillActivationNotice([]string{"notebook"})),
+			toolResult("t2", toolport.FormatSkillActivationNotice([]string{"notebook"})),
 			`{"activatedTools":[]}`,
 		)}),
 	}
@@ -113,9 +113,9 @@ func TestReplayActivatedTools_dedupe(t *testing.T) {
 	registry := requiredToolsRegistry()
 	history := []llm.Message{
 		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t1", "fetch_tools")}),
-		replayMsg(t, "user", []llm.ContentBlock{toolResult("t1", toolctx.FormatFetchActivationNotice([]string{"notebook", "graphify"}))}),
+		replayMsg(t, "user", []llm.ContentBlock{toolResult("t1", toolport.FormatFetchActivationNotice([]string{"notebook", "graphify"}))}),
 		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t2", "fetch_tools")}),
-		replayMsg(t, "user", []llm.ContentBlock{toolResult("t2", toolctx.FormatFetchActivationNotice([]string{"graphify"}))}),
+		replayMsg(t, "user", []llm.ContentBlock{toolResult("t2", toolport.FormatFetchActivationNotice([]string{"graphify"}))}),
 	}
 	if got, want := replayActivatedTools(history, registry, ""), []string{"notebook", "graphify"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("replay = %v, want %v", got, want)

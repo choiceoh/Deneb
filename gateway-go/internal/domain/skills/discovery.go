@@ -88,7 +88,7 @@ type discoveredSkill struct {
 // DefaultManagedSkillsDir returns the managed skills catalog root
 // (~/.deneb/skills), or "" when the home directory cannot be resolved.
 // Single source of truth for discovery and for the read tool's extra
-// allowed root (toolctx.CoreToolDeps.SkillsCatalogDir).
+// allowed root (tooldeps.CoreToolDeps.SkillsCatalogDir).
 func DefaultManagedSkillsDir() string {
 	home, _ := os.UserHomeDir()
 	if home == "" {

@@ -18,7 +18,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -196,7 +196,7 @@ func skillReadMissHint(path string, skillRoots []string) string {
 // ToolRead returns the file-read tool. extraReadRoots are directories outside
 // the workspace that reads may reach (read-only; currently the skills catalog —
 // the system prompt directs the model to read SKILL.md at those locations).
-func ToolRead(defaultDir string, extraReadRoots ...string) toolctx.ToolFunc {
+func ToolRead(defaultDir string, extraReadRoots ...string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -224,7 +224,7 @@ func ToolRead(defaultDir string, extraReadRoots ...string) toolctx.ToolFunc {
 
 		// File-read dedup: for default full-file reads (no offset/limit/function),
 		// check cache before hitting disk.  Skip if force=true.
-		fc := toolctx.FileCacheFromContext(ctx)
+		fc := toolport.FileCacheFromContext(ctx)
 		// hashes=true emits per-line anchors, which the plain cached output does
 		// not contain — bypass the dedup cache for those reads.
 		useCache := fc != nil && !p.Force && !p.Hashes && p.Function == "" && p.Offset <= 0 && p.Limit <= 0

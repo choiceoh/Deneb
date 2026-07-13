@@ -9,19 +9,20 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolctx"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 type fakeSessionTranscript struct {
 	searches []string
-	results  map[string][]toolctx.SearchResult
+	results  map[string][]toolport.SearchResult
 }
 
-func (f *fakeSessionTranscript) Load(string, int) ([]toolctx.ChatMessage, int, error) {
+func (f *fakeSessionTranscript) Load(string, int) ([]toolport.ChatMessage, int, error) {
 	return nil, 0, nil
 }
 
-func (f *fakeSessionTranscript) Append(string, toolctx.ChatMessage) error {
+func (f *fakeSessionTranscript) Append(string, toolport.ChatMessage) error {
 	return nil
 }
 
@@ -33,7 +34,7 @@ func (f *fakeSessionTranscript) ListKeys() ([]string, error) {
 	return nil, nil
 }
 
-func (f *fakeSessionTranscript) Search(query string, _ int) ([]toolctx.SearchResult, error) {
+func (f *fakeSessionTranscript) Search(query string, _ int) ([]toolport.SearchResult, error) {
 	f.searches = append(f.searches, query)
 	return f.results[query], nil
 }
@@ -52,17 +53,17 @@ func sessionSearchJSON(t *testing.T, v any) json.RawMessage {
 }
 
 func TestToolSessionsSearchExpandsNaturalLanguageQuery(t *testing.T) {
-	match := toolctx.MatchedMsg{
+	match := toolport.MatchedMsg{
 		Index:   3,
-		Message: toolctx.NewTextChatMessage("assistant", "PR 리뷰 후 체리픽 브랜치를 만들었다", 123),
+		Message: toolport.NewTextChatMessage("assistant", "PR 리뷰 후 체리픽 브랜치를 만들었다", 123),
 	}
 	transcript := &fakeSessionTranscript{
-		results: map[string][]toolctx.SearchResult{
+		results: map[string][]toolport.SearchResult{
 			"pr": {
-				{SessionKey: "desktop:abc", Matches: []toolctx.MatchedMsg{match}},
+				{SessionKey: "desktop:abc", Matches: []toolport.MatchedMsg{match}},
 			},
 			"체리픽": {
-				{SessionKey: "desktop:abc", Matches: []toolctx.MatchedMsg{match}},
+				{SessionKey: "desktop:abc", Matches: []toolport.MatchedMsg{match}},
 			},
 		},
 	}
@@ -90,8 +91,8 @@ func TestToolSessionsSearchExpandsNaturalLanguageQuery(t *testing.T) {
 
 // --- sessions_spawn guardrails ---
 
-func spawnDeps(sm *session.Manager) *toolctx.SessionDeps {
-	return &toolctx.SessionDeps{
+func spawnDeps(sm *session.Manager) *tooldeps.SessionDeps {
+	return &tooldeps.SessionDeps{
 		Manager: sm,
 		SendFn:  func(string, string) error { return nil },
 	}
@@ -104,7 +105,7 @@ func spawnInput(t *testing.T, task, label string) json.RawMessage {
 
 func TestSessionsSpawn_RecordsDepthAndLabel(t *testing.T) {
 	sm := session.NewManager()
-	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+	ctx := toolport.WithSessionKey(context.Background(), "client:main")
 
 	out, err := ToolSessionsSpawn(spawnDeps(sm))(ctx, spawnInput(t, "research X", "researcher"))
 	if err != nil {
@@ -133,7 +134,7 @@ func TestSessionsSpawn_RecordsDepthAndLabel(t *testing.T) {
 
 func TestSessionsSpawn_StoresToolPreset(t *testing.T) {
 	sm := session.NewManager()
-	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+	ctx := toolport.WithSessionKey(context.Background(), "client:main")
 
 	input := sessionSearchJSON(t, map[string]string{
 		"task": "research X", "label": "r1", "tool_preset": "researcher",
@@ -162,7 +163,7 @@ func TestSessionsSpawn_StoresToolPreset(t *testing.T) {
 
 func TestSessionsSpawn_ImplementerUsesCodingRoleWhenConfigured(t *testing.T) {
 	sm := session.NewManager()
-	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+	ctx := toolport.WithSessionKey(context.Background(), "client:main")
 	deps := spawnDeps(sm)
 	deps.CodingDefaultModel = "kimi/kimi-for-coding"
 
@@ -196,7 +197,7 @@ func TestSessionsSpawn_ImplementerUsesCodingRoleWhenConfigured(t *testing.T) {
 
 func TestSessionsSpawn_RejectsExplicitCodingWhenUnconfigured(t *testing.T) {
 	sm := session.NewManager()
-	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+	ctx := toolport.WithSessionKey(context.Background(), "client:main")
 
 	input := sessionSearchJSON(t, map[string]string{
 		"task": "fix the build", "label": "impl", "model": "coding",
@@ -217,7 +218,7 @@ func TestSessionsSpawn_RejectsExplicitCodingWhenUnconfigured(t *testing.T) {
 
 func TestSessionsSpawn_ImplementerUsesLiveCodingRole(t *testing.T) {
 	sm := session.NewManager()
-	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+	ctx := toolport.WithSessionKey(context.Background(), "client:main")
 	deps := spawnDeps(sm)
 	codingModel := ""
 	deps.CodingDefaultModelFn = func() string { return codingModel }
@@ -241,7 +242,7 @@ func TestSessionsSpawn_ImplementerUsesLiveCodingRole(t *testing.T) {
 // child the full toolset.
 func TestSessionsSpawn_RejectsUnknownToolPreset(t *testing.T) {
 	sm := session.NewManager()
-	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+	ctx := toolport.WithSessionKey(context.Background(), "client:main")
 
 	input := sessionSearchJSON(t, map[string]string{
 		"task": "research X", "tool_preset": "reseacher", // typo on purpose
@@ -268,7 +269,7 @@ func TestSessionsSpawn_RejectsBeyondMaxDepth(t *testing.T) {
 	if err := sm.Set(parent); err != nil {
 		t.Fatalf("set parent: %v", err)
 	}
-	ctx := toolctx.WithSessionKey(context.Background(), "client:main:deep")
+	ctx := toolport.WithSessionKey(context.Background(), "client:main:deep")
 
 	out, err := ToolSessionsSpawn(spawnDeps(sm))(ctx, spawnInput(t, "go deeper", ""))
 	if err != nil {
@@ -295,7 +296,7 @@ func TestSessionsSpawn_RejectsBeyondConcurrencyCap(t *testing.T) {
 			t.Fatalf("set child %d: %v", i, err)
 		}
 	}
-	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+	ctx := toolport.WithSessionKey(context.Background(), "client:main")
 
 	out, err := ToolSessionsSpawn(spawnDeps(sm))(ctx, spawnInput(t, "one more", ""))
 	if err != nil {
@@ -322,7 +323,7 @@ func TestSessionsSpawn_TerminalChildrenDoNotCountAgainstCap(t *testing.T) {
 			t.Fatalf("set child %d done: %v", i, err)
 		}
 	}
-	ctx := toolctx.WithSessionKey(context.Background(), "client:main")
+	ctx := toolport.WithSessionKey(context.Background(), "client:main")
 
 	out, err := ToolSessionsSpawn(spawnDeps(sm))(ctx, spawnInput(t, "fresh task", ""))
 	if err != nil {
@@ -346,7 +347,7 @@ func TestToolSessionsStats(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	tool := ToolSessions(&toolctx.SessionDeps{AgentLog: w})
+	tool := ToolSessions(&tooldeps.SessionDeps{AgentLog: w})
 	out, err := tool(context.Background(), json.RawMessage(`{"action":"stats","days":7}`))
 	if err != nil {
 		t.Fatalf("stats: %v", err)
@@ -358,7 +359,7 @@ func TestToolSessionsStats(t *testing.T) {
 	}
 
 	// Unwired agent log degrades to a notice, never an error.
-	out, err = ToolSessions(&toolctx.SessionDeps{})(context.Background(), json.RawMessage(`{"action":"stats"}`))
+	out, err = ToolSessions(&tooldeps.SessionDeps{})(context.Background(), json.RawMessage(`{"action":"stats"}`))
 	if err != nil || !strings.Contains(out, "배선되지 않아") {
 		t.Errorf("nil agentlog: out=%q err=%v", out, err)
 	}
