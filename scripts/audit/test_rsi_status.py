@@ -93,6 +93,21 @@ class L2Test(unittest.TestCase):
     def test_empty_is_idle(self):
         self.assertEqual(assess_l2([], frozen=False, now_ms=NOW).state, IDLE)
 
+    def test_assess_reads_last_freeze_verdict_not_file_presence(self):
+        # Parity with Go AutoAdoptFrozen: frozen:false unfreezes even though
+        # the marker file still exists.
+        with tempfile.TemporaryDirectory() as data_dir:
+            freeze = os.path.join(data_dir, "auto_adopt_freeze.json")
+            with open(freeze, "w", encoding="utf-8") as handle:
+                handle.write(json.dumps({"frozen": True, "createdAt": OLD}) + "\n")
+                handle.write(json.dumps({"frozen": False, "createdAt": RECENT}) + "\n")
+            layers = {layer.key: layer.state for layer in assess(data_dir, NOW)}
+            self.assertEqual(layers["L2"], IDLE)
+            with open(freeze, "a", encoding="utf-8") as handle:
+                handle.write(json.dumps({"frozen": True, "createdAt": RECENT}) + "\n")
+            layers = {layer.key: layer.state for layer in assess(data_dir, NOW)}
+            self.assertEqual(layers["L2"], FROZEN)
+
 
 class L3Test(unittest.TestCase):
     def test_blatant_only_is_data_gated_not_starved(self):

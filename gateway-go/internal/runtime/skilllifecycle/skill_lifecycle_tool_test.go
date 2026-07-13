@@ -754,6 +754,38 @@ func TestSkillLifecycleSelfCorrectionRecordReviewAndStatus(t *testing.T) {
 	if len(pending) != 0 {
 		t.Fatalf("reviewed candidate should leave pending status view, got %+v", pending)
 	}
+
+	// Accepted candidates stay visible — they are the L4 dispatch backlog the
+	// heartbeat review lane endorses for coding-dispatch.
+	gotAny, err = backend.RecordSelfCorrectionCandidate(context.Background(), chattools.SkillSelfCorrectionCandidateRequest{
+		Scope:          "code",
+		Title:          "accepted backlog",
+		Candidate:      "wire accepted into status",
+		Evidence:       "status filter regression",
+		TargetFiles:    []string{"gateway-go/internal/pipeline/chat/effort_router.go"},
+		ProposedChange: "include accepted",
+		Risk:           "low",
+		Source:         "health-finding:test",
+	})
+	if err != nil {
+		t.Fatalf("RecordSelfCorrectionCandidate accepted: %v", err)
+	}
+	acceptedID := gotAny.Candidate.ID
+	if _, err := backend.ReviewSelfCorrectionCandidate(context.Background(), chattools.SkillSelfCorrectionReviewRequest{
+		ID:       acceptedID,
+		Status:   genesis.SelfCorrectionStatusAccepted,
+		Reviewer: "codex",
+	}); err != nil {
+		t.Fatalf("ReviewSelfCorrectionCandidate accept: %v", err)
+	}
+	statusAny, err = backend.SkillLifecycleStatus(context.Background(), chattools.SkillLifecycleStatusRequest{Limit: 5})
+	if err != nil {
+		t.Fatalf("SkillLifecycleStatus after accept: %v", err)
+	}
+	pending = *statusAny.SelfCorrectionCandidates
+	if len(pending) != 1 || pending[0].ID != acceptedID || pending[0].Status != genesis.SelfCorrectionStatusAccepted {
+		t.Fatalf("expected accepted candidate in status, got %+v", pending)
+	}
 }
 
 func TestSkillLifecycleCuratorActionsPinArchiveRestore(t *testing.T) {

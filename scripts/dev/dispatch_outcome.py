@@ -21,6 +21,11 @@ the worktree's commit state), never from parsing session text:
                                             exercised the contract's "do not
                                             land" clause)
 
+Pick-lane companion: blocks_redispatch() — landed/attempted block redispatch;
+declined/failed/timeout may retry; outcome-less markers block only until the
+session abandon age (default = SESSION_TIMEOUT) so a crash before accounting
+cannot starve the L4 drain forever.
+
 The marker is rewritten atomically (tmp+rename); all fields are additive so
 older markers without outcomes stay readable. Exit 0 even on unreadable
 markers — outcome accounting must never break the dispatch lane.
@@ -35,6 +40,59 @@ import time
 from pathlib import Path
 
 TIMEOUT_RC = 124  # coreutils timeout(1) convention
+
+# Outcomes that permanently (or until upgraded) consume a candidate slot.
+# attempted stays blocked so an in-flight PR is not double-dispatched; later
+# ticks may upgrade it to landed via --upgrade-only.
+BLOCKING_OUTCOMES = frozenset({"landed", "attempted"})
+# Terminal failures / clean declines: the candidate may be retried on a later
+# tick (subject to the daily cap). Observed 2026-07-13: treating any marker
+# file as permanent skip left declined/failed/timeout slots dead forever.
+REDISPATCH_OUTCOMES = frozenset({"declined", "failed", "timeout"})
+# Marker is written BEFORE the Claude session starts. A crash/kill before
+# outcome accounting leaves no "outcome" field — block while the session
+# wall-clock could still be running, then release so the L4 drain continues.
+DEFAULT_ABANDON_AFTER_SEC = 7200  # matches coding-dispatch SESSION_TIMEOUT default
+
+
+def blocks_redispatch(
+    marker_path: str | Path,
+    *,
+    now_sec: float | None = None,
+    abandon_after_sec: int = DEFAULT_ABANDON_AFTER_SEC,
+) -> bool:
+    """True when the pick lane must skip this candidate because of its marker.
+
+    Decision table (load-bearing for L4 drain):
+      no marker file                         -> False (pick it)
+      outcome landed|attempted               -> True
+      outcome declined|failed|timeout        -> False (retry allowed)
+      missing/empty outcome, age < abandon   -> True  (likely in flight)
+      missing/empty outcome, age >= abandon  -> False (abandoned session)
+      unreadable marker                      -> True  (do not thrash)
+    """
+    path = Path(marker_path)
+    if not path.is_file():
+        return False
+    try:
+        marker = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return True
+    outcome = (marker.get("outcome") or "").strip()
+    if outcome in BLOCKING_OUTCOMES:
+        return True
+    if outcome in REDISPATCH_OUTCOMES:
+        return False
+    # No recorded outcome yet — age gate against the marker mtime (written at
+    # dispatch start). Prefer mtime over createdAt: the marker body is a copy of
+    # the candidate record whose createdAt is the queue timestamp, not dispatch.
+    if now_sec is None:
+        now_sec = time.time()
+    try:
+        age = now_sec - path.stat().st_mtime
+    except OSError:
+        return True
+    return age < max(0, abandon_after_sec)
 
 
 def decide(rc: int, ahead: int, pr_state: str) -> str:
