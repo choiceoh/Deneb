@@ -46,15 +46,15 @@ type judgeBenchPair struct {
 	Degraded    string
 }
 
-// JudgeBenchOutcome aggregates one judge prompt's run over the gold pairs.
-type JudgeBenchOutcome struct {
+// judgeBenchOutcome aggregates one judge prompt's run over the gold pairs.
+type judgeBenchOutcome struct {
 	Correct  int      `json:"correct"`
 	Total    int      `json:"total"`
 	Failures []string `json:"failures,omitempty"`
 }
 
 // Rate returns the caught-defect ratio (1.0 when the bench did not run).
-func (o JudgeBenchOutcome) Rate() float64 {
+func (o judgeBenchOutcome) Rate() float64 {
 	if o.Total == 0 {
 		return 1
 	}
@@ -123,8 +123,8 @@ type judgeBenchVerdictFn func(ctx context.Context, judgeSystemPrompt, original, 
 // under test. A pair is CORRECT when the judge rejects the degraded body
 // (pass=false) and does not score it above the original. Verdict errors count
 // as failures — a judge prompt that breaks the parser is unfit.
-func runJudgeDegradationBench(ctx context.Context, judgeSystemPrompt string, pairs []judgeBenchPair, verdict judgeBenchVerdictFn) JudgeBenchOutcome {
-	var out JudgeBenchOutcome
+func runJudgeDegradationBench(ctx context.Context, judgeSystemPrompt string, pairs []judgeBenchPair, verdict judgeBenchVerdictFn) judgeBenchOutcome {
+	var out judgeBenchOutcome
 	for _, pair := range pairs {
 		out.Total++
 		v, err := verdict(ctx, judgeSystemPrompt, pair.Original, pair.Degraded)
@@ -151,7 +151,7 @@ func runJudgeDegradationBench(ctx context.Context, judgeSystemPrompt string, pai
 // judgeBenchDecision is the deterministic promotion rule for an
 // evaluator-epoch proposal: it must not regress the incumbent on the same
 // pairs and must clear the absolute floor. Returns "" when admissible.
-func judgeBenchDecision(incumbent, proposal JudgeBenchOutcome) string {
+func judgeBenchDecision(incumbent, proposal judgeBenchOutcome) string {
 	if proposal.Total < judgeBenchMinPairs {
 		return fmt.Sprintf("bench too small (%d pairs < %d)", proposal.Total, judgeBenchMinPairs)
 	}

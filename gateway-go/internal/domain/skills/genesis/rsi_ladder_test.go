@@ -76,7 +76,7 @@ func TestRSILadder_CalibrationRow(t *testing.T) {
 		for i := 0; i < n; i++ {
 			if err := tr.LogMetaRevision(MetaRevisionRecord{
 				Epoch: epoch, Artifact: "a.md", Proposed: true,
-				BenchShadow: &ProducerBenchOutcome{Skills: 1},
+				BenchShadow: &producerBenchOutcome{Skills: 1},
 			}); err != nil {
 				t.Fatal(err)
 			}

@@ -8,6 +8,7 @@ package server
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 )
@@ -39,4 +40,53 @@ func (s *Server) postLadderReadyCard(title, detail string) {
 	if _, err := nf.Append(item); err != nil {
 		s.logger.Warn("ladder-ready card post failed", "row", title, "error", err)
 	}
+}
+
+// ladderActionRelockPrefix carries the graduation row key in the action id:
+// "ladder:relock:<row-key>".
+const ladderActionRelockPrefix = "ladder:relock:"
+
+// postGraduationCard surfaces one EXECUTED unlock (operator directive
+// 2026-07-14: the loop flips evidence-met locks itself) — notification with a
+// post-hoc 재잠금 veto, mirroring the P2 auto-adoption card.
+func (s *Server) postGraduationCard(key, title, evidence string) {
+	nf := s.nativeWorkFeedStore()
+	if nf == nil {
+		return
+	}
+	item := workfeed.Item{
+		Source:  ladderReadySource,
+		Title:   "졸업 실행: " + title,
+		Summary: evidence,
+		Status:  "unread",
+		Body: fmt.Sprintf(`자율성 졸업 사다리의 한 행이 증거 임계를 충족해 자동으로 잠금 해제되었습니다.
+
+- 행: %s
+- 증거: %s
+
+임계값 정책은 코드에 고정되어 있고 루프는 이를 실행만 합니다 (수용회로 forbidden). 되돌리려면 아래 재잠금을 누르세요 — 즉시 잠금 상태로 복원되고 원장에 기록됩니다. 킬 스위치: DENEB_AUTO_GRADUATE=0.`, title, evidence),
+		Actions: []workfeed.Action{
+			{ID: ladderActionRelockPrefix + key, Kind: workfeed.ActionAck, Label: "재잠금"},
+		},
+	}
+	if _, err := nf.Append(item); err != nil {
+		s.logger.Warn("graduation card post failed", "row", key, "error", err)
+	}
+}
+
+// handleLadderCardAction applies the operator's 재잠금 veto from a graduation
+// card. Best-effort — the card has already settled.
+func (s *Server) handleLadderCardAction(_ workfeed.Item, actionID string) {
+	if s.genesisTracker == nil || !strings.HasPrefix(actionID, ladderActionRelockPrefix) {
+		return
+	}
+	key := strings.TrimPrefix(actionID, ladderActionRelockPrefix)
+	if key == "" {
+		return
+	}
+	if err := s.genesisTracker.RelockGraduation(key, "operator relocked from feed card"); err != nil {
+		s.logger.Warn("graduation relock failed", "row", key, "error", err)
+		return
+	}
+	s.logger.Info("graduation relocked from feed card", "row", key)
 }

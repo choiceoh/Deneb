@@ -101,28 +101,28 @@ type MetaRevisionRecord struct {
 	AdoptionHealth *MetaAdoptionHealth `json:"adoptionHealth,omitempty"`
 	// Evaluator-epoch only: judge-degradation bench outcomes (BabelJudge) for
 	// the incumbent and the proposal over the same gold pairs.
-	BenchIncumbent *JudgeBenchOutcome `json:"benchIncumbent,omitempty"`
-	BenchProposal  *JudgeBenchOutcome `json:"benchProposal,omitempty"`
+	BenchIncumbent *judgeBenchOutcome `json:"benchIncumbent,omitempty"`
+	BenchProposal  *judgeBenchOutcome `json:"benchProposal,omitempty"`
 	// Producer-epoch only: shadow-replay bench (CPE anchor preservation +
 	// AgentDevel flip gate over generated candidates).
-	BenchShadow *ProducerBenchOutcome `json:"benchShadow,omitempty"`
+	BenchShadow *producerBenchOutcome `json:"benchShadow,omitempty"`
 	// Genesis-epoch only: genesis shadow bench (fixed scenarios scored by the
 	// production admissibility gate — RSI P5-4 slice 2).
-	BenchGenesis *GenesisBenchOutcome `json:"benchGenesis,omitempty"`
+	BenchGenesis *genesisBenchOutcome `json:"benchGenesis,omitempty"`
 	// OperatorUtility is ADVISORY-ONLY (never a gate input, P5-5): what the
 	// operator's feed-card accept/reject verdicts looked like at this cycle.
 	// Recorded for diagnosis/audit; the deterministic gates ignore it. Mirrors
 	// the subtle-vs-blatant judge-degradation split — informs the producer's
 	// prose, never decides adoption.
-	OperatorUtility *OperatorUtilitySignals `json:"operatorUtility,omitempty"`
+	OperatorUtility *operatorUtilitySignals `json:"operatorUtility,omitempty"`
 }
 
-// OperatorUtilitySignals summarizes 7d operator feed-card decisions for the
+// operatorUtilitySignals summarizes 7d operator feed-card decisions for the
 // meta-evidence block. ADVISORY ONLY (P5-5): grounds the producer's prose on
 // operator-visible utility; no gate reads it. Feed-card decisions are already
 // ledgered as MetaRevisionRecord.Action entries (adopted/rejected/
 // operator_reverted) — this is a read-side aggregate, not a new signal source.
-type OperatorUtilitySignals struct {
+type operatorUtilitySignals struct {
 	Adopted7d      int     `json:"adopted7d"`
 	Rejected7d     int     `json:"rejected7d"`
 	Reverted7d     int     `json:"reverted7d"`
@@ -232,13 +232,13 @@ func (t *Tracker) MetaEvolutionHealth() MetaEvolutionHealth {
 	return out
 }
 
-// OperatorUtilitySignals summarizes 7d operator feed-card decisions from the
+// operatorUtilitySignals summarizes 7d operator feed-card decisions from the
 // meta-experience ledger. ADVISORY ONLY (P5-5): surfaces what the operator
 // accepted/rejected/reverted to the meta-evidence block; never read by any
 // gate, drift brake, or promotion bench. Feed-card decisions are ledgered as
 // MetaRevisionRecord.Action entries — this aggregates that field.
-func (t *Tracker) OperatorUtilitySignals() OperatorUtilitySignals {
-	var out OperatorUtilitySignals
+func (t *Tracker) operatorUtilitySignals() operatorUtilitySignals {
+	var out operatorUtilitySignals
 	entries, err := t.RecentMetaRevisions(50)
 	if err != nil || len(entries) == 0 {
 		return out
@@ -306,15 +306,15 @@ type MetaEvolutionTask struct {
 
 	// pending bench outcomes for the in-flight cycle's ledger write (set via
 	// recordWithBench; Run is single-flight per task so no locking needed).
-	pendingBenchIncumbent *JudgeBenchOutcome
-	pendingBenchProposal  *JudgeBenchOutcome
-	pendingBenchShadow    *ProducerBenchOutcome
-	pendingBenchGenesis   *GenesisBenchOutcome
+	pendingBenchIncumbent *judgeBenchOutcome
+	pendingBenchProposal  *judgeBenchOutcome
+	pendingBenchShadow    *producerBenchOutcome
+	pendingBenchGenesis   *genesisBenchOutcome
 	pendingAdoptionHealth *MetaAdoptionHealth
 	pendingAction         string
 	// pendingOperatorUtility is the ADVISORY snapshot stashed for the cycle's
 	// ledger write (P5-5); set once in Run, copied into MetaRevisionRecord.
-	pendingOperatorUtility *OperatorUtilitySignals
+	pendingOperatorUtility *operatorUtilitySignals
 }
 
 // Name identifies the task in the autonomous scheduler.
@@ -380,7 +380,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	// a gate input). Computed before evidence assembly so the producer's prose
 	// AND the ledger record both see the same picture. Ground rule: the
 	// deterministic gates ignore this entirely.
-	util := t.Tracker.OperatorUtilitySignals()
+	util := t.Tracker.operatorUtilitySignals()
 	t.pendingOperatorUtility = &util
 
 	evidence := t.assembleEvidence(ctx, epoch)
@@ -403,7 +403,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	// judge-prompt revision (BabelJudge — a judge must never grade its own
 	// revision). Incumbent and proposal replay the same gold pairs; a proposal
 	// that regresses or misses the floor is rejected before it is surfaced.
-	var benchIncumbent, benchProposal *JudgeBenchOutcome
+	var benchIncumbent, benchProposal *judgeBenchOutcome
 	if epoch == metaEpochEvaluator {
 		verdict := t.judgeBenchExecutor()
 		if verdict == nil {
@@ -429,7 +429,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	// AgentDevel flip gate). With zero benchable scenarios the proposal stays
 	// propose-only surfaced — manual adoption adjudicates until the corpus
 	// can bench producer revisions.
-	var benchShadow *ProducerBenchOutcome
+	var benchShadow *producerBenchOutcome
 	if epoch == metaEpochProducer {
 		if gen := t.producerShadowExecutor(); gen != nil {
 			scenarios := buildProducerShadowScenarios(t.Evolver.catalogEntries(), t.Tracker, producerBenchMaxSkills*metaBenchScale())
@@ -452,7 +452,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	// rejects; without a wired generator the proposal is dropped — a
 	// genesis revision must never adopt unbenched (mirrors the evaluator
 	// epoch's no-judge behavior).
-	var benchGenesis *GenesisBenchOutcome
+	var benchGenesis *genesisBenchOutcome
 	if epoch == metaEpochGenesis {
 		if t.GenesisGen == nil {
 			logger.Warn("meta-evolution: no genesis generator wired, genesis proposal dropped")
@@ -532,7 +532,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 // recordWithBenches stashes the bench outcomes for the closure-based ledger
 // writer. The closure owns the shared fields; bench fields ride via the task.
 func (t *MetaEvolutionTask) recordWithBenches(record func(bool, string, string) error,
-	inc, prop *JudgeBenchOutcome, shadow *ProducerBenchOutcome, proposed bool, toVersion, reason string,
+	inc, prop *judgeBenchOutcome, shadow *producerBenchOutcome, proposed bool, toVersion, reason string,
 ) error {
 	t.pendingBenchIncumbent, t.pendingBenchProposal, t.pendingBenchShadow = inc, prop, shadow
 	defer func() {
@@ -661,7 +661,7 @@ func (t *MetaEvolutionTask) assembleEvidence(ctx context.Context, epoch string) 
 	if epoch == metaEpochGenesis {
 		b.WriteString(t.assembleGenesisEvidence())
 	}
-	if spots := t.Tracker.LabelerBlindSpots(evolutionHealthWindow); len(spots) > 0 {
+	if spots := t.Tracker.labelerBlindSpots(evolutionHealthWindow); len(spots) > 0 {
 		// Blind Curator (2607.07436): confirmed-clean skills that fail their own
 		// workout cases = usage-labeler false-pass suspects. ADVISORY — grounds
 		// the producer on label-fidelity risk; no gate reads it.
@@ -698,7 +698,7 @@ func (t *MetaEvolutionTask) assembleOperatorUtilityEvidence() string {
 	if t.Tracker == nil {
 		return ""
 	}
-	u := t.Tracker.OperatorUtilitySignals()
+	u := t.Tracker.operatorUtilitySignals()
 	if u.Adopted7d == 0 && u.Rejected7d == 0 && u.Reverted7d == 0 {
 		return "" // no operator verdicts in the window — fresh install or quiet week
 	}
@@ -716,7 +716,7 @@ func (t *MetaEvolutionTask) assembleOperatorUtilityEvidence() string {
 // assembleJudgeAccuracyEvidence closes the P3 loop: it surfaces the LIVE judge's
 // recent labeled mistakes so an evaluator-epoch revision targets the judge's
 // ACTUAL blind spots instead of revising blind. Three safety properties:
-//   - No teaching-to-the-test: JudgeMissExhibit carries only the miss CLASS and
+//   - No teaching-to-the-test: judgeMissExhibit carries only the miss CLASS and
 //     skill, never the pair body, so the revision learns to catch a category of
 //     defect — it cannot memorize the exact bench pairs. And the misses are
 //     dominated by the SUBTLE classes (imperative-drop, safety-drop) while the
@@ -764,8 +764,8 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 	// confirmed rollbacks whose accepting judge is the incumbent. A superseded
 	// judge's mistake may already be fixed — same scoping rule as the
 	// synthetic misses above.
-	var organic []OrganicFalseAccept
-	for _, o := range t.Tracker.OrganicFalseAccepts(organicFalseAcceptWindow, judgeAccuracyMaxExhibits) {
+	var organic []organicFalseAccept
+	for _, o := range t.Tracker.organicFalseAccepts(organicFalseAcceptWindow, judgeAccuracyMaxExhibits) {
 		if o.JudgeVersion == version {
 			organic = append(organic, o)
 		}
@@ -875,7 +875,7 @@ func (t *MetaEvolutionTask) assembleGenesisEvidence() string {
 // confident enough to auto-adopt (margin <= 0 on the epoch bench that ran),
 // or "" when the evidence shows a measurable improvement. Pure — the
 // deterministic half of the low-confidence routing decision.
-func metaLowConfidenceReason(inc, prop *JudgeBenchOutcome, shadow *ProducerBenchOutcome, gen *GenesisBenchOutcome) string {
+func metaLowConfidenceReason(inc, prop *judgeBenchOutcome, shadow *producerBenchOutcome, gen *genesisBenchOutcome) string {
 	if inc != nil && prop != nil && prop.Rate() <= inc.Rate() {
 		return fmt.Sprintf("judge bench margin %.2f→%.2f (no measurable improvement)", inc.Rate(), prop.Rate())
 	}

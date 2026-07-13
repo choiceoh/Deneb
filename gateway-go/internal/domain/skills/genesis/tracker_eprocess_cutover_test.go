@@ -143,7 +143,7 @@ func TestEProcessCutoverReadiness(t *testing.T) {
 		}
 	}
 
-	if r := tr.EProcessCutoverReadiness(); r.Labels != 0 || r.Ready {
+	if r := tr.eProcessCutoverReadiness(); r.Labels != 0 || r.Ready {
 		t.Fatalf("fresh ledger must read 0 labels, not ready: %+v", r)
 	}
 
@@ -151,13 +151,13 @@ func TestEProcessCutoverReadiness(t *testing.T) {
 	for i := 0; i < 19; i++ {
 		stash("sk", false)
 	}
-	if r := tr.EProcessCutoverReadiness(); r.Labels != 19 || r.Ready {
+	if r := tr.eProcessCutoverReadiness(); r.Labels != 19 || r.Ready {
 		t.Fatalf("n=19 must not be ready: %+v", r)
 	}
 
 	// 20th label agrees → n=20, agreement 100% → ready.
 	stash("sk", false)
-	r := tr.EProcessCutoverReadiness()
+	r := tr.eProcessCutoverReadiness()
 	if r.Labels != 20 || !r.Ready || r.AgreementRate != 1.0 {
 		t.Fatalf("n=20 all-agree must be ready: %+v", r)
 	}
@@ -169,12 +169,12 @@ func TestEProcessCutoverReadiness(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		stash("sk", true)
 	}
-	if r := tr.EProcessCutoverReadiness(); r.Ready || r.Disagreements != 3 {
+	if r := tr.eProcessCutoverReadiness(); r.Ready || r.Disagreements != 3 {
 		t.Fatalf("87%% agreement must not be ready: %+v", r)
 	}
 
 	t.Setenv("DENEB_EPROCESS_OWNS_ROLLBACK", "1")
-	if r := tr.EProcessCutoverReadiness(); !r.EProcessOwner {
+	if r := tr.eProcessCutoverReadiness(); !r.EProcessOwner {
 		t.Fatalf("owner flag must mirror the env knob: %+v", r)
 	}
 }

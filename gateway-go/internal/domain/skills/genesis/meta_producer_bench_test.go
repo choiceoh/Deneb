@@ -68,16 +68,16 @@ func TestRunProducerShadowBench(t *testing.T) {
 // Promotion rule: flips reject outright; mean regression beyond epsilon
 // rejects; an unbenchable corpus (zero scenarios) stays propose-only ("").
 func TestProducerBenchDecision(t *testing.T) {
-	if r := producerBenchDecision(ProducerBenchOutcome{Skills: 0}); r != "" {
+	if r := producerBenchDecision(producerBenchOutcome{Skills: 0}); r != "" {
 		t.Fatalf("unbenchable corpus must stay propose-only: %q", r)
 	}
-	if r := producerBenchDecision(ProducerBenchOutcome{Skills: 2, Flips: 1}); !strings.Contains(r, "flip") {
+	if r := producerBenchDecision(producerBenchOutcome{Skills: 2, Flips: 1}); !strings.Contains(r, "flip") {
 		t.Fatalf("flip not rejected: %q", r)
 	}
-	if r := producerBenchDecision(ProducerBenchOutcome{Skills: 2, IncumbentScore: 90, ProposalScore: 80}); !strings.Contains(r, "regressed") {
+	if r := producerBenchDecision(producerBenchOutcome{Skills: 2, IncumbentScore: 90, ProposalScore: 80}); !strings.Contains(r, "regressed") {
 		t.Fatalf("mean regression not rejected: %q", r)
 	}
-	if r := producerBenchDecision(ProducerBenchOutcome{Skills: 2, IncumbentScore: 90, ProposalScore: 88}); r != "" {
+	if r := producerBenchDecision(producerBenchOutcome{Skills: 2, IncumbentScore: 90, ProposalScore: 88}); r != "" {
 		t.Fatalf("within-epsilon noise rejected: %q", r)
 	}
 }

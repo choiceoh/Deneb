@@ -449,6 +449,25 @@ operator-tunable):
 > persisted; a fall-back-and-re-earn fires again — a new decision moment), so
 > scarce operator attention arrives exactly when a graduation decision
 > becomes available instead of requiring dashboard polling (ANCHOR pattern).
+>
+> **UNLOCK EXECUTION DELEGATED 2026-07-14** (operator directive: "잠금
+> 해제도 에이전트에게 맡겨버려. 그래야 재귀적 자기개선이지"). The watch now
+> EXECUTES evidence-met unlocks itself via the loop-owned graduation state
+> (`graduation_state.go` → `~/.deneb/data/graduation_state.json`, read by
+> the Go dashboards, `coding-dispatch.sh`, and `rsi_status.py` so the three
+> allowlists cannot drift). Trust architecture mirrors P2 auto-adoption:
+> compiled thresholds ARE the ratified policy (the loop executes, never
+> edits — `rsi_ladder.go`/`ladder_watch.go`/`graduation_state.go`/
+> `tracker_eprocess_cutover.go` joined the forbidden acceptance-machinery
+> surface), kill switch `DENEB_AUTO_GRADUATE=0`, the drift self-brake pauses
+> execution, every unlock/relock is lifecycle-ledgered, and the feed card is
+> a notification with a 재잠금 veto. Auto-executable rows and their compiled
+> evidence: e-process cutover (n≥20 ∧ agreement≥90%; env knob overrides both
+> ways), dispatch cap 2→4 (decided≥5 ∧ land rate≥50% ∧ 0 ledgered
+> deploy-watch rollbacks — `deploy-watch.sh` now appends a rollback ledger),
+> staged-source admission (review-lane endorsements: accepted≥2 ∧ rejected=0
+> per source — a rejection is a standing veto). The calibration-window and
+> manual-drill rows stay notify-only (their flips live outside the process).
 
 | Lock (today) | Evidence to graduate | Action |
 |---|---|---|

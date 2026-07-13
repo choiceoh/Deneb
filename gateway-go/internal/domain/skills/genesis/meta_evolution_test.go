@@ -164,7 +164,7 @@ func TestMetaEvolution_JudgeAccuracyEvidence(t *testing.T) {
 			"section-drop": {4, 4}, // no miss — must not appear
 			"safety-drop":  {2, 5}, // 3 missed — must appear
 		},
-		FalseRejects: []FalseRejectExhibit{{Skill: "sk", RejectReason: "over-tightened"}},
+		FalseRejects: []falseRejectExhibit{{Skill: "sk", RejectReason: "over-tightened"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -417,7 +417,7 @@ func TestOperatorUtilitySignals(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Empty ledger → zero value (fresh install is quiet).
-	if u := tr.OperatorUtilitySignals(); u.Adopted7d != 0 || u.Rejected7d != 0 || u.Reverted7d != 0 || u.AdoptionRate != 0 {
+	if u := tr.operatorUtilitySignals(); u.Adopted7d != 0 || u.Rejected7d != 0 || u.Reverted7d != 0 || u.AdoptionRate != 0 {
 		t.Fatalf("empty ledger utility = %+v", u)
 	}
 	// Ancient verdict (outside 7d) must be excluded.
@@ -439,7 +439,7 @@ func TestOperatorUtilitySignals(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	u := tr.OperatorUtilitySignals()
+	u := tr.operatorUtilitySignals()
 	// adopted + auto_adopted = 2; rejected = 1; operator_reverted + auto_reverted = 2.
 	if u.Adopted7d != 2 || u.Rejected7d != 1 || u.Reverted7d != 2 {
 		t.Fatalf("7d counts = %+v (want adopted=2 rejected=1 reverted=2)", u)
@@ -505,7 +505,7 @@ func TestMetaEvolution_OperatorUtilityEvidence(t *testing.T) {
 func TestMetaRevisionRecord_OperatorUtilityRoundTrip(t *testing.T) {
 	rec := MetaRevisionRecord{
 		Epoch: metaEpochProducer,
-		OperatorUtility: &OperatorUtilitySignals{
+		OperatorUtility: &operatorUtilitySignals{
 			Adopted7d: 3, Rejected7d: 1, Reverted7d: 0, AdoptionRate: 0.75,
 		},
 	}
@@ -608,19 +608,19 @@ func TestMetaEvolution_QualityBenchEvidence(t *testing.T) {
 // measurable improvement (margin <= 0) routes the adoption to the operator;
 // an improving bench (or a benchless cycle) does not.
 func TestMetaLowConfidenceReason(t *testing.T) {
-	worse := &JudgeBenchOutcome{Correct: 8, Total: 10}
-	same := &JudgeBenchOutcome{Correct: 8, Total: 10}
-	better := &JudgeBenchOutcome{Correct: 9, Total: 10}
+	worse := &judgeBenchOutcome{Correct: 8, Total: 10}
+	same := &judgeBenchOutcome{Correct: 8, Total: 10}
+	better := &judgeBenchOutcome{Correct: 9, Total: 10}
 	if metaLowConfidenceReason(worse, same, nil, nil) == "" {
 		t.Fatal("equal judge margin must be low-confidence")
 	}
 	if metaLowConfidenceReason(worse, better, nil, nil) != "" {
 		t.Fatal("improving judge margin must be confident")
 	}
-	if metaLowConfidenceReason(nil, nil, &ProducerBenchOutcome{IncumbentScore: 0.6, ProposalScore: 0.6}, nil) == "" {
+	if metaLowConfidenceReason(nil, nil, &producerBenchOutcome{IncumbentScore: 0.6, ProposalScore: 0.6}, nil) == "" {
 		t.Fatal("flat shadow margin must be low-confidence")
 	}
-	if metaLowConfidenceReason(nil, nil, &ProducerBenchOutcome{IncumbentScore: 0.5, ProposalScore: 0.7}, nil) != "" {
+	if metaLowConfidenceReason(nil, nil, &producerBenchOutcome{IncumbentScore: 0.5, ProposalScore: 0.7}, nil) != "" {
 		t.Fatal("improving shadow margin must be confident")
 	}
 	if metaLowConfidenceReason(nil, nil, nil, nil) != "" {
