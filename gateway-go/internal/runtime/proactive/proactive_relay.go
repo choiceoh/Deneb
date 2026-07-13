@@ -515,17 +515,13 @@ func (d proactiveRelayDeps) PublishDeliverable(content string) (bool, error) {
 	return d.publishDeliverable(content)
 }
 
-// startsWithDenebUIFence reports whether the body opens with a deneb-ui code
-// fence. Mirrors the parser's tolerance (case-insensitive info string,
-// whitespace after the backticks) so a valid card never gets accordion-wrapped
-// into escaped literal text.
+// startsWithDenebUIFence reports whether the body's first line opens a
+// deneb-ui fence under the EXTRACTOR's contract (denebui.IsFenceOpenLine) —
+// a prefix check would bypass the accordion for openers the renderers reject
+// ("```deneb-ui extra"), landing literal markup in the transcript.
 func startsWithDenebUIFence(body string) bool {
-	t := strings.TrimSpace(body)
-	if !strings.HasPrefix(t, "```") {
-		return false
-	}
-	t = strings.TrimLeft(t[3:], "` \t")
-	return len(t) >= len(denebui.FenceInfo) && strings.EqualFold(t[:len(denebui.FenceInfo)], denebui.FenceInfo)
+	first, _, _ := strings.Cut(strings.TrimSpace(body), "\n")
+	return denebui.IsFenceOpenLine(first)
 }
 
 // collapsedReportBody returns content with its leading title line removed when

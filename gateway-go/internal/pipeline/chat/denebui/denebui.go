@@ -152,6 +152,15 @@ func HasFence(text string) bool {
 	return false
 }
 
+// IsFenceOpenLine reports whether a line opens a deneb-ui fence under the
+// SAME contract the extractor applies (case-insensitive info string; a
+// remainder only when it starts with '<'). Server-side consumers (the
+// proactive relay's collapse bypass) must use this instead of a prefix check
+// so they can never diverge from what the renderers will actually parse.
+func IsFenceOpenLine(line string) bool {
+	return isDenebUIFenceOpen(strings.TrimSpace(line))
+}
+
 // isDenebUIFenceOpen reports whether a (whitespace-trimmed) line opens a
 // deneb-ui fence (see denebUIFenceOpenSplit for the tolerated shapes).
 func isDenebUIFenceOpen(line string) bool {

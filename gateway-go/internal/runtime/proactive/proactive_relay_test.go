@@ -613,12 +613,13 @@ func TestStartsWithDenebUIFence(t *testing.T) {
 		"```deneb-ui\n<column/>\n```",
 		"```  Deneb-UI\n<column/>\n```",
 		"  ```DENEB-UI\n<column/>\n```",
+		"```deneb-ui<column/>\n```",
 	} {
 		if !startsWithDenebUIFence(ok) {
 			t.Fatalf("must detect fence: %q", ok)
 		}
 	}
-	for _, no := range []string{"산문 보고", "```go\ncode\n```", "``` denebui\n```"} {
+	for _, no := range []string{"산문 보고", "```go\ncode\n```", "``` denebui\n```", "```deneb-ui 라벨 HTML\n```", "```deneb-ui extra\n<column/>"} {
 		if startsWithDenebUIFence(no) {
 			t.Fatalf("false positive: %q", no)
 		}

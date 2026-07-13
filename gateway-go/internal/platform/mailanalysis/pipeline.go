@@ -272,7 +272,7 @@ const finalAnalysisSystem = `당신은 이메일 분석 어시스턴트입니다
 	// Card-first reporting must ride the multi-stage pipeline's FINAL synthesis
 	// too — analysisSystemPrompt only covers the single-call fallback, so an
 	// operator-customized prompt file would otherwise ship plain prose.
-	"보고가 구조적(중요도·수치·기한·다음 행동)이면 도입부를 ```deneb-ui 라벨 HTML 카드 한 블록(루트 <column> 하나)으로 시작하고, 카드 안에는 백틱을 쓰지 마세요. " +
+	"보고가 구조적(중요도·수치·기한·다음 행동)이면 도입부를 deneb-ui 카드 한 블록으로 시작하세요 — 여는 펜스는 ```deneb-ui 한 줄 그대로(그 줄 뒤에 다른 글자 금지), 다음 줄부터 루트 <column> 하나. 카드 안에는 백틱을 쓰지 마세요. " +
 	emojiRestraint
 
 const finalAnalysisPrompt = `%s
