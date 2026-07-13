@@ -1,5 +1,34 @@
 # Changelog
 
+## [4.97.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.96.0...deneb-v4.97.0) (2026-07-13)
+
+
+### ✨ Features
+
+* **andromeda:** 능동형 질문 카드 데스크톱 답변 어포던스 — 피드 상세 답변 칩(action.run)·question 플래그 존중 ([#3564](https://github.com/choiceoh/Deneb/issues/3564)) ([43c5524](https://github.com/choiceoh/Deneb/commit/43c5524696b2cfc7de80f9524c53197ff91c0df7))
+* **andromeda:** 데스크톱 카드 노드 렌더 파리티 — 카운트다운 라이브 틱·미결정 진행바·2글자 아바타/아이콘 폴백·secondary 뱃지 분리 ([#3571](https://github.com/choiceoh/Deneb/issues/3571)) ([409bf12](https://github.com/choiceoh/Deneb/commit/409bf12dfb27146699f0423b8737cf00e0defa9f))
+* **andromeda:** 카드 노드 렌더 파리티 2탄 — box 정렬·이미지 대체박스·슬라이더 범위정규화·아이콘 매핑 확장 ([#3577](https://github.com/choiceoh/Deneb/issues/3577)) ([7fc26bb](https://github.com/choiceoh/Deneb/commit/7fc26bbc25b54a9093d402338c543ff1db90b4d8))
+* **andromeda:** 카드 막대차트 세로 SVG 파리티 — 가로 CSS 막대→네이티브 캔버스형 세로 컬럼(값 라벨 상단·0=막대없음) ([#3573](https://github.com/choiceoh/Deneb/issues/3573)) ([8130a06](https://github.com/choiceoh/Deneb/commit/8130a0630175e84158de62a2beed6d477f750865))
+* **chat:** deneb-ui 카드 채택률 분모 신호 — 카드 저작 턴 Info 로그(adoption-miss와 대칭) ([#3570](https://github.com/choiceoh/Deneb/issues/3570)) ([25d5e6c](https://github.com/choiceoh/Deneb/commit/25d5e6c98556d27ea52df3ebc933722517f31e76))
+* **genesis:** deadcode-audit 델타 마이너 — P5-3 선제 L4 공급 2번째 슬라이스 ([#3569](https://github.com/choiceoh/Deneb/issues/3569)) ([e0eeaed](https://github.com/choiceoh/Deneb/commit/e0eeaed80b4ccb70875d21406c625619de8dddf8))
+* **genesis:** 도구-품질 마이너 — agentlog 도구 오류·인자수리율을 도구설명 개선 후보로 (Lane A, 재귀표면 확대) ([#3578](https://github.com/choiceoh/Deneb/issues/3578)) ([245c094](https://github.com/choiceoh/Deneb/commit/245c094ba692021b67fed68155c8fd3a09090d5e))
+* **genesis:** 도구-품질 마이너에 지연 트리거(회귀+도구별 기대치) + tool-quality 자동배차 졸업 ([#3580](https://github.com/choiceoh/Deneb/issues/3580)) ([69f84f0](https://github.com/choiceoh/Deneb/commit/69f84f01cffda80b8840d1a8a59573abed284c37))
+* **genesis:** 커리큘럼 캘린더 커버리지-갭 수요 소스 — P5-1 slice-3 ([#3576](https://github.com/choiceoh/Deneb/issues/3576)) ([9a99e2e](https://github.com/choiceoh/Deneb/commit/9a99e2e1a58c436c82ea1ea1cbafe6e3e6d254cb))
+* **mailanalysis:** 메일 능동 카드에 '결정=인터랙티브' 계약 — 결정 지점 선택지 칩(choices→answer) ([#3575](https://github.com/choiceoh/Deneb/issues/3575)) ([80071af](https://github.com/choiceoh/Deneb/commit/80071af5aaa2fc0aff17f498346fe163d6d50974))
+* **native:** deneb-ui stat 노드 타일 크롬 — 데스크톱 .dui-stat 파리티 (+선존 spotless 정리·패치노트) ([#3579](https://github.com/choiceoh/Deneb/issues/3579)) ([8462e8f](https://github.com/choiceoh/Deneb/commit/8462e8f9bc92eeeb9c0b0fe0fb1399b40a574f47))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** 채팅 화면 진입 시 맨 아래까지 자동스크롤 복원 ([#3554](https://github.com/choiceoh/Deneb/issues/3554) 회귀) ([#3572](https://github.com/choiceoh/Deneb/issues/3572)) ([166dd3c](https://github.com/choiceoh/Deneb/commit/166dd3c97c0fbe1d744e72d75df3e41b82129343))
+* **mail:** CJK 인코딩 보낸이/제목 헤더 디코딩 — GB18030/GBK/Big5/Shift-JIS 추가 ([#3566](https://github.com/choiceoh/Deneb/issues/3566)) ([f87bbad](https://github.com/choiceoh/Deneb/commit/f87bbadb529a953a8a05dea8588c5b8a79974817))
+* **native:** size numbering table columns to content, not weight share ([#3567](https://github.com/choiceoh/Deneb/issues/3567)) ([e98f9f6](https://github.com/choiceoh/Deneb/commit/e98f9f6e7ac1eef4f20bfdc2e197f2e591ff2721))
+
+
+### 🔧 Internal
+
+* **server:** 커리큘럼 env-digest를 runtime/curriculumenv로 추출 — composition root 책임 축소 ([#3574](https://github.com/choiceoh/Deneb/issues/3574)) ([a481ff7](https://github.com/choiceoh/Deneb/commit/a481ff7f619fb2f43bdc57bb227594b3bb51e6f4))
+
 ## [4.96.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.95.0...deneb-v4.96.0) (2026-07-13)
 
 
