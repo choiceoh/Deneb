@@ -444,16 +444,21 @@ type EvolutionHealthSummary struct {
 	// soft (RSI P1.5 ⑤, CoVerRL). Complement of ConfirmRate, made explicit so
 	// the scoreboard reads without arithmetic; n alongside so a 1/1 doesn't
 	// masquerade as certainty.
-	FalseAcceptRate         float64 `json:"falseAcceptRate"`
-	ResolvedEvolves7d       int     `json:"resolvedEvolves7d"`
-	Genesis7d               int     `json:"genesis7d"`
-	DistinctSkillsEvolved7d int     `json:"distinctSkillsEvolved7d"`
-	TopEvolvedSkill         string  `json:"topEvolvedSkill,omitempty"`
-	TopEvolvedCount         int     `json:"topEvolvedCount,omitempty"`
-	LastRejectedSkill       string  `json:"lastRejectedSkill,omitempty"`
-	LastRejectedReason      string  `json:"lastRejectedReason,omitempty"`
-	Thrash                  bool    `json:"thrash"`
-	ThrashCooldownUntil     int64   `json:"thrashCooldownUntil,omitempty"`
+	FalseAcceptRate   float64 `json:"falseAcceptRate"`
+	ResolvedEvolves7d int     `json:"resolvedEvolves7d"`
+	Genesis7d         int     `json:"genesis7d"`
+	// Proposals7d counts Propus routing decisions (evolution_proposal) — activity
+	// that means L1 is alive but candidates have not cleared the gate yet. RSI
+	// assessors use this to distinguish DATA-GATED from IDLE (Python rsi_status
+	// parity).
+	Proposals7d             int    `json:"proposals7d"`
+	DistinctSkillsEvolved7d int    `json:"distinctSkillsEvolved7d"`
+	TopEvolvedSkill         string `json:"topEvolvedSkill,omitempty"`
+	TopEvolvedCount         int    `json:"topEvolvedCount,omitempty"`
+	LastRejectedSkill       string `json:"lastRejectedSkill,omitempty"`
+	LastRejectedReason      string `json:"lastRejectedReason,omitempty"`
+	Thrash                  bool   `json:"thrash"`
+	ThrashCooldownUntil     int64  `json:"thrashCooldownUntil,omitempty"`
 }
 
 // EvolutionHealth summarizes evolve/genesis activity over the last 7 days from
@@ -502,6 +507,8 @@ func (t *Tracker) computeEvolutionHealthLocked(now time.Time) EvolutionHealthSum
 			s.EvolveConfirmed7d++
 		case "cross_skill_regression":
 			s.CrossSkillRegressions7d++
+		case "evolution_proposal":
+			s.Proposals7d++
 		case "genesis", "": // legacy genesis entries have no Type
 			s.Genesis7d++
 		}

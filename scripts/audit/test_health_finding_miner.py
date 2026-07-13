@@ -151,7 +151,19 @@ class ReopenBlockedTest(unittest.TestCase):
         cooled = self._existing("applied", NOW - REOPEN_COOLDOWN_MS - 60_000)
         self.assertIsNone(reopen_blocked(cooled, self.SRC, NOW))
 
+    def test_reopen_cap_blocks_after_six_twins(self):
+        # Cap is 5; the 6th twin permanently blocks (Go selfCorrectionReopenCap).
+        cooled = NOW - REOPEN_COOLDOWN_MS - 60_000
+        twins = [
+            {"id": f"sc-{i}", "source": self.SRC, "status": "applied", "createdAt": cooled - i}
+            for i in range(6)
+        ]
+        reason = reopen_blocked(twins, self.SRC, NOW)
+        self.assertIsNotNone(reason)
+        self.assertIn("reopen cap", reason)
+
     def test_newest_twin_wins(self):
+
         rows = [
             {"id": "old", "source": self.SRC, "status": "applied",
              "createdAt": NOW - 10 * REOPEN_COOLDOWN_MS},

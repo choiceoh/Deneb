@@ -13,6 +13,19 @@ func TestClassifyProposalSurfacesUsesMostRestrictiveTier(t *testing.T) {
 	}
 }
 
+// Runtime-health findings (and similar proactive sources) intentionally omit
+// targetFiles until a human/agent localizes the fix. The summary tier must still
+// be propose-only — an empty string left clients and audits unable to label the
+// row (observed on health-finding:runtime-latency, 2026-07-13).
+func TestClassifyProposalSurfacesEmptyTargetsDefaultProposeOnly(t *testing.T) {
+	for _, targets := range [][]string{nil, {}} {
+		tier, forbidden := ClassifyProposalSurfaces(targets)
+		if tier != SurfaceTierProposeOnly || len(forbidden) != 0 {
+			t.Fatalf("targets=%v → tier=%q forbidden=%v, want propose-only", targets, tier, forbidden)
+		}
+	}
+}
+
 // Operator authorization 2026-07-12: gateway source is declared propose-only,
 // while the acceptance machinery stays forbidden — the loop must never be able
 // to queue an edit to its own gates.

@@ -2562,6 +2562,11 @@ class MiniappWireValueContractTest {
                     expectation = Expectation.Exact,
                 ),
                 fieldValue(
+                    name = "surface",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
                     name = "autoDispatch",
                     value = JsonPrimitive(true),
                     expectation = Expectation.Exact,

@@ -23,6 +23,8 @@ package genesis
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -154,6 +156,7 @@ func (t *Tracker) rsiAssessL1() RSILayer {
 	metrics := []RSIMetricKV{
 		{"진화(7일)", strconv.Itoa(h.Evolves7d)},
 		{"신규 스킬", strconv.Itoa(h.Genesis7d)},
+		{"제안", strconv.Itoa(h.Proposals7d)},
 		{"기각", strconv.Itoa(h.EvolveRejected7d)},
 		{"확정률", fmt.Sprintf("%.0f%%", h.ConfirmRate*100)},
 		{"e-process", rsiEProcessValue(t.EProcessCutoverReadiness())},
@@ -163,10 +166,13 @@ func (t *Tracker) rsiAssessL1() RSILayer {
 	switch {
 	case committed > 0:
 		base.State = RSIStateLive
-		base.Diagnosis = fmt.Sprintf("이번 주 진화 %d · 신규 스킬 %d · 기각 %d", h.Evolves7d, h.Genesis7d, h.EvolveRejected7d)
-	case h.EvolveRejected7d > 0:
+		base.Diagnosis = fmt.Sprintf("이번 주 진화 %d · 신규 스킬 %d · 제안 %d · 기각 %d", h.Evolves7d, h.Genesis7d, h.Proposals7d, h.EvolveRejected7d)
+	case h.EvolveRejected7d > 0 || h.Proposals7d > 0:
+		// Proposals/rejections without commits = the lane is alive but gated
+		// (Python rsi_status assess_l1 parity). Counting only rejects previously
+		// left proposal-only weeks looking IDLE.
 		base.State = RSIStateDataGated
-		base.Diagnosis = "후보는 생성됐지만 이번 주 게이트를 통과한 진화가 없습니다"
+		base.Diagnosis = fmt.Sprintf("제안 %d · 기각 %d — 후보는 있지만 이번 주 게이트를 통과한 진화가 없습니다", h.Proposals7d, h.EvolveRejected7d)
 	default:
 		base.State = RSIStateIdle
 		base.Diagnosis = "최근 7일간 스킬 진화 활동이 없습니다"
@@ -175,6 +181,9 @@ func (t *Tracker) rsiAssessL1() RSILayer {
 }
 
 func (t *Tracker) rsiAssessL2() RSILayer {
+	// Scoreboard stays on the 7d MetaEvolutionHealth window; LIVE/IDLE for the
+	// slow loop uses a 14d look-back (Python rsi_status assess_l2 parity — the
+	// weekly cadence would otherwise flip IDLE mid-week after a quiet 7d).
 	h := t.MetaEvolutionHealth()
 	metrics := []RSIMetricKV{
 		{"개정(7일)", strconv.Itoa(h.Revisions7d)},
@@ -188,18 +197,37 @@ func (t *Tracker) rsiAssessL2() RSILayer {
 	case t.AutoAdoptFrozen():
 		base.State = RSIStateFrozen
 		base.Diagnosis = "드리프트 자기 브레이크 작동 — 자동 채택이 제안 전용으로 동결됐습니다"
-	case h.Revisions7d > 0:
+	case t.metaActivityIn(metaEvolutionAssessWindow):
 		base.State = RSIStateLive
-		diag := fmt.Sprintf("이번 주 슬로우 루프 개정 %d · 제안 %d", h.Revisions7d, h.Proposed7d)
+		diag := fmt.Sprintf("슬로우 루프 활동 있음 · 7일 개정 %d · 제안 %d", h.Revisions7d, h.Proposed7d)
 		if strings.TrimSpace(h.LastEpoch) != "" {
 			diag += fmt.Sprintf(" (최근: %s)", h.LastEpoch)
 		}
 		base.Diagnosis = diag
 	default:
 		base.State = RSIStateIdle
-		base.Diagnosis = "이번 주 슬로우 루프 사이클이 없습니다 — 주간 주기를 기다리는 중"
+		base.Diagnosis = "최근 14일간 슬로우 루프 사이클이 없습니다 — 주간 주기를 기다리는 중"
 	}
 	return base
+}
+
+// metaEvolutionAssessWindow is the L2 LIVE/IDLE look-back (2× the 7d health
+// window). Weekly cadence means a quiet mid-week 7d slice must not erase a
+// revision from last week.
+const metaEvolutionAssessWindow = 14 * 24 * time.Hour
+
+func (t *Tracker) metaActivityIn(window time.Duration) bool {
+	entries, err := t.RecentMetaRevisions(50)
+	if err != nil || len(entries) == 0 {
+		return false
+	}
+	cutoff := time.Now().Add(-window).UnixMilli()
+	for _, e := range entries {
+		if e.CreatedAt >= cutoff {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *Tracker) rsiAssessL3() RSILayer {
@@ -283,17 +311,21 @@ func (t *Tracker) rsiAssessL4() RSILayer {
 			}
 		}
 	}
+	_, dispatchedToday := t.codingDispatchCounts()
 	metrics := []RSIMetricKV{
 		{"후보", strconv.Itoa(len(cands))},
 		{"코드 후보", strconv.Itoa(byScope["code"])},
 		{"배차 가능", strconv.Itoa(dispatchable)},
 		{"검토 대기(비배차)", strconv.Itoa(staged)},
+		{"오늘 배차", strconv.Itoa(dispatchedToday)},
 	}
 	base := RSILayer{Key: "L4", Title: "소스 자가편집", Metrics: metrics}
 	switch {
-	case dispatchable > 0:
+	case dispatchable > 0 || dispatchedToday > 0:
+		// dispatch_today keeps L4 LIVE after coding-dispatch drains the queue
+		// (Python rsi_status assess_l4 parity).
 		base.State = RSIStateLive
-		base.Diagnosis = fmt.Sprintf("배차 가능한 코드 후보 %d건 — 코딩 레인 대기 중", dispatchable)
+		base.Diagnosis = fmt.Sprintf("배차 가능한 코드 후보 %d건 · 오늘 배차 %d건", dispatchable, dispatchedToday)
 	case len(cands) == 0:
 		base.State = RSIStateIdle
 		base.Diagnosis = "아직 캡처된 자기교정 후보가 없습니다"
@@ -305,6 +337,32 @@ func (t *Tracker) rsiAssessL4() RSILayer {
 		base.Diagnosis = fmt.Sprintf("후보 %d건(%s)이지만 배차 가능한 코드 후보가 아직 없습니다", len(cands), rsiScopeSummary(byScope))
 	}
 	return base
+}
+
+// codingDispatchCounts mirrors scripts/audit/rsi_status.py's coding_dispatch/
+// marker scan: total markers and how many were written today (UTC day boundary).
+func (t *Tracker) codingDispatchCounts() (total, today int) {
+	dir := filepath.Join(filepath.Dir(t.selfCorrectionPath), "coding_dispatch")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0, 0
+	}
+	now := time.Now().UTC()
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		total++
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if !info.ModTime().Before(dayStart) {
+			today++
+		}
+	}
+	return total, today
 }
 
 // rsiEProcessValue formats the L1 e-process cutover metric: who owns rollback
