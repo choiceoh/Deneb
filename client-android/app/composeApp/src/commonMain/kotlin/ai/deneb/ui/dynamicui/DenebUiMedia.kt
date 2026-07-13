@@ -325,8 +325,15 @@ internal fun RenderChart(node: ChartNode) {
                     val barHeight = if (v > 0f) (((v / maxValue) * plotH) * drawProgress).coerceAtLeast(2.dp.toPx()) else 0f
                     val x = gap + index * (barWidth + gap)
                     val centerX = x + barWidth / 2f
+                    // Vertical gradient (opaque top → faint base) gives the columns
+                    // depth instead of a flat fill — matches the line chart's area
+                    // wash and the desktop bar gradient.
                     drawRoundRect(
-                        color = chartColor,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(chartColor.copy(alpha = 0.95f), chartColor.copy(alpha = 0.30f)),
+                            startY = plotBottom - barHeight,
+                            endY = plotBottom,
+                        ),
                         topLeft = Offset(x, plotBottom - barHeight),
                         size = Size(barWidth, barHeight),
                         cornerRadius = CornerRadius(corner, corner),

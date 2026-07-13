@@ -15,10 +15,8 @@ import ai.deneb.ui.text.displayUnits
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -589,32 +587,44 @@ internal fun RenderBadge(node: BadgeNode) {
 
 @Composable
 internal fun RenderStat(node: StatNode) {
-    // Tile chrome (desktop .dui-stat parity): a light container + hairline border
-    // so a KPI strip reads as tiles, not bare centered text. Material substrate,
-    // Deneb typography inside (design-system boundary).
+    // No tile box: inside a card, a bordered/filled container reads as an awkward
+    // box-in-a-box (2026-07 operator feedback). A KPI is a clean number + unit +
+    // label; the row's gap separates siblings. Typography carries it, not a border.
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .widthIn(min = 72.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(6.dp))
-            .padding(horizontal = 11.dp, vertical = 9.dp),
+        modifier = Modifier.widthIn(min = 72.dp).padding(vertical = 2.dp),
     ) {
         // Count-up entrance: the numeric run inside the value rolls from 0 to
         // its target (600ms) while prefix/suffix ("$", "톤", "/t") stay fixed;
         // tabular figures keep the digits from jittering as they roll. Static
         // contexts render the final value immediately.
         val motion = LocalDenebUiMotion.current
-        val display = if (motion) statCountUpValue(node.value) else node.value
-        Text(
-            text = display,
-            // Stat value on the subject rung (22); Bold override keeps the metric
-            // reading as a number, not a content title (law 3: weight = function).
-            style = DenebType.subject.copy(fontFeatureSettings = "tnum"),
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        // Unit-suffix typography: "381톤"/"68%"/"2.4억" put the number on the subject
+        // rung (22, Bold) with a quieter baseline-aligned unit; a ratio ("7/10") or a
+        // bare number stays whole. Count-up rolls the number only.
+        val unitMatch = Regex("^(-?[\\d,]+(?:\\.\\d+)?)([^\\d\\s]{1,2})$").find(node.value.trim())
+        val numPart = unitMatch?.groupValues?.get(1) ?: node.value
+        val unitPart = unitMatch?.groupValues?.getOrNull(2)?.takeIf { it.isNotEmpty() }
+        val numDisplay = if (motion) statCountUpValue(numPart) else numPart
+        Row {
+            Text(
+                text = numDisplay,
+                // Stat value on the subject rung (22); Bold override keeps the metric
+                // reading as a number, not a content title (law 3: weight = function).
+                style = DenebType.subject.copy(fontFeatureSettings = "tnum"),
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.alignByBaseline(),
+            )
+            if (unitPart != null) {
+                Text(
+                    text = unitPart,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.alignByBaseline().padding(start = 2.dp),
+                )
+            }
+        }
         Text(
             text = node.label,
             style = MaterialTheme.typography.bodyMedium,
@@ -629,8 +639,13 @@ internal fun RenderStat(node: StatNode) {
             val negative = desc.startsWith("-") || desc.startsWith("−") || desc.startsWith("▼")
             val trendColor = when {
                 positive -> denebOnSuccessContainer()
-                negative -> MaterialTheme.colorScheme.error
+                negative -> MaterialTheme.colorScheme.onErrorContainer
                 else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            val chipColor = when {
+                positive -> denebSuccessContainer()
+                negative -> MaterialTheme.colorScheme.errorContainer
+                else -> MaterialTheme.colorScheme.surfaceContainerHigh
             }
             val display = when {
                 desc.startsWith("+") -> "▲ " + desc.removePrefix("+")
@@ -640,12 +655,21 @@ internal fun RenderStat(node: StatNode) {
 
                 else -> desc
             }
-            Text(
-                text = display,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (positive || negative) FontWeight.SemiBold else null,
-                color = trendColor,
-            )
+            // Trend as a tinted pill so the direction reads at a glance, not as a
+            // bare colored word (desktop .dui-stat-desc chip parity).
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = chipColor,
+                modifier = Modifier.padding(top = 5.dp),
+            ) {
+                Text(
+                    text = display,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (positive || negative) FontWeight.SemiBold else null,
+                    color = trendColor,
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                )
+            }
         }
     }
 }
