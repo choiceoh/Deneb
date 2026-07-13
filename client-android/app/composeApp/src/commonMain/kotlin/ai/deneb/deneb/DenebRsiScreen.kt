@@ -160,13 +160,23 @@ internal fun RsiStatusContent(
             color = denebHint(),
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
         )
-        RsiHealthCard(status.health)
+        // Same 18.dp gap the layer cards get — else the health card butts against L1.
+        if (status.health.hasActivity) {
+            RsiHealthCard(status.health)
+            Spacer(Modifier.height(18.dp))
+        }
         status.layers.forEach { layer ->
             RsiLayerCard(layer, lifecycle, candidates)
             Spacer(Modifier.height(18.dp))
         }
     }
 }
+
+/** The 7-day scoreboard renders only when something happened — an all-zero board
+ *  would just echo the layer cards' IDLE state. Hoisted so the caller can guard the
+ *  card *and* its trailing spacer with the same predicate. */
+private val RSIHealthView.hasActivity: Boolean
+    get() = evolves7d > 0 || genesis7d > 0 || metaRevisions7d > 0 || thrash || autoAdoptFrozen
 
 /** Evolution-health scoreboard (7-day) from `rsi.status.health`: the numeric
  *  fields the layer diagnoses only render as prose. Skipped entirely when
@@ -176,9 +186,7 @@ internal fun RsiStatusContent(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RsiHealthCard(health: RSIHealthView) {
-    val hasActivity = health.evolves7d > 0 || health.genesis7d > 0 ||
-        health.metaRevisions7d > 0 || health.thrash || health.autoAdoptFrozen
-    if (!hasActivity) return
+    if (!health.hasActivity) return
     fun pct(v: Double) = "${(v * 100).roundToInt()}%"
     DenebGroup {
         Text(
@@ -191,6 +199,8 @@ private fun RsiHealthCard(health: RSIHealthView) {
             Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
+            // 7 tiles: cap at 4/row so they wrap balanced (4+3) instead of orphaning the 7th.
+            maxItemsInEachRow = 4,
         ) {
             RsiStat("확정률", pct(health.confirmRate))
             RsiStat("오수용률", pct(health.falseAcceptRate), sub = "n=${health.resolvedEvolves7d}")
