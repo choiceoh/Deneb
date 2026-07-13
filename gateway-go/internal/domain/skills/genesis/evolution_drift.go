@@ -35,8 +35,11 @@ const (
 	// driftMetaRevertCeil — this fraction of recent meta-adoptions getting
 	// reverted means the slow loop is adopting regressions.
 	driftMetaRevertCeil = 0.50
-	// driftJudgeAccuracyFloor — a judge-accuracy run below this (fails half the
-	// planted defects) means the verifier itself is broken/soft.
+	// driftJudgeAccuracyFloor — a judge-accuracy run whose MUST-CATCH accuracy
+	// (blatantJudgeDegradations classes only) falls below this means the
+	// verifier itself is broken/soft. Scoped to the blatant classes on
+	// purpose: the lane's probe curriculum ladder mixes harder tiers into the
+	// same run, and their misses are P3 fuel, not breakage.
 	driftJudgeAccuracyFloor = 0.50
 	// driftMonotonyStreak — this many consecutive meta-adoptions targeting the
 	// SAME artifact (no revert between) is a loop optimizing one narrow lever:
@@ -121,15 +124,23 @@ func (t *Tracker) AuditEvolutionDrift() DriftVerdict {
 		}
 	}
 
-	// Signal 4: the verifier itself failing planted defects.
-	if runs, err := t.RecentJudgeAccuracy(1); err == nil && len(runs) == 1 && runs[0].Pairs > 0 {
-		rate := float64(runs[0].Correct) / float64(runs[0].Pairs)
-		if rate < driftJudgeAccuracyFloor {
-			v.Signals = append(v.Signals, DriftSignal{
-				Kind:   "verifier_broken",
-				Detail: fmt.Sprintf("judge caught only %.0f%% of planted defects", rate*100),
-				Value:  rate,
-			})
+	// Signal 4: the verifier itself failing planted defects. Scored on the
+	// must-catch blatant classes ONLY: those are the "a competent judge always
+	// rejects these" contract, so missing half of them is real breakage.
+	// Subtle/weaken-tier misses are the P3 label food the probe curriculum
+	// ladder exists to produce — an aggregate rate would misread a
+	// hard-probe-heavy run ("judge can't catch hard probes yet", normal) as
+	// verifier breakage and freeze a healthy lane.
+	if runs, err := t.RecentJudgeAccuracy(1); err == nil && len(runs) == 1 {
+		if correct, total := driftMustCatchCounts(runs[0]); total > 0 {
+			rate := float64(correct) / float64(total)
+			if rate < driftJudgeAccuracyFloor {
+				v.Signals = append(v.Signals, DriftSignal{
+					Kind:   "verifier_broken",
+					Detail: fmt.Sprintf("judge caught only %.0f%% of must-catch planted defects", rate*100),
+					Value:  rate,
+				})
+			}
 		}
 	}
 
@@ -164,6 +175,23 @@ func driftMetaCounts(revs []MetaRevisionRecord) (adopted, reverted, streak int) 
 		}
 	}
 	return adopted, reverted, streak
+}
+
+// driftMustCatchCounts returns a lane run's correct/total over the must-catch
+// blatant degradation classes (blatantJudgeDegradations). A record predating
+// the ByClass breakdown falls back to its aggregate counts — the only signal a
+// legacy record carries. A run with no must-catch pairs yields total 0: no
+// evidence either way, so the caller skips the signal.
+func driftMustCatchCounts(rec JudgeAccuracyRecord) (correct, total int) {
+	if len(rec.ByClass) == 0 {
+		return rec.Correct, rec.Pairs
+	}
+	for _, d := range blatantJudgeDegradations {
+		ct := rec.ByClass[d.name]
+		correct += ct[0]
+		total += ct[1]
+	}
+	return correct, total
 }
 
 // RunEvolutionDriftAudit computes the verdict, persists a freeze/clear
