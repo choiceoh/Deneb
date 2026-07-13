@@ -72,10 +72,11 @@ func SourceAutoDispatches(source string) bool { return rsiSourceDispatchable(sou
 // rsiLayerDetails is the per-layer "what is this loop" explanation the viewers
 // reveal on tap — static role text, keyed by layer.
 var rsiLayerDetails = map[string]string{
-	"L1": "저성과 스킬의 본문을 자동으로 다시 쓰고, 보류 검증과 롤백으로 회귀를 막는 기본 자가개선 루프입니다.",
-	"L2": "스킬을 고치는 프롬프트(생성·판정) 자체를 주간 단위로 개정하는 메타 루프입니다. 벤치를 통과하면 자동 채택되고, 드리프트가 감지되면 스스로 동결합니다.",
-	"L3": "판정자가 자신의 오판으로 학습하는 검증기 공진화 루프입니다. 판정 정확도 레인이 심은 결함을 재생해 오판 라벨을 만듭니다.",
-	"L4": "게이트웨이 소스 자체를 고치는 자가편집 루프입니다. 근거 있는 후보만 코딩 레인에 배차되고, 게이트 통과와 배포 롤백 워치로 보호됩니다.",
+	"L1":   "저성과 스킬의 본문을 자동으로 다시 쓰고, 보류 검증과 롤백으로 회귀를 막는 기본 자가개선 루프입니다.",
+	"L2":   "스킬을 고치는 프롬프트(생성·판정) 자체를 주간 단위로 개정하는 메타 루프입니다. 벤치를 통과하면 자동 채택되고, 드리프트가 감지되면 스스로 동결합니다.",
+	"L3":   "판정자가 자신의 오판으로 학습하는 검증기 공진화 루프입니다. 판정 정확도 레인이 심은 결함을 재생해 오판 라벨을 만듭니다.",
+	"L4":   "게이트웨이 소스 자체를 고치는 자가편집 루프입니다. 근거 있는 후보만 코딩 레인에 배차되고, 게이트 통과와 배포 롤백 워치로 보호됩니다.",
+	"GRAD": "자율성 졸업 사다리의 행별 증거를 상시 심사하는 계기판입니다. 증거가 임계에 도달하면 '준비됨'으로 표시될 뿐, 잠금 해제 결정은 항상 운영자의 몫입니다.",
 }
 
 // RSILoopStatus is the whole recursive-self-improvement snapshot.
@@ -122,10 +123,15 @@ type RSIMetricKV struct {
 // RSIStatus composes the four layer assessments from the tracker's public
 // aggregates. It takes no lock of its own — each aggregate locks internally.
 func (t *Tracker) RSIStatus() RSILoopStatus {
-	layers := []RSILayer{t.rsiAssessL1(), t.rsiAssessL2(), t.rsiAssessL3(), t.rsiAssessL4()}
+	layers := []RSILayer{t.rsiAssessL1(), t.rsiAssessL2(), t.rsiAssessL3(), t.rsiAssessL4(), t.rsiAssessLadder()}
 	turning := 0
 	for i := range layers {
 		layers[i].Detail = rsiLayerDetails[layers[i].Key]
+		// The graduation-ladder pseudo-layer is an evidence dashboard, not a
+		// loop — it never counts toward the "N/4 turning" headline.
+		if layers[i].Key == "GRAD" {
+			continue
+		}
 		if layers[i].State == RSIStateLive || layers[i].State == RSIStateFrozen {
 			turning++
 		}
@@ -406,9 +412,19 @@ func (t *Tracker) dispatchMarkerDir() string {
 // diagnosis suffix ("" when no marker carries an outcome yet — markers
 // predating outcome accounting simply have none).
 func rsiDispatchOutcomeNote(dir string) string {
+	outcomes, decided, landed := rsiDispatchOutcomes(dir)
+	if decided == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" · 배차 결과: %s (랜딩률 %.0f%%)", rsiOutcomeSummary(outcomes), float64(landed)/float64(decided)*100)
+}
+
+// rsiDispatchOutcomes scans the dispatch markers for recorded outcomes — the
+// shared read the L4 diagnosis note and the graduation-ladder cap row both
+// aggregate from. Markers predating outcome accounting carry none.
+func rsiDispatchOutcomes(dir string) (outcomes map[string]int, decided, landed int) {
+	outcomes = map[string]int{}
 	paths, _ := filepath.Glob(filepath.Join(dir, "*.json"))
-	outcomes := map[string]int{}
-	decided, landed := 0, 0
 	for _, p := range paths {
 		raw, err := os.ReadFile(p)
 		if err != nil {
@@ -426,19 +442,7 @@ func rsiDispatchOutcomeNote(dir string) string {
 			landed++
 		}
 	}
-	if decided == 0 {
-		return ""
-	}
-	keys := make([]string, 0, len(outcomes))
-	for k := range outcomes {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	parts := make([]string, 0, len(keys))
-	for _, k := range keys {
-		parts = append(parts, fmt.Sprintf("%s %d", k, outcomes[k]))
-	}
-	return fmt.Sprintf(" · 배차 결과: %s (랜딩률 %.0f%%)", strings.Join(parts, "·"), float64(landed)/float64(decided)*100)
+	return outcomes, decided, landed
 }
 
 // rsiEProcessValue formats the L1 e-process cutover metric: who owns rollback

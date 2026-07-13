@@ -66,15 +66,16 @@ func TestRSIStatus_HealthBlockPresent(t *testing.T) {
 	}
 }
 
-// An untouched tracker reports four layers, none turning — the honest "nothing
-// has happened yet" baseline (all IDLE, never a false LIVE).
+// An untouched tracker reports the four loop layers plus the graduation-
+// ladder dashboard, none turning — the honest "nothing has happened yet"
+// baseline (all quiet, never a false LIVE).
 func TestRSIStatus_EmptyTrackerIsQuiet(t *testing.T) {
 	tr := newTestTracker(t)
 	st := tr.RSIStatus()
-	if len(st.Layers) != 4 {
-		t.Fatalf("want 4 layers, got %d", len(st.Layers))
+	if len(st.Layers) != 5 {
+		t.Fatalf("want 5 layers (L1-L4 + GRAD), got %d", len(st.Layers))
 	}
-	for i, want := range []string{"L1", "L2", "L3", "L4"} {
+	for i, want := range []string{"L1", "L2", "L3", "L4", "GRAD"} {
 		if st.Layers[i].Key != want {
 			t.Fatalf("layer %d key = %q, want %q", i, st.Layers[i].Key, want)
 		}
