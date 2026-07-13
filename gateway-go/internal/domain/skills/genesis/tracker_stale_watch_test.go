@@ -16,7 +16,7 @@ func TestResolveStaleWatches(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tr.SetRollback(func(string) {}, 3)
+		tr.SetRollback(func(string) bool { return true }, 3)
 		return tr
 	}
 	use := func(t *testing.T, tr *Tracker, skill string, ok bool) {
@@ -116,7 +116,7 @@ func TestResolveStaleWatches(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tr1.SetRollback(func(string) {}, 3)
+		tr1.SetRollback(func(string) bool { return true }, 3)
 		if err := tr1.LogEvolveWithAudit("skl", "1.0.1", "d", HarnessEditAudit{}); err != nil {
 			t.Fatal(err)
 		}
@@ -130,7 +130,7 @@ func TestResolveStaleWatches(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tr2.SetRollback(func(string) {}, 3)
+		tr2.SetRollback(func(string) bool { return true }, 3)
 		tr2.mu.Lock()
 		created := int64(0)
 		if w := tr2.postEvolve["skl"]; w != nil {

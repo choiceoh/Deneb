@@ -131,11 +131,17 @@ type EvolveProvenance struct {
 // missed regression). These labels accumulate on the lifecycle ledger until
 // there is enough evidence to switch the firing decision over.
 type RollbackBaselineTest struct {
-	EValue       float64 `json:"eValue"`
-	N            int     `json:"n"`
-	Reject       bool    `json:"reject"`
-	Baseline     float64 `json:"baseline"`
-	Disagreement bool    `json:"disagreement"`
+	EValue   float64 `json:"eValue"`
+	N        int     `json:"n"`
+	Reject   bool    `json:"reject"`
+	Baseline float64 `json:"baseline"`
+	// RejectReachable marks a fair comparison: the e-process observed at
+	// least MinRejectObservations, so "did not reject" is a verdict rather
+	// than a mathematical certainty. Legacy labels (absent field) read
+	// false and are excluded from cutover readiness — they were recorded
+	// while the confirm window made rejection unreachable (RSI eval C1).
+	RejectReachable bool `json:"rejectReachable"`
+	Disagreement    bool `json:"disagreement"`
 }
 
 type evolveLogEntry struct {
@@ -260,6 +266,35 @@ func (t *Tracker) LogEvolveConfirmed(skillName string, audit HarnessEditAudit, c
 		BaselineTest:     bt,
 		SelfHarnessAudit: audit.Ptr(),
 	})
+}
+
+// handleFailedRollback records that a fired rollback did NOT restore the
+// backup (missing backup or write error) and drops the stashed baseline
+// label so it cannot attach to a later resolution of the same skill (RSI
+// code eval H3). A distinct lifecycle type — NOT evolve_rolled_back — because
+// the regressing body is still live; conflating it with a real rollback would
+// overstate the loop's self-correction rate and hide a stuck skill. Logged at
+// Error: the skill is regressing in real use and the automatic revert failed,
+// which is an operator-visible failure.
+func (t *Tracker) handleFailedRollback(skillName string) {
+	t.mu.Lock()
+	bt := t.pendingBaselineTest[skillName]
+	delete(t.pendingBaselineTest, skillName)
+	err := jsonlstore.Append(t.logPath, evolveLogEntry{
+		Type:         "evolve_rollback_failed",
+		SkillName:    skillName,
+		Reason:       "rollback fired but backup restore failed — regressing body still live",
+		CreatedAt:    time.Now().UnixMilli(),
+		BaselineTest: bt,
+	})
+	t.mu.Unlock()
+	if t.logger != nil {
+		if err != nil {
+			t.logger.Error("genesis: failed-rollback lifecycle log write failed", "skill", skillName, "error", err)
+		} else {
+			t.logger.Error("genesis: rollback fired but restore failed — regressing skill still live", "skill", skillName)
+		}
+	}
 }
 
 // LogEvolveWatchExpired records a watch that aged out with ZERO post-evolve

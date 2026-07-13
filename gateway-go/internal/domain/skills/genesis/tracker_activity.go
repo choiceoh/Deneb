@@ -92,9 +92,13 @@ func (t *Tracker) SetEvolveTrigger(fn func(), threshold int, minGap time.Duratio
 
 // SetRollback wires the post-evolve rollback. After a skill is evolved, its
 // next uses are watched; `threshold` failures within the observation window
-// (windowed, not strict-consecutive) fire `fn` to revert the evolution.
-// threshold<=0 disables the watch.
-func (t *Tracker) SetRollback(fn func(skillName string), threshold int) {
+// (windowed, not strict-consecutive) fire `fn` to revert the evolution. fn
+// reports whether the revert actually happened — a false return (missing
+// backup, write error) is a failed rollback that leaves the regressing body
+// live, and the tracker records it and clears the stashed baseline label so
+// it can't mislabel a later resolution (RSI code eval H3). threshold<=0
+// disables the watch.
+func (t *Tracker) SetRollback(fn func(skillName string) bool, threshold int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.rollback = fn

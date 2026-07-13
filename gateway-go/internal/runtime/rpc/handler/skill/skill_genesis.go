@@ -181,6 +181,9 @@ func skillsUsage(deps GenesisDeps) rpcutil.HandlerFunc {
 			Success:      p.Success,
 			ErrorMsg:     p.ErrorMsg,
 			FailureTrace: p.FailureTrace,
+			// Tag the source explicitly so this real-usage path does not rely
+			// on the empty-source legacy fallback (RSI code eval M3).
+			Source: genesis.UsageSourceReal,
 		})
 		if err != nil {
 			return nil, err

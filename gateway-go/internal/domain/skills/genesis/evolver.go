@@ -98,6 +98,17 @@ type Evolver struct {
 	// trigger can't overlap (TryLock: a second concurrent caller skips).
 	runMu sync.Mutex
 
+	// skillLocks serializes evolves of the SAME skill across ALL entry points
+	// (periodic, review fork, manual RPC). runMu only guards the periodic
+	// cycle, so a review/RPC evolve could previously read-gate-write the same
+	// file concurrently with the periodic one — last-writer-wins on the body,
+	// and the backup could capture an intermediate version, corrupting
+	// rollback (RSI code eval M4). Different skills never contend. Guarded by
+	// skillLocksMu; the per-skill mutex is a leaf (never held across another
+	// lock acquisition).
+	skillLocksMu sync.Mutex
+	skillLocks   map[string]*sync.Mutex
+
 	// meta resolves prompt artifacts (RSI P1); nil → compiled-in prompts.
 	meta *generation.MetaArtifacts
 
@@ -120,7 +131,39 @@ func NewEvolver(llmClient *llm.Client, catalog *skills.Catalog, tracker *Tracker
 		model:            model,
 		logger:           logger,
 		selfTest:         envBool("DENEB_SKILL_EVOLVE_SELFTEST", true),
+		skillLocks:       make(map[string]*sync.Mutex),
 	}
+}
+
+// lockSkill serializes evolves of one skill across every entry point. Returns
+// the unlock func. Different skills never contend; the per-skill mutex is a
+// leaf lock.
+func (e *Evolver) lockSkill(skillName string) func() {
+	e.skillLocksMu.Lock()
+	mu := e.skillLocks[skillName]
+	if mu == nil {
+		mu = &sync.Mutex{}
+		if e.skillLocks == nil {
+			e.skillLocks = make(map[string]*sync.Mutex)
+		}
+		e.skillLocks[skillName] = mu
+	}
+	e.skillLocksMu.Unlock()
+	mu.Lock()
+	return mu.Unlock
+}
+
+// lockSkillMutex returns the per-skill mutex identity without locking it —
+// test seam for asserting the map keys by skill.
+func (e *Evolver) lockSkillMutex(skillName string) *sync.Mutex {
+	e.skillLocksMu.Lock()
+	defer e.skillLocksMu.Unlock()
+	mu := e.skillLocks[skillName]
+	if mu == nil {
+		mu = &sync.Mutex{}
+		e.skillLocks[skillName] = mu
+	}
+	return mu
 }
 
 // SetLowConfidenceObserver registers the post-commit sink for accepted skill
@@ -271,6 +314,13 @@ func (e *Evolver) EvolveSkill(ctx context.Context, skillName, reviewFinding stri
 func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding string, burstContinuation bool) (*EvolveResult, error) {
 	if e.catalog == nil {
 		return nil, fmt.Errorf("evolver: catalog not configured")
+	}
+	// Serialize all evolves of this skill (M4). Burst rounds already run under
+	// the same goroutine so re-entrancy is not a concern; a burst holds the
+	// lock for its whole loop-until-dry, which is the intended exclusion.
+	if !burstContinuation {
+		unlock := e.lockSkill(skillName)
+		defer unlock()
 	}
 	// Get current skill content. A miss usually means a BUNDLED (repo) skill:
 	// those are deliberately not seeded into this catalog (the curator's

@@ -173,11 +173,16 @@ func (t *Tracker) stashBaselineTestLocked(skill string, w *evolveWatch) {
 		t.pendingBaselineTest = make(map[string]*RollbackBaselineTest)
 	}
 	t.pendingBaselineTest[skill] = &RollbackBaselineTest{
-		EValue:       w.ep.E,
-		N:            w.ep.N,
-		Reject:       reject,
-		Baseline:     w.ep.Baseline,
-		Disagreement: thresholdFired != reject,
+		EValue:   w.ep.E,
+		N:        w.ep.N,
+		Reject:   reject,
+		Baseline: w.ep.Baseline,
+		// A disagreement is only a FAIR comparison when the e-process saw
+		// enough observations that rejection was attainable at all; below
+		// that bound "test quiet" is a mathematical certainty, not a verdict
+		// (RSI code eval C1) — cutover readiness must not count those.
+		RejectReachable: w.ep.N >= w.ep.MinRejectObservations(),
+		Disagreement:    thresholdFired != reject,
 	}
 }
 
@@ -230,7 +235,13 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 				t.logger.Info("genesis: post-evolve regression tripped, rolling back",
 					"skill", skill, "fails", fails, "owner", owner, "targetRecurrences", recurred)
 			}
-			fn(skill)
+			// A failed revert (missing backup, write error) leaves the
+			// regressing body live AND leaves the stashed baseline label
+			// unconsumed — where it would later attach to the wrong
+			// resolution. Record the failure and drop the stash (RSI eval H3).
+			if !fn(skill) {
+				t.handleFailedRollback(skill)
+			}
 		}()
 		return
 	}
@@ -239,7 +250,7 @@ func (t *Tracker) maybeFireRollbackLocked(r UsageRecord) {
 	// used to be dropped silently here, so a shipped evolve only ever produced a
 	// rollback event, never an "it held up" event. Now every shipped evolve ends
 	// in either evolve_rolled_back or evolve_confirmed.
-	if w.postUses >= t.rollbackWindowLocked() {
+	if w.postUses >= t.rollbackWindowForWatchLocked(w) {
 		t.stashBaselineTestLocked(r.SkillName, w)
 		uses, fails, recurred := w.postUses, w.postFails, w.recurred
 		audit := w.audit
@@ -266,6 +277,25 @@ func (t *Tracker) rollbackWindowLocked() int {
 		return 0
 	}
 	return t.rollbackThreshold * 2
+}
+
+// rollbackWindowForWatchLocked extends the confirm window so the watch's
+// e-process gets a fair chance to reject before the window closes (RSI code
+// eval C1: at production threshold 3 the 6-use window closed at E≈10.4 < 20,
+// so Reject() was mathematically unreachable and a cutover would have turned
+// rollback off entirely). The extension is per-watch because the fastest
+// path to rejection depends on the clamped baseline. Sparse-usage watches
+// are unaffected: ResolveStaleWatches still closes them by age. Caller holds
+// t.mu.
+func (t *Tracker) rollbackWindowForWatchLocked(w *evolveWatch) int {
+	window := t.rollbackWindowLocked()
+	if w == nil || w.ep == nil || window == 0 {
+		return window
+	}
+	if minObs := w.ep.MinRejectObservations(); minObs > window {
+		return minObs
+	}
+	return window
 }
 
 // ResolveStaleWatches closes rollback watches older than maxAge that the

@@ -50,3 +50,52 @@ func TestSourceSurfaceAuthorization(t *testing.T) {
 		t.Fatalf("mixed proposal = tier %q forbidden %v", tier, forbidden)
 	}
 }
+
+// C2 hardening: a directory-shaped target enclosing acceptance machinery is
+// forbidden at record time — basename-only matching let ".../genesis" (the
+// health miner's normal output shape) through even though it contains every
+// gate file. Non-acceptor directories stay proposable.
+func TestClassifySurfaceDirectoryContainment(t *testing.T) {
+	for _, dir := range []string{
+		"gateway-go/internal/domain/skills/genesis",
+		"internal/domain/skills/genesis/",
+		"gateway-go/internal/domain/skills/genesis/surfaces",
+		"gateway-go/internal/domain/skills/genesis/eprocess",
+		"scripts/dev",
+	} {
+		if s := ClassifySurface(dir); s.Tier != SurfaceTierForbidden {
+			t.Fatalf("acceptor-enclosing directory %q = %+v, want forbidden", dir, s)
+		}
+	}
+	for _, dir := range []string{
+		"gateway-go/internal/domain/wiki",
+		"gateway-go/internal/runtime/server",
+		"client-android/app",
+	} {
+		if s := ClassifySurface(dir); s.Tier == SurfaceTierForbidden {
+			t.Fatalf("non-acceptor directory %q = %+v, must stay proposable", dir, s)
+		}
+	}
+}
+
+// C2 hardening: the scripts-side acceptor (dispatch allowlist, outcome table,
+// prompt composer, landing tool, CI gate) is forbidden — the loop could
+// previously queue an edit to its own dispatcher.
+func TestClassifySurfaceAcceptanceScripts(t *testing.T) {
+	for _, target := range []string{
+		"scripts/dev/coding-dispatch.sh",
+		"scripts/dev/dispatch_prompt.py",
+		"scripts/dev/dispatch_outcome.py",
+		"scripts/dev/pr.sh",
+		".github/workflows/ci.yml",
+		"dispatch_outcome.py", // bare-basename spelling
+	} {
+		if s := ClassifySurface(target); s.Tier != SurfaceTierForbidden {
+			t.Fatalf("acceptance script %q = %+v, want forbidden", target, s)
+		}
+	}
+	// Other scripts stay proposable.
+	if s := ClassifySurface("scripts/audit/health_finding_miner.py"); s.Tier == SurfaceTierForbidden {
+		t.Fatalf("non-acceptor script = %+v, must stay proposable", s)
+	}
+}

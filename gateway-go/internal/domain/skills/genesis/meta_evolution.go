@@ -346,8 +346,11 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	t.maybeRevertAdoption(logger)
 	// Self-brake: read the ledgers for reward-hacking/drift signals and freeze
 	// auto-adoption if the trajectory has gone bad (meta-monitor). Transition
-	// surfaces to the operator via OnDriftFreeze.
-	t.Tracker.RunEvolutionDriftAudit(t.OnDriftFreeze)
+	// surfaces to the operator via OnDriftFreeze. Use the FRESH verdict at the
+	// adopt gate below, not only the persisted marker: if the freeze-transition
+	// write failed, AutoAdoptFrozen would still read "not frozen" and the cycle
+	// would auto-adopt despite tripped signals (RSI code eval H5).
+	driftVerdict := t.Tracker.RunEvolutionDriftAudit(t.OnDriftFreeze)
 
 	epoch, artifact := t.nextEpoch()
 	fallback := generation.DefaultMetaArtifacts()[artifact]
@@ -426,24 +429,28 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 
 	// Producer epoch: shadow-replay the same evolve scenarios through both
 	// prompts and compare what they PRODUCE (CPE anchor preservation +
-	// AgentDevel flip gate). With zero benchable scenarios the proposal stays
-	// propose-only surfaced — manual adoption adjudicates until the corpus
-	// can bench producer revisions.
+	// AgentDevel flip gate). Without a wired shadow generator the proposal is
+	// DROPPED — a producer revision must never adopt unbenched (mirrors the
+	// evaluator/genesis epochs; the previous fall-through auto-adopted with no
+	// bench when the primary client was nil, RSI code eval H1).
 	var benchShadow *ProducerBenchOutcome
 	if epoch == metaEpochProducer {
-		if gen := t.producerShadowExecutor(); gen != nil {
-			scenarios := buildProducerShadowScenarios(t.Evolver.catalogEntries(), t.Tracker, producerBenchMaxSkills*metaBenchScale())
-			shadow := runProducerShadowBench(ctx, incumbent, proposal, scenarios, gen)
-			benchShadow = &shadow
-			if rejectReason := producerBenchDecision(shadow); rejectReason != "" {
-				logger.Info("meta-evolution: proposal rejected by producer shadow bench",
-					"artifact", artifact, "skills", shadow.Skills, "flips", shadow.Flips, "reason", rejectReason)
-				return t.recordWithBenches(record, nil, nil, benchShadow,
-					false, "", "shadow bench rejected: "+rejectReason)
-			}
-			logger.Info("meta-evolution: proposal cleared producer shadow bench",
-				"skills", shadow.Skills, "incumbentScore", shadow.IncumbentScore, "proposalScore", shadow.ProposalScore)
+		gen := t.producerShadowExecutor()
+		if gen == nil {
+			logger.Warn("meta-evolution: no producer shadow generator wired, producer proposal dropped")
+			return record(false, "", "producer bench unavailable: no generator wired")
 		}
+		scenarios := buildProducerShadowScenarios(t.Evolver.catalogEntries(), t.Tracker, producerBenchMaxSkills*metaBenchScale())
+		shadow := runProducerShadowBench(ctx, incumbent, proposal, scenarios, gen)
+		benchShadow = &shadow
+		if rejectReason := producerBenchDecision(shadow); rejectReason != "" {
+			logger.Info("meta-evolution: proposal rejected by producer shadow bench",
+				"artifact", artifact, "skills", shadow.Skills, "flips", shadow.Flips, "reason", rejectReason)
+			return t.recordWithBenches(record, nil, nil, benchShadow,
+				false, "", "shadow bench rejected: "+rejectReason)
+		}
+		logger.Info("meta-evolution: proposal cleared producer shadow bench",
+			"skills", shadow.Skills, "incumbentScore", shadow.IncumbentScore, "proposalScore", shadow.ProposalScore)
 	}
 
 	// Genesis epoch: shadow-replay fixed session scenarios through both
@@ -497,11 +504,12 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 		return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow,
 			true, toVersion, annotateReason(reason, "[저신뢰: "+lowConfidence+" — 운영자 verdict 대기]"))
 	}
-	if metaAutoAdoptEnabled() && !t.Tracker.AutoAdoptFrozen() {
+	if metaAutoAdoptEnabled() && !driftVerdict.Frozen && !t.Tracker.AutoAdoptFrozen() {
 		// Operator mandate (2026-07-11): the deterministic gate chain (contract
 		// + epoch bench) IS the approver. Adopt immediately; the ledger health
 		// snapshot arms the revert watch and the feed card carries a post-hoc
-		// veto (되돌리기).
+		// veto (되돌리기). Both the fresh drift verdict AND the persisted marker
+		// must clear — the fresh one catches a freeze whose marker write failed.
 		if adoptedVersion, aerr := t.Meta.AdoptProposal(artifact); aerr != nil {
 			logger.Warn("meta-evolution: auto-adoption failed, falling back to propose-only",
 				"artifact", artifact, "error", aerr)

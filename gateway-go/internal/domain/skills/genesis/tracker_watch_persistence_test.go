@@ -40,7 +40,7 @@ func TestTracker_EvolveWatchSurvivesRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	fired1 := make(chan string, 1)
-	tr1.SetRollback(func(s string) { fired1 <- s }, 3)
+	tr1.SetRollback(func(s string) bool { fired1 <- s; return true }, 3)
 	use(tr1, true)
 	use(tr1, false) // pre-evolve baseline: 2 uses, 1 fail
 	if err := tr1.LogEvolveWithAudit("sk", "1.0.1", "d", HarnessEditAudit{}); err != nil {
@@ -75,7 +75,7 @@ func TestTracker_EvolveWatchSurvivesRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	fired2 := make(chan string, 1)
-	tr2.SetRollback(func(s string) { fired2 <- s }, 3)
+	tr2.SetRollback(func(s string) bool { fired2 <- s; return true }, 3)
 	use(tr2, false)
 	select {
 	case s := <-fired2:

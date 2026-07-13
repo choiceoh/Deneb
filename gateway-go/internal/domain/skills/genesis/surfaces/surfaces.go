@@ -29,8 +29,11 @@ const (
 type EditableSurface struct {
 	Name string `json:"name"`
 	Tier string `json:"tier"`
-	// Patterns match case-insensitively: "*.ext" by extension, otherwise by
-	// base filename.
+	// Patterns match case-insensitively: "*.ext" by extension; a pattern
+	// containing "/" is a repo-relative path matched by basename, path
+	// suffix, AND directory containment (a directory target enclosing the
+	// path matches — a proposal aimed at a whole package cannot skirt a
+	// forbidden file inside it); otherwise by base filename.
 	Patterns []string `json:"patterns"`
 	Note     string   `json:"note,omitempty"`
 }
@@ -54,14 +57,43 @@ func DeclaredEditableSurfaces() []EditableSurface {
 			// accepts for (unanimous across the 2026H1 sweep — an exploitable
 			// gate poisons every downstream label). Human/agent PRs may still
 			// change these through normal review; the SELF-improvement queue
-			// rejects them at record time.
+			// rejects them at record time. Full repo-relative paths so a
+			// directory-shaped target (the health miner's normal output) that
+			// encloses one of these is ALSO rejected — basename-only matching
+			// let ".../genesis" through (RSI code eval C2).
 			Name: "acceptance-machinery", Tier: SurfaceTierForbidden,
 			Patterns: []string{
-				"validation_engine.go", "validation_replay.go", "eprocess.go",
-				"meta_judge_bench.go", "meta_producer_bench.go", "meta_evolution.go",
-				"judge_accuracy.go", "surfaces.go", "tracker_usage.go",
+				"gateway-go/internal/domain/skills/genesis/validation_engine.go",
+				"gateway-go/internal/domain/skills/genesis/validation_replay.go",
+				"gateway-go/internal/domain/skills/genesis/eprocess/eprocess.go",
+				"gateway-go/internal/domain/skills/genesis/meta_judge_bench.go",
+				"gateway-go/internal/domain/skills/genesis/meta_producer_bench.go",
+				"gateway-go/internal/domain/skills/genesis/meta_genesis_bench.go",
+				"gateway-go/internal/domain/skills/genesis/meta_evolution.go",
+				"gateway-go/internal/domain/skills/genesis/judge_accuracy.go",
+				"gateway-go/internal/domain/skills/genesis/surfaces/surfaces.go",
+				"gateway-go/internal/domain/skills/genesis/tracker_usage.go",
+				"gateway-go/internal/domain/skills/genesis/tracker_self_correction.go",
+				"gateway-go/internal/domain/skills/genesis/tracker_eprocess_cutover.go",
+				"gateway-go/internal/domain/skills/genesis/evolution_drift.go",
 			},
-			Note: "deterministic accept/reject core (gates, benches, e-process, rollback watch, this whitelist)",
+			Note: "deterministic accept/reject core (gates, benches, e-process, rollback watch, drift brake, record-time gate, this whitelist)",
+		},
+		{
+			// The scripts-side half of the same acceptor: the dispatch
+			// allowlist, the outcome decision table, the prompt composer, and
+			// the landing tool all decide what self-improvement work runs and
+			// how its results are judged — dispatchable-by-the-loop would let
+			// it queue an edit to its own dispatcher (RSI code eval C2/F3).
+			Name: "acceptance-scripts", Tier: SurfaceTierForbidden,
+			Patterns: []string{
+				"scripts/dev/coding-dispatch.sh",
+				"scripts/dev/dispatch_prompt.py",
+				"scripts/dev/dispatch_outcome.py",
+				"scripts/dev/pr.sh",
+				".github/workflows/ci.yml",
+			},
+			Note: "dispatch allowlist, outcome table, prompt composer, landing tool, CI gate — operator/PR review only",
 		},
 		{
 			// Operator authorization 2026-07-12 ("게이트웨이 소스 자가편집도 괜찮다 —
@@ -100,8 +132,10 @@ var undeclaredSurface = EditableSurface{Name: "undeclared", Tier: SurfaceTierPro
 
 // ClassifySurface maps one proposal target path to its declared surface.
 func ClassifySurface(target string) EditableSurface {
-	base := strings.ToLower(strings.TrimSpace(path.Base(strings.ReplaceAll(target, "\\", "/"))))
-	if base == "" || base == "." {
+	norm := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(target, "\\", "/")))
+	norm = strings.TrimSuffix(strings.TrimPrefix(norm, "./"), "/")
+	base := path.Base(norm)
+	if base == "" || base == "." || base == "/" {
 		return undeclaredSurface
 	}
 	for _, surface := range DeclaredEditableSurfaces() {
@@ -113,12 +147,40 @@ func ClassifySurface(target string) EditableSurface {
 				}
 				continue
 			}
+			if strings.Contains(p, "/") {
+				if pathPatternMatches(p, norm, base) {
+					return surface
+				}
+				continue
+			}
 			if base == p {
 				return surface
 			}
 		}
 	}
 	return undeclaredSurface
+}
+
+// pathPatternMatches reports whether a repo-relative path pattern matches the
+// normalized target: by basename (bare-filename targets keep working), by
+// path suffix at a component boundary (absolute or repo-relative spellings),
+// or by directory containment — the target names a directory that encloses
+// the pattern, at any depth of path abbreviation. Containment is deliberately
+// conservative: a proposal aimed at a whole directory cannot be lexically
+// proven to exclude the forbidden file inside it.
+func pathPatternMatches(pattern, norm, base string) bool {
+	if base == path.Base(pattern) {
+		return true
+	}
+	if norm == pattern || strings.HasSuffix(norm, "/"+pattern) {
+		return true
+	}
+	// Directory containment: "gateway-go/.../genesis", ".../skills/genesis",
+	// or "genesis" all enclose ".../genesis/<file>.go".
+	if strings.HasPrefix(pattern, norm+"/") || strings.Contains(pattern, "/"+norm+"/") {
+		return true
+	}
+	return false
 }
 
 // ClassifyProposalSurfaces summarizes target files into a tier and forbidden list.

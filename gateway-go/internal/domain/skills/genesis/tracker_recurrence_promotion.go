@@ -183,7 +183,7 @@ func selfCorrectionReopenBlocked(existing []SelfCorrectionCandidateRecord, sourc
 	var newest *SelfCorrectionCandidateRecord
 	sourceTwins := 0
 	for i := range existing {
-		if !strings.HasPrefix(existing[i].Source, source) {
+		if !selfCorrectionSourceMatches(existing[i].Source, source) {
 			continue
 		}
 		sourceTwins++
@@ -211,6 +211,15 @@ func selfCorrectionReopenBlocked(existing []SelfCorrectionCandidateRecord, sourc
 	cooled := now.UnixMilli()-newest.CreatedAt >= selfCorrectionReopenCooldown.Milliseconds()
 	recurredAgain := freshLastAt > newest.CreatedAt
 	return !(cooled && recurredAgain)
+}
+
+// selfCorrectionSourceMatches is the twin test for reopen suppression: an
+// exact source, or the same source extended past a separator (":" variants a
+// promoter appends). A bare prefix must NOT match — source ids that are
+// prefixes of one another ("…latency" vs "…latency-p99") used to cross-block
+// (RSI code eval M7/F4). Mirrored by scripts/audit/health_finding_miner.py.
+func selfCorrectionSourceMatches(existing, source string) bool {
+	return existing == source || strings.HasPrefix(existing, source+":")
 }
 
 // PromoteFailureClusterCandidates converts the top recurring failure clusters into

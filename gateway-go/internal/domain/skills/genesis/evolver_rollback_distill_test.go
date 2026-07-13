@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
@@ -60,6 +61,74 @@ func TestRollbackSkill_PersistsEvidence(t *testing.T) {
 	}
 	if len(cases[0].Replay.ExpectedToolCalls) != 1 || cases[0].Replay.ExpectedToolCalls[0].Name != "wiki" {
 		t.Fatalf("distilled case lost the tool evidence: %+v", cases[0].Replay)
+	}
+}
+
+// H2 regression pin: a rollback must re-register the restored version in the
+// catalog, so a later version-liveness check reads the reverted version and
+// cannot mistake a stale evolved-version entry for a still-live one.
+func TestRollbackSkill_ReRegistersRestoredVersion(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	file := filepath.Join(dir, "SKILL.md")
+	original := "---\nname: sk\nversion: 1.0.0\n---\n\n# sk\n\noriginal body\n"
+	evolved := "---\nname: sk\nversion: 1.0.1\n---\n\n# sk\n\nregressed body\n"
+	if err := os.WriteFile(file, []byte(evolved), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := backupSkillVersion(file, original); err != nil {
+		t.Fatal(err)
+	}
+	tracker, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog := skills.NewCatalog(slog.Default())
+	catalog.Register(skills.SkillEntry{Skill: skills.Skill{Name: "sk", Version: "1.0.1", FilePath: file}})
+	e := NewEvolver(nil, catalog, tracker, "m", slog.Default())
+
+	if !e.RollbackSkillWithResult("sk") {
+		t.Fatal("rollback with backup should report success")
+	}
+	got, ok := catalog.Get("sk")
+	if !ok {
+		t.Fatal("skill dropped from catalog on rollback")
+	}
+	if got.Skill.Version != "1.0.0" {
+		t.Fatalf("catalog still reports evolved version %q — liveness check would read stale (H2)", got.Skill.Version)
+	}
+}
+
+// M4 regression pin: lockSkill serializes the same skill across callers and
+// never contends across different skills.
+func TestEvolver_LockSkillSerializes(t *testing.T) {
+	e := NewEvolver(nil, skills.NewCatalog(nil), nil, "m", slog.Default())
+
+	// Same skill: the second Lock must block until the first unlocks. Prove
+	// mutual exclusion with a race-detectable shared counter.
+	const goroutines = 20
+	var counter int
+	var wg sync.WaitGroup
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			unlock := e.lockSkill("sk")
+			counter++ // guarded solely by lockSkill; -race would flag a gap
+			unlock()
+		}()
+	}
+	wg.Wait()
+	if counter != goroutines {
+		t.Fatalf("lost updates under contention: counter=%d want %d", counter, goroutines)
+	}
+
+	// Different skills use different mutexes (no shared identity).
+	if e.lockSkillMutex("a") == e.lockSkillMutex("b") {
+		t.Fatal("distinct skills must not share a lock")
+	}
+	if e.lockSkillMutex("a") != e.lockSkillMutex("a") {
+		t.Fatal("same skill must reuse its lock")
 	}
 }
 
