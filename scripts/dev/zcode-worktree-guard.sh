@@ -48,13 +48,25 @@ FILE_PATH=$(echo "$INPUT" | jq -r '
 # resolves correctly.
 WT_BASE="$HOME/.zcode/worktrees"
 if [[ -n "$FILE_PATH" ]]; then
-    # Normalize: resolve relative paths to absolute.
+    # Normalize: resolve relative paths to absolute, then canonicalize to
+    # eliminate ../ segments.  realpath -m handles non-existent paths (the
+    # file may not exist yet on a Write); if realpath is unavailable (macOS
+    # pre-Catalina), fall back to cd+pwd for existing paths.
     RESOLVED="$FILE_PATH"
     if [[ "$FILE_PATH" != /* ]]; then
         BASE_DIR="${CLAUDE_PROJECT_DIR:-${ZCODE_PROJECT_DIR:-$(pwd)}}"
         RESOLVED="$BASE_DIR/$FILE_PATH"
     fi
-    case "$(cd "$RESOLVED" 2>/dev/null && pwd || echo "$RESOLVED")" in
+    CANONICAL=$(realpath -m "$RESOLVED" 2>/dev/null || echo "$RESOLVED")
+    # If realpath failed (e.g. macOS without coreutils), try cd on the parent.
+    if [[ "$CANONICAL" == "$RESOLVED" ]]; then
+        PARENT=$(dirname "$RESOLVED")
+        CANONICAL_PARENT=$(cd "$PARENT" 2>/dev/null && pwd) || CANONICAL_PARENT=""
+        if [[ -n "$CANONICAL_PARENT" ]]; then
+            CANONICAL="$CANONICAL_PARENT/$(basename "$RESOLVED")"
+        fi
+    fi
+    case "$CANONICAL" in
         "$WT_BASE"/*)
             exit 0
             ;;

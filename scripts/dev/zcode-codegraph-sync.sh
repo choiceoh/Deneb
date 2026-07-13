@@ -20,8 +20,16 @@ FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook
 
 ROOT=""
 if [[ -n "$FILE_PATH" ]]; then
+    # Normalize relative paths: the hook cwd is often the main checkout, so
+    # a relative path from a worktree context would resolve wrong.  Resolve
+    # against the project dir first, then canonicalize.
+    ABS_PATH="$FILE_PATH"
+    if [[ "$FILE_PATH" != /* ]]; then
+        BASE_DIR="${CLAUDE_PROJECT_DIR:-${ZCODE_PROJECT_DIR:-$(pwd)}}"
+        ABS_PATH="$BASE_DIR/$FILE_PATH"
+    fi
     # Walk up from the file to find the enclosing .codegraph directory.
-    DIR=$(cd "$(dirname "$FILE_PATH")" 2>/dev/null && pwd) || DIR=""
+    DIR=$(cd "$(dirname "$ABS_PATH")" 2>/dev/null && pwd) || DIR=""
     while [[ -n "$DIR" ]] && [[ "$DIR" != "/" ]]; do
         if [[ -d "$DIR/.codegraph" ]]; then
             ROOT="$DIR"

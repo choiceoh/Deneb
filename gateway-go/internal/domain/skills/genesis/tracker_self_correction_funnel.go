@@ -171,10 +171,11 @@ func setEarlier(index map[string]int64, id string, createdAt int64) {
 }
 
 func selfCorrectionAppliedBySource(candidates map[string]SelfCorrectionCandidateRecord, firstApplied map[string]int64) map[string]int64 {
-	// Source-prefix → earliest APPLIED transition createdAt, for reopen detection.
-	// A candidate is a reopen when its source signature had an earlier applied
-	// fix — the "fix did not stick" signal. Applied can arrive as a direct review
-	// or as a deploy-watch closure event.
+	// Source → earliest APPLIED transition createdAt, for reopen detection.
+	// A candidate is a reopen when its exact source string had an earlier
+	// applied fix — the "fix did not stick" signal. This is an exact-match
+	// lookup (not prefix), matching how candidates store their Source field.
+	// Applied can arrive as a direct review or as a deploy-watch closure event.
 	appliedBySource := make(map[string]int64)
 	for id, cand := range candidates {
 		appliedAt, ok := firstApplied[id]
