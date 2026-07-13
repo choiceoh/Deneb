@@ -367,6 +367,42 @@ describe("WorkfeedPane boundary behavior", () => {
       );
     });
 
+    it("settles an ack-style decision chip (meta:adopt) without spawning a chat turn", async () => {
+      // Mirrors the gateway's genesis-meta 채택/기각 card: ActionAck chips settle the
+      // card server-side (handleMetaProposalAction) and return a BLANK prompt, so the
+      // desktop must run the action but NOT deliver a chat turn (native parity — the
+      // adopt/reject decision is applied by the RPC hook, not by a follow-up turn).
+      installGateway(rpc, chats, {
+        "miniapp.workfeed.action.run": () => rpcReply({ item: { id: "proposal" }, removeFromFeed: true }),
+      });
+      renderFeed([
+        {
+          id: "proposal",
+          source: "genesis-meta",
+          title: "메타 개정 제안",
+          body: "채택하거나 기각하세요.",
+          question: true,
+          actions: [
+            { id: "meta:adopt", kind: "ack", label: "채택" },
+            { id: "meta:reject", kind: "ack", label: "기각" },
+          ],
+          createdAtMs: at(0, 9),
+        },
+      ]);
+      await userEvent.click(await screen.findByText("메타 개정 제안"));
+      const detail = screen.getByRole("region", { name: "피드 상세" });
+      await userEvent.click(within(detail).getByRole("button", { name: "채택" }));
+      await waitFor(() =>
+        expect(lastRpc(rpc, "miniapp.workfeed.action.run")?.params).toEqual({
+          itemId: "proposal",
+          actionId: "meta:adopt",
+        }),
+      );
+      // Flush the run's onResult microtasks, then assert the blank prompt produced no chat.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(chats).toHaveLength(0);
+    });
+
     it("trims answers, clears the field and delivers the returned prompt", async () => {
       renderFeed(todayItems);
       await userEvent.click(await screen.findByText("계약 승인 여부"));
