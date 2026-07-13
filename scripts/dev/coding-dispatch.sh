@@ -159,7 +159,13 @@ for rid, rec in sorted(cand.items(), key=pick_order):
             os.path.join(dispatch_dir, rid + ".json"),
             abandon_after_sec=abandon_after):
         continue
-    print(json.dumps(rec, ensure_ascii=False))
+    # Emit the MERGED status — the cand map keeps the original candidate row
+    # (status=proposed), while reviews are status deltas. Writing the stale
+    # proposed into the dispatch marker (live 2026-07-13: ee440d82 marker said
+    # proposed while the queue was accepted) poisons the ledger.
+    out = dict(rec)
+    out["status"] = status.get(rid, rec.get("status") or "proposed")
+    print(json.dumps(out, ensure_ascii=False))
     break
 PYEOF
         )

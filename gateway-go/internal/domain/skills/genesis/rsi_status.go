@@ -188,7 +188,7 @@ func (t *Tracker) rsiAssessL2() RSILayer {
 	h := t.MetaEvolutionHealth()
 	metrics := []RSIMetricKV{
 		{"개정(7일)", strconv.Itoa(h.Revisions7d)},
-		{"제안", strconv.Itoa(h.Proposed7d)},
+		{"제안(7일)", strconv.Itoa(h.Proposed7d)},
 	}
 	if strings.TrimSpace(h.LastEpoch) != "" {
 		metrics = append(metrics, RSIMetricKV{"최근 에폭", h.LastEpoch})
@@ -200,9 +200,14 @@ func (t *Tracker) rsiAssessL2() RSILayer {
 		base.Diagnosis = "드리프트 자기 브레이크 작동 — 자동 채택이 제안 전용으로 동결됐습니다"
 	case t.metaActivityIn(metaEvolutionAssessWindow):
 		base.State = RSIStateLive
-		diag := fmt.Sprintf("슬로우 루프 활동 있음 · 7일 개정 %d · 제안 %d", h.Revisions7d, h.Proposed7d)
+		// Diagnosis uses the SAME 14d window as LIVE/IDLE — quoting 7d scoreboard
+		// numbers here made a 10d-old weekly cycle read as "0 revisions" while
+		// the layer stayed LIVE (Python assess_l2 prints 14d counts).
+		cycles, proposed, adopted, reverted := t.metaCycleCountsIn(metaEvolutionAssessWindow)
+		diag := fmt.Sprintf("%d 사이클 / %d 제안 / %d 채택 / %d 되돌림 (14일)",
+			cycles, proposed, adopted, reverted)
 		if strings.TrimSpace(h.LastEpoch) != "" {
-			diag += fmt.Sprintf(" (최근: %s)", h.LastEpoch)
+			diag += fmt.Sprintf(" · 최근 %s", h.LastEpoch)
 		}
 		base.Diagnosis = diag
 	default:
@@ -218,17 +223,36 @@ func (t *Tracker) rsiAssessL2() RSILayer {
 const metaEvolutionAssessWindow = 14 * 24 * time.Hour
 
 func (t *Tracker) metaActivityIn(window time.Duration) bool {
+	cycles, proposed, adopted, reverted := t.metaCycleCountsIn(window)
+	return cycles+proposed+adopted+reverted > 0
+}
+
+// metaCycleCountsIn tallies slow-loop ledger rows inside window, matching
+// scripts/audit/rsi_status.py assess_l2 (action=="" → cycle; proposed flag;
+// adopted/reverted action rows).
+func (t *Tracker) metaCycleCountsIn(window time.Duration) (cycles, proposed, adopted, reverted int) {
 	entries, err := t.RecentMetaRevisions(50)
 	if err != nil || len(entries) == 0 {
-		return false
+		return 0, 0, 0, 0
 	}
 	cutoff := time.Now().Add(-window).UnixMilli()
 	for _, e := range entries {
-		if e.CreatedAt >= cutoff {
-			return true
+		if e.CreatedAt < cutoff {
+			continue
+		}
+		switch e.Action {
+		case "auto_adopted", "adopted":
+			adopted++
+		case "auto_reverted", "operator_reverted":
+			reverted++
+		case "":
+			cycles++
+			if e.Proposed {
+				proposed++
+			}
 		}
 	}
-	return false
+	return cycles, proposed, adopted, reverted
 }
 
 func (t *Tracker) rsiAssessL3() RSILayer {

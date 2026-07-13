@@ -153,7 +153,9 @@ func TestRSIStatus_L1DataGatedOnProposalsOnly(t *testing.T) {
 }
 
 // L2 LIVE uses a 14d look-back so a weekly revision older than 7d does not
-// flip the slow loop IDLE mid-week (Python assess_l2 parity).
+// flip the slow loop IDLE mid-week (Python assess_l2 parity). Diagnosis must
+// quote 14d cycle counts — not the 7d scoreboard (a 10d-old cycle is LIVE with
+// 7d metrics still at 0).
 func TestRSIStatus_L2LiveWithin14dWindow(t *testing.T) {
 	tr := newTestTracker(t)
 	tenDaysAgo := time.Now().Add(-10 * 24 * time.Hour).UnixMilli()
@@ -165,6 +167,16 @@ func TestRSIStatus_L2LiveWithin14dWindow(t *testing.T) {
 	l := rsiLayerByKey(tr.RSIStatus().Layers, "L2")
 	if l.State != RSIStateLive {
 		t.Fatalf("L2 = %s, want LIVE (%s)", l.State, l.Diagnosis)
+	}
+	if !strings.Contains(l.Diagnosis, "(14일)") {
+		t.Fatalf("L2 diagnosis should cite 14d window, got %q", l.Diagnosis)
+	}
+	if !strings.Contains(l.Diagnosis, "1 사이클") || !strings.Contains(l.Diagnosis, "1 제안") {
+		t.Fatalf("L2 diagnosis should count the 10d-old cycle, got %q", l.Diagnosis)
+	}
+	// Scoreboard metrics stay on 7d — the 10d-old row must not inflate them.
+	if got := rsiMetricValue(l.Metrics, "개정(7일)"); got != "0" {
+		t.Fatalf("7d revisions metric = %q, want 0 (%+v)", got, l.Metrics)
 	}
 }
 
