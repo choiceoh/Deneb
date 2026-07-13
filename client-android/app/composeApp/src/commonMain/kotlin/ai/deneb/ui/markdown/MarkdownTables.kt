@@ -160,12 +160,11 @@ private fun FittedTable(block: Table, numCols: Int, tiny: BooleanArray, colWidth
     }
 }
 
-private fun RowScope.fittedCellWidth(i: Int, tiny: BooleanArray, colWidths: IntArray, weights: FloatArray): Modifier =
-    if (tiny.getOrElse(i) { false }) {
-        Modifier.width(colWidths.getOrElse(i) { 100 }.dp)
-    } else {
-        Modifier.weight(weights.getOrElse(i) { 1f })
-    }
+private fun RowScope.fittedCellWidth(i: Int, tiny: BooleanArray, colWidths: IntArray, weights: FloatArray): Modifier = if (tiny.getOrElse(i) { false }) {
+    Modifier.width(colWidths.getOrElse(i) { 100 }.dp)
+} else {
+    Modifier.weight(weights.getOrElse(i) { 1f })
+}
 
 // Wide table: fixed content-derived column widths under one horizontal scroll, so the
 // header and every row stay aligned and each cell remains readable. Long cells wrap
