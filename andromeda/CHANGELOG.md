@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.0.73](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.72...andromeda-v0.0.73) (2026-07-13)
+
+
+### ✨ Features
+
+* **andromeda:** 능동형 질문 카드 데스크톱 답변 어포던스 — 피드 상세 답변 칩(action.run)·question 플래그 존중 ([#3564](https://github.com/choiceoh/Deneb/issues/3564)) ([43c5524](https://github.com/choiceoh/Deneb/commit/43c5524696b2cfc7de80f9524c53197ff91c0df7))
+* **andromeda:** 데스크톱 카드 노드 렌더 파리티 — 카운트다운 라이브 틱·미결정 진행바·2글자 아바타/아이콘 폴백·secondary 뱃지 분리 ([#3571](https://github.com/choiceoh/Deneb/issues/3571)) ([409bf12](https://github.com/choiceoh/Deneb/commit/409bf12dfb27146699f0423b8737cf00e0defa9f))
+* **andromeda:** 카드 노드 렌더 파리티 2탄 — box 정렬·이미지 대체박스·슬라이더 범위정규화·아이콘 매핑 확장 ([#3577](https://github.com/choiceoh/Deneb/issues/3577)) ([7fc26bb](https://github.com/choiceoh/Deneb/commit/7fc26bbc25b54a9093d402338c543ff1db90b4d8))
+* **andromeda:** 카드 막대차트 세로 SVG 파리티 — 가로 CSS 막대→네이티브 캔버스형 세로 컬럼(값 라벨 상단·0=막대없음) ([#3573](https://github.com/choiceoh/Deneb/issues/3573)) ([8130a06](https://github.com/choiceoh/Deneb/commit/8130a0630175e84158de62a2beed6d477f750865))
+
 ## [0.0.72](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.71...andromeda-v0.0.72) (2026-07-13)
 
 
