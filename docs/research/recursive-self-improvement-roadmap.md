@@ -323,6 +323,31 @@ Five workstreams, in priority order:
    meta-experience ledger. Ref: PACE 2605.23019 (prompts AND control logic on
    the slow timescale).
 
+   *Candidate audit (2026-07-13):* the "failure-analysis prompt" and "teacher
+   prompt" turn out not to exist as separate surfaces — failure analysis is
+   deterministic Go formatting inside the evolve prompt, and the teacher
+   rewrite already loads the SAME externalized evolve artifact
+   (`evolver_judge_teacher.go` → `MetaEvolveSystemPrompt`). The real
+   externalization candidates are the dispatch prompt (below), the curriculum
+   prompt (kept compiled on purpose — the demand lane's honesty bar must not
+   be self-relaxable; revisit only with an operator decision), and the
+   retrieval policy (not a prompt; needs its own design).
+
+   *Slice-1 LANDED (dispatch-contract externalization).* The POLICY half of
+   the L4 coding-dispatch prompt is now the fifth meta artifact
+   (`meta/dispatch-contract-prompt.md`, compiled default in
+   `generation/prompts.go`, materialized + sidecar-refreshed by the gateway
+   like the other four). The consumer is OUTSIDE the gateway process —
+   `scripts/dev/dispatch_prompt.py` composes candidate data + contract text
+   and stamps `promptVersion` (sha12) provenance into the dispatch marker
+   (P1.5 attribution extended to L4). Honesty details: no second copy of the
+   contract exists anywhere (an unusable artifact DEFERS the dispatch, never
+   silently swaps prompts; a scripts-side test pins the artifact name against
+   the Go constant), and rollout is behavior-neutral (byte-identical prompt
+   when the artifact equals the compiled default — verified). NOT in the L2
+   rotation: adoption of a revision stays operator-side until a
+   dispatch-outcome bench exists.
+
 5. **Outer-loop fitness — ground L2 in operator-visible utility.**
    Gate-passage rates are proxies; the top-level signal should be utility the
    operator experiences: feed-card accept/reject (#3456 already ledgers it),
