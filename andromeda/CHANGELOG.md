@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.75](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.74...andromeda-v0.0.75) (2026-07-13)
+
+
+### ✨ Features
+
+* **rsi:** RSI 화면용 데이터 노출 — 구조적 건강 블록·후보 자동배차 플래그·배차 허용목록 tool-quality ([#3588](https://github.com/choiceoh/Deneb/issues/3588)) ([03072bd](https://github.com/choiceoh/Deneb/commit/03072bd89a6041396440998dde7deb949181f03f))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 카드 stat 박스 제거 — 네이티브 파리티(카드 내 박스겹침 해소) ([#3590](https://github.com/choiceoh/Deneb/issues/3590)) ([0f9bd6f](https://github.com/choiceoh/Deneb/commit/0f9bd6fd79507b5a6a09e9401e2ad6706d8cb3b1))
+
 ## [0.0.74](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.73...andromeda-v0.0.74) (2026-07-13)
 
 
