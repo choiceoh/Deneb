@@ -119,6 +119,26 @@ class L3Test(unittest.TestCase):
                         "falseRejects": [{"skill": "sk"}]}], [], NOW)
         self.assertEqual(s.state, LIVE)
 
+    def test_weaken_tier_zero_miss_reads_probe_ceiling(self):
+        # Escalated (weaken-tier) probes in the ledger with zero misses: still
+        # DATA-GATED, but the diagnosis must say the lane already probes at its
+        # difficulty ceiling — not promise a future escalation.
+        s = assess_l3([{"createdAt": RECENT, "pairs": 4, "correct": 4,
+                        "byClass": {"imperative-drop": [2, 2], "imperative-weaken": [2, 2]},
+                        "misses": []}], [], NOW)
+        self.assertEqual(s.state, DATA_GATED)
+        self.assertTrue(s.metrics["weaken_probes_deployed"])
+        self.assertIn("weaken tier", s.diagnosis)
+
+    def test_drop_tier_zero_miss_promises_escalation(self):
+        # Drop-tier-only saturation names the ladder's next step.
+        s = assess_l3([{"createdAt": RECENT, "pairs": 2, "correct": 2,
+                        "byClass": {"imperative-drop": [1, 1], "safety-drop": [1, 1]},
+                        "misses": []}], [], NOW)
+        self.assertEqual(s.state, DATA_GATED)
+        self.assertFalse(s.metrics["weaken_probes_deployed"])
+        self.assertIn("escalates", s.diagnosis)
+
     def test_organic_false_accepts_are_live_fuel(self):
         # A baseline-CONFIRMED rollback (e-process agreed) is a real-usage P3
         # label; a baseline-quiet rollback is a disagreement label, not fuel.

@@ -158,6 +158,20 @@ evaluator-epoch evidence alongside the synthetic misses — scoped to the
 incumbent judge, surfaced on `rsi_status` L3 (실전 라벨). Real-usage labels now
 flow; volume still depends on evolve throughput (P5-1/P5-2).
 
+**Probe curriculum ladder landed 2026-07-13:** the judge-accuracy lane's
+planted-defect corpus was saturating (14 runs × 0 misses at the drop tier —
+a static probe corpus the judge has outgrown produces zero labels forever,
+starving every evaluator epoch). The lane now escalates to in-place WEAKEN
+probes (`imperative-weaken`: a hard-rule token diluted to a preference in
+place; `scope-narrow`: a universal quantifier shrunk — nothing absent for a
+diff to catch, the guarantee simply gone) once the incumbent judge posts
+`judgeEscalationWindow` consecutive zero-miss drop-tier runs. The honesty
+invariant is unchanged (enforcement/coverage loss by construction, never
+debatable harm); a drop-tier miss re-locks the tier, and a judge revision
+resets the curriculum via version scoping — a fresh judge re-earns tier 3.
+Weaken classes stay OUT of the meta-judge promotion gate, same separation as
+the drop tier.
+
 Label quality is triple-threatened (2026H1 sweep) — three preconditions:
 
 1. **Baseline-aware rollback first** (PACE): the current baseline-blind
