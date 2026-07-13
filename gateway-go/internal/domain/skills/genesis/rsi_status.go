@@ -22,6 +22,7 @@ package genesis
 // color and a localized badge label.
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -336,6 +337,12 @@ func (t *Tracker) rsiAssessL4() RSILayer {
 		base.State = RSIStateStarved
 		base.Diagnosis = fmt.Sprintf("후보 %d건(%s)이지만 배차 가능한 코드 후보가 아직 없습니다", len(cands), rsiScopeSummary(byScope))
 	}
+	// Dispatch-outcome history (graduation-ladder evidence: the cap-raise row
+	// needs a measured land rate) rides the diagnosis text — no new metric row,
+	// so the native card layout is untouched.
+	if note := rsiDispatchOutcomeNote(t.dispatchMarkerDir()); note != "" {
+		base.Diagnosis += note
+	}
 	return base
 }
 
@@ -363,6 +370,51 @@ func (t *Tracker) codingDispatchCounts() (total, today int) {
 		}
 	}
 	return total, today
+}
+
+// dispatchMarkerDir is where coding-dispatch.sh writes its per-dispatch
+// markers — the dispatch ledger, next to the tracker's data files.
+func (t *Tracker) dispatchMarkerDir() string {
+	return filepath.Join(filepath.Dir(t.logPath), "coding_dispatch")
+}
+
+// rsiDispatchOutcomeNote aggregates recorded dispatch outcomes into a short
+// diagnosis suffix ("" when no marker carries an outcome yet — markers
+// predating outcome accounting simply have none).
+func rsiDispatchOutcomeNote(dir string) string {
+	paths, _ := filepath.Glob(filepath.Join(dir, "*.json"))
+	outcomes := map[string]int{}
+	decided, landed := 0, 0
+	for _, p := range paths {
+		raw, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		var m struct {
+			Outcome string `json:"outcome"`
+		}
+		if json.Unmarshal(raw, &m) != nil || m.Outcome == "" {
+			continue
+		}
+		outcomes[m.Outcome]++
+		decided++
+		if m.Outcome == "landed" {
+			landed++
+		}
+	}
+	if decided == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(outcomes))
+	for k := range outcomes {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s %d", k, outcomes[k]))
+	}
+	return fmt.Sprintf(" · 배차 결과: %s (랜딩률 %.0f%%)", strings.Join(parts, "·"), float64(landed)/float64(decided)*100)
 }
 
 // rsiEProcessValue formats the L1 e-process cutover metric: who owns rollback

@@ -273,8 +273,14 @@ def _merge_candidates(rows: list[dict]) -> tuple[dict[str, dict], dict[str, str]
     return cand, status
 
 
-def assess_l4(rows: list[dict], dispatch_total: int, dispatch_today: int) -> LayerStatus:
+def assess_l4(
+    rows: list[dict],
+    dispatch_total: int,
+    dispatch_today: int,
+    outcomes: dict[str, int] | None = None,
+) -> LayerStatus:
     """Source self-edit — the coding-dispatch supply of code-scope candidates."""
+    outcomes = outcomes or {}
     cand, status = _merge_candidates(rows)
     by_scope: dict[str, int] = {}
     dispatchable = 0
@@ -298,6 +304,13 @@ def assess_l4(rows: list[dict], dispatch_total: int, dispatch_today: int) -> Lay
                 staged += 1
                 prefix = src.split(":", 1)[0] if src else "(no source)"
                 staged_sources[prefix] = staged_sources.get(prefix, 0) + 1
+    # Land rate over DECIDED dispatches (ladder row: raise the daily cap after
+    # N dispatches with >=50% land rate). "attempted" is non-terminal (a later
+    # reprobe may upgrade it), but counting it in the denominator keeps the
+    # rate honest rather than flattering.
+    decided = sum(outcomes.values())
+    landed = outcomes.get("landed", 0)
+    land_rate = (landed / decided) if decided else None
     metrics = {
         "candidates": len(cand),
         "by_scope": by_scope,
@@ -306,10 +319,17 @@ def assess_l4(rows: list[dict], dispatch_total: int, dispatch_today: int) -> Lay
         "staged_sources": staged_sources,
         "dispatched_total": dispatch_total,
         "dispatched_today": dispatch_today,
+        "dispatch_outcomes": outcomes,
+        "land_rate": land_rate,
     }
+    outcome_note = ""
+    if decided:
+        parts = ", ".join(f"{k}:{v}" for k, v in sorted(outcomes.items()))
+        outcome_note = f" · outcomes {parts} (land rate {land_rate:.0%})"
     if dispatchable > 0 or dispatch_today > 0:
         return LayerStatus("L4", "source self-edit", LIVE, metrics,
-                           f"{dispatchable} dispatchable code candidates, {dispatch_today} dispatched today")
+                           f"{dispatchable} dispatchable code candidates, {dispatch_today} dispatched today"
+                           + outcome_note)
     if len(cand) == 0:
         return LayerStatus("L4", "source self-edit", IDLE, metrics,
                            "no self-correction candidates — capture funnel idle")
@@ -334,16 +354,28 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
 
     dispatch_dir = os.path.join(data_dir, "coding_dispatch")
     dispatch_total = dispatch_today = 0
+    outcomes: dict[str, int] = {}
     today_cutoff = now_ms - (now_ms % DAY_MS)
     try:
         for name in os.listdir(dispatch_dir):
             if not name.endswith(".json"):
                 continue
+            path = os.path.join(dispatch_dir, name)
             dispatch_total += 1
             try:
-                if os.path.getmtime(os.path.join(dispatch_dir, name)) * 1000 >= today_cutoff:
+                if os.path.getmtime(path) * 1000 >= today_cutoff:
                     dispatch_today += 1
             except OSError:
+                continue
+            # Outcome accounting (graduation-ladder evidence): each marker
+            # carries the session's observed outcome once dispatch_outcome.py
+            # recorded it; pre-accounting markers simply have none.
+            try:
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    outcome = (json.load(f) or {}).get("outcome")
+                if outcome:
+                    outcomes[outcome] = outcomes.get(outcome, 0) + 1
+            except (OSError, json.JSONDecodeError):
                 continue
     except OSError:
         pass
@@ -352,7 +384,7 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
         assess_l1(genesis, now_ms),
         assess_l2(revisions, frozen, now_ms),
         assess_l3(judge, genesis, now_ms),
-        assess_l4(candidates, dispatch_total, dispatch_today),
+        assess_l4(candidates, dispatch_total, dispatch_today, outcomes),
     ]
 
 
