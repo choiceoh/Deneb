@@ -466,6 +466,10 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// prose on the accepted structural quality state (overall score,
 			// weakest pillars). Sourced from the checked-in health-v2 baseline.
 			QualityBench: s.metaQualityBenchEvidence,
+			// RSI P5-4 slice 2: the genesis-epoch shadow bench executes both
+			// prompts on the PRODUCTION genesis model (never persists, no
+			// daily-cap interaction).
+			GenesisGen: s.genesisSvc.ShadowGenerate,
 		})
 		s.autonomousSvc.RegisterTask(&genesis.SkillCuratorTask{
 			Tracker: s.genesisTracker,

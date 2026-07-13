@@ -348,6 +348,27 @@ Five workstreams, in priority order:
    rotation: adoption of a revision stays operator-side until a
    dispatch-outcome bench exists.
 
+   *Slice-2 LANDED (genesis epoch — the rotation actually widens).* The
+   genesis system prompt is now the THIRD artifact the slow loop can revise:
+   epochs rotate producer → evaluator → genesis, and a genesis-epoch
+   proposal is gated by a new deterministic shadow bench
+   (`meta_genesis_bench.go`): three COMPILED session fixtures (skill-worthy
+   multi-tool workflows with user corrections, byte-identical inputs for
+   both prompts, mirroring `Service.Generate`'s exact prompt shape) are
+   replayed through incumbent and proposal on the PRODUCTION genesis model
+   (`generation.Service.ShadowGenerate`, server-injected closure), and both
+   outputs are scored by the production admissibility gate
+   (`generation.BenchAdmissibility` — parse + specificity issues, LLM-free
+   ground truth). A proposal that flips a scenario the incumbent handles
+   cleanly (vague output, or skipping a known skill-worthy session) is
+   rejected; a mean gate-issue regression beyond noise rejects; the contract
+   gate pins the genesis response-schema anchors. Conservative first
+   posture: a 0→0 issue margin reads low-confidence, so early genesis
+   revisions route to the operator-verdict card rather than auto-adopting —
+   auto-adoption begins only when a revision measurably fixes gate issues
+   the incumbent produces. Evidence block adds the 30d genesis lane volume
+   with an explicit "skip 규칙은 정밀화 방향으로만" honesty instruction.
+
 5. **Outer-loop fitness — ground L2 in operator-visible utility.**
    Gate-passage rates are proxies; the top-level signal should be utility the
    operator experiences: feed-card accept/reject (#3456 already ledgers it),
