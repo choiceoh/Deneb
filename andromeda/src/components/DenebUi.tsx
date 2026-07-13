@@ -496,14 +496,22 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
           </span>
         );
       case "stat": {
-        // Signed descriptions ("+2.1%") are direction claims — arrow + tint.
+        // Signed descriptions ("+2.1%") are direction claims — arrow + tinted chip.
         const desc = n.description ? String(n.description).trim() : "";
         const pos = desc.startsWith("+") || desc.startsWith("▲");
         const neg = desc.startsWith("-") || desc.startsWith("−") || desc.startsWith("▼");
         const trend = pos ? `▲ ${desc.replace(/^[+▲]\s*/, "")}` : neg ? `▼ ${desc.replace(/^[-−▼]\s*/, "")}` : desc;
+        // Unit-suffix typography: "381톤"/"68%"/"2.4억" → big number + a smaller
+        // unit, so the metric reads as a value not a string. Only a trailing 1–2
+        // char non-digit unit splits (a ratio like "7/10" or a bare "12" stays whole).
+        const rawVal = String(n.value || "");
+        const um = /^(-?[\d,]+(?:\.\d+)?)([^\d\s]{1,2})$/.exec(rawVal.trim());
         return (
           <div key={key} className="dui-stat">
-            <StatValue value={String(n.value || "")} />
+            <div className="dui-stat-value-row">
+              <StatValue value={um ? um[1] : rawVal} />
+              {um ? <span className="dui-stat-unit">{um[2]}</span> : null}
+            </div>
             <div className="dui-stat-label">{String(n.label || "")}</div>
             {desc ? <div className={"dui-stat-desc" + (pos ? " pos" : neg ? " neg" : "")}>{trend}</div> : null}
           </div>
@@ -690,6 +698,8 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         // values get a 2px legibility floor. Scaled from the real series max.
         const barH = (v: number) => (v > 0 ? Math.max(2, (v / max) * plotH) : 0);
         const summary = nums.map((v, i) => `${labels[i] ?? i + 1} ${v}`).join(", ");
+        const barGradId = `dui-barg-${key}`;
+        const midY = (plotTop + plotBottom) / 2;
         return (
           <div key={key} className="dui-chart">
             {n.label ? <div className="dui-stat-label">{String(n.label)}</div> : null}
@@ -700,14 +710,32 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
               role="img"
               aria-label={`${String(n.label ?? "bar chart")}: ${summary}`}
             >
+              <defs>
+                {/* Vertical accent gradient (opaque top → faint base) gives the
+                    columns depth instead of a flat fill. CSS-var stops stay
+                    theme-aware; unique id per chart avoids cross-SVG collision. */}
+                <linearGradient id={barGradId} x1="0" y1="0" x2="0" y2="1">
+                  <stop className="dui-bar-grad-top" offset="0" />
+                  <stop className="dui-bar-grad-bot" offset="1" />
+                </linearGradient>
+              </defs>
               <line className="dui-line-grid" x1={0} y1={plotBottom} x2={W} y2={plotBottom} />
+              <line className="dui-line-grid dui-grid-mid" x1={0} y1={midY} x2={W} y2={midY} strokeDasharray="2 4" />
               {nums.map((v, i) => {
                 const h = barH(v);
                 const cx = barX(i) + barW / 2;
                 return (
                   <g key={i}>
                     {h > 0 ? (
-                      <rect className="dui-bar-rect" x={barX(i)} y={plotBottom - h} width={barW} height={h} rx={3} />
+                      <rect
+                        className="dui-bar-rect"
+                        x={barX(i)}
+                        y={plotBottom - h}
+                        width={barW}
+                        height={h}
+                        rx={3}
+                        fill={`url(#${barGradId})`}
+                      />
                     ) : null}
                     <text className="dui-bar-svg-val" x={cx} y={plotBottom - h - 3} textAnchor="middle">
                       {String(values[i] ?? "")}

@@ -4224,20 +4224,39 @@ button.mail-attachment {
   font-size: 11px;
   color: var(--muted-2);
 }
-.dui-stat-desc {
-  font-size: 11.5px;
-  color: var(--muted);
-}
 .dui-stat-value {
   font-variant-numeric: tabular-nums;
 }
-.dui-stat-desc.pos {
-  color: #5db075;
+/* value + unit suffix: the number is the hero, the unit a quieter baseline tail */
+.dui-stat-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+.dui-stat-unit {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-2);
+}
+/* trend as a tinted chip — direction reads at a glance, not just a colored word */
+.dui-stat-desc {
+  align-self: flex-start;
+  margin-top: 5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: var(--panel-sunken);
+}
+.dui-stat-desc.pos {
+  color: #4f9e6a;
+  background: rgba(93, 176, 117, 0.14);
 }
 .dui-stat-desc.neg {
-  color: #e5615c;
-  font-weight: 600;
+  color: #c9564f;
+  background: rgba(229, 97, 92, 0.13);
 }
 /* status badge tints — soft fills, parity with the native 2-accent restraint */
 .dui-badge.success {
@@ -4376,8 +4395,18 @@ button.mail-attachment {
   height: 92px;
   display: block;
 }
-.dui-bar-rect {
-  fill: var(--accent);
+/* Bar columns take a per-chart vertical gradient (set via the fill attr so no CSS
+   overrides it); the stops stay theme-aware through --accent. */
+.dui-bar-grad-top {
+  stop-color: var(--accent);
+  stop-opacity: 0.95;
+}
+.dui-bar-grad-bot {
+  stop-color: var(--accent);
+  stop-opacity: 0.3;
+}
+.dui-grid-mid {
+  opacity: 0.55;
 }
 .dui-bar-svg-val {
   fill: var(--ink-2);

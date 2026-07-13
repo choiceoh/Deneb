@@ -442,4 +442,24 @@ describe("DenebUi node rendering polish", () => {
     const unknown = render(<DenebUi spec={{ type: "icon", name: "totally_unknown_xyz" }} onSubmit={() => {}} />);
     expect(unknown.container.querySelector(".dui-icon")).toBeNull();
   });
+
+  it("splits a stat value into a hero number and a unit suffix, but keeps a bare number whole", () => {
+    const withUnit = render(<DenebUi spec={{ type: "stat", value: "381톤", label: "생산" }} onSubmit={() => {}} />);
+    expect(withUnit.container.querySelector(".dui-stat-value")?.textContent).toBe("381");
+    expect(withUnit.container.querySelector(".dui-stat-unit")?.textContent).toBe("톤");
+    const pct = render(<DenebUi spec={{ type: "stat", value: "68%", label: "공정" }} onSubmit={() => {}} />);
+    expect(pct.container.querySelector(".dui-stat-unit")?.textContent).toBe("%");
+    const bare = render(<DenebUi spec={{ type: "stat", value: "12", label: "미열람" }} onSubmit={() => {}} />);
+    expect(bare.container.querySelector(".dui-stat-unit")).toBeNull();
+    expect(bare.container.querySelector(".dui-stat-value")?.textContent).toBe("12");
+  });
+
+  it("fills bar-chart columns with a per-chart gradient", () => {
+    const { container } = render(
+      <DenebUi spec={{ type: "chart", chartType: "bar", labels: ["a", "b"], values: [1, 2] }} onSubmit={() => {}} />,
+    );
+    const grad = container.querySelector("linearGradient");
+    expect(grad?.id).toBeTruthy();
+    expect(container.querySelector(".dui-bar-rect")?.getAttribute("fill")).toBe(`url(#${grad!.id})`);
+  });
 });
