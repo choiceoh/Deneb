@@ -15,8 +15,10 @@ import ai.deneb.ui.text.displayUnits
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -275,8 +277,7 @@ internal fun RenderTable(node: TableNode) {
     }
     val tinyColumn = BooleanArray(columnCount) { tinyUnits[it] in 1..3 }
     if (tinyColumn.all { it }) tinyColumn.fill(false)
-    fun RowScope.cellWidth(index: Int): Modifier =
-        if (tinyColumn[index]) Modifier.width((tinyUnits[index] * 9 + 4).dp) else Modifier.weight(columnWeight(index))
+    fun RowScope.cellWidth(index: Int): Modifier = if (tinyColumn[index]) Modifier.width((tinyUnits[index] * 9 + 4).dp) else Modifier.weight(columnWeight(index))
     val hairline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
 
     // Dense tables (3+ columns) drop one type rung so a narrow column fits
@@ -335,8 +336,7 @@ internal fun RenderTable(node: TableNode) {
 
 // Marker-stripped cell text for column-width measurement — inline emphasis/code
 // markers ("**1**") render invisibly, so they must not count toward width.
-private fun bareCellText(cell: String?): String =
-    cell.orEmpty().trim().filterNot { it == '*' || it == '_' || it == '~' || it == '`' }
+private fun bareCellText(cell: String?): String = cell.orEmpty().trim().filterNot { it == '*' || it == '_' || it == '~' || it == '`' }
 
 @Composable
 internal fun RenderProgress(node: ProgressNode) {
@@ -589,9 +589,17 @@ internal fun RenderBadge(node: BadgeNode) {
 
 @Composable
 internal fun RenderStat(node: StatNode) {
+    // Tile chrome (desktop .dui-stat parity): a light container + hairline border
+    // so a KPI strip reads as tiles, not bare centered text. Material substrate,
+    // Deneb typography inside (design-system boundary).
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.widthIn(min = 72.dp),
+        modifier = Modifier
+            .widthIn(min = 72.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(6.dp))
+            .padding(horizontal = 11.dp, vertical = 9.dp),
     ) {
         // Count-up entrance: the numeric run inside the value rolls from 0 to
         // its target (600ms) while prefix/suffix ("$", "톤", "/t") stay fixed;
