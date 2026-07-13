@@ -80,7 +80,7 @@ func TestWikiBriefSection(t *testing.T) {
 // synthesis prompt verbatim, and an empty brief must add nothing.
 func TestBuildWikiSynthesisPromptIncludesBriefSection(t *testing.T) {
 	section := WikiBriefSection("ESS 안건은 반드시 프로젝트로 기록")
-	prompt := buildWikiSynthesisPrompt("index", "history", "", section, "diary")
+	prompt := buildWikiSynthesisPrompt("index", "history", "", section, "", "diary")
 	if !strings.Contains(prompt, "ESS 안건은 반드시 프로젝트로 기록") {
 		t.Error("synthesis prompt missing operator brief content")
 	}
@@ -88,7 +88,7 @@ func TestBuildWikiSynthesisPromptIncludesBriefSection(t *testing.T) {
 		t.Error("synthesis prompt missing brief section heading")
 	}
 
-	plain := buildWikiSynthesisPrompt("index", "history", "", "", "diary")
+	plain := buildWikiSynthesisPrompt("index", "history", "", "", "", "diary")
 	if strings.Contains(plain, "운영자 위키 지침") {
 		t.Error("empty brief must not inject a section")
 	}

@@ -76,6 +76,12 @@ type Store struct {
 	// atomic even if a future caller appends without writeMu.
 	logMu sync.Mutex
 
+	// recallMu serializes the recall-utility ledger (.recall-hits.jsonl):
+	// per-turn appends from the recall preflight vs. the dream cycle's
+	// aggregate-read + compaction. Independent side file, like dealMu/logMu —
+	// never held while holding another Store mutex. See recall_hits.go.
+	recallMu sync.Mutex
+
 	mu       sync.RWMutex
 	index    *Index // cached master index
 	fts      *searchDB

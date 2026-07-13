@@ -75,7 +75,85 @@ func (wd *WikiDreamer) verifyPages(ctx context.Context) []VerifyFinding {
 	// archive material, not working memory.
 	findings = append(findings, wd.detectStaleMailAnalyses()...)
 
+	// 5f: Unrecalled-cold detection (효용 접지). Old low-importance pages that
+	// never surfaced in the recall-utility ledger are candidate dead weight the
+	// dreamer created and nobody ever used. Advisory only — no auto-fix — because
+	// "not yet queried" is a weaker signal than supersession or a passed
+	// deadline; the operator decides.
+	findings = append(findings, wd.detectUnrecalled()...)
+
 	return findings
+}
+
+// unrecalledImportanceCeil caps the importance of an archive-candidate: a page
+// the dreamer marked important stays regardless of recall (it may simply not
+// have been queried yet). unrecalledFindingLimit caps how many cold pages one
+// cycle surfaces, so a large cold tail cannot drown the report.
+const (
+	unrecalledImportanceCeil = 0.5
+	unrecalledFindingLimit   = 8
+)
+
+// detectUnrecalled flags pages that are (1) older than the cold threshold, (2)
+// low-importance, (3) live (not archived/superseded), (4) outside the policy
+// categories that recall does not drive, and (5) absent from the retained
+// recall-utility ledger. These are the dreamer's writes that never earned their
+// keep. Pure computation over the ledger + page frontmatter; advisory only.
+func (wd *WikiDreamer) detectUnrecalled() []VerifyFinding {
+	relPaths, err := wd.store.ListPages("")
+	if err != nil {
+		return nil
+	}
+	// Retained ledger = the full compaction window: a page absent here is cold
+	// over the whole horizon, not merely quiet in the last 30 days.
+	recalls := wd.store.RecallHitCounts(time.Now().Add(-recallHitRetention))
+	cutoff := time.Now().AddDate(0, 0, -unrecalledColdMinDays).Format("2006-01-02")
+	var findings []VerifyFinding
+	for _, rp := range relPaths {
+		if len(findings) >= unrecalledFindingLimit {
+			break
+		}
+		rp = filepath.ToSlash(rp) // ListPages walks with the OS separator
+		// Category gate: 사용자/시스템 are policy/config, 인물 is a directory
+		// consulted by name resolution — absence of a recall hit there does not
+		// mean dead. 메일분석 has its own retention detector (5e).
+		switch categoryFromPath(rp) {
+		case "사용자", "시스템", "인물":
+			continue
+		}
+		if recalls[rp] > 0 {
+			continue
+		}
+		page, err := wd.store.ReadPage(rp)
+		if err != nil || page == nil || page.Meta.Archived || page.Meta.SupersededBy != "" {
+			continue
+		}
+		if page.Meta.Importance >= unrecalledImportanceCeil {
+			continue
+		}
+		created := strings.TrimSpace(page.Meta.Created)
+		if created == "" || created >= cutoff { // ISO dates compare lexicographically
+			continue
+		}
+		title := page.Meta.Title
+		if title == "" {
+			title = strings.TrimSuffix(filepath.Base(rp), ".md")
+		}
+		findings = append(findings, VerifyFinding{
+			Type:   "unrecalled",
+			Detail: fmt.Sprintf("장기 미회상 저중요 페이지 %q (생성 %s, 회상 0) — 아카이브 검토", title, created),
+			PageA:  rp,
+		})
+	}
+	return findings
+}
+
+// categoryFromPath returns a wiki path's category — its first path segment.
+func categoryFromPath(rp string) string {
+	if i := strings.IndexByte(rp, '/'); i > 0 {
+		return rp[:i]
+	}
+	return ""
 }
 
 // enrichRelatedLinks adds semantic `related` links to pages that currently have

@@ -55,6 +55,11 @@ type Service struct {
 	dreamer          Dreamer
 	dreamRunning     bool
 	dreamTimerCancel context.CancelFunc // independent dreaming check timer
+	// drainStreak counts consecutive near-term re-triggers issued to drain a
+	// diary backlog that overflowed the per-cycle byte cap. Reset when a cycle
+	// reports no remaining backlog; capped at maxDrainStreak so a bug that keeps
+	// reporting backlog cannot pin the dreamer to a 20s hot-loop.
+	drainStreak int
 
 	// Periodic tasks (gmail polling, etc.).
 	tasks       []PeriodicTask
@@ -375,6 +380,60 @@ func (s *Service) runDreamingAsync() {
 		)
 		s.notifyDreaming(report, nil)
 		s.emit(CycleEvent{Type: "dreaming_completed", DreamReport: report})
+
+		// Adaptive backlog drain: a cycle that hit the per-cycle input cap with
+		// more diary bytes waiting re-triggers soon instead of waiting the full
+		// interval, so a busy backlog consolidates in minutes. A cycle that
+		// drained everything resets the streak counter.
+		if report.MoreBacklog {
+			s.scheduleBacklogDrain()
+		} else {
+			s.mu.Lock()
+			s.drainStreak = 0
+			s.mu.Unlock()
+		}
+	}()
+}
+
+// drainRetriggerDelay spaces backlog-drain re-triggers: long enough for the
+// completing cycle's dreamRunning flag to reset and to avoid a tight loop, short
+// enough that a backlog clears in minutes. A var so tests can shrink it.
+// maxDrainStreak bounds the chain so a bug cannot hot-loop the dreamer.
+var drainRetriggerDelay = 20 * time.Second
+
+const maxDrainStreak = 30
+
+// scheduleBacklogDrain arms one near-term re-trigger of the dream cycle to
+// consume the next backlog chunk. Derives from svcCtx (cancels on shutdown),
+// recovers from panics, and self-caps via drainStreak so it cannot hot-loop.
+func (s *Service) scheduleBacklogDrain() {
+	s.mu.Lock()
+	if s.drainStreak >= maxDrainStreak {
+		s.logger.Warn("aurora-dream: backlog drain cap reached; waiting for normal cadence", "streak", s.drainStreak)
+		s.drainStreak = 0
+		s.mu.Unlock()
+		return
+	}
+	s.drainStreak++
+	streak := s.drainStreak
+	ctx := s.svcCtx
+	s.mu.Unlock()
+	if ctx == nil {
+		return
+	}
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("aurora-dream: backlog drain re-trigger panic", "panic", r)
+			}
+		}()
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(drainRetriggerDelay):
+		}
+		s.logger.Info("aurora-dream: draining remaining backlog", "streak", streak)
+		s.runDreamingAsync()
 	}()
 }
 

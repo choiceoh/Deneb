@@ -55,6 +55,11 @@ type diaryScanResult struct {
 	// by RunDream when a partial (salvaged) synthesis leaves tail content
 	// unconsumed, so the next cycle re-reads it.
 	PriorFiles map[string]diaryFileState
+	// MorePending is true when this scan stopped at the per-cycle byte cap with
+	// unconsumed diary bytes still on disk. The autonomous service drains that
+	// remainder with a near-term re-trigger instead of waiting the full 8h
+	// interval, so a busy backlog lands in the wiki in minutes, not days.
+	MorePending bool
 }
 
 type diaryProcessState struct {
@@ -369,10 +374,58 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 
 	heldOffsets := wd.applyDreamPartialBackpressure(cycle)
 	wd.curateDreamMemory(cycle, heldOffsets)
+	wd.scoreDreamCycle(cycle)
+	// Signal remaining backlog for a near-term drain, but NOT while backpressure
+	// holds cursors — re-running immediately would just re-consume the same
+	// damaged chunk and hot-loop. A held cycle waits for the normal cadence.
+	cycle.report.MoreBacklog = !heldOffsets && cycle.scan != nil && cycle.scan.MorePending
 	wd.persistDreamProgress(cycle, heldOffsets)
 
 	wd.completeDreamCycle(ctx, cycle)
 	return cycle.report, nil
+}
+
+// scoreDreamCycle grades this cycle's output against the recall-utility ledger
+// and records the score on the report. Runs BEFORE persistDreamProgress appends
+// the current capsule, so the utility axis judges only PRIOR cycles' pages —
+// which have had a chance to be recalled. Also compacts the ledger (maintenance)
+// so it cannot grow unbounded. Advisory: a scoring failure never fails the cycle.
+func (wd *WikiDreamer) scoreDreamCycle(cycle *dreamCycle) {
+	now := time.Now()
+	if dropped, err := wd.store.CompactRecallHits(now); err != nil {
+		cycle.addPhaseError("recall-hits-compact: %v", err)
+	} else if dropped > 0 {
+		wd.logger.Info("wiki-dream: recall-hit ledger compacted", "dropped", dropped)
+	}
+
+	var priorCapsules []processedDiaryCapsule
+	if cycle.scan != nil {
+		priorCapsules = cycle.scan.State.Recent
+	}
+	q := computeDreamQuality(dreamQualityInputs{
+		proposed:   cycle.report.WikiUpdatesProposed,
+		applied:    cycle.created + cycle.updated,
+		updates:    cycle.updates,
+		priorPaths: priorCapsules,
+		recalls:    wd.store.RecallHitScoreCounts(now),
+		now:        now,
+	})
+	cycle.report.QualityScore = q.Score
+	cycle.report.RecallHitPages = q.RecalledPages
+	if q.Signals > 0 {
+		wd.logger.Info("wiki-dream: quality",
+			"score", int(q.Score+0.5),
+			"precision", round2(q.Precision),
+			"confidence", round2(q.Confidence),
+			"utility", round2(q.Utility),
+			"recalledPages", q.RecalledPages,
+			"signals", q.Signals)
+	}
+}
+
+// round2 rounds a 0–1 axis to two decimals for tidy log lines.
+func round2(v float64) float64 {
+	return float64(int(v*100+0.5)) / 100
 }
 
 func (wd *WikiDreamer) collectDreamSources(ctx context.Context, cycle *dreamCycle) {
@@ -423,9 +476,18 @@ func (wd *WikiDreamer) synthesizeDreamCycle(ctx context.Context, cycle *dreamCyc
 		wd.finishFailedDreamSynthesis(cycle)
 		return false
 	}
+	// WikiUpdatesProposed counts what synthesis proposed, BEFORE the critique —
+	// so the quality precision axis (applied/proposed) reflects both the offline
+	// critique and the apply guards.
+	cycle.report.WikiUpdatesProposed = len(updates)
+
+	// Offline self-critique (P3): a second, cheap model pass drops proposals that
+	// duplicate the index or add no knowledge, before they reach the store.
+	updates, dropped := wd.critiqueUpdates(ctx, updates)
+	cycle.report.CritiqueDropped = dropped
+
 	cycle.updates = updates
 	cycle.partial = partial
-	cycle.report.WikiUpdatesProposed = len(updates)
 	cycle.proposal = buildDreamProposalReport(cycle.scan, updates)
 	cycle.report.WikiProposalPath = wd.dreamProposalPath()
 	if err := wd.saveDreamProposalReport(cycle.proposal); err != nil {
@@ -454,8 +516,22 @@ func (wd *WikiDreamer) applyDreamUpdates(ctx context.Context, cycle *dreamCycle)
 	}
 }
 
+// auxMinInputBytes gates the synthInput-consuming auxiliary LLM passes (open
+// loops, project digests): below this the input is a diary header plus a word or
+// two (e.g. a bare "안녕" that synthesis already discards), which cannot yield a
+// commitment or a project-status digest — so the model call is pure waste. Set
+// deliberately low so no substantive-but-short note is ever skipped; real cycles
+// carry hundreds of bytes and always pass.
+const auxMinInputBytes = 64
+
+// auxInputTooSmall reports whether synthInput is too trivial to be worth an
+// auxiliary LLM extraction pass.
+func auxInputTooSmall(synthInput string) bool {
+	return len(strings.TrimSpace(synthInput)) < auxMinInputBytes
+}
+
 func (wd *WikiDreamer) captureDreamOpenLoops(ctx context.Context, cycle *dreamCycle) {
-	if wd.openLoopSink == nil {
+	if wd.openLoopSink == nil || auxInputTooSmall(cycle.synthInput) {
 		return
 	}
 	loops, err := wd.extractOpenLoops(ctx, cycle.synthInput)
@@ -486,6 +562,9 @@ func (wd *WikiDreamer) seedDreamPersonPages(ctx context.Context, cycle *dreamCyc
 }
 
 func (wd *WikiDreamer) applyDreamProjectDigests(ctx context.Context, cycle *dreamCycle) {
+	if auxInputTooSmall(cycle.synthInput) {
+		return
+	}
 	digests, err := wd.extractProjectDigests(ctx, cycle.synthInput)
 	if err != nil {
 		cycle.addPhaseError("project-digests: %v", err)
@@ -529,6 +608,9 @@ func (wd *WikiDreamer) rebuildAndVerifyDreamWiki(ctx context.Context, cycle *dre
 	for _, finding := range findings {
 		if finding.Fix == nil {
 			cycle.report.VerifyFindings = append(cycle.report.VerifyFindings, finding.Detail)
+		}
+		if finding.Type == "unrecalled" {
+			cycle.report.UnrecalledFindings++
 		}
 	}
 	wd.logger.Info("wiki-dream: verification", "findings", len(findings), "autoApplied", applied)

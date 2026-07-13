@@ -38,6 +38,15 @@ func (s *Server) postDreamWorkfeedCard(r *autonomous.DreamReport) {
 		summary = fmt.Sprintf("일지·메모 통합 — 제안 %d건 중 %d건 반영.",
 			r.WikiUpdatesProposed, applied)
 	}
+	// Surface the cycle's self-graded quality (0 = unscored) so the operator can
+	// trend it without opening the proposal JSON — volume is already in the title,
+	// this is the OUTPUT signal (precision·confidence·recall utility).
+	if r.QualityScore > 0 {
+		summary += fmt.Sprintf(" 품질 %d/100", int(r.QualityScore+0.5))
+		if r.RecallHitPages > 0 {
+			summary += fmt.Sprintf(" · 회상활용 %d면", r.RecallHitPages)
+		}
+	}
 	if _, err := feed.Append(workfeed.Item{
 		Source:  workfeed.SourceDream,
 		Title:   title,

@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
@@ -114,6 +115,30 @@ func recallContentKey(note string) string {
 		}
 	}
 	return b.String()
+}
+
+// recordRecallUtility tees the injected wiki-page paths into the store's
+// recall-utility ledger (효용 접지). Only Kind=="wiki" rows carry a real page
+// relPath as Source (org rows may hold "조직도: 이름"); other kinds are diary/
+// transcript/file, not dreamer-managed pages, so they are not scored. Best-effort:
+// a nil store or a write error is swallowed after a single Warn — losing this
+// derived telemetry is not user-observable and self-heals next turn.
+func recordRecallUtility(store *wiki.Store, evidence []recallEvidence, logger *slog.Logger) {
+	if store == nil || len(evidence) == 0 {
+		return
+	}
+	paths := make([]string, 0, len(evidence))
+	for _, ev := range evidence {
+		if ev.Kind == "wiki" && ev.Source != "" {
+			paths = append(paths, ev.Source)
+		}
+	}
+	if len(paths) == 0 {
+		return
+	}
+	if err := store.RecordRecallHits(paths); err != nil && logger != nil {
+		logger.Warn("recall preflight: recall-hit ledger write failed", "error", err)
+	}
 }
 
 type recallEvidence struct {
@@ -261,6 +286,10 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 		logger.Info("recall preflight: evidence injected",
 			"session", params.SessionKey, "count", len(evidence), "sources", collection.sourceSummary, "truncated", truncated)
 	}
+	// 효용 접지: record which wiki pages this turn actually pulled into context so
+	// the dream cycle can learn which of its writes earn their keep (recall_hits.go).
+	// Best-effort telemetry — a ledger write must never affect the turn.
+	recordRecallUtility(deps.Wiki, evidence, logger)
 	return formatRecallEvidenceAt(evidence, deps.now()), truncated
 }
 

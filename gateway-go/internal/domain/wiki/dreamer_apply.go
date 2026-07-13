@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -192,7 +193,14 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 	// effect on the very next dream without a restart (see brief.go).
 	briefSection := WikiBriefSection(LoadWikiBrief(wd.workspaceDir))
 
-	prompt := buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, briefSection, diaryContent)
+	// 효용 접지: bias synthesis toward the pages that actually get recalled, so
+	// new facts attach to living knowledge rather than cold pages (recall_hits.go).
+	anchorSection := wd.formatRecalledAnchors(time.Now())
+
+	// Rules block is externalizable (P1 절차 외부화): re-read every cycle so a
+	// slow-loop/operator edit lands on the next dream without a restart.
+	rules := wd.loadWikiSynthesisRules()
+	prompt := buildWikiSynthesisPromptWithRules(rules, indexContent, processedHistory, polarisSection, briefSection, anchorSection, diaryContent)
 
 	resp, err := wd.client.Complete(ctx,
 		wd.llmRequest("You are a wiki knowledge base maintainer. Respond only with a JSON array.", prompt, wd.synthesisBudget()))
@@ -231,7 +239,17 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 	return updates, partial, nil
 }
 
-func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, briefSection, diaryContent string) string {
+func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, briefSection, anchorSection, diaryContent string) string {
+	return buildWikiSynthesisPromptWithRules(defaultWikiSynthesisRules,
+		indexContent, processedHistory, polarisSection, briefSection, anchorSection, diaryContent)
+}
+
+// buildWikiSynthesisPromptWithRules assembles the synthesis prompt with a
+// caller-supplied rules block. The dynamic sections (index/history/anchors/
+// diary) stay in Go; only the tunable rules text is externalizable, so a
+// slow-loop or operator can evolve the synthesis policy without a rebuild
+// (loadWikiSynthesisRules). buildWikiSynthesisPrompt passes the built-in default.
+func buildWikiSynthesisPromptWithRules(rules, indexContent, processedHistory, polarisSection, briefSection, anchorSection, diaryContent string) string {
 	return fmt.Sprintf(`당신은 위키 지식베이스 관리자입니다. 아래 일지 내용을 분석하여 위키 페이지를 생성하거나 업데이트할 지시사항을 JSON 배열로 반환하세요.
 
 ## 현재 위키 인덱스
@@ -239,11 +257,18 @@ func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, br
 
 ## 최근 처리 이력
 %s
-%s%s
+%s%s%s
 ## 새 일지 내용
 %s
 
-## 규칙
+%s`, indexContent, processedHistory, polarisSection, briefSection, anchorSection, diaryContent, rules)
+}
+
+// defaultWikiSynthesisRules is the built-in synthesis policy. An operator or the
+// slow-loop can override it per deployment with a wiki-dream-rules.md file (see
+// loadWikiSynthesisRules); the apply guards enforce structure regardless, so a
+// bad override degrades synthesis quality but cannot corrupt the store.
+const defaultWikiSynthesisRules = `## 규칙
 - 일시적인 내용(인사, 잡담)은 무시
 - 중요한 결정, 새로운 사실, 인물 정보, 프로젝트 진행 등만 위키에 반영
 - 기존 페이지가 있으면 action:"update", 없으면 action:"create"
@@ -288,7 +313,80 @@ func buildWikiSynthesisPrompt(indexContent, processedHistory, polarisSection, br
 - kinds: **프로젝트 대표페이지 전용** — 2단 고정 체계 "1차" 또는 "1차/2차" (복수 허용): 태양광(발전소 사업 — 시공·개발·인허가 포함; 2차: 토지/루프탑/수상/ESS — ESS 사업도 태양광), 기자재(2차: 모듈/인버터/케이블/기타), 풍력(2차: 육상/해상), 기타(2차: 용역/협력). 2차를 모르면 1차만, 확인되면 세분화. 어휘 밖 값은 무시됨
 - 업데이트가 불필요하면 빈 배열 [] 반환
 
-JSON 배열만 반환하세요. 다른 텍스트 없이.`, indexContent, processedHistory, polarisSection, briefSection, diaryContent)
+JSON 배열만 반환하세요. 다른 텍스트 없이.`
+
+// wikiDreamRulesFile is the optional per-deployment override for the synthesis
+// rules block, read from the workspace dir each cycle (like WIKI.md brief) so a
+// slow-loop or operator edit takes effect on the next dream without a restart.
+const wikiDreamRulesFile = "wiki-dream-rules.md"
+
+// loadWikiSynthesisRules returns the operator/slow-loop rules override when a
+// non-empty wiki-dream-rules.md exists in the workspace dir, else the built-in
+// default. Empty workspaceDir or any read error falls back to the default —
+// synthesis must never run with an empty rules block.
+func (wd *WikiDreamer) loadWikiSynthesisRules() string {
+	if wd.workspaceDir == "" {
+		return defaultWikiSynthesisRules
+	}
+	data, err := os.ReadFile(filepath.Join(wd.workspaceDir, wikiDreamRulesFile))
+	if err != nil {
+		return defaultWikiSynthesisRules
+	}
+	if trimmed := strings.TrimSpace(string(data)); trimmed != "" {
+		return trimmed
+	}
+	return defaultWikiSynthesisRules
+}
+
+// recallAnchorLimit caps how many "living" anchors the synthesis hint lists.
+const recallAnchorLimit = 8
+
+// formatRecalledAnchors renders the pages pulled into chat turns most often in
+// the score window as a synthesis hint. The dreamer should connect new facts to
+// knowledge that gets used, not spawn cold pages beside it. Empty when the
+// recall-utility ledger has nothing yet (early cycles) — the section then
+// vanishes from the prompt rather than showing a hollow header.
+func (wd *WikiDreamer) formatRecalledAnchors(now time.Time) string {
+	counts := wd.store.RecallHitScoreCounts(now)
+	if len(counts) == 0 {
+		return ""
+	}
+	type anchor struct {
+		path string
+		n    int
+	}
+	ranked := make([]anchor, 0, len(counts))
+	for p, n := range counts {
+		ranked = append(ranked, anchor{p, n})
+	}
+	sort.Slice(ranked, func(i, j int) bool {
+		if ranked[i].n != ranked[j].n {
+			return ranked[i].n > ranked[j].n
+		}
+		return ranked[i].path < ranked[j].path // stable tie-break
+	})
+	var sb strings.Builder
+	shown := 0
+	for _, a := range ranked {
+		if shown >= recallAnchorLimit {
+			break
+		}
+		page, err := wd.store.ReadPage(a.path)
+		if err != nil || page == nil || page.Meta.Archived {
+			continue // recalled path since deleted/archived — skip
+		}
+		title := page.Meta.Title
+		if title == "" {
+			title = strings.TrimSuffix(filepath.Base(a.path), ".md")
+		}
+		fmt.Fprintf(&sb, "- [[%s]] %s (회상 %d회)\n", a.path, title, a.n)
+		shown++
+	}
+	if shown == 0 {
+		return ""
+	}
+	return "\n## 자주 회상된 앵커 (실제 쓰이는 지식 — 새 사실을 여기에 연결하고 중복 생성 대신 갱신하라)\n" +
+		strings.TrimRight(sb.String(), "\n") + "\n"
 }
 
 // newPageFromUpdate stamps a fresh Page with the meta carried by a wikiUpdate:
