@@ -1,5 +1,30 @@
 # Changelog
 
+## [4.102.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.101.0...deneb-v4.102.0) (2026-07-13)
+
+
+### ✨ Features
+
+* **genesis:** 졸업 잠금 해제를 루프에 위임 — 증거 게이트 자동 실행 + 재잠금 비토 (오퍼레이터 지시 2026-07-14) ([#3626](https://github.com/choiceoh/Deneb/issues/3626)) ([fc067fc](https://github.com/choiceoh/Deneb/commit/fc067fc7fbc519aa23f523fe223c1bea956e497c))
+
+
+### 🐛 Bug Fixes
+
+* **deploy:** keep rollback watcher alive under systemd ([#3630](https://github.com/choiceoh/Deneb/issues/3630)) ([13fafe5](https://github.com/choiceoh/Deneb/commit/13fafe58d151d8bfebcd3559c309228c24a96b03))
+* **deploy:** reject stale watcher acknowledgements ([#3631](https://github.com/choiceoh/Deneb/issues/3631)) ([d301257](https://github.com/choiceoh/Deneb/commit/d3012571033819f15eb0e7f691f28e8f6f5f7128))
+* **genesis:** RSI 3차 적대적 리뷰 후속 — 이전 수정의 잔존 결함 교정 ([#3633](https://github.com/choiceoh/Deneb/issues/3633)) ([913f586](https://github.com/choiceoh/Deneb/commit/913f5869357f8830e26c4d44ec7d643577b199e5))
+* **genesis:** RSI 코드 수준 평가 + 발견 전량 수정 (C1·C2·H1–H5·M2–M7) ([#3625](https://github.com/choiceoh/Deneb/issues/3625)) ([1983a24](https://github.com/choiceoh/Deneb/commit/1983a24db4d10b222719d5eae3c7c1c608c66254))
+* **jsonlstore:** 오버사이즈 라인 skip — 손상 라인 하나가 스캔 전체를 죽이지 않게 ([#3637](https://github.com/choiceoh/Deneb/issues/3637)) ([bba9511](https://github.com/choiceoh/Deneb/commit/bba95114d7d27b9cac03223200969a20860ebf14))
+* **rsi:** classify instant dispatch failures as environment errors ([#3632](https://github.com/choiceoh/Deneb/issues/3632)) ([50854b9](https://github.com/choiceoh/Deneb/commit/50854b9a02afa6b5a1613a0d02f4ba2bafc2be34))
+* **rsi:** dispatch source improvements through Codex ([#3636](https://github.com/choiceoh/Deneb/issues/3636)) ([7f424b3](https://github.com/choiceoh/Deneb/commit/7f424b357253fea25358f1dfc2ab9c76750c3b9a))
+* **rsi:** harden closed-loop delivery and dispatch ([#3628](https://github.com/choiceoh/Deneb/issues/3628)) ([cd74b65](https://github.com/choiceoh/Deneb/commit/cd74b65dba71259be0f538d814972095aa1e28a6))
+* **rsi:** resolve Codex in systemd user services ([#3638](https://github.com/choiceoh/Deneb/issues/3638)) ([5c6affb](https://github.com/choiceoh/Deneb/commit/5c6affbc0053f4104e87112763ef596681c8a716))
+
+
+### 🔧 Internal
+
+* **chat:** split tool context contracts ([#3639](https://github.com/choiceoh/Deneb/issues/3639)) ([b3649f9](https://github.com/choiceoh/Deneb/commit/b3649f956780d17f80eeca0c53ff95c4c6af17d4))
+
 ## [4.101.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.100.0...deneb-v4.101.0) (2026-07-13)
 
 
