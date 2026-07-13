@@ -7,6 +7,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from coding_dispatch_executor import (
     TIMEOUT_EXIT,
@@ -31,6 +32,18 @@ class CodingDispatchExecutorTest(unittest.TestCase):
             self.assertIsNone(resolve_codex(str(path)))
             path.chmod(path.stat().st_mode | stat.S_IXUSR)
             self.assertEqual(resolve_codex(str(path)), str(path))
+
+    def test_standard_user_install_works_with_minimal_service_path(self):
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            codex = home / ".local" / "bin" / "codex"
+            codex.parent.mkdir(parents=True)
+            fake_executable(codex, "exit 0\n")
+            with (
+                mock.patch("coding_dispatch_executor.shutil.which", return_value=None),
+                mock.patch("coding_dispatch_executor.Path.home", return_value=home),
+            ):
+                self.assertEqual(resolve_codex(), str(codex))
 
     def test_command_limits_writes_and_reads_prompt_from_stdin(self):
         cmd = build_command("/bin/codex", Path("/worktree"), Path("/prod"))

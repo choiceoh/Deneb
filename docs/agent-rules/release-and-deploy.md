@@ -66,6 +66,7 @@ cat > ~/.config/systemd/user/deneb-coding-dispatch.service <<'UNIT'
 Description=Deneb RSI L4 coding dispatch (self-correction queue -> Codex headless)
 [Service]
 Type=oneshot
+Environment=DENEB_DISPATCH_CODEX_BIN=%h/.local/bin/codex
 ExecStart=%h/deneb/scripts/dev/coding-dispatch.sh
 UNIT
 cat > ~/.config/systemd/user/deneb-coding-dispatch.timer <<'UNIT'
