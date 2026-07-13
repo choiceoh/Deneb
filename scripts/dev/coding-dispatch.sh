@@ -78,10 +78,11 @@ main() {
         done
     fi
 
-    # Daily cap: markers created today.
+    # Daily cap: markers created today (UTC — matches rsi_status.go /
+    # scripts/audit/rsi_status.py so "오늘 배차" and the cap share a day boundary).
     local today spent
-    today=$(date +%Y-%m-%d)
-    spent=$(find "$DISPATCH_DIR" -name "*.json" -newermt "$today" 2>/dev/null | wc -l)
+    today=$(date -u +%Y-%m-%d)
+    spent=$(find "$DISPATCH_DIR" -name "*.json" -newermt "$today UTC" 2>/dev/null | wc -l)
     if (( spent >= DAILY_CAP )); then
         exit 0
     fi
@@ -159,7 +160,22 @@ PYEOF
     local wt="$WORKTREE_ROOT/dispatch-$cid"
     mkdir -p "$WORKTREE_ROOT"
     if [[ ! -d "$wt" ]]; then
-        if ! git -C "$PROD_DIR" worktree add "$wt" -b "dispatch/$cid" origin/main >>"$LOG_FILE" 2>&1; then
+        # Orphan-branch recovery: a prior crash can leave refs/heads/dispatch/$cid
+        # without a worktree. `worktree add -b` then fails forever on the same
+        # head-of-queue candidate (observed 2026-07-13: sc-1783840100484-4c2c454a
+        # blocked the whole L4 drain). Attach the existing branch when present;
+        # if that fails, drop the stale ref and recreate from origin/main.
+        local branch="dispatch/$cid"
+        if git -C "$PROD_DIR" show-ref --verify --quiet "refs/heads/$branch"; then
+            if ! git -C "$PROD_DIR" worktree add "$wt" "$branch" >>"$LOG_FILE" 2>&1; then
+                log "stale dispatch branch $branch — recreating worktree"
+                git -C "$PROD_DIR" branch -D "$branch" >>"$LOG_FILE" 2>&1 || true
+                if ! git -C "$PROD_DIR" worktree add "$wt" -b "$branch" origin/main >>"$LOG_FILE" 2>&1; then
+                    log "worktree creation failed for $cid after branch reset"
+                    exit 0
+                fi
+            fi
+        elif ! git -C "$PROD_DIR" worktree add "$wt" -b "$branch" origin/main >>"$LOG_FILE" 2>&1; then
             log "worktree creation failed for $cid"
             exit 0
         fi

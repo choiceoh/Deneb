@@ -452,8 +452,18 @@ export function RsiPane() {
     void callRpc<SkillsLifecycleResponse>(cfg, RSI_RPC.lifecycle, { limit: 12 })
       .then((d) => setLifecycle(d.events ?? []))
       .catch(() => setLifecycle([]));
-    void callRpc<SelfImprovementCodingListResponse>(cfg, RSI_RPC.coding, { limit: 8, status: "proposed" })
-      .then((d) => setCandidates(d.candidates ?? []))
+    void callRpc<SelfImprovementCodingListResponse>(cfg, RSI_RPC.coding, { limit: 24, status: "all" })
+      .then((d) => {
+        // Pending dispatch supply = proposed + accepted (coding-dispatch picks both).
+        // Filtering to proposed alone hid the entire accepted L4 backlog
+        // (observed 2026-07-13: 7 accepted health-finding candidates, drill empty).
+        const pending = (d.candidates ?? []).filter(
+          (c) =>
+            (c.status === "proposed" || c.status === "accepted") &&
+            (!c.scope || c.scope === "code"),
+        );
+        setCandidates(pending.slice(0, 8));
+      })
       .catch(() => setCandidates([]));
   }, [cfg, connected]);
 

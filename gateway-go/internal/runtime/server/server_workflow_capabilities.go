@@ -118,13 +118,14 @@ func (s *Server) registerHeartbeatWorkflowTasks(homeDir string) {
 			runtimeheartbeat.TodoDeadlineCollector(),
 			runtimeheartbeat.DealDeadlineSignalCollector(func() *wiki.Store { return s.wikiStore }),
 		),
-		SignalConfig:        autonomous.SignalConfigForThreshold(configresolve.ProactiveEscalateThreshold(s.logger)),
-		ProposedSelfCoding:  s.proposedSelfCodingFingerprint,
-		PromoteRecurrences:  s.promoteSelfCodingRecurrences,
-		PromoteClusters:     s.promoteSelfCodingClusters,
-		SelfImproveSignals:  s.selfCodingFunnelSignals,
-		SelfImproveEvidence: s.selfCodingFailureEvidence,
-		IdleSkillReview:     s.idleSkillReviewLaneIfProduction(homeDir),
+		SignalConfig:              autonomous.SignalConfigForThreshold(configresolve.ProactiveEscalateThreshold(s.logger)),
+		ProposedSelfCoding:        s.proposedSelfCodingFingerprint,
+		DispatchBacklogSelfCoding: s.dispatchBacklogSelfCodingCount,
+		PromoteRecurrences:        s.promoteSelfCodingRecurrences,
+		PromoteClusters:           s.promoteSelfCodingClusters,
+		SelfImproveSignals:        s.selfCodingFunnelSignals,
+		SelfImproveEvidence:       s.selfCodingFailureEvidence,
+		IdleSkillReview:           s.idleSkillReviewLaneIfProduction(homeDir),
 	}))
 }
 
@@ -144,6 +145,31 @@ func (s *Server) proposedSelfCodingFingerprint() (int, string) {
 		}
 	}
 	return len(recs), fmt.Sprintf("%d:%s:%d", len(recs), newest.ID, newest.UpdatedAt)
+}
+
+// dispatchBacklogSelfCodingCount counts accepted, dispatchable code candidates
+// waiting for coding-dispatch.sh. Used to suppress the generator sweep while
+// the consumer lane is backed up (proposed is handled separately).
+func (s *Server) dispatchBacklogSelfCodingCount() int {
+	tracker := s.genesisTracker
+	if tracker == nil {
+		return 0
+	}
+	recs, err := tracker.RecentSelfCorrectionCandidates("", genesis.SelfCorrectionStatusAccepted, 100)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, rec := range recs {
+		if rec.Scope != "code" {
+			continue
+		}
+		if !genesis.SourceAutoDispatches(rec.Source) {
+			continue
+		}
+		n++
+	}
+	return n
 }
 
 func (s *Server) promoteSelfCodingRecurrences() (int, error) {
