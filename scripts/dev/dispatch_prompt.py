@@ -67,6 +67,11 @@ FORBIDDEN_SURFACE_BASENAMES = (
     "coding-dispatch.sh",
     "dispatch_prompt.py",
     "dispatch_outcome.py",
+    # The landing tool and CI gate are the highest-value acceptance-script
+    # targets. Boundary-aware matching (below) makes them safe to guard in
+    # prose without false-positiving the words "PR" or "CI" (3rd-review C2-C2).
+    "pr.sh",
+    "ci.yml",
     "prompt_cache.go",
     "cache_breakpoints.go",
     "tier1_cache.go",
@@ -75,10 +80,25 @@ FORBIDDEN_SURFACE_BASENAMES = (
     "codeql.yml",
 )
 
+# A basename must appear as a whole PATH COMPONENT, not an arbitrary substring:
+# a bare `name in blob` flagged "eprocess.go" inside the real, unrelated file
+# `web_html_preprocess.go` (…pr[eprocess.go]) and wedged it out of the L4 lane
+# (3rd-review C2-C1). Bound it with negative lookarounds: the name may not be
+# preceded by a filename-body char (so "preprocess" 's "r" blocks it, while
+# "/", space, quote, or start is fine) nor followed by one (so "pr.shell" does
+# not match "pr.sh"). A trailing "." / "/" (sentence period, dir slash) is OK.
+import re as _re
+
+_FORBIDDEN_RE = _re.compile(
+    r"(?<![A-Za-z0-9._-])(" + "|".join(_re.escape(n) for n in FORBIDDEN_SURFACE_BASENAMES)
+    + r")(?![A-Za-z0-9_-])",
+    _re.IGNORECASE,
+)
+
 
 def forbidden_surface_mentions(candidate: dict) -> list[str]:
-    """Forbidden-surface basenames mentioned anywhere in the candidate's
-    free text or structured targets (case-insensitive)."""
+    """Forbidden-surface basenames mentioned as a whole path component in the
+    candidate's free text or structured targets (case-insensitive)."""
     fields = [
         str(candidate.get(k, ""))
         for k in ("title", "skillName", "candidate", "proposedChange", "evidence", "risk")
@@ -86,8 +106,10 @@ def forbidden_surface_mentions(candidate: dict) -> list[str]:
     targets = candidate.get("targetFiles")
     if isinstance(targets, list):
         fields.extend(str(x) for x in targets)
-    blob = "\n".join(fields).lower()
-    return [name for name in FORBIDDEN_SURFACE_BASENAMES if name in blob]
+    blob = "\n".join(fields)
+    hits = {m.group(1).lower() for m in _FORBIDDEN_RE.finditer(blob)}
+    # Preserve declaration order for stable, testable output.
+    return [name for name in FORBIDDEN_SURFACE_BASENAMES if name in hits]
 
 
 def resolve_contract(meta_dir: Path) -> tuple[str, str] | None:
