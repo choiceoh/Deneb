@@ -76,6 +76,9 @@ describe("Workstation (connected, fixtures)", () => {
     await userEvent.click(within(nav).getByRole("button", { name: /할일/ }));
     expect(await screen.findByRole("button", { name: /새 할일/ })).toBeInTheDocument();
 
+    // 패널은 기본 접힘 — 우측 탭으로 먼저 연다.
+    await userEvent.click(screen.getByRole("button", { name: "Deneb 패널 열기" }));
+
     // Widen the Deneb panel → the center work pane is unmounted.
     await userEvent.click(screen.getByRole("button", { name: "패널 넓히기" }));
     expect(screen.queryByRole("button", { name: /새 할일/ })).not.toBeInTheDocument();
@@ -93,7 +96,10 @@ describe("Workstation (connected, fixtures)", () => {
     const nav = screen.getByRole("navigation");
     await userEvent.click(within(nav).getByRole("button", { name: /할일/ }));
 
-    // The side panel is visible → collapse it; its expand toggle disappears and a
+    // 패널은 기본 접힘 — 우측 탭으로 연 뒤 접기·재열기 동작을 검증한다.
+    await userEvent.click(await screen.findByRole("button", { name: "Deneb 패널 열기" }));
+
+    // The side panel is now visible → collapse it; its expand toggle disappears and a
     // reopen tab takes its place.
     await userEvent.click(await screen.findByRole("button", { name: "Deneb 패널 접기" }));
     expect(screen.queryByRole("button", { name: "패널 넓히기" })).not.toBeInTheDocument();

@@ -31,7 +31,8 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
   // 우측 데네브 패널 접기 — 위키처럼 본문을 넓게 보고 싶을 때 패널을 완전히 숨긴다. 숨기면
   // 작업 pane이 전 폭을 차지하고, 우측 가장자리의 작은 탭으로 다시 연다. (노트북 하단 채팅
   // 모드에는 적용하지 않는다 — 거기선 채팅이 하단에 도킹돼 있다.)
-  const [aiCollapsed, setAiCollapsed] = useState(false);
+  // 기본은 접힘 — 작업 영역을 넓게 두고, 필요할 때 우측 탭으로 데네브 패널을 연다.
+  const [aiCollapsed, setAiCollapsed] = useState(true);
 
   // 파일 pane은 첫 방문 이후 계속 마운트 유지(열린 탭·미저장 편집을 pane 전환에도 보존).
   // 방문 전엔 렌더하지 않아 불필요한 프리페치·DOM 중복을 피한다.

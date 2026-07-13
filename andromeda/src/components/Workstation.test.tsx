@@ -110,6 +110,13 @@ function renderWorkstation(value = workspace(), gateway = cfg) {
   );
 }
 
+// 우측 데네브 패널은 기본 접힘 — 열림 상태 동작을 검증하는 테스트는 먼저 우측 탭으로 연다.
+async function renderWithPanelOpen(value = workspace()) {
+  const result = renderWorkstation(value);
+  await userEvent.click(screen.getByRole("button", { name: "Deneb 패널 열기" }));
+  return result;
+}
+
 beforeEach(() => vi.clearAllMocks());
 
 describe("Workstation composition", () => {
@@ -119,8 +126,10 @@ describe("Workstation composition", () => {
     expect(screen.getByRole("navigation", { name: "test sidebar" })).toBeInTheDocument();
     expect(screen.getByText("today pane")).toBeInTheDocument();
     expect(screen.getByTestId("chat-view")).toHaveAttribute("data-hidden", "true");
-    expect(screen.getByTestId("ai-panel")).toHaveAttribute("data-hidden", "false");
+    // 우측 데네브 패널은 기본 접힘 — 숨겨진 채 마운트되고 우측 탭으로 연다.
+    expect(screen.getByTestId("ai-panel")).toHaveAttribute("data-hidden", "true");
     expect(screen.getByTestId("ai-panel")).toHaveAttribute("data-placement", "side");
+    expect(screen.getByRole("button", { name: "Deneb 패널 열기" })).toBeInTheDocument();
   });
 
   it("starts native catch-up sync with the current gateway state", () => {
@@ -172,7 +181,7 @@ describe("Workstation composition", () => {
 
 describe("Workstation AI panel controls", () => {
   it("expands AI and hides the work pane", async () => {
-    renderWorkstation();
+    await renderWithPanelOpen();
     expect(screen.getByText("today pane")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "toggle expand" }));
@@ -182,7 +191,7 @@ describe("Workstation AI panel controls", () => {
   });
 
   it("restores the work pane after narrowing AI", async () => {
-    renderWorkstation();
+    await renderWithPanelOpen();
     await userEvent.click(screen.getByRole("button", { name: "toggle expand" }));
     await userEvent.click(screen.getByRole("button", { name: "toggle expand" }));
     expect(screen.getByText("today pane")).toBeInTheDocument();
@@ -190,7 +199,7 @@ describe("Workstation AI panel controls", () => {
   });
 
   it("collapses side AI while leaving the work pane full-width", async () => {
-    renderWorkstation();
+    await renderWithPanelOpen();
 
     await userEvent.click(screen.getByRole("button", { name: "collapse AI" }));
 
@@ -200,7 +209,7 @@ describe("Workstation AI panel controls", () => {
   });
 
   it("reopens a collapsed AI panel", async () => {
-    renderWorkstation();
+    await renderWithPanelOpen();
     await userEvent.click(screen.getByRole("button", { name: "collapse AI" }));
     await userEvent.click(screen.getByRole("button", { name: "Deneb 패널 열기" }));
     expect(screen.getByTestId("ai-panel")).toHaveAttribute("data-hidden", "false");
@@ -208,7 +217,7 @@ describe("Workstation AI panel controls", () => {
   });
 
   it("collapsing an expanded panel resets expansion", async () => {
-    renderWorkstation();
+    await renderWithPanelOpen();
     await userEvent.click(screen.getByRole("button", { name: "toggle expand" }));
     // Expanded AIPanel intentionally has no collapse button; narrow first, then collapse.
     await userEvent.click(screen.getByRole("button", { name: "toggle expand" }));
@@ -310,7 +319,7 @@ describe("Workstation persistent files pane", () => {
   });
 
   it("hides files while AI is expanded without unmounting it", async () => {
-    renderWorkstation(workspace({ view: "files" }));
+    await renderWithPanelOpen(workspace({ view: "files" }));
     await userEvent.click(screen.getByRole("button", { name: "toggle expand" }));
     expect(screen.getByTestId("files-pane")).toBeInTheDocument();
     expect(screen.getByTestId("files-pane").closest("main")).toHaveStyle({ display: "none" });
