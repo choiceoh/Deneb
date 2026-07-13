@@ -4345,35 +4345,19 @@ button.mail-attachment {
   gap: 7px;
   padding: 3px 0;
 }
-.dui-bar-row {
-  display: grid;
-  grid-template-columns: minmax(64px, 88px) minmax(80px, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-}
-.dui-bar-label {
-  min-width: 0;
-  color: var(--ink-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.dui-bar-track {
-  min-width: 0;
-  height: 10px;
-  background: var(--panel-sunken);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.dui-bar-fill {
+/* bar chart (default / type="bar") — vertical SVG columns, native-canvas parity:
+   value labels sit above each column, category labels below (.dui-line-axis). */
+.dui-bar-svg {
+  width: 100%;
+  height: 92px;
   display: block;
-  height: 100%;
-  background: var(--accent);
-  border-radius: 999px;
 }
-.dui-bar-val {
-  color: var(--muted-2);
+.dui-bar-rect {
+  fill: var(--accent);
+}
+.dui-bar-svg-val {
+  fill: var(--ink-2);
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 /* line chart (chart type="line") — SVG polyline + dots + per-point values */
@@ -4633,7 +4617,7 @@ button.mail-attachment {
    line trims along its length (pathLength=1 normalizes the dash units). */
 @keyframes dui-bar-grow {
   from {
-    width: 0;
+    transform: scaleY(0);
   }
 }
 @keyframes dui-line-draw {
@@ -4646,7 +4630,9 @@ button.mail-attachment {
   .dui > .dui-card {
     animation: dui-rise 0.3s var(--ease) backwards;
   }
-  .dui-bar-fill {
+  .dui-bar-rect {
+    transform-box: fill-box;
+    transform-origin: bottom;
     animation: dui-bar-grow 0.5s var(--ease);
   }
   .dui-line-path {

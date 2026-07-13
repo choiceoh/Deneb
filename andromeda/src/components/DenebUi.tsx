@@ -610,18 +610,57 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
             </div>
           );
         }
+        // Vertical bar (column) chart — SVG parity with the native canvas:
+        // columns from a zero baseline, value labels above each bar, x-axis
+        // labels below. The old horizontal CSS bars read structurally different
+        // from the phone's vertical columns for the same card.
+        const W = 320;
+        const H = 92;
+        const PAD = 10;
+        const plotBottom = H - PAD;
+        const plotTop = PAD + 12; // headroom for the value labels above the bars
+        const plotH = plotBottom - plotTop;
+        const count = nums.length;
+        const gap = count > 0 ? Math.max(4, (W - 2 * PAD) * 0.04) : 0;
+        const barW = count > 0 ? Math.max(1, (W - 2 * PAD - gap * (count + 1)) / count) : 0;
+        const barX = (i: number) => PAD + gap + i * (barW + gap);
+        // Zero is a real claim → no bar (the value label still says 0); positive
+        // values get a 2px legibility floor. Scaled from the real series max.
+        const barH = (v: number) => (v > 0 ? Math.max(2, (v / max) * plotH) : 0);
+        const summary = nums.map((v, i) => `${labels[i] ?? i + 1} ${v}`).join(", ");
         return (
           <div key={key} className="dui-chart">
             {n.label ? <div className="dui-stat-label">{String(n.label)}</div> : null}
-            {labels.map((l, i) => (
-              <div key={i} className="dui-bar-row">
-                <span className="dui-bar-label">{String(l)}</span>
-                <span className="dui-bar-track">
-                  <span className="dui-bar-fill" style={{ width: `${((Number(values[i]) || 0) / max) * 100}%` }} />
-                </span>
-                <span className="dui-bar-val">{String(values[i] ?? "")}</span>
+            <svg
+              className="dui-bar-svg"
+              viewBox={`0 0 ${W} ${H}`}
+              preserveAspectRatio="none"
+              role="img"
+              aria-label={`${String(n.label ?? "bar chart")}: ${summary}`}
+            >
+              <line className="dui-line-grid" x1={0} y1={plotBottom} x2={W} y2={plotBottom} />
+              {nums.map((v, i) => {
+                const h = barH(v);
+                const cx = barX(i) + barW / 2;
+                return (
+                  <g key={i}>
+                    {h > 0 ? (
+                      <rect className="dui-bar-rect" x={barX(i)} y={plotBottom - h} width={barW} height={h} rx={3} />
+                    ) : null}
+                    <text className="dui-bar-svg-val" x={cx} y={plotBottom - h - 3} textAnchor="middle">
+                      {String(values[i] ?? "")}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+            {labels.length > 0 ? (
+              <div className="dui-line-axis">
+                {labels.map((l, i) => (
+                  <span key={i}>{String(l)}</span>
+                ))}
               </div>
-            ))}
+            ) : null}
           </div>
         );
       }
