@@ -312,7 +312,10 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 		// follow-up turns in client:main still have the full analysis in context.
 		// A body whose title can't be derived falls back to plain prose delivery.
 		transcriptBody := deliverBody
-		if opts.collapse {
+		// A producer-authored deneb-ui card is already the compact presentation —
+		// wrapping it in the accordion would backtick-escape the fence into
+		// literal text. Deliver card-first bodies as-is.
+		if opts.collapse && !startsWithDenebUIFence(deliverBody) {
 			if title, titleLine := extractCardTitle(content); strings.TrimSpace(title) != "" {
 				transcriptBody = denebui.CollapsedReportFence(title, collapsedReportBody(deliverBody, title, titleLine))
 			}
@@ -510,6 +513,19 @@ func (d proactiveRelayDeps) publishDeliverable(content string) (bool, error) {
 // PublishDeliverable files a substantial interactive response in the work feed.
 func (d proactiveRelayDeps) PublishDeliverable(content string) (bool, error) {
 	return d.publishDeliverable(content)
+}
+
+// startsWithDenebUIFence reports whether the body opens with a deneb-ui code
+// fence. Mirrors the parser's tolerance (case-insensitive info string,
+// whitespace after the backticks) so a valid card never gets accordion-wrapped
+// into escaped literal text.
+func startsWithDenebUIFence(body string) bool {
+	t := strings.TrimSpace(body)
+	if !strings.HasPrefix(t, "```") {
+		return false
+	}
+	t = strings.TrimLeft(t[3:], "` \t")
+	return len(t) >= len(denebui.FenceInfo) && strings.EqualFold(t[:len(denebui.FenceInfo)], denebui.FenceInfo)
 }
 
 // collapsedReportBody returns content with its leading title line removed when

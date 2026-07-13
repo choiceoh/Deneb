@@ -581,3 +581,46 @@ func TestRelayCollapsed(t *testing.T) {
 		}
 	})
 }
+
+// A producer-authored deneb-ui card body must bypass the accordion wrap on the
+// collapse path — wrapping would backtick-escape the fence into literal text.
+func TestRelayCollapsed_CardBodyBypassesAccordion(t *testing.T) {
+	card := "```deneb-ui\n<column><card><row><icon name=\"mail\" size=\"16\"/><text style=\"caption\">메일 분석</text></row><text>핵심 결론</text></card></column>\n```\n\n상세 산문."
+	store := newRecordingTranscriptStore()
+	// No workFeed wired → the transcript (accordion-eligible) path is exercised.
+	d := proactiveRelayDeps{transcriptStore: store}
+	delivered, err := d.relayCollapsed(context.Background(), "ignored", card)
+	if err != nil || !delivered {
+		t.Fatalf("relayCollapsed: delivered=%v err=%v", delivered, err)
+	}
+	appends := store.appends[nativeWorkSessionKey]
+	if len(appends) != 1 {
+		t.Fatalf("want 1 transcript append, got %d", len(appends))
+	}
+	got := appends[0].TextContent()
+	if strings.Contains(got, "<accordion") || strings.Contains(got, "&#96;") {
+		t.Fatalf("card body was accordion-wrapped/escaped:\n%s", got)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(got), "```deneb-ui") {
+		t.Fatalf("card fence must survive verbatim:\n%s", got)
+	}
+}
+
+// The bypass mirrors the parser's fence tolerance: case-insensitive info
+// string and whitespace after the backticks must also bypass the accordion.
+func TestStartsWithDenebUIFence(t *testing.T) {
+	for _, ok := range []string{
+		"```deneb-ui\n<column/>\n```",
+		"```  Deneb-UI\n<column/>\n```",
+		"  ```DENEB-UI\n<column/>\n```",
+	} {
+		if !startsWithDenebUIFence(ok) {
+			t.Fatalf("must detect fence: %q", ok)
+		}
+	}
+	for _, no := range []string{"산문 보고", "```go\ncode\n```", "``` denebui\n```"} {
+		if startsWithDenebUIFence(no) {
+			t.Fatalf("false positive: %q", no)
+		}
+	}
+}

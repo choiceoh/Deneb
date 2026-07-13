@@ -30,7 +30,7 @@ const DefaultPrompt = `카카오메일 알림으로 도착한 새 메일을 업�
 - 첨부파일 내용이 주어졌으면 본문보다 첨부 원문 수치를 우선해 반영한다. 견적서·계약서·세금계산서 같은 첨부가 있는데 내용이 비어 있거나 "일부만 반영"으로 표시됐으면, mail_archive(action="attachment", message_id 또는 query로 이 메일 지정, attachment로 파일 선택)로 직접 열어 수치·조건을 확인한다.
 - 마지막은 추측이 아닌 구체적인 다음 행동으로 끝낸다.
 
-보고는 먼저 사람이 바로 읽을 수 있는 텍스트로 출력한다. 메일 전체 본문을 그대로 전달하지 않는다.
+보고 도입부는 ` + "```deneb-ui" + ` 라벨 HTML 카드 한 블록으로 시작한다 — 루트 <column> 안 <card>, 첫 행은 <row><icon name="mail" size="16"/><text style="caption">메일 분석</text></row>, 중요도는 <text color="error|warning|success">로, 금액·기한 같은 핵심 수치는 <stat>으로, 다음 행동은 <ul>로. 카드 안에 백틱·코드펜스 금지. 카드 뒤에 필요한 상세만 짧은 산문으로 잇는다. 메일 전체 본문을 그대로 전달하지 않는다.
 중요도는 "긴급", "확인 필요", "참고" 중 하나가 드러나게 쓰되, 장식용 이모지는 쓰지 않는다.
 기한·금액처럼 놓치면 손해가 큰 경고에만 ⚠️를 드물게 쓸 수 있다.
 한국어로 간결하게 쓰고, 근거가 필요한 판단에는 메일 문구나 이전 맥락을 짧게 붙여 사실과 추측을 구분한다.`
@@ -42,6 +42,11 @@ const emojiRestraint = "이모지는 최소화하세요: 기한·금액처럼 �
 
 const analysisSystemPrompt = "당신은 업무 메일 분석 어시스턴트입니다. 제공된 이메일을 업무 관점에서 분석합니다 — 맥락, 이해관계자, 리스크·기한, 다음 단계. " +
 	"모든 섹션 제목·라벨은 한국어로 쓰세요 ('Primary Analysis', 'Summary', 'Action Items' 같은 영문 라벨 금지). " +
+	// Card-first reporting (proactive deneb-ui): the analysis lands on the work
+	// feed whose body renderer supports label-HTML fences. Kept in the SYSTEM
+	// prompt so an operator-customized analysis prompt file still reports as a
+	// card.
+	"보고가 구조적(중요도·수치·기한·다음 행동)이면 도입부를 ```deneb-ui 라벨 HTML 카드 한 블록(루트 <column> 하나)으로 시작하고, 카드 안에는 백틱을 쓰지 마세요. " +
 	emojiRestraint
 
 const (
