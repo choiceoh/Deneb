@@ -140,7 +140,10 @@ function LayerCard({
           header="판정자 공진화 현황"
           emptyText="판정 데이터 없음"
           rows={[
-            ["오수용률", `${pct(health.falseAcceptRate)} (표본 ${health.resolvedEvolves7d ?? 0})`],
+            [
+              "오수용률",
+              `${(health.resolvedEvolves7d ?? 0) > 0 ? pct(health.falseAcceptRate) : "—"} (표본 ${health.resolvedEvolves7d ?? 0})`,
+            ],
             ["롤백", `${health.rolledBack7d ?? 0}건 (7일)`],
           ]}
         />
@@ -165,12 +168,20 @@ function RsiCandidateDrill({
       {candidates.length === 0 ? (
         <div style={{ fontSize: 12, color: color.muted }}>대기 중인 코딩 후보 없음</div>
       ) : (
-        candidates.slice(0, 6).map((c) => {
+        candidates.slice(0, 6).map((c, i) => {
           const src = sourceLabel(c.source);
           return (
             <div
-              key={c.id}
+              key={c.id ?? `cand-${i}`}
+              role="button"
+              tabIndex={0}
               onClick={() => onOpen(c)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onOpen(c);
+                }
+              }}
               style={{
                 display: "flex",
                 flexWrap: "wrap",
@@ -335,16 +346,25 @@ function Chip({ text, accent }: { text: string; accent?: boolean }) {
 // happened (the layer cards already say IDLE). Self-brake flags surface as warm
 // accent chips.
 function HealthCard({ health }: { health: RSIHealthView }) {
+  // Outcome-only weeks matter too: an evolve confirmed / rolled back this window
+  // (resolvedEvolves7d) is activity even when no new evolve/genesis started.
+  const resolved = health.resolvedEvolves7d ?? 0;
   const active =
     (health.evolves7d ?? 0) > 0 ||
     (health.genesis7d ?? 0) > 0 ||
     (health.metaRevisions7d ?? 0) > 0 ||
+    (health.confirmed7d ?? 0) > 0 ||
+    (health.rolledBack7d ?? 0) > 0 ||
+    resolved > 0 ||
     !!health.thrash ||
     !!health.autoAdoptFrozen;
   if (!active) return null;
+  // Rates are undefined with no resolved sample — show "—", not a misleading 0%
+  // that reads as a failed confirmation while activity is still pending.
+  const rate = (v?: number) => (resolved > 0 ? pct(v) : "—");
   const stats: Array<[string, string, string?]> = [
-    ["확정률", pct(health.confirmRate)],
-    ["오수용률", pct(health.falseAcceptRate), `n=${health.resolvedEvolves7d ?? 0}`],
+    ["확정률", rate(health.confirmRate)],
+    ["오수용률", rate(health.falseAcceptRate), `n=${resolved}`],
     ["진화", String(health.evolves7d ?? 0)],
     ["확정", String(health.confirmed7d ?? 0)],
     ["롤백", String(health.rolledBack7d ?? 0)],
