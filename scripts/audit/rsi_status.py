@@ -51,6 +51,10 @@ DAY_MS = 24 * 60 * 60 * 1000
 # windowed count would starve the evidence at organic cadence.
 EPROCESS_CUTOVER_MIN_LABELS = 20
 EPROCESS_CUTOVER_MIN_AGREEMENT = 0.90
+# >=1 fair ROLLBACK label required so cutover-ready can't false-green on a
+# pure-confirm population (agreement ~1.0 by construction) — mirrors Go
+# eProcessCutoverMinFairRollbacks (RSI 3rd-review C1-D1).
+EPROCESS_CUTOVER_MIN_FAIR_ROLLBACKS = 1
 
 # Organic false-accept mining window (must match judge_accuracy.go): rollbacks
 # are scarce at organic cadence, so real-usage P3 labels use a 30d window.
@@ -139,11 +143,19 @@ def _auto_adopt_frozen(path: str) -> bool:
 
     Mirrors genesis.Tracker.AutoAdoptFrozen: the path is JSONL (despite the
     .json suffix), and an unfreeze row (frozen:false) clears the brake.
+
+    Fails CLOSED like the Go side (3rd-review H5): a marker that EXISTS but
+    yields no usable verdict — unreadable, empty, or all-lines-corrupt — reads
+    frozen, because the one component whose job is to halt the loop must not
+    default to "go" when it cannot read its own brake. Only a genuinely ABSENT
+    marker (fresh install / a real clear) reads not-frozen. Previously this
+    mirror failed OPEN on every such case while Go failed closed, so the two
+    dashboards reported opposite L2 states for a corrupt marker.
     """
     rows = read_jsonl(path)
-    if not rows:
-        return False
-    return bool(rows[-1].get("frozen"))
+    if rows:
+        return bool(rows[-1].get("frozen"))
+    return os.path.exists(path)
 
 
 def _within(created_ms: Any, cutoff_ms: int) -> bool:
@@ -189,7 +201,7 @@ def assess_l1(events: list[dict], now_ms: int) -> LayerStatus:
 def _eprocess_readiness(events: list[dict]) -> dict:
     """Score observation-mode baseline-test labels against the cutover
     graduation thresholds (mirrors Tracker.eProcessCutoverReadiness)."""
-    labels = disagreements = unfair = 0
+    labels = disagreements = unfair = fair_rollbacks = 0
     for e in events:
         bt = e.get("baselineTest")
         if not isinstance(bt, dict):
@@ -205,14 +217,20 @@ def _eprocess_readiness(events: list[dict]) -> dict:
         labels += 1
         if bt.get("disagreement"):
             disagreements += 1
+        if e.get("type") == "evolve_rolled_back":
+            fair_rollbacks += 1
     agreement = (labels - disagreements) / labels if labels else 0.0
     return {
         "eprocess_labels": labels,
         "eprocess_disagreements": disagreements,
         "eprocess_unfair_labels": unfair,
+        "eprocess_fair_rollbacks": fair_rollbacks,
         "eprocess_agreement": round(agreement, 4),
+        # Requires >=1 fair ROLLBACK label so agreement isn't measured on a
+        # pure-confirm (trivially-agreeing) population — mirrors Go C1-D1.
         "eprocess_cutover_ready": labels >= EPROCESS_CUTOVER_MIN_LABELS
-        and agreement >= EPROCESS_CUTOVER_MIN_AGREEMENT,
+        and agreement >= EPROCESS_CUTOVER_MIN_AGREEMENT
+        and fair_rollbacks >= EPROCESS_CUTOVER_MIN_FAIR_ROLLBACKS,
     }
 
 

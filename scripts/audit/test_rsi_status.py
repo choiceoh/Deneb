@@ -80,6 +80,24 @@ class L1Test(unittest.TestCase):
         n20_noisy = [dict(base, baselineTest={"rejectReachable": True, "disagreement": i < 3}) for i in range(20)]
         self.assertFalse(assess_l1(n20_noisy, NOW).metrics["eprocess_cutover_ready"])
 
+    def test_eprocess_readiness_pure_confirms_not_ready(self):
+        # C1-D1: a pure-confirm population (no rollback labels) is agreement-
+        # biased ~1.0; readiness requires >=1 fair rollback so agreement was
+        # tested against a disagreement-capable case (mirrors Go).
+        confirms = [{"createdAt": OLD, "type": "evolve_confirmed",
+                     "baselineTest": {"reject": False, "rejectReachable": True, "disagreement": False}}
+                    for _ in range(25)]
+        s = assess_l1(confirms, NOW)
+        self.assertGreaterEqual(s.metrics["eprocess_labels"], 20)
+        self.assertEqual(s.metrics["eprocess_fair_rollbacks"], 0)
+        self.assertFalse(s.metrics["eprocess_cutover_ready"])
+        # One fair rollback unlocks it.
+        confirms.append({"createdAt": RECENT, "type": "evolve_rolled_back",
+                         "baselineTest": {"reject": True, "rejectReachable": True, "disagreement": False}})
+        s2 = assess_l1(confirms, NOW)
+        self.assertEqual(s2.metrics["eprocess_fair_rollbacks"], 1)
+        self.assertTrue(s2.metrics["eprocess_cutover_ready"])
+
     def test_eprocess_readiness_excludes_unreachable_labels(self):
         # Labels recorded while rejection was mathematically unreachable
         # (rejectReachable false/absent) are excluded from the count — matching
