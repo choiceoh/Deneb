@@ -3,9 +3,13 @@
     "codegraph": {
       "type": "stdio",
       "command": "bash",
-      "args": ["${workspaceFolder}/scripts/dev/codegraph-serve.sh"],
+      "args": [
+        "${workspaceFolder}/scripts/dev/cursor-codegraph-serve.sh",
+        "${workspaceFolder}"
+      ],
       "env": {
-        "PATH": "${env:PATH}:${userHome}/.local/bin:${userHome}/.npm-global/bin"
+        "PATH": "${env:PATH}:${userHome}/.local/bin:${userHome}/.npm-global/bin",
+        "CURSOR_CODEGRAPH_FALLBACK": "${workspaceFolder}"
       }
     }
   }

@@ -46,9 +46,9 @@ Defines:
 
 Cursor's equivalent:
 
-- **MCP**: `.cursor/mcp.json` → `codegraph-serve.sh` (`${workspaceFolder}` interpolation).
-- **Hooks**: `sessionStart` → `cursor-worktree-init.sh`; `preToolUse` → main-checkout guard + rules-gate + codegraph-nudge; `afterFileEdit` → codegraph sync; `postToolUse` → codegraph-remind.
-- **Isolation**: session worktrees live under `~/.cursor/worktrees/Deneb/<session-id>` on `cursor/<session-id>`. Do **not** call `move_agent_to_root` into these worktrees — it can rewrite the worktree branch to `main`. Scope Shell `working_directory` and Write paths to the session worktree instead (guard allows absolute paths under `~/.cursor/worktrees/Deneb/`).
+- **MCP**: `.cursor/mcp.json` → `cursor-codegraph-serve.sh` (binds to `~/.cursor/worktrees/Deneb/active-root` when set, else workspaceFolder).
+- **Hooks**: `sessionStart` → `cursor-worktree-init.sh`; `preToolUse` → main-checkout guard (`failClosed: true`) + rules-gate + codegraph-nudge; `afterFileEdit` → codegraph sync; `postToolUse` → codegraph-remind.
+- **Isolation**: session worktrees under `~/.cursor/worktrees/Deneb/<session-id>` on `cursor/<session-id>`. After SessionStart, enter with `move_agent_to_root` then `git checkout cursor/<session-id>` (restores branch if the move rewrote it to `main`, and rebinds MCP).
 - **Rule**: `.cursor/rules/worktree-codegraph.mdc` (`alwaysApply`).
 
 ### `.claude/settings.json` (workspace scope)
@@ -205,9 +205,10 @@ ZCode and Claude Code use the same hook scripts (codegraph-nudge, codegraph-remi
 |---------|-------|-----|
 | Worktree not created on session start | SessionStart hook didn't fire or `CLAUDE_SESSION_ID` missing | Run `bash scripts/dev/zcode-worktree-init.sh` manually |
 | Guard blocks with no `cd` path | No zcode worktree exists | Run `zcode-worktree-init.sh` or create one manually |
-| `codegraph_explore` not available | MCP server not connected | Check Settings → MCP; verify `codegraph serve --mcp` starts; restart ZCode/Cursor |
-| Cursor main-checkout edit blocked | Guard fired (expected) | Retry with path under `~/.cursor/worktrees/Deneb/<session-id>` |
-| Cursor worktree branch became `main` | `move_agent_to_root` rewrote the worktree | Avoid that MCP call; `git checkout cursor/<session-id>` to recover |
+| `codegraph_explore` not available | MCP server not connected | Check Settings → MCP; verify `bash scripts/dev/cursor-codegraph-serve.sh` starts; reload Cursor window |
+| Cursor main-checkout edit blocked | Guard fired (expected) | Retry under `~/.cursor/worktrees/Deneb/<session-id>`; enter via `move_agent_to_root` then `git checkout cursor/<id>` |
+| Cursor worktree branch became `main` | `move_agent_to_root` rewrote the worktree | Immediately `git checkout cursor/<session-id>` in that worktree |
+| CodeGraph answers look stale vs edits | MCP still bound to primary checkout | Confirm `active-root` points at the session worktree; reload MCP or re-enter via `move_agent_to_root` |
 | Push fails with non-fast-forward | Another agent pushed to main | Use `scripts/dev/zcode-push.sh` (auto rebase) |
 | Commit hangs on pre-commit | OrbStack/Docker stuck | Use `scripts/dev/zcode-commit.sh` (local validation + fallback) |
 | CodeGraph index stale | PostToolUse sync didn't run | Run `codegraph sync` manually |
