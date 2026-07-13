@@ -45,6 +45,38 @@ func TestSelfCorrectionReopenBlocked(t *testing.T) {
 			t.Fatal("newest applied+cooled+fresh should reopen")
 		}
 	})
+
+	// Reopen cap: a signature that already produced selfCorrectionReopenCap
+	// prior candidates is permanently blocked even when the newest is applied,
+	// cooled, and freshly recurring. Each twin has a distinct CreatedAt so they
+	// survive dedup; all share the same source prefix.
+	t.Run("reopen cap exceeded → permanent block", func(t *testing.T) {
+		existing := make([]SelfCorrectionCandidateRecord, 0, selfCorrectionReopenCap+1)
+		for i := 0; i <= selfCorrectionReopenCap; i++ {
+			age := old - int64(i)*int64(24*time.Hour/time.Millisecond)
+			existing = append(existing, SelfCorrectionCandidateRecord{
+				Source: src, Status: SelfCorrectionStatusApplied, CreatedAt: age,
+			})
+		}
+		if !selfCorrectionReopenBlocked(existing, src, recent, now) {
+			t.Fatalf("expected permanent block with %d source twins (cap=%d), got allow",
+				len(existing), selfCorrectionReopenCap)
+		}
+	})
+
+	// Just under the cap: the applied+cooled+fresh path still re-opens.
+	t.Run("at cap (not exceeded) → still reopens", func(t *testing.T) {
+		existing := make([]SelfCorrectionCandidateRecord, 0, selfCorrectionReopenCap)
+		for i := 0; i < selfCorrectionReopenCap; i++ {
+			age := old - int64(i)*int64(24*time.Hour/time.Millisecond)
+			existing = append(existing, SelfCorrectionCandidateRecord{
+				Source: src, Status: SelfCorrectionStatusApplied, CreatedAt: age,
+			})
+		}
+		if selfCorrectionReopenBlocked(existing, src, recent, now) {
+			t.Fatalf("expected reopen at exactly cap=%d twins, got block", selfCorrectionReopenCap)
+		}
+	})
 }
 
 func seedClusterFailures(t *testing.T, tr *Tracker, skill, errMsg string, n int) {

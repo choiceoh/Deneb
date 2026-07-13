@@ -89,7 +89,7 @@ func TestDetectSelfImproveSweep_FireThrottleRefire(t *testing.T) {
 	if nudge == "" {
 		t.Fatal("empty queue with signals should fire the sweep")
 	}
-	for _, want := range []string{"자가개선 스윕", "거절 3건", "승격자격 1", "재발 2건", "self_correction_propose", "NO_REPLY"} {
+	for _, want := range []string{"자가개선 스윕", "거절 3건", "승격자격 1", "재발 2건", "self_correction", "NO_REPLY"} {
 		if !strings.Contains(nudge, want) {
 			t.Errorf("sweep nudge missing %q:\n%s", want, nudge)
 		}

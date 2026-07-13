@@ -72,6 +72,94 @@ func TestSelfCorrectionFunnel_EmptyStateIsAllZero(t *testing.T) {
 	}
 }
 
+func TestSelfCorrectionFunnel_ClosureMetrics(t *testing.T) {
+	tr := newTestTracker(t)
+	now := time.UnixMilli(1_783_500_000_000)
+	dayMs := int64(24 * time.Hour / time.Millisecond)
+
+	// Two candidates in-window: sc-a gets applied after 2 days, sc-b gets
+	// rejected after 1 day. Conversion = 1 applied / 2 verdicted = 0.5.
+	captureA := now.UnixMilli() - 5*dayMs
+	captureB := now.UnixMilli() - 3*dayMs
+	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		Type: SelfCorrectionTypeCandidate, ID: "sc-a", Source: "failure-cluster:aaa", CreatedAt: captureA,
+	})
+	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		Type: SelfCorrectionTypeCandidate, ID: "sc-b", Source: "failure-cluster:bbb", CreatedAt: captureB,
+	})
+	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		Type: SelfCorrectionTypeReview, ID: "sc-a", Status: SelfCorrectionStatusApplied, CreatedAt: captureA + 2*dayMs,
+	})
+	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		Type: SelfCorrectionTypeReview, ID: "sc-b", Status: SelfCorrectionStatusRejected, CreatedAt: captureB + dayMs,
+	})
+
+	// A third candidate in-window that re-opens an OLD applied signature —
+	// the "fix did not stick" signal. The prior applied candidate is outside
+	// the window (oldApplied) but its source matches the new candidate.
+	oldApplied := now.UnixMilli() - 20*dayMs
+	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		Type: SelfCorrectionTypeCandidate, ID: "sc-old", Source: "failure-cluster:reopen-sig", CreatedAt: oldApplied,
+	})
+	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		Type: SelfCorrectionTypeReview, ID: "sc-old", Status: SelfCorrectionStatusApplied, CreatedAt: oldApplied + dayMs,
+	})
+	reopenCapture := now.UnixMilli() - dayMs
+	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		Type: SelfCorrectionTypeCandidate, ID: "sc-reopen", Source: "failure-cluster:reopen-sig", CreatedAt: reopenCapture,
+	})
+
+	tr.mu.Lock()
+	s := tr.computeSelfCorrectionFunnelLocked(now)
+	tr.mu.Unlock()
+
+	if s.Proposed7d != 3 {
+		t.Fatalf("Proposed7d = %d, want 3 (sc-a, sc-b, sc-reopen in window; sc-old outside)", s.Proposed7d)
+	}
+	if s.Verdicted7d != 2 {
+		t.Fatalf("Verdicted7d = %d, want 2 (sc-a + sc-b verdicted in window; sc-old outside)", s.Verdicted7d)
+	}
+	if s.Applied7d != 1 {
+		t.Fatalf("Applied7d = %d, want 1 (only sc-a)", s.Applied7d)
+	}
+	if s.ConversionRate != 0.5 {
+		t.Fatalf("ConversionRate = %f, want 0.5 (1 applied / 2 verdicted)", s.ConversionRate)
+	}
+	if s.Reopens7d != 1 {
+		t.Fatalf("Reopens7d = %d, want 1 (sc-reopen re-opens reopen-sig)", s.Reopens7d)
+	}
+	// MeanTimeToVerdict: sc-a took 2 days, sc-b took 1 day → avg 1.5 days.
+	wantMean := (2*dayMs + dayMs) / 2
+	if s.MeanTimeToVerdictMs != wantMean {
+		t.Fatalf("MeanTimeToVerdictMs = %d, want %d", s.MeanTimeToVerdictMs, wantMean)
+	}
+}
+
+func TestSelfCorrectionFunnel_NoVerdictsMeansZeroClosure(t *testing.T) {
+	tr := newTestTracker(t)
+	now := time.UnixMilli(1_783_500_000_000)
+	dayMs := int64(24 * time.Hour / time.Millisecond)
+
+	// Candidate captured in-window but never verdicted — a stuck queue.
+	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		Type: SelfCorrectionTypeCandidate, ID: "sc-stuck", Source: "failure-cluster:stuck", CreatedAt: now.UnixMilli() - dayMs,
+	})
+
+	tr.mu.Lock()
+	s := tr.computeSelfCorrectionFunnelLocked(now)
+	tr.mu.Unlock()
+
+	if s.Proposed7d != 1 {
+		t.Fatalf("Proposed7d = %d, want 1", s.Proposed7d)
+	}
+	if s.Verdicted7d != 0 {
+		t.Fatalf("Verdicted7d = %d, want 0 (never reviewed)", s.Verdicted7d)
+	}
+	if s.Applied7d != 0 || s.ConversionRate != 0 || s.MeanTimeToVerdictMs != 0 {
+		t.Fatalf("closure side = %+v, want all zero for un-verdicted candidate", s)
+	}
+}
+
 func appendFunnel[T any](t *testing.T, path string, record T) {
 	t.Helper()
 	if err := jsonlstore.Append(path, record); err != nil {

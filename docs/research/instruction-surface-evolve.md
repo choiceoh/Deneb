@@ -48,7 +48,7 @@ Gate design — shadow replay over recorded heartbeat contexts:
    existing replay-executor argument in `init_genesis.go`).
 3. **Verifiers** (deterministic first): NO_REPLY discipline preserved on
    quiet fixtures; required actions still chosen on actionable fixtures
-   (e.g. a sweep fixture must still yield `self_correction_propose`); output
+   (e.g. a sweep fixture must still yield `self_correction`); output
    length/format budget. A paired judge is a *secondary* signal only.
 4. **Acceptance**: the no-trade-off rule — held-in delta >= 0 AND held-out
    delta >= 0 AND at least one > 0, over verifier pass counts. Reject on any

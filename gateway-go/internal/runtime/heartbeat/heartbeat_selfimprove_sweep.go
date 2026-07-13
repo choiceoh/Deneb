@@ -175,7 +175,7 @@ func buildSelfImproveSweepNudge(funnel genesis.SelfCorrectionFunnelSummary, recu
 	b.WriteString(`
 이번 점검에서 후보를 직접 발굴하세요:
 1) skill_lifecycle(action=status)로 self-harness 신호·최근 거절 사유·실패 패턴을 확인하세요` + clusterStartHint(clusters) + `.
-2) 반복 메커니즘(지지도 있는 클러스터) 중 좁은 변경으로 고칠 수 있는 것을 skill_lifecycle(action=self_correction_propose)로 최대 2건 제안하세요 — evidence에 클러스터 시그니처·지지도를 인용하고 targetFiles·risk를 채우며, 저장소 코드 수정이 필요한 건은 제안 기록만 남기세요.
+2) 반복 메커니즘(지지도 있는 클러스터) 중 좁은 변경으로 고칠 수 있는 것을 skill_lifecycle(action=self_correction)로 최대 2건 제안하세요 — evidence에 클러스터 시그니처·지지도를 인용하고 targetFiles·risk를 채우며, 저장소 코드 수정이 필요한 건은 제안 기록만 남기세요.
 3) 단발 사례이거나 addressable하지 않으면 제안하지 마세요 — 억지 후보는 필터 정밀도를 망칩니다.
 
 ★필수: 도구 호출 없이 이 넛지를 지나치지 마세요 — 최소 1)의 status 확인은 실제로 수행한 뒤 제안 여부를 판단하세요. 판단 없이 NO_REPLY로 끝내면 같은 신호로 재점검만 반복 소모합니다. 사용자 메시지는 임원 판단이 필요한 발견일 때만 작성하고, 그 외에는 검토를 마친 뒤 NO_REPLY 하세요.`)

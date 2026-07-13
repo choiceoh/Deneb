@@ -599,6 +599,12 @@ export interface SelfImprovementCodingFunnel {
   promotableRejections7d?: number
   lastRejectionAt?: number
   lastNudgeAt?: number
+  proposed7d?: number
+  verdicted7d?: number
+  applied7d?: number
+  conversionRate?: number
+  meanTimeToVerdictMs?: number
+  reopens7d?: number
 }
 
 export interface SelfImprovementCodingListResponse {

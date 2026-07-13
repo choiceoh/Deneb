@@ -40,6 +40,15 @@ const (
 	// rejected/superseded candidates never re-open (the operator ruled).
 	selfCorrectionReopenCooldown = 2 * evolutionHealthWindow
 
+	// selfCorrectionReopenCap bounds how many times the SAME source signature
+	// can re-open as a fresh candidate after an APPLIED fix failed to stick.
+	// Without this, a stubbornly recurring defect floods the queue every
+	// cooldown (14d) forever — the reopen signal is valuable but not infinitely
+	// so. Past the cap, the signature is permanently blocked: the fix path is
+	// exhausted and an operator must intervene (re-scope the fix, widen the
+	// target, or accept the defect as a known limit).
+	selfCorrectionReopenCap = 5
+
 	// failureClusterPromoteThreshold is the minimum cluster support (recurring
 	// members) before a failure cluster auto-promotes into a candidate. 2 — same
 	// bar as target recurrence: a lone failure can be a one-off flake, but a
@@ -172,10 +181,12 @@ func selfCorrectionReopenBlocked(existing []SelfCorrectionCandidateRecord, sourc
 		return false
 	}
 	var newest *SelfCorrectionCandidateRecord
+	sourceTwins := 0
 	for i := range existing {
 		if !strings.HasPrefix(existing[i].Source, source) {
 			continue
 		}
+		sourceTwins++
 		if newest == nil || existing[i].CreatedAt > newest.CreatedAt {
 			c := existing[i]
 			newest = &c
@@ -183,6 +194,14 @@ func selfCorrectionReopenBlocked(existing []SelfCorrectionCandidateRecord, sourc
 	}
 	if newest == nil {
 		return false // never promoted → allow the first capture
+	}
+	// Reopen cap: a signature that has already re-opened selfCorrectionReopenCap
+	// times (sourceTwins counts every prior candidate for this source) has
+	// exhausted the auto-reopen path. Block permanently — the operator must
+	// break the cycle manually. The cap is on candidate count, not just reopen
+	// events, because each prior twin either WAS a reopen or the original.
+	if sourceTwins > selfCorrectionReopenCap {
+		return true
 	}
 	if normalizeSelfCorrectionStatus(newest.Status) != SelfCorrectionStatusApplied {
 		return true // live twin, or operator-ruled (rejected/superseded) → block
