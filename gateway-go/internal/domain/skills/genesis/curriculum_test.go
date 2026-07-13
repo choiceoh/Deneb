@@ -15,16 +15,21 @@ func curriculumFixture(t *testing.T, resp curriculumResp, catalog map[string]str
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A fixed environment signal — grounding now scans ONLY this digest, not
+	// the self-authored scaffolding (M6). The fixture quotes a verbatim slice
+	// of it so an admissible proposal clears the grounding gate.
+	const envSignal = "최근 실패한 요청(명시적 능력 갭): \"투자사 미팅 사전 브리프를 만들어줘\" — 오류: 해당 능력 없음"
 	task := &CurriculumTask{
-		Tracker: tr,
-		Logger:  slog.Default(),
-		proposeFn: func(_ context.Context, evidence string) (curriculumResp, error) {
-			// Ground the fixture's evidence in the assembled block (the
-			// source-grounding gate requires a >=12-rune verbatim quote).
+		Tracker:   tr,
+		Logger:    slog.Default(),
+		EnvDigest: func(context.Context) string { return envSignal },
+		proposeFn: func(_ context.Context, _ string) (curriculumResp, error) {
+			// Ground the fixture's evidence in the ENVIRONMENT digest (the
+			// source-grounding gate requires a >=12-rune verbatim quote from
+			// the env-derived corpus, not the scaffolding).
 			out := resp
-			if runes := []rune(evidence); len(runes) >= curriculumGroundingMinRunes {
-				out.Evidence = "인용: " + string(runes[:curriculumGroundingMinRunes+4])
-			}
+			runes := []rune(envSignal)
+			out.Evidence = "인용: " + string(runes[:curriculumGroundingMinRunes+8])
 			return out, nil
 		},
 		catalogFn: func() map[string]string { return catalog },
@@ -207,5 +212,40 @@ func TestCurriculumSourceGrounding(t *testing.T) {
 	}
 	if got := curriculumSourceGrounding("짧음", input); got == "" {
 		t.Fatal("too-short evidence must be rejected")
+	}
+}
+
+// M6: grounding scans ONLY the environment-derived corpus. A proposal quoting
+// the self-authored scaffolding (a section header, a catalog line) proves no
+// real demand and must be rejected; only a quote from the env digest grounds.
+func TestCurriculumRun_GroundingRejectsScaffoldingQuote(t *testing.T) {
+	scaffoldQuote := curriculumResp{
+		Name:     "meeting-brief-digest",
+		Brief:    strings.Repeat("회의 전 참석자·안건을 모아 브리프를 만든다. ", 3),
+		Reason:   "coverage gap",
+		Evidence: "## 이미 알려진 수요 백로그 (재제안 금지)", // pure scaffolding, in the full block only
+		Cases: []curriculumCase{{
+			Description: "브리프", Input: "브리프 만들어줘", RequiredSubstrings: []string{"참석자", "안건"},
+		}},
+	}
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", t.TempDir())
+	task := &CurriculumTask{
+		Tracker: tr, Logger: slog.Default(),
+		EnvDigest: func(context.Context) string {
+			return "환경: 반복되는 투자사 미팅 준비 요청이 관찰됨"
+		},
+		proposeFn: func(context.Context, string) (curriculumResp, error) { return scaffoldQuote, nil },
+		catalogFn: func() map[string]string { return map[string]string{} },
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	opps, _ := tr.RecentSkillOpportunities("", 10)
+	if len(opps) != 0 {
+		t.Fatalf("scaffolding-grounded proposal must be rejected, filed %d opportunities", len(opps))
 	}
 }

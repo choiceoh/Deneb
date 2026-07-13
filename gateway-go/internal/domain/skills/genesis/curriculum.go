@@ -158,7 +158,7 @@ func (t *CurriculumTask) Run(ctx context.Context) error {
 		backlog = nil // fail-open: a torn backlog must not stop demand mining
 	}
 
-	demandEvidence := t.assembleDemandEvidence(ctx, catalog, backlog)
+	demandEvidence, groundingCorpus := t.assembleDemandEvidence(ctx, catalog, backlog)
 	resp, err := propose(ctx, demandEvidence)
 	if err != nil {
 		logger.Warn("curriculum: propose failed", "error", err)
@@ -173,7 +173,12 @@ func (t *CurriculumTask) Run(ctx context.Context) error {
 		logger.Info("curriculum: proposal rejected", "name", resp.Name, "reason", reason)
 		return nil
 	}
-	if reason := curriculumSourceGrounding(resp.Evidence, demandEvidence); reason != "" {
+	// Ground ONLY against the environment-derived corpus (EnvDigest: feed
+	// titles, wiki domains, calendar, failed requests), never the self-authored
+	// scaffolding (section headers, catalog descriptions, backlog lines). A
+	// proposal quoting its own boilerplate proved nothing about real demand
+	// (RSI code eval M6).
+	if reason := curriculumSourceGrounding(resp.Evidence, groundingCorpus); reason != "" {
 		logger.Info("curriculum: proposal rejected (ungrounded evidence)", "name", resp.Name, "reason", reason)
 		return nil
 	}
@@ -229,8 +234,12 @@ func (t *CurriculumTask) catalogNames() map[string]string {
 // assembleDemandEvidence builds the deterministic evidence block: the catalog
 // (what exists), the usage shape (what is exercised), the backlog (what is
 // already known demand — re-proposal forbidden), and the optional environment
-// digest.
-func (t *CurriculumTask) assembleDemandEvidence(ctx context.Context, catalog map[string]string, backlog []SkillOpportunityRecord) string {
+// digest. It returns the full evidence shown to the producer AND the
+// environment-derived grounding corpus (the digest only) — the subset a
+// proposal's evidence must quote to be considered grounded. The scaffolding
+// (headers, catalog, usage, backlog) is authored by this function, so it must
+// NOT count as evidence of real demand (RSI code eval M6).
+func (t *CurriculumTask) assembleDemandEvidence(ctx context.Context, catalog map[string]string, backlog []SkillOpportunityRecord) (evidence, groundingCorpus string) {
 	var b strings.Builder
 
 	names := make([]string, 0, len(catalog))
@@ -273,12 +282,13 @@ func (t *CurriculumTask) assembleDemandEvidence(ctx context.Context, catalog map
 
 	if t.EnvDigest != nil {
 		if digest := strings.TrimSpace(t.EnvDigest(ctx)); digest != "" {
+			groundingCorpus = common.TruncateRunes(digest, 2000)
 			b.WriteString("\n## 환경 요약\n")
-			b.WriteString(common.TruncateRunes(digest, 2000))
+			b.WriteString(groundingCorpus)
 			b.WriteString("\n")
 		}
 	}
-	return b.String()
+	return b.String(), groundingCorpus
 }
 
 // llmPropose asks the strongest wired model for one capability proposal.
