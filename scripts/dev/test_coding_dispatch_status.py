@@ -10,6 +10,14 @@ from coding_dispatch_status import record_status
 
 
 class CodingDispatchStatusTest(unittest.TestCase):
+    def test_instant_process_failure_is_classified_as_environment_failure(self):
+        dispatcher = Path(__file__).with_name("coding-dispatch.sh").read_text(encoding="utf-8")
+        expected = (
+            'record_runtime_status environment_failed '
+            '"instant environment failure rc=$rc" "$cid"'
+        )
+        self.assertIn(expected, dispatcher)
+
     def test_failures_accumulate_and_success_resets(self):
         with TemporaryDirectory() as td:
             path = Path(td) / "status.json"
