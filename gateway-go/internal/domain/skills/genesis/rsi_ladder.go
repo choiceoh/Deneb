@@ -54,12 +54,10 @@ type ladderRow struct {
 	Detail string
 }
 
-// rsiAssessLadder evaluates every machine-checkable graduation-ladder row and
-// folds them into the pseudo-layer card. Layer state: LIVE when any row's
-// evidence is READY (an operator decision is actionable now), DATA-GATED
-// otherwise (evidence still accumulating — the honest steady state).
-func (t *Tracker) rsiAssessLadder() RSILayer {
-	rows := []ladderRow{
+// ladderRows evaluates every graduation-ladder row — shared by the GRAD card
+// (rsiAssessLadder) and the transition watch (LadderWatchTask).
+func (t *Tracker) ladderRows() []ladderRow {
+	return []ladderRow{
 		t.ladderEProcessRow(),
 		t.ladderDispatchCapRow(),
 		t.ladderStagedSourcesRow(),
@@ -69,6 +67,14 @@ func (t *Tracker) rsiAssessLadder() RSILayer {
 			Detail: "배포 롤백 1회 실전/소방훈련 완주가 증거 — 기계 판독 불가, 운영자 판단 행",
 		},
 	}
+}
+
+// rsiAssessLadder folds the evaluated rows into the pseudo-layer card. Layer
+// state: LIVE when any row's evidence is READY (an operator decision is
+// actionable now), DATA-GATED otherwise (evidence still accumulating — the
+// honest steady state).
+func (t *Tracker) rsiAssessLadder() RSILayer {
+	rows := t.ladderRows()
 	metrics := make([]RSIMetricKV, 0, len(rows))
 	var ready []string
 	for _, r := range rows {

@@ -33,6 +33,7 @@ func (s *Server) postMetaProposalCard(artifact, epoch, reason, path string, adop
 	epochLabel := map[string]string{
 		"producer":  "producer (evolve 프롬프트)",
 		"evaluator": "evaluator (judge 프롬프트)",
+		"genesis":   "genesis (신규 스킬 생성 프롬프트)",
 	}[epoch]
 	if epochLabel == "" {
 		epochLabel = epoch

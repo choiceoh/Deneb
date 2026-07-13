@@ -422,6 +422,11 @@ operator-tunable):
 > available", and the engine NEVER flips a lock itself. The card never counts
 > toward the L1–L4 "turning" headline. Non-ledgered evidence (deploy-watch
 > rollback drill) stays an explicit MANUAL row rather than a silent claim.
+> **Transition watch landed the same day** (`ladder_watch.go`, prod-gated 6h
+> task): a row's transition INTO READY files a work-feed card once (snapshot
+> persisted; a fall-back-and-re-earn fires again — a new decision moment), so
+> scarce operator attention arrives exactly when a graduation decision
+> becomes available instead of requiring dashboard polling (ANCHOR pattern).
 
 | Lock (today) | Evidence to graduate | Action |
 |---|---|---|
