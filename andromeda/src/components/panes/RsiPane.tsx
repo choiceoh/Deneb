@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
+  RSIHealthView,
   RSILayerView,
   RSILoopStatusResponse,
   SelfCorrectionCandidate,
@@ -12,6 +13,7 @@ import { RSI_RPC } from "@/resources";
 import { serializeList } from "@/aiText";
 import { errText } from "@/format";
 import { color, line, pane } from "@/theme";
+import { Detail, Modal } from "@/components/Modal";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 
 // 재귀적 자가개선 (recursive self-improvement) loop status — the desktop window onto
@@ -60,10 +62,14 @@ function LayerCard({
   layer,
   lifecycle,
   candidates,
+  health,
+  onOpenCandidate,
 }: {
   layer: RSILayerView;
   lifecycle: SkillLifecycleEvent[];
   candidates: SelfCorrectionCandidate[];
+  health: RSIHealthView;
+  onOpenCandidate: (c: SelfCorrectionCandidate) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const tint = stateColor(layer.state);
@@ -119,14 +125,80 @@ function LayerCard({
           rows={lifecycle.slice(0, 6).map((e): [string, string] => [eventTypeLabel(e.type), eventText(e)])}
         />
       )}
-      {expanded && layer.key === "L4" && (
+      {expanded && layer.key === "L2" && (
         <RsiDrill
-          header="대기 중 코딩 후보"
-          emptyText="대기 중인 코딩 후보 없음"
-          rows={candidates
-            .slice(0, 6)
-            .map((c): [string, string] => [candidateStatusLabel(c.status), c.title || c.candidate || ""])}
+          header="메타 진화 현황"
+          emptyText="메타 진화 데이터 없음"
+          rows={[
+            ["개정", `${health.metaRevisions7d ?? 0}건 (7일)`],
+            ["자동채택", health.autoAdoptFrozen ? "동결 — 드리프트 자기 브레이크 작동" : "정상"],
+          ]}
         />
+      )}
+      {expanded && layer.key === "L3" && (
+        <RsiDrill
+          header="판정자 공진화 현황"
+          emptyText="판정 데이터 없음"
+          rows={[
+            ["오수용률", `${pct(health.falseAcceptRate)} (표본 ${health.resolvedEvolves7d ?? 0})`],
+            ["롤백", `${health.rolledBack7d ?? 0}건 (7일)`],
+          ]}
+        />
+      )}
+      {expanded && layer.key === "L4" && <RsiCandidateDrill candidates={candidates} onOpen={onOpenCandidate} />}
+    </div>
+  );
+}
+
+// L4 drill: the coding queue rendered as clickable rows — status + provenance +
+// dispatch-track chips at a glance, click opens the full candidate detail.
+function RsiCandidateDrill({
+  candidates,
+  onOpen,
+}: {
+  candidates: SelfCorrectionCandidate[];
+  onOpen: (c: SelfCorrectionCandidate) => void;
+}) {
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: line }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: color.muted, marginBottom: 6 }}>대기 중 코딩 후보</div>
+      {candidates.length === 0 ? (
+        <div style={{ fontSize: 12, color: color.muted }}>대기 중인 코딩 후보 없음</div>
+      ) : (
+        candidates.slice(0, 6).map((c) => {
+          const src = sourceLabel(c.source);
+          return (
+            <div
+              key={c.id}
+              onClick={() => onOpen(c)}
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 6,
+                alignItems: "baseline",
+                padding: "4px 0",
+                cursor: "pointer",
+              }}
+            >
+              <span style={{ fontSize: 11, color: color.muted, minWidth: 34 }}>{candidateStatusLabel(c.status)}</span>
+              <span
+                style={{
+                  fontSize: 12.5,
+                  color: color.text,
+                  flex: 1,
+                  minWidth: 120,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {c.title || c.candidate || "—"}
+              </span>
+              {src && <Chip text={src} />}
+              {c.scope === "code" && <Chip text={c.autoDispatch ? "자동수리" : "검토 대기"} accent={c.autoDispatch} />}
+            </div>
+          );
+        })
       )}
     </div>
   );
@@ -204,6 +276,127 @@ function candidateStatusLabel(status?: string): string {
   }
 }
 
+// Maps a candidate `source` namespace to a short Korean label. Suffix-aware for
+// tool-quality (:desc description / :latency perf). Keep in sync with the miner
+// source prefixes (scripts/audit/*_miner.py, genesis L4 sources).
+function sourceLabel(source?: string): string | null {
+  const s = (source ?? "").trim();
+  if (!s) return null;
+  if (s.startsWith("runtime-error")) return "런타임 오류";
+  if (s.startsWith("health-finding:runtime-")) return "런타임 건강";
+  if (s.startsWith("health-finding")) return "코드 건강";
+  if (s.startsWith("deadcode-finding")) return "죽은 코드";
+  if (s.startsWith("tool-quality") && s.endsWith(":latency")) return "도구 지연";
+  if (s.startsWith("tool-quality")) return "도구 설명";
+  if (s.startsWith("evolve-tool-gap")) return "도구 갭";
+  if (s.startsWith("self-harness")) return "하네스";
+  if (s.startsWith("sop-mining")) return "SOP";
+  return s.split(":")[0] || s;
+}
+
+function pct(v?: number): string {
+  return `${Math.round((v ?? 0) * 100)}%`;
+}
+
+// Small pill: neutral (bordered) for provenance, or warm accent (soft fill) for
+// the auto-dispatch track / self-brake flags — a paused or auto-acting loop must
+// read at a glance.
+function Chip({ text, accent }: { text: string; accent?: boolean }) {
+  return (
+    <span
+      style={
+        accent
+          ? {
+              fontSize: 11,
+              fontWeight: 600,
+              padding: "2px 8px",
+              borderRadius: 5,
+              background: color.active,
+              color: color.accent,
+              whiteSpace: "nowrap",
+            }
+          : {
+              fontSize: 11,
+              padding: "1px 7px",
+              borderRadius: 5,
+              border: line,
+              color: color.muted,
+              whiteSpace: "nowrap",
+            }
+      }
+    >
+      {text}
+    </span>
+  );
+}
+
+// Evolution-health scoreboard (7-day) from rsi.status.health: the numeric fields
+// the layer diagnoses only render as prose. Hidden entirely when nothing has
+// happened (the layer cards already say IDLE). Self-brake flags surface as warm
+// accent chips.
+function HealthCard({ health }: { health: RSIHealthView }) {
+  const active =
+    (health.evolves7d ?? 0) > 0 ||
+    (health.genesis7d ?? 0) > 0 ||
+    (health.metaRevisions7d ?? 0) > 0 ||
+    !!health.thrash ||
+    !!health.autoAdoptFrozen;
+  if (!active) return null;
+  const stats: Array<[string, string, string?]> = [
+    ["확정률", pct(health.confirmRate)],
+    ["오수용률", pct(health.falseAcceptRate), `n=${health.resolvedEvolves7d ?? 0}`],
+    ["진화", String(health.evolves7d ?? 0)],
+    ["확정", String(health.confirmed7d ?? 0)],
+    ["롤백", String(health.rolledBack7d ?? 0)],
+    ["신규 스킬", String(health.genesis7d ?? 0)],
+    ["메타 개정", String(health.metaRevisions7d ?? 0)],
+  ];
+  return (
+    <div style={{ border: line, borderRadius: 8, padding: "12px 14px", marginBottom: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: color.muted, marginBottom: 10 }}>진화 건강 (7일)</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 22px" }}>
+        {stats.map(([label, value, sub], i) => (
+          <div key={i}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: color.text }}>{value}</div>
+            <div style={{ fontSize: 11, color: color.muted }}>{label}</div>
+            {sub && <div style={{ fontSize: 11, color: color.muted }}>{sub}</div>}
+          </div>
+        ))}
+      </div>
+      {(health.autoAdoptFrozen || health.thrash) && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+          {health.autoAdoptFrozen && <Chip text="메타 자동채택 동결" accent />}
+          {health.thrash && <Chip text="진화 쓰래싱" accent />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Read-only detail for one coding candidate (the L4 drill row → this modal): the
+// rich fields the drill row can't show — provenance, dispatch track, evidence,
+// proposed change, risk, target files.
+function CandidateModal({ candidate, onClose }: { candidate: SelfCorrectionCandidate; onClose: () => void }) {
+  const src = sourceLabel(candidate.source);
+  const track =
+    candidate.scope === "code" ? (candidate.autoDispatch ? "자동수리 (졸업 소스)" : "검토 대기 (스테이지)") : null;
+  return (
+    <Modal title={candidate.title || candidate.candidate || "코딩 후보"} onClose={onClose} width={560}>
+      <Detail label="상태" value={candidateStatusLabel(candidate.status)} />
+      {src && <Detail label="출처" value={`${src}${candidate.source ? ` · ${candidate.source}` : ""}`} />}
+      {track && <Detail label="처리 방식" value={track} />}
+      {candidate.proposedChange && <Detail label="제안 변경" value={candidate.proposedChange} multiline />}
+      {candidate.candidate && <Detail label="관찰" value={candidate.candidate} multiline />}
+      {candidate.evidence && <Detail label="근거" value={candidate.evidence} multiline />}
+      {candidate.risk && <Detail label="리스크" value={candidate.risk} multiline />}
+      {candidate.targetFiles && candidate.targetFiles.length > 0 && (
+        <Detail label="대상 파일" value={candidate.targetFiles.join(" · ")} multiline />
+      )}
+      {candidate.reviewNote && <Detail label="결과" value={candidate.reviewNote} multiline />}
+    </Modal>
+  );
+}
+
 export function RsiPane() {
   const { cfg, connected } = useWorkspace();
   const [data, setData] = useState<RSILoopStatusResponse | null>(null);
@@ -212,6 +405,7 @@ export function RsiPane() {
   // Drill-down detail folded into the hub: L1 → Propus lifecycle, L4 → coding queue.
   const [lifecycle, setLifecycle] = useState<SkillLifecycleEvent[]>([]);
   const [candidates, setCandidates] = useState<SelfCorrectionCandidate[]>([]);
+  const [selected, setSelected] = useState<SelfCorrectionCandidate | null>(null);
 
   // Reset spinner/error on each (re)connect as a render-phase adjustment, so the
   // effect stays free of synchronous setState (mirrors SkillsPane's PropusFeed).
@@ -270,9 +464,18 @@ export function RsiPane() {
           <div style={{ fontSize: 13, color: color.muted, marginBottom: 12 }}>
             {data?.turning ?? 0}/{layers.length}개 루프 가동 중
           </div>
+          {data?.health && <HealthCard health={data.health} />}
           {layers.map((l) => (
-            <LayerCard key={l.key} layer={l} lifecycle={lifecycle} candidates={candidates} />
+            <LayerCard
+              key={l.key}
+              layer={l}
+              lifecycle={lifecycle}
+              candidates={candidates}
+              health={data?.health ?? {}}
+              onOpenCandidate={setSelected}
+            />
           ))}
+          {selected && <CandidateModal candidate={selected} onClose={() => setSelected(null)} />}
         </>
       )}
     </div>
