@@ -10,6 +10,13 @@ from coding_dispatch_status import record_status
 
 
 class CodingDispatchStatusTest(unittest.TestCase):
+    def test_dispatcher_uses_codex_executor_without_claude_binary_contract(self):
+        dispatcher = Path(__file__).with_name("coding-dispatch.sh").read_text(encoding="utf-8")
+        self.assertIn("coding_dispatch_executor.py", dispatcher)
+        self.assertIn('python3 "$DISPATCH_EXECUTOR" --check', dispatcher)
+        self.assertNotIn("DENEB_DISPATCH_CLAUDE_BIN", dispatcher)
+        self.assertNotIn("resolve_claude", dispatcher)
+
     def test_instant_process_failure_is_classified_as_environment_failure(self):
         dispatcher = Path(__file__).with_name("coding-dispatch.sh").read_text(encoding="utf-8")
         expected = (

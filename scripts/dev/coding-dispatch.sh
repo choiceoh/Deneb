@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # coding-dispatch.sh — RSI L4 실행 레인: 자기교정 큐의 소스 후보를 코딩
-# 에이전트(Claude Code 헤드리스)에 자동 배차한다.
+# 에이전트(Codex CLI 헤드리스)에 자동 배차한다.
 #
 # 오퍼레이터 승인(2026-07-12, memory: source-self-edit-authorization): dev
 # 트리에서만 편집, 전체 게이트 그린일 때만 랜딩·핫스왑. 이 스크립트는 그
@@ -55,12 +55,11 @@ CAPEOF
     )
 fi
 SESSION_TIMEOUT="${DENEB_DISPATCH_TIMEOUT_SEC:-7200}"
-# Claude Code binary: newest installed ccd-cli unless overridden.
-CLAUDE_BIN="${DENEB_DISPATCH_CLAUDE_BIN:-}"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 DISPATCH_RPC="$SCRIPT_DIR/self_correction_dispatch.py"
 DISPATCH_RECLAIM="$SCRIPT_DIR/dispatch_reclaim.py"
 DISPATCH_OUTCOME="$SCRIPT_DIR/dispatch_outcome.py"
+DISPATCH_EXECUTOR="$SCRIPT_DIR/coding_dispatch_executor.py"
 DISPATCH_STATUS_WRITER="$SCRIPT_DIR/coding_dispatch_status.py"
 DISPATCH_STATUS_FILE="$STATE_DIR/data/coding_dispatch_status.json"
 
@@ -75,24 +74,6 @@ record_runtime_status() {
             --result "$result" --detail "$detail" --candidate "$candidate" \
             >>"$LOG_FILE" 2>&1 || log "WARN: failed to persist dispatch runtime status ($result)"
     fi
-}
-
-resolve_claude() {
-    if [[ -n "$CLAUDE_BIN" && -x "$CLAUDE_BIN" ]]; then
-        printf '%s' "$CLAUDE_BIN"
-        return 0
-    fi
-    local newest candidate
-    newest=$(
-        for candidate in "$HOME/.claude/remote/ccd-cli/"*; do
-            [[ -x "$candidate" ]] && basename "$candidate"
-        done | sort -V | tail -1
-    )
-    if [[ -n "$newest" && -x "$HOME/.claude/remote/ccd-cli/$newest" ]]; then
-        printf '%s' "$HOME/.claude/remote/ccd-cli/$newest"
-        return 0
-    fi
-    command -v claude 2>/dev/null || return 1
 }
 
 record_event() {
@@ -337,10 +318,9 @@ PY
         exit 0
     fi
 
-    local claude_bin
-    if ! claude_bin=$(resolve_claude); then
-        log "no Claude Code binary available — idle"
-        record_runtime_status environment_failed "no Claude Code binary available"
+    if [[ ! -f "$DISPATCH_EXECUTOR" ]] || ! python3 "$DISPATCH_EXECUTOR" --check >>"$LOG_FILE" 2>&1; then
+        log "Codex executor unavailable or not logged in — idle"
+        record_runtime_status environment_failed "Codex executor unavailable or not logged in"
         exit 0
     fi
 
@@ -536,12 +516,13 @@ PYEOF
         exit 0
     fi
     record_runtime_status dispatched "agent session started" "$cid"
-    log "dispatching $cid → $wt (claude $(basename "$claude_bin"), cap $((spent+1))/$DAILY_CAP today)"
+    log "dispatching $cid → $wt (Codex CLI, cap $((spent+1))/$DAILY_CAP today)"
     set +e
     local started_at rc
     started_at=$(date +%s)
-    ( cd "$wt" && timeout "$SESSION_TIMEOUT" "$claude_bin" -p "$prompt" \
-        --permission-mode acceptEdits >>"$LOG_FILE" 2>&1 )
+    printf '%s' "$prompt" | python3 "$DISPATCH_EXECUTOR" \
+        --worktree "$wt" --prod-dir "$PROD_DIR" --timeout "$SESSION_TIMEOUT" \
+        >>"$LOG_FILE" 2>&1
     rc=$?
     set -e
     local elapsed=$(( $(date +%s) - started_at ))
@@ -563,7 +544,7 @@ PYEOF
     fi
 
     # Instant failure (<60s, rc!=0) means the session never really started —
-    # binary not logged in ("Not logged in", observed live 2026-07-12), missing
+    # binary not logged in, missing
     # deps, etc. Burning the candidate AND a daily-cap slot on that would starve
     # the lane silently: release the marker and the worktree so the same
     # candidate re-dispatches once the environment is fixed.

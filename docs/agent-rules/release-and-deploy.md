@@ -50,8 +50,8 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
 
 - `scripts/dev/coding-dispatch.sh`: 자기교정 큐(`~/.deneb/data/self_correction_candidates.jsonl`)의
   미배차 소스 후보(scope=code, 증거 기반 Source, 리뷰 승인 accepted 우선 → proposed) 1건을 골라 프로덕션
-  클론의 **시도별 고유 브랜치·워크트리**에서 **Claude Code 헤드리스**
-  (`~/.claude/remote/ccd-cli/` 최신)로
+  클론의 **시도별 고유 브랜치·워크트리**에서 로그인된 **Codex CLI 헤드리스**
+  (`codex exec`, `DENEB_DISPATCH_CODEX_BIN`으로 경로 재정의)로
   구현을 배차한다. 세션 프롬프트가 CLAUDE.md 게이트 준수 + 그린 시 `pr.sh land`
   랜딩까지 지시하며, 배차 마커(`~/.deneb/data/coding_dispatch/<id>.json`)와 일일
   상한(`DENEB_DISPATCH_DAILY_CAP`, 기본 2)이 재배차·토큰 예산을 통제한다.
@@ -63,7 +63,7 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
 mkdir -p ~/.config/systemd/user
 cat > ~/.config/systemd/user/deneb-coding-dispatch.service <<'UNIT'
 [Unit]
-Description=Deneb RSI L4 coding dispatch (self-correction queue -> Claude Code headless)
+Description=Deneb RSI L4 coding dispatch (self-correction queue -> Codex headless)
 [Service]
 Type=oneshot
 ExecStart=%h/deneb/scripts/dev/coding-dispatch.sh
