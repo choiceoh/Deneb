@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": ".cursor/hooks/session-worktree.sh",
+        "timeout": 20
+      }
+    ],
+    "preToolUse": [
+      {
+        "matcher": "Write|StrReplace|Delete|EditNotebook",
+        "command": ".cursor/hooks/guard-main-checkout.sh",
+        "timeout": 10,
+        "failClosed": false
+      },
+      {
+        "matcher": "Write|StrReplace|Delete|EditNotebook",
+        "command": ".cursor/hooks/rules-gate.sh",
+        "timeout": 10
+      },
+      {
+        "matcher": "Grep|Shell",
+        "command": ".cursor/hooks/codegraph-nudge.sh",
+        "timeout": 12
+      }
+    ],
+    "postToolUse": [
+      {
+        "matcher": "Read|Write|StrReplace",
+        "command": ".cursor/hooks/codegraph-remind.sh",
+        "timeout": 10
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/codegraph-sync.sh",
+        "timeout": 5
+      }
+    ]
+  }
+}

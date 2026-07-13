@@ -5,32 +5,33 @@
 ## Architecture at a glance
 
 ```
-SessionStart ──→ zcode-worktree-init.sh     auto-creates ~/.zcode/worktrees/Deneb/<session-id>
-                                              on branch zcode/<session-id>, copies codegraph index
+SessionStart ──→ zcode-worktree-init.sh / cursor-worktree-init.sh
+                                              auto-creates agent worktree + copies codegraph index
 
-PreToolUse ────→ zcode-worktree-guard.sh     blocks edits in the main checkout
-                clash check                   cross-worktree conflict detection
+PreToolUse ────→ worktree-guard              blocks edits in the main checkout
+                clash check                   cross-worktree conflict detection (ZCode)
                 claude-rules-gate.py          path-scoped rule guidance (1st touch)
                 codegraph-remind.py           CodeGraph nudge on source read/edit (1x/session)
                 codegraph-nudge.py            symbol grep → CodeGraph redirect (1x/pattern)
-                pre-commit-gate.sh            go-fmt/vet on committer calls
+                pre-commit-gate.sh            go-fmt/vet on committer calls (ZCode)
 
-PostToolUse ───→ zcode-codegraph-sync.sh     background codegraph sync after edits (<0.5s)
+PostToolUse ───→ codegraph-sync               background codegraph sync after edits (<0.5s)
 
-Stop ──────────→ zcode-worktree-status.sh    reports commit/uncommitted counts
+Stop ──────────→ zcode-worktree-status.sh    reports commit/uncommitted counts (ZCode)
 
 MCP ───────────→ codegraph                    codegraph_explore tool (serves via codegraph-serve.sh)
 ```
 
-Three agents share the codegraph and hook infrastructure:
+Four agents share the codegraph and hook infrastructure:
 
 | Agent | Config file | Worktree location | Branch prefix |
 |-------|-------------|-------------------|---------------|
 | **ZCode** | `.zcode/config.json` | `~/.zcode/worktrees/Deneb/` | `zcode/` |
+| **Cursor** | `.cursor/hooks.json` + `.cursor/mcp.json` | `~/.cursor/worktrees/Deneb/` | `cursor/` |
 | **Claude Code** | `.claude/settings.json` | native `EnterWorktree` | `claude/` |
 | **Codex** | `~/.codex/hooks.json` + `config.toml` | `~/.codex/worktrees/` | `codex/` |
 
-All three auto-connect the `codegraph` MCP server and share the same PostToolUse sync hook, rules-gate, codegraph nudge/remind, and pre-commit gate — ensuring consistent code intelligence across agents without duplication.
+All four auto-connect the `codegraph` MCP server and share the same sync / rules-gate / nudge / remind scripts — ensuring consistent code intelligence across agents without duplication.
 
 ## Configuration files
 
@@ -38,8 +39,17 @@ All three auto-connect the `codegraph` MCP server and share the same PostToolUse
 
 Defines:
 
-- **MCP server**: `codegraph` via `scripts/dev/codegraph-serve.sh` (absolute path — config-file MCP does not expand templates).
+- **MCP server**: `codegraph` via `bash scripts/dev/codegraph-serve.sh` (project-relative; portable across machines).
 - **Hooks**: 8 hooks across SessionStart / PreToolUse / PostToolUse / Stop, with `hooks.enabled: true`.
+
+### `.cursor/hooks.json` + `.cursor/mcp.json` (workspace scope)
+
+Cursor's equivalent:
+
+- **MCP**: `.cursor/mcp.json` → `codegraph-serve.sh` (`${workspaceFolder}` interpolation).
+- **Hooks**: `sessionStart` → `cursor-worktree-init.sh`; `preToolUse` → main-checkout guard + rules-gate + codegraph-nudge; `afterFileEdit` → codegraph sync; `postToolUse` → codegraph-remind.
+- **Isolation**: session worktrees live under `~/.cursor/worktrees/Deneb/<session-id>` on `cursor/<session-id>`. Do **not** call `move_agent_to_root` into these worktrees — it can rewrite the worktree branch to `main`. Scope Shell `working_directory` and Write paths to the session worktree instead (guard allows absolute paths under `~/.cursor/worktrees/Deneb/`).
+- **Rule**: `.cursor/rules/worktree-codegraph.mdc` (`alwaysApply`).
 
 ### `.claude/settings.json` (workspace scope)
 
@@ -181,12 +191,13 @@ ZCode and Claude Code use the same hook scripts (codegraph-nudge, codegraph-remi
 
 ## Setup checklist (new machine)
 
-1. **Install codegraph**: `npm i -g @colbymchenry/codegraph && cd ~/Documents/GitHub/Deneb && codegraph init`
-2. **Verify MCP**: restart ZCode → Settings → MCP → codegraph should show "connected"
-3. **Verify worktree isolation**: start a new ZCode session → check `~/.zcode/worktrees/Deneb/<session-id>` exists
+1. **Install codegraph**: `npm i -g @colbymchenry/codegraph && codegraph init` (in the repo root)
+2. **Verify MCP**: restart ZCode/Cursor → Settings → MCP → codegraph should show "connected"
+3. **Verify worktree isolation**: start a new ZCode session → `~/.zcode/worktrees/Deneb/<session-id>`; Cursor chat → `~/.cursor/worktrees/Deneb/<session-id>`
 4. **Verify guard**: try editing in the main checkout → should be blocked with worktree path guidance
 5. **Verify codegraph hooks**: grep a known symbol (e.g., `GatewayHub`) → should get CodeGraph nudge
-6. **Optional — install OrbStack**: for Docker-based pre-commit hooks (ShellCheck, golangci-lint). If OrbStack is unstable, use `zcode-commit.sh` which falls back to `--no-verify`.
+6. **Cursor**: open the repo (or a linked worktree) so `.cursor/hooks.json` + `.cursor/mcp.json` load; new Agent chat should inject the worktree path via `sessionStart`
+7. **Optional — install OrbStack**: for Docker-based pre-commit hooks (ShellCheck, golangci-lint). If OrbStack is unstable, use `zcode-commit.sh` which falls back to `--no-verify`.
 
 ## Troubleshooting
 
@@ -194,7 +205,9 @@ ZCode and Claude Code use the same hook scripts (codegraph-nudge, codegraph-remi
 |---------|-------|-----|
 | Worktree not created on session start | SessionStart hook didn't fire or `CLAUDE_SESSION_ID` missing | Run `bash scripts/dev/zcode-worktree-init.sh` manually |
 | Guard blocks with no `cd` path | No zcode worktree exists | Run `zcode-worktree-init.sh` or create one manually |
-| `codegraph_explore` not available | MCP server not connected | Check Settings → MCP; verify `codegraph serve --mcp` starts; restart ZCode |
+| `codegraph_explore` not available | MCP server not connected | Check Settings → MCP; verify `codegraph serve --mcp` starts; restart ZCode/Cursor |
+| Cursor main-checkout edit blocked | Guard fired (expected) | Retry with path under `~/.cursor/worktrees/Deneb/<session-id>` |
+| Cursor worktree branch became `main` | `move_agent_to_root` rewrote the worktree | Avoid that MCP call; `git checkout cursor/<session-id>` to recover |
 | Push fails with non-fast-forward | Another agent pushed to main | Use `scripts/dev/zcode-push.sh` (auto rebase) |
 | Commit hangs on pre-commit | OrbStack/Docker stuck | Use `scripts/dev/zcode-commit.sh` (local validation + fallback) |
 | CodeGraph index stale | PostToolUse sync didn't run | Run `codegraph sync` manually |

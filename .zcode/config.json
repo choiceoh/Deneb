@@ -4,7 +4,9 @@
       "codegraph": {
         "type": "stdio",
         "command": "bash",
-        "args": ["/Users/ost/Documents/GitHub/Deneb/scripts/dev/codegraph-serve.sh"]
+        "args": [
+          "scripts/dev/codegraph-serve.sh"
+        ]
       }
     }
   },

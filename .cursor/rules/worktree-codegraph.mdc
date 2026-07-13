@@ -1,0 +1,13 @@
+---
+description: Cursor worktree isolation + CodeGraph usage for Deneb
+alwaysApply: true
+---
+
+# Cursor worktree + CodeGraph
+
+- SessionStart creates `~/.cursor/worktrees/Deneb/<session-id>` on `cursor/<session-id>`.
+- Scope **all** Shell (`working_directory`) and Write/StrReplace/Delete paths to that worktree.
+- Do **not** call `move_agent_to_root` into a git worktree — it can force the worktree onto `main`.
+- Main checkout (`~/deneb` or any main-branch primary checkout) edits are blocked by `cursor-worktree-guard`.
+- Structure/relation/blast-radius questions: use MCP **codegraph_explore** (or CLI `codegraph callers|impact|node`) before multi-file grep/Read.
+- String-keyed RPC/tool/event names: `scripts/dev/rpcmap.py <name>` then `codegraph node <handler>`.
