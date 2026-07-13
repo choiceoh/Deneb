@@ -16,6 +16,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -230,6 +233,7 @@ private fun SelfImprovementCodingCandidateRow(candidate: SelfCorrectionCandidate
             )
             Text(lifecycleTime(candidate.updatedAt), style = DenebType.meta, color = denebHint())
         }
+        SelfImprovementCodingChips(candidate)
         val primary = candidate.proposedChange.ifBlank { candidate.candidate }
         if (primary.isNotBlank()) {
             Spacer(Modifier.height(2.dp))
@@ -274,6 +278,69 @@ private fun SelfImprovementCodingCandidateRow(candidate: SelfCorrectionCandidate
             }
         }
     }
+}
+
+/** Provenance + dispatch-track chips shown at a glance (no expand needed): WHICH
+ *  miner surfaced the candidate, and whether its source is graduated onto the
+ *  auto-dispatch track (자동수리 — auto-implements + lands through the gates) or
+ *  staged for review (검토 대기). 자동수리 uses the cool interaction accent (it
+ *  will act); the source chip stays neutral. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SelfImprovementCodingChips(candidate: SelfCorrectionCandidate) {
+    val sourceLabel = selfImprovementCodingSourceLabel(candidate.source)
+    val showTrack = candidate.scope == "code"
+    if (sourceLabel == null && !showTrack) return
+    Spacer(Modifier.height(6.dp))
+    FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (sourceLabel != null) {
+            CodingChip(sourceLabel, MaterialTheme.colorScheme.surfaceVariant, denebHint())
+        }
+        if (showTrack) {
+            if (candidate.autoDispatch) {
+                CodingChip("자동수리", MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer)
+            } else {
+                CodingChip("검토 대기", MaterialTheme.colorScheme.surfaceVariant, denebHint())
+            }
+        }
+    }
+}
+
+/** Maps a candidate `source` namespace to a short Korean label. Returns null for
+ *  a blank source. Suffix-aware for tool-quality (:desc description / :latency
+ *  perf). Keep in sync with the miner source prefixes (scripts/audit/*_miner.py,
+ *  genesis L4 sources). */
+private fun selfImprovementCodingSourceLabel(source: String): String? {
+    val s = source.trim()
+    if (s.isEmpty()) return null
+    return when {
+        s.startsWith("runtime-error") -> "런타임 오류"
+        s.startsWith("health-finding:runtime-") -> "런타임 건강"
+        s.startsWith("health-finding") -> "코드 건강"
+        s.startsWith("deadcode-finding") -> "죽은 코드"
+        s.endsWith(":latency") && s.startsWith("tool-quality") -> "도구 지연"
+        s.startsWith("tool-quality") -> "도구 설명"
+        s.startsWith("evolve-tool-gap") -> "도구 갭"
+        s.startsWith("self-harness") -> "하네스"
+        s.startsWith("sop-mining") -> "SOP"
+        else -> s.substringBefore(':').ifBlank { s }
+    }
+}
+
+@Composable
+private fun CodingChip(text: String, bg: Color, fg: Color) {
+    Text(
+        text = text,
+        style = DenebType.meta,
+        color = fg,
+        modifier = Modifier
+            .background(bg, RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    )
 }
 
 @Composable
