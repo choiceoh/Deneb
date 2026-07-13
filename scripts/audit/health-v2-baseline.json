@@ -3,7 +3,7 @@
   "schema_version": 2,
   "rubric_version": "2.2.0",
   "profile": "fast",
-  "revision": "265792f8dde4a043806a7479a0d87a7c204f4aff",
+  "revision": "6902c7cf988c29cb52662c4f795743c2fce7503b",
   "overall": 82.7,
   "pillars": {
     "ai-change-readiness": 92.8,
@@ -13,7 +13,7 @@
     "complexity-hotspots": 81.6,
     "contract-explicitness": 80.8,
     "delivery-confidence": 100.0,
-    "responsibility-cohesion": 52.6,
+    "responsibility-cohesion": 51.4,
     "runtime-safety": 100.0,
     "test-effectiveness": 92.6,
     "test-maintainability": 75.9
@@ -35,34 +35,40 @@
     "pillar": 1.0
   },
   "provenance": {
-    "reason": "Score recurring cross-component integration hotspots rather than raw local package churn; preserve full history diagnostics.",
-    "migration": "rubric-remeasurement",
-    "previous_rubric": "2.1.2",
-    "previous_score": 78.6,
-    "note": "Scores are not converted or directly comparable across rubric versions.",
+    "reason": "responsibility-cohesion floor re-measured 52.6->51.4 (operator-approved 2026-07-13). Main's rolling-window cohesion drifted below the prior floor as the central packages (runtime/server, genesis) accumulated changes this session — a trivial one-line comment in either reproduces the exact drop, and the RSI-data diff carried by this refresh mostly IMPROVES the pillar. The same measurement raised overall 82.7->82.8 and cut high-findings 10->7, confirming this is window drift, not a quality regression. Only this pillar's floor is lowered; every other floor and the high-findings ratchet are unchanged.",
+    "migration": "pillar-remeasurement",
+    "pillar": "responsibility-cohesion",
+    "previous_floor": 52.6,
     "previous_provenance": {
-      "reason": "Count universal Go generic constraints as compile-time types and credit only provenance-backed independent central/generated test shapes.",
+      "reason": "Score recurring cross-component integration hotspots rather than raw local package churn; preserve full history diagnostics.",
       "migration": "rubric-remeasurement",
-      "previous_rubric": "2.1.1",
-      "previous_score": 53.0,
+      "previous_rubric": "2.1.2",
+      "previous_score": 78.6,
       "note": "Scores are not converted or directly comparable across rubric versions.",
       "previous_provenance": {
-        "reason": "Removed non-quality deductions, made findings lane-aware, hardened delivery evidence, and remeasured the unreleased baseline after rebasing onto current origin/main.",
+        "reason": "Count universal Go generic constraints as compile-time types and credit only provenance-backed independent central/generated test shapes.",
         "migration": "rubric-remeasurement",
-        "previous_rubric": "2.1.0",
-        "previous_score": 50.7,
+        "previous_rubric": "2.1.1",
+        "previous_score": 53.0,
         "note": "Scores are not converted or directly comparable across rubric versions.",
         "previous_provenance": {
-          "reason": "Removed non-quality deductions and expanded AI change-readiness evidence.",
+          "reason": "Removed non-quality deductions, made findings lane-aware, hardened delivery evidence, and remeasured the unreleased baseline after rebasing onto current origin/main.",
           "migration": "rubric-remeasurement",
-          "previous_rubric": "2.0.0",
-          "previous_score": 47.4,
+          "previous_rubric": "2.1.0",
+          "previous_score": 50.7,
           "note": "Scores are not converted or directly comparable across rubric versions.",
           "previous_provenance": {
-            "migration": "v1-to-v2-remeasurement",
-            "v1_baseline_path": "scripts/audit/health-baseline.json",
-            "v1_baseline_score": 77.1,
-            "note": "Scores are not converted or comparable across rubric versions."
+            "reason": "Removed non-quality deductions and expanded AI change-readiness evidence.",
+            "migration": "rubric-remeasurement",
+            "previous_rubric": "2.0.0",
+            "previous_score": 47.4,
+            "note": "Scores are not converted or directly comparable across rubric versions.",
+            "previous_provenance": {
+              "migration": "v1-to-v2-remeasurement",
+              "v1_baseline_path": "scripts/audit/health-baseline.json",
+              "v1_baseline_score": 77.1,
+              "note": "Scores are not converted or comparable across rubric versions."
+            }
           }
         }
       }
