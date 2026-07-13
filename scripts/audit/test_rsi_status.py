@@ -193,6 +193,21 @@ class L4Test(unittest.TestCase):
         self.assertEqual(s.metrics["dispatchable"], 0)
         self.assertEqual(s.state, STARVED)
 
+    def test_dispatch_outcomes_feed_land_rate(self):
+        # Graduation-ladder evidence: recorded marker outcomes yield a land
+        # rate over DECIDED dispatches; the LIVE diagnosis names it.
+        rows = [{"type": "self_correction_candidate", "id": "d", "scope": "code",
+                 "status": "accepted", "source": "health-finding:x"}]
+        s = assess_l4(rows, dispatch_total=3, dispatch_today=0,
+                      outcomes={"landed": 1, "declined": 1})
+        self.assertEqual(s.metrics["land_rate"], 0.5)
+        self.assertEqual(s.metrics["dispatch_outcomes"], {"landed": 1, "declined": 1})
+        self.assertIn("land rate 50%", s.diagnosis)
+        # No outcomes recorded yet (pre-accounting markers): rate is None, not 0.
+        s = assess_l4(rows, dispatch_total=3, dispatch_today=0, outcomes={})
+        self.assertIsNone(s.metrics["land_rate"])
+        self.assertNotIn("land rate", s.diagnosis)
+
     def test_staged_non_dispatch_code_supply_is_visible(self):
         # Proposed code candidates from sources outside the dispatch allowlist
         # (runtime-error #3491) are staged supply. The layer stays STARVED

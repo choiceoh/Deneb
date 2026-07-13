@@ -301,3 +301,35 @@ func rsiMetricValue(metrics []RSIMetricKV, label string) string {
 	}
 	return ""
 }
+
+// Dispatch-outcome accounting (graduation-ladder evidence): recorded marker
+// outcomes surface as a land-rate note on the L4 diagnosis; a queue whose
+// markers predate outcome accounting stays silent (no fabricated 0% rate).
+func TestRSIStatus_DispatchOutcomeNote(t *testing.T) {
+	tr := newTestTracker(t)
+	dir := tr.dispatchMarkerDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a.json", `{"id":"a","outcome":"landed"}`)
+	write("b.json", `{"id":"b","outcome":"declined"}`)
+	write("c.json", `{"id":"c"}`) // pre-accounting marker — carries no outcome
+
+	l4 := tr.rsiAssessL4()
+	if !strings.Contains(l4.Diagnosis, "배차 결과") || !strings.Contains(l4.Diagnosis, "랜딩률 50%") {
+		t.Fatalf("L4 diagnosis missing outcome note: %s", l4.Diagnosis)
+	}
+	if !strings.Contains(l4.Diagnosis, "declined 1") || !strings.Contains(l4.Diagnosis, "landed 1") {
+		t.Fatalf("L4 diagnosis missing outcome counts: %s", l4.Diagnosis)
+	}
+
+	if d := newTestTracker(t).rsiAssessL4().Diagnosis; strings.Contains(d, "배차 결과") {
+		t.Fatalf("no-outcome queue must not fabricate a rate: %s", d)
+	}
+}

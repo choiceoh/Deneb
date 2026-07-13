@@ -56,6 +56,27 @@ main() {
         exit 0 # a dispatch session is running
     fi
     mkdir -p "$DISPATCH_DIR"
+    local script_dir
+    script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+    # Upgrade non-terminal outcomes first: a session that pushed a PR but died
+    # before landing records "attempted" — if that PR merged later, the land
+    # rate (graduation-ladder evidence) would permanently undercount. Bounded
+    # reprobe: newest few attempted markers within 14d, one gh probe each.
+    if command -v gh >/dev/null 2>&1; then
+        local m mcid mstate
+        for m in $(grep -l '"outcome": "attempted"' "$DISPATCH_DIR"/*.json 2>/dev/null | head -5); do
+            [[ -n $(find "$m" -mtime -14 2>/dev/null) ]] || continue
+            mcid=$(basename "$m" .json)
+            mstate=$(cd "$PROD_DIR" && gh pr list --head "dispatch/$mcid" --state merged \
+                --json state --jq '.[0].state // ""' 2>/dev/null || true)
+            if [[ "$mstate" == "MERGED" ]]; then
+                python3 "$script_dir/dispatch_outcome.py" --marker "$m" --rc 0 \
+                    --pr-state MERGED --upgrade-only >>"$LOG_FILE" 2>&1 || true
+                log "reprobe: $mcid attempted → landed (PR merged after session end)"
+            fi
+        done
+    fi
 
     # Daily cap: markers created today.
     local today spent
@@ -151,8 +172,7 @@ PYEOF
     # so a crashed session must not redispatch forever) carries promptVersion
     # provenance. An unusable artifact defers the dispatch — candidate and
     # daily-cap slot stay unburned until the gateway materializes it.
-    local script_dir prompt
-    script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+    local prompt
     if ! prompt=$(printf '%s' "$pick" | python3 "$script_dir/dispatch_prompt.py" \
             --meta-dir "$STATE_DIR/skills/genesis/meta" \
             --marker "$DISPATCH_DIR/$cid.json" 2>>"$LOG_FILE"); then
@@ -186,6 +206,22 @@ PYEOF
         log "instant failure — marker released for $cid (environment problem, not the candidate)"
         exit 0
     fi
+
+    # Outcome accounting (graduation-ladder evidence: cap raise needs a
+    # measured land rate). Gather observable facts — PR state for the dispatch
+    # branch, commits ahead of origin/main in the worktree — and let
+    # dispatch_outcome.py fold the verdict into the marker. Never fatal.
+    local pr_state="" ahead=""
+    git -C "$PROD_DIR" fetch origin main --quiet >>"$LOG_FILE" 2>&1 || true
+    if command -v gh >/dev/null 2>&1; then
+        pr_state=$(cd "$PROD_DIR" && gh pr list --head "dispatch/$cid" --state all \
+            --json state --jq '.[0].state // ""' 2>/dev/null || true)
+    fi
+    ahead=$(git -C "$wt" rev-list --count origin/main..HEAD 2>/dev/null || echo "")
+    local outcome
+    outcome=$(python3 "$script_dir/dispatch_outcome.py" --marker "$DISPATCH_DIR/$cid.json" \
+        --rc "$rc" --elapsed "$elapsed" --ahead "$ahead" --pr-state "$pr_state" 2>>"$LOG_FILE" || echo "unknown")
+    log "dispatch $cid outcome: $outcome (prState=${pr_state:-n/a}, ahead=${ahead:-n/a})"
 
     # Worktree cleanup only when the branch merged or session ended clean with
     # no unpushed work; otherwise keep for inspection.
