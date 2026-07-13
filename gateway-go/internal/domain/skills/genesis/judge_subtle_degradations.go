@@ -178,14 +178,17 @@ func weakenNegationAdjacent(line string, idx, tokenLen int) bool {
 	return strings.Contains(before, "not ") || strings.HasSuffix(strings.TrimRight(before, " "), "n't")
 }
 
-// isASCIIWordToken reports whether s is entirely ASCII letters/space — the
-// shape of the English imperative swap tokens ("must ", "always ", "never ").
+// isASCIIWordToken reports whether s is entirely ASCII letters and spaces —
+// the shape of the English imperative swap tokens ("must ", "always ",
+// "never "). Digits/punctuation are rejected so only genuinely English
+// imperatives take the negation guard (Korean adverb tokens are non-ASCII and
+// weaken regardless of negation).
 func isASCIIWordToken(s string) bool {
 	if s == "" {
 		return false
 	}
 	for _, r := range s {
-		if r > 127 {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == ' ') {
 			return false
 		}
 	}
