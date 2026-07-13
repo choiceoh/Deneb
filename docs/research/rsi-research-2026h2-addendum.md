@@ -169,11 +169,17 @@ it honest.
 | 2607.06283 skill-retrieval reranking | decomposition-guided rerank vs ambiguous name matching — revisit when the catalog outgrows the prompt index (today it fits) |
 | 2606.29823 Experience Graphs | ledgers as queryable DB with causal lineage (Meta KernelEvolve ~10x); JSONL + wiki-graph cover the near term — infra-heavy, note-only |
 
-### Second-pass candidates, in order
+### Second-pass candidates — ALL LANDED 2026-07-13
 
-1. **Curriculum evidence source-grounding gate** — deterministic verbatim-
-   quotation check on curriculum proposals (small; curriculum.go record gate).
-2. **Binary-question judge direction** — soft path first (evaluator-epoch
-   exemplar), schema migration as a reviewed follow-up.
-3. **SOP miner → composite-tool L4 candidates** — frequency-gated transcript
-   mining into the existing review lane (medium; new miner, no gate changes).
+1. **Curriculum evidence source-grounding gate** — LANDED:
+   `curriculumSourceGrounding` rejects proposals whose evidence carries no
+   >=12-rune verbatim quote from the demand-evidence block; prompt rule added.
+2. **Binary-question judge direction** — LANDED (soft path): the evaluator
+   epoch's miss block now carries the BINEVAL rubric-decomposition direction
+   as advisory prose; schema migration remains a reviewed follow-up.
+3. **SOP miner** — LANDED: `scripts/audit/sop-miner.py` mines contiguous
+   tool-call n-grams (>=3 tools, >=2 distinct, >=5 occurrences across >=3
+   sessions, 30d window) from transcripts and files `sop-mining:<sha>`
+   scope=code candidates over the RPC, reusing the health-finding miner's
+   reopen/cap/RPC edge. Source stays OUTSIDE the dispatch allowlist —
+   staged for review per the graduation ladder, like runtime-error.
