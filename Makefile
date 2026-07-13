@@ -264,6 +264,14 @@ health-v2-baseline:
 runtime-health:
 	@python3 scripts/audit/runtime-health.py
 
+# Recall evaluation-loop health against the LIVE wiki (advisory, operator-run):
+# gold-set retrieval quality + production ledger utility + gold coverage of the
+# live project roster + a composite recall-health score. Needs the embedding
+# server; runs on a throwaway copy so prod is untouched. `ARGS=--emit-gold` also
+# prints deterministic gold candidates for uncovered projects (curated append).
+recall-health:
+	@scripts/dev/recall-health.sh $(ARGS)
+
 # Deterministic parser/scoring regression tests for the advisory runtime metric.
 # Safe in CI: fixtures only, never reads the host journal.
 runtime-health-test:
