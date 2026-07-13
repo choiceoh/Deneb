@@ -96,7 +96,14 @@ fun DenebRsiScreen(
             loadOk = true
             // Best-effort drill data — a failure here leaves the overview intact.
             lifecycle = client.fetchSkillLifecycle(limit = 12) ?: emptyList()
-            candidates = client.fetchSelfImprovementCodingCandidates(limit = 8, status = "proposed") ?: emptyList()
+            // Pending dispatch = proposed + accepted (coding-dispatch picks both).
+            // proposed-only hid the entire accepted L4 backlog (2026-07-13: 7
+            // accepted health-finding candidates, drill empty while L4 LIVE).
+            candidates = client.fetchSelfImprovementCodingCandidates(limit = 24, status = "all")
+                ?.filter { it.status == "proposed" || it.status == "accepted" }
+                ?.filter { it.scope.isBlank() || it.scope == "code" }
+                ?.take(8)
+                ?: emptyList()
         }
     }
     LaunchedEffect(Unit) { load() }
@@ -176,7 +183,9 @@ internal fun RsiStatusContent(
  *  would just echo the layer cards' IDLE state. Hoisted so the caller can guard the
  *  card *and* its trailing spacer with the same predicate. */
 private val RSIHealthView.hasActivity: Boolean
-    get() = evolves7d > 0 || genesis7d > 0 || metaRevisions7d > 0 || thrash || autoAdoptFrozen
+    get() = evolves7d > 0 || genesis7d > 0 || metaRevisions7d > 0 ||
+        confirmed7d > 0 || rolledBack7d > 0 || resolvedEvolves7d > 0 ||
+        thrash || autoAdoptFrozen
 
 /** Evolution-health scoreboard (7-day) from `rsi.status.health`: the numeric
  *  fields the layer diagnoses only render as prose. Skipped entirely when
@@ -188,6 +197,9 @@ private val RSIHealthView.hasActivity: Boolean
 private fun RsiHealthCard(health: RSIHealthView) {
     if (!health.hasActivity) return
     fun pct(v: Double) = "${(v * 100).roundToInt()}%"
+    // Rates are undefined with no resolved sample — show "—", not a misleading 0%
+    // (andromeda HealthCard parity).
+    fun rate(v: Double) = if (health.resolvedEvolves7d > 0) pct(v) else "—"
     DenebGroup {
         Text(
             text = "진화 건강 (7일)",
@@ -202,8 +214,8 @@ private fun RsiHealthCard(health: RSIHealthView) {
             // 7 tiles: cap at 4/row so they wrap balanced (4+3) instead of orphaning the 7th.
             maxItemsInEachRow = 4,
         ) {
-            RsiStat("확정률", pct(health.confirmRate))
-            RsiStat("오수용률", pct(health.falseAcceptRate), sub = "n=${health.resolvedEvolves7d}")
+            RsiStat("확정률", rate(health.confirmRate))
+            RsiStat("오수용률", rate(health.falseAcceptRate), sub = "n=${health.resolvedEvolves7d}")
             RsiStat("진화", health.evolves7d.toString())
             RsiStat("확정", health.confirmed7d.toString())
             RsiStat("롤백", health.rolledBack7d.toString())

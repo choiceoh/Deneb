@@ -81,6 +81,12 @@ func (t *heartbeatTask) detectSelfImproveSweepNudge(now time.Time) string {
 		t.markSelfImproveSweepYield()
 		return ""
 	}
+	// Accepted code candidates awaiting coding-dispatch are also a live
+	// consumer backlog — mining more while they sit is the wrong pressure
+	// (observed 2026-07-13: 0 proposed / 7 accepted, sweep still eligible).
+	if t.dispatchBacklogSelfCoding != nil && t.dispatchBacklogSelfCoding() > 0 {
+		return ""
+	}
 	statePath := t.selfImproveSweepStatePath()
 	st := loadSelfImproveSweepState(statePath)
 	if st.LastNudgeAt.After(now) {

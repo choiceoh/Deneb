@@ -73,6 +73,12 @@ type heartbeatTask struct {
 	// disabled (tests, genesis tracker absent).
 	proposedSelfCoding func() (count int, fingerprint string)
 
+	// dispatchBacklogSelfCoding, when set, reports how many code-scope
+	// accepted candidates are waiting for coding-dispatch. The generator sweep
+	// must not mine more while the consumer backlog is non-empty (proposed is
+	// already covered by proposedSelfCoding above).
+	dispatchBacklogSelfCoding func() int
+
 	// promoteRecurrences, when set, deterministically converts fresh
 	// target-recurrence signals ("the accepted evolve did not stick") into
 	// proposed candidates each tick, BEFORE the lanes below look at the queue
@@ -117,37 +123,39 @@ type Task = heartbeatTask
 
 // TaskConfig contains the execution and signal boundaries for Task.
 type TaskConfig struct {
-	ChatHandler         chatport.SyncRunner
-	Activity            *monitoring.ActivityTracker
-	Logger              *slog.Logger
-	HomeDir             string
-	CollectSignals      func(context.Context) autonomous.SignalInputs
-	SignalConfig        autonomous.SignalConfig
-	ProposedSelfCoding  func() (count int, fingerprint string)
-	PromoteRecurrences  func() (int, error)
-	PromoteClusters     func() (int, error)
-	SelfImproveSignals  func() (genesis.SelfCorrectionFunnelSummary, int)
-	SelfImproveEvidence func(limit int) []genesis.FailureClusterSummary
-	IdleSkillReview     func(context.Context) (bool, string)
-	Now                 func() time.Time
+	ChatHandler               chatport.SyncRunner
+	Activity                  *monitoring.ActivityTracker
+	Logger                    *slog.Logger
+	HomeDir                   string
+	CollectSignals            func(context.Context) autonomous.SignalInputs
+	SignalConfig              autonomous.SignalConfig
+	ProposedSelfCoding        func() (count int, fingerprint string)
+	DispatchBacklogSelfCoding func() int
+	PromoteRecurrences        func() (int, error)
+	PromoteClusters           func() (int, error)
+	SelfImproveSignals        func() (genesis.SelfCorrectionFunnelSummary, int)
+	SelfImproveEvidence       func(limit int) []genesis.FailureClusterSummary
+	IdleSkillReview           func(context.Context) (bool, string)
+	Now                       func() time.Time
 }
 
 // NewTask constructs the periodic heartbeat worker.
 func NewTask(cfg TaskConfig) *Task {
 	return &heartbeatTask{
-		chatHandler:         cfg.ChatHandler,
-		activity:            cfg.Activity,
-		logger:              cfg.Logger,
-		homeDir:             cfg.HomeDir,
-		collectSignals:      cfg.CollectSignals,
-		signalConfig:        cfg.SignalConfig,
-		proposedSelfCoding:  cfg.ProposedSelfCoding,
-		promoteRecurrences:  cfg.PromoteRecurrences,
-		promoteClusters:     cfg.PromoteClusters,
-		selfImproveSignals:  cfg.SelfImproveSignals,
-		selfImproveEvidence: cfg.SelfImproveEvidence,
-		idleSkillReview:     cfg.IdleSkillReview,
-		nowFn:               cfg.Now,
+		chatHandler:               cfg.ChatHandler,
+		activity:                  cfg.Activity,
+		logger:                    cfg.Logger,
+		homeDir:                   cfg.HomeDir,
+		collectSignals:            cfg.CollectSignals,
+		signalConfig:              cfg.SignalConfig,
+		proposedSelfCoding:        cfg.ProposedSelfCoding,
+		dispatchBacklogSelfCoding: cfg.DispatchBacklogSelfCoding,
+		promoteRecurrences:        cfg.PromoteRecurrences,
+		promoteClusters:           cfg.PromoteClusters,
+		selfImproveSignals:        cfg.SelfImproveSignals,
+		selfImproveEvidence:       cfg.SelfImproveEvidence,
+		idleSkillReview:           cfg.IdleSkillReview,
+		nowFn:                     cfg.Now,
 	}
 }
 
