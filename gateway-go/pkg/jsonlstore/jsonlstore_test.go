@@ -65,6 +65,53 @@ not json
 	}
 }
 
+func TestLoadOversizeLineIsSkippedNotFatal(t *testing.T) {
+	// RSI 4th-review M2-#3: an oversize (>maxLineBytes) line — a torn write, a
+	// merged record, or external corruption — must be skipped like any other
+	// corrupt line, never abort the scan. The old bufio.Scanner returned
+	// (partial, ErrTooLong), which the genesis held-out gate surfaced as an
+	// engine error and, failing CLOSED, froze evolution for every skill sharing
+	// the JSONL. Verify the good records survive and no error escapes.
+	path := filepath.Join(t.TempDir(), "oversize.jsonl")
+	giant := strings.Repeat("x", maxLineBytes+16)
+	data := `{"name":"a","value":1}` + "\n" +
+		`{"name":"` + giant + `","value":2}` + "\n" +
+		`{"name":"c","value":3}` + "\n"
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	items, err := Load[record](path)
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil (oversize line must skip, not fail)", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2 (oversize line skipped, neighbors kept)", len(items))
+	}
+	if items[0].Name != "a" || items[1].Name != "c" {
+		t.Fatalf("unexpected surviving records: %+v", items)
+	}
+}
+
+func TestLoadLineAtCeilingIsKept(t *testing.T) {
+	// A line up to maxLineBytes is still valid — only strictly larger lines are
+	// dropped, matching the prior scanner ceiling so nothing regresses.
+	path := filepath.Join(t.TempDir(), "ceiling.jsonl")
+	// Pad Name so the whole JSON line lands just under the ceiling.
+	pad := maxLineBytes - len(`{"name":"","value":1}`) - 8
+	item := record{Name: strings.Repeat("y", pad), Value: 7}
+	if err := Append(path, item); err != nil {
+		t.Fatal(err)
+	}
+	items, err := Load[record](path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Value != 7 {
+		t.Fatalf("near-ceiling line dropped: got %+v", items)
+	}
+}
+
 func TestAppendMarshalErrorDoesNotCreateFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "rejected.jsonl")
 	item := struct {
