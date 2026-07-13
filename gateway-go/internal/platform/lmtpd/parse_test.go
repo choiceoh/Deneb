@@ -317,6 +317,50 @@ func TestCharsetDecode_EUCKR(t *testing.T) {
 	}
 }
 
+func TestCharsetDecode_CJK(t *testing.T) {
+	// "中" (U+4E2D) in each legacy CJK encoding decodes to the same rune.
+	cases := []struct {
+		charset string
+		raw     []byte
+	}{
+		{"gb18030", []byte{0xD6, 0xD0}}, // GB18030/GBK/GB2312 share this byte pair
+		{"gbk", []byte{0xD6, 0xD0}},
+		{"big5", []byte{0xA4, 0xA4}},
+		{"shift_jis", []byte{0x92, 0x86}},
+		{"euc-jp", []byte{0xC3, 0xE6}},
+	}
+	for _, tc := range cases {
+		if got := charsetDecode(tc.raw, tc.charset); got != "中" {
+			t.Errorf("%s decode = %q, want 中", tc.charset, got)
+		}
+	}
+}
+
+func TestDecodeHeader_GB18030From(t *testing.T) {
+	// Real regression: an aikosolar.com sender whose display name is a GB18030
+	// RFC2047 encoded-word. Before GB18030 was wired into decoderFor, the raw
+	// bytes passed through as invalid UTF-8 and rendered as U+FFFD in the native
+	// inbox ("보낸이 이름 깨짐").
+	raw := crlf(
+		"From: =?GB18030?B?uqvKr4itSGFuIEhhbihIYW5IYW4p?= <han.han@aikosolar.com>",
+		"Subject: s",
+		"",
+		"body",
+		"",
+	)
+	msg, err := parseMessage([]byte(raw), "id")
+	if err != nil {
+		t.Fatalf("parseMessage: %v", err)
+	}
+	const want = "韩石埈Han Han(HanHan) <han.han@aikosolar.com>"
+	if msg.Detail.From != want {
+		t.Errorf("From = %q, want %q", msg.Detail.From, want)
+	}
+	if strings.ContainsRune(msg.Detail.From, '�') {
+		t.Errorf("From still contains replacement char: %q", msg.Detail.From)
+	}
+}
+
 func TestClampRunes(t *testing.T) {
 	if got := clampRunes("한국어", 10); got != "한국어" {
 		t.Errorf("clampRunes short = %q", got)

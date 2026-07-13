@@ -20,7 +20,10 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/japanese"
 	"golang.org/x/text/encoding/korean"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/encoding/traditionalchinese"
 	"golang.org/x/text/encoding/unicode"
 )
 
@@ -316,8 +319,10 @@ func (s *base64Sanitizer) Read(p []byte) (int, error) {
 }
 
 // charsetDecode converts a body part to UTF-8 from its declared charset.
-// UTF-8/ASCII pass through; EUC-KR/CP949 (common in Korean mail) and KS_C_5601
-// are decoded via x/text. Unknown charsets are returned as-is (best-effort).
+// UTF-8/ASCII pass through; the CJK legacy charsets a Korean business inbox
+// realistically receives (EUC-KR/CP949, Chinese GB/Big5, Japanese Shift-JIS/
+// EUC-JP/ISO-2022-JP) are decoded via x/text. Unknown charsets are returned
+// as-is (best-effort).
 func charsetDecode(b []byte, charset string) string {
 	dec := decoderFor(charset)
 	if dec == nil {
@@ -336,6 +341,19 @@ func decoderFor(charset string) *encoding.Decoder {
 		return nil // already UTF-8/ASCII
 	case "euc-kr", "euckr", "cp949", "ks_c_5601-1987", "ksc5601", "ks_c_5601":
 		return korean.EUCKR.NewDecoder()
+	case "gb18030", "gbk", "gb2312", "gb_2312-80", "csgb2312", "cp936", "ms936", "windows-936":
+		// GB18030 is a backward-compatible superset of GBK and GB2312, so one
+		// decoder handles all three. Chinese senders (e.g. an aikosolar.com
+		// GB18030 encoded-word display name) otherwise render as U+FFFD soup.
+		return simplifiedchinese.GB18030.NewDecoder()
+	case "big5", "big5-hkscs", "cn-big5", "csbig5":
+		return traditionalchinese.Big5.NewDecoder()
+	case "shift_jis", "shift-jis", "sjis", "cp932", "ms932", "windows-31j":
+		return japanese.ShiftJIS.NewDecoder()
+	case "euc-jp", "eucjp":
+		return japanese.EUCJP.NewDecoder()
+	case "iso-2022-jp", "csiso2022jp":
+		return japanese.ISO2022JP.NewDecoder()
 	case "utf-16", "utf-16le":
 		return unicode.UTF16(unicode.LittleEndian, unicode.UseBOM).NewDecoder()
 	case "utf-16be":
