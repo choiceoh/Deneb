@@ -148,8 +148,10 @@ func (s *Server) proposedSelfCodingFingerprint() (int, string) {
 }
 
 // dispatchBacklogSelfCodingCount counts accepted, dispatchable code candidates
-// waiting for coding-dispatch.sh. Used to suppress the generator sweep while
-// the consumer lane is backed up (proposed is handled separately).
+// that coding-dispatch has NOT yet claimed (no blocking marker). Used to
+// suppress the generator sweep while the consumer lane is backed up.
+// Tracker read errors fail-closed (return 1) so a broken ledger cannot re-open
+// mining while backlog visibility is unknown (bot review #3612).
 func (s *Server) dispatchBacklogSelfCodingCount() int {
 	tracker := s.genesisTracker
 	if tracker == nil {
@@ -157,7 +159,10 @@ func (s *Server) dispatchBacklogSelfCodingCount() int {
 	}
 	recs, err := tracker.RecentSelfCorrectionCandidates("", genesis.SelfCorrectionStatusAccepted, 100)
 	if err != nil {
-		return 0
+		if s.logger != nil {
+			s.logger.Warn("dispatch backlog: self-correction read failed — suppressing sweep", "error", err)
+		}
+		return 1
 	}
 	n := 0
 	for _, rec := range recs {
@@ -165,6 +170,9 @@ func (s *Server) dispatchBacklogSelfCodingCount() int {
 			continue
 		}
 		if !genesis.SourceAutoDispatches(rec.Source) {
+			continue
+		}
+		if tracker.DispatchMarkerBlocks(rec.ID) {
 			continue
 		}
 		n++

@@ -16,8 +16,16 @@ deny() {
   local hint="$2"
   local full
   full=$(printf '%s\n%s' "$msg" "$hint")
-  jq -nc --arg m "$full" \
-    '{permission:"deny", user_message:"메인 체크아웃 편집이 차단되었습니다. Cursor 워크트리를 사용하세요.", agent_message:$m}'
+  # failClosed hooks require valid JSON on stdout even when jq is missing
+  # (bot review #3604).
+  if command -v jq >/dev/null 2>&1; then
+    jq -nc --arg m "$full" \
+      '{permission:"deny", user_message:"메인 체크아웃 편집이 차단되었습니다. Cursor 워크트리를 사용하세요.", agent_message:$m}' \
+      2>/dev/null && exit 0
+  fi
+  python3 -c 'import json,sys; print(json.dumps({"permission":"deny","user_message":"메인 체크아웃 편집이 차단되었습니다. Cursor 워크트리를 사용하세요.","agent_message":sys.argv[1]}, ensure_ascii=False))' "$full" 2>/dev/null && exit 0
+  # Last resort: static JSON (message truncated) so failClosed never sees empty stdout.
+  printf '%s\n' '{"permission":"deny","user_message":"메인 체크아웃 편집이 차단되었습니다. Cursor 워크트리를 사용하세요.","agent_message":"main checkout edit blocked"}'
   exit 0
 }
 
@@ -31,14 +39,9 @@ resolve_abs() {
   # Echo realpath or empty on failure. Reject raw `..` segments before resolve
   # so a missing python/realpath fallback cannot prefix-bypass WT_BASE.
   local raw="$1"
-  case "$raw" in
-    *..*) ;;
-    *) ;;
-  esac
-  # If the path literally contains /../ or starts with ../, require realpath success.
-  if [[ "$raw" == *'/../'* || "$raw" == '../'* || "$raw" == *'/..' || "$raw" == '..' ]]; then
-    python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$raw" 2>/dev/null || return 1
-    return 0
+  if [[ "$raw" == *'..'* ]]; then
+    # Explicit deny for traversal segments (bot #3604: prior case was a no-op).
+    return 1
   fi
   if command -v realpath >/dev/null 2>&1; then
     realpath -m "$raw" 2>/dev/null || python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$raw" 2>/dev/null || return 1
@@ -83,11 +86,17 @@ SESSION_ID="${CURSOR_SESSION_ID:-}"
 if [[ -z "$SESSION_ID" ]]; then
   SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
 fi
+SAFE_SID=""
+if [[ -n "$SESSION_ID" ]]; then
+  SAFE_SID=$(printf '%s' "$SESSION_ID" | tr -c 'A-Za-z0-9._-' '_' | cut -c1-80)
+fi
 WT_PATH=""
 if [[ -n "${CURSOR_WORKTREE:-}" && -d "${CURSOR_WORKTREE}" ]]; then
   WT_PATH="$CURSOR_WORKTREE"
-elif [[ -n "$SESSION_ID" && -d "$WT_BASE/$SESSION_ID" ]]; then
-  WT_PATH="$WT_BASE/$SESSION_ID"
+elif [[ -n "$SAFE_SID" && -d "$WT_BASE/$SAFE_SID" ]]; then
+  WT_PATH="$WT_BASE/$SAFE_SID"
+elif [[ -n "$SAFE_SID" && -f "$WT_BASE/active-root.$SAFE_SID" ]]; then
+  WT_PATH=$(head -1 "$WT_BASE/active-root.$SAFE_SID" 2>/dev/null || true)
 elif [[ -f "$WT_BASE/active-root" ]]; then
   WT_PATH=$(head -1 "$WT_BASE/active-root" 2>/dev/null || true)
 fi

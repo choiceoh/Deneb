@@ -40,6 +40,9 @@ class DecisionTableTest(unittest.TestCase):
             ((1, 0, ""), "failed"),
             ((0, 2, ""), "attempted"),  # unpushed/unlanded commits
             ((0, 0, "OPEN"), "attempted"),  # PR still in flight
+            # OPEN / ahead beat timeout so reprobe can still upgrade to landed
+            ((124, 0, "OPEN"), "attempted"),
+            ((124, 2, ""), "attempted"),
             ((0, 0, ""), "declined"),  # clean exit, no work: contract clause
             ((0, 0, "CLOSED"), "declined"),  # PR closed without merge, no work left
         ]
@@ -47,6 +50,18 @@ class DecisionTableTest(unittest.TestCase):
             self.assertEqual(
                 dispatch_outcome.decide(rc, ahead, state), want, (rc, ahead, state)
             )
+
+    def test_unknown_ahead_without_pr_skips_outcome(self):
+        with TemporaryDirectory() as td:
+            marker = Path(td) / "sc-u.json"
+            before = {"id": "sc-u", "promptVersion": "x"}
+            marker.write_text(json.dumps(before) + "\n")
+            rc, printed = run_main(
+                ["--marker", str(marker), "--rc", "0", "--ahead", "", "--pr-state", ""]
+            )
+            self.assertEqual(rc, 0)
+            self.assertEqual(printed, "")
+            self.assertEqual(json.loads(marker.read_text()), before)
 
 
 class MarkerRewriteTest(unittest.TestCase):

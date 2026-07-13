@@ -99,11 +99,16 @@ fun DenebRsiScreen(
             // Pending dispatch = proposed + accepted (coding-dispatch picks both).
             // proposed-only hid the entire accepted L4 backlog (2026-07-13: 7
             // accepted health-finding candidates, drill empty while L4 LIVE).
-            candidates = client.fetchSelfImprovementCodingCandidates(limit = 24, status = "all")
-                ?.filter { it.status == "proposed" || it.status == "accepted" }
-                ?.filter { it.scope.isBlank() || it.scope == "code" }
-                ?.take(8)
-                ?: emptyList()
+            // Fetch proposed + accepted separately so a flood of applied/rejected
+            // rows cannot crowd the server-side limit before client filtering
+            // (bot review #3612).
+            val proposed = client.fetchSelfImprovementCodingCandidates(limit = 24, status = "proposed")
+            val accepted = client.fetchSelfImprovementCodingCandidates(limit = 24, status = "accepted")
+            candidates = ((proposed ?: emptyList()) + (accepted ?: emptyList()))
+                .distinctBy { it.id }
+                .filter { it.scope.isBlank() || it.scope == "code" }
+                .sortedByDescending { it.updatedAt.takeIf { ts -> ts > 0 } ?: it.createdAt }
+                .take(8)
         }
     }
     LaunchedEffect(Unit) { load() }
@@ -184,8 +189,8 @@ internal fun RsiStatusContent(
  *  card *and* its trailing spacer with the same predicate. */
 private val RSIHealthView.hasActivity: Boolean
     get() = evolves7d > 0 || genesis7d > 0 || metaRevisions7d > 0 ||
-        confirmed7d > 0 || rolledBack7d > 0 || resolvedEvolves7d > 0 ||
-        thrash || autoAdoptFrozen
+        confirmed7d > 0 || rolledBack7d > 0 || rejected7d > 0 ||
+        resolvedEvolves7d > 0 || thrash || autoAdoptFrozen
 
 /** Evolution-health scoreboard (7-day) from `rsi.status.health`: the numeric
  *  fields the layer diagnoses only render as prose. Skipped entirely when

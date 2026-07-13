@@ -12,23 +12,23 @@ Decision table — deterministic, from facts the shell gathers (a PR probe and
 the worktree's commit state), never from parsing session text:
 
   pr-state MERGED            -> landed     (the contract's success terminal)
+  ahead > 0 or pr-state OPEN -> attempted  (work exists / PR in flight —
+                                            checked BEFORE rc so a timeout
+                                            after opening a PR stays reprobeable)
   rc 124 (timeout(1))        -> timeout    (session hit the wall clock)
   rc != 0                    -> failed     (session died)
-  ahead > 0 or pr-state OPEN -> attempted  (work exists but is not landed —
-                                            reprobed on later dispatch ticks,
-                                            MERGED upgrades it to landed)
-  otherwise                  -> declined   (clean exit, no commits: the agent
-                                            exercised the contract's "do not
-                                            land" clause)
+  otherwise                  -> declined   (clean exit, no commits)
+
+When --ahead is '' (unknown) and --pr-state is empty, refuse to guess: leave
+the marker without an outcome rather than recording a false declined.
 
 Pick-lane companion: blocks_redispatch() — landed/attempted block redispatch;
 declined/failed/timeout may retry; outcome-less markers block only until the
-session abandon age (default = SESSION_TIMEOUT) so a crash before accounting
-cannot starve the L4 drain forever.
+session abandon age (default = SESSION_TIMEOUT).
 
 The marker is rewritten atomically (tmp+rename); all fields are additive so
 older markers without outcomes stay readable. Exit 0 even on unreadable
-markers — outcome accounting must never break the dispatch lane.
+markers or write failures — outcome accounting must never break the lane.
 """
 
 from __future__ import annotations
@@ -41,18 +41,9 @@ from pathlib import Path
 
 TIMEOUT_RC = 124  # coreutils timeout(1) convention
 
-# Outcomes that permanently (or until upgraded) consume a candidate slot.
-# attempted stays blocked so an in-flight PR is not double-dispatched; later
-# ticks may upgrade it to landed via --upgrade-only.
 BLOCKING_OUTCOMES = frozenset({"landed", "attempted"})
-# Terminal failures / clean declines: the candidate may be retried on a later
-# tick (subject to the daily cap). Observed 2026-07-13: treating any marker
-# file as permanent skip left declined/failed/timeout slots dead forever.
 REDISPATCH_OUTCOMES = frozenset({"declined", "failed", "timeout"})
-# Marker is written BEFORE the Claude session starts. A crash/kill before
-# outcome accounting leaves no "outcome" field — block while the session
-# wall-clock could still be running, then release so the L4 drain continues.
-DEFAULT_ABANDON_AFTER_SEC = 7200  # matches coding-dispatch SESSION_TIMEOUT default
+DEFAULT_ABANDON_AFTER_SEC = 7200
 
 
 def blocks_redispatch(
@@ -61,31 +52,23 @@ def blocks_redispatch(
     now_sec: float | None = None,
     abandon_after_sec: int = DEFAULT_ABANDON_AFTER_SEC,
 ) -> bool:
-    """True when the pick lane must skip this candidate because of its marker.
-
-    Decision table (load-bearing for L4 drain):
-      no marker file                         -> False (pick it)
-      outcome landed|attempted               -> True
-      outcome declined|failed|timeout        -> False (retry allowed)
-      missing/empty outcome, age < abandon   -> True  (likely in flight)
-      missing/empty outcome, age >= abandon  -> False (abandoned session)
-      unreadable marker                      -> True  (do not thrash)
-    """
+    """True when the pick lane must skip this candidate because of its marker."""
     path = Path(marker_path)
     if not path.is_file():
         return False
     try:
-        marker = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        marker = json.loads(raw)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
         return True
-    outcome = (marker.get("outcome") or "").strip()
+    if not isinstance(marker, dict):
+        return True
+    outcome_raw = marker.get("outcome")
+    outcome = outcome_raw.strip() if isinstance(outcome_raw, str) else ""
     if outcome in BLOCKING_OUTCOMES:
         return True
     if outcome in REDISPATCH_OUTCOMES:
         return False
-    # No recorded outcome yet — age gate against the marker mtime (written at
-    # dispatch start). Prefer mtime over createdAt: the marker body is a copy of
-    # the candidate record whose createdAt is the queue timestamp, not dispatch.
     if now_sec is None:
         now_sec = time.time()
     try:
@@ -96,15 +79,36 @@ def blocks_redispatch(
 
 
 def decide(rc: int, ahead: int, pr_state: str) -> str:
+    """Map observables to an outcome. Caller must not pass unknown ahead as 0."""
     if pr_state == "MERGED":
         return "landed"
+    # OPEN / unpushed commits win over session rc: a timeout after opening a PR
+    # must stay reprobeable (upgrade-only scans attempted markers).
+    if ahead > 0 or pr_state == "OPEN":
+        return "attempted"
     if rc == TIMEOUT_RC:
         return "timeout"
     if rc != 0:
         return "failed"
-    if ahead > 0 or pr_state == "OPEN":
-        return "attempted"
     return "declined"
+
+
+def write_marker(path: Path, marker: dict, *, mtime_sec: float | None = None) -> bool:
+    """Atomic rewrite. Returns False on I/O failure (never raises)."""
+    try:
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(marker, ensure_ascii=False) + "\n", encoding="utf-8")
+        tmp.replace(path)
+        if mtime_sec is not None:
+            try:
+                os_utime = __import__("os").utime
+                os_utime(path, (mtime_sec, mtime_sec))
+            except OSError:
+                pass
+        return True
+    except OSError as e:
+        print(f"dispatch outcome: marker write failed ({e}) — skipped", file=sys.stderr)
+        return False
 
 
 def main() -> int:
@@ -115,46 +119,67 @@ def main() -> int:
     ap.add_argument(
         "--ahead",
         default="",
-        help="commits ahead of origin/main in the dispatch worktree ('' = unknown)",
+        help="commits ahead of origin/main ('' = unknown — do not guess declined)",
     )
     ap.add_argument(
         "--pr-state",
         default="",
-        help="gh PR state for the dispatch branch: MERGED|OPEN|CLOSED|'' (unknown)",
+        help="gh PR state: MERGED|OPEN|CLOSED|'' (unknown)",
     )
     ap.add_argument(
         "--upgrade-only",
         action="store_true",
-        help="reprobe mode: upgrade a non-terminal outcome to landed when the "
-        "PR merged later; every other field is preserved, non-MERGED is a no-op",
+        help="reprobe mode: upgrade to landed on MERGED; preserve marker mtime "
+        "so daily-cap accounting is not burned by late merges",
+    )
+    ap.add_argument(
+        "--preserve-mtime",
+        action="store_true",
+        help="keep the marker's prior mtime after rewrite (used by reprobe)",
     )
     args = ap.parse_args()
 
     path = Path(args.marker)
     try:
-        marker = json.loads(path.read_text(encoding="utf-8"))
+        marker = json.loads(path.read_text(encoding="utf-8", errors="replace"))
     except (OSError, json.JSONDecodeError) as e:
         print(f"dispatch outcome: marker unreadable ({e}) — skipped", file=sys.stderr)
         return 0
+    if not isinstance(marker, dict):
+        print("dispatch outcome: marker not an object — skipped", file=sys.stderr)
+        return 0
+
+    prior_mtime = None
+    if args.preserve_mtime or args.upgrade_only:
+        try:
+            prior_mtime = path.stat().st_mtime
+        except OSError:
+            prior_mtime = None
 
     pr_state = args.pr_state.strip().upper()
     if args.upgrade_only:
         if pr_state != "MERGED":
-            print(marker.get("outcome", ""))
+            print(marker.get("outcome", "") if isinstance(marker.get("outcome"), str) else "")
             return 0
         marker["outcome"] = "landed"
         marker["outcomePrState"] = "MERGED"
         marker["outcomeAt"] = int(time.time() * 1000)
-        write_marker(path, marker)
+        write_marker(path, marker, mtime_sec=prior_mtime)
         print("landed")
         return 0
 
+    ahead_raw = args.ahead.strip()
+    if ahead_raw == "" and not pr_state:
+        # Unknown facts — do not invent declined (bot review #3609).
+        print("unknown", file=sys.stderr)
+        print("")
+        return 0
     try:
-        ahead = int(args.ahead)
+        ahead = int(ahead_raw) if ahead_raw != "" else 0
     except ValueError:
         ahead = 0
-    outcome = decide(args.rc, ahead, pr_state)
 
+    outcome = decide(args.rc, ahead, pr_state)
     marker["outcome"] = outcome
     marker["outcomeRc"] = args.rc
     marker["outcomeElapsedSec"] = args.elapsed
@@ -162,15 +187,9 @@ def main() -> int:
     if pr_state:
         marker["outcomePrState"] = pr_state
 
-    write_marker(path, marker)
+    write_marker(path, marker, mtime_sec=prior_mtime if args.preserve_mtime else None)
     print(outcome)
     return 0
-
-
-def write_marker(path: Path, marker: dict) -> None:
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(marker, ensure_ascii=False) + "\n", encoding="utf-8")
-    tmp.replace(path)
 
 
 if __name__ == "__main__":

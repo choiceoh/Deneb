@@ -65,30 +65,69 @@ main() {
     local script_dir
     script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-    # Upgrade non-terminal outcomes first: a session that pushed a PR but died
-    # before landing records "attempted" — if that PR merged later, the land
-    # rate (graduation-ladder evidence) would permanently undercount. Bounded
-    # reprobe: newest few attempted markers within 14d, one gh probe each.
+    # Upgrade non-terminal outcomes first. Newest-first within 14d (mtime), then
+    # truncate — sorting AFTER age filter so five stale markers cannot starve
+    # newer attempted ones (bot #3609). Also reprobe failed/timeout when the PR
+    # later merged (OPEN-at-end sessions used to record failed before attempted).
     if command -v gh >/dev/null 2>&1; then
         local m mcid mstate
-        for m in $(grep -l '"outcome": "attempted"' "$DISPATCH_DIR"/*.json 2>/dev/null | head -5); do
-            [[ -n $(find "$m" -mtime -14 2>/dev/null) ]] || continue
+        while IFS= read -r m; do
+            [[ -f "$m" ]] || continue
+            if ! grep -qE '"outcome": "(attempted|failed|timeout)"' "$m" 2>/dev/null; then
+                continue
+            fi
             mcid=$(basename "$m" .json)
             mstate=$(cd "$PROD_DIR" && gh pr list --head "dispatch/$mcid" --state merged \
                 --json state --jq '.[0].state // ""' 2>/dev/null || true)
             if [[ "$mstate" == "MERGED" ]]; then
                 python3 "$script_dir/dispatch_outcome.py" --marker "$m" --rc 0 \
-                    --pr-state MERGED --upgrade-only >>"$LOG_FILE" 2>&1 || true
-                log "reprobe: $mcid attempted → landed (PR merged after session end)"
+                    --pr-state MERGED --upgrade-only --preserve-mtime >>"$LOG_FILE" 2>&1 || true
+                log "reprobe: $mcid → landed (PR merged after session end)"
             fi
-        done
+        done < <(
+            find "$DISPATCH_DIR" -name '*.json' -mtime -14 -printf '%T@ %p\n' 2>/dev/null \
+                | sort -rn | head -20 | while read -r _ path; do printf '%s\n' "$path"; done
+        )
     fi
 
-    # Daily cap: markers created today (UTC — matches rsi_status.go /
-    # scripts/audit/rsi_status.py so "오늘 배차" and the cap share a day boundary).
+    # Daily cap: prefer explicit dispatchedAt (ms) so late reprobe rewrites do
+    # not burn today's slots; fall back to mtime for legacy markers.
     local today spent
     today=$(date -u +%Y-%m-%d)
-    spent=$(find "$DISPATCH_DIR" -name "*.json" -newermt "$today UTC" 2>/dev/null | wc -l)
+    spent=$(python3 - "$DISPATCH_DIR" "$today" <<'PY'
+import json, os, sys, time
+from datetime import datetime, timezone
+dispatch_dir, today = sys.argv[1], sys.argv[2]
+day = datetime.strptime(today, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+start = int(day.timestamp() * 1000)
+end = start + 86400000
+n = 0
+try:
+    names = os.listdir(dispatch_dir)
+except OSError:
+    print(0); raise SystemExit
+for name in names:
+    if not name.endswith(".json"):
+        continue
+    path = os.path.join(dispatch_dir, name)
+    ts = None
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            rec = json.load(f)
+        if isinstance(rec, dict) and isinstance(rec.get("dispatchedAt"), (int, float)):
+            ts = int(rec["dispatchedAt"])
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        pass
+    if ts is None:
+        try:
+            ts = int(os.path.getmtime(path) * 1000)
+        except OSError:
+            continue
+    if start <= ts < end:
+        n += 1
+print(n)
+PY
+)
     if (( spent >= DAILY_CAP )); then
         log "daily cap reached ($spent/$DAILY_CAP UTC $today) — idle"
         exit 0
@@ -107,13 +146,13 @@ main() {
 
     mkdir -p "$WORKTREE_ROOT"
 
-    # Pick + setup may need more than one try in a single tick: a head-of-queue
-    # candidate whose worktree/branch setup fails used to exit 0 and starve the
-    # other dispatchable IDs until the next timer (live 2026-07-13: 4c2c454a
-    # failed at 20:22 and 22:22 while 6 siblings sat ready).
+    # Pick + setup: keep trying until a worktree is ready or the queue is
+    # exhausted this tick (hard-capping at 5 left candidate 6+ permanently
+    # starved across timer ticks when the head of queue was poison — bot #3615).
     local pick="" cid="" wt="" skip_ids=""
-    local attempt
-    for attempt in 1 2 3 4 5; do
+    local attempt=0
+    while (( attempt < 40 )); do
+        attempt=$((attempt + 1))
         # Newest undispatched proposed/accepted code candidate with an evidence-
         # bearing source. Marker skip: dispatch_outcome.blocks_redispatch.
         # Optional argv[5]=comma-separated ids to skip this tick after setup fail.
@@ -159,10 +198,6 @@ for rid, rec in sorted(cand.items(), key=pick_order):
             os.path.join(dispatch_dir, rid + ".json"),
             abandon_after_sec=abandon_after):
         continue
-    # Emit the MERGED status — the cand map keeps the original candidate row
-    # (status=proposed), while reviews are status deltas. Writing the stale
-    # proposed into the dispatch marker (live 2026-07-13: ee440d82 marker said
-    # proposed while the queue was accepted) poisons the ledger.
     out = dict(rec)
     out["status"] = status.get(rid, rec.get("status") or "proposed")
     print(json.dumps(out, ensure_ascii=False))
@@ -175,22 +210,43 @@ PYEOF
         fi
         cid=$(printf '%s' "$pick" | python3 -c "import json,sys;print(json.load(sys.stdin)['id'])")
         wt="$WORKTREE_ROOT/dispatch-$cid"
+        local branch="dispatch/$cid"
 
-        # Unregistered leftover dir → wipe (crash mid-add / empty tree).
-        if [[ -d "$wt" ]] && ! git -C "$PROD_DIR" worktree list --porcelain 2>/dev/null \
-                | grep -Fxq "worktree $wt"; then
-            log "stale worktree dir (not registered) — removing $wt"
-            rm -rf "$wt"
+        # Unregistered leftover dir → wipe only after worktree list SUCCEEDS
+        # (bot #3614: a bad PROD_DIR made list fail and rm -rf real trees).
+        if [[ -d "$wt" ]]; then
+            local wt_list
+            if ! wt_list=$(git -C "$PROD_DIR" worktree list --porcelain 2>/dev/null); then
+                log "git worktree list failed for $PROD_DIR — setup deferred for $cid"
+                skip_ids="${skip_ids:+$skip_ids,}$cid"
+                pick=""; cid=""; wt=""
+                continue
+            fi
+            if ! printf '%s\n' "$wt_list" | grep -Fxq "worktree $wt"; then
+                log "stale worktree dir (not registered) — removing $wt"
+                rm -rf "$wt"
+            fi
         fi
 
-        # Registered but abandoned worktrees can lag origin/main by dozens of
-        # commits (live 2026-07-13: ee440d82 was 73 behind). Reusing without a
-        # sync would land patches on an ancient base. When ahead==0, hard-reset
-        # to origin/main; when ahead>0 keep the in-progress commits.
+        # Sync registered worktrees to origin/main when clean+ahead==0. Dirty
+        # trees from failed/timeout sessions are preserved for inspection and
+        # skipped this tick (bot #3615: reset --hard wiped uncommitted work).
         if [[ -d "$wt" ]]; then
-            git -C "$PROD_DIR" fetch origin main --quiet >>"$LOG_FILE" 2>&1 || true
-            local ahead_existing
+            if ! git -C "$PROD_DIR" fetch origin main --quiet >>"$LOG_FILE" 2>&1; then
+                log "fetch origin/main failed — setup deferred for $cid"
+                skip_ids="${skip_ids:+$skip_ids,}$cid"
+                pick=""; cid=""; wt=""
+                continue
+            fi
+            local ahead_existing dirty
             ahead_existing=$(git -C "$wt" rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
+            dirty=$(git -C "$wt" status --porcelain 2>/dev/null || true)
+            if [[ -n "$dirty" && "$ahead_existing" == "0" ]]; then
+                log "dirty worktree $cid with no commits ahead — preserving, try next"
+                skip_ids="${skip_ids:+$skip_ids,}$cid"
+                pick=""; cid=""; wt=""
+                continue
+            fi
             if [[ "$ahead_existing" == "0" ]]; then
                 if git -C "$wt" reset --hard origin/main >>"$LOG_FILE" 2>&1; then
                     log "synced existing worktree $cid to origin/main"
@@ -205,8 +261,9 @@ PYEOF
         fi
 
         if [[ ! -d "$wt" ]]; then
-            # Orphan-branch recovery (live 2026-07-13: 4c2c454a).
-            local branch="dispatch/$cid"
+            # Orphan-branch recovery. On attach of an existing branch with no
+            # commits ahead, refresh to origin/main so retries do not land from
+            # a stale tip (bot #3614).
             if git -C "$PROD_DIR" show-ref --verify --quiet "refs/heads/$branch"; then
                 if ! git -C "$PROD_DIR" worktree add "$wt" "$branch" >>"$LOG_FILE" 2>&1; then
                     log "stale dispatch branch $branch — recreating worktree"
@@ -216,6 +273,13 @@ PYEOF
                         skip_ids="${skip_ids:+$skip_ids,}$cid"
                         pick=""; cid=""; wt=""
                         continue
+                    fi
+                else
+                    git -C "$PROD_DIR" fetch origin main --quiet >>"$LOG_FILE" 2>&1 || true
+                    local ahead_attach
+                    ahead_attach=$(git -C "$wt" rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
+                    if [[ "$ahead_attach" == "0" ]]; then
+                        git -C "$wt" reset --hard origin/main >>"$LOG_FILE" 2>&1 || true
                     fi
                 fi
             elif ! git -C "$PROD_DIR" worktree add "$wt" -b "$branch" origin/main >>"$LOG_FILE" 2>&1; then
