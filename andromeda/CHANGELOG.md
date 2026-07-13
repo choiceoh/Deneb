@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.74](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.73...andromeda-v0.0.74) (2026-07-13)
+
+
+### ✨ Features
+
+* **andromeda:** 우측 데네브 채팅 패널 기본 접힘 — 작업 영역 넓게, 우측 탭으로 열기 ([#3585](https://github.com/choiceoh/Deneb/issues/3585)) ([0358ad1](https://github.com/choiceoh/Deneb/commit/0358ad1db7089f4cee0b33ff88eba7b513894e1a))
+* **andromeda:** 카드 비주얼 업그레이드 v1 — stat 수치 타이포(단위 서픽스·델타 칩)·막대차트 그라디언트/그리드 ([#3584](https://github.com/choiceoh/Deneb/issues/3584)) ([a9b4d4c](https://github.com/choiceoh/Deneb/commit/a9b4d4cd8e40dea9c9a666a3e885de59f147e379))
+* **andromeda:** 카드 테이블 dense 모드 — 3열+ CJK 테이블 타입 한 단 낮춤(어절 fit·네이티브 파리티) ([#3581](https://github.com/choiceoh/Deneb/issues/3581)) ([839c42d](https://github.com/choiceoh/Deneb/commit/839c42de2967f1595d7bf5a56f4559a48cafeaad))
+
 ## [0.0.73](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.72...andromeda-v0.0.73) (2026-07-13)
 
 
