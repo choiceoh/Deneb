@@ -178,6 +178,9 @@ func TestMetaEvolution_JudgeAccuracyEvidence(t *testing.T) {
 	if !strings.Contains(ev, "false-reject") {
 		t.Fatalf("evaluator epoch lost the balancing false-reject signal:\n%s", ev)
 	}
+	if !strings.Contains(ev, "예/아니오 점검 항목") {
+		t.Fatalf("evaluator epoch lost the binary-rubric direction hint (BINEVAL):\n%s", ev)
+	}
 
 	// The producer epoch must NOT be grounded on judge misses (different target).
 	if prod := task.assembleEvidence(context.Background(), metaEpochProducer); strings.Contains(prod, "판정자 최근 오판") {
