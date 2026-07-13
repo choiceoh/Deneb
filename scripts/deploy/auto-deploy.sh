@@ -92,7 +92,13 @@ accept_ready_watch() {
 
 start_deploy_watch() {
     local head="$1" watcher="$PROD_DIR/scripts/deploy/deploy-watch.sh"
-    local watcher_pid ready_head="" deadline
+    local watcher_unit="deneb-deploy-watch-${head:0:12}-$$"
+    local ready_head="" ready_pid="" deadline env_name
+    local -a watcher_env=(
+        "DENEB_PROD_DIR=$PROD_DIR"
+        "DENEB_STATE_DIR=$STATE_DIR"
+        "DENEB_DEPLOY_WATCH_READY_FILE=$WATCH_READY_FILE"
+    )
     rm -f "$WATCH_READY_FILE"
     if [[ ! -x "$watcher" ]]; then
         record_unverified "$head" "watcher_missing"
@@ -100,20 +106,41 @@ start_deploy_watch() {
         return 1
     fi
 
-    nohup "$watcher" "$head" >/dev/null 2>&1 &
-    watcher_pid=$!
+    # auto-deploy itself runs as a oneshot systemd service. A nohup child stays
+    # in that service's cgroup and systemd kills it as soon as the parent exits,
+    # which used to reduce the 10-minute rollback watch to a few milliseconds.
+    # A collected transient user service owns the watcher independently while
+    # still cleaning up its unit after the watch exits.
+    for env_name in \
+        DENEB_DEPLOY_WATCH_LOCK_FILE \
+        DENEB_DEPLOY_WATCH_LOG_FILE \
+        DENEB_GATEWAY_SERVICE \
+        DENEB_PROD_PORT \
+        DENEB_DEPLOY_WATCH_SEC \
+        DENEB_DEPLOY_WATCH_POLL_SEC \
+        DENEB_DEPLOY_WATCH_HANDOFF_SEC \
+        DENEB_DEPLOY_WATCH_ERROR_BUDGET; do
+        if [[ -v "$env_name" ]]; then
+            watcher_env+=("$env_name=${!env_name}")
+        fi
+    done
+    if ! systemd-run --user --quiet --collect --unit="$watcher_unit" \
+        --property=Type=exec /usr/bin/env "${watcher_env[@]}" "$watcher" "$head" \
+        >>"$LOG_FILE" 2>&1; then
+        record_unverified "$head" "watcher_launch_failed"
+        log "ERROR: deploy ${head:0:10} is unverified: deploy-watch transient service failed to start"
+        return 1
+    fi
+
     deadline=$(( SECONDS + WATCH_START_SEC ))
     while (( SECONDS <= deadline )); do
         if [[ -f "$WATCH_READY_FILE" ]]; then
-            read -r ready_head _ < "$WATCH_READY_FILE" || true
+            read -r ready_head ready_pid _ < "$WATCH_READY_FILE" || true
             if [[ "$ready_head" == "$head" ]]; then
                 rm -f "$UNVERIFIED_FILE"
-                log "deploy-watch active for ${head:0:10} (pid $watcher_pid)"
+                log "deploy-watch active for ${head:0:10} (pid ${ready_pid:-unknown}, unit $watcher_unit)"
                 return 0
             fi
-        fi
-        if ! kill -0 "$watcher_pid" 2>/dev/null; then
-            break
         fi
         sleep 0.1
     done

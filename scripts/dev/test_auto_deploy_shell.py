@@ -49,6 +49,15 @@ class AutoDeployShellTests(unittest.TestCase):
               *) /bin/date "$@" ;;
             esac
         """)
+        write_executable(self.bin / "systemd-run", """
+            #!/usr/bin/env bash
+            printf 'systemd-run %s\\n' "$*" >> "$FAKE_CALLS"
+            [[ "${SYSTEMD_RUN_RC:-0}" == 0 ]] || exit "$SYSTEMD_RUN_RC"
+            while [[ "${1:-}" == --* ]]; do
+              shift
+            done
+            nohup "$@" >/dev/null 2>&1 &
+        """)
         write_executable(self.bin / "git", """
             #!/usr/bin/env bash
             printf 'git %s\\n' "$*" >> "$FAKE_CALLS"
@@ -136,6 +145,7 @@ class AutoDeployShellTests(unittest.TestCase):
             "FAKE_NOW": "2000",
             "DEPLOY_RC": "0",
             "WATCH_ACK": "1",
+            "SYSTEMD_RUN_RC": "0",
         }
         defaults.update(values)
         return isolated_env(self.home, self.bin, **defaults)
@@ -291,6 +301,21 @@ class AutoDeployShellTests(unittest.TestCase):
         self.assertIn("deploy OK (head now remote222)", self.log_text())
         self.assertIn("deploy-watch active for remote222", self.log_text())
         self.assertFalse((self.state / "auto-deploy.unverified-head").exists())
+        self.assertIn(
+            "systemd-run --user --quiet --collect --unit=deneb-deploy-watch-remote222-",
+            self.call_text(),
+        )
+        self.assertIn("--property=Type=exec /usr/bin/env", self.call_text())
+
+    def test_watcher_transient_service_launch_failure_stays_unverified(self) -> None:
+        proc = self.invoke(self.env(SYSTEMD_RUN_RC="23"))
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(
+            (self.state / "auto-deploy.unverified-head").read_text().split()[::2],
+            ["remote222", "watcher_launch_failed"],
+        )
+        self.assertNotIn("watch head=remote222", self.call_text())
+        self.assertIn("transient service failed to start", self.log_text())
 
     def test_unacknowledged_watch_stays_unverified_and_noop_retries(self) -> None:
         first = self.invoke(self.env(WATCH_ACK="0"))
