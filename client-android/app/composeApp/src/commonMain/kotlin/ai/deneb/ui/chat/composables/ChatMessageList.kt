@@ -55,6 +55,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment.Companion.BottomCenter
 import androidx.compose.ui.Alignment.Companion.CenterEnd
 import androidx.compose.ui.Alignment.Companion.CenterHorizontally
@@ -83,6 +84,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import nl.marc_apps.tts.TextToSpeechInstance
 import nl.marc_apps.tts.errors.TextToSpeechSynthesisInterruptedError
@@ -735,12 +737,39 @@ private suspend fun LazyListState.scrollToTrueBottom(
     contentPaddingBottomPx: Int,
     animate: Boolean = false,
 ) {
-    val total = layoutInfo.totalItemsCount
-    if (total <= 0) return
-    scrollToItem(total - 1, Int.MAX_VALUE)
-    if (contentPaddingBottomPx > 0) {
-        // scrollToItem to the last row measured the tail; only now can we know it
-        // exists. Scroll the contentPadding gap so the last line clears the input bar.
-        if (animate) animateScrollBy(contentPaddingBottomPx.toFloat()) else scrollBy(contentPaddingBottomPx.toFloat())
+    // On a cold chat-screen open the install scroll effect can fire before the
+    // LazyColumn's first measure, when totalItemsCount is still 0. Wait one layout
+    // pass so the scroll isn't a no-op that leaves the list pinned at the top
+    // (#3554 regression). Only the non-empty-history branch reaches this call, so
+    // items WILL appear; the await cancels with the effect if the screen leaves
+    // composition, so an empty list can't hang here.
+    if (layoutInfo.totalItemsCount <= 0) {
+        snapshotFlow { layoutInfo.totalItemsCount }.first { it > 0 }
+    }
+
+    if (animate) {
+        // Scroll-to-bottom button: the list is already measured (the button only
+        // shows once items are laid out), so one smooth scroll suffices.
+        scrollToItem(layoutInfo.totalItemsCount - 1, Int.MAX_VALUE)
+        if (contentPaddingBottomPx > 0) animateScrollBy(contentPaddingBottomPx.toFloat())
+        return
+    }
+
+    // Instant path (cold-entry install / on-send / streaming follow). scrollToItem
+    // (last, MAX) pins the last item's bottom to the physical viewport bottom;
+    // scrollBy then reveals the trailing contentPadding (input-bar reserve) so the
+    // last line rests just above the bar, not clipped under it.
+    //
+    // A tall last message measures its markdown body over several frames (async
+    // precompute + pausable composition). At the first pin that layout is still
+    // incomplete, so it reads as "already at the end" and the pin lands short —
+    // the newest lines stay hidden below the fold ("완벽하게 밑까지 안 내려옴").
+    // canScrollForward can't distinguish this from a genuine bottom. Re-pin each
+    // frame for a brief window so the scroll tracks the growing content down to
+    // the true bottom; it settles to a no-op once measurement completes.
+    repeat(8) {
+        scrollToItem(layoutInfo.totalItemsCount - 1, Int.MAX_VALUE)
+        if (contentPaddingBottomPx > 0) scrollBy(contentPaddingBottomPx.toFloat())
+        withFrameNanos { }
     }
 }
