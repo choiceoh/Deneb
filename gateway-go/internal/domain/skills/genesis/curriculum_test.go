@@ -16,9 +16,17 @@ func curriculumFixture(t *testing.T, resp curriculumResp, catalog map[string]str
 		t.Fatal(err)
 	}
 	task := &CurriculumTask{
-		Tracker:   tr,
-		Logger:    slog.Default(),
-		proposeFn: func(context.Context, string) (curriculumResp, error) { return resp, nil },
+		Tracker: tr,
+		Logger:  slog.Default(),
+		proposeFn: func(_ context.Context, evidence string) (curriculumResp, error) {
+			// Ground the fixture's evidence in the assembled block (the
+			// source-grounding gate requires a >=12-rune verbatim quote).
+			out := resp
+			if runes := []rune(evidence); len(runes) >= curriculumGroundingMinRunes {
+				out.Evidence = "인용: " + string(runes[:curriculumGroundingMinRunes+4])
+			}
+			return out, nil
+		},
 		catalogFn: func() map[string]string { return catalog },
 	}
 	return task, tr
@@ -182,5 +190,22 @@ func TestNormalizeCurriculumName(t *testing.T) {
 		if got := normalizeCurriculumName(in); got != want {
 			t.Errorf("normalize(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// Source-grounding gate (SkillCenter 2607.07676): the evidence field must
+// quote the demand-evidence block verbatim; hallucinated justifications and
+// too-short evidence are rejected regardless of plausibility.
+func TestCurriculumSourceGrounding(t *testing.T) {
+	input := "## 현재 스킬 카탈로그\n- mail-triage — 메일 분류와 우선순위 정리\n## 환경 다이제스트\n다음 주 화요일 투자사 미팅 준비 항목 5건이 위키에 기록됨"
+
+	if got := curriculumSourceGrounding("위키에 따르면 투자사 미팅 준비 항목 5건이 위키에 기록됨 — 반복 수요", input); got != "" {
+		t.Fatalf("verbatim quote must pass: %s", got)
+	}
+	if got := curriculumSourceGrounding("운영자가 매주 보고서를 요청한다는 강한 신호가 있다", input); got == "" {
+		t.Fatal("hallucinated evidence must be rejected")
+	}
+	if got := curriculumSourceGrounding("짧음", input); got == "" {
+		t.Fatal("too-short evidence must be rejected")
 	}
 }

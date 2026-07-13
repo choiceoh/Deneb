@@ -766,6 +766,12 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 		fmt.Fprintf(&b, "- 의심 false-reject: %d건 (기각했으나 실제로는 현재 본문보다 나았던 후보 — 과잉 엄격화 경계)\n", falseRejects)
 	}
 	b.WriteString("위 유형의 실제 결함 감지력을 높이되, 정상 개선을 기각하지 않도록 판정 기준을 정밀화하라 (과잉 기각은 진화를 정지시킨다).\n")
+	// Research-grounded direction hint (BINEVAL 2606.27226, soft path — RSI
+	// 2026H2 addendum second pass #2): decomposing the judging RUBRIC into
+	// atomic yes/no checks calibrates better than scalar scoring and makes
+	// per-miss-class fixes targetable. ADVISORY prose only; the response JSON
+	// schema is protected by the contract gate regardless.
+	b.WriteString("개정 방향 후보 (자문): 판정 기준을 원자적 예/아니오 점검 항목 목록으로 분해해 서술하는 방식을 고려하라 — 스칼라 채점보다 캘리브레이션이 좋고 놓친 유형별 교정이 쉽다. 단 출력 JSON 스키마는 절대 불변.\n")
 	return b.String()
 }
 
