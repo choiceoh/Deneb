@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -85,14 +86,14 @@ FORBIDDEN_SURFACE_BASENAMES = (
 # `web_html_preprocess.go` (…pr[eprocess.go]) and wedged it out of the L4 lane
 # (3rd-review C2-C1). Bound it with negative lookarounds: the name may not be
 # preceded by a filename-body char (so "preprocess" 's "r" blocks it, while
-# "/", space, quote, or start is fine) nor followed by one (so "pr.shell" does
-# not match "pr.sh"). A trailing "." / "/" (sentence period, dir slash) is OK.
-import re as _re
-
-_FORBIDDEN_RE = _re.compile(
-    r"(?<![A-Za-z0-9._-])(" + "|".join(_re.escape(n) for n in FORBIDDEN_SURFACE_BASENAMES)
-    + r")(?![A-Za-z0-9_-])",
-    _re.IGNORECASE,
+# "/", space, quote, or start is fine) nor followed by one — including an
+# extension continuation "."+alnum, so "eprocess.go.bak" / "pr.sh.md" do NOT
+# match "eprocess.go" / "pr.sh" (Copilot review). A bare trailing "." (sentence
+# period) or "/" (dir slash) still terminates the component.
+_FORBIDDEN_RE = re.compile(
+    r"(?<![A-Za-z0-9._-])(" + "|".join(re.escape(n) for n in FORBIDDEN_SURFACE_BASENAMES)
+    + r")(?![A-Za-z0-9_-])(?!\.[A-Za-z0-9])",
+    re.IGNORECASE,
 )
 
 

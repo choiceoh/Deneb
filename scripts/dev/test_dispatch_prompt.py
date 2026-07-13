@@ -155,6 +155,26 @@ class DispatchPromptTest(unittest.TestCase):
             self.assertEqual(rc2, dispatch_prompt.DEFER_EXIT)
             self.assertIn("coding-dispatch.sh", err2)
 
+    def test_forbidden_surface_boundary_matching(self):
+        # Whole-component matching, not substring (3rd-review C2-C1 + Copilot):
+        # unrelated files that merely CONTAIN a forbidden basename must NOT trip.
+        fm = dispatch_prompt.forbidden_surface_mentions
+        for benign in (
+            {"targetFiles": ["gateway-go/internal/pipeline/chat/web/web_html_preprocess.go"]},
+            {"targetFiles": ["a/eprocess.go.bak"]},          # extension continuation
+            {"candidate": "see docs/pr.sh.md for details"},   # extension continuation
+            {"evidence": "open a PR, wait for CI to pass"},    # words, not pr.sh/ci.yml
+            {"candidate": "use the pr.shell wrapper"},         # pr.shell != pr.sh
+        ):
+            self.assertEqual(fm(benign), [], f"false positive: {benign}")
+        for hit, want in (
+            ({"proposedChange": "edit surfaces.go. then rebuild"}, "surfaces.go"),  # sentence period
+            ({"targetFiles": ["genesis/surfaces.go"]}, "surfaces.go"),              # dir slash
+            ({"targetFiles": [".github/workflows/ci.yml"]}, "ci.yml"),
+            ({"proposedChange": "patch scripts/dev/pr.sh land"}, "pr.sh"),
+        ):
+            self.assertIn(want, fm(hit), f"missed: {hit}")
+
     def test_forbidden_basenames_cover_go_whitelist(self):
         # Every basename in the Go forbidden surface whitelist must be in the
         # scripts-side guard so the two cannot drift. Order/comment-tolerant:
