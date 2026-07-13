@@ -207,12 +207,25 @@ describe("deneb-ui renderer parity conventions", () => {
     expect(container.querySelector(".dui-quote strong")?.textContent).toBe("품질");
   });
 
-  it("scales bars from the real series max (fractional series fill)", () => {
+  it("draws vertical bars scaled from the real series max (fractional series)", () => {
     const spec = { type: "chart", chartType: "bar", labels: ["a", "b"], values: [0.12, 0.18] };
     const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
-    const fills = container.querySelectorAll(".dui-bar-fill");
-    // 0.18 is the max → 100%; flooring at 1 would have made it 18%.
-    expect((fills[1] as HTMLElement).style.width).toBe("100%");
+    const rects = container.querySelectorAll(".dui-bar-rect");
+    expect(rects).toHaveLength(2);
+    const h0 = Number(rects[0].getAttribute("height"));
+    const h1 = Number(rects[1].getAttribute("height"));
+    // 0.18 is the series max → full plot height; 0.12 scales to 0.12/0.18 of it
+    // (flooring at 1 would have flattened both to near-empty).
+    expect(h1).toBeGreaterThan(h0);
+    expect(h0 / h1).toBeCloseTo(0.12 / 0.18, 2);
+  });
+
+  it("omits the bar for a zero value but keeps its label", () => {
+    const spec = { type: "chart", chartType: "bar", labels: ["a", "b"], values: [0, 5] };
+    const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
+    // Zero is a real claim → no rect drawn, but the value text (0) still shows.
+    expect(container.querySelectorAll(".dui-bar-rect")).toHaveLength(1);
+    expect(container.querySelector(".dui-bar-svg")?.textContent).toContain("0");
   });
 
   it("renders inline emphasis inside text nodes", () => {
