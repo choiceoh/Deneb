@@ -40,7 +40,11 @@ internal fun TableBlock(block: Table) {
     // of a weight share — the sqrt weight floor otherwise hands a single-digit
     // column ~20% of a phone-width table (2026-07-13 production screenshot: the
     // '#' column of a 3-column briefing table ate a fifth of the row).
-    val tiny = remember(block, numCols) { tinyColumns(maxUnits) }
+    // Detection keys off CELL data only — a numbering column with a short WORD label
+    // ("단계": header 4 units, cells "1".."5") still counts as tiny (its digits are),
+    // so it sizes to the label instead of a weight share. naturalColWidths still uses
+    // maxUnits (header included) so the label fits.
+    val tiny = remember(block, numCols) { tinyColumns(maxCellUnits(block, numCols)) }
     val colWidths = remember(block, numCols) { naturalColWidths(maxUnits, tiny, dense) }
     // Auto-numeric columns: models rarely write ':---:' alignment markers, so
     // a column whose every cell starts with a digit right-aligns with tabular
@@ -214,7 +218,8 @@ private fun WideTable(block: Table, numCols: Int, colWidths: IntArray, voice: Ta
     }
 }
 
-// Widest content (header included) per column, in CJK-aware display units.
+// Widest content (header included) per column, in CJK-aware display units. Drives
+// column WIDTH (a tiny column's label must still fit).
 private fun maxColUnits(block: Table, numCols: Int): IntArray = IntArray(numCols) { i ->
     var units = inlineDisplayUnits(block.headers.getOrNull(i) ?: emptyList())
     for (row in block.rows) {
@@ -223,9 +228,19 @@ private fun maxColUnits(block: Table, numCols: Int): IntArray = IntArray(numCols
     units
 }
 
-// A column is "tiny" when its widest cell AND header fit in a few display units —
-// numbering ("#", "1".."99", "10."), ranks, single marks. Tiny columns are sized
-// to content instead of joining the weight split or the 72dp scroll floor.
+// Widest CELL only (header excluded) per column — drives tiny DETECTION, so a
+// numbering column with a short word label ("단계") counts as tiny by its data.
+private fun maxCellUnits(block: Table, numCols: Int): IntArray = IntArray(numCols) { i ->
+    var units = 0
+    for (row in block.rows) {
+        units = maxOf(units, inlineDisplayUnits(row.getOrNull(i) ?: emptyList()))
+    }
+    units
+}
+
+// A column is "tiny" when its widest CELL fits in a few display units — numbering
+// ("#", "1".."99", "10."), ranks, single marks — regardless of a short word label
+// ("단계"). Tiny columns are sized to content instead of joining the weight split.
 private const val TINY_COL_MAX_UNITS = 3
 
 // Intrinsic dp per display unit for tiny columns — deliberately more generous than
@@ -235,9 +250,9 @@ private const val TINY_UNIT_DP = 9
 
 // Tiny only when some other column can absorb the freed width — an all-tiny table
 // keeps the weight layout so it still spans the viewport.
-private fun tinyColumns(maxUnits: IntArray): BooleanArray {
-    val tiny = BooleanArray(maxUnits.size) { maxUnits[it] in 1..TINY_COL_MAX_UNITS }
-    return if (tiny.all { it }) BooleanArray(maxUnits.size) else tiny
+private fun tinyColumns(cellUnits: IntArray): BooleanArray {
+    val tiny = BooleanArray(cellUnits.size) { cellUnits[it] in 1..TINY_COL_MAX_UNITS }
+    return if (tiny.all { it }) BooleanArray(cellUnits.size) else tiny
 }
 
 // Per-column natural width in dp, sized by the widest cell's CJK-aware display width

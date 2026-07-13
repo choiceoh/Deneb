@@ -273,7 +273,20 @@ internal fun RenderTable(node: TableNode) {
         }
         units
     }
-    val tinyColumn = BooleanArray(columnCount) { tinyUnits[it] in 1..3 }
+    // Detection keys off the CELL DATA only (header excluded): a numbering column
+    // whose cells are tiny ("1".."5") is tiny even when its label is a short WORD
+    // ("단계", 순번). The old header-inclusive test left "단계" (header 4 units) taking
+    // a full weight share — a fifth of the card — while "#" (header 1 unit) narrowed
+    // correctly (2026-07-13 production screenshot). The WIDTH above still covers the
+    // header so the label fits.
+    val cellUnits = IntArray(columnCount) { index ->
+        var units = 0
+        for (row in node.rows) {
+            units = maxOf(units, displayUnits(bareCellText(row.getOrNull(index))))
+        }
+        units
+    }
+    val tinyColumn = BooleanArray(columnCount) { cellUnits[it] in 1..3 }
     if (tinyColumn.all { it }) tinyColumn.fill(false)
     fun RowScope.cellWidth(index: Int): Modifier = if (tinyColumn[index]) Modifier.width((tinyUnits[index] * 9 + 4).dp) else Modifier.weight(columnWeight(index))
     val hairline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
