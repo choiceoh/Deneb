@@ -402,6 +402,35 @@ func (t *Tracker) dispatchMarkerDir() string {
 	return filepath.Join(filepath.Dir(t.logPath), "coding_dispatch")
 }
 
+// DispatchMarkerBlocks reports whether coding-dispatch would skip this candidate
+// id: landed/attempted (or an in-flight marker with no outcome). declined/
+// failed/timeout remain unblocked so the sweep suppressor still sees retryable
+// backlog (bot review #3612).
+func (t *Tracker) DispatchMarkerBlocks(id string) bool {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false
+	}
+	raw, err := os.ReadFile(filepath.Join(t.dispatchMarkerDir(), id+".json"))
+	if err != nil {
+		return false
+	}
+	var m struct {
+		Outcome string `json:"outcome"`
+	}
+	if json.Unmarshal(raw, &m) != nil {
+		return true
+	}
+	switch strings.TrimSpace(m.Outcome) {
+	case "landed", "attempted":
+		return true
+	case "declined", "failed", "timeout":
+		return false
+	default:
+		return true
+	}
+}
+
 // rsiDispatchOutcomeNote aggregates recorded dispatch outcomes into a short
 // diagnosis suffix ("" when no marker carries an outcome yet — markers
 // predating outcome accounting simply have none).

@@ -344,16 +344,19 @@ def assess_l4(
                            + outcome_note)
     if len(cand) == 0:
         return LayerStatus("L4", "source self-edit", IDLE, metrics,
-                           "no self-correction candidates — capture funnel idle")
+                           "no self-correction candidates — capture funnel idle"
+                           + outcome_note)
     if staged > 0:
         staged_summary = ", ".join(f"{k}:{v}" for k, v in sorted(staged_sources.items()))
         return LayerStatus("L4", "source self-edit", STARVED, metrics,
                            f"{staged} code candidates staged from non-dispatch sources ({staged_summary}) "
-                           "— propose-only supply awaiting allowlist graduation")
+                           "— propose-only supply awaiting allowlist graduation"
+                           + outcome_note)
     scope_summary = ", ".join(f"{k}:{v}" for k, v in sorted(by_scope.items()))
     return LayerStatus("L4", "source self-edit", STARVED, metrics,
                        f"{len(cand)} candidates ({scope_summary}) but 0 are code-scope from "
-                       f"{'/'.join(L4_SOURCES)} — no source produces code candidates (wiring gap)")
+                       f"{'/'.join(L4_SOURCES)} — no source produces code candidates (wiring gap)"
+                       + outcome_note)
 
 
 def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:

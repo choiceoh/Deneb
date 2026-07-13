@@ -57,6 +57,24 @@ pick_root() {
     fi
   done
 
+  # Prefer session-scoped pin over the last-writer global active-root.
+  local sid="${CURSOR_SESSION_ID:-}"
+  if [[ -n "$sid" ]]; then
+    local safe
+    safe=$(printf '%s' "$sid" | tr -c 'A-Za-z0-9._-' '_' | cut -c1-80)
+    if [[ -n "$safe" && -d "$WT_BASE/$safe" ]] && same_repo "$WT_BASE/$safe" "$anchor"; then
+      printf '%s\n' "$WT_BASE/$safe"
+      return 0
+    fi
+    if [[ -n "$safe" && -f "$WT_BASE/active-root.$safe" ]]; then
+      candidate=$(head -1 "$WT_BASE/active-root.$safe" 2>/dev/null || true)
+      if [[ -n "$candidate" && -d "$candidate" ]] && same_repo "$candidate" "$anchor"; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+    fi
+  fi
+
   if [[ -f "$WT_BASE/active-root" ]]; then
     candidate=$(head -1 "$WT_BASE/active-root" 2>/dev/null || true)
     if [[ -n "$candidate" && -d "$candidate" ]] && same_repo "$candidate" "$anchor"; then

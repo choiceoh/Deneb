@@ -355,6 +355,7 @@ function HealthCard({ health }: { health: RSIHealthView }) {
     (health.metaRevisions7d ?? 0) > 0 ||
     (health.confirmed7d ?? 0) > 0 ||
     (health.rolledBack7d ?? 0) > 0 ||
+    (health.rejected7d ?? 0) > 0 ||
     resolved > 0 ||
     !!health.thrash ||
     !!health.autoAdoptFrozen;
@@ -452,15 +453,24 @@ export function RsiPane() {
     void callRpc<SkillsLifecycleResponse>(cfg, RSI_RPC.lifecycle, { limit: 12 })
       .then((d) => setLifecycle(d.events ?? []))
       .catch(() => setLifecycle([]));
-    void callRpc<SelfImprovementCodingListResponse>(cfg, RSI_RPC.coding, { limit: 24, status: "all" })
-      .then((d) => {
-        // Pending dispatch supply = proposed + accepted (coding-dispatch picks both).
-        // Filtering to proposed alone hid the entire accepted L4 backlog
-        // (observed 2026-07-13: 7 accepted health-finding candidates, drill empty).
-        const pending = (d.candidates ?? []).filter(
-          (c) => (c.status === "proposed" || c.status === "accepted") && (!c.scope || c.scope === "code"),
-        );
-        setCandidates(pending.slice(0, 8));
+    void Promise.all([
+      callRpc<SelfImprovementCodingListResponse>(cfg, RSI_RPC.coding, { limit: 24, status: "proposed" }),
+      callRpc<SelfImprovementCodingListResponse>(cfg, RSI_RPC.coding, { limit: 24, status: "accepted" }),
+    ])
+      .then(([proposed, accepted]) => {
+        // Fetch statuses separately so applied/rejected churn cannot crowd the
+        // server-side limit before we filter (bot review #3612).
+        const pending = [...(proposed.candidates ?? []), ...(accepted.candidates ?? [])]
+          .filter((c) => !c.scope || c.scope === "code")
+          .sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+        const seen = new Set<string>();
+        const deduped = pending.filter((c) => {
+          const id = c.id || "";
+          if (!id || seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        });
+        setCandidates(deduped.slice(0, 8));
       })
       .catch(() => setCandidates([]));
   }, [cfg, connected]);

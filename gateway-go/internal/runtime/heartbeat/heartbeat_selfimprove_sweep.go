@@ -85,6 +85,9 @@ func (t *heartbeatTask) detectSelfImproveSweepNudge(now time.Time) string {
 	// consumer backlog — mining more while they sit is the wrong pressure
 	// (observed 2026-07-13: 0 proposed / 7 accepted, sweep still eligible).
 	if t.dispatchBacklogSelfCoding != nil && t.dispatchBacklogSelfCoding() > 0 {
+		// Accepted backlog is also live consumer work — mark yield so a prior
+		// sweep nudge is not counted as ignored while the drain runs (bot #3612).
+		t.markSelfImproveSweepYield()
 		return ""
 	}
 	statePath := t.selfImproveSweepStatePath()

@@ -86,10 +86,45 @@ def main() -> int:
         return DEFER_EXIT
     contract, version = resolved
 
+    # Preserve prior outcome history across retries so land-rate accounting does
+    # not collapse failed→landed into a single "landed" marker (bot #3614).
+    attempts: list[dict] = []
+    dispatched_at = None
+    marker_path = Path(args.marker)
+    if marker_path.is_file():
+        try:
+            prev = json.loads(marker_path.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, json.JSONDecodeError, TypeError):
+            prev = None
+        if isinstance(prev, dict):
+            prior = prev.get("attempts")
+            if isinstance(prior, list):
+                attempts = [a for a in prior if isinstance(a, dict)]
+            if prev.get("outcome"):
+                snap = {
+                    k: prev[k]
+                    for k in (
+                        "outcome",
+                        "outcomeRc",
+                        "outcomeElapsedSec",
+                        "outcomeAt",
+                        "outcomePrState",
+                        "promptVersion",
+                    )
+                    if k in prev
+                }
+                if snap:
+                    attempts.append(snap)
+            if isinstance(prev.get("dispatchedAt"), (int, float)):
+                dispatched_at = int(prev["dispatchedAt"])
+
     marker = dict(candidate)
     marker["promptVersion"] = version
     marker["promptSource"] = "artifact"
-    Path(args.marker).write_text(
+    marker["dispatchedAt"] = dispatched_at or int(__import__("time").time() * 1000)
+    if attempts:
+        marker["attempts"] = attempts[-10:]
+    marker_path.write_text(
         json.dumps(marker, ensure_ascii=False) + "\n", encoding="utf-8"
     )
 

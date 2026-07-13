@@ -34,9 +34,16 @@ emit_json() {
 
 write_active_root() {
   local wt="$1"
+  local sid="${2:-}"
   local base="$HOME/.cursor/worktrees/Deneb"
   mkdir -p "$base"
-  # Atomic-ish replace so a concurrent reader never sees a partial path.
+  # Session-scoped pin first so concurrent Cursor chats do not clobber each
+  # other via a single global active-root (bot review #3604).
+  if [[ -n "$sid" ]]; then
+    printf '%s\n' "$wt" >"$base/active-root.$sid.tmp" \
+      && mv -f "$base/active-root.$sid.tmp" "$base/active-root.$sid"
+  fi
+  # Global fallback for tools that only know the last writer (codegraph serve).
   printf '%s\n' "$wt" >"$base/active-root.tmp" && mv -f "$base/active-root.tmp" "$base/active-root"
 }
 
@@ -58,10 +65,15 @@ GIT_COMMON_ABS=$(cd "$ROOT" && cd "$GIT_COMMON" 2>/dev/null && pwd) || exit 0
 
 # Already inside a linked worktree? Don't nest — pin active-root and remind.
 if [[ "$GIT_DIR_ABS" != "$GIT_COMMON_ABS" ]]; then
-  write_active_root "$ROOT"
+  write_active_root "$ROOT" "$SAFE_ID"
   BRANCH=$(cd "$ROOT" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
+  # move_agent_to_root may flip the worktree onto main — never hint "checkout main".
+  RECOVER_BRANCH="$BRANCH"
+  if [[ "$BRANCH" == "main" || "$BRANCH" == "HEAD" || "$BRANCH" == "unknown" ]]; then
+    RECOVER_BRANCH="cursor/$SAFE_ID"
+  fi
   CTX=$(printf 'Cursor 세션이 이미 링크드 워크트리에 있습니다: %s (브랜치 %s).\n이 경로에서만 편집하세요. CodeGraph MCP(codegraph_explore) 사용 가능.\n브랜치가 실수로 main이면: git checkout %s' \
-    "$ROOT" "$BRANCH" "$BRANCH")
+    "$ROOT" "$BRANCH" "$RECOVER_BRANCH")
   emit_json "$ROOT" "$SAFE_ID" "$CTX"
   exit 0
 fi
@@ -86,7 +98,7 @@ else
   fi
 fi
 
-write_active_root "$WT_PATH"
+write_active_root "$WT_PATH" "$SAFE_ID"
 
 # Seed CodeGraph index in background (copy + sync).
 if [[ -d "$ROOT/.codegraph" ]]; then
