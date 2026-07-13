@@ -81,7 +81,10 @@ describe("WorkfeedPane", () => {
     expect(chatCalls[0]).toMatchObject({ message: "승인합니다", sessionKey: "client:main" });
   });
 
-  it("no longer surfaces action chips even when the item carries actions", async () => {
+  it("keeps generic action chips hidden on a non-question card (wide body)", async () => {
+    // A non-question card's quick-action chips stay hidden — the desktop detail keeps
+    // the body wide (unlike the phone's action sheet). Answer chips only appear on a
+    // question card (see the boundary test's action.run coverage), matching native.
     const dataProvider = fakeProvider({
       workfeed: [{ id: "w2", source: "followup", title: "미답장 메일 3건", actions: [{ id: "reply", label: "답장" }] }],
     });
@@ -90,7 +93,7 @@ describe("WorkfeedPane", () => {
     await userEvent.click(await screen.findByText("미답장 메일 3건"));
     const detail = screen.getByLabelText("피드 상세");
 
-    // 액션 섹션은 제거됨 — 본문을 와이드하게. 액션 칩도, action.run 도 없다.
+    // 일반(비질문) 카드의 빠른-액션 칩은 숨김 — 본문을 와이드하게. action.run 도 없다.
     expect(within(detail).queryByText("액션")).not.toBeInTheDocument();
     expect(within(detail).queryByRole("button", { name: "답장" })).not.toBeInTheDocument();
     expect(rpcCalls.some((c) => c.method === "miniapp.workfeed.action.run")).toBe(false);

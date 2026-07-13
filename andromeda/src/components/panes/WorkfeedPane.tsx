@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { WorkItem } from "@/types";
+import type { WorkAction, WorkItem } from "@/types";
 import { useCachedList } from "@/cachedList";
 import { callRpc, chatStream } from "@/gateway";
 import { WORKFEED_RPC } from "@/resources";
@@ -24,8 +24,10 @@ function addDays(dayMs: number, delta: number): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + delta).getTime();
 }
 
-// Items sourced from a question expect a free-text reply. The gateway settles the
-// card via workfeed.answer/action.run, then returns a sessionKey+prompt to deliver.
+// Fallback question detection for payloads predating the WorkItem.question flag:
+// a "question"-tagged source expects a free-text reply. WorkItemDetail prefers the
+// authoritative flag and only falls back to this. The gateway settles the card via
+// workfeed.answer/action.run, then returns a sessionKey+prompt to deliver.
 const isQuestion = (w: WorkItem) => (w.source ?? "").includes("question");
 const ignoreUiSubmit = () => {};
 
@@ -253,7 +255,13 @@ function WorkItemDetail({
   onAck: () => void;
   onClose: () => void;
 }) {
-  const question = isQuestion(w);
+  // One-tap answer chips: a card that offers fixed choices (```choices, deal-team
+  // dept:, genesis-meta meta:) carries them as actions. Native parity — chips take
+  // priority over the free-text field, and each settles the card via action.run.
+  const actions = w.actions ?? [];
+  // The gateway's authoritative question flag; the source-substring heuristic is a
+  // legacy fallback for payloads that predate it.
+  const question = w.question === true || isQuestion(w);
   const [text, setText] = useState("");
   const [feedback, setFeedback] = useState("");
   // AI 분석 본문은 기본 전체 펼침; 길면 "분석 접기"로 접는다 (스크롤 박스 대신 토글).
@@ -267,6 +275,11 @@ function WorkItemDetail({
     setText("");
     void run(WORKFEED_RPC.answer, { itemId: w.id, answer: t });
   };
+
+  // Run a chip's work-feed action. Mirrors the native answerWorkFeed(actionId) path:
+  // the gateway settles the card and returns {sessionKey, prompt}, which useAction's
+  // onResult streams to the asking session — the same handler the free-text field uses.
+  const runAction = (a: WorkAction) => void run(WORKFEED_RPC.actionRun, { itemId: w.id, actionId: a.id });
 
   const submitFeedback = () => {
     const t = feedback.trim();
@@ -311,26 +324,39 @@ function WorkItemDetail({
             <p className="workfeed-empty-body">본문 없음</p>
           </div>
         )}
-        {/* 본문 하단 풀폭 푸터: 액션 칩은 제거하고 답변(질문 한정)·정정만 남겨 본문을 와이드하게. */}
+        {/* 본문 하단 풀폭 푸터: 답변·정정만 남겨 본문을 와이드하게. 답변 어포던스는
+            question 카드에만 (네이티브 WorkFeedAnswerBlock과 동일) — 일반 카드의
+            빠른-액션 칩은 의도적으로 숨겨 본문을 넓게 유지한다. question 카드는 고정
+            선택지가 있으면 답변 칩, 없으면 자유입력. */}
         <div className="workfeed-tools">
-          {question && (
+          {question ? (
             <section className="workfeed-tool">
               <div className="workfeed-tool-title">답변</div>
-              <div className="workfeed-form">
-                <textarea
-                  className="field"
-                  placeholder="답변 입력…"
-                  rows={3}
-                  value={text}
-                  disabled={busy}
-                  onChange={(e) => setText(e.target.value)}
-                />
-                <button className="chip" onClick={submit} disabled={busy || !text.trim()}>
-                  답변
-                </button>
-              </div>
+              {actions.length > 0 ? (
+                <div className="workfeed-chips">
+                  {actions.map((a) => (
+                    <button key={a.id} className="chip" onClick={() => runAction(a)} disabled={busy}>
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="workfeed-form">
+                  <textarea
+                    className="field"
+                    placeholder="답변 입력…"
+                    rows={3}
+                    value={text}
+                    disabled={busy}
+                    onChange={(e) => setText(e.target.value)}
+                  />
+                  <button className="chip" onClick={submit} disabled={busy || !text.trim()}>
+                    답변
+                  </button>
+                </div>
+              )}
             </section>
-          )}
+          ) : null}
           <section className="workfeed-tool">
             <div className="workfeed-tool-title">정정</div>
             <div className="workfeed-form">

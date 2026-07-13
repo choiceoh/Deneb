@@ -2134,6 +2134,13 @@ textarea {
   line-height: 1.45;
   resize: vertical;
 }
+/* One-tap answer chips (from WorkItem.actions), wrapping across rows so a card
+   that offers several choices doesn't overflow the detail column. */
+.workfeed-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 @media (max-width: 760px) {
   .workfeed-detail-head {
     grid-template-columns: minmax(0, 1fr);
