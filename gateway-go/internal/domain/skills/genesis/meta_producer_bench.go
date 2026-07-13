@@ -43,8 +43,8 @@ type producerShadowScenario struct {
 	Cases      []SkillValidationCaseRecord
 }
 
-// ProducerBenchOutcome aggregates the shadow replay over all scenarios.
-type ProducerBenchOutcome struct {
+// producerBenchOutcome aggregates the shadow replay over all scenarios.
+type producerBenchOutcome struct {
 	Skills         int      `json:"skills"` // scenarios where BOTH prompts produced a scorable candidate
 	Flips          int      `json:"flips"`
 	IncumbentScore float64  `json:"incumbentScore"` // mean held-out percent
@@ -121,8 +121,8 @@ func shadowCandidateBody(text string) string {
 // scenario counts only when BOTH prompts yielded a candidate — a one-sided
 // skip says nothing about relative quality. Flips are counted per case:
 // incumbent candidate passes, proposal candidate fails.
-func runProducerShadowBench(ctx context.Context, incumbentPrompt, proposalPrompt string, scenarios []producerShadowScenario, gen producerShadowGenFn) ProducerBenchOutcome {
-	var out ProducerBenchOutcome
+func runProducerShadowBench(ctx context.Context, incumbentPrompt, proposalPrompt string, scenarios []producerShadowScenario, gen producerShadowGenFn) producerBenchOutcome {
+	var out producerBenchOutcome
 	var incSum, propSum float64
 	for _, sc := range scenarios {
 		incText, err := gen(ctx, incumbentPrompt, sc.UserPrompt)
@@ -170,7 +170,7 @@ func runProducerShadowBench(ctx context.Context, incumbentPrompt, proposalPrompt
 // producer revision yet — the proposal stays propose-only surfaced (return
 // ""), because manual adoption is the adjudicator in that regime. With bench
 // data: any flip rejects; a mean regression beyond the noise epsilon rejects.
-func producerBenchDecision(out ProducerBenchOutcome) string {
+func producerBenchDecision(out producerBenchOutcome) string {
 	if out.Skills == 0 {
 		return ""
 	}

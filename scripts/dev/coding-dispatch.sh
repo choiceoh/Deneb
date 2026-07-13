@@ -36,7 +36,25 @@ PROD_DIR="${DENEB_PROD_DIR:-$HOME/deneb}"
 WORKTREE_ROOT="${DENEB_DISPATCH_WORKTREE_ROOT:-$HOME/deneb-agent-worktrees}"
 LOCK_FILE="/tmp/deneb-coding-dispatch.lock"
 LOG_FILE="/tmp/deneb-coding-dispatch.log"
-DAILY_CAP="${DENEB_DISPATCH_DAILY_CAP:-2}"
+# Daily cap resolution: explicit env wins → executed graduation-ladder unlock
+# (~/.deneb/data/graduation_state.json, dispatch-cap row — operator delegated
+# unlock execution 2026-07-14) → compiled default 2.
+GRADUATION_STATE="$HOME/.deneb/data/graduation_state.json"
+if [[ -n "${DENEB_DISPATCH_DAILY_CAP:-}" ]]; then
+    DAILY_CAP="$DENEB_DISPATCH_DAILY_CAP"
+else
+    DAILY_CAP=$(python3 - "$GRADUATION_STATE" <<'CAPEOF' 2>/dev/null || echo 2
+import json, sys
+try:
+    rows = json.load(open(sys.argv[1])).get("rows") or {}
+    row = rows.get("dispatch-cap") or {}
+    v = int(row.get("value") or 0)
+    print(v if row.get("unlocked") and v > 0 else 2)
+except Exception:
+    print(2)
+CAPEOF
+    )
+fi
 SESSION_TIMEOUT="${DENEB_DISPATCH_TIMEOUT_SEC:-7200}"
 # Claude Code binary: newest installed ccd-cli unless overridden.
 CLAUDE_BIN="${DENEB_DISPATCH_CLAUDE_BIN:-}"
@@ -297,6 +315,17 @@ abandon_after = int(sys.argv[4])
 skip = {s for s in (sys.argv[5] if len(sys.argv) > 5 else "").split(",") if s}
 sys.path.insert(0, script_dir)
 import dispatch_outcome
+# Executed graduation-ladder unlocks admit staged sources at runtime (rows
+# keyed "source:<prefix>" in ~/.deneb/data/graduation_state.json — the same
+# file genesis rsiSourceDispatchable and rsi_status.py read, so the three
+# allowlists cannot drift).
+graduated_sources = []
+try:
+    _grows = json.load(open(os.path.expanduser("~/.deneb/data/graduation_state.json"))).get("rows") or {}
+    graduated_sources = [k[len("source:"):] for k, v in _grows.items()
+                         if k.startswith("source:") and (v or {}).get("unlocked")]
+except Exception:
+    pass
 cand, status = {}, {}
 for line in open(queue, errors="replace"):
     line = line.strip()
@@ -326,7 +355,8 @@ for rid, rec in sorted(cand.items(), key=pick_order):
         continue
     src = rec.get("source") or ""
     if not (src.startswith("evolve-tool-gap") or src.startswith("self-harness")
-            or src.startswith("health-finding") or src.startswith("tool-quality")):
+            or src.startswith("health-finding") or src.startswith("tool-quality")
+            or any(src.startswith(g) for g in graduated_sources)):
         continue
     if dispatch_outcome.blocks_redispatch(
             os.path.join(dispatch_dir, rid + ".json"),

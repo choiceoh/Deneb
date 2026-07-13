@@ -38,6 +38,9 @@ type WorkFeedDeps struct {
 	// OnEvolveVerdict records an operator label for a low-confidence accepted
 	// skill evolve, optionally rolling it back. Best-effort after settlement.
 	OnEvolveVerdict func(item workfeed.Item, actionID string)
+	// OnLadder, if set, applies a graduation-ladder card's veto (재잠금) after
+	// the action settles. Same best-effort contract as OnAnswer.
+	OnLadder func(item workfeed.Item, actionID string)
 }
 
 const (
@@ -227,6 +230,11 @@ func workFeedActionRun(deps WorkFeedDeps) rpcutil.HandlerFunc {
 			result.Item.Source == "genesis-evolve-verdict" &&
 			strings.HasPrefix(actionID, "evolve-verdict:") {
 			deps.OnEvolveVerdict(result.Item, actionID)
+		}
+		if deps.OnLadder != nil &&
+			result.Item.Source == "genesis-ladder" &&
+			strings.HasPrefix(actionID, "ladder:") {
+			deps.OnLadder(result.Item, actionID)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":             true,

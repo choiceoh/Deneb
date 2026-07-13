@@ -80,8 +80,8 @@ func genesisShadowScenarios() []genesisShadowScenario {
 	}
 }
 
-// GenesisBenchOutcome aggregates the shadow replay over all scenarios.
-type GenesisBenchOutcome struct {
+// genesisBenchOutcome aggregates the shadow replay over all scenarios.
+type genesisBenchOutcome struct {
 	Scenarios       int      `json:"scenarios"`       // scored on BOTH sides (non-skip, parseable)
 	Flips           int      `json:"flips"`           // incumbent clean → proposal skip/issue
 	IncumbentIssues float64  `json:"incumbentIssues"` // mean gate issues over scored scenarios
@@ -101,8 +101,8 @@ type genesisShadowGenFn func(ctx context.Context, systemPrompt, userPrompt strin
 // enters the mean-issue comparison only when BOTH prompts produced a
 // parseable non-skip skill; skips are counted per side, and a proposal that
 // skips or degrades a scenario the incumbent handles CLEANLY is a flip.
-func runGenesisShadowBench(ctx context.Context, incumbentPrompt, proposalPrompt string, scenarios []genesisShadowScenario, gen genesisShadowGenFn) GenesisBenchOutcome {
-	var out GenesisBenchOutcome
+func runGenesisShadowBench(ctx context.Context, incumbentPrompt, proposalPrompt string, scenarios []genesisShadowScenario, gen genesisShadowGenFn) genesisBenchOutcome {
+	var out genesisBenchOutcome
 	var incSum, propSum int
 	for _, sc := range scenarios {
 		incText, err := gen(ctx, incumbentPrompt, sc.UserPrompt)
@@ -158,7 +158,7 @@ func runGenesisShadowBench(ctx context.Context, incumbentPrompt, proposalPrompt 
 // proposal-side skip on a clean incumbent scenario never enters the scored
 // set). Zero scored scenarios otherwise returns "" — the low-confidence
 // routing surfaces those to the operator instead of auto-adopting.
-func genesisBenchDecision(out GenesisBenchOutcome) string {
+func genesisBenchDecision(out genesisBenchOutcome) string {
 	if out.Flips > 0 {
 		return fmt.Sprintf("genesis shadow flipped %d clean scenario(s): %s",
 			out.Flips, joinNotes(out.Notes))

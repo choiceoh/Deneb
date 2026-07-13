@@ -528,6 +528,9 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 				Tracker: s.genesisTracker,
 				Logger:  s.logger,
 				OnReady: s.postLadderReadyCard,
+				// Operator directive 2026-07-14: evidence-met unlocks execute
+				// automatically; this card is the notification + 재잠금 veto.
+				OnGraduated: s.postGraduationCard,
 			})
 			// Adversarial coverage: deterministically mutate each skill body
 			// (section drops, tool-reference drops) and author the held-out

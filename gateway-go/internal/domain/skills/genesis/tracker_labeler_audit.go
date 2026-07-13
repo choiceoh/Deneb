@@ -22,18 +22,18 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
-// LabelerBlindSpot is one false-pass suspect: a confirmed-clean skill that
+// labelerBlindSpot is one false-pass suspect: a confirmed-clean skill that
 // concurrently fails its own workout cases.
-type LabelerBlindSpot struct {
+type labelerBlindSpot struct {
 	Skill       string `json:"skill"`
 	FailedCases int    `json:"failedCases"`
 	ConfirmedAt int64  `json:"confirmedAt"`
 }
 
-// LabelerBlindSpots joins in-window evolve confirmations against the workout
+// labelerBlindSpots joins in-window evolve confirmations against the workout
 // lane's fails-own-validation records. Sorted worst-first (failed cases desc,
 // then name for determinism).
-func (t *Tracker) LabelerBlindSpots(window time.Duration) []LabelerBlindSpot {
+func (t *Tracker) labelerBlindSpots(window time.Duration) []labelerBlindSpot {
 	entries, err := jsonlstore.Load[LifecycleLogEntry](t.logPath)
 	if err != nil {
 		return nil
@@ -52,10 +52,10 @@ func (t *Tracker) LabelerBlindSpots(window time.Duration) []LabelerBlindSpot {
 		return nil
 	}
 	_, failedCases := t.WorkoutActivity(window) // takes t.mu internally
-	var out []LabelerBlindSpot
+	var out []labelerBlindSpot
 	for skill, at := range confirmedAt {
 		if cases := failedCases[skill]; len(cases) > 0 {
-			out = append(out, LabelerBlindSpot{Skill: skill, FailedCases: len(cases), ConfirmedAt: at})
+			out = append(out, labelerBlindSpot{Skill: skill, FailedCases: len(cases), ConfirmedAt: at})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {

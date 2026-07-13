@@ -58,7 +58,7 @@ func TestOrganicFalseAccepts(t *testing.T) {
 	}
 	rollback("sk-d", true, true)
 
-	got := tr.OrganicFalseAccepts(30*24*time.Hour, 10)
+	got := tr.organicFalseAccepts(30*24*time.Hour, 10)
 	if len(got) != 2 {
 		t.Fatalf("want 2 labels (sk-a, sk-d), got %+v", got)
 	}
@@ -71,14 +71,14 @@ func TestOrganicFalseAccepts(t *testing.T) {
 	}
 
 	// The limit caps newest-first.
-	if capped := tr.OrganicFalseAccepts(30*24*time.Hour, 1); len(capped) != 1 || capped[0].Skill != "sk-d" {
+	if capped := tr.organicFalseAccepts(30*24*time.Hour, 1); len(capped) != 1 || capped[0].Skill != "sk-d" {
 		t.Fatalf("limit=1 must keep the newest label: %+v", capped)
 	}
 
 	// A window that excludes everything yields nothing.
-	if none := tr.OrganicFalseAccepts(time.Millisecond, 10); len(none) != 0 {
+	if none := tr.organicFalseAccepts(time.Millisecond, 10); len(none) != 0 {
 		time.Sleep(2 * time.Millisecond)
-		if none = tr.OrganicFalseAccepts(time.Millisecond, 10); len(none) != 0 {
+		if none = tr.organicFalseAccepts(time.Millisecond, 10); len(none) != 0 {
 			t.Fatalf("sub-ms window must exclude all labels: %+v", none)
 		}
 	}

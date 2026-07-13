@@ -58,10 +58,16 @@ func DeclaredEditableSurfaces() []EditableSurface {
 			Name: "acceptance-machinery", Tier: SurfaceTierForbidden,
 			Patterns: []string{
 				"validation_engine.go", "validation_replay.go", "eprocess.go",
-				"meta_judge_bench.go", "meta_producer_bench.go", "meta_evolution.go",
+				"meta_judge_bench.go", "meta_producer_bench.go", "meta_genesis_bench.go", "meta_evolution.go",
 				"judge_accuracy.go", "surfaces.go", "tracker_usage.go",
+				// Graduation machinery (operator delegated unlock EXECUTION
+				// 2026-07-14): the loop may exercise evidence-met unlocks, but
+				// the thresholds and the executor are policy — a loop that
+				// could edit them could grant itself autonomy without evidence.
+				"rsi_ladder.go", "ladder_watch.go", "graduation_state.go",
+				"tracker_eprocess_cutover.go",
 			},
-			Note: "deterministic accept/reject core (gates, benches, e-process, rollback watch, this whitelist)",
+			Note: "deterministic accept/reject core (gates, benches, e-process, rollback watch, graduation policy, this whitelist)",
 		},
 		{
 			// Operator authorization 2026-07-12 ("게이트웨이 소스 자가편집도 괜찮다 —

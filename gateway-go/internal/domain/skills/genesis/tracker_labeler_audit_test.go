@@ -41,7 +41,7 @@ func TestLabelerBlindSpots(t *testing.T) {
 	// (that is L1's normal evolve signal, not a labeler contradiction).
 	workoutFail("sk-workout-only", "c1")
 
-	spots := tr.LabelerBlindSpots(7 * 24 * time.Hour)
+	spots := tr.labelerBlindSpots(7 * 24 * time.Hour)
 	if len(spots) != 1 || spots[0].Skill != "sk-blind" || spots[0].FailedCases != 2 {
 		t.Fatalf("want sk-blind with 2 failed cases, got %+v", spots)
 	}
@@ -51,7 +51,7 @@ func TestLabelerBlindSpots(t *testing.T) {
 
 	// A window that predates all records yields nothing.
 	time.Sleep(2 * time.Millisecond)
-	if got := tr.LabelerBlindSpots(time.Millisecond); len(got) != 0 {
+	if got := tr.labelerBlindSpots(time.Millisecond); len(got) != 0 {
 		t.Fatalf("sub-ms window must exclude all joins: %+v", got)
 	}
 }

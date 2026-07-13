@@ -132,7 +132,7 @@ func TestRunJudgeDegradationBench(t *testing.T) {
 
 // Promotion rule: proposal must clear the floor AND not regress the incumbent.
 func TestJudgeBenchDecision(t *testing.T) {
-	mk := func(correct, total int) JudgeBenchOutcome { return JudgeBenchOutcome{Correct: correct, Total: total} }
+	mk := func(correct, total int) judgeBenchOutcome { return judgeBenchOutcome{Correct: correct, Total: total} }
 	if r := judgeBenchDecision(mk(3, 6), mk(4, 6)); r != "" {
 		t.Fatalf("improving proposal rejected: %s", r)
 	}

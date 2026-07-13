@@ -76,7 +76,7 @@ var rsiLayerDetails = map[string]string{
 	"L2":   "스킬을 고치는 프롬프트(생성·판정) 자체를 주간 단위로 개정하는 메타 루프입니다. 벤치를 통과하면 자동 채택되고, 드리프트가 감지되면 스스로 동결합니다.",
 	"L3":   "판정자가 자신의 오판으로 학습하는 검증기 공진화 루프입니다. 판정 정확도 레인이 심은 결함을 재생해 오판 라벨을 만듭니다.",
 	"L4":   "게이트웨이 소스 자체를 고치는 자가편집 루프입니다. 근거 있는 후보만 코딩 레인에 배차되고, 게이트 통과와 배포 롤백 워치로 보호됩니다.",
-	"GRAD": "자율성 졸업 사다리의 행별 증거를 상시 심사하는 계기판입니다. 증거가 임계에 도달하면 '준비됨'으로 표시될 뿐, 잠금 해제 결정은 항상 운영자의 몫입니다.",
+	"GRAD": "자율성 졸업 사다리의 행별 증거를 상시 심사하고, 임계 충족 시 잠금 해제를 자동 실행하는 계기판입니다 (2026-07-14 위임). 모든 실행은 원장 기록과 재잠금 비토 카드를 남기며, 임계값 정책 자체는 루프가 편집할 수 없습니다.",
 }
 
 // RSILoopStatus is the whole recursive-self-improvement snapshot.
@@ -166,8 +166,8 @@ func (t *Tracker) rsiAssessL1() RSILayer {
 		{"제안", strconv.Itoa(h.Proposals7d)},
 		{"기각", strconv.Itoa(h.EvolveRejected7d)},
 		{"확정률", fmt.Sprintf("%.0f%%", h.ConfirmRate*100)},
-		{"e-process", rsiEProcessValue(t.EProcessCutoverReadiness())},
-		{"라벨러 사각", strconv.Itoa(len(t.LabelerBlindSpots(evolutionHealthWindow)))},
+		{"e-process", rsiEProcessValue(t.eProcessCutoverReadiness())},
+		{"라벨러 사각", strconv.Itoa(len(t.labelerBlindSpots(evolutionHealthWindow)))},
 	}
 	base := RSILayer{Key: "L1", Title: "스킬 진화", Metrics: metrics}
 	switch {
@@ -289,7 +289,7 @@ func (t *Tracker) rsiAssessL3() RSILayer {
 	if runs == 0 && operatorLabels == 0 {
 		return RSILayer{Key: "L3", Title: "판정자 공진화", State: RSIStateIdle, Diagnosis: "판정 정확도 레인이 최근 7일간 실행되지 않았습니다"}
 	}
-	organic := len(t.OrganicFalseAccepts(organicFalseAcceptWindow, 50))
+	organic := len(t.organicFalseAccepts(organicFalseAcceptWindow, 50))
 	metrics := []RSIMetricKV{
 		{"실행(7일)", strconv.Itoa(runs)},
 		{"판정 놓침", strconv.Itoa(misses)},
@@ -523,7 +523,7 @@ func rsiDispatchOutcomes(dir string) (outcomes map[string]int, decided, landed i
 // rsiEProcessValue formats the L1 e-process cutover metric: who owns rollback
 // firing, and how the observation-mode label evidence stands against the
 // graduation thresholds (n>=20, agreement>=90%).
-func rsiEProcessValue(r EProcessCutoverReadiness) string {
+func rsiEProcessValue(r eProcessCutoverReadiness) string {
 	switch {
 	case r.EProcessOwner:
 		return fmt.Sprintf("발화 소유 (라벨 n=%d)", r.Labels)
@@ -540,6 +540,14 @@ func rsiSourceDispatchable(source string) bool {
 	source = strings.TrimSpace(source)
 	for _, s := range rsiDispatchSources {
 		if strings.HasPrefix(source, s) {
+			return true
+		}
+	}
+	// Executed graduation-ladder unlocks admit staged sources at runtime
+	// (operator directive 2026-07-14); coding-dispatch.sh and rsi_status.py
+	// read the same state file so the three allowlists cannot drift.
+	for _, s := range graduatedDispatchSources() {
+		if s != "" && strings.HasPrefix(source, s) {
 			return true
 		}
 	}
