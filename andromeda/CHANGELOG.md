@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.77](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.76...andromeda-v0.0.77) (2026-07-13)
+
+
+### 🐛 Bug Fixes
+
+* **rsi:** harden closed-loop delivery and dispatch ([#3628](https://github.com/choiceoh/Deneb/issues/3628)) ([cd74b65](https://github.com/choiceoh/Deneb/commit/cd74b65dba71259be0f538d814972095aa1e28a6))
+
 ## [0.0.76](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.75...andromeda-v0.0.76) (2026-07-13)
 
 
