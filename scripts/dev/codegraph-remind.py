@@ -49,8 +49,12 @@ def main():
     if rel.startswith(".."):
         return 0  # outside the repo
 
-    # Once per session (total, not per file).
-    session = re.sub(r"[^A-Za-z0-9_-]", "_", str(payload.get("session_id") or "nosession"))
+    # Once per session (total, not per file).  When session_id is unavailable
+    # (rare under ZCode), fall back to the PID so each process gets its own
+    # marker — a constant "nosession" would suppress the nudge forever after
+    # the first session-less run.
+    sid = payload.get("session_id") or os.getpid()
+    session = re.sub(r"[^A-Za-z0-9_-]", "_", str(sid))
     marker = os.path.join(tempfile.gettempdir(), f"codegraph-remind-{session}")
     if os.path.exists(marker):
         return 0

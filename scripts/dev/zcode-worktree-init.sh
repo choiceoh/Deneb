@@ -55,6 +55,10 @@ WT_BRANCH="zcode/$SESSION_ID"
 mkdir -p "$WT_BASE"
 
 # ── Idempotent: reuse if the worktree already exists ──────────────────────
+# Prune stale worktree registrations first — a half-deleted worktree (dir
+# gone but registration remains) would cause `git worktree add` to fail
+# silently under the `|| exit 0` guard below.
+git worktree prune 2>/dev/null || true
 if git worktree list --porcelain 2>/dev/null | grep -q "^worktree ${WT_PATH}$"; then
     printf '{"additionalContext":"⚡ ZCode 워크트리 재사용: %s (브랜치 %s).\\n\\n첫 작업 전 반드시 진입: cd %s\\n이 디렉터리에서만 편집하세요 — 메인 체크아웃(/Users/ost/Documents/GitHub/Deneb)에서의 Write/Edit/MultiEdit는 가드가 차단합니다."}\n' \
         "$WT_PATH" "$WT_BRANCH" "$WT_PATH"
@@ -62,24 +66,39 @@ if git worktree list --porcelain 2>/dev/null | grep -q "^worktree ${WT_PATH}$"; 
 fi
 
 # ── Create the worktree ───────────────────────────────────────────────────
-# Note: git worktree add prints "HEAD is now at ..." to stdout, which would
-# corrupt our JSON output.  Redirect all git output to stderr so only our
-# printf lands on stdout (hook output must be clean JSON).
+# Branch from origin/main (not local main) so sessions start from upstream
+# HEAD even when the user hasn't pulled.  A quiet fetch first; if it fails
+# (offline), fall back to local main.
+git fetch --quiet origin main 2>/dev/null || true
+SEED_REF="main"
+if git rev-parse --verify origin/main >/dev/null 2>&1; then
+    SEED_REF="origin/main"
+fi
 if git show-ref --verify --quiet "refs/heads/$WT_BRANCH" 2>/dev/null; then
     # Branch exists (worktree was cleaned up earlier) — re-attach.
     git worktree add "$WT_PATH" "$WT_BRANCH" >&2 2>/dev/null || exit 0
 else
-    # Fresh branch from main.
-    git worktree add -b "$WT_BRANCH" "$WT_PATH" main >&2 2>/dev/null || exit 0
+    # Fresh branch from origin/main (or local main if fetch failed).
+    git worktree add -b "$WT_BRANCH" "$WT_PATH" "$SEED_REF" >&2 2>/dev/null || exit 0
 fi
 
 # ── Seed CodeGraph index (background, fail-open) ──────────────────────────
-# Same strategy as codegraph-autoindex.py: copy the main checkout's index
-# (sub-second) then run `codegraph sync` to reconcile branch drift.  Runs
-# detached so session start is never delayed.
+# Copy the main checkout's index, then run `codegraph sync` to reconcile
+# branch drift.  Daemon runtime files (pid/sock/log) are excluded — they
+# point at the main checkout's socket and would confuse the worktree's
+# codegraph into talking to the wrong daemon.  Runs detached so session
+# start is never delayed.
 if [[ -d "$ROOT/.codegraph" ]]; then
     {
-        cp -r "$ROOT/.codegraph" "$WT_PATH/.codegraph" 2>/dev/null &&
+        mkdir -p "$WT_PATH/.codegraph" &&
+        # Copy everything except daemon runtime files.
+        for item in "$ROOT/.codegraph"/*; do
+            base=$(basename "$item")
+            case "$base" in
+                daemon.pid|daemon.sock|daemon.log) continue ;;
+            esac
+            cp -r "$item" "$WT_PATH/.codegraph/" 2>/dev/null || true
+        done &&
         cd "$WT_PATH" &&
         (codegraph sync 2>/dev/null || true)
     } >/dev/null 2>&1 &

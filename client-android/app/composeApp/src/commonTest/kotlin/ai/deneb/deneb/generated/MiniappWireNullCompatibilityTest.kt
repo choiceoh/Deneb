@@ -2650,6 +2650,42 @@ class MiniappWireNullCompatibilityTest {
             field = "rolledBack7d",
         ),
         nullContract(
+            name = "SelfImprovementCodingFunnel.proposed7d",
+            serializer = SelfImprovementCodingFunnel.serializer(),
+            empty = SelfImprovementCodingFunnel(),
+            field = "proposed7d",
+        ),
+        nullContract(
+            name = "SelfImprovementCodingFunnel.verdicted7d",
+            serializer = SelfImprovementCodingFunnel.serializer(),
+            empty = SelfImprovementCodingFunnel(),
+            field = "verdicted7d",
+        ),
+        nullContract(
+            name = "SelfImprovementCodingFunnel.applied7d",
+            serializer = SelfImprovementCodingFunnel.serializer(),
+            empty = SelfImprovementCodingFunnel(),
+            field = "applied7d",
+        ),
+        nullContract(
+            name = "SelfImprovementCodingFunnel.conversionRate",
+            serializer = SelfImprovementCodingFunnel.serializer(),
+            empty = SelfImprovementCodingFunnel(),
+            field = "conversionRate",
+        ),
+        nullContract(
+            name = "SelfImprovementCodingFunnel.meanTimeToVerdictMs",
+            serializer = SelfImprovementCodingFunnel.serializer(),
+            empty = SelfImprovementCodingFunnel(),
+            field = "meanTimeToVerdictMs",
+        ),
+        nullContract(
+            name = "SelfImprovementCodingFunnel.reopens7d",
+            serializer = SelfImprovementCodingFunnel.serializer(),
+            empty = SelfImprovementCodingFunnel(),
+            field = "reopens7d",
+        ),
+        nullContract(
             name = "SelfImprovementCodingListResponse.candidates",
             serializer = SelfImprovementCodingListResponse.serializer(),
             empty = SelfImprovementCodingListResponse(),
