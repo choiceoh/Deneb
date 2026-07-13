@@ -155,28 +155,50 @@ class DispatchPromptTest(unittest.TestCase):
             self.assertEqual(rc2, dispatch_prompt.DEFER_EXIT)
             self.assertIn("coding-dispatch.sh", err2)
 
+    def test_forbidden_surface_boundary_matching(self):
+        # Whole-component matching, not substring (3rd-review C2-C1 + Copilot):
+        # unrelated files that merely CONTAIN a forbidden basename must NOT trip.
+        fm = dispatch_prompt.forbidden_surface_mentions
+        for benign in (
+            {"targetFiles": ["gateway-go/internal/pipeline/chat/web/web_html_preprocess.go"]},
+            {"targetFiles": ["a/eprocess.go.bak"]},          # extension continuation
+            {"candidate": "see docs/pr.sh.md for details"},   # extension continuation
+            {"evidence": "open a PR, wait for CI to pass"},    # words, not pr.sh/ci.yml
+            {"candidate": "use the pr.shell wrapper"},         # pr.shell != pr.sh
+        ):
+            self.assertEqual(fm(benign), [], f"false positive: {benign}")
+        for hit, want in (
+            ({"proposedChange": "edit surfaces.go. then rebuild"}, "surfaces.go"),  # sentence period
+            ({"targetFiles": ["genesis/surfaces.go"]}, "surfaces.go"),              # dir slash
+            ({"targetFiles": [".github/workflows/ci.yml"]}, "ci.yml"),
+            ({"proposedChange": "patch scripts/dev/pr.sh land"}, "pr.sh"),
+        ):
+            self.assertIn(want, fm(hit), f"missed: {hit}")
+
     def test_forbidden_basenames_cover_go_whitelist(self):
         # Every basename in the Go forbidden surface whitelist must be in the
-        # scripts-side guard so the two cannot drift (same pinning pattern as
-        # the artifact name below).
+        # scripts-side guard so the two cannot drift. Order/comment-tolerant:
+        # a forbidden entry is any struct literal whose body contains
+        # `Tier: SurfaceTierForbidden`, regardless of field order or interposed
+        # comments/Note (3rd-review C2-C3 — the old regex assumed Tier directly
+        # before Patterns and could be evaded). pr.sh/ci.yml are now guarded
+        # too (boundary matching makes them prose-safe), so no exemption.
         go_src = (
             Path(__file__).resolve().parents[2]
             / "gateway-go/internal/domain/skills/genesis/surfaces/surfaces.go"
         ).read_text(encoding="utf-8")
-        forbidden_blocks = re.findall(
-            r"Tier: SurfaceTierForbidden,\s*Patterns: \[\]string\{(.*?)\}",
-            go_src,
-            re.S,
-        )
+        # Split into brace-balanced struct literals inside DeclaredEditableSurfaces
+        # and keep those declaring the forbidden tier.
+        entries = re.findall(r"\{([^{}]*Patterns:\s*\[\]string\{[^}]*\}[^{}]*)\}", go_src, re.S)
+        forbidden_blocks = [e for e in entries if "SurfaceTierForbidden" in e]
         self.assertTrue(forbidden_blocks, "no forbidden pattern blocks found in surfaces.go")
         for block in forbidden_blocks:
-            for pattern in re.findall(r'"([^"]+)"', block):
+            patterns_body = re.search(r"Patterns:\s*\[\]string\{(.*?)\}", block, re.S)
+            self.assertIsNotNone(patterns_body)
+            for pattern in re.findall(r'"([^"]+)"', patterns_body.group(1)):
+                if pattern.startswith("*."):
+                    continue  # extension globs are a tier, not a basename to scan
                 basename = pattern.rsplit("/", 1)[-1]
-                if basename in ("pr.sh", "ci.yml"):
-                    # pr.sh/ci.yml are legitimate words in candidate prose
-                    # (the contract itself mandates pr.sh land) — guarded by
-                    # the record-time surface gate instead.
-                    continue
                 self.assertIn(
                     basename,
                     dispatch_prompt.FORBIDDEN_SURFACE_BASENAMES,

@@ -217,11 +217,11 @@ func TestPostEvolveRollback_ProvenSkillStopsWatch(t *testing.T) {
 		}
 	}
 	// One failure, then enough successes to fill the window without reaching
-	// 3 failures — the watch proves out and clears. The window is the
-	// C1-extended one: max(threshold*2, e-process MinRejectObservations),
-	// which is 8 uses at the clamped-floor baseline of a fresh skill.
+	// 3 failures — the watch proves out and clears. Under LEGACY ownership
+	// (default; no DENEB_EPROCESS_OWNS_ROLLBACK) the window is 2×threshold = 6
+	// uses; the C1 e-process window extension applies only after cutover.
 	rec(false)
-	for i := 0; i < 7; i++ {
+	for i := 0; i < 5; i++ {
 		rec(true)
 	}
 	// Watch is cleared now; a later failure burst must not roll back.

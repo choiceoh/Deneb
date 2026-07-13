@@ -208,6 +208,16 @@ func (e *Evolver) RollbackSkillWithResult(skillName string) bool {
 	if e.catalog == nil {
 		return false
 	}
+	// Serialize against concurrent evolves of the SAME skill (M4 3rd-review
+	// defect): a rollback fires because a skill is regressing, and a regressing
+	// skill is exactly what EvolveUnderperformers selects — so rollback(X) can
+	// race evolve(X). Without this lock the evolve's read-gate-write can capture
+	// the just-rolled-away body into the next backup, corrupting rollback. The
+	// per-skill lock is a leaf (evolve never triggers rollback synchronously),
+	// so no deadlock. The usage-path caller runs this in a lock-free goroutine
+	// (not under t.mu), so blocking here is safe.
+	unlock := e.lockSkill(skillName)
+	defer unlock()
 	entry, ok := e.catalog.Get(skillName)
 	if !ok {
 		e.logger.Warn("evolver: rollback skipped, skill not in catalog", "skill", skillName)
@@ -238,9 +248,13 @@ func (e *Evolver) RollbackSkillWithResult(skillName string) bool {
 	// and a no-op backup restore succeeds — double-counting one judge mistake
 	// as both an organic AND an operator false-accept label (RSI code eval H2).
 	restored := *entry
-	if v, ok := skills.ParseFrontmatter(string(prev))["version"]; ok && v != "" {
-		restored.Skill.Version = v
-	}
+	// Set the version to whatever the RESTORED file actually declares (empty if
+	// it has no frontmatter version) — do NOT keep the evolved version on a
+	// version-less backup, which would leave the catalog advertising the old
+	// body under the reverted-away version and re-open the H2 stale-read the
+	// re-register was meant to close (3rd-review H2 edge). An empty version is
+	// an honest, already-valid catalog state for an unversioned skill.
+	restored.Skill.Version = skills.ParseFrontmatter(string(prev))["version"]
 	e.catalog.Register(restored)
 	e.logger.Info("evolver: skill rolled back after consecutive post-evolve failures",
 		"skill", skillName, "restoredVersion", restored.Skill.Version)
