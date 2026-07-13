@@ -264,10 +264,20 @@ func (m *Manager) Restore(ctx context.Context, snapshotID string) (*Snapshot, er
 		m.mu.Unlock()
 		return nil, fmt.Errorf("checkpoint: snapshot %q not found", snapshotID)
 	}
-	path := target.Path
+	restore := *target
+	var data []byte
+	if !restore.Tombstone {
+		data, err = m.readBlob(restore.BlobPath)
+		if err != nil {
+			m.mu.Unlock()
+			return nil, fmt.Errorf("checkpoint: read blob: %w", err)
+		}
+	}
+	path := restore.Path
 	m.mu.Unlock()
 
-	// Take a pre-restore snapshot (Snapshot acquires mu itself — must release first).
+	// Buffer the requested payload before taking the pre-restore snapshot so
+	// aggressive retention cannot evict the target blob mid-restore.
 	if _, err := m.Snapshot(ctx, path, "pre-restore"); err != nil {
 		return nil, fmt.Errorf("checkpoint: pre-restore snapshot: %w", err)
 	}
@@ -275,21 +285,17 @@ func (m *Manager) Restore(ctx context.Context, snapshotID string) (*Snapshot, er
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if target.Tombstone {
+	if restore.Tombstone {
 		// Restore to "file did not exist": remove current.
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("checkpoint: remove for tombstone restore: %w", err)
 		}
-		return target, nil
-	}
-	data, err := m.readBlob(target.BlobPath)
-	if err != nil {
-		return nil, fmt.Errorf("checkpoint: read blob: %w", err)
+		return &restore, nil
 	}
 	if err := atomicfile.WriteFile(path, data, &atomicfile.Options{Fsync: true}); err != nil {
 		return nil, fmt.Errorf("checkpoint: restore write: %w", err)
 	}
-	return target, nil
+	return &restore, nil
 }
 
 // Diff returns a unified diff between the snapshot contents and the current

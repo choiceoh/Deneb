@@ -33,13 +33,12 @@ func (m *Manager) pruneLocked() error {
 		return nil
 	}
 
-	// Blob deletion remains best-effort, but the index must still be rewritten
-	// so a single undeletable blob cannot retain every expired checkpoint.
-	blobErr := deleteRetiredSnapshotBlobs(removed)
 	if err := rewriteIndex(m.indexPath(), remaining); err != nil {
 		return err
 	}
-	return blobErr
+	// Blob deletion remains best-effort, but the rewritten index must win so
+	// failed cleanup cannot resurrect expired snapshots.
+	return deleteRetiredSnapshotBlobs(removed)
 }
 
 func selectSnapshotsForRetention(all []*Snapshot, retentionN int, maxBytes int64) ([]*Snapshot, []*Snapshot) {

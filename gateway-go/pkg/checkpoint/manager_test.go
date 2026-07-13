@@ -70,6 +70,35 @@ func TestSnapshotAndRestoreRoundtrip(t *testing.T) {
 	}
 }
 
+func TestRestoreOlderSnapshotAfterPreRestorePrune(t *testing.T) {
+	m := newTestManager(t, "session-restore-prune", WithRetentionN(2), WithGzip(false))
+	target := filepath.Join(t.TempDir(), "hello.txt")
+	writeFile(t, target, "version 1")
+
+	s1, err := m.Snapshot(context.Background(), target, "fs_write")
+	if err != nil {
+		t.Fatalf("snapshot 1: %v", err)
+	}
+	writeFile(t, target, "version 2")
+	if _, err := m.Snapshot(context.Background(), target, "fs_write"); err != nil {
+		t.Fatalf("snapshot 2: %v", err)
+	}
+
+	// Leave the newest file content unsnapshotted so Restore must create a
+	// distinct pre-restore snapshot that triggers retention pruning.
+	writeFile(t, target, "version 3")
+	if _, err := m.Restore(context.Background(), s1.ID); err != nil {
+		t.Fatalf("restore older snapshot: %v", err)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read restored file: %v", err)
+	}
+	if string(data) != "version 1" {
+		t.Fatalf("got %q, want %q", string(data), "version 1")
+	}
+}
+
 func TestSnapshotDeduplication(t *testing.T) {
 	m := newTestManager(t, "session-dedup")
 	target := filepath.Join(t.TempDir(), "same.txt")
@@ -238,6 +267,45 @@ func TestRetentionRewritesIndexAfterBlobDeleteFailure(t *testing.T) {
 	}
 	if _, err := os.Stat(undeletableBlob); err != nil {
 		t.Fatalf("failed blob unexpectedly disappeared: %v", err)
+	}
+}
+
+func TestRetentionKeepsBlobsWhenIndexRewriteFails(t *testing.T) {
+	m := newTestManager(t, "session-ret-rewrite-error", WithRetentionN(1))
+	target := filepath.Join(t.TempDir(), "tracked.txt")
+	blobDir := filepath.Join(m.SessionDir(), "hash")
+	if err := os.MkdirAll(blobDir, 0o755); err != nil {
+		t.Fatalf("mkdir blob dir: %v", err)
+	}
+	blobPath := filepath.Join(blobDir, "old.txt")
+	writeFile(t, blobPath, "old snapshot")
+
+	snapshots := []*Snapshot{
+		{ID: "old", Path: target, Seq: 1, Size: 12, BlobPath: blobPath, PathHash: "hash"},
+		{ID: "new", Path: target, Seq: 2, Size: 1, PathHash: "hash"},
+	}
+	if err := rewriteIndex(m.indexPath(), snapshots); err != nil {
+		t.Fatalf("seed index: %v", err)
+	}
+	if err := os.Mkdir(m.indexPath()+".rewrite.tmp", 0o755); err != nil {
+		t.Fatalf("block rewrite tmp: %v", err)
+	}
+
+	m.mu.Lock()
+	err := m.pruneLocked()
+	m.mu.Unlock()
+	if err == nil || !strings.Contains(err.Error(), "write index tmp") {
+		t.Fatalf("prune error = %v, want index rewrite error", err)
+	}
+	if _, err := os.Stat(blobPath); err != nil {
+		t.Fatalf("blob deleted despite rewrite failure: %v", err)
+	}
+	remaining, err := readIndex(m.indexPath())
+	if err != nil {
+		t.Fatalf("read index after failed prune: %v", err)
+	}
+	if len(remaining) != 2 {
+		t.Fatalf("remaining snapshots = %+v, want untouched index", remaining)
 	}
 }
 
