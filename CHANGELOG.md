@@ -1,5 +1,50 @@
 # Changelog
 
+## [4.101.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.100.0...deneb-v4.101.0) (2026-07-13)
+
+
+### ✨ Features
+
+* **andromeda:** RSI Pane 강화 — 진화 건강 카드·L2/L3 드릴·L4 후보 소스·자동배차 칩·상세 모달 ([#3595](https://github.com/choiceoh/Deneb/issues/3595)) ([e98e07a](https://github.com/choiceoh/Deneb/commit/e98e07ae9b2abf1d7bf7a7a44fda6fd8f445d109))
+* close recursive self-improvement feedback loops ([#3622](https://github.com/choiceoh/Deneb/issues/3622)) ([2142504](https://github.com/choiceoh/Deneb/commit/2142504306cb785d6e8a8996f86aec7a70c38dad))
+* **cursor:** auto worktree isolation + CodeGraph MCP wiring ([#3601](https://github.com/choiceoh/Deneb/issues/3601)) ([18def53](https://github.com/choiceoh/Deneb/commit/18def532606976b94e4a975cc69bedf7ad8d3d03))
+* **genesis:** L2 회전에 genesis epoch 편입 — 3번째 진화 아티팩트 + 결정적 섀도 벤치 (P5-4 slice-2) ([#3617](https://github.com/choiceoh/Deneb/issues/3617)) ([9ab7b41](https://github.com/choiceoh/Deneb/commit/9ab7b41fc48b68405d603fc8dad43dde8b817bd5))
+* **genesis:** L4 배차 결과 회계 — 마커에 랜딩/기각/실패 기록 + 랜딩률 집계 (졸업 사다리 증거) ([#3609](https://github.com/choiceoh/Deneb/issues/3609)) ([b0c9097](https://github.com/choiceoh/Deneb/commit/b0c9097913c36edbd74d5141b36a4dbd34c90ebb))
+* **genesis:** L4 배차 계약 프롬프트 외부화 — 5번째 메타 아티팩트 (P5-4 slice-1) ([#3606](https://github.com/choiceoh/Deneb/issues/3606)) ([f1f7b8b](https://github.com/choiceoh/Deneb/commit/f1f7b8bfdb598be66200aca972a0fda64f606d34))
+* **genesis:** 사다리 READY 전이 감시 — 증거 충족 시 능동 피드 카드 1회 발화 (ladder-watch) ([#3624](https://github.com/choiceoh/Deneb/issues/3624)) ([8d6d55a](https://github.com/choiceoh/Deneb/commit/8d6d55a983ec70574b65fb42e34707f34cf79951))
+* **genesis:** 졸업 사다리 상시 심사 — 행별 증거 기계 판독 + GRAD 계기판 카드 (자율성 졸업의 증거화) ([#3620](https://github.com/choiceoh/Deneb/issues/3620)) ([24292f2](https://github.com/choiceoh/Deneb/commit/24292f2babe028e3b608da675dec64cdcb2f7bca))
+* **genesis:** 커리큘럼 수요 소스 완결 — 실패한 사용자 요청 채굴 (P5-1 slice-4) ([#3603](https://github.com/choiceoh/Deneb/issues/3603)) ([c0a3600](https://github.com/choiceoh/Deneb/commit/c0a360001ef29fd72b7d4951f917f13e1e36b204))
+* **genesis:** 판정자 프로브 커리큘럼 사다리 — drop 포화 시 제자리 약화 tier로 격상 (P3 라벨 기근 해소) ([#3602](https://github.com/choiceoh/Deneb/issues/3602)) ([92105d6](https://github.com/choiceoh/Deneb/commit/92105d63de90868a612bbc09bc22b7f227e35e6f))
+* **native:** RSI 화면 강화 — 진화 건강 스코어보드 카드 + L4 큐 소스·자동배차 칩 ([#3591](https://github.com/choiceoh/Deneb/issues/3591)) ([5d518a7](https://github.com/choiceoh/Deneb/commit/5d518a75c3f5ba6dbca150b38ad895e7761d1cfa))
+* **recall:** recall-health — 회상 평가 루프 닫기 (원장 효용·골드셋 커버리지·복합 점수·골드셋 공진화) ([#3599](https://github.com/choiceoh/Deneb/issues/3599)) ([fbbdf18](https://github.com/choiceoh/Deneb/commit/fbbdf18237f1ed35c743b55a105746bc26b382b8))
+* **rsi:** 자가교정 루프 관측성·안정성 업그레이드 + 워크트리 가드 파일 경로 인식 ([#3605](https://github.com/choiceoh/Deneb/issues/3605)) ([188c400](https://github.com/choiceoh/Deneb/commit/188c4007c207fda19d731f77b52690044cb9bb3f))
+* **wiki:** 드리머 효용접지 폐루프 — 회상-히트 원장·품질점수·오프라인 자기비평·적응 백로그드레인·프롬프트 외부화·프리필터 ([#3596](https://github.com/choiceoh/Deneb/issues/3596)) ([4b7d61a](https://github.com/choiceoh/Deneb/commit/4b7d61ae04440db00c7c3776ae268c11a0d21aca))
+
+
+### 🐛 Bug Fixes
+
+* **codegraph:** tighten index excludes + prefer node for exact symbols ([#3607](https://github.com/choiceoh/Deneb/issues/3607)) ([0e2c6f7](https://github.com/choiceoh/Deneb/commit/0e2c6f7918a90d826ab7a4ef6581101ed3cd6f68))
+* **cursor:** harden worktree guard + bind CodeGraph to active-root ([#3604](https://github.com/choiceoh/Deneb/issues/3604)) ([d21d742](https://github.com/choiceoh/Deneb/commit/d21d7427d7d4710d338b017ad19384452d0de908))
+* **dev:** codegraph-nudge F541 — 플레이스홀더 없는 f-string 접두사 제거 (main lint 오염 수리) ([#3611](https://github.com/choiceoh/Deneb/issues/3611)) ([a9dff18](https://github.com/choiceoh/Deneb/commit/a9dff18a2ce2edc271eb117a7cb60f213731a03e))
+* **genesis:** RSI 상태·표면 티어·재오픈 캡 Go/Python 패리티 복구 ([#3610](https://github.com/choiceoh/Deneb/issues/3610)) ([0e8950e](https://github.com/choiceoh/Deneb/commit/0e8950ebe80fe338faa99e60026c13cdcc85f19e))
+* **genesis:** verifier_broken 드리프트 신호를 must-catch 클래스 정확도로 스코프 ([#3608](https://github.com/choiceoh/Deneb/issues/3608)) ([a17ff7d](https://github.com/choiceoh/Deneb/commit/a17ff7d6081a3b62b20fc6701c9a6e6027e3a7b8))
+* **native:** RSI '진화 건강' 카드 레이아웃 — L1 사이 18dp 간격 복구 + 지표 4+3 균형 배치 ([#3600](https://github.com/choiceoh/Deneb/issues/3600)) ([8942fc7](https://github.com/choiceoh/Deneb/commit/8942fc7244e557ae499c78a523bdef515b518b70))
+* **native:** 표 tiny 열 폭 조임 — 헤더는 텍스트율(6dp)·숫자는 9dp로 분리('단계' 40→28dp) ([#3598](https://github.com/choiceoh/Deneb/issues/3598)) ([ab7b766](https://github.com/choiceoh/Deneb/commit/ab7b7662ef7a6a3c0d962369aea0428cde8371e7))
+* **native:** 표 번호 열 폭 — 셀 데이터로 tiny 판정(헤더 제외) · '단계'류 짧은라벨 번호열도 좁게 ([#3594](https://github.com/choiceoh/Deneb/issues/3594)) ([9468cb1](https://github.com/choiceoh/Deneb/commit/9468cb11f4741340c338661a9d83193dae941e8f))
+* **rsi:** abandoned L4 마커·스테일 워크트리 회수 ([#3623](https://github.com/choiceoh/Deneb/issues/3623)) ([61a4e19](https://github.com/choiceoh/Deneb/commit/61a4e199dbc499e680f8dedf6c13c3e83a063660))
+* **rsi:** L4 마커 outcome 재배차·워크트리 검증·L2 freeze/status 패리티 ([#3614](https://github.com/choiceoh/Deneb/issues/3614)) ([187984b](https://github.com/choiceoh/Deneb/commit/187984b210470d6ff75ce9e287c6660810789110))
+* **rsi:** L4 배차 교착·accepted 백로그 가시성·스윕 억제 ([#3612](https://github.com/choiceoh/Deneb/issues/3612)) ([680ec36](https://github.com/choiceoh/Deneb/commit/680ec36742de561eab32f0bb282ff9c4bfb82112))
+* **rsi:** L4 스테일 워크트리 동기화·셋업 실패 시 다음 후보 ([#3615](https://github.com/choiceoh/Deneb/issues/3615)) ([d409c6f](https://github.com/choiceoh/Deneb/commit/d409c6f1f23b9afe1d9fba19306b6dd83a9c7f52))
+* **rsi:** L4 재시도 브랜치 갱신·DispatchMarkerBlocks abandon 패리티 ([#3621](https://github.com/choiceoh/Deneb/issues/3621)) ([c942603](https://github.com/choiceoh/Deneb/commit/c94260365c119147343af75342f8b04b0909f012))
+* **rsi:** 미흡수 봇 리뷰 지적 흡수 — L4 배차·스윕·Cursor 가드·RSI UI ([#3618](https://github.com/choiceoh/Deneb/issues/3618)) ([7fc2580](https://github.com/choiceoh/Deneb/commit/7fc2580657e7bfd0f8e92f6848e0727b915958d9))
+* **rsi:** 배차 마커 status 병합·L2 진단 14일 카운트 패리티 ([#3616](https://github.com/choiceoh/Deneb/issues/3616)) ([7c05562](https://github.com/choiceoh/Deneb/commit/7c0556220f8deffe7f7011e78bf559a91f10e4a3))
+
+
+### ⚡ Performance
+
+* **mailarchive:** search·project_history의 IMAP 텍스트검색 폴백 제거 (미러가 정본) ([#3597](https://github.com/choiceoh/Deneb/issues/3597)) ([6a5b163](https://github.com/choiceoh/Deneb/commit/6a5b1639673e683dc16a803dadb232128a1f83c9))
+* **mailarchive:** 한국어 검색 미스 시 CJK-무능 IMAP 폴백 스킵 + store 경로 로그화 ([#3592](https://github.com/choiceoh/Deneb/issues/3592)) ([1154bbe](https://github.com/choiceoh/Deneb/commit/1154bbe1a36e856a567efe780adb4f4d8dfd2786))
+
 ## [4.100.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.99.0...deneb-v4.100.0) (2026-07-13)
 
 
