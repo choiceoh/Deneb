@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.99.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.98.0...deneb-v4.99.0) (2026-07-13)
+
+
+### ✨ Features
+
+* **native:** 카드 stat 수치 타이포·추세 칩 + 막대 그라디언트 · stat 박스 제거(카드 내 박스겹침 해소) ([#3586](https://github.com/choiceoh/Deneb/issues/3586)) ([38b4167](https://github.com/choiceoh/Deneb/commit/38b4167cae0af703ae3c604e17d19e5ef5db9132))
+
 ## [4.98.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.97.0...deneb-v4.98.0) (2026-07-13)
 
 
