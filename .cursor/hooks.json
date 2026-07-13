@@ -12,7 +12,7 @@
         "matcher": "Write|StrReplace|Delete|EditNotebook",
         "command": ".cursor/hooks/guard-main-checkout.sh",
         "timeout": 10,
-        "failClosed": false
+        "failClosed": true
       },
       {
         "matcher": "Write|StrReplace|Delete|EditNotebook",

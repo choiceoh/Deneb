@@ -1,51 +1,83 @@
 #!/usr/bin/env bash
 # Cursor preToolUse (Write|StrReplace|Delete|EditNotebook): block main-checkout edits.
 #
-# Allows:
-#   - edits whose path is under ~/.cursor/worktrees/Deneb/
-#   - any edit when the workspace root is already a linked worktree
-#   - main-checkout edits on a non-main branch (explicit user choice)
+# Allows target paths under:
+#   - ~/.cursor/worktrees/Deneb/*
+#   - $CURSOR_WORKTREE (session pin)
+#   - the current linked worktree root (when cwd is already a worktree)
 # Denies:
-#   - main-checkout on main, targeting a path outside the Cursor worktree
+#   - writes into the primary checkout while on main
+#   - absolute paths that escape a linked worktree back to the primary checkout
+#   - path-traversal attempts (`..`) that fail realpath normalization
 set -uo pipefail
+
+deny() {
+  local msg="$1"
+  local hint="$2"
+  local full
+  full=$(printf '%s\n%s' "$msg" "$hint")
+  jq -nc --arg m "$full" \
+    '{permission:"deny", user_message:"메인 체크아웃 편집이 차단되었습니다. Cursor 워크트리를 사용하세요.", agent_message:$m}'
+  exit 0
+}
+
+allow() {
+  # failClosed hooks treat empty stdout as failure — always emit allow JSON.
+  printf '%s\n' '{"permission":"allow"}'
+  exit 0
+}
+
+resolve_abs() {
+  # Echo realpath or empty on failure. Reject raw `..` segments before resolve
+  # so a missing python/realpath fallback cannot prefix-bypass WT_BASE.
+  local raw="$1"
+  case "$raw" in
+    *..*) ;;
+    *) ;;
+  esac
+  # If the path literally contains /../ or starts with ../, require realpath success.
+  if [[ "$raw" == *'/../'* || "$raw" == '../'* || "$raw" == *'/..' || "$raw" == '..' ]]; then
+    python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$raw" 2>/dev/null || return 1
+    return 0
+  fi
+  if command -v realpath >/dev/null 2>&1; then
+    realpath -m "$raw" 2>/dev/null || python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$raw" 2>/dev/null || return 1
+  else
+    python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$raw" 2>/dev/null || return 1
+  fi
+}
+
+under() {
+  # True if $1 is $2 or a path under $2.
+  local path="$1" base="$2"
+  [[ -n "$base" ]] || return 1
+  [[ "$path" == "$base" || "$path" == "$base"/* ]]
+}
 
 INPUT=$(cat)
 ROOT="${CURSOR_PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$(pwd)}}"
-ROOT=$(cd "$ROOT" 2>/dev/null && pwd) || exit 0
-[[ -e "$ROOT/.git" ]] || exit 0
+ROOT=$(cd "$ROOT" 2>/dev/null && pwd) || allow
+[[ -e "$ROOT/.git" ]] || allow
 
 TARGET=$(echo "$INPUT" | jq -r '
   .tool_input.path // .tool_input.file_path // .tool_input.target_notebook // empty
 ' 2>/dev/null || true)
 
-# Already in a linked worktree → pass.
-GIT_DIR=$(cd "$ROOT" && git rev-parse --git-dir 2>/dev/null) || exit 0
-GIT_COMMON=$(cd "$ROOT" && git rev-parse --git-common-dir 2>/dev/null) || exit 0
-GIT_DIR_ABS=$(cd "$ROOT" && cd "$GIT_DIR" 2>/dev/null && pwd) || exit 0
-GIT_COMMON_ABS=$(cd "$ROOT" && cd "$GIT_COMMON" 2>/dev/null && pwd) || exit 0
-[[ "$GIT_DIR_ABS" != "$GIT_COMMON_ABS" ]] && exit 0
+GIT_DIR=$(cd "$ROOT" && git rev-parse --git-dir 2>/dev/null) || allow
+GIT_COMMON=$(cd "$ROOT" && git rev-parse --git-common-dir 2>/dev/null) || allow
+GIT_DIR_ABS=$(cd "$ROOT" && cd "$GIT_DIR" 2>/dev/null && pwd) || allow
+GIT_COMMON_ABS=$(cd "$ROOT" && cd "$GIT_COMMON" 2>/dev/null && pwd) || allow
+IS_LINKED=0
+[[ "$GIT_DIR_ABS" != "$GIT_COMMON_ABS" ]] && IS_LINKED=1
 
-BRANCH=$(cd "$ROOT" && git rev-parse --abbrev-ref HEAD 2>/dev/null) || exit 0
-[[ "$BRANCH" == "main" ]] || exit 0
-
-WT_BASE="$HOME/.cursor/worktrees/Deneb"
-if [[ -n "$TARGET" ]]; then
-  if [[ "$TARGET" = /* ]]; then
-    TARGET_ABS="$TARGET"
-  else
-    TARGET_ABS="$ROOT/$TARGET"
-  fi
-  # Normalize .. components when possible.
-  TARGET_ABS=$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$TARGET_ABS" 2>/dev/null || echo "$TARGET_ABS")
-  case "$TARGET_ABS" in
-    "$WT_BASE"/*) exit 0 ;;
-  esac
-  if [[ -n "${CURSOR_WORKTREE:-}" ]]; then
-    case "$TARGET_ABS" in
-      "$CURSOR_WORKTREE"/*|"$CURSOR_WORKTREE") exit 0 ;;
-    esac
-  fi
+# Primary checkout root (parent of .git common dir).
+PRIMARY="$ROOT"
+if [[ "$IS_LINKED" -eq 1 ]]; then
+  PRIMARY=$(cd "$GIT_COMMON_ABS/.." 2>/dev/null && pwd) || PRIMARY="$ROOT"
 fi
+
+BRANCH=$(cd "$ROOT" && git rev-parse --abbrev-ref HEAD 2>/dev/null) || allow
+WT_BASE="$HOME/.cursor/worktrees/Deneb"
 
 SESSION_ID="${CURSOR_SESSION_ID:-}"
 if [[ -z "$SESSION_ID" ]]; then
@@ -56,19 +88,55 @@ if [[ -n "${CURSOR_WORKTREE:-}" && -d "${CURSOR_WORKTREE}" ]]; then
   WT_PATH="$CURSOR_WORKTREE"
 elif [[ -n "$SESSION_ID" && -d "$WT_BASE/$SESSION_ID" ]]; then
   WT_PATH="$WT_BASE/$SESSION_ID"
-elif [[ -d "$WT_BASE" ]]; then
-  WT_PATH=$(ls -dt "$WT_BASE"/*/ 2>/dev/null | head -1)
-  WT_PATH=${WT_PATH%/}
+elif [[ -f "$WT_BASE/active-root" ]]; then
+  WT_PATH=$(head -1 "$WT_BASE/active-root" 2>/dev/null || true)
 fi
-
 if [[ -n "$WT_PATH" && -d "$WT_PATH" ]]; then
   HINT=$(printf '→ 워크트리 경로로 재시도:\n  path/working_directory: %s' "$WT_PATH")
 else
   HINT='→ 워크트리 없음. 생성:\n  bash scripts/dev/cursor-worktree-init.sh'
 fi
+DENY_MSG='메인 체크아웃 편집 차단 (cursor-worktree-guard). 동시 에이전트 충돌 방지를 위해 Cursor 전용 워크트리에서만 편집하세요.'
 
-AGENT_MSG=$(printf '메인 체크아웃(main) 편집 차단 (cursor-worktree-guard).\n동시 에이전트 충돌 방지를 위해 Cursor 전용 워크트리에서만 편집하세요.\n%s' "$HINT")
-AGENT_JSON=$(printf '%s' "$AGENT_MSG" | jq -Rs .)
+# No target path: only allow when already inside a linked worktree (cwd scoped).
+if [[ -z "$TARGET" ]]; then
+  if [[ "$IS_LINKED" -eq 1 ]]; then
+    allow
+  fi
+  if [[ "$BRANCH" != "main" ]]; then
+    allow  # explicit non-main checkout in primary
+  fi
+  deny "$DENY_MSG" "$HINT"
+fi
 
-printf '{"permission":"deny","user_message":"메인 체크아웃 편집이 차단되었습니다. Cursor 워크트리를 사용하세요.","agent_message":%s}\n' "$AGENT_JSON"
-exit 0
+if [[ "$TARGET" = /* ]]; then
+  TARGET_RAW="$TARGET"
+else
+  TARGET_RAW="$ROOT/$TARGET"
+fi
+
+TARGET_ABS=$(resolve_abs "$TARGET_RAW") || deny "$DENY_MSG (경로 정규화 실패 — '..' 우회 의)" "$HINT"
+
+# Always allow Cursor session worktrees.
+if under "$TARGET_ABS" "$WT_BASE"; then
+  allow
+fi
+if [[ -n "$WT_PATH" ]] && under "$TARGET_ABS" "$WT_PATH"; then
+  allow
+fi
+
+# Linked worktree cwd: allow only targets inside this worktree root.
+if [[ "$IS_LINKED" -eq 1 ]]; then
+  if under "$TARGET_ABS" "$ROOT"; then
+    allow
+  fi
+  deny "$DENY_MSG (링크드 워크트리에서 외부/메인 경로 편집 차단)" "$HINT"
+fi
+
+# Primary checkout on a non-main branch = explicit user choice.
+if [[ "$BRANCH" != "main" ]]; then
+  allow
+fi
+
+# Primary checkout on main: deny (target was not under a Cursor worktree).
+deny "$DENY_MSG" "$HINT"
