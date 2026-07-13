@@ -4,9 +4,11 @@
 > claims in [recursive-self-improvement-roadmap.md](recursive-self-improvement-roadmap.md).
 > Method: seven parallel deep-review passes (L1 fast loop, P1.5 acceptor, P2
 > meta-evolution, P3 verifier co-evolution, L4 self-coding, audit/ladder layer,
-> P5-1 demand lanes), full test-suite runs, and direct re-verification of every
-> headline finding at HEAD (9bec273). This is a dated assessment, not a live
-> status surface — current counters come from `scripts/audit/rsi-status.py`.
+> P5-1 demand lanes), targeted test runs (all `genesis/...` Go packages plus the
+> RSI-related audit-script unittest modules — not the gateway-wide Go, Kotlin,
+> or TS lanes), and direct re-verification of every headline finding at commit
+> 9bec273 (HEAD at audit time). This is a dated assessment, not a live status
+> surface — current counters come from `scripts/audit/rsi-status.py`.
 
 ## Verdict in one paragraph
 
@@ -15,8 +17,8 @@ roadmap "LANDED" claims checked, nearly all are CONFIRMED in code with the
 mechanisms as described, a handful are PARTIAL, none are fabricated. The
 deterministic-Go-decides / LLM-only-produces split genuinely holds, ground
 rule 3 (synthetic vs real usage separation) holds at the single write path,
-and both test suites pass (8/8 Go packages in `genesis/...`; 107 Python audit
-tests). However, several flagship *safety* mechanisms are weaker than
+and the RSI-scoped test suites pass (8/8 Go packages in `genesis/...`; 107
+Python tests across the five RSI audit-script modules). However, several flagship *safety* mechanisms are weaker than
 documented at exactly the points that matter most: the e-process acceptor is
 parameterized so it can never fire in production, the "loop cannot edit its
 own acceptor" invariant is a convention rather than a gate against prose or
@@ -40,7 +42,8 @@ chain built on top of it. The loop's *honesty instrumentation* is ahead of its
 ## Findings by severity
 
 File references are repo-relative; all Critical/High findings were
-re-verified directly at HEAD, not taken on faith from a single review pass.
+re-verified directly at the audited commit (9bec273), not taken on faith from
+a single review pass.
 
 ### Critical (design-level, undermines a flagship safety property)
 
@@ -129,7 +132,8 @@ also warn-and-continue (`evolver_candidate_eval.go:225-228`), so the missing-
 backup path is reachable.
 
 **H4 — The Go/Python audit mirrors already disagree, and parity is enforced
-by comments only.** Live drift found: the P5-2 calibration-window constant is
+by comments only.** Live drift found: the calibration-window constant
+(roadmap P5 workstream 2, the calibration campaign) is
 2026-07-12T00:00Z in Go (`rsi_ladder.go:39`) but `1_783_900_800_000` =
 2026-07-13T00:00Z in Python (`scripts/audit/rsi_status.py:466`, whose own
 comment says 07-12) — bench rows from Jul 12 count toward READY in Go but not
