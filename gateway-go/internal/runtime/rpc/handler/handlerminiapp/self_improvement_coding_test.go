@@ -24,6 +24,10 @@ func testSelfImprovementCodingDeps() SelfImprovementCodingDeps {
 				ProposedChange: "자가개선 코딩 화면에서 후보 큐를 렌더링",
 				Risk:           "후보와 적용 완료 이벤트가 섞이면 혼란",
 				Source:         "self-correction",
+				DispatchPhase:  genesis.SelfCorrectionDispatchMerged,
+				AttemptID:      "attempt-1",
+				PRNumber:       42,
+				CommitSHA:      "merge-sha",
 				CreatedAt:      444,
 				UpdatedAt:      444,
 			}, {
@@ -64,6 +68,11 @@ func testSelfImprovementCodingDeps() SelfImprovementCodingDeps {
 				Rejections7d:           2,
 				PromotableRejections7d: 1,
 				LastRejectionAt:        666,
+				PendingCount:           2,
+				OldestPendingAgeMs:     888,
+				Dispatched7d:           3,
+				WatchPassed7d:          1,
+				RolledBack7d:           1,
 			}
 		},
 		LastNudgeAtMs: func() int64 { return 777 },
@@ -92,6 +101,10 @@ func TestSelfImprovementCodingList_PendingCandidates(t *testing.T) {
 		candidate.ProposedChange != "자가개선 코딩 화면에서 후보 큐를 렌더링" ||
 		len(candidate.TargetFiles) != 1 {
 		t.Fatalf("unexpected self-improvement coding candidate: %+v", candidate)
+	}
+	if candidate.DispatchPhase != genesis.SelfCorrectionDispatchMerged || candidate.AttemptID != "attempt-1" ||
+		candidate.PRNumber != 42 || candidate.CommitSHA != "merge-sha" {
+		t.Fatalf("dispatch provenance missing from candidate: %+v", candidate)
 	}
 	if len(candidate.EvidenceKinds) != 3 ||
 		candidate.EvidenceKinds[0] != "evidence" ||
@@ -160,6 +173,11 @@ func TestSelfImprovementCodingList_FunnelSummary(t *testing.T) {
 		PromotableRejections7d: 1,
 		LastRejectionAt:        666,
 		LastNudgeAt:            777,
+		PendingCount:           2,
+		OldestPendingAgeMs:     888,
+		Dispatched7d:           3,
+		WatchPassed7d:          1,
+		RolledBack7d:           1,
 	}
 	if payload.Funnel != want {
 		t.Fatalf("funnel = %+v, want %+v", payload.Funnel, want)
@@ -197,6 +215,59 @@ func TestSelfImprovementCodingMethods_RecordOptional(t *testing.T) {
 	methods = SelfImprovementCodingMethods(deps)
 	if _, ok := methods["miniapp.self_improvement_coding.record"]; !ok {
 		t.Fatalf("record method missing despite RecordCandidate dep")
+	}
+}
+
+func TestSelfImprovementCodingMethods_DispatchOptional(t *testing.T) {
+	deps := testSelfImprovementCodingDeps()
+	methods := SelfImprovementCodingMethods(deps)
+	if _, ok := methods["miniapp.self_improvement_coding.dispatch"]; ok {
+		t.Fatal("dispatch method must be absent without a RecordDispatch dep")
+	}
+	deps.RecordDispatch = func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
+		return rec, nil
+	}
+	methods = SelfImprovementCodingMethods(deps)
+	if _, ok := methods["miniapp.self_improvement_coding.dispatch"]; !ok {
+		t.Fatal("dispatch method missing despite RecordDispatch dep")
+	}
+}
+
+func TestSelfImprovementCodingDispatch_RecordsProvenance(t *testing.T) {
+	var got genesis.SelfCorrectionCandidateRecord
+	deps := testSelfImprovementCodingDeps()
+	deps.RecordDispatch = func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
+		got = rec
+		return rec, nil
+	}
+	h := selfImprovementCodingDispatch(deps)
+	params, _ := json.Marshal(map[string]any{
+		"id": "sc-1", "dispatchPhase": "merged", "attemptId": "attempt-1",
+		"branch": "dispatch/sc-1", "prNumber": 42, "prUrl": "https://example.test/pr/42",
+		"commitSha": "merge-sha", "outcomeNote": "checks green",
+	})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{
+		ID: "1", Method: "miniapp.self_improvement_coding.dispatch", Params: params,
+	})
+	if resp.Error != nil {
+		t.Fatalf("dispatch response error: %+v", resp.Error)
+	}
+	if got.ID != "sc-1" || got.DispatchPhase != "merged" || got.AttemptID != "attempt-1" ||
+		got.PRNumber != 42 || got.CommitSHA != "merge-sha" {
+		t.Fatalf("dispatch provenance not passed through: %+v", got)
+	}
+}
+
+func TestSelfImprovementCodingDispatch_RequiresAttempt(t *testing.T) {
+	h := selfImprovementCodingDispatch(SelfImprovementCodingDeps{
+		RecordDispatch: func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
+			return rec, nil
+		},
+	})
+	params, _ := json.Marshal(map[string]any{"id": "sc-1", "dispatchPhase": "started"})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Params: params})
+	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
+		t.Fatalf("expected missing attemptId, got %+v", resp.Error)
 	}
 }
 

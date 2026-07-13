@@ -73,6 +73,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--meta-dir", required=True, help="managed genesis meta dir")
     ap.add_argument("--marker", required=True, help="dispatch marker path to write")
+    ap.add_argument("--attempt-id", required=True, help="unique delivery attempt id")
+    ap.add_argument("--branch", required=True, help="delivery worktree branch")
     args = ap.parse_args()
 
     candidate = json.load(sys.stdin)
@@ -121,6 +123,8 @@ def main() -> int:
     marker = dict(candidate)
     marker["promptVersion"] = version
     marker["promptSource"] = "artifact"
+    marker["attemptId"] = args.attempt_id
+    marker["branch"] = args.branch
     marker["dispatchedAt"] = dispatched_at or int(__import__("time").time() * 1000)
     if attempts:
         marker["attempts"] = attempts[-10:]

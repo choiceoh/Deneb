@@ -7,6 +7,7 @@ package server
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
@@ -19,7 +20,103 @@ const (
 	metaProposalActionAdopt  = "meta:adopt"
 	metaProposalActionReject = "meta:reject"
 	metaProposalActionRevert = "meta:revert"
+	evolveVerdictSource      = "genesis-evolve-verdict"
+	evolveVerdictConfirm     = "evolve-verdict:confirm"
+	evolveVerdictRollback    = "evolve-verdict:rollback"
 )
+
+// postLowConfidenceEvolveCard turns a borderline-but-admissible judge decision
+// into a real operator label. The evolve remains protected by the normal
+// post-use rollback watch; this card only adds fast, explicit P3 feedback.
+func (s *Server) postLowConfidenceEvolveCard(result genesis.EvolveResult) {
+	if !result.Evolved || !result.NeedsOperatorVerdict || result.JudgeMargin == nil {
+		return
+	}
+	nf := s.nativeWorkFeedStore()
+	if nf == nil {
+		return
+	}
+	margin := strconv.FormatFloat(*result.JudgeMargin, 'f', 1, 64)
+	item := workfeed.Item{
+		Source:  evolveVerdictSource,
+		Title:   "저신뢰 스킬 개선 확인: " + result.SkillName,
+		Summary: fmt.Sprintf("%s → %s · 판정 여유 %s점", result.SkillName, result.NewVersion, margin),
+		Body: fmt.Sprintf(`스킬 개선이 모든 자동 게이트를 통과해 적용됐지만 판정 점수 차이가 작습니다.
+
+- 스킬: %s
+- 적용 버전: %s
+- 판정 여유: %s점
+
+의도한 개선이면 확정하고, 실제로 부적절하면 즉시 이전 버전으로 되돌리세요. 결정은 판정자 공진화(P3)의 실제 라벨로 축적됩니다.`,
+			result.SkillName, result.NewVersion, margin),
+		RefType: "skill-evolve-verdict",
+		RefID:   result.SkillName,
+		Metadata: map[string]string{
+			"decisionId":   result.SkillName + "@" + result.NewVersion,
+			"skill":        result.SkillName,
+			"version":      result.NewVersion,
+			"judgeVersion": result.JudgeVersion,
+			"judgeMargin":  margin,
+		},
+		Question: true,
+		Actions: []workfeed.Action{
+			{ID: evolveVerdictConfirm, Kind: workfeed.ActionAck, Label: "개선 확정"},
+			{ID: evolveVerdictRollback, Kind: workfeed.ActionAck, Label: "되돌리기"},
+		},
+		Status: workfeed.StatusUnread,
+	}
+	if _, err := nf.Append(item); err != nil {
+		s.logger.Warn("low-confidence evolve 카드 생성 실패", "skill", result.SkillName, "error", err)
+	}
+}
+
+// handleEvolveVerdictAction applies one settled low-confidence verdict and
+// writes an idempotent, version-attributed P3 label. A rollback is recorded
+// only when the exact card version is still live and restoration succeeds.
+func (s *Server) handleEvolveVerdictAction(item workfeed.Item, actionID string) {
+	if s.genesisTracker == nil || s.genesisEvolver == nil {
+		return
+	}
+	skill := strings.TrimSpace(item.Metadata["skill"])
+	version := strings.TrimSpace(item.Metadata["version"])
+	decisionID := strings.TrimSpace(item.Metadata["decisionId"])
+	margin, err := strconv.ParseFloat(item.Metadata["judgeMargin"], 64)
+	if skill == "" || version == "" || decisionID == "" || err != nil {
+		s.logger.Warn("invalid low-confidence evolve verdict card", "ref", item.RefID)
+		return
+	}
+	if _, settled := s.genesisTracker.OperatorJudgeVerdictByDecisionID(decisionID); settled {
+		return
+	}
+	verdict := genesis.OperatorJudgeVerdictConfirm
+	if actionID == evolveVerdictRollback {
+		if s.skillCatalog == nil {
+			return
+		}
+		entry, ok := s.skillCatalog.Get(skill)
+		if !ok || entry.Skill.Version != version {
+			s.logger.Warn("stale evolve rollback verdict ignored", "skill", skill, "cardVersion", version)
+			return
+		}
+		if !s.genesisEvolver.RollbackSkillWithResult(skill) {
+			s.logger.Warn("operator evolve rollback failed", "skill", skill, "version", version)
+			return
+		}
+		verdict = genesis.OperatorJudgeVerdictRollback
+	} else if actionID != evolveVerdictConfirm {
+		return
+	}
+	if err := s.genesisTracker.LogOperatorJudgeVerdict(genesis.OperatorJudgeVerdict{
+		DecisionID:   decisionID,
+		Skill:        skill,
+		Version:      version,
+		Verdict:      verdict,
+		JudgeVersion: item.Metadata["judgeVersion"],
+		JudgeMargin:  margin,
+	}); err != nil {
+		s.logger.Warn("operator judge verdict ledger write failed", "skill", skill, "error", err)
+	}
+}
 
 // postMetaProposalCard surfaces one slow-loop revision in the work feed.
 // adopted=true → auto-adoption NOTIFICATION with a post-hoc veto (되돌리기);

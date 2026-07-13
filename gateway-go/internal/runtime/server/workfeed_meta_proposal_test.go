@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
@@ -88,4 +89,47 @@ func TestHandleMetaProposalAction(t *testing.T) {
 			t.Fatalf("no-op paths wrote ledger entries: %+v", ledger)
 		}
 	})
+}
+
+func TestLowConfidenceEvolveCardRecordsOperatorVerdict(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tracker, err := genesis.NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	margin := 1.5
+	s := &Server{
+		logger: slog.Default(),
+		MemorySubsystem: &MemorySubsystem{
+			workFeedStore: workfeed.NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl")),
+		},
+		GenesisSubsystem: &GenesisSubsystem{
+			genesisTracker: tracker,
+			genesisEvolver: &genesis.Evolver{},
+		},
+	}
+	result := genesis.EvolveResult{
+		SkillName: "email-analysis", Evolved: true, NewVersion: "1.0.1",
+		JudgeVersion: "judge-v1", JudgeMargin: &margin, NeedsOperatorVerdict: true,
+	}
+	s.postLowConfidenceEvolveCard(result)
+	items, _, err := s.workFeedStore.List(5, true)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("feed items = %+v err=%v", items, err)
+	}
+	item := items[0]
+	if item.Source != evolveVerdictSource || item.Metadata["decisionId"] != "email-analysis@1.0.1" || len(item.Actions) != 2 {
+		t.Fatalf("low-confidence card = %+v", item)
+	}
+	s.handleEvolveVerdictAction(item, evolveVerdictConfirm)
+	labels := tracker.RecentOperatorJudgeVerdicts(time.Hour, 5)
+	if len(labels) != 1 || labels[0].Verdict != genesis.OperatorJudgeVerdictConfirm || labels[0].JudgeMargin != margin {
+		t.Fatalf("operator labels = %+v", labels)
+	}
+	// A later tap on the opposite chip is a no-op: the first decision wins.
+	s.handleEvolveVerdictAction(item, evolveVerdictRollback)
+	labels = tracker.RecentOperatorJudgeVerdicts(time.Hour, 5)
+	if len(labels) != 1 || labels[0].Verdict != genesis.OperatorJudgeVerdictConfirm {
+		t.Fatalf("settled verdict changed: %+v", labels)
+	}
 }

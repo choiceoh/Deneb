@@ -158,6 +158,50 @@ func TestSelfCorrectionFunnel_NoVerdictsMeansZeroClosure(t *testing.T) {
 	if s.Applied7d != 0 || s.ConversionRate != 0 || s.MeanTimeToVerdictMs != 0 {
 		t.Fatalf("closure side = %+v, want all zero for un-verdicted candidate", s)
 	}
+	if s.PendingCount != 1 || s.OldestPendingAgeMs != dayMs {
+		t.Fatalf("pending age = %+v, want one candidate aged one day", s)
+	}
+}
+
+func TestSelfCorrectionFunnel_AcceptedThenWatchPassedCountsApplied(t *testing.T) {
+	tr := newTestTracker(t)
+	now := time.UnixMilli(1_783_500_000_000)
+	dayMs := int64(24 * time.Hour / time.Millisecond)
+	captured := now.UnixMilli() - 4*dayMs
+	accepted := captured + dayMs
+	attempt := "attempt-1"
+
+	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		Type: SelfCorrectionTypeCandidate, ID: "sc-close", Source: "self-harness:close", CreatedAt: captured,
+	})
+	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		Type: SelfCorrectionTypeReview, ID: "sc-close", Status: SelfCorrectionStatusAccepted, CreatedAt: accepted,
+	})
+	for i, phase := range []string{
+		SelfCorrectionDispatchStarted,
+		SelfCorrectionDispatchMerged,
+		SelfCorrectionDispatchDeployed,
+		SelfCorrectionDispatchWatchPassed,
+	} {
+		appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+			Type: SelfCorrectionTypeDispatch, ID: "sc-close", DispatchPhase: phase,
+			AttemptID: attempt, CreatedAt: accepted + int64(i+1)*1000,
+		})
+	}
+
+	tr.mu.Lock()
+	s := tr.computeSelfCorrectionFunnelLocked(now)
+	tr.mu.Unlock()
+
+	if s.Verdicted7d != 1 || s.Applied7d != 1 || s.ConversionRate != 1 {
+		t.Fatalf("accepted -> watch_passed must close the funnel: %+v", s)
+	}
+	if s.Dispatched7d != 1 || s.WatchPassed7d != 1 || s.RolledBack7d != 0 {
+		t.Fatalf("dispatch outcomes not counted: %+v", s)
+	}
+	if s.PendingCount != 0 {
+		t.Fatalf("watch-passed candidate still pending: %+v", s)
+	}
 }
 
 func appendFunnel[T any](t *testing.T, path string, record T) {

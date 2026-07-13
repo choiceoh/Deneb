@@ -418,9 +418,10 @@ func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities 
 		}),
 		handlerminiapp.WormholeMethods(handlerminiapp.WormholeDeps{}),
 		handlerminiapp.WorkFeedMethods(handlerminiapp.WorkFeedDeps{
-			Store:          capabilities.nativeWorkFeed,
-			OnAnswer:       s.recordDealQuestionAnswer,
-			OnMetaProposal: s.handleMetaProposalAction,
+			Store:           capabilities.nativeWorkFeed,
+			OnAnswer:        s.recordDealQuestionAnswer,
+			OnMetaProposal:  s.handleMetaProposalAction,
+			OnEvolveVerdict: s.handleEvolveVerdictAction,
 		}),
 		// miniapp.models.* is deliberately registered in registerLateMethods:
 		// the picker snapshots the model registry and chat handler at creation.
@@ -767,6 +768,12 @@ func (s *Server) earlySelfImprovementMethods() map[string]rpcutil.HandlerFunc {
 				return genesis.SelfCorrectionCandidateRecord{}, errors.New("genesis tracker unavailable")
 			}
 			return s.genesisTracker.RecordSelfCorrectionCandidate(rec)
+		},
+		RecordDispatch: func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
+			if s.genesisTracker == nil {
+				return genesis.SelfCorrectionCandidateRecord{}, errors.New("genesis tracker unavailable")
+			}
+			return s.genesisTracker.RecordSelfCorrectionDispatch(rec)
 		},
 		Funnel: func() genesis.SelfCorrectionFunnelSummary {
 			if s.genesisTracker == nil {

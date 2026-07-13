@@ -85,8 +85,11 @@ type Item struct {
 	SessionKey string `json:"sessionKey,omitempty"`
 	RefType    string `json:"refType,omitempty"`
 	RefID      string `json:"refId,omitempty"`
-	Status     string `json:"status"`
-	Priority   int    `json:"priority,omitempty"`
+	// Metadata carries source-specific machine-readable action context. It
+	// keeps stable identifiers and measurements out of localized display prose.
+	Metadata map[string]string `json:"metadata,omitempty"`
+	Status   string            `json:"status"`
+	Priority int               `json:"priority,omitempty"`
 	// Question marks a card the agent is asking the user to answer (a deal-team
 	// question, or a proactive turn that posed a question / offered ```choices).
 	// The native renders such a card with inline answer chips (from Actions) plus a

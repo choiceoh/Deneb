@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
 func newTestTracker(t *testing.T) *Tracker {
@@ -283,6 +285,120 @@ func TestSelfCorrectionReviewRejectsUnknownID(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("orphan review should not create a visible candidate, got %+v", got)
+	}
+}
+
+func TestSelfCorrectionReviewFSMAndDispatchClosure(t *testing.T) {
+	tracker := newTestTracker(t)
+	candidate, err := tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		ID: "sc-dispatch", Scope: "code", Title: "close the loop", Source: "self-harness:test",
+	})
+	if err != nil {
+		t.Fatalf("RecordSelfCorrectionCandidate: %v", err)
+	}
+	if _, err := tracker.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
+		ID: candidate.ID, Status: SelfCorrectionStatusAccepted, Reviewer: "operator",
+	}); err != nil {
+		t.Fatalf("accept: %v", err)
+	}
+	// Idempotent retries must not create a second review row.
+	if _, err := tracker.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
+		ID: candidate.ID, Status: SelfCorrectionStatusAccepted, Reviewer: "operator",
+	}); err != nil {
+		t.Fatalf("idempotent accept: %v", err)
+	}
+
+	for _, event := range []SelfCorrectionCandidateRecord{
+		{ID: candidate.ID, DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-1", Branch: "dispatch/sc-dispatch"},
+		{ID: candidate.ID, DispatchPhase: SelfCorrectionDispatchPROpened, AttemptID: "attempt-1", PRNumber: 42},
+		{ID: candidate.ID, DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1", CommitSHA: "merge-sha"},
+		{ID: candidate.ID, DispatchPhase: SelfCorrectionDispatchDeployed, AttemptID: "attempt-1", DeployHead: "deploy-sha"},
+		{ID: candidate.ID, DispatchPhase: SelfCorrectionDispatchWatchPassed, AttemptID: "attempt-1", DeployHead: "deploy-sha"},
+	} {
+		if _, err := tracker.RecordSelfCorrectionDispatch(event); err != nil {
+			t.Fatalf("dispatch %s: %v", event.DispatchPhase, err)
+		}
+	}
+
+	rows, err := tracker.RecentSelfCorrectionCandidates("", "", 10)
+	if err != nil {
+		t.Fatalf("RecentSelfCorrectionCandidates: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Status != SelfCorrectionStatusApplied ||
+		rows[0].DispatchPhase != SelfCorrectionDispatchWatchPassed || rows[0].CommitSHA != "merge-sha" {
+		t.Fatalf("watch closure did not fold into applied candidate: %+v", rows)
+	}
+	if _, err := tracker.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
+		ID: candidate.ID, Status: SelfCorrectionStatusAccepted,
+	}); err == nil || !strings.Contains(err.Error(), "invalid self-correction status transition") {
+		t.Fatalf("terminal applied status moved backwards: %v", err)
+	}
+	entries, err := jsonlstore.Load[SelfCorrectionCandidateRecord](tracker.selfCorrectionPath)
+	if err != nil {
+		t.Fatalf("load ledger: %v", err)
+	}
+	if len(entries) != 7 { // candidate + accepted + five dispatch phases
+		t.Fatalf("idempotent review inflated ledger: got %d rows, want 7", len(entries))
+	}
+}
+
+func TestSelfCorrectionDispatchFSMRejectsSkippedAndCrossAttemptPhases(t *testing.T) {
+	tracker := newTestTracker(t)
+	if _, err := tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		ID: "sc-fsm", Scope: "code", Title: "fsm", Source: "self-harness:test",
+	}); err != nil {
+		t.Fatalf("candidate: %v", err)
+	}
+	if _, err := tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
+		ID: "sc-fsm", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1",
+	}); err == nil || !strings.Contains(err.Error(), "invalid self-correction dispatch transition") {
+		t.Fatalf("skipped start accepted: %v", err)
+	}
+	if _, err := tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
+		ID: "sc-fsm", DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-1",
+	}); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if _, err := tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
+		ID: "sc-fsm", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-2",
+	}); err == nil || !strings.Contains(err.Error(), "attempt changed") {
+		t.Fatalf("cross-attempt merge accepted: %v", err)
+	}
+}
+
+func TestSelfCorrectionDispatchSamePhaseCanEnrichMissingProvenance(t *testing.T) {
+	tracker := newTestTracker(t)
+	if _, err := tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		ID: "sc-enrich", Scope: "code", Title: "enrich", Source: "self-harness:test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []SelfCorrectionCandidateRecord{
+		{ID: "sc-enrich", DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-1"},
+		{ID: "sc-enrich", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1"},
+		{ID: "sc-enrich", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1", CommitSHA: "late-merge-sha"},
+	} {
+		if _, err := tracker.RecordSelfCorrectionDispatch(event); err != nil {
+			t.Fatalf("record %+v: %v", event, err)
+		}
+	}
+	rows, err := tracker.RecentSelfCorrectionCandidates("", "", 10)
+	if err != nil || len(rows) != 1 || rows[0].CommitSHA != "late-merge-sha" {
+		t.Fatalf("enriched dispatch = %+v err=%v", rows, err)
+	}
+	entries, err := jsonlstore.Load[SelfCorrectionCandidateRecord](tracker.selfCorrectionPath)
+	if err != nil || len(entries) != 4 {
+		t.Fatalf("ledger rows = %d err=%v, want candidate + start + merge + enrichment", len(entries), err)
+	}
+	// Exact retry after enrichment must not append again.
+	if _, err := tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
+		ID: "sc-enrich", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1", CommitSHA: "late-merge-sha",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := jsonlstore.Load[SelfCorrectionCandidateRecord](tracker.selfCorrectionPath)
+	if len(after) != len(entries) {
+		t.Fatalf("exact retry inflated ledger: %d -> %d", len(entries), len(after))
 	}
 }
 

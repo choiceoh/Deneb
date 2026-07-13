@@ -21,6 +21,9 @@ type SelfImprovementCodingDeps struct {
 	// tracker — the queue's single writer, which enforces the forbidden-surface
 	// list at record time. Optional: without it the record method is absent.
 	RecordCandidate func(genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error)
+	// RecordDispatch appends one authoritative delivery event (started -> PR ->
+	// merged -> deployed -> watched/rolled back). Optional for read-only servers.
+	RecordDispatch func(genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error)
 	// Funnel reports capture-side activity (optional — zero summary when absent).
 	Funnel func() genesis.SelfCorrectionFunnelSummary
 	// LastNudgeAtMs reports when the heartbeat self-coding review lane last
@@ -57,6 +60,14 @@ type SelfCorrectionCandidate struct {
 	ReviewNote    string   `json:"reviewNote,omitempty"`
 	EvidenceKinds []string `json:"evidenceKinds,omitempty"`
 	ReviewActions []string `json:"reviewActions,omitempty"`
+	DispatchPhase string   `json:"dispatchPhase,omitempty"`
+	AttemptID     string   `json:"attemptId,omitempty"`
+	Branch        string   `json:"branch,omitempty"`
+	PRNumber      int      `json:"prNumber,omitempty"`
+	PRURL         string   `json:"prUrl,omitempty"`
+	CommitSHA     string   `json:"commitSha,omitempty"`
+	DeployHead    string   `json:"deployHead,omitempty"`
+	OutcomeNote   string   `json:"outcomeNote,omitempty"`
 	CreatedAt     int64    `json:"createdAt,omitempty"`
 	UpdatedAt     int64    `json:"updatedAt,omitempty"`
 }
@@ -92,6 +103,11 @@ type SelfImprovementCodingFunnel struct {
 	ConversionRate      float64 `json:"conversionRate,omitempty"`
 	MeanTimeToVerdictMs int64   `json:"meanTimeToVerdictMs,omitempty"`
 	Reopens7d           int     `json:"reopens7d,omitempty"`
+	PendingCount        int     `json:"pendingCount,omitempty"`
+	OldestPendingAgeMs  int64   `json:"oldestPendingAgeMs,omitempty"`
+	Dispatched7d        int     `json:"dispatched7d,omitempty"`
+	WatchPassed7d       int     `json:"watchPassed7d,omitempty"`
+	RolledBack7d        int     `json:"rolledBack7d,omitempty"`
 }
 
 // SelfImprovementCodingListResponse is the miniapp.self_improvement_coding.list
@@ -118,7 +134,54 @@ func SelfImprovementCodingMethods(deps SelfImprovementCodingDeps) map[string]rpc
 	if deps.RecordCandidate != nil {
 		methods["miniapp.self_improvement_coding.record"] = selfImprovementCodingRecord(deps)
 	}
+	if deps.RecordDispatch != nil {
+		methods["miniapp.self_improvement_coding.dispatch"] = selfImprovementCodingDispatch(deps)
+	}
 	return methods
+}
+
+// selfImprovementCodingDispatch records one deterministic delivery transition.
+// The tracker validates both candidate existence and the delivery FSM; callers
+// cannot skip directly from queued to merged or close a deployment as applied
+// before the rollback watch passes.
+func selfImprovementCodingDispatch(deps SelfImprovementCodingDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID            string `json:"id"`
+		DispatchPhase string `json:"dispatchPhase"`
+		AttemptID     string `json:"attemptId"`
+		Branch        string `json:"branch"`
+		PRNumber      int    `json:"prNumber"`
+		PRURL         string `json:"prUrl"`
+		CommitSHA     string `json:"commitSha"`
+		DeployHead    string `json:"deployHead"`
+		OutcomeNote   string `json:"outcomeNote"`
+	}
+	return bindAuthenticated[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		if strings.TrimSpace(p.ID) == "" {
+			return rpcerr.MissingParam("id").Response(req.ID)
+		}
+		if strings.TrimSpace(p.DispatchPhase) == "" {
+			return rpcerr.MissingParam("dispatchPhase").Response(req.ID)
+		}
+		if strings.TrimSpace(p.AttemptID) == "" {
+			return rpcerr.MissingParam("attemptId").Response(req.ID)
+		}
+		_, err := deps.RecordDispatch(genesis.SelfCorrectionCandidateRecord{
+			ID:            p.ID,
+			DispatchPhase: p.DispatchPhase,
+			AttemptID:     p.AttemptID,
+			Branch:        p.Branch,
+			PRNumber:      p.PRNumber,
+			PRURL:         p.PRURL,
+			CommitSHA:     p.CommitSHA,
+			DeployHead:    p.DeployHead,
+			OutcomeNote:   p.OutcomeNote,
+		})
+		if err != nil {
+			return rpcerr.WrapValidationFailed("self-correction dispatch rejected", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true, "id": strings.TrimSpace(p.ID), "dispatchPhase": strings.TrimSpace(p.DispatchPhase)})
+	})
 }
 
 // SelfImprovementCodingRecordResponse is the miniapp.self_improvement_coding.record
@@ -232,6 +295,11 @@ func selfImprovementCodingFunnel(deps SelfImprovementCodingDeps) SelfImprovement
 			ConversionRate:         f.ConversionRate,
 			MeanTimeToVerdictMs:    f.MeanTimeToVerdictMs,
 			Reopens7d:              f.Reopens7d,
+			PendingCount:           f.PendingCount,
+			OldestPendingAgeMs:     f.OldestPendingAgeMs,
+			Dispatched7d:           f.Dispatched7d,
+			WatchPassed7d:          f.WatchPassed7d,
+			RolledBack7d:           f.RolledBack7d,
 		}
 	}
 	if deps.LastNudgeAtMs != nil {
@@ -261,6 +329,14 @@ func selfCorrectionCandidate(rec genesis.SelfCorrectionCandidateRecord) SelfCorr
 		ReviewNote:     textutil.TruncateRunes(rec.ReviewNote, lifecycleTextMaxRunes, "…"),
 		EvidenceKinds:  selfCorrectionEvidenceKinds(rec),
 		ReviewActions:  selfCorrectionReviewActions(rec),
+		DispatchPhase:  rec.DispatchPhase,
+		AttemptID:      rec.AttemptID,
+		Branch:         rec.Branch,
+		PRNumber:       rec.PRNumber,
+		PRURL:          rec.PRURL,
+		CommitSHA:      rec.CommitSHA,
+		DeployHead:     rec.DeployHead,
+		OutcomeNote:    textutil.TruncateRunes(rec.OutcomeNote, lifecycleTextMaxRunes, "…"),
 		CreatedAt:      rec.CreatedAt,
 		UpdatedAt:      rec.UpdatedAt,
 	}

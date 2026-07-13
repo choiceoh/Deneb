@@ -198,18 +198,25 @@ func backupSkillVersion(skillFile, content string) error {
 // evolve does. Best-effort: a missing backup or absent catalog entry is a
 // no-op (logged), never a crash.
 func (e *Evolver) RollbackSkill(skillName string) {
+	e.RollbackSkillWithResult(skillName)
+}
+
+// RollbackSkillWithResult is the operator-action variant of RollbackSkill. It
+// reports whether the backup was actually restored so a failed/no-op action is
+// never mislabeled as a human-confirmed judge false accept.
+func (e *Evolver) RollbackSkillWithResult(skillName string) bool {
 	if e.catalog == nil {
-		return
+		return false
 	}
 	entry, ok := e.catalog.Get(skillName)
 	if !ok {
 		e.logger.Warn("evolver: rollback skipped, skill not in catalog", "skill", skillName)
-		return
+		return false
 	}
 	prev, err := os.ReadFile(skillBackupPath(entry.Skill.FilePath))
 	if err != nil {
 		e.logger.Warn("evolver: rollback skipped, no backup available", "skill", skillName, "error", err)
-		return
+		return false
 	}
 	// Capture the regressing body BEFORE restoring the backup: recording it as
 	// a rejected edit (RSI P1.5 ③, CPE 2605.09315) feeds the rejected-edit
@@ -222,7 +229,7 @@ func (e *Evolver) RollbackSkill(skillName string) {
 	}
 	if err := atomicfile.WriteFile(entry.Skill.FilePath, prev, &atomicfile.Options{Perm: 0o644}); err != nil {
 		e.logger.Error("evolver: rollback write failed", "skill", skillName, "error", err)
-		return
+		return false
 	}
 	e.logger.Info("evolver: skill rolled back after consecutive post-evolve failures", "skill", skillName)
 	if e.tracker != nil {
@@ -234,6 +241,7 @@ func (e *Evolver) RollbackSkill(skillName string) {
 		}
 		e.distillRollbackValidationCase(skillName)
 	}
+	return true
 }
 
 // distillRollbackValidationCase turns the failure evidence that tripped a

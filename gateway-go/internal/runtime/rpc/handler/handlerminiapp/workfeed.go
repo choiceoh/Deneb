@@ -35,6 +35,9 @@ type WorkFeedDeps struct {
 	// decision after the action settles (RSI P2 feed-card adoption). Same
 	// best-effort contract as OnAnswer.
 	OnMetaProposal func(item workfeed.Item, actionID string)
+	// OnEvolveVerdict records an operator label for a low-confidence accepted
+	// skill evolve, optionally rolling it back. Best-effort after settlement.
+	OnEvolveVerdict func(item workfeed.Item, actionID string)
 }
 
 const (
@@ -219,6 +222,11 @@ func workFeedActionRun(deps WorkFeedDeps) rpcutil.HandlerFunc {
 			result.Item.Source == "genesis-meta" &&
 			strings.HasPrefix(actionID, "meta:") {
 			deps.OnMetaProposal(result.Item, actionID)
+		}
+		if deps.OnEvolveVerdict != nil &&
+			result.Item.Source == "genesis-evolve-verdict" &&
+			strings.HasPrefix(actionID, "evolve-verdict:") {
+			deps.OnEvolveVerdict(result.Item, actionID)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":             true,

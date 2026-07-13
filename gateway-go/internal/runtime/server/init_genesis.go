@@ -74,6 +74,7 @@ func (s *Server) initGenesisServices() {
 	}
 
 	s.genesisEvolver = genesis.NewEvolver(lwClient, s.skillCatalog, s.genesisTracker, lwModel, s.logger)
+	s.genesisEvolver.SetLowConfidenceObserver(s.postLowConfidenceEvolveCard)
 
 	// RSI P1 (docs/research/recursive-self-improvement-roadmap.md): the
 	// generative half of the improvement pipeline resolves its system prompts

@@ -45,8 +45,8 @@ type SelfCorrectionFunnelSummary struct {
 	// the window (one per candidate ID, so re-verdicting the same row does not
 	// inflate the count). Verdicted = the review lane is alive.
 	Verdicted7d int `json:"verdicted7d,omitempty"`
-	// Applied7d is the subset of verdicted candidates that landed as applied
-	// (the fix was committed). Applied = the loop actually closed.
+	// Applied7d is the subset of candidates first verdicted in-window that have
+	// since reached applied, including accepted -> deploy-watch closure.
 	Applied7d int `json:"applied7d,omitempty"`
 	// ConversionRate is Applied7d / Verdicted7d (0 when no verdicts). This is
 	// review-lane quality, not capture quality: a low rate means the queue is
@@ -60,6 +60,15 @@ type SelfCorrectionFunnelSummary struct {
 	// signature had a PRIOR applied candidate — the "fix did not stick"
 	// signal. High reopens = fixes are superficial, not root cause.
 	Reopens7d int `json:"reopens7d,omitempty"`
+	// PendingCount and OldestPendingAgeMs make queue aging visible even when no
+	// new verdict landed in the seven-day window.
+	PendingCount       int   `json:"pendingCount,omitempty"`
+	OldestPendingAgeMs int64 `json:"oldestPendingAgeMs,omitempty"`
+	// Delivery outcomes prove whether accepted code candidates actually crossed
+	// the automated release boundary.
+	Dispatched7d  int `json:"dispatched7d,omitempty"`
+	WatchPassed7d int `json:"watchPassed7d,omitempty"`
+	RolledBack7d  int `json:"rolledBack7d,omitempty"`
 }
 
 // SelfCorrectionFunnel summarizes capture + closure activity from the persisted
@@ -74,21 +83,33 @@ func (t *Tracker) SelfCorrectionFunnel() SelfCorrectionFunnelSummary {
 func (t *Tracker) computeSelfCorrectionFunnelLocked(now time.Time) SelfCorrectionFunnelSummary {
 	var s SelfCorrectionFunnelSummary
 	cutoff := now.Add(-evolutionHealthWindow).UnixMilli()
-
 	records, err := jsonlstore.Load[SelfCorrectionCandidateRecord](t.selfCorrectionPath)
 	if err != nil {
 		records = nil // fall through to the rejection scan; a missing file is not fatal
 	}
-
-	// First pass: collect candidates and first-verdict per ID.
-	type firstVerdict struct {
-		status    string
-		createdAt int64
+	candidatesByID, firstVerdicts, firstApplied := collectSelfCorrectionFunnel(records, cutoff, &s)
+	appliedBySource := selfCorrectionAppliedBySource(candidatesByID, firstApplied)
+	verdictLatencySum := addSelfCorrectionClosureMetrics(&s, candidatesByID, firstVerdicts, firstApplied, appliedBySource, cutoff)
+	addSelfCorrectionPendingMetrics(&s, records, now.UnixMilli())
+	if s.Verdicted7d > 0 {
+		s.ConversionRate = float64(s.Applied7d) / float64(s.Verdicted7d)
+		s.MeanTimeToVerdictMs = verdictLatencySum / int64(s.Verdicted7d)
 	}
+	t.addSelfCorrectionRejectionMetrics(&s, cutoff)
+	return s
+}
+
+// collectSelfCorrectionFunnel performs the chronological fold once and returns
+// the three indexes every closure metric shares.
+func collectSelfCorrectionFunnel(records []SelfCorrectionCandidateRecord, cutoff int64, s *SelfCorrectionFunnelSummary) (
+	map[string]SelfCorrectionCandidateRecord, map[string]int64, map[string]int64,
+) {
 	candidatesByID := make(map[string]SelfCorrectionCandidateRecord, len(records))
-	firstVerdicts := make(map[string]firstVerdict, len(records))
+	firstVerdicts := make(map[string]int64, len(records))
+	firstApplied := make(map[string]int64, len(records))
 	for _, rec := range records {
-		if rec.Type == SelfCorrectionTypeReview {
+		switch rec.Type {
+		case SelfCorrectionTypeReview:
 			if rec.CreatedAt > s.LastReviewAt {
 				s.LastReviewAt = rec.CreatedAt
 			}
@@ -97,52 +118,89 @@ func (t *Tracker) computeSelfCorrectionFunnelLocked(now time.Time) SelfCorrectio
 				continue
 			}
 			// Earliest review row = first verdict (later rows are re-verdicts).
-			prior, exists := firstVerdicts[rec.ID]
 			status := normalizeSelfCorrectionStatus(rec.Status)
-			if !exists || rec.CreatedAt < prior.createdAt {
-				firstVerdicts[rec.ID] = firstVerdict{status: status, createdAt: rec.CreatedAt}
+			setEarlier(firstVerdicts, rec.ID, rec.CreatedAt)
+			if status == SelfCorrectionStatusApplied {
+				setEarlier(firstApplied, rec.ID, rec.CreatedAt)
 			}
-			continue
-		}
-		rec.ID = strings.TrimSpace(rec.ID)
-		if rec.ID == "" {
-			continue
-		}
-		if rec.CreatedAt > s.LastCaptureAt {
-			s.LastCaptureAt = rec.CreatedAt
-		}
-		// Keep the earliest candidate row per ID (the original proposal).
-		if existing, ok := candidatesByID[rec.ID]; !ok || rec.CreatedAt < existing.CreatedAt {
-			candidatesByID[rec.ID] = rec
+		case SelfCorrectionTypeDispatch:
+			rec.ID = strings.TrimSpace(rec.ID)
+			if rec.ID == "" {
+				continue
+			}
+			switch normalizeSelfCorrectionDispatchPhase(rec.DispatchPhase) {
+			case SelfCorrectionDispatchStarted:
+				if rec.CreatedAt >= cutoff {
+					s.Dispatched7d++
+				}
+			case SelfCorrectionDispatchWatchPassed:
+				if rec.CreatedAt >= cutoff {
+					s.WatchPassed7d++
+				}
+				if rec.CreatedAt > s.LastReviewAt {
+					s.LastReviewAt = rec.CreatedAt
+				}
+				setEarlier(firstVerdicts, rec.ID, rec.CreatedAt)
+				setEarlier(firstApplied, rec.ID, rec.CreatedAt)
+			case SelfCorrectionDispatchRolledBack:
+				if rec.CreatedAt >= cutoff {
+					s.RolledBack7d++
+				}
+			}
+		case "", SelfCorrectionTypeCandidate:
+			rec.ID = strings.TrimSpace(rec.ID)
+			if rec.ID == "" {
+				continue
+			}
+			if rec.CreatedAt > s.LastCaptureAt {
+				s.LastCaptureAt = rec.CreatedAt
+			}
+			// Keep the earliest candidate row per ID (the original proposal).
+			if existing, ok := candidatesByID[rec.ID]; !ok || rec.CreatedAt < existing.CreatedAt {
+				candidatesByID[rec.ID] = rec
+			}
 		}
 	}
+	return candidatesByID, firstVerdicts, firstApplied
+}
 
-	// Source-prefix → earliest APPLIED createdAt, for reopen detection.
+func setEarlier(index map[string]int64, id string, createdAt int64) {
+	if prior, exists := index[id]; !exists || createdAt < prior {
+		index[id] = createdAt
+	}
+}
+
+func selfCorrectionAppliedBySource(candidates map[string]SelfCorrectionCandidateRecord, firstApplied map[string]int64) map[string]int64 {
+	// Source-prefix → earliest APPLIED transition createdAt, for reopen detection.
 	// A candidate is a reopen when its source signature had an earlier applied
-	// candidate — the fix was attempted once and the signature came back.
-	// Source-prefix → earliest APPLIED verdict createdAt, for reopen detection.
-	// A candidate is a reopen when its source signature had an earlier applied
-	// fix — the "fix did not stick" signal. Status lives on review rows (merged
-	// at read time), so disposition comes from firstVerdicts, not the candidate
-	// row's initial status.
+	// fix — the "fix did not stick" signal. Applied can arrive as a direct review
+	// or as a deploy-watch closure event.
 	appliedBySource := make(map[string]int64)
-	for id, cand := range candidatesByID {
-		verdict, ok := firstVerdicts[id]
-		if !ok || verdict.status != SelfCorrectionStatusApplied {
+	for id, cand := range candidates {
+		appliedAt, ok := firstApplied[id]
+		if !ok {
 			continue
 		}
 		src := strings.TrimSpace(cand.Source)
 		if src == "" {
 			continue
 		}
-		if prior, exists := appliedBySource[src]; !exists || verdict.createdAt < prior {
-			appliedBySource[src] = verdict.createdAt
+		if prior, exists := appliedBySource[src]; !exists || appliedAt < prior {
+			appliedBySource[src] = appliedAt
 		}
 	}
+	return appliedBySource
+}
 
+func addSelfCorrectionClosureMetrics(
+	s *SelfCorrectionFunnelSummary,
+	candidates map[string]SelfCorrectionCandidateRecord,
+	firstVerdicts, firstApplied, appliedBySource map[string]int64,
+	cutoff int64,
+) int64 {
 	// Closure metrics over the window.
 	var verdictLatencySum int64
-	for id, cand := range candidatesByID {
+	for id, cand := range candidates {
 		if cand.CreatedAt >= cutoff {
 			s.Proposed7d++
 			// Reopen: a candidate captured in-window whose source already had
@@ -151,28 +209,42 @@ func (t *Tracker) computeSelfCorrectionFunnelLocked(now time.Time) SelfCorrectio
 				s.Reopens7d++
 			}
 		}
-		verdict, ok := firstVerdicts[id]
-		if !ok || verdict.createdAt < cutoff {
+		verdictAt, ok := firstVerdicts[id]
+		if !ok || verdictAt < cutoff {
 			continue
 		}
 		s.Verdicted7d++
-		if verdict.status == SelfCorrectionStatusApplied {
+		if _, applied := firstApplied[id]; applied {
 			s.Applied7d++
 		}
-		latency := verdict.createdAt - cand.CreatedAt
+		latency := verdictAt - cand.CreatedAt
 		if latency > 0 {
 			verdictLatencySum += latency
 		}
 	}
-	if s.Verdicted7d > 0 {
-		s.ConversionRate = float64(s.Applied7d) / float64(s.Verdicted7d)
-		s.MeanTimeToVerdictMs = verdictLatencySum / int64(s.Verdicted7d)
-	}
+	return verdictLatencySum
+}
 
-	// Rejection scan (unchanged from original).
+func addSelfCorrectionPendingMetrics(s *SelfCorrectionFunnelSummary, records []SelfCorrectionCandidateRecord, nowMs int64) {
+	// Current queue age is computed from the same folded state clients see.
+	for _, cand := range mergeSelfCorrectionRecords(records) {
+		if cand.Status != SelfCorrectionStatusProposed && cand.Status != SelfCorrectionStatusAccepted {
+			continue
+		}
+		s.PendingCount++
+		age := nowMs - cand.CreatedAt
+		if age > s.OldestPendingAgeMs {
+			s.OldestPendingAgeMs = age
+		}
+	}
+}
+
+func (t *Tracker) addSelfCorrectionRejectionMetrics(s *SelfCorrectionFunnelSummary, cutoff int64) {
+	// Rejection scan is independent of the queue fold: it reads the upstream
+	// evolve lifecycle and explains whether capture inputs still arrive.
 	entries, err := jsonlstore.Load[LifecycleLogEntry](t.logPath)
 	if err != nil {
-		return s
+		return
 	}
 	for _, entry := range entries {
 		if entry.Type != "evolve_rejected" {
@@ -189,5 +261,4 @@ func (t *Tracker) computeSelfCorrectionFunnelLocked(now time.Time) SelfCorrectio
 			s.PromotableRejections7d++
 		}
 	}
-	return s
 }

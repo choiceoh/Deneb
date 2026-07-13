@@ -74,6 +74,32 @@ func TestJudgeAccuracyTask_Run(t *testing.T) {
 	}
 }
 
+func TestOperatorJudgeVerdictIsIdempotentAndSeparateFromLaneRuns(t *testing.T) {
+	_, tr := accuracyFixture(t)
+	verdict := OperatorJudgeVerdict{
+		DecisionID: "sk@1.0.1", Skill: "sk", Version: "1.0.1",
+		Verdict: OperatorJudgeVerdictConfirm, JudgeVersion: "judge-v1", JudgeMargin: 1.5,
+	}
+	if err := tr.LogOperatorJudgeVerdict(verdict); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.LogOperatorJudgeVerdict(verdict); err != nil {
+		t.Fatal(err)
+	}
+	if runs, err := tr.RecentJudgeAccuracy(5); err != nil || len(runs) != 0 {
+		t.Fatalf("operator label leaked into scheduled runs: %+v err=%v", runs, err)
+	}
+	labels := tr.RecentOperatorJudgeVerdicts(time.Hour, 5)
+	if len(labels) != 1 || labels[0].DecisionID != verdict.DecisionID {
+		t.Fatalf("labels = %+v, want one idempotent verdict", labels)
+	}
+	if err := tr.LogOperatorJudgeVerdict(OperatorJudgeVerdict{
+		DecisionID: "bad", Skill: "sk", Version: "1", Verdict: "maybe",
+	}); err == nil {
+		t.Fatal("invalid operator verdict accepted")
+	}
+}
+
 // The probe curriculum ladder: weaken-tier pairs deploy only after
 // judgeEscalationWindow consecutive zero-miss drop-tier runs of the incumbent
 // judge; a drop-tier miss or a judge revision (version change) re-locks it.

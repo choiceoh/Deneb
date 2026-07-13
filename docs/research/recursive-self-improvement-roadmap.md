@@ -158,6 +158,14 @@ evaluator-epoch evidence alongside the synthetic misses — scoped to the
 incumbent judge, surfaced on `rsi_status` L3 (실전 라벨). Real-usage labels now
 flow; volume still depends on evolve throughput (P5-1/P5-2).
 
+**Low-confidence operator-label slice landed 2026-07-13:** an accepted skill
+evolve whose judge score margin is close to the admission boundary now emits a
+work-feed verdict card. `개선 확정` and `되돌리기` are persisted as idempotent,
+judge-version-attributed labels in `judge_accuracy_log.jsonl`; a rollback is
+accepted only while the card's exact skill version is still live and the backup
+restore succeeds. These labels feed both the L3 status surface and the next
+evaluator epoch, adding real verdict density without inventing synthetic usage.
+
 **Probe curriculum ladder landed 2026-07-13:** the judge-accuracy lane's
 planted-defect corpus was saturating (14 runs × 0 misses at the drop tier —
 a static probe corpus the judge has outgrown produces zero labels forever,
@@ -205,23 +213,37 @@ consuming the self-correction queue.
 When an evolve attempt's failure analysis names a missing/broken tool
 capability, emit a **paired** self-correction coding candidate referencing the
 skill and the failure signature, and record the pairing in the lifecycle log.
-The skill half stays auto-apply behind existing gates; the tool half is
-propose-only through the existing 자가코딩 review lane — source code remains a
-forbidden self-edit surface. "Atomic" here means atomically *proposed and
-tracked*, not atomically applied.
+The skill half stays auto-apply behind existing gates; the tool half is routed
+through the L4 자가코딩 lane and its durable dispatch/result ledger. It can land
+only through the declared source surface, full PR/CI/deploy gates, and the
+deploy rollback watch. "Atomic" here means atomically *proposed and tracked*,
+not atomically applied.
 
 ### P5 — Compounding (beyond structural completion)
 
-**Status: PROPOSED (2026-07-12).** P1–P4 built the machinery and the audit
-layer now reports it honestly; the binding constraint has moved from *missing
-components* to *compounding rate*. Measured throughput at proposal time:
+**Status: ACTIVE.** P1–P4 built the machinery and the audit layer reports it
+from canonical ledgers; the binding constraint has moved from *missing
+components* to *compounding rate*. The 2026-07-12 proposal baseline was
 3 evolves + 2 genesis per 7d, 1 meta cycle, 0 resolved rollback watches,
-0 judge-miss labels, 0 L4 dispatches. RSI value compounds as
+0 judge-miss labels, and 0 L4 dispatches. That sentence is historical evidence,
+not current status. RSI value compounds as
 (improvement per cycle) × (cycle rate) × (evolvable surface) × (label
 fidelity) — and every factor except fidelity is near its floor. The sober
 baseline applies: most evolutionary-agent "improvement" collapses into a few
 edit types (2605.20086), so raw cycle count alone does not compound either.
 Each workstream below pairs a throughput lever with a fidelity guard.
+
+**Live-status contract (drift guard).** This roadmap stores architecture,
+invariants, thresholds, and dated historical baselines only. Current counters
+must be generated from the append-only ledgers:
+
+```bash
+python3 scripts/audit/rsi-status.py --markdown
+python3 scripts/audit/rsi-status.py --write-markdown ~/.deneb/data/rsi-current-status.md
+```
+
+The generated document includes its timestamp and source directory and is
+never hand-edited or checked in as an allegedly current snapshot.
 
 Five workstreams, in priority order:
 
@@ -443,7 +465,8 @@ operator-grounded numbers is theater and gets cut.
 **L5 note (the layer above L4).** The one prompt L1–L4 hold fixed is the
 meta-governor (`metaEvolutionSystemPrompt`). Whether it should ever become the
 fourth evolvable prompt — and why it stays frozen until P3 is not just built but
-*calibrated* (currently 0 graded labels) — is worked out in
+*calibrated* (as demonstrated by the generated L3 status and its label-quality
+thresholds) — is worked out in
 [rsi-l5-meta-governor-unfreeze.md](rsi-l5-meta-governor-unfreeze.md). Design-only;
 recommendation is keep-frozen, feed the loop instead.
 
