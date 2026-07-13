@@ -613,3 +613,17 @@ func TestMetaLowConfidenceReason(t *testing.T) {
 		t.Fatal("benchless cycle keeps documented behavior (not routed)")
 	}
 }
+
+// annotateReason: an empty producer reason must not leave a dangling " — "
+// in verdict cards or the ledger.
+func TestAnnotateReason(t *testing.T) {
+	if got := annotateReason("", "저신뢰 라우팅: margin 0.8→0.8"); got != "저신뢰 라우팅: margin 0.8→0.8" {
+		t.Fatalf("empty reason must yield the bare note, got %q", got)
+	}
+	if got := annotateReason("  ", "note"); got != "note" {
+		t.Fatalf("whitespace reason must yield the bare note, got %q", got)
+	}
+	if got := annotateReason("judge drift", "note"); got != "judge drift — note" {
+		t.Fatalf("non-empty reason must join with em-dash, got %q", got)
+	}
+}
