@@ -31,8 +31,8 @@ func parseMailArchiveArgs(input json.RawMessage) mailArchiveArgs {
 	return args
 }
 
-// mailArchiveQuery carries the immutable request/configuration plus the two
-// timing observations updated by query modes for the caller's deferred log.
+// mailArchiveQuery carries the immutable request/configuration plus the timing
+// observations updated by query modes for the caller's deferred log.
 type mailArchiveQuery struct {
 	deps       MailArchiveDeps
 	args       mailArchiveArgs
@@ -43,6 +43,10 @@ type mailArchiveQuery struct {
 	imapReady  bool
 	usedIMAP   *bool
 	storeHits  *int
+	// fallbackSkipped flips true when a store miss deliberately did NOT fall
+	// through to IMAP — a Korean text-search miss the mirror is authoritative
+	// for (see skipHangulTextFallback).
+	fallbackSkipped *bool
 }
 
 func (q mailArchiveQuery) search(ctx context.Context) (string, error) {
@@ -65,11 +69,15 @@ func (q mailArchiveQuery) search(ctx context.Context) (string, error) {
 		msgs, widened = q.widenStoreSearch(msgs, opts)
 	}
 	if len(msgs) == 0 && q.imapReady {
-		*q.usedIMAP = true
-		var err error
-		msgs, err = mailarchive.SearchContextMessages(ctx, q.cfg, q.args.Query, opts)
-		if err != nil {
-			return "", fmt.Errorf("아카이브 검색 실패: %w", err)
+		if q.skipHangulTextFallback() {
+			*q.fallbackSkipped = true
+		} else {
+			*q.usedIMAP = true
+			var err error
+			msgs, err = mailarchive.SearchContextMessages(ctx, q.cfg, q.args.Query, opts)
+			if err != nil {
+				return "", fmt.Errorf("아카이브 검색 실패: %w", err)
+			}
 		}
 	}
 	return q.formatSearch(ctx, msgs, widened)
@@ -196,11 +204,15 @@ func (q mailArchiveQuery) projectHistory(ctx context.Context) (string, error) {
 		history, used = q.deps.Store.ProjectHistory(q.args.Query, opts.Since, opts.Limit, opts.IndexLimit)
 	}
 	if !used && q.imapReady {
-		*q.usedIMAP = true
-		var err error
-		history, err = mailarchive.ProjectHistoryContext(ctx, q.cfg, q.args.Query, opts)
-		if err != nil {
-			return "", fmt.Errorf("프로젝트 히스토리 조회 실패: %w", err)
+		if q.skipHangulTextFallback() {
+			*q.fallbackSkipped = true
+		} else {
+			*q.usedIMAP = true
+			var err error
+			history, err = mailarchive.ProjectHistoryContext(ctx, q.cfg, q.args.Query, opts)
+			if err != nil {
+				return "", fmt.Errorf("프로젝트 히스토리 조회 실패: %w", err)
+			}
 		}
 	}
 	return q.formatProjectHistory(ctx, history)
@@ -275,4 +287,31 @@ func (q mailArchiveQuery) attachment(ctx context.Context) (string, error) {
 		return "선택한 조건에 맞는 첨부가 없습니다. action=read로 첨부 목록을 먼저 확인하세요.", nil
 	}
 	return formatArchiveAttachments(ctx, atts), nil
+}
+
+// skipHangulTextFallback reports whether a store miss should NOT fall through to
+// the IMAP text-search fallback. The archive's Dovecot has no CJK full-text
+// index, so a Korean query there scans message bodies linearly (~10s on the
+// large Gmail mailbox) and STILL under-matches the local mirror (measured: the
+// mirror finds "한화" in 375 places, IMAP in 5). So when the mirror is populated
+// it is the authoritative Korean index — a 0-hit is trustworthy and the fallback
+// can only add latency, never recall. ASCII queries keep the fallback (IMAP TEXT
+// matches Latin fine and can reach mail the mirror has not yet backfilled). Only
+// the text-scan actions (search / project_history) consult this; read/thread
+// fall back via cheap Message-ID/header lookups, which are not CJK-blind.
+func (q mailArchiveQuery) skipHangulTextFallback() bool {
+	return q.storeReady && hasHangul(q.args.Query)
+}
+
+// hasHangul reports whether s contains any Hangul (syllables or Jamo).
+func hasHangul(s string) bool {
+	for _, r := range s {
+		switch {
+		case r >= 0xAC00 && r <= 0xD7A3, // Hangul syllables
+			r >= 0x1100 && r <= 0x11FF, // Hangul Jamo
+			r >= 0x3130 && r <= 0x318F: // Hangul Compatibility Jamo
+			return true
+		}
+	}
+	return false
 }

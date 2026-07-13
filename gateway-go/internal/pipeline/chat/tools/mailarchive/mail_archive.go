@@ -62,9 +62,15 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 		// Phase timing: attribute where a call's time went so "mail_archive is
 		// slow" is diagnosable straight from the log. usedIMAP flips true whenever
 		// the fast local store missed and we fell through to the full IMAP
-		// fetch+parse (the 12.9s path — usually un-backfilled historical mail); the
-		// attachment action is always IMAP fetch + OCR. Fast store hits stay at
-		// Debug (quiet); the slow paths surface at Info.
+		// fetch+parse (the ~11s path — a large-mailbox TEXT scan); the attachment
+		// action is always IMAP fetch + OCR. fallbackSkipped flips true when a
+		// Korean store-miss deliberately did NOT fall back (the mirror is the
+		// authoritative CJK index — see skipHangulTextFallback). EVERY call logs at
+		// Info now, store hits included, so the log shows the full picture: a
+		// "path=store" line is a served-from-mirror call, not a missing one — and a
+		// store miss reads as storeHits=0 with either path=imap-fallback (paid) or
+		// fallbackSkipped=true (gated). durationMs at Info follows logging.md §5
+		// (latency belongs in an Info field, not Debug).
 		start := time.Now()
 		loggedAction := args.Action
 		if loggedAction == "" {
@@ -72,24 +78,22 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 		}
 		usedIMAP := false
 		// storeHits records what the local store returned for a search before any
-		// IMAP fallback (-1 = the action never queried the store). Surfaced on the
-		// slow path so a fallback can be attributed to store-not-ready vs a genuine
-		// zero-hit search — the two have opposite fixes.
+		// IMAP fallback (-1 = the action never queried the store). It lets a
+		// fallback be attributed to store-not-ready vs a genuine zero-hit search —
+		// the two have opposite fixes.
 		storeHits := -1
+		fallbackSkipped := false
 		defer func() {
 			path := mailArchivePath(loggedAction, usedIMAP)
 			durMs := time.Since(start).Milliseconds()
-			if path == "store" {
-				slog.Debug("mail_archive", "action", loggedAction, "path", path, "durationMs", durMs)
-			} else {
-				storeLen := 0
-				if deps.Store != nil {
-					storeLen = deps.Store.Len()
-				}
-				slog.Info("mail_archive", "action", loggedAction, "path", path, "durationMs", durMs,
-					"storeReady", storeReady, "storeLen", storeLen, "storeHits", storeHits,
-					"query", textutil.TruncateRunes(args.Query, 80, "\n... (이하 생략)"))
+			storeLen := 0
+			if deps.Store != nil {
+				storeLen = deps.Store.Len()
 			}
+			slog.Info("mail_archive", "action", loggedAction, "path", path, "durationMs", durMs,
+				"storeReady", storeReady, "storeLen", storeLen, "storeHits", storeHits,
+				"fallbackSkipped", fallbackSkipped,
+				"query", textutil.TruncateRunes(args.Query, 80, "\n... (이하 생략)"))
 		}()
 
 		limit := args.Limit
@@ -102,15 +106,16 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 			BodyRunes: mailArchiveBodyRunes(args.IncludeBody),
 		}
 		query := mailArchiveQuery{
-			deps:       deps,
-			args:       args,
-			mailboxes:  mailboxes,
-			cfg:        cfg,
-			opts:       opts,
-			storeReady: storeReady,
-			imapReady:  imapReady,
-			usedIMAP:   &usedIMAP,
-			storeHits:  &storeHits,
+			deps:            deps,
+			args:            args,
+			mailboxes:       mailboxes,
+			cfg:             cfg,
+			opts:            opts,
+			storeReady:      storeReady,
+			imapReady:       imapReady,
+			usedIMAP:        &usedIMAP,
+			storeHits:       &storeHits,
+			fallbackSkipped: &fallbackSkipped,
 		}
 
 		switch args.Action {
@@ -135,8 +140,9 @@ func ToolMailArchive(optional ...MailArchiveDeps) func(ctx context.Context, inpu
 // mailArchivePath classifies which data path a mail_archive call took, for the
 // per-call phase-timing log: "store" = fast in-memory local hit (~ms); "attachment"
 // = always IMAP fetch + OCR; "imap-fallback" = the local store missed and the call
-// paid the full IMAP fetch+parse (the slow ~12.9s path, typically un-backfilled
-// historical mail). Pure so the classification is unit-testable.
+// paid a live IMAP text search (the slow ~11s path — a linear body scan over the
+// large Gmail mailbox, since the archive Dovecot has no full-text index). Pure so
+// the classification is unit-testable.
 func mailArchivePath(action string, usedIMAP bool) string {
 	switch {
 	case action == "attachment":
