@@ -312,8 +312,8 @@ private fun SelfImprovementCodingChips(candidate: SelfCorrectionCandidate) {
 
 /** Maps a candidate `source` namespace to a short Korean label. Returns null for
  *  a blank source. Suffix-aware for tool-quality (:desc description / :latency
- *  perf). Keep in sync with the miner source prefixes (scripts/audit/*_miner.py,
- *  genesis L4 sources). */
+ *  perf). Keep in sync with the miner source prefixes (the scripts/audit
+ *  *_miner.py miners, genesis L4 sources). */
 private fun selfImprovementCodingSourceLabel(source: String): String? {
     val s = source.trim()
     if (s.isEmpty()) return null
