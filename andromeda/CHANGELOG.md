@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.71](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.70...andromeda-v0.0.71) (2026-07-13)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** Cargo.lock 앱 버전 0.0.70 동기화 — release 커밋 이후 깨진 cargo check --locked 복구 ([#3552](https://github.com/choiceoh/Deneb/issues/3552)) ([465bfe9](https://github.com/choiceoh/Deneb/commit/465bfe99aab223c190521e9a67d4a5000e9a256e))
+
 ## [0.0.70](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.69...andromeda-v0.0.70) (2026-07-12)
 
 

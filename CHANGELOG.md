@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.95.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.94.0...deneb-v4.95.0) (2026-07-13)
+
+
+### ✨ Features
+
+* **genesis:** e-process 컷오버 메커니즘 + L3 실전 false-accept 라벨 수확 ([#3550](https://github.com/choiceoh/Deneb/issues/3550)) ([0ce16dc](https://github.com/choiceoh/Deneb/commit/0ce16dc85fec16ef15d92565e1e2793e3adcff10))
+* **genesis:** RSI 2026H2 논문 애드덤 + 차기 커밋 후보 6건 전체 구현 ([#3555](https://github.com/choiceoh/Deneb/issues/3555)) ([ec65ce1](https://github.com/choiceoh/Deneb/commit/ec65ce1f3899aa53150013478ac196acecbda070))
+* **genesis:** RSI P5-1 커리큘럼 환경 다이제스트 배선 — EnvDigest 클로저 주입 ([#3553](https://github.com/choiceoh/Deneb/issues/3553)) ([37574c8](https://github.com/choiceoh/Deneb/commit/37574c8e3a1046db2eedea69aeeaab11219ea5c0))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** Cargo.lock 앱 버전 0.0.70 동기화 — release 커밋 이후 깨진 cargo check --locked 복구 ([#3552](https://github.com/choiceoh/Deneb/issues/3552)) ([465bfe9](https://github.com/choiceoh/Deneb/commit/465bfe99aab223c190521e9a67d4a5000e9a256e))
+* **chat:** 마지막 줄이 입력창에 가리지 않게 — scrollToTrueBottom 으로 contentPadding 보정 ([#3554](https://github.com/choiceoh/Deneb/issues/3554)) ([177f81b](https://github.com/choiceoh/Deneb/commit/177f81b0446f63f29dfaccaa8be95165f32040ca))
+
 ## [4.94.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.93.0...deneb-v4.94.0) (2026-07-12)
 
 
