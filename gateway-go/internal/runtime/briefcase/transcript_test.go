@@ -56,7 +56,7 @@ func TestRunTranscriptPreservesSameSessionHistoryThroughPolaris(t *testing.T) {
 	}
 	got := make([]string, len(assembled.Messages))
 	for i, msg := range assembled.Messages {
-		if err := json.Unmarshal(msg.Content, &got[i]); err != nil {
+		if err := json.Unmarshal(msg.Content.Bytes(), &got[i]); err != nil {
 			t.Fatalf("decode assembled message %d: %v", i, err)
 		}
 	}
@@ -115,7 +115,7 @@ func TestRunTranscriptPersistsHistoryWithinSameRunRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if assembled.TotalMessages != 1 || len(assembled.Messages) != 1 || !strings.Contains(string(assembled.Messages[0].Content), "persisted turn") {
+	if assembled.TotalMessages != 1 || len(assembled.Messages) != 1 || !strings.Contains(assembled.Messages[0].Content.String(), "persisted turn") {
 		t.Fatalf("reopened context = %+v", assembled)
 	}
 }

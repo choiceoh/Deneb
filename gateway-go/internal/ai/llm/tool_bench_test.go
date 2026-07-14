@@ -42,7 +42,7 @@ func buildToolList(n int) []Tool {
 		tools[i] = Tool{
 			Name:        "tool_" + string(rune('a'+i%26)),
 			Description: "Sample tool for benchmarking with a realistic description length",
-			InputSchema: sampleSchema(),
+			inputSchema: sampleSchema(),
 		}
 	}
 	return tools
@@ -102,17 +102,17 @@ func TestPreSerializeEncodesInputSchema(t *testing.T) {
 	tool := Tool{
 		Name:        "test",
 		Description: "test tool",
-		InputSchema: sampleSchema(),
+		inputSchema: sampleSchema(),
 	}
 	tool.PreSerialize()
 
-	if tool.RawInputSchema == nil {
+	if tool.RawInputSchema.IsZero() {
 		t.Fatal("RawInputSchema should not be nil after PreSerialize")
 	}
 
 	// Verify the pre-serialized JSON is valid and matches the schema.
 	var parsed map[string]any
-	if err := json.Unmarshal(tool.RawInputSchema, &parsed); err != nil {
+	if err := json.Unmarshal(tool.RawInputSchema.Bytes(), &parsed); err != nil {
 		t.Fatalf("RawInputSchema is not valid JSON: %v", err)
 	}
 	if parsed["type"] != "object" {
@@ -131,13 +131,13 @@ func TestPreSerialize_Idempotent(t *testing.T) {
 	tool := Tool{
 		Name:        "test",
 		Description: "test tool",
-		InputSchema: sampleSchema(),
+		inputSchema: sampleSchema(),
 	}
 	tool.PreSerialize()
-	first := string(tool.RawInputSchema)
+	first := tool.RawInputSchema.String()
 
 	tool.PreSerialize() // should not change
-	if string(tool.RawInputSchema) != first {
+	if tool.RawInputSchema.String() != first {
 		t.Error("PreSerialize should be idempotent")
 	}
 }
@@ -146,7 +146,7 @@ func TestToolMarshalJSONWithPreSerializedSchema(t *testing.T) {
 	tool := Tool{
 		Name:        "test",
 		Description: "test tool",
-		InputSchema: sampleSchema(),
+		inputSchema: sampleSchema(),
 	}
 	tool.PreSerialize()
 

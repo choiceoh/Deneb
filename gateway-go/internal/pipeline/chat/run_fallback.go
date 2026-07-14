@@ -302,7 +302,7 @@ func (t *fallbackTurn) compactionRecovery(ctx context.Context, compactAttempt in
 			"budget", t.contextBudget,
 			"attempt", compactAttempt+1)
 		if t.deps.broadcast != nil {
-			t.deps.broadcast("chat.compaction_stuck", ChatCompactionStuckEvent{
+			broadcastPayload(t.deps.broadcast, "chat.compaction_stuck", ChatCompactionStuckEvent{
 				Reason:       "protected_zone_exceeds_budget",
 				MessageCount: len(t.messages),
 				Budget:       t.contextBudget,
@@ -326,7 +326,7 @@ func (t *fallbackTurn) compactionRecovery(ctx context.Context, compactAttempt in
 			"inputHash", inputHash,
 			"attempt", compactAttempt+1)
 		if t.deps.broadcast != nil {
-			t.deps.broadcast("chat.compaction_stuck", ChatCompactionStuckEvent{
+			broadcastPayload(t.deps.broadcast, "chat.compaction_stuck", ChatCompactionStuckEvent{
 				Reason:       "idempotent_compaction",
 				MessageCount: len(t.messages),
 				InputHash:    inputHash,
@@ -548,7 +548,7 @@ func (t *fallbackTurn) finalizeFailure() (*agent.AgentResult, string, bool, erro
 	// error return — easy to miss when diagnosing "why did the bot suddenly
 	// stop on long sessions".
 	if isContextOverflow(t.runErr) && t.deps.broadcast != nil {
-		t.deps.broadcast("chat.context_overflow_unrecoverable", ChatContextOverflowEvent{
+		broadcastPayload(t.deps.broadcast, "chat.context_overflow_unrecoverable", ChatContextOverflowEvent{
 			Model:        t.cfg.Model,
 			MessageCount: len(t.messages),
 			Attempts:     maxCompactionRetries + 1,

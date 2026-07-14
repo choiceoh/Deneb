@@ -114,7 +114,7 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 			// Surface the merge on the session event bus so dashboards
 			// can distinguish it from normal "message_sent" starts.
 			if h.broadcast != nil {
-				h.broadcast("sessions.changed", SessionsChangedEvent{
+				broadcastPayload(h.broadcast, "sessions.changed", SessionsChangedEvent{
 					SessionKey: p.SessionKey,
 					Reason:     "merged",
 					Status:     "running",
@@ -427,7 +427,7 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 			Ts:    time.Now().UnixMilli(),
 		})
 		if h.broadcast != nil {
-			h.broadcast("sessions.changed", SessionsChangedEvent{
+			broadcastPayload(h.broadcast, "sessions.changed", SessionsChangedEvent{
 				SessionKey: key,
 				Reason:     "aborted",
 				Status:     "killed",

@@ -139,7 +139,7 @@ func TestAssembleContextFullPreservesUncoveredRecentAfterSummary(t *testing.T) {
 	seen := make(map[string]bool, total)
 	for _, msg := range result.Messages {
 		var text string
-		if json.Unmarshal(msg.Content, &text) == nil {
+		if json.Unmarshal(msg.Content.Bytes(), &text) == nil {
 			seen[text] = true
 		}
 	}
@@ -196,7 +196,7 @@ func TestAssembleContextFullClearsDanglingToolUse(t *testing.T) {
 	if len(result.Messages) != 3 {
 		t.Fatalf("got %d, want 3 messages", len(result.Messages))
 	}
-	repaired := string(result.Messages[1].Content)
+	repaired := result.Messages[1].Content.String()
 	if strings.Contains(repaired, "tool_use") {
 		t.Fatalf("dangling tool_use survived assembly: %s", repaired)
 	}
@@ -220,8 +220,8 @@ func TestAssembleContextFullClearsOrphanToolResultAfterSummary(t *testing.T) {
 
 	result := testutil.Must(assembleContextFull(store, "s1", 30_000, 48, slog.Default()))
 	for _, msg := range result.Messages {
-		if strings.Contains(string(msg.Content), "tool_result") {
-			t.Fatalf("orphan tool_result survived assembly: %s", string(msg.Content))
+		if strings.Contains(msg.Content.String(), "tool_result") {
+			t.Fatalf("orphan tool_result survived assembly: %s", msg.Content.String())
 		}
 	}
 }

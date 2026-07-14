@@ -106,7 +106,7 @@ func waitNotInFlight(t *testing.T, e *Engine, sess string, timeout time.Duration
 func msgsContain(msgs []llm.Message, want string) bool {
 	for _, m := range msgs {
 		var text string
-		if json.Unmarshal(m.Content, &text) == nil && len(text) >= len(want) {
+		if json.Unmarshal(m.Content.Bytes(), &text) == nil && len(text) >= len(want) {
 			for i := 0; i+len(want) <= len(text); i++ {
 				if text[i:i+len(want)] == want {
 					return true

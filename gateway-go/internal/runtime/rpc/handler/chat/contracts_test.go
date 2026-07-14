@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
@@ -112,9 +114,9 @@ func TestBtwHandlerTrimsInputAndBroadcastsContract(t *testing.T) {
 	var payload map[string]any
 	methods := BtwMethods(BtwDeps{
 		Chat: handler,
-		Broadcaster: func(gotEvent string, gotPayload any) (int, []error) {
+		Broadcaster: func(gotEvent string, gotPayload events.EventPayload) (int, []error) {
 			event = gotEvent
-			payload = gotPayload.(map[string]any)
+			_ = json.Unmarshal(gotPayload.Bytes(), &payload)
 			return 1, nil
 		},
 	})
@@ -146,7 +148,7 @@ func TestBtwHandlerDependencyErrorDoesNotBroadcast(t *testing.T) {
 	broadcasts := 0
 	method := BtwMethods(BtwDeps{
 		Chat: handler,
-		Broadcaster: func(string, any) (int, []error) {
+		Broadcaster: func(string, events.EventPayload) (int, []error) {
 			broadcasts++
 			return 0, nil
 		},

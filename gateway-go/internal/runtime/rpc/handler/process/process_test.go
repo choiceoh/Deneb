@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	rtevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpctest"
@@ -196,7 +198,7 @@ func TestCronUpdate_FieldMerge(t *testing.T) {
 	var gotEvent string
 	deps := CronAdvancedDeps{
 		Service:     svc,
-		Broadcaster: func(event string, _ any) (int, []error) { gotEvent = event; return 1, nil },
+		Broadcaster: func(event string, _ rtevents.EventPayload) (int, []error) { gotEvent = event; return 1, nil },
 	}
 	m := CronAdvancedMethods(deps)
 

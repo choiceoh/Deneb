@@ -233,11 +233,11 @@ func probeModel(ctx context.Context, client *llm.Client, model string) (Calibrat
 		switch ev.Type {
 		case "content_block_delta":
 			var d llm.ContentBlockDelta
-			if json.Unmarshal(ev.Payload, &d) == nil && d.Delta.Type != "thinking_delta" {
+			if json.Unmarshal(ev.Payload.Bytes(), &d) == nil && d.Delta.Type != "thinking_delta" {
 				text.WriteString(d.Delta.Text)
 			}
 		case "error":
-			return Calibration{}, fmt.Errorf("stream error: %s", string(ev.Payload))
+			return Calibration{}, fmt.Errorf("stream error: %s", ev.Payload.String())
 		}
 	}
 	if probeCtx.Err() != nil {

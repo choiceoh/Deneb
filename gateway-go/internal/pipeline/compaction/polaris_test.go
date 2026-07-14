@@ -23,7 +23,7 @@ func toolResultMsg(content string) llm.Message {
 		Content:   content,
 	}}
 	raw, _ := json.Marshal(blocks)
-	return llm.Message{Role: "user", Content: raw}
+	return llm.Message{Role: "user", Content: llm.FlexibleFromRaw(raw)}
 }
 
 // --- EstimateTokens ---
@@ -68,7 +68,7 @@ func TestMicroCompact_TruncatesOldCodeBlocks(t *testing.T) {
 
 	// Verify the tool_result at index 2 had its code stripped.
 	var blocks []llm.ContentBlock
-	json.Unmarshal(result[2].Content, &blocks)
+	json.Unmarshal(result[2].Content.Bytes(), &blocks)
 	if strings.Contains(blocks[0].Content, "func main") {
 		t.Error("code should have been stripped from old tool result")
 	}
@@ -132,7 +132,7 @@ func TestLLMCompact_CreatesSummaryFenceForOldMessages(t *testing.T) {
 		t.Error("summarizer should have been called")
 	}
 	// First message should be the summary.
-	firstText := string(result[0].Content)
+	firstText := result[0].Content.String()
 	if !strings.Contains(firstText, "Polaris compaction") {
 		t.Error("expected Polaris compaction marker in summary message")
 	}
@@ -165,7 +165,7 @@ func TestEmergencyCompact_EvictsOldestSummarizesNonEvicted(t *testing.T) {
 	if evicted >= len(msgs)-4 {
 		t.Errorf("evicted = %d, want partial eviction (old zone is %d)", evicted, len(msgs)-4)
 	}
-	if last := string(result[len(result)-1].Content); !strings.Contains(last, hugeInput) {
+	if last := result[len(result)-1].Content.String(); !strings.Contains(last, hugeInput) {
 		t.Error("trigger input should be preserved intact in the recent tail")
 	}
 	if !s.called {
@@ -175,7 +175,7 @@ func TestEmergencyCompact_EvictsOldestSummarizesNonEvicted(t *testing.T) {
 		t.Errorf("result should be shorter: got %d, original %d", len(result), len(msgs))
 	}
 	// First message should be the summary of non-evicted old messages.
-	firstText := string(result[0].Content)
+	firstText := result[0].Content.String()
 	if !strings.Contains(firstText, "summarized") {
 		t.Error("expected summary marker in first message")
 	}
@@ -281,7 +281,7 @@ func TestCompact_PreservesBytesBelowUsageGate(t *testing.T) {
 	if r.MicroPruned != 0 || r.OldToolResultsStubbed != 0 {
 		t.Errorf("cheap pruning ran below the gate: pruned=%d stubbed=%d", r.MicroPruned, r.OldToolResultsStubbed)
 	}
-	if string(result[2].Content) != string(msgs[2].Content) {
+	if result[2].Content.String() != msgs[2].Content.String() {
 		t.Error("old tool_result bytes must be untouched below the gate")
 	}
 

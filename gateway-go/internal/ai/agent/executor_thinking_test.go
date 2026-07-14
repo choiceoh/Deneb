@@ -27,10 +27,10 @@ func TestConsumeStreamInto_StreamedThinkingStoresReasoning(t *testing.T) {
 	stop, _ := json.Marshal(llm.ContentBlockStop{Index: 0})
 
 	events := make(chan llm.StreamEvent, 8)
-	events <- llm.StreamEvent{Type: "content_block_start", Payload: start}
-	events <- llm.StreamEvent{Type: "content_block_delta", Payload: mkDelta("let me ")}
-	events <- llm.StreamEvent{Type: "content_block_delta", Payload: mkDelta("reason")}
-	events <- llm.StreamEvent{Type: "content_block_stop", Payload: stop}
+	events <- llm.StreamEvent{Type: "content_block_start", Payload: llm.FlexibleFromRaw(start)}
+	events <- llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw(mkDelta("let me "))}
+	events <- llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw(mkDelta("reason"))}
+	events <- llm.StreamEvent{Type: "content_block_stop", Payload: llm.FlexibleFromRaw(stop)}
 	events <- makeStreamEvent("message_stop")
 	close(events)
 

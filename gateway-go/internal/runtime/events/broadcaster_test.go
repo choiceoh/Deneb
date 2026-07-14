@@ -36,19 +36,20 @@ func TestBroadcastEmitsEventsToRegisteredTap(t *testing.T) {
 	var (
 		mu    sync.Mutex
 		seen  []string
-		seenP []any
+		seenP []EventPayload
 	)
-	b.RegisterTap(func(event string, payload any) {
+	b.RegisterTap(func(event string, payload EventPayload) {
 		mu.Lock()
 		defer mu.Unlock()
 		seen = append(seen, event)
 		seenP = append(seenP, payload)
 	})
 
-	if _, errs := b.Broadcast("evt.one", map[string]string{"k": "v"}); len(errs) != 0 {
+	oneWire, _ := PayloadOf(map[string]string{"k": "v"})
+	if _, errs := b.Broadcast("evt.one", oneWire); len(errs) != 0 {
 		t.Fatalf("broadcast errs: %v", errs)
 	}
-	if _, errs := b.Broadcast("evt.two", nil); len(errs) != 0 {
+	if _, errs := b.Broadcast("evt.two", EventPayload{}); len(errs) != 0 {
 		t.Fatalf("broadcast errs: %v", errs)
 	}
 
@@ -57,7 +58,7 @@ func TestBroadcastEmitsEventsToRegisteredTap(t *testing.T) {
 	if len(seen) != 2 || seen[0] != "evt.one" || seen[1] != "evt.two" {
 		t.Errorf("tap saw %v, want [evt.one evt.two]", seen)
 	}
-	if seenP[0] == nil {
+	if seenP[0].IsZero() {
 		t.Errorf("tap should receive payload, got nil")
 	}
 }
@@ -67,16 +68,16 @@ func TestBroadcastEmitsEventsToRegisteredTap(t *testing.T) {
 // the whole event bus.
 func TestBroadcast_TapPanicRecovered(t *testing.T) {
 	b := NewBroadcaster()
-	b.RegisterTap(func(_ string, _ any) {
+	b.RegisterTap(func(_ string, _ EventPayload) {
 		panic("intentional tap panic")
 	})
 	var ok bool
-	b.RegisterTap(func(_ string, _ any) {
+	b.RegisterTap(func(_ string, _ EventPayload) {
 		ok = true
 	})
 
 	// Should not panic.
-	if _, errs := b.Broadcast("evt", nil); len(errs) != 0 {
+	if _, errs := b.Broadcast("evt", EventPayload{}); len(errs) != 0 {
 		t.Fatalf("broadcast errs: %v", errs)
 	}
 	if !ok {
@@ -92,7 +93,8 @@ func TestBroadcastEmitsToAllSubscribedReceivers(t *testing.T) {
 	b.Subscribe(s1, Filter{})
 	b.Subscribe(s2, Filter{})
 
-	sent, errs := b.Broadcast("test.event", map[string]string{"key": "value"})
+	valueWire, _ := PayloadOf(map[string]string{"key": "value"})
+	sent, errs := b.Broadcast("test.event", valueWire)
 	if sent != 2 {
 		t.Errorf("got %d, want 2 sent", sent)
 	}
@@ -112,7 +114,7 @@ func TestBroadcastIgnoresUnauthenticatedSubscribers(t *testing.T) {
 	b.Subscribe(s1, Filter{})
 	b.Subscribe(s2, Filter{})
 
-	sent, _ := b.Broadcast("test", nil)
+	sent, _ := b.Broadcast("test", EventPayload{})
 	if sent != 1 {
 		t.Errorf("got %d, want 1 sent", sent)
 	}
@@ -128,13 +130,13 @@ func TestBroadcastFilterAllowsMatchingEventsOnly(t *testing.T) {
 	b.Subscribe(s1, Filter{Events: map[string]struct{}{"wanted": {}}})
 
 	// Event that matches filter.
-	sent, _ := b.Broadcast("wanted", nil)
+	sent, _ := b.Broadcast("wanted", EventPayload{})
 	if sent != 1 {
 		t.Errorf("got %d, want 1 sent for matching event", sent)
 	}
 
 	// Event that doesn't match filter.
-	sent, _ = b.Broadcast("unwanted", nil)
+	sent, _ = b.Broadcast("unwanted", EventPayload{})
 	if sent != 0 {
 		t.Errorf("got %d, want 0 sent for non-matching event", sent)
 	}
@@ -146,7 +148,7 @@ func TestBroadcast_SendError(t *testing.T) {
 
 	b.Subscribe(s1, Filter{})
 
-	sent, errs := b.Broadcast("test", nil)
+	sent, errs := b.Broadcast("test", EventPayload{})
 	if sent != 0 {
 		t.Errorf("got %d, want 0 sent", sent)
 	}
@@ -191,9 +193,9 @@ func TestSequentialBroadcastsEmitOneMessageEach(t *testing.T) {
 	s := &mockSubscriber{id: "s1", authed: true}
 	b.Subscribe(s, Filter{})
 
-	b.Broadcast("e1", nil)
-	b.Broadcast("e2", nil)
-	b.Broadcast("e3", nil)
+	b.Broadcast("e1", EventPayload{})
+	b.Broadcast("e2", EventPayload{})
+	b.Broadcast("e3", EventPayload{})
 
 	if len(s.received) != 3 {
 		t.Fatalf("got %d, want 3 messages", len(s.received))
@@ -210,7 +212,7 @@ func TestBroadcastToConnIDsAllowsOnlyTargetedSubscriber(t *testing.T) {
 	b.Subscribe(s2, Filter{})
 
 	targets := map[string]struct{}{"s1": {}}
-	sent, _ := b.BroadcastToConnIDs("test", nil, targets)
+	sent, _ := b.BroadcastToConnIDs("test", EventPayload{}, targets)
 	if sent != 1 {
 		t.Errorf("got %d, want 1 targeted send", sent)
 	}

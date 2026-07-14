@@ -44,7 +44,7 @@ func TestTargetedToolRunIDReturnsRunIDOnlyForWellFormedToolEvents(t *testing.T) 
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := targetedToolRunID(test.event, test.payload); got != test.want {
+			if got := targetedToolRunID(test.event, eventPayloadFromAny(test.payload)); got != test.want {
 				t.Fatalf("targetedToolRunID() = %q, want %q", got, test.want)
 			}
 		})

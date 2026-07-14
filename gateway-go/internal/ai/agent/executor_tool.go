@@ -7,6 +7,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -111,17 +112,17 @@ func prepareToolCall(
 	loopDetector *ToolLoopDetector,
 ) toolCallPrep {
 	if hooks.OnToolStart != nil {
-		hooks.OnToolStart(tc.Name, turnReason, tc.Input)
+		hooks.OnToolStart(tc.Name, turnReason, json.RawMessage(tc.Input.Bytes()))
 	}
 	if hooks.OnToolEmit != nil {
-		hooks.OnToolEmit(tc.Name, tc.ID, tc.Input)
+		hooks.OnToolEmit(tc.Name, tc.ID, json.RawMessage(tc.Input.Bytes()))
 	}
 	logger.Info("exec", "name", tc.Name, "turn", turn)
 	start := time.Now()
 
 	// Tool loop detection: check for stuck patterns before executing.
 	if loopDetector != nil {
-		loopResult := loopDetector.RecordAndCheck(tc.Name, tc.Input)
+		loopResult := loopDetector.RecordAndCheck(tc.Name, json.RawMessage(tc.Input.Bytes()))
 		if loopResult.Stuck {
 			if loopResult.Level == ToolLoopCritical {
 				logger.Warn("tool loop blocked",
@@ -146,7 +147,7 @@ func prepareToolCall(
 
 	// Plugin hook: allow blocking tool execution before it starts.
 	if hooks.OnBeforeToolCall != nil {
-		if block, reason := hooks.OnBeforeToolCall(tc.Name, tc.ID, tc.Input); block {
+		if block, reason := hooks.OnBeforeToolCall(tc.Name, tc.ID, json.RawMessage(tc.Input.Bytes())); block {
 			logger.Info("tool blocked by hook", "name", tc.Name, "reason", reason)
 			result := llm.ContentBlock{
 				Type:      "tool_result",
@@ -163,7 +164,7 @@ func prepareToolCall(
 	}
 
 	return toolCallPrep{
-		before: captureToolFileSnapshots(toolProvenanceRoot(tools), tc.Name, tc.Input),
+		before: captureToolFileSnapshots(toolProvenanceRoot(tools), tc.Name, json.RawMessage(tc.Input.Bytes())),
 		start:  start,
 	}
 }
@@ -238,7 +239,7 @@ func runToolCore(
 			}
 		}()
 		if tools != nil {
-			toolOutput, toolErr = tools.Execute(ctx, tc.Name, tc.Input)
+			toolOutput, toolErr = tools.Execute(ctx, tc.Name, json.RawMessage(tc.Input.Bytes()))
 		} else {
 			toolErr = fmt.Errorf("no tool executor configured")
 		}
@@ -290,8 +291,8 @@ func finishToolCall(
 	// Attach the call's metadata sideband (nil when nothing was set, keeping
 	// the field absent). Server-attached here — tool output CONTENT can never
 	// forge it, which is what readers like deferred replay rely on.
-	block.Metadata = prep.meta.JSON()
-	fileEffects := buildToolFileEffects(prep.before, captureToolFileSnapshots(toolProvenanceRoot(tools), tc.Name, tc.Input))
+	block.Metadata = llm.FlexibleFromRaw(prep.meta.JSON())
+	fileEffects := buildToolFileEffects(prep.before, captureToolFileSnapshots(toolProvenanceRoot(tools), tc.Name, json.RawMessage(tc.Input.Bytes())))
 
 	// Record result hash for no-progress detection.
 	if loopDetector != nil {
@@ -351,7 +352,7 @@ func segmentToolCalls(cfg AgentConfig, calls []llm.ContentBlock) []toolCallSegme
 	allSequential := cfg.ParallelSafeTool == nil
 	if !allSequential {
 		for _, tc := range calls {
-			if bytes.Contains(tc.Input, []byte(`"$ref"`)) {
+			if bytes.Contains(tc.Input.Bytes(), []byte(`"$ref"`)) {
 				allSequential = true
 				break
 			}

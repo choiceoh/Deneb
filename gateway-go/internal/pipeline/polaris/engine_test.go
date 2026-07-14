@@ -108,7 +108,7 @@ func TestCompactAndPersist_BootstrapNoGapAtFreshTailBoundary(t *testing.T) {
 	seen := make(map[string]int, total)
 	for _, m := range compacted {
 		var text string
-		if json.Unmarshal(m.Content, &text) == nil {
+		if json.Unmarshal(m.Content.Bytes(), &text) == nil {
 			seen[text]++
 		}
 	}
@@ -153,7 +153,7 @@ func TestCompactAndPersist_BootstrapWithSyntheticPrependOrphans(t *testing.T) {
 	seen := make(map[string]bool, total)
 	for _, m := range compacted {
 		var text string
-		if json.Unmarshal(m.Content, &text) == nil {
+		if json.Unmarshal(m.Content.Bytes(), &text) == nil {
 			seen[text] = true
 		}
 	}

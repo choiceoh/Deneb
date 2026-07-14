@@ -400,13 +400,13 @@ func TestDealInfoFromExtractContractAdditional(t *testing.T) {
 func TestCollectStreamTextContractAdditional(t *testing.T) {
 	event := func(kind, text string) llm.StreamEvent {
 		payload, _ := json.Marshal(map[string]any{"delta": map[string]string{"type": kind, "text": text}})
-		return llm.StreamEvent{Type: "content_block_delta", Payload: payload}
+		return llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw(payload)}
 	}
 	ch := make(chan llm.StreamEvent, 8)
-	ch <- llm.StreamEvent{Type: "message_start", Payload: []byte(`{}`)}
+	ch <- llm.StreamEvent{Type: "message_start", Payload: llm.FlexibleFromRaw([]byte(`{}`))}
 	ch <- event("thinking_delta", "secret")
 	ch <- event("text_delta", " hello ")
-	ch <- llm.StreamEvent{Type: "content_block_delta", Payload: []byte(`not-json`)}
+	ch <- llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw([]byte(`not-json`))}
 	ch <- event("text_delta", "world")
 	close(ch)
 	if got, err := collectStreamText(context.Background(), ch); err != nil || got != "hello world" {
@@ -429,7 +429,7 @@ func TestCollectStreamTextErrorPayloads(t *testing.T) {
 		{payload: `not-json`, want: "not-json"},
 	} {
 		ch := make(chan llm.StreamEvent, 1)
-		ch <- llm.StreamEvent{Type: "error", Payload: []byte(tt.payload)}
+		ch <- llm.StreamEvent{Type: "error", Payload: llm.FlexibleFromRaw([]byte(tt.payload))}
 		close(ch)
 		if _, err := collectStreamText(context.Background(), ch); err == nil || !strings.Contains(err.Error(), tt.want) {
 			t.Errorf("payload %q error = %v", tt.payload, err)
@@ -446,7 +446,7 @@ func TestCollectStreamTextCancellationContract(t *testing.T) {
 	}
 	ctx, cancel = context.WithCancel(context.Background())
 	ch := make(chan llm.StreamEvent, 1)
-	ch <- llm.StreamEvent{Type: "content_block_delta", Payload: []byte(`{"delta":{"type":"text_delta","text":"partial"}}`)}
+	ch <- llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw([]byte(`{"delta":{"type":"text_delta","text":"partial"}}`))}
 	go func() {
 		time.Sleep(time.Millisecond)
 		cancel()

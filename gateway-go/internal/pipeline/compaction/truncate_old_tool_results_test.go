@@ -17,7 +17,7 @@ func assistantMsg(t *testing.T, text string) llm.Message {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	return llm.Message{Role: "assistant", Content: raw}
+	return llm.Message{Role: "assistant", Content: llm.FlexibleFromRaw(raw)}
 }
 
 func firstToolResultContent(t *testing.T, raw json.RawMessage) string {
@@ -50,7 +50,7 @@ func TestTruncateOldToolResults_StubsOversizedContent(t *testing.T) {
 	if stubbed != 1 {
 		t.Errorf("stubbed = %d, want 1", stubbed)
 	}
-	if got := firstToolResultContent(t, out[1].Content); got != stubPlaceholder {
+	if got := firstToolResultContent(t, json.RawMessage(out[1].Content.Bytes())); got != stubPlaceholder {
 		t.Errorf("content = %q, want placeholder", got)
 	}
 }
@@ -74,7 +74,7 @@ func TestTruncateOldToolResults_KeepsActivationNotice(t *testing.T) {
 	if stubbed != 1 {
 		t.Fatalf("stubbed = %d, want 1", stubbed)
 	}
-	got := firstToolResultContent(t, out[1].Content)
+	got := firstToolResultContent(t, json.RawMessage(out[1].Content.Bytes()))
 	if !strings.HasPrefix(got, stubPlaceholder) {
 		t.Errorf("stub must lead with the placeholder, got %q", got)
 	}
@@ -100,7 +100,7 @@ func TestTruncateOldToolResults_PreservesShortContent(t *testing.T) {
 	if stubbed != 0 {
 		t.Errorf("stubbed = %d, want 0", stubbed)
 	}
-	if got := firstToolResultContent(t, out[1].Content); got != short {
+	if got := firstToolResultContent(t, json.RawMessage(out[1].Content.Bytes())); got != short {
 		t.Errorf("short content modified: %q", got)
 	}
 }
@@ -119,7 +119,7 @@ func TestTruncateOldToolResults_ProtectsRecentTurns(t *testing.T) {
 	if stubbed != 0 {
 		t.Errorf("stubbed = %d, want 0 (within protected tail)", stubbed)
 	}
-	if got := firstToolResultContent(t, out[3].Content); got != long {
+	if got := firstToolResultContent(t, json.RawMessage(out[3].Content.Bytes())); got != long {
 		t.Errorf("recent content modified")
 	}
 }
@@ -148,7 +148,7 @@ func TestTruncateOldToolResults_HandlesMultipleBlocksInMessage(t *testing.T) {
 	raw, _ := json.Marshal(blocks)
 	messages := []llm.Message{
 		assistantMsg(t, "a1"),
-		{Role: "user", Content: raw},
+		{Role: "user", Content: llm.FlexibleFromRaw(raw)},
 		assistantMsg(t, "a2"),
 		assistantMsg(t, "a3"),
 		assistantMsg(t, "a4"),
@@ -159,7 +159,7 @@ func TestTruncateOldToolResults_HandlesMultipleBlocksInMessage(t *testing.T) {
 		t.Errorf("stubbed = %d, want 2", stubbed)
 	}
 	var got []llm.ContentBlock
-	if err := json.Unmarshal(out[1].Content, &got); err != nil {
+	if err := json.Unmarshal(out[1].Content.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if got[0].Content != stubPlaceholder {
@@ -177,12 +177,12 @@ func TestTruncateOldToolResults_NonToolResultBlocksUntouched(t *testing.T) {
 	long := strings.Repeat("a", 500)
 	blocks := []llm.ContentBlock{
 		{Type: "text", Text: long},
-		{Type: "tool_use", ID: "t1", Name: "exec", Input: json.RawMessage(`{"cmd":"echo"}`)},
+		{Type: "tool_use", ID: "t1", Name: "exec", Input: llm.FlexibleFromRaw([]byte(`{"cmd":"echo"}`))},
 	}
 	raw, _ := json.Marshal(blocks)
 	messages := []llm.Message{
 		assistantMsg(t, "a1"),
-		{Role: "assistant", Content: raw},
+		{Role: "assistant", Content: llm.FlexibleFromRaw(raw)},
 		assistantMsg(t, "a2"),
 		assistantMsg(t, "a3"),
 		assistantMsg(t, "a4"),
@@ -210,7 +210,7 @@ func TestTruncateOldToolResults_CJKRunesNotBytes(t *testing.T) {
 	if stubbed != 0 {
 		t.Errorf("stubbed = %d, want 0 (200 runes < 256)", stubbed)
 	}
-	if got := firstToolResultContent(t, out[1].Content); got != korean200 {
+	if got := firstToolResultContent(t, json.RawMessage(out[1].Content.Bytes())); got != korean200 {
 		t.Errorf("Korean short content modified")
 	}
 
@@ -228,7 +228,7 @@ func TestTruncateOldToolResults_CJKRunesNotBytes(t *testing.T) {
 	if stubbed2 != 1 {
 		t.Errorf("stubbed = %d, want 1 (300 runes > 256)", stubbed2)
 	}
-	if got := firstToolResultContent(t, out2[1].Content); got != stubPlaceholder {
+	if got := firstToolResultContent(t, json.RawMessage(out2[1].Content.Bytes())); got != stubPlaceholder {
 		t.Errorf("Korean long content not stubbed: %q", got)
 	}
 }
@@ -243,9 +243,9 @@ func TestTruncateOldToolResults_DoesNotMutateInput(t *testing.T) {
 		assistantMsg(t, "a4"),
 		assistantMsg(t, "a5"),
 	}
-	originalContent := string(messages[1].Content)
+	originalContent := messages[1].Content.String()
 	_, _ = TruncateOldToolResults(messages, 4, 256)
-	if string(messages[1].Content) != originalContent {
+	if messages[1].Content.String() != originalContent {
 		t.Errorf("input mutated; placeholder leaked into source slice")
 	}
 }
@@ -269,7 +269,7 @@ func TestTruncateOldToolResults_PreservesSpilloverPointer(t *testing.T) {
 	if stubbed != 1 {
 		t.Fatalf("expected 1 stub, got %d", stubbed)
 	}
-	got := firstToolResultContent(t, out[1].Content)
+	got := firstToolResultContent(t, json.RawMessage(out[1].Content.Bytes()))
 	if !strings.Contains(got, `read_spillover("sp_c0953cb7")`) {
 		t.Fatalf("spillover pointer stripped from stub (spill file stranded): %q", got)
 	}
@@ -282,7 +282,7 @@ func TestTruncateOldToolResults_PreservesSpilloverPointer(t *testing.T) {
 		assistantMsg(t, "a2"), assistantMsg(t, "a3"), assistantMsg(t, "a4"), assistantMsg(t, "a5"),
 	}
 	outP, _ := TruncateOldToolResults(plain, 4, 256)
-	if firstToolResultContent(t, outP[1].Content) != stubPlaceholder {
+	if firstToolResultContent(t, json.RawMessage(outP[1].Content.Bytes())) != stubPlaceholder {
 		t.Errorf("non-spilled result should get the bare placeholder")
 	}
 }
@@ -306,7 +306,7 @@ func TestMicroCompact_PreservesSpilledResultUnpruned(t *testing.T) {
 	if pruned != 0 {
 		t.Fatalf("expected the spilled result to be skipped (pruned=0), got %d", pruned)
 	}
-	if !strings.Contains(firstToolResultContent(t, out[1].Content), `read_spillover("sp_deadbeef")`) {
+	if !strings.Contains(firstToolResultContent(t, json.RawMessage(out[1].Content.Bytes())), `read_spillover("sp_deadbeef")`) {
 		t.Fatalf("MicroCompact stripped the spillover pointer via stripCodeFences")
 	}
 }

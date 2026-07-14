@@ -22,10 +22,10 @@ func runawayThinkingTurn(t *testing.T) []llm.StreamEvent {
 	delta, _ := json.Marshal(cbd)
 	stop, _ := json.Marshal(llm.ContentBlockStop{Index: 0})
 	return []llm.StreamEvent{
-		{Type: "content_block_start", Payload: start},
-		{Type: "content_block_delta", Payload: delta},
-		{Type: "content_block_stop", Payload: stop},
-		{Type: "message_delta", Payload: json.RawMessage(`{"delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":32768}}`)},
+		{Type: "content_block_start", Payload: llm.FlexibleFromRaw(start)},
+		{Type: "content_block_delta", Payload: llm.FlexibleFromRaw(delta)},
+		{Type: "content_block_stop", Payload: llm.FlexibleFromRaw(stop)},
+		{Type: "message_delta", Payload: llm.FlexibleFromRaw([]byte(`{"delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":32768}}`))},
 		makeStreamEvent("message_stop"),
 	}
 }
@@ -45,10 +45,10 @@ func textTurn(t *testing.T, text, stopReason string) []llm.StreamEvent {
 		"usage": map[string]any{"output_tokens": 5},
 	})
 	return []llm.StreamEvent{
-		{Type: "content_block_start", Payload: start},
-		{Type: "content_block_delta", Payload: delta},
-		{Type: "content_block_stop", Payload: stop},
-		{Type: "message_delta", Payload: md},
+		{Type: "content_block_start", Payload: llm.FlexibleFromRaw(start)},
+		{Type: "content_block_delta", Payload: llm.FlexibleFromRaw(delta)},
+		{Type: "content_block_stop", Payload: llm.FlexibleFromRaw(stop)},
+		{Type: "message_delta", Payload: llm.FlexibleFromRaw(md)},
 		makeStreamEvent("message_stop"),
 	}
 }

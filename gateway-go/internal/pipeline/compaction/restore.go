@@ -71,7 +71,7 @@ func collectFileReadToolUses(messages []llm.Message) fileReadPaths {
 			continue
 		}
 		var blocks []llm.ContentBlock
-		if json.Unmarshal(msg.Content, &blocks) != nil {
+		if json.Unmarshal(msg.Content.Bytes(), &blocks) != nil {
 			continue
 		}
 		for _, b := range blocks {
@@ -81,7 +81,7 @@ func collectFileReadToolUses(messages []llm.Message) fileReadPaths {
 			if _, ok := fileReadTools[b.Name]; !ok {
 				continue
 			}
-			path := extractPathFromInput(b.Input)
+			path := extractPathFromInput(json.RawMessage(b.Input.Bytes()))
 			if path == "" {
 				continue
 			}
@@ -103,7 +103,7 @@ func collectFileReadRecords(messages []llm.Message, toolUses fileReadPaths) []Fi
 			continue
 		}
 		var blocks []llm.ContentBlock
-		if json.Unmarshal(msg.Content, &blocks) != nil {
+		if json.Unmarshal(msg.Content.Bytes(), &blocks) != nil {
 			continue
 		}
 		for _, b := range blocks {
@@ -212,24 +212,24 @@ func TruncateToolCallArgs(messages []llm.Message, headChars int) []llm.Message {
 	out := make([]llm.Message, len(messages))
 	for i, msg := range messages {
 		var blocks []llm.ContentBlock
-		if json.Unmarshal(msg.Content, &blocks) != nil {
+		if json.Unmarshal(msg.Content.Bytes(), &blocks) != nil {
 			out[i] = msg
 			continue
 		}
 		modified := false
 		for bi, b := range blocks {
-			if b.Type != "tool_use" || len(b.Input) == 0 {
+			if b.Type != "tool_use" || b.Input.IsZero() {
 				continue
 			}
-			shrunk := jsonutil.TruncateStringLeaves(string(b.Input), headChars)
-			if shrunk != string(b.Input) {
-				blocks[bi].Input = json.RawMessage(shrunk)
+			shrunk := jsonutil.TruncateStringLeaves(b.Input.String(), headChars)
+			if shrunk != b.Input.String() {
+				blocks[bi].Input = llm.FlexibleFromRaw([]byte(shrunk))
 				modified = true
 			}
 		}
 		if modified {
 			raw, _ := json.Marshal(blocks)
-			out[i] = llm.Message{Role: msg.Role, Content: raw}
+			out[i] = llm.Message{Role: msg.Role, Content: llm.FlexibleFromRaw(raw)}
 		} else {
 			out[i] = msg
 		}
@@ -244,7 +244,7 @@ func StripImageBlocks(messages []llm.Message) []llm.Message {
 	out := make([]llm.Message, len(messages))
 	for i, msg := range messages {
 		var blocks []llm.ContentBlock
-		if json.Unmarshal(msg.Content, &blocks) != nil {
+		if json.Unmarshal(msg.Content.Bytes(), &blocks) != nil {
 			out[i] = msg
 			continue
 		}
@@ -275,7 +275,7 @@ func StripImageBlocks(messages []llm.Message) []llm.Message {
 
 		if modified {
 			raw, _ := json.Marshal(filtered)
-			out[i] = llm.Message{Role: msg.Role, Content: raw}
+			out[i] = llm.Message{Role: msg.Role, Content: llm.FlexibleFromRaw(raw)}
 		} else {
 			out[i] = msg
 		}
@@ -303,7 +303,7 @@ func StripThinkingBlocks(messages []llm.Message) ([]llm.Message, int) {
 	stripped := 0
 	for i, msg := range messages {
 		var blocks []llm.ContentBlock
-		if json.Unmarshal(msg.Content, &blocks) != nil {
+		if json.Unmarshal(msg.Content.Bytes(), &blocks) != nil {
 			// String content (no blocks) — nothing to strip.
 			out[i] = msg
 			continue
@@ -320,7 +320,7 @@ func StripThinkingBlocks(messages []llm.Message) ([]llm.Message, int) {
 		}
 		if modified {
 			raw, _ := json.Marshal(filtered)
-			out[i] = llm.Message{Role: msg.Role, Content: raw}
+			out[i] = llm.Message{Role: msg.Role, Content: llm.FlexibleFromRaw(raw)}
 		} else {
 			out[i] = msg
 		}
@@ -367,7 +367,7 @@ func TruncateOldToolResults(messages []llm.Message, turnThreshold, minChars int)
 
 	for i := 0; i < cutoff; i++ {
 		var blocks []llm.ContentBlock
-		if err := json.Unmarshal(messages[i].Content, &blocks); err != nil {
+		if err := json.Unmarshal(messages[i].Content.Bytes(), &blocks); err != nil {
 			continue
 		}
 		changed := false
@@ -404,7 +404,7 @@ func TruncateOldToolResults(messages []llm.Message, turnThreshold, minChars int)
 		}
 		if changed {
 			if raw, err := json.Marshal(blocks); err == nil {
-				result[i] = llm.Message{Role: messages[i].Role, Content: raw}
+				result[i] = llm.Message{Role: messages[i].Role, Content: llm.FlexibleFromRaw(raw)}
 			}
 		}
 	}

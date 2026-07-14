@@ -29,8 +29,8 @@ func TestParseSSE_BasicEvent(t *testing.T) {
 	if events[0].Type != "message_start" {
 		t.Errorf("type = %q, want %q", events[0].Type, "message_start")
 	}
-	if string(events[0].Payload) != `{"type":"message_start"}` {
-		t.Errorf("payload = %q", string(events[0].Payload))
+	if events[0].Payload.String() != `{"type":"message_start"}` {
+		t.Errorf("payload = %q", events[0].Payload.String())
 	}
 }
 
@@ -56,8 +56,8 @@ func TestParseSSE_MultiLineData(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("got %d, want 1 event", len(events))
 	}
-	if string(events[0].Payload) != "line1\nline2" {
-		t.Errorf("payload = %q, want %q", string(events[0].Payload), "line1\nline2")
+	if events[0].Payload.String() != "line1\nline2" {
+		t.Errorf("payload = %q, want %q", events[0].Payload.String(), "line1\nline2")
 	}
 }
 
@@ -95,8 +95,8 @@ func TestParseSSE_DataWithColon(t *testing.T) {
 		t.Fatalf("got %d, want 1 event", len(events))
 	}
 	expected := `{"url":"https://example.com"}`
-	if string(events[0].Payload) != expected {
-		t.Errorf("payload = %q, want %q", string(events[0].Payload), expected)
+	if events[0].Payload.String() != expected {
+		t.Errorf("payload = %q, want %q", events[0].Payload.String(), expected)
 	}
 }
 

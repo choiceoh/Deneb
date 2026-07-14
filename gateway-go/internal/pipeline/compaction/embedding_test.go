@@ -49,7 +49,7 @@ func TestEmbeddingCompact_ReturnsSelectedSubset(t *testing.T) {
 	if len(result) >= len(messages) {
 		t.Errorf("expected fewer messages, got %d (original %d)", len(result), len(messages))
 	}
-	first := string(result[0].Content)
+	first := result[0].Content.String()
 	if !strings.Contains(first, "Polaris embedding compaction") {
 		t.Errorf("expected MMR marker message, got: %s", first)
 	}
@@ -113,7 +113,7 @@ func TestMMRSelect_ReturnsOneFromEachCluster(t *testing.T) {
 		llm.NewTextMessage("user", "cluster-C-1 "+pad),
 	}
 
-	singleMsgTokens := EstimateTokens(string(messages[0].Content)) + 4
+	singleMsgTokens := EstimateTokens(messages[0].Content.String()) + 4
 	budget := singleMsgTokens * 3
 
 	selected := mmrSelect(embeddings, query, messages, budget)
@@ -123,7 +123,7 @@ func TestMMRSelect_ReturnsOneFromEachCluster(t *testing.T) {
 
 	hasA, hasB, hasC := false, false, false
 	for _, msg := range selected {
-		content := string(msg.Content)
+		content := msg.Content.String()
 		if strings.Contains(content, "cluster-A") {
 			hasA = true
 		}
@@ -161,7 +161,7 @@ func TestMMRSelect_ReturnsMostRelevantUnderTightBudget(t *testing.T) {
 	if len(selected) != 1 {
 		t.Fatalf("expected 1 selection, got %d", len(selected))
 	}
-	if content := string(selected[0].Content); !strings.Contains(content, "relevant") || strings.Contains(content, "irrelevant") {
+	if content := selected[0].Content.String(); !strings.Contains(content, "relevant") || strings.Contains(content, "irrelevant") {
 		t.Errorf("expected the relevant message, got: %s", content)
 	}
 }
@@ -183,7 +183,7 @@ func TestMMRSelect_EmptySelected_NoPenalty(t *testing.T) {
 	if len(selected) != 1 {
 		t.Fatalf("expected 1 selection, got %d", len(selected))
 	}
-	if content := string(selected[0].Content); !strings.Contains(content, "most-relevant") {
+	if content := selected[0].Content.String(); !strings.Contains(content, "most-relevant") {
 		t.Errorf("expected most-relevant message, got: %s", content)
 	}
 }
@@ -225,7 +225,7 @@ func TestRecencyCompact_SkipsWhenUnderBudget(t *testing.T) {
 func TestMergeConsecutiveSameRole_PreservesToolBlocks(t *testing.T) {
 	withTool := llm.NewBlockMessage("assistant", []llm.ContentBlock{
 		{Type: "text", Text: "checking the calendar"},
-		{Type: "tool_use", ID: "tu_1", Name: "calendar", Input: json.RawMessage(`{"day":"today"}`)},
+		{Type: "tool_use", ID: "tu_1", Name: "calendar", Input: llm.FlexibleFromRaw([]byte(`{"day":"today"}`))},
 	})
 	textOnly := llm.NewTextMessage("assistant", "done — two events today")
 
@@ -234,7 +234,7 @@ func TestMergeConsecutiveSameRole_PreservesToolBlocks(t *testing.T) {
 		t.Fatalf("expected 1 merged message, got %d", len(out))
 	}
 	var blocks []llm.ContentBlock
-	if err := json.Unmarshal(out[0].Content, &blocks); err != nil {
+	if err := json.Unmarshal(out[0].Content.Bytes(), &blocks); err != nil {
 		t.Fatalf("merged content not block-shaped: %v (content=%s)", err, out[0].Content)
 	}
 	var toolUse, texts int
@@ -268,7 +268,7 @@ func TestMergeConsecutiveSameRole_PreservesPlainTextJoinedShape(t *testing.T) {
 		t.Fatalf("expected 1 merged message, got %d", len(out))
 	}
 	var s string
-	if err := json.Unmarshal(out[0].Content, &s); err != nil {
+	if err := json.Unmarshal(out[0].Content.Bytes(), &s); err != nil {
 		t.Fatalf("merged plain-text content should stay a string: %v", err)
 	}
 	if s != "첫 번째\n\n두 번째" {

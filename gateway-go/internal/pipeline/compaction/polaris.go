@@ -248,7 +248,7 @@ func restoreFileReads(
 
 func lastUserMessageIndex(messages []llm.Message) int {
 	for index := len(messages) - 1; index >= 0; index-- {
-		if messages[index].Role == "user" && !isToolResultMessage(messages[index].Content) {
+		if messages[index].Role == "user" && !isToolResultMessage(json.RawMessage(messages[index].Content.Bytes())) {
 			return index
 		}
 	}
@@ -260,7 +260,7 @@ func EstimateMessagesTokens(messages []llm.Message) int {
 	total := 0
 	for _, m := range messages {
 		// role overhead (~4 tokens) + content
-		total += EstimateTokens(string(m.Content)) + 4
+		total += EstimateTokens(m.Content.String()) + 4
 	}
 	return total
 }
@@ -286,10 +286,10 @@ func lastUserInputTokens(messages []llm.Message) int {
 		if messages[i].Role != "user" {
 			continue
 		}
-		if isToolResultMessage(messages[i].Content) {
+		if isToolResultMessage(json.RawMessage(messages[i].Content.Bytes())) {
 			continue
 		}
-		return EstimateTokens(string(messages[i].Content))
+		return EstimateTokens(messages[i].Content.String())
 	}
 	return 0
 }
@@ -330,7 +330,7 @@ func isToolResultMessage(content json.RawMessage) bool {
 // len(messages) when every message from startIdx on is a tool_result — callers
 // guard against an empty window.
 func snapWindowStart(messages []llm.Message, startIdx int) int {
-	for startIdx < len(messages) && isToolResultMessage(messages[startIdx].Content) {
+	for startIdx < len(messages) && isToolResultMessage(json.RawMessage(messages[startIdx].Content.Bytes())) {
 		startIdx++
 	}
 	return startIdx

@@ -341,7 +341,7 @@ func extractSkillLifecycleToolActivities(content json.RawMessage, pending map[st
 			}
 			*activities = append(*activities, generation.ToolActivity{
 				Name:  b.Name,
-				Input: compactJSONForReplay(b.Input),
+				Input: compactJSONForReplay(json.RawMessage(b.Input.Bytes())),
 			})
 			if b.ID != "" && pending != nil {
 				pending[b.ID] = len(*activities) - 1

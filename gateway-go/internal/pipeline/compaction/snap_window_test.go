@@ -1,6 +1,7 @@
 package compaction
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -66,7 +67,7 @@ func TestRecencyCompact_SnapsWindowBoundaryPastOrphanResult(t *testing.T) {
 	if len(out) < 2 {
 		t.Fatalf("unexpected output length %d", len(out))
 	}
-	if isToolResultMessage(out[1].Content) {
+	if isToolResultMessage(json.RawMessage(out[1].Content.Bytes())) {
 		t.Fatal("kept window starts with an orphan tool_result — snap did not apply")
 	}
 }

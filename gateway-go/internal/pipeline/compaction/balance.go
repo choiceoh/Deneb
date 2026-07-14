@@ -29,7 +29,7 @@ func BalanceToolBlocks(messages []llm.Message) []llm.Message {
 	resultIDs := map[string]struct{}{}
 	parsed := make([][]llm.ContentBlock, len(messages))
 	for i := range messages {
-		blocks, ok := decodeBlocks(messages[i].Content)
+		blocks, ok := decodeBlocks(json.RawMessage(messages[i].Content.Bytes()))
 		if !ok {
 			continue
 		}

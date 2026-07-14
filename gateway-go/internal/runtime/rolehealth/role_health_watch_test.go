@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	rtevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
 )
@@ -22,7 +24,7 @@ func newTestRoleHealthWatch(t *testing.T) (*roleHealthWatch, *bytes.Buffer, *[]s
 	w := &roleHealthWatch{
 		logger:    slog.New(slog.NewTextHandler(&logBuf, nil)),
 		statePath: filepath.Join(t.TempDir(), "role_health.json"),
-		broadcast: func(event string, _ any) { events = append(events, event) },
+		broadcast: func(event string, _ rtevents.EventPayload) { events = append(events, event) },
 	}
 	return w, &logBuf, &events
 }

@@ -13,8 +13,8 @@ import (
 
 func TestMergeJSONFieldsPreservesOriginalFields(t *testing.T) {
 	base := []byte(`{"model":"test","stream":true}`)
-	extra := map[string]any{
-		"timeout": 30.0,
+	extra := map[string]FlexibleJSON{
+		"timeout": FlexibleFromValue(30.0),
 	}
 	got := testutil.Must(mergeJSONFields(base, extra))
 	s := string(got)
@@ -124,7 +124,7 @@ func TestConvertMessagesToOpenAI_MixedBlockProjectionContract(t *testing.T) {
 		NewBlockMessage("assistant", []ContentBlock{
 			{Type: "thinking", Thinking: "reasoning"},
 			{Type: "text", Text: "answer"},
-			{Type: "tool_use", ID: "call-1", Name: "read", Input: json.RawMessage(`{"path":"a"}`)},
+			{Type: "tool_use", ID: "call-1", Name: "read", Input: FlexibleFromRaw([]byte(`{"path":"a"}`))},
 			{Type: "image_url", ImageURL: &ImageURL{URL: "https://ignored.example/image.png"}},
 		}),
 		NewBlockMessage("user", []ContentBlock{

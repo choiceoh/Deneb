@@ -27,13 +27,13 @@ func TestMapFinishReasonFailsClosedForUnknownValues(t *testing.T) {
 func TestTranslateOpenAIStreamCapsRawBytesBeforeToolBuffering(t *testing.T) {
 	client := &Client{logger: slog.Default(), maxStreamBytes: 32}
 	raw := make(chan StreamEvent, 1)
-	raw <- StreamEvent{Payload: json.RawMessage(`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"this-is-too-large"}}]}}]}`)}
+	raw <- StreamEvent{Payload: FlexibleFromRaw([]byte(`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"this-is-too-large"}}]}}]}`))}
 	close(raw)
 	out := make(chan StreamEvent, 4)
 	client.translateOpenAIStream(context.Background(), raw, out)
 	close(out)
 	for event := range out {
-		if event.Type == "error" && strings.Contains(string(event.Payload), "stream_limit") {
+		if event.Type == "error" && strings.Contains(event.Payload.String(), "stream_limit") {
 			return
 		}
 	}
@@ -93,13 +93,13 @@ func TestStreamChat_UsageOnFinishChunk(t *testing.T) {
 		switch ev.Type {
 		case "message_start":
 			var ms MessageStart
-			if json.Unmarshal(ev.Payload, &ms) == nil {
+			if json.Unmarshal(ev.Payload.Bytes(), &ms) == nil {
 				// Last message_start wins (same as consumeStream).
 				inputTokens = ms.Message.Usage.InputTokens
 			}
 		case "message_delta":
 			var md MessageDelta
-			if json.Unmarshal(ev.Payload, &md) == nil {
+			if json.Unmarshal(ev.Payload.Bytes(), &md) == nil {
 				outputTokens = md.Usage.OutputTokens
 			}
 		}
@@ -171,12 +171,12 @@ func TestStreamChat_UsageOnSeparateChunk(t *testing.T) {
 		switch ev.Type {
 		case "message_start":
 			var ms MessageStart
-			if json.Unmarshal(ev.Payload, &ms) == nil {
+			if json.Unmarshal(ev.Payload.Bytes(), &ms) == nil {
 				inputTokens = ms.Message.Usage.InputTokens
 			}
 		case "message_delta":
 			var md MessageDelta
-			if json.Unmarshal(ev.Payload, &md) == nil {
+			if json.Unmarshal(ev.Payload.Bytes(), &md) == nil {
 				outputTokens = md.Usage.OutputTokens
 			}
 		}
@@ -292,7 +292,7 @@ func TestStreamChat_MultipleToolCalls(t *testing.T) {
 		switch ev.Type {
 		case "content_block_start":
 			var cbs ContentBlockStart
-			if json.Unmarshal(ev.Payload, &cbs) == nil {
+			if json.Unmarshal(ev.Payload.Bytes(), &cbs) == nil {
 				blocks[cbs.Index] = &blockInfo{
 					startType: cbs.ContentBlock.Type,
 					startName: cbs.ContentBlock.Name,
@@ -300,14 +300,14 @@ func TestStreamChat_MultipleToolCalls(t *testing.T) {
 			}
 		case "content_block_delta":
 			var cbd ContentBlockDelta
-			if json.Unmarshal(ev.Payload, &cbd) == nil {
+			if json.Unmarshal(ev.Payload.Bytes(), &cbd) == nil {
 				if b, ok := blocks[cbd.Index]; ok {
 					b.deltas = append(b.deltas, cbd.Index)
 				}
 			}
 		case "content_block_stop":
 			var cbe ContentBlockStop
-			if json.Unmarshal(ev.Payload, &cbe) == nil {
+			if json.Unmarshal(ev.Payload.Bytes(), &cbe) == nil {
 				stopIndices = append(stopIndices, cbe.Index)
 			}
 		}
@@ -374,7 +374,7 @@ func TestStreamChat_UnparseableContentSkipped(t *testing.T) {
 		Model: "test-model",
 		Messages: []Message{
 			NewTextMessage("user", "hello"),
-			{Role: "assistant", Content: json.RawMessage(`12345`)}, // unparseable
+			{Role: "assistant", Content: FlexibleFromRaw([]byte(`12345`))}, // unparseable
 		},
 		MaxTokens: 100,
 	})

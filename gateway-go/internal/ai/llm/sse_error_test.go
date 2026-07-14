@@ -31,7 +31,7 @@ func TestParseSSE_CleanStreamHasNoError(t *testing.T) {
 	input := "data: {\"a\":1}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
 	for _, ev := range collectEvents(input) {
 		if ev.Type == "error" {
-			t.Fatalf("clean stream produced an unexpected error event: %q", string(ev.Payload))
+			t.Fatalf("clean stream produced an unexpected error event: %q", ev.Payload.String())
 		}
 	}
 }
@@ -53,7 +53,7 @@ func TestParseSSEWithByteLimitRejectsDelimiterFreeMultilineEvent(t *testing.T) {
 	if got[0].Type != "error" {
 		t.Fatalf("event type = %q, want error", got[0].Type)
 	}
-	if !strings.Contains(string(got[0].Payload), "byte limit exceeded") {
+	if !strings.Contains(got[0].Payload.String(), "byte limit exceeded") {
 		t.Fatalf("error payload = %s, want byte-limit message", got[0].Payload)
 	}
 }

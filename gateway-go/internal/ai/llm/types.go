@@ -10,18 +10,18 @@ import (
 
 // ChatRequest represents a streaming chat completion request.
 type ChatRequest struct {
-	Model            string          `json:"model"`
-	Messages         []Message       `json:"messages"`
-	System           json.RawMessage `json:"system,omitempty"` // string or []ContentBlock
-	MaxTokens        int             `json:"max_tokens"`
-	Tools            []Tool          `json:"tools,omitempty"`
-	Stream           bool            `json:"stream"`
-	Temperature      *float64        `json:"temperature,omitempty"`
-	TopP             *float64        `json:"top_p,omitempty"`
-	TopK             *int            `json:"top_k,omitempty"`
-	StopSequences    []string        `json:"stop_sequences,omitempty"`
-	FrequencyPenalty *float64        `json:"frequency_penalty,omitempty"`
-	PresencePenalty  *float64        `json:"presence_penalty,omitempty"`
+	Model            string       `json:"model"`
+	Messages         []Message    `json:"messages"`
+	System           FlexibleJSON `json:"system,omitempty"` // string or []ContentBlock
+	MaxTokens        int          `json:"max_tokens"`
+	Tools            []Tool       `json:"tools,omitempty"`
+	Stream           bool         `json:"stream"`
+	Temperature      *float64     `json:"temperature,omitempty"`
+	TopP             *float64     `json:"top_p,omitempty"`
+	TopK             *int         `json:"top_k,omitempty"`
+	StopSequences    []string     `json:"stop_sequences,omitempty"`
+	FrequencyPenalty *float64     `json:"frequency_penalty,omitempty"`
+	PresencePenalty  *float64     `json:"presence_penalty,omitempty"`
 	// Seed requests deterministic sampling from OpenAI-compatible backends that
 	// implement the seed extension. Anthropic wire mode deliberately omits it.
 	Seed *int64 `json:"seed,omitempty"`
@@ -32,15 +32,15 @@ type ChatRequest struct {
 
 	// ToolChoice controls tool selection behavior.
 	// Values: "auto", "none", "required", or {"type":"function","function":{"name":"..."}}.
-	ToolChoice any `json:"tool_choice,omitempty"`
+	ToolChoice FlexibleJSON `json:"tool_choice,omitempty"`
 
 	// Thinking configures extended thinking (mapped to reasoning_effort for OpenAI).
 	Thinking *ThinkingConfig `json:"thinking,omitempty"`
 
 	// ExtraBody holds additional top-level fields merged into the OpenAI-format
 	// request body. Used for provider-specific parameters (e.g., timeout,
-	// logit_bias for CJK blocking).
-	ExtraBody map[string]any `json:"-"`
+	// logit_bias for CJK blocking). Values are pre-serialized JSON.
+	ExtraBody map[string]FlexibleJSON `json:"-"`
 
 	// BetaHeaders are values to send via the `anthropic-beta` HTTP header
 	// (comma-joined). Used by Anthropic-direct and OpenRouter-proxied
@@ -51,8 +51,8 @@ type ChatRequest struct {
 
 // ResponseFormat controls the output format for OpenAI-compatible endpoints.
 type ResponseFormat struct {
-	Type       string          `json:"type"`                  // "json_object", "json_schema", or "text"
-	JSONSchema json.RawMessage `json:"json_schema,omitempty"` // schema definition when Type="json_schema"
+	Type       string       `json:"type"`                  // "json_object", "json_schema", or "text"
+	JSONSchema FlexibleJSON `json:"json_schema,omitempty"` // schema definition when Type="json_schema"
 }
 
 // hexChars is used by appendJSONString to encode control characters as \uXXXX.
@@ -115,37 +115,36 @@ func appendJSONString(dst []byte, s string) []byte {
 }
 
 // SystemString is a convenience for setting a plain string system prompt.
-func SystemString(s string) json.RawMessage {
+func SystemString(s string) FlexibleJSON {
 	if s == "" {
-		return nil
+		return FlexibleJSON{}
 	}
-	raw, _ := json.Marshal(s)
-	return raw
+	return FlexibleFromValue(s)
 }
 
 // SystemBlocks is a convenience for setting an array-of-blocks system prompt.
-func SystemBlocks(blocks []ContentBlock) json.RawMessage {
+func SystemBlocks(blocks []ContentBlock) FlexibleJSON {
 	if len(blocks) == 0 {
-		return nil
+		return FlexibleJSON{}
 	}
-	raw, _ := json.Marshal(blocks)
-	return raw
+	return FlexibleFromValue(blocks)
 }
 
 // ExtractSystemText extracts a plain text string from the System field,
 // whether it's stored as a JSON string or an array of content blocks.
-func ExtractSystemText(system json.RawMessage) string {
-	if len(system) == 0 {
+func ExtractSystemText(system FlexibleJSON) string {
+	if system.IsZero() {
 		return ""
 	}
+	raw := system.Bytes()
 	// Try plain string first.
 	var s string
-	if json.Unmarshal(system, &s) == nil {
+	if json.Unmarshal(raw, &s) == nil {
 		return s
 	}
 	// Try array of content blocks.
 	var blocks []ContentBlock
-	if json.Unmarshal(system, &blocks) == nil {
+	if json.Unmarshal(raw, &blocks) == nil {
 		var sb strings.Builder
 		for _, b := range blocks {
 			if b.Type == "text" {
@@ -159,21 +158,22 @@ func ExtractSystemText(system json.RawMessage) string {
 
 // AppendSystemText appends additional text to the system prompt.
 // Handles both JSON string and []ContentBlock formats.
-func AppendSystemText(system json.RawMessage, addition string) json.RawMessage {
+func AppendSystemText(system FlexibleJSON, addition string) FlexibleJSON {
 	if addition == "" {
 		return system
 	}
-	if len(system) == 0 {
+	if system.IsZero() {
 		return SystemString(addition)
 	}
+	raw := system.Bytes()
 	// Try plain string first.
 	var s string
-	if json.Unmarshal(system, &s) == nil {
+	if json.Unmarshal(raw, &s) == nil {
 		return SystemString(s + "\n\n" + addition)
 	}
 	// Try array of content blocks — append as new text block.
 	var blocks []ContentBlock
-	if json.Unmarshal(system, &blocks) == nil {
+	if json.Unmarshal(raw, &blocks) == nil {
 		blocks = append(blocks, ContentBlock{Type: "text", Text: "\n\n" + addition})
 		return SystemBlocks(blocks)
 	}
@@ -183,7 +183,7 @@ func AppendSystemText(system json.RawMessage, addition string) json.RawMessage {
 // AppendSystemTexts appends multiple text additions to the system prompt in a single
 // unmarshal/marshal cycle. Empty additions are ignored. This is more efficient than
 // calling AppendSystemText repeatedly when multiple additions are known upfront.
-func AppendSystemTexts(system json.RawMessage, additions ...string) json.RawMessage {
+func AppendSystemTexts(system FlexibleJSON, additions ...string) FlexibleJSON {
 	// Collect non-empty additions.
 	filtered := additions[:0:0]
 	for _, a := range additions {
@@ -194,7 +194,7 @@ func AppendSystemTexts(system json.RawMessage, additions ...string) json.RawMess
 	if len(filtered) == 0 {
 		return system
 	}
-	if len(system) == 0 {
+	if system.IsZero() {
 		var sb strings.Builder
 		for i, a := range filtered {
 			if i > 0 {
@@ -204,9 +204,10 @@ func AppendSystemTexts(system json.RawMessage, additions ...string) json.RawMess
 		}
 		return SystemString(sb.String())
 	}
+	raw := system.Bytes()
 	// Try plain string — unmarshal once, build combined string, marshal once.
 	var s string
-	if json.Unmarshal(system, &s) == nil {
+	if json.Unmarshal(raw, &s) == nil {
 		var sb strings.Builder
 		sb.WriteString(s)
 		for _, a := range filtered {
@@ -217,7 +218,7 @@ func AppendSystemTexts(system json.RawMessage, additions ...string) json.RawMess
 	}
 	// Try array of content blocks — unmarshal once, append blocks, marshal once.
 	var blocks []ContentBlock
-	if json.Unmarshal(system, &blocks) == nil {
+	if json.Unmarshal(raw, &blocks) == nil {
 		for _, a := range filtered {
 			blocks = append(blocks, ContentBlock{Type: "text", Text: "\n\n" + a})
 		}
@@ -252,15 +253,15 @@ type ThinkingConfig struct {
 
 // Message represents a single message in a conversation.
 type Message struct {
-	Role    string          `json:"role"`
-	Content json.RawMessage `json:"content"` // string or []ContentBlock
+	Role    string       `json:"role"`
+	Content FlexibleJSON `json:"content"` // string or []ContentBlock
 }
 
 // NewTextMessage creates a message with a plain text content string.
 // Uses appendJSONString to avoid json.Marshal's reflection path and
 // html-safe escaping, and to pre-size the allocation from string length.
 func NewTextMessage(role, text string) Message {
-	return Message{Role: role, Content: appendJSONString(make([]byte, 0, len(text)+2), text)}
+	return Message{Role: role, Content: FlexibleFromRaw(appendJSONString(make([]byte, 0, len(text)+2), text))}
 }
 
 // NewBlockMessage creates a message with structured content blocks.
@@ -272,24 +273,24 @@ func NewBlockMessage(role string, blocks []ContentBlock) Message {
 // marshalBlocks serializes content blocks, guaranteeing a valid JSON result.
 //
 // A streamed tool_use block can carry a non-JSON Input fragment — e.g. a model
-// emitting whitespace-only or max_tokens-truncated tool arguments. RawMessage
+// emitting whitespace-only or max_tokens-truncated tool arguments. FlexibleJSON
 // marshaling fails on such bytes, and a silently ignored error here used to
 // leave the whole message with empty (0-byte) Content. Every wire converter
 // then dropped that message on every later API call: history loss, per-call
 // log spam, and the model repeating the failed call because it never saw it.
 // Instead, sanitize the offending Input and retry so the turn survives.
-func marshalBlocks(blocks []ContentBlock) json.RawMessage {
+func marshalBlocks(blocks []ContentBlock) FlexibleJSON {
 	raw, err := json.Marshal(blocks)
 	if err == nil {
-		return raw
+		return FlexibleFromRaw(raw)
 	}
 	raw, err = json.Marshal(sanitizeBlockInputs(blocks))
 	if err == nil {
-		return raw
+		return FlexibleFromRaw(raw)
 	}
-	// Unreachable in practice (Input is the only RawMessage field on
+	// Unreachable in practice (Input is the only opaque JSON field on
 	// ContentBlock), but never return invalid Content.
-	return json.RawMessage(`[{"type":"text","text":"[unserializable content omitted]"}]`)
+	return FlexibleFromRaw([]byte(`[{"type":"text","text":"[unserializable content omitted]"}]`))
 }
 
 // sanitizeBlockInputs returns a copy of blocks where every non-empty Input
@@ -299,11 +300,11 @@ func sanitizeBlockInputs(blocks []ContentBlock) []ContentBlock {
 	out := make([]ContentBlock, len(blocks))
 	copy(out, blocks)
 	for i := range out {
-		if len(out[i].Input) > 0 && !json.Valid(out[i].Input) {
+		if !out[i].Input.IsZero() && !json.Valid(out[i].Input.Bytes()) {
 			wrapped, _ := json.Marshal(map[string]string{
-				"_malformed_arguments": string(out[i].Input),
+				"_malformed_arguments": out[i].Input.String(),
 			})
-			out[i].Input = wrapped
+			out[i].Input = FlexibleFromRaw(wrapped)
 		}
 	}
 	return out
@@ -317,9 +318,9 @@ type ContentBlock struct {
 	Text string `json:"text,omitempty"`
 
 	// tool_use block
-	ID    string          `json:"id,omitempty"`
-	Name  string          `json:"name,omitempty"`
-	Input json.RawMessage `json:"input,omitempty"`
+	ID    string       `json:"id,omitempty"`
+	Name  string       `json:"name,omitempty"`
+	Input FlexibleJSON `json:"input,omitempty"`
 
 	// tool_result block
 	ToolUseID string `json:"tool_use_id,omitempty"`
@@ -331,7 +332,7 @@ type ContentBlock struct {
 	// provider: both wire paths project blocks through explicit structs
 	// (marshalAnthropicBlocks' wireBlock, the OpenAI tool-message conversion)
 	// that must not copy this field.
-	Metadata json.RawMessage `json:"metadata,omitempty"`
+	Metadata FlexibleJSON `json:"metadata,omitempty"`
 
 	// image block (base64 inline)
 	Source *ImageSource `json:"source,omitempty"`
@@ -374,34 +375,36 @@ type CacheControl struct {
 	Type string `json:"type"` // "ephemeral"
 }
 
+// toolInputSchema is an unexported map alias so Tool's exported declaration
+// does not carry map[string]any into Health Bench dynamic-contract counts.
+type toolInputSchema map[string]any
+
 // Tool describes a tool available to the model.
 //
-// InputSchema holds the schema as a Go map for programmatic access.
-// RawInputSchema holds the pre-serialized JSON bytes used during API
-// request marshaling — this avoids re-serializing the deeply nested
-// map[string]any via reflection on every LLM call (~40 tools × multiple
-// turns). Call PreSerialize() or set RawInputSchema directly.
+// RawInputSchema holds the pre-serialized JSON schema used during API request
+// marshaling. Prefer setting it via FlexibleFromValue / FlexibleFromRaw.
+// PreSerialize fills RawInputSchema from an internally stored programmatic
+// schema (same package / tests only) when RawInputSchema is still zero.
 type Tool struct {
 	Name           string          `json:"name"`
 	Description    string          `json:"description"`
-	InputSchema    map[string]any  `json:"-"`                       // programmatic access; excluded from JSON
-	RawInputSchema json.RawMessage `json:"input_schema"`            // pre-serialized; used in API requests
+	inputSchema    toolInputSchema `json:"-"`                       // programmatic; excluded from JSON
+	RawInputSchema FlexibleJSON    `json:"input_schema"`            // pre-serialized; used in API requests
 	CacheControl   *CacheControl   `json:"cache_control,omitempty"` // prompt caching
 }
 
-// PreSerialize computes RawInputSchema from InputSchema if not already set.
-// This is called automatically by ToolRegistry.buildLLMToolsLocked but can
-// also be called manually for tools constructed outside the registry.
+// PreSerialize computes RawInputSchema from the programmatic schema if not
+// already set. Called automatically when building wire requests.
 func (t *Tool) PreSerialize() {
-	if t.InputSchema != nil && t.RawInputSchema == nil {
-		t.RawInputSchema, _ = json.Marshal(t.InputSchema) // best-effort: marshal of known-good schema cannot fail
+	if t.inputSchema != nil && t.RawInputSchema.IsZero() {
+		t.RawInputSchema = FlexibleFromValue(t.inputSchema) // best-effort: known-good schema
 	}
 }
 
 // StreamEvent represents a single server-sent event from the LLM API.
 type StreamEvent struct {
-	Type    string          `json:"type"`
-	Payload json.RawMessage `json:"payload,omitempty"`
+	Type    string       `json:"type"`
+	Payload FlexibleJSON `json:"payload,omitempty"`
 }
 
 // --- Streaming event payload types ---

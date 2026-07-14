@@ -210,7 +210,7 @@ func (h *GatewayHub) SetInsights(e *insights.Engine) { h.insights = e }
 
 // Broadcast sends an event to all connected SSE clients.
 // Satisfies BroadcastFunc signature for direct use in handler Deps.
-func (h *GatewayHub) Broadcast(event string, payload any) (int, []error) {
+func (h *GatewayHub) Broadcast(event string, payload events.EventPayload) (int, []error) {
 	if h == nil || h.broadcaster == nil {
 		return 0, []error{fmt.Errorf("gateway broadcaster is not available")}
 	}

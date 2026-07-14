@@ -229,7 +229,7 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 				Sender: sender,
 				Logger: s.logger,
 				Broadcast: func(event string, payload any) {
-					s.broadcaster.Broadcast(event, payload)
+					s.broadcaster.Broadcast(event, eventPayloadFromAny(payload))
 				},
 				ShutdownCtx: s.ShutdownCtx(),
 			})

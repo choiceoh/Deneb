@@ -215,7 +215,7 @@ func apcHashMessages(messages []llm.Message) []uint64 {
 		h := fnv.New64a()
 		_, _ = h.Write([]byte(m.Role))
 		_, _ = h.Write([]byte{0})
-		_, _ = h.Write(m.Content)
+		_, _ = h.Write(m.Content.Bytes())
 		out[i] = h.Sum64()
 	}
 	return out

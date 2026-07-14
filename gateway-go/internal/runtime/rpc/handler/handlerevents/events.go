@@ -144,7 +144,8 @@ func eventsBroadcast(deps EventsDeps) rpcutil.HandlerFunc {
 		if p.Event == "" {
 			return nil, rpcerr.MissingParam("event")
 		}
-		sent, _ := deps.Broadcaster.Broadcast(p.Event, p.Payload)
+		wire, _ := events.PayloadOf(p.Payload)
+		sent, _ := deps.Broadcaster.Broadcast(p.Event, wire)
 		return map[string]int{"sent": sent}, nil
 	})
 }

@@ -55,7 +55,7 @@ func (c *Client) streamChatOpenAI(ctx context.Context, req ChatRequest) (<-chan 
 			Function: openAIFunction{
 				Name:        req.Tools[i].Name,
 				Description: req.Tools[i].Description,
-				Parameters:  req.Tools[i].RawInputSchema,
+				Parameters:  json.RawMessage(req.Tools[i].RawInputSchema.Bytes()),
 			},
 		})
 	}
@@ -138,21 +138,21 @@ func (c *Client) convertMessageToOpenAI(message Message, preserveThinking bool) 
 	// Empty (0-byte) Content has nothing to convert — skip it without the
 	// unparseable-content warning below, which would otherwise repeat on every
 	// API call for the rest of the run.
-	if len(message.Content) == 0 {
+	if message.Content.IsZero() {
 		c.logger.Debug("skipping message with empty content", "role", message.Role)
 		return nil
 	}
 
 	var text string
-	if err := json.Unmarshal(message.Content, &text); err == nil {
+	if err := json.Unmarshal(message.Content.Bytes(), &text); err == nil {
 		return []openAIMessage{{Role: message.Role, Content: text}}
 	}
 
 	var blocks []ContentBlock
-	if err := json.Unmarshal(message.Content, &blocks); err != nil {
+	if err := json.Unmarshal(message.Content.Bytes(), &blocks); err != nil {
 		c.logger.Warn("skipping message with unparseable content",
 			"role", message.Role, "error", err,
-			"content_preview", truncateForLog(string(message.Content), 200))
+			"content_preview", truncateForLog(message.Content.String(), 200))
 		return nil
 	}
 
@@ -197,8 +197,8 @@ func classifyOpenAIMessageBlocks(role string, blocks []ContentBlock, preserveThi
 
 func openAIToolCallFromBlock(block ContentBlock) openAIToolCall {
 	arguments := "{}"
-	if len(block.Input) > 0 {
-		arguments = string(block.Input)
+	if !block.Input.IsZero() {
+		arguments = block.Input.String()
 	}
 	call := openAIToolCall{ID: block.ID, Type: "function"}
 	call.Function.Name = block.Name
@@ -297,7 +297,7 @@ func applySamplingParams(oaiReq *openAIRequest, req *ChatRequest) {
 	if req.ResponseFormat != nil {
 		oaiReq.ResponseFormat = req.ResponseFormat
 	}
-	if req.ToolChoice != nil {
+	if !req.ToolChoice.IsZero() {
 		oaiReq.ToolChoice = req.ToolChoice
 	}
 
@@ -425,17 +425,18 @@ func setBetaHeaders(httpReq *http.Request, req *ChatRequest) {
 }
 
 // mergeJSONFields merges extra key-value pairs into a JSON object.
-func mergeJSONFields(base []byte, extra map[string]any) ([]byte, error) {
+// Extra values are already serialized FlexibleJSON payloads.
+func mergeJSONFields(base []byte, extra map[string]FlexibleJSON) ([]byte, error) {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(base, &obj); err != nil {
 		return nil, err
 	}
 	for k, v := range extra {
-		raw, err := json.Marshal(v)
-		if err != nil {
-			return nil, err
+		if v.IsZero() {
+			obj[k] = json.RawMessage("null")
+			continue
 		}
-		obj[k] = raw
+		obj[k] = json.RawMessage(v.Bytes())
 	}
 	return json.Marshal(obj)
 }

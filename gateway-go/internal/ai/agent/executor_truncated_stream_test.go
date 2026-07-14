@@ -16,7 +16,7 @@ func truncBlockStart(t *testing.T, idx int, block llm.ContentBlock) llm.StreamEv
 	if err != nil {
 		t.Fatalf("marshal start: %v", err)
 	}
-	return llm.StreamEvent{Type: "content_block_start", Payload: p}
+	return llm.StreamEvent{Type: "content_block_start", Payload: llm.FlexibleFromRaw(p)}
 }
 
 func truncDelta(t *testing.T, idx int, deltaType, text, partialJSON string) llm.StreamEvent {
@@ -30,7 +30,7 @@ func truncDelta(t *testing.T, idx int, deltaType, text, partialJSON string) llm.
 	if err != nil {
 		t.Fatalf("marshal delta: %v", err)
 	}
-	return llm.StreamEvent{Type: "content_block_delta", Payload: p}
+	return llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw(p)}
 }
 
 func runTruncated(t *testing.T, events []llm.StreamEvent) *turnResult {
@@ -129,7 +129,7 @@ func TestConsumeStreamInto_TruncatedStream_ToolUseValidityGate(t *testing.T) {
 		if len(result.toolCalls) != 1 {
 			t.Fatalf("got %d tool calls, want 1 (complete-args tool_use should survive)", len(result.toolCalls))
 		}
-		if got := string(result.toolCalls[0].Input); got != `{"path":"f.go"}` {
+		if got := result.toolCalls[0].Input.String(); got != `{"path":"f.go"}` {
 			t.Errorf("tool input = %q, want full args", got)
 		}
 	})
@@ -142,7 +142,7 @@ func TestConsumeStreamInto_ProperlyStoppedBlock_NoDoubleAppend(t *testing.T) {
 	result := runTruncated(t, []llm.StreamEvent{
 		truncBlockStart(t, 0, llm.ContentBlock{Type: "text"}),
 		truncDelta(t, 0, "text_delta", "hello", ""),
-		{Type: "content_block_stop", Payload: stop},
+		{Type: "content_block_stop", Payload: llm.FlexibleFromRaw(stop)},
 		{Type: "message_stop"},
 	})
 	if result.text != "hello" || len(result.contentBlocks) != 1 {

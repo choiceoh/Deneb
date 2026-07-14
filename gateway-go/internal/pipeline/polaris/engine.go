@@ -355,7 +355,7 @@ func safeCoverageCount(raw []llm.Message, covered int) int {
 	if covered > len(raw) {
 		covered = len(raw)
 	}
-	for covered > 0 && covered < len(raw) && compact.IsToolResultMessage(raw[covered].Content) {
+	for covered > 0 && covered < len(raw) && compact.IsToolResultMessage(json.RawMessage(raw[covered].Content.Bytes())) {
 		covered--
 	}
 	return covered
@@ -384,7 +384,7 @@ func isSummaryFenceMessage(m llm.Message) bool {
 		return false
 	}
 	var text string
-	if json.Unmarshal(m.Content, &text) != nil {
+	if json.Unmarshal(m.Content.Bytes(), &text) != nil {
 		return false
 	}
 	return strings.HasPrefix(text, summaryPrefix) || compact.IsContextFenceText(text)

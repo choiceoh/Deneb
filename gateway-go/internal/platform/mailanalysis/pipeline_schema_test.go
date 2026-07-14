@@ -62,7 +62,7 @@ func TestExtractorSchemasValidStrictWrapperFormat(t *testing.T) {
 // ResponseFormat marshals to the {type:json_schema, json_schema:{...}} body the
 // live probe verified against the production qwen vLLM.
 func TestExtractorSchemasEncodeToWireFormat(t *testing.T) {
-	rf := &llm.ResponseFormat{Type: "json_schema", JSONSchema: actionItemsSchema}
+	rf := &llm.ResponseFormat{Type: "json_schema", JSONSchema: llm.FlexibleFromRaw(actionItemsSchema)}
 	raw, err := json.Marshal(rf)
 	if err != nil {
 		t.Fatalf("marshal ResponseFormat: %v", err)

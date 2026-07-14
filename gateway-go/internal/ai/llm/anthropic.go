@@ -72,8 +72,8 @@ func buildAnthropicRequestBody(req ChatRequest) ([]byte, error) {
 	}
 
 	// System prompt: pass through raw (string or []ContentBlock, both valid).
-	if len(req.System) > 0 {
-		areq.System = req.System
+	if !req.System.IsZero() {
+		areq.System = json.RawMessage(req.System.Bytes())
 	}
 
 	// Messages: convert from internal format. Anthropic shares semantics, so
@@ -107,7 +107,7 @@ func buildAnthropicRequestBody(req ChatRequest) ([]byte, error) {
 			areq.Tools = append(areq.Tools, anthropicTool{
 				Name:         req.Tools[i].Name,
 				Description:  req.Tools[i].Description,
-				InputSchema:  req.Tools[i].RawInputSchema,
+				InputSchema:  json.RawMessage(req.Tools[i].RawInputSchema.Bytes()),
 				CacheControl: req.Tools[i].CacheControl,
 			})
 		}
@@ -160,7 +160,28 @@ func buildAnthropicRequestBody(req ChatRequest) ([]byte, error) {
 // every request that sets ToolChoice on an Anthropic-mode client (e.g. a
 // SendSync option riding a fallback to mimo-plan). Values already in the
 // Anthropic shape pass through unchanged; nil stays nil.
-func translateAnthropicToolChoice(v any) any {
+func translateAnthropicToolChoice(v FlexibleJSON) any {
+	if v.IsZero() {
+		return nil
+	}
+	var asString string
+	if json.Unmarshal(v.Bytes(), &asString) == nil {
+		return translateAnthropicToolChoiceValue(asString)
+	}
+	var asMap map[string]any
+	if json.Unmarshal(v.Bytes(), &asMap) == nil {
+		return translateAnthropicToolChoiceValue(asMap)
+	}
+	var decoded any
+	if json.Unmarshal(v.Bytes(), &decoded) == nil {
+		return translateAnthropicToolChoiceValue(decoded)
+	}
+	return nil
+}
+
+// translateAnthropicToolChoiceValue maps decoded OpenAI-vocabulary tool_choice
+// values onto the Anthropic Messages shape.
+func translateAnthropicToolChoiceValue(v any) any {
 	switch tc := v.(type) {
 	case nil:
 		return nil
@@ -195,7 +216,7 @@ func translateAnthropicToolChoice(v any) any {
 // emptyJSONObject is the canonical empty input for tool_use blocks when the
 // model called a tool with no arguments. Anthropic-compat servers reject
 // `null` here ("sequence item 0: expected str instance, NoneType found").
-var emptyJSONObject = json.RawMessage(`{}`)
+var emptyJSONObject = FlexibleFromRaw([]byte("{}"))
 
 // sanitizeAnthropicContent ensures the message content payload is a JSON
 // array of blocks with all required fields populated. Empty/nil content
@@ -203,18 +224,19 @@ var emptyJSONObject = json.RawMessage(`{}`)
 // strings are wrapped in a single text block; block arrays have their
 // required fields backfilled (text="", input={}, content="", thinking="")
 // so omitempty does not strip a field that the upstream validator requires.
-func sanitizeAnthropicContent(raw json.RawMessage) (json.RawMessage, error) {
-	if len(raw) == 0 || string(raw) == "null" {
+func sanitizeAnthropicContent(raw FlexibleJSON) (json.RawMessage, error) {
+	if raw.IsZero() || raw.String() == "null" {
 		return marshalAnthropicBlocks([]ContentBlock{{Type: "text", Text: ""}})
 	}
+	bytes := raw.Bytes()
 	// Plain string content → wrap as a single text block.
 	var s string
-	if json.Unmarshal(raw, &s) == nil {
+	if json.Unmarshal(bytes, &s) == nil {
 		return marshalAnthropicBlocks([]ContentBlock{{Type: "text", Text: s}})
 	}
 	// Array of blocks — backfill required fields.
 	var blocks []ContentBlock
-	if err := json.Unmarshal(raw, &blocks); err != nil {
+	if err := json.Unmarshal(bytes, &blocks); err != nil {
 		return nil, err
 	}
 	for i := range blocks {
@@ -232,7 +254,7 @@ func sanitizeAnthropicContent(raw json.RawMessage) (json.RawMessage, error) {
 func fillRequiredBlockFields(b *ContentBlock) {
 	switch b.Type {
 	case "tool_use":
-		if len(b.Input) == 0 || string(b.Input) == "null" {
+		if b.Input.IsZero() || b.Input.String() == "null" {
 			b.Input = emptyJSONObject
 		}
 	}
@@ -265,7 +287,7 @@ func marshalAnthropicBlocks(blocks []ContentBlock) (json.RawMessage, error) {
 			Type:         b.Type,
 			ID:           b.ID,
 			Name:         b.Name,
-			Input:        b.Input,
+			Input:        json.RawMessage(b.Input.Bytes()),
 			ToolUseID:    b.ToolUseID,
 			IsError:      b.IsError,
 			Source:       b.Source,
@@ -326,7 +348,7 @@ func forwardAnthropicStream(ctx context.Context, rawEvents <-chan StreamEvent, o
 			var probe struct {
 				Type string `json:"type"`
 			}
-			if json.Unmarshal(raw.Payload, &probe) == nil && probe.Type != "" {
+			if json.Unmarshal(raw.Payload.Bytes(), &probe) == nil && probe.Type != "" {
 				raw.Type = probe.Type
 			}
 		}
@@ -349,5 +371,5 @@ func forwardAnthropicStream(ctx context.Context, rawEvents <-chan StreamEvent, o
 		Type:    "premature_end",
 		Message: "provider stream ended without message_stop — connection cut mid-response",
 	})
-	emit(ctx, out, StreamEvent{Type: "error", Payload: payload})
+	emit(ctx, out, StreamEvent{Type: "error", Payload: FlexibleFromRaw(payload)})
 }

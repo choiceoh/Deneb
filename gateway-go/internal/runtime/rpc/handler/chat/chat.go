@@ -12,6 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -182,10 +183,11 @@ func handleSteer(deps Deps) rpcutil.HandlerFunc {
 			return rpcerr.InvalidRequest("steer note is empty").Response(req.ID)
 		}
 		if deps.Broadcaster != nil {
-			_, _ = deps.Broadcaster("chat.steer_received", map[string]any{
+			wire, _ := events.PayloadOf(map[string]any{
 				"sessionKey": p.SessionKey,
 				"note":       p.Note,
 			})
+			_, _ = deps.Broadcaster("chat.steer_received", wire)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":         true,
@@ -232,12 +234,13 @@ func handleChatBtw(deps BtwDeps) rpcutil.HandlerFunc {
 
 		// Broadcast side_result event to connected clients.
 		if deps.Broadcaster != nil {
-			_, _ = deps.Broadcaster("chat.side_result", map[string]any{
+			wire, _ := events.PayloadOf(map[string]any{
 				"kind":       "btw",
 				"sessionKey": p.SessionKey,
 				"question":   p.Question,
 				"text":       text,
 			})
+			_, _ = deps.Broadcaster("chat.side_result", wire)
 		}
 
 		return rpcutil.RespondOK(req.ID, map[string]any{

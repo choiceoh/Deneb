@@ -45,7 +45,7 @@ func toolTurnTestStreamer(specs ...toolUseSpec) *fakeLLMStreamer {
 func decodeToolTurnBlocks(t *testing.T, msg llm.Message) []llm.ContentBlock {
 	t.Helper()
 	var blocks []llm.ContentBlock
-	if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+	if err := json.Unmarshal(msg.Content.Bytes(), &blocks); err != nil {
 		t.Fatalf("decode %s message blocks: %v (content=%s)", msg.Role, err, msg.Content)
 	}
 	return blocks
@@ -55,7 +55,7 @@ func collectToolTurnBlocks(t *testing.T, messages []llm.Message) (uses, results 
 	t.Helper()
 	for i, msg := range messages {
 		var blocks []llm.ContentBlock
-		if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+		if err := json.Unmarshal(msg.Content.Bytes(), &blocks); err != nil {
 			continue // plain text content
 		}
 		for _, block := range blocks {

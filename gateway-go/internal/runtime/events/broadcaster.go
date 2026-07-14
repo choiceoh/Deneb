@@ -64,7 +64,7 @@ const maxBufferedBytes int64 = 50 * 1024 * 1024 // 50 MB
 // is built for them — so they can react to events without authentication or
 // network state. Taps are invoked AFTER WS fan-out, with no locks held, so
 // they may safely call back into the broadcaster.
-type Tap func(event string, payload any)
+type Tap func(event string, payload EventPayload)
 
 // Broadcaster distributes events to subscribed SSE clients.
 //
@@ -184,7 +184,7 @@ func (b *Broadcaster) RegisterTap(t Tap) {
 // dispatchTaps invokes all registered taps with the given event/payload.
 // Snapshots the slice under tapMu, then releases the lock before invoking
 // callbacks so a tap may safely call back into the broadcaster.
-func (b *Broadcaster) dispatchTaps(event string, payload any) {
+func (b *Broadcaster) dispatchTaps(event string, payload EventPayload) {
 	b.tapMu.RLock()
 	if len(b.taps) == 0 {
 		b.tapMu.RUnlock()
@@ -210,12 +210,12 @@ func (b *Broadcaster) dispatchTaps(event string, payload any) {
 
 // Broadcast sends an event to all matching subscribers.
 // Returns the number of subscribers that received the event and any send errors.
-func (b *Broadcaster) Broadcast(event string, payload any) (sent int, errs []error) {
+func (b *Broadcaster) Broadcast(event string, payload EventPayload) (sent int, errs []error) {
 	return b.BroadcastWithOpts(event, payload, BroadcastOpts{})
 }
 
 // BroadcastWithOpts sends an event with advanced options (targeting, slow consumer, state version).
-func (b *Broadcaster) BroadcastWithOpts(event string, payload any, opts BroadcastOpts) (sent int, errs []error) {
+func (b *Broadcaster) BroadcastWithOpts(event string, payload EventPayload, opts BroadcastOpts) (sent int, errs []error) {
 	// Taps observe every attempted broadcast, including a payload that cannot be
 	// serialized. Defer keeps the callback after network fan-out on success.
 	defer b.dispatchTaps(event, payload)
@@ -224,9 +224,12 @@ func (b *Broadcaster) BroadcastWithOpts(event string, payload any, opts Broadcas
 	seq := b.seq
 	b.mu.Unlock()
 
-	frame, err := protocol.NewEventFrame(event, payload)
-	if err != nil {
-		return 0, []error{err}
+	frame := &protocol.EventFrame{
+		Type:  protocol.FrameTypeEvent,
+		Event: event,
+	}
+	if raw := payload.Bytes(); len(raw) > 0 {
+		frame.Payload = raw
 	}
 	// Only include seq for broadcast (non-targeted) events.
 	if opts.TargetConnIDs == nil {
@@ -278,7 +281,7 @@ func (b *Broadcaster) BroadcastWithOpts(event string, payload any, opts Broadcas
 }
 
 // BroadcastToConnIDs sends an event to specific connection IDs.
-func (b *Broadcaster) BroadcastToConnIDs(event string, payload any, connIDs map[string]struct{}) (int, []error) {
+func (b *Broadcaster) BroadcastToConnIDs(event string, payload EventPayload, connIDs map[string]struct{}) (int, []error) {
 	return b.BroadcastWithOpts(event, payload, BroadcastOpts{TargetConnIDs: connIDs})
 }
 

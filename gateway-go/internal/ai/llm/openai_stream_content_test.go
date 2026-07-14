@@ -27,7 +27,7 @@ func describeContentEvents(t *testing.T, events []StreamEvent) []contentEventDes
 		switch event.Type {
 		case "content_block_start":
 			var start ContentBlockStart
-			if err := json.Unmarshal(event.Payload, &start); err != nil {
+			if err := json.Unmarshal(event.Payload.Bytes(), &start); err != nil {
 				t.Fatalf("decode content_block_start: %v", err)
 			}
 			descriptor.index = start.Index
@@ -36,7 +36,7 @@ func describeContentEvents(t *testing.T, events []StreamEvent) []contentEventDes
 			descriptor.name = start.ContentBlock.Name
 		case "content_block_delta":
 			var delta ContentBlockDelta
-			if err := json.Unmarshal(event.Payload, &delta); err != nil {
+			if err := json.Unmarshal(event.Payload.Bytes(), &delta); err != nil {
 				t.Fatalf("decode content_block_delta: %v", err)
 			}
 			descriptor.index = delta.Index
@@ -45,7 +45,7 @@ func describeContentEvents(t *testing.T, events []StreamEvent) []contentEventDes
 			descriptor.partialJSON = delta.Delta.PartialJSON
 		case "content_block_stop":
 			var stop ContentBlockStop
-			if err := json.Unmarshal(event.Payload, &stop); err != nil {
+			if err := json.Unmarshal(event.Payload.Bytes(), &stop); err != nil {
 				t.Fatalf("decode content_block_stop: %v", err)
 			}
 			descriptor.index = stop.Index
@@ -154,7 +154,7 @@ func translateOpenAITestEvents(t *testing.T, rawEvents ...StreamEvent) []StreamE
 
 func openAIData(v any) StreamEvent {
 	payload, _ := json.Marshal(v)
-	return StreamEvent{Payload: payload}
+	return StreamEvent{Payload: FlexibleFromRaw(payload)}
 }
 
 func TestTranslateOpenAIStreamLengthDiscardsBufferedTools(t *testing.T) {
@@ -176,7 +176,7 @@ func TestTranslateOpenAIStreamLengthDiscardsBufferedTools(t *testing.T) {
 				"index": 0, "delta": map[string]any{}, "finish_reason": "length",
 			}},
 		}),
-		StreamEvent{Payload: json.RawMessage(`[DONE]`)},
+		StreamEvent{Payload: FlexibleFromRaw([]byte(`[DONE]`))},
 	)
 
 	var stopReason string
@@ -185,7 +185,7 @@ func TestTranslateOpenAIStreamLengthDiscardsBufferedTools(t *testing.T) {
 		switch event.Type {
 		case "content_block_start":
 			var start ContentBlockStart
-			if err := json.Unmarshal(event.Payload, &start); err != nil {
+			if err := json.Unmarshal(event.Payload.Bytes(), &start); err != nil {
 				t.Fatal(err)
 			}
 			if start.ContentBlock.Type == "tool_use" {
@@ -193,7 +193,7 @@ func TestTranslateOpenAIStreamLengthDiscardsBufferedTools(t *testing.T) {
 			}
 		case "message_delta":
 			var delta MessageDelta
-			if err := json.Unmarshal(event.Payload, &delta); err != nil {
+			if err := json.Unmarshal(event.Payload.Bytes(), &delta); err != nil {
 				t.Fatal(err)
 			}
 			if delta.Delta.StopReason != "" {
@@ -282,7 +282,7 @@ func TestTranslateOpenAIStreamDoneClosesVisibleBlockWithoutFinishReason(t *testi
 					"id": "done", "model": "test-model",
 					"choices": []map[string]any{{"index": 0, "delta": test.delta}},
 				}),
-				StreamEvent{Payload: json.RawMessage(`[DONE]`)},
+				StreamEvent{Payload: FlexibleFromRaw([]byte(`[DONE]`))},
 			)
 
 			var types []string
@@ -354,7 +354,7 @@ func TestTranslateOpenAIStreamIgnoresChoiceEventsAfterFinish(t *testing.T) {
 			"id": "finish", "model": "test-model", "choices": []any{},
 			"usage": map[string]int{"prompt_tokens": 21, "completion_tokens": 17},
 		}),
-		StreamEvent{Payload: json.RawMessage(`[DONE]`)},
+		StreamEvent{Payload: FlexibleFromRaw([]byte(`[DONE]`))},
 	)
 
 	var toolNames []string
@@ -364,7 +364,7 @@ func TestTranslateOpenAIStreamIgnoresChoiceEventsAfterFinish(t *testing.T) {
 		switch event.Type {
 		case "content_block_start":
 			var start ContentBlockStart
-			if err := json.Unmarshal(event.Payload, &start); err != nil {
+			if err := json.Unmarshal(event.Payload.Bytes(), &start); err != nil {
 				t.Fatal(err)
 			}
 			if start.ContentBlock.Type == "text" {
@@ -375,7 +375,7 @@ func TestTranslateOpenAIStreamIgnoresChoiceEventsAfterFinish(t *testing.T) {
 			}
 		case "message_delta":
 			var delta MessageDelta
-			if err := json.Unmarshal(event.Payload, &delta); err != nil {
+			if err := json.Unmarshal(event.Payload.Bytes(), &delta); err != nil {
 				t.Fatal(err)
 			}
 			if delta.Delta.StopReason != "" {

@@ -2,7 +2,6 @@ package llm
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -163,7 +162,7 @@ func TestConvertMessages_PreservesThinkingWhenInterleaved(t *testing.T) {
 		NewBlockMessage("assistant", []ContentBlock{
 			{Type: "thinking", Thinking: "I should call the search tool first."},
 			{Type: "text", Text: "Calling search."},
-			{Type: "tool_use", ID: "t1", Name: "search", Input: json.RawMessage(`{"q":"x"}`)},
+			{Type: "tool_use", ID: "t1", Name: "search", Input: FlexibleFromRaw([]byte(`{"q":"x"}`))},
 		}),
 	}
 

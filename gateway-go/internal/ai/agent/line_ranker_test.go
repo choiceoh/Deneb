@@ -262,8 +262,8 @@ func TestCompactPriorToolResults_PreservesErrorViaRankLines(t *testing.T) {
 	raw, _ := json.Marshal(blocks)
 
 	messages := []llm.Message{
-		{Role: "user", Content: raw},
-		{Role: "assistant", Content: json.RawMessage(`"thinking..."`)},
+		{Role: "user", Content: llm.FlexibleFromRaw(raw)},
+		{Role: "assistant", Content: llm.FlexibleFromRaw([]byte(`"thinking..."`))},
 	}
 
 	n := CompactPriorToolResults(messages, 1) // compact messages before index 1
@@ -273,7 +273,7 @@ func TestCompactPriorToolResults_PreservesErrorViaRankLines(t *testing.T) {
 
 	// Unmarshal the compacted content and verify the error survived.
 	var result []llm.ContentBlock
-	if err := json.Unmarshal(messages[0].Content, &result); err != nil {
+	if err := json.Unmarshal(messages[0].Content.Bytes(), &result); err != nil {
 		t.Fatalf("unmarshal compacted: %v", err)
 	}
 	if !strings.Contains(result[0].Content, "compilation failed") {

@@ -171,7 +171,7 @@ func messageStartEvent(inputTokens int) llm.StreamEvent {
 			}{InputTokens: inputTokens},
 		},
 	})
-	return llm.StreamEvent{Type: "message_start", Payload: payload}
+	return llm.StreamEvent{Type: "message_start", Payload: llm.FlexibleFromRaw(payload)}
 }
 
 func contentBlockStartEvent(index int, blockType, id string) llm.StreamEvent {
@@ -183,7 +183,7 @@ func contentBlockStartEvent(index int, blockType, id string) llm.StreamEvent {
 		Index:        index,
 		ContentBlock: block,
 	})
-	return llm.StreamEvent{Type: "content_block_start", Payload: payload}
+	return llm.StreamEvent{Type: "content_block_start", Payload: llm.FlexibleFromRaw(payload)}
 }
 
 func textDeltaEvent(index int, text string) llm.StreamEvent {
@@ -192,7 +192,7 @@ func textDeltaEvent(index int, text string) llm.StreamEvent {
 	cbd.Delta.Type = "text_delta"
 	cbd.Delta.Text = text
 	payload, _ := json.Marshal(cbd)
-	return llm.StreamEvent{Type: "content_block_delta", Payload: payload}
+	return llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw(payload)}
 }
 
 func toolInputDeltaEvent(index int, name, inputJSON string) llm.StreamEvent {
@@ -202,14 +202,14 @@ func toolInputDeltaEvent(index int, name, inputJSON string) llm.StreamEvent {
 	cbd.Delta.Type = "input_json_delta"
 	cbd.Delta.PartialJSON = inputJSON
 	payload, _ := json.Marshal(cbd)
-	return llm.StreamEvent{Type: "content_block_delta", Payload: payload}
+	return llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw(payload)}
 }
 
 func contentBlockStopEvent(index int) llm.StreamEvent {
 	payload, _ := json.Marshal(struct {
 		Index int `json:"index"`
 	}{Index: index})
-	return llm.StreamEvent{Type: "content_block_stop", Payload: payload}
+	return llm.StreamEvent{Type: "content_block_stop", Payload: llm.FlexibleFromRaw(payload)}
 }
 
 func messageDeltaEvent(stopReason string, outputTokens int) llm.StreamEvent {
@@ -223,7 +223,7 @@ func messageDeltaEvent(stopReason string, outputTokens int) llm.StreamEvent {
 			CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 		}{OutputTokens: outputTokens},
 	})
-	return llm.StreamEvent{Type: "message_delta", Payload: payload}
+	return llm.StreamEvent{Type: "message_delta", Payload: llm.FlexibleFromRaw(payload)}
 }
 
 // contentBlockStartToolUseEvent creates a content_block_start for a tool_use block
@@ -234,7 +234,7 @@ func contentBlockStartToolUseEvent(index int, id, name string) llm.StreamEvent {
 		Index:        index,
 		ContentBlock: block,
 	})
-	return llm.StreamEvent{Type: "content_block_start", Payload: payload}
+	return llm.StreamEvent{Type: "content_block_start", Payload: llm.FlexibleFromRaw(payload)}
 }
 
 // buildToolUseTurnEventsWithNames creates SSE events with proper tool names in content_block_start.
@@ -269,7 +269,7 @@ func TestRunAgent_TextOnlyTurnReturnsFinalText(t *testing.T) {
 		MaxTurns:  5,
 		Timeout:   10 * time.Second,
 		MaxTokens: 4096,
-		System:    llm.SystemString("You are a test assistant."),
+		System:    json.RawMessage(llm.SystemString("You are a test assistant.").Bytes()),
 	}
 
 	messages := []llm.Message{llm.NewTextMessage("user", "Hi")}

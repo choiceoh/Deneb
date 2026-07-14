@@ -224,7 +224,7 @@ func TestCollectStream_DropsThinkingDeltas(t *testing.T) {
 		cbd.Delta.Type = typ
 		cbd.Delta.Text = text
 		p, _ := json.Marshal(cbd)
-		return llm.StreamEvent{Type: "content_block_delta", Payload: p}
+		return llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw(p)}
 	}
 
 	events := make(chan llm.StreamEvent, 8)

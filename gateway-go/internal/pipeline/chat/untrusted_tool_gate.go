@@ -91,7 +91,7 @@ func (g *untrustedToolGate) beforeToolCall(name, _ /*toolCallID*/ string, input 
 			"tool", name, "session", g.sessionKey, "runId", g.runID)
 	}
 	if g.broadcast != nil {
-		g.broadcast("chat.tool_blocked", ChatToolBlockedEvent{
+		broadcastPayload(g.broadcast, "chat.tool_blocked", ChatToolBlockedEvent{
 			Session:    g.sessionKey,
 			SessionKey: g.sessionKey,
 			RunID:      g.runID,

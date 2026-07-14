@@ -25,18 +25,18 @@ func TestNewBlockMessage_MalformedToolInput(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			msg := NewBlockMessage("assistant", []ContentBlock{
 				{Type: "text", Text: "calling read"},
-				{Type: "tool_use", ID: "toolu_1", Name: "read", Input: json.RawMessage(tc.input)},
+				{Type: "tool_use", ID: "toolu_1", Name: "read", Input: FlexibleFromRaw([]byte(tc.input))},
 			})
 
-			if len(msg.Content) == 0 {
+			if msg.Content.Len() == 0 {
 				t.Fatal("Content is empty — malformed Input nuked the whole message")
 			}
-			if !json.Valid(msg.Content) {
+			if !json.Valid(msg.Content.Bytes()) {
 				t.Fatalf("Content is not valid JSON: %q", msg.Content)
 			}
 
 			var blocks []ContentBlock
-			if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+			if err := json.Unmarshal(msg.Content.Bytes(), &blocks); err != nil {
 				t.Fatalf("Content does not round-trip to blocks: %v", err)
 			}
 			if len(blocks) != 2 {
@@ -46,13 +46,13 @@ func TestNewBlockMessage_MalformedToolInput(t *testing.T) {
 			if tu.Type != "tool_use" || tu.ID != "toolu_1" || tu.Name != "read" {
 				t.Fatalf("tool_use block mangled: %+v", tu)
 			}
-			if len(tu.Input) == 0 || !json.Valid(tu.Input) {
+			if tu.Input.Len() == 0 || !json.Valid(tu.Input.Bytes()) {
 				t.Fatalf("sanitized Input is not valid JSON: %q", tu.Input)
 			}
 			// The raw fragment must be preserved so the model can see what it
 			// actually emitted.
 			var wrapped map[string]string
-			if err := json.Unmarshal(tu.Input, &wrapped); err != nil {
+			if err := json.Unmarshal(tu.Input.Bytes(), &wrapped); err != nil {
 				t.Fatalf("sanitized Input is not an object: %v", err)
 			}
 			if wrapped["_malformed_arguments"] != tc.input {
@@ -68,14 +68,14 @@ func TestNewBlockMessage_EmptyToolInputUnchanged(t *testing.T) {
 	msg := NewBlockMessage("assistant", []ContentBlock{
 		{Type: "tool_use", ID: "toolu_1", Name: "read"},
 	})
-	if !json.Valid(msg.Content) {
+	if !json.Valid(msg.Content.Bytes()) {
 		t.Fatalf("Content is not valid JSON: %q", msg.Content)
 	}
 	var blocks []ContentBlock
-	if err := json.Unmarshal(msg.Content, &blocks); err != nil || len(blocks) != 1 {
+	if err := json.Unmarshal(msg.Content.Bytes(), &blocks); err != nil || len(blocks) != 1 {
 		t.Fatalf("round-trip failed: err=%v blocks=%d", err, len(blocks))
 	}
-	if len(blocks[0].Input) != 0 {
+	if blocks[0].Input.Len() != 0 {
 		t.Errorf("empty Input was rewritten: %q", blocks[0].Input)
 	}
 }
@@ -83,13 +83,13 @@ func TestNewBlockMessage_EmptyToolInputUnchanged(t *testing.T) {
 func TestNewBlockMessagePreservesValidToolInput(t *testing.T) {
 	in := json.RawMessage(`{"path":"a.go"}`)
 	msg := NewBlockMessage("assistant", []ContentBlock{
-		{Type: "tool_use", ID: "toolu_1", Name: "read", Input: in},
+		{Type: "tool_use", ID: "toolu_1", Name: "read", Input: FlexibleFromRaw(in)},
 	})
 	var blocks []ContentBlock
-	if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+	if err := json.Unmarshal(msg.Content.Bytes(), &blocks); err != nil {
 		t.Fatalf("round-trip failed: %v", err)
 	}
-	if string(blocks[0].Input) != string(in) {
+	if blocks[0].Input.String() != string(in) {
 		t.Errorf("valid Input rewritten: got %q, want %q", blocks[0].Input, in)
 	}
 }
@@ -100,18 +100,18 @@ func TestNormalizeMessages_MalformedInputMergeSurvives(t *testing.T) {
 	// already sanitized). mergeContent must not collapse them into a message
 	// with empty Content.
 	bad := Message{Role: "assistant", Content: marshalBlocks([]ContentBlock{
-		{Type: "tool_use", ID: "toolu_1", Name: "read", Input: json.RawMessage(" ")},
+		{Type: "tool_use", ID: "toolu_1", Name: "read", Input: FlexibleFromRaw([]byte(" "))},
 	})}
 	good := NewTextMessage("assistant", "and some text")
 	merged := NormalizeMessages([]Message{bad, good})
 	if len(merged) != 1 {
 		t.Fatalf("merged = %d messages, want 1", len(merged))
 	}
-	if len(merged[0].Content) == 0 || !json.Valid(merged[0].Content) {
+	if merged[0].Content.Len() == 0 || !json.Valid(merged[0].Content.Bytes()) {
 		t.Fatalf("merged Content invalid: %q", merged[0].Content)
 	}
 	var blocks []ContentBlock
-	if err := json.Unmarshal(merged[0].Content, &blocks); err != nil || len(blocks) != 2 {
+	if err := json.Unmarshal(merged[0].Content.Bytes(), &blocks); err != nil || len(blocks) != 2 {
 		t.Fatalf("merged round-trip failed: err=%v blocks=%d", err, len(blocks))
 	}
 }
@@ -137,7 +137,7 @@ func TestConvertMessagesToOpenAI_SanitizedToolUseRoundTrips(t *testing.T) {
 	// OpenAI wire as a tool call (not be dropped), with valid JSON arguments.
 	c := NewClient("http://127.0.0.1:0", "")
 	assistant := NewBlockMessage("assistant", []ContentBlock{
-		{Type: "tool_use", ID: "toolu_1", Name: "read", Input: json.RawMessage(" ")},
+		{Type: "tool_use", ID: "toolu_1", Name: "read", Input: FlexibleFromRaw([]byte(" "))},
 	})
 	out := c.convertMessagesToOpenAI([]Message{assistant}, false)
 	if len(out) != 1 {

@@ -19,23 +19,23 @@ func metadataResultMessage(t *testing.T) Message {
 			Type:      "tool_result",
 			ToolUseID: "toolu_1",
 			Content:   "Activated 1 tool(s): graphify. You can now call them directly.",
-			Metadata:  json.RawMessage(`{"activatedTools":["graphify"],"secret":"code-only"}`),
+			Metadata:  FlexibleFromRaw([]byte(`{"activatedTools":["graphify"],"secret":"code-only"}`)),
 		},
 	}
 	raw, err := json.Marshal(blocks)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Message{Role: "user", Content: raw}
+	return Message{Role: "user", Content: FlexibleFromRaw(raw)}
 }
 
 func TestMetadata_TranscriptRoundTrip(t *testing.T) {
 	msg := metadataResultMessage(t)
 	var blocks []ContentBlock
-	if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+	if err := json.Unmarshal(msg.Content.Bytes(), &blocks); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(blocks[0].Metadata), "activatedTools") {
+	if !strings.Contains(blocks[0].Metadata.String(), "activatedTools") {
 		t.Fatalf("metadata must survive the transcript round-trip, got %s", blocks[0].Metadata)
 	}
 }
@@ -43,7 +43,7 @@ func TestMetadata_TranscriptRoundTrip(t *testing.T) {
 func TestMetadataOmittedFromAnthropicWireContract(t *testing.T) {
 	msg := metadataResultMessage(t)
 	var blocks []ContentBlock
-	if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+	if err := json.Unmarshal(msg.Content.Bytes(), &blocks); err != nil {
 		t.Fatal(err)
 	}
 	wire, err := marshalAnthropicBlocks(blocks)

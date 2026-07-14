@@ -31,7 +31,7 @@ func RecencyCompact(
 	kept := 0
 	startIdx := len(messages)
 	for i := len(messages) - 1; i >= 0; i-- {
-		msgTokens := EstimateTokens(string(messages[i].Content)) + 4
+		msgTokens := EstimateTokens(messages[i].Content.String()) + 4
 		if kept+msgTokens > target {
 			break
 		}

@@ -272,7 +272,7 @@ func TestCollectStreamNilClosedUnknownAndCancellation(t *testing.T) {
 		t.Fatalf("closed stream = %q/%v", got, err)
 	}
 	unknown := make(chan llm.StreamEvent, 2)
-	unknown <- llm.StreamEvent{Type: "ping", Payload: json.RawMessage(`{"ignored":true}`)}
+	unknown <- llm.StreamEvent{Type: "ping", Payload: llm.FlexibleFromRaw([]byte(`{"ignored":true}`))}
 	close(unknown)
 	if got, err := CollectStream(context.Background(), unknown); err != nil || got != "" {
 		t.Fatalf("unknown event = %q/%v", got, err)
@@ -331,8 +331,8 @@ func TestCollectStreamDeltaAndErrorShapeMatrix(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			ch := make(chan llm.StreamEvent, 2)
-			ch <- llm.StreamEvent{Type: "content_block_delta", Payload: json.RawMessage(`{"delta":{"text":"partial"}}`)}
-			ch <- llm.StreamEvent{Type: "error", Payload: json.RawMessage(tt.payload)}
+			ch <- llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw([]byte(`{"delta":{"text":"partial"}}`))}
+			ch <- llm.StreamEvent{Type: "error", Payload: llm.FlexibleFromRaw([]byte(tt.payload))}
 			close(ch)
 			got, err := CollectStream(context.Background(), ch)
 			if err == nil || got != "partial" || !strings.Contains(err.Error(), tt.want) {

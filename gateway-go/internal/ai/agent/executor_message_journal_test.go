@@ -62,13 +62,13 @@ func TestRunAgentMessageJournal_MaxTokensRecoveryPersistsExchange(t *testing.T) 
 	if result.TurnsPersisted != 3 {
 		t.Fatalf("TurnsPersisted = %d, want 3 messages", result.TurnsPersisted)
 	}
-	if !strings.Contains(string(persisted[0].Content), "partial answer") {
+	if !strings.Contains(persisted[0].Content.String(), "partial answer") {
 		t.Errorf("first persisted assistant = %s, want truncated answer", persisted[0].Content)
 	}
-	if !strings.Contains(string(persisted[1].Content), "Output was truncated") {
+	if !strings.Contains(persisted[1].Content.String(), "Output was truncated") {
 		t.Errorf("persisted recovery prompt = %s, want resume instruction", persisted[1].Content)
 	}
-	if !strings.Contains(string(persisted[2].Content), "final answer") {
+	if !strings.Contains(persisted[2].Content.String(), "final answer") {
 		t.Errorf("terminal persisted assistant = %s, want final answer", persisted[2].Content)
 	}
 }
@@ -106,16 +106,16 @@ func TestRunAgentMessageJournal_ThinkingRunawayRecoverySavesExchange(t *testing.
 		t.Fatalf("TurnsPersisted = %d, want 3 messages", result.TurnsPersisted)
 	}
 	var blocks []llm.ContentBlock
-	if err := json.Unmarshal(persisted[0].Content, &blocks); err != nil {
+	if err := json.Unmarshal(persisted[0].Content.Bytes(), &blocks); err != nil {
 		t.Fatalf("decode persisted thinking assistant: %v", err)
 	}
 	if len(blocks) != 1 || blocks[0].Type != "thinking" || blocks[0].Thinking == "" {
 		t.Fatalf("persisted thinking assistant blocks = %+v, want non-empty thinking block", blocks)
 	}
-	if !strings.Contains(string(persisted[1].Content), "직전 응답이 분석") {
+	if !strings.Contains(persisted[1].Content.String(), "직전 응답이 분석") {
 		t.Errorf("persisted thinking-off prompt = %s, want injected retry instruction", persisted[1].Content)
 	}
-	if !strings.Contains(string(persisted[2].Content), "direct final answer") {
+	if !strings.Contains(persisted[2].Content.String(), "direct final answer") {
 		t.Errorf("terminal persisted assistant = %s, want direct final answer", persisted[2].Content)
 	}
 }
@@ -135,7 +135,7 @@ func TestRunAgentMessageJournal_FinalizeGateSavesFirstFinishOnce(t *testing.T) {
 		FinalizeGate: func(_ int) string {
 			gateCalls++
 			if gateCalls == 1 {
-				if len(persisted) != 1 || !strings.Contains(string(persisted[0].Content), "first finish") {
+				if len(persisted) != 1 || !strings.Contains(persisted[0].Content.String(), "first finish") {
 					t.Errorf("gate observed persisted messages = %+v, want first finish before decision", persisted)
 				}
 				return "[verification gate] run tests"
@@ -161,17 +161,17 @@ func TestRunAgentMessageJournal_FinalizeGateSavesFirstFinishOnce(t *testing.T) {
 	}
 	firstCount := 0
 	for _, message := range persisted {
-		if strings.Contains(string(message.Content), "first finish") {
+		if strings.Contains(message.Content.String(), "first finish") {
 			firstCount++
 		}
 	}
 	if firstCount != 1 {
 		t.Fatalf("first finishing assistant persisted %d times, want exactly once", firstCount)
 	}
-	if !strings.Contains(string(persisted[1].Content), "verification gate") {
+	if !strings.Contains(persisted[1].Content.String(), "verification gate") {
 		t.Errorf("persisted gate prompt = %s, want injected verification instruction", persisted[1].Content)
 	}
-	if !strings.Contains(string(persisted[2].Content), "verified finish") {
+	if !strings.Contains(persisted[2].Content.String(), "verified finish") {
 		t.Errorf("terminal persisted assistant = %s, want verified finish", persisted[2].Content)
 	}
 }
@@ -203,11 +203,11 @@ func TestRunAgentMessageJournal_TerminalAssistantSavesOnce(t *testing.T) {
 	if result.TurnsPersisted != 1 {
 		t.Fatalf("TurnsPersisted = %d, want 1 message", result.TurnsPersisted)
 	}
-	if !strings.Contains(string(persisted[0].Content), "done once") {
+	if !strings.Contains(persisted[0].Content.String(), "done once") {
 		t.Errorf("persisted assistant = %s, want terminal answer", persisted[0].Content)
 	}
 	if len(result.FinalMessages) != 1 || result.FinalMessages[0].Role != "user" ||
-		strings.Contains(string(result.FinalMessages[0].Content), "done once") {
+		strings.Contains(result.FinalMessages[0].Content.String(), "done once") {
 		t.Errorf("FinalMessages = %+v, terminal assistant must remain persist-only", result.FinalMessages)
 	}
 }

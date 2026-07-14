@@ -44,7 +44,7 @@ func (s *seqSummarizer) callCount() int {
 func msgText(t *testing.T, m llm.Message) string {
 	t.Helper()
 	var text string
-	if json.Unmarshal(m.Content, &text) != nil {
+	if json.Unmarshal(m.Content.Bytes(), &text) != nil {
 		return ""
 	}
 	return text
@@ -261,7 +261,7 @@ func TestTrimWithFenceProtection_BalancesOrphanedToolPairs(t *testing.T) {
 
 	toolUse, _ := json.Marshal([]llm.ContentBlock{{
 		Type: "tool_use", ID: "tu_1", Name: "exec",
-		Input: json.RawMessage(fmt.Sprintf(`{"cmd":%q}`, makeString(6000))),
+		Input: llm.FlexibleFromRaw([]byte(fmt.Sprintf(`{"cmd":%q}`, makeString(6000)))),
 	}})
 	toolResult, _ := json.Marshal([]llm.ContentBlock{{
 		Type: "tool_result", ToolUseID: "tu_1", Content: makeString(6000),
@@ -269,10 +269,10 @@ func TestTrimWithFenceProtection_BalancesOrphanedToolPairs(t *testing.T) {
 
 	msgs := []llm.Message{
 		fence,
-		{Role: "assistant", Content: toolUse}, // ~3K tokens — oldest raw, will be trimmed
-		{Role: "user", Content: toolResult},   // its result would orphan without balancing
-		llmMsg("user", makeString(4000)),      // ~2K
-		llmMsg("assistant", makeString(4000)), // ~2K
+		{Role: "assistant", Content: llm.FlexibleFromRaw(toolUse)}, // ~3K tokens — oldest raw, will be trimmed
+		{Role: "user", Content: llm.FlexibleFromRaw(toolResult)},   // its result would orphan without balancing
+		llmMsg("user", makeString(4000)),                           // ~2K
+		llmMsg("assistant", makeString(4000)),                      // ~2K
 		llmMsg("user", "recent question"),
 		llmMsg("assistant", "recent answer"),
 	}
@@ -289,7 +289,7 @@ func TestTrimWithFenceProtection_BalancesOrphanedToolPairs(t *testing.T) {
 	// left as an orphan.
 	for _, m := range out {
 		var blocks []llm.ContentBlock
-		if json.Unmarshal(m.Content, &blocks) != nil {
+		if json.Unmarshal(m.Content.Bytes(), &blocks) != nil {
 			continue
 		}
 		for _, b := range blocks {

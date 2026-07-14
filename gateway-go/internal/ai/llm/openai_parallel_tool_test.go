@@ -26,7 +26,7 @@ func assembleSingleBlock(events <-chan StreamEvent) []ContentBlock {
 		switch ev.Type {
 		case "content_block_start":
 			var cbs ContentBlockStart
-			if json.Unmarshal(ev.Payload, &cbs) == nil {
+			if json.Unmarshal(ev.Payload.Bytes(), &cbs) == nil {
 				curIndex = cbs.Index
 				b := cbs.ContentBlock
 				cur = &b
@@ -34,7 +34,7 @@ func assembleSingleBlock(events <-chan StreamEvent) []ContentBlock {
 			}
 		case "content_block_delta":
 			var cbd ContentBlockDelta
-			if json.Unmarshal(ev.Payload, &cbd) == nil && cur != nil && cbd.Index == curIndex {
+			if json.Unmarshal(ev.Payload.Bytes(), &cbd) == nil && cur != nil && cbd.Index == curIndex {
 				switch cbd.Delta.Type {
 				case "input_json_delta":
 					curJSON = append(curJSON, cbd.Delta.PartialJSON...)
@@ -48,7 +48,7 @@ func assembleSingleBlock(events <-chan StreamEvent) []ContentBlock {
 		case "content_block_stop":
 			if cur != nil {
 				if cur.Type == "tool_use" && len(curJSON) > 0 {
-					cur.Input = json.RawMessage(curJSON)
+					cur.Input = FlexibleFromRaw(curJSON)
 				}
 				out = append(out, *cur)
 				cur = nil
@@ -123,7 +123,7 @@ func TestStreamChat_ParallelToolCalls_AssembleViaSingleBlock(t *testing.T) {
 	got := map[string]string{}
 	for _, b := range assembleSingleBlock(events) {
 		if b.Type == "tool_use" {
-			got[b.Name] = string(b.Input)
+			got[b.Name] = b.Input.String()
 		}
 	}
 

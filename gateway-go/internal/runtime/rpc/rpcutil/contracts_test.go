@@ -202,19 +202,27 @@ func (s *hubSubscriber) SendEvent(data []byte) error {
 	return nil
 }
 
+func mustPayload(v any) events.EventPayload {
+	p, err := events.PayloadOf(v)
+	if err != nil {
+		panic(err)
+	}
+	return p
+}
+
 func TestGatewayHubBroadcastDeliversOrReturnsErrorWhenUnavailable(t *testing.T) {
 	var nilHub *GatewayHub
-	if sent, errs := nilHub.Broadcast("event", nil); sent != 0 || len(errs) != 1 || !strings.Contains(errs[0].Error(), "not available") {
+	if sent, errs := nilHub.Broadcast("event", events.EventPayload{}); sent != 0 || len(errs) != 1 || !strings.Contains(errs[0].Error(), "not available") {
 		t.Fatalf("nil hub broadcast = %d/%v", sent, errs)
 	}
-	if sent, errs := NewGatewayHub(HubConfig{}).Broadcast("event", nil); sent != 0 || len(errs) != 1 {
+	if sent, errs := NewGatewayHub(HubConfig{}).Broadcast("event", events.EventPayload{}); sent != 0 || len(errs) != 1 {
 		t.Fatalf("missing broadcaster = %d/%v", sent, errs)
 	}
 	cfg := completeHubConfig()
 	sub := &hubSubscriber{id: "conn"}
 	cfg.Broadcaster.Subscribe(sub, events.Filter{})
 	h := NewGatewayHub(cfg)
-	if sent, errs := h.Broadcast("hub.event", map[string]any{"ok": true}); sent != 1 || len(errs) != 0 {
+	if sent, errs := h.Broadcast("hub.event", mustPayload(map[string]any{"ok": true})); sent != 1 || len(errs) != 0 {
 		t.Fatalf("broadcast = %d/%v", sent, errs)
 	}
 	sub.mu.Lock()

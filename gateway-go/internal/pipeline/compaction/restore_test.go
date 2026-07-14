@@ -13,12 +13,12 @@ func TestStripThinkingBlocks_RemovesThinkingPreservesOtherBlocks(t *testing.T) {
 		if err != nil {
 			t.Fatalf("marshal blocks: %v", err)
 		}
-		return llm.Message{Role: "assistant", Content: raw}
+		return llm.Message{Role: "assistant", Content: llm.FlexibleFromRaw(raw)}
 	}
 	blockTypes := func(t *testing.T, msg llm.Message) []string {
 		t.Helper()
 		var blocks []llm.ContentBlock
-		if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+		if err := json.Unmarshal(msg.Content.Bytes(), &blocks); err != nil {
 			t.Fatalf("unmarshal content %q: %v", msg.Content, err)
 		}
 		types := make([]string, len(blocks))
@@ -45,7 +45,7 @@ func TestStripThinkingBlocks_RemovesThinkingPreservesOtherBlocks(t *testing.T) {
 			mustBlocks(
 				llm.ContentBlock{Type: "thinking", Thinking: "secret reasoning", Signature: "sig-abc"},
 				llm.ContentBlock{Type: "text", Text: "the answer"},
-				llm.ContentBlock{Type: "tool_use", ID: "t1", Name: "exec", Input: json.RawMessage(`{}`)},
+				llm.ContentBlock{Type: "tool_use", ID: "t1", Name: "exec", Input: llm.FlexibleFromRaw([]byte(`{}`))},
 			),
 		}
 		out, n := StripThinkingBlocks(in)
@@ -53,7 +53,7 @@ func TestStripThinkingBlocks_RemovesThinkingPreservesOtherBlocks(t *testing.T) {
 			t.Fatalf("stripped count = %d, want 1", n)
 		}
 		// User message (string content) is untouched.
-		if string(out[0].Content) != string(in[0].Content) {
+		if out[0].Content.String() != in[0].Content.String() {
 			t.Errorf("user message changed: %q", out[0].Content)
 		}
 		if got := blockTypes(t, out[1]); !eq(got, []string{"text", "tool_use"}) {
@@ -98,7 +98,7 @@ func TestStripThinkingBlocks_RemovesThinkingPreservesOtherBlocks(t *testing.T) {
 			t.Fatalf("stripped count = %d, want 0", n)
 		}
 		for i := range in {
-			if string(out[i].Content) != string(in[i].Content) {
+			if out[i].Content.String() != in[i].Content.String() {
 				t.Errorf("message %d changed: %q -> %q", i, in[i].Content, out[i].Content)
 			}
 		}
@@ -134,7 +134,7 @@ func assistantToolUseMsg(t *testing.T, toolName, id, path string) llm.Message {
 		Type:  "tool_use",
 		ID:    id,
 		Name:  toolName,
-		Input: input,
+		Input: llm.FlexibleFromRaw(input),
 	}}
 	return llm.NewBlockMessage("assistant", blocks)
 }

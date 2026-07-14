@@ -230,10 +230,10 @@ func loadTurnContextMessages(params RunParams, deps runDeps, logger *slog.Logger
 // deployments short-circuit with nil frozen inputs.
 func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, workspaceDir, sessionToolPreset string) (json.RawMessage, []prompt.ContextFile, *prompt.TopicKnowledge) {
 	if params.System != "" {
-		return llm.SystemString(params.System), nil, nil
+		return json.RawMessage(llm.SystemString(params.System).Bytes()), nil, nil
 	}
 	if deps.defaultSystem != "" {
-		return llm.SystemString(deps.defaultSystem), nil, nil
+		return json.RawMessage(llm.SystemString(deps.defaultSystem).Bytes()), nil, nil
 	}
 	if deps.tools == nil {
 		return nil, nil, nil
@@ -384,7 +384,7 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 		Now:                deps.now(),
 	}
 
-	return llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp)), ctxFiles, frozenTopic
+	return json.RawMessage(llm.SystemBlocks(prompt.BuildSystemPromptBlocks(spp)).Bytes()), ctxFiles, frozenTopic
 }
 
 // compactionHooks holds optional callbacks for the STW compaction phase.

@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"reflect"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -87,10 +86,10 @@ func TestSubscribeReplacementAndNilContract(t *testing.T) {
 	if b.Count() != 1 {
 		t.Fatalf("replacement count = %d", b.Count())
 	}
-	if sent, errs := b.Broadcast("old", nil); sent != 0 || len(errs) != 0 {
+	if sent, errs := b.Broadcast("old", EventPayload{}); sent != 0 || len(errs) != 0 {
 		t.Fatalf("old event = sent=%d errs=%v", sent, errs)
 	}
-	if sent, errs := b.Broadcast("new", nil); sent != 1 || len(errs) != 0 {
+	if sent, errs := b.Broadcast("new", EventPayload{}); sent != 1 || len(errs) != 0 {
 		t.Fatalf("new event = sent=%d errs=%v", sent, errs)
 	}
 	if len(subscriberFrames(t, first)) != 0 || len(subscriberFrames(t, second)) != 1 {
@@ -106,7 +105,8 @@ func TestBroadcastEmitsSequencedFramesWithStateAndTargeting(t *testing.T) {
 	b.Subscribe(two, Filter{})
 	version := protocol.StateVersion{Presence: 4, Health: 9}
 
-	if sent, errs := b.BroadcastWithOpts("state.changed", map[string]any{"ready": true}, BroadcastOpts{StateVersion: &version}); sent != 2 || len(errs) != 0 {
+	stateWire, _ := PayloadOf(map[string]any{"ready": true})
+	if sent, errs := b.BroadcastWithOpts("state.changed", stateWire, BroadcastOpts{StateVersion: &version}); sent != 2 || len(errs) != 0 {
 		t.Fatalf("broadcast = sent=%d errs=%v", sent, errs)
 	}
 	first := subscriberFrames(t, one)[0]
@@ -121,7 +121,8 @@ func TestBroadcastEmitsSequencedFramesWithStateAndTargeting(t *testing.T) {
 	}
 
 	targets := map[string]struct{}{"two": {}}
-	if sent, errs := b.BroadcastWithOpts("targeted", "private", BroadcastOpts{TargetConnIDs: targets}); sent != 1 || len(errs) != 0 {
+	privateWire, _ := PayloadOf("private")
+	if sent, errs := b.BroadcastWithOpts("targeted", privateWire, BroadcastOpts{TargetConnIDs: targets}); sent != 1 || len(errs) != 0 {
 		t.Fatalf("targeted = sent=%d errs=%v", sent, errs)
 	}
 	if len(subscriberFrames(t, one)) != 1 {
@@ -136,32 +137,39 @@ func TestBroadcastEmitsSequencedFramesWithStateAndTargeting(t *testing.T) {
 		t.Fatalf("target payload = %q/%v", text, err)
 	}
 
-	if sent, errs := b.BroadcastToConnIDs("nobody", nil, map[string]struct{}{}); sent != 0 || len(errs) != 0 {
+	if sent, errs := b.BroadcastToConnIDs("nobody", EventPayload{}, map[string]struct{}{}); sent != 0 || len(errs) != 0 {
 		t.Fatalf("empty target set = sent=%d errs=%v", sent, errs)
 	}
 }
 
-func TestBroadcastMarshalFailureStillDispatchesTap(t *testing.T) {
+func TestPayloadOfRejectsUnmarshalableValue(t *testing.T) {
+	bad := make(chan int)
+	if _, err := PayloadOf(bad); err == nil {
+		t.Fatal("want marshal error for unmarshalable payload")
+	}
+}
+
+func TestBroadcastStillDispatchesTapOnSendFailure(t *testing.T) {
 	b := NewBroadcaster()
-	sub := &mockSubscriber{id: "one", authed: true}
+	sub := &mockSubscriber{id: "one", authed: true, failSend: true}
 	b.Subscribe(sub, Filter{})
 	var tapped atomic.Int64
 	var gotEvent string
-	var gotPayload any
-	b.RegisterTap(func(event string, payload any) {
+	var gotPayload EventPayload
+	b.RegisterTap(func(event string, payload EventPayload) {
 		tapped.Add(1)
 		gotEvent, gotPayload = event, payload
 	})
-	bad := make(chan int)
-	sent, errs := b.Broadcast("bad.payload", bad)
-	if sent != 0 || len(errs) != 1 || !strings.Contains(errs[0].Error(), "marshal") {
-		t.Fatalf("bad payload = sent=%d errs=%v", sent, errs)
+	wire, _ := PayloadOf(map[string]string{"k": "v"})
+	sent, errs := b.Broadcast("bad.payload", wire)
+	if sent != 0 || len(errs) != 1 {
+		t.Fatalf("send failure = sent=%d errs=%v", sent, errs)
 	}
-	if tapped.Load() != 1 || gotEvent != "bad.payload" || gotPayload != any(bad) {
+	if tapped.Load() != 1 || gotEvent != "bad.payload" || gotPayload.IsZero() {
 		t.Fatalf("tap = count=%d event=%q payload=%#v", tapped.Load(), gotEvent, gotPayload)
 	}
 	if len(subscriberFrames(t, sub)) != 0 {
-		t.Fatal("unserializable event reached subscriber")
+		t.Fatal("failed send should not deliver subscriber frame")
 	}
 }
 
@@ -180,7 +188,7 @@ func TestSlowConsumerBoundaryForStructuredAndRawBroadcast(t *testing.T) {
 			b.SetLogger(nil)
 			sub := &mockSubscriber{id: "slow", authed: true, bufferedAmount: tt.buffered}
 			b.Subscribe(sub, Filter{})
-			if sent, errs := b.BroadcastWithOpts("structured", nil, BroadcastOpts{DropIfSlow: true}); sent != tt.want || len(errs) != 0 {
+			if sent, errs := b.BroadcastWithOpts("structured", EventPayload{}, BroadcastOpts{DropIfSlow: true}); sent != tt.want || len(errs) != 0 {
 				t.Fatalf("structured = sent=%d errs=%v want=%d", sent, errs, tt.want)
 			}
 			if sent := b.BroadcastRaw("raw", []byte(`{"event":"raw"}`)); sent != tt.want {
@@ -203,7 +211,8 @@ func TestBroadcastDeliveryMatrixAndErrorAggregation(t *testing.T) {
 	b.Subscribe(filtered, Filter{Events: map[string]struct{}{"other": {}}})
 	b.Subscribe(untargeted, Filter{})
 	targets := map[string]struct{}{"good": {}, "failing": {}, "unauth": {}, "filtered": {}}
-	sent, errs := b.BroadcastWithOpts("event", map[string]int{"n": 1}, BroadcastOpts{TargetConnIDs: targets})
+	deliveryWire, _ := PayloadOf(map[string]int{"n": 1})
+	sent, errs := b.BroadcastWithOpts("event", deliveryWire, BroadcastOpts{TargetConnIDs: targets})
 	if sent != 1 || len(errs) != 1 || errs[0].Error() != "send failed" {
 		t.Fatalf("delivery = sent=%d errs=%v", sent, errs)
 	}
@@ -234,7 +243,7 @@ func TestBroadcasterAllowsReentrantSubscriberAndTapCallbacks(t *testing.T) {
 	sub := &callbackSubscriber{id: "self"}
 	sub.callback = func() { b.Unsubscribe("self") }
 	b.Subscribe(sub, Filter{})
-	if sent, errs := b.Broadcast("first", nil); sent != 1 || len(errs) != 0 {
+	if sent, errs := b.Broadcast("first", EventPayload{}); sent != 1 || len(errs) != 0 {
 		t.Fatalf("reentrant subscriber = sent=%d errs=%v", sent, errs)
 	}
 	if b.Count() != 0 || sub.count.Load() != 1 {
@@ -242,15 +251,15 @@ func TestBroadcasterAllowsReentrantSubscriberAndTapCallbacks(t *testing.T) {
 	}
 
 	var first, late atomic.Int64
-	b.RegisterTap(func(string, any) {
+	b.RegisterTap(func(string, EventPayload) {
 		first.Add(1)
-		b.RegisterTap(func(string, any) { late.Add(1) })
+		b.RegisterTap(func(string, EventPayload) { late.Add(1) })
 	})
-	_, _ = b.Broadcast("tap-one", nil)
+	_, _ = b.Broadcast("tap-one", EventPayload{})
 	if first.Load() != 1 || late.Load() != 0 {
 		t.Fatalf("first tap dispatch = first=%d late=%d", first.Load(), late.Load())
 	}
-	_, _ = b.Broadcast("tap-two", nil)
+	_, _ = b.Broadcast("tap-two", EventPayload{})
 	if first.Load() != 2 || late.Load() != 1 {
 		t.Fatalf("second tap dispatch = first=%d late=%d", first.Load(), late.Load())
 	}
@@ -571,7 +580,8 @@ func TestBroadcasterConcurrentMutationAndBroadcast(t *testing.T) {
 				b.SubscribeSessionEvents(id)
 				b.SubscribeSessionMessageEvents(id, "session")
 				b.RegisterToolEventRecipient(fmt.Sprintf("run-%d-%d", worker, i), id)
-				if _, errs := b.Broadcast("event", i); len(errs) != 0 {
+				loopWire, _ := PayloadOf(i)
+				if _, errs := b.Broadcast("event", loopWire); len(errs) != 0 {
 					unexpected.Add(1)
 				}
 				b.Unsubscribe(id)
@@ -590,10 +600,10 @@ func TestBroadcasterConcurrentMutationAndBroadcast(t *testing.T) {
 func TestTapPanicWithNilLoggerDoesNotBlockLaterTaps(t *testing.T) {
 	b := NewBroadcaster()
 	b.SetLogger(nil)
-	b.RegisterTap(func(string, any) { panic("boom") })
+	b.RegisterTap(func(string, EventPayload) { panic("boom") })
 	var called atomic.Bool
-	b.RegisterTap(func(string, any) { called.Store(true) })
-	if sent, errs := b.Broadcast("event", nil); sent != 0 || len(errs) != 0 {
+	b.RegisterTap(func(string, EventPayload) { called.Store(true) })
+	if sent, errs := b.Broadcast("event", EventPayload{}); sent != 0 || len(errs) != 0 {
 		t.Fatalf("broadcast = %d/%v", sent, errs)
 	}
 	if !called.Load() {
@@ -608,7 +618,7 @@ func TestCallbackSubscriberErrorStillAllowsOtherDeliveries(t *testing.T) {
 	good := &mockSubscriber{id: "good", authed: true}
 	b.Subscribe(failing, Filter{})
 	b.Subscribe(good, Filter{})
-	sent, errs := b.Broadcast("event", nil)
+	sent, errs := b.Broadcast("event", EventPayload{})
 	if sent != 1 || len(errs) != 1 || !errors.Is(errs[0], wantErr) {
 		t.Fatalf("delivery = sent=%d errs=%v", sent, errs)
 	}

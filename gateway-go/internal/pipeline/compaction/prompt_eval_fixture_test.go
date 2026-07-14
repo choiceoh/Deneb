@@ -56,7 +56,7 @@ var forbiddenLeakTokens = []string{
 func fixtureMessages() []llm.Message {
 	toolUse := func(id, name string, input map[string]any) llm.ContentBlock {
 		raw, _ := json.Marshal(input)
-		return llm.ContentBlock{Type: "tool_use", ID: id, Name: name, Input: raw}
+		return llm.ContentBlock{Type: "tool_use", ID: id, Name: name, Input: llm.FlexibleFromRaw(raw)}
 	}
 	toolResult := func(id, content string) llm.Message {
 		return llm.NewBlockMessage("user", []llm.ContentBlock{

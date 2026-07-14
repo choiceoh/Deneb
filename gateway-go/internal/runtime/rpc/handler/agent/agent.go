@@ -66,12 +66,13 @@ func processExec(deps ExtendedDeps) rpcutil.HandlerFunc {
 
 		// Broadcast process completion event to subscribers.
 		if deps.Broadcaster != nil && result != nil {
-			deps.Broadcaster("process.completed", map[string]any{
+			wire, _ := events.PayloadOf(map[string]any{
 				"id":       result.ID,
 				"status":   result.Status,
 				"exitCode": result.ExitCode,
 				"ms":       result.RuntimeMs,
 			})
+			deps.Broadcaster("process.completed", wire)
 		}
 
 		return result, nil

@@ -113,8 +113,8 @@ func TestContextHeavyRoutingKeepsThinkingWhenHistoryIsHeavy(t *testing.T) {
 	p := enabled()
 	heavy := []llm.Message{
 		llm.NewTextMessage("user", "이 코드 분석해줘"),
-		{Role: "assistant", Content: []byte(`[{"type":"tool_use","id":"t1","name":"read","input":{}}]`)},
-		{Role: "user", Content: []byte(`[{"type":"tool_result","tool_use_id":"t1","content":"file body"}]`)},
+		{Role: "assistant", Content: llm.FlexibleFromRaw([]byte(`[{"type":"tool_use","id":"t1","name":"read","input":{}}]`))},
+		{Role: "user", Content: llm.FlexibleFromRaw([]byte(`[{"type":"tool_result","tool_use_id":"t1","content":"file body"}]`))},
 		llm.NewTextMessage("assistant", "분석 결과입니다..."),
 		llm.NewTextMessage("user", "그거 마저 해줘"),
 	}

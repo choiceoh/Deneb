@@ -53,7 +53,7 @@ func (c *Client) completeViaStream(ctx context.Context, req ChatRequest) (string
 		switch ev.Type {
 		case "content_block_delta":
 			var cbd ContentBlockDelta
-			if json.Unmarshal(ev.Payload, &cbd) != nil {
+			if json.Unmarshal(ev.Payload.Bytes(), &cbd) != nil {
 				continue
 			}
 			switch cbd.Delta.Type {
@@ -67,14 +67,14 @@ func (c *Client) completeViaStream(ctx context.Context, req ChatRequest) (string
 			}
 		case "message_delta":
 			var md MessageDelta
-			if json.Unmarshal(ev.Payload, &md) == nil && md.Delta.StopReason != "" {
+			if json.Unmarshal(ev.Payload.Bytes(), &md) == nil && md.Delta.StopReason != "" {
 				stopReason = md.Delta.StopReason
 			}
 		case "error":
 			// Mid-stream error (overload, premature_end, provider fault):
 			// whatever text accumulated so far is partial — fail the call
 			// instead of returning it as a complete answer.
-			return "", fmt.Errorf("stream error event: %s", truncateForLog(string(ev.Payload), 300))
+			return "", fmt.Errorf("stream error event: %s", truncateForLog(ev.Payload.String(), 300))
 		}
 	}
 	out := strings.TrimSpace(sb.String())
@@ -114,7 +114,7 @@ func (c *Client) completeOpenAI(ctx context.Context, req ChatRequest) (string, e
 	// User messages (text only — title generation doesn't need multimodal).
 	for _, m := range req.Messages {
 		var text string
-		if err := json.Unmarshal(m.Content, &text); err == nil {
+		if err := json.Unmarshal(m.Content.Bytes(), &text); err == nil {
 			oaiReq.Messages = append(oaiReq.Messages, openAIMessage{
 				Role:    m.Role,
 				Content: text,

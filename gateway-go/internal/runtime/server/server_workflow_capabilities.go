@@ -23,6 +23,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/goalloop"
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
@@ -46,11 +47,12 @@ func (s *Server) registerProcessApprovalSideEffect(hub *rpcutil.GatewayHub) {
 			CommandArgv: req.Args,
 			Cwd:         req.WorkingDir,
 		})
-		hub.Broadcast("exec.approval.requested", map[string]any{
+		approvalWire, _ := events.PayloadOf(map[string]any{
 			"id":      ar.ID,
 			"command": req.Command,
 			"args":    req.Args,
 		})
+		hub.Broadcast("exec.approval.requested", approvalWire)
 		waitCh := s.approvals.WaitForDecision(ar.ID)
 		timer := time.NewTimer(30 * time.Second)
 		defer timer.Stop()
@@ -82,7 +84,8 @@ func (s *Server) configureAutonomousWorkflow(hub *rpcutil.GatewayHub) {
 	// cycle, otherwise a restart loses byte-identical APC prompt reuse.
 	chat.ConfigurePromptSnapshots(config.ResolveStateDir(), s.logger)
 	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {
-		hub.Broadcast("dreaming.cycle", event)
+		dreamWire, _ := events.PayloadOf(event)
+		hub.Broadcast("dreaming.cycle", dreamWire)
 		if event.Type == "dreaming_completed" {
 			s.postDreamWorkfeedCard(event.DreamReport)
 		}
@@ -418,7 +421,7 @@ func (s *Server) registerRoleHealthWorkflow() {
 	s.roleHealth = rolehealth.New(
 		s.modelRegistry,
 		s.logger,
-		func(event string, payload any) {
+		func(event string, payload events.EventPayload) {
 			if s.broadcaster != nil {
 				s.broadcaster.Broadcast(event, payload)
 			}

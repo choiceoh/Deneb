@@ -63,13 +63,13 @@ func TestComposeBeforeAPICall_ChainPreservesPriorMutations(t *testing.T) {
 			last := len(msgs) - 1
 			// Decode existing blocks (if any), append a new one, re-encode.
 			var blocks []llm.ContentBlock
-			if len(msgs[last].Content) > 0 {
-				_ = json.Unmarshal(msgs[last].Content, &blocks)
+			if msgs[last].Content.Len() > 0 {
+				_ = json.Unmarshal(msgs[last].Content.Bytes(), &blocks)
 			}
 			blocks = append(blocks, llm.ContentBlock{Type: "text", Text: tag})
 			raw, _ := json.Marshal(blocks)
 			out := append([]llm.Message(nil), msgs...)
-			out[last] = llm.Message{Role: msgs[last].Role, Content: raw}
+			out[last] = llm.Message{Role: msgs[last].Role, Content: llm.FlexibleFromRaw(raw)}
 			return out
 		}
 	}
@@ -79,7 +79,7 @@ func TestComposeBeforeAPICall_ChainPreservesPriorMutations(t *testing.T) {
 		t.Fatalf("message count = %d, want 1", len(got))
 	}
 	var blocks []llm.ContentBlock
-	if err := json.Unmarshal(got[0].Content, &blocks); err != nil {
+	if err := json.Unmarshal(got[0].Content.Bytes(), &blocks); err != nil {
 		t.Fatalf("unmarshal blocks: %v", err)
 	}
 	if len(blocks) != 3 || blocks[0].Text != "a" || blocks[1].Text != "b" || blocks[2].Text != "c" {

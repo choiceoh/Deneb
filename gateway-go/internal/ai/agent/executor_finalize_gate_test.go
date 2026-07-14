@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -27,7 +28,7 @@ func TestRunAgent_FinalizeGateRejectsFirstFinishAllowsSecond(t *testing.T) {
 		MaxTurns:  5,
 		Timeout:   10 * time.Second,
 		MaxTokens: 4096,
-		System:    llm.SystemString("test"),
+		System:    json.RawMessage(llm.SystemString("test").Bytes()),
 		FinalizeGate: func(turn int) string {
 			if gateCalls.Add(1) == 1 {
 				return "[검증 게이트] 검증을 실행하세요."
@@ -53,7 +54,7 @@ func TestRunAgent_FinalizeGateRejectsFirstFinishAllowsSecond(t *testing.T) {
 	var sawGatePrompt bool
 	for _, m := range result.FinalMessages {
 		// Content is a raw JSON string or block array — substring match is enough.
-		if m.Role == "user" && strings.Contains(string(m.Content), "검증 게이트") {
+		if m.Role == "user" && strings.Contains(m.Content.String(), "검증 게이트") {
 			sawGatePrompt = true
 		}
 	}
@@ -67,7 +68,7 @@ func TestRunAgent_NilFinalizeGateUnchanged(t *testing.T) {
 	streamer := &fakeLLMStreamer{
 		turns: [][]llm.StreamEvent{buildTextTurnEvents("done", 10, 5)},
 	}
-	cfg := AgentConfig{MaxTurns: 3, Timeout: 5 * time.Second, MaxTokens: 1024, System: llm.SystemString("t")}
+	cfg := AgentConfig{MaxTurns: 3, Timeout: 5 * time.Second, MaxTokens: 1024, System: json.RawMessage(llm.SystemString("t").Bytes())}
 	result := testutil.Must(RunAgent(context.Background(), cfg, []llm.Message{llm.NewTextMessage("user", "hi")}, streamer, nil, StreamHooks{}, nil, nil))
 	if result.Text != "done" {
 		t.Errorf("Text = %q, want done", result.Text)

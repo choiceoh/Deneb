@@ -61,7 +61,7 @@ func replayActivatedTools(messages []llm.Message, registry *ToolRegistry, sessio
 		if msg.Role != "assistant" {
 			continue
 		}
-		for _, b := range decodeBlocks(msg.Content) {
+		for _, b := range decodeBlocks(json.RawMessage(msg.Content.Bytes())) {
 			if b.Type == "tool_use" && activationNoticeWriters[b.Name] {
 				writerCalls[b.ID] = true
 			}
@@ -95,12 +95,12 @@ func replayActivatedTools(messages []llm.Message, registry *ToolRegistry, sessio
 		if msg.Role != "user" {
 			continue
 		}
-		for _, b := range decodeBlocks(msg.Content) {
+		for _, b := range decodeBlocks(json.RawMessage(msg.Content.Bytes())) {
 			if b.Type != "tool_result" {
 				continue
 			}
 			var metaNames []string
-			if toolmeta.Get(b.Metadata, "activatedTools", &metaNames) {
+			if toolmeta.Get(json.RawMessage(b.Metadata.Bytes()), "activatedTools", &metaNames) {
 				for _, name := range metaNames {
 					admit(name)
 				}

@@ -67,7 +67,7 @@ func parseSSE(ctx context.Context, r io.Reader, maxBytes int) <-chan StreamEvent
 				Type    string `json:"type"`
 				Message string `json:"message"`
 			}{Type: "error", Message: message})
-			return emit(StreamEvent{Type: "error", Payload: payload})
+			return emit(StreamEvent{Type: "error", Payload: FlexibleFromRaw(payload)})
 		}
 
 		for scanner.Scan() {
@@ -92,7 +92,7 @@ func parseSSE(ctx context.Context, r io.Reader, maxBytes int) <-chan StreamEvent
 				if dataBuf.Len() > 0 {
 					ev := StreamEvent{
 						Type:    eventType,
-						Payload: json.RawMessage(dataBuf.String()),
+						Payload: FlexibleFromRaw([]byte(dataBuf.String())),
 					}
 					if !emit(ev) {
 						return
@@ -135,7 +135,7 @@ func parseSSE(ctx context.Context, r io.Reader, maxBytes int) <-chan StreamEvent
 		if dataBuf.Len() > 0 {
 			if !emit(StreamEvent{
 				Type:    eventType,
-				Payload: json.RawMessage(dataBuf.String()),
+				Payload: FlexibleFromRaw([]byte(dataBuf.String())),
 			}) {
 				return
 			}

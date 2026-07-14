@@ -85,7 +85,7 @@ func TestStreamChat_PrematureDone_FlushesBufferedToolCalls(t *testing.T) {
 		switch ev.Type {
 		case "content_block_start":
 			var cbs ContentBlockStart
-			testutil.NoError(t, json.Unmarshal(ev.Payload, &cbs))
+			testutil.NoError(t, json.Unmarshal(ev.Payload.Bytes(), &cbs))
 			if cbs.ContentBlock.Type == "tool_use" {
 				sawToolStart = true
 				if cbs.ContentBlock.ID != "call_abc" || cbs.ContentBlock.Name != "read_file" {
@@ -95,7 +95,7 @@ func TestStreamChat_PrematureDone_FlushesBufferedToolCalls(t *testing.T) {
 			}
 		case "content_block_delta":
 			var cbd ContentBlockDelta
-			testutil.NoError(t, json.Unmarshal(ev.Payload, &cbd))
+			testutil.NoError(t, json.Unmarshal(ev.Payload.Bytes(), &cbd))
 			if cbd.Delta.Type == "input_json_delta" {
 				args += cbd.Delta.PartialJSON
 			}
@@ -132,7 +132,7 @@ func TestStreamChat_PrematureDone_DropsTruncatedToolArgs(t *testing.T) {
 			continue
 		}
 		var cbs ContentBlockStart
-		testutil.NoError(t, json.Unmarshal(ev.Payload, &cbs))
+		testutil.NoError(t, json.Unmarshal(ev.Payload.Bytes(), &cbs))
 		if cbs.ContentBlock.Type == "tool_use" {
 			t.Fatalf("tool call with truncated args must be dropped, got block %q", cbs.ContentBlock.Name)
 		}
@@ -151,7 +151,7 @@ func requireTerminalError(t *testing.T, got []StreamEvent, wantSubstr string) {
 	if last.Type != "error" {
 		t.Fatalf("terminal event = %q, want error (events: %v)", last.Type, eventTypes(got))
 	}
-	if !strings.Contains(string(last.Payload), wantSubstr) {
+	if !strings.Contains(last.Payload.String(), wantSubstr) {
 		t.Errorf("error payload = %s, want mention of %q", last.Payload, wantSubstr)
 	}
 	for _, ev := range got {
@@ -192,7 +192,7 @@ func TestStreamChat_EOFWithoutDone_SurfacesErrorNotSuccess(t *testing.T) {
 			continue
 		}
 		var cbs ContentBlockStart
-		testutil.NoError(t, json.Unmarshal(ev.Payload, &cbs))
+		testutil.NoError(t, json.Unmarshal(ev.Payload.Bytes(), &cbs))
 		if cbs.ContentBlock.Type == "tool_use" {
 			t.Error("buffered tool call must be dropped on mid-stream EOF, not flushed")
 		}
@@ -281,7 +281,7 @@ func TestStreamChat_FinishReasonWithoutDone_NormalStop(t *testing.T) {
 		switch ev.Type {
 		case "content_block_delta":
 			var delta ContentBlockDelta
-			if err := json.Unmarshal(ev.Payload, &delta); err != nil {
+			if err := json.Unmarshal(ev.Payload.Bytes(), &delta); err != nil {
 				t.Fatalf("decode content delta: %v", err)
 			}
 			if delta.Delta.Type == "text_delta" {
@@ -289,7 +289,7 @@ func TestStreamChat_FinishReasonWithoutDone_NormalStop(t *testing.T) {
 			}
 		case "message_delta":
 			var delta MessageDelta
-			if err := json.Unmarshal(ev.Payload, &delta); err != nil {
+			if err := json.Unmarshal(ev.Payload.Bytes(), &delta); err != nil {
 				t.Fatalf("decode message delta: %v", err)
 			}
 			if delta.Delta.StopReason == "end_turn" {
@@ -344,7 +344,7 @@ func TestConvertMessagesIgnoresThinkingOnlyAssistantMessage(t *testing.T) {
 		Model: "test-model",
 		Messages: []Message{
 			NewTextMessage("user", "first"),
-			{Role: "assistant", Content: thinkingOnly},
+			{Role: "assistant", Content: FlexibleFromRaw(thinkingOnly)},
 			NewTextMessage("user", "second"),
 		},
 		MaxTokens: 100,

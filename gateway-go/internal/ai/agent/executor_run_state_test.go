@@ -236,8 +236,8 @@ func TestAgentRunState_MultiTurnAggregationUpdatesTotals(t *testing.T) {
 	state.recordTurn(&turnResult{
 		text: narration,
 		toolCalls: []llm.ContentBlock{
-			{Type: "tool_use", Name: "read", Input: json.RawMessage(`{"path":"a"}`)},
-			{Type: "tool_use", Name: "grep", Input: json.RawMessage(`{"q":"b"}`)},
+			{Type: "tool_use", Name: "read", Input: llm.FlexibleFromRaw([]byte(`{"path":"a"}`))},
+			{Type: "tool_use", Name: "grep", Input: llm.FlexibleFromRaw([]byte(`{"q":"b"}`))},
 		},
 		contentBlocks: []llm.ContentBlock{{Type: "thinking", Thinking: "think one"}},
 		usage: llm.TokenUsage{

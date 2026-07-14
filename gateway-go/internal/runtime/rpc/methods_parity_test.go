@@ -7,6 +7,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/maintenance"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
@@ -90,7 +91,7 @@ func fullDispatcher() *Dispatcher {
 	})
 
 	// Phase 3: Native workflow methods.
-	broadcastFn := func(event string, payload any) (int, []error) { return 0, nil }
+	broadcastFn := func(event string, payload events.EventPayload) (int, []error) { return 0, nil }
 	RegisterCronAdvancedMethods(d, CronAdvancedDeps{Service: cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test-adv"}, nil, testLogger()), Broadcaster: broadcastFn})
 	RegisterCronServiceMethods(d, CronServiceDeps{Service: cron.NewService(cron.ServiceConfig{StorePath: "/tmp/deneb-cron-test"}, nil, testLogger())})
 	RegisterConfigAdvancedMethods(d, ConfigAdvancedDeps{Broadcaster: broadcastFn})

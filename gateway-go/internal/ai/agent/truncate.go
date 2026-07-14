@@ -69,7 +69,7 @@ func CompactPriorToolResults(messages []llm.Message, lastTurnStartIdx int) int {
 		}
 		// Try to parse as content blocks (tool result messages are block arrays).
 		var blocks []llm.ContentBlock
-		if err := json.Unmarshal(messages[i].Content, &blocks); err != nil {
+		if err := json.Unmarshal(messages[i].Content.Bytes(), &blocks); err != nil {
 			continue // plain text message, skip
 		}
 
@@ -88,7 +88,7 @@ func CompactPriorToolResults(messages []llm.Message, lastTurnStartIdx int) int {
 
 		if changed {
 			raw, _ := json.Marshal(blocks)
-			messages[i].Content = raw
+			messages[i].Content = llm.FlexibleFromRaw(raw)
 		}
 	}
 	return compacted

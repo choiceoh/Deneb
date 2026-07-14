@@ -2,7 +2,6 @@ package pilot
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -132,11 +131,11 @@ func TestCollectStream_ContentBlockDelta(t *testing.T) {
 	ch := make(chan llm.StreamEvent, 3)
 	ch <- llm.StreamEvent{
 		Type:    "content_block_delta",
-		Payload: json.RawMessage(`{"delta":{"text":"hello"}}`),
+		Payload: llm.FlexibleFromRaw([]byte(`{"delta":{"text":"hello"}}`)),
 	}
 	ch <- llm.StreamEvent{
 		Type:    "content_block_delta",
-		Payload: json.RawMessage(`{"delta":{"text":" world"}}`),
+		Payload: llm.FlexibleFromRaw([]byte(`{"delta":{"text":" world"}}`)),
 	}
 	close(ch)
 
@@ -153,11 +152,11 @@ func TestCollectStream_ErrorEvent(t *testing.T) {
 	ch := make(chan llm.StreamEvent, 2)
 	ch <- llm.StreamEvent{
 		Type:    "content_block_delta",
-		Payload: json.RawMessage(`{"delta":{"text":"partial"}}`),
+		Payload: llm.FlexibleFromRaw([]byte(`{"delta":{"text":"partial"}}`)),
 	}
 	ch <- llm.StreamEvent{
 		Type:    "error",
-		Payload: json.RawMessage(`{"error":{"message":"rate limit exceeded"}}`),
+		Payload: llm.FlexibleFromRaw([]byte(`{"error":{"message":"rate limit exceeded"}}`)),
 	}
 	close(ch)
 
@@ -181,11 +180,11 @@ func TestCollectStream_TopLevelErrorEvent(t *testing.T) {
 	ch := make(chan llm.StreamEvent, 2)
 	ch <- llm.StreamEvent{
 		Type:    "content_block_delta",
-		Payload: json.RawMessage(`{"delta":{"text":"partial"}}`),
+		Payload: llm.FlexibleFromRaw([]byte(`{"delta":{"text":"partial"}}`)),
 	}
 	ch <- llm.StreamEvent{
 		Type:    "error",
-		Payload: json.RawMessage(`{"type":"error","message":"SSE stream read error: unexpected EOF"}`),
+		Payload: llm.FlexibleFromRaw([]byte(`{"type":"error","message":"SSE stream read error: unexpected EOF"}`)),
 	}
 	close(ch)
 
@@ -208,7 +207,7 @@ func TestCollectStream_UnparseableErrorEvent(t *testing.T) {
 	ch := make(chan llm.StreamEvent, 1)
 	ch <- llm.StreamEvent{
 		Type:    "error",
-		Payload: json.RawMessage(`{"weird":"shape"}`),
+		Payload: llm.FlexibleFromRaw([]byte(`{"weird":"shape"}`)),
 	}
 	close(ch)
 
@@ -225,7 +224,7 @@ func TestCollectStream_ContextCancelledWithPartial(t *testing.T) {
 	ch := make(chan llm.StreamEvent, 1)
 	ch <- llm.StreamEvent{
 		Type:    "content_block_delta",
-		Payload: json.RawMessage(`{"delta":{"text":"partial content"}}`),
+		Payload: llm.FlexibleFromRaw([]byte(`{"delta":{"text":"partial content"}}`)),
 	}
 
 	// Cancel after the first event has been consumed. We need to cancel

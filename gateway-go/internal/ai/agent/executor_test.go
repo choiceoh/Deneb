@@ -172,7 +172,7 @@ func TestExtractThinkingText_ReturnsLastOfMultipleBlocks(t *testing.T) {
 
 // makeStreamEvent creates a minimal SSE event for testing.
 func makeStreamEvent(typ string) llm.StreamEvent {
-	return llm.StreamEvent{Type: typ, Payload: json.RawMessage(`{}`)}
+	return llm.StreamEvent{Type: typ, Payload: llm.FlexibleFromRaw([]byte(`{}`))}
 }
 
 func TestConsumeStreamInto_IdleTimeout(t *testing.T) {
@@ -213,19 +213,19 @@ func TestConsumeStreamInto_MalformedEventsSkipped(t *testing.T) {
 	go func() {
 		// Valid message_start.
 		startPayload, _ := json.Marshal(llm.MessageStart{})
-		events <- llm.StreamEvent{Type: "message_start", Payload: startPayload}
+		events <- llm.StreamEvent{Type: "message_start", Payload: llm.FlexibleFromRaw(startPayload)}
 
 		// Malformed content_block_start (bad JSON).
-		events <- llm.StreamEvent{Type: "content_block_start", Payload: json.RawMessage(`{bad`)}
+		events <- llm.StreamEvent{Type: "content_block_start", Payload: llm.FlexibleFromRaw([]byte(`{bad`))}
 
 		// Malformed content_block_delta.
-		events <- llm.StreamEvent{Type: "content_block_delta", Payload: json.RawMessage(`not json`)}
+		events <- llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw([]byte(`not json`))}
 
 		// Malformed message_delta.
-		events <- llm.StreamEvent{Type: "message_delta", Payload: json.RawMessage(`///`)}
+		events <- llm.StreamEvent{Type: "message_delta", Payload: llm.FlexibleFromRaw([]byte(`///`))}
 
 		// Valid message_stop.
-		events <- llm.StreamEvent{Type: "message_stop", Payload: json.RawMessage(`{}`)}
+		events <- llm.StreamEvent{Type: "message_stop", Payload: llm.FlexibleFromRaw([]byte(`{}`))}
 	}()
 
 	err := consumeStreamInto(ctx, events, StreamHooks{}, result, -1, nil)
@@ -240,14 +240,14 @@ func TestConsumeStreamInto_DeltaIndexMismatch(t *testing.T) {
 
 	go func() {
 		startPayload, _ := json.Marshal(llm.MessageStart{})
-		events <- llm.StreamEvent{Type: "message_start", Payload: startPayload}
+		events <- llm.StreamEvent{Type: "message_start", Payload: llm.FlexibleFromRaw(startPayload)}
 
 		// Open block at index 0.
 		cbsPayload, _ := json.Marshal(llm.ContentBlockStart{
 			Index:        0,
 			ContentBlock: llm.ContentBlock{Type: "text"},
 		})
-		events <- llm.StreamEvent{Type: "content_block_start", Payload: cbsPayload}
+		events <- llm.StreamEvent{Type: "content_block_start", Payload: llm.FlexibleFromRaw(cbsPayload)}
 
 		// Valid delta for index 0.
 		var cbd0Val llm.ContentBlockDelta
@@ -255,7 +255,7 @@ func TestConsumeStreamInto_DeltaIndexMismatch(t *testing.T) {
 		cbd0Val.Delta.Type = "text_delta"
 		cbd0Val.Delta.Text = "hello"
 		cbd0, _ := json.Marshal(cbd0Val)
-		events <- llm.StreamEvent{Type: "content_block_delta", Payload: cbd0}
+		events <- llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw(cbd0)}
 
 		// Mismatched delta for index 5 — should be dropped.
 		var cbd5Val llm.ContentBlockDelta
@@ -263,13 +263,13 @@ func TestConsumeStreamInto_DeltaIndexMismatch(t *testing.T) {
 		cbd5Val.Delta.Type = "text_delta"
 		cbd5Val.Delta.Text = " SHOULD NOT APPEAR"
 		cbd5, _ := json.Marshal(cbd5Val)
-		events <- llm.StreamEvent{Type: "content_block_delta", Payload: cbd5}
+		events <- llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw(cbd5)}
 
 		// Close block 0.
 		cbStop, _ := json.Marshal(llm.ContentBlockStop{Index: 0})
-		events <- llm.StreamEvent{Type: "content_block_stop", Payload: cbStop}
+		events <- llm.StreamEvent{Type: "content_block_stop", Payload: llm.FlexibleFromRaw(cbStop)}
 
-		events <- llm.StreamEvent{Type: "message_stop", Payload: json.RawMessage(`{}`)}
+		events <- llm.StreamEvent{Type: "message_stop", Payload: llm.FlexibleFromRaw([]byte(`{}`))}
 	}()
 
 	err := consumeStreamInto(ctx, events, StreamHooks{}, result, -1, nil)
@@ -282,7 +282,7 @@ func TestConsumeStreamInto_DeltaIndexMismatch(t *testing.T) {
 
 func TestConsumeStreamInto_ErrorEventIsSentinel(t *testing.T) {
 	events := make(chan llm.StreamEvent, 1)
-	events <- llm.StreamEvent{Type: "error", Payload: json.RawMessage(`{"message":"upstream hiccup"}`)}
+	events <- llm.StreamEvent{Type: "error", Payload: llm.FlexibleFromRaw([]byte(`{"message":"upstream hiccup"}`))}
 	close(events)
 
 	err := consumeStreamInto(context.Background(), events, StreamHooks{}, &turnResult{}, -1, nil)
@@ -296,7 +296,7 @@ func TestConsumeStreamInto_ErrorEventIsSentinel(t *testing.T) {
 // (and thereby escalating to the model-fallback chain).
 func TestRunAgent_MidStreamErrorRetriedOnSameModel(t *testing.T) {
 	streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{
-		{{Type: "error", Payload: json.RawMessage(`{"message":"transient backend fault"}`)}},
+		{{Type: "error", Payload: llm.FlexibleFromRaw([]byte(`{"message":"transient backend fault"}`))}},
 		buildTextTurnEvents("recovered after retry", 10, 5),
 	}}
 
@@ -316,8 +316,8 @@ func TestRunAgent_MidStreamErrorRetriedOnSameModel(t *testing.T) {
 // retry budget is spent, the error propagates to the caller's fallback chain.
 func TestRunAgent_MidStreamErrorSecondFailurePropagates(t *testing.T) {
 	streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{
-		{{Type: "error", Payload: json.RawMessage(`{"message":"fault A"}`)}},
-		{{Type: "error", Payload: json.RawMessage(`{"message":"fault B"}`)}},
+		{{Type: "error", Payload: llm.FlexibleFromRaw([]byte(`{"message":"fault A"}`))}},
+		{{Type: "error", Payload: llm.FlexibleFromRaw([]byte(`{"message":"fault B"}`))}},
 	}}
 
 	cfg := AgentConfig{MaxTurns: 3, Timeout: 5 * time.Second, MaxTokens: 1024}

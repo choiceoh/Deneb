@@ -6,6 +6,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
+
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -40,9 +42,10 @@ func TestHandleChatBtwEmitsSideResultOnSuccess(t *testing.T) {
 	d := NewDispatcher(nil)
 	RegisterChatBtwMethods(d, ChatBtwDeps{
 		Chat: &mockBtwChat{text: "4"},
-		Broadcaster: func(event string, payload any) (int, []error) {
+		Broadcaster: func(event string, payload events.EventPayload) (int, []error) {
 			broadcastEvent = event
-			data, _ := payload.(map[string]any)
+			var data map[string]any
+			_ = json.Unmarshal(payload.Bytes(), &data)
 			if data["kind"] != "btw" {
 				t.Errorf("got %v, want kind=btw", data["kind"])
 			}

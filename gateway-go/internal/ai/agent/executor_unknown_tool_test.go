@@ -25,7 +25,7 @@ func TestExecuteOneTool_TagsUnknownToolInAgentlog(t *testing.T) {
 	w := agentlog.NewWriter(t.TempDir())
 	rl := agentlog.NewRunLogger(w, "client:test", "run1")
 
-	tc := llm.ContentBlock{Type: "tool_use", ID: "t1", Name: "frobnicate", Input: json.RawMessage(`{}`)}
+	tc := llm.ContentBlock{Type: "tool_use", ID: "t1", Name: "frobnicate", Input: llm.FlexibleFromRaw([]byte(`{}`))}
 	block := executeOneTool(context.Background(), tc, unknownToolExecutor{}, StreamHooks{},
 		"", 0, slog.Default(), rl, nil)
 	if !block.IsError {

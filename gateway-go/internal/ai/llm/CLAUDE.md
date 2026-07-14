@@ -10,7 +10,11 @@ HTTP wire 형식만 책임진다.
 - `client.go`의 `Client`, `NewClient`, `DoStream`이 HTTP 수명주기,
   인증 header, retry와 request timeout을 소유한다.
 - `types.go`의 `ChatRequest`, `Message`, `ContentBlock`, `StreamEvent`가
-  provider와 무관한 공개 계약이다.
+  provider와 무관한 공개 계약이다. 불투명 JSON 필드는 `FlexibleJSON`
+  (`flexible_json.go`의 `FlexibleFromRaw`, `FlexibleFromValue`, `Bytes`,
+  `String`)을 쓴다 — `json.RawMessage`를 export하지 않는다.
+- `SystemString`, `SystemBlocks`, `ExtractSystemText`, `AppendSystemText`,
+  `ContentToBlocks`가 system/content 경계를 typed helper로 유지한다.
 - `openai.go`의 `Client.StreamChat`이 API mode를 분기한다. OpenAI 응답은
   `openai_stream.go`에서 내부 `StreamEvent` 형식으로 변환한다.
 - `openai_complete.go`의 `Client.Complete`는 짧은 동기 호출의 단일
@@ -36,10 +40,14 @@ HTTP wire 형식만 책임진다.
   않는다.
 - 구체 모델 이름이나 역할 정책을 여기 추가하지 않는다. 새 provider mode는
   `Client`의 mode 분기와 공통 request/event 계약을 함께 검증한다.
+- `FlexibleJSON`의 바이트는 unexported다. wire 어댑터만 `Bytes()`로 읽고,
+  패키지 경계에서 `any`/`json.RawMessage`를 다시 노출하지 않는다.
 
 ## 집중 검증
 
 전송 변경은 request body/header, 정상 종료, provider error, 취소와 premature
-EOF를 해당 `*_test.go`에서 함께 확인한다. 결정적 패키지 검증 명령은:
+EOF를 해당 `*_test.go`에서 함께 확인한다. `FlexibleJSON` 마이그레이션은
+`types_test.go`, `normalize_empty_test.go`, provider stream 테스트로 확인한다.
+결정적 패키지 검증 명령은:
 
 `cd gateway-go && go test -count=1 ./internal/ai/llm`

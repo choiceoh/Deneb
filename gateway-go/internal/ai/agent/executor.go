@@ -62,9 +62,9 @@ func generatedOutputTokenCharge(blocks []llm.ContentBlock, providerTokens int) i
 		return 0
 	}
 	content := llm.NewBlockMessage("assistant", blocks).Content
-	estimate := tokenest.EstimateBytesUncalibrated(content)
-	if providerTokens <= 0 && len(content) > estimate {
-		estimate = len(content)
+	estimate := tokenest.EstimateBytesUncalibrated(content.Bytes())
+	if providerTokens <= 0 && content.Len() > estimate {
+		estimate = content.Len()
 	}
 	if providerTokens > estimate {
 		return providerTokens

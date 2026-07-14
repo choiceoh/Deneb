@@ -28,7 +28,7 @@ func (f *fakeLLM) StreamChat(_ context.Context, _ llm.ChatRequest) (<-chan llm.S
 	f.calls++
 	ch := make(chan llm.StreamEvent, 1)
 	payload, _ := json.Marshal(map[string]any{"delta": map[string]string{"text": f.reply}})
-	ch <- llm.StreamEvent{Type: "content_block_delta", Payload: payload}
+	ch <- llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw(payload)}
 	close(ch)
 	return ch, nil
 }
