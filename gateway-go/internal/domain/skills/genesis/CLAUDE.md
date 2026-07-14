@@ -36,6 +36,7 @@ Deneb의 자가개선 루프. 스킬을 진화시키고(L1), 진화시키는 절
 | feed-card 수락/기각 | `MetaRevisionRecord.Action` 원장 | `assembleOperatorUtilityEvidence()` |
 | 런타임 건강 (latency#1) | `agentlog.Writer.AggregateByModel` | `RuntimeHealth` 클로저 (서버 주입) |
 | 코드베이스 건강 | `health-v2-baseline.json` | `QualityBench` 클로저 (서버 주입) |
+| 개정 구조성 균형 (L1.5 함정 계측) | `MetaRevisionRecord.RevisionClass` 원장 (`meta_revision_class.go` 결정적 분류) | `assembleRevisionClassEvidence()` (producer 에폭; 파라미터형 연속 채택 ≥3이면 구조 개정 넛지) |
 
 세 신호 모두 기존 데이터 소스의 읽기 전용 뷰이며, genesis는 리프 패키지로
 유지된다 (agentlog/baseline 지식은 서버 클로저가 소유).

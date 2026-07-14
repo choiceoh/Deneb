@@ -115,6 +115,11 @@ type MetaRevisionRecord struct {
 	// the subtle-vs-blatant judge-degradation split — informs the producer's
 	// prose, never decides adoption.
 	OperatorUtility *operatorUtilitySignals `json:"operatorUtility,omitempty"`
+	// RevisionClass classifies a PROPOSED revision against its incumbent:
+	// "structural" | "parametric" (L1.5-trap telemetry, Bilevel Autoresearch
+	// 2603.23420 — parameter-level tweaks showed no reliable gain there). Set
+	// on cycle records that produced a proposal; ADVISORY, no gate reads it.
+	RevisionClass string `json:"revisionClass,omitempty"`
 }
 
 // operatorUtilitySignals summarizes 7d operator feed-card decisions for the
@@ -315,6 +320,9 @@ type MetaEvolutionTask struct {
 	// pendingOperatorUtility is the ADVISORY snapshot stashed for the cycle's
 	// ledger write (P5-5); set once in Run, copied into MetaRevisionRecord.
 	pendingOperatorUtility *operatorUtilitySignals
+	// pendingRevisionClass is the structural/parametric classification of the
+	// in-flight proposal (L1.5-trap telemetry); set after the contract gate.
+	pendingRevisionClass string
 }
 
 // Name identifies the task in the autonomous scheduler.
@@ -372,6 +380,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 			AdoptionHealth:  t.pendingAdoptionHealth,
 			Action:          t.pendingAction,
 			OperatorUtility: t.pendingOperatorUtility,
+			RevisionClass:   t.pendingRevisionClass,
 		})
 		if err != nil {
 			logger.Warn("meta-evolution: ledger write failed", "error", err)
@@ -401,6 +410,13 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 			"artifact", artifact, "reason", rejectReason)
 		return record(false, "", "contract gate rejected: "+rejectReason)
 	}
+	// L1.5-trap telemetry (ADVISORY): classify the surviving proposal as a
+	// structural mechanism change vs a parametric tweak. Ledgered + surfaced;
+	// never a gate input.
+	revClass, revDetail := classifyMetaRevision(incumbent, proposal)
+	t.pendingRevisionClass = revClass
+	logger.Info("meta-evolution: proposal classified",
+		"artifact", artifact, "class", revClass, "detail", revDetail)
 
 	// Evaluator epoch: the judge-degradation bench is the ONLY fitness for a
 	// judge-prompt revision (BabelJudge — a judge must never grade its own
@@ -548,6 +564,7 @@ func (t *MetaEvolutionTask) recordWithBenches(record func(bool, string, string) 
 		t.pendingBenchGenesis = nil // set directly by the genesis-epoch branch
 		t.pendingAdoptionHealth, t.pendingAction = nil, ""
 		t.pendingOperatorUtility = nil
+		t.pendingRevisionClass = ""
 	}()
 	return record(proposed, toVersion, reason)
 }
@@ -663,6 +680,9 @@ func (t *MetaEvolutionTask) assembleEvidence(ctx context.Context, epoch string) 
 				p.Epoch, p.Artifact, p.FromVersion, p.ToVersion, common.TruncateRunes(p.Reason, 160), status)
 		}
 	}
+	if epoch == metaEpochProducer {
+		b.WriteString(t.assembleRevisionClassEvidence())
+	}
 	if epoch == metaEpochEvaluator {
 		b.WriteString(t.assembleJudgeAccuracyEvidence())
 	}
@@ -718,6 +738,37 @@ func (t *MetaEvolutionTask) assembleOperatorUtilityEvidence() string {
 	}
 	b.WriteString("\n")
 	b.WriteString("- 이는 운영자가 체감한 효용 자문 신호 — 개선 방향의 정성 참고. 채택률이 낮으면 제안이 운영자 기대에 못 미쳤다는 뜻이나, 게이트 통과 여부와 무관.\n")
+	return b.String()
+}
+
+// assembleRevisionClassEvidence surfaces the structural/parametric balance of
+// recent meta revisions to the PRODUCER epoch (L1.5-trap counter-pressure,
+// Bilevel Autoresearch 2603.23420: parameter tweaks of a fixed mechanism gave
+// no reliable gain; structural mechanism change carried the improvement). When
+// adoptions run parametric for metaParametricStreakNudge consecutive windows,
+// an explicit nudge asks the producer to weigh a structural candidate — while
+// keeping the one-weakness-per-cycle discipline. ADVISORY prose only; the
+// deterministic gates are untouched, so a timid-but-correct revision still
+// adopts and a bold-but-regressive one is still rejected.
+func (t *MetaEvolutionTask) assembleRevisionClassEvidence() string {
+	if t.Tracker == nil {
+		return ""
+	}
+	bal := t.Tracker.MetaRevisionClassBalance()
+	if bal.Structural+bal.Parametric == 0 {
+		return "" // pre-instrumentation history only — stay quiet
+	}
+	var b strings.Builder
+	b.WriteString("\n## 개정 구조성 균형 (자문 — 게이트 아님)\n")
+	fmt.Fprintf(&b, "- 최근 제안 분류: 구조형 %d · 파라미터형 %d", bal.Structural, bal.Parametric)
+	if bal.Unclassified > 0 {
+		fmt.Fprintf(&b, " · 미분류 %d", bal.Unclassified)
+	}
+	b.WriteString("\n")
+	if bal.AdoptedParametricStreak >= metaParametricStreakNudge {
+		fmt.Fprintf(&b, "- ⚠ 최근 채택 %d연속 파라미터형(수치·문구 손질). 증거가 구조적 약점을 가리킨다면 섹션/절차 수준의 메커니즘 개정 후보를 우선 검토하라 — 파라미터 손질만 반복하면 탐색 행동은 바뀌지 않는다 (Bilevel Autoresearch: 파라미터 조정은 유의미한 이득 없음, 구조 교체가 개선의 전부). 단 '한 사이클 한 약점' 규율과 출력 스키마 계약은 그대로 지켜라.\n",
+			bal.AdoptedParametricStreak)
+	}
 	return b.String()
 }
 
