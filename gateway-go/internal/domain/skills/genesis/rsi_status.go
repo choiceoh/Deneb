@@ -505,8 +505,8 @@ func (t *Tracker) dispatchMarkerDir() string {
 // DispatchMarkerBlocks reports whether coding-dispatch would skip this candidate
 // id. Parity with scripts/dev/dispatch_outcome.blocks_redispatch:
 //
-//	landed / attempted          → block
-//	declined / failed / timeout → retryable (do not block)
+//	landed / attempted / declined → block
+//	failed / timeout              → retryable (do not block)
 //	outcome-less / corrupt      → block until marker mtime is older than
 //	                               dispatchMarkerAbandonAfter (default = L4
 //	                               SESSION_TIMEOUT 2h); after that the pick
@@ -536,9 +536,9 @@ func (t *Tracker) dispatchMarkerBlocksAt(id string, now time.Time) bool {
 		return true
 	}
 	switch strings.TrimSpace(m.Outcome) {
-	case "landed", "attempted":
+	case "landed", "attempted", "declined":
 		return true
-	case "declined", "failed", "timeout":
+	case "failed", "timeout":
 		return false
 	default:
 		info, err := os.Stat(path)

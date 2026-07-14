@@ -12,10 +12,10 @@
 #      적용되고, 프롬프트가 랜딩까지 지시한다 (체크 그린 시 pr.sh land).
 #   4. 배차 마커(~/.deneb/data/coding_dispatch/<id>.json)로 재배차를 막고
 #      일일 배차 상한으로 토큰 예산을 지킨다. 마커 파일 존재만으로는 영구
-#      스킵하지 않는다 — landed/attempted만 차단, declined/failed/timeout은
-#      재시도, outcome 없는 마커는 세션 타임아웃 경과 후 포기(abandoned)로
-#      본다 (dispatch_outcome.blocks_redispatch). abandoned 마커는 authoritative
-#      lifecycle·GitHub·git 사실을 함께 확인한 뒤에만 회수한다.
+#      스킵하지 않는다 — landed/attempted/declined는 차단하고, 실제 프로세스
+#      실패·타임아웃만 재시도한다. outcome 없는 마커는 세션 타임아웃 경과 후
+#      포기(abandoned)로 본다 (dispatch_outcome.blocks_redispatch). abandoned
+#      마커는 authoritative lifecycle·GitHub·git 사실을 함께 확인한 뒤에만 회수한다.
 #   5. 매 시도는 고유 branch/worktree로 최신 origin/main에서 시작한다. dirty,
 #      ahead, remote 보존이 필요한 시도는 강제 삭제하지 않으며, 안전하게 회수할
 #      수 없는 경우 그대로 남긴다. 셋업 실패 시 같은 틱에서 다음 후보로 넘어간다
@@ -96,6 +96,36 @@ record_runtime_status() {
             --result "$result" --detail "$detail" --candidate "$candidate" \
             >>"$LOG_FILE" 2>&1 || log "WARN: failed to persist dispatch runtime status ($result)"
     fi
+}
+
+# A clean no-change verdict is a healthy dispatcher completion, not a broken
+# agent session. Keep actual process/timeout/unlanded-work failures visible.
+record_session_status() {
+    local candidate="$1" pr_outcome="$2" outcome="$3" rc="$4"
+    case "$pr_outcome" in
+        merged) record_runtime_status merged "PR merged" "$candidate" ;;
+        open) record_runtime_status pr_opened "PR open" "$candidate" ;;
+        *)
+            case "$outcome" in
+                declined)
+                    record_runtime_status completed \
+                        "session declined safely; no code or PR" "$candidate"
+                    ;;
+                timeout)
+                    record_runtime_status session_failed \
+                        "session timed out; no open or merged PR" "$candidate"
+                    ;;
+                attempted)
+                    record_runtime_status session_failed \
+                        "session left unlanded work; no open PR" "$candidate"
+                    ;;
+                *)
+                    record_runtime_status session_failed \
+                        "session rc=$rc; no open or merged PR" "$candidate"
+                    ;;
+            esac
+            ;;
+    esac
 }
 
 record_event() {
@@ -558,16 +588,6 @@ PYEOF
         log "WARN: failed to record terminal PR outcome for $cid"
     fi
 
-    if [[ "$terminal_recorded" -eq 0 ]]; then
-        record_runtime_status ledger_failed "terminal event rejected" "$cid"
-    else
-        case "$PR_OUTCOME" in
-            merged) record_runtime_status merged "PR merged" "$cid" ;;
-            open) record_runtime_status pr_opened "PR open" "$cid" ;;
-            *) record_runtime_status session_failed "session rc=$rc; no open or merged PR" "$cid" ;;
-        esac
-    fi
-
     # Instant failure (<60s, rc!=0) means the session never really started —
     # binary not logged in, missing
     # deps, etc. Burning the candidate AND a daily-cap slot on that would starve
@@ -596,6 +616,12 @@ PYEOF
     outcome=$(python3 "$script_dir/dispatch_outcome.py" --marker "$DISPATCH_DIR/$cid.json" \
         --rc "$rc" --elapsed "$elapsed" --ahead "$ahead" --pr-state "$pr_state" 2>>"$LOG_FILE" || echo "unknown")
     log "dispatch $cid outcome: $outcome (prState=${pr_state:-n/a}, ahead=${ahead:-n/a})"
+
+    if [[ "$terminal_recorded" -eq 0 ]]; then
+        record_runtime_status ledger_failed "terminal event rejected" "$cid"
+    else
+        record_session_status "$cid" "$PR_OUTCOME" "$outcome" "$rc"
+    fi
 
     # Worktree cleanup only when the branch merged or session ended clean with
     # no unpushed work; otherwise keep for inspection.

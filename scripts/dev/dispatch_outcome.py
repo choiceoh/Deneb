@@ -22,9 +22,11 @@ the worktree's commit state), never from parsing session text:
 When --ahead is '' (unknown) and --pr-state is empty, refuse to guess: leave
 the marker without an outcome rather than recording a false declined.
 
-Pick-lane companion: blocks_redispatch() — landed/attempted block redispatch;
-declined/failed/timeout may retry; outcome-less markers block only until the
-session abandon age (default = SESSION_TIMEOUT).
+Pick-lane companion: blocks_redispatch() — landed/attempted/declined block
+redispatch; failed/timeout may retry; outcome-less markers block only until
+the session abandon age (default = SESSION_TIMEOUT). A clean decline is a
+deliberate no-change verdict, so repeating the same unchanged candidate only
+burns another agent session without adding evidence.
 
 The marker is rewritten atomically (tmp+rename); all fields are additive so
 older markers without outcomes stay readable. Exit 0 even on unreadable
@@ -41,8 +43,8 @@ from pathlib import Path
 
 TIMEOUT_RC = 124  # coreutils timeout(1) convention
 
-BLOCKING_OUTCOMES = frozenset({"landed", "attempted"})
-REDISPATCH_OUTCOMES = frozenset({"declined", "failed", "timeout"})
+BLOCKING_OUTCOMES = frozenset({"landed", "attempted", "declined"})
+REDISPATCH_OUTCOMES = frozenset({"failed", "timeout"})
 DEFAULT_ABANDON_AFTER_SEC = 7200
 ACTIVE_LEDGER_PHASES = frozenset({"started", "pr_opened", "merged", "deployed", "watch_passed"})
 RETRYABLE_LEDGER_PHASES = frozenset({"failed", "rolled_back"})

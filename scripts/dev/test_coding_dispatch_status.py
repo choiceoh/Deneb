@@ -12,6 +12,27 @@ from coding_dispatch_status import record_status
 
 
 class CodingDispatchStatusTest(unittest.TestCase):
+    def _session_status(self, pr_outcome: str, outcome: str, rc: int) -> str:
+        dispatcher_path = Path(__file__).with_name("coding-dispatch.sh")
+        proc = subprocess.run(
+            [
+                "/bin/bash",
+                "-c",
+                'source "$1"; '
+                'record_runtime_status() { printf "%s|%s|%s" "$1" "$2" "$3"; }; '
+                'record_session_status candidate "$2" "$3" "$4"',
+                "test",
+                str(dispatcher_path),
+                pr_outcome,
+                outcome,
+                str(rc),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return proc.stdout
+
     def test_dispatcher_uses_codex_executor_without_claude_binary_contract(self):
         dispatcher = Path(__file__).with_name("coding-dispatch.sh").read_text(encoding="utf-8")
         self.assertIn("coding_dispatch_executor.py", dispatcher)
@@ -87,6 +108,24 @@ class CodingDispatchStatusTest(unittest.TestCase):
             'record_runtime_status environment_failed "instant environment failure rc=$rc" "$cid"'
         )
         self.assertIn(expected, dispatcher)
+
+    def test_clean_decline_is_completed_not_session_failure(self):
+        self.assertEqual(
+            self._session_status("failed", "declined", 0),
+            "completed|session declined safely; no code or PR|candidate",
+        )
+
+    def test_real_session_failures_remain_visible(self):
+        self.assertTrue(
+            self._session_status("failed", "failed", 1).startswith("session_failed|")
+        )
+        self.assertTrue(
+            self._session_status("failed", "timeout", 124).startswith("session_failed|")
+        )
+        self.assertEqual(
+            self._session_status("open", "attempted", 0),
+            "pr_opened|PR open|candidate",
+        )
 
     def test_failures_accumulate_and_success_resets(self):
         with TemporaryDirectory() as td:

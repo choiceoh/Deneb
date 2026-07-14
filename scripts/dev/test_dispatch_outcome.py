@@ -129,15 +129,15 @@ class BlocksRedispatchTest(unittest.TestCase):
     def test_missing_marker_does_not_block(self):
         self.assertFalse(dispatch_outcome.blocks_redispatch("/no/such/marker.json"))
 
-    def test_landed_and_attempted_block(self):
+    def test_terminal_outcomes_block(self):
         with TemporaryDirectory() as td:
-            for outcome in ("landed", "attempted"):
+            for outcome in ("landed", "attempted", "declined"):
                 path = self._write(td, f"{outcome}.json", {"id": "x", "outcome": outcome})
                 self.assertTrue(dispatch_outcome.blocks_redispatch(path), outcome)
 
-    def test_terminal_failures_allow_retry(self):
+    def test_process_failures_allow_retry(self):
         with TemporaryDirectory() as td:
-            for outcome in ("declined", "failed", "timeout"):
+            for outcome in ("failed", "timeout"):
                 path = self._write(td, f"{outcome}.json", {"id": "x", "outcome": outcome})
                 self.assertFalse(dispatch_outcome.blocks_redispatch(path), outcome)
 
