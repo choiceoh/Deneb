@@ -102,7 +102,7 @@ func TestIndexOptionsAndNilSafety(t *testing.T) {
 	}
 }
 
-func TestWarmBatchesSkipsShortAndReusesHashes(t *testing.T) {
+func TestWarmLoadsOnlyChangedItemsAndSkipsShortText(t *testing.T) {
 	embedder := &recordingEmbedder{healthy: true}
 	ix := New("batch", embedder, "", WithBatchSize(2))
 	defer ix.Close()
@@ -182,7 +182,7 @@ func TestWarmPreservesPriorVectorsOnEmbedFailureAndBadShape(t *testing.T) {
 	}
 }
 
-func TestSearchGuardsRankingAndStableTies(t *testing.T) {
+func TestSearchVecRejectsInvalidInputsAndBreaksTiesStably(t *testing.T) {
 	ix := New("search", &recordingEmbedder{healthy: true}, "")
 	defer ix.Close()
 	ix.vecs = map[string]cachedVec{
@@ -213,7 +213,7 @@ func TestSearchGuardsRankingAndStableTies(t *testing.T) {
 	}
 }
 
-func TestSearchAndSearchBatchDegradation(t *testing.T) {
+func TestSearchAndSearchBatchReturnNilOnDegradedEmbedderOrShortInput(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		embedder *recordingEmbedder
@@ -352,7 +352,7 @@ func TestRefreshAsyncSingleFlightAndCloseCancellation(t *testing.T) {
 	ix.Close() // idempotent
 }
 
-func TestContentHashDeterminismAndSeparation(t *testing.T) {
+func TestContentHashPreservesDeterminismAndSeparatesInputs(t *testing.T) {
 	a := ContentHash("same text")
 	b := ContentHash("same text")
 	c := ContentHash("different text")

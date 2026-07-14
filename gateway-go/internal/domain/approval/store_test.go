@@ -29,7 +29,7 @@ func TestCreateRequest(t *testing.T) {
 	}
 }
 
-func TestGetRequest(t *testing.T) {
+func TestGetRequestReturnsCopyPreservingOriginal(t *testing.T) {
 	s := NewStore()
 	req := s.CreateRequest(CreateRequestParams{Command: "echo hello"})
 
@@ -49,7 +49,7 @@ func TestGetRequest(t *testing.T) {
 	}
 }
 
-func TestResolve(t *testing.T) {
+func TestResolveUpdatesDecisionAndResolvedTimestamp(t *testing.T) {
 	s := NewStore()
 	req := s.CreateRequest(CreateRequestParams{Command: "test"})
 
@@ -68,7 +68,7 @@ func TestResolve(t *testing.T) {
 	}
 }
 
-func TestWaitForDecision(t *testing.T) {
+func TestWaitForDecisionEmitsNotificationOnResolve(t *testing.T) {
 	s := NewStore()
 	req := s.CreateRequest(CreateRequestParams{Command: "test"})
 
@@ -105,7 +105,7 @@ func TestWaitForDecisionAlreadyResolved(t *testing.T) {
 	}
 }
 
-func TestGlobalSnapshot(t *testing.T) {
+func TestGlobalSnapshotUpdatesVersionAndHash(t *testing.T) {
 	s := NewStore()
 
 	snap := s.GlobalSnapshot()
@@ -126,7 +126,7 @@ func TestGlobalSnapshot(t *testing.T) {
 	}
 }
 
-func TestCleanup(t *testing.T) {
+func TestCleanupRemovesExpiredRequest(t *testing.T) {
 	s := NewStore()
 	// Create with very short TTL.
 	s.defaultTTL = 1 * time.Millisecond
@@ -139,7 +139,7 @@ func TestCleanup(t *testing.T) {
 	}
 }
 
-func TestTwoPhase(t *testing.T) {
+func TestCreateRequestPreservesTwoPhaseFlag(t *testing.T) {
 	s := NewStore()
 	req := s.CreateRequest(CreateRequestParams{
 		Command:  "dangerous",

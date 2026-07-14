@@ -98,9 +98,10 @@ func TestNormalizeKindsHierarchy(t *testing.T) {
 	}
 }
 
-// TestProjectAnchor_SiteMatch: naming the PLACE anchors the project — mail and
-// calendar text says "수산리 현장" far more often than the project title.
-func TestProjectAnchor_SiteMatch(t *testing.T) {
+// TestProjectAnchor_MatchesBySiteNameMentionIgnoresUnrelatedText: naming the PLACE
+// anchors the project — mail and calendar text says "수산리 현장" far more often
+// than the project title.
+func TestProjectAnchor_MatchesBySiteNameMentionIgnoresUnrelatedText(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

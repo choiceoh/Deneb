@@ -6,9 +6,9 @@ import (
 	"testing/quick"
 )
 
-// TestTransitionsFromTerminalOnlyToRunning verifies that terminal states can
+// TestTerminalStatusesAllowOnlyRestartTransition verifies that terminal states can
 // only transition back to Running (the restart/retry path).
-func TestTransitionsFromTerminalOnlyToRunning(t *testing.T) {
+func TestTerminalStatusesAllowOnlyRestartTransition(t *testing.T) {
 	terminals := []RunStatus{StatusDone, StatusFailed, StatusKilled, StatusTimeout}
 	allStatuses := []RunStatus{StatusRunning, StatusDone, StatusFailed, StatusKilled, StatusTimeout}
 
@@ -28,10 +28,10 @@ func TestTransitionsFromTerminalOnlyToRunning(t *testing.T) {
 	}
 }
 
-// TestRunningAlwaysReachesTerminal applies random valid transitions starting
+// TestRunningAlwaysTransitionsToTerminalBoundaryState applies random valid transitions starting
 // from Running. Since Running can only go to terminal states, a single
 // transition from Running must always reach a terminal state.
-func TestRunningAlwaysReachesTerminal(t *testing.T) {
+func TestRunningAlwaysTransitionsToTerminalBoundaryState(t *testing.T) {
 	f := func(seed uint32) bool {
 		rng := rand.New(rand.NewSource(int64(seed)))
 		status := StatusRunning
@@ -50,9 +50,9 @@ func TestRunningAlwaysReachesTerminal(t *testing.T) {
 	}
 }
 
-// TestValidateTransitionConsistency checks that ValidateTransition and
+// TestValidateTransitionAgreesWithIsValidTransitionContract checks that ValidateTransition and
 // IsValidTransition always agree.
-func TestValidateTransitionConsistency(t *testing.T) {
+func TestValidateTransitionAgreesWithIsValidTransitionContract(t *testing.T) {
 	allStatuses := []RunStatus{"", StatusRunning, StatusDone, StatusFailed, StatusKilled, StatusTimeout}
 
 	for _, from := range allStatuses {
@@ -69,9 +69,9 @@ func TestValidateTransitionConsistency(t *testing.T) {
 	}
 }
 
-// TestRandomTransitionSequencesNeverPanic applies random transitions and
+// TestRandomTransitionSequencesWithInvalidStepsNeverPanic applies random transitions and
 // verifies no panics occur, even with invalid transitions.
-func TestRandomTransitionSequencesNeverPanic(t *testing.T) {
+func TestRandomTransitionSequencesWithInvalidStepsNeverPanic(t *testing.T) {
 	allStatuses := []RunStatus{"", StatusRunning, StatusDone, StatusFailed, StatusKilled, StatusTimeout}
 
 	f := func(seed uint32) bool {
@@ -98,10 +98,10 @@ func TestRandomTransitionSequencesNeverPanic(t *testing.T) {
 	}
 }
 
-// TestIsTerminalMatchesValidTransitions verifies that IsTerminal is consistent
+// TestIsTerminalAgreesWithValidTransitionsContract verifies that IsTerminal is consistent
 // with the valid transitions map — terminal states should allow transition to
 // Running only, and Running should not be terminal.
-func TestIsTerminalMatchesValidTransitions(t *testing.T) {
+func TestIsTerminalAgreesWithValidTransitionsContract(t *testing.T) {
 	for status, targets := range validTransitions {
 		if status == "" {
 			continue // initial state, not a real status

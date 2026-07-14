@@ -20,7 +20,7 @@ func TestNormalizeSkillFilter_TrimsAndDeduplicates(t *testing.T) {
 	}
 }
 
-func TestMatchesSkillFilter_Equal(t *testing.T) {
+func TestMatchesSkillFilterIgnoresElementOrder(t *testing.T) {
 	a := []string{"weather", "github"}
 	b := []string{"github", "weather"}
 	if !MatchesSkillFilter(a, b) {
@@ -28,7 +28,7 @@ func TestMatchesSkillFilter_Equal(t *testing.T) {
 	}
 }
 
-func TestMatchesSkillFilter_Different(t *testing.T) {
+func TestMatchesSkillFilterReturnsFalseForDifferentSets(t *testing.T) {
 	a := []string{"weather"}
 	b := []string{"github"}
 	if MatchesSkillFilter(a, b) {
@@ -36,7 +36,7 @@ func TestMatchesSkillFilter_Different(t *testing.T) {
 	}
 }
 
-func TestDedupeAndSort(t *testing.T) {
+func TestDedupeAndSortDeduplicatesAndSorts(t *testing.T) {
 	tests := []struct {
 		name  string
 		input []string

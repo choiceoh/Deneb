@@ -20,10 +20,10 @@ func relatedSet(t *testing.T, store *Store, relPath string) map[string]bool {
 	return set
 }
 
-// TestStore_MergePage_FullScenario exercises the whole merge: body replacement,
-// frontmatter union, repointing a third page that referenced the source, and
-// deletion of the source page.
-func TestStore_MergePage_FullScenario(t *testing.T) {
+// TestStore_MergePage_UnionsFrontmatterRepointsReferrersAndDeletesSource exercises
+// the whole merge: body replacement, frontmatter union, repointing a third page
+// that referenced the source, and deletion of the source page.
+func TestStore_MergePage_UnionsFrontmatterRepointsReferrersAndDeletesSource(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()

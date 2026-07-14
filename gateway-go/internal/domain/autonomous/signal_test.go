@@ -35,7 +35,7 @@ func TestDetectSignals_Empty(t *testing.T) {
 	}
 }
 
-func TestDetectSignals_VIPMailUnanswered(t *testing.T) {
+func TestDetectSignals_VIPMailUnansweredWithSenderName(t *testing.T) {
 	cfg := DefaultSignalConfig()
 	in := SignalInputs{
 		Now: signalTestNow,
@@ -72,7 +72,7 @@ func TestDetectSignals_VIPMailAnsweredOrRead_NoSignal(t *testing.T) {
 	}
 }
 
-func TestDetectSignals_StaleVsFreshMail(t *testing.T) {
+func TestDetectSignals_StaleVsFreshMailWithoutEscalating(t *testing.T) {
 	cfg := DefaultSignalConfig()
 	// Fresh, non-important, unanswered mail → no signal.
 	fresh := SignalInputs{Now: signalTestNow, Mail: []MailSignalInput{
@@ -98,7 +98,7 @@ func TestDetectSignals_StaleVsFreshMail(t *testing.T) {
 	}
 }
 
-func TestDetectSignals_StaleMailAccumulatesToThreshold(t *testing.T) {
+func TestDetectSignals_StaleMailAccumulatesToThresholdBoundary(t *testing.T) {
 	cfg := DefaultSignalConfig() // StaleMailWeight=15, threshold=40 → need 3
 	var mail []MailSignalInput
 	for i := range 3 {
@@ -113,7 +113,7 @@ func TestDetectSignals_StaleMailAccumulatesToThreshold(t *testing.T) {
 	}
 }
 
-func TestDetectSignals_CalendarConflict(t *testing.T) {
+func TestDetectSignals_CalendarConflictWithEventNames(t *testing.T) {
 	cfg := DefaultSignalConfig()
 	in := SignalInputs{Now: signalTestNow, Events: []EventSignalInput{
 		{ID: "1", Summary: "팀 미팅", Start: at(time.Hour), End: at(2 * time.Hour)},
@@ -132,7 +132,7 @@ func TestDetectSignals_CalendarConflict(t *testing.T) {
 	}
 }
 
-func TestDetectSignals_AdjacentEventsNoConflict(t *testing.T) {
+func TestDetectSignals_AdjacentEventsWithoutConflict(t *testing.T) {
 	cfg := DefaultSignalConfig()
 	// Back-to-back (one ends exactly when next starts) is NOT a conflict.
 	in := SignalInputs{Now: signalTestNow, Events: []EventSignalInput{
@@ -157,7 +157,7 @@ func TestDetectSignals_CanceledAndAllDayIgnoredForConflict(t *testing.T) {
 	}
 }
 
-func TestDetectSignals_ThreeWayConflictCountsPairs(t *testing.T) {
+func TestDetectSignals_ThreeWayConflictCreatesThreePairs(t *testing.T) {
 	cfg := DefaultSignalConfig()
 	// Three events all overlapping the same window → 3 pairs (1-2, 1-3, 2-3).
 	in := SignalInputs{Now: signalTestNow, Events: []EventSignalInput{
@@ -171,7 +171,7 @@ func TestDetectSignals_ThreeWayConflictCountsPairs(t *testing.T) {
 	}
 }
 
-func TestDetectSignals_ImminentEvent(t *testing.T) {
+func TestDetectSignals_ImminentEventWithMissingResponse(t *testing.T) {
 	cfg := DefaultSignalConfig()
 	in := SignalInputs{Now: signalTestNow, Events: []EventSignalInput{
 		{ID: "1", Summary: "이사회", Start: at(20 * time.Minute), End: at(80 * time.Minute), NeedsResponse: true},
@@ -189,7 +189,7 @@ func TestDetectSignals_ImminentEvent(t *testing.T) {
 	}
 }
 
-func TestDetectSignals_PastEventNotImminent(t *testing.T) {
+func TestDetectSignals_PastEventWithoutImminentSignal(t *testing.T) {
 	cfg := DefaultSignalConfig()
 	in := SignalInputs{Now: signalTestNow, Events: []EventSignalInput{
 		{ID: "1", Summary: "이미 시작", Start: at(-10 * time.Minute), End: at(50 * time.Minute)},
@@ -199,7 +199,7 @@ func TestDetectSignals_PastEventNotImminent(t *testing.T) {
 	}
 }
 
-func TestDetectSignals_DeadlineWindow(t *testing.T) {
+func TestDetectSignals_DeadlineWindowBoundary(t *testing.T) {
 	cfg := DefaultSignalConfig()
 	in := SignalInputs{Now: signalTestNow, Deadlines: []DeadlineSignalInput{
 		{Label: "보고서 제출", Due: at(3 * time.Hour)}, // within 24h → signal
@@ -215,7 +215,7 @@ func TestDetectSignals_DeadlineWindow(t *testing.T) {
 	}
 }
 
-func TestDetectSignals_SummaryCapsReasonsPerKind(t *testing.T) {
+func TestDetectSignals_SummaryTruncatesReasonsPerKind(t *testing.T) {
 	cfg := DefaultSignalConfig()
 	var mail []MailSignalInput
 	for i := range 5 {
@@ -250,7 +250,7 @@ func TestDetectSignals_ThresholdBoundary(t *testing.T) {
 	}
 }
 
-func TestDetectSignals_MixedScore(t *testing.T) {
+func TestDetectSignals_MixedScoreFormatsSummaryOrder(t *testing.T) {
 	cfg := DefaultSignalConfig()
 	in := SignalInputs{
 		Now: signalTestNow,
@@ -281,7 +281,7 @@ func TestDetectSignals_MixedScore(t *testing.T) {
 	}
 }
 
-func TestDetectSignals_ZeroWindowsDisableRules(t *testing.T) {
+func TestDetectSignals_ZeroWindowsIgnoreAllInputs(t *testing.T) {
 	cfg := DefaultSignalConfig()
 	cfg.StaleMailAge = 0
 	cfg.ImminentEventWindow = 0
@@ -299,7 +299,7 @@ func TestDetectSignals_ZeroWindowsDisableRules(t *testing.T) {
 	}
 }
 
-func TestHumanizeDuration(t *testing.T) {
+func TestHumanizeDurationFormatsKoreanStrings(t *testing.T) {
 	cases := []struct {
 		d    time.Duration
 		want string

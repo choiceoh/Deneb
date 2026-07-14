@@ -2,7 +2,7 @@ package propus
 
 import "testing"
 
-func TestPropusSystemIdentityFiltersWeakSources(t *testing.T) {
+func TestBuildPropusSystemIdentityReturnsCanonicalSeparatedFromFilteredSources(t *testing.T) {
 	identity := BuildPropusSystemIdentity(PropusScopeGlobal)
 
 	if identity.Name != "Propus" || identity.Codename != "propus" {
@@ -19,7 +19,7 @@ func TestPropusSystemIdentityFiltersWeakSources(t *testing.T) {
 	}
 }
 
-func TestBuildPropusOverviewUsesUnifiedCoverageAndActions(t *testing.T) {
+func TestBuildPropusOverviewReturnsStateCoverageAndNextActions(t *testing.T) {
 	overview := BuildPropusOverview(PropusOverviewInput{
 		Scope: PropusScopeGlobal,
 		Recent: []LifecycleLogEntry{
@@ -75,7 +75,7 @@ func TestBuildPropusOverviewUsesUnifiedCoverageAndActions(t *testing.T) {
 	}
 }
 
-func TestBuildPropusLifecycleSummaryUsesSharedOverview(t *testing.T) {
+func TestBuildPropusLifecycleSummaryReturnsStateCoverageAndNextCue(t *testing.T) {
 	summary := BuildPropusLifecycleSummary(PropusLifecycleSummaryInput{
 		Scope:     PropusScopeSkill,
 		SkillName: "srv1-ops",

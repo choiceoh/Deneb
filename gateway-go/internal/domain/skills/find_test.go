@@ -18,7 +18,7 @@ func seedSkillFile(t *testing.T, root, rel string) string {
 	return p
 }
 
-func TestFindSkillFile_AllLayouts(t *testing.T) {
+func TestFindSkillFileReturnsFlatCategoryAndGenesisLayouts(t *testing.T) {
 	root := t.TempDir()
 	want := map[string]string{
 		"flat-skill": seedSkillFile(t, root, "flat-skill/SKILL.md"),

@@ -73,9 +73,10 @@ func TestRestructure_DryRunWritesNothing(t *testing.T) {
 	}
 }
 
-// TestRestructure_SetClient: the set-client plan op stamps the 대표페이지's
-// 거래처 without re-stamping Updated; non-rep sources are skipped with a reason.
-func TestRestructure_SetClient(t *testing.T) {
+// TestRestructure_SetClientStampsRepClientWithoutTouchingUpdatedSkipsLedger: the
+// set-client plan op stamps the 대표페이지's 거래처 without re-stamping Updated;
+// non-rep sources are skipped with a reason.
+func TestRestructure_SetClientStampsRepClientWithoutTouchingUpdatedSkipsLedger(t *testing.T) {
 	store := newRestructureStore(t)
 
 	// Pin a known Updated so the no-restamp contract is observable. Use a rep
@@ -122,7 +123,7 @@ func TestRestructure_SetClient(t *testing.T) {
 	}
 }
 
-func TestRestructure_Apply(t *testing.T) {
+func TestRestructure_ApplyMergesFoldsMovesMailAndMintsRepIdempotently(t *testing.T) {
 	store := newRestructureStore(t)
 
 	plan := []RestructureOp{

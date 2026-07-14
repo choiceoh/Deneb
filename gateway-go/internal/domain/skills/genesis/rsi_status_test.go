@@ -17,10 +17,11 @@ func rsiLayerByKey(layers []rsiLayer, key string) rsiLayer {
 	return rsiLayer{}
 }
 
-// SourceAutoDispatches is the single graduation predicate the L4 count and the
+// TestSourceAutoDispatchesReturnsTrueForGraduatedFalseForStagedSources exercises
+// SourceAutoDispatches, the single graduation predicate the L4 count and the
 // wire projection both read — it must include tool-quality (:desc/:latency) as
 // of the 2026-07-13 graduation, and exclude still-staged sources.
-func TestSourceAutoDispatches(t *testing.T) {
+func TestSourceAutoDispatchesReturnsTrueForGraduatedFalseForStagedSources(t *testing.T) {
 	graduated := []string{
 		"evolve-tool-gap", "self-harness",
 		"health-finding:volatile-hub:46a3", "tool-quality:web:desc", "tool-quality:exec:latency",
@@ -40,7 +41,7 @@ func TestSourceAutoDispatches(t *testing.T) {
 
 // A tool-quality code candidate now counts as dispatchable in L4 (the graduation
 // bug: the allowlist previously omitted it, undercounting the client's L4 view).
-func TestRSIStatus_L4ToolQualityGraduated(t *testing.T) {
+func TestRSIStatusL4ReturnsToolQualityCandidateAsDispatchable(t *testing.T) {
 	tr := newTestTracker(t)
 	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "tool-quality",
@@ -56,7 +57,7 @@ func TestRSIStatus_L4ToolQualityGraduated(t *testing.T) {
 
 // The structured health block is always present on the snapshot, and its rates
 // stay in [0,1] — clients draw a scoreboard from it instead of parsing strings.
-func TestRSIStatus_HealthBlockPresent(t *testing.T) {
+func TestRSIStatusHealthRatesWithinZeroToOneRange(t *testing.T) {
 	st := newTestTracker(t).RSIStatus()
 	if st.Health.ConfirmRate < 0 || st.Health.ConfirmRate > 1 {
 		t.Fatalf("confirmRate out of range: %v", st.Health.ConfirmRate)
@@ -89,7 +90,7 @@ func TestRSIStatus_EmptyTrackerIsQuiet(t *testing.T) {
 }
 
 // Each layer flips to LIVE from its own signal, and Turning counts them.
-func TestRSIStatus_AllLayersLive(t *testing.T) {
+func TestRSIStatusAllFourLayersLiveWhenEachSignalFires(t *testing.T) {
 	tr := newTestTracker(t)
 	if err := tr.LogEvolve("sk", "1.0.1", "tightened"); err != nil { // L1
 		t.Fatal(err)
@@ -157,7 +158,7 @@ func TestRSIStatus_L1DataGatedOnRejectionsOnly(t *testing.T) {
 // Proposals without commits are also DATA-GATED (Python assess_l1 parity) —
 // previously they fell through to IDLE because EvolutionHealth ignored
 // evolution_proposal events.
-func TestRSIStatus_L1DataGatedOnProposalsOnly(t *testing.T) {
+func TestRSIStatusL1DataGatedOnProposalsWithoutCommits(t *testing.T) {
 	tr := newTestTracker(t)
 	if err := tr.LogEvolutionProposal(EvolutionProposalRecord{
 		Candidate: "repeatable deploy fix", Route: "genesis",
@@ -203,7 +204,7 @@ func TestRSIStatus_L2LiveWithin14dWindow(t *testing.T) {
 
 // A marker receipt alone is not proof that the authoritative dispatch loop is
 // turning; only a lifecycle event may make L4 LIVE.
-func TestRSIStatus_L4MarkerTodayDoesNotClaimLive(t *testing.T) {
+func TestRSIStatusL4MarkerReceiptAloneStaysIdleWithoutStarting(t *testing.T) {
 	tr := newTestTracker(t)
 	dir := filepath.Join(filepath.Dir(tr.selfCorrectionPath), "coding_dispatch")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -225,7 +226,7 @@ func TestRSIStatus_L4MarkerTodayDoesNotClaimLive(t *testing.T) {
 // source, not yet in the dispatch allowlist) is STARVED — code fuel exists but
 // nothing is dispatchable. The staged metric and diagnosis must say so
 // explicitly: supply awaiting review, not a wiring gap.
-func TestRSIStatus_L4StarvedOnNonDispatchableCode(t *testing.T) {
+func TestRSIStatusL4StarvedWhenOnlyStagedNonDispatchableCandidateExists(t *testing.T) {
 	tr := newTestTracker(t)
 	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "gateway-runtime",
@@ -252,7 +253,7 @@ func TestRSIStatus_L4StarvedOnNonDispatchableCode(t *testing.T) {
 // review and is in the dispatch allowlist — its candidates count dispatchable
 // while a staged runtime-error next to it keeps counting. Supply alone remains
 // IDLE until the authoritative dispatcher records a started lifecycle.
-func TestRSIStatus_L4HealthFindingGraduated(t *testing.T) {
+func TestRSIStatusL4HealthFindingCountsDispatchableAlongsideStagedRuntimeError(t *testing.T) {
 	tr := newTestTracker(t)
 	for _, rec := range []SelfCorrectionCandidateRecord{
 		{
@@ -304,7 +305,7 @@ func TestRSIStatus_L4QueuedWithStagedExtras(t *testing.T) {
 // Review-endorsed (accepted) candidates are queued dispatch supply, not settled:
 // the heartbeat review lane accepts candidates it cannot implement itself, and
 // the dispatcher picks them first (2026-07-12 status-contract fix).
-func TestRSIStatus_L4AcceptedCountsDispatchable(t *testing.T) {
+func TestRSIStatusL4ReviewAcceptedCandidateReturnsDispatchable(t *testing.T) {
 	tr := newTestTracker(t)
 	rec, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "codebase-health",
@@ -381,7 +382,7 @@ func TestRSIStatus_L4FailedAttemptOnlyRequeuesWithoutUnlandedWork(t *testing.T) 
 	}
 }
 
-func TestRSIStatus_L4UsesDispatchLifecycleInsteadOfCountingMarkersAsQueued(t *testing.T) {
+func TestRSIStatusL4MetricsReflectDispatchLifecyclePhasesWithoutMarkerCounts(t *testing.T) {
 	tr := newTestTracker(t)
 	makeCandidate := func(id string) {
 		t.Helper()
@@ -435,10 +436,11 @@ func rsiMetricValue(metrics []rsiMetric, label string) string {
 	return ""
 }
 
-// Dispatch-outcome accounting (graduation-ladder evidence): recorded marker
+// TestRSIStatusL4DiagnosisNotesLandRateOnlyWhenMarkersCarryOutcome exercises
+// dispatch-outcome accounting (graduation-ladder evidence): recorded marker
 // outcomes surface as a land-rate note on the L4 diagnosis; a queue whose
 // markers predate outcome accounting stays silent (no fabricated 0% rate).
-func TestRSIStatus_DispatchOutcomeNote(t *testing.T) {
+func TestRSIStatusL4DiagnosisNotesLandRateOnlyWhenMarkersCarryOutcome(t *testing.T) {
 	tr := newTestTracker(t)
 	dir := tr.dispatchMarkerDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {

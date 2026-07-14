@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestApplyDreamPartialBackpressure_HoldsTwoCyclesThenAdvances(t *testing.T) {
+func TestApplyDreamPartialBackpressure_HoldsTwoCyclesThenClears(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	wd := &WikiDreamer{logger: logger}
 	prior := map[string]diaryFileState{"memory/2026-07-11.md": {Offset: 10}}
@@ -43,7 +43,7 @@ func TestApplyDreamPartialBackpressure_HoldsTwoCyclesThenAdvances(t *testing.T) 
 	}
 }
 
-func TestApplyDreamPartialBackpressure_MemoryOnlyCycleStillHolds(t *testing.T) {
+func TestApplyDreamPartialBackpressure_MemoryOnlyCyclePreservesCursor(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	wd := &WikiDreamer{logger: logger}
 	cycle := &dreamCycle{
@@ -71,7 +71,7 @@ func TestApplyDreamPartialBackpressure_MemoryOnlyCycleStillHolds(t *testing.T) {
 	}
 }
 
-func TestDreamProgressCursor_HeldCursorNeverAdvances(t *testing.T) {
+func TestDreamProgressCursor_ReturnsHeldOrLatestDateOrNow(t *testing.T) {
 	now := time.Date(2026, 7, 12, 9, 30, 0, 0, time.UTC)
 	tests := []struct {
 		name   string

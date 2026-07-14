@@ -73,7 +73,7 @@ func TestMetaArtifacts_MaterializeIsWriteIfAbsent(t *testing.T) {
 
 // Behavior-neutral rollout: with no artifacts wired, the resolver returns the
 // exact compiled-in prompt for every known artifact.
-func TestMetaArtifacts_UnwiredIdentity(t *testing.T) {
+func TestMetaArtifactsUnwiredLoadReturnsCompiledDefaults(t *testing.T) {
 	for name, def := range DefaultMetaArtifacts() {
 		if got := (*MetaArtifacts)(nil).Load(name, def); got != def {
 			t.Fatalf("%s: unwired load diverges from compiled default", name)
@@ -81,7 +81,7 @@ func TestMetaArtifacts_UnwiredIdentity(t *testing.T) {
 	}
 }
 
-func TestMetaArtifacts_VersionAttribution(t *testing.T) {
+func TestMetaArtifactsVersionReturnsHashOfEffectivePromptContent(t *testing.T) {
 	// Unwired resolver: version = hash of the compiled fallback — stable.
 	var nilM *MetaArtifacts
 	base := nilM.Version(MetaEvolveSystemPrompt, evolveSystemPrompt)

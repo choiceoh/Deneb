@@ -63,7 +63,7 @@ func TestLoadWikiBrief_ContentAndTruncation(t *testing.T) {
 	}
 }
 
-func TestWikiBriefSection(t *testing.T) {
+func TestWikiBriefSection_WrapsContentUnlessEmpty(t *testing.T) {
 	if got := WikiBriefSection(""); got != "" {
 		t.Errorf("empty brief: got %q, want empty section", got)
 	}
@@ -75,10 +75,11 @@ func TestWikiBriefSection(t *testing.T) {
 	}
 }
 
-// TestBuildWikiSynthesisPromptIncludesBriefSection pins the operator-steering
-// injection point: a non-empty WIKI.md section must reach the dreamer's
-// synthesis prompt verbatim, and an empty brief must add nothing.
-func TestBuildWikiSynthesisPromptIncludesBriefSection(t *testing.T) {
+// TestBuildWikiSynthesisPromptIncludesBriefSectionUnlessEmpty pins the
+// operator-steering injection point: a non-empty WIKI.md section must reach
+// the dreamer's synthesis prompt verbatim, and an empty brief must add
+// nothing.
+func TestBuildWikiSynthesisPromptIncludesBriefSectionUnlessEmpty(t *testing.T) {
 	section := WikiBriefSection("ESS 안건은 반드시 프로젝트로 기록")
 	prompt := buildWikiSynthesisPrompt("index", "history", "", section, "", "diary")
 	if !strings.Contains(prompt, "ESS 안건은 반드시 프로젝트로 기록") {

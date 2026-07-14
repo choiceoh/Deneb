@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestSplitProgressLogSection(t *testing.T) {
+func TestSplitProgressLogSectionParsesSections(t *testing.T) {
 	t.Run("cuts the section and keeps surrounding body", func(t *testing.T) {
 		content := "요약 문단입니다.\n\n## 진행 로그\n- 2026-07-02: 회의 결과 연장 수용\n- 2026-07-03: 공정표 제출\n\n## 관련 문서\n- [[a]]"
 		body, logLines := splitProgressLogSection(content)
@@ -63,7 +63,7 @@ func TestSplitProgressLogSection(t *testing.T) {
 	})
 }
 
-func TestIsDailyMailDigestPage(t *testing.T) {
+func TestIsDailyMailDigestPageReturnsExpectedFlag(t *testing.T) {
 	positives := []struct{ title, path string }{
 		{"daily mail analysis", "기타/daily mail analysis.md"},
 		{"2026-07-02 일일 메일 분석", "기타/2026-07-02-일일-메일-분석.md"},

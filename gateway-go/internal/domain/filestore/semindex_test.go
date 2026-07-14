@@ -42,7 +42,7 @@ func (f *fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, er
 // plainText is a trivial extractor: the file's bytes ARE its text.
 func plainText(_ context.Context, data []byte, _ string) string { return string(data) }
 
-func TestSemanticIndex_ReindexAndSearch(t *testing.T) {
+func TestSemanticIndex_ReindexAndSearchReturnsTopHit(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
 	// Two files with disjoint vocabulary so a query about one ranks it first.
@@ -112,7 +112,7 @@ func (f *fixedEmbedder) Embed(_ context.Context, texts []string) ([][]float32, e
 // This test pins both a 0.6-band noise hit (must be dropped) and a 0.8 relevant
 // hit (must survive), so a regression that lowers the floor back into the noise
 // band fails here.
-func TestSemanticIndex_ScoreFloor(t *testing.T) {
+func TestSemanticIndex_ScoreFloorRejectsNoiseQueries(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
 	// Bodies must clear minChunkRunes (8) to produce a chunk at all.
@@ -165,7 +165,7 @@ func TestSemanticIndex_ScoreFloor(t *testing.T) {
 	}
 }
 
-func TestSemanticIndex_Incremental(t *testing.T) {
+func TestSemanticIndex_IncrementalReindexUpdatesChangedFiles(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
 	mustPut(t, store, "/a.txt", "delivery delay 납기")
@@ -212,7 +212,7 @@ func TestSemanticIndex_Incremental(t *testing.T) {
 // A file overwritten with DIFFERENT content but the SAME byte size and SAME
 // mtime (second granularity) must still re-embed. The (mtime,size) key alone
 // can't see this — the content-prefix hash is what catches it.
-func TestSemanticIndex_ContentHashReindex(t *testing.T) {
+func TestSemanticIndex_ContentHashReindexDetectsUpdatedContent(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
 	// Two bodies of identical byte length but different content.
@@ -276,7 +276,7 @@ func TestSemanticIndex_ContentHashReindex(t *testing.T) {
 
 // Remove drops a deleted file's entry immediately (no reindex), so search stops
 // returning it. Rename re-keys a moved file so it's findable at the new path.
-func TestSemanticIndex_RemoveAndRename(t *testing.T) {
+func TestSemanticIndex_RemoveClearsAndRenameUpdatesEntry(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
 	mustPut(t, store, "/계약/납기.txt", "delivery delay 납기 지연")
@@ -315,7 +315,7 @@ func TestSemanticIndex_RemoveAndRename(t *testing.T) {
 	nilIdx.Rename("/x", "/y")
 }
 
-func TestSemanticIndex_GC(t *testing.T) {
+func TestSemanticIndex_GCEvictsDeletedFiles(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
 	mustPut(t, store, "/keep.txt", "delivery 납기")
@@ -350,7 +350,7 @@ func TestSemanticIndex_GC(t *testing.T) {
 	}
 }
 
-func TestSemanticIndex_Persistence(t *testing.T) {
+func TestSemanticIndex_PersistenceLoadsWithoutReembedding(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
 	mustPut(t, store, "/a.txt", "delivery 납기")
@@ -412,7 +412,7 @@ func TestSemanticIndex_DegradesWithoutEmbedder(t *testing.T) {
 	}
 }
 
-func TestChunkText(t *testing.T) {
+func TestChunkTextTruncatesAtChunkCap(t *testing.T) {
 	// Short text → one chunk.
 	if got := chunkText("hello world 안녕"); len(got) != 1 {
 		t.Errorf("short text chunks = %d, want 1", len(got))

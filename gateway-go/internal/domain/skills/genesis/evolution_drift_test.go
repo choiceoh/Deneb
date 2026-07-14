@@ -40,7 +40,7 @@ func shapeEvolutionHealth(t *testing.T, tr *Tracker, confirmed, rolledBack int) 
 
 // The self-brake must engage on each drift class and stay clear on a healthy
 // trajectory.
-func TestAuditEvolutionDrift(t *testing.T) {
+func TestAuditEvolutionDrift_FreezesOnDriftSignalsStaysClearOnHealthyTrajectory(t *testing.T) {
 	t.Run("healthy trajectory is not frozen", func(t *testing.T) {
 		tr := driftTracker(t)
 		shapeEvolutionHealth(t, tr, 5, 1) // FAR 0.17
@@ -193,7 +193,7 @@ func TestAuditEvolutionDrift(t *testing.T) {
 
 // The persisted self-brake marker gates AutoAdoptFrozen and only logs on a
 // state transition.
-func TestRunEvolutionDriftAudit_Transitions(t *testing.T) {
+func TestRunEvolutionDriftAudit_FiresTransitionCallbackOnlyOnStateChangeAndRecovery(t *testing.T) {
 	tr := driftTracker(t)
 	if tr.AutoAdoptFrozen() {
 		t.Fatal("fresh tracker should not be frozen")

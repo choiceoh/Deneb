@@ -101,7 +101,7 @@ func TestRollbackSkill_ReRegistersRestoredVersion(t *testing.T) {
 
 // M4 regression pin: lockSkill serializes the same skill across callers and
 // never contends across different skills.
-func TestEvolver_LockSkillSerializes(t *testing.T) {
+func TestLockSkillSerializesSameSkillConcurrentlyAndSeparatesDifferentSkills(t *testing.T) {
 	e := NewEvolver(nil, skills.NewCatalog(nil), nil, "m", slog.Default())
 
 	// Same skill: the second Lock must block until the first unlocks. Prove

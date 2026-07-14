@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestHotwordHints(t *testing.T) {
+func TestHotwordHintsReturnsDedupedTerms(t *testing.T) {
 	s := &Store{index: newIndex()}
 	s.index.Entries["프로젝트/a.md"] = IndexEntry{
 		Title: "에코프로 태양광 사업", Category: "프로젝트", Type: "entity", Importance: 0.5,
@@ -41,7 +41,7 @@ func TestHotwordHints(t *testing.T) {
 	}
 }
 
-func TestHotwordHintsCap(t *testing.T) {
+func TestHotwordHintsCapTruncatesTerms(t *testing.T) {
 	s := &Store{index: newIndex()}
 	s.index.Entries["a.md"] = IndexEntry{Title: "t1", Tags: []string{"x1", "x2", "x3", "x4"}}
 	if got := strings.Split(s.HotwordHints(3), ", "); len(got) > 3 {
@@ -49,14 +49,14 @@ func TestHotwordHintsCap(t *testing.T) {
 	}
 }
 
-// TestHotwordHints_LiveWiki proves the real index.md parses into the titles/tags
-// HotwordHints reads. NewStore may rewrite the index, so point DENEB_WIKI_DIR at
-// a COPY of the wiki, not the live one:
+// TestHotwordHints_LiveWikiParsesRealIndex proves the real index.md parses
+// into the titles/tags HotwordHints reads. NewStore may rewrite the index, so
+// point DENEB_WIKI_DIR at a COPY of the wiki, not the live one:
 //
 //	cp -r ~/.deneb/wiki /tmp/wiki-copy
 //	DENEB_WIKI_LIVE=1 DENEB_WIKI_DIR=/tmp/wiki-copy \
-//	  go test -run TestHotwordHints_LiveWiki -v ./internal/domain/wiki/
-func TestHotwordHints_LiveWiki(t *testing.T) {
+//	  go test -run TestHotwordHints_LiveWikiParsesRealIndex -v ./internal/domain/wiki/
+func TestHotwordHints_LiveWikiParsesRealIndex(t *testing.T) {
 	if os.Getenv("DENEB_WIKI_LIVE") != "1" {
 		t.Skip("set DENEB_WIKI_LIVE=1 + DENEB_WIKI_DIR (a copy of the wiki) to run")
 	}

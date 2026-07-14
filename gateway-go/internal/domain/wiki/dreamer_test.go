@@ -14,7 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestWikiDreamerScanDiariesUsesOffsets(t *testing.T) {
+func TestWikiDreamerScanDiariesReadsFromOffsets(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -63,7 +63,7 @@ func TestWikiDreamerScanDiariesUsesOffsets(t *testing.T) {
 	}
 }
 
-func TestWikiDreamerScanDiariesDoesNotSkipLegacyCutoffDay(t *testing.T) {
+func TestWikiDreamerScanDiariesReadsSameDayDespiteCutoff(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -226,7 +226,7 @@ func TestParseWikiUpdates_NonArrayIsError(t *testing.T) {
 	}
 }
 
-func TestBuildWikiSynthesisPromptIncludesCompoundingRules(t *testing.T) {
+func TestBuildWikiSynthesisPromptRendersCompoundingRules(t *testing.T) {
 	prompt := buildWikiSynthesisPrompt("index", "history", "", "", "", "diary")
 	for _, want := range []string{
 		"상호링크",
@@ -251,7 +251,7 @@ func TestBuildWikiSynthesisPromptIncludesCompoundingRules(t *testing.T) {
 // occurrence — and the confidence split plus the transient-instruction guard
 // keep the profile conservative + operator-reviewable. The facet taxonomy
 // (소통/리듬/포맷/성향/컨텍스트) keeps 사용자 pages small and per-axis.
-func TestBuildWikiSynthesisPromptIncludesPreferenceRules(t *testing.T) {
+func TestBuildWikiSynthesisPromptRendersPreferenceRules(t *testing.T) {
 	prompt := buildWikiSynthesisPrompt("index", "history", "", "", "", "diary")
 	for _, want := range []string{
 		"working-style 추론", // behavioral abstraction directive present

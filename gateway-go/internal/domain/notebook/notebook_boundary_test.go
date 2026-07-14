@@ -262,7 +262,7 @@ func TestCreateTrimsFieldsAndGeneratesUniqueSuffixes(t *testing.T) {
 	}
 }
 
-func TestStampLockedStrictlyMonotonicAcrossFutureDiskState(t *testing.T) {
+func TestStampLockedRemainsMonotonicWhenDiskClockIsAhead(t *testing.T) {
 	t.Parallel()
 
 	store := newTestStore(t)
@@ -501,7 +501,7 @@ func TestConcurrentPinUniqueDeduplicatesStableRef(t *testing.T) {
 	}
 }
 
-func TestPersistenceFilePermissionsAndAtomicTempCleanup(t *testing.T) {
+func TestPersistenceSavesWithRestrictedPermsAndCleansTempFile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()

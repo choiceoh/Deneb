@@ -254,7 +254,7 @@ func TestNormalizeSignatureMatrix(t *testing.T) {
 	}
 }
 
-func TestSignatureMatchesMatrix(t *testing.T) {
+func TestSignatureMatchesReturnsBidirectionalSubstringContainment(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name, target, supported string
@@ -379,7 +379,7 @@ func TestSignatureMatchesMatrix(t *testing.T) {
 	}
 }
 
-func TestCanonicalSkillSurfaceMatrix(t *testing.T) {
+func TestCanonicalSkillSurfaceNormalizesAliasesToCanonicalNames(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ name, input, want string }{
 		{
@@ -736,7 +736,7 @@ func guardrailDocument(change string) (string, string) {
 	return original, candidate
 }
 
-func TestValidateEditedSurfaceMatrix(t *testing.T) {
+func TestValidateEditedSurfaceAcceptsEditableSurfacesAndRejectsProtectedOnes(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name, surface, change string
@@ -1021,7 +1021,7 @@ func longSkillDocument(sections int, linesPerSection int) string {
 	return b.String()
 }
 
-func TestValidateTextualEditBudgetBoundaries(t *testing.T) {
+func TestValidateTextualEditBudgetEnforcesSizeBoundaryAndHeadingInvariants(t *testing.T) {
 	t.Parallel()
 	original := longSkillDocument(4, 6)
 	tests := []struct {
@@ -1095,7 +1095,7 @@ func TestValidateTextualEditBudgetBoundaries(t *testing.T) {
 	}
 }
 
-func TestValidateHermesEvolutionGuardrailBoundaries(t *testing.T) {
+func TestValidateHermesEvolutionGuardrailsRejectsOversizedRetitledAndUncoveredRewrites(t *testing.T) {
 	t.Parallel()
 	original := longSkillDocument(6, 3)
 	tests := []struct {

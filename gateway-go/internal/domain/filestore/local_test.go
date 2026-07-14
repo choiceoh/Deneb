@@ -49,7 +49,7 @@ func TestLocalStore_PutGetRoundtrip(t *testing.T) {
 	}
 }
 
-func TestLocalStore_PutAutorename(t *testing.T) {
+func TestLocalStore_PutAutorenamePreservesOriginal(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -96,7 +96,7 @@ func TestLocalStore_PutOverwrite(t *testing.T) {
 	}
 }
 
-func TestLocalStore_List(t *testing.T) {
+func TestLocalStore_ListReturnsEntries(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	mustPut(t, s, "/a.txt", "a")
@@ -137,7 +137,7 @@ func TestLocalStore_List(t *testing.T) {
 	}
 }
 
-func TestLocalStore_Search(t *testing.T) {
+func TestLocalStore_SearchReturnsMatchingEntries(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	mustPut(t, s, "/메일/2026견적서.pdf", "x")
@@ -170,10 +170,10 @@ func TestLocalStore_Search(t *testing.T) {
 	}
 }
 
-// TestLocalStore_SearchContent covers the full-text widening: a match on the
-// file name, a match on the extracted text (with an extractFn), and the
-// nil-extractFn fallback that must behave exactly like name-only Search.
-func TestLocalStore_SearchContent(t *testing.T) {
+// TestLocalStore_SearchContentFallbackToNameOnly covers the full-text widening: a
+// match on the file name, a match on the extracted text (with an extractFn), and
+// the nil-extractFn fallback that must behave exactly like name-only Search.
+func TestLocalStore_SearchContentFallbackToNameOnly(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	mustPut(t, s, "/메일/견적서.pdf", "총 공급가액 1억원")  // name has 견적, body has 공급가
@@ -230,9 +230,9 @@ func TestLocalStore_SearchContent(t *testing.T) {
 	}
 }
 
-// TestLocalStore_PathEscape is the security-critical test: a virtual path with
-// "../" (or absolute re-anchoring) must never read or write outside the root.
-func TestLocalStore_PathEscape(t *testing.T) {
+// TestLocalStore_RejectsPathEscape is the security-critical test: a virtual path
+// with "../" (or absolute re-anchoring) must never read or write outside the root.
+func TestLocalStore_RejectsPathEscape(t *testing.T) {
 	root := t.TempDir()
 	s, err := NewLocalStore(root)
 	if err != nil {
@@ -298,7 +298,7 @@ func TestLocalStore_StatAndDelete(t *testing.T) {
 	}
 }
 
-func TestLocalStore_Open(t *testing.T) {
+func TestLocalStore_OpenReturnsReadableStream(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	mustPut(t, s, "/dir/file.txt", "streamed content")
@@ -327,7 +327,7 @@ func TestLocalStore_Open(t *testing.T) {
 	}
 }
 
-func TestVPath(t *testing.T) {
+func TestVPathNormalizesVirtualPaths(t *testing.T) {
 	cases := map[string]string{
 		"":            "/",
 		"/":           "/",
@@ -345,7 +345,7 @@ func TestVPath(t *testing.T) {
 	}
 }
 
-func TestDefaultDir(t *testing.T) {
+func TestDefaultDirReturnsConfiguredOrFallback(t *testing.T) {
 	t.Setenv("DENEB_FILES_DIR", "/tmp/deneb-files-test")
 	if got := DefaultDir(); got != "/tmp/deneb-files-test" {
 		t.Errorf("DefaultDir with env = %q", got)
@@ -356,7 +356,7 @@ func TestDefaultDir(t *testing.T) {
 	}
 }
 
-func TestLocalStore_Mkdir(t *testing.T) {
+func TestLocalStore_MkdirCreatesFolder(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -388,7 +388,7 @@ func TestLocalStore_Mkdir(t *testing.T) {
 	}
 }
 
-func TestLocalStore_Move(t *testing.T) {
+func TestLocalStore_MovePreservesContent(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	mustPut(t, s, "/inbox/견적서.pdf", "v1")
@@ -419,7 +419,7 @@ func TestLocalStore_Move(t *testing.T) {
 	}
 }
 
-func TestLocalStore_MoveAutorename(t *testing.T) {
+func TestLocalStore_MoveAutorenamePreservesTarget(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	mustPut(t, s, "/a/doc.pdf", "A")
@@ -456,9 +456,9 @@ func TestLocalStore_MoveErrors(t *testing.T) {
 	}
 }
 
-// TestLocalStore_MkdirMovePathEscape ensures the traversal guard covers the new
-// mutators too — neither Mkdir nor Move may create or land outside the root.
-func TestLocalStore_MkdirMovePathEscape(t *testing.T) {
+// TestLocalStore_MkdirMoveRespectsRootBoundary ensures the traversal guard covers
+// the new mutators too — neither Mkdir nor Move may create or land outside the root.
+func TestLocalStore_MkdirMoveRespectsRootBoundary(t *testing.T) {
 	root := t.TempDir()
 	s, err := NewLocalStore(root)
 	if err != nil {

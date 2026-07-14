@@ -16,7 +16,7 @@ func newRecallHitsStore(t *testing.T) *Store {
 	return store
 }
 
-func TestRecordRecallHits_CountsAndWindow(t *testing.T) {
+func TestRecordRecallHits_CollapsesDuplicatesWithinCallIgnoresEmptyPaths(t *testing.T) {
 	store := newRecallHitsStore(t)
 
 	// Two turns surface 프로젝트/A three times total, 인물/B once; a duplicate
@@ -43,7 +43,7 @@ func TestRecordRecallHits_CountsAndWindow(t *testing.T) {
 	}
 }
 
-func TestRecallHitCounts_ExcludesBeforeSince(t *testing.T) {
+func TestRecallHitCounts_FutureSinceRejectsAllHits(t *testing.T) {
 	store := newRecallHitsStore(t)
 	if err := store.RecordRecallHits([]string{"프로젝트/old.md"}); err != nil {
 		t.Fatalf("record: %v", err)
@@ -55,7 +55,7 @@ func TestRecallHitCounts_ExcludesBeforeSince(t *testing.T) {
 	}
 }
 
-func TestCompactRecallHits_DropsAgedLines(t *testing.T) {
+func TestCompactRecallHits_NoopWhenFreshDropsAfterRetentionElapses(t *testing.T) {
 	store := newRecallHitsStore(t)
 	if err := store.RecordRecallHits([]string{"프로젝트/fresh.md"}); err != nil {
 		t.Fatalf("record: %v", err)

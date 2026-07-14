@@ -7,7 +7,7 @@ import (
 
 // Fixtures mirror the shapes of real Korean business mail this deployment
 // receives (synthetic values — no live data).
-func TestScore_Tiers(t *testing.T) {
+func TestScore_ReturnsTierForMailScenarios(t *testing.T) {
 	vip := func(email string) bool { return email == "kim@partner.co.kr" }
 	s := New(vip, nil)
 
@@ -71,7 +71,7 @@ func TestScore_NilVIPLookupSafe(t *testing.T) {
 	}
 }
 
-func TestSenderEmail(t *testing.T) {
+func TestSenderEmailNormalizesCasing(t *testing.T) {
 	cases := map[string]string{
 		"홍길동 <Hong@Corp.co.KR>": "hong@corp.co.kr",
 		"bare@addr.com":         "bare@addr.com",
@@ -84,7 +84,7 @@ func TestSenderEmail(t *testing.T) {
 	}
 }
 
-func TestScore_HintCappedAtTwo(t *testing.T) {
+func TestScore_HintCappedAtTwoBoundary(t *testing.T) {
 	s := New(func(string) bool { return true }, nil)
 	// urgent keyword + deadline + attention + money + vip = 5 categories
 	_, hint := s.Score("k <k@p.kr>", "긴급 낙찰 계약 3억원", "내일까지 회신 요망")
@@ -107,7 +107,7 @@ func countSep(s string) int {
 	return n
 }
 
-func TestScore_CounterpartyAmplifies(t *testing.T) {
+func TestScore_CounterpartyAmplifiesWithContentSignal(t *testing.T) {
 	counterparty := func(email string) bool { return strings.HasSuffix(email, "@acme.co.kr") }
 
 	// Amplify-only: a contentless FYI from an active counterparty stays unmarked.

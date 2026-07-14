@@ -85,7 +85,7 @@ func newFilesAdapterFixture(t *testing.T) (Adapter, *filestore.SemanticIndex, *f
 	return ad, idx, embed
 }
 
-func TestFilesAdapter_Recall_MapsHitsAndRespectsFloor(t *testing.T) {
+func TestFilesAdapter_Recall_MapsHitsAndRejectsBelowFloor(t *testing.T) {
 	ad, _, _ := newFilesAdapterFixture(t)
 
 	hits, err := ad.Recall(context.Background(), "개발행위허가 신청서 핵심 알려줘", 5)
@@ -126,7 +126,7 @@ func TestFilesAdapter_Recall_OffTopicEmpty(t *testing.T) {
 	}
 }
 
-func TestFilesAdapter_Recall_DegradesOnUnhealthyEmbedder(t *testing.T) {
+func TestFilesAdapter_Recall_ReturnsEmptyOnUnhealthyEmbedder(t *testing.T) {
 	ad, _, embed := newFilesAdapterFixture(t)
 	embed.unhealthy = true // simulate the embedding server going down mid-session
 	hits, err := ad.Recall(context.Background(), "개발행위허가 신청서 핵심", 5)

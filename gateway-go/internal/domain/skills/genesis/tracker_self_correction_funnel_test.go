@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
-func TestSelfCorrectionFunnel_DistinguishesConsumedFromBroken(t *testing.T) {
+func TestSelfCorrectionFunnelExcludesPatchFirstRejectionsFromPromotableCount(t *testing.T) {
 	tr := newTestTracker(t)
 	now := time.UnixMilli(1_783_500_000_000)
 	dayMs := int64(24 * time.Hour / time.Millisecond)
@@ -72,7 +72,7 @@ func TestSelfCorrectionFunnel_EmptyStateIsAllZero(t *testing.T) {
 	}
 }
 
-func TestSelfCorrectionFunnel_ClosureMetrics(t *testing.T) {
+func TestSelfCorrectionFunnelReturnsConversionRateAndReopenCount(t *testing.T) {
 	tr := newTestTracker(t)
 	now := time.UnixMilli(1_783_500_000_000)
 	dayMs := int64(24 * time.Hour / time.Millisecond)
@@ -135,7 +135,7 @@ func TestSelfCorrectionFunnel_ClosureMetrics(t *testing.T) {
 	}
 }
 
-func TestSelfCorrectionFunnel_NoVerdictsMeansZeroClosure(t *testing.T) {
+func TestSelfCorrectionFunnelEmptyClosureForUnverdictedPendingCandidate(t *testing.T) {
 	tr := newTestTracker(t)
 	now := time.UnixMilli(1_783_500_000_000)
 	dayMs := int64(24 * time.Hour / time.Millisecond)
@@ -163,7 +163,7 @@ func TestSelfCorrectionFunnel_NoVerdictsMeansZeroClosure(t *testing.T) {
 	}
 }
 
-func TestSelfCorrectionFunnel_AcceptedThenWatchPassedCountsApplied(t *testing.T) {
+func TestSelfCorrectionFunnelReturnsAcceptedThroughWatchPassedAsApplied(t *testing.T) {
 	tr := newTestTracker(t)
 	now := time.UnixMilli(1_783_500_000_000)
 	dayMs := int64(24 * time.Hour / time.Millisecond)

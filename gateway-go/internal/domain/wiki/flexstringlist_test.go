@@ -41,7 +41,7 @@ func TestWikiUpdateArrayTagsUnchanged(t *testing.T) {
 	}
 }
 
-func TestFlexStringListUnmarshal(t *testing.T) {
+func TestFlexStringListDecodesVariants(t *testing.T) {
 	cases := []struct {
 		name string
 		in   string

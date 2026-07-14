@@ -75,7 +75,7 @@ func TestParseRef(t *testing.T) {
 	}
 }
 
-func TestRefString(t *testing.T) {
+func TestRefStringFormatsLayerAndID(t *testing.T) {
 	if got := (Ref{Layer: LayerWiki, ID: "인물/박부장"}).String(); got != "w:인물/박부장" {
 		t.Errorf("String = %q, want %q", got, "w:인물/박부장")
 	}
@@ -84,7 +84,7 @@ func TestRefString(t *testing.T) {
 	}
 }
 
-func TestRouter_Recall_Merges(t *testing.T) {
+func TestRouter_Recall_MergesAndReturnsHighestFirst(t *testing.T) {
 	wikiA := &mockAdapter{
 		layer: LayerWiki,
 		results: []Result{
@@ -110,11 +110,11 @@ func TestRouter_Recall_Merges(t *testing.T) {
 	}
 }
 
-// TestRouter_Recall_LayerQuota pins the per-layer quota: a layer that returns
+// TestRouter_Recall_LayerQuotaPreservesOtherLayerHit pins the per-layer quota: a layer that returns
 // many high-scoring hits must not sweep the whole merged window — the other
 // layer's hit survives even though every files hit outscores it. This is the
 // hindsight-lesson guard (a higher score band must not monopolize recall).
-func TestRouter_Recall_LayerQuota(t *testing.T) {
+func TestRouter_Recall_LayerQuotaPreservesOtherLayerHit(t *testing.T) {
 	// Files layer: 5 hits, all scoring ABOVE the single wiki hit.
 	files := &mockAdapter{layer: LayerFiles}
 	for i := 0; i < 5; i++ {
@@ -147,9 +147,9 @@ func TestRouter_Recall_LayerQuota(t *testing.T) {
 	}
 }
 
-// TestRouter_Recall_SingleLayerUnquota'd ensures the quota never throttles a
+// TestRouter_Recall_SingleLayerReturnsAllHits ensures the quota never throttles a
 // single-layer router (the production wiki-only case before files wiring).
-func TestRouter_Recall_SingleLayerUnquotaed(t *testing.T) {
+func TestRouter_Recall_SingleLayerReturnsAllHits(t *testing.T) {
 	wikiA := &mockAdapter{layer: LayerWiki}
 	for i := 0; i < 5; i++ {
 		wikiA.results = append(wikiA.results, Result{

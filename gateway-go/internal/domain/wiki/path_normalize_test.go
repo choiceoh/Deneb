@@ -59,9 +59,10 @@ func TestNormalizeCategoryPath(t *testing.T) {
 	}
 }
 
-// TestRemapLegacyCategory pins the legacy→taxonomy alias map and the no-mapping
-// signal that routes unrecognized names to the catch-all.
-func TestRemapLegacyCategory(t *testing.T) {
+// TestRemapLegacyCategory_MapsLegacyNamesAndReportsNoMappingForCurrentOrUnknown pins
+// the legacy→taxonomy alias map and the no-mapping signal that routes
+// unrecognized names to the catch-all.
+func TestRemapLegacyCategory_MapsLegacyNamesAndReportsNoMappingForCurrentOrUnknown(t *testing.T) {
 	mapped := map[string]string{
 		"거래": "프로젝트", "결정": "프로젝트", "mail-analyses": "프로젝트",
 		"사람": "인물", "기술": "업무", "선호": "사용자", "운영시스템": "시스템",

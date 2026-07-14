@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
-func TestStoreAppendPull(t *testing.T) {
+func TestStoreAppendPullReturnsPagedEvents(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "native_sync.jsonl"))
 	first, err := store.Append(AppendInput{
 		Type:           TypeWorkFeedCreated,
@@ -55,7 +55,7 @@ func TestStoreAppendPull(t *testing.T) {
 	}
 }
 
-func TestStoreAppendRequiresType(t *testing.T) {
+func TestStoreAppendRejectsMissingType(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "native_sync.jsonl"))
 	if _, err := store.Append(AppendInput{}); !errors.Is(err, ErrInvalidEvent) {
 		t.Fatalf("append err = %v, want ErrInvalidEvent", err)
@@ -142,7 +142,7 @@ func TestStoreAppendPrunesWhenOverCap(t *testing.T) {
 	}
 }
 
-func TestStoreAppendNoPruneUnderCap(t *testing.T) {
+func TestStoreAppendPreservesAllEventsUnderCap(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "native_sync.jsonl")
 	store := NewStore(path)
 	for i := 0; i < 10; i++ {

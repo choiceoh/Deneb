@@ -169,7 +169,7 @@ func TestPickLaneBoundaryAndDeterministicSorting(t *testing.T) {
 	}
 }
 
-func TestMatchPersonNormalizationDedupAndTieBreak(t *testing.T) {
+func TestMatchPersonNormalizesAndBreaksTiesDeterministically(t *testing.T) {
 	t.Parallel()
 
 	rules := map[string]Lane{
@@ -218,7 +218,7 @@ func TestMatchPersonEmptyRuleMapsNeverMatch(t *testing.T) {
 	}
 }
 
-func TestMatchCompanySubstringDirectionsAndNormalization(t *testing.T) {
+func TestMatchCompanyNormalizesSubstringDirectionsAndTieBreak(t *testing.T) {
 	t.Parallel()
 
 	rules := map[string]Lane{
@@ -257,7 +257,7 @@ func TestMatchCompanySubstringDirectionsAndNormalization(t *testing.T) {
 	}
 }
 
-func TestMatchCompanyIsDeterministicAcrossMapConstructionOrder(t *testing.T) {
+func TestMatchCompanyContractIgnoresMapConstructionOrder(t *testing.T) {
 	t.Parallel()
 
 	entries := []struct {
@@ -322,7 +322,7 @@ func TestMatchKeywordBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestClassifyStrengthPrecedenceMatrix(t *testing.T) {
+func TestClassifyPrecedenceFallbackAcrossStrengthTiers(t *testing.T) {
 	t.Parallel()
 
 	rules := Rules{
@@ -439,7 +439,7 @@ func TestClassifyStrengthPrecedenceMatrix(t *testing.T) {
 	}
 }
 
-func TestClassifyDoesNotMutateSignalsOrRules(t *testing.T) {
+func TestClassifyPreservesSignalsAndRulesWithoutMutation(t *testing.T) {
 	t.Parallel()
 
 	rules := Rules{
@@ -472,7 +472,7 @@ func TestClassifyDoesNotMutateSignalsOrRules(t *testing.T) {
 	}
 }
 
-func TestDefaultKeywordRulesCompleteAndFresh(t *testing.T) {
+func TestDefaultKeywordRulesCreatesIndependentCopies(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]Lane{
@@ -505,7 +505,7 @@ func TestDefaultKeywordRulesCompleteAndFresh(t *testing.T) {
 	}
 }
 
-func TestDefaultRulesMapsAreIndependentAndClassifyEveryDefault(t *testing.T) {
+func TestDefaultRulesCreatesIndependentMapsAndClassifiesDefaults(t *testing.T) {
 	t.Parallel()
 
 	one := DefaultRules()
@@ -530,7 +530,7 @@ func TestDefaultRulesMapsAreIndependentAndClassifyEveryDefault(t *testing.T) {
 	}
 }
 
-func TestMergePersonsValidationNormalizationAndCollisions(t *testing.T) {
+func TestMergePersonsNormalizesDropsInvalidAndResolvesCollisions(t *testing.T) {
 	t.Parallel()
 
 	dst := map[string]Lane{"기존사람": LaneTeam1}
@@ -561,7 +561,7 @@ func TestMergePersonsValidationNormalizationAndCollisions(t *testing.T) {
 	}
 }
 
-func TestMergeCompaniesValidationNormalizationAndOverride(t *testing.T) {
+func TestMergeCompaniesNormalizesOverridesAndDropsInvalid(t *testing.T) {
 	t.Parallel()
 
 	dst := map[string]Lane{
@@ -591,7 +591,7 @@ func TestMergeCompaniesValidationNormalizationAndOverride(t *testing.T) {
 	}
 }
 
-func TestMergeKeywordsValidationCaseAndWhitespace(t *testing.T) {
+func TestMergeKeywordsNormalizesCaseAndDropsInvalid(t *testing.T) {
 	t.Parallel()
 
 	dst := map[string]Lane{
@@ -777,7 +777,7 @@ func TestLoadFromFileMissingParentAndDanglingSymlinkUseDefaults(t *testing.T) {
 	}
 }
 
-func TestResolveRulesPathHonorsTrimmedOverride(t *testing.T) {
+func TestResolveRulesPathTrimsOverrideAndLoadsIt(t *testing.T) {
 	// Environment variables are process-global; keep this test serial.
 	dir := t.TempDir()
 	override := filepath.Join(dir, "operator-rules.json")
@@ -797,7 +797,7 @@ func TestResolveRulesPathHonorsTrimmedOverride(t *testing.T) {
 	}
 }
 
-func TestResolveRulesPathFallsBackToResolvedStateDir(t *testing.T) {
+func TestResolveRulesPathFallbackUsesStateDir(t *testing.T) {
 	// Environment variables are process-global; keep this test serial.
 	state := t.TempDir()
 	t.Setenv(rulesEnvVar, " \t ")
@@ -900,7 +900,7 @@ func TestConcurrentClassificationIsRaceFreeAndStable(t *testing.T) {
 	wg.Wait()
 }
 
-func TestClassificationTieBreakDoesNotDependOnMapIteration(t *testing.T) {
+func TestClassificationTieBreakContractIgnoresMapIterationOrder(t *testing.T) {
 	t.Parallel()
 
 	lanes := []Lane{LaneTeam3, LanePersonal, LaneTeam2, LaneNamdo, LaneTeam1}

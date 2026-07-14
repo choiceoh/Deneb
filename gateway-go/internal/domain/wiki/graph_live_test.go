@@ -12,13 +12,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
 )
 
-// TestGraphContextLive renders GraphContext against the real on-disk wiki, once
-// token-only and once with the embedding rerank wired, so the "유사" neighbors
-// the dense signal adds are visible. Skipped in CI; needs the BGE-M3 sidecar.
+// TestGraphContextLive_RendersTokenOnlyVsEmbeddingRerank renders GraphContext
+// against the real on-disk wiki, once token-only and once with the embedding
+// rerank wired, so the "유사" neighbors the dense signal adds are visible.
+// Skipped in CI; needs the BGE-M3 sidecar.
 //
 //	DENEB_WIKI_GRAPH_LIVE=1 DENEB_WIKI_GRAPH_Q=비금도 \
-//	  go test -run TestGraphContextLive -v ./internal/domain/wiki/
-func TestGraphContextLive(t *testing.T) {
+//	  go test -run TestGraphContextLive_RendersTokenOnlyVsEmbeddingRerank -v ./internal/domain/wiki/
+func TestGraphContextLive_RendersTokenOnlyVsEmbeddingRerank(t *testing.T) {
 	if os.Getenv("DENEB_WIKI_GRAPH_LIVE") == "" {
 		t.Skip("set DENEB_WIKI_GRAPH_LIVE=1 to run against ~/.deneb/wiki")
 	}

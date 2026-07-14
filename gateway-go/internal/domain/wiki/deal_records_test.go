@@ -40,7 +40,7 @@ func TestParseAmount(t *testing.T) {
 	}
 }
 
-func TestDealRecordsTee(t *testing.T) {
+func TestDealRecordsTee_IdempotentOnReFile(t *testing.T) {
 	s, err := NewStore(t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)

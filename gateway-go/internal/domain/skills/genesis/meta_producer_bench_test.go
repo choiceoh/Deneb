@@ -21,7 +21,7 @@ func producerResp(body string) string {
 
 // Flip counting: proposal-generated candidate failing a case the incumbent's
 // candidate passes is a flip; equal-or-better outcomes are not.
-func TestRunProducerShadowBench(t *testing.T) {
+func TestRunProducerShadowBenchDetectsFlipsAndIgnoresSkipsAndErrors(t *testing.T) {
 	scenarios := []producerShadowScenario{shadowScenario("case-a", "required step")}
 
 	gen := func(incBody, propBody string) producerShadowGenFn {
@@ -67,7 +67,7 @@ func TestRunProducerShadowBench(t *testing.T) {
 
 // Promotion rule: flips reject outright; mean regression beyond epsilon
 // rejects; an unbenchable corpus (zero scenarios) stays propose-only ("").
-func TestProducerBenchDecision(t *testing.T) {
+func TestProducerBenchDecisionRejectsFlipsAndRegressionAllowsNoise(t *testing.T) {
 	if r := producerBenchDecision(producerBenchOutcome{Skills: 0}); r != "" {
 		t.Fatalf("unbenchable corpus must stay propose-only: %q", r)
 	}
@@ -83,7 +83,7 @@ func TestProducerBenchDecision(t *testing.T) {
 }
 
 // shadowCandidateBody must survive skip/junk without producing a body.
-func TestShadowCandidateBody(t *testing.T) {
+func TestShadowCandidateBodyEmptyOnSkipOrUnparsableJSON(t *testing.T) {
 	if got := shadowCandidateBody(producerResp("the body")); got != "the body" {
 		t.Fatalf("body = %q", got)
 	}

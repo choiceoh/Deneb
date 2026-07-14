@@ -12,7 +12,7 @@ func oldRuleFlags(y leverYield, minShips int, maxRate float64) bool {
 	return y.Committed >= minShips && rate <= maxRate
 }
 
-func TestFilterLowYieldLevers_ResolvedAndSmoothed(t *testing.T) {
+func TestFilterLowYieldLeversUsesResolvedOutcomesWithoutRawCommittedRate(t *testing.T) {
 	levers := []leverYield{
 		// Good lever whose evolves are mostly still PENDING. Raw rate 3/8=0.375
 		// wrongly flags it; the resolved view (3 confirmed, 0 reverts) keeps it.

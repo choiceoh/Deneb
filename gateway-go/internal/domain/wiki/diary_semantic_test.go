@@ -7,11 +7,12 @@ import (
 	"testing"
 )
 
-// TestDiarySemanticParaphrase proves the diary semantic index catches a hit that
-// BM25 misses: a diary entry phrased "차질 우려" is found by the query "위험" (the
-// fakeEmbedder's risk cluster) even though they share no keyword. BM25 over the
-// same query returns nothing, so semantic is the only path that surfaces it.
-func TestDiarySemanticParaphrase(t *testing.T) {
+// TestDiarySemanticParaphraseReturnsMatch proves the diary semantic index
+// catches a hit that BM25 misses: a diary entry phrased "차질 우려" is found by
+// the query "위험" (the fakeEmbedder's risk cluster) even though they share no
+// keyword. BM25 over the same query returns nothing, so semantic is the only
+// path that surfaces it.
+func TestDiarySemanticParaphraseReturnsMatch(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

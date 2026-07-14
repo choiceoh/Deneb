@@ -21,7 +21,7 @@ func TestNormalizeErrorSignature(t *testing.T) {
 	}
 }
 
-func TestIsExternalFault(t *testing.T) {
+func TestIsExternalFaultReturnsTrueForNetworkAndRateLimitFalseForCodeDefects(t *testing.T) {
 	ext := []string{
 		"request failed with 429 rate limit",
 		"read tcp: connection reset by peer",

@@ -38,12 +38,13 @@ func TestDetectDuplicates_NormalizedTitle(t *testing.T) {
 	}
 }
 
-// TestDetectDuplicates_MailAnalysisGuard: two 메일분석 pages sharing a subject but
-// carrying different Message IDs are DISTINCT Gmail messages (메일 1통 = 1페이지)
-// and must never get an auto-merge Fix — the 2026-06 mis-merge that folded 14
-// different-ID mails together on normalized-title equality. A genuine same-mail
-// duplicate (same ID in two buckets) still merges.
-func TestDetectDuplicates_MailAnalysisGuard(t *testing.T) {
+// TestDetectDuplicates_RejectsAutoMergeAcrossDifferentMessageIDsButMergesSameID:
+// two 메일분석 pages sharing a subject but carrying different Message IDs are
+// DISTINCT Gmail messages (메일 1통 = 1페이지) and must never get an auto-merge
+// Fix — the 2026-06 mis-merge that folded 14 different-ID mails together on
+// normalized-title equality. A genuine same-mail duplicate (same ID in two
+// buckets) still merges.
+func TestDetectDuplicates_RejectsAutoMergeAcrossDifferentMessageIDsButMergesSameID(t *testing.T) {
 	const sameTitle = "Re: Re: [해밀고흥솔라팜] 모듈 제작 마스터 스케쥴 요청의 건"
 
 	t.Run("different msgID is never auto-merged", func(t *testing.T) {
@@ -77,9 +78,10 @@ func TestDetectDuplicates_MailAnalysisGuard(t *testing.T) {
 	})
 }
 
-// TestDetectStaleSuperseded_ArchiveFlow: a page superseded and untouched for
-// over the threshold gets an archive Fix, and applying it flips Archived.
-func TestDetectStaleSuperseded_ArchiveFlow(t *testing.T) {
+// TestDetectStaleSuperseded_ArchivesPastThresholdSkipsRecentAndIdempotent: a page
+// superseded and untouched for over the threshold gets an archive Fix, and
+// applying it flips Archived.
+func TestDetectStaleSuperseded_ArchivesPastThresholdSkipsRecentAndIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -124,9 +126,10 @@ func TestDetectStaleSuperseded_ArchiveFlow(t *testing.T) {
 	}
 }
 
-// TestDetectStaleMailAnalyses_RetentionFlow: mail-analysis pages older than
-// the retention window get an archive fix; fresh ones and non-mail pages don't.
-func TestDetectStaleMailAnalyses_RetentionFlow(t *testing.T) {
+// TestDetectStaleMailAnalyses_ArchivesPastRetentionSkipsFreshAndNonMailIdempotent:
+// mail-analysis pages older than the retention window get an archive fix;
+// fresh ones and non-mail pages don't.
+func TestDetectStaleMailAnalyses_ArchivesPastRetentionSkipsFreshAndNonMailIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

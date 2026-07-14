@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestSanitizeSkillCommandName(t *testing.T) {
+func TestSanitizeSkillCommandNameNormalizesAndTruncatesInput(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected string
@@ -24,7 +24,7 @@ func TestSanitizeSkillCommandName(t *testing.T) {
 	}
 }
 
-func TestResolveUniqueSkillCommandName(t *testing.T) {
+func TestResolveUniqueSkillCommandNameReturnsSuffixedNameForDuplicates(t *testing.T) {
 	used := map[string]struct{}{"github": {}}
 
 	// First call should get _2 suffix.
@@ -40,7 +40,7 @@ func TestResolveUniqueSkillCommandName(t *testing.T) {
 	}
 }
 
-func TestBuildSkillCommandSpecs(t *testing.T) {
+func TestBuildSkillCommandSpecsReturnsSpecsExcludingNonUserInvocableSkills(t *testing.T) {
 	entries := []SkillEntry{
 		{
 			Skill:      Skill{Name: "github", Description: "GitHub operations"},
@@ -68,7 +68,7 @@ func TestBuildSkillCommandSpecs(t *testing.T) {
 	}
 }
 
-func TestBuildSkillCommandSpecs_reserved(t *testing.T) {
+func TestBuildSkillCommandSpecsDeduplicatesReservedNames(t *testing.T) {
 	entries := []SkillEntry{
 		{
 			Skill:      Skill{Name: "help", Description: "Help"},
@@ -85,7 +85,7 @@ func TestBuildSkillCommandSpecs_reserved(t *testing.T) {
 	}
 }
 
-func TestBuildSkillCommandSpecs_dispatch(t *testing.T) {
+func TestBuildSkillCommandSpecsParsesDispatchFromFrontmatter(t *testing.T) {
 	entries := []SkillEntry{
 		{
 			Skill: Skill{Name: "run-tool", Description: "Run a tool"},

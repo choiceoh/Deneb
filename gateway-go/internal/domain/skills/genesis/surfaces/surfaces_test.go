@@ -2,7 +2,7 @@ package surfaces
 
 import "testing"
 
-func TestClassifyProposalSurfacesUsesMostRestrictiveTier(t *testing.T) {
+func TestClassifyProposalSurfacesClassifiesEditableProposeOnlyAndReturnsForbiddenTargets(t *testing.T) {
 	tier, forbidden := ClassifyProposalSurfaces([]string{"skills/demo/SKILL.md", "workspace/AGENTS.md"})
 	if tier != SurfaceTierProposeOnly || len(forbidden) != 0 {
 		t.Fatalf("mixed editable surfaces = (%q, %v), want propose-only without forbidden targets", tier, forbidden)
@@ -29,7 +29,7 @@ func TestClassifyProposalSurfacesEmptyTargetsDefaultProposeOnly(t *testing.T) {
 // Operator authorization 2026-07-12: gateway source is declared propose-only,
 // while the acceptance machinery stays forbidden — the loop must never be able
 // to queue an edit to its own gates.
-func TestSourceSurfaceAuthorization(t *testing.T) {
+func TestClassifySurfaceReturnsGatewaySourceProposeOnlyAndAcceptanceMachineryForbidden(t *testing.T) {
 	if s := ClassifySurface("gateway-go/internal/runtime/server/heartbeat_task.go"); s.Name != "gateway-source" || s.Tier != SurfaceTierProposeOnly {
 		t.Fatalf("gateway source = %+v", s)
 	}
@@ -55,7 +55,7 @@ func TestSourceSurfaceAuthorization(t *testing.T) {
 // forbidden at record time — basename-only matching let ".../genesis" (the
 // health miner's normal output shape) through even though it contains every
 // gate file. Non-acceptor directories stay proposable.
-func TestClassifySurfaceDirectoryContainment(t *testing.T) {
+func TestClassifySurfaceRejectsDirectoriesEnclosingAcceptanceMachinery(t *testing.T) {
 	for _, dir := range []string{
 		"gateway-go/internal/domain/skills/genesis",
 		"internal/domain/skills/genesis/",
@@ -81,7 +81,7 @@ func TestClassifySurfaceDirectoryContainment(t *testing.T) {
 // C2 hardening: the scripts-side acceptor (dispatch allowlist, outcome table,
 // prompt composer, landing tool, CI gate) is forbidden — the loop could
 // previously queue an edit to its own dispatcher.
-func TestClassifySurfaceAcceptanceScripts(t *testing.T) {
+func TestClassifySurfaceRejectsAcceptanceScriptsIncludingBareBasename(t *testing.T) {
 	for _, target := range []string{
 		"scripts/dev/coding-dispatch.sh",
 		"scripts/dev/dispatch_prompt.py",

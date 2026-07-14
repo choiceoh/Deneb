@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestLivenessHeartbeat(t *testing.T) {
+func TestLivenessHeartbeatSavesReviewEvolveAndCounters(t *testing.T) {
 	tr := newTestTracker(t)
 
 	// A clean snapshot before any activity.
@@ -40,7 +40,7 @@ func TestLivenessHeartbeat(t *testing.T) {
 	}
 }
 
-func TestEvolveEventTrigger_FiresAtThresholdAndResets(t *testing.T) {
+func TestEvolveEventTriggerFiresAtThresholdAndClearsCounter(t *testing.T) {
 	tr := newTestTracker(t)
 	fired := make(chan struct{}, 4)
 	tr.SetEvolveTrigger(func() { fired <- struct{}{} }, 2, 0) // threshold 2, no minGap
@@ -71,7 +71,7 @@ func TestEvolveEventTrigger_FiresAtThresholdAndResets(t *testing.T) {
 	}
 }
 
-func TestEvolveEventTrigger_MinGapSuppresses(t *testing.T) {
+func TestEvolveEventTriggerMinGapStopsFireButKeepsAccumulatingCounter(t *testing.T) {
 	tr := newTestTracker(t)
 	// Record a very recent evolve so minGap blocks the next fire.
 	tr.RecordEvolutionActivity(skillActivityEvolve, true, "")

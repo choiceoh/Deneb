@@ -69,7 +69,7 @@ func newTestNudger(t *testing.T, interval int) *Nudger {
 	return NewNudger(svc, NudgerConfig{Interval: interval}, slog.Default())
 }
 
-func TestNudger_Disabled_IntervalZero(t *testing.T) {
+func TestNudgerEnabledFalseWhenIntervalZero(t *testing.T) {
 	n := newTestNudger(t, 0)
 	if n.Enabled() {
 		t.Error("expected disabled when interval=0")
@@ -85,7 +85,7 @@ func TestNudger_Disabled_NilService(t *testing.T) {
 	n.OnToolCalls(context.TODO(), "s", 5, generation.SessionContext{})
 }
 
-func TestNudger_CountsIncrement(t *testing.T) {
+func TestNudgerCountReturnsPerSessionIncrementIndependently(t *testing.T) {
 	n := newTestNudger(t, 10)
 	for range 5 {
 		n.OnToolCalls(context.TODO(), "session-a", 1, generation.SessionContext{})
@@ -99,7 +99,7 @@ func TestNudger_CountsIncrement(t *testing.T) {
 	}
 }
 
-func TestNudger_ThresholdResetsCounter(t *testing.T) {
+func TestNudgerCounterReturnsToZeroAfterThresholdFire(t *testing.T) {
 	n := newTestNudger(t, 10)
 	// Supply a snapshot that EvaluateReview will reject so nothing spawns.
 	sctx := generation.SessionContext{
@@ -123,7 +123,7 @@ func TestNudger_ThresholdResetsCounter(t *testing.T) {
 	}
 }
 
-func TestNudger_Reset(t *testing.T) {
+func TestNudgerResetClearsSessionCount(t *testing.T) {
 	n := newTestNudger(t, 10)
 	n.OnToolCalls(context.TODO(), "s", 7, generation.SessionContext{})
 	if got := n.Count("s"); got != 7 {
@@ -180,7 +180,7 @@ func TestNudger_RunOnce_RespectsEvaluateRejection(t *testing.T) {
 	}
 }
 
-func TestNudger_RunReviewOnce_UsesFencedReviewerAfterEvaluate(t *testing.T) {
+func TestNudgerRunReviewOnceRunsReviewerWhenEvaluateReviewPasses(t *testing.T) {
 	reviewer := &fakeReviewRunner{}
 	tracker := &fakeActivityTracker{}
 	n := newTestNudger(t, 10)
@@ -210,7 +210,7 @@ func TestNudger_RunReviewOnce_UsesFencedReviewerAfterEvaluate(t *testing.T) {
 	}
 }
 
-func TestNudger_RunReviewOnce_RecordsEvaluateSkip(t *testing.T) {
+func TestNudgerRunReviewOnceSkipsReviewerWhenEvaluateReviewRejects(t *testing.T) {
 	reviewer := &fakeReviewRunner{}
 	tracker := &fakeActivityTracker{}
 	n := newTestNudger(t, 10)
@@ -242,7 +242,7 @@ func TestNudger_FromEnv_DefaultWhenUnset(t *testing.T) {
 	}
 }
 
-func TestNudger_FromEnv_ExplicitZeroDisables(t *testing.T) {
+func TestNudgerFromEnvDisabledWhenIntervalEnvIsZero(t *testing.T) {
 	t.Setenv("DENEB_SKILL_NUDGE_INTERVAL", "0")
 	svc := generation.NewService(generation.Config{}, nil, nil, slog.Default())
 	n := NewNudgerFromEnv(svc, slog.Default())
@@ -260,7 +260,7 @@ func TestNudger_FromEnv_InvalidValueUsesDefault(t *testing.T) {
 	}
 }
 
-func TestNudger_InflightBlocksSecondFire(t *testing.T) {
+func TestNudgerOnToolCallsSkipsIncrementWhenSessionInflight(t *testing.T) {
 	n := newTestNudger(t, 5)
 	// Manually flip inflight.
 	n.mu.Lock()
@@ -275,7 +275,7 @@ func TestNudger_InflightBlocksSecondFire(t *testing.T) {
 	}
 }
 
-func TestNudger_BackoffRaisesThresholdPerFire(t *testing.T) {
+func TestNudgerIncrementDoublesThresholdWhenFired(t *testing.T) {
 	n := newTestNudger(t, 5) // interval=5
 	// First fire lands at the base threshold (5).
 	if !n.increment("s", 5) {
@@ -313,7 +313,7 @@ func TestNudger_ResetClearsBackoff(t *testing.T) {
 	}
 }
 
-func TestNudger_RunStaleReview(t *testing.T) {
+func TestNudgerRunStaleReviewReturnsFiredOnlyForReviewWorthyUnblockedSessions(t *testing.T) {
 	n := newTestNudger(t, 3)
 	rec := &fakeReviewRunner{}
 	n.reviewer = rec
@@ -357,7 +357,7 @@ func TestNudger_RunStaleReview(t *testing.T) {
 	}
 }
 
-func TestNudger_WouldReview(t *testing.T) {
+func TestNudgerWouldReviewReturnsGateAndEnabledState(t *testing.T) {
 	n := newTestNudger(t, 3)
 	rich := generation.SessionContext{Turns: 2, ToolActivities: []generation.ToolActivity{{Name: "a"}, {Name: "b"}}}
 	if !n.WouldReview(rich) {

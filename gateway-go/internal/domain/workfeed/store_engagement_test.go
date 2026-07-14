@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestEngagement(t *testing.T) {
+func TestEngagementCountsEngagedIgnoredAndPendingItems(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 
 	const now int64 = 2_000_000_000_000 // realistic ms epoch (~2033); must stay positive after subtracting the window

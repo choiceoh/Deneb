@@ -71,7 +71,7 @@ func TestEnrichReproductionWithBehavior(t *testing.T) {
 // The oracle's fails-on-original/passes-on-candidate check must ignore the
 // behavioral assertions: a candidate that legitimately still names the failing
 // tool must NOT cause the (string-discriminative) case to be dropped.
-func TestAdoptReproductionCase_BehavioralDoesNotCorruptOracle(t *testing.T) {
+func TestAdoptReproductionCaseKeepsBehavioralAssertionsWithoutAffectingOracleDiscrimination(t *testing.T) {
 	newEvolver := func(t *testing.T) *Evolver {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())

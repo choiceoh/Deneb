@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestBuildSkillsIndex_OmitsExtraMetadata(t *testing.T) {
+func TestBuildSkillsIndexRendersWithoutCategoryTagsAndRelatedSkills(t *testing.T) {
 	in := []PromptSkill{{
 		Name:          "release",
 		Description:   "Release a new version",
@@ -49,7 +49,7 @@ func TestBuildSkillsIndex_EmptyReturnsEmpty(t *testing.T) {
 	}
 }
 
-func TestBuildSkillsIndex_DisabledModelInvocationExcluded(t *testing.T) {
+func TestBuildSkillsIndexExcludesSkillsWithDisabledModelInvocation(t *testing.T) {
 	in := []PromptSkill{
 		{Name: "visible", FilePath: "/p1", Description: "shown"},
 		{Name: "hidden", FilePath: "/p2", Description: "skip me", DisableModelInvocation: true},
@@ -63,7 +63,7 @@ func TestBuildSkillsIndex_DisabledModelInvocationExcluded(t *testing.T) {
 	}
 }
 
-func TestBuildSkillsIndex_ByteStableAcrossCalls(t *testing.T) {
+func TestBuildSkillsIndexReturnsByteIdenticalOutputAcrossCalls(t *testing.T) {
 	// The semi-static cache invariant relies on byte-identical output for
 	// identical input. Two calls with the same skill list must produce the
 	// same prompt bytes (no timestamps, no map iteration order, no random).
@@ -102,7 +102,7 @@ func TestBuildSkillsIndex_FallsBackToCompactWhenIndexExceedsBudget(t *testing.T)
 	}
 }
 
-func TestBuildSkillsIndex_CompactsHomePaths(t *testing.T) {
+func TestBuildSkillsIndexNormalizesHomeDirectoryPaths(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		t.Skip("no home dir")
@@ -121,7 +121,7 @@ func TestBuildSkillsIndex_CompactsHomePaths(t *testing.T) {
 	}
 }
 
-func TestBuildSkillsIndex_FlattensMultilineDescription(t *testing.T) {
+func TestBuildSkillsIndexFormatsMultilineDescriptionOntoSingleLine(t *testing.T) {
 	in := []PromptSkill{{
 		Name:        "wrap",
 		Description: "first line\nsecond  line",
@@ -133,7 +133,7 @@ func TestBuildSkillsIndex_FlattensMultilineDescription(t *testing.T) {
 	}
 }
 
-func TestBuildSkillsIndex_SmallerThanFull(t *testing.T) {
+func TestBuildSkillsIndexReturnsSmallerOutputThanFullPrompt(t *testing.T) {
 	// P5 invariant: index is strictly smaller than the full format for any
 	// skill that carries category/tags/related_skills. If this regresses,
 	// P5's primary value (semi-static token reduction) is gone.

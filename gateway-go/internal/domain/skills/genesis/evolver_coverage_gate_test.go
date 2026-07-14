@@ -11,7 +11,7 @@ import (
 // Coverage-conditional relaxation: a skill WITH held-out cases may land bigger
 // rewrites (the replay gate measures regressions the size caps only proxied),
 // while uncovered skills keep the conservative caps.
-func TestCoverageConditionalGates_RelaxForCoveredSkills(t *testing.T) {
+func TestCoverageConditionalGates_AllowRelaxedBudgetAndJudgeMarginForCoveredSkills(t *testing.T) {
 	var origLines []string
 	origLines = append(origLines, "# Skill")
 	for i := 0; i < 19; i++ {

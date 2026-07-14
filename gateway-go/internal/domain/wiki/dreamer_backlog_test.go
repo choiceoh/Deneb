@@ -12,10 +12,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-// TestScanDiariesReportsBacklogRemainder verifies the near-term drain signal:
-// a single diary larger than the per-cycle byte cap leaves MorePending set on
-// the first scan, and a follow-up scan that consumes the remainder clears it.
-func TestScanDiariesReportsBacklogRemainder(t *testing.T) {
+// TestScanDiariesReportsThenClearsBacklogRemainder verifies the near-term
+// drain signal: a single diary larger than the per-cycle byte cap leaves
+// MorePending set on the first scan, and a follow-up scan that consumes the
+// remainder clears it.
+func TestScanDiariesReportsThenClearsBacklogRemainder(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()

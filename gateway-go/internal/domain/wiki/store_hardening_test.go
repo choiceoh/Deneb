@@ -87,9 +87,9 @@ func TestStore_ConcurrentWriteAndIndexWalkers_Race(t *testing.T) {
 	wg.Wait()
 }
 
-// TestSnapshotEntries_DeepCopy: mutating a snapshot (map or slice fields) must
-// not leak into the live index.
-func TestSnapshotEntries_DeepCopy(t *testing.T) {
+// TestSnapshotEntries_MutatingCopyPreservesLiveIndex: mutating a snapshot
+// (map or slice fields) must not leak into the live index.
+func TestSnapshotEntries_MutatingCopyPreservesLiveIndex(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -358,10 +358,10 @@ func TestPage_RenderFlowArrayCommaRoundtrip(t *testing.T) {
 
 // --- Finding 6: FoldDuplicate weaker than MergePage ---------------------------
 
-// TestStore_FoldDuplicate_MergesLikeMergePage: the automated fold now runs the
-// same locked merge as MergePage — inbound references repointed, cues/code
-// inherited, body preserved under the marker.
-func TestStore_FoldDuplicate_MergesLikeMergePage(t *testing.T) {
+// TestStore_FoldDuplicate_RepointsReferencesInheritsCodeAndCuesDeletesFoldPage: the
+// automated fold now runs the same locked merge as MergePage — inbound
+// references repointed, cues/code inherited, body preserved under the marker.
+func TestStore_FoldDuplicate_RepointsReferencesInheritsCodeAndCuesDeletesFoldPage(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -451,10 +451,11 @@ func TestStore_FoldDuplicate_SerializesUnderWriteMu(t *testing.T) {
 
 // --- Finding 7: boot consistency didn't adopt orphan pages ---------------------
 
-// TestNewStore_AdoptsOrphanPages: a page on disk with no index entry (crash
-// between page write and index save) must be adopted into the master index at
-// startup, not stay invisible until the next dream-cycle rebuild.
-func TestNewStore_AdoptsOrphanPages(t *testing.T) {
+// TestNewStore_AdoptsOrphanPagesMissingFromIndexAtStartup: a page on disk with no
+// index entry (crash between page write and index save) must be adopted into
+// the master index at startup, not stay invisible until the next dream-cycle
+// rebuild.
+func TestNewStore_AdoptsOrphanPagesMissingFromIndexAtStartup(t *testing.T) {
 	dir := t.TempDir()
 	wikiDir, diaryDir := filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")
 
@@ -625,7 +626,7 @@ func TestStore_Backlinks_NormalizedComparison(t *testing.T) {
 
 // --- Finding 11: mergeFrontmatterInto dropped src.Code/Resource ----------------
 
-func TestMergeFrontmatterInto_InheritsCodeAndResource(t *testing.T) {
+func TestMergeFrontmatterInto_FillsEmptyCodeAndResourceKeepsNonEmpty(t *testing.T) {
 	dst := Frontmatter{Title: "keep"}
 	src := Frontmatter{Title: "fold", Code: "pl3-kia-mod-001", Resource: "gmail:thread-1"}
 	mergeFrontmatterInto(&dst, src)
@@ -678,7 +679,7 @@ func TestPage_SplitByH2_IgnoresFencedHeadings(t *testing.T) {
 
 // --- Finding 13: external path guard --------------------------------------------
 
-func TestValidateExternalPath(t *testing.T) {
+func TestValidateExternalPath_RejectsTraversalAbsoluteAndWindowsPaths(t *testing.T) {
 	valid := []string{
 		"기타/a.md",
 		"기타/a",

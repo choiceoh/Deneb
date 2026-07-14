@@ -10,7 +10,7 @@ import (
 // Flip gate (RSI P1.5, AgentDevel 2601.04620): a candidate that regresses any
 // previously-passing held-out case is rejected even when aggregate score
 // improves — compensated regressions must not buy promotion.
-func TestValidateCandidate_FlipGate(t *testing.T) {
+func TestValidateCandidateFlipGateRejectsRegressionOfPreviouslyPassingCase(t *testing.T) {
 	// The pool split hashes the dedupe identity (2/3 blind) — the gate only
 	// scores blind cases, so pin every fixture into the blind pool by
 	// deterministically probing ID suffixes.
@@ -121,7 +121,7 @@ func TestValidateCandidate_FlipGate(t *testing.T) {
 
 // Per-case scores must fold to exactly the aggregate scorer's numbers — the
 // flip gate and the score gates must never disagree about what they measured.
-func TestScoreByCase_AggregateConsistency(t *testing.T) {
+func TestScoreSkillValidationCasesByCaseReturnsAggregateScore(t *testing.T) {
 	cases := []SkillValidationCaseRecord{
 		{ID: "a", SkillName: "sk", RequiredSubstrings: []string{"alpha", ""}, ForbiddenSubstrings: []string{"bad"}},
 		{ID: "b", SkillName: "sk", RequiredHeadings: []string{"Setup"}, RequiredSubstrings: []string{"beta"}},

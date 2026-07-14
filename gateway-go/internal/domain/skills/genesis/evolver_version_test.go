@@ -2,7 +2,7 @@ package genesis
 
 import "testing"
 
-func TestBumpPatchVersion(t *testing.T) {
+func TestBumpPatchVersionIncrementsPatchDefaultsOnMalformedInput(t *testing.T) {
 	tests := []struct {
 		input, want string
 	}{

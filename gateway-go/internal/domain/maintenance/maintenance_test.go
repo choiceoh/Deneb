@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestNewRunner(t *testing.T) {
+func TestNewRunnerCreatesWithDenebDir(t *testing.T) {
 	r := NewRunner("/tmp/deneb-test-maintenance")
 	if r == nil {
 		t.Fatal("expected non-nil runner")
@@ -17,7 +17,7 @@ func TestNewRunner(t *testing.T) {
 	}
 }
 
-func TestRunDryRun(t *testing.T) {
+func TestRunDryRunCreatesReport(t *testing.T) {
 	dir := t.TempDir()
 	r := NewRunner(dir)
 
@@ -33,7 +33,7 @@ func TestRunDryRun(t *testing.T) {
 	}
 }
 
-func TestRunCleansOldSessions(t *testing.T) {
+func TestRunDeletesOldSessions(t *testing.T) {
 	dir := t.TempDir()
 	sessDir := filepath.Join(dir, "sessions")
 	if err := os.MkdirAll(sessDir, 0o755); err != nil {
@@ -76,7 +76,7 @@ func TestRunCleansOldSessions(t *testing.T) {
 	}
 }
 
-func TestRunCleansOldLogs(t *testing.T) {
+func TestRunDeletesOldLogs(t *testing.T) {
 	dir := t.TempDir()
 	logDir := filepath.Join(dir, "logs")
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
@@ -100,7 +100,7 @@ func TestRunCleansOldLogs(t *testing.T) {
 	}
 }
 
-func TestDryRunDoesNotRemoveFiles(t *testing.T) {
+func TestDryRunPreservesFilesWithoutDeleting(t *testing.T) {
 	dir := t.TempDir()
 	sessDir := filepath.Join(dir, "sessions")
 	if err := os.MkdirAll(sessDir, 0o755); err != nil {
@@ -129,7 +129,7 @@ func TestDryRunDoesNotRemoveFiles(t *testing.T) {
 	}
 }
 
-func TestLastReport(t *testing.T) {
+func TestLastReportReturnsNilBeforeRun(t *testing.T) {
 	dir := t.TempDir()
 	r := NewRunner(dir)
 
@@ -143,7 +143,7 @@ func TestLastReport(t *testing.T) {
 	}
 }
 
-func TestSummarizeReport(t *testing.T) {
+func TestSummarizeReportReturnsNilForNilReport(t *testing.T) {
 	if SummarizeReport(nil) != nil {
 		t.Fatal("expected nil summary for nil report")
 	}
@@ -186,7 +186,7 @@ func TestRunEmptyDirs(t *testing.T) {
 	}
 }
 
-func TestLogSizeBudgetCleanup(t *testing.T) {
+func TestLogSizeBudgetEvictsOldestFile(t *testing.T) {
 	dir := t.TempDir()
 	logDir := filepath.Join(dir, "logs")
 	if err := os.MkdirAll(logDir, 0o755); err != nil {

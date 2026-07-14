@@ -50,7 +50,7 @@ func TestNewStoreNormalizesDeduplicatesAndSortsTemplates(t *testing.T) {
 	}
 }
 
-func TestGetTextAndOverrideTextMisses(t *testing.T) {
+func TestGetTextAndOverrideTextReportMissingUntilSet(t *testing.T) {
 	store := NewStore("", promptTemplates())
 	if _, ok, err := store.Get(" missing "); err != nil || ok {
 		t.Fatalf("Get miss ok=%v err=%v", ok, err)

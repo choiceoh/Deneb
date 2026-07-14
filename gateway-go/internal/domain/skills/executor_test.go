@@ -18,7 +18,7 @@ func localSkill(dir, command string, fixedArgs ...string) SkillEntry {
 	}
 }
 
-func TestExecuteLocalSkillRunsInSkillDirectoryAndTrimsTrailingNewlines(t *testing.T) {
+func TestExecuteLocalSkillReturnsTrimmedOutputFromSkillDirectory(t *testing.T) {
 	dir := t.TempDir()
 	entry := localSkill(dir, "sh", "-c", `printf '%s\n\n' "$PWD"`)
 	got, err := ExecuteLocalSkill(entry, "")
@@ -58,7 +58,7 @@ func TestExecuteLocalSkillReportsMissingExecutable(t *testing.T) {
 	}
 }
 
-func TestExecuteLocalSkillRequiresConfiguration(t *testing.T) {
+func TestExecuteLocalSkillErrorsWhenLocalExecConfigMissing(t *testing.T) {
 	for _, entry := range []SkillEntry{
 		{Skill: Skill{Name: "nil-metadata"}},
 		{Skill: Skill{Name: "nil-local-exec"}, Metadata: &DenebSkillMetadata{}},
@@ -98,7 +98,7 @@ func TestExecuteLocalSkillPreservesStdoutBytesExceptTrailingNewlines(t *testing.
 	}
 }
 
-func TestExecuteSystemSkillReportsUnsupportedHandler(t *testing.T) {
+func TestExecuteSystemSkillReturnsUnsupportedError(t *testing.T) {
 	entry := SkillEntry{Skill: Skill{Name: "internal", Type: SkillTypeSystem}}
 	if _, err := ExecuteSystemSkill(entry, "ignored"); err == nil || !strings.Contains(err.Error(), "not supported") {
 		t.Fatalf("ExecuteSystemSkill error = %v", err)

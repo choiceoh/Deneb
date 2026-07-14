@@ -30,7 +30,7 @@ func TestParseCapacityMW(t *testing.T) {
 	}
 }
 
-func TestDealRecordFrom_Terms(t *testing.T) {
+func TestDealRecordFrom_PreservesTerms(t *testing.T) {
 	in := DealPageInput{
 		Counterparty: "남도에코",
 		Terms: &DealTerms{
@@ -69,7 +69,7 @@ func TestDealRecordFrom_Terms(t *testing.T) {
 	}
 }
 
-func TestSumDealRecords_Capacity(t *testing.T) {
+func TestSumDealRecords_ReturnsCapacityTotals(t *testing.T) {
 	recs := []DealRecord{
 		{Counterparty: "a", Terms: &DealTerms{CapacityMW: 2.9405}},
 		{Counterparty: "b", Terms: &DealTerms{CapacityMW: 0.5}},
@@ -82,7 +82,7 @@ func TestSumDealRecords_Capacity(t *testing.T) {
 	}
 }
 
-func TestUpsertDealPage_PersistsTermsToLedger(t *testing.T) {
+func TestUpsertDealPage_SavesTermsToLedger(t *testing.T) {
 	store := newDealStore(t)
 	_, _, err := store.UpsertDealPage(DealPageInput{
 		Counterparty: "남도에코",

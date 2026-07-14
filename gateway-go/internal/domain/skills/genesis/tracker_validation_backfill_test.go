@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestRecentRealUseSessionsBySkill_WindowDedupCapOrder(t *testing.T) {
+func TestRecentRealUseSessionsBySkillReturnsNewestFirstCappedAndExcludesReviewConsult(t *testing.T) {
 	tr := newTestTracker(t)
 	now := time.Now().UnixMilli()
 	hourMs := int64(time.Hour / time.Millisecond)

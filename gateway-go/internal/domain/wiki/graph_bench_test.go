@@ -32,8 +32,8 @@ import (
 // Spearman rank-correlation, strong-vs-weak AUC, and per-grade mean score for
 // each, so graphMentionsEnabled can be set from the comparison.
 //
-//	DENEB_WIKI_BENCH=1 go test -run TestGraphBench -v ./internal/domain/wiki/
-func TestGraphBench(t *testing.T) {
+//	DENEB_WIKI_BENCH=1 go test -run TestGraphBench_DisplaysRankingMetricsAgainstJudgeGrades -v ./internal/domain/wiki/
+func TestGraphBench_DisplaysRankingMetricsAgainstJudgeGrades(t *testing.T) {
 	if os.Getenv("DENEB_WIKI_BENCH") == "" {
 		t.Skip("set DENEB_WIKI_BENCH=1 to score against ~/.deneb/wiki-graph/bench-grades.json")
 	}

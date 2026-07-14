@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestValidTransitions(t *testing.T) {
+func TestIsValidTransitionCoversStatusPairBoundary(t *testing.T) {
 	tests := []struct {
 		from  RunStatus
 		to    RunStatus
@@ -45,7 +45,7 @@ func TestValidTransitions(t *testing.T) {
 	}
 }
 
-func TestIsTerminal(t *testing.T) {
+func TestIsTerminalReturnsTrueOnlyForTerminalStatuses(t *testing.T) {
 	if IsTerminal(StatusRunning) {
 		t.Error("running should not be terminal")
 	}
@@ -59,7 +59,7 @@ func TestIsTerminal(t *testing.T) {
 	}
 }
 
-func TestValidateTransition(t *testing.T) {
+func TestValidateTransitionReturnsErrorForInvalidTransition(t *testing.T) {
 	if err := ValidateTransition("", StatusRunning); err != nil {
 		t.Errorf("got %v, want nil", err)
 	}

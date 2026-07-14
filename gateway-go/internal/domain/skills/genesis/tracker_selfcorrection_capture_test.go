@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestSelfCorrectionReopenBlocked(t *testing.T) {
+func TestSelfCorrectionReopenRejectedUnlessAppliedCooledAndFreshlyRecurring(t *testing.T) {
 	now := time.Now()
 	src := "failure-cluster:deadbeef"
 	old := now.Add(-30 * 24 * time.Hour).UnixMilli() // older than the 14d cooldown

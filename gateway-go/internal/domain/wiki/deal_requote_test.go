@@ -22,7 +22,7 @@ func requoteInput(sourceRef, unitPrice, capacity, amount string) DealPageInput {
 	return in
 }
 
-func TestDetectRequote_UnitPriceChange(t *testing.T) {
+func TestDetectRequote_ReturnsUnitPriceChange(t *testing.T) {
 	s := newDealStore(t)
 	now := time.Date(2026, 7, 1, 9, 0, 0, 0, time.UTC)
 	if _, _, err := s.UpsertDealPage(requoteInput("mail:q1", "25,600원/m", "2,940.5kW", "3.2억"), now); err != nil {
@@ -47,7 +47,7 @@ func TestDetectRequote_UnitPriceChange(t *testing.T) {
 	}
 }
 
-func TestDetectRequote_NoFalsePositives(t *testing.T) {
+func TestDetectRequote_RejectsFalsePositives(t *testing.T) {
 	s := newDealStore(t)
 	now := time.Date(2026, 7, 1, 9, 0, 0, 0, time.UTC)
 	if _, _, err := s.UpsertDealPage(requoteInput("mail:q1", "25,600원/m", "", ""), now); err != nil {
@@ -84,7 +84,7 @@ func TestDetectRequote_NoFalsePositives(t *testing.T) {
 	}
 }
 
-func TestDetectRequote_CapacityAndAmount(t *testing.T) {
+func TestDetectRequote_ReturnsCapacityAndAmountChanges(t *testing.T) {
 	s := newDealStore(t)
 	now := time.Date(2026, 7, 1, 9, 0, 0, 0, time.UTC)
 	if _, _, err := s.UpsertDealPage(requoteInput("mail:q1", "", "2,940.5kW", "320,000,000원"), now); err != nil {

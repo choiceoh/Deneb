@@ -72,7 +72,7 @@ func TestParsePage_NoFrontmatter(t *testing.T) {
 	}
 }
 
-func TestStripLeadingFrontmatter(t *testing.T) {
+func TestStripLeadingFrontmatter_StripsLeadingBlocksPreservesHorizontalRulesAndProse(t *testing.T) {
 	cases := []struct {
 		name string
 		in   string
@@ -189,7 +189,7 @@ func TestFrontmatter_ClientRoundtripAndNormalize(t *testing.T) {
 	}
 }
 
-func TestPage_Section(t *testing.T) {
+func TestPage_Section_ReturnsHeadingBodyOrEmptyForMissing(t *testing.T) {
 	page := &Page{
 		Body: `# Title
 
@@ -221,7 +221,7 @@ This is the summary.
 	}
 }
 
-func TestPage_Sections(t *testing.T) {
+func TestPage_Sections_ReturnsOrderedHeadingList(t *testing.T) {
 	page := &Page{
 		Body: "# Title\n\n## Alpha\nA\n\n## Beta\nB\n\n## Gamma\nC\n",
 	}

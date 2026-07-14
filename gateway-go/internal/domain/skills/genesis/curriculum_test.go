@@ -94,7 +94,7 @@ func TestCurriculumRun_FilesOpportunityWithCasesFirst(t *testing.T) {
 }
 
 // A skip verdict files nothing — zero opportunities, zero cases.
-func TestCurriculumRun_SkipFilesNothing(t *testing.T) {
+func TestCurriculumRun_SkipVerdictWritesNoOpportunitiesOrCases(t *testing.T) {
 	task, tr := curriculumFixture(t, curriculumResp{Skip: true, Reason: "충분히 덮여 있음"}, nil)
 	if err := task.Run(context.Background()); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -201,7 +201,7 @@ func TestNormalizeCurriculumName(t *testing.T) {
 // Source-grounding gate (SkillCenter 2607.07676): the evidence field must
 // quote the demand-evidence block verbatim; hallucinated justifications and
 // too-short evidence are rejected regardless of plausibility.
-func TestCurriculumSourceGrounding(t *testing.T) {
+func TestCurriculumSourceGrounding_AcceptsVerbatimQuoteRejectsHallucinatedOrShortEvidence(t *testing.T) {
 	input := "## 현재 스킬 카탈로그\n- mail-triage — 메일 분류와 우선순위 정리\n## 환경 다이제스트\n다음 주 화요일 투자사 미팅 준비 항목 5건이 위키에 기록됨"
 
 	if got := curriculumSourceGrounding("위키에 따르면 투자사 미팅 준비 항목 5건이 위키에 기록됨 — 반복 수요", input); got != "" {
@@ -218,7 +218,7 @@ func TestCurriculumSourceGrounding(t *testing.T) {
 // Codex review: the grounding corpus keeps only demand DATA — bullet content
 // and the payload of a "header: data" line — never the static section headers,
 // so quoting a boilerplate header cannot satisfy grounding.
-func TestCurriculumGroundingLines_StripsHeaders(t *testing.T) {
+func TestCurriculumGroundingLines_PreservesDemandDataStripsSectionHeaders(t *testing.T) {
 	digest := "최근 실패한 요청(명시적 능력 갭, 최대 5):\n" +
 		"- 07-12: \"투자사 미팅 브리프를 만들어줘\" — 오류: 없음\n" +
 		"\n활성 위키 상대 도메인(최대 10): acme.com · bohae.co.kr\n" +

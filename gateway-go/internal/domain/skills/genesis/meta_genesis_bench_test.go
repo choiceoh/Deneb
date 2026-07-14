@@ -33,7 +33,7 @@ func cannedGen(incResp, propResp string) genesisShadowGenFn {
 // the production admissibility gate: a proposal that degrades or skips a
 // scenario the incumbent handles cleanly flips and rejects; matching quality
 // clears the bench (adoption confidence is the router's job, not the gate's).
-func TestGenesisShadowBench(t *testing.T) {
+func TestGenesisShadowBenchFlipsOnDegradationOrSkipClearsOnMatchingQuality(t *testing.T) {
 	scenarios := genesisShadowScenarios()
 	if len(scenarios) < 3 {
 		t.Fatalf("expected >=3 compiled fixtures, got %d", len(scenarios))
@@ -88,7 +88,7 @@ func TestGenesisShadowBench(t *testing.T) {
 // A vague incumbent is not a flip when the proposal is equally vague — flips
 // key on CLEAN incumbent scenarios only; the mean-issue regression rule
 // handles graded movement.
-func TestGenesisShadowBench_IssueRegression(t *testing.T) {
+func TestGenesisBenchDecisionRejectsMeanIssueRegressionNotEqualVagueness(t *testing.T) {
 	scenarios := genesisShadowScenarios()[:1]
 	out := runGenesisShadowBench(context.Background(), "INCUMBENT", "PROPOSAL", scenarios, cannedGen(genVagueResp, genVagueResp))
 	if out.Flips != 0 || out.Scenarios != 1 {

@@ -32,7 +32,7 @@ func TestWrapSkillInvocationOmitsEmptyOptionalFields(t *testing.T) {
 	}
 }
 
-func TestWrapSkillInvocationDoesNotDoubleTerminateContentLine(t *testing.T) {
+func TestWrapSkillInvocationAvoidsDoubleNewlineWhenContentAlreadyTerminated(t *testing.T) {
 	got := WrapSkillInvocation("x", "prompt", "", "already terminated\n")
 	if strings.Contains(got, "already terminated\n\n  </command-contents>") {
 		t.Fatalf("extra blank line inserted before closing tag: %q", got)
@@ -53,7 +53,7 @@ func TestWrapSkillErrorEscapesEveryUserControlledField(t *testing.T) {
 	}
 }
 
-func TestEscapeXMLTagEscapesAmpersandFirst(t *testing.T) {
+func TestEscapeXMLTagEncodesAmpersandBeforeOtherEntities(t *testing.T) {
 	if got, want := escapeXMLTag("<&amp;>"), "&lt;&amp;amp;&gt;"; got != want {
 		t.Fatalf("escapeXMLTag = %q, want %q", got, want)
 	}

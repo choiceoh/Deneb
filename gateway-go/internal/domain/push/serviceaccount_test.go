@@ -95,7 +95,7 @@ func TestParseServiceAccount_Errors(t *testing.T) {
 	}
 }
 
-func TestSignedAssertion_VerifiesAndCarriesClaims(t *testing.T) {
+func TestSignedAssertionEncodesClaimsAndVerifiesSignature(t *testing.T) {
 	raw, key := testCredentials(t, "https://oauth2.example/token")
 	sa, err := parseServiceAccount(raw)
 	if err != nil {

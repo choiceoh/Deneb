@@ -11,7 +11,7 @@ import (
 	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 )
 
-func TestSanitizeSkillName(t *testing.T) {
+func TestSanitizeSkillNameLowercasesHyphenatesAndRejectsTooShort(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string
@@ -35,7 +35,7 @@ func TestSanitizeSkillName(t *testing.T) {
 	}
 }
 
-func TestBuildToolSummary(t *testing.T) {
+func TestBuildToolSummaryReturnsAllToolNames(t *testing.T) {
 	activities := []ToolActivity{
 		{Name: "read", IsError: false},
 		{Name: "exec", IsError: false},
@@ -53,14 +53,14 @@ func TestBuildToolSummary(t *testing.T) {
 	}
 }
 
-func TestDefaultConfigKeepsAttemptThresholdLow(t *testing.T) {
+func TestDefaultConfigReturnsLowToolCallAndTurnThresholds(t *testing.T) {
 	cfg := DefaultConfig()
 	if cfg.MinToolCalls != 2 || cfg.MinTurns != 2 {
 		t.Fatalf("unexpected low-attempt generation defaults: %+v", cfg)
 	}
 }
 
-func TestEvaluate_MinToolCalls(t *testing.T) {
+func TestEvaluateRejectsSessionWithTooFewToolCalls(t *testing.T) {
 	svc := &Service{
 		cfg: Config{MinToolCalls: 5, MinTurns: 3, MaxSkillsPerDay: 10},
 	}
@@ -74,7 +74,7 @@ func TestEvaluate_MinToolCalls(t *testing.T) {
 	}
 }
 
-func TestEvaluate_MinTurns(t *testing.T) {
+func TestEvaluateRejectsSessionWithTooFewTurns(t *testing.T) {
 	svc := &Service{
 		cfg: Config{MinToolCalls: 5, MinTurns: 3, MaxSkillsPerDay: 10},
 	}
@@ -93,7 +93,7 @@ func TestEvaluate_MinTurns(t *testing.T) {
 	}
 }
 
-func TestEvaluate_MinToolDiversity(t *testing.T) {
+func TestEvaluateRejectsSessionWithLowToolDiversity(t *testing.T) {
 	svc := &Service{
 		cfg:          Config{MinToolCalls: 5, MinTurns: 3, MaxSkillsPerDay: 10},
 		recentSkills: make(map[string]time.Time),
@@ -114,7 +114,7 @@ func TestEvaluate_MinToolDiversity(t *testing.T) {
 	}
 }
 
-func TestEvaluate_Pass(t *testing.T) {
+func TestEvaluateAllowsSessionMeetingAllCriteria(t *testing.T) {
 	svc := &Service{
 		cfg:          Config{MinToolCalls: 5, MinTurns: 3, MaxSkillsPerDay: 10},
 		recentSkills: make(map[string]time.Time),
@@ -150,7 +150,7 @@ func TestEvaluateReview_AllowsNarrowButReviewWorthySignal(t *testing.T) {
 	}
 }
 
-func TestEvaluateReview_StillRequiresObservedToolWork(t *testing.T) {
+func TestEvaluateReviewRejectsSingleTrivialToolObservation(t *testing.T) {
 	svc := &Service{
 		cfg: Config{MinToolCalls: 5, MinTurns: 3, MaxSkillsPerDay: 10},
 	}
@@ -159,7 +159,7 @@ func TestEvaluateReview_StillRequiresObservedToolWork(t *testing.T) {
 	}
 }
 
-func TestSkillSpecificityIssues(t *testing.T) {
+func TestSkillSpecificityIssuesPassesWellFormedAndRejectsVagueSkills(t *testing.T) {
 	good := &GeneratedSkill{
 		Name:        "deploy-gateway",
 		Description: "게이트웨이를 배포한다. Use when: 코드 머지 후 프로덕션 반영이 필요할 때. NOT for: 로컬 테스트.",
@@ -197,7 +197,7 @@ func TestSkillSpecificityIssues(t *testing.T) {
 	}
 }
 
-func TestHasActionableStep(t *testing.T) {
+func TestHasActionableStepReturnsNumberedStepsAndInlineCodeNotProse(t *testing.T) {
 	if !hasActionableStep("1. 먼저 빌드한다\n2. 배포한다") {
 		t.Error("numbered steps should count as actionable")
 	}
@@ -209,7 +209,7 @@ func TestHasActionableStep(t *testing.T) {
 	}
 }
 
-func TestBuildSkillMD(t *testing.T) {
+func TestBuildSkillMDReturnsFrontmatterOriginAndBody(t *testing.T) {
 	skill := &GeneratedSkill{
 		Name:        "test-skill",
 		Category:    "coding",
@@ -233,10 +233,10 @@ func TestBuildSkillMD(t *testing.T) {
 	}
 }
 
-// TestJudgeGenerated_NoJudgePassesThrough verifies the genesis judge is fail-
+// TestJudgeGeneratedPassesThroughWhenNoJudgeWired verifies the genesis judge is fail-
 // open: with no judge wired it falls through to the heuristic gate (prior
 // behavior) instead of blocking all skill creation.
-func TestJudgeGenerated_NoJudgePassesThrough(t *testing.T) {
+func TestJudgeGeneratedPassesThroughWhenNoJudgeWired(t *testing.T) {
 	svc := &Service{logger: slog.Default()}
 	pass, _ := svc.judgeGenerated(context.Background(), &GeneratedSkill{Name: "x", Body: "body"})
 	if !pass {
@@ -244,10 +244,10 @@ func TestJudgeGenerated_NoJudgePassesThrough(t *testing.T) {
 	}
 }
 
-// TestListExistingSkillDescriptions verifies the judge's redundancy context
+// TestListExistingSkillDescriptionsReturnsNamesAndDescriptions verifies the judge's redundancy context
 // includes existing skill names AND descriptions (token-Jaccard dedup can only
 // see names; semantic duplicates need the descriptions).
-func TestListExistingSkillDescriptions(t *testing.T) {
+func TestListExistingSkillDescriptionsReturnsNamesAndDescriptions(t *testing.T) {
 	cat := skills.NewCatalog(nil)
 	cat.Register(skills.SkillEntry{Skill: skills.Skill{Name: "morning-letter", Description: "wiki+gmail morning letter"}})
 	cat.Register(skills.SkillEntry{Skill: skills.Skill{Name: "deploy", Description: "deploy gateway"}})

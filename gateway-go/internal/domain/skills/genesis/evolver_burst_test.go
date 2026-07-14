@@ -8,7 +8,7 @@ import (
 
 // Burst keeps evolving while rounds land, stops on the first dry round, and
 // never exceeds the cap; a non-evolved first result never bursts.
-func TestRunEvolveBurst_LoopUntilDryAndCap(t *testing.T) {
+func TestRunEvolveBurst_StopsAtDryRoundOrCapReached(t *testing.T) {
 	e := &Evolver{logger: slog.Default()}
 
 	// First round landed; fake rounds: one more accept, then dry.
@@ -55,7 +55,7 @@ func TestRunEvolveBurst_LoopUntilDryAndCap(t *testing.T) {
 
 // A2/A4: "covered" (relaxed caps + burst continuation) requires a SCORABLE
 // case, not mere case existence — an assertion-less corpus must read uncovered.
-func TestHasScorableValidationCase(t *testing.T) {
+func TestHasScorableValidationCase_RequiresAssertionsWithoutMereExistence(t *testing.T) {
 	if hasScorableValidationCase(nil) {
 		t.Fatal("no cases must read uncovered")
 	}

@@ -2,11 +2,11 @@ package genesis
 
 import "testing"
 
-// TestEvolutionHealth_SurfacesConfirmAndCrossSkill verifies the two previously
-// write-only lifecycle signals (evolve_confirmed, cross_skill_regression) are now
-// tallied into EvolutionHealthSummary, with ConfirmRate = confirmed / (confirmed
-// + rolled-back).
-func TestEvolutionHealth_SurfacesConfirmAndCrossSkill(t *testing.T) {
+// TestEvolutionHealthReturnsConfirmedRolledBackAndCrossSkillRegressions verifies
+// the two previously write-only lifecycle signals (evolve_confirmed,
+// cross_skill_regression) are now tallied into EvolutionHealthSummary, with
+// ConfirmRate = confirmed / (confirmed + rolled-back).
+func TestEvolutionHealthReturnsConfirmedRolledBackAndCrossSkillRegressions(t *testing.T) {
 	tr := newTestTracker(t)
 	audit := HarnessEditAudit{
 		TargetSignature:        "terminal=timeout|mechanism=bounded-execution",

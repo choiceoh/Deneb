@@ -63,7 +63,7 @@ func TestFormatConfirmedEvolveExemplars(t *testing.T) {
 	}
 }
 
-func TestEvolutionHealth_FalseAcceptScoreboard(t *testing.T) {
+func TestEvolutionHealthReturnsFalseAcceptRateComplementingConfirmRate(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {

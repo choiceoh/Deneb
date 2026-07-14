@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestActiveCounterpartyDomains(t *testing.T) {
+func TestActiveCounterpartyDomainsExpiresStale(t *testing.T) {
 	store, err := NewStore(t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +56,7 @@ func TestActiveCounterpartyDomains(t *testing.T) {
 // CounterpartyProjects must mirror the domain-set rules (window, freemail,
 // linked-only) and add per-domain project lists ordered by latest activity,
 // capped and deterministically tie-broken.
-func TestCounterpartyProjects(t *testing.T) {
+func TestCounterpartyProjectsReturnsOrderedAndCapped(t *testing.T) {
 	store, err := NewStore(t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)

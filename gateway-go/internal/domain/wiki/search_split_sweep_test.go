@@ -151,7 +151,7 @@ func countMarkdownPages(t *testing.T, root string) int {
 	return n
 }
 
-func TestSplitThresholdSweep(t *testing.T) {
+func TestSplitThresholdSweep_PreservesRecallAboveFloorAsThresholdShrinksAndFragmentsMorePages(t *testing.T) {
 	plants := sweepPlants()
 
 	// 1<<30 = effectively no split (baseline whole pages); then progressively

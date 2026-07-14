@@ -12,7 +12,7 @@ func newMoveStore(t *testing.T) *Store {
 	return s
 }
 
-func TestMovePage(t *testing.T) {
+func TestMovePage_MovesFileUpdatesCategoryPreservesBody(t *testing.T) {
 	s := newMoveStore(t)
 	page := NewPage("탑솔라", "프로젝트", nil)
 	page.Body = "# 탑솔라\n본문 보존 확인"
@@ -59,9 +59,9 @@ func TestMovePage_RejectsExistingTarget(t *testing.T) {
 	}
 }
 
-// TestMovePage_RepointsInboundReferences: pages whose Related pointed at the
-// old path follow the move — the graph edge survives instead of dangling.
-func TestMovePage_RepointsInboundReferences(t *testing.T) {
+// TestMovePage_UpdatesInboundRelatedLinksToNewPath: pages whose Related pointed
+// at the old path follow the move — the graph edge survives instead of dangling.
+func TestMovePage_UpdatesInboundRelatedLinksToNewPath(t *testing.T) {
 	s := newMoveStore(t)
 	target := NewPage("탑솔라", "프로젝트", nil)
 	if err := s.WritePage("프로젝트/탑솔라.md", target); err != nil {
@@ -137,14 +137,14 @@ func TestMovePage_RepointDoesNotStampReferrerUpdated(t *testing.T) {
 	}
 }
 
-func TestMovePage_SourceNotFound(t *testing.T) {
+func TestMovePage_ErrorsWhenSourceMissing(t *testing.T) {
 	s := newMoveStore(t)
 	if err := s.MovePage("프로젝트/missing.md", "인물/missing.md"); err == nil {
 		t.Error("expected error moving a nonexistent source")
 	}
 }
 
-func TestMovePage_NoopSamePath(t *testing.T) {
+func TestMovePage_SamePathIsNoopAndPreservesPage(t *testing.T) {
 	s := newMoveStore(t)
 	if err := s.WritePage("프로젝트/a.md", NewPage("A", "프로젝트", nil)); err != nil {
 		t.Fatal(err)

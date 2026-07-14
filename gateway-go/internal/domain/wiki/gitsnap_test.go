@@ -26,7 +26,7 @@ func gitLogCount(t *testing.T, dir string) int {
 	return c
 }
 
-func TestSnapshotGit_CommitsOnlyOnChange(t *testing.T) {
+func TestSnapshotGit_CommitsOnlyWhenChanged(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
 	}

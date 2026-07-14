@@ -43,7 +43,7 @@ func accuracyFixture(t *testing.T) (*JudgeAccuracyTask, *Tracker) {
 
 // The lane ledgers per-class accuracy with miss exhibits, attributed to the
 // judge prompt version — the P3 label substrate.
-func TestJudgeAccuracyTask_Run(t *testing.T) {
+func TestJudgeAccuracyTaskRunLedgersPerClassAccuracyWithMissExhibits(t *testing.T) {
 	task, tr := accuracyFixture(t)
 	task.verdictFn = func(_ context.Context, _, _, degraded string) (judgeVerdict, error) {
 		// Miss exactly the fake-tool class (pass the defect); catch the rest.
@@ -103,7 +103,7 @@ func TestOperatorJudgeVerdictIsIdempotentAndSeparateFromLaneRuns(t *testing.T) {
 // The probe curriculum ladder: weaken-tier pairs deploy only after
 // judgeEscalationWindow consecutive zero-miss drop-tier runs of the incumbent
 // judge; a drop-tier miss or a judge revision (version change) re-locks it.
-func TestJudgeAccuracyEscalation(t *testing.T) {
+func TestJudgeAccuracyEscalationAllowsWeakenTierAfterSaturatedWindow(t *testing.T) {
 	task, tr := accuracyFixture(t)
 	version := task.Meta.Version(generation.MetaSkillJudgeSystemPrompt,
 		generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt])
@@ -194,7 +194,7 @@ func TestMineFalseRejects(t *testing.T) {
 }
 
 // The charter subset is deterministic, frozen, and a reasonable minority.
-func TestIsCharterCase(t *testing.T) {
+func TestIsCharterCaseDeterministicAboutQuarterProportionStraddlesBothPoolBoundary(t *testing.T) {
 	charter := 0
 	for i := 0; i < 400; i++ {
 		rec := SkillValidationCaseRecord{SkillName: "sk", ID: fmt.Sprintf("case-%d", i), RequiredSubstrings: []string{"x"}}
@@ -228,7 +228,7 @@ func TestIsCharterCase(t *testing.T) {
 }
 
 // The env knob accelerates the lane.
-func TestJudgeAccuracyInterval(t *testing.T) {
+func TestJudgeAccuracyIntervalDefaultsAndAllowsEnvOverride(t *testing.T) {
 	task := &JudgeAccuracyTask{}
 	t.Setenv("DENEB_JUDGE_ACCURACY_INTERVAL_HOURS", "")
 	if task.Interval() != judgeAccuracyDefaultInterval {

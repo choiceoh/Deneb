@@ -2,8 +2,9 @@ package wiki
 
 import "testing"
 
-// TestIsProjectRepPage locks the 대표페이지 rule for both layout forms.
-func TestIsProjectRepPage(t *testing.T) {
+// TestIsProjectRepPage_MatchesRepFormsRejectsSubPagesAndBuckets locks the 대표페이지
+// rule for both layout forms.
+func TestIsProjectRepPage_MatchesRepFormsRejectsSubPagesAndBuckets(t *testing.T) {
 	cases := map[string]bool{
 		"프로젝트/영산고/대표.md":            true,  // in-folder form
 		"프로젝트/영산고.md":               true,  // legacy flat form
@@ -26,8 +27,9 @@ func TestIsProjectRepPage(t *testing.T) {
 	}
 }
 
-// TestProjectNameOf covers name extraction across forms and reserved buckets.
-func TestProjectNameOf(t *testing.T) {
+// TestProjectNameOf_ExtractsNameAcrossFormsRejectsReservedBuckets covers name
+// extraction across forms and reserved buckets.
+func TestProjectNameOf_ExtractsNameAcrossFormsRejectsReservedBuckets(t *testing.T) {
 	cases := []struct {
 		path string
 		name string
@@ -79,9 +81,9 @@ func TestNormalizeProjectPagePath(t *testing.T) {
 	}
 }
 
-// TestMailAnalysisPagePath: linked mails land in the project slot, unlinked in
-// the category-level bucket.
-func TestMailAnalysisPagePath(t *testing.T) {
+// TestMailAnalysisPagePath_LinkedGoesToProjectSlotUnlinkedToBucket: linked mails
+// land in the project slot, unlinked in the category-level bucket.
+func TestMailAnalysisPagePath_LinkedGoesToProjectSlotUnlinkedToBucket(t *testing.T) {
 	if got := MailAnalysisPagePath("영산고", "abc"); got != "프로젝트/영산고/메일분석/abc.md" {
 		t.Errorf("linked = %q", got)
 	}
@@ -90,8 +92,9 @@ func TestMailAnalysisPagePath(t *testing.T) {
 	}
 }
 
-// TestIsProjectRawDataPath separates raw data from curated project content.
-func TestIsProjectRawDataPath(t *testing.T) {
+// TestIsProjectRawDataPath_ClassifiesRawRejectsCuratedPages
+// separates raw data from curated project content.
+func TestIsProjectRawDataPath_ClassifiesRawRejectsCuratedPages(t *testing.T) {
 	cases := map[string]bool{
 		"프로젝트/영산고/메일분석/abc.md":      true,
 		"프로젝트/메일분석/abc.md":          true,
@@ -109,9 +112,10 @@ func TestIsProjectRawDataPath(t *testing.T) {
 	}
 }
 
-// TestProjectFolderOf: nested slots resolve to the owning project folder — the
-// key the dreamer's code inheritance uses.
-func TestProjectFolderOf(t *testing.T) {
+// TestProjectFolderOf_ResolvesNestedAndLegacyRejectsReservedBucket: nested slots
+// resolve to the owning project folder — the key the dreamer's code
+// inheritance uses.
+func TestProjectFolderOf_ResolvesNestedAndLegacyRejectsReservedBucket(t *testing.T) {
 	if folder, ok := ProjectFolderOf("프로젝트/영산고/메일분석/abc.md"); !ok || folder != "프로젝트/영산고" {
 		t.Errorf("nested slot = (%q, %v)", folder, ok)
 	}
@@ -123,7 +127,7 @@ func TestProjectFolderOf(t *testing.T) {
 	}
 }
 
-func TestProjectOfLinkedMailAnalysis(t *testing.T) {
+func TestProjectOfLinkedMailAnalysis_ResolvesLinkedRejectsUnlinkedLegacyAndReserved(t *testing.T) {
 	cases := map[string]struct {
 		project string
 		ok      bool
@@ -144,9 +148,10 @@ func TestProjectOfLinkedMailAnalysis(t *testing.T) {
 	}
 }
 
-// TestMaterialSlot locks the 자료 slot: paths, raw-data classification, the
-// reserved global bucket, and overdeep folding under the slot.
-func TestMaterialSlot(t *testing.T) {
+// TestMaterialSlot_PathFormatRawClassificationAndOverdeepFolding locks the 자료
+// slot: paths, raw-data classification, the reserved global bucket, and
+// overdeep folding under the slot.
+func TestMaterialSlot_PathFormatRawClassificationAndOverdeepFolding(t *testing.T) {
 	if got := MaterialPagePath("영산고", "발표-abcd1234.md"); got != "프로젝트/영산고/자료/발표-abcd1234.md" {
 		t.Errorf("MaterialPagePath linked = %q", got)
 	}
@@ -176,9 +181,10 @@ func TestMaterialSlot(t *testing.T) {
 	}
 }
 
-// TestMeetingSlot locks the 회의록 slot: paths, raw-data classification, the
-// reserved global bucket, and overdeep folding under the slot.
-func TestMeetingSlot(t *testing.T) {
+// TestMeetingSlot_PathFormatRawClassificationAndOverdeepFolding locks the 회의록
+// slot: paths, raw-data classification, the reserved global bucket, and
+// overdeep folding under the slot.
+func TestMeetingSlot_PathFormatRawClassificationAndOverdeepFolding(t *testing.T) {
 	if got := MeetingPagePath("영산고", "주간회의-abcd1234.md"); got != "프로젝트/영산고/회의록/주간회의-abcd1234.md" {
 		t.Errorf("MeetingPagePath linked = %q", got)
 	}

@@ -8,7 +8,7 @@ import (
 
 // Time-based watch resolution: the label pipeline must not starve on
 // rarely-used skills (backtest 2026-07-11: zero historical resolutions).
-func TestResolveStaleWatches(t *testing.T) {
+func TestResolveStaleWatchesConfirmsUsedExpiresUnusedLeavesFreshWatchesAlone(t *testing.T) {
 	newTracker := func(t *testing.T) *Tracker {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())

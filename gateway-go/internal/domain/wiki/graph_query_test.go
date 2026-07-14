@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestGraphContext(t *testing.T) {
+func TestGraphContextReturnsMatchingNeighbors(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -69,10 +69,11 @@ func TestGraphContext(t *testing.T) {
 	}
 }
 
-// TestGraphContext_InlineWikiLinks verifies that an Obsidian-style [[wiki-link]]
-// written in a page body becomes a graph edge even when there is no matching
-// `related:` frontmatter entry — the loop the dreamer's emitted links left open.
-func TestGraphContext_InlineWikiLinks(t *testing.T) {
+// TestGraphContext_InlineWikiLinksCreateEdges verifies that an Obsidian-style
+// [[wiki-link]] written in a page body becomes a graph edge even when there is
+// no matching `related:` frontmatter entry — the loop the dreamer's emitted
+// links left open.
+func TestGraphContext_InlineWikiLinksCreateEdges(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -111,7 +112,7 @@ func TestGraphContext_InlineWikiLinks(t *testing.T) {
 	}
 }
 
-func TestExtractWikiLinks(t *testing.T) {
+func TestExtractWikiLinksParsesLinkForms(t *testing.T) {
 	cases := []struct {
 		name string
 		body string
@@ -140,9 +141,10 @@ func TestExtractWikiLinks(t *testing.T) {
 	}
 }
 
-// TestPageConnections verifies the compact neighbor footer seeds by exact path
-// and lists strongest neighbors, returning "" for an isolated page.
-func TestPageConnections(t *testing.T) {
+// TestPageConnectionsReturnsNeighborFooter verifies the compact neighbor
+// footer seeds by exact path and lists strongest neighbors, returning "" for
+// an isolated page.
+func TestPageConnectionsReturnsNeighborFooter(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -188,11 +190,11 @@ func TestPageConnections(t *testing.T) {
 	}
 }
 
-// TestGraphContext_ProjectFamilyEdges verifies that pages sharing a project
-// folder connect with no explicit link (the 2026-07 orphan class: 로그/기자재
-// invisible to GraphContext), and that raw mail-analysis pages join weaker
-// than curated slots.
-func TestGraphContext_ProjectFamilyEdges(t *testing.T) {
+// TestGraphContext_ProjectFamilyCreatesEdges verifies that pages sharing a
+// project folder connect with no explicit link (the 2026-07 orphan class:
+// 로그/기자재 invisible to GraphContext), and that raw mail-analysis pages join
+// weaker than curated slots.
+func TestGraphContext_ProjectFamilyCreatesEdges(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -316,10 +318,11 @@ func TestGraphScoreMap_PreservesPhasePrecedenceAndBoundaries(t *testing.T) {
 	}
 }
 
-// TestSemanticNeighborLabel pins the deterministic path/category → kind rules:
-// 프로젝트/ layout slots are authoritative, other pages fall back to category
-// then top-level folder, and meaningless kinds (기타, root files) return "".
-func TestSemanticNeighborLabel(t *testing.T) {
+// TestSemanticNeighborLabelReturnsKind pins the deterministic path/category →
+// kind rules: 프로젝트/ layout slots are authoritative, other pages fall back to
+// category then top-level folder, and meaningless kinds (기타, root files)
+// return "".
+func TestSemanticNeighborLabelReturnsKind(t *testing.T) {
 	cases := []struct {
 		path     string
 		category string

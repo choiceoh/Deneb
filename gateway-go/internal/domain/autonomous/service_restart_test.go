@@ -5,10 +5,10 @@ import (
 	"time"
 )
 
-// TestComputeInitialDelay covers the restart catch-up math: a recently-run task
+// TestComputeInitialDelayAfterRestart covers the restart catch-up math: a recently-run task
 // waits out only the remainder of its interval, while a never-run or overdue
 // task uses the grace period.
-func TestComputeInitialDelay(t *testing.T) {
+func TestComputeInitialDelayAfterRestart(t *testing.T) {
 	grace := 30 * time.Second
 	interval := 10 * time.Minute
 	now := time.UnixMilli(2_000_000_000_000)
@@ -64,9 +64,9 @@ func TestStatePersistenceRoundTrip(t *testing.T) {
 	}
 }
 
-// TestStatePersistenceNoDir confirms save/load are safe no-ops when no state dir
+// TestStatePersistenceWithoutStateDir confirms save/load are safe no-ops when no state dir
 // is configured (in-memory-only mode).
-func TestStatePersistenceNoDir(t *testing.T) {
+func TestStatePersistenceWithoutStateDir(t *testing.T) {
 	s := NewService(nil)
 	s.RegisterTask(&fakeTask{name: "x", interval: time.Hour})
 	s.saveState() // must not panic or write anything

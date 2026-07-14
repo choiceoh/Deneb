@@ -200,7 +200,7 @@ func TestNewTaskRejectsSSHHostOptionAndShellSyntax(t *testing.T) {
 	}
 }
 
-func TestNewTaskAcceptsSafeHostAndDirectoryShapes(t *testing.T) {
+func TestNewTaskPreservesSafeHostAndDirectoryShapes(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -616,7 +616,7 @@ func TestAddFilePropagatesTarHeaderFailure(t *testing.T) {
 	}
 }
 
-func TestTaskRunOrdersSnapshotShipAndPrune(t *testing.T) {
+func TestTaskRunCreatesSnapshotBeforeShipAndPrune(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -859,7 +859,7 @@ func TestConcurrentWriteArchiveProducesIndependentValidStreams(t *testing.T) {
 	}
 }
 
-func TestDefaultTargetsAreStableAndUnique(t *testing.T) {
+func TestDefaultTargetsSatisfyPathSafetyContract(t *testing.T) {
 	t.Parallel()
 
 	want := []string{

@@ -14,11 +14,11 @@ func newProjectTestStore(t *testing.T) *Store {
 	return testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 }
 
-// TestKnownProjects: a project is its 대표페이지 — the in-folder 프로젝트/<name>/대표.md
-// form or the legacy flat 프로젝트/<name>.md form (folder form wins when both
-// exist); raw-data buckets (메일분석/, mail-analyses/, 거래/), sub-pages, and other
-// categories are excluded.
-func TestKnownProjects(t *testing.T) {
+// TestKnownProjects_ListsRepPagesFolderFormWinsRejectsRawAndSubPages: a project is
+// its 대표페이지 — the in-folder 프로젝트/<name>/대표.md form or the legacy flat
+// 프로젝트/<name>.md form (folder form wins when both exist); raw-data buckets
+// (메일분석/, mail-analyses/, 거래/), sub-pages, and other categories are excluded.
+func TestKnownProjects_ListsRepPagesFolderFormWinsRejectsRawAndSubPages(t *testing.T) {
 	store := newProjectTestStore(t)
 	defer store.Close()
 
@@ -57,9 +57,9 @@ func TestKnownProjects(t *testing.T) {
 	}
 }
 
-// TestEnsureProjectPage_RepPageTitle: a missing in-folder 대표페이지 is minted with
-// the project's name, not the literal "대표".
-func TestEnsureProjectPage_RepPageTitle(t *testing.T) {
+// TestEnsureProjectPage_TitlesNewRepPageWithProjectNameNotLiteralDefault: a missing
+// in-folder 대표페이지 is minted with the project's name, not the literal "대표".
+func TestEnsureProjectPage_TitlesNewRepPageWithProjectNameNotLiteralDefault(t *testing.T) {
 	page := ensureProjectPage(nil, "프로젝트/영산고/대표.md")
 	if page.Meta.Title != "영산고" {
 		t.Errorf("Title = %q, want 영산고", page.Meta.Title)
@@ -113,9 +113,10 @@ func TestSetProjectStatus_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestAppendProjectStatusLine: prepend newest-first, strip the provenance marker
-// on read, idempotent by ref, and capped.
-func TestAppendProjectStatusLine(t *testing.T) {
+// TestAppendProjectStatusLine_PrependsIdempotentByRefAndCapped: prepend
+// newest-first, strip the provenance marker on read, idempotent by ref, and
+// capped.
+func TestAppendProjectStatusLine_PrependsIdempotentByRefAndCapped(t *testing.T) {
 	store := newProjectTestStore(t)
 	defer store.Close()
 	path := "프로젝트/영산고.md"

@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/surfaces"
 )
 
-func TestClassifySurface_TiersAndPrecedence(t *testing.T) {
+func TestClassifySurfaceReturnsTierByPathPattern(t *testing.T) {
 	cases := []struct {
 		target   string
 		wantName string
@@ -31,7 +31,7 @@ func TestClassifySurface_TiersAndPrecedence(t *testing.T) {
 
 // A forbidden target must reject the candidate at record time; allowed
 // targets annotate the record with the most restrictive tier.
-func TestRecordSelfCorrectionCandidate_EnforcesDeclaredSurfaces(t *testing.T) {
+func TestRecordSelfCorrectionCandidate_RejectsForbiddenSummarizesMixedAndAutoApplySurfaces(t *testing.T) {
 	tr := newTestTracker(t)
 
 	_, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{

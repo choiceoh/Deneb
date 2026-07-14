@@ -9,7 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestBuildGraphSnapshotProjectsEachEdgeSource(t *testing.T) {
+func TestBuildGraphSnapshotCreatesEdgeForEachSource(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	t.Cleanup(func() { _ = store.Close() })
@@ -88,7 +88,7 @@ func TestBuildGraphSnapshotRejectsInvalidDestination(t *testing.T) {
 	}
 }
 
-func TestBuildGraphSnapshotKeepsDuplicateDeclaredIDsDistinct(t *testing.T) {
+func TestBuildGraphSnapshotPreservesDuplicateDeclaredIDsDistinct(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), ""))
 	t.Cleanup(func() { _ = store.Close() })

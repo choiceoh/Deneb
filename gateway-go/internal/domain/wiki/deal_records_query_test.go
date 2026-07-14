@@ -40,7 +40,7 @@ func seedDealStore(t *testing.T) *Store {
 	return s
 }
 
-func TestQueryDealRecords(t *testing.T) {
+func TestQueryDealRecordsReturnsFiltered(t *testing.T) {
 	s := seedDealStore(t)
 
 	// Fuzzy counterparty: lowercase/space variant matches, newest ISO date first.
@@ -77,7 +77,7 @@ func TestQueryDealRecords(t *testing.T) {
 	}
 }
 
-func TestSumDealRecords(t *testing.T) {
+func TestSumDealRecordsReturnsTotals(t *testing.T) {
 	s := seedDealStore(t)
 	recs, err := s.QueryDealRecords(DealRecordFilter{})
 	if err != nil {
@@ -109,9 +109,10 @@ func TestSumDealRecords(t *testing.T) {
 	}
 }
 
-// TestQueryDealRecords_ProjectBackfill: rows teed before the projects field
-// existed must still match a project filter via their ledger page's Related.
-func TestQueryDealRecords_ProjectBackfill(t *testing.T) {
+// TestQueryDealRecords_ProjectBackfillReturnsLegacyMatches: rows teed before
+// the projects field existed must still match a project filter via their
+// ledger page's Related.
+func TestQueryDealRecords_ProjectBackfillReturnsLegacyMatches(t *testing.T) {
 	dir := t.TempDir()
 	s, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

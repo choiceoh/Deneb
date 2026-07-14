@@ -33,7 +33,7 @@ func (f fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, err
 	return out, nil
 }
 
-func TestWarmSemanticIndex(t *testing.T) {
+func TestWarmSemanticIndex_EmbedsAllPagesUpfrontNoopWithoutEmbedder(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -60,7 +60,7 @@ func TestWarmSemanticIndex(t *testing.T) {
 	}
 }
 
-func TestMergeSearchResultsDemotesBM25Only(t *testing.T) {
+func TestMergeSearchResults_DemotesUnconfirmedBM25BoostsConfirmedRejectsSemanticOnlyByFloor(t *testing.T) {
 	bm25 := []SearchResult{
 		{Path: "nosem.md", Score: 0.9},  // strong lexical, no semantic entry (cosine 0)
 		{Path: "weak.md", Score: 0.9},   // strong lexical, weak cosine (< threshold)
@@ -111,13 +111,13 @@ func TestMergeSearchResultsDemotesBM25Only(t *testing.T) {
 	}
 }
 
-// TestMergeSearchResults_SemanticOnlyFloorOverride confirms the
-// DENEB_WIKI_SEM_FLOOR env override moves the admission gate, that a malformed
-// override falls back to the default, and — using the exact MEASURED leak
-// cosine (0.6302) — proves the leak→no-leak transition: the off-topic
-// semantic-only hit is injected when the floor is below it (old floorless
-// behavior) and excluded at the shipped 0.70 default.
-func TestMergeSearchResults_SemanticOnlyFloorOverride(t *testing.T) {
+// TestMergeSearchResults_SemanticOnlyFloorOverrideGatesLeakCosineFallsBackOnMalformed
+// confirms the DENEB_WIKI_SEM_FLOOR env override moves the admission gate, that
+// a malformed override falls back to the default, and — using the exact
+// MEASURED leak cosine (0.6302) — proves the leak→no-leak transition: the
+// off-topic semantic-only hit is injected when the floor is below it (old
+// floorless behavior) and excluded at the shipped 0.70 default.
+func TestMergeSearchResults_SemanticOnlyFloorOverrideGatesLeakCosineFallsBackOnMalformed(t *testing.T) {
 	// The measured leak: an off-topic wiki page injected at score 0.6302 == its
 	// raw cosine, with no admission gate on the semantic-only branch.
 	const measuredLeakCos = 0.6302
@@ -147,7 +147,7 @@ func TestMergeSearchResults_SemanticOnlyFloorOverride(t *testing.T) {
 	}
 }
 
-func TestSearchHybrid(t *testing.T) {
+func TestSearchHybrid_SurfacesSemanticMatchesDegradesToBM25WhenUnhealthy(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -223,7 +223,7 @@ func TestSearchHybrid(t *testing.T) {
 	}
 }
 
-func TestSuggestRelatedAndEnrich(t *testing.T) {
+func TestSuggestRelatedAndEnrich_SuggestsConceptMatchAndCreatesRelatedLink(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -266,11 +266,12 @@ func TestSuggestRelatedAndEnrich(t *testing.T) {
 	}
 }
 
-// TestRefreshAsync_BackgroundAndSingleFlight exercises the real async path
-// (syncRefresh off): a request triggers a background re-embed that populates
-// vectors without blocking the caller, and a second trigger over unchanged
-// pages re-embeds nothing (single-flight + content-hash skip).
-func TestRefreshAsync_BackgroundAndSingleFlight(t *testing.T) {
+// TestRefreshAsync_LoadsVectorsInBackgroundSkipsUnchangedOnRetrigger exercises
+// the real async path (syncRefresh off): a request triggers a background
+// re-embed that populates vectors without blocking the caller, and a second
+// trigger over unchanged pages re-embeds nothing (single-flight + content-hash
+// skip).
+func TestRefreshAsync_LoadsVectorsInBackgroundSkipsUnchangedOnRetrigger(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

@@ -10,7 +10,7 @@ func TestService_StartStop(t *testing.T) {
 	s.Stop() // must not panic or deadlock
 }
 
-func TestService_OnEvent_listenerRegistered(t *testing.T) {
+func TestService_OnEvent_EmitsToRegisteredListener(t *testing.T) {
 	s := NewService(nil)
 	called := false
 	s.OnEvent(func(event CycleEvent) {
@@ -23,7 +23,7 @@ func TestService_OnEvent_listenerRegistered(t *testing.T) {
 	}
 }
 
-func TestService_OnEvent_multipleListeners(t *testing.T) {
+func TestService_OnEvent_EmitsToMultipleListeners(t *testing.T) {
 	s := NewService(nil)
 	count := 0
 	s.OnEvent(func(CycleEvent) { count++ })

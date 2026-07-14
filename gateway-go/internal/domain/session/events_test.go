@@ -51,7 +51,7 @@ func TestEventBusSubscribeEmit(t *testing.T) {
 	}
 }
 
-func TestEventBusUnsubscribe(t *testing.T) {
+func TestEventBusUnsubscribeStopsFurtherDelivery(t *testing.T) {
 	bus := NewEventBus()
 	var count int
 	var mu sync.Mutex
@@ -80,7 +80,7 @@ func TestEventBusUnsubscribe(t *testing.T) {
 	}
 }
 
-func TestEventBusMultipleSubscribers(t *testing.T) {
+func TestEventBusEmitReachesAllSubscribers(t *testing.T) {
 	bus := NewEventBus()
 	var count1, count2 int
 	var mu sync.Mutex

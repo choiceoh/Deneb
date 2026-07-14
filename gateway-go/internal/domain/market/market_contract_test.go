@@ -118,7 +118,7 @@ func TestParseChartFallbackScaleAndMetadataBoundaries(t *testing.T) {
 	}
 }
 
-func TestFetchOneBuildsEscapedRequestAndValidatesResponse(t *testing.T) {
+func TestFetchOneBuildsEscapedRequestAndReturnsQuoteOrError(t *testing.T) {
 	var seenURL, seenAgent string
 	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		seenURL = req.URL.String()
@@ -193,7 +193,7 @@ func TestFetchAllAllowsPartialAndErrorsWhenAllFail(t *testing.T) {
 	}
 }
 
-func TestCacheFreshAndRefreshedResultsDoNotAliasState(t *testing.T) {
+func TestCacheFreshAndRefreshedResultsPreserveIsolation(t *testing.T) {
 	now := time.Now()
 	cache := &Cache{
 		quotes:  []Quote{{Symbol: "A", Label: "Alpha", Price: 10}},

@@ -10,7 +10,7 @@ import (
 // precondition — a baseline-blind rollback is a disagreement label, not P3
 // food), and each label is attributed to the judge version whose acceptance
 // shipped the evolve.
-func TestOrganicFalseAccepts(t *testing.T) {
+func TestOrganicFalseAcceptsIncludesOnlyBaselineConfirmedRollbacks(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {

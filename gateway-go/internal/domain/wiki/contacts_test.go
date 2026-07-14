@@ -12,7 +12,7 @@ import (
 // EnrichContacts must touch ONLY existing 인물 pages whose name matches a
 // contact — never a non-인물 page, never an unmatched contact, and never a new
 // page.
-func TestEnrichContacts_MatchesExistingPeopleOnly(t *testing.T) {
+func TestEnrichContacts_UpdatesExistingPeopleOnly(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -111,7 +111,7 @@ func TestEnrichContacts_Idempotent(t *testing.T) {
 	}
 }
 
-func TestUpsertSection(t *testing.T) {
+func TestUpsertSectionUpdatesOrCreates(t *testing.T) {
 	// Replace an existing section, preserve the others and their order.
 	body := "서문 문단.\n\n## 메모\n기존 메모.\n\n## 연락처\n- 전화: old-number\n"
 	out := upsertSection(body, "연락처", "- 전화: new-number")

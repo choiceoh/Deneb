@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestEnrichEmployeePages(t *testing.T) {
+func TestEnrichEmployeePages_CreatesInternalPagesDedupsTitleVariantSkipsExternal(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -45,7 +45,7 @@ func TestEnrichEmployeePages(t *testing.T) {
 	}
 }
 
-func TestEnrichDealMentionedPages(t *testing.T) {
+func TestEnrichDealMentionedPages_CreatesPagesForExternalContactsNamedInDealBody(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -88,7 +88,7 @@ func TestEnrichDealMentionedPages(t *testing.T) {
 	}
 }
 
-func TestEnrichPersonEmails(t *testing.T) {
+func TestEnrichPersonEmails_WritesUniqueIdentitiesFlagsHomonymsIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -157,7 +157,7 @@ func TestEnrichPersonEmails(t *testing.T) {
 
 // identityEmails must distinguish 이직 (one person who moved — shared mobile,
 // keep both addresses) from 동명이인 (different people — distinct phones, flag).
-func TestIdentityEmails_JobChangeVsHomonym(t *testing.T) {
+func TestIdentityEmails_ReturnsUnionedEmailsOrHomonymFlag(t *testing.T) {
 	// 이직: same 010 mobile across two employers → one identity, union both emails.
 	move := []contactdomain.Contact{
 		{Name: "김이직", Phones: []string{"010-1111-2222"}, Emails: []string{"a@oldco.com"}, Org: "Old"},

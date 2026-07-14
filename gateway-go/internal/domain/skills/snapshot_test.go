@@ -2,7 +2,7 @@ package skills
 
 import "testing"
 
-func TestFilterExcludedSkills(t *testing.T) {
+func TestFilterExcludedSkillsDeletesNamedEntries(t *testing.T) {
 	entries := []SkillEntry{
 		{Skill: Skill{Name: "active"}},
 		{Skill: Skill{Name: "archived"}},

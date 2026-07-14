@@ -80,7 +80,7 @@ func TestNormalizePropusScopeMatrix(t *testing.T) {
 	}
 }
 
-func TestPropusStatePriorityMatrix(t *testing.T) {
+func TestPropusStatePriorityReturnsRanksForKnownStatesCaseSensitively(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name, state string
@@ -147,7 +147,7 @@ func TestPropusStatePriorityMatrix(t *testing.T) {
 	}
 }
 
-func TestPropusMaxStatePairwiseOrdering(t *testing.T) {
+func TestPropusMaxStateReturnsHigherPriorityStateForEveryPair(t *testing.T) {
 	t.Parallel()
 	states := []string{"steady", "has_backlog", "needs_validation", "needs_evolution", "needs_review", "needs_attention"}
 	for _, current := range states {
@@ -167,7 +167,7 @@ func TestPropusMaxStatePairwiseOrdering(t *testing.T) {
 	}
 }
 
-func TestPropusActionPriorityMatrix(t *testing.T) {
+func TestPropusActionPriorityReturnsRanksForKnownActionsCaseSensitively(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name, action string
@@ -279,7 +279,7 @@ func TestPropusActionPriorityMatrix(t *testing.T) {
 	}
 }
 
-func TestPropusPrioritizeNextActionsBySelectedState(t *testing.T) {
+func TestPropusPrioritizeNextActionsOrdersFirstActionByStateWithoutMutatingInput(t *testing.T) {
 	t.Parallel()
 	all := []string{"continue_observing", "route_opportunity_backlog", "record_validation_case_from_session", "triage_low_success_skills", "review_pending_self_corrections", "inspect_recent_rejections_and_rollbacks"}
 	cases := []struct{ state, first string }{
@@ -305,7 +305,7 @@ func TestPropusPrioritizeNextActionsBySelectedState(t *testing.T) {
 	}
 }
 
-func TestAppendUniqueStringsNormalizationMatrix(t *testing.T) {
+func TestAppendUniqueStringsTrimsDedupesCaseInsensitivelyAndPreservesOrder(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name               string
@@ -353,7 +353,7 @@ func TestAppendUniqueStringsNormalizationMatrix(t *testing.T) {
 	}
 }
 
-func TestPropusNextCueMatrix(t *testing.T) {
+func TestPropusNextCueSelectsMessageByFirstMatchingActionOrStateFallback(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name, state string
@@ -479,7 +479,7 @@ func TestPropusNextCueMatrix(t *testing.T) {
 	}
 }
 
-func TestPropusLifecycleEventTypeMatrix(t *testing.T) {
+func TestPropusLifecycleEventTypeNormalizesKnownTypesElseReview(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ name, input, want string }{
 		{
@@ -548,7 +548,7 @@ func TestPropusLifecycleEventTypeMatrix(t *testing.T) {
 	}
 }
 
-func TestPropusLastActivityMSAllTimestampPositions(t *testing.T) {
+func TestPropusLastActivityMSReturnsMaxOfFourTimestampFields(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name string
@@ -573,7 +573,7 @@ func TestPropusLastActivityMSAllTimestampPositions(t *testing.T) {
 	}
 }
 
-func TestPropusLifecycleCountsClassification(t *testing.T) {
+func TestPropusLifecycleCountsReturnsEntriesByTypeAndExecution(t *testing.T) {
 	t.Parallel()
 	entries := []LifecycleLogEntry{
 		{Type: ""},
@@ -602,7 +602,7 @@ func TestPropusLifecycleCountsClassification(t *testing.T) {
 	}
 }
 
-func TestPropusHealthAttentionIndependentSignals(t *testing.T) {
+func TestPropusHealthAttentionReturnsEachSignalIndependently(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name  string
@@ -641,7 +641,7 @@ func containsStringForContract(values []string, want string) bool {
 	return false
 }
 
-func TestBuildPropusHealthStatePrecedence(t *testing.T) {
+func TestBuildPropusHealthStateReturnsEscalatingIdleObservingAttentionDegraded(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name  string

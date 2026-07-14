@@ -68,7 +68,7 @@ func TestBackupAndRollbackSkill(t *testing.T) {
 	}
 }
 
-func TestCommitEvaluatedCandidateSurfacesOnlyLowConfidenceJudgeMargins(t *testing.T) {
+func TestCommitEvaluatedCandidateFlagsOperatorVerdictWhenJudgeMarginIsNarrow(t *testing.T) {
 	dir := t.TempDir()
 	skillFile := filepath.Join(dir, "SKILL.md")
 	original := "---\nname: foo\nversion: 1.0.0\n---\n\n# Foo\n\noriginal\n"
@@ -113,7 +113,7 @@ func TestCommitEvaluatedCandidateSurfacesOnlyLowConfidenceJudgeMargins(t *testin
 // candidate is judged by the teacher when one is wired (judge != producer,
 // arXiv:2508.02994), and falls back to the lightweight model only when no
 // teacher is available.
-func TestPickCandidateJudge_AvoidsSameFamily(t *testing.T) {
+func TestPickCandidateJudgePrefersTeacherFallbackToLightweight(t *testing.T) {
 	lw := &llm.Client{}
 	teacher := &llm.Client{}
 
@@ -377,7 +377,7 @@ func TestParseAndApplyRecordsSelfHarnessAudit(t *testing.T) {
 	}
 }
 
-func TestValidateSelfHarnessAuditRequiresSupportedSignature(t *testing.T) {
+func TestValidateSelfHarnessAuditAllowsSignatureMatchOrReviewFinding(t *testing.T) {
 	stats := &UsageStats{
 		SkillName:    "deploy-helper",
 		TotalUses:    2,
@@ -408,7 +408,7 @@ func TestValidateSelfHarnessAuditRequiresSupportedSignature(t *testing.T) {
 	}
 }
 
-func TestValidateSelfHarnessEditedSurfaceRequiresClaimedSectionChange(t *testing.T) {
+func TestValidateEditedSurfaceRequiresMatchingChangedSectionRejectsUneditableSurface(t *testing.T) {
 	original := strings.Join([]string{
 		"# Deploy Helper",
 		"## Procedure",
@@ -520,7 +520,7 @@ func writeTestSSEJSON(t *testing.T, w http.ResponseWriter, payload string) {
 	fmt.Fprintf(w, `{"choices":[{"message":{"role":"assistant","content":%q},"finish_reason":"stop"}]}`, payload)
 }
 
-func TestStripEchoedFrontmatter(t *testing.T) {
+func TestStripEchoedFrontmatterClearsDuplicatedBlocksKeepsPlainBody(t *testing.T) {
 	fm := "---\nname: demo\nversion: \"1.1.0\"\n---\n"
 	body := "# Demo\n\n## Procedure\n- step one"
 	hr := "---\njust a section divider\n---\n" + body
@@ -546,7 +546,7 @@ func TestStripEchoedFrontmatter(t *testing.T) {
 	}
 }
 
-func TestValidateTextualEditBudget(t *testing.T) {
+func TestValidateTextualEditBudgetRejectsFullRewriteAndMissingHeadings(t *testing.T) {
 	originalBody := strings.Join([]string{
 		"# Deploy Helper",
 		"## When to Use",
@@ -603,7 +603,7 @@ func TestValidateTextualEditBudget(t *testing.T) {
 	}
 }
 
-func TestValidateHermesEvolutionGuardrails(t *testing.T) {
+func TestValidateHermesEvolutionGuardrailsRejectsOversizedRetitledAndBroadRewrites(t *testing.T) {
 	originalBody := strings.Join([]string{
 		"# Deploy Helper",
 		"## When to Use",
@@ -793,7 +793,7 @@ func TestMineSkillFailurePatternsPrefersStructuredTrace(t *testing.T) {
 	}
 }
 
-func TestEvolveSkillPromptIncludesValidationCases(t *testing.T) {
+func TestEvolveSkillPromptIncludesValidationCaseAndFailureEvidence(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "SKILL.md")
 	original := "---\nname: srv1-ops\nversion: \"1.0.0\"\n---\n\n# Srv1 Ops\n\n## Procedure\n- Inspect srv1.\n"
@@ -892,7 +892,7 @@ func TestEvolveSkillPromptIncludesValidationCases(t *testing.T) {
 	}
 }
 
-func TestAcceptJudgeVerdictRequiresStrictScoreImprovement(t *testing.T) {
+func TestAcceptJudgeVerdictRejectsSmallDeltaMissingScoresAndFailedPass(t *testing.T) {
 	score := func(v float64) *float64 { return &v }
 
 	pass, reason := acceptJudgeVerdict(judgeVerdict{
@@ -1012,7 +1012,7 @@ func TestParseAndApply_StripsEchoedFrontmatterAndBumpsVersion(t *testing.T) {
 // re-evolved without converging) and the recency gate (a skill with no fresh
 // real use). Both must fire even for the review path, which supplies a finding
 // and otherwise bypasses the periodic candidate selector.
-func TestEvolutionSuppressed_ThrashGuardAndRecencyGate(t *testing.T) {
+func TestEvolutionSuppressed_ThrashCooldownAndRecencyGateRejectOnlyOffendingSkills(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	t.Run("nil tracker never suppresses", func(t *testing.T) {
@@ -1092,7 +1092,7 @@ func TestEvolutionSuppressed_ThrashGuardAndRecencyGate(t *testing.T) {
 // the EvolveSkill choke point: a thrashing skill is rejected before any model
 // call (the Evolver has no LLM client, so reaching the call would error), and the
 // suppression is recorded as an auditable evolve_rejected lifecycle entry.
-func TestEvolveSkill_SuppressesThrashingSkillBeforeLLM(t *testing.T) {
+func TestEvolveSkillRejectsThrashingSkillBeforeAnyLLMCall(t *testing.T) {
 	tr := newTestTracker(t)
 	for i := 0; i < evolutionThrashMinEvolves; i++ {
 		if err := tr.LogEvolve("topsolar-db", "1.0.1", "rewrite"); err != nil {
@@ -1151,7 +1151,7 @@ func writeTestSkill(t *testing.T, dir, name, body string) string {
 // TestCrossSkillNeighborsPicksSharedTagAndTokenSkills verifies neighbor
 // selection (#4): a shared frontmatter tag floors a skill above purely
 // token-similar ones, an unrelated skill is excluded, and the cap is honored.
-func TestCrossSkillNeighborsPicksSharedTagAndTokenSkills(t *testing.T) {
+func TestCrossSkillNeighborsRanksSharedTagAboveTokenRejectsUnrelated(t *testing.T) {
 	dir := t.TempDir()
 	cat := skills.NewCatalog(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	mk := func(name, desc string, tags []string) {
@@ -1192,7 +1192,7 @@ func TestCrossSkillNeighborsPicksSharedTagAndTokenSkills(t *testing.T) {
 // sweep (#4) end to end: the evolved skill's held-out forbidden assertion is
 // replayed against a tag-neighbor whose body violates it, producing a
 // cross_skill_regression lifecycle entry. It must not roll back or error.
-func TestDetectCrossSkillRegressionLogsNeighborViolation(t *testing.T) {
+func TestDetectCrossSkillRegressionLogsNeighborViolationNoOpWithoutCases(t *testing.T) {
 	dir := t.TempDir()
 	tracker := newTestTracker(t)
 	if err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
@@ -1251,7 +1251,7 @@ func TestDetectCrossSkillRegressionLogsNeighborViolation(t *testing.T) {
 // largest held-out margin. The held-out case has two required substrings; the
 // second candidate satisfies both (2/2) while the others satisfy one (1/2), so
 // it must win on margin regardless of generation order.
-func TestGenerateSelectAndApplyCommitsBestNonRegressiveCandidate(t *testing.T) {
+func TestGenerateSelectAndApplyWritesHighestHeldOutMarginCandidate(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "SKILL.md")
 	original := "---\nname: deploy-helper\nversion: \"1.0.0\"\n---\n\n# Deploy Helper\n\n## Procedure\n- Deploy the service.\n"

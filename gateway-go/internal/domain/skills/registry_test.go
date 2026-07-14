@@ -69,7 +69,7 @@ func TestRegistryReadResultsCannotMutateInternalState(t *testing.T) {
 	}
 }
 
-func TestRegistryStatusIsDeterministic(t *testing.T) {
+func TestRegistryStatusReturnsSkillsSortedByKey(t *testing.T) {
 	registry := NewRegistry()
 	for _, name := range []string{"zeta", "alpha", "middle"} {
 		registry.Install(name, "")

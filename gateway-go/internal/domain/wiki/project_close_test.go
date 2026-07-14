@@ -91,11 +91,12 @@ func TestCloseAndReopenProject(t *testing.T) {
 	}
 }
 
-// TestReopenProject_KeepsLogArchiveArchived: reopening a project un-archives its
-// pages EXCEPT the rotated-log archive (로그-보관.md), which RotateProjectLog
-// archived on purpose. Un-archiving it would resurface old rotated-out log
-// sections in search — so it must stay archived across a close/reopen.
-func TestReopenProject_KeepsLogArchiveArchived(t *testing.T) {
+// TestReopenProject_LeavesRotatedLogArchiveArchivedAfterClose: reopening a project
+// un-archives its pages EXCEPT the rotated-log archive (로그-보관.md), which
+// RotateProjectLog archived on purpose. Un-archiving it would resurface old
+// rotated-out log sections in search — so it must stay archived across a
+// close/reopen.
+func TestReopenProject_LeavesRotatedLogArchiveArchivedAfterClose(t *testing.T) {
 	store := newCloseStore(t)
 	seedProject(t, store, "가덕도")
 
@@ -233,9 +234,10 @@ func TestCloseProject_ByDisplayTitle(t *testing.T) {
 	}
 }
 
-// TestFlagDormantProjects: long-inactive active projects get one 종결-검토
-// bullet (quarter-idempotent, capped); fresh and closed projects don't.
-func TestFlagDormantProjects(t *testing.T) {
+// TestFlagDormantProjects_FlagsStaleActiveProjectsSkipsFreshAndClosedIdempotently:
+// long-inactive active projects get one 종결-검토 bullet (quarter-idempotent,
+// capped); fresh and closed projects don't.
+func TestFlagDormantProjects_FlagsStaleActiveProjectsSkipsFreshAndClosedIdempotently(t *testing.T) {
 	store := newCloseStore(t)
 	now := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
 	old := now.AddDate(0, 0, -(dormantAfterDays + 40)).Format("2006-01-02")
@@ -275,8 +277,8 @@ func TestFlagDormantProjects(t *testing.T) {
 	}
 }
 
-// TestFlagDormantProjects_Cap: the per-call cap holds.
-func TestFlagDormantProjects_Cap(t *testing.T) {
+// TestFlagDormantProjects_RespectsPerCallBoundary: the per-call cap holds.
+func TestFlagDormantProjects_RespectsPerCallBoundary(t *testing.T) {
 	store := newCloseStore(t)
 	now := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
 	old := now.AddDate(0, 0, -(dormantAfterDays + 40)).Format("2006-01-02")

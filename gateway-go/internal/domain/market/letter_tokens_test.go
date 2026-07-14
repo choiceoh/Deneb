@@ -12,7 +12,7 @@ func resetLetterTokens() {
 	letterTokens.Unlock()
 }
 
-func TestSubstituteLetterTokens(t *testing.T) {
+func TestSubstituteLetterTokensRendersKnownValues(t *testing.T) {
 	resetLetterTokens()
 	RecordLetterTokens(map[string]string{
 		LetterTokenUSDKRW: "1,531",
@@ -49,7 +49,7 @@ func TestSubstituteLetterTokensExpired(t *testing.T) {
 	}
 }
 
-func TestSubstituteLetterTokensFastPath(t *testing.T) {
+func TestSubstituteLetterTokensFastPathReturnsUnchanged(t *testing.T) {
 	resetLetterTokens()
 	const s = "시세 토큰이 없는 평범한 본문"
 	if got := SubstituteLetterTokens(s); got != s {

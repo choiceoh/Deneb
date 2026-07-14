@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func TestTokenSource_MintsAndCaches(t *testing.T) {
+func TestTokenSourceCachesTokenUntilItExpires(t *testing.T) {
 	var hits int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&hits, 1)

@@ -14,7 +14,7 @@ import (
 // Meta rollback watch: a recent adoption whose health snapshot the current 7d
 // window regresses hard against gets auto-reverted; healthy or under-sampled
 // windows stay put.
-func TestMaybeRevertAdoption(t *testing.T) {
+func TestMaybeRevertAdoptionTriggersRollbackOnlyOnHardHealthRegression(t *testing.T) {
 	setup := func(t *testing.T) (*MetaEvolutionTask, *generation.MetaArtifacts, string) {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())
@@ -145,7 +145,7 @@ func TestMaybeRevertAdoption(t *testing.T) {
 }
 
 // The kill switch flips the success tail back to propose-only.
-func TestMetaAutoAdoptEnabled(t *testing.T) {
+func TestMetaAutoAdoptEnabledDefaultsOnAndStopsOnKillSwitch(t *testing.T) {
 	t.Setenv("DENEB_META_AUTO_ADOPT", "")
 	if !metaAutoAdoptEnabled() {
 		t.Fatal("default must be enabled (operator mandate)")

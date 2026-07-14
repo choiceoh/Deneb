@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestSessionApplyPatch(t *testing.T) {
+func TestSessionApplyPatchUpdatesOnlyChangedFields(t *testing.T) {
 	t.Run("empty patch no change", func(t *testing.T) {
 		s := &Session{Key: "k1", Label: "orig"}
 		if s.ApplyPatch(PatchFields{}) {
@@ -91,7 +91,7 @@ func TestSessionApplyPatch(t *testing.T) {
 	})
 }
 
-func TestManagerPatch(t *testing.T) {
+func TestManagerPatchUpdatesExistingOrCreatesMissingSession(t *testing.T) {
 	t.Run("patch existing session", func(t *testing.T) {
 		m := NewManager()
 		m.Create("s1", KindDirect)
@@ -123,7 +123,7 @@ func TestManagerPatch(t *testing.T) {
 	})
 }
 
-func TestManagerResetSession(t *testing.T) {
+func TestManagerResetSessionClearsRuntimeFieldsOrReturnsNilForUnknown(t *testing.T) {
 	t.Run("resets runtime fields", func(t *testing.T) {
 		m := NewManager()
 		started := int64(1000)
@@ -179,7 +179,7 @@ func TestManagerResetSession(t *testing.T) {
 	})
 }
 
-func TestManagerFindBySessionID(t *testing.T) {
+func TestManagerFindBySessionIDReturnsMatchOrNilWhenMissing(t *testing.T) {
 	m := NewManager()
 	m.Set(&Session{Key: "k1", Kind: KindDirect, SessionID: "sid-abc"})
 	m.Set(&Session{Key: "k2", Kind: KindDirect, SessionID: "sid-def"})
@@ -201,7 +201,7 @@ func TestManagerFindBySessionID(t *testing.T) {
 	})
 }
 
-func TestManagerFindByLabel(t *testing.T) {
+func TestManagerFindByLabelReturnsAllMatchesOrEmpty(t *testing.T) {
 	m := NewManager()
 	m.Set(&Session{Key: "k1", Kind: KindDirect, Label: "test"})
 	m.Set(&Session{Key: "k2", Kind: KindDirect, Label: "test"})

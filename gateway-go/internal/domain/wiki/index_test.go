@@ -220,7 +220,7 @@ _자동 생성: 2026-04-07 14:30_
 	}
 }
 
-func TestIndex_RemoveEntry(t *testing.T) {
+func TestIndex_DeletesEntry(t *testing.T) {
 	idx := newIndex()
 	idx.updateEntry("기술/test.md", &Page{
 		Meta: Frontmatter{Title: "Test", Category: "기술"},

@@ -192,7 +192,7 @@ func TestLookupPhoneFallbackDeduplicatesAndPreservesOrder(t *testing.T) {
 	}
 }
 
-func TestSearchEveryFieldLimitAndCase(t *testing.T) {
+func TestSearchAcrossFieldsWithCaseInsensitiveLimit(t *testing.T) {
 	store, _ := NewStore(filepath.Join(t.TempDir(), "contacts.json"))
 	contacts := []Contact{
 		{Name: "Alice Kim", Org: "Solar One", Emails: []string{"ALICE@EXAMPLE.COM"}, Phones: []string{"010-1111-2222"}},

@@ -11,7 +11,7 @@ import (
 // unfixable assertion pinned OriginalScore below 100 and the min-delta rule
 // then rejected EVERY future candidate of that skill (the wedge), or handed
 // out free passes. Checked in as regressions so the gate can't re-grow them.
-func TestScoreSkillValidationCases_ExploitSeeds(t *testing.T) {
+func TestScoreSkillValidationCasesIgnoresEmptyAssertionsAndClearsWedge(t *testing.T) {
 	body := "# 제목\n\n본문 내용"
 	mk := func(req, forb, head []string) []SkillValidationCaseRecord {
 		return []SkillValidationCaseRecord{{SkillName: "sk", RequiredSubstrings: req, ForbiddenSubstrings: forb, RequiredHeadings: head}}

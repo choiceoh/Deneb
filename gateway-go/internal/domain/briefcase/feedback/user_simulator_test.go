@@ -8,7 +8,7 @@ import (
 	casepack "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase"
 )
 
-func TestScriptedUserSimulatorConsumesOnlyPublicHandoffInOrder(t *testing.T) {
+func TestScriptedUserSimulatorReturnsFollowUpsInOrderAndRejectsReplay(t *testing.T) {
 	plan := UserSimulatorPlan{
 		SchemaVersion: UserSimulatorPlanSchemaVersion,
 		CaseID:        "case-1",

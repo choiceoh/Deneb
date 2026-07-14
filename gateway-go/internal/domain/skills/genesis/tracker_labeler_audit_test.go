@@ -8,7 +8,7 @@ import (
 
 // Blind Curator join: a confirmed-clean skill that concurrently fails its own
 // workout cases is a labeler false-pass suspect; every other combination is not.
-func TestLabelerBlindSpots(t *testing.T) {
+func TestLabelerBlindSpotsFlagsConfirmedSkillsThatFailOwnWorkoutCases(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {

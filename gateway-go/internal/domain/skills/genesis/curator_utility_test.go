@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestClassifyUnfixableUnderperformer(t *testing.T) {
+func TestClassifyUnfixableUnderperformerFiresOnlyAboveRollbackFloorAndRate(t *testing.T) {
 	cfg := defaultSkillCuratorConfig() // MinRollbacks=2, RatePct=50
 
 	tests := []struct {
@@ -47,7 +47,7 @@ func TestClassifyUnfixableUnderperformer_WorkoutFailuresInReason(t *testing.T) {
 // The load-bearing behavior: an ACTIVELY-USED (never idle) but unfixable
 // underperformer is archived by the utility path, which the idle path could
 // never reach. A healthy skill with the same recency stays active.
-func TestApplySkillCuratorTransitions_UtilityArchivesActiveThrasher(t *testing.T) {
+func TestApplySkillCuratorTransitions_ArchivesActivelyUsedRollbackThrasher(t *testing.T) {
 	tracker := newTestTracker(t)
 	recent := time.Now().UnixMilli()
 
@@ -108,7 +108,7 @@ func TestApplySkillCuratorTransitions_UtilityArchivesActiveThrasher(t *testing.T
 	}
 }
 
-func TestApplySkillCuratorTransitions_UtilityHonorsPin(t *testing.T) {
+func TestApplySkillCuratorTransitions_PinnedThrasherRejectsUtilityArchival(t *testing.T) {
 	tracker := newTestTracker(t)
 	recent := time.Now().UnixMilli()
 	if err := tracker.markSkillAgentCreatedLockedForTest("pinned-thrasher", recent); err != nil {

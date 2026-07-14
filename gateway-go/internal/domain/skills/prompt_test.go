@@ -54,7 +54,7 @@ func TestBuildSkillsPrompt_compactFallback(t *testing.T) {
 	}
 }
 
-func TestBuildSkillsPrompt_disabledModelInvocationExcluded(t *testing.T) {
+func TestBuildSkillsPromptExcludesSkillsWithDisabledModelInvocation(t *testing.T) {
 	skills := []PromptSkill{
 		{Name: "visible", Description: "visible", FilePath: "/a/SKILL.md"},
 		{Name: "hidden", Description: "hidden", FilePath: "/b/SKILL.md", DisableModelInvocation: true},
@@ -68,7 +68,7 @@ func TestBuildSkillsPrompt_disabledModelInvocationExcluded(t *testing.T) {
 	}
 }
 
-func TestCompactSkillPaths(t *testing.T) {
+func TestCompactSkillPathsPreservesNonHomePaths(t *testing.T) {
 	skills := []PromptSkill{
 		{Name: "test", FilePath: "/tmp/other/SKILL.md"},
 	}
@@ -79,7 +79,7 @@ func TestCompactSkillPaths(t *testing.T) {
 	}
 }
 
-func TestEscapeXml(t *testing.T) {
+func TestEscapeXMLEncodesSpecialCharacters(t *testing.T) {
 	input := `<test & "thing" 'here'>`
 	expected := "&lt;test &amp; &quot;thing&quot; &apos;here&apos;&gt;"
 	if got := escapeXML(input); got != expected {
@@ -87,7 +87,7 @@ func TestEscapeXml(t *testing.T) {
 	}
 }
 
-func TestBuildSkillsPrompt_categoryIncluded(t *testing.T) {
+func TestBuildSkillsPromptIncludesCategoryTagOnlyWhenSet(t *testing.T) {
 	skills := []PromptSkill{
 		{Name: "tmux", Description: "Terminal multiplexer", FilePath: "~/skills/tmux/SKILL.md", Category: "devops"},
 		{Name: "weather", Description: "Weather info", FilePath: "~/skills/weather/SKILL.md"},
@@ -103,7 +103,7 @@ func TestBuildSkillsPrompt_categoryIncluded(t *testing.T) {
 	}
 }
 
-func TestBuildSkillsPrompt_tagsAndRelatedSkills(t *testing.T) {
+func TestBuildSkillsPromptReturnsTagsAndRelatedSkills(t *testing.T) {
 	skills := []PromptSkill{
 		{
 			Name:          "weather",

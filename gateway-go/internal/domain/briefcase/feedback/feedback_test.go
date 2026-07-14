@@ -9,7 +9,7 @@ import (
 	"unicode/utf8"
 )
 
-func TestFeedbackFirewallBuildsOnlyCoarseDeterministicHandoff(t *testing.T) {
+func TestFeedbackFirewallCreatesDeterministicHandoffWithoutLeaks(t *testing.T) {
 	hidden := HiddenFeedbackInputs{
 		SealedSourceIDs:     []string{"sealed-contract-v7"},
 		SealedPaths:         []string{"sealed/grader-plan.json"},
@@ -234,7 +234,7 @@ func TestFeedbackFirewallRejectsFoldedPartialAndEquivalentNumericLeaks(t *testin
 	}
 }
 
-func TestFeedbackFirewallExtractsSensitiveSealedTextFragments(t *testing.T) {
+func TestFeedbackFirewallRejectsSealedTextFragmentLeaks(t *testing.T) {
 	firewall, err := NewFeedbackFirewall(HiddenFeedbackInputs{
 		SealedContents: []string{"Private evaluator gold: OMEGA-SECRET-731."},
 	}, FeedbackLimits{})
@@ -246,7 +246,7 @@ func TestFeedbackFirewallExtractsSensitiveSealedTextFragments(t *testing.T) {
 	}
 }
 
-func TestFeedbackFirewallScansOnlySimulatorFollowUp(t *testing.T) {
+func TestFeedbackFirewallAllowsVisibleOutputButRejectsFollowUpLeak(t *testing.T) {
 	firewall, err := NewFeedbackFirewall(HiddenFeedbackInputs{}, FeedbackLimits{})
 	if err != nil {
 		t.Fatal(err)
@@ -308,7 +308,7 @@ func TestFeedbackTextAndLimitsFailClosed(t *testing.T) {
 	}
 }
 
-func TestFeedbackHandoffShapeValidationAndZeroValueMarshal(t *testing.T) {
+func TestFeedbackHandoffRejectsInvalidShapeAndZeroValueMarshal(t *testing.T) {
 	firewall, err := NewFeedbackFirewall(HiddenFeedbackInputs{}, FeedbackLimits{MaxTrajectoryItems: 1, MaxArtifactItems: 1})
 	if err != nil {
 		t.Fatal(err)

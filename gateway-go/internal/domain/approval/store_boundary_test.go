@@ -177,7 +177,7 @@ func TestGetReturnsDeepCopiesOfMutableFields(t *testing.T) {
 	}
 }
 
-func TestRequestTimingBoundaries(t *testing.T) {
+func TestCreateRequestExpiryTimeoutBoundaryMatrix(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -239,7 +239,7 @@ func TestRequestTimingBoundaries(t *testing.T) {
 	}
 }
 
-func TestGeneratedIDsAreOpaqueUniqueHex(t *testing.T) {
+func TestCreateRequestGeneratesUniqueHexIDs(t *testing.T) {
 	t.Parallel()
 
 	const count = 512
@@ -304,7 +304,7 @@ func TestConcurrentGeneratedIDsAndReads(t *testing.T) {
 	}
 }
 
-func TestResolveDecisionMatrix(t *testing.T) {
+func TestResolveUpdatesDecisionAndTimestampMatrix(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -403,7 +403,7 @@ func TestConcurrentResolveHasExactlyOneWinner(t *testing.T) {
 	}
 }
 
-func TestWaitForDecisionFanout(t *testing.T) {
+func TestWaitForDecisionFanoutClosesAllWaiterChannels(t *testing.T) {
 	const waiterCount = 128
 	s := NewStore()
 	req := s.CreateRequest(CreateRequestParams{ID: "fanout"})
@@ -557,7 +557,7 @@ func TestCleanupIsIdempotentAndWakesAllExpiredWaiters(t *testing.T) {
 	}
 }
 
-func TestGlobalSnapshotInputAndOutputIsolation(t *testing.T) {
+func TestGlobalSnapshotPreservesDataDespiteInputAndOutputMutation(t *testing.T) {
 	t.Parallel()
 
 	file := ApprovalsFile{
