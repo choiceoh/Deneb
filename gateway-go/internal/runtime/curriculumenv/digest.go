@@ -103,69 +103,90 @@ func Digest(s Sources) string {
 	// demand evidence — the operator already asked in their own words and the
 	// agent could not complete it — and the consumer
 	// (curriculum.assembleDemandEvidence) truncates the digest to a rune
-	// budget. Rendering it last meant a busy feed+calendar silently starved
-	// it. Real user requests that errored mid-run, rendered with the request
-	// text so the 12-rune verbatim-quote grounding gate can bind a proposal to
-	// the actual ask. Live-test synthetic sessions are excluded at the source
-	// (agentlog.FailedUserRequests).
-	if s.AgentLog != nil {
-		failed := s.AgentLog.FailedUserRequests(now().Add(-failedWindow).UnixMilli(), failedCap)
-		if len(failed) > 0 {
-			fmt.Fprintf(&b, "최근 실패한 요청(명시적 능력 갭, 최대 %d):\n", failedCap)
-			for _, r := range failed {
-				line := fmt.Sprintf("- %s: \"%s\"", time.UnixMilli(r.Ts).Format("01-02"), truncRunes(r.Message, 80))
-				if e := strings.TrimSpace(r.Error); e != "" {
-					line += " — 오류: " + truncRunes(e, 60)
-				}
-				b.WriteString(line + "\n")
-			}
+	// budget. Rendering it last meant a busy feed+calendar silently starved it.
+	writeFailedRequestsSection(&b, s.AgentLog, now)
+	writeFeedSection(&b, s.Feed)
+	writeWikiDomainsSection(&b, s.Wiki, now)
+	writeUpcomingEventsSection(&b, now)
+
+	return strings.TrimSpace(b.String())
+}
+
+// writeFailedRequestsSection renders real user requests that errored mid-run,
+// with the request text so the 12-rune verbatim-quote grounding gate can bind a
+// proposal to the actual ask. Live-test synthetic sessions are excluded at the
+// source (agentlog.FailedUserRequests).
+func writeFailedRequestsSection(b *strings.Builder, agentLog FailedRequestSource, now func() time.Time) {
+	if agentLog == nil {
+		return
+	}
+	failed := agentLog.FailedUserRequests(now().Add(-failedWindow).UnixMilli(), failedCap)
+	if len(failed) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "최근 실패한 요청(명시적 능력 갭, 최대 %d):\n", failedCap)
+	for _, r := range failed {
+		line := fmt.Sprintf("- %s: \"%s\"", time.UnixMilli(r.Ts).Format("01-02"), truncRunes(r.Message, 80))
+		if e := strings.TrimSpace(r.Error); e != "" {
+			line += " — 오류: " + truncRunes(e, 60)
+		}
+		b.WriteString(line + "\n")
+	}
+}
+
+// writeFeedSection renders active work: recent feed items (titles only — the
+// producer needs the shape of what's happening, not detail).
+func writeFeedSection(b *strings.Builder, feed FeedLister) {
+	if feed == nil {
+		return
+	}
+	items, _, err := feed.List(feedCap, false)
+	if err != nil || len(items) == 0 {
+		return
+	}
+	if b.Len() > 0 {
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(b, "최근 업무 피드(최대 %d):\n", feedCap)
+	for _, item := range items {
+		if title := strings.TrimSpace(item.Title); title != "" {
+			fmt.Fprintf(b, "- %s\n", truncRunes(title, 80))
 		}
 	}
+}
 
-	// Active work: recent feed items (titles only — the producer needs the
-	// shape of what's happening, not detail).
-	if s.Feed != nil {
-		items, _, err := s.Feed.List(feedCap, false)
-		if err == nil && len(items) > 0 {
-			if b.Len() > 0 {
-				b.WriteString("\n")
-			}
-			fmt.Fprintf(&b, "최근 업무 피드(최대 %d):\n", feedCap)
-			for _, item := range items {
-				if title := strings.TrimSpace(item.Title); title != "" {
-					fmt.Fprintf(&b, "- %s\n", truncRunes(title, 80))
-				}
-			}
-		}
+// writeWikiDomainsSection renders environment breadth: active wiki counterparty
+// domains (who the operator is engaging with).
+func writeWikiDomainsSection(b *strings.Builder, wiki WikiDomainSource, now func() time.Time) {
+	if wiki == nil {
+		return
 	}
-
-	// Environment breadth: active wiki counterparty domains (who the operator
-	// is engaging with).
-	if s.Wiki != nil {
-		cutoff := now().Add(-domainWindow).Format("2006-01-02")
-		domains := s.Wiki.ActiveCounterpartyDomains(cutoff)
-		if len(domains) > 0 {
-			sorted := make([]string, 0, len(domains))
-			for d := range domains {
-				sorted = append(sorted, d)
-			}
-			sort.Strings(sorted)
-			if len(sorted) > domainCap {
-				sorted = sorted[:domainCap]
-			}
-			if b.Len() > 0 {
-				b.WriteString("\n")
-			}
-			fmt.Fprintf(&b, "활성 위키 상대 도메인(최대 %d): %s\n", domainCap, strings.Join(sorted, " · "))
-		}
+	cutoff := now().Add(-domainWindow).Format("2006-01-02")
+	domains := wiki.ActiveCounterpartyDomains(cutoff)
+	if len(domains) == 0 {
+		return
 	}
+	sorted := make([]string, 0, len(domains))
+	for d := range domains {
+		sorted = append(sorted, d)
+	}
+	sort.Strings(sorted)
+	if len(sorted) > domainCap {
+		sorted = sorted[:domainCap]
+	}
+	if b.Len() > 0 {
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(b, "활성 위키 상대 도메인(최대 %d): %s\n", domainCap, strings.Join(sorted, " · "))
+}
 
-	// Forward-looking demand: upcoming business-calendar commitments (skill-
-	// coverage gaps vs the calendar, RSI P5-1). The producer infers which
-	// capabilities imminent commitments will need; the curriculum lane's 12-rune
-	// verbatim-quote grounding gate keeps a proposal tied to a real event
-	// summary, so this is demand grounding, not free invention. Untitled holds
-	// carry no demand signal and are skipped.
+// writeUpcomingEventsSection renders forward-looking demand: upcoming
+// business-calendar commitments (skill-coverage gaps vs the calendar, RSI
+// P5-1). The producer infers which capabilities imminent commitments will
+// need; the curriculum lane's 12-rune verbatim-quote grounding gate keeps a
+// proposal tied to a real event summary, so this is demand grounding, not free
+// invention. Untitled holds carry no demand signal and are skipped.
+func writeUpcomingEventsSection(b *strings.Builder, now func() time.Time) {
 	from := now()
 	var events []string
 	for _, ev := range upcomingCalEvents(from, from.Add(forwardWindow)) {
@@ -178,16 +199,15 @@ func Digest(s Sources) string {
 			break
 		}
 	}
-	if len(events) > 0 {
-		if b.Len() > 0 {
-			b.WriteString("\n")
-		}
-		fmt.Fprintf(&b, "다가오는 일정(스킬 커버리지 갭 후보, 최대 %d):\n", eventCap)
-		b.WriteString(strings.Join(events, "\n"))
+	if len(events) == 0 {
+		return
+	}
+	if b.Len() > 0 {
 		b.WriteString("\n")
 	}
-
-	return strings.TrimSpace(b.String())
+	fmt.Fprintf(b, "다가오는 일정(스킬 커버리지 갭 후보, 최대 %d):\n", eventCap)
+	b.WriteString(strings.Join(events, "\n"))
+	b.WriteString("\n")
 }
 
 // truncRunes caps a string to n runes with an ellipsis.
