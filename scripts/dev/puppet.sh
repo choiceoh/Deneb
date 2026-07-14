@@ -163,10 +163,13 @@ if os.environ.get("PUPPET_ALL_ROLES") == "1":
         ("codingModel", "coding-seat"),
     ):
         agents[key] = "puppet/" + seat
-    # Opt-in vision (image turns) routes to main when unconfigured — which is
-    # already a seat. Possess only when prod configured it. (chatbot role retired.)
-    if agents.get("visionModel"):
-        agents["visionModel"] = "puppet/vision-seat"
+    # Opt-in roles that may still appear in prod config (chatbot retired from
+    # model-roles but may linger; vision → image turns). Possess when present
+    # so puppet routing does not leak to a real model.
+    for key, seat in (("chatbotModel", "chatbot-seat"),
+                      ("visionModel", "vision-seat")):
+        if agents.get(key):
+            agents[key] = "puppet/" + seat
     # Subagents read agents.defaults.subagents.model when set; keep them in
     # the seat too rather than letting them slip to a real model.
     sub = agents.get("defaults", {}).get("subagents")
