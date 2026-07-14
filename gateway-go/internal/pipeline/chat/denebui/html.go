@@ -262,46 +262,63 @@ func parseAttrs(s string, j int) (map[string]string, int, bool, bool) {
 			j++
 			continue
 		}
-		k := j
-		for k < len(s) && isNameChar(s[k]) {
-			k++
-		}
-		key := strings.ToLower(s[j:k])
-		j = k
-		for j < len(s) && isSpace(s[j]) {
-			j++
-		}
-		val := ""
-		hasVal := false
-		if j < len(s) && s[j] == '=' {
-			j++
-			for j < len(s) && isSpace(s[j]) {
-				j++
-			}
-			if j < len(s) && (s[j] == '"' || s[j] == '\'') {
-				q := s[j]
-				j++
-				k = j
-				for k < len(s) && s[k] != q {
-					k++
-				}
-				val = s[j:k]
-				j = min(k+1, len(s))
-			} else {
-				k = j
-				for k < len(s) && !isSpace(s[k]) && s[k] != '>' && s[k] != '/' {
-					k++
-				}
-				val = s[j:k]
-				j = k
-			}
-			hasVal = true
-		}
-		if !hasVal {
-			val = "true" // boolean attribute
-		}
+		var key, val string
+		key, j = scanAttrName(s, j)
+		val, j = scanAttrValue(s, j)
 		attrs[key] = decodeEntities(val)
 	}
+}
+
+// scanAttrName consumes the (ASCII-lowercased) attribute name at s[j:] and
+// returns it with the index just past it.
+func scanAttrName(s string, j int) (string, int) {
+	k := j
+	for k < len(s) && isNameChar(s[k]) {
+		k++
+	}
+	return strings.ToLower(s[j:k]), k
+}
+
+// scanAttrValue consumes optional whitespace, '=' and the quoted or bare value
+// at s[j:], returning the raw (undecoded) value and the index just past it.
+// A valueless attribute is boolean: "true".
+func scanAttrValue(s string, j int) (string, int) {
+	for j < len(s) && isSpace(s[j]) {
+		j++
+	}
+	if j >= len(s) || s[j] != '=' {
+		return "true", j // boolean attribute
+	}
+	j++
+	for j < len(s) && isSpace(s[j]) {
+		j++
+	}
+	if j < len(s) && (s[j] == '"' || s[j] == '\'') {
+		return scanQuotedAttrValue(s, j)
+	}
+	return scanBareAttrValue(s, j)
+}
+
+// scanQuotedAttrValue consumes a double- or single-quoted attribute value at
+// s[j:]; an unterminated quote swallows to EOF.
+func scanQuotedAttrValue(s string, j int) (string, int) {
+	q := s[j]
+	j++
+	k := j
+	for k < len(s) && s[k] != q {
+		k++
+	}
+	return s[j:k], min(k+1, len(s))
+}
+
+// scanBareAttrValue consumes an unquoted attribute value at s[j:], ending at
+// whitespace, '>' or '/'.
+func scanBareAttrValue(s string, j int) (string, int) {
+	k := j
+	for k < len(s) && !isSpace(s[k]) && s[k] != '>' && s[k] != '/' {
+		k++
+	}
+	return s[j:k], k
 }
 
 func (p *htmlParser) handleOpen(name string, attrs map[string]string, selfClose bool) {

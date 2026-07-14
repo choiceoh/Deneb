@@ -69,39 +69,91 @@ func WriteFileContext(ctx context.Context, path string, data []byte, opts *Optio
 	}
 
 	// Advisory lock on a sidecar .lock file.
-	lockPath := path + ".lock"
-	lockFd, err := os.OpenFile(lockPath, os.O_CREATE|os.O_WRONLY, 0o600)
+	lockFd, err := acquireLock(ctx, path+".lock")
 	if err != nil {
-		return fmt.Errorf("atomicfile: open lock %s: %w", lockPath, err)
+		return err
 	}
 	defer lockFd.Close()
-
-	for {
-		err := syscall.Flock(int(lockFd.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) //nolint:gosec // G115 — Fd() returns a valid file descriptor, safe for syscall
-		if err == nil {
-			break
-		}
-		if err != syscall.EWOULDBLOCK && err != syscall.EAGAIN {
-			return fmt.Errorf("atomicfile: flock %s: %w", lockPath, err)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
 	defer syscall.Flock(int(lockFd.Fd()), syscall.LOCK_UN) //nolint:gosec,errcheck // G115 — Fd() returns a valid file descriptor //nolint:errcheck
 
 	// Write to a temp file in the same directory (same filesystem → atomic rename).
-	randBytes := make([]byte, 8)
-	if _, err := rand.Read(randBytes); err != nil {
-		return fmt.Errorf("atomicfile: random: %w", err)
+	tmp, err := tempName(path)
+	if err != nil {
+		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	tmp := fmt.Sprintf("%s.%d.%s.tmp", path, os.Getpid(), hex.EncodeToString(randBytes))
 
+	if err := writeTemp(ctx, tmp, data, opts); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+
+	// Best-effort backup of existing file.
+	if opts != nil && opts.Backup {
+		if _, statErr := os.Stat(path); statErr == nil {
+			_ = copyFile(path, path+".bak")
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+
+	// Atomic rename (POSIX guarantees atomicity on same filesystem).
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("atomicfile: rename: %w", err)
+	}
+
+	return nil
+}
+
+// acquireLock opens the sidecar lock file and polls for the exclusive
+// advisory flock until acquired or ctx is done. On success the caller owns
+// both the unlock and the close; on error the descriptor is already closed.
+func acquireLock(ctx context.Context, lockPath string) (*os.File, error) {
+	lockFd, err := os.OpenFile(lockPath, os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("atomicfile: open lock %s: %w", lockPath, err)
+	}
+	for {
+		err := syscall.Flock(int(lockFd.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) //nolint:gosec // G115 — Fd() returns a valid file descriptor, safe for syscall
+		if err == nil {
+			return lockFd, nil
+		}
+		if err != syscall.EWOULDBLOCK && err != syscall.EAGAIN {
+			lockFd.Close()
+			return nil, fmt.Errorf("atomicfile: flock %s: %w", lockPath, err)
+		}
+		select {
+		case <-ctx.Done():
+			lockFd.Close()
+			return nil, ctx.Err()
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
+// tempName builds a collision-resistant sibling temp path for the target file.
+func tempName(path string) (string, error) {
+	randBytes := make([]byte, 8)
+	if _, err := rand.Read(randBytes); err != nil {
+		return "", fmt.Errorf("atomicfile: random: %w", err)
+	}
+	return fmt.Sprintf("%s.%d.%s.tmp", path, os.Getpid(), hex.EncodeToString(randBytes)), nil
+}
+
+// writeTemp creates tmp and streams data into it in 64 KiB chunks with
+// cooperative cancellation, fsyncs when requested, then closes it — exactly
+// the write → [fsync] → close order WriteFileContext performs before rename.
+// On any error the temp file is closed and removed; on success it exists
+// fully written (and synced when Options.Fsync is set).
+func writeTemp(ctx context.Context, tmp string, data []byte, opts *Options) error {
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, opts.perm())
 	if err != nil {
 		return fmt.Errorf("atomicfile: create temp %s: %w", tmp, err)
@@ -143,28 +195,6 @@ func WriteFileContext(ctx context.Context, path string, data []byte, opts *Optio
 		os.Remove(tmp)
 		return fmt.Errorf("atomicfile: close temp: %w", err)
 	}
-	if err := ctx.Err(); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-
-	// Best-effort backup of existing file.
-	if opts != nil && opts.Backup {
-		if _, statErr := os.Stat(path); statErr == nil {
-			_ = copyFile(path, path+".bak")
-		}
-	}
-	if err := ctx.Err(); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-
-	// Atomic rename (POSIX guarantees atomicity on same filesystem).
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("atomicfile: rename: %w", err)
-	}
-
 	return nil
 }
 

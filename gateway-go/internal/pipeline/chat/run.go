@@ -207,20 +207,7 @@ func isMainSession(key string) bool {
 // It persists the user message, assembles context, calls the LLM agent loop,
 // persists the result, and broadcasts completion events.
 func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
-	logger := deps.logger
-	if logger == nil {
-		logger = slog.Default()
-	}
-	var logArgs []any
-	if !isMainSession(params.SessionKey) {
-		logArgs = append(logArgs, "session", abbreviateSession(params.SessionKey))
-	}
-	if params.ClientRunID != "" {
-		logArgs = append(logArgs, "runId", params.ClientRunID)
-	}
-	if len(logArgs) > 0 {
-		logger = logger.With(logArgs...)
-	}
+	logger := runAgentLoggerFor(params, deps)
 
 	// Emit lifecycle start event for agent job tracker.
 	if deps.jobTracker != nil {
@@ -238,6 +225,88 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 		broadcaster.EmitStarted()
 	}
 
+	ctx = withRunContextValues(ctx, params, deps)
+	typingSignaler := startRunTypingSignaler(ctx, params, deps)
+
+	// Create agent detail logger for this run.
+	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
+
+	// Run the agent and capture result.
+	chatResult, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, logger, runLog)
+
+	// Stop typing indicator before delivering the reply.
+	if typingSignaler != nil {
+		typingSignaler.Stop()
+	}
+
+	// Persist interrupted context: when the run was aborted while tools were
+	// executing, save a context note to the transcript so the next run knows
+	// what the assistant was doing. Without this, the next run has no memory
+	// of the interrupted work and starts from scratch.
+	if chatResult != nil && len(chatResult.InterruptedToolNames) > 0 && deps.transcript != nil {
+		persistInterruptedContext(deps, params.SessionKey, chatResult.AgentResult, logger)
+	}
+
+	// Handle completion.
+	now := time.Now().UnixMilli()
+
+	// A run cancelled by a quick-fire merge can land on EITHER branch:
+	//   - error path: LLM call returned context.Canceled / DeadlineExceeded
+	//   - success path: agent loop saw ctx.Done() between turns and
+	//     returned cleanly with stopReason="aborted" (no error)
+	// In both cases the user's intent is "supersede with the next run",
+	// so the run is quietly superseded; the new run produces the reply.
+	mergedCancel := errors.Is(context.Cause(ctx), ErrMergedIntoNewRun)
+
+	if err != nil {
+		handleRunError(ctx, params, deps, broadcaster, logger, err, now)
+
+		// Drain pending queue even on error: if the user sent a message while
+		// this run was active, it must be processed regardless of whether the
+		// run succeeded or failed. Without this, queued messages are silently
+		// lost when the LLM stalls or the run errors out.
+		drainPendingAfterRun(params, deps, logger, "processing queued message after run error")
+		return
+	}
+
+	// Skip handleRunSuccess on a merge cancel: there's no real assistant
+	// response to deliver (the new run will produce one), and dispatching
+	// an empty/aborted reply would surface "agent produced empty response"
+	// noise to the channel layer.
+	if mergedCancel {
+		return
+	}
+	handleRunSuccess(ctx, params, deps, broadcaster, logger, chatResult.AgentResult, now)
+
+	// Process pending message: if the user sent a message while this run was
+	// active, it was queued. Now that the run is complete, drain and process it.
+	drainPendingAfterRun(params, deps, logger, "processing queued message after run completion")
+}
+
+// runAgentLoggerFor derives the per-run logger (session/runId annotations for
+// non-main sessions) from the deps logger.
+func runAgentLoggerFor(params RunParams, deps runDeps) *slog.Logger {
+	logger := deps.logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	var logArgs []any
+	if !isMainSession(params.SessionKey) {
+		logArgs = append(logArgs, "session", abbreviateSession(params.SessionKey))
+	}
+	if params.ClientRunID != "" {
+		logArgs = append(logArgs, "runId", params.ClientRunID)
+	}
+	if len(logArgs) > 0 {
+		logger = logger.With(logArgs...)
+	}
+	return logger
+}
+
+// withRunContextValues injects the per-run context values tools read: delivery
+// context, reply/media send functions, auto-delivery flag, channel upload
+// limit, and session key.
+func withRunContextValues(ctx context.Context, params RunParams, deps runDeps) context.Context {
 	// Inject delivery context and reply function into ctx so tools
 	// (especially the message tool) can send proactive messages.
 	if params.Delivery != nil {
@@ -283,82 +352,32 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 			ctx = WithMaxUploadBytes(ctx, limit)
 		}
 	}
-	ctx = WithSessionKey(ctx, params.SessionKey)
+	return WithSessionKey(ctx, params.SessionKey)
+}
 
-	// Set up phase-aware typing indicator for native-client delivery.
-	// The factory (injected via chatport boundary) creates a TypingSignaler with
-	// a 5s keepalive cadence for the native typing indicator.
-	var typingSignaler chatport.TypingSignaler
-	if deps.chatport.NewTypingSignaler != nil && deps.callbacks.typingFn != nil && params.Delivery != nil {
-		delivery := params.Delivery
-		typingSignaler = deps.chatport.NewTypingSignaler(func() { _ = deps.callbacks.typingFn(ctx, delivery) })
-		typingSignaler.SignalRunStart()
+// startRunTypingSignaler sets up the phase-aware typing indicator for
+// native-client delivery. The factory (injected via chatport boundary) creates
+// a TypingSignaler with a 5s keepalive cadence for the native typing
+// indicator. Returns nil when typing signalling is not wired for this run.
+func startRunTypingSignaler(ctx context.Context, params RunParams, deps runDeps) chatport.TypingSignaler {
+	if deps.chatport.NewTypingSignaler == nil || deps.callbacks.typingFn == nil || params.Delivery == nil {
+		return nil
 	}
+	delivery := params.Delivery
+	typingSignaler := deps.chatport.NewTypingSignaler(func() { _ = deps.callbacks.typingFn(ctx, delivery) })
+	typingSignaler.SignalRunStart()
+	return typingSignaler
+}
 
-	// Create agent detail logger for this run.
-	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
-
-	// Run the agent and capture result.
-	chatResult, err := executeAgentRun(ctx, params, deps, broadcaster, typingSignaler, logger, runLog)
-
-	// Stop typing indicator before delivering the reply.
-	if typingSignaler != nil {
-		typingSignaler.Stop()
-	}
-
-	// Persist interrupted context: when the run was aborted while tools were
-	// executing, save a context note to the transcript so the next run knows
-	// what the assistant was doing. Without this, the next run has no memory
-	// of the interrupted work and starts from scratch.
-	if chatResult != nil && len(chatResult.InterruptedToolNames) > 0 && deps.transcript != nil {
-		persistInterruptedContext(deps, params.SessionKey, chatResult.AgentResult, logger)
-	}
-
-	// Handle completion.
-	now := time.Now().UnixMilli()
-
-	// A run cancelled by a quick-fire merge can land on EITHER branch:
-	//   - error path: LLM call returned context.Canceled / DeadlineExceeded
-	//   - success path: agent loop saw ctx.Done() between turns and
-	//     returned cleanly with stopReason="aborted" (no error)
-	// In both cases the user's intent is "supersede with the next run",
-	// so the run is quietly superseded; the new run produces the reply.
-	mergedCancel := errors.Is(context.Cause(ctx), ErrMergedIntoNewRun)
-
-	if err != nil {
-		handleRunError(ctx, params, deps, broadcaster, logger, err, now)
-
-		// Drain pending queue even on error: if the user sent a message while
-		// this run was active, it must be processed regardless of whether the
-		// run succeeded or failed. Without this, queued messages are silently
-		// lost when the LLM stalls or the run errors out.
-		if deps.drainPendingFn != nil && deps.startRunFn != nil {
-			if pending := deps.drainPendingFn(params.SessionKey); pending != nil {
-				logger.Info("processing queued message after run error",
-					"sessionKey", params.SessionKey)
-				deps.startRunFn(*pending)
-			}
-		}
+// drainPendingAfterRun processes one queued message after a run finishes (on
+// both the error and success paths), so messages sent mid-run are never
+// silently lost.
+func drainPendingAfterRun(params RunParams, deps runDeps, logger *slog.Logger, logMsg string) {
+	if deps.drainPendingFn == nil || deps.startRunFn == nil {
 		return
 	}
-
-	// Skip handleRunSuccess on a merge cancel: there's no real assistant
-	// response to deliver (the new run will produce one), and dispatching
-	// an empty/aborted reply would surface "agent produced empty response"
-	// noise to the channel layer.
-	if mergedCancel {
-		return
-	}
-	handleRunSuccess(ctx, params, deps, broadcaster, logger, chatResult.AgentResult, now)
-
-	// Process pending message: if the user sent a message while this run was
-	// active, it was queued. Now that the run is complete, drain and process it.
-	if deps.drainPendingFn != nil && deps.startRunFn != nil {
-		if pending := deps.drainPendingFn(params.SessionKey); pending != nil {
-			logger.Info("processing queued message after run completion",
-				"sessionKey", params.SessionKey)
-			deps.startRunFn(*pending)
-			return
-		}
+	if pending := deps.drainPendingFn(params.SessionKey); pending != nil {
+		logger.Info(logMsg, "sessionKey", params.SessionKey)
+		deps.startRunFn(*pending)
 	}
 }

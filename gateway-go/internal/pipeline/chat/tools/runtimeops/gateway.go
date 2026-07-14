@@ -130,18 +130,21 @@ func ToolGateway(repoDir string) toolport.ToolFunc {
 	return ToolGatewayWithDeps(repoDir, GatewayDeps{})
 }
 
+// gatewayParams is the gateway tool's input payload.
+type gatewayParams struct {
+	Action      string         `json:"action"`
+	Path        string         `json:"path"`
+	Value       any            `json:"value"`
+	Patch       map[string]any `json:"patch"`
+	Config      map[string]any `json:"config"`
+	ActionToken string         `json:"action_token"`
+	Reason      string         `json:"reason"`
+}
+
 // ToolGatewayWithDeps is the injectable constructor used by tests.
 func ToolGatewayWithDeps(repoDir string, deps GatewayDeps) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		var p struct {
-			Action      string         `json:"action"`
-			Path        string         `json:"path"`
-			Value       any            `json:"value"`
-			Patch       map[string]any `json:"patch"`
-			Config      map[string]any `json:"config"`
-			ActionToken string         `json:"action_token"`
-			Reason      string         `json:"reason"`
-		}
+		var p gatewayParams
 		if err := jsonutil.UnmarshalInto("gateway params", input, &p); err != nil {
 			return "", err
 		}
@@ -172,109 +175,145 @@ func ToolGatewayWithDeps(repoDir string, deps GatewayDeps) toolport.ToolFunc {
 				return msg, nil
 			}
 			return gatewayUpdate(ctx, deps, repoDir, true)
-
-		// ── Legacy / existing actions (preserved) ──────────────────────────
-
-		case "config.get":
-			snapshot, err := config.LoadConfig(deps.configPath())
-			if err != nil {
-				return fmt.Sprintf("설정 파일 로드에 실패했습니다: %s", err.Error()), nil
-			}
-			result := map[string]any{
-				"path":   snapshot.Path,
-				"exists": snapshot.Exists,
-				"valid":  snapshot.Valid,
-				"hash":   snapshot.Hash,
-				"config": snapshot.Config,
-			}
-			data, _ := json.MarshalIndent(result, "", "  ")
-			return string(data), nil
-
-		case "config.schema.lookup":
-			node := config.LookupSchema(p.Path)
-			if node == nil {
-				return fmt.Sprintf("경로 %q에 대한 스키마를 찾을 수 없습니다.", p.Path), nil
-			}
-			data, _ := json.MarshalIndent(node, "", "  ")
-			return string(data), nil
-
-		// Legacy bulk writes: same secret-path block + approval gate as
-		// config_set — the schema has always promised approval for these, and
-		// config.apply replaces the ENTIRE config file.
-		case "config.patch":
-			if p.Patch == nil {
-				return "", fmt.Errorf("config.patch에는 patch 객체가 필요합니다")
-			}
-			if hit := findSecretKey("", p.Patch); hit != "" {
-				slog.Warn("gateway tool: config.patch blocked (secret path)", "path", hit)
-				return fmt.Sprintf("거부: patch의 %q 경로는 비밀 값으로 보입니다. 에이전트는 토큰/비밀번호/API 키를 관리하지 않습니다.", hit), nil
-			}
-			token := newActionToken()
-			registerPendingApproval(token, "config.patch", approvalPayload(p.Patch))
-			slog.Info("gateway tool: config.patch awaiting approval", "token", token)
-			return approvalEnvelope(token, "config.patch",
-				fmt.Sprintf("설정 병합 패치: 최상위 키 %d개를 덮어씁니다", len(p.Patch)), "설정 패치")
-
-		case "config.patch.confirmed":
-			if p.Patch == nil {
-				return "", fmt.Errorf("config.patch에는 patch 객체가 필요합니다")
-			}
-			if msg := consumePendingApproval(p.ActionToken, "config.patch", approvalPayload(p.Patch)); msg != "" {
-				return msg, nil
-			}
-			return gatewayConfigPatch(deps, p.Patch)
-
-		case "config.apply":
-			if p.Config == nil {
-				return "", fmt.Errorf("config.apply에는 config 객체가 필요합니다")
-			}
-			if hit := findSecretKey("", p.Config); hit != "" {
-				slog.Warn("gateway tool: config.apply blocked (secret path)", "path", hit)
-				return fmt.Sprintf("거부: config의 %q 경로는 비밀 값으로 보입니다. 에이전트는 토큰/비밀번호/API 키를 관리하지 않습니다.", hit), nil
-			}
-			token := newActionToken()
-			registerPendingApproval(token, "config.apply", approvalPayload(p.Config))
-			slog.Info("gateway tool: config.apply awaiting approval", "token", token)
-			return approvalEnvelope(token, "config.apply",
-				"설정 전체 교체: deneb.json 파일 전체를 제공된 내용으로 바꿉니다", "설정 교체")
-
-		case "config.apply.confirmed":
-			if p.Config == nil {
-				return "", fmt.Errorf("config.apply에는 config 객체가 필요합니다")
-			}
-			if msg := consumePendingApproval(p.ActionToken, "config.apply", approvalPayload(p.Config)); msg != "" {
-				return msg, nil
-			}
-			return gatewayConfigApply(deps, p.Config)
-
-		case "restart":
-			token := newActionToken()
-			registerPendingApproval(token, "restart", "")
-			slog.Info("gateway tool: restart requested, awaiting approval",
-				"reason", p.Reason, "token", token)
-			return approvalEnvelope(
-				token,
-				"restart",
-				"게이트웨이를 재시작합니다. 진행 중인 세션이 중단됩니다.",
-				"재시작",
-			)
-
-		case "restart.confirmed":
-			if msg := consumePendingApproval(p.ActionToken, "restart", ""); msg != "" {
-				return msg, nil
-			}
-			slog.Info("gateway tool: restart confirmed, sending SIGUSR1",
-				"pid", deps.signaller().PID(), "token", p.ActionToken)
-			if err := deps.signaller().Signal(syscall.SIGUSR1); err != nil {
-				slog.Error("gateway tool: restart signal failed", "error", err)
-				return fmt.Sprintf("재시작 신호 전송 실패: %s. CLI에서 `deneb gateway restart`를 사용하세요.", err.Error()), nil
-			}
-			return "게이트웨이 재시작 신호를 전송했습니다 (SIGUSR1). 곧 재시작됩니다.", nil
-
-		default:
-			return fmt.Sprintf("알 수 없는 gateway action: %q. 지원 action: status, config_get, config_set, update, restart, config.get, config.schema.lookup, config.patch, config.apply.", p.Action), nil
 		}
+
+		return gatewayLegacyAction(deps, p)
 	}
+}
+
+// gatewayLegacyAction dispatches the legacy / existing action names
+// (preserved for backward compatibility) plus the unknown-action default.
+func gatewayLegacyAction(deps GatewayDeps, p gatewayParams) (string, error) {
+	switch p.Action {
+	case "config.get":
+		return legacyConfigGet(deps)
+
+	case "config.schema.lookup":
+		return legacySchemaLookup(p.Path)
+
+	// Legacy bulk writes: same secret-path block + approval gate as
+	// config_set — the schema has always promised approval for these, and
+	// config.apply replaces the ENTIRE config file.
+	case "config.patch":
+		return legacyConfigPatch(deps, p.Patch, "", false)
+
+	case "config.patch.confirmed":
+		return legacyConfigPatch(deps, p.Patch, p.ActionToken, true)
+
+	case "config.apply":
+		return legacyConfigApply(deps, p.Config, "", false)
+
+	case "config.apply.confirmed":
+		return legacyConfigApply(deps, p.Config, p.ActionToken, true)
+
+	case "restart":
+		return legacyRestartRequest(p.Reason)
+
+	case "restart.confirmed":
+		return legacyRestartConfirmed(deps, p.ActionToken)
+
+	default:
+		return fmt.Sprintf("알 수 없는 gateway action: %q. 지원 action: status, config_get, config_set, update, restart, config.get, config.schema.lookup, config.patch, config.apply.", p.Action), nil
+	}
+}
+
+func legacyConfigGet(deps GatewayDeps) (string, error) {
+	snapshot, err := config.LoadConfig(deps.configPath())
+	if err != nil {
+		return fmt.Sprintf("설정 파일 로드에 실패했습니다: %s", err.Error()), nil
+	}
+	result := map[string]any{
+		"path":   snapshot.Path,
+		"exists": snapshot.Exists,
+		"valid":  snapshot.Valid,
+		"hash":   snapshot.Hash,
+		"config": snapshot.Config,
+	}
+	data, _ := json.MarshalIndent(result, "", "  ")
+	return string(data), nil
+}
+
+func legacySchemaLookup(path string) (string, error) {
+	node := config.LookupSchema(path)
+	if node == nil {
+		return fmt.Sprintf("경로 %q에 대한 스키마를 찾을 수 없습니다.", path), nil
+	}
+	data, _ := json.MarshalIndent(node, "", "  ")
+	return string(data), nil
+}
+
+// legacyConfigPatch handles config.patch (confirmed=false: secret-path block +
+// approval request) and config.patch.confirmed (confirmed=true: token consume
+// + apply).
+func legacyConfigPatch(deps GatewayDeps, patch map[string]any, actionToken string, confirmed bool) (string, error) {
+	if patch == nil {
+		return "", fmt.Errorf("config.patch에는 patch 객체가 필요합니다")
+	}
+	if confirmed {
+		if msg := consumePendingApproval(actionToken, "config.patch", approvalPayload(patch)); msg != "" {
+			return msg, nil
+		}
+		return gatewayConfigPatch(deps, patch)
+	}
+	if hit := findSecretKey("", patch); hit != "" {
+		slog.Warn("gateway tool: config.patch blocked (secret path)", "path", hit)
+		return fmt.Sprintf("거부: patch의 %q 경로는 비밀 값으로 보입니다. 에이전트는 토큰/비밀번호/API 키를 관리하지 않습니다.", hit), nil
+	}
+	token := newActionToken()
+	registerPendingApproval(token, "config.patch", approvalPayload(patch))
+	slog.Info("gateway tool: config.patch awaiting approval", "token", token)
+	return approvalEnvelope(token, "config.patch",
+		fmt.Sprintf("설정 병합 패치: 최상위 키 %d개를 덮어씁니다", len(patch)), "설정 패치")
+}
+
+// legacyConfigApply handles config.apply (confirmed=false: secret-path block +
+// approval request) and config.apply.confirmed (confirmed=true: token consume
+// + apply).
+func legacyConfigApply(deps GatewayDeps, cfg map[string]any, actionToken string, confirmed bool) (string, error) {
+	if cfg == nil {
+		return "", fmt.Errorf("config.apply에는 config 객체가 필요합니다")
+	}
+	if confirmed {
+		if msg := consumePendingApproval(actionToken, "config.apply", approvalPayload(cfg)); msg != "" {
+			return msg, nil
+		}
+		return gatewayConfigApply(deps, cfg)
+	}
+	if hit := findSecretKey("", cfg); hit != "" {
+		slog.Warn("gateway tool: config.apply blocked (secret path)", "path", hit)
+		return fmt.Sprintf("거부: config의 %q 경로는 비밀 값으로 보입니다. 에이전트는 토큰/비밀번호/API 키를 관리하지 않습니다.", hit), nil
+	}
+	token := newActionToken()
+	registerPendingApproval(token, "config.apply", approvalPayload(cfg))
+	slog.Info("gateway tool: config.apply awaiting approval", "token", token)
+	return approvalEnvelope(token, "config.apply",
+		"설정 전체 교체: deneb.json 파일 전체를 제공된 내용으로 바꿉니다", "설정 교체")
+}
+
+func legacyRestartRequest(reason string) (string, error) {
+	token := newActionToken()
+	registerPendingApproval(token, "restart", "")
+	slog.Info("gateway tool: restart requested, awaiting approval",
+		"reason", reason, "token", token)
+	return approvalEnvelope(
+		token,
+		"restart",
+		"게이트웨이를 재시작합니다. 진행 중인 세션이 중단됩니다.",
+		"재시작",
+	)
+}
+
+func legacyRestartConfirmed(deps GatewayDeps, actionToken string) (string, error) {
+	if msg := consumePendingApproval(actionToken, "restart", ""); msg != "" {
+		return msg, nil
+	}
+	slog.Info("gateway tool: restart confirmed, sending SIGUSR1",
+		"pid", deps.signaller().PID(), "token", actionToken)
+	if err := deps.signaller().Signal(syscall.SIGUSR1); err != nil {
+		slog.Error("gateway tool: restart signal failed", "error", err)
+		return fmt.Sprintf("재시작 신호 전송 실패: %s. CLI에서 `deneb gateway restart`를 사용하세요.", err.Error()), nil
+	}
+	return "게이트웨이 재시작 신호를 전송했습니다 (SIGUSR1). 곧 재시작됩니다.", nil
 }
 
 // ── Action implementations ────────────────────────────────────────────────

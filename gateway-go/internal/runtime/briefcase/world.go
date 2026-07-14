@@ -222,30 +222,10 @@ func (w *World) QueryPreviewsContext(ctx context.Context, kinds []casepack.Sourc
 	}
 	needle := strings.ToLower(strings.TrimSpace(query))
 	w.mu.RLock()
-	matches := make([]Record, 0, len(w.visible))
-	matchOffsets := make(map[string]int, len(w.visible))
-	for _, record := range w.visible {
-		if err := ctx.Err(); err != nil {
-			w.mu.RUnlock()
-			return nil, 0, err
-		}
-		if len(allowed) > 0 {
-			if _, ok := allowed[record.Source.Kind]; !ok {
-				continue
-			}
-		}
-		if needle != "" {
-			matched, offset, err := recordMatchOffsetContext(ctx, record, needle)
-			if err != nil {
-				w.mu.RUnlock()
-				return nil, 0, err
-			}
-			if !matched {
-				continue
-			}
-			matchOffsets[record.Source.ID] = offset
-		}
-		matches = append(matches, record)
+	defer w.mu.RUnlock()
+	matches, matchOffsets, err := w.collectPreviewMatches(ctx, allowed, needle)
+	if err != nil {
+		return nil, 0, err
 	}
 	sort.Slice(matches, func(i, j int) bool {
 		left, right := matches[i].Source.AvailableAt, matches[j].Source.AvailableAt
@@ -256,13 +236,53 @@ func (w *World) QueryPreviewsContext(ctx context.Context, kinds []casepack.Sourc
 	})
 	total := len(matches)
 	if recordOffset < 0 || recordOffset > total {
-		w.mu.RUnlock()
 		return nil, total, fmt.Errorf("briefcase: record offset %d is outside 0..%d", recordOffset, total)
 	}
 	matches = matches[recordOffset:]
 	if maxRecords > 0 && len(matches) > maxRecords {
 		matches = matches[:maxRecords]
 	}
+	previews, err := buildRecordPreviews(ctx, matches, matchOffsets, needle, maxContentBytes, maxTotalContentBytes)
+	if err != nil {
+		return nil, 0, err
+	}
+	return previews, total, ctx.Err()
+}
+
+// collectPreviewMatches gathers visible records that pass the kind filter and,
+// when needle is non-empty, contain it — recording each match's byte offset by
+// source ID. Caller must hold w.mu.
+func (w *World) collectPreviewMatches(ctx context.Context, allowed map[casepack.SourceKind]struct{}, needle string) ([]Record, map[string]int, error) {
+	matches := make([]Record, 0, len(w.visible))
+	matchOffsets := make(map[string]int, len(w.visible))
+	for _, record := range w.visible {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
+		if len(allowed) > 0 {
+			if _, ok := allowed[record.Source.Kind]; !ok {
+				continue
+			}
+		}
+		if needle != "" {
+			matched, offset, err := recordMatchOffsetContext(ctx, record, needle)
+			if err != nil {
+				return nil, nil, err
+			}
+			if !matched {
+				continue
+			}
+			matchOffsets[record.Source.ID] = offset
+		}
+		matches = append(matches, record)
+	}
+	return matches, matchOffsets, nil
+}
+
+// buildRecordPreviews renders one preview per match, centering each window on
+// the record's needle offset and charging every rendered byte against the
+// shared maxTotalContentBytes budget (negative budget = unlimited).
+func buildRecordPreviews(ctx context.Context, matches []Record, matchOffsets map[string]int, needle string, maxContentBytes, maxTotalContentBytes int) ([]RecordPreview, error) {
 	previews := make([]RecordPreview, 0, len(matches))
 	remaining := maxTotalContentBytes
 	for _, record := range matches {
@@ -282,16 +302,14 @@ func (w *World) QueryPreviewsContext(ctx context.Context, kinds []casepack.Sourc
 		}
 		preview, err := previewRecordContext(ctx, record, offset, limit)
 		if err != nil {
-			w.mu.RUnlock()
-			return nil, 0, err
+			return nil, err
 		}
 		previews = append(previews, preview)
 		if remaining >= 0 {
 			remaining -= len(preview.Content)
 		}
 	}
-	w.mu.RUnlock()
-	return previews, total, ctx.Err()
+	return previews, nil
 }
 
 func previewRecordContext(ctx context.Context, record Record, offsetBytes, maxContentBytes int) (RecordPreview, error) {

@@ -67,23 +67,26 @@ func ToolWrite(defaultDir string) toolport.ToolFunc {
 
 // --- Edit tool ---
 
+// editParams is the edit tool's input payload.
+type editParams struct {
+	FilePath   string      `json:"file_path"`
+	OldString  string      `json:"old_string"`
+	NewString  string      `json:"new_string"`
+	ReplaceAll bool        `json:"replace_all"`
+	Regex      bool        `json:"regex"`
+	Line       int         `json:"line"`
+	Anchor     string      `json:"anchor"`
+	AnchorEnd  string      `json:"anchor_end"`
+	Edits      []batchEdit `json:"edits"`
+}
+
 // ToolEdit builds the workspace file-edit tool.
 func ToolEdit(defaultDir string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
-		var p struct {
-			FilePath   string      `json:"file_path"`
-			OldString  string      `json:"old_string"`
-			NewString  string      `json:"new_string"`
-			ReplaceAll bool        `json:"replace_all"`
-			Regex      bool        `json:"regex"`
-			Line       int         `json:"line"`
-			Anchor     string      `json:"anchor"`
-			AnchorEnd  string      `json:"anchor_end"`
-			Edits      []batchEdit `json:"edits"`
-		}
+		var p editParams
 		if err := jsonutil.UnmarshalInto("edit params", input, &p); err != nil {
 			return "", err
 		}
@@ -128,94 +131,84 @@ func ToolEdit(defaultDir string) toolport.ToolFunc {
 
 		content := string(data)
 
-		// Helper: update cache after a successful write.
-		updateCache := func() {
-			if fc != nil {
-				fc.UpdateAfterWrite(path)
-			}
+		result, err := dispatchEdit(ctx, path, content, p)
+		// Update cache after a successful write.
+		if err == nil && fc != nil {
+			fc.UpdateAfterWrite(path)
 		}
-
-		// Batch mode: N sequential replacements in ONE call — one read, one
-		// atomic write, one re-prefill instead of N (the per-edit round-trip is
-		// the single biggest coding-turn waste). All-or-nothing: any failing
-		// edit aborts before the write, so the file is never left half-edited.
-		if len(p.Edits) > 0 {
-			result, err := applyBatchEditsContext(ctx, path, p.FilePath, content, p.Edits)
-			if err == nil {
-				updateCache()
-			}
-			return result, err
-		}
-
-		// Content-hash anchored replacement (opt-in, token-efficient). The
-		// model addresses a whole line — or an anchor..anchor_end range — by the
-		// short hash surfaced via read(hashes=true), instead of reproducing
-		// old_string. Replaces the matched line(s) wholesale with new_string.
-		if p.Anchor != "" {
-			result, err := editByAnchorContext(ctx, path, p.FilePath, content, p.Anchor, p.AnchorEnd, p.NewString)
-			if err == nil {
-				updateCache()
-			}
-			return result, err
-		}
-
-		// Regex-based replacement.
-		if p.Regex {
-			result, err := editWithRegexContext(ctx, path, p.FilePath, content, p.OldString, p.NewString, p.ReplaceAll)
-			if err == nil {
-				updateCache()
-			}
-			return result, err
-		}
-
-		// Line-targeted replacement.
-		if p.Line > 0 {
-			result, err := editAtLineContext(ctx, path, p.FilePath, content, p.OldString, p.NewString, p.Line)
-			if err == nil {
-				updateCache()
-			}
-			return result, err
-		}
-
-		count := strings.Count(content, p.OldString)
-		if count == 0 {
-			// Whitespace-tolerant fallback: a unique line-aligned match that
-			// differs only in indentation is applied directly (with the file's
-			// indentation) instead of bouncing a "not found" back to the model —
-			// the mismatch is almost always tabs-vs-spaces or a copy at the
-			// wrong depth, and the retry round-trip is the single biggest
-			// coding-turn waste. Ambiguous or partial-line cases still fail
-			// with the existing hint so the model can disambiguate.
-			if !p.ReplaceAll {
-				if result, handled, err := editWhitespaceTolerantContext(ctx, path, p.FilePath, content, p.OldString, p.NewString); handled {
-					if err == nil {
-						updateCache()
-					}
-					return result, err
-				}
-			}
-			hint := editFuzzyHint(content, p.OldString)
-			return "", fmt.Errorf("old_string not found in file%s", hint)
-		}
-		if count > 1 && !p.ReplaceAll {
-			return "", fmt.Errorf("old_string is not unique in file (%d occurrences). Use replace_all=true to replace all, or use line= to target a specific line", count)
-		}
-
-		var newContent string
-		if p.ReplaceAll {
-			newContent = strings.ReplaceAll(content, p.OldString, p.NewString)
-		} else {
-			newContent = strings.Replace(content, p.OldString, p.NewString, 1)
-		}
-		if err := atomicfile.WriteFileContext(ctx, path, []byte(newContent), nil); err != nil {
-			return "", fmt.Errorf("failed to write file: %w", err)
-		}
-		updateCache()
-		if count > 1 {
-			return fmt.Sprintf("Edited %s (%d replacements)", p.FilePath, count), nil
-		}
-		return fmt.Sprintf("Edited %s", p.FilePath), nil
+		return result, err
 	}
+}
+
+// dispatchEdit routes one edit invocation to its mode (batch / anchor / regex /
+// line-target / plain substring). The caller updates the file cache on success.
+func dispatchEdit(ctx context.Context, path, content string, p editParams) (string, error) {
+	// Batch mode: N sequential replacements in ONE call — one read, one
+	// atomic write, one re-prefill instead of N (the per-edit round-trip is
+	// the single biggest coding-turn waste). All-or-nothing: any failing
+	// edit aborts before the write, so the file is never left half-edited.
+	if len(p.Edits) > 0 {
+		return applyBatchEditsContext(ctx, path, p.FilePath, content, p.Edits)
+	}
+
+	// Content-hash anchored replacement (opt-in, token-efficient). The
+	// model addresses a whole line — or an anchor..anchor_end range — by the
+	// short hash surfaced via read(hashes=true), instead of reproducing
+	// old_string. Replaces the matched line(s) wholesale with new_string.
+	if p.Anchor != "" {
+		return editByAnchorContext(ctx, path, p.FilePath, content, p.Anchor, p.AnchorEnd, p.NewString)
+	}
+
+	// Regex-based replacement.
+	if p.Regex {
+		return editWithRegexContext(ctx, path, p.FilePath, content, p.OldString, p.NewString, p.ReplaceAll)
+	}
+
+	// Line-targeted replacement.
+	if p.Line > 0 {
+		return editAtLineContext(ctx, path, p.FilePath, content, p.OldString, p.NewString, p.Line)
+	}
+
+	return editBySubstring(ctx, path, content, p)
+}
+
+// editBySubstring is the plain (non-regex, non-anchored) old_string →
+// new_string replacement, with the whitespace-tolerant fallback.
+func editBySubstring(ctx context.Context, path, content string, p editParams) (string, error) {
+	count := strings.Count(content, p.OldString)
+	if count == 0 {
+		// Whitespace-tolerant fallback: a unique line-aligned match that
+		// differs only in indentation is applied directly (with the file's
+		// indentation) instead of bouncing a "not found" back to the model —
+		// the mismatch is almost always tabs-vs-spaces or a copy at the
+		// wrong depth, and the retry round-trip is the single biggest
+		// coding-turn waste. Ambiguous or partial-line cases still fail
+		// with the existing hint so the model can disambiguate.
+		if !p.ReplaceAll {
+			if result, handled, err := editWhitespaceTolerantContext(ctx, path, p.FilePath, content, p.OldString, p.NewString); handled {
+				return result, err
+			}
+		}
+		hint := editFuzzyHint(content, p.OldString)
+		return "", fmt.Errorf("old_string not found in file%s", hint)
+	}
+	if count > 1 && !p.ReplaceAll {
+		return "", fmt.Errorf("old_string is not unique in file (%d occurrences). Use replace_all=true to replace all, or use line= to target a specific line", count)
+	}
+
+	var newContent string
+	if p.ReplaceAll {
+		newContent = strings.ReplaceAll(content, p.OldString, p.NewString)
+	} else {
+		newContent = strings.Replace(content, p.OldString, p.NewString, 1)
+	}
+	if err := atomicfile.WriteFileContext(ctx, path, []byte(newContent), nil); err != nil {
+		return "", fmt.Errorf("failed to write file: %w", err)
+	}
+	if count > 1 {
+		return fmt.Sprintf("Edited %s (%d replacements)", p.FilePath, count), nil
+	}
+	return fmt.Sprintf("Edited %s", p.FilePath), nil
 }
 
 // batchEdit is one entry of the edit tool's edits=[...] batch mode.
