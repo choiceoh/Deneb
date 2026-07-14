@@ -140,6 +140,7 @@ func trackSuppressed(ctx *emitCtx, tok *token, stripNoise bool) {
 		if ctx.suppressDepth < 0 {
 			ctx.suppressDepth = 0
 		}
+	default: // text/entity tokens inside a suppressed element need no tracking
 	}
 }
 
@@ -255,6 +256,7 @@ func openTableTag(ctx *emitCtx, tag tagName) {
 	case tagTd:
 		ctx.tableBuilder.endCell()
 		ctx.tableBuilder.startCell(false)
+	default: // non-structural tags inside a table need no cell bookkeeping
 	}
 }
 
@@ -373,6 +375,7 @@ func closeTableTag(ctx *emitCtx, tag tagName) {
 		ctx.tableBuilder.endRow()
 	case tagTh, tagTd:
 		ctx.tableBuilder.endCell()
+	default: // non-structural tags inside a table need no cell bookkeeping
 	}
 }
 
