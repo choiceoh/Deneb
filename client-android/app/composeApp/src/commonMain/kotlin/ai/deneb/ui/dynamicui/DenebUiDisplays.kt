@@ -409,6 +409,7 @@ internal fun RenderCountdown(
     var remainingSeconds by remember { mutableStateOf<Long>(node.seconds.toLong()) }
     var expired by remember { mutableStateOf(false) }
     val currentOnCallback by rememberUpdatedState(onCallback)
+    val currentIsInteractive by rememberUpdatedState(isInteractive)
     val uriHandler = LocalUriHandler.current
     val clipboardManager = LocalClipboardManager.current
 
@@ -420,28 +421,30 @@ internal fun RenderCountdown(
                 if (!expired) {
                     expired = true
                     node.id?.let { formState[it] = "0" }
-                    try {
-                        when (val action = node.action) {
-                            is CallbackAction -> {
-                                val data = collectFormData(action, formState)
-                                currentOnCallback(action.event, data)
-                            }
+                    if (shouldRunCountdownExpiryAction(currentIsInteractive, node.action)) {
+                        try {
+                            when (val action = node.action) {
+                                is CallbackAction -> {
+                                    val data = collectFormData(action, formState)
+                                    currentOnCallback(action.event, data)
+                                }
 
-                            is ToggleAction -> {
-                                toggleState[action.targetId] = !(toggleState[action.targetId] ?: true)
-                            }
+                                is ToggleAction -> {
+                                    toggleState[action.targetId] = !(toggleState[action.targetId] ?: true)
+                                }
 
-                            is OpenUrlAction -> {
-                                uriHandler.openUri(action.url)
-                            }
+                                is OpenUrlAction -> {
+                                    uriHandler.openUri(action.url)
+                                }
 
-                            is CopyToClipboardAction -> {
-                                clipboardManager.setText(AnnotatedString(action.text))
-                            }
+                                is CopyToClipboardAction -> {
+                                    clipboardManager.setText(AnnotatedString(action.text))
+                                }
 
-                            null -> {}
-                        }
-                    } catch (_: Exception) {}
+                                null -> {}
+                            }
+                        } catch (_: Exception) {}
+                    }
                 }
                 break
             }
@@ -474,6 +477,8 @@ internal fun RenderCountdown(
         )
     }
 }
+
+internal fun shouldRunCountdownExpiryAction(isInteractive: Boolean, action: UiAction?): Boolean = isInteractive && action != null
 
 @Composable
 internal fun RenderAlert(node: AlertNode) {
