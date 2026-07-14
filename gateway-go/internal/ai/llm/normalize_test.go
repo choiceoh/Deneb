@@ -44,7 +44,7 @@ func TestNormalizeMessages_MergesConsecutiveUser(t *testing.T) {
 
 	// Merged content should be a block array with both text blocks.
 	var blocks []ContentBlock
-	if err := json.Unmarshal(got[0].Content, &blocks); err != nil {
+	if err := json.Unmarshal(got[0].Content.Bytes(), &blocks); err != nil {
 		t.Fatalf("unmarshal merged content: %v", err)
 	}
 	if len(blocks) != 2 {
@@ -77,7 +77,7 @@ func TestNormalizeMessages_MergesToolResultBlocks(t *testing.T) {
 
 	// The two user messages should be merged into one with both tool_result blocks.
 	var merged []ContentBlock
-	if err := json.Unmarshal(got[1].Content, &merged); err != nil {
+	if err := json.Unmarshal(got[1].Content.Bytes(), &merged); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if len(merged) != 2 {
@@ -104,7 +104,7 @@ func TestNormalizeMessages_MixedTextAndBlocks(t *testing.T) {
 	}
 
 	var merged []ContentBlock
-	if err := json.Unmarshal(got[1].Content, &merged); err != nil {
+	if err := json.Unmarshal(got[1].Content.Bytes(), &merged); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if len(merged) != 2 {
@@ -130,7 +130,7 @@ func TestNormalizeMessages_ThreeConsecutive(t *testing.T) {
 		t.Fatalf("want 2, got %d", len(got))
 	}
 	var blocks []ContentBlock
-	if err := json.Unmarshal(got[0].Content, &blocks); err != nil {
+	if err := json.Unmarshal(got[0].Content.Bytes(), &blocks); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if len(blocks) != 3 {

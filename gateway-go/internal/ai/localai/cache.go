@@ -49,7 +49,7 @@ func cacheKey(req *Request) [32]byte {
 	for _, m := range req.Messages {
 		writeCacheField(h, []byte(m.Role))
 		// Content is json.RawMessage — include raw bytes directly.
-		writeCacheField(h, m.Content)
+		writeCacheField(h, m.Content.Bytes())
 	}
 	// Include maxTokens and response format in the key so requests with
 	// different generation parameters don't collide.
@@ -58,7 +58,7 @@ func cacheKey(req *Request) [32]byte {
 	if req.ResponseFormat != nil {
 		h.Write([]byte{1})
 		writeCacheField(h, []byte(req.ResponseFormat.Type))
-		writeCacheField(h, req.ResponseFormat.JSONSchema)
+		writeCacheField(h, req.ResponseFormat.JSONSchema.Bytes())
 	} else {
 		h.Write([]byte{0})
 	}

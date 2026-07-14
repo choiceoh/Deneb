@@ -62,7 +62,7 @@ func hashMessages(messages []llm.Message) string {
 		// roles don't collide. A single byte separator is enough.
 		_, _ = h.Write([]byte(m.Role))
 		_, _ = h.Write([]byte{0})
-		_, _ = h.Write(m.Content)
+		_, _ = h.Write(m.Content.Bytes())
 		_, _ = h.Write([]byte{1})
 	}
 	return hex.EncodeToString(h.Sum(nil)[:16])
@@ -116,7 +116,7 @@ func protectedZoneExceedsBudget(messages []llm.Message, budget int) bool {
 func estimateMessagesRoughTokens(messages []llm.Message) int {
 	total := 0
 	for _, m := range messages {
-		total += byteLenToTokens(len(m.Content)) + 4 // +4 role overhead
+		total += byteLenToTokens(m.Content.Len()) + 4 // +4 role overhead
 	}
 	return total
 }

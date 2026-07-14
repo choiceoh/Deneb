@@ -193,7 +193,7 @@ func stripBase64ImagesFromHistory(messages []llm.Message) []llm.Message {
 
 		// Parse as content block array. If it's a plain string there are no images.
 		var blocks []llm.ContentBlock
-		if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+		if err := json.Unmarshal(msg.Content.Bytes(), &blocks); err != nil {
 			continue
 		}
 
@@ -214,7 +214,7 @@ func stripBase64ImagesFromHistory(messages []llm.Message) []llm.Message {
 			if err == nil {
 				result[i] = llm.Message{
 					Role:    msg.Role,
-					Content: newContent,
+					Content: llm.FlexibleFromRaw(newContent),
 				}
 			}
 		}

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -20,7 +21,7 @@ type Deps struct {
 	SessionCount    func() int
 	ConnectionCount func() int64
 	LastHeartbeatMs func() int64
-	Broadcast       func(event string, payload any) (int, []error)
+	Broadcast       func(event string, payload events.EventPayload) (int, []error)
 	DaemonStatus    func() (any, bool)
 	AgentActiveRuns func() int
 	AgentCacheSize  func() int
@@ -122,7 +123,8 @@ func systemPresence(deps Deps) rpcutil.HandlerFunc {
 		if deps.Broadcast == nil {
 			return rpcutil.RespondOK(req.ID, map[string]int{"sent": 0})
 		}
-		sent, _ := deps.Broadcast("presence", payload)
+		wire, _ := events.PayloadOf(payload)
+		sent, _ := deps.Broadcast("presence", wire)
 		return rpcutil.RespondOK(req.ID, map[string]int{"sent": sent})
 	}
 }
@@ -146,7 +148,8 @@ func systemEvent(deps Deps) rpcutil.HandlerFunc {
 		if deps.Broadcast == nil {
 			return rpcutil.RespondOK(req.ID, map[string]int{"sent": 0})
 		}
-		sent, _ := deps.Broadcast(p.Event, p.Payload)
+		wire, _ := events.PayloadOf(p.Payload)
+		sent, _ := deps.Broadcast(p.Event, wire)
 		return rpcutil.RespondOK(req.ID, map[string]int{"sent": sent})
 	}
 }

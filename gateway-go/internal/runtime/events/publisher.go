@@ -91,7 +91,8 @@ func (p *Publisher) PublishSessionMessage(update TranscriptUpdate) {
 		}
 	}
 
-	p.broadcaster.BroadcastToConnIDs("session.message", payload, connIDs)
+	wire, _ := PayloadOf(payload)
+	p.broadcaster.BroadcastToConnIDs("session.message", wire, connIDs)
 
 	// Also notify session event subscribers.
 	p.publishSessionChanged(update.SessionKey, "message", nil)
@@ -127,14 +128,16 @@ func (p *Publisher) PublishAgentEvent(evt AgentEvent) {
 		if len(connIDs) == 0 {
 			return
 		}
-		p.broadcaster.BroadcastWithOpts("agent.event", payload, BroadcastOpts{
+		wire, _ := PayloadOf(payload)
+		p.broadcaster.BroadcastWithOpts("agent.event", wire, BroadcastOpts{
 			DropIfSlow:    true,
 			TargetConnIDs: connIDs,
 		})
 		return
 	}
 
-	p.broadcaster.BroadcastWithOpts("agent.event", payload, BroadcastOpts{DropIfSlow: true})
+	wire, _ := PayloadOf(payload)
+	p.broadcaster.BroadcastWithOpts("agent.event", wire, BroadcastOpts{DropIfSlow: true})
 }
 
 // PublishConfigChanged broadcasts a configuration change event.
@@ -142,10 +145,11 @@ func (p *Publisher) PublishConfigChanged(section string) {
 	if p == nil || p.broadcaster == nil {
 		return
 	}
-	p.broadcaster.BroadcastWithOpts("config.changed", map[string]any{
+	cfgWire, _ := PayloadOf(map[string]any{
 		"section": section,
 		"ts":      time.Now().UnixMilli(),
-	}, BroadcastOpts{})
+	})
+	p.broadcaster.BroadcastWithOpts("config.changed", cfgWire, BroadcastOpts{})
 }
 
 // CleanupAgentSeq removes sequence tracking for a completed agent run.
@@ -188,7 +192,8 @@ func (p *Publisher) publishSessionChanged(sessionKey, phase string, overrides ma
 		payload[k] = v
 	}
 
-	p.broadcaster.BroadcastWithOpts("sessions.changed", payload, BroadcastOpts{
+	wire, _ := PayloadOf(payload)
+	p.broadcaster.BroadcastWithOpts("sessions.changed", wire, BroadcastOpts{
 		DropIfSlow:    true,
 		TargetConnIDs: connIDs,
 	})

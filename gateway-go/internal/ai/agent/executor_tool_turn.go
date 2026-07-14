@@ -145,7 +145,7 @@ func (r *toolTurnRun) runSequentialSegment(ctx context.Context, seg toolCallSegm
 		// Count only successful mutations. The nudge is staged here but is
 		// omitted by RunAgent when cancellation means no next LLM turn exists.
 		if r.cfg.ToolLoopDetector != nil && !r.outcome.results[i].IsError {
-			if nudge := r.cfg.ToolLoopDetector.RecordFileMutation(provenanceRoot, tc.Name, tc.Input); nudge != "" {
+			if nudge := r.cfg.ToolLoopDetector.RecordFileMutation(provenanceRoot, tc.Name, tc.Input.Bytes()); nudge != "" {
 				r.outcome.editThrashNudges = append(r.outcome.editThrashNudges, nudge)
 			}
 		}

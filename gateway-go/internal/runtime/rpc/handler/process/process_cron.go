@@ -6,6 +6,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -24,7 +25,8 @@ func resolveJobID(id, jobID string) (string, error) {
 // emitCronChanged broadcasts a cron.changed event if a broadcaster is set.
 func emitCronChanged(b BroadcastFunc, action, id string) {
 	if b != nil {
-		b("cron.changed", map[string]any{"action": action, "id": id})
+		wire, _ := events.PayloadOf(map[string]any{"action": action, "id": id})
+		b("cron.changed", wire)
 	}
 }
 

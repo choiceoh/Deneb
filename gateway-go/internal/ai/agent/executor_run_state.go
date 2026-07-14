@@ -71,7 +71,7 @@ func (s *agentRunState) recordTurn(turnRes *turnResult) agentTurnStats {
 			stats.toolNames = append(stats.toolNames, tc.Name)
 			s.toolCounts[tc.Name]++
 		}
-		stats.toolInputBytes += len(tc.Input)
+		stats.toolInputBytes += tc.Input.Len()
 	}
 	s.totalTextChars += stats.textChars
 	s.totalToolCalls += stats.toolCount

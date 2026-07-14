@@ -45,7 +45,7 @@ func protectedToolResultIDs(messages []llm.Message) map[string]bool {
 			continue
 		}
 		var blocks []llm.ContentBlock
-		if err := json.Unmarshal(m.Content, &blocks); err != nil {
+		if err := json.Unmarshal(m.Content.Bytes(), &blocks); err != nil {
 			continue
 		}
 		for _, b := range blocks {

@@ -123,7 +123,7 @@ func appendTextToMessage(msg llm.Message, additions []string) (llm.Message, bool
 
 	// Plain string content.
 	var s string
-	if err := json.Unmarshal(msg.Content, &s); err == nil {
+	if err := json.Unmarshal(msg.Content.Bytes(), &s); err == nil {
 		if s == "" {
 			// Degenerate empty message: skip the leading separator.
 			return llm.NewTextMessage(msg.Role, suffix[2:]), true
@@ -133,7 +133,7 @@ func appendTextToMessage(msg llm.Message, additions []string) (llm.Message, bool
 
 	// Content-block array (multimodal user message): append one text block.
 	var blocks []llm.ContentBlock
-	if err := json.Unmarshal(msg.Content, &blocks); err == nil && len(blocks) > 0 {
+	if err := json.Unmarshal(msg.Content.Bytes(), &blocks); err == nil && len(blocks) > 0 {
 		out := make([]llm.ContentBlock, len(blocks), len(blocks)+1)
 		copy(out, blocks)
 		out = append(out, llm.ContentBlock{Type: "text", Text: suffix[2:]})

@@ -47,7 +47,7 @@ func TestBuildMessagePersister_EphemeralUserAllowsAssistantPersist(t *testing.T)
 	}
 
 	rawText, _ := json.Marshal("hello")
-	persister(llm.Message{Role: "assistant", Content: rawText})
+	persister(llm.Message{Role: "assistant", Content: llm.FlexibleFromRaw(rawText)})
 
 	msgs, _, err := transcript.Load("telegram:1", 100)
 	if err != nil {
@@ -84,7 +84,7 @@ func TestBuildMessagePersister_IgnoresNoReplyOnlyMessage(t *testing.T) {
 	}
 
 	rawText, _ := json.Marshal("NO_REPLY")
-	persister(llm.Message{Role: "assistant", Content: rawText})
+	persister(llm.Message{Role: "assistant", Content: llm.FlexibleFromRaw(rawText)})
 
 	msgs, _, err := transcript.Load("telegram:1", 100)
 	if err != nil {
@@ -112,7 +112,7 @@ func TestBuildMessagePersister_FormatsMarketLetterTokensForDisplay(t *testing.T)
 	}
 
 	rawText, _ := json.Marshal("1달러는 {{market:usd_krw}}원입니다.")
-	persister(llm.Message{Role: "assistant", Content: rawText})
+	persister(llm.Message{Role: "assistant", Content: llm.FlexibleFromRaw(rawText)})
 
 	msgs, _, err := transcript.Load("client:main", 100)
 	if err != nil {
@@ -145,13 +145,13 @@ func TestBuildMessagePersister_FormatsTextBlocksOnlyPreservingToolUse(t *testing
 	toolInput := `{"command":"echo {{market:usd_krw}}"}`
 	blocks := []llm.ContentBlock{
 		{Type: "text", Text: "환율은 {{market:usd_krw}}원."},
-		{Type: "tool_use", ID: "tu_1", Name: "exec", Input: json.RawMessage(toolInput)},
+		{Type: "tool_use", ID: "tu_1", Name: "exec", Input: llm.FlexibleFromRaw([]byte(toolInput))},
 	}
 	rawBlocks, err := json.Marshal(blocks)
 	if err != nil {
 		t.Fatalf("marshal blocks: %v", err)
 	}
-	persister(llm.Message{Role: "assistant", Content: rawBlocks})
+	persister(llm.Message{Role: "assistant", Content: llm.FlexibleFromRaw(rawBlocks)})
 
 	msgs, _, err := transcript.Load("client:main", 100)
 	if err != nil {
@@ -170,8 +170,8 @@ func TestBuildMessagePersister_FormatsTextBlocksOnlyPreservingToolUse(t *testing
 	if got[0].Text != "환율은 1,531원." {
 		t.Errorf("text block = %q, want substituted display value", got[0].Text)
 	}
-	if string(got[1].Input) != toolInput {
-		t.Errorf("tool_use input = %s, want untouched raw input", got[1].Input)
+	if got[1].Input.String() != toolInput {
+		t.Errorf("tool_use input = %s, want untouched raw input", got[1].Input.String())
 	}
 }
 
@@ -187,7 +187,7 @@ func TestBuildMessagePersister_BriefcasePreservesRawMarketTokens(t *testing.T) {
 
 	persister := buildMessagePersister(deps, params, slog.Default())
 	rawText, _ := json.Marshal("환율은 {{market:usd_krw}}원.")
-	persister(llm.Message{Role: "assistant", Content: rawText})
+	persister(llm.Message{Role: "assistant", Content: llm.FlexibleFromRaw(rawText)})
 
 	msgs, _, err := transcript.Load("briefcase:run", 100)
 	if err != nil {

@@ -42,7 +42,7 @@ func MicroCompact(messages []llm.Message, turnThreshold int) ([]llm.Message, int
 
 	for i := 0; i < cutoff; i++ {
 		var blocks []llm.ContentBlock
-		if err := json.Unmarshal(messages[i].Content, &blocks); err != nil {
+		if err := json.Unmarshal(messages[i].Content.Bytes(), &blocks); err != nil {
 			continue
 		}
 
@@ -72,7 +72,7 @@ func MicroCompact(messages []llm.Message, turnThreshold int) ([]llm.Message, int
 
 		if changed {
 			if raw, err := json.Marshal(blocks); err == nil {
-				result[i] = llm.Message{Role: messages[i].Role, Content: raw}
+				result[i] = llm.Message{Role: messages[i].Role, Content: llm.FlexibleFromRaw(raw)}
 			}
 		}
 	}

@@ -463,7 +463,7 @@ func reportCompactionDegraded(
 		"tokensAfter", result.TokensAfter,
 		"budget", contextBudget)
 	if deps.broadcast != nil {
-		deps.broadcast("chat.compaction_degraded", ChatCompactionDegradedEvent{
+		broadcastPayload(deps.broadcast, "chat.compaction_degraded", ChatCompactionDegradedEvent{
 			Session:      params.SessionKey,
 			TokensBefore: result.TokensBefore,
 			TokensAfter:  result.TokensAfter,
@@ -490,7 +490,7 @@ func finalizePrompt(
 		// Current-turn recall evidence is compact and more relevant than
 		// always-on tier-1 memory, so keep it even when the static prompt is
 		// already at its nominal budget.
-		systemPrompt = llm.AppendSystemText(systemPrompt, recallAddition)
+		systemPrompt = json.RawMessage(llm.AppendSystemText(llm.FlexibleFromRaw(systemPrompt), recallAddition).Bytes())
 	}
 
 	if tier1Addition != "" {
@@ -508,7 +508,7 @@ func finalizePrompt(
 		additionFragments := []prompt.PromptFragment{prompt.NewFragment("memory", tier1Addition)}
 		optimized := additionBudget.Optimize(additionFragments)
 		for _, f := range optimized {
-			systemPrompt = llm.AppendSystemText(systemPrompt, f.Content)
+			systemPrompt = json.RawMessage(llm.AppendSystemText(llm.FlexibleFromRaw(systemPrompt), f.Content).Bytes())
 		}
 	}
 

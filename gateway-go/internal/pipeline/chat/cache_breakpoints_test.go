@@ -57,12 +57,12 @@ func TestBuildTrailingCacheHookPreservesInput(t *testing.T) {
 	}
 	snapshots := make([]string, len(original))
 	for i, m := range original {
-		snapshots[i] = string(m.Content)
+		snapshots[i] = m.Content.String()
 	}
 	_ = hook(original)
 	for i, m := range original {
-		if string(m.Content) != snapshots[i] {
-			t.Errorf("msg[%d] content mutated: before=%s after=%s", i, snapshots[i], m.Content)
+		if m.Content.String() != snapshots[i] {
+			t.Errorf("msg[%d] content mutated: before=%s after=%s", i, snapshots[i], m.Content.String())
 		}
 	}
 }
@@ -165,11 +165,11 @@ func TestPickTrailingCacheTargetsReturnsAscendingIndices(t *testing.T) {
 	}
 }
 
-func decodeOrFail(t *testing.T, raw json.RawMessage) []llm.ContentBlock {
+func decodeOrFail(t *testing.T, content llm.FlexibleJSON) []llm.ContentBlock {
 	t.Helper()
-	blocks, ok := decodeMessageBlocks(raw)
+	blocks, ok := decodeMessageBlocks(json.RawMessage(content.Bytes()))
 	if !ok {
-		t.Fatalf("decode failed for content: %s", raw)
+		t.Fatalf("decode failed for content: %s", content.String())
 	}
 	return blocks
 }

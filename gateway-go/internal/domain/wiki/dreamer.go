@@ -277,10 +277,10 @@ func (wd *WikiDreamer) llmRequest(system, prompt string, maxTokens int) llm.Chat
 	systemJSON, _ := json.Marshal(system)
 	return llm.ChatRequest{
 		Model:     wd.model,
-		System:    systemJSON,
+		System:    llm.FlexibleFromRaw(systemJSON),
 		Messages:  []llm.Message{llm.NewTextMessage("user", prompt)},
 		MaxTokens: maxTokens,
-		ExtraBody: wd.llmExtraBody,
+		ExtraBody: flexibleExtraBody(wd.llmExtraBody),
 	}
 }
 
@@ -743,3 +743,15 @@ func (wd *WikiDreamer) completeDreamCycle(ctx context.Context, cycle *dreamCycle
 // scanDiaries reads diary bytes that have not yet been consolidated. The
 // primary cursor is a per-file byte offset; index.LastProcessed is only a
 // legacy migration hint for old diaries that predate the cursor file.
+
+func flexibleExtraBody(m map[string]any) map[string]llm.FlexibleJSON {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]llm.FlexibleJSON, len(m))
+	for k, v := range m {
+		out[k] = llm.FlexibleFromValue(v)
+	}
+	return out
+}
+

@@ -41,7 +41,9 @@ func (s *Server) registerSessionRPCMethods() {
 
 	s.chatHandler = chat.NewHandler(
 		s.sessions,
-		s.broadcastSessionEvent,
+		func(event string, payload any) (int, []error) {
+			return s.broadcastSessionEvent(event, eventPayloadFromAny(payload))
+		},
 		s.logger,
 		chatCfg,
 	)
@@ -69,21 +71,43 @@ func (s *Server) registerSessionDomainMethods() {
 	}))
 }
 
-func targetedToolRunID(event string, payload any) string {
+func targetedToolRunID(event string, payload events.EventPayload) string {
 	if event != "session.tool" {
 		return ""
 	}
-	values, ok := payload.(map[string]any)
-	if !ok {
+	var values map[string]any
+	if json.Unmarshal(payload.Bytes(), &values) != nil {
 		return ""
 	}
 	runID, _ := values["runId"].(string)
 	return runID
 }
 
+// eventPayloadFromAny converts pipeline/domain broadcast payloads into the
+// typed events.EventPayload used by the runtime broadcaster. Keeps higher
+// layers from importing runtime/events (Health Bench upward-import rule).
+func eventPayloadFromAny(payload any) events.EventPayload {
+	switch v := payload.(type) {
+	case nil:
+		return events.EventPayload{}
+	case events.EventPayload:
+		return v
+	case json.RawMessage:
+		return events.PayloadFromRaw(v)
+	case []byte:
+		return events.PayloadFromRaw(v)
+	default:
+		raw, err := json.Marshal(v)
+		if err != nil {
+			return events.EventPayload{}
+		}
+		return events.PayloadFromRaw(raw)
+	}
+}
+
 // broadcastSessionEvent keeps tool progress scoped to the connection that
 // started the run; every other event retains the normal fan-out behavior.
-func (s *Server) broadcastSessionEvent(event string, payload any) (int, []error) {
+func (s *Server) broadcastSessionEvent(event string, payload events.EventPayload) (int, []error) {
 	runID := targetedToolRunID(event, payload)
 	if runID != "" {
 		if connID := s.broadcaster.ToolEventRecipient(runID); connID != "" {

@@ -659,14 +659,14 @@ func buildMessagePersister(
 	return func(msg llm.Message) {
 		content := msg.Content
 		if msg.Role == "assistant" {
-			sanitized, skip := sanitizeAssistantForTranscript(content, !deps.briefcaseMode)
+			sanitized, skip := sanitizeAssistantForTranscript(json.RawMessage(content.Bytes()), !deps.briefcaseMode)
 			if skip {
 				logger.Info("skipping persist of empty assistant turn",
 					"session", params.SessionKey,
 					"reason", "no user-visible content after silent-token strip")
 				return
 			}
-			content = sanitized
+			content = llm.FlexibleFromRaw(sanitized)
 		}
 		now := time.Now()
 		if deps.briefcaseMode {
@@ -674,7 +674,7 @@ func buildMessagePersister(
 		}
 		chatMsg := ChatMessage{
 			Role:      msg.Role,
-			Content:   content, // json.RawMessage — rich blocks preserved
+			Content:   json.RawMessage(content.Bytes()), // rich blocks preserved
 			Timestamp: now.UnixMilli(),
 		}
 		if err := deps.transcript.Append(params.SessionKey, chatMsg); err != nil {

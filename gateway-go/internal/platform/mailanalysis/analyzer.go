@@ -170,7 +170,7 @@ func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt, thinki
 			// OpenAI-translated stream carries that reasoning in .Delta.Text. The
 			// delta type is the reliable signal — matching the multi-stage path's
 			// collectStreamText (pipeline.go), which already filters it.
-			if json.Unmarshal(ev.Payload, &delta) == nil &&
+			if json.Unmarshal(ev.Payload.Bytes(), &delta) == nil &&
 				delta.Delta.Type != "thinking_delta" && delta.Delta.Text != "" {
 				sb.WriteString(delta.Delta.Text)
 			}
@@ -178,7 +178,7 @@ func AnalyzeEmail(ctx context.Context, client *llm.Client, model, prompt, thinki
 			var errInfo struct {
 				Message string `json:"message"`
 			}
-			if json.Unmarshal(ev.Payload, &errInfo) == nil && errInfo.Message != "" {
+			if json.Unmarshal(ev.Payload.Bytes(), &errInfo) == nil && errInfo.Message != "" {
 				return "", fmt.Errorf("LLM 스트림 오류: %s", errInfo.Message)
 			}
 			return "", fmt.Errorf("LLM 스트림 오류")

@@ -43,6 +43,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
 	"github.com/choiceoh/deneb/gateway-go/pkg/llmerr"
@@ -96,7 +97,7 @@ type roleHealthTarget struct {
 type roleHealthWatch struct {
 	logger    *slog.Logger
 	registry  *modelrole.Registry
-	broadcast func(event string, payload any) // nil-safe wrapper, never nil
+	broadcast func(event string, payload events.EventPayload) // nil-safe wrapper, never nil
 	statePath string
 
 	mu    sync.Mutex
@@ -112,7 +113,7 @@ type roleHealthWatch struct {
 type Watch = roleHealthWatch
 
 // New constructs a provider-role health watch. A nil registry disables it.
-func New(registry *modelrole.Registry, logger *slog.Logger, broadcast func(string, any), statePath string) *Watch {
+func New(registry *modelrole.Registry, logger *slog.Logger, broadcast func(string, events.EventPayload), statePath string) *Watch {
 	if registry == nil {
 		return nil
 	}
@@ -294,8 +295,8 @@ func (w *roleHealthWatch) probeProviderOnce(ctx context.Context, t roleHealthTar
 		var errBody struct {
 			Message string `json:"message"`
 		}
-		msg := string(ev.Payload)
-		if json.Unmarshal(ev.Payload, &errBody) == nil && errBody.Message != "" {
+		msg := ev.Payload.String()
+		if json.Unmarshal(ev.Payload.Bytes(), &errBody) == nil && errBody.Message != "" {
 			msg = errBody.Message
 		}
 		verdict, errText = classifyProbeError(errors.New(msg)), msg
@@ -357,13 +358,14 @@ func (w *roleHealthWatch) emit(t roleHealthTarget, verdict, errText string) {
 	if w.broadcast == nil {
 		return
 	}
-	w.broadcast("model.role_health", map[string]any{
+	wire, _ := events.PayloadOf(map[string]any{
 		"provider": t.providerID,
 		"model":    t.model,
 		"roles":    t.roles,
 		"verdict":  verdict,
 		"error":    errText,
 	})
+	w.broadcast("model.role_health", wire)
 }
 
 func (w *roleHealthWatch) loadState() {

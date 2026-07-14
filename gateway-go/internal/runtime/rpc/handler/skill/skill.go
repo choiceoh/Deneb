@@ -8,6 +8,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -15,7 +16,8 @@ import (
 // broadcast calls fn only if it is non-nil — avoids a nil check at every call site.
 func broadcast(fn BroadcastFunc, event string, payload any) {
 	if fn != nil {
-		fn(event, payload)
+		wire, _ := events.PayloadOf(payload)
+		fn(event, wire)
 	}
 }
 

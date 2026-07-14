@@ -303,7 +303,7 @@ func splitIntoChunks(messages []llm.Message, maxTokens int) [][]llm.Message {
 	currentTokens := 0
 
 	for _, msg := range messages {
-		msgTokens := EstimateTokens(string(msg.Content)) + 4
+		msgTokens := EstimateTokens(msg.Content.String()) + 4
 		if len(current) > 0 && currentTokens+msgTokens > maxTokens {
 			chunks = append(chunks, current)
 			current = nil
@@ -340,7 +340,7 @@ func serializeMessages(messages []llm.Message) string {
 		sb.WriteString(fmt.Sprintf("[%s]: ", msg.Role))
 
 		var blocks []llm.ContentBlock
-		if err := json.Unmarshal(msg.Content, &blocks); err == nil {
+		if err := json.Unmarshal(msg.Content.Bytes(), &blocks); err == nil {
 			for _, b := range blocks {
 				switch b.Type {
 				case "text":
@@ -362,10 +362,10 @@ func serializeMessages(messages []llm.Message) string {
 		} else {
 			// Plain text content (JSON string).
 			var text string
-			if json.Unmarshal(msg.Content, &text) == nil {
+			if json.Unmarshal(msg.Content.Bytes(), &text) == nil {
 				sb.WriteString(text)
 			} else {
-				sb.Write(msg.Content)
+				sb.Write(msg.Content.Bytes())
 			}
 		}
 		sb.WriteByte('\n')

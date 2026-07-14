@@ -12,7 +12,7 @@ import (
 // marshalMessageStart builds a serialized MessageStart payload with optional
 // input and cache-read token counts (Anthropic semantics: input excludes the
 // cache-read portion — see openAIUsage.splitPromptTokens).
-func marshalMessageStart(id, model string, inputTokens, cacheReadTokens int) json.RawMessage {
+func marshalMessageStart(id, model string, inputTokens, cacheReadTokens int) FlexibleJSON {
 	p, _ := json.Marshal(MessageStart{
 		Message: struct {
 			ID    string `json:"id"`
@@ -37,7 +37,7 @@ func marshalMessageStart(id, model string, inputTokens, cacheReadTokens int) jso
 			},
 		},
 	})
-	return p
+	return FlexibleFromRaw(p)
 }
 
 // mapFinishReason translates an OpenAI finish reason to an Anthropic stop reason.
@@ -64,21 +64,21 @@ func mapFinishReason(reason string) string {
 // unmarshals into openAIChunk with all-zero fields, so without the second
 // probe it was swallowed as an empty usage chunk and the turn ended as an
 // empty success.
-func probeOpenAIError(payload json.RawMessage) (json.RawMessage, bool) {
+func probeOpenAIError(payload FlexibleJSON) (FlexibleJSON, bool) {
 	var errResp struct {
 		Error struct {
 			Message string `json:"message"`
 			Type    string `json:"type"`
 		} `json:"error"`
 	}
-	if json.Unmarshal(payload, &errResp) != nil || errResp.Error.Message == "" {
-		return nil, false
+	if json.Unmarshal(payload.Bytes(), &errResp) != nil || errResp.Error.Message == "" {
+		return FlexibleJSON{}, false
 	}
 	p, _ := json.Marshal(map[string]string{
 		"type":    errResp.Error.Type,
 		"message": errResp.Error.Message,
 	})
-	return p, true
+	return FlexibleFromRaw(p), true
 }
 
 // translateOpenAIStream reads OpenAI SSE chunks from rawEvents and emits
@@ -140,7 +140,7 @@ func (t *openAIStreamTranslator) handleRawEvent(raw StreamEvent) bool {
 	if !t.acceptRawBytes(raw) {
 		return false
 	}
-	if string(raw.Payload) == "[DONE]" {
+	if raw.Payload.String() == "[DONE]" {
 		t.finishAtDoneSentinel()
 		return false
 	}
@@ -177,7 +177,7 @@ func (t *openAIStreamTranslator) acceptRawBytes(raw StreamEvent) bool {
 	if t.client.maxStreamBytes <= 0 {
 		return true
 	}
-	incoming := len(raw.Type) + len(raw.Payload)
+	incoming := len(raw.Type) + raw.Payload.Len()
 	if incoming <= t.client.maxStreamBytes-t.rawBytes {
 		t.rawBytes += incoming
 		return true
@@ -185,7 +185,7 @@ func (t *openAIStreamTranslator) acceptRawBytes(raw StreamEvent) bool {
 	payload, _ := json.Marshal(map[string]string{
 		"type": "stream_limit", "message": "provider stream exceeded configured byte limit",
 	})
-	emit(t.ctx, t.out, StreamEvent{Type: "error", Payload: payload})
+	emit(t.ctx, t.out, StreamEvent{Type: "error", Payload: FlexibleFromRaw(payload)})
 	return false
 }
 
@@ -197,15 +197,15 @@ const (
 	openAIChunkStop
 )
 
-func (t *openAIStreamTranslator) decodeChunk(payload json.RawMessage) (openAIChunk, openAIChunkAction) {
+func (t *openAIStreamTranslator) decodeChunk(payload FlexibleJSON) (openAIChunk, openAIChunkAction) {
 	var chunk openAIChunk
-	if err := json.Unmarshal(payload, &chunk); err != nil {
+	if err := json.Unmarshal(payload.Bytes(), &chunk); err != nil {
 		if errorPayload, ok := probeOpenAIError(payload); ok {
 			t.emitError(errorPayload)
 			return openAIChunk{}, openAIChunkStop
 		}
 		t.client.logger.Warn("skipping unparseable OpenAI stream chunk",
-			"error", err, "payload", string(payload))
+			"error", err, "payload", payload.String())
 		return openAIChunk{}, openAIChunkSkip
 	}
 	return chunk, openAIChunkProcess
@@ -222,7 +222,7 @@ func (t *openAIStreamTranslator) emitInitialMessageStart(chunk openAIChunk) {
 	})
 }
 
-func (t *openAIStreamTranslator) handleChoiceLessChunk(rawPayload json.RawMessage, chunk openAIChunk) bool {
+func (t *openAIStreamTranslator) handleChoiceLessChunk(rawPayload FlexibleJSON, chunk openAIChunk) bool {
 	// A bare {"error":{...}} body parses into a zero-valued openAIChunk, so it
 	// needs a second probe after successful unmarshalling.
 	if chunk.Usage == nil {
@@ -294,7 +294,7 @@ func (t *openAIStreamTranslator) emitUsageMessageStart(chunk openAIChunk) {
 	})
 }
 
-func marshalMessageDelta(stopReason string, outputTokens int) json.RawMessage {
+func marshalMessageDelta(stopReason string, outputTokens int) FlexibleJSON {
 	payload, _ := json.Marshal(MessageDelta{
 		Delta: struct {
 			StopReason string `json:"stop_reason"`
@@ -305,7 +305,7 @@ func marshalMessageDelta(stopReason string, outputTokens int) json.RawMessage {
 			CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 		}{OutputTokens: outputTokens},
 	})
-	return payload
+	return FlexibleFromRaw(payload)
 }
 
 func (t *openAIStreamTranslator) finishAtDoneSentinel() {
@@ -318,7 +318,7 @@ func (t *openAIStreamTranslator) finishAtDoneSentinel() {
 	emit(t.ctx, t.out, StreamEvent{Type: "message_stop"})
 }
 
-func (t *openAIStreamTranslator) emitError(payload json.RawMessage) {
+func (t *openAIStreamTranslator) emitError(payload FlexibleJSON) {
 	t.content.flushTools(openAIDiscardTools)
 	emit(t.ctx, t.out, StreamEvent{Type: "error", Payload: payload})
 }
@@ -351,7 +351,7 @@ func (t *openAIStreamTranslator) finishAtEOF() {
 			t.chunkCount,
 		),
 	})
-	emit(t.ctx, t.out, StreamEvent{Type: "error", Payload: errPayload})
+	emit(t.ctx, t.out, StreamEvent{Type: "error", Payload: FlexibleFromRaw(errPayload)})
 }
 
 func emit(ctx context.Context, ch chan<- StreamEvent, ev StreamEvent) {

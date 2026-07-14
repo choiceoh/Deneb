@@ -370,7 +370,7 @@ func callLocalLLMJSON[T any](ctx context.Context, client *llm.Client, model, sys
 	for attempt := range 2 {
 		format := &llm.ResponseFormat{Type: "json_object"}
 		if useSchema {
-			format = &llm.ResponseFormat{Type: "json_schema", JSONSchema: schema}
+			format = &llm.ResponseFormat{Type: "json_schema", JSONSchema: llm.FlexibleFromRaw(schema)}
 		}
 
 		events, err := client.StreamChat(ctx, llm.ChatRequest{
@@ -442,7 +442,7 @@ func collectStreamText(ctx context.Context, events <-chan llm.StreamEvent) (stri
 				// thought in .text, so the delta type is the reliable signal.
 				// Reasoning is also disabled at the request level (analysis reqs
 				// above); this is the belt-and-suspenders guard.
-				if json.Unmarshal(ev.Payload, &delta) == nil &&
+				if json.Unmarshal(ev.Payload.Bytes(), &delta) == nil &&
 					delta.Delta.Type != "thinking_delta" && delta.Delta.Text != "" {
 					sb.WriteString(delta.Delta.Text)
 				}
@@ -450,10 +450,10 @@ func collectStreamText(ctx context.Context, events <-chan llm.StreamEvent) (stri
 				var errBody struct {
 					Message string `json:"message"`
 				}
-				if json.Unmarshal(ev.Payload, &errBody) == nil && errBody.Message != "" {
+				if json.Unmarshal(ev.Payload.Bytes(), &errBody) == nil && errBody.Message != "" {
 					return "", fmt.Errorf("LLM stream error: %s", errBody.Message)
 				}
-				return "", fmt.Errorf("LLM stream error: %s", string(ev.Payload))
+				return "", fmt.Errorf("LLM stream error: %s", ev.Payload.String())
 			}
 		}
 	}

@@ -126,7 +126,7 @@ func TestStreamChat_CachedTokensOnUsageChunk(t *testing.T) {
 			continue
 		}
 		var ms MessageStart
-		if json.Unmarshal(ev.Payload, &ms) == nil {
+		if json.Unmarshal(ev.Payload.Bytes(), &ms) == nil {
 			// Last message_start wins (same as consumeStream).
 			inputTokens = ms.Message.Usage.InputTokens
 			cacheRead = ms.Message.Usage.CacheReadInputTokens

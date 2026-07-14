@@ -3,6 +3,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -63,7 +64,7 @@ func (p *turnRequestPreparer) refreshDeferredInputs(turn int) {
 	}
 	if p.cfg.DeferredSystemText != nil {
 		if extra := p.cfg.DeferredSystemText(); extra != "" {
-			p.cfg.System = llm.AppendSystemText(p.cfg.System, extra)
+			p.cfg.System = json.RawMessage(llm.AppendSystemText(llm.FlexibleFromRaw(p.cfg.System), extra).Bytes())
 		}
 	}
 	if p.cfg.DynamicToolsProvider != nil {
@@ -108,7 +109,7 @@ func (p *turnRequestPreparer) buildRequest(messages []llm.Message, thinking *llm
 	return llm.ChatRequest{
 		Model:            p.cfg.Model,
 		Messages:         messages,
-		System:           p.cfg.System,
+		System:           llm.FlexibleFromRaw(p.cfg.System),
 		MaxTokens:        p.cfg.MaxTokens,
 		Tools:            p.cfg.Tools,
 		Stream:           true,
@@ -121,7 +122,7 @@ func (p *turnRequestPreparer) buildRequest(messages []llm.Message, thinking *llm
 		Seed:             p.cfg.Seed,
 		StopSequences:    p.cfg.StopSequences,
 		ResponseFormat:   p.cfg.ResponseFormat,
-		ToolChoice:       p.cfg.ToolChoice,
+		ToolChoice:       flexibleToolChoice(p.cfg.ToolChoice),
 	}
 }
 
@@ -173,4 +174,11 @@ func appendUniqueTools(base, extra []llm.Tool) []llm.Tool {
 		}
 	}
 	return base
+}
+
+func flexibleToolChoice(v any) llm.FlexibleJSON {
+	if v == nil {
+		return llm.FlexibleJSON{}
+	}
+	return llm.FlexibleFromValue(v)
 }

@@ -101,7 +101,7 @@ func injectSteerMarker(messages []llm.Message, marker string) ([]llm.Message, bo
 			continue
 		}
 		var blocks []llm.ContentBlock
-		if err := json.Unmarshal(msg.Content, &blocks); err != nil {
+		if err := json.Unmarshal(msg.Content.Bytes(), &blocks); err != nil {
 			// Plain text user message (no content blocks) — not a tool result.
 			continue
 		}
@@ -138,7 +138,7 @@ func injectSteerMarker(messages []llm.Message, marker string) ([]llm.Message, bo
 		// original slice via messages.
 		newMessages := make([]llm.Message, len(messages))
 		copy(newMessages, messages)
-		newMessages[idx] = llm.Message{Role: msg.Role, Content: raw}
+		newMessages[idx] = llm.Message{Role: msg.Role, Content: llm.FlexibleFromRaw(raw)}
 		return newMessages, true
 	}
 	return messages, false

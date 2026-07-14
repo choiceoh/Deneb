@@ -87,7 +87,7 @@ func DropEmptyMessages(messages []Message) []Message {
 // marshalAnthropicBlocks drops (it serializes `thinking`). Such a block reaches
 // Anthropic empty, so a message made only of those is empty for our purposes and
 // must be dropped — otherwise Anthropic rejects it ("... must not be empty").
-func isContentEmpty(content json.RawMessage) bool {
+func isContentEmpty(content FlexibleJSON) bool {
 	for _, b := range ContentToBlocks(content) {
 		switch b.Type {
 		case "", "text":
@@ -105,10 +105,10 @@ func isContentEmpty(content json.RawMessage) bool {
 	return true
 }
 
-// mergeContent combines two json.RawMessage content values into one block
+// mergeContent combines two FlexibleJSON content values into one block
 // array. Each value may be a JSON string (plain text) or a JSON array of
 // ContentBlock objects.
-func mergeContent(a, b json.RawMessage) json.RawMessage {
+func mergeContent(a, b FlexibleJSON) FlexibleJSON {
 	blocksA := ContentToBlocks(a)
 	blocksB := ContentToBlocks(b)
 	merged := make([]ContentBlock, 0, len(blocksA)+len(blocksB))
@@ -124,18 +124,19 @@ func mergeContent(a, b json.RawMessage) json.RawMessage {
 // becomes a single text block; an array of blocks is returned as-is. The
 // canonical content parser — reuse it instead of hand-rolling the
 // "is it a block array or a bare string" dance (effort router, compaction).
-func ContentToBlocks(content json.RawMessage) []ContentBlock {
-	if len(content) == 0 {
+func ContentToBlocks(content FlexibleJSON) []ContentBlock {
+	if content.IsZero() {
 		return nil
 	}
+	raw := content.Bytes()
 	// Try array of blocks first (most common for tool_result messages).
 	var blocks []ContentBlock
-	if err := json.Unmarshal(content, &blocks); err == nil && len(blocks) > 0 {
+	if err := json.Unmarshal(raw, &blocks); err == nil && len(blocks) > 0 {
 		return blocks
 	}
 	// Plain text string → single text block.
 	var text string
-	if err := json.Unmarshal(content, &text); err == nil && text != "" {
+	if err := json.Unmarshal(raw, &text); err == nil && text != "" {
 		return []ContentBlock{{Type: "text", Text: text}}
 	}
 	return nil

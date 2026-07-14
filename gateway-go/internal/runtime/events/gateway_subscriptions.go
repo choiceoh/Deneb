@@ -143,7 +143,8 @@ func (g *GatewayEventSubscriptions) runAgentLoop(params GatewaySubscriptionParam
 				continue
 			}
 			// Fallback: direct broadcast without sequencing.
-			params.Broadcaster.BroadcastWithOpts("agent", evt, BroadcastOpts{DropIfSlow: true})
+			agentWire, _ := PayloadOf(evt)
+			params.Broadcaster.BroadcastWithOpts("agent", agentWire, BroadcastOpts{DropIfSlow: true})
 		}
 	}
 }
@@ -181,7 +182,8 @@ func (g *GatewayEventSubscriptions) runTranscriptLoop(params GatewaySubscription
 				payload["messageSeq"] = *update.MessageSeq
 			}
 
-			params.Broadcaster.BroadcastToConnIDs("session.message", payload, connIDs)
+			msgWire, _ := PayloadOf(payload)
+			params.Broadcaster.BroadcastToConnIDs("session.message", msgWire, connIDs)
 
 			sessionEventConnIDs := params.Broadcaster.SessionEventSubscriberConnIDs()
 			if len(sessionEventConnIDs) > 0 {
@@ -196,7 +198,8 @@ func (g *GatewayEventSubscriptions) runTranscriptLoop(params GatewaySubscription
 				if update.MessageSeq != nil {
 					changedPayload["messageSeq"] = *update.MessageSeq
 				}
-				params.Broadcaster.BroadcastToConnIDs("sessions.changed", changedPayload, sessionEventConnIDs)
+				changedWire, _ := PayloadOf(changedPayload)
+				params.Broadcaster.BroadcastToConnIDs("sessions.changed", changedWire, sessionEventConnIDs)
 			}
 		}
 	}
@@ -230,7 +233,8 @@ func (g *GatewayEventSubscriptions) runLifecycleLoop(params GatewaySubscriptionP
 				payload["displayName"] = evt.DisplayName
 			}
 
-			params.Broadcaster.BroadcastToConnIDs("sessions.changed", payload, connIDs)
+			lifecycleWire, _ := PayloadOf(payload)
+			params.Broadcaster.BroadcastToConnIDs("sessions.changed", lifecycleWire, connIDs)
 		}
 	}
 }

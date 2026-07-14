@@ -77,7 +77,7 @@ func TestStreamChat_VLLMReasoningEmitsThinking(t *testing.T) {
 			continue
 		}
 		var cbd ContentBlockDelta
-		if json.Unmarshal(ev.Payload, &cbd) != nil {
+		if json.Unmarshal(ev.Payload.Bytes(), &cbd) != nil {
 			continue
 		}
 		if cbd.Delta.Type == "thinking_delta" {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/middleware"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
@@ -25,7 +26,7 @@ type HandlerFunc = middleware.HandlerFunc
 // BroadcastFunc is the canonical signature for broadcasting events to connected
 // SSE clients. Previously duplicated across 7+ handler packages; now
 // defined once here and referenced everywhere via rpcutil.BroadcastFunc.
-type BroadcastFunc func(event string, payload any) (int, []error)
+type BroadcastFunc func(event string, payload events.EventPayload) (int, []error)
 
 // MaxKeyInErrorMsg is the maximum key length included in error messages.
 // Prevents log inflation from pathologically large keys.

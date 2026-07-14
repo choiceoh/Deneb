@@ -216,7 +216,7 @@ func TestStreamChat_AnthropicMode_MidStreamEOF_SurfacesError(t *testing.T) {
 	if last.Type != "error" {
 		t.Fatalf("terminal event = %q, want error (mid-stream EOF must not look like success)", last.Type)
 	}
-	if !strings.Contains(string(last.Payload), "message_stop") {
+	if !strings.Contains(last.Payload.String(), "message_stop") {
 		t.Errorf("error payload = %s, want mention of the missing message_stop", last.Payload)
 	}
 	for _, ev := range got {
@@ -274,7 +274,7 @@ func TestSanitizeAnthropicContentBackfillsMissingFields(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := sanitizeAnthropicContent(tc.in)
+			got, err := sanitizeAnthropicContent(FlexibleFromRaw(tc.in))
 			if err != nil {
 				t.Fatalf("sanitize: %v", err)
 			}

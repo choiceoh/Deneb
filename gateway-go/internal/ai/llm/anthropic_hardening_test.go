@@ -170,7 +170,7 @@ func TestTranslateAnthropicToolChoiceFormats(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := translateAnthropicToolChoice(tc.in)
+			got := translateAnthropicToolChoice(FlexibleFromValue(tc.in))
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("translateAnthropicToolChoice(%v) = %v, want %v", tc.in, got, tc.want)
 			}
@@ -231,7 +231,7 @@ func TestBuildAnthropicRequestBodyFormatsToolChoice(t *testing.T) {
 	body, err := buildAnthropicRequestBody(ChatRequest{
 		Model: "m", MaxTokens: 64,
 		Messages:   []Message{NewTextMessage("user", "hi")},
-		ToolChoice: "required",
+		ToolChoice: FlexibleFromValue("required"),
 	})
 	if err != nil {
 		t.Fatalf("buildAnthropicRequestBody: %v", err)

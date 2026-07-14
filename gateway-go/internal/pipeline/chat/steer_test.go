@@ -172,7 +172,7 @@ func TestSteerInjectWritesMarkerToLastToolResult(t *testing.T) {
 	}
 	// Injection landed on the tool_result block.
 	var blocks []llm.ContentBlock
-	if err := json.Unmarshal(out[2].Content, &blocks); err != nil {
+	if err := json.Unmarshal(out[2].Content.Bytes(), &blocks); err != nil {
 		t.Fatalf("unmarshal injected block: %v", err)
 	}
 	if len(blocks) != 1 || blocks[0].Type != "tool_result" {
@@ -221,7 +221,7 @@ func TestSteerInjectWritesToLatestWhenMultipleResults(t *testing.T) {
 
 	// First tool_result must be untouched.
 	var first []llm.ContentBlock
-	if err := json.Unmarshal(out[0].Content, &first); err != nil {
+	if err := json.Unmarshal(out[0].Content.Bytes(), &first); err != nil {
 		t.Fatalf("unmarshal first: %v", err)
 	}
 	if strings.Contains(first[0].Content, "z") {
@@ -230,7 +230,7 @@ func TestSteerInjectWritesToLatestWhenMultipleResults(t *testing.T) {
 
 	// Latest tool_result must carry the marker.
 	var latest []llm.ContentBlock
-	if err := json.Unmarshal(out[2].Content, &latest); err != nil {
+	if err := json.Unmarshal(out[2].Content.Bytes(), &latest); err != nil {
 		t.Fatalf("unmarshal latest: %v", err)
 	}
 	if !strings.Contains(latest[0].Content, "z") {
@@ -257,7 +257,7 @@ func TestSteerBeforeAPICallWritesMarkerAndClearsQueue(t *testing.T) {
 
 	out := hook(msgs)
 	var blocks []llm.ContentBlock
-	if err := json.Unmarshal(out[0].Content, &blocks); err != nil {
+	if err := json.Unmarshal(out[0].Content.Bytes(), &blocks); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if !strings.Contains(blocks[0].Content, "do extra step") {
@@ -293,7 +293,7 @@ func TestSteerBeforeAPICall_PreservesOrderOnNoToolResult(t *testing.T) {
 	}
 	out2 := hook(msgs2)
 	var blocks []llm.ContentBlock
-	if err := json.Unmarshal(out2[0].Content, &blocks); err != nil {
+	if err := json.Unmarshal(out2[0].Content.Bytes(), &blocks); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if !strings.Contains(blocks[0].Content, "pending") {
@@ -309,9 +309,7 @@ func TestSteerBeforeAPICall_PreservesOrderOnNoToolResult(t *testing.T) {
 func cloneMessagesForTest(in []llm.Message) []llm.Message {
 	out := make([]llm.Message, len(in))
 	for i, m := range in {
-		cp := make(json.RawMessage, len(m.Content))
-		copy(cp, m.Content)
-		out[i] = llm.Message{Role: m.Role, Content: cp}
+		out[i] = llm.Message{Role: m.Role, Content: llm.FlexibleFromRaw(m.Content.Bytes())}
 	}
 	return out
 }
@@ -324,7 +322,7 @@ func messagesEqual(a, b []llm.Message) bool {
 		if a[i].Role != b[i].Role {
 			return false
 		}
-		if string(a[i].Content) != string(b[i].Content) {
+		if !a[i].Content.Equal(b[i].Content) {
 			return false
 		}
 	}

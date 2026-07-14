@@ -280,7 +280,7 @@ func deliverEmptyRunReply(params RunParams, deps runDeps, result *agent.AgentRes
 				"error", err, "stopReason", result.StopReason,
 				"session", params.SessionKey)
 			if deps.broadcast != nil {
-				deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
+				broadcastPayload(deps.broadcast, "chat.delivery_failed", ChatDeliveryFailedEvent{
 					Session: params.SessionKey,
 					Channel: params.Delivery.Channel,
 					Reason:  "stop_fallback_error",
@@ -292,7 +292,7 @@ func deliverEmptyRunReply(params RunParams, deps runDeps, result *agent.AgentRes
 		return
 	}
 	if deps.broadcast != nil {
-		deps.broadcast("chat.empty_response", ChatEmptyResponseEvent{
+		broadcastPayload(deps.broadcast, "chat.empty_response", ChatEmptyResponseEvent{
 			Session:    params.SessionKey,
 			Channel:    params.Delivery.Channel,
 			StopReason: result.StopReason,
@@ -307,7 +307,7 @@ func reportMissingReplyDirectiveParser(params RunParams, deps runDeps, result *a
 		"channel", params.Delivery.Channel,
 		"textLen", len(result.Text))
 	if deps.broadcast != nil {
-		deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
+		broadcastPayload(deps.broadcast, "chat.delivery_failed", ChatDeliveryFailedEvent{
 			Session: params.SessionKey,
 			Channel: params.Delivery.Channel,
 			Reason:  "parse_directives_nil",
@@ -385,7 +385,7 @@ func handleMissingChannelReply(params RunParams, deps runDeps, replyText string,
 		"channel", params.Delivery.Channel,
 		"textLen", len(replyText))
 	if deps.broadcast != nil {
-		deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
+		broadcastPayload(deps.broadcast, "chat.delivery_failed", ChatDeliveryFailedEvent{
 			Session: params.SessionKey,
 			Channel: params.Delivery.Channel,
 			Reason:  "reply_func_nil",
@@ -409,7 +409,7 @@ func sendChannelReply(ctx context.Context, params RunParams, deps runDeps, reply
 		"error", err, "channel", params.Delivery.Channel,
 		"session", params.SessionKey)
 	if deps.broadcast != nil {
-		deps.broadcast("chat.delivery_failed", ChatDeliveryFailedEvent{
+		broadcastPayload(deps.broadcast, "chat.delivery_failed", ChatDeliveryFailedEvent{
 			Session: params.SessionKey,
 			Channel: params.Delivery.Channel,
 			Reason:  "reply_func_error",
@@ -447,7 +447,7 @@ func deliverDirectiveMedia(
 		"failed", len(failedURLs),
 		"total", len(directives.MediaURLs))
 	if deps.broadcast != nil {
-		deps.broadcast("chat.media_delivery_failed", ChatMediaDeliveryFailedEvent{
+		broadcastPayload(deps.broadcast, "chat.media_delivery_failed", ChatMediaDeliveryFailedEvent{
 			Session: params.SessionKey,
 			Channel: params.Delivery.Channel,
 			Count:   len(failedURLs),
@@ -529,7 +529,7 @@ func finishRun(deps runDeps, params RunParams, phase session.LifecyclePhase, rea
 		FailureReason: failureReason,
 	})
 	if deps.broadcast != nil {
-		deps.broadcast("sessions.changed", SessionsChangedEvent{
+		broadcastPayload(deps.broadcast, "sessions.changed", SessionsChangedEvent{
 			SessionKey: params.SessionKey,
 			Reason:     reason,
 			Status:     status,

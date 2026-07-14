@@ -185,12 +185,12 @@ func appendAttachmentsToHistory(messages []llm.Message, text string, attachments
 func extractTextFromMessage(msg llm.Message) string {
 	// Try as plain string first.
 	var s string
-	if err := json.Unmarshal(msg.Content, &s); err == nil {
+	if err := json.Unmarshal(msg.Content.Bytes(), &s); err == nil {
 		return s
 	}
 	// Try as content block array.
 	var blocks []llm.ContentBlock
-	if err := json.Unmarshal(msg.Content, &blocks); err == nil {
+	if err := json.Unmarshal(msg.Content.Bytes(), &blocks); err == nil {
 		for _, b := range blocks {
 			if b.Type == "text" && b.Text != "" {
 				return b.Text

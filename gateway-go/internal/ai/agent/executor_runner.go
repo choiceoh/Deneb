@@ -348,9 +348,9 @@ func (r *agentRunner) recordTokenFeedback(request llm.ChatRequest, result *turnR
 		return
 	}
 	estimator := tokenest.ForModel(r.cfg.Model)
-	estimated := estimator.CountBytes([]byte(request.System))
+	estimated := estimator.CountBytes(request.System.Bytes())
 	for _, message := range request.Messages {
-		estimated += estimator.CountBytes([]byte(message.Content))
+		estimated += estimator.CountBytes(message.Content.Bytes())
 	}
 	tokenest.RecordFeedback(estimator.Family(), estimated, result.usage.InputTokens)
 }

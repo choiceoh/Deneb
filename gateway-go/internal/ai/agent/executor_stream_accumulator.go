@@ -42,7 +42,7 @@ func newStreamAccumulator(result *turnResult, hooks StreamHooks, logger *slog.Lo
 // for message_stop; an exhausted raw event channel is handled by the caller.
 func (a *streamAccumulator) apply(event llm.StreamEvent) (complete bool, err error) {
 	if a.result.maxStreamBytes > 0 {
-		incoming := len(event.Type) + len(event.Payload)
+		incoming := len(event.Type) + event.Payload.Len()
 		if incoming > a.result.maxStreamBytes-a.result.streamBytes {
 			return false, ErrStreamLimit
 		}
@@ -51,24 +51,24 @@ func (a *streamAccumulator) apply(event llm.StreamEvent) (complete bool, err err
 
 	switch event.Type {
 	case "message_start":
-		if err := a.applyMessageStart(event.Payload); err != nil {
+		if err := a.applyMessageStart(json.RawMessage(event.Payload.Bytes())); err != nil {
 			return false, err
 		}
 	case "content_block_start":
-		a.startContentBlock(event.Payload)
+		a.startContentBlock(json.RawMessage(event.Payload.Bytes()))
 	case "content_block_delta":
-		a.applyContentBlockDelta(event.Payload)
+		a.applyContentBlockDelta(json.RawMessage(event.Payload.Bytes()))
 	case "content_block_stop":
 		a.finalizePending()
 	case "message_delta":
-		a.applyMessageDelta(event.Payload)
+		a.applyMessageDelta(json.RawMessage(event.Payload.Bytes()))
 	case "message_stop":
 		// A block still open here means the stream ended without its finish
 		// chunk. Preserve already-streamed text/thinking where it is safe.
 		a.flushTruncated()
 		return true, nil
 	case "error":
-		return false, fmt.Errorf("%w: %s", ErrStreamEvent, string(event.Payload))
+		return false, fmt.Errorf("%w: %s", ErrStreamEvent, event.Payload.String())
 	}
 	return false, nil
 }
@@ -183,7 +183,7 @@ func (a *streamAccumulator) finalizePending() {
 	switch a.currentBlock.block.Type {
 	case "tool_use":
 		if len(a.currentBlock.jsonBuf) > 0 {
-			a.currentBlock.block.Input = json.RawMessage(a.currentBlock.jsonBuf)
+			a.currentBlock.block.Input = llm.FlexibleFromRaw(a.currentBlock.jsonBuf)
 		}
 	case "thinking":
 		a.currentBlock.block.Thinking = a.currentBlock.block.Text

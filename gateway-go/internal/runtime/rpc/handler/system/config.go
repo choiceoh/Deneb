@@ -6,6 +6,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -109,7 +110,8 @@ func configSet(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 			return nil, err
 		}
 		if deps.Broadcaster != nil {
-			deps.Broadcaster("config.changed", map[string]any{"hash": newHash})
+			wire, _ := events.PayloadOf(map[string]any{"hash": newHash})
+			deps.Broadcaster("config.changed", wire)
 		}
 		return map[string]any{
 			"ok":       true,
@@ -133,11 +135,12 @@ func configApply(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 			return nil, err
 		}
 		if deps.Broadcaster != nil {
-			deps.Broadcaster("config.applied", map[string]any{
+			wire, _ := events.PayloadOf(map[string]any{
 				"hash":       newHash,
 				"sessionKey": p.SessionKey,
 				"note":       p.Note,
 			})
+			deps.Broadcaster("config.applied", wire)
 		}
 		return map[string]any{
 			"ok":       true,
@@ -217,11 +220,12 @@ func configPatch(deps ConfigAdvancedDeps) rpcutil.HandlerFunc {
 		}
 		newHash := config.HashString(string(merged))
 		if deps.Broadcaster != nil {
-			deps.Broadcaster("config.patched", map[string]any{
+			wire, _ := events.PayloadOf(map[string]any{
 				"hash":       newHash,
 				"sessionKey": p.SessionKey,
 				"note":       p.Note,
 			})
+			deps.Broadcaster("config.patched", wire)
 		}
 		return map[string]any{
 			"ok":       true,

@@ -33,6 +33,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
@@ -150,7 +151,7 @@ func (n *Service) Start(ctx context.Context) {
 
 // tap is the broadcaster Tap callback for *mirroring* events. It first
 // filters to the monitored error set + debounce + enqueue.
-func (n *Service) Tap(event string, payload any) {
+func (n *Service) Tap(event string, payload events.EventPayload) {
 	if _, want := mirroredEvents[event]; !want {
 		return
 	}
@@ -158,7 +159,7 @@ func (n *Service) Tap(event string, payload any) {
 		return
 	}
 	select {
-	case n.queue <- notifyEvent{name: event, payload: payload}:
+	case n.queue <- notifyEvent{name: event, payload: payload.Bytes()}:
 		n.markSent(event)
 	default:
 		n.logger.Warn("notify queue full, dropping event", "event", event)

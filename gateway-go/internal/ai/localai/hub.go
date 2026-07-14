@@ -418,7 +418,7 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 		Temperature:    h.defaultTemp,
 		TopP:           h.defaultTopP,
 		TopK:           h.defaultTopK,
-		ExtraBody:      merged,
+		ExtraBody:      llmExtraBody(merged),
 		ResponseFormat: req.ResponseFormat,
 	}
 
@@ -519,7 +519,7 @@ func (h *Hub) callDirect(ctx context.Context, client *llm.Client, providerID, mo
 		Temperature: fbTemp,
 		TopP:        fbTopP,
 		TopK:        fbTopK,
-		ExtraBody:   merged,
+		ExtraBody:   llmExtraBody(merged),
 	}
 
 	events, err := client.StreamChat(ctx, req)
@@ -551,7 +551,7 @@ func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, 
 				return strings.TrimSpace(sb.String()), nil
 			}
 			if ev.Type == "content_block_delta" {
-				sb.WriteString(extractTextDelta(ev.Payload))
+				sb.WriteString(extractTextDelta(ev.Payload.Bytes()))
 			}
 		}
 	}
@@ -590,10 +590,22 @@ func estimateInputTokens(req *Request) int {
 	est := tokenest.Estimate(req.System)
 	// Message content: byte-level heuristic (raw JSON bytes).
 	for _, m := range req.Messages {
-		est += tokenest.EstimateBytes([]byte(m.Content))
+		est += tokenest.EstimateBytes(m.Content.Bytes())
 	}
 	if est < 1 {
 		return 1
 	}
 	return est
 }
+
+func llmExtraBody(m map[string]any) map[string]llm.FlexibleJSON {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]llm.FlexibleJSON, len(m))
+	for k, v := range m {
+		out[k] = llm.FlexibleFromValue(v)
+	}
+	return out
+}
+

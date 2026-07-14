@@ -86,7 +86,7 @@ func pickTrailingCacheTargets(messages []llm.Message, n int) []int {
 // by max_tokens mid-reasoning persists as [thinking] only) — so the marker
 // walks back to the last block that may carry it.
 func withTrailingCacheControl(msg llm.Message) llm.Message {
-	blocks, ok := decodeMessageBlocks(msg.Content)
+	blocks, ok := decodeMessageBlocks(json.RawMessage(msg.Content.Bytes()))
 	if !ok || len(blocks) == 0 {
 		return msg
 	}
@@ -106,7 +106,7 @@ func withTrailingCacheControl(msg llm.Message) llm.Message {
 	if err != nil {
 		return msg
 	}
-	msg.Content = raw
+	msg.Content = llm.FlexibleFromRaw(raw)
 	return msg
 }
 
@@ -143,10 +143,10 @@ func stripMessageCacheMarkersHook(messages []llm.Message) []llm.Message {
 	out := messages
 	copied := false
 	for i := range messages {
-		if !bytes.Contains(messages[i].Content, []byte(`"cache_control"`)) {
+		if !bytes.Contains(messages[i].Content.Bytes(), []byte(`"cache_control"`)) {
 			continue
 		}
-		blocks, ok := decodeMessageBlocks(messages[i].Content)
+		blocks, ok := decodeMessageBlocks(json.RawMessage(messages[i].Content.Bytes()))
 		if !ok {
 			continue
 		}
@@ -169,7 +169,7 @@ func stripMessageCacheMarkersHook(messages []llm.Message) []llm.Message {
 			copy(out, messages)
 			copied = true
 		}
-		out[i].Content = raw
+		out[i].Content = llm.FlexibleFromRaw(raw)
 	}
 	return out
 }

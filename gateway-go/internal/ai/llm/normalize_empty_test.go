@@ -6,7 +6,7 @@ import (
 )
 
 func msg(role string, content string) Message {
-	return Message{Role: role, Content: json.RawMessage(content)}
+	return Message{Role: role, Content: FlexibleFromRaw([]byte(content))}
 }
 
 func TestIsContentEmpty(t *testing.T) {
@@ -34,7 +34,7 @@ func TestIsContentEmpty(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := isContentEmpty(json.RawMessage(tc.content)); got != tc.want {
+			if got := isContentEmpty(FlexibleFromRaw([]byte(tc.content))); got != tc.want {
 				t.Fatalf("isContentEmpty(%s) = %v, want %v", tc.content, got, tc.want)
 			}
 		})
@@ -53,7 +53,7 @@ func TestDropEmptyMessages(t *testing.T) {
 	}
 	for _, m := range out {
 		if isContentEmpty(m.Content) {
-			t.Fatalf("DropEmptyMessages left an empty message: %s", string(m.Content))
+			t.Fatalf("DropEmptyMessages left an empty message: %s", m.Content.String())
 		}
 	}
 	// Input must be untouched.
@@ -104,7 +104,7 @@ func TestBuildAnthropicRequestBody_DropsEmptyAssistant(t *testing.T) {
 		t.Fatalf("unmarshal request body: %v", err)
 	}
 	for i, m := range parsed.Messages {
-		if isContentEmpty(m.Content) {
+		if isContentEmpty(FlexibleFromRaw(m.Content)) {
 			t.Fatalf("message %d (role %q) reached Anthropic empty: %s", i, m.Role, string(m.Content))
 		}
 	}

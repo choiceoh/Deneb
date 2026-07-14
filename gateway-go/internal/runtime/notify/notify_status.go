@@ -6,6 +6,7 @@
 package notify
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -15,7 +16,13 @@ import (
 // line. Returns "" when the event isn't recognized — defensive guard for
 // the tap filter (which already excludes unknowns).
 func formatErrorEvent(event string, payload any) string {
-	fields, _ := payload.(map[string]any)
+	var fields map[string]any
+	switch p := payload.(type) {
+	case map[string]any:
+		fields = p
+	case []byte:
+		_ = json.Unmarshal(p, &fields)
+	}
 
 	headline := errorHeadlineKO(event)
 	if headline == "" {

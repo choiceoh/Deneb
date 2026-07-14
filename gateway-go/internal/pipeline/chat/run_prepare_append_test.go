@@ -18,7 +18,7 @@ func appendTestHistory() []llm.Message {
 
 func messagesContain(msgs []llm.Message, needle string) bool {
 	for _, m := range msgs {
-		if strings.Contains(string(m.Content), needle) {
+		if strings.Contains(m.Content.String(), needle) {
 			return true
 		}
 	}
@@ -40,8 +40,8 @@ func TestAssembleTurnMessagesAppendCurrentMessageCreatesNewUserTurn(t *testing.T
 		t.Fatalf("expected history+1 messages, got %d", len(msgs))
 	}
 	last := msgs[len(msgs)-1]
-	if last.Role != "user" || !strings.Contains(string(last.Content), "링크 요약해줘") {
-		t.Fatalf("last message must be the appended current user message, got role=%s content=%s", last.Role, last.Content)
+	if last.Role != "user" || !strings.Contains(last.Content.String(), "링크 요약해줘") {
+		t.Fatalf("last message must be the appended current user message, got role=%s content=%s", last.Role, last.Content.String())
 	}
 	// The previous turn's user message must be untouched (the replace-last
 	// attachment branch corrupts it if the switch arms are misordered).
@@ -71,11 +71,11 @@ func TestAssembleTurnMessages_AppendCurrentMessageWithAttachments(t *testing.T) 
 		t.Fatal("previous user message must not be replaced by the attachment merge")
 	}
 	last := msgs[len(msgs)-1]
-	if last.Role != "user" || !strings.Contains(string(last.Content), "스크린샷이랑 링크 봐줘") {
-		t.Fatalf("last message must carry the current text, got: %s", last.Content)
+	if last.Role != "user" || !strings.Contains(last.Content.String(), "스크린샷이랑 링크 봐줘") {
+		t.Fatalf("last message must carry the current text, got: %s", last.Content.String())
 	}
-	if !strings.Contains(string(last.Content), "image") {
-		t.Fatalf("last message must be multimodal (attachment blocks), got: %s", last.Content)
+	if !strings.Contains(last.Content.String(), "image") {
+		t.Fatalf("last message must be multimodal (attachment blocks), got: %s", last.Content.String())
 	}
 }
 

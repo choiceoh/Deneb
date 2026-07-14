@@ -189,7 +189,7 @@ func mmrSelect(
 			break
 		}
 
-		msgTokens := EstimateTokens(string(messages[bestIdx].Content)) + 4 //nolint:gosec // G602: bestIdx is validated (0 <= bestIdx < n)
+		msgTokens := EstimateTokens(messages[bestIdx].Content.String()) + 4 //nolint:gosec // G602: bestIdx is validated (0 <= bestIdx < n)
 		if usedTokens+msgTokens > tokenBudget && len(selectedIndices) > 0 {
 			break // would exceed budget
 		}
@@ -285,11 +285,11 @@ func mergeConsecutiveSameRole(messages []llm.Message) []llm.Message {
 // merged block-by-block so tool calls, images, and thinking survive.
 func mergeMessagePair(a, b llm.Message) llm.Message {
 	var as, bs string
-	if json.Unmarshal(a.Content, &as) == nil && json.Unmarshal(b.Content, &bs) == nil {
+	if json.Unmarshal(a.Content.Bytes(), &as) == nil && json.Unmarshal(b.Content.Bytes(), &bs) == nil {
 		return llm.NewTextMessage(b.Role, as+"\n\n"+bs)
 	}
-	ab, aok := contentBlocksOf(a.Content)
-	bb, bok := contentBlocksOf(b.Content)
+	ab, aok := contentBlocksOf(json.RawMessage(a.Content.Bytes()))
+	bb, bok := contentBlocksOf(json.RawMessage(b.Content.Bytes()))
 	if !aok || !bok {
 		// Undecodable content: fall back to text extraction rather than drop
 		// the message entirely.

@@ -294,11 +294,11 @@ func effortMessage(role string, content, toolCalls json.RawMessage) llm.Message 
 		extra = append(extra, llm.ContentBlock{Type: "tool_result"})
 	}
 	if len(extra) > 0 {
-		if enc, err := json.Marshal(append(llm.ContentToBlocks(content), extra...)); err == nil {
-			return llm.Message{Role: role, Content: enc}
+		if enc, err := json.Marshal(append(llm.ContentToBlocks(llm.FlexibleFromRaw(content)), extra...)); err == nil {
+			return llm.Message{Role: role, Content: llm.FlexibleFromRaw(enc)}
 		}
 	}
-	return llm.Message{Role: role, Content: content}
+	return llm.Message{Role: role, Content: llm.FlexibleFromRaw(content)}
 }
 
 // hasJSONValue reports whether raw is a present, non-null JSON value (an OpenAI

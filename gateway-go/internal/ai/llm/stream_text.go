@@ -19,7 +19,7 @@ func DrainStreamText(events <-chan StreamEvent) string {
 				Text string `json:"text"`
 			} `json:"delta"`
 		}
-		if json.Unmarshal(event.Payload, &payload) == nil {
+		if json.Unmarshal(event.Payload.Bytes(), &payload) == nil {
 			text.WriteString(payload.Delta.Text)
 		}
 	}

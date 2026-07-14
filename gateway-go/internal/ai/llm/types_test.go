@@ -8,11 +8,11 @@ import (
 func TestSystemStringEncodesNonEmptyOrNilWhenEmpty(t *testing.T) {
 	t.Run("non-empty string", func(t *testing.T) {
 		raw := SystemString("hello world")
-		if raw == nil {
+		if raw.IsZero() {
 			t.Fatal("expected non-nil")
 		}
 		var s string
-		if err := json.Unmarshal(raw, &s); err != nil {
+		if err := json.Unmarshal(raw.Bytes(), &s); err != nil {
 			t.Fatalf("unmarshal: %v", err)
 		}
 		if s != "hello world" {
@@ -22,7 +22,7 @@ func TestSystemStringEncodesNonEmptyOrNilWhenEmpty(t *testing.T) {
 
 	t.Run("empty string returns nil", func(t *testing.T) {
 		raw := SystemString("")
-		if raw != nil {
+		if !raw.IsZero() {
 			t.Errorf("got %s, want nil", raw)
 		}
 	})
@@ -35,11 +35,11 @@ func TestSystemBlocksEncodesNonEmptyOrNilWhenEmpty(t *testing.T) {
 			{Type: "text", Text: "world"},
 		}
 		raw := SystemBlocks(blocks)
-		if raw == nil {
+		if raw.IsZero() {
 			t.Fatal("expected non-nil")
 		}
 		var parsed []ContentBlock
-		if err := json.Unmarshal(raw, &parsed); err != nil {
+		if err := json.Unmarshal(raw.Bytes(), &parsed); err != nil {
 			t.Fatalf("unmarshal: %v", err)
 		}
 		if len(parsed) != 2 {
@@ -52,14 +52,14 @@ func TestSystemBlocksEncodesNonEmptyOrNilWhenEmpty(t *testing.T) {
 
 	t.Run("empty blocks returns nil", func(t *testing.T) {
 		raw := SystemBlocks(nil)
-		if raw != nil {
+		if !raw.IsZero() {
 			t.Errorf("got %s, want nil", raw)
 		}
 	})
 
 	t.Run("empty slice returns nil", func(t *testing.T) {
 		raw := SystemBlocks([]ContentBlock{})
-		if raw != nil {
+		if !raw.IsZero() {
 			t.Errorf("got %s, want nil", raw)
 		}
 	})
@@ -97,14 +97,14 @@ func TestExtractSystemTextParsesStringOrBlocks(t *testing.T) {
 	})
 
 	t.Run("nil returns empty", func(t *testing.T) {
-		got := ExtractSystemText(nil)
+		got := ExtractSystemText(FlexibleJSON{})
 		if got != "" {
 			t.Errorf("got %q, want empty", got)
 		}
 	})
 
 	t.Run("empty returns empty", func(t *testing.T) {
-		got := ExtractSystemText(json.RawMessage{})
+		got := ExtractSystemText(FlexibleJSON{})
 		if got != "" {
 			t.Errorf("got %q, want empty", got)
 		}
@@ -146,16 +146,16 @@ func TestAppendSystemTextsAppendsAndSkipsEmpty(t *testing.T) {
 	t.Run("no additions returns unchanged", func(t *testing.T) {
 		base := SystemString("base")
 		got := AppendSystemTexts(base)
-		if string(got) != string(base) {
-			t.Errorf("got %s, want %s", got, base)
+		if got.String() != base.String() {
+			t.Errorf("got %s, want %s", got.String(), base.String())
 		}
 	})
 
 	t.Run("empty additions are skipped", func(t *testing.T) {
 		base := SystemString("base")
 		got := AppendSystemTexts(base, "", "")
-		if string(got) != string(base) {
-			t.Errorf("got %s, want %s", got, base)
+		if got.String() != base.String() {
+			t.Errorf("got %s, want %s", got.String(), base.String())
 		}
 	})
 
@@ -163,7 +163,7 @@ func TestAppendSystemTextsAppendsAndSkipsEmpty(t *testing.T) {
 		base := SystemString("base")
 		got := AppendSystemTexts(base, "add1", "add2")
 		var s string
-		if err := json.Unmarshal(got, &s); err != nil {
+		if err := json.Unmarshal(got.Bytes(), &s); err != nil {
 			t.Fatalf("unmarshal: %v", err)
 		}
 		want := "base\n\nadd1\n\nadd2"
@@ -176,7 +176,7 @@ func TestAppendSystemTextsAppendsAndSkipsEmpty(t *testing.T) {
 		base := SystemBlocks([]ContentBlock{{Type: "text", Text: "base"}})
 		got := AppendSystemTexts(base, "add1", "add2")
 		var blocks []ContentBlock
-		if err := json.Unmarshal(got, &blocks); err != nil {
+		if err := json.Unmarshal(got.Bytes(), &blocks); err != nil {
 			t.Fatalf("unmarshal: %v", err)
 		}
 		if len(blocks) != 3 {
@@ -191,9 +191,9 @@ func TestAppendSystemTextsAppendsAndSkipsEmpty(t *testing.T) {
 	})
 
 	t.Run("nil base with additions", func(t *testing.T) {
-		got := AppendSystemTexts(nil, "only")
+		got := AppendSystemTexts(FlexibleJSON{}, "only")
 		var s string
-		if err := json.Unmarshal(got, &s); err != nil {
+		if err := json.Unmarshal(got.Bytes(), &s); err != nil {
 			t.Fatalf("unmarshal: %v", err)
 		}
 		if s != "only" {
@@ -205,7 +205,7 @@ func TestAppendSystemTextsAppendsAndSkipsEmpty(t *testing.T) {
 		base := SystemString("base")
 		got := AppendSystemTexts(base, "", "real", "")
 		var s string
-		if err := json.Unmarshal(got, &s); err != nil {
+		if err := json.Unmarshal(got.Bytes(), &s); err != nil {
 			t.Fatalf("unmarshal: %v", err)
 		}
 		want := "base\n\nreal"
@@ -225,7 +225,7 @@ func TestNewBlockMessageRoundTripsContentBlocks(t *testing.T) {
 		t.Errorf("role = %q, want %q", msg.Role, "user")
 	}
 	var parsed []ContentBlock
-	if err := json.Unmarshal(msg.Content, &parsed); err != nil {
+	if err := json.Unmarshal(msg.Content.Bytes(), &parsed); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if len(parsed) != 2 {

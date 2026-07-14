@@ -73,7 +73,7 @@ func (e *openAIContentEmitter) emitText(s string) {
 			Index:        e.textBlockIndex,
 			ContentBlock: ContentBlock{Type: "text"},
 		})
-		emit(e.ctx, e.out, StreamEvent{Type: "content_block_start", Payload: payload})
+		emit(e.ctx, e.out, StreamEvent{Type: "content_block_start", Payload: FlexibleFromRaw(payload)})
 	}
 	e.emitDelta(e.textBlockIndex, "text_delta", s, "")
 }
@@ -93,7 +93,7 @@ func (e *openAIContentEmitter) emitThinking(s string) {
 			Index:        e.thinkingBlockIdx,
 			ContentBlock: ContentBlock{Type: "thinking"},
 		})
-		emit(e.ctx, e.out, StreamEvent{Type: "content_block_start", Payload: payload})
+		emit(e.ctx, e.out, StreamEvent{Type: "content_block_start", Payload: FlexibleFromRaw(payload)})
 	}
 	e.emitDelta(e.thinkingBlockIdx, "thinking_delta", s, "")
 }
@@ -172,7 +172,7 @@ func (e *openAIContentEmitter) flushTools(policy openAIToolFlushPolicy) {
 				Name: builder.name,
 			},
 		})
-		emit(e.ctx, e.out, StreamEvent{Type: "content_block_start", Payload: start})
+		emit(e.ctx, e.out, StreamEvent{Type: "content_block_start", Payload: FlexibleFromRaw(start)})
 		if len(builder.args) > 0 {
 			e.emitDelta(builder.blockIdx, "input_json_delta", "", string(builder.args))
 		}
@@ -192,7 +192,7 @@ func (e *openAIContentEmitter) allocateBlockIndex() int {
 
 func (e *openAIContentEmitter) closeBlock(index int) {
 	payload, _ := json.Marshal(ContentBlockStop{Index: index})
-	emit(e.ctx, e.out, StreamEvent{Type: "content_block_stop", Payload: payload})
+	emit(e.ctx, e.out, StreamEvent{Type: "content_block_stop", Payload: FlexibleFromRaw(payload)})
 }
 
 func (e *openAIContentEmitter) emitDelta(index int, deltaType, text, partialJSON string) {
@@ -202,5 +202,5 @@ func (e *openAIContentEmitter) emitDelta(index int, deltaType, text, partialJSON
 	delta.Delta.Text = text
 	delta.Delta.PartialJSON = partialJSON
 	payload, _ := json.Marshal(delta)
-	emit(e.ctx, e.out, StreamEvent{Type: "content_block_delta", Payload: payload})
+	emit(e.ctx, e.out, StreamEvent{Type: "content_block_delta", Payload: FlexibleFromRaw(payload)})
 }

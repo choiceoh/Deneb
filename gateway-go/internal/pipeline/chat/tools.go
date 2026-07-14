@@ -705,11 +705,10 @@ func toLLMTool(def ToolDef) llm.Tool {
 		schema = map[string]any{"type": "object"}
 	}
 	tool := llm.Tool{
-		Name:        def.Name,
-		Description: def.Description,
-		InputSchema: schema,
+		Name:           def.Name,
+		Description:    def.Description,
+		RawInputSchema: llm.FlexibleFromValue(schema),
 	}
-	tool.PreSerialize()
 	return tool
 }
 

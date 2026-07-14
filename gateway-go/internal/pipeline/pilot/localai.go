@@ -162,7 +162,7 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 		System:    llm.SystemString(system),
 		MaxTokens: maxTokens,
 		Stream:    true,
-		ExtraBody: shapedExtra(providerID, model),
+		ExtraBody: pilotExtraBody(shapedExtra(providerID, model)),
 	}
 
 	events, err := client.StreamChat(ctx, req)
@@ -177,7 +177,7 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 					continue
 				}
 				req.Model = fbCfg.Model
-				req.ExtraBody = shapedExtra(fbCfg.ProviderID, fbCfg.Model)
+				req.ExtraBody = pilotExtraBody(shapedExtra(fbCfg.ProviderID, fbCfg.Model))
 				events, err = fbClient.StreamChat(ctx, req)
 				if err == nil {
 					break
@@ -242,7 +242,7 @@ func CollectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, 
 			}
 			switch ev.Type {
 			case "content_block_delta":
-				if text := ExtractDeltaText(ev.Payload); text != "" {
+				if text := ExtractDeltaText(ev.Payload.Bytes()); text != "" {
 					sb.WriteString(text)
 				}
 			case "error":
@@ -260,13 +260,13 @@ func CollectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, 
 						Message string `json:"message"`
 					} `json:"error"`
 				}
-				_ = json.Unmarshal(ev.Payload, &errPayload)
+				_ = json.Unmarshal(ev.Payload.Bytes(), &errPayload)
 				msg := errPayload.Message
 				if msg == "" {
 					msg = errPayload.Error.Message
 				}
 				if msg == "" {
-					msg = string(ev.Payload)
+					msg = ev.Payload.String()
 				}
 				return sb.String(), fmt.Errorf("stream error: %s", msg)
 			}
@@ -315,4 +315,15 @@ func TruncateHead(s string, maxChars int) string {
 		maxChars = 0
 	}
 	return string(runes[:maxChars]) + fmt.Sprintf("\n\n[... truncated at %d chars]", maxChars)
+}
+
+func pilotExtraBody(m map[string]any) map[string]llm.FlexibleJSON {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]llm.FlexibleJSON, len(m))
+	for k, v := range m {
+		out[k] = llm.FlexibleFromValue(v)
+	}
+	return out
 }

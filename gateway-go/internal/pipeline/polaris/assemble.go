@@ -207,7 +207,7 @@ func chatToLLM(msgs []chatport.ChatMessage) []llm.Message {
 		if role == "" {
 			role = "user"
 		}
-		out = append(out, llm.Message{Role: role, Content: m.Content})
+		out = append(out, llm.Message{Role: role, Content: llm.FlexibleFromRaw(m.Content)})
 	}
 	return out
 }
@@ -219,7 +219,7 @@ func trimLLMToTokenBudget(msgs []llm.Message, budget int) []llm.Message {
 	}
 	total := compact.EstimateMessagesTokens(msgs)
 	for len(msgs) > 1 && total > budget {
-		total -= compact.EstimateTokens(string(msgs[0].Content)) + 4
+		total -= compact.EstimateTokens(msgs[0].Content.String()) + 4
 		msgs = msgs[1:]
 	}
 	return msgs
