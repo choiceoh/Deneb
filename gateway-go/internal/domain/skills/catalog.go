@@ -1,7 +1,7 @@
 // Package skills provides skill discovery, metadata parsing, filtering,
 // and filesystem watching for the Go gateway.
 //
-// This mirrors the skill system in src/agents/skills/ from the TypeScript codebase.
+// Originally ported from the retired TypeScript gateway skill system.
 // Skills are user-defined or bundled plugins that extend agent capabilities.
 package skills
 

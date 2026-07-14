@@ -1,8 +1,7 @@
 // Package process manages subprocess execution with approval workflow.
 //
-// This mirrors the process management in src/infra/process/ and the
-// agent execution logic in src/agents/ from the TypeScript codebase.
-// The Go gateway takes ownership of process lifecycle to avoid Node.js overhead.
+// Originally ported from the retired TypeScript gateway's process/agent
+// execution packages. The Go gateway owns process lifecycle end-to-end.
 package process
 
 import (

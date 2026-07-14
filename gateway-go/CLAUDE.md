@@ -8,7 +8,7 @@ Go HTTP + SSE gateway server — the primary Deneb runtime.
 |---------|-------------|
 | `make go` | Build |
 | `make go-dev` | Dev mode with auto-restart on SIGUSR1 |
-| `make go-test` | Run tests with `-race` |
+| `make go-test` | Run tests (`make go-race` for the race build) |
 | `make go-vet` | Run `go vet` |
 | `make go-fmt` | Check formatting |
 | `scripts/audit/deadcode-audit.sh` | Advisory dead-code diff vs checked-in baseline (run from repo root; `--update` needs operator approval) |
@@ -19,7 +19,7 @@ Go HTTP + SSE gateway server — the primary Deneb runtime.
 |-----------|---------|
 | `cmd/gateway/` | Entry point (`main.go`), `--port`/`--bind` flags, graceful shutdown |
 | `internal/runtime/server/` | HTTP server: `/health`, `/api/v1/miniapp/rpc`, OpenAI APIs, hooks |
-| `internal/runtime/rpc/` | Registry-based RPC dispatcher, 150+ methods |
+| `internal/runtime/rpc/` | Registry-based RPC dispatcher, 200+ methods |
 | `internal/domain/session/` | Session lifecycle state machine (`IDLE → RUNNING → DONE/FAILED/KILLED/TIMEOUT`) |
 | `internal/pipeline/chat/` | System prompt, tool registration, context files, slash commands |
 | `internal/ai/llm/` | LLM client, sampling parameters, multimodal types |
@@ -33,12 +33,13 @@ Follow the GatewayHub wiring rules (`docs/agent-rules/hub-wiring.md` — 5 rules
 enforced by code review + snapshot test):
 1. Define `Deps` struct + `Methods(deps Deps)` in the handler package (`internal/runtime/rpc/handler/<domain>/`)
 2. Add the service field to `rpcutil.GatewayHub` (new domains only) + update `hub.Validate()`
-3. Wire the Deps inline in `internal/runtime/server/method_registry.go` (the ONLY wiring point)
+3. Wire the Deps inline in `internal/runtime/server/method_registry.go` or
+   `method_registry_late.go` (the ONLY wiring points)
 4. Update the `requiredMethods` snapshot list in `method_registry_test.go`
 
 ### Adding a New Agent Tool
 1. Add schema to `internal/pipeline/chat/toolreg/tool_schemas.json`, run `make tool-schemas`
-2. Implement handler in `internal/pipeline/chat/tools/<name>.go`
+2. Implement handler in `internal/pipeline/chat/tools/` (or a subpackage: `runtimeops/`, `routine/`, `mailarchive/`, `codeaction/`, …)
 3. Register in `internal/pipeline/chat/toolreg/core.go` (appropriate Register*Tools function)
 
 ### Working with Generated Files

@@ -1,9 +1,9 @@
 // Package agent provides agent job tracking, caching, and deduplication
 // for the Go gateway.
 //
-// This mirrors the agent job system from src/gateway/server-methods/agents/agent-job.ts
-// in the TypeScript codebase. It tracks running agent jobs, caches results with TTL,
-// and prevents duplicate concurrent executions.
+// Originally ported from the retired TypeScript gateway agent-job handler.
+// Tracks running agent jobs, caches results with TTL, and prevents duplicate
+// concurrent executions.
 package agent
 
 import (

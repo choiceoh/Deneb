@@ -1,6 +1,6 @@
 // Package daemon manages the gateway daemon process lifecycle.
 //
-// This mirrors the daemon management in src/daemon/ from the TypeScript codebase.
+// This mirrors the daemon management in src/daemon/ from the retired TypeScript gateway.
 // The daemon handles background process supervision, PID file management,
 // and graceful restart coordination.
 package daemon

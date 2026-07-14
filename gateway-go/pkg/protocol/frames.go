@@ -1,7 +1,8 @@
 // Package protocol defines the gateway wire protocol types.
 //
-// These types mirror the Protobuf definitions in proto/gateway.proto
-// and the TypeScript types in src/gateway/protocol/schema/frames.ts.
+// Hand-written JSON wire types for the Go gateway (no proto/ tree in this
+// repo). Frame shapes originally tracked the retired TypeScript protocol
+// schema.
 package protocol
 
 import (
@@ -62,7 +63,7 @@ type StateVersion struct {
 }
 
 // GatewayFrame is a union of all frame types, discriminated by the Type field.
-// Mirrors proto/gateway.proto GatewayFrame. Exactly one of Request, Response,
+// GatewayFrame wire shape. Exactly one of Request, Response,
 // or Event is non-nil.
 type GatewayFrame struct {
 	Request  *RequestFrame  `json:"request,omitempty"`

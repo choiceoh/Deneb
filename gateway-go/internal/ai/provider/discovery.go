@@ -5,7 +5,7 @@ import (
 )
 
 // NormalizeProviderID normalizes a provider identifier to its canonical form.
-// Mirrors src/agents/provider-id.ts normalizeProviderId.
+// Originally mirrored normalizeProviderId from the retired TypeScript gateway.
 func NormalizeProviderID(id string) string {
 	normalized := strings.TrimSpace(strings.ToLower(id))
 	switch normalized {

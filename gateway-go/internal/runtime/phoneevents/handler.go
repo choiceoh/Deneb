@@ -1,4 +1,5 @@
-// server_http_event_ingest.go — POST /api/event/ingest
+// Package phoneevents — POST /api/event/ingest
+// Formerly server_http_event_ingest.go.
 //
 // Receives a real-time event from the user's phone — today the authenticated
 // native-app path (miniapp.event.ingest, NotificationListener); the loopback

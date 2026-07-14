@@ -5,10 +5,10 @@
 # Used by AI agents to detect quality/performance regressions.
 #
 # Usage:
-#   scripts/baseline.sh save       # save current result as baseline
-#   scripts/baseline.sh compare    # compare current result vs baseline
-#   scripts/baseline.sh show       # show saved baseline for current branch
-#   scripts/baseline.sh history    # list all saved baselines
+#   scripts/dev/baseline.sh save       # save current result as baseline
+#   scripts/dev/baseline.sh compare    # compare current result vs baseline
+#   scripts/dev/baseline.sh show       # show saved baseline for current branch
+#   scripts/dev/baseline.sh history    # list all saved baselines
 #
 # Output (compare):
 #   BASELINE_COMPARE metric=85→90(+5) korean=20→25(+5) latency=2100→1800(-300ms)
@@ -39,7 +39,7 @@ _baseline_file() {
 cmd_save() {
   if [[ ! -f "$RESULT_FILE" ]]; then
     echo "ERROR: no result file found at $RESULT_FILE"
-    echo "  Run scripts/iterate.sh first to generate a result."
+    echo "  Run scripts/dev/iterate.sh first to generate a result."
     exit 1
   fi
 
@@ -71,13 +71,13 @@ cmd_compare() {
 
   if [[ ! -f "$baseline_file" ]]; then
     echo "NO_BASELINE: no baseline saved for branch $(_current_branch)"
-    echo "  Run: scripts/baseline.sh save"
+    echo "  Run: scripts/dev/baseline.sh save"
     exit 0
   fi
 
   if [[ ! -f "$RESULT_FILE" ]]; then
     echo "ERROR: no current result at $RESULT_FILE"
-    echo "  Run scripts/iterate.sh first."
+    echo "  Run scripts/dev/iterate.sh first."
     exit 1
   fi
 

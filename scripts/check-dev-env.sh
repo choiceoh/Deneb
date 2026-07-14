@@ -100,7 +100,7 @@ echo ""
 
 if [ "$MISSING" -gt 0 ]; then
     echo "Warning: $MISSING tool(s) missing. Some build targets may fail."
-    echo "See CLAUDE.md 'Agent Quick-Start' section for setup instructions."
+    echo "See CLAUDE.md Git/PR + Makefile `info` targets for setup instructions."
 else
     echo "All tools available. Ready to build."
 fi

@@ -40,9 +40,9 @@ sidebarTitle: "Papers Deep Dive"
 
 ### 코드 ground truth
 
-- recall 4소스(wiki/diary/session/hindsight) 병렬, 공유 1.5s 데드라인. 스코어: wiki `0.80+BM25`(최대 1.80), hindsight `0.92-0.05×rank`(0.60 바닥), diary 0.55, session 0.58 (`recall_preflight.go`, `recall_hindsight.go`).
+- recall 4소스(wiki/diary/polaris|transcript/file/org) 병렬, 공유 1.5s 데드라인. 스코어: wiki `0.80+BM25`(최대 1.80), hindsight `0.92-0.05×rank`(0.60 바닥), diary 0.55, session 0.58 (`recall_preflight.go`, `(removed; Hindsight retired)`).
 - dedup은 정규화 내용 키(80 rune) 기준 점수 승자 — **같은 사실의 중복**만 잡는다. **다른 값의 충돌**(담당자 김민준 vs 박수진)은 내용 키가 달라 dedup을 통과 → 둘 다 노출 → 모델이 `age=` 표기로 판단. 이 구조는 유지가 맞다 (서버가 충돌을 자동 중재하면 위키가 stale한 케이스에서 오답을 강제한다).
-- retain 페이로드: `User+Assistant 합본(6000자 캡) + metadata{source, retained_at=now}` (`hindsight_recorder.go`) — 원 발화 시각 메타 없음.
+- retain 페이로드: `User+Assistant 합본(6000자 캡) + metadata{source, retained_at=now}` (`(removed; Hindsight retired)`) — 원 발화 시각 메타 없음.
 - 위키 supersession 파이프라인 존재 (정정 사항 1). 단 superseded 페이지가 recall에 잡혀도 evidence 노트에 그 사실이 표기되지 않는다.
 - 회귀 하네스(`recall_bench_test.go`): 정적 코퍼스 8케이스, floor 80%. 사실 수정/망각 케이스 0.
 
@@ -54,7 +54,7 @@ sidebarTitle: "Papers Deep Dive"
 
 **1C. 무효화 전파 (중).** dreamer가 `MarkSuperseded`를 수행한 사이클 종료 시 hindsight에 1건 retain: "사실 갱신: `<old>` 내용은 `<new>`로 대체됨 (YYYY-MM-DD)". hindsight를 고치지 않고 검색 공간 안에 정정 사실 자체를 심는 접근. 부작용 낮음, 효과는 hindsight 하이브리드 검색의 랭킹에 의존 — 1A보다 후순위.
 
-**1D. 회귀 하네스 확장 (중).** `recall_bench_test.go`에 턴 단위 시나리오 추가: ①위키 주입 → 질의(구사실 적중) ②diary 주입(사실 변경) → 질의(신사실 적중) ③`MarkSuperseded` 시뮬레이션 → 질의(신사실 + `[대체됨]` 마커, 구사실 비인용) — `mustFind`/`mustNotFind` 어서션, floor 75%, `recall-metric.sh`에 두 번째 메트릭 라인 추가. MemoryAgentBench의 incremental-injection 정신의 단일 사용자 축소판.
+**1D. 회귀 하네스 확장 (중).** `recall_bench_test.go`에 턴 단위 시나리오 추가: ①위키 주입 → 질의(구사실 적중) ②diary 주입(사실 변경) → 질의(신사실 적중) ③`MarkSuperseded` 시뮬레이션 → 질의(신사실 + `[대체됨]` 마커, 구사실 비인용) — `mustFind`/`mustNotFind` 어서션, floor 75%, `scripts/dev/recall-metric.sh`에 두 번째 메트릭 라인 추가. MemoryAgentBench의 incremental-injection 정신의 단일 사용자 축소판.
 
 ## 발견 2 — 컨텍스트: collapse 회피 확정, ACON 경량 루프
 
@@ -65,7 +65,7 @@ sidebarTitle: "Papers Deep Dive"
 
 ### 코드 ground truth
 
-- polaris summarizer(`compaction/llm.go`)는 이미 정교함: 한국어 4섹션 고정 출력(Facts/Open Loops/Uncertain/Tool Outcomes) + **"이전 요약을 갱신하라" 증분 프롬프트**(재작성 아닌 갱신) + **anchor keywords 인프라**(`SetAnchorKeywords` — 위키 Tier1 제목의 사실 보존 강제) + fence 분리·budget 재배분(`polaris/engine.go:86-107`). ACE collapse 관점에서 안전.
+- polaris summarizer(`gateway-go/internal/pipeline/compaction/llm.go`)는 이미 정교함: 한국어 4섹션 고정 출력(Facts/Open Loops/Uncertain/Tool Outcomes) + **"이전 요약을 갱신하라" 증분 프롬프트**(재작성 아닌 갱신) + **anchor keywords 인프라**(`SetAnchorKeywords` — 위키 Tier1 제목의 사실 보존 강제) + fence 분리·budget 재배분(`polaris/engine.go:86-107`). ACE collapse 관점에서 안전.
 - dreaming 위키 병합 = append-only + supersedes (정정 사항 1·3). 갭: 비대 페이지 큐레이션 부재 (30KB+ 페이지가 누적 가능; 중복 "페이지" 병합 패스 `MergePage`는 있으나 페이지 "내부" 정리는 없음).
 - MEMORY.md(워크스페이스): 32K 캡, 자동 누적, 압축 메커니즘 없음 (`prompt/context_files.go`) — 비대화 1순위 문서.
 - "압축 후 정보 부족" 신호: agentlog에 직접 필드는 없으나 프록시 가능 — 압축 발생 run(`Compacted` 기록됨) 직후 N턴 내 과거 조회성 도구 호출(transcript 검색, read_spillover) 발생 여부.

@@ -1,6 +1,6 @@
 // Package approval manages execution approval requests and their lifecycle.
 //
-// This ports the TypeScript exec-approval system (src/gateway/server-methods/exec/exec-approval.ts)
+// Originally ported from the retired TypeScript gateway exec-approval system (was src/gateway/server-methods/exec/exec-approval.ts)
 // to Go, providing in-memory storage for approval requests with decision resolution.
 package approval
 

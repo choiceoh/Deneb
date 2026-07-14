@@ -55,7 +55,7 @@ const analysisSystemPrompt = "당신은 업무 메일 분석 어시스턴트입�
 	emojiRestraint
 
 const (
-	// Roomy budget: the local vLLM (step3.7) is the analysis model, and a tight
+	// Roomy budget: the local vLLM (step3.7) is the stage-2 main-role model, and a tight
 	// allowance combined with its default extended thinking left no room for the
 	// answer text (empty stream → "LLM 응답이 비어있습니다"). Thinking is disabled
 	// for this call (see AnalyzeEmail), so this is purely the summary budget.

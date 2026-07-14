@@ -1,7 +1,7 @@
 // gmail_analyze.go — miniapp.gmail.analyze RPC.
 //
 // Operator taps "🔍 분석" on a Mini App email detail; the gateway runs the
-// same analysis pipeline the agent's `gmail` tool uses (intent + key
+// same analysis pipeline the agent's `mail_archive` / mailanalysis path uses (intent + key
 // stakeholders + risks + next-step suggestions) and returns the result as
 // markdown for inline rendering.
 //
@@ -10,7 +10,7 @@
 // LLM call when LocalClient is absent, so the Mini App path doesn't need
 // to know about the two-stage detail.
 //
-// Long requests: the pipeline's stage-2 timeout is 240 seconds. The
+// Long requests: the pipeline's stage-2 timeout is 360 seconds. The
 // dispatcher wraps every handler in safeCall with the request context;
 // the HTTP bridge does not impose its own deadline, so the call is bound
 // by the operator's network and the LLM provider. Frontend shows a

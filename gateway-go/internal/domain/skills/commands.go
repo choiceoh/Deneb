@@ -1,6 +1,6 @@
 // commands.go builds slash command specifications from skill entries.
 //
-// This ports buildWorkspaceSkillCommandSpecs() from src/agents/skills/workspace.ts.
+// Originally ported buildWorkspaceSkillCommandSpecs from the retired TypeScript skills package.
 package skills
 
 import (

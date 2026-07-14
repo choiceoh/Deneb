@@ -1,9 +1,8 @@
-// server_http_miniapp_stream.go — Server-Sent Events (SSE) variant of the
-// miniapp chat bridge. The standalone native client posts one chat turn and
+// miniapp chat SSE stream (formerly server_http_miniapp_stream.go).
+// The standalone native client posts one chat turn and
 // receives the assistant text token-by-token instead of waiting for the full
 // reply (which the blocking miniapp.chat.send RPC returns in one shot).
-//
-// Pipeline:
+//// Pipeline:
 //
 //	POST /api/v1/miniapp/chat/stream
 //	  X-Deneb-Client-Token: <token>

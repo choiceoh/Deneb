@@ -42,7 +42,7 @@ globs: ["gateway-go/internal/pipeline/chat/denebui/**", "gateway-go/cmd/denebui-
 - 메일 분석 (능동): `mailanalysis/analyzer.go` `analysisSystemPrompt` +
   `DefaultPrompt` — 구조적 보고는 카드 도입부. 시스템 프롬프트 쪽 계약이
   운영자 커스텀 프롬프트 파일과 무관하게 적용되는 정본.
-- 하트비트 보고 (능동): `heartbeat/heartbeat_task.go` `heartbeatTriggerTemplate`
+- 하트비트 보고 (능동): `runtime/heartbeat/heartbeat_task.go` `heartbeatTriggerTemplate`
   — 비 NO_REPLY 보고는 카드 기본, 결정 요청은 인터랙티브 카드.
 - 채택률 관측: `run_lifecycle.go` `looksStructuredWithoutCard` — 카드 없이
   구조적 형태로 나간 턴을 Info 로그("deneb-ui adoption miss")로 계수.

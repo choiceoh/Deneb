@@ -23,11 +23,12 @@
 #   scripts/dev/puppet.sh history|status|logs|logs-broker|stop|restart
 #
 # Roles: every LLM role is possessed by default, each under its own seat name
-# (puppet/main-seat, lightweight-seat, tiny-seat, analysis-seat, fallback-seat,
+# (puppet/main-seat, lightweight-seat, tiny-seat, fallback-seat,
 # coding-seat, subagent-seat) so `pending` shows WHICH role a request came
 # from. coding-seat matters: code: sessions, implementer sub-agents, and the
 # skill nudger's background review all resolve the coding role — expect its
 # requests to appear mid-session; answer or `fail` them like any other.
+# (analysis/chatbot roles retired 2026-07 — not mapped.)
 #
 # Interop: the gateway uses the same binary/pid/log/state paths as
 # live-test.sh (per DENEB_INSTANCE), so live-test.sh logs/logs-errors/status
@@ -154,7 +155,6 @@ if os.environ.get("PUPPET_ALL_ROLES") == "1":
         ("lightweightModel", "lightweight-seat"),
         ("fallbackModel", "fallback-seat"),
         ("tinyModel", "tiny-seat"),
-        ("analysisModel", "analysis-seat"),
         # code: sessions, implementer sub-agents, and the skill nudger's
         # background review all resolve the coding role. Leaving it out let
         # those calls leak to a real model mid-puppet-session (measured:
@@ -163,9 +163,9 @@ if os.environ.get("PUPPET_ALL_ROLES") == "1":
         ("codingModel", "coding-seat"),
     ):
         agents[key] = "puppet/" + seat
-    # Opt-in roles (chatbot → chat: sessions, vision → image turns) route to
-    # main when unconfigured — which is already a seat. Possess them only
-    # when prod configured them, so puppet routing mirrors prod routing.
+    # Opt-in roles that may still appear in prod config (chatbot retired from
+    # model-roles but may linger; vision → image turns). Possess when present
+    # so puppet routing does not leak to a real model.
     for key, seat in (("chatbotModel", "chatbot-seat"),
                       ("visionModel", "vision-seat")):
         if agents.get(key):

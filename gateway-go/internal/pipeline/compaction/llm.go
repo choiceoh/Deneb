@@ -211,7 +211,7 @@ func summarizeInChunks(
 		chunks = chunks[:maxChunksPerPass]
 	}
 	// Cap per-chunk output: generation time, not prefill, dominates a chunk
-	// call (live: ~1.4K-token summaries ≈ 30-45s each on the analysis model),
+	// call (live: ~1.4K-token summaries ≈ 30-45s each on the main-role model),
 	// so an uncapped maxOutput/len share (~7K at a 140K budget) can single-
 	// handedly blow the shared STW deadline. 2048 ≈ 10:1 compression per
 	// chunk and double the floor — summaries stay substantive while a full

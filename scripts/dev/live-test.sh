@@ -11,37 +11,37 @@
 # mock_native_client.py).
 #
 # Usage:
-#   scripts/live-test.sh build              Build gateway from current tree
-#   scripts/live-test.sh start              Start dev gateway
-#   scripts/live-test.sh stop               Stop dev gateway
-#   scripts/live-test.sh restart            Rebuild + restart
-#   scripts/live-test.sh status             Check if dev gateway is running
-#   scripts/live-test.sh health             Hit /health endpoint
-#   scripts/live-test.sh smoke              Smoke test (health + ready)
-#   scripts/live-test.sh chat MESSAGE       Send chat via native miniapp RPC, wait for response
-#   scripts/live-test.sh quality [SCENARIO]  Run quality tests (native miniapp RPC)
-#   scripts/live-test.sh quality-custom MSG Quality test with custom message
-#   scripts/live-test.sh quality-list       List all available quality tests
-#   scripts/live-test.sh quality-history    Show past quality test runs
-#   scripts/live-test.sh quality-compare A B Compare two runs
-#   scripts/live-test.sh quality-trend NAME  Score trend for a test
+#   scripts/dev/live-test.sh build              Build gateway from current tree
+#   scripts/dev/live-test.sh start              Start dev gateway
+#   scripts/dev/live-test.sh stop               Stop dev gateway
+#   scripts/dev/live-test.sh restart            Rebuild + restart
+#   scripts/dev/live-test.sh status             Check if dev gateway is running
+#   scripts/dev/live-test.sh health             Hit /health endpoint
+#   scripts/dev/live-test.sh smoke              Smoke test (health + ready)
+#   scripts/dev/live-test.sh chat MESSAGE       Send chat via native miniapp RPC, wait for response
+#   scripts/dev/live-test.sh quality [SCENARIO]  Run quality tests (native miniapp RPC)
+#   scripts/dev/live-test.sh quality-custom MSG Quality test with custom message
+#   scripts/dev/live-test.sh quality-list       List all available quality tests
+#   scripts/dev/live-test.sh quality-history    Show past quality test runs
+#   scripts/dev/live-test.sh quality-compare A B Compare two runs
+#   scripts/dev/live-test.sh quality-trend NAME  Score trend for a test
 #
 # Benchmarks (Arena-Hard + MT-Bench + Oolong + LLM-as-Judge + Pairwise):
-#   scripts/live-test.sh bench [SUITE]       Run benchmark tests (all/challenge/multiturn/oolong)
-#   scripts/live-test.sh bench-judge MSG     LLM-as-Judge single message evaluation
+#   scripts/dev/live-test.sh bench [SUITE]       Run benchmark tests (all/challenge/multiturn/oolong)
+#   scripts/dev/live-test.sh bench-judge MSG     LLM-as-Judge single message evaluation
 #
-#   scripts/live-test.sh model [show|list|set MODEL]  Hot-swap model without restart
+#   scripts/dev/live-test.sh model [show|list|set MODEL]  Hot-swap model without restart
 #
-#   scripts/live-test.sh logs [N]           Tail dev gateway logs (default: 50 lines)
-#   scripts/live-test.sh logs-watch         Follow dev gateway logs in real-time
-#   scripts/live-test.sh logs-grep PATTERN  Search logs for pattern
-#   scripts/live-test.sh logs-errors        Show only error/warning lines from logs
-#   scripts/live-test.sh logs-since SECS    Show logs from last N seconds
+#   scripts/dev/live-test.sh logs [N]           Tail dev gateway logs (default: 50 lines)
+#   scripts/dev/live-test.sh logs-watch         Follow dev gateway logs in real-time
+#   scripts/dev/live-test.sh logs-grep PATTERN  Search logs for pattern
+#   scripts/dev/live-test.sh logs-errors        Show only error/warning lines from logs
+#   scripts/dev/live-test.sh logs-since SECS    Show logs from last N seconds
 #
 # Reproduction (AI agent reproduces user-reported symptoms via native miniapp RPC):
-#   scripts/live-test.sh chat-check MSG [--expect PAT] [--expect-tool TOOL] ...
-#   scripts/live-test.sh multi-chat MSG1 MSG2 MSG3 [--expect-context PAT]
-#   scripts/live-test.sh tool-check TOOL_NAME MSG
+#   scripts/dev/live-test.sh chat-check MSG [--expect PAT] [--expect-tool TOOL] ...
+#   scripts/dev/live-test.sh multi-chat MSG1 MSG2 MSG3 [--expect-context PAT]
+#   scripts/dev/live-test.sh tool-check TOOL_NAME MSG
 #
 # The dev gateway runs on port 18790 (separate from production on 18789).
 #
@@ -105,7 +105,7 @@ cmd_start() {
   fi
 
   echo "    WARN: Gateway started but /health not responding after 6s"
-  echo "    Check logs: scripts/live-test.sh logs"
+  echo "    Check logs: scripts/dev/live-test.sh logs"
   return 1
 }
 
@@ -265,11 +265,11 @@ cmd_parity() {
 }
 
 # Send a chat message via the native miniapp RPC surface and show the response.
-# Usage: scripts/live-test.sh chat "hello, what can you do?"
+# Usage: scripts/dev/live-test.sh chat "hello, what can you do?"
 cmd_chat() {
   local message="${1:-}"
   if [[ -z "$message" ]]; then
-    echo "Usage: scripts/live-test.sh chat MESSAGE"
+    echo "Usage: scripts/dev/live-test.sh chat MESSAGE"
     return 1
   fi
 
@@ -327,7 +327,7 @@ cmd_quality() {
 cmd_quality_custom() {
   local message="${1:-}"
   if [[ -z "$message" ]]; then
-    echo "Usage: scripts/live-test.sh quality-custom MESSAGE"
+    echo "Usage: scripts/dev/live-test.sh quality-custom MESSAGE"
     return 1
   fi
   shift
@@ -373,7 +373,7 @@ cmd_logs_watch() {
 cmd_logs_grep() {
   local pattern="${1:-}"
   if [[ -z "$pattern" ]]; then
-    echo "Usage: scripts/live-test.sh logs-grep PATTERN"
+    echo "Usage: scripts/dev/live-test.sh logs-grep PATTERN"
     return 1
   fi
   if [[ -f "$DEV_LOG" ]]; then
@@ -447,7 +447,7 @@ for m in data.get('available', []):
     set|switch)
       local model="${1:-}"
       if [[ -z "$model" ]]; then
-        echo "Usage: scripts/live-test.sh model set MODEL"
+        echo "Usage: scripts/dev/live-test.sh model set MODEL"
         echo "  예: model set zai/glm-5-turbo"
         echo "      model set google/gemini-3.1-pro-preview"
         echo "      model set main  (역할 이름도 가능)"
@@ -467,7 +467,7 @@ for m in data.get('available', []):
       ;;
 
     *)
-      echo "Usage: scripts/live-test.sh model [show|list|set MODEL]"
+      echo "Usage: scripts/dev/live-test.sh model [show|list|set MODEL]"
       echo ""
       echo "  show          현재 모델 표시 (기본)"
       echo "  list          사용 가능한 모델 목록"
@@ -608,7 +608,7 @@ PYEOF
   parity)        cmd_parity ;;
 
   help|*)
-    echo "Usage: scripts/live-test.sh COMMAND [ARGS]"
+    echo "Usage: scripts/dev/live-test.sh COMMAND [ARGS]"
     echo ""
     echo "Lifecycle:"
     echo "  build           Build gateway binary from current tree"

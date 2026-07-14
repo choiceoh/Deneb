@@ -1,6 +1,6 @@
 ---
 title: "도구 개선 방안 탐구"
-summary: "채팅 도구 시스템(스키마 40개, deferred 22개)의 선택 품질·토큰 효율·계측 루프·신규 도구를 코드 조사 기반으로 분석한 제안 노트."
+summary: "채팅 도구 시스템(스키마 ~45개, deferred ~23+)의 선택 품질·토큰 효율·계측 루프·신규 도구를 코드 조사 기반으로 분석한 제안 노트."
 read_when:
   - "채팅 도구 시스템(fetch_tools, 프리셋, 출력 캡)을 개선하려 할 때"
   - "도구 사용 통계·에러율 계측을 설계할 때"
@@ -13,7 +13,7 @@ sidebarTitle: "도구 개선 탐구"
 **Status:** ideation / proposal backlog (도구 시스템 단일 주제)
 **Audience:** Deneb 운영자 + 차기 AI 세션
 **Scope:** 채팅 도구 시스템 — 선택 품질, 토큰/컨텍스트 효율, 계측, 기존 도구 개선, 신규 도구.
-**Methodology:** `gateway-go/internal/pipeline/chat/{toolctx,tools,toolreg}` + 실행 경로(`tools.go`, `agentsys/agent`) 전수 조사, `docs/research/` 기존 노트([improvement-ideas](/research/improvement-ideas), [tool-interception-gap](/research/tool-interception-gap)) 교차 검토, 2026-07-05 프로덕션 측정치 인용. 범용 백로그와 겹치는 항목은 여기서 재서술하지 않고 앵커로 참조한다.
+**Methodology:** `gateway-go/internal/pipeline/chat/{toolport,tooldeps,tools,toolreg}` + 실행 경로(`tools.go`, `ai/agent`) 전수 조사, `docs/research/` 기존 노트([improvement-ideas](/research/improvement-ideas), [tool-interception-gap](/research/tool-interception-gap)) 교차 검토, 2026-07-05 프로덕션 측정치 인용. 범용 백로그와 겹치는 항목은 여기서 재서술하지 않고 앵커로 참조한다.
 
 > **읽는 법.** 각 제안은 **현황/근거 → 제안 → 예상 효과 → 우선순위(P0~P3 / S·M·L) → 측정 방법** 순. 채택 여부는 운영자 판단이며, 합의된 항목만 별도 PR로 진행한다.
 
@@ -38,15 +38,15 @@ sidebarTitle: "도구 개선 탐구"
 
 ---
 
-## 1. 현재 도구 시스템 지도 (2026-07-05 기준)
+## 1. 현재 도구 시스템 지도 (2026-07-14 기준)
 
 개선 논의의 공통 전제. 수치는 코드에서 직접 집계했다.
 
-- **도구 스키마 40개** (`toolreg/tool_schemas.json` — 파라미터·max_output만 보유, 설명은 등록 코드에), 등록 호출 39곳 + chat 측 별도 등록(fetch_tools, code_action, pilot). 그중 **deferred 22개** (`Deferred: true`, `toolreg/core.go`).
-- **deferred 메커니즘**: 초기 Tools 배열에서 스키마 제외, 시스템 프롬프트에는 이름 + 80 rune 절단 설명만 노출(`prompt/system_prompt.go:265-270`). 모델이 `fetch_tools`(exact names 또는 BM25 질의, `tools/fetch_tools.go`)로 활성화하면 다음 턴부터 `DynamicToolsProvider`가 스키마 주입.
+- **도구 스키마 ~45개** (`toolreg/tool_schemas.json` — 파라미터·max_output만 보유, 설명은 등록 코드에; `toolreg_boundary_test.go` `allSchemaCases`), 등록은 toolreg + chat 측 별도(fetch_tools, code_action, pilot). 그중 **deferred ~23+** (`Deferred: true`, `toolreg/core.go`).
+- **deferred 메커니즘**: 초기 Tools 배열에서 스키마 제외, 시스템 프롬프트에는 이름 + 80 rune 절단 설명만 노출(`prompt/system_prompt.go`). 모델이 `fetch_tools`(exact names 또는 BM25 질의, `tools/runtimeops/fetch_tools.go`)로 활성화하면 다음 턴부터 `DynamicToolsProvider`가 스키마 주입.
 - **프리셋 8종** (`toolpreset/preset.go`): conversation/boot/self-review/researcher/implementer/verifier/wiki-research/coding. 노출·활성화·실행 4지점에서 게이트.
 - **실행 경로 안전장치** (`chat/tools.go:97` `ToolRegistry.Execute`, 단일 평면 레지스트리): malformed JSON 복구(`tool_argrepair.go`) → 프리셋 방어 → `$ref` 해석 → RunCache(grep만 캐시) → 실행 → 24K head/tail 절단 + 스필오버 → 캐시 무효화 → 사후처리 → 선택적 LLM 압축(`compress:true`, 16000자 이상만 — `localai_hooks.go:44`).
-- **루프 감지** (`agentsys/agent/tool_loop.go:40-42`): warn 10 / critical 20 / breaker 30, 같은 경로 편집 6회 넛지.
+- **루프 감지** (`ai/agent/tool_loop.go:40-42`): warn 10 / critical 20 / breaker 30, 같은 경로 편집 6회 넛지.
 - **미지 도구**: Levenshtein "Did you mean" 제안(`chat/tool_suggest.go`).
 - **병렬 실행은 제거됨** — 도구는 항상 모델 방출 순서대로 순차 실행.
 
@@ -58,21 +58,21 @@ sidebarTitle: "도구 개선 탐구"
 
 ### 2.1 (D) deferred 설명 80자 절단 감사 (**P1 / S**)
 
-- **현황**: deferred 도구 22개는 시스템 프롬프트에 `truncateDescription(desc, 80)` (rune 기준, `prompt/system_prompt.go:268,593-598`)으로만 보인다. 모델이 "이 도구를 fetch할까"를 판단하는 유일한 근거가 이 80자다. 실제 사례 — `mail_archive` 설명(`toolreg/core.go:51`)은 200+ rune인데, 80 rune 절단 시 `action=list|search|read|thread|project_history` 열거와 "업무 맥락·미팅 준비에 우선 사용" 트리거 문구가 **모두 잘린다**. 프롬프트 감사(2026-06-12)의 "HOW는 fetch 시점에 배달" 원칙(graphify 패턴)은 옳지만, **WHEN(트리거)이 80자 안에 들어있는지**는 아무도 감사하지 않았다.
-- **제안**: ① 22개 deferred 설명의 첫 80 rune을 일괄 감사해 "무엇+언제 쓰나"가 앞에 오도록 재배치(설명 뒷부분의 HOW는 그대로 유지). ② 선택적으로 `tool_schemas.json`에 `prompt_summary` 필드를 신설해 절단 대신 명시적 요약을 쓰게 한다(생성기 `cmd/tool-schema-gen` 수정 포함 — 규모가 커지므로 ①로 부족할 때만).
+- **현황**: deferred 도구 ~23+개는 시스템 프롬프트에 `truncateDescription(desc, 80)` (rune 기준)으로만 보인다. 모델이 "이 도구를 fetch할까"를 판단하는 유일한 근거가 이 80자다. 실제 사례 — `mail_archive` 설명은 200+ rune인데, 80 rune 절단 시 `action=list|search|read|thread|project_history` 열거와 "업무 맥락·미팅 준비에 우선 사용" 트리거 문구가 **모두 잘린다**. 프롬프트 감사(2026-06-12)의 "HOW는 fetch 시점에 배달" 원칙(graphify 패턴)은 옳지만, **WHEN(트리거)이 80자 안에 들어있는지**는 아무도 감사하지 않았다.
+- **제안**: ① deferred 설명의 첫 80 rune을 일괄 감사해 "무엇+언제 쓰나"가 앞에 오도록 재배치(설명 뒷부분의 HOW는 그대로 유지). ② 선택적으로 `tool_schemas.json`에 `prompt_summary` 필드를 신설해 절단 대신 명시적 요약을 쓰게 한다(생성기 `cmd/tool-schema-gen` 수정 포함 — 규모가 커지므로 ①로 부족할 때만).
 - **예상 효과**: deferred 도구 미발견(모델이 web/exec로 우회하거나 포기) 감소. 캐시 영향 없음 — static 블록 키에 이미 deferred 목록이 포함되어 설명 변경은 1회 cache miss 후 안정.
 - **측정**: (B)의 계측으로 "deferred 도구별 fetch율 vs 절단 전후" 비교. 단기로는 `scripts/dev/live-test.sh chat-check "<트리거 문장>" --expect-tool fetch_tools` 시나리오 몇 개로 스팟 확인.
 
 ### 2.2 (A) fetch_tools 이미-활성 단락 (**P1 / S**) (효율 측면은 §3.1)
 
-- **현황**: 프로덕션 측정(2026-07-05, 14일 agent-logs): **fetch_tools 호출의 20%가 런 내 동일입력·동일결과 반복, 한 메일분석 런에서 최대 7회 재fetch** (`pipeline/compaction/protected.go:12-17` 주석에 기록). #3089가 컴팩션 cheap 패스에서 fetch_tools 결과를 보호해 "지워져서 다시 fetch"는 막았지만, `tools/fetch_tools.go`에는 **"이미 활성화된 도구" 검사 자체가 없다** — 같은 이름을 다시 부르면 스키마 전문을 또 반환한다(`fetch_tools.go:102-135`).
-- **제안**: 활성 집합을 알면 재요청 시 스키마 재출력 대신 `"already active: X — call it directly"` 한 줄을 반환한다. 구현 시 동시성 주의 — `DeferredActivation.seen`은 executor 고루틴 전용이라(`toolctx/context.go` 주석 명시) 도구 고루틴에서 직접 읽으면 안 된다. 옵션 ① executor가 턴 시작 시 불변 active-set 스냅샷을 ctx에 주입(락 불필요, 같은 턴 내 중복은 놓침), 옵션 ② seen을 mutex 보호로 전환(완전하지만 concurrency.md 체크리스트 대상). ①이 단순하고 반복의 대부분(턴 경계 넘어 재fetch)을 잡는다.
+- **현황**: 프로덕션 측정(2026-07-05, 14일 agent-logs): **fetch_tools 호출의 20%가 런 내 동일입력·동일결과 반복** 이력이 있었다. #3089가 컴팩션 cheap 패스에서 fetch_tools 결과를 보호했고, **§6.5에서 already-active 단락이 랜딩**(`tools/runtimeops/fetch_tools.go` — 이미 활성면 스키마 재출력 대신 한 줄). 아래 제안은 역사적 설계 노트; 현행은 §6.5 기준.
+- **제안**: 활성 집합을 알면 재요청 시 스키마 재출력 대신 `"already active: X — call it directly"` 한 줄을 반환한다. 구현 시 동시성 주의 — `DeferredActivation.seen`은 executor 고루틴 전용이라(`toolport/context.go` 주석 명시) 도구 고루틴에서 직접 읽으면 안 된다. 옵션 ① executor가 턴 시작 시 불변 active-set 스냅샷을 ctx에 주입(락 불필요, 같은 턴 내 중복은 놓침), 옵션 ② seen을 mutex 보호로 전환(완전하지만 concurrency.md 체크리스트 대상). ①이 단순하고 반복의 대부분(턴 경계 넘어 재fetch)을 잡는다.
 - **예상 효과**: 반복 1회당 스키마 전문(수백~수천 토큰) 절약 + 모델의 "activated, call directly" 신호 강화.
 - **측정**: #3089 이후 반복률을 먼저 재측정(20%는 보호 이전 수치)하고, 단락 도입 후 다시 측정. 둘 다 agent-logs의 turn.tool 입력 해시로 산출 가능.
 
 ### 2.3 (E) fetch_tools 한국어 질의 매칭 보강 (**P2 / S-M**)
 
-- **현황**: BM25 토크나이저는 비문자·비숫자 rune 에서 분리하는 whole-token 매칭이다(`tools/bm25.go:39-45`, 스테밍 없음). 한글도 letter라 색인은 되지만, ① 조사·어미가 붙은 질의 토큰("메일을")은 색인 토큰("메일")과 불일치, ② 복합어 색인 토큰("자동보관")은 질의 토큰("보관")과 불일치. substring 폴백(`fetch_tools.go:90-96`)은 **질의 전체 문자열**이 설명에 그대로 들어있어야 발동해 다어절 한국어 질의를 구제하지 못한다.
+- **현황**: BM25 토크나이저는 비문자·비숫자 rune 에서 분리하는 whole-token 매칭이다(`tools/runtimeops/bm25.go`, 스테밍 없음). 한글도 letter라 색인은 되지만, ① 조사·어미가 붙은 질의 토큰("메일을")은 색인 토큰("메일")과 불일치, ② 복합어 색인 토큰("자동보관")은 질의 토큰("보관")과 불일치. substring 폴백은 **질의 전체 문자열**이 설명에 그대로 들어있어야 발동해 다어절 한국어 질의를 구제하지 못한다.
 - **제안**: 작은 단계 둘 중 하나 — ① 폴백을 질의 전체가 아닌 **토큰 단위** substring으로 완화(질의 토큰 중 하나라도 설명에 부분일치하면 후보 유지, 기존 `searchResultLimit=5`·score floor 유지), ② 한글 토큰에 한해 2-gram 보조 색인. ①이 코드 몇 줄로 끝나며 영어 경로는 불변. 풀 임베딩 라우팅은 [improvement-ideas](/research/improvement-ideas) §2.2의 P3/L 항목 — 이 제안은 그 전 단계의 저비용 보강이다.
 - **예상 효과**: 한국어 질의(`fetch_tools(query="메일 보관함 검색")`)의 미스매치로 인한 "No deferred tools match" → 모델 우회 행동 감소.
 - **측정**: 한국어 질의 세트 10~20개로 before/after 매칭률 테이블(단위 테스트로 고정 — `fetch_tools_test.go` 확장).
@@ -94,7 +94,7 @@ sidebarTitle: "도구 개선 탐구"
 
 ### 3.2 (C) per-tool MaxOutput 감사 (**P2 / S**) (B 이후)
 
-- **현황**: 도구 출력은 기본 24K chars에서 head/tail 절단+스필오버된다. per-tool 캡은 `tool_schemas.json`의 `max_output` → `ToolMaxOutputs()`로 오버라이드하는데, **40개 중 6개만 설정**되어 있다: calendar/contacts/deal_ledger 8000, exec 32000, notebook 24000, wiki 20000 (`toolreg/tool_schemas_gen.go`). 나머지 34개는 실측 없이 24K 기본을 쓴다.
+- **현황**: 도구 출력은 기본 24K chars에서 head/tail 절단+스필오버된다. per-tool 캡은 `tool_schemas.json`의 `max_output` → `ToolMaxOutputs()`로 오버라이드하는데, **~45개 중 6개만 설정**되어 있다: calendar/contacts/deal_ledger 8000, exec 32000, notebook 24000, wiki 20000 (`toolreg/tool_schemas_gen.go`). 나머지 ~39개는 실측 없이 24K 기본을 쓴다.
 - **제안**: (B)의 출력크기 계측(도구별 출력 chars 분포)이 쌓이면, 상위 출력 도구부터 캡을 데이터 기반으로 조정한다. 예상 후보: `sessions`(히스토리 덤프), `polaris`(회상), `web`(페이지 본문), `graphify`. 계측 전 짐작으로 조정하지 않는다 — 이 항목이 P2인 이유이자 (B)가 선행인 이유.
 - **예상 효과**: 장기 런(메일분석·크론)의 히스토리 비대 완화. 컴팩션 cheap 패스 부담 감소.
 - **측정**: (B) 지표에서 도구별 p50/p95 출력 chars, 스필오버 발생률, `read_spillover` 회수율(스필오버를 실제로 다시 읽는 비율 — 낮으면 캡을 더 줄여도 된다는 신호).
@@ -118,13 +118,13 @@ sidebarTitle: "도구 개선 탐구"
 - **측정**: 이 항목 자체가 측정 인프라. 완료 기준: `observe`로 14일 창의 도구별 calls/errors/avgMs/repaired/unknown/loopBlocked/출력분포를 한 번에 볼 수 있다.
 - **참조**: 세션 종료 요약 카드([improvement-ideas](/research/improvement-ideas) #9(§4.2)), 도구 선택 trace 로그([improvement-ideas](/research/improvement-ideas) #13(§4.3))는 이 데이터의 소비처 후보 — 중복 구현하지 말 것.
 
-### 4.2 (F) insights 스테일 주석 (**P3 / XS**) (발견 사항)
+### 4.2 (F) insights 스테일 주석 — **DONE**
 
-`runtime/insights/engine.go:175-177` 주석은 *"Deneb's default pipeline does not persist per-tool invocation counts, so this is empty unless future code installs a hook"*이라 하지만, 훅은 이미 프로덕션에 배선되어 있다(`server_rpc_session.go:131`의 `SetToolAggregator`). 차기 세션이 이 주석을 믿고 "도구 통계 없음"으로 오판할 수 있다. (B) 작업 시 함께 수정 권장 — 문서만으로는 코드 변경하지 않으므로 여기 기록만 한다.
+`runtime/insights/engine.go` 주석은 실제 배선(`SetToolAggregator`)에 맞게 갱신됨 (§6.5).
 
 ### 4.3 (G) OnBeforeToolCall 활용 스케치 (**P3 / M**)
 
-`StreamHooks.OnBeforeToolCall`(block 전용 pre-execution 훅, `agentsys/agent/hooks.go`)은 구현되어 있으나 프로덕션 사용처가 없다([tool-interception-gap](/research/tool-interception-gap) 결론: "Scenario C, no refactor"). 유스케이스가 생기면 첫 후보는 **per-run 도구별 호출 예산**(예: `web` 런당 N회 초과 시 block + "예산 소진, 지금까지 결과로 종합하라") — 루프 감지가 "같은 호출 반복"을 잡는 것과 달리 "다른 입력의 과다 호출"을 잡는다. 단 (B) 계측에서 과다 호출 패턴이 실재하는지 확인 전에는 착수하지 않는다.
+`StreamHooks.OnBeforeToolCall`(block 전용 pre-execution 훅, `ai/agent/hooks.go`)은 구현되어 있고 **프로덕션 소비자 둘**(goal-loop idempotency + untrusted-origin gate; [tool-interception-gap](/research/tool-interception-gap) §4/§10). 추가 유스케이스 후보: **per-run 도구별 호출 예산**(예: `web` 런당 N회 초과 시 block) — 루프 감지가 "같은 호출 반복"을 잡는 것과 달리 "다른 입력의 과다 호출"을 잡는다. 단 (B) 계측에서 과다 호출 패턴이 실재하는지 확인 전에는 착수하지 않는다.
 
 ---
 
@@ -132,8 +132,8 @@ sidebarTitle: "도구 개선 탐구"
 
 위 구조 제안과 별개로, 조사 중 발견한 도구별 소항목:
 
-- **`morning_letter` 날씨 지역 하드코딩**: `tools/morning_letter.go:228-230`이 `wttr.in/Gwangju,South+Korea`를 하드코딩. §6.1의 `weather` 도구 승격과 함께 지역을 설정/컨텍스트에서 받도록 정리.
-- **RunCache 캐시 대상 확대 검토**: 현재 grep만 캐시 가능(`toolctx/run_cache.go`), 시스템 프롬프트는 "find/tree results are cached within a run"이라 안내(`system_prompt.go:282`). 읽기 전용 도구 중 런 내 재호출이 잦은 것(예: `contacts`, `calendar` 조회)이 있는지 (B) 데이터로 확인 후 확대. 프롬프트 문구와 실제 캐시 대상의 정합도 이때 맞춘다.
+- **`morning_letter` 날씨 지역 하드코딩**: `tools/routine/morning_letter.go`가 `wttr.in/Gwangju,South+Korea`를 하드코딩. §6.1의 `weather` 도구 승격과 함께 지역을 설정/컨텍스트에서 받도록 정리.
+- **RunCache 캐시 대상 확대 검토**: 현재 grep만 캐시 가능(`toolport/run_cache.go`), 시스템 프롬프트는 "find/tree results are cached within a run"이라 안내(`system_prompt.go:282`). 읽기 전용 도구 중 런 내 재호출이 잦은 것(예: `contacts`, `calendar` 조회)이 있는지 (B) 데이터로 확인 후 확대. 프롬프트 문구와 실제 캐시 대상의 정합도 이때 맞춘다.
 - **deferred 설명의 언어 혼재**: 코어 도구(read/grep 등)는 영어, 업무 도구(mail_archive/phone 등)는 한국어 설명. 모델 선택 품질에 유의미한 차이가 있는지는 미검증 — (D) 감사 시 일관성 기준(트리거 문구는 한국어 우선)을 함께 정한다.
 
 코드 위생 관련 인접 항목([improvement-ideas](/research/improvement-ideas) §1.1의 run_exec.go 분리, §3.2의 CJK 절단 테스트)은 기존 백로그 참조.
@@ -146,7 +146,7 @@ sidebarTitle: "도구 개선 탐구"
 
 ### 6.1 `weather` (**P2 / S**) (기존 코드 승격)
 
-- **근거**: 날씨 fetch·파싱 코드가 **이미 존재**하지만 morning_letter 내부 전용이다(`tools/morning_letter.go` — wttr.in 호출, 지역 하드코딩). "내일 비 와?", "우산 챙겨야 해?"는 현재 `web` 도구(페이지 fetch + 본문 토큰)로 처리되어 비싸고 느리다.
+- **근거**: 날씨 fetch·파싱 코드가 **이미 존재**하지만 morning_letter 내부 전용이다(`tools/routine/morning_letter.go` — wttr.in 호출, 지역 하드코딩). "내일 비 와?", "우산 챙겨야 해?"는 현재 `web` 도구(페이지 fetch + 본문 토큰)로 처리되어 비싸고 느리다.
 - **제안**: fetch 로직을 공용으로 추출해 `weather(when=now|today|tomorrow, location?)` deferred 도구로 노출. morning_letter는 같은 코드를 소비(중복 제거). 기본 지역은 설정으로.
 - **리스크**: 낮음. 외부 의존은 기존과 동일(wttr.in).
 
@@ -172,7 +172,7 @@ sidebarTitle: "도구 개선 탐구"
 
 로드맵 1~2단계는 이 문서와 같은 브랜치(PR #3117)에서 즉시 구현됐다:
 
-- **B**: `TurnToolData.Blocked/UnknownTool` + `RunEndData.RepairedToolCalls` → `agentlog.Aggregate`가 `ToolStat.Repaired/Unknown/Blocked/TotalOutputChars/MaxOutputChars`로 폴딩 → `observe(what=behavior)` 도구 라인에 비정상 카운터·출력 크기 노출. unknown 판정은 `agent.ErrUnknownTool` 센티널(chat `unknownToolError`가 래핑), repaired는 run-scoped `toolctx.ToolExecStats`(chat 레이어만 관측 가능해 run.end에 탑승).
+- **B**: `TurnToolData.Blocked/UnknownTool` + `RunEndData.RepairedToolCalls` → `agentlog.Aggregate`가 `ToolStat.Repaired/Unknown/Blocked/TotalOutputChars/MaxOutputChars`로 폴딩 → `observe(what=behavior)` 도구 라인에 비정상 카운터·출력 크기 노출. unknown 판정은 `agent.ErrUnknownTool` 센티널(chat `unknownToolError`가 래핑), repaired는 run-scoped `toolport.ToolExecStats`(chat 레이어만 관측 가능해 run.end에 탑승).
 - **A**: `DeferredActivation`에 executor 드레인 시 갱신되는 불변 active 스냅샷(`IsActive`) 추가 — 문서의 설계 옵션 ① 채택. fetch_tools는 이미 활성인 도구에 스키마 재출력 대신 "Already active — call directly" 한 줄 반환(같은 턴 내 중복은 통과, 문서화된 트레이드오프). 반복률 재측정은 (B) 지표로 운영 데이터 축적 후.
 - **D**: 22개 감사 결과 최악 5건(mail_archive·research_panel·phone_read·observe·sessions)의 트리거 문구를 첫 80 rune 안으로 전진 배치. `prompt_summary` 필드 신설(②)은 불필요 판정 — ①로 충분.
 - **F**: `insights/engine.go` 스테일 주석 2곳을 실제 배선 사실로 갱신.

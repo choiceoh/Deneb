@@ -272,7 +272,7 @@ func (h *GatewayHub) Validate() error {
 		missing = append(missing, "Logger")
 	}
 	// Optional (nil-safe or late-bound):
-	//   InternalHooks — explicitly nil-safe in handlers
+	//   WikiStore / ContactsStore / Insights / LocalAIHub / EmbeddingClient
 	//   CronPersistLog — optional run log
 	//   Version — empty string is valid
 

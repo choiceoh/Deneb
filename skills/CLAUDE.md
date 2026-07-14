@@ -29,7 +29,7 @@ description: One-line description of what skills belong in this category.
 
 | Category | Description | Skills |
 |---|---|---|
-| `coding` | Software development, code generation, version control, CI/CD | evolution-proposal, github, skill-creator, skill-evolution, skill-factory |
+| `coding` | Software development, code generation, version control, CI/CD | evolution-proposal, github, self-evolve, skill-creator, skill-evolution, skill-factory |
 | `productivity` | Daily workflows, documents, summarization, personal automation | contract-review, decision-premortem, deep-research, email-analysis, fact-check, meeting-minutes, morning-letter, proactive-gate, retrieval-plan, session-logs, weekly-report |
 | `devops` | System monitoring, terminal management, infrastructure | (none — 2026-07 사용량 감사로 은퇴; 필요 시 git 히스토리에서 복원) |
 | `security` | Security, secrets management, and credential handling | (none) |
@@ -52,7 +52,7 @@ Adapted from hermes-agent's framework:
 - Needs custom processing logic that must execute precisely every time
 - Handles binary data, streaming, or real-time events
 - Requires persistent state or in-process memory
-- Examples: browser automation, TTS, Vega search, memory operations
+- Examples: browser automation, TTS, knowledge/wiki write paths, mail_archive
 
 ## SKILL.md Frontmatter Standard
 

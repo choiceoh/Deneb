@@ -41,7 +41,7 @@ Trace a tool call from model response to execution:
    (`executor.go:265-277`). That function:
    - fires `OnToolStart` / `OnToolEmit` hooks for streaming clients,
    - runs the `ToolLoopDetector`,
-   - calls `OnBeforeToolCall(name, id, input)` — if it returns `block=true`, short-circuits with an error tool_result (`executor.go:577-591`). No one currently sets this hook.
+   - calls `OnBeforeToolCall(name, id, input)` — if it returns `block=true`, short-circuits with an error tool_result (`executor.go:577-591`). Production consumers: goal-loop idempotency guard + untrusted-origin gate (§4, §10).
    - invokes `tools.Execute(ctx, tc.Name, tc.Input)` — **the sole dispatch point**.
 3. **`tools` is `*chat.ToolRegistry`** (`gateway-go/internal/pipeline/chat/tools.go:38`),
    built per-handler in the chat pipeline startup and handed to the agent via
@@ -50,7 +50,7 @@ Trace a tool call from model response to execution:
    preset filtering, handles `$ref` injection, runs the tool function, applies
    post-processing, then returns.
 
-There is **no fork in this path**. Every tool name — fs, exec, grep, git, memory, polaris, gmail, sessions, sessions_spawn, subagents, cron, web, wiki, message, send_file, skills, fetch_tools, gateway, read_spillover, process — is a plain entry in the same map.
+There is **no fork in this path**. Every tool name — read, write, edit, grep, exec, knowledge, polaris, mail_archive, sessions, sessions_spawn, subagents, cron, web, wiki, message, send_file, skills, fetch_tools, gateway, read_spillover, process — is a plain entry in the same map.
 
 ## 3. Deneb tool inventory — agent-scoped vs registry
 
@@ -63,7 +63,7 @@ The Hermes axis does not apply cleanly because **nothing in Deneb is agent-insta
 | `self._session_db` | `polaris.Store`, `transcript.TranscriptStore` | DI via `CoreToolDeps` |
 | `self.clarify_callback` | (no equivalent) | — |
 | `self._memory_manager` (Honcho/Mem0 intercept) | (no equivalent) | — |
-| `self._dispatch_delegate_task` | `sessions_spawn` tool | Registry + `toolctx.SessionDeps` |
+| `self._dispatch_delegate_task` | `sessions_spawn` tool | Registry + `tooldeps.SessionDeps` |
 
 **Deneb injects state through `CoreToolDeps`** at registration time (`toolreg/core.go`). The registry call `tools.ToolPolaris(store, localAI)` closes over `store`, so the executor inside the registry is still stateful, just closed-over rather than method-bound. This is the Go idiom for the same thing.
 
@@ -71,8 +71,8 @@ Meaningful categories today:
 
 - **Stateless file I/O**: read, write, edit, grep (closed over `workspaceDir`)
 - **Stateful session**: sessions, sessions_spawn, subagents, polaris (closed over stores)
-- **External I/O**: exec, web, gmail, message, send_file
-- **Runtime plugins (deferred activation via `fetch_tools`)**: gateway, process, skills, send_file, sessions, gmail, polaris, read_spillover
+- **External I/O**: exec, web, mail_archive, message, send_file
+- **Runtime plugins (deferred activation via `fetch_tools`)**: gateway, process, skills, send_file, sessions, mail_archive, polaris, read_spillover
 - **Meta**: fetch_tools (registers other tools on demand)
 
 No tool name collides with a plugin-provided tool, and there is no external memory provider shipping its own tool surface. So the Hermes "memory_manager.has_tool()" claim mechanism has no caller in Deneb today.
@@ -98,7 +98,7 @@ This is sufficient for the policy/guard use case (audit, deny-list, per-turn bud
 | Hermes capability | Deneb today | Gap? |
 |---|---|---|
 | Agent-scoped tools with instance state | Closures over DI-injected deps; equivalent outcome | **No gap.** |
-| Plugin pre-tool-call block | `OnBeforeToolCall` hook (unused) | **No gap.** |
+| Plugin pre-tool-call block | `OnBeforeToolCall` hook (two consumers; block-only) | **No gap.** |
 | External memory provider claiming tool names | No caller; no plugin surface exists today | **Latent gap — but no demand.** |
 | Ordered chain with early exit | Single registry lookup; preset filtering is the only pre-execute gate | **No gap given current demand.** |
 | Post-exec side effects tied to specific tools (`on_memory_write`) | Post-processors (`PostProcessRegistry`) run on name-match after execution | **No gap.** Deneb's post-processor model is cleaner. |
@@ -114,7 +114,7 @@ This is sufficient for the policy/guard use case (audit, deny-list, per-turn bud
    ("fewer moving parts, not more options").
 
 2. **The two legitimate use cases are already covered.**
-   - Pre-execute block / audit → `OnBeforeToolCall` (implemented, unused).
+   - Pre-execute block / audit → `OnBeforeToolCall` (implemented; goal-loop + untrusted-origin gate).
    - Post-execute side effects on specific tools → `PostProcessRegistry`
      (implemented, used for e.g. file-path injection).
 
@@ -127,7 +127,7 @@ This is sufficient for the policy/guard use case (audit, deny-list, per-turn bud
 4. **If the future introduces an external memory provider** (Honcho-equivalent,
    Mem0 port, etc.), the right extension is *not* a generic interceptor chain
    but a specific adapter that registers its tools into the existing registry
-   via `RegisterTool(toolctx.ToolDef{...})`. The external package already
+   via `RegisterTool(toolport.ToolDef{...})`. The external package already
    owns its name; no interception is needed — just registration with a closure
    over the provider's client.
 
@@ -162,7 +162,7 @@ Scenario C held. The cross-cutting concerns a generic interceptor chain would
 have carried were added as explicit stages inside `ToolRegistry.Execute` (plus
 the existing hooks), in dispatch order:
 
-- **Dry-run** — `toolctx.WithToolDryRun` / `RunParams.ToolDryRun` suppresses
+- **Dry-run** — `toolport.WithToolDryRun` / `RunParams.ToolDryRun` suppresses
   every tool not on a read-only allowlist (`tool_dry_run.go`, default-deny),
   so eval/replay harnesses drive the real loop without side effects.
 - **Run-cache** — exec now invalidates via

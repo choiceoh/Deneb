@@ -75,7 +75,7 @@ Codex CLI's global config: auto-worktree, codegraph MCP, nudge/remind/sync hooks
 
 ```bash
 scripts/dev/zcode-cleanup.sh           # dry-run — show what would be removed
-scripts/dev/zcode-push.sh --apply      # actually remove stale/merged worktrees
+scripts/dev/zcode-cleanup.sh --apply      # actually remove stale/merged worktrees
 ```
 
 Removes worktrees whose branch is merged into `main` or older than N days (default 7) with no uncommitted changes. Preserves dirty worktrees.
@@ -130,7 +130,7 @@ rpcmap miniapp.people.list           # RPC method → handler
 rpcmap wiki                          # chat tool → handler
 rpcmap chat.delivery_failed          # event broadcast → event type
 rpcmap --handler peopleList          # reverse lookup
-rpcmap --list                        # dump everything (277 mappings)
+rpcmap --list                        # dump everything (~280 mappings)
 ```
 
 Feed the resolved handler to `codegraph node <handler>` for full source + callers/callees.

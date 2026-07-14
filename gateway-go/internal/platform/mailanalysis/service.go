@@ -95,7 +95,7 @@ type Config struct {
 	// the business documents arriving as attachments. nil = attachment gate off.
 	AttachmentExtractFn func(ctx context.Context, data []byte, filename, mimeType string) string
 
-	// ThinkingKwarg is the analysis model's chat_template_kwargs thinking
+	// ThinkingKwarg is the stage-2 main-role model's chat_template_kwargs thinking
 	// off-switch (modelcaps.ThinkingToggleKwarg). Forwarded to PipelineDeps so the
 	// "disabled" thinking config truly stops reasoning on dual-mode vLLM models
 	// (else they exhaust the budget and return empty). "" for non-vLLM models.

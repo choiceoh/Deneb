@@ -105,10 +105,11 @@ PRUNE_DIRS = {
 # cohesion violation. Grounded in gateway-go/CLAUDE.md's module map. Unknown
 # top-level packages default to mid-rank (2) and are never flagged as sources.
 LAYER_RANK = {
-    "runtime": 5,   # HTTP server, RPC dispatch, session — top orchestration
-    "agentsys": 4,  # agent loop + hooks
+    "runtime": 5,   # HTTP server, RPC dispatch — top orchestration
     "pipeline": 3,  # chat pipeline: prompt, tools, context
-    "domain": 2, "platform": 2, "ai": 2,  # business logic + integrations + LLM
+    # agent loop lives under ai/agent (formerly agentsys/); keep ai at mid-rank
+    # so pipeline→ai imports are not flagged as upward.
+    "domain": 2, "platform": 2, "ai": 2,  # business logic + integrations + LLM/agent
     "core": 1, "infra": 1, "hanja": 1,    # foundational
     "testutil": 0,  # test-only helper (downward from everyone)
 }
@@ -118,11 +119,10 @@ DEFAULT_RANK = 2
 # high-rank top-level dir but is really a foundational shared kernel — no upward
 # deps, imported across layers — and so must not read as an upward violation
 # when a lower layer uses it. Checked before the top-level LAYER_RANK.
-#   runtime/session: the session state store. Verified it imports nothing under
-#   runtime/agentsys/pipeline and is used by pipeline·runtime·platform — shared
-#   state, not top orchestration.
+#   runtime/sessionstore: durable session markers/store helpers used across
+#   pipeline·runtime·platform — shared state, not top orchestration.
 SUBPKG_RANK = {
-    "runtime/session": 1,
+    "runtime/sessionstore": 1,
 }
 
 

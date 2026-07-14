@@ -13,7 +13,7 @@ codebase) and the Andromeda desktop workstation (Tauri + React).
 Native client (Android/iOS) ──┐
                               ├──> Go Gateway (HTTP + SSE)
 Andromeda (desktop, Tauri) ───┘         │
-                                    150+ RPC methods, 150+ agent tools
+                                    200+ RPC methods, ~45 agent tools
                                     Session management
                                     Chat/LLM pipeline
                                     Wiki knowledge base + Polaris session memory
@@ -22,7 +22,7 @@ Andromeda (desktop, Tauri) ───┘         │
 
 | Module | Language | Description |
 |--------|----------|-------------|
-| `gateway-go/` | Go | HTTP + SSE server, RPC dispatch (150+ methods), session management, chat/LLM pipeline, 150+ tool integrations |
+| `gateway-go/` | Go | HTTP + SSE server, RPC dispatch (200+ methods), session management, chat/LLM pipeline, ~45 built-in tool integrations |
 | `client-android/` | Kotlin | Mobile native client (Kotlin Multiplatform: Android / iOS; vendored Kai UI, Apache-2.0) wired to the gateway over an authenticated `miniapp.*` RPC surface |
 | `andromeda/` | TypeScript/Rust | Desktop workstation client (Tauri 2 + React 18 + Refine) on the same `miniapp.*` RPC + SSE surface |
 | `skills/` | Markdown | Filesystem-discovered skill plugins by category |

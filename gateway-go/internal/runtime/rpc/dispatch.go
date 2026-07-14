@@ -1,8 +1,8 @@
 // Package rpc handles RPC method dispatch for the gateway.
 //
 // Each domain (chat, sessions, agents, config, system, etc.) registers
-// its method handlers here. This mirrors the structure of
-// src/gateway/server-methods/ in the TypeScript codebase.
+// its method handlers here during boot. Layout originally followed the
+// retired TypeScript gateway's server-methods packages.
 package rpc
 
 import (

@@ -1,6 +1,6 @@
 // prompt.go builds the LLM system prompt for available skills.
 //
-// This ports src/agents/skills/workspace.ts:formatSkillsCompact(),
+// Originally ported formatSkillsCompact from the retired TypeScript skills package,
 // applySkillsPromptLimits(), and the pi-coding-agent formatSkillsForPrompt().
 // Supports full format (name + description + location) and compact format
 // (name + location only) with budget-aware fallback.

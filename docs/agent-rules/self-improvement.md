@@ -39,7 +39,7 @@ things it shouldn't.
 
 | File | Role |
 |---|---|
-| `evolver.go` | `Evolver` — rewrite orchestrator (1820 LOC, largest file) |
+| `evolver.go` | `Evolver` — rewrite orchestrator (~844 LOC) |
 | `tracker.go` | `Tracker` — activity log, lifecycle, event triggers, usage-source gate |
 | `genesis.go` | `Service`, `Config`, generation/persist orchestration |
 | `curator.go` | Staleness classification + archive; `markSkillAgentCreatedLocked` |
