@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	SelfCorrectionTypeCandidate = "self_correction_candidate"
-	SelfCorrectionTypeReview    = "self_correction_review"
-	SelfCorrectionTypeDispatch  = "self_correction_dispatch"
+	selfCorrectionTypeCandidate = "self_correction_candidate"
+	selfCorrectionTypeReview    = "self_correction_review"
+	selfCorrectionTypeDispatch  = "self_correction_dispatch"
 
 	SelfCorrectionStatusProposed   = "proposed"
 	SelfCorrectionStatusAccepted   = "accepted"
@@ -23,13 +23,13 @@ const (
 	SelfCorrectionStatusSuperseded = "superseded"
 	SelfCorrectionStatusApplied    = "applied"
 
-	SelfCorrectionDispatchStarted     = "started"
-	SelfCorrectionDispatchPROpened    = "pr_opened"
+	selfCorrectionDispatchStarted     = "started"
+	selfCorrectionDispatchPROpened    = "pr_opened"
 	SelfCorrectionDispatchMerged      = "merged"
-	SelfCorrectionDispatchDeployed    = "deployed"
-	SelfCorrectionDispatchWatchPassed = "watch_passed"
-	SelfCorrectionDispatchFailed      = "failed"
-	SelfCorrectionDispatchRolledBack  = "rolled_back"
+	selfCorrectionDispatchDeployed    = "deployed"
+	selfCorrectionDispatchWatchPassed = "watch_passed"
+	selfCorrectionDispatchFailed      = "failed"
+	selfCorrectionDispatchRolledBack  = "rolled_back"
 )
 
 // SelfCorrectionCandidateRecord is an append-only proposal for a future coding
@@ -79,7 +79,7 @@ func (t *Tracker) RecordSelfCorrectionCandidate(record SelfCorrectionCandidateRe
 	defer t.mu.Unlock()
 
 	now := time.Now().UnixMilli()
-	record.Type = SelfCorrectionTypeCandidate
+	record.Type = selfCorrectionTypeCandidate
 	record.Status = normalizeSelfCorrectionStatus(record.Status)
 	if record.Status == "" {
 		record.Status = SelfCorrectionStatusProposed
@@ -129,7 +129,7 @@ func (t *Tracker) RecordSelfCorrectionReview(record SelfCorrectionCandidateRecor
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	record.Type = SelfCorrectionTypeReview
+	record.Type = selfCorrectionTypeReview
 	record.ID = strings.TrimSpace(record.ID)
 	record.Status = normalizeSelfCorrectionStatus(record.Status)
 	record.Reviewer = strings.TrimSpace(record.Reviewer)
@@ -172,7 +172,7 @@ func (t *Tracker) RecordSelfCorrectionDispatch(record SelfCorrectionCandidateRec
 	defer t.mu.Unlock()
 
 	now := time.Now().UnixMilli()
-	record.Type = SelfCorrectionTypeDispatch
+	record.Type = selfCorrectionTypeDispatch
 	record.ID = strings.TrimSpace(record.ID)
 	record.DispatchPhase = normalizeSelfCorrectionDispatchPhase(record.DispatchPhase)
 	record.AttemptID = strings.TrimSpace(record.AttemptID)
@@ -225,13 +225,13 @@ func (t *Tracker) RecordSelfCorrectionDispatch(record SelfCorrectionCandidateRec
 	if !validSelfCorrectionDispatchTransition(current.DispatchPhase, record.DispatchPhase) {
 		return record, fmt.Errorf("genesis-tracker: invalid self-correction dispatch transition %s -> %s", current.DispatchPhase, record.DispatchPhase)
 	}
-	if current.DispatchPhase != "" && record.DispatchPhase != SelfCorrectionDispatchStarted && current.AttemptID != record.AttemptID {
+	if current.DispatchPhase != "" && record.DispatchPhase != selfCorrectionDispatchStarted && current.AttemptID != record.AttemptID {
 		return record, fmt.Errorf("genesis-tracker: dispatch attempt changed inside lifecycle: %s -> %s", current.AttemptID, record.AttemptID)
 	}
-	if record.DispatchPhase == SelfCorrectionDispatchStarted && current.AttemptID == record.AttemptID {
+	if record.DispatchPhase == selfCorrectionDispatchStarted && current.AttemptID == record.AttemptID {
 		return record, fmt.Errorf("genesis-tracker: retry must use a new dispatch attemptId")
 	}
-	if record.DispatchPhase == SelfCorrectionDispatchWatchPassed && current.Status != SelfCorrectionStatusApplied &&
+	if record.DispatchPhase == selfCorrectionDispatchWatchPassed && current.Status != SelfCorrectionStatusApplied &&
 		!validSelfCorrectionStatusTransition(current.Status, SelfCorrectionStatusApplied) {
 		return record, fmt.Errorf("genesis-tracker: watched dispatch cannot close status %s as applied", current.Status)
 	}
@@ -314,87 +314,112 @@ func mergeSelfCorrectionRecords(entries []SelfCorrectionCandidateRecord) map[str
 			continue
 		}
 		switch rec.Type {
-		case SelfCorrectionTypeReview:
-			base, ok := merged[rec.ID]
-			if !ok {
-				continue
+		case selfCorrectionTypeReview:
+			if base, ok := merged[rec.ID]; ok {
+				merged[rec.ID] = applySelfCorrectionReview(base, rec)
 			}
-			if status := normalizeSelfCorrectionStatus(rec.Status); status != "" {
-				base.Status = status
+		case selfCorrectionTypeDispatch:
+			if base, ok := merged[rec.ID]; ok {
+				merged[rec.ID] = applySelfCorrectionDispatch(base, rec)
 			}
-			if rec.Reviewer != "" {
-				base.Reviewer = rec.Reviewer
-			}
-			if rec.ReviewNote != "" {
-				base.ReviewNote = rec.ReviewNote
-			}
-			if rec.UpdatedAt > 0 {
-				base.UpdatedAt = rec.UpdatedAt
-			}
-			merged[rec.ID] = base
-		case SelfCorrectionTypeDispatch:
-			base, ok := merged[rec.ID]
-			if !ok {
-				continue
-			}
-			phase := normalizeSelfCorrectionDispatchPhase(rec.DispatchPhase)
-			newAttempt := phase == SelfCorrectionDispatchStarted && rec.AttemptID != "" &&
-				base.AttemptID != "" && rec.AttemptID != base.AttemptID
-			if newAttempt {
-				base.Branch = ""
-				base.PRNumber = 0
-				base.PRURL = ""
-				base.CommitSHA = ""
-				base.DeployHead = ""
-				base.OutcomeNote = ""
-			}
-			samePhase := base.DispatchPhase == phase && base.AttemptID == rec.AttemptID
-			base.DispatchPhase = phase
-			if rec.AttemptID != "" {
-				base.AttemptID = rec.AttemptID
-			}
-			if base.Branch == "" && rec.Branch != "" {
-				base.Branch = rec.Branch
-			}
-			if base.PRNumber == 0 && rec.PRNumber > 0 {
-				base.PRNumber = rec.PRNumber
-			}
-			if base.PRURL == "" && rec.PRURL != "" {
-				base.PRURL = rec.PRURL
-			}
-			if base.CommitSHA == "" && rec.CommitSHA != "" {
-				base.CommitSHA = rec.CommitSHA
-			}
-			if base.DeployHead == "" && rec.DeployHead != "" {
-				base.DeployHead = rec.DeployHead
-			}
-			if rec.OutcomeNote != "" && (!samePhase || base.OutcomeNote == "") {
-				base.OutcomeNote = rec.OutcomeNote
-			}
-			if base.DispatchPhase == SelfCorrectionDispatchWatchPassed {
-				base.Status = SelfCorrectionStatusApplied
-				base.Reviewer = "deploy-watch"
-				if base.ReviewNote == "" {
-					base.ReviewNote = "merged deployment survived rollback watch"
-				}
-			}
-			if rec.UpdatedAt > 0 {
-				base.UpdatedAt = rec.UpdatedAt
-			}
-			merged[rec.ID] = base
-		case "", SelfCorrectionTypeCandidate: // empty type is a legacy candidate row
-			rec.Type = SelfCorrectionTypeCandidate
-			rec.Status = normalizeSelfCorrectionStatus(rec.Status)
-			if rec.Status == "" {
-				rec.Status = SelfCorrectionStatusProposed
-			}
-			if rec.UpdatedAt == 0 {
-				rec.UpdatedAt = rec.CreatedAt
-			}
-			merged[rec.ID] = rec
+		case "", selfCorrectionTypeCandidate: // empty type is a legacy candidate row
+			merged[rec.ID] = normalizedSelfCorrectionCandidate(rec)
 		}
 	}
 	return merged
+}
+
+// applySelfCorrectionReview folds one review row into the merged candidate.
+func applySelfCorrectionReview(base, rec SelfCorrectionCandidateRecord) SelfCorrectionCandidateRecord {
+	if status := normalizeSelfCorrectionStatus(rec.Status); status != "" {
+		base.Status = status
+	}
+	if rec.Reviewer != "" {
+		base.Reviewer = rec.Reviewer
+	}
+	if rec.ReviewNote != "" {
+		base.ReviewNote = rec.ReviewNote
+	}
+	if rec.UpdatedAt > 0 {
+		base.UpdatedAt = rec.UpdatedAt
+	}
+	return base
+}
+
+// applySelfCorrectionDispatch folds one dispatch row into the merged candidate.
+func applySelfCorrectionDispatch(base, rec SelfCorrectionCandidateRecord) SelfCorrectionCandidateRecord {
+	phase := normalizeSelfCorrectionDispatchPhase(rec.DispatchPhase)
+	if phase == selfCorrectionDispatchStarted && rec.AttemptID != "" &&
+		base.AttemptID != "" && rec.AttemptID != base.AttemptID {
+		base = resetSelfCorrectionDelivery(base)
+	}
+	samePhase := base.DispatchPhase == phase && base.AttemptID == rec.AttemptID
+	base.DispatchPhase = phase
+	if rec.AttemptID != "" {
+		base.AttemptID = rec.AttemptID
+	}
+	base = fillSelfCorrectionDelivery(base, rec)
+	if rec.OutcomeNote != "" && (!samePhase || base.OutcomeNote == "") {
+		base.OutcomeNote = rec.OutcomeNote
+	}
+	if base.DispatchPhase == selfCorrectionDispatchWatchPassed {
+		base.Status = SelfCorrectionStatusApplied
+		base.Reviewer = "deploy-watch"
+		if base.ReviewNote == "" {
+			base.ReviewNote = "merged deployment survived rollback watch"
+		}
+	}
+	if rec.UpdatedAt > 0 {
+		base.UpdatedAt = rec.UpdatedAt
+	}
+	return base
+}
+
+// resetSelfCorrectionDelivery clears delivery evidence when a new dispatch
+// attempt starts, so a retry never inherits the previous attempt's PR/commit.
+func resetSelfCorrectionDelivery(base SelfCorrectionCandidateRecord) SelfCorrectionCandidateRecord {
+	base.Branch = ""
+	base.PRNumber = 0
+	base.PRURL = ""
+	base.CommitSHA = ""
+	base.DeployHead = ""
+	base.OutcomeNote = ""
+	return base
+}
+
+// fillSelfCorrectionDelivery adopts first-seen delivery evidence from a
+// dispatch row without overwriting evidence already recorded.
+func fillSelfCorrectionDelivery(base, rec SelfCorrectionCandidateRecord) SelfCorrectionCandidateRecord {
+	if base.Branch == "" && rec.Branch != "" {
+		base.Branch = rec.Branch
+	}
+	if base.PRNumber == 0 && rec.PRNumber > 0 {
+		base.PRNumber = rec.PRNumber
+	}
+	if base.PRURL == "" && rec.PRURL != "" {
+		base.PRURL = rec.PRURL
+	}
+	if base.CommitSHA == "" && rec.CommitSHA != "" {
+		base.CommitSHA = rec.CommitSHA
+	}
+	if base.DeployHead == "" && rec.DeployHead != "" {
+		base.DeployHead = rec.DeployHead
+	}
+	return base
+}
+
+// normalizedSelfCorrectionCandidate normalizes a candidate (or legacy) row
+// before it seeds the merged map.
+func normalizedSelfCorrectionCandidate(rec SelfCorrectionCandidateRecord) SelfCorrectionCandidateRecord {
+	rec.Type = selfCorrectionTypeCandidate
+	rec.Status = normalizeSelfCorrectionStatus(rec.Status)
+	if rec.Status == "" {
+		rec.Status = SelfCorrectionStatusProposed
+	}
+	if rec.UpdatedAt == 0 {
+		rec.UpdatedAt = rec.CreatedAt
+	}
+	return rec
 }
 
 func validSelfCorrectionStatusTransition(from, to string) bool {
@@ -413,10 +438,10 @@ func validSelfCorrectionStatusTransition(from, to string) bool {
 
 func normalizeSelfCorrectionDispatchPhase(phase string) string {
 	switch strings.ToLower(strings.TrimSpace(phase)) {
-	case SelfCorrectionDispatchStarted, SelfCorrectionDispatchPROpened,
-		SelfCorrectionDispatchMerged, SelfCorrectionDispatchDeployed,
-		SelfCorrectionDispatchWatchPassed, SelfCorrectionDispatchFailed,
-		SelfCorrectionDispatchRolledBack:
+	case selfCorrectionDispatchStarted, selfCorrectionDispatchPROpened,
+		SelfCorrectionDispatchMerged, selfCorrectionDispatchDeployed,
+		selfCorrectionDispatchWatchPassed, selfCorrectionDispatchFailed,
+		selfCorrectionDispatchRolledBack:
 		return strings.ToLower(strings.TrimSpace(phase))
 	default:
 		return ""
@@ -428,21 +453,21 @@ func validSelfCorrectionDispatchTransition(from, to string) bool {
 	to = normalizeSelfCorrectionDispatchPhase(to)
 	switch from {
 	case "":
-		return to == SelfCorrectionDispatchStarted
-	case SelfCorrectionDispatchStarted:
-		return to == SelfCorrectionDispatchPROpened || to == SelfCorrectionDispatchMerged || to == SelfCorrectionDispatchFailed
-	case SelfCorrectionDispatchPROpened:
-		return to == SelfCorrectionDispatchMerged || to == SelfCorrectionDispatchFailed
+		return to == selfCorrectionDispatchStarted
+	case selfCorrectionDispatchStarted:
+		return to == selfCorrectionDispatchPROpened || to == SelfCorrectionDispatchMerged || to == selfCorrectionDispatchFailed
+	case selfCorrectionDispatchPROpened:
+		return to == SelfCorrectionDispatchMerged || to == selfCorrectionDispatchFailed
 	case SelfCorrectionDispatchMerged:
-		return to == SelfCorrectionDispatchDeployed || to == SelfCorrectionDispatchFailed
-	case SelfCorrectionDispatchDeployed:
-		return to == SelfCorrectionDispatchWatchPassed || to == SelfCorrectionDispatchRolledBack
-	case SelfCorrectionDispatchFailed:
+		return to == selfCorrectionDispatchDeployed || to == selfCorrectionDispatchFailed
+	case selfCorrectionDispatchDeployed:
+		return to == selfCorrectionDispatchWatchPassed || to == selfCorrectionDispatchRolledBack
+	case selfCorrectionDispatchFailed:
 		// A session can exit before GitHub exposes the PR. Late reconciliation
 		// may promote that same attempt from failed to its observed PR state.
-		return to == SelfCorrectionDispatchStarted || to == SelfCorrectionDispatchPROpened || to == SelfCorrectionDispatchMerged
-	case SelfCorrectionDispatchRolledBack:
-		return to == SelfCorrectionDispatchStarted
+		return to == selfCorrectionDispatchStarted || to == selfCorrectionDispatchPROpened || to == SelfCorrectionDispatchMerged
+	case selfCorrectionDispatchRolledBack:
+		return to == selfCorrectionDispatchStarted
 	default:
 		return false // watch_passed is terminal
 	}

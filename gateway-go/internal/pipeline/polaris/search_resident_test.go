@@ -2,7 +2,7 @@ package polaris
 
 import "testing"
 
-func TestSearchResidentSessions(t *testing.T) {
+func TestSearchResidentSessionsReturnsCrossSessionHits(t *testing.T) {
 	s := testStore(t)
 
 	// Two distinct conversations, both resident after AppendMessage.

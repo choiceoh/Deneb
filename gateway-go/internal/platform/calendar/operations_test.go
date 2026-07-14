@@ -74,7 +74,7 @@ func (rt *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return rt.inner.RoundTrip(req)
 }
 
-func TestListUpcoming_HappyPath(t *testing.T) {
+func TestListUpcoming_IgnoresCancelledAndNormalizesAttendeeEmail(t *testing.T) {
 	body := `{"items":[
 		{"id":"e1","summary":"부산8 진척 협의","status":"confirmed",
 		 "start":{"dateTime":"2026-05-26T14:00:00+09:00"},
@@ -114,7 +114,7 @@ func TestListUpcoming_HappyPath(t *testing.T) {
 	}
 }
 
-func TestListUpcoming_AllDay(t *testing.T) {
+func TestListUpcoming_ParsesAllDayEventDate(t *testing.T) {
 	body := `{"items":[
 		{"id":"e1","summary":"휴가","status":"confirmed",
 		 "start":{"date":"2026-05-27","timeZone":"Asia/Seoul"},
@@ -135,7 +135,7 @@ func TestListUpcoming_AllDay(t *testing.T) {
 	}
 }
 
-func TestListUpcoming_ConferenceURI(t *testing.T) {
+func TestListUpcoming_ReturnsVideoConferenceURIOverPhone(t *testing.T) {
 	body := `{"items":[{
 		"id":"meet","summary":"Standup","status":"confirmed",
 		"start":{"dateTime":"2026-05-26T10:00:00+09:00"},
@@ -187,7 +187,7 @@ func TestGet_404ReturnsNilNoError(t *testing.T) {
 // is the segment separator), so we ReplaceAll it after PathEscape.
 // This test verifies the slash in the event ID does not break the
 // URL path.
-func TestGet_PathEscapesSlashInEventID(t *testing.T) {
+func TestGet_EncodesSlashInEventIDPath(t *testing.T) {
 	dir := t.TempDir()
 	writeJSON(t, filepath.Join(dir, "calendar_client.json"), map[string]any{
 		"installed": map[string]string{"client_id": "id", "client_secret": "secret"},
@@ -240,7 +240,7 @@ func TestGet_500BubblesAPIError(t *testing.T) {
 	}
 }
 
-func TestGet_HappyPath(t *testing.T) {
+func TestGet_ReturnsEventByID(t *testing.T) {
 	body := `{"id":"e1","summary":"hello","status":"confirmed",
 		"start":{"dateTime":"2026-05-26T14:00:00+09:00"},
 		"end":{"dateTime":"2026-05-26T15:00:00+09:00"}}`
@@ -324,7 +324,7 @@ func TestReadJSON_MalformedSurfaces(t *testing.T) {
 // confirmHomeIsNotTouched ensures the credentialsDir() helper returns a
 // child of the user's home, so tests that swap to t.TempDir() never
 // silently fall back to a real ~/.deneb on machines without the dir.
-func TestCredentialsDir_RootedInHome(t *testing.T) {
+func TestCredentialsDir_ReturnsPathUnderHome(t *testing.T) {
 	dir := credentialsDir()
 	home, _ := os.UserHomeDir()
 	if home != "" && !strings.HasPrefix(dir, home) {

@@ -127,11 +127,11 @@ func TestThinkingPreviewTailTruncation(t *testing.T) {
 	}
 }
 
-// TestCleanThinkingPreviewSentenceExtraction pins the chip-line cleanup against
+// TestCleanThinkingPreviewFormatsLatestSentence pins the chip-line cleanup against
 // a real DeepSeek-V4 reasoning sample: Korean, wrapped in parentheses, verbose
 // multi-sentence thoughts. The chip must surface the latest complete sentence
 // from its head — no wrapper parens, no leading ellipsis, opener dropped.
-func TestCleanThinkingPreviewSentenceExtraction(t *testing.T) {
+func TestCleanThinkingPreviewFormatsLatestSentence(t *testing.T) {
 	// Verbatim shape from the live engine (truncated middle for brevity).
 	raw := "(아, 탑솔라의 김 부장님에게서 온 이메일에 대해 문의하시는군요. " +
 		"보통 때와 다른 어조에 계좌 변경 요청까지 있다니... 상당히 의심스러운 상황입니다.)\n\n" +
@@ -160,7 +160,7 @@ func TestCleanThinkingPreviewSentenceExtraction(t *testing.T) {
 	}
 }
 
-func TestCleanThinkingPreviewEdgeCases(t *testing.T) {
+func TestCleanThinkingPreviewReturnsEmptyOrLatestSentence(t *testing.T) {
 	tests := []struct {
 		name string
 		in   string

@@ -144,7 +144,7 @@ func TestLoadFailuresKeepServiceContext(t *testing.T) {
 	}
 }
 
-func TestRefreshReportsAndRetainsRotatedToken(t *testing.T) {
+func TestRefresh_ReturnsRotatedTokenAndExpiry(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.FormValue("client_id"); got != "client-id" {
 			t.Errorf("client_id = %q", got)
@@ -200,7 +200,7 @@ func TestRefreshKeepsCurrentTokenWhenResponseOmitsIt(t *testing.T) {
 	}
 }
 
-func TestPersistAtomicallyReplacesToken(t *testing.T) {
+func TestPersist_UpdatesTokenFileAtomically(t *testing.T) {
 	tokenPath := filepath.Join(t.TempDir(), "token.json")
 	if err := os.WriteFile(tokenPath, []byte("old-token"), 0o644); err != nil {
 		t.Fatal(err)

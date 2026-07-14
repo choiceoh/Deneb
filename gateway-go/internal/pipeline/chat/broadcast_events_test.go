@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-// TestBroadcastEventsWireShape locks the wire JSON of every broadcast event. The
+// TestBroadcastEventsEncodeWireShape locks the wire JSON of every broadcast event. The
 // native client parses these payloads by key, so the exact top-level key set must
 // match what the prior map[string]any literals produced — including omitempty
 // fields that appear on one emitter path but not another (sessions.changed.deltaMs,
 // chat.delivery_failed.error, chat.compaction_stuck.budget/inputHash).
-func TestBroadcastEventsWireShape(t *testing.T) {
+func TestBroadcastEventsEncodeWireShape(t *testing.T) {
 	cases := []struct {
 		name     string
 		payload  any
@@ -107,9 +107,9 @@ func TestBroadcastEventsWireShape(t *testing.T) {
 	}
 }
 
-// TestSessionsChangedDeltaMsValue guards the one non-string field whose value
+// TestSessionsChangedPreservesDeltaMsValue guards the one non-string field whose value
 // (not just presence) the merged path depends on.
-func TestSessionsChangedDeltaMsValue(t *testing.T) {
+func TestSessionsChangedPreservesDeltaMsValue(t *testing.T) {
 	data, err := json.Marshal(SessionsChangedEvent{SessionKey: "k", Reason: "merged", Status: "running", DeltaMs: 1234})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)

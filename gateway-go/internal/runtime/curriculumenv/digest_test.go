@@ -57,7 +57,7 @@ func (f fakeFailed) FailedUserRequests(sinceMs int64, _ int) []agentlog.FailedRe
 }
 
 // truncRunes caps at n runes with an ellipsis (Korean runes count as 1 each).
-func TestTruncRunes(t *testing.T) {
+func TestTruncRunesTruncatesToRuneLimit(t *testing.T) {
 	if got := truncRunes("abc", 5); got != "abc" {
 		t.Fatalf("short string should be unchanged: got %q", got)
 	}
@@ -72,7 +72,7 @@ func TestTruncRunes(t *testing.T) {
 }
 
 // The digest surfaces recent feed-item titles, skipping blank ones.
-func TestDigest_FeedItems(t *testing.T) {
+func TestDigestFeedItemsIgnoresBlankTitles(t *testing.T) {
 	feed := fakeFeed{items: []workfeed.Item{
 		{Title: "계약 검토 — NDA 초안"}, {Title: "  "}, {Title: "주간 보고서 작성"},
 	}}
@@ -89,7 +89,7 @@ func TestDigest_FeedItems(t *testing.T) {
 }
 
 // The digest surfaces active wiki domains, sorted, under the section header.
-func TestDigest_WikiDomains(t *testing.T) {
+func TestDigestWikiDomainsFormatsSortedJoinedList(t *testing.T) {
 	got := Digest(Sources{Wiki: fakeWiki{"acme.com": {}, "bohae.co.kr": {}}})
 	if !strings.Contains(got, "위키 상대 도메인") {
 		t.Fatalf("digest missing wiki section:\n%s", got)
@@ -179,7 +179,7 @@ func TestDigest_FailedRequestsRenderFirst(t *testing.T) {
 
 // The injected clock feeds the wiki cutoff (a fixed Now keeps the test
 // deterministic and proves Now is honored).
-func TestDigest_InjectedClock(t *testing.T) {
+func TestDigestWikiCutoffWithInjectedClock(t *testing.T) {
 	var gotCutoff string
 	src := Sources{
 		Wiki: cutoffCapture{&gotCutoff},
@@ -202,7 +202,7 @@ var errBoom = errors.New("boom")
 
 // The digest surfaces upcoming business-calendar commitments (P5-1 forward
 // demand), skipping untitled holds.
-func TestDigest_UpcomingCalendar(t *testing.T) {
+func TestDigestUpcomingCalendarIgnoresUntitledHolds(t *testing.T) {
 	withEvents(t, func(from, to time.Time) []calendar.Event {
 		return []calendar.Event{
 			{Summary: "ACME 계약 협상 미팅", Start: from.Add(24 * time.Hour)},
@@ -223,7 +223,7 @@ func TestDigest_UpcomingCalendar(t *testing.T) {
 }
 
 // A calendar window with only untitled holds carries no demand → no section.
-func TestDigest_UntitledCalendarOmitted(t *testing.T) {
+func TestDigestOnlyUntitledCalendarYieldsEmptyDigest(t *testing.T) {
 	withEvents(t, func(from, to time.Time) []calendar.Event {
 		return []calendar.Event{{Summary: "   ", Start: from.Add(time.Hour)}}
 	})

@@ -2,7 +2,7 @@ package chatport
 
 import "testing"
 
-func TestReplyDirectives_FieldAccess(t *testing.T) {
+func TestReplyDirectives_ReadFieldsAfterConstruction(t *testing.T) {
 	rd := ReplyDirectives{
 		Text:           "hello",
 		MediaURLs:      []string{"https://example.com/a.png", "https://example.com/b.png"},
@@ -43,7 +43,7 @@ func TestReplyDirectives_FieldAccess(t *testing.T) {
 	}
 }
 
-func TestReplyDirectives_ZeroValue(t *testing.T) {
+func TestReplyDirectives_ZeroValueHasEmptyDefaults(t *testing.T) {
 	var rd ReplyDirectives
 
 	if rd.Text != "" {

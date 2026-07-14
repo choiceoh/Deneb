@@ -26,7 +26,7 @@ func gitLogCount(t *testing.T, dir string) int {
 	return c
 }
 
-func TestSnapshotGit_CommitsOnlyOnChange(t *testing.T) {
+func TestSnapshotGit_CommitsOnlyWhenChanged(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
 	}
@@ -91,7 +91,7 @@ func TestSnapshotGit_ReturnsHashAndStat(t *testing.T) {
 	if hash == "" {
 		t.Fatal("commit must return a short hash")
 	}
-	if stat := store.GitSnapshotStat(ctx, hash); !strings.Contains(stat, "changed") {
+	if stat := store.gitSnapshotStat(ctx, hash); !strings.Contains(stat, "changed") {
 		t.Errorf("diffstat missing summary line: %q", stat)
 	}
 	// Noop snapshot returns "".

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestSelectMailboxesUsesConfiguredArchiveNames(t *testing.T) {
+func TestSelectMailboxesReturnsConfiguredOrLegacyGmailNames(t *testing.T) {
 	configured := []string{"INBOX", "Archive", "Archive", " "}
 
 	if got := SelectMailboxes("", configured); !reflect.DeepEqual(got, []string{"INBOX", "Archive"}) {

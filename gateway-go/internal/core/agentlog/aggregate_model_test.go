@@ -16,7 +16,7 @@ func appendEntry(t *testing.T, w *Writer, session, runID, typ string, data any) 
 	}
 }
 
-func TestAggregateByModel(t *testing.T) {
+func TestAggregateByModelReturnsPerModelRunAndToolStats(t *testing.T) {
 	w := NewWriter(t.TempDir())
 
 	// Run 1: gemma4 via vllm — clean run with one tool error.

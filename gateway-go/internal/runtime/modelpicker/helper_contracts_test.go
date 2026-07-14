@@ -411,7 +411,7 @@ func TestIsLocalURLBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestProviderClassificationMatrix(t *testing.T) {
+func TestProviderClassificationWhenNameMatches(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name                     string
@@ -640,7 +640,7 @@ func TestCapMergedModelsDisplayBoundary(t *testing.T) {
 	}
 }
 
-func TestProviderEntriesProjectionMatrix(t *testing.T) {
+func TestProviderEntriesCreatesModelEntries(t *testing.T) {
 	t.Parallel()
 	models := []string{
 		"family/sub/model-0",

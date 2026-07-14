@@ -26,7 +26,7 @@ func discardServer(t *testing.T) (*Server, *wiki.Store) {
 
 // A team answer is recorded onto the deal page — the visible "불확실 → 질문 → 기록"
 // close. "딜 아님" records nothing.
-func TestRecordDealQuestionAnswer(t *testing.T) {
+func TestRecordDealQuestionAnswerUpdatesPagePreservingBody(t *testing.T) {
 	s, ws := discardServer(t)
 	const path = "프로젝트/완도.md"
 	if err := ws.WritePage(path, &wiki.Page{Meta: wiki.Frontmatter{Title: "완도군청"}, Body: "기존 본문"}); err != nil {
@@ -56,7 +56,7 @@ func TestRecordDealQuestionAnswer(t *testing.T) {
 }
 
 // A missing/empty RefID or wiki page is a no-op, not a panic.
-func TestRecordDealQuestionAnswer_NoTarget(t *testing.T) {
+func TestRecordDealQuestionAnswerIgnoresMissingTarget(t *testing.T) {
 	s, _ := discardServer(t)
 	s.recordDealQuestionAnswer(workfeed.Item{RefID: ""}, "dept:pl1")           // empty path
 	s.recordDealQuestionAnswer(workfeed.Item{RefID: "프로젝트/없음.md"}, "dept:pl2") // missing page

@@ -258,7 +258,7 @@ func buildToolUseTurnEventsWithNames(tools []toolUseSpec, inputTokens, outputTok
 
 // --- Integration Tests ---
 
-func TestRunAgent_HappyPath_TextOnly(t *testing.T) {
+func TestRunAgent_TextOnlyTurnReturnsFinalText(t *testing.T) {
 	streamer := &fakeLLMStreamer{
 		turns: [][]llm.StreamEvent{
 			buildTextTurnEvents("Hello, world!", 100, 50),
@@ -292,7 +292,7 @@ func TestRunAgent_HappyPath_TextOnly(t *testing.T) {
 	}
 }
 
-func TestRunAgent_SingleToolCall(t *testing.T) {
+func TestRunAgent_RespondsWithTextAfterSingleToolCall(t *testing.T) {
 	tools := newFakeToolExecutor()
 	tools.outputs["read"] = "file contents here"
 
@@ -333,7 +333,7 @@ func TestRunAgent_SingleToolCall(t *testing.T) {
 	}
 }
 
-func TestRunAgent_MaxTurns(t *testing.T) {
+func TestRunAgent_MaxTurnsInjectsGraceTurnBeforeStopping(t *testing.T) {
 	// LLM keeps calling tools indefinitely. Post-grace-call: the executor
 	// injects a wrap-up user message after the final budgeted turn and runs
 	// one extra iteration. Since this test's streamer runs out of scripted
@@ -472,11 +472,12 @@ func TestRunAgent_ToolError(t *testing.T) {
 	}
 }
 
-// TestRunAgent_MultipleToolCalls verifies that when the LLM emits multiple
-// tool_use blocks in a single turn, the executor runs them sequentially and
-// feeds all results back on the next turn. Parallel tool execution has been
-// removed; tools always run one at a time in stream order.
-func TestRunAgent_MultipleToolCalls(t *testing.T) {
+// TestRunAgent_MultipleToolCallsRunSequentiallyWithoutParallelism verifies that
+// when the LLM emits multiple tool_use blocks in a single turn, the executor
+// runs them sequentially and feeds all results back on the next turn. Parallel
+// tool execution has been removed; tools always run one at a time in stream
+// order.
+func TestRunAgent_MultipleToolCallsRunSequentiallyWithoutParallelism(t *testing.T) {
 	tools := newFakeToolExecutor()
 	tools.outputs["read"] = "file A"
 	tools.outputs["grep"] = "match found"
@@ -547,7 +548,7 @@ func TestRunAgent_ToolCallAttemptLimitRejectsWholeTurnBeforeHooks(t *testing.T) 
 	}
 }
 
-func TestRunAgent_ToolCallAttemptLimitIsCumulativeAndCountsDenied(t *testing.T) {
+func TestRunAgent_ToolCallLimitCountsRejectedAttemptsCumulatively(t *testing.T) {
 	const limit = 2
 	streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{
 		buildToolUseTurnEventsWithNames([]toolUseSpec{{id: "toolu_denied", name: "read", inputJSON: `{}`}}, 1, 1),
@@ -584,7 +585,7 @@ func TestRunAgent_ToolCallAttemptLimitIsCumulativeAndCountsDenied(t *testing.T) 
 
 func intPtr(value int) *int { return &value }
 
-func TestRunAgent_OnTurnInit_Hook(t *testing.T) {
+func TestRunAgent_OnTurnInitAppliesPerTurnWithoutCarryingPriorContext(t *testing.T) {
 	type ctxKey struct{}
 	var capturedTurnValues []int
 	var inheritedTurnValues []int
@@ -648,7 +649,7 @@ func (c *contextCapturingToolExecutor) Execute(ctx context.Context, _ string, _ 
 	return "ok", nil
 }
 
-func TestRunAgent_OnTurn_Callback(t *testing.T) {
+func TestRunAgent_OnTurnCallbackUpdatesAccumulatedTokensPerTurn(t *testing.T) {
 	streamer := &fakeLLMStreamer{
 		turns: [][]llm.StreamEvent{
 			buildToolUseTurnEventsWithNames([]toolUseSpec{
@@ -752,7 +753,7 @@ func TestRunAgent_StreamHooks_Called(t *testing.T) {
 	}
 }
 
-func TestRunAgent_LogsToolProvenance(t *testing.T) {
+func TestRunAgent_CreatesToolProvenanceLogEntry(t *testing.T) {
 	targetPath := filepath.Join(t.TempDir(), "foo.go")
 	inputJSON := fmt.Sprintf(`{"file_path":%q,"new_string":"package main"}`, targetPath)
 	tools := newFakeToolExecutor()
@@ -803,7 +804,7 @@ func TestRunAgent_LogsToolProvenance(t *testing.T) {
 	}
 }
 
-func TestRunAgent_LogsMutatingToolFileEffects(t *testing.T) {
+func TestRunAgent_LogsFileEffectsForWriteMutation(t *testing.T) {
 	dir := t.TempDir()
 	targetPath := filepath.Join(dir, "foo.go")
 	if err := os.WriteFile(targetPath, []byte("old\n"), 0o644); err != nil {
@@ -872,7 +873,7 @@ func TestRunAgent_LogsMutatingToolFileEffects(t *testing.T) {
 	}
 }
 
-func TestRunAgent_SkipsFileEffectsOutsideProvenanceRoot(t *testing.T) {
+func TestRunAgent_IgnoresFileEffectsOutsideProvenanceRoot(t *testing.T) {
 	dir := t.TempDir()
 	outsideDir := t.TempDir()
 	outsidePath := filepath.Join(outsideDir, "outside.go")
@@ -917,10 +918,11 @@ func TestRunAgent_SkipsFileEffectsOutsideProvenanceRoot(t *testing.T) {
 	}
 }
 
-// TestRunAgent_ThinkingModulatorPerTurn asserts the AgentConfig.ThinkingModulator
-// contract: the executor calls it per turn and uses its return value in the
-// ChatRequest, falling back to cfg.Thinking when the modulator returns nil.
-func TestRunAgent_ThinkingModulatorPerTurn(t *testing.T) {
+// TestRunAgent_ThinkingModulatorFallsBackToConfigWhenNil asserts the
+// AgentConfig.ThinkingModulator contract: the executor calls it per turn and
+// uses its return value in the ChatRequest, falling back to cfg.Thinking when
+// the modulator returns nil.
+func TestRunAgent_ThinkingModulatorFallsBackToConfigWhenNil(t *testing.T) {
 	streamer := &fakeLLMStreamer{
 		turns: [][]llm.StreamEvent{
 			// Turn 0: a tool call so the loop continues to a second turn.

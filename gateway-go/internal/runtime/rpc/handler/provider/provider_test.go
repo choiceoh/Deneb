@@ -33,7 +33,7 @@ func (p catalogPlugin) Catalog(context.Context, providercore.CatalogContext) (*p
 	return &providercore.CatalogResult{Entries: p.entries}, nil
 }
 
-func TestMethodsRequireRegistry(t *testing.T) {
+func TestMethodsReturnNilAndEmptyModelsWithoutRegistry(t *testing.T) {
 	if got := Methods(Deps{}); got != nil {
 		t.Fatalf("Methods() = %v, want nil", got)
 	}
@@ -44,7 +44,7 @@ func TestMethodsRequireRegistry(t *testing.T) {
 	}
 }
 
-func TestProviderHandlersSortAndSerializePlugins(t *testing.T) {
+func TestProviderHandlersReturnSortedAndSerializedPlugins(t *testing.T) {
 	registry := providercore.NewRegistry()
 	for _, plugin := range []catalogPlugin{
 		{id: "zeta", label: "Zeta", entries: []providercore.CatalogEntry{{Provider: "zeta", ModelID: "z1"}}},

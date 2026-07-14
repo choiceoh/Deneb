@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestFrozenAndManualClock(t *testing.T) {
+func TestFrozenClockAndManualClockRejectsRewind(t *testing.T) {
 	loc := time.FixedZone("KST", 9*60*60)
 	start := time.Date(2026, 7, 11, 9, 30, 0, 123, loc)
 	frozen := NewFrozenClock(start)

@@ -70,7 +70,7 @@ func TestStore_ConcurrentUpdatePage_NoLostUpdate(t *testing.T) {
 	}
 
 	// The cached index entry must reflect the page that's actually on disk.
-	entry, ok := store.SnapshotEntries()[relPath]
+	entry, ok := store.snapshotEntries()[relPath]
 	if !ok {
 		t.Fatal("page missing from index after concurrent updates")
 	}
@@ -127,7 +127,7 @@ func TestStore_ConcurrentWritePage_IndexMatchesDisk(t *testing.T) {
 
 	// Final state: the index entry must match the page on disk.
 	onDisk := testutil.Must(store.ReadPage(relPath))
-	entry, ok := store.SnapshotEntries()[relPath]
+	entry, ok := store.snapshotEntries()[relPath]
 	if !ok {
 		t.Fatal("page missing from index after concurrent writes")
 	}
@@ -140,11 +140,11 @@ func TestStore_ConcurrentWritePage_IndexMatchesDisk(t *testing.T) {
 }
 
 // TestStore_RebuildIndex_SerializesAgainstWriters is the deterministic guard for
-// the fix: RebuildIndex must hold writeMu across its disk scan + index swap so a
+// the fix: rebuildIndex must hold writeMu across its disk scan + index swap so a
 // concurrent page write can't land between them and have its index entry dropped
 // by the wholesale swap. We simulate an in-flight writer by holding writeMu, then
-// assert RebuildIndex BLOCKS until we release it. Without the writeMu acquisition
-// (the pre-fix racy rebuild) RebuildIndex returns immediately while a writer
+// assert rebuildIndex BLOCKS until we release it. Without the writeMu acquisition
+// (the pre-fix racy rebuild) rebuildIndex returns immediately while a writer
 // "holds" the lock — exactly the window that drops a just-written entry — and
 // this test fails. The transient drop itself is hard to catch in a fuzz test
 // because a later rebuild re-scans the full disk and self-heals it; this asserts
@@ -165,15 +165,15 @@ func TestStore_RebuildIndex_SerializesAgainstWriters(t *testing.T) {
 	store.writeMu.Lock()
 
 	done := make(chan error, 1)
-	go func() { done <- store.RebuildIndex() }()
+	go func() { done <- store.rebuildIndex() }()
 
 	select {
 	case <-done:
-		// RebuildIndex finished while "a writer" held writeMu — it does not
+		// rebuildIndex finished while "a writer" held writeMu — it does not
 		// serialize against writers, so a concurrent write's index update can be
 		// clobbered by the swap.
 		store.writeMu.Unlock()
-		t.Fatal("RebuildIndex completed while writeMu was held; it must block on writeMu to snapshot disk consistently")
+		t.Fatal("rebuildIndex completed while writeMu was held; it must block on writeMu to snapshot disk consistently")
 	case <-time.After(200 * time.Millisecond):
 		// Expected: blocked on writeMu.
 	}
@@ -182,10 +182,10 @@ func TestStore_RebuildIndex_SerializesAgainstWriters(t *testing.T) {
 	select {
 	case err := <-done:
 		if err != nil {
-			t.Fatalf("RebuildIndex: %v", err)
+			t.Fatalf("rebuildIndex: %v", err)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("RebuildIndex did not complete after writeMu was released")
+		t.Fatal("rebuildIndex did not complete after writeMu was released")
 	}
 }
 
@@ -237,8 +237,8 @@ func TestStore_RebuildIndexConcurrentWithWrites_IndexMatchesDisk(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < newPages; i++ {
-			if err := store.RebuildIndex(); err != nil {
-				t.Errorf("RebuildIndex: %v", err)
+			if err := store.rebuildIndex(); err != nil {
+				t.Errorf("rebuildIndex: %v", err)
 				return
 			}
 		}
@@ -250,7 +250,7 @@ func TestStore_RebuildIndexConcurrentWithWrites_IndexMatchesDisk(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < newPages; i++ {
-				_ = store.SnapshotEntries()
+				_ = store.snapshotEntries()
 			}
 		}()
 	}

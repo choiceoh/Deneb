@@ -37,7 +37,7 @@ func TestParseVllmCounter(t *testing.T) {
 	}
 }
 
-func TestPromLabel(t *testing.T) {
+func TestPromLabelReturnsAnchoredValueIgnoringDecoyPrefix(t *testing.T) {
 	body := `engine="0",engine_model_name="decoy",model_name="real-model"`
 	if got := promLabel(body, "model_name"); got != "real-model" {
 		t.Errorf("promLabel boundary anchoring failed: got %q, want %q", got, "real-model")
@@ -49,7 +49,7 @@ func TestPromLabel(t *testing.T) {
 
 // The fetch path strips /v1, sums multi-engine shards per model, sorts models,
 // and rounds the hit rate to one decimal.
-func TestFetchVllmPrefixCaches(t *testing.T) {
+func TestFetchVllmPrefixCachesNormalizesEndpointAndSumsShards(t *testing.T) {
 	metrics := strings.Join([]string{
 		`# HELP vllm:prefix_cache_queries_total Prefix cache queries`,
 		`# TYPE vllm:prefix_cache_queries_total counter`,

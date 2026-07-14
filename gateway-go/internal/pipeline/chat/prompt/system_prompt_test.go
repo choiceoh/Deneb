@@ -9,7 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
-func TestBuildSystemPromptContainsSections(t *testing.T) {
+func TestBuildSystemPromptRendersRequiredSections(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/home/user/project",
 		ToolDefs: []ToolDef{
@@ -58,7 +58,7 @@ func TestBuildSystemPromptContainsSections(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPromptWorkPersona(t *testing.T) {
+func TestBuildSystemPromptRendersWorkPersona(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "wiki"}, {Name: "exec"}}
 
 	// 업무 workspace: Nev persona + 비서실장 + 위키 외부메모리 all present. The
@@ -81,10 +81,10 @@ func TestBuildSystemPromptWorkPersona(t *testing.T) {
 	}
 }
 
-// TestBuildSystemPromptPolarisGating pins the tool-conditional 회상 coaching:
+// TestBuildSystemPromptRendersPolarisSectionWhenToolPresent pins the tool-conditional 회상 coaching:
 // coaching a model to call polaris when the preset withholds the tool produces
 // failed tool-call loops, so the section renders only when the tool is present.
-func TestBuildSystemPromptPolarisGating(t *testing.T) {
+func TestBuildSystemPromptRendersPolarisSectionWhenToolPresent(t *testing.T) {
 	with := BuildSystemPrompt(SystemPromptParams{ToolDefs: []ToolDef{{Name: "read"}, {Name: "polaris"}}})
 	if !strings.Contains(with, "## 회상 (polaris)") {
 		t.Error("polaris-carrying prompt missing 회상 section")
@@ -95,7 +95,7 @@ func TestBuildSystemPromptPolarisGating(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPromptCompactToolList(t *testing.T) {
+func TestBuildSystemPromptRendersCompactToolList(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
@@ -120,7 +120,7 @@ func TestBuildSystemPromptCompactToolList(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPromptSkillsInjection(t *testing.T) {
+func TestBuildSystemPromptRendersSkillsAndPropusDoctrine(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		SkillsPrompt: `<available_skills><skill><name>test-skill</name></skill></available_skills>`,
@@ -150,7 +150,7 @@ func TestBuildSystemPromptSkillsInjection(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPromptNoSkills(t *testing.T) {
+func TestBuildSystemPromptRendersSkillsSectionWithoutSkills(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 	}
@@ -179,7 +179,7 @@ func TestBuildSystemPromptNoMemoryWithoutTools(t *testing.T) {
 	}
 }
 
-func TestBuildRuntimeLine(t *testing.T) {
+func TestBuildRuntimeLineWithFullInfo(t *testing.T) {
 	info := &RuntimeInfo{
 		AgentID: "default",
 		Host:    "dgx-spark",
@@ -215,7 +215,7 @@ func TestBuildRuntimeLine_NilInfo(t *testing.T) {
 	}
 }
 
-func TestBuildRuntimeLine_NoChannel(t *testing.T) {
+func TestBuildRuntimeLineWithoutChannel(t *testing.T) {
 	info := &RuntimeInfo{
 		Host: "my-host",
 		OS:   "linux",
@@ -233,7 +233,7 @@ func TestBuildRuntimeLine_NoChannel(t *testing.T) {
 	}
 }
 
-func TestBuildRuntimeLine_DefaultModel(t *testing.T) {
+func TestBuildRuntimeLineWithDefaultModel(t *testing.T) {
 	info := &RuntimeInfo{
 		Model:        "claude-opus-4-6",
 		DefaultModel: "claude-sonnet-4-6",
@@ -247,7 +247,7 @@ func TestBuildRuntimeLine_DefaultModel(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPrompt_MessageToolSilentReply(t *testing.T) {
+func TestBuildSystemPromptRendersMessagingGuidanceWithMessageTool(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
@@ -264,7 +264,7 @@ func TestBuildSystemPrompt_MessageToolSilentReply(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPrompt_NoMessageTool(t *testing.T) {
+func TestBuildSystemPromptOmitsMessagingGuidanceWithoutMessageTool(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
@@ -279,7 +279,7 @@ func TestBuildSystemPrompt_NoMessageTool(t *testing.T) {
 	}
 }
 
-func TestBuildDefaultRuntimeInfo(t *testing.T) {
+func TestBuildDefaultRuntimeInfoReturnsModelAndOS(t *testing.T) {
 	info := BuildDefaultRuntimeInfo("claude-sonnet-4-6", "claude-sonnet-4-6")
 	if info == nil {
 		t.Fatal("expected non-nil RuntimeInfo")
@@ -298,7 +298,7 @@ func TestBuildDefaultRuntimeInfo(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPromptNoPilotSection(t *testing.T) {
+func TestBuildSystemPromptWithoutPilotReferences(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
@@ -312,14 +312,14 @@ func TestBuildSystemPromptNoPilotSection(t *testing.T) {
 	}
 }
 
-// TestResolveTimezone_HonorsConfiguredZone is a regression guard for the
+// TestResolveTimezoneReturnsConfiguredZone is a regression guard for the
 // timezone mismatch where resolveTimezone() read only the TZ env var and the
 // server-local zone abbreviation, ignoring DENEB_TIMEZONE and the config
 // "timezone" key. On a UTC container (the common deployment) that made the
 // system prompt show UTC while logs, cron, and the calendar briefing — all
 // dentime-based — ran in the configured zone (typically KST). resolveTimezone
 // must now agree with pkg/dentime.
-func TestResolveTimezone_HonorsConfiguredZone(t *testing.T) {
+func TestResolveTimezoneReturnsConfiguredZone(t *testing.T) {
 	t.Setenv("DENEB_TIMEZONE", "Asia/Seoul")
 	dentime.ResetCache()
 	t.Cleanup(dentime.ResetCache)
@@ -329,11 +329,11 @@ func TestResolveTimezone_HonorsConfiguredZone(t *testing.T) {
 	}
 }
 
-// TestBuildSystemPromptDateInConfiguredZone verifies the rendered date line
+// TestBuildSystemPromptRendersDateInConfiguredZone verifies the rendered date line
 // uses the configured zone, not the server-local zone. With an explicit
 // UserTimezone the prompt must render "now" in that zone — proving the
 // day-only date can flip a calendar day relative to UTC.
-func TestBuildSystemPromptDateInConfiguredZone(t *testing.T) {
+func TestBuildSystemPromptRendersDateInConfiguredZone(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs:     []ToolDef{{Name: "read"}},
@@ -350,7 +350,7 @@ func TestBuildSystemPromptDateInConfiguredZone(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPromptDateUsesInjectedSemanticTime(t *testing.T) {
+func TestBuildSystemPromptRendersDateFromInjectedTime(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs:     []ToolDef{{Name: "read"}},
@@ -363,7 +363,7 @@ func TestBuildSystemPromptDateUsesInjectedSemanticTime(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPromptBlocksMatchesString(t *testing.T) {
+func TestBuildSystemPromptBlocksReturnsSameContentAsString(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
@@ -387,7 +387,7 @@ func TestBuildSystemPromptBlocksMatchesString(t *testing.T) {
 	}
 }
 
-// TestBuildSystemPromptBlocks_CacheControlPlacement asserts the cache_control
+// TestBuildSystemPromptBlocksPreservesCacheControlBoundary asserts the cache_control
 // allocation: Static + Semi-static carry ephemeral markers; Dynamic does NOT.
 // This invariant matters because Anthropic limits a request to 4 cache_control
 // breakpoints. The 2 system markers leave room for 2 trailing message markers
@@ -395,7 +395,7 @@ func TestBuildSystemPromptBlocksMatchesString(t *testing.T) {
 // If the dynamic block ever regains a marker, trailing markers would push the
 // request past the 4-breakpoint limit and the dynamic content (recall memory,
 // timestamp, runtime info) would still cache-miss every turn.
-func TestBuildSystemPromptBlocks_CacheControlPlacement(t *testing.T) {
+func TestBuildSystemPromptBlocksPreservesCacheControlBoundary(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs:     []ToolDef{{Name: "read"}},
@@ -419,12 +419,12 @@ func TestBuildSystemPromptBlocks_CacheControlPlacement(t *testing.T) {
 	}
 }
 
-// TestBuildSystemPromptBlocks_CompactionFiredInjectsNote asserts the P4
+// TestBuildSystemPromptBlocksEmitsCompactionNoteWhenFired asserts the P4
 // invariant: when CompactionFired=true, the dynamic block carries a one-
 // time reminder that summaries are present in history. The reminder
 // references the SUMMARY_PREFIX marker so the model bridges the two
 // signals (system note + per-message prefix).
-func TestBuildSystemPromptBlocks_CompactionFiredInjectsNote(t *testing.T) {
+func TestBuildSystemPromptBlocksEmitsCompactionNoteWhenFired(t *testing.T) {
 	base := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs:     []ToolDef{{Name: "read"}},
@@ -448,7 +448,7 @@ func TestBuildSystemPromptBlocks_CompactionFiredInjectsNote(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPrompt_WikiSavingIsNotResponse(t *testing.T) {
+func TestBuildSystemPromptRendersWikiSaveGuidance(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
@@ -471,7 +471,7 @@ func TestBuildSystemPrompt_WikiSavingIsNotResponse(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPromptConversationMode(t *testing.T) {
+func TestBuildSystemPromptRendersConversationModeWithPreset(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
@@ -490,7 +490,7 @@ func TestBuildSystemPromptConversationMode(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPromptNormalModeNoConversationBlock(t *testing.T) {
+func TestBuildSystemPromptOmitsConversationModeWithoutPreset(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{
@@ -526,7 +526,7 @@ func TestWriteCompactToolList_UncategorizedTools(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPrompt_WebToolGuidance(t *testing.T) {
+func TestBuildSystemPromptRendersWebGuidanceWithWebTool(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs: []ToolDef{

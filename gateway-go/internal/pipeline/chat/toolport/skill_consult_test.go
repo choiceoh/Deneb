@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestSkillConsultLog_DrainNew_dedupAndHighWater(t *testing.T) {
+func TestSkillConsultLogDrainNewDeduplicatesWithHighWaterMark(t *testing.T) {
 	var nilLog *SkillConsultLog
 	if got := nilLog.DrainNew(); got != nil {
 		t.Fatalf("nil log DrainNew = %v, want nil", got)

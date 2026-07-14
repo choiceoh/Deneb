@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestProviderCatalogConfigFileMatrix(t *testing.T) {
+func TestProviderCatalogParsesConfigFileMatrix(t *testing.T) {
 	t.Setenv("DENEB_TEST_PROVIDER_BASE", "http://env/v1")
 	t.Setenv("DENEB_TEST_PROVIDER_KEY", "env-key")
 	t.Setenv("DENEB_TEST_PROVIDER_MISSING", "")

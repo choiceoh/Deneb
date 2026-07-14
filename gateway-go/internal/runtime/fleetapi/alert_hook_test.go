@@ -22,7 +22,7 @@ func (g *alertGateStub) ShouldRelay(title, level string, _ time.Time) bool {
 	return g.relay
 }
 
-func TestAlertHookPublishesFleetAlert(t *testing.T) {
+func TestAlertHookEmitsFleetAlertWhenRelayed(t *testing.T) {
 	t.Parallel()
 	gate := &alertGateStub{relay: true}
 	var gotTitle, gotBody string

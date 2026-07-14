@@ -13,7 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestResolvePath(t *testing.T) {
+func TestResolvePathClampsTraversalToWorkspaceBoundary(t *testing.T) {
 	// Use a temp dir as the workspace root so filepath.Abs works predictably.
 	workspace := t.TempDir()
 
@@ -179,7 +179,7 @@ func TestToolWrite(t *testing.T) {
 	})
 }
 
-func TestToolEdit(t *testing.T) {
+func TestToolEditRejectsMissingOrAmbiguousOldString(t *testing.T) {
 	dir := t.TempDir()
 	fn := filesystem.ToolEdit(dir)
 

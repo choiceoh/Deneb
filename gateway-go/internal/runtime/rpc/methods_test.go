@@ -41,7 +41,7 @@ func dispatch(t *testing.T, d *Dispatcher, method string, params any) *protocol.
 	return d.Dispatch(context.Background(), req)
 }
 
-func TestBuiltinMethodsRegistered(t *testing.T) {
+func TestBuiltinMethodsRegisteredWithExpectedNames(t *testing.T) {
 	d := testDispatcher()
 	methods := d.Methods()
 	if len(methods) < 5 {
@@ -63,7 +63,7 @@ func TestBuiltinMethodsRegistered(t *testing.T) {
 	}
 }
 
-func TestHealthCheck(t *testing.T) {
+func TestHealthCheckReturnsOKStatus(t *testing.T) {
 	d := testDispatcher()
 	resp := dispatch(t, d, ciHealthMethod, nil)
 	if !resp.OK {
@@ -79,7 +79,7 @@ func TestHealthCheck(t *testing.T) {
 	}
 }
 
-func TestRPCSmokeFrequentMethods(t *testing.T) {
+func TestRPCSmokeFrequentMethodsReturnExpectedResults(t *testing.T) {
 	d := testDispatcher()
 	tests := []struct {
 		name         string
@@ -141,7 +141,7 @@ func TestRPCSmokeFrequentMethods(t *testing.T) {
 	}
 }
 
-func TestSessionsGet_NotFound(t *testing.T) {
+func TestSessionsGetReturnsNotFoundForUnknownSession(t *testing.T) {
 	d := testDispatcher()
 	resp := dispatch(t, d, "sessions.get", map[string]string{"key": "nonexistent"})
 	if resp.OK {
@@ -152,7 +152,7 @@ func TestSessionsGet_NotFound(t *testing.T) {
 	}
 }
 
-func TestRegisterCoreBuiltins_DuplicateMethodValidation(t *testing.T) {
+func TestRegisterCoreBuiltinsRejectsDuplicateMethodRegistration(t *testing.T) {
 	d := NewDispatcher(testLogger())
 	d.beginRegistryValidation()
 	d.setRegistryModule("core.health")
@@ -219,7 +219,7 @@ func TestSessionsDelete_RunningBlocked(t *testing.T) {
 	}
 }
 
-func TestSessionsList(t *testing.T) {
+func TestSessionsListReturnsOK(t *testing.T) {
 	sm := session.NewManager()
 	sm.Set(&session.Session{Key: "s1", Kind: session.KindDirect})
 	sm.Set(&session.Session{Key: "s2", Kind: session.KindGroup})

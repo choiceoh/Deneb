@@ -10,10 +10,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/lmtpd"
 )
 
-// TestRelatedMessages_Live derives a real sender + Message-ID from the archive,
-// constructs a synthetic incoming reply, and verifies the source finds the
-// referenced message and/or sender history. Gated like TestIMAP_Live.
-func TestRelatedMessages_Live(t *testing.T) {
+// TestRelatedMessagesLiveReturnsSenderHistoryForSyntheticReply derives a real
+// sender + Message-ID from the archive, constructs a synthetic incoming reply,
+// and verifies the source finds the referenced message and/or sender history.
+// Gated like TestIMAPLiveSearchesAndReadsMessageBody.
+func TestRelatedMessagesLiveReturnsSenderHistoryForSyntheticReply(t *testing.T) {
 	if os.Getenv("DENEB_ARCHIVE_IMAP_LIVE") == "" {
 		t.Skip("set DENEB_ARCHIVE_IMAP_LIVE=1 to run against a live archive IMAP")
 	}

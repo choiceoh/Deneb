@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-func TestSessionBindingServiceBindResolveReplaceAndUnbind(t *testing.T) {
+func TestSessionBindingRebindReplacesStaleIDAndUnbindErrorsAfterRemoval(t *testing.T) {
 	svc := NewSessionBindingService()
 	if svc.IsDirty() {
 		t.Fatal("new binding service starts dirty")
@@ -77,7 +77,7 @@ func TestSessionBindingServiceBindResolveReplaceAndUnbind(t *testing.T) {
 	}
 }
 
-func TestSessionBindingResolveDoesNotExposeMutableState(t *testing.T) {
+func TestSessionBindingResolveReturnsDefensiveCopy(t *testing.T) {
 	svc := NewSessionBindingService()
 	result := svc.Bind(SessionBindParams{
 		TargetSessionKey: "client:main",
@@ -244,7 +244,7 @@ func TestSessionBindingConcurrentReadersAndWriters(t *testing.T) {
 	}
 }
 
-func TestDefaultACPStorePaths(t *testing.T) {
+func TestDefaultACPStorePathsFormatRelativeToHomeDir(t *testing.T) {
 	home := filepath.Join("home", "operator")
 	if got, want := DefaultBindingStorePath(home), filepath.Join(home, ".deneb", "acp", "bindings.json"); got != want {
 		t.Fatalf("binding path = %q, want %q", got, want)

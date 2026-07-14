@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
-func TestExtractDeltaText(t *testing.T) {
+func TestExtractDeltaTextHandlesEmptyAndMalformedPayloads(t *testing.T) {
 	tests := []struct {
 		name    string
 		payload []byte

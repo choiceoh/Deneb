@@ -76,7 +76,7 @@ func TestTagNameDispatchBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestVoidAndNoiseTagSets(t *testing.T) {
+func TestIsVoidTagAndIsNoiseTagReturnExpectedMembership(t *testing.T) {
 	t.Parallel()
 
 	all := []tagName{
@@ -197,7 +197,7 @@ func TestMalformedEntitiesStayLiteral(t *testing.T) {
 	}
 }
 
-func TestValidCodePointBoundaries(t *testing.T) {
+func TestIsValidCodePointRejectsSurrogateRange(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -281,7 +281,7 @@ func TestNormalizeInlineBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestExtractAttrTokenBoundariesAndWhitespace(t *testing.T) {
+func TestExtractAttrReturnsValueAcrossQuotingAndWhitespaceVariants(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -322,7 +322,7 @@ func TestExtractAttrTokenBoundariesAndWhitespace(t *testing.T) {
 	}
 }
 
-func TestConvertUsesExactHrefAndSrcAttributes(t *testing.T) {
+func TestConvertIgnoresDecoyDataAttributesForHrefAndSrc(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -525,7 +525,7 @@ func TestTokenizeBoundaryShapes(t *testing.T) {
 	}
 }
 
-func TestConvertNoiseSuppressionMatrix(t *testing.T) {
+func TestConvertStripsNoiseTagsWhenStripNoiseEnabled(t *testing.T) {
 	t.Parallel()
 
 	tags := []string{"nav", "aside", "svg", "iframe", "form"}
@@ -545,7 +545,7 @@ func TestConvertNoiseSuppressionMatrix(t *testing.T) {
 	}
 }
 
-func TestConvertAlwaysSuppressesExecutableContentCaseInsensitively(t *testing.T) {
+func TestConvertIgnoresTagCaseForScriptStyleNoscriptSuppression(t *testing.T) {
 	t.Parallel()
 
 	tags := []string{"script", "style", "noscript", "SCRIPT", "Style", "NoScript"}

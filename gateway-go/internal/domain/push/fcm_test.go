@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestClassifyFCMResponse(t *testing.T) {
+func TestClassifyFCMResponseParsesStatusIntoOutcome(t *testing.T) {
 	cases := []struct {
 		name     string
 		status   int
@@ -63,7 +63,7 @@ func tokenServer(t *testing.T) *httptest.Server {
 	}))
 }
 
-func TestFCMSender_Send_OK(t *testing.T) {
+func TestFCMSenderSendWritesDataOnlyMessageWithAuthHeader(t *testing.T) {
 	tokenSrv := tokenServer(t)
 	defer tokenSrv.Close()
 
@@ -116,7 +116,7 @@ func TestFCMSender_Send_OK(t *testing.T) {
 
 // Send must stay data-only even with a nil caller data map, and explicit
 // title/body must win over colliding caller-supplied keys.
-func TestFCMSender_Send_DataOnly(t *testing.T) {
+func TestFCMSenderSendStaysDataOnlyWithNilOrCollidingData(t *testing.T) {
 	tokenSrv := tokenServer(t)
 	defer tokenSrv.Close()
 
@@ -155,7 +155,7 @@ func TestFCMSender_Send_DataOnly(t *testing.T) {
 	}
 }
 
-func TestFCMSender_Send_UnregisteredIsPermanent(t *testing.T) {
+func TestFCMSenderSendClassifiesUnregisteredAsPermanentFailure(t *testing.T) {
 	tokenSrv := tokenServer(t)
 	defer tokenSrv.Close()
 	fcmSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -190,7 +190,7 @@ func TestFCMSender_Send_AuthFailure(t *testing.T) {
 	}
 }
 
-func TestFCMSendEndpoint(t *testing.T) {
+func TestFCMSendEndpointFormatsProjectURL(t *testing.T) {
 	got := fcmSendEndpoint("https://fcm.googleapis.com/", "proj-1")
 	want := "https://fcm.googleapis.com/v1/projects/proj-1/messages:send"
 	if got != want {

@@ -11,7 +11,7 @@ import (
 // history-bearing session (client:main) never persists its trigger message,
 // and before the explicit-append fix nothing else put it into the working
 // message list — the model saw pure history with no new input.
-func TestEphemeralNeedsExplicitAppend(t *testing.T) {
+func TestEphemeralNeedsExplicitAppendReturnsWhetherAppendNeeded(t *testing.T) {
 	history := prepResult{Messages: []llm.Message{
 		llm.NewTextMessage("user", "이전 질문"),
 		llm.NewTextMessage("assistant", "이전 답변"),

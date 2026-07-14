@@ -87,7 +87,7 @@ func TestNotifier_NilSafe(t *testing.T) {
 	n.DeliverFallback("t", "b") // must not panic
 }
 
-func TestNotifier_NoTokensIsNoop(t *testing.T) {
+func TestNotifierDeliverFallbackNoopsWithEmptyTokenList(t *testing.T) {
 	logger, ch := recordingLogger()
 	n := NewNotifier(NotifierDeps{
 		Store:  &fakeStore{},
@@ -101,7 +101,7 @@ func TestNotifier_NoTokensIsNoop(t *testing.T) {
 	waitForLog(t, ch, "push fallback: no registered device tokens; skipping FCM")
 }
 
-func TestNotifier_AllDelivered(t *testing.T) {
+func TestNotifierDeliverFallbackSucceedsWithoutPruning(t *testing.T) {
 	logger, ch := recordingLogger()
 	store := &fakeStore{tokens: []DeviceToken{{Token: "a"}, {Token: "b"}}}
 	n := NewNotifier(NotifierDeps{
@@ -119,7 +119,7 @@ func TestNotifier_AllDelivered(t *testing.T) {
 	}
 }
 
-func TestNotifier_PrunesDeadTokensOnPartialDelivery(t *testing.T) {
+func TestNotifierPartialDeliveryEvictsDeadTokens(t *testing.T) {
 	logger, ch := recordingLogger()
 	store := &fakeStore{tokens: []DeviceToken{{Token: "live"}, {Token: "dead"}}}
 	n := NewNotifier(NotifierDeps{

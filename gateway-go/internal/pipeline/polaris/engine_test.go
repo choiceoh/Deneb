@@ -44,7 +44,7 @@ func (m *mockSummarizer) Summarize(_ context.Context, _, _ string, _ int) (strin
 
 func (m *mockSummarizer) called() bool { return m.calledFlag.Load() }
 
-func TestCompactAndPersist_NoLLMCompaction(t *testing.T) {
+func TestCompactAndPersistSkipsLLMCompactionWhenContextIsSmall(t *testing.T) {
 	e, s := testEngine(t)
 
 	// Seed a few messages in the LCM store so DAG tracking works.
@@ -218,7 +218,7 @@ func TestCompactAndPersist_WithLLMCompaction(t *testing.T) {
 	}
 }
 
-func TestCapturingSummarizer(t *testing.T) {
+func TestCapturingSummarizerReturnsAndStoresInnerResult(t *testing.T) {
 	var captured string
 	inner := &mockSummarizer{summary: "captured text"}
 	cs := &capturingSummarizer{inner: inner, captured: &captured}
@@ -232,7 +232,7 @@ func TestCapturingSummarizer(t *testing.T) {
 	}
 }
 
-func TestShouldCompact(t *testing.T) {
+func TestShouldCompactReturnsUrgencyByBudgetRatio(t *testing.T) {
 	e, _ := testEngine(t)
 
 	// Defaults are Soft=0.70, Hard=0.85 — chosen to keep headroom between

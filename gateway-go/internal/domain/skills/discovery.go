@@ -308,29 +308,7 @@ func loadSkillsFromSource(dir string, source SkillSource, limits SkillsLimits, l
 	// Check if the root itself is a single skill directory.
 	rootSkillMd := filepath.Join(baseDir, "SKILL.md")
 	if fileExists(rootSkillMd) {
-		skillMdReal := resolveContainedPath(rootSkillMd, dir, rootRealPath)
-		if skillMdReal == "" {
-			return nil
-		}
-		size := fileSize(skillMdReal)
-		if size > int64(limits.MaxSkillFileBytes) {
-			log.Warn("skipping skills root: oversized SKILL.md",
-				"dir", baseDir, "size", size, "max", limits.MaxSkillFileBytes)
-			return nil
-		}
-		content, err := os.ReadFile(skillMdReal)
-		if err != nil {
-			return nil
-		}
-		name, desc := extractSkillNameAndDesc(string(content), filepath.Base(baseDir))
-		return []discoveredSkill{{
-			Name:     name,
-			Desc:     desc,
-			FilePath: rootSkillMd,
-			BaseDir:  baseDir,
-			Source:   source,
-			Content:  string(content),
-		}}
+		return loadRootSkill(rootSkillMd, baseDir, dir, rootRealPath, source, limits, log)
 	}
 
 	// List child directories.
@@ -358,37 +336,71 @@ func loadSkillsFromSource(dir string, source SkillSource, limits SkillsLimits, l
 			ds := loadSingleSkill(skillMd, skillDir, dir, rootRealPath, "", source, limits, log)
 			if ds != nil {
 				loaded = append(loaded, *ds)
-				if len(loaded) >= limits.MaxSkillsLoadedPerSource {
-					break
-				}
 			}
-			continue
-		}
-
-		// Nested category layout: skills/category/skill-name/SKILL.md
-		// Check if this directory contains subdirectories with SKILL.md files.
-		subDirs := listChildDirectories(skillDir)
-		sort.Strings(subDirs)
-		for _, subName := range subDirs {
-			subSkillDir := filepath.Join(skillDir, subName)
-			subSkillDirReal := resolveContainedPath(subSkillDir, dir, rootRealPath)
-			if subSkillDirReal == "" {
-				continue
-			}
-			subSkillMd := filepath.Join(subSkillDir, "SKILL.md")
-			if !fileExists(subSkillMd) {
-				continue
-			}
-			ds := loadSingleSkill(subSkillMd, subSkillDir, dir, rootRealPath, name, source, limits, log)
-			if ds != nil {
-				loaded = append(loaded, *ds)
-				if len(loaded) >= limits.MaxSkillsLoadedPerSource {
-					break
-				}
-			}
+		} else {
+			// Nested category layout: skills/category/skill-name/SKILL.md
+			loaded = loadNestedCategorySkills(loaded, skillDir, name, dir, rootRealPath, source, limits, log)
 		}
 		if len(loaded) >= limits.MaxSkillsLoadedPerSource {
 			break
+		}
+	}
+	return loaded
+}
+
+// loadRootSkill loads a skills root that is itself a single skill directory
+// (baseDir/SKILL.md, no child walk). Unlike loadSingleSkill it keeps the FULL
+// file content (a lone root skill has no progressive-loading pressure).
+// Returns nil when the file escapes the root, is oversized, or is unreadable.
+func loadRootSkill(rootSkillMd, baseDir, rootDir, rootRealPath string, source SkillSource, limits SkillsLimits, log *slog.Logger) []discoveredSkill {
+	skillMdReal := resolveContainedPath(rootSkillMd, rootDir, rootRealPath)
+	if skillMdReal == "" {
+		return nil
+	}
+	size := fileSize(skillMdReal)
+	if size > int64(limits.MaxSkillFileBytes) {
+		log.Warn("skipping skills root: oversized SKILL.md",
+			"dir", baseDir, "size", size, "max", limits.MaxSkillFileBytes)
+		return nil
+	}
+	content, err := os.ReadFile(skillMdReal)
+	if err != nil {
+		return nil
+	}
+	name, desc := extractSkillNameAndDesc(string(content), filepath.Base(baseDir))
+	return []discoveredSkill{{
+		Name:     name,
+		Desc:     desc,
+		FilePath: rootSkillMd,
+		BaseDir:  baseDir,
+		Source:   source,
+		Content:  string(content),
+	}}
+}
+
+// loadNestedCategorySkills walks one category directory of the nested layout
+// (skills/category/skill-name/SKILL.md), appending each loaded skill to loaded
+// in sorted-subdirectory order until the per-source cap is reached. Returns
+// the (possibly grown) slice.
+func loadNestedCategorySkills(loaded []discoveredSkill, categoryDir, category, rootDir, rootRealPath string, source SkillSource, limits SkillsLimits, log *slog.Logger) []discoveredSkill {
+	subDirs := listChildDirectories(categoryDir)
+	sort.Strings(subDirs)
+	for _, subName := range subDirs {
+		subSkillDir := filepath.Join(categoryDir, subName)
+		subSkillDirReal := resolveContainedPath(subSkillDir, rootDir, rootRealPath)
+		if subSkillDirReal == "" {
+			continue
+		}
+		subSkillMd := filepath.Join(subSkillDir, "SKILL.md")
+		if !fileExists(subSkillMd) {
+			continue
+		}
+		ds := loadSingleSkill(subSkillMd, subSkillDir, rootDir, rootRealPath, category, source, limits, log)
+		if ds != nil {
+			loaded = append(loaded, *ds)
+			if len(loaded) >= limits.MaxSkillsLoadedPerSource {
+				break
+			}
 		}
 	}
 	return loaded

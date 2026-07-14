@@ -260,7 +260,7 @@ func TestBuildLoggerPrecedenceFormatAndLevelFiltering(t *testing.T) {
 	}
 }
 
-func TestBuildEarlyLoggerRespectsRequestedThreshold(t *testing.T) {
+func TestBuildEarlyLoggerHonorsThresholdBoundary(t *testing.T) {
 	ctx := context.Background()
 	debug := BuildEarlyLogger("debug")
 	if debug == nil || !debug.Enabled(ctx, slog.LevelDebug) {
@@ -272,7 +272,7 @@ func TestBuildEarlyLoggerRespectsRequestedThreshold(t *testing.T) {
 	}
 }
 
-func TestIsLocalAIReachableHTTPBoundaries(t *testing.T) {
+func TestIsLocalAIReachableHTTPStatusBoundary(t *testing.T) {
 	if isLocalAIReachable("") {
 		t.Fatal("empty base URL reported reachable")
 	}
@@ -338,7 +338,7 @@ func TestIsLocalAIReachableClosesResponseBody(t *testing.T) {
 	}
 }
 
-func TestResolvePIDPathPrecedence(t *testing.T) {
+func TestResolvePIDPathFallbackPrecedence(t *testing.T) {
 	if got := resolvePIDPath("/custom/run.pid", "/config"); got != "/custom/run.pid" {
 		t.Fatalf("explicit PID path = %q", got)
 	}

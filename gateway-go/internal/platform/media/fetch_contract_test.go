@@ -107,7 +107,7 @@ func TestFetchSuccessContract(t *testing.T) {
 	}
 }
 
-func TestFetchSuccessStatusRange(t *testing.T) {
+func TestFetchReturnsBodyForEvery2xxStatus(t *testing.T) {
 	tests := []struct {
 		name   string
 		status int
@@ -253,7 +253,7 @@ func TestFetchValidatesEveryRedirectWithCustomClient(t *testing.T) {
 	}
 }
 
-func TestFetchRedirectLimitAndCallerPolicy(t *testing.T) {
+func TestFetchEnforcesRedirectLimitAndPreservesCallerPolicy(t *testing.T) {
 	t.Run("max redirects is enforced", func(t *testing.T) {
 		var calls atomic.Int64
 		client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {

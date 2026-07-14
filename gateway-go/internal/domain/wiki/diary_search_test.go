@@ -40,8 +40,8 @@ func TestDiarySearch_EmptyQueryReturnsNil(t *testing.T) {
 	}
 }
 
-// TestDiarySearch_RecencyOutranksOld — same BM25 match, fresher entry wins.
-func TestDiarySearch_RecencyOutranksOld(t *testing.T) {
+// TestDiarySearch_RecencyOutranksOldWithSameScore — same BM25 match, fresher entry wins.
+func TestDiarySearch_RecencyOutranksOldWithSameScore(t *testing.T) {
 	d := newDiarySearchDB()
 	now := time.Now().UnixMilli()
 	old := now - 60*24*60*60*1000 // 60 days ago
@@ -87,8 +87,8 @@ func TestDiarySearch_RecentEntriesFallback(t *testing.T) {
 	}
 }
 
-// TestDiarySearch_RebuildFromDir reads multi-file diary state from disk.
-func TestDiarySearch_RebuildFromDir(t *testing.T) {
+// TestDiarySearch_RebuildFromDirLoadsFiles reads multi-file diary state from disk.
+func TestDiarySearch_RebuildFromDirLoadsFiles(t *testing.T) {
 	dir := t.TempDir()
 	files := map[string]string{
 		"diary-2026-05-15.md": "\n## 09:00\n\nfirst entry on tuesday\n\n## 14:30\n\nsecond tuesday entry, recall topic\n",
@@ -115,9 +115,9 @@ func TestDiarySearch_RebuildFromDir(t *testing.T) {
 	}
 }
 
-// TestDiarySearch_KoreanPrefixMatch — textsearch handles Hangul prefix; verify
-// it still works end-to-end through diary search.
-func TestDiarySearch_KoreanPrefixMatch(t *testing.T) {
+// TestDiarySearch_KoreanPrefixMatchReturnsHits — textsearch handles Hangul
+// prefix; verify it still works end-to-end through diary search.
+func TestDiarySearch_KoreanPrefixMatchReturnsHits(t *testing.T) {
 	d := newDiarySearchDB()
 	d.upsertEntry("diary-2026-05-16.md", "10:30",
 		"위키 페이지 회상 파이프라인을 정리했다.", time.Now().UnixMilli())
@@ -147,8 +147,8 @@ func TestParseDiaryFile_BasicSections(t *testing.T) {
 	}
 }
 
-// TestDiaryEntryUnixMillis — filename + header → unix millis.
-func TestDiaryEntryUnixMillis(t *testing.T) {
+// TestDiaryEntryUnixMillisParsesTimestamp — filename + header → unix millis.
+func TestDiaryEntryUnixMillisParsesTimestamp(t *testing.T) {
 	got := diaryEntryUnixMillis("diary-2026-05-16.md", "10:30")
 	if got <= 0 {
 		t.Fatalf("expected positive timestamp, got %d", got)
@@ -185,12 +185,12 @@ func TestStore_AppendDiary_UpdatesIndex(t *testing.T) {
 	}
 }
 
-// TestStore_AppendDiaryTo_NoLiveIndex documents the known limitation that the
-// standalone AppendDiaryTo helper (used by gmailpoll and morning_letter) does
-// NOT touch the in-memory index — its entries are only searchable after the
-// next gateway restart. Captured here so a future refactor that fixes it can
-// flip this assertion intentionally.
-func TestStore_AppendDiaryTo_NoLiveIndex(t *testing.T) {
+// TestStore_AppendDiaryTo_DoesNotUpdateLiveIndex documents the known limitation
+// that the standalone AppendDiaryTo helper (used by gmailpoll and
+// morning_letter) does NOT touch the in-memory index — its entries are only
+// searchable after the next gateway restart. Captured here so a future
+// refactor that fixes it can flip this assertion intentionally.
+func TestStore_AppendDiaryTo_DoesNotUpdateLiveIndex(t *testing.T) {
 	wikiDir := t.TempDir()
 	diaryDir := t.TempDir()
 	store, err := NewStore(wikiDir, diaryDir)
@@ -212,11 +212,11 @@ func TestStore_AppendDiaryTo_NoLiveIndex(t *testing.T) {
 	}
 }
 
-// TestDiarySearch_SameMinuteEntriesBothSearchable guards the ID-collision
+// TestDiarySearch_SameMinuteEntriesBothReturned guards the ID-collision
 // fix: several diary entries land in the same HH:MM minute after every chat
 // burst, and colliding doc IDs used to replace each other in the index —
 // every same-minute entry but the last vanished from recall.
-func TestDiarySearch_SameMinuteEntriesBothSearchable(t *testing.T) {
+func TestDiarySearch_SameMinuteEntriesBothReturned(t *testing.T) {
 	d := newDiarySearchDB()
 	d.upsertEntry("diary-2026-06-10.md", "15:01", "남도에코와 실사 일정 통화", 1)
 	d.upsertEntry("diary-2026-06-10.md", "15:01", "모닝레터 패턴 재사용 결정", 2)

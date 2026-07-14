@@ -9,7 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 )
 
-func TestCalendarProposalsFromMail(t *testing.T) {
+func TestCalendarProposalsFromMailCreatesMeetingAndDealProposals(t *testing.T) {
 	now := time.Date(2026, 6, 17, 10, 0, 0, 0, time.Local)
 	items := []mailanalysis.ActionItem{
 		{Title: "킥오프 미팅 참석", DueHint: "6월 30일", Priority: "high"}, // dated + high → proposed
@@ -46,7 +46,7 @@ func TestCalendarProposalsFromMail(t *testing.T) {
 	}
 }
 
-func TestDocumentAttachmentNames(t *testing.T) {
+func TestDocumentAttachmentNamesIgnoresImageMimeTypes(t *testing.T) {
 	atts := []gmail.AttachmentInfo{
 		{Filename: "견적서.pdf", MimeType: "application/pdf"},
 		{Filename: "logo.png", MimeType: "image/png"},                                                          // image → skipped
@@ -77,7 +77,7 @@ func TestCalendarProposalsFromMail_NoneWhenNothingQualifies(t *testing.T) {
 	}
 }
 
-func TestDealDeadlineTitle(t *testing.T) {
+func TestDealDeadlineTitleFormatsMissingFields(t *testing.T) {
 	cases := []struct {
 		deal mailanalysis.DealInfo
 		want string
@@ -122,7 +122,7 @@ func TestParseTimeOfDay(t *testing.T) {
 	}
 }
 
-func TestCalendarProposalsFromMail_TimedMeeting(t *testing.T) {
+func TestCalendarProposalsFromMailTimedMeetingFormatsStartTime(t *testing.T) {
 	now := time.Date(2026, 6, 17, 10, 0, 0, 0, time.Local)
 	items := []mailanalysis.ActionItem{
 		// medium priority but TIMED → should still be proposed (a real meeting),
@@ -143,7 +143,7 @@ func TestCalendarProposalsFromMail_TimedMeeting(t *testing.T) {
 }
 
 // Executive preference: routine/FYI mail proposes no schedules, however date-rich.
-func TestCalendarProposalsFromMail_RoutineImportanceSuppressed(t *testing.T) {
+func TestCalendarProposalsFromMailRoutineTierDeniedUnknownTierAllowed(t *testing.T) {
 	now := time.Date(2026, 6, 17, 10, 0, 0, 0, time.Local)
 	// Items that WOULD normally propose (high-priority dated + timed meeting + deal).
 	items := []mailanalysis.ActionItem{

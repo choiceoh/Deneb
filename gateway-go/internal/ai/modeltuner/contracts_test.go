@@ -54,7 +54,7 @@ func TestEffortSignalContract(t *testing.T) {
 	}
 }
 
-func TestAnalyzeThresholdBoundariesAndStableOrdering(t *testing.T) {
+func TestAnalyzeRespectsThresholdBoundaryAndPreservesOrder(t *testing.T) {
 	stats := []agentlog.ModelStat{
 		{Provider: "p", Model: "z", Runs: 4, MaxTokensRecoveries: 4, TimeoutRuns: 4, P95Ms: 999_999, ToolCalls: 100, ToolErrors: 100},
 		{Provider: "p", Model: "b", Runs: 10, MaxTokensRecoveries: 2, TimeoutRuns: 2, CacheCreationTokens: 1, CacheReadTokens: 1, InputTokens: 9, P95Ms: 120_001, ThinkingRuns: 3, FallbackRuns: 3, ToolCalls: 20, ToolErrors: 3},
@@ -85,7 +85,7 @@ func TestAnalyzeThresholdBoundariesAndStableOrdering(t *testing.T) {
 	}
 }
 
-func TestAnalyzeDoesNotJudgeInactiveCacheOrLowToolSamples(t *testing.T) {
+func TestAnalyzeIgnoresInactiveCacheAndLowToolSamples(t *testing.T) {
 	got := Analyze([]agentlog.ModelStat{{Model: "m", Runs: 100, CacheCreationTokens: 0, CacheReadTokens: 0, InputTokens: 100, ToolCalls: 19, ToolErrors: 19}})
 	if len(got) != 0 {
 		t.Fatalf("recommendations = %+v", got)
@@ -109,7 +109,7 @@ func TestFingerprintContractAdditional(t *testing.T) {
 	}
 }
 
-func TestKoreanRatioAdditional(t *testing.T) {
+func TestKoreanRatioIgnoresPunctuationAndCountsHanLetters(t *testing.T) {
 	for _, tt := range []struct {
 		input string
 		want  float64
@@ -190,7 +190,7 @@ func newProbeServer(t *testing.T, chunks ...map[string]any) *httptest.Server {
 	}))
 }
 
-func TestProbeModelFiltersThinkingAndMeasuresAnswer(t *testing.T) {
+func TestProbeModelReadsAnswerAndSkipsThinkingChunks(t *testing.T) {
 	srv := newProbeServer(
 		t,
 		map[string]any{"role": "assistant", "reasoning_content": "내부 추론"},
@@ -257,7 +257,7 @@ func TestTaskMetadataAndNilLogsRun(t *testing.T) {
 	}
 }
 
-func TestTaskRunPersistsNotifiesOnChangeAndSuppressesSameSet(t *testing.T) {
+func TestTaskRunSavesScorecardAndDeduplicatesNotifications(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "scorecard.json")
 	logs := &contractStats{stats: []agentlog.ModelStat{{Provider: "p", Model: "m", Runs: 10, TimeoutRuns: 3}}}
 	var notices []string

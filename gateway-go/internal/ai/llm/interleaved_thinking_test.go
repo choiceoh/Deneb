@@ -183,10 +183,10 @@ func TestConvertMessages_PreservesThinkingWhenInterleaved(t *testing.T) {
 	}
 }
 
-// TestConvertMessages_DoesNotLeakUserThinking confirms thinking blocks on
+// TestConvertMessagesIgnoresUserThinkingBlocks confirms thinking blocks on
 // non-assistant messages (defensive: the wire never carries these, but
 // belt-and-braces) never bleed into reasoning_content.
-func TestConvertMessages_DoesNotLeakUserThinking(t *testing.T) {
+func TestConvertMessagesIgnoresUserThinkingBlocks(t *testing.T) {
 	c := NewClient("http://invalid", "")
 	messages := []Message{
 		NewBlockMessage("user", []ContentBlock{

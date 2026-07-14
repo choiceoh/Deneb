@@ -17,9 +17,9 @@ import (
 // (pl1, bs8); deal-type is letters only; sequence is digits only.
 var projectCodeRe = regexp.MustCompile(`^[a-z][a-z0-9]{2}-[a-z0-9]{3}-[a-z]{3}-[0-9]{3}$`)
 
-// DeptCodes are the fixed department segments. etc lumps every other division
+// deptCodes are the fixed department segments. etc lumps every other division
 // (전략사업본부·미래사업실·설계실); com is multi-division collaboration / JV.
-var DeptCodes = map[string]string{
+var deptCodes = map[string]string{
 	"pl0": "기획조정실장 직할 (오선택 직접)",
 	"pl1": "기획조정실 1팀 (사업개발)",
 	"pl2": "기획조정실 2팀 (루프탑·RE100·자가소비)",
@@ -29,8 +29,8 @@ var DeptCodes = map[string]string{
 	"com": "다부서 협동 / JV",
 }
 
-// DealTypeCodes are the fixed deal-type segments.
-var DealTypeCodes = map[string]string{
+// dealTypeCodes are the fixed deal-type segments.
+var dealTypeCodes = map[string]string{
 	"dev": "개발·인허가",
 	"epc": "EPC 시공·O&M",
 	"mod": "모듈 조달",
@@ -42,7 +42,7 @@ var DealTypeCodes = map[string]string{
 
 // normalizeProjectCode lowercases, trims, and strips any wikilink wrapper from a
 // raw frontmatter code value. It does not reject malformed values (parsing stays
-// lenient); callers use ValidProjectCode to gate.
+// lenient); callers use validProjectCode to gate.
 func normalizeProjectCode(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(s, "[[")
@@ -50,17 +50,17 @@ func normalizeProjectCode(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
 }
 
-// ValidProjectCode reports whether s is a structurally well-formed project code
+// validProjectCode reports whether s is a structurally well-formed project code
 // with a known department and deal-type segment.
-func ValidProjectCode(s string) bool {
+func validProjectCode(s string) bool {
 	if !projectCodeRe.MatchString(s) {
 		return false
 	}
 	parts := strings.Split(s, "-")
-	if _, ok := DeptCodes[parts[0]]; !ok {
+	if _, ok := deptCodes[parts[0]]; !ok {
 		return false
 	}
-	if _, ok := DealTypeCodes[parts[2]]; !ok {
+	if _, ok := dealTypeCodes[parts[2]]; !ok {
 		return false
 	}
 	return true

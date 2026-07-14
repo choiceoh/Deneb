@@ -94,7 +94,7 @@ func TestParsePlaudTranscript(t *testing.T) {
 	}
 }
 
-func TestSplitRelatedProjects(t *testing.T) {
+func TestSplitRelatedProjectsIgnoresHallucinatedPaths(t *testing.T) {
 	cands := []mailanalysis.ProjectCandidate{
 		{Path: "프로젝트/비금도-154kv/대표.md"},
 		{Path: "프로젝트/영광-bess/대표.md"},
@@ -119,7 +119,7 @@ func TestSplitRelatedProjects(t *testing.T) {
 	}
 }
 
-func TestMeetingFilename(t *testing.T) {
+func TestMeetingFilenameFormatsSlugWithFallback(t *testing.T) {
 	f := plaudFile{ID: "174d2f812c09ff81f9f95df708da938a", Name: "07-06 회의: 재생에너지 리스크!"}
 	got := meetingFilename(f)
 	if got != "07-06-회의-재생에너지-리스크-174d2f81.md" {
@@ -178,7 +178,7 @@ func newTestPlaudService(t *testing.T, exec func(ctx context.Context, name strin
 	return s, sink
 }
 
-func TestPlaudTickBaselineThenAnalyze(t *testing.T) {
+func TestPlaudTickAnalyzesOnlyWhenNewRecordingAppears(t *testing.T) {
 	transcript := strings.Repeat("오형석: 계약 조건 협의를 진행했습니다. ", 20)
 	inner, _ := json.Marshal([]map[string]any{{"content": transcript}})
 	outer, _ := json.Marshal([]map[string]any{{"data_content": string(inner)}})
@@ -258,7 +258,7 @@ func keysOfPlaudPages(m map[string]*wiki.Page) []string {
 	return out
 }
 
-func TestPlaudSelectNewFiltersAndCaps(t *testing.T) {
+func TestPlaudSelectNewIgnoresSeenAndCapsCount(t *testing.T) {
 	s, _ := newTestPlaudService(t, func(ctx context.Context, name string, args json.RawMessage) (string, error) {
 		return "", nil
 	})

@@ -33,7 +33,7 @@ func fleetServer(t *testing.T, wantToken string, body string) *httptest.Server {
 	}))
 }
 
-func TestDiscoverFleet_HealthyVLLMOnly(t *testing.T) {
+func TestDiscoverFleet_ReturnsHealthyVLLMOnly(t *testing.T) {
 	srv := fleetServer(t, "", servicesPayload)
 	defer srv.Close()
 
@@ -62,7 +62,7 @@ func TestDiscoverFleet_HealthyVLLMOnly(t *testing.T) {
 	}
 }
 
-func TestDiscoverFleet_SendsTokenAndDedups(t *testing.T) {
+func TestDiscoverFleet_SendsTokenAndDeduplicatesModels(t *testing.T) {
 	// Two nodes serve the same model id; the first wins. Server also enforces the
 	// fleet token, proving discoverFleet authenticates.
 	dup := `{"services":[
@@ -90,7 +90,7 @@ func TestDiscoverFleet_AuthRejected(t *testing.T) {
 	}
 }
 
-func TestDeriveOpenAIBase(t *testing.T) {
+func TestDeriveOpenAIBase_ParsesModelsURLToBase(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"http://127.0.0.1:8000/v1/models", "http://127.0.0.1:8000/v1"},
 		{"http://127.0.0.1:8000/v1/models/", "http://127.0.0.1:8000/v1"},
@@ -106,7 +106,7 @@ func TestDeriveOpenAIBase(t *testing.T) {
 	}
 }
 
-func TestRouterLookup_ConfigWinsOverFleet(t *testing.T) {
+func TestRouterLookup_ConfigWinsOverFleetWithSameName(t *testing.T) {
 	rt := quietRouter(config{Models: []modelEntry{
 		{Name: "shared", URL: "http://config/v1", UpstreamModel: "shared"},
 	}})
@@ -140,7 +140,7 @@ func TestRouterLookup_ConfigWinsOverFleet(t *testing.T) {
 	}
 }
 
-func TestRouterLookup_FleetBackedEntry(t *testing.T) {
+func TestRouterLookup_FleetBackedEntryPreservesConfigAcrossMoves(t *testing.T) {
 	// A fleet-backed explicit entry keeps its own routing config (toggleKwarg) but
 	// takes its URL live from discovery, keyed by upstreamModel.
 	rt := quietRouter(config{Models: []modelEntry{
@@ -203,7 +203,7 @@ func TestRouterLookup_FleetBackedStaticFallback(t *testing.T) {
 	}
 }
 
-func TestValidateConfig_FleetBacked(t *testing.T) {
+func TestValidateConfig_WarnsFleetBackedWithoutSparkfleetSource(t *testing.T) {
 	// A fleet-backed entry with no sparkfleet source can never resolve → warned;
 	// its empty url must NOT be warned (the url comes from discovery, not the file).
 	warns := validateConfig(config{Models: []modelEntry{
@@ -236,7 +236,7 @@ func fleetWarnsContain(warns []string, sub string) bool {
 
 // End-to-end: a model that exists ONLY in the discovered fleet set is routable
 // through serve() — proving lookup() is wired into the request path.
-func TestServe_RoutesToDiscoveredModel(t *testing.T) {
+func TestServe_RoutesToDiscoveredModelWithFleetBackend(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, `{"from":"fleet"}`)
 	}))

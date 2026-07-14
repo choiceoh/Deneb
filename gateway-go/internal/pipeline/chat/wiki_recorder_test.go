@@ -13,11 +13,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-// TestMaybeRecordRunDiary_SyncPathSideEffects pins the wiring shared by the
-// async lifecycle and SendSync/SendSyncStream (the native chat path): an
-// eligible turn records the diary — with leaked reasoning delimiters stripped
-// — and fires the dream-turn trigger; an excluded session prefix does neither.
-func TestMaybeRecordRunDiary_SyncPathSideEffects(t *testing.T) {
+// TestMaybeRecordRunDiaryWritesDiaryAndFiresDreamTrigger pins the wiring
+// shared by the async lifecycle and SendSync/SendSyncStream (the native chat
+// path): an eligible turn records the diary — with leaked reasoning
+// delimiters stripped — and fires the dream-turn trigger; an excluded
+// session prefix does neither.
+func TestMaybeRecordRunDiaryWritesDiaryAndFiresDreamTrigger(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -55,11 +56,12 @@ func TestMaybeRecordRunDiary_SyncPathSideEffects(t *testing.T) {
 	}
 }
 
-// TestMaybeRecordRunDiary_PreferenceSignalPropagates pins the 선호 fast path: a
-// preference-voicing turn nudges the dreamer (preferenceSignalFn) BEFORE the
-// dream-turn increment — the increment's ShouldDream check must already see the
-// pending signal — and a plain factual turn fires the increment only.
-func TestMaybeRecordRunDiary_PreferenceSignalPropagates(t *testing.T) {
+// TestMaybeRecordRunDiaryEmitsPreferenceSignalBeforeDreamTrigger pins the
+// 선호 fast path: a preference-voicing turn nudges the dreamer
+// (preferenceSignalFn) BEFORE the dream-turn increment — the increment's
+// ShouldDream check must already see the pending signal — and a plain
+// factual turn fires the increment only.
+func TestMaybeRecordRunDiaryEmitsPreferenceSignalBeforeDreamTrigger(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -102,7 +104,7 @@ func waitDiaryEvent(t *testing.T, ch chan string) string {
 	}
 }
 
-func TestRecordDiaryIncludesOutcomeForShortPrompt(t *testing.T) {
+func TestRecordDiaryWritesOutcomeForShortPrompt(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -125,11 +127,12 @@ func TestRecordDiaryIncludesOutcomeForShortPrompt(t *testing.T) {
 	}
 }
 
-// TestClassifyDiarySignalTagsPreference pins the behavioral-signal capture: a user
-// turn voicing a standing preference or style correction is tagged "선호" (and
-// force-recorded as durable), so the dreamer aggregates an explicit cue for its
-// working-style abstraction instead of inferring it from raw text.
-func TestClassifyDiarySignalTagsPreference(t *testing.T) {
+// TestClassifyDiarySignalReturnsPreferenceTag pins the behavioral-signal
+// capture: a user turn voicing a standing preference or style correction is
+// tagged "선호" (and force-recorded as durable), so the dreamer aggregates an
+// explicit cue for its working-style abstraction instead of inferring it
+// from raw text.
+func TestClassifyDiarySignalReturnsPreferenceTag(t *testing.T) {
 	cases := []struct {
 		msg     string
 		wantTag bool
@@ -164,7 +167,7 @@ func TestRecordDiarySkipsShortPromptWithoutOutcome(t *testing.T) {
 	}
 }
 
-func TestRecordDiarySkipsTrivialBriefOutcome(t *testing.T) {
+func TestRecordDiaryIgnoresTrivialAcknowledgement(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -174,7 +177,7 @@ func TestRecordDiarySkipsTrivialBriefOutcome(t *testing.T) {
 	}
 }
 
-func TestShouldRecordRunDiarySkipsHeartbeatAndSystemSessions(t *testing.T) {
+func TestShouldRecordRunDiaryIgnoresHeartbeatAndSystemSessions(t *testing.T) {
 	if shouldRecordRunDiary(RunParams{SessionKey: "telegram:1", Message: "[시스템 하트비트] check", EphemeralUser: true}) {
 		t.Fatal("heartbeat trigger should not be recorded to diary")
 	}

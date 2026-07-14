@@ -22,7 +22,7 @@ func sampleResult(transcript string) *media.YouTubeResult {
 }
 
 // Short transcripts pass through unchanged — no summarization, no spillover note.
-func TestSummarizeYouTubeResult_ShortTranscriptPassthrough(t *testing.T) {
+func TestSummarizeYouTubeResultReturnsShortTranscriptUnchanged(t *testing.T) {
 	r := sampleResult("짧은 자막입니다.")
 	out := summarizeYouTubeResult(context.Background(), nil, r)
 
@@ -35,7 +35,7 @@ func TestSummarizeYouTubeResult_ShortTranscriptPassthrough(t *testing.T) {
 }
 
 // A result without a usable transcript passes through unchanged.
-func TestSummarizeYouTubeResult_NoTranscript(t *testing.T) {
+func TestSummarizeYouTubeResultReturnsMarkerWhenTranscriptMissing(t *testing.T) {
 	r := sampleResult("")
 	out := summarizeYouTubeResult(context.Background(), nil, r)
 

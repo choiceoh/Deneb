@@ -2,10 +2,10 @@ package autonomous
 
 import "testing"
 
-// TestSignalConfigForThreshold verifies the operator cadence dial: a positive
+// TestSignalConfigForThresholdPreservesOtherFields verifies the operator cadence dial: a positive
 // value overrides only EscalateThreshold, and an unset/non-positive value keeps
 // the calibrated default byte-for-byte.
-func TestSignalConfigForThreshold(t *testing.T) {
+func TestSignalConfigForThresholdPreservesOtherFields(t *testing.T) {
 	def := DefaultSignalConfig()
 
 	// Unset / non-positive keeps the calibrated default.

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestTimedTextSegments(t *testing.T) {
+func TestTimedTextDocSegmentsParsesLegacyAndSRV3Shapes(t *testing.T) {
 	t.Run("legacy text shape", func(t *testing.T) {
 		raw := `<?xml version="1.0"?><transcript>` +
 			`<text start="0" dur="2">Hello &amp;amp; welcome</text>` +
@@ -49,7 +49,7 @@ func TestTimedTextSegments(t *testing.T) {
 	})
 }
 
-func TestExtractVideoID(t *testing.T) {
+func TestExtractVideoIDParsesKnownFormsAndReturnsEmptyForInvalid(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string
@@ -95,7 +95,7 @@ func TestNormalizeUploadDate(t *testing.T) {
 	}
 }
 
-func TestSelectCaptionTrack(t *testing.T) {
+func TestSelectCaptionTrackPrefersManualTracksOverAutoWithKoreanFirst(t *testing.T) {
 	manualKo := captionTrack{BaseURL: "u-ko", LanguageCode: "ko"}
 	manualEn := captionTrack{BaseURL: "u-en", LanguageCode: "en"}
 	manualEnUS := captionTrack{BaseURL: "u-en-us", LanguageCode: "en-US"}
@@ -259,7 +259,7 @@ func TestFormatChapteredTranscript(t *testing.T) {
 	}
 }
 
-func TestAvailableCaptionLabels(t *testing.T) {
+func TestAvailableCaptionLabelsFormatsAutoSuffixAndReturnsNilWhenEmpty(t *testing.T) {
 	tracks := []captionTrack{
 		{LanguageCode: "ko"},
 		{LanguageCode: "en", Kind: "asr"},
@@ -280,7 +280,7 @@ func TestAvailableCaptionLabels(t *testing.T) {
 	}
 }
 
-func TestChannelURL(t *testing.T) {
+func TestChannelURLNormalizesRelativeProfileAndFallsBackWhenEmpty(t *testing.T) {
 	tests := []struct {
 		channelID  string
 		profileURL string
@@ -298,7 +298,7 @@ func TestChannelURL(t *testing.T) {
 	}
 }
 
-func TestBestThumbnail(t *testing.T) {
+func TestBestThumbnailSelectsLargestAreaAndReturnsEmptyForNil(t *testing.T) {
 	type thumb = struct {
 		URL    string `json:"url"`
 		Width  int    `json:"width"`

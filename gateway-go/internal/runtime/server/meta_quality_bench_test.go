@@ -9,7 +9,7 @@ import (
 )
 
 // weakestPillars returns the n lowest, ascending.
-func TestWeakestPillars(t *testing.T) {
+func TestWeakestPillarsReturnsLowestScoresAscending(t *testing.T) {
 	pillars := map[string]float64{
 		"runtime-safety":     100,
 		"change-locality":    55,
@@ -31,7 +31,7 @@ func TestWeakestPillars(t *testing.T) {
 
 // The evidence reads the baseline JSON from DENEB_PROD_DIR and formats the
 // overall score + weakest pillars + accepted finding count.
-func TestMetaQualityBenchEvidence_FromBaseline(t *testing.T) {
+func TestMetaQualityBenchEvidenceFormatsBaselineScoreAndWeakestPillars(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DENEB_PROD_DIR", dir)
 	baselinePath := filepath.Join(dir, "scripts", "audit", "health-v2-baseline.json")
@@ -70,7 +70,7 @@ func TestMetaQualityBenchEvidence_FromBaseline(t *testing.T) {
 }
 
 // No source tree / no baseline → empty (quiet, not broken).
-func TestMetaQualityBenchEvidence_NoBaseline(t *testing.T) {
+func TestMetaQualityBenchEvidenceReturnsEmptyWithoutBaseline(t *testing.T) {
 	t.Setenv("DENEB_PROD_DIR", t.TempDir())
 	s := &Server{AutonomousSubsystem: &AutonomousSubsystem{}}
 	if got := s.metaQualityBenchEvidence(context.Background()); got != "" {

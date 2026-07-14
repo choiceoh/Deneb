@@ -38,48 +38,82 @@ import (
 // generation. Placed on its own line in the struct's doc comment.
 const wireMarker = "deneb:wire"
 
-func main() {
-	var srcDir, outFile, testOutFile, fieldTestOutFile, nullTestOutFile, valueTestOutFile, pkg string
-	var check bool
+// genFlags holds the parsed command-line flags.
+type genFlags struct {
+	srcDir           string
+	outFile          string
+	testOutFile      string
+	fieldTestOutFile string
+	nullTestOutFile  string
+	valueTestOutFile string
+	pkg              string
+	check            bool
+}
+
+func parseFlags() genFlags {
+	var f genFlags
+	stringFlags := map[string]*string{
+		"-src":            &f.srcDir,
+		"-out":            &f.outFile,
+		"-test-out":       &f.testOutFile,
+		"-field-test-out": &f.fieldTestOutFile,
+		"-null-test-out":  &f.nullTestOutFile,
+		"-value-test-out": &f.valueTestOutFile,
+		"-pkg":            &f.pkg,
+	}
 	for i := 1; i < len(os.Args); i++ {
-		switch os.Args[i] {
-		case "-src":
-			i++
-			srcDir = arg(i)
-		case "-out":
-			i++
-			outFile = arg(i)
-		case "-test-out":
-			i++
-			testOutFile = arg(i)
-		case "-field-test-out":
-			i++
-			fieldTestOutFile = arg(i)
-		case "-null-test-out":
-			i++
-			nullTestOutFile = arg(i)
-		case "-value-test-out":
-			i++
-			valueTestOutFile = arg(i)
-		case "-pkg":
-			i++
-			pkg = arg(i)
-		case "-check":
-			check = true
-		default:
+		if os.Args[i] == "-check" {
+			f.check = true
+			continue
+		}
+		target, ok := stringFlags[os.Args[i]]
+		if !ok {
 			fail("unknown flag %q", os.Args[i])
 		}
+		i++
+		*target = arg(i)
 	}
-	if srcDir == "" || outFile == "" || pkg == "" {
+	if f.srcDir == "" || f.outFile == "" || f.pkg == "" {
 		fail("usage: kotlin-models-gen -src DIR -out FILE [-test-out FILE] [-field-test-out FILE] [-null-test-out FILE] [-value-test-out FILE] -pkg KOTLIN_PKG [-check]")
 	}
+	return f
+}
 
-	structs, marked, err := gowire.ParseStructs(srcDir, wireMarker)
+// genOutput pairs a target path with its rendered content.
+type genOutput struct {
+	path    string
+	content string
+}
+
+// buildOutputs renders the model file plus each requested test file, in the
+// original emission order (out, test-out, field-test-out, null-test-out,
+// value-test-out). Renderers are unchanged, so output stays byte-identical.
+func buildOutputs(f genFlags, classes []kotClass) []genOutput {
+	outputs := []genOutput{{f.outFile, render(classes, f.pkg, f.srcDir)}}
+	if f.testOutFile != "" {
+		outputs = append(outputs, genOutput{f.testOutFile, renderContractTests(classes, f.pkg, f.srcDir)})
+	}
+	if f.fieldTestOutFile != "" {
+		outputs = append(outputs, genOutput{f.fieldTestOutFile, renderFieldContractTests(classes, f.pkg, f.srcDir)})
+	}
+	if f.nullTestOutFile != "" {
+		outputs = append(outputs, genOutput{f.nullTestOutFile, renderNullContractTests(classes, f.pkg, f.srcDir)})
+	}
+	if f.valueTestOutFile != "" {
+		outputs = append(outputs, genOutput{f.valueTestOutFile, renderValueContractTests(classes, f.pkg, f.srcDir)})
+	}
+	return outputs
+}
+
+func main() {
+	f := parseFlags()
+
+	structs, marked, err := gowire.ParseStructs(f.srcDir, wireMarker)
 	if err != nil {
-		fail("parse %s: %v", srcDir, err)
+		fail("parse %s: %v", f.srcDir, err)
 	}
 	if len(marked) == 0 {
-		fail("no structs marked //%s in %s", wireMarker, srcDir)
+		fail("no structs marked //%s in %s", wireMarker, f.srcDir)
 	}
 
 	classes, err := buildClasses(structs, marked)
@@ -87,56 +121,20 @@ func main() {
 		fail("%v", err)
 	}
 
-	src := render(classes, pkg, srcDir)
-	testSrc := ""
-	if testOutFile != "" {
-		testSrc = renderContractTests(classes, pkg, srcDir)
-	}
-	fieldTestSrc := ""
-	if fieldTestOutFile != "" {
-		fieldTestSrc = renderFieldContractTests(classes, pkg, srcDir)
-	}
-	nullTestSrc := ""
-	if nullTestOutFile != "" {
-		nullTestSrc = renderNullContractTests(classes, pkg, srcDir)
-	}
-	valueTestSrc := ""
-	if valueTestOutFile != "" {
-		valueTestSrc = renderValueContractTests(classes, pkg, srcDir)
-	}
+	outputs := buildOutputs(f, classes)
 
-	if check {
-		checkGenerated(outFile, src)
-		if testOutFile != "" {
-			checkGenerated(testOutFile, testSrc)
+	if f.check {
+		for _, out := range outputs {
+			checkGenerated(out.path, out.content)
 		}
-		if fieldTestOutFile != "" {
-			checkGenerated(fieldTestOutFile, fieldTestSrc)
-		}
-		if nullTestOutFile != "" {
-			checkGenerated(nullTestOutFile, nullTestSrc)
-		}
-		if valueTestOutFile != "" {
-			checkGenerated(valueTestOutFile, valueTestSrc)
-		}
-		fmt.Printf("ok: %s up to date (%d types)\n", outFile, len(classes))
+		fmt.Printf("ok: %s up to date (%d types)\n", f.outFile, len(classes))
 		return
 	}
 
-	writeGenerated(outFile, src)
-	if testOutFile != "" {
-		writeGenerated(testOutFile, testSrc)
+	for _, out := range outputs {
+		writeGenerated(out.path, out.content)
 	}
-	if fieldTestOutFile != "" {
-		writeGenerated(fieldTestOutFile, fieldTestSrc)
-	}
-	if nullTestOutFile != "" {
-		writeGenerated(nullTestOutFile, nullTestSrc)
-	}
-	if valueTestOutFile != "" {
-		writeGenerated(valueTestOutFile, valueTestSrc)
-	}
-	fmt.Printf("wrote %s (%d types)\n", outFile, len(classes))
+	fmt.Printf("wrote %s (%d types)\n", f.outFile, len(classes))
 }
 
 // ---------------------------------------------------------------------------

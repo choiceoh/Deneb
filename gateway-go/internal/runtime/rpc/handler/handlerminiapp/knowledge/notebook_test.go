@@ -86,7 +86,7 @@ func TestNotebookAddSourceRejections(t *testing.T) {
 	}
 }
 
-func TestNotebookRemoveSource(t *testing.T) {
+func TestNotebookRemoveSourceDropsCitedEntryAndRejectsUnknownCite(t *testing.T) {
 	m := notebookTestMethods(t)
 	created := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "딜"}))
 	id, _ := created["id"].(string)
@@ -109,10 +109,10 @@ func TestNotebookRemoveSource(t *testing.T) {
 	}
 }
 
-// TestNotebookSetMode exercises the grounding-strictness toggle the desktop
+// TestNotebookSetModeTogglesStrictSoftAndRejectsInvalidInputs exercises the grounding-strictness toggle the desktop
 // notebook pane drives: new notebooks are soft (mode omitted), set_mode switches
 // to strict and back, and bad mode / unknown id / missing id are rejected.
-func TestNotebookSetMode(t *testing.T) {
+func TestNotebookSetModeTogglesStrictSoftAndRejectsInvalidInputs(t *testing.T) {
 	m := notebookTestMethods(t)
 	created := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "딜"}))
 	id, _ := created["id"].(string)

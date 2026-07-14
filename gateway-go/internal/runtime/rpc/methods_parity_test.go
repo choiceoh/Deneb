@@ -147,7 +147,7 @@ func fullDispatcher() *Dispatcher {
 
 // TestTSBaseMethodParity verifies every method from the TS BASE_METHODS list
 // is registered in the Go dispatcher.
-func TestTSBaseMethodParity(t *testing.T) {
+func TestTSBaseMethodParityHasNoMissingMethods(t *testing.T) {
 	d := fullDispatcher()
 	registered := make(map[string]struct{})
 	for _, m := range d.Methods() {
@@ -171,7 +171,7 @@ func TestTSBaseMethodParity(t *testing.T) {
 }
 
 // TestMethodCount verifies the total number of registered methods meets the target.
-func TestMethodCount(t *testing.T) {
+func TestMethodCountMeetsMinimumBoundary(t *testing.T) {
 	d := fullDispatcher()
 	methods := d.Methods()
 	// We expect at least 75 methods (after removing Telegram bot methods).

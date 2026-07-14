@@ -81,7 +81,7 @@ func unmarshalPayload(t *testing.T, resp *protocol.ResponseFrame) map[string]any
 
 // --- acp.status ---
 
-func TestACPStatus(t *testing.T) {
+func TestACPStatusReturnsDefaultCounts(t *testing.T) {
 	deps := testACPDeps()
 	d := testACPDispatcher(deps)
 
@@ -181,7 +181,7 @@ func TestACPList_WithParentFilter(t *testing.T) {
 
 // --- acp.spawn ---
 
-func TestACPSpawn_Success(t *testing.T) {
+func TestACPSpawnCreatesAgentWithSessionKey(t *testing.T) {
 	deps := testACPDeps()
 	d := testACPDispatcher(deps)
 
@@ -206,7 +206,7 @@ func TestACPSpawn_MissingRole(t *testing.T) {
 	requireError(t, resp, protocol.ErrMissingParam)
 }
 
-func TestACPSpawn_Disabled(t *testing.T) {
+func TestACPSpawnFailsWhenDisabled(t *testing.T) {
 	deps := testACPDeps()
 	deps.SetEnabled(false)
 	d := testACPDispatcher(deps)
@@ -217,7 +217,7 @@ func TestACPSpawn_Disabled(t *testing.T) {
 
 // --- acp.kill ---
 
-func TestACPKill_Success(t *testing.T) {
+func TestACPKillUpdatesAgentStatusToKilled(t *testing.T) {
 	deps := testACPDeps()
 	d := testACPDispatcher(deps)
 
@@ -242,7 +242,7 @@ func TestACPKill_Success(t *testing.T) {
 	}
 }
 
-func TestACPKill_NotFound(t *testing.T) {
+func TestACPKillReturnsErrorForUnknownAgent(t *testing.T) {
 	deps := testACPDeps()
 	d := testACPDispatcher(deps)
 
@@ -260,7 +260,7 @@ func TestACPKill_MissingParam(t *testing.T) {
 
 // --- acp.send ---
 
-func TestACPSend_ByAgentID(t *testing.T) {
+func TestACPSendRoutesMessageWithAgentID(t *testing.T) {
 	deps := testACPDeps()
 	d := testACPDispatcher(deps)
 
@@ -289,7 +289,7 @@ func TestACPSend_ByAgentID(t *testing.T) {
 	}
 }
 
-func TestACPSend_BySessionKey(t *testing.T) {
+func TestACPSendRoutesMessageWithSessionKey(t *testing.T) {
 	deps := testACPDeps()
 	d := testACPDispatcher(deps)
 
@@ -318,7 +318,7 @@ func TestACPSend_MissingMessage(t *testing.T) {
 	requireError(t, resp, protocol.ErrMissingParam)
 }
 
-func TestACPSend_NoSendFn(t *testing.T) {
+func TestACPSendReturnsErrorWhenSendFnMissing(t *testing.T) {
 	deps := testACPDeps()
 	deps.SessionSendFn = nil
 	d := testACPDispatcher(deps)
@@ -336,7 +336,7 @@ func TestACPSend_NoSendFn(t *testing.T) {
 
 // --- acp.bind / acp.unbind ---
 
-func TestACPBindUnbind(t *testing.T) {
+func TestACPUnbindSucceedsWithBindingID(t *testing.T) {
 	deps := testACPDeps()
 	d := testACPDispatcher(deps)
 
@@ -361,7 +361,7 @@ func TestACPBindUnbind(t *testing.T) {
 	requireOK(t, resp)
 }
 
-func TestACPUnbind_ByConversation(t *testing.T) {
+func TestACPUnbindSucceedsWithConversationID(t *testing.T) {
 	deps := testACPDeps()
 	d := testACPDispatcher(deps)
 
@@ -394,7 +394,7 @@ func TestACPBind_MissingTargetKey(t *testing.T) {
 
 // --- acp.bindings ---
 
-func TestACPBindings_All(t *testing.T) {
+func TestACPBindingsReturnsAllWhenNoFilter(t *testing.T) {
 	deps := testACPDeps()
 	d := testACPDispatcher(deps)
 
@@ -420,7 +420,7 @@ func TestACPBindings_All(t *testing.T) {
 	}
 }
 
-func TestACPBindings_FilterBySession(t *testing.T) {
+func TestACPBindingsReturnsFilteredCountWithSessionKey(t *testing.T) {
 	deps := testACPDeps()
 	d := testACPDispatcher(deps)
 
@@ -483,7 +483,7 @@ func TestACPWriteOps_DisabledState(t *testing.T) {
 
 // --- Methods registration ---
 
-func TestACPMethodsRegistered(t *testing.T) {
+func TestACPMethodsRegisteredWithDispatcher(t *testing.T) {
 	deps := testACPDeps()
 	d := testACPDispatcher(deps)
 

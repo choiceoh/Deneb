@@ -40,7 +40,7 @@ func (s *calendarBriefingService) runDecision(now time.Time, events []calendar.E
 	return pushes
 }
 
-func TestBriefing_PushesEventInWindow(t *testing.T) {
+func TestBriefingPushesWhenEventInWindow(t *testing.T) {
 	s := makeService(t)
 	now := time.Date(2026, 5, 26, 13, 45, 0, 0, time.UTC)
 	events := []calendar.Event{
@@ -52,7 +52,7 @@ func TestBriefing_PushesEventInWindow(t *testing.T) {
 	}
 }
 
-func TestBriefing_SkipsOutsideWindow(t *testing.T) {
+func TestBriefingIgnoresEventsOutsideWindow(t *testing.T) {
 	s := makeService(t)
 	now := time.Date(2026, 5, 26, 13, 45, 0, 0, time.UTC)
 	events := []calendar.Event{
@@ -66,7 +66,7 @@ func TestBriefing_SkipsOutsideWindow(t *testing.T) {
 	}
 }
 
-func TestBriefing_HitsEdgesOfWindow(t *testing.T) {
+func TestBriefingPushesAtWindowBoundaryEdges(t *testing.T) {
 	s := makeService(t)
 	now := time.Date(2026, 5, 26, 13, 45, 0, 0, time.UTC)
 	events := []calendar.Event{
@@ -79,7 +79,7 @@ func TestBriefing_HitsEdgesOfWindow(t *testing.T) {
 	}
 }
 
-func TestBriefing_DedupsRepeatedTicks(t *testing.T) {
+func TestBriefingDeduplicatesRepeatedTicks(t *testing.T) {
 	s := makeService(t)
 	now := time.Date(2026, 5, 26, 13, 45, 0, 0, time.UTC)
 	events := []calendar.Event{
@@ -97,7 +97,7 @@ func TestBriefing_DedupsRepeatedTicks(t *testing.T) {
 
 // Rescheduled event: same Google ID, different Start. The new start
 // must produce a new dedup key so the rescheduled briefing fires.
-func TestBriefing_RescheduledEventGetsNewBriefing(t *testing.T) {
+func TestBriefingRescheduledEventCreatesNewPush(t *testing.T) {
 	s := makeService(t)
 	now := time.Date(2026, 5, 26, 13, 45, 0, 0, time.UTC)
 	original := calendar.Event{ID: "ev1", Start: now.Add(15 * time.Minute)}
@@ -137,7 +137,7 @@ func TestBriefing_ZeroStartTimeIgnored(t *testing.T) {
 	}
 }
 
-func TestBriefing_PruneRemovesStaleEntries(t *testing.T) {
+func TestBriefingPruneEvictsStaleEntries(t *testing.T) {
 	s := makeService(t)
 	now := time.Date(2026, 5, 26, 13, 45, 0, 0, time.UTC)
 

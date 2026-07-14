@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestExtractLinks_BareURLs(t *testing.T) {
+func TestExtractLinksReturnsBareURLsFromText(t *testing.T) {
 	urls := ExtractLinks("Check https://example.com and https://rust-lang.org", 5)
 	if len(urls) != 2 {
 		t.Fatalf("got %d: %v, want 2 URLs", len(urls), urls)
@@ -17,7 +17,7 @@ func TestExtractLinks_BareURLs(t *testing.T) {
 	}
 }
 
-func TestExtractLinks_MarkdownLinksStripped(t *testing.T) {
+func TestExtractLinksIgnoresMarkdownWrappedURLs(t *testing.T) {
 	text := "See [Docs](https://docs.example.com) and https://bare.example.com"
 	urls := ExtractLinks(text, 5)
 	if len(urls) != 1 {
@@ -35,14 +35,14 @@ func TestExtractLinks_Deduplication(t *testing.T) {
 	}
 }
 
-func TestExtractLinks_MaxLimit(t *testing.T) {
+func TestExtractLinksReturnsAtMostMaxLimitURLs(t *testing.T) {
 	urls := ExtractLinks("https://a.com https://b.com https://c.com https://d.com", 2)
 	if len(urls) != 2 {
 		t.Fatalf("got %d, want 2 URLs", len(urls))
 	}
 }
 
-func TestExtractLinks_SSRFBlocked(t *testing.T) {
+func TestExtractLinksRejectsSSRFTargetedURLs(t *testing.T) {
 	text := "https://example.com http://127.0.0.1/admin http://169.254.169.254/metadata"
 	urls := ExtractLinks(text, 5)
 	if len(urls) != 1 {
@@ -53,7 +53,7 @@ func TestExtractLinks_SSRFBlocked(t *testing.T) {
 	}
 }
 
-func TestStripURLTail_TrailingPunctuation(t *testing.T) {
+func TestStripURLTailReturnsURLWithoutTrailingPunctuation(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string
@@ -72,7 +72,7 @@ func TestStripURLTail_TrailingPunctuation(t *testing.T) {
 	}
 }
 
-func TestStripURLTail_BalancedParens(t *testing.T) {
+func TestStripURLTailPreservesBalancedParens(t *testing.T) {
 	// Wikipedia-style URL with balanced parens should be kept.
 	url := "https://en.wikipedia.org/wiki/Rust_(programming_language)"
 	got := stripURLTail(url)
@@ -81,14 +81,14 @@ func TestStripURLTail_BalancedParens(t *testing.T) {
 	}
 }
 
-func TestStripURLTail_UnbalancedClosingParen(t *testing.T) {
+func TestFindBareURLsReturnsURLWithoutTrailingParen(t *testing.T) {
 	urls := findBareURLs("(see https://example.com)")
 	if len(urls) != 1 || urls[0] != "https://example.com" {
 		t.Errorf("got %v, want unbalanced paren stripped", urls)
 	}
 }
 
-func TestExtractLinks_JSONArray(t *testing.T) {
+func TestExtractLinksReturnsURLFromJSONArrayText(t *testing.T) {
 	input := `["https://github.com/choiceoh/deneb/releases/latest/download/latest.json"],`
 	urls := ExtractLinks(input, 5)
 	if len(urls) != 1 {
@@ -99,7 +99,7 @@ func TestExtractLinks_JSONArray(t *testing.T) {
 	}
 }
 
-func TestExtractLinks_MultibyteMDLinks(t *testing.T) {
+func TestExtractLinksPreservesKoreanTextAroundMarkdownLinks(t *testing.T) {
 	// Korean text with markdown link must not corrupt multibyte chars.
 	text := "한국어 [링크](https://docs.example.com) 텍스트 https://bare.example.com 끝"
 	urls := ExtractLinks(text, 5)
@@ -122,7 +122,7 @@ func TestExtractLinks_MultibyteMDLinks(t *testing.T) {
 // --- Rust parity: trailing colon stripped ---
 // --- Rust parity: balanced brackets for all 4 bracket types ---
 
-func TestStripURLTail_BalancedSquareBrackets(t *testing.T) {
+func TestStripURLTailPreservesBalancedSquareBrackets(t *testing.T) {
 	// Balanced [] should be preserved.
 	url := "https://example.com/path[0]"
 	got := stripURLTail(url)

@@ -34,7 +34,7 @@ func TestFailureEvidenceClusters_GroupsOrdersAndWindows(t *testing.T) {
 	})
 	appendFunnel(t, tr.usagePath, UsageRecord{
 		SkillName: "contract-review", SessionKey: "system:skill-review:x", Success: false,
-		ErrorMsg: artifactErr, UsedAt: now.UnixMilli() - dayMs, Source: UsageSourceReviewConsult,
+		ErrorMsg: artifactErr, UsedAt: now.UnixMilli() - dayMs, Source: usageSourceReviewConsult,
 	})
 	appendFunnel(t, tr.usagePath, UsageRecord{
 		SkillName: "contract-review", SessionKey: "client:a", Success: false,
@@ -184,7 +184,7 @@ func TestFailureEvidenceClusters_DeterministicRanking(t *testing.T) {
 		clusterUsageRecord("alpha", " z ", "terminal=tool-error|mechanism=tool-boundary", tiedAt, UsageSourceReal),
 		clusterUsageRecord("alpha", "a", "terminal=timeout|mechanism=bounded-execution", tiedAt, UsageSourceReal),
 		clusterUsageRecord("alpha", "a", "terminal=missing-artifact|mechanism=artifact-recovery", tiedAt, UsageSourceReal),
-		clusterUsageRecord("alpha", "", "terminal=timeout|mechanism=bounded-execution", tiedAt, UsageSourceWorkout),
+		clusterUsageRecord("alpha", "", "terminal=timeout|mechanism=bounded-execution", tiedAt, usageSourceWorkout),
 	}
 	for _, record := range usage {
 		appendFunnel(t, tr.usagePath, record)

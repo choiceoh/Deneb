@@ -61,7 +61,7 @@ func TestAssembleMiniappModelSectionsDeduplicatesAcrossSources(t *testing.T) {
 	}
 }
 
-func TestMiniappModelHealthEntryStateMatrix(t *testing.T) {
+func TestMiniappModelHealthWhenProbeAndVerdictVary(t *testing.T) {
 	t.Parallel()
 	entry := modelEntry{
 		provider: "zai",
@@ -180,7 +180,7 @@ func TestMiniappModelHealthEntryStateMatrix(t *testing.T) {
 	}
 }
 
-func TestProbeModelsClassifiedResponseMatrix(t *testing.T) {
+func TestProbeModelsClassifiedHandlesMalformedResponses(t *testing.T) {
 	cases := []struct {
 		name       string
 		status     int
@@ -306,7 +306,7 @@ func TestBuildMiniappModelHealthConcurrentReadSafety(t *testing.T) {
 	}
 }
 
-func TestProviderModelProbeJSONShapeIsInternalOnly(t *testing.T) {
+func TestProviderModelProbeEncodesToEmptyJSON(t *testing.T) {
 	t.Parallel()
 	probe := providerModelProbe{
 		checked:   true,

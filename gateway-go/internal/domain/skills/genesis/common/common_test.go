@@ -377,7 +377,7 @@ func TestSanitizeSkillNameBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestEnvBoolAcceptedSpellings(t *testing.T) {
+func TestEnvBoolParsesRecognizedSpellingsElseFallback(t *testing.T) {
 	cases := []struct {
 		name     string
 		raw      string
@@ -515,7 +515,7 @@ func TestEnvBoolAcceptedSpellings(t *testing.T) {
 	}
 }
 
-func TestEnvIntParsingMatrix(t *testing.T) {
+func TestEnvIntParsesValidIntegersElseFallback(t *testing.T) {
 	cases := []struct {
 		name     string
 		raw      string
@@ -653,7 +653,7 @@ func TestEnvIntParsingMatrix(t *testing.T) {
 	}
 }
 
-func TestSkillDedupTokensNormalizationMatrix(t *testing.T) {
+func TestSkillDedupTokensNormalizesAndDedupesTerms(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name        string
@@ -803,7 +803,7 @@ func TestSkillDedupTokensNormalizationMatrix(t *testing.T) {
 	}
 }
 
-func TestJaccardSimilaritySetMatrix(t *testing.T) {
+func TestJaccardSimilarityReturnsIntersectionOverUnion(t *testing.T) {
 	t.Parallel()
 	set := func(values any) map[string]struct{} {
 		out := map[string]struct{}{}

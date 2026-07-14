@@ -12,7 +12,7 @@ import (
 
 const supervisorTestDigest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-func TestSupervisorContinueThenPassAndHideDiagnostics(t *testing.T) {
+func TestSupervisorEvaluateReturnsContinueThenPassWithHiddenDiagnostics(t *testing.T) {
 	plan := signedSupervisorPlan(t, 2, 1, []SupervisorCheckpoint{
 		{Cycle: 1, Checks: []Check{{ID: "final-answer", Type: CheckExactText, Weight: 1, ExpectedText: "final"}}},
 		{Cycle: 2, Checks: []Check{{ID: "final-answer", Type: CheckExactText, Weight: 1, ExpectedText: "final"}}},
@@ -81,7 +81,7 @@ func TestSupervisorCanceledEvaluationDoesNotConsumeCheckpoint(t *testing.T) {
 	}
 }
 
-func TestSupervisorCriticalGateIsImmediateAndStillCountsForBestScore(t *testing.T) {
+func TestSupervisorCriticalGateFailsImmediatelyAndPreservesBestScore(t *testing.T) {
 	plan := signedSupervisorPlan(t, 3, 0.5, []SupervisorCheckpoint{
 		{Cycle: 1, Checks: []Check{
 			{ID: "unsafe", Type: CheckForbidden, Critical: true, Weight: 1, Needle: "unsafe"},
@@ -108,7 +108,7 @@ func TestSupervisorCriticalGateIsImmediateAndStillCountsForBestScore(t *testing.
 	}
 }
 
-func TestSupervisorCycleLimitAndBestSoFarTieUsesEarliest(t *testing.T) {
+func TestSupervisorCycleLimitFailsAndPreservesEarliestBestTie(t *testing.T) {
 	checkpoints := []SupervisorCheckpoint{
 		{Cycle: 1, Checks: halfScoreChecks()},
 		{Cycle: 2, Checks: halfScoreChecks()},
@@ -174,7 +174,7 @@ func TestSupervisorInvalidGradeAndRunMismatchFailClosed(t *testing.T) {
 	}
 }
 
-func TestSupervisorPlanValidationAndDigest(t *testing.T) {
+func TestSupervisorPlanDigestMatchesAndValidationRejectsTamperedPlans(t *testing.T) {
 	valid := signedSupervisorPlan(t, 1, 1, []SupervisorCheckpoint{{
 		Cycle: 1, Checks: []Check{{ID: "answer", Type: CheckContains, Weight: 1, Needle: "ok"}},
 	}})
@@ -215,7 +215,7 @@ func TestSupervisorPlanValidationAndDigest(t *testing.T) {
 	}
 }
 
-func TestSupervisorPlanValidationReportsFirstViolationDeterministically(t *testing.T) {
+func TestSupervisorPlanValidationReturnsFirstViolationInContractOrder(t *testing.T) {
 	valid := signedSupervisorPlan(t, 1, 1, []SupervisorCheckpoint{{
 		Cycle: 1, Checks: []Check{{ID: "answer", Type: CheckContains, Weight: 1, Needle: "ok"}},
 	}})

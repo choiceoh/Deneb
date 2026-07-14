@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 )
 
-func TestCleanLLMCardTitle(t *testing.T) {
+func TestCleanLLMCardTitleRejectsGenericOrShortTitles(t *testing.T) {
 	cases := map[string]string{
 		"현대차 울산 가견적서 재송부":         "현대차 울산 가견적서 재송부",    // kept as-is (no hard length clamp)
 		"\"무림 과업지시서\"":            "무림 과업지시서",           // surrounding quotes
@@ -27,10 +27,10 @@ func TestCleanLLMCardTitle(t *testing.T) {
 	}
 }
 
-// TestRelay_CardTitler verifies the lightweight-LLM titler names mail-report
-// cards, is skipped for non-mail proactive cards, and falls back to the
-// deterministic heuristic when the model returns "".
-func TestRelay_CardTitler(t *testing.T) {
+// TestRelay_CardTitlerLLMWinsOrFallbackHeuristic verifies the lightweight-LLM
+// titler names mail-report cards, is skipped for non-mail proactive cards,
+// and falls back to the deterministic heuristic when the model returns "".
+func TestRelay_CardTitlerLLMWinsOrFallbackHeuristic(t *testing.T) {
 	mailBody := "## 📬 메일 분석 리포트\n\n### 무림피앤피 울산공장 과업지시서 송부\n**🟡 확인 필요**"
 
 	t.Run("LLM title wins for a mail report", func(t *testing.T) {

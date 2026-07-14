@@ -8,7 +8,7 @@ import (
 
 // Blind Curator join: a confirmed-clean skill that concurrently fails its own
 // workout cases is a labeler false-pass suspect; every other combination is not.
-func TestLabelerBlindSpots(t *testing.T) {
+func TestLabelerBlindSpotsFlagsConfirmedSkillsThatFailOwnWorkoutCases(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
@@ -16,7 +16,7 @@ func TestLabelerBlindSpots(t *testing.T) {
 	}
 	confirm := func(skill string) {
 		t.Helper()
-		if err := tr.LogEvolveConfirmed(skill, HarnessEditAudit{}, true); err != nil {
+		if err := tr.logEvolveConfirmed(skill, HarnessEditAudit{}, true); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -25,7 +25,7 @@ func TestLabelerBlindSpots(t *testing.T) {
 		if err := tr.RecordUsage(UsageRecord{
 			SkillName: skill, SessionKey: "workout:1", Success: false,
 			ErrorMsg: "workout replay failed 1/2 assertions on case " + caseLabel + ": boom",
-			Source:   UsageSourceWorkout,
+			Source:   usageSourceWorkout,
 		}); err != nil {
 			t.Fatal(err)
 		}

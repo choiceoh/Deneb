@@ -7,7 +7,7 @@
 // DealRecord ledger row (with the audit quote kept), and capacity additionally
 // parses to a numeric MW so "이 거래처 총 몇 MW" becomes deterministic
 // summation instead of the model eyeballing prose — the same motivation as
-// AmountValue/ParseAmount in deal_records.go.
+// AmountValue/parseAmount in deal_records.go.
 package wiki
 
 import (
@@ -52,11 +52,11 @@ func (t *DealTerms) Empty() bool {
 // matching). Deliberately unit-mandatory: a bare number is not a capacity.
 var capacityRe = regexp.MustCompile(`(?i)([0-9]+(?:\.[0-9]+)?)\s*(mwp?|kwp?|㎿|㎾)`)
 
-// ParseCapacityMW parses a free-text 설비용량/물량 into megawatts. ok=false when
+// parseCapacityMW parses a free-text 설비용량/물량 into megawatts. ok=false when
 // no unit-tagged figure is present — the raw string stays on the record either
-// way, so unparsed capacity is surfaced rather than guessed (ParseAmount's
+// way, so unparsed capacity is surfaced rather than guessed (parseAmount's
 // contract).
-func ParseCapacityMW(raw string) (mw float64, ok bool) {
+func parseCapacityMW(raw string) (mw float64, ok bool) {
 	s := strings.ReplaceAll(strings.TrimSpace(raw), ",", "")
 	if s == "" {
 		return 0, false

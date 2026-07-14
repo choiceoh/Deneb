@@ -114,7 +114,7 @@ func TestDeletePersistenceFailureRestoresOrderingAndEvent(t *testing.T) {
 	}
 }
 
-func TestListRangeInstantAndHalfOpenBoundaries(t *testing.T) {
+func TestListRange_HonorsHalfOpenIntervalBoundary(t *testing.T) {
 	s := newTestStore(t)
 	from := time.Date(2026, 7, 11, 9, 0, 0, 0, time.UTC)
 	to := from.Add(time.Hour)
@@ -138,7 +138,7 @@ func TestListRangeInstantAndHalfOpenBoundaries(t *testing.T) {
 	}
 }
 
-func TestAllDayDefaultUsesNextLocalCalendarDayAcrossDST(t *testing.T) {
+func TestBuildRecord_NormalizesAllDayEndAcrossDST(t *testing.T) {
 	loc, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		t.Skipf("timezone data unavailable: %v", err)
@@ -176,7 +176,7 @@ func TestCreateAndGetDefensivelyCopyDocumentSlices(t *testing.T) {
 	}
 }
 
-func TestBuildRecordNormalizationAndDefaultEnds(t *testing.T) {
+func TestBuildRecord_NormalizesMissingAndBackwardsEndTimes(t *testing.T) {
 	start := time.Date(2026, 7, 11, 10, 0, 0, 123, time.FixedZone("custom", 9*3600))
 	for _, tt := range []struct {
 		name    string
@@ -313,7 +313,7 @@ func TestNewRejectsEmptyAndCorruptStores(t *testing.T) {
 	}
 }
 
-func TestMutationValidationLeavesStoreUntouched(t *testing.T) {
+func TestMutationValidation_RejectsInvalidInputWithoutMutating(t *testing.T) {
 	s := newTestStore(t)
 	ev, err := s.Create(eventInput("valid", 9))
 	if err != nil {

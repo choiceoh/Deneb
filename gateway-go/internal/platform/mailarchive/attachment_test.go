@@ -26,7 +26,7 @@ func eq(a, b []string) bool {
 	return true
 }
 
-func TestSelectArchivedAttachments(t *testing.T) {
+func TestSelectArchivedAttachmentsReturnsIndexOrSubstringMatches(t *testing.T) {
 	all := []ArchivedAttachment{att("견적서.pdf"), att("계약서.docx"), att("운영관리사양서.xlsx")}
 
 	cases := []struct {
@@ -48,7 +48,7 @@ func TestSelectArchivedAttachments(t *testing.T) {
 	}
 }
 
-func TestSelectArchivedAttachments_CaseInsensitive(t *testing.T) {
+func TestSelectArchivedAttachmentsIgnoresSelectorCase(t *testing.T) {
 	all := []ArchivedAttachment{att("Quotation-Final.PDF")}
 	if got := names(selectArchivedAttachments(all, "quotation")); !eq(got, []string{"Quotation-Final.PDF"}) {
 		t.Errorf("case-insensitive substring failed: got %v", got)

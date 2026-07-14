@@ -27,7 +27,7 @@ func benchBody() string {
 
 // Each mechanical degradation must actually plant its defect — otherwise the
 // bench measures nothing.
-func TestJudgeBenchDegradations(t *testing.T) {
+func TestDegradationFunctionsCreateTheirIntendedDefects(t *testing.T) {
 	body := benchBody()
 
 	dropped, ok := degradeDropLastSection(body)
@@ -49,7 +49,7 @@ func TestJudgeBenchDegradations(t *testing.T) {
 }
 
 // Pair construction is deterministic over the catalog and skips stub bodies.
-func TestBuildJudgeDegradationPairs(t *testing.T) {
+func TestBuildJudgeDegradationPairsIgnoresStubsAndIsDeterministic(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, content string) skills.SkillEntry {
 		path := filepath.Join(dir, name+".md")
@@ -89,7 +89,7 @@ func TestBuildJudgeDegradationPairs(t *testing.T) {
 
 // Bench scoring: correct = judge rejects the planted defect without scoring it
 // above the original; passes, inverted scores, and errors are failures.
-func TestRunJudgeDegradationBench(t *testing.T) {
+func TestRunJudgeDegradationBenchCountsInvertedScoresAndErrorsAsFailures(t *testing.T) {
 	pairs := []judgeBenchPair{
 		{Skill: "a", Degradation: "section-drop"},
 		{Skill: "a", Degradation: "fake-tool"},
@@ -131,7 +131,7 @@ func TestRunJudgeDegradationBench(t *testing.T) {
 }
 
 // Promotion rule: proposal must clear the floor AND not regress the incumbent.
-func TestJudgeBenchDecision(t *testing.T) {
+func TestJudgeBenchDecisionRejectsRegressionFloorMissAndTinySample(t *testing.T) {
 	mk := func(correct, total int) judgeBenchOutcome { return judgeBenchOutcome{Correct: correct, Total: total} }
 	if r := judgeBenchDecision(mk(3, 6), mk(4, 6)); r != "" {
 		t.Fatalf("improving proposal rejected: %s", r)

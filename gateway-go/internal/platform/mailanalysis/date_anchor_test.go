@@ -12,7 +12,7 @@ import (
 // resolvable by table lookup — the table's 다음 주 row must carry the exact
 // Friday date so the model copies instead of computing (dsv4 computed it
 // off-by-one in both prompt formats, 2026-07-04).
-func TestBuildDateAnchor_ThursdayNextWeekTable(t *testing.T) {
+func TestBuildDateAnchorEmitsNextWeekLookupTable(t *testing.T) {
 	// 2026-07-02 is a real Thursday.
 	msg := &gmail.MessageDetail{Date: "Thu, 2 Jul 2026 10:05:00 +0900"}
 	now := time.Date(2026, 7, 5, 10, 0, 0, 0, anchorTimezone)
@@ -81,7 +81,7 @@ func TestBuildDateAnchor_YearBoundaryRows(t *testing.T) {
 
 // 내일/모레/월말 must be lookup rows too — the reading rule forbids arithmetic,
 // so every cue it names needs an explicit anchor.
-func TestBuildDateAnchor_DirectiveRow(t *testing.T) {
+func TestBuildDateAnchorEmitsRelativeDayDirectiveRows(t *testing.T) {
 	msg := &gmail.MessageDetail{Date: "Thu, 2 Jul 2026 10:05:00 +0900"}
 	got := buildDateAnchor(msg, time.Date(2026, 7, 5, 10, 0, 0, 0, anchorTimezone))
 	for _, want := range []string{

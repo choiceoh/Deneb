@@ -22,7 +22,7 @@ func ingestPhoneActionResult(s *Server, eventType, source, text string) {
 	}).IngestAsync(eventType, source, text)
 }
 
-func TestPhoneActionAwaiter(t *testing.T) {
+func TestPhoneActionAwaiterResolvesOnceAndIgnoresLateOrUnknownReports(t *testing.T) {
 	a := newPhoneActionAwaiter()
 
 	ch := a.register("pa1", 1)
@@ -53,7 +53,7 @@ func TestPhoneActionAwaiter(t *testing.T) {
 	}
 }
 
-func TestPhoneActionAwaiter_SuccessBiasedAggregation(t *testing.T) {
+func TestPhoneActionAwaiterAggregationPreservesSuccessOverPartialFailure(t *testing.T) {
 	a := newPhoneActionAwaiter()
 
 	// fanout=2: one failure is absorbed, a later success resolves.
@@ -206,7 +206,7 @@ func TestDispatchPhoneAction_UnconfirmedOnCancel(t *testing.T) {
 	}
 }
 
-func TestDispatchPhoneAction_SyncStateFireAndForget(t *testing.T) {
+func TestDispatchPhoneActionSyncStateReturnsNilWithoutCorrelationID(t *testing.T) {
 	s := phoneActionTestServer()
 	frames, unsub := s.pushHub.Subscribe(proactive.KindMobile)
 	defer unsub()
@@ -221,7 +221,7 @@ func TestDispatchPhoneAction_SyncStateFireAndForget(t *testing.T) {
 	}
 }
 
-func TestDispatchPhoneAction_NoMobileSubscriber(t *testing.T) {
+func TestDispatchPhoneActionReturnsErrorWithoutMobileSubscriber(t *testing.T) {
 	s := phoneActionTestServer()
 	// Desktop-only connection must not read as dispatchable.
 	_, unsub := s.pushHub.Subscribe(proactive.KindDesktop)

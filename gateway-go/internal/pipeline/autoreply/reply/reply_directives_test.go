@@ -88,7 +88,7 @@ func TestParseReplyDirectives_StripsLeakedToolCall(t *testing.T) {
 
 // --- splitMediaFromOutput tests ---
 
-func TestSplitMediaFromOutput_MediaToken(t *testing.T) {
+func TestSplitMediaFromOutputParsesMediaToken(t *testing.T) {
 	text, urls, url, _ := splitMediaFromOutput("Hello\nMEDIA: https://example.com/image.png\nWorld")
 	if url != "https://example.com/image.png" {
 		t.Fatalf("got %q, want media URL", url)
@@ -101,7 +101,7 @@ func TestSplitMediaFromOutput_MediaToken(t *testing.T) {
 	}
 }
 
-func TestSplitMediaFromOutput_NoMedia(t *testing.T) {
+func TestSplitMediaFromOutputReturnsTextUnchangedWithoutMediaToken(t *testing.T) {
 	text, urls, url, _ := splitMediaFromOutput("Just plain text")
 	if url != "" {
 		t.Fatalf("got %q, want no media URL", url)
@@ -114,7 +114,7 @@ func TestSplitMediaFromOutput_NoMedia(t *testing.T) {
 	}
 }
 
-func TestSplitMediaFromOutput_LocalPath(t *testing.T) {
+func TestSplitMediaFromOutputParsesLocalPathMedia(t *testing.T) {
 	text, urls, url, _ := splitMediaFromOutput("MEDIA: /tmp/image.png")
 	if url != "/tmp/image.png" {
 		t.Fatalf("got %q, want local path", url)
@@ -127,7 +127,7 @@ func TestSplitMediaFromOutput_LocalPath(t *testing.T) {
 	}
 }
 
-func TestSplitMediaFromOutput_FileURL(t *testing.T) {
+func TestSplitMediaFromOutputParsesFileURLToPath(t *testing.T) {
 	text, urls, _, _ := splitMediaFromOutput("MEDIA: file:///home/user/photo.jpg")
 	if len(urls) != 1 || urls[0] != "/home/user/photo.jpg" {
 		t.Fatalf("got %v, want file:// stripped path", urls)
@@ -137,7 +137,7 @@ func TestSplitMediaFromOutput_FileURL(t *testing.T) {
 	}
 }
 
-func TestSplitMediaFromOutput_InsideFence(t *testing.T) {
+func TestSplitMediaFromOutputIgnoresMediaInsideCodeFence(t *testing.T) {
 	input := "Hello\n```\nMEDIA: https://example.com/fake.png\n```\nWorld"
 	text, urls, _, _ := splitMediaFromOutput(input)
 	// MEDIA: inside a code fence should NOT be extracted.
@@ -149,7 +149,7 @@ func TestSplitMediaFromOutput_InsideFence(t *testing.T) {
 	}
 }
 
-func TestSplitMediaFromOutput_MultipleMedia(t *testing.T) {
+func TestSplitMediaFromOutputParsesMultipleMediaTokens(t *testing.T) {
 	input := "MEDIA: https://a.com/1.png\nSome text\nMEDIA: https://b.com/2.jpg"
 	text, urls, url, _ := splitMediaFromOutput(input)
 	if len(urls) != 2 {
@@ -163,7 +163,7 @@ func TestSplitMediaFromOutput_MultipleMedia(t *testing.T) {
 	}
 }
 
-func TestSplitMediaFromOutput_AudioTag(t *testing.T) {
+func TestSplitMediaFromOutputParsesAudioAsVoiceTag(t *testing.T) {
 	text, _, _, audioAsVoice := splitMediaFromOutput("Hello [[audio_as_voice]] world")
 	if !audioAsVoice {
 		t.Fatal("expected audioAsVoice")
@@ -173,7 +173,7 @@ func TestSplitMediaFromOutput_AudioTag(t *testing.T) {
 	}
 }
 
-func TestSplitMediaFromOutput_VoiceTag(t *testing.T) {
+func TestSplitMediaFromOutputParsesVoiceTagAsAudio(t *testing.T) {
 	_, _, _, audioAsVoice := splitMediaFromOutput("Hello [[voice]] world")
 	if !audioAsVoice {
 		t.Fatal("expected audioAsVoice from [[voice]] tag")
@@ -187,7 +187,7 @@ func TestSplitMediaFromOutput_Empty(t *testing.T) {
 	}
 }
 
-func TestSplitMediaFromOutput_RelativePath(t *testing.T) {
+func TestSplitMediaFromOutputParsesRelativePathMedia(t *testing.T) {
 	_, urls, _, _ := splitMediaFromOutput("MEDIA: ./output/image.png")
 	if len(urls) != 1 {
 		t.Fatalf("got %d, want 1 URL for relative path", len(urls))

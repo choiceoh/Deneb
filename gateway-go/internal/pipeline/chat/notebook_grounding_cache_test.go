@@ -2,7 +2,7 @@ package chat
 
 import "testing"
 
-func TestNotebookGroundingCache(t *testing.T) {
+func TestNotebookGroundingCacheEvictsOnChangeAndClear(t *testing.T) {
 	const sk = "client:nbg-cache-test"
 	clearNotebookGrounding(sk)
 

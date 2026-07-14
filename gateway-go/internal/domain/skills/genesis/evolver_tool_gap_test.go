@@ -27,7 +27,7 @@ func toolGapStats(tool string) *UsageStats {
 
 // P4 pairing: a grounded tool-gap declaration emits ONE coding candidate and a
 // lifecycle pairing entry; hallucinated or duplicate declarations do not.
-func TestMaybePairToolGap(t *testing.T) {
+func TestMaybePairToolGapQueuesGroundedDeclarationOnceSkipsHallucinatedOrMalformed(t *testing.T) {
 	newEvolver := func(t *testing.T) *Evolver {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())

@@ -2,12 +2,12 @@ package server
 
 import "testing"
 
-// TestMailAnalysisWikiPath locks the per-project layout slot: a mail the
+// TestMailAnalysisWikiPathFormatsProjectFolder locks the per-project layout slot: a mail the
 // analyzer linked to a project is filed under that project's 메일분석/ folder
 // (the reliable related-project signal), while an unlinked mail lands in the
 // category-level 프로젝트/메일분석/ bucket. Both the new in-folder 대표페이지 form
 // and the legacy flat form must resolve the owning project.
-func TestMailAnalysisWikiPath(t *testing.T) {
+func TestMailAnalysisWikiPathFormatsProjectFolder(t *testing.T) {
 	cases := []struct {
 		name    string
 		msgID   string
@@ -54,9 +54,9 @@ func TestMailAnalysisWikiPath(t *testing.T) {
 	}
 }
 
-// TestDirectProjectPages locks the 대표페이지 filter both layouts must pass and
+// TestDirectProjectPagesFiltersAndDeduplicates locks the 대표페이지 filter both layouts must pass and
 // raw-data paths must fail.
-func TestDirectProjectPages(t *testing.T) {
+func TestDirectProjectPagesFiltersAndDeduplicates(t *testing.T) {
 	got := directProjectPages([]string{
 		"프로젝트/영산고/대표.md",          // new form → keep
 		"프로젝트/영산고/대표.md",          // dup → dropped

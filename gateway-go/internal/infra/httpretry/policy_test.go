@@ -2,7 +2,7 @@ package httpretry
 
 import "testing"
 
-func TestClassify(t *testing.T) {
+func TestClassify_ReturnsCategoryForStatusCode(t *testing.T) {
 	tests := []struct {
 		status int
 		want   Category

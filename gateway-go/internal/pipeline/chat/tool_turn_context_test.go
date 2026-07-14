@@ -48,7 +48,7 @@ func TestTurnContext_Wait_AlreadyAvailable(t *testing.T) {
 	}
 }
 
-func TestTurnContext_Wait_BlocksUntilStored(t *testing.T) {
+func TestTurnContextWaitReturnsAfterDelayedStore(t *testing.T) {
 	tc := NewTurnContext()
 
 	var wg sync.WaitGroup
@@ -132,7 +132,7 @@ func TestTurnContext_ConcurrentAccess(t *testing.T) {
 	}
 }
 
-func TestTurnContext_ContextIntegration(t *testing.T) {
+func TestTurnContextRoundTripsThroughContext(t *testing.T) {
 	tc := NewTurnContext()
 	ctx := WithTurnContext(context.Background(), tc)
 
@@ -147,7 +147,7 @@ func TestTurnContext_ContextIntegration(t *testing.T) {
 	}
 }
 
-func TestDetectCycle_NoCycle(t *testing.T) {
+func TestDetectCycleReturnsNilForAcyclicRefs(t *testing.T) {
 	refs := map[string]string{
 		"toolu_2": "toolu_1",
 		"toolu_3": "toolu_2",

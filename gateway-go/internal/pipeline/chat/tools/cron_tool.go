@@ -186,19 +186,72 @@ func cronList(svc *cron.Service) (string, error) {
 	return sb.String(), nil
 }
 
-func cronAdd(ctx context.Context, d *tooldeps.ChronoDeps, name, schedule, command string, enabled *bool, jobObj map[string]any, opts cronToolOpts) (string, error) {
-	// Support nested job object.
-	if jobObj != nil {
-		if v, ok := jobObj["name"].(string); ok && name == "" {
-			name = v
+// cronAddMergeJobObj merges the nested job object's fields into the flat
+// name/schedule/command params (flat params win when both are set).
+func cronAddMergeJobObj(jobObj map[string]any, name, schedule, command string) (string, string, string) {
+	if jobObj == nil {
+		return name, schedule, command
+	}
+	if v, ok := jobObj["name"].(string); ok && name == "" {
+		name = v
+	}
+	if v, ok := jobObj["schedule"].(string); ok && schedule == "" {
+		schedule = v
+	}
+	if v, ok := jobObj["command"].(string); ok && command == "" {
+		command = v
+	}
+	return name, schedule, command
+}
+
+// cronBuildPayload assembles the agentTurn payload for a new cron job from the
+// command text and the extended add options.
+func cronBuildPayload(command string, opts cronToolOpts) cron.StorePayload {
+	payload := cron.StorePayload{
+		Kind:    "agentTurn",
+		Message: command,
+	}
+	if opts.RetryCount != nil {
+		rc := *opts.RetryCount
+		if rc > 3 {
+			rc = 3
 		}
-		if v, ok := jobObj["schedule"].(string); ok && schedule == "" {
-			schedule = v
-		}
-		if v, ok := jobObj["command"].(string); ok && command == "" {
-			command = v
+		payload.RetryCount = rc
+	}
+	if opts.RetryBackoff != nil {
+		payload.RetryBackoffMs = *opts.RetryBackoff
+	}
+	if opts.Thinking != "" && opts.Thinking != "default" {
+		payload.Thinking = opts.Thinking
+	}
+	return payload
+}
+
+// cronApplyDeliveryMode applies the add-time delivery mode to the job.
+func cronApplyDeliveryMode(ctx context.Context, job *cron.StoreJob, deliveryMode string) {
+	if deliveryMode == "none" {
+		// Explicit no-delivery: leave Delivery nil (agent runs silently).
+		return
+	}
+	if deliveryMode == "announce" || deliveryMode == "" {
+		// Default: capture delivery context from the creating session so the
+		// cron job knows where to send output (delivery channel + session). The
+		// thread ID is captured too so a cron defined inside a forum topic
+		// produces its output in that same topic instead of leaking into
+		// General — the user-visible win of M4.
+		if delivery := toolport.DeliveryFromContext(ctx); delivery != nil && delivery.To != "" {
+			job.Delivery = &cron.JobDeliveryConfig{
+				Channel:  delivery.Channel,
+				To:       delivery.To,
+				ThreadID: delivery.ThreadID,
+			}
 		}
 	}
+}
+
+func cronAdd(ctx context.Context, d *tooldeps.ChronoDeps, name, schedule, command string, enabled *bool, jobObj map[string]any, opts cronToolOpts) (string, error) {
+	// Support nested job object.
+	name, schedule, command = cronAddMergeJobObj(jobObj, name, schedule, command)
 	if name == "" || schedule == "" || command == "" {
 		return "", fmt.Errorf("name, schedule, command 모두 필요합니다. 예: cron add name=daily schedule='0 9 * * *' command='뉴스 확인'")
 	}
@@ -207,84 +260,53 @@ func cronAdd(ctx context.Context, d *tooldeps.ChronoDeps, name, schedule, comman
 		return "", fmt.Errorf("command가 최대 길이 %d자를 초과합니다", maxCommandLen)
 	}
 
-	if d.Service != nil {
-		smartOpts := cron.SmartScheduleOpts{
-			Tz:         opts.Tz,
-			StaggerMs:  opts.StaggerMs,
-			AnchorTime: opts.AnchorTime,
-		}
-		storeSched, err := cron.ParseSmartScheduleWithOpts(schedule, smartOpts)
-		if err != nil {
-			return "", fmt.Errorf("잘못된 스케줄: %w", err)
-		}
-		isEnabled := true
-		if enabled != nil {
-			isEnabled = *enabled
-		}
-		payload := cron.StorePayload{
-			Kind:    "agentTurn",
-			Message: command,
-		}
-		if opts.RetryCount != nil {
-			rc := *opts.RetryCount
-			if rc > 3 {
-				rc = 3
-			}
-			payload.RetryCount = rc
-		}
-		if opts.RetryBackoff != nil {
-			payload.RetryBackoffMs = *opts.RetryBackoff
-		}
-		if opts.Thinking != "" && opts.Thinking != "default" {
-			payload.Thinking = opts.Thinking
-		}
-
-		job := cron.StoreJob{
-			ID:       name,
-			Name:     name,
-			Enabled:  isEnabled,
-			Schedule: storeSched,
-			Payload:  payload,
-		}
-
-		// Apply delivery mode.
-		if opts.DeliveryMode == "none" {
-			// Explicit no-delivery: leave Delivery nil (agent runs silently).
-		} else if opts.DeliveryMode == "announce" || opts.DeliveryMode == "" {
-			// Default: capture delivery context from the creating session so the
-			// cron job knows where to send output (delivery channel + session). The
-			// thread ID is captured too so a cron defined inside a forum topic
-			// produces its output in that same topic instead of leaking into
-			// General — the user-visible win of M4.
-			if delivery := toolport.DeliveryFromContext(ctx); delivery != nil && delivery.To != "" {
-				job.Delivery = &cron.JobDeliveryConfig{
-					Channel:  delivery.Channel,
-					To:       delivery.To,
-					ThreadID: delivery.ThreadID,
-				}
-			}
-		}
-
-		if err := d.Service.Add(ctx, job); err != nil {
-			return "", fmt.Errorf("크론 작업 추가 실패: %w", err)
-		}
-
-		// Build response.
-		schedDesc := cron.FormatHumanSchedule(storeSched)
-		nextMs := cron.ComputeNextRunAtMs(storeSched, time.Now().UnixMilli())
-		var sb strings.Builder
-		fmt.Fprintf(&sb, "✅ 크론 작업 **%s** 추가 완료\n", name)
-		fmt.Fprintf(&sb, "- 스케줄: %s\n", schedDesc)
-		if nextMs > 0 {
-			fmt.Fprintf(&sb, "- 다음 실행: %s\n", cronNextRun(nextMs))
-		}
-		if payload.RetryCount > 0 {
-			fmt.Fprintf(&sb, "- 재시도: 최대 %d회\n", payload.RetryCount)
-		}
-		return sb.String(), nil
+	if d.Service == nil {
+		return "", fmt.Errorf("크론 서비스를 사용할 수 없습니다")
 	}
 
-	return "", fmt.Errorf("크론 서비스를 사용할 수 없습니다")
+	smartOpts := cron.SmartScheduleOpts{
+		Tz:         opts.Tz,
+		StaggerMs:  opts.StaggerMs,
+		AnchorTime: opts.AnchorTime,
+	}
+	storeSched, err := cron.ParseSmartScheduleWithOpts(schedule, smartOpts)
+	if err != nil {
+		return "", fmt.Errorf("잘못된 스케줄: %w", err)
+	}
+	isEnabled := true
+	if enabled != nil {
+		isEnabled = *enabled
+	}
+	payload := cronBuildPayload(command, opts)
+
+	job := cron.StoreJob{
+		ID:       name,
+		Name:     name,
+		Enabled:  isEnabled,
+		Schedule: storeSched,
+		Payload:  payload,
+	}
+
+	// Apply delivery mode.
+	cronApplyDeliveryMode(ctx, &job, opts.DeliveryMode)
+
+	if err := d.Service.Add(ctx, job); err != nil {
+		return "", fmt.Errorf("크론 작업 추가 실패: %w", err)
+	}
+
+	// Build response.
+	schedDesc := cron.FormatHumanSchedule(storeSched)
+	nextMs := cron.ComputeNextRunAtMs(storeSched, time.Now().UnixMilli())
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "✅ 크론 작업 **%s** 추가 완료\n", name)
+	fmt.Fprintf(&sb, "- 스케줄: %s\n", schedDesc)
+	if nextMs > 0 {
+		fmt.Fprintf(&sb, "- 다음 실행: %s\n", cronNextRun(nextMs))
+	}
+	if payload.RetryCount > 0 {
+		fmt.Fprintf(&sb, "- 재시도: 최대 %d회\n", payload.RetryCount)
+	}
+	return sb.String(), nil
 }
 
 func cronUpdate(ctx context.Context, d *tooldeps.ChronoDeps, jobID, name, schedule, command string, enabled *bool, opts cronToolOpts) (string, error) {

@@ -34,7 +34,7 @@ func TestMergeWindowTracker_TouchReturnsPreviousTimestamp(t *testing.T) {
 	}
 }
 
-func TestMergeWindowTracker_PerSessionIsolation(t *testing.T) {
+func TestMergeWindowTracker_EnforcesPerSessionBoundary(t *testing.T) {
 	m := NewMergeWindowTracker()
 	m.Touch("sess-A")
 	if got := m.Touch("sess-B"); !got.IsZero() {
@@ -179,7 +179,7 @@ func TestSend_MergesWhenActiveRunInsideMergeWindow(t *testing.T) {
 
 // TestSend_MergeFoldsPendingMessage verifies that any older queued message
 // is folded into the new merged run rather than discarded.
-func TestSend_MergeFoldsPendingMessage(t *testing.T) {
+func TestSend_MergeClearsPendingQueue(t *testing.T) {
 	sm := session.NewManager()
 	bc := func(event string, payload any) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
@@ -242,7 +242,7 @@ func TestSend_FirstMessageStartsRunNormally(t *testing.T) {
 // TestSend_SkipMergeBypassesMergeWindow verifies that a chat.send with
 // skipMerge=true never cancels an active run, even inside the window —
 // the call falls through to the normal "queue" branch instead.
-func TestSend_SkipMergeBypassesMergeWindow(t *testing.T) {
+func TestSend_SkipMergeIgnoresMergeWindow(t *testing.T) {
 	sm := session.NewManager()
 	bc := func(event string, payload any) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
@@ -277,7 +277,7 @@ func TestSend_SkipMergeBypassesMergeWindow(t *testing.T) {
 // TestSend_MergeBroadcastsSessionsChanged verifies that a merge fires a
 // sessions.changed broadcast with reason=merged so dashboards can
 // distinguish it from normal run starts.
-func TestSend_MergeBroadcastsSessionsChanged(t *testing.T) {
+func TestSend_MergeEmitsSessionsChangedBroadcast(t *testing.T) {
 	sm := session.NewManager()
 	var mu sync.Mutex
 	var events []SessionsChangedEvent
@@ -327,7 +327,7 @@ func TestSend_MergeBroadcastsSessionsChanged(t *testing.T) {
 // merge cancel path attaches ErrMergedIntoNewRun via WithCancelCause so
 // the cancelled run can distinguish a merge from a generic kill and
 // perform the right channel-side cleanup (clear emoji, delete draft).
-func TestSend_MergeAttachesErrMergedIntoNewRunCause(t *testing.T) {
+func TestSend_MergeCancelsRunWithErrMergedIntoNewRunCause(t *testing.T) {
 	sm := session.NewManager()
 	bc := func(event string, payload any) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
@@ -365,7 +365,7 @@ func TestSend_MergeAttachesErrMergedIntoNewRunCause(t *testing.T) {
 // TestInterruptActiveRunHasNoCause verifies that the legacy
 // InterruptActiveRun path (used by /reset, /kill, sessions.abort)
 // cancels with a nil cause — only the merge path attaches a sentinel.
-func TestInterruptActiveRunHasNoCause(t *testing.T) {
+func TestInterruptActiveRunCancelsWithNilCause(t *testing.T) {
 	sm := session.NewManager()
 	bc := func(event string, payload any) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())

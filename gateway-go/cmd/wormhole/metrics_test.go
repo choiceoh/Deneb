@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestMetrics_RecordAndPrometheus(t *testing.T) {
+func TestMetrics_RecordAndWritePrometheusFormat(t *testing.T) {
 	m := newMetrics()
 	m.record("dsv4", "deneb", 200, 100*time.Millisecond)
 	m.record("dsv4", "deneb", 200, 300*time.Millisecond)
@@ -43,7 +43,7 @@ func TestMetrics_RecordAndPrometheus(t *testing.T) {
 
 // A real request through the router increments metrics and /metrics serves them —
 // proving the serve() instrumentation captures the forwarded upstream status.
-func TestServe_RecordsMetricsAndExposes(t *testing.T) {
+func TestServe_RecordsAndReturnsMetricsAtEndpoint(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, `{"ok":true}`)
 	}))
@@ -90,7 +90,7 @@ func TestServe_RecordsMetricsAndExposes(t *testing.T) {
 	}
 }
 
-func TestMetrics_TokenGated(t *testing.T) {
+func TestMetrics_TokenGatedRejectsWithoutToken(t *testing.T) {
 	rt := quietRouter(config{Token: "sekret", Models: []modelEntry{{Name: "m", URL: "http://x/v1", UpstreamModel: "m"}}})
 	srv := httptest.NewServer(rt.handler())
 	defer srv.Close()

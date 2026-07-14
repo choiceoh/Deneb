@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestRecordCall(t *testing.T) {
+func TestRecordCallUpdatesPerProviderCallCounts(t *testing.T) {
 	tracker := New()
 
 	tracker.RecordCall("anthropic")
@@ -20,7 +20,7 @@ func TestRecordCall(t *testing.T) {
 	}
 }
 
-func TestRecordTokens(t *testing.T) {
+func TestRecordTokensUpdatesAccumulatedTotals(t *testing.T) {
 	tracker := New()
 
 	tracker.RecordTokens("anthropic", 100, 200, 50, 10)
@@ -42,7 +42,7 @@ func TestRecordTokens(t *testing.T) {
 	}
 }
 
-func TestStatus(t *testing.T) {
+func TestStatusReturnsUptimeStartedAtAndProviderCount(t *testing.T) {
 	tracker := New()
 	tracker.RecordCall("test-provider")
 
@@ -58,7 +58,7 @@ func TestStatus(t *testing.T) {
 	}
 }
 
-func TestCost(t *testing.T) {
+func TestCostReturnsTotalCallsAndProviderCount(t *testing.T) {
 	tracker := New()
 	tracker.RecordCall("anthropic")
 	tracker.RecordCall("anthropic")
@@ -73,7 +73,7 @@ func TestCost(t *testing.T) {
 	}
 }
 
-func TestStatusIsolation(t *testing.T) {
+func TestStatusPreservesSeparateCountsAcrossSnapshots(t *testing.T) {
 	// Ensure Status returns a copy, not a reference to internal state.
 	tracker := New()
 	tracker.RecordCall("test")

@@ -35,7 +35,7 @@ func seedRecurrence(t *testing.T, tr *Tracker, failures int) {
 	}
 }
 
-func TestPromoteTargetRecurrence_CapturesOnceAtThreshold(t *testing.T) {
+func TestPromoteTargetRecurrenceCandidatesCapturesOnceAtThresholdThenIdempotent(t *testing.T) {
 	tr := newTestTracker(t)
 	seedRecurrence(t, tr, 2)
 
@@ -71,7 +71,7 @@ func TestPromoteTargetRecurrence_CapturesOnceAtThreshold(t *testing.T) {
 	}
 }
 
-func TestPromoteTargetRecurrence_ReviewedSignatureStaysBlocked(t *testing.T) {
+func TestPromoteTargetRecurrenceCandidatesStaysBlockedAfterOperatorRejection(t *testing.T) {
 	tr := newTestTracker(t)
 	seedRecurrence(t, tr, 2)
 	if _, err := tr.PromoteTargetRecurrenceCandidates(); err != nil {
@@ -97,7 +97,7 @@ func TestPromoteTargetRecurrence_ReviewedSignatureStaysBlocked(t *testing.T) {
 	}
 }
 
-func TestPromoteTargetRecurrence_BelowThresholdStaysQuiet(t *testing.T) {
+func TestPromoteTargetRecurrenceCandidatesReturnsEmptyBelowThreshold(t *testing.T) {
 	tr := newTestTracker(t)
 	seedRecurrence(t, tr, 1)
 
@@ -110,12 +110,12 @@ func TestPromoteTargetRecurrence_BelowThresholdStaysQuiet(t *testing.T) {
 	}
 }
 
-// TestPromoteTargetRecurrence_ResolvesGenesisNestedTarget guards the target-path
-// contract: a genesis skill lives at <root>/genesis/<category>/<name>/SKILL.md,
+// TestPromoteTargetRecurrenceCandidatesLoadsNestedGenesisSkillPath guards the
+// target-path contract: a genesis skill lives at <root>/genesis/<category>/<name>/SKILL.md,
 // and the promoted candidate must point there — the earlier naive root+name
 // join recorded phantom targets (~/.deneb/skills/<name>/SKILL.md) that sent the
 // consuming session to a nonexistent file.
-func TestPromoteTargetRecurrence_ResolvesGenesisNestedTarget(t *testing.T) {
+func TestPromoteTargetRecurrenceCandidatesLoadsNestedGenesisSkillPath(t *testing.T) {
 	tr := newTestTracker(t)
 	skillMD := filepath.Join(tr.skillsRoot, "genesis", "productivity", "deploy-helper", "SKILL.md")
 	if err := os.MkdirAll(filepath.Dir(skillMD), 0o755); err != nil {

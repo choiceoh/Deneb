@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestToolExecStats_RecordAndSnapshot(t *testing.T) {
+func TestToolExecStatsSnapshotPreservesCollectorState(t *testing.T) {
 	s := NewToolExecStats()
 	if got := s.RepairedCounts(); got != nil {
 		t.Fatalf("empty stats should return nil, got %v", got)

@@ -76,7 +76,7 @@ func TestParseMemorySections_ByteFaithful(t *testing.T) {
 	}
 }
 
-func TestScanWorkspaceMemory_ConsumedThroughAndBudget(t *testing.T) {
+func TestScanWorkspaceMemory_FiltersConsumedAndDisablesOnEmptyWorkspace(t *testing.T) {
 	dir := t.TempDir()
 	writeMemoryFixture(t, dir)
 	wd := &WikiDreamer{workspaceDir: dir}
@@ -110,7 +110,7 @@ func TestScanWorkspaceMemory_ConsumedThroughAndBudget(t *testing.T) {
 	}
 }
 
-func TestCurateWorkspaceMemory_DropsConsumedOldKeepsRest(t *testing.T) {
+func TestCurateWorkspaceMemory_DropsConsumedSectionsPreservesRestAndBackup(t *testing.T) {
 	dir := t.TempDir()
 	original := writeMemoryFixture(t, dir)
 	wd := &WikiDreamer{workspaceDir: dir}
@@ -212,7 +212,7 @@ func writeOversizedMemory(t *testing.T, dir string) (path, oldest, newest string
 	return path, oldest, newest
 }
 
-func TestEnforceMemoryDiskCap_BoundsAndKeepsHeadTail(t *testing.T) {
+func TestEnforceMemoryDiskCap_TrimsOldestPreservesPreambleCategoriesAndNewest(t *testing.T) {
 	dir := t.TempDir()
 	path, oldest, newest := writeOversizedMemory(t, dir)
 	before := len(testReadFile(t, path))
@@ -268,7 +268,7 @@ func TestEnforceMemoryDiskCap_BoundsAndKeepsHeadTail(t *testing.T) {
 	}
 }
 
-func TestEnforceMemoryDiskCap_NoOpUnderCap(t *testing.T) {
+func TestEnforceMemoryDiskCap_NoopWhenUnderCapCreatesNoBackup(t *testing.T) {
 	dir := t.TempDir()
 	original := writeMemoryFixture(t, dir) // small fixture, well under the cap
 	wd := &WikiDreamer{workspaceDir: dir}

@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestThinkingRoute_InjectsOnSimpleTurn(t *testing.T) {
+func TestThinkingRoute_RoutesOffWhenTurnIsSimple(t *testing.T) {
 	entry := modelEntry{Name: "dsv4", ToggleKwarg: "thinking"}
 	body := []byte(`{"model":"dsv4","messages":[{"role":"user","content":"hi"}]}`)
 	out, reason, off := thinkingRoute(body, entry)
@@ -27,7 +27,7 @@ func TestThinkingRoute_InjectsOnSimpleTurn(t *testing.T) {
 	}
 }
 
-func TestThinkingRoute_KeepsThinkingOnHardTurn(t *testing.T) {
+func TestThinkingRoute_KeepsThinkingWhenTurnIsHard(t *testing.T) {
 	entry := modelEntry{Name: "dsv4", ToggleKwarg: "thinking"}
 	// "분석" is a hard signal in the Ares DefaultProfile → keep thinking on.
 	body := []byte(`{"model":"dsv4","messages":[{"role":"user","content":"이거 분석해줘"}]}`)
@@ -40,7 +40,7 @@ func TestThinkingRoute_KeepsThinkingOnHardTurn(t *testing.T) {
 	}
 }
 
-func TestThinkingRoute_ModeOffAlwaysInjects(t *testing.T) {
+func TestThinkingRoute_StaticOffAlwaysInjectsWhenHard(t *testing.T) {
 	entry := modelEntry{Name: "dsv4-nothink", ToggleKwarg: "thinking", ThinkingMode: thinkingModeOff}
 	// "분석" is a hard signal — the judge mode would keep thinking; static off must not.
 	body := []byte(`{"model":"dsv4-nothink","messages":[{"role":"user","content":"이거 분석해줘"}]}`)
@@ -58,7 +58,7 @@ func TestThinkingRoute_ModeOffAlwaysInjects(t *testing.T) {
 	}
 }
 
-func TestThinkingRoute_OffUnlessHard(t *testing.T) {
+func TestThinkingRoute_OffUnlessHardModeWithMixedSignals(t *testing.T) {
 	entry := modelEntry{Name: "dsv4-auto", ToggleKwarg: "thinking", ThinkingMode: thinkingModeOffUnlessHard}
 
 	// Long-but-plain input ("long" — the ambiguous middle) routes OFF under the
@@ -104,7 +104,7 @@ func TestApplyThinking_StaticOffIgnoresNoEffortHeader(t *testing.T) {
 	}
 }
 
-func TestThinkingRoute_NoToggleIsNoOp(t *testing.T) {
+func TestThinkingRoute_NoTogglePreservesBody(t *testing.T) {
 	entry := modelEntry{Name: "x"} // no ToggleKwarg
 	body := []byte(`{"model":"x","messages":[{"role":"user","content":"hi"}]}`)
 	out, reason, off := thinkingRoute(body, entry)
@@ -135,7 +135,7 @@ func TestInjectKwarg_MergesAndPreserves(t *testing.T) {
 	}
 }
 
-func TestContentText(t *testing.T) {
+func TestContentText_ParsesStringAndArrayContent(t *testing.T) {
 	s, a := contentText(json.RawMessage(`"hello"`))
 	if s != "hello" || a {
 		t.Errorf("string content = (%q, %v), want (hello, false)", s, a)
@@ -149,7 +149,7 @@ func TestContentText(t *testing.T) {
 // A short follow-up steering a thread already deep in tool work must KEEP
 // thinking — the reconstructed History (h_t) carries the tool activity the
 // current message alone can't show. Proven for both wire shapes.
-func TestThinkingRoute_ContextHeavyKeepsThinking(t *testing.T) {
+func TestThinkingRoute_KeepsThinkingWhenContextIsHeavy(t *testing.T) {
 	entry := modelEntry{Name: "dsv4", ToggleKwarg: "thinking"}
 	cases := []struct {
 		name string
@@ -189,7 +189,7 @@ func TestThinkingRoute_ContextHeavyKeepsThinking(t *testing.T) {
 // A pure ack stays routable even in a heavy thread (it steers nothing), and a
 // short follow-up in a LIGHT thread still routes off — so History reconstruction
 // doesn't over-trigger.
-func TestThinkingRoute_HistoryDoesNotOverTrigger(t *testing.T) {
+func TestThinkingRoute_RoutesOffForAckWithoutOverTriggering(t *testing.T) {
 	entry := modelEntry{Name: "dsv4", ToggleKwarg: "thinking"}
 	ack := `{"model":"dsv4","messages":[
 		{"role":"user","content":"이 코드 분석해줘"},
@@ -210,7 +210,7 @@ func TestThinkingRoute_HistoryDoesNotOverTrigger(t *testing.T) {
 	}
 }
 
-func TestThinkingRoute_AppliedOnForward(t *testing.T) {
+func TestThinkingRoute_WritesThinkingFalseOnForward(t *testing.T) {
 	var gotBody string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
@@ -232,7 +232,7 @@ func TestThinkingRoute_AppliedOnForward(t *testing.T) {
 	}
 }
 
-func TestReasoningRoute_GLMOffOnSimpleTurn(t *testing.T) {
+func TestReasoningRoute_GLMOffWithSimpleTurn(t *testing.T) {
 	entry := modelEntry{Name: "glm-5.2", Reasoning: "glm"}
 	// A short conversational turn → route reasoning off. The gateway's stray
 	// reasoning_effort:"low" (which GLM would treat as MAX) must be stripped.
@@ -253,12 +253,12 @@ func TestReasoningRoute_GLMOffOnSimpleTurn(t *testing.T) {
 	}
 }
 
-func TestReasoningRoute_GLMHighOnHardTurn(t *testing.T) {
+func TestReasoningRoute_GLMHighWhenTurnIsHard(t *testing.T) {
 	entry := modelEntry{Name: "glm-5.2", Reasoning: "glm"}
 	// "분석" is a hard signal in the Ares DefaultProfile → keep reasoning on, and
 	// pin "high" (GLM resolves anything but an explicit "high" to MAX). No
 	// explicit reasoning_effort on the request — an explicit one now expresses
-	// caller intent and bypasses Ares (see TestReasoningRoute_GLMExplicitEffort).
+	// caller intent and bypasses Ares (see TestReasoningRoute_GLMExplicitEffortWithLowAndHigh).
 	body := []byte(`{"model":"glm-5.2","messages":[{"role":"user","content":"이 데이터를 심층 분석해줘"}]}`)
 	out, _, off := reasoningRoute(body, entry)
 	if off {
@@ -276,12 +276,13 @@ func TestReasoningRoute_GLMHighOnHardTurn(t *testing.T) {
 	}
 }
 
-// TestReasoningRoute_GLMExplicitEffort: an explicit inbound reasoning_effort
-// is caller intent and bypasses Ares — non-high maps to thinking OFF (GLM has
-// no true "low": anything but explicit high/max silently means MAX, which is
-// how the skill evolver's 12K budget drowned in reasoning, live 2026-07-04),
-// while an explicit high stays high with thinking enabled.
-func TestReasoningRoute_GLMExplicitEffort(t *testing.T) {
+// TestReasoningRoute_GLMExplicitEffortWithLowAndHigh: an explicit inbound
+// reasoning_effort is caller intent and bypasses Ares — non-high maps to
+// thinking OFF (GLM has no true "low": anything but explicit high/max
+// silently means MAX, which is how the skill evolver's 12K budget drowned in
+// reasoning, live 2026-07-04), while an explicit high stays high with
+// thinking enabled.
+func TestReasoningRoute_GLMExplicitEffortWithLowAndHigh(t *testing.T) {
 	entry := modelEntry{Name: "glm-5.2", Reasoning: "glm"}
 
 	// Explicit low (the gateway's thinking-disabled translation) → OFF, even
@@ -316,7 +317,7 @@ func TestReasoningRoute_GLMExplicitEffort(t *testing.T) {
 	}
 }
 
-func TestReasoningRoute_NoStyleIsNoOp(t *testing.T) {
+func TestReasoningRoute_NoStylePreservesBody(t *testing.T) {
 	entry := modelEntry{Name: "x"} // no Reasoning style
 	body := []byte(`{"model":"x","messages":[{"role":"user","content":"안녕"}]}`)
 	out, reason, off := reasoningRoute(body, entry)

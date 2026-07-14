@@ -56,7 +56,7 @@ func TestParseDueHint_ExplicitDates(t *testing.T) {
 	}
 }
 
-func TestEndOfWeek_AlwaysForwardFriday(t *testing.T) {
+func TestEndOfWeekNormalizesToUpcomingFriday(t *testing.T) {
 	base := time.Date(2026, 6, 8, 0, 0, 0, 0, time.UTC)
 	for offset := range 14 {
 		today := base.AddDate(0, 0, offset)

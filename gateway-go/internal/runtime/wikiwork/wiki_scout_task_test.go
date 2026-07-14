@@ -23,7 +23,7 @@ func writeScoutRepPage(t *testing.T, wikiDir, project, body string) {
 	}
 }
 
-func TestWikiScoutConstructionAndDisabledRun(t *testing.T) {
+func TestWikiScoutConstructionReturnsErrorOnDisabledRun(t *testing.T) {
 	task := NewScoutTask(nil, nil, nil, nil, filepath.Join(t.TempDir(), "state.json"), "")
 	if task == nil {
 		t.Fatal("NewScoutTask returned nil")
@@ -39,10 +39,10 @@ func TestWikiScoutConstructionAndDisabledRun(t *testing.T) {
 	}
 }
 
-// TestWikiScoutSelectQuestionsCooldown pins the retry discipline: stale
+// TestWikiScoutSelectQuestionsAppliesRetryCooldown pins the retry discipline: stale
 // questions are selected oldest-first up to the cap, and a question attempted
 // within the cooldown window is skipped until the cooldown lapses.
-func TestWikiScoutSelectQuestionsCooldown(t *testing.T) {
+func TestWikiScoutSelectQuestionsAppliesRetryCooldown(t *testing.T) {
 	dir := t.TempDir()
 	wikiDir := filepath.Join(dir, "wiki")
 	old := time.Now().AddDate(0, 0, -10).Format("2006-01-02")
@@ -83,10 +83,10 @@ func TestWikiScoutSelectQuestionsCooldown(t *testing.T) {
 	}
 }
 
-// TestWikiScoutBuildPrompt pins the scout's write-surface contract: questions
+// TestWikiScoutBuildPromptRendersQuestionsAndBriefSection pins the scout's write-surface contract: questions
 // and brief steering are present, answers flow through ingest + 질문해결 log
 // ops, and rep-page body edits are forbidden.
-func TestWikiScoutBuildPrompt(t *testing.T) {
+func TestWikiScoutBuildPromptRendersQuestionsAndBriefSection(t *testing.T) {
 	ws := t.TempDir()
 	if err := os.WriteFile(filepath.Join(ws, wiki.WikiBriefFileName),
 		[]byte("구리값·모듈 단가 동향 상시 관찰"), 0o600); err != nil {
@@ -130,10 +130,10 @@ func TestWikiScoutBuildPrompt(t *testing.T) {
 	}
 }
 
-// TestWikiScoutCollectFreshQuestions pins the post-research trigger's input:
+// TestWikiScoutCollectFreshQuestionsReturnsOnlyTodaysBullets pins the post-research trigger's input:
 // only today-dated bullets on a live rep page qualify; old bullets, archived
 // pages, and non-rep paths yield nothing.
-func TestWikiScoutCollectFreshQuestions(t *testing.T) {
+func TestWikiScoutCollectFreshQuestionsReturnsOnlyTodaysBullets(t *testing.T) {
 	dir := t.TempDir()
 	wikiDir := filepath.Join(dir, "wiki")
 	now := time.Now()
@@ -164,17 +164,17 @@ func TestWikiScoutCollectFreshQuestions(t *testing.T) {
 	}
 }
 
-// TestWikiScoutTriggerForPageNoDeps pins that the trigger is safe to call
+// TestWikiScoutTriggerForPageRunsWithoutPanickingOnMissingDeps pins that the trigger is safe to call
 // with missing dependencies (it must never panic on the research goroutine).
-func TestWikiScoutTriggerForPageNoDeps(t *testing.T) {
+func TestWikiScoutTriggerForPageRunsWithoutPanickingOnMissingDeps(t *testing.T) {
 	(&wikiScoutTask{}).TriggerForPage(context.Background(), "프로젝트/a/대표.md")
 }
 
-// TestWikiScoutResearchShareMaintenanceLock pins the shared-lock wiring: the
+// TestWikiScoutResearchShareMaintenanceLockGuardsConcurrentAccess pins the shared-lock wiring: the
 // scout exposes its maintenance lock, and while it is held the research task's
 // TryLock-based guard would skip. This is the scout-vs-research serialization
 // Codex flagged (turnMu alone only covered scout-vs-scout).
-func TestWikiScoutResearchShareMaintenanceLock(t *testing.T) {
+func TestWikiScoutResearchShareMaintenanceLockGuardsConcurrentAccess(t *testing.T) {
 	scout := NewScoutTask(nil, nil, nil, testWikiLogger(),
 		filepath.Join(t.TempDir(), "scout.json"), "")
 	lock := scout.MaintenanceLock()
@@ -205,10 +205,10 @@ func TestWikiScoutResearchShareMaintenanceLock(t *testing.T) {
 	research.maintMu.Unlock()
 }
 
-// TestWikiScoutPromptCarriesIngestProjectValue pins the Codex-review fix: the
+// TestWikiScoutPromptRendersStableIngestProjectValue pins the Codex-review fix: the
 // prompt must carry the stable folder name for wiki ingest project= linking,
 // since the displayed project label can be a differing frontmatter title.
-func TestWikiScoutPromptCarriesIngestProjectValue(t *testing.T) {
+func TestWikiScoutPromptRendersStableIngestProjectValue(t *testing.T) {
 	task := &wikiScoutTask{}
 	now := time.Date(2026, 7, 12, 9, 0, 0, 0, time.UTC)
 	got := task.buildPrompt([]wiki.OpenQuestion{{

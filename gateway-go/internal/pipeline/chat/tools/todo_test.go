@@ -42,7 +42,7 @@ func TestFormatTodoList_SortAndOverdue(t *testing.T) {
 	}
 }
 
-func TestToolTodo_CRUD(t *testing.T) {
+func TestToolTodo_CreatesUpdatesAndDeletesTodo(t *testing.T) {
 	store, err := localtodo.New(filepath.Join(t.TempDir(), "todos.json"))
 	if err != nil {
 		t.Fatalf("new store: %v", err)
@@ -89,7 +89,7 @@ func TestToolTodo_CRUD(t *testing.T) {
 	}
 }
 
-func TestToolTodo_AddRequiresTitle(t *testing.T) {
+func TestToolTodo_AddReturnsErrorWithoutTitle(t *testing.T) {
 	store, err := localtodo.New(filepath.Join(t.TempDir(), "todos.json"))
 	if err != nil {
 		t.Fatalf("new store: %v", err)

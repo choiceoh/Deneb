@@ -12,7 +12,7 @@ import (
 // TestBuildMux_RegistersExpectedRoutes verifies that buildMux registers all
 // expected routes. This is a component-level test that runs independently of
 // the full server startup sequence.
-func TestBuildMux_RegistersExpectedRoutes(t *testing.T) {
+func TestBuildMuxReturnsExpectedStatusPerRoute(t *testing.T) {
 	srv := testutil.Must(New(":0"))
 	mux := srv.buildMux()
 

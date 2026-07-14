@@ -10,7 +10,9 @@
   정의한다. 새 영속 동작은 먼저 이 계약이 소유해야 하는지 판단한다.
 - `page.go`의 `Page`와 `NewPage`는 위키 페이지의 메타데이터·본문 모델을
   소유한다. 프런트매터 해석 규칙을 호출자에 복제하지 않는다.
-- `index.go`의 `Index`와 `NewIndex`는 검색 인덱스의 단일 진입점이다.
+- `index.go`의 `Index`와 `newIndex`는 검색 인덱스의 단일 진입점이다. 인덱스
+  생성·파싱(`newIndex`/`parseIndex`)과 항목 갱신은 패키지 내부 전용이며, 외부는
+  `Store.SnapshotIndex` 등 `Store`의 메서드로만 접근한다.
 - `graph_query.go`의 `Store.GraphContext`와 `Store.PageConnections`는 그래프
   조회 계약이다. 임베딩 재정렬은 이 파일 안의 내부 단계로 유지한다.
 - `dreamer.go`의 `WikiDreamer`와 `NewWikiDreamer`가 자율 정리 오케스트레이션을

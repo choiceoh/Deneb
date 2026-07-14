@@ -20,7 +20,7 @@ import (
 // well?" before we switch cardTitleSummary from lightweight → tiny.
 //
 //	DENEB_TITLE_LIVETEST=1 go test -run TestCardTitle_RoleCompare_Live -v ./internal/runtime/server/
-func TestCardTitle_RoleCompare_Live(t *testing.T) {
+func TestCardTitleRoleCompareLiveSkipsWithoutEnvFlag(t *testing.T) {
 	if os.Getenv("DENEB_TITLE_LIVETEST") == "" {
 		t.Skip("set DENEB_TITLE_LIVETEST=1 to run (needs real config + network to wormhole)")
 	}

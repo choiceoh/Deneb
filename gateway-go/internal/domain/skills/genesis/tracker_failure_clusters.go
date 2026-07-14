@@ -105,7 +105,7 @@ func usageFailureClusterEvidence(record UsageRecord, cutoff int64) (failureClust
 	}
 
 	kind := FailureClusterKindUsage
-	if record.Source == UsageSourceWorkout {
+	if record.Source == usageSourceWorkout {
 		kind = FailureClusterKindWorkout
 	}
 	model := strings.TrimSpace(record.Model)
@@ -129,7 +129,7 @@ func isUsageFailureClusterCandidate(record UsageRecord, cutoff int64) bool {
 	if record.UsedAt < cutoff || record.Success {
 		return false
 	}
-	if record.Source == UsageSourceWorkout {
+	if record.Source == usageSourceWorkout {
 		return true
 	}
 	return isRealUsageRecord(record)

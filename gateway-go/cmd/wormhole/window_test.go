@@ -24,7 +24,7 @@ func vllmModelsSrv(t *testing.T, body string) *httptest.Server {
 	return srv
 }
 
-func TestProbeMaxModelLen(t *testing.T) {
+func TestProbeMaxModelLen_ReturnsWindowOrZero(t *testing.T) {
 	srv := vllmModelsSrv(t, `{"data":[{"id":"dsv4","max_model_len":1000000}]}`)
 	if got := probeMaxModelLen(context.Background(), http.DefaultClient, modelEntry{Name: "dsv4", URL: srv.URL + "/v1"}); got != 1000000 {
 		t.Errorf("probe = %d, want 1000000", got)
@@ -45,7 +45,7 @@ func TestProbeMaxModelLen(t *testing.T) {
 
 // refreshWindows probes only LOCAL openai backends and surfaces the window in
 // /v1/models; a cloud-fronted model is left out (max_model_len isn't its fact).
-func TestRefreshWindows_LocalOnlyAndListed(t *testing.T) {
+func TestRefreshWindows_LoadsLocalWindowsIntoModelsList(t *testing.T) {
 	srv := vllmModelsSrv(t, `{"data":[{"id":"dsv4","max_model_len":1000000}]}`)
 	rt := quietRouter(config{Models: []modelEntry{
 		{Name: "dsv4", URL: srv.URL + "/v1"},                // local (loopback) vLLM

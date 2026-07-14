@@ -31,10 +31,11 @@ func (f semFakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, 
 	return out, nil
 }
 
-// TestSearchSummariesSemanticParaphrase: a summary about "기성 청구" (billing) is
-// found by a payment-concept query that shares no keyword, and only for OTHER
-// sessions (the current one is excluded — its summaries are already in context).
-func TestSearchSummariesSemanticParaphrase(t *testing.T) {
+// TestSearchSummariesSemanticReturnsParaphrasedMatch: a summary about "기성
+// 청구" (billing) is found by a payment-concept query that shares no keyword,
+// and only for OTHER sessions (the current one is excluded — its summaries
+// are already in context).
+func TestSearchSummariesSemanticReturnsParaphrasedMatch(t *testing.T) {
 	s := testStore(t)
 	defer s.Close()
 
@@ -81,8 +82,8 @@ func TestSearchSummariesSemanticParaphrase(t *testing.T) {
 	}
 }
 
-// TestSearchSummariesSemanticDisabled: no embedder → nil (keyword-only recall).
-func TestSearchSummariesSemanticDisabled(t *testing.T) {
+// TestSearchSummariesSemanticReturnsNilWhenDisabled: no embedder → nil (keyword-only recall).
+func TestSearchSummariesSemanticReturnsNilWhenDisabled(t *testing.T) {
 	s := testStore(t)
 	defer s.Close()
 	if _, err := s.InsertSummary(SummaryNode{SessionKey: "sessA", Level: 1, Content: "아무 요약 내용", CreatedAt: 1000}); err != nil {

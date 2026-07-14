@@ -186,7 +186,7 @@ func writePromptToolCalls(b *strings.Builder, label string, calls []SkillReplayT
 // as a positive few-shot section for the evolve prompt (RSI P1.5 ⑤) — the
 // mirror of formatLowYieldLevers: instead of "these directions keep dying",
 // "these edits on the same failure family actually held up in real use".
-func formatConfirmedEvolveExemplars(exemplars []ConfirmedEvolveExemplar) string {
+func formatConfirmedEvolveExemplars(exemplars []confirmedEvolveExemplar) string {
 	if len(exemplars) == 0 {
 		return ""
 	}

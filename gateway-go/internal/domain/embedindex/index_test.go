@@ -23,7 +23,7 @@ func (f fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, err
 	return out, nil
 }
 
-func TestIndexRefreshSearch(t *testing.T) {
+func TestIndexRefreshLoadsItemsAndSearchRanksExactMatch(t *testing.T) {
 	ix := New("test", fakeEmbedder{healthy: true}, "", WithSyncRefresh())
 	defer ix.Close()
 	items := []Item{
@@ -49,7 +49,7 @@ func TestIndexRefreshSearch(t *testing.T) {
 	}
 }
 
-func TestDisabledEmbedderDegrades(t *testing.T) {
+func TestDisabledEmbedderReturnsNilSearchResults(t *testing.T) {
 	ix := New("test", fakeEmbedder{healthy: false}, "")
 	defer ix.Close()
 	if ix.Enabled() {
@@ -60,9 +60,9 @@ func TestDisabledEmbedderDegrades(t *testing.T) {
 	}
 }
 
-// TestReembedOnContentChange: dropping an item removes its vector. Guards the
-// content-hash cache key + vanished-entry cleanup.
-func TestReembedOnContentChange(t *testing.T) {
+// TestReembedEvictsVectorWhenItemRemoved: dropping an item removes its vector.
+// Guards the content-hash cache key + vanished-entry cleanup.
+func TestReembedEvictsVectorWhenItemRemoved(t *testing.T) {
 	ix := New("test", fakeEmbedder{healthy: true}, "", WithSyncRefresh())
 	defer ix.Close()
 	v1 := []Item{{ID: "a", Hash: ContentHash("first"), Text: "first version text"}}

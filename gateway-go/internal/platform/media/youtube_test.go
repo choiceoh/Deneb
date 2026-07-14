@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestIsYouTubeURL(t *testing.T) {
+func TestIsYouTubeURLRecognizesValidFormsAndRejectsNonYouTubeURLs(t *testing.T) {
 	tests := []struct {
 		input string
 		want  bool
@@ -30,7 +30,7 @@ func TestIsYouTubeURL(t *testing.T) {
 	}
 }
 
-func TestExtractYouTubeURLs(t *testing.T) {
+func TestExtractYouTubeURLsReturnsAllURLsFoundInText(t *testing.T) {
 	text := "Check out https://youtu.be/abc12345678 and also https://www.youtube.com/watch?v=xyz12345678"
 	urls := ExtractYouTubeURLs(text)
 	if len(urls) != 2 {
@@ -44,7 +44,7 @@ func TestExtractYouTubeURLs(t *testing.T) {
 	}
 }
 
-func TestCleanSubtitleText(t *testing.T) {
+func TestCleanSubtitleTextStripsVTTMarkupAndDeduplicatesLines(t *testing.T) {
 	raw := `WEBVTT
 Kind: captions
 Language: en

@@ -2,7 +2,7 @@ package media
 
 import "testing"
 
-func TestSelectWatchFrameCount(t *testing.T) {
+func TestSelectWatchFrameCountReturnsBucketedCountsByDuration(t *testing.T) {
 	tests := []struct {
 		duration int
 		want     int
@@ -25,7 +25,7 @@ func TestSelectWatchFrameCount(t *testing.T) {
 	}
 }
 
-func TestSelectWatchTimestamps_WholeVideo(t *testing.T) {
+func TestSelectWatchTimestampsReturnsSortedTimestampsAcrossWholeVideo(t *testing.T) {
 	const duration, count = 600, 80
 	ts := selectWatchTimestamps(duration, count, 0, 0)
 	if len(ts) != count {
@@ -41,7 +41,7 @@ func TestSelectWatchTimestamps_WholeVideo(t *testing.T) {
 	}
 }
 
-func TestSelectWatchTimestamps_Window(t *testing.T) {
+func TestSelectWatchTimestampsKeepsSamplesWithinWindow(t *testing.T) {
 	// A [start,end] window must keep every sample inside the window.
 	const start, end, count = 100.0, 130.0, 30
 	ts := selectWatchTimestamps(600, count, start, end)
@@ -70,7 +70,7 @@ func TestSelectWatchTimestamps_UnknownDuration(t *testing.T) {
 	}
 }
 
-func TestSelectWatchTimestamps_SingleFrame(t *testing.T) {
+func TestSelectWatchTimestampsReturnsMidVideoTimestampForSingleFrame(t *testing.T) {
 	ts := selectWatchTimestamps(100, 1, 0, 0)
 	if len(ts) != 1 {
 		t.Fatalf("got %d timestamps, want 1", len(ts))

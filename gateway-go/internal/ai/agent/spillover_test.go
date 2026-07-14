@@ -28,7 +28,7 @@ func TestSpilloverStore_StoreAndLoad(t *testing.T) {
 	}
 }
 
-func TestSpilloverStore_SessionIsolation(t *testing.T) {
+func TestSpilloverStore_LoadRejectsDifferentSession(t *testing.T) {
 	dir := t.TempDir()
 	store := NewSpilloverStore(dir)
 
@@ -70,7 +70,7 @@ func TestSpilloverStore_FormatPreview(t *testing.T) {
 	}
 }
 
-func TestSpilloverStore_SpillAndPreview(t *testing.T) {
+func TestSpilloverStore_SpillAndPreviewReturnsTruncatedPreview(t *testing.T) {
 	dir := t.TempDir()
 	store := NewSpilloverStore(dir)
 
@@ -88,7 +88,7 @@ func TestSpilloverStore_SpillAndPreview(t *testing.T) {
 	}
 }
 
-func TestSpilloverStore_CleanSession(t *testing.T) {
+func TestSpilloverStore_CleanSessionDeletesOwnEntriesOnly(t *testing.T) {
 	dir := t.TempDir()
 	store := NewSpilloverStore(dir)
 
@@ -152,7 +152,7 @@ func TestSpilloverStore_StartCleanup(t *testing.T) {
 	cancel() // should stop the goroutine
 }
 
-func TestSpilloverStore_DiskFile(t *testing.T) {
+func TestSpilloverStore_StoreWritesSingleDiskFile(t *testing.T) {
 	dir := t.TempDir()
 	store := NewSpilloverStore(dir)
 
@@ -173,7 +173,7 @@ func TestSpilloverStore_DiskFile(t *testing.T) {
 	}
 }
 
-func TestSanitizeSessionKey(t *testing.T) {
+func TestSanitizeSessionKey_NormalizesSpecialChars(t *testing.T) {
 	tests := []struct {
 		input, want string
 	}{
@@ -189,7 +189,7 @@ func TestSanitizeSessionKey(t *testing.T) {
 	}
 }
 
-func TestSanitizeToolName(t *testing.T) {
+func TestSanitizeToolName_NormalizesAndDefaultsEmpty(t *testing.T) {
 	tests := []struct {
 		input, want string
 	}{
@@ -206,10 +206,10 @@ func TestSanitizeToolName(t *testing.T) {
 	}
 }
 
-// TestSpilloverStore_RedactsOnStore verifies that a tool output containing a
-// secret (e.g. `cat .env`) is masked before hitting disk. The spill record is
-// loadable and Load returns the redacted bytes.
-func TestSpilloverStore_RedactsOnStore(t *testing.T) {
+// TestSpilloverStore_WritesRedactedSecretToDisk verifies that a tool output
+// containing a secret (e.g. `cat .env`) is masked before hitting disk. The
+// spill record is loadable and Load returns the redacted bytes.
+func TestSpilloverStore_WritesRedactedSecretToDisk(t *testing.T) {
 	dir := t.TempDir()
 	store := NewSpilloverStore(dir)
 
@@ -241,8 +241,8 @@ func TestSpilloverStore_RedactsOnStore(t *testing.T) {
 	}
 }
 
-// TestSpilloverStore_RedactsOnStore_Korean ensures Korean text passes through.
-func TestSpilloverStore_RedactsOnStore_Korean(t *testing.T) {
+// TestSpilloverStore_RedactPreservesKoreanText ensures Korean text passes through.
+func TestSpilloverStore_RedactPreservesKoreanText(t *testing.T) {
 	dir := t.TempDir()
 	store := NewSpilloverStore(dir)
 
@@ -277,11 +277,11 @@ func TestFormatPreview_RedactsSecret(t *testing.T) {
 	}
 }
 
-// TestSpilloverStore_RemoveSession_TrackedAndOrphan verifies that
+// TestSpilloverStore_RemoveSessionDeletesTrackedAndOrphanFiles verifies that
 // RemoveSession wipes both index-tracked files and orphan files on disk that
 // share the session's sanitized prefix. Files from a different session must
 // survive.
-func TestSpilloverStore_RemoveSession_TrackedAndOrphan(t *testing.T) {
+func TestSpilloverStore_RemoveSessionDeletesTrackedAndOrphanFiles(t *testing.T) {
 	dir := t.TempDir()
 	store := NewSpilloverStore(dir)
 

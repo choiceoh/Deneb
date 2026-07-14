@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestStoreAppendListAck(t *testing.T) {
+func TestStoreAppendListAndAckUpdateVisibility(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 
 	if _, err := store.Append(Item{
@@ -104,7 +104,7 @@ func TestStoreMarkRead(t *testing.T) {
 	}
 }
 
-func TestStoreCorrect(t *testing.T) {
+func TestStoreCorrectAppendsNotePreservingOriginalBody(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 
 	if _, err := store.Append(Item{
@@ -208,7 +208,7 @@ func TestStoreRewrite(t *testing.T) {
 	}
 }
 
-func TestStoreListRangeFiltersBeforeLimit(t *testing.T) {
+func TestStoreListRangeFiltersByTimeBoundaryBeforeLimit(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	for i := 0; i < 5; i++ {
 		if _, err := store.Append(Item{
@@ -311,7 +311,7 @@ func TestStoreRunActionOpenReturnsContextPrompt(t *testing.T) {
 	}
 }
 
-func TestStoreRunActionSnoozeHidesItem(t *testing.T) {
+func TestStoreRunActionSnoozeClearsItemFromFeed(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	if _, err := store.Append(Item{ID: "item", Body: "body"}); err != nil {
 		t.Fatalf("append: %v", err)
@@ -342,7 +342,7 @@ func TestStoreRunActionMissing(t *testing.T) {
 	}
 }
 
-func TestStoreRunActionAckSettlesDuplicateIDs(t *testing.T) {
+func TestStoreRunActionAckDeduplicatesAllMatchingIDs(t *testing.T) {
 	// Legacy feeds (old restart-resetting id counter) could hold several items
 	// under one id. Acking via RunAction must settle every twin, not just the
 	// first match, or the survivors stay unread and the card re-surfaces on the
@@ -426,7 +426,7 @@ func TestStoreRunActionTrashDeletes(t *testing.T) {
 	}
 }
 
-func TestStoreRunActionSnoozeSettlesDuplicateIDs(t *testing.T) {
+func TestStoreRunActionSnoozeDeduplicatesAllMatchingIDs(t *testing.T) {
 	// Snooze, like ack, is id-scoped and must hide every twin sharing the id.
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	for _, body := range []string{"twin a", "twin b"} {
@@ -442,7 +442,7 @@ func TestStoreRunActionSnoozeSettlesDuplicateIDs(t *testing.T) {
 	}
 }
 
-func TestPreviewTrimsToFirstLine(t *testing.T) {
+func TestPreviewTruncatesToFirstLine(t *testing.T) {
 	got := Preview(" first line \nsecond line", 100)
 	if got != "first line" {
 		t.Fatalf("Preview = %q, want first line", got)
@@ -458,7 +458,7 @@ func mustAppendIfNew(t *testing.T, s *Store, it Item) bool {
 	return created
 }
 
-func TestStoreDedupsConsecutiveIdentical(t *testing.T) {
+func TestStoreDeduplicatesConsecutiveIdenticalAppends(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	item := Item{Source: SourceProactive, Body: "동일한 분석 본문"}
 
@@ -477,7 +477,7 @@ func TestStoreDedupsConsecutiveIdentical(t *testing.T) {
 	}
 }
 
-func TestStoreDistinctBodiesNotDeduped(t *testing.T) {
+func TestStoreDistinctBodiesAreNotDeduplicated(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	mustAppendIfNew(t, store, Item{Source: SourceProactive, Body: "본문 A"})
 	mustAppendIfNew(t, store, Item{Source: SourceProactive, Body: "본문 B"})
@@ -486,7 +486,7 @@ func TestStoreDistinctBodiesNotDeduped(t *testing.T) {
 	}
 }
 
-func TestStoreDifferentSourceNotDeduped(t *testing.T) {
+func TestStoreDifferentSourceIsNotDeduplicated(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	mustAppendIfNew(t, store, Item{Source: SourceProactive, Body: "같은 본문"})
 	if created := mustAppendIfNew(t, store, Item{Source: SourceCaptureImage, Body: "같은 본문"}); !created {

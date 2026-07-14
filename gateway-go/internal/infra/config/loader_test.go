@@ -9,7 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestResolveStateDirDefault(t *testing.T) {
+func TestResolveStateDirWithoutOverride(t *testing.T) {
 	t.Setenv("DENEB_STATE_DIR", "")
 
 	dir := ResolveStateDir()
@@ -21,7 +21,7 @@ func TestResolveStateDirDefault(t *testing.T) {
 	}
 }
 
-func TestResolveStateDirOverride(t *testing.T) {
+func TestResolveStateDirWithEnvOverride(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("DENEB_STATE_DIR", tmp)
 
@@ -31,7 +31,7 @@ func TestResolveStateDirOverride(t *testing.T) {
 	}
 }
 
-func TestResolveConfigPathOverride(t *testing.T) {
+func TestResolveConfigPathWithEnvOverride(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "custom.json")
 	if err := os.WriteFile(cfgPath, []byte("{}"), 0o644); err != nil {
@@ -192,7 +192,7 @@ func TestNormalizeBindMode(t *testing.T) {
 	}
 }
 
-func TestResolveGatewayPort(t *testing.T) {
+func TestResolveGatewayPortWithConfigAndEnvOverrides(t *testing.T) {
 	// Default.
 	port := ResolveGatewayPort(nil)
 	if port != DefaultGatewayPort {
@@ -215,7 +215,7 @@ func TestResolveGatewayPort(t *testing.T) {
 	}
 }
 
-func TestApplyDefaults(t *testing.T) {
+func TestApplyDefaultsWhenConfigEmpty(t *testing.T) {
 	cfg := DenebConfig{}
 	applyDefaults(&cfg)
 
@@ -252,7 +252,7 @@ func TestResolveAgentWorkspaceDirNilConfig(t *testing.T) {
 	}
 }
 
-func TestResolveAgentWorkspaceDirFromDefaults(t *testing.T) {
+func TestResolveAgentWorkspaceDirWithAgentsDefaults(t *testing.T) {
 	cfg := &DenebConfig{
 		Agents: &AgentsConfig{
 			Defaults: &AgentsDefaultsConfig{
@@ -266,7 +266,7 @@ func TestResolveAgentWorkspaceDirFromDefaults(t *testing.T) {
 	}
 }
 
-func TestResolveAgentWorkspaceDirFromAgentList(t *testing.T) {
+func TestResolveAgentWorkspaceDirWithDefaultAgentEntry(t *testing.T) {
 	isDefault := true
 	cfg := &DenebConfig{
 		Agents: &AgentsConfig{
@@ -285,7 +285,7 @@ func TestResolveAgentWorkspaceDirFromAgentList(t *testing.T) {
 	}
 }
 
-func TestResolveAgentWorkspaceDirProfile(t *testing.T) {
+func TestResolveAgentWorkspaceDirWithProfileEnv(t *testing.T) {
 	t.Setenv("DENEB_PROFILE", "work")
 	dir := ResolveAgentWorkspaceDir(nil)
 	if filepath.Base(dir) != "workspace-work" {
@@ -293,7 +293,7 @@ func TestResolveAgentWorkspaceDirProfile(t *testing.T) {
 	}
 }
 
-func TestResolveAgentWorkspaceDirHomeTilde(t *testing.T) {
+func TestResolveAgentWorkspaceDirNormalizesHomeTilde(t *testing.T) {
 	cfg := &DenebConfig{
 		Agents: &AgentsConfig{
 			Defaults: &AgentsDefaultsConfig{

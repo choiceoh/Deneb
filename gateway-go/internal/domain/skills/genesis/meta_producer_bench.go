@@ -75,7 +75,7 @@ func buildProducerShadowScenarios(entries []skills.SkillEntry, tracker *Tracker,
 		if err != nil {
 			continue
 		}
-		stats, _ := tracker.EvolutionEvidenceStats(entry.Skill.Name)
+		stats, _ := tracker.evolutionEvidenceStats(entry.Skill.Name)
 		if stats == nil {
 			stats = &UsageStats{SkillName: entry.Skill.Name}
 		}
@@ -152,8 +152,8 @@ func runProducerShadowBench(ctx context.Context, incumbentPrompt, proposalPrompt
 			}
 		}
 		out.Skills++
-		incSum += inc.Percent()
-		propSum += prop.Percent()
+		incSum += inc.percent()
+		propSum += prop.percent()
 	}
 	if out.Skills > 0 {
 		out.IncumbentScore = incSum / float64(out.Skills)

@@ -128,7 +128,7 @@ func TestTombstoneRestoreDeletesFile(t *testing.T) {
 	}
 }
 
-func TestRetentionKeepN(t *testing.T) {
+func TestRetentionKeepNEvictsOlderSnapshots(t *testing.T) {
 	m := newTestManager(t, "session-retN", WithRetentionN(3))
 	target := filepath.Join(t.TempDir(), "spam.txt")
 
@@ -168,7 +168,7 @@ func TestRetentionKeepN(t *testing.T) {
 	}
 }
 
-func TestRetentionMaxBytes(t *testing.T) {
+func TestRetentionMaxBytesEvictsOldestSnapshot(t *testing.T) {
 	// Force a tiny byte cap so the second snapshot should evict the first.
 	m := newTestManager(t, "session-retB", WithRetentionN(100), WithMaxBytes(10), WithGzip(false))
 	target := filepath.Join(t.TempDir(), "big.txt")
@@ -275,7 +275,7 @@ func TestConcurrentSnapshotSameFile(t *testing.T) {
 	}
 }
 
-func TestSessionIsolation(t *testing.T) {
+func TestSessionBoundaryPreventsCrossContamination(t *testing.T) {
 	root := t.TempDir()
 	mA := New(root, "session-A")
 	mB := New(root, "session-B")
@@ -305,7 +305,7 @@ func TestSessionIsolation(t *testing.T) {
 	}
 }
 
-func TestDiff(t *testing.T) {
+func TestDiffRendersLineChanges(t *testing.T) {
 	m := newTestManager(t, "session-diff")
 	target := filepath.Join(t.TempDir(), "code.txt")
 	writeFile(t, target, "line 1\nline 2\nline 3\n")
@@ -327,7 +327,7 @@ func TestDiff(t *testing.T) {
 	}
 }
 
-func TestListLimit(t *testing.T) {
+func TestListTruncatesToLimit(t *testing.T) {
 	m := newTestManager(t, "session-limit", WithRetentionN(50))
 	target := filepath.Join(t.TempDir(), "log.txt")
 	for i := range 5 {
@@ -345,7 +345,7 @@ func TestListLimit(t *testing.T) {
 	}
 }
 
-func TestIndexCorruptionTolerated(t *testing.T) {
+func TestListSkipsMalformedIndexLine(t *testing.T) {
 	m := newTestManager(t, "session-corrupt")
 	target := filepath.Join(t.TempDir(), "x.txt")
 	writeFile(t, target, "ok")

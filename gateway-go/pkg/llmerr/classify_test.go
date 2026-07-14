@@ -10,7 +10,7 @@ import (
 
 // ─── Classify: happy paths ──────────────────────────────────────────────
 
-func TestClassify_ByStatus(t *testing.T) {
+func TestClassifyReturnsReasonByHTTPStatus(t *testing.T) {
 	tests := []struct {
 		name   string
 		status int
@@ -61,7 +61,7 @@ func TestClassify_ByStatus(t *testing.T) {
 	}
 }
 
-func TestClassify_ProviderSpecific(t *testing.T) {
+func TestClassifyReturnsReasonForProviderSpecificBodies(t *testing.T) {
 	tests := []struct {
 		name   string
 		status int
@@ -91,7 +91,7 @@ func TestClassify_ProviderSpecific(t *testing.T) {
 	}
 }
 
-func TestClassify_By400ContextOverflow(t *testing.T) {
+func TestClassifyReturnsContextOverflowFor400MaxContextBody(t *testing.T) {
 	body := []byte(`{"error":{"message":"This model's maximum context length is 128000 tokens"}}`)
 	got := Classify(nil, 400, body)
 	if got.Reason != ReasonContextOverflow {
@@ -99,7 +99,7 @@ func TestClassify_By400ContextOverflow(t *testing.T) {
 	}
 }
 
-func TestClassify_By400GenericLargeSession(t *testing.T) {
+func TestClassifyReturnsContextOverflowWhen400GenericOnLargeSession(t *testing.T) {
 	// Bare "Error" body with a large session → overflow heuristic.
 	body := []byte(`{"error":{"message":"Error"}}`)
 	got := ClassifyWithHint(nil, 400, body, Hint{TokenUsagePercent: 0.75})
@@ -108,7 +108,7 @@ func TestClassify_By400GenericLargeSession(t *testing.T) {
 	}
 }
 
-func TestClassify_By400GenericSmallSession(t *testing.T) {
+func TestClassifyReturnsFormatErrorWhen400GenericOnSmallSession(t *testing.T) {
 	body := []byte(`{"error":{"message":"Error"}}`)
 	// No hint → not large → plain format error.
 	got := Classify(nil, 400, body)
@@ -157,7 +157,7 @@ func TestClassify_ByErrorCode(t *testing.T) {
 	}
 }
 
-func TestClassify_ByMessageOnly(t *testing.T) {
+func TestClassifyReturnsReasonByMessageOnly(t *testing.T) {
 	tests := []struct {
 		name string
 		err  error
@@ -180,12 +180,12 @@ func TestClassify_ByMessageOnly(t *testing.T) {
 	}
 }
 
-// TestClassify_LegacyContextOverflowStrings guards the migration of
+// TestClassifyReturnsContextOverflowForLegacyStrings guards the migration of
 // chat/run_helpers.go:isContextOverflow and
 // autoreply/runner_errors.go:ClassifyAgentError from hand-rolled substring
 // lists to llmerr.Classify. Every string the old implementations matched
 // must still classify as ReasonContextOverflow.
-func TestClassify_LegacyContextOverflowStrings(t *testing.T) {
+func TestClassifyReturnsContextOverflowForLegacyStrings(t *testing.T) {
 	// Exact strings from the pre-migration substring checks in both
 	// chat/run_helpers.go and autoreply/runner_errors.go.
 	legacy := []string{
@@ -214,7 +214,7 @@ func TestClassify_LegacyContextOverflowStrings(t *testing.T) {
 	}
 }
 
-func TestClassify_OpenRouterWrappedRawMetadata(t *testing.T) {
+func TestClassifyParsesOpenRouterWrappedRawMetadata(t *testing.T) {
 	// OpenRouter wraps upstream errors inside metadata.raw.
 	body := []byte(`{"error":{"message":"Provider returned error","metadata":{"raw":"{\"error\":{\"message\":\"maximum context length exceeded\"}}"}}}`)
 	got := Classify(nil, 200, body) // note: 2xx, matched by message
@@ -248,7 +248,7 @@ func TestClassify_DNSTimeout(t *testing.T) {
 	}
 }
 
-func TestClassify_ContextDeadline(t *testing.T) {
+func TestClassifyReturnsTimeoutForContextDeadline(t *testing.T) {
 	got := Classify(context.DeadlineExceeded, 0, nil)
 	if got.Reason != ReasonTimeout {
 		t.Fatalf("Reason = %v, want timeout (ctx deadline)", got.Reason)
@@ -262,14 +262,14 @@ func TestClassify_ContextCanceled(t *testing.T) {
 	}
 }
 
-func TestClassify_DisconnectSmallSession(t *testing.T) {
+func TestClassifyReturnsTimeoutForDisconnectOnSmallSession(t *testing.T) {
 	got := Classify(errors.New("server disconnected without sending a response"), 0, nil)
 	if got.Reason != ReasonTimeout {
 		t.Fatalf("Reason = %v, want timeout (small-session disconnect)", got.Reason)
 	}
 }
 
-func TestClassify_DisconnectLargeSession(t *testing.T) {
+func TestClassifyReturnsContextOverflowForDisconnectOnLargeSession(t *testing.T) {
 	err := errors.New("peer closed connection without sending complete response")
 	got := ClassifyWithHint(err, 0, nil, Hint{ApproxTokens: 150_000})
 	if got.Reason != ReasonContextOverflow {
@@ -277,14 +277,14 @@ func TestClassify_DisconnectLargeSession(t *testing.T) {
 	}
 }
 
-func TestClassify_SSLTransient(t *testing.T) {
+func TestClassifyReturnsTimeoutForTransientSSLError(t *testing.T) {
 	got := Classify(errors.New("remote error: tls: bad record mac"), 0, nil)
 	if got.Reason != ReasonTimeout {
 		t.Fatalf("Reason = %v, want timeout (SSL transient)", got.Reason)
 	}
 }
 
-func TestClassify_SSLTransientOverridesLargeSession(t *testing.T) {
+func TestClassifyReturnsTimeoutForSSLTransientEvenOnLargeSession(t *testing.T) {
 	// SSL hiccup on a large session should NOT trigger compression.
 	err := errors.New("bad_record_mac on stream")
 	got := ClassifyWithHint(err, 0, nil, Hint{ApproxTokens: 150_000})
@@ -340,7 +340,7 @@ func TestClassify_MessageTruncation(t *testing.T) {
 
 // ─── Reason metadata ────────────────────────────────────────────────────
 
-func TestReason_String(t *testing.T) {
+func TestReasonStringReturnsCanonicalName(t *testing.T) {
 	cases := map[Reason]string{
 		ReasonUnknown:           "unknown",
 		ReasonAuth:              "auth",
@@ -401,7 +401,7 @@ func TestReason_Retryable(t *testing.T) {
 
 // ─── Action matrix ──────────────────────────────────────────────────────
 
-func TestDefaultAction_Matrix(t *testing.T) {
+func TestDefaultActionReturnsExpectedFlagsPerReason(t *testing.T) {
 	tests := []struct {
 		reason Reason
 		check  func(a Action) string // returns "" on ok, error msg otherwise
@@ -500,7 +500,7 @@ func TestDefaultAction_Matrix(t *testing.T) {
 	}
 }
 
-func TestDefaultAction_BackoffGrowsAndCaps(t *testing.T) {
+func TestDefaultActionBackoffGrowsWithAttemptAndCapsAtMax(t *testing.T) {
 	a1 := ReasonServerError.DefaultAction(1)
 	a2 := ReasonServerError.DefaultAction(2)
 	a10 := ReasonServerError.DefaultAction(10)
@@ -519,7 +519,7 @@ func TestDefaultAction_BackoffGrowsAndCaps(t *testing.T) {
 	}
 }
 
-func TestDefaultAction_AttemptClampedPositive(t *testing.T) {
+func TestDefaultActionReturnsBaseBackoffWhenAttemptNonPositive(t *testing.T) {
 	a := ReasonServerError.DefaultAction(0)
 	if a.Backoff != BaseBackoff {
 		t.Errorf("attempt 0 should clamp to 1: Backoff = %v, want %v", a.Backoff, BaseBackoff)
@@ -532,7 +532,7 @@ func TestDefaultAction_AttemptClampedPositive(t *testing.T) {
 
 // ─── Sanity: backoffFor is deterministic ───────────────────────────────
 
-func TestBackoffFor_Deterministic(t *testing.T) {
+func TestBackoffForReturnsDeterministicBackoff(t *testing.T) {
 	for i := 1; i < 20; i++ {
 		first := backoffFor(i)
 		second := backoffFor(i)

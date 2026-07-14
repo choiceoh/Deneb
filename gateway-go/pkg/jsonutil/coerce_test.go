@@ -2,7 +2,7 @@ package jsonutil
 
 import "testing"
 
-func TestUnmarshalInto_CoercesStringScalars(t *testing.T) {
+func TestUnmarshalInto_ParsesStringScalarsAsTypedFields(t *testing.T) {
 	var p struct {
 		Max      int     `json:"max"`
 		Download bool    `json:"download"`
@@ -19,7 +19,7 @@ func TestUnmarshalInto_CoercesStringScalars(t *testing.T) {
 	}
 }
 
-func TestUnmarshal_CoercesStringScalars(t *testing.T) {
+func TestUnmarshal_ParsesStringScalarsAsTypedFields(t *testing.T) {
 	type params struct {
 		Max      int  `json:"max"`
 		Download bool `json:"download"`
@@ -33,7 +33,7 @@ func TestUnmarshal_CoercesStringScalars(t *testing.T) {
 	}
 }
 
-func TestUnmarshalInto_FastPathUnaffected(t *testing.T) {
+func TestUnmarshalInto_FastPathParsesWithoutCoercion(t *testing.T) {
 	var p struct {
 		Max      int  `json:"max"`
 		Download bool `json:"download"`

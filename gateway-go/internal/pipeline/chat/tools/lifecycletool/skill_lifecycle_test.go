@@ -82,7 +82,7 @@ func (f *fakeSkillLifecycleBackend) ReviewSelfCorrectionCandidate(_ context.Cont
 	return SkillSelfCorrectionReviewResult{OK: true, Review: &genesis.SelfCorrectionCandidateRecord{ID: req.ID, Status: req.Status}}, nil
 }
 
-func TestToolSkillLifecyclePropose(t *testing.T) {
+func TestToolSkillLifecycleCreatesProposal(t *testing.T) {
 	backend := &fakeSkillLifecycleBackend{}
 	fn := ToolSkillLifecycle(backend)
 
@@ -104,7 +104,7 @@ func TestToolSkillLifecyclePropose(t *testing.T) {
 	}
 }
 
-func TestToolSkillLifecycleGenesis(t *testing.T) {
+func TestToolSkillLifecycleStartsGenesis(t *testing.T) {
 	backend := &fakeSkillLifecycleBackend{}
 	fn := ToolSkillLifecycle(backend)
 
@@ -119,7 +119,7 @@ func TestToolSkillLifecycleGenesis(t *testing.T) {
 	}
 }
 
-func TestToolSkillLifecycleEvolve(t *testing.T) {
+func TestToolSkillLifecycleEvolveUpdatesSkill(t *testing.T) {
 	backend := &fakeSkillLifecycleBackend{}
 	fn := ToolSkillLifecycle(backend)
 
@@ -135,7 +135,7 @@ func TestToolSkillLifecycleEvolve(t *testing.T) {
 	}
 }
 
-func TestToolSkillLifecycleStatus(t *testing.T) {
+func TestToolSkillLifecycleReadsSkillStatus(t *testing.T) {
 	backend := &fakeSkillLifecycleBackend{}
 	fn := ToolSkillLifecycle(backend)
 
@@ -155,7 +155,7 @@ func TestToolSkillLifecycleStatus(t *testing.T) {
 	}
 }
 
-func TestToolSkillLifecycleSelfCorrection(t *testing.T) {
+func TestToolSkillLifecycleCreatesSelfCorrectionCandidate(t *testing.T) {
 	backend := &fakeSkillLifecycleBackend{}
 	fn := ToolSkillLifecycle(backend)
 
@@ -183,7 +183,7 @@ func TestToolSkillLifecycleSelfCorrection(t *testing.T) {
 	}
 }
 
-func TestToolSkillLifecycleSelfCorrectionReview(t *testing.T) {
+func TestToolSkillLifecycleUpdatesSelfCorrectionReview(t *testing.T) {
 	backend := &fakeSkillLifecycleBackend{}
 	fn := ToolSkillLifecycle(backend)
 
@@ -201,7 +201,7 @@ func TestToolSkillLifecycleSelfCorrectionReview(t *testing.T) {
 	}
 }
 
-func TestToolSkillLifecycleCuratorAction(t *testing.T) {
+func TestToolSkillLifecycleUpdatesSkillViaCuratorAction(t *testing.T) {
 	backend := &fakeSkillLifecycleBackend{}
 	fn := ToolSkillLifecycle(backend)
 
@@ -220,7 +220,7 @@ func TestToolSkillLifecycleCuratorAction(t *testing.T) {
 	}
 }
 
-func TestToolSkillLifecycleValidationCase(t *testing.T) {
+func TestToolSkillLifecycleCreatesValidationCase(t *testing.T) {
 	backend := &fakeSkillLifecycleBackend{}
 	fn := ToolSkillLifecycle(backend)
 
@@ -275,7 +275,7 @@ func TestToolSkillLifecycleValidationCase(t *testing.T) {
 	}
 }
 
-func TestToolSkillLifecycleValidationCaseFromSession(t *testing.T) {
+func TestToolSkillLifecycleCreatesValidationCaseFromSession(t *testing.T) {
 	backend := &fakeSkillLifecycleBackend{}
 	fn := ToolSkillLifecycle(backend)
 
@@ -307,7 +307,7 @@ func TestToolSkillLifecycleValidationCaseFromSession(t *testing.T) {
 	}
 }
 
-func TestToolSkillLifecycleValidationBackfill(t *testing.T) {
+func TestToolSkillLifecycleCreatesBackfilledValidationCases(t *testing.T) {
 	backend := &fakeSkillLifecycleBackend{}
 	fn := ToolSkillLifecycle(backend)
 

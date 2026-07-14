@@ -642,7 +642,7 @@ func TestCaptureContactsAdditionalValidationContract(t *testing.T) {
 	})
 }
 
-func TestTodayFeedDigestAdditionalBoundaries(t *testing.T) {
+func TestBuildTodayFeedDigestHandlesBoundaryAndWhitespaceCases(t *testing.T) {
 	loc, err := time.LoadLocation("Asia/Seoul")
 	if err != nil {
 		t.Skip("tzdata unavailable")
@@ -676,7 +676,7 @@ func TestTodayFeedDigestAdditionalBoundaries(t *testing.T) {
 	}
 }
 
-func TestBase64FixturesAreStable(t *testing.T) {
+func TestBase64FixturesDecodeToExpectedPlaintext(t *testing.T) {
 	for plain, encoded := range map[string]string{
 		"image": "aW1hZ2U=",
 		"audio": "YXVkaW8=",

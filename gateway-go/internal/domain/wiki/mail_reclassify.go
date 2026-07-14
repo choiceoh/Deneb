@@ -36,7 +36,7 @@ func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) []Re
 	if s == nil || maxMoves <= 0 {
 		return nil
 	}
-	bucket := projectCategoryPrefix + "/" + MailAnalysisDir
+	bucket := projectCategoryPrefix + "/" + mailAnalysisDir
 	pages, err := s.ListPages(bucket)
 	if err != nil {
 		return nil

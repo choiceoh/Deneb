@@ -120,7 +120,7 @@ func TestLoadFromFile_CorruptJSONErrors(t *testing.T) {
 	}
 }
 
-func TestExampleTemplateIsValidAndFake(t *testing.T) {
+func TestExampleTemplateLoadsAndClassifiesFakeEntries(t *testing.T) {
 	// The shipped example template must parse cleanly (it's documentation the
 	// operator copies) and must classify with its fake entries.
 	rules, err := LoadFromFile("classification_rules.example.json")

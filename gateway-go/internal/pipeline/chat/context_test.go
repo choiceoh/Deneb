@@ -7,7 +7,7 @@ import "testing"
 // sharply with input size). Invalid or headroom-less values must fall back to
 // the default rather than underflow effectiveContextBudget's memory-minus-
 // system arithmetic.
-func TestDefaultContextConfigBudgetOverride(t *testing.T) {
+func TestDefaultContextConfigBudgetOverrideFallsBackOnInvalid(t *testing.T) {
 	cases := []struct {
 		name string
 		env  string

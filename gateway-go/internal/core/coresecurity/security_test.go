@@ -7,7 +7,7 @@ import (
 
 // --- ValidateSessionKey (Rust: test_is_valid_session_key) ---
 
-func TestValidateSessionKey(t *testing.T) {
+func TestValidateSessionKeyRejectsEmptyOversizedAndNullBytes(t *testing.T) {
 	if err := ValidateSessionKey("my-session-123"); err != nil {
 		t.Errorf("valid key rejected: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestValidateSessionKey(t *testing.T) {
 
 // --- ValidateSessionKey multibyte (Rust: test_is_valid_session_key_multibyte) ---
 
-func TestValidateSessionKey_Multibyte(t *testing.T) {
+func TestValidateSessionKeyRejectsOversizedMultibyteKeys(t *testing.T) {
 	key512 := strings.Repeat("a", 512)
 	if err := ValidateSessionKey(key512); err != nil {
 		t.Errorf("512 ASCII chars rejected: %v", err)
@@ -54,7 +54,7 @@ func TestValidateSessionKey_Multibyte(t *testing.T) {
 
 // --- SanitizeHTML (Rust: test_sanitize_html) ---
 
-func TestSanitizeHTML(t *testing.T) {
+func TestSanitizeHTMLEncodesSpecialCharactersAsEntities(t *testing.T) {
 	cases := []struct {
 		input, want string
 	}{
@@ -74,7 +74,7 @@ func TestSanitizeHTML(t *testing.T) {
 
 // --- IsSafeURL (Rust: test_is_safe_url) ---
 
-func TestIsSafeURL(t *testing.T) {
+func TestIsSafeURLAllowsPublicHostsAndRejectsPrivateTargets(t *testing.T) {
 	safe := []string{
 		"https://example.com/api",
 		"http://cdn.example.com/image.png",
@@ -115,7 +115,7 @@ func TestIsSafeURL(t *testing.T) {
 
 // --- IPv6 (Rust: test_is_safe_url_ipv6) ---
 
-func TestIsSafeURL_IPv6(t *testing.T) {
+func TestIsSafeURLRejectsPrivateIPv6ButAllowsPublic(t *testing.T) {
 	blocked := []string{
 		"http://[::1]/",
 		"http://[::1]:8080/path",
@@ -138,7 +138,7 @@ func TestIsSafeURL_IPv6(t *testing.T) {
 
 // --- Metadata IPv6 (Rust: test_is_safe_url_metadata_ipv6) ---
 
-func TestIsSafeURL_MetadataIPv6(t *testing.T) {
+func TestIsSafeURLRejectsIPv4MappedMetadataAddress(t *testing.T) {
 	if IsSafeURL("http://[::ffff:169.254.169.254]/") {
 		t.Error("cloud metadata via IPv4-mapped IPv6 should be blocked")
 	}
@@ -146,7 +146,7 @@ func TestIsSafeURL_MetadataIPv6(t *testing.T) {
 
 // --- Numeric bypass (Rust: test_is_safe_url_numeric_bypass) ---
 
-func TestIsSafeURL_NumericBypass(t *testing.T) {
+func TestIsSafeURLRejectsNumericIPEncodingBypasses(t *testing.T) {
 	blocked := []string{
 		"http://0177.0.0.1/",       // octal 127.0.0.1
 		"http://0177.0.0.01/admin", // octal 127.0.0.1
@@ -177,7 +177,7 @@ func TestIsSafeURL_NumericBypass(t *testing.T) {
 
 // --- IPv6 zone ID (Rust: test_is_safe_url_ipv6_zone_id) ---
 
-func TestIsSafeURL_IPv6ZoneID(t *testing.T) {
+func TestIsSafeURLRejectsIPv6AddressesWithZoneID(t *testing.T) {
 	blocked := []string{
 		"http://[fe80::1%25eth0]/",
 		"http://[::1%25lo]/",
@@ -192,7 +192,7 @@ func TestIsSafeURL_IPv6ZoneID(t *testing.T) {
 
 // --- File URL (Rust: test_file_url_blocked) ---
 
-func TestIsSafeURL_FileURL(t *testing.T) {
+func TestIsSafeURLRejectsFileSchemeURLs(t *testing.T) {
 	blocked := []string{
 		"file:///etc/passwd",
 		"FILE:///etc/passwd",
@@ -210,7 +210,7 @@ func TestIsSafeURL_FileURL(t *testing.T) {
 
 // --- UNC path (Rust: test_unc_path_blocked) ---
 
-func TestIsSafeURL_UNCPath(t *testing.T) {
+func TestIsSafeURLRejectsUNCPathURLs(t *testing.T) {
 	blocked := []string{
 		"\\\\server\\share",
 		"\\\\?\\UNC\\server\\share",
@@ -226,7 +226,7 @@ func TestIsSafeURL_UNCPath(t *testing.T) {
 
 // --- Internal helpers ---
 
-func TestIsPrivateIPv4U32(t *testing.T) {
+func TestIsPrivateIPv4U32ReturnsPrivateClassification(t *testing.T) {
 	cases := []struct {
 		ip   uint32
 		want bool

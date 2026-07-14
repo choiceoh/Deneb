@@ -44,18 +44,19 @@ func TestStore_WriteAndReadPage(t *testing.T) {
 	}
 }
 
-// TestStore_PathNormalization verifies that a page written with a bare path
-// (no .md extension) resolves to the same .md file on every access path —
-// ReadPage, ListPages, and the master index. This guards the duplicate-page
-// regression: before normalization, a bare path wrote an extensionless sibling
-// that ListPages (which filters on .md) dropped, so search and index never saw
-// it and the dreamer kept re-creating the same page.
-// TestStore_StripsEmbeddedFrontmatter guards the duplicate-frontmatter
-// regression: when content arrives with its own frontmatter block prepended
-// (as WikiDreamer's LLM output sometimes does), WritePage must store the page
-// with exactly one frontmatter — the one Render emits from Page.Meta — not the
-// stacked pair that previously round-tripped onto disk and broke parsing.
-func TestStore_StripsEmbeddedFrontmatter(t *testing.T) {
+// TestStore_PathNormalization_ResolvesBarePathToSingleMdFile verifies that a page
+// written with a bare path (no .md extension) resolves to the same .md file on
+// every access path — ReadPage, ListPages, and the master index. This guards
+// the duplicate-page regression: before normalization, a bare path wrote an
+// extensionless sibling that ListPages (which filters on .md) dropped, so
+// search and index never saw it and the dreamer kept re-creating the same page.
+// TestStore_StripsEmbeddedFrontmatter_PreservesSingleFrontmatterFence guards
+// the duplicate-frontmatter regression: when content arrives with its own
+// frontmatter block prepended (as WikiDreamer's LLM output sometimes does),
+// WritePage must store the page with exactly one frontmatter — the one Render
+// emits from Page.Meta — not the stacked pair that previously round-tripped
+// onto disk and broke parsing.
+func TestStore_StripsEmbeddedFrontmatter_PreservesSingleFrontmatterFence(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -89,7 +90,7 @@ func TestStore_StripsEmbeddedFrontmatter(t *testing.T) {
 	}
 }
 
-func TestStore_PathNormalization(t *testing.T) {
+func TestStore_PathNormalization_ReturnsSingleMdFileForBarePath(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -131,8 +132,8 @@ func TestStore_PathNormalization(t *testing.T) {
 	}
 
 	// The master index is keyed by the normalized .md path.
-	if _, ok := store.SnapshotEntries()["프로젝트/스파이럴-테스트베드.md"]; !ok {
-		t.Errorf("index missing normalized key; entries=%v", store.SnapshotEntries())
+	if _, ok := store.snapshotEntries()["프로젝트/스파이럴-테스트베드.md"]; !ok {
+		t.Errorf("index missing normalized key; entries=%v", store.snapshotEntries())
 	}
 
 	// Re-writing with the .md form must update in place, not create a second page.
@@ -173,7 +174,7 @@ func TestStore_DeletePage(t *testing.T) {
 	}
 }
 
-func TestStore_ListPages(t *testing.T) {
+func TestStore_ListPages_ReturnsAllAndFiltersByCategory(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -208,7 +209,7 @@ func TestStore_ListPages(t *testing.T) {
 	}
 }
 
-func TestStore_Search(t *testing.T) {
+func TestStore_Search_FindsMatchingContentEmptyForNonexistent(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -234,7 +235,7 @@ func TestStore_Search(t *testing.T) {
 	}
 }
 
-func TestStore_BacklinkMaintenance(t *testing.T) {
+func TestStore_BacklinkMaintenance_CreatesReverseBacklinkOnWrite(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -295,7 +296,7 @@ func TestStore_BacklinkCleanupOnDelete(t *testing.T) {
 	}
 }
 
-func TestStore_Stats(t *testing.T) {
+func TestStore_Stats_ReturnsPageCountBytesAndCategoryCount(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -318,10 +319,11 @@ func TestStore_Stats(t *testing.T) {
 	}
 }
 
-// TestAppendDiaryTo_RedactsSecret ensures diary entries are scrubbed before
-// they land on disk. Diary files are the primary input to the Wiki Dreamer;
-// redacting here stops secrets from entering the wiki synthesis pipeline.
-func TestAppendDiaryTo_RedactsSecret(t *testing.T) {
+// TestAppendDiaryTo_RedactsSecretPreservesKoreanProse ensures diary entries are
+// scrubbed before they land on disk. Diary files are the primary input to the
+// Wiki Dreamer; redacting here stops secrets from entering the wiki synthesis
+// pipeline.
+func TestAppendDiaryTo_RedactsSecretPreservesKoreanProse(t *testing.T) {
 	dir := t.TempDir()
 	diaryDir := filepath.Join(dir, "diary")
 
@@ -350,16 +352,16 @@ func TestAppendDiaryTo_RedactsSecret(t *testing.T) {
 	}
 }
 
-// TestStore_AppendLog_RedactsSecret ensures the audit log does not persist
+// TestStore_AppendLog_ClearsSecretToken ensures the audit log does not persist
 // secret patterns (page titles / details can echo user content).
-func TestStore_AppendLog_RedactsSecret(t *testing.T) {
+func TestStore_AppendLog_ClearsSecretToken(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
 
 	token := "github_pat_11" + strings.Repeat("Z", 60)
-	if err := store.AppendLog("create", "페이지 본문에 "+token+" 포함됨"); err != nil {
-		t.Fatalf("AppendLog: %v", err)
+	if err := store.appendLog("create", "페이지 본문에 "+token+" 포함됨"); err != nil {
+		t.Fatalf("appendLog: %v", err)
 	}
 
 	data := testutil.Must(os.ReadFile(filepath.Join(dir, "wiki", "log.md")))
@@ -370,7 +372,7 @@ func TestStore_AppendLog_RedactsSecret(t *testing.T) {
 }
 
 // TestStore_AppendLog_RotatesWhenOversized verifies the size-capped rotation:
-// once log.md exceeds wikiLogMaxBytes, the next AppendLog rolls off the oldest
+// once log.md exceeds wikiLogMaxBytes, the next appendLog rolls off the oldest
 // entries, keeps the newest ~wikiLogKeepBytes, and the freshly appended entry
 // survives. Pre-seeds an oversized file so the test stays fast (no 2MB of
 // real appends).
@@ -398,8 +400,8 @@ func TestStore_AppendLog_RotatesWhenOversized(t *testing.T) {
 	seededSize := sb.Len()
 
 	// One append crosses (already over) the cap and triggers rotation.
-	if err := store.AppendLog("create", "프로젝트/freshest — 최신 항목"); err != nil {
-		t.Fatalf("AppendLog: %v", err)
+	if err := store.appendLog("create", "프로젝트/freshest — 최신 항목"); err != nil {
+		t.Fatalf("appendLog: %v", err)
 	}
 
 	after := string(testutil.Must(os.ReadFile(logPath)))

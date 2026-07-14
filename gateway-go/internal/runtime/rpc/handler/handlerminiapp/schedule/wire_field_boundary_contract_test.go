@@ -2152,98 +2152,98 @@ func assertWireFieldOmitsZeroValue(t *testing.T, target any, jsonName string) {
 	}
 }
 
-func TestCalendarEventOutDescriptionOmitsZeroValue(t *testing.T) {
+func TestCalendarEventOutDescriptionOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value calendarEventOut
 	assertWireFieldOmitsZeroValue(t, &value, "description")
 }
 
-func TestCalendarEventOutLocationOmitsZeroValue(t *testing.T) {
+func TestCalendarEventOutLocationOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value calendarEventOut
 	assertWireFieldOmitsZeroValue(t, &value, "location")
 }
 
-func TestCalendarEventOutAllDayOmitsZeroValue(t *testing.T) {
+func TestCalendarEventOutAllDayOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value calendarEventOut
 	assertWireFieldOmitsZeroValue(t, &value, "allDay")
 }
 
-func TestCalendarEventOutStatusOmitsZeroValue(t *testing.T) {
+func TestCalendarEventOutStatusOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value calendarEventOut
 	assertWireFieldOmitsZeroValue(t, &value, "status")
 }
 
-func TestCalendarEventOutHTMLLinkOmitsZeroValue(t *testing.T) {
+func TestCalendarEventOutHTMLLinkOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value calendarEventOut
 	assertWireFieldOmitsZeroValue(t, &value, "htmlLink")
 }
 
-func TestCalendarEventOutLocalOmitsZeroValue(t *testing.T) {
+func TestCalendarEventOutLocalOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value calendarEventOut
 	assertWireFieldOmitsZeroValue(t, &value, "local")
 }
 
-func TestCalendarEventOutCategoryOmitsZeroValue(t *testing.T) {
+func TestCalendarEventOutCategoryOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value calendarEventOut
 	assertWireFieldOmitsZeroValue(t, &value, "category")
 }
 
-func TestCalendarEventOutOrganizerOmitsZeroValue(t *testing.T) {
+func TestCalendarEventOutOrganizerOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value calendarEventOut
 	assertWireFieldOmitsZeroValue(t, &value, "organizer")
 }
 
-func TestCalendarEventOutAttendeesOmitsZeroValue(t *testing.T) {
+func TestCalendarEventOutAttendeesOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value calendarEventOut
 	assertWireFieldOmitsZeroValue(t, &value, "attendees")
 }
 
-func TestCalendarEventOutConferenceOmitsZeroValue(t *testing.T) {
+func TestCalendarEventOutConferenceOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value calendarEventOut
 	assertWireFieldOmitsZeroValue(t, &value, "conference")
 }
 
-func TestCalendarEventOutHasMeetOmitsZeroValue(t *testing.T) {
+func TestCalendarEventOutHasMeetOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value calendarEventOut
 	assertWireFieldOmitsZeroValue(t, &value, "hasMeet")
 }
 
-func TestCalendarProposalOutSourceSubjectOmitsZeroValue(t *testing.T) {
+func TestCalendarProposalOutSourceSubjectOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value calendarProposalOut
 	assertWireFieldOmitsZeroValue(t, &value, "sourceSubject")
 }
 
-func TestCalendarProposalOutSourceFromOmitsZeroValue(t *testing.T) {
+func TestCalendarProposalOutSourceFromOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value calendarProposalOut
 	assertWireFieldOmitsZeroValue(t, &value, "sourceFrom")
 }
 
-func TestMiniappCronRowNameOmitsZeroValue(t *testing.T) {
+func TestMiniappCronRowNameOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronRow
@@ -2257,7 +2257,7 @@ func TestMiniappCronRowPayloadPreviewOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "payloadPreview")
 }
 
-func TestMiniappCronRowNextRunAtMsOmitsZeroValue(t *testing.T) {
+func TestMiniappCronRowNextRunAtMsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronRow
@@ -2271,7 +2271,7 @@ func TestMiniappCronRowConsecutiveErrorsOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "consecutiveErrors")
 }
 
-func TestMiniappCronRowAutoDisabledAtMsOmitsZeroValue(t *testing.T) {
+func TestMiniappCronRowAutoDisabledAtMsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronRow
@@ -2285,63 +2285,63 @@ func TestMiniappCronRowLastErrorOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "lastError")
 }
 
-func TestMiniappCronDetailNameOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailNameOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
 	assertWireFieldOmitsZeroValue(t, &value, "name")
 }
 
-func TestMiniappCronDetailAgentIDOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailAgentIDOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
 	assertWireFieldOmitsZeroValue(t, &value, "agentId")
 }
 
-func TestMiniappCronDetailSessionTargetOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailSessionTargetOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
 	assertWireFieldOmitsZeroValue(t, &value, "sessionTarget")
 }
 
-func TestMiniappCronDetailTimezoneOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailTimezoneOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
 	assertWireFieldOmitsZeroValue(t, &value, "timezone")
 }
 
-func TestMiniappCronDetailCronExprOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailCronExprOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
 	assertWireFieldOmitsZeroValue(t, &value, "cronExpr")
 }
 
-func TestMiniappCronDetailStaggerMsOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailStaggerMsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
 	assertWireFieldOmitsZeroValue(t, &value, "staggerMs")
 }
 
-func TestMiniappCronDetailPromptOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailPromptOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
 	assertWireFieldOmitsZeroValue(t, &value, "prompt")
 }
 
-func TestMiniappCronDetailModelOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailModelOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
 	assertWireFieldOmitsZeroValue(t, &value, "model")
 }
 
-func TestMiniappCronDetailThinkingOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailThinkingOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
@@ -2355,7 +2355,7 @@ func TestMiniappCronDetailTimeoutSecondsOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "timeoutSeconds")
 }
 
-func TestMiniappCronDetailLightContextOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailLightContextOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
@@ -2369,14 +2369,14 @@ func TestMiniappCronDetailRetryCountOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "retryCount")
 }
 
-func TestMiniappCronDetailDeliveryChannelOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailDeliveryChannelOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
 	assertWireFieldOmitsZeroValue(t, &value, "deliveryChannel")
 }
 
-func TestMiniappCronDetailDeliveryToOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailDeliveryToOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
@@ -2397,21 +2397,21 @@ func TestMiniappCronDetailFailureAlertAfterOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "failureAlertAfter")
 }
 
-func TestMiniappCronDetailNextRunAtMsOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailNextRunAtMsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
 	assertWireFieldOmitsZeroValue(t, &value, "nextRunAtMs")
 }
 
-func TestMiniappCronDetailLastSessionKeyOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailLastSessionKeyOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
 	assertWireFieldOmitsZeroValue(t, &value, "lastSessionKey")
 }
 
-func TestMiniappCronDetailLastDeliveryStatusOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailLastDeliveryStatusOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
@@ -2432,7 +2432,7 @@ func TestMiniappCronDetailConsecutiveErrorsOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "consecutiveErrors")
 }
 
-func TestMiniappCronDetailAutoDisabledAtMsOmitsZeroValue(t *testing.T) {
+func TestMiniappCronDetailAutoDisabledAtMsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MiniappCronDetail
@@ -2453,35 +2453,35 @@ func TestMiniappCronDetailUpdatedAtMsOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "updatedAtMs")
 }
 
-func TestTodoOutNoteOmitsZeroValue(t *testing.T) {
+func TestTodoOutNoteOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value todoOut
 	assertWireFieldOmitsZeroValue(t, &value, "note")
 }
 
-func TestTodoOutDueOmitsZeroValue(t *testing.T) {
+func TestTodoOutDueOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value todoOut
 	assertWireFieldOmitsZeroValue(t, &value, "due")
 }
 
-func TestTodoOutDueAllDayOmitsZeroValue(t *testing.T) {
+func TestTodoOutDueAllDayOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value todoOut
 	assertWireFieldOmitsZeroValue(t, &value, "dueAllDay")
 }
 
-func TestTodoOutDoneOmitsZeroValue(t *testing.T) {
+func TestTodoOutDoneOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value todoOut
 	assertWireFieldOmitsZeroValue(t, &value, "done")
 }
 
-func TestTodoOutDoneAtOmitsZeroValue(t *testing.T) {
+func TestTodoOutDoneAtOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value todoOut

@@ -35,10 +35,10 @@ func writeUnlinkedMail(t *testing.T, store *Store, id, title string, related []s
 	}
 }
 
-// TestReclassifyUnlinkedMailAnalyses: related-signal and unique-title-signal
-// mails re-file into their project's 메일분석 slot (gaining the 대표 edge);
-// ambiguous and signal-less mails stay put.
-func TestReclassifyUnlinkedMailAnalyses(t *testing.T) {
+// TestReclassifyUnlinkedMailAnalysesReturnsMoved: related-signal and
+// unique-title-signal mails re-file into their project's 메일분석 slot
+// (gaining the 대표 edge); ambiguous and signal-less mails stay put.
+func TestReclassifyUnlinkedMailAnalysesReturnsMoved(t *testing.T) {
 	store := newReclassifyStore(t)
 	now := time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC)
 
@@ -77,11 +77,11 @@ func TestReclassifyUnlinkedMailAnalyses(t *testing.T) {
 	}
 }
 
-// TestReclassifyTarget_TwoDistinctRelatedProjectsIsAmbiguous (M23): a mail
+// TestReclassifyTarget_TwoDistinctRelatedProjectsReturnsEmpty (M23): a mail
 // whose Related cites TWO different projects has no unambiguous home — the
 // doctrine is 모호하면 잔류, and returning the first Related entry was arbitrary.
 // Repeated citations of the SAME project stay a valid signal.
-func TestReclassifyTarget_TwoDistinctRelatedProjectsIsAmbiguous(t *testing.T) {
+func TestReclassifyTarget_TwoDistinctRelatedProjectsReturnsEmpty(t *testing.T) {
 	store := newReclassifyStore(t)
 	projects := store.KnownProjects()
 
@@ -115,8 +115,8 @@ func TestReclassifyTarget_TwoDistinctRelatedProjectsIsAmbiguous(t *testing.T) {
 	}
 }
 
-// TestReclassifyUnlinkedMailAnalyses_Cap: the per-call cap holds.
-func TestReclassifyUnlinkedMailAnalyses_Cap(t *testing.T) {
+// TestReclassifyUnlinkedMailAnalyses_CapEnforcesBoundary: the per-call cap holds.
+func TestReclassifyUnlinkedMailAnalyses_CapEnforcesBoundary(t *testing.T) {
 	store := newReclassifyStore(t)
 	writeUnlinkedMail(t, store, "c1", "기아 화성 문의 1", nil)
 	writeUnlinkedMail(t, store, "c2", "기아 화성 문의 2", nil)
@@ -150,10 +150,10 @@ func newClientGroupStore(t *testing.T) *Store {
 	return store
 }
 
-// TestMatchProjectsInText_ClientKey: a bare 거래처 mention anchors every
-// project of that client (the 거래처-as-top-level recall behavior), while
-// unrelated projects stay out.
-func TestMatchProjectsInText_ClientKey(t *testing.T) {
+// TestMatchProjectsInText_ClientKeyReturnsAllProjects: a bare 거래처 mention
+// anchors every project of that client (the 거래처-as-top-level recall
+// behavior), while unrelated projects stay out.
+func TestMatchProjectsInText_ClientKeyReturnsAllProjects(t *testing.T) {
 	store := newClientGroupStore(t)
 
 	got := store.MatchProjectsInText("금호타이어 요즘 어떻게 되고 있어?", 5)
@@ -167,10 +167,11 @@ func TestMatchProjectsInText_ClientKey(t *testing.T) {
 	}
 }
 
-// TestUniqueProjectInText: exactly-one resolution is specificity-aware — a
-// bare client mention ties across the client's projects (no arbitrary pick),
-// a specific title wins despite the sibling's client-key hit.
-func TestUniqueProjectInText(t *testing.T) {
+// TestUniqueProjectInTextReturnsSpecificMatch: exactly-one resolution is
+// specificity-aware — a bare client mention ties across the client's projects
+// (no arbitrary pick), a specific title wins despite the sibling's client-key
+// hit.
+func TestUniqueProjectInTextReturnsSpecificMatch(t *testing.T) {
 	store := newClientGroupStore(t)
 
 	if ref, ok := store.UniqueProjectInText("금호타이어 회의"); ok {
@@ -188,10 +189,11 @@ func TestUniqueProjectInText(t *testing.T) {
 	}
 }
 
-// TestReclassifyTarget_ClientMentionStaysPut: mail titled with only the 거래처
-// stays in the unlinked bucket (tie), while a project-specific title still
-// files even though the sibling project also hits via the shared client key.
-func TestReclassifyTarget_ClientMentionStaysPut(t *testing.T) {
+// TestReclassifyTarget_ClientMentionReturnsEmpty: mail titled with only the
+// 거래처 stays in the unlinked bucket (tie), while a project-specific title
+// still files even though the sibling project also hits via the shared
+// client key.
+func TestReclassifyTarget_ClientMentionReturnsEmpty(t *testing.T) {
 	store := newClientGroupStore(t)
 	projects := store.KnownProjects()
 
@@ -205,9 +207,9 @@ func TestReclassifyTarget_ClientMentionStaysPut(t *testing.T) {
 	}
 }
 
-// TestMatchProjectsInText: normalized containment, specificity order, the
-// short-name guard, and closed-project exclusion.
-func TestMatchProjectsInText(t *testing.T) {
+// TestMatchProjectsInTextReturnsRankedMatches: normalized containment,
+// specificity order, the short-name guard, and closed-project exclusion.
+func TestMatchProjectsInTextReturnsRankedMatches(t *testing.T) {
 	store := newReclassifyStore(t)
 
 	got := store.MatchProjectsInText("기아 화성 근황 알려줘", 2)

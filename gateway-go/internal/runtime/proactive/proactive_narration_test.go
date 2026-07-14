@@ -2,7 +2,7 @@ package proactive
 
 import "testing"
 
-func TestIsNarrationOnlyProactive(t *testing.T) {
+func TestIsNarrationOnlyProactiveAllowsRealReports(t *testing.T) {
 	suppress := []string{
 		// Whole-body working-narration / self-talk (observed leaks).
 		"이제 분석 보고를 정리해.",

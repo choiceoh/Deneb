@@ -12,7 +12,7 @@ import (
 // The server adapter wires its stores into the curriculumenv digest. Digest
 // FORMAT is covered by runtime/curriculumenv; this only proves the wiring
 // (a wired feed store reaches the digest, no store yields "").
-func TestCurriculumEnvDigest_Wiring(t *testing.T) {
+func TestCurriculumEnvDigestReturnsWiredFeedContent(t *testing.T) {
 	dir := t.TempDir()
 	store := workfeed.NewStore(filepath.Join(dir, "workfeed.jsonl"))
 	if _, err := store.Append(workfeed.Item{Source: "test", Title: "계약 검토 — NDA 초안"}); err != nil {

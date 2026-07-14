@@ -94,9 +94,9 @@ func TestCodeActionAllow(t *testing.T) {
 	}
 }
 
-// TestCodeActionBridge covers the HTTP bridge: token auth, allowlist
+// TestCodeActionBridgeEnforcesAuthAndAllowlist covers the HTTP bridge: token auth, allowlist
 // enforcement, and forwarding of permitted calls to the invoker.
-func TestCodeActionBridge(t *testing.T) {
+func TestCodeActionBridgeEnforcesAuthAndAllowlist(t *testing.T) {
 	inv := &recordingInvoker{result: "RESULT_OK"}
 	b := &codeActionBridge{invoker: inv, token: "secret-token", ctx: context.Background()}
 	srv := httptest.NewServer(b)
@@ -143,7 +143,7 @@ func TestCodeActionBridge(t *testing.T) {
 	}
 }
 
-func TestCodeActionPromotionCallsSkillLifecycleAfterSuccessfulRun(t *testing.T) {
+func TestCodeActionPromotionEmitsSkillLifecycleCallOnSuccess(t *testing.T) {
 	inv := &recordingInvoker{result: `{"ok":true,"route":"genesis","executed":true}`}
 	out := promoteCodeActionWorkflow(context.Background(), inv, CodeActionPromotion{
 		Candidate: "Batch join contacts calendar and wiki in code_action",
@@ -218,9 +218,9 @@ func newTestContactsStore(t *testing.T) *contacts.Store {
 	return store
 }
 
-// TestCodeAction_OutputAndBridge runs real Python: print() round-trips and a
+// TestCodeActionRoundTripsPythonOutputThroughBridge runs real Python: print() round-trips and a
 // permitted deneb.mail_archive call reaches the (fake) invoker.
-func TestCodeAction_OutputAndBridge(t *testing.T) {
+func TestCodeActionRoundTripsPythonOutputThroughBridge(t *testing.T) {
 	requirePython(t)
 	inv := &recordingInvoker{result: "MAILS:a,b,c"}
 	out := runCodeAction(t, CodeActionDeps{Invoker: inv}, `
@@ -236,7 +236,7 @@ print("GOT", mails)
 	}
 }
 
-func TestCodeAction_MailArchiveBridge(t *testing.T) {
+func TestCodeActionReturnsMailArchiveBridgeResult(t *testing.T) {
 	requirePython(t)
 	inv := &recordingInvoker{result: "ARCHIVE:thread"}
 	out := runCodeAction(t, CodeActionDeps{Invoker: inv}, `
@@ -252,7 +252,7 @@ print("GOT", thread)
 	}
 }
 
-func TestCodeAction_MailArchiveStructuredJSON(t *testing.T) {
+func TestCodeActionParsesStructuredMailArchiveJSON(t *testing.T) {
 	requirePython(t)
 	inv := &recordingInvoker{result: `{"action":"list","messages":[{"subject":"Alpha","locator":"archive|INBOX|1"}]}`}
 	out := runCodeAction(t, CodeActionDeps{Invoker: inv}, `
@@ -268,10 +268,10 @@ print(rows["messages"][0]["subject"], rows["messages"][0]["locator"])
 	}
 }
 
-// TestCodeAction_SandboxBlocks is the security core: the audit hook must block
+// TestCodeActionSandboxRejectsUnsafeOperations is the security core: the audit hook must block
 // network, subprocess, out-of-sandbox writes, and secret reads — each surfacing
 // as a traceback the model can read.
-func TestCodeAction_SandboxBlocks(t *testing.T) {
+func TestCodeActionSandboxRejectsUnsafeOperations(t *testing.T) {
 	requirePython(t)
 	inv := &recordingInvoker{result: ""}
 
@@ -334,9 +334,9 @@ print("WROTE", open(p).read())
 	}
 }
 
-// TestContactsStructured covers the typed structured-output handler: read
+// TestContactsStructuredReturnsMatchesAndRejectsMutations covers the typed structured-output handler: read
 // actions return []Contact, empty results are non-nil, mutating actions reject.
-func TestContactsStructured(t *testing.T) {
+func TestContactsStructuredReturnsMatchesAndRejectsMutations(t *testing.T) {
 	store := newTestContactsStore(t)
 
 	val, err := contactsStructured(store, map[string]any{"action": "search", "query": "탑솔라"})
@@ -372,9 +372,9 @@ func TestContactsStructured(t *testing.T) {
 	}
 }
 
-// TestCodeActionBridge_structured verifies the json=true path: contacts returns
+// TestCodeActionBridgeStructuredJSONReturnsDataOrError verifies the json=true path: contacts returns
 // a marshaled []Contact, and a tool without a structured handler errors clearly.
-func TestCodeActionBridge_structured(t *testing.T) {
+func TestCodeActionBridgeStructuredJSONReturnsDataOrError(t *testing.T) {
 	store := newTestContactsStore(t)
 	b := &codeActionBridge{invoker: &recordingInvoker{}, contacts: store, token: "tok", ctx: context.Background()}
 	srv := httptest.NewServer(b)
@@ -413,9 +413,9 @@ func TestCodeActionBridge_structured(t *testing.T) {
 	}
 }
 
-// TestCodeAction_StructuredContacts is the python e2e for as_json=True: model
+// TestCodeActionReturnsStructuredContactsList is the python e2e for as_json=True: model
 // code receives a real Python list of dicts it can filter/count.
-func TestCodeAction_StructuredContacts(t *testing.T) {
+func TestCodeActionReturnsStructuredContactsList(t *testing.T) {
 	requirePython(t)
 	store := newTestContactsStore(t)
 	out := runCodeAction(t, CodeActionDeps{Invoker: &recordingInvoker{}, Contacts: store}, `
@@ -470,10 +470,10 @@ func (f *fakeLocalCal) Update(string, localcal.CreateInput) (*calendar.Event, er
 }
 func (f *fakeLocalCal) Delete(string) error { return nil }
 
-// TestCalendarStructured covers the typed calendar path: list maps merged
+// TestCalendarStructuredReturnsEventsAndRejectsMutations covers the typed calendar path: list maps merged
 // events to DTOs, get routes a local: ID to the local store, mutating actions
 // are rejected.
-func TestCalendarStructured(t *testing.T) {
+func TestCalendarStructuredReturnsEventsAndRejectsMutations(t *testing.T) {
 	start := time.Now().Add(time.Hour)
 	fake := &fakeLocalCal{events: []calendar.Event{{
 		ID: "local:evt1", Summary: "탑솔라 미팅", Start: start, End: start.Add(time.Hour),
@@ -509,9 +509,9 @@ func TestCalendarStructured(t *testing.T) {
 	}
 }
 
-// TestWikiStructured covers the typed wiki path: read returns page metadata +
+// TestWikiStructuredReturnsPagesAndRejectsWrites covers the typed wiki path: read returns page metadata +
 // body, search returns ranked hits, mutating actions are rejected.
-func TestWikiStructured(t *testing.T) {
+func TestWikiStructuredReturnsPagesAndRejectsWrites(t *testing.T) {
 	dir := t.TempDir()
 	wdir := filepath.Join(dir, "wiki")
 	store, err := wiki.NewStore(wdir, filepath.Join(dir, "diary"))
@@ -576,8 +576,8 @@ func TestWikiStructured(t *testing.T) {
 	}
 }
 
-// TestCodeAction_StructuredCalendar is the python e2e for deneb.calendar(as_json=True).
-func TestCodeAction_StructuredCalendar(t *testing.T) {
+// TestCodeActionReturnsStructuredCalendarEvents is the python e2e for deneb.calendar(as_json=True).
+func TestCodeActionReturnsStructuredCalendarEvents(t *testing.T) {
 	requirePython(t)
 	start := time.Now().Add(time.Hour)
 	fake := &fakeLocalCal{events: []calendar.Event{{
@@ -593,10 +593,10 @@ print("TITLE", evs[0]["title"] if evs else "none")
 	}
 }
 
-// TestCodeAction_StructuredWikiIndex is the python e2e for deneb.wiki("index",
+// TestCodeActionReturnsStructuredWikiIndexPaths is the python e2e for deneb.wiki("index",
 // as_json=True): the full subprocess→bridge→ListPages path yields a path list
 // the model can enumerate and then read.
-func TestCodeAction_StructuredWikiIndex(t *testing.T) {
+func TestCodeActionReturnsStructuredWikiIndexPaths(t *testing.T) {
 	requirePython(t)
 	dir := t.TempDir()
 	wdir := filepath.Join(dir, "wiki")

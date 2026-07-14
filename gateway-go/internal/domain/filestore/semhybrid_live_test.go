@@ -53,12 +53,13 @@ func (l *liveEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, 
 	return out.Embeddings, nil
 }
 
-// TestHybridSearch_Live measures floor-only Search vs hybrid HybridSearch on a
-// real BGE-M3 server, over a small Korean office-doc corpus. It is a measurement
-// harness (not a CI assertion): it prints per-query keep/drop for both methods
-// and only hard-fails on the load-bearing invariants — exact filename queries
-// must survive hybrid, and clearly-irrelevant queries must stay empty in both.
-func TestHybridSearch_Live(t *testing.T) {
+// TestHybridSearch_LiveReturnsExactNameMatches measures floor-only Search vs
+// hybrid HybridSearch on a real BGE-M3 server, over a small Korean office-doc
+// corpus. It is a measurement harness (not a CI assertion): it prints per-query
+// keep/drop for both methods and only hard-fails on the load-bearing invariants —
+// exact filename queries must survive hybrid, and clearly-irrelevant queries must
+// stay empty in both.
+func TestHybridSearch_LiveReturnsExactNameMatches(t *testing.T) {
 	if os.Getenv("DENEB_EMBED_LIVE") != "1" {
 		t.Skip("set DENEB_EMBED_LIVE=1 (and DENEB_EMBED_URL) to run the live BGE-M3 comparison")
 	}
@@ -180,13 +181,13 @@ func TestHybridSearch_Live(t *testing.T) {
 	t.Logf("  irrelevant : floor %d total hits  hybrid %d total hits", floorIrrKept, hybIrrKept)
 }
 
-// TestHybridSearch_LiveSubfloorNameMatch is the adversarial case that the topical
-// corpus above can't produce: a file whose NAME contains the query terms but
-// whose BODY is generic boilerplate UNRELATED to those terms, so the real BGE-M3
-// body cosine lands BELOW the 0.73 floor. The floor-only Search drops it; hybrid
-// must rescue it on the exact-name signal. This is the load-bearing demonstration
-// of the hybrid gain on real vectors.
-func TestHybridSearch_LiveSubfloorNameMatch(t *testing.T) {
+// TestHybridSearch_LiveRecoversSubfloorNameMatch is the adversarial case that the
+// topical corpus above can't produce: a file whose NAME contains the query terms
+// but whose BODY is generic boilerplate UNRELATED to those terms, so the real
+// BGE-M3 body cosine lands BELOW the 0.73 floor. The floor-only Search drops it;
+// hybrid must rescue it on the exact-name signal. This is the load-bearing
+// demonstration of the hybrid gain on real vectors.
+func TestHybridSearch_LiveRecoversSubfloorNameMatch(t *testing.T) {
 	if os.Getenv("DENEB_EMBED_LIVE") != "1" {
 		t.Skip("set DENEB_EMBED_LIVE=1 (and DENEB_EMBED_URL) to run the live BGE-M3 comparison")
 	}

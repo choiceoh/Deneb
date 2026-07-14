@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestCheckDestructiveCommand(t *testing.T) {
+func TestCheckDestructiveCommandReturnsDangerWarnings(t *testing.T) {
 	tests := []struct {
 		command string
 		danger  bool
@@ -43,7 +43,7 @@ func TestCheckDestructiveCommand(t *testing.T) {
 	}
 }
 
-func TestCheckCatastrophicCommand(t *testing.T) {
+func TestCheckCatastrophicCommandRejectsCatastrophicPaths(t *testing.T) {
 	tests := []struct {
 		command string
 		block   bool
@@ -127,7 +127,7 @@ func TestFormatDestructiveWarnings(t *testing.T) {
 	})
 }
 
-func TestInPlaceFileTargets(t *testing.T) {
+func TestInPlaceFileTargetsReturnsCheckpointCandidates(t *testing.T) {
 	contains := func(xs []string, s string) bool {
 		for _, x := range xs {
 			if x == s {
@@ -165,7 +165,7 @@ func TestInPlaceFileTargets(t *testing.T) {
 	}
 }
 
-func TestDetectFileModification(t *testing.T) {
+func TestDetectFileModificationReturnsModificationKind(t *testing.T) {
 	tests := []struct {
 		command string
 		want    string
@@ -259,7 +259,7 @@ func TestExecCommandPreservesRunCache(t *testing.T) {
 	}
 }
 
-func TestExecCacheClassificationSeparatesParsingFromMutationDecision(t *testing.T) {
+func TestExecCacheClassificationPreservesCacheOnlyForReadOnlyStages(t *testing.T) {
 	tests := []struct {
 		name         string
 		command      string

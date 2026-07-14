@@ -6,7 +6,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
-func TestResolveRunTypingPolicy(t *testing.T) {
+func TestResolveRunTypingPolicyReturnsPolicyAndSuppressFlagPerContext(t *testing.T) {
 	tests := []struct {
 		name         string
 		params       ResolveRunTypingPolicyParams

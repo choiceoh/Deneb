@@ -287,7 +287,7 @@ func (r variantResult) composite() float64 {
 
 // ---- live harness ----
 
-func TestComparePromptVariants_Live(t *testing.T) {
+func TestComparePromptVariants_RendersLiveComparisonTable(t *testing.T) {
 	if os.Getenv("DENEB_COMPACT_EVAL") == "" {
 		t.Skip("set DENEB_COMPACT_EVAL=1 to run the live prompt A/B (needs local analysis model)")
 	}
@@ -431,7 +431,7 @@ func envInt(key string, def int) int {
 
 // ---- CI-safe scorer validation (no model) ----
 
-func TestPromptEval_DeterministicScorers(t *testing.T) {
+func TestPromptEval_ScorersReturnHigherScoreForGoodSummary(t *testing.T) {
 	sections := []string{"핵심 사실", "열린 루프", "도구 결과"}
 
 	good := scoreDeterministic(fixtureSummaryForFacts(), sections)

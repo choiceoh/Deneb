@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestCleanSessionTitle(t *testing.T) {
+func TestCleanSessionTitleNormalizesRawText(t *testing.T) {
 	cases := []struct {
 		name string
 		in   string
@@ -29,7 +29,7 @@ func TestCleanSessionTitle(t *testing.T) {
 	}
 }
 
-func TestCleanSessionTitle_CapsLength(t *testing.T) {
+func TestCleanSessionTitleTruncatesLongTitles(t *testing.T) {
 	long := strings.Repeat("가", 100)
 	got := cleanSessionTitle(long)
 	if n := len([]rune(got)); n > sessionTitleLabelCap {
@@ -37,7 +37,7 @@ func TestCleanSessionTitle_CapsLength(t *testing.T) {
 	}
 }
 
-func TestIsAutoTitleSession(t *testing.T) {
+func TestIsAutoTitleSessionReturnsTrueForConversationKeys(t *testing.T) {
 	cases := map[string]bool{
 		// Per-conversation native chats are titled.
 		"client:main:9f1c2a":       true, // 업무 explicit new chat (child of the home)
@@ -60,7 +60,7 @@ func TestIsAutoTitleSession(t *testing.T) {
 	}
 }
 
-func TestFirstLine(t *testing.T) {
+func TestFirstLineReturnsTextBeforeNewline(t *testing.T) {
 	cases := map[string]string{
 		"a\nb":   "a",
 		"a\r\nb": "a",
@@ -74,7 +74,7 @@ func TestFirstLine(t *testing.T) {
 	}
 }
 
-func TestCapRunes(t *testing.T) {
+func TestCapRunesTruncatesByRuneCount(t *testing.T) {
 	if got := capRunes("hello", 3); got != "hel" {
 		t.Errorf("capRunes truncate = %q, want %q", got, "hel")
 	}

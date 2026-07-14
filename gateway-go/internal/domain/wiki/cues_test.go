@@ -20,29 +20,29 @@ func TestCuesFrontmatterRoundtrip(t *testing.T) {
 		},
 		Body: "EPC 선수금 5천만원. 6월 15일 입금 예정.",
 	}
-	parsed, err := ParsePage(page.Render())
+	parsed, err := parsePage(page.Render())
 	if err != nil {
-		t.Fatalf("ParsePage: %v", err)
+		t.Fatalf("parsePage: %v", err)
 	}
 	if got := strings.Join(parsed.Meta.Cues, ","); got != "계약금,착수금" {
 		t.Fatalf("cues roundtrip = %q, want %q", got, "계약금,착수금")
 	}
 
-	bare, err := ParsePage((&Page{Meta: Frontmatter{Title: "t", Category: "기타"}, Body: "b"}).Render())
+	bare, err := parsePage((&Page{Meta: Frontmatter{Title: "t", Category: "기타"}, Body: "b"}).Render())
 	if err != nil {
-		t.Fatalf("ParsePage bare: %v", err)
+		t.Fatalf("parsePage bare: %v", err)
 	}
 	if len(bare.Meta.Cues) != 0 {
 		t.Fatalf("bare page grew cues: %v", bare.Meta.Cues)
 	}
 }
 
-// TestSearchFindsPageByCueOnly is the causal proof for cue anchors: the query
+// TestSearchReturnsPageByCueOnly is the causal proof for cue anchors: the query
 // vocabulary ("계약금") exists ONLY in the page's cues — title/summary/body/tags
 // all say "선수금" — so a lexical hit is reachable exclusively through cue
 // indexing (searchablePageFields). The control store holds the identical page
 // WITHOUT cues and must not surface it for the same query.
-func TestSearchFindsPageByCueOnly(t *testing.T) {
+func TestSearchReturnsPageByCueOnly(t *testing.T) {
 	ctx := context.Background()
 	makePage := func(cues []string) *Page {
 		return &Page{
@@ -202,10 +202,10 @@ func TestSearchValidityBeforeTruncate(t *testing.T) {
 	}
 }
 
-// TestSemanticTextIncludesCues — cue anchors must fold into the embedded text
+// TestSemanticTextRendersCues — cue anchors must fold into the embedded text
 // so the semantic index also pulls the page toward the question vocabulary
 // (and a cue change re-embeds the page via the contentHash cache key).
-func TestSemanticTextIncludesCues(t *testing.T) {
+func TestSemanticTextRendersCues(t *testing.T) {
 	page := &Page{
 		Meta: Frontmatter{Title: "제목", Summary: "요약", Cues: []string{"계약금", "착수금"}},
 		Body: "본문",
@@ -219,10 +219,10 @@ func TestSemanticTextIncludesCues(t *testing.T) {
 	}
 }
 
-// TestSearch_CueMatchDoesNotLeakCueTextAsSnippet: cues are retrieval anchors,
+// TestSearch_CueMatchDoesNotDisplayCueTextInSnippet: cues are retrieval anchors,
 // not content — a cue-only match must find the page but the result snippet
 // (recall evidence "match:", memory search) must come from visible fields.
-func TestSearch_CueMatchDoesNotLeakCueTextAsSnippet(t *testing.T) {
+func TestSearch_CueMatchDoesNotDisplayCueTextInSnippet(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

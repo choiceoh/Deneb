@@ -12,7 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
-func TestChatHarnessContinuesSameDenebSession(t *testing.T) {
+func TestChatHarnessContinuesWithSameDenebSession(t *testing.T) {
 	pack := writeHarnessCase(t)
 	var requests []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

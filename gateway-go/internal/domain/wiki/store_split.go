@@ -1,4 +1,4 @@
-// store_split.go — oversized-page splitting: SplitPage rewrites a page as a
+// store_split.go — oversized-page splitting: splitPage rewrites a page as a
 // table of contents and moves its H2 sections into child pages. Split from
 // store.go (Store core).
 package wiki
@@ -11,11 +11,11 @@ import (
 	"time"
 )
 
-// SplitPage splits an oversized page into sub-pages by H2 sections.
+// splitPage splits an oversized page into sub-pages by H2 sections.
 // The parent page is rewritten as a table-of-contents linking to sub-pages.
 // Sub-pages inherit the parent's metadata.
 // Returns the paths of created sub-pages, or nil if splitting was not needed.
-func (s *Store) SplitPage(relPath string, maxBytes int) ([]string, error) {
+func (s *Store) splitPage(relPath string, maxBytes int) ([]string, error) {
 	// Hold writeMu across the read + the sub-page/parent rewrites so the split
 	// (which reads the oversized body, then overwrites the parent as a TOC) can't
 	// race a concurrent writer of the same page. Sub-page and parent writes below

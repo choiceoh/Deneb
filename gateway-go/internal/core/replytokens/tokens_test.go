@@ -2,7 +2,7 @@ package tokens
 
 import "testing"
 
-func TestIsSilentReplyText(t *testing.T) {
+func TestIsSilentReplyTextReturnsTrueForExactTokenVariants(t *testing.T) {
 	tests := []struct {
 		name  string
 		text  string
@@ -31,7 +31,7 @@ func TestIsSilentReplyText(t *testing.T) {
 	}
 }
 
-func TestStripSilentToken(t *testing.T) {
+func TestStripSilentTokenWithTrailingDecorationVariants(t *testing.T) {
 	tests := []struct {
 		name  string
 		text  string
@@ -57,7 +57,7 @@ func TestStripSilentToken(t *testing.T) {
 	}
 }
 
-func TestIsSilentReplyPrefixText(t *testing.T) {
+func TestIsSilentReplyPrefixTextReturnsTrueForProgressivePrefixMatches(t *testing.T) {
 	tests := []struct {
 		name  string
 		text  string

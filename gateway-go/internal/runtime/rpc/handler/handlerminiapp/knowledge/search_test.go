@@ -27,7 +27,7 @@ func TestSearchMethods_BothNilReturnsNil(t *testing.T) {
 	}
 }
 
-func TestSearchAll_FansOutToAllDomains(t *testing.T) {
+func TestSearchAll_ReturnsResultsFromWikiDiaryAndGmailDomains(t *testing.T) {
 	store := &fakeMemoryStore{
 		searchFn: func(_ context.Context, q string, _ int) ([]wiki.SearchResult, error) {
 			if q != "peter" {
@@ -127,7 +127,7 @@ func TestSearchAll_MissingQuery(t *testing.T) {
 	}
 }
 
-func TestMatchesPerson(t *testing.T) {
+func TestMatchesPersonReturnsTrueForCaseInsensitiveSubstringMatch(t *testing.T) {
 	p := PersonRow{Email: "peter@example.com", Name: "Peter Park"}
 	cases := []struct {
 		needle string

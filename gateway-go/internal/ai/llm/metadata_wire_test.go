@@ -40,7 +40,7 @@ func TestMetadata_TranscriptRoundTrip(t *testing.T) {
 	}
 }
 
-func TestMetadata_NotOnAnthropicWire(t *testing.T) {
+func TestMetadataOmittedFromAnthropicWireContract(t *testing.T) {
 	msg := metadataResultMessage(t)
 	var blocks []ContentBlock
 	if err := json.Unmarshal(msg.Content, &blocks); err != nil {
@@ -58,7 +58,7 @@ func TestMetadata_NotOnAnthropicWire(t *testing.T) {
 	}
 }
 
-func TestMetadata_NotOnOpenAIWire(t *testing.T) {
+func TestMetadataOmittedFromOpenAIWireContract(t *testing.T) {
 	c := NewClient("http://localhost", "key")
 	msgs := c.convertMessagesToOpenAI([]Message{metadataResultMessage(t)}, false)
 	raw, err := json.Marshal(msgs)

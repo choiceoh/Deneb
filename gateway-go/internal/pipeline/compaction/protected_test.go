@@ -74,7 +74,7 @@ func TestTruncateOldToolResults_ProtectsFetchToolsSchema(t *testing.T) {
 
 // MicroCompact must not strip code fences out of a protected fetch_tools
 // result (schemas carry fenced JSON), while still pruning fences elsewhere.
-func TestMicroCompact_ProtectsFetchToolsSchema(t *testing.T) {
+func TestMicroCompact_PreservesFetchToolsSchemaFences(t *testing.T) {
 	fenced := "설명\n```json\n{\"name\":\"exec\"}\n```"
 	messages := []llm.Message{
 		fetchToolsCallMsg(t, "ft_1"),
@@ -97,7 +97,7 @@ func TestMicroCompact_ProtectsFetchToolsSchema(t *testing.T) {
 	}
 }
 
-func TestProtectedToolResultIDs_OnlyFetchTools(t *testing.T) {
+func TestProtectedToolResultIDs_ReturnsOnlyFetchToolsIDs(t *testing.T) {
 	messages := []llm.Message{
 		fetchToolsCallMsg(t, "ft_1"),
 		func() llm.Message {

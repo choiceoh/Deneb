@@ -2,7 +2,7 @@ package chat
 
 import "testing"
 
-func TestIsSilentReply(t *testing.T) {
+func TestIsSilentReplyReturnsTrueOnlyForExactToken(t *testing.T) {
 	tests := []struct {
 		input string
 		want  bool
@@ -31,7 +31,7 @@ func TestIsSilentReply(t *testing.T) {
 	}
 }
 
-func TestStripSilentToken(t *testing.T) {
+func TestStripSilentTokenClearsTrailingMarker(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string

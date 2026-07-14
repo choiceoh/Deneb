@@ -9,7 +9,7 @@ import (
 // sub-session, never the primary 업무 feed (client:main) — and must NOT raise a
 // 업무 work-feed card (the feed lists items globally, so a card would resurface in
 // the main feed). Regression guard for "dreaming entering the main work session".
-func TestDreamNotifierRoutesToSubSession(t *testing.T) {
+func TestDreamNotifierWritesToSubSessionTranscript(t *testing.T) {
 	store := newRecordingTranscriptStore()
 	feed := &recordingWorkFeed{}
 	d := proactiveRelayDeps{transcriptStore: store, workFeed: feed}
@@ -35,7 +35,7 @@ func TestDreamNotifierRoutesToSubSession(t *testing.T) {
 // is left untouched, so the 업무 chat stays a place to ask rather than a wall of
 // pushed reports (PR #2448 feed-first home). The dream sub-session above still
 // mirrors into its transcript because it has no feed surface.
-func TestMainNotifierCardsFeedOnly(t *testing.T) {
+func TestMainNotifierCreatesFeedCardOnly(t *testing.T) {
 	store := newRecordingTranscriptStore()
 	feed := &recordingWorkFeed{}
 	d := proactiveRelayDeps{transcriptStore: store, workFeed: feed}

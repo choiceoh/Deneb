@@ -19,7 +19,7 @@ func abortEntry(session, run string) (*AbortEntry, context.Context) {
 	}, ctx
 }
 
-func TestAbortTrackerSessionLifecycle(t *testing.T) {
+func TestAbortTrackerCancelsAllRunsForSession(t *testing.T) {
 	tracker := NewAbortTracker()
 	t.Cleanup(tracker.Close)
 

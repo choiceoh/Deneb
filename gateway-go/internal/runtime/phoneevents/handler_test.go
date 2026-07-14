@@ -10,7 +10,7 @@ import (
 // The usage event type must skip the notification-specific tiny gate (its ads/OTP
 // classifier doesn't fit a usage digest) and run the full default-silence judgment,
 // like context/clipboard. notification/sms keep the gate.
-func TestNotificationLikeEvent(t *testing.T) {
+func TestNotificationLikeEventReturnsExpectedPerType(t *testing.T) {
 	cases := map[string]bool{
 		"notification": true,
 		"sms":          true,
@@ -32,7 +32,7 @@ func TestNotificationLikeEvent(t *testing.T) {
 // card), but ONLY Gmail — other mail apps have no poll coverage so they must still
 // run. And only notification-type events: a Gmail "source" on a clipboard/context
 // event isn't a notification and must pass through.
-func TestIsPolledGmailNotification(t *testing.T) {
+func TestIsPolledGmailNotificationIgnoresOnlyGmailSource(t *testing.T) {
 	type tc struct {
 		eventType string
 		source    string
@@ -67,7 +67,7 @@ func TestIsPolledGmailNotification(t *testing.T) {
 
 // The usage type carries its own label + guidance, and the guidance embeds the
 // NO_REPLY placeholder so its default-silence branch can be filled by the caller.
-func TestUsageEventLabelAndGuidance(t *testing.T) {
+func TestUsageEventLabelAndGuidanceFormatPlaceholder(t *testing.T) {
 	if got := phoneEventKindLabel("usage"); got != "앱 사용 리듬" {
 		t.Errorf("phoneEventKindLabel(usage) = %q", got)
 	}
@@ -77,7 +77,7 @@ func TestUsageEventLabelAndGuidance(t *testing.T) {
 	}
 }
 
-func TestRecordPhoneUsage(t *testing.T) {
+func TestRecordPhoneUsageWritesTrimmedPayload(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DENEB_STATE_DIR", dir)
 
@@ -96,7 +96,7 @@ func TestRecordPhoneUsage(t *testing.T) {
 // A native-client crash report is appended to the bounded crash log with its
 // device source and full stack — the server-side record the app otherwise lacks.
 // Consecutive reports accumulate as separate entries; blank text is a no-op.
-func TestRecordClientCrash(t *testing.T) {
+func TestRecordClientCrashCreatesEntriesIgnoresBlank(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DENEB_STATE_DIR", dir)
 	path := filepath.Join(dir, "client-crashes.log")
@@ -127,7 +127,7 @@ func TestRecordClientCrash(t *testing.T) {
 
 // The crash log is bounded so a crash loop can't grow it without limit, and after
 // trimming it must still begin at a clean entry marker (never mid-stack).
-func TestRecordClientCrash_Bounded(t *testing.T) {
+func TestRecordClientCrash_BoundedTruncatesAtEntryMarker(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DENEB_STATE_DIR", dir)
 

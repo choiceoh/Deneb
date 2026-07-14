@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestRepairToolArguments(t *testing.T) {
+func TestRepairToolArgumentsNormalizesMalformedJSON(t *testing.T) {
 	cases := []struct {
 		name     string
 		in       string
@@ -81,10 +81,10 @@ func TestExecute_RepairsMalformedArgs(t *testing.T) {
 	}
 }
 
-// TestExecute_ValidArgsUntouched guards the invariant that already-valid
+// TestExecutePreservesValidArgsUntouched guards the invariant that already-valid
 // arguments reach the tool byte-for-byte (the repair must never rewrite a
 // well-formed call).
-func TestExecute_ValidArgsUntouched(t *testing.T) {
+func TestExecutePreservesValidArgsUntouched(t *testing.T) {
 	r := NewToolRegistry()
 	var gotInput string
 	r.Register("echo", func(_ context.Context, input json.RawMessage) (string, error) {

@@ -16,7 +16,7 @@ func mustAppend(t *testing.T, s *Store, item Item) {
 	}
 }
 
-func TestInferPriority(t *testing.T) {
+func TestInferPriorityParsesUrgencyMarkersFromBody(t *testing.T) {
 	cases := []struct {
 		body string
 		want int
@@ -42,7 +42,7 @@ func TestInferPriority(t *testing.T) {
 
 // The feed orders by priority first, so an urgent item stays above a newer
 // normal one — a chief-of-staff briefing, not a reverse-chronological log.
-func TestListSortsByPriorityThenRecency(t *testing.T) {
+func TestListReturnsItemsOrderedByPriorityThenRecency(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	now := nowMs()
 
@@ -67,7 +67,7 @@ func TestListSortsByPriorityThenRecency(t *testing.T) {
 
 // Retention bounds the stored items: oldest acked are dropped past the cap, but
 // an unread item is never dropped even if it is the oldest.
-func TestPruneRetentionKeepsActiveDropsOldAcked(t *testing.T) {
+func TestPruneRetentionPreservesUnreadDropsOldestAcked(t *testing.T) {
 	items := make([]Item, 0, maxRetained+60)
 	for i := range maxRetained + 50 {
 		items = append(items, Item{ID: fmt.Sprintf("acked-%d", i), Status: StatusAcked, CreatedAtMs: int64(i + 1000)})

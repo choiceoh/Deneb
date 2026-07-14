@@ -27,7 +27,7 @@ func fakeRules() Rules {
 	}
 }
 
-func TestClassify_PersonMatch(t *testing.T) {
+func TestClassify_PersonMatchNormalizesHonorific(t *testing.T) {
 	r := fakeRules()
 	// Attendee name carries an honorific; NormalizePersonName should peel it so
 	// "홍길동 부장" still matches the "홍길동" rule.
@@ -49,7 +49,7 @@ func TestClassify_PersonWithParentheticalAffiliation(t *testing.T) {
 	}
 }
 
-func TestClassify_CompanyMatch(t *testing.T) {
+func TestClassify_CompanyMatchFallbackFromUnknownPerson(t *testing.T) {
 	r := fakeRules()
 	// No known person, but a known company → medium confidence.
 	lane, conf := r.Classify(Signals{
@@ -64,7 +64,7 @@ func TestClassify_CompanyMatch(t *testing.T) {
 	}
 }
 
-func TestClassify_CompanySubstringBothDirections(t *testing.T) {
+func TestClassify_CompanySubstringBoundaryBothDirections(t *testing.T) {
 	r := fakeRules()
 	// Rule key "가나에너지" should match a decorated firm string.
 	if lane, _ := r.Classify(Signals{Companies: []string{"가나에너지(주)"}}); lane != LaneNamdo {
@@ -76,7 +76,7 @@ func TestClassify_CompanySubstringBothDirections(t *testing.T) {
 	}
 }
 
-func TestClassify_KeywordMatch(t *testing.T) {
+func TestClassify_KeywordMatchWithWeakConfidence(t *testing.T) {
 	r := fakeRules()
 	// No person/company, but the title mentions a domain keyword (substring).
 	lane, conf := r.Classify(Signals{Text: "옥상 루프탑 발전 점검 일정"})
@@ -88,7 +88,7 @@ func TestClassify_KeywordMatch(t *testing.T) {
 	}
 }
 
-func TestClassify_PriorityPersonOverCompanyOverKeyword(t *testing.T) {
+func TestClassify_PersonPriorityContractOverCompanyAndKeyword(t *testing.T) {
 	r := fakeRules()
 	// All three signals present but pointing at DIFFERENT lanes: person (team1)
 	// must win over company (namdo) and keyword (team2). This is the core
@@ -103,7 +103,7 @@ func TestClassify_PriorityPersonOverCompanyOverKeyword(t *testing.T) {
 	}
 }
 
-func TestClassify_CompanyOverKeyword(t *testing.T) {
+func TestClassify_CompanyPriorityContractOverKeyword(t *testing.T) {
 	r := fakeRules()
 	// No known person; company (namdo) must win over a keyword (team2).
 	lane, conf := r.Classify(Signals{
@@ -115,7 +115,7 @@ func TestClassify_CompanyOverKeyword(t *testing.T) {
 	}
 }
 
-func TestClassify_Unclassified(t *testing.T) {
+func TestClassify_UnknownSignalsYieldUnclassified(t *testing.T) {
 	r := fakeRules()
 	// Nothing matches → holding lane, no confidence.
 	lane, conf := r.Classify(Signals{
@@ -152,7 +152,7 @@ func TestClassify_ShortNameIgnored(t *testing.T) {
 	}
 }
 
-func TestClassify_MultiLaneDeterministicTieBreak(t *testing.T) {
+func TestClassify_TieBreakContractPicksSmallestLane(t *testing.T) {
 	r := Rules{PersonToLane: map[string]Lane{
 		"홍길동": LaneTeam3, // "team3"
 		"이영희": LaneNamdo, // "namdo"

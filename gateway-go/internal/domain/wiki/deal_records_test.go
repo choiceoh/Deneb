@@ -31,16 +31,16 @@ func TestParseAmount(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.raw, func(t *testing.T) {
-			val, cur, ok := ParseAmount(c.raw)
+			val, cur, ok := parseAmount(c.raw)
 			if ok != c.wantOK || val != c.wantVal || cur != c.wantCur {
-				t.Errorf("ParseAmount(%q) = (%v, %q, %v), want (%v, %q, %v)",
+				t.Errorf("parseAmount(%q) = (%v, %q, %v), want (%v, %q, %v)",
 					c.raw, val, cur, ok, c.wantVal, c.wantCur, c.wantOK)
 			}
 		})
 	}
 }
 
-func TestDealRecordsTee(t *testing.T) {
+func TestDealRecordsTee_IdempotentOnReFile(t *testing.T) {
 	s, err := NewStore(t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)

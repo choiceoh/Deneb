@@ -234,7 +234,7 @@ func (t *SkillWorkoutTask) recordWorkoutFailure(
 			AgentMechanism: "skill body no longer yields the proven tool plan",
 			ErrorMsg:       trimmedError,
 		},
-		Source: UsageSourceWorkout,
+		Source: usageSourceWorkout,
 	}); err != nil {
 		logger.Warn("skill-workout: usage record failed", "skill", name, "error", err)
 	}
@@ -244,7 +244,7 @@ func (t *SkillWorkoutTask) recordWorkoutFailure(
 func (t *SkillWorkoutTask) recordWorkoutRotation(name, executorModel string, cycle int64, logger *slog.Logger) {
 	if err := t.Tracker.RecordUsage(UsageRecord{
 		SkillName: name, SessionKey: workoutSessionPrefix + strconv.FormatInt(cycle, 10),
-		Model: executorModel, Success: true, Source: UsageSourceWorkout,
+		Model: executorModel, Success: true, Source: usageSourceWorkout,
 	}); err != nil {
 		logger.Warn("skill-workout: rotation marker record failed", "skill", name, "error", err)
 	}
@@ -265,7 +265,7 @@ func (t *Tracker) WorkoutActivity(window time.Duration) (lastAt map[string]int64
 	}
 	cutoff := time.Now().Add(-window).UnixMilli()
 	for _, r := range records {
-		if r.Source != UsageSourceWorkout {
+		if r.Source != usageSourceWorkout {
 			continue
 		}
 		name := strings.TrimSpace(r.SkillName)

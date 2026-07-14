@@ -171,7 +171,7 @@ func TestRecordTokensSignedBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestRecordCallDoesNotChangeTokensAndRecordTokensDoesNotChangeCalls(t *testing.T) {
+func TestRecordCallAndRecordTokensPreserveEachOthersFields(t *testing.T) {
 	t.Parallel()
 
 	tracker := New()
@@ -247,7 +247,7 @@ func TestStatusUptimeTruncatesSubsecondDuration(t *testing.T) {
 	}
 }
 
-func TestStatusSnapshotIsolationForMapAndValues(t *testing.T) {
+func TestStatusReturnsIndependentSnapshotsImmuneToMutation(t *testing.T) {
 	t.Parallel()
 
 	tracker := New()
@@ -276,7 +276,7 @@ func TestStatusSnapshotIsolationForMapAndValues(t *testing.T) {
 	}
 }
 
-func TestCostSnapshotIsolationForMapAndValues(t *testing.T) {
+func TestCostReturnsIndependentSnapshotsImmuneToMutation(t *testing.T) {
 	t.Parallel()
 
 	tracker := New()
@@ -307,7 +307,7 @@ func TestCostSnapshotIsolationForMapAndValues(t *testing.T) {
 	}
 }
 
-func TestStatusAndCostSnapshotsAreMutuallyIndependent(t *testing.T) {
+func TestStatusAndCostReturnIndependentSnapshots(t *testing.T) {
 	t.Parallel()
 
 	tracker := New()
@@ -327,7 +327,7 @@ func TestStatusAndCostSnapshotsAreMutuallyIndependent(t *testing.T) {
 	}
 }
 
-func TestCostTotalCallsIncludesSignedProviderCounts(t *testing.T) {
+func TestCostTotalCallsSumsSignedCountsAtNegativeBoundary(t *testing.T) {
 	t.Parallel()
 
 	tracker := New()
@@ -342,7 +342,7 @@ func TestCostTotalCallsIncludesSignedProviderCounts(t *testing.T) {
 	}
 }
 
-func TestProviderStatsJSONFieldShapeByReflection(t *testing.T) {
+func TestProviderStatsJSONTagsMatchExpectedFieldFormat(t *testing.T) {
 	t.Parallel()
 
 	usageType := reflect.TypeOf(TokenUsage{})
@@ -531,7 +531,7 @@ func TestProviderKeysRemainDistinctUnderConcurrency(t *testing.T) {
 	}
 }
 
-func TestCostProviderSetMatchesStatusProviderSet(t *testing.T) {
+func TestCostAndStatusReturnMatchingProviderSets(t *testing.T) {
 	t.Parallel()
 
 	tracker := New()

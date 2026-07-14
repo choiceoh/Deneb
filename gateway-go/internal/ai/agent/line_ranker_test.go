@@ -74,7 +74,7 @@ func TestRankLines_WithinBudget(t *testing.T) {
 	}
 }
 
-func TestRankLines_ContextExpansion(t *testing.T) {
+func TestRankLines_ContextExpansionPreservesNeighborLines(t *testing.T) {
 	// Error on line 10, context ±2 (lines 8-12) should all be included
 	// even though those neighbor lines have no keywords.
 	var lines []string
@@ -107,7 +107,7 @@ func TestRankLines_ContextExpansion(t *testing.T) {
 	}
 }
 
-func TestRankLines_FewLines_FallsBackToHeadTail(t *testing.T) {
+func TestRankLines_FewLinesFallsBackToHeadTailTruncation(t *testing.T) {
 	// ≤3 lines: RankLines should fall back to TruncateHeadTail.
 	content := strings.Repeat("A", 500) + "\n" + strings.Repeat("B", 500) + "\n" + strings.Repeat("C", 500)
 
@@ -150,7 +150,7 @@ func TestRankLines_PreservesOriginalOrder(t *testing.T) {
 	}
 }
 
-func TestScoreLine_Cumulative(t *testing.T) {
+func TestScoreLine_CumulativeWhenMultiplePatternsMatch(t *testing.T) {
 	// A line with multiple matching patterns should get cumulative score.
 	// "panic" (+15) + "error" (+10) + base (1) = 26
 	score := scoreTestLine("panic: runtime error: invalid memory address", 5, 100)
@@ -159,7 +159,7 @@ func TestScoreLine_Cumulative(t *testing.T) {
 	}
 }
 
-func TestScoreLine_PositionalBonus(t *testing.T) {
+func TestScoreLine_PositionalBonusVariesWithLinePosition(t *testing.T) {
 	plain := "just a normal line"
 
 	// First 10% gets +2.
@@ -180,7 +180,7 @@ func TestScoreLine_PositionalBonus(t *testing.T) {
 	}
 }
 
-func TestScoreLine_HTTPStatus(t *testing.T) {
+func TestScoreLine_HTTPStatusFormatScoresHigherThanPlain(t *testing.T) {
 	statusLine := `GET /api/health returned 500 Internal Server Error`
 	plain := "some normal log line"
 	if scoreTestLine(statusLine, 50, 100) <= scoreTestLine(plain, 50, 100) {
@@ -196,7 +196,7 @@ func TestScoreLine_JSONError(t *testing.T) {
 	}
 }
 
-func TestScoreLine_SectionSeparator(t *testing.T) {
+func TestScoreLine_SectionSeparatorBoundaryScoresHigher(t *testing.T) {
 	sep := "=== BUILD OUTPUT ==="
 	plain := "some normal log line"
 	if scoreTestLine(sep, 50, 100) <= scoreTestLine(plain, 50, 100) {
@@ -242,7 +242,7 @@ func TestRankLines_GoPanicStackTrace(t *testing.T) {
 	}
 }
 
-func TestCompactPriorToolResults_UsesRankLines(t *testing.T) {
+func TestCompactPriorToolResults_PreservesErrorViaRankLines(t *testing.T) {
 	// Build a message with a tool_result exceeding CompactedMaxOutput (4K).
 	var logLines []string
 	for i := 0; i < 200; i++ {

@@ -81,7 +81,7 @@ func cronsDepsFor(svc CronService) CronsDeps {
 	return CronsDeps{Service: func() (CronService, error) { return svc, nil }}
 }
 
-func TestCronsList_HappyPath(t *testing.T) {
+func TestCronsListReturnsHumanizedJobRows(t *testing.T) {
 	svc := &fakeCronLister{
 		listPageFn: func(opts cron.ListPageOptions) cron.ListPageResult {
 			if opts.SortBy != "nextRunAtMs" || opts.SortDir != "asc" {
@@ -135,7 +135,7 @@ func TestCronsList_HappyPath(t *testing.T) {
 	}
 }
 
-func TestCronsList_ExcludeDisabledByDefault(t *testing.T) {
+func TestCronsListIgnoresDisabledJobsByDefault(t *testing.T) {
 	svc := &fakeCronLister{
 		listPageFn: func(_ cron.ListPageOptions) cron.ListPageResult {
 			return cron.ListPageResult{
@@ -158,7 +158,7 @@ func TestCronsList_ExcludeDisabledByDefault(t *testing.T) {
 	}
 }
 
-func TestCronsList_IncludeDisabled(t *testing.T) {
+func TestCronsListReturnsDisabledJobsWhenIncludeDisabled(t *testing.T) {
 	svc := &fakeCronLister{
 		listPageFn: func(_ cron.ListPageOptions) cron.ListPageResult {
 			return cron.ListPageResult{
@@ -181,7 +181,7 @@ func TestCronsList_IncludeDisabled(t *testing.T) {
 	}
 }
 
-func TestCronsList_LimitClamp(t *testing.T) {
+func TestCronsListClampsLimitWhenOverMax(t *testing.T) {
 	var seenLimit int
 	svc := &fakeCronLister{
 		listPageFn: func(opts cron.ListPageOptions) cron.ListPageResult {
@@ -196,7 +196,7 @@ func TestCronsList_LimitClamp(t *testing.T) {
 	}
 }
 
-func TestCronsList_RequiresAuth(t *testing.T) {
+func TestCronsListRejectsUnauthenticated(t *testing.T) {
 	h := cronsList(cronsDepsFor(&fakeCronLister{}))
 	resp := h(context.Background(), reqWith(t, "miniapp.crons.list", map[string]any{}))
 	if resp.OK || resp.Error.Code != protocol.ErrUnauthorized {
@@ -204,7 +204,7 @@ func TestCronsList_RequiresAuth(t *testing.T) {
 	}
 }
 
-func TestCronsList_ServiceUnavailable(t *testing.T) {
+func TestCronsListReturnsUnavailableWhenServiceErrors(t *testing.T) {
 	deps := CronsDeps{Service: func() (CronService, error) {
 		return nil, errors.New("not wired")
 	}}
@@ -221,7 +221,7 @@ func TestCronsMethods_NilFactoryReturnsNil(t *testing.T) {
 	}
 }
 
-func TestCronsMethods_RegistersGet(t *testing.T) {
+func TestCronsMethodsReturnsGetHandler(t *testing.T) {
 	got := CronsMethods(cronsDepsFor(&fakeCronLister{}))
 	if _, ok := got["miniapp.crons.get"]; !ok {
 		t.Errorf("miniapp.crons.get not registered: %v", got)
@@ -230,7 +230,7 @@ func TestCronsMethods_RegistersGet(t *testing.T) {
 
 // --- cronsGet -------------------------------------------------------------
 
-func TestCronsGet_HappyPath(t *testing.T) {
+func TestCronsGetReturnsFullUntruncatedDetail(t *testing.T) {
 	// Longer than maxCronPayloadPreview (120 runes) so we can prove the
 	// detail endpoint returns the full prompt where the list row would
 	// have truncated it.
@@ -298,7 +298,7 @@ func TestCronsGet_HappyPath(t *testing.T) {
 	}
 }
 
-func TestCronsGet_NotFound(t *testing.T) {
+func TestCronsGetReturnsNotFoundForUnknownID(t *testing.T) {
 	svc := &fakeCronLister{jobFn: func(string) *cron.StoreJob { return nil }}
 	h := cronsGet(cronsDepsFor(svc))
 	resp := h(authedCtx(), reqWith(t, "miniapp.crons.get", map[string]any{"id": "nope"}))
@@ -315,7 +315,7 @@ func TestCronsGet_MissingID(t *testing.T) {
 	}
 }
 
-func TestCronsGet_RequiresAuth(t *testing.T) {
+func TestCronsGetRejectsUnauthenticated(t *testing.T) {
 	h := cronsGet(cronsDepsFor(&fakeCronLister{}))
 	resp := h(context.Background(), reqWith(t, "miniapp.crons.get", map[string]any{"id": "x"}))
 	if resp.OK || resp.Error.Code != protocol.ErrUnauthorized {
@@ -325,7 +325,7 @@ func TestCronsGet_RequiresAuth(t *testing.T) {
 
 // --- cronsUpdate / cronsRun / cronsRemove ---------------------------------
 
-func TestCronsMethods_RegistersMutations(t *testing.T) {
+func TestCronsMethodsRegistersUpdateRunRemove(t *testing.T) {
 	got := CronsMethods(cronsDepsFor(&fakeCronLister{}))
 	for _, m := range []string{"miniapp.crons.update", "miniapp.crons.run", "miniapp.crons.remove"} {
 		if _, ok := got[m]; !ok {
@@ -458,7 +458,7 @@ func TestCronsUpdate_RequiresAuth(t *testing.T) {
 	}
 }
 
-func TestCronsRun_Enqueues(t *testing.T) {
+func TestCronsRunEnqueuesJobWithManualMode(t *testing.T) {
 	svc := &fakeCronLister{job: baseJob()}
 	h := cronsRun(cronsDepsFor(svc))
 	resp := h(authedCtx(), reqWith(t, "miniapp.crons.run", map[string]any{"id": "job1"}))
@@ -472,7 +472,7 @@ func TestCronsRun_Enqueues(t *testing.T) {
 	}
 }
 
-func TestCronsRun_NotFound(t *testing.T) {
+func TestCronsRunReturnsNotFoundForUnknownID(t *testing.T) {
 	h := cronsRun(cronsDepsFor(&fakeCronLister{}))
 	resp := h(authedCtx(), reqWith(t, "miniapp.crons.run", map[string]any{"id": "ghost"}))
 	if resp.OK || resp.Error.Code != protocol.ErrNotFound {
@@ -480,7 +480,7 @@ func TestCronsRun_NotFound(t *testing.T) {
 	}
 }
 
-func TestCronsRemove_Removes(t *testing.T) {
+func TestCronsRemoveDeletesJobAndReturnsRemoved(t *testing.T) {
 	svc := &fakeCronLister{job: baseJob()}
 	h := cronsRemove(cronsDepsFor(svc))
 	resp := h(authedCtx(), reqWith(t, "miniapp.crons.remove", map[string]any{"id": "job1"}))
@@ -491,7 +491,7 @@ func TestCronsRemove_Removes(t *testing.T) {
 	}
 }
 
-func TestCronsRemove_NotFound(t *testing.T) {
+func TestCronsRemoveReturnsNotFoundForUnknownID(t *testing.T) {
 	h := cronsRemove(cronsDepsFor(&fakeCronLister{}))
 	resp := h(authedCtx(), reqWith(t, "miniapp.crons.remove", map[string]any{"id": "ghost"}))
 	if resp.OK || resp.Error.Code != protocol.ErrNotFound {
@@ -499,7 +499,7 @@ func TestCronsRemove_NotFound(t *testing.T) {
 	}
 }
 
-func TestCronsRemove_RequiresAuth(t *testing.T) {
+func TestCronsRemoveRejectsUnauthenticated(t *testing.T) {
 	h := cronsRemove(cronsDepsFor(&fakeCronLister{}))
 	resp := h(context.Background(), reqWith(t, "miniapp.crons.remove", map[string]any{"id": "job1"}))
 	if resp.OK || resp.Error.Code != protocol.ErrUnauthorized {

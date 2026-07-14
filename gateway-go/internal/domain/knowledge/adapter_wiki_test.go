@@ -9,7 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestWikiAdapterRecordMarksSupersededPages(t *testing.T) {
+func TestWikiAdapterRecordUpdatesSupersededPageMeta(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	t.Cleanup(func() { _ = store.Close() })

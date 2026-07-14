@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestExtractFileText(t *testing.T) {
+func TestExtractFileTextReturnsRawOrEmpty(t *testing.T) {
 	ctx := context.Background()
 	if got := ExtractFileText(ctx, "note.txt", []byte("hello world")); got != "hello world" {
 		t.Errorf("txt = %q", got)

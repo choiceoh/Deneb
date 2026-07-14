@@ -16,7 +16,7 @@ import (
 // Test debounce: checkDebounce + markSent — first marked send succeeds,
 // second within window is blocked, distinct event is unaffected.
 // Without this guard a flapping failure mode would spam the monitoring chat.
-func TestNotifyService_Debounce(t *testing.T) {
+func TestNotifyServiceDebounceDeniesRepeatWithinWindow(t *testing.T) {
 	n := &Service{lastSent: make(map[string]time.Time)}
 
 	if !n.checkDebounce("chat.delivery_failed") {
@@ -92,7 +92,7 @@ func TestNewNotifyService_NilWhenDisabled(t *testing.T) {
 // last-sent timestamp, otherwise subsequent legitimate sends would be
 // suppressed for the full debounce window. Regression guard for the bug
 // I caught in self-review.
-func TestNotifyService_DebounceNotPoisonedByDrop(t *testing.T) {
+func TestNotifyServiceDebounceUnaffectedWithoutMarkSent(t *testing.T) {
 	n := &Service{lastSent: make(map[string]time.Time)}
 
 	// Sanity: first checkDebounce returns true.
@@ -127,7 +127,7 @@ func itoa(i int) string {
 }
 
 // formatHeartbeatLine returns a non-empty Korean line with all key stats.
-func TestNotifyService_HeartbeatLine(t *testing.T) {
+func TestNotifyServiceHeartbeatLineFormatsKeyStats(t *testing.T) {
 	mgr := session.NewManager()
 	n := &Service{sessions: mgr}
 	startTime := time.Now().Add(-2 * time.Minute)
@@ -163,7 +163,7 @@ func TestNotifySlogHandler_ForwardsErrors(t *testing.T) {
 }
 
 // slog forwarder: suppress-prefix messages are NOT forwarded.
-func TestNotifySlogHandler_SuppressesSelfLog(t *testing.T) {
+func TestNotifySlogHandlerIgnoresSelfLogMessages(t *testing.T) {
 	n := newNotifyServiceForTest()
 	delegate := slog.NewTextHandler(&bytes.Buffer{}, nil)
 	h := NewSlogHandler(delegate, n)
@@ -292,7 +292,7 @@ func TestSwappableHandler_ChainedWithForwardsAndPreservesAttrs(t *testing.T) {
 
 // swappableHandler: swap atomically updates the inner handler and
 // captured loggers see the new handler immediately.
-func TestSwappableHandler_Swap(t *testing.T) {
+func TestSwappableHandlerSwapUpdatesInnerHandler(t *testing.T) {
 	var buf1, buf2 bytes.Buffer
 	h1 := slog.NewTextHandler(&buf1, &slog.HandlerOptions{Level: slog.LevelDebug})
 	h2 := slog.NewTextHandler(&buf2, &slog.HandlerOptions{Level: slog.LevelDebug})
@@ -314,7 +314,7 @@ func TestSwappableHandler_Swap(t *testing.T) {
 // Self-poll happy path: a 200 response within timeout returns ok=true and
 // non-zero latency. Validates the basic HTTP roundtrip against a real
 // loopback listener, not a stub.
-func TestNotifyService_SelfPoll_Healthy(t *testing.T) {
+func TestNotifyServiceSelfPollWhenHealthyReturnsOK(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -342,7 +342,7 @@ func TestNotifyService_SelfPoll_Healthy(t *testing.T) {
 // hung MUST be closed before srv.Close() so the handler returns and the
 // server's in-flight wait group drains; defer order is LIFO so close(hung)
 // is registered AFTER srv.Close() to run first on cleanup.
-func TestNotifyService_SelfPoll_Hung(t *testing.T) {
+func TestNotifyServiceSelfPollDetectsTimeout(t *testing.T) {
 	hung := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		<-hung
@@ -363,7 +363,7 @@ func TestNotifyService_SelfPoll_Hung(t *testing.T) {
 
 // Self-poll on 5xx: a non-2xx response means the gateway is responding
 // but unhealthy. Treated identically to a hang for alerting purposes.
-func TestNotifyService_SelfPoll_NonOK(t *testing.T) {
+func TestNotifyServiceSelfPollReturnsErrorOnNonOK(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -387,7 +387,7 @@ func TestNotifyService_SelfPoll_NonOK(t *testing.T) {
 // alerting) is correct: during startup the listener legitimately doesn't
 // exist yet and we don't want spurious "🚨 응답 없음" alerts on every
 // boot.
-func TestNotifyService_SelfPoll_NoBoundAddr(t *testing.T) {
+func TestNotifyServiceSelfPollSkipsWhenAddrMissing(t *testing.T) {
 	n := newNotifyServiceForTest()
 	n.boundAddr = func() string { return "" }
 	ok, latency, err := n.selfPoll(context.Background())
@@ -402,7 +402,7 @@ func TestNotifyService_SelfPoll_NoBoundAddr(t *testing.T) {
 // of the format expectation: the prefix is goroutine-driven only when
 // the count crosses goroutineWarnAbsolute. We assert the healthy path
 // here (negative path) and the threshold constant separately.
-func TestNotifyService_HeartbeatLine_HealthyPrefix(t *testing.T) {
+func TestNotifyServiceHeartbeatLineWhenHealthyPrefix(t *testing.T) {
 	n := newNotifyServiceForTest()
 	n.sessions = session.NewManager()
 	line := n.buildHeartbeatLine(time.Now().Add(-2*time.Minute), time.Now())
@@ -414,7 +414,7 @@ func TestNotifyService_HeartbeatLine_HealthyPrefix(t *testing.T) {
 // composeHangAlert renders the operator-facing 🚨 line with the error
 // truncated. Empty/nil errors get a placeholder so the message never
 // looks blank.
-func TestNotifyService_ComposeHangAlert(t *testing.T) {
+func TestNotifyServiceComposeHangAlertRendersPlaceholderForNilError(t *testing.T) {
 	n := newNotifyServiceForTest()
 	got := n.composeHangAlert(nil)
 	if !strings.HasPrefix(got, "🚨") {

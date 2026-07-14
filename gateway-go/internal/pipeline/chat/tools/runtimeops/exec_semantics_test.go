@@ -2,7 +2,7 @@ package runtimeops
 
 import "testing"
 
-func TestInterpretExitCode(t *testing.T) {
+func TestInterpretExitCodeReturnsErrorAndHint(t *testing.T) {
 	tests := []struct {
 		name     string
 		command  string
@@ -47,7 +47,7 @@ func TestInterpretExitCode(t *testing.T) {
 	}
 }
 
-func TestExtractBaseCommand(t *testing.T) {
+func TestExtractBaseCommandReturnsCommandName(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string

@@ -2,7 +2,7 @@ package agentlog
 
 import "testing"
 
-func TestAggregateEffort(t *testing.T) {
+func TestAggregateEffortReturnsRoutedKeptEscalationTotals(t *testing.T) {
 	w := NewWriter(t.TempDir())
 
 	// Two routed-off runs: one clean, one that escalated (restored thinking).
@@ -54,7 +54,7 @@ func TestAggregateEffort_EmptyAndNilSafe(t *testing.T) {
 	}
 }
 
-func TestAggregateEffortByModel(t *testing.T) {
+func TestAggregateEffortByModelReturnsPerModelTotals(t *testing.T) {
 	w := NewWriter(t.TempDir())
 
 	// model A: 2 routed (1 escalated) + 1 kept.
@@ -120,7 +120,7 @@ func TestAggregateEffortByModel_EmptyAndNilSafe(t *testing.T) {
 	}
 }
 
-func TestEffortReasonCategory(t *testing.T) {
+func TestEffortReasonCategoryReturnsUnknownForBlankReason(t *testing.T) {
 	cases := map[string]string{
 		"kept:hard-signal:분석": "hard-signal",
 		"kept:context-heavy":  "context-heavy",

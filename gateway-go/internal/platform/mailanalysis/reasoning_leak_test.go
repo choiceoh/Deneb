@@ -2,7 +2,7 @@ package mailanalysis
 
 import "testing"
 
-func TestStripReasoningLeak(t *testing.T) {
+func TestStripReasoningLeakClearsThinkBlocks(t *testing.T) {
 	cases := []struct {
 		name string
 		in   string
@@ -24,7 +24,7 @@ func TestStripReasoningLeak(t *testing.T) {
 	}
 }
 
-func TestStripToolCallLeak(t *testing.T) {
+func TestStripToolCallLeakClearsToolCallBlocks(t *testing.T) {
 	cases := []struct {
 		name string
 		in   string

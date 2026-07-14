@@ -108,7 +108,7 @@ func decodeSkillsPayload[T any](t *testing.T, resp *protocol.ResponseFrame) T {
 	return out
 }
 
-func TestSkillsList_OriginAndEvolveEnrichment(t *testing.T) {
+func TestSkillsListReturnsOriginAndEvolveEnrichedFields(t *testing.T) {
 	h := skillsList(testSkillsDeps())
 	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.skills.list"})
 	payload := decodeSkillsPayload[SkillsListResponse](t, resp)
@@ -171,7 +171,7 @@ func TestSkillsList_GenesisDirFallbackOrigin(t *testing.T) {
 
 // Detail returns the same enriched row as the list plus the SKILL.md body
 // read from the entry's FilePath.
-func TestSkillsDetail_RowAndBody(t *testing.T) {
+func TestSkillsDetailReturnsEnrichedRowAndFileBody(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "SKILL.md")
 	body := "---\nname: email-analysis\n---\n\n# 메일 분석\n\n절차…"
@@ -344,7 +344,7 @@ func TestSkillsDetail_UnknownAndMissingName(t *testing.T) {
 	}
 }
 
-func TestSkillsLifecycle_MappingAndLimit(t *testing.T) {
+func TestSkillsLifecycleReturnsMappedEventsWithLimitAndSummary(t *testing.T) {
 	h := skillsLifecycle(testSkillsDeps())
 	params, _ := json.Marshal(map[string]any{"limit": 4})
 	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.skills.lifecycle", Params: params})
@@ -411,7 +411,7 @@ func TestLifecycleEvent_EvidenceFallback(t *testing.T) {
 	}
 }
 
-func TestSkillsLifecycle_SkillFilter(t *testing.T) {
+func TestSkillsLifecycleReturnsFilteredEventsForSkillName(t *testing.T) {
 	h := skillsLifecycle(testSkillsDeps())
 	params, _ := json.Marshal(map[string]any{"skillName": "morning-letter"})
 	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.skills.lifecycle", Params: params})

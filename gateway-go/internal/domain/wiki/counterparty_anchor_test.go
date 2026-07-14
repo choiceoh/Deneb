@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-// TestMatchCounterpartiesInText pins the ledger-anchor matching rules: Korean
-// names by normalized containment, long ASCII names by containment, short
-// ASCII names only as standalone tokens (with an attached Korean particle
-// allowed), archived ledgers excluded, longest key first.
-func TestMatchCounterpartiesInText(t *testing.T) {
+// TestMatchCounterpartiesInTextReturnsMatches pins the ledger-anchor matching
+// rules: Korean names by normalized containment, long ASCII names by
+// containment, short ASCII names only as standalone tokens (with an attached
+// Korean particle allowed), archived ledgers excluded, longest key first.
+func TestMatchCounterpartiesInTextReturnsMatches(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

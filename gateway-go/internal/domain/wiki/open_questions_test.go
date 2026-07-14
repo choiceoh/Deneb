@@ -40,7 +40,7 @@ func TestOpenQuestionsIn(t *testing.T) {
 	}
 }
 
-func TestCollectStaleOpenQuestions(t *testing.T) {
+func TestCollectStaleOpenQuestions_RejectsArchivedAndNonRepSortsUndatedFirst(t *testing.T) {
 	dir := t.TempDir()
 	wikiDir := filepath.Join(dir, "wiki")
 	store, err := NewStore(wikiDir, filepath.Join(dir, "diary"))

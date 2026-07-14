@@ -79,7 +79,7 @@ func TestReadHeartbeat_returnsContent(t *testing.T) {
 // minutes after user said stop" bug. Pin its contract so a future refactor
 // does not silently drop the stop-word rule, the self-edit instruction, or
 // the NO_REPLY contract.
-func TestHeartbeatTriggerTemplate_invariants(t *testing.T) {
+func TestHeartbeatTriggerTemplateContractStringsPresent(t *testing.T) {
 	got := fmt.Sprintf(heartbeatTriggerTemplate, "<<HEARTBEAT_BODY>>")
 
 	mustContain := map[string]string{
@@ -110,7 +110,7 @@ func TestHeartbeatTriggerTemplate_invariants(t *testing.T) {
 	}
 }
 
-func TestHeartbeatSyncRequestIsTranscriptIsolated(t *testing.T) {
+func TestHeartbeatSyncRequestWithoutTranscriptPersistence(t *testing.T) {
 	req := heartbeatSyncRequest()
 	if req.MaxHistoryTokens != heartbeatHistoryBudget {
 		t.Fatalf("heartbeat history budget = %d, want %d", req.MaxHistoryTokens, heartbeatHistoryBudget)
@@ -160,7 +160,7 @@ func TestHeartbeatTriggerTemplate_doesNotPromoteFSWrite(t *testing.T) {
 // A scaffolding-only HEARTBEAT.md (section headers, comments, archived items)
 // must not count as tasks — production 2026-07-05: a file holding only
 // "## Active Tasks" kept every 30-min tick paying a full ~29K-token cloud turn.
-func TestHeartbeatHasTasks(t *testing.T) {
+func TestHeartbeatHasTasksTreatsScaffoldingAsEmpty(t *testing.T) {
 	cases := []struct {
 		name    string
 		content string

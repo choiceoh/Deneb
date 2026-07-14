@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestSegmentSpeakerFlexible(t *testing.T) {
+func TestSegmentSpeakerParsesFlexibleTypes(t *testing.T) {
 	// The model emits speaker as a string label OR a bare integer index OR null.
 	var num asrSegment
 	if err := json.Unmarshal([]byte(`{"start":0,"end":1,"speaker":2,"content":"hi"}`), &num); err != nil {
@@ -45,7 +45,7 @@ func TestDisplaySpeaker(t *testing.T) {
 	}
 }
 
-func TestMmss(t *testing.T) {
+func TestMmssFormatsSecondsAsClock(t *testing.T) {
 	cases := map[float64]string{
 		0:    "00:00",
 		5:    "00:05",
@@ -87,7 +87,7 @@ func TestFormatTranscript(t *testing.T) {
 	}
 }
 
-func TestAudioFilename(t *testing.T) {
+func TestAudioFilenameReturnsExtensionForMimeType(t *testing.T) {
 	cases := map[string]string{
 		"audio/mp4":     "audio.m4a",
 		"audio/x-m4a":   "audio.m4a",

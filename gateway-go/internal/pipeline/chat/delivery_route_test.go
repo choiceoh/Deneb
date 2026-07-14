@@ -2,7 +2,7 @@ package chat
 
 import "testing"
 
-func TestDeliveryFromSessionKey(t *testing.T) {
+func TestDeliveryFromSessionKeyParsesChannelAndThread(t *testing.T) {
 	tests := []struct {
 		name        string
 		key         string

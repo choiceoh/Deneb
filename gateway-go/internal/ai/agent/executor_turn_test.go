@@ -61,7 +61,7 @@ func TestTurnRequestPreparerNilTurnContextKeepsPreviousContext(t *testing.T) {
 	}
 }
 
-func TestTurnRequestPreparerPollsDeferredInputsAcrossLaterTurns(t *testing.T) {
+func TestTurnRequestPreparerLoadsDeferredInputsAfterFirstTurn(t *testing.T) {
 	systemTexts := []string{"first late context", "second late context"}
 	toolSets := [][]llm.Tool{
 		{{Name: "read"}},
@@ -132,7 +132,7 @@ func TestTurnRequestPreparerBeforeAPICallUsesRequestOnlyViewAndNilFallback(t *te
 	}
 }
 
-func TestTurnRequestPreparerThinkingOverrideIsOneShot(t *testing.T) {
+func TestTurnRequestPreparerThinkingOverrideAppliesOnceThenRestoresModulator(t *testing.T) {
 	baseline := &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 5000}
 	modulated := &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 32000}
 	override := &llm.ThinkingConfig{Type: "disabled"}
@@ -170,7 +170,7 @@ func TestTurnRequestPreparerThinkingOverrideIsOneShot(t *testing.T) {
 	}
 }
 
-func TestTurnRequestPreparerBuildsCompleteChatRequest(t *testing.T) {
+func TestTurnRequestPreparerCreatesRequestWithAllConfigFields(t *testing.T) {
 	temperature := 0.2
 	topP := 0.8
 	topK := 20
@@ -218,7 +218,7 @@ func TestTurnRequestPreparerBuildsCompleteChatRequest(t *testing.T) {
 	}
 }
 
-func TestTurnRequestPreparerAppendsBudgetWarningLast(t *testing.T) {
+func TestTurnRequestPreparerAppendsBudgetWarningWhenNearMaxTurns(t *testing.T) {
 	cfg := AgentConfig{
 		MaxTurns:      25,
 		SpawnDetected: func() bool { return true },

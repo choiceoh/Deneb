@@ -61,7 +61,7 @@ func TestRecallSnapshot_Clear(t *testing.T) {
 	ClearSession("")
 }
 
-func TestRecallSnapshot_PerSessionIsolation(t *testing.T) {
+func TestRecallSnapshotPreservesPerSessionIsolation(t *testing.T) {
 	resetRecallSnapshotStore(t)
 
 	StoreSnapshot("s1", "fp", "value-1")
@@ -81,7 +81,7 @@ func TestRecallSnapshot_PerSessionIsolation(t *testing.T) {
 	}
 }
 
-func TestRecallSnapshot_PerFingerprintIsolation(t *testing.T) {
+func TestRecallSnapshotPreservesPerFingerprintIsolation(t *testing.T) {
 	resetRecallSnapshotStore(t)
 
 	// Same session, different cue fingerprints → independent slots so a
@@ -134,14 +134,14 @@ func TestRecallCueFingerprint_NoCueReturnsEmpty(t *testing.T) {
 	}
 }
 
-func TestRecallCueFingerprint_CueOnlyVagueReference(t *testing.T) {
+func TestRecallCueFingerprintReturnsCueOnlyForVagueReference(t *testing.T) {
 	got := CueFingerprint("그거 뭐였지?")
 	if got != "cue-only" {
 		t.Errorf("vague-cue message should map to cue-only slot, got %q", got)
 	}
 }
 
-func TestRecallCueFingerprint_DifferentTopicsDifferentFingerprints(t *testing.T) {
+func TestRecallCueFingerprintReturnsUniqueFingerprintPerTopic(t *testing.T) {
 	// Different topical messages must produce different fingerprints so a
 	// turn about topic A does not hit the cache slot of an earlier turn
 	// about topic B. This is the core anti-poisoning property.
@@ -155,7 +155,7 @@ func TestRecallCueFingerprint_DifferentTopicsDifferentFingerprints(t *testing.T)
 	}
 }
 
-func TestRecallCueFingerprint_Stable(t *testing.T) {
+func TestRecallCueFingerprintReturnsSameValueForSameMessage(t *testing.T) {
 	// Same message produces the same fingerprint every time (sorted terms
 	// make the output deterministic regardless of token order).
 	msg := "전에 chat pipeline 정리한 거"
@@ -169,7 +169,7 @@ func TestRecallCueFingerprint_Stable(t *testing.T) {
 	}
 }
 
-func TestRecallMemoryHasEvidence(t *testing.T) {
+func TestRecallMemoryHasEvidenceReturnsBoolPerCase(t *testing.T) {
 	cases := []struct {
 		name string
 		in   string
@@ -205,7 +205,7 @@ source=none confidence=none age=unknown
 	}
 }
 
-func TestShouldFreezeRecallSnapshot(t *testing.T) {
+func TestShouldFreezeRecallSnapshotReturnsExpectedDecision(t *testing.T) {
 	evidence := "ref=프로젝트/x.md source=wiki confidence=high age=3d"
 	cases := []struct {
 		name      string

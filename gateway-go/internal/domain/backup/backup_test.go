@@ -75,7 +75,7 @@ func TestWriteArchive_ContentsAndExclusions(t *testing.T) {
 	}
 }
 
-func TestTaskRun_InjectedShip(t *testing.T) {
+func TestTaskRunWithInjectedShipCapturesArchive(t *testing.T) {
 	dir := writeTestStore(t)
 	task, err := NewTask(Config{StateDir: dir, SSHHost: "testhost"}, nil)
 	if err != nil {
@@ -101,7 +101,7 @@ func TestTaskRun_InjectedShip(t *testing.T) {
 	}
 }
 
-func TestNewTask_Validation(t *testing.T) {
+func TestNewTaskRejectsMissingFieldsAndUnsafeRemoteDir(t *testing.T) {
 	if _, err := NewTask(Config{SSHHost: "h"}, nil); err == nil {
 		t.Error("missing StateDir must be rejected")
 	}
@@ -113,11 +113,11 @@ func TestNewTask_Validation(t *testing.T) {
 	}
 }
 
-// TestBackup_Live ships a tiny real archive over ssh and cleans it up.
+// TestBackupLiveCreatesAndCleansRemoteArchive ships a tiny real archive over ssh and cleans it up.
 // Requires the storage host to be reachable:
 //
-//	DENEB_BACKUP_LIVE=1 DENEB_BACKUP_SSH_HOST=srv2 go test -run TestBackup_Live ./internal/domain/backup/
-func TestBackup_Live(t *testing.T) {
+//	DENEB_BACKUP_LIVE=1 DENEB_BACKUP_SSH_HOST=srv2 go test -run TestBackupLiveCreatesAndCleansRemoteArchive ./internal/domain/backup/
+func TestBackupLiveCreatesAndCleansRemoteArchive(t *testing.T) {
 	if os.Getenv("DENEB_BACKUP_LIVE") == "" {
 		t.Skip("set DENEB_BACKUP_LIVE=1 for the live ssh test")
 	}

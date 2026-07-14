@@ -64,7 +64,7 @@ func (f *fakeDrive) DownloadFile(_ context.Context, id string) ([]byte, error) {
 	return f.contents[id], nil
 }
 
-func TestSupernoteConstructionAndGating(t *testing.T) {
+func TestSupernoteConstructionReturnsErrorWhenDepsMissing(t *testing.T) {
 	dir := t.TempDir()
 	task := NewSupernoteDigestTask(nil, nil, nil, nil,
 		filepath.Join(dir, "state.json"), "folder123", "")
@@ -83,9 +83,9 @@ func TestSupernoteConstructionAndGating(t *testing.T) {
 	}
 }
 
-// TestSupernoteSelectFreshDedupAndKind pins selection: already-seen IDs skip,
+// TestSupernoteSelectFreshDeduplicatesSeenIDsAndCapsResults pins selection: already-seen IDs skip,
 // non-note kinds skip, oldest-first, capped.
-func TestSupernoteSelectFreshDedupAndKind(t *testing.T) {
+func TestSupernoteSelectFreshDeduplicatesSeenIDsAndCapsResults(t *testing.T) {
 	task := &supernoteDigestTask{}
 	state := &supernoteDigestState{Version: 1, SeenIDs: []string{"old"}}
 	files := []googledrive.File{
@@ -111,7 +111,7 @@ func TestSupernoteSelectFreshDedupAndKind(t *testing.T) {
 	}
 }
 
-func TestIsIngestibleNote(t *testing.T) {
+func TestIsIngestibleNoteReturnsTrueOnlyForSupportedFileTypes(t *testing.T) {
 	yes := []googledrive.File{
 		{Name: "a.pdf", MimeType: "application/pdf"},
 		{Name: "b.PDF", MimeType: ""},
@@ -134,9 +134,9 @@ func TestIsIngestibleNote(t *testing.T) {
 	}
 }
 
-// TestSupernoteBuildPrompt pins the consolidation contract: notes render with
+// TestSupernoteBuildPromptRendersNotesWithAttributionAndBrief pins the consolidation contract: notes render with
 // name+content, first-party framing, wiki-write surface, source attribution.
-func TestSupernoteBuildPrompt(t *testing.T) {
+func TestSupernoteBuildPromptRendersNotesWithAttributionAndBrief(t *testing.T) {
 	ws := t.TempDir()
 	if err := os.WriteFile(filepath.Join(ws, "WIKI.md"), []byte("태양광 프로젝트 우선"), 0o600); err != nil {
 		t.Fatal(err)
@@ -164,9 +164,9 @@ func TestSupernoteBuildPrompt(t *testing.T) {
 	}
 }
 
-// TestSupernoteRunUnconfiguredFolder pins the dormant no-op: no folder → nil,
+// TestSupernoteRunReturnsWithoutDriveCallWhenFolderUnconfigured pins the dormant no-op: no folder → nil,
 // no Drive call.
-func TestSupernoteRunUnconfiguredFolder(t *testing.T) {
+func TestSupernoteRunReturnsWithoutDriveCallWhenFolderUnconfigured(t *testing.T) {
 	fd := &fakeDrive{}
 	// Folder empty ⇒ the task returns before ever building a Drive client.
 	tk := &supernoteDigestTask{

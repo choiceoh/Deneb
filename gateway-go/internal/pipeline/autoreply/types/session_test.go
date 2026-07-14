@@ -30,7 +30,7 @@ func TestIsSessionExpired(t *testing.T) {
 	}
 }
 
-func TestIsSessionIdle(t *testing.T) {
+func TestIsSessionIdleThresholdBoundaryCases(t *testing.T) {
 	now := time.Now().UnixMilli()
 	tests := []struct {
 		name      string
@@ -55,7 +55,7 @@ func TestIsSessionIdle(t *testing.T) {
 	}
 }
 
-func TestDefaultSessionResetPolicy(t *testing.T) {
+func TestDefaultSessionResetPolicyReturnsEmptyLimits(t *testing.T) {
 	p := DefaultSessionResetPolicy()
 	if p.MaxAgeMs != 0 {
 		t.Errorf("got %d, want MaxAgeMs=0", p.MaxAgeMs)

@@ -42,7 +42,7 @@ func fakeTree() OrgTree {
 	}}
 }
 
-func TestTreeHelpers(t *testing.T) {
+func TestTreeHelpersReturnRootsChildrenAndLaneNodes(t *testing.T) {
 	tree := fakeTree()
 
 	if roots := tree.Roots(); len(roots) != 1 || roots[0].ID != "g" {
@@ -66,7 +66,7 @@ func TestTreeHelpers(t *testing.T) {
 	}
 }
 
-func TestValidate_OK(t *testing.T) {
+func TestValidateAllowsWellFormedTree(t *testing.T) {
 	if err := fakeTree().Validate(); err != nil {
 		t.Fatalf("valid tree rejected: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestValidate_MissingParent(t *testing.T) {
 	}
 }
 
-func TestValidate_Cycle(t *testing.T) {
+func TestValidateRejectsCyclicParentage(t *testing.T) {
 	// a → b → a (each names the other as parent): a cycle with no root.
 	tree := OrgTree{Nodes: []OrgNode{
 		{ID: "a", Name: "A", Type: NodeTypeDivision, ParentID: "b"},
@@ -103,7 +103,7 @@ func TestValidate_Cycle(t *testing.T) {
 	}
 }
 
-func TestValidate_SelfParent(t *testing.T) {
+func TestValidateRejectsSelfParentNode(t *testing.T) {
 	tree := OrgTree{Nodes: []OrgNode{
 		{ID: "a", Name: "A", Type: NodeTypeGroup, ParentID: "a"},
 	}}
@@ -112,7 +112,7 @@ func TestValidate_SelfParent(t *testing.T) {
 	}
 }
 
-func TestValidate_DuplicateID(t *testing.T) {
+func TestValidateRejectsDuplicateNodeID(t *testing.T) {
 	tree := OrgTree{Nodes: []OrgNode{
 		{ID: "a", Name: "A", Type: NodeTypeGroup},
 		{ID: "a", Name: "A2", Type: NodeTypeTeam},
@@ -122,7 +122,7 @@ func TestValidate_DuplicateID(t *testing.T) {
 	}
 }
 
-func TestValidate_DuplicateLane(t *testing.T) {
+func TestValidateRejectsDuplicateLaneKey(t *testing.T) {
 	// Two nodes claiming the same lane key would collide the dashboard column.
 	tree := OrgTree{Nodes: []OrgNode{
 		{ID: "a", Name: "A", Type: NodeTypeTeam, Lane: "x"},
@@ -151,7 +151,7 @@ func TestValidate_BadTypeAndEmptyFields(t *testing.T) {
 	}
 }
 
-func TestDeriveRules(t *testing.T) {
+func TestDeriveRulesReturnsPersonCompanyAndKeywordLaneMappings(t *testing.T) {
 	rules := fakeTree().DeriveRules()
 
 	// Members → PersonToLane (member Name only; Rank/Position ignored), normalized
@@ -217,7 +217,7 @@ func TestDeriveRules_NoDefaultKeywordSeedWhenLanes(t *testing.T) {
 	}
 }
 
-func TestDeriveRules_MoonlightingPicksMinLane(t *testing.T) {
+func TestDeriveRulesReturnsMinLaneForSharedMembers(t *testing.T) {
 	// MED: a person/keyword/company that appears under TWO lane nodes (겸직 or a
 	// shared term) must resolve to the lexicographically smallest lane, matching
 	// the engine's pickLane tie-break — not collapse to whichever node came last
@@ -263,7 +263,7 @@ func TestValidate_RejectsReservedUnclassifiedLane(t *testing.T) {
 	}
 }
 
-func TestDeriveRules_ShortNameSkipped(t *testing.T) {
+func TestDeriveRulesIgnoresSingleRuneMemberNames(t *testing.T) {
 	// A 1-rune member is too ambiguous to be a person key and must be dropped.
 	tree := OrgTree{Nodes: []OrgNode{
 		{ID: "x", Name: "X", Type: NodeTypeTeam, Lane: "x", Members: []Member{{Name: "김"}}},
@@ -274,7 +274,7 @@ func TestDeriveRules_ShortNameSkipped(t *testing.T) {
 	}
 }
 
-func TestDeriveLanes_OrderAndNames(t *testing.T) {
+func TestDeriveLanesReturnsLanesInChartOrderWithNames(t *testing.T) {
 	defs := fakeTree().DeriveLanes()
 	// Chart order: t1, t2, nd (input order of lane nodes).
 	wantKeys := []string{"team1", "team2", "namdo"}
@@ -292,7 +292,7 @@ func TestDeriveLanes_OrderAndNames(t *testing.T) {
 	}
 }
 
-func TestValidate_MemberRankPosition(t *testing.T) {
+func TestValidateMemberRankAndPositionAcceptsValidRejectsInvalid(t *testing.T) {
 	cases := []struct {
 		name    string
 		member  Member
@@ -322,7 +322,7 @@ func TestValidate_MemberRankPosition(t *testing.T) {
 	}
 }
 
-func TestRankOrder_Seniority(t *testing.T) {
+func TestRankOrderSortsBySeniorityWithUnknownLast(t *testing.T) {
 	// 회장 is most senior (0) and ranks strictly increase toward junior grades.
 	if RankOrder(RankChairman) != 0 {
 		t.Errorf("RankChairman order = %d, want 0 (most senior)", RankOrder(RankChairman))
@@ -340,7 +340,7 @@ func TestRankOrder_Seniority(t *testing.T) {
 	}
 }
 
-func TestHeads_DerivedFromLeaderPosition(t *testing.T) {
+func TestHeadsReturnsLeaderMembersOrNilWhenNone(t *testing.T) {
 	node := OrgNode{ID: "t", Name: "1팀", Type: NodeTypeTeam, Members: []Member{
 		{Name: "김철수", Rank: RankExecVP, Position: PositionTeamLead}, // leader
 		{Name: "이몽룡", Rank: RankManager, Position: PositionTeamMem}, // not a leader

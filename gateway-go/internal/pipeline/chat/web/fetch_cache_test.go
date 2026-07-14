@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestFetchCache_HitMiss(t *testing.T) {
+func TestFetchCacheReturnsHitOrMiss(t *testing.T) {
 	c := NewFetchCacheWithTTL(8, time.Minute)
 
 	// Miss on empty cache.
@@ -25,7 +25,7 @@ func TestFetchCache_HitMiss(t *testing.T) {
 	}
 }
 
-func TestFetchCache_TTLExpiry(t *testing.T) {
+func TestFetchCacheExpiresAfterTTL(t *testing.T) {
 	c := NewFetchCacheWithTTL(8, 10*time.Millisecond)
 
 	c.Put("https://example.com", "data")

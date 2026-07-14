@@ -9,7 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
-func TestDefaultSnapshotPathsStayUnderDenebHome(t *testing.T) {
+func TestDefaultSnapshotPathsReturnPathsUnderDenebHome(t *testing.T) {
 	home := filepath.Join("tmp", "operator")
 	in, out, diary := defaultSnapshotPaths(home)
 	if in != filepath.Join(home, ".deneb", "wiki") ||

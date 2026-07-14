@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
-func TestSelfCorrectionFunnel_DistinguishesConsumedFromBroken(t *testing.T) {
+func TestSelfCorrectionFunnelExcludesPatchFirstRejectionsFromPromotableCount(t *testing.T) {
 	tr := newTestTracker(t)
 	now := time.UnixMilli(1_783_500_000_000)
 	dayMs := int64(24 * time.Hour / time.Millisecond)
@@ -16,13 +16,13 @@ func TestSelfCorrectionFunnel_DistinguishesConsumedFromBroken(t *testing.T) {
 	captureAt := now.UnixMilli() - 4*dayMs
 	reviewAt := captureAt + dayMs
 	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
-		Type: SelfCorrectionTypeCandidate, ID: "sc-a", Title: "a", CreatedAt: captureAt - 1000,
+		Type: selfCorrectionTypeCandidate, ID: "sc-a", Title: "a", CreatedAt: captureAt - 1000,
 	})
 	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
-		Type: SelfCorrectionTypeCandidate, ID: "sc-b", Title: "b", CreatedAt: captureAt,
+		Type: selfCorrectionTypeCandidate, ID: "sc-b", Title: "b", CreatedAt: captureAt,
 	})
 	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
-		Type: SelfCorrectionTypeReview, ID: "sc-b", Status: SelfCorrectionStatusApplied, CreatedAt: reviewAt,
+		Type: selfCorrectionTypeReview, ID: "sc-b", Status: SelfCorrectionStatusApplied, CreatedAt: reviewAt,
 	})
 
 	// Rejections: one promotable + one patch-first inside the window, one
@@ -72,7 +72,7 @@ func TestSelfCorrectionFunnel_EmptyStateIsAllZero(t *testing.T) {
 	}
 }
 
-func TestSelfCorrectionFunnel_ClosureMetrics(t *testing.T) {
+func TestSelfCorrectionFunnelReturnsConversionRateAndReopenCount(t *testing.T) {
 	tr := newTestTracker(t)
 	now := time.UnixMilli(1_783_500_000_000)
 	dayMs := int64(24 * time.Hour / time.Millisecond)
@@ -82,16 +82,16 @@ func TestSelfCorrectionFunnel_ClosureMetrics(t *testing.T) {
 	captureA := now.UnixMilli() - 5*dayMs
 	captureB := now.UnixMilli() - 3*dayMs
 	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
-		Type: SelfCorrectionTypeCandidate, ID: "sc-a", Source: "failure-cluster:aaa", CreatedAt: captureA,
+		Type: selfCorrectionTypeCandidate, ID: "sc-a", Source: "failure-cluster:aaa", CreatedAt: captureA,
 	})
 	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
-		Type: SelfCorrectionTypeCandidate, ID: "sc-b", Source: "failure-cluster:bbb", CreatedAt: captureB,
+		Type: selfCorrectionTypeCandidate, ID: "sc-b", Source: "failure-cluster:bbb", CreatedAt: captureB,
 	})
 	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
-		Type: SelfCorrectionTypeReview, ID: "sc-a", Status: SelfCorrectionStatusApplied, CreatedAt: captureA + 2*dayMs,
+		Type: selfCorrectionTypeReview, ID: "sc-a", Status: SelfCorrectionStatusApplied, CreatedAt: captureA + 2*dayMs,
 	})
 	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
-		Type: SelfCorrectionTypeReview, ID: "sc-b", Status: SelfCorrectionStatusRejected, CreatedAt: captureB + dayMs,
+		Type: selfCorrectionTypeReview, ID: "sc-b", Status: SelfCorrectionStatusRejected, CreatedAt: captureB + dayMs,
 	})
 
 	// A third candidate in-window that re-opens an OLD applied signature —
@@ -99,14 +99,14 @@ func TestSelfCorrectionFunnel_ClosureMetrics(t *testing.T) {
 	// the window (oldApplied) but its source matches the new candidate.
 	oldApplied := now.UnixMilli() - 20*dayMs
 	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
-		Type: SelfCorrectionTypeCandidate, ID: "sc-old", Source: "failure-cluster:reopen-sig", CreatedAt: oldApplied,
+		Type: selfCorrectionTypeCandidate, ID: "sc-old", Source: "failure-cluster:reopen-sig", CreatedAt: oldApplied,
 	})
 	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
-		Type: SelfCorrectionTypeReview, ID: "sc-old", Status: SelfCorrectionStatusApplied, CreatedAt: oldApplied + dayMs,
+		Type: selfCorrectionTypeReview, ID: "sc-old", Status: SelfCorrectionStatusApplied, CreatedAt: oldApplied + dayMs,
 	})
 	reopenCapture := now.UnixMilli() - dayMs
 	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
-		Type: SelfCorrectionTypeCandidate, ID: "sc-reopen", Source: "failure-cluster:reopen-sig", CreatedAt: reopenCapture,
+		Type: selfCorrectionTypeCandidate, ID: "sc-reopen", Source: "failure-cluster:reopen-sig", CreatedAt: reopenCapture,
 	})
 
 	tr.mu.Lock()
@@ -135,14 +135,14 @@ func TestSelfCorrectionFunnel_ClosureMetrics(t *testing.T) {
 	}
 }
 
-func TestSelfCorrectionFunnel_NoVerdictsMeansZeroClosure(t *testing.T) {
+func TestSelfCorrectionFunnelEmptyClosureForUnverdictedPendingCandidate(t *testing.T) {
 	tr := newTestTracker(t)
 	now := time.UnixMilli(1_783_500_000_000)
 	dayMs := int64(24 * time.Hour / time.Millisecond)
 
 	// Candidate captured in-window but never verdicted — a stuck queue.
 	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
-		Type: SelfCorrectionTypeCandidate, ID: "sc-stuck", Source: "failure-cluster:stuck", CreatedAt: now.UnixMilli() - dayMs,
+		Type: selfCorrectionTypeCandidate, ID: "sc-stuck", Source: "failure-cluster:stuck", CreatedAt: now.UnixMilli() - dayMs,
 	})
 
 	tr.mu.Lock()
@@ -163,7 +163,7 @@ func TestSelfCorrectionFunnel_NoVerdictsMeansZeroClosure(t *testing.T) {
 	}
 }
 
-func TestSelfCorrectionFunnel_AcceptedThenWatchPassedCountsApplied(t *testing.T) {
+func TestSelfCorrectionFunnelReturnsAcceptedThroughWatchPassedAsApplied(t *testing.T) {
 	tr := newTestTracker(t)
 	now := time.UnixMilli(1_783_500_000_000)
 	dayMs := int64(24 * time.Hour / time.Millisecond)
@@ -172,19 +172,19 @@ func TestSelfCorrectionFunnel_AcceptedThenWatchPassedCountsApplied(t *testing.T)
 	attempt := "attempt-1"
 
 	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
-		Type: SelfCorrectionTypeCandidate, ID: "sc-close", Source: "self-harness:close", CreatedAt: captured,
+		Type: selfCorrectionTypeCandidate, ID: "sc-close", Source: "self-harness:close", CreatedAt: captured,
 	})
 	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
-		Type: SelfCorrectionTypeReview, ID: "sc-close", Status: SelfCorrectionStatusAccepted, CreatedAt: accepted,
+		Type: selfCorrectionTypeReview, ID: "sc-close", Status: SelfCorrectionStatusAccepted, CreatedAt: accepted,
 	})
 	for i, phase := range []string{
-		SelfCorrectionDispatchStarted,
+		selfCorrectionDispatchStarted,
 		SelfCorrectionDispatchMerged,
-		SelfCorrectionDispatchDeployed,
-		SelfCorrectionDispatchWatchPassed,
+		selfCorrectionDispatchDeployed,
+		selfCorrectionDispatchWatchPassed,
 	} {
 		appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
-			Type: SelfCorrectionTypeDispatch, ID: "sc-close", DispatchPhase: phase,
+			Type: selfCorrectionTypeDispatch, ID: "sc-close", DispatchPhase: phase,
 			AttemptID: attempt, CreatedAt: accepted + int64(i+1)*1000,
 		})
 	}

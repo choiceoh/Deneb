@@ -271,7 +271,7 @@ func newProcessManager(t *testing.T) *infraprocess.Manager {
 	return mgr
 }
 
-func TestToolMethodsSurfaceAndInvokeValidation(t *testing.T) {
+func TestToolMethodsReturnThreeHandlersAndRejectInvalidInvoke(t *testing.T) {
 	methods := ToolMethods(ToolDeps{})
 	for _, name := range []string{"tools.invoke", "tools.list", "tools.status"} {
 		if methods[name] == nil {
@@ -296,7 +296,7 @@ func TestToolMethodsSurfaceAndInvokeValidation(t *testing.T) {
 	rpctest.MustErr(t, resp)
 }
 
-func TestToolsInvokeDryRunDoesNotRequireManagerOrCommand(t *testing.T) {
+func TestToolsInvokeDryRunErrorsWithoutManagerAndSkipsExecution(t *testing.T) {
 	methods := ToolMethods(ToolDeps{})
 	// A nil manager means bash is unavailable even in dry-run mode because the
 	// dispatcher cannot establish that local execution is configured.
@@ -321,7 +321,7 @@ func TestToolsInvokeDryRunDoesNotRequireManagerOrCommand(t *testing.T) {
 	}
 }
 
-func TestToolsInvokeBashExecutionAndStatusLookup(t *testing.T) {
+func TestToolsInvokeBashExecutesAndReturnsTrackedStatus(t *testing.T) {
 	mgr := newProcessManager(t)
 	methods := ToolMethods(ToolDeps{Processes: mgr})
 	result := decodePayload[infraprocess.ExecResult](t, rpctest.Call(methods, "tools.invoke", map[string]any{
@@ -425,7 +425,7 @@ func writeWorkspaceSkill(t *testing.T, workspace, category, name, description st
 	}
 }
 
-func TestWorkspaceSkillHandlersDiscoverFilterAndBroadcast(t *testing.T) {
+func TestWorkspaceSkillHandlersDiscoverFilterAndEmitChangeEvent(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	workspace := t.TempDir()
@@ -489,7 +489,7 @@ func TestWorkspaceSkillHandlersDiscoverFilterAndBroadcast(t *testing.T) {
 	}
 }
 
-func TestWorkspaceSkillHandlersRequireWorkspaceDir(t *testing.T) {
+func TestWorkspaceSkillHandlersRejectMissingWorkspaceDir(t *testing.T) {
 	methods := Methods(Deps{Skills: skills.NewRegistry()})
 	for _, method := range []string{
 		"skills.snapshot", "skills.commands", "skills.discover", "skills.entries", "skills.workspace_status",
@@ -502,7 +502,7 @@ func TestWorkspaceSkillHandlersRequireWorkspaceDir(t *testing.T) {
 	}
 }
 
-func TestWorkspaceDiscoverConfigAndEligibilityOverrideSemantics(t *testing.T) {
+func TestWorkspaceDiscoverConfigRejectsEmptyDirAndEligibilityContextAppliesOverrides(t *testing.T) {
 	if _, err := workspaceDiscoverConfig("", "", "", nil, nil); err == nil {
 		t.Fatal("empty workspace config succeeded")
 	}
@@ -624,7 +624,7 @@ func TestExtractToolNamesMalformedAndMixedBlocks(t *testing.T) {
 	}
 }
 
-func TestGenesisMethodsRegistrationDependsOnServices(t *testing.T) {
+func TestGenesisMethodsReturnEmptyWithoutServices(t *testing.T) {
 	if got := GenesisMethods(GenesisDeps{}); len(got) != 0 {
 		t.Fatalf("empty genesis methods = %#v", got)
 	}

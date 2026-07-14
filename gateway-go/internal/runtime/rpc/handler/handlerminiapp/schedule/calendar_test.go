@@ -51,7 +51,7 @@ func calDepsWithLocal(t *testing.T, client CalendarClient) (CalendarDeps, *local
 	return deps, store
 }
 
-func TestCalendarListUpcoming_ShapeAndDefaults(t *testing.T) {
+func TestCalendarListUpcomingReturnsListShapeWithDefaultWindow(t *testing.T) {
 	var seenFrom, seenTo time.Time
 	var seenMax int
 	client := &fakeCalendarClient{
@@ -113,7 +113,7 @@ func TestCalendarListUpcoming_ShapeAndDefaults(t *testing.T) {
 	}
 }
 
-func TestCalendarListUpcoming_HonorsParams(t *testing.T) {
+func TestCalendarListUpcomingPreservesCustomHoursAheadAndLimit(t *testing.T) {
 	var seenMax int
 	var seenWindow float64
 	client := &fakeCalendarClient{
@@ -137,7 +137,7 @@ func TestCalendarListUpcoming_HonorsParams(t *testing.T) {
 	}
 }
 
-func TestCalendarListUpcoming_ClampsExcessivelyLargeRequests(t *testing.T) {
+func TestCalendarListUpcomingClampsParamsToBoundaryMax(t *testing.T) {
 	var seenMax int
 	var seenWindow float64
 	client := &fakeCalendarClient{
@@ -200,7 +200,7 @@ func TestCalendarListUpcoming_500WithMisleadingBodyStaysUnavailable(t *testing.T
 	}
 }
 
-func TestCalendarGet_404MapsToNotFound(t *testing.T) {
+func TestCalendarGetReturnsNotFoundOn404APIError(t *testing.T) {
 	client := &fakeCalendarClient{
 		getFn: func(context.Context, string) (*calendar.Event, error) {
 			return nil, &calendar.APIError{StatusCode: 404, Body: "not found"}
@@ -216,7 +216,7 @@ func TestCalendarGet_404MapsToNotFound(t *testing.T) {
 	}
 }
 
-func TestCalendarGet_HappyPath(t *testing.T) {
+func TestCalendarGetReturnsFullEventDetail(t *testing.T) {
 	client := &fakeCalendarClient{
 		getFn: func(_ context.Context, id string) (*calendar.Event, error) {
 			if id != "e1" {
@@ -248,7 +248,7 @@ func TestCalendarGet_HappyPath(t *testing.T) {
 	}
 }
 
-func TestCalendarGet_NotFound(t *testing.T) {
+func TestCalendarGetReturnsNotFoundOnNilEvent(t *testing.T) {
 	client := &fakeCalendarClient{
 		getFn: func(context.Context, string) (*calendar.Event, error) {
 			return nil, nil
@@ -279,7 +279,7 @@ func TestCalendarMethods_NilDeps(t *testing.T) {
 }
 
 // Smoke: payload always JSON-serializable, no time.Time fields leaking.
-func TestCalendarListUpcoming_JSONSerializable(t *testing.T) {
+func TestCalendarListUpcomingEncodesResponseAsValidJSON(t *testing.T) {
 	client := &fakeCalendarClient{
 		listFn: func(context.Context, time.Time, time.Time, int) ([]calendar.Event, error) {
 			return []calendar.Event{{ID: "e1", Summary: "x"}}, nil
@@ -294,7 +294,7 @@ func TestCalendarListUpcoming_JSONSerializable(t *testing.T) {
 
 // --- list_range ----------------------------------------------------------
 
-func TestCalendarListRange_HappyPath(t *testing.T) {
+func TestCalendarListRangeReturnsEventsWithinParsedWindow(t *testing.T) {
 	var seenFrom, seenTo time.Time
 	client := &fakeCalendarClient{
 		listFn: func(_ context.Context, from, to time.Time, _ int) ([]calendar.Event, error) {
@@ -337,7 +337,7 @@ func TestCalendarListRange_RejectsBadParams(t *testing.T) {
 	}
 }
 
-func TestCalendarListRange_ClampsWideWindow(t *testing.T) {
+func TestCalendarListRangeClampsWindowToBoundaryMaxDays(t *testing.T) {
 	var seenWindow time.Duration
 	client := &fakeCalendarClient{
 		listFn: func(_ context.Context, from, to time.Time, _ int) ([]calendar.Event, error) {
@@ -361,7 +361,7 @@ func TestCalendarListRange_ClampsWideWindow(t *testing.T) {
 // --- list merge ----------------------------------------------------------
 
 // list_range and list_upcoming must union Google + local events, sorted by start.
-func TestCalendarListRange_MergesLocalEvents(t *testing.T) {
+func TestCalendarListRangeReturnsLocalAndGoogleEventsSortedByStart(t *testing.T) {
 	client := &fakeCalendarClient{
 		listFn: func(context.Context, time.Time, time.Time, int) ([]calendar.Event, error) {
 			return []calendar.Event{
@@ -471,7 +471,7 @@ func TestCalendarCreate_UnavailableWithoutLocalStore(t *testing.T) {
 	}
 }
 
-func TestCalendarGet_RoutesLocalIDToStore(t *testing.T) {
+func TestCalendarGetReturnsLocalEventWhenIDIsLocal(t *testing.T) {
 	deps, store := calDepsWithLocal(t, nil)
 	created, err := store.Create(localcal.CreateInput{
 		Summary: "로컬", Start: time.Date(2026, 6, 10, 5, 0, 0, 0, time.UTC),
@@ -553,9 +553,10 @@ func TestCalendarUpdate_RejectsGoogleID(t *testing.T) {
 	}
 }
 
-// TestEventCategory pins the month-grid color buckets: deadline by Kind,
-// others by a non-self organizer, mine for everything the user owns.
-func TestEventCategory(t *testing.T) {
+// TestEventCategoryReturnsBucketByKindAndOrganizer pins the month-grid color
+// buckets: deadline by Kind, others by a non-self organizer, mine for
+// everything the user owns.
+func TestEventCategoryReturnsBucketByKindAndOrganizer(t *testing.T) {
 	cases := []struct {
 		name string
 		ev   calendar.Event
@@ -577,9 +578,9 @@ func TestEventCategory(t *testing.T) {
 	}
 }
 
-// TestProjectEventOut_SetsCategory confirms the wire projection carries the
-// bucket through so the native grid can color by it.
-func TestProjectEventOut_SetsCategory(t *testing.T) {
+// TestProjectEventOutReturnsCategoryFromOrganizer confirms the wire
+// projection carries the bucket through so the native grid can color by it.
+func TestProjectEventOutReturnsCategoryFromOrganizer(t *testing.T) {
 	out := projectEventOut(calendar.Event{
 		ID:        "g1",
 		Summary:   "에코프로 미팅",

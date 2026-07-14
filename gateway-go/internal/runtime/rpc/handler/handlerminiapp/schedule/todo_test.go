@@ -58,7 +58,7 @@ func TestTodoCreateRequiresTitle(t *testing.T) {
 	}
 }
 
-func TestTodoSetDoneAndListFilter(t *testing.T) {
+func TestTodoSetDoneMarksDoneAndListIgnoresItWhenIncludeDoneFalse(t *testing.T) {
 	deps, store := todoDepsWithStore(t)
 	td, err := store.Create(localtodo.CreateInput{Title: "전화하기"})
 	if err != nil {

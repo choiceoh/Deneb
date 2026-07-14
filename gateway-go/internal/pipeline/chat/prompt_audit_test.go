@@ -7,7 +7,7 @@
 // builds/CI by the build tag; needs a live workspace, so it is operator-run:
 //
 //	AUDIT_WS=$HOME/.deneb/workspace go test -tags promptaudit \
-//	    -run TestPromptAudit ./internal/pipeline/chat/ -v
+//	    -run TestPromptAuditWritesPromptArtifacts ./internal/pipeline/chat/ -v
 //
 // Tokenize the artifacts against the serving engine, e.g.:
 //
@@ -34,7 +34,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolreg"
 )
 
-func TestPromptAudit(t *testing.T) {
+func TestPromptAuditWritesPromptArtifacts(t *testing.T) {
 	ws := os.Getenv("AUDIT_WS")
 	if ws == "" {
 		t.Skip("AUDIT_WS not set (operator-run harness)")

@@ -48,7 +48,7 @@ func TestMachineSenderDemotionBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestSimilarHumanSenderNamesAreNotMachineDemoted(t *testing.T) {
+func TestSimilarHumanSenderNamesPreserveAttentionTier(t *testing.T) {
 	t.Parallel()
 
 	tests := []string{
@@ -122,7 +122,7 @@ func TestNoiseDemotionBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestUrgentKeywordSignalMatrix(t *testing.T) {
+func TestUrgentKeywordMatrixEscalatesWithDeadline(t *testing.T) {
 	t.Parallel()
 
 	keywords := []string{
@@ -236,7 +236,7 @@ func TestDeadlineSignalBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestDeadlineNearMissesDoNotSignal(t *testing.T) {
+func TestDeadlineNearMissesReturnEmptyTier(t *testing.T) {
 	t.Parallel()
 
 	nearMisses := []string{
@@ -350,7 +350,7 @@ func TestMoneySignalBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestMoneyNearMissesDoNotSignal(t *testing.T) {
+func TestMoneyNearMissesReturnEmptyTier(t *testing.T) {
 	t.Parallel()
 
 	nearMisses := []string{
@@ -376,7 +376,7 @@ func TestMoneyNearMissesDoNotSignal(t *testing.T) {
 	}
 }
 
-func TestSignalScoreThresholdMatrix(t *testing.T) {
+func TestSignalScoreThresholdMatrixReturnsExpectedTier(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -425,7 +425,7 @@ func TestSignalScoreThresholdMatrix(t *testing.T) {
 	}
 }
 
-func TestRelationshipCallbacksAreAmplifiersOnly(t *testing.T) {
+func TestRelationshipCallbacksAmplifyOnlyWithContent(t *testing.T) {
 	t.Parallel()
 
 	var vipCalls atomic.Int64
@@ -451,7 +451,7 @@ func TestRelationshipCallbacksAreAmplifiersOnly(t *testing.T) {
 	}
 }
 
-func TestRelationshipCallbacksRequireExtractableEmail(t *testing.T) {
+func TestRelationshipCallbacksSkipWithoutExtractableEmail(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int64
@@ -477,7 +477,7 @@ func TestRelationshipCallbacksRequireExtractableEmail(t *testing.T) {
 	}
 }
 
-func TestRelationshipCallbacksReceiveCanonicalEmail(t *testing.T) {
+func TestRelationshipCallbacksReceiveNormalizedEmail(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
@@ -567,7 +567,7 @@ func TestJoinHintsBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestDistinctMatchesOrderDedupAndWhitespace(t *testing.T) {
+func TestDistinctMatchesDeduplicatesOrderAndWhitespace(t *testing.T) {
 	t.Parallel()
 
 	re := regexp.MustCompile(`\s*(alpha|beta|gamma)\s*`)
@@ -595,7 +595,7 @@ func TestDistinctMatchesOrderDedupAndWhitespace(t *testing.T) {
 	}
 }
 
-func TestHintNamesRelationshipThatCrossedThreshold(t *testing.T) {
+func TestHintNamesRelationshipAtThresholdBoundary(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -628,7 +628,7 @@ func TestHintNamesRelationshipThatCrossedThreshold(t *testing.T) {
 	}
 }
 
-func TestDemotionSkipsRelationshipCallbacks(t *testing.T) {
+func TestDemotionIgnoresRelationshipCallbacks(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int64
@@ -707,7 +707,7 @@ func TestConcurrentScoreWithThreadSafeLookups(t *testing.T) {
 	}
 }
 
-func TestScoreIsDeterministicAcrossRepeatedCalls(t *testing.T) {
+func TestScoreIsIdempotentAcrossRepeatedCalls(t *testing.T) {
 	t.Parallel()
 
 	s := New(
@@ -735,7 +735,7 @@ func TestScoreIsDeterministicAcrossRepeatedCalls(t *testing.T) {
 	}
 }
 
-func TestTierWireValues(t *testing.T) {
+func TestTierWireValuesEncodeToExpectedStrings(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {

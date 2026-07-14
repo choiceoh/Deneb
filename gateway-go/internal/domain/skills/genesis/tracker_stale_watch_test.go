@@ -8,7 +8,7 @@ import (
 
 // Time-based watch resolution: the label pipeline must not starve on
 // rarely-used skills (backtest 2026-07-11: zero historical resolutions).
-func TestResolveStaleWatches(t *testing.T) {
+func TestResolveStaleWatchesConfirmsUsedExpiresUnusedLeavesFreshWatchesAlone(t *testing.T) {
 	newTracker := func(t *testing.T) *Tracker {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())
@@ -56,7 +56,7 @@ func TestResolveStaleWatches(t *testing.T) {
 		use(t, tr, "sk", true) // one clean post-evolve use — below the 6-use window
 		backdate(t, tr, "sk", 15*24*time.Hour)
 
-		if n := tr.ResolveStaleWatches(14 * 24 * time.Hour); n != 1 {
+		if n := tr.resolveStaleWatches(14 * 24 * time.Hour); n != 1 {
 			t.Fatalf("resolved = %d, want 1", n)
 		}
 		// The confirm callback runs in the calling goroutine here (confirmEvolve
@@ -80,7 +80,7 @@ func TestResolveStaleWatches(t *testing.T) {
 			t.Fatal(err)
 		}
 		backdate(t, tr, "sk0", 15*24*time.Hour)
-		if n := tr.ResolveStaleWatches(14 * 24 * time.Hour); n != 1 {
+		if n := tr.resolveStaleWatches(14 * 24 * time.Hour); n != 1 {
 			t.Fatalf("resolved = %d, want 1", n)
 		}
 		if got := entryType(t, tr, "sk0"); got != "evolve_watch_expired" {
@@ -98,7 +98,7 @@ func TestResolveStaleWatches(t *testing.T) {
 			t.Fatal(err)
 		}
 		use(t, tr, "skf", true)
-		if n := tr.ResolveStaleWatches(14 * 24 * time.Hour); n != 0 {
+		if n := tr.resolveStaleWatches(14 * 24 * time.Hour); n != 0 {
 			t.Fatalf("fresh watch resolved: %d", n)
 		}
 		tr.mu.Lock()

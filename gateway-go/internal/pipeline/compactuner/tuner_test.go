@@ -49,7 +49,7 @@ func newTask(t *testing.T, src SummarySource, llmc llmClient) (*Task, *compactio
 	}), gs
 }
 
-func TestRun_MergesProposedGuidelines(t *testing.T) {
+func TestRun_SavesProposedGuidelines(t *testing.T) {
 	src := fakeSummaries{nodes: []polaris.SummaryNode{
 		leaf("비용 논의를 했다"), leaf("담당자와 통화"), leaf("일정 방향 정함"), leaf("결제 관련 합의"),
 	}}

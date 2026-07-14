@@ -13,7 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 )
 
-func TestRunTranscriptAssemblesSameSessionHistoryThroughPolaris(t *testing.T) {
+func TestRunTranscriptPreservesSameSessionHistoryThroughPolaris(t *testing.T) {
 	ambientHome := t.TempDir()
 	t.Setenv("HOME", ambientHome)
 	root, err := NewRunRoot(t.TempDir())

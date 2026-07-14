@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestCSVToMarkdown(t *testing.T) {
+func TestCSVToMarkdownFormatsTable(t *testing.T) {
 	csv := "이름,수량,단가\n모듈,100,5000\n인버터,20,30000\n"
 	got, err := csvToMarkdown([]byte(csv))
 	if err != nil {
@@ -24,7 +24,7 @@ func TestCSVToMarkdown(t *testing.T) {
 	}
 }
 
-func TestCSVToMarkdown_Ragged(t *testing.T) {
+func TestCSVToMarkdownFormatsRaggedRow(t *testing.T) {
 	// A short row must not break the table; it pads to the header width.
 	got, err := csvToMarkdown([]byte("a,b,c\n1\n"))
 	if err != nil {
@@ -35,7 +35,7 @@ func TestCSVToMarkdown_Ragged(t *testing.T) {
 	}
 }
 
-func TestExtractDocumentText_XLSXByName(t *testing.T) {
+func TestExtractDocumentTextReturnsXLSXByFilename(t *testing.T) {
 	text, ok := ExtractDocumentText(context.Background(), makeTestXLSX(t), "report.xlsx", "")
 	if !ok {
 		t.Fatal("expected xlsx extraction to succeed")
@@ -45,7 +45,7 @@ func TestExtractDocumentText_XLSXByName(t *testing.T) {
 	}
 }
 
-func TestExtractDocumentText_XLSXByMime(t *testing.T) {
+func TestExtractDocumentTextReturnsXLSXByMimeType(t *testing.T) {
 	// No usable filename extension → must classify by MIME type.
 	_, ok := ExtractDocumentText(context.Background(), makeTestXLSX(t), "download",
 		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -54,13 +54,13 @@ func TestExtractDocumentText_XLSXByMime(t *testing.T) {
 	}
 }
 
-func TestExtractDocumentText_Unsupported(t *testing.T) {
+func TestExtractDocumentTextRejectsPlainText(t *testing.T) {
 	if _, ok := ExtractDocumentText(context.Background(), []byte("hello"), "note.txt", "text/plain"); ok {
 		t.Error("plain text is not a document — ExtractDocumentText should decline it")
 	}
 }
 
-func TestExtractDocumentText_Markdown(t *testing.T) {
+func TestExtractDocumentTextAllowsMarkdownOnly(t *testing.T) {
 	md := []byte("# 분기 리뷰\n\n매출 1.2억, 마감 6/25.\n")
 	text, ok := ExtractDocumentText(context.Background(), md, "review.md", "")
 	if !ok {
@@ -75,7 +75,7 @@ func TestExtractDocumentText_Markdown(t *testing.T) {
 	}
 }
 
-func TestIsExtractableDocument(t *testing.T) {
+func TestIsExtractableDocumentReturnsTrueForKnownTypes(t *testing.T) {
 	yes := []struct{ mime, name string }{
 		{"application/pdf", ""},
 		{"", "a.xlsx"},
@@ -104,7 +104,7 @@ func TestIsExtractableDocument(t *testing.T) {
 	}
 }
 
-func TestColumnGaps(t *testing.T) {
+func TestColumnGapsReturnsGapCount(t *testing.T) {
 	cases := map[string]int{
 		"품목       수량      단가": 2, // two multi-space gaps → 3 columns
 		"모듈       100":        1,
@@ -119,7 +119,7 @@ func TestColumnGaps(t *testing.T) {
 	}
 }
 
-func TestPageHasTable(t *testing.T) {
+func TestPageHasTableReturnsTrueForAlignedColumns(t *testing.T) {
 	table := "견적서\n" +
 		"품목       수량      단가\n" +
 		"모듈       100       5000\n" +

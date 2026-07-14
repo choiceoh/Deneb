@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestResolveSkillKey(t *testing.T) {
+func TestResolveSkillKeyPrefersMetadataSkillKeyWithNameFallback(t *testing.T) {
 	tests := []struct {
 		name     string
 		entry    SkillEntry
@@ -45,7 +45,7 @@ func TestResolveSkillKey(t *testing.T) {
 	}
 }
 
-func TestCatalog_RegisterAndList(t *testing.T) {
+func TestCatalogListReturnsEntriesSortedByName(t *testing.T) {
 	c := NewCatalog(nil)
 
 	c.Register(SkillEntry{Skill: Skill{Name: "weather", Source: SourceBundled}})
@@ -65,7 +65,7 @@ func TestCatalog_RegisterAndList(t *testing.T) {
 	}
 }
 
-func TestCatalog_BuildWorkspaceSnapshot(t *testing.T) {
+func TestCatalogBuildWorkspaceSnapshotReturnsFilteredEntriesByName(t *testing.T) {
 	c := NewCatalog(nil)
 	c.Register(SkillEntry{Skill: Skill{Name: "weather"}})
 	c.Register(SkillEntry{Skill: Skill{Name: "github"}})
@@ -108,7 +108,7 @@ user-invocable: true
 	}
 }
 
-func TestResolveSkillInvocationPolicy(t *testing.T) {
+func TestResolveSkillInvocationPolicyAppliesOverridesWithDefaultFallback(t *testing.T) {
 	fm := ParsedFrontmatter{
 		"user-invocable":           "false",
 		"disable-model-invocation": "true",
@@ -131,7 +131,7 @@ func TestResolveSkillInvocationPolicy(t *testing.T) {
 	}
 }
 
-func TestCatalogOwnsDeepCopiesOfEntries(t *testing.T) {
+func TestCatalogRegisterPreservesDeepCopyAgainstCallerMutation(t *testing.T) {
 	extract := true
 	strip := 2
 	original := SkillEntry{
@@ -197,7 +197,7 @@ func TestCatalogReadViewsCannotMutateStoredEntry(t *testing.T) {
 	}
 }
 
-func TestCatalogVersionCountAndUnregister(t *testing.T) {
+func TestCatalogTracksVersionCountAndUnregisterDeletesEntry(t *testing.T) {
 	catalog := NewCatalog(nil)
 	catalog.SetVersion(42)
 	catalog.Register(SkillEntry{Skill: Skill{Name: "one"}})

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestKeyHealthLabel(t *testing.T) {
+func TestKeyHealthLabel_ReturnsStatusStringForState(t *testing.T) {
 	now := time.Now()
 	cases := []struct {
 		name  string
@@ -32,7 +32,7 @@ func TestKeyHealthLabel(t *testing.T) {
 	}
 }
 
-func TestProbeKeyAuth(t *testing.T) {
+func TestProbeKeyAuth_ReturnsLabelForStatusCode(t *testing.T) {
 	cases := []struct {
 		code      int
 		wantOK    bool
@@ -65,7 +65,7 @@ func TestProbeKeyAuth(t *testing.T) {
 }
 
 // A dead endpoint records status 0 → "unreachable", never a false "ok".
-func TestProbeKeyAuth_Unreachable(t *testing.T) {
+func TestProbeKeyAuth_ReturnsUnreachableWhenClosed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	url := srv.URL
 	srv.Close() // now refuses connections

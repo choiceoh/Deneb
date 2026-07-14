@@ -13,7 +13,7 @@ func TestDeriveStart(t *testing.T) {
 	}
 }
 
-func TestDeriveEndDone(t *testing.T) {
+func TestDeriveEndWithoutStopReasonYieldsDoneStatus(t *testing.T) {
 	existing := &Session{StartedAt: int64Ptr(1000)}
 	event := LifecycleEvent{Phase: PhaseEnd, Ts: 2000}
 	snap := DeriveLifecycleSnapshot(existing, event)
@@ -25,7 +25,7 @@ func TestDeriveEndDone(t *testing.T) {
 	}
 }
 
-func TestDeriveEndKilled(t *testing.T) {
+func TestDeriveEndWithAbortedStopReasonYieldsKilledStatus(t *testing.T) {
 	existing := &Session{StartedAt: int64Ptr(1000)}
 	event := LifecycleEvent{Phase: PhaseEnd, Ts: 1500, StopReason: "aborted"}
 	snap := DeriveLifecycleSnapshot(existing, event)
@@ -141,7 +141,7 @@ func TestDeriveEndRuntimeMsFallback(t *testing.T) {
 	}
 }
 
-func TestDeriveEndRuntimeMsClampsToZero(t *testing.T) {
+func TestDeriveEndNormalizesNegativeRuntimeMsToZero(t *testing.T) {
 	existing := &Session{StartedAt: int64Ptr(5000)}
 	event := LifecycleEvent{Phase: PhaseEnd, Ts: 1000} // endedAt < startedAt
 	snap := DeriveLifecycleSnapshot(existing, event)
@@ -150,7 +150,7 @@ func TestDeriveEndRuntimeMsClampsToZero(t *testing.T) {
 	}
 }
 
-func TestDeriveEndKilledAbortedLastRun(t *testing.T) {
+func TestDeriveEndSetsAbortedLastRunWhenKilled(t *testing.T) {
 	event := LifecycleEvent{Phase: PhaseEnd, Ts: 2000, StopReason: "aborted"}
 	snap := DeriveLifecycleSnapshot(nil, event)
 	if !snap.AbortedLastRun {
@@ -158,7 +158,7 @@ func TestDeriveEndKilledAbortedLastRun(t *testing.T) {
 	}
 }
 
-func TestDeriveEndDoneAbortedLastRun(t *testing.T) {
+func TestDeriveEndLeavesAbortedLastRunFalseWhenDone(t *testing.T) {
 	event := LifecycleEvent{Phase: PhaseEnd, Ts: 2000}
 	snap := DeriveLifecycleSnapshot(nil, event)
 	if snap.AbortedLastRun {
@@ -174,7 +174,7 @@ func TestDeriveErrorAbortedLastRun(t *testing.T) {
 	}
 }
 
-func TestIsFiniteTimestamp(t *testing.T) {
+func TestIsFiniteTimestampRejectsNilZeroAndNegative(t *testing.T) {
 	tests := []struct {
 		name string
 		v    *int64

@@ -53,7 +53,7 @@ func TestOrgMethods_NilDepsReturnsNil(t *testing.T) {
 	}
 }
 
-func TestOrgMethods_Registers(t *testing.T) {
+func TestOrgMethodsReturnsGetAndSaveHandlers(t *testing.T) {
 	deps, _ := fakeOrgDeps(t)
 	m := OrgMethods(deps)
 	for _, name := range []string{"miniapp.org.get", "miniapp.org.save"} {
@@ -63,7 +63,7 @@ func TestOrgMethods_Registers(t *testing.T) {
 	}
 }
 
-func TestOrgGet_RequiresAuth(t *testing.T) {
+func TestOrgGetReturnsUnauthorizedWithoutIdentity(t *testing.T) {
 	deps, _ := fakeOrgDeps(t)
 	resp := orgGet(deps)(context.Background(), reqWith(t, "miniapp.org.get", nil))
 	if resp.OK || resp.Error.Code != protocol.ErrUnauthorized {
@@ -248,7 +248,7 @@ func memberTree(memberName string) OrgTreeOut {
 	}}
 }
 
-func TestOrgGet_EnrichesMatchingMember(t *testing.T) {
+func TestOrgGetReturnsEnrichedContactsForMatchingMember(t *testing.T) {
 	book := fakeContactBook{
 		"김철수": {phones: []string{"010-1111-2222"}, emails: []string{"chulsoo@example.test"}},
 	}
@@ -268,7 +268,7 @@ func TestOrgGet_EnrichesMatchingMember(t *testing.T) {
 	}
 }
 
-func TestOrgGet_EnrichMatchesAcrossTitleSuffix(t *testing.T) {
+func TestOrgGetReturnsEnrichedContactsAcrossTitleSuffix(t *testing.T) {
 	// The member is "김철수 부장" but the contact is bare "김철수": the title-peeling
 	// match still attaches the contact (the production wiring uses
 	// contacts.NormalizePersonName for the same effect).

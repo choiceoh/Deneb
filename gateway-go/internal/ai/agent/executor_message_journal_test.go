@@ -73,7 +73,7 @@ func TestRunAgentMessageJournal_MaxTokensRecoveryPersistsExchange(t *testing.T) 
 	}
 }
 
-func TestRunAgentMessageJournal_ThinkingRunawayPersistsExchange(t *testing.T) {
+func TestRunAgentMessageJournal_ThinkingRunawayRecoverySavesExchange(t *testing.T) {
 	streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{
 		runawayThinkingTurn(t),
 		textTurn(t, "direct final answer", "end_turn"),
@@ -120,7 +120,7 @@ func TestRunAgentMessageJournal_ThinkingRunawayPersistsExchange(t *testing.T) {
 	}
 }
 
-func TestRunAgentMessageJournal_FinalizeGatePersistsExchangeOnce(t *testing.T) {
+func TestRunAgentMessageJournal_FinalizeGateSavesFirstFinishOnce(t *testing.T) {
 	streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{
 		buildTextTurnEvents("first finish", 10, 5),
 		buildTextTurnEvents("verified finish", 12, 6),
@@ -176,7 +176,7 @@ func TestRunAgentMessageJournal_FinalizeGatePersistsExchangeOnce(t *testing.T) {
 	}
 }
 
-func TestRunAgentMessageJournal_TerminalAssistantPersistsExactlyOnce(t *testing.T) {
+func TestRunAgentMessageJournal_TerminalAssistantSavesOnce(t *testing.T) {
 	streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{
 		buildTextTurnEvents("done once", 10, 5),
 	}}

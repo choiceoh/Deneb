@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestHandleBtw_SyncResponse(t *testing.T) {
+func TestHandleBtwReturnsSyncResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -30,7 +30,7 @@ func TestHandleBtw_SyncResponse(t *testing.T) {
 	}
 }
 
-func TestHandleBtw_SessionIsolation(t *testing.T) {
+func TestHandleBtwPreservesMainSessionIsolation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -67,7 +67,7 @@ func TestHandleBtw_SessionIsolation(t *testing.T) {
 	}
 }
 
-func TestHandleBtw_ClonesParentTranscript(t *testing.T) {
+func TestHandleBtwLoadsParentTranscriptContext(t *testing.T) {
 	// Track whether the LLM request includes the parent context.
 	var receivedMessages int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +97,7 @@ func TestHandleBtw_ClonesParentTranscript(t *testing.T) {
 	}
 }
 
-func TestHandleBtw_UninitializedHandler(t *testing.T) {
+func TestHandleBtwReturnsErrorWhenUninitialized(t *testing.T) {
 	h := &Handler{}
 	_, err := h.HandleBtw(context.Background(), "sess-1", "hello")
 	if err == nil || err.Error() != "chat handler not initialized" {

@@ -100,7 +100,7 @@ func TestNewServicePreservesExplicitConfiguration(t *testing.T) {
 	}
 }
 
-func TestServicePipelineDepsForwardsRuntimeDependencies(t *testing.T) {
+func TestServicePipelineDepsForwardsConfigWithAndWithoutGmail(t *testing.T) {
 	mainClient := llm.NewClient("http://main.example.test", "main-key")
 	localClient := llm.NewClient("http://local.example.test", "local-key")
 	projectsCalls := 0
@@ -334,7 +334,7 @@ func TestSearchMessagesRetriesTransientFailuresWithoutChangingRequest(t *testing
 	}
 }
 
-func TestSelectNewMessagesFiltersSeenBeforeApplyingCycleCap(t *testing.T) {
+func TestSelectNewMessagesFiltersSeenIDsWithCycleCap(t *testing.T) {
 	svc := NewService(Config{MaxPerCycle: 2}, quietMailLogger())
 	state := &PollState{SeenIDs: []string{"seen"}}
 	messages := []gmail.MessageSummary{
@@ -597,7 +597,7 @@ func TestAnalyzeBatchSkipsNilEntriesWithoutPanicking(t *testing.T) {
 	}
 }
 
-func TestSynthesizeBatchReportValidatesInputs(t *testing.T) {
+func TestSynthesizeBatchReportRejectsInvalidInputs(t *testing.T) {
 	if _, err := synthesizeBatchReport(context.Background(), PipelineDeps{}, nil); err == nil || !strings.Contains(err.Error(), "no analyzed") {
 		t.Fatalf("empty items error = %v", err)
 	}
@@ -742,7 +742,7 @@ func TestClipCharsNonPositiveLimitContract(t *testing.T) {
 	}
 }
 
-func TestStateStoreDefaultPathAndStateGuards(t *testing.T) {
+func TestStateStoreDefaultPathAndNilStateGuards(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	store := newStateStore("   ")

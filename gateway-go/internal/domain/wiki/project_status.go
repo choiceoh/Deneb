@@ -8,7 +8,7 @@
 //
 // Two writers keep it fresh:
 //   - the dream cycle (periodic, LLM): replaces the section with a clean roll-up
-//     (SetProjectStatus) — see project_digest.go.
+//     (setProjectStatus) — see project_digest.go.
 //   - mail analysis (event-driven, no LLM): prepends one dated bullet per
 //     project-linked mail (AppendProjectStatusLine) — see the server's mail sink.
 //
@@ -152,10 +152,10 @@ func (s *Store) ProjectStatuses() ([]ProjectStatus, error) {
 	return out, nil
 }
 
-// SetProjectStatus replaces a project page's 현재 상태 section with a fresh
+// setProjectStatus replaces a project page's 현재 상태 section with a fresh
 // roll-up (the dream cycle's compacted lines, most salient first). Creates the
 // page if absent. now stamps Updated (injected for deterministic tests).
-func (s *Store) SetProjectStatus(relPath string, lines []string, due string, now time.Time) error {
+func (s *Store) setProjectStatus(relPath string, lines []string, due string, now time.Time) error {
 	// Dedupe while cleaning: the 2026-07 audit found rep pages whose whole
 	// 현재 상태 was the same no-information bullet twice ("테스트베드 구축
 	// 진행" ×2) — a duplicate line adds zero signal at any position.

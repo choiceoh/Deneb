@@ -25,7 +25,7 @@ func (m *mockEmbedder) Embed(_ context.Context, texts []string) ([][]float32, er
 	return result, nil
 }
 
-func TestEmbeddingCompact_SelectsSubset(t *testing.T) {
+func TestEmbeddingCompact_ReturnsSelectedSubset(t *testing.T) {
 	var messages []llm.Message
 	for i := range 20 {
 		role := "user"
@@ -55,7 +55,7 @@ func TestEmbeddingCompact_SelectsSubset(t *testing.T) {
 	}
 }
 
-func TestEmbeddingCompact_TooFewMessages(t *testing.T) {
+func TestEmbeddingCompact_SkipsWhenTooFewMessages(t *testing.T) {
 	messages := []llm.Message{
 		llm.NewTextMessage("user", "hello"),
 		llm.NewTextMessage("assistant", "hi"),
@@ -69,7 +69,7 @@ func TestEmbeddingCompact_TooFewMessages(t *testing.T) {
 	}
 }
 
-func TestCosineSim(t *testing.T) {
+func TestCosineSim_ReturnsHighForIdenticalLowForOrthogonal(t *testing.T) {
 	a := []float32{1, 0, 0}
 	b := []float32{1, 0, 0}
 	c := []float32{0, 1, 0}
@@ -82,7 +82,7 @@ func TestCosineSim(t *testing.T) {
 	}
 }
 
-func TestCentroid(t *testing.T) {
+func TestCentroid_ReturnsAverageVector(t *testing.T) {
 	vecs := [][]float32{{2, 0}, {0, 4}}
 	c := centroid(vecs)
 	if c[0] != 1 || c[1] != 2 {
@@ -90,7 +90,7 @@ func TestCentroid(t *testing.T) {
 	}
 }
 
-func TestMMRSelect_DiversityProperty(t *testing.T) {
+func TestMMRSelect_ReturnsOneFromEachCluster(t *testing.T) {
 	// 3 clusters: A (idx 0,1), B (idx 2,3), C (idx 4,5).
 	// MMR should pick one from each cluster, not two from the same.
 	embeddings := [][]float32{
@@ -139,7 +139,7 @@ func TestMMRSelect_DiversityProperty(t *testing.T) {
 	}
 }
 
-func TestMMRSelect_RelevanceProperty(t *testing.T) {
+func TestMMRSelect_ReturnsMostRelevantUnderTightBudget(t *testing.T) {
 	// idx 2 is the only one matching query; rest are orthogonal.
 	embeddings := [][]float32{
 		{0, 0, 1, 0},
@@ -188,7 +188,7 @@ func TestMMRSelect_EmptySelected_NoPenalty(t *testing.T) {
 	}
 }
 
-func TestRecencyCompact_DropsOldest(t *testing.T) {
+func TestRecencyCompact_EvictsOldestMessages(t *testing.T) {
 	var messages []llm.Message
 	for range 30 {
 		messages = append(messages, llm.NewTextMessage("user", strings.Repeat("content ", 100)))
@@ -205,7 +205,7 @@ func TestRecencyCompact_DropsOldest(t *testing.T) {
 	}
 }
 
-func TestRecencyCompact_NoopUnderBudget(t *testing.T) {
+func TestRecencyCompact_SkipsWhenUnderBudget(t *testing.T) {
 	messages := []llm.Message{
 		llm.NewTextMessage("user", "hello"),
 		llm.NewTextMessage("assistant", "hi"),
@@ -259,7 +259,7 @@ func TestMergeConsecutiveSameRole_PreservesToolBlocks(t *testing.T) {
 
 // TestMergeConsecutiveSameRole_PlainTextKeepsJoinedShape pins the legacy
 // behavior for the common all-text case: a single joined text message.
-func TestMergeConsecutiveSameRole_PlainTextKeepsJoinedShape(t *testing.T) {
+func TestMergeConsecutiveSameRole_PreservesPlainTextJoinedShape(t *testing.T) {
 	out := mergeConsecutiveSameRole([]llm.Message{
 		llm.NewTextMessage("user", "첫 번째"),
 		llm.NewTextMessage("user", "두 번째"),

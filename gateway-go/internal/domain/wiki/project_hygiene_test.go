@@ -7,11 +7,12 @@ import (
 	"time"
 )
 
-// TestCleanProjectFolderName pins mint-time name hygiene against the five
-// real mail-subject-named folders the 2026-07-05 audit found. Only TRAILING
-// debris is stripped (dates, 요청/송부-class suffixes, dangling dashes) —
-// mid-name tokens stay, and business tail words (발주, 견적) are kept.
-func TestCleanProjectFolderName(t *testing.T) {
+// TestCleanProjectFolderName_NormalizesTrailingDebrisKeepsMidNameTokens pins
+// mint-time name hygiene against the five real mail-subject-named folders the
+// 2026-07-05 audit found. Only TRAILING debris is stripped (dates, 요청/송부-class
+// suffixes, dangling dashes) — mid-name tokens stay, and business tail words
+// (발주, 견적) are kept.
+func TestCleanProjectFolderName_NormalizesTrailingDebrisKeepsMidNameTokens(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"강진-신다산-epc-계약서-법무검토-의견-(2026-06-30)", "강진-신다산-epc-계약서-법무검토"},
 		{"부산항터미널-태양광-(신선대)-—-가배치-요청-(2026-06-25)", "부산항터미널-태양광-(신선대)-—-가배치"},
@@ -23,16 +24,17 @@ func TestCleanProjectFolderName(t *testing.T) {
 		{"요청", "요청"}, // single segment never stripped to nothing
 	}
 	for _, tc := range cases {
-		if got := CleanProjectFolderName(tc.in); got != tc.want {
-			t.Errorf("CleanProjectFolderName(%q)\n got %q\nwant %q", tc.in, got, tc.want)
+		if got := cleanProjectFolderName(tc.in); got != tc.want {
+			t.Errorf("cleanProjectFolderName(%q)\n got %q\nwant %q", tc.in, got, tc.want)
 		}
 	}
 }
 
-// TestCleanNewProjectRepPath: mint-time only — existing dirty folders keep
-// their paths; a new dirty mint is cleaned; and when the CLEAN folder already
-// exists the dirty twin routes into it.
-func TestCleanNewProjectRepPath(t *testing.T) {
+// TestCleanNewProjectRepPath_NormalizesNewMintKeepsExistingRoutesToCleanTwin:
+// mint-time only — existing dirty folders keep their paths; a new dirty mint
+// is cleaned; and when the CLEAN folder already exists the dirty twin routes
+// into it.
+func TestCleanNewProjectRepPath_NormalizesNewMintKeepsExistingRoutesToCleanTwin(t *testing.T) {
 	dir := t.TempDir()
 	s, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -61,9 +63,10 @@ func TestCleanNewProjectRepPath(t *testing.T) {
 	}
 }
 
-// TestSetProjectStatus_Dedupe: duplicate roll-up lines collapse — the audit
-// found rep pages whose whole 현재 상태 was one no-information bullet twice.
-func TestSetProjectStatus_Dedupe(t *testing.T) {
+// TestSetProjectStatus_DeduplicatesDuplicateStatusBullets: duplicate roll-up
+// lines collapse — the audit found rep pages whose whole 현재 상태 was one
+// no-information bullet twice.
+func TestSetProjectStatus_DeduplicatesDuplicateStatusBullets(t *testing.T) {
 	dir := t.TempDir()
 	s, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -71,8 +74,8 @@ func TestSetProjectStatus_Dedupe(t *testing.T) {
 	}
 	rel := RepPagePath("영광-bess")
 	now := time.Date(2026, 7, 5, 9, 0, 0, 0, time.UTC)
-	if err := s.SetProjectStatus(rel, []string{"BESS 구축 진행", "BESS 구축 진행", "계약금 입금 확인"}, "", now); err != nil {
-		t.Fatalf("SetProjectStatus: %v", err)
+	if err := s.setProjectStatus(rel, []string{"BESS 구축 진행", "BESS 구축 진행", "계약금 입금 확인"}, "", now); err != nil {
+		t.Fatalf("setProjectStatus: %v", err)
 	}
 	page, err := s.ReadPage(rel)
 	if err != nil {

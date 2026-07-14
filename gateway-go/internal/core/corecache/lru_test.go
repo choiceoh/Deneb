@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestLRU_GetPut(t *testing.T) {
+func TestLRUGetReturnsPutValues(t *testing.T) {
 	c := NewLRU[string, int](3, 0)
 	c.Put("a", 1)
 	c.Put("b", 2)
@@ -43,7 +43,7 @@ func TestLRU_Eviction(t *testing.T) {
 	}
 }
 
-func TestLRU_AccessPromotes(t *testing.T) {
+func TestLRUAccessPromotesAndPreservesRecentlyUsedEntry(t *testing.T) {
 	c := NewLRU[string, int](2, 0)
 	c.Put("a", 1)
 	c.Put("b", 2)
@@ -87,7 +87,7 @@ func TestLRU_Delete(t *testing.T) {
 	}
 }
 
-func TestLRU_TTLExpiry(t *testing.T) {
+func TestLRUExpiresEntryAfterTTL(t *testing.T) {
 	c := NewLRU[string, int](10, 50*time.Millisecond)
 	c.Put("a", 1)
 
@@ -103,7 +103,7 @@ func TestLRU_TTLExpiry(t *testing.T) {
 	}
 }
 
-func TestLRU_Cleanup(t *testing.T) {
+func TestLRUCleanupEvictsExpiredEntries(t *testing.T) {
 	c := NewLRU[string, int](10, 50*time.Millisecond)
 	c.Put("a", 1)
 	c.Put("b", 2)

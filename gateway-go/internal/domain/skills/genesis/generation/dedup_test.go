@@ -9,7 +9,7 @@ import (
 	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 )
 
-func TestJaccardSimilarity(t *testing.T) {
+func TestJaccardSimilarityReturnsRatioAcrossIdenticalDisjointAndPartialOverlapSets(t *testing.T) {
 	a := map[string]struct{}{"git": {}, "rebase": {}, "flow": {}}
 	if got := genesiscommon.JaccardSimilarity(a, a); got != 1.0 {
 		t.Fatalf("identical sets: want 1.0, got %v", got)
@@ -28,7 +28,7 @@ func TestJaccardSimilarity(t *testing.T) {
 	}
 }
 
-func TestSkillDedupTokens_DropsShortAndTokenizesKorean(t *testing.T) {
+func TestSkillDedupTokensReturnsKoreanTokensAndDropsSingleRuneTokens(t *testing.T) {
 	tokens := genesiscommon.SkillDedupTokens("git-rebase-flow", "rebase 충돌 해결")
 	for _, want := range []string{"git", "rebase", "flow", "충돌", "해결"} {
 		if _, ok := tokens[want]; !ok {
@@ -41,7 +41,7 @@ func TestSkillDedupTokens_DropsShortAndTokenizesKorean(t *testing.T) {
 	}
 }
 
-func TestSanitizeSkillDescription(t *testing.T) {
+func TestSanitizeSkillDescriptionCollapsesWhitespaceStripsControlAndTruncatesLength(t *testing.T) {
 	if got := sanitizeSkillDescription("line1\nline2\ttab"); got != "line1 line2 tab" {
 		t.Fatalf("newline/tab collapse: got %q", got)
 	}
@@ -58,7 +58,7 @@ func TestSanitizeSkillDescription(t *testing.T) {
 	}
 }
 
-func TestIsDuplicateSkill(t *testing.T) {
+func TestIsDuplicateSkillReturnsTrueForExactAndNearMatchesButNotUnrelated(t *testing.T) {
 	cat := skills.NewCatalog(slog.Default())
 	cat.Register(skills.SkillEntry{Skill: skills.Skill{
 		Name:        "foo-bar-baz",
@@ -85,7 +85,7 @@ func TestIsDuplicateSkill(t *testing.T) {
 	}
 }
 
-func TestEnvBool(t *testing.T) {
+func TestEnvBoolAcceptsSpellingsAndUsesFallbackOnGarbage(t *testing.T) {
 	if !genesiscommon.EnvBool("DENEB_TEST_MISSING_BOOL", true) {
 		t.Fatal("unset should return fallback true")
 	}

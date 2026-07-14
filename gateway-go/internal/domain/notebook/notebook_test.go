@@ -45,7 +45,7 @@ func TestCreateRequiresName(t *testing.T) {
 	}
 }
 
-func TestUniqueIDOnSameName(t *testing.T) {
+func TestCreateAssignsDistinctIDsForSameName(t *testing.T) {
 	s := newTestStore(t)
 	a, _ := s.Create("deal", "")
 	b, _ := s.Create("deal", "")
@@ -54,7 +54,7 @@ func TestUniqueIDOnSameName(t *testing.T) {
 	}
 }
 
-func TestAddSourceCiteMonotonicAcrossRemoval(t *testing.T) {
+func TestAddSourceCitePreservesMonotonicOrderAcrossRemoval(t *testing.T) {
 	s := newTestStore(t)
 	nb, _ := s.Create("nb", "")
 
@@ -82,7 +82,7 @@ func TestAddSourceCiteMonotonicAcrossRemoval(t *testing.T) {
 	}
 }
 
-func TestAddSourceValidation(t *testing.T) {
+func TestAddSourceAcceptsValidAndRejectsInvalidSources(t *testing.T) {
 	s := newTestStore(t)
 	nb, _ := s.Create("nb", "")
 
@@ -137,7 +137,7 @@ func TestDelete(t *testing.T) {
 	}
 }
 
-func TestPersistenceAcrossReopen(t *testing.T) {
+func TestPersistenceReloadsNotebookAndSourceAfterReopen(t *testing.T) {
 	dir := t.TempDir()
 	s, err := NewStore(dir)
 	if err != nil {
@@ -226,14 +226,14 @@ func TestEnsureForDealIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestEnsureForDealRequiresRef(t *testing.T) {
+func TestEnsureForDealRejectsBlankRef(t *testing.T) {
 	s := newTestStore(t)
 	if _, err := s.EnsureForDeal("  ", "x", ""); err == nil {
 		t.Fatal("EnsureForDeal with blank deal ref should error")
 	}
 }
 
-func TestGetByDealRef(t *testing.T) {
+func TestGetByDealRefReturnsMatchAfterCreate(t *testing.T) {
 	s := newTestStore(t)
 	if _, ok := s.GetByDealRef("프로젝트/탑솔라.md"); ok {
 		t.Fatal("GetByDealRef should miss before creation")
@@ -245,7 +245,7 @@ func TestGetByDealRef(t *testing.T) {
 	}
 }
 
-func TestDealRefPersists(t *testing.T) {
+func TestDealRefPersistsAcrossReload(t *testing.T) {
 	dir := t.TempDir()
 	s, _ := NewStore(dir)
 	nb, _ := s.EnsureForDeal("프로젝트/탑솔라.md", "탑솔라", "")
@@ -297,7 +297,7 @@ func TestPinUniqueDedupsByRefAndCreatesDeal(t *testing.T) {
 	}
 }
 
-func TestPinUniqueRequiresRefAndValidSource(t *testing.T) {
+func TestPinUniqueRejectsBlankRefAndInvalidSource(t *testing.T) {
 	s := newTestStore(t)
 	if _, err := s.PinUnique("", "x", Source{Kind: KindNote, Text: "y"}); err == nil {
 		t.Fatal("PinUnique without deal ref should error")
@@ -307,7 +307,7 @@ func TestPinUniqueRequiresRefAndValidSource(t *testing.T) {
 	}
 }
 
-func TestSlugify(t *testing.T) {
+func TestSlugifyNormalizesNamesToSlugs(t *testing.T) {
 	cases := map[string]string{
 		"탑솔라 딜":          "탑솔라-딜",
 		"  Deal / 2026 ": "deal-2026",
@@ -321,7 +321,7 @@ func TestSlugify(t *testing.T) {
 	}
 }
 
-func TestStampProjectRefs(t *testing.T) {
+func TestStampProjectRefsIsIdempotentAndPersistsAcrossReload(t *testing.T) {
 	dir := t.TempDir()
 	s, err := NewStore(dir)
 	if err != nil {

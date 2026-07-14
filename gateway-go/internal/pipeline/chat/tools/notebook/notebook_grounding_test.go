@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
-func TestBuildNotebookGroundingSoftAndStrict(t *testing.T) {
+func TestBuildNotebookGroundingWithSoftAndStrictModes(t *testing.T) {
 	fn, deps := newTestNotebookTool(t)
 	callNotebook(t, fn, map[string]any{"action": "create", "name": "탑솔라 딜"})
 	id := extractID(t, deps)
@@ -65,7 +65,7 @@ func TestBuildNotebookGroundingEmptyOrMissing(t *testing.T) {
 	}
 }
 
-func TestBuildNotebookGroundingByteBudget(t *testing.T) {
+func TestBuildNotebookGroundingStaysWithinByteBudget(t *testing.T) {
 	fn, deps := newTestNotebookTool(t)
 	callNotebook(t, fn, map[string]any{"action": "create", "name": "큰 노트북"})
 	id := extractID(t, deps)
@@ -113,7 +113,7 @@ func TestNotebookOpenCloseBindsSession(t *testing.T) {
 	}
 }
 
-func TestNotebookModeAction(t *testing.T) {
+func TestNotebookModeActionNormalizesSoftToEmpty(t *testing.T) {
 	fn, deps := newTestNotebookTool(t)
 	callNotebook(t, fn, map[string]any{"action": "create", "name": "계약 검토"})
 	id := extractID(t, deps)
@@ -132,7 +132,7 @@ func TestNotebookModeAction(t *testing.T) {
 	}
 }
 
-func TestNotebookAddFileSourceText(t *testing.T) {
+func TestNotebookAddFileSourceReadsLocalText(t *testing.T) {
 	fn, deps := newTestNotebookTool(t)
 	callNotebook(t, fn, map[string]any{"action": "create", "name": "문서 노트북"})
 	id := extractID(t, deps)
@@ -168,7 +168,7 @@ func TestNotebookAddFileSourceMissing(t *testing.T) {
 	}
 }
 
-func TestNotebookExternalSourceIngest(t *testing.T) {
+func TestNotebookExternalSourceIngestsWithInjectedReaders(t *testing.T) {
 	fn, deps := newTestNotebookTool(t)
 	// Inject a fake reader for the external kinds (the pointer is the one
 	// ToolNotebook captured, so setting fields after construction is seen).
@@ -193,7 +193,7 @@ func TestNotebookExternalSourceIngest(t *testing.T) {
 	}
 }
 
-func TestNotebookExternalSourceUnwired(t *testing.T) {
+func TestNotebookExternalSourceReportsDisabledWithoutReaders(t *testing.T) {
 	fn, deps := newTestNotebookTool(t) // no readers wired
 	callNotebook(t, fn, map[string]any{"action": "create", "name": "nb"})
 	id := extractID(t, deps)
@@ -206,7 +206,7 @@ func TestNotebookExternalSourceUnwired(t *testing.T) {
 	}
 }
 
-func TestNotebookOpenDedicatedGuard(t *testing.T) {
+func TestNotebookOpenRejectsDifferentNotebookInDedicatedSession(t *testing.T) {
 	fn, deps := newTestNotebookTool(t)
 	callNotebook(t, fn, map[string]any{"action": "create", "name": "탑솔라"})
 	idA := extractID(t, deps)

@@ -32,7 +32,7 @@ func TestResolveGatewayRuntimeConfigDefaultsWithoutLoader(t *testing.T) {
 	}
 }
 
-func TestResolveGatewayRuntimeConfigSourcePrecedence(t *testing.T) {
+func TestResolveGatewayRuntimeConfigWithSourcePrecedenceOverrides(t *testing.T) {
 	configUIEnabled := false
 	overrideUIEnabled := true
 	configResetOnExit := false
@@ -96,7 +96,7 @@ func TestResolveGatewayRuntimeConfigSourcePrecedence(t *testing.T) {
 	}
 }
 
-func TestResolveGatewayRuntimeConfigDefaults(t *testing.T) {
+func TestResolveGatewayRuntimeConfigWithAppliedDefaults(t *testing.T) {
 	cfg := DenebConfig{}
 	applyDefaults(&cfg)
 
@@ -127,7 +127,7 @@ func TestResolveGatewayRuntimeConfigDefaults(t *testing.T) {
 	}
 }
 
-func TestResolveGatewayRuntimeConfigBindOverride(t *testing.T) {
+func TestResolveGatewayRuntimeConfigWithLANBindOverride(t *testing.T) {
 	cfg := DenebConfig{}
 	applyDefaults(&cfg)
 	// Non-loopback Control UI requires allowedOrigins or the dangerous fallback flag.
@@ -148,7 +148,7 @@ func TestResolveGatewayRuntimeConfigBindOverride(t *testing.T) {
 }
 
 // IP-form bind values must resolve identically to their canonical mode names.
-func TestResolveGatewayRuntimeConfigBindIPAliases(t *testing.T) {
+func TestResolveGatewayRuntimeConfigNormalizesBindAliases(t *testing.T) {
 	dangerousFlag := true
 	cases := []struct {
 		bind     string
@@ -284,7 +284,7 @@ func TestResolveGatewayRuntimeConfigValidationErrors(t *testing.T) {
 	}
 }
 
-func TestResolveGatewayRuntimeConfigTrustedProxyLoopback(t *testing.T) {
+func TestResolveGatewayRuntimeConfigAllowsLoopbackTrustedProxy(t *testing.T) {
 	cfg := DenebConfig{}
 	applyDefaults(&cfg)
 	cfg.Gateway.TrustedProxies = []string{"127.0.0.1"}
@@ -304,7 +304,7 @@ func TestResolveGatewayRuntimeConfigTrustedProxyLoopback(t *testing.T) {
 	}
 }
 
-func TestIsLoopbackHost(t *testing.T) {
+func TestIsLoopbackHostWithLoopbackAndNonLoopbackHosts(t *testing.T) {
 	tests := []struct {
 		host     string
 		expected bool
@@ -323,7 +323,7 @@ func TestIsLoopbackHost(t *testing.T) {
 	}
 }
 
-func TestIsValidIPv4(t *testing.T) {
+func TestIsValidIPv4RejectsNonIPv4Strings(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected bool
@@ -342,7 +342,7 @@ func TestIsValidIPv4(t *testing.T) {
 	}
 }
 
-func TestIsTrustedProxyAddress(t *testing.T) {
+func TestIsTrustedProxyAddressAllowsExactAndCIDRMatches(t *testing.T) {
 	proxies := []string{"10.0.0.1", "192.168.0.0/24", "127.0.0.1"}
 
 	if !isTrustedProxyAddress("10.0.0.1", proxies) {
@@ -384,7 +384,7 @@ func TestNormalizeControlUIBasePath(t *testing.T) {
 	}
 }
 
-func TestControlUIDisabled(t *testing.T) {
+func TestResolveGatewayRuntimeConfigWhenControlUIDisabled(t *testing.T) {
 	cfg := DenebConfig{}
 	applyDefaults(&cfg)
 	disabled := false
@@ -402,7 +402,7 @@ func TestControlUIDisabled(t *testing.T) {
 	}
 }
 
-func TestResolvedGatewayAuthHasSharedSecret(t *testing.T) {
+func TestResolvedGatewayAuthHasSharedSecretWithTokenOrPassword(t *testing.T) {
 	tests := []struct {
 		auth     ResolvedGatewayAuth
 		expected bool

@@ -27,7 +27,7 @@ func TestTruncateForError(t *testing.T) {
 	}
 }
 
-func TestUnmarshalParams(t *testing.T) {
+func TestUnmarshalParamsRejectsNilEmptyAndInvalidInput(t *testing.T) {
 	err := unmarshalParams(nil, &struct{}{})
 	if err == nil {
 		t.Error("expected error for nil params")

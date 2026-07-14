@@ -7,11 +7,11 @@ import (
 	"testing"
 )
 
-func TestValidProjectCode(t *testing.T) {
+func TestValidProjectCodeRejectsInvalid(t *testing.T) {
 	valid := []string{"pl0-jdo-wnd-001", "pl3-tri-mod-001", "nde-ztt-cbl-001", "pl2-bs8-epc-002", "etc-gpo-wnd-001", "com-hyu-mod-010"}
 	for _, c := range valid {
-		if !ValidProjectCode(c) {
-			t.Errorf("ValidProjectCode(%q) = false, want true", c)
+		if !validProjectCode(c) {
+			t.Errorf("validProjectCode(%q) = false, want true", c)
 		}
 	}
 	invalid := []string{
@@ -24,8 +24,8 @@ func TestValidProjectCode(t *testing.T) {
 		"PL3-TRI-MOD-001",   // not normalized (uppercase)
 	}
 	for _, c := range invalid {
-		if ValidProjectCode(c) {
-			t.Errorf("ValidProjectCode(%q) = true, want false", c)
+		if validProjectCode(c) {
+			t.Errorf("validProjectCode(%q) = true, want false", c)
 		}
 	}
 }
@@ -43,7 +43,7 @@ func TestNormalizeProjectCode(t *testing.T) {
 	}
 }
 
-func TestCodeStem(t *testing.T) {
+func TestCodeStemParsesFormats(t *testing.T) {
 	cases := map[string]string{
 		"pl3-tri-mod":     "pl3-tri-mod", // bare stem
 		"pl3-tri-mod-007": "pl3-tri-mod", // full code → sequence dropped (Go owns it)
@@ -61,7 +61,7 @@ func TestCodeStem(t *testing.T) {
 	}
 }
 
-func TestCodeIndex_ResolveCode(t *testing.T) {
+func TestCodeIndex_ResolveCodeCreatesOrInherits(t *testing.T) {
 	// Child filed under an existing project inherits the folder's frozen code.
 	ci := codeIndex{
 		folderCode: map[string]string{"프로젝트/기아-화성": "pl2-kia-epc-001"},
@@ -91,7 +91,7 @@ func TestCodeIndex_ResolveCode(t *testing.T) {
 	}
 }
 
-func TestBuildCodeIndex(t *testing.T) {
+func TestBuildCodeIndexCreatesFolderCodeMap(t *testing.T) {
 	s, err := NewStore(t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -112,10 +112,10 @@ func TestBuildCodeIndex(t *testing.T) {
 	}
 }
 
-// TestBuildCodeIndex_RepCodeWinsOverLaterEntity: the 대표페이지's code owns the
-// folder — a child page typed "entity" iterated AFTER the rep (여기서는 파일명
-// 정렬상 대표.md 뒤에 오는 이름) must not overwrite it.
-func TestBuildCodeIndex_RepCodeWinsOverLaterEntity(t *testing.T) {
+// TestBuildCodeIndex_RepCodePreservedOverLaterEntity: the 대표페이지's code owns
+// the folder — a child page typed "entity" iterated AFTER the rep (여기서는
+// 파일명 정렬상 대표.md 뒤에 오는 이름) must not overwrite it.
+func TestBuildCodeIndex_RepCodePreservedOverLaterEntity(t *testing.T) {
 	s, err := NewStore(t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -181,10 +181,10 @@ func TestFindExistingPage_ChildCreateKeepsOwnPath(t *testing.T) {
 	}
 }
 
-// TestGraphContext_CodeRefSurvivesMove is the headline guarantee: a reference by
-// code resolves to its target page, and keeps resolving after the target moves to
-// a different path/folder (the whole point of a frozen identity).
-func TestGraphContext_CodeRefSurvivesMove(t *testing.T) {
+// TestGraphContext_CodeRefPreservedAcrossMove is the headline guarantee: a
+// reference by code resolves to its target page, and keeps resolving after the
+// target moves to a different path/folder (the whole point of a frozen identity).
+func TestGraphContext_CodeRefPreservedAcrossMove(t *testing.T) {
 	s, err := NewStore(t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)

@@ -13,7 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestIsInterimNarration(t *testing.T) {
+func TestIsInterimNarration_ShortOrEmptyTextWithToolsIsNarration(t *testing.T) {
 	atThreshold := strings.Repeat("가", deliverableNarrationMaxRunes)
 	underThreshold := strings.Repeat("나", deliverableNarrationMaxRunes-1)
 	cases := []struct {
@@ -40,7 +40,7 @@ func TestIsInterimNarration(t *testing.T) {
 	}
 }
 
-func TestStripNarrationHead(t *testing.T) {
+func TestStripNarrationHead_StripsPreambleBeforeBoundary(t *testing.T) {
 	cases := []struct {
 		name string
 		text string
@@ -141,7 +141,7 @@ func TestStripNarrationHead(t *testing.T) {
 	}
 }
 
-func TestExtractThinkingText_Basic(t *testing.T) {
+func TestExtractThinkingText_ReturnsSingleThinkingBlock(t *testing.T) {
 	blocks := []llm.ContentBlock{
 		{Type: "thinking", Thinking: "사용자가 설정 파일을 수정하고 싶어합니다.\n먼저 파일을 읽어봐야겠습니다."},
 		{Type: "tool_use", Name: "read"},
@@ -154,7 +154,7 @@ func TestExtractThinkingText_Basic(t *testing.T) {
 	}
 }
 
-func TestExtractThinkingText_MultipleBlocks(t *testing.T) {
+func TestExtractThinkingText_ReturnsLastOfMultipleBlocks(t *testing.T) {
 	blocks := []llm.ContentBlock{
 		{Type: "thinking", Thinking: "first thinking block"},
 		{Type: "text", Text: "some text"},

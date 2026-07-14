@@ -18,7 +18,7 @@ func TestNewEmptyURLDisabled(t *testing.T) {
 	}
 }
 
-func TestCheckClassifiesBackends(t *testing.T) {
+func TestCheck_ParsesAndClassifiesBackendHealth(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/services" {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -50,7 +50,7 @@ func TestCheckClassifiesBackends(t *testing.T) {
 	}
 }
 
-func TestCheckAllHealthy(t *testing.T) {
+func TestCheck_ReturnsOkWhenAllBackendsHealthy(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"services":[{"name":"paddleocr","ok":true}]}`))
 	}))
@@ -63,7 +63,7 @@ func TestCheckAllHealthy(t *testing.T) {
 	}
 }
 
-func TestCheckUnavailable(t *testing.T) {
+func TestCheck_ReportsUnavailableOnServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "boom", http.StatusBadGateway)
 	}))
@@ -103,10 +103,10 @@ func (h *capHandler) count(level slog.Level, msg string) int {
 	return n
 }
 
-// TestCheckLogsDownOnlyOnTransition verifies a persistently-down backend logs
-// once (not every poll) and a recovery logs once — the fix for journald being
-// flooded with the same down-set 1000+ times/day.
-func TestCheckLogsDownOnlyOnTransition(t *testing.T) {
+// TestCheck_DeduplicatesDownAndRecoveryLogs verifies a persistently-down
+// backend logs once (not every poll) and a recovery logs once — the fix for
+// journald being flooded with the same down-set 1000+ times/day.
+func TestCheck_DeduplicatesDownAndRecoveryLogs(t *testing.T) {
 	down := true
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		ok := "true"

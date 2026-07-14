@@ -69,7 +69,7 @@ func depsWith(reader tooldeps.CalendarReader, local tooldeps.LocalCalendar) *too
 	}
 }
 
-func TestCalendar_ListMergesAndSorts(t *testing.T) {
+func TestCalendarListReturnsMergedEventsSortedByStart(t *testing.T) {
 	now := time.Now()
 	google := &fakeCalReader{
 		upcoming: []calendar.Event{
@@ -140,7 +140,7 @@ func TestCalendar_CreateGetUpdateDelete(t *testing.T) {
 	}
 }
 
-func TestCalendar_Capture(t *testing.T) {
+func TestCalendarCaptureReturnsMinutesGuidanceForEvent(t *testing.T) {
 	local := newTestLocalCal(t)
 	d := &tooldeps.CalendarDeps{Local: local}
 	start := time.Now().Add(-2 * time.Hour).Truncate(time.Hour)
@@ -162,7 +162,7 @@ func TestCalendar_Capture(t *testing.T) {
 	}
 }
 
-func TestCalendar_Audit(t *testing.T) {
+func TestCalendarAuditReturnsOverlapAndOverloadFindings(t *testing.T) {
 	local := newTestLocalCal(t)
 	d := &tooldeps.CalendarDeps{Local: local}
 	// Tomorrow, inside the default 7-day window + 09–18 working hours.
@@ -187,7 +187,7 @@ func TestCalendar_Audit(t *testing.T) {
 	}
 }
 
-func TestCalendar_AuditClean(t *testing.T) {
+func TestCalendarAuditReturnsCleanForEmptyCalendar(t *testing.T) {
 	d := &tooldeps.CalendarDeps{Local: newTestLocalCal(t)}
 	out := callCal(t, d, map[string]any{"action": "audit"})
 	if !strings.Contains(out, "일정 양호") {
@@ -195,7 +195,7 @@ func TestCalendar_AuditClean(t *testing.T) {
 	}
 }
 
-func TestCalendar_Timeline(t *testing.T) {
+func TestCalendarTimelineReturnsOnlyQueryMatchedEvents(t *testing.T) {
 	local := newTestLocalCal(t)
 	d := &tooldeps.CalendarDeps{Local: local}
 	day := time.Now().Add(48 * time.Hour)
@@ -215,7 +215,7 @@ func TestCalendar_Timeline(t *testing.T) {
 	}
 }
 
-func TestCalendar_TimelineNeedsQuery(t *testing.T) {
+func TestCalendarTimelineReturnsHintWhenQueryMissing(t *testing.T) {
 	d := &tooldeps.CalendarDeps{Local: newTestLocalCal(t)}
 	out := callCal(t, d, map[string]any{"action": "timeline"})
 	if !strings.Contains(out, "query") {
@@ -236,7 +236,7 @@ func TestCalendar_TimelineRejectsBadRange(t *testing.T) {
 	}
 }
 
-func TestCalendar_AuditPartialDataNotClean(t *testing.T) {
+func TestCalendarAuditNotCleanWhenGoogleFetchFails(t *testing.T) {
 	// Google fetch fails → calMerged returns a warn with only local data, so the
 	// audit must not certify the schedule clean.
 	google := &fakeCalReader{listErr: errors.New("google down")}
@@ -268,7 +268,7 @@ func TestCalendar_RejectGoogleWrite(t *testing.T) {
 	}
 }
 
-func TestCalendar_GetGoogleEvent(t *testing.T) {
+func TestCalendarGetReturnsGoogleEventDetailAsReadOnly(t *testing.T) {
 	google := &fakeCalReader{
 		byID: map[string]*calendar.Event{
 			"g-1": {
@@ -308,7 +308,7 @@ func TestCalendar_ListEmpty(t *testing.T) {
 	}
 }
 
-func TestCalendarGlance(t *testing.T) {
+func TestCalendarGlanceRendersEventsWithRelativeDayLabels(t *testing.T) {
 	loc, _ := time.LoadLocation("Asia/Seoul")
 	if loc == nil {
 		loc = time.FixedZone("KST", 9*60*60)
@@ -382,7 +382,7 @@ func TestCalendar_FreeWithin_SkipsTooShort(t *testing.T) {
 	}
 }
 
-func TestCalendar_DetectConflicts(t *testing.T) {
+func TestDetectConflictsReturnsOverlappingPairs(t *testing.T) {
 	now := time.Now()
 	// Sorted by start, as calMerged returns.
 	events := []calendar.Event{
@@ -396,7 +396,7 @@ func TestCalendar_DetectConflicts(t *testing.T) {
 	}
 }
 
-func TestCalendar_FreeSlotsAction(t *testing.T) {
+func TestCalendarFreeSlotsReturnsGapsAroundBusyAndLunch(t *testing.T) {
 	loc := time.FixedZone("KST", 9*60*60)
 	// Tomorrow, so the "don't suggest past slots today" clamp never interferes.
 	tomorrow := time.Now().In(loc).AddDate(0, 0, 1)
@@ -425,7 +425,7 @@ func TestCalendar_FreeSlotsAction(t *testing.T) {
 
 // Weekends are skipped by default; include_weekends opts back in. A window
 // covering exactly one Saturday yields no slots unless opted in.
-func TestCalendar_FreeSlotsSkipsWeekends(t *testing.T) {
+func TestCalendarFreeSlotsIgnoresWeekendsUnlessOptedIn(t *testing.T) {
 	loc := time.FixedZone("KST", 9*60*60)
 	day := time.Now().In(loc).AddDate(0, 0, 1)
 	for day.Weekday() != time.Saturday {
@@ -457,7 +457,7 @@ func TestCalendar_FreeSlotsSkipsWeekends(t *testing.T) {
 
 // A deliberately narrow lunch-hour window is NOT carved out — an explicit
 // "find me a lunch slot" search still works.
-func TestCalendar_FreeSlotsNarrowLunchWindowUntouched(t *testing.T) {
+func TestCalendarFreeSlotsPreservesExplicitNarrowLunchWindow(t *testing.T) {
 	loc := time.FixedZone("KST", 9*60*60)
 	day := time.Now().In(loc).AddDate(0, 0, 1)
 	for day.Weekday() == time.Saturday || day.Weekday() == time.Sunday {
@@ -476,7 +476,7 @@ func TestCalendar_FreeSlotsNarrowLunchWindowUntouched(t *testing.T) {
 	}
 }
 
-func TestCalendar_ListFlagsConflicts(t *testing.T) {
+func TestCalendarListReturnsConflictFlagForOverlappingEvents(t *testing.T) {
 	local := newTestLocalCal(t)
 	base := time.Now().Add(2 * time.Hour)
 	if _, err := local.Create(localcal.CreateInput{Summary: "회의 A", Start: base, End: base.Add(time.Hour)}); err != nil {
@@ -501,7 +501,7 @@ func TestCalendar_CreateRequiresFields(t *testing.T) {
 	}
 }
 
-func TestCalLinkBadge(t *testing.T) {
+func TestCalLinkBadgeFormatsKindAndLabel(t *testing.T) {
 	cases := []struct {
 		name string
 		ev   calendar.Event
@@ -519,7 +519,7 @@ func TestCalLinkBadge(t *testing.T) {
 	}
 }
 
-func TestCalendar_BriefShowsLinkAndDirective(t *testing.T) {
+func TestCalendarBriefRendersLinkBadgeAndSynthesisDirective(t *testing.T) {
 	local := newTestLocalCal(t)
 	start := time.Now().In(calDisplayLoc()).Add(2 * time.Hour)
 	if _, err := local.Create(localcal.CreateInput{
@@ -546,7 +546,7 @@ func TestCalendar_BriefShowsLinkAndDirective(t *testing.T) {
 	}
 }
 
-func TestCalendar_PrepPullsLinkedContext(t *testing.T) {
+func TestCalendarPrepReturnsLinkedMailContextDirective(t *testing.T) {
 	local := newTestLocalCal(t)
 	start := time.Now().Add(3 * time.Hour)
 	ev, err := local.Create(localcal.CreateInput{
@@ -566,7 +566,7 @@ func TestCalendar_PrepPullsLinkedContext(t *testing.T) {
 	}
 }
 
-func TestCalendar_PrepShowsDocs(t *testing.T) {
+func TestCalendarPrepReturnsLinkedDocumentsSection(t *testing.T) {
 	local := newTestLocalCal(t)
 	start := time.Now().Add(3 * time.Hour)
 	ev, err := local.Create(localcal.CreateInput{
@@ -582,7 +582,7 @@ func TestCalendar_PrepShowsDocs(t *testing.T) {
 	}
 }
 
-func TestCalendar_PrepSkipsAllDayForNextMeeting(t *testing.T) {
+func TestCalendarPrepIgnoresAllDayWhenPickingNextMeeting(t *testing.T) {
 	local := newTestLocalCal(t)
 	loc := calDisplayLoc()
 	now := time.Now().In(loc)

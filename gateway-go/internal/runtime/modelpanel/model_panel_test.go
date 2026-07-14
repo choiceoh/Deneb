@@ -12,7 +12,7 @@ func TestConsultWithoutRegistryDegradesToEmpty(t *testing.T) {
 	}
 }
 
-func TestPanelModelFamily(t *testing.T) {
+func TestPanelModelFamilyNormalizesKnownModels(t *testing.T) {
 	tests := map[string]string{
 		"deepseek-v4":         "deepseek",
 		"Qwen3.6-35B":         "qwen",

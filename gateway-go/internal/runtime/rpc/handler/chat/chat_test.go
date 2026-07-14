@@ -50,7 +50,7 @@ func TestChatBtw_MissingQuestion(t *testing.T) {
 	}
 }
 
-func TestChatBtw_Success(t *testing.T) {
+func TestChatBtwReturnsAnswerTextOnSuccess(t *testing.T) {
 	handlers := BtwMethods(BtwDeps{
 		Chat: &mockBtwHandler{result: "the answer is 42"},
 	})
@@ -95,7 +95,7 @@ func TestChatBtw_HandlerError(t *testing.T) {
 	}
 }
 
-func TestChatBtw_BroadcasterCalledOnSuccess(t *testing.T) {
+func TestChatBtwEmitsSideResultBroadcastOnSuccess(t *testing.T) {
 	var broadcasted bool
 	handlers := BtwMethods(BtwDeps{
 		Chat: &mockBtwHandler{result: "answer"},

@@ -70,10 +70,10 @@ func TestToolFiles_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestToolFiles_SemanticSearch exercises the semantic search path: a wired
+// TestToolFilesSemanticSearchUsesNameSearchFallback exercises the semantic search path: a wired
 // search func returns ranked hits (with snippet), and an empty result falls back
 // to a name search.
-func TestToolFiles_SemanticSearch(t *testing.T) {
+func TestToolFilesSemanticSearchUsesNameSearchFallback(t *testing.T) {
 	t.Setenv("DENEB_FILES_DIR", t.TempDir())
 	ctx := context.Background()
 

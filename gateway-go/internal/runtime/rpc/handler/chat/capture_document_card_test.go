@@ -23,7 +23,7 @@ func (f *fakeCaptureFeed) Correct(string, string) (workfeed.Item, error) { retur
 
 func (f *fakeCaptureFeed) Rewrite(string, string) (workfeed.Item, error) { return workfeed.Item{}, nil }
 
-func TestCardCapturedDocument(t *testing.T) {
+func TestCardCapturedDocumentCreatesCardAndSkipsDuplicates(t *testing.T) {
 	const substantial = "## 계약서 리스크 검토\n\n- O&M 단가 인상\n- 면책 조항 삭제 요구\n\n결론: 서명 전 3건 확인 필요."
 
 	t.Run("substantial analysis becomes a doc_analysis deliverable card", func(t *testing.T) {

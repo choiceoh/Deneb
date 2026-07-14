@@ -7,7 +7,7 @@
 //	       rule passes against an in-memory path set, and emit an ordered
 //	       action list plus skip reasons.
 //	apply: execute that exact action list through the Store primitives
-//	       (MergePage/MovePage/DeletePage), then RebuildIndex.
+//	       (MergePage/MovePage/DeletePage), then rebuildIndex.
 //
 // The gateway must be STOPPED while applying — Store locking is in-process
 // only, and the live gateway additionally holds in-memory FTS/index state that
@@ -105,7 +105,7 @@ func RestructureProjectLayout(store *Store, plan []RestructureOp, apply bool) (*
 	executeRestructureActions(store, state.actions, rep)
 	rep.Applied = true
 	removeEmptyDirs(store.Dir())
-	if err := store.RebuildIndex(); err != nil {
+	if err := store.rebuildIndex(); err != nil {
 		rep.Errors = append(rep.Errors, fmt.Sprintf("rebuild index: %v", err))
 	}
 	return rep, nil
@@ -584,7 +584,7 @@ func resolveMailProject(relPath string, page *Page, projectNames map[string]bool
 		return name
 	}
 	seg := splitProjectPath(relPath)
-	if len(seg) >= 3 && (seg[0] == legacyMailAnalysisDir || seg[0] == MailAnalysisDir) && projectNames[seg[1]] {
+	if len(seg) >= 3 && (seg[0] == legacyMailAnalysisDir || seg[0] == mailAnalysisDir) && projectNames[seg[1]] {
 		return seg[1]
 	}
 	for _, r := range page.Meta.Related {

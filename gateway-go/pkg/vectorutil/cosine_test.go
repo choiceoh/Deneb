@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestCosine(t *testing.T) {
+func TestCosineUsesFallbackZeroForDegenerateVectors(t *testing.T) {
 	tests := []struct {
 		name string
 		a    []float32

@@ -447,7 +447,7 @@ func TestPanelModelFamilyIdempotence(t *testing.T) {
 	}
 }
 
-func TestPanelModelFamilyLongInputs(t *testing.T) {
+func TestPanelModelFamilyParsesLongInputs(t *testing.T) {
 	tests := []struct{ name, model, want string }{
 		{name: "deepseek at start", model: "deepseek" + strings.Repeat("x", 1<<16), want: "deepseek"},
 		{name: "qwen at middle", model: strings.Repeat("x", 1<<15) + "qwen" + strings.Repeat("y", 1<<15), want: "qwen"},

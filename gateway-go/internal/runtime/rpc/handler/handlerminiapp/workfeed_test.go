@@ -113,7 +113,7 @@ func TestWorkFeedMethods_NilStoreReturnsNil(t *testing.T) {
 	}
 }
 
-func TestWorkFeedList(t *testing.T) {
+func TestWorkFeedListReturnsClampedLimitAndIncludeAcked(t *testing.T) {
 	store := &fakeWorkFeedStore{
 		items: []workfeed.Item{
 			{ID: "a", Title: "A", Status: workfeed.StatusUnread},
@@ -143,7 +143,7 @@ func TestWorkFeedList(t *testing.T) {
 	}
 }
 
-func TestWorkFeedListRange(t *testing.T) {
+func TestWorkFeedListReturnsItemsWithinSinceBeforeRange(t *testing.T) {
 	store := &fakeWorkFeedStore{
 		items: []workfeed.Item{
 			{ID: "old", Title: "Old", Status: workfeed.StatusUnread, CreatedAtMs: 1_000},
@@ -185,7 +185,7 @@ func TestWorkFeedListRejectsInvalidRange(t *testing.T) {
 	}
 }
 
-func TestWorkFeedListRequiresAuth(t *testing.T) {
+func TestWorkFeedListReturnsUnauthorizedWithoutIdentity(t *testing.T) {
 	h := workFeedList(WorkFeedDeps{Store: &fakeWorkFeedStore{}})
 	resp := h(context.Background(), reqWith(t, "miniapp.workfeed.list", nil))
 	if resp.OK {
@@ -196,7 +196,7 @@ func TestWorkFeedListRequiresAuth(t *testing.T) {
 	}
 }
 
-func TestWorkFeedAck(t *testing.T) {
+func TestWorkFeedAckReturnsAckedItem(t *testing.T) {
 	store := &fakeWorkFeedStore{items: []workfeed.Item{{ID: "a", Title: "A"}}}
 	h := workFeedAck(WorkFeedDeps{Store: store})
 	resp := h(authedCtx(), reqWith(t, "miniapp.workfeed.ack", map[string]any{"id": "a"}))
@@ -223,7 +223,7 @@ func TestWorkFeedAckMissing(t *testing.T) {
 	}
 }
 
-func TestWorkFeedAckUnavailable(t *testing.T) {
+func TestWorkFeedAckReturnsUnavailableOnStoreError(t *testing.T) {
 	store := &fakeWorkFeedStore{ackErr: errors.New("disk down")}
 	h := workFeedAck(WorkFeedDeps{Store: store})
 	resp := h(authedCtx(), reqWith(t, "miniapp.workfeed.ack", map[string]any{"id": "a"}))
@@ -277,7 +277,7 @@ func TestWorkFeedReadNotFound(t *testing.T) {
 	}
 }
 
-func TestWorkFeedActionRun(t *testing.T) {
+func TestWorkFeedActionRunReturnsPromptAndSessionKey(t *testing.T) {
 	store := &fakeWorkFeedStore{}
 	h := workFeedActionRun(WorkFeedDeps{Store: store})
 	resp := h(authedCtx(), reqWith(t, "miniapp.workfeed.action.run", map[string]any{
@@ -319,7 +319,7 @@ func TestWorkFeedActionRunMissingAction(t *testing.T) {
 // A deal-question card's "dept:*" answer routes to OnAnswer with the settled item
 // (carrying RefID) and the tapped action — so the server can record the team onto
 // the deal wiki page.
-func TestWorkFeedActionRun_DealQuestionRoutesAnswer(t *testing.T) {
+func TestWorkFeedActionRunEmitsOnAnswerForDealQuestionDeptAction(t *testing.T) {
 	store := &fakeWorkFeedStore{runItem: workfeed.Item{
 		ID: "q1", Source: "deal_question", RefType: "wiki", RefID: "프로젝트/완도.md",
 	}}
@@ -347,7 +347,7 @@ func TestWorkFeedActionRun_DealQuestionRoutesAnswer(t *testing.T) {
 
 // OnAnswer must NOT fire for an ordinary card, nor for a non-"dept:" action on a
 // deal-question card — only a real team answer records.
-func TestWorkFeedActionRun_NonAnswerSkipsOnAnswer(t *testing.T) {
+func TestWorkFeedActionRunIgnoresOnAnswerForNonDeptActions(t *testing.T) {
 	cases := []struct {
 		name     string
 		item     workfeed.Item
@@ -376,7 +376,7 @@ func TestWorkFeedActionRun_NonAnswerSkipsOnAnswer(t *testing.T) {
 	}
 }
 
-func TestWorkFeedActionRun_EvolveVerdictRoutesOperatorLabel(t *testing.T) {
+func TestWorkFeedActionRunEmitsOnEvolveVerdictForOperatorLabelAction(t *testing.T) {
 	item := workfeed.Item{
 		ID: "v1", Source: "genesis-evolve-verdict",
 		Metadata: map[string]string{"skill": "email-analysis"},

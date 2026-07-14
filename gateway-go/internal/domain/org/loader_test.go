@@ -149,7 +149,7 @@ func TestMarshal_ValidatesAndRoundTrips(t *testing.T) {
 	}
 }
 
-func TestExampleTemplateIsValidAndFake(t *testing.T) {
+func TestExampleTemplateLoadsValidatesAndClassifiesFakeMember(t *testing.T) {
 	// The shipped example must parse + validate (it's documentation the operator
 	// copies) and derive working rules from its fake entries.
 	tree, err := LoadFromFile("org.example.json")

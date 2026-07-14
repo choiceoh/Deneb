@@ -17,7 +17,7 @@ func apcDiagFor(t *testing.T, system string, msgs []llm.Message, recall string) 
 	return beginAPCDiag(context.Background(), runDeps{}, "test:"+t.Name(), llm.APIModeOpenAI, "vllm", "deepseek-v4-flash", []byte(system), recall, msgs, logger)
 }
 
-func TestAPCDiag_Classification(t *testing.T) {
+func TestAPCDiagClassifiesRunsWhenHistoryChanges(t *testing.T) {
 	msgs := []llm.Message{
 		llm.NewTextMessage("user", "첫 질문"),
 		llm.NewTextMessage("assistant", "첫 답변"),
@@ -75,7 +75,7 @@ func TestAPCDiag_Classification(t *testing.T) {
 	d.finish()
 }
 
-func TestAPCDiag_CommonPrefixLen(t *testing.T) {
+func TestAPCDiagCommonPrefixLenReturnsMatchCount(t *testing.T) {
 	cases := []struct {
 		a, b []uint64
 		want int

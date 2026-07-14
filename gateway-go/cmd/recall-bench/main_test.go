@@ -196,7 +196,7 @@ func TestRunCLIPreservesGoldAndZeroScoreErrors(t *testing.T) {
 	}
 }
 
-func TestResolveFusionReportsEffectiveGraphState(t *testing.T) {
+func TestResolveFusionReturnsEffectiveGraphState(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name, fusion, graph string

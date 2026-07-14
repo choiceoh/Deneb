@@ -16,7 +16,7 @@ func (m *mockSnapshotProvider) SessionSnapshot(key string) *SessionSnapshot {
 	return m.snapshots[key]
 }
 
-func TestPublisher_PublishSessionMessage(t *testing.T) {
+func TestPublisherEmitsAtLeastOneEventOnSessionMessage(t *testing.T) {
 	b := NewBroadcaster()
 	sub := &mockSubscriber{id: "conn-1", authed: true}
 	b.Subscribe(sub, Filter{})
@@ -43,7 +43,7 @@ func TestPublisher_PublishSessionMessage(t *testing.T) {
 	}
 }
 
-func TestPublisher_PublishAgentEvent_Sequencing(t *testing.T) {
+func TestPublisherAgentEventSeqPerRunDeletedOnCleanup(t *testing.T) {
 	b := NewBroadcaster()
 	sub := &mockSubscriber{id: "conn-1", authed: true}
 	b.Subscribe(sub, Filter{})

@@ -29,7 +29,7 @@ func TestAssembleContextFull_EmptyStore(t *testing.T) {
 	}
 }
 
-func TestAssembleContextFull_RecentOnly(t *testing.T) {
+func TestAssembleContextFullReturnsRecentMessagesWithoutSummaries(t *testing.T) {
 	store := testAssembleStore(t)
 
 	// Store has messages but no summaries.
@@ -78,7 +78,7 @@ func TestAssembleContextFull_WithSummaries(t *testing.T) {
 	}
 }
 
-func TestAssembleContextFull_MultiLevelSummaries(t *testing.T) {
+func TestAssembleContextFullLoadsCondensedSummaryAcrossLevels(t *testing.T) {
 	store := testAssembleStore(t)
 
 	// Seed 30 messages.
@@ -111,7 +111,7 @@ func TestAssembleContextFull_MultiLevelSummaries(t *testing.T) {
 	}
 }
 
-func TestAssembleContextFull_DoesNotDropUncoveredRecentAfterSummary(t *testing.T) {
+func TestAssembleContextFullPreservesUncoveredRecentAfterSummary(t *testing.T) {
 	store := testAssembleStore(t)
 
 	const total = 60
@@ -151,7 +151,7 @@ func TestAssembleContextFull_DoesNotDropUncoveredRecentAfterSummary(t *testing.T
 	}
 }
 
-func TestAssembleContextFull_TokenBudgetTrimsOldestSummaries(t *testing.T) {
+func TestAssembleContextFullTruncatesSummariesUnderTightBudget(t *testing.T) {
 	store := testAssembleStore(t)
 
 	// Seed messages.
@@ -179,7 +179,7 @@ func blockMsg(role, blocksJSON string, ts int64) toolport.ChatMessage {
 	return toolport.ChatMessage{Role: role, Content: json.RawMessage(blocksJSON), Timestamp: ts}
 }
 
-func TestAssembleContextFull_RepairsDanglingToolUse(t *testing.T) {
+func TestAssembleContextFullClearsDanglingToolUse(t *testing.T) {
 	store := testAssembleStore(t)
 
 	// An interrupted turn: the assistant's tool_use persisted but its
@@ -202,7 +202,7 @@ func TestAssembleContextFull_RepairsDanglingToolUse(t *testing.T) {
 	}
 }
 
-func TestAssembleContextFull_RepairsOrphanToolResultAfterSummary(t *testing.T) {
+func TestAssembleContextFullClearsOrphanToolResultAfterSummary(t *testing.T) {
 	store := testAssembleStore(t)
 
 	for i := 0; i < 10; i++ {
@@ -226,7 +226,7 @@ func TestAssembleContextFull_RepairsOrphanToolResultAfterSummary(t *testing.T) {
 	}
 }
 
-func TestSelectBestSummaries(t *testing.T) {
+func TestSelectBestSummariesReturnsCondensedNode(t *testing.T) {
 	nodes := []SummaryNode{
 		{Level: 1, MsgStart: 0, MsgEnd: 9},
 		{Level: 1, MsgStart: 10, MsgEnd: 19},

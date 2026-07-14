@@ -98,7 +98,7 @@ func TestPing_OmitsModelWhenUnresolved(t *testing.T) {
 	}
 }
 
-func TestPing_NoIdentity(t *testing.T) {
+func TestPingReturnsUnauthorizedWithoutIdentity(t *testing.T) {
 	h := ping(Deps{Version: "4.22.3"})
 	resp := h(context.Background(), newReq(t, "miniapp.ping"))
 
@@ -158,7 +158,7 @@ func TestClientHello_WithCapabilities(t *testing.T) {
 	}
 }
 
-func TestClientHello_NoIdentity(t *testing.T) {
+func TestClientHelloReturnsUnauthorizedWithoutIdentity(t *testing.T) {
 	h := clientHello(Deps{Version: "4.22.3"})
 	resp := h(context.Background(), newReq(t, "miniapp.client.hello"))
 
@@ -191,7 +191,7 @@ func TestWhoami_WithIdentity(t *testing.T) {
 	}
 }
 
-func TestWhoami_NoIdentity(t *testing.T) {
+func TestWhoamiReturnsUnauthorizedWithoutIdentity(t *testing.T) {
 	h := whoami()
 	resp := h(context.Background(), newReq(t, "miniapp.whoami"))
 
@@ -203,7 +203,7 @@ func TestWhoami_NoIdentity(t *testing.T) {
 	}
 }
 
-func TestWhoami_NoUser(t *testing.T) {
+func TestWhoamiReturnsUnauthorizedWhenUserNil(t *testing.T) {
 	data := sampleIdentity()
 	data.User = nil
 	h := whoami()
@@ -218,7 +218,7 @@ func TestWhoami_NoUser(t *testing.T) {
 	}
 }
 
-func TestMethods_RegistersCoreMethods(t *testing.T) {
+func TestMethodsReturnsCoreMethodSet(t *testing.T) {
 	got := Methods(Deps{Version: "x"})
 	for _, name := range []string{"miniapp.ping", "miniapp.whoami", "miniapp.client.hello"} {
 		if _, ok := got[name]; !ok {

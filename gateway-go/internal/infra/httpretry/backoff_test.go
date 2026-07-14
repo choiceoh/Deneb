@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestBackoff_Delay(t *testing.T) {
+func TestBackoff_DelayGrowsAndCapsAtBoundary(t *testing.T) {
 	b := Backoff{Base: 1 * time.Second, Max: 60 * time.Second}
 
 	tests := []struct {
@@ -26,7 +26,7 @@ func TestBackoff_Delay(t *testing.T) {
 	}
 }
 
-func TestBackoff_Jitter(t *testing.T) {
+func TestBackoff_DelayWithJitterVariesWithinRange(t *testing.T) {
 	b := Backoff{Base: 1 * time.Second, Max: 60 * time.Second, Jitter: 0.25}
 
 	// With 25% jitter, attempt 1 should be in [1s, 1.25s).

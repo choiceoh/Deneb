@@ -53,7 +53,7 @@ func findCalledMethod(t *testing.T, result map[string]any, method string) map[st
 	return nil
 }
 
-func TestHealthMethodsExposeRuntimeAndSessionCount(t *testing.T) {
+func TestHealthMethodsReturnHealthAndSystemInfo(t *testing.T) {
 	methods := HealthMethods(HealthDeps{
 		SessionCount: func() int { return 7 },
 		Version:      "v-test",
@@ -80,7 +80,7 @@ func TestHealthMethodsExposeRuntimeAndSessionCount(t *testing.T) {
 	}
 }
 
-func TestHealthMethodsUseSafeDefaults(t *testing.T) {
+func TestHealthMethodsReturnZeroSessionsAndUnknownVersionByDefault(t *testing.T) {
 	methods := HealthMethods(HealthDeps{})
 	health := rpctest.Result(t, rpctest.Call(methods, "health.check", nil))
 	if health["sessions"] != float64(0) {
@@ -106,7 +106,7 @@ func TestIdentityMethodsReturnStableGatewayIdentity(t *testing.T) {
 	}
 }
 
-func TestMaintenanceMethodsHandleUnavailableRunner(t *testing.T) {
+func TestMaintenanceMethodsRejectRunAndSummaryWhenRunnerMissing(t *testing.T) {
 	methods := MaintenanceMethods(MaintenanceDeps{})
 	rpctest.MustErr(t, rpctest.Call(methods, "maintenance.run", nil))
 	rpctest.MustErr(t, rpctest.Call(methods, "maintenance.summary", nil))
@@ -117,7 +117,7 @@ func TestMaintenanceMethodsHandleUnavailableRunner(t *testing.T) {
 	}
 }
 
-func TestMaintenanceMethodsRunAndReuseReport(t *testing.T) {
+func TestMaintenanceMethodsRunCreatesAndSummaryReusesReport(t *testing.T) {
 	runner := maintenance.NewRunner(t.TempDir())
 	methods := MaintenanceMethods(MaintenanceDeps{Runner: runner})
 
@@ -168,7 +168,7 @@ func TestUsageMethodsReturnEmptyShapeWithoutTracker(t *testing.T) {
 	}
 }
 
-func TestUsageMethodsSerializeRecordedCallsAndTokens(t *testing.T) {
+func TestUsageMethodsReturnRecordedCallsAndTokenTotals(t *testing.T) {
 	tracker := usage.New()
 	tracker.RecordCall("openai")
 	tracker.RecordCall("openai")
@@ -204,7 +204,7 @@ func TestMonitoringMethodsReturnStableEmptyChannelSurface(t *testing.T) {
 	}
 }
 
-func TestMonitoringAggregatesThreeLabelMetricKeys(t *testing.T) {
+func TestMonitoringRPCZeroCallsReturnsZeroAndCalledMethodCounts(t *testing.T) {
 	const calledMethod = "system.contract.called"
 	const zeroMethod = "system.contract.zero"
 	metrics.RPCRequestsTotal.Inc(calledMethod, "ok", "")
@@ -252,7 +252,7 @@ func TestLogsTailRejectsMissingLogDirectoryAndNonLogFiles(t *testing.T) {
 	rpctest.MustErr(t, rpctest.Call(LogsMethods(LogsDeps{LogDir: dir}), "logs.tail", nil))
 }
 
-func TestLogsTailChoosesLatestNamedLog(t *testing.T) {
+func TestLogsTailReturnsLatestDatedLogFileByDefault(t *testing.T) {
 	dir := t.TempDir()
 	for name, body := range map[string]string{
 		"deneb-2026-07-09.log": "old\n",
@@ -317,7 +317,7 @@ func TestLogsTailPaginatesCRLFWithoutCursorDrift(t *testing.T) {
 	}
 }
 
-func TestLogsTailByteLimitDoesNotAdvancePastPartialLine(t *testing.T) {
+func TestLogsTailByteLimitTruncatesAtBoundaryAndResumesAtNextLine(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "deneb.log"), []byte("abcdefghij\nsecond\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -338,7 +338,7 @@ func TestLogsTailByteLimitDoesNotAdvancePastPartialLine(t *testing.T) {
 	}
 }
 
-func TestLogsTailSkipsOnlyAnActualPartialLine(t *testing.T) {
+func TestLogsTailReadsOnlyFullLinesAfterMidLineCursor(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "deneb.log"), []byte("alpha\nbeta\ngamma\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -352,7 +352,7 @@ func TestLogsTailSkipsOnlyAnActualPartialLine(t *testing.T) {
 	}
 }
 
-func TestLogsTailResetsCursorAfterRotation(t *testing.T) {
+func TestLogsTailRestartsAfterCursorExceedsRotatedFileSize(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "deneb.log"), []byte("fresh\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -368,7 +368,7 @@ func TestLogsTailResetsCursorAfterRotation(t *testing.T) {
 	}
 }
 
-func TestLogsTailResetsNegativeExternalCursor(t *testing.T) {
+func TestLogsTailRestartsWhenCursorIsNegative(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "deneb.log"), []byte("first\nsecond\n"), 0o600); err != nil {
 		t.Fatal(err)

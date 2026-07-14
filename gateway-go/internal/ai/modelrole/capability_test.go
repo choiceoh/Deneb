@@ -8,7 +8,7 @@ import (
 
 func boolPtr(b bool) *bool { return &b }
 
-func TestCapabilityForModel_Layering(t *testing.T) {
+func TestCapabilityForModelLayersOverFallbackDefaults(t *testing.T) {
 	srv := newDiscoverySrv(t, `{"data":[{"id":"gemma4","max_model_len":131072}]}`, 200)
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		MainModel: "vllm/gemma4",
@@ -78,11 +78,11 @@ func TestCapabilityForModel_Layering(t *testing.T) {
 	})
 }
 
-// TestCapabilityForModel_WormholeFrontedWindow covers the production regression:
+// TestCapabilityForModelWormholeLoadsVllmWindow covers the production regression:
 // the main model is routed via the wormhole proxy (whose /v1/models omits
 // max_model_len), yet the real window must still resolve — harvested from the
 // still-configured direct vllm provider that no role uses, applied by served id.
-func TestCapabilityForModel_WormholeFrontedWindow(t *testing.T) {
+func TestCapabilityForModelWormholeLoadsVllmWindow(t *testing.T) {
 	srv := newDiscoverySrv(t, `{"data":[{"id":"deepseek-v4-flash","max_model_len":1000000}]}`, 200)
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		// Main is fronted by wormhole; no role uses the vllm provider directly.
@@ -100,7 +100,7 @@ func TestCapabilityForModel_WormholeFrontedWindow(t *testing.T) {
 	}
 }
 
-func TestProfileForModel_Layering(t *testing.T) {
+func TestProfileForModelOverridesPreserveUnsetFields(t *testing.T) {
 	temp, topK := 0.3, 40
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		MainModel: "zai/glm-5-turbo",
@@ -131,7 +131,7 @@ func TestProfileForModel_Layering(t *testing.T) {
 	}
 }
 
-func TestTunedMaxTokens(t *testing.T) {
+func TestTunedMaxTokensUpdatesAndClears(t *testing.T) {
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{MainModel: "zai/glm-5-turbo"})
 	if reg.TunedMaxTokens("m") != 0 {
 		t.Fatal("unset model must report 0")
@@ -150,7 +150,7 @@ func TestTunedMaxTokens(t *testing.T) {
 	}
 }
 
-func TestRefreshVllmRole(t *testing.T) {
+func TestRefreshVllmRoleUpdatesServedModel(t *testing.T) {
 	srv := newDiscoverySrv(t, `{"data":[{"id":"model-a","max_model_len":8192}]}`, 200)
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		MainModel: "vllm/model-a",

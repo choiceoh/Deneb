@@ -13,7 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-func TestSenderContext_HappyPath(t *testing.T) {
+func TestSenderContextReturnsRecentMailAndWikiHits(t *testing.T) {
 	gmailClient := &fakeGmailClient{
 		searchFn: func(_ context.Context, q string, n int) ([]gmail.MessageSummary, error) {
 			// Quoted email per the hardening that protects against
@@ -76,7 +76,7 @@ func TestSenderContext_HappyPath(t *testing.T) {
 	}
 }
 
-func TestSenderContext_BareEmail(t *testing.T) {
+func TestSenderContextFallsBackToRawEmailForWikiQueryWhenNoDisplayName(t *testing.T) {
 	var seenGmailQuery string
 	var seenWikiQuery string
 	deps := GmailContextDeps{
@@ -114,7 +114,7 @@ func TestSenderContext_BareEmail(t *testing.T) {
 	}
 }
 
-func TestSenderContext_BareName(t *testing.T) {
+func TestSenderContextSkipsGmailSearchWhenEmailIsEmpty(t *testing.T) {
 	var seenGmailQuery string
 	calledGmail := false
 	deps := GmailContextDeps{
@@ -163,7 +163,7 @@ func TestSenderContext_MissingSenderParam(t *testing.T) {
 	}
 }
 
-func TestSenderContext_RequiresAuth(t *testing.T) {
+func TestSenderContextRejectsUnauthenticatedRequest(t *testing.T) {
 	h := senderContext(GmailContextDeps{
 		Client: func() (GmailClient, error) { return &fakeGmailClient{}, nil },
 	})
@@ -243,7 +243,7 @@ func TestGmailContextMethods_NoSourcesReturnsNil(t *testing.T) {
 	}
 }
 
-func TestSenderContext_IncludesWikiFactsFromGraphify(t *testing.T) {
+func TestSenderContextReturnsWikiFactsFromSenderFactsCallback(t *testing.T) {
 	var seenFrom string
 	deps := GmailContextDeps{
 		WikiStore: func() (MemorySearcher, error) {
@@ -434,13 +434,13 @@ func TestSenderContext_TruncatedFlag(t *testing.T) {
 	}
 }
 
-// TestSenderContext_SourcesRunInParallel verifies the three sources
-// (Gmail / Wiki / SenderFacts) run concurrently rather than
+// TestSenderContextRunsGmailWikiAndSenderFactsConcurrently verifies the three
+// sources (Gmail / Wiki / SenderFacts) run concurrently rather than
 // sequentially. Each fake source sleeps 80ms; sequential execution
 // would take ≥240ms, parallel ≈80ms. The threshold is generous (150ms)
 // to absorb scheduling jitter on slow CI hardware while still catching
 // a regression to the serial pattern.
-func TestSenderContext_SourcesRunInParallel(t *testing.T) {
+func TestSenderContextRunsGmailWikiAndSenderFactsConcurrently(t *testing.T) {
 	const sleepEach = 80 * time.Millisecond
 	gmailClient := &fakeGmailClient{
 		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
@@ -489,12 +489,12 @@ func TestSenderContext_SourcesRunInParallel(t *testing.T) {
 	}
 }
 
-// TestSenderContext_CacheHitSkipsWork validates two contract pieces:
-// (a) the cache really does prevent the Gmail/Wiki/SenderFacts work
-// from running a second time within the TTL, and (b) it keys off the
+// TestSenderContextCacheServesSecondCallWithoutRefetchingSources validates two
+// contract pieces: (a) the cache really does prevent the Gmail/Wiki/SenderFacts
+// work from running a second time within the TTL, and (b) it keys off the
 // extracted email so "Alice <alice@x.com>" and "ALICE <Alice@X.COM>"
 // reuse the same cache entry.
-func TestSenderContext_CacheHitSkipsWork(t *testing.T) {
+func TestSenderContextCacheServesSecondCallWithoutRefetchingSources(t *testing.T) {
 	var gmailCalls, wikiCalls, factsCalls atomic.Int32
 	deps := GmailContextDeps{
 		Client: func() (GmailClient, error) {
@@ -561,9 +561,9 @@ func TestSenderContext_CacheHitSkipsWork(t *testing.T) {
 	}
 }
 
-// TestSenderContext_CacheTTLExpiry confirms that an entry past its
+// TestSenderContextCacheEntryExpiresAfterTTL confirms that an entry past its
 // TTL is treated as a miss and recomputed.
-func TestSenderContext_CacheTTLExpiry(t *testing.T) {
+func TestSenderContextCacheEntryExpiresAfterTTL(t *testing.T) {
 	var gmailCalls atomic.Int32
 	deps := GmailContextDeps{
 		Client: func() (GmailClient, error) {
@@ -585,10 +585,10 @@ func TestSenderContext_CacheTTLExpiry(t *testing.T) {
 	}
 }
 
-// TestSenderContext_CacheDisabled checks that a negative TTL skips
-// caching entirely — useful for the parallel-execution test above and
+// TestSenderContextIgnoresCacheWhenTTLIsNegative checks that a negative TTL
+// skips caching entirely — useful for the parallel-execution test above and
 // for any future operator-facing flag.
-func TestSenderContext_CacheDisabled(t *testing.T) {
+func TestSenderContextIgnoresCacheWhenTTLIsNegative(t *testing.T) {
 	var gmailCalls atomic.Int32
 	deps := GmailContextDeps{
 		Client: func() (GmailClient, error) {
@@ -609,7 +609,7 @@ func TestSenderContext_CacheDisabled(t *testing.T) {
 	}
 }
 
-func TestLooksLikeEmail(t *testing.T) {
+func TestLooksLikeEmailAcceptsValidAndRejectsMalformedAddresses(t *testing.T) {
 	good := []string{"a@b.com", "user.name+tag@example.co.kr", "x@y"}
 	bad := []string{
 		"",

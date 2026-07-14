@@ -10,7 +10,7 @@ import (
 // live const lagged, and that gap let the summarizer invent figures that were
 // never in the source (fabricated a 체납 amount with no origin). Guard the
 // clause so the drift cannot silently return.
-func TestSummarizerPrompts_HaveAntiFabricationRule(t *testing.T) {
+func TestSummarizerPrompts_RejectInventedFacts(t *testing.T) {
 	for name, prompt := range map[string]string{
 		"compactionSystemPrompt":   compactionSystemPrompt,
 		"recompactionSystemPrompt": recompactionSystemPrompt,
@@ -23,7 +23,7 @@ func TestSummarizerPrompts_HaveAntiFabricationRule(t *testing.T) {
 
 // The untrusted fence must warn the model that figures inside a summary are
 // unverified and must not be asserted to the user as fact.
-func TestContextFence_WarnsUnverifiedFigures(t *testing.T) {
+func TestContextFence_EmitsUnverifiedWarning(t *testing.T) {
 	out := FormatContextFence("polaris", "conversation-summary", "제목", "본문")
 	for _, want := range []string{"UNVERIFIED", "established fact"} {
 		if !strings.Contains(out, want) {

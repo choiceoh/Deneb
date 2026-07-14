@@ -33,7 +33,7 @@ func TestSkillValidationEngineRejectsHeldOutRegression(t *testing.T) {
 	}
 }
 
-func TestSkillValidationEnginePassesHeldOutImprovement(t *testing.T) {
+func TestValidateCandidatePassesWhenHeldOutCaseScoreImproves(t *testing.T) {
 	tr := newTestTracker(t)
 	if err := tr.RecordSkillValidationCase(SkillValidationCaseRecord{
 		SkillName:          "deploy-helper",
@@ -58,7 +58,7 @@ func TestSkillValidationEnginePassesHeldOutImprovement(t *testing.T) {
 	}
 }
 
-func TestSkillValidationEngineScoresDryRunReplay(t *testing.T) {
+func TestValidateCandidateReturnsReplayActionScoresAgainstSkillBody(t *testing.T) {
 	tr := newTestTracker(t)
 	if err := tr.RecordSkillValidationCase(SkillValidationCaseRecord{
 		SkillName:   "srv1-ops",
@@ -120,7 +120,7 @@ func TestSkillValidationEngineRejectsDryRunReplayRegression(t *testing.T) {
 	}
 }
 
-func TestSkillValidationEngineDoesNotScoreReplayInputAsCandidateBehavior(t *testing.T) {
+func TestValidateCandidateIgnoresReplayInputTextWhenScoringCandidate(t *testing.T) {
 	tr := newTestTracker(t)
 	if err := tr.RecordSkillValidationCase(SkillValidationCaseRecord{
 		SkillName: "srv1-ops",
@@ -206,7 +206,7 @@ func TestSkillValidationEngineRejectsToolCallTraceOrderRegression(t *testing.T) 
 	}
 }
 
-func TestSkillValidationEngineScoresFixtureObservations(t *testing.T) {
+func TestValidateCandidateReturnsFixtureOutputObservationScores(t *testing.T) {
 	tr := newTestTracker(t)
 	if err := tr.RecordSkillValidationCase(SkillValidationCaseRecord{
 		SkillName: "srv1-ops",
@@ -239,7 +239,7 @@ func TestSkillValidationEngineScoresFixtureObservations(t *testing.T) {
 	}
 }
 
-func TestSkillValidationEngineDoesNotScoreFixtureOutputAsCandidateBehavior(t *testing.T) {
+func TestValidateCandidateIgnoresFixtureOutputWhenScoringCandidateBody(t *testing.T) {
 	tr := newTestTracker(t)
 	if err := tr.RecordSkillValidationCase(SkillValidationCaseRecord{
 		SkillName: "srv1-ops",
@@ -270,10 +270,11 @@ func TestSkillValidationEngineDoesNotScoreFixtureOutputAsCandidateBehavior(t *te
 	}
 }
 
-// TestCrossSkillRegressionFlagsForbiddenViolation covers #4's deterministic
-// scorer: a neighbor body that still relies on something the evolved skill now
-// forbids (here `eval`) fails the evolved skill's held-out assertions.
-func TestCrossSkillRegressionFlagsForbiddenViolation(t *testing.T) {
+// TestCrossSkillRegressionFailsNeighborRelyingOnForbiddenSubstring covers #4's
+// deterministic scorer: a neighbor body that still relies on something the
+// evolved skill now forbids (here `eval`) fails the evolved skill's held-out
+// assertions.
+func TestCrossSkillRegressionFailsNeighborRelyingOnForbiddenSubstring(t *testing.T) {
 	cases := []SkillValidationCaseRecord{{
 		SkillName:           "topsolar-db",
 		ID:                  "safe-wrapper",
@@ -282,7 +283,7 @@ func TestCrossSkillRegressionFlagsForbiddenViolation(t *testing.T) {
 	}}
 	neighbor := "# Sibling\n\n## Procedure\n- 단일 bash block 사용\n- eval 로 동적 실행\n"
 
-	result := CrossSkillRegression("topsolar-restore", neighbor, cases)
+	result := crossSkillRegression("topsolar-restore", neighbor, cases)
 	if !result.Failed {
 		t.Fatalf("expected neighbor relying on forbidden eval to fail, got %+v", result)
 	}
@@ -294,21 +295,21 @@ func TestCrossSkillRegressionFlagsForbiddenViolation(t *testing.T) {
 	}
 }
 
-// TestCrossSkillRegressionPassesCompliantNeighbor verifies a neighbor that
-// honors the evolved skill's assertions is not flagged, and that an empty case
-// set is a no-op (Failed=false, Total=0).
-func TestCrossSkillRegressionPassesCompliantNeighbor(t *testing.T) {
+// TestCrossSkillRegressionPassesCompliantNeighborAndNoOpsOnEmptyCases verifies a
+// neighbor that honors the evolved skill's assertions is not flagged, and that
+// an empty case set is a no-op (Failed=false, Total=0).
+func TestCrossSkillRegressionPassesCompliantNeighborAndNoOpsOnEmptyCases(t *testing.T) {
 	cases := []SkillValidationCaseRecord{{
 		SkillName:           "topsolar-db",
 		ForbiddenSubstrings: []string{"eval"},
 		RequiredSubstrings:  []string{"단일 bash block"},
 	}}
 	neighbor := "# Sibling\n\n## Procedure\n- 단일 bash block 으로만 실행\n"
-	if result := CrossSkillRegression("topsolar-restore", neighbor, cases); result.Failed {
+	if result := crossSkillRegression("topsolar-restore", neighbor, cases); result.Failed {
 		t.Fatalf("expected compliant neighbor to pass, got %+v", result)
 	}
 
-	if result := CrossSkillRegression("topsolar-restore", neighbor, nil); result.Failed || result.Total != 0 {
+	if result := crossSkillRegression("topsolar-restore", neighbor, nil); result.Failed || result.Total != 0 {
 		t.Fatalf("expected no-op for empty case set, got %+v", result)
 	}
 }

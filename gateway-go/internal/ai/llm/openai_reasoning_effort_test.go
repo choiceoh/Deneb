@@ -5,7 +5,7 @@ import "testing"
 // dsv4 (DeepSeek-V4 family) only accepts reasoning_effort "high"/"max"; "low"/
 // "medium" are rejected. applySamplingParams must clamp dsv4 to "high" regardless
 // of the thinking budget, while other models keep the budget→effort mapping.
-func TestApplySamplingParams_ReasoningEffortFloor(t *testing.T) {
+func TestApplySamplingParamsNormalizesReasoningEffortFloor(t *testing.T) {
 	cases := []struct {
 		name   string
 		model  string

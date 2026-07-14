@@ -117,10 +117,10 @@ func msgsContain(msgs []llm.Message, want string) bool {
 	return false
 }
 
-// TestCompactInBackground_PersistsAndShrinksNextAssembly: the happy path. An
+// TestCompactInBackgroundSavesAndShrinksNextAssembly: the happy path. An
 // uncovered tail over the threshold is summarized in the background; a new leaf
 // node lands right after prior coverage and the next assembly is smaller.
-func TestCompactInBackground_PersistsAndShrinksNextAssembly(t *testing.T) {
+func TestCompactInBackgroundSavesAndShrinksNextAssembly(t *testing.T) {
 	e, s := testEngine(t)
 	sess := "bg-happy"
 	seedSession(t, s, sess, 40, 9) // messages 0..39; existing summary covers 0..9
@@ -202,9 +202,9 @@ func TestCompactInBackground_PinnedCoverageExcludesConcurrentAppends(t *testing.
 	}
 }
 
-// TestCompactInBackground_SingleFlight: a second launch while a pass is in
-// flight is a no-op (no redundant LLM work, no duplicate leaf node).
-func TestCompactInBackground_SingleFlight(t *testing.T) {
+// TestCompactInBackgroundSingleFlightsConcurrentLaunches: a second launch while
+// a pass is in flight is a no-op (no redundant LLM work, no duplicate leaf node).
+func TestCompactInBackgroundSingleFlightsConcurrentLaunches(t *testing.T) {
 	e, s := testEngine(t)
 	sess := "bg-single"
 	seedSession(t, s, sess, 40, 9)
@@ -234,9 +234,9 @@ func TestCompactInBackground_SingleFlight(t *testing.T) {
 	}
 }
 
-// TestCompactInBackground_BelowThresholdNoOp: an uncovered tail under the LLM
-// threshold is not worth a background pass — no goroutine, no summary.
-func TestCompactInBackground_BelowThresholdNoOp(t *testing.T) {
+// TestCompactInBackgroundSkipsWhenBelowThreshold: an uncovered tail under the
+// LLM threshold is not worth a background pass — no goroutine, no summary.
+func TestCompactInBackgroundSkipsWhenBelowThreshold(t *testing.T) {
 	e, s := testEngine(t)
 	sess := "bg-small"
 	for i := 0; i < 6; i++ {
@@ -268,10 +268,11 @@ func TestCompactInBackground_NilSummarizerNoOp(t *testing.T) {
 	}
 }
 
-// TestCompactInBackground_OffCriticalPath measures the win: the caller returns
-// long before the (deliberately slow) summarization finishes, whereas the
-// synchronous CompactAndPersist blocks the caller for the whole summarizer time.
-func TestCompactInBackground_OffCriticalPath(t *testing.T) {
+// TestCompactInBackgroundReturnsBeforeSummarizerCompletes measures the win: the
+// caller returns long before the (deliberately slow) summarization finishes,
+// whereas the synchronous CompactAndPersist blocks the caller for the whole
+// summarizer time.
+func TestCompactInBackgroundReturnsBeforeSummarizerCompletes(t *testing.T) {
 	const summarizerDelay = 300 * time.Millisecond
 
 	// Synchronous baseline on its own session: blocks for the summarizer.
@@ -308,9 +309,10 @@ func TestCompactInBackground_OffCriticalPath(t *testing.T) {
 	}
 }
 
-// TestSafeCoverageCount: the covered boundary is snapped back past any trailing
-// tool_result so the next assembly's recent window never starts with an orphan.
-func TestSafeCoverageCount(t *testing.T) {
+// TestSafeCoverageCountAdjustsBoundaryAroundToolPairs: the covered boundary is
+// snapped back past any trailing tool_result so the next assembly's recent
+// window never starts with an orphan.
+func TestSafeCoverageCountAdjustsBoundaryAroundToolPairs(t *testing.T) {
 	toolUse := llm.NewBlockMessage("assistant", []llm.ContentBlock{{Type: "tool_use", ID: "t1", Name: "exec"}})
 	toolRes := llm.NewBlockMessage("user", []llm.ContentBlock{{Type: "tool_result", ToolUseID: "t1", Content: "r"}})
 	u, a := llmMsg("user", "hi"), llmMsg("assistant", "yo")

@@ -148,7 +148,7 @@ func TestAgentLog_SendSyncStream_RunEndInSameSessionFile(t *testing.T) {
 // TestAgentLog_SendSync_RunEndInSameSessionFile covers the non-streaming sync
 // path (miniapp.chat.send, cron single-run, heartbeat), which previously
 // passed a nil RunLogger and logged nothing at all.
-func TestAgentLog_SendSync_RunEndInSameSessionFile(t *testing.T) {
+func TestAgentLogSendSyncWritesRunEndToSameSessionFile(t *testing.T) {
 	server := newSSEOKServer("sync reply")
 	defer server.Close()
 	h, logDir := newAgentLogSyncHandler(t, server)
@@ -199,7 +199,7 @@ func TestAgentLog_SendSync_ErrorWritesRunError(t *testing.T) {
 // TestAgentLog_AsyncSend_SingleRunEnd guards the relocation: run.end moved from
 // handleRunSuccess into executeAgentRun, so the async path (chat.send →
 // runAgentAsync) must log it exactly once — neither zero nor double.
-func TestAgentLog_AsyncSend_SingleRunEnd(t *testing.T) {
+func TestAgentLogAsyncSendWritesRunEndExactlyOnce(t *testing.T) {
 	server := newSSEOKServer("async reply")
 	defer server.Close()
 

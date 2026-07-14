@@ -72,7 +72,7 @@ func TestJobTracker_ErrorGraceWindow(t *testing.T) {
 	}
 }
 
-func TestJobTracker_WaitForJob_CachedResult(t *testing.T) {
+func TestJobTracker_WaitForJobReturnsCachedResult(t *testing.T) {
 	jt := NewJobTracker(nil)
 	now := time.Now().UnixMilli()
 
@@ -97,7 +97,7 @@ func TestJobTracker_WaitForJob_Timeout(t *testing.T) {
 	}
 }
 
-func TestJobTracker_ActiveRunCount(t *testing.T) {
+func TestJobTracker_ActiveRunCountUpdatesOnStartAndEnd(t *testing.T) {
 	jt := NewJobTracker(nil)
 	now := time.Now().UnixMilli()
 

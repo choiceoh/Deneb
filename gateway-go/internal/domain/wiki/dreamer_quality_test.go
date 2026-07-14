@@ -8,7 +8,7 @@ import (
 
 func approx(a, b float64) bool { return math.Abs(a-b) < 0.01 }
 
-func TestComputeDreamQuality_AllThreeAxes(t *testing.T) {
+func TestComputeDreamQuality_ReturnsAllThreeAxes(t *testing.T) {
 	now := time.Now()
 	old := now.Add(-72 * time.Hour).Format(time.RFC3339) // past the 48h grace
 	in := dreamQualityInputs{
@@ -59,7 +59,7 @@ func TestComputeDreamQuality_MissingUtilityRenormalizes(t *testing.T) {
 	}
 }
 
-func TestComputeDreamQuality_FreshPagesExemptFromUtility(t *testing.T) {
+func TestComputeDreamQuality_FreshPagesScoreWithoutUtility(t *testing.T) {
 	now := time.Now()
 	fresh := now.Add(-1 * time.Hour).Format(time.RFC3339) // inside the 48h grace
 	q := computeDreamQuality(dreamQualityInputs{
@@ -80,7 +80,7 @@ func TestComputeDreamQuality_FreshPagesExemptFromUtility(t *testing.T) {
 	}
 }
 
-func TestComputeDreamQuality_IdleCycleUnscored(t *testing.T) {
+func TestComputeDreamQuality_IdleCycleReturnsZeroScore(t *testing.T) {
 	q := computeDreamQuality(dreamQualityInputs{now: time.Now()})
 	if q.Signals != 0 || q.Score != 0 {
 		t.Errorf("idle cycle should be unscored: signals=%d score=%.2f", q.Signals, q.Score)

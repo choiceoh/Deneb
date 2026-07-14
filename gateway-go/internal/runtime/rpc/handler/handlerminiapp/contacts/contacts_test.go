@@ -12,7 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-func TestContactsMethodsOwnsProjectionAndAuth(t *testing.T) {
+func TestContactsListRejectsUnauthenticatedAndReturnsProjectedRows(t *testing.T) {
 	store, err := contacts.NewStore(filepath.Join(t.TempDir(), "contacts.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -41,7 +41,7 @@ func TestContactsMethodsOwnsProjectionAndAuth(t *testing.T) {
 	}
 }
 
-func TestContactsMethodsDegradesUnavailable(t *testing.T) {
+func TestContactsMethodsNilStoreReturnsNilAndListReturnsUnavailableOnStoreError(t *testing.T) {
 	if got := ContactsMethods(ContactsDeps{}); got != nil {
 		t.Fatalf("nil factory registered methods: %v", got)
 	}

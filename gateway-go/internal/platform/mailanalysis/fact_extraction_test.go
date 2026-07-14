@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestExtractFactsForWiki_NoLocalClient(t *testing.T) {
+func TestExtractFactsForWikiReturnsEmptyWithoutLocalClient(t *testing.T) {
 	// No LocalClient → extractor must short-circuit with empty result, never panic.
 	got := extractFactsForWiki(context.Background(), PipelineDeps{}, "임의의 분석 결과")
 	if got != "" {
@@ -48,7 +48,7 @@ func TestExtractFactsForWiki_RenderingFormat(t *testing.T) {
 	}
 }
 
-func TestStripWikiFactsBlock(t *testing.T) {
+func TestStripWikiFactsBlockClearsBlockAndPreservesText(t *testing.T) {
 	block := renderFactsBlock([]WikiFactProposal{
 		{Entity: "ABC상사", Type: "deal", Fact: "NDA 진행 70%"},
 		{Entity: "박부장", Type: "person", Fact: "결정권자"},

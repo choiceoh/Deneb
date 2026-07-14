@@ -2,7 +2,7 @@ package chat
 
 import "testing"
 
-func TestStripReasoningLeak(t *testing.T) {
+func TestStripReasoningLeakClearsThinkingBlocks(t *testing.T) {
 	cases := []struct {
 		name string
 		in   string

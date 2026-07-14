@@ -23,7 +23,7 @@ func TestUnmarshalParams_NilParams(t *testing.T) {
 	}
 }
 
-func TestUnmarshalParams_ValidJSON(t *testing.T) {
+func TestUnmarshalParamsParsesValidJSON(t *testing.T) {
 	var out struct {
 		Name string `json:"name"`
 		Age  int    `json:"age"`
@@ -102,7 +102,7 @@ func TestTruncateForError(t *testing.T) {
 // RequireKey
 // ---------------------------------------------------------------------------
 
-func TestRequireKey(t *testing.T) {
+func TestRequireKeyTrimsOrReturnsMissingParamError(t *testing.T) {
 	tests := []struct {
 		name    string
 		key     string

@@ -67,7 +67,7 @@ func TestNormalizeMoneyToInt_NotationEquivalence(t *testing.T) {
 
 // --- sourceMoneyValues: scanning the document text for money figures ---
 
-func TestSourceMoneyValues_ScansMixedNotations(t *testing.T) {
+func TestSourceMoneyValuesParsesMixedNotations(t *testing.T) {
 	src := "견적 총액은 5,000,000원이며 부가세 별도. 계약금 500만원, 잔금은 1억2천만 규모."
 	vals := sourceMoneyValues(src)
 	for _, want := range []int64{5_000_000, 120_000_000} {
@@ -79,7 +79,7 @@ func TestSourceMoneyValues_ScansMixedNotations(t *testing.T) {
 
 // --- amountFoundInSource: the gate's corroboration check ---
 
-func TestAmountFoundInSource(t *testing.T) {
+func TestAmountFoundInSourceNormalizesNotationsForMatch(t *testing.T) {
 	src := "총 5,000,000원 (모듈 100장)"
 	cases := []struct {
 		amount string
@@ -104,11 +104,11 @@ func TestAmountFoundInSource(t *testing.T) {
 
 // --- gate behavior via dealInfoFromExtract ---
 
-// TestDealAmountGate_NotationDiffKeepsAmount is the strongest over-block guard:
-// the extractor wrote "5,000,000원" but the source document spelled it "500만원".
-// Integer equivalence must corroborate it, so the amount is KEPT (a substring
-// check would wrongly blank it).
-func TestDealAmountGate_NotationDiffKeepsAmount(t *testing.T) {
+// TestDealAmountGatePreservesAmountAcrossNotations is the strongest over-block
+// guard: the extractor wrote "5,000,000원" but the source document spelled it
+// "500만원". Integer equivalence must corroborate it, so the amount is KEPT (a
+// substring check would wrongly blank it).
+func TestDealAmountGatePreservesAmountAcrossNotations(t *testing.T) {
 	src := "가나에너지 발주서. 공급가액 500만원, 납기 2주."
 	got := dealInfoFromExtract(dealExtract{
 		IsDeal:       true,
@@ -127,9 +127,9 @@ func TestDealAmountGate_NotationDiffKeepsAmount(t *testing.T) {
 	}
 }
 
-// TestDealAmountGate_HallucinationBlanked: an amount with no source match is
-// blanked and flagged, while the rest of the deal is preserved.
-func TestDealAmountGate_HallucinationBlanked(t *testing.T) {
+// TestDealAmountGateRejectsHallucinatedAmount: an amount with no source match
+// is blanked and flagged, while the rest of the deal is preserved.
+func TestDealAmountGateRejectsHallucinatedAmount(t *testing.T) {
 	src := "마바솔라 견적서. 모듈 단가 위주, 총액 표기 없음. 참고용."
 	got := dealInfoFromExtract(dealExtract{
 		IsDeal:       true,

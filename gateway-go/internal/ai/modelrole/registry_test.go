@@ -31,7 +31,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestResolveModel(t *testing.T) {
+func TestResolveModelReturnsRoleOrPassthrough(t *testing.T) {
 	reg := NewRegistry(slog.Default(), "zai/test-model", "")
 
 	tests := []struct {
@@ -67,7 +67,7 @@ func TestResolveModel(t *testing.T) {
 	}
 }
 
-func TestResolveModel_CodingOptIn(t *testing.T) {
+func TestResolveModelResolvesCodingWhenConfigured(t *testing.T) {
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		MainModel:   "zai/test-model",
 		CodingModel: "kimi/kimi-for-coding",
@@ -85,7 +85,7 @@ func TestResolveModel_CodingOptIn(t *testing.T) {
 	}
 }
 
-func TestRoleForModel(t *testing.T) {
+func TestRoleForModelReturnsFirstMatchingRole(t *testing.T) {
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		MainModel:   "zai/test-model",
 		CodingModel: "kimi/kimi-for-coding",
@@ -239,7 +239,7 @@ func TestFallbackChain(t *testing.T) {
 	}
 }
 
-func TestResolveLocalAIAPIKey(t *testing.T) {
+func TestResolveLocalAIAPIKeyDefaultsOrLoadsEnv(t *testing.T) {
 	// Default: returns "local" when env var is not set.
 	t.Setenv("LOCAL_AI_API_KEY", "")
 	t.Setenv("SGLANG_API_KEY", "")
@@ -254,7 +254,7 @@ func TestResolveLocalAIAPIKey(t *testing.T) {
 	}
 }
 
-func TestMimoProviderResolution(t *testing.T) {
+func TestMimoProviderResolutionReturnsPerVariantConfig(t *testing.T) {
 	// The base provider uses the global API; the Token Plan variant uses
 	// the Singapore subscription endpoint. Both speak Anthropic and share
 	// one API key env var.
@@ -284,7 +284,7 @@ func TestMimoProviderResolution(t *testing.T) {
 	}
 }
 
-func TestKimiProviderResolution(t *testing.T) {
+func TestKimiProviderResolutionReturnsAnthropicEndpoint(t *testing.T) {
 	// Kimi Code resolves to Moonshot's Anthropic-compatible endpoint.
 	if got := resolveBaseURL("kimi"); got != DefaultKimiBaseURL {
 		t.Errorf("resolveBaseURL(kimi) = %q, want %q", got, DefaultKimiBaseURL)
@@ -303,7 +303,7 @@ func TestKimiProviderResolution(t *testing.T) {
 	}
 }
 
-func TestDefaultHeaders(t *testing.T) {
+func TestDefaultHeadersReturnsIsolatedCopyPerProvider(t *testing.T) {
 	// Coding-subscription providers get a coding-agent User-Agent.
 	for _, providerID := range []string{"kimi", "mimo-plan"} {
 		h := DefaultHeaders(providerID)
@@ -326,7 +326,7 @@ func TestDefaultHeaders(t *testing.T) {
 	}
 }
 
-func TestResolveAuthScheme(t *testing.T) {
+func TestResolveAuthSchemeReturnsBearerForSubscriptions(t *testing.T) {
 	// Coding-subscription providers authenticate with Bearer tokens.
 	for _, providerID := range []string{"kimi", "mimo", "mimo-plan"} {
 		if got := ResolveAuthScheme(providerID); got != "bearer" {
@@ -341,7 +341,7 @@ func TestResolveAuthScheme(t *testing.T) {
 	}
 }
 
-func TestClientForProvider(t *testing.T) {
+func TestClientForProviderReturnsClientOrNil(t *testing.T) {
 	reg := NewRegistry(nil, "zai/glm-5-turbo", "")
 
 	// Known built-in providers build a client on demand.
@@ -359,7 +359,7 @@ func TestClientForProvider(t *testing.T) {
 	}
 }
 
-func TestLogModelAlias(t *testing.T) {
+func TestLogModelAliasFormatsShortName(t *testing.T) {
 	tests := []struct {
 		name string
 		cfg  ModelConfig
@@ -391,9 +391,10 @@ func TestLogModelAlias(t *testing.T) {
 	}
 }
 
-// VllmBaseURLs feeds the observation plane's /metrics scrape: vllm-provider
-// roles only, deduped, main first, anthropic-mode endpoints excluded.
-func TestVllmBaseURLs(t *testing.T) {
+// TestVllmBaseURLsReturnsDedupedVllmEndpoints feeds the observation plane's
+// /metrics scrape: vllm-provider roles only, deduped, main first,
+// anthropic-mode endpoints excluded.
+func TestVllmBaseURLsReturnsDedupedVllmEndpoints(t *testing.T) {
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		MainModel:        "vllm/dsv4-flash",
 		LightweightModel: "vllm/qwen-lite",   // same catalog endpoint → deduped

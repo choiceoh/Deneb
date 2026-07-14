@@ -15,7 +15,7 @@ func resetForTest(t *testing.T) {
 	ResetCache()
 }
 
-func TestNow_EnvVarWins(t *testing.T) {
+func TestNowReturnsSeoulOffsetFromEnvVar(t *testing.T) {
 	resetForTest(t)
 	t.Setenv(envVar, "Asia/Seoul")
 	ResetCache()
@@ -58,7 +58,7 @@ func TestEnvVar_InvalidFallsBackToLocal(t *testing.T) {
 	}
 }
 
-func TestConfigPath_PicksUpAfterReset(t *testing.T) {
+func TestConfigTimezoneLoadsAfterCacheReset(t *testing.T) {
 	resetForTest(t)
 	SetConfigTimezone("America/Los_Angeles")
 
@@ -71,7 +71,7 @@ func TestConfigPath_PicksUpAfterReset(t *testing.T) {
 	}
 }
 
-func TestEnvOverridesConfig(t *testing.T) {
+func TestEnvVarIgnoresConfigTimezone(t *testing.T) {
 	resetForTest(t)
 	SetConfigTimezone("America/Los_Angeles")
 	t.Setenv(envVar, "Asia/Seoul")

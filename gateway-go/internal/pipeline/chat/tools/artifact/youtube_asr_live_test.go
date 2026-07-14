@@ -17,8 +17,8 @@ import (
 // (no GPU/network). Run on the DGX host:
 //
 //	DENEB_YT_ASR_LIVE=1 DENEB_YT_ASR_URL=https://youtu.be/<id> \
-//	  go test -run TestYouTubeASR_Live -timeout 300s ./internal/pipeline/chat/tools/
-func TestYouTubeASR_Live(t *testing.T) {
+//	  go test -run TestYouTubeASRReturnsTranscriptFromLiveAudio -timeout 300s ./internal/pipeline/chat/tools/
+func TestYouTubeASRReturnsTranscriptFromLiveAudio(t *testing.T) {
 	if os.Getenv("DENEB_YT_ASR_LIVE") == "" {
 		t.Skip("set DENEB_YT_ASR_LIVE=1 (+ DENEB_YT_ASR_URL) to run against the live sidecar")
 	}

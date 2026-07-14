@@ -21,7 +21,7 @@ func newTestRegistryWithNames(names ...string) *ToolRegistry {
 	return r
 }
 
-func TestSuggestToolNames_TypoSuggestions(t *testing.T) {
+func TestSuggestToolNamesReturnsClosestMatchForTypo(t *testing.T) {
 	r := newTestRegistryWithNames("read", "write", "edit", "grep", "exec", "tree")
 
 	cases := []struct {
@@ -83,7 +83,7 @@ func TestUnknownToolError_NoSuggestionForGarbage(t *testing.T) {
 	}
 }
 
-func TestDynamicMaxDistance(t *testing.T) {
+func TestDynamicMaxDistanceReturnsExpectedThreshold(t *testing.T) {
 	cases := []struct {
 		name string
 		want int
@@ -102,7 +102,7 @@ func TestDynamicMaxDistance(t *testing.T) {
 	}
 }
 
-func TestToolNameEditDistance(t *testing.T) {
+func TestToolNameEditDistanceReturnsExpectedValue(t *testing.T) {
 	cases := []struct {
 		a, b string
 		want int

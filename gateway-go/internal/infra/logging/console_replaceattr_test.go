@@ -33,9 +33,9 @@ func TestConsoleHandler_NilReplaceAttr_ByteIdentical(t *testing.T) {
 	}
 }
 
-// TestConsoleHandler_ReplaceAttr_MasksStringValues confirms that a replacer
-// which rewrites string values is reflected in the rendered output.
-func TestConsoleHandler_ReplaceAttr_MasksStringValues(t *testing.T) {
+// TestConsoleHandler_ReplaceAttr_WritesMaskedStringValues confirms that a
+// replacer which rewrites string values is reflected in the rendered output.
+func TestConsoleHandler_ReplaceAttr_WritesMaskedStringValues(t *testing.T) {
 	var buf bytes.Buffer
 	mask := func(groups []string, a slog.Attr) slog.Attr {
 		if a.Value.Kind() == slog.KindString {
@@ -68,9 +68,10 @@ func TestConsoleHandler_ReplaceAttr_MasksStringValues(t *testing.T) {
 	}
 }
 
-// TestConsoleHandler_ReplaceAttr_DropsZero confirms that returning a zero
-// Attr causes the attribute to be omitted entirely from the output.
-func TestConsoleHandler_ReplaceAttr_DropsZero(t *testing.T) {
+// TestConsoleHandler_ReplaceAttr_ClearsZeroAttrFromOutput confirms that
+// returning a zero Attr causes the attribute to be omitted entirely from the
+// output.
+func TestConsoleHandler_ReplaceAttr_ClearsZeroAttrFromOutput(t *testing.T) {
 	var buf bytes.Buffer
 	drop := func(groups []string, a slog.Attr) slog.Attr {
 		if a.Key == "drop_me" {
@@ -146,9 +147,9 @@ func TestConsoleHandler_ReplaceAttr_GroupsThreaded(t *testing.T) {
 	}
 }
 
-// TestConsoleHandler_ReplaceAttr_NestedGroups verifies the groups stack is
-// deepened correctly for groups within groups.
-func TestConsoleHandler_ReplaceAttr_NestedGroups(t *testing.T) {
+// TestConsoleHandler_ReplaceAttr_PreservesNestedGroupPath verifies the groups
+// stack is deepened correctly for groups within groups.
+func TestConsoleHandler_ReplaceAttr_PreservesNestedGroupPath(t *testing.T) {
 	var buf bytes.Buffer
 	var sawGroups [][]string
 	capture := func(groups []string, a slog.Attr) slog.Attr {
@@ -218,9 +219,10 @@ func TestConsoleHandler_ReplaceAttr_WithGroupHandler(t *testing.T) {
 	}
 }
 
-// TestConsoleHandler_ReplaceAttr_RedactIntegration wires redact.AttrReplacer
-// in and confirms a runtime-assembled token is masked end-to-end.
-func TestConsoleHandler_ReplaceAttr_RedactIntegration(t *testing.T) {
+// TestConsoleHandler_ReplaceAttr_WritesRedactedTokenIntegration wires
+// redact.AttrReplacer in and confirms a runtime-assembled token is masked
+// end-to-end.
+func TestConsoleHandler_ReplaceAttr_WritesRedactedTokenIntegration(t *testing.T) {
 	if !redact.Enabled() {
 		t.Skip("DENEB_REDACT_SECRETS disabled at package init — cannot test integration")
 	}
@@ -256,10 +258,10 @@ func TestConsoleHandler_ReplaceAttr_RedactIntegration(t *testing.T) {
 	}
 }
 
-// TestConsoleHandler_ReplaceAttr_PriorReplacerChain verifies a downstream
-// replacer sees the Attr AFTER the prior one has been applied (matches the
-// redact.AttrReplacer(prev) composition contract).
-func TestConsoleHandler_ReplaceAttr_PriorReplacerChain(t *testing.T) {
+// TestConsoleHandler_ReplaceAttr_AppliesChainInContractOrder verifies a
+// downstream replacer sees the Attr AFTER the prior one has been applied
+// (matches the redact.AttrReplacer(prev) composition contract).
+func TestConsoleHandler_ReplaceAttr_AppliesChainInContractOrder(t *testing.T) {
 	first := func(groups []string, a slog.Attr) slog.Attr {
 		if a.Key == "stage" {
 			return slog.String(a.Key, "mid-"+a.Value.String())
@@ -295,10 +297,10 @@ func TestConsoleHandler_ReplaceAttr_PriorReplacerChain(t *testing.T) {
 	}
 }
 
-// TestConsoleHandler_ReplaceAttr_GroupAttrNotPassed confirms that a
+// TestConsoleHandler_ReplaceAttr_IgnoresGroupAttrItself confirms that a
 // Group-kind Attr itself is not handed to the replacer — only its contents.
 // (Matches slog.JSONHandler.)
-func TestConsoleHandler_ReplaceAttr_GroupAttrNotPassed(t *testing.T) {
+func TestConsoleHandler_ReplaceAttr_IgnoresGroupAttrItself(t *testing.T) {
 	var seenKeys []string
 	capture := func(groups []string, a slog.Attr) slog.Attr {
 		seenKeys = append(seenKeys, a.Key)

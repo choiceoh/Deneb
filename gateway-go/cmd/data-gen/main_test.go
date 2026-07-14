@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func TestGenerateIsDeterministicAndHonorsMetadata(t *testing.T) {
+func TestGeneratePreservesDeclaredMetadataAndSortsOutput(t *testing.T) {
 	doc := map[string]any{
 		"_gen": map[string]any{
 			"package":    "sample",

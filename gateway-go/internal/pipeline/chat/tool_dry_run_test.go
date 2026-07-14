@@ -9,10 +9,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
-// TestExecute_DryRunSuppressesSideEffectTools verifies the default-deny
+// TestExecuteDryRunRejectsSideEffectTools verifies the default-deny
 // polarity: allowlisted read-only tools execute normally under dry-run, every
 // other tool returns a stub without its fn being invoked.
-func TestExecute_DryRunSuppressesSideEffectTools(t *testing.T) {
+func TestExecuteDryRunRejectsSideEffectTools(t *testing.T) {
 	reg := NewToolRegistry()
 	executed := map[string]int{}
 	fake := func(name string) ToolFunc {
@@ -62,7 +62,7 @@ func TestExecute_DryRunSuppressesSideEffectTools(t *testing.T) {
 	}
 }
 
-func TestToolDryRunContext(t *testing.T) {
+func TestToolDryRunContextReturnsFalseUntilSet(t *testing.T) {
 	if toolport.ToolDryRunFromContext(context.Background()) {
 		t.Fatal("dry-run must default to false")
 	}
@@ -71,10 +71,10 @@ func TestToolDryRunContext(t *testing.T) {
 	}
 }
 
-// TestExecute_DryRunKeepsVerifyGateFaithful: a stubbed write must arm the
+// TestExecuteDryRunPreservesVerifyGateBehavior: a stubbed write must arm the
 // verify gate and a stubbed verification exec must disarm it, mirroring a
 // real run so replayed edit flows still see the finalize nudge.
-func TestExecute_DryRunKeepsVerifyGateFaithful(t *testing.T) {
+func TestExecuteDryRunPreservesVerifyGateBehavior(t *testing.T) {
 	reg := NewToolRegistry()
 	for _, name := range []string{"write", "exec"} {
 		reg.Register(name, func(_ context.Context, _ json.RawMessage) (string, error) {

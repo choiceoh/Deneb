@@ -21,7 +21,7 @@ func TestPrioritizedArchiveUIDGroupsPreservesThreadAncestors(t *testing.T) {
 	}
 }
 
-func TestPrioritizedArchiveUIDGroupsCapsSenderRecentOnly(t *testing.T) {
+func TestPrioritizedArchiveUIDGroupsKeepsOnlyRecentSenderUIDsWithoutThread(t *testing.T) {
 	got := prioritizedArchiveUIDGroups(nil, []string{"1", "2", "3", "4"}, 2, 2, 10)
 	want := [][]string{{"3", "4"}}
 	if !reflect.DeepEqual(got, want) {
@@ -29,14 +29,14 @@ func TestPrioritizedArchiveUIDGroupsCapsSenderRecentOnly(t *testing.T) {
 	}
 }
 
-func TestPrioritizedArchiveUIDGroupsDisablesZeroCaps(t *testing.T) {
+func TestPrioritizedArchiveUIDGroupsReturnsNilWhenCapsAreZero(t *testing.T) {
 	got := prioritizedArchiveUIDGroups([]string{"1", "2"}, []string{"3", "4"}, 0, 0, 10)
 	if got != nil {
 		t.Fatalf("got %v want nil", got)
 	}
 }
 
-func TestNewSourceCapsReferenceSearches(t *testing.T) {
+func TestNewSourceCreatesSourceWithDefaultReferenceCap(t *testing.T) {
 	src := New(Config{Addr: "127.0.0.1:1143"})
 	if src == nil {
 		t.Fatal("source should be configured with an address")
@@ -46,7 +46,7 @@ func TestNewSourceCapsReferenceSearches(t *testing.T) {
 	}
 }
 
-func TestSameArchivedMessageByMessageID(t *testing.T) {
+func TestSameArchivedMessageMatchesWhenMessageIDsEqualIgnoringCase(t *testing.T) {
 	current := &gmail.MessageDetail{MessageIDHeader: "<A@Example.COM>"}
 	archived := &gmail.MessageDetail{MessageIDHeader: " <a@example.com> "}
 	if !sameArchivedMessage(current, archived, normalizeMsgID(current.MessageIDHeader)) {

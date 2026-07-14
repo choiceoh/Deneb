@@ -56,7 +56,7 @@ func TestErrorEnricher_CommandNotFound(t *testing.T) {
 	}
 }
 
-func TestGrepResultSummarizer_Long(t *testing.T) {
+func TestGrepResultSummarizerTruncatesLongOutput(t *testing.T) {
 	var lines []string
 	for range 300 {
 		lines = append(lines, "file.go:"+strings.Repeat("x", 10))
@@ -76,7 +76,7 @@ func TestStructuredFormatter_CompactJSON(t *testing.T) {
 	}
 }
 
-func TestExecAnnotator_NonZeroExit(t *testing.T) {
+func TestExecAnnotatorFlagsFailureOnNonZeroExit(t *testing.T) {
 	output := "some error\nExit code: 1"
 	result := ExecAnnotator(context.Background(), "exec", output)
 	if !strings.HasPrefix(result, "[command failed") {
@@ -84,7 +84,7 @@ func TestExecAnnotator_NonZeroExit(t *testing.T) {
 	}
 }
 
-func TestPostProcessRegistry_Apply(t *testing.T) {
+func TestPostProcessRegistryEmitsGlobalAndToolSpecificMarkers(t *testing.T) {
 	pp := NewPostProcessRegistry()
 
 	// Global: uppercase marker.

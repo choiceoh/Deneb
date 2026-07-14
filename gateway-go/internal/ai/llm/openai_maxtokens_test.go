@@ -2,10 +2,10 @@ package llm
 
 import "testing"
 
-// TestApplySamplingParams_DisabledTemplateKwarg: a template-toggle "disabled"
+// TestApplySamplingParamsDisabledTemplateKwargClearsReasoningEffort: a template-toggle "disabled"
 // emits chat_template_kwargs and suppresses reasoning_effort entirely; without
 // the kwarg the per-model reasoning_effort floor ("low") is preserved.
-func TestApplySamplingParams_DisabledTemplateKwarg(t *testing.T) {
+func TestApplySamplingParamsDisabledTemplateKwargClearsReasoningEffort(t *testing.T) {
 	oaiReq := &openAIRequest{MaxTokens: 1024}
 	applySamplingParams(oaiReq, &ChatRequest{Thinking: &ThinkingConfig{Type: "disabled", TemplateKwarg: "thinking"}})
 	if oaiReq.ReasoningEffort != "" {

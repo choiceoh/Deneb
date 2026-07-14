@@ -14,7 +14,7 @@ func (moduleSyncStore) Pull(afterSeq int64, _ int) (nativesync.PullResult, error
 	return nativesync.PullResult{Cursor: afterSeq}, nil
 }
 
-func TestMethodsComposesOwnedCapabilities(t *testing.T) {
+func TestMethodsReturnsNilForEmptyDepsAndSyncPullOnlyWhenSyncConfigured(t *testing.T) {
 	got, err := Methods(Dependencies{})
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestMethodsComposesOwnedCapabilities(t *testing.T) {
 	}
 }
 
-func TestOrgDashboardDepsOwnsOrgPolicy(t *testing.T) {
+func TestOrgDashboardDepsReturnsNonNilRulesAndLanesLoaders(t *testing.T) {
 	deps := OrgDashboardDeps(nil, nil)
 	if deps.Rules == nil || deps.Lanes == nil {
 		t.Fatalf("org dashboard loaders not wired: %+v", deps)

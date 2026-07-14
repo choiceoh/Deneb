@@ -88,7 +88,7 @@ func TestResolvePathHandlesSymlinkedRootAndMissingDescendants(t *testing.T) {
 	}
 }
 
-func TestPathUnderRootDoesNotAcceptPrefixCollision(t *testing.T) {
+func TestPathUnderRootRejectsPrefixCollision(t *testing.T) {
 	root := filepath.Join(string(filepath.Separator), "tmp", "workspace")
 	for _, tc := range []struct {
 		path string
@@ -106,7 +106,7 @@ func TestPathUnderRootDoesNotAcceptPrefixCollision(t *testing.T) {
 	}
 }
 
-func TestProtectedPathGuardFollowsFileAndParentSymlinks(t *testing.T) {
+func TestProtectedPathGuardRejectsFileAndParentSymlinkAliases(t *testing.T) {
 	secretDir := filepath.Join(t.TempDir(), ".ssh")
 	if err := os.MkdirAll(secretDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -194,7 +194,7 @@ func TestToolSendFileForwardsExactDeliveryContract(t *testing.T) {
 	}
 }
 
-func TestToolSendFileExplicitTypeWinsOverDetection(t *testing.T) {
+func TestToolSendFileExplicitTypeIgnoresDetectedMediaType(t *testing.T) {
 	t.Setenv("DENEB_ARCHIVE_SENT_FILES", "off")
 	path := writeArtifactFixture(t, "looks.png", []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a})
 	var gotType string
@@ -212,7 +212,7 @@ func TestToolSendFileExplicitTypeWinsOverDetection(t *testing.T) {
 	}
 }
 
-func TestToolSendFileValidationOrderAvoidsCallback(t *testing.T) {
+func TestToolSendFileValidationRejectsBeforeInvokingCallback(t *testing.T) {
 	t.Setenv("DENEB_ARCHIVE_SENT_FILES", "0")
 	path := writeArtifactFixture(t, "large.bin", []byte("123456"))
 	var calls atomic.Int32
@@ -375,7 +375,7 @@ func TestToolSendFileConcurrentCallsKeepParametersIsolated(t *testing.T) {
 	}
 }
 
-func TestDetectMediaTypeMagicAndVoiceExtension(t *testing.T) {
+func TestDetectMediaTypeReturnsTypeFromMagicAndVoiceExtension(t *testing.T) {
 	fixtures := []struct {
 		name string
 		data []byte
@@ -472,7 +472,7 @@ func TestFinishRenderedImageSuccessAndFailureStates(t *testing.T) {
 	}
 }
 
-func TestDeliveryCallbackCanObserveDeadline(t *testing.T) {
+func TestDeliveryCallbackObservesBoundedSendTimeoutDeadline(t *testing.T) {
 	path := writeArtifactFixture(t, "x.txt", []byte("x"))
 	ctx := deliveryContext(context.Background(), &toolport.DeliveryContext{Channel: "x", To: "y"},
 		func(ctx context.Context, _ *toolport.DeliveryContext, _ string, _ string, _ string, _ bool) error {

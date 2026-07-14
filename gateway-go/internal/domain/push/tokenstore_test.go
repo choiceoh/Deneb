@@ -15,7 +15,7 @@ func newTestStore(t *testing.T) *Store {
 	return s
 }
 
-func TestStore_RegisterDedupAndRefresh(t *testing.T) {
+func TestStoreRegisterDedupesAndPreservesRegisteredAt(t *testing.T) {
 	s := newTestStore(t)
 
 	if n, err := s.Register("tok-a", "android"); err != nil || n != 1 {
@@ -48,7 +48,7 @@ func TestStore_RegisterEmptyTokenRejected(t *testing.T) {
 	}
 }
 
-func TestStore_Unregister(t *testing.T) {
+func TestStoreUnregisterRemovesTokenAndIgnoresMissing(t *testing.T) {
 	s := newTestStore(t)
 	_, _ = s.Register("tok-a", "android")
 	_, _ = s.Register("tok-b", "ios")
@@ -62,7 +62,7 @@ func TestStore_Unregister(t *testing.T) {
 	}
 }
 
-func TestStore_Prune(t *testing.T) {
+func TestStorePruneEvictsMatchingTokens(t *testing.T) {
 	s := newTestStore(t)
 	_, _ = s.Register("tok-a", "android")
 	_, _ = s.Register("tok-b", "ios")

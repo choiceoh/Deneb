@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestRunCache_GetSet(t *testing.T) {
+func TestRunCacheSavesAndLoadsEntry(t *testing.T) {
 	rc := NewRunCache()
 
 	// Miss on empty cache.
@@ -131,7 +131,7 @@ func TestRunCache_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
-func TestBuildCacheKey_Canonical(t *testing.T) {
+func TestBuildCacheKeyReturnsMatchingKeysForIdenticalJSON(t *testing.T) {
 	// Same fields, same JSON ordering → same key.
 	input1 := json.RawMessage(`{"pattern":"*.go","path":"src"}`)
 	input2 := json.RawMessage(`{"pattern":"*.go","path":"src"}`)
@@ -151,7 +151,7 @@ func TestBuildCacheKey_Canonical(t *testing.T) {
 	}
 }
 
-func TestBuildCacheKey_StripsNonSemantic(t *testing.T) {
+func TestBuildCacheKeyIgnoresNonSemanticFields(t *testing.T) {
 	// "compress" and "$ref" should be stripped.
 	plain := json.RawMessage(`{"pattern":"*.go"}`)
 	withCompress := json.RawMessage(`{"pattern":"*.go","compress":true}`)
@@ -169,7 +169,7 @@ func TestBuildCacheKey_StripsNonSemantic(t *testing.T) {
 	}
 }
 
-func TestBuildCacheKey_DifferentTools(t *testing.T) {
+func TestBuildCacheKeyReturnsDistinctKeysPerTool(t *testing.T) {
 	input := json.RawMessage(`{"pattern":"*.go"}`)
 	findKey := BuildCacheKey("find", input)
 	treeKey := BuildCacheKey("tree", input)
@@ -179,7 +179,7 @@ func TestBuildCacheKey_DifferentTools(t *testing.T) {
 	}
 }
 
-func TestIsCacheableTool(t *testing.T) {
+func TestIsCacheableToolReturnsExpectedForKnownTools(t *testing.T) {
 	if !IsCacheableTool("grep") {
 		t.Fatal("grep should be cacheable")
 	}
@@ -197,7 +197,7 @@ func TestIsCacheableTool(t *testing.T) {
 	}
 }
 
-func TestIsMutationTool(t *testing.T) {
+func TestIsMutationToolReturnsExpectedForKnownTools(t *testing.T) {
 	for _, name := range []string{"write", "edit"} {
 		if !IsMutationTool(name) {
 			t.Fatalf("%s should be a mutation tool", name)
@@ -270,11 +270,11 @@ func TestExecute_ExecInvalidatesRunCache(t *testing.T) {
 	}
 }
 
-// TestExecute_ProcessDisablesRunCache covers the background-exec timing gap:
+// TestExecuteStopsRunCacheAfterProcessInteraction covers the background-exec timing gap:
 // a tracked process may be mid-write regardless of which run launched it, so
 // any process-tool interaction trips the sticky async-writer latch — the
 // cache stays off for the rest of the run (not just wiped once).
-func TestExecute_ProcessDisablesRunCache(t *testing.T) {
+func TestExecuteStopsRunCacheAfterProcessInteraction(t *testing.T) {
 	reg := NewToolRegistry()
 	grepCalls := 0
 	reg.Register("grep", func(_ context.Context, _ json.RawMessage) (string, error) {
@@ -311,11 +311,11 @@ func TestExecute_ProcessDisablesRunCache(t *testing.T) {
 	}
 }
 
-// TestExecute_BackgroundExecDisablesRunCache: a background exec's writes land
+// TestExecuteStopsRunCacheWhenBackgroundExecMutates: a background exec's writes land
 // at an unpredictable future point, so a non-read-only background command
 // disables the cache for the rest of the run — even when nothing was cached
 // yet at launch time. Read-only background commands leave it alone.
-func TestExecute_BackgroundExecDisablesRunCache(t *testing.T) {
+func TestExecuteStopsRunCacheWhenBackgroundExecMutates(t *testing.T) {
 	reg := NewToolRegistry()
 	grepCalls := 0
 	reg.Register("grep", func(_ context.Context, _ json.RawMessage) (string, error) {
@@ -356,10 +356,10 @@ func TestExecute_BackgroundExecDisablesRunCache(t *testing.T) {
 	}
 }
 
-// TestExecute_SessionsSpawnDisablesRunCache: a spawned child whose preset can
+// TestExecuteStopsRunCacheWhenSpawnPresetCanMutate: a spawned child whose preset can
 // write/edit/exec is an async writer against the shared workspace; a
 // read-focused researcher child is not.
-func TestExecute_SessionsSpawnDisablesRunCache(t *testing.T) {
+func TestExecuteStopsRunCacheWhenSpawnPresetCanMutate(t *testing.T) {
 	newReg := func() (*ToolRegistry, *RunCache, context.Context) {
 		reg := NewToolRegistry()
 		reg.Register("sessions_spawn", func(_ context.Context, _ json.RawMessage) (string, error) {

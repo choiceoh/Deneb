@@ -28,7 +28,7 @@ func TestNewPreservesTaskOrderAndCompactionFallback(t *testing.T) {
 	}
 }
 
-func TestNewEnablesCompactionTaskAndPromptTunerTogether(t *testing.T) {
+func TestNewCreatesCompactionTaskWithPromptTuner(t *testing.T) {
 	t.Setenv("DENEB_COMPACTION_TUNER", "1")
 	deps := testDeps(t)
 	deps.Summaries = summarySourceStub{}

@@ -22,7 +22,7 @@ func okHandler(_ context.Context, req *protocol.RequestFrame) *protocol.Response
 	return resp
 }
 
-func TestChain_Order(t *testing.T) {
+func TestChain_PreservesMiddlewareExecutionOrder(t *testing.T) {
 	var order []string
 
 	m1 := func(next HandlerFunc) HandlerFunc {
@@ -57,7 +57,7 @@ func TestChain_Order(t *testing.T) {
 	}
 }
 
-func TestLogging_Middleware(t *testing.T) {
+func TestLoggingMiddleware_ReturnsHandlerResponse(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	mw := Logging(logger)
 	handler := mw(okHandler)

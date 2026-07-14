@@ -138,7 +138,7 @@ func newIntegrationHandler(
 
 // TestIntegration_SimpleTextResponse verifies the full async flow for a simple
 // text response: Send -> LLM response -> transcript persisted -> session done.
-func TestIntegration_SimpleTextResponse(t *testing.T) {
+func TestIntegration_SavesSimpleTextResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -227,7 +227,7 @@ func TestIntegration_SimpleTextResponse(t *testing.T) {
 
 // TestIntegration_ToolCallFlow tests the full async flow with a tool call:
 // Send -> LLM requests tool -> tool executes -> LLM responds with final text.
-func TestIntegration_ToolCallFlow(t *testing.T) {
+func TestIntegration_EmitsFinalTextAfterToolCall(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
@@ -303,7 +303,7 @@ func TestIntegration_ToolCallFlow(t *testing.T) {
 
 // TestIntegration_AbortActiveRun tests that aborting an active run transitions
 // the session correctly and cancels the LLM call.
-func TestIntegration_AbortActiveRun(t *testing.T) {
+func TestIntegration_CancelsActiveRunWithoutGoroutineLeak(t *testing.T) {
 	baseline := runtime.NumGoroutine()
 
 	// LLM server that blocks indefinitely until context is canceled.
@@ -366,7 +366,7 @@ func TestIntegration_AbortActiveRun(t *testing.T) {
 
 // TestIntegration_MultipleMessagesHistory tests that multiple Send calls
 // accumulate messages in the transcript and are visible via History.
-func TestIntegration_MultipleMessagesHistory(t *testing.T) {
+func TestIntegration_SavesMultipleMessagesToHistory(t *testing.T) {
 	msgIdx := 0
 	responses := []string{"First reply", "Second reply"}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -444,7 +444,7 @@ func TestIntegration_MultipleMessagesHistory(t *testing.T) {
 
 // TestIntegration_ReplyFunc tests that the assistant response is delivered
 // back to the originating channel via ReplyFunc.
-func TestIntegration_ReplyFunc(t *testing.T) {
+func TestIntegration_EmitsReplyViaReplyFunc(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -499,7 +499,7 @@ func TestIntegration_ReplyFunc(t *testing.T) {
 
 // TestIntegration_InterruptPreviousRun tests that sending a new message
 // to the same session interrupts the previous run.
-func TestIntegration_InterruptPreviousRun(t *testing.T) {
+func TestIntegration_CancelsPreviousRunOnNewMessage(t *testing.T) {
 	// First request: LLM blocks forever.
 	// Second request: LLM responds immediately.
 	callCount := 0
@@ -612,7 +612,7 @@ func TestIntegration_LLMError(t *testing.T) {
 
 // TestIntegration_SlashCommandReset tests that /reset clears the transcript
 // and transitions the session.
-func TestIntegration_SlashCommandReset(t *testing.T) {
+func TestIntegration_SlashResetClearsTranscript(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)

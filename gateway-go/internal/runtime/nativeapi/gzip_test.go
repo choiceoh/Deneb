@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestClientAcceptsGzip(t *testing.T) {
+func TestClientAcceptsGzipParsesAcceptEncodingHeader(t *testing.T) {
 	cases := map[string]bool{
 		"gzip":                true,
 		"gzip, deflate, br":   true,

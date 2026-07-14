@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestShouldIncludeSkill_basic(t *testing.T) {
+func TestShouldIncludeSkillIncludesSkillWithNoRequirements(t *testing.T) {
 	entry := SkillEntry{
 		Skill: Skill{Name: "test", Source: SourceWorkspace},
 	}
@@ -17,7 +17,7 @@ func TestShouldIncludeSkill_basic(t *testing.T) {
 	}
 }
 
-func TestShouldIncludeSkill_disabled(t *testing.T) {
+func TestShouldIncludeSkillReturnsFalseForDisabledSkill(t *testing.T) {
 	f := false
 	entry := SkillEntry{
 		Skill: Skill{Name: "test", Source: SourceWorkspace},
@@ -33,7 +33,7 @@ func TestShouldIncludeSkill_disabled(t *testing.T) {
 	}
 }
 
-func TestShouldIncludeSkill_alwaysFlag(t *testing.T) {
+func TestShouldIncludeSkillIncludesAlwaysFlaggedSkillDespiteMissingBinary(t *testing.T) {
 	entry := SkillEntry{
 		Skill: Skill{Name: "always-on", Source: SourceBundled},
 		Metadata: &DenebSkillMetadata{
@@ -52,7 +52,7 @@ func TestShouldIncludeSkill_alwaysFlag(t *testing.T) {
 	}
 }
 
-func TestShouldIncludeSkill_envRequired(t *testing.T) {
+func TestShouldIncludeSkillAllowsWithConfiguredEnvVar(t *testing.T) {
 	entry := SkillEntry{
 		Skill: Skill{Name: "needs-token", Source: SourceBundled},
 		Metadata: &DenebSkillMetadata{
@@ -78,7 +78,7 @@ func TestShouldIncludeSkill_envRequired(t *testing.T) {
 	}
 }
 
-func TestShouldIncludeSkill_apiKeyMatchesPrimaryEnv(t *testing.T) {
+func TestShouldIncludeSkillIncludesSkillWhenAPIKeyMatchesPrimaryEnv(t *testing.T) {
 	entry := SkillEntry{
 		Skill: Skill{Name: "needs-token", Source: SourceBundled},
 		Metadata: &DenebSkillMetadata{
@@ -118,7 +118,7 @@ func TestShouldIncludeSkill_bundledAllowlist(t *testing.T) {
 	}
 }
 
-func TestShouldIncludeSkill_requiresTools(t *testing.T) {
+func TestShouldIncludeSkillAllowsWhenAllToolsAvailable(t *testing.T) {
 	entry := SkillEntry{
 		Skill: Skill{Name: "terminal-skill", Source: SourceWorkspace},
 		Metadata: &DenebSkillMetadata{
@@ -166,7 +166,7 @@ func TestShouldIncludeSkill_fallbackForTools(t *testing.T) {
 	}
 }
 
-func TestFilterBySkillFilter(t *testing.T) {
+func TestFilterBySkillFilterReturnsNamedSkillsOnly(t *testing.T) {
 	entries := []SkillEntry{
 		{Skill: Skill{Name: "github"}},
 		{Skill: Skill{Name: "weather"}},

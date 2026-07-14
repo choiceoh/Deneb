@@ -42,7 +42,7 @@ func TestGuidelineStore_SaveLoadCapDedup(t *testing.T) {
 	}
 }
 
-func TestSanitizeGuidelines_DropsPlaceholderJunk(t *testing.T) {
+func TestSanitizeGuidelines_IgnoresPlaceholderJunk(t *testing.T) {
 	// Live 2026-07-06: the tuner LLM echoed schema placeholders and they
 	// persisted alongside real guidelines. Sanitize (Load AND Save path)
 	// must drop them while keeping the real Korean directives.
@@ -94,7 +94,7 @@ func TestAugmentWithGuidelines(t *testing.T) {
 	}
 }
 
-func TestCompactionPrompt_AppliesBoth(t *testing.T) {
+func TestCompactionPrompt_RendersAnchorsAndGuidelines(t *testing.T) {
 	cfg := Config{AnchorKeywords: []string{"탑솔라"}, LearnedGuidelines: []string{"결제 기한 보존"}}
 	got := compactionPrompt("BASE", cfg)
 	if !strings.Contains(got, "Anchor") || !strings.Contains(got, "탑솔라") {

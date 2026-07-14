@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestFileCache_SetAndGet(t *testing.T) {
+func TestFileCache_SavesAndLoadsEntry(t *testing.T) {
 	fc := NewFileCache(10)
 	entry := &FileCacheEntry{
 		Path:      "/tmp/test.go",
@@ -50,7 +50,7 @@ func TestFileCache_LRUEviction(t *testing.T) {
 	}
 }
 
-func TestFileCache_LRUAccessRefresh(t *testing.T) {
+func TestFileCache_LRUAccessPreservesEntryFromEviction(t *testing.T) {
 	fc := NewFileCache(3)
 
 	fc.Set("/tmp/a.go", &FileCacheEntry{Path: "/tmp/a.go"})
@@ -86,7 +86,7 @@ func TestFileCache_Invalidate(t *testing.T) {
 	}
 }
 
-func TestFileChanged_Unchanged(t *testing.T) {
+func TestFileChanged_ReturnsFalseWhenMatchingDiskState(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.txt")
 	os.WriteFile(path, []byte("hello"), 0o644)
@@ -103,7 +103,7 @@ func TestFileChanged_Unchanged(t *testing.T) {
 	}
 }
 
-func TestFileChanged_MtimeChanged(t *testing.T) {
+func TestFileChanged_ReturnsTrueWhenMtimeDiffers(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.txt")
 	os.WriteFile(path, []byte("hello"), 0o644)
@@ -119,7 +119,7 @@ func TestFileChanged_MtimeChanged(t *testing.T) {
 	}
 }
 
-func TestFileChanged_SizeChanged(t *testing.T) {
+func TestFileChanged_ReturnsTrueWhenSizeDiffers(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.txt")
 	os.WriteFile(path, []byte("hello world"), 0o644)
@@ -172,7 +172,7 @@ func TestCheckStaleness_NeverRead(t *testing.T) {
 	}
 }
 
-func TestCheckStaleness_Fresh(t *testing.T) {
+func TestCheckStaleness_PassesWhenFileUnchanged(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "fresh.txt")
 	os.WriteFile(path, []byte("hello"), 0o644)
@@ -191,7 +191,7 @@ func TestCheckStaleness_Fresh(t *testing.T) {
 	}
 }
 
-func TestCheckStaleness_Stale(t *testing.T) {
+func TestCheckStaleness_ErrorsWhenFileModifiedExternally(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "stale.txt")
 	os.WriteFile(path, []byte("original"), 0o644)
@@ -218,7 +218,7 @@ func TestCheckStaleness_Stale(t *testing.T) {
 	}
 }
 
-func TestCheckStaleness_MtimeChangedContentSame(t *testing.T) {
+func TestCheckStaleness_IgnoresMtimeWhenContentHashMatches(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "synced.txt")
 	content := []byte("same content")
@@ -276,7 +276,7 @@ func TestUpdateAfterWrite(t *testing.T) {
 	}
 }
 
-func TestContentHashOf(t *testing.T) {
+func TestContentHashOf_CreatesStableDistinctHashes(t *testing.T) {
 	h1 := ContentHashOf([]byte("hello"))
 	h2 := ContentHashOf([]byte("hello"))
 	h3 := ContentHashOf([]byte("world"))

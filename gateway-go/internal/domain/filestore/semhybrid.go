@@ -91,17 +91,67 @@ func (si *SemanticIndex) HybridSearch(ctx context.Context, query string, max int
 		return nil, nil
 	}
 
-	// --- semantic side: best chunk cosine per file ---
-	type semHit struct {
-		path    string
-		size    int64
-		mtime   string
-		cos     float64
-		snippet string
+	// --- semantic side: best chunk cosine per file, ranked descending ---
+	sem := hybridSemanticHits(qv, entries)
+	semRank := hybridSemRanks(sem, max)
+
+	// --- lexical side: BM25 over name + chunk text, ranked descending ---
+	corpus := buildLexCorpus(entries)
+	queryTokens := lexTokenize(q)
+	lex := corpus.score(queryTokens)
+	lexRank, bestBM25 := hybridLexRanks(lex)
+
+	// --- admission gate + RRF fusion ---
+	out := fuseHybridHits(sem, lex, semRank, lexRank, bestBM25, max)
+
+	results := make([]ScoredEntry, 0, len(out))
+	for _, h := range out {
+		results = append(results, ScoredEntry{
+			Entry: Entry{
+				Tag:            "file",
+				Name:           pathBase(h.path),
+				PathDisplay:    h.path,
+				PathLower:      strings.ToLower(h.path),
+				ID:             h.path,
+				Size:           h.size,
+				ServerModified: h.mtime,
+			},
+			// Surface the cosine as the displayed similarity (a stable, familiar
+			// 0–1 number) rather than the RRF score, which is a tiny fusion value
+			// with no intuitive meaning to a reader. Ranking still uses RRF.
+			Score:   h.cos,
+			Snippet: h.snippet,
+		})
 	}
-	sem := make([]semHit, 0, len(entries))
-	cosByPath := make(map[string]float64, len(entries))
-	snipByPath := make(map[string]string, len(entries))
+	return results, nil
+}
+
+// hybridSemHit is one file's semantic-side evaluation: its best chunk cosine
+// against the query vector and that chunk's snippet.
+type hybridSemHit struct {
+	path    string
+	size    int64
+	mtime   string
+	cos     float64
+	snippet string
+}
+
+// hybridFusedHit is an admitted file carrying its RRF fusion score (the
+// ranking key) alongside the cosine (the displayed similarity).
+type hybridFusedHit struct {
+	path    string
+	size    int64
+	mtime   string
+	snippet string
+	score   float64 // RRF score
+	cos     float64
+}
+
+// hybridSemanticHits computes each file's best chunk cosine (and its snippet),
+// returning one hit per file ranked by cosine descending, path ascending on
+// ties.
+func hybridSemanticHits(qv []float32, entries []*fileEntry) []hybridSemHit {
+	sem := make([]hybridSemHit, 0, len(entries))
 	for _, fe := range entries {
 		best := -1.0
 		bestSnip := ""
@@ -115,35 +165,39 @@ func (si *SemanticIndex) HybridSearch(ctx context.Context, query string, max int
 		if best < 0 {
 			best = 0 // a file with no chunks (text-less) has no semantic signal
 		}
-		cosByPath[fe.Path] = best
-		snipByPath[fe.Path] = bestSnip
-		sem = append(sem, semHit{path: fe.Path, size: fe.Size, mtime: fe.MTime, cos: best, snippet: bestSnip})
+		sem = append(sem, hybridSemHit{path: fe.Path, size: fe.Size, mtime: fe.MTime, cos: best, snippet: bestSnip})
 	}
-	// Rank the semantic list by cosine, descending; keep a generous top-K so files
-	// just outside the result cap still feed their rank into RRF.
 	sort.Slice(sem, func(a, b int) bool {
 		if sem[a].cos != sem[b].cos {
 			return sem[a].cos > sem[b].cos
 		}
 		return sem[a].path < sem[b].path
 	})
-	semRank := make(map[string]int, len(sem))
+	return sem
+}
+
+// hybridSemRanks assigns each path its 0-based position in the cosine-ranked
+// semantic list, keeping a generous top-K (at least hybridSemanticK) so files
+// just outside the result cap still feed their rank into RRF.
+func hybridSemRanks(sem []hybridSemHit, max int) map[string]int {
 	semCap := max
 	if hybridSemanticK > semCap {
 		semCap = hybridSemanticK
 	}
+	semRank := make(map[string]int, len(sem))
 	for i, h := range sem {
 		if i >= semCap {
 			break
 		}
 		semRank[h.path] = i // 0-based rank
 	}
+	return semRank
+}
 
-	// --- lexical side: BM25 over name + chunk text ---
-	corpus := buildLexCorpus(entries)
-	queryTokens := lexTokenize(q)
-	lex := corpus.score(queryTokens)
-	// Rank the lexical list by BM25, descending.
+// hybridLexRanks ranks the lexical results by BM25 descending (path ascending
+// on ties), returning each path's 0-based rank and the query's best BM25 score
+// (the anchor for the corpus-relative admission bar).
+func hybridLexRanks(lex map[string]lexResult) (map[string]int, float64) {
 	type lexRanked struct {
 		path  string
 		score float64
@@ -166,33 +220,32 @@ func (si *SemanticIndex) HybridSearch(ctx context.Context, query string, max int
 	for i, r := range lexList {
 		lexRank[r.path] = i
 	}
+	return lexRank, bestBM25
+}
 
-	// --- admission gate + RRF fusion ---
-	// A file is admitted (a real hit, not noise) when its cosine clears the
-	// semantic floor OR it has a strong lexical match. Both signals contribute
-	// their rank to the RRF score regardless of which gate admitted the file, so
-	// agreement between the two naturally floats to the top.
-	type fused struct {
-		path    string
-		size    int64
-		mtime   string
-		snippet string
-		score   float64 // RRF score
-		cos     float64
+// admitHybridHit is the OR-gate: a file is admitted (a real hit, not noise)
+// when its cosine clears the semantic floor OR it has a strong lexical match.
+func admitHybridHit(h hybridSemHit, lex map[string]lexResult, bestBM25 float64) bool {
+	lr, hasLex := lex[h.path]
+	switch {
+	case h.cos >= minSemanticScore:
+		return true // genuine meaning match (the original floor)
+	case hasLex && lr.nameHit:
+		return true // exact name match — the strongest lexical signal
+	case hasLex && bestBM25 > 0 && lr.score >= lexStrongBM25Frac*bestBM25 && lr.matched >= lexMinMatchTokens:
+		return true // strong, multi-token corpus-relative lexical match
 	}
-	out := make([]fused, 0, len(entries))
+	return false
+}
+
+// fuseHybridHits applies the admission gate and orders admitted files by
+// Reciprocal Rank Fusion of the two signals' ranks, capped to max. Both
+// signals contribute their rank to the RRF score regardless of which gate
+// admitted the file, so agreement between the two naturally floats to the top.
+func fuseHybridHits(sem []hybridSemHit, lex map[string]lexResult, semRank, lexRank map[string]int, bestBM25 float64, max int) []hybridFusedHit {
+	out := make([]hybridFusedHit, 0, len(sem))
 	for _, h := range sem {
-		lr, hasLex := lex[h.path]
-		admit := false
-		switch {
-		case h.cos >= minSemanticScore:
-			admit = true // genuine meaning match (the original floor)
-		case hasLex && lr.nameHit:
-			admit = true // exact name match — the strongest lexical signal
-		case hasLex && bestBM25 > 0 && lr.score >= lexStrongBM25Frac*bestBM25 && lr.matched >= lexMinMatchTokens:
-			admit = true // strong, multi-token corpus-relative lexical match
-		}
-		if !admit {
+		if !admitHybridHit(h, lex, bestBM25) {
 			continue
 		}
 		// RRF: sum 1/(k+rank) over the lists this file appears in. A file absent
@@ -204,7 +257,7 @@ func (si *SemanticIndex) HybridSearch(ctx context.Context, query string, max int
 		if r, ok := lexRank[h.path]; ok {
 			score += 1.0 / (rrfK + float64(r))
 		}
-		out = append(out, fused{
+		out = append(out, hybridFusedHit{
 			path: h.path, size: h.size, mtime: h.mtime,
 			snippet: h.snippet, score: score, cos: h.cos,
 		})
@@ -224,25 +277,5 @@ func (si *SemanticIndex) HybridSearch(ctx context.Context, query string, max int
 	if len(out) > max {
 		out = out[:max]
 	}
-
-	results := make([]ScoredEntry, 0, len(out))
-	for _, h := range out {
-		results = append(results, ScoredEntry{
-			Entry: Entry{
-				Tag:            "file",
-				Name:           pathBase(h.path),
-				PathDisplay:    h.path,
-				PathLower:      strings.ToLower(h.path),
-				ID:             h.path,
-				Size:           h.size,
-				ServerModified: h.mtime,
-			},
-			// Surface the cosine as the displayed similarity (a stable, familiar
-			// 0–1 number) rather than the RRF score, which is a tiny fusion value
-			// with no intuitive meaning to a reader. Ranking still uses RRF.
-			Score:   h.cos,
-			Snippet: h.snippet,
-		})
-	}
-	return results, nil
+	return out
 }

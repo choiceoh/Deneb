@@ -14,7 +14,7 @@ import (
 // documents peaks near ~5000 tokens and the curve is ASYMMETRIC (too-large costs
 // more than too-small). This sweeps MaxPageBytes over a corpus of large
 // multi-topic pages, splitting each page at the threshold exactly as the dreamer
-// does (Store.SplitPage), and reports recall (hit@k) per threshold — the
+// does (Store.splitPage), and reports recall (hit@k) per threshold — the
 // Deneb/Korean counterpart of the paper's Table 3.
 //
 // What this asserts vs. emits:
@@ -151,11 +151,11 @@ func countMarkdownPages(t *testing.T, root string) int {
 	return n
 }
 
-func TestSplitThresholdSweep(t *testing.T) {
+func TestSplitThresholdSweep_PreservesRecallAboveFloorAsThresholdShrinksAndFragmentsMorePages(t *testing.T) {
 	plants := sweepPlants()
 
 	// 1<<30 = effectively no split (baseline whole pages); then progressively
-	// smaller caps so SplitPage fires and fragments each page into more sub-pages.
+	// smaller caps so splitPage fires and fragments each page into more sub-pages.
 	thresholds := []int{1 << 30, 24 * 1024, 12 * 1024, 6 * 1024}
 
 	var basePages, smallPages int
@@ -174,12 +174,12 @@ func TestSplitThresholdSweep(t *testing.T) {
 		}
 		// Split exactly as the dreamer does after a consolidation write.
 		for path := range buildSweepCorpus() {
-			if _, err := store.SplitPage(path, thr); err != nil {
-				t.Fatalf("SplitPage %s: %v", path, err)
+			if _, err := store.splitPage(path, thr); err != nil {
+				t.Fatalf("splitPage %s: %v", path, err)
 			}
 		}
-		if err := store.RebuildIndex(); err != nil {
-			t.Fatalf("RebuildIndex: %v", err)
+		if err := store.rebuildIndex(); err != nil {
+			t.Fatalf("rebuildIndex: %v", err)
 		}
 
 		pageCount := countMarkdownPages(t, store.Dir())

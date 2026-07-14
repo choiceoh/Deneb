@@ -74,7 +74,7 @@ func TestParseStructsReportsSourceErrors(t *testing.T) {
 	}
 }
 
-func TestJSONFieldNameMatchesEncodingJSONTags(t *testing.T) {
+func TestJSONFieldNameParsesTagsAndIgnoresHyphenFields(t *testing.T) {
 	tests := []struct {
 		name, tag, want string
 		skip            bool
@@ -98,7 +98,7 @@ func TestJSONFieldNameMatchesEncodingJSONTags(t *testing.T) {
 	}
 }
 
-func TestExportedNameUsesFirstRune(t *testing.T) {
+func TestExportedNameUppercasesFirstRuneAndHandlesEmptyInput(t *testing.T) {
 	for input, want := range map[string]string{"calendarEvent": "CalendarEvent", "already": "Already", "": "", "éclair": "Éclair"} {
 		if got := ExportedName(input); got != want {
 			t.Errorf("ExportedName(%q) = %q, want %q", input, got, want)

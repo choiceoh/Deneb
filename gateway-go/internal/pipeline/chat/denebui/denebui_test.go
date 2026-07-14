@@ -2,7 +2,7 @@ package denebui
 
 import "testing"
 
-func TestExtractFences(t *testing.T) {
+func TestExtractFencesReturnsMatchingBlocks(t *testing.T) {
 	t.Run("single block", func(t *testing.T) {
 		text := "여기 대시보드입니다:\n\n```deneb-ui\n{\"type\":\"text\",\"value\":\"hi\"}\n```\n\n끝."
 		got := ExtractFences(text)
@@ -87,7 +87,7 @@ func TestExtractFences(t *testing.T) {
 	})
 }
 
-func TestValidate_Valid(t *testing.T) {
+func TestValidateReturnsNoIssuesForValidBodies(t *testing.T) {
 	cases := map[string]string{
 		"dashboard": `{"type":"column","children":[
 			{"type":"card","children":[
@@ -157,7 +157,7 @@ func TestValidate_Invalid(t *testing.T) {
 	}
 }
 
-func TestValidate_NotJSON(t *testing.T) {
+func TestValidateReturnsErrorForNonJSONBody(t *testing.T) {
 	if _, err := Validate("{this is not json"); err == nil {
 		t.Errorf("expected error for non-JSON body")
 	}

@@ -1816,14 +1816,14 @@ func assertWireFieldOmitsZeroValue(t *testing.T, target any, jsonName string) {
 	}
 }
 
-func TestMemoryPageRowTitleOmitsZeroValue(t *testing.T) {
+func TestMemoryPageRowTitleOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MemoryPageRow
 	assertWireFieldOmitsZeroValue(t, &value, "title")
 }
 
-func TestMemoryPageRowSummaryOmitsZeroValue(t *testing.T) {
+func TestMemoryPageRowSummaryOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MemoryPageRow
@@ -1837,126 +1837,126 @@ func TestMemoryPageRowUpdatedOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "updated")
 }
 
-func TestNotebookSummaryOutDescriptionOmitsZeroValue(t *testing.T) {
+func TestNotebookSummaryOutDescriptionOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value NotebookSummaryOut
 	assertWireFieldOmitsZeroValue(t, &value, "description")
 }
 
-func TestNotebookSummaryOutDealRefOmitsZeroValue(t *testing.T) {
+func TestNotebookSummaryOutDealRefOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value NotebookSummaryOut
 	assertWireFieldOmitsZeroValue(t, &value, "dealRef")
 }
 
-func TestNotebookSummaryOutProjectRefsOmitsZeroValue(t *testing.T) {
+func TestNotebookSummaryOutProjectRefsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value NotebookSummaryOut
 	assertWireFieldOmitsZeroValue(t, &value, "projectRefs")
 }
 
-func TestNotebookSourceOutRefOmitsZeroValue(t *testing.T) {
+func TestNotebookSourceOutRefOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value NotebookSourceOut
 	assertWireFieldOmitsZeroValue(t, &value, "ref")
 }
 
-func TestNotebookSourceOutTitleOmitsZeroValue(t *testing.T) {
+func TestNotebookSourceOutTitleOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value NotebookSourceOut
 	assertWireFieldOmitsZeroValue(t, &value, "title")
 }
 
-func TestNotebookSourceOutTextOmitsZeroValue(t *testing.T) {
+func TestNotebookSourceOutTextOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value NotebookSourceOut
 	assertWireFieldOmitsZeroValue(t, &value, "text")
 }
 
-func TestNotebookOutDescriptionOmitsZeroValue(t *testing.T) {
+func TestNotebookOutDescriptionOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value NotebookOut
 	assertWireFieldOmitsZeroValue(t, &value, "description")
 }
 
-func TestNotebookOutDealRefOmitsZeroValue(t *testing.T) {
+func TestNotebookOutDealRefOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value NotebookOut
 	assertWireFieldOmitsZeroValue(t, &value, "dealRef")
 }
 
-func TestNotebookOutModeOmitsZeroValue(t *testing.T) {
+func TestNotebookOutModeOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value NotebookOut
 	assertWireFieldOmitsZeroValue(t, &value, "mode")
 }
 
-func TestPersonRowNameOmitsZeroValue(t *testing.T) {
+func TestPersonRowNameOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PersonRow
 	assertWireFieldOmitsZeroValue(t, &value, "name")
 }
 
-func TestPersonRowLastSeenOmitsZeroValue(t *testing.T) {
+func TestPersonRowLastSeenOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PersonRow
 	assertWireFieldOmitsZeroValue(t, &value, "lastSeen")
 }
 
-func TestPersonRowLastSubjectOmitsZeroValue(t *testing.T) {
+func TestPersonRowLastSubjectOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PersonRow
 	assertWireFieldOmitsZeroValue(t, &value, "lastSubject")
 }
 
-func TestPersonRowWikiPathOmitsZeroValue(t *testing.T) {
+func TestPersonRowWikiPathOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PersonRow
 	assertWireFieldOmitsZeroValue(t, &value, "wikiPath")
 }
 
-func TestPersonRowWikiSummaryOmitsZeroValue(t *testing.T) {
+func TestPersonRowWikiSummaryOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PersonRow
 	assertWireFieldOmitsZeroValue(t, &value, "wikiSummary")
 }
 
-func TestSearchWikiHitTitleOmitsZeroValue(t *testing.T) {
+func TestSearchWikiHitTitleOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SearchWikiHit
 	assertWireFieldOmitsZeroValue(t, &value, "title")
 }
 
-func TestSearchWikiHitSummaryOmitsZeroValue(t *testing.T) {
+func TestSearchWikiHitSummaryOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SearchWikiHit
 	assertWireFieldOmitsZeroValue(t, &value, "summary")
 }
 
-func TestSearchWikiHitCategoryOmitsZeroValue(t *testing.T) {
+func TestSearchWikiHitCategoryOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SearchWikiHit
 	assertWireFieldOmitsZeroValue(t, &value, "category")
 }
 
-func TestSearchDiaryHitAtOmitsZeroValue(t *testing.T) {
+func TestSearchDiaryHitAtOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SearchDiaryHit

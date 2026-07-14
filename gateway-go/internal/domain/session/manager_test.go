@@ -24,14 +24,14 @@ func TestCreateAndGet(t *testing.T) {
 	}
 }
 
-func TestGetNotFound(t *testing.T) {
+func TestGetReturnsNilForMissingSession(t *testing.T) {
 	m := NewManager()
 	if m.Get("nonexistent") != nil {
 		t.Error("should not find nonexistent session")
 	}
 }
 
-func TestSetAndCount(t *testing.T) {
+func TestSetAddsSessionsAndCountReturnsTotal(t *testing.T) {
 	m := NewManager()
 	m.Set(&Session{Key: "s1", Kind: KindDirect})
 	m.Set(&Session{Key: "s2", Kind: KindGroup})
@@ -53,7 +53,7 @@ func TestDelete(t *testing.T) {
 	}
 }
 
-func TestApplyLifecycleEvent(t *testing.T) {
+func TestApplyLifecycleEventUpdatesStatusAndRuntimeMs(t *testing.T) {
 	m := NewManager()
 
 	s := m.ApplyLifecycleEvent("s1", LifecycleEvent{Phase: PhaseStart, Ts: 1000})
@@ -127,7 +127,7 @@ func TestApplyLifecycleEndWithoutStart(t *testing.T) {
 	}
 }
 
-func TestApplyLifecycleAbortedLastRun(t *testing.T) {
+func TestApplyLifecycleAbortedLastRunUpdatesAcrossStartKillRestart(t *testing.T) {
 	m := NewManager()
 
 	// Start: AbortedLastRun = false.
@@ -229,7 +229,7 @@ func TestApplyLifecycleRuntimeMsFallback(t *testing.T) {
 	}
 }
 
-func TestZeroValueManager(t *testing.T) {
+func TestZeroValueManagerWorksWithoutExplicitInit(t *testing.T) {
 	// The zero value of Manager is ready to use (like bytes.Buffer).
 	var m Manager
 

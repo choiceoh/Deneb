@@ -6,7 +6,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpctest"
 )
 
-func TestMethodsExposeMatchingLocalAndMiniappSnapshots(t *testing.T) {
+func TestSnapshotHandlersReturnReportAndMarkdown(t *testing.T) {
 	deps := Deps{StateDir: func() string { return t.TempDir() }}
 	local := Methods(deps)
 	remote := MiniappMethods(deps)

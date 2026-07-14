@@ -12,7 +12,7 @@ import (
 // agent turns) must index as readable prose, not the raw JSON fallback of
 // ChatMessage.TextContent — raw JSON made search snippets unreadable and
 // polluted the FTS index with JSON syntax tokens.
-func TestIndexableText_ThinkingAndToolOnlyMessage(t *testing.T) {
+func TestIndexableTextFormatsThinkingAndToolOnlyMessage(t *testing.T) {
 	content := `[{"type":"thinking","thinking":"주간보고는 /weekly로 트리거해야 한다"},` +
 		`{"type":"tool_use","id":"t1","name":"cron","input":{"action":"list"}}]`
 	msg := toolport.ChatMessage{Role: "assistant", Content: json.RawMessage(content)}
@@ -29,7 +29,7 @@ func TestIndexableText_ThinkingAndToolOnlyMessage(t *testing.T) {
 	}
 }
 
-func TestIndexableText_PlainAndTextBlocksUnchanged(t *testing.T) {
+func TestIndexableTextPreservesPlainAndTextBlockContent(t *testing.T) {
 	plain := toolport.ChatMessage{Role: "user", Content: json.RawMessage(`"안녕하세요"`)}
 	if got := indexableText(plain); got != "안녕하세요" {
 		t.Errorf("plain string altered: %q", got)

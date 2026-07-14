@@ -14,7 +14,7 @@ import (
 
 func pointer[T any](value T) *T { return &value }
 
-func TestAbortTriggerNormalizationMatrix(t *testing.T) {
+func TestAbortTriggerAndRequestTextRejectPartialAndInvalidInputs(t *testing.T) {
 	for _, input := range []string{
 		"stop", " STOP ", "!stop!", "🛑 stop 🛑", "cancel", "abort", "halt",
 		"quit", "exit", "end", "kill", "break", "esc",
@@ -135,7 +135,7 @@ func TestAbortCutoffCopiesTimestampAndHandlesNilEntry(t *testing.T) {
 	}
 }
 
-func TestNumericMessageSIDBoundaries(t *testing.T) {
+func TestNumericMessageSIDParsesBoundaryValues(t *testing.T) {
 	for _, tc := range []struct {
 		input string
 		want  string
@@ -186,7 +186,7 @@ func TestShouldSkipAbortCutoffPrecedenceAndInvalidTimestamps(t *testing.T) {
 	}
 }
 
-func TestShouldPersistAbortCutoffWhitespaceMatrix(t *testing.T) {
+func TestShouldPersistAbortCutoffWhitespaceBoundaryMatrix(t *testing.T) {
 	for _, tc := range []struct {
 		command string
 		target  string
@@ -358,7 +358,7 @@ func TestApplySessionUpdateSelectiveFields(t *testing.T) {
 	}
 }
 
-func TestSessionResetHelpersAndJSONAccounting(t *testing.T) {
+func TestSessionResetClearsFieldsAndUsageJSONRoundTrips(t *testing.T) {
 	session := &types.SessionState{Model: "model", Provider: "provider", UpdatedAt: -1}
 	ResetSessionModel(session)
 	if session.Model != "" || session.Provider != "" || session.UpdatedAt <= 0 {

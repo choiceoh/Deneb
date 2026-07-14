@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 )
 
-func TestTargetedToolRunID_OnlyTargetsWellFormedToolEvents(t *testing.T) {
+func TestTargetedToolRunIDReturnsRunIDOnlyForWellFormedToolEvents(t *testing.T) {
 	tests := []struct {
 		name    string
 		event   string
@@ -68,7 +68,7 @@ func TestSessionInsightToolStats_PreservesCountsAndHandlesZeroCalls(t *testing.T
 	}
 }
 
-func TestCronRelayPresentation_EmailJobsCollapseAndPreviewStaysBounded(t *testing.T) {
+func TestCronRelayPresentationTruncatesPreviewAndCollapsesEmailJobs(t *testing.T) {
 	if !cronJobUsesCollapsedRelay("email-single-analysis") {
 		t.Fatal("email analysis must use collapsed relay")
 	}

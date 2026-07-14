@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestBuildMIME_PlainText(t *testing.T) {
+func TestBuildMIME_FormatsPlainTextMessage(t *testing.T) {
 	raw := buildMIME("alice@example.com", "", "", "Hello", "", "Hi Alice", false)
 
 	if !strings.Contains(raw, "To: alice@example.com\r\n") {
@@ -26,7 +26,7 @@ func TestBuildMIME_PlainText(t *testing.T) {
 	}
 }
 
-func TestBuildMIME_HTML(t *testing.T) {
+func TestBuildMIME_FormatsHTMLMessage(t *testing.T) {
 	raw := buildMIME("bob@example.com", "", "", "Hi", "", "<p>Hello</p>", true)
 
 	if !strings.Contains(raw, "Content-Type: text/html; charset=\"UTF-8\"\r\n") {
@@ -45,7 +45,7 @@ func TestBuildMIME_WithCC_BCC(t *testing.T) {
 	}
 }
 
-func TestBuildMIME_Reply(t *testing.T) {
+func TestBuildMIME_FormatsReplyHeaders(t *testing.T) {
 	raw := buildMIME("alice@example.com", "", "", "Re: Hello", "<msg-123@mail.gmail.com>", "Thanks", false)
 
 	if !strings.Contains(raw, "In-Reply-To: <msg-123@mail.gmail.com>\r\n") {
@@ -88,7 +88,7 @@ func TestDecodeBase64URL_Wrapped(t *testing.T) {
 	}
 }
 
-func TestCollectAttachments(t *testing.T) {
+func TestCollectAttachments_ParsesAttachmentMetadata(t *testing.T) {
 	payload := &apiPayload{
 		MimeType: "multipart/mixed",
 		Parts: []apiPayload{
@@ -106,7 +106,7 @@ func TestCollectAttachments(t *testing.T) {
 	}
 }
 
-func TestExtractBody_SinglePart(t *testing.T) {
+func TestExtractBody_DecodesSinglePartPlainText(t *testing.T) {
 	p := &apiPayload{
 		MimeType: "text/plain",
 		Body:     &apiBody{Data: "SGVsbG8"}, // "Hello"
@@ -117,7 +117,7 @@ func TestExtractBody_SinglePart(t *testing.T) {
 	}
 }
 
-func TestExtractBody_Multipart_PrefersPlain(t *testing.T) {
+func TestExtractBody_ReturnsPlainTextWhenBothPartsPresent(t *testing.T) {
 	p := &apiPayload{
 		MimeType: "multipart/alternative",
 		Parts: []apiPayload{
@@ -137,7 +137,7 @@ func TestExtractBody_Multipart_PrefersPlain(t *testing.T) {
 	}
 }
 
-func TestExtractBody_Multipart_FallsBackToHTML(t *testing.T) {
+func TestExtractBody_UsesHTMLFallbackWhenPlainMissing(t *testing.T) {
 	p := &apiPayload{
 		MimeType: "multipart/alternative",
 		Parts: []apiPayload{
@@ -162,7 +162,7 @@ func TestExtractBody_Nil(t *testing.T) {
 // stripMailChrome handles a representative subset of the noise we see on
 // real newsletters/auto-mails. Each case is shaped as the rendered text
 // the operator would see after htmlToText.
-func TestStripMailChrome(t *testing.T) {
+func TestStripMailChrome_ClearsNewsletterBannersAndFooters(t *testing.T) {
 	// "Lorem" body padded out so the result clears the 200-byte safety
 	// gate that disables chrome stripping for short bodies (one-line
 	// replies, OTPs, alerts).
@@ -230,7 +230,7 @@ func TestStripMailChrome(t *testing.T) {
 
 // Short bodies must not be touched — OTP/alert mails are tiny and any
 // pattern misfire there would discard the entire content.
-func TestStripMailChrome_ShortBodyUntouched(t *testing.T) {
+func TestStripMailChrome_PreservesShortBody(t *testing.T) {
 	in := "OTP: 123456 — 5분 후 만료됩니다.\nUnsubscribe"
 	got := stripMailChrome(in)
 	if got != in {
@@ -242,7 +242,7 @@ func TestStripMailChrome_ShortBodyUntouched(t *testing.T) {
 // the input unchanged. Built from a synthetic mail whose "real" content
 // is dwarfed by a fake "view in browser" header followed by a single
 // short visible line.
-func TestStripMailChrome_AbortsOnOveraggressiveCut(t *testing.T) {
+func TestStripMailChrome_ReturnsInputWhenCutWouldRemoveMostBody(t *testing.T) {
 	chrome := strings.Repeat("View in browser. ", 30) // 510 bytes of preamble noise
 	visible := "한 줄."                                 // ≤25% of chrome length
 	in := chrome + "\n" + visible
@@ -267,7 +267,7 @@ func TestStripMailChrome_FooterCueInTopHalfIgnored(t *testing.T) {
 // HTML-only newsletters used to leak raw markup into the Mini App's <pre>
 // body view. extractBody should flatten the HTML on both the single-part
 // and the multipart fallback paths.
-func TestExtractBody_SinglePart_HTML_FlattenedToText(t *testing.T) {
+func TestExtractBody_RendersSinglePartHTMLAsText(t *testing.T) {
 	// "<html><body><p>Hello <b>world</b></p><br><div>Line two</div><script>alert(1)</script></body></html>"
 	p := &apiPayload{
 		MimeType: "text/html",
@@ -285,7 +285,7 @@ func TestExtractBody_SinglePart_HTML_FlattenedToText(t *testing.T) {
 	}
 }
 
-func TestHTMLToText(t *testing.T) {
+func TestHTMLToText_RendersHTMLAsPlainText(t *testing.T) {
 	cases := []struct {
 		name string
 		in   string
@@ -604,7 +604,7 @@ func TestExtractBody_DecodesPlainEntities(t *testing.T) {
 // Some composers (Outlook, Daum editor, Angular-templated webmail signatures) emit
 // HTML into the text/plain alternative. Since extraction prefers text/plain, those
 // tags would otherwise reach the reader raw — flatten them like an HTML body.
-func TestExtractBody_PlainCarryingHTMLIsFlattened(t *testing.T) {
+func TestExtractBody_RendersHTMLFoundInPlainPart(t *testing.T) {
 	raw := "안녕하십니까.<o:p></o:p>\n" +
 		"<span ng-if=\"showField('title')\" style=\"font-size:11pt;\">기획조정실 대리</span>\n" +
 		"<hr dze_content_sep=\"\">\n" +
@@ -627,7 +627,7 @@ func TestExtractBody_PlainCarryingHTMLIsFlattened(t *testing.T) {
 	}
 }
 
-func TestExtractBody_Multipart_PlainCarryingHTMLIsFlattened(t *testing.T) {
+func TestExtractBody_RendersHTMLFoundInMultipartPlainPart(t *testing.T) {
 	htmlInPlain := "본문<o:p></o:p> <span style=\"color:red\">강조</span> <div>끝</div>"
 	p := &apiPayload{
 		MimeType: "multipart/alternative",
@@ -657,7 +657,7 @@ func TestExtractBody_PlainProseWithIncidentalAnglesUntouched(t *testing.T) {
 	}
 }
 
-func TestPlainLooksLikeHTML(t *testing.T) {
+func TestPlainLooksLikeHTML_DetectsHTMLWithoutFalsePositives(t *testing.T) {
 	cases := []struct {
 		name string
 		in   string

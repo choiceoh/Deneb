@@ -17,7 +17,7 @@ import (
 // Feed-card adoption closes the P2 human loop: 채택 promotes the .proposed
 // into the live artifact, 기각 discards it, and either decision lands in the
 // meta-experience ledger the next weekly cycle reads.
-func TestHandleMetaProposalAction(t *testing.T) {
+func TestHandleMetaProposalActionUpdatesArtifactOnAdoptOrReject(t *testing.T) {
 	newServer := func(t *testing.T) (*Server, string) {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())
@@ -92,7 +92,7 @@ func TestHandleMetaProposalAction(t *testing.T) {
 	})
 }
 
-func TestLowConfidenceEvolveCardRecordsOperatorVerdict(t *testing.T) {
+func TestLowConfidenceEvolveCardPreservesFirstOperatorVerdict(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tracker, err := genesis.NewTracker(slog.Default())
 	if err != nil {

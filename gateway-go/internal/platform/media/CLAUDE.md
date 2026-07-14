@@ -34,8 +34,8 @@
 - `fetch_contract_test.go`의 `TestFetchRejectsInvalidInitialURLsBeforeTransport`,
   `TestFetchValidatesEveryRedirectWithCustomClient`, `TestFetchSizeLimitsContract`
   계열이 SSRF와 byte 한도를 검증한다.
-- `watch_scene_test.go`의 `TestWatchLocalFile_SceneAlignedFrames`와
-  `TestDetectSceneChangeTimestamps_WindowOffset`, `youtube_native_test.go`의
-  `TestSelectCaptionTrack`이 frame/caption 선택 계약을 고정한다.
+- `watch_scene_test.go`의 `TestWatchVideoReturnsFramesAlignedWithSceneCuts`와
+  `TestDetectSceneChangeTimestampsShiftsCutsToAbsoluteTimeWithinWindow`, `youtube_native_test.go`의
+  `TestSelectCaptionTrackPrefersManualTracksOverAutoWithKoreanFirst`이 frame/caption 선택 계약을 고정한다.
 
 `cd gateway-go && go test -count=1 ./internal/platform/media`

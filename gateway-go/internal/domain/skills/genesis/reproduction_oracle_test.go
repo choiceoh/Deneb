@@ -13,7 +13,7 @@ import (
 // Reproduction oracle (SEA Alg 8, RSI P1.5): a producer-authored case is
 // adopted only when the deterministic gate confirms fails-on-original AND
 // passes-on-candidate.
-func TestAdoptReproductionCase(t *testing.T) {
+func TestAdoptReproductionCaseAdoptsOnlyWhenDiscriminativeAgainstOriginalAndCandidate(t *testing.T) {
 	newEvolver := func(t *testing.T) *Evolver {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())
@@ -84,7 +84,7 @@ func TestAdoptReproductionCase(t *testing.T) {
 
 // Sidecar-provenance refresh: a materialized file that is still the pristine
 // default follows the compiled default forward; a revised file never moves.
-func TestMaterializeDefaults_SidecarRefresh(t *testing.T) {
+func TestMaterializeDefaultsRefreshesPristineFileButPreservesRevisedOne(t *testing.T) {
 	dir := t.TempDir()
 	m := generation.NewMetaArtifacts(dir, slog.Default())
 	name := "prompt.md"

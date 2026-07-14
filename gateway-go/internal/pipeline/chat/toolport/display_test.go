@@ -52,7 +52,7 @@ func mustText(t *testing.T, m ChatMessage) string {
 // A tool turn is persisted as an assistant tool_use followed by a user-role
 // tool_result. The tool_result message must not surface as a chat bubble, while
 // the surrounding turn (including the assistant's text) is preserved in order.
-func TestStripToolResultBlocks_DropsToolResultOnlyMessage(t *testing.T) {
+func TestStripToolResultBlocksDeletesResultOnlyMessage(t *testing.T) {
 	msgs := []ChatMessage{
 		NewTextChatMessage("user", "리눅스 프로세스 보여줘", 0),
 		richMsg("assistant", `[{"type":"text","text":"확인해볼게요"},{"type":"tool_use","id":"t1","name":"exec","input":{"command":"ps aux"}}]`),
@@ -82,7 +82,7 @@ func TestStripToolResultBlocks_DropsToolResultOnlyMessage(t *testing.T) {
 
 // A message that mixes a text block with a tool_result keeps the text and loses
 // only the tool_result.
-func TestStripToolResultBlocks_KeepsOtherBlocksInMixedMessage(t *testing.T) {
+func TestStripToolResultBlocksPreservesOtherBlocksInMixedMessage(t *testing.T) {
 	msgs := []ChatMessage{
 		richMsg("user", `[{"type":"text","text":"여기 결과"},{"type":"tool_result","tool_use_id":"t9","content":"secret stdout"}]`),
 	}
@@ -101,7 +101,7 @@ func TestStripToolResultBlocks_KeepsOtherBlocksInMixedMessage(t *testing.T) {
 
 // Plain-string content and non-tool_result blocks (thinking, tool_use) pass
 // through byte-for-byte — the strip is scoped to tool_result only.
-func TestStripToolResultBlocks_LeavesPlainAndNonToolResultBlocks(t *testing.T) {
+func TestStripToolResultBlocksPreservesPlainAndNonToolResultBlocks(t *testing.T) {
 	thinking := richMsg("assistant", `[{"type":"thinking","thinking":"고민중"},{"type":"tool_use","id":"t1","name":"exec","input":{}}]`)
 	msgs := []ChatMessage{
 		NewTextChatMessage("user", "안녕", 0),
@@ -145,7 +145,7 @@ func TestStripLinkEnrichmentForDisplay_StripsAppendedBlock(t *testing.T) {
 
 // The baked "[<RFC3339>] " wall-clock prefix (run_exec.go persist site) must
 // come off user bubbles, while user-typed brackets and non-user roles survive.
-func TestStripUserMessageTimestamp(t *testing.T) {
+func TestStripUserMessageTimestampPreservesUserTypedBrackets(t *testing.T) {
 	cases := []struct {
 		name, in, want string
 	}{

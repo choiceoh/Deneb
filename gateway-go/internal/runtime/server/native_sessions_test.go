@@ -13,7 +13,7 @@ import (
 // SIGUSR1 restart because the filter used to match bare isNativeClientSessionKey.
 // The chat: namespace (legacy 챗봇 workspace, mode removed) is the inverse: its
 // conversations must keep restoring so old chats stay listed in the drawer.
-func TestRestorableTranscriptSession(t *testing.T) {
+func TestRestorableTranscriptSessionReturnsTrueOnlyForLiveKeyFormats(t *testing.T) {
 	cases := []struct {
 		key  string
 		want bool
@@ -47,7 +47,7 @@ func TestRestorableTranscriptSession(t *testing.T) {
 // TestRetiredKeysStillNativeButNotRestorable documents the deliberate gap: the
 // retired keys remain "native client" keys for activity/heartbeat/resume
 // purposes (isNativeClientSessionKey stays broad), yet must not be restored.
-func TestRetiredKeysStillNativeButNotRestorable(t *testing.T) {
+func TestRetiredKeysReturnTrueForNativeButFalseForRestorable(t *testing.T) {
 	retired := []string{
 		"client:topic:업무",
 		"client:6ae56098-122c-40ff-a5bd-c9e6cad6faa8",

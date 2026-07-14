@@ -27,7 +27,7 @@ func sweepTask(t *testing.T, proposed int, funnel genesis.SelfCorrectionFunnelSu
 // The evidence bundle leads the nudge: clusters render as one bullet each and
 // the instructions pivot to cluster-first mining. A nil evidence closure (or an
 // empty bundle) falls back to the counter-only nudge.
-func TestBuildSelfImproveSweepNudge_EvidenceBundle(t *testing.T) {
+func TestBuildSelfImproveSweepNudgeEvidenceBundleWithFallback(t *testing.T) {
 	task := sweepTask(t, 0, genesis.SelfCorrectionFunnelSummary{Rejections7d: 4, PromotableRejections7d: 2}, 1)
 	task.selfImproveEvidence = func(limit int) []genesis.FailureClusterSummary {
 		if limit != sweepEvidenceClusterLimit {
@@ -78,7 +78,7 @@ func TestBuildSelfImproveSweepNudge_EvidenceBundle(t *testing.T) {
 
 // An empty queue with fresh signals fires the sweep; the interval throttles
 // re-fires; past the interval it fires again while signals persist.
-func TestDetectSelfImproveSweep_FireThrottleRefire(t *testing.T) {
+func TestDetectSelfImproveSweepFiresThenExpiresThrottle(t *testing.T) {
 	task := sweepTask(t, 0, genesis.SelfCorrectionFunnelSummary{
 		Rejections7d:           3,
 		PromotableRejections7d: 1,
@@ -151,7 +151,7 @@ func TestDetectSelfImproveSweep_EscalatesAfterIgnoredNudges(t *testing.T) {
 	}
 }
 
-func TestDetectSelfImproveSweep_QuietPaths(t *testing.T) {
+func TestDetectSelfImproveSweepBusyEmptyAndNilStayQuiet(t *testing.T) {
 	// Queue not empty → the review lane owns the tick.
 	busy := sweepTask(t, 2, genesis.SelfCorrectionFunnelSummary{Rejections7d: 3}, 1)
 	if got := busy.detectSelfImproveSweepNudge(time.Now()); got != "" {
@@ -198,7 +198,7 @@ func TestDetectSelfImproveSweep_ClockSkewRecovers(t *testing.T) {
 // Workout evidence alone (no rejections/recurrences — they're quarantined
 // counters) must wake the sweep, or the synthetic exercise lane piles up
 // clusters nothing consumes.
-func TestDetectSelfImproveSweep_FiresOnEvidenceClustersAlone(t *testing.T) {
+func TestDetectSelfImproveSweepWhenOnlyWorkoutEvidence(t *testing.T) {
 	task := sweepTask(t, 0, genesis.SelfCorrectionFunnelSummary{}, 0)
 	task.selfImproveEvidence = func(int) []genesis.FailureClusterSummary {
 		return []genesis.FailureClusterSummary{{

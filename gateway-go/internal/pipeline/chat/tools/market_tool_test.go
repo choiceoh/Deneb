@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 )
 
-func TestToolMarket(t *testing.T) {
+func TestToolMarketReturnsFreshQuotes(t *testing.T) {
 	asOf := time.Now().UnixMilli()
 	fetch := func(context.Context) ([]market.Quote, int64, bool, error) {
 		return []market.Quote{

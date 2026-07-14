@@ -132,98 +132,129 @@ func ClearSessionSnapshot(sessionKey string) {
 	Cache.ClearSession(sessionKey)
 }
 
+// contextLoadState accumulates results across the per-filename scans of
+// loadContextFilesFromDisk.
+type contextLoadState struct {
+	files          []ContextFile
+	totalChars     int
+	seen           map[string]struct{}  // track resolved paths for dedup
+	resolvedMtimes map[string]time.Time // for cache validation
+}
+
 // loadContextFilesFromDisk performs the actual filesystem scan.
 func loadContextFilesFromDisk(workspaceDir string) ([]ContextFile, map[string]time.Time) { //nolint:gocritic // unnamedResult — naming would shadow local vars
 	searchDirs := collectSearchDirs(workspaceDir)
 
-	var files []ContextFile
-	totalChars := 0
-	seen := make(map[string]struct{})            // track resolved paths for dedup
-	resolvedMtimes := make(map[string]time.Time) // for cache validation
-
+	st := &contextLoadState{
+		seen:           make(map[string]struct{}),
+		resolvedMtimes: make(map[string]time.Time),
+	}
 	for _, name := range contextFileNames {
-		for _, dir := range searchDirs {
-			path := filepath.Join(dir, name)
-
-			// Follow symlinks in case context files are symlinked.
-			resolved, err := filepath.EvalSymlinks(path)
-			if err != nil {
-				continue
-			}
-
-			// Skip if we already loaded this resolved path.
-			if _, ok := seen[resolved]; ok {
-				break
-			}
-
-			info, err := os.Stat(resolved)
-			if err != nil {
-				continue
-			}
-
-			data, err := os.ReadFile(resolved)
-			if err != nil {
-				continue
-			}
-
-			content := string(data)
-			if content == "" {
-				continue
-			}
-
-			// Record mtime for cache validation.
-			resolvedMtimes[resolved] = info.ModTime()
-
-			// Effective budget: per-file cap, clipped by the remaining total.
-			budget := contextFileCharBudget(name)
-			if remaining := maxContextTotalChars - totalChars; remaining < budget {
-				if remaining <= 0 {
-					break
-				}
-				budget = remaining
-			}
-			if len(content) > budget {
-				// Truncation drops real memory content — surface it so the
-				// operator learns the file needs trimming (not just the LLM).
-				slog.Warn("context file exceeds budget; head/tail truncated",
-					"file", name, "sizeBytes", len(content), "budgetBytes", budget)
-				content = truncateContent(content, budget)
-			}
-
-			// Content-based dedup (handles symlinks pointing to same file).
-			isDup := false
-			for _, existing := range files {
-				if existing.Content == content {
-					isDup = true
-					break
-				}
-			}
-			if isDup {
-				seen[resolved] = struct{}{}
-				break
-			}
-
-			// Use relative label: if from workspace root, just the filename;
-			// otherwise include relative path hint.
-			label := name
-			if dir != workspaceDir {
-				rel, _ := filepath.Rel(workspaceDir, filepath.Join(dir, name))
-				if rel != "" {
-					label = rel
-				}
-			}
-
-			files = append(files, ContextFile{
-				Path:    label,
-				Content: content,
-			})
-			totalChars += len(content)
-			seen[resolved] = struct{}{}
-			break // Found for this filename, don't search further up
-		}
+		loadContextFileForName(st, workspaceDir, searchDirs, name)
 	}
 
-	return files, resolvedMtimes
+	return st.files, st.resolvedMtimes
+}
+
+// loadContextFileForName searches searchDirs (workspace first, then ancestors)
+// for one context filename and loads the first hit into st. A return stops
+// the search for this filename; a continue moves on to the next (higher) dir.
+func loadContextFileForName(st *contextLoadState, workspaceDir string, searchDirs []string, name string) {
+	for _, dir := range searchDirs {
+		path := filepath.Join(dir, name)
+
+		// Follow symlinks in case context files are symlinked.
+		resolved, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			continue
+		}
+
+		// Skip if we already loaded this resolved path.
+		if _, ok := st.seen[resolved]; ok {
+			return
+		}
+
+		info, err := os.Stat(resolved)
+		if err != nil {
+			continue
+		}
+
+		data, err := os.ReadFile(resolved)
+		if err != nil {
+			continue
+		}
+
+		content := string(data)
+		if content == "" {
+			continue
+		}
+
+		// Record mtime for cache validation.
+		st.resolvedMtimes[resolved] = info.ModTime()
+
+		budget, ok := effectiveContextBudget(name, st.totalChars)
+		if !ok {
+			return // total budget exhausted
+		}
+		if len(content) > budget {
+			// Truncation drops real memory content — surface it so the
+			// operator learns the file needs trimming (not just the LLM).
+			slog.Warn("context file exceeds budget; head/tail truncated",
+				"file", name, "sizeBytes", len(content), "budgetBytes", budget)
+			content = truncateContent(content, budget)
+		}
+
+		// Content-based dedup (handles symlinks pointing to same file).
+		if contextContentIsDup(st.files, content) {
+			st.seen[resolved] = struct{}{}
+			return
+		}
+
+		st.files = append(st.files, ContextFile{
+			Path:    contextFileLabel(workspaceDir, dir, name),
+			Content: content,
+		})
+		st.totalChars += len(content)
+		st.seen[resolved] = struct{}{}
+		return // Found for this filename, don't search further up
+	}
+}
+
+// effectiveContextBudget returns the per-file byte budget clipped by the
+// remaining total budget. ok=false means the total budget is exhausted.
+func effectiveContextBudget(name string, totalChars int) (int, bool) {
+	budget := contextFileCharBudget(name)
+	if remaining := maxContextTotalChars - totalChars; remaining < budget {
+		if remaining <= 0 {
+			return 0, false
+		}
+		budget = remaining
+	}
+	return budget, true
+}
+
+// contextContentIsDup reports whether an already-loaded file has identical
+// content (handles symlinks pointing to the same file).
+func contextContentIsDup(files []ContextFile, content string) bool {
+	for _, existing := range files {
+		if existing.Content == content {
+			return true
+		}
+	}
+	return false
+}
+
+// contextFileLabel returns the display label: if from the workspace root,
+// just the filename; otherwise a relative path hint.
+func contextFileLabel(workspaceDir, dir, name string) string {
+	if dir == workspaceDir {
+		return name
+	}
+	rel, _ := filepath.Rel(workspaceDir, filepath.Join(dir, name))
+	if rel == "" {
+		return name
+	}
+	return rel
 }
 
 // collectSearchDirs returns the workspace dir plus its ancestors, stopping

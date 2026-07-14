@@ -9,10 +9,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-// TestSearchBatchParity: SearchBatch(queries) must equal Search(q) per query
-// (same BM25/blend/validity; only the embed is shared). Runs without an embedder
-// (pure BM25 path) so the parity holds deterministically.
-func TestSearchBatchParity(t *testing.T) {
+// TestSearchBatchParity_ReturnsPerQuerySearchResults: SearchBatch(queries) must
+// equal Search(q) per query (same BM25/blend/validity; only the embed is
+// shared). Runs without an embedder (pure BM25 path) so the parity holds
+// deterministically.
+func TestSearchBatchParity_ReturnsPerQuerySearchResults(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), ""))
 	t.Cleanup(func() { store.Close() })

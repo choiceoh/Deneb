@@ -47,7 +47,7 @@ func TestFormatGoalGlance_EmptyGoal(t *testing.T) {
 	}
 }
 
-func TestNewGoalGlanceFunc(t *testing.T) {
+func TestNewGoalGlanceFuncReturnsGoalForActiveSession(t *testing.T) {
 	// Save/restore the process default so this never leaks into sibling tests.
 	prev := goals.Default()
 	t.Cleanup(func() { goals.SetDefault(prev) })

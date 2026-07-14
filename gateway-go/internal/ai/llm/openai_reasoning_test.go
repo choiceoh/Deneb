@@ -9,10 +9,10 @@ import (
 	"testing"
 )
 
-// TestReasoningText_AcceptsBothFields guards the streaming reasoning field
+// TestReasoningTextReadsBothFieldNames guards the streaming reasoning field
 // mismatch: deneb must read reasoning from both "reasoning_content"
 // (DeepSeek/OpenRouter) and "reasoning" (vLLM/step3p7).
-func TestReasoningText_AcceptsBothFields(t *testing.T) {
+func TestReasoningTextReadsBothFieldNames(t *testing.T) {
 	cases := []struct {
 		name string
 		d    openAIDelta

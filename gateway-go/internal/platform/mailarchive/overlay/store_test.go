@@ -14,7 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive/overlay"
 )
 
-func TestStorePersistsLocatorsAndMutations(t *testing.T) {
+func TestStoreSavesLocatorsAndMutationsAcrossReload(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "state.json")
 	store := overlay.NewStore(path)
 	if got := store.Get("missing"); got != (overlay.MessageState{}) {
@@ -186,7 +186,7 @@ func TestStoreInvalidInputsAreNoOpsAndCorruptStateRecovers(t *testing.T) {
 	}
 }
 
-func TestStoreSnapshotIsIndependent(t *testing.T) {
+func TestStoreSnapshotReturnsIndependentCopy(t *testing.T) {
 	store := overlay.NewStore(filepath.Join(t.TempDir(), "state.json"))
 	if err := store.RememberLocator("id", "INBOX", "9"); err != nil {
 		t.Fatal(err)

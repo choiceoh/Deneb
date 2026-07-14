@@ -17,9 +17,10 @@ func newLogStore(t *testing.T) *Store {
 	return store
 }
 
-// TestRotateProjectLog: sections beyond the newest LogKeepSections move to
-// 로그-보관.md (archived), newest sections stay in place and in order.
-func TestRotateProjectLog(t *testing.T) {
+// TestRotateProjectLog_MovesOverflowToArchiveKeepsNewestNoopUnderCapOrMissing:
+// sections beyond the newest LogKeepSections move to 로그-보관.md (archived),
+// newest sections stay in place and in order.
+func TestRotateProjectLog_MovesOverflowToArchiveKeepsNewestNoopUnderCapOrMissing(t *testing.T) {
 	store := newLogStore(t)
 
 	page := NewPage("영산고 진행 로그", "프로젝트", nil)
@@ -112,8 +113,9 @@ func TestTrimRotatedLogSections_KeepsConcurrentAppend(t *testing.T) {
 	}
 }
 
-// TestIsProjectLogPage guards the review-exclusion rule for log slots.
-func TestIsProjectLogPage(t *testing.T) {
+// TestIsProjectLogPage_MatchesLogAndArchiveSlotsRejectsOthers guards the
+// review-exclusion rule for log slots.
+func TestIsProjectLogPage_MatchesLogAndArchiveSlotsRejectsOthers(t *testing.T) {
 	cases := map[string]bool{
 		"프로젝트/영산고/로그.md":    true,
 		"프로젝트/영산고/로그-보관.md": true,
@@ -129,9 +131,10 @@ func TestIsProjectLogPage(t *testing.T) {
 	}
 }
 
-// TestFindSimilarPages_CodeSignal: two 대표페이지 sharing a frozen project code
-// are the same project regardless of naming.
-func TestFindSimilarPages_CodeSignal(t *testing.T) {
+// TestFindSimilarPages_ReturnsMatchByProjectCodeRegardlessOfNaming: two
+// 대표페이지 sharing a frozen project code are the same project regardless of
+// naming.
+func TestFindSimilarPages_ReturnsMatchByProjectCodeRegardlessOfNaming(t *testing.T) {
 	store := newLogStore(t)
 	a := NewPage("기아 화성 국유지", "프로젝트", nil)
 	a.Meta.Code = "pl3-kia-mod-001"

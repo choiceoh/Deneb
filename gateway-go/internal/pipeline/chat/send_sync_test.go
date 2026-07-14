@@ -30,7 +30,7 @@ func newSyncTestHandler(server *httptest.Server, transcript TranscriptStore) *Ha
 	return NewHandler(sm, broadcast, logger, cfg)
 }
 
-func TestSendSync_UninitializedHandler(t *testing.T) {
+func TestSendSyncReturnsErrorForUninitializedHandler(t *testing.T) {
 	h := &Handler{}
 	_, err := h.SendSync(context.Background(), "sess-1", "hello", "", nil)
 	if err == nil || err.Error() != "chat handler not initialized" {
@@ -38,7 +38,7 @@ func TestSendSync_UninitializedHandler(t *testing.T) {
 	}
 }
 
-func TestPrepareSyncRun_PropagatesToolCallAttemptLimit(t *testing.T) {
+func TestPrepareSyncRunPreservesExplicitZeroToolCallLimit(t *testing.T) {
 	server := httptest.NewServer(http.NotFoundHandler())
 	defer server.Close()
 	h := newSyncTestHandler(server, NewMemoryTranscriptStore())
@@ -86,7 +86,7 @@ func TestSendSync_UsesDefaultModelWhenRequestModelEmpty(t *testing.T) {
 	}
 }
 
-func TestSendSync_RecordActivitySkipsEphemeralUser(t *testing.T) {
+func TestSendSyncRecordsActivityOnlyWhenNotEphemeral(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -185,7 +185,7 @@ func TestBuildSyncResult_LeavesNormalEmptyEndTurnBlank(t *testing.T) {
 // The interactive surfaces (chat.send reply, stream done frame) both read
 // BestText — a letter composed in chat must surface substituted market numbers,
 // not raw tokens (the proactive relay only covers the cron path).
-func TestBestText_SubstitutesMarketLetterTokens(t *testing.T) {
+func TestBestTextReturnsSubstitutedMarketTokens(t *testing.T) {
 	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
 	r := SyncResult{DeliverableText: `<stat value="{{market:usd_krw}}" label="USD/KRW"/>`}
 	if got := r.BestTextRaw(); got != `<stat value="{{market:usd_krw}}" label="USD/KRW"/>` {
@@ -196,7 +196,7 @@ func TestBestText_SubstitutesMarketLetterTokens(t *testing.T) {
 	}
 }
 
-func TestBestText(t *testing.T) {
+func TestBestTextReturnsDeliverableOverFallbacks(t *testing.T) {
 	cases := []struct {
 		name string
 		r    SyncResult

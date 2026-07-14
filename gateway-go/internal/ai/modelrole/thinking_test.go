@@ -5,12 +5,13 @@ import (
 	"testing"
 )
 
-// TestThinkingOffDirective pins the shared raw-call thinking-off policy
-// consumed by the localai hub, the pilot direct path, and the wiki dreamer
-// wiring. The dual-mode case is the load-bearing one: deepseek-v4 keeps
-// Profile.Reasoning=false by design, so a reasoning-first check would send it
-// the Qwen enable_thinking spelling its template ignores.
-func TestThinkingOffDirective(t *testing.T) {
+// TestThinkingOffDirectiveReturnsPerModelToggle pins the shared raw-call
+// thinking-off policy consumed by the localai hub, the pilot direct path,
+// and the wiki dreamer wiring. The dual-mode case is the load-bearing one:
+// deepseek-v4 keeps Profile.Reasoning=false by design, so a reasoning-first
+// check would send it the Qwen enable_thinking spelling its template
+// ignores.
+func TestThinkingOffDirectiveReturnsPerModelToggle(t *testing.T) {
 	toggleOf := func(directive *ThinkingOffDirective) map[string]bool {
 		t.Helper()
 		if directive == nil {

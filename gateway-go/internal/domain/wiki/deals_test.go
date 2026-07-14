@@ -57,7 +57,7 @@ func TestUpsertDealPage_CreatesPage(t *testing.T) {
 	}
 }
 
-func TestUpsertDealPage_AppendsSecondDocument(t *testing.T) {
+func TestUpsertDealPage_WritesSecondDocument(t *testing.T) {
 	s := newDealStore(t)
 	now := time.Date(2026, 6, 9, 0, 0, 0, 0, time.UTC)
 
@@ -108,7 +108,7 @@ func TestUpsertDealPage_IdempotentBySourceRef(t *testing.T) {
 	}
 }
 
-func TestUpsertDealPage_RequiresCounterparty(t *testing.T) {
+func TestUpsertDealPage_RejectsMissingCounterparty(t *testing.T) {
 	s := newDealStore(t)
 	now := time.Date(2026, 6, 9, 0, 0, 0, 0, time.UTC)
 	if _, _, err := s.UpsertDealPage(DealPageInput{DocType: "견적서"}, now); err == nil {
@@ -116,7 +116,7 @@ func TestUpsertDealPage_RequiresCounterparty(t *testing.T) {
 	}
 }
 
-func TestDealSlug(t *testing.T) {
+func TestDealSlugFormatsCounterpartyName(t *testing.T) {
 	cases := map[string]string{
 		"탑솔라":           "탑솔라",
 		"TopSolar Inc.": "topsolar-inc",
@@ -130,7 +130,7 @@ func TestDealSlug(t *testing.T) {
 	}
 }
 
-func TestUpsertDealPage_StampsRelatedProjects(t *testing.T) {
+func TestUpsertDealPage_UpdatesRelatedProjects(t *testing.T) {
 	s := newDealStore(t)
 	now := time.Date(2026, 6, 9, 0, 0, 0, 0, time.UTC)
 

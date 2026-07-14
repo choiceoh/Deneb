@@ -46,7 +46,7 @@ func TestRunContractProvenanceAndWireRoundTrip(t *testing.T) {
 	}
 }
 
-func TestCloneRunResultOwnsMutableEvidence(t *testing.T) {
+func TestCloneRunResultPreservesOriginalEvidence(t *testing.T) {
 	run := &RunResult{
 		Episodes:     []EpisodeResult{{ReleasedSource: []string{"source-1"}}},
 		DeviceLedger: []DeviceActionRecord{{Payload: json.RawMessage(`{"a":1}`)}},

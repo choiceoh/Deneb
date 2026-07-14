@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestValidateURL(t *testing.T) {
+func TestValidateURLRejectsPrivateAndUnsupportedSchemes(t *testing.T) {
 	tests := []struct {
 		name    string
 		url     string
@@ -33,7 +33,7 @@ func TestValidateURL(t *testing.T) {
 	}
 }
 
-func TestIsPrivateIP(t *testing.T) {
+func TestIsPrivateIPClassifiesPrivateRangesAndTreatsNilAsPrivate(t *testing.T) {
 	privateIPs := []string{
 		"127.0.0.1", "10.0.0.1", "192.168.1.1", "172.16.0.1", "::1",
 		// CGNAT / tailnet range and other non-routable blocks.
@@ -67,9 +67,9 @@ func TestIsPrivateIP(t *testing.T) {
 	}
 }
 
-// TestEmbeddedIPv4s: each transition format decodes to the exact embedded
-// IPv4, and plain addresses decode to nothing.
-func TestEmbeddedIPv4s(t *testing.T) {
+// TestEmbeddedIPv4sParsesTransitionFormatsAndSkipsPlainAddresses: each transition
+// format decodes to the exact embedded IPv4, and plain addresses decode to nothing.
+func TestEmbeddedIPv4sParsesTransitionFormatsAndSkipsPlainAddresses(t *testing.T) {
 	cases := []struct {
 		in   string
 		want string // "" = no embedding
@@ -116,7 +116,7 @@ func TestParseContentDispositionFileName(t *testing.T) {
 	}
 }
 
-func TestDetectMIME(t *testing.T) {
+func TestDetectMIMEIdentifiesPNGAndDefaultsOnEmptyInput(t *testing.T) {
 	// PNG magic bytes.
 	png := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
 	if got := DetectMIME(png); got != "image/png" {

@@ -9,7 +9,7 @@ import (
 // ListPages must prune backup/hidden directories (operator-made copies, the
 // wiki .git repo) so they never surface as phantom 인물/프로젝트 rows, while
 // keeping legit project subfolders (기자재/메일분석/…).
-func TestListPages_PrunesBackupAndHiddenDirs(t *testing.T) {
+func TestListPages_RejectsBackupAndHiddenDirs(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

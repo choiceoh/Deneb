@@ -36,9 +36,9 @@ func TestFrontmatterSitesRoundtrip(t *testing.T) {
 		},
 		Body: "본문.",
 	}
-	parsed, err := ParsePage(p.Render())
+	parsed, err := parsePage(p.Render())
 	if err != nil {
-		t.Fatalf("ParsePage: %v", err)
+		t.Fatalf("parsePage: %v", err)
 	}
 	want := []string{"전북 군산시 옥구읍 수산리", "충남 당진시 송악읍"}
 	if len(parsed.Meta.Sites) != 2 || parsed.Meta.Sites[0] != want[0] || parsed.Meta.Sites[1] != want[1] {
@@ -98,9 +98,10 @@ func TestNormalizeKindsHierarchy(t *testing.T) {
 	}
 }
 
-// TestProjectAnchor_SiteMatch: naming the PLACE anchors the project — mail and
-// calendar text says "수산리 현장" far more often than the project title.
-func TestProjectAnchor_SiteMatch(t *testing.T) {
+// TestProjectAnchor_MatchesBySiteNameMentionIgnoresUnrelatedText: naming the PLACE
+// anchors the project — mail and calendar text says "수산리 현장" far more often
+// than the project title.
+func TestProjectAnchor_MatchesBySiteNameMentionIgnoresUnrelatedText(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

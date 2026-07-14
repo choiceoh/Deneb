@@ -127,7 +127,7 @@ func TestRestructure_ApplyContinuesAfterActionFailure(t *testing.T) {
 	if _, err := store.ReadPage("업무/후속.md"); err == nil {
 		t.Fatal("later delete did not run after the move failure")
 	}
-	if _, ok := store.SnapshotEntries()["업무/실패.md"]; !ok {
+	if _, ok := store.snapshotEntries()["업무/실패.md"]; !ok {
 		t.Fatal("final index rebuild omitted the surviving failed-move source")
 	}
 }

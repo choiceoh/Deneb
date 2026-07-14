@@ -27,10 +27,11 @@ func (s *slowToolExecutor) Execute(ctx context.Context, _ string, _ json.RawMess
 	}
 }
 
-// TestToolHeartbeat_FiresDuringLongTool verifies that OnToolProgress fires
-// periodically while a tool is still executing, so surface liveness
-// indicators (client typing "...") stay alive during multi-minute tools.
-func TestToolHeartbeat_FiresDuringLongTool(t *testing.T) {
+// TestToolHeartbeat_FiresPeriodicallyThenStopsAfterReturn verifies that
+// OnToolProgress fires periodically while a tool is still executing, so
+// surface liveness indicators (client typing "...") stay alive during
+// multi-minute tools, and stops firing promptly once the tool returns.
+func TestToolHeartbeat_FiresPeriodicallyThenStopsAfterReturn(t *testing.T) {
 	// Shrink the interval so the test runs in under a second.
 	origInterval := toolHeartbeatInterval
 	toolHeartbeatInterval = 50 * time.Millisecond
@@ -85,9 +86,9 @@ func TestToolHeartbeat_FiresDuringLongTool(t *testing.T) {
 	}
 }
 
-// TestToolHeartbeat_ShortToolNoFire verifies no heartbeat fires when the
-// tool returns faster than the first tick.
-func TestToolHeartbeat_ShortToolNoFire(t *testing.T) {
+// TestToolHeartbeat_NoFireWhenToolFinishesBeforeFirstTick verifies no
+// heartbeat fires when the tool returns faster than the first tick.
+func TestToolHeartbeat_NoFireWhenToolFinishesBeforeFirstTick(t *testing.T) {
 	origInterval := toolHeartbeatInterval
 	toolHeartbeatInterval = 100 * time.Millisecond
 	t.Cleanup(func() { toolHeartbeatInterval = origInterval })

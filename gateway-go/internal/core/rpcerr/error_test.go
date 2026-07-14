@@ -12,7 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-func TestNewBasic(t *testing.T) {
+func TestNewCreatesErrorWithoutDetails(t *testing.T) {
 	e := New(protocol.ErrNotFound, "session not found")
 	if e.Code != protocol.ErrNotFound {
 		t.Errorf("code = %q, want %q", e.Code, protocol.ErrNotFound)
@@ -25,7 +25,7 @@ func TestNewBasic(t *testing.T) {
 	}
 }
 
-func TestTypedContextChaining(t *testing.T) {
+func TestWithSessionAndWithMethodChainIntoDetails(t *testing.T) {
 	e := New(protocol.ErrNotFound, "session not found").
 		WithSession("abc-123").
 		WithMethod("sessions.get")
@@ -64,7 +64,7 @@ func TestToShapePreservesDetails(t *testing.T) {
 	}
 }
 
-func TestResponse(t *testing.T) {
+func TestResponseReturnsErrorEnvelopeWithRequestID(t *testing.T) {
 	e := MissingParam("key")
 	resp := e.Response("req-1")
 	if resp.ID != "req-1" {
@@ -81,7 +81,7 @@ func TestResponse(t *testing.T) {
 	}
 }
 
-func TestWrap(t *testing.T) {
+func TestWrapPreservesCauseAndSetsMessageFromError(t *testing.T) {
 	cause := errors.New("db connection lost")
 	e := Wrap(protocol.ErrDependencyFailed, cause)
 	if e.Message != "db connection lost" {
@@ -92,7 +92,7 @@ func TestWrap(t *testing.T) {
 	}
 }
 
-func TestUnwrap(t *testing.T) {
+func TestUnwrapPreservesErrorChainForIsAndAs(t *testing.T) {
 	sentinel := errors.New("root cause")
 	e := Wrap(protocol.ErrDependencyFailed, sentinel)
 
@@ -117,7 +117,7 @@ func TestUnwrap(t *testing.T) {
 	}
 }
 
-func TestWrapConvenienceConstructors(t *testing.T) {
+func TestWrapConvenienceConstructorsPreserveCodeAndCause(t *testing.T) {
 	cause := errors.New("disk full")
 	tests := []struct {
 		name string
@@ -145,7 +145,7 @@ func TestWrapConvenienceConstructors(t *testing.T) {
 	}
 }
 
-func TestLogAttrs(t *testing.T) {
+func TestLogAttrsReturnsCodeMessageAndSessionKeyForLogging(t *testing.T) {
 	e := New(protocol.ErrNotFound, "missing").WithSession("s1")
 	attrs := e.LogAttrs()
 	if len(attrs) != 3 {

@@ -123,7 +123,7 @@ func TestIsRealUsageRecord_AllowlistFailsClosed(t *testing.T) {
 			t.Fatalf("source %q must count as real", s)
 		}
 	}
-	notReal := []string{UsageSourceWorkout, UsageSourceReviewVerdict, UsageSourceReviewConsult, "curriculum", "sandbox-shadow-2027"}
+	notReal := []string{usageSourceWorkout, UsageSourceReviewVerdict, usageSourceReviewConsult, "curriculum", "sandbox-shadow-2027"}
 	for _, s := range notReal {
 		if isRealUsageRecord(UsageRecord{SkillName: "sk", SessionKey: "client:t", Success: true, Source: s}) {
 			t.Fatalf("source %q must NOT count as real (allowlist fails closed)", s)
@@ -236,7 +236,7 @@ func TestPostEvolveRollback_ProvenSkillStopsWatch(t *testing.T) {
 	}
 }
 
-func TestTrackerRecentLifecycleLog_NewestFirstAndTyped(t *testing.T) {
+func TestRecentLifecycleLogReturnsNewestFirstWithTypedEntries(t *testing.T) {
 	tracker := newTestTracker(t)
 	if err := tracker.LogGenesis("deploy-helper", "session", "telegram:1", "coding", "Deploy workflow"); err != nil {
 		t.Fatalf("LogGenesis: %v", err)
@@ -265,7 +265,7 @@ func TestTrackerRecentLifecycleLog_NewestFirstAndTyped(t *testing.T) {
 	}
 }
 
-func TestTrackerLifecycleLogStoresSelfHarnessAudit(t *testing.T) {
+func TestRecentLifecycleLogPreservesSelfHarnessAuditFields(t *testing.T) {
 	tracker := newTestTracker(t)
 	audit := HarnessEditAudit{
 		TargetSignature:        "terminal=timeout|mechanism=bounded-execution",
@@ -297,7 +297,7 @@ func TestTrackerLifecycleLogStoresSelfHarnessAudit(t *testing.T) {
 	}
 }
 
-func TestSelfCorrectionCandidatesRecordAndReview(t *testing.T) {
+func TestRecordSelfCorrectionCandidateDeduplicatesTargetsAndReviewTransitionsStatus(t *testing.T) {
 	tracker := newTestTracker(t)
 	rec, err := tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 		Scope:          "skill",
@@ -373,7 +373,7 @@ func TestSelfCorrectionReviewRejectsUnknownID(t *testing.T) {
 	}
 }
 
-func TestSelfCorrectionReviewFSMAndDispatchClosure(t *testing.T) {
+func TestSelfCorrectionDispatchPhasesFoldIntoAppliedAndRejectsPostTerminalReview(t *testing.T) {
 	tracker := newTestTracker(t)
 	candidate, err := tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 		ID: "sc-dispatch", Scope: "code", Title: "close the loop", Source: "self-harness:test",
@@ -394,11 +394,11 @@ func TestSelfCorrectionReviewFSMAndDispatchClosure(t *testing.T) {
 	}
 
 	for _, event := range []SelfCorrectionCandidateRecord{
-		{ID: candidate.ID, DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-1", Branch: "dispatch/sc-dispatch"},
-		{ID: candidate.ID, DispatchPhase: SelfCorrectionDispatchPROpened, AttemptID: "attempt-1", PRNumber: 42},
+		{ID: candidate.ID, DispatchPhase: selfCorrectionDispatchStarted, AttemptID: "attempt-1", Branch: "dispatch/sc-dispatch"},
+		{ID: candidate.ID, DispatchPhase: selfCorrectionDispatchPROpened, AttemptID: "attempt-1", PRNumber: 42},
 		{ID: candidate.ID, DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1", CommitSHA: "merge-sha"},
-		{ID: candidate.ID, DispatchPhase: SelfCorrectionDispatchDeployed, AttemptID: "attempt-1", DeployHead: "deploy-sha"},
-		{ID: candidate.ID, DispatchPhase: SelfCorrectionDispatchWatchPassed, AttemptID: "attempt-1", DeployHead: "deploy-sha"},
+		{ID: candidate.ID, DispatchPhase: selfCorrectionDispatchDeployed, AttemptID: "attempt-1", DeployHead: "deploy-sha"},
+		{ID: candidate.ID, DispatchPhase: selfCorrectionDispatchWatchPassed, AttemptID: "attempt-1", DeployHead: "deploy-sha"},
 	} {
 		if _, err := tracker.RecordSelfCorrectionDispatch(event); err != nil {
 			t.Fatalf("dispatch %s: %v", event.DispatchPhase, err)
@@ -410,7 +410,7 @@ func TestSelfCorrectionReviewFSMAndDispatchClosure(t *testing.T) {
 		t.Fatalf("RecentSelfCorrectionCandidates: %v", err)
 	}
 	if len(rows) != 1 || rows[0].Status != SelfCorrectionStatusApplied ||
-		rows[0].DispatchPhase != SelfCorrectionDispatchWatchPassed || rows[0].CommitSHA != "merge-sha" {
+		rows[0].DispatchPhase != selfCorrectionDispatchWatchPassed || rows[0].CommitSHA != "merge-sha" {
 		t.Fatalf("watch closure did not fold into applied candidate: %+v", rows)
 	}
 	if _, err := tracker.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
@@ -440,7 +440,7 @@ func TestSelfCorrectionDispatchFSMRejectsSkippedAndCrossAttemptPhases(t *testing
 		t.Fatalf("skipped start accepted: %v", err)
 	}
 	if _, err := tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
-		ID: "sc-fsm", DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-1",
+		ID: "sc-fsm", DispatchPhase: selfCorrectionDispatchStarted, AttemptID: "attempt-1",
 	}); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -459,7 +459,7 @@ func TestSelfCorrectionDispatchSamePhaseCanEnrichMissingProvenance(t *testing.T)
 		t.Fatal(err)
 	}
 	for _, event := range []SelfCorrectionCandidateRecord{
-		{ID: "sc-enrich", DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-1"},
+		{ID: "sc-enrich", DispatchPhase: selfCorrectionDispatchStarted, AttemptID: "attempt-1"},
 		{ID: "sc-enrich", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1"},
 		{ID: "sc-enrich", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1", CommitSHA: "late-merge-sha"},
 	} {
@@ -495,15 +495,15 @@ func TestSelfCorrectionDispatchRejectsConflictingSamePhaseProvenance(t *testing.
 		t.Fatal(err)
 	}
 	for _, event := range []SelfCorrectionCandidateRecord{
-		{ID: "sc-conflict", DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-1", Branch: "dispatch/sc-conflict"},
-		{ID: "sc-conflict", DispatchPhase: SelfCorrectionDispatchPROpened, AttemptID: "attempt-1", PRNumber: 42, PRURL: "https://example.test/pr/42"},
+		{ID: "sc-conflict", DispatchPhase: selfCorrectionDispatchStarted, AttemptID: "attempt-1", Branch: "dispatch/sc-conflict"},
+		{ID: "sc-conflict", DispatchPhase: selfCorrectionDispatchPROpened, AttemptID: "attempt-1", PRNumber: 42, PRURL: "https://example.test/pr/42"},
 	} {
 		if _, err := tracker.RecordSelfCorrectionDispatch(event); err != nil {
 			t.Fatal(err)
 		}
 	}
 	_, err := tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
-		ID: "sc-conflict", DispatchPhase: SelfCorrectionDispatchPROpened, AttemptID: "attempt-1",
+		ID: "sc-conflict", DispatchPhase: selfCorrectionDispatchPROpened, AttemptID: "attempt-1",
 		PRNumber: 99, PRURL: "https://example.test/pr/99", CommitSHA: "late-sha",
 	})
 	if err == nil || !strings.Contains(err.Error(), "conflicting self-correction dispatch provenance") {
@@ -526,8 +526,8 @@ func TestSelfCorrectionDispatchLatePRReconciliationPromotesFailedAttempt(t *test
 		t.Fatal(err)
 	}
 	for _, event := range []SelfCorrectionCandidateRecord{
-		{ID: "sc-late-pr", DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-1", Branch: "dispatch/sc-late-pr-attempt-1"},
-		{ID: "sc-late-pr", DispatchPhase: SelfCorrectionDispatchFailed, AttemptID: "attempt-1", OutcomeNote: "PR not visible at session exit"},
+		{ID: "sc-late-pr", DispatchPhase: selfCorrectionDispatchStarted, AttemptID: "attempt-1", Branch: "dispatch/sc-late-pr-attempt-1"},
+		{ID: "sc-late-pr", DispatchPhase: selfCorrectionDispatchFailed, AttemptID: "attempt-1", OutcomeNote: "PR not visible at session exit"},
 		{ID: "sc-late-pr", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1", Branch: "dispatch/sc-late-pr-attempt-1", PRNumber: 77, CommitSHA: "late-merge"},
 	} {
 		if _, err := tracker.RecordSelfCorrectionDispatch(event); err != nil {
@@ -543,7 +543,7 @@ func TestSelfCorrectionDispatchLatePRReconciliationPromotesFailedAttempt(t *test
 	}
 }
 
-func TestSelfCorrectionDispatchNewAttemptResetsPriorProvenance(t *testing.T) {
+func TestRecordSelfCorrectionDispatchNewAttemptClearsPriorAttemptProvenance(t *testing.T) {
 	tracker := newTestTracker(t)
 	if _, err := tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 		ID: "sc-retry", Scope: "code", Title: "retry", Source: "self-harness:test",
@@ -551,10 +551,10 @@ func TestSelfCorrectionDispatchNewAttemptResetsPriorProvenance(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, event := range []SelfCorrectionCandidateRecord{
-		{ID: "sc-retry", DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-1", Branch: "dispatch/sc-retry"},
-		{ID: "sc-retry", DispatchPhase: SelfCorrectionDispatchPROpened, AttemptID: "attempt-1", PRNumber: 42, PRURL: "https://example.test/pr/42"},
-		{ID: "sc-retry", DispatchPhase: SelfCorrectionDispatchFailed, AttemptID: "attempt-1", OutcomeNote: "session failed"},
-		{ID: "sc-retry", DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-2", Branch: "dispatch/sc-retry"},
+		{ID: "sc-retry", DispatchPhase: selfCorrectionDispatchStarted, AttemptID: "attempt-1", Branch: "dispatch/sc-retry"},
+		{ID: "sc-retry", DispatchPhase: selfCorrectionDispatchPROpened, AttemptID: "attempt-1", PRNumber: 42, PRURL: "https://example.test/pr/42"},
+		{ID: "sc-retry", DispatchPhase: selfCorrectionDispatchFailed, AttemptID: "attempt-1", OutcomeNote: "session failed"},
+		{ID: "sc-retry", DispatchPhase: selfCorrectionDispatchStarted, AttemptID: "attempt-2", Branch: "dispatch/sc-retry"},
 	} {
 		if _, err := tracker.RecordSelfCorrectionDispatch(event); err != nil {
 			t.Fatalf("record %+v: %v", event, err)
@@ -586,7 +586,7 @@ func TestSkillsNeedingEvolution_SkipsUntilNewRealFailureAfterAttempt(t *testing.
 		t.Fatalf("LogEvolveRejected: %v", err)
 	}
 
-	candidates, err := tracker.SkillsNeedingEvolution(3, 0.7)
+	candidates, err := tracker.skillsNeedingEvolution(3, 0.7)
 	if err != nil {
 		t.Fatalf("SkillsNeedingEvolution: %v", err)
 	}
@@ -613,7 +613,7 @@ func TestSkillsNeedingEvolution_SkipsUntilNewRealFailureAfterAttempt(t *testing.
 			t.Fatalf("RecordUsage fresh success: %v", err)
 		}
 	}
-	candidates, err = tracker.SkillsNeedingEvolution(3, 0.7)
+	candidates, err = tracker.skillsNeedingEvolution(3, 0.7)
 	if err != nil {
 		t.Fatalf("SkillsNeedingEvolution after fresh evidence: %v", err)
 	}
@@ -640,14 +640,14 @@ func TestSkillsNeedingEvolution_IgnoresExpiredFailureEvidence(t *testing.T) {
 		}
 	}
 
-	stats, err := tracker.EvolutionEvidenceStats("stale-skill")
+	stats, err := tracker.evolutionEvidenceStats("stale-skill")
 	if err != nil {
 		t.Fatalf("EvolutionEvidenceStats: %v", err)
 	}
 	if stats.TotalUses != 0 {
 		t.Fatalf("expired failures must not enter evolution evidence, got %+v", stats)
 	}
-	candidates, err := tracker.SkillsNeedingEvolution(2, 0.7)
+	candidates, err := tracker.skillsNeedingEvolution(2, 0.7)
 	if err != nil {
 		t.Fatalf("SkillsNeedingEvolution: %v", err)
 	}
@@ -666,7 +666,7 @@ func TestSkillsNeedingEvolution_IgnoresExpiredFailureEvidence(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("RecordUsage fresh failure: %v", err)
 	}
-	candidates, err = tracker.SkillsNeedingEvolution(2, 0.7)
+	candidates, err = tracker.skillsNeedingEvolution(2, 0.7)
 	if err != nil {
 		t.Fatalf("SkillsNeedingEvolution after one fresh failure: %v", err)
 	}
@@ -683,7 +683,7 @@ func TestSkillsNeedingEvolution_IgnoresExpiredFailureEvidence(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("RecordUsage fresh success: %v", err)
 	}
-	candidates, err = tracker.SkillsNeedingEvolution(2, 0.7)
+	candidates, err = tracker.skillsNeedingEvolution(2, 0.7)
 	if err != nil {
 		t.Fatalf("SkillsNeedingEvolution after bounded evidence: %v", err)
 	}
@@ -698,7 +698,7 @@ func TestSkillsNeedingEvolution_IgnoresExpiredFailureEvidence(t *testing.T) {
 	t.Fatalf("expected fresh bounded evidence to trigger candidate, got %+v", candidates)
 }
 
-func TestSkillsNeedingEvolution_SkipsThrashingTopSkillDuringCooldown(t *testing.T) {
+func TestSkillsNeedingEvolutionExcludesThrashingSkillDuringCooldownButPreservesOthers(t *testing.T) {
 	tracker := newTestTracker(t)
 	for i := 0; i < evolutionThrashMinEvolves; i++ {
 		if err := tracker.LogEvolve("deploy-helper", "1.0.1", "tighten deploy workflow"); err != nil {
@@ -720,7 +720,7 @@ func TestSkillsNeedingEvolution_SkipsThrashingTopSkillDuringCooldown(t *testing.
 		}
 	}
 
-	candidates, err := tracker.SkillsNeedingEvolution(3, 0.7)
+	candidates, err := tracker.skillsNeedingEvolution(3, 0.7)
 	if err != nil {
 		t.Fatalf("SkillsNeedingEvolution: %v", err)
 	}
@@ -740,7 +740,7 @@ func TestSkillsNeedingEvolution_SkipsThrashingTopSkillDuringCooldown(t *testing.
 	}
 }
 
-func TestTrackerRecentLifecycleLog_Limit(t *testing.T) {
+func TestRecentLifecycleLogRespectsLimitAndReturnsNewestFirst(t *testing.T) {
 	tracker := newTestTracker(t)
 	for _, name := range []string{"one", "two", "three"} {
 		if err := tracker.LogGenesis(name, "session", "", "coding", ""); err != nil {
@@ -801,7 +801,7 @@ func TestTrackerRejectedSkillEdits_NewestFirstAndFiltered(t *testing.T) {
 	}
 }
 
-func TestTrackerSkillOpportunities_NewestFirstAndFiltered(t *testing.T) {
+func TestRecentSkillOpportunitiesFiltersBySkillAndReturnsNewestFirst(t *testing.T) {
 	tracker := newTestTracker(t)
 	if err := tracker.RecordSkillOpportunity(SkillOpportunityRecord{
 		Candidate:  "add merge verification proof",
@@ -843,7 +843,7 @@ func TestTrackerSkillOpportunities_NewestFirstAndFiltered(t *testing.T) {
 	}
 }
 
-func TestTrackerSkillOpportunities_NoOpEchoCollapsed(t *testing.T) {
+func TestRecentSkillOpportunitiesDeduplicatesRepeatedNoOpEchoesOfSamePattern(t *testing.T) {
 	tracker := newTestTracker(t)
 	// Live 2026-07-06 shape: the same "pattern: detail" candidate re-proposed
 	// as no-op review after review — only the first append survives inside
@@ -916,7 +916,7 @@ func TestTrackerRejectedSkillEditsFallsBackToLifecycleLog(t *testing.T) {
 	}
 }
 
-func TestTrackerSkillValidationCases_NewestFirstAndFiltered(t *testing.T) {
+func TestRecordAndRecentSkillValidationCasesFilterNewestFirstAndRoundTripReplay(t *testing.T) {
 	tracker := newTestTracker(t)
 	if err := tracker.RecordSkillValidationCase(SkillValidationCaseRecord{
 		SkillName: "deploy-helper",
@@ -1090,7 +1090,7 @@ func TestTrackerValidationCaseSummaryRejectsWeakAutomaticCases(t *testing.T) {
 	}
 }
 
-func TestTrackerValidationCaseSummaryCountsFrontierTiers(t *testing.T) {
+func TestValidationCaseSummaryReturnsUniqueCaseCountsPerFrontierTier(t *testing.T) {
 	tracker := newTestTracker(t)
 	for _, rec := range []SkillValidationCaseRecord{
 		{
@@ -1150,7 +1150,7 @@ func TestTrackerOptimizerMemoryRecordsAcceptedRejectedAndRollback(t *testing.T) 
 	if err := tracker.LogEvolveRejected("deploy-helper", "invented command"); err != nil {
 		t.Fatalf("LogEvolveRejected: %v", err)
 	}
-	if err := tracker.LogEvolveRolledBack("deploy-helper"); err != nil {
+	if err := tracker.logEvolveRolledBack("deploy-helper"); err != nil {
 		t.Fatalf("LogEvolveRolledBack: %v", err)
 	}
 
@@ -1177,7 +1177,7 @@ func TestTrackerOptimizerMemoryFallsBackToLifecycleLogWhenSidecarMissing(t *test
 	if err := tracker.LogEvolveRejected("deploy-helper", "invented command"); err != nil {
 		t.Fatalf("LogEvolveRejected: %v", err)
 	}
-	if err := tracker.LogEvolveRolledBack("deploy-helper"); err != nil {
+	if err := tracker.logEvolveRolledBack("deploy-helper"); err != nil {
 		t.Fatalf("LogEvolveRolledBack: %v", err)
 	}
 	if err := os.Remove(tracker.optimizerMemoryPath); err != nil {
@@ -1229,7 +1229,7 @@ func TestTrackerOptimizerMemoryBackfillsLifecycleBeforeFirstSidecarWrite(t *test
 	}
 }
 
-func TestTrackerCuratorMarksGeneratedSkillsAndTracksActivity(t *testing.T) {
+func TestSkillCuratorReportTracksAgentCreatedSkillUseAndPatchCounts(t *testing.T) {
 	tracker := newTestTracker(t)
 	if err := tracker.LogGenesis("deploy-helper", "session", "telegram:1", "coding", "Deploy workflow"); err != nil {
 		t.Fatalf("LogGenesis: %v", err)
@@ -1283,7 +1283,7 @@ func TestTrackerCuratorTransitionsOnlyAgentCreatedAndHonorsPin(t *testing.T) {
 		t.Fatalf("RecordUsage user-skill: %v", err)
 	}
 
-	summary, err := tracker.ApplySkillCuratorTransitions(now, SkillCuratorConfig{
+	summary, err := tracker.applySkillCuratorTransitions(now, SkillCuratorConfig{
 		IntervalHours:    1,
 		MinIdleHours:     0,
 		StaleAfterDays:   30,
@@ -1415,7 +1415,7 @@ func TestUsageStatsRecordsStructuredFailureTrace(t *testing.T) {
 	}
 }
 
-func TestSelfHarnessSignalsCountTargetRecurrence(t *testing.T) {
+func TestSelfHarnessSignalsCountsTargetRecurrenceAfterFreshPostEvolveFailure(t *testing.T) {
 	tr := newTestTracker(t)
 	audit := HarnessEditAudit{
 		TargetSignature:        "terminal=timeout|mechanism=bounded-execution",
@@ -1519,10 +1519,11 @@ func TestPostEvolveRollback_IgnoresConsultInfraFailures(t *testing.T) {
 	}
 }
 
-// TestUsageStats_ExcludeReviewSources verifies the evolver's success-rate sees
-// only genuine skill executions: review-fork verdicts (explicit Source) and
-// consult turns (session prefix) and consult-infra failures are all excluded.
-func TestUsageStats_ExcludeReviewSources(t *testing.T) {
+// TestStatsIgnoresReviewVerdictAndReviewForkConsultSessions verifies the
+// evolver's success-rate sees only genuine skill executions: review-fork
+// verdicts (explicit Source) and consult turns (session prefix) and
+// consult-infra failures are all excluded.
+func TestStatsIgnoresReviewVerdictAndReviewForkConsultSessions(t *testing.T) {
 	tr := newTestTracker(t)
 	rec := func(r UsageRecord) {
 		if err := tr.RecordUsage(r); err != nil {
@@ -1550,9 +1551,10 @@ func TestUsageStats_ExcludeReviewSources(t *testing.T) {
 	}
 }
 
-// TestEvolutionHealth_DetectsThrash verifies the /health summary flags a thrash
-// when one skill dominates recent evolutions (the email-analysis pattern).
-func TestEvolutionHealth_DetectsThrash(t *testing.T) {
+// TestEvolutionHealthFlagsThrashWhenOneSkillDominatesEvolves verifies the
+// /health summary flags a thrash when one skill dominates recent evolutions
+// (the email-analysis pattern).
+func TestEvolutionHealthFlagsThrashWhenOneSkillDominatesEvolves(t *testing.T) {
 	tr := newTestTracker(t)
 	for i := 0; i < 6; i++ {
 		if err := tr.LogEvolve("email-analysis", "1.1.0", "x"); err != nil {
@@ -1574,9 +1576,9 @@ func TestEvolutionHealth_DetectsThrash(t *testing.T) {
 	}
 }
 
-// TestEvolutionHealth_BalancedIsNotThrash verifies evenly spread evolutions do
-// not trip the thrash flag.
-func TestEvolutionHealth_BalancedIsNotThrash(t *testing.T) {
+// TestEvolutionHealthNotThrashWhenEvolvesAreEvenlySpread verifies evenly spread
+// evolutions do not trip the thrash flag.
+func TestEvolutionHealthNotThrashWhenEvolvesAreEvenlySpread(t *testing.T) {
 	tr := newTestTracker(t)
 	for _, name := range []string{"a", "a", "b", "b", "c", "c"} {
 		if err := tr.LogEvolve(name, "1.0.1", ""); err != nil {
@@ -1592,10 +1594,11 @@ func TestEvolutionHealth_BalancedIsNotThrash(t *testing.T) {
 	}
 }
 
-// TestEvolutionHealth_SingleSkillDominanceIsThrash verifies the low-volume but
-// total-dominance case (one skill is the ONLY thing evolving) trips the flag —
-// the real email-analysis state, where nothing else ever gets attention.
-func TestEvolutionHealth_SingleSkillDominanceIsThrash(t *testing.T) {
+// TestEvolutionHealthFlagsThrashWhenSingleSkillIsOnlyOneEvolving verifies the
+// low-volume but total-dominance case (one skill is the ONLY thing evolving)
+// trips the flag — the real email-analysis state, where nothing else ever
+// gets attention.
+func TestEvolutionHealthFlagsThrashWhenSingleSkillIsOnlyOneEvolving(t *testing.T) {
 	tr := newTestTracker(t)
 	for i := 0; i < 3; i++ {
 		if err := tr.LogEvolve("email-analysis", "1.1.0", ""); err != nil {
@@ -1616,7 +1619,7 @@ func TestEvolutionHealth_IncludesRejectedAndRolledBackSignals(t *testing.T) {
 	if err := tr.LogEvolveRejected("email-analysis", "textual edit budget exceeded"); err != nil {
 		t.Fatalf("LogEvolveRejected: %v", err)
 	}
-	if err := tr.LogEvolveRolledBack("deploy-helper"); err != nil {
+	if err := tr.logEvolveRolledBack("deploy-helper"); err != nil {
 		t.Fatalf("LogEvolveRolledBack: %v", err)
 	}
 
@@ -1629,10 +1632,11 @@ func TestEvolutionHealth_IncludesRejectedAndRolledBackSignals(t *testing.T) {
 	}
 }
 
-// TestCuratorUseCount_RealUseOnly verifies a review verdict does NOT bump the
-// curator use-count/staleness (only genuine execution does), so a verdict-only
-// skill correctly reads as unused and stays eligible for staleness pruning.
-func TestCuratorUseCount_RealUseOnly(t *testing.T) {
+// TestSkillCuratorUseCountIgnoresReviewVerdictsCountsOnlyRealUsage verifies a
+// review verdict does NOT bump the curator use-count/staleness (only genuine
+// execution does), so a verdict-only skill correctly reads as unused and stays
+// eligible for staleness pruning.
+func TestSkillCuratorUseCountIgnoresReviewVerdictsCountsOnlyRealUsage(t *testing.T) {
 	tr := newTestTracker(t)
 	if err := tr.LogGenesis("gen-skill", "session", "client:main", "productivity", "x"); err != nil {
 		t.Fatalf("LogGenesis: %v", err)
@@ -1656,9 +1660,10 @@ func TestCuratorUseCount_RealUseOnly(t *testing.T) {
 	}
 }
 
-// TestAgentSkillValueSummary verifies the /health "dead weight" measurement:
-// agent-created skills total + how many have zero real uses.
-func TestAgentSkillValueSummary(t *testing.T) {
+// TestAgentSkillValueSummaryReturnsTotalAndZeroUseSkills verifies the /health
+// "dead weight" measurement: agent-created skills total + how many have zero
+// real uses.
+func TestAgentSkillValueSummaryReturnsTotalAndZeroUseSkills(t *testing.T) {
 	tr := newTestTracker(t)
 	if err := tr.LogGenesis("used-skill", "session", "client:main", "productivity", ""); err != nil {
 		t.Fatalf("LogGenesis used: %v", err)
@@ -1675,9 +1680,10 @@ func TestAgentSkillValueSummary(t *testing.T) {
 	}
 }
 
-// TestReconcileCuratorAgainstCatalog verifies orphan curator entries (skills no
-// longer in the catalog) are pruned while present ones are kept.
-func TestReconcileCuratorAgainstCatalog(t *testing.T) {
+// TestReconcileCuratorAgainstCatalogDeletesOrphanedSkillEntries verifies orphan
+// curator entries (skills no longer in the catalog) are pruned while present
+// ones are kept.
+func TestReconcileCuratorAgainstCatalogDeletesOrphanedSkillEntries(t *testing.T) {
 	tr := newTestTracker(t)
 	for _, n := range []string{"keep-skill", "orphan-skill"} {
 		if err := tr.LogGenesis(n, "session", "client:main", "productivity", ""); err != nil {

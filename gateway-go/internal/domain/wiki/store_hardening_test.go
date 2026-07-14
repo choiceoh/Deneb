@@ -70,7 +70,7 @@ func TestStore_ConcurrentWriteAndIndexWalkers_Race(t *testing.T) {
 		},
 		func() { _ = store.SnapshotIndex().Render() },
 		func() {
-			for range store.SnapshotEntries() {
+			for range store.snapshotEntries() {
 			}
 		},
 		func() { _ = store.FlagDormantProjects(time.Now(), 1) },
@@ -87,9 +87,9 @@ func TestStore_ConcurrentWriteAndIndexWalkers_Race(t *testing.T) {
 	wg.Wait()
 }
 
-// TestSnapshotEntries_DeepCopy: mutating a snapshot (map or slice fields) must
-// not leak into the live index.
-func TestSnapshotEntries_DeepCopy(t *testing.T) {
+// TestSnapshotEntries_MutatingCopyPreservesLiveIndex: mutating a snapshot
+// (map or slice fields) must not leak into the live index.
+func TestSnapshotEntries_MutatingCopyPreservesLiveIndex(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -101,7 +101,7 @@ func TestSnapshotEntries_DeepCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	snap := store.SnapshotEntries()
+	snap := store.snapshotEntries()
 	e := snap["기타/스냅샷.md"]
 	if len(e.Tags) != 1 || len(e.Related) != 1 {
 		t.Fatalf("snapshot entry incomplete: %+v", e)
@@ -110,7 +110,7 @@ func TestSnapshotEntries_DeepCopy(t *testing.T) {
 	e.Related[0] = "오염"
 	delete(snap, "기타/스냅샷.md")
 
-	fresh := store.SnapshotEntries()["기타/스냅샷.md"]
+	fresh := store.snapshotEntries()["기타/스냅샷.md"]
 	if fresh.Tags[0] != "태그1" || fresh.Related[0] != "기타/이웃.md" {
 		t.Errorf("snapshot mutation leaked into live index: %+v", fresh)
 	}
@@ -171,13 +171,13 @@ func TestStore_FoldDuplicate_RejectsSelfFold(t *testing.T) {
 // --- Finding 3: IndexEntry.Related not persisted in index.md -----------------
 
 // TestIndex_RelatedPersistsAcrossReload: the related column round-trips
-// through Render/ParseIndex, including items that carry the inner separator.
+// through Render/parseIndex, including items that carry the inner separator.
 func TestIndex_RelatedPersistsAcrossReload(t *testing.T) {
 	dir := t.TempDir()
 	idxPath := filepath.Join(dir, "index.md")
 
-	idx := NewIndex()
-	idx.UpdateEntry("프로젝트/영산고/대표.md", &Page{Meta: Frontmatter{
+	idx := newIndex()
+	idx.updateEntry("프로젝트/영산고/대표.md", &Page{Meta: Frontmatter{
 		Title:    "영산고",
 		Category: "프로젝트",
 		Related:  []string{"인물/김민준.md", "프로젝트/영산고/로그.md", "pipe|in|item"},
@@ -187,7 +187,7 @@ func TestIndex_RelatedPersistsAcrossReload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := testutil.Must(ParseIndex(idxPath)).Entries["프로젝트/영산고/대표.md"]
+	got := testutil.Must(parseIndex(idxPath)).Entries["프로젝트/영산고/대표.md"]
 	want := []string{"인물/김민준.md", "프로젝트/영산고/로그.md", "pipe in item"}
 	if len(got.Related) != len(want) {
 		t.Fatalf("related = %v, want %v", got.Related, want)
@@ -207,8 +207,8 @@ func TestIndex_EmptyIDRowRoundtrip(t *testing.T) {
 	dir := t.TempDir()
 	idxPath := filepath.Join(dir, "index.md")
 
-	idx := NewIndex()
-	idx.UpdateEntry("기타/무제.md", &Page{Meta: Frontmatter{
+	idx := newIndex()
+	idx.updateEntry("기타/무제.md", &Page{Meta: Frontmatter{
 		Title:   "무제 페이지", // no ID
 		Related: []string{"기타/이웃.md"},
 		Updated: "2026-07-01",
@@ -216,7 +216,7 @@ func TestIndex_EmptyIDRowRoundtrip(t *testing.T) {
 	if err := idx.Save(idxPath); err != nil {
 		t.Fatal(err)
 	}
-	got, ok := testutil.Must(ParseIndex(idxPath)).Entries["기타/무제.md"]
+	got, ok := testutil.Must(parseIndex(idxPath)).Entries["기타/무제.md"]
 	if !ok {
 		t.Fatal("ID-less entry lost its path key on reload (field shift)")
 	}
@@ -273,7 +273,7 @@ func TestStore_RelatedSurvivesRestart_BacklinkRemoval(t *testing.T) {
 	// Restart: the reloaded index must still know X→Y.
 	store2 := testutil.Must(NewStore(wikiDir, diaryDir))
 	defer store2.Close()
-	if rel := store2.SnapshotEntries()["기타/x.md"].Related; len(rel) != 1 || rel[0] != "기타/y.md" {
+	if rel := store2.snapshotEntries()["기타/x.md"].Related; len(rel) != 1 || rel[0] != "기타/y.md" {
 		t.Fatalf("Related lost across restart: %v", rel)
 	}
 
@@ -305,7 +305,7 @@ func TestPage_RenderNewlineScalarsKeepMetadata(t *testing.T) {
 		},
 		Body: "본문입니다.",
 	}
-	got := testutil.Must(ParsePage(p.Render()))
+	got := testutil.Must(parsePage(p.Render()))
 	if got.Meta.Title != "제목 첫 줄 주입된 둘째 줄" {
 		t.Errorf("title = %q", got.Meta.Title)
 	}
@@ -339,7 +339,7 @@ func TestPage_RenderFlowArrayCommaRoundtrip(t *testing.T) {
 		},
 		Body: "b",
 	}
-	got := testutil.Must(ParsePage(p.Render()))
+	got := testutil.Must(parsePage(p.Render()))
 	if len(got.Meta.Cues) != 2 {
 		t.Fatalf("cues split: %v", got.Meta.Cues)
 	}
@@ -350,7 +350,7 @@ func TestPage_RenderFlowArrayCommaRoundtrip(t *testing.T) {
 		t.Errorf("tags = %v", got.Meta.Tags)
 	}
 	// Idempotent: a second cycle must not change anything further.
-	again := testutil.Must(ParsePage(got.Render()))
+	again := testutil.Must(parsePage(got.Render()))
 	if len(again.Meta.Cues) != 2 || again.Meta.Cues[0] != got.Meta.Cues[0] {
 		t.Errorf("second roundtrip drifted: %v", again.Meta.Cues)
 	}
@@ -358,10 +358,10 @@ func TestPage_RenderFlowArrayCommaRoundtrip(t *testing.T) {
 
 // --- Finding 6: FoldDuplicate weaker than MergePage ---------------------------
 
-// TestStore_FoldDuplicate_MergesLikeMergePage: the automated fold now runs the
-// same locked merge as MergePage — inbound references repointed, cues/code
-// inherited, body preserved under the marker.
-func TestStore_FoldDuplicate_MergesLikeMergePage(t *testing.T) {
+// TestStore_FoldDuplicate_RepointsReferencesInheritsCodeAndCuesDeletesFoldPage: the
+// automated fold now runs the same locked merge as MergePage — inbound
+// references repointed, cues/code inherited, body preserved under the marker.
+func TestStore_FoldDuplicate_RepointsReferencesInheritsCodeAndCuesDeletesFoldPage(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 	defer store.Close()
@@ -451,10 +451,11 @@ func TestStore_FoldDuplicate_SerializesUnderWriteMu(t *testing.T) {
 
 // --- Finding 7: boot consistency didn't adopt orphan pages ---------------------
 
-// TestNewStore_AdoptsOrphanPages: a page on disk with no index entry (crash
-// between page write and index save) must be adopted into the master index at
-// startup, not stay invisible until the next dream-cycle rebuild.
-func TestNewStore_AdoptsOrphanPages(t *testing.T) {
+// TestNewStore_AdoptsOrphanPagesMissingFromIndexAtStartup: a page on disk with no
+// index entry (crash between page write and index save) must be adopted into
+// the master index at startup, not stay invisible until the next dream-cycle
+// rebuild.
+func TestNewStore_AdoptsOrphanPagesMissingFromIndexAtStartup(t *testing.T) {
 	dir := t.TempDir()
 	wikiDir, diaryDir := filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")
 
@@ -486,7 +487,7 @@ func TestNewStore_AdoptsOrphanPages(t *testing.T) {
 
 	store2 := testutil.Must(NewStore(wikiDir, diaryDir))
 	defer store2.Close()
-	entries := store2.SnapshotEntries()
+	entries := store2.snapshotEntries()
 	if e, ok := entries["기타/orphan.md"]; !ok || e.Title != "orphan" {
 		t.Errorf("orphan page not adopted at startup: %+v", entries)
 	}
@@ -625,7 +626,7 @@ func TestStore_Backlinks_NormalizedComparison(t *testing.T) {
 
 // --- Finding 11: mergeFrontmatterInto dropped src.Code/Resource ----------------
 
-func TestMergeFrontmatterInto_InheritsCodeAndResource(t *testing.T) {
+func TestMergeFrontmatterInto_FillsEmptyCodeAndResourceKeepsNonEmpty(t *testing.T) {
 	dst := Frontmatter{Title: "keep"}
 	src := Frontmatter{Title: "fold", Code: "pl3-kia-mod-001", Resource: "gmail:thread-1"}
 	mergeFrontmatterInto(&dst, src)
@@ -678,7 +679,7 @@ func TestPage_SplitByH2_IgnoresFencedHeadings(t *testing.T) {
 
 // --- Finding 13: external path guard --------------------------------------------
 
-func TestValidateExternalPath(t *testing.T) {
+func TestValidateExternalPath_RejectsTraversalAbsoluteAndWindowsPaths(t *testing.T) {
 	valid := []string{
 		"기타/a.md",
 		"기타/a",

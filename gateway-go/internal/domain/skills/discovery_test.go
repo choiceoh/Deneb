@@ -15,7 +15,7 @@ func isolatedConfig(workspaceDir string) DiscoverConfig {
 	}
 }
 
-func TestDiscoverWorkspaceSkills_singleSkill(t *testing.T) {
+func TestDiscoverWorkspaceSkillsReturnsSingleWorkspaceSkill(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
 	skillsDir := filepath.Join(tmpDir, "skills", "test-skill")
@@ -50,7 +50,7 @@ This is a test skill.
 	}
 }
 
-func TestDiscoverWorkspaceSkills_precedence(t *testing.T) {
+func TestDiscoverWorkspaceSkillsLoadsWorkspaceSkillOverBundled(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
 	bundledDir := filepath.Join(tmpDir, "bundled")
@@ -78,7 +78,7 @@ func TestDiscoverWorkspaceSkills_precedence(t *testing.T) {
 	}
 }
 
-func TestDiscoverWorkspaceSkills_oversizedSkip(t *testing.T) {
+func TestDiscoverWorkspaceSkillsIgnoresOversizedSkillFile(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
 	skillsDir := filepath.Join(tmpDir, "skills", "big-skill")
@@ -98,7 +98,7 @@ func TestDiscoverWorkspaceSkills_oversizedSkip(t *testing.T) {
 	}
 }
 
-func TestResolveNestedSkillsRoot(t *testing.T) {
+func TestResolveNestedSkillsRootReturnsNestedSkillsDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// No nested skills/ directory — should return dir itself.
@@ -119,7 +119,7 @@ func TestResolveNestedSkillsRoot(t *testing.T) {
 	}
 }
 
-func TestIsPathInside(t *testing.T) {
+func TestIsPathInsideReturnsTrueForNestedAndSamePath(t *testing.T) {
 	if !isPathInside("/a/b", "/a/b/c") {
 		t.Error("expected /a/b/c inside /a/b")
 	}
@@ -131,7 +131,7 @@ func TestIsPathInside(t *testing.T) {
 	}
 }
 
-func TestDiscoverWorkspaceSkills_categoryFromFrontmatter(t *testing.T) {
+func TestDiscoverWorkspaceSkillsReadsCategoryAndVersionFromFrontmatter(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
 	skillsDir := filepath.Join(tmpDir, "skills", "my-tool")
@@ -152,7 +152,7 @@ func TestDiscoverWorkspaceSkills_categoryFromFrontmatter(t *testing.T) {
 	}
 }
 
-func TestDiscoverWorkspaceSkills_nestedCategoryDir(t *testing.T) {
+func TestDiscoverWorkspaceSkillsReadsCategoryFromParentDirectory(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
 
@@ -176,7 +176,7 @@ func TestDiscoverWorkspaceSkills_nestedCategoryDir(t *testing.T) {
 	}
 }
 
-func TestDiscoverWorkspaceSkills_nestedCategoryOverride(t *testing.T) {
+func TestDiscoverWorkspaceSkillsReturnsFrontmatterCategoryOverridingDirectory(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
 
@@ -197,7 +197,7 @@ func TestDiscoverWorkspaceSkills_nestedCategoryOverride(t *testing.T) {
 	}
 }
 
-func TestDiscoverWorkspaceSkills_mixedFlatAndNested(t *testing.T) {
+func TestDiscoverWorkspaceSkillsLoadsMixedFlatAndNestedLayouts(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
 
@@ -244,7 +244,7 @@ func TestDiscoverWorkspaceSkills_mixedFlatAndNested(t *testing.T) {
 // Genesis output nests one level deeper than the standard walk
 // (managed/genesis/<category>/<name>/SKILL.md). Discovery must reach it, or
 // loop-generated skills vanish from the catalog at every restart.
-func TestDiscoverWorkspaceSkills_genesisDepth(t *testing.T) {
+func TestDiscoverWorkspaceSkillsReturnsGenesisDepthManagedSkill(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tmpDir := t.TempDir()
 	managedDir := filepath.Join(tmpDir, "managed-skills")

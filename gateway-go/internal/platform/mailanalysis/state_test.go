@@ -55,7 +55,7 @@ func TestStateStore_SaveAndLoad(t *testing.T) {
 	}
 }
 
-func TestStateStore_TrimSeenIDs(t *testing.T) {
+func TestStateStoreTruncatesOldestSeenIDsOnSave(t *testing.T) {
 	dir := t.TempDir()
 	store := newStateStore(dir)
 
@@ -116,7 +116,7 @@ func TestStateStore_AtomicWrite(t *testing.T) {
 	}
 }
 
-func TestPollState_HasSeen_MapLookup(t *testing.T) {
+func TestPollStateHasSeenTrueForSeenFalseForMissing(t *testing.T) {
 	state := &PollState{
 		SeenIDs: []string{"a", "b", "c"},
 		seenSet: map[string]struct{}{"a": {}, "b": {}, "c": {}},
@@ -130,7 +130,7 @@ func TestPollState_HasSeen_MapLookup(t *testing.T) {
 	}
 }
 
-func TestPollState_MarkSeen(t *testing.T) {
+func TestPollStateMarkSeenUpdatesSeenIDs(t *testing.T) {
 	state := &PollState{}
 	state.markSeen("x")
 	state.markSeen("y")

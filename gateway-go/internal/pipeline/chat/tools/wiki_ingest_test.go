@@ -40,9 +40,9 @@ func TestNormalizeSourceURL(t *testing.T) {
 	}
 }
 
-// TestMaterialFilename: same URL → same name regardless of title drift's hash
-// part; Korean titles survive slugification.
-func TestMaterialFilename(t *testing.T) {
+// TestMaterialFilenameReturnsStableSlug: same URL → same name regardless of
+// title drift's hash part; Korean titles survive slugification.
+func TestMaterialFilenameReturnsStableSlug(t *testing.T) {
 	a := materialFilename("발표 자료: Research OS!", "https://example.com/a")
 	b := materialFilename("발표 자료: Research OS!", "https://example.com/a")
 	if a != b {
@@ -60,8 +60,9 @@ func TestMaterialFilename(t *testing.T) {
 	}
 }
 
-// TestFetchWebText exercises the stdlib HTML stripper: title, script/style
-// removal, entity decoding, and the non-HTML content-type rejection.
+// TestFetchWebTextParsesHTMLAndRejectsBinary exercises the stdlib HTML
+// stripper: title, script/style removal, entity decoding, and the non-HTML
+// content-type rejection.
 // withPlainIngestClient swaps the SSRF-safe ingest client for a plain one for
 // the test's duration: httptest binds to 127.0.0.1, which the production SSRF
 // dialer correctly rejects (that rejection is asserted in
@@ -90,7 +91,7 @@ func TestIngestHTTPClientRejectsLoopback(t *testing.T) {
 	}
 }
 
-func TestFetchWebText(t *testing.T) {
+func TestFetchWebTextParsesHTMLAndRejectsBinary(t *testing.T) {
 	withPlainIngestClient(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -125,10 +126,11 @@ func TestFetchWebText(t *testing.T) {
 	}
 }
 
-// TestWikiIngest_EndToEnd runs the full flow against a temp store and a local
-// HTTP server, with the summarizer stubbed: page creation, idempotent dedup,
-// project routing (existing vs unknown project), and the 로그 op-prefix append.
-func TestWikiIngest_EndToEnd(t *testing.T) {
+// TestWikiIngestCreatesDedupsAndRoutesProject runs the full flow against a
+// temp store and a local HTTP server, with the summarizer stubbed: page
+// creation, idempotent dedup, project routing (existing vs unknown project),
+// and the 로그 op-prefix append.
+func TestWikiIngestCreatesDedupsAndRoutesProject(t *testing.T) {
 	withPlainIngestClient(t)
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
@@ -209,11 +211,11 @@ func TestWikiIngest_EndToEnd(t *testing.T) {
 
 // TestWikiIngest_SummaryFailOpen: an LLM outage must not lose the capture —
 // the page lands with the excerpt fallback.
-// TestWikiIngest_LegacyFlatRepLinks pins the Codex-review fix: a project whose
-// rep page is still the legacy flat form (프로젝트/<name>.md) must link the
-// ingest into the project (folder 자료 slot + 로그 op + related to the flat
-// rep), not silently fall back to the global bucket.
-func TestWikiIngest_LegacyFlatRepLinks(t *testing.T) {
+// TestWikiIngestLinksProjectWhenRepIsLegacyFlat pins the Codex-review fix: a
+// project whose rep page is still the legacy flat form (프로젝트/<name>.md)
+// must link the ingest into the project (folder 자료 slot + 로그 op + related
+// to the flat rep), not silently fall back to the global bucket.
+func TestWikiIngestLinksProjectWhenRepIsLegacyFlat(t *testing.T) {
 	withPlainIngestClient(t)
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))

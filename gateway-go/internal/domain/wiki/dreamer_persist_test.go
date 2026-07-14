@@ -56,12 +56,13 @@ func TestWikiDreamerPersistsLastDreamAcrossRestart(t *testing.T) {
 	}
 }
 
-// TestShouldDream_PreferenceSignalAcceleratesCadence pins the 선호 fast path: a
-// pending preference signal (NotePreferenceSignal, fed by the chat diary
-// recorder) drops the dream wait from 8h to wikiDreamPrefMinInterval, respects
-// that floor so back-to-back preference turns can't thrash cycles, and is
-// consumed by resetCounters at the end of a cycle.
-func TestShouldDream_PreferenceSignalAcceleratesCadence(t *testing.T) {
+// TestShouldDream_PreferenceSignalAcceleratesCadenceWithFloor pins the 선호
+// fast path: a pending preference signal (NotePreferenceSignal, fed by the
+// chat diary recorder) drops the dream wait from 8h to
+// wikiDreamPrefMinInterval, respects that floor so back-to-back preference
+// turns can't thrash cycles, and is consumed by resetCounters at the end of a
+// cycle.
+func TestShouldDream_PreferenceSignalAcceleratesCadenceWithFloor(t *testing.T) {
 	dir := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))

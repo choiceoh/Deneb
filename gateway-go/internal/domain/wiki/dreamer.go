@@ -392,7 +392,7 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 // so it cannot grow unbounded. Advisory: a scoring failure never fails the cycle.
 func (wd *WikiDreamer) scoreDreamCycle(cycle *dreamCycle) {
 	now := time.Now()
-	if dropped, err := wd.store.CompactRecallHits(now); err != nil {
+	if dropped, err := wd.store.compactRecallHits(now); err != nil {
 		cycle.addPhaseError("recall-hits-compact: %v", err)
 	} else if dropped > 0 {
 		wd.logger.Info("wiki-dream: recall-hit ledger compacted", "dropped", dropped)
@@ -693,7 +693,7 @@ func dreamProgressCursor(scan *diaryScanResult, heldOffsets bool, now time.Time)
 
 func (wd *WikiDreamer) persistDreamProgress(cycle *dreamCycle, heldOffsets bool) {
 	cursor := dreamProgressCursor(cycle.scan, heldOffsets, time.Now())
-	if err := wd.store.SetLastProcessedAndSave(cursor); err != nil {
+	if err := wd.store.setLastProcessedAndSave(cursor); err != nil {
 		cycle.addPhaseError("index-save: %v", err)
 	}
 	if cycle.scan == nil {
@@ -727,7 +727,7 @@ func (wd *WikiDreamer) completeDreamCycle(ctx context.Context, cycle *dreamCycle
 	if hash := wd.store.SnapshotGit(ctx, message); hash != "" {
 		cycle.report.WikiChangeSummary = formatWikiChangeSummary(
 			hash,
-			wd.store.GitSnapshotStat(ctx, hash),
+			wd.store.gitSnapshotStat(ctx, hash),
 			wd.store.Dir(),
 			updatePaths(cycle.updates),
 		)

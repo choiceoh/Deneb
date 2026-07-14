@@ -34,11 +34,11 @@ bounded 결과 envelope로 변환한다. media·document parser를 조합하지�
 ## 테스트와 집중 검증
 
 - `web_boundary_contract_test.go`의
-  `TestContentClassificationAndDocumentNames`,
+  `TestContentClassificationReturnsTypeAndDocumentName`,
   `TestSharedClientUsesPooledTransportAndIndependentTimeouts`,
   `TestRetryabilityAndClassificationErrorMatrix`가 fetch 경계를 검증한다.
-- `singleflight_test.go`의 `TestSingleflight_PanicDoesNotPoisonKey`,
-  `web_fetch_escalate_test.go`의 `TestEscalateThinContent_AdoptsRicherResult`,
+- `singleflight_test.go`의 `TestSingleflightRecoversKeyAfterPanic`,
+  `web_fetch_escalate_test.go`의 `TestEscalateThinContentUpdatesMetaWithRicherResult`,
   `web_youtube_test.go`의 `TestFormatYouTubeFallback_TruncatesAndReferencesSpillover`
   가 주요 degrade 경로를 고정한다.
 

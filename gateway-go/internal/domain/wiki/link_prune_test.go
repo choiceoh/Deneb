@@ -26,8 +26,9 @@ func writePrunePage(t *testing.T, store *Store, path, title, id string, related 
 	}
 }
 
-// TestPruneDeadRelatedLinks covers every repair tier and the drop path.
-func TestPruneDeadRelatedLinks(t *testing.T) {
+// TestPruneDeadRelatedLinksUpdatesRelated covers every repair tier and the
+// drop path.
+func TestPruneDeadRelatedLinksUpdatesRelated(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), ""))
 	defer store.Close()
@@ -105,9 +106,9 @@ func TestPruneDeadRelatedLinks(t *testing.T) {
 	}
 }
 
-// TestPruneDeadRelatedLinks_AmbiguousStaysDropped: a basename shared by many
+// TestPruneDeadRelatedLinks_AmbiguousStaysDeleted: a basename shared by many
 // pages (대표.md) must never be "repaired" by guessing.
-func TestPruneDeadRelatedLinks_AmbiguousStaysDropped(t *testing.T) {
+func TestPruneDeadRelatedLinks_AmbiguousStaysDeleted(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), ""))
 	defer store.Close()
@@ -139,11 +140,11 @@ func TestPruneDeadRelatedLinks_AmbiguousStaysDropped(t *testing.T) {
 	}
 }
 
-// TestPruneDeadRelatedLinks_ExtensionRepairKeepsMutualBacklink: repairing
+// TestPruneDeadRelatedLinks_ExtensionRepairPreservesMutualBacklink: repairing
 // "기술/b" → "기술/b.md" is the SAME file. The raw-string backlink diff used to
 // see it as remove("기술/b")+add("기술/b.md") and the remove leg deleted the
 // mutual backlink the repair was keeping.
-func TestPruneDeadRelatedLinks_ExtensionRepairKeepsMutualBacklink(t *testing.T) {
+func TestPruneDeadRelatedLinks_ExtensionRepairPreservesMutualBacklink(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), ""))
 	defer store.Close()

@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
 )
 
-func TestLifecycleEntriesProjectionMatrix(t *testing.T) {
+func TestLifecycleEntriesProjectionPreservesFieldsAndCopiesAudit(t *testing.T) {
 	t.Parallel()
 	input := []genesis.LifecycleLogEntry{
 		{
@@ -282,7 +282,7 @@ func TestLifecycleEntriesProjectionMatrix(t *testing.T) {
 	}
 }
 
-func TestUsageStatsProjectionMatrix(t *testing.T) {
+func TestUsageStatsProjectionPreservesAllFields(t *testing.T) {
 	t.Parallel()
 	input := []genesis.UsageStats{
 		{
@@ -572,7 +572,7 @@ func TestUsageStatNilAndCopySemantics(t *testing.T) {
 	}
 }
 
-func TestCuratorProjectionMatrix(t *testing.T) {
+func TestCuratorProjectionFieldContractKeepsNameCreatedByState(t *testing.T) {
 	t.Parallel()
 	input := []genesis.SkillCuratorRecord{
 		{
@@ -1167,7 +1167,7 @@ func TestProjectionEmptySlicesAreStableNonNil(t *testing.T) {
 	}
 }
 
-func TestProjectionJSONSerializationIsDeterministic(t *testing.T) {
+func TestProjectionJSONEncodeIsDeterministic(t *testing.T) {
 	t.Parallel()
 	value := struct {
 		Lifecycle []propus.LifecycleLogEntry

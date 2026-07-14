@@ -774,19 +774,6 @@ func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit 
 	return results
 }
 
-// SearchFiles returns wiki file paths matching a query.
-func (s *Store) SearchFiles(ctx context.Context, query string, limit int) ([]string, error) {
-	results, err := s.Search(ctx, query, limit)
-	if err != nil {
-		return nil, err
-	}
-	paths := make([]string, len(results))
-	for i, r := range results {
-		paths[i] = r.Path
-	}
-	return paths, nil
-}
-
 // scoreToNormalized converts a raw BM25 score to a 0-1 range.
 func scoreToNormalized(score float64) float64 {
 	if score <= 0 {

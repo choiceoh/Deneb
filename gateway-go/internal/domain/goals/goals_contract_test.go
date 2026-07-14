@@ -37,7 +37,7 @@ func TestDefaultStoreConcurrentAccess(t *testing.T) {
 	}
 }
 
-func TestStateCloneDeepCopiesMutableFields(t *testing.T) {
+func TestStateClonePreservesOriginalAndHandlesNilState(t *testing.T) {
 	original := &State{
 		Goal:            "goal",
 		Status:          StatusActive,
@@ -58,7 +58,7 @@ func TestStateCloneDeepCopiesMutableFields(t *testing.T) {
 	}
 }
 
-func TestStateActiveRemainingAndSummaryStatuses(t *testing.T) {
+func TestStateActiveRemainingAndSummaryHandleNilAndBoundary(t *testing.T) {
 	if (*State)(nil).Active() || (*State)(nil).Remaining() != 0 {
 		t.Fatal("nil state reported active or remaining budget")
 	}
@@ -127,7 +127,7 @@ func TestListActiveHasStableCreatedThenSessionOrder(t *testing.T) {
 	}
 }
 
-func TestPauseOnlyTransitionsActiveGoals(t *testing.T) {
+func TestPauseTransitionsActiveGoalsAndPreservesTerminalStates(t *testing.T) {
 	store := NewStore("", nil)
 	if store.Pause("missing", "reason") != nil {
 		t.Fatal("Pause missing returned state")
@@ -156,7 +156,7 @@ func TestPauseOnlyTransitionsActiveGoals(t *testing.T) {
 	}
 }
 
-func TestResumeNoopAndResetSemantics(t *testing.T) {
+func TestResumeIsNoopOnActiveClearsPausedStateAndPreservesDone(t *testing.T) {
 	store := NewStore("", nil)
 	if store.Resume("missing") != nil {
 		t.Fatal("Resume missing returned state")
@@ -244,7 +244,7 @@ func TestLoadFiltersNilAndSurvivesCorruptState(t *testing.T) {
 	}
 }
 
-func TestDestructiveActionClassificationMatrix(t *testing.T) {
+func TestDestructiveActionKeyClassifiesWriteActionsAndIgnoresReads(t *testing.T) {
 	for _, action := range []string{"send", "reply", "forward", "upload", "share", "backup", "create", "update", "delete", "add", "remove", "write", "edit"} {
 		input := []byte(`{"action":" ` + strings.ToUpper(action) + ` "}`)
 		key, ok := DestructiveActionKey("tool", input)
@@ -286,7 +286,7 @@ func TestHashArgsCanonicalValuesAndRawFallback(t *testing.T) {
 	}
 }
 
-func TestItoaBoundaries(t *testing.T) {
+func TestItoaHandlesZeroNegativeAndLargeBoundaryValues(t *testing.T) {
 	for _, tc := range []struct {
 		n    int
 		want string

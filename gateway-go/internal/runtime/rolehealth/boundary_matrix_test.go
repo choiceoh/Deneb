@@ -239,7 +239,7 @@ func TestVerdictsDefensiveCopyAndNilBoundary(t *testing.T) {
 	}
 }
 
-func TestRoleHealthTimingConstants(t *testing.T) {
+func TestRoleHealthTimingConstantsBoundaryInvariant(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		got, want time.Duration

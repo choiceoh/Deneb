@@ -32,7 +32,7 @@ func TestSign_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestVerify_NoToken(t *testing.T) {
+func TestVerify_RejectsWhenSigningKeyMissing(t *testing.T) {
 	t.Setenv("DENEB_STATE_DIR", t.TempDir()) // no token generated → no signing key
 	exp := time.Now().Add(time.Hour).Unix()
 	if Verify("/x.pdf", exp, Sign("/x.pdf", exp)) {
@@ -40,7 +40,7 @@ func TestVerify_NoToken(t *testing.T) {
 	}
 }
 
-func TestLink(t *testing.T) {
+func TestLink_EmptyWithoutTokenThenSignedWithToken(t *testing.T) {
 	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	t.Setenv("DENEB_PUBLIC_BASE_URL", "https://deneb.example.com")
 

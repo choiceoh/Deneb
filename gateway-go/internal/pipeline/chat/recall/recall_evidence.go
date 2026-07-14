@@ -485,11 +485,25 @@ func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionK
 	store := bridge.Store()
 	maxIdx, _ := store.MaxMsgIndex(sessionKey)
 
+	evidence, canceled := appendPolarisSessionHits(ctx, store, sessionKey, queries, maxIdx, nil)
+	if canceled {
+		return evidence
+	}
+	evidence, canceled = appendPolarisCrossSessionHits(ctx, store, sessionKey, queries, evidence)
+	if canceled {
+		return evidence
+	}
+	return appendPolarisSummaryHits(ctx, store, sessionKey, queries, evidence)
+}
+
+// appendPolarisSessionHits appends current-session FTS message hits (skipping
+// the current user message, which is already in context). canceled=true means
+// ctx expired mid-scan and the caller must stop with the evidence so far.
+func appendPolarisSessionHits(ctx context.Context, store *polaris.Store, sessionKey string, queries []string, maxIdx int, evidence []recallEvidence) ([]recallEvidence, bool) {
 	seen := make(map[int]struct{})
-	var evidence []recallEvidence
 	for _, q := range queries {
 		if ctx.Err() != nil {
-			return evidence
+			return evidence, true
 		}
 		hits, err := store.SearchMessages(sessionKey, q, 3)
 		if err != nil {
@@ -513,15 +527,19 @@ func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionK
 			})
 		}
 	}
+	return evidence, false
+}
 
-	// Cross-session: surface relevant messages from OTHER conversations that are
-	// resident in memory (no disk I/O). Scored slightly below current-session hits
-	// since cross-session context is less likely to be what the user means, but it
-	// closes the "recall only sees this session" gap. See Store.SearchResidentSessions.
+// appendPolarisCrossSessionHits appends relevant messages from OTHER
+// conversations that are resident in memory (no disk I/O). Scored slightly
+// below current-session hits since cross-session context is less likely to be
+// what the user means, but it closes the "recall only sees this session" gap.
+// See Store.SearchResidentSessions.
+func appendPolarisCrossSessionHits(ctx context.Context, store *polaris.Store, sessionKey string, queries []string, evidence []recallEvidence) ([]recallEvidence, bool) {
 	seenCross := make(map[string]struct{})
 	for _, q := range queries {
 		if ctx.Err() != nil {
-			return evidence
+			return evidence, true
 		}
 		hits, err := store.SearchResidentSessions(sessionKey, q, 2)
 		if err != nil {
@@ -543,12 +561,16 @@ func recallPolarisEvidence(ctx context.Context, bridge *polaris.Bridge, sessionK
 			})
 		}
 	}
+	return evidence, false
+}
 
-	// Cross-session SEMANTIC: match a past conversation by the meaning of its DAG
-	// summary, not keywords — so "지난번 곡성 대금" surfaces the session whose
-	// summary says "금호 기성 청구" even with no shared word. One batched embed;
-	// one row per session (its most-relevant summary), capped and floored so a
-	// loosely-related summary doesn't crowd the sharper message hits.
+// appendPolarisSummaryHits appends cross-session SEMANTIC matches: a past
+// conversation matched by the meaning of its DAG summary, not keywords — so
+// "지난번 곡성 대금" surfaces the session whose summary says "금호 기성 청구"
+// even with no shared word. One batched embed; one row per session (its
+// most-relevant summary), capped and floored so a loosely-related summary
+// doesn't crowd the sharper message hits.
+func appendPolarisSummaryHits(ctx context.Context, store *polaris.Store, sessionKey string, queries []string, evidence []recallEvidence) []recallEvidence {
 	seenSummarySession := make(map[string]struct{})
 	summaryAdded := 0
 	for i, hits := range store.SearchSummariesSemantic(ctx, sessionKey, queries, 2) {

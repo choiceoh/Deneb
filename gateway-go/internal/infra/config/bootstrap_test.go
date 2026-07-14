@@ -61,7 +61,7 @@ func TestBootstrapGatewayConfigWithToken(t *testing.T) {
 	}
 }
 
-func TestBootstrapGatewayConfigTokenFromEnv(t *testing.T) {
+func TestBootstrapGatewayConfigLoadsTokenFromEnv(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "deneb.json")
 	t.Setenv("DENEB_GATEWAY_TOKEN", "")
@@ -81,7 +81,7 @@ func TestBootstrapGatewayConfigTokenFromEnv(t *testing.T) {
 	}
 }
 
-func TestBootstrapGatewayConfigPasswordMode(t *testing.T) {
+func TestBootstrapGatewayConfigLoadsPasswordMode(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "deneb.json")
 	t.Setenv("DENEB_GATEWAY_TOKEN", "")
@@ -109,7 +109,7 @@ func TestBootstrapGatewayConfigPasswordMode(t *testing.T) {
 	}
 }
 
-func TestBootstrapGatewayConfigPasswordModeNoPassword(t *testing.T) {
+func TestBootstrapGatewayConfigRejectsMissingPassword(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "deneb.json")
 	t.Setenv("DENEB_GATEWAY_TOKEN", "")
@@ -133,7 +133,7 @@ func TestBootstrapGatewayConfigPasswordModeNoPassword(t *testing.T) {
 	}
 }
 
-func TestBootstrapPersistToken(t *testing.T) {
+func TestBootstrapPersistTokenWritesToken(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "deneb.json")
 	t.Setenv("DENEB_GATEWAY_TOKEN", "")
@@ -172,7 +172,7 @@ func TestBootstrapPersistToken(t *testing.T) {
 	}
 }
 
-func TestBootstrapAuthOverride(t *testing.T) {
+func TestBootstrapWithAuthOverrideUsesOverrideToken(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "deneb.json")
 	t.Setenv("DENEB_GATEWAY_TOKEN", "")
@@ -193,7 +193,7 @@ func TestBootstrapAuthOverride(t *testing.T) {
 	}
 }
 
-func TestPersistDefaultModel(t *testing.T) {
+func TestPersistDefaultModelPreservesExistingFields(t *testing.T) {
 	logger := slog.Default()
 
 	t.Run("existing config", func(t *testing.T) {
@@ -274,7 +274,7 @@ func TestPersistDefaultModel(t *testing.T) {
 	})
 }
 
-func TestPersistCustomProviderModel(t *testing.T) {
+func TestPersistCustomProviderModelCreatesAndDeduplicates(t *testing.T) {
 	logger := slog.Default()
 
 	t.Run("creates provider in new config", func(t *testing.T) {

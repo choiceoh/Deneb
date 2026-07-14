@@ -796,50 +796,38 @@ func verifyRunBinding(pack *casepack.Pack, fingerprint evalbriefcase.Fingerprint
 	if result.Arm != runtimebriefcase.ArmRawPrimary && result.Arm != runtimebriefcase.ArmMemoryAssisted {
 		return fmt.Errorf("run result has unsupported arm %q", result.Arm)
 	}
+	return verifyFingerprintBinding(fingerprint, result)
+}
+
+// verifyFingerprintBinding checks every populated grader fingerprint field
+// against the run; caseId is mandatory, the rest bind only when non-zero.
+func verifyFingerprintBinding(fingerprint evalbriefcase.Fingerprint, result runtimebriefcase.RunResult) error {
 	if fingerprint.CaseID != result.CaseID {
 		return errors.New("grader fingerprint caseId does not match the run")
 	}
-	if fingerprint.RunID != "" && fingerprint.RunID != result.RunID {
-		return errors.New("grader fingerprint runId does not match the run")
+	bindings := []struct {
+		name      string
+		got, want string
+	}{
+		{"runId", fingerprint.RunID, result.RunID},
+		{"casepackSha256", fingerprint.CasepackSHA256, result.CasepackSHA256},
+		{"model", fingerprint.Model, result.Model},
+		{"providerModel", fingerprint.ProviderModel, result.ProviderModel},
+		{"arm", fingerprint.Arm, string(result.Arm)},
+		{"apiMode", fingerprint.APIMode, result.APIMode},
+		{"recallMode", fingerprint.RecallMode, result.RecallMode},
+		{"devicePlanSha256", fingerprint.DevicePlanSHA256, result.DevicePlanSHA256},
+		{"devicePlanSourceSha256", fingerprint.DevicePlanSourceSHA256, result.DevicePlanSourceSHA256},
+		{"toolSchemaSha256", fingerprint.ToolSchemaSHA256, result.ToolSchemaSHA256},
+		{"endpointSha256", fingerprint.EndpointSHA256, result.EndpointSHA256},
+		{"buildSha256", fingerprint.BuildSHA256, result.BuildSHA256},
+		{"executionProfileSha256", fingerprint.ExecutionProfileSHA256, result.ExecutionProfileSHA256},
+		{"systemPromptSequenceSha256", fingerprint.SystemPromptSequenceSHA256, result.SystemPromptSequenceSHA256},
 	}
-	if fingerprint.CasepackSHA256 != "" && fingerprint.CasepackSHA256 != result.CasepackSHA256 {
-		return errors.New("grader fingerprint casepackSha256 does not match the run")
-	}
-	if fingerprint.Model != "" && fingerprint.Model != result.Model {
-		return errors.New("grader fingerprint model does not match the run")
-	}
-	if fingerprint.ProviderModel != "" && fingerprint.ProviderModel != result.ProviderModel {
-		return errors.New("grader fingerprint providerModel does not match the run")
-	}
-	if fingerprint.Arm != "" && fingerprint.Arm != string(result.Arm) {
-		return errors.New("grader fingerprint arm does not match the run")
-	}
-	if fingerprint.APIMode != "" && fingerprint.APIMode != result.APIMode {
-		return errors.New("grader fingerprint apiMode does not match the run")
-	}
-	if fingerprint.RecallMode != "" && fingerprint.RecallMode != result.RecallMode {
-		return errors.New("grader fingerprint recallMode does not match the run")
-	}
-	if fingerprint.DevicePlanSHA256 != "" && fingerprint.DevicePlanSHA256 != result.DevicePlanSHA256 {
-		return errors.New("grader fingerprint devicePlanSha256 does not match the run")
-	}
-	if fingerprint.DevicePlanSourceSHA256 != "" && fingerprint.DevicePlanSourceSHA256 != result.DevicePlanSourceSHA256 {
-		return errors.New("grader fingerprint devicePlanSourceSha256 does not match the run")
-	}
-	if fingerprint.ToolSchemaSHA256 != "" && fingerprint.ToolSchemaSHA256 != result.ToolSchemaSHA256 {
-		return errors.New("grader fingerprint toolSchemaSha256 does not match the run")
-	}
-	if fingerprint.EndpointSHA256 != "" && fingerprint.EndpointSHA256 != result.EndpointSHA256 {
-		return errors.New("grader fingerprint endpointSha256 does not match the run")
-	}
-	if fingerprint.BuildSHA256 != "" && fingerprint.BuildSHA256 != result.BuildSHA256 {
-		return errors.New("grader fingerprint buildSha256 does not match the run")
-	}
-	if fingerprint.ExecutionProfileSHA256 != "" && fingerprint.ExecutionProfileSHA256 != result.ExecutionProfileSHA256 {
-		return errors.New("grader fingerprint executionProfileSha256 does not match the run")
-	}
-	if fingerprint.SystemPromptSequenceSHA256 != "" && fingerprint.SystemPromptSequenceSHA256 != result.SystemPromptSequenceSHA256 {
-		return errors.New("grader fingerprint systemPromptSequenceSha256 does not match the run")
+	for _, binding := range bindings {
+		if binding.got != "" && binding.got != binding.want {
+			return fmt.Errorf("grader fingerprint %s does not match the run", binding.name)
+		}
 	}
 	if fingerprint.Seed != 0 && fingerprint.Seed != result.Seed {
 		return errors.New("grader fingerprint seed does not match the run")
@@ -1165,6 +1153,19 @@ func sameStrings(left, right []string) bool {
 }
 
 func validateRunResult(result runtimebriefcase.RunResult) error {
+	if err := validateRunResultHeader(result); err != nil {
+		return err
+	}
+	if err := validateRunResultDigests(result); err != nil {
+		return err
+	}
+	if err := validateRunResultPayload(result); err != nil {
+		return err
+	}
+	return validateRunEpisodes(result)
+}
+
+func validateRunResultHeader(result runtimebriefcase.RunResult) error {
 	if result.SchemaVersion != runtimebriefcase.RunSchemaVersion {
 		return fmt.Errorf("run result has unsupported schemaVersion %q", result.SchemaVersion)
 	}
@@ -1186,6 +1187,10 @@ func validateRunResult(result runtimebriefcase.RunResult) error {
 	if result.Arm == runtimebriefcase.ArmRawPrimary && result.RecallMode != "disabled" {
 		return errors.New("raw-primary run result must have recall disabled")
 	}
+	return nil
+}
+
+func validateRunResultDigests(result runtimebriefcase.RunResult) error {
 	if !lowerSHA256(result.CasepackSHA256) || !lowerSHA256(result.ToolSchemaSHA256) {
 		return errors.New("run result requires lowercase casepack and tool-schema SHA-256 values")
 	}
@@ -1205,6 +1210,10 @@ func validateRunResult(result runtimebriefcase.RunResult) error {
 	if result.DevicePlanSHA256 != "" && (!lowerSHA256(result.DevicePlanSHA256) || !lowerSHA256(result.DevicePlanSourceSHA256)) {
 		return errors.New("run result device plan digests must be lowercase SHA-256 values")
 	}
+	return nil
+}
+
+func validateRunResultPayload(result runtimebriefcase.RunResult) error {
 	if strings.TrimSpace(result.ArtifactRoot) == "" {
 		return errors.New("run result artifactRoot is required")
 	}
@@ -1215,6 +1224,10 @@ func validateRunResult(result runtimebriefcase.RunResult) error {
 	if err := decodeJSONBytes(result.State, &state); err != nil {
 		return fmt.Errorf("run result state: %w", err)
 	}
+	return nil
+}
+
+func validateRunEpisodes(result runtimebriefcase.RunResult) error {
 	if len(result.Episodes) == 0 {
 		return errors.New("run result has no episodes")
 	}
@@ -1235,18 +1248,25 @@ func validateRunResult(result runtimebriefcase.RunResult) error {
 			continue
 		}
 		executable++
-		if strings.TrimSpace(episode.Model) == "" {
-			return fmt.Errorf("run result executor episode %q has no model", episode.EpisodeID)
-		}
-		if episode.Model != result.Model {
-			return fmt.Errorf("run result executor episode %q model %q does not match run model %q", episode.EpisodeID, episode.Model, result.Model)
-		}
-		if episode.StopReason != "end_turn" {
-			return fmt.Errorf("run result executor episode %q has incomplete stop reason %q", episode.EpisodeID, episode.StopReason)
+		if err := validateExecutorEpisode(episode, result.Model); err != nil {
+			return err
 		}
 	}
 	if executable == 0 {
 		return errors.New("run result has no completed executor episode")
+	}
+	return nil
+}
+
+func validateExecutorEpisode(episode runtimebriefcase.EpisodeResult, runModel string) error {
+	if strings.TrimSpace(episode.Model) == "" {
+		return fmt.Errorf("run result executor episode %q has no model", episode.EpisodeID)
+	}
+	if episode.Model != runModel {
+		return fmt.Errorf("run result executor episode %q model %q does not match run model %q", episode.EpisodeID, episode.Model, runModel)
+	}
+	if episode.StopReason != "end_turn" {
+		return fmt.Errorf("run result executor episode %q has incomplete stop reason %q", episode.EpisodeID, episode.StopReason)
 	}
 	return nil
 }

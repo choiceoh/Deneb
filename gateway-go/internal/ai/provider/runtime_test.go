@@ -25,7 +25,7 @@ func (p *testPlugin) Capabilities() Capabilities {
 	return Capabilities{}
 }
 
-func TestProviderRuntimeResolverResolvePlugin(t *testing.T) {
+func TestProviderRuntimeResolverResolvePluginReturnsCachedOrNil(t *testing.T) {
 	reg := NewRegistry()
 	tp := &testPlugin{id: "openai", label: "OpenAI"}
 	reg.Register(tp)
@@ -54,7 +54,7 @@ func TestProviderRuntimeResolverResolvePlugin(t *testing.T) {
 	}
 }
 
-func TestProviderRuntimeResolverResetCache(t *testing.T) {
+func TestProviderRuntimeResolverResetCacheClearsCachedPlugin(t *testing.T) {
 	reg := NewRegistry()
 	tp := &testPlugin{id: "openai", label: "OpenAI"}
 	reg.Register(tp)
@@ -71,7 +71,7 @@ func TestProviderRuntimeResolverResetCache(t *testing.T) {
 	}
 }
 
-func TestProviderRuntimeResolverCapabilities(t *testing.T) {
+func TestProviderRuntimeResolverCapabilitiesReturnsNilForUnknown(t *testing.T) {
 	reg := NewRegistry()
 	caps := &Capabilities{SupportsStreaming: true, SupportsTools: true}
 	tp := &testPlugin{id: "openai", label: "OpenAI", caps: caps}

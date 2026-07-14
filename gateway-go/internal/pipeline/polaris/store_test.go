@@ -61,7 +61,7 @@ func TestAppendAndLoad(t *testing.T) {
 	}
 }
 
-func TestMsgIndexAutoIncrement(t *testing.T) {
+func TestMsgIndexAutoIncrementReturnsMaxIndex(t *testing.T) {
 	s := testStore(t)
 
 	for i := 0; i < 5; i++ {
@@ -74,7 +74,7 @@ func TestMsgIndexAutoIncrement(t *testing.T) {
 	}
 }
 
-func TestSummaryNodes(t *testing.T) {
+func TestSummaryNodesLoadsByLevelAndCoverage(t *testing.T) {
 	s := testStore(t)
 
 	id1, err := s.InsertSummary(SummaryNode{
@@ -146,7 +146,7 @@ func TestDeleteSession(t *testing.T) {
 	}
 }
 
-func TestSessionTokens(t *testing.T) {
+func TestSessionTokensReturnsPositiveCount(t *testing.T) {
 	s := testStore(t)
 
 	s.AppendMessage("s1", textMsg("user", "hello world this is a test", 1000))

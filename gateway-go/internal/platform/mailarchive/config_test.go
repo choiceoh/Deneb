@@ -2,7 +2,7 @@ package mailarchive
 
 import "testing"
 
-func TestAddressFromEnv(t *testing.T) {
+func TestAddressFromEnvReturnsTrimmedOverrideOrDefault(t *testing.T) {
 	t.Setenv("DENEB_ARCHIVE_IMAP_ADDR", " mail.example:1143 ")
 	if got := AddressFromEnv(); got != "mail.example:1143" {
 		t.Fatalf("AddressFromEnv override = %q", got)

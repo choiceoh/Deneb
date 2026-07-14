@@ -925,7 +925,7 @@ func TestValidFleetSegmentBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestFleetProxyDisabledAndForbiddenBoundaries(t *testing.T) {
+func TestFleetProxyRejectsDisabledAndForbiddenRequests(t *testing.T) {
 	t.Run("nil integration", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		New(nil, fleetTestLogger()).Proxy(rec, httptest.NewRequest(http.MethodGet, "/api/v1/fleet/api/state", nil))
@@ -958,7 +958,7 @@ func TestFleetProxyDisabledAndForbiddenBoundaries(t *testing.T) {
 	})
 }
 
-func TestFleetProxyForwardsRequestAndResponseBoundaries(t *testing.T) {
+func TestFleetProxyForwardsRequestPreservingResponseFields(t *testing.T) {
 	t.Setenv("DENEB_SPARKFLEET_TOKEN", "fleet-secret")
 	type observed struct {
 		method      string

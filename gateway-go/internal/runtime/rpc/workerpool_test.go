@@ -40,7 +40,7 @@ func TestWorkerPoolConcurrencyLimit(t *testing.T) {
 	}
 }
 
-func TestWorkerPoolStats(t *testing.T) {
+func TestWorkerPoolStatsReturnsCompletedTaskCounts(t *testing.T) {
 	pool := NewWorkerPool(4)
 	var wg sync.WaitGroup
 

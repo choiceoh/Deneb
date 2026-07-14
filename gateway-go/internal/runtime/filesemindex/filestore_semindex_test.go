@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestNewRequiresStore(t *testing.T) {
+func TestNewReturnsNilWithoutStore(t *testing.T) {
 	if got := New(nil, nil, nil); got != nil {
 		t.Fatalf("New(nil) = %#v, want disabled service", got)
 	}
@@ -32,7 +32,7 @@ func TestDisabledServiceDegradesWithoutWork(t *testing.T) {
 	svc.Rename("/old.pdf", "/new.pdf")
 }
 
-func TestFileServerModifiedMillis(t *testing.T) {
+func TestFileServerModifiedMillisParsesValidTimestamp(t *testing.T) {
 	stamp := "2026-07-11T08:15:30Z"
 	want, err := time.Parse(time.RFC3339, stamp)
 	if err != nil {

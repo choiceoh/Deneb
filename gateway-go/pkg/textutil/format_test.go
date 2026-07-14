@@ -18,7 +18,7 @@ func TestFormatBytes(t *testing.T) {
 	}
 }
 
-func TestGroupThousands(t *testing.T) {
+func TestGroupThousandsFormatsCommaSeparators(t *testing.T) {
 	tests := map[string]string{
 		"1":       "1",
 		"999":     "999",

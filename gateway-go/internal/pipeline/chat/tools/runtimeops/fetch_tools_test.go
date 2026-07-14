@@ -61,7 +61,7 @@ func assertActivated(t *testing.T, out, name string) {
 	}
 }
 
-func TestFetchTools_ByName(t *testing.T) {
+func TestFetchTools_ByNameReturnsActivatedTool(t *testing.T) {
 	reg := &fakeFetchRegistry{
 		defs: map[string]toolport.ToolDef{
 			"mail_archive": {Name: "mail_archive", Description: "Read local mail archive", Deferred: true},
@@ -75,7 +75,7 @@ func TestFetchTools_ByName(t *testing.T) {
 	assertActivated(t, out, "mail_archive")
 }
 
-func TestFetchTools_ByQuery(t *testing.T) {
+func TestFetchTools_ByQueryReturnsMatchingTool(t *testing.T) {
 	reg := &fakeFetchRegistry{
 		defs: map[string]toolport.ToolDef{
 			"mail_archive": {Name: "mail_archive", Description: "Read email from the local archive", Deferred: true},
@@ -94,7 +94,7 @@ func TestFetchTools_ByQuery(t *testing.T) {
 }
 
 // Query matches a parameter name (not the name/description) via BM25 indexing.
-func TestFetchTools_ByQuery_ParamName(t *testing.T) {
+func TestFetchTools_ByQuery_ParamNameReturnsMatch(t *testing.T) {
 	reg := &fakeFetchRegistry{
 		defs: map[string]toolport.ToolDef{
 			"storage": {
@@ -135,7 +135,7 @@ func TestFetchTools_ByQuery_SubstringFallback(t *testing.T) {
 
 // A whole-token BM25 hit and a substring-only match are both surfaced (recall
 // floor preserved).
-func TestFetchTools_ByQuery_UnionBM25AndSubstring(t *testing.T) {
+func TestFetchTools_ByQuery_ReturnsUnionOfBM25AndSubstringMatches(t *testing.T) {
 	reg := &fakeFetchRegistry{
 		defs: map[string]toolport.ToolDef{
 			"book":     {Name: "book", Description: "book tool", Deferred: true},
@@ -183,7 +183,7 @@ func TestFetchTools_RequestValidationErrors(t *testing.T) {
 }
 
 // Non-deferred tools are not surfaced by query search.
-func TestFetchTools_NonDeferredExcluded(t *testing.T) {
+func TestFetchTools_QueryIgnoresNonDeferredTools(t *testing.T) {
 	reg := &fakeFetchRegistry{
 		defs: map[string]toolport.ToolDef{
 			"read": {Name: "read", Description: "read a file", Deferred: false},
@@ -365,7 +365,7 @@ func TestFetchTools_SameTurnDuplicateStillReturnsSchema(t *testing.T) {
 	assertActivated(t, out, "mail_archive")
 }
 
-func TestFetchTools_PresetFiltersQueryResults(t *testing.T) {
+func TestFetchTools_PresetRejectsDisallowedQueryResults(t *testing.T) {
 	reg := &fakeFetchRegistry{
 		defs: map[string]toolport.ToolDef{
 			"cron": {Name: "cron", Description: "Schedule recurring jobs", Deferred: true},

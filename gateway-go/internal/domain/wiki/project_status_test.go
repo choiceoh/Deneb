@@ -14,11 +14,11 @@ func newProjectTestStore(t *testing.T) *Store {
 	return testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
 }
 
-// TestKnownProjects: a project is its 대표페이지 — the in-folder 프로젝트/<name>/대표.md
-// form or the legacy flat 프로젝트/<name>.md form (folder form wins when both
-// exist); raw-data buckets (메일분석/, mail-analyses/, 거래/), sub-pages, and other
-// categories are excluded.
-func TestKnownProjects(t *testing.T) {
+// TestKnownProjects_ListsRepPagesFolderFormWinsRejectsRawAndSubPages: a project is
+// its 대표페이지 — the in-folder 프로젝트/<name>/대표.md form or the legacy flat
+// 프로젝트/<name>.md form (folder form wins when both exist); raw-data buckets
+// (메일분석/, mail-analyses/, 거래/), sub-pages, and other categories are excluded.
+func TestKnownProjects_ListsRepPagesFolderFormWinsRejectsRawAndSubPages(t *testing.T) {
 	store := newProjectTestStore(t)
 	defer store.Close()
 
@@ -57,9 +57,9 @@ func TestKnownProjects(t *testing.T) {
 	}
 }
 
-// TestEnsureProjectPage_RepPageTitle: a missing in-folder 대표페이지 is minted with
-// the project's name, not the literal "대표".
-func TestEnsureProjectPage_RepPageTitle(t *testing.T) {
+// TestEnsureProjectPage_TitlesNewRepPageWithProjectNameNotLiteralDefault: a missing
+// in-folder 대표페이지 is minted with the project's name, not the literal "대표".
+func TestEnsureProjectPage_TitlesNewRepPageWithProjectNameNotLiteralDefault(t *testing.T) {
 	page := ensureProjectPage(nil, "프로젝트/영산고/대표.md")
 	if page.Meta.Title != "영산고" {
 		t.Errorf("Title = %q, want 영산고", page.Meta.Title)
@@ -70,7 +70,7 @@ func TestEnsureProjectPage_RepPageTitle(t *testing.T) {
 	}
 }
 
-// TestSetProjectStatus_RoundTrip: SetProjectStatus writes the 현재 상태 section
+// TestSetProjectStatus_RoundTrip: setProjectStatus writes the 현재 상태 section
 // (creating the page), and ProjectStatuses reads it back with due + updated.
 func TestSetProjectStatus_RoundTrip(t *testing.T) {
 	store := newProjectTestStore(t)
@@ -78,8 +78,8 @@ func TestSetProjectStatus_RoundTrip(t *testing.T) {
 
 	now := time.Date(2026, 6, 23, 9, 0, 0, 0, time.UTC)
 	lines := []string{"모듈 발주 완료", "계약 체결", "납기 6월 말"}
-	if err := store.SetProjectStatus("프로젝트/영산고.md", lines, "2026-06-30", now); err != nil {
-		t.Fatalf("SetProjectStatus: %v", err)
+	if err := store.setProjectStatus("프로젝트/영산고.md", lines, "2026-06-30", now); err != nil {
+		t.Fatalf("setProjectStatus: %v", err)
 	}
 
 	statuses, err := store.ProjectStatuses()
@@ -103,9 +103,9 @@ func TestSetProjectStatus_RoundTrip(t *testing.T) {
 		t.Errorf("bullets = %v, want the 3 lines in order", st.Bullets)
 	}
 
-	// SetProjectStatus replaces (not appends): a second call leaves only the new lines.
-	if err := store.SetProjectStatus("프로젝트/영산고.md", []string{"시운전 시작"}, "", now); err != nil {
-		t.Fatalf("SetProjectStatus #2: %v", err)
+	// setProjectStatus replaces (not appends): a second call leaves only the new lines.
+	if err := store.setProjectStatus("프로젝트/영산고.md", []string{"시운전 시작"}, "", now); err != nil {
+		t.Fatalf("setProjectStatus #2: %v", err)
 	}
 	statuses, _ = store.ProjectStatuses()
 	if len(statuses) != 1 || len(statuses[0].Bullets) != 1 || statuses[0].Bullets[0] != "시운전 시작" {
@@ -113,9 +113,10 @@ func TestSetProjectStatus_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestAppendProjectStatusLine: prepend newest-first, strip the provenance marker
-// on read, idempotent by ref, and capped.
-func TestAppendProjectStatusLine(t *testing.T) {
+// TestAppendProjectStatusLine_PrependsIdempotentByRefAndCapped: prepend
+// newest-first, strip the provenance marker on read, idempotent by ref, and
+// capped.
+func TestAppendProjectStatusLine_PrependsIdempotentByRefAndCapped(t *testing.T) {
 	store := newProjectTestStore(t)
 	defer store.Close()
 	path := "프로젝트/영산고.md"

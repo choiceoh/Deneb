@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestCheckValidatesEveryFence(t *testing.T) {
+func TestCheckEmitsValidForEveryWellFormedFence(t *testing.T) {
 	input := "before\n```deneb-ui\n<text>one</text>\n```\nafter\n```DENEB-UI\n<alert severity=\"info\">two</alert>\n```"
 	var stdout, stderr bytes.Buffer
 	if code := check(input, false, &stdout, &stderr); code != 0 {

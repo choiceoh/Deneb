@@ -12,7 +12,7 @@ func newMoveStore(t *testing.T) *Store {
 	return s
 }
 
-func TestMovePage(t *testing.T) {
+func TestMovePage_MovesFileUpdatesCategoryPreservesBody(t *testing.T) {
 	s := newMoveStore(t)
 	page := NewPage("탑솔라", "프로젝트", nil)
 	page.Body = "# 탑솔라\n본문 보존 확인"
@@ -59,9 +59,9 @@ func TestMovePage_RejectsExistingTarget(t *testing.T) {
 	}
 }
 
-// TestMovePage_RepointsInboundReferences: pages whose Related pointed at the
-// old path follow the move — the graph edge survives instead of dangling.
-func TestMovePage_RepointsInboundReferences(t *testing.T) {
+// TestMovePage_UpdatesInboundRelatedLinksToNewPath: pages whose Related pointed
+// at the old path follow the move — the graph edge survives instead of dangling.
+func TestMovePage_UpdatesInboundRelatedLinksToNewPath(t *testing.T) {
 	s := newMoveStore(t)
 	target := NewPage("탑솔라", "프로젝트", nil)
 	if err := s.WritePage("프로젝트/탑솔라.md", target); err != nil {
@@ -132,19 +132,19 @@ func TestMovePage_RepointDoesNotStampReferrerUpdated(t *testing.T) {
 		t.Errorf("Updated = %q, want 2025-01-01 (repoint must not stamp)", got.Meta.Updated)
 	}
 	// The master index mirrors the stamp — FlagDormantProjects reads it there.
-	if e, ok := s.SnapshotEntries()["프로젝트/휴면/대표.md"]; !ok || e.Updated != "2025-01-01" {
+	if e, ok := s.snapshotEntries()["프로젝트/휴면/대표.md"]; !ok || e.Updated != "2025-01-01" {
 		t.Errorf("index Updated = %q (present=%v), want 2025-01-01", e.Updated, ok)
 	}
 }
 
-func TestMovePage_SourceNotFound(t *testing.T) {
+func TestMovePage_ErrorsWhenSourceMissing(t *testing.T) {
 	s := newMoveStore(t)
 	if err := s.MovePage("프로젝트/missing.md", "인물/missing.md"); err == nil {
 		t.Error("expected error moving a nonexistent source")
 	}
 }
 
-func TestMovePage_NoopSamePath(t *testing.T) {
+func TestMovePage_SamePathIsNoopAndPreservesPage(t *testing.T) {
 	s := newMoveStore(t)
 	if err := s.WritePage("프로젝트/a.md", NewPage("A", "프로젝트", nil)); err != nil {
 		t.Fatal(err)

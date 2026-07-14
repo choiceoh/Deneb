@@ -23,7 +23,7 @@ health를 확인한다.`
 // The probe authors a discriminative RequiredHeadings case for a section whose
 // removal the existing case set fails to catch, and stays quiet where coverage
 // already bites.
-func TestProbeStructuralCoverageGaps(t *testing.T) {
+func TestProbeStructuralCoverageGaps_CreatesCasesOnlyForUncoveredSections(t *testing.T) {
 	t.Run("uncaught section drop is authored as a heading case", func(t *testing.T) {
 		// Existing cases protect only 'Procedure' (a substring) — 'Verification'
 		// and 'When to Use' section drops go undetected.
@@ -80,7 +80,7 @@ func TestProbeStructuralCoverageGaps(t *testing.T) {
 	})
 }
 
-func TestDropSection(t *testing.T) {
+func TestDropSectionClearsOnlyTargetSection(t *testing.T) {
 	headings := extractRawHeadings(advBody)
 	var verif rawSkillHeading
 	for _, h := range headings {
@@ -113,7 +113,7 @@ const advToolBody = `# 배포 스킬
 // The behavioral probe authors a discriminative RequiredTools case for a tool
 // whose removal the existing case set fails to catch, and stays quiet where a
 // case already protects the tool.
-func TestProbeBehavioralCoverageGaps(t *testing.T) {
+func TestProbeBehavioralCoverageGaps_CreatesCasesForUncaughtToolDrops(t *testing.T) {
 	t.Run("uncaught tool drop is authored as a RequiredTools case", func(t *testing.T) {
 		// Only 'mail_archive' is protected (via a required substring); dropping
 		// 'wiki_search' goes undetected.
@@ -163,7 +163,7 @@ func TestProbeBehavioralCoverageGaps(t *testing.T) {
 	})
 }
 
-func TestExtractToolRefs(t *testing.T) {
+func TestExtractToolRefsReturnsSnakeCaseToolsOnly(t *testing.T) {
 	got := extractToolRefs("use wiki_search then Mail_Archive; skip plainword and CamelCase")
 	if !contains(got, "wiki_search") || !contains(got, "mail_archive") {
 		t.Fatalf("tool extraction = %v", got)

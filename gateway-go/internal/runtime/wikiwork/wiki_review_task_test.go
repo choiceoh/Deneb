@@ -37,9 +37,9 @@ func writeReviewPage(t *testing.T, store *wiki.Store, path, title string) {
 	}
 }
 
-// TestWikiReview_RecentlyTouchedPages: the audit-log parser returns touched
+// TestWikiReviewRecentlyTouchedPagesReturnsDedupedNewestFirst: the audit-log parser returns touched
 // pages newest-first, deduped, skipping raw-data buckets.
-func TestWikiReview_RecentlyTouchedPages(t *testing.T) {
+func TestWikiReviewRecentlyTouchedPagesReturnsDedupedNewestFirst(t *testing.T) {
 	task, store := newReviewFixture(t)
 	writeReviewPage(t, store, "업무/구리값-동향.md", "구리값 동향")
 	writeReviewPage(t, store, "업무/구리값-동향.md", "구리값 동향")                  // second write → update, dedup
@@ -84,10 +84,10 @@ func TestWikiReview_ObserveModeRecordsWithoutMerging(t *testing.T) {
 	}
 }
 
-// TestWikiReview_RunMergesHighConfidenceDuplicate: end-to-end with auto-merge
+// TestWikiReviewRunMergesDuplicateAndIgnoresInventedPath: end-to-end with auto-merge
 // armed — two same-title pages, a fake verdict, and the duplicate is folded
 // (reversibly) while an invented path in the verdict is ignored.
-func TestWikiReview_RunMergesHighConfidenceDuplicate(t *testing.T) {
+func TestWikiReviewRunMergesDuplicateAndIgnoresInventedPath(t *testing.T) {
 	task, store := newReviewFixture(t)
 	task.autoMerge = true
 	writeReviewPage(t, store, "업무/탑솔라-공급계약.md", "탑솔라 공급 계약")
@@ -139,9 +139,9 @@ func TestWikiReview_RunMergesHighConfidenceDuplicate(t *testing.T) {
 	}
 }
 
-// TestWikiReview_SameProjectSlotsAreNotSuspects: a project's 대표.md and detail
+// TestWikiReviewGatherSuspectsRejectsSameProjectSlots: a project's 대표.md and detail
 // pages must never be offered as duplicate candidates of each other.
-func TestWikiReview_SameProjectSlotsAreNotSuspects(t *testing.T) {
+func TestWikiReviewGatherSuspectsRejectsSameProjectSlots(t *testing.T) {
 	task, store := newReviewFixture(t)
 	rep := wiki.NewPage("영산고", "프로젝트", nil)
 	rep.Body = "# 영산고 태양광 사업"
@@ -165,14 +165,14 @@ func TestWikiReview_SameProjectSlotsAreNotSuspects(t *testing.T) {
 	}
 }
 
-// TestWikiReview_MaintenanceRunsOnQuietCycle: the deterministic maintenance
+// TestWikiReviewMaintenanceRunsWhenCycleIsQuiet: the deterministic maintenance
 // sweep (here proven via log rotation) must run even on a TRULY quiet cycle —
 // touched==0, because the watermark is pre-advanced past the fixture writes.
 // The regression this guards: rotation/dormancy/dead-link pruning/mail-refiling
 // used to sit AFTER the duplicate-review early-returns (touched==0,
 // suspects==0, verdict error), so on the common quiet cycle they never ran. On
 // the old code this test fails (로그-보관.md never appears).
-func TestWikiReview_MaintenanceRunsOnQuietCycle(t *testing.T) {
+func TestWikiReviewMaintenanceRunsWhenCycleIsQuiet(t *testing.T) {
 	task, store := newReviewFixture(t)
 	// A lone project with an over-long 로그.md and no duplicate candidates.
 	rep := wiki.NewPage("테스트프로젝트", "프로젝트", nil)
@@ -218,12 +218,12 @@ func TestWikiReview_MaintenanceRunsOnQuietCycle(t *testing.T) {
 	}
 }
 
-// TestWikiReview_FlatRemnantFoldsIntoExistingSlot: when a blind write recreates
+// TestWikiReviewGatherSuspectsFoldsFlatRemnantAndPreservesContent: when a blind write recreates
 // the flat 프로젝트/<name>.md while the in-folder 대표.md already exists, MovePage
 // fails (target exists) and the same-folder filter hides the pair from the
 // duplicate review — so the layout repair must FOLD the remnant into the slot
 // (deterministic; content survives under the merge marker).
-func TestWikiReview_FlatRemnantFoldsIntoExistingSlot(t *testing.T) {
+func TestWikiReviewGatherSuspectsFoldsFlatRemnantAndPreservesContent(t *testing.T) {
 	task, store := newReviewFixture(t)
 	rep := wiki.NewPage("영산고", "프로젝트", nil)
 	rep.Body = "# 영산고 태양광"

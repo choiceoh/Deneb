@@ -35,7 +35,7 @@ func (m *mockBtwChat) HandleBtw(_ context.Context, _, _ string) (string, error) 
 	return m.text, m.err
 }
 
-func TestHandleChatBtw_Success(t *testing.T) {
+func TestHandleChatBtwEmitsSideResultOnSuccess(t *testing.T) {
 	var broadcastEvent string
 	d := NewDispatcher(nil)
 	RegisterChatBtwMethods(d, ChatBtwDeps{

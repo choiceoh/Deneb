@@ -72,9 +72,10 @@ func waitFor(deadline time.Duration, cond func() bool) bool {
 	return cond()
 }
 
-// TestSchedulerLoopFiresDueJobs verifies the basic happy path: a due job
-// gets executed by the loop without explicit wake signals.
-func TestSchedulerLoopFiresDueJobs(t *testing.T) {
+// TestSchedulerLoopAfterStartFiresDueJobsWithoutWakeSignal verifies the basic
+// happy path: a due job gets executed by the loop without explicit wake
+// signals.
+func TestSchedulerLoopAfterStartFiresDueJobsWithoutWakeSignal(t *testing.T) {
 	svc, agent := newTestService(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -183,10 +184,11 @@ func TestSchedulerLoopSurvivesStoreError(t *testing.T) {
 	}
 }
 
-// TestSignalWakeCoalesces verifies that many signals while the loop is busy
-// produce at most one extra wake (channel cap 1). Sanity check that the
-// non-blocking send pattern doesn't deadlock under load.
-func TestSignalWakeCoalesces(t *testing.T) {
+// TestSignalWakeWithoutLoopCoalescesRepeatedCallsToSingleWake verifies that
+// many signals while the loop is busy produce at most one extra wake
+// (channel cap 1). Sanity check that the non-blocking send pattern doesn't
+// deadlock under load.
+func TestSignalWakeWithoutLoopCoalescesRepeatedCallsToSingleWake(t *testing.T) {
 	svc, _ := newTestService(t)
 	// Don't Start — we want to test the channel directly without the loop
 	// draining wakes.
@@ -247,11 +249,11 @@ func TestManualRunPreservesFutureNextRun(t *testing.T) {
 	}
 }
 
-// TestManualRunOverdueAdvances verifies the inverse: when NextRunAtMs is in
-// the past at manual-run time (i.e. the job was overdue and the operator
-// nudged it through), we DO advance to the next match. Otherwise stale
-// past timestamps would persist.
-func TestManualRunOverdueAdvances(t *testing.T) {
+// TestManualRunOverdueAdvancesNextRunWithoutPreservingPastTime verifies the
+// inverse: when NextRunAtMs is in the past at manual-run time (i.e. the job
+// was overdue and the operator nudged it through), we DO advance to the next
+// match. Otherwise stale past timestamps would persist.
+func TestManualRunOverdueAdvancesNextRunWithoutPreservingPastTime(t *testing.T) {
 	svc, _ := newTestService(t)
 
 	now := time.Now().UnixMilli()
@@ -278,10 +280,10 @@ func TestManualRunOverdueAdvances(t *testing.T) {
 	}
 }
 
-// TestSchedulerTriggerSchedulerAlwaysAdvances verifies that scheduler-driven
-// runs (the normal path) always advance NextRunAtMs to the next match,
-// regardless of where the previous value sat.
-func TestSchedulerTriggerAlwaysAdvances(t *testing.T) {
+// TestSchedulerTriggerAlwaysAdvancesNextRunWithoutPreservingFutureValue
+// verifies that scheduler-driven runs (the normal path) always advance
+// NextRunAtMs to the next match, regardless of where the previous value sat.
+func TestSchedulerTriggerAlwaysAdvancesNextRunWithoutPreservingFutureValue(t *testing.T) {
 	svc, _ := newTestService(t)
 
 	now := time.Now().UnixMilli()
@@ -350,9 +352,10 @@ func TestStopWaitsForLoopExit(t *testing.T) {
 	}
 }
 
-// TestSignalWakeNoLoopIsSafe verifies signalWake doesn't deadlock when the
-// loop hasn't started (e.g. early-init code paths or after Stop).
-func TestSignalWakeNoLoopIsSafe(t *testing.T) {
+// TestSignalWakeWithoutStartedLoopDoesNotDeadlock verifies signalWake
+// doesn't deadlock when the loop hasn't started (e.g. early-init code paths
+// or after Stop).
+func TestSignalWakeWithoutStartedLoopDoesNotDeadlock(t *testing.T) {
 	svc, _ := newTestService(t)
 	// No Start.
 	for range 100 {
@@ -360,10 +363,10 @@ func TestSignalWakeNoLoopIsSafe(t *testing.T) {
 	}
 }
 
-// TestApplyJobResultSignalsWake verifies that applyJobResult nudges the loop
-// so a freshly-computed NextRunAtMs sooner than the current sleep target
-// is honored without waiting for idleInterval.
-func TestApplyJobResultSignalsWake(t *testing.T) {
+// TestApplyJobResultWithSoonerNextRunSignalsWake verifies that
+// applyJobResult nudges the loop so a freshly-computed NextRunAtMs sooner
+// than the current sleep target is honored without waiting for idleInterval.
+func TestApplyJobResultWithSoonerNextRunSignalsWake(t *testing.T) {
 	svc, _ := newTestService(t)
 
 	// Drain any pending wakes.
@@ -395,7 +398,7 @@ func TestApplyJobResultSignalsWake(t *testing.T) {
 
 // errStr is exercised indirectly above; this is a smoke test that it doesn't
 // panic on nil and round-trips error text.
-func TestErrStr(t *testing.T) {
+func TestErrStrHandlesNilAndRoundTripsErrorText(t *testing.T) {
 	if errStr(nil) != "" {
 		t.Error("errStr(nil) should be empty")
 	}

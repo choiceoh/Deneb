@@ -142,7 +142,7 @@ func TestParseCronFieldValidationAndExpansion(t *testing.T) {
 	}
 }
 
-func TestComputeNextEveryStrictlyFutureAndOverflow(t *testing.T) {
+func TestComputeNextEveryMsReturnsFutureTickAndGuardsOverflow(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
 		now    int64
@@ -345,7 +345,7 @@ func TestParseSmartScheduleContractAdditional(t *testing.T) {
 	}
 }
 
-func TestLooksLikeCronExprMatrix(t *testing.T) {
+func TestLooksLikeCronExprDetectsFieldFormatMatrix(t *testing.T) {
 	for _, tt := range []struct {
 		fields []string
 		want   bool
@@ -428,7 +428,7 @@ func TestKoreanFailureCauseContract(t *testing.T) {
 	}
 }
 
-func TestResolveCommandBestEffortAndSafeStr(t *testing.T) {
+func TestResolveJobCommandBestEffortAndSafeStrIgnoresNilTarget(t *testing.T) {
 	if got := resolveJobCommand(StoreJob{Payload: StorePayload{Kind: "systemEvent", Text: "event", Message: "message"}}); got != "event" {
 		t.Fatalf("system command = %q", got)
 	}
@@ -447,7 +447,7 @@ func TestResolveCommandBestEffortAndSafeStr(t *testing.T) {
 	}
 }
 
-func TestSortJobsAscendingDescendingAndStableTies(t *testing.T) {
+func TestSortJobsAscendingDescendingPreservesStableTies(t *testing.T) {
 	base := []StoreJob{
 		{ID: "b", Name: "beta", UpdatedAtMs: 20, State: JobState{NextRunAtMs: 200}},
 		{ID: "a1", Name: "Alpha", UpdatedAtMs: 10, State: JobState{NextRunAtMs: 100}},
@@ -485,7 +485,7 @@ func contractCronJob(id, name string, enabled bool, next int64) StoreJob {
 	return StoreJob{ID: id, Name: name, Enabled: enabled, Schedule: StoreSchedule{Kind: "every", EveryMs: 60_000}, Payload: StorePayload{Kind: "agentTurn", Message: "run " + name}, State: JobState{NextRunAtMs: next}}
 }
 
-func TestServiceCRUDListPaginationAndEvents(t *testing.T) {
+func TestServiceCreateListUpdateDeleteEmitsEvents(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cron", "jobs.json")
 	svc := NewService(ServiceConfig{StorePath: path}, nil, nil)
 	var mu sync.Mutex
@@ -554,7 +554,7 @@ func TestServiceCRUDListPaginationAndEvents(t *testing.T) {
 	}
 }
 
-func TestServiceAddValidationAndInferredName(t *testing.T) {
+func TestServiceAddRejectsPastScheduleAndInfersName(t *testing.T) {
 	svc := NewService(ServiceConfig{StorePath: filepath.Join(t.TempDir(), "jobs.json")}, nil, nil)
 	if err := svc.Add(context.Background(), StoreJob{ID: "past", Enabled: true, Schedule: StoreSchedule{Kind: "at", At: "2000-01-01T00:00:00Z"}, Payload: StorePayload{Kind: "agentTurn", Message: "past"}}); err == nil || !strings.Contains(err.Error(), "invalid schedule") {
 		t.Fatalf("past Add = %v", err)
@@ -615,7 +615,7 @@ func TestServiceRunMissingDueSkipAndImmediate(t *testing.T) {
 	}
 }
 
-func TestServiceSettersAndEventListenerIsolation(t *testing.T) {
+func TestServiceSettersUpdateConfigAndLateListenerSkipsCurrentEmit(t *testing.T) {
 	svc := NewService(ServiceConfig{StorePath: filepath.Join(t.TempDir(), "jobs.json")}, nil, nil)
 	runner := &contractAgentRunner{}
 	svc.SetAgentRunner(runner)
@@ -707,7 +707,7 @@ func TestStoreDefaultPathCloneAndCorruptLoad(t *testing.T) {
 	}
 }
 
-func TestStoreVersionDefaultsAndSnapshotIsolation(t *testing.T) {
+func TestStoreLoadDefaultsVersionAndReturnsIsolatedSnapshot(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "jobs.json")
 	data, _ := json.Marshal(CronStoreFile{Jobs: nil})
 	if err := os.WriteFile(path, data, 0o600); err != nil {

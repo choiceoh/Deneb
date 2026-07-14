@@ -42,14 +42,9 @@ const openLoopMaxTokens = 1024
 // the loop pass, not the remaining dream-cycle budget.
 const openLoopTimeout = 2 * time.Minute
 
-// SetOpenLoopSink wires the destination for extracted commitments. The sink
-// returns how many were newly recorded (after its own dedup). nil disables
-// extraction entirely.
-func (wd *WikiDreamer) SetOpenLoopSink(fn func(ctx context.Context, loops []OpenLoop) (int, error)) {
-	wd.openLoopSink = fn
-}
-
 // extractOpenLoops runs the focused extraction pass over the cycle input.
+// Note: the openLoopSink destination was deliberately unwired in #2810
+// (approval-first policy); re-enabling means assigning WikiDreamer.openLoopSink.
 func (wd *WikiDreamer) extractOpenLoops(ctx context.Context, content string) ([]OpenLoop, error) {
 	if wd.client == nil || strings.TrimSpace(content) == "" {
 		return nil, nil

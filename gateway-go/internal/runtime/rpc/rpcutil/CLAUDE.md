@@ -31,7 +31,7 @@ composition root의 서비스 컨테이너를 소유한다. 도메인 handler는
 ## 테스트와 집중 검증
 
 - `contracts_test.go`의 `TestGatewayHubValidateReportsAllMissingDependencies`,
-  `TestGatewayHubPhaseOrdering`, `TestGenericBindPreservesResponseJSONAndErrorShapes`,
+  `TestGatewayHubAdvancePhaseRejectsOutOfOrderTransitions`, `TestGenericBindPreservesResponseJSONAndErrorShapes`,
   `TestNilBoundFunctionsReturnErrorsInsteadOfPanicking`이 수명주기와 wire 계약을
   고정한다.
 - `helpers_test.go`의 `TestUnmarshalParams_InvalidJSON`과

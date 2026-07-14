@@ -52,7 +52,7 @@ func runFleet(t *testing.T, d *tooldeps.FleetDeps, args map[string]any) string {
 	return out
 }
 
-func TestFleetTool_off(t *testing.T) {
+func TestFleetTool_ReturnsOffMessageWhenUnconfigured(t *testing.T) {
 	// No base URL wired → integration off, every action a calm message (no error).
 	out := runFleet(t, &tooldeps.FleetDeps{}, map[string]any{"action": "status"})
 	if !strings.Contains(out, "꺼져") {
@@ -60,7 +60,7 @@ func TestFleetTool_off(t *testing.T) {
 	}
 }
 
-func TestFleetTool_status(t *testing.T) {
+func TestFleetTool_StatusReturnsNodeAndGPUInfo(t *testing.T) {
 	out := runFleet(t, fleetDepsFor(stubFleet(t).URL), map[string]any{"action": "status"})
 	for _, want := range []string{"gx10", "qwen36", "GPU 42%", "다운: vllm", "실패 작업"} {
 		if !strings.Contains(out, want) {
@@ -69,14 +69,14 @@ func TestFleetTool_status(t *testing.T) {
 	}
 }
 
-func TestFleetTool_recipeAction(t *testing.T) {
+func TestFleetTool_RecipeActionReturnsJobID(t *testing.T) {
 	out := runFleet(t, fleetDepsFor(stubFleet(t).URL), map[string]any{"action": "restart", "recipe": "qwen36"})
 	if !strings.Contains(out, "job-9") {
 		t.Errorf("expected job id in:\n%s", out)
 	}
 }
 
-func TestFleetTool_actionNeedsRecipe(t *testing.T) {
+func TestFleetTool_ReturnsRecipeRequiredWhenMissing(t *testing.T) {
 	out := runFleet(t, fleetDepsFor(stubFleet(t).URL), map[string]any{"action": "launch"})
 	if !strings.Contains(out, "recipe") {
 		t.Errorf("expected recipe-required message, got %q", out)
@@ -90,7 +90,7 @@ func TestFleetTool_cancel(t *testing.T) {
 	}
 }
 
-func TestFleetTool_diagnose(t *testing.T) {
+func TestFleetTool_DiagnoseReturnsFindings(t *testing.T) {
 	out := runFleet(t, fleetDepsFor(stubFleet(t).URL), map[string]any{"action": "diagnose", "recipe": "qwen36"})
 	for _, want := range []string{"OOM", "KV cache"} {
 		if !strings.Contains(out, want) {

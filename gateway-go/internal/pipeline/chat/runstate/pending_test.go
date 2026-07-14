@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestPendingQueueLatestIntentWins(t *testing.T) {
+func TestPendingQueueDrainReturnsLatestIntent(t *testing.T) {
 	queue := NewPendingQueue()
 	queue.Enqueue("client:main", Params{SessionKey: "client:main", Message: "first"})
 	queue.Enqueue("client:main", Params{SessionKey: "client:main", Message: "latest"})
@@ -23,7 +23,7 @@ func TestPendingQueueLatestIntentWins(t *testing.T) {
 	}
 }
 
-func TestPendingQueueKeepsSessionsIndependent(t *testing.T) {
+func TestPendingQueueWithMultipleSessionsReturnsIndependentMessages(t *testing.T) {
 	queue := NewPendingQueue()
 	queue.Enqueue("client:a", Params{SessionKey: "client:a", Message: "A"})
 	queue.Enqueue("client:b", Params{SessionKey: "client:b", Message: "B"})

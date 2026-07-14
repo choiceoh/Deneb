@@ -11,7 +11,7 @@ import (
 // main-session assembly (context files, memory, skills index ≈ 50K tokens).
 // Everything the run needs must therefore live in the system preamble or the
 // review prompt itself.
-func TestSkillReviewSystemPrompt_SelfContained(t *testing.T) {
+func TestSkillReviewSystemPromptIncludesToolsWithinSizeBoundary(t *testing.T) {
 	for _, want := range []string{"fetch_tools", "skills", "skill_lifecycle", "propose"} {
 		if !strings.Contains(skillReviewSystemPrompt, want) {
 			t.Errorf("system prompt missing %q", want)
@@ -26,7 +26,7 @@ func TestSkillReviewSystemPrompt_SelfContained(t *testing.T) {
 // template must tell the reviewer to fetch it via the skills tool, and to fall
 // back conservatively when the listing is empty/unavailable (nil snapshot
 // after a restart, always-on skills missing from the discoverable list).
-func TestBuildSkillReviewPrompt_PointsAtSkillIndex(t *testing.T) {
+func TestBuildSkillReviewPromptIncludesIndexGuidanceAndFallback(t *testing.T) {
 	prompt := buildSkillReviewPrompt("client:main", generation.SessionContext{AllText: "user: 테스트"}, "(none)")
 	if !strings.Contains(prompt, "skills action=list") {
 		t.Error("prompt missing skills-index guidance")
@@ -41,7 +41,7 @@ func TestBuildSkillReviewPrompt_PointsAtSkillIndex(t *testing.T) {
 
 // The fork session key derives a persisted `system:skill-review:*` identity
 // from arbitrary session keys — unsafe runes must be folded to '_'.
-func TestSkillReviewSessionKey_Sanitizes(t *testing.T) {
+func TestSkillReviewSessionKeyNormalizesUnsafeRunes(t *testing.T) {
 	cases := map[string]string{
 		"client:main":     "system:skill-review:client:main",
 		"cron:작업/1 테스트":   "system:skill-review:cron:작업_1_테스트",

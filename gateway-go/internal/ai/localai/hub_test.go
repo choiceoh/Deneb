@@ -14,7 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
-func TestResponseCache(t *testing.T) {
+func TestResponseCachePutGetRoundTrip(t *testing.T) {
 	cache := newResponseCache(5*time.Minute, 100)
 
 	req := SimpleRequest("sys", "hello", 100, PriorityNormal, "test")
@@ -38,7 +38,7 @@ func TestResponseCache(t *testing.T) {
 	}
 }
 
-func TestResponseCacheExpiry(t *testing.T) {
+func TestResponseCacheExpiredEntryMisses(t *testing.T) {
 	cache := newResponseCache(10*time.Millisecond, 100)
 
 	req := SimpleRequest("sys", "hello", 100, PriorityNormal, "test")
@@ -63,7 +63,7 @@ func TestResponseCacheEviction(t *testing.T) {
 	}
 }
 
-func TestPriorityQueue(t *testing.T) {
+func TestPriorityQueueReturnsCriticalFirst(t *testing.T) {
 	q := newRequestQueue()
 
 	bg := &queueEntry{
@@ -89,7 +89,7 @@ func TestPriorityQueue(t *testing.T) {
 	}
 }
 
-func TestQueueDropOldestBackground(t *testing.T) {
+func TestQueueDropOldestBackgroundEmitsError(t *testing.T) {
 	q := newRequestQueue()
 
 	// Add 3 entries: 1 normal + 2 background.
@@ -134,7 +134,7 @@ func TestQueueDropOldestBackground(t *testing.T) {
 	}
 }
 
-func TestCacheKey_DifferentMaxTokens(t *testing.T) {
+func TestCacheKeyEncodesMaxTokens(t *testing.T) {
 	r1 := SimpleRequest("sys", "hello", 100, PriorityNormal, "test")
 	r2 := SimpleRequest("sys", "hello", 200, PriorityNormal, "test")
 
@@ -145,7 +145,7 @@ func TestCacheKey_DifferentMaxTokens(t *testing.T) {
 	}
 }
 
-func TestMergeRequestBody_NonReasoningKeepsNoThinking(t *testing.T) {
+func TestMergeRequestBodyPreservesNoThinkingForNonReasoning(t *testing.T) {
 	merged := mergeRequestBody(nil, "vllm", "gemma4", nil)
 	ctk, ok := merged["chat_template_kwargs"].(map[string]any)
 	if !ok {
@@ -156,7 +156,7 @@ func TestMergeRequestBody_NonReasoningKeepsNoThinking(t *testing.T) {
 	}
 }
 
-func TestMergeRequestBody_ReasoningDropsNoThinking(t *testing.T) {
+func TestMergeRequestBodyReasoningModelWithoutChatTemplateKwargs(t *testing.T) {
 	// A reasoning model must not receive enable_thinking — vLLM's
 	// --reasoning-parser ignores it and a thinking-only chat template that
 	// lacks the parameter rejects the request with a 400.
@@ -166,7 +166,7 @@ func TestMergeRequestBody_ReasoningDropsNoThinking(t *testing.T) {
 	}
 }
 
-func TestMergeRequestBody_DualModeGetsTemplateToggle(t *testing.T) {
+func TestMergeRequestBodyDualModeCreatesThinkingToggle(t *testing.T) {
 	// deepseek-v4 is dual-mode: Profile.Reasoning=false by design, thinking
 	// controlled ONLY via chat_template_kwargs.thinking. The old non-reasoning
 	// branch sent the Qwen enable_thinking spelling, which dsv4 templates
@@ -185,7 +185,7 @@ func TestMergeRequestBody_DualModeGetsTemplateToggle(t *testing.T) {
 	}
 }
 
-func TestMergeRequestBody_CallerExtraWins(t *testing.T) {
+func TestMergeRequestBodyPreservesCallerOverrides(t *testing.T) {
 	caller := map[string]any{"timeout": 30.0, "chat_template_kwargs": "caller-value"}
 	merged := mergeRequestBody(nil, "vllm", "qwen3.6-35b-a3b", caller)
 	if merged["timeout"] != 30.0 {
@@ -196,7 +196,7 @@ func TestMergeRequestBody_CallerExtraWins(t *testing.T) {
 	}
 }
 
-func TestExtractTextDelta(t *testing.T) {
+func TestExtractTextDeltaParsesDeltaPayloads(t *testing.T) {
 	tests := []struct {
 		name    string
 		payload string
@@ -266,7 +266,7 @@ func TestSubmit_UnhealthyRejectsBackground(t *testing.T) {
 	h.cancel()
 }
 
-func TestSubmit_OversizedRequestDoesNotBlockFollowingRequest(t *testing.T) {
+func TestSubmitRejectsOversizedRequestWithoutBlockingNext(t *testing.T) {
 	h := newDispatchTestHub(t, Config{TokenBudget: 10}, nil)
 
 	oversized := SimpleRequest("sys", "too large", 1, PriorityNormal, "test")

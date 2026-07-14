@@ -2,10 +2,11 @@ package web
 
 import "testing"
 
-// TestClassifyContentType_DocumentByURL covers the case where a download
-// endpoint serves a document under a generic content type — classification must
-// fall back to the URL's file extension instead of returning plain.
-func TestClassifyContentType_DocumentByURL(t *testing.T) {
+// TestClassifyContentTypeUsesURLExtensionAsFallback covers the case where a
+// download endpoint serves a document under a generic content type —
+// classification must fall back to the URL's file extension instead of
+// returning plain.
+func TestClassifyContentTypeUsesURLExtensionAsFallback(t *testing.T) {
 	cases := []struct {
 		name        string
 		contentType string
@@ -25,7 +26,7 @@ func TestClassifyContentType_DocumentByURL(t *testing.T) {
 	}
 }
 
-func TestDocumentName(t *testing.T) {
+func TestDocumentNameReturnsFileNameFromURL(t *testing.T) {
 	cases := map[string]string{
 		"https://x.test/a/b/report.pdf?x=1": "report.pdf",
 		"https://x.test/data.csv":           "data.csv",

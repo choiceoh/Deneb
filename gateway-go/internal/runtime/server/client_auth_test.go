@@ -26,7 +26,7 @@ func postMiniappClientToken(t *testing.T, s *Server, token string, body any) *ht
 	return rec
 }
 
-func TestMiniappRPC_ClientToken(t *testing.T) {
+func TestMiniappRPCAuthenticatesValidTokenRejectsWrongToken(t *testing.T) {
 	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	token, err := clientauth.Generate()
 	if err != nil {

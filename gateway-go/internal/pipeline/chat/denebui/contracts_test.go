@@ -67,7 +67,7 @@ func TestFenceRecognitionContract(t *testing.T) {
 	}
 }
 
-func TestExtractFencesDocumentOrderAndBoundaries(t *testing.T) {
+func TestExtractFencesReturnsInDocumentOrder(t *testing.T) {
 	text := strings.Join([]string{
 		"before",
 		"```json",
@@ -657,7 +657,7 @@ func TestTruthyContract(t *testing.T) {
 	}
 }
 
-func TestActionFromAttrsPrecedenceAndData(t *testing.T) {
+func TestActionFromAttrsWithPrecedenceAndData(t *testing.T) {
 	tests := []struct {
 		name  string
 		attrs map[string]string

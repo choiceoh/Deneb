@@ -19,7 +19,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
 
-func TestFetchCacheDefaultsExpiryRefreshAndLRU(t *testing.T) {
+func TestFetchCacheEvictsLRUAndExpiresEntries(t *testing.T) {
 	defaults := NewFetchCache()
 	if defaults.maxSize != fetchCacheDefaultMaxSize || defaults.ttl != fetchCacheDefaultTTL {
 		t.Fatalf("default cache config = size %d ttl %s", defaults.maxSize, defaults.ttl)
@@ -98,7 +98,7 @@ func TestFetchCacheConcurrentCapacityAndIntegrity(t *testing.T) {
 	}
 }
 
-func TestContentClassificationAndDocumentNames(t *testing.T) {
+func TestContentClassificationReturnsTypeAndDocumentName(t *testing.T) {
 	cases := []struct {
 		contentType string
 		url         string
@@ -326,7 +326,7 @@ func TestSearchFormattingAnswerPriorityAndEmptyFallback(t *testing.T) {
 	}
 }
 
-func TestScrapeContentMetadataAndBinaryURLDetection(t *testing.T) {
+func TestScrapeContentParsesMetadataAndBinaryURLs(t *testing.T) {
 	if got := pickScrapeContent(&serperScrapeResponse{Markdown: "  # heading  ", Text: "plain"}); got != "  # heading  " {
 		t.Fatalf("markdown preference = %q", got)
 	}
@@ -372,7 +372,7 @@ func TestScrapeContentMetadataAndBinaryURLDetection(t *testing.T) {
 	}
 }
 
-func TestSearchAPIKeyPrecedenceAndFirstEnv(t *testing.T) {
+func TestSearchAPIKeyFallbackToFirstEnv(t *testing.T) {
 	t.Setenv("BRAVE_SEARCH_API_KEY", "search-key")
 	t.Setenv("BRAVE_API_KEY", "legacy-key")
 	t.Setenv("SERPER_API_KEY", "serper-key")
@@ -394,7 +394,7 @@ func TestSearchAPIKeyPrecedenceAndFirstEnv(t *testing.T) {
 	}
 }
 
-func TestLocalAIExtractorEnvironmentAndAvailabilityCache(t *testing.T) {
+func TestLocalAIExtractorLoadsEnvAndCachesAvailability(t *testing.T) {
 	t.Setenv("LOCAL_AI_BASE_URL", "http://local-primary")
 	t.Setenv("SGLANG_BASE_URL", "http://secondary")
 	t.Setenv("LOCAL_AI_API_KEY", "primary-key")
@@ -433,7 +433,7 @@ func TestLocalAIExtractorEnvironmentAndAvailabilityCache(t *testing.T) {
 	}
 }
 
-func TestLocalAIExtractSmallContentAndResponseBoundaries(t *testing.T) {
+func TestLocalAIExtractParsesSmallContentAndResponseVariants(t *testing.T) {
 	extractor := &LocalAIExtractor{}
 	small := "<html><body><h1>Hello</h1><p>short body</p></body></html>"
 	got, err := extractor.extract(context.Background(), small, "https://example.com", "en")
@@ -564,7 +564,7 @@ func TestTypedSearchFormattingRepresentativePayloads(t *testing.T) {
 	}
 }
 
-func TestBinaryExtensionSetRemainsCaseAndQueryInsensitive(t *testing.T) {
+func TestBinaryExtensionDetectionIgnoresCaseAndQuery(t *testing.T) {
 	urls := []string{
 		"a.pdf", "a.doc", "a.docx", "a.xls", "a.xlsx", "a.ppt", "a.pptx",
 		"a.zip", "a.tar", "a.gz", "a.7z", "a.mp3", "a.wav", "a.ogg", "a.flac",

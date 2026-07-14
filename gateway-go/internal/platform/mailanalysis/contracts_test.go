@@ -68,7 +68,7 @@ func TestSanitizePathComponentContract(t *testing.T) {
 	}
 }
 
-func TestAnalysisPromptSelection(t *testing.T) {
+func TestAnalysisPromptFallbackToDefaultOtherwiseTrims(t *testing.T) {
 	for _, tt := range []struct{ prompt, want string }{
 		{want: DefaultPrompt},
 		{prompt: " ", want: DefaultPrompt},
@@ -80,7 +80,7 @@ func TestAnalysisPromptSelection(t *testing.T) {
 	}
 }
 
-func TestPipelineDependencyGate(t *testing.T) {
+func TestCanRunPipelineTrueWhenClientAndModelSet(t *testing.T) {
 	client := llm.NewClient("http://example.test", "key")
 	for _, tt := range []struct {
 		name string
@@ -118,7 +118,7 @@ func TestProjectCandidatesContract(t *testing.T) {
 	}
 }
 
-func TestAnalysisThinkingBoundaries(t *testing.T) {
+func TestAnalysisThinkingTypeAndBudgetBoundary(t *testing.T) {
 	anthropic := llm.NewClient("http://example.test", "key", llm.WithAPIMode(llm.APIModeAnthropic))
 	for _, tt := range []struct {
 		max     int
@@ -484,7 +484,7 @@ func TestGatherRelatedMessagesArchiveContract(t *testing.T) {
 	}
 }
 
-func TestExtractSenderContextInProcessAndUnicodeCap(t *testing.T) {
+func TestExtractSenderContextTruncatesFactsToUnicodeCap(t *testing.T) {
 	msg := &gmail.MessageDetail{From: "홍길동 <hong@example.test>"}
 	calledWith := ""
 	deps := PipelineDeps{SenderFactsFn: func(_ context.Context, from string) string {
@@ -612,7 +612,7 @@ func TestCallLocalLLMJSONContractAndSchemaFallback(t *testing.T) {
 	})
 }
 
-func TestRunFinalSynthesisAgentFastPath(t *testing.T) {
+func TestRunFinalSynthesisReturnsAgentResultWhenAvailable(t *testing.T) {
 	called := 0
 	deps := PipelineDeps{AgentSynthesisFn: func(_ context.Context, prompt string) (string, error) {
 		called++
@@ -719,7 +719,7 @@ func TestAnalyzeBatchSingleAndEmptyContracts(t *testing.T) {
 	}
 }
 
-func TestExtractForEvalValidationAndKinds(t *testing.T) {
+func TestExtractForEvalRejectsInvalidInputsAndParsesKinds(t *testing.T) {
 	if _, err := ExtractForEval(context.Background(), nil, "model", "deal", "input"); err == nil {
 		t.Fatal("nil client accepted")
 	}

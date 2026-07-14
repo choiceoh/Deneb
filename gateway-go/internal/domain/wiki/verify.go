@@ -15,8 +15,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// VerifyFinding represents a single verification issue found.
-type VerifyFinding struct {
+// verifyFinding represents a single verification issue found.
+type verifyFinding struct {
 	Type   string `json:"type"`            // "duplicate", "misclassified", or "stale_deadline"
 	Detail string `json:"detail"`          // human-readable description (Korean)
 	PageA  string `json:"pageA"`           // primary page path
@@ -24,13 +24,13 @@ type VerifyFinding struct {
 	// Fix is set only on HIGH-CONFIDENCE findings the dream cycle may auto-apply
 	// (Phase 5): an exact-duplicate merge or an LLM-high-confidence category move.
 	// Nil means advisory-only — surfaced in the report, never auto-touched.
-	Fix *VerifyFix `json:"fix,omitempty"`
+	Fix *verifyFix `json:"fix,omitempty"`
 }
 
-// VerifyFix is the structured, auto-applicable correction attached to a
-// high-confidence VerifyFinding. Conservative by construction: only the two
+// verifyFix is the structured, auto-applicable correction attached to a
+// high-confidence verifyFinding. Conservative by construction: only the two
 // safe, reversible (git-recoverable) actions are expressible.
-type VerifyFix struct {
+type verifyFix struct {
 	Kind    string `json:"kind"`              // "merge" (fold PageB into PageA, delete PageB) | "move" (PageA → NewPath)
 	NewPath string `json:"newPath,omitempty"` // move: the corrected path under the right category
 }
@@ -43,16 +43,16 @@ type VerifyFix struct {
 // Detection only — no auto-fix. Stale deadlines are surfaced, never deleted, so
 // the operator (or a later analysis turn) decides whether a deal/milestone is
 // done or slipped, and analysis stops treating a passed deadline as upcoming.
-func (wd *WikiDreamer) verifyPages(ctx context.Context) []VerifyFinding {
+func (wd *WikiDreamer) verifyPages(ctx context.Context) []verifyFinding {
 	// Snapshot once: the detectors below walk the entries (and the LLM pass
 	// holds them across a network call) — iterating the live index map would
 	// race concurrent page writers.
-	entries := wd.store.SnapshotEntries()
+	entries := wd.store.snapshotEntries()
 	if len(entries) < 2 {
 		return nil
 	}
 
-	var findings []VerifyFinding
+	var findings []verifyFinding
 
 	// 5a: Duplicate detection (pure computation).
 	findings = append(findings, detectDuplicates(entries)...)
@@ -99,16 +99,16 @@ const (
 // categories that recall does not drive, and (5) absent from the retained
 // recall-utility ledger. These are the dreamer's writes that never earned their
 // keep. Pure computation over the ledger + page frontmatter; advisory only.
-func (wd *WikiDreamer) detectUnrecalled() []VerifyFinding {
+func (wd *WikiDreamer) detectUnrecalled() []verifyFinding {
 	relPaths, err := wd.store.ListPages("")
 	if err != nil {
 		return nil
 	}
 	// Retained ledger = the full compaction window: a page absent here is cold
 	// over the whole horizon, not merely quiet in the last 30 days.
-	recalls := wd.store.RecallHitCounts(time.Now().Add(-recallHitRetention))
+	recalls := wd.store.recallHitCounts(time.Now().Add(-recallHitRetention))
 	cutoff := time.Now().AddDate(0, 0, -unrecalledColdMinDays).Format("2006-01-02")
-	var findings []VerifyFinding
+	var findings []verifyFinding
 	for _, rp := range relPaths {
 		if len(findings) >= unrecalledFindingLimit {
 			break
@@ -139,7 +139,7 @@ func (wd *WikiDreamer) detectUnrecalled() []VerifyFinding {
 		if title == "" {
 			title = strings.TrimSuffix(filepath.Base(rp), ".md")
 		}
-		findings = append(findings, VerifyFinding{
+		findings = append(findings, verifyFinding{
 			Type:   "unrecalled",
 			Detail: fmt.Sprintf("장기 미회상 저중요 페이지 %q (생성 %s, 회상 0) — 아카이브 검토", title, created),
 			PageA:  rp,
@@ -157,7 +157,7 @@ func categoryFromPath(rp string) string {
 }
 
 // enrichRelatedLinks adds semantic `related` links to pages that currently have
-// none, via Store.SuggestRelated (high cosine floor). Conservative by design:
+// none, via Store.suggestRelated (high cosine floor). Conservative by design:
 // only zero-related pages, at most maxEnrichPerPage each, additive only (never
 // removes). Returns the number of links added. No-op without an embedder.
 func (wd *WikiDreamer) enrichRelatedLinks(ctx context.Context) int {
@@ -175,12 +175,12 @@ func (wd *WikiDreamer) enrichRelatedLinks(ctx context.Context) int {
 		if perr != nil || page == nil || len(page.Meta.Related) > 0 {
 			continue
 		}
-		sugg := wd.store.SuggestRelated(ctx, rp, maxEnrichPerPage)
+		sugg := wd.store.suggestRelated(ctx, rp, maxEnrichPerPage)
 		if len(sugg) == 0 {
 			continue
 		}
 		// Apply via UpdatePage so a concurrent writer of rp can't be clobbered by
-		// this Related-only edit. SuggestRelated (an embedding query) ran above,
+		// this Related-only edit. suggestRelated (an embedding query) ran above,
 		// outside the write lock. Re-check Related under the lock: another writer
 		// may have filled it since the read, in which case skip (additive-only).
 		written := false
@@ -206,13 +206,13 @@ func (wd *WikiDreamer) enrichRelatedLinks(ctx context.Context) int {
 // detectStaleDeadlines flags pages whose frontmatter `due` (YYYY-MM-DD) is in
 // the past. Reads pages directly because the index doesn't carry the due field.
 // Pure computation, no LLM.
-func (wd *WikiDreamer) detectStaleDeadlines() []VerifyFinding {
+func (wd *WikiDreamer) detectStaleDeadlines() []verifyFinding {
 	relPaths, err := wd.store.ListPages("")
 	if err != nil {
 		return nil
 	}
 	today := time.Now()
-	var findings []VerifyFinding
+	var findings []verifyFinding
 	for _, rp := range relPaths {
 		page, err := wd.store.ReadPage(rp)
 		if err != nil || page == nil || page.Meta.Archived {
@@ -234,7 +234,7 @@ func (wd *WikiDreamer) detectStaleDeadlines() []VerifyFinding {
 		if title == "" {
 			title = strings.TrimSuffix(filepath.Base(rp), ".md")
 		}
-		findings = append(findings, VerifyFinding{
+		findings = append(findings, verifyFinding{
 			Type:   "stale_deadline",
 			Detail: fmt.Sprintf("기한 지남: %q (기한 %s, %d일 경과) — 처리 완료/갱신 필요", title, due, days),
 			PageA:  rp,
@@ -250,13 +250,13 @@ const staleSupersededAfterDays = 30
 // detectStaleSuperseded flags pages that have carried a SupersededBy marker for
 // over staleSupersededAfterDays without being touched — attach an auto-archive
 // fix (reversible: the flag flips back, git keeps history).
-func (wd *WikiDreamer) detectStaleSuperseded() []VerifyFinding {
+func (wd *WikiDreamer) detectStaleSuperseded() []verifyFinding {
 	relPaths, err := wd.store.ListPages("")
 	if err != nil {
 		return nil
 	}
 	cutoff := time.Now().AddDate(0, 0, -staleSupersededAfterDays).Format("2006-01-02")
-	var findings []VerifyFinding
+	var findings []verifyFinding
 	for _, rp := range relPaths {
 		rp = filepath.ToSlash(rp) // ListPages walks with the OS separator
 		page, err := wd.store.ReadPage(rp)
@@ -270,12 +270,12 @@ func (wd *WikiDreamer) detectStaleSuperseded() []VerifyFinding {
 		if last == "" || last >= cutoff { // ISO dates compare lexicographically
 			continue
 		}
-		findings = append(findings, VerifyFinding{
+		findings = append(findings, verifyFinding{
 			Type: "stale_superseded",
 			Detail: fmt.Sprintf("%s 이후 방치된 superseded 페이지 (→ %s) — 아카이브",
 				last, page.Meta.SupersededBy),
 			PageA: rp,
-			Fix:   &VerifyFix{Kind: "archive"},
+			Fix:   &verifyFix{Kind: "archive"},
 		})
 	}
 	return findings
@@ -290,13 +290,13 @@ const mailAnalysisArchiveAfterDays = 90
 // detectStaleMailAnalyses flags mail-analysis pages older than the retention
 // window with an auto-archive fix. Date basis: Updated (set once at creation —
 // the mail sink never rewrites these), falling back to Created.
-func (wd *WikiDreamer) detectStaleMailAnalyses() []VerifyFinding {
+func (wd *WikiDreamer) detectStaleMailAnalyses() []verifyFinding {
 	relPaths, err := wd.store.ListPages("")
 	if err != nil {
 		return nil
 	}
 	cutoff := time.Now().AddDate(0, 0, -mailAnalysisArchiveAfterDays).Format("2006-01-02")
-	var findings []VerifyFinding
+	var findings []verifyFinding
 	for _, rp := range relPaths {
 		rp = filepath.ToSlash(rp)
 		if !IsMailAnalysisPath(rp) {
@@ -313,11 +313,11 @@ func (wd *WikiDreamer) detectStaleMailAnalyses() []VerifyFinding {
 		if last == "" || last >= cutoff { // ISO dates compare lexicographically
 			continue
 		}
-		findings = append(findings, VerifyFinding{
+		findings = append(findings, verifyFinding{
 			Type:   "stale_mail_analysis",
 			Detail: fmt.Sprintf("보존 기한(%d일) 지난 메일분석 (%s) — 아카이브", mailAnalysisArchiveAfterDays, last),
 			PageA:  rp,
-			Fix:    &VerifyFix{Kind: "archive"},
+			Fix:    &verifyFix{Kind: "archive"},
 		})
 	}
 	return findings
@@ -330,14 +330,14 @@ type pageRef struct {
 }
 
 // detectDuplicates finds pages with identical or very similar titles/IDs.
-// entries is an index snapshot (Store.SnapshotEntries).
-func detectDuplicates(entries map[string]IndexEntry) []VerifyFinding {
+// entries is an index snapshot (Store.snapshotEntries).
+func detectDuplicates(entries map[string]IndexEntry) []verifyFinding {
 	pages := make([]pageRef, 0, len(entries))
 	for path, entry := range entries {
 		pages = append(pages, pageRef{path: path, title: entry.Title, id: entry.ID})
 	}
 
-	var findings []VerifyFinding
+	var findings []verifyFinding
 	seen := map[string]struct{}{}
 
 	for i := 0; i < len(pages); i++ {
@@ -359,7 +359,7 @@ func detectDuplicates(entries map[string]IndexEntry) []VerifyFinding {
 			// root of the 2026-06 mail-analysis mis-merge: 14 pages each swallowed a
 			// different-ID mail because their titles normalized equal.
 			if IsMailAnalysisPath(a.path) || IsMailAnalysisPath(b.path) {
-				if MailAnalysisMsgID(a.path) != MailAnalysisMsgID(b.path) {
+				if mailAnalysisMsgID(a.path) != mailAnalysisMsgID(b.path) {
 					continue
 				}
 			}
@@ -376,7 +376,7 @@ func detectDuplicates(entries map[string]IndexEntry) []VerifyFinding {
 					continue
 				}
 				if isSimilar(a.title, b.title) {
-					findings = append(findings, VerifyFinding{
+					findings = append(findings, verifyFinding{
 						Type: "duplicate",
 						Detail: fmt.Sprintf("유사한 제목: \"%s\" ~ \"%s\" (거리 %d)",
 							a.title, b.title, levenshtein(a.title, b.title)),
@@ -394,7 +394,7 @@ func detectDuplicates(entries map[string]IndexEntry) []VerifyFinding {
 					findings = append(findings, exactDupFinding(entries, a.path, b.path,
 						fmt.Sprintf("동일한 ID: \"%s\"", a.id)))
 				} else {
-					findings = append(findings, VerifyFinding{
+					findings = append(findings, verifyFinding{
 						Type:   "duplicate",
 						Detail: fmt.Sprintf("유사한 ID: \"%s\" ~ \"%s\" (거리 %d)", a.id, b.id, dist),
 						PageA:  a.path, PageB: b.path,
@@ -447,8 +447,8 @@ type misclassificationResult struct {
 }
 
 // detectMisclassifications sends page list to LLM to find category errors.
-// entries is an index snapshot (Store.SnapshotEntries).
-func (wd *WikiDreamer) detectMisclassifications(ctx context.Context, entries map[string]IndexEntry) []VerifyFinding {
+// entries is an index snapshot (Store.snapshotEntries).
+func (wd *WikiDreamer) detectMisclassifications(ctx context.Context, entries map[string]IndexEntry) []verifyFinding {
 	var lines []string
 	for path, entry := range entries {
 		lines = append(lines, fmt.Sprintf("%s\t%s\t%s\t%s",
@@ -498,9 +498,9 @@ JSON 배열만 반환. 다른 텍스트 없이.
 		return nil
 	}
 
-	var findings []VerifyFinding
+	var findings []verifyFinding
 	for _, r := range results {
-		f := VerifyFinding{
+		f := verifyFinding{
 			Type:   "misclassified",
 			Detail: fmt.Sprintf("%s → %s (%s)", r.CurrentCategory, r.CorrectCategory, r.Reason),
 			PageA:  r.Path,
@@ -510,7 +510,7 @@ JSON 배열만 반환. 다른 텍스트 없이.
 		// stays advisory and never moves a real page.
 		if strings.EqualFold(strings.TrimSpace(r.Confidence), "high") {
 			if np := recategorizedPath(r.Path, r.CorrectCategory); np != "" {
-				f.Fix = &VerifyFix{Kind: "move", NewPath: np}
+				f.Fix = &verifyFix{Kind: "move", NewPath: np}
 			}
 		}
 		findings = append(findings, f)

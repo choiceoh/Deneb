@@ -17,7 +17,7 @@ func TestNew_Format(t *testing.T) {
 	t.Logf("generated id: %s", id)
 }
 
-func TestNew_Uniqueness(t *testing.T) {
+func TestNew_CreatesUniqueIDsAcrossManyCalls(t *testing.T) {
 	seen := make(map[string]struct{}, 1000)
 	for i := range 1000 {
 		id := New("x")
@@ -28,7 +28,7 @@ func TestNew_Uniqueness(t *testing.T) {
 	}
 }
 
-func TestNew_Wrap(t *testing.T) {
+func TestNew_WrapsCounterAtBoundary(t *testing.T) {
 	// Force counter near wrap point.
 	counter.Store(9998)
 	a := New("p")

@@ -79,7 +79,7 @@ func TestMetaEvolution_ProducerDropsWithoutShadowGenerator(t *testing.T) {
 // The deterministic contract gate is what stands between an LLM proposal and
 // the .proposed file — it must reject schema-breaking, oversized, and no-op
 // revisions regardless of how plausible the prose reads.
-func TestMetaProposalGate(t *testing.T) {
+func TestMetaProposalGateRejectsIdenticalOversizedAndSchemaBreakingProposals(t *testing.T) {
 	incumbent := strings.Repeat("현재 프롬프트 내용. ", 30)
 	valid := incumbent + `
 ## 출력 (JSON만)
@@ -126,7 +126,7 @@ func TestMetaProposalGate(t *testing.T) {
 
 // Epoch rotation reads the meta-experience ledger: producer, then evaluator,
 // then genesis, then back to producer — one part of the pipeline per window.
-func TestMetaEvolution_EpochAlternation(t *testing.T) {
+func TestNextEpochRotatesProducerEvaluatorGenesisAndIgnoresActionRecords(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
@@ -170,7 +170,7 @@ func TestMetaEvolution_EpochAlternation(t *testing.T) {
 
 // The ledger is the meta-experience memory — it must survive round-trips and
 // surface newest-first, and the evidence block must include it.
-func TestMetaEvolution_LedgerAndEvidence(t *testing.T) {
+func TestMetaRevisionLedgerNewestFirstAndDisplayedInEvidence(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
@@ -206,7 +206,7 @@ func TestMetaEvolution_LedgerAndEvidence(t *testing.T) {
 // live judge's OWN recent misses (and false-rejects), scoped to the incumbent
 // judge version. The producer epoch never sees them; a clean judge yields
 // nothing; a version mismatch is excluded.
-func TestMetaEvolution_JudgeAccuracyEvidence(t *testing.T) {
+func TestAssembleEvidenceLoadsEvaluatorEpochOnIncumbentJudgeMissesOnly(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
@@ -220,7 +220,7 @@ func TestMetaEvolution_JudgeAccuracyEvidence(t *testing.T) {
 
 	// Incumbent judge: caught every blatant section-drop, missed 3/5 subtle
 	// safety-drops, and has one suspected false-reject.
-	if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+	if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 		JudgeVersion: version,
 		Pairs:        9,
 		Correct:      6,
@@ -233,7 +233,7 @@ func TestMetaEvolution_JudgeAccuracyEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A DIFFERENT judge version's misses must be ignored (may already be fixed).
-	if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+	if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 		JudgeVersion: "stale-version",
 		ByClass:      map[string][2]int{"imperative-drop": {0, 6}},
 	}); err != nil {
@@ -270,7 +270,7 @@ func TestMetaEvolution_JudgeAccuracyEvidence(t *testing.T) {
 // when the synthetic lane has nothing: a baseline-confirmed rollback of an
 // evolve the INCUMBENT judge accepted must appear; one accepted by a stale
 // judge version must not.
-func TestMetaEvolution_JudgeAccuracyEvidence_OrganicLabels(t *testing.T) {
+func TestAssembleEvidenceLoadsOrganicFalseAcceptsForIncumbentJudgeVersion(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
@@ -283,14 +283,14 @@ func TestMetaEvolution_JudgeAccuracyEvidence_OrganicLabels(t *testing.T) {
 
 	rollback := func(skill, judgeVersion string) {
 		t.Helper()
-		if err := tr.LogEvolveWithProvenance(skill, "1.1", "d", HarnessEditAudit{},
-			&EvolveProvenance{JudgeArtifactVersion: judgeVersion}); err != nil {
+		if err := tr.logEvolveWithProvenance(skill, "1.1", "d", HarnessEditAudit{},
+			&evolveProvenance{JudgeArtifactVersion: judgeVersion}); err != nil {
 			t.Fatal(err)
 		}
 		tr.mu.Lock()
-		tr.pendingBaselineTest[skill] = &RollbackBaselineTest{Reject: true}
+		tr.pendingBaselineTest[skill] = &rollbackBaselineTest{Reject: true}
 		tr.mu.Unlock()
-		if err := tr.LogEvolveRolledBack(skill); err != nil {
+		if err := tr.logEvolveRolledBack(skill); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -313,7 +313,7 @@ func TestMetaEvolution_JudgeAccuracyEvidence_OrganicLabels(t *testing.T) {
 // Category segmentation (evaluator preference collapse, 2606.16682): a
 // category-local miss concentration must be named in the evaluator evidence;
 // a fully-caught category must not appear.
-func TestMetaEvolution_JudgeAccuracyEvidence_CategorySkew(t *testing.T) {
+func TestAssembleEvidenceSurfacesCategorySkewWithoutFullyCaughtCategories(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
@@ -324,7 +324,7 @@ func TestMetaEvolution_JudgeAccuracyEvidence_CategorySkew(t *testing.T) {
 	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
 	version := meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
 
-	if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+	if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 		JudgeVersion: version,
 		Pairs:        8, Correct: 6,
 		ByClass:    map[string][2]int{"safety-drop": {6, 8}},
@@ -343,7 +343,7 @@ func TestMetaEvolution_JudgeAccuracyEvidence_CategorySkew(t *testing.T) {
 
 // A clean incumbent judge (no misses, no false-rejects) leaves the evaluator
 // epoch exactly as it was — the closure is a no-op until labels accumulate.
-func TestMetaEvolution_JudgeAccuracyEvidence_CleanJudge(t *testing.T) {
+func TestAssembleEvidenceLeavesMissBlockEmptyForCleanJudge(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
@@ -354,7 +354,7 @@ func TestMetaEvolution_JudgeAccuracyEvidence_CleanJudge(t *testing.T) {
 	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
 	version := meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
 
-	if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+	if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 		JudgeVersion: version,
 		Pairs:        8,
 		Correct:      8,
@@ -388,7 +388,7 @@ func TestWriteProposal_DoesNotTouchLiveArtifact(t *testing.T) {
 
 // The 7d scoreboard reads the ledger: counts within the window, newest entry
 // summarized.
-func TestMetaEvolutionHealth(t *testing.T) {
+func TestMetaEvolutionHealthWindowsRevisionsAndDisplaysNewest(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
@@ -431,7 +431,7 @@ func TestMetaEvolutionTask_OnProposalNilSafe(t *testing.T) {
 }
 
 // Acceleration knobs: cadence and bench-scale env overrides with sane bounds.
-func TestAccelerationKnobs(t *testing.T) {
+func TestIntervalAndBenchScaleEnvOverridesWithBoundsFallback(t *testing.T) {
 	task := &MetaEvolutionTask{}
 	t.Setenv("DENEB_META_EVOLUTION_INTERVAL_DAYS", "")
 	if task.Interval() != 7*24*time.Hour {
@@ -521,7 +521,7 @@ func TestOperatorUtilitySignals(t *testing.T) {
 // decisions exist, and is absent (empty string) on a fresh install — the
 // data-gated-not-broken distinction. The block must be marked advisory so the
 // producer knows it is prose-grounding, not a gate.
-func TestMetaEvolution_OperatorUtilityEvidence(t *testing.T) {
+func TestAssembleOperatorUtilityEvidenceAdvisoryBlockAppearsInBothEpochsWhenVerdictsExist(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
@@ -600,7 +600,7 @@ func TestMetaRevisionRecord_OperatorUtilityRoundTrip(t *testing.T) {
 // is nil (dev without agentlog) or returns empty (fresh install). The block
 // must be marked advisory so the producer knows it is prose-grounding, not a
 // gate.
-func TestMetaEvolution_RuntimeHealthEvidence(t *testing.T) {
+func TestAssembleEvidenceRuntimeHealthBlockAbsentUnlessClosureNonEmpty(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
@@ -639,7 +639,7 @@ func TestMetaEvolution_RuntimeHealthEvidence(t *testing.T) {
 
 // P5-5: the codebase-health advisory block appears when QualityBench is wired
 // and returns non-empty; absent when nil or empty. Both epochs carry it.
-func TestMetaEvolution_QualityBenchEvidence(t *testing.T) {
+func TestAssembleEvidenceQualityBenchBlockAbsentUnlessClosureNonEmpty(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
@@ -671,7 +671,7 @@ func TestMetaEvolution_QualityBenchEvidence(t *testing.T) {
 // Low-confidence routing (ANCHOR 2606.06114): a bench that cannot show a
 // measurable improvement (margin <= 0) routes the adoption to the operator;
 // an improving bench (or a benchless cycle) does not.
-func TestMetaLowConfidenceReason(t *testing.T) {
+func TestMetaLowConfidenceReasonReturnsFlatOrEqualMarginsNotImprovingOnes(t *testing.T) {
 	worse := &judgeBenchOutcome{Correct: 8, Total: 10}
 	same := &judgeBenchOutcome{Correct: 8, Total: 10}
 	better := &judgeBenchOutcome{Correct: 9, Total: 10}
@@ -694,7 +694,7 @@ func TestMetaLowConfidenceReason(t *testing.T) {
 
 // annotateReason: an empty producer reason must not leave a dangling " — "
 // in verdict cards or the ledger.
-func TestAnnotateReason(t *testing.T) {
+func TestAnnotateReasonJoinsWithEmDashOrReturnsBareNoteWhenEmpty(t *testing.T) {
 	if got := annotateReason("", "저신뢰 라우팅: margin 0.8→0.8"); got != "저신뢰 라우팅: margin 0.8→0.8" {
 		t.Fatalf("empty reason must yield the bare note, got %q", got)
 	}

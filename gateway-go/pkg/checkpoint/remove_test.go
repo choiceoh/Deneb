@@ -76,9 +76,9 @@ func TestRemoveSessionByID_NoopForMissing(t *testing.T) {
 	}
 }
 
-// TestRemoveSessionByID_RemovesExistingDir verifies RemoveSessionByID actually
+// TestRemoveSessionByID_DeletesPopulatedSessionDir verifies RemoveSessionByID actually
 // wipes a session that was populated by a Manager.
-func TestRemoveSessionByID_RemovesExistingDir(t *testing.T) {
+func TestRemoveSessionByID_DeletesPopulatedSessionDir(t *testing.T) {
 	root := t.TempDir()
 	m := checkpoint.New(root, "session-byid")
 	target := filepath.Join(t.TempDir(), "f.txt")
@@ -98,10 +98,10 @@ func TestRemoveSessionByID_RemovesExistingDir(t *testing.T) {
 	}
 }
 
-// TestRemoveSession_IsolationAcrossSessions verifies that removing one
+// TestRemoveSession_ConcurrentRemovalLeavesOtherSessionIntact verifies that removing one
 // session's directory does not affect another session under the same root,
 // even when the operations overlap in time.
-func TestRemoveSession_IsolationAcrossSessions(t *testing.T) {
+func TestRemoveSession_ConcurrentRemovalLeavesOtherSessionIntact(t *testing.T) {
 	root := t.TempDir()
 
 	// Seed session A with real content.
@@ -157,11 +157,11 @@ func TestRemoveSession_IsolationAcrossSessions(t *testing.T) {
 	}
 }
 
-// TestRemoveSessionByID_DoesNotClimbOutOfRoot verifies that a malicious or
+// TestRemoveSessionByID_StaysWithinRootBoundary verifies that a malicious or
 // malformed sessionID with path-escape components is sanitized just like
 // Manager construction, so callers cannot accidentally delete a sibling
 // directory by passing "../..".
-func TestRemoveSessionByID_DoesNotClimbOutOfRoot(t *testing.T) {
+func TestRemoveSessionByID_StaysWithinRootBoundary(t *testing.T) {
 	outer := t.TempDir()
 	root := filepath.Join(outer, "ckp")
 	if err := os.MkdirAll(root, 0o755); err != nil {

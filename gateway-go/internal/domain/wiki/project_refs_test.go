@@ -5,11 +5,12 @@ import (
 	"testing"
 )
 
-// TestProjectOwnedRefs: a project owns pages that share its frozen code (folder
-// inheritance) or explicitly link it (Related[]/[[wiki-link]], by path or code).
-// Fuzzy signals (tags, mentions) are excluded, the 대표페이지 is never its own ref,
-// and a different project's pages are never attributed.
-func TestProjectOwnedRefs(t *testing.T) {
+// TestProjectOwnedRefs_IncludesCodeAndLinkSignalsRejectsSelfAndOtherProjects: a
+// project owns pages that share its frozen code (folder inheritance) or
+// explicitly link it (Related[]/[[wiki-link]], by path or code). Fuzzy signals
+// (tags, mentions) are excluded, the 대표페이지 is never its own ref, and a
+// different project's pages are never attributed.
+func TestProjectOwnedRefs_IncludesCodeAndLinkSignalsRejectsSelfAndOtherProjects(t *testing.T) {
 	store := newProjectTestStore(t)
 	defer store.Close()
 

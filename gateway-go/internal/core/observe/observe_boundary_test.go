@@ -292,7 +292,7 @@ func TestNewCaptureNilDelegateCapturesWithoutPanic(t *testing.T) {
 	}
 }
 
-func TestCaptureEnabledMirrorsDelegate(t *testing.T) {
+func TestCaptureEnabledReturnsDelegateLevelDecision(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -318,7 +318,7 @@ func TestCaptureEnabledMirrorsDelegate(t *testing.T) {
 	}
 }
 
-func TestCaptureToLineHoistsAndOverridesJoinKeys(t *testing.T) {
+func TestCaptureToLineUpdatesJoinKeysFromRecordAttrs(t *testing.T) {
 	t.Parallel()
 
 	capture := NewCapture(nil, NewRing(1))
@@ -354,7 +354,7 @@ func TestCaptureToLineHoistsAndOverridesJoinKeys(t *testing.T) {
 	}
 }
 
-func TestCaptureAttributeValueKindsFlattenSafely(t *testing.T) {
+func TestCaptureFormatsVariousAttributeKindsAsStrings(t *testing.T) {
 	t.Parallel()
 
 	capture := NewCapture(nil, NewRing(1))
@@ -707,7 +707,7 @@ func TestBuildTurnViewRingOnlyRecoversNewestNonEmptySession(t *testing.T) {
 	}
 }
 
-func TestBuildTurnViewCapsLogsAndKeepsNewest(t *testing.T) {
+func TestBuildTurnViewTruncatesLogsKeepingNewestEntries(t *testing.T) {
 	t.Parallel()
 
 	ring := NewRing(turnLogLimit + 100)

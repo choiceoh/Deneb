@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestDetectFences_Simple(t *testing.T) {
+func TestDetectFencesParsesSingleBacktickSpan(t *testing.T) {
 	spans := DetectFences("hello\n```js\ncode\n```\nend")
 	if len(spans) != 1 {
 		t.Fatalf("got %d, want 1 span", len(spans))
@@ -20,7 +20,7 @@ func TestDetectFences_Simple(t *testing.T) {
 	}
 }
 
-func TestDetectFences_Tilde(t *testing.T) {
+func TestDetectFencesParsesTildeMarker(t *testing.T) {
 	spans := DetectFences("~~~\ncode\n~~~")
 	if len(spans) != 1 {
 		t.Fatalf("got %d, want 1 span", len(spans))
@@ -41,7 +41,7 @@ func TestDetectFences_Unclosed(t *testing.T) {
 	}
 }
 
-func TestDetectFences_Indented(t *testing.T) {
+func TestDetectFencesPreservesIndentPrefix(t *testing.T) {
 	spans := DetectFences("   ```\ncode\n   ```")
 	if len(spans) != 1 {
 		t.Fatalf("got %d, want 1 span", len(spans))
@@ -51,21 +51,21 @@ func TestDetectFences_Indented(t *testing.T) {
 	}
 }
 
-func TestDetectFences_TooMuchIndent(t *testing.T) {
+func TestDetectFencesRejectsFourSpaceIndent(t *testing.T) {
 	spans := DetectFences("    ```python\n    code\n    ```")
 	if len(spans) != 0 {
 		t.Errorf("4-space indent should not match, got %d spans", len(spans))
 	}
 }
 
-func TestDetectFences_MultipleFences(t *testing.T) {
+func TestDetectFencesParsesMultipleSeparateSpans(t *testing.T) {
 	spans := DetectFences("```\na\n```\n\n```\nb\n```")
 	if len(spans) != 2 {
 		t.Errorf("got %d, want 2 spans", len(spans))
 	}
 }
 
-func TestDetectFences_ClosingNeedsSameChar(t *testing.T) {
+func TestDetectFencesIgnoresMismatchedCloserChar(t *testing.T) {
 	// Open with ``` but try to close with ~~~ — should not close.
 	spans := DetectFences("```\ncode\n~~~\nmore\n```")
 	if len(spans) != 1 {
@@ -76,7 +76,7 @@ func TestDetectFences_ClosingNeedsSameChar(t *testing.T) {
 	}
 }
 
-func TestDetectFences_ClosingNeedsEnoughMarkers(t *testing.T) {
+func TestDetectFencesIgnoresShortClosingMarkerCount(t *testing.T) {
 	// Open with ```` (4) — closing ``` (3) should not close.
 	spans := DetectFences("````\ncode\n```\nstill open\n````")
 	if len(spans) != 1 {
@@ -84,7 +84,7 @@ func TestDetectFences_ClosingNeedsEnoughMarkers(t *testing.T) {
 	}
 }
 
-func TestDetectFences_JSON(t *testing.T) {
+func TestDetectFencesEncodesSpansWithRustCompatibleFieldNames(t *testing.T) {
 	spans := DetectFences("```python\nprint('hi')\n```")
 	data := testutil.Must(json.Marshal(spans))
 	// Verify JSON field names match Rust output.
@@ -107,14 +107,14 @@ func TestDetectFences_JSON(t *testing.T) {
 // matchFenceLine unit tests
 // ---------------------------------------------------------------------------
 
-func TestMatchFenceLine_Backtick(t *testing.T) {
+func TestMatchFenceLineParsesBacktickComponents(t *testing.T) {
 	indent, marker, rest := matchFenceLine("```python")
 	if indent != "" || marker != "```" || rest != "python" {
 		t.Errorf("got indent=%q marker=%q rest=%q", indent, marker, rest)
 	}
 }
 
-func TestMatchFenceLine_Indented(t *testing.T) {
+func TestMatchFenceLineParsesIndentedComponents(t *testing.T) {
 	indent, marker, rest := matchFenceLine("  ~~~")
 	if indent != "  " || marker != "~~~" || rest != "" {
 		t.Errorf("got indent=%q marker=%q rest=%q", indent, marker, rest)

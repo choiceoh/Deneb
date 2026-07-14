@@ -149,7 +149,7 @@ func TestCollectLetterSectionsConcurrentCallsStayIsolated(t *testing.T) {
 	}
 }
 
-func TestKoreanDateAcrossWeekAndTimezone(t *testing.T) {
+func TestKoreanDateFormatsAcrossWeekAndTimezone(t *testing.T) {
 	start := time.Date(2026, 7, 5, 0, 0, 0, 0, kstLocation)
 	wants := []string{"일", "월", "화", "수", "목", "금", "토"}
 	for offset, weekday := range wants {
@@ -295,7 +295,7 @@ func writeRoutineWikiPage(t *testing.T, root, rel string, meta wiki.Frontmatter,
 	}
 }
 
-func TestFetchDeadlinesEnforcesWindowImportanceAndPageState(t *testing.T) {
+func TestFetchDeadlinesReturnsItemsWithinImportanceWindow(t *testing.T) {
 	root := t.TempDir()
 	now := time.Date(2026, 7, 11, 18, 30, 0, 0, kstLocation)
 	base := wiki.Frontmatter{Category: "프로젝트", Importance: deadlineMinImportance}
@@ -341,7 +341,7 @@ func TestFetchDeadlinesEnforcesWindowImportanceAndPageState(t *testing.T) {
 	}
 }
 
-func TestFetchOpenQuestionsCapsOldestAndSkipsNonRepPages(t *testing.T) {
+func TestFetchOpenQuestionsReturnsCappedOldestWithoutNonRepPages(t *testing.T) {
 	root := t.TempDir()
 	now := time.Date(2026, 7, 11, 9, 0, 0, 0, kstLocation)
 	for index := 0; index < 8; index++ {

@@ -244,7 +244,7 @@ func (t *Tracker) metaCycleCountsIn(window time.Duration) (cycles, proposed, ado
 }
 
 func (t *Tracker) rsiAssessL3() rsiLayer {
-	records, err := t.RecentJudgeAccuracy(20)
+	records, err := t.recentJudgeAccuracy(20)
 	operatorLabels := len(t.RecentOperatorJudgeVerdicts(7*24*time.Hour, 100))
 	if err != nil || (len(records) == 0 && operatorLabels == 0) {
 		return rsiLayer{Key: "L3", Title: "판정자 공진화", State: rsiStateIdle, Diagnosis: "판정 정확도 레인이 아직 실행되지 않았습니다"}
@@ -302,99 +302,15 @@ func (t *Tracker) rsiAssessL4() rsiLayer {
 	if err != nil {
 		return rsiLayer{Key: "L4", Title: "소스 자가편집", State: rsiStateIdle, Diagnosis: "후보 저장소를 읽을 수 없습니다"}
 	}
-	byScope := map[string]int{}
-	dispatchable := 0
-	staged := 0
-	inFlight := 0
-	applied := 0
-	failed := 0
-	oldestPendingAt := int64(0)
-	for _, c := range cands {
-		scope := strings.TrimSpace(c.Scope)
-		if scope == "" {
-			scope = "?"
-		}
-		byScope[scope]++
-		// proposed = unreviewed backlog; accepted = review-endorsed, awaiting
-		// implementation — both are queued dispatch supply (the heartbeat review
-		// lane accepts candidates it cannot implement itself).
-		st := normalizeSelfCorrectionStatus(c.Status)
-		if scope != "code" {
-			continue
-		}
-		phase := normalizeSelfCorrectionDispatchPhase(c.DispatchPhase)
-		switch phase {
-		case SelfCorrectionDispatchStarted, SelfCorrectionDispatchPROpened,
-			SelfCorrectionDispatchMerged, SelfCorrectionDispatchDeployed:
-			inFlight++
-		case SelfCorrectionDispatchWatchPassed:
-			applied++
-		case SelfCorrectionDispatchFailed, SelfCorrectionDispatchRolledBack:
-			failed++
-			if (phase == SelfCorrectionDispatchRolledBack || !t.DispatchMarkerBlocks(c.ID)) &&
-				(st == SelfCorrectionStatusProposed || st == SelfCorrectionStatusAccepted) &&
-				rsiSourceDispatchable(c.Source) {
-				dispatchable++
-				if c.CreatedAt > 0 && (oldestPendingAt == 0 || c.CreatedAt < oldestPendingAt) {
-					oldestPendingAt = c.CreatedAt
-				}
-			}
-		case "":
-			if st == SelfCorrectionStatusProposed || st == SelfCorrectionStatusAccepted {
-				if rsiSourceDispatchable(c.Source) {
-					dispatchable++
-					if c.CreatedAt > 0 && (oldestPendingAt == 0 || c.CreatedAt < oldestPendingAt) {
-						oldestPendingAt = c.CreatedAt
-					}
-				} else {
-					// Code candidate from a source not yet in the dispatch
-					// allowlist (runtime-error, …): real L4 supply staged for
-					// review, not a wiring gap.
-					staged++
-				}
-			}
-		}
-	}
+	tally := t.tallyL4Candidates(cands)
 	_, dispatchedToday := t.codingDispatchCounts()
 	runtime := t.codingDispatchRuntimeStatus()
-	metrics := []rsiMetric{
-		{Label: "후보", Value: strconv.Itoa(len(cands))},
-		{Label: "코드 후보", Value: strconv.Itoa(byScope["code"])},
-		{Label: "배차 가능", Value: strconv.Itoa(dispatchable)},
-		{Label: "진행 중", Value: strconv.Itoa(inFlight)},
-		{Label: "감시 통과", Value: strconv.Itoa(applied)},
-		{Label: "실패/롤백", Value: strconv.Itoa(failed)},
-		{Label: "검토 대기(비배차)", Value: strconv.Itoa(staged)},
-		{Label: "오늘 배차", Value: strconv.Itoa(dispatchedToday)},
-		{Label: "배차 틱", Value: rsiDispatchTickValue(runtime)},
-		{Label: "연속 배차 실패", Value: strconv.Itoa(runtime.ConsecutiveFailures)},
-		{Label: "최근 성공", Value: rsiAgeValue(runtime.LastSuccessfulAtMs)},
-		{Label: "최장 대기", Value: rsiAgeValue(oldestPendingAt)},
+	base := rsiLayer{
+		Key:     "L4",
+		Title:   "소스 자가편집",
+		Metrics: rsiL4Metrics(tally, len(cands), dispatchedToday, runtime),
 	}
-	base := rsiLayer{Key: "L4", Title: "소스 자가편집", Metrics: metrics}
-	switch {
-	case inFlight > 0:
-		base.State = rsiStateLive
-		base.Diagnosis = fmt.Sprintf("코드 후보 %d건이 PR·배포·롤백 감시 단계를 통과 중", inFlight)
-	case applied > 0:
-		base.State = rsiStateLive
-		base.Diagnosis = fmt.Sprintf("소스 자가편집 %d건이 머지·배포 후 롤백 감시까지 통과", applied)
-	case dispatchable > 0 && runtime.ConsecutiveFailures > 0:
-		base.State = rsiStateStarved
-		base.Diagnosis = fmt.Sprintf("배차 대기 %d건 · 디스패처 %d회 연속 실패 (%s)", dispatchable, runtime.ConsecutiveFailures, rsiDispatchTickValue(runtime))
-	case dispatchable > 0:
-		base.State = rsiStateIdle
-		base.Diagnosis = fmt.Sprintf("배차 대기 %d건 · 아직 진행 중인 authoritative dispatch 없음 (%s)", dispatchable, rsiDispatchTickValue(runtime))
-	case len(cands) == 0:
-		base.State = rsiStateIdle
-		base.Diagnosis = "아직 캡처된 자기교정 후보가 없습니다"
-	case staged > 0:
-		base.State = rsiStateStarved
-		base.Diagnosis = fmt.Sprintf("비배차 소스의 코드 후보 %d건이 검토 대기 중 — 품질 리뷰 후 배차 소스로 졸업하면 배차됩니다", staged)
-	default:
-		base.State = rsiStateStarved
-		base.Diagnosis = fmt.Sprintf("후보 %d건(%s)이지만 배차 가능한 코드 후보가 아직 없습니다", len(cands), rsiScopeSummary(byScope))
-	}
+	base.State, base.Diagnosis = rsiL4Verdict(tally, len(cands), runtime)
 	// Dispatch-outcome history (graduation-ladder evidence: the cap-raise row
 	// needs a measured land rate) rides the diagnosis text — no new metric row,
 	// so the native card layout is untouched.
@@ -402,6 +318,106 @@ func (t *Tracker) rsiAssessL4() rsiLayer {
 		base.Diagnosis += note
 	}
 	return base
+}
+
+// l4Tally is the phase/status census of code candidates feeding the L4 card.
+type l4Tally struct {
+	byScope         map[string]int
+	dispatchable    int
+	staged          int
+	inFlight        int
+	applied         int
+	failed          int
+	oldestPendingAt int64
+}
+
+func (l *l4Tally) markPending(createdAt int64) {
+	l.dispatchable++
+	if createdAt > 0 && (l.oldestPendingAt == 0 || createdAt < l.oldestPendingAt) {
+		l.oldestPendingAt = createdAt
+	}
+}
+
+func (t *Tracker) tallyL4Candidates(cands []SelfCorrectionCandidateRecord) l4Tally {
+	tally := l4Tally{byScope: map[string]int{}}
+	for _, c := range cands {
+		scope := strings.TrimSpace(c.Scope)
+		if scope == "" {
+			scope = "?"
+		}
+		tally.byScope[scope]++
+		if scope != "code" {
+			continue
+		}
+		// proposed = unreviewed backlog; accepted = review-endorsed, awaiting
+		// implementation — both are queued dispatch supply (the heartbeat review
+		// lane accepts candidates it cannot implement itself).
+		st := normalizeSelfCorrectionStatus(c.Status)
+		queued := st == SelfCorrectionStatusProposed || st == SelfCorrectionStatusAccepted
+		phase := normalizeSelfCorrectionDispatchPhase(c.DispatchPhase)
+		switch phase {
+		case selfCorrectionDispatchStarted, selfCorrectionDispatchPROpened,
+			SelfCorrectionDispatchMerged, selfCorrectionDispatchDeployed:
+			tally.inFlight++
+		case selfCorrectionDispatchWatchPassed:
+			tally.applied++
+		case selfCorrectionDispatchFailed, selfCorrectionDispatchRolledBack:
+			tally.failed++
+			if (phase == selfCorrectionDispatchRolledBack || !t.DispatchMarkerBlocks(c.ID)) &&
+				queued && rsiSourceDispatchable(c.Source) {
+				tally.markPending(c.CreatedAt)
+			}
+		case "":
+			if !queued {
+				continue
+			}
+			if rsiSourceDispatchable(c.Source) {
+				tally.markPending(c.CreatedAt)
+			} else {
+				// Code candidate from a source not yet in the dispatch
+				// allowlist (runtime-error, …): real L4 supply staged for
+				// review, not a wiring gap.
+				tally.staged++
+			}
+		}
+	}
+	return tally
+}
+
+func rsiL4Metrics(tally l4Tally, total, dispatchedToday int, runtime codingDispatchRuntime) []rsiMetric {
+	return []rsiMetric{
+		{Label: "후보", Value: strconv.Itoa(total)},
+		{Label: "코드 후보", Value: strconv.Itoa(tally.byScope["code"])},
+		{Label: "배차 가능", Value: strconv.Itoa(tally.dispatchable)},
+		{Label: "진행 중", Value: strconv.Itoa(tally.inFlight)},
+		{Label: "감시 통과", Value: strconv.Itoa(tally.applied)},
+		{Label: "실패/롤백", Value: strconv.Itoa(tally.failed)},
+		{Label: "검토 대기(비배차)", Value: strconv.Itoa(tally.staged)},
+		{Label: "오늘 배차", Value: strconv.Itoa(dispatchedToday)},
+		{Label: "배차 틱", Value: rsiDispatchTickValue(runtime)},
+		{Label: "연속 배차 실패", Value: strconv.Itoa(runtime.ConsecutiveFailures)},
+		{Label: "최근 성공", Value: rsiAgeValue(runtime.LastSuccessfulAtMs)},
+		{Label: "최장 대기", Value: rsiAgeValue(tally.oldestPendingAt)},
+	}
+}
+
+func rsiL4Verdict(tally l4Tally, total int, runtime codingDispatchRuntime) (string, string) {
+	switch {
+	case tally.inFlight > 0:
+		return rsiStateLive, fmt.Sprintf("코드 후보 %d건이 PR·배포·롤백 감시 단계를 통과 중", tally.inFlight)
+	case tally.applied > 0:
+		return rsiStateLive, fmt.Sprintf("소스 자가편집 %d건이 머지·배포 후 롤백 감시까지 통과", tally.applied)
+	case tally.dispatchable > 0 && runtime.ConsecutiveFailures > 0:
+		return rsiStateStarved, fmt.Sprintf("배차 대기 %d건 · 디스패처 %d회 연속 실패 (%s)", tally.dispatchable, runtime.ConsecutiveFailures, rsiDispatchTickValue(runtime))
+	case tally.dispatchable > 0:
+		return rsiStateIdle, fmt.Sprintf("배차 대기 %d건 · 아직 진행 중인 authoritative dispatch 없음 (%s)", tally.dispatchable, rsiDispatchTickValue(runtime))
+	case total == 0:
+		return rsiStateIdle, "아직 캡처된 자기교정 후보가 없습니다"
+	case tally.staged > 0:
+		return rsiStateStarved, fmt.Sprintf("비배차 소스의 코드 후보 %d건이 검토 대기 중 — 품질 리뷰 후 배차 소스로 졸업하면 배차됩니다", tally.staged)
+	default:
+		return rsiStateStarved, fmt.Sprintf("후보 %d건(%s)이지만 배차 가능한 코드 후보가 아직 없습니다", total, rsiScopeSummary(tally.byScope))
+	}
 }
 
 type codingDispatchRuntime struct {

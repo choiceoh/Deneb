@@ -10,7 +10,7 @@ import (
 // The ladder engine turns machine-readable evidence into row states without
 // ever flipping a lock: thresholds met read 준비됨, accumulating evidence
 // reads 축적 중, and the aggregate card goes LIVE only when a row is READY.
-func TestRSILadder(t *testing.T) {
+func TestRSIAssessLadderFlipsLiveWhenARowReachesReady(t *testing.T) {
 	tr := newTestTracker(t)
 
 	// Empty evidence: every machine row accumulates, aggregate DATA-GATED.
@@ -69,7 +69,7 @@ func TestRSILadder(t *testing.T) {
 
 // Calibration row counts only post-window bench-carrying CYCLE records and
 // requires every rotating epoch to reach the target.
-func TestRSILadder_CalibrationRow(t *testing.T) {
+func TestLadderCalibrationRowReadyOnlyWhenAllEpochsReachBenchTarget(t *testing.T) {
 	tr := newTestTracker(t)
 	seed := func(epoch string, n int) {
 		t.Helper()

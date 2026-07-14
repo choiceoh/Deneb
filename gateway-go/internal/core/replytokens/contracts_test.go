@@ -103,7 +103,7 @@ func TestHeartbeatContentEmptyContractAdditional(t *testing.T) {
 	}
 }
 
-func TestResolveHeartbeatPromptAdditional(t *testing.T) {
+func TestResolveHeartbeatPromptReturnsTrimmedCustomTextWhenPresent(t *testing.T) {
 	for _, tt := range []struct{ in, want string }{{want: HeartbeatPrompt}, {in: " \n", want: HeartbeatPrompt}, {in: " custom \n", want: "custom"}} {
 		if got := ResolveHeartbeatPrompt(tt.in); got != tt.want {
 			t.Errorf("Resolve(%q) = %q", tt.in, got)
@@ -169,7 +169,7 @@ func TestTokenBoundaryHelpers(t *testing.T) {
 	}
 }
 
-func TestStripHeartbeatTokenModesAndUnicodeChars(t *testing.T) {
+func TestStripHeartbeatTokenModeAndAckLengthBoundaryWithUnicode(t *testing.T) {
 	shortKorean := strings.Repeat("가", 200)
 	longKorean := strings.Repeat("가", 301)
 	for _, tt := range []struct {
@@ -240,7 +240,7 @@ func TestSilentReplyExactRegexCacheConcurrent(t *testing.T) {
 	}
 }
 
-func TestSilentReplyPrefixAdditionalMatrix(t *testing.T) {
+func TestIsSilentReplyPrefixTextBoundaryAcrossDefaultAndCustomTokens(t *testing.T) {
 	for _, tt := range []struct {
 		text, token string
 		want        bool

@@ -40,7 +40,7 @@ func TestConsoleHandler_BasicFormat(t *testing.T) {
 	}
 }
 
-func TestConsoleHandler_LevelAbbreviations(t *testing.T) {
+func TestConsoleHandler_FormatsLevelAbbreviations(t *testing.T) {
 	tests := []struct {
 		level slog.Level
 		want  string
@@ -62,7 +62,7 @@ func TestConsoleHandler_LevelAbbreviations(t *testing.T) {
 	}
 }
 
-func TestConsoleHandler_ValueQuoting(t *testing.T) {
+func TestConsoleHandler_FormatsQuotedValues(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 
@@ -94,7 +94,7 @@ func TestConsoleHandler_ValueQuoting(t *testing.T) {
 	}
 }
 
-func TestConsoleHandler_Enabled(t *testing.T) {
+func TestConsoleHandler_AllowsLevelsAtOrAboveThreshold(t *testing.T) {
 	h := NewConsoleHandler(nil, &ConsoleOptions{Level: slog.LevelWarn, Color: false})
 	if h.Enabled(context.TODO(), slog.LevelDebug) {
 		t.Error("debug should not be enabled at warn level")
@@ -143,7 +143,7 @@ func TestConsoleHandler_WithGroup(t *testing.T) {
 	}
 }
 
-func TestConsoleHandler_ColorStyling(t *testing.T) {
+func TestConsoleHandler_RendersAnsiColorStyling(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
 
@@ -162,7 +162,7 @@ func TestConsoleHandler_ColorStyling(t *testing.T) {
 	}
 }
 
-func TestConsoleHandler_ColorLevelStyles(t *testing.T) {
+func TestConsoleHandler_RendersColorStyleByLevel(t *testing.T) {
 	tests := []struct {
 		level slog.Level
 		want  string
@@ -184,7 +184,7 @@ func TestConsoleHandler_ColorLevelStyles(t *testing.T) {
 	}
 }
 
-func TestConsoleHandler_NoColorOutput(t *testing.T) {
+func TestConsoleHandler_FormatsOutputWithoutAnsiColor(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 
@@ -223,7 +223,7 @@ func TestConsoleHandler_ErrorAttrHighlight(t *testing.T) {
 	}
 }
 
-func TestConsoleHandler_BoolAttr(t *testing.T) {
+func TestConsoleHandler_FormatsBoolAndIntAttrs(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 
@@ -242,7 +242,7 @@ func TestConsoleHandler_BoolAttr(t *testing.T) {
 	}
 }
 
-func TestConsoleHandler_Timestamp(t *testing.T) {
+func TestConsoleHandler_FormatsTimestampWithoutFraction(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
 
@@ -275,7 +275,7 @@ func TestConsoleHandler_ErrorMessageBoldRed(t *testing.T) {
 
 // --- New tests for modernized features ---
 
-func TestConsoleHandler_PkgTag(t *testing.T) {
+func TestConsoleHandler_RendersPkgAttrAsTag(t *testing.T) {
 	// pkg preAttr should render as [server] tag, not pkg=server.
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
@@ -295,7 +295,7 @@ func TestConsoleHandler_PkgTag(t *testing.T) {
 	}
 }
 
-func TestConsoleHandler_PkgTagInline(t *testing.T) {
+func TestConsoleHandler_RendersInlinePkgAttrAsTag(t *testing.T) {
 	// pkg as a record attr (not preAttr) should also render as tag.
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})
@@ -316,7 +316,7 @@ func TestConsoleHandler_PkgTagInline(t *testing.T) {
 	}
 }
 
-func TestConsoleHandler_PkgTagColor(t *testing.T) {
+func TestConsoleHandler_RendersPkgTagWithDimCyanColor(t *testing.T) {
 	// Color mode should use dim cyan for pkg tag.
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: true})
@@ -334,7 +334,7 @@ func TestConsoleHandler_PkgTagColor(t *testing.T) {
 	}
 }
 
-func TestConsoleHandler_NoPkgTag(t *testing.T) {
+func TestConsoleHandler_FormatsMessageWithoutPkgTag(t *testing.T) {
 	// Without pkg attr, separator goes directly to message.
 	var buf bytes.Buffer
 	h := NewConsoleHandler(&buf, &ConsoleOptions{Level: slog.LevelDebug, Color: false})

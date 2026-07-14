@@ -15,7 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-func TestExtendedMethodsExactDependencySurface(t *testing.T) {
+func TestExtendedMethodsRegistersOnlyMethodsWithSatisfiedDependencies(t *testing.T) {
 	sessions := session.NewManager()
 	base := ExtendedMethods(ExtendedDeps{Sessions: sessions})
 	baseNames := make([]string, 0, len(base))
@@ -81,7 +81,7 @@ func TestSessionsCreateMalformedJSON(t *testing.T) {
 	}
 }
 
-func TestSessionsLifecycleValidationAndTransitions(t *testing.T) {
+func TestSessionsLifecycleRejectsInvalidParamsAndUpdatesStatus(t *testing.T) {
 	manager := session.NewManager()
 	methods := ExtendedMethods(ExtendedDeps{Sessions: manager})
 	for _, params := range []map[string]any{
@@ -125,7 +125,7 @@ func TestSessionsLifecycleValidationAndTransitions(t *testing.T) {
 	}
 }
 
-func TestAgentStatusCountsRunningAndOptionalProcesses(t *testing.T) {
+func TestAgentStatusReturnsSessionCountsAndOptionalProcessCount(t *testing.T) {
 	manager := session.NewManager()
 	manager.Create("idle", session.KindDirect)
 	manager.ApplyLifecycleEvent("running", session.LifecycleEvent{Phase: session.PhaseStart, Ts: 100})

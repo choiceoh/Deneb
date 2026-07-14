@@ -110,10 +110,10 @@ func (s *Store) readRecallHitsLocked() []recallHit {
 	return out
 }
 
-// RecallHitCounts aggregates hits at or after `since` into per-path counts. Used
+// recallHitCounts aggregates hits at or after `since` into per-path counts. Used
 // by the dream cycle for the utility-coverage quality subscore and the synthesis
 // anchor list. An empty map when nothing was recalled in the window.
-func (s *Store) RecallHitCounts(since time.Time) map[string]int {
+func (s *Store) recallHitCounts(since time.Time) map[string]int {
 	cutoff := since.UnixMilli()
 	s.recallMu.Lock()
 	hits := s.readRecallHitsLocked()
@@ -128,19 +128,19 @@ func (s *Store) RecallHitCounts(since time.Time) map[string]int {
 	return counts
 }
 
-// RecallHitScoreCounts is RecallHitCounts over the standard score window,
+// RecallHitScoreCounts is recallHitCounts over the standard score window,
 // stamped against now. The dreamer passes its cycle clock so tests stay
 // deterministic.
 func (s *Store) RecallHitScoreCounts(now time.Time) map[string]int {
-	return s.RecallHitCounts(now.Add(-recallHitScoreWindow))
+	return s.recallHitCounts(now.Add(-recallHitScoreWindow))
 }
 
-// CompactRecallHits rewrites the ledger keeping only hits at or after
+// compactRecallHits rewrites the ledger keeping only hits at or after
 // now-recallHitRetention, bounding growth. Called once per dream cycle under a
 // single lock so a concurrent RecordRecallHits cannot interleave. A no-op
 // (dropped 0) when nothing aged out or the ledger is missing. Best-effort: an
 // I/O failure leaves the ledger intact and is returned for logging.
-func (s *Store) CompactRecallHits(now time.Time) (dropped int, err error) {
+func (s *Store) compactRecallHits(now time.Time) (dropped int, err error) {
 	cutoff := now.Add(-recallHitRetention).UnixMilli()
 	s.recallMu.Lock()
 	defer s.recallMu.Unlock()

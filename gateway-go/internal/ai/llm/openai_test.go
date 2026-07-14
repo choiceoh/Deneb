@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestMergeJSONFields(t *testing.T) {
+func TestMergeJSONFieldsPreservesOriginalFields(t *testing.T) {
 	base := []byte(`{"model":"test","stream":true}`)
 	extra := map[string]any{
 		"timeout": 30.0,
@@ -26,7 +26,7 @@ func TestMergeJSONFields(t *testing.T) {
 	}
 }
 
-func TestIsOpenAIReasoningModel(t *testing.T) {
+func TestIsOpenAIReasoningModelAllowsKnownDeniesCompatible(t *testing.T) {
 	reasoning := []string{"o1", "o1-mini", "o3", "o3-mini", "o4-mini", "gpt-5", "gpt-5-mini", "openai/o3-mini", "O3-Mini"}
 	for _, m := range reasoning {
 		if !isOpenAIReasoningModel(m) {
@@ -48,7 +48,7 @@ func TestIsOpenAIReasoningModel(t *testing.T) {
 // for every OpenAI-mode request — breaking self-hosted vLLM, which 400s on
 // "max_tokens must be at least 1, got 0". The remap must apply ONLY to genuine
 // OpenAI reasoning models.
-func TestApplySamplingParams_MaxTokensRemap(t *testing.T) {
+func TestApplySamplingParamsPreservesMaxTokensExceptOpenAIReasoning(t *testing.T) {
 	thinking := &ThinkingConfig{Type: "enabled", BudgetTokens: 8192}
 
 	t.Run("vllm preserves max_tokens", func(t *testing.T) {
@@ -82,7 +82,7 @@ func TestApplySamplingParams_MaxTokensRemap(t *testing.T) {
 // reasoned ~half of "none"/"minimal" with a non-overlapping range. Minimizing the
 // chain-of-thought keeps it from eating the max_tokens budget and truncating the
 // answer. The mail-analysis path sets Thinking{Type:"disabled"} for this.
-func TestApplySamplingParams_ReasoningDisabled(t *testing.T) {
+func TestApplySamplingParamsNormalizesDisabledReasoningToLowEffort(t *testing.T) {
 	oai := &openAIRequest{MaxTokens: 1536}
 	applySamplingParams(oai, &ChatRequest{Model: "step3p7", Thinking: &ThinkingConfig{Type: "disabled"}})
 	if oai.ReasoningEffort != "low" {

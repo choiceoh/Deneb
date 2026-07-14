@@ -6,7 +6,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpctest"
 )
 
-func TestMethodsMirrorAllObservationEndpoints(t *testing.T) {
+func TestMethodsExposeNoMissingObservationEndpoints(t *testing.T) {
 	local := Methods(Deps{})
 	miniapp := MiniappMethods(Deps{})
 	for _, suffix := range []string{"turn", "logs", "behavior", "health"} {

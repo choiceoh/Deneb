@@ -19,7 +19,7 @@ func (f executionAgentFunc) RunAgentTurn(ctx context.Context, params AgentTurnPa
 // the user silently lost the report, and consecutive failures never counted
 // toward auto-disable. A bare handled=false with no error is an intentional
 // suppression (the NO_REPLY / "nothing to report" noise floor) and must stay ok.
-func TestExecuteJob_HandoffOutcomeStatus(t *testing.T) {
+func TestExecuteJobStatusReflectsHandoffOutcomeWithErrorPromotion(t *testing.T) {
 	baseJob := StoreJob{
 		ID:       "j1",
 		Name:     "report",
@@ -92,7 +92,7 @@ func TestExecuteJob_HandoffOutcomeStatus(t *testing.T) {
 	}
 }
 
-func TestRunJobOnce_FinalizationOrder(t *testing.T) {
+func TestRunJobOnceEmitsFinishedEventAfterStateAndLogCommit(t *testing.T) {
 	svc, agent := newTestService(t)
 	agent.output = "완료 보고"
 	job := StoreJob{

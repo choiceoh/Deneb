@@ -17,7 +17,7 @@ import (
 
 const (
 	SkillCuratorStateActive   = "active"
-	SkillCuratorStateStale    = "stale"
+	skillCuratorStateStale    = "stale"
 	SkillCuratorStateArchived = "archived"
 
 	SkillCuratorCreatedByAgent = "agent"
@@ -65,34 +65,34 @@ type SkillCuratorRecord struct {
 	ArchivedAt    int64  `json:"archivedAt,omitempty"`
 }
 
-// SkillCuratorState is the JSON sidecar stored next to genesis usage logs.
-type SkillCuratorState struct {
+// skillCuratorState is the JSON sidecar stored next to genesis usage logs.
+type skillCuratorState struct {
 	Version   int                           `json:"version"`
 	UpdatedAt int64                         `json:"updatedAt"`
 	Skills    map[string]SkillCuratorRecord `json:"skills"`
 }
 
-// SkillCuratorTransition describes one automatic state change.
-type SkillCuratorTransition struct {
+// skillCuratorTransition describes one automatic state change.
+type skillCuratorTransition struct {
 	SkillName string `json:"skillName"`
 	From      string `json:"from"`
 	To        string `json:"to"`
 	Reason    string `json:"reason"`
 }
 
-// SkillCuratorSummary is returned by the periodic curator run.
-type SkillCuratorSummary struct {
+// skillCuratorSummary is returned by the periodic curator run.
+type skillCuratorSummary struct {
 	Checked           int                      `json:"checked"`
 	MarkedStale       int                      `json:"markedStale,omitempty"`
 	Archived          int                      `json:"archived,omitempty"`
 	ArchivedUnfixable int                      `json:"archivedUnfixable,omitempty"`
 	Reactivated       int                      `json:"reactivated,omitempty"`
-	Transitions       []SkillCuratorTransition `json:"transitions,omitempty"`
+	Transitions       []skillCuratorTransition `json:"transitions,omitempty"`
 }
 
-// DefaultSkillCuratorConfig returns the production defaults copied from the
+// defaultSkillCuratorConfig returns the production defaults copied from the
 // proven Hermes pattern: weekly review, stale after 30 days, archived after 90.
-func DefaultSkillCuratorConfig() SkillCuratorConfig {
+func defaultSkillCuratorConfig() SkillCuratorConfig {
 	return SkillCuratorConfig{
 		IntervalHours:          defaultSkillCuratorIntervalHours,
 		MinIdleHours:           defaultSkillCuratorMinIdleHours,
@@ -106,7 +106,7 @@ func DefaultSkillCuratorConfig() SkillCuratorConfig {
 
 // SkillCuratorConfigFromEnv returns curator config with explicit env overrides.
 func SkillCuratorConfigFromEnv() SkillCuratorConfig {
-	cfg := DefaultSkillCuratorConfig()
+	cfg := defaultSkillCuratorConfig()
 	cfg.IntervalHours = envInt("DENEB_SKILL_CURATOR_INTERVAL_HOURS", cfg.IntervalHours)
 	cfg.MinIdleHours = envInt("DENEB_SKILL_CURATOR_MIN_IDLE_HOURS", cfg.MinIdleHours)
 	cfg.StaleAfterDays = envInt("DENEB_SKILL_CURATOR_STALE_DAYS", cfg.StaleAfterDays)
@@ -143,7 +143,7 @@ func envBool(name string, fallback bool) bool {
 }
 
 func (cfg SkillCuratorConfig) withDefaults() SkillCuratorConfig {
-	def := DefaultSkillCuratorConfig()
+	def := defaultSkillCuratorConfig()
 	if cfg.IntervalHours <= 0 {
 		cfg.IntervalHours = def.IntervalHours
 	}
@@ -169,13 +169,6 @@ func (cfg SkillCuratorConfig) withDefaults() SkillCuratorConfig {
 		cfg.UtilityRollbackRatePct = def.UtilityRollbackRatePct
 	}
 	return cfg
-}
-
-// MarkSkillAgentCreated opts a generated skill into curator management.
-func (t *Tracker) MarkSkillAgentCreated(skillName string) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.markSkillAgentCreatedLocked(skillName, time.Now().UnixMilli())
 }
 
 // MarkSkillPatched records a lifecycle-managed patch for an agent-created skill.
@@ -220,7 +213,7 @@ func (t *Tracker) SetSkillCuratorState(skillName, nextState string) (SkillCurato
 	}
 	nextState = strings.TrimSpace(nextState)
 	switch nextState {
-	case SkillCuratorStateActive, SkillCuratorStateStale, SkillCuratorStateArchived:
+	case SkillCuratorStateActive, skillCuratorStateStale, SkillCuratorStateArchived:
 	default:
 		return SkillCuratorRecord{}, fmt.Errorf("skill curator: invalid state %q", nextState)
 	}
@@ -278,9 +271,9 @@ func (t *Tracker) SkillCuratorReport(skillName string) ([]SkillCuratorRecord, er
 	return records, nil
 }
 
-// ApplySkillCuratorTransitions updates active/stale/archive state for managed
+// applySkillCuratorTransitions updates active/stale/archive state for managed
 // skills. It never deletes skill files and never touches user-authored skills.
-func (t *Tracker) ApplySkillCuratorTransitions(now time.Time, cfg SkillCuratorConfig) (SkillCuratorSummary, error) {
+func (t *Tracker) applySkillCuratorTransitions(now time.Time, cfg SkillCuratorConfig) (skillCuratorSummary, error) {
 	if now.IsZero() {
 		now = time.Now()
 	}
@@ -294,10 +287,10 @@ func (t *Tracker) ApplySkillCuratorTransitions(now time.Time, cfg SkillCuratorCo
 
 	state, err := t.loadCuratorStateLocked()
 	if err != nil {
-		return SkillCuratorSummary{}, err
+		return skillCuratorSummary{}, err
 	}
 
-	var summary SkillCuratorSummary
+	var summary skillCuratorSummary
 	changed := false
 	minIdle := time.Duration(cfg.MinIdleHours) * time.Hour
 	staleAfter := time.Duration(cfg.StaleAfterDays) * 24 * time.Hour
@@ -322,7 +315,7 @@ func (t *Tracker) ApplySkillCuratorTransitions(now time.Time, cfg SkillCuratorCo
 			rec.State = SkillCuratorStateArchived
 			rec.ArchivedAt = now.UnixMilli()
 			summary.ArchivedUnfixable++
-			summary.Transitions = append(summary.Transitions, SkillCuratorTransition{
+			summary.Transitions = append(summary.Transitions, skillCuratorTransition{
 				SkillName: rec.SkillName, From: from, To: SkillCuratorStateArchived, Reason: ureason,
 			})
 			changed = true
@@ -350,10 +343,10 @@ func (t *Tracker) ApplySkillCuratorTransitions(now time.Time, cfg SkillCuratorCo
 			reason = fmt.Sprintf("no use or patch for %d days", cfg.ArchiveAfterDays)
 			summary.Archived++
 		case idle >= staleAfter:
-			to = SkillCuratorStateStale
+			to = skillCuratorStateStale
 			reason = fmt.Sprintf("no use or patch for %d days", cfg.StaleAfterDays)
 			summary.MarkedStale++
-		case from == SkillCuratorStateStale:
+		case from == skillCuratorStateStale:
 			to = SkillCuratorStateActive
 			rec.ArchivedAt = 0
 			reason = "recent use or patch reactivated the skill"
@@ -361,7 +354,7 @@ func (t *Tracker) ApplySkillCuratorTransitions(now time.Time, cfg SkillCuratorCo
 		}
 		if to != from {
 			rec.State = to
-			summary.Transitions = append(summary.Transitions, SkillCuratorTransition{
+			summary.Transitions = append(summary.Transitions, skillCuratorTransition{
 				SkillName: rec.SkillName,
 				From:      from,
 				To:        to,
@@ -374,7 +367,7 @@ func (t *Tracker) ApplySkillCuratorTransitions(now time.Time, cfg SkillCuratorCo
 	if changed {
 		state.UpdatedAt = now.UnixMilli()
 		if err := t.saveCuratorStateLocked(state); err != nil {
-			return SkillCuratorSummary{}, err
+			return skillCuratorSummary{}, err
 		}
 	}
 	return summary, nil
@@ -490,8 +483,8 @@ func (t *Tracker) ReconcileCuratorAgainstCatalog(catalogSkills map[string]bool) 
 	return orphans, nil
 }
 
-func (t *Tracker) loadCuratorStateLocked() (*SkillCuratorState, error) {
-	state := &SkillCuratorState{
+func (t *Tracker) loadCuratorStateLocked() (*skillCuratorState, error) {
+	state := &skillCuratorState{
 		Version: 1,
 		Skills:  make(map[string]SkillCuratorRecord),
 	}
@@ -523,12 +516,12 @@ func (t *Tracker) loadCuratorStateLocked() (*SkillCuratorState, error) {
 	return state, nil
 }
 
-func (t *Tracker) saveCuratorStateLocked(state *SkillCuratorState) error {
+func (t *Tracker) saveCuratorStateLocked(state *skillCuratorState) error {
 	if t.curatorPath == "" {
 		return nil
 	}
 	if state == nil {
-		state = &SkillCuratorState{}
+		state = &skillCuratorState{}
 	}
 	if state.Version == 0 {
 		state.Version = 1
@@ -576,7 +569,7 @@ func curatorStateRank(state string) int {
 	switch state {
 	case SkillCuratorStateActive:
 		return 0
-	case SkillCuratorStateStale:
+	case skillCuratorStateStale:
 		return 1
 	case SkillCuratorStateArchived:
 		return 2
@@ -610,7 +603,7 @@ func (t *SkillCuratorTask) Run(ctx context.Context) error {
 		return err
 	}
 	cfg := t.Config.withDefaults()
-	summary, err := t.Tracker.ApplySkillCuratorTransitions(time.Now(), cfg)
+	summary, err := t.Tracker.applySkillCuratorTransitions(time.Now(), cfg)
 	if err != nil {
 		return err
 	}

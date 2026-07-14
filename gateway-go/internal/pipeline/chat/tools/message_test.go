@@ -9,7 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
-func TestToolMessageSendRequiresConnectedChannel(t *testing.T) {
+func TestToolMessageSendErrorsWithoutConnectedChannel(t *testing.T) {
 	tool := ToolMessage()
 
 	_, err := tool(context.Background(), []byte(`{"action":"send","message":"hello"}`))
@@ -21,7 +21,7 @@ func TestToolMessageSendRequiresConnectedChannel(t *testing.T) {
 	}
 }
 
-func TestToolMessageSendRequiresDeliveryTarget(t *testing.T) {
+func TestToolMessageSendErrorsWithoutDeliveryTarget(t *testing.T) {
 	tool := ToolMessage()
 	ctx := toolport.WithReplyFunc(context.Background(), func(ctx context.Context, delivery *toolport.DeliveryContext, text string) error {
 		t.Fatalf("replyFn should not be called without a delivery target")
@@ -37,7 +37,7 @@ func TestToolMessageSendRequiresDeliveryTarget(t *testing.T) {
 	}
 }
 
-func TestToolMessageSendAutoDeliveryNoReplyFuncIsBenign(t *testing.T) {
+func TestToolMessageSendAutoDeliveryIgnoresMissingReplyFunc(t *testing.T) {
 	tool := ToolMessage()
 	ctx := toolport.WithAutoDelivery(context.Background())
 
@@ -50,7 +50,7 @@ func TestToolMessageSendAutoDeliveryNoReplyFuncIsBenign(t *testing.T) {
 	}
 }
 
-func TestToolMessageSendAutoDeliveryNoDeliveryTargetIsBenign(t *testing.T) {
+func TestToolMessageSendAutoDeliveryIgnoresMissingDeliveryTarget(t *testing.T) {
 	tool := ToolMessage()
 	ctx := toolport.WithAutoDelivery(context.Background())
 	ctx = toolport.WithReplyFunc(ctx, func(ctx context.Context, delivery *toolport.DeliveryContext, text string) error {
@@ -90,7 +90,7 @@ func TestToolMessageSendPropagatesDeliveryFailure(t *testing.T) {
 	}
 }
 
-func TestToolMessageSendSuccessUsesCurrentDelivery(t *testing.T) {
+func TestToolMessageSendReturnsSuccessWithCurrentDelivery(t *testing.T) {
 	tool := ToolMessage()
 	var gotDelivery *toolport.DeliveryContext
 	var gotText string

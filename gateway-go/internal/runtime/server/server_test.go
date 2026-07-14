@@ -15,7 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestHealthEndpoint(t *testing.T) {
+func TestHealthEndpointReturnsOKWithWorkerPoolStats(t *testing.T) {
 	srv := testutil.Must(New(":0"))
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
@@ -53,7 +53,7 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 }
 
-func TestHealthEndpointIncludesUsageQualitySignals(t *testing.T) {
+func TestHealthEndpointReturnsUsageQualityAndPropusSignals(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tracker, err := genesis.NewTracker(slog.Default())
 	if err != nil {

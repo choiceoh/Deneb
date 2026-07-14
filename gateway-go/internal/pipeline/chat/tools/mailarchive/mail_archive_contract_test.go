@@ -49,7 +49,7 @@ func archiveFixture(id, subject, body string, at time.Time) mailarchive.ContextM
 	}
 }
 
-func TestToolMailArchiveConfigurationAndInputValidation(t *testing.T) {
+func TestToolMailArchiveRejectsInvalidInputWhenUnconfigured(t *testing.T) {
 	t.Setenv("DENEB_ARCHIVE_IMAP_USER", "")
 	t.Setenv("DENEB_ARCHIVE_IMAP_PASS", "")
 
@@ -136,7 +136,7 @@ func TestToolMailArchiveStoreListSearchAndReadJSON(t *testing.T) {
 	}
 }
 
-func TestToolMailArchiveDispatchCharacterization(t *testing.T) {
+func TestToolMailArchiveDispatchFallsBackOnMalformedJSON(t *testing.T) {
 	now := time.Now()
 	message := archiveFixture("one", "Alpha 견적", "첫 번째 본문", now)
 	store := newArchiveStore(t, message)
@@ -175,7 +175,7 @@ func TestToolMailArchiveDispatchCharacterization(t *testing.T) {
 	}
 }
 
-func TestMailArchiveScalarHelpers(t *testing.T) {
+func TestMailArchiveScalarHelpersReturnExpectedValues(t *testing.T) {
 	if got := mailArchiveMailboxLabel(nil); got != "all" {
 		t.Fatalf("mailbox nil = %q", got)
 	}
@@ -235,7 +235,7 @@ func TestArchiveRelatedQueryNormalizesPrefixesAndSender(t *testing.T) {
 	}
 }
 
-func TestArchiveRelatedTermsAndEventMatching(t *testing.T) {
+func TestArchiveRelatedTermsParsesAndMatchesEvents(t *testing.T) {
 	terms := archiveRelatedTerms(`Re: "A" Alpha, 베타! x [납기]`)
 	wantTerms := []string{"re", "alpha", "베타", "납기"}
 	if strings.Join(terms, "|") != strings.Join(wantTerms, "|") {
@@ -363,7 +363,7 @@ func TestProjectHistoryAndRelatedSummaryFormatting(t *testing.T) {
 	}
 }
 
-func TestEnrichArchiveMessageBodyPolicyAndMarshal(t *testing.T) {
+func TestEnrichArchiveMessageBodyPolicyEncodesResponse(t *testing.T) {
 	msg := archiveFixture("one", "Alpha", "secret body", time.Now())
 	withoutBody := enrichArchiveMessage(context.Background(), MailArchiveDeps{}, msg, false)
 	if withoutBody.Body != "" || withoutBody.ID != msg.ID {

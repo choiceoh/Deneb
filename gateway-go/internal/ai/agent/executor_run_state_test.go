@@ -228,7 +228,7 @@ func TestRunAgentRunState_GraceCancellationClearsInFlightFlag(t *testing.T) {
 	})
 }
 
-func TestAgentRunState_MultiTurnAggregation(t *testing.T) {
+func TestAgentRunState_MultiTurnAggregationUpdatesTotals(t *testing.T) {
 	state := newAgentRunState([]llm.Message{llm.NewTextMessage("user", "inspect")}, nil)
 	narration := "Checking both sources now."
 	final := "Final answer."
@@ -290,7 +290,7 @@ func TestAgentRunState_MultiTurnAggregation(t *testing.T) {
 	}
 }
 
-func TestAgentRunState_TextHeadIsValidUTF8(t *testing.T) {
+func TestAgentRunState_TextHeadTruncatesAtValidUTF8Boundary(t *testing.T) {
 	state := newAgentRunState(nil, nil)
 	text := strings.Repeat("가", 100) // 300 bytes; byte 200 lands mid-rune.
 	stats := state.recordTurn(&turnResult{text: text})

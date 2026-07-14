@@ -46,7 +46,7 @@ func TestSnapWindowStart(t *testing.T) {
 	}
 }
 
-func TestRecencyCompact_SnapsPastOrphanToolResult(t *testing.T) {
+func TestRecencyCompact_SnapsWindowBoundaryPastOrphanResult(t *testing.T) {
 	// msg0 is large (forces a cut that keeps only the tail). The recency window
 	// would otherwise start at the tool_result (msg1), orphaning it. Snap must
 	// push the window start to msg2.

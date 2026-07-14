@@ -37,7 +37,7 @@ func seedPoolCases(t *testing.T, tr *Tracker, skillName string) (blind, visible 
 	return blind, visible
 }
 
-func TestValidationCasePoolPartitionIsDeterministicAndDisjoint(t *testing.T) {
+func TestRecentSkillValidationCasesPoolReturnsBlindAndVisibleDeterministically(t *testing.T) {
 	tr := newTestTracker(t)
 	skill := "pool-partition"
 	seedPoolCases(t, tr, skill)
@@ -46,11 +46,11 @@ func TestValidationCasePoolPartitionIsDeterministicAndDisjoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RecentSkillValidationCases: %v", err)
 	}
-	blindPool, err := tr.RecentSkillValidationCasesPool(skill, 100, true)
+	blindPool, err := tr.recentSkillValidationCasesPool(skill, 100, true)
 	if err != nil {
 		t.Fatalf("RecentSkillValidationCasesPool(blind): %v", err)
 	}
-	visiblePool, err := tr.RecentSkillValidationCasesPool(skill, 100, false)
+	visiblePool, err := tr.recentSkillValidationCasesPool(skill, 100, false)
 	if err != nil {
 		t.Fatalf("RecentSkillValidationCasesPool(visible): %v", err)
 	}
@@ -69,7 +69,7 @@ func TestValidationCasePoolPartitionIsDeterministicAndDisjoint(t *testing.T) {
 	}
 }
 
-func TestEvolverPromptNeverShowsBlindPoolCases(t *testing.T) {
+func TestValidationCasesForPromptIgnoresBlindPoolButCoverageIncludesIt(t *testing.T) {
 	tr := newTestTracker(t)
 	skill := "pool-prompt"
 	blind, _ := seedPoolCases(t, tr, skill)
@@ -94,13 +94,13 @@ func TestEvolverPromptNeverShowsBlindPoolCases(t *testing.T) {
 	}
 }
 
-func TestHeldOutGateScoresBlindPoolOnly(t *testing.T) {
+func TestHeldOutCasesScoresBlindPoolWhenNonEmpty(t *testing.T) {
 	tr := newTestTracker(t)
 	skill := "pool-gate"
 	seedPoolCases(t, tr, skill)
 
 	engine := NewSkillValidationEngine(tr, slog.Default())
-	blindPool, err := tr.RecentSkillValidationCasesPool(skill, 100, true)
+	blindPool, err := tr.recentSkillValidationCasesPool(skill, 100, true)
 	if err != nil {
 		t.Fatalf("RecentSkillValidationCasesPool: %v", err)
 	}

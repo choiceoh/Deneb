@@ -5,7 +5,7 @@ import "testing"
 // TestHasDocumentAttachment covers the hard anchor the deliverable auto-publish
 // gates on: a document was ingested this turn. Ordinary chat (no attachment, or an
 // image/audio one) must read false so it can never trip the safety net.
-func TestHasDocumentAttachment(t *testing.T) {
+func TestHasDocumentAttachmentReturnsTrueOnlyForDocuments(t *testing.T) {
 	cases := []struct {
 		name string
 		atts []ChatAttachment

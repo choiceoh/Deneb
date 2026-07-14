@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestLatestPublishedApk(t *testing.T) {
+func TestLatestPublishedApkIgnoresStaleNotes(t *testing.T) {
 	dir := t.TempDir()
 	// Published builds, mixing the legacy deneb-<name>-<code>-... filenames with
 	// the new code-only deneb-<code>-<sha>-... shape; the newest is a new-shape file
@@ -50,7 +50,7 @@ func TestLatestPublishedApk(t *testing.T) {
 
 // When version.json describes the same build as the newest APK, its notes ride
 // along — the normal published-build case.
-func TestLatestPublishedApkNotesMatchCode(t *testing.T) {
+func TestLatestPublishedApkAttachesNotesWhenCodeMatches(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "deneb-2.9.30-153-fossDebug.apk"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
@@ -68,7 +68,7 @@ func TestLatestPublishedApkNotesMatchCode(t *testing.T) {
 	}
 }
 
-func TestLatestPublishedApkNoCandidates(t *testing.T) {
+func TestLatestPublishedApkEmptyOrMissingDirReturnsNone(t *testing.T) {
 	if _, ok := latestPublishedApk(t.TempDir()); ok {
 		t.Fatal("empty dir must yield no manifest")
 	}
@@ -77,7 +77,7 @@ func TestLatestPublishedApkNoCandidates(t *testing.T) {
 	}
 }
 
-func TestDenebApkDirEnvOverride(t *testing.T) {
+func TestDenebApkDirWithEnvOverride(t *testing.T) {
 	t.Setenv("DENEB_APK_DIR", "/tmp/custom-apk")
 	if got := denebApkDir(); got != "/tmp/custom-apk" {
 		t.Fatalf("env override ignored: %q", got)

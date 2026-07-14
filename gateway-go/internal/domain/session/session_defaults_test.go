@@ -54,10 +54,10 @@ func TestSessionDefaults_AppliedOnPatchCreate(t *testing.T) {
 	}
 }
 
-// TestSessionDefaults_ZeroValueIsNoop verifies that a Manager with no
+// TestSessionDefaultsZeroValueLeavesFieldsEmpty verifies that a Manager with no
 // defaults installed creates sessions with zero ModelConfig — preserving
 // the prior behavior for operators who don't opt in.
-func TestSessionDefaults_ZeroValueIsNoop(t *testing.T) {
+func TestSessionDefaultsZeroValueLeavesFieldsEmpty(t *testing.T) {
 	m := NewManager()
 	s := m.Create("telegram:2", KindDirect)
 	if s == nil {

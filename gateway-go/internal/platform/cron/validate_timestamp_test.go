@@ -5,14 +5,14 @@ import (
 	"time"
 )
 
-func TestValidateScheduleTimestamp_NonAtSchedule(t *testing.T) {
+func TestValidateScheduleTimestampAllowsNonAtSchedules(t *testing.T) {
 	result := ValidateScheduleTimestamp(StoreSchedule{Kind: "cron", Expr: "0 * * * *"}, time.Now().UnixMilli())
 	if !result.OK {
 		t.Fatalf("expected OK for non-at schedule, got: %s", result.Message)
 	}
 }
 
-func TestValidateScheduleTimestamp_ValidFuture(t *testing.T) {
+func TestValidateScheduleTimestampAllowsFutureAtSchedule(t *testing.T) {
 	now := time.Now().UnixMilli()
 	future := time.UnixMilli(now + 3600*1000).UTC().Format(time.RFC3339)
 	result := ValidateScheduleTimestamp(StoreSchedule{Kind: "at", At: future}, now)
@@ -33,7 +33,7 @@ func TestValidateScheduleTimestamp_PastRejected(t *testing.T) {
 	}
 }
 
-func TestValidateScheduleTimestamp_TooFarFuture(t *testing.T) {
+func TestValidateScheduleTimestampRejectsTooFarFutureAtSchedule(t *testing.T) {
 	now := time.Now().UnixMilli()
 	farFuture := time.UnixMilli(now + 11*365*24*3600*1000).UTC().Format(time.RFC3339)
 	result := ValidateScheduleTimestamp(StoreSchedule{Kind: "at", At: farFuture}, now)

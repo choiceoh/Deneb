@@ -66,12 +66,12 @@ func buildBM25LeakStore(t *testing.T) *wiki.Store {
 	return store
 }
 
-// TestRecallBM25Leak_CommonNounExcluded is the core e2e gate: a common-only
+// TestRecallBM25LeakRejectsCommonNounQuery is the core e2e gate: a common-only
 // recall query (single corpus-common noun, no rare anchor) must inject NO wiki
 // row — the off-topic pages it lexically matched are floored. An explicit cue
 // gets the honest no-evidence notice instead. With the floor disabled the SAME
 // query injects the off-topic pages (the leak), proving the gate is the cause.
-func TestRecallBM25Leak_CommonNounExcluded(t *testing.T) {
+func TestRecallBM25LeakRejectsCommonNounQuery(t *testing.T) {
 	store := buildBM25LeakStore(t)
 
 	// Two shapes of the leak, both bypassing the broadening penalty:
@@ -108,11 +108,11 @@ func TestRecallBM25Leak_CommonNounExcluded(t *testing.T) {
 	}
 }
 
-// TestRecallBM25Leak_RareNounSurvives is the over-block guard: a legitimate
+// TestRecallBM25LeakPreservesRareNounMatch is the over-block guard: a legitimate
 // single rare-proper-noun recall must still surface its wiki page through the
 // full pipeline. The rarity-keyed floor keeps it; a blunt single-term drop would
 // not.
-func TestRecallBM25Leak_RareNounSurvives(t *testing.T) {
+func TestRecallBM25LeakPreservesRareNounMatch(t *testing.T) {
 	store := buildBM25LeakStore(t)
 	const msg = "전에 마바솔라 건 어떻게 됐지?"
 	out, _ := Build(context.Background(),

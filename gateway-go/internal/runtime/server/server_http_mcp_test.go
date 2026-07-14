@@ -49,7 +49,7 @@ func decodeMCP(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 	return out
 }
 
-func TestMCP_InitializeAndToolsList(t *testing.T) {
+func TestMCPInitializeReturnsNegotiatedVersionAndToolList(t *testing.T) {
 	token := withClientToken(t)
 	s := newTestServer(t)
 
@@ -98,7 +98,7 @@ func TestMCP_InitializeAndToolsList(t *testing.T) {
 	}
 }
 
-func TestMCP_ToolCallBridgesToRPC(t *testing.T) {
+func TestMCPToolCallDispatchesToRPCAndReturnsResult(t *testing.T) {
 	token := withClientToken(t)
 	s := newTestServer(t)
 
@@ -165,7 +165,7 @@ func TestMCP_ToolCallErrorsSurfaceInResult(t *testing.T) {
 	}
 }
 
-func TestMCP_TransportRules(t *testing.T) {
+func TestMCPTransportRejectsInvalidRequestsPerJSONRPCRules(t *testing.T) {
 	token := withClientToken(t)
 	s := newTestServer(t)
 
@@ -274,7 +274,7 @@ func TestMCP_RejectsMalformedEnvelopes(t *testing.T) {
 // TestMCPInternalID pins the internal dispatch-id derivation: type-prefixed
 // (numeric 1 vs string "1" must not collide) and length-capped (a
 // client-chosen id can't inflate internal ids).
-func TestMCPInternalID(t *testing.T) {
+func TestMCPInternalIDAvoidsCollisionAndTruncatesLongIDs(t *testing.T) {
 	num := mcpapi.InternalID(json.RawMessage(`1`))
 	str := mcpapi.InternalID(json.RawMessage(`"1"`))
 	if num == str {

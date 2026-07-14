@@ -11,7 +11,7 @@ import (
 // The watch fires exactly once per READY transition: a fresh READY fires,
 // a repeat run stays silent (snapshot persisted), a fall-back-and-re-earn
 // fires again, and a nil OnReady never panics.
-func TestLadderWatch(t *testing.T) {
+func TestLadderWatchFiresOnceOnReadyTransitionRetriesOnMissingOrFailedCallback(t *testing.T) {
 	tr := newTestTracker(t)
 	task := &LadderWatchTask{Tracker: tr}
 

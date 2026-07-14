@@ -43,7 +43,7 @@ func accuracyFixture(t *testing.T) (*JudgeAccuracyTask, *Tracker) {
 
 // The lane ledgers per-class accuracy with miss exhibits, attributed to the
 // judge prompt version — the P3 label substrate.
-func TestJudgeAccuracyTask_Run(t *testing.T) {
+func TestJudgeAccuracyTaskRunLedgersPerClassAccuracyWithMissExhibits(t *testing.T) {
 	task, tr := accuracyFixture(t)
 	task.verdictFn = func(_ context.Context, _, _, degraded string) (judgeVerdict, error) {
 		// Miss exactly the fake-tool class (pass the defect); catch the rest.
@@ -55,7 +55,7 @@ func TestJudgeAccuracyTask_Run(t *testing.T) {
 	if err := task.Run(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	recs, err := tr.RecentJudgeAccuracy(5)
+	recs, err := tr.recentJudgeAccuracy(5)
 	if err != nil || len(recs) != 1 {
 		t.Fatalf("ledger = %+v err=%v", recs, err)
 	}
@@ -86,7 +86,7 @@ func TestOperatorJudgeVerdictIsIdempotentAndSeparateFromLaneRuns(t *testing.T) {
 	if err := tr.LogOperatorJudgeVerdict(verdict); err != nil {
 		t.Fatal(err)
 	}
-	if runs, err := tr.RecentJudgeAccuracy(5); err != nil || len(runs) != 0 {
+	if runs, err := tr.recentJudgeAccuracy(5); err != nil || len(runs) != 0 {
 		t.Fatalf("operator label leaked into scheduled runs: %+v err=%v", runs, err)
 	}
 	labels := tr.RecentOperatorJudgeVerdicts(time.Hour, 5)
@@ -103,13 +103,13 @@ func TestOperatorJudgeVerdictIsIdempotentAndSeparateFromLaneRuns(t *testing.T) {
 // The probe curriculum ladder: weaken-tier pairs deploy only after
 // judgeEscalationWindow consecutive zero-miss drop-tier runs of the incumbent
 // judge; a drop-tier miss or a judge revision (version change) re-locks it.
-func TestJudgeAccuracyEscalation(t *testing.T) {
+func TestJudgeAccuracyEscalationAllowsWeakenTierAfterSaturatedWindow(t *testing.T) {
 	task, tr := accuracyFixture(t)
 	version := task.Meta.Version(generation.MetaSkillJudgeSystemPrompt,
 		generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt])
 	seed := func(v string, dropMissed int) {
 		t.Helper()
-		if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+		if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 			JudgeVersion: v, Pairs: 2, Correct: 2 - dropMissed,
 			ByClass: map[string][2]int{
 				"imperative-drop": {1 - dropMissed, 1},
@@ -157,7 +157,7 @@ func TestJudgeAccuracyEscalation(t *testing.T) {
 	if err := task.Run(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	recs, err := tr.RecentJudgeAccuracy(1)
+	recs, err := tr.recentJudgeAccuracy(1)
 	if err != nil || len(recs) != 1 {
 		t.Fatalf("ledger read failed: %+v err=%v", recs, err)
 	}
@@ -194,12 +194,12 @@ func TestMineFalseRejects(t *testing.T) {
 }
 
 // The charter subset is deterministic, frozen, and a reasonable minority.
-func TestIsCharterCase(t *testing.T) {
+func TestIsCharterCaseDeterministicAboutQuarterProportionStraddlesBothPoolBoundary(t *testing.T) {
 	charter := 0
 	for i := 0; i < 400; i++ {
 		rec := SkillValidationCaseRecord{SkillName: "sk", ID: fmt.Sprintf("case-%d", i), RequiredSubstrings: []string{"x"}}
-		first := IsCharterCase(rec)
-		if first != IsCharterCase(rec) {
+		first := isCharterCase(rec)
+		if first != isCharterCase(rec) {
 			t.Fatal("charter membership not deterministic")
 		}
 		if first {
@@ -214,7 +214,7 @@ func TestIsCharterCase(t *testing.T) {
 	var cb, cv int
 	for i := 0; i < 400; i++ {
 		rec := SkillValidationCaseRecord{SkillName: "sk", ID: fmt.Sprintf("case-%d", i), RequiredSubstrings: []string{"x"}}
-		if IsCharterCase(rec) {
+		if isCharterCase(rec) {
 			if validationCaseBlindHeldOut(rec) {
 				cb++
 			} else {
@@ -228,7 +228,7 @@ func TestIsCharterCase(t *testing.T) {
 }
 
 // The env knob accelerates the lane.
-func TestJudgeAccuracyInterval(t *testing.T) {
+func TestJudgeAccuracyIntervalDefaultsAndAllowsEnvOverride(t *testing.T) {
 	task := &JudgeAccuracyTask{}
 	t.Setenv("DENEB_JUDGE_ACCURACY_INTERVAL_HOURS", "")
 	if task.Interval() != judgeAccuracyDefaultInterval {

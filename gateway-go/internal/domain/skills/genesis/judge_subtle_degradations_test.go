@@ -30,7 +30,7 @@ func subtleBody() string {
 
 // Each subtle degradation must remove exactly its load-bearing line, keep the
 // document structure, and change the body — otherwise it plants no defect.
-func TestSubtleJudgeDegradations(t *testing.T) {
+func TestSubtleDegradationsRemoveTargetLinePreserveStructure(t *testing.T) {
 	body := subtleBody()
 
 	imp, ok := degradeDropImperative(body)
@@ -61,7 +61,7 @@ func TestSubtleJudgeDegradations(t *testing.T) {
 
 // dropFirstLineMatching skips headings and short lines, and reports ok=false
 // when no substantive line carries a token.
-func TestDropFirstLineMatching(t *testing.T) {
+func TestDropFirstLineMatchingIgnoresHeadingsAndShortLinesRemovesSubstantiveMatch(t *testing.T) {
 	// A heading that contains the token must NOT be dropped (that is
 	// section-drop's job, and the honesty invariant excludes structure loss).
 	headingOnly := "# 반드시 지켜라\n\n평범한 설명 문단입니다 이것은."
@@ -92,7 +92,7 @@ func TestDropFirstLineMatching(t *testing.T) {
 // Tier-3 weaken degradations mutate one token in place: the line survives
 // (line count preserved — nothing for a diff to find missing), the binding
 // force is diluted, and no other byte changes.
-func TestWeakenJudgeDegradations(t *testing.T) {
+func TestWeakenDegradationsMutateTokenInPlacePreserveLineCount(t *testing.T) {
 	body := subtleBody()
 	wantLines := strings.Count(body, "\n")
 
@@ -144,7 +144,7 @@ func TestWeakenJudgeDegradations(t *testing.T) {
 // M5 honesty invariant: a weaken swap in a NEGATED context does not weaken the
 // rule ("must not commit" → "may not commit" is still a prohibition), so it
 // must be skipped rather than emitted as a mislabeled defect pair.
-func TestWeaken_SkipsNegationAdjacentContext(t *testing.T) {
+func TestWeakenIgnoresNegatedImperativeDilutesLaterAffirmativeLine(t *testing.T) {
 	// Only line carries "must" inside "must not" → no honest weakening → skip.
 	negated := "This intro line is long enough to pass the floor.\nYou must not commit secrets to the repository ever."
 	if got, ok := weakenFirstLineMatching(negated, imperativeWeakenSwaps); ok {
@@ -167,7 +167,7 @@ func TestWeaken_SkipsNegationAdjacentContext(t *testing.T) {
 
 // M5 charter wiring: the first live co-evolution training-surface consumer
 // (false-reject mining) must exclude the frozen charter slice.
-func TestExcludeCharterCases(t *testing.T) {
+func TestExcludeCharterCasesDeletesOnlyCharterMembers(t *testing.T) {
 	// Build enough cases that the ~25% charter hash selects at least one.
 	var cases []SkillValidationCaseRecord
 	for i := 0; i < 40; i++ {
@@ -178,7 +178,7 @@ func TestExcludeCharterCases(t *testing.T) {
 	}
 	var charterIn int
 	for _, c := range cases {
-		if IsCharterCase(c) {
+		if isCharterCase(c) {
 			charterIn++
 		}
 	}
@@ -190,7 +190,7 @@ func TestExcludeCharterCases(t *testing.T) {
 		t.Fatalf("excludeCharterCases kept %d, want %d", len(filtered), len(cases)-charterIn)
 	}
 	for _, c := range filtered {
-		if IsCharterCase(c) {
+		if isCharterCase(c) {
 			t.Fatal("charter case survived the co-evolution training filter")
 		}
 	}
@@ -198,7 +198,7 @@ func TestExcludeCharterCases(t *testing.T) {
 
 // Pair construction over a catalog: subtle pairs are built for the real body,
 // stubs are skipped, the limit is honored, and construction is deterministic.
-func TestBuildSubtleJudgeDegradationPairs(t *testing.T) {
+func TestBuildSubtleAndWeakenDegradationPairsIgnoreStubsHonorLimitDeterministic(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, content string) skills.SkillEntry {
 		path := filepath.Join(dir, name+".md")

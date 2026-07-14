@@ -98,7 +98,7 @@ func TestFlexStrStrictJSONBoundary(t *testing.T) {
 	}
 }
 
-func TestASREnvironmentNormalization(t *testing.T) {
+func TestASREnvironmentNormalizesURLAndHotwords(t *testing.T) {
 	t.Setenv("DENEB_ASR_URL", "  http://asr.example.test/base///  ")
 	if got := asrBaseURL(); got != "http://asr.example.test/base" {
 		t.Fatalf("asrBaseURL = %q", got)
@@ -201,7 +201,7 @@ func TestTranscribeAudioMultipartRoundTrip(t *testing.T) {
 	}
 }
 
-func TestTranscribeAudioDefaultFilenameAndOptionalField(t *testing.T) {
+func TestTranscribeAudioUsesDefaultFilenameWithoutHotwordsField(t *testing.T) {
 	captured := make(chan capturedASRRequest, 1)
 	asrTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		got, err := captureASRRequest(r)
@@ -400,7 +400,7 @@ func TestTranscribeAudioTextMergesBiasAndFormats(t *testing.T) {
 	}
 }
 
-func TestMergeHotwordsAndAudioFilenameBoundaries(t *testing.T) {
+func TestMergeHotwordsAndAudioFilenameBoundary(t *testing.T) {
 	if got := mergeHotwords("", "  alpha ", "\n", "beta,gamma"); got != "alpha, beta,gamma" {
 		t.Fatalf("mergeHotwords = %q", got)
 	}

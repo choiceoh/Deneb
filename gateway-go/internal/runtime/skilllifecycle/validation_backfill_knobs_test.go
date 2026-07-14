@@ -6,7 +6,7 @@ import (
 )
 
 // Archive-sweep knobs: env overrides with defaults preserved and junk rejected.
-func TestBackfillKnobs(t *testing.T) {
+func TestBackfillKnobsPreservesDefaultsAndRejectsJunkOverrides(t *testing.T) {
 	t.Setenv("DENEB_VALIDATION_BACKFILL_WINDOW_DAYS", "")
 	if backfillWindow() != 7*24*time.Hour {
 		t.Fatalf("default window = %v", backfillWindow())

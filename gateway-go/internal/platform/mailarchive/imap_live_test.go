@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// TestIMAP_Live exercises the minimal client against a real archive IMAP server.
+// TestIMAPLiveSearchesAndReadsMessageBody exercises the minimal client against a real archive IMAP server.
 // Gated: set DENEB_ARCHIVE_IMAP_LIVE=1 plus ADDR/USER/PASS. CI skips it (no server).
-func TestIMAP_Live(t *testing.T) {
+func TestIMAPLiveSearchesAndReadsMessageBody(t *testing.T) {
 	if os.Getenv("DENEB_ARCHIVE_IMAP_LIVE") == "" {
 		t.Skip("set DENEB_ARCHIVE_IMAP_LIVE=1 to run against a live archive IMAP")
 	}

@@ -56,7 +56,7 @@ func TestDependencyAccessorsNilGetterAndNilResult(t *testing.T) {
 	}
 }
 
-func TestMethodPrefixesHaveExactIndependentSurfaces(t *testing.T) {
+func TestMethodsReturnExactFourNamedLocalAndMiniappEndpoints(t *testing.T) {
 	local := Methods(Deps{})
 	mini := MiniappMethods(Deps{})
 	if len(local) != 4 || len(mini) != 4 {
@@ -230,7 +230,7 @@ func TestBehaviorHandlerNilGetterResultReturnsInitializedMaps(t *testing.T) {
 	}
 }
 
-func TestHealthHandlerRingAndAgentLogMetrics(t *testing.T) {
+func TestHealthHandlerReturnsRingAndAgentLogMetrics(t *testing.T) {
 	capture, _ := newCapture(t, 4)
 	now := time.Now()
 	appendRecord(t, capture, now, slog.LevelInfo, "ok", slog.String("runId", "r"))

@@ -67,7 +67,7 @@ func TestPushRegister_WithIdentity(t *testing.T) {
 	}
 }
 
-func TestPushRegister_ReportsDeliveryEnabled(t *testing.T) {
+func TestPushRegisterReturnsDeliveryEnabledWhenSenderConfigured(t *testing.T) {
 	store := &fakePushStore{}
 	h := pushRegister(PushDeps{Store: store, DeliveryEnabled: func() bool { return true }})
 	ctx := clientauth.WithContext(context.Background(), sampleIdentity())

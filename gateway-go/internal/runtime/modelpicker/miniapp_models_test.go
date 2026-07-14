@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestBuildMiniappModelHealth(t *testing.T) {
+func TestBuildMiniappModelHealthAuthOverlayUpdatesStatus(t *testing.T) {
 	sections := []modelSection{{
 		title: "models",
 		entries: []modelEntry{
@@ -67,7 +67,7 @@ func TestBuildMiniappModelHealth(t *testing.T) {
 	}
 }
 
-func TestCapMergedModelsDeclaredExempt(t *testing.T) {
+func TestCapMergedModelsExemptsDeclaredTruncatesDiscovered(t *testing.T) {
 	many := func(prefix string, n int) []string {
 		out := make([]string, 0, n)
 		for i := 0; i < n; i++ {
@@ -102,7 +102,7 @@ func TestCapMergedModelsDeclaredExempt(t *testing.T) {
 // Regression: the discovered list doubles as the health-membership authority,
 // so it must NOT be trimmed to the display cap — a served model beyond the cap
 // rendered as a false "offline" while answering completions fine.
-func TestDiscoverProviderModelsKeepsFullServedList(t *testing.T) {
+func TestDiscoverProviderModelsPreservesFullServedList(t *testing.T) {
 	const served = maxModelsPerProvider + 8
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -124,7 +124,7 @@ func TestDiscoverProviderModelsKeepsFullServedList(t *testing.T) {
 	}
 }
 
-func TestEffectiveBaseURLResolvesCloudProviders(t *testing.T) {
+func TestEffectiveBaseURLResolvesKnownAndEmptyForUnknown(t *testing.T) {
 	// Built-in cloud providers must resolve to a non-empty endpoint so the
 	// health probe can reach them (otherwise their dots stay "unknown").
 	for _, name := range []string{"zai", "openrouter", "kimi", "mimo-plan", "vllm", "localai"} {
@@ -142,7 +142,7 @@ func TestEffectiveBaseURLResolvesCloudProviders(t *testing.T) {
 	}
 }
 
-func TestProbeModelsClassified(t *testing.T) {
+func TestProbeModelsClassifiedWhenReachableAndListedVary(t *testing.T) {
 	t.Run("200 with OpenAI list → listed", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -194,7 +194,7 @@ func TestProbeModelsClassified(t *testing.T) {
 	})
 }
 
-func TestModelIDForProviderEntryKeepsNestedModelNames(t *testing.T) {
+func TestModelIDForProviderEntryPreservesNestedModelNames(t *testing.T) {
 	entry := modelEntry{
 		provider: "openrouter",
 		fullID:   "openrouter/anthropic/claude-sonnet-4.6",

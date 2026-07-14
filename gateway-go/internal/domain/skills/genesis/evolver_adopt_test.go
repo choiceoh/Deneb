@@ -21,7 +21,7 @@ func writeAdoptFixture(t *testing.T, dir, body string) {
 // TestAdoptBundledSkill: a bundled skill (nested category layout, with a
 // support file) is copied into the managed dir, parsed, and registered; the
 // managed copy is what the evolver will rewrite.
-func TestAdoptBundledSkill(t *testing.T) {
+func TestAdoptBundledSkill_CopiesNestedSkillWithSupportFilesAndRegisters(t *testing.T) {
 	bundled := t.TempDir()
 	managed := t.TempDir()
 	skillDir := filepath.Join(bundled, "productivity", "contract-review")
@@ -103,7 +103,7 @@ func TestAdoptBundledSkill_Failures(t *testing.T) {
 
 // TestLoadSkillEntry_ViaAdoption: flat bundled layout (no category dir) is
 // also locatable.
-func TestAdoptBundledSkill_FlatLayout(t *testing.T) {
+func TestAdoptBundledSkill_LoadsFlatLayoutSkill(t *testing.T) {
 	bundled := t.TempDir()
 	managed := t.TempDir()
 	writeAdoptFixture(t, filepath.Join(bundled, "topsolar-db"), "---\nname: topsolar-db\nversion: \"1.1.1\"\n---\n\n# DB\n")

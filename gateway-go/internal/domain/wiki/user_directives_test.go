@@ -49,7 +49,7 @@ func TestRenderUserDirectives_Cap(t *testing.T) {
 	}
 }
 
-func TestMergeUserDirectives(t *testing.T) {
+func TestMergeUserDirectives_ReplacesSectionPreservesUserContentIdempotent(t *testing.T) {
 	section := renderUserDirectivesSection([]userDirective{{title: "톤", summary: "간결"}})
 
 	existing := "# 사용자\n\n이름: 홍길동\n"
@@ -98,13 +98,13 @@ func TestMergeUserDirectives(t *testing.T) {
 	}
 }
 
-func TestCollapseSpaces(t *testing.T) {
+func TestCollapseSpaces_NormalizesNewlinesAndTabsToSingleSpace(t *testing.T) {
 	if got := collapseSpaces("a\n  b\t c"); got != "a b c" {
 		t.Fatalf("collapseSpaces = %q", got)
 	}
 }
 
-func TestDistillUserDirectives(t *testing.T) {
+func TestDistillUserDirectives_WritesActiveOnlyExcludesSupersededAndArchivedByteStable(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

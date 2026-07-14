@@ -266,7 +266,7 @@ func TestReadDiaryConcurrent(t *testing.T) {
 	}
 }
 
-func TestNotebookFetchCapConstant(t *testing.T) {
+func TestNotebookFetchCapIsPositiveBoundary(t *testing.T) {
 	if notebookFetchMaxBytes != 4<<20 {
 		t.Errorf("fetch cap=%d", notebookFetchMaxBytes)
 	}

@@ -358,7 +358,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	// adopt gate below, not only the persisted marker: if the freeze-transition
 	// write failed, AutoAdoptFrozen would still read "not frozen" and the cycle
 	// would auto-adopt despite tripped signals (RSI code eval H5).
-	driftVerdict := t.Tracker.RunEvolutionDriftAudit(t.OnDriftFreeze)
+	driftVerdict := t.Tracker.runEvolutionDriftAudit(t.OnDriftFreeze)
 
 	epoch, artifact := t.nextEpoch()
 	fallback := generation.DefaultMetaArtifacts()[artifact]
@@ -435,12 +435,12 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 		benchIncumbent, benchProposal = &inc, &prop
 		if rejectReason := judgeBenchDecision(inc, prop); rejectReason != "" {
 			logger.Info("meta-evolution: proposal rejected by judge-degradation bench",
-				"artifact", artifact, "incumbentRate", inc.Rate(), "proposalRate", prop.Rate(), "reason", rejectReason)
+				"artifact", artifact, "incumbentRate", inc.rate(), "proposalRate", prop.rate(), "reason", rejectReason)
 			return t.recordWithBenches(record, benchIncumbent, benchProposal, nil,
 				false, "", "judge bench rejected: "+rejectReason)
 		}
 		logger.Info("meta-evolution: proposal cleared judge-degradation bench",
-			"incumbentRate", inc.Rate(), "proposalRate", prop.Rate(), "pairs", prop.Total)
+			"incumbentRate", inc.rate(), "proposalRate", prop.rate(), "pairs", prop.Total)
 	}
 
 	// AgentDevel flip gate). Without a wired shadow generator the proposal is
@@ -659,7 +659,7 @@ func (t *MetaEvolutionTask) assembleEvidence(ctx context.Context, epoch string) 
 	if h.LastRejectedReason != "" {
 		fmt.Fprintf(&b, "- 최근 기각: %s — %s\n", h.LastRejectedSkill, common.TruncateRunes(h.LastRejectedReason, 200))
 	}
-	if levers, err := t.Tracker.LowYieldLevers(3, 2, 0.5); err == nil && len(levers) > 0 {
+	if levers, err := t.Tracker.lowYieldLevers(3, 2, 0.5); err == nil && len(levers) > 0 {
 		b.WriteString("\n## 저수율 레버 (반복 커밋되나 확인율 낮음)\n")
 		for _, lv := range levers {
 			fmt.Fprintf(&b, "- %s/%s: committed %d, confirmed %d, rolledBack %d (rate %.2f)\n",
@@ -796,62 +796,95 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 	}
 	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
 	version := t.Meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
-	byClass := map[string][2]int{}    // class -> [missed, total]
-	byCategory := map[string][2]int{} // skill category -> [missed, total]
-	falseRejects := 0
-	if records, err := t.Tracker.RecentJudgeAccuracy(judgeMissEvidenceRuns); err == nil {
+	ev := t.collectJudgeAccuracyEvidence(version)
+	if ev.clean() {
+		return "" // incumbent judge is clean — nothing to co-evolve on
+	}
+	return renderJudgeAccuracyEvidence(ev)
+}
+
+// judgeAccuracyEvidence is the incumbent-judge miss/label bundle feeding the
+// evaluator-epoch revision prompt.
+type judgeAccuracyEvidence struct {
+	byClass           map[string][2]int // class -> [missed, total]
+	byCategory        map[string][2]int // skill category -> [missed, total]
+	falseRejects      int
+	organic           []organicFalseAccept
+	operatorConfirms  int
+	operatorRollbacks int
+}
+
+func (ev judgeAccuracyEvidence) clean() bool {
+	for _, ct := range ev.byClass {
+		if ct[0] > 0 {
+			return false
+		}
+	}
+	return ev.falseRejects == 0 && len(ev.organic) == 0 &&
+		ev.operatorConfirms == 0 && ev.operatorRollbacks == 0
+}
+
+// collectJudgeAccuracyEvidence gathers the incumbent judge's synthetic misses,
+// organic false-accepts, and operator verdicts. Records from superseded judge
+// versions are skipped — their mistakes may already be fixed.
+func (t *MetaEvolutionTask) collectJudgeAccuracyEvidence(version string) judgeAccuracyEvidence {
+	ev := judgeAccuracyEvidence{
+		byClass:    map[string][2]int{},
+		byCategory: map[string][2]int{},
+	}
+	if records, err := t.Tracker.recentJudgeAccuracy(judgeMissEvidenceRuns); err == nil {
 		for _, rec := range records {
 			if rec.JudgeVersion != version {
 				continue // only the incumbent judge's own record is actionable
 			}
-			for cls, ct := range rec.ByClass {
-				cur := byClass[cls]
-				cur[0] += ct[1] - ct[0] // missed = total - correct
-				cur[1] += ct[1]
-				byClass[cls] = cur
-			}
-			for cat, ct := range rec.ByCategory {
-				cur := byCategory[cat]
-				cur[0] += ct[1] - ct[0]
-				cur[1] += ct[1]
-				byCategory[cat] = cur
-			}
-			falseRejects += len(rec.FalseRejects)
+			accumulateMissCounts(ev.byClass, rec.ByClass)
+			accumulateMissCounts(ev.byCategory, rec.ByCategory)
+			ev.falseRejects += len(rec.FalseRejects)
 		}
 	}
 	// Organic labels — the REAL-usage half of the P3 food supply: baseline-
-	// confirmed rollbacks whose accepting judge is the incumbent. A superseded
-	// judge's mistake may already be fixed — same scoping rule as the
-	// synthetic misses above.
-	var organic []organicFalseAccept
+	// confirmed rollbacks whose accepting judge is the incumbent.
 	for _, o := range t.Tracker.organicFalseAccepts(organicFalseAcceptWindow, judgeAccuracyMaxExhibits) {
 		if o.JudgeVersion == version {
-			organic = append(organic, o)
+			ev.organic = append(ev.organic, o)
 		}
 	}
-	operatorConfirms, operatorRollbacks := 0, 0
 	for _, verdict := range t.Tracker.RecentOperatorJudgeVerdicts(organicFalseAcceptWindow, judgeAccuracyMaxExhibits*4) {
 		if verdict.JudgeVersion != version {
 			continue
 		}
 		if verdict.Verdict == OperatorJudgeVerdictRollback {
-			operatorRollbacks++
+			ev.operatorRollbacks++
 		} else if verdict.Verdict == OperatorJudgeVerdictConfirm {
-			operatorConfirms++
+			ev.operatorConfirms++
 		}
 	}
+	return ev
+}
+
+// accumulateMissCounts folds one record's [correct, total] pairs into the
+// running [missed, total] tallies.
+func accumulateMissCounts(into map[string][2]int, counts map[string][2]int) {
+	for key, ct := range counts {
+		cur := into[key]
+		cur[0] += ct[1] - ct[0] // missed = total - correct
+		cur[1] += ct[1]
+		into[key] = cur
+	}
+}
+
+// renderJudgeAccuracyEvidence formats the collected evidence block. Wording is
+// part of the meta-evolution prompt contract — change only with intent.
+func renderJudgeAccuracyEvidence(ev judgeAccuracyEvidence) string {
 	type classMiss struct {
 		name          string
 		missed, total int
 	}
 	var missed []classMiss
-	for name, ct := range byClass {
+	for name, ct := range ev.byClass {
 		if ct[0] > 0 {
 			missed = append(missed, classMiss{name, ct[0], ct[1]})
 		}
-	}
-	if len(missed) == 0 && falseRejects == 0 && len(organic) == 0 && operatorConfirms == 0 && operatorRollbacks == 0 {
-		return "" // incumbent judge is clean — nothing to co-evolve on
 	}
 	sort.Slice(missed, func(i, j int) bool {
 		if missed[i].missed != missed[j].missed {
@@ -864,25 +897,25 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 	for _, m := range missed {
 		fmt.Fprintf(&b, "- %s: 최근 %d/%d 건 놓침 (이 유형의 열화를 통과시킴)\n", m.name, m.missed, m.total)
 	}
-	if len(organic) > 0 {
-		names := make([]string, 0, len(organic))
-		for _, o := range organic {
+	if len(ev.organic) > 0 {
+		names := make([]string, 0, len(ev.organic))
+		for _, o := range ev.organic {
 			names = append(names, o.Skill)
 		}
 		fmt.Fprintf(&b, "- 실전 false-accept %d건: %s — 판정자가 통과시킨 evolve가 실사용에서 롤백됨 (baseline-aware 확인, 최근 30일)\n",
-			len(organic), strings.Join(names, ", "))
+			len(ev.organic), strings.Join(names, ", "))
 	}
-	if operatorRollbacks > 0 {
-		fmt.Fprintf(&b, "- 운영자 확인 false-accept %d건: 저신뢰 evolve를 사람이 직접 되돌림 — 판정 경계를 강화할 실제 라벨\n", operatorRollbacks)
+	if ev.operatorRollbacks > 0 {
+		fmt.Fprintf(&b, "- 운영자 확인 false-accept %d건: 저신뢰 evolve를 사람이 직접 되돌림 — 판정 경계를 강화할 실제 라벨\n", ev.operatorRollbacks)
 	}
-	if operatorConfirms > 0 {
-		fmt.Fprintf(&b, "- 운영자 확인 true-accept %d건: 저신뢰 evolve를 사람이 유효하다고 확정 — 과잉 엄격화하지 말 것\n", operatorConfirms)
+	if ev.operatorConfirms > 0 {
+		fmt.Fprintf(&b, "- 운영자 확인 true-accept %d건: 저신뢰 evolve를 사람이 유효하다고 확정 — 과잉 엄격화하지 말 것\n", ev.operatorConfirms)
 	}
 	// Category-local bias (evaluator preference collapse, 2606.16682): a
 	// category whose misses concentrate must be named so the revision fixes
 	// the category blind spot, not just the aggregate.
 	var skewed []string
-	for cat, ct := range byCategory {
+	for cat, ct := range ev.byCategory {
 		if ct[0] > 0 {
 			skewed = append(skewed, fmt.Sprintf("%s %d/%d", cat, ct[0], ct[1]))
 		}
@@ -891,8 +924,8 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 		sort.Strings(skewed)
 		fmt.Fprintf(&b, "- 카테고리별 놓침 분포: %s (한 카테고리 편중 = 국소 편향 신호)\n", strings.Join(skewed, " · "))
 	}
-	if falseRejects > 0 {
-		fmt.Fprintf(&b, "- 의심 false-reject: %d건 (기각했으나 실제로는 현재 본문보다 나았던 후보 — 과잉 엄격화 경계)\n", falseRejects)
+	if ev.falseRejects > 0 {
+		fmt.Fprintf(&b, "- 의심 false-reject: %d건 (기각했으나 실제로는 현재 본문보다 나았던 후보 — 과잉 엄격화 경계)\n", ev.falseRejects)
 	}
 	b.WriteString("위 유형의 실제 결함 감지력을 높이되, 정상 개선을 기각하지 않도록 판정 기준을 정밀화하라 (과잉 기각은 진화를 정지시킨다).\n")
 	// Research-grounded direction hint (BINEVAL 2606.27226, soft path — RSI
@@ -935,8 +968,8 @@ func (t *MetaEvolutionTask) assembleGenesisEvidence() string {
 // or "" when the evidence shows a measurable improvement. Pure — the
 // deterministic half of the low-confidence routing decision.
 func metaLowConfidenceReason(inc, prop *judgeBenchOutcome, shadow *producerBenchOutcome, gen *genesisBenchOutcome) string {
-	if inc != nil && prop != nil && prop.Rate() <= inc.Rate() {
-		return fmt.Sprintf("judge bench margin %.2f→%.2f (no measurable improvement)", inc.Rate(), prop.Rate())
+	if inc != nil && prop != nil && prop.rate() <= inc.rate() {
+		return fmt.Sprintf("judge bench margin %.2f→%.2f (no measurable improvement)", inc.rate(), prop.rate())
 	}
 	if shadow != nil && shadow.ProposalScore <= shadow.IncumbentScore {
 		return fmt.Sprintf("shadow bench margin %.2f→%.2f (no measurable improvement)", shadow.IncumbentScore, shadow.ProposalScore)

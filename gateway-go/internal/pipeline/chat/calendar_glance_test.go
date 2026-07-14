@@ -20,7 +20,7 @@ func TestNewCalendarGlanceFunc_NilWhenNoSource(t *testing.T) {
 	}
 }
 
-func TestNewCalendarGlanceFunc_BuildsAndFreezesPerDay(t *testing.T) {
+func TestNewCalendarGlanceFuncBuildsAndPreservesPerDay(t *testing.T) {
 	// Reset the global day cache so this test is deterministic regardless of
 	// other tests in the package that may have populated it.
 	calGlanceCache.mu.Lock()

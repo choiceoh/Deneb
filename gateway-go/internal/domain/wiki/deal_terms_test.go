@@ -23,14 +23,14 @@ func TestParseCapacityMW(t *testing.T) {
 		{"협의 중", 0, false},
 	}
 	for _, tc := range cases {
-		got, ok := ParseCapacityMW(tc.in)
+		got, ok := parseCapacityMW(tc.in)
 		if ok != tc.ok || (ok && got != tc.want) {
-			t.Errorf("ParseCapacityMW(%q) = %v,%v want %v,%v", tc.in, got, ok, tc.want, tc.ok)
+			t.Errorf("parseCapacityMW(%q) = %v,%v want %v,%v", tc.in, got, ok, tc.want, tc.ok)
 		}
 	}
 }
 
-func TestDealRecordFrom_Terms(t *testing.T) {
+func TestDealRecordFrom_PreservesTerms(t *testing.T) {
 	in := DealPageInput{
 		Counterparty: "남도에코",
 		Terms: &DealTerms{
@@ -69,7 +69,7 @@ func TestDealRecordFrom_Terms(t *testing.T) {
 	}
 }
 
-func TestSumDealRecords_Capacity(t *testing.T) {
+func TestSumDealRecords_ReturnsCapacityTotals(t *testing.T) {
 	recs := []DealRecord{
 		{Counterparty: "a", Terms: &DealTerms{CapacityMW: 2.9405}},
 		{Counterparty: "b", Terms: &DealTerms{CapacityMW: 0.5}},
@@ -82,7 +82,7 @@ func TestSumDealRecords_Capacity(t *testing.T) {
 	}
 }
 
-func TestUpsertDealPage_PersistsTermsToLedger(t *testing.T) {
+func TestUpsertDealPage_SavesTermsToLedger(t *testing.T) {
 	store := newDealStore(t)
 	_, _, err := store.UpsertDealPage(DealPageInput{
 		Counterparty: "남도에코",

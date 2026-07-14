@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestRing_AppendAndQueryNewestFirst(t *testing.T) {
+func TestRingQueryReturnsAppendedLinesNewestFirst(t *testing.T) {
 	r := NewRing(10)
 	for i := range 5 {
 		r.append(LogLine{Ts: int64(i), Msg: "m", lvl: slog.LevelInfo})
@@ -41,7 +41,7 @@ func TestRing_WrapEvictsOldest(t *testing.T) {
 	}
 }
 
-func TestRing_Filters(t *testing.T) {
+func TestRingQueryReturnsFilteredResultsByCriteria(t *testing.T) {
 	r := NewRing(10)
 	r.append(LogLine{Ts: 1, RunID: "A", Session: "s1", Msg: "hello", lvl: slog.LevelInfo})
 	r.append(LogLine{Ts: 2, RunID: "B", Session: "s2", Msg: "world", lvl: slog.LevelError})

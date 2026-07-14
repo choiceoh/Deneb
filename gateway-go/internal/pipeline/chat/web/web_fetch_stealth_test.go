@@ -6,7 +6,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
 
-func TestIsSoftBlock_CloudflareChallenge(t *testing.T) {
+func TestIsSoftBlockReturnsTrueForChallengePages(t *testing.T) {
 	tests := []struct {
 		name string
 		html string
@@ -128,7 +128,7 @@ func TestJinaReaderURL(t *testing.T) {
 	})
 }
 
-func TestBrowserProfiles(t *testing.T) {
+func TestBrowserProfilesEmitHeadersWithoutBotUserAgent(t *testing.T) {
 	// Verify profiles have essential headers.
 	for _, profile := range []browserProfile{chromeProfile, firefoxProfile} {
 		t.Run(profile.name, func(t *testing.T) {

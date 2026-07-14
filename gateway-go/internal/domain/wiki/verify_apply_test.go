@@ -28,7 +28,7 @@ func writePageT(t *testing.T, s *Store, rel, title, category, body string) {
 	}
 }
 
-func TestRecategorizedPath(t *testing.T) {
+func TestRecategorizedPath_SwapsLeadingCategoryDirNoopOnSameOrInvalid(t *testing.T) {
 	cases := []struct {
 		path, newCat, want string
 	}{
@@ -45,14 +45,14 @@ func TestRecategorizedPath(t *testing.T) {
 	}
 }
 
-func TestApplyVerifyFixes_Move(t *testing.T) {
+func TestApplyVerifyFixes_MoveRelocatesPageAndUpdatesCategory(t *testing.T) {
 	s, wd := newVerifyStore(t)
 	writePageT(t, s, "기타/김부장.md", "김부장", "기타", "사람인데 기타로 잘못 분류됨")
 
-	n := wd.applyVerifyFixes([]VerifyFinding{{
+	n := wd.applyVerifyFixes([]verifyFinding{{
 		Type:  "misclassified",
 		PageA: "기타/김부장.md",
-		Fix:   &VerifyFix{Kind: "move", NewPath: "인물/김부장.md"},
+		Fix:   &verifyFix{Kind: "move", NewPath: "인물/김부장.md"},
 	}})
 	if n != 1 {
 		t.Fatalf("applied = %d, want 1", n)
@@ -66,16 +66,16 @@ func TestApplyVerifyFixes_Move(t *testing.T) {
 	}
 }
 
-func TestApplyVerifyFixes_Merge(t *testing.T) {
+func TestApplyVerifyFixes_MergeFoldsPagePreservingBothBodies(t *testing.T) {
 	s, wd := newVerifyStore(t)
 	writePageT(t, s, "프로젝트/a.md", "탑솔라", "프로젝트", "AAA 본문")
 	writePageT(t, s, "프로젝트/b.md", "탑솔라", "프로젝트", "BBB 본문")
 
-	n := wd.applyVerifyFixes([]VerifyFinding{{
+	n := wd.applyVerifyFixes([]verifyFinding{{
 		Type:  "duplicate",
 		PageA: "프로젝트/a.md", // keep
 		PageB: "프로젝트/b.md", // fold
-		Fix:   &VerifyFix{Kind: "merge"},
+		Fix:   &verifyFix{Kind: "merge"},
 	}})
 	if n != 1 {
 		t.Fatalf("applied = %d, want 1", n)
@@ -95,10 +95,10 @@ func TestApplyVerifyFixes_Merge(t *testing.T) {
 	}
 }
 
-func TestApplyVerifyFixes_SkipsAdvisoryAndCaps(t *testing.T) {
+func TestApplyVerifyFixes_IgnoresAdvisoryAndCapsAppliedFixCount(t *testing.T) {
 	s, wd := newVerifyStore(t)
 	// One advisory finding (no Fix) must be ignored entirely.
-	advisory := VerifyFinding{Type: "misclassified", PageA: "기타/keep.md", Detail: "low-confidence"}
+	advisory := verifyFinding{Type: "misclassified", PageA: "기타/keep.md", Detail: "low-confidence"}
 	writePageT(t, s, "기타/keep.md", "keep", "기타", "stays put")
 
 	// Cap+1 high-confidence moves — the cap must hold, leaving exactly one behind.
@@ -106,16 +106,16 @@ func TestApplyVerifyFixes_SkipsAdvisoryAndCaps(t *testing.T) {
 	for i := 0; i <= maxAutoVerifyFixes; i++ {
 		names = append(names, fmt.Sprintf("p%02d", i))
 	}
-	var findings []VerifyFinding
+	var findings []verifyFinding
 	for _, name := range names {
 		writePageT(t, s, "기타/"+name+".md", name, "기타", "move me")
-		findings = append(findings, VerifyFinding{
+		findings = append(findings, verifyFinding{
 			Type:  "misclassified",
 			PageA: "기타/" + name + ".md",
-			Fix:   &VerifyFix{Kind: "move", NewPath: "인물/" + name + ".md"},
+			Fix:   &verifyFix{Kind: "move", NewPath: "인물/" + name + ".md"},
 		})
 	}
-	findings = append([]VerifyFinding{advisory}, findings...)
+	findings = append([]verifyFinding{advisory}, findings...)
 
 	n := wd.applyVerifyFixes(findings)
 	if n != maxAutoVerifyFixes {
@@ -137,12 +137,12 @@ func TestApplyVerifyFixes_SkipsAdvisoryAndCaps(t *testing.T) {
 	}
 }
 
-// TestFoldDuplicate_RefusesDistinctMailAnalyses: the shared merge chokepoint is
-// the last-line guard — even if a caller decides two 메일분석 pages are duplicates,
-// different Message IDs mean two different Gmail messages (메일 1통 = 1페이지) and
-// the fold is refused with both pages left intact. A same-ID fold (one mail
-// relocated across buckets) still succeeds.
-func TestFoldDuplicate_RefusesDistinctMailAnalyses(t *testing.T) {
+// TestFoldDuplicate_RefusesDifferentMessageIDsAllowsSameIDAcrossBuckets: the shared
+// merge chokepoint is the last-line guard — even if a caller decides two
+// 메일분석 pages are duplicates, different Message IDs mean two different Gmail
+// messages (메일 1통 = 1페이지) and the fold is refused with both pages left
+// intact. A same-ID fold (one mail relocated across buckets) still succeeds.
+func TestFoldDuplicate_RefusesDifferentMessageIDsAllowsSameIDAcrossBuckets(t *testing.T) {
 	s, _ := newVerifyStore(t)
 	keep := "프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3e4371576a3.md"
 	fold := "프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3aa72de312b.md"
@@ -176,7 +176,7 @@ func TestFoldDuplicate_RefusesDistinctMailAnalyses(t *testing.T) {
 	}
 }
 
-func TestExactDupFinding_KeepsHigherImportance(t *testing.T) {
+func TestExactDupFinding_PicksHigherImportancePageAsKeeperWithMergeFix(t *testing.T) {
 	entries := map[string]IndexEntry{
 		"프로젝트/low.md":  {Title: "탑솔라", Importance: 0.3},
 		"프로젝트/high.md": {Title: "탑솔라", Importance: 0.8},

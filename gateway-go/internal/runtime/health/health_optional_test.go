@@ -103,7 +103,7 @@ func TestCollectOptionalHealthProbesPropagateCancellation(t *testing.T) {
 	}
 }
 
-func TestCollectOptionalHealthProbesRepanicsOnCaller(t *testing.T) {
+func TestCollectOptionalHealthProbesPanicsForCallerToRecover(t *testing.T) {
 	defer func() {
 		if got := recover(); got != "cache probe panic" {
 			t.Fatalf("recovered panic = %v, want cache probe panic", got)

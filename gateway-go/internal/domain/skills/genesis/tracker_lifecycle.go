@@ -36,8 +36,8 @@ type LifecycleLogEntry struct {
 	Result           string                `json:"result,omitempty"`
 	NewVersion       string                `json:"newVersion,omitempty"`
 	SelfHarnessAudit *HarnessEditAudit     `json:"selfHarnessAudit,omitempty"`
-	Provenance       *EvolveProvenance     `json:"provenance,omitempty"`
-	BaselineTest     *RollbackBaselineTest `json:"baselineTest,omitempty"`
+	Provenance       *evolveProvenance     `json:"provenance,omitempty"`
+	BaselineTest     *rollbackBaselineTest `json:"baselineTest,omitempty"`
 }
 
 // genesisLogEntry is the JSONL format for genesis log events.
@@ -83,7 +83,7 @@ func (t *Tracker) LogGenesis(skillName, source, sessionKey, category, descriptio
 	}); err != nil {
 		return err
 	}
-	t.recordEvolutionActivityLocked(SkillActivityGenesis, true, "")
+	t.recordEvolutionActivityLocked(skillActivityGenesis, true, "")
 	t.maybeFireEvolveLocked()
 	return t.markSkillAgentCreatedLocked(skillName, createdAt)
 }
@@ -109,12 +109,12 @@ func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
 // curator's MarkSkillPatched (which only tracks agent-created skills), this
 // records every committed or rejected evolve — including ones on user-authored
 // skills — so the native client can render a complete evolution timeline.
-// EvolveProvenance attributes an evolve decision to the exact evaluator
+// evolveProvenance attributes an evolve decision to the exact evaluator
 // configuration that produced it (RSI P1.5 certificate ledger): the effective
 // meta-artifact versions, the judge identity, and the decision scores.
 // Additive JSONL — older entries simply lack it; P2/P3 consume it as their
 // label substrate (per-version judge accuracy, false-accept attribution).
-type EvolveProvenance struct {
+type evolveProvenance struct {
 	EvolveArtifactVersion string   `json:"evolveArtifactVersion,omitempty"`
 	JudgeArtifactVersion  string   `json:"judgeArtifactVersion,omitempty"`
 	JudgeModel            string   `json:"judgeModel,omitempty"`
@@ -123,14 +123,14 @@ type EvolveProvenance struct {
 	HeldOutMargin         *float64 `json:"heldOutMargin,omitempty"`
 }
 
-// RollbackBaselineTest is the baseline-aware test's verdict at the moment a
+// rollbackBaselineTest is the baseline-aware test's verdict at the moment a
 // watch resolved (observation mode): Disagreement marks the mislabeling class
 // PACE warns about — on a rollback, the legacy threshold fired while the
 // anytime-valid test had NOT rejected (possible false rollback); on a
 // confirm, the test HAD rejected while the threshold confirmed (possible
 // missed regression). These labels accumulate on the lifecycle ledger until
 // there is enough evidence to switch the firing decision over.
-type RollbackBaselineTest struct {
+type rollbackBaselineTest struct {
 	EValue   float64 `json:"eValue"`
 	N        int     `json:"n"`
 	Reject   bool    `json:"reject"`
@@ -152,8 +152,8 @@ type evolveLogEntry struct {
 	Reason           string                `json:"reason,omitempty"`
 	CreatedAt        int64                 `json:"createdAt"`
 	SelfHarnessAudit *HarnessEditAudit     `json:"selfHarnessAudit,omitempty"`
-	Provenance       *EvolveProvenance     `json:"provenance,omitempty"`
-	BaselineTest     *RollbackBaselineTest `json:"baselineTest,omitempty"`
+	Provenance       *evolveProvenance     `json:"provenance,omitempty"`
+	BaselineTest     *rollbackBaselineTest `json:"baselineTest,omitempty"`
 }
 
 // LogEvolve records a committed skill evolution (rewrite applied to disk) and
@@ -165,12 +165,12 @@ func (t *Tracker) LogEvolve(skillName, newVersion, description string) error {
 // LogEvolveWithAudit records a committed skill evolution with structured
 // Self-Harness transition metadata.
 func (t *Tracker) LogEvolveWithAudit(skillName, newVersion, description string, audit HarnessEditAudit) error {
-	return t.LogEvolveWithProvenance(skillName, newVersion, description, audit, nil)
+	return t.logEvolveWithProvenance(skillName, newVersion, description, audit, nil)
 }
 
-// LogEvolveWithProvenance is LogEvolveWithAudit plus the evaluator-attribution
+// logEvolveWithProvenance is LogEvolveWithAudit plus the evaluator-attribution
 // certificate (RSI P1.5). prov may be nil (legacy callers).
-func (t *Tracker) LogEvolveWithProvenance(skillName, newVersion, description string, audit HarnessEditAudit, prov *EvolveProvenance) error {
+func (t *Tracker) logEvolveWithProvenance(skillName, newVersion, description string, audit HarnessEditAudit, prov *evolveProvenance) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
@@ -205,9 +205,9 @@ func (t *Tracker) LogEvolveWithProvenance(skillName, newVersion, description str
 	return nil
 }
 
-// LogEvolveRolledBack records that an evolution was reverted after it regressed
+// logEvolveRolledBack records that an evolution was reverted after it regressed
 // (rollbackThreshold post-evolve failures within the observation window).
-func (t *Tracker) LogEvolveRolledBack(skillName string) error {
+func (t *Tracker) logEvolveRolledBack(skillName string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
@@ -239,17 +239,17 @@ func (t *Tracker) confirmEvolve(skillName string, audit HarnessEditAudit, uses, 
 			"skill", skillName, "uses", uses, "fails", fails, "targetRecurrences", recurred,
 			"clean", clean, "expectedBehaviorChange", audit.ExpectedBehaviorChange)
 	}
-	if err := t.LogEvolveConfirmed(skillName, audit, clean); err != nil && t.logger != nil {
+	if err := t.logEvolveConfirmed(skillName, audit, clean); err != nil && t.logger != nil {
 		t.logger.Warn("genesis: confirm lifecycle log failed", "skill", skillName, "error", err)
 	}
 }
 
-// LogEvolveConfirmed records that an evolution proved out over its post-evolve
+// logEvolveConfirmed records that an evolution proved out over its post-evolve
 // observation window (#1). It is the positive counterpart to LogEvolveRolledBack,
 // so the lifecycle log now carries the outcome of every shipped evolve. clean
 // reports whether the target failure signature never recurred and no failures
 // occurred within the window.
-func (t *Tracker) LogEvolveConfirmed(skillName string, audit HarnessEditAudit, clean bool) error {
+func (t *Tracker) logEvolveConfirmed(skillName string, audit HarnessEditAudit, clean bool) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	reason := "partial: held up but target signature recurred below threshold"
@@ -297,10 +297,10 @@ func (t *Tracker) handleFailedRollback(skillName string) {
 	}
 }
 
-// LogEvolveWatchExpired records a watch that aged out with ZERO post-evolve
+// logEvolveWatchExpired records a watch that aged out with ZERO post-evolve
 // real uses — closed for hygiene, but deliberately a distinct type so it never
 // counts as confirmed (no evidence) nor rolled back in health statistics.
-func (t *Tracker) LogEvolveWatchExpired(skillName string) error {
+func (t *Tracker) logEvolveWatchExpired(skillName string) error {
 	// Hold t.mu like every other lifecycle writer in this file: the mutex
 	// serializes JSONL appends to t.logPath so a concurrent writer cannot
 	// interleave a partial record (reviewer feedback, #3460). Callers
@@ -324,12 +324,12 @@ func (t *Tracker) LogEvolveRejected(skillName, reason string) error {
 // LogEvolveRejectedWithAudit records a rejected skill evolution with structured
 // Self-Harness transition metadata from the candidate that failed validation.
 func (t *Tracker) LogEvolveRejectedWithAudit(skillName, reason string, audit HarnessEditAudit) error {
-	return t.LogEvolveRejectedWithProvenance(skillName, reason, audit, nil)
+	return t.logEvolveRejectedWithProvenance(skillName, reason, audit, nil)
 }
 
-// LogEvolveRejectedWithProvenance is LogEvolveRejectedWithAudit plus the
+// logEvolveRejectedWithProvenance is LogEvolveRejectedWithAudit plus the
 // evaluator-attribution certificate (RSI P1.5). prov may be nil.
-func (t *Tracker) LogEvolveRejectedWithProvenance(skillName, reason string, audit HarnessEditAudit, prov *EvolveProvenance) error {
+func (t *Tracker) logEvolveRejectedWithProvenance(skillName, reason string, audit HarnessEditAudit, prov *evolveProvenance) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
@@ -347,14 +347,14 @@ func (t *Tracker) LogEvolveRejectedWithProvenance(skillName, reason string, audi
 	return nil
 }
 
-// LogCrossSkillRegression records that a committed evolve of sourceSkill made a
+// logCrossSkillRegression records that a committed evolve of sourceSkill made a
 // similar NEIGHBOR skill regress the evolved skill's held-out forbidden/required
 // assertions (#4 cross-skill regression detection). It is an observation only:
 // the evolve is NOT rolled back — a shared-tag/description neighbor failing the
 // evolved skill's contract is a coupling signal worth surfacing, not proof the
 // edit is wrong (the neighbor was never under that contract). neighborSkill is
 // the skill that regressed; sourceSkill is the evolve that triggered the check.
-func (t *Tracker) LogCrossSkillRegression(sourceSkill, neighborSkill, reason string) error {
+func (t *Tracker) logCrossSkillRegression(sourceSkill, neighborSkill, reason string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return jsonlstore.Append(t.logPath, evolveLogEntry{
@@ -366,10 +366,10 @@ func (t *Tracker) LogCrossSkillRegression(sourceSkill, neighborSkill, reason str
 	})
 }
 
-// LogGateExploit records that a synthetic exploit-shaped candidate PASSED the
+// logGateExploit records that a synthetic exploit-shaped candidate PASSED the
 // deterministic preflight (adversarial gate-trap probe, 2605.20744) — a
 // gate-integrity alarm, never an accepted edit (the trap is never committed).
-func (t *Tracker) LogGateExploit(skillName, reason string) error {
+func (t *Tracker) logGateExploit(skillName, reason string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return jsonlstore.Append(t.logPath, evolveLogEntry{
@@ -406,8 +406,8 @@ func (t *Tracker) RecentLifecycleLog(limit int) ([]LifecycleLogEntry, error) {
 	return entries, nil
 }
 
-// SkillsNeedingEvolution returns skills with recent unresolved failure rates.
-func (t *Tracker) SkillsNeedingEvolution(minUses int, maxSuccessRate float64) ([]UsageStats, error) {
+// skillsNeedingEvolution returns skills with recent unresolved failure rates.
+func (t *Tracker) skillsNeedingEvolution(minUses int, maxSuccessRate float64) ([]UsageStats, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 

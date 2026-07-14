@@ -367,10 +367,10 @@ func TestWikiSearch_EmptyQueryReturnsGuidance(t *testing.T) {
 	}
 }
 
-// TestWikiSearch_KoreanPrefixMatch verifies Hangul-aware matching works on
-// a Korean token that appears in a page title. Uses a longer token because
+// TestWikiSearchReturnsKoreanPrefixMatch verifies Hangul-aware matching works
+// on a Korean token that appears in a page title. Uses a longer token because
 // BM25's short-token de-emphasis may filter single-character matches.
-func TestWikiSearch_KoreanPrefixMatch(t *testing.T) {
+func TestWikiSearchReturnsKoreanPrefixMatch(t *testing.T) {
 	store := newTestWikiStore(t)
 	out, err := wikiSearch(context.Background(), store, "레시피", 5)
 	if err != nil {
@@ -381,9 +381,9 @@ func TestWikiSearch_KoreanPrefixMatch(t *testing.T) {
 	}
 }
 
-// TestWikiSearch_Metadata verifies recall can find pages through structured
-// frontmatter, not only title/body text.
-func TestWikiSearch_Metadata(t *testing.T) {
+// TestWikiSearchReturnsPageByMetadata verifies recall can find pages through
+// structured frontmatter, not only title/body text.
+func TestWikiSearchReturnsPageByMetadata(t *testing.T) {
 	store := newTestWikiStore(t)
 	out, err := wikiSearch(context.Background(), store, "overview", 5)
 	if err != nil {
@@ -394,11 +394,11 @@ func TestWikiSearch_Metadata(t *testing.T) {
 	}
 }
 
-// TestWikiSearch_SpecialCharactersSafe verifies that FTS-boolean-shaped or
-// SQL-injection-shaped queries pass through the tokenizer without error.
-// Pure-Go textsearch strips non-letter/non-digit runes; these should not
-// panic or return an error.
-func TestWikiSearch_SpecialCharactersSafe(t *testing.T) {
+// TestWikiSearchHandlesSpecialCharactersWithoutError verifies that
+// FTS-boolean-shaped or SQL-injection-shaped queries pass through the
+// tokenizer without error. Pure-Go textsearch strips non-letter/non-digit
+// runes; these should not panic or return an error.
+func TestWikiSearchHandlesSpecialCharactersWithoutError(t *testing.T) {
 	store := newTestWikiStore(t)
 	queries := []string{
 		`"quoted phrase"`,
@@ -421,10 +421,10 @@ func TestWikiSearch_SpecialCharactersSafe(t *testing.T) {
 	}
 }
 
-// TestWikiSearch_LimitDefaulting verifies limit=0 defaults, and a negative
-// limit is treated like 0. (Schema-level clamping of large values is not
-// exercised here — it happens at RPC boundary.)
-func TestWikiSearch_LimitDefaulting(t *testing.T) {
+// TestWikiSearchNormalizesZeroAndNegativeLimit verifies limit=0 defaults, and
+// a negative limit is treated like 0. (Schema-level clamping of large values
+// is not exercised here — it happens at RPC boundary.)
+func TestWikiSearchNormalizesZeroAndNegativeLimit(t *testing.T) {
 	store := newTestWikiStore(t)
 	out0, err := wikiSearch(context.Background(), store, "Deneb", 0)
 	if err != nil {
@@ -439,9 +439,9 @@ func TestWikiSearch_LimitDefaulting(t *testing.T) {
 	}
 }
 
-// TestWikiSearch_NoResults returns a friendly Korean message when no page
-// matches.
-func TestWikiSearch_NoResults(t *testing.T) {
+// TestWikiSearchReturnsMessageWhenNoMatch returns a friendly Korean message
+// when no page matches.
+func TestWikiSearchReturnsMessageWhenNoMatch(t *testing.T) {
 	store := newTestWikiStore(t)
 	out, err := wikiSearch(context.Background(), store, "xyzzy-unlikely-term-ABCDEF", 5)
 	if err != nil {
@@ -459,10 +459,10 @@ func TestWikiSearch_NoResults(t *testing.T) {
 // the wiki tool is gated by deps.Store presence upstream. Exercising nil
 // here would only enforce an undocumented precondition.)
 
-// TestMemorySystemStatus_Panel: the wiki status action must answer
+// TestWikiStatusDisplaysMemoryPanel: the wiki status action must answer
 // "기억 상태 어때?" in one glance — dreaming liveness, diary footprint,
 // MEMORY.md budget pressure, backup recency.
-func TestMemorySystemStatus_Panel(t *testing.T) {
+func TestWikiStatusDisplaysMemoryPanel(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("DENEB_STATE_DIR", home)
 

@@ -25,7 +25,7 @@ import (
 // context.go — DeferredActivation
 // ---------------------------------------------------------------------------
 
-func TestDeferredActivation_activate(t *testing.T) {
+func TestDeferredActivationActivateReturnsActivatedNames(t *testing.T) {
 	da := NewDeferredActivation()
 	da.Activate([]string{"mail_archive", "calendar"})
 	got := da.ActivatedNames()
@@ -36,7 +36,7 @@ func TestDeferredActivation_activate(t *testing.T) {
 	}
 }
 
-func TestDeferredActivation_multipleMerge(t *testing.T) {
+func TestDeferredActivationMultipleActivateCallsDeduplicate(t *testing.T) {
 	da := NewDeferredActivation()
 	da.Activate([]string{"mail_archive"})
 	da.Activate([]string{"calendar", "mail_archive"}) // duplicate
@@ -116,7 +116,7 @@ func TestRunCache_invalidateByPath_unscopedEntriesRemoved(t *testing.T) {
 	}
 }
 
-func TestIsCacheableTool(t *testing.T) {
+func TestIsCacheableToolReturnsExpectedClassification(t *testing.T) {
 	cacheable := []string{"grep"}
 	for _, name := range cacheable {
 		if !IsCacheableTool(name) {
@@ -132,7 +132,7 @@ func TestIsCacheableTool(t *testing.T) {
 	}
 }
 
-func TestIsMutationTool(t *testing.T) {
+func TestIsMutationToolReturnsExpectedClassification(t *testing.T) {
 	mutations := []string{"write", "edit"}
 	for _, name := range mutations {
 		if !IsMutationTool(name) {
@@ -148,7 +148,7 @@ func TestIsMutationTool(t *testing.T) {
 	}
 }
 
-func TestBuildCacheKey_stripsCompress(t *testing.T) {
+func TestBuildCacheKeyNormalizesAwayCompressField(t *testing.T) {
 	input := json.RawMessage(`{"path":"/src","compress":true}`)
 	got := BuildCacheKey("find", input)
 	// After stripping "compress", the key should not contain it.
@@ -165,7 +165,7 @@ func TestBuildCacheKey_stripsCompress(t *testing.T) {
 	}
 }
 
-func TestBuildCacheKey_stripsRef(t *testing.T) {
+func TestBuildCacheKeyNormalizesAwayRefField(t *testing.T) {
 	input := json.RawMessage(`{"path":"/src","$ref":"tool-abc"}`)
 	got := BuildCacheKey("grep", input)
 	var m map[string]any
@@ -181,7 +181,7 @@ func TestBuildCacheKey_stripsRef(t *testing.T) {
 // turn_context.go
 // ---------------------------------------------------------------------------
 
-func TestTurnContext_waitUnblockedByStore(t *testing.T) {
+func TestTurnContextWaitReturnsAfterStore(t *testing.T) {
 	tc := NewTurnContext()
 
 	done := make(chan struct{})
@@ -208,7 +208,7 @@ func TestTurnContext_waitUnblockedByStore(t *testing.T) {
 	}
 }
 
-func TestTurnContext_toolTiming(t *testing.T) {
+func TestTurnContextToolTimingReturnsAggregatedStats(t *testing.T) {
 	tc := NewTurnContext()
 	tc.Store("t1", &TurnResult{ToolName: "grep", Duration: 100 * time.Millisecond})
 	tc.Store("t2", &TurnResult{ToolName: "grep", Duration: 200 * time.Millisecond})
@@ -242,7 +242,7 @@ func TestTurnContext_toolTiming(t *testing.T) {
 // turn_context.go — DetectCycle
 // ---------------------------------------------------------------------------
 
-func TestDetectCycle_noCycle(t *testing.T) {
+func TestDetectCycleAllowsAcyclicRefs(t *testing.T) {
 	refs := map[string]string{
 		"a": "b",
 		"b": "c",
@@ -252,7 +252,7 @@ func TestDetectCycle_noCycle(t *testing.T) {
 	}
 }
 
-func TestDetectCycle_simpleCycle(t *testing.T) {
+func TestDetectCycleRejectsSimpleCyclicRefs(t *testing.T) {
 	refs := map[string]string{
 		"a": "b",
 		"b": "c",
@@ -263,7 +263,7 @@ func TestDetectCycle_simpleCycle(t *testing.T) {
 	}
 }
 
-func TestDetectCycle_selfLoop(t *testing.T) {
+func TestDetectCycleRejectsSelfLoop(t *testing.T) {
 	refs := map[string]string{
 		"x": "x",
 	}

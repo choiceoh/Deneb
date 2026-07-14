@@ -7,7 +7,7 @@ import "testing"
 // fork run logged "polaris: compaction failed to reduce below budget
 // tokensBefore=5390 tokensAfter=5390 budget=1" after burning every compaction
 // tier on a budget the protected current turn alone exceeds.
-func TestSkipCompactionBudget(t *testing.T) {
+func TestSkipCompactionBudgetReturnsTrueBelowFloor(t *testing.T) {
 	cases := []struct {
 		name   string
 		budget int

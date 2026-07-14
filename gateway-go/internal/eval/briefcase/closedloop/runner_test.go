@@ -183,7 +183,7 @@ func TestRunnerRejectsExecutorFromDifferentCasepackDigest(t *testing.T) {
 	}
 }
 
-func TestRunnerAndHarnessSnapshotAuthenticatedPackProvenance(t *testing.T) {
+func TestRunnerAndHarnessPreserveProvenanceDespiteLaterPackMutation(t *testing.T) {
 	fixture := newLoopFixture(t, []string{"The approved budget is 120."}, "Try again.")
 	defer fixture.close()
 	before, err := fixture.harness.Binding()
@@ -238,7 +238,7 @@ func TestRunnerRejectsSupervisorFingerprintBeforeMismatchedArmRuns(t *testing.T)
 	}
 }
 
-func TestVisibleTrajectoryIncludesPublicDialogueButNeverSealedPlan(t *testing.T) {
+func TestVisibleTrajectoryIncludesPublicDialogueWithoutSealedPlanTokens(t *testing.T) {
 	pack, _, _, _, _ := writeLoopCase(t, "Please retry using only public evidence.")
 	run := &runcontract.RunResult{Episodes: []runcontract.EpisodeResult{
 		{EpisodeID: "initial", Phase: "timeline", Model: "test-model", Text: "I have a draft."},
@@ -263,7 +263,7 @@ func TestVisibleTrajectoryIncludesPublicDialogueButNeverSealedPlan(t *testing.T)
 	}
 }
 
-func TestHiddenFeedbackInputsExtractStateScalarAnswers(t *testing.T) {
+func TestHiddenFeedbackInputsRejectsStateScalarLeaks(t *testing.T) {
 	plan := evalbriefcase.SupervisorPlan{Checkpoints: []evalbriefcase.SupervisorCheckpoint{{
 		Cycle: 1,
 		Checks: []evalbriefcase.Check{
@@ -292,7 +292,7 @@ func TestHiddenFeedbackInputsExtractStateScalarAnswers(t *testing.T) {
 	}
 }
 
-func TestExpectedStateScalarTokensCanonicalizeAllJSONScalars(t *testing.T) {
+func TestExpectedStateScalarTokensNormalizeAllJSONScalars(t *testing.T) {
 	tokens := expectedStateScalarTokens(json.RawMessage(`{"budget":1e2,"approved":true,"optional":null,"label":"final"}`))
 	joined := "\x00" + strings.Join(tokens, "\x00") + "\x00"
 	for _, want := range []string{"budget", "1e2", "100", "approved", "true", "optional", "null", "label", "final"} {
@@ -302,7 +302,7 @@ func TestExpectedStateScalarTokensCanonicalizeAllJSONScalars(t *testing.T) {
 	}
 }
 
-func TestHiddenFeedbackInputsIncludesSupervisorMetadata(t *testing.T) {
+func TestHiddenFeedbackInputsRejectsSupervisorMetadataLeaks(t *testing.T) {
 	plan := evalbriefcase.SupervisorPlan{
 		SchemaVersion: evalbriefcase.SupervisorPlanSchemaVersion,
 		PlanDigest:    strings.Repeat("a", 64),

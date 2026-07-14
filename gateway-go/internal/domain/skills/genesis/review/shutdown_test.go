@@ -7,7 +7,7 @@ import (
 
 // A nudger with no shutdown context wired falls back to context.Background(),
 // preserving the prior (never-cancelled-by-us) behavior.
-func TestNudger_BaseContextDefaultsToBackground(t *testing.T) {
+func TestNudgerBaseContextDefaultsToUncancelledBackground(t *testing.T) {
 	n := NewNudger(nil, NudgerConfig{}, nil)
 	ctx := n.baseContext()
 	if ctx == nil {

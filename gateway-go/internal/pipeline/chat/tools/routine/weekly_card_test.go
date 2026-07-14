@@ -33,7 +33,7 @@ func weeklyCardFixture() weeklyEnvelope {
 	}
 }
 
-func TestComposeWeeklyCard_ValidatesAndShapes(t *testing.T) {
+func TestComposeWeeklyCard_RendersStatsAndBadges(t *testing.T) {
 	msg := composeWeeklyCard(weeklyCardFixture())
 
 	if !strings.HasPrefix(msg, "📋 주간업무보고 — ") {
@@ -84,7 +84,7 @@ func TestComposeWeeklyCard_EmptyWeekStillValidates(t *testing.T) {
 	}
 }
 
-func TestComposeWeeklyCard_EscapesHostileText(t *testing.T) {
+func TestComposeWeeklyCard_RendersHostileTextWithoutBreakingFence(t *testing.T) {
 	env := weeklyCardFixture()
 	// Backticks in a report line must not terminate the outer fence; angle
 	// brackets and quotes must not corrupt markup or attributes.

@@ -533,7 +533,7 @@ func TestDeterministicWeeklyRunFormFailureIsBestEffort(t *testing.T) {
 	}
 }
 
-func TestNewRunnerWiresBoundaries(t *testing.T) {
+func TestNewRunnerWiresCallbacksOnCreate(t *testing.T) {
 	dataFn := func(context.Context) (string, error) { return "data", nil }
 	textFn := func(context.Context) (string, error) { return "text", nil }
 	formFn := func(context.Context) error { return nil }

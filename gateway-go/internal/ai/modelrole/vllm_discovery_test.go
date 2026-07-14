@@ -33,7 +33,7 @@ func newDiscoverySrv(t *testing.T, body string, status int) *httptest.Server {
 
 // A token-gated /models endpoint (e.g. the wormhole router) is discoverable only
 // when the optional apiKey is forwarded as a Bearer token.
-func TestDiscoverServedVllmModels_SendsBearer(t *testing.T) {
+func TestDiscoverServedVllmModelsFailsWithoutBearerAuth(t *testing.T) {
 	var gotAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
@@ -60,7 +60,7 @@ func TestDiscoverServedVllmModels_SendsBearer(t *testing.T) {
 	}
 }
 
-func TestDiscoverServedVllmModels(t *testing.T) {
+func TestDiscoverServedVllmModelsReturnsIDsOrError(t *testing.T) {
 	cases := []struct {
 		name    string
 		body    string
@@ -130,7 +130,7 @@ func TestDiscoverServedVllmModels(t *testing.T) {
 	}
 }
 
-func TestDiscoverServedVllmModelInfos(t *testing.T) {
+func TestDiscoverServedVllmModelInfosParsesMaxModelLen(t *testing.T) {
 	t.Run("parses max_model_len and defaults to zero when absent", func(t *testing.T) {
 		srv := newDiscoverySrv(t, `{"data":[{"id":"step3p7","max_model_len":262144},{"id":"other"}]}`, 200)
 		infos, err := DiscoverServedVllmModelInfos(context.Background(), srv.URL+"/v1")
@@ -150,7 +150,7 @@ func TestDiscoverServedVllmModelInfos(t *testing.T) {
 	})
 }
 
-func TestReconcileVllmModel(t *testing.T) {
+func TestReconcileVllmModelUpdatesOrPreservesConfiguredModel(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	t.Run("non-vllm provider is no-op", func(t *testing.T) {

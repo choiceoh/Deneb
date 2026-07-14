@@ -9,7 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
 )
 
-func TestSkillLifecycleResultJSONCompatibility(t *testing.T) {
+func TestSkillLifecycleResultPreservesJSONShape(t *testing.T) {
 	emptyID := ""
 	skillName := "deploy-helper"
 	action := "archive"

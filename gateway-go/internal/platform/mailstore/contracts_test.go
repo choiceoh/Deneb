@@ -152,7 +152,7 @@ func TestNewRejectsNonDirectoryRoot(t *testing.T) {
 	}
 }
 
-func TestNewSkipsDirectoriesNonJSONLAndCorruptShards(t *testing.T) {
+func TestNew_IgnoresNonJSONLAndCorruptShards(t *testing.T) {
 	root := t.TempDir()
 	msgDir := filepath.Join(root, "messages")
 	if err := os.MkdirAll(filepath.Join(msgDir, "nested.jsonl"), 0o755); err != nil {
@@ -283,7 +283,7 @@ func TestPutConcurrentDuplicateContract(t *testing.T) {
 	}
 }
 
-func TestListOrderingMailboxSinceAndLimits(t *testing.T) {
+func TestList_ReturnsNewestFirstFilteredByMailboxAndSince(t *testing.T) {
 	s := newContractStore(t)
 	putContractMessages(
 		t, s,

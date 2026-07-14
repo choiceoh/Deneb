@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestProjectMatchKeysAndLink(t *testing.T) {
+func TestItemLinkedToProjectMatchesKnownRefsAndRejectsUnrelated(t *testing.T) {
 	keys := projectMatchKeys(
 		"탑솔라",
 		"프로젝트/탑솔라.md",
@@ -34,11 +34,11 @@ func TestProjectMatchKeysAndLink(t *testing.T) {
 	}
 }
 
-// TestProjectMatchKeys_FolderSchemaNoCrossMatch: after the folder-schema
+// TestProjectMatchKeysExcludeSlotLeafRejectsCrossProjectRefs: after the folder-schema
 // migration every rep page ends in 대표.md (logs in 로그.md), so the slot leaf
 // must never act as a match key — otherwise ANY project's rep/log path links to
 // EVERY project. The discriminating leaf of a slot path is its project folder.
-func TestProjectMatchKeys_FolderSchemaNoCrossMatch(t *testing.T) {
+func TestProjectMatchKeysExcludeSlotLeafRejectsCrossProjectRefs(t *testing.T) {
 	keys := projectMatchKeys(
 		"탑솔라",
 		"프로젝트/탑솔라/대표.md",
@@ -77,7 +77,7 @@ func TestProjectMatchKeys_FolderSchemaNoCrossMatch(t *testing.T) {
 	}
 }
 
-func TestMailIDsFromRefs(t *testing.T) {
+func TestMailIDsFromRefsDeduplicatesAndReturnsEmptyForNil(t *testing.T) {
 	refs := []string{
 		"프로젝트/mail-analyses/탑솔라/abc123.md", // → abc123
 		"프로젝트/mail-analyses/탑솔라/def456.md", // → def456
@@ -102,7 +102,7 @@ func TestMailIDsFromRefs(t *testing.T) {
 	}
 }
 
-func TestMailMsgIDFromSource(t *testing.T) {
+func TestMailMsgIDFromSourceParsesPrefixAndReturnsEmptyForNonMailSource(t *testing.T) {
 	cases := map[string]string{
 		"mail:abc123":             "abc123",       // clean form (proposalEventSource strips |title)
 		"mail:abc123|회의 제목":       "abc123",       // legacy form with a title suffix

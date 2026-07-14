@@ -14,7 +14,7 @@ import (
 // mailArchivePath drives the per-call phase-timing log: a "store" hit is the fast
 // in-memory path, while "imap-fallback" / "attachment" are the slow paths that
 // surface at Info so a slow mail_archive call is attributable from the log.
-func TestMailArchivePath(t *testing.T) {
+func TestMailArchivePathReturnsPhaseLabel(t *testing.T) {
 	cases := []struct {
 		action   string
 		usedIMAP bool
@@ -37,13 +37,13 @@ func TestMailArchivePath(t *testing.T) {
 	}
 }
 
-// TestMailArchiveSearchWidensPastDaysWindow: the model routinely attaches a
+// TestMailArchiveSearchWidensWindowToLoadOlderMatch: the model routinely attaches a
 // `days` window to keyword searches even when the user asked for no recency, so
 // a match older than the window returned zero from the fast store and paid a
 // slow IMAP round-trip (which applies the same window). The search must instead
 // widen to all-time in the store and surface the older match, labeled so the
 // model does not present it as recent.
-func TestMailArchiveSearchWidensPastDaysWindow(t *testing.T) {
+func TestMailArchiveSearchWidensWindowToLoadOlderMatch(t *testing.T) {
 	// Store-only: empty IMAP creds ⇒ imapReady=false, so a store miss cannot fall
 	// back — the widen is the only way the older mail can surface.
 	t.Setenv("DENEB_ARCHIVE_IMAP_USER", "")

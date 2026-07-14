@@ -2,7 +2,7 @@ package metrics
 
 import "testing"
 
-func TestCacheHitTracker(t *testing.T) {
+func TestCacheHitTracker_AccumulatesAndIgnoresNonPositiveRecords(t *testing.T) {
 	var c CacheHitTracker
 
 	// Empty tracker: ratio is 0, no division by zero.

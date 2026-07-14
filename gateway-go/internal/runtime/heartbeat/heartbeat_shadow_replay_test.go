@@ -32,7 +32,7 @@ func seedShadowFixtures(t *testing.T, path string, n int) {
 // A candidate that keeps quiet fixtures quiet and fixes an original failure
 // accepts; one that goes silent on actionable fixtures rejects; a too-small
 // corpus refuses to judge.
-func TestRunHeartbeatShadowReplay_Verdicts(t *testing.T) {
+func TestRunHeartbeatShadowReplayAcceptRejectOrInsufficientVerdict(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/fixtures.jsonl"
 	seedShadowFixtures(t, path, 8)
@@ -97,7 +97,7 @@ func TestRunHeartbeatShadowReplay_Verdicts(t *testing.T) {
 
 // Error-outcome fixtures are excluded from the corpus, and identical
 // performance on both sides rejects for lack of improvement.
-func TestRunHeartbeatShadowReplay_ExclusionsAndNoImprovement(t *testing.T) {
+func TestRunHeartbeatShadowReplayExcludesErrorsAndRejectsNoImprovement(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/fixtures.jsonl"
 	seedShadowFixtures(t, path, 6)

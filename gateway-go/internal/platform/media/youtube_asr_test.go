@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestYtPlayerClientArgs(t *testing.T) {
+func TestYtPlayerClientArgsReturnsNilByDefaultAndFlagWhenOverridden(t *testing.T) {
 	// Default is empty — forcing a player client broke audio downloads and gave
 	// no caption benefit, so the default path uses yt-dlp's own client choice.
 	t.Setenv("DENEB_YTDLP_PLAYER_CLIENT", "")
@@ -22,7 +22,7 @@ func TestYtPlayerClientArgs(t *testing.T) {
 	}
 }
 
-func TestAsrAudioCapSec(t *testing.T) {
+func TestAsrAudioCapSecReturnsOverrideOrDefaultOnInvalidEnv(t *testing.T) {
 	t.Setenv("DENEB_YT_ASR_CAP_SEC", "")
 	if got := asrAudioCapSec(); got != 600 {
 		t.Errorf("default cap = %d, want 600", got)
@@ -37,7 +37,7 @@ func TestAsrAudioCapSec(t *testing.T) {
 	}
 }
 
-func TestTranscriptViaASR_NoTranscriberIsNoop(t *testing.T) {
+func TestTranscriptViaASRReturnsEmptyWhenTranscriberIsNil(t *testing.T) {
 	// With no AudioTranscriber wired, the fallback must be a clean no-op (never
 	// attempt a download) so captions-only deployments behave as before.
 	prev := AudioTranscriber

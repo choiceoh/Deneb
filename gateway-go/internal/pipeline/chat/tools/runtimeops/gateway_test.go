@@ -71,7 +71,7 @@ func parseEnvelope(t *testing.T, s string) map[string]any {
 
 // ── status ────────────────────────────────────────────────────────────────
 
-func TestGatewayStatusHappyPath(t *testing.T) {
+func TestGatewayStatusReturnsVersionPortAndUptime(t *testing.T) {
 	cfgPath := writeTempConfig(t, `{"gateway": {"port": 19999}}`)
 	GatewayVersion = "test-1.2.3"
 	tool := ToolGatewayWithDeps("", GatewayDeps{
@@ -96,7 +96,7 @@ func TestGatewayStatusHappyPath(t *testing.T) {
 
 // ── config_get ────────────────────────────────────────────────────────────
 
-func TestGatewayConfigGetDottedPath(t *testing.T) {
+func TestGatewayConfigGetReturnsDottedPathValue(t *testing.T) {
 	cfgPath := writeTempConfig(t, `{"model": {"main": "glm-5.1", "fallback": "qwen"}}`)
 	tool := ToolGatewayWithDeps("", GatewayDeps{ConfigPath: cfgPath})
 
@@ -117,7 +117,7 @@ func TestGatewayConfigGetDottedPath(t *testing.T) {
 
 // ── config_set ────────────────────────────────────────────────────────────
 
-func TestGatewayConfigSetRequiresApproval(t *testing.T) {
+func TestGatewayConfigSetReturnsApprovalThenWritesOnConfirm(t *testing.T) {
 	cfgPath := writeTempConfig(t, `{"model": {"main": "glm-5.1"}}`)
 	tool := ToolGatewayWithDeps("", GatewayDeps{ConfigPath: cfgPath})
 
@@ -201,7 +201,7 @@ func TestGatewayConfigSetRejectsObjectReplacement(t *testing.T) {
 	}
 }
 
-func TestGatewayConfigSetRequiresPath(t *testing.T) {
+func TestGatewayConfigSetReturnsErrorWithoutPath(t *testing.T) {
 	cfgPath := writeTempConfig(t, `{}`)
 	tool := ToolGatewayWithDeps("", GatewayDeps{ConfigPath: cfgPath})
 	raw, _ := json.Marshal(map[string]any{"action": "config_set"})
@@ -315,7 +315,7 @@ func TestGatewayConfigSetConfirmPayloadMismatch(t *testing.T) {
 }
 
 // Legacy bulk writes now share the secret block + approval gate.
-func TestGatewayConfigPatchApprovalFlow(t *testing.T) {
+func TestGatewayConfigPatchRejectsSecretsAndRequiresApproval(t *testing.T) {
 	cfgPath := writeTempConfig(t, `{"model": {"main": "a"}}`)
 	tool := ToolGatewayWithDeps("", GatewayDeps{ConfigPath: cfgPath})
 

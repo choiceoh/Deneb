@@ -2,7 +2,7 @@ package config
 
 import "testing"
 
-func TestLookupSchema(t *testing.T) {
+func TestLookupSchemaResolvesKnownPathsReturnsNilForUnknown(t *testing.T) {
 	tests := []struct {
 		name     string
 		path     string
@@ -82,7 +82,7 @@ func TestLookupSchema(t *testing.T) {
 	}
 }
 
-func TestLookupSchemaDefaults(t *testing.T) {
+func TestLookupSchemaReturnsPortDefaultValue(t *testing.T) {
 	node := LookupSchema("gateway.port")
 	if node == nil {
 		t.Fatal("gateway.port should exist")
@@ -92,7 +92,7 @@ func TestLookupSchemaDefaults(t *testing.T) {
 	}
 }
 
-func TestLookupSchemaEnums(t *testing.T) {
+func TestLookupSchemaReturnsEnumValues(t *testing.T) {
 	node := LookupSchema("gateway.bind")
 	if node == nil {
 		t.Fatal("gateway.bind should exist")

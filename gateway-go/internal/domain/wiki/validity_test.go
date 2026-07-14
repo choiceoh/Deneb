@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestValidityFactor(t *testing.T) {
+func TestValidityFactor_ScalesWithAgeArchivedAndSupersededStatus(t *testing.T) {
 	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
 	cases := []struct {
 		name string
@@ -30,10 +30,11 @@ func TestValidityFactor(t *testing.T) {
 	}
 }
 
-// TestSearch_DemotesSupersededPages: a page whose facts were replaced must
-// rank below the page that replaced it, even with near-identical text — the
-// exact "year-old port number presented as current" failure recall had.
-func TestSearch_DemotesSupersededPages(t *testing.T) {
+// TestSearch_DemotesSupersededPageBelowReplacementAndPersistsAcrossRestart: a page
+// whose facts were replaced must rank below the page that replaced it, even
+// with near-identical text — the exact "year-old port number presented as
+// current" failure recall had.
+func TestSearch_DemotesSupersededPageBelowReplacementAndPersistsAcrossRestart(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

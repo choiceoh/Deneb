@@ -1,6 +1,6 @@
 // recall_provenance_test.go — unit tests for applyProvenancePenalty
 // (recall_provenance.go). The end-to-end behavior through the real recall
-// pipeline is covered by recall_gain_test.go:TestRecallSynthesisDrift; here we
+// pipeline is covered by recall_gain_test.go:TestRecallSynthesisDriftPreservesCorrectValueRanking; here we
 // drive the function directly on constructed recallEvidence so the rule's two
 // guards (type-aware, entity-scoped) are checked in isolation.
 package recall
@@ -18,7 +18,7 @@ func topEvidenceKind(ev []recallEvidence) string {
 	return kind
 }
 
-func TestApplyProvenancePenalty(t *testing.T) {
+func TestApplyProvenancePenaltyUpdatesWikiScoreWhenDrifted(t *testing.T) {
 	wiki := func(note string, score float64) recallEvidence {
 		return recallEvidence{Kind: "wiki", Source: "거래/x.md", Note: note, Score: score}
 	}

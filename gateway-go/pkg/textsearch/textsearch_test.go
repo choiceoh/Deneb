@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestBasicSearch(t *testing.T) {
+func TestSearchReturnsMatchingDocuments(t *testing.T) {
 	idx := New()
 	idx.Upsert("doc1", "The quick brown fox")
 	idx.Upsert("doc2", "The lazy brown dog")
@@ -17,7 +17,7 @@ func TestBasicSearch(t *testing.T) {
 	}
 }
 
-func TestANDSearch(t *testing.T) {
+func TestSearchReturnsOnlyDocsMatchingAllTerms(t *testing.T) {
 	idx := New()
 	idx.Upsert("doc1", "brown fox jumps")
 	idx.Upsert("doc2", "brown dog sleeps")
@@ -45,7 +45,7 @@ func TestORFallback(t *testing.T) {
 	}
 }
 
-func TestHangulSearch(t *testing.T) {
+func TestSearchReturnsDocsWhenHangulPrefixMatches(t *testing.T) {
 	idx := New()
 	idx.Upsert("page1", "DGX Spark 설정 가이드", "GPU 설정 방법을 설명합니다")
 	idx.Upsert("page2", "네트워크 설정", "네트워크 인터페이스 구성")
@@ -57,7 +57,7 @@ func TestHangulSearch(t *testing.T) {
 	}
 }
 
-func TestHangulPrefixScoresCandidate(t *testing.T) {
+func TestHangulPrefixSearchReturnsPositiveScore(t *testing.T) {
 	idx := New()
 	idx.Upsert("page1", "라면 레시피", "계란을 넣고 3분 끓입니다")
 
@@ -73,7 +73,7 @@ func TestHangulPrefixScoresCandidate(t *testing.T) {
 	}
 }
 
-func TestDocFreqAndRarity(t *testing.T) {
+func TestDocFreqAndNormalizedRarityAcrossTermFrequencies(t *testing.T) {
 	idx := New()
 	// 10 docs: "common" in all 10, "rare" in 1. Hangul "보고" in 4 (+ prefix
 	// "보고서" counts via Hangul-prefix matching, same as scoring).
@@ -171,7 +171,7 @@ func TestNormalizedRarityNStable(t *testing.T) {
 	}
 }
 
-func TestUpsertReplace(t *testing.T) {
+func TestUpsertReplacesDocumentContentOnUpdate(t *testing.T) {
 	idx := New()
 	idx.Upsert("doc1", "old content here")
 
@@ -193,7 +193,7 @@ func TestUpsertReplace(t *testing.T) {
 	}
 }
 
-func TestRemove(t *testing.T) {
+func TestRemoveDeletesDocumentFromIndex(t *testing.T) {
 	idx := New()
 	idx.Upsert("doc1", "hello world")
 	idx.Remove("doc1")
@@ -208,7 +208,7 @@ func TestRemove(t *testing.T) {
 	}
 }
 
-func TestLimit(t *testing.T) {
+func TestSearchLimitTruncatesHitCount(t *testing.T) {
 	idx := New()
 	for i := 0; i < 20; i++ {
 		idx.Upsert(string(rune('a'+i)), "common word")
@@ -220,7 +220,7 @@ func TestLimit(t *testing.T) {
 	}
 }
 
-func TestSnippet(t *testing.T) {
+func TestSearchHitReturnsNonEmptySnippet(t *testing.T) {
 	idx := New()
 	idx.Upsert("doc1", "This is a long document about Go programming and testing frameworks")
 
@@ -233,7 +233,7 @@ func TestSnippet(t *testing.T) {
 	}
 }
 
-func TestScoreOrdering(t *testing.T) {
+func TestSearchReturnsHitsOrderedByDescendingScore(t *testing.T) {
 	idx := New()
 	idx.Upsert("high", "fox fox fox fox fox") // high TF for "fox"
 	idx.Upsert("low", "the fox and the dog")  // low TF for "fox"
@@ -250,7 +250,7 @@ func TestScoreOrdering(t *testing.T) {
 	}
 }
 
-func TestTokenize(t *testing.T) {
+func TestTokenizeNormalizesCaseAndSplitsPunctuation(t *testing.T) {
 	tokens := tokenize("Hello, World! 안녕하세요")
 	if len(tokens) != 3 {
 		t.Fatalf("expected 3 tokens, got %d: %v", len(tokens), tokens)

@@ -98,7 +98,7 @@ func setDreamerNoTimer(svc *Service, d Dreamer) {
 	svc.mu.Unlock()
 }
 
-func TestServiceIncrementDreamTurnRunsDreamCycle(t *testing.T) {
+func TestServiceIncrementDreamTurnEmitsDreamEvents(t *testing.T) {
 	svc := NewService(nil)
 	d := &fakeDreamer{shouldDream: true, runReport: &DreamReport{FactsVerified: 2, DurationMs: 250}}
 	n := &fakeNotifier{}
@@ -239,7 +239,7 @@ func (p *panicingTask) Run(context.Context) error {
 	panic("test panic")
 }
 
-func TestService_ExecuteTask_RecordsPanic(t *testing.T) {
+func TestService_ExecuteTask_RecoversFromPanic(t *testing.T) {
 	svc := NewService(nil)
 	svc.taskStatus["panicker"] = &TaskStatus{Name: "panicker"}
 
@@ -261,7 +261,7 @@ func TestService_ExecuteTask_RecordsPanic(t *testing.T) {
 	}
 }
 
-func TestService_ExecuteTask_SkipsIfRunning(t *testing.T) {
+func TestService_ExecuteTask_IgnoresRunningTask(t *testing.T) {
 	svc := NewService(nil)
 	svc.taskStatus["busy"] = &TaskStatus{Name: "busy", Running: true}
 
@@ -315,10 +315,10 @@ func TestService_ConcurrentIncrementDreamTurn(t *testing.T) {
 	}
 }
 
-// TestService_BacklogDrain_RetriggersUntilDrained verifies that a cycle
+// TestService_BacklogDrain_RetryUntilDrained verifies that a cycle
 // reporting MoreBacklog schedules a near-term re-run, and the chain stops once a
 // cycle reports the backlog drained — no infinite loop.
-func TestService_BacklogDrain_RetriggersUntilDrained(t *testing.T) {
+func TestService_BacklogDrain_RetryUntilDrained(t *testing.T) {
 	restore := drainRetriggerDelay
 	drainRetriggerDelay = 5 * time.Millisecond
 	defer func() { drainRetriggerDelay = restore }()
@@ -493,8 +493,8 @@ func TestService_PeriodicTask_ErrorTracking(t *testing.T) {
 	}
 }
 
-// TestService_PeriodicTask_Success verifies successful task execution clears errors.
-func TestService_PeriodicTask_Success(t *testing.T) {
+// TestService_PeriodicTask_ClearsErrorOnSuccess verifies successful task execution clears errors.
+func TestService_PeriodicTask_ClearsErrorOnSuccess(t *testing.T) {
 	svc := NewService(nil)
 	task := newFakeTask("ok-task", time.Hour)
 

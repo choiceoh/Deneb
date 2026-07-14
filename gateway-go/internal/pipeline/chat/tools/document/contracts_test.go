@@ -117,7 +117,7 @@ func TestCSVToMarkdownContract(t *testing.T) {
 	}
 }
 
-func TestCSVToMarkdownCapsRowsAndReportsOmission(t *testing.T) {
+func TestCSVToMarkdownTruncatesRowsAndReportsOmission(t *testing.T) {
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
 	if err := w.Write([]string{"row", "value"}); err != nil {
@@ -148,7 +148,7 @@ func TestCSVToMarkdownCapsRowsAndReportsOmission(t *testing.T) {
 	}
 }
 
-func TestOOXMLPartNaturalOrdering(t *testing.T) {
+func TestOOXMLPartLessReturnsNaturalOrder(t *testing.T) {
 	tests := []struct {
 		name   string
 		prefix string
@@ -210,7 +210,7 @@ func TestOOXMLPartNaturalOrdering(t *testing.T) {
 	}
 }
 
-func TestXLSXNaturalSheetOrderEndToEnd(t *testing.T) {
+func TestXLSXToTextPreservesNaturalSheetOrder(t *testing.T) {
 	data := makeContractZip(t, map[string]string{
 		"xl/worksheets/sheet10.xml": `<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>ten</t></is></c></row></sheetData></worksheet>`,
 		"xl/worksheets/sheet2.xml":  `<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>two</t></is></c></row></sheetData></worksheet>`,
@@ -228,7 +228,7 @@ func TestXLSXNaturalSheetOrderEndToEnd(t *testing.T) {
 	}
 }
 
-func TestPPTXNaturalSlideOrderEndToEnd(t *testing.T) {
+func TestPPTXToTextPreservesNaturalSlideOrder(t *testing.T) {
 	slide := func(text string) string {
 		return `<p:sld xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>` + text + `</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`
 	}
@@ -278,7 +278,7 @@ func TestXLSXCellValueContract(t *testing.T) {
 	}
 }
 
-func TestXLSXSharedStringRichTextAndInlineCells(t *testing.T) {
+func TestXLSXToTextReadsSharedStringsAndInlineCells(t *testing.T) {
 	data := makeContractZip(t, map[string]string{
 		"xl/sharedStrings.xml": `<sst><si><r><t>rich </t></r><r><t>text</t></r></si><si><t>plain</t></si></sst>`,
 		"xl/worksheets/sheet1.xml": `<worksheet><sheetData>` +
@@ -457,7 +457,7 @@ func TestFileClassificationContract(t *testing.T) {
 	}
 }
 
-func TestExtractableDocumentMatrix(t *testing.T) {
+func TestIsExtractableDocumentReturnsExpectedForEachFormat(t *testing.T) {
 	tests := []struct {
 		name string
 		mime string

@@ -76,9 +76,9 @@ func TestFileTranscriptStore_CreatesDir(t *testing.T) {
 	}
 }
 
-// TestFileTranscriptStore_RedactsLegacyText covers the common path where
+// TestFileTranscriptStoreRedactsSecretsOnWrite covers the common path where
 // ChatMessage.Content is a plain JSON string (legacy format).
-func TestFileTranscriptStore_RedactsLegacyText(t *testing.T) {
+func TestFileTranscriptStoreRedactsSecretsOnWrite(t *testing.T) {
 	dir := t.TempDir()
 	store := NewFileTranscriptStore(dir)
 
@@ -98,9 +98,10 @@ func TestFileTranscriptStore_RedactsLegacyText(t *testing.T) {
 	}
 }
 
-// TestFileTranscriptStore_RedactsRichBlocks covers the ContentBlock array
-// shape used by newer assistant messages with tool_use / tool_result blocks.
-func TestFileTranscriptStore_RedactsRichBlocks(t *testing.T) {
+// TestFileTranscriptStoreRedactsRichBlockSecretsOnWrite covers the
+// ContentBlock array shape used by newer assistant messages with tool_use /
+// tool_result blocks.
+func TestFileTranscriptStoreRedactsRichBlockSecretsOnWrite(t *testing.T) {
 	dir := t.TempDir()
 	store := NewFileTranscriptStore(dir)
 
@@ -181,7 +182,7 @@ func TestFileTranscriptStore_ConcurrentAppendKeepsEveryJSONRecord(t *testing.T) 
 	}
 }
 
-func TestMemoryTranscriptStore_SearchHonorsLimitAndSessionBoundaries(t *testing.T) {
+func TestMemoryTranscriptStoreSearchRespectsLimitAndSessionBoundary(t *testing.T) {
 	store := NewMemoryTranscriptStore()
 	for _, tc := range []struct {
 		key, text string

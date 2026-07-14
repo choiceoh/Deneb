@@ -48,7 +48,7 @@ func TestStoreSetResetAndReload(t *testing.T) {
 	}
 }
 
-func TestStoreValidation(t *testing.T) {
+func TestStoreRejectsEmptyMissingAndReadOnlySets(t *testing.T) {
 	store := NewStore("", []Template{
 		{ID: "editable", Title: "Editable", DefaultText: "default", Editable: true},
 		{ID: "readonly", Title: "Read only", DefaultText: "default", Editable: false},

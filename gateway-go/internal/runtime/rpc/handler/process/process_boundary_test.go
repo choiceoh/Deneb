@@ -49,7 +49,7 @@ func TestACPMethodsNilAndCompleteSurface(t *testing.T) {
 	}
 }
 
-func TestACPStatusCountsLifecycleAndBindings(t *testing.T) {
+func TestACPStatusReturnsAgentAndBindingCounts(t *testing.T) {
 	registry := acp.NewACPRegistry()
 	registry.Register(acp.ACPAgent{ID: "idle", ParentID: "p", Status: "idle"})
 	registry.Register(acp.ACPAgent{ID: "running", ParentID: "p", Status: "running"})
@@ -312,7 +312,7 @@ func TestCronAdvancedAndServiceMethodsNilDependencies(t *testing.T) {
 	emitCronChanged(nil, "added", "id")
 }
 
-func TestCronAddValidationSuccessAndBroadcast(t *testing.T) {
+func TestCronAddRejectsInvalidInputAndBroadcastsOnSuccess(t *testing.T) {
 	svc := newCronService(t)
 	type changed struct{ action, id string }
 	var events []changed

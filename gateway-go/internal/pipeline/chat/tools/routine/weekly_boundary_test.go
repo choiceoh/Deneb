@@ -32,7 +32,7 @@ func weeklyTestMeta(title, sogan, updated, due string, importance float64) wiki.
 	return meta
 }
 
-func TestCollectWeeklyAppliesActivityGroupingAndUrgencyTransitions(t *testing.T) {
+func TestCollectWeeklyComputesGroupsAndBadgesAtWeekBoundary(t *testing.T) {
 	root := t.TempDir()
 	now := time.Date(2026, 7, 13, 14, 30, 0, 0, kstLocation) // Monday
 	body := "## 진행 상황\n- 첫 작업\n- 최종 작업\n\n## 다음 액션\n- 후속 실행\n"
@@ -141,7 +141,7 @@ func TestCollectWeeklyReportDataSerializationBoundary(t *testing.T) {
 	}
 }
 
-func TestWeeklyProjectionHelpersAtInputBoundaries(t *testing.T) {
+func TestWeeklyProjectionHelpersAtInputBoundary(t *testing.T) {
 	if got := weeklySoganFromTags([]string{" misc ", " 소관: 2팀 ", "소관:1팀"}); got != "2팀" {
 		t.Errorf("weeklySoganFromTags = %q", got)
 	}
@@ -176,7 +176,7 @@ func TestWeeklyProjectionHelpersAtInputBoundaries(t *testing.T) {
 	}
 }
 
-func TestWeeklyExtractAndBulletHelpersBoundOutput(t *testing.T) {
+func TestWeeklyExtractAndBulletHelpersTruncateAtBoundary(t *testing.T) {
 	body := "intro\n## 현재 진행 상황\n- first\n- second\n\n## 다음 액션 및 열린 이슈\n* [x] **ship it**\n\n## 종료\n- hidden"
 	if got := weeklyExtractSection(body, "진행 상황"); got != "- first\n- second" {
 		t.Errorf("progress section = %q", got)
@@ -232,7 +232,7 @@ func TestWeeklyExtractAndBulletHelpersBoundOutput(t *testing.T) {
 	}
 }
 
-func TestComposeWeeklyHTMLEscapesAllDynamicText(t *testing.T) {
+func TestComposeWeeklyHTMLRendersEscapedDynamicText(t *testing.T) {
 	env := weeklyEnvelope{
 		Office:      `<script>alert("office")</script>`,
 		Reporter:    `operator & "owner"`,

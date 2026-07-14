@@ -22,7 +22,7 @@ func (f toolExecFunc) Execute(ctx context.Context, name string, input json.RawMe
 
 func vetAll(string) bool { return true }
 
-func TestSegmentToolCalls(t *testing.T) {
+func TestSegmentToolCalls_SplitsAtEachVetBoundary(t *testing.T) {
 	call := func(name, input string) llm.ContentBlock {
 		return llm.ContentBlock{Type: "tool_use", Name: name, Input: json.RawMessage(input)}
 	}
@@ -88,11 +88,11 @@ func TestSegmentToolCalls(t *testing.T) {
 	}
 }
 
-// TestExecuteToolsParallel_OverlapsAndKeepsOrder: three 120ms calls must
+// TestExecuteToolsParallel_OverlapsButPreservesCallOrder: three 120ms calls must
 // finish in well under serial time (360ms), and the result blocks, result-hook
 // emissions, and ToolUseIDs must all follow the CALL order even though the
 // executions complete in a different order.
-func TestExecuteToolsParallel_OverlapsAndKeepsOrder(t *testing.T) {
+func TestExecuteToolsParallel_OverlapsButPreservesCallOrder(t *testing.T) {
 	sleeps := map[string]time.Duration{"tu_0": 120 * time.Millisecond, "tu_1": 60 * time.Millisecond, "tu_2": 10 * time.Millisecond}
 	exec := toolExecFunc(func(ctx context.Context, name string, input json.RawMessage) (string, error) {
 		var p struct {
@@ -143,11 +143,11 @@ func TestExecuteToolsParallel_OverlapsAndKeepsOrder(t *testing.T) {
 	}
 }
 
-// TestToolResultMetadataAttached: a tool that writes to the per-call toolmeta
-// collector gets its values attached to the result block's Metadata — on both
-// the sequential and the parallel path — and calls that set nothing keep the
-// field absent.
-func TestToolResultMetadataAttached(t *testing.T) {
+// TestToolResultMetadata_PresentOrMissingAcrossPaths: a tool that writes to the
+// per-call toolmeta collector gets its values attached to the result block's
+// Metadata — on both the sequential and the parallel path — and calls that set
+// nothing keep the field absent.
+func TestToolResultMetadata_PresentOrMissingAcrossPaths(t *testing.T) {
 	exec := toolExecFunc(func(ctx context.Context, _ string, input json.RawMessage) (string, error) {
 		if strings.Contains(string(input), "meta") {
 			toolmeta.Set(ctx, "activatedTools", []string{"graphify"})

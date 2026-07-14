@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestPureGrepCharacterizesScopeOrderingCaseAndLimit(t *testing.T) {
+func TestPureGrepScopeOrderingCaseAndLimitTruncation(t *testing.T) {
 	grep, workspace := newPureGrepTestTool(t)
 	writePureGrepFixture(t, workspace, "a.txt", "Needle alpha\nother\n")
 	writePureGrepFixture(t, workspace, "nested/b.txt", "needle beta\nNEEDLE gamma\n")

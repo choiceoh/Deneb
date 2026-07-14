@@ -296,52 +296,84 @@ func (t OrgTree) Validate() error {
 			return fmt.Errorf("org: duplicate node id %q", id)
 		}
 		byID[id] = 1
-		if strings.TrimSpace(n.Name) == "" {
-			return fmt.Errorf("org: node %q has empty name", id)
-		}
-		if !validNodeTypes[n.Type] {
-			return fmt.Errorf("org: node %q has invalid type %q (want group|company|division|team)", id, n.Type)
-		}
-		for _, m := range n.Members {
-			if strings.TrimSpace(m.Name) == "" {
-				return fmt.Errorf("org: node %q has a member with empty name", id)
-			}
-			if r := strings.TrimSpace(m.Rank); r != "" && !validRanks[r] {
-				return fmt.Errorf("org: node %q member %q has invalid rank %q", id, m.Name, r)
-			}
-			if pos := strings.TrimSpace(m.Position); pos != "" && !validPositions[pos] {
-				return fmt.Errorf("org: node %q member %q has invalid position %q", id, m.Name, pos)
-			}
+		if err := validateNodeShape(id, n); err != nil {
+			return err
 		}
 	}
 
 	// Parent existence + lane uniqueness.
 	seenLane := make(map[string]string) // lane key → owning node id
 	for _, n := range t.Nodes {
-		if p := strings.TrimSpace(n.ParentID); p != "" {
-			if _, ok := byID[p]; !ok {
-				return fmt.Errorf("org: node %q references missing parent %q", n.ID, p)
-			}
-			if p == n.ID {
-				return fmt.Errorf("org: node %q is its own parent", n.ID)
-			}
+		if err := validateNodeParent(n, byID); err != nil {
+			return err
 		}
-		if lane := strings.TrimSpace(n.Lane); lane != "" {
-			// "unclassified" is the dashboard's reserved holding-lane key
-			// (classification.LaneUnclassified). A chart lane that claimed it
-			// would collide with the triage column groupByLane appends, so
-			// reject it here rather than render two columns with the same key.
-			if lane == string(classification.LaneUnclassified) {
-				return fmt.Errorf("org: node %q uses reserved lane key %q", n.ID, lane)
-			}
-			if owner, dup := seenLane[lane]; dup {
-				return fmt.Errorf("org: lane key %q used by both %q and %q", lane, owner, n.ID)
-			}
-			seenLane[lane] = n.ID
+		if err := validateNodeLane(n, seenLane); err != nil {
+			return err
 		}
 	}
 
 	return t.checkNoCycles(byID)
+}
+
+// validateNodeShape checks one node's name, type, and member fields. id is
+// the node's trimmed ID (already checked non-empty and unique).
+func validateNodeShape(id string, n OrgNode) error {
+	if strings.TrimSpace(n.Name) == "" {
+		return fmt.Errorf("org: node %q has empty name", id)
+	}
+	if !validNodeTypes[n.Type] {
+		return fmt.Errorf("org: node %q has invalid type %q (want group|company|division|team)", id, n.Type)
+	}
+	for _, m := range n.Members {
+		if strings.TrimSpace(m.Name) == "" {
+			return fmt.Errorf("org: node %q has a member with empty name", id)
+		}
+		if r := strings.TrimSpace(m.Rank); r != "" && !validRanks[r] {
+			return fmt.Errorf("org: node %q member %q has invalid rank %q", id, m.Name, r)
+		}
+		if pos := strings.TrimSpace(m.Position); pos != "" && !validPositions[pos] {
+			return fmt.Errorf("org: node %q member %q has invalid position %q", id, m.Name, pos)
+		}
+	}
+	return nil
+}
+
+// validateNodeParent checks that a non-root node's ParentID references an
+// existing node other than itself. byID is the full validated id set.
+func validateNodeParent(n OrgNode, byID map[string]int) error {
+	p := strings.TrimSpace(n.ParentID)
+	if p == "" {
+		return nil
+	}
+	if _, ok := byID[p]; !ok {
+		return fmt.Errorf("org: node %q references missing parent %q", n.ID, p)
+	}
+	if p == n.ID {
+		return fmt.Errorf("org: node %q is its own parent", n.ID)
+	}
+	return nil
+}
+
+// validateNodeLane checks a lane-tagged node's lane key against the reserved
+// key and the tree-wide uniqueness ledger (seenLane, lane key → owning node
+// id), registering the key on success.
+func validateNodeLane(n OrgNode, seenLane map[string]string) error {
+	lane := strings.TrimSpace(n.Lane)
+	if lane == "" {
+		return nil
+	}
+	// "unclassified" is the dashboard's reserved holding-lane key
+	// (classification.LaneUnclassified). A chart lane that claimed it
+	// would collide with the triage column groupByLane appends, so
+	// reject it here rather than render two columns with the same key.
+	if lane == string(classification.LaneUnclassified) {
+		return fmt.Errorf("org: node %q uses reserved lane key %q", n.ID, lane)
+	}
+	if owner, dup := seenLane[lane]; dup {
+		return fmt.Errorf("org: lane key %q used by both %q and %q", lane, owner, n.ID)
+	}
+	seenLane[lane] = n.ID
+	return nil
 }
 
 // checkNoCycles walks each node's parent chain; if following parents revisits a

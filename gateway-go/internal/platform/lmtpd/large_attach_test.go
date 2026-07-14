@@ -5,7 +5,7 @@ import "testing"
 // Mirrors the real tsgw.topsolar.kr 대용량첨부 widget: a largeUpDownLoader div with
 // one <a> per file (download endpoint mail002A31), an <img> thumbnail
 // (mail002A30), plus ordinary body links that must NOT be treated as downloads.
-func TestExtractLargeAttachmentLinks(t *testing.T) {
+func TestExtractLargeAttachmentLinksReturnsDecodedHrefAndFilename(t *testing.T) {
 	body := `<html><body>
 <div class="largeUpDownLoader">
   <div class="filebox"><a href="https://tsgw.topsolar.kr/mail/mail002A31?&amp;key=AAA" class="icon icon_pdf">견적서_탑솔라.pdf</a></div>
@@ -32,7 +32,7 @@ func TestExtractLargeAttachmentLinks(t *testing.T) {
 
 // Real groupware wraps the filename and size on separate lines inside the
 // anchor; the hint must keep only the filename (no newline, no "(22.2 MB)").
-func TestExtractLargeAttachmentLinks_FilenameHintFirstLine(t *testing.T) {
+func TestExtractLargeAttachmentLinksFormatsMultilineFilenameHint(t *testing.T) {
 	body := `<div class="largeUpDownLoader">
 	<a href="https://tsgw.topsolar.kr/mail/mail002A31?key=AAA" class="icon icon_zip">
 	  자료일체 (2).zip
@@ -47,14 +47,14 @@ func TestExtractLargeAttachmentLinks_FilenameHintFirstLine(t *testing.T) {
 	}
 }
 
-func TestExtractLargeAttachmentLinks_NoWidget(t *testing.T) {
+func TestExtractLargeAttachmentLinksReturnsNilWithoutWidgetMarker(t *testing.T) {
 	body := `<html><body><a href="https://x.com/file.pdf">file</a></body></html>`
 	if refs := extractLargeAttachmentLinks(body); refs != nil {
 		t.Fatalf("want nil without the widget marker, got %+v", refs)
 	}
 }
 
-func TestExtractLargeAttachmentLinks_DedupAndFilter(t *testing.T) {
+func TestExtractLargeAttachmentLinksDeduplicatesAndFiltersLinks(t *testing.T) {
 	body := `<div class="largeUpDownLoader">
 	<a href="https://tsgw.topsolar.kr/mail/mail002A31?key=AAA">f1</a>
 	<a href="https://tsgw.topsolar.kr/mail/mail002A31?key=AAA">dup</a>

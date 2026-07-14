@@ -13,7 +13,7 @@ func (f fakeSkillNudger) Enabled() bool                                         
 func (f fakeSkillNudger) OnToolCalls(context.Context, string, int, SkillNudgeSnapshot) {}
 func (f fakeSkillNudger) Reset(string)                                                 {}
 
-func TestShouldEnableSkillNudgerFencesAutonomousAndSelfReviewRuns(t *testing.T) {
+func TestShouldEnableSkillNudgerRejectsAutonomousAndReviewSessions(t *testing.T) {
 	nudger := fakeSkillNudger{enabled: true}
 	tests := []struct {
 		name   string

@@ -27,7 +27,7 @@ func messagesContain(msgs []llm.Message, needle string) bool {
 
 // AppendCurrentMessage (deferred-enrichment / ephemeral path) must append the
 // current message as a NEW last user message after the loaded history.
-func TestAssembleTurnMessages_AppendCurrentMessage(t *testing.T) {
+func TestAssembleTurnMessagesAppendCurrentMessageCreatesNewUserTurn(t *testing.T) {
 	params := RunParams{
 		SessionKey:           "client:main",
 		Message:              "[2026-07-05T10:05:00+09:00] 링크 요약해줘",
@@ -81,7 +81,7 @@ func TestAssembleTurnMessages_AppendCurrentMessageWithAttachments(t *testing.T) 
 
 // Without the flag, a persisted turn keeps the exact legacy behavior: the
 // message is expected to already be in history and nothing is appended.
-func TestAssembleTurnMessages_PersistedTurnUnchanged(t *testing.T) {
+func TestAssembleTurnMessagesPersistedTurnPreservesHistory(t *testing.T) {
 	params := RunParams{SessionKey: "client:main", Message: "이전 질문"}
 	prep := prepResult{Messages: appendTestHistory()}
 	msgs := assembleTurnMessages(context.Background(), params, runDeps{}, prep, modelResolution{})

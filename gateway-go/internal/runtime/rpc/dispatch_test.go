@@ -12,7 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-func TestDispatchRegisteredMethod(t *testing.T) {
+func TestDispatchReturnsOKForRegisteredMethod(t *testing.T) {
 	d := NewDispatcher(rpctest.NewLogger())
 	d.Register("health", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		resp, _ := protocol.NewResponseOK(req.ID, map[string]string{"status": "ok"})
@@ -81,7 +81,7 @@ func TestDispatchCanceledContextReturnsAgentTimeout(t *testing.T) {
 	}
 }
 
-func TestMethods(t *testing.T) {
+func TestMethodsReturnsRegisteredMethodNames(t *testing.T) {
 	d := NewDispatcher(rpctest.NewLogger())
 	d.Register("health", func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		return nil

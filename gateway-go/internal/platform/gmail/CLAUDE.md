@@ -34,9 +34,9 @@
 ## 테스트와 집중 검증
 
 - `client_test.go`의 `TestValidToken_RefreshesExpired`,
-  `TestRefresh_PersistsRotatedRefreshToken`, `TestGetClient_RetriableOnFailure`가
+  `TestRefresh_SavesRotatedRefreshTokenToDisk`, `TestGetClient_RetriableOnFailure`가
   인증 수명주기를 검증한다.
-- `operations_test.go`의 `TestMetadataConcurrency`, `TestCollectAttachments`,
-  `TestBuildMIME_Reply`가 fan-out, MIME, thread 계약을 고정한다.
+- `operations_test.go`의 `TestMetadataConcurrency`, `TestCollectAttachments_ParsesAttachmentMetadata`,
+  `TestBuildMIME_FormatsReplyHeaders`가 fan-out, MIME, thread 계약을 고정한다.
 
 `cd gateway-go && go test -count=1 ./internal/platform/gmail`

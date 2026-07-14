@@ -52,7 +52,7 @@ func TestParseMCPServerSpecs(t *testing.T) {
 	}
 }
 
-func TestRegisterMCPServerTools(t *testing.T) {
+func TestRegisterMCPServerToolsCreatesNamespacedDeferredDefs(t *testing.T) {
 	registry := chat.NewToolRegistry()
 	spec := mcpServerSpec{Name: "plaud", Label: "회의·통화 녹음"}
 	tools := []mcpclient.ToolInfo{
@@ -84,7 +84,7 @@ func TestRegisterMCPServerTools(t *testing.T) {
 	}
 }
 
-func TestClampToolName(t *testing.T) {
+func TestClampToolNameTruncatesWithoutCollision(t *testing.T) {
 	longA := "plaud_" + strings.Repeat("a", 60) + "_variant_one"
 	longB := "plaud_" + strings.Repeat("a", 60) + "_variant_two"
 	a := clampToolName(longA, "remote-a")
@@ -103,7 +103,7 @@ func TestClampToolName(t *testing.T) {
 	}
 }
 
-func TestSanitizeMCPToolName(t *testing.T) {
+func TestSanitizeMCPToolNameNormalizesAndTruncatesLongNames(t *testing.T) {
 	cases := map[string]string{
 		"search_recordings": "search_recordings",
 		"get-transcript":    "get-transcript",

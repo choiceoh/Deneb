@@ -76,7 +76,7 @@ func rerunTestJob() StoreJob {
 // An aborted turn must be recorded status="aborted" (not ok, not error):
 // PendingRerun queued for the boot scan, no consecutive-error count, and no
 // immediate post-run rerun (the gateway is shutting down).
-func TestAbortedRunQueuesPendingRerun(t *testing.T) {
+func TestAbortedRunRecordsAbortedStatusAndQueuesRerunWithoutRetry(t *testing.T) {
 	agent := &seqAgent{err: ErrTurnAborted}
 	svc := newRerunTestService(t, agent)
 	job := rerunTestJob()
@@ -131,7 +131,7 @@ func TestStartRecoversPendingRerun(t *testing.T) {
 // A trigger dropped by the per-job overlap guard must queue a rerun that the
 // owning executor consumes after it finishes — two agent runs total, flag
 // cleared at the end.
-func TestOverlapSkipQueuesRerunConsumedPostRun(t *testing.T) {
+func TestConcurrentOverlapSkipQueuesRerunConsumedByOwningRun(t *testing.T) {
 	agent := &seqAgent{
 		block:   make(chan struct{}),
 		started: make(chan struct{}, 4),

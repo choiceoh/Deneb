@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestValidateConfig(t *testing.T) {
+func TestValidateConfig_ReturnsWarningsForInvalidEntries(t *testing.T) {
 	cases := []struct {
 		name       string
 		cfg        config

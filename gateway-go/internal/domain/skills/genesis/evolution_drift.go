@@ -48,20 +48,20 @@ const (
 	driftMonotonyStreak = 3
 )
 
-// DriftSignal is one tripped drift condition.
-type DriftSignal struct {
+// driftSignal is one tripped drift condition.
+type driftSignal struct {
 	Kind   string  `json:"kind"`
 	Detail string  `json:"detail"`
 	Value  float64 `json:"value,omitempty"`
 }
 
-// DriftVerdict is the audit outcome. Frozen true means auto-adoption should
+// driftVerdict is the audit outcome. Frozen true means auto-adoption should
 // fall back to propose-only until the trajectory recovers or an operator
 // clears the marker.
-type DriftVerdict struct {
+type driftVerdict struct {
 	CreatedAt int64         `json:"createdAt"`
 	Frozen    bool          `json:"frozen"`
-	Signals   []DriftSignal `json:"signals,omitempty"`
+	Signals   []driftSignal `json:"signals,omitempty"`
 	// Snapshot of the inputs, for the audit trail.
 	FalseAcceptRate float64 `json:"falseAcceptRate"`
 	ConfirmRate     float64 `json:"confirmRate"`
@@ -81,7 +81,7 @@ func (t *Tracker) autoAdoptFreezePath() string {
 // not-frozen.
 func (t *Tracker) AutoAdoptFrozen() bool {
 	path := t.autoAdoptFreezePath()
-	verdicts, err := jsonlstore.Load[DriftVerdict](path)
+	verdicts, err := jsonlstore.Load[driftVerdict](path)
 	if err != nil {
 		if t.logger != nil {
 			t.logger.Warn("drift brake: freeze marker unreadable, failing closed (frozen)", "error", err)
@@ -102,16 +102,16 @@ func (t *Tracker) AutoAdoptFrozen() bool {
 	return false
 }
 
-// AuditEvolutionDrift computes the drift verdict from the ledgers. Pure read;
+// auditEvolutionDrift computes the drift verdict from the ledgers. Pure read;
 // the caller decides whether to persist/act. judgeRuns may be nil (judge
 // accuracy is one of several signals, not required).
-func (t *Tracker) AuditEvolutionDrift() DriftVerdict {
+func (t *Tracker) auditEvolutionDrift() driftVerdict {
 	// Fresh compute, not the 60s-cached EvolutionHealth(): the self-brake must
 	// react to the current trajectory, never a stale snapshot.
 	t.mu.Lock()
 	h := t.computeEvolutionHealthLocked(time.Now())
 	t.mu.Unlock()
-	v := DriftVerdict{
+	v := driftVerdict{
 		FalseAcceptRate: h.FalseAcceptRate,
 		ConfirmRate:     h.ConfirmRate,
 		Resolved:        h.ResolvedEvolves7d,
@@ -119,7 +119,7 @@ func (t *Tracker) AuditEvolutionDrift() DriftVerdict {
 
 	// Signal 1: judge going soft (accepting bad evolves).
 	if h.ResolvedEvolves7d >= driftMinResolved && h.FalseAcceptRate >= driftFalseAcceptCeil {
-		v.Signals = append(v.Signals, DriftSignal{
+		v.Signals = append(v.Signals, driftSignal{
 			Kind:   "judge_soft",
 			Detail: fmt.Sprintf("falseAcceptRate %.2f over %d resolved evolves", h.FalseAcceptRate, h.ResolvedEvolves7d),
 			Value:  h.FalseAcceptRate,
@@ -130,14 +130,14 @@ func (t *Tracker) AuditEvolutionDrift() DriftVerdict {
 	if revs, err := t.RecentMetaRevisions(20); err == nil {
 		adopted, reverted, streak := driftMetaCounts(revs)
 		if adopted >= 2 && float64(reverted)/float64(adopted) >= driftMetaRevertCeil {
-			v.Signals = append(v.Signals, DriftSignal{
+			v.Signals = append(v.Signals, driftSignal{
 				Kind:   "meta_revert_spike",
 				Detail: fmt.Sprintf("%d of %d recent meta-adoptions reverted", reverted, adopted),
 				Value:  float64(reverted) / float64(adopted),
 			})
 		}
 		if streak >= driftMonotonyStreak {
-			v.Signals = append(v.Signals, DriftSignal{
+			v.Signals = append(v.Signals, driftSignal{
 				Kind:   "adoption_monotony",
 				Detail: fmt.Sprintf("%d consecutive adoptions of the same artifact (diversity collapse)", streak),
 				Value:  float64(streak),
@@ -152,11 +152,11 @@ func (t *Tracker) AuditEvolutionDrift() DriftVerdict {
 	// ladder exists to produce — an aggregate rate would misread a
 	// hard-probe-heavy run ("judge can't catch hard probes yet", normal) as
 	// verifier breakage and freeze a healthy lane.
-	if runs, err := t.RecentJudgeAccuracy(1); err == nil && len(runs) == 1 {
+	if runs, err := t.recentJudgeAccuracy(1); err == nil && len(runs) == 1 {
 		if correct, total := driftMustCatchCounts(runs[0]); total > 0 {
 			rate := float64(correct) / float64(total)
 			if rate < driftJudgeAccuracyFloor {
-				v.Signals = append(v.Signals, DriftSignal{
+				v.Signals = append(v.Signals, driftSignal{
 					Kind:   "verifier_broken",
 					Detail: fmt.Sprintf("judge caught only %.0f%% of must-catch planted defects", rate*100),
 					Value:  rate,
@@ -203,7 +203,7 @@ func driftMetaCounts(revs []MetaRevisionRecord) (adopted, reverted, streak int) 
 // the ByClass breakdown falls back to its aggregate counts — the only signal a
 // legacy record carries. A run with no must-catch pairs yields total 0: no
 // evidence either way, so the caller skips the signal.
-func driftMustCatchCounts(rec JudgeAccuracyRecord) (correct, total int) {
+func driftMustCatchCounts(rec judgeAccuracyRecord) (correct, total int) {
 	if len(rec.ByClass) == 0 {
 		return rec.Correct, rec.Pairs
 	}
@@ -215,13 +215,13 @@ func driftMustCatchCounts(rec JudgeAccuracyRecord) (correct, total int) {
 	return correct, total
 }
 
-// RunEvolutionDriftAudit computes the verdict, persists a freeze/clear
+// runEvolutionDriftAudit computes the verdict, persists a freeze/clear
 // transition to the marker + lifecycle ledger, and returns the verdict. It is
 // idempotent: it only writes on a state CHANGE (clear→frozen or frozen→clear)
 // so the log stays readable. onTransition, if set, fires once per change
 // (feed-card surface).
-func (t *Tracker) RunEvolutionDriftAudit(onTransition func(frozen bool, reasons []string)) DriftVerdict {
-	v := t.AuditEvolutionDrift()
+func (t *Tracker) runEvolutionDriftAudit(onTransition func(frozen bool, reasons []string)) driftVerdict {
+	v := t.auditEvolutionDrift()
 	v.CreatedAt = time.Now().UnixMilli()
 	was := t.AutoAdoptFrozen()
 	if v.Frozen == was {

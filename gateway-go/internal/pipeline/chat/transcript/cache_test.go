@@ -23,7 +23,7 @@ func (s *countingStore) Load(sessionKey string, limit int) ([]ChatMessage, int, 
 	return s.MemoryTranscriptStore.Load(sessionKey, limit)
 }
 
-func TestCachedTranscriptStore_CacheHit(t *testing.T) {
+func TestCachedTranscriptStoreReturnsCachedLoadOnHit(t *testing.T) {
 	inner := newCountingStore()
 	cache := NewCachedTranscriptStore(inner, 5*time.Second)
 
@@ -93,7 +93,7 @@ func TestCachedTranscriptStore_InvalidateOnDelete(t *testing.T) {
 	}
 }
 
-func TestCachedTranscriptStore_TTLExpiry(t *testing.T) {
+func TestCachedTranscriptStoreExpiresAfterTTL(t *testing.T) {
 	inner := newCountingStore()
 	cache := NewCachedTranscriptStore(inner, 1*time.Millisecond)
 
@@ -108,7 +108,7 @@ func TestCachedTranscriptStore_TTLExpiry(t *testing.T) {
 	}
 }
 
-func TestCachedTranscriptStore_LimitSlicing(t *testing.T) {
+func TestCachedTranscriptStoreReturnsLimitedSlice(t *testing.T) {
 	inner := newCountingStore()
 	cache := NewCachedTranscriptStore(inner, 5*time.Second)
 

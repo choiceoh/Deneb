@@ -97,11 +97,11 @@ func TestParseGPUInt(t *testing.T) {
 	}
 }
 
-// TestGPUHealthObserveAbsentDegrades verifies the core graceful-degradation
+// TestGPUHealthObserveAbsentReturnsNilStats verifies the core graceful-degradation
 // contract: when nvidia-smi is absent (runner reports ok=false), observe
 // reports present=false and no stats, so /health omits the gpu section instead
 // of erroring on a non-GPU host.
-func TestGPUHealthObserveAbsentDegrades(t *testing.T) {
+func TestGPUHealthObserveAbsentReturnsNilStats(t *testing.T) {
 	var g gpuHealth
 	absent := func(context.Context) (string, bool) { return "", false }
 	stats, present := g.observe(context.Background(), absent)
@@ -113,9 +113,9 @@ func TestGPUHealthObserveAbsentDegrades(t *testing.T) {
 	}
 }
 
-// TestGPUHealthObservePresentAndCached verifies a present GPU is parsed and
+// TestGPUHealthObservePresentThenReadsFromCache verifies a present GPU is parsed and
 // then served from cache without re-invoking the runner within the TTL.
-func TestGPUHealthObservePresentAndCached(t *testing.T) {
+func TestGPUHealthObservePresentThenReadsFromCache(t *testing.T) {
 	var g gpuHealth
 	calls := 0
 	runner := func(context.Context) (string, bool) {

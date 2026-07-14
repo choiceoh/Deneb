@@ -170,9 +170,9 @@ func (t *Tracker) stashBaselineTestLocked(skill string, w *evolveWatch) {
 	reject := w.ep.Reject()
 	thresholdFired := t.rollbackThreshold > 0 && w.postFails >= t.rollbackThreshold
 	if t.pendingBaselineTest == nil { // struct-literal construction in tests
-		t.pendingBaselineTest = make(map[string]*RollbackBaselineTest)
+		t.pendingBaselineTest = make(map[string]*rollbackBaselineTest)
 	}
-	t.pendingBaselineTest[skill] = &RollbackBaselineTest{
+	t.pendingBaselineTest[skill] = &rollbackBaselineTest{
 		EValue:   w.ep.E,
 		N:        w.ep.N,
 		Reject:   reject,
@@ -308,7 +308,7 @@ func (t *Tracker) rollbackWindowForWatchLocked(w *evolveWatch) int {
 	return window
 }
 
-// ResolveStaleWatches closes rollback watches older than maxAge that the
+// resolveStaleWatches closes rollback watches older than maxAge that the
 // usage-driven path will never resolve (backtest 2026-07-11: zero historical
 // resolutions — post-evolve real usage runs out at 0-5 uses, below the 6-use
 // window). A stale watch with at least one clean-enough use confirms with a
@@ -316,7 +316,7 @@ func (t *Tracker) rollbackWindowForWatchLocked(w *evolveWatch) int {
 // entry — this is what unblocks the P3 label pipeline); a stale watch with
 // ZERO uses expires without polluting confirm/rollback statistics. Returns
 // the number of watches closed.
-func (t *Tracker) ResolveStaleWatches(maxAge time.Duration) int {
+func (t *Tracker) resolveStaleWatches(maxAge time.Duration) int {
 	if maxAge <= 0 {
 		return 0
 	}
@@ -361,7 +361,7 @@ func (t *Tracker) ResolveStaleWatches(maxAge time.Duration) int {
 			t.logger.Info("genesis: post-evolve watch expired unused (no real usage within window)",
 				"skill", skill, "maxAge", maxAge)
 		}
-		if err := t.LogEvolveWatchExpired(skill); err != nil && t.logger != nil {
+		if err := t.logEvolveWatchExpired(skill); err != nil && t.logger != nil {
 			t.logger.Warn("genesis: watch-expired lifecycle log failed", "skill", skill, "error", err)
 		}
 	}
@@ -419,11 +419,11 @@ func (t *Tracker) getStatsLocked(skillName string) *UsageStats {
 	return stats
 }
 
-// EvolutionEvidenceStats returns the bounded usage evidence that the automatic
+// evolutionEvidenceStats returns the bounded usage evidence that the automatic
 // evolver is allowed to act on. It intentionally differs from Stats(), which is
 // a lifetime observability aggregate: stale failures should remain visible in
 // status output, but they must not keep triggering fresh rewrites forever.
-func (t *Tracker) EvolutionEvidenceStats(skillName string) (*UsageStats, error) {
+func (t *Tracker) evolutionEvidenceStats(skillName string) (*UsageStats, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 

@@ -44,7 +44,7 @@ func requireRPCError(t *testing.T, response *protocol.ResponseFrame, code string
 	}
 }
 
-func TestEventsMethodsSurfaceAndAliases(t *testing.T) {
+func TestEventsMethodsReturnsAliasSurfaceAndBroadcastNilWithoutBroadcaster(t *testing.T) {
 	broadcaster := events.NewBroadcaster()
 	methods := EventsMethods(EventsDeps{Broadcaster: broadcaster})
 	want := []string{
@@ -76,7 +76,7 @@ func TestEventsMethodsSurfaceAndAliases(t *testing.T) {
 	}
 }
 
-func TestSessionSubscribeUnsubscribeAndAliasBehavior(t *testing.T) {
+func TestSessionSubscribeAliasAndUnsubscribeUpdateSharedSubscriberSet(t *testing.T) {
 	broadcaster := events.NewBroadcaster()
 	methods := EventsMethods(EventsDeps{Broadcaster: broadcaster})
 
@@ -105,7 +105,7 @@ func TestSessionSubscribeUnsubscribeAndAliasBehavior(t *testing.T) {
 	}
 }
 
-func TestSessionMessageSubscribeUnsubscribe(t *testing.T) {
+func TestSessionMessageSubscribeAddsThenUnsubscribeClearsSubscriberSet(t *testing.T) {
 	broadcaster := events.NewBroadcaster()
 	methods := EventsMethods(EventsDeps{Broadcaster: broadcaster})
 	response := invokeEventHandler(t, methods["sessions.messages.subscribe"], "msg-sub", `{"connId":" conn ","sessionKey":" session:1 "}`)
@@ -120,7 +120,7 @@ func TestSessionMessageSubscribeUnsubscribe(t *testing.T) {
 	}
 }
 
-func TestToolRecipientSubscribeReplaceAndUnsubscribe(t *testing.T) {
+func TestToolRecipientSubscribeReplacesPriorConnAndUnsubscribeClearsRecipient(t *testing.T) {
 	broadcaster := events.NewBroadcaster()
 	methods := EventsMethods(EventsDeps{Broadcaster: broadcaster})
 	for i, conn := range []string{"conn-1", " conn-2 "} {
@@ -200,7 +200,7 @@ func TestBroadcastHandlerDeliversEventAndPayload(t *testing.T) {
 	}
 }
 
-func TestBroadcastHandlerValidation(t *testing.T) {
+func TestBroadcastHandlerReturnsErrorsForMissingEventAndMalformedJSON(t *testing.T) {
 	handler := BroadcastMethods(EventsDeps{Broadcaster: events.NewBroadcaster()})["events.broadcast"]
 	for _, params := range []string{`{}`, `{"event":""}`, `{"event":"   "}`} {
 		response := invokeEventHandler(t, handler, "missing", params)

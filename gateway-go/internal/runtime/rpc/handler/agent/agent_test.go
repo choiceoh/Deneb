@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpctest"
 )
 
-func TestExtendedMethodsRegistersDependencyAwareSurface(t *testing.T) {
+func TestExtendedMethodsOmitsMethodsWithoutRequiredDependencies(t *testing.T) {
 	base := ExtendedMethods(ExtendedDeps{})
 	for _, name := range []string{"agent.status", "sessions.create", "sessions.lifecycle"} {
 		if base[name] == nil {
@@ -38,7 +38,7 @@ func TestSessionsCreateValidatesAndCreates(t *testing.T) {
 	}
 }
 
-func TestAgentStatusCountsSessions(t *testing.T) {
+func TestAgentStatusReturnsTotalSessionCount(t *testing.T) {
 	mgr := session.NewManager()
 	mgr.Create("client:one", session.KindDirect)
 	methods := ExtendedMethods(ExtendedDeps{Sessions: mgr})

@@ -8,7 +8,7 @@ import (
 // Table-driven behavior spec for the anytime-valid primitive. The formal
 // validity guarantee is mathematical (supermartingale + Ville); these tables
 // pin the implementation to it deterministically.
-func TestEProcess_Tables(t *testing.T) {
+func TestEProcessObserveRejectClampsAndSerializesCorrectly(t *testing.T) {
 	t.Run("healthy stream never rejects", func(t *testing.T) {
 		// Baseline 0.25, observed stream at exactly baseline cadence.
 		p := NewEProcess(0.05, 0.25)

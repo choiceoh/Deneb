@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestIsLocalURL(t *testing.T) {
+func TestIsLocalURL_ReturnsTrueForPrivateAndTailnetRanges(t *testing.T) {
 	local := []string{
 		"http://127.0.0.1:8000/v1", "http://localhost:8000", "http://10.0.0.5:8000",
 		"http://192.168.1.10/v1", "http://172.16.3.4/v1", "http://[::1]:8000/v1",
@@ -32,7 +32,7 @@ func TestIsLocalURL(t *testing.T) {
 	}
 }
 
-func TestModelEntry_LocalOverride(t *testing.T) {
+func TestModelEntry_LocalOverrideReturnsExplicitOrAutoDetected(t *testing.T) {
 	f, tr := false, true
 	if (modelEntry{URL: "http://127.0.0.1/v1", Local: &f}).isLocal() {
 		t.Error("explicit local=false must override a loopback URL → cloud")
@@ -82,7 +82,7 @@ func TestLocalOnly_Mode_BlocksCloudAllowsLocal(t *testing.T) {
 	}
 }
 
-func TestLocalOnly_Header_BlocksCloud(t *testing.T) {
+func TestLocalOnly_HeaderRejectsCloudRequest(t *testing.T) {
 	rt := quietRouter(config{Models: []modelEntry{
 		{Name: "cloud", URL: "https://api.example.com/v1", UpstreamModel: "x"},
 	}})

@@ -87,7 +87,7 @@ func TestReadPIDFile(t *testing.T) {
 	}
 }
 
-func TestCheckExistingDaemon_NoFile(t *testing.T) {
+func TestCheckExistingDaemonReturnsNilWithoutPIDFile(t *testing.T) {
 	dir := t.TempDir()
 	d := NewDaemon(filepath.Join(dir, "test.pid"), 18789, "test", testLogger())
 	if d.CheckExistingDaemon() != nil {
@@ -95,7 +95,7 @@ func TestCheckExistingDaemon_NoFile(t *testing.T) {
 	}
 }
 
-func TestCheckExistingDaemon_CurrentProcess(t *testing.T) {
+func TestCheckExistingDaemonReturnsRunningProcessInfo(t *testing.T) {
 	dir := t.TempDir()
 	pidFile := filepath.Join(dir, "test.pid")
 

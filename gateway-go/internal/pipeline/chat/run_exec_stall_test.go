@@ -10,7 +10,7 @@ import (
 // a turn engages the model fallback chain. A stall is a timeout that produced
 // no text; a timeout that produced text is a slow-but-productive turn and must
 // not be treated as a stall (falling back would discard the partial answer).
-func TestIsStalledResult(t *testing.T) {
+func TestIsStalledResultReturnsTrueOnlyForBlankTimeout(t *testing.T) {
 	cases := []struct {
 		name string
 		res  *agent.AgentResult

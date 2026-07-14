@@ -34,7 +34,7 @@ func (t *Tracker) recordEvolutionActivityLocked(kind string, ok bool, errMsg str
 	now := time.Now().UnixMilli()
 	metricOnly := false
 	switch kind {
-	case SkillActivityReview:
+	case skillActivityReview:
 		state.LastReviewAt = now
 		state.LastReviewOK = ok
 	case SkillActivityReviewAttempt:
@@ -46,9 +46,9 @@ func (t *Tracker) recordEvolutionActivityLocked(kind string, ok bool, errMsg str
 	case SkillActivityValidationRejected:
 		state.ValidationRejections++
 		metricOnly = true
-	case SkillActivityEvolve:
+	case skillActivityEvolve:
 		state.LastEvolveAt = now
-	case SkillActivityGenesis:
+	case skillActivityGenesis:
 		state.LastGenesisAt = now
 	}
 	if !metricOnly && !ok && errMsg != "" {

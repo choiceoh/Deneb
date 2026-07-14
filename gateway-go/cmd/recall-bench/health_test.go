@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
-func TestComputeLedgerUtility(t *testing.T) {
+func TestComputeLedgerUtilityReturnsCountsAndTopPages(t *testing.T) {
 	u := computeLedgerUtility(map[string]int{
 		"프로젝트/a/대표.md": 5,
 		"프로젝트/b/대표.md": 2,
@@ -27,7 +27,7 @@ func TestComputeLedgerUtility(t *testing.T) {
 	}
 }
 
-func TestComputeGoldCoverage(t *testing.T) {
+func TestComputeGoldCoverageReturnsCoveredAndUncoveredProjects(t *testing.T) {
 	projects := []wiki.ProjectRef{
 		{Name: "당진", Path: "프로젝트/lg화학-당진/대표.md"},
 		{Name: "군산", Path: "프로젝트/knk-energy/대표.md"},
@@ -60,7 +60,7 @@ func TestEmitGoldCandidates_ValidJSONL(t *testing.T) {
 	}
 }
 
-func TestComputeRecallHealth_Blend(t *testing.T) {
+func TestComputeRecallHealthReturnsWeightedBlendScore(t *testing.T) {
 	// mrrSum/scored = 0.8 → retrieval 80; coverage 50% → 50.
 	result := benchmarkResult{scored: 10, mrrSum: 8.0}
 	cov := goldCoverage{knownProjects: 4, covered: 2}

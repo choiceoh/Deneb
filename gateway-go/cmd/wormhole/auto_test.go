@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestAuto_FirstHealthyWins(t *testing.T) {
+func TestAuto_ReturnsFirstHealthyResponse(t *testing.T) {
 	var bHit bool
 	a := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, `{"from":"a"}`)
@@ -37,7 +37,7 @@ func TestAuto_FirstHealthyWins(t *testing.T) {
 	}
 }
 
-func TestAuto_FallsBackOn5xx(t *testing.T) {
+func TestAuto_FallbackOnUpstream5xxError(t *testing.T) {
 	var aHit, bHit bool
 	a := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		aHit = true
@@ -70,7 +70,7 @@ func TestAuto_FallsBackOn5xx(t *testing.T) {
 	}
 }
 
-func TestAuto_EgressGuardSkipsCloud(t *testing.T) {
+func TestAuto_LocalOnlyIgnoresCloudCandidate(t *testing.T) {
 	var localHit bool
 	local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		localHit = true
@@ -98,7 +98,7 @@ func TestAuto_EgressGuardSkipsCloud(t *testing.T) {
 	}
 }
 
-func TestAuto_ProtocolFiltering(t *testing.T) {
+func TestAuto_FiltersByProtocolWhenRoutingMessages(t *testing.T) {
 	var oaiHit, antHit bool
 	oai := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { oaiHit = true }))
 	defer oai.Close()
@@ -144,7 +144,7 @@ func TestAuto_AllFailIs502(t *testing.T) {
 	}
 }
 
-func TestAuto_AdvertisedInModels(t *testing.T) {
+func TestAuto_ModelsEndpointReturnsAutoName(t *testing.T) {
 	rt := quietRouter(config{Auto: []string{"a"}, Models: []modelEntry{{Name: "a", URL: "http://x/v1", UpstreamModel: "a"}}})
 	srv := httptest.NewServer(rt.handler())
 	defer srv.Close()

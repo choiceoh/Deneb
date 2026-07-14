@@ -13,7 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestToolRegistry_Execute(t *testing.T) {
+func TestToolRegistryExecuteReturnsToolOutput(t *testing.T) {
 	reg := NewToolRegistry()
 	reg.Register("echo", func(_ context.Context, input json.RawMessage) (string, error) {
 		return string(input), nil
@@ -33,11 +33,11 @@ func TestToolRegistry_UnknownTool(t *testing.T) {
 	}
 }
 
-// TestToolRegistry_AutoSpillover_OverThreshold verifies that a tool returning
+// TestToolRegistryAutoSpilloverWritesOverThresholdOutputToDisk verifies that a tool returning
 // more than agent.DefaultMaxOutput chars is automatically spilled to disk and
 // the value returned to the caller is the trim marker (head+tail) — not the
 // raw content. The spill must be loadable by the same session via the store.
-func TestToolRegistry_AutoSpillover_OverThreshold(t *testing.T) {
+func TestToolRegistryAutoSpilloverWritesOverThresholdOutputToDisk(t *testing.T) {
 	store := agent.NewSpilloverStore(t.TempDir())
 
 	reg := NewToolRegistry()
@@ -68,10 +68,10 @@ func TestToolRegistry_AutoSpillover_OverThreshold(t *testing.T) {
 	}
 }
 
-// TestToolRegistry_AutoSpillover_BelowThreshold verifies the pass-through path:
+// TestToolRegistryAutoSpilloverPreservesOutputBelowThreshold verifies the pass-through path:
 // outputs within DefaultMaxOutput are returned verbatim and no spill file is
 // created.
-func TestToolRegistry_AutoSpillover_BelowThreshold(t *testing.T) {
+func TestToolRegistryAutoSpilloverPreservesOutputBelowThreshold(t *testing.T) {
 	store := agent.NewSpilloverStore(t.TempDir())
 
 	reg := NewToolRegistry()
@@ -129,13 +129,13 @@ func firstN(s string, n int) string {
 	return s[:n]
 }
 
-// TestToolRegistry_ReRegisterReplaces verifies the documented collision
+// TestToolRegistryReRegisterUpdatesLastWriterWinsWithWarnLog verifies the documented collision
 // behavior: re-registering an existing name replaces the prior definition
 // (last-writer-wins), does NOT duplicate the name in registration order, and
 // logs a slog.Warn on the replace (but not on the first register).
 // See docs/research/tool-interception-gap.md and gateway-go/CLAUDE.md
 // (Tool Interception & Safety).
-func TestToolRegistry_ReRegisterReplaces(t *testing.T) {
+func TestToolRegistryReRegisterUpdatesLastWriterWinsWithWarnLog(t *testing.T) {
 	reg := NewToolRegistry()
 
 	mkTool := func(out string) ToolDef {

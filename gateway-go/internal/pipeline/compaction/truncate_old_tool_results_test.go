@@ -290,7 +290,7 @@ func TestTruncateOldToolResults_PreservesSpilloverPointer(t *testing.T) {
 // TestMicroCompact_SkipsSpilledResult: the spill pointer can sit between a
 // head's opening ``` and a tail's closing ```; codeBlockRE would swallow the
 // pointer with the fence. MicroCompact must skip a spilled result wholesale.
-func TestMicroCompact_SkipsSpilledResult(t *testing.T) {
+func TestMicroCompact_PreservesSpilledResultUnpruned(t *testing.T) {
 	spilled := "```\n" + strings.Repeat("x", 300) +
 		"\n... [999 lines truncated — use read_spillover(\"sp_deadbeef\") for full content] ...\n" +
 		strings.Repeat("y", 300) + "\n```"
@@ -311,7 +311,7 @@ func TestMicroCompact_SkipsSpilledResult(t *testing.T) {
 	}
 }
 
-func TestSpilloverRef(t *testing.T) {
+func TestSpilloverRef_ParsesSpillIDFromText(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{`... [12 lines truncated — use read_spillover("sp_c0953cb7") for full content] ...`, "sp_c0953cb7"},
 		{"plain output, no spill", ""},

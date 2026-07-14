@@ -32,7 +32,7 @@ func TestOrgContactLookup_NilStoreReturnsNilFunc(t *testing.T) {
 	}
 }
 
-func TestOrgContactLookup_ExactName(t *testing.T) {
+func TestOrgContactLookupReturnsPhonesAndEmailsForExactName(t *testing.T) {
 	store := newContactStore(t, contacts.Contact{
 		Name:   "김철수",
 		Phones: []string{"010-1111-2222"},
@@ -64,7 +64,7 @@ func TestOrgContactLookup_NormalizesTitleAndAffiliation(t *testing.T) {
 	}
 }
 
-func TestOrgContactLookup_NoSubstringMismatch(t *testing.T) {
+func TestOrgContactLookupReturnsEmptyForSubstringMismatch(t *testing.T) {
 	// "이수" must NOT match the contact "이수민" — matching is exact on the
 	// normalized key, not a substring.
 	store := newContactStore(t, contacts.Contact{
@@ -93,7 +93,7 @@ func TestOrgContactLookup_BlankNameEmpty(t *testing.T) {
 	}
 }
 
-func TestOrgContactLookup_HomonymsUnionAndDedup(t *testing.T) {
+func TestOrgContactLookupDeduplicatesUnionedHomonymResults(t *testing.T) {
 	// Two contacts normalize to the same name ("김철수" and "김철수 부장"): their
 	// phones/emails are unioned, and a value shared across both appears once.
 	store := newContactStore(

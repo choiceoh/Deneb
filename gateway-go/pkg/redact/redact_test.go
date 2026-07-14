@@ -45,7 +45,7 @@ func TestParseEnabled(t *testing.T) {
 	}
 }
 
-func TestString_VendorPrefixes(t *testing.T) {
+func TestStringMasksVendorTokensPreservingPrefix(t *testing.T) {
 	cases := []struct {
 		name   string
 		token  string // constructed at runtime so no literal secret appears in source
@@ -81,7 +81,7 @@ func TestString_VendorPrefixes(t *testing.T) {
 	}
 }
 
-func TestString_JWT(t *testing.T) {
+func TestStringMasksJWTPreservingPrefix(t *testing.T) {
 	// Runtime-constructed three-segment JWT: eyJ… header . eyJ… payload . signature
 	// Segments are base64-url-safe padding so pattern matches without literal secret in source.
 	jwt := "eyJ" + strings.Repeat("Z", 30) + "." + "eyJ" + strings.Repeat("Z", 30) + "." + strings.Repeat("Z", 20)
@@ -95,7 +95,7 @@ func TestString_JWT(t *testing.T) {
 	}
 }
 
-func TestString_DBConnString(t *testing.T) {
+func TestStringMasksDBPasswordsWithAsterisks(t *testing.T) {
 	cases := []string{
 		"postgres://user:s3cret@host:5432/db",
 		"postgresql://user:s3cret@host:5432/db",
@@ -118,7 +118,7 @@ func TestString_DBConnString(t *testing.T) {
 	}
 }
 
-func TestString_AuthHeaders(t *testing.T) {
+func TestStringMasksAuthHeaderTokensWhenPresent(t *testing.T) {
 	// Bearer token: construct at runtime to avoid static secret detection.
 	bearerTok := "sk-proj-" + strings.Repeat("Z", 24)
 	got := String("Authorization: Bearer " + bearerTok)
@@ -132,7 +132,7 @@ func TestString_AuthHeaders(t *testing.T) {
 	}
 }
 
-func TestString_URLQueryParams(t *testing.T) {
+func TestStringMasksSensitiveQueryParamsWithAsterisks(t *testing.T) {
 	cases := []struct {
 		in       string
 		wantGone string
@@ -181,7 +181,7 @@ func TestString_URLQueryParams(t *testing.T) {
 	}
 }
 
-func TestString_URLUserinfo(t *testing.T) {
+func TestStringMasksURLUserinfoPasswordWithAsterisks(t *testing.T) {
 	got := String("https://admin:supersecret@api.example.com/x")
 	if strings.Contains(got, "supersecret") {
 		t.Errorf("URL userinfo password leaked: %q", got)
@@ -191,7 +191,7 @@ func TestString_URLUserinfo(t *testing.T) {
 	}
 }
 
-func TestString_FormBody(t *testing.T) {
+func TestStringMasksFormBodyPasswordWhenPresent(t *testing.T) {
 	in := "grant_type=password&username=alice&password=hunter2&scope=read"
 	got := String(in)
 	if strings.Contains(got, "hunter2") {
@@ -213,7 +213,7 @@ func TestString_FormBody(t *testing.T) {
 	}
 }
 
-func TestString_JSONFields(t *testing.T) {
+func TestStringMasksSensitiveJSONFieldsPreservingOthers(t *testing.T) {
 	apiKey := strings.Repeat("Z", 32) // synthetic 32-char token; no literal secret in source
 	in := `{"apiKey": "` + apiKey + `", "other": "keep"}`
 	got := String(in)
@@ -225,7 +225,7 @@ func TestString_JSONFields(t *testing.T) {
 	}
 }
 
-func TestString_EnvAssignment(t *testing.T) {
+func TestStringMasksEnvAssignmentValuePreservingName(t *testing.T) {
 	secret := "sk-" + strings.Repeat("Z", 24) // runtime-built, no literal secret in source
 	in := "OPENAI_API_KEY=" + secret + " trailing"
 	got := String(in)
@@ -237,7 +237,7 @@ func TestString_EnvAssignment(t *testing.T) {
 	}
 }
 
-func TestString_PrivateKeyBlock(t *testing.T) {
+func TestStringReplacesPrivateKeyBlockWithPlaceholder(t *testing.T) {
 	in := "before\n-----BEGIN RSA PRIVATE KEY-----\nMIIEvQIBADANBgkqh...lots of base64...\n-----END RSA PRIVATE KEY-----\nafter"
 	got := String(in)
 	if strings.Contains(got, "MIIEvQIBADAN") {
@@ -251,7 +251,7 @@ func TestString_PrivateKeyBlock(t *testing.T) {
 	}
 }
 
-func TestString_TelegramBotToken(t *testing.T) {
+func TestStringMasksTelegramBotTokenWhenPresent(t *testing.T) {
 	// Telegram bot token format: bot<digits>:<35-char base64url>. Constructed
 	// at runtime so no literal token appears in the source.
 	tokBody := "AAH" + strings.Repeat("Z", 32)
@@ -265,7 +265,7 @@ func TestString_TelegramBotToken(t *testing.T) {
 	}
 }
 
-func TestString_DiscordMention(t *testing.T) {
+func TestStringMasksDiscordMentionIDWhenPresent(t *testing.T) {
 	got := String("hey <@123456789012345678> look")
 	if strings.Contains(got, "123456789012345678") {
 		t.Errorf("discord ID leaked: %q", got)
@@ -279,14 +279,14 @@ func TestString_DiscordMention(t *testing.T) {
 	}
 }
 
-func TestString_Phone(t *testing.T) {
+func TestStringMasksPhoneNumberWhenPresent(t *testing.T) {
 	got := String("call me at +14155551234 tomorrow")
 	if strings.Contains(got, "14155551234") {
 		t.Errorf("phone number leaked: %q", got)
 	}
 }
 
-func TestString_NegativeCases(t *testing.T) {
+func TestStringPreservesPlainTextUnchanged(t *testing.T) {
 	// Plain text that must pass through unchanged.
 	cases := []string{
 		"Hello, world!",
@@ -339,7 +339,7 @@ func TestString_EmptyAndDisabled(t *testing.T) {
 	})
 }
 
-func TestBytes(t *testing.T) {
+func TestBytesMasksTokensAndPreservesNonMatchingInput(t *testing.T) {
 	// Empty input returns same slice (no alloc).
 	if got := Bytes(nil); got != nil {
 		t.Errorf("nil should return nil, got %v", got)
@@ -362,7 +362,7 @@ func TestBytes(t *testing.T) {
 	}
 }
 
-func TestAttrReplacer_StringValue(t *testing.T) {
+func TestAttrReplacerMasksStringValueWhenSecretPresent(t *testing.T) {
 	r := AttrReplacer(nil)
 	a := slog.String("token", "sk-proj-REDACTFIXTUREREDACT00000")
 	out := r(nil, a)
@@ -382,7 +382,7 @@ func TestAttrReplacer_ErrorValue(t *testing.T) {
 	}
 }
 
-func TestAttrReplacer_PrevChain(t *testing.T) {
+func TestAttrReplacerComposesWithPrevReplacerBeforeMasking(t *testing.T) {
 	// prev replacer tags every Attr with a known sentinel so we can
 	// verify the chain order: prev first, then our redaction.
 	prev := func(groups []string, a slog.Attr) slog.Attr {
@@ -403,7 +403,7 @@ func TestAttrReplacer_PrevChain(t *testing.T) {
 	}
 }
 
-func TestAttrReplacer_NonStringPassthrough(t *testing.T) {
+func TestAttrReplacerPreservesNonStringValues(t *testing.T) {
 	r := AttrReplacer(nil)
 	a := slog.Int("count", 42)
 	out := r(nil, a)
@@ -412,7 +412,7 @@ func TestAttrReplacer_NonStringPassthrough(t *testing.T) {
 	}
 }
 
-func TestAttrReplacer_FullHandlerIntegration(t *testing.T) {
+func TestAttrReplacerMasksSecretInRenderedHandlerOutput(t *testing.T) {
 	// Hook the redactor into a real slog handler and verify the rendered
 	// output does not contain the raw secret.
 	var buf bytes.Buffer
@@ -427,7 +427,7 @@ func TestAttrReplacer_FullHandlerIntegration(t *testing.T) {
 	}
 }
 
-func TestMaskToken(t *testing.T) {
+func TestMaskTokenFormatsShortAsStarsAndLongAsPrefixSuffix(t *testing.T) {
 	cases := []struct {
 		in   string
 		want string
@@ -472,7 +472,7 @@ func TestIsTokenBoundary(t *testing.T) {
 // Fuzz-style smoke check: verify String never panics on a variety of
 // pathological inputs. This is not a real fuzz target (kept out of the
 // corpus) but catches obvious regex / slicing bugs during unit runs.
-func TestString_PathologicalInputs(t *testing.T) {
+func TestStringHandlesPathologicalInputsWithoutPanic(t *testing.T) {
 	inputs := []string{
 		"",
 		"\x00",

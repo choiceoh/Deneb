@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestDeviceTwinOutcomesDelayAndDuplicateSafety(t *testing.T) {
+func TestDeviceTwinOutcomesDeduplicatesRepeatedActions(t *testing.T) {
 	start := time.Date(2026, 7, 11, 9, 0, 0, 0, time.UTC)
 	clock := NewManualClock(start)
 	twin, err := NewDeviceTwin(clock, []DevicePlan{
@@ -112,7 +112,7 @@ func TestDeviceTwinFailsClosedForUnplannedAndInvalidPlans(t *testing.T) {
 	}
 }
 
-func TestTimelineAndDeviceTwinRemainDeterministicTogether(t *testing.T) {
+func TestTimelineWithDeviceTwinStaysDeterministic(t *testing.T) {
 	start := time.Date(2026, 7, 11, 9, 0, 0, 0, time.UTC)
 	clock := NewManualClock(start)
 	twin, err := NewDeviceTwin(clock, []DevicePlan{{
@@ -150,7 +150,7 @@ func TestTimelineAndDeviceTwinRemainDeterministicTogether(t *testing.T) {
 	}
 }
 
-func TestDevicePlansDigestCanonicalizesOrderAndJSON(t *testing.T) {
+func TestDevicePlansDigestNormalizesOrderAndDetectsChange(t *testing.T) {
 	left := []DevicePlan{
 		{ActionID: "b", Kind: "notify", Payload: json.RawMessage(`{"x":1,"y":2}`), Status: DeviceConfirmed},
 		{ActionID: "a", Kind: "alarm", Payload: json.RawMessage(`{"at":"09:00"}`), Status: DeviceFailed, Failure: "denied"},

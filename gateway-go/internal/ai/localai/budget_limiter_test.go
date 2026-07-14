@@ -22,7 +22,7 @@ func TestTokenBudgetLimiterRejectsOversized(t *testing.T) {
 	limiter.release(12)
 }
 
-func TestTokenBudgetLimiterWaitRespectsContext(t *testing.T) {
+func TestTokenBudgetLimiterAcquireStopsOnContextCancel(t *testing.T) {
 	limiter := newTokenBudgetLimiter(10, 0.25)
 	if err := limiter.acquire(context.Background(), 10, PriorityNormal); err != nil {
 		t.Fatal(err)
@@ -44,7 +44,7 @@ func TestTokenBudgetLimiterWaitRespectsContext(t *testing.T) {
 	}
 }
 
-func TestTokenBudgetLimiterReleaseWakesWaiter(t *testing.T) {
+func TestTokenBudgetLimiterWaiterSucceedsWhenReleased(t *testing.T) {
 	limiter := newTokenBudgetLimiter(10, 0.25)
 	if err := limiter.acquire(context.Background(), 10, PriorityNormal); err != nil {
 		t.Fatal(err)

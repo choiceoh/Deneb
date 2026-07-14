@@ -10,7 +10,7 @@ import (
 // A panic in fn must not poison the key. Before the defer fix, an unwind
 // skipped wg.Done()/delete, so the *call stayed in g.calls with its WaitGroup
 // at 1 and every later caller for that key blocked on c.wg.Wait() forever.
-func TestSingleflight_PanicDoesNotPoisonKey(t *testing.T) {
+func TestSingleflightRecoversKeyAfterPanic(t *testing.T) {
 	var g singleflight
 
 	// First call panics; the panic must still propagate to the caller.

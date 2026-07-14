@@ -69,7 +69,7 @@ func TestChatCompletions_UnknownModelIs404(t *testing.T) {
 	}
 }
 
-func TestChatCompletions_TokenRequired(t *testing.T) {
+func TestChatCompletions_RejectsWithoutToken(t *testing.T) {
 	rt := quietRouter(config{Token: "sekret", Models: []modelEntry{{Name: "dsv4", URL: "http://127.0.0.1:1/v1", UpstreamModel: "dsv4"}}})
 	srv := httptest.NewServer(rt.handler())
 	defer srv.Close()
@@ -84,7 +84,7 @@ func TestChatCompletions_TokenRequired(t *testing.T) {
 	}
 }
 
-func TestListModels(t *testing.T) {
+func TestListModels_ReturnsOpenAIModelsOnly(t *testing.T) {
 	// /v1/models is the OpenAI front's catalog: openai-protocol models only. An
 	// anthropic model is served on /v1/messages, not /v1/chat/completions, so it
 	// must NOT appear here (else a discovering picker binds it to the wrong front).
@@ -143,7 +143,7 @@ func TestRewriteModel_PreservesOtherFields(t *testing.T) {
 	}
 }
 
-func TestExtractModel(t *testing.T) {
+func TestExtractModel_ReturnsTrimmedModelOrEmpty(t *testing.T) {
 	if got := extractModel([]byte(`{"model":" dsv4 ","x":1}`)); got != "dsv4" {
 		t.Errorf("extractModel = %q, want dsv4 (trimmed)", got)
 	}

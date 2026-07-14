@@ -20,7 +20,7 @@ func seedProjectWithSite(t *testing.T, store *wiki.Store, project, site string) 
 	}
 }
 
-func TestSiteVisitRecordMatchAndDedup(t *testing.T) {
+func TestSiteVisitRecordMatchDeduplicatesSameDayVisit(t *testing.T) {
 	store := newTestStore(t)
 	seedProjectWithSite(t, store, "수산리태양광", "전북 군산시 옥구읍 수산리")
 
@@ -46,7 +46,7 @@ func TestSiteVisitRecordMatchAndDedup(t *testing.T) {
 	}
 }
 
-func TestSiteVisitNonMatchIsSilent(t *testing.T) {
+func TestSiteVisitIgnoresNonMatchingPlaceSilently(t *testing.T) {
 	store := newTestStore(t)
 	seedProjectWithSite(t, store, "수산리태양광", "전북 군산시 옥구읍 수산리")
 	r := NewSiteVisitRecorder(store, testWikiLogger(), filepath.Join(t.TempDir(), "s.json"))
@@ -80,10 +80,10 @@ func TestSiteVisitFromPayload(t *testing.T) {
 	r.RecordFromLocationPayload(`{bad`)
 }
 
-// TestMatchProjectSiteIsSitesOnly pins the false-positive guard: a project
+// TestMatchProjectSiteMatchesBySiteAndRejectsNameOnlyHits pins the false-positive guard: a project
 // named after a place must NOT match a location by its NAME — only by an
 // explicit 현장.
-func TestMatchProjectSiteIsSitesOnly(t *testing.T) {
+func TestMatchProjectSiteMatchesBySiteAndRejectsNameOnlyHits(t *testing.T) {
 	store := newTestStore(t)
 	// Project literally named "군산" but with a DIFFERENT site.
 	seedProjectWithSite(t, store, "군산", "전남 신안군 비금면")
@@ -124,7 +124,7 @@ func TestMatchProjectSiteReturnsReadableCandidate(t *testing.T) {
 	}
 }
 
-func TestSanitizeLogText(t *testing.T) {
+func TestSanitizeLogTextNormalizesWhitespaceAndControlChars(t *testing.T) {
 	cases := map[string]string{
 		"전북 군산시 수산리":         "전북 군산시 수산리",
 		"line1\nline2":       "line1 line2", // newline can't inject a new heading
@@ -139,11 +139,11 @@ func TestSanitizeLogText(t *testing.T) {
 	}
 }
 
-// TestMatchProjectSiteAmbiguousTieNoMatch pins the QK91C fix: when two distinct
+// TestMatchProjectSiteRejectsAmbiguousTieButResolvesLongerKey pins the QK91C fix: when two distinct
 // active projects match a location at the same longest site key (shared 현장 or
 // shared trailing 리), there is no evidence to choose, so it returns no match
 // rather than silently logging to whichever was scanned first.
-func TestMatchProjectSiteAmbiguousTieNoMatch(t *testing.T) {
+func TestMatchProjectSiteRejectsAmbiguousTieButResolvesLongerKey(t *testing.T) {
 	store := newTestStore(t)
 	seedProjectWithSite(t, store, "수산리A", "전북 군산시 옥구읍 수산리")
 	seedProjectWithSite(t, store, "수산리B", "전북 군산시 옥구읍 수산리")
@@ -160,7 +160,7 @@ func TestMatchProjectSiteAmbiguousTieNoMatch(t *testing.T) {
 	}
 }
 
-func TestSiteVisitStatePersist(t *testing.T) {
+func TestSiteVisitStatePersistsAndLoadsAcrossRecorders(t *testing.T) {
 	store := newTestStore(t)
 	seedProjectWithSite(t, store, "수산리태양광", "전북 군산시 옥구읍 수산리")
 	dir := t.TempDir()

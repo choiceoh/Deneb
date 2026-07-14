@@ -252,11 +252,11 @@ func (e *Evolver) catalogEntries() []skills.SkillEntry {
 	return e.catalog.List()
 }
 
-func (e *Evolver) newProvenance() EvolveProvenance {
+func (e *Evolver) newProvenance() evolveProvenance {
 	e.configMu.RLock()
 	m := e.meta
 	e.configMu.RUnlock()
-	return EvolveProvenance{
+	return evolveProvenance{
 		EvolveArtifactVersion: m.Version(generation.MetaEvolveSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaEvolveSystemPrompt]),
 		JudgeArtifactVersion:  m.Version(generation.MetaSkillJudgeSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]),
 	}
@@ -325,20 +325,9 @@ func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding stri
 	if e.catalog == nil {
 		return nil, fmt.Errorf("evolver: catalog not configured")
 	}
-	// Get current skill content. A miss usually means a BUNDLED (repo) skill:
-	// those are deliberately not seeded into this catalog (the curator's
-	// staleness archiver would eat the rarely-used ones), so an evolve verdict
-	// on one adopts it — copy into the managed dir, which overrides bundled at
-	// discovery — and evolves the copy. Never rewrite the repo checkout in
-	// place (deploy rsync --delete + auto git pull would clobber it). First
-	// production hit 2026-07-04: contract-review's evolve verdict died here.
-	entry, ok := e.catalog.Get(skillName)
-	if !ok {
-		adopted, aerr := e.adoptBundledSkill(skillName)
-		if aerr != nil {
-			return nil, fmt.Errorf("evolver: skill %q not found in catalog (bundled adoption: %w)", skillName, aerr)
-		}
-		entry = adopted
+	entry, err := e.resolveEvolveEntry(skillName)
+	if err != nil {
+		return nil, err
 	}
 
 	// Circuit breakers, checked before any LLM call is spent. Both previously
@@ -351,15 +340,7 @@ func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding stri
 	// that bypass. The suppression is logged as evolve_rejected so it is auditable
 	// instead of a silent re-evolve.
 	if blocked, reason := e.evolutionSuppressed(skillName, time.Now()); blocked {
-		if e.tracker != nil {
-			if logErr := e.tracker.LogEvolveRejectedWithAudit(skillName, reason, HarnessEditAudit{}); logErr != nil && e.logger != nil {
-				e.logger.Warn("evolver: lifecycle log write failed", "skill", skillName, "error", logErr)
-			}
-		}
-		if e.logger != nil {
-			e.logger.Info("evolver: evolve suppressed", "skill", skillName, "reason", reason)
-		}
-		return &EvolveResult{SkillName: skillName, Evolved: false, Reason: reason}, nil
+		return e.suppressedEvolveResult(skillName, reason), nil
 	}
 
 	currentContent, err := os.ReadFile(entry.Skill.FilePath)
@@ -370,27 +351,82 @@ func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding stri
 	// Get the bounded usage evidence this evolution is allowed to act on.
 	// Lifetime Stats() can include old failures that should remain observable
 	// but must not keep driving fresh rewrites.
+	stats := e.evolutionStats(skillName)
+	// Burst continuation on a covered skill bypasses the fresh-evidence
+	// requirement — its held-out bench is the evidence, and the pre-commit
+	// gates below still guard every round. Uncovered skills fall through to
+	// the conservative stop.
+	if !hasSufficientEvolutionEvidence(stats, reviewFinding) &&
+		!(burstContinuation && hasScorableValidationCase(e.validationCasesForCoverage(skillName))) {
+		return &EvolveResult{
+			SkillName: skillName,
+			Evolved:   false,
+			Reason:    fmt.Sprintf("insufficient evolution evidence: need review finding or at least %d counted uses with %d real failures and recent error evidence", skillEvolutionMinEvidenceUses, skillEvolutionMinEvidenceFailures),
+		}, nil
+	}
+
+	userPrompt := e.buildEvolveUserPrompt(skillName, string(currentContent), stats, reviewFinding)
+
+	if primaryClient, _ := e.primaryModel(); primaryClient == nil {
+		return nil, fmt.Errorf("evolver: primary client not configured")
+	}
+
+	return e.generateSelectAndApply(ctx, userPrompt, entry, string(currentContent), stats, reviewFinding)
+}
+
+// resolveEvolveEntry gets the current skill entry from the catalog. A miss
+// usually means a BUNDLED (repo) skill: those are deliberately not seeded into
+// this catalog (the curator's staleness archiver would eat the rarely-used
+// ones), so an evolve verdict on one adopts it — copy into the managed dir,
+// which overrides bundled at discovery — and evolves the copy. Never rewrite
+// the repo checkout in place (deploy rsync --delete + auto git pull would
+// clobber it). First production hit 2026-07-04: contract-review's evolve
+// verdict died here.
+func (e *Evolver) resolveEvolveEntry(skillName string) (*skills.SkillEntry, error) {
+	entry, ok := e.catalog.Get(skillName)
+	if !ok {
+		adopted, aerr := e.adoptBundledSkill(skillName)
+		if aerr != nil {
+			return nil, fmt.Errorf("evolver: skill %q not found in catalog (bundled adoption: %w)", skillName, aerr)
+		}
+		entry = adopted
+	}
+	return entry, nil
+}
+
+// suppressedEvolveResult logs a circuit-breaker suppression (lifecycle +
+// operator log) and returns the non-evolve result. Pure extraction of the
+// evolveSkill suppression tail; audit records are unchanged.
+func (e *Evolver) suppressedEvolveResult(skillName, reason string) *EvolveResult {
+	if e.tracker != nil {
+		if logErr := e.tracker.LogEvolveRejectedWithAudit(skillName, reason, HarnessEditAudit{}); logErr != nil && e.logger != nil {
+			e.logger.Warn("evolver: lifecycle log write failed", "skill", skillName, "error", logErr)
+		}
+	}
+	if e.logger != nil {
+		e.logger.Info("evolver: evolve suppressed", "skill", skillName, "reason", reason)
+	}
+	return &EvolveResult{SkillName: skillName, Evolved: false, Reason: reason}
+}
+
+// evolutionStats returns the bounded usage evidence for skillName, or an empty
+// stats value when the tracker is unwired or has nothing recorded.
+func (e *Evolver) evolutionStats(skillName string) *UsageStats {
 	var stats *UsageStats
 	if e.tracker != nil {
-		stats, _ = e.tracker.EvolutionEvidenceStats(skillName)
+		stats, _ = e.tracker.evolutionEvidenceStats(skillName)
 	}
 	if stats == nil {
 		stats = &UsageStats{SkillName: skillName}
 	}
-	if !hasSufficientEvolutionEvidence(stats, reviewFinding) {
-		// Burst continuation on a covered skill bypasses the fresh-evidence
-		// requirement — its held-out bench is the evidence, and the pre-commit
-		// gates below still guard every round. Uncovered skills fall through to
-		// the conservative stop.
-		if !(burstContinuation && hasScorableValidationCase(e.validationCasesForCoverage(skillName))) {
-			return &EvolveResult{
-				SkillName: skillName,
-				Evolved:   false,
-				Reason:    fmt.Sprintf("insufficient evolution evidence: need review finding or at least %d counted uses with %d real failures and recent error evidence", skillEvolutionMinEvidenceUses, skillEvolutionMinEvidenceFailures),
-			}, nil
-		}
-	}
+	return stats
+}
 
+// buildEvolveUserPrompt assembles the rewrite prompt: current body, usage
+// stats, and the tracker-derived evidence sections. A review-provided finding
+// (when present) is the primary basis for improvement and lets the evolver
+// proceed without usage data.
+func (e *Evolver) buildEvolveUserPrompt(skillName, currentContent string, stats *UsageStats, reviewFinding string) string {
 	var rejected []RejectedSkillEditRecord
 	var optimizerMemory SkillOptimizerMemoryEntry
 	var validationCases []SkillValidationCaseRecord
@@ -410,8 +446,6 @@ func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding stri
 		validationCases = e.validationCasesForPrompt(skillName)
 	}
 
-	// Build prompt. A review-provided finding (when present) is the primary
-	// basis for improvement and lets the evolver proceed without usage data.
 	findingSection := ""
 	if strings.TrimSpace(reviewFinding) != "" {
 		findingSection = "\n\n## Review Finding (개선 지시 — 우선 반영)\n" + strings.TrimSpace(reviewFinding)
@@ -419,24 +453,10 @@ func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding stri
 	rejectedSection := formatRejectedSkillEdits(rejected)
 	memorySection := formatOptimizerMemory(optimizerMemory)
 	leverSection := e.formatLowYieldLevers()
-	exemplarSection := ""
-	if e.tracker != nil && stats != nil {
-		var sigs []string
-		for _, tr := range stats.RecentFailureTraces {
-			if s := strings.TrimSpace(tr.Signature); s != "" {
-				sigs = append(sigs, s)
-			}
-			if len(sigs) >= 3 {
-				break
-			}
-		}
-		if exemplars, exErr := e.tracker.ConfirmedEvolveExemplars(sigs, skillName, 3); exErr == nil {
-			exemplarSection = formatConfirmedEvolveExemplars(exemplars)
-		}
-	}
+	exemplarSection := e.formatEvolveExemplarSection(skillName, stats)
 	validationSection := formatValidationCasesForPrompt(validationCases)
 	failurePatternSection := formatFailurePatternsForPrompt(stats)
-	userPrompt := fmt.Sprintf(`## 현재 SKILL.md
+	return fmt.Sprintf(`## 현재 SKILL.md
 %s
 
 ## 사용 통계
@@ -444,7 +464,7 @@ func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding stri
 - 성공: %d회 (%.0f%%)
 - 실패: %d회
 - 최근 에러: %s%s%s%s%s%s%s%s`,
-		string(currentContent),
+		currentContent,
 		stats.TotalUses, stats.SuccessCount, stats.SuccessRate*100,
 		stats.FailureCount,
 		formatRecentErrors(stats.RecentErrors),
@@ -455,12 +475,29 @@ func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding stri
 		exemplarSection,
 		validationSection,
 		findingSection)
+}
 
-	if primaryClient, _ := e.primaryModel(); primaryClient == nil {
-		return nil, fmt.Errorf("evolver: primary client not configured")
+// formatEvolveExemplarSection renders confirmed evolve exemplars matched to the
+// skill's recent failure signatures (up to 3), or "" when the tracker is
+// unwired or lookup fails.
+func (e *Evolver) formatEvolveExemplarSection(skillName string, stats *UsageStats) string {
+	if e.tracker == nil || stats == nil {
+		return ""
 	}
-
-	return e.generateSelectAndApply(ctx, userPrompt, entry, string(currentContent), stats, reviewFinding)
+	var sigs []string
+	for _, tr := range stats.RecentFailureTraces {
+		if s := strings.TrimSpace(tr.Signature); s != "" {
+			sigs = append(sigs, s)
+		}
+		if len(sigs) >= 3 {
+			break
+		}
+	}
+	exemplars, exErr := e.tracker.confirmedEvolveExemplars(sigs, skillName, 3)
+	if exErr != nil {
+		return ""
+	}
+	return formatConfirmedEvolveExemplars(exemplars)
 }
 
 const (
@@ -477,7 +514,7 @@ func (e *Evolver) formatLowYieldLevers() string {
 	if e == nil || e.tracker == nil {
 		return ""
 	}
-	levers, err := e.tracker.LowYieldLevers(skillLeverYieldScanLimit, skillLeverYieldMinShips, skillLeverYieldMaxConfirmRate)
+	levers, err := e.tracker.lowYieldLevers(skillLeverYieldScanLimit, skillLeverYieldMinShips, skillLeverYieldMaxConfirmRate)
 	if err != nil || len(levers) == 0 {
 		return ""
 	}
@@ -555,6 +592,14 @@ func (e *Evolver) generateSelectAndApply(ctx context.Context, userPrompt string,
 		}
 	}
 
+	return e.finishCandidateSelection(entry, originalContent, best, lastResult, firstGenErr, generated)
+}
+
+// finishCandidateSelection resolves the K-candidate loop's outcome: commit the
+// best committable candidate, else return the last per-candidate skip/rejection
+// (already lifecycle-logged), else the fatal first-attempt producer error. Pure
+// extraction of generateSelectAndApply's tail.
+func (e *Evolver) finishCandidateSelection(entry *skills.SkillEntry, originalContent string, best *evaluatedCandidate, lastResult *EvolveResult, firstGenErr error, generated int) (*EvolveResult, error) {
 	if best != nil {
 		if generated > 1 && e.logger != nil {
 			e.logger.Info("evolver: selected best candidate",
@@ -680,9 +725,9 @@ func (e *Evolver) evolutionSuppressed(skillName string, now time.Time) (bool, st
 	return false, ""
 }
 
-// EvolveUnderperformers finds and evolves skills with poor success rates.
+// evolveUnderperformers finds and evolves skills with poor success rates.
 // Used as a periodic background task.
-func (e *Evolver) EvolveUnderperformers(ctx context.Context) ([]EvolveResult, error) {
+func (e *Evolver) evolveUnderperformers(ctx context.Context) ([]EvolveResult, error) {
 	if e.tracker == nil {
 		return nil, nil
 	}
@@ -693,7 +738,7 @@ func (e *Evolver) EvolveUnderperformers(ctx context.Context) ([]EvolveResult, er
 	}
 	defer e.runMu.Unlock()
 
-	candidates, err := e.tracker.SkillsNeedingEvolution(skillEvolutionMinEvidenceUses, 0.7)
+	candidates, err := e.tracker.skillsNeedingEvolution(skillEvolutionMinEvidenceUses, 0.7)
 	if err != nil {
 		return nil, err
 	}
@@ -818,14 +863,14 @@ func (t *EvolutionTask) Run(ctx context.Context) error {
 	// skill never resolves and the e-process label pipeline starves (backtest
 	// 2026-07-11: zero historical resolutions).
 	if t.Evolver != nil && t.Evolver.tracker != nil {
-		if n := t.Evolver.tracker.ResolveStaleWatches(watchMaxAge()); n > 0 && t.Evolver.logger != nil {
+		if n := t.Evolver.tracker.resolveStaleWatches(watchMaxAge()); n > 0 && t.Evolver.logger != nil {
 			t.Evolver.logger.Info("evolver: stale rollback watches resolved time-based", "count", n)
 		}
 	}
-	results, err := t.Evolver.EvolveUnderperformers(ctx)
+	results, err := t.Evolver.evolveUnderperformers(ctx)
 	// Heartbeat: records that the evolve cycle actually ran (liveness on /health).
 	if t.Evolver != nil && t.Evolver.tracker != nil {
-		t.Evolver.tracker.RecordEvolutionActivity(SkillActivityEvolve, err == nil, genesiscommon.ErrorString(err))
+		t.Evolver.tracker.RecordEvolutionActivity(skillActivityEvolve, err == nil, genesiscommon.ErrorString(err))
 	}
 	if err != nil {
 		return err

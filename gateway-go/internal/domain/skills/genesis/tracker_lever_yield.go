@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// LeverYield is the effectiveness of one evolution "lever" — a (target failure
+// leverYield is the effectiveness of one evolution "lever" — a (target failure
 // signature × edited surface) combination — aggregated over the lifecycle log
 // (#2, HarnessX Appendix D). It answers "do Procedure edits on timeout
 // signatures hold up more often than Pitfalls edits?", which per-skill tracking
@@ -13,7 +13,7 @@ import (
 // those that proved out over the post-evolve window; Partial counts
 // confirmed-but-target-recurred; RolledBack counts reverts; ConfirmRate is
 // Confirmed/Committed.
-type LeverYield struct {
+type leverYield struct {
 	Signature   string  `json:"signature"`
 	Surface     string  `json:"surface"`
 	Committed   int     `json:"committed"`
@@ -38,22 +38,22 @@ func leverKeyFromAudit(audit *HarnessEditAudit) leverKey {
 	}
 }
 
-// LeverYields aggregates the lifecycle log into per-lever effectiveness. It pairs
+// leverYields aggregates the lifecycle log into per-lever effectiveness. It pairs
 // each shipped evolve (an "evolved" entry, which carries the Self-Harness audit)
 // with its later outcome ("evolve_confirmed" / "evolve_rolled_back") for the same
 // skill — rollback entries carry no audit, so the lever is recovered from that
 // skill's most recent shipped evolve. limit bounds how much of the log is read.
-func (t *Tracker) LeverYields(limit int) ([]LeverYield, error) {
+func (t *Tracker) leverYields(limit int) ([]leverYield, error) {
 	entries, err := t.RecentLifecycleLog(limit)
 	if err != nil {
 		return nil, err
 	}
-	agg := map[leverKey]*LeverYield{}
+	agg := map[leverKey]*leverYield{}
 	lastLever := map[string]leverKey{} // skill -> lever of its last shipped evolve
-	get := func(k leverKey) *LeverYield {
+	get := func(k leverKey) *leverYield {
 		y := agg[k]
 		if y == nil {
-			y = &LeverYield{Signature: k.sig, Surface: k.surface}
+			y = &leverYield{Signature: k.sig, Surface: k.surface}
 			agg[k] = y
 		}
 		return y
@@ -81,7 +81,7 @@ func (t *Tracker) LeverYields(limit int) ([]LeverYield, error) {
 			get(lastLever[e.SkillName]).RolledBack++
 		}
 	}
-	out := make([]LeverYield, 0, len(agg))
+	out := make([]leverYield, 0, len(agg))
 	for _, y := range agg {
 		if y.Committed == 0 {
 			// Orphaned confirm/rollback whose 'evolved' entry fell outside the
@@ -105,7 +105,7 @@ func (t *Tracker) LeverYields(limit int) ([]LeverYield, error) {
 	return out, nil
 }
 
-// LowYieldLevers returns levers the evolver should stop proposing: a
+// lowYieldLevers returns levers the evolver should stop proposing: a
 // (signature×surface) pair whose RESOLVED evolves confirm at or below
 // maxConfirmRate. It feeds the evolve prompt's avoid-directions (HarnessX
 // Appendix D).
@@ -126,8 +126,8 @@ func (t *Tracker) LeverYields(limit int) ([]LeverYield, error) {
 //     borderline lever, so it would never fire — uncertainty paralysis).
 //
 // minResolved gates on resolved outcomes (confirm+revert), not bare ships.
-func (t *Tracker) LowYieldLevers(limit, minResolved int, maxConfirmRate float64) ([]LeverYield, error) {
-	all, err := t.LeverYields(limit)
+func (t *Tracker) lowYieldLevers(limit, minResolved int, maxConfirmRate float64) ([]leverYield, error) {
+	all, err := t.leverYields(limit)
 	if err != nil {
 		return nil, err
 	}
@@ -136,8 +136,8 @@ func (t *Tracker) LowYieldLevers(limit, minResolved int, maxConfirmRate float64)
 
 // filterLowYieldLevers is the pure avoid-decision (resolved denominator + Laplace
 // smoothing), split out for testability.
-func filterLowYieldLevers(levers []LeverYield, minResolved int, maxConfirmRate float64) []LeverYield {
-	var low []LeverYield
+func filterLowYieldLevers(levers []leverYield, minResolved int, maxConfirmRate float64) []leverYield {
+	var low []leverYield
 	for _, y := range levers {
 		resolved := y.Confirmed + y.RolledBack
 		if resolved < minResolved {
@@ -151,23 +151,23 @@ func filterLowYieldLevers(levers []LeverYield, minResolved int, maxConfirmRate f
 	return low
 }
 
-// ConfirmedEvolveExemplar is one cross-skill "this edit actually held up"
+// confirmedEvolveExemplar is one cross-skill "this edit actually held up"
 // exhibit for the evolve prompt (RSI P1.5 ⑤, TPGO 2604.20714 / GRAO): the
 // audit of a confirmed evolve whose target signature matches one of the
 // failing skill's current failure signatures.
-type ConfirmedEvolveExemplar struct {
+type confirmedEvolveExemplar struct {
 	SkillName string           `json:"skillName"`
 	Audit     HarnessEditAudit `json:"audit"`
 	CreatedAt int64            `json:"createdAt"`
 }
 
-// ConfirmedEvolveExemplars returns confirmed evolves (newest first, at most
+// confirmedEvolveExemplars returns confirmed evolves (newest first, at most
 // limit) whose normalized target signature matches any of signatures,
 // excluding excludeSkill (its own history already reaches the prompt via
 // optimizer memory). This is the positive mirror of LowYieldLevers — the
 // GRAO experience-retrieval mechanism: a memoryless improvement loop repeats
 // dead ends AND forgets what worked (TPGO ablation 30.0→14.5%).
-func (t *Tracker) ConfirmedEvolveExemplars(signatures []string, excludeSkill string, limit int) ([]ConfirmedEvolveExemplar, error) {
+func (t *Tracker) confirmedEvolveExemplars(signatures []string, excludeSkill string, limit int) ([]confirmedEvolveExemplar, error) {
 	if limit <= 0 || len(signatures) == 0 {
 		return nil, nil
 	}
@@ -201,8 +201,8 @@ func (t *Tracker) ConfirmedEvolveExemplars(signatures []string, excludeSkill str
 
 // confirmedExemplarsMatching scans newest-first confirmed evolves whose target
 // signature matches any of wanted (substring semantics, SignatureMatches).
-func confirmedExemplarsMatching(entries []LifecycleLogEntry, wanted []string, excludeSkill string, limit int) []ConfirmedEvolveExemplar {
-	var out []ConfirmedEvolveExemplar
+func confirmedExemplarsMatching(entries []LifecycleLogEntry, wanted []string, excludeSkill string, limit int) []confirmedEvolveExemplar {
+	var out []confirmedEvolveExemplar
 	for _, e := range entries { // newest first
 		if e.Type != "evolve_confirmed" || e.SkillName == excludeSkill || e.SelfHarnessAudit == nil {
 			continue
@@ -221,7 +221,7 @@ func confirmedExemplarsMatching(entries []LifecycleLogEntry, wanted []string, ex
 		if !matched {
 			continue
 		}
-		out = append(out, ConfirmedEvolveExemplar{SkillName: e.SkillName, Audit: *e.SelfHarnessAudit, CreatedAt: e.CreatedAt})
+		out = append(out, confirmedEvolveExemplar{SkillName: e.SkillName, Audit: *e.SelfHarnessAudit, CreatedAt: e.CreatedAt})
 		if len(out) >= limit {
 			break
 		}

@@ -14,7 +14,7 @@ func TestParseSlashCommand_Help(t *testing.T) {
 	}
 }
 
-func TestSlashHelpText_ListsCommands(t *testing.T) {
+func TestSlashHelpTextDisplaysCommands(t *testing.T) {
 	text := slashHelpText()
 	for _, want := range []string{"/help", "/status", "/reset", "/kill", "/rollback", "/update", "/restart"} {
 		if !strings.Contains(text, want) {

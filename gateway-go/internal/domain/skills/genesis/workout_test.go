@@ -56,7 +56,7 @@ func TestSkillWorkoutTask_RecordsQuarantinedFailures(t *testing.T) {
 		t.Fatalf("want 1 workout record, got %d (err=%v)", len(records), err)
 	}
 	rec := records[0]
-	if rec.Source != UsageSourceWorkout || rec.Success || !strings.HasPrefix(rec.SessionKey, workoutSessionPrefix) {
+	if rec.Source != usageSourceWorkout || rec.Success || !strings.HasPrefix(rec.SessionKey, workoutSessionPrefix) {
 		t.Fatalf("workout record shape wrong: %+v", rec)
 	}
 	if isRealUsageRecord(rec) {
@@ -107,7 +107,7 @@ func TestSkillWorkoutTask_PassAndExecutorErrorPaths(t *testing.T) {
 
 // The lane rotates fairly (least-recently-exercised first) and never
 // re-records a defect already evidenced inside the window.
-func TestSkillWorkoutTask_RotationAndDedup(t *testing.T) {
+func TestSkillWorkoutTaskDedupsRepeatedFailureAcrossCyclesAndTracksRotation(t *testing.T) {
 	tr, catalog := workoutFixtures(t)
 	failing := func(_ context.Context, _ string, _ SkillValidationCaseRecord) (skillReplayTrace, error) {
 		return skillReplayTrace{}, nil
@@ -147,7 +147,7 @@ func TestSkillWorkoutTask_RotationAndDedup(t *testing.T) {
 }
 
 // The liveness summary rolls up in-window workout records for the status view.
-func TestWorkoutActivitySummarize(t *testing.T) {
+func TestWorkoutActivitySummarizeRollsUpInWindowRecordsAndZerosWhenEmpty(t *testing.T) {
 	tr, catalog := workoutFixtures(t)
 	task := &SkillWorkoutTask{
 		Tracker: tr, Catalog: catalog,
@@ -183,7 +183,7 @@ func TestWorkoutCaseLabelFromError_PreservesColonLabels(t *testing.T) {
 // Passing skills advance rotation via a success marker, so lastAt is set for
 // every exercised skill (not just failing ones) — fixes the starvation where
 // alphabetically-first passing skills ran every cycle.
-func TestSkillWorkoutTask_PassingSkillAdvancesRotation(t *testing.T) {
+func TestSkillWorkoutTaskPassingSkillUpdatesRotationTimestamp(t *testing.T) {
 	tr, catalog := workoutFixtures(t)
 	pass := &SkillWorkoutTask{
 		Tracker: tr, Catalog: catalog,

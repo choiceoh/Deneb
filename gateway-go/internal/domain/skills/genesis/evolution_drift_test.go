@@ -24,7 +24,7 @@ func shapeEvolutionHealth(t *testing.T, tr *Tracker, confirmed, rolledBack int) 
 		if err := tr.LogEvolveWithAudit("sk", "1.0.1", "d", HarnessEditAudit{}); err != nil {
 			t.Fatal(err)
 		}
-		if err := tr.LogEvolveConfirmed("sk", HarnessEditAudit{}, true); err != nil {
+		if err := tr.logEvolveConfirmed("sk", HarnessEditAudit{}, true); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -32,7 +32,7 @@ func shapeEvolutionHealth(t *testing.T, tr *Tracker, confirmed, rolledBack int) 
 		if err := tr.LogEvolveWithAudit("sk", "1.0.2", "d", HarnessEditAudit{}); err != nil {
 			t.Fatal(err)
 		}
-		if err := tr.LogEvolveRolledBack("sk"); err != nil {
+		if err := tr.logEvolveRolledBack("sk"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -40,11 +40,11 @@ func shapeEvolutionHealth(t *testing.T, tr *Tracker, confirmed, rolledBack int) 
 
 // The self-brake must engage on each drift class and stay clear on a healthy
 // trajectory.
-func TestAuditEvolutionDrift(t *testing.T) {
+func TestAuditEvolutionDrift_FreezesOnDriftSignalsStaysClearOnHealthyTrajectory(t *testing.T) {
 	t.Run("healthy trajectory is not frozen", func(t *testing.T) {
 		tr := driftTracker(t)
 		shapeEvolutionHealth(t, tr, 5, 1) // FAR 0.17
-		if v := tr.AuditEvolutionDrift(); v.Frozen {
+		if v := tr.auditEvolutionDrift(); v.Frozen {
 			t.Fatalf("healthy trajectory frozen: %+v", v.Signals)
 		}
 	})
@@ -52,7 +52,7 @@ func TestAuditEvolutionDrift(t *testing.T) {
 	t.Run("judge going soft (high false-accept) freezes", func(t *testing.T) {
 		tr := driftTracker(t)
 		shapeEvolutionHealth(t, tr, 2, 4) // FAR 0.67 over 6 resolved
-		v := tr.AuditEvolutionDrift()
+		v := tr.auditEvolutionDrift()
 		if !v.Frozen || !hasSignal(v, "judge_soft") {
 			t.Fatalf("high false-accept did not trip judge_soft: %+v", v.Signals)
 		}
@@ -61,7 +61,7 @@ func TestAuditEvolutionDrift(t *testing.T) {
 	t.Run("thin sample does not freeze on rate alone", func(t *testing.T) {
 		tr := driftTracker(t)
 		shapeEvolutionHealth(t, tr, 0, 2) // FAR 1.0 but only 2 resolved < min 4
-		if v := tr.AuditEvolutionDrift(); v.Frozen {
+		if v := tr.auditEvolutionDrift(); v.Frozen {
 			t.Fatalf("thin sample froze: %+v", v.Signals)
 		}
 	})
@@ -78,7 +78,7 @@ func TestAuditEvolutionDrift(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		v := tr.AuditEvolutionDrift()
+		v := tr.auditEvolutionDrift()
 		if !v.Frozen || !hasSignal(v, "meta_revert_spike") {
 			t.Fatalf("revert spike not detected: %+v", v.Signals)
 		}
@@ -91,7 +91,7 @@ func TestAuditEvolutionDrift(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		v := tr.AuditEvolutionDrift()
+		v := tr.auditEvolutionDrift()
 		if !v.Frozen || !hasSignal(v, "adoption_monotony") {
 			t.Fatalf("monotony not detected: %+v", v.Signals)
 		}
@@ -110,7 +110,7 @@ func TestAuditEvolutionDrift(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if v := tr.AuditEvolutionDrift(); hasSignal(v, "adoption_monotony") {
+		if v := tr.auditEvolutionDrift(); hasSignal(v, "adoption_monotony") {
 			t.Fatalf("revert should have broken the streak: %+v", v.Signals)
 		}
 	})
@@ -118,10 +118,10 @@ func TestAuditEvolutionDrift(t *testing.T) {
 	t.Run("broken verifier (failed planted defects) freezes", func(t *testing.T) {
 		tr := driftTracker(t)
 		// No ByClass breakdown (legacy record) — the aggregate fallback path.
-		if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{Pairs: 12, Correct: 4}); err != nil {
+		if err := tr.logJudgeAccuracy(judgeAccuracyRecord{Pairs: 12, Correct: 4}); err != nil {
 			t.Fatal(err)
 		}
-		v := tr.AuditEvolutionDrift()
+		v := tr.auditEvolutionDrift()
 		if !v.Frozen || !hasSignal(v, "verifier_broken") {
 			t.Fatalf("broken verifier not detected: %+v", v.Signals)
 		}
@@ -131,7 +131,7 @@ func TestAuditEvolutionDrift(t *testing.T) {
 		tr := driftTracker(t)
 		// Blatant 1/4 caught is breakage; the passing subtle probes hold the
 		// aggregate at 6/9 = 0.67, which the old all-class rate would miss.
-		if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+		if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 			Pairs: 9, Correct: 6,
 			ByClass: map[string][2]int{
 				"section-drop":    {1, 1},
@@ -144,7 +144,7 @@ func TestAuditEvolutionDrift(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		v := tr.AuditEvolutionDrift()
+		v := tr.auditEvolutionDrift()
 		if !v.Frozen || !hasSignal(v, "verifier_broken") {
 			t.Fatalf("must-catch misses not detected: %+v", v.Signals)
 		}
@@ -156,7 +156,7 @@ func TestAuditEvolutionDrift(t *testing.T) {
 		// tier-3 weaken probe missed. The aggregate 4/10 = 0.40 sits under the
 		// floor — scoring must-catch classes only keeps the healthy judge
 		// unfrozen (weaken misses are P3 fuel, not breakage).
-		if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+		if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 			Pairs: 10, Correct: 4,
 			ByClass: map[string][2]int{
 				"section-drop":      {1, 1},
@@ -169,14 +169,14 @@ func TestAuditEvolutionDrift(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		if v := tr.AuditEvolutionDrift(); hasSignal(v, "verifier_broken") {
+		if v := tr.auditEvolutionDrift(); hasSignal(v, "verifier_broken") {
 			t.Fatalf("weaken-tier misses tripped verifier_broken: %+v", v.Signals)
 		}
 	})
 
 	t.Run("run with no must-catch pairs yields no verifier evidence", func(t *testing.T) {
 		tr := driftTracker(t)
-		if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+		if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 			Pairs: 4, Correct: 0,
 			ByClass: map[string][2]int{
 				"imperative-drop": {0, 2},
@@ -185,7 +185,7 @@ func TestAuditEvolutionDrift(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		if v := tr.AuditEvolutionDrift(); hasSignal(v, "verifier_broken") {
+		if v := tr.auditEvolutionDrift(); hasSignal(v, "verifier_broken") {
 			t.Fatalf("subtle-only run tripped verifier_broken: %+v", v.Signals)
 		}
 	})
@@ -193,7 +193,7 @@ func TestAuditEvolutionDrift(t *testing.T) {
 
 // The persisted self-brake marker gates AutoAdoptFrozen and only logs on a
 // state transition.
-func TestRunEvolutionDriftAudit_Transitions(t *testing.T) {
+func TestRunEvolutionDriftAudit_FiresTransitionCallbackOnlyOnStateChangeAndRecovery(t *testing.T) {
 	tr := driftTracker(t)
 	if tr.AutoAdoptFrozen() {
 		t.Fatal("fresh tracker should not be frozen")
@@ -202,7 +202,7 @@ func TestRunEvolutionDriftAudit_Transitions(t *testing.T) {
 	// Drive a freeze.
 	shapeEvolutionHealth(t, tr, 1, 5) // FAR 0.83
 	var transitions []bool
-	tr.RunEvolutionDriftAudit(func(frozen bool, _ []string) { transitions = append(transitions, frozen) })
+	tr.runEvolutionDriftAudit(func(frozen bool, _ []string) { transitions = append(transitions, frozen) })
 	if !tr.AutoAdoptFrozen() {
 		t.Fatal("drift did not engage the self-brake")
 	}
@@ -211,11 +211,11 @@ func TestRunEvolutionDriftAudit_Transitions(t *testing.T) {
 	}
 
 	// Re-running on the same frozen state must NOT re-fire the transition.
-	tr.RunEvolutionDriftAudit(func(bool, []string) { t.Fatal("transition re-fired without a state change") })
+	tr.runEvolutionDriftAudit(func(bool, []string) { t.Fatal("transition re-fired without a state change") })
 
 	// Recover: enough clean confirms to pull FAR under the ceiling.
 	shapeEvolutionHealth(t, tr, 20, 0)
-	tr.RunEvolutionDriftAudit(func(frozen bool, _ []string) { transitions = append(transitions, frozen) })
+	tr.runEvolutionDriftAudit(func(frozen bool, _ []string) { transitions = append(transitions, frozen) })
 	if tr.AutoAdoptFrozen() {
 		t.Fatal("recovery did not release the self-brake")
 	}
@@ -254,7 +254,7 @@ func TestAutoAdoptFrozen_FailsClosed(t *testing.T) {
 	})
 }
 
-func hasSignal(v DriftVerdict, kind string) bool {
+func hasSignal(v driftVerdict, kind string) bool {
 	for _, s := range v.Signals {
 		if s.Kind == kind {
 			return true

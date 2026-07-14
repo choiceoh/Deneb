@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 )
 
-func TestRegisterEarlyMethods_ValidatesBeforeCapabilityInitialization(t *testing.T) {
+func TestRegisterEarlyMethodsReturnsValidationErrorBeforeStoresInitialize(t *testing.T) {
 	srv := &Server{MemorySubsystem: &MemorySubsystem{}}
 	hub := rpcutil.NewGatewayHub(rpcutil.HubConfig{})
 
@@ -81,7 +81,7 @@ func TestEarlyCapabilityHelpers_PreserveMethodNames(t *testing.T) {
 	}
 }
 
-func TestEarlyProviderMethods_RequiresRegistry(t *testing.T) {
+func TestEarlyProviderMethodsReturnsMethodsOnlyWithRegistry(t *testing.T) {
 	srv := &Server{ServerRPC: &ServerRPC{}}
 	if got := srv.earlyProviderMethods(); got != nil {
 		t.Fatalf("provider groups without registry = %v, want nil", got)

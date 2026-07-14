@@ -11,7 +11,7 @@ import (
 // unfixable assertion pinned OriginalScore below 100 and the min-delta rule
 // then rejected EVERY future candidate of that skill (the wedge), or handed
 // out free passes. Checked in as regressions so the gate can't re-grow them.
-func TestScoreSkillValidationCases_ExploitSeeds(t *testing.T) {
+func TestScoreSkillValidationCasesIgnoresEmptyAssertionsAndClearsWedge(t *testing.T) {
 	body := "# 제목\n\n본문 내용"
 	mk := func(req, forb, head []string) []SkillValidationCaseRecord {
 		return []SkillValidationCaseRecord{{SkillName: "sk", RequiredSubstrings: req, ForbiddenSubstrings: forb, RequiredHeadings: head}}
@@ -48,8 +48,8 @@ func TestScoreSkillValidationCases_ExploitSeeds(t *testing.T) {
 	}}
 	orig := scoreSkillValidationCases("본문", tcs)
 	cand := scoreSkillValidationCases("본문 + 회상 단계", tcs)
-	if orig.Percent() != 0 || cand.Percent() != 100 {
-		t.Fatalf("wedge not cleared: orig=%v cand=%v", orig.Percent(), cand.Percent())
+	if orig.percent() != 0 || cand.percent() != 100 {
+		t.Fatalf("wedge not cleared: orig=%v cand=%v", orig.percent(), cand.percent())
 	}
 }
 
@@ -62,7 +62,7 @@ func checkScoreInvariants(t *testing.T, body string, tcs []SkillValidationCaseRe
 	if s.Passed < 0 || s.Total < 0 || s.Passed > s.Total {
 		t.Fatalf("invariant Passed<=Total violated: %+v", s)
 	}
-	if p := s.Percent(); p < 0 || p > 100 {
+	if p := s.percent(); p < 0 || p > 100 {
 		t.Fatalf("Percent out of range: %v", p)
 	}
 	if again := scoreSkillValidationCases(body, tcs); again.Passed != s.Passed || again.Total != s.Total {
@@ -117,7 +117,7 @@ func FuzzCrossSkillRegression(f *testing.F) {
 		if !utf8.ValidString(body) || !utf8.ValidString(forb) {
 			t.Skip()
 		}
-		r := CrossSkillRegression("n", body, []SkillValidationCaseRecord{{SkillName: "sk", ForbiddenSubstrings: []string{forb}}})
+		r := crossSkillRegression("n", body, []SkillValidationCaseRecord{{SkillName: "sk", ForbiddenSubstrings: []string{forb}}})
 		if r.Passed > r.Total {
 			t.Fatalf("cross-regression invariant: %+v", r)
 		}

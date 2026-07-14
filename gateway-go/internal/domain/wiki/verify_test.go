@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestDetectStaleDeadlines(t *testing.T) {
+func TestDetectStaleDeadlines_FlagsOnlyPastDueIgnoresFutureAndNoDue(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

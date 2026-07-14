@@ -10,11 +10,12 @@ import (
 func intPtr(i int) *int       { return &i }
 func strPtr(s string) *string { return &s }
 
-// TestRoutingProfileForModel_Layering covers the three resolution layers: a
-// dual-mode model resolves to the builtin default + its capability toggle (the
-// current main model's behavior), a model with no toggle stays inert, and a
-// deneb.json routing block overrides per-model knobs.
-func TestRoutingProfileForModel_Layering(t *testing.T) {
+// TestRoutingProfileForModelReturnsLayeredOverrides covers the three
+// resolution layers: a dual-mode model resolves to the builtin default + its
+// capability toggle (the current main model's behavior), a model with no
+// toggle stays inert, and a deneb.json routing block overrides per-model
+// knobs.
+func TestRoutingProfileForModelReturnsLayeredOverrides(t *testing.T) {
 	def := router.DefaultProfile()
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		MainModel: "vllm/deepseek-v4-flash",

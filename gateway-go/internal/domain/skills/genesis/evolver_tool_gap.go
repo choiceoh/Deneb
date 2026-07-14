@@ -25,9 +25,9 @@ import (
 // evolveToolGapPairedType is the lifecycle entry type recording the pairing.
 const evolveToolGapPairedType = "evolve_tool_gap_paired"
 
-// LogEvolveToolGapPaired records that a skipped evolve was paired with a
+// logEvolveToolGapPaired records that a skipped evolve was paired with a
 // tool-repair coding candidate.
-func (t *Tracker) LogEvolveToolGapPaired(skillName, tool, candidateID string) error {
+func (t *Tracker) logEvolveToolGapPaired(skillName, tool, candidateID string) error {
 	return jsonlstore.Append(t.logPath, evolveLogEntry{
 		Type:      evolveToolGapPairedType,
 		SkillName: skillName,
@@ -97,7 +97,7 @@ func (e *Evolver) maybePairToolGap(skillName string, resp evolveResp, stats *Usa
 			"skill", skillName, "tool", tool, "error", err)
 		return
 	}
-	if err := e.tracker.LogEvolveToolGapPaired(skillName, tool, record.ID); err != nil {
+	if err := e.tracker.logEvolveToolGapPaired(skillName, tool, record.ID); err != nil {
 		e.logger.Warn("evolver: tool gap lifecycle write failed",
 			"skill", skillName, "error", err)
 	}

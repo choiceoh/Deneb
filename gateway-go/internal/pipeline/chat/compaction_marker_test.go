@@ -6,7 +6,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 )
 
-func TestCompactionProducedSummary(t *testing.T) {
+func TestCompactionProducedSummaryReturnsExpectedBool(t *testing.T) {
 	cases := []struct {
 		name string
 		in   compaction.Result

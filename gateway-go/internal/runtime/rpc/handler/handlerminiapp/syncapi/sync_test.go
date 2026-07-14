@@ -36,7 +36,7 @@ func TestSyncMethodsNilStoreReturnsNil(t *testing.T) {
 	}
 }
 
-func TestSyncPull(t *testing.T) {
+func TestSyncPullClampsLimitAndReturnsNextCursor(t *testing.T) {
 	store := &fakeNativeSyncStore{}
 	h := syncPull(SyncDeps{Store: store})
 	resp := h(authedCtx(), reqWith(t, "miniapp.sync.pull", map[string]any{
@@ -59,7 +59,7 @@ func TestSyncPull(t *testing.T) {
 	}
 }
 
-func TestSyncPullRequiresAuth(t *testing.T) {
+func TestSyncPullRejectsUnauthenticatedContext(t *testing.T) {
 	h := syncPull(SyncDeps{Store: &fakeNativeSyncStore{}})
 	resp := h(context.Background(), reqWith(t, "miniapp.sync.pull", nil))
 	if resp.OK {
@@ -70,7 +70,7 @@ func TestSyncPullRequiresAuth(t *testing.T) {
 	}
 }
 
-func TestSyncPullUnavailable(t *testing.T) {
+func TestSyncPullReturnsUnavailableOnStoreError(t *testing.T) {
 	h := syncPull(SyncDeps{Store: &fakeNativeSyncStore{err: errors.New("disk down")}})
 	resp := h(authedCtx(), reqWith(t, "miniapp.sync.pull", nil))
 	if resp.OK {

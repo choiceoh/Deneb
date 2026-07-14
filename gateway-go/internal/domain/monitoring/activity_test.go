@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestActivityTracker(t *testing.T) {
+func TestActivityTrackerUpdatesTimestampOnTouch(t *testing.T) {
 	tracker := NewActivityTracker()
 	initial := tracker.LastActivityAt()
 	if initial <= 0 {

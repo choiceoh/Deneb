@@ -137,7 +137,7 @@ func TestParseFenceBoundariesAndOffsets(t *testing.T) {
 	}
 }
 
-func TestInlineDirectiveParsingAndAudioTags(t *testing.T) {
+func TestStripInlineDirectivesParsesAudioAndVoiceKeys(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		in        string
@@ -188,7 +188,7 @@ func TestCollapseWhitespaceContract(t *testing.T) {
 	}
 }
 
-func TestMediaValidationHelpers(t *testing.T) {
+func TestMediaValidationHelpersClassifyValidAndInvalidCandidates(t *testing.T) {
 	for _, tc := range []struct {
 		candidate   string
 		valid       bool
@@ -224,7 +224,7 @@ func TestMediaValidationHelpers(t *testing.T) {
 	}
 }
 
-func TestCandidateCleaningQuotingAndNormalization(t *testing.T) {
+func TestCleanCandidateUnwrapsQuotesAndNormalizesSource(t *testing.T) {
 	for _, tc := range []struct {
 		in      string
 		cleaned string

@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
-func TestIsCacheIncompatibleProvider(t *testing.T) {
+func TestIsCacheIncompatibleProviderReturnsTrueOnlyForKimiVariants(t *testing.T) {
 	// Bare id, casing/whitespace, catalog aliases (kimi-code/kimi-coding) and the
 	// "<provider>-subagent" remap (kimi-subagent) all route through the Anthropic
 	// client and reject cache_control, so all must match.
@@ -25,7 +25,7 @@ func TestIsCacheIncompatibleProvider(t *testing.T) {
 	}
 }
 
-func TestStripCacheControlMarkers_RemovesAllMarkers(t *testing.T) {
+func TestStripCacheControlMarkers_ClearsAllMarkers(t *testing.T) {
 	ephemeral := &llm.CacheControl{Type: "ephemeral"}
 	blocks := []llm.ContentBlock{
 		{Type: "text", Text: "static", CacheControl: ephemeral},
@@ -55,14 +55,14 @@ func TestStripCacheControlMarkers_RemovesAllMarkers(t *testing.T) {
 	}
 }
 
-func TestStripCacheControlMarkers_StringSystemUnchanged(t *testing.T) {
+func TestStripCacheControlMarkers_PreservesStringSystem(t *testing.T) {
 	raw := llm.SystemString("plain system prompt")
 	if out := stripCacheControlMarkers(raw); string(out) != string(raw) {
 		t.Fatalf("string system prompt must be unchanged, got %s", out)
 	}
 }
 
-func TestStripCacheControlMarkers_NoMarkersUnchanged(t *testing.T) {
+func TestStripCacheControlMarkers_PreservesBlocksWithoutMarkers(t *testing.T) {
 	blocks := []llm.ContentBlock{{Type: "text", Text: "a"}, {Type: "text", Text: "b"}}
 	raw, _ := json.Marshal(blocks)
 	if out := stripCacheControlMarkers(raw); string(out) != string(raw) {

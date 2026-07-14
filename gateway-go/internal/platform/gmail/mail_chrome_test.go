@@ -10,10 +10,10 @@ import (
 // so footer/preamble line anchors land on distinct lines.
 var chromeBody = strings.Repeat("이번 주 출시 노트의 주요 변경 사항입니다. ", 8)
 
-// TestStripMailChrome_NewPreamblePatterns covers the patterns added in the
+// TestStripMailChrome_ClearsPreambleNoisePatterns covers the patterns added in the
 // header-filter enhancement: trouble-viewing banners, click-here, online
 // view, mobile click-to-view, "[광고]" markers, Korean variations.
-func TestStripMailChrome_NewPreamblePatterns(t *testing.T) {
+func TestStripMailChrome_ClearsPreambleNoisePatterns(t *testing.T) {
 	cases := []struct {
 		name     string
 		preamble string
@@ -46,10 +46,10 @@ func TestStripMailChrome_NewPreamblePatterns(t *testing.T) {
 	}
 }
 
-// TestStripMailChrome_NewFooterPatterns covers do-not-reply, mobile
+// TestStripMailChrome_ClearsFooterNoisePatterns covers do-not-reply, mobile
 // signatures, business-registration footers, privacy/terms footers,
 // "you're receiving this because" footers.
-func TestStripMailChrome_NewFooterPatterns(t *testing.T) {
+func TestStripMailChrome_ClearsFooterNoisePatterns(t *testing.T) {
 	cases := []struct {
 		name   string
 		footer string
@@ -91,9 +91,9 @@ func TestStripMailChrome_NewFooterPatterns(t *testing.T) {
 	}
 }
 
-// TestStripMailReplyQuote_CutsBelowMarker verifies that reply / forward
+// TestStripMailReplyQuote_TruncatesBelowMarker verifies that reply / forward
 // markers truncate the body to the user's actual reply text.
-func TestStripMailReplyQuote_CutsBelowMarker(t *testing.T) {
+func TestStripMailReplyQuote_TruncatesBelowMarker(t *testing.T) {
 	reply := strings.Repeat("답장입니다. 검토 후 회신드리겠습니다. ", 4)
 
 	cases := []struct {
@@ -171,10 +171,10 @@ func TestStripMailReplyQuote_KeepsForwardWithoutCommentary(t *testing.T) {
 	}
 }
 
-// TestStripMailReplyQuote_ShortPrefixSkipped — when the surviving prefix
-// would be tiny (< minReplyVisible visible chars), keep the input as-is
-// so the operator can see the quoted body.
-func TestStripMailReplyQuote_ShortPrefixSkipped(t *testing.T) {
+// TestStripMailReplyQuote_PreservesQuotedBodyWhenPrefixTooShort — when the
+// surviving prefix would be tiny (< minReplyVisible visible chars), keep the
+// input as-is so the operator can see the quoted body.
+func TestStripMailReplyQuote_PreservesQuotedBodyWhenPrefixTooShort(t *testing.T) {
 	in := "ㅇㅋ\n\n" +
 		"----- Original Message -----\n" +
 		strings.Repeat("긴 원본 본문이 여기에 길게 들어 있다고 가정합니다. ", 8)
@@ -184,10 +184,10 @@ func TestStripMailReplyQuote_ShortPrefixSkipped(t *testing.T) {
 	}
 }
 
-// TestStripMailReplyQuote_OutlookHeaderOnlyOnHeaderLikeLine — "보낸 사람:"
+// TestStripMailReplyQuote_IgnoresMidProseOutlookHeaderMention — "보낸 사람:"
 // in mid-body prose (no colon-prefixed header form) must not trigger a
 // cut.
-func TestStripMailReplyQuote_OutlookHeaderOnlyOnHeaderLikeLine(t *testing.T) {
+func TestStripMailReplyQuote_IgnoresMidProseOutlookHeaderMention(t *testing.T) {
 	// The phrase "보낸 사람을" appears mid-sentence here — this is not a
 	// header line and must not cut the body.
 	body := strings.Repeat("이번 분기 보낸 사람을 추적하는 시스템 개선안에 대해 검토했습니다. ", 5)
@@ -197,9 +197,9 @@ func TestStripMailReplyQuote_OutlookHeaderOnlyOnHeaderLikeLine(t *testing.T) {
 	}
 }
 
-// TestVisibleRuneCount sanity-checks the helper used to gate reply-quote
-// cuts.
-func TestVisibleRuneCount(t *testing.T) {
+// TestVisibleRuneCount_IgnoresWhitespace sanity-checks the helper used to
+// gate reply-quote cuts.
+func TestVisibleRuneCount_IgnoresWhitespace(t *testing.T) {
 	cases := []struct {
 		in   string
 		want int
@@ -218,12 +218,12 @@ func TestVisibleRuneCount(t *testing.T) {
 	}
 }
 
-// TestStripMailChrome_BackwardCompat — verify the original safety
+// TestStripMailChrome_PreservesSafetyInvariants — verify the original safety
 // invariants (short body untouched, top-half copyright kept, over-
 // aggressive cut aborted) still hold after the expansion. These overlap
 // with the operations_test.go tests but are kept here so the chrome file
 // is self-testable.
-func TestStripMailChrome_BackwardCompat(t *testing.T) {
+func TestStripMailChrome_PreservesSafetyInvariants(t *testing.T) {
 	t.Run("short body untouched", func(t *testing.T) {
 		in := "OTP: 123456 — Sent from my iPhone"
 		if got := stripMailChrome(in); got != in {

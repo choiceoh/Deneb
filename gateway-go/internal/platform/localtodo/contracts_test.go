@@ -374,7 +374,7 @@ func TestValidationFailuresLeaveTodoUntouched(t *testing.T) {
 	}
 }
 
-func TestSortTodosStableTieBreaks(t *testing.T) {
+func TestSortTodos_PreservesInsertionOrderForTies(t *testing.T) {
 	created := time.Date(2026, 7, 11, 9, 0, 0, 0, time.UTC)
 	due := created.Add(24 * time.Hour)
 	in := []Todo{

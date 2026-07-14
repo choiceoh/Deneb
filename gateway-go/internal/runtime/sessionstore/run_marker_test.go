@@ -54,7 +54,7 @@ func TestRunMarkerStore_WriteReadDelete(t *testing.T) {
 	}
 }
 
-func TestRunMarkerStore_List(t *testing.T) {
+func TestRunMarkerStore_ListReturnsAllWrittenMarkers(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	store := NewRunMarkerStore(dir)
@@ -75,7 +75,7 @@ func TestRunMarkerStore_List(t *testing.T) {
 	}
 }
 
-func TestRunMarkerStore_ListSkipsCorruptFiles(t *testing.T) {
+func TestRunMarkerStore_ListIgnoresCorruptFiles(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	store := NewRunMarkerStore(dir)
@@ -102,7 +102,7 @@ func TestRunMarkerStore_ListSkipsCorruptFiles(t *testing.T) {
 	}
 }
 
-func TestRunMarkerStore_IncrementResumeAttempts(t *testing.T) {
+func TestRunMarkerStore_IncrementResumeAttemptsUpdatesPersistedCount(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	store := NewRunMarkerStore(dir)
@@ -144,7 +144,7 @@ func TestRunMarkerStore_IncrementResumeAttempts(t *testing.T) {
 	}
 }
 
-func TestRunMarkerStore_Touch(t *testing.T) {
+func TestRunMarkerStore_TouchUpdatesLastActivityAt(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	store := NewRunMarkerStore(dir)
@@ -171,7 +171,7 @@ func TestRunMarkerStore_Touch(t *testing.T) {
 	}
 }
 
-func TestRunMarkerStore_SanitizeKey(t *testing.T) {
+func TestRunMarkerStore_SanitizeKeyNormalizesPathTraversal(t *testing.T) {
 	t.Parallel()
 	// Path traversal attempts must not escape baseDir.
 	dir := t.TempDir()

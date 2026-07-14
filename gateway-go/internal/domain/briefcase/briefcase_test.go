@@ -46,7 +46,7 @@ func TestLoadDirValidCasepack(t *testing.T) {
 	}
 }
 
-func TestCanonicalDigest(t *testing.T) {
+func TestCanonicalDigestChangesWithManifestAndRejectsNil(t *testing.T) {
 	_, manifest := writeValidCase(t)
 	want := manifest.ManifestDigest
 
@@ -341,7 +341,7 @@ func TestLoadDirRejectsSealedAndFutureVisibility(t *testing.T) {
 	}
 }
 
-func TestPolicyValidation(t *testing.T) {
+func TestPolicyValidationRejectsInvalidValues(t *testing.T) {
 	tests := []struct {
 		name   string
 		mutate func(*Manifest)

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestTokenize(t *testing.T) {
+func TestTokenizeParsesWordsAndDigits(t *testing.T) {
 	got := tokenize("Send_and read Email-99!")
 	want := []string{"send", "and", "read", "email", "99"}
 	if !reflect.DeepEqual(got, want) {
@@ -13,7 +13,7 @@ func TestTokenize(t *testing.T) {
 	}
 }
 
-func TestExtractParamNames(t *testing.T) {
+func TestExtractParamNamesReturnsSchemaProperties(t *testing.T) {
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -37,7 +37,7 @@ func TestExtractParamNames(t *testing.T) {
 	}
 }
 
-func TestBM25Rank_OrdersByRelevance(t *testing.T) {
+func TestBM25Rank_ReturnsDocsOrderedByRelevance(t *testing.T) {
 	docs := []searchDoc{
 		{name: "mail_archive", tokens: tokenize("mail archive email email inbox")},
 		{name: "calendar", tokens: tokenize("calendar email events")},

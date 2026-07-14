@@ -42,9 +42,10 @@ func (s *recordingTranscriptStore) Search(string, int) ([]toolport.SearchResult,
 }
 func (s *recordingTranscriptStore) CloneRecent(string, string, int) error { return nil }
 
-// TestRelay verifies that relay() always delivers to the native 업무 session
-// (client:main) plus a live push, regardless of the session key argument.
-func TestRelay(t *testing.T) {
+// TestRelayWritesNativeSessionAndEmitsPush verifies that relay() always
+// delivers to the native 업무 session (client:main) plus a live push,
+// regardless of the session key argument.
+func TestRelayWritesNativeSessionAndEmitsPush(t *testing.T) {
 	store := newRecordingTranscriptStore()
 	hub := newClientPushHub()
 	events, unsub := hub.subscribe(kindMobile)
@@ -86,10 +87,11 @@ func TestRelay(t *testing.T) {
 	}
 }
 
-// TestRelay_SuppressesContentless verifies that "nothing to report" proactive
-// bodies (an email-check cron's "없습니다" ping, a dreaming "변경 없음", an analysis
-// stub) are dropped entirely: no transcript bubble, no work-feed card, no push.
-func TestRelay_SuppressesContentless(t *testing.T) {
+// TestRelay_IgnoresContentlessBodies verifies that "nothing to report"
+// proactive bodies (an email-check cron's "없습니다" ping, a dreaming "변경 없음",
+// an analysis stub) are dropped entirely: no transcript bubble, no work-feed
+// card, no push.
+func TestRelay_IgnoresContentlessBodies(t *testing.T) {
 	cases := []string{
 		"읽지 않은 카카오메일 알림이 없습니다.",
 		"읽지 않은 카카오메일 알림이 없어요. 분석할 새 메일이 없습니다 🐾",
@@ -131,11 +133,11 @@ func TestRelay_SuppressesContentless(t *testing.T) {
 	}
 }
 
-// TestRelay_SuppressesSilentToken verifies the proactive relay honors the
+// TestRelay_IgnoresSilentReplyToken verifies the proactive relay honors the
 // NO_REPLY silent-reply contract: a turn that signals "nothing to report" with
 // the bare token is dropped entirely instead of leaking a literal "NO_REPLY"
 // transcript bubble + work-feed card + push.
-func TestRelay_SuppressesSilentToken(t *testing.T) {
+func TestRelay_IgnoresSilentReplyToken(t *testing.T) {
 	for _, body := range []string{"NO_REPLY", "NO_REPLY 🐾", "  NO_REPLY  ", "**NO_REPLY**"} {
 		store := newRecordingTranscriptStore()
 		feed := &recordingWorkFeed{}
@@ -165,10 +167,10 @@ func TestRelay_SuppressesSilentToken(t *testing.T) {
 	}
 }
 
-// TestRelay_StripsTrailingSilentToken verifies a real report that merely ends
-// with a NO_REPLY token is still delivered — with the token stripped — rather
-// than suppressed wholesale.
-func TestRelay_StripsTrailingSilentToken(t *testing.T) {
+// TestRelay_DeliversWithTrailingSilentTokenStripped verifies a real report
+// that merely ends with a NO_REPLY token is still delivered — with the token
+// stripped — rather than suppressed wholesale.
+func TestRelay_DeliversWithTrailingSilentTokenStripped(t *testing.T) {
 	store := newRecordingTranscriptStore()
 	feed := &recordingWorkFeed{}
 	hub := newClientPushHub()
@@ -189,10 +191,11 @@ func TestRelay_StripsTrailingSilentToken(t *testing.T) {
 	}
 }
 
-// TestStripProactiveMetaPreamble covers the real leak cases observed in
-// ~/.deneb/workfeed.jsonl (a model opening a cron/morning-letter report with
-// working narration) and the legit reports that must pass through untouched.
-func TestStripProactiveMetaPreamble(t *testing.T) {
+// TestStripProactiveMetaPreambleClearsNarrationKeepsReports covers the real
+// leak cases observed in ~/.deneb/workfeed.jsonl (a model opening a
+// cron/morning-letter report with working narration) and the legit reports
+// that must pass through untouched.
+func TestStripProactiveMetaPreambleClearsNarrationKeepsReports(t *testing.T) {
 	// strip[i] = {body, wantPrefix}: the preamble (+ divider) must be removed and
 	// the remainder must begin with wantPrefix and no longer contain the preamble.
 	strip := []struct{ body, wantPrefix, gone string }{
@@ -276,11 +279,12 @@ func TestStripProactiveMetaPreamble(t *testing.T) {
 	}
 }
 
-// TestRelay_StripsMetaPreamble verifies the work-feed card body delivered for a
-// proactive report has the leading working-narration preamble removed end-to-end
-// (not just the standalone helper), and that the feed-backed main session leaves
-// the chat transcript untouched (PR #2448 feed-only delivery).
-func TestRelay_StripsMetaPreamble(t *testing.T) {
+// TestRelay_ClearsMetaPreambleFromFeedCardBody verifies the work-feed card
+// body delivered for a proactive report has the leading working-narration
+// preamble removed end-to-end (not just the standalone helper), and that the
+// feed-backed main session leaves the chat transcript untouched (PR #2448
+// feed-only delivery).
+func TestRelay_ClearsMetaPreambleFromFeedCardBody(t *testing.T) {
 	store := newRecordingTranscriptStore()
 	feed := &recordingWorkFeed{}
 	hub := newClientPushHub()
@@ -309,12 +313,13 @@ func TestRelay_StripsMetaPreamble(t *testing.T) {
 	}
 }
 
-// TestRelay_WorkModelFooter verifies the bare model name is appended at the foot
-// of a 업무 feed report (client:main) when the resolver yields a name, that it sits
-// at the end without polluting the card title/summary, and that it is absent when
-// the resolver is unwired or returns "". The report body never contains the model
-// name, so Contains(...) is a clean discriminator for the stamp.
-func TestRelay_WorkModelFooter(t *testing.T) {
+// TestRelay_WorkModelFooterWritesModelNameWhenResolved verifies the bare
+// model name is appended at the foot of a 업무 feed report (client:main) when
+// the resolver yields a name, that it sits at the end without polluting the
+// card title/summary, and that it is absent when the resolver is unwired or
+// returns "". The report body never contains the model name, so Contains(...)
+// is a clean discriminator for the stamp.
+func TestRelay_WorkModelFooterWritesModelNameWhenResolved(t *testing.T) {
 	const model = "deepseek-v4-flash"
 	body := "📊 일일 브리핑\n\n오늘 처리할 핵심 안건이 있습니다.\n- 대한전선 당진 2차 착수보고회 참석 확인\n- 무림 울산공장 풍력 검토안 회신"
 
@@ -377,7 +382,7 @@ func TestRelay_WorkModelFooter(t *testing.T) {
 	})
 }
 
-func TestIsContentlessProactive(t *testing.T) {
+func TestIsContentlessProactiveFlagsEmptyReports(t *testing.T) {
 	contentless := []string{
 		"",
 		"   ",
@@ -417,10 +422,10 @@ func TestIsContentlessProactive(t *testing.T) {
 	}
 }
 
-// TestRelay_ExtractsTitleAndSummary verifies the proactive relay derives a human
-// title + summary from the body (not the fixed "업무 리포트" + first-line slice)
-// and never leaks markdown markers into either field.
-func TestRelay_ExtractsTitleAndSummary(t *testing.T) {
+// TestRelay_ParsesTitleAndSummaryFromBody verifies the proactive relay
+// derives a human title + summary from the body (not the fixed "업무 리포트" +
+// first-line slice) and never leaks markdown markers into either field.
+func TestRelay_ParsesTitleAndSummaryFromBody(t *testing.T) {
 	cases := []struct {
 		name       string
 		body       string
@@ -493,13 +498,14 @@ func TestRelay_EmptyTitleWhenUnextractable(t *testing.T) {
 	}
 }
 
-// TestRelayCollapsed verifies the collapsed mail-analysis delivery. For the
-// feed-backed main session (client:main) the report lands in the 업무 feed only:
-// the work-feed card carries the raw prose body (read inline in the 피드 screen),
-// the chat transcript is left untouched (PR #2448), and the push preview keeps the
-// raw prose. The accordion-fence path remains exercised for feed-less sessions
+// TestRelayCollapsedPreservesProseAndAppliesSuppressionGates verifies the
+// collapsed mail-analysis delivery. For the feed-backed main session
+// (client:main) the report lands in the 업무 feed only: the work-feed card
+// carries the raw prose body (read inline in the 피드 screen), the chat
+// transcript is left untouched (PR #2448), and the push preview keeps the raw
+// prose. The accordion-fence path remains exercised for feed-less sessions
 // (the subtests below that omit workFeed). Suppression gates still apply.
-func TestRelayCollapsed(t *testing.T) {
+func TestRelayCollapsedPreservesProseAndAppliesSuppressionGates(t *testing.T) {
 	body := "## 📧 JOCA Cable 최신 메일 분석 보고\n\n**발신**: fred@jocacable.com\n\n- 회신 기한: 6/13"
 
 	t.Run("feed-backed main session: feed keeps prose, transcript untouched", func(t *testing.T) {
@@ -584,7 +590,7 @@ func TestRelayCollapsed(t *testing.T) {
 
 // A producer-authored deneb-ui card body must bypass the accordion wrap on the
 // collapse path — wrapping would backtick-escape the fence into literal text.
-func TestRelayCollapsed_CardBodyBypassesAccordion(t *testing.T) {
+func TestRelayCollapsed_CardBodyPreservedWithoutAccordionWrap(t *testing.T) {
 	card := "```deneb-ui\n<column><card><row><icon name=\"mail\" size=\"16\"/><text style=\"caption\">메일 분석</text></row><text>핵심 결론</text></card></column>\n```\n\n상세 산문."
 	store := newRecordingTranscriptStore()
 	// No workFeed wired → the transcript (accordion-eligible) path is exercised.

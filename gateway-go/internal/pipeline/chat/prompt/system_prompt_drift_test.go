@@ -16,7 +16,7 @@ var clockPattern = regexp.MustCompile(`\b\d{1,2}:\d{2}\b`)
 // in the tool registry. This prevents phantom (never-registered) names from
 // accumulating — the render-time filter silently drops them, so drift is
 // invisible without this check.
-func TestToolCategoriesMatchRegistry(t *testing.T) {
+func TestToolCategoriesHaveNoMissingRegistryNames(t *testing.T) {
 	data, err := os.ReadFile("../toolreg/tool_schemas.json")
 	if err != nil {
 		t.Fatalf("read tool_schemas.json: %v", err)
@@ -77,7 +77,7 @@ func TestStaticCacheKeyIgnoresSkills(t *testing.T) {
 // ephemeral cache_control marker on the semi-static block relies on this
 // byte stability — if the block bytes drift (map iteration order, timestamps,
 // etc.), the cache read silently misses on every turn.
-func TestSemiStaticBlockStableAcrossCalls(t *testing.T) {
+func TestSemiStaticBlockPreservesByteStabilityAcrossCalls(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs:     []ToolDef{{Name: "read"}, {Name: "exec"}},
@@ -109,7 +109,7 @@ func TestSemiStaticBlockStableAcrossCalls(t *testing.T) {
 // blocks. If a future refactor accidentally moves skill content into the
 // static block, it would change the static cache key per-session (bad);
 // if it moved into the dynamic block, every turn would be a cache miss.
-func TestSkillsInjectedOnlyInSemiStatic(t *testing.T) {
+func TestSkillsRenderOnlyInSemiStaticBlock(t *testing.T) {
 	marker := "DENEB_SKILL_CACHE_SENTINEL_ZZZ"
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
@@ -135,7 +135,7 @@ func TestSkillsInjectedOnlyInSemiStatic(t *testing.T) {
 // (b) invalidates when a topic's content hash changes (its .md was edited).
 // Without (a) two topics would overwrite each other's Static cache; without
 // (b) an edited topic file would keep serving stale cached knowledge.
-func TestStaticCacheKeyVariesByTopic(t *testing.T) {
+func TestStaticCacheKeyUpdatesPerTopicAndContentHash(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "exec"}}
 	deferred := []DeferredToolInfo{{Name: "mail_archive", Description: "Local mail archive"}}
 
@@ -173,7 +173,7 @@ func TestStaticCacheKeyTopicEmptyEqualsLegacy(t *testing.T) {
 // integration is the chosen design: a leak into the dynamic block would make
 // every turn a cache miss, and a leak into semi-static would collide with the
 // skills cache marker.
-func TestTopicKnowledgeOnlyInStaticBlock(t *testing.T) {
+func TestTopicKnowledgeRendersOnlyInStaticBlock(t *testing.T) {
 	ResetContextFileCacheForTest()
 	marker := "DENEB_TOPIC_CACHE_SENTINEL_ZZZ"
 	pathMarker := "/tmp/topics/coding.md"
@@ -206,7 +206,7 @@ func TestTopicKnowledgeOnlyInStaticBlock(t *testing.T) {
 // no "|persona=" suffix — so the common (unedited) case is a zero-regression
 // byte-identical match to the pre-feature behavior, preserving the existing
 // vLLM APC / Anthropic Static cache entry.
-func TestPersonaDefaultByteIdentical(t *testing.T) {
+func TestPersonaDefaultPreservesByteIdenticalStaticBlock(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "persona_test_sentinel"}}
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
@@ -226,7 +226,7 @@ func TestPersonaDefaultByteIdentical(t *testing.T) {
 // identity/role text in the Static block (and only there), and that its content
 // hash gives the Static cache key a distinct "|persona=" slot so an edited
 // persona never reuses the default entry.
-func TestPersonaOverrideInStaticBlock(t *testing.T) {
+func TestPersonaOverrideRendersOnlyInStaticBlock(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "persona_test_sentinel"}}
 	marker := "DENEB_PERSONA_SENTINEL_QQQ"
 	override := "너는 커스텀 페르소나다. " + marker
@@ -256,7 +256,7 @@ func TestPersonaOverrideInStaticBlock(t *testing.T) {
 // TestPersonaCacheKeyFor asserts the persona hash helper: empty for blank text,
 // deterministic, distinct per content, and 12 hex chars (matching the topic
 // hash scheme).
-func TestPersonaCacheKeyFor(t *testing.T) {
+func TestPersonaCacheKeyForCreatesDeterministicHash(t *testing.T) {
 	if PersonaCacheKeyFor("") != "" || PersonaCacheKeyFor("   \n\t ") != "" {
 		t.Errorf("blank persona text must yield an empty cache key")
 	}
@@ -286,7 +286,7 @@ func TestPersonaCacheKeyFor(t *testing.T) {
 // Dynamic (unmarked) split: content that varies per session — the channel
 // runtime line, calendar/goal glances, the compaction reminder — must render
 // ONLY into the dynamic block, or every session forks the shared cached prefix.
-func TestSessionVariableContentStaysOutOfCachedBlocks(t *testing.T) {
+func TestSessionVariableContentRendersOnlyInDynamicBlock(t *testing.T) {
 	const (
 		calSentinel  = "DENEB_CAL_GLANCE_SENTINEL_ZZZ"
 		goalSentinel = "DENEB_GOAL_GLANCE_SENTINEL_ZZZ"
@@ -326,7 +326,7 @@ func TestSessionVariableContentStaysOutOfCachedBlocks(t *testing.T) {
 // bytes. Both Hermes (#24778: a per-turn volatile tier dropped cumulative cache
 // hits 83.3%→66.6%, then was killed) and OpenClaw (#98267) re-learned this the
 // hard way; this pins Deneb's invariant.
-func TestSystemPromptByteStableAcrossTurns(t *testing.T) {
+func TestSystemPromptPreservesByteStabilityAcrossTurns(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs:     []ToolDef{{Name: "read"}, {Name: "exec"}},
@@ -353,7 +353,7 @@ func TestSystemPromptByteStableAcrossTurns(t *testing.T) {
 // no wall-clock time: with empty context inputs, the only timestamp source is
 // the Context section's date line, and a HH:MM in it would tick the system
 // bytes every minute (exact time is baked into the user message instead — P6).
-func TestDynamicTimestampIsDayOnly(t *testing.T) {
+func TestDynamicTimestampRendersWithoutWallClockTime(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		ToolDefs:     []ToolDef{{Name: "read"}},

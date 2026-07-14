@@ -14,7 +14,7 @@ func sample() []Contact {
 	}
 }
 
-func TestReplaceAllAndCount(t *testing.T) {
+func TestReplaceAllUpdatesCountAndShrinksStore(t *testing.T) {
 	s, err := NewStore(filepath.Join(t.TempDir(), "contacts.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -28,7 +28,7 @@ func TestReplaceAllAndCount(t *testing.T) {
 	}
 }
 
-func TestLookupPhone(t *testing.T) {
+func TestLookupPhoneNormalizesFormatsAndMissesUnknown(t *testing.T) {
 	s, _ := NewStore(filepath.Join(t.TempDir(), "c.json"))
 	s.ReplaceAll(sample())
 
@@ -51,7 +51,7 @@ func TestLookupPhone(t *testing.T) {
 	}
 }
 
-func TestLookupEmail(t *testing.T) {
+func TestLookupEmailIsCaseInsensitiveAndMissesUnknown(t *testing.T) {
 	s, _ := NewStore(filepath.Join(t.TempDir(), "c.json"))
 	// Two 김성훈 with different addresses — the address book already keeps homonyms
 	// as distinct entries; LookupEmail is the join that recovers the right one.
@@ -75,7 +75,7 @@ func TestLookupEmail(t *testing.T) {
 	}
 }
 
-func TestSearch(t *testing.T) {
+func TestSearchMatchesFieldsAndReturnsEmptyForNoMatch(t *testing.T) {
 	s, _ := NewStore(filepath.Join(t.TempDir(), "c.json"))
 	s.ReplaceAll(sample())
 
@@ -93,7 +93,7 @@ func TestSearch(t *testing.T) {
 	}
 }
 
-func TestHotwordHints(t *testing.T) {
+func TestHotwordHintsOrderingAndTermCapBoundary(t *testing.T) {
 	s, _ := NewStore(filepath.Join(t.TempDir(), "c.json"))
 	s.ReplaceAll(sample())
 
@@ -113,7 +113,7 @@ func TestHotwordHints(t *testing.T) {
 	}
 }
 
-func TestPersistence(t *testing.T) {
+func TestPersistenceReloadsSavedContacts(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "c.json")
 	s, _ := NewStore(path)
 	s.ReplaceAll(sample())

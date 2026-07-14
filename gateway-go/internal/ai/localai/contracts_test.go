@@ -184,7 +184,7 @@ func TestCacheKeySemanticIdentityContract(t *testing.T) {
 	})
 }
 
-func TestCacheKeyFramesMessageBoundaries(t *testing.T) {
+func TestCacheKeySeparatesBoundaryCollisions(t *testing.T) {
 	// These requests produced the exact same concatenated byte stream before
 	// cache fields were length framed:
 	// user + "xassistant" + assistant + "y"

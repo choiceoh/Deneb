@@ -7,7 +7,7 @@
 // vibes — the same role the graph bench plays for wiki edges.
 //
 // Two consumers:
-//   - CI: TestRecallQuality asserts the hit-rate floor (regression gate).
+//   - CI: TestRecallQualityRespectsFloorBoundary asserts the hit-rate floor (regression gate).
 //   - Tuning: `scripts/dev/recall-metric.sh` greps the RECALL_METRIC line for
 //     the iterate.sh optimization loop (metric_value=<pct>).
 //
@@ -260,8 +260,8 @@ func runRecallBench(t *testing.T, verbose bool) (int, int) {
 	return hits, len(cases)
 }
 
-// TestRecallQuality is the CI regression gate + the tuning metric emitter.
-func TestRecallQuality(t *testing.T) {
+// TestRecallQualityRespectsFloorBoundary is the CI regression gate + the tuning metric emitter.
+func TestRecallQualityRespectsFloorBoundary(t *testing.T) {
 	hits, total := runRecallBench(t, true)
 	pct := hits * 100 / total
 	// Stable, grep-able line for scripts/dev/recall-metric.sh.
@@ -271,12 +271,12 @@ func TestRecallQuality(t *testing.T) {
 	}
 }
 
-// TestRecallSourceAttribution reports which backend produced the evidence per
+// TestRecallSourceAttributionReturnsPerSourceCounts reports which backend produced the evidence per
 // case — the data the backend-consolidation decision needs. Informational
 // (no floor): the corpus has no embedder/polaris, so it attributes
 // the lexical sources; production attribution comes from the per-turn
 // "sources" field in the recall preflight Info logs.
-func TestRecallSourceAttribution(t *testing.T) {
+func TestRecallSourceAttributionReturnsPerSourceCounts(t *testing.T) {
 	store := buildRecallBenchStore(t)
 	agg := map[string]int{}
 	for _, c := range recallBenchCases() {
@@ -308,7 +308,7 @@ func TestRecallSourceAttribution(t *testing.T) {
 
 // buildRecallHardStore extends the bench corpus with a lexical distractor for the
 // harder "necessary-but-dissimilar" set below. Reuses the main corpus unchanged
-// (so TestRecallQuality's gated store is untouched) and adds one look-alike page.
+// (so TestRecallQualityRespectsFloorBoundary's gated store is untouched) and adds one look-alike page.
 func buildRecallHardStore(t *testing.T) *wiki.Store {
 	t.Helper()
 	store := buildRecallBenchStore(t)
@@ -349,15 +349,15 @@ func recallHardCases() []recallBenchCase {
 	}
 }
 
-// TestRecallHardSet measures the harder entity-bridge / cross-source recall set.
+// TestRecallHardSetErrorsWhenAllOutputsEmpty measures the harder entity-bridge / cross-source recall set.
 // INFORMATIONAL (no hit-rate floor): the no-embedder bench cannot guarantee these
 // pass, and the goal is to pressure + measure the "necessary-but-dissimilar"
 // weakness for the iterate.sh tuning loop (RECALL_HARD_METRIC), not to gate CI —
 // a flapping regression gate would be worse than the signal. It errors only if
 // recall is wholly dead (empty output for every case), mirroring
-// TestRecallSourceAttribution. Once the host confirms a stable pass rate, a floor
+// TestRecallSourceAttributionReturnsPerSourceCounts. Once the host confirms a stable pass rate, a floor
 // can be added.
-func TestRecallHardSet(t *testing.T) {
+func TestRecallHardSetErrorsWhenAllOutputsEmpty(t *testing.T) {
 	store := buildRecallHardStore(t)
 	cases := recallHardCases()
 	hits, produced := 0, 0
@@ -391,14 +391,14 @@ func TestRecallHardSet(t *testing.T) {
 	}
 }
 
-// TestRecallFactRevisionSupersession exercises the "selective forgetting"
+// TestRecallSurfacesUpdatedFactOverStaleValue exercises the "selective forgetting"
 // competency (MemoryAgentBench arXiv:2507.05257): when a stored fact is revised,
 // recall must surface the new value and must never present the old value as a
 // current fact. Deneb's mechanism is the wiki supersession marker — even if a
 // demoted superseded page still surfaces, it carries a staleness marker so the
 // model does not cite the old value. This is an incremental, turn-by-turn
 // scenario (seed → query → revise → re-query), not a static corpus snapshot.
-func TestRecallFactRevisionSupersession(t *testing.T) {
+func TestRecallSurfacesUpdatedFactOverStaleValue(t *testing.T) {
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

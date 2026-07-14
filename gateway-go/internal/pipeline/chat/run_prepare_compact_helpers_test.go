@@ -8,7 +8,7 @@ import (
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 )
 
-func TestCompactionTierReportsHighestImpactOutcome(t *testing.T) {
+func TestCompactionTierReturnsHighestImpactOutcome(t *testing.T) {
 	tests := []struct {
 		name   string
 		result compact.Result

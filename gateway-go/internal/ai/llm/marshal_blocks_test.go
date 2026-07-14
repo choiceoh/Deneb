@@ -80,7 +80,7 @@ func TestNewBlockMessage_EmptyToolInputUnchanged(t *testing.T) {
 	}
 }
 
-func TestNewBlockMessage_ValidToolInputUntouched(t *testing.T) {
+func TestNewBlockMessagePreservesValidToolInput(t *testing.T) {
 	in := json.RawMessage(`{"path":"a.go"}`)
 	msg := NewBlockMessage("assistant", []ContentBlock{
 		{Type: "tool_use", ID: "toolu_1", Name: "read", Input: in},

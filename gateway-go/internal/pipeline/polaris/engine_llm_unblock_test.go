@@ -61,12 +61,12 @@ func dagFenceMsg(start, end int, content string) llm.Message {
 	))
 }
 
-// TestCompactAndPersist_SummariesExist_LLMTierStillFires is THE regression
+// TestCompactAndPersistFiresLLMTierAndPreservesExistingFence is THE regression
 // test for the production wedge: a DAG summary already exists and is injected
 // as a fence, and the uncovered raw tail exceeds the LLM threshold. The LLM
 // tier must still fire on the raw remainder, persist a NEW leaf node starting
 // right after the existing coverage, and keep the injected fence intact.
-func TestCompactAndPersist_SummariesExist_LLMTierStillFires(t *testing.T) {
+func TestCompactAndPersistFiresLLMTierAndPreservesExistingFence(t *testing.T) {
 	e, s := testEngine(t)
 	sess := "s1"
 
@@ -148,10 +148,10 @@ func TestCompactAndPersist_SummariesExist_LLMTierStillFires(t *testing.T) {
 	}
 }
 
-// TestCompactAndPersist_PersistsJoinedChunkSummary pins that a chunked pass
+// TestCompactAndPersistSavesJoinedChunkSummary pins that a chunked pass
 // persists the JOINED summary, not whichever single chunk call finished last
 // (the capturingSummarizer race that silently dropped chunks' facts).
-func TestCompactAndPersist_PersistsJoinedChunkSummary(t *testing.T) {
+func TestCompactAndPersistSavesJoinedChunkSummary(t *testing.T) {
 	e, s := testEngine(t)
 	sess := "s1"
 
@@ -195,13 +195,13 @@ func TestCompactAndPersist_PersistsJoinedChunkSummary(t *testing.T) {
 	}
 }
 
-// TestCompactAndPersist_SafetyTrimKeepsFences_TokensAfterAccurate pins the
+// TestCompactAndPersistSafetyTrimPreservesFencesWithAccurateTokens pins the
 // incremental-digestion regime: a pass covers only part of a huge backlog, the
 // leftover raw keeps the turn over budget, and the safety trim must (a) keep
 // the summary fences, (b) drop oldest raw only, and (c) report the post-trim
 // token count in Result.TokensAfter so the caller's degraded-context warning
 // fires only on real failures.
-func TestCompactAndPersist_SafetyTrimKeepsFences_TokensAfterAccurate(t *testing.T) {
+func TestCompactAndPersistSafetyTrimPreservesFencesWithAccurateTokens(t *testing.T) {
 	e, s := testEngine(t)
 	sess := "s1"
 
@@ -300,12 +300,12 @@ func TestTrimWithFenceProtection_BalancesOrphanedToolPairs(t *testing.T) {
 	}
 }
 
-// TestBootstrap_PartialCoveragePersistsPartialRange pins that a bootstrap over
+// TestBootstrapPartialCoverageSavesPartialRange pins that a bootstrap over
 // a huge backlog — digested in bounded chunk batches — persists ONLY the range
 // the summary actually covers. Persisting the full older range while covering
 // a prefix (the pre-fix assumption) would silently lose the uncovered facts:
 // coverage would skip past messages no summary ever saw.
-func TestBootstrap_PartialCoveragePersistsPartialRange(t *testing.T) {
+func TestBootstrapPartialCoverageSavesPartialRange(t *testing.T) {
 	e, s := testEngine(t)
 	sess := "s1"
 

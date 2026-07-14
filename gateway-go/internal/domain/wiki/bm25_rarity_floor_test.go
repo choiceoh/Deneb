@@ -80,11 +80,11 @@ func searchPaths(t *testing.T, store *Store, q string, limit int) []SearchResult
 	return res
 }
 
-// TestBM25RarityFloor_CommonNounLeakExcluded is the core gate: at realistic N, a
+// TestBM25RarityFloor_CommonNounLeakRejected is the core gate: at realistic N, a
 // common-only query (single corpus-common noun) returns NOTHING — the off-topic
 // pages it lexically matched are floored. With the floor disabled (env override
 // to 0) the SAME query returns those pages: the leak→no-leak transition.
-func TestBM25RarityFloor_CommonNounLeakExcluded(t *testing.T) {
+func TestBM25RarityFloor_CommonNounLeakRejected(t *testing.T) {
 	store, n := buildRarityCorpus(t)
 	if n < bm25GateMinCorpus {
 		t.Fatalf("corpus N=%d below gate min %d — gate would be off", n, bm25GateMinCorpus)
@@ -117,10 +117,10 @@ func TestBM25RarityFloor_CommonNounLeakExcluded(t *testing.T) {
 	}
 }
 
-// TestBM25RarityFloor_RareNounSurvives is the over-block guard: a LEGITIMATE
+// TestBM25RarityFloor_RareNounPreserved is the over-block guard: a LEGITIMATE
 // single rare-proper-noun query must still surface its page. A blunt "drop all
 // single-term hits" rule would kill this; the rarity-keyed gate keeps it.
-func TestBM25RarityFloor_RareNounSurvives(t *testing.T) {
+func TestBM25RarityFloor_RareNounPreserved(t *testing.T) {
 	store, _ := buildRarityCorpus(t)
 	for _, tc := range []struct{ q, want string }{
 		{"마바솔라", "거래/mabasolar.md"},
@@ -139,10 +139,10 @@ func TestBM25RarityFloor_RareNounSurvives(t *testing.T) {
 	}
 }
 
-// TestBM25RarityFloor_SmallCorpusGateOff proves the conservative small-corpus
+// TestBM25RarityFloor_SmallCorpusAllowsHits proves the conservative small-corpus
 // guard: below bm25GateMinCorpus the gate never engages, so a tiny wiki whose
 // every term is technically "common" (large df fraction) still returns hits.
-func TestBM25RarityFloor_SmallCorpusGateOff(t *testing.T) {
+func TestBM25RarityFloor_SmallCorpusAllowsHits(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -173,9 +173,10 @@ func TestBM25RarityFloor_SmallCorpusGateOff(t *testing.T) {
 	}
 }
 
-// TestBM25RarityFloor_Override confirms the DENEB_WIKI_BM25_RARITY_FLOOR override
-// moves the gate and a malformed value falls back to the default.
-func TestBM25RarityFloor_Override(t *testing.T) {
+// TestBM25RarityFloorValue_OverridesAndFallsBackOnInvalid confirms the
+// DENEB_WIKI_BM25_RARITY_FLOOR override moves the gate and a malformed or
+// out-of-range value falls back to the default.
+func TestBM25RarityFloorValue_OverridesAndFallsBackOnInvalid(t *testing.T) {
 	if got := bm25RarityFloorValue(); got != bm25RarityFloor {
 		t.Fatalf("default = %.3f, want %.3f", got, bm25RarityFloor)
 	}
@@ -193,10 +194,10 @@ func TestBM25RarityFloor_Override(t *testing.T) {
 	}
 }
 
-// TestBM25RarityFloor_SemanticConfirmedSurvives proves the gate never drops a
+// TestBM25RarityFloor_SemanticConfirmedPreserved proves the gate never drops a
 // lexical hit that semantic similarity confirms: even for a common-only query,
 // a page whose cosine >= semSupportThreshold is kept (mergeSearchResults path).
-func TestBM25RarityFloor_SemanticConfirmedSurvives(t *testing.T) {
+func TestBM25RarityFloor_SemanticConfirmedPreserved(t *testing.T) {
 	bm25 := []SearchResult{{Path: "confirmed.md", Score: 0.4}, {Path: "weak.md", Score: 0.4}}
 	sem := []SearchResult{
 		{Path: "confirmed.md", Score: 0.65}, // >= semSupportThreshold: confirmed → kept

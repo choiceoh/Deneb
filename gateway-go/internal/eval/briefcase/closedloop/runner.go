@@ -555,37 +555,56 @@ func auditFromHidden(hidden evalbriefcase.SupervisorHiddenDiagnostics) Superviso
 // all sealed case sources. It does not include public executor output.
 func HiddenFeedbackInputs(pack *casepack.Pack, plan evalbriefcase.SupervisorPlan, _ ...string) (feedbackcontract.HiddenFeedbackInputs, error) {
 	var hidden feedbackcontract.HiddenFeedbackInputs
-	sealedContentBytes := int64(0)
-	if pack != nil {
-		for _, source := range pack.Manifest.Sources {
-			if source.Access != casepack.SourceAccessSealed {
-				continue
-			}
-			hidden.SealedSourceIDs = appendNonBlank(hidden.SealedSourceIDs, source.ID)
-			hidden.SealedPaths = appendNonBlank(hidden.SealedPaths, source.Path)
-			hidden.HiddenReferences = appendNonBlank(hidden.HiddenReferences, source.SourceRef)
-			hidden.SupervisorMetadata = appendNonBlank(hidden.SupervisorMetadata, source.SHA256)
-			if source.SourceRef == supervisorSourceRef || source.SourceRef == userSimulatorSourceRef {
-				continue
-			}
-			if !isFirewallContentRole(source.SourceRef) {
-				return feedbackcontract.HiddenFeedbackInputs{}, fmt.Errorf("closed loop: sealed source %q must declare a scannable briefcase grader, device, or gold role", source.ID)
-			}
-			info, err := os.Lstat(filepath.Join(pack.Root, filepath.FromSlash(source.Path)))
-			if err != nil || !info.Mode().IsRegular() || info.Size() > maxSealedPlanBytes || sealedContentBytes+info.Size() > maxSealedPlanBytes {
-				return feedbackcontract.HiddenFeedbackInputs{}, fmt.Errorf("closed loop: sealed firewall inputs exceed %d bytes", maxSealedPlanBytes)
-			}
-			content, err := pack.ReadFile(source.Path)
-			if err != nil {
-				return feedbackcontract.HiddenFeedbackInputs{}, fmt.Errorf("closed loop: read sealed source for firewall: %w", err)
-			}
-			if !utf8.Valid(content) {
-				return feedbackcontract.HiddenFeedbackInputs{}, fmt.Errorf("closed loop: sealed firewall source %q is not valid UTF-8", source.ID)
-			}
-			sealedContentBytes += int64(len(content))
-			hidden.SealedContents = append(hidden.SealedContents, string(content))
-		}
+	if err := collectSealedSourceTokens(pack, &hidden); err != nil {
+		return feedbackcontract.HiddenFeedbackInputs{}, err
 	}
+	appendPlanMetadataTokens(&hidden, plan)
+	appendCheckpointTokens(&hidden, plan)
+	return hidden, nil
+}
+
+// collectSealedSourceTokens folds every sealed case source into hidden: its
+// identifiers always, and its full content when the source declares a
+// scannable firewall content role within the sealed-size budget.
+func collectSealedSourceTokens(pack *casepack.Pack, hidden *feedbackcontract.HiddenFeedbackInputs) error {
+	if pack == nil {
+		return nil
+	}
+	sealedContentBytes := int64(0)
+	for _, source := range pack.Manifest.Sources {
+		if source.Access != casepack.SourceAccessSealed {
+			continue
+		}
+		hidden.SealedSourceIDs = appendNonBlank(hidden.SealedSourceIDs, source.ID)
+		hidden.SealedPaths = appendNonBlank(hidden.SealedPaths, source.Path)
+		hidden.HiddenReferences = appendNonBlank(hidden.HiddenReferences, source.SourceRef)
+		hidden.SupervisorMetadata = appendNonBlank(hidden.SupervisorMetadata, source.SHA256)
+		if source.SourceRef == supervisorSourceRef || source.SourceRef == userSimulatorSourceRef {
+			continue
+		}
+		if !isFirewallContentRole(source.SourceRef) {
+			return fmt.Errorf("closed loop: sealed source %q must declare a scannable briefcase grader, device, or gold role", source.ID)
+		}
+		info, err := os.Lstat(filepath.Join(pack.Root, filepath.FromSlash(source.Path)))
+		if err != nil || !info.Mode().IsRegular() || info.Size() > maxSealedPlanBytes || sealedContentBytes+info.Size() > maxSealedPlanBytes {
+			return fmt.Errorf("closed loop: sealed firewall inputs exceed %d bytes", maxSealedPlanBytes)
+		}
+		content, err := pack.ReadFile(source.Path)
+		if err != nil {
+			return fmt.Errorf("closed loop: read sealed source for firewall: %w", err)
+		}
+		if !utf8.Valid(content) {
+			return fmt.Errorf("closed loop: sealed firewall source %q is not valid UTF-8", source.ID)
+		}
+		sealedContentBytes += int64(len(content))
+		hidden.SealedContents = append(hidden.SealedContents, string(content))
+	}
+	return nil
+}
+
+// appendPlanMetadataTokens folds the plan's digest, explicit deny tokens,
+// fingerprint fields, pass threshold, and cycle budget into hidden.
+func appendPlanMetadataTokens(hidden *feedbackcontract.HiddenFeedbackInputs, plan evalbriefcase.SupervisorPlan) {
 	hidden.SupervisorMetadata = appendNonBlank(hidden.SupervisorMetadata, plan.SchemaVersion)
 	hidden.SupervisorMetadata = appendNonBlank(hidden.SupervisorMetadata, plan.PlanDigest)
 	hidden.ExplicitSensitiveTokens = append(hidden.ExplicitSensitiveTokens, plan.FeedbackDenyTokens...)
@@ -614,6 +633,11 @@ func HiddenFeedbackInputs(pack *casepack.Pack, plan evalbriefcase.SupervisorPlan
 		hidden.SupervisorMetadata = append(hidden.SupervisorMetadata, thresholdText)
 	}
 	hidden.SupervisorMetadata = append(hidden.SupervisorMetadata, "maxCycles="+strconv.Itoa(plan.MaxCycles))
+}
+
+// appendCheckpointTokens folds every checkpoint check's identifiers, expected
+// answers, and hidden references into hidden.
+func appendCheckpointTokens(hidden *feedbackcontract.HiddenFeedbackInputs, plan evalbriefcase.SupervisorPlan) {
 	for _, checkpoint := range plan.Checkpoints {
 		hidden.CheckpointIDs = append(hidden.CheckpointIDs, fmt.Sprintf("checkpoint-cycle-%d", checkpoint.Cycle))
 		for _, check := range checkpoint.Checks {
@@ -639,7 +663,6 @@ func HiddenFeedbackInputs(pack *casepack.Pack, plan evalbriefcase.SupervisorPlan
 			}
 		}
 	}
-	return hidden, nil
 }
 
 func isFirewallContentRole(sourceRef string) bool {

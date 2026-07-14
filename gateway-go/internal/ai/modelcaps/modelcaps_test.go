@@ -2,7 +2,7 @@ package modelcaps
 
 import "testing"
 
-func TestIsOpenAIReasoningModel(t *testing.T) {
+func TestIsOpenAIReasoningModelAllowsKnownDeniesCompatible(t *testing.T) {
 	for _, m := range []string{"o1", "o3-mini", "o4-mini-high", "gpt-5", "openai/o3-mini", "GPT-5-turbo", " o1-preview "} {
 		if !IsOpenAIReasoningModel(m) {
 			t.Errorf("IsOpenAIReasoningModel(%q) = false, want true", m)
@@ -30,7 +30,7 @@ func TestRejectsCacheControl(t *testing.T) {
 	}
 }
 
-func TestBuiltin(t *testing.T) {
+func TestBuiltinMapsKnownProvidersReturnsZeroForUnknown(t *testing.T) {
 	c := Builtin("kimi", "kimi-for-coding")
 	if !c.RejectsCacheControl || c.Reasoning {
 		t.Errorf("kimi builtin = %+v, want RejectsCacheControl only", c)
@@ -45,10 +45,10 @@ func TestBuiltin(t *testing.T) {
 	}
 }
 
-// TestThinkingToggleKwarg verifies provider-aware gating: only vLLM-backed
+// TestThinkingToggleKwargAllowsVLLMDeniesOtherProviders verifies provider-aware gating: only vLLM-backed
 // providers (a direct vllm provider OR the wormhole proxy) get the template
 // toggle, and only for the DeepSeek V4 family.
-func TestThinkingToggleKwarg(t *testing.T) {
+func TestThinkingToggleKwargAllowsVLLMDeniesOtherProviders(t *testing.T) {
 	for _, c := range []struct{ p, m string }{
 		{"vllm", "deepseek-v4-flash"},
 		{"vllm", "DeepSeek-V4-Flash"},     // case-insensitive

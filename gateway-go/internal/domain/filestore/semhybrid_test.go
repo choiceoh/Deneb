@@ -15,11 +15,11 @@ func pathSet(hits []ScoredEntry) map[string]bool {
 	return s
 }
 
-// TestHybridSearch_ExactNameSurvivesBelowFloor is the core hybrid gain: a file
+// TestHybridSearch_ReturnsExactNameBelowFloor is the core hybrid gain: a file
 // whose NAME literally contains the query but whose chunk cosine lands in the
 // BGE-M3 Korean noise band (~0.6, below the 0.73 floor) is DROPPED by the
 // cosine-only Search, but HybridSearch keeps it on the exact-name signal.
-func TestHybridSearch_ExactNameSurvivesBelowFloor(t *testing.T) {
+func TestHybridSearch_ReturnsExactNameBelowFloor(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
 	// The file is named after "탑솔라" but its body is generic boilerplate, so the
@@ -167,10 +167,10 @@ func TestHybridSearch_RejectsSingleCommonToken(t *testing.T) {
 	}
 }
 
-// TestHybridSearch_SemanticOnlyAboveFloor is a no-regression check: a file with
-// no lexical overlap but a genuine above-floor cosine (a real meaning match) is
-// still returned, exactly as cosine-only Search would.
-func TestHybridSearch_SemanticOnlyAboveFloor(t *testing.T) {
+// TestHybridSearch_ReturnsSemanticOnlyAboveFloor is a no-regression check: a file
+// with no lexical overlap but a genuine above-floor cosine (a real meaning match)
+// is still returned, exactly as cosine-only Search would.
+func TestHybridSearch_ReturnsSemanticOnlyAboveFloor(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
 	// The body shares no tokens with the (differently-phrased) query, but sits at
@@ -205,10 +205,11 @@ func TestHybridSearch_SemanticOnlyAboveFloor(t *testing.T) {
 	}
 }
 
-// TestHybridSearch_Degrades mirrors Search's degradation contract: a
-// nil/unhealthy embedder, a too-short query, or an empty index returns an empty
-// slice and no error, so the caller falls back to name/content search.
-func TestHybridSearch_Degrades(t *testing.T) {
+// TestHybridSearch_DegradesReturnsEmptyResults mirrors Search's degradation
+// contract: a nil/unhealthy embedder, a too-short query, or an empty index
+// returns an empty slice and no error, so the caller falls back to name/content
+// search.
+func TestHybridSearch_DegradesReturnsEmptyResults(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
 	mustPut(t, store, "/a.txt", "delivery 납기 지연 위약금")
@@ -238,10 +239,10 @@ func TestHybridSearch_Degrades(t *testing.T) {
 	}
 }
 
-// TestHybridSearch_TopMatchRanksOverPartial sanity-checks ordering with the
+// TestHybridSearch_ReturnsTopMatchOverPartial sanity-checks ordering with the
 // vocab-count fakeEmbedder (orthogonal vocab → exact-0 cosine for the unrelated
 // file): the file matching the query both ways outranks the one matching neither.
-func TestHybridSearch_TopMatchRanksOverPartial(t *testing.T) {
+func TestHybridSearch_ReturnsTopMatchOverPartial(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
 	mustPut(t, store, "/계약/납기.txt", "delivery delay penalty 납기 지연 위약금 계약")

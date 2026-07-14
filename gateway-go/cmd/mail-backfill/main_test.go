@@ -16,7 +16,7 @@ func TestParseSince(t *testing.T) {
 	}
 }
 
-func TestValidateSource(t *testing.T) {
+func TestValidateSourceRejectsUnknownSource(t *testing.T) {
 	for _, source := range []string{"", "imap", "gmail"} {
 		if err := validateSource(source); err != nil {
 			t.Errorf("validateSource(%q) = %v", source, err)

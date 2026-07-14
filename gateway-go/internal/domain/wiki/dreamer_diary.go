@@ -40,92 +40,18 @@ func (wd *WikiDreamer) scanDiaries(_ context.Context) (*diaryScanResult, error) 
 		priorFiles[k] = v
 	}
 	legacyCutoff := wd.store.LastProcessed()
-	var diaryFiles []os.DirEntry
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasPrefix(e.Name(), "diary-") || !strings.HasSuffix(e.Name(), ".md") {
-			continue
-		}
-		diaryFiles = append(diaryFiles, e)
-	}
-
+	diaryFiles := listDiaryFiles(entries)
 	if len(diaryFiles) == 0 {
 		return nil, nil
 	}
-
-	sort.Slice(diaryFiles, func(i, j int) bool {
-		return diaryFiles[i].Name() < diaryFiles[j].Name()
-	})
 
 	var sb strings.Builder
 	const maxBytes = 30000
 	latestDate := ""
 	for _, entry := range diaryFiles {
-		name := entry.Name()
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-		date := diaryDateFromName(name)
-
-		fileState, hasState := state.Files[name]
-		if !hasState && legacyCutoff != "" && date != "" && date < legacyCutoff {
-			state.Files[name] = diaryFileState{
-				Offset:  info.Size(),
-				Size:    info.Size(),
-				ModUnix: info.ModTime().Unix(),
-			}
-			continue
-		}
-
-		offset := fileState.Offset
-		if offset < 0 || offset > info.Size() {
-			offset = 0
-		}
-		if offset == info.Size() {
-			continue
-		}
-
-		data, err := os.ReadFile(filepath.Join(diaryDir, name))
-		if err != nil {
-			continue
-		}
-		if offset > int64(len(data)) {
-			offset = 0
-		}
-		remaining := maxBytes - sb.Len()
-		if remaining <= 0 {
+		date, stop := scanDiaryFile(diaryDir, entry, legacyCutoff, state, &sb, maxBytes)
+		if stop {
 			break
-		}
-		chunk := data[offset:]
-		nextOffset := info.Size()
-		if len(chunk) > remaining {
-			// Back the cut up to a rune boundary: diaries are Korean-heavy and
-			// a byte-indexed cut can split a 3-byte Hangul rune, feeding the
-			// synthesizer invalid UTF-8. The next scan resumes at nextOffset,
-			// so the trimmed bytes are not lost, just deferred.
-			cut := remaining
-			for cut > 0 && !utf8.RuneStart(chunk[cut]) {
-				cut--
-			}
-			chunk = chunk[:cut]
-			nextOffset = offset + int64(len(chunk))
-		}
-		if len(chunk) == 0 {
-			state.Files[name] = diaryFileState{
-				Offset:  nextOffset,
-				Size:    info.Size(),
-				ModUnix: info.ModTime().Unix(),
-			}
-			continue
-		}
-
-		fmt.Fprintf(&sb, "--- %s @%d ---\n", name, offset)
-		sb.Write(chunk)
-		sb.WriteByte('\n')
-		state.Files[name] = diaryFileState{
-			Offset:  nextOffset,
-			Size:    info.Size(),
-			ModUnix: info.ModTime().Unix(),
 		}
 		if date > latestDate {
 			latestDate = date
@@ -145,6 +71,103 @@ func (wd *WikiDreamer) scanDiaries(_ context.Context) (*diaryScanResult, error) 
 		PriorFiles:  priorFiles,
 		MorePending: diaryBacklogRemains(diaryFiles, state),
 	}, nil
+}
+
+// listDiaryFiles filters directory entries down to diary markdown files
+// (diary-*.md), sorted ascending by name so dates process oldest-first.
+func listDiaryFiles(entries []os.DirEntry) []os.DirEntry {
+	var diaryFiles []os.DirEntry
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), "diary-") || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		diaryFiles = append(diaryFiles, e)
+	}
+	sort.Slice(diaryFiles, func(i, j int) bool {
+		return diaryFiles[i].Name() < diaryFiles[j].Name()
+	})
+	return diaryFiles
+}
+
+// scanDiaryFile consumes the unread tail of one diary file into sb (respecting
+// the per-cycle byte budget) and records the next-cycle offset in state. It
+// returns the file's diary date when content was appended (empty otherwise);
+// stop=true means the budget was already exhausted and the scan loop must end.
+func scanDiaryFile(diaryDir string, entry os.DirEntry, legacyCutoff string, state diaryProcessState, sb *strings.Builder, maxBytes int) (string, bool) {
+	name := entry.Name()
+	info, err := entry.Info()
+	if err != nil {
+		return "", false
+	}
+	date := diaryDateFromName(name)
+
+	fileState, hasState := state.Files[name]
+	if !hasState && legacyCutoff != "" && date != "" && date < legacyCutoff {
+		state.Files[name] = diaryFileState{
+			Offset:  info.Size(),
+			Size:    info.Size(),
+			ModUnix: info.ModTime().Unix(),
+		}
+		return "", false
+	}
+
+	offset := fileState.Offset
+	if offset < 0 || offset > info.Size() {
+		offset = 0
+	}
+	if offset == info.Size() {
+		return "", false
+	}
+
+	data, err := os.ReadFile(filepath.Join(diaryDir, name))
+	if err != nil {
+		return "", false
+	}
+	if offset > int64(len(data)) {
+		offset = 0
+	}
+	remaining := maxBytes - sb.Len()
+	if remaining <= 0 {
+		return "", true
+	}
+	chunk, nextOffset := cutDiaryChunk(data[offset:], offset, info.Size(), remaining)
+	if len(chunk) == 0 {
+		state.Files[name] = diaryFileState{
+			Offset:  nextOffset,
+			Size:    info.Size(),
+			ModUnix: info.ModTime().Unix(),
+		}
+		return "", false
+	}
+
+	fmt.Fprintf(sb, "--- %s @%d ---\n", name, offset)
+	sb.Write(chunk)
+	sb.WriteByte('\n')
+	state.Files[name] = diaryFileState{
+		Offset:  nextOffset,
+		Size:    info.Size(),
+		ModUnix: info.ModTime().Unix(),
+	}
+	return date, false
+}
+
+// cutDiaryChunk trims chunk to the remaining byte budget and returns it with
+// the offset the next scan should resume at (the full file size when nothing
+// was trimmed). When trimming, the cut backs up to a rune boundary: diaries
+// are Korean-heavy and a byte-indexed cut can split a 3-byte Hangul rune,
+// feeding the synthesizer invalid UTF-8. The next scan resumes at nextOffset,
+// so the trimmed bytes are not lost, just deferred.
+func cutDiaryChunk(chunk []byte, offset, fileSize int64, remaining int) ([]byte, int64) {
+	nextOffset := fileSize
+	if len(chunk) > remaining {
+		cut := remaining
+		for cut > 0 && !utf8.RuneStart(chunk[cut]) {
+			cut--
+		}
+		chunk = chunk[:cut]
+		nextOffset = offset + int64(len(chunk))
+	}
+	return chunk, nextOffset
 }
 
 // diaryBacklogRemains reports whether any diary file still holds unconsumed

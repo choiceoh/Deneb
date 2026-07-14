@@ -35,7 +35,7 @@ func TestDisabledRootReturnsUnavailable(t *testing.T) {
 	}
 }
 
-func TestListRequiresSessionKey(t *testing.T) {
+func TestListReturnsMissingParamWithoutSessionKey(t *testing.T) {
 	m := Methods(Deps{Root: t.TempDir()})
 	resp := m["checkpoint.list"](context.Background(), &protocol.RequestFrame{
 		ID:     "r1",
@@ -181,7 +181,7 @@ func TestListEmptySession(t *testing.T) {
 	}
 }
 
-func TestListLimit(t *testing.T) {
+func TestListReturnsLimitedSnapshotCount(t *testing.T) {
 	root := t.TempDir()
 	sessionKey := "s"
 	mgr := checkpoint.New(root, sessionKey)

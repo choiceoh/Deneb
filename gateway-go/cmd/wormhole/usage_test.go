@@ -36,7 +36,7 @@ func TestParseUsageTail(t *testing.T) {
 	}
 }
 
-func TestUsageTail_PassthroughAndSingleFire(t *testing.T) {
+func TestUsageTail_PreservesBytesAndFiresCallbackOnce(t *testing.T) {
 	payload := strings.Repeat("x", 3000) + `{"usage":{"prompt_tokens":5,"completion_tokens":7}}`
 	fired := 0
 	var gotTail []byte
@@ -88,7 +88,7 @@ func TestUsageMeter_RecordAndPersistRoundtrip(t *testing.T) {
 	}
 }
 
-func TestUsageHandler_PricingAndBudget(t *testing.T) {
+func TestUsageHandler_ReturnsPricingAndBudgetJSON(t *testing.T) {
 	rt := quietRouter(config{
 		Token:            "",
 		MonthlyBudgetUSD: 100,
@@ -133,7 +133,7 @@ func TestUsageHandler_PricingAndBudget(t *testing.T) {
 	}
 }
 
-func TestBalancedJSONObject_StringEscapes(t *testing.T) {
+func TestBalancedJSONObject_ParsesStringEscapesCorrectly(t *testing.T) {
 	obj := balancedJSONObject([]byte(`{"a":"brace } in \" string","b":{"c":1}} trailing`))
 	if obj == nil || !bytes.HasSuffix(obj, []byte(`}}`)) {
 		t.Fatalf("balanced parse failed: %s", obj)

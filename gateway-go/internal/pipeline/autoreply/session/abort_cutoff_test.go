@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestShouldSkipMessageByAbortCutoff(t *testing.T) {
+func TestShouldSkipMessageByAbortCutoffSIDAndTimestampBoundaryCases(t *testing.T) {
 	ts := func(v int64) *int64 { return &v }
 
 	tests := []struct {
@@ -37,7 +37,7 @@ func TestShouldSkipMessageByAbortCutoff(t *testing.T) {
 	}
 }
 
-func TestShouldPersistAbortCutoff(t *testing.T) {
+func TestShouldPersistAbortCutoffWhenSessionsMatchOrKeyEmpty(t *testing.T) {
 	// Same session.
 	if !ShouldPersistAbortCutoff("sess:1", "sess:1") {
 		t.Error("same session should persist")
@@ -52,7 +52,7 @@ func TestShouldPersistAbortCutoff(t *testing.T) {
 	}
 }
 
-func TestAbortCutoffLifecycle(t *testing.T) {
+func TestAbortCutoffApplyReadAndClearLifecycle(t *testing.T) {
 	entry := &SessionAbortCutoffEntry{}
 
 	// Initially no cutoff.

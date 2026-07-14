@@ -29,7 +29,7 @@ func TestActivityTrackerTouchSessionAndBlankPreservation(t *testing.T) {
 	}
 }
 
-func TestActivityTrackerZeroValueIsUsable(t *testing.T) {
+func TestActivityTrackerZeroValueStartsUsable(t *testing.T) {
 	var tracker ActivityTracker
 	if tracker.LastActivityAt() != 0 || tracker.LastSessionKey() != "" {
 		t.Fatalf("zero tracker timestamp=%d key=%q", tracker.LastActivityAt(), tracker.LastSessionKey())

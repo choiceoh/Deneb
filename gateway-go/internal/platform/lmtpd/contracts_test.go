@@ -70,7 +70,7 @@ func TestParseMessageFallbackAndErrors(t *testing.T) {
 	}
 }
 
-func TestProcessStatusMatrix(t *testing.T) {
+func TestProcessReturnsStatusForEachOutcome(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	good := rawContractMail("status", "body")
 	for _, tt := range []struct {
@@ -97,7 +97,7 @@ func TestProcessStatusMatrix(t *testing.T) {
 	}
 }
 
-func TestProcessRetainsExactRawAndContext(t *testing.T) {
+func TestProcessPreservesRawBytesAndContext(t *testing.T) {
 	raw := rawContractMail("raw", "line one\r\nline two")
 	ctxKey := struct{}{}
 	ctx := context.WithValue(context.Background(), ctxKey, "value")
@@ -157,7 +157,7 @@ func TestReadDataOversizeDrainsToNextCommand(t *testing.T) {
 	}
 }
 
-func TestDrainDataTerminationMatrix(t *testing.T) {
+func TestDrainDataStopsAtTerminatorVariants(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		wire string
@@ -208,7 +208,7 @@ func TestNewContract(t *testing.T) {
 	}
 }
 
-func TestNewMessageIDShapeAndUniqueness(t *testing.T) {
+func TestNewMessageIDCreatesUniqueFormattedIDs(t *testing.T) {
 	seen := make(map[string]bool, 256)
 	for range 256 {
 		id := newMessageID()
@@ -294,7 +294,7 @@ func TestServeListenFailure(t *testing.T) {
 	}
 }
 
-func TestProtocolCommandStateMatrix(t *testing.T) {
+func TestProtocolCommandStateContractMatrix(t *testing.T) {
 	server, client := net.Pipe()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -334,7 +334,7 @@ func TestProtocolCommandStateMatrix(t *testing.T) {
 	}
 }
 
-func TestProtocolRecipientCapAndPerRecipientReplies(t *testing.T) {
+func TestProtocolRejectsExcessRecipientsAndRepliesPerRecipient(t *testing.T) {
 	server, client := net.Pipe()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -444,7 +444,7 @@ func TestQueueUsesDetailIDFallbackAndCopiesRaw(t *testing.T) {
 	}
 }
 
-func TestQueueClaimOldestAndStableNameTieBreak(t *testing.T) {
+func TestQueueClaimReturnsOldestFirstWithStableTieBreak(t *testing.T) {
 	q, err := NewQueue(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -606,7 +606,7 @@ func TestQueuePathAndNameFallbacks(t *testing.T) {
 	}
 }
 
-func TestQueueFileNameDeterministicSafeAndDistinct(t *testing.T) {
+func TestQueueFileNameFormatIsDeterministicSafeAndDistinct(t *testing.T) {
 	a := queueFileName("same/key")
 	b := queueFileName("same/key")
 	c := queueFileName("same\\key")
@@ -649,7 +649,7 @@ func TestCountFilesAndRemoveIfExistsContracts(t *testing.T) {
 	}
 }
 
-func TestSelectListenFDAdditionalMatrix(t *testing.T) {
+func TestSelectListenFDBoundaryAndMalformedInputs(t *testing.T) {
 	pid := os.Getpid()
 	for _, tt := range []struct {
 		name      string

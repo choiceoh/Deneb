@@ -54,18 +54,21 @@ func validateWorkdir(dir string) error {
 	return nil
 }
 
+// execParams is the exec tool's input payload.
+type execParams struct {
+	Command    string            `json:"command"`
+	Workdir    string            `json:"workdir"`
+	Timeout    float64           `json:"timeout"`
+	Background bool              `json:"background"`
+	Structured bool              `json:"structured"`
+	Env        map[string]string `json:"env"`
+}
+
 // ToolExec returns a tool that runs shell commands via procMgr with defaultDir as the
 // working directory when no explicit workdir is provided.
 func ToolExec(procMgr *process.Manager, defaultDir string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		var p struct {
-			Command    string            `json:"command"`
-			Workdir    string            `json:"workdir"`
-			Timeout    float64           `json:"timeout"`
-			Background bool              `json:"background"`
-			Structured bool              `json:"structured"`
-			Env        map[string]string `json:"env"`
-		}
+		var p execParams
 		if err := jsonutil.UnmarshalInto("exec params", input, &p); err != nil {
 			return "", err
 		}
@@ -100,121 +103,140 @@ func ToolExec(procMgr *process.Manager, defaultDir string) toolport.ToolFunc {
 			return "", err
 		}
 
-		// Pre-exec checkpoint: an in-place file edit run via exec (sed -i, '>'
-		// redirect) bypasses the rollback net the fs Write/Edit tools have.
-		// Snapshot the target files that already exist so this edit is
-		// /rollback-recoverable too. Best-effort + nil-safe (no Checkpointer wired →
-		// no-op); only existing regular files are snapshotted, so over-inclusive
-		// candidates (a misparsed sed script) harmlessly drop out, and the command
-		// itself is never blocked or modified.
-		for _, t := range InPlaceFileTargets(p.Command) {
-			abs := t
-			if !filepath.IsAbs(abs) {
-				abs = filepath.Join(workDir, t)
-			}
-			if fi, err := os.Stat(abs); err == nil && fi.Mode().IsRegular() {
-				toolport.SnapshotBeforeWrite(ctx, abs, "exec")
-			}
-		}
-
-		timeoutMs := int64(60000)
-		if p.Timeout > 0 {
-			timeoutMs = int64(p.Timeout * 1000)
-		}
-		const maxTimeoutMs = 10 * 60 * 1000
-		if timeoutMs > maxTimeoutMs {
-			timeoutMs = maxTimeoutMs
-		}
+		snapshotInPlaceTargets(ctx, p.Command, workDir)
+		timeoutMs := execTimeoutMs(p.Timeout)
 
 		if procMgr != nil {
-			req := process.ExecRequest{
-				Command:    "bash",
-				Args:       []string{"-c", p.Command},
-				WorkingDir: workDir,
-				TimeoutMs:  timeoutMs,
-				Env:        p.Env,
-			}
-
-			// Background mode: launch asynchronously and return the process ID
-			// so the caller can poll via the process tool.
-			if p.Background {
-				id := procMgr.ExecuteBackground(ctx, req)
-				return fmt.Sprintf(`{"id":%q,"status":"running","message":"background process started, use process tool with action=poll to check"}`, id), nil
-			}
-
-			result := procMgr.Execute(ctx, req)
-			if p.Structured {
-				return formatExecResultJSON(result), nil
-			}
-			out := formatExecResult(result)
-			// Annotate non-error exit codes with command-specific context.
-			// e.g. grep exit 1 = "no matches found", not an error.
-			if result.ExitCode != 0 {
-				if isErr, hint := InterpretExitCode(p.Command, result.ExitCode); !isErr && hint != "" {
-					out += " " + hint
-				}
-			}
-			if destructiveWarning != "" {
-				out = destructiveWarning + "\n" + out
-			}
-			return out, nil
+			return execViaManager(ctx, procMgr, p, workDir, timeoutMs, destructiveWarning)
 		}
+		return execFallback(ctx, p, workDir, timeoutMs, destructiveWarning)
+	}
+}
 
-		// Fallback: direct exec without process manager. Same env hygiene as
-		// the procMgr path — the inherited gateway environment carries
-		// secrets, so it must never reach the child unsanitized; p.Env is
-		// applied on top (it was silently dropped here before).
-		execCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
-		defer cancel()
-		start := time.Now()
-		cmd := exec.CommandContext(execCtx, "bash", "-c", p.Command) //nolint:gosec // G204 — command execution is by design
-		cmd.Dir = workDir
-		env := process.SanitizeEnv(os.Environ(), slog.Default())
-		for k, v := range p.Env {
-			env = append(env, k+"="+v)
+// snapshotInPlaceTargets takes a pre-exec checkpoint: an in-place file edit run
+// via exec (sed -i, '>' redirect) bypasses the rollback net the fs Write/Edit
+// tools have. Snapshot the target files that already exist so this edit is
+// /rollback-recoverable too. Best-effort + nil-safe (no Checkpointer wired →
+// no-op); only existing regular files are snapshotted, so over-inclusive
+// candidates (a misparsed sed script) harmlessly drop out, and the command
+// itself is never blocked or modified.
+func snapshotInPlaceTargets(ctx context.Context, command, workDir string) {
+	for _, t := range InPlaceFileTargets(command) {
+		abs := t
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(workDir, t)
 		}
-		cmd.Env = env
-		out, err := cmd.CombinedOutput()
-		elapsed := time.Since(start)
-
-		if p.Structured {
-			exitCode := 0
-			if err != nil {
-				var exitErr *exec.ExitError
-				if errors.As(err, &exitErr) {
-					exitCode = exitErr.ExitCode()
-				} else {
-					exitCode = -1
-				}
-			}
-			result := map[string]any{
-				"stdout":     string(out),
-				"stderr":     "",
-				"exit_code":  exitCode,
-				"runtime_ms": elapsed.Milliseconds(),
-				"timed_out":  execCtx.Err() != nil,
-			}
-			data, _ := json.MarshalIndent(result, "", "  ")
-			return string(data), nil
+		if fi, err := os.Stat(abs); err == nil && fi.Mode().IsRegular() {
+			toolport.SnapshotBeforeWrite(ctx, abs, "exec")
 		}
+	}
+}
 
-		// Exit-code hints + destructive warning previously applied only on the
-		// procMgr path; the fallback dropped both.
-		outStr := string(out)
+// execTimeoutMs converts the requested timeout (seconds) into milliseconds,
+// defaulting to 60s and capping at 10 minutes.
+func execTimeoutMs(timeoutSec float64) int64 {
+	timeoutMs := int64(60000)
+	if timeoutSec > 0 {
+		timeoutMs = int64(timeoutSec * 1000)
+	}
+	const maxTimeoutMs = 10 * 60 * 1000
+	if timeoutMs > maxTimeoutMs {
+		timeoutMs = maxTimeoutMs
+	}
+	return timeoutMs
+}
+
+// execViaManager runs the command through the process manager (foreground or
+// background) and formats the result.
+func execViaManager(ctx context.Context, procMgr *process.Manager, p execParams, workDir string, timeoutMs int64, destructiveWarning string) (string, error) {
+	req := process.ExecRequest{
+		Command:    "bash",
+		Args:       []string{"-c", p.Command},
+		WorkingDir: workDir,
+		TimeoutMs:  timeoutMs,
+		Env:        p.Env,
+	}
+
+	// Background mode: launch asynchronously and return the process ID
+	// so the caller can poll via the process tool.
+	if p.Background {
+		id := procMgr.ExecuteBackground(ctx, req)
+		return fmt.Sprintf(`{"id":%q,"status":"running","message":"background process started, use process tool with action=poll to check"}`, id), nil
+	}
+
+	result := procMgr.Execute(ctx, req)
+	if p.Structured {
+		return formatExecResultJSON(result), nil
+	}
+	out := formatExecResult(result)
+	// Annotate non-error exit codes with command-specific context.
+	// e.g. grep exit 1 = "no matches found", not an error.
+	if result.ExitCode != 0 {
+		if isErr, hint := InterpretExitCode(p.Command, result.ExitCode); !isErr && hint != "" {
+			out += " " + hint
+		}
+	}
+	if destructiveWarning != "" {
+		out = destructiveWarning + "\n" + out
+	}
+	return out, nil
+}
+
+// execFallback is direct exec without a process manager. Same env hygiene as
+// the procMgr path — the inherited gateway environment carries secrets, so it
+// must never reach the child unsanitized; p.Env is applied on top (it was
+// silently dropped here before).
+func execFallback(ctx context.Context, p execParams, workDir string, timeoutMs int64, destructiveWarning string) (string, error) {
+	execCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	cmd := exec.CommandContext(execCtx, "bash", "-c", p.Command) //nolint:gosec // G204 — command execution is by design
+	cmd.Dir = workDir
+	env := process.SanitizeEnv(os.Environ(), slog.Default())
+	for k, v := range p.Env {
+		env = append(env, k+"="+v)
+	}
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
+	elapsed := time.Since(start)
+
+	if p.Structured {
+		exitCode := 0
 		if err != nil {
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {
-				if isErr, hint := InterpretExitCode(p.Command, exitErr.ExitCode()); !isErr && hint != "" {
-					outStr += " " + hint
-				}
+				exitCode = exitErr.ExitCode()
+			} else {
+				exitCode = -1
 			}
-			outStr = fmt.Sprintf("%s\n\nError: %s", outStr, err.Error())
 		}
-		if destructiveWarning != "" {
-			outStr = destructiveWarning + "\n" + outStr
+		result := map[string]any{
+			"stdout":     string(out),
+			"stderr":     "",
+			"exit_code":  exitCode,
+			"runtime_ms": elapsed.Milliseconds(),
+			"timed_out":  execCtx.Err() != nil,
 		}
-		return outStr, nil
+		data, _ := json.MarshalIndent(result, "", "  ")
+		return string(data), nil
 	}
+
+	// Exit-code hints + destructive warning previously applied only on the
+	// procMgr path; the fallback dropped both.
+	outStr := string(out)
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			if isErr, hint := InterpretExitCode(p.Command, exitErr.ExitCode()); !isErr && hint != "" {
+				outStr += " " + hint
+			}
+		}
+		outStr = fmt.Sprintf("%s\n\nError: %s", outStr, err.Error())
+	}
+	if destructiveWarning != "" {
+		outStr = destructiveWarning + "\n" + outStr
+	}
+	return outStr, nil
 }
 
 // formatExecResultJSON returns process manager result as JSON.

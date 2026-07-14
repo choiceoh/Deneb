@@ -32,7 +32,7 @@ type evaluatedCandidate struct {
 	margin      float64 // held-out score margin (candidate - original); selection rank
 	// prov is the evaluator-attribution certificate accumulated while the
 	// candidate ran the gates (RSI P1.5) — recorded with the lifecycle entry.
-	prov EvolveProvenance
+	prov evolveProvenance
 	// reproduction is the producer-authored defect-reproduction case, adopted
 	// at commit only after the deterministic oracle confirms it (fails on the
 	// original body, passes on the committed body).
@@ -88,47 +88,10 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 	committedAudit := audit
 	prov := e.newProvenance()
 
-	// Execution-grounded behavioral gate (do-no-harm safety net). Replays the
-	// candidate vs the original through the executor model on stored replay
-	// cases and rejects a candidate that regresses the proven tool-call
-	// behavior. Orthogonal to the self-test/judge below, so it runs in both
-	// modes. Fail-open: disabled, no cases, or executor error never blocks.
-	if behavior, berr := e.validationEngine.EvaluateBehavior(ctx, entry.Skill.Name, skillBodyOnly(originalContent), candidateBody); berr != nil {
-		e.logger.Warn("evolver: behavioral replay unavailable, skipping gate",
-			"skill", entry.Skill.Name, "error", berr)
-	} else if behavior.Evaluated && !behavior.Pass {
-		if e.tracker != nil {
-			if logErr := e.tracker.LogEvolveRejectedWithProvenance(entry.Skill.Name, behavior.Reason, audit, &prov); logErr != nil {
-				e.logger.Warn("evolver: lifecycle log write failed",
-					"skill", entry.Skill.Name, "error", logErr)
-			}
-		}
-		e.recordRejectedSkillEdit(entry.Skill.Name, candidateBody, behavior.Reason, "behavioral-replay", audit)
-		return evaluatedCandidate{result: &EvolveResult{
-			SkillName: entry.Skill.Name,
-			Evolved:   false,
-			Reason:    "behavioral replay rejected: " + behavior.Reason,
-		}}, nil
-	}
-
-	// Deterministic selector gates are not optional: even when LLM self-testing
-	// is disabled for cost/latency, candidates must still obey bounded edit and
-	// held-out validation constraints.
-	if !e.selfTest {
-		if ok, reason := e.validateCandidatePreflight(entry.Skill.Name, originalContent, candidateBody, audit, stats, reviewFinding); !ok {
-			if e.tracker != nil {
-				if logErr := e.tracker.LogEvolveRejectedWithProvenance(entry.Skill.Name, reason, audit, &prov); logErr != nil {
-					e.logger.Warn("evolver: lifecycle log write failed",
-						"skill", entry.Skill.Name, "error", logErr)
-				}
-			}
-			e.recordRejectedSkillEdit(entry.Skill.Name, candidateBody, reason, "preflight", audit)
-			return evaluatedCandidate{result: &EvolveResult{
-				SkillName: entry.Skill.Name,
-				Evolved:   false,
-				Reason:    "selection rejected: " + reason,
-			}}, nil
-		}
+	// Gate order is inviolable: behavioral replay → deterministic selection
+	// preflight (self-test-off mode) → LLM self-test + teacher escalation.
+	if rejected := e.preSelfTestGates(ctx, entry, originalContent, candidateBody, audit, stats, reviewFinding, &prov); rejected != nil {
+		return *rejected, nil
 	}
 
 	// Self-test the rewrite before committing it. A failed or uncertain judge
@@ -137,20 +100,7 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 	if e.selfTest {
 		accepted, ok, reason := e.selfTestAndMaybeEscalate(ctx, entry, originalContent, candidateBody, stats, audit, reviewFinding, &prov)
 		if !ok {
-			// Best-effort lifecycle record so rejected attempts are visible in
-			// the native observability feed, not just operator logs.
-			if e.tracker != nil {
-				if logErr := e.tracker.LogEvolveRejectedWithProvenance(entry.Skill.Name, reason, audit, &prov); logErr != nil {
-					e.logger.Warn("evolver: lifecycle log write failed",
-						"skill", entry.Skill.Name, "error", logErr)
-				}
-			}
-			e.recordRejectedSkillEdit(entry.Skill.Name, candidateBody, reason, "self-test", audit)
-			return evaluatedCandidate{result: &EvolveResult{
-				SkillName: entry.Skill.Name,
-				Evolved:   false,
-				Reason:    "self-test rejected: " + reason,
-			}}, nil
+			return e.rejectCandidateEdit(entry.Skill.Name, candidateBody, reason, "self-test", "self-test rejected: ", audit, &prov), nil
 		}
 		candidateBody = accepted.Body
 		if strings.TrimSpace(accepted.Description) != "" {
@@ -169,26 +119,7 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 	// first-committable order, preserving single-candidate behavior.
 	margin := e.heldOutSelectionMargin(entry.Skill.Name, originalContent, candidateBody)
 	prov.HeldOutMargin = &margin
-	var reproduction *SkillValidationCaseRecord
-	if rc := resp.Changes.ReproductionCase; rc != nil {
-		reproduction = &SkillValidationCaseRecord{
-			SkillName:           entry.Skill.Name,
-			ID:                  fmt.Sprintf("repro-%s-%s", entry.Skill.Name, newVersion),
-			Description:         strings.TrimSpace(rc.Description),
-			RequiredSubstrings:  rc.RequiredSubstrings,
-			ForbiddenSubstrings: rc.ForbiddenSubstrings,
-			RequiredHeadings:    rc.RequiredHeadings,
-			Source:              "reproduction-oracle",
-			FrontierTier:        "hard",
-		}
-		// ① Behavioral enrichment: string assertions only test "does the body
-		// SAY X". When the targeted failure named a concrete tool call, attach a
-		// behavioral replay assertion so the strongest gate (executor-based
-		// EvaluateBehavior) also tests "does the skill make the agent DO X". Free
-		// (tool data already lives in the failure trace); the oracle check below
-		// scores strings only, so this never corrupts the fails-on-original test.
-		enrichReproductionWithBehavior(reproduction, stats)
-	}
+	reproduction := e.reproductionCaseFromResp(entry.Skill.Name, newVersion, resp, stats)
 	return evaluatedCandidate{
 		body:         candidateBody,
 		newVersion:   newVersion,
@@ -198,6 +129,88 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 		prov:         prov,
 		reproduction: reproduction,
 	}, nil
+}
+
+// preSelfTestGates runs the pre-commit gates that come BEFORE the LLM
+// self-test, in their inviolable order, returning a non-nil rejection when a
+// gate fails (nil → the candidate may proceed to self-test):
+//
+//  1. Execution-grounded behavioral gate (do-no-harm safety net). Replays the
+//     candidate vs the original through the executor model on stored replay
+//     cases and rejects a candidate that regresses the proven tool-call
+//     behavior. Orthogonal to the self-test/judge, so it runs in both modes.
+//     Fail-open: disabled, no cases, or executor error never blocks.
+//  2. Deterministic selector gates (self-test-off mode only) are not optional:
+//     even when LLM self-testing is disabled for cost/latency, candidates must
+//     still obey bounded edit and held-out validation constraints. (With
+//     self-test on, validateCandidatePreflight runs inside
+//     selfTestAndMaybeEscalate — unchanged.)
+func (e *Evolver) preSelfTestGates(ctx context.Context, entry *skills.SkillEntry, originalContent, candidateBody string, audit HarnessEditAudit, stats *UsageStats, reviewFinding string, prov *evolveProvenance) *evaluatedCandidate {
+	if behavior, berr := e.validationEngine.EvaluateBehavior(ctx, entry.Skill.Name, skillBodyOnly(originalContent), candidateBody); berr != nil {
+		e.logger.Warn("evolver: behavioral replay unavailable, skipping gate",
+			"skill", entry.Skill.Name, "error", berr)
+	} else if behavior.Evaluated && !behavior.Pass {
+		rejected := e.rejectCandidateEdit(entry.Skill.Name, candidateBody, behavior.Reason, "behavioral-replay", "behavioral replay rejected: ", audit, prov)
+		return &rejected
+	}
+
+	if !e.selfTest {
+		if ok, reason := e.validateCandidatePreflight(entry.Skill.Name, originalContent, candidateBody, audit, stats, reviewFinding); !ok {
+			rejected := e.rejectCandidateEdit(entry.Skill.Name, candidateBody, reason, "preflight", "selection rejected: ", audit, prov)
+			return &rejected
+		}
+	}
+	return nil
+}
+
+// rejectCandidateEdit records a gate rejection — best-effort lifecycle record
+// (so rejected attempts are visible in the native observability feed, not just
+// operator logs) plus the rejected-edit buffer — and returns the
+// non-committable evaluatedCandidate. Pure extraction of the three identical
+// rejection tails (behavioral replay / selection preflight / self-test);
+// source labels the buffer entry and reasonPrefix the caller-visible Reason,
+// both exactly as before.
+func (e *Evolver) rejectCandidateEdit(skillName, candidateBody, reason, source, reasonPrefix string, audit HarnessEditAudit, prov *evolveProvenance) evaluatedCandidate {
+	if e.tracker != nil {
+		if logErr := e.tracker.logEvolveRejectedWithProvenance(skillName, reason, audit, prov); logErr != nil {
+			e.logger.Warn("evolver: lifecycle log write failed",
+				"skill", skillName, "error", logErr)
+		}
+	}
+	e.recordRejectedSkillEdit(skillName, candidateBody, reason, source, audit)
+	return evaluatedCandidate{result: &EvolveResult{
+		SkillName: skillName,
+		Evolved:   false,
+		Reason:    reasonPrefix + reason,
+	}}
+}
+
+// reproductionCaseFromResp builds the producer-authored defect-reproduction
+// case from the parsed evolve response (resp.Changes must be non-nil — callers
+// sit past the skip gate), or nil when the producer supplied none. Behavioral
+// enrichment (①): string assertions only test "does the body SAY X". When the
+// targeted failure named a concrete tool call, attach a behavioral replay
+// assertion so the strongest gate (executor-based EvaluateBehavior) also tests
+// "does the skill make the agent DO X". Free (tool data already lives in the
+// failure trace); the commit-time oracle scores strings only, so this never
+// corrupts the fails-on-original test.
+func (e *Evolver) reproductionCaseFromResp(skillName, newVersion string, resp evolveResp, stats *UsageStats) *SkillValidationCaseRecord {
+	rc := resp.Changes.ReproductionCase
+	if rc == nil {
+		return nil
+	}
+	reproduction := &SkillValidationCaseRecord{
+		SkillName:           skillName,
+		ID:                  fmt.Sprintf("repro-%s-%s", skillName, newVersion),
+		Description:         strings.TrimSpace(rc.Description),
+		RequiredSubstrings:  rc.RequiredSubstrings,
+		ForbiddenSubstrings: rc.ForbiddenSubstrings,
+		RequiredHeadings:    rc.RequiredHeadings,
+		Source:              "reproduction-oracle",
+		FrontierTier:        "hard",
+	}
+	enrichReproductionWithBehavior(reproduction, stats)
+	return reproduction
 }
 
 // commitEvaluatedCandidate writes an already-gated candidate to disk and records
@@ -248,7 +261,7 @@ func (e *Evolver) commitEvaluatedCandidate(entry *skills.SkillEntry, originalCon
 	// MarkSkillPatched only tracks agent-created skills, so without this a
 	// committed evolve of a user-authored skill leaves no queryable trace.
 	if e.tracker != nil {
-		if logErr := e.tracker.LogEvolveWithProvenance(entry.Skill.Name, newVersion, committedDescription, committedAudit, &eval.prov); logErr != nil {
+		if logErr := e.tracker.logEvolveWithProvenance(entry.Skill.Name, newVersion, committedDescription, committedAudit, &eval.prov); logErr != nil {
 			e.logger.Warn("evolver: lifecycle log write failed",
 				"skill", entry.Skill.Name, "error", logErr)
 		}

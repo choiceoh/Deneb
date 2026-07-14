@@ -9,7 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localtodo"
 )
 
-func TestTodoDeadlinesAndCombine(t *testing.T) {
+func TestTodoDeadlinesFilterAndCombineWithNilCollectors(t *testing.T) {
 	now := time.Now()
 	todos := []localtodo.Todo{
 		{Title: "견적 회신", Due: now.Add(3 * time.Hour)},

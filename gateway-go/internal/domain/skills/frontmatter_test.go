@@ -8,14 +8,14 @@ import (
 	"testing"
 )
 
-// TestBundledSkillMetadataResolves sweeps the repo's bundled skills/ tree:
+// TestBundledSkillMetadataParsesForAllSkillsAndPreservesKbInterviewTriggers sweeps the repo's bundled skills/ tree:
 // every SKILL.md that declares a metadata block must parse to non-nil deneb
 // metadata. ResolveDenebMetadata fails SILENTLY (nil) on malformed JSON, which
 // drops triggers/tags/related_skills without any error — kb-interview shipped
 // with a broken "tags": key and its auto-surfacing triggers were dead until
 // this sweep existed. Skipped when the repo skills/ dir isn't present (e.g.
 // the module built outside the repo).
-func TestBundledSkillMetadataResolves(t *testing.T) {
+func TestBundledSkillMetadataParsesForAllSkillsAndPreservesKbInterviewTriggers(t *testing.T) {
 	skillsDir := filepath.Join("..", "..", "..", "..", "skills")
 	if info, err := os.Stat(skillsDir); err != nil || !info.IsDir() {
 		t.Skipf("bundled skills dir not found at %s", skillsDir)
@@ -164,7 +164,7 @@ func TestParseFrontmatterBool(t *testing.T) {
 	}
 }
 
-func TestResolveSkillInvocationPolicy_Defaults(t *testing.T) {
+func TestResolveSkillInvocationPolicyReturnsUserInvocableTrueByDefault(t *testing.T) {
 	fm := ParsedFrontmatter{}
 	policy := ResolveSkillInvocationPolicy(fm)
 
@@ -176,7 +176,7 @@ func TestResolveSkillInvocationPolicy_Defaults(t *testing.T) {
 	}
 }
 
-func TestResolveSkillInvocationPolicy_Overrides(t *testing.T) {
+func TestResolveSkillInvocationPolicyAppliesFrontmatterOverridesWhenSet(t *testing.T) {
 	fm := ParsedFrontmatter{
 		"user-invocable":           "false",
 		"disable-model-invocation": "true",
@@ -310,7 +310,7 @@ func TestNormalizeSafeDownloadURL_Extended(t *testing.T) {
 	}
 }
 
-func TestResolveDenebMetadata_ValidMetadata(t *testing.T) {
+func TestResolveDenebMetadataParsesValidMetadataFields(t *testing.T) {
 	fm := ParsedFrontmatter{
 		"metadata": `{"deneb": {"always": true, "skillKey": "weather", "emoji": "☀️", "os": ["linux"]}}`,
 	}
@@ -329,7 +329,7 @@ func TestResolveDenebMetadata_ValidMetadata(t *testing.T) {
 	}
 }
 
-func TestResolveDenebMetadata_RelaxedMetadataBlock(t *testing.T) {
+func TestResolveDenebMetadataParsesRelaxedJSONWithTrailingCommas(t *testing.T) {
 	content := `---
 name: github
 metadata:
@@ -387,7 +387,7 @@ metadata:
 	}
 }
 
-func TestExtractFrontmatterBlock_Valid(t *testing.T) {
+func TestExtractFrontmatterBlockReturnsHeaderAndBodyOffset(t *testing.T) {
 	content := "---\nname: test\ndescription: A test\n---\n# Body\n\nSome content here."
 	header, offset := ExtractFrontmatterBlock(content)
 	if header == "" {

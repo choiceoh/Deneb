@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestStore_SetGetListActive(t *testing.T) {
+func TestStoreSetCreatesGoalAndListActiveReturnsCopies(t *testing.T) {
 	s := NewStore("", nil)
 	st := s.Set("client:main", "탑솔라 6월 견적 정리", 0)
 	if st.Status != StatusActive || st.MaxTurns != DefaultMaxTurns || st.TurnsUsed != 0 {
@@ -28,7 +28,7 @@ func TestStore_SetGetListActive(t *testing.T) {
 	}
 }
 
-func TestStore_RecordRun_DoneVerdict(t *testing.T) {
+func TestStoreRecordRunDoneVerdictUpdatesStatusAndClearsFromActive(t *testing.T) {
 	s := NewStore("", nil)
 	s.Set("k", "goal", 20)
 	st := s.RecordRun("k", "done", "deliverable produced", false)
@@ -43,7 +43,7 @@ func TestStore_RecordRun_DoneVerdict(t *testing.T) {
 	}
 }
 
-func TestStore_RecordRun_BudgetExhaustionPauses(t *testing.T) {
+func TestStoreRecordRunPausesWhenBudgetExhausted(t *testing.T) {
 	s := NewStore("", nil)
 	s.Set("k", "goal", 3)
 	var st *State
@@ -102,7 +102,7 @@ func TestStore_PauseResumeClear(t *testing.T) {
 	}
 }
 
-func TestStore_Ledger(t *testing.T) {
+func TestStoreLedgerTracksCommittedActionsAndClearsOnNewGoal(t *testing.T) {
 	s := NewStore("", nil)
 	s.Set("k", "goal", 20)
 	if s.SeenAction("k", "message:abc") {
@@ -122,7 +122,7 @@ func TestStore_Ledger(t *testing.T) {
 	}
 }
 
-func TestStore_Persistence(t *testing.T) {
+func TestStoreRestoresPersistedGoalAndLedger(t *testing.T) {
 	dir := t.TempDir()
 	s1 := NewStore(dir, nil)
 	s1.Set("client:main", "지속 목표", 10)
@@ -143,7 +143,7 @@ func TestStore_Persistence(t *testing.T) {
 	}
 }
 
-func TestDestructiveActionKey(t *testing.T) {
+func TestDestructiveActionKeyDistinguishesWriteFromReadActions(t *testing.T) {
 	tests := []struct {
 		name         string
 		tool         string
@@ -173,7 +173,7 @@ func TestDestructiveActionKey(t *testing.T) {
 	}
 }
 
-func TestDestructiveActionKey_StableAcrossKeyOrder(t *testing.T) {
+func TestDestructiveActionKeyNormalizesArgOrderAndDetectsChanges(t *testing.T) {
 	// Same call, different JSON key order → same ledger key (canonicalized).
 	k1, _ := DestructiveActionKey("message", []byte(`{"to":"a@b.c","text":"hi"}`))
 	k2, _ := DestructiveActionKey("message", []byte(`{"text":"hi","to":"a@b.c"}`))
@@ -187,7 +187,7 @@ func TestDestructiveActionKey_StableAcrossKeyOrder(t *testing.T) {
 	}
 }
 
-func TestStore_AddSubgoal(t *testing.T) {
+func TestStoreAddSubgoalTrimsIgnoresBlankAndResetsOnNewGoal(t *testing.T) {
 	s := NewStore("", nil)
 	if s.AddSubgoal("k", "criterion") != nil {
 		t.Fatal("AddSubgoal on a missing goal should return nil")
@@ -210,7 +210,7 @@ func TestStore_AddSubgoal(t *testing.T) {
 	}
 }
 
-func TestState_Summary(t *testing.T) {
+func TestStateSummaryHandlesNilAndDisplaysGoalDetails(t *testing.T) {
 	if (*State)(nil).Summary() == "" {
 		t.Fatal("nil Summary should be non-empty")
 	}

@@ -50,7 +50,7 @@ type DealRecord struct {
 // dealRecordFrom builds a typed record from the write-time input, parsing the
 // free-text 금액. now is injected for deterministic tests.
 func dealRecordFrom(in DealPageInput, now time.Time) DealRecord {
-	val, cur, ok := ParseAmount(in.Amount)
+	val, cur, ok := parseAmount(in.Amount)
 	date := strings.TrimSpace(in.Date)
 	if date == "" {
 		date = now.Format("2006-01-02")
@@ -78,7 +78,7 @@ func dealRecordFrom(in DealPageInput, now time.Time) DealRecord {
 	}
 	if !in.Terms.Empty() {
 		t := *in.Terms // copy — never mutate the caller's input
-		if mw, mok := ParseCapacityMW(t.Capacity.Value); mok {
+		if mw, mok := parseCapacityMW(t.Capacity.Value); mok {
 			t.CapacityMW = mw
 		}
 		rec.Terms = &t
@@ -136,13 +136,13 @@ func (s *Store) ListDealRecords() ([]DealRecord, error) {
 	return out, sc.Err()
 }
 
-// ParseAmount parses a free-text 금액 ("5,000,000원", "$1,200", "1200달러") into a
+// parseAmount parses a free-text 금액 ("5,000,000원", "$1,200", "1200달러") into a
 // numeric value and an ISO-ish currency code. ok=false (value 0) when no ASCII
 // numeric is present — notably spelled-out Korean numerals ("오백만원", "5천만원"),
 // which are intentionally out of scope for v1 and surfaced as unparsed rather
 // than guessed. Formal business documents (견적서/세금계산서/거래명세서) use digit
 // grouping, the dominant case this covers.
-func ParseAmount(raw string) (value float64, currency string, ok bool) {
+func parseAmount(raw string) (value float64, currency string, ok bool) {
 	s := strings.TrimSpace(raw)
 	if s == "" {
 		return 0, "", false

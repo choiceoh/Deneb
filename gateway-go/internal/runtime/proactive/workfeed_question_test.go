@@ -11,7 +11,7 @@ import (
 // mail-analysis contract now teaches) yields the card body with the fence stripped,
 // plus one ActionAnswer chip per option — the plumbing the feed renders as tappable
 // answer chips (native WorkFeedAnswerBlock + the desktop parity from #3564).
-func TestSplitChoicesFence_MailDecisionCard(t *testing.T) {
+func TestSplitChoicesFenceCreatesAnswerActionsFromMailCard(t *testing.T) {
 	body := "```deneb-ui\n<column><card><text>견적 회신 필요</text></card></column>\n```\n\n" +
 		"```choices\n회신 초안 작성\n나중에 알림\n무시\n```"
 

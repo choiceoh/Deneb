@@ -53,8 +53,8 @@ type judgeBenchOutcome struct {
 	Failures []string `json:"failures,omitempty"`
 }
 
-// Rate returns the caught-defect ratio (1.0 when the bench did not run).
-func (o judgeBenchOutcome) Rate() float64 {
+// rate returns the caught-defect ratio (1.0 when the bench did not run).
+func (o judgeBenchOutcome) rate() float64 {
 	if o.Total == 0 {
 		return 1
 	}
@@ -155,13 +155,13 @@ func judgeBenchDecision(incumbent, proposal judgeBenchOutcome) string {
 	if proposal.Total < judgeBenchMinPairs {
 		return fmt.Sprintf("bench too small (%d pairs < %d)", proposal.Total, judgeBenchMinPairs)
 	}
-	if proposal.Rate() < judgeBenchMinRate {
+	if proposal.rate() < judgeBenchMinRate {
 		return fmt.Sprintf("proposal catches %.0f%% of planted defects (< %.0f%% floor): %s",
-			proposal.Rate()*100, judgeBenchMinRate*100, strings.Join(proposal.Failures, "; "))
+			proposal.rate()*100, judgeBenchMinRate*100, strings.Join(proposal.Failures, "; "))
 	}
-	if proposal.Rate() < incumbent.Rate() {
+	if proposal.rate() < incumbent.rate() {
 		return fmt.Sprintf("proposal regresses the incumbent on the degradation bench (%.0f%% < %.0f%%): %s",
-			proposal.Rate()*100, incumbent.Rate()*100, strings.Join(proposal.Failures, "; "))
+			proposal.rate()*100, incumbent.rate()*100, strings.Join(proposal.Failures, "; "))
 	}
 	return ""
 }

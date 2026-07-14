@@ -2,7 +2,7 @@ package push
 
 import "testing"
 
-func TestConfigEnabled(t *testing.T) {
+func TestConfigEnabledWhenPathSetAndNotDisabled(t *testing.T) {
 	cases := []struct {
 		name string
 		cfg  Config
@@ -22,7 +22,7 @@ func TestConfigEnabled(t *testing.T) {
 	}
 }
 
-func TestConfigFromEnv(t *testing.T) {
+func TestConfigFromEnvReadsPathAndDisableOverride(t *testing.T) {
 	t.Setenv("DENEB_FCM_CREDENTIALS_FILE", "/path/to/sa.json")
 	t.Setenv("DENEB_FCM_DISABLE", "")
 	cfg := ConfigFromEnv()
@@ -36,7 +36,7 @@ func TestConfigFromEnv(t *testing.T) {
 	}
 }
 
-func TestConfigFromEnv_UnsetIsDormant(t *testing.T) {
+func TestConfigFromEnvMissingCredentialsStaysDisabled(t *testing.T) {
 	t.Setenv("DENEB_FCM_CREDENTIALS_FILE", "")
 	t.Setenv("DENEB_FCM_DISABLE", "")
 	if ConfigFromEnv().Enabled() {

@@ -45,7 +45,7 @@ func TestRollbackSkill_PersistsEvidence(t *testing.T) {
 	catalog.Register(skills.SkillEntry{Skill: skills.Skill{Name: "sk", Version: "1.0.1", FilePath: file}})
 	e := NewEvolver(nil, catalog, tracker, "m", slog.Default())
 
-	e.RollbackSkill("sk")
+	e.rollbackSkill("sk")
 
 	restored, err := os.ReadFile(file)
 	if err != nil || string(restored) != original {
@@ -101,7 +101,7 @@ func TestRollbackSkill_ReRegistersRestoredVersion(t *testing.T) {
 
 // M4 regression pin: lockSkill serializes the same skill across callers and
 // never contends across different skills.
-func TestEvolver_LockSkillSerializes(t *testing.T) {
+func TestLockSkillSerializesSameSkillConcurrentlyAndSeparatesDifferentSkills(t *testing.T) {
 	e := NewEvolver(nil, skills.NewCatalog(nil), nil, "m", slog.Default())
 
 	// Same skill: the second Lock must block until the first unlocks. Prove

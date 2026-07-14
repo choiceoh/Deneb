@@ -12,13 +12,13 @@ import (
 // TestDetectDuplicates_NormalizedTitle: punctuation/spacing title variants get
 // a high-confidence merge Fix; genuinely different titles stay advisory.
 func TestDetectDuplicates_NormalizedTitle(t *testing.T) {
-	idx := NewIndex()
-	idx.UpdateEntry("프로젝트/영산고-태양광/대표.md", &Page{Meta: Frontmatter{Title: "영산고 태양광", Importance: 0.7}})
-	idx.UpdateEntry("프로젝트/영산고태양광/대표.md", &Page{Meta: Frontmatter{Title: "영산고-태양광", Importance: 0.5}})
-	idx.UpdateEntry("프로젝트/부산8호/대표.md", &Page{Meta: Frontmatter{Title: "부산 8호 태양광", Importance: 0.5}})
+	idx := newIndex()
+	idx.updateEntry("프로젝트/영산고-태양광/대표.md", &Page{Meta: Frontmatter{Title: "영산고 태양광", Importance: 0.7}})
+	idx.updateEntry("프로젝트/영산고태양광/대표.md", &Page{Meta: Frontmatter{Title: "영산고-태양광", Importance: 0.5}})
+	idx.updateEntry("프로젝트/부산8호/대표.md", &Page{Meta: Frontmatter{Title: "부산 8호 태양광", Importance: 0.5}})
 
 	findings := detectDuplicates(idx.Entries)
-	var normFix *VerifyFinding
+	var normFix *verifyFinding
 	for i := range findings {
 		if findings[i].Type == "duplicate" && findings[i].Fix != nil &&
 			strings.Contains(findings[i].Detail, "정규화") {
@@ -38,19 +38,20 @@ func TestDetectDuplicates_NormalizedTitle(t *testing.T) {
 	}
 }
 
-// TestDetectDuplicates_MailAnalysisGuard: two 메일분석 pages sharing a subject but
-// carrying different Message IDs are DISTINCT Gmail messages (메일 1통 = 1페이지)
-// and must never get an auto-merge Fix — the 2026-06 mis-merge that folded 14
-// different-ID mails together on normalized-title equality. A genuine same-mail
-// duplicate (same ID in two buckets) still merges.
-func TestDetectDuplicates_MailAnalysisGuard(t *testing.T) {
+// TestDetectDuplicates_RejectsAutoMergeAcrossDifferentMessageIDsButMergesSameID:
+// two 메일분석 pages sharing a subject but carrying different Message IDs are
+// DISTINCT Gmail messages (메일 1통 = 1페이지) and must never get an auto-merge
+// Fix — the 2026-06 mis-merge that folded 14 different-ID mails together on
+// normalized-title equality. A genuine same-mail duplicate (same ID in two
+// buckets) still merges.
+func TestDetectDuplicates_RejectsAutoMergeAcrossDifferentMessageIDsButMergesSameID(t *testing.T) {
 	const sameTitle = "Re: Re: [해밀고흥솔라팜] 모듈 제작 마스터 스케쥴 요청의 건"
 
 	t.Run("different msgID is never auto-merged", func(t *testing.T) {
-		idx := NewIndex()
-		idx.UpdateEntry("프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3e4371576a3.md",
+		idx := newIndex()
+		idx.updateEntry("프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3e4371576a3.md",
 			&Page{Meta: Frontmatter{Title: sameTitle, Importance: 0.3}})
-		idx.UpdateEntry("프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3aa72de312b.md",
+		idx.updateEntry("프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3aa72de312b.md",
 			&Page{Meta: Frontmatter{Title: sameTitle, Importance: 0.3}})
 		for _, f := range detectDuplicates(idx.Entries) {
 			if f.Fix != nil {
@@ -60,10 +61,10 @@ func TestDetectDuplicates_MailAnalysisGuard(t *testing.T) {
 	})
 
 	t.Run("same msgID across buckets still merges", func(t *testing.T) {
-		idx := NewIndex()
-		idx.UpdateEntry("프로젝트/메일분석/19eaa3e4371576a3.md",
+		idx := newIndex()
+		idx.updateEntry("프로젝트/메일분석/19eaa3e4371576a3.md",
 			&Page{Meta: Frontmatter{Title: sameTitle, Importance: 0.3}})
-		idx.UpdateEntry("프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3e4371576a3.md",
+		idx.updateEntry("프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3e4371576a3.md",
 			&Page{Meta: Frontmatter{Title: sameTitle, Importance: 0.5}})
 		merged := false
 		for _, f := range detectDuplicates(idx.Entries) {
@@ -77,9 +78,10 @@ func TestDetectDuplicates_MailAnalysisGuard(t *testing.T) {
 	})
 }
 
-// TestDetectStaleSuperseded_ArchiveFlow: a page superseded and untouched for
-// over the threshold gets an archive Fix, and applying it flips Archived.
-func TestDetectStaleSuperseded_ArchiveFlow(t *testing.T) {
+// TestDetectStaleSuperseded_ArchivesPastThresholdSkipsRecentAndIdempotent: a page
+// superseded and untouched for over the threshold gets an archive Fix, and
+// applying it flips Archived.
+func TestDetectStaleSuperseded_ArchivesPastThresholdSkipsRecentAndIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -124,9 +126,10 @@ func TestDetectStaleSuperseded_ArchiveFlow(t *testing.T) {
 	}
 }
 
-// TestDetectStaleMailAnalyses_RetentionFlow: mail-analysis pages older than
-// the retention window get an archive fix; fresh ones and non-mail pages don't.
-func TestDetectStaleMailAnalyses_RetentionFlow(t *testing.T) {
+// TestDetectStaleMailAnalyses_ArchivesPastRetentionSkipsFreshAndNonMailIdempotent:
+// mail-analysis pages older than the retention window get an archive fix;
+// fresh ones and non-mail pages don't.
+func TestDetectStaleMailAnalyses_ArchivesPastRetentionSkipsFreshAndNonMailIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

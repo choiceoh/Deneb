@@ -30,7 +30,7 @@ func toolResultMsg(content string) llm.Message {
 
 // --- MicroCompact ---
 
-func TestMicroCompact_NoChange(t *testing.T) {
+func TestMicroCompact_SkipsWhenBelowTurnThreshold(t *testing.T) {
 	msgs := []llm.Message{
 		textMsg("user", "hello"),
 		textMsg("assistant", "hi"),
@@ -46,7 +46,7 @@ func TestMicroCompact_NoChange(t *testing.T) {
 	}
 }
 
-func TestMicroCompact_StripsOldCode(t *testing.T) {
+func TestMicroCompact_TruncatesOldCodeBlocks(t *testing.T) {
 	msgs := []llm.Message{
 		textMsg("user", "read file"),
 		textMsg("assistant", "calling tool"),
@@ -112,7 +112,7 @@ func (m *mockSummarizer) Summarize(_ context.Context, system, conversation strin
 	return "### 핵심 사실\n- [테스트] 요약 완료", nil
 }
 
-func TestLLMCompact_SummarizesOld(t *testing.T) {
+func TestLLMCompact_CreatesSummaryFenceForOldMessages(t *testing.T) {
 	// Build enough messages to have >6 assistant turns.
 	var msgs []llm.Message
 	for i := 0; i < 10; i++ {
@@ -190,7 +190,7 @@ func TestEmergencyCompact_EvictsOldestSummarizesNonEvicted(t *testing.T) {
 // itself one of the messages (usually inside the preserved recent tail).
 // Adding it to the budget check again demands phantom headroom and wipes the
 // whole old zone even when everything already fits.
-func TestEmergencyCompact_NoDoubleCountOfTriggerInput(t *testing.T) {
+func TestEmergencyCompact_SkipsEvictionWhenInputAlreadyCounted(t *testing.T) {
 	var msgs []llm.Message
 	for i := 0; i < 5; i++ {
 		msgs = append(msgs, textMsg("user", strings.Repeat("x", 2000)))
@@ -222,7 +222,7 @@ func TestEmergencyCompact_NoDoubleCountOfTriggerInput(t *testing.T) {
 
 // --- Full pipeline ---
 
-func TestCompact_PipelineOrder(t *testing.T) {
+func TestCompact_StopsAtMicroTierWhenBelowLLMThreshold(t *testing.T) {
 	// Build messages with code in old tool results.
 	msgs := []llm.Message{
 		textMsg("user", "old question"),
@@ -261,7 +261,7 @@ func TestCompact_PipelineOrder(t *testing.T) {
 // budget (under CheapPruneMinUsagePct) the Tier 2/2b cheap pruning must not
 // run at all — every pruned byte rewrites history mid-prompt and invalidates
 // the vLLM prefix cache from that point on every turn.
-func TestCompact_CheapPruneGate(t *testing.T) {
+func TestCompact_PreservesBytesBelowUsageGate(t *testing.T) {
 	bulky := strings.Repeat("결과 데이터 라인입니다. ", 40) // > DefaultStubMinChars runes
 	msgs := []llm.Message{
 		textMsg("user", "old question"),

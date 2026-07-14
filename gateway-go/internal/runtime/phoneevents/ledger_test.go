@@ -72,7 +72,7 @@ func TestLedgerReadTailBudgetStopsAtLineBoundary(t *testing.T) {
 	}
 }
 
-func TestLedgerRedactsAndBounds(t *testing.T) {
+func TestLedgerRedactsSecretsAndTruncatesOversizedText(t *testing.T) {
 	dir := t.TempDir()
 	l := NewLedger(dir, testLedgerLogger())
 	l.Append("notification", "mail", "api key sk-proj-abcdefghijklmnopqrstuvwxyz012345 유출 주의")
@@ -93,7 +93,7 @@ func TestLedgerRedactsAndBounds(t *testing.T) {
 	}
 }
 
-func TestLedgerSkipsOTP(t *testing.T) {
+func TestLedgerIgnoresOTPMessages(t *testing.T) {
 	dir := t.TempDir()
 	l := NewLedger(dir, testLedgerLogger())
 	// OTP / security-code notifications must not persist to the raw ledger.
@@ -115,7 +115,7 @@ func TestLedgerSkipsOTP(t *testing.T) {
 	}
 }
 
-func TestIsSensitiveNotification(t *testing.T) {
+func TestIsSensitiveNotificationWithAndWithoutOTPKeywords(t *testing.T) {
 	sensitive := []string{
 		"인증번호 123456",
 		"인증 번호 [4821]",
@@ -140,7 +140,7 @@ func TestIsSensitiveNotification(t *testing.T) {
 	}
 }
 
-func TestLedgerPruneOldFiles(t *testing.T) {
+func TestLedgerPruneEvictsExpiredDayFiles(t *testing.T) {
 	dir := t.TempDir()
 	old := time.Now().AddDate(0, 0, -(ledgerRetentionDays + 5)).Format("2006-01-02")
 	if err := os.WriteFile(filepath.Join(dir, old+".jsonl"), []byte("{}\n"), 0o600); err != nil {

@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestSeedPersonPages(t *testing.T) {
+func TestSeedPersonPages_CreatesForRepeatedMentionsSkipsExistingShortAndSingleMention(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

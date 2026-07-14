@@ -60,7 +60,7 @@ func TestSnoozeReSurfacesWhenWindowElapses(t *testing.T) {
 // RunAction snooze sets a future re-surface window, removes the item from the
 // current feed, and leaves the snooze action available (non-terminal) so it can
 // be snoozed again after it returns.
-func TestSnoozeActionSetsReSurfaceWindow(t *testing.T) {
+func TestSnoozeActionUpdatesReSurfaceWindowAndHidesItem(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	item, err := store.Append(Item{ID: "x", Source: SourceProactive, Title: "X", Body: "b"})
 	if err != nil {

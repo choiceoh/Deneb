@@ -11,7 +11,7 @@ const dealFactsSource = `견적 내용을 안내드립니다.
 4. 하자보증기간은 준공 후 3년입니다.
 지체상금은 1일당 계약금액의 1/1000로 합니다.`
 
-func TestVerifyDealFacts_KeepsVerbatimQuotes(t *testing.T) {
+func TestVerifyDealFactsPreservesVerbatimQuotes(t *testing.T) {
 	facts := &DealFacts{
 		CapacityMW:   QuotedFact{Value: "2,940.5kW", Quote: "설비용량: 2,940.5kW (모듈 545W × 5,395장)"},
 		UnitPrice:    QuotedFact{Value: "148원/W", Quote: "모듈 단가는 148원/W로 산정하였습니다."},
@@ -34,7 +34,7 @@ func TestVerifyDealFacts_KeepsVerbatimQuotes(t *testing.T) {
 	}
 }
 
-func TestVerifyDealFacts_DropsBadQuotes(t *testing.T) {
+func TestVerifyDealFactsRejectsInvalidQuotes(t *testing.T) {
 	cases := []struct {
 		name string
 		fact QuotedFact
@@ -54,7 +54,7 @@ func TestVerifyDealFacts_DropsBadQuotes(t *testing.T) {
 	}
 }
 
-func TestVerifyDealFacts_WhitespaceAndCommaInsensitive(t *testing.T) {
+func TestVerifyDealFactsNormalizesWhitespaceAndCommas(t *testing.T) {
 	// LLM re-spaced the quote and dropped the comma from the value — both must
 	// still verify (OCR/LLM re-spacing is normal, commas are display-only).
 	facts := &DealFacts{
@@ -93,7 +93,7 @@ func TestDealFactsEmpty(t *testing.T) {
 	}
 }
 
-func TestDigitsCoveredBy(t *testing.T) {
+func TestDigitsCoveredByNormalizesCommasBeforeMatching(t *testing.T) {
 	cases := []struct {
 		value, quote string
 		want         bool

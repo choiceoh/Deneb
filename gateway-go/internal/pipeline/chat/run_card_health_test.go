@@ -40,7 +40,7 @@ const (
 // A card turn must emit the card-authored denominator signal (not a miss), and a
 // structured no-card answer must emit the miss (not authored) — so grepping the
 // journal for the two yields a real adoption rate.
-func TestReportDenebUICardHealth_AdoptionSignals(t *testing.T) {
+func TestReportDenebUICardHealthEmitsAdoptionSignals(t *testing.T) {
 	authored, log1 := captureLogger()
 	reportDenebUICardHealth("```deneb-ui\n<card><text>보고</text></card>\n```", "client:main", log1)
 	if !contains(*authored, msgCardAuthored) {

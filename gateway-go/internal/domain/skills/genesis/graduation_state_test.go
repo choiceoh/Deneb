@@ -10,7 +10,7 @@ import (
 // The unlock ledger: idempotent unlock + relock round-trip, lifecycle ledger
 // entries, and the dispatch predicate consuming graduated sources. HOME is
 // isolated because the state file lives at the FIXED shared path.
-func TestGraduationState(t *testing.T) {
+func TestGraduationStateUnlockIsIdempotentAndWidensDispatchPredicate(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	tr := newTestTracker(t)
 
@@ -69,7 +69,7 @@ func TestGraduationState(t *testing.T) {
 
 // eProcessOwnsRollback: graduation state flips ownership; the operator env
 // knob overrides in BOTH directions.
-func TestEProcessOwnershipViaGraduation(t *testing.T) {
+func TestEProcessOwnsRollbackFlipsOnGraduationAndEnvOverride(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("DENEB_EPROCESS_OWNS_ROLLBACK", "")
 	tr := newTestTracker(t)
@@ -94,7 +94,7 @@ func TestEProcessOwnershipViaGraduation(t *testing.T) {
 
 // The auto-graduator executes evidence-met unlocks once, respects the review
 // veto, the kill switch, and the drift brake.
-func TestLadderWatch_AutoGraduation(t *testing.T) {
+func TestLadderWatchAutoGraduatesOnFloorStopsForVetoKillSwitchAndDriftFreeze(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("DENEB_AUTO_GRADUATE", "")
 	tr := newTestTracker(t)

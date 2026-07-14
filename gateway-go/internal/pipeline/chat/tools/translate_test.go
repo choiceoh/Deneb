@@ -138,7 +138,7 @@ func TestTranslateSegments_TranslatesBatchesConcurrently(t *testing.T) {
 	}
 }
 
-func TestTranslateBatchDeepL_TextAndParts(t *testing.T) {
+func TestTranslateBatchDeepL_ReturnsTranslatedTextAndParts(t *testing.T) {
 	oldClient := deeplHTTPClient
 	defer func() { deeplHTTPClient = oldClient }()
 
@@ -214,7 +214,7 @@ func TestTranslateBatchDeepLDisabledWithoutKey(t *testing.T) {
 	}
 }
 
-func TestTranslateBatchDeepLMismatchFallsBack(t *testing.T) {
+func TestTranslateBatchDeepLMismatchTriggersFallback(t *testing.T) {
 	oldClient := deeplHTTPClient
 	defer func() { deeplHTTPClient = oldClient }()
 
@@ -239,7 +239,7 @@ func TestTranslateBatchDeepLMismatchFallsBack(t *testing.T) {
 	}
 }
 
-func TestDeepLTranslateEndpoint(t *testing.T) {
+func TestDeepLTranslateEndpointReturnsValidatedURL(t *testing.T) {
 	t.Setenv("DEEPL_API_URL", "")
 	if got := deepLTranslateEndpoint(); got != defaultDeepLTranslateURL {
 		t.Fatalf("default endpoint=%q want %q", got, defaultDeepLTranslateURL)
@@ -263,7 +263,7 @@ func TestDeepLTranslateEndpoint(t *testing.T) {
 	}
 }
 
-func TestDeepLTargetLang(t *testing.T) {
+func TestDeepLTargetLangReturnsMappedCode(t *testing.T) {
 	cases := map[string]string{
 		"":                  "KO",
 		"ko":                "KO",

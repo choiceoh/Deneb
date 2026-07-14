@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
 
-func TestShouldEscalateThinContent(t *testing.T) {
+func TestShouldEscalateThinContentWhenJSOrEmptySignaled(t *testing.T) {
 	tests := []struct {
 		name string
 		meta webFetchMeta
@@ -76,7 +76,7 @@ func withMockJina(t *testing.T, fn func(ctx context.Context, url string, maxByte
 	return &calls
 }
 
-func TestEscalateThinContent_AdoptsRicherResult(t *testing.T) {
+func TestEscalateThinContentUpdatesMetaWithRicherResult(t *testing.T) {
 	rendered := strings.Repeat("실제 본문 내용입니다. ", 200) // well over the threshold
 	calls := withMockJina(t, func(_ context.Context, _ string, _ int64) (*media.FetchResult, error) {
 		return &media.FetchResult{

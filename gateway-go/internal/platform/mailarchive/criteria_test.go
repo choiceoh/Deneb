@@ -19,7 +19,7 @@ func TestArchiveSentSinceCriteria_DateHeaderWithMargin(t *testing.T) {
 	}
 }
 
-func TestArchiveTextCriteria_SingleTokenKeepsShape(t *testing.T) {
+func TestArchiveTextCriteriaFormatsSingleTokenAsFieldOr(t *testing.T) {
 	got := archiveTextCriteria("당진솔라빌리지")
 	want := `OR OR FROM "당진솔라빌리지" SUBJECT "당진솔라빌리지" TEXT "당진솔라빌리지"`
 	if got != want {
@@ -31,7 +31,7 @@ func TestArchiveTextCriteria_SingleTokenKeepsShape(t *testing.T) {
 // requiring the whole query as one verbatim phrase. The old phrase form made
 // the production query below return 0 hits even though every word matched
 // some message individually.
-func TestArchiveTextCriteria_MultiTokenANDsPerTokenORs(t *testing.T) {
+func TestArchiveTextCriteriaFormatsEachTokenAsSeparateFieldOr(t *testing.T) {
 	got := archiveTextCriteria("당진솔라빌리지 EPC Taiwoo")
 	wantParts := []string{
 		`OR OR FROM "당진솔라빌리지" SUBJECT "당진솔라빌리지" TEXT "당진솔라빌리지"`,
@@ -43,7 +43,7 @@ func TestArchiveTextCriteria_MultiTokenANDsPerTokenORs(t *testing.T) {
 	}
 }
 
-func TestArchiveTextCriteria_CapsTokenCount(t *testing.T) {
+func TestArchiveTextCriteriaTruncatesTokensBeyondCap(t *testing.T) {
 	got := archiveTextCriteria("a b c d e f g h")
 	if n := strings.Count(got, "FROM"); n != 6 {
 		t.Fatalf("token cap: got %d FROM groups, want 6 (criteria %q)", n, got)

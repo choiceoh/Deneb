@@ -47,7 +47,7 @@ func meetingEvent() calendar.Event {
 	}
 }
 
-func TestBriefingEnricher_Extra_FullContext(t *testing.T) {
+func TestBriefingEnricherExtraRendersFullContext(t *testing.T) {
 	extra := fullContextEnricher().extra(context.Background(), meetingEvent())
 
 	for _, must := range []string{
@@ -128,7 +128,7 @@ func TestBriefingEnricher_Extra_TimeoutBounded(t *testing.T) {
 	}
 }
 
-func TestBriefingEnricher_AttendeeLine_NoEmailUsesWikiOnly(t *testing.T) {
+func TestBriefingEnricherAttendeeLineWithoutEmailUsesWikiOnly(t *testing.T) {
 	enr := &briefingEnricher{
 		// recentMailCount must NOT be consulted for a name-only attendee
 		// (no '@'), so make it fail loudly if called.
@@ -145,7 +145,7 @@ func TestBriefingEnricher_AttendeeLine_NoEmailUsesWikiOnly(t *testing.T) {
 	}
 }
 
-func TestExternalAttendees_FiltersAndCaps(t *testing.T) {
+func TestExternalAttendeesIgnoresSelfAndDeclinedCapped(t *testing.T) {
 	att := []calendar.Attendee{
 		{DisplayName: "Me", Self: true},
 		{DisplayName: "A", ResponseStatus: "accepted"},
@@ -163,7 +163,7 @@ func TestExternalAttendees_FiltersAndCaps(t *testing.T) {
 	}
 }
 
-func TestBriefTopicQuery_SanitizesAndFloors(t *testing.T) {
+func TestBriefTopicQueryNormalizesAndFloorsShortInput(t *testing.T) {
 	cases := map[string]string{
 		"[정기] 탑솔라 주간회의":  "정기 탑솔라 주간회의",
 		`프로젝트: "킥오프"`:    "프로젝트 킥오프",
@@ -181,7 +181,7 @@ func TestBriefTopicQuery_SanitizesAndFloors(t *testing.T) {
 
 // sendBriefing must ship base briefing + enrichment as one body, with the
 // enrichment additive (base lines preserved).
-func TestSendBriefing_AppendsEnrichment(t *testing.T) {
+func TestSendBriefingAppendsEnrichmentPreservingBase(t *testing.T) {
 	s := makeService(t)
 	var captured string
 	s.deliver = func(text string) (bool, error) {
@@ -213,7 +213,7 @@ func TestSendBriefing_AppendsEnrichment(t *testing.T) {
 }
 
 // With no enricher set, sendBriefing ships exactly the base briefing.
-func TestSendBriefing_NoEnricherShipsBaseOnly(t *testing.T) {
+func TestSendBriefingWithoutEnricherShipsBaseOnly(t *testing.T) {
 	s := makeService(t)
 	var captured string
 	s.deliver = func(text string) (bool, error) {

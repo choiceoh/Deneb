@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestNewRequestFrame(t *testing.T) {
+func TestNewRequestFrameRoundTripsThroughJSON(t *testing.T) {
 	req := testutil.Must(NewRequestFrame("req-1", "health", map[string]string{"key": "value"}))
 	if req.Type != FrameTypeRequest {
 		t.Errorf("Type = %q, want %q", req.Type, FrameTypeRequest)
@@ -28,7 +28,7 @@ func TestNewRequestFrame(t *testing.T) {
 	}
 }
 
-func TestNewRequestFrameValidation(t *testing.T) {
+func TestNewRequestFrameValidationRejectsEmptyFields(t *testing.T) {
 	_, err := NewRequestFrame("", "health", nil)
 	if err == nil {
 		t.Error("expected error for empty id")
@@ -39,7 +39,7 @@ func TestNewRequestFrameValidation(t *testing.T) {
 	}
 }
 
-func TestResponseFrameOK(t *testing.T) {
+func TestResponseFrameOKRoundTripsThroughJSON(t *testing.T) {
 	resp := testutil.Must(NewResponseOK("resp-1", map[string]string{"status": "ok"}))
 	if !resp.OK {
 		t.Error("OK should be true")

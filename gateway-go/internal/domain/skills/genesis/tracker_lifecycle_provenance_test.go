@@ -14,7 +14,7 @@ func TestTracker_EvolveProvenanceRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	orig, cand, margin := 6.5, 8.0, 1.5
-	prov := &EvolveProvenance{
+	prov := &evolveProvenance{
 		EvolveArtifactVersion: "aaaaaaaaaaaa",
 		JudgeArtifactVersion:  "bbbbbbbbbbbb",
 		JudgeModel:            "judge-model-x",
@@ -22,10 +22,10 @@ func TestTracker_EvolveProvenanceRoundTrip(t *testing.T) {
 		JudgeScoreCandidate:   &cand,
 		HeldOutMargin:         &margin,
 	}
-	if err := tr.LogEvolveWithProvenance("skill-a", "1.0.1", "desc", HarnessEditAudit{}, prov); err != nil {
+	if err := tr.logEvolveWithProvenance("skill-a", "1.0.1", "desc", HarnessEditAudit{}, prov); err != nil {
 		t.Fatal(err)
 	}
-	if err := tr.LogEvolveRejectedWithProvenance("skill-b", "reason", HarnessEditAudit{}, prov); err != nil {
+	if err := tr.logEvolveRejectedWithProvenance("skill-b", "reason", HarnessEditAudit{}, prov); err != nil {
 		t.Fatal(err)
 	}
 	if err := tr.LogEvolve("skill-legacy", "0.0.1", "no provenance"); err != nil {

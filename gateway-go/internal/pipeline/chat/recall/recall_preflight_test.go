@@ -15,7 +15,7 @@ type testStrictErrorSink struct{ err error }
 
 func (s *testStrictErrorSink) Record(err error) { s.err = err }
 
-func TestShouldRunRecallPreflight(t *testing.T) {
+func TestHasCueReturnsTrueOnlyForRecallCues(t *testing.T) {
 	if !hasCue("전에 이야기한 회상 개선 계속해줘") {
 		t.Fatal("expected explicit recall cue to trigger preflight")
 	}
@@ -24,7 +24,7 @@ func TestShouldRunRecallPreflight(t *testing.T) {
 	}
 }
 
-func TestRecallSearchQueriesDropsCueNoise(t *testing.T) {
+func TestRecallSearchQueriesIgnoresCueNoiseWords(t *testing.T) {
 	queries := searchQueries("전에 Deneb 회상 개선 얘기했던 거 계속해줘")
 	joined := strings.Join(queries, " ")
 	if !strings.Contains(joined, "deneb") || !strings.Contains(joined, "개선") {
@@ -46,7 +46,7 @@ func TestRecallSearchQueriesNormalizesKoreanEndings(t *testing.T) {
 	}
 }
 
-func TestRecallSearchQueriesDropsGenericVerbs(t *testing.T) {
+func TestRecallSearchQueriesIgnoresGenericVerbs(t *testing.T) {
 	// Generic request/action verbs must not become standalone query terms —
 	// they match unrelated entries by a common word (puppet measurement: "정리"
 	// from "정리해줘" surfaced "디스크 정리"/"키 정리" for a "탑솔라 조직" question).
@@ -74,7 +74,7 @@ func TestRecallSearchQueriesDropsGenericVerbs(t *testing.T) {
 	}
 }
 
-func TestRecallSearchQueriesDropsSmalltalk(t *testing.T) {
+func TestRecallSearchQueriesIgnoresSmalltalkAndTimeDeictics(t *testing.T) {
 	// A greeting has no recall subject: greetings, question words, auxiliary
 	// verbs, and time deictics must all be filtered so no query fires at all
 	// (puppet measurement: "안녕 오늘 도와줄 있어" pulled three rows of an
@@ -93,7 +93,7 @@ func TestRecallSearchQueriesDropsSmalltalk(t *testing.T) {
 	}
 }
 
-func TestBuildRecallPreflightGreetingStaysSilent(t *testing.T) {
+func TestBuildRecallPreflightReturnsEmptyForGreeting(t *testing.T) {
 	// A topicless NON-cue turn (smalltalk) must inject nothing — neither
 	// common-word search hits nor the recent-diary fallback, which is
 	// reserved for topicless recall cues ("아까 뭐였지?").
@@ -118,7 +118,7 @@ func TestBuildRecallPreflightGreetingStaysSilent(t *testing.T) {
 	}
 }
 
-func TestRecallPrimaryQuery(t *testing.T) {
+func TestRecallPrimaryQueryReturnsCombinedQueryOnlyForMultiTerm(t *testing.T) {
 	// Multi-term message → the combined (space-joined) query is primary.
 	if got := recallPrimaryQuery([]string{"탑솔라 조직 구성", "탑솔라", "조직"}); got != "탑솔라 조직 구성" {
 		t.Fatalf("expected combined query, got %q", got)
@@ -129,11 +129,11 @@ func TestRecallPrimaryQuery(t *testing.T) {
 	}
 }
 
-// TestApplyBroadeningPenalty_ProjectAnchorExempt: the guaranteed project-anchor
+// TestApplyBroadeningPenaltyPreservesProjectAnchorScore: the guaranteed project-anchor
 // row is pinned structurally (sentinel Query, not a search term) — the
 // broadening penalty must demote term-only stragglers but never the anchor,
 // or combined-query wiki hits outrank the named project's 대표페이지.
-func TestApplyBroadeningPenalty_ProjectAnchorExempt(t *testing.T) {
+func TestApplyBroadeningPenaltyPreservesProjectAnchorScore(t *testing.T) {
 	queries := []string{"기아 화성 근황", "기아", "화성"}
 	evidence := []recallEvidence{
 		{Query: recallProjectAnchorQuery, Score: recallProjectAnchorScore},
@@ -184,7 +184,7 @@ func TestDiaryHitEvidenceNormalizesScore(t *testing.T) {
 	}
 }
 
-func TestBuildRecallPreflightInjectsWikiEvidence(t *testing.T) {
+func TestBuildRecallPreflightReturnsFencedWikiEvidence(t *testing.T) {
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -232,7 +232,7 @@ func TestBuildRecallPreflightInjectsWikiEvidence(t *testing.T) {
 	}
 }
 
-func TestRecallWikiStalenessMarker(t *testing.T) {
+func TestRecallWikiStalenessMarkerFormatsByFrontmatterState(t *testing.T) {
 	if m := recallWikiStalenessMarker(wiki.Frontmatter{}); m != "" {
 		t.Fatalf("current page must have no marker, got %q", m)
 	}
@@ -278,7 +278,7 @@ func TestFormatRecallWikiNoteIncludesStalenessMarker(t *testing.T) {
 	}
 }
 
-func TestBuildRecallPreflightUsesRecentDiaryForTopiclessRecall(t *testing.T) {
+func TestBuildRecallPreflightUsesRecentDiaryFallbackWhenTopicless(t *testing.T) {
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -300,7 +300,7 @@ func TestBuildRecallPreflightUsesRecentDiaryForTopiclessRecall(t *testing.T) {
 	}
 }
 
-func TestBuildRecallPreflightSearchesTranscript(t *testing.T) {
+func TestBuildRecallPreflightReturnsTranscriptEvidence(t *testing.T) {
 	transcript := newTestTranscriptStore()
 	if err := transcript.Append("telegram:1", toolport.NewTextChatMessage("user", "alpha 결정은 서버 preflight로 하기로 했다", 1000)); err != nil {
 		t.Fatalf("Append old: %v", err)
@@ -320,7 +320,7 @@ func TestBuildRecallPreflightSearchesTranscript(t *testing.T) {
 	}
 }
 
-func TestBuildRecallPreflightNoTrigger(t *testing.T) {
+func TestBuildRecallPreflightReturnsEmptyWithoutCue(t *testing.T) {
 	out, _ := Build(
 		context.Background(),
 		Params{SessionKey: "telegram:1", Message: "새 기능 설계해줘"},
@@ -332,7 +332,7 @@ func TestBuildRecallPreflightNoTrigger(t *testing.T) {
 	}
 }
 
-func TestBuildRecallPreflightSkipsEphemeralUser(t *testing.T) {
+func TestBuildRecallPreflightReturnsEmptyForEphemeralUser(t *testing.T) {
 	out, _ := Build(
 		context.Background(),
 		Params{SessionKey: "telegram:1", Message: "전에 alpha 결정 기억나?", EphemeralUser: true},
@@ -346,7 +346,7 @@ func TestBuildRecallPreflightSkipsEphemeralUser(t *testing.T) {
 
 // TestBuildRecallPreflightSkipsWhenSkipRecall covers the "focused chat / memory
 // off" toggle: the same query that surfaces transcript evidence (see
-// TestBuildRecallPreflightSearchesTranscript) must produce an empty preflight
+// TestBuildRecallPreflightReturnsTranscriptEvidence) must produce an empty preflight
 // when SkipRecall is set — no work-context injection, no search latency.
 func TestBuildRecallPreflightSkipsWhenSkipRecall(t *testing.T) {
 	transcript := newTestTranscriptStore()
@@ -455,7 +455,7 @@ func TestBuildRecallPreflightFlagsDeadlineTruncation(t *testing.T) {
 	}
 }
 
-func TestBuildRecallPreflightSurvivesPanickingSource(t *testing.T) {
+func TestBuildRecallPreflightRecoversFromPanickingSource(t *testing.T) {
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -481,7 +481,7 @@ func TestBuildRecallPreflightSurvivesPanickingSource(t *testing.T) {
 	}
 }
 
-func TestBuildRecallPreflightBriefcaseRecordsPanickingSource(t *testing.T) {
+func TestBuildRecallPreflightBriefcaseRecordsPanicAsStrictError(t *testing.T) {
 	sink := &testStrictErrorSink{}
 	Build(
 		context.Background(),
@@ -494,7 +494,7 @@ func TestBuildRecallPreflightBriefcaseRecordsPanickingSource(t *testing.T) {
 	}
 }
 
-func TestDedupRecallEvidence_CrossSource(t *testing.T) {
+func TestDedupRecallEvidenceDeduplicatesAcrossSources(t *testing.T) {
 	rows := []recallEvidence{
 		{Source: "wiki", Note: "현대차 울산 모듈 납품, 결제기한 6월 말.", Score: 0.9},
 		{Source: "polaris", Note: "현대차 울산 모듈 납품 — 결제기한 6월 말", Score: 0.6}, // same fact, punctuation differs
@@ -509,7 +509,7 @@ func TestDedupRecallEvidence_CrossSource(t *testing.T) {
 	}
 }
 
-func TestRecallEvidenceBudget_Adaptive(t *testing.T) {
+func TestRecallEvidenceBudgetReturnsTighterBudgetWithoutCue(t *testing.T) {
 	if got := recallEvidenceBudget(true); got != recallMaxEvidence {
 		t.Errorf("cue budget = %d, want %d", got, recallMaxEvidence)
 	}
@@ -552,7 +552,7 @@ func TestRunRecallSourcesPreservesDeclarationOrderAcrossConcurrentCompletion(t *
 	}
 }
 
-func TestRankRecallEvidenceAppliesStableOrderingAndAdaptiveBudget(t *testing.T) {
+func TestRankRecallEvidenceSortsStablyAndTruncatesToBudget(t *testing.T) {
 	evidence := make([]recallEvidence, 10)
 	for i := range evidence {
 		evidence[i] = recallEvidence{

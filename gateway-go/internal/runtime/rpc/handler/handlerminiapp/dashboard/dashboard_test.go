@@ -84,7 +84,7 @@ func TestDashboardMethods_RegistersWithRulesOnly(t *testing.T) {
 	}
 }
 
-func TestDashboardLanes_RequiresAuth(t *testing.T) {
+func TestDashboardLanes_RejectsUnauthenticatedRequest(t *testing.T) {
 	h := dashboardLanes(DashboardDeps{Rules: fakeRulesLoader()})
 	resp := h(context.Background(), reqWith(t, "miniapp.dashboard.lanes", nil))
 	if resp.OK {
@@ -95,7 +95,7 @@ func TestDashboardLanes_RequiresAuth(t *testing.T) {
 	}
 }
 
-func TestDashboardLanes_GroupsByPartFromAllSources(t *testing.T) {
+func TestDashboardLanes_ReturnsAllSourcesGroupedInFixedOrder(t *testing.T) {
 	now := time.Now()
 	deps := DashboardDeps{
 		Rules: fakeRulesLoader(),
@@ -182,7 +182,7 @@ func TestDashboardLanes_UnclassifiedOmittedWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestDashboardLanes_ItemsSortedSoonestFirst(t *testing.T) {
+func TestDashboardLanes_ReturnsItemsOrderedBySoonestFirst(t *testing.T) {
 	now := time.Now()
 	// Three team1 events out of order; expect ascending WhenMs within the lane.
 	deps := DashboardDeps{
@@ -254,7 +254,7 @@ func TestDashboardLanes_RulesLoaderErrorFallsBackToDefaults(t *testing.T) {
 	}
 }
 
-func TestDashboardLanes_OrgChartLanesDriveColumns(t *testing.T) {
+func TestDashboardLanes_ReturnsOrgChartColumnsWhenLanesLoaderPresent(t *testing.T) {
 	// When a Lanes loader yields org-chart lanes, the dashboard renders THOSE
 	// columns (chart order + names + custom keys), not the legacy hardcoded set.
 	now := time.Now()
@@ -357,10 +357,10 @@ func TestDashboardLanes_ProductionPath_NoSilentDropWithNodeIDLanes(t *testing.T)
 	}
 }
 
-// TestGroupByLane_AbsorbsOrphanedBucket is the unit-level guarantee for the
+// TestGroupByLane_PreservesOrphanedItemsInUnclassifiedBucket is the unit-level guarantee for the
 // groupByLane safety net: an item classified to a lane that is in neither the
 // column set nor the reserved key is folded into 미분류, never dropped.
-func TestGroupByLane_AbsorbsOrphanedBucket(t *testing.T) {
+func TestGroupByLane_PreservesOrphanedItemsInUnclassifiedBucket(t *testing.T) {
 	items := []classifiedItem{
 		// Lane "ghost" matches no column below.
 		{lane: classification.Lane("ghost"), item: DashboardItem{Title: "고아", RefID: "x1"}},

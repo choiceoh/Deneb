@@ -41,17 +41,17 @@ type IndexEntry struct {
 	Confidence string // high, medium, low
 }
 
-// NewIndex creates an empty index.
-func NewIndex() *Index {
+// newIndex creates an empty index.
+func newIndex() *Index {
 	return &Index{
 		Entries: make(map[string]IndexEntry),
 	}
 }
 
-// Clone returns a deep copy of the index (entry map and slice fields
+// clone returns a deep copy of the index (entry map and slice fields
 // included). Backs Store.SnapshotIndex — the copy is what makes lock-free
 // walking/rendering safe while writers mutate the live index in place.
-func (idx *Index) Clone() *Index {
+func (idx *Index) clone() *Index {
 	if idx == nil {
 		return nil
 	}
@@ -74,10 +74,10 @@ func cloneIndexEntries(in map[string]IndexEntry) map[string]IndexEntry {
 	return out
 }
 
-// UpdateEntry adds or updates an index entry from a page. Slice fields are
+// updateEntry adds or updates an index entry from a page. Slice fields are
 // copied — storing the caller's live Tags/Related slices would alias the index
 // entry to memory the caller may keep mutating after the write returns.
-func (idx *Index) UpdateEntry(relPath string, page *Page) {
+func (idx *Index) updateEntry(relPath string, page *Page) {
 	idx.Entries[relPath] = IndexEntry{
 		ID:         page.Meta.ID,
 		Title:      page.Meta.Title,
@@ -93,8 +93,8 @@ func (idx *Index) UpdateEntry(relPath string, page *Page) {
 	}
 }
 
-// RemoveEntry removes a page from the index.
-func (idx *Index) RemoveEntry(relPath string) {
+// removeEntry removes a page from the index.
+func (idx *Index) removeEntry(relPath string) {
 	delete(idx.Entries, relPath)
 }
 
@@ -153,12 +153,12 @@ func (idx *Index) Render() string {
 			bl := backlinkCount[e.path]
 			// created and related ride as the LAST columns (after the
 			// render-computed backlinks) so every older field keeps its
-			// position — old parsers and old files stay compatible; ParseIndex
+			// position — old parsers and old files stay compatible; parseIndex
 			// tolerates their absence. Without the related column the
 			// in-memory Related lists evaporate on every restart (index.md is
 			// what NewStore reloads), leaving backlink diffs, reference
 			// repointing, and the backlinks count blind until the next full
-			// RebuildIndex.
+			// rebuildIndex.
 			sb.WriteString(fmt.Sprintf(
 				"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
 				sanitizeTSV(e.entry.ID),
@@ -242,15 +242,15 @@ func (idx *Index) Save(path string) error {
 	return nil
 }
 
-// ParseIndex reads and parses an existing index.md.
+// parseIndex reads and parses an existing index.md.
 // Supports both TSV format (new) and markdown list format (legacy).
-func ParseIndex(path string) (*Index, error) {
+func parseIndex(path string) (*Index, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	idx := NewIndex()
+	idx := newIndex()
 	lines := strings.Split(string(data), "\n")
 	currentCategory := ""
 
@@ -305,7 +305,7 @@ func ParseIndex(path string) (*Index, error) {
 // 10-field format (without created), and the old 8-field format (without
 // type/confidence) still parse correctly — missing trailing columns simply
 // stay zero (Created "" falls back to Updated at the call sites; Related nil
-// self-heals on the next RebuildIndex).
+// self-heals on the next rebuildIndex).
 func parseTSVLine(line, category string) indexRenderEntry {
 	fields := strings.Split(line, "\t")
 	if len(fields) < 2 {

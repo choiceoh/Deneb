@@ -35,38 +35,7 @@ func (h *Handler) handleSlashCommand(
 	}
 	switch cmd.Command {
 	case "reset":
-		// Abort any active run, clear transcript, and discard frozen context snapshot.
-		h.InterruptActiveRun(sessionKey)
-		h.pending.Clear(sessionKey)
-		h.mergeWindow.Clear(sessionKey)
-		if h.steer != nil {
-			h.steer.Clear(sessionKey)
-		}
-		prompt.ClearSessionSnapshot(sessionKey)
-		chatrecall.ClearSession(sessionKey)
-		clearTier1Wiki(sessionKey)
-		toolport.ClearActiveNotebook(sessionKey) // unbind any active notebook-grounding session
-		clearNotebookGrounding(sessionKey)       // drop the frozen grounding snapshot too
-		forgetPromptSnapshot(sessionKey)         // drop the persisted copy too, not just memory
-		// Stop any standing goal bound to this session so /reset is a clean slate.
-		if gs := goals.Default(); gs != nil {
-			gs.Clear(sessionKey)
-		}
-		if h.transcript != nil {
-			if err := h.transcript.Delete(sessionKey); err != nil {
-				h.logger.Error("failed to delete transcript on reset", "error", err)
-			}
-		}
-		// Clear tool preset so session exits any preset mode (e.g. conversation).
-		if sess := h.sessions.Get(sessionKey); sess != nil && sess.ToolPreset != "" {
-			sess.ToolPreset = ""
-			_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
-		}
-		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
-			Phase: session.PhaseEnd,
-			Ts:    time.Now().UnixMilli(),
-		})
-		respond("세션이 초기화되었습니다.")
+		h.handleResetCommand(sessionKey, respond)
 
 	case "kill":
 		h.InterruptActiveRun(sessionKey)
@@ -88,43 +57,25 @@ func (h *Handler) handleSlashCommand(
 	case "rollback":
 		// /rollback [list|목록] [N] | [diff|비교] <id> | [restore|복원] <id>
 		// Delegated to rollback_dispatch.go for parsing + rendering.
-		rollbackLogger := h.logger
-		go func() {
-			defer func() {
-				if r := recover(); r != nil && rollbackLogger != nil {
-					rollbackLogger.Error("panic in /rollback command handler", "panic", r)
-				}
-			}()
+		h.runSlashAsync("/rollback command handler", func() {
 			h.handleRollbackCommand(sessionKey, delivery, cmd.Args)
-		}()
+		})
 
 	case "update":
 		// /update — preview pending commits; /update 확인 — pull + build +
 		// restart. Delegated to update_dispatch.go. Runs in a goroutine
 		// because the build step can take a couple of minutes.
-		updateLogger := h.logger
-		go func() {
-			defer func() {
-				if r := recover(); r != nil && updateLogger != nil {
-					updateLogger.Error("panic in /update command handler", "panic", r)
-				}
-			}()
+		h.runSlashAsync("/update command handler", func() {
 			h.handleUpdateCommand(reqID, sessionKey, delivery, cmd.Args)
-		}()
+		})
 
 	case "restart":
 		// /restart — guidance; /restart 확인 — restart the gateway.
 		// Delegated to restart_dispatch.go. Runs in a goroutine so the
 		// reply is delivered before graceful shutdown begins.
-		restartLogger := h.logger
-		go func() {
-			defer func() {
-				if r := recover(); r != nil && restartLogger != nil {
-					restartLogger.Error("panic in /restart command handler", "panic", r)
-				}
-			}()
+		h.runSlashAsync("/restart command handler", func() {
 			h.handleRestartCommand(delivery, cmd.Args)
-		}()
+		})
 
 	case "goal":
 		// /goal <text> sets a standing goal (Ralph loop); status|pause|resume|stop
@@ -138,43 +89,7 @@ func (h *Handler) handleSlashCommand(
 		// (cron_agent_adapter.go) so a manual trigger produces the same output.
 		// No agent loop — the card is built straight from wiki data
 		// (routine.RenderWeeklyReportCard) so the format never drifts.
-		if h.weeklyReportTextFn == nil {
-			respond("주간업무보고 생성이 이 게이트웨이에 배선되지 않았습니다.")
-			break
-		}
-		// Form image → native chat (best-effort; render may be skipped on low
-		// memory/disk, in which case the text report below still lands).
-		if h.weeklyFormDeliverFn != nil {
-			formFn := h.weeklyFormDeliverFn
-			formLogger := h.logger
-			go func() {
-				defer func() {
-					if r := recover(); r != nil && formLogger != nil {
-						formLogger.Error("panic in /weekly form delivery", "panic", r)
-					}
-				}()
-				// Bounded background ctx: the chromium render takes a few seconds
-				// and is an independent side delivery from the text reply.
-				fctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-				defer cancel()
-				if err := formFn(fctx); err != nil && formLogger != nil {
-					formLogger.Error("weekly form image delivery failed", "error", err)
-				}
-			}()
-		}
-		// Deterministic text — fast wiki read, returned synchronously so the sync
-		// native RPC carries it as the command's reply.
-		tctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		txt, terr := h.weeklyReportTextFn(tctx)
-		cancel()
-		if terr != nil || strings.TrimSpace(txt) == "" {
-			if h.logger != nil {
-				h.logger.Error("weekly report text generation failed", "error", terr)
-			}
-			respond("주간업무보고를 생성하지 못했습니다. 위키 프로젝트 페이지에 `소관:` 태그가 있는지 확인해주세요.")
-			break
-		}
-		respond(txt)
+		h.handleWeeklyCommand(respond)
 
 	}
 
@@ -182,6 +97,93 @@ func (h *Handler) handleSlashCommand(
 		"command": cmd.Command,
 		"handled": true,
 	})
+}
+
+// handleResetCommand implements /reset: abort any active run, clear the
+// transcript, and discard every frozen per-session snapshot.
+func (h *Handler) handleResetCommand(sessionKey string, respond func(text string)) {
+	h.InterruptActiveRun(sessionKey)
+	h.pending.Clear(sessionKey)
+	h.mergeWindow.Clear(sessionKey)
+	if h.steer != nil {
+		h.steer.Clear(sessionKey)
+	}
+	prompt.ClearSessionSnapshot(sessionKey)
+	chatrecall.ClearSession(sessionKey)
+	clearTier1Wiki(sessionKey)
+	toolport.ClearActiveNotebook(sessionKey) // unbind any active notebook-grounding session
+	clearNotebookGrounding(sessionKey)       // drop the frozen grounding snapshot too
+	forgetPromptSnapshot(sessionKey)         // drop the persisted copy too, not just memory
+	// Stop any standing goal bound to this session so /reset is a clean slate.
+	if gs := goals.Default(); gs != nil {
+		gs.Clear(sessionKey)
+	}
+	if h.transcript != nil {
+		if err := h.transcript.Delete(sessionKey); err != nil {
+			h.logger.Error("failed to delete transcript on reset", "error", err)
+		}
+	}
+	// Clear tool preset so session exits any preset mode (e.g. conversation).
+	if sess := h.sessions.Get(sessionKey); sess != nil && sess.ToolPreset != "" {
+		sess.ToolPreset = ""
+		_ = h.sessions.Set(sess) // best-effort: in-memory store, error unreachable
+	}
+	h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
+		Phase: session.PhaseEnd,
+		Ts:    time.Now().UnixMilli(),
+	})
+	respond("세션이 초기화되었습니다.")
+}
+
+// handleWeeklyCommand implements /weekly (see the dispatch comment above).
+func (h *Handler) handleWeeklyCommand(respond func(text string)) {
+	if h.weeklyReportTextFn == nil {
+		respond("주간업무보고 생성이 이 게이트웨이에 배선되지 않았습니다.")
+		return
+	}
+	// Form image → native chat (best-effort; render may be skipped on low
+	// memory/disk, in which case the text report below still lands).
+	if h.weeklyFormDeliverFn != nil {
+		formFn := h.weeklyFormDeliverFn
+		formLogger := h.logger
+		h.runSlashAsync("/weekly form delivery", func() {
+			// Bounded background ctx: the chromium render takes a few seconds
+			// and is an independent side delivery from the text reply.
+			fctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+			defer cancel()
+			if err := formFn(fctx); err != nil && formLogger != nil {
+				formLogger.Error("weekly form image delivery failed", "error", err)
+			}
+		})
+	}
+	// Deterministic text — fast wiki read, returned synchronously so the sync
+	// native RPC carries it as the command's reply.
+	tctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	txt, terr := h.weeklyReportTextFn(tctx)
+	cancel()
+	if terr != nil || strings.TrimSpace(txt) == "" {
+		if h.logger != nil {
+			h.logger.Error("weekly report text generation failed", "error", terr)
+		}
+		respond("주간업무보고를 생성하지 못했습니다. 위키 프로젝트 페이지에 `소관:` 태그가 있는지 확인해주세요.")
+		return
+	}
+	respond(txt)
+}
+
+// runSlashAsync runs a long-lived slash command handler on its own goroutine
+// with panic recovery. The handler delivers its own late output via the
+// channel reply path; `what` names the command in the panic log line.
+func (h *Handler) runSlashAsync(what string, fn func()) {
+	logger := h.logger
+	go func() {
+		defer func() {
+			if r := recover(); r != nil && logger != nil {
+				logger.Error("panic in "+what, "panic", r)
+			}
+		}()
+		fn()
+	}()
 }
 
 // deliverSlashResponse sends a slash command response back to the originating channel.
@@ -213,20 +215,7 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 	var sections []string
 
 	// Session + status.
-	statusIcon := "🟢"
-	switch sess.Status {
-	case session.StatusRunning:
-		statusIcon = "🔄"
-	case session.StatusFailed:
-		statusIcon = "❌"
-	case session.StatusKilled:
-		statusIcon = "⛔"
-	case session.StatusTimeout:
-		statusIcon = "⏰"
-	default:
-		// StatusDone, StatusIdle, etc.
-	}
-	sections = append(sections, fmt.Sprintf("📋 **세션:** `%s` %s %s", sessionKey, statusIcon, string(sess.Status)))
+	sections = append(sections, fmt.Sprintf("📋 **세션:** `%s` %s %s", sessionKey, sessionStatusIcon(sess.Status), string(sess.Status)))
 
 	// Model.
 	if model != "" {
@@ -234,6 +223,56 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 	}
 
 	// Mode settings.
+	if modes := sessionModeLine(sess); modes != "" {
+		sections = append(sections, modes)
+	}
+
+	// Token usage from session.
+	sections = append(sections, h.sessionTokenLine(sess))
+
+	// Channel.
+	if sess.Channel != "" {
+		sections = append(sections, fmt.Sprintf("📡 **채널:** %s", sess.Channel))
+	}
+
+	// Active runs.
+	if activeRuns := h.abort.CountForSession(sessionKey); activeRuns > 0 {
+		sections = append(sections, fmt.Sprintf("🏃 **실행 중:** %d개", activeRuns))
+	}
+
+	// Pending messages.
+	if pendingCount := h.pending.Len(sessionKey); pendingCount > 0 {
+		sections = append(sections, fmt.Sprintf("📬 **대기 중:** %d개", pendingCount))
+	}
+
+	sections = h.appendServerStatus(sections, sessionKey, sess)
+
+	if line := promptCacheStatusLine(); line != "" {
+		sections = append(sections, line)
+	}
+
+	return strings.Join(sections, "\n")
+}
+
+// sessionStatusIcon maps a session status to its /status emoji.
+func sessionStatusIcon(status session.RunStatus) string {
+	switch status {
+	case session.StatusRunning:
+		return "🔄"
+	case session.StatusFailed:
+		return "❌"
+	case session.StatusKilled:
+		return "⛔"
+	case session.StatusTimeout:
+		return "⏰"
+	default:
+		// StatusDone, StatusIdle, etc.
+		return "🟢"
+	}
+}
+
+// sessionModeLine renders the ⚙️ 모드 line, or "" when no mode is active.
+func sessionModeLine(sess *session.Session) string {
 	var modes []string
 	if sess.ThinkingLevel != "" && sess.ThinkingLevel != "off" {
 		modes = append(modes, fmt.Sprintf("Think: %s", sess.ThinkingLevel))
@@ -254,89 +293,80 @@ func (h *Handler) buildSessionStatus(sessionKey string) string {
 		}
 		modes = append(modes, fmt.Sprintf("Preset: %s", presetLabel))
 	}
-	if len(modes) > 0 {
-		sections = append(sections, "⚙️ **모드:** "+strings.Join(modes, " | "))
+	if len(modes) == 0 {
+		return ""
 	}
+	return "⚙️ **모드:** " + strings.Join(modes, " | ")
+}
 
-	// Token usage from session.
+// sessionTokenLine renders the 📊 토큰 usage line against the memory budget.
+func (h *Handler) sessionTokenLine(sess *session.Session) string {
 	memBudget := h.contextCfg.MemoryTokenBudget
-	if sess.TotalTokens != nil && *sess.TotalTokens > 0 {
-		in, out := int64(0), int64(0)
-		if sess.InputTokens != nil {
-			in = *sess.InputTokens
-		}
-		if sess.OutputTokens != nil {
-			out = *sess.OutputTokens
-		}
-		usagePct := float64(*sess.TotalTokens) / float64(memBudget) * 100
-		if usagePct > 100 {
-			usagePct = 100
-		}
-		sections = append(sections, fmt.Sprintf("📊 **토큰:** %s / %s (%s %.0f%%) in: %s, out: %s",
-			formatCompactTokens(*sess.TotalTokens), formatCompactTokens(int64(memBudget)), //nolint:gosec // G115 — memBudget is a practical token count, never near int64 overflow
-			buildUsageBar(usagePct), usagePct,
-			formatCompactTokens(in), formatCompactTokens(out)))
-	} else {
-		sections = append(sections, fmt.Sprintf("📊 **토큰:** 0 / %s", formatCompactTokens(int64(memBudget)))) //nolint:gosec // G115 — memBudget is a practical token count
+	if sess.TotalTokens == nil || *sess.TotalTokens <= 0 {
+		return fmt.Sprintf("📊 **토큰:** 0 / %s", formatCompactTokens(int64(memBudget))) //nolint:gosec // G115 — memBudget is a practical token count
 	}
-
-	// Channel.
-	if sess.Channel != "" {
-		sections = append(sections, fmt.Sprintf("📡 **채널:** %s", sess.Channel))
+	in, out := int64(0), int64(0)
+	if sess.InputTokens != nil {
+		in = *sess.InputTokens
 	}
-
-	// Active runs.
-	activeRuns := h.abort.CountForSession(sessionKey)
-	if activeRuns > 0 {
-		sections = append(sections, fmt.Sprintf("🏃 **실행 중:** %d개", activeRuns))
+	if sess.OutputTokens != nil {
+		out = *sess.OutputTokens
 	}
-
-	// Pending messages.
-	pendingCount := h.pending.Len(sessionKey)
-	if pendingCount > 0 {
-		sections = append(sections, fmt.Sprintf("📬 **대기 중:** %d개", pendingCount))
+	usagePct := float64(*sess.TotalTokens) / float64(memBudget) * 100
+	if usagePct > 100 {
+		usagePct = 100
 	}
+	return fmt.Sprintf("📊 **토큰:** %s / %s (%s %.0f%%) in: %s, out: %s",
+		formatCompactTokens(*sess.TotalTokens), formatCompactTokens(int64(memBudget)), //nolint:gosec // G115 — memBudget is a practical token count, never near int64 overflow
+		buildUsageBar(usagePct), usagePct,
+		formatCompactTokens(in), formatCompactTokens(out))
+}
 
-	// Server-level info from StatusDepsFunc.
+// appendServerStatus appends the server-level info from StatusDepsFunc, or —
+// when no status dependency is wired — the session's own failure reason.
+func (h *Handler) appendServerStatus(sections []string, sessionKey string, sess *session.Session) []string {
 	statusFn := h.StatusDeps()
-	if statusFn != nil {
-		sd := statusFn(sessionKey)
-		if sd.Version != "" {
-			uptime := ""
-			if !sd.StartedAt.IsZero() {
-				uptime = fmt.Sprintf(" | Uptime: %s", formatUptime(time.Since(sd.StartedAt)))
-			}
-			sections = append(sections, fmt.Sprintf("🖥️ **Gateway** v%s%s", sd.Version, uptime))
+	if statusFn == nil {
+		// Session failure reason (from session itself).
+		if sess.FailureReason != "" {
+			sections = append(sections, fmt.Sprintf("⚠️ **마지막 오류:** %s", sess.FailureReason))
 		}
-		sections = append(sections, fmt.Sprintf("🔧 Sessions: %d", sd.SessionCount))
-		if sd.LastFailureReason != "" {
-			sections = append(sections, fmt.Sprintf("⚠️ **마지막 오류:** %s", sd.LastFailureReason))
+		return sections
+	}
+	sd := statusFn(sessionKey)
+	if sd.Version != "" {
+		uptime := ""
+		if !sd.StartedAt.IsZero() {
+			uptime = fmt.Sprintf(" | Uptime: %s", formatUptime(time.Since(sd.StartedAt)))
 		}
+		sections = append(sections, fmt.Sprintf("🖥️ **Gateway** v%s%s", sd.Version, uptime))
 	}
-
-	// Session failure reason (from session itself).
-	if sess.FailureReason != "" && statusFn == nil {
-		sections = append(sections, fmt.Sprintf("⚠️ **마지막 오류:** %s", sess.FailureReason))
+	sections = append(sections, fmt.Sprintf("🔧 Sessions: %d", sd.SessionCount))
+	if sd.LastFailureReason != "" {
+		sections = append(sections, fmt.Sprintf("⚠️ **마지막 오류:** %s", sd.LastFailureReason))
 	}
+	return sections
+}
 
-	// Process-wide prompt-cache hit ratio — the cache-doctrine regression
-	// alarm (docs/agent-rules/prompt-cache.md), counted only for Anthropic-mode
-	// runs (non-Anthropic providers can't report cache usage). Shows a recent
-	// EWMA (surfaces a fresh regression) alongside the cumulative-since-start
-	// total. Only rendered once some prompt tokens are recorded.
-	if cr, cc, fi := metrics.CacheHits.Snapshot(); cr+cc+fi > 0 {
-		// Compute the cumulative ratio from this same snapshot (not a second
-		// atomic load) so the shown percentage and counts stay consistent.
-		line := fmt.Sprintf("💾 **캐시 히트율:** 누적 %.0f%%", metrics.HitRatioOf(cr, cc, fi)*100)
-		if recent, ok := metrics.CacheHits.RecentRatio(); ok {
-			line += fmt.Sprintf(" · 최근 %.0f%%", recent*100)
-		}
-		line += fmt.Sprintf(" (read %s · write %s · fresh %s)",
-			formatCompactTokens(cr), formatCompactTokens(cc), formatCompactTokens(fi))
-		sections = append(sections, line)
+// promptCacheStatusLine renders the process-wide prompt-cache hit ratio — the
+// cache-doctrine regression alarm (docs/agent-rules/prompt-cache.md), counted
+// only for Anthropic-mode runs (non-Anthropic providers can't report cache
+// usage). Shows a recent EWMA (surfaces a fresh regression) alongside the
+// cumulative-since-start total. Empty until some prompt tokens are recorded.
+func promptCacheStatusLine() string {
+	cr, cc, fi := metrics.CacheHits.Snapshot()
+	if cr+cc+fi <= 0 {
+		return ""
 	}
-
-	return strings.Join(sections, "\n")
+	// Compute the cumulative ratio from this same snapshot (not a second
+	// atomic load) so the shown percentage and counts stay consistent.
+	line := fmt.Sprintf("💾 **캐시 히트율:** 누적 %.0f%%", metrics.HitRatioOf(cr, cc, fi)*100)
+	if recent, ok := metrics.CacheHits.RecentRatio(); ok {
+		line += fmt.Sprintf(" · 최근 %.0f%%", recent*100)
+	}
+	line += fmt.Sprintf(" (read %s · write %s · fresh %s)",
+		formatCompactTokens(cr), formatCompactTokens(cc), formatCompactTokens(fi))
+	return line
 }
 
 // formatCompactTokens formats token counts in compact form (e.g. "1.2M", "890K", "500").

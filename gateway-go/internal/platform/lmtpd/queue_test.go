@@ -17,7 +17,7 @@ func queueTestMessage(key string) *Message {
 	}
 }
 
-func TestQueueEnqueueClaimComplete(t *testing.T) {
+func TestQueueLifecycleUpdatesStatsAndRejectsDuplicateEnqueue(t *testing.T) {
 	q, err := NewQueue(t.TempDir())
 	if err != nil {
 		t.Fatalf("NewQueue: %v", err)

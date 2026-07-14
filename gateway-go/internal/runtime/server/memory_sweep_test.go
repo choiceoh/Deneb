@@ -47,7 +47,7 @@ func TestSweepAutomatedTranscripts_PrefixAllowlist(t *testing.T) {
 	}
 }
 
-func TestMemorySweepRetention_EnvOverride(t *testing.T) {
+func TestMemorySweepRetentionReturnsEnvOverrideOrDefault(t *testing.T) {
 	t.Setenv("DENEB_SWEEP_RETENTION_DAYS", "0")
 	if got := memorySweepRetention(); got != 0 {
 		t.Errorf("0 must disable sweeping, got %v", got)

@@ -2,7 +2,7 @@ package mailanalysis
 
 import "testing"
 
-func TestCompanyMatchKey(t *testing.T) {
+func TestCompanyMatchKeyNormalizesCompanySuffixes(t *testing.T) {
 	cases := map[string]string{
 		"탑솔라":               "탑솔라",
 		"탑솔라(주)":            "탑솔라",
@@ -24,7 +24,7 @@ func TestCompanyMatchKey(t *testing.T) {
 	}
 }
 
-func TestIsSelfCounterparty(t *testing.T) {
+func TestIsSelfCounterpartyMatchesSelfRejectsExternal(t *testing.T) {
 	// Pin to the deployment defaults so the domain-derived romanized stem
 	// (topsolar) and the Korean default (탑솔라) are both deterministic
 	// regardless of the ambient environment.
@@ -62,7 +62,7 @@ func TestIsSelfCounterparty(t *testing.T) {
 	}
 }
 
-func TestOrgLabel(t *testing.T) {
+func TestOrgLabelParsesDomainToOrgStem(t *testing.T) {
 	cases := map[string]string{
 		"topsolar.kr":       "topsolar",
 		"mail.topsolar.kr":  "topsolar",
@@ -80,7 +80,7 @@ func TestOrgLabel(t *testing.T) {
 	}
 }
 
-func TestOurCompanyNames_EnvOverride(t *testing.T) {
+func TestOurCompanyNamesParsesEnvOrFallbackToDefault(t *testing.T) {
 	t.Setenv("DENEB_MAIL_OUR_DOMAINS", "topsolar.kr")
 	t.Setenv("DENEB_MAIL_OUR_NAMES", "탑솔라, 탑쏠라")
 	got := ourCompanyNames(ourAnchorDomains())

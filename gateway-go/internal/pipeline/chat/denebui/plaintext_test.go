@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestPlainTextProjectsCardProseInOrder(t *testing.T) {
+func TestPlainTextRendersCardProseInOrder(t *testing.T) {
 	body := `<column>
 		<row><icon name="sun" size="20"/><text style="headline">7월 12일 일요일 ☀️</text></row>
 		<text style="caption">주말입니다. 다음 주 핵심: 계약 협상 마무리.</text>
@@ -41,7 +41,7 @@ func TestPlainTextProjectsCardProseInOrder(t *testing.T) {
 	}
 }
 
-func TestPlainTextOutOfScopeInputs(t *testing.T) {
+func TestPlainTextReturnsEmptyForOutOfScopeInput(t *testing.T) {
 	if got := PlainText(`{"type":"text","value":"레거시"}`); got != "" {
 		t.Errorf("legacy JSON should project to empty, got %q", got)
 	}
@@ -59,7 +59,7 @@ func TestReplaceFencesProjectsAndPreservesProse(t *testing.T) {
 	}
 }
 
-func TestReplaceFencesKeepsGluedProsePrefix(t *testing.T) {
+func TestReplaceFencesPreservesGluedProsePrefix(t *testing.T) {
 	// #3499 leniency: an opener glued to the tail of a prose sentence.
 	text := "정리했어요.```deneb-ui\n<column><text>본문</text></column>\n```"
 	got := ReplaceFences(text, PlainText)
@@ -71,7 +71,7 @@ func TestReplaceFencesKeepsGluedProsePrefix(t *testing.T) {
 	}
 }
 
-func TestReplaceFencesDropsUnprojectableBlock(t *testing.T) {
+func TestReplaceFencesIgnoresUnprojectableBlock(t *testing.T) {
 	text := "앞.\n```deneb-ui\n{\"type\":\"card\"}\n```\n뒤."
 	got := ReplaceFences(text, PlainText)
 	if strings.Contains(got, "deneb-ui") || strings.Contains(got, "card") {
@@ -82,7 +82,7 @@ func TestReplaceFencesDropsUnprojectableBlock(t *testing.T) {
 	}
 }
 
-func TestReplaceFencesNoFencePassthrough(t *testing.T) {
+func TestReplaceFencesPassesThroughWithoutFence(t *testing.T) {
 	text := "펜스 없는 본문\n그대로."
 	if got := ReplaceFences(text, PlainText); got != text {
 		t.Errorf("no-fence text must pass through unchanged, got %q", got)

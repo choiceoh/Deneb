@@ -81,7 +81,7 @@ func TestMarkdownRendersAllStatusBranchesAndOptionalSections(t *testing.T) {
 	}
 }
 
-func TestMarkdownMinimalUsesDashesAndNoOptionalRows(t *testing.T) {
+func TestMarkdownRendersDashesForEmptyReportWithoutOptionalRows(t *testing.T) {
 	r := Report{
 		GeneratedAt: time.Date(2026, 1, 2, 3, 4, 0, 0, time.UTC),
 		Memory:      MemoryStatus{},
@@ -162,7 +162,7 @@ func TestLoopStatusMissingExactThresholdStaleAndFuture(t *testing.T) {
 	}
 }
 
-func TestLoopStatusDiaryUsesNewestValidFile(t *testing.T) {
+func TestLoopStatusDiaryLoadsNewestValidFile(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "memory", "diary")
 	if err := os.MkdirAll(filepath.Join(dir, "diary-9999-99-99.md"), 0o755); err != nil {
@@ -210,7 +210,7 @@ func TestSkillAndFrontierNormalizesRoutesSkipsMalformedAndSorts(t *testing.T) {
 	}
 }
 
-func TestTopFrontierLimitTieBreakAndInputIsolation(t *testing.T) {
+func TestTopFrontierBreaksTiesAndPreservesInputMap(t *testing.T) {
 	input := map[string]int{"z": 3, "a": 3, "b": 2, "c": 1}
 	got := topFrontier(input, 3)
 	want := []FrontierItem{{Skill: "a", NoOps: 3}, {Skill: "z", NoOps: 3}, {Skill: "b", NoOps: 2}}
@@ -349,7 +349,7 @@ func TestModelSummaryDeterministicMalformedAndDownParsing(t *testing.T) {
 	}
 }
 
-func TestNewestDiaryDateBacklogAndFirstTenBoundaries(t *testing.T) {
+func TestNewestDiaryDateAndBacklogBoundaryCases(t *testing.T) {
 	root := t.TempDir()
 	if name, mt := newestDiary(filepath.Join(root, "missing")); name != "" || !mt.IsZero() {
 		t.Fatalf("missing newest diary = %q %s", name, mt)

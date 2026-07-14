@@ -11,7 +11,7 @@ import (
 // transcript-only session would otherwise stay invisible until the next
 // restart's transcript rescan. Regression guard for the client:main:dream
 // first-delivery gap.
-func TestRelayRegistersNewSubSession(t *testing.T) {
+func TestRelayCreatesSessionRowForNewSubSession(t *testing.T) {
 	mgr := &session.Manager{}
 	d := proactiveRelayDeps{
 		transcriptStore: newRecordingTranscriptStore(),
@@ -77,7 +77,7 @@ func TestRelayTouchesExistingSessionWithoutClobber(t *testing.T) {
 // A suppressed delivery (contentless "변경 없음") writes nothing, so it must not
 // register a session either — an empty drawer row with no transcript would be
 // exactly the kind of ghost the suppression floor exists to prevent.
-func TestRelaySuppressedDeliveryRegistersNothing(t *testing.T) {
+func TestRelaySuppressedDeliveryLeavesRegistrationEmpty(t *testing.T) {
 	mgr := &session.Manager{}
 	d := proactiveRelayDeps{
 		transcriptStore: newRecordingTranscriptStore(),

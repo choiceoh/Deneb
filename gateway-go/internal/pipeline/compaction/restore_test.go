@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
-func TestStripThinkingBlocks(t *testing.T) {
+func TestStripThinkingBlocks_RemovesThinkingPreservesOtherBlocks(t *testing.T) {
 	mustBlocks := func(blocks ...llm.ContentBlock) llm.Message {
 		raw, err := json.Marshal(blocks)
 		if err != nil {
