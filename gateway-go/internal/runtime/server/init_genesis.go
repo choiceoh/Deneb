@@ -4,22 +4,16 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/review"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle"
@@ -28,6 +22,10 @@ import (
 // initGenesisServices creates the genesis service, tracker, and evolver.
 // Called after chatHandler is created but BEFORE registerLateMethods, so the
 // RPC methods can be registered in method_registry.go (Rule 1 compliance).
+//
+// Core construction (catalog/service/tracker/evolver/meta) lives in
+// skilllifecycle.BuildCore — the owning-module registrar port — so this
+// composition root does not import generation/review leaves.
 func (s *Server) initGenesisServices() {
 	if s.chatHandler == nil || s.modelRegistry == nil {
 		s.logger.Debug("genesis: skipped (chat handler or model registry unavailable)")
@@ -40,79 +38,45 @@ func (s *Server) initGenesisServices() {
 		s.logger.Debug("genesis: skipped (lightweight model not configured)")
 		return
 	}
-	cfg := generation.DefaultConfigFromEnv()
-	cfg.Model = lwModel
 
-	// Shared catalog so genesis can register generated skills and evolver can look them up.
-	s.skillCatalog = skills.NewCatalog(s.logger)
-	s.seedSkillCatalog()
-
-	s.genesisSvc = generation.NewService(cfg, lwClient, s.skillCatalog, s.logger)
-
-	tracker, err := genesis.NewTracker(s.logger)
-	if err != nil {
-		s.logger.Warn("genesis: tracker unavailable", "error", err)
-	} else {
-		s.genesisTracker = tracker
+	workspaceDir := ""
+	if s.toolDeps != nil {
+		workspaceDir = s.toolDeps.WorkspaceDir
 	}
-
-	// Reconcile orphan curator entries against the freshly-discovered catalog:
-	// a skill removed or consolidated away otherwise leaves a lifecycle record
-	// that lingers forever and skews the agent-skill value metric. Race-free at
-	// startup; the reconcile itself guards against a discovery failure wiping
-	// history (see ReconcileCuratorAgainstCatalog).
-	if s.genesisTracker != nil && s.skillCatalog != nil {
-		known := map[string]bool{}
-		for _, e := range s.skillCatalog.List() {
-			known[e.Skill.Name] = true
-		}
-		if pruned, rerr := s.genesisTracker.ReconcileCuratorAgainstCatalog(known); rerr != nil {
-			s.logger.Warn("genesis: curator reconcile failed", "error", rerr)
-		} else if len(pruned) > 0 {
-			s.logger.Info("genesis: pruned orphan curator entries", "skills", pruned)
-		}
-	}
-
-	s.genesisEvolver = genesis.NewEvolver(lwClient, s.skillCatalog, s.genesisTracker, lwModel, s.logger)
-	s.genesisEvolver.SetLowConfidenceObserver(s.postLowConfidenceEvolveCard)
-
-	// RSI P1 (docs/research/recursive-self-improvement-roadmap.md): the
-	// generative half of the improvement pipeline resolves its system prompts
-	// from versioned artifacts under <managed genesis dir>/meta, with the
-	// compiled-in constants as fallback. Wiring here is read-only (load +
-	// fallback, safe for any instance/test); materialization happens in
-	// registerGenesisAutonomousTasks — the boot-only session-phase path bare
-	// New() unit tests never reach — behind the production-state gate, so
-	// neither a dev instance nor an unisolated test writes production state.
-	s.genesisMeta = generation.NewMetaArtifacts(filepath.Join(cfg.OutputDir, "meta"), s.logger)
-	s.genesisSvc.SetMetaArtifacts(s.genesisMeta)
-	s.genesisEvolver.SetMetaArtifacts(s.genesisMeta)
-	// Copy-on-evolve for bundled repo skills: they are not seeded into the
-	// genesis catalog (curator staleness would archive the unused ones), so the
-	// evolver adopts one into the managed dir on its first evolve verdict and
-	// evolves the copy (managed overrides bundled at discovery). Managed dir ""
-	// = the default ~/.deneb/skills.
-	s.genesisEvolver.SetAdoptionDirs(chat.BundledSkillsDir(), "")
-	evolverRole, evolverModel := s.configureGenesisEvolverModels(s.genesisEvolver)
 	thinkingKwargs := s.genesisThinkingKwargs()
-
-	// Quality-gate generated skills with the stronger main model (judge !=
-	// producer): rejects semantic duplicates + vague/one-off skills the
-	// specificity heuristic can't catch. Self-generated skills are net-harmful
-	// unless curated (SoK SkillsBench -1.3pp), so this is the genesis counterpart
-	// to the evolver's self-test. Thinking off (same dsv4 toggle as the evolver).
 	mainClient := s.modelRegistry.Client(modelrole.RoleMain)
 	mainModel := s.modelRegistry.Model(modelrole.RoleMain)
-	if mainClient != nil && mainModel != "" {
-		s.genesisSvc.SetJudge(mainClient, mainModel, &llm.ThinkingConfig{
-			Type:          "disabled",
-			TemplateKwarg: thinkingKwargs[mainModel],
-		})
+
+	var evolverRole modelrole.Role
+	var evolverModel string
+	bundle := skilllifecycle.BuildCore(skilllifecycle.CoreBuildInput{
+		Logger:                s.logger,
+		LWClient:              lwClient,
+		LWModel:               lwModel,
+		MainClient:            mainClient,
+		MainModel:             mainModel,
+		WorkspaceDir:          workspaceDir,
+		BundledSkillsDir:      chat.BundledSkillsDir(),
+		ThinkingKwargs:        thinkingKwargs,
+		LowConfidenceObserver: s.postLowConfidenceEvolveCard,
+		ConfigureEvolver: func(evolver *skilllifecycle.Evolver) (string, string) {
+			evolverRole, evolverModel = s.configureGenesisEvolverModels(evolver)
+			return string(evolverRole), evolverModel
+		},
+	})
+	if bundle == nil {
+		return
 	}
+	s.skillCatalog = bundle.Catalog
+	s.genesisSvc = bundle.Service
+	s.genesisTracker = bundle.Tracker
+	s.genesisEvolver = bundle.Evolver
+	s.genesisMeta = bundle.Meta
+	cfg := bundle.Config
 
 	// Iteration-based nudger (Hermes-style): fires a mid-session skill
 	// review every N tool calls. Env var DENEB_SKILL_NUDGE_INTERVAL
-	// overrides review.DefaultNudgeInterval; 0 disables.
+	// overrides skilllifecycle.DefaultNudgeInterval; 0 disables.
 	// The review fork dispatches through chat.SendSync, which re-resolves the model string into a
 	// provider via resolveModel — so it needs the FULL "provider/model" id. Model() returns the
 	// bare name (e.g. "step3p7"), which has no provider and fails client resolution
@@ -132,7 +96,7 @@ func (s *Server) initGenesisServices() {
 		reviewModel = s.modelRegistry.FullModelID(modelrole.RoleLightweight)
 	}
 	reviewFork := skilllifecycle.NewReviewFork(s.chatHandler, s.genesisTranscripts, s.genesisTracker, reviewModel, s.logger)
-	s.genesisNudger = review.NewNudgerFromEnvWithTrackerAndReviewer(
+	s.genesisNudger = skilllifecycle.NewNudgerFromEnvWithTrackerAndReviewer(
 		s.genesisSvc,
 		s.genesisTracker,
 		reviewFork,
@@ -200,7 +164,7 @@ func (s *Server) refreshCodingModelConsumers() {
 	}
 }
 
-func (s *Server) configureGenesisEvolverModels(evolver *genesis.Evolver) (modelrole.Role, string) {
+func (s *Server) configureGenesisEvolverModels(evolver *skilllifecycle.Evolver) (modelrole.Role, string) {
 	if evolver == nil || s.modelRegistry == nil {
 		return "", ""
 	}
@@ -298,29 +262,6 @@ func (s *Server) genesisThinkingKwargs() map[string]string {
 		}
 	}
 	return thinkingKwargs
-}
-
-func (s *Server) seedSkillCatalog() {
-	if s.skillCatalog == nil {
-		return
-	}
-	workspaceDir := ""
-	if s.toolDeps != nil {
-		workspaceDir = s.toolDeps.WorkspaceDir
-	}
-	if workspaceDir == "" {
-		workspaceDir = configresolve.WorkspaceDir()
-	}
-	entries := skills.DiscoverWorkspaceSkills(skills.DiscoverConfig{
-		WorkspaceDir: workspaceDir,
-		Logger:       s.logger,
-	})
-	for _, entry := range entries {
-		s.skillCatalog.Register(entry)
-	}
-	if len(entries) > 0 {
-		s.logger.Info("genesis: seeded skill catalog", "skills", len(entries), "workspace", workspaceDir)
-	}
 }
 
 func (s *Server) registerSkillLifecycleTool() {
@@ -439,7 +380,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 					return
 				}
 				if _, prod := s.productionStateDir(home); prod {
-					s.genesisMeta.MaterializeDefaults(generation.DefaultMetaArtifacts())
+					s.genesisMeta.MaterializeDefaults(skilllifecycle.DefaultMetaArtifacts())
 				}
 			},
 		}
