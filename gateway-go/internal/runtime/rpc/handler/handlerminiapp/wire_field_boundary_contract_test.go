@@ -9096,42 +9096,42 @@ func assertWireFieldOmitsZeroValue(t *testing.T, target any, jsonName string) {
 	}
 }
 
-func TestContactRowPhonesOmitsZeroValue(t *testing.T) {
+func TestContactRowPhonesOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ContactRow
 	assertWireFieldOmitsZeroValue(t, &value, "phones")
 }
 
-func TestContactRowEmailsOmitsZeroValue(t *testing.T) {
+func TestContactRowEmailsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ContactRow
 	assertWireFieldOmitsZeroValue(t, &value, "emails")
 }
 
-func TestContactRowOrgOmitsZeroValue(t *testing.T) {
+func TestContactRowOrgOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ContactRow
 	assertWireFieldOmitsZeroValue(t, &value, "org")
 }
 
-func TestDashboardItemSubtitleOmitsZeroValue(t *testing.T) {
+func TestDashboardItemSubtitleOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value DashboardItem
 	assertWireFieldOmitsZeroValue(t, &value, "subtitle")
 }
 
-func TestDashboardItemRefTypeOmitsZeroValue(t *testing.T) {
+func TestDashboardItemRefTypeOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value DashboardItem
 	assertWireFieldOmitsZeroValue(t, &value, "refType")
 }
 
-func TestDashboardItemRefIDOmitsZeroValue(t *testing.T) {
+func TestDashboardItemRefIDOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value DashboardItem
@@ -9145,182 +9145,182 @@ func TestDashboardItemWhenMsOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "whenMs")
 }
 
-func TestMailRowOutMailboxOmitsZeroValue(t *testing.T) {
+func TestMailRowOutMailboxOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "mailbox")
 }
 
-func TestMailRowOutHasAttachmentOmitsZeroValue(t *testing.T) {
+func TestMailRowOutHasAttachmentOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "hasAttachment")
 }
 
-func TestMailRowOutAttachmentCountOmitsZeroValue(t *testing.T) {
+func TestMailRowOutAttachmentCountOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "attachmentCount")
 }
 
-func TestMailRowOutPriorityOmitsZeroValue(t *testing.T) {
+func TestMailRowOutPriorityOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "priority")
 }
 
-func TestMailRowOutPriorityHintOmitsZeroValue(t *testing.T) {
+func TestMailRowOutPriorityHintOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "priorityHint")
 }
 
-func TestMailRowOutAnalysisStatusOmitsZeroValue(t *testing.T) {
+func TestMailRowOutAnalysisStatusOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "analysisStatus")
 }
 
-func TestMailRowOutAnalysisQualityOmitsZeroValue(t *testing.T) {
+func TestMailRowOutAnalysisQualityOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "analysisQuality")
 }
 
-func TestMailRowOutFeedStatusOmitsZeroValue(t *testing.T) {
+func TestMailRowOutFeedStatusOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "feedStatus")
 }
 
-func TestMailRowOutCalendarProposalCountOmitsZeroValue(t *testing.T) {
+func TestMailRowOutCalendarProposalCountOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "calendarProposalCount")
 }
 
-func TestMailRowOutTodoCountOmitsZeroValue(t *testing.T) {
+func TestMailRowOutTodoCountOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "todoCount")
 }
 
-func TestMailRowOutWorkStateHintOmitsZeroValue(t *testing.T) {
+func TestMailRowOutWorkStateHintOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "workStateHint")
 }
 
-func TestMailRowOutRelatedProjectsOmitsZeroValue(t *testing.T) {
+func TestMailRowOutRelatedProjectsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "relatedProjects")
 }
 
-func TestMailMessageOutCCOmitsZeroValue(t *testing.T) {
+func TestMailMessageOutCCOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailMessageOut
 	assertWireFieldOmitsZeroValue(t, &value, "cc")
 }
 
-func TestMailMessageOutRawBodyOmitsZeroValue(t *testing.T) {
+func TestMailMessageOutRawBodyOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailMessageOut
 	assertWireFieldOmitsZeroValue(t, &value, "rawBody")
 }
 
-func TestMailMessageOutRawBodyTotalOmitsZeroValue(t *testing.T) {
+func TestMailMessageOutRawBodyTotalOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailMessageOut
 	assertWireFieldOmitsZeroValue(t, &value, "rawBodyTotal")
 }
 
-func TestMailMessageOutBodyCleanedOmitsZeroValue(t *testing.T) {
+func TestMailMessageOutBodyCleanedOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailMessageOut
 	assertWireFieldOmitsZeroValue(t, &value, "bodyCleaned")
 }
 
-func TestMailMessageOutBodyHiddenBlockCountOmitsZeroValue(t *testing.T) {
+func TestMailMessageOutBodyHiddenBlockCountOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailMessageOut
 	assertWireFieldOmitsZeroValue(t, &value, "bodyHiddenBlockCount")
 }
 
-func TestMailMessageOutBodyHiddenLineCountOmitsZeroValue(t *testing.T) {
+func TestMailMessageOutBodyHiddenLineCountOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailMessageOut
 	assertWireFieldOmitsZeroValue(t, &value, "bodyHiddenLineCount")
 }
 
-func TestMailMessageOutAnalysisStatusOmitsZeroValue(t *testing.T) {
+func TestMailMessageOutAnalysisStatusOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailMessageOut
 	assertWireFieldOmitsZeroValue(t, &value, "analysisStatus")
 }
 
-func TestMailMessageOutAnalysisQualityOmitsZeroValue(t *testing.T) {
+func TestMailMessageOutAnalysisQualityOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailMessageOut
 	assertWireFieldOmitsZeroValue(t, &value, "analysisQuality")
 }
 
-func TestMailMessageOutFeedStatusOmitsZeroValue(t *testing.T) {
+func TestMailMessageOutFeedStatusOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailMessageOut
 	assertWireFieldOmitsZeroValue(t, &value, "feedStatus")
 }
 
-func TestMailMessageOutCalendarProposalCountOmitsZeroValue(t *testing.T) {
+func TestMailMessageOutCalendarProposalCountOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailMessageOut
 	assertWireFieldOmitsZeroValue(t, &value, "calendarProposalCount")
 }
 
-func TestMailMessageOutTodoCountOmitsZeroValue(t *testing.T) {
+func TestMailMessageOutTodoCountOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailMessageOut
 	assertWireFieldOmitsZeroValue(t, &value, "todoCount")
 }
 
-func TestMailMessageOutWorkStateHintOmitsZeroValue(t *testing.T) {
+func TestMailMessageOutWorkStateHintOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailMessageOut
 	assertWireFieldOmitsZeroValue(t, &value, "workStateHint")
 }
 
-func TestMailMessageOutRelatedProjectsOmitsZeroValue(t *testing.T) {
+func TestMailMessageOutRelatedProjectsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailMessageOut
 	assertWireFieldOmitsZeroValue(t, &value, "relatedProjects")
 }
 
-func TestMailNativeStatusOutGeneratedAtOmitsZeroValue(t *testing.T) {
+func TestMailNativeStatusOutGeneratedAtOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailNativeStatusOut
@@ -9334,112 +9334,112 @@ func TestMailNativeStatusOutErrorOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "error")
 }
 
-func TestProjectRefTitleOmitsZeroValue(t *testing.T) {
+func TestProjectRefTitleOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ProjectRef
 	assertWireFieldOmitsZeroValue(t, &value, "title")
 }
 
-func TestProjectRefSummaryOmitsZeroValue(t *testing.T) {
+func TestProjectRefSummaryOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ProjectRef
 	assertWireFieldOmitsZeroValue(t, &value, "summary")
 }
 
-func TestMailAnalysisOutSubjectOmitsZeroValue(t *testing.T) {
+func TestMailAnalysisOutSubjectOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailAnalysisOut
 	assertWireFieldOmitsZeroValue(t, &value, "subject")
 }
 
-func TestMailAnalysisOutFromOmitsZeroValue(t *testing.T) {
+func TestMailAnalysisOutFromOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailAnalysisOut
 	assertWireFieldOmitsZeroValue(t, &value, "from")
 }
 
-func TestMailAnalysisOutDateOmitsZeroValue(t *testing.T) {
+func TestMailAnalysisOutDateOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailAnalysisOut
 	assertWireFieldOmitsZeroValue(t, &value, "date")
 }
 
-func TestMailAnalysisOutRelatedProjectsOmitsZeroValue(t *testing.T) {
+func TestMailAnalysisOutRelatedProjectsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailAnalysisOut
 	assertWireFieldOmitsZeroValue(t, &value, "relatedProjects")
 }
 
-func TestMailAnalysisOutAnalysisStatusOmitsZeroValue(t *testing.T) {
+func TestMailAnalysisOutAnalysisStatusOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailAnalysisOut
 	assertWireFieldOmitsZeroValue(t, &value, "analysisStatus")
 }
 
-func TestMailAnalysisOutAnalysisQualityOmitsZeroValue(t *testing.T) {
+func TestMailAnalysisOutAnalysisQualityOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailAnalysisOut
 	assertWireFieldOmitsZeroValue(t, &value, "analysisQuality")
 }
 
-func TestMailAnalysisOutFeedStatusOmitsZeroValue(t *testing.T) {
+func TestMailAnalysisOutFeedStatusOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailAnalysisOut
 	assertWireFieldOmitsZeroValue(t, &value, "feedStatus")
 }
 
-func TestMailAnalysisOutCalendarProposalCountOmitsZeroValue(t *testing.T) {
+func TestMailAnalysisOutCalendarProposalCountOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailAnalysisOut
 	assertWireFieldOmitsZeroValue(t, &value, "calendarProposalCount")
 }
 
-func TestMailAnalysisOutTodoCountOmitsZeroValue(t *testing.T) {
+func TestMailAnalysisOutTodoCountOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailAnalysisOut
 	assertWireFieldOmitsZeroValue(t, &value, "todoCount")
 }
 
-func TestMailAnalysisOutWorkStateHintOmitsZeroValue(t *testing.T) {
+func TestMailAnalysisOutWorkStateHintOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MailAnalysisOut
 	assertWireFieldOmitsZeroValue(t, &value, "workStateHint")
 }
 
-func TestSenderWikiHitOutTitleOmitsZeroValue(t *testing.T) {
+func TestSenderWikiHitOutTitleOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SenderWikiHitOut
 	assertWireFieldOmitsZeroValue(t, &value, "title")
 }
 
-func TestSenderWikiHitOutSummaryOmitsZeroValue(t *testing.T) {
+func TestSenderWikiHitOutSummaryOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SenderWikiHitOut
 	assertWireFieldOmitsZeroValue(t, &value, "summary")
 }
 
-func TestSenderWikiHitOutCategoryOmitsZeroValue(t *testing.T) {
+func TestSenderWikiHitOutCategoryOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SenderWikiHitOut
 	assertWireFieldOmitsZeroValue(t, &value, "category")
 }
 
-func TestSenderRecentOutLastReceivedAtOmitsZeroValue(t *testing.T) {
+func TestSenderRecentOutLastReceivedAtOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SenderRecentOut
@@ -9453,7 +9453,7 @@ func TestSenderRecentOutTruncatedOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "truncated")
 }
 
-func TestModelOptionProviderOmitsZeroValue(t *testing.T) {
+func TestModelOptionProviderOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ModelOption
@@ -9467,35 +9467,35 @@ func TestModelOptionDisplayOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "display")
 }
 
-func TestModelOptionHealthOmitsZeroValue(t *testing.T) {
+func TestModelOptionHealthOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ModelOption
 	assertWireFieldOmitsZeroValue(t, &value, "health")
 }
 
-func TestModelOptionCustomOmitsZeroValue(t *testing.T) {
+func TestModelOptionCustomOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ModelOption
 	assertWireFieldOmitsZeroValue(t, &value, "custom")
 }
 
-func TestModelOptionDeletableOmitsZeroValue(t *testing.T) {
+func TestModelOptionDeletableOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ModelOption
 	assertWireFieldOmitsZeroValue(t, &value, "deletable")
 }
 
-func TestModelOptionUnhealthyOmitsZeroValue(t *testing.T) {
+func TestModelOptionUnhealthyOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ModelOption
 	assertWireFieldOmitsZeroValue(t, &value, "unhealthy")
 }
 
-func TestModelOptionNoteOmitsZeroValue(t *testing.T) {
+func TestModelOptionNoteOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ModelOption
@@ -9509,98 +9509,98 @@ func TestModelDeleteResultClearedRolesOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "clearedRoles")
 }
 
-func TestModelsListResultAdvisoriesOmitsZeroValue(t *testing.T) {
+func TestModelsListResultAdvisoriesOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ModelsListResult
 	assertWireFieldOmitsZeroValue(t, &value, "advisories")
 }
 
-func TestMemberOutRankOmitsZeroValue(t *testing.T) {
+func TestMemberOutRankOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MemberOut
 	assertWireFieldOmitsZeroValue(t, &value, "rank")
 }
 
-func TestMemberOutPositionOmitsZeroValue(t *testing.T) {
+func TestMemberOutPositionOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MemberOut
 	assertWireFieldOmitsZeroValue(t, &value, "position")
 }
 
-func TestMemberOutPhonesOmitsZeroValue(t *testing.T) {
+func TestMemberOutPhonesOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MemberOut
 	assertWireFieldOmitsZeroValue(t, &value, "phones")
 }
 
-func TestMemberOutEmailsOmitsZeroValue(t *testing.T) {
+func TestMemberOutEmailsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MemberOut
 	assertWireFieldOmitsZeroValue(t, &value, "emails")
 }
 
-func TestMemberOutPersonPathOmitsZeroValue(t *testing.T) {
+func TestMemberOutPersonPathOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value MemberOut
 	assertWireFieldOmitsZeroValue(t, &value, "personPath")
 }
 
-func TestOrgNodeOutParentIDOmitsZeroValue(t *testing.T) {
+func TestOrgNodeOutParentIDOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value OrgNodeOut
 	assertWireFieldOmitsZeroValue(t, &value, "parentId")
 }
 
-func TestOrgNodeOutLaneOmitsZeroValue(t *testing.T) {
+func TestOrgNodeOutLaneOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value OrgNodeOut
 	assertWireFieldOmitsZeroValue(t, &value, "lane")
 }
 
-func TestOrgNodeOutMembersOmitsZeroValue(t *testing.T) {
+func TestOrgNodeOutMembersOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value OrgNodeOut
 	assertWireFieldOmitsZeroValue(t, &value, "members")
 }
 
-func TestOrgNodeOutKeywordsOmitsZeroValue(t *testing.T) {
+func TestOrgNodeOutKeywordsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value OrgNodeOut
 	assertWireFieldOmitsZeroValue(t, &value, "keywords")
 }
 
-func TestOrgNodeOutCompaniesOmitsZeroValue(t *testing.T) {
+func TestOrgNodeOutCompaniesOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value OrgNodeOut
 	assertWireFieldOmitsZeroValue(t, &value, "companies")
 }
 
-func TestProjectDigestRowHeadlineOmitsZeroValue(t *testing.T) {
+func TestProjectDigestRowHeadlineOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ProjectDigestRow
 	assertWireFieldOmitsZeroValue(t, &value, "headline")
 }
 
-func TestProjectDigestRowBulletsOmitsZeroValue(t *testing.T) {
+func TestProjectDigestRowBulletsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ProjectDigestRow
 	assertWireFieldOmitsZeroValue(t, &value, "bullets")
 }
 
-func TestProjectDigestRowDueOmitsZeroValue(t *testing.T) {
+func TestProjectDigestRowDueOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ProjectDigestRow
@@ -9614,28 +9614,28 @@ func TestProjectDigestRowUpdatedAtMsOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "updatedAtMs")
 }
 
-func TestProjectDigestRowPathOmitsZeroValue(t *testing.T) {
+func TestProjectDigestRowPathOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ProjectDigestRow
 	assertWireFieldOmitsZeroValue(t, &value, "path")
 }
 
-func TestProjectDigestRowCodeOmitsZeroValue(t *testing.T) {
+func TestProjectDigestRowCodeOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ProjectDigestRow
 	assertWireFieldOmitsZeroValue(t, &value, "code")
 }
 
-func TestProjectDigestRowClientOmitsZeroValue(t *testing.T) {
+func TestProjectDigestRowClientOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ProjectDigestRow
 	assertWireFieldOmitsZeroValue(t, &value, "client")
 }
 
-func TestProjectDigestRowRefsOmitsZeroValue(t *testing.T) {
+func TestProjectDigestRowRefsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value ProjectDigestRow
@@ -9649,28 +9649,28 @@ func TestPromptTunerReportErrorOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "error")
 }
 
-func TestPromptTunerReportProposedOmitsZeroValue(t *testing.T) {
+func TestPromptTunerReportProposedOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PromptTunerReport
 	assertWireFieldOmitsZeroValue(t, &value, "proposed")
 }
 
-func TestPromptTunerReportAddedOmitsZeroValue(t *testing.T) {
+func TestPromptTunerReportAddedOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PromptTunerReport
 	assertWireFieldOmitsZeroValue(t, &value, "added")
 }
 
-func TestPromptRowDescriptionOmitsZeroValue(t *testing.T) {
+func TestPromptRowDescriptionOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PromptRow
 	assertWireFieldOmitsZeroValue(t, &value, "description")
 }
 
-func TestPromptRowCategoryOmitsZeroValue(t *testing.T) {
+func TestPromptRowCategoryOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PromptRow
@@ -9684,14 +9684,14 @@ func TestPromptRowUpdatedAtMsOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "updatedAtMs")
 }
 
-func TestPromptDetailOutDescriptionOmitsZeroValue(t *testing.T) {
+func TestPromptDetailOutDescriptionOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PromptDetailOut
 	assertWireFieldOmitsZeroValue(t, &value, "description")
 }
 
-func TestPromptDetailOutCategoryOmitsZeroValue(t *testing.T) {
+func TestPromptDetailOutCategoryOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PromptDetailOut
@@ -9705,112 +9705,112 @@ func TestPromptDetailOutUpdatedAtMsOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "updatedAtMs")
 }
 
-func TestSelfCorrectionCandidateStatusOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateStatusOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
 	assertWireFieldOmitsZeroValue(t, &value, "status")
 }
 
-func TestSelfCorrectionCandidateScopeOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateScopeOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
 	assertWireFieldOmitsZeroValue(t, &value, "scope")
 }
 
-func TestSelfCorrectionCandidateSkillNameOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateSkillNameOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
 	assertWireFieldOmitsZeroValue(t, &value, "skillName")
 }
 
-func TestSelfCorrectionCandidateSessionKeyOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateSessionKeyOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
 	assertWireFieldOmitsZeroValue(t, &value, "sessionKey")
 }
 
-func TestSelfCorrectionCandidateTitleOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateTitleOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
 	assertWireFieldOmitsZeroValue(t, &value, "title")
 }
 
-func TestSelfCorrectionCandidateCandidateOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateCandidateOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
 	assertWireFieldOmitsZeroValue(t, &value, "candidate")
 }
 
-func TestSelfCorrectionCandidateEvidenceOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateEvidenceOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
 	assertWireFieldOmitsZeroValue(t, &value, "evidence")
 }
 
-func TestSelfCorrectionCandidateReasonOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateReasonOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
 	assertWireFieldOmitsZeroValue(t, &value, "reason")
 }
 
-func TestSelfCorrectionCandidateTargetFilesOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateTargetFilesOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
 	assertWireFieldOmitsZeroValue(t, &value, "targetFiles")
 }
 
-func TestSelfCorrectionCandidateProposedChangeOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateProposedChangeOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
 	assertWireFieldOmitsZeroValue(t, &value, "proposedChange")
 }
 
-func TestSelfCorrectionCandidateRiskOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateRiskOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
 	assertWireFieldOmitsZeroValue(t, &value, "risk")
 }
 
-func TestSelfCorrectionCandidateSourceOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateSourceOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
 	assertWireFieldOmitsZeroValue(t, &value, "source")
 }
 
-func TestSelfCorrectionCandidateReviewerOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateReviewerOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
 	assertWireFieldOmitsZeroValue(t, &value, "reviewer")
 }
 
-func TestSelfCorrectionCandidateReviewNoteOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateReviewNoteOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
 	assertWireFieldOmitsZeroValue(t, &value, "reviewNote")
 }
 
-func TestSelfCorrectionCandidateEvidenceKindsOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateEvidenceKindsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
 	assertWireFieldOmitsZeroValue(t, &value, "evidenceKinds")
 }
 
-func TestSelfCorrectionCandidateReviewActionsOmitsZeroValue(t *testing.T) {
+func TestSelfCorrectionCandidateReviewActionsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfCorrectionCandidate
@@ -9831,14 +9831,14 @@ func TestSelfCorrectionCandidateUpdatedAtOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "updatedAt")
 }
 
-func TestSelfImprovementCodingFunnelLastCaptureAtOmitsZeroValue(t *testing.T) {
+func TestSelfImprovementCodingFunnelLastCaptureAtOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfImprovementCodingFunnel
 	assertWireFieldOmitsZeroValue(t, &value, "lastCaptureAt")
 }
 
-func TestSelfImprovementCodingFunnelLastReviewAtOmitsZeroValue(t *testing.T) {
+func TestSelfImprovementCodingFunnelLastReviewAtOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfImprovementCodingFunnel
@@ -9866,49 +9866,49 @@ func TestSelfImprovementCodingFunnelLastRejectionAtOmitsZeroValue(t *testing.T) 
 	assertWireFieldOmitsZeroValue(t, &value, "lastRejectionAt")
 }
 
-func TestSelfImprovementCodingFunnelLastNudgeAtOmitsZeroValue(t *testing.T) {
+func TestSelfImprovementCodingFunnelLastNudgeAtOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfImprovementCodingFunnel
 	assertWireFieldOmitsZeroValue(t, &value, "lastNudgeAt")
 }
 
-func TestSelfImprovementCodingListResponseStatusCountsOmitsZeroValue(t *testing.T) {
+func TestSelfImprovementCodingListResponseStatusCountsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SelfImprovementCodingListResponse
 	assertWireFieldOmitsZeroValue(t, &value, "statusCounts")
 }
 
-func TestSessionRowOutKindOmitsZeroValue(t *testing.T) {
+func TestSessionRowOutKindOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value sessionRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "kind")
 }
 
-func TestSessionRowOutStatusOmitsZeroValue(t *testing.T) {
+func TestSessionRowOutStatusOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value sessionRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "status")
 }
 
-func TestSessionRowOutChannelOmitsZeroValue(t *testing.T) {
+func TestSessionRowOutChannelOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value sessionRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "channel")
 }
 
-func TestSessionRowOutModelOmitsZeroValue(t *testing.T) {
+func TestSessionRowOutModelOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value sessionRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "model")
 }
 
-func TestSessionRowOutLabelOmitsZeroValue(t *testing.T) {
+func TestSessionRowOutLabelOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value sessionRowOut
@@ -9929,91 +9929,91 @@ func TestSessionRowOutStartedAtMsOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "startedAtMs")
 }
 
-func TestSessionRowOutRuntimeMsOmitsZeroValue(t *testing.T) {
+func TestSessionRowOutRuntimeMsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value sessionRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "runtimeMs")
 }
 
-func TestSessionRowOutTotalTokensOmitsZeroValue(t *testing.T) {
+func TestSessionRowOutTotalTokensOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value sessionRowOut
 	assertWireFieldOmitsZeroValue(t, &value, "totalTokens")
 }
 
-func TestTranscriptMsgOutIDOmitsZeroValue(t *testing.T) {
+func TestTranscriptMsgOutIDOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value transcriptMsgOut
 	assertWireFieldOmitsZeroValue(t, &value, "id")
 }
 
-func TestTranscriptMsgOutAttachmentsOmitsZeroValue(t *testing.T) {
+func TestTranscriptMsgOutAttachmentsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value transcriptMsgOut
 	assertWireFieldOmitsZeroValue(t, &value, "attachments")
 }
 
-func TestTranscriptMsgOutTimestampMsOmitsZeroValue(t *testing.T) {
+func TestTranscriptMsgOutTimestampMsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value transcriptMsgOut
 	assertWireFieldOmitsZeroValue(t, &value, "timestampMs")
 }
 
-func TestSkillRowDescriptionOmitsZeroValue(t *testing.T) {
+func TestSkillRowDescriptionOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "description")
 }
 
-func TestSkillRowCategoryOmitsZeroValue(t *testing.T) {
+func TestSkillRowCategoryOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "category")
 }
 
-func TestSkillRowHomepageOmitsZeroValue(t *testing.T) {
+func TestSkillRowHomepageOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "homepage")
 }
 
-func TestSkillRowTagsOmitsZeroValue(t *testing.T) {
+func TestSkillRowTagsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "tags")
 }
 
-func TestSkillRowRelatedSkillsOmitsZeroValue(t *testing.T) {
+func TestSkillRowRelatedSkillsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "relatedSkills")
 }
 
-func TestSkillRowSourceOmitsZeroValue(t *testing.T) {
+func TestSkillRowSourceOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "source")
 }
 
-func TestSkillRowVersionOmitsZeroValue(t *testing.T) {
+func TestSkillRowVersionOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "version")
 }
 
-func TestSkillRowOriginOmitsZeroValue(t *testing.T) {
+func TestSkillRowOriginOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
@@ -10027,245 +10027,245 @@ func TestSkillRowCreatedAtOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "createdAt")
 }
 
-func TestSkillRowEvolveCountOmitsZeroValue(t *testing.T) {
+func TestSkillRowEvolveCountOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "evolveCount")
 }
 
-func TestSkillRowLastEvolvedAtOmitsZeroValue(t *testing.T) {
+func TestSkillRowLastEvolvedAtOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "lastEvolvedAt")
 }
 
-func TestSkillRowTotalUsesOmitsZeroValue(t *testing.T) {
+func TestSkillRowTotalUsesOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "totalUses")
 }
 
-func TestSkillRowLastUsedAtOmitsZeroValue(t *testing.T) {
+func TestSkillRowLastUsedAtOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "lastUsedAt")
 }
 
-func TestSkillRowCuratorStateOmitsZeroValue(t *testing.T) {
+func TestSkillRowCuratorStateOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "curatorState")
 }
 
-func TestSkillRowEditableOmitsZeroValue(t *testing.T) {
+func TestSkillRowEditableOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "editable")
 }
 
-func TestSkillRowDeletableOmitsZeroValue(t *testing.T) {
+func TestSkillRowDeletableOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "deletable")
 }
 
-func TestSkillRowDependencySummaryOmitsZeroValue(t *testing.T) {
+func TestSkillRowDependencySummaryOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "dependencySummary")
 }
 
-func TestSkillRowInstallSummaryOmitsZeroValue(t *testing.T) {
+func TestSkillRowInstallSummaryOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillRow
 	assertWireFieldOmitsZeroValue(t, &value, "installSummary")
 }
 
-func TestSkillLifecycleEventSkillNameOmitsZeroValue(t *testing.T) {
+func TestSkillLifecycleEventSkillNameOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillLifecycleEvent
 	assertWireFieldOmitsZeroValue(t, &value, "skillName")
 }
 
-func TestSkillLifecycleEventAtOmitsZeroValue(t *testing.T) {
+func TestSkillLifecycleEventAtOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillLifecycleEvent
 	assertWireFieldOmitsZeroValue(t, &value, "at")
 }
 
-func TestSkillLifecycleEventVersionOmitsZeroValue(t *testing.T) {
+func TestSkillLifecycleEventVersionOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillLifecycleEvent
 	assertWireFieldOmitsZeroValue(t, &value, "version")
 }
 
-func TestSkillLifecycleEventDetailOmitsZeroValue(t *testing.T) {
+func TestSkillLifecycleEventDetailOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillLifecycleEvent
 	assertWireFieldOmitsZeroValue(t, &value, "detail")
 }
 
-func TestSkillLifecycleEventRouteOmitsZeroValue(t *testing.T) {
+func TestSkillLifecycleEventRouteOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillLifecycleEvent
 	assertWireFieldOmitsZeroValue(t, &value, "route")
 }
 
-func TestSkillLifecycleEventEvidenceOmitsZeroValue(t *testing.T) {
+func TestSkillLifecycleEventEvidenceOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillLifecycleEvent
 	assertWireFieldOmitsZeroValue(t, &value, "evidence")
 }
 
-func TestSkillLifecycleEventTargetSignatureOmitsZeroValue(t *testing.T) {
+func TestSkillLifecycleEventTargetSignatureOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillLifecycleEvent
 	assertWireFieldOmitsZeroValue(t, &value, "targetSignature")
 }
 
-func TestSkillLifecycleEventEditedSurfaceOmitsZeroValue(t *testing.T) {
+func TestSkillLifecycleEventEditedSurfaceOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillLifecycleEvent
 	assertWireFieldOmitsZeroValue(t, &value, "editedSurface")
 }
 
-func TestSkillLifecycleEventExpectedBehaviorChangeOmitsZeroValue(t *testing.T) {
+func TestSkillLifecycleEventExpectedBehaviorChangeOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillLifecycleEvent
 	assertWireFieldOmitsZeroValue(t, &value, "expectedBehaviorChange")
 }
 
-func TestSkillLifecycleEventRegressionRiskOmitsZeroValue(t *testing.T) {
+func TestSkillLifecycleEventRegressionRiskOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillLifecycleEvent
 	assertWireFieldOmitsZeroValue(t, &value, "regressionRisk")
 }
 
-func TestPropusLifecycleSummaryLatestAtOmitsZeroValue(t *testing.T) {
+func TestPropusLifecycleSummaryLatestAtOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PropusLifecycleSummary
 	assertWireFieldOmitsZeroValue(t, &value, "latestAt")
 }
 
-func TestPropusLifecycleSummaryLatestTypeOmitsZeroValue(t *testing.T) {
+func TestPropusLifecycleSummaryLatestTypeOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PropusLifecycleSummary
 	assertWireFieldOmitsZeroValue(t, &value, "latestType")
 }
 
-func TestPropusLifecycleSummaryLatestSkillOmitsZeroValue(t *testing.T) {
+func TestPropusLifecycleSummaryLatestSkillOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PropusLifecycleSummary
 	assertWireFieldOmitsZeroValue(t, &value, "latestSkill")
 }
 
-func TestPropusLifecycleSummaryDoctrineVersionOmitsZeroValue(t *testing.T) {
+func TestPropusLifecycleSummaryDoctrineVersionOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PropusLifecycleSummary
 	assertWireFieldOmitsZeroValue(t, &value, "doctrineVersion")
 }
 
-func TestPropusLifecycleSummaryDoctrineOmitsZeroValue(t *testing.T) {
+func TestPropusLifecycleSummaryDoctrineOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PropusLifecycleSummary
 	assertWireFieldOmitsZeroValue(t, &value, "doctrine")
 }
 
-func TestPropusLifecycleSummarySourcePapersOmitsZeroValue(t *testing.T) {
+func TestPropusLifecycleSummarySourcePapersOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PropusLifecycleSummary
 	assertWireFieldOmitsZeroValue(t, &value, "sourcePapers")
 }
 
-func TestPropusLifecycleSummaryFilteredSourcesOmitsZeroValue(t *testing.T) {
+func TestPropusLifecycleSummaryFilteredSourcesOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PropusLifecycleSummary
 	assertWireFieldOmitsZeroValue(t, &value, "filteredSources")
 }
 
-func TestPropusLifecycleSummaryPrinciplesOmitsZeroValue(t *testing.T) {
+func TestPropusLifecycleSummaryPrinciplesOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PropusLifecycleSummary
 	assertWireFieldOmitsZeroValue(t, &value, "principles")
 }
 
-func TestPropusLifecycleSummaryQualityGatesOmitsZeroValue(t *testing.T) {
+func TestPropusLifecycleSummaryQualityGatesOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PropusLifecycleSummary
 	assertWireFieldOmitsZeroValue(t, &value, "qualityGates")
 }
 
-func TestPropusLifecycleSummaryNextActionsOmitsZeroValue(t *testing.T) {
+func TestPropusLifecycleSummaryNextActionsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PropusLifecycleSummary
 	assertWireFieldOmitsZeroValue(t, &value, "nextActions")
 }
 
-func TestPropusLifecycleSummaryCoverageStateOmitsZeroValue(t *testing.T) {
+func TestPropusLifecycleSummaryCoverageStateOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PropusLifecycleSummary
 	assertWireFieldOmitsZeroValue(t, &value, "coverageState")
 }
 
-func TestPropusLifecycleSummaryCoverageGapsOmitsZeroValue(t *testing.T) {
+func TestPropusLifecycleSummaryCoverageGapsOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PropusLifecycleSummary
 	assertWireFieldOmitsZeroValue(t, &value, "coverageGaps")
 }
 
-func TestPropusLifecycleSummaryNextCueOmitsZeroValue(t *testing.T) {
+func TestPropusLifecycleSummaryNextCueOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PropusLifecycleSummary
 	assertWireFieldOmitsZeroValue(t, &value, "nextCue")
 }
 
-func TestPropusLifecycleSummaryQualityGateOmitsZeroValue(t *testing.T) {
+func TestPropusLifecycleSummaryQualityGateOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PropusLifecycleSummary
 	assertWireFieldOmitsZeroValue(t, &value, "qualityGate")
 }
 
-func TestPropusLifecycleSummaryAttentionCueOmitsZeroValue(t *testing.T) {
+func TestPropusLifecycleSummaryAttentionCueOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value PropusLifecycleSummary
 	assertWireFieldOmitsZeroValue(t, &value, "attentionCue")
 }
 
-func TestSkillDetailResponseBodyOmitsZeroValue(t *testing.T) {
+func TestSkillDetailResponseBodyOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillDetailResponse
@@ -10279,28 +10279,28 @@ func TestSkillDetailResponseBodyTruncatedOmitsZeroValue(t *testing.T) {
 	assertWireFieldOmitsZeroValue(t, &value, "bodyTruncated")
 }
 
-func TestSkillDetailResponsePathOmitsZeroValue(t *testing.T) {
+func TestSkillDetailResponsePathOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value SkillDetailResponse
 	assertWireFieldOmitsZeroValue(t, &value, "path")
 }
 
-func TestWormholeStatusOutListenOmitsZeroValue(t *testing.T) {
+func TestWormholeStatusOutListenOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value WormholeStatusOut
 	assertWireFieldOmitsZeroValue(t, &value, "listen")
 }
 
-func TestWormholeStatusOutAutoOmitsZeroValue(t *testing.T) {
+func TestWormholeStatusOutAutoOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value WormholeStatusOut
 	assertWireFieldOmitsZeroValue(t, &value, "auto")
 }
 
-func TestWormholeModelOutKeyHealthOmitsZeroValue(t *testing.T) {
+func TestWormholeModelOutKeyHealthOmittedWhenZero(t *testing.T) {
 	t.Parallel()
 
 	var value WormholeModelOut
