@@ -502,6 +502,27 @@ def assess_l4(
                        + outcome_note)
 
 
+def _dispatch_attempts(marker: dict | None, fallback_at_ms: int) -> list[dict[str, Any]]:
+    """Return retained retry history plus the marker's current attempt.
+
+    ``dispatch_prompt.py`` snapshots the previous top-level attempt into
+    ``attempts`` before a retry and replaces the top-level fields with the new
+    attempt. Treating one marker file as one dispatch therefore undercounts
+    retries and inflates the graduation ladder's land rate.
+    """
+    if not isinstance(marker, dict):
+        return [{"dispatchedAt": fallback_at_ms}]
+    attempts = [a for a in (marker.get("attempts") or []) if isinstance(a, dict)]
+    current: dict[str, Any] = {}
+    if isinstance(marker.get("outcome"), str):
+        current["outcome"] = marker["outcome"]
+    dispatched_at = marker.get("dispatchedAt")
+    current["dispatchedAt"] = (
+        int(dispatched_at) if isinstance(dispatched_at, (int, float)) else fallback_at_ms
+    )
+    return attempts + [current]
+
+
 def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
     """Read every ledger under data_dir and classify all four layers."""
     genesis = read_jsonl(os.path.join(data_dir, "skill_genesis_log.jsonl"))
@@ -524,25 +545,44 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
             if not name.endswith(".json"):
                 continue
             path = os.path.join(dispatch_dir, name)
-            dispatch_total += 1
+            try:
+                fallback_at_ms = int(os.path.getmtime(path) * 1000)
+            except OSError:
+                fallback_at_ms = 0
+            marker: dict | None = None
             try:
                 with open(path, encoding="utf-8", errors="replace") as handle:
-                    marker = json.load(handle)
-                marker_id = str(marker.get("id") or name[:-5])
-                if marker_id:
-                    dispatched_ids.add(marker_id)
-                outcome = marker.get("outcome")
-                if outcome:
-                    outcomes[outcome] = outcomes.get(outcome, 0) + 1
-                    if marker_id:
-                        marker_outcomes[marker_id] = str(outcome)
+                    loaded = json.load(handle)
+                marker = loaded if isinstance(loaded, dict) else None
             except (OSError, json.JSONDecodeError, TypeError, AttributeError):
                 pass
-            try:
-                if os.path.getmtime(path) * 1000 >= today_cutoff:
+
+            marker_id = str((marker or {}).get("id") or name[:-5])
+            if marker_id:
+                dispatched_ids.add(marker_id)
+            attempts = _dispatch_attempts(marker, fallback_at_ms)
+            dispatch_total += len(attempts)
+            for attempt in attempts:
+                outcome = attempt.get("outcome")
+                outcome = outcome.strip() if isinstance(outcome, str) else ""
+                if outcome:
+                    outcomes[outcome] = outcomes.get(outcome, 0) + 1
+                dispatched_at = attempt.get("dispatchedAt")
+                if (
+                    isinstance(dispatched_at, (int, float))
+                    and today_cutoff <= dispatched_at < today_cutoff + DAY_MS
+                ):
                     dispatch_today += 1
-            except OSError:
-                continue
+
+            # Redispatch blocking follows the current attempt only. Historical
+            # failures must not make a later landed/declined marker retryable.
+            if marker is not None:
+                current_outcome = marker.get("outcome")
+                current_outcome = (
+                    current_outcome.strip() if isinstance(current_outcome, str) else ""
+                )
+                if current_outcome and marker_id:
+                    marker_outcomes[marker_id] = current_outcome
     except OSError:
         pass
 

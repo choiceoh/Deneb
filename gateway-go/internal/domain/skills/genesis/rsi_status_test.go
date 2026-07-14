@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -219,6 +220,42 @@ func TestRSIStatusL4MarkerReceiptAloneStaysIdleWithoutStarting(t *testing.T) {
 	}
 	if got := rsiMetricValue(l.Metrics, "오늘 배차"); got != "1" {
 		t.Fatalf("dispatched today metric = %q, want 1 (%+v)", got, l.Metrics)
+	}
+}
+
+func TestRSIDispatchMetricsCountRetryHistoryNotMarkerFiles(t *testing.T) {
+	tr := newTestTracker(t)
+	dir := tr.dispatchMarkerDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	marker := fmt.Sprintf(`{
+		"id":"retry",
+		"outcome":"declined",
+		"dispatchedAt":%d,
+		"attempts":[
+			{"outcome":"landed","dispatchedAt":%d},
+			{"outcome":"failed","dispatchedAt":%d}
+		]
+	}`, now.Add(-time.Minute).UnixMilli(), now.Add(-2*time.Minute).UnixMilli(), dayStart.Add(-time.Minute).UnixMilli())
+	if err := os.WriteFile(filepath.Join(dir, "retry.json"), []byte(marker), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	total, today := tr.codingDispatchCounts()
+	if total != 3 || today != 2 {
+		t.Fatalf("dispatch counts = total %d today %d, want 3/2", total, today)
+	}
+	outcomes, decided, landed := rsiDispatchOutcomes(dir)
+	if decided != 3 || landed != 1 {
+		t.Fatalf("outcomes = %+v decided=%d landed=%d, want 3 decisions/1 landed", outcomes, decided, landed)
+	}
+	for outcome, want := range map[string]int{"landed": 1, "failed": 1, "declined": 1} {
+		if got := outcomes[outcome]; got != want {
+			t.Fatalf("outcomes[%s] = %d, want %d (%+v)", outcome, got, want, outcomes)
+		}
 	}
 }
 

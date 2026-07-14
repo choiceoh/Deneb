@@ -418,6 +418,32 @@ class AssessAndCliTest(unittest.TestCase):
         self.assertEqual(layers.pop("GRAD"), DATA_GATED)  # ladder: evidence accumulating
         self.assertEqual(set(layers.values()), {IDLE})
 
+    def test_dispatch_metrics_count_retry_history_not_marker_files(self):
+        with tempfile.TemporaryDirectory() as data_dir:
+            dispatch_dir = os.path.join(data_dir, "coding_dispatch")
+            os.makedirs(dispatch_dir)
+            today_cutoff = NOW - (NOW % DAY)
+            marker = {
+                "id": "retry",
+                "outcome": "declined",
+                "dispatchedAt": NOW - 1_000,
+                "attempts": [
+                    {"outcome": "landed", "dispatchedAt": NOW - 2_000},
+                    {"outcome": "failed", "dispatchedAt": today_cutoff - 1_000},
+                ],
+            }
+            with open(os.path.join(dispatch_dir, "retry.json"), "w", encoding="utf-8") as handle:
+                json.dump(marker, handle)
+
+            l4 = next(layer for layer in assess(data_dir, NOW) if layer.key == "L4")
+            self.assertEqual(l4.metrics["dispatched_total"], 3)
+            self.assertEqual(l4.metrics["dispatched_today"], 2)
+            self.assertEqual(
+                l4.metrics["dispatch_outcomes"],
+                {"landed": 1, "failed": 1, "declined": 1},
+            )
+            self.assertAlmostEqual(l4.metrics["land_rate"], 1 / 3)
+
     def test_markdown_is_generated_from_the_same_snapshot(self):
         layers = [assess_l1([{"createdAt": RECENT, "type": "evolved"}], NOW)]
         doc = render_markdown(layers, NOW, "/tmp/deneb-data")
