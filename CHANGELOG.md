@@ -1,5 +1,23 @@
 # Changelog
 
+## [4.104.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.103.0...deneb-v4.104.0) (2026-07-14)
+
+
+### ✨ Features
+
+* **genesis:** 메타 개정 구조성 계측(L1.5 함정)·K-후보 직교 탐색 렌즈 — Bilevel Autoresearch(2603.23420) 반영 ([#3645](https://github.com/choiceoh/Deneb/issues/3645)) ([98c6a27](https://github.com/choiceoh/Deneb/commit/98c6a271e466f9080c87152b207575054228a288))
+
+
+### 🐛 Bug Fixes
+
+* **native:** gate countdown expiry actions by interactivity ([#3650](https://github.com/choiceoh/Deneb/issues/3650)) ([597000b](https://github.com/choiceoh/Deneb/commit/597000b51379bf85ecde764ccccf0acec803f261))
+* **rsi:** stop retrying declined dispatches ([#3647](https://github.com/choiceoh/Deneb/issues/3647)) ([dbd6c32](https://github.com/choiceoh/Deneb/commit/dbd6c32a7fad55528113bc686887125ff6344bde))
+
+
+### 🔧 Internal
+
+* Health Bench 2.0 점수 개선 — complexity tail·계약 축소·테스트 명명 (82.9→90 목표 1차) ([#3644](https://github.com/choiceoh/Deneb/issues/3644)) ([50aba65](https://github.com/choiceoh/Deneb/commit/50aba65311539dca7b00c46c5e53ea467b0dbb33))
+
 ## [4.103.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.102.0...deneb-v4.103.0) (2026-07-14)
 
 
