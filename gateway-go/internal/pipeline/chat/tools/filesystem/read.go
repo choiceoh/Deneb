@@ -193,27 +193,178 @@ func skillReadMissHint(path string, skillRoots []string) string {
 	return fmt.Sprintf("skill %q not found under any skills catalog root — likely archived/removed by curation or renamed; check the current catalog with the skills tool (action=list) instead of retrying paths", name)
 }
 
+// readParams are the read tool's decoded arguments.
+type readParams struct {
+	FilePath string `json:"file_path"`
+	Offset   int    `json:"offset"`
+	Limit    int    `json:"limit"`
+	Function string `json:"function"`
+	Force    bool   `json:"force"`
+	Hashes   bool   `json:"hashes"`
+}
+
+// parseReadParams decodes and validates the read tool's arguments.
+func parseReadParams(ctx context.Context, input json.RawMessage) (readParams, error) {
+	var p readParams
+	if err := ctx.Err(); err != nil {
+		return p, err
+	}
+	if err := jsonutil.UnmarshalInto("read params", input, &p); err != nil {
+		return p, err
+	}
+	if p.FilePath == "" {
+		return p, fmt.Errorf("file_path is required")
+	}
+	return p, nil
+}
+
+// useReadCache reports whether the file-read dedup cache applies: default
+// full-file reads only (no offset/limit/function), not forced. hashes=true
+// emits per-line anchors, which the plain cached output does not contain —
+// bypass the dedup cache for those reads.
+func useReadCache(fc *agent.FileCache, p readParams) bool {
+	return fc != nil && !p.Force && !p.Hashes && p.Function == "" && p.Offset <= 0 && p.Limit <= 0
+}
+
+// cachedReadResult returns the cached output for path if the cache holds a
+// still-fresh entry.
+func cachedReadResult(fc *agent.FileCache, path, displayPath string) (string, bool) {
+	entry := fc.Get(path)
+	if entry == nil || agent.FileChanged(path, entry) {
+		return "", false
+	}
+	entry.ReadCount++
+	return agent.FormatCachedRead(displayPath, entry), true
+}
+
+// readFileWithFallbacks reads path, applying the skill-catalog fallbacks on a
+// miss. It returns the path that finally resolved (fallbacks may move it), the
+// file bytes, and — when the path turned out to be a directory — the rendered
+// listing instead.
+func readFileWithFallbacks(path, displayPath string, skillRoots []string) (string, []byte, string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// Cross-skill-root fallback: a bundled skill loads from ~/deneb/skills
+		// (the repo) and is advertised there, but the model — primed by the
+		// pervasive ~/.deneb/ convention everywhere else — frequently reads it at
+		// ~/.deneb/skills/<rel>, an allowed root that holds a DIFFERENT (managed)
+		// skill set, so the read 404s (this silently broke the 8am morning-letter
+		// cron: it could not load its bundled SKILL.md). When the path is under
+		// one skill root and missing, try the same skills-relative remainder under
+		// the other roots so the bundled skill resolves regardless of which root
+		// the model picked. Scoped to the already-allowed catalog roots.
+		if altPath, altData, ok := trySkillRootFallback(path, skillRoots); ok {
+			path, data, err = altPath, altData, nil
+		}
+	}
+	if err != nil {
+		// Wrong-nesting fallback: stale skill references (queued
+		// self-correction records, old prompt snapshots) carry the flat
+		// <root>/<name>/SKILL.md form while the skill lives category- or
+		// genesis-nested. Resolve by skill name across the catalog layouts
+		// before failing.
+		if altPath, altData, ok := trySkillLayoutFallback(path, skillRoots); ok {
+			path, data, err = altPath, altData, nil
+		}
+	}
+	if err != nil {
+		// A read on a directory is a common, benign LLM move (exploring, or a
+		// path that turned out to be a dir). Return the listing instead of a
+		// hard error — more useful, and it keeps the mistake out of the error
+		// stats (this hard error was the bulk of read's recorded failures).
+		if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
+			listing, listErr := listDirForRead(path, displayPath)
+			return path, nil, listing, listErr
+		}
+		if hint := skillReadMissHint(path, skillRoots); hint != "" {
+			return "", nil, "", fmt.Errorf("failed to read file: %w (%s)", err, hint)
+		}
+		return "", nil, "", fmt.Errorf("failed to read file: %w", err)
+	}
+	return path, data, "", nil
+}
+
+// renderReadRange renders the requested line range of data with the read
+// tool's header/continuation framing.
+func renderReadRange(displayPath string, data []byte, p readParams) string {
+	// Count total lines cheaply (byte scan, no allocation).
+	totalLines := bytes.Count(data, []byte{'\n'}) + 1
+
+	// Apply offset (1-based).
+	start := 0
+	if p.Offset > 0 {
+		start = p.Offset - 1
+	}
+	if start > totalLines {
+		start = totalLines
+	}
+
+	// Apply limit (default: 2000 lines).
+	limit := 2000
+	if p.Limit > 0 {
+		limit = p.Limit
+	}
+	end := start + limit
+	if end > totalLines {
+		end = totalLines
+	}
+
+	// Stream through the byte slice, materializing only the lines in range.
+	// This avoids strings.Split() which allocates a string per line.
+	var sb strings.Builder
+	if p.Hashes {
+		fmt.Fprintf(&sb, "[File: %s | %d lines | columns: line<TAB>anchor<TAB>content — pass anchor=<hash> to edit]\n", displayPath, totalLines)
+	} else {
+		fmt.Fprintf(&sb, "[File: %s | %d lines]\n", displayPath, totalLines)
+	}
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner.Buffer(nil, bufio.MaxScanTokenSize)
+	lineNum := 0
+	for scanner.Scan() {
+		if lineNum >= end {
+			break
+		}
+		if lineNum >= start {
+			if p.Hashes {
+				fmt.Fprintf(&sb, "%d\t%s\t%s\n", lineNum+1, lineAnchorHash(scanner.Text()), scanner.Text())
+			} else {
+				fmt.Fprintf(&sb, "%d\t%s\n", lineNum+1, scanner.Text())
+			}
+		}
+		lineNum++
+	}
+	if end < totalLines {
+		fmt.Fprintf(&sb, "[... %d more lines. Use offset=%d to continue reading.]\n", totalLines-end, end+1)
+	}
+	return sb.String()
+}
+
+// storeReadCache caches the rendered output for future dedup (only for
+// default full-file reads, ≤1MB).
+func storeReadCache(fc *agent.FileCache, path, output string, data []byte) {
+	info, statErr := os.Stat(path)
+	if statErr != nil || info.Size() > fc.MaxEntrySize() {
+		return
+	}
+	fc.Set(path, &agent.FileCacheEntry{
+		Path:        path,
+		MTime:       info.ModTime(),
+		Size:        info.Size(),
+		Content:     output,
+		ContentHash: agent.ContentHashOf(data),
+		ReadAt:      time.Now(),
+		ReadCount:   1,
+	})
+}
+
 // ToolRead returns the file-read tool. extraReadRoots are directories outside
 // the workspace that reads may reach (read-only; currently the skills catalog —
 // the system prompt directs the model to read SKILL.md at those locations).
 func ToolRead(defaultDir string, extraReadRoots ...string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		if err := ctx.Err(); err != nil {
+		p, err := parseReadParams(ctx, input)
+		if err != nil {
 			return "", err
-		}
-		var p struct {
-			FilePath string `json:"file_path"`
-			Offset   int    `json:"offset"`
-			Limit    int    `json:"limit"`
-			Function string `json:"function"`
-			Force    bool   `json:"force"`
-			Hashes   bool   `json:"hashes"`
-		}
-		if err := jsonutil.UnmarshalInto("read params", input, &p); err != nil {
-			return "", err
-		}
-		if p.FilePath == "" {
-			return "", fmt.Errorf("file_path is required")
 		}
 
 		dir := defaultDir
@@ -225,53 +376,19 @@ func ToolRead(defaultDir string, extraReadRoots ...string) toolport.ToolFunc {
 		// File-read dedup: for default full-file reads (no offset/limit/function),
 		// check cache before hitting disk.  Skip if force=true.
 		fc := toolport.FileCacheFromContext(ctx)
-		// hashes=true emits per-line anchors, which the plain cached output does
-		// not contain — bypass the dedup cache for those reads.
-		useCache := fc != nil && !p.Force && !p.Hashes && p.Function == "" && p.Offset <= 0 && p.Limit <= 0
+		useCache := useReadCache(fc, p)
 		if useCache {
-			if entry := fc.Get(path); entry != nil && !agent.FileChanged(path, entry) {
-				entry.ReadCount++
-				return agent.FormatCachedRead(p.FilePath, entry), nil
+			if cached, ok := cachedReadResult(fc, path, p.FilePath); ok {
+				return cached, nil
 			}
 		}
 
-		data, err := os.ReadFile(path)
+		path, data, dirListing, err := readFileWithFallbacks(path, p.FilePath, extraReadRoots)
 		if err != nil {
-			// Cross-skill-root fallback: a bundled skill loads from ~/deneb/skills
-			// (the repo) and is advertised there, but the model — primed by the
-			// pervasive ~/.deneb/ convention everywhere else — frequently reads it at
-			// ~/.deneb/skills/<rel>, an allowed root that holds a DIFFERENT (managed)
-			// skill set, so the read 404s (this silently broke the 8am morning-letter
-			// cron: it could not load its bundled SKILL.md). When the path is under
-			// one skill root and missing, try the same skills-relative remainder under
-			// the other roots so the bundled skill resolves regardless of which root
-			// the model picked. Scoped to the already-allowed catalog roots.
-			if altPath, altData, ok := trySkillRootFallback(path, extraReadRoots); ok {
-				path, data, err = altPath, altData, nil
-			}
+			return "", err
 		}
-		if err != nil {
-			// Wrong-nesting fallback: stale skill references (queued
-			// self-correction records, old prompt snapshots) carry the flat
-			// <root>/<name>/SKILL.md form while the skill lives category- or
-			// genesis-nested. Resolve by skill name across the catalog layouts
-			// before failing.
-			if altPath, altData, ok := trySkillLayoutFallback(path, extraReadRoots); ok {
-				path, data, err = altPath, altData, nil
-			}
-		}
-		if err != nil {
-			// A read on a directory is a common, benign LLM move (exploring, or a
-			// path that turned out to be a dir). Return the listing instead of a
-			// hard error — more useful, and it keeps the mistake out of the error
-			// stats (this hard error was the bulk of read's recorded failures).
-			if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
-				return listDirForRead(path, p.FilePath)
-			}
-			if hint := skillReadMissHint(path, extraReadRoots); hint != "" {
-				return "", fmt.Errorf("failed to read file: %w (%s)", err, hint)
-			}
-			return "", fmt.Errorf("failed to read file: %w", err)
+		if dirListing != "" {
+			return dirListing, nil
 		}
 
 		// Function extraction mode — needs the full content as string.
@@ -279,70 +396,10 @@ func ToolRead(defaultDir string, extraReadRoots ...string) toolport.ToolFunc {
 			return readFunction(path, p.FilePath, string(data), p.Function)
 		}
 
-		// Count total lines cheaply (byte scan, no allocation).
-		totalLines := bytes.Count(data, []byte{'\n'}) + 1
+		output := renderReadRange(p.FilePath, data, p)
 
-		// Apply offset (1-based).
-		start := 0
-		if p.Offset > 0 {
-			start = p.Offset - 1
-		}
-		if start > totalLines {
-			start = totalLines
-		}
-
-		// Apply limit (default: 2000 lines).
-		limit := 2000
-		if p.Limit > 0 {
-			limit = p.Limit
-		}
-		end := start + limit
-		if end > totalLines {
-			end = totalLines
-		}
-
-		// Stream through the byte slice, materializing only the lines in range.
-		// This avoids strings.Split() which allocates a string per line.
-		var sb strings.Builder
-		if p.Hashes {
-			fmt.Fprintf(&sb, "[File: %s | %d lines | columns: line<TAB>anchor<TAB>content — pass anchor=<hash> to edit]\n", p.FilePath, totalLines)
-		} else {
-			fmt.Fprintf(&sb, "[File: %s | %d lines]\n", p.FilePath, totalLines)
-		}
-		scanner := bufio.NewScanner(bytes.NewReader(data))
-		scanner.Buffer(nil, bufio.MaxScanTokenSize)
-		lineNum := 0
-		for scanner.Scan() {
-			if lineNum >= end {
-				break
-			}
-			if lineNum >= start {
-				if p.Hashes {
-					fmt.Fprintf(&sb, "%d\t%s\t%s\n", lineNum+1, lineAnchorHash(scanner.Text()), scanner.Text())
-				} else {
-					fmt.Fprintf(&sb, "%d\t%s\n", lineNum+1, scanner.Text())
-				}
-			}
-			lineNum++
-		}
-		if end < totalLines {
-			fmt.Fprintf(&sb, "[... %d more lines. Use offset=%d to continue reading.]\n", totalLines-end, end+1)
-		}
-		output := sb.String()
-
-		// Cache the result for future dedup (only for default full-file reads, ≤1MB).
 		if useCache {
-			if info, statErr := os.Stat(path); statErr == nil && info.Size() <= fc.MaxEntrySize() {
-				fc.Set(path, &agent.FileCacheEntry{
-					Path:        path,
-					MTime:       info.ModTime(),
-					Size:        info.Size(),
-					Content:     output,
-					ContentHash: agent.ContentHashOf(data),
-					ReadAt:      time.Now(),
-					ReadCount:   1,
-				})
-			}
+			storeReadCache(fc, path, output, data)
 		}
 
 		return output, nil

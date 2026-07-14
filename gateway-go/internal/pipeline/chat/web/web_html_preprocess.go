@@ -57,6 +57,43 @@ func StripNoiseElements(html string) string {
 	return result
 }
 
+// isTagBoundaryChar reports whether ch can legally follow a tag-name prefix —
+// i.e. "<nav" followed by ch is really a <nav> tag and not e.g. <navigate>.
+func isTagBoundaryChar(ch byte) bool {
+	return ch == '>' || ch == ' ' || ch == '\t' || ch == '\n' || ch == '/'
+}
+
+// skipToBlockEnd scans forward from searchFrom for the close tag matching an
+// already-open element (depth 1), tracking nested same-name opens. It returns
+// the index just past the matching close tag, or len(html) when no close tag
+// is found (strip to end). lower must be the lowercased html.
+func skipToBlockEnd(html, lower string, searchFrom int, openPrefix, closeTag string) int {
+	depth := 1
+	for depth > 0 {
+		nextOpen := strings.Index(lower[searchFrom:], openPrefix)
+		nextClose := strings.Index(lower[searchFrom:], closeTag)
+
+		if nextClose < 0 {
+			// No closing tag found — strip to end.
+			return len(html)
+		}
+
+		// Check if there's a nested open before this close.
+		if nextOpen >= 0 && nextOpen < nextClose {
+			absOpen := searchFrom + nextOpen + len(openPrefix)
+			// Verify the nested open is a real tag.
+			if absOpen < len(html) && isTagBoundaryChar(html[absOpen]) {
+				depth++
+			}
+			searchFrom += nextOpen + len(openPrefix)
+		} else {
+			depth--
+			searchFrom += nextClose + len(closeTag)
+		}
+	}
+	return searchFrom
+}
+
 // stripTagBlock removes all occurrences of <tag ...>...</tag> (case-insensitive).
 // Handles nested tags of the same type by tracking depth.
 func stripTagBlock(html, tag string) string {
@@ -77,50 +114,39 @@ func stripTagBlock(html, tag string) string {
 
 		// Verify it's actually a tag boundary (not e.g., <navigate>).
 		afterPrefix := start + len(openPrefix)
-		if afterPrefix < len(html) {
-			next := html[afterPrefix]
-			if next != '>' && next != ' ' && next != '\t' && next != '\n' && next != '/' {
-				b.WriteString(html[cursor : start+1])
-				cursor = start + 1
-				continue
-			}
+		if afterPrefix < len(html) && !isTagBoundaryChar(html[afterPrefix]) {
+			b.WriteString(html[cursor : start+1])
+			cursor = start + 1
+			continue
 		}
 
 		b.WriteString(html[cursor:start])
 
 		// Find matching close tag, handling nesting.
-		depth := 1
-		searchFrom := afterPrefix
-		for depth > 0 {
-			nextOpen := strings.Index(lower[searchFrom:], openPrefix)
-			nextClose := strings.Index(lower[searchFrom:], closeTag)
-
-			if nextClose < 0 {
-				// No closing tag found — strip to end.
-				searchFrom = len(html)
-				break
-			}
-
-			// Check if there's a nested open before this close.
-			if nextOpen >= 0 && nextOpen < nextClose {
-				absOpen := searchFrom + nextOpen + len(openPrefix)
-				// Verify the nested open is a real tag.
-				if absOpen < len(html) {
-					ch := html[absOpen]
-					if ch == '>' || ch == ' ' || ch == '\t' || ch == '\n' || ch == '/' {
-						depth++
-					}
-				}
-				searchFrom += nextOpen + len(openPrefix)
-			} else {
-				depth--
-				searchFrom += nextClose + len(closeTag)
-			}
-		}
-		cursor = searchFrom
+		cursor = skipToBlockEnd(html, lower, afterPrefix, openPrefix, closeTag)
 	}
 	b.WriteString(html[cursor:])
 	return b.String()
+}
+
+// findEnclosingNoiseTag walks backward from matchStart to the nearest '<' and,
+// when that opening tag is a <div> or <section>, returns its index and tag
+// name. It returns -1 when the nearest tag is anything else (blast-radius
+// limit: only div/section blocks are ever stripped).
+func findEnclosingNoiseTag(html, lower string, matchStart int) (int, string) {
+	for i := matchStart - 1; i >= 0; i-- {
+		if html[i] != '<' {
+			continue
+		}
+		if strings.HasPrefix(lower[i:], "<section") {
+			return i, "section"
+		}
+		if strings.HasPrefix(lower[i:], "<div") {
+			return i, "div"
+		}
+		return -1, ""
+	}
+	return -1, ""
 }
 
 // stripMatchingBlocks finds HTML elements whose opening tag matches the regex
@@ -142,64 +168,23 @@ func stripMatchingBlocks(html string, pattern *regexp.Regexp) string {
 	for _, loc := range locs {
 		matchStart := loc[0]
 
-		// Walk backward to find <div or <section.
-		tagStart := -1
-		for i := matchStart - 1; i >= 0; i-- {
-			if html[i] == '<' {
-				prefix := lower[i:]
-				if strings.HasPrefix(prefix, "<div") || strings.HasPrefix(prefix, "<section") {
-					tagStart = i
-				}
-				break
-			}
-		}
+		tagStart, tag := findEnclosingNoiseTag(html, lower, matchStart)
 		if tagStart < 0 {
 			continue
-		}
-
-		// Determine the tag name.
-		tag := "div"
-		if strings.HasPrefix(lower[tagStart:], "<section") {
-			tag = "section"
 		}
 
 		// Find the matching close tag from the match position.
 		closeTag := "</" + tag + ">"
 		openPrefix := "<" + tag
 
-		depth := 1
 		searchFrom := matchStart
 		// Skip past the opening tag's >.
 		if gt := strings.IndexByte(html[searchFrom:], '>'); gt >= 0 {
 			searchFrom += gt + 1
 		}
 
-		for depth > 0 {
-			nextOpen := strings.Index(lower[searchFrom:], openPrefix)
-			nextClose := strings.Index(lower[searchFrom:], closeTag)
-
-			if nextClose < 0 {
-				searchFrom = len(html)
-				break
-			}
-
-			if nextOpen >= 0 && nextOpen < nextClose {
-				// Verify it's a real tag boundary.
-				absAfter := searchFrom + nextOpen + len(openPrefix)
-				if absAfter < len(html) {
-					ch := html[absAfter]
-					if ch == '>' || ch == ' ' || ch == '\t' || ch == '\n' || ch == '/' {
-						depth++
-					}
-				}
-				searchFrom += nextOpen + len(openPrefix)
-			} else {
-				depth--
-				searchFrom += nextClose + len(closeTag)
-			}
-		}
-
-		ranges = append(ranges, removeRange{tagStart, searchFrom})
+		end := skipToBlockEnd(html, lower, searchFrom, openPrefix, closeTag)
+		ranges = append(ranges, removeRange{tagStart, end})
 	}
 
 	if len(ranges) == 0 {
