@@ -470,8 +470,40 @@ func rsiAgeValue(atMs int64) string {
 	}
 }
 
+type rsiDispatchAttempt struct {
+	Outcome      string `json:"outcome"`
+	DispatchedAt int64  `json:"dispatchedAt"`
+}
+
+type rsiDispatchMarker struct {
+	Outcome      string               `json:"outcome"`
+	DispatchedAt int64                `json:"dispatchedAt"`
+	Attempts     []rsiDispatchAttempt `json:"attempts"`
+}
+
+// rsiDispatchAttempts returns retained retry history plus the marker's current
+// top-level attempt. dispatch_prompt.py moves the prior top-level attempt into
+// attempts before each retry, so one marker file is not necessarily one
+// dispatch. The file mtime remains the compatibility timestamp for legacy
+// markers written before dispatchedAt existed.
+func rsiDispatchAttempts(path string, fallbackAt int64) []rsiDispatchAttempt {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return []rsiDispatchAttempt{{DispatchedAt: fallbackAt}}
+	}
+	var marker rsiDispatchMarker
+	if json.Unmarshal(raw, &marker) != nil {
+		return []rsiDispatchAttempt{{DispatchedAt: fallbackAt}}
+	}
+	current := rsiDispatchAttempt{Outcome: marker.Outcome, DispatchedAt: marker.DispatchedAt}
+	if current.DispatchedAt == 0 {
+		current.DispatchedAt = fallbackAt
+	}
+	return append(marker.Attempts, current)
+}
+
 // codingDispatchCounts mirrors scripts/audit/rsi_status.py's coding_dispatch/
-// marker scan: total markers and how many were written today (UTC day boundary).
+// attempt scan: retained retry history plus each marker's current attempt.
 func (t *Tracker) codingDispatchCounts() (total, today int) {
 	dir := filepath.Join(filepath.Dir(t.selfCorrectionPath), "coding_dispatch")
 	entries, err := os.ReadDir(dir)
@@ -480,17 +512,22 @@ func (t *Tracker) codingDispatchCounts() (total, today int) {
 	}
 	now := time.Now().UTC()
 	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	dayEnd := dayStart.Add(24 * time.Hour)
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}
-		total++
 		info, err := e.Info()
 		if err != nil {
 			continue
 		}
-		if !info.ModTime().Before(dayStart) {
-			today++
+		attempts := rsiDispatchAttempts(filepath.Join(dir, e.Name()), info.ModTime().UnixMilli())
+		total += len(attempts)
+		for _, attempt := range attempts {
+			at := time.UnixMilli(attempt.DispatchedAt)
+			if !at.Before(dayStart) && at.Before(dayEnd) {
+				today++
+			}
 		}
 	}
 	return total, today
@@ -560,27 +597,27 @@ func rsiDispatchOutcomeNote(dir string) string {
 	return fmt.Sprintf(" · 배차 결과: %s (랜딩률 %.0f%%)", rsiOutcomeSummary(outcomes), float64(landed)/float64(decided)*100)
 }
 
-// rsiDispatchOutcomes scans the dispatch markers for recorded outcomes — the
-// shared read the L4 diagnosis note and the graduation-ladder cap row both
-// aggregate from. Markers predating outcome accounting carry none.
+// rsiDispatchOutcomes scans current and retained retry outcomes — the shared
+// read the L4 diagnosis note and the graduation-ladder cap row both aggregate
+// from. Markers predating outcome accounting carry none.
 func rsiDispatchOutcomes(dir string) (outcomes map[string]int, decided, landed int) {
 	outcomes = map[string]int{}
 	paths, _ := filepath.Glob(filepath.Join(dir, "*.json"))
 	for _, p := range paths {
-		raw, err := os.ReadFile(p)
+		info, err := os.Stat(p)
 		if err != nil {
 			continue
 		}
-		var m struct {
-			Outcome string `json:"outcome"`
-		}
-		if json.Unmarshal(raw, &m) != nil || m.Outcome == "" {
-			continue
-		}
-		outcomes[m.Outcome]++
-		decided++
-		if m.Outcome == "landed" {
-			landed++
+		for _, attempt := range rsiDispatchAttempts(p, info.ModTime().UnixMilli()) {
+			outcome := strings.TrimSpace(attempt.Outcome)
+			if outcome == "" {
+				continue
+			}
+			outcomes[outcome]++
+			decided++
+			if outcome == "landed" {
+				landed++
+			}
 		}
 	}
 	return outcomes, decided, landed
