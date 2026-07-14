@@ -48,7 +48,7 @@ describe("Workstation (connected, fixtures)", () => {
     mail: [{ id: "m1", subject: "분기 보고서", from: "lead@corp.com" }],
   });
 
-  it("lands on the 오늘 dashboard and switches to a resource pane", async () => {
+  it("displays 오늘 dashboard when landing and switches to resource pane when nav clicked", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,
       dataProvider,
@@ -65,7 +65,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(await screen.findByRole("button", { name: /새 할일/ })).toBeInTheDocument();
   });
 
-  it("expands the Deneb panel over the work pane and collapses back", async () => {
+  it("expands Deneb panel over work pane when opened and restores collapsed layout when closed", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,
       dataProvider,
@@ -88,7 +88,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(await screen.findByRole("button", { name: /새 할일/ })).toBeInTheDocument();
   });
 
-  it("collapses the Deneb panel and reopens it from the edge tab", async () => {
+  it("collapses Deneb panel when dismissed and displays panel again when edge tab clicked", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,
       dataProvider,
@@ -110,7 +110,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(screen.queryByRole("button", { name: "Deneb 패널 열기" })).not.toBeInTheDocument();
   });
 
-  it("keeps Ctrl+C for copy — editing combos never switch panes", async () => {
+  it("preserves Ctrl+C for copy when editing and denies pane switches on editing combos", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,
       dataProvider,
@@ -126,7 +126,7 @@ describe("Workstation (connected, fixtures)", () => {
     await waitFor(() => expect(screen.queryByText("세금 신고")).not.toBeInTheDocument());
   });
 
-  it("opens the 채팅 탭 from the rail (center chat greets)", async () => {
+  it("displays 채팅 tab when rail clicked and renders center chat greeting", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,
       dataProvider,
@@ -139,7 +139,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(screen.getByText(/^선택님, /)).toBeVisible();
   });
 
-  it("opens a dashboard mail row directly in the mail pane", async () => {
+  it("opens mail pane when dashboard mail row clicked and displays selected message", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,
       dataProvider: fakeProvider({
@@ -156,7 +156,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(await within(detail).findByText("본문까지 바로 열립니다.")).toBeInTheDocument();
   });
 
-  it("supports multiline AI prompts while plain Enter sends", async () => {
+  it("allows multiline AI prompts with Shift+Enter and sends message when plain Enter pressed", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -273,7 +273,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(within(result).getByText("견적 금액은 1,200만원")).toBeInTheDocument();
   });
 
-  it("drops a file anywhere on the panel — subtle ring only while a drag is over it", async () => {
+  it("displays subtle drop ring when file drag is over panel and accepts dropped file", async () => {
     const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
     vi.stubGlobal(
       "fetch",
@@ -325,7 +325,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(await screen.findByRole("group", { name: "첨부 분석 결과" })).toBeInTheDocument();
   });
 
-  it("pastes a clipboard image into the composer as an attachment", async () => {
+  it("creates composer attachment when clipboard image pasted", async () => {
     const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
     vi.stubGlobal(
       "fetch",

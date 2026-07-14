@@ -30,7 +30,7 @@ class DashboardTimeLabelTest {
     }
 
     @Test
-    fun todayUsesRelativeDayAndZeroPaddedClock() {
+    fun formatsTodayWithRelativeDayAndZeroPaddedClockWhenTimestampIsToday() {
         val zone = TimeZone.UTC
         val today = Clock.System.todayIn(zone)
 
@@ -40,7 +40,7 @@ class DashboardTimeLabelTest {
     }
 
     @Test
-    fun tomorrowAndYesterdayUseRelativeLabels() {
+    fun formatsTomorrowAndYesterdayWithRelativeLabelsWhenDateIsAdjacent() {
         val zone = TimeZone.UTC
         val today = Clock.System.todayIn(zone)
         val tomorrow = today.plus(1, DateTimeUnit.DAY)
@@ -51,7 +51,7 @@ class DashboardTimeLabelTest {
     }
 
     @Test
-    fun olderDateIncludesMonthDayAndKoreanWeekday() {
+    fun formatsOlderDateWithMonthDayAndKoreanWeekdayWhenNotRecent() {
         val zone = TimeZone.UTC
         val old = LocalDate(2000, 1, 1)
 
@@ -59,7 +59,7 @@ class DashboardTimeLabelTest {
     }
 
     @Test
-    fun sameInstantUsesRequestedTimezoneCalendarDay() {
+    fun formatsSameInstantWithRequestedTimezoneCalendarDayWhenZoneDiffers() {
         val instant = kotlin.time.Instant.parse("2000-01-01T16:30:00Z").toEpochMilliseconds()
 
         assertEquals("1월 1일 (토) 16:30", dashboardTimeLabel(instant, TimeZone.UTC))
@@ -68,7 +68,7 @@ class DashboardTimeLabelTest {
     }
 
     @Test
-    fun secondAndMillisecondPrecisionAreSuppressed() {
+    fun formatsWithoutSecondAndMillisecondWhenPrecisionSuppressed() {
         val epoch = kotlin.time.Instant.parse("2000-01-01T12:34:59.999Z").toEpochMilliseconds()
 
         assertEquals("1월 1일 (토) 12:34", dashboardTimeLabel(epoch, TimeZone.UTC))

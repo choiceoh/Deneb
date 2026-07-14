@@ -44,7 +44,7 @@ function renderDetail(over?: Partial<Mail>) {
 }
 
 describe("MailDetail layout", () => {
-  it("defaults to the 분석 view and toggles to 본문", async () => {
+  it("displays 분석 view by default and switches to 본문 when toggle clicked", async () => {
     renderDetail();
     // Let the sender fetch settle so the enrichment cards' state lands inside act().
     await screen.findByText("최근 30일 5건");
@@ -58,7 +58,7 @@ describe("MailDetail layout", () => {
     expect(screen.queryByRole("button", { name: /이 메일 분석/ })).not.toBeInTheDocument();
   });
 
-  it("collapses the 발신자 card by default and expands it on click", async () => {
+  it("collapses 발신자 card by default and expands when header clicked", async () => {
     renderDetail();
     // Wait for the sender context to load — the collapsed header carries a teaser.
     expect(await screen.findByText("최근 30일 5건")).toBeInTheDocument();
@@ -71,7 +71,7 @@ describe("MailDetail layout", () => {
     expect(await screen.findByRole("button", { name: "탑솔라" })).toBeInTheDocument();
   });
 
-  it("previews a PDF attachment in-app and keeps a non-previewable one as a link", async () => {
+  it("renders PDF preview in-app when attachment is PDF and preserves link when not previewable", async () => {
     const originalFetch = globalThis.fetch;
     // jsdom has no object-URL support; the PDF viewer creates one for its
     // <embed>. Patch createObjectURL directly (spreading URL drops its static

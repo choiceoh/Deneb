@@ -29,7 +29,7 @@ describe("DayPager", () => {
     return props;
   }
 
-  it("announces the selected day and row count", () => {
+  it("announces selected day and row count when calendar day focused", () => {
     renderPager();
 
     const live = screen.getByText("7월 11일 금요일").parentElement!;
@@ -37,7 +37,7 @@ describe("DayPager", () => {
     expect(within(live).getByText("4건")).toBeInTheDocument();
   });
 
-  it("handles all three navigation actions", async () => {
+  it("updates calendar when previous, next, and today navigation triggered", async () => {
     const props = renderPager();
 
     await userEvent.click(screen.getByRole("button", { name: "이전 날" }));
@@ -73,26 +73,26 @@ describe("DayPager", () => {
 });
 
 describe("DenebStar", () => {
-  it("is decorative and hidden from assistive technology", () => {
+  it("renders decorative glyph hidden from assistive technology when marked decorative", () => {
     const { container } = render(<DenebStar />);
 
     expect(container.firstElementChild).toHaveAttribute("aria-hidden", "true");
     expect(container.querySelector("svg")).toHaveAttribute("viewBox", "0 0 24 24");
   });
 
-  it("uses the default 20-pixel canvas", () => {
+  it("renders default 20-pixel canvas when size not specified", () => {
     const { container } = render(<DenebStar />);
     expect(container.querySelector("svg")).toHaveAttribute("width", "20");
     expect(container.querySelector("svg")).toHaveAttribute("height", "20");
   });
 
-  it.each([8, 16, 24, 48])("uses the requested %i-pixel canvas", (size) => {
+  it.each([8, 16, 24, 48])("renders requested %i-pixel canvas when custom size provided", (size) => {
     const { container } = render(<DenebStar size={size} />);
     expect(container.querySelector("svg")).toHaveAttribute("width", String(size));
     expect(container.querySelector("svg")).toHaveAttribute("height", String(size));
   });
 
-  it("keeps one glow and one core path", () => {
+  it("preserves one glow and one core path when icon rendered", () => {
     const { container } = render(<DenebStar />);
     expect(container.querySelectorAll(".deneb-star-glow")).toHaveLength(1);
     expect(container.querySelectorAll(".deneb-star-core")).toHaveLength(1);
@@ -159,7 +159,7 @@ describe("Icon", () => {
     expect(svg.childElementCount).toBeGreaterThan(0);
   });
 
-  it.each(iconNames)("marks the %s glyph as decorative", (name) => {
+  it.each(iconNames)("marks %s glyph as decorative when assistive hiding enabled", (name) => {
     const { container } = render(<Icon name={name} />);
     const svg = container.querySelector("svg")!;
 
@@ -167,7 +167,7 @@ describe("Icon", () => {
     expect(svg).toHaveAttribute("focusable", "false");
   });
 
-  it("forwards size, class, and stroke width", () => {
+  it("forwards size, class, and stroke width when custom props provided", () => {
     const { container } = render(<Icon name="settings" size={28} className="nav-glyph" strokeWidth={2.5} />);
     const svg = container.querySelector("svg")!;
 
@@ -177,7 +177,7 @@ describe("Icon", () => {
     expect(svg).toHaveAttribute("stroke-width", "2.5");
   });
 
-  it("uses the compact defaults", () => {
+  it("applies compact defaults when variant not specified", () => {
     const { container } = render(<Icon name="today" />);
     const svg = container.querySelector("svg")!;
 
@@ -211,7 +211,7 @@ describe("ModelPicker", () => {
     },
   );
 
-  it("groups models under their server-provided sections", () => {
+  it("groups models under server sections when sections provided", () => {
     render(<ModelPicker models={models} value="provider/fast" onChange={() => {}} />);
 
     const picker = screen.getByRole("combobox", { name: "모델 선택" });
@@ -222,7 +222,7 @@ describe("ModelPicker", () => {
     expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["Fast", "Smart ⚠", "Tiny"]);
   });
 
-  it("selects the active model", () => {
+  it("displays active model as selected when model id matches", () => {
     render(<ModelPicker models={models} value="local/tiny" onChange={() => {}} />);
     expect(screen.getByRole("combobox")).toHaveValue("local/tiny");
   });
@@ -234,12 +234,12 @@ describe("ModelPicker", () => {
     expect(screen.getAllByRole("option")[0]).toHaveTextContent("custom/legacy");
   });
 
-  it("does not duplicate a known active model as an orphan", () => {
+  it("denies orphan duplicate when active model already listed in section", () => {
     render(<ModelPicker models={models} value="provider/fast" onChange={() => {}} />);
     expect(screen.getAllByRole("option", { name: "Fast" })).toHaveLength(1);
   });
 
-  it("reports user selection by model id", async () => {
+  it("emits model id when user selects model from dropdown", async () => {
     const onChange = vi.fn();
     render(<ModelPicker models={models} value="provider/fast" onChange={onChange} />);
 
@@ -249,7 +249,7 @@ describe("ModelPicker", () => {
     expect(onChange).toHaveBeenCalledWith("provider/smart");
   });
 
-  it("forwards the busy state", () => {
+  it("forwards busy disabled state when busy prop set", () => {
     render(<ModelPicker models={models} value="provider/fast" onChange={() => {}} disabled />);
     expect(screen.getByRole("combobox")).toBeDisabled();
   });
@@ -300,7 +300,7 @@ describe("SessionDrawer", () => {
     expect(screen.queryByText("최근 대화가 없습니다.")).not.toBeInTheDocument();
   });
 
-  it("uses a trimmed label and falls back to the session key", () => {
+  it("displays trimmed label and falls back to session key when label empty", () => {
     render(
       <SessionDrawer
         sessions={sessions}
@@ -317,7 +317,7 @@ describe("SessionDrawer", () => {
     expect(screen.getByText("client:main:beta")).toBeInTheDocument();
   });
 
-  it("marks only the current conversation active", () => {
+  it("marks only current conversation active when session list rendered", () => {
     render(
       <SessionDrawer
         sessions={sessions}
@@ -376,7 +376,7 @@ describe("SessionDrawer", () => {
     expect(onNew).toHaveBeenCalledTimes(1);
   });
 
-  it("disables every action while busy", () => {
+  it("disables every action when busy state active", () => {
     render(
       <SessionDrawer
         sessions={sessions}
@@ -429,7 +429,7 @@ describe("proactiveNav", () => {
     "progress",
     "notebook",
     "today",
-  ])("maps the %s event to its pane", (kind) => {
+  ])("routes %s event to target pane when event fired", (kind) => {
     expect(proactiveNav(event(kind, "resource-7"))).toEqual({ view: kind, ref: "resource-7" });
   });
 
