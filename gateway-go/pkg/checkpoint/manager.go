@@ -264,6 +264,18 @@ func (m *Manager) Restore(ctx context.Context, snapshotID string) (*Snapshot, er
 		m.mu.Unlock()
 		return nil, fmt.Errorf("checkpoint: snapshot %q not found", snapshotID)
 	}
+	var targetData []byte
+	if !target.Tombstone {
+		// Load the target bytes before the pre-restore snapshot. That snapshot may
+		// trigger pruning, and retention can legitimately evict the very snapshot
+		// we're restoring; keeping the bytes in memory makes historical restores
+		// deterministic under tight caps.
+		targetData, err = m.readBlob(target.BlobPath)
+		if err != nil {
+			m.mu.Unlock()
+			return nil, fmt.Errorf("checkpoint: read blob: %w", err)
+		}
+	}
 	path := target.Path
 	m.mu.Unlock()
 
@@ -282,11 +294,7 @@ func (m *Manager) Restore(ctx context.Context, snapshotID string) (*Snapshot, er
 		}
 		return target, nil
 	}
-	data, err := m.readBlob(target.BlobPath)
-	if err != nil {
-		return nil, fmt.Errorf("checkpoint: read blob: %w", err)
-	}
-	if err := atomicfile.WriteFile(path, data, &atomicfile.Options{Fsync: true}); err != nil {
+	if err := atomicfile.WriteFile(path, targetData, &atomicfile.Options{Fsync: true}); err != nil {
 		return nil, fmt.Errorf("checkpoint: restore write: %w", err)
 	}
 	return target, nil

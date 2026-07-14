@@ -94,10 +94,7 @@ func (s *Server) broadcastSessionEvent(event string, payload any) (int, []error)
 }
 
 func (s *Server) openSessionTranscriptStore() (chat.TranscriptStore, string, *polaris.Store) {
-	transcriptDir := ""
-	if home, err := os.UserHomeDir(); err == nil {
-		transcriptDir = home + "/.deneb/transcripts"
-	}
+	transcriptDir := transcriptBaseDir()
 	if transcriptDir == "" {
 		return nil, "", nil
 	}

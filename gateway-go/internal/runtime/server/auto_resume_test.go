@@ -563,6 +563,48 @@ func TestAutoResumeEnabledReturnsFalseWhenConfigDisables(t *testing.T) {
 	}
 }
 
+func TestTranscriptBaseDirUsesConfiguredStateDir(t *testing.T) {
+	tmpHome := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("DENEB_STATE_DIR", stateDir)
+
+	if got := transcriptBaseDir(); got != filepath.Join(stateDir, "transcripts") {
+		t.Fatalf("transcriptBaseDir() = %q, want %q", got, filepath.Join(stateDir, "transcripts"))
+	}
+}
+
+func TestRestoreAndWakeSessionsUsesConfiguredStateDir(t *testing.T) {
+	tmpHome := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("DENEB_STATE_DIR", stateDir)
+
+	srv := newAutoResumeTestServer(t, tmpHome)
+	srv.denebDir = stateDir
+
+	transcriptDir := filepath.Join(stateDir, "transcripts")
+	if err := os.MkdirAll(transcriptDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sessionKey := "client:main:restored"
+	path := filepath.Join(transcriptDir, sessionKey+".jsonl")
+	data := `{"type":"session","version":1,"id":"` + sessionKey + `","timestamp":1}` + "\n" +
+		`{"role":"user","content":"hello","timestamp":2}` + "\n"
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srv.restoreAndWakeSessions(context.Background())
+	restored := srv.sessions.Get(sessionKey)
+	if restored == nil {
+		t.Fatal("expected session restored from configured state dir")
+	}
+	if restored.Channel != "client" {
+		t.Fatalf("restored channel = %q, want client", restored.Channel)
+	}
+}
+
 // Dispatch counter assertion uses atomics too, so the test is race-safe
 // when we run with -race.
 var _ = atomic.Int32{}

@@ -206,6 +206,35 @@ func TestRetentionMaxBytesEvictsOldestSnapshot(t *testing.T) {
 	}
 }
 
+func TestRestoreSucceedsEvenIfPruneEvictsTargetSnapshot(t *testing.T) {
+	// With retention 2, the pre-restore snapshot would normally evict the
+	// oldest target snapshot before Restore reads it back.
+	m := newTestManager(t, "session-restore-prune", WithRetentionN(2), WithGzip(false))
+	target := filepath.Join(t.TempDir(), "history.txt")
+
+	writeFile(t, target, "version 1")
+	s1, err := m.Snapshot(context.Background(), target, "fs_write")
+	if err != nil {
+		t.Fatalf("snapshot 1: %v", err)
+	}
+	writeFile(t, target, "version 2")
+	if _, err := m.Snapshot(context.Background(), target, "fs_write"); err != nil {
+		t.Fatalf("snapshot 2: %v", err)
+	}
+	writeFile(t, target, "version 3")
+
+	if _, err := m.Restore(context.Background(), s1.ID); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read restored file: %v", err)
+	}
+	if string(data) != "version 1" {
+		t.Fatalf("restored contents = %q, want %q", string(data), "version 1")
+	}
+}
+
 func TestRetentionRewritesIndexAfterBlobDeleteFailure(t *testing.T) {
 	m := newTestManager(t, "session-ret-delete-error", WithRetentionN(1))
 	target := filepath.Join(t.TempDir(), "tracked.txt")

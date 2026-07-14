@@ -39,6 +39,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/sessionstore"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
@@ -490,11 +491,11 @@ func (s *Server) dispatchResumeMessage(ctx context.Context, sessionKey, channel,
 // Matches the path used by restoreAndWakeSessions so the two subsystems
 // always agree on which files to inspect.
 func transcriptBaseDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
+	base := configresolve.DenebDir()
+	if base == "" {
 		return ""
 	}
-	return filepath.Join(home, ".deneb", "transcripts")
+	return filepath.Join(base, "transcripts")
 }
 
 // tailShapeString renders the enum for structured logs.
