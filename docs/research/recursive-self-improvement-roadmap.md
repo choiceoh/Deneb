@@ -140,6 +140,22 @@ Meta-experience memory is mandatory (TPGO: memoryless meta-loops collapse,
 meta-revisions and their outcomes. Cadence asymmetry stands: fast 6h, slow
 7d, one change per window, evaluator/producer epochs alternate (RQGM).
 
+**Boldness instrumentation landed (2026-07-14, the L1.5-trap telemetry).**
+Bilevel Autoresearch (2603.23420) measured parameter-level tweaks of a fixed
+mechanism as a null result while structural mechanism change carried the
+entire gain — and a non-regression gate stack systematically selects timid
+edits, so the loop can drift into the null regime invisibly. Every proposal
+is now classified `structural`/`parametric` by a deterministic classifier
+(`meta_revision_class.go`: heading text + numbered-rule presence/order =
+skeleton; rule REWORDING — the "quantify rule 14" archetype — is parametric;
+≥0.35 body-line churn with an intact skeleton is a rewrite → structural).
+The class rides the ledger (`MetaRevisionRecord.RevisionClass`), surfaces on
+rsi_status L2 (구조형·파라미터형 + 연속 파라미터형 채택), and at ≥3
+consecutive parametric ADOPTIONS the producer epoch's evidence block carries
+an explicit structural-candidate nudge. ADVISORY throughout — no gate, bench,
+or brake reads it; the same paper's counter-repetition idea also landed on
+the fast loop (K-candidate orthogonal lens rotation, `candidateVariationNote`).
+
 ### P3 — Verifier co-evolution (CoEvoSkills; preconditions added)
 
 Close the loop on verification quality using labels we already collect:

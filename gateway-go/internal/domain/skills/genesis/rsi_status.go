@@ -170,6 +170,17 @@ func (t *Tracker) rsiAssessL2() rsiLayer {
 	if strings.TrimSpace(h.LastEpoch) != "" {
 		metrics = append(metrics, rsiMetric{Label: "최근 에폭", Value: h.LastEpoch})
 	}
+	// L1.5-trap telemetry (advisory): structural vs parametric mix of recent
+	// proposals, plus the consecutive-parametric-adoption streak once it hits
+	// the nudge threshold — all-parametric adoption is the regime Bilevel
+	// Autoresearch (2603.23420) measured as a null result.
+	bal := t.MetaRevisionClassBalance()
+	if bal.Structural+bal.Parametric > 0 {
+		metrics = append(metrics, rsiMetric{Label: "구조형·파라미터형", Value: fmt.Sprintf("%d·%d", bal.Structural, bal.Parametric)})
+		if bal.AdoptedParametricStreak >= metaParametricStreakNudge {
+			metrics = append(metrics, rsiMetric{Label: "연속 파라미터형 채택", Value: strconv.Itoa(bal.AdoptedParametricStreak)})
+		}
+	}
 	base := rsiLayer{Key: "L2", Title: "메타 진화", Metrics: metrics}
 	switch {
 	case t.AutoAdoptFrozen():

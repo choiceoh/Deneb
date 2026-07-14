@@ -612,14 +612,33 @@ func (e *Evolver) generateCandidateText(ctx context.Context, userPrompt string, 
 	return text, nil
 }
 
+// candidateVariationLenses are deterministic orthogonal exploration directives
+// for the K-candidate loop. A generic "be different" note lets the producer
+// re-run its prior-favored direction with cosmetic variation (the deterministic
+// repetition Bilevel Autoresearch 2603.23420 observed in its baseline: same
+// state → same proposals). Each attempt instead gets a NAMED lens that forces
+// a direction LLM priors under-explore — the same idea as their generated
+// Tabu/Orthogonal mechanisms, applied at the proposal side. The gates still
+// judge every candidate, so a lens that fits a skill badly just yields a
+// rejected candidate, never a loosened contract.
+var candidateVariationLenses = [...]string{
+	"직교 섹션: 직전 후보가 손댔을 법한 최우선 섹션이 아니라, 실패 서명과 두 번째로 관련 깊은 다른 섹션을 고쳐서 같은 실패를 막아보세요.",
+	"축소 방향: 지시를 추가하지 말고, 모호하거나 과잉된 지시를 제거·압축하는 것만으로 실패를 막아보세요 (추가 편향 금지 — 삭제가 이번 후보의 유일한 수단).",
+	"구조 재배열: 내용을 새로 쓰지 말고, 기존 절들의 순서·구획을 재배열해 (예: 실패와 관련된 규칙을 앞으로) 같은 실패를 막아보세요.",
+	"경계 명시: 일반 규칙을 다듬는 대신, 실패 케이스가 밟은 경계 조건을 명시적 예외/반례 절로 못박는 접근을 시도하세요.",
+}
+
 // candidateVariationNote nudges the producer toward a distinct rewrite on the
-// nth (>0) candidate without loosening the rewrite contract. It is inert
-// instruction text appended to the user prompt; the gates judge the result, so a
-// candidate that drifts is simply rejected.
+// nth (>0) candidate without loosening the rewrite contract. Deterministic:
+// attempt n always gets the same lens, rotating through
+// candidateVariationLenses. Inert instruction text appended to the user
+// prompt; the gates judge the result, so a candidate that drifts is simply
+// rejected.
 func candidateVariationNote(attempt int) string {
+	lens := candidateVariationLenses[(attempt-1)%len(candidateVariationLenses)]
 	return fmt.Sprintf(
-		"\n\n## 후보 다양화 지시 (candidate #%d)\n동일한 검증 기준을 모두 만족하되, 직전 후보와는 다른 접근(다른 섹션을 손보거나 다른 메커니즘을 강조)으로 본문을 작성하세요. 검증 계약(필수/금지 항목, 구조 보존, 실제 도구만)은 그대로 지키세요.",
-		attempt+1,
+		"\n\n## 후보 다양화 지시 (candidate #%d — 탐색 렌즈 고정)\n%s\n검증 계약(필수/금지 항목, 구조 보존, 실제 도구만)은 그대로 지키세요.",
+		attempt+1, lens,
 	)
 }
 
