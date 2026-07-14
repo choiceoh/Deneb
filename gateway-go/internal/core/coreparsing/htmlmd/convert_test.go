@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-func TestBasicHTML(t *testing.T) {
+func TestConvertRendersBasicHTMLAsMarkdown(t *testing.T) {
 	r := Convert("<p>Hello <b>world</b></p>")
 	if r.Text != "Hello **world**" {
 		t.Errorf("got %q", r.Text)
 	}
 }
 
-func TestStripsScriptStyle(t *testing.T) {
+func TestConvertRemovesScriptAndStyleWhenPresent(t *testing.T) {
 	html := "<p>before</p><script>alert(1)</script><style>.x{}</style><p>after</p>"
 	r := Convert(html)
 	if !strings.Contains(r.Text, "before") {
@@ -29,7 +29,7 @@ func TestStripsScriptStyle(t *testing.T) {
 	}
 }
 
-func TestExtractsTitle(t *testing.T) {
+func TestConvertReturnsTitleFromHeadElement(t *testing.T) {
 	html := "<html><head><title>My Page</title></head><body>content</body></html>"
 	r := Convert(html)
 	if r.Title != "My Page" {
@@ -37,7 +37,7 @@ func TestExtractsTitle(t *testing.T) {
 	}
 }
 
-func TestConvertsLinks(t *testing.T) {
+func TestConvertRendersAnchorAsMarkdownLink(t *testing.T) {
 	html := `<a href="https://example.com">Click here</a>`
 	r := Convert(html)
 	if !strings.Contains(r.Text, "[Click here](https://example.com)") {
@@ -45,7 +45,7 @@ func TestConvertsLinks(t *testing.T) {
 	}
 }
 
-func TestConvertsHeadings(t *testing.T) {
+func TestConvertRendersHeadingsAsMarkdownHashes(t *testing.T) {
 	html := "<h1>Title</h1><h2>Subtitle</h2><p>text</p>"
 	r := Convert(html)
 	if !strings.Contains(r.Text, "# Title") {
@@ -56,7 +56,7 @@ func TestConvertsHeadings(t *testing.T) {
 	}
 }
 
-func TestConvertsListItems(t *testing.T) {
+func TestConvertRendersListItemsAsDashBullets(t *testing.T) {
 	r := Convert("<ul><li>one</li><li>two</li></ul>")
 	if !strings.Contains(r.Text, "- one") {
 		t.Errorf("missing li: %q", r.Text)
@@ -105,7 +105,7 @@ func TestNormalizesWhitespace(t *testing.T) {
 	}
 }
 
-func TestMultibyteUTF8(t *testing.T) {
+func TestConvertPreservesMultibyteUTF8Text(t *testing.T) {
 	html := "<p>안녕하세요 🌍</p><br><p>세계</p>"
 	r := Convert(html)
 	if !strings.Contains(r.Text, "안녕하세요") {
@@ -119,7 +119,7 @@ func TestMultibyteUTF8(t *testing.T) {
 	}
 }
 
-func TestMultibyteEntitiesMixed(t *testing.T) {
+func TestConvertDecodesEntitiesAmidMultibyteText(t *testing.T) {
 	r := Convert("<p>한국어 &amp; 日本語</p>")
 	if r.Text != "한국어 & 日本語" {
 		t.Errorf("got %q", r.Text)
@@ -162,7 +162,7 @@ func TestManyAmpersandsWithMultibyte(t *testing.T) {
 	}
 }
 
-func TestDeeplyNestedTags(t *testing.T) {
+func TestConvertPreservesContentInDeeplyNestedTags(t *testing.T) {
 	html := strings.Repeat("<div>", 100) + "content" + strings.Repeat("</div>", 100)
 	r := Convert(html)
 	if !strings.Contains(r.Text, "content") {
@@ -170,7 +170,7 @@ func TestDeeplyNestedTags(t *testing.T) {
 	}
 }
 
-func TestUnbalancedTags(t *testing.T) {
+func TestConvertSurvivesMalformedUnbalancedTags(t *testing.T) {
 	html := `<h1>Title</h2><a href="x">link<p>text</li></a>`
 	r := Convert(html)
 	_ = r.Text // no panic
@@ -184,7 +184,7 @@ func TestScriptWithAngleBrackets(t *testing.T) {
 	}
 }
 
-func TestEmojiSequences(t *testing.T) {
+func TestConvertPreservesTextAroundEmojiZWJSequences(t *testing.T) {
 	html := "<p>👨\u200d👩\u200d👧\u200d👦 family 🏳️\u200d🌈 flag</p>"
 	r := Convert(html)
 	if !strings.Contains(r.Text, "family") || !strings.Contains(r.Text, "flag") {
@@ -198,14 +198,14 @@ func TestNullBytes(t *testing.T) {
 	_ = r.Text
 }
 
-func TestOnlyTagsNoContent(t *testing.T) {
+func TestConvertReturnsEmptyForTagsWithoutContent(t *testing.T) {
 	r := Convert("<div><p><span></span></p></div>")
 	if strings.TrimSpace(r.Text) != "" {
 		t.Errorf("got %q", r.Text)
 	}
 }
 
-func TestNumericEntityEdgeCases(t *testing.T) {
+func TestConvertPreservesTextAroundInvalidNumericEntities(t *testing.T) {
 	html := "&#0; &#xFFFFFF; &#999999999; &#xD800; normal"
 	r := Convert(html)
 	if !strings.Contains(r.Text, "normal") {
@@ -221,7 +221,7 @@ func TestHrefWithMultibyte(t *testing.T) {
 	}
 }
 
-func TestLargeInputNoPanic(t *testing.T) {
+func TestConvertPreservesContentOnLargeInput(t *testing.T) {
 	chunk := "<p>Hello &amp; world 한국어 🌍</p><br><hr>\n"
 	html := strings.Repeat(chunk, 20_000)
 	r := Convert(html)
@@ -230,7 +230,7 @@ func TestLargeInputNoPanic(t *testing.T) {
 	}
 }
 
-func TestCurlyQuotesInHTML(t *testing.T) {
+func TestConvertPreservesCurlyQuotesInHTML(t *testing.T) {
 	html := "<!doctype html><html lang=\"ko-kr\"><head><title>YouTube\u2019s Best</title></head><body><p>It\u2019s a video about \u2018coding\u2019 &amp; stuff</p><li>Item with \u2019quotes\u2019</li><a href=\"https://example.com\">Link\u2019s text</a><h1>Heading with \u2019curly\u2019</h1></body></html>"
 	r := Convert(html)
 	if !strings.ContainsRune(r.Text, '\u2019') {
@@ -238,7 +238,7 @@ func TestCurlyQuotesInHTML(t *testing.T) {
 	}
 }
 
-func TestCurlyQuotesAtEveryByteAlignment(t *testing.T) {
+func TestConvertPreservesCurlyQuotesAtAnyByteAlignment(t *testing.T) {
 	for padding := range 4 {
 		prefix := strings.Repeat("x", padding)
 		html := "<p>" + prefix + "\u2019</p><li>" + prefix + "\u2019item</li><a href=\"u\">" + prefix + "\u2019link</a><h2>" + prefix + "\u2019head</h2>"
@@ -249,7 +249,7 @@ func TestCurlyQuotesAtEveryByteAlignment(t *testing.T) {
 	}
 }
 
-func TestEntityAdjacentToMultibyte(t *testing.T) {
+func TestConvertDecodesEntitiesAdjacentToMultibyte(t *testing.T) {
 	html := "\u2019&amp;\u2019&lt;\u2019&#8217;\u2019&#x2019;\u2019"
 	r := Convert(html)
 	if !strings.Contains(r.Text, "&") || !strings.Contains(r.Text, "<") {
@@ -257,7 +257,7 @@ func TestEntityAdjacentToMultibyte(t *testing.T) {
 	}
 }
 
-func TestYoutubeLikeKoreanHTML(t *testing.T) {
+func TestConvertParsesTitleAndRemovesScriptInKoreanHTML(t *testing.T) {
 	var b strings.Builder
 	b.WriteString(`<!doctype html><html style="font-size: 10px;font-family: roboto, arial, sans-serif;" lang="ko-kr"><head><title>테스트 동영상</title></head><body>`)
 	for range 30 {
@@ -303,7 +303,7 @@ func TestXcomKoreanHTMLWithEllipsisNoPanic(t *testing.T) {
 	}
 }
 
-func TestEllipsisAtEveryByteAlignment(t *testing.T) {
+func TestConvertPreservesEllipsisAtAnyByteAlignment(t *testing.T) {
 	for padding := range 4 {
 		prefix := strings.Repeat("x", padding)
 		html := "<p>" + prefix + "\u2026</p><li>" + prefix + "\u2026item</li><a href=\"u\">" + prefix + "\u2026link</a><h2>" + prefix + "\u2026head</h2><code>" + prefix + "\u2026code</code>"
@@ -343,7 +343,7 @@ func TestLargeXcomHTMLWithMultibyte(t *testing.T) {
 	}
 }
 
-func TestConvertsBold(t *testing.T) {
+func TestConvertRendersBoldAsDoubleAsterisks(t *testing.T) {
 	r := Convert("<p><strong>bold text</strong> and <b>also bold</b></p>")
 	if !strings.Contains(r.Text, "**bold text**") {
 		t.Errorf("got %q", r.Text)
@@ -353,7 +353,7 @@ func TestConvertsBold(t *testing.T) {
 	}
 }
 
-func TestConvertsItalic(t *testing.T) {
+func TestConvertRendersItalicAsSingleAsterisks(t *testing.T) {
 	r := Convert("<p><em>italic text</em> and <i>also italic</i></p>")
 	if !strings.Contains(r.Text, "*italic text*") {
 		t.Errorf("got %q", r.Text)
@@ -382,21 +382,21 @@ func TestITagBoundary(t *testing.T) {
 	}
 }
 
-func TestNestedEmphasis(t *testing.T) {
+func TestConvertPreservesNestedEmphasisText(t *testing.T) {
 	r := Convert("<strong><em>bold italic</em></strong>")
 	if !strings.Contains(r.Text, "bold italic") {
 		t.Errorf("got %q", r.Text)
 	}
 }
 
-func TestConvertsInlineCode(t *testing.T) {
+func TestConvertRendersInlineCodeWithBackticks(t *testing.T) {
 	r := Convert("<p>Use <code>println!</code> to print</p>")
 	if !strings.Contains(r.Text, "`println!`") {
 		t.Errorf("got %q", r.Text)
 	}
 }
 
-func TestConvertsCodeBlock(t *testing.T) {
+func TestConvertRendersCodeBlockAsFencedMarkdown(t *testing.T) {
 	html := "<pre><code>fn main() {\n    println!(\"hello\");\n}</code></pre>"
 	r := Convert(html)
 	if !strings.Contains(r.Text, "```") {
@@ -418,7 +418,7 @@ func TestConvertsCodeBlockWithLanguage(t *testing.T) {
 	}
 }
 
-func TestConvertsStrikethrough(t *testing.T) {
+func TestConvertRendersStrikethroughWithTildes(t *testing.T) {
 	html := "<p><del>deleted</del> and <s>struck</s> and <strike>old</strike></p>"
 	r := Convert(html)
 	if !strings.Contains(r.Text, "~~deleted~~") {
@@ -432,7 +432,7 @@ func TestConvertsStrikethrough(t *testing.T) {
 	}
 }
 
-func TestConvertsImage(t *testing.T) {
+func TestConvertRendersImageAsMarkdownLink(t *testing.T) {
 	html := `<img src="https://example.com/pic.jpg" alt="A photo">`
 	r := Convert(html)
 	if !strings.Contains(r.Text, "[A photo](https://example.com/pic.jpg)") {
@@ -440,7 +440,7 @@ func TestConvertsImage(t *testing.T) {
 	}
 }
 
-func TestConvertsImageNoAlt(t *testing.T) {
+func TestConvertFallsBackToFilenameWhenAltMissing(t *testing.T) {
 	html := `<img src="https://example.com/photo.png">`
 	r := Convert(html)
 	if !strings.Contains(r.Text, "[photo.png](https://example.com/photo.png)") {
@@ -448,14 +448,14 @@ func TestConvertsImageNoAlt(t *testing.T) {
 	}
 }
 
-func TestConvertsBlockquote(t *testing.T) {
+func TestConvertRendersBlockquoteWithAnglePrefix(t *testing.T) {
 	r := Convert("<blockquote>This is quoted text</blockquote>")
 	if !strings.Contains(r.Text, "> This is quoted text") {
 		t.Errorf("got %q", r.Text)
 	}
 }
 
-func TestConvertsSimpleTable(t *testing.T) {
+func TestConvertRendersSimpleTableWithPipeRows(t *testing.T) {
 	html := "<table><tr><td>A</td><td>B</td></tr><tr><td>1</td><td>2</td></tr></table>"
 	r := Convert(html)
 	if !strings.Contains(r.Text, "| A | B |") {
@@ -483,7 +483,7 @@ func TestConvertsTableWithHeaders(t *testing.T) {
 	}
 }
 
-func TestConvertsTablePipeEscape(t *testing.T) {
+func TestConvertEscapesPipeWhenInTableCell(t *testing.T) {
 	html := "<table><tr><td>a|b</td><td>c</td></tr></table>"
 	r := Convert(html)
 	if !strings.Contains(r.Text, `a\|b`) {
@@ -491,7 +491,7 @@ func TestConvertsTablePipeEscape(t *testing.T) {
 	}
 }
 
-func TestConvertsOrderedList(t *testing.T) {
+func TestConvertRendersOrderedListWithNumbers(t *testing.T) {
 	html := "<ol><li>first</li><li>second</li><li>third</li></ol>"
 	r := Convert(html)
 	if !strings.Contains(r.Text, "1. first") {
@@ -505,7 +505,7 @@ func TestConvertsOrderedList(t *testing.T) {
 	}
 }
 
-func TestMixedOlUl(t *testing.T) {
+func TestConvertRendersMixedOrderedAndUnorderedLists(t *testing.T) {
 	html := "<ul><li>bullet</li></ul><ol><li>one</li><li>two</li></ol><ul><li>dot</li></ul>"
 	r := Convert(html)
 	if !strings.Contains(r.Text, "- bullet") {
@@ -535,7 +535,7 @@ func TestSTagBoundary(t *testing.T) {
 
 // --- strip_noise option tests ---
 
-func TestStripNoiseSuppressesNav(t *testing.T) {
+func TestStripNoiseRemovesNavWhenEnabled(t *testing.T) {
 	html := "<p>content</p><nav><a href='/'>Home</a><a href='/about'>About</a></nav><p>more</p>"
 	r := ConvertWithOpts(html, Options{StripNoise: true})
 	if !strings.Contains(r.Text, "content") {
@@ -549,7 +549,7 @@ func TestStripNoiseSuppressesNav(t *testing.T) {
 	}
 }
 
-func TestStripNoiseSuppressesAsideSvgIframeForm(t *testing.T) {
+func TestStripNoiseRemovesAsideSvgIframeFormWhenEnabled(t *testing.T) {
 	html := "<p>keep</p><aside>sidebar</aside><svg><path/></svg><iframe src='x'>frame</iframe><form><input/></form><p>end</p>"
 	r := ConvertWithOpts(html, Options{StripNoise: true})
 	if !strings.Contains(r.Text, "keep") || !strings.Contains(r.Text, "end") {
@@ -571,7 +571,7 @@ func TestStripNoiseOffPreservesNav(t *testing.T) {
 	}
 }
 
-func TestStripNoiseNestedNav(t *testing.T) {
+func TestStripNoiseRemovesNestedNavWhenEnabled(t *testing.T) {
 	html := "<nav><ul><li><a href='/'>Home</a></li><li><a href='/about'>About</a></li></ul></nav><p>article content</p>"
 	r := ConvertWithOpts(html, Options{StripNoise: true})
 	if !strings.Contains(r.Text, "article content") {
@@ -627,7 +627,7 @@ func TestDecodesSymbolEntities(t *testing.T) {
 	}
 }
 
-func TestTableEscapesBackslash(t *testing.T) {
+func TestConvertEscapesBackslashWhenInTableCell(t *testing.T) {
 	html := `<table><tr><td>a\b</td><td>c</td></tr></table>`
 	r := Convert(html)
 	if !strings.Contains(r.Text, `a\\b`) {

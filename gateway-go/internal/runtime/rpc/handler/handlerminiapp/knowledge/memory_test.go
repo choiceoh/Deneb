@@ -91,7 +91,7 @@ func memoryDepsFor(store MemorySearcher) MemoryDeps {
 	return MemoryDeps{Store: func() (MemorySearcher, error) { return store, nil }}
 }
 
-func TestMemorySearch_HappyPath(t *testing.T) {
+func TestMemorySearchReturnsEnrichedMatches(t *testing.T) {
 	store := &fakeMemoryStore{
 		searchFn: func(_ context.Context, q string, n int) ([]wiki.SearchResult, error) {
 			if q != "dgx" || n != defaultMemorySearchLimit {
@@ -145,7 +145,7 @@ func TestMemorySearch_MissingQuery(t *testing.T) {
 	}
 }
 
-func TestMemorySearch_BlankQuery(t *testing.T) {
+func TestMemorySearchRejectsBlankQuery(t *testing.T) {
 	store := &fakeMemoryStore{}
 	h := memorySearch(memoryDepsFor(store))
 	resp := h(authedCtx(), reqWith(t, "miniapp.memory.search", map[string]any{"query": "   "}))
@@ -157,7 +157,7 @@ func TestMemorySearch_BlankQuery(t *testing.T) {
 	}
 }
 
-func TestMemorySearch_LimitClamp(t *testing.T) {
+func TestMemorySearchClampsLimitWhenOverMax(t *testing.T) {
 	var seenLimit int
 	store := &fakeMemoryStore{
 		searchFn: func(_ context.Context, _ string, n int) ([]wiki.SearchResult, error) {
@@ -201,7 +201,7 @@ func TestMemorySearch_ReadPageFailsFallsThrough(t *testing.T) {
 	}
 }
 
-func TestMemorySearch_RequiresAuth(t *testing.T) {
+func TestMemorySearchRejectsUnauthenticated(t *testing.T) {
 	h := memorySearch(memoryDepsFor(&fakeMemoryStore{}))
 	resp := h(context.Background(), reqWith(t, "miniapp.memory.search", map[string]any{"query": "x"}))
 	if resp.OK {
@@ -212,7 +212,7 @@ func TestMemorySearch_RequiresAuth(t *testing.T) {
 	}
 }
 
-func TestMemorySearch_StoreUnavailable(t *testing.T) {
+func TestMemorySearchReturnsUnavailableWhenStoreErrors(t *testing.T) {
 	deps := MemoryDeps{
 		Store: func() (MemorySearcher, error) {
 			return nil, errors.New("wiki disabled")
@@ -236,7 +236,7 @@ func TestMemoryMethods_NilStoreReturnsNil(t *testing.T) {
 
 // --- get_page -----------------------------------------------------------
 
-func TestMemoryGetPage_HappyPath(t *testing.T) {
+func TestMemoryGetPageReturnsMetadataAndBody(t *testing.T) {
 	store := &fakeMemoryStore{
 		readPageFn: func(p string) (*wiki.Page, error) {
 			if p != "people/alice.md" {
@@ -317,7 +317,7 @@ func TestMemoryGetPage_PathTraversalRejected(t *testing.T) {
 	}
 }
 
-func TestMemoryGetPage_NotFound(t *testing.T) {
+func TestMemoryGetPageReturnsNotFoundForMissingPage(t *testing.T) {
 	store := &fakeMemoryStore{
 		readPageFn: func(_ string) (*wiki.Page, error) {
 			return nil, fs.ErrNotExist
@@ -352,7 +352,7 @@ func TestMemoryGetPage_ReadFailureIsUnavailable(t *testing.T) {
 	}
 }
 
-func TestMemoryGetPage_RequiresAuth(t *testing.T) {
+func TestMemoryGetPageRejectsUnauthenticated(t *testing.T) {
 	h := memoryGetPage(memoryDepsFor(&fakeMemoryStore{}))
 	resp := h(context.Background(), reqWith(t, "miniapp.memory.get_page", map[string]any{"path": "x.md"}))
 	if resp.OK {
@@ -363,7 +363,7 @@ func TestMemoryGetPage_RequiresAuth(t *testing.T) {
 	}
 }
 
-func TestMemoryMethods_RegistersAllMethods(t *testing.T) {
+func TestMemoryMethodsReturnsAllRegisteredMethods(t *testing.T) {
 	got := MemoryMethods(memoryDepsFor(&fakeMemoryStore{}))
 	for _, name := range []string{
 		"miniapp.memory.search",
@@ -757,7 +757,7 @@ func TestMemoryCreatePage_RequiresAuth(t *testing.T) {
 
 // --- slugifyTitle helper ------------------------------------------------
 
-func TestSlugifyTitle(t *testing.T) {
+func TestSlugifyTitleNormalizesTitlesToSlugs(t *testing.T) {
 	cases := []struct {
 		in, want string
 	}{
@@ -783,7 +783,7 @@ func TestSlugifyTitle(t *testing.T) {
 
 // --- categories ---------------------------------------------------------
 
-func TestMemoryCategories_HappyPath(t *testing.T) {
+func TestMemoryCategoriesReturnsBucketsSortedByCount(t *testing.T) {
 	store := &fakeMemoryStore{
 		statsFn: func() wiki.StoreStats {
 			return wiki.StoreStats{
@@ -816,7 +816,7 @@ func TestMemoryCategories_HappyPath(t *testing.T) {
 	}
 }
 
-func TestMemoryCategories_RequiresAuth(t *testing.T) {
+func TestMemoryCategoriesRejectsUnauthenticated(t *testing.T) {
 	h := memoryCategories(memoryDepsFor(&fakeMemoryStore{}))
 	resp := h(context.Background(), reqWith(t, "miniapp.memory.categories", map[string]any{}))
 	if resp.OK || resp.Error.Code != protocol.ErrUnauthorized {
@@ -826,7 +826,7 @@ func TestMemoryCategories_RequiresAuth(t *testing.T) {
 
 // --- list_in_category ---------------------------------------------------
 
-func TestMemoryListInCategory_HappyPath(t *testing.T) {
+func TestMemoryListInCategoryReturnsEnrichedPages(t *testing.T) {
 	store := &fakeMemoryStore{
 		listPagesFn: func(cat string) ([]string, error) {
 			if cat != "projects" {
@@ -886,7 +886,7 @@ func TestMemoryListInCategory_PathTraversalRejected(t *testing.T) {
 	}
 }
 
-func TestMemoryListInCategory_LimitClampedAndTotalReflectsAll(t *testing.T) {
+func TestMemoryListInCategoryClampsLimitPreservingTotal(t *testing.T) {
 	// Fixture sized relative to the cap so the clamp actually engages even as
 	// the ceiling moves (it was raised for the desktop wiki tree).
 	fixture := maxMemoryListLimit + 100
@@ -917,7 +917,7 @@ func TestMemoryListInCategory_LimitClampedAndTotalReflectsAll(t *testing.T) {
 
 // --- diary_recent -------------------------------------------------------
 
-func TestMemoryDiaryRecent_HappyPath(t *testing.T) {
+func TestMemoryDiaryRecentReturnsEntriesWithDefaultLimit(t *testing.T) {
 	var seenLimit int
 	store := &fakeMemoryStore{
 		diaryRecentFn: func(limit int) []wiki.DiaryHit {
@@ -945,7 +945,7 @@ func TestMemoryDiaryRecent_HappyPath(t *testing.T) {
 	}
 }
 
-func TestMemoryDiaryRecent_LimitClamp(t *testing.T) {
+func TestMemoryDiaryRecentClampsLimitWhenOverMax(t *testing.T) {
 	var seenLimit int
 	store := &fakeMemoryStore{
 		diaryRecentFn: func(limit int) []wiki.DiaryHit {
@@ -1140,7 +1140,7 @@ func TestMemoryMerge_NotFoundDoesNotStart(t *testing.T) {
 	}
 }
 
-func TestMemoryMerge_RequiresAuth(t *testing.T) {
+func TestMemoryMergeRejectsUnauthenticated(t *testing.T) {
 	resp := memoryMergePage(mergeDepsFor(&fakeMemoryStore{}, noopStart))(context.Background(),
 		reqWith(t, "miniapp.memory.merge", map[string]any{
 			"targetPath": "프로젝트/a.md",
@@ -1235,7 +1235,7 @@ func TestMemoryDeletePages_RequiresAuth(t *testing.T) {
 // Tests use 프로젝트/인물 — valid taxonomy categories independent of the 6-category
 // migration — so they hold whether or not that change has landed.
 
-func TestMemoryMovePage_HappyPath(t *testing.T) {
+func TestMemoryMovePageReturnsEchoedPathsOnSuccess(t *testing.T) {
 	var gotFrom, gotTo string
 	store := &fakeMemoryStore{
 		movePageFn: func(from, to string) error {
@@ -1327,7 +1327,7 @@ func TestMemoryMovePage_StoreErrorSurfaces(t *testing.T) {
 	}
 }
 
-func TestMemoryMovePage_RequiresAuth(t *testing.T) {
+func TestMemoryMovePageRejectsUnauthenticated(t *testing.T) {
 	h := memoryMovePage(memoryDepsFor(&fakeMemoryStore{}))
 	resp := h(context.Background(), reqWith(t, "miniapp.memory.move_page", map[string]any{
 		"from": "프로젝트/a.md", "to": "인물/a.md",
