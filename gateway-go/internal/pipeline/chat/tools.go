@@ -112,55 +112,19 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 	presetName := toolport.ToolPresetFromContext(ctx)
 	briefcasePreset := presetName == string(toolpreset.PresetBriefcase)
 
-	// Enforce tool preset: reject tools not in the allowed set.
-	// This is a defense-in-depth check — the LLM only sees filtered tools,
-	// but if it hallucinates a tool call, this blocks execution.
-	if presetName != "" {
-		if allowed := toolpreset.AllowedTools(toolpreset.Preset(presetName)); allowed != nil {
-			if _, ok := allowed[name]; !ok {
-				return "", fmt.Errorf("tool %q is not allowed for preset %q", name, presetName)
-			}
-		}
+	if err := checkToolPresetAllowed(name, presetName); err != nil {
+		return "", err
 	}
 
 	// Dry-run: suppress side-effect tools (everything not on the read-only
 	// allowlist) before any execution machinery runs. See tool_dry_run.go.
-	if toolport.ToolDryRunFromContext(ctx) {
-		if _, safe := dryRunSafeTools[name]; !safe {
-			stub := dryRunStub(name)
-			// Keep the verify gate faithful in replays (review catch on
-			// #3171): the stub tells the model the call succeeded, so a
-			// stubbed write/edit must arm the gate and a stubbed
-			// verification exec must disarm it — otherwise a replayed edit
-			// flow finishes without the finalize nudge a real run gets.
-			verifyGateFromContext(ctx).recordTool(name, input, stub, nil)
-			return stub, nil
-		}
+	if stub, done := dryRunShortCircuit(ctx, name, input); done {
+		return stub, nil
 	}
 
-	// Repair common malformed-JSON argument patterns from open-weight models
-	// (markdown fences, Python literals, trailing commas) before any input
-	// parsing. Only invalid JSON is touched, and only when the repair makes it
-	// valid; otherwise the original bytes fall through to the tool's own
-	// fail-fast parse error (the loop detector remains the backstop). The Warn
-	// is the measurement signal for how often the main model emits malformed
-	// calls — no argument content is logged (it may be sensitive).
-	if !briefcasePreset {
-		if repaired, didRepair := repairToolArguments(input); didRepair {
-			slog.Warn("repaired malformed tool-call arguments", "tool", name, "bytes", len(input))
-			toolport.ToolExecStatsFromContext(ctx).RecordRepaired(name)
-			input = repaired
-		}
-	}
-	if briefcasePreset && (hasTopLevelJSONKey(input, "compress") || hasTopLevelJSONKey(input, "$ref")) {
-		return "", fmt.Errorf("tool %q uses metadata forbidden by the briefcase preset", name)
-	}
-	// Check for compress flag before executing (avoids re-parsing in every tool).
-	wantCompress := !briefcasePreset && extractCompressFlag(input)
-
-	// Resolve $ref: wait for the referenced tool result and inject it.
-	if !briefcasePreset {
-		input = resolveRef(ctx, input)
+	input, wantCompress, err := prepareToolInput(ctx, name, input, briefcasePreset)
+	if err != nil {
+		return "", err
 	}
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -168,18 +132,11 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 
 	// Check run-level cache for idempotent tools (grep, fetch_tools).
 	// Cached results include post-processing but not compression.
-	rc := RunCacheFromContext(ctx)
-	cacheable := rc != nil && IsCacheableTool(name)
+	rc, cacheable := toolRunCache(ctx, name)
 	var cacheKey string
 	if cacheable {
 		cacheKey = BuildCacheKey(name, input)
-		if cached, ok := rc.Get(cacheKey); ok {
-			// Registry-internal outcome — counted here because the tool fn
-			// never runs (see ToolExecStats).
-			toolport.ToolExecStatsFromContext(ctx).RecordCacheHit(name)
-			if wantCompress && cached != "" {
-				return compressToolOutput(ctx, name, cached, slog.Default()), nil
-			}
+		if cached, ok := cachedToolResult(ctx, rc, cacheKey, name, wantCompress); ok {
 			return cached, nil
 		}
 	}
@@ -198,45 +155,142 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 		return output, err
 	}
 
-	// Head/tail truncation — preserve both ends for LLM comprehension.
-	// Build errors and test failures are typically at the end of output,
-	// while context (paths, invocations) is at the start.  Keep both visible.
+	output = r.capToolOutput(ctx, def, name, output)
+
+	// Invalidate caches when this tool may have modified the file system.
+	// Must run after execution and before the cache Set in finalizeToolOutput,
+	// or a call could re-cache the result it just invalidated.
+	invalidateCachesAfterTool(ctx, name, input, rc)
+
+	return r.finalizeToolOutput(ctx, rc, name, cacheKey, output, input, cacheable, wantCompress), nil
+}
+
+// checkToolPresetAllowed enforces the tool preset: reject tools not in the
+// allowed set. This is a defense-in-depth check — the LLM only sees filtered
+// tools, but if it hallucinates a tool call, this blocks execution.
+func checkToolPresetAllowed(name, presetName string) error {
+	if presetName == "" {
+		return nil
+	}
+	allowed := toolpreset.AllowedTools(toolpreset.Preset(presetName))
+	if allowed == nil {
+		return nil
+	}
+	if _, ok := allowed[name]; !ok {
+		return fmt.Errorf("tool %q is not allowed for preset %q", name, presetName)
+	}
+	return nil
+}
+
+// dryRunShortCircuit returns the dry-run stub for side-effect tools when the
+// run is in dry-run mode. done=false means the call proceeds normally.
+func dryRunShortCircuit(ctx context.Context, name string, input json.RawMessage) (stub string, done bool) {
+	if !toolport.ToolDryRunFromContext(ctx) {
+		return "", false
+	}
+	if _, safe := dryRunSafeTools[name]; safe {
+		return "", false
+	}
+	stub = dryRunStub(name)
+	// Keep the verify gate faithful in replays (review catch on
+	// #3171): the stub tells the model the call succeeded, so a
+	// stubbed write/edit must arm the gate and a stubbed
+	// verification exec must disarm it — otherwise a replayed edit
+	// flow finishes without the finalize nudge a real run gets.
+	verifyGateFromContext(ctx).recordTool(name, input, stub, nil)
+	return stub, true
+}
+
+// prepareToolInput runs the pre-execution input pipeline in order: argument
+// repair, briefcase metadata rejection, compress-flag extraction, and $ref
+// resolution (wait for the referenced tool result and inject it).
+func prepareToolInput(ctx context.Context, name string, input json.RawMessage, briefcasePreset bool) (json.RawMessage, bool, error) {
+	// Repair common malformed-JSON argument patterns from open-weight models
+	// (markdown fences, Python literals, trailing commas) before any input
+	// parsing. Only invalid JSON is touched, and only when the repair makes it
+	// valid; otherwise the original bytes fall through to the tool's own
+	// fail-fast parse error (the loop detector remains the backstop). The Warn
+	// is the measurement signal for how often the main model emits malformed
+	// calls — no argument content is logged (it may be sensitive).
+	if !briefcasePreset {
+		if repaired, didRepair := repairToolArguments(input); didRepair {
+			slog.Warn("repaired malformed tool-call arguments", "tool", name, "bytes", len(input))
+			toolport.ToolExecStatsFromContext(ctx).RecordRepaired(name)
+			input = repaired
+		}
+	}
+	if briefcasePreset && (hasTopLevelJSONKey(input, "compress") || hasTopLevelJSONKey(input, "$ref")) {
+		return input, false, fmt.Errorf("tool %q uses metadata forbidden by the briefcase preset", name)
+	}
+	// Check for compress flag before executing (avoids re-parsing in every tool).
+	wantCompress := !briefcasePreset && extractCompressFlag(input)
+
+	// Resolve $ref: wait for the referenced tool result and inject it.
+	if !briefcasePreset {
+		input = resolveRef(ctx, input)
+	}
+	return input, wantCompress, nil
+}
+
+// toolRunCache resolves the run-level cache and whether this tool's results
+// are cacheable in it.
+func toolRunCache(ctx context.Context, name string) (*RunCache, bool) {
+	rc := RunCacheFromContext(ctx)
+	return rc, rc != nil && IsCacheableTool(name)
+}
+
+// cachedToolResult returns the run-cached result for cacheKey, applying
+// requested compression. ok=false means a cache miss.
+func cachedToolResult(ctx context.Context, rc *RunCache, cacheKey, name string, wantCompress bool) (string, bool) {
+	cached, ok := rc.Get(cacheKey)
+	if !ok {
+		return "", false
+	}
+	// Registry-internal outcome — counted here because the tool fn
+	// never runs (see ToolExecStats).
+	toolport.ToolExecStatsFromContext(ctx).RecordCacheHit(name)
+	if wantCompress && cached != "" {
+		return compressToolOutput(ctx, name, cached, slog.Default()), true
+	}
+	return cached, true
+}
+
+// capToolOutput applies head/tail truncation — preserve both ends for LLM
+// comprehension. Build errors and test failures are typically at the end of
+// output, while context (paths, invocations) is at the start. Keep both
+// visible.
+func (r *ToolRegistry) capToolOutput(ctx context.Context, def ToolDef, name, output string) string {
 	maxOutput := agent.DefaultMaxOutput
 	if def.MaxOutput > 0 {
 		maxOutput = def.MaxOutput
 	}
-	if len(output) > maxOutput {
-		toolport.ToolExecStatsFromContext(ctx).RecordTruncated(name)
-		var spillID string
-		// Spill full content to disk so the LLM can retrieve it via read_spillover.
-		if r.spillStore != nil {
-			sessionKey := toolport.SessionKeyFromContext(ctx)
-			spillID, _ = r.spillStore.Store(sessionKey, name, output)
-		}
-		output = agent.TruncateHeadTail(output, maxOutput, spillID)
+	if len(output) <= maxOutput {
+		return output
 	}
+	toolport.ToolExecStatsFromContext(ctx).RecordTruncated(name)
+	var spillID string
+	// Spill full content to disk so the LLM can retrieve it via read_spillover.
+	if r.spillStore != nil {
+		sessionKey := toolport.SessionKeyFromContext(ctx)
+		spillID, _ = r.spillStore.Store(sessionKey, name, output)
+	}
+	return agent.TruncateHeadTail(output, maxOutput, spillID)
+}
 
-	// Invalidate caches when this tool may have modified the file system.
-	// Must run after execution and before the cache Set below, or a call
-	// could re-cache the result it just invalidated.
-	invalidateCachesAfterTool(ctx, name, input, rc)
-
-	// Apply post-processors.
+// finalizeToolOutput applies the post-execution output pipeline in order:
+// post-processors, run-cache store (after post-processing, before
+// compression), and agent-requested compression.
+func (r *ToolRegistry) finalizeToolOutput(ctx context.Context, rc *RunCache, name, cacheKey, output string, input json.RawMessage, cacheable, wantCompress bool) string {
 	if r.postProcess != nil {
 		output = r.postProcess.Apply(ctx, name, output)
 	}
-
-	// Store in run cache (after post-processing, before compression).
 	if cacheable {
 		rc.SetWithScope(cacheKey, output, extractPathScope(input))
 	}
-
-	// Apply compression if requested by the agent.
 	if wantCompress && output != "" {
 		output = compressToolOutput(ctx, name, output, slog.Default())
 	}
-
-	return output, nil
+	return output
 }
 
 // SetPostProcess attaches a PostProcessRegistry to the tool registry.

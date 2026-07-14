@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
@@ -54,13 +55,7 @@ func executeAgentRun(
 		deps.strictErrors = &strictRunErrorSink{}
 	}
 
-	// Emit agent run.start event to gateway subscriptions.
-	if deps.callbacks.emitAgentFn != nil {
-		deps.callbacks.emitAgentFn("run.start", params.SessionKey, params.ClientRunID, map[string]any{
-			"model": params.Model,
-			"ts":    runStart.UnixMilli(),
-		})
-	}
+	emitRunStart(deps, params, runStart)
 
 	// Signal "preparing" phase — covers parallel context assembly, system prompt
 	// build, and recall preflight setup. SSE clients receive a structured
@@ -72,29 +67,14 @@ func executeAgentRun(
 	// in flight: the fetched block must be part of the persisted bytes
 	// (prompt-cache rule: what the LLM saw is what history reloads), so the
 	// message cannot be persisted until the fetches complete.
-	if params.PendingEnrichment == nil {
-		persistTurnUserMessage(params, deps, logger)
-		if err := deps.strictErrors.Err(); err != nil {
-			return nil, fmt.Errorf("briefcase transcript persistence: %w", err)
-		}
+	if err := persistInitialUserMessage(params, deps, logger); err != nil {
+		return nil, err
 	}
-	workspaceDir := params.WorkspaceDir
-	if workspaceDir == "" {
-		workspaceDir = resolveWorkspaceDirForPrompt()
-	}
-
-	// Pre-warm context file snapshot for this session so disk I/O happens
-	// before the parallel prep phase (no-op if already cached from a prior turn).
-	if !deps.briefcaseMode {
-		prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
-	}
+	workspaceDir := prewarmPromptWorkspace(params, deps)
 
 	// Cache session lookup: fetched once and reused throughout this function
 	// to avoid repeated map lookups + lock acquisitions.
-	var cachedSession *session.Session
-	if deps.sessions != nil {
-		cachedSession = deps.sessions.Get(params.SessionKey)
-	}
+	cachedSession := lookupRunSession(deps, params.SessionKey)
 
 	// 2. Resolve model and provider early (no IO — pure config/registry lookups).
 	mr := resolveModel(params, deps, cachedSession)
@@ -102,16 +82,12 @@ func executeAgentRun(
 	providerID := mr.providerID
 	initialRole := mr.initialRole
 
-	thinkingLevel := ""
-	if cachedSession != nil && cachedSession.ThinkingLevel != "" && cachedSession.ThinkingLevel != "off" {
-		thinkingLevel = cachedSession.ThinkingLevel
-	}
 	runLog.LogStart(agentlog.RunStartData{
 		Model:         model,
 		Provider:      providerID,
 		Message:       params.Message,
 		Channel:       deliveryChannel(params.Delivery),
-		ThinkingLevel: thinkingLevel,
+		ThinkingLevel: sessionThinkingLevel(cachedSession),
 	})
 
 	// 3. Resolve LLM client from in-memory config/auth store. May perform
@@ -119,16 +95,7 @@ func executeAgentRun(
 	// external secret references on the chat path.
 	client := resolveClient(ctx, deps, providerID, logger)
 	if client == nil {
-		// This failure path exits before the enrichment join below, where the
-		// deferred persist lives — persist the original message here so the
-		// user's input isn't lost from history. No LLM saw anything this
-		// turn, so the unenriched bytes are consistent.
-		if params.PendingEnrichment != nil {
-			persistTurnUserMessage(params, deps, logger)
-		}
-		err := fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
-		runLog.LogError(agentlog.RunErrorData{Error: err.Error()})
-		return nil, err
+		return nil, noLLMClientError(params, deps, providerID, model, runLog, logger)
 	}
 
 	// Recall preflight runs during context preparation: when the current
@@ -147,34 +114,16 @@ func executeAgentRun(
 	parallelPrepMs := time.Since(prepStart).Milliseconds()
 	logger.Info("pipeline: parallel prep done (context+sysprompt)", "ms", parallelPrepMs)
 
-	if prep.ContextErr != nil {
-		if deps.briefcaseMode {
-			return nil, fmt.Errorf("briefcase context assembly: %w", prep.ContextErr)
-		}
-		logger.Error("context assembly failed, proceeding with degraded context",
-			"sessionKey", params.SessionKey, "error", prep.ContextErr)
+	if err := checkContextAssembly(prep, deps, params.SessionKey, logger); err != nil {
+		return nil, err
 	}
 	if err := deps.strictErrors.Err(); err != nil {
 		return nil, fmt.Errorf("briefcase context preparation: %w", err)
 	}
 
-	// Enrichment join: the link fetches ran concurrently with the parallel
-	// prep above (recall/history/sysprompt), so on the common path they cost
-	// no extra wall-clock. The joined (enriched) message is persisted HERE —
-	// after the history load, which therefore does not contain it — and
-	// AppendCurrentMessage tells assembleTurnMessages to append the exact
-	// persisted bytes explicitly, keeping next turn's history reload
-	// byte-identical to what this turn's LLM call sees (vLLM APC).
 	enrichStart := time.Now()
-	if params.PendingEnrichment != nil {
-		params.Message = params.PendingEnrichment(ctx)
-		if formatted := persistTurnUserMessage(params, deps, logger); formatted != "" {
-			params.Message = formatted
-			params.AppendCurrentMessage = true
-		}
-		if err := deps.strictErrors.Err(); err != nil {
-			return nil, fmt.Errorf("briefcase transcript persistence: %w", err)
-		}
+	if err := joinPendingEnrichment(ctx, &params, deps, logger); err != nil {
+		return nil, err
 	}
 	enrichJoinMs := time.Since(enrichStart).Milliseconds()
 	// Ephemeral turns (heartbeat) never persist their trigger message, and on
@@ -189,18 +138,7 @@ func executeAgentRun(
 	}
 
 	// Stage 2: Assemble final message list (prebuilt, attachments, Polaris compaction).
-	var cHooks *compactionHooks
-	if deps.callbacks.typingFn != nil && params.Delivery != nil {
-		delivery := params.Delivery
-		typingFn := deps.callbacks.typingFn
-		cHooks = &compactionHooks{
-			typingFn: func() {
-				tCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				_ = typingFn(tCtx, delivery)
-			},
-		}
-	}
+	cHooks := buildCompactionHooks(params, deps)
 	assembleStart := time.Now()
 	messages := assembleMessages(ctx, params, deps, prep, mr, logger, cHooks)
 	assembleMs := time.Since(assembleStart).Milliseconds()
@@ -216,23 +154,11 @@ func executeAgentRun(
 	logger.Info("pipeline: system prompt finalized",
 		"chars", len(systemPrompt))
 
-	prepTotalMs := time.Since(runStart).Milliseconds()
-	// prepMs alone hid a 60s stall (4× on one session, 2026-07-07 — the stage
-	// that ate it was unidentifiable post-hoc). Persist the breakdown and name
-	// the culprit in the journal whenever prep is user-noticeably slow.
-	if prepTotalMs > 5000 {
-		logger.Warn("pipeline: slow prep",
-			"totalMs", prepTotalMs, "parallelPrepMs", parallelPrepMs,
-			"enrichJoinMs", enrichJoinMs, "assembleMs", assembleMs,
-			"sessionKey", params.SessionKey)
-	}
-	runLog.LogPrep(agentlog.RunPrepData{
-		SystemPromptChars: len(systemPrompt),
-		ContextMessages:   len(messages),
-		PrepMs:            prepTotalMs,
-		EnrichJoinMs:      enrichJoinMs,
-		AssembleMs:        assembleMs,
-		RecallChars:       len(prep.RecallMemory),
+	logRunPrep(logger, runLog, params, prep, len(systemPrompt), len(messages), prepTimings{
+		runStart:       runStart,
+		parallelPrepMs: parallelPrepMs,
+		enrichJoinMs:   enrichJoinMs,
+		assembleMs:     assembleMs,
 	})
 
 	// Stage 3.5: APC prefix-stability diagnostics — classify how this run's
@@ -246,22 +172,7 @@ func executeAgentRun(
 	}
 
 	// Stage 4: Build tool list and agent config.
-	acd := agentConfigDeps{
-		Tools:              deps.tools,
-		MaxTokens:          deps.maxTokens,
-		SubagentNotifyCh:   deps.subagentNotifyCh,
-		EmitAgentFn:        deps.callbacks.emitAgentFn,
-		Transcript:         deps.transcript,
-		SkillNudger:        deps.skills.Nudger,
-		SkillUsageRecorder: deps.skills.UsageRecorder,
-		// Deferred tools activated in earlier runs stay active: replay the
-		// transcript's activation evidence into this run (deferred_replay.go).
-		ReplayDeferredTools: replayActivatedTools(messages, deps.tools, sessionToolPreset),
-	}
-	if n := len(acd.ReplayDeferredTools); n > 0 {
-		logger.Info("deferred replay: reactivating tools from transcript",
-			"count", n, "tools", strings.Join(acd.ReplayDeferredTools, ","))
-	}
+	acd := buildAgentConfigDeps(deps, messages, sessionToolPreset, logger)
 	// execStats threads into recordRunCompletion (LogEnd's RepairedToolCalls) —
 	// #3117 introduced it while #3121 moved LogEnd into the completion sink.
 	cfg, spawnFlag, execStats := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, model, logger)
@@ -297,16 +208,7 @@ func executeAgentRun(
 	// Execute agent loop with model fallback chain.
 	agentStart := time.Now()
 	agentResult, actualModel, fellBack, err := runAgentWithFallback(ctx, cfg, messages, client, deps, providerID, initialRole, effortRt, hooks, logger, runLog)
-	if err != nil && effortDecision != "" {
-		// The failed-run record matters MOST for the label pipeline: a
-		// routed run that escalated and still failed is the strongest
-		// misjudgment signal. The success-path record rides on the
-		// "agent loop complete" line below.
-		logger.Info("effort router: run failed",
-			"decision", effortDecision,
-			"escalated", effortRt != nil && effortRt.escalated,
-			"model", actualModel, "error", err)
-	}
+	logEffortRouteFailure(logger, effortDecision, effortRt, actualModel, err)
 	if err != nil {
 		// Log run.error here — not in the async-only completion handler — so
 		// every entry path (runAgentAsync, SendSync, SendSyncStream) closes the
@@ -323,15 +225,7 @@ func executeAgentRun(
 		return nil, fmt.Errorf("briefcase transcript persistence: %w", err)
 	}
 
-	// Release any trailing backticks the delta transliterator held back to
-	// disambiguate a fence marker that could have spanned deltas (run ended
-	// first). Emitted before the done frame so the live view's last tokens
-	// aren't dropped; the final/persisted text is transliterated separately.
-	if deltaTranslit != nil && broadcaster != nil {
-		if tail := deltaTranslit.Flush(); tail != "" {
-			broadcaster.EmitDelta(tail)
-		}
-	}
+	flushDeltaTail(deltaTranslit, broadcaster)
 
 	recordRunCompletion(runCompletionRecord{
 		params:         params,
@@ -351,6 +245,207 @@ func executeAgentRun(
 	}, logger)
 
 	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag, ActualModel: actualModel, FellBack: fellBack}, nil
+}
+
+// emitRunStart emits the agent run.start event to gateway subscriptions.
+func emitRunStart(deps runDeps, params RunParams, runStart time.Time) {
+	if deps.callbacks.emitAgentFn == nil {
+		return
+	}
+	deps.callbacks.emitAgentFn("run.start", params.SessionKey, params.ClientRunID, map[string]any{
+		"model": params.Model,
+		"ts":    runStart.UnixMilli(),
+	})
+}
+
+// persistInitialUserMessage persists the inbound user message unless the
+// persist is deferred to the enrichment join (a link enrichment in flight).
+func persistInitialUserMessage(params RunParams, deps runDeps, logger *slog.Logger) error {
+	if params.PendingEnrichment != nil {
+		return nil
+	}
+	persistTurnUserMessage(params, deps, logger)
+	if err := deps.strictErrors.Err(); err != nil {
+		return fmt.Errorf("briefcase transcript persistence: %w", err)
+	}
+	return nil
+}
+
+// prewarmPromptWorkspace resolves the workspace dir and pre-warms the context
+// file snapshot for this session so disk I/O happens before the parallel prep
+// phase (no-op if already cached from a prior turn).
+func prewarmPromptWorkspace(params RunParams, deps runDeps) string {
+	workspaceDir := params.WorkspaceDir
+	if workspaceDir == "" {
+		workspaceDir = resolveWorkspaceDirForPrompt()
+	}
+	if !deps.briefcaseMode {
+		prompt.LoadContextFiles(workspaceDir, prompt.WithSessionSnapshot(params.SessionKey))
+	}
+	return workspaceDir
+}
+
+// lookupRunSession fetches the session once for reuse throughout the run.
+func lookupRunSession(deps runDeps, sessionKey string) *session.Session {
+	if deps.sessions == nil {
+		return nil
+	}
+	return deps.sessions.Get(sessionKey)
+}
+
+// sessionThinkingLevel returns the session's thinking level, or "" when unset
+// or explicitly off.
+func sessionThinkingLevel(sess *session.Session) string {
+	if sess == nil || sess.ThinkingLevel == "" || sess.ThinkingLevel == "off" {
+		return ""
+	}
+	return sess.ThinkingLevel
+}
+
+// noLLMClientError builds the no-client run error. This failure path exits
+// before the enrichment join, where the deferred persist lives — persist the
+// original message here so the user's input isn't lost from history. No LLM
+// saw anything this turn, so the unenriched bytes are consistent.
+func noLLMClientError(params RunParams, deps runDeps, providerID, model string, runLog *agentlog.RunLogger, logger *slog.Logger) error {
+	if params.PendingEnrichment != nil {
+		persistTurnUserMessage(params, deps, logger)
+	}
+	err := fmt.Errorf("no LLM client available (provider=%q, model=%q)", providerID, model)
+	runLog.LogError(agentlog.RunErrorData{Error: err.Error()})
+	return err
+}
+
+// checkContextAssembly turns a context assembly failure into a run error in
+// briefcase mode; interactive runs proceed with degraded context.
+func checkContextAssembly(prep prepResult, deps runDeps, sessionKey string, logger *slog.Logger) error {
+	if prep.ContextErr == nil {
+		return nil
+	}
+	if deps.briefcaseMode {
+		return fmt.Errorf("briefcase context assembly: %w", prep.ContextErr)
+	}
+	logger.Error("context assembly failed, proceeding with degraded context",
+		"sessionKey", sessionKey, "error", prep.ContextErr)
+	return nil
+}
+
+// joinPendingEnrichment joins the deferred link enrichment: the link fetches
+// ran concurrently with the parallel prep (recall/history/sysprompt), so on
+// the common path they cost no extra wall-clock. The joined (enriched)
+// message is persisted HERE — after the history load, which therefore does
+// not contain it — and AppendCurrentMessage tells assembleTurnMessages to
+// append the exact persisted bytes explicitly, keeping next turn's history
+// reload byte-identical to what this turn's LLM call sees (vLLM APC).
+func joinPendingEnrichment(ctx context.Context, params *RunParams, deps runDeps, logger *slog.Logger) error {
+	if params.PendingEnrichment == nil {
+		return nil
+	}
+	params.Message = params.PendingEnrichment(ctx)
+	if formatted := persistTurnUserMessage(*params, deps, logger); formatted != "" {
+		params.Message = formatted
+		params.AppendCurrentMessage = true
+	}
+	if err := deps.strictErrors.Err(); err != nil {
+		return fmt.Errorf("briefcase transcript persistence: %w", err)
+	}
+	return nil
+}
+
+// buildCompactionHooks wires the typing signal into compaction, so the user
+// sees activity during a long compaction pass. Nil when the run has no
+// delivery or typing callback.
+func buildCompactionHooks(params RunParams, deps runDeps) *compactionHooks {
+	if deps.callbacks.typingFn == nil || params.Delivery == nil {
+		return nil
+	}
+	delivery := params.Delivery
+	typingFn := deps.callbacks.typingFn
+	return &compactionHooks{
+		typingFn: func() {
+			tCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = typingFn(tCtx, delivery)
+		},
+	}
+}
+
+// prepTimings carries the per-stage prep timing breakdown to logRunPrep.
+type prepTimings struct {
+	runStart       time.Time
+	parallelPrepMs int64
+	enrichJoinMs   int64
+	assembleMs     int64
+}
+
+// logRunPrep records the prep stage: the agentlog prep entry plus a Warn with
+// the per-stage breakdown when prep is user-noticeably slow. prepMs alone hid
+// a 60s stall (4× on one session, 2026-07-07 — the stage that ate it was
+// unidentifiable post-hoc), so the breakdown names the culprit in the journal.
+func logRunPrep(logger *slog.Logger, runLog *agentlog.RunLogger, params RunParams, prep prepResult, systemPromptChars, messageCount int, t prepTimings) {
+	prepTotalMs := time.Since(t.runStart).Milliseconds()
+	if prepTotalMs > 5000 {
+		logger.Warn("pipeline: slow prep",
+			"totalMs", prepTotalMs, "parallelPrepMs", t.parallelPrepMs,
+			"enrichJoinMs", t.enrichJoinMs, "assembleMs", t.assembleMs,
+			"sessionKey", params.SessionKey)
+	}
+	runLog.LogPrep(agentlog.RunPrepData{
+		SystemPromptChars: systemPromptChars,
+		ContextMessages:   messageCount,
+		PrepMs:            prepTotalMs,
+		EnrichJoinMs:      t.enrichJoinMs,
+		AssembleMs:        t.assembleMs,
+		RecallChars:       len(prep.RecallMemory),
+	})
+}
+
+// buildAgentConfigDeps assembles the agent config dependency bag. Deferred
+// tools activated in earlier runs stay active: replay the transcript's
+// activation evidence into this run (deferred_replay.go).
+func buildAgentConfigDeps(deps runDeps, messages []llm.Message, sessionToolPreset string, logger *slog.Logger) agentConfigDeps {
+	acd := agentConfigDeps{
+		Tools:               deps.tools,
+		MaxTokens:           deps.maxTokens,
+		SubagentNotifyCh:    deps.subagentNotifyCh,
+		EmitAgentFn:         deps.callbacks.emitAgentFn,
+		Transcript:          deps.transcript,
+		SkillNudger:         deps.skills.Nudger,
+		SkillUsageRecorder:  deps.skills.UsageRecorder,
+		ReplayDeferredTools: replayActivatedTools(messages, deps.tools, sessionToolPreset),
+	}
+	if n := len(acd.ReplayDeferredTools); n > 0 {
+		logger.Info("deferred replay: reactivating tools from transcript",
+			"count", n, "tools", strings.Join(acd.ReplayDeferredTools, ","))
+	}
+	return acd
+}
+
+// logEffortRouteFailure records a routed run that failed. The failed-run
+// record matters MOST for the label pipeline: a routed run that escalated and
+// still failed is the strongest misjudgment signal. The success-path record
+// rides on the "agent loop complete" line.
+func logEffortRouteFailure(logger *slog.Logger, effortDecision string, effortRt *effortRoute, actualModel string, err error) {
+	if err == nil || effortDecision == "" {
+		return
+	}
+	logger.Info("effort router: run failed",
+		"decision", effortDecision,
+		"escalated", effortRt != nil && effortRt.escalated,
+		"model", actualModel, "error", err)
+}
+
+// flushDeltaTail releases any trailing backticks the delta transliterator
+// held back to disambiguate a fence marker that could have spanned deltas
+// (run ended first). Emitted before the done frame so the live view's last
+// tokens aren't dropped; the final/persisted text is transliterated
+// separately.
+func flushDeltaTail(deltaTranslit *hanja.Streamer, broadcaster *streaming.Broadcaster) {
+	if deltaTranslit == nil || broadcaster == nil {
+		return
+	}
+	if tail := deltaTranslit.Flush(); tail != "" {
+		broadcaster.EmitDelta(tail)
+	}
 }
 
 // runCompletionRecord bundles everything the post-loop telemetry sink needs.
