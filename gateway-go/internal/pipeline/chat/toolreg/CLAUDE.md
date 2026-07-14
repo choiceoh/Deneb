@@ -35,10 +35,10 @@
 
 - `toolreg_boundary_test.go`의
   `TestRegisterCoreToolsWithMinimalDependenciesHasValidUniqueContracts`,
-  `TestRegisterCoreToolsDeferredPolicyMatchesOperationalIntent`,
+  `TestRegisterCoreToolsDeferredPolicyContractMatchesOperationalIntent`,
   `TestWorkspaceRegistrationGroupsPreserveOrder`,
   `TestConcurrentSchemaConstructionIsIsolated`가 핵심 계약을 고정한다.
-- `core_test.go`의 `TestRegisterFileToolsRegistersOnlyFileTools`와
+- `core_test.go`의 `TestRegisterFileToolsCreatesOnlyFileToolSet`와
   `TestRegisterSessionToolsContracts`가 책임별 등록 표면을 확인한다.
 
 `cd gateway-go && go test -count=1 ./internal/pipeline/chat/toolreg`

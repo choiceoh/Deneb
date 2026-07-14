@@ -39,14 +39,14 @@ session 상태는 주입된 infra/domain service가 소유한다.
 
 ## 테스트와 집중 검증
 
-- `exec_safety_test.go`의 `TestCheckCatastrophicCommand`와
-  `TestExecCacheClassificationSeparatesParsingFromMutationDecision`,
+- `exec_safety_test.go`의 `TestCheckCatastrophicCommandRejectsCatastrophicPaths`와
+  `TestExecCacheClassificationPreservesCacheOnlyForReadOnlyStages`,
   `contracts_test.go`의 `TestToolExecFallbackValidationStructuredAndHints`가 두 실행
   경로의 안전성을 검증한다.
 - `sessions_tool_test.go`의 `TestSessionsSpawn_RejectsBeyondMaxDepth`,
   `TestSessionsSpawn_RejectsBeyondConcurrencyCap`, `fetch_tools_test.go`의
   `TestFetchTools_PresetBlocksDisallowedName`가 session/tool 경계를 고정한다.
-- `gateway_test.go`의 `TestGatewayConfigSetRequiresApproval`과
+- `gateway_test.go`의 `TestGatewayConfigSetReturnsApprovalThenWritesOnConfirm`과
   `TestGatewayConfirmedWithoutApprovalRejected`가 mutation 승인 계약을 확인한다.
 
 `cd gateway-go && go test -count=1 ./internal/pipeline/chat/tools/runtimeops`

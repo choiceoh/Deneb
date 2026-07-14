@@ -32,10 +32,10 @@ rate gate를 통과한 결과만 영속한다. runtime scheduling과 전체 evol
 
 ## 테스트와 집중 검증
 
-- `service_test.go`의 `TestEvaluate_Pass`, `TestSkillSpecificityIssues`,
-  `TestBuildSkillMD`가 생성 gate와 wire 형식을 검증한다.
+- `service_test.go`의 `TestEvaluateAllowsSessionMeetingAllCriteria`, `TestSkillSpecificityIssuesPassesWellFormedAndRejectsVagueSkills`,
+  `TestBuildSkillMDReturnsFrontmatterOriginAndBody`가 생성 gate와 wire 형식을 검증한다.
 - `daily_cap_test.go`의 `TestGenesis_DailyCapPersistsAcrossRestart`,
-  `dedup_test.go`의 `TestIsDuplicateSkill`, `meta_artifacts_test.go`의
+  `dedup_test.go`의 `TestIsDuplicateSkillReturnsTrueForExactAndNearMatchesButNotUnrelated`, `meta_artifacts_test.go`의
   `TestMetaArtifacts_MaterializeIsWriteIfAbsent`가 재시작·중복·provenance 계약을
   고정한다.
 

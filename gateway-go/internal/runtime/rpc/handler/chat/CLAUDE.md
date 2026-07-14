@@ -35,7 +35,7 @@
   `TestCaptureDocumentValidationContract`, `TestWorkfeedFeedbackMessageContract`,
   `TestDefaultSessionKeyContract`가 registration과 입력 경계를 고정한다.
 - `chat_port_test.go`의 `TestChatMethodsRejectTypedNilPort`와
-  `capture_document_card_test.go`의 `TestCardCapturedDocument`가 typed port와
+  `capture_document_card_test.go`의 `TestCardCapturedDocumentCreatesCardAndSkipsDuplicates`가 typed port와
   deliverable 중복 방지를 검증한다.
 
 `cd gateway-go && go test -count=1 ./internal/runtime/rpc/handler/chat`

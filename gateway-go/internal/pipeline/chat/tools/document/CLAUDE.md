@@ -34,8 +34,8 @@ OCR fallback과 bounded attachment 표현을 소유한다. 호출자별 문구·
 
 ## 테스트와 집중 검증
 
-- `docparse_test.go`의 `TestExtractDocument_ConsistentAcrossCallers`와
-  `TestExtractDocument_CallerDivergences`가 canonical dispatcher와 facade 차이를
+- `docparse_test.go`의 `TestExtractDocumentReturnsConsistentTextAcrossCallers`와
+  `TestExtractDocumentTextRejectsPlainTextAndUnsupportedBinary`가 canonical dispatcher와 facade 차이를
   고정한다.
 - `contracts_test.go`의 `TestXLSXRejectsOversizedColumnReference`,
   `TestAttachmentRenderingRuneBudgets`, `TestExtractDocumentTextPromotionContract`가
