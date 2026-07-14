@@ -2,7 +2,7 @@ package lmtpd
 
 import "testing"
 
-func TestSelectListenFD(t *testing.T) {
+func TestSelectListenFDContractByNameAndPid(t *testing.T) {
 	const pid = 4242
 	tests := []struct {
 		name        string

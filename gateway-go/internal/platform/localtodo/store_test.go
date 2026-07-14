@@ -108,7 +108,7 @@ func TestListOrdersIncompleteThenDueThenCreated(t *testing.T) {
 	}
 }
 
-func TestListRangeOnlyDatedInWindow(t *testing.T) {
+func TestListRange_ReturnsOnlyDatedTodosInWindow(t *testing.T) {
 	s := newTestStore(t)
 	mk := func(title string, day int) {
 		if _, err := s.Create(CreateInput{Title: title, Due: time.Date(2026, 6, day, 9, 0, 0, 0, time.UTC)}); err != nil {
@@ -191,7 +191,7 @@ func TestPersistenceRoundTrip(t *testing.T) {
 	}
 }
 
-func TestIsTodoID(t *testing.T) {
+func TestIsTodoID_ReturnsTrueOnlyForTodoPrefix(t *testing.T) {
 	if !IsTodoID("todo:123") {
 		t.Error("todo: prefix should be a todo id")
 	}

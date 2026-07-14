@@ -103,7 +103,7 @@ func TestNormalizedSourceDeduplicates(t *testing.T) {
 	}
 }
 
-func TestDecideStatusAndEventIDInvariants(t *testing.T) {
+func TestDecide_RejectsInvalidStatusAndClearsEventIDOnReopen(t *testing.T) {
 	s := newTestStore(t)
 	p, _, _ := s.CreateIfAbsent(validAllDayProposal("source"))
 	if got, err := s.Decide(p.ID, Status("unknown"), "local:wrong"); err == nil || got != nil {
@@ -326,7 +326,7 @@ func TestListPendingReturnsOnlyPendingAndFreshCopies(t *testing.T) {
 	}
 }
 
-func TestIDsHaveExpectedEntropyShape(t *testing.T) {
+func TestNewID_GeneratesUniqueFormattedIDs(t *testing.T) {
 	seen := make(map[string]struct{})
 	for i := 0; i < 100; i++ {
 		id := newID()

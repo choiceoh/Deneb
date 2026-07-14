@@ -197,7 +197,7 @@ func TestParseMessage_MessageIDDedupKey(t *testing.T) {
 	}
 }
 
-func TestSanitizeID_NoCollision(t *testing.T) {
+func TestSanitizeIDEncodesDistinctUnsafeCharsWithoutCollision(t *testing.T) {
 	// Distinct Message-IDs that differ only in path/space chars must NOT collapse
 	// to the same dedup key (the old "_"-collapse let one crafted id suppress
 	// another). Percent-encoding keeps them distinct.
@@ -241,7 +241,7 @@ func TestParseMessage_MalformedMultipartPreservesBody(t *testing.T) {
 	}
 }
 
-func TestSeenStore(t *testing.T) {
+func TestSeenStoreTracksSeenKeysWithEvictionAndPersistence(t *testing.T) {
 	path := t.TempDir() + "/seen.json"
 	s := NewSeenStore(path, 2)
 	if s.Seen("k1") {
@@ -361,7 +361,7 @@ func TestDecodeHeader_GB18030From(t *testing.T) {
 	}
 }
 
-func TestClampRunes(t *testing.T) {
+func TestClampRunesTruncatesLongStringsWithMarker(t *testing.T) {
 	if got := clampRunes("한국어", 10); got != "한국어" {
 		t.Errorf("clampRunes short = %q", got)
 	}

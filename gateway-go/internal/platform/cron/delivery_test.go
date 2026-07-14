@@ -60,7 +60,7 @@ func TestNormalizeDeliveryTarget(t *testing.T) {
 	}
 }
 
-func TestMatchesDeliveryTarget(t *testing.T) {
+func TestMatchesDeliveryTargetRejectsMismatchAndAllowsWildcardProvider(t *testing.T) {
 	tests := []struct {
 		name      string
 		provider  string
@@ -89,7 +89,7 @@ func TestMatchesDeliveryTarget(t *testing.T) {
 	}
 }
 
-func TestResolveDeliveryTarget(t *testing.T) {
+func TestResolveDeliveryTargetUsesExplicitOrDefaultsAndErrorsOnMissingFields(t *testing.T) {
 	t.Run("explicit delivery", func(t *testing.T) {
 		target, err := ResolveDeliveryTarget(
 			&JobDeliveryConfig{Channel: "telegram", To: "12345"},

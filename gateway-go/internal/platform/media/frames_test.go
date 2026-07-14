@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestSelectFrameCount(t *testing.T) {
+func TestSelectFrameCountReturnsBucketedCountsByDuration(t *testing.T) {
 	tests := []struct {
 		duration int
 		want     int
@@ -28,7 +28,7 @@ func TestSelectFrameCount(t *testing.T) {
 	}
 }
 
-func TestSelectTimestamps(t *testing.T) {
+func TestSelectTimestampsReturnsSortedTimestampsWithinDuration(t *testing.T) {
 	tests := []struct {
 		duration int
 		count    int

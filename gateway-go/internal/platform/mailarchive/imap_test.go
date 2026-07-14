@@ -45,7 +45,7 @@ func TestExtractLiteralPayload(t *testing.T) {
 	}
 }
 
-func TestExtractFetchUID(t *testing.T) {
+func TestExtractFetchUIDParsesUIDOrReturnsEmpty(t *testing.T) {
 	tests := map[string]string{
 		"* 1 FETCH (UID 5 BODY[] {11}\r\nHELLO WORLD)\r\n": "5",
 		"* 9 FETCH (FLAGS () UID 42 BODY[] {1}\r\nx)\r\n":  "42",
@@ -58,7 +58,7 @@ func TestExtractFetchUID(t *testing.T) {
 	}
 }
 
-func TestExtractAddr(t *testing.T) {
+func TestExtractAddrParsesAddressOrReturnsEmpty(t *testing.T) {
 	cases := map[string]string{
 		`Christina Gu <christina.gu@zttgroup.com>`: "christina.gu@zttgroup.com",
 		`plain@example.com`:                        "plain@example.com",
@@ -72,14 +72,14 @@ func TestExtractAddr(t *testing.T) {
 	}
 }
 
-func TestImapSinceDate(t *testing.T) {
+func TestImapSinceDateFormatsDateForIMAPSearch(t *testing.T) {
 	got := imapSinceDate(time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC))
 	if got != "05-Jan-2026" {
 		t.Fatalf("got %q want 05-Jan-2026", got)
 	}
 }
 
-func TestDedupStrings(t *testing.T) {
+func TestDedupStringsDeduplicatesPreservingOrder(t *testing.T) {
 	got := dedupStrings([]string{"1", "2", "1", "", "3", "2"})
 	want := []string{"1", "2", "3"}
 	if len(got) != len(want) {
@@ -92,7 +92,7 @@ func TestDedupStrings(t *testing.T) {
 	}
 }
 
-func TestQuote(t *testing.T) {
+func TestQuoteEncodesBackslashesAndQuotes(t *testing.T) {
 	if got := quote(`a"b\c`); got != `"a\"b\\c"` {
 		t.Fatalf("quote escaping wrong: %s", got)
 	}

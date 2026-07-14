@@ -22,7 +22,7 @@ func resetDentimeForTest(t *testing.T) {
 	})
 }
 
-func TestComputeNextRunAtMs_Every(t *testing.T) {
+func TestComputeNextRunAtMsEveryReturnsNowPlusInterval(t *testing.T) {
 	now := int64(1000000)
 	schedule := StoreSchedule{Kind: "every", EveryMs: 60000}
 
@@ -49,7 +49,7 @@ func TestComputeNextRunAtMs_EveryWithAnchor(t *testing.T) {
 	}
 }
 
-func TestComputeNextRunAtMs_At(t *testing.T) {
+func TestComputeNextRunAtMsAtReturnsFutureTimestamp(t *testing.T) {
 	future := time.Now().Add(1 * time.Hour).UnixMilli()
 	schedule := StoreSchedule{Kind: "at", At: time.UnixMilli(future).Format(time.RFC3339)}
 
@@ -59,7 +59,7 @@ func TestComputeNextRunAtMs_At(t *testing.T) {
 	}
 }
 
-func TestComputeNextRunAtMs_AtPast(t *testing.T) {
+func TestComputeNextRunAtMsAtPastReturnsZero(t *testing.T) {
 	past := time.Now().Add(-1 * time.Hour).UnixMilli()
 	schedule := StoreSchedule{Kind: "at", At: time.UnixMilli(past).Format(time.RFC3339)}
 
@@ -69,7 +69,7 @@ func TestComputeNextRunAtMs_AtPast(t *testing.T) {
 	}
 }
 
-func TestComputeNextRunAtMs_Cron(t *testing.T) {
+func TestComputeNextRunAtMsCronReturnsNextMinuteBoundary(t *testing.T) {
 	// Every minute cron.
 	schedule := StoreSchedule{Kind: "cron", Expr: "* * * * *"}
 	now := time.Now().UnixMilli()
@@ -84,7 +84,7 @@ func TestComputeNextRunAtMs_Cron(t *testing.T) {
 	}
 }
 
-func TestComputeNextRunAtMs_CronHourly(t *testing.T) {
+func TestComputeNextRunAtMsCronHourlyReturnsFutureTopOfHour(t *testing.T) {
 	// Top of every hour.
 	schedule := StoreSchedule{Kind: "cron", Expr: "0 * * * *"}
 	now := time.Now().UnixMilli()
@@ -127,7 +127,7 @@ func TestParseCronField(t *testing.T) {
 	}
 }
 
-func TestIsRecurringTopOfHourCronExpr(t *testing.T) {
+func TestIsRecurringTopOfHourCronExprDetectsFiveAndSixFieldFormats(t *testing.T) {
 	tests := []struct {
 		expr string
 		want bool
@@ -165,7 +165,7 @@ func TestParseAbsoluteTimeMs(t *testing.T) {
 	}
 }
 
-func TestCronShorthandAliases(t *testing.T) {
+func TestCronShorthandAliasesParseToFutureNextRun(t *testing.T) {
 	now := time.Now().UnixMilli()
 	shorthands := []string{"@hourly", "@daily", "@weekly", "@monthly", "@yearly", "@annually"}
 	for _, sh := range shorthands {
@@ -177,7 +177,7 @@ func TestCronShorthandAliases(t *testing.T) {
 	}
 }
 
-func TestCronNamedMonths(t *testing.T) {
+func TestCronNamedMonthsParseToValidNextRun(t *testing.T) {
 	now := time.Now().UnixMilli()
 	schedule := StoreSchedule{Kind: "cron", Expr: "0 0 1 JAN *"}
 	next := ComputeNextRunAtMs(schedule, now)
@@ -186,7 +186,7 @@ func TestCronNamedMonths(t *testing.T) {
 	}
 }
 
-func TestCronNamedDays(t *testing.T) {
+func TestCronNamedDaysParseToNextMonday(t *testing.T) {
 	now := time.Now().UnixMilli()
 	schedule := StoreSchedule{Kind: "cron", Expr: "0 0 * * MON"}
 	next := ComputeNextRunAtMs(schedule, now)
@@ -200,7 +200,7 @@ func TestCronNamedDays(t *testing.T) {
 	}
 }
 
-func TestCronNamedRange(t *testing.T) {
+func TestCronNamedRangeParsesToNextWeekday(t *testing.T) {
 	now := time.Now().UnixMilli()
 	schedule := StoreSchedule{Kind: "cron", Expr: "0 9 * * MON-FRI"}
 	next := ComputeNextRunAtMs(schedule, now)
@@ -215,7 +215,7 @@ func TestCronNamedRange(t *testing.T) {
 	}
 }
 
-func TestStableJobOffset(t *testing.T) {
+func TestStableJobOffsetReturnsDeterministicValueWithinBoundary(t *testing.T) {
 	offset1 := stableJobOffset("0 * * * *", 300000)
 	offset2 := stableJobOffset("0 * * * *", 300000)
 	if offset1 != offset2 {
@@ -318,9 +318,9 @@ func TestParseSmartSchedule(t *testing.T) {
 
 // --- resolveScheduleLocation / per-job TZ fallback ---------------------
 
-// TestResolveScheduleLocation_ExplicitJobTzWins verifies per-job Tz beats
-// both the dentime global and time.Local.
-func TestResolveScheduleLocation_ExplicitJobTzWins(t *testing.T) {
+// TestResolveScheduleLocationWithExplicitJobTzOverridesGlobal verifies
+// per-job Tz beats both the dentime global and time.Local.
+func TestResolveScheduleLocationWithExplicitJobTzOverridesGlobal(t *testing.T) {
 	resetDentimeForTest(t)
 	dentime.SetConfigTimezone("Asia/Seoul")
 	dentime.ResetCache()
@@ -331,9 +331,9 @@ func TestResolveScheduleLocation_ExplicitJobTzWins(t *testing.T) {
 	}
 }
 
-// TestResolveScheduleLocation_InheritsDentime verifies empty per-job Tz
-// inherits the dentime global zone — the core bug fix.
-func TestResolveScheduleLocation_InheritsDentime(t *testing.T) {
+// TestResolveScheduleLocationWithoutJobTzInheritsGlobal verifies empty
+// per-job Tz inherits the dentime global zone — the core bug fix.
+func TestResolveScheduleLocationWithoutJobTzInheritsGlobal(t *testing.T) {
 	resetDentimeForTest(t)
 	dentime.SetConfigTimezone("Asia/Seoul")
 	dentime.ResetCache()
@@ -358,9 +358,9 @@ func TestResolveScheduleLocation_InvalidTzUsesUTC(t *testing.T) {
 	}
 }
 
-// TestResolveScheduleLocation_NoGlobalFallsBackToLocal verifies the final
-// fallback when neither per-job nor dentime provides a zone.
-func TestResolveScheduleLocation_NoGlobalFallsBackToLocal(t *testing.T) {
+// TestResolveScheduleLocationUsesLocalFallbackWithoutGlobalOrJobTz verifies
+// the final fallback when neither per-job nor dentime provides a zone.
+func TestResolveScheduleLocationUsesLocalFallbackWithoutGlobalOrJobTz(t *testing.T) {
 	resetDentimeForTest(t)
 	// Intentionally leave dentime empty.
 
@@ -371,10 +371,10 @@ func TestResolveScheduleLocation_NoGlobalFallsBackToLocal(t *testing.T) {
 	// time.Local may be UTC on CI or arbitrary locally; just assert non-nil.
 }
 
-// TestComputeNextCronMs_InheritsDentimeZone is the end-to-end behaviour
-// check: a "9am daily" cron with empty per-job Tz fires at 09:00 KST when
-// dentime is set to Asia/Seoul.
-func TestComputeNextCronMs_InheritsDentimeZone(t *testing.T) {
+// TestComputeNextCronMsWithEmptyTzInheritsDentimeZone is the end-to-end
+// behaviour check: a "9am daily" cron with empty per-job Tz fires at 09:00
+// KST when dentime is set to Asia/Seoul.
+func TestComputeNextCronMsWithEmptyTzInheritsDentimeZone(t *testing.T) {
 	resetDentimeForTest(t)
 	dentime.SetConfigTimezone("Asia/Seoul")
 	dentime.ResetCache()

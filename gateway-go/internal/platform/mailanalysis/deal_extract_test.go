@@ -2,7 +2,7 @@ package mailanalysis
 
 import "testing"
 
-func TestDealInfoFromExtract_NotADeal(t *testing.T) {
+func TestDealInfoFromExtractReturnsNilWhenNotADeal(t *testing.T) {
 	if got := dealInfoFromExtract(dealExtract{IsDeal: false, Counterparty: "마바솔라"}, "", nil); got != nil {
 		t.Errorf("isDeal=false should yield nil, got %+v", got)
 	}

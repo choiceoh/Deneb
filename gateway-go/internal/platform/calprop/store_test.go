@@ -37,7 +37,7 @@ func TestCreateIfAbsent_DedupsBySource(t *testing.T) {
 	}
 }
 
-func TestListPending_AndDecide(t *testing.T) {
+func TestListPending_SortsByStartAndDecideClearsPending(t *testing.T) {
 	s := newTestStore(t)
 	a, _, _ := s.CreateIfAbsent(CreateInput{Title: "A", Start: "2026-07-02", AllDay: true, Source: "s:a"})
 	b, _, _ := s.CreateIfAbsent(CreateInput{Title: "B", Start: "2026-07-01", AllDay: true, Source: "s:b"})
@@ -133,7 +133,7 @@ func TestCreateIfAbsent_KeepsRecentTerminal(t *testing.T) {
 	}
 }
 
-func TestClaimForAccept_OnlyFirstWins(t *testing.T) {
+func TestClaimForAccept_RejectsSecondClaimAfterFirstWins(t *testing.T) {
 	s := newTestStore(t)
 	p, _, _ := s.CreateIfAbsent(CreateInput{Title: "킥오프", Start: "2026-07-03", AllDay: true, Source: "s:k"})
 
@@ -164,7 +164,7 @@ func TestClaimForAccept_UnknownID(t *testing.T) {
 	}
 }
 
-func TestClaimForAccept_ReleaseReopens(t *testing.T) {
+func TestClaimForAccept_RestoresPendingStateOnRelease(t *testing.T) {
 	s := newTestStore(t)
 	p, _, _ := s.CreateIfAbsent(CreateInput{Title: "회의", Start: "2026-07-04", AllDay: true, Source: "s:m"})
 

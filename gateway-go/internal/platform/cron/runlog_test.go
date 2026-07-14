@@ -34,7 +34,7 @@ func TestRunLogAppendAndRead(t *testing.T) {
 	}
 }
 
-func TestRunLogStatusFilter(t *testing.T) {
+func TestRunLogReadPageFiltersByErrorStatus(t *testing.T) {
 	dir := t.TempDir()
 	storePath := filepath.Join(dir, "jobs.json")
 	rl := NewPersistentRunLog(storePath)
@@ -49,7 +49,7 @@ func TestRunLogStatusFilter(t *testing.T) {
 	}
 }
 
-func TestRunLogPagination(t *testing.T) {
+func TestRunLogReadPagePaginatesWithLimitAndOffset(t *testing.T) {
 	dir := t.TempDir()
 	storePath := filepath.Join(dir, "jobs.json")
 	rl := NewPersistentRunLog(storePath)
@@ -70,7 +70,7 @@ func TestRunLogPagination(t *testing.T) {
 	}
 }
 
-func TestRunLogTextSearch(t *testing.T) {
+func TestRunLogReadPageFiltersByTextQuery(t *testing.T) {
 	dir := t.TempDir()
 	storePath := filepath.Join(dir, "jobs.json")
 	rl := NewPersistentRunLog(storePath)

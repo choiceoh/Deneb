@@ -53,7 +53,7 @@ func TestStoreAddAndGet(t *testing.T) {
 	}
 }
 
-func TestStoreRemove(t *testing.T) {
+func TestStoreRemoveJobDeletesTargetKeepsOthers(t *testing.T) {
 	dir := t.TempDir()
 	storePath := filepath.Join(dir, "jobs.json")
 	s := NewStore(storePath)
@@ -92,7 +92,7 @@ func TestStoreUpdateState(t *testing.T) {
 	}
 }
 
-func TestStorePersistence(t *testing.T) {
+func TestStoreWriteThenReloadRoundTripsPersistedJob(t *testing.T) {
 	dir := t.TempDir()
 	storePath := filepath.Join(dir, "jobs.json")
 

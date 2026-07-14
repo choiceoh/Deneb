@@ -30,7 +30,7 @@ func TestLoadPrompt_CustomFile(t *testing.T) {
 	}
 }
 
-func TestServiceAnalysisPromptPrefersNativeOverride(t *testing.T) {
+func TestServiceAnalysisPromptUsesNativeOverrideWhenSet(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "custom-prompt.md")
 	if err := os.WriteFile(path, []byte("file prompt"), 0o600); err != nil {
@@ -50,7 +50,7 @@ func TestServiceAnalysisPromptPrefersNativeOverride(t *testing.T) {
 	}
 }
 
-func TestServiceAnalysisPromptFallsBackToPromptFile(t *testing.T) {
+func TestServiceAnalysisPromptFallbackToPromptFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "custom-prompt.md")
 	if err := os.WriteFile(path, []byte("file prompt"), 0o600); err != nil {

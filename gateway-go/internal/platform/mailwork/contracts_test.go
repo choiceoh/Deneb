@@ -51,7 +51,7 @@ func TestNilAndEmptyStoreContracts(t *testing.T) {
 	}
 }
 
-func TestMessageWorkflowTransitionsAndPersistence(t *testing.T) {
+func TestMessageWorkflow_TransitionsThroughStatesAndReloadsFromDisk(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state", "mailwork.json")
 	s := New(path)
 	in := MessageInput{ID: "  msg-1  ", ThreadID: " thread ", From: " sender ", Subject: " subject ", Date: " date ", Mailbox: " INBOX ", HasAttachment: true, AttachmentCount: 2}

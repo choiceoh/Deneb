@@ -8,10 +8,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
 
-// TestAnalysisThinking locks the gating: extended thinking turns on ONLY for an
-// Anthropic-mode client with real token headroom. OpenAI-mode (the local vLLM
-// path that leaked CoT into the body, #1816) and tight budgets stay disabled.
-func TestAnalysisThinking(t *testing.T) {
+// TestAnalysisThinkingOnlyEnabledWhenAnthropicHasHeadroom locks the gating:
+// extended thinking turns on ONLY for an Anthropic-mode client with real token
+// headroom. OpenAI-mode (the local vLLM path that leaked CoT into the body,
+// #1816) and tight budgets stay disabled.
+func TestAnalysisThinkingOnlyEnabledWhenAnthropicHasHeadroom(t *testing.T) {
 	anthropic := llm.NewClient("http://x", "k", llm.WithAPIMode(llm.APIModeAnthropic))
 	openai := llm.NewClient("http://x", "k", llm.WithAPIMode(llm.APIModeOpenAI))
 
@@ -63,7 +64,7 @@ func TestExtractDisplayName(t *testing.T) {
 	}
 }
 
-func TestExtractWikiGraphContext_NoSender(t *testing.T) {
+func TestExtractWikiGraphContextEmptyWhenNoSender(t *testing.T) {
 	// Empty From → empty MemoryContext, never even tries to exec.
 	msg := &gmail.MessageDetail{From: ""}
 	got := extractWikiGraphContext(context.Background(), msg)

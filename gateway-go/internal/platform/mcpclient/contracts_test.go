@@ -117,7 +117,7 @@ func TestChildEnvAllowlistAndLocaleFamily(t *testing.T) {
 	}
 }
 
-func TestStatsSnapshotCopyAndCounters(t *testing.T) {
+func TestStats_ReturnsIndependentCopyOfCounters(t *testing.T) {
 	c, _ := New(context.Background(), []string{"server"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	now := time.Now()
 	c.mu.Lock()
@@ -237,7 +237,7 @@ func (h *rpcHarness) close() {
 	}
 }
 
-func TestPingListToolsAndCallToolRPCIntegration(t *testing.T) {
+func TestPing_ListToolsAndCallToolReturnExpectedResults(t *testing.T) {
 	page := 0
 	h := newRPCHarness(t, func(req map[string]any) map[string]any {
 		switch req["method"] {
@@ -376,7 +376,7 @@ func TestReadLoopRoutesResponsesAndIgnoresGarbage(t *testing.T) {
 	}
 }
 
-func TestOnNotificationOnlyMarksListChange(t *testing.T) {
+func TestOnNotification_IgnoresOtherMarksListChanged(t *testing.T) {
 	c, _ := New(context.Background(), []string{"server"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	c.onNotification("other")
 	if c.listChangedLogged {

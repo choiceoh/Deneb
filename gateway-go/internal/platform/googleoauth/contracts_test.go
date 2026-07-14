@@ -196,7 +196,7 @@ func TestJSONTransportNilAndReadFailures(t *testing.T) {
 	}
 }
 
-func TestJSONResponseLimitBoundaries(t *testing.T) {
+func TestJSON_EnforcesMaxResponseByteBoundary(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		body string
@@ -466,7 +466,7 @@ func TestSourceRefreshFailurePreservesState(t *testing.T) {
 	}
 }
 
-func TestSourcePersistCurrentState(t *testing.T) {
+func TestSource_PersistWritesCurrentTokenToDisk(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "token.json")
 	expiry := time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC)
 	s := NewSource("Test", Loaded{AccessToken: "access", RefreshToken: "refresh", Expiry: expiry}, path, http.DefaultClient)

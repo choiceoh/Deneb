@@ -31,7 +31,7 @@ func writeJSON(t *testing.T, path string, v any) {
 	}
 }
 
-func TestNewClientFromDir_InstalledCredentials(t *testing.T) {
+func TestNewClientFromDir_LoadsInstalledCredentials(t *testing.T) {
 	dir := t.TempDir()
 
 	writeJSON(t, filepath.Join(dir, "gmail_client.json"), map[string]any{
@@ -64,7 +64,7 @@ func TestNewClientFromDir_InstalledCredentials(t *testing.T) {
 	}
 }
 
-func TestNewClientFromDir_WebCredentials(t *testing.T) {
+func TestNewClientFromDir_LoadsWebCredentials(t *testing.T) {
 	dir := t.TempDir()
 
 	writeJSON(t, filepath.Join(dir, "gmail_client.json"), map[string]any{
@@ -167,7 +167,7 @@ func TestNewClientFromDir_InvalidJSON(t *testing.T) {
 	}
 }
 
-func TestValidToken_UsesCache(t *testing.T) {
+func TestValidToken_ReturnsCachedToken(t *testing.T) {
 	c := clientWithTokens(googleoauth.Loaded{
 		AccessToken: "cached-token",
 		Expiry:      time.Now().Add(10 * time.Minute),
@@ -289,7 +289,7 @@ func TestGetClient_RetriableOnFailure(t *testing.T) {
 	// Both should fail, but importantly the second call actually tried (not cached error).
 }
 
-func TestPersistToken(t *testing.T) {
+func TestPersistToken_WritesTokenFile(t *testing.T) {
 	tokenPath := filepath.Join(t.TempDir(), "token.json")
 
 	c := clientWithTokens(googleoauth.Loaded{
@@ -324,11 +324,11 @@ func TestPersistToken(t *testing.T) {
 	}
 }
 
-// TestRefresh_PersistsRotatedRefreshToken regression-tests the silent token-loss
+// TestRefresh_SavesRotatedRefreshTokenToDisk regression-tests the silent token-loss
 // bug: when Google rotates the refresh_token in a refresh response, the new
 // value MUST land on disk so the next gateway restart loads the live token
 // rather than the revoked one.
-func TestRefresh_PersistsRotatedRefreshToken(t *testing.T) {
+func TestRefresh_SavesRotatedRefreshTokenToDisk(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
@@ -372,10 +372,10 @@ func TestRefresh_PersistsRotatedRefreshToken(t *testing.T) {
 	}
 }
 
-// TestPersistToken_DoesNotPanicOnUnwritablePath verifies that a broken token
+// TestPersistToken_DoesNotPanicWhenPathUnwritable verifies that a broken token
 // path does not crash the gateway. The error is surfaced via slog.Error in
 // the real code path (asserted by inspection, not by capturing logs here).
-func TestPersistToken_DoesNotPanicOnUnwritablePath(t *testing.T) {
+func TestPersistToken_DoesNotPanicWhenPathUnwritable(t *testing.T) {
 	c := clientWithTokens(googleoauth.Loaded{
 		AccessToken:  "ya29.x",
 		RefreshToken: "1//x",

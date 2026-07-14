@@ -14,7 +14,7 @@ func TestInferLegacyName_FromPayload(t *testing.T) {
 	}
 }
 
-func TestInferLegacyName_FromSchedule(t *testing.T) {
+func TestInferLegacyNameFallbackToScheduleWhenPayloadEmpty(t *testing.T) {
 	job := StoreJob{
 		Schedule: StoreSchedule{Kind: "cron", Expr: "0 */2 * * *"},
 		Payload:  StorePayload{Kind: "systemEvent"},

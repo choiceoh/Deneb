@@ -36,7 +36,7 @@ func TestParseShowinfoTimes_NoMatches(t *testing.T) {
 	}
 }
 
-func TestEvenSampleTimestamps(t *testing.T) {
+func TestEvenSampleTimestampsPreservesEndpointsAndReturnsAllWhenUnderBudget(t *testing.T) {
 	candidates := []float64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
 
 	t.Run("under budget returns as-is", func(t *testing.T) {
@@ -123,7 +123,7 @@ func synthCutsVideo(t *testing.T, colors []string, segDur int) string {
 	return out
 }
 
-func TestDetectSceneChangeTimestamps_SyntheticCuts(t *testing.T) {
+func TestDetectSceneChangeTimestampsFindsCutsAndAnchorsAtWindowStart(t *testing.T) {
 	// Hard cuts at t=2, 4, 6. Colors are picked for distinct luma — ffmpeg's
 	// scene score works on the luma plane, so e.g. red→green (nearly equal Y)
 	// would be invisible to it.
@@ -150,7 +150,7 @@ func TestDetectSceneChangeTimestamps_SyntheticCuts(t *testing.T) {
 	}
 }
 
-func TestWatchLocalFile_SceneAlignedFrames(t *testing.T) {
+func TestWatchVideoReturnsFramesAlignedWithSceneCuts(t *testing.T) {
 	// 12 one-second segments → 11 hard cuts (>= sceneMinCandidates), so the
 	// scene path is taken end-to-end: every extracted frame must sit on a cut
 	// (integer second), not on an even grid across the duration.
@@ -177,7 +177,7 @@ func TestWatchLocalFile_SceneAlignedFrames(t *testing.T) {
 	}
 }
 
-func TestDetectSceneChangeTimestamps_WindowOffset(t *testing.T) {
+func TestDetectSceneChangeTimestampsShiftsCutsToAbsoluteTimeWithinWindow(t *testing.T) {
 	video := synthCutsVideo(t, []string{"black", "white", "gray", "black"}, 2)
 
 	// Scan [3, 8): only the cuts at t=4 and t=6 are inside; parsed times must

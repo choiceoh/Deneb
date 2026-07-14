@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
 
-func TestAttachmentCandidates_Filters(t *testing.T) {
+func TestAttachmentCandidatesRejectsInvalidEntries(t *testing.T) {
 	atts := []gmail.AttachmentInfo{
 		{Filename: "견적서.pdf", MimeType: "application/pdf", AttachmentID: "a1", Size: 50000},
 		{Filename: "logo.png", MimeType: "image/png", AttachmentID: "a2", Size: 400},                     // too small → skip
@@ -28,7 +28,7 @@ func TestAttachmentCandidates_Filters(t *testing.T) {
 	}
 }
 
-func TestAttachmentCandidates_SizeCeiling(t *testing.T) {
+func TestAttachmentCandidatesRejectsOversizedAttachment(t *testing.T) {
 	atts := []gmail.AttachmentInfo{
 		{Filename: "small.pdf", MimeType: "application/pdf", AttachmentID: "a1", Size: 50000},
 		{Filename: "huge.pdf", MimeType: "application/pdf", AttachmentID: "a2", Size: maxAttachmentSize + 1}, // over ceiling → skip
@@ -39,7 +39,7 @@ func TestAttachmentCandidates_SizeCeiling(t *testing.T) {
 	}
 }
 
-func TestAttachmentCandidates_CountCap(t *testing.T) {
+func TestAttachmentCandidatesEnforcesCountBoundary(t *testing.T) {
 	var atts []gmail.AttachmentInfo
 	for i := 0; i < maxAttachmentCandidates+3; i++ {
 		atts = append(atts, gmail.AttachmentInfo{Filename: "doc.pdf", MimeType: "application/pdf", AttachmentID: "x", Size: 5000})
@@ -60,7 +60,7 @@ func TestIsExtractableAttachment_MimeFallback(t *testing.T) {
 	}
 }
 
-func TestBuildAttachmentSelection_OnlyPicked(t *testing.T) {
+func TestBuildAttachmentSelectionIgnoresUnpickedAttachments(t *testing.T) {
 	ext := []extractedAttachment{
 		{att: gmail.AttachmentInfo{Filename: "견적서.pdf"}, text: "총액 5,000,000원"},
 		{att: gmail.AttachmentInfo{Filename: "logo.png"}, text: "회사로고"},
@@ -121,7 +121,7 @@ func TestIsClearBusinessDoc(t *testing.T) {
 	}
 }
 
-func TestClipChars(t *testing.T) {
+func TestClipCharsTruncatesByRuneCount(t *testing.T) {
 	if got := clipChars("짧은글", 10); got != "짧은글" {
 		t.Fatalf("short unchanged: %q", got)
 	}

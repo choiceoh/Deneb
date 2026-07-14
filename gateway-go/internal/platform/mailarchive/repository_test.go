@@ -14,7 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
 
-func TestRepositorySearchPageUsesArchiveAndLocalOverlay(t *testing.T) {
+func TestRepositorySearchPageReflectsOverlayReadAndArchiveUpdates(t *testing.T) {
 	raw := archiveTestMessage("m1@example.com", "sender@example.com", "Archive subject", "Archive body for native mail.", "")
 	srv := newTestIMAPArchive(t, map[string]map[string][]byte{
 		"INBOX": {"1": []byte(raw)},
@@ -88,7 +88,7 @@ func TestRepositorySearchPageUsesArchiveAndLocalOverlay(t *testing.T) {
 	}
 }
 
-func TestRepositoryGetAttachmentUsesArchiveRawMessage(t *testing.T) {
+func TestRepositoryGetAttachmentReturnsBytesFromArchivedMessage(t *testing.T) {
 	raw := archiveTestMessage("m2@example.com", "sender@example.com", "Attachment", "See attached.", "%PDF")
 	srv := newTestIMAPArchive(t, map[string]map[string][]byte{
 		"INBOX": {"7": []byte(raw)},
@@ -117,7 +117,7 @@ func TestRepositoryGetAttachmentUsesArchiveRawMessage(t *testing.T) {
 	}
 }
 
-func TestRepositoryResolvesLegacyGmailLocatorAfterArchiveRename(t *testing.T) {
+func TestRepositoryGetMessageResolvesLegacyGmailLocatorAfterMailboxMigration(t *testing.T) {
 	raw := archiveTestMessage("m-legacy@example.com", "sender@example.com", "Renamed archive", "Still reachable.", "")
 	srv := newTestIMAPArchive(t, map[string]map[string][]byte{
 		"Archive": {"9": []byte(raw)},
@@ -139,7 +139,7 @@ func TestRepositoryResolvesLegacyGmailLocatorAfterArchiveRename(t *testing.T) {
 	}
 }
 
-func TestRepositoryNativeStatusSummarizesArchiveAndOverlay(t *testing.T) {
+func TestRepositoryNativeStatusReturnsArchiveAndOverlayCounts(t *testing.T) {
 	raw1 := archiveTestMessage("m1@example.com", "sender@example.com", "One", "Body one.", "")
 	raw2 := archiveTestMessage("m2@example.com", "sender@example.com", "Two", "Body two.", "%PDF")
 	srv := newTestIMAPArchive(t, map[string]map[string][]byte{
@@ -180,7 +180,7 @@ func TestRepositoryNativeStatusSummarizesArchiveAndOverlay(t *testing.T) {
 	}
 }
 
-func TestRepositorySearchPageFiltersHasAttachmentInArchive(t *testing.T) {
+func TestRepositorySearchPageReturnsOnlyMessagesWithAttachments(t *testing.T) {
 	rawPlain := archiveTestMessage("plain@example.com", "sender@example.com", "Plain", "No attachment.", "")
 	rawAttached := archiveTestMessage("attached@example.com", "sender@example.com", "Attached", "See attached.", "%PDF")
 	srv := newTestIMAPArchive(t, map[string]map[string][]byte{
@@ -206,7 +206,7 @@ func TestRepositorySearchPageFiltersHasAttachmentInArchive(t *testing.T) {
 	}
 }
 
-func TestRepositorySearchPageSearchesAllMailboxesByDefaultAndNarrowsExplicitInbox(t *testing.T) {
+func TestRepositorySearchPageDefaultsToAllMailboxesWithOptionalInboxNarrowing(t *testing.T) {
 	rawInbox := archiveTestMessage("inbox@example.com", "sender@example.com", "Inbox", "Inbox body.", "")
 	rawGmail := archiveTestMessage("gmail@example.com", "sender@example.com", "Gmail", "Gmail body.", "")
 	srv := newTestIMAPArchive(t, map[string]map[string][]byte{
@@ -268,7 +268,7 @@ func TestRepositorySearchPageSearchesAllMailboxesByDefaultAndNarrowsExplicitInbo
 	}
 }
 
-func TestRepositorySearchPageScansPastFilteredNewestRows(t *testing.T) {
+func TestRepositorySearchPageFillsFullPageWithoutCountingArchivedRows(t *testing.T) {
 	msgs := map[string][]byte{}
 	for i := 1; i <= 80; i++ {
 		uid := fmt.Sprintf("%d", i)
@@ -346,7 +346,7 @@ func TestRepositoryMutationResolvesArchiveIDWithoutPriorList(t *testing.T) {
 	}
 }
 
-func TestRepositoryFallsBackForUnsupportedQuery(t *testing.T) {
+func TestRepositoryUsesFallbackForUnsupportedQuery(t *testing.T) {
 	fallback := &fakeRepositoryFallback{
 		rows: []gmail.MessageSummary{{ID: "gmail-1", Subject: "starred"}},
 	}

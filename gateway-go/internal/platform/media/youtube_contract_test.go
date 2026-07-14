@@ -356,7 +356,7 @@ func TestCleanSubtitleTextContractMatrix(t *testing.T) {
 	}
 }
 
-func TestCleanSubtitleTextUnicodeCap(t *testing.T) {
+func TestCleanSubtitleTextTruncatesAtUnicodeRuneCap(t *testing.T) {
 	input := strings.Repeat("가", 50_001)
 	got := cleanSubtitleText(input)
 	if !utf8.ValidString(got) {
@@ -443,7 +443,7 @@ func TestVideoIDValidationContract(t *testing.T) {
 	}
 }
 
-func TestInnertubeEnvironmentOverrides(t *testing.T) {
+func TestInnertubeKeyAndVersionUseEnvOverrideWhenSet(t *testing.T) {
 	t.Setenv("DENEB_YT_INNERTUBE_KEY", "")
 	t.Setenv("DENEB_YT_INNERTUBE_CLIENT_VERSION", "")
 	if got := innertubeKey(); got != innertubeWebKey {
@@ -732,7 +732,7 @@ func TestASRUsableContract(t *testing.T) {
 	}
 }
 
-func TestFrameCountBoundariesAdditional(t *testing.T) {
+func TestSelectFrameCountBoundaryValuesMapToExpectedBuckets(t *testing.T) {
 	for _, tt := range []struct {
 		duration int
 		want     int
@@ -953,7 +953,7 @@ func TestExtractTranscriptNativeRejectsBadIDWithoutNetwork(t *testing.T) {
 	}
 }
 
-func TestExtractTranscriptNativeBoundedSkipsTightASRBudget(t *testing.T) {
+func TestExtractTranscriptNativeBoundedReturnsNilWithoutNetworkOnTightASRBudget(t *testing.T) {
 	oldTranscriber, oldReady := AudioTranscriber, AudioTranscriberReady
 	t.Cleanup(func() {
 		AudioTranscriber = oldTranscriber
@@ -997,7 +997,7 @@ func TestTranscriptViaASRSkipsBeforeDownloadWhenUnavailable(t *testing.T) {
 	}
 }
 
-func TestTranscriptViaASRSkipsTooTightDeadline(t *testing.T) {
+func TestTranscriptViaASRReturnsEmptyWithoutCallingTranscriberOnTightDeadline(t *testing.T) {
 	oldTranscriber, oldReady := AudioTranscriber, AudioTranscriberReady
 	t.Cleanup(func() {
 		AudioTranscriber = oldTranscriber

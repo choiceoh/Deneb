@@ -30,7 +30,7 @@ type schemaWrapper struct {
 	Schema map[string]any `json:"schema"`
 }
 
-func TestExtractorSchemas_ValidStrictWrapper(t *testing.T) {
+func TestExtractorSchemasValidStrictWrapperFormat(t *testing.T) {
 	for key, raw := range extractorSchemas {
 		if !json.Valid(raw) {
 			t.Errorf("%s: schema is not valid JSON", key)
@@ -58,10 +58,10 @@ func TestExtractorSchemas_ValidStrictWrapper(t *testing.T) {
 	}
 }
 
-// TestExtractorSchemas_WireShape proves a schema threaded through ResponseFormat
-// marshals to the {type:json_schema, json_schema:{...}} body the live probe
-// verified against the production qwen vLLM.
-func TestExtractorSchemas_WireShape(t *testing.T) {
+// TestExtractorSchemasEncodeToWireFormat proves a schema threaded through
+// ResponseFormat marshals to the {type:json_schema, json_schema:{...}} body the
+// live probe verified against the production qwen vLLM.
+func TestExtractorSchemasEncodeToWireFormat(t *testing.T) {
 	rf := &llm.ResponseFormat{Type: "json_schema", JSONSchema: actionItemsSchema}
 	raw, err := json.Marshal(rf)
 	if err != nil {
@@ -108,7 +108,7 @@ func leafEnum(t *testing.T, raw json.RawMessage, walk func(root map[string]any) 
 	return out
 }
 
-func TestActionPrioritySchema_Enum(t *testing.T) {
+func TestActionPrioritySchemaEnumContract(t *testing.T) {
 	// The headline invariant: priority is exactly high|medium|low — the set the
 	// downstream high-priority calendar-proposal gate keys on.
 	got := leafEnum(t, actionItemsSchema, func(root map[string]any) any {
@@ -120,12 +120,12 @@ func TestActionPrioritySchema_Enum(t *testing.T) {
 	assertSameSet(t, "priority", got, []string{"high", "medium", "low"})
 }
 
-// TestActionItemsSchema_MatchesLiveVerifiedShape locks the reflection-generated
+// TestActionItemsSchemaMatchesLiveVerifiedContract locks the reflection-generated
 // schema to the exact json_schema body that was confirmed working (HTTP 200 +
 // conforming output) against the production qwen vLLM during development. If the
 // generator or the ActionItem struct ever changes the wire shape, this fails —
 // proving the derived schema still equals the live-verified contract.
-func TestActionItemsSchema_MatchesLiveVerifiedShape(t *testing.T) {
+func TestActionItemsSchemaMatchesLiveVerifiedContract(t *testing.T) {
 	const liveVerified = `{
       "name": "action_items",
       "strict": true,
@@ -163,7 +163,7 @@ func TestActionItemsSchema_MatchesLiveVerifiedShape(t *testing.T) {
 	}
 }
 
-func TestWikiFactTypeSchema_Enum(t *testing.T) {
+func TestWikiFactTypeSchemaEnumContract(t *testing.T) {
 	got := leafEnum(t, wikiFactsSchema, func(root map[string]any) any {
 		props := root["properties"].(map[string]any)
 		facts := props["facts"].(map[string]any)

@@ -186,7 +186,7 @@ func TestListRangeStartInWindowSorted(t *testing.T) {
 
 // A multi-day event must appear for any window it overlaps, even one that opens
 // after its start day — and must vanish once the window clears its end.
-func TestListRangeIncludesOverlappingMultiDay(t *testing.T) {
+func TestListRange_IncludesMultiDayEventAcrossWindowBoundary(t *testing.T) {
 	s := newTestStore(t)
 	// All-day workshop spanning June 8 → June 10, stored with an exclusive end at
 	// June 11 00:00 (the convention the native form and Google both use).
@@ -263,7 +263,7 @@ func TestPersistenceRoundTrip(t *testing.T) {
 	}
 }
 
-func TestIsLocalID(t *testing.T) {
+func TestIsLocalID_ReturnsTrueOnlyForLocalPrefix(t *testing.T) {
 	if !IsLocalID("local:123") {
 		t.Error("local: prefix should be local")
 	}
@@ -275,7 +275,7 @@ func TestIsLocalID(t *testing.T) {
 // The change observer fires once per successful mutation with the event's ID, so
 // the server can mirror it onto native-sync. A failed mutation (not-found) must
 // not fire it.
-func TestChangeObserverFires(t *testing.T) {
+func TestChangeObserver_FiresOnSuccessNotOnMissingTarget(t *testing.T) {
 	s := newTestStore(t)
 	var got []string
 	s.SetChangeObserver(func(id string) { got = append(got, id) })

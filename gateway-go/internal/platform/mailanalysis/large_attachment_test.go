@@ -33,7 +33,7 @@ func TestLargeAttachAllowed(t *testing.T) {
 	}
 }
 
-func TestLargeAttachRulesEnvOverride(t *testing.T) {
+func TestLargeAttachRulesAllowsHostsFromEnvOverride(t *testing.T) {
 	t.Setenv("DENEB_LARGE_ATTACH_HOSTS", "mail.example.com|download , files.example.org")
 	rules := largeAttachRules()
 	if !largeAttachAllowed("https://mail.example.com/download/1", rules) {
@@ -50,7 +50,7 @@ func TestLargeAttachRulesEnvOverride(t *testing.T) {
 	}
 }
 
-func TestFetchLargeAttachmentsInto(t *testing.T) {
+func TestFetchLargeAttachmentsIntoMergesAllowedAndSkipsBlocked(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Disposition", `attachment; filename="quote.pdf"`)
 		_, _ = w.Write([]byte("%PDF-1.7 fake pdf bytes"))
@@ -81,7 +81,7 @@ func TestFetchLargeAttachmentsInto(t *testing.T) {
 	}
 }
 
-func TestFetchLargeAttachments_RedirectBlocked(t *testing.T) {
+func TestFetchLargeAttachmentsDeniesRedirectToUnallowedHost(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "http://evil.example.com/x", http.StatusFound)
 	}))
@@ -100,7 +100,7 @@ func TestFetchLargeAttachments_RedirectBlocked(t *testing.T) {
 	}
 }
 
-func TestFetchLargeAttachmentsInto_NoLinks(t *testing.T) {
+func TestFetchLargeAttachmentsIntoNoOpWhenNoLinks(t *testing.T) {
 	s := &Service{log: slog.Default()}
 	msg := &gmail.MessageDetail{ID: "m1"}
 	attBytes := map[string][]byte{}

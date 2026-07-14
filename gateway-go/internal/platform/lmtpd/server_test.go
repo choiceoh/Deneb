@@ -28,7 +28,7 @@ func readReply(t *testing.T, r *bufio.Reader) string {
 	}
 }
 
-func TestServer_Delivery(t *testing.T) {
+func TestServerParsesAndDeliversMessageOverSession(t *testing.T) {
 	var (
 		mu   sync.Mutex
 		got  *Message
@@ -126,7 +126,7 @@ func TestServer_Delivery(t *testing.T) {
 	}
 }
 
-func TestSplitListenAddr(t *testing.T) {
+func TestSplitListenAddrParsesNetworkAndAddress(t *testing.T) {
 	cases := map[string][2]string{
 		"127.0.0.1:10024":     {"tcp", "127.0.0.1:10024"},
 		"tcp:0.0.0.0:24":      {"tcp", "0.0.0.0:24"},

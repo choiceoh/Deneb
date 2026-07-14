@@ -81,7 +81,7 @@ func TestParseRelatedProjects_NoCandidates(t *testing.T) {
 	}
 }
 
-func TestProjectSelectionSuffix(t *testing.T) {
+func TestProjectSelectionSuffixRendersCandidatesOrEmpty(t *testing.T) {
 	if s := projectSelectionSuffix(nil); s != "" {
 		t.Errorf("no candidates → want empty suffix, got %q", s)
 	}
@@ -102,7 +102,7 @@ func TestProjectCandidates_NilProvider(t *testing.T) {
 	}
 }
 
-func TestProjectCandidates_Capped(t *testing.T) {
+func TestProjectCandidatesTruncatesToCap(t *testing.T) {
 	big := make([]ProjectCandidate, maxProjectCandidates+10)
 	for i := range big {
 		big[i] = ProjectCandidate{Path: "프로젝트/p.md"}

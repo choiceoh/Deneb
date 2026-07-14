@@ -76,7 +76,7 @@ func TestNewClientFromDir_MissingRefreshTokenFails(t *testing.T) {
 	}
 }
 
-func TestRefresh_PersistsRotatedToken(t *testing.T) {
+func TestRefresh_SavesRotatedTokenToDisk(t *testing.T) {
 	dir := t.TempDir()
 	writeJSON(t, filepath.Join(dir, "calendar_client.json"), map[string]any{
 		"installed": map[string]string{"client_id": "id", "client_secret": "secret"},

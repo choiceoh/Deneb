@@ -193,7 +193,7 @@ func TestNormalizeProjectSubjectContract(t *testing.T) {
 	}
 }
 
-func TestContextMessageDedupeKeyPriority(t *testing.T) {
+func TestContextMessageDeduplicateKeyPrefersMessageIDThenIDThenLocator(t *testing.T) {
 	tests := []struct {
 		name string
 		msg  ContextMessage
@@ -279,7 +279,7 @@ func TestContextLimitContract(t *testing.T) {
 	}
 }
 
-func TestArchiveTextCriteriaEscapingAndBounds(t *testing.T) {
+func TestArchiveTextCriteriaEncodesSpecialCharactersAndMultipleTerms(t *testing.T) {
 	tests := []struct {
 		name  string
 		query string
@@ -335,7 +335,7 @@ func TestRankTermsAndTermMatchingContract(t *testing.T) {
 	}
 }
 
-func TestRankProjectMessagesSignalsAndInputIsolation(t *testing.T) {
+func TestRankProjectMessagesPreservesInputAndRanksBySignal(t *testing.T) {
 	now := time.Now()
 	input := []ContextMessage{
 		{
@@ -393,7 +393,7 @@ func TestRankProjectMessagesSignalsAndInputIsolation(t *testing.T) {
 	}
 }
 
-func TestRecencyBoostBoundaries(t *testing.T) {
+func TestRecencyBoostDecayAtEachAgeBoundary(t *testing.T) {
 	now := time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC)
 	tests := []struct {
 		name string
@@ -569,7 +569,7 @@ func TestArchiveLabelOverlayContract(t *testing.T) {
 	}
 }
 
-func TestCloneDetailDeepCopiesSlices(t *testing.T) {
+func TestCloneDetailPreservesOriginalAndReturnsNilInput(t *testing.T) {
 	original := &gmail.MessageDetail{
 		ID:     "id",
 		Labels: []string{"INBOX"},
@@ -779,7 +779,7 @@ func TestReadFullContract(t *testing.T) {
 	}
 }
 
-func TestIMAPConnectionTagAndSearchParsing(t *testing.T) {
+func TestIMAPConnectionParsesSearchResultsAndIncrementsTags(t *testing.T) {
 	client, server := net.Pipe()
 	defer client.Close()
 	defer server.Close()

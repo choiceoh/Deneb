@@ -118,8 +118,8 @@ func TestMissesReturnEmpty(t *testing.T) {
 	}
 }
 
-// TestSinceFilter: List/Search honor the since bound (KST calendar day).
-func TestSinceFilter(t *testing.T) {
+// TestSinceFilter_ReturnsOnlyMessagesOnOrAfterSince: List/Search honor the since bound (KST calendar day).
+func TestSinceFilter_ReturnsOnlyMessagesOnOrAfterSince(t *testing.T) {
 	dir := t.TempDir()
 	s, err := mailstore.New(dir)
 	if err != nil {

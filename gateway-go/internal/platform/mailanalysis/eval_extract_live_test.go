@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
-// TestExtractForEval_Live runs the REAL deal extractor (real prompt + jsonutil
+// TestExtractForEvalLiveReturnsCorrectDealFields runs the REAL deal extractor (real prompt + jsonutil
 // parse + amount gate) against several models through the wormhole router, to prove
 // the production-fidelity extraction-benchmark idea: each model is scored on the
 // exact task Deneb runs in prod, and a model that fences its JSON still extracts
@@ -20,8 +20,8 @@ import (
 //	DENEB_EVAL_EXTRACT_LIVE=1 \
 //	DENEB_EVAL_WORMHOLE_URL=http://100.111.114.20:18800/v1 \
 //	DENEB_EVAL_WORMHOLE_TOKEN=... \
-//	go test -run TestExtractForEval_Live -v ./internal/platform/mailanalysis/
-func TestExtractForEval_Live(t *testing.T) {
+//	go test -run TestExtractForEvalLiveReturnsCorrectDealFields -v ./internal/platform/mailanalysis/
+func TestExtractForEvalLiveReturnsCorrectDealFields(t *testing.T) {
 	if os.Getenv("DENEB_EVAL_EXTRACT_LIVE") != "1" {
 		t.Skip("set DENEB_EVAL_EXTRACT_LIVE=1 (+ wormhole url/token) to run")
 	}

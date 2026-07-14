@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )
 
-func TestPlanArchiveSearchBoundsCandidateScan(t *testing.T) {
+func TestPlanArchiveSearchClampsFetchPerBoxAtBoundary(t *testing.T) {
 	spec := archiveQuery{Criteria: "ALL"}
 	tests := []struct {
 		name      string
@@ -51,7 +51,7 @@ func TestPlanArchiveSearchRejectsInvalidInputs(t *testing.T) {
 	}
 }
 
-func TestRepositorySearchPageAppliesFiltersBeforePagination(t *testing.T) {
+func TestRepositorySearchPageAppliesFiltersAcrossPageBoundary(t *testing.T) {
 	messages := map[string][]byte{}
 	for uid := 1; uid <= 8; uid++ {
 		attachment := ""
@@ -94,7 +94,7 @@ func TestRepositorySearchPageAppliesFiltersBeforePagination(t *testing.T) {
 	}
 }
 
-func TestRepositorySearchPageUsesArchiveForDegradedQuery(t *testing.T) {
+func TestRepositorySearchPageDegradesToArchiveInsteadOfFallback(t *testing.T) {
 	raw := archiveTestMessage("archive-result@example.com", "sender@example.com", "Archive", "Archive body.", "")
 	srv := newTestIMAPArchive(t, map[string]map[string][]byte{"INBOX": {"1": []byte(raw)}})
 	fallback := &fakeRepositoryFallback{rows: []gmail.MessageSummary{{ID: "fallback-result"}}}
@@ -110,7 +110,7 @@ func TestRepositorySearchPageUsesArchiveForDegradedQuery(t *testing.T) {
 	}
 }
 
-func TestRepositorySearchPageBoundsMailboxDegradation(t *testing.T) {
+func TestRepositorySearchPageSkipsFailedMailboxesButErrorsWhenAllFail(t *testing.T) {
 	raw := archiveTestMessage("survivor@example.com", "sender@example.com", "Survivor", "Archive body.", "")
 	srv := newTestIMAPArchiveRejecting(t, map[string]map[string][]byte{
 		"INBOX": {"1": []byte(raw)},
@@ -136,7 +136,7 @@ func TestRepositorySearchPageBoundsMailboxDegradation(t *testing.T) {
 	}
 }
 
-func TestRepositorySearchPageHandlesOversizedPagination(t *testing.T) {
+func TestRepositorySearchPageReturnsEmptyForOversizedPageToken(t *testing.T) {
 	raw := archiveTestMessage("one@example.com", "sender@example.com", "One", "Archive body.", "")
 	srv := newTestIMAPArchive(t, map[string]map[string][]byte{"INBOX": {"1": []byte(raw)}})
 	repo := newArchiveSearchTestRepository(t, srv.addr, []string{"INBOX"}, nil)

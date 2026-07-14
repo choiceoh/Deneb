@@ -2,7 +2,7 @@ package cron
 
 import "testing"
 
-func TestBuildRunLogPageSharesFilteringSortingAndPagination(t *testing.T) {
+func TestBuildRunLogPageReturnsFilteredSortedPaginatedResults(t *testing.T) {
 	entries := []RunLogEntry{
 		{Ts: 20, JobID: "weekly", Status: "ok", DeliveryStatus: "sent", Summary: "later report"},
 		{Ts: 10, JobID: "daily", Status: "error", DeliveryStatus: "failed", Error: "network timeout"},

@@ -109,7 +109,7 @@ func TestProjectHistoryContextBuildsTimelineAndThreadClusters(t *testing.T) {
 	}
 }
 
-func TestProjectHistoryRanksBusinessSignalsBeforePlainMatches(t *testing.T) {
+func TestProjectHistoryContextReturnsBusinessSignalOverPlainMatch(t *testing.T) {
 	plain := archiveContextTestMessage("solar-plain@deneb", "plain@example.com", "SolarPrime update", "Wed, 17 Jun 2026 13:00:00 +0000", "SolarPrime 참고 메일입니다.", "", "")
 	important := archiveContextTestMessage("solar-important@deneb", "sales@example.com", "SolarPrime update", "Wed, 17 Jun 2026 09:00:00 +0000", "SolarPrime 견적 금액 100만원, 납기 마감 2026-06-30 검토 필요.", "", "")
 	srv := newTestIMAPArchive(t, map[string]map[string][]byte{

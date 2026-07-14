@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestStoreRememberAndMarkAnalysisDone(t *testing.T) {
+func TestStoreRememberAndAnalysisDone_PreservesMetadata(t *testing.T) {
 	store := New(filepath.Join(t.TempDir(), "mail_work_state.json"))
 
 	if _, err := store.RememberMessage(MessageInput{
@@ -51,7 +51,7 @@ func TestStoreRememberAndMarkAnalysisDone(t *testing.T) {
 	}
 }
 
-func TestStoreSummary(t *testing.T) {
+func TestStoreSummary_ReturnsCountsAcrossStates(t *testing.T) {
 	store := New(filepath.Join(t.TempDir(), "mail_work_state.json"))
 	_, _ = store.MarkAnalysisDone(AnalysisInput{
 		MessageInput:          MessageInput{ID: "done"},
@@ -75,7 +75,7 @@ func TestStoreSummary(t *testing.T) {
 	}
 }
 
-func TestStoreMarkAnalysisDoneReplacesKnownDerivedCounts(t *testing.T) {
+func TestStoreMarkAnalysisDone_UpdatesKnownDerivedCounts(t *testing.T) {
 	store := New(filepath.Join(t.TempDir(), "mail_work_state.json"))
 
 	if _, err := store.MarkAnalysisDone(AnalysisInput{
@@ -123,7 +123,7 @@ func TestStoreMarkAnalysisDonePreservesUnknownDerivedCounts(t *testing.T) {
 	}
 }
 
-func TestStoreMarkDerivedCountsReplacesCounts(t *testing.T) {
+func TestStoreMarkDerivedCounts_UpdatesCountsToLatestValues(t *testing.T) {
 	store := New(filepath.Join(t.TempDir(), "mail_work_state.json"))
 
 	if _, err := store.MarkDerivedCounts("m1", 3, 2); err != nil {
