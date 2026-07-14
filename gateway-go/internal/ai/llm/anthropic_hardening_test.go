@@ -137,9 +137,9 @@ func TestCompleteViaStream_EmptyCleanStreamStaysNilError(t *testing.T) {
 	}
 }
 
-// TestTranslateAnthropicToolChoice covers the OpenAI→Anthropic vocabulary map
+// TestTranslateAnthropicToolChoiceFormats covers the OpenAI→Anthropic vocabulary map
 // and the pass-through cases.
-func TestTranslateAnthropicToolChoice(t *testing.T) {
+func TestTranslateAnthropicToolChoiceFormats(t *testing.T) {
 	cases := []struct {
 		name string
 		in   any
@@ -178,10 +178,10 @@ func TestTranslateAnthropicToolChoice(t *testing.T) {
 	}
 }
 
-// TestBuildAnthropicRequestBody_MaxTokensDefault verifies a zero MaxTokens is
+// TestBuildAnthropicRequestBodyDefaultsMissingMaxTokens verifies a zero MaxTokens is
 // replaced by the wire default — max_tokens is required (>0) on the Anthropic
 // API, unlike the OpenAI path where omitempty defers to the server default.
-func TestBuildAnthropicRequestBody_MaxTokensDefault(t *testing.T) {
+func TestBuildAnthropicRequestBodyDefaultsMissingMaxTokens(t *testing.T) {
 	body, err := buildAnthropicRequestBody(ChatRequest{
 		Model:    "m",
 		Messages: []Message{NewTextMessage("user", "hi")},
@@ -200,9 +200,9 @@ func TestBuildAnthropicRequestBody_MaxTokensDefault(t *testing.T) {
 	}
 }
 
-// TestBuildAnthropicRequestBody_AdaptiveThinking verifies the adaptive type
+// TestBuildAnthropicRequestBodyAdaptiveThinkingWithoutBudgetTokens verifies the adaptive type
 // serializes alone, without a budget_tokens field (Opus 4.7+ rejects one).
-func TestBuildAnthropicRequestBody_AdaptiveThinking(t *testing.T) {
+func TestBuildAnthropicRequestBodyAdaptiveThinkingWithoutBudgetTokens(t *testing.T) {
 	body, err := buildAnthropicRequestBody(ChatRequest{
 		Model: "claude-opus-4-8", MaxTokens: 1024,
 		Messages: []Message{NewTextMessage("user", "hi")},
@@ -225,9 +225,9 @@ func TestBuildAnthropicRequestBody_AdaptiveThinking(t *testing.T) {
 	}
 }
 
-// TestBuildAnthropicRequestBody_ToolChoiceTranslated verifies the translation
+// TestBuildAnthropicRequestBodyFormatsToolChoice verifies the translation
 // is applied on the wire, not just in the helper.
-func TestBuildAnthropicRequestBody_ToolChoiceTranslated(t *testing.T) {
+func TestBuildAnthropicRequestBodyFormatsToolChoice(t *testing.T) {
 	body, err := buildAnthropicRequestBody(ChatRequest{
 		Model: "m", MaxTokens: 64,
 		Messages:   []Message{NewTextMessage("user", "hi")},

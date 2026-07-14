@@ -16,9 +16,10 @@ func enabled() Profile {
 	return p
 }
 
-// TestDecide exercises the false-easy-averse heuristic: only obviously-simple
-// short conversational messages route to non-thinking.
-func TestDecide(t *testing.T) {
+// TestDecideRoutesOffThinkingWhenMessageIsSimple exercises the
+// false-easy-averse heuristic: only obviously-simple short conversational
+// messages route to non-thinking.
+func TestDecideRoutesOffThinkingWhenMessageIsSimple(t *testing.T) {
 	p := enabled()
 	cases := []struct {
 		req     Request
@@ -48,9 +49,10 @@ func TestDecide(t *testing.T) {
 	}
 }
 
-// TestDecideReasonTags pins the stable reason strings the agentlog scorecard
-// parses — renaming one silently breaks calibration aggregation.
-func TestDecideReasonTags(t *testing.T) {
+// TestDecideEmitsStableReasonTagsContract pins the stable reason strings the
+// agentlog scorecard parses — renaming one silently breaks calibration
+// aggregation.
+func TestDecideEmitsStableReasonTagsContract(t *testing.T) {
 	p := enabled()
 	for _, c := range []struct {
 		req    Request
@@ -104,9 +106,10 @@ func TestHardSignalWordBoundary(t *testing.T) {
 	}
 }
 
-// TestContextHeavyRouting: a short follow-up in a heavy thread keeps thinking
-// (Ares #3 — router sees h_t), pure acks stay routable.
-func TestContextHeavyRouting(t *testing.T) {
+// TestContextHeavyRoutingKeepsThinkingWhenHistoryIsHeavy: a short follow-up in
+// a heavy thread keeps thinking (Ares #3 — router sees h_t), pure acks stay
+// routable.
+func TestContextHeavyRoutingKeepsThinkingWhenHistoryIsHeavy(t *testing.T) {
 	p := enabled()
 	heavy := []llm.Message{
 		llm.NewTextMessage("user", "이 코드 분석해줘"),
@@ -141,10 +144,11 @@ func TestContextHeavyRouting(t *testing.T) {
 	}
 }
 
-// TestDefaultProfileConstants pins the shipped tuning values so an accidental
-// edit to DefaultProfile (which the active model resolves to verbatim) fails
-// loudly rather than silently shifting production routing.
-func TestDefaultProfileConstants(t *testing.T) {
+// TestDefaultProfileContractPinsShippedThresholds pins the shipped tuning
+// values so an accidental edit to DefaultProfile (which the active model
+// resolves to verbatim) fails loudly rather than silently shifting production
+// routing.
+func TestDefaultProfileContractPinsShippedThresholds(t *testing.T) {
 	p := DefaultProfile()
 	if p.Enabled || p.ToggleKwarg != "" {
 		t.Error("DefaultProfile must be inert until the resolver fills the toggle")

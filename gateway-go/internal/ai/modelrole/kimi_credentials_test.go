@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestKimiCLIToken(t *testing.T) {
+func TestKimiCLITokenReadsCredentialsFile(t *testing.T) {
 	dir := t.TempDir()
 
 	// Missing file → empty, no error.
@@ -34,7 +34,7 @@ func TestKimiCLIToken(t *testing.T) {
 	}
 }
 
-func TestKimiToken(t *testing.T) {
+func TestKimiTokenPrefersFileOverEnvFallback(t *testing.T) {
 	dir := t.TempDir()
 
 	// No file and no env var → empty.

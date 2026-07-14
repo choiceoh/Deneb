@@ -28,7 +28,7 @@ func resetGlobalCal() {
 	globalCal.mu.Unlock()
 }
 
-func TestCalibrator_BasicConvergence(t *testing.T) {
+func TestCalibratorUpdatesFactorTowardActualRatio(t *testing.T) {
 	c := newCalibrator()
 
 	// Simulate: raw estimate is 100, but actual is 130 (30% underestimate).
@@ -51,7 +51,7 @@ func TestCalibrator_BasicConvergence(t *testing.T) {
 	t.Logf("converged factor: %.4f after 200 samples", factor)
 }
 
-func TestCalibrator_OverestimateCorrection(t *testing.T) {
+func TestCalibratorUpdatesFactorDownForOverestimate(t *testing.T) {
 	c := newCalibrator()
 
 	// Simulate: raw estimate 200, actual 150 (overestimate by 33%).
@@ -72,7 +72,7 @@ func TestCalibrator_OverestimateCorrection(t *testing.T) {
 	}
 }
 
-func TestCalibrator_MinSamples(t *testing.T) {
+func TestCalibratorReturnsDefaultFactorBeforeMinSamples(t *testing.T) {
 	c := newCalibrator()
 
 	// Below minSamples, factor should be 1.0.
@@ -90,7 +90,7 @@ func TestCalibrator_MinSamples(t *testing.T) {
 	}
 }
 
-func TestCalibrator_Clamping(t *testing.T) {
+func TestCalibratorClampsFactorToBoundaryLimits(t *testing.T) {
 	c := newCalibrator()
 
 	// Extreme outlier: actual 10x estimated.
@@ -113,7 +113,7 @@ func TestCalibrator_Clamping(t *testing.T) {
 	}
 }
 
-func TestCalibrator_FamilyIsolation(t *testing.T) {
+func TestCalibratorPreservesOtherFamiliesUntrained(t *testing.T) {
 	c := newCalibrator()
 
 	// Only train Claude.
@@ -230,7 +230,7 @@ func TestPersistence_SaveLoad(t *testing.T) {
 	t.Logf("saved=%.4f, loaded=%.4f", claudeFactor, loaded)
 }
 
-func TestRecordFeedback_Global(t *testing.T) {
+func TestRecordFeedbackUpdatesGlobalCorrectionFactor(t *testing.T) {
 	defer saveGlobalCal()()
 	resetGlobalCal()
 
@@ -250,7 +250,7 @@ func TestRecordFeedback_Global(t *testing.T) {
 	t.Logf("global factor: %.4f", factor)
 }
 
-func TestCalibrationStats(t *testing.T) {
+func TestCalibrationStatsReturnsSampleCountsAndActiveFlag(t *testing.T) {
 	defer saveGlobalCal()()
 	resetGlobalCal()
 	for i := 0; i < 20; i++ {
@@ -276,9 +276,10 @@ func TestCalibrationStats(t *testing.T) {
 	}
 }
 
-// TestCalibrator_MathCorrectness verifies that the calibration math
-// converges correctly even when the factor changes between recordings.
-func TestCalibrator_MathCorrectness(t *testing.T) {
+// TestCalibratorConvergesToTrueRatioWhenFactorVaries verifies that the
+// calibration math converges correctly even when the factor changes between
+// recordings.
+func TestCalibratorConvergesToTrueRatioWhenFactorVaries(t *testing.T) {
 	c := newCalibrator()
 
 	// The "true" ratio is 1.4 (raw estimate * 1.4 = actual).

@@ -14,7 +14,7 @@ import (
 // FinalizeGate holds the first finish (injecting its prompt as a user turn)
 // and lets the second finish through — mirroring the max_tokens recovery
 // shape. The run must terminate with the second turn's text.
-func TestRunAgent_FinalizeGateHoldsFirstFinish(t *testing.T) {
+func TestRunAgent_FinalizeGateRejectsFirstFinishAllowsSecond(t *testing.T) {
 	streamer := &fakeLLMStreamer{
 		turns: [][]llm.StreamEvent{
 			buildTextTurnEvents("끝났습니다 (검증 안 함)", 100, 20),

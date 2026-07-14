@@ -38,7 +38,7 @@ func tunerRegistry() *modelrole.Registry {
 	)
 }
 
-func TestAnalyze_Rules(t *testing.T) {
+func TestAnalyzeFlagsUnhealthyModelsAndIgnoresHealthyOnes(t *testing.T) {
 	stats := []agentlog.ModelStat{
 		{ // fires fallback + max_tokens + stall + latency (thinking-aware message)
 			Model: "m1", Provider: "p", Runs: 10,
@@ -147,7 +147,7 @@ func TestTask_Run_AppliesAndClearsTunedFloor(t *testing.T) {
 	}
 }
 
-func TestApplyEffortNudge_OptInAndApply(t *testing.T) {
+func TestApplyEffortNudgeWhenFlagEnabledNudgesAttributableModel(t *testing.T) {
 	reg := tunerRegistry()
 	task := &Task{deps: Deps{Registry: reg, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}}
 
@@ -200,7 +200,7 @@ func TestApplyEffortNudge_OptInAndApply(t *testing.T) {
 	}
 }
 
-func TestKoreanRatio(t *testing.T) {
+func TestKoreanRatioNearOneForKoreanAndZeroWithoutIt(t *testing.T) {
 	if r := koreanRatio("안녕하세요 저는 데네브입니다"); r < 0.9 {
 		t.Errorf("korean text ratio = %f, want ~1", r)
 	}
@@ -212,7 +212,7 @@ func TestKoreanRatio(t *testing.T) {
 	}
 }
 
-func TestNewTask_ReappliesPersistedFloors(t *testing.T) {
+func TestNewTaskRestoresPersistedMaxTokensFloor(t *testing.T) {
 	reg := tunerRegistry()
 	statePath := filepath.Join(t.TempDir(), "model-stats.json")
 
@@ -236,7 +236,7 @@ func TestNewTask_ReappliesPersistedFloors(t *testing.T) {
 	}
 }
 
-func TestScorecardNoteAndAdvisories(t *testing.T) {
+func TestScorecardFormatsNoteAndAdvisoryLines(t *testing.T) {
 	sc := Scorecard{
 		WindowHours: 24,
 		Models: []agentlog.ModelStat{{

@@ -2,10 +2,10 @@ package router
 
 import "testing"
 
-// TestEffortNudge_DirectionAndGuards covers the policy's two firing directions
-// and every no-op guard: the bounded recalibration must move the gate only on a
-// trusted signal, in the right direction, by exactly one step.
-func TestEffortNudge_DirectionAndGuards(t *testing.T) {
+// TestEffortNudgeDirectionWhenTrustedOtherwiseNoop covers the policy's two
+// firing directions and every no-op guard: the bounded recalibration must move
+// the gate only on a trusted signal, in the right direction, by exactly one step.
+func TestEffortNudgeDirectionWhenTrustedOtherwiseNoop(t *testing.T) {
 	cases := []struct {
 		name        string
 		current     int
@@ -86,10 +86,10 @@ func TestEffortNudge_DirectionAndGuards(t *testing.T) {
 	}
 }
 
-// TestEffortNudge_ClampBand pins the [min,max] band so the loop can never run
-// away: a down-nudge at the floor and an up-nudge at the ceiling must report no
-// change, and a value already outside the band is pulled back inside.
-func TestEffortNudge_ClampBand(t *testing.T) {
+// TestEffortNudgeClampsToBandBoundary pins the [min,max] band so the loop can
+// never run away: a down-nudge at the floor and an up-nudge at the ceiling must
+// report no change, and a value already outside the band is pulled back inside.
+func TestEffortNudgeClampsToBandBoundary(t *testing.T) {
 	downSig := EffortSignal{Sample: 60, RoutedRuns: 20, EscalationRate: 0.5, RoutedShare: 0.40}
 	upSig := EffortSignal{Sample: 100, RoutedRuns: 2, EscalationRate: 0, RoutedShare: 0.02}
 
@@ -146,10 +146,10 @@ func TestEffortNudge_ClampBand(t *testing.T) {
 	})
 }
 
-// TestEffortNudgeBandSanity guards the band invariants the policy relies on:
-// the shipped default sits strictly inside the band and a single step never
-// jumps the whole band.
-func TestEffortNudgeBandSanity(t *testing.T) {
+// TestEffortNudgeBandContractHoldsDefaultAndStep guards the band invariants the
+// policy relies on: the shipped default sits strictly inside the band and a
+// single step never jumps the whole band.
+func TestEffortNudgeBandContractHoldsDefaultAndStep(t *testing.T) {
 	def := DefaultProfile().MaxSimpleRunes
 	if def <= EffortNudgeMin || def >= EffortNudgeMax {
 		t.Fatalf("default gate %d must sit strictly inside [%d,%d]", def, EffortNudgeMin, EffortNudgeMax)

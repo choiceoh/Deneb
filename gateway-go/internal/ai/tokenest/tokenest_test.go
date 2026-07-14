@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestCount_PureEnglish(t *testing.T) {
+func TestCountEstimatesTokensWithinRangeForEnglishText(t *testing.T) {
 	est := ForFamily(FamilyClaude)
 	// "The quick brown fox jumps over the lazy dog" = 44 chars
 	// English: ~4 runes/token → expect ~11 tokens (plus spaces).
@@ -18,7 +18,7 @@ func TestCount_PureEnglish(t *testing.T) {
 	t.Logf("Claude English: %q → %d tokens", text, got)
 }
 
-func TestCount_PureKorean(t *testing.T) {
+func TestCountEstimatesTokensWithinRangeForKoreanText(t *testing.T) {
 	est := ForFamily(FamilyClaude)
 	// "서울에서 맛있는 김치를 먹었습니다" = 15 Hangul + 2 spaces
 	text := "서울에서 맛있는 김치를 먹었습니다"
@@ -30,7 +30,7 @@ func TestCount_PureKorean(t *testing.T) {
 	t.Logf("Claude Korean: %q → %d tokens", text, got)
 }
 
-func TestCount_MixedKoreanEnglish(t *testing.T) {
+func TestCountEstimatesTokensWithinRangeForMixedText(t *testing.T) {
 	est := ForFamily(FamilyClaude)
 	text := "안녕하세요 Hello World 테스트입니다"
 	got := est.Count(text)
@@ -41,7 +41,7 @@ func TestCount_MixedKoreanEnglish(t *testing.T) {
 	t.Logf("Claude mixed: %q → %d tokens", text, got)
 }
 
-func TestCount_CodeContent(t *testing.T) {
+func TestCountEstimatesTokensWithinRangeForCodeContent(t *testing.T) {
 	est := ForFamily(FamilyClaude)
 	text := `func estimateTokens(s string) int {
 	return utf8.RuneCountInString(s) / 2
@@ -54,7 +54,7 @@ func TestCount_CodeContent(t *testing.T) {
 	t.Logf("Claude code: %d tokens for %d chars", got, len(text))
 }
 
-func TestCount_Numbers(t *testing.T) {
+func TestCountEstimatesTokensWithinRangeForKoreanWithNumbers(t *testing.T) {
 	est := ForFamily(FamilyClaude)
 	text := "2024년 4월 7일 오후 3시 15분"
 	got := est.Count(text)
@@ -64,9 +64,10 @@ func TestCount_Numbers(t *testing.T) {
 	t.Logf("Claude date: %q → %d tokens", text, got)
 }
 
-// TestFamilyDifferences verifies that different families produce different
-// estimates for Korean-heavy content (the primary differentiator).
-func TestFamilyDifferences(t *testing.T) {
+// TestFamilyDifferencesOpenAIReturnsMoreTokensThanClaudeForKorean verifies
+// that different families produce different estimates for Korean-heavy
+// content (the primary differentiator).
+func TestFamilyDifferencesOpenAIReturnsMoreTokensThanClaudeForKorean(t *testing.T) {
 	text := "서울특별시에서 인공지능 연구를 진행하고 있습니다"
 
 	claude := ForFamily(FamilyClaude).Count(text)
@@ -79,7 +80,7 @@ func TestFamilyDifferences(t *testing.T) {
 	t.Logf("Korean estimates — Claude: %d, OpenAI: %d", claude, openai)
 }
 
-func TestForModel_Resolution(t *testing.T) {
+func TestForModelParsesModelIDToFamily(t *testing.T) {
 	tests := []struct {
 		modelID string
 		want    Family
@@ -108,9 +109,9 @@ func TestForModel_Resolution(t *testing.T) {
 	}
 }
 
-// TestEstimate_BetterThanRuneDiv2 demonstrates improvement over the old
-// rune/2 approach for English-heavy content.
-func TestEstimate_BetterThanRuneDiv2(t *testing.T) {
+// TestEstimateWithScriptAwarenessBeatsRuneDivTwoForEnglish demonstrates
+// improvement over the old rune/2 approach for English-heavy content.
+func TestEstimateWithScriptAwarenessBeatsRuneDivTwoForEnglish(t *testing.T) {
 	// The old approach: rune_count / 2.
 	// For pure English, this massively overestimates.
 	text := "The quick brown fox jumps over the lazy dog near the river"
@@ -125,8 +126,9 @@ func TestEstimate_BetterThanRuneDiv2(t *testing.T) {
 	}
 }
 
-// TestEstimate_KoreanMoreAccurate demonstrates improvement for Korean text.
-func TestEstimate_KoreanMoreAccurate(t *testing.T) {
+// TestEstimateWithScriptAwarenessBeatsRuneDivTwoForKorean demonstrates
+// improvement for Korean text.
+func TestEstimateWithScriptAwarenessBeatsRuneDivTwoForKorean(t *testing.T) {
 	// Old approach: rune/2 underestimates Korean because Hangul syllables
 	// are ~1.5 runes/token, not 2.
 	text := "대한민국 서울특별시 강남구에서 열리는 국제 인공지능 학회에 참석했습니다"
@@ -141,7 +143,7 @@ func TestEstimate_KoreanMoreAccurate(t *testing.T) {
 	}
 }
 
-func TestEstimateBytes_ASCII(t *testing.T) {
+func TestEstimateBytesWithinRangeForASCIIContent(t *testing.T) {
 	data := []byte(`{"role":"assistant","content":"Hello world"}`)
 	got := EstimateBytes(data)
 	// Pure ASCII: ~4 bytes/token → ~11 tokens for 44 bytes.
@@ -151,7 +153,7 @@ func TestEstimateBytes_ASCII(t *testing.T) {
 	t.Logf("ASCII JSON %d bytes → %d tokens", len(data), got)
 }
 
-func TestEstimateBytes_Korean(t *testing.T) {
+func TestEstimateBytesWithinRangeForKoreanContent(t *testing.T) {
 	data := []byte("서울에서 맛있는 김치를 먹었습니다")
 	got := EstimateBytes(data)
 	// Korean UTF-8: ~4.5 bytes/token.
@@ -161,7 +163,7 @@ func TestEstimateBytes_Korean(t *testing.T) {
 	t.Logf("Korean %d bytes → %d tokens", len(data), got)
 }
 
-func TestCountBytes_DivisorStability(t *testing.T) {
+func TestCountBytesStaysWithinRatioOfRuneCount(t *testing.T) {
 	est := ForFamily(FamilyClaude)
 	// Verify that the byte estimate is within 2x of the rune estimate
 	// for the same content.
@@ -177,7 +179,7 @@ func TestCountBytes_DivisorStability(t *testing.T) {
 	t.Logf("Mixed: rune=%d, byte=%d, ratio=%.2f", runeEst, byteEst, ratio)
 }
 
-func TestClassifyRune(t *testing.T) {
+func TestClassifyRuneParsesScriptClassPerCharacter(t *testing.T) {
 	tests := []struct {
 		r    rune
 		want scriptClass

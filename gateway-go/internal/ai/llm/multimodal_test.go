@@ -23,7 +23,7 @@ func multimodalUserMessage() Message {
 	})
 }
 
-func TestConvertMessagesToOpenAI_ImageBlocks(t *testing.T) {
+func TestConvertMessagesToOpenAIFormatsImageBlocks(t *testing.T) {
 	client := NewClient("http://localhost", "")
 	out := client.convertMessagesToOpenAI([]Message{multimodalUserMessage()}, false)
 	if len(out) != 1 {
@@ -70,7 +70,7 @@ func TestConvertMessagesToOpenAI_EmptyImageSourceDropped(t *testing.T) {
 	}
 }
 
-func TestBuildAnthropicRequestBody_ImageBlocks(t *testing.T) {
+func TestBuildAnthropicRequestBodyPreservesImageBlocks(t *testing.T) {
 	body, err := buildAnthropicRequestBody(ChatRequest{
 		Model:     "claude-test",
 		MaxTokens: 64,

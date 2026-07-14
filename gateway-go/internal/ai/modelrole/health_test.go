@@ -16,7 +16,7 @@ func healthTestRegistry() *Registry {
 	})
 }
 
-func TestModelHealth_BreakerOpensAfterStreak(t *testing.T) {
+func TestModelHealthBreakerOpensWhenStreakReached(t *testing.T) {
 	reg := healthTestRegistry()
 	for i := range unhealthyStreak - 1 {
 		reg.RecordModelFailure("m")
@@ -30,7 +30,7 @@ func TestModelHealth_BreakerOpensAfterStreak(t *testing.T) {
 	}
 }
 
-func TestModelHealth_SuccessResetsStreak(t *testing.T) {
+func TestModelHealthSuccessClosesBreakerAndResetsStreak(t *testing.T) {
 	reg := healthTestRegistry()
 	for range unhealthyStreak {
 		reg.RecordModelFailure("m")
@@ -46,7 +46,7 @@ func TestModelHealth_SuccessResetsStreak(t *testing.T) {
 	}
 }
 
-func TestModelHealth_CooldownHalfOpens(t *testing.T) {
+func TestModelHealthCooldownRecoversThenReopensOnFailure(t *testing.T) {
 	reg := healthTestRegistry()
 	for range unhealthyStreak {
 		reg.RecordModelFailure("m")

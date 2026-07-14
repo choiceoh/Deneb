@@ -52,9 +52,9 @@ func TestComposeBeforeAPICall_ChainThreadsMessagesInOrder(t *testing.T) {
 	}
 }
 
-// TestComposeBeforeAPICall_ChainPassesMessagesThrough verifies each hook sees
+// TestComposeBeforeAPICall_ChainPreservesPriorMutations verifies each hook sees
 // the output of the previous one (not the original input).
-func TestComposeBeforeAPICall_ChainPassesMessagesThrough(t *testing.T) {
+func TestComposeBeforeAPICall_ChainPreservesPriorMutations(t *testing.T) {
 	appendBlock := func(tag string) func([]llm.Message) []llm.Message {
 		return func(msgs []llm.Message) []llm.Message {
 			if len(msgs) == 0 {

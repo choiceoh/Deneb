@@ -281,7 +281,7 @@ func (s contractSource) Sample() []Signal {
 	return s.signals
 }
 
-func TestTaskMetadataDefaultsAndCollectIsolation(t *testing.T) {
+func TestTaskDefaultsAndCollectRecoversFromPanickingSource(t *testing.T) {
 	task := NewTask(Deps{})
 	if task.Name() != "regression-watch" || task.Interval() != 6*time.Hour || task.deps.Logger == nil || task.deps.Thresholds != DefaultThresholds() {
 		t.Fatalf("task = %+v", task)
@@ -406,7 +406,7 @@ func TestTaskRunNoSignalsAndSaveFailure(t *testing.T) {
 	}
 }
 
-func TestDefaultStatePathUsesResolvedStateDir(t *testing.T) {
+func TestDefaultStatePathReturnsResolvedStateDir(t *testing.T) {
 	path := DefaultStatePath()
 	if filepath.Base(path) != "regression-baseline.json" || filepath.Dir(path) == "." {
 		t.Fatalf("path = %q", path)

@@ -98,7 +98,7 @@ func BenchmarkToolList_Marshal_PreSerialized(b *testing.B) {
 	}
 }
 
-func TestPreSerialize(t *testing.T) {
+func TestPreSerializeEncodesInputSchema(t *testing.T) {
 	tool := Tool{
 		Name:        "test",
 		Description: "test tool",
@@ -142,7 +142,7 @@ func TestPreSerialize_Idempotent(t *testing.T) {
 	}
 }
 
-func TestTool_MarshalJSON_PreSerialized(t *testing.T) {
+func TestToolMarshalJSONWithPreSerializedSchema(t *testing.T) {
 	tool := Tool{
 		Name:        "test",
 		Description: "test tool",

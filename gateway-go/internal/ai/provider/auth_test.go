@@ -40,7 +40,7 @@ func (f *fakeAuthProvider) callCount() int {
 	return f.calls
 }
 
-func TestManagedCredential_Expiry(t *testing.T) {
+func TestManagedCredentialIsExpiredAndExpiringSoon(t *testing.T) {
 	// Not expired (no expiry set).
 	cred := &ManagedCredential{ProviderID: "test", APIKey: "key"}
 	if cred.IsExpired() {
@@ -72,7 +72,7 @@ func TestManagedCredential_Expiry(t *testing.T) {
 	}
 }
 
-func TestAuthManager_StoreResolve(t *testing.T) {
+func TestAuthManagerStoreAndResolveNormalizedAlias(t *testing.T) {
 	am := NewAuthManager(nil, nil)
 
 	am.Store(&ManagedCredential{
@@ -105,7 +105,7 @@ func TestAuthManager_StoreResolve(t *testing.T) {
 	}
 }
 
-func TestAuthManager_Prepare_NoForwarder(t *testing.T) {
+func TestAuthManagerPrepareWithoutForwarderPassesThroughKey(t *testing.T) {
 	am := NewAuthManager(nil, nil)
 
 	prepared, err := am.Prepare(context.Background(), RuntimeAuthContext{
@@ -118,7 +118,7 @@ func TestAuthManager_Prepare_NoForwarder(t *testing.T) {
 	}
 }
 
-func TestAuthManager_RefreshIfNeeded_RotatesExpiringCredential(t *testing.T) {
+func TestAuthManagerRefreshIfNeededRotatesCredentialThatExpiresSoon(t *testing.T) {
 	fp := &fakeAuthProvider{
 		id:           "fakeauth",
 		newKey:       "new-key",
@@ -185,10 +185,10 @@ func TestAuthManager_RefreshIfNeeded_NoopWhenNotExpiringOrMissing(t *testing.T) 
 	}
 }
 
-// TestAuthManager_RefreshExpiring_SelectsOnlyExpiring is the selection-logic
-// guard: refreshExpiring must refresh exactly the credentials inside the 5m
-// window and leave far-future / no-expiry credentials untouched.
-func TestAuthManager_RefreshExpiring_SelectsOnlyExpiring(t *testing.T) {
+// TestAuthManagerRefreshExpiringSelectsOnlyCredentialsThatExpireSoon is the
+// selection-logic guard: refreshExpiring must refresh exactly the credentials
+// inside the 5m window and leave far-future / no-expiry credentials untouched.
+func TestAuthManagerRefreshExpiringSelectsOnlyCredentialsThatExpireSoon(t *testing.T) {
 	fp := &fakeAuthProvider{
 		id:           "expiring",
 		newKey:       "rotated",

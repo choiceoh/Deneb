@@ -27,7 +27,7 @@ func runChain(t *testing.T, build func(c *BeforeAPICallChain, rec func(string) f
 	return order
 }
 
-func TestBeforeAPICallChain_StageOrder(t *testing.T) {
+func TestBeforeAPICallChain_StageOrderIgnoresRegistrationOrder(t *testing.T) {
 	order := runChain(t, func(c *BeforeAPICallChain, rec func(string) func([]llm.Message) []llm.Message) {
 		// Register out of run order; stage must drive execution order.
 		c.Add("post", HookStagePost, rec("post"))
@@ -50,7 +50,7 @@ func TestBeforeAPICallChain_StableWithinStage(t *testing.T) {
 	}
 }
 
-func TestBeforeAPICallChain_AfterReorders(t *testing.T) {
+func TestBeforeAPICallChain_RunsAfterDependencyWhenDeclared(t *testing.T) {
 	order := runChain(t, func(c *BeforeAPICallChain, rec func(string) func([]llm.Message) []llm.Message) {
 		// b registered first but declares it must run after a.
 		c.Add("b", HookStageNormal, rec("b"), "a")
@@ -61,7 +61,7 @@ func TestBeforeAPICallChain_AfterReorders(t *testing.T) {
 	}
 }
 
-func TestBeforeAPICallChain_SingletonFirstWins(t *testing.T) {
+func TestBeforeAPICallChain_RejectsDuplicateNameKeepsFirst(t *testing.T) {
 	order := runChain(t, func(c *BeforeAPICallChain, rec func(string) func([]llm.Message) []llm.Message) {
 		c.Add("dup", HookStageNormal, rec("first"))
 		c.Add("dup", HookStageNormal, rec("second")) // same name → rejected

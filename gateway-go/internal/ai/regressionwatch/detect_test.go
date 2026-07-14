@@ -2,7 +2,7 @@ package regressionwatch
 
 import "testing"
 
-func TestRegressed_DirectionAndFloors(t *testing.T) {
+func TestRegressedDirectionAndFloorBoundary(t *testing.T) {
 	th := Thresholds{RelPct: 0.30, AbsNoiseFloor: 0.02, AbsHard: 0.10, CountHard: 5, MinSample: 0}
 	cases := []struct {
 		name        string
@@ -36,7 +36,7 @@ func TestRegressed_DirectionAndFloors(t *testing.T) {
 	}
 }
 
-func TestDetect_SkipsNoBaselineAndLowSample(t *testing.T) {
+func TestDetectSkipsMissingBaselineAndLowSample(t *testing.T) {
 	base := Baseline{Entries: map[string]BaselineEntry{
 		"agentlog.error_rate@m1": {Value: 0.10, HigherWorse: true},
 	}}

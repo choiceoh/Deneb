@@ -14,7 +14,7 @@ import (
 // TestSplitPromptTokens verifies the Anthropic-semantics normalization of the
 // OpenAI prompt-token count: input excludes cache reads so downstream sums
 // (input + cacheRead) never double-count cache hits.
-func TestSplitPromptTokens(t *testing.T) {
+func TestSplitPromptTokensNormalizesCacheReads(t *testing.T) {
 	cases := []struct {
 		name      string
 		usage     openAIUsage

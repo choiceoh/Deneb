@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestSnapshot(t *testing.T) {
+func TestSnapshotLoadsStateAndRendersMarkdownSummary(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 6, 28, 15, 0, 0, 0, time.UTC)
 
@@ -97,11 +97,11 @@ func TestSnapshot(t *testing.T) {
 	}
 }
 
-// TestMemoryStatus_RealBacklogAndLegacySkips: unconsumed bytes from an OLDER
-// diary date surface as backlog days; untracked files older than the newest
-// tracked one are the dreamer's legacy-cutoff skips and count as neither
-// consumed nor pending; untracked NEWER files are fully pending.
-func TestMemoryStatus_RealBacklogAndLegacySkips(t *testing.T) {
+// TestMemoryStatusIgnoresLegacyFilesAndComputesBacklog: unconsumed bytes from
+// an OLDER diary date surface as backlog days; untracked files older than the
+// newest tracked one are the dreamer's legacy-cutoff skips and count as
+// neither consumed nor pending; untracked NEWER files are fully pending.
+func TestMemoryStatusIgnoresLegacyFilesAndComputesBacklog(t *testing.T) {
 	dir := t.TempDir()
 	write := func(rel, content string) {
 		p := filepath.Join(dir, rel)
@@ -180,10 +180,10 @@ func TestReadTailCapped(t *testing.T) {
 	}
 }
 
-// TestMemoryStatus_NoLedgerNoFakeBacklog: with no files ledger at all (fresh
-// box or pre-ledger state), nothing counts as pending — the dreamer's absence
-// is a liveness signal, not a byte backlog.
-func TestMemoryStatus_NoLedgerNoFakeBacklog(t *testing.T) {
+// TestMemoryStatusWithoutLedgerReportsNoBacklog: with no files ledger at all
+// (fresh box or pre-ledger state), nothing counts as pending — the dreamer's
+// absence is a liveness signal, not a byte backlog.
+func TestMemoryStatusWithoutLedgerReportsNoBacklog(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "memory", "diary")
 	if err := os.MkdirAll(p, 0o755); err != nil {

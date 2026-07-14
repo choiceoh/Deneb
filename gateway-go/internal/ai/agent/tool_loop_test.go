@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestToolLoopDetector_GenericRepeat(t *testing.T) {
+func TestToolLoopDetector_WarnsThenCriticalWhenCallsRepeat(t *testing.T) {
 	cfg := DefaultToolLoopConfig()
 	cfg.WarningThreshold = 3
 	cfg.CriticalThreshold = 5
@@ -42,7 +42,7 @@ func TestToolLoopDetector_GenericRepeat(t *testing.T) {
 	}
 }
 
-func TestToolLoopDetector_DifferentArgs(t *testing.T) {
+func TestToolLoopDetector_AllowsDifferentArgsWithoutTriggering(t *testing.T) {
 	cfg := DefaultToolLoopConfig()
 	cfg.WarningThreshold = 3
 	d := NewToolLoopDetector(cfg, slog.Default())
@@ -57,7 +57,7 @@ func TestToolLoopDetector_DifferentArgs(t *testing.T) {
 	}
 }
 
-func TestToolLoopDetector_PollNoProgress(t *testing.T) {
+func TestToolLoopDetector_WarnsWhenPollResultUnchanged(t *testing.T) {
 	cfg := DefaultToolLoopConfig()
 	cfg.WarningThreshold = 3
 	cfg.CriticalThreshold = 5
@@ -99,7 +99,7 @@ func TestToolLoopDetector_PollWithProgress(t *testing.T) {
 	}
 }
 
-func TestToolLoopDetector_PingPong(t *testing.T) {
+func TestToolLoopDetector_WarnsWhenAlternatingCallsReachThreshold(t *testing.T) {
 	cfg := DefaultToolLoopConfig()
 	cfg.WarningThreshold = 6
 	cfg.CriticalThreshold = 12
@@ -132,7 +132,7 @@ func TestToolLoopDetector_PingPong(t *testing.T) {
 	}
 }
 
-func TestToolLoopDetector_GlobalCircuitBreaker(t *testing.T) {
+func TestToolLoopDetector_CircuitBreakerTripsWhenCallCountExceedsThreshold(t *testing.T) {
 	// Use a non-polling tool ("read") so poll_no_progress and generic_repeat
 	// don't interfere. Set warning/critical high so only the circuit breaker fires.
 	cfg := ToolLoopConfig{
@@ -160,7 +160,7 @@ func TestToolLoopDetector_GlobalCircuitBreaker(t *testing.T) {
 	}
 }
 
-func TestToolLoopDetector_HistoryWindowSlides(t *testing.T) {
+func TestToolLoopDetector_HistoryWindowEvictsOldEntries(t *testing.T) {
 	cfg := DefaultToolLoopConfig()
 	cfg.HistorySize = 5
 	cfg.WarningThreshold = 4
@@ -187,7 +187,7 @@ func TestToolLoopDetector_HistoryWindowSlides(t *testing.T) {
 	}
 }
 
-func TestToolLoopDetector_RecordFileMutation_SamePathThrash(t *testing.T) {
+func TestToolLoopDetector_RecordFileMutation_SamePathTriggersIdempotentNudge(t *testing.T) {
 	d := NewToolLoopDetector(DefaultToolLoopConfig(), slog.Default())
 	root := t.TempDir()
 
@@ -222,7 +222,7 @@ func TestToolLoopDetector_RecordFileMutation_SamePathThrash(t *testing.T) {
 	}
 }
 
-func TestToolLoopDetector_RecordFileMutation_DistinctPathsIndependent(t *testing.T) {
+func TestToolLoopDetector_RecordFileMutation_DistinctPathsStayWithoutNudge(t *testing.T) {
 	d := NewToolLoopDetector(DefaultToolLoopConfig(), slog.Default())
 	root := t.TempDir()
 
@@ -236,7 +236,7 @@ func TestToolLoopDetector_RecordFileMutation_DistinctPathsIndependent(t *testing
 	}
 }
 
-func TestToolLoopDetector_RecordFileMutation_NonMutatingAndNoRoot(t *testing.T) {
+func TestToolLoopDetector_RecordFileMutation_IgnoresNonMutatingAndMissingRoot(t *testing.T) {
 	d := NewToolLoopDetector(DefaultToolLoopConfig(), slog.Default())
 	root := t.TempDir()
 
@@ -257,7 +257,7 @@ func TestToolLoopDetector_RecordFileMutation_NonMutatingAndNoRoot(t *testing.T) 
 	}
 }
 
-func TestToolLoopDetector_RecordFileMutation_Disabled(t *testing.T) {
+func TestToolLoopDetector_RecordFileMutation_StaysSilentWhenDisabled(t *testing.T) {
 	cfg := DefaultToolLoopConfig()
 	cfg.Enabled = false
 	d := NewToolLoopDetector(cfg, slog.Default())

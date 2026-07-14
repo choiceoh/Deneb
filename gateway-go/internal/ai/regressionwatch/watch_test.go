@@ -27,7 +27,7 @@ func loThresh() Thresholds {
 	return Thresholds{RelPct: 0.30, AbsNoiseFloor: 0.0, AbsHard: 0.05, CountHard: 1, MinSample: 0}
 }
 
-func TestRun_NotifiesOnNewRegressionAndDedups(t *testing.T) {
+func TestRunNotifiesOnceThenIdempotentForSameRegression(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "regression-baseline.json")
 	src := &fakeSource{Signals: []Signal{
 		{Key: "agentlog.error_rate", Scope: "m1", Value: 0.10, Sample: 100, HigherWorse: true, Kind: KindRate},
@@ -246,7 +246,7 @@ func TestRun_NotifyFailureDoesNotAbortOrAdvanceMarker(t *testing.T) {
 	}
 }
 
-func TestFingerprint_OrderIndependentAndDistinguishesSets(t *testing.T) {
+func TestFingerprintNormalizesOrderAndDistinguishesSets(t *testing.T) {
 	a := []Regression{{Key: "b"}, {Key: "a"}}
 	b := []Regression{{Key: "a"}, {Key: "b"}}
 	if Fingerprint(a) != Fingerprint(b) {

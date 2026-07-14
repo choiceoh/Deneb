@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestAnthropicRequestOmitsOpenAISamplingSeed(t *testing.T) {
+func TestAnthropicRequestBuildsWithoutSamplingSeed(t *testing.T) {
 	seed := int64(42001)
 	body, err := buildAnthropicRequestBody(ChatRequest{
 		Model: "test", MaxTokens: 32, Seed: &seed,

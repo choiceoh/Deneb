@@ -361,7 +361,7 @@ func TestRunAgent_CancelAfterOrdinaryToolErrorOnlyMarksContextFailureInterrupted
 	}
 }
 
-func TestRunAgent_NormalToolTurnUsesSingleCommitFlow(t *testing.T) {
+func TestRunAgent_ToolTurnCommitsResultsWithoutCancellation(t *testing.T) {
 	var executed []string
 	exec := toolExecFunc(func(_ context.Context, name string, _ json.RawMessage) (string, error) {
 		executed = append(executed, name)

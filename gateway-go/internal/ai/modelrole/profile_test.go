@@ -2,7 +2,7 @@ package modelrole
 
 import "testing"
 
-func TestProfileFor(t *testing.T) {
+func TestProfileForReturnsReasoningAndSamplingFlags(t *testing.T) {
 	tests := []struct {
 		name        string
 		model       string
@@ -37,11 +37,11 @@ func TestProfileFor(t *testing.T) {
 	}
 }
 
-// TestIsReasoningModel_Step3p7 locks the core fix: step3p7 was previously
-// misclassified (it matched no name in the old switch) and so got
+// TestIsReasoningModelReturnsTrueForStep3p7 locks the core fix: step3p7 was
+// previously misclassified (it matched no name in the old switch) and so got
 // enable_thinking=false attached (400 risk) and was mis-ordered in the hub
 // fallback chain. It must now be detected as a reasoning model.
-func TestIsReasoningModel_Step3p7(t *testing.T) {
+func TestIsReasoningModelReturnsTrueForStep3p7(t *testing.T) {
 	for _, m := range []string{"step3p7", "vllm/step3p7", "step-3.7"} {
 		if !IsReasoningModel(m) {
 			t.Errorf("IsReasoningModel(%q) = false, want true", m)
@@ -49,10 +49,10 @@ func TestIsReasoningModel_Step3p7(t *testing.T) {
 	}
 }
 
-// TestProfileFor_DeepseekV4Sampling pins the recommended values for the
-// self-hosted main model: the shipped generation_config.json is 1.0/1.0,
-// so dropping this profile silently reverts dsv4 to no-op sampling.
-func TestProfileFor_DeepseekV4Sampling(t *testing.T) {
+// TestProfileForDeepseekV4ReturnsPinnedSampling pins the recommended values
+// for the self-hosted main model: the shipped generation_config.json is
+// 1.0/1.0, so dropping this profile silently reverts dsv4 to no-op sampling.
+func TestProfileForDeepseekV4ReturnsPinnedSampling(t *testing.T) {
 	p := ProfileFor("deepseek-v4-flash")
 	if p.Temperature == nil || *p.Temperature != 0.6 {
 		t.Errorf("deepseek-v4 Temperature = %v, want 0.6", p.Temperature)
@@ -65,9 +65,9 @@ func TestProfileFor_DeepseekV4Sampling(t *testing.T) {
 	}
 }
 
-// TestProfileFor_Qwen3Sampling pins the vendor-recommended values so a future
-// edit can't silently drop them.
-func TestProfileFor_Qwen3Sampling(t *testing.T) {
+// TestProfileForQwen3ReturnsPinnedSampling pins the vendor-recommended
+// values so a future edit can't silently drop them.
+func TestProfileForQwen3ReturnsPinnedSampling(t *testing.T) {
 	p := ProfileFor("qwen3-30b")
 	if p.Temperature == nil || *p.Temperature != 0.7 {
 		t.Errorf("qwen3 Temperature = %v, want 0.7", p.Temperature)

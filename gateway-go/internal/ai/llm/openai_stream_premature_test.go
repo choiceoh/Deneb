@@ -327,11 +327,11 @@ func TestStreamChat_ErrorJSONBody_SurfacedNotSwallowed(t *testing.T) {
 	requireTerminalError(t, got, "backend exploded")
 }
 
-// TestConvertMessages_ThinkingOnlyAssistantSkipped verifies that an assistant
+// TestConvertMessagesIgnoresThinkingOnlyAssistantMessage verifies that an assistant
 // history message whose only content was thinking blocks (dropped when
 // preserveThinking is off) is omitted entirely instead of being sent as
 // {"role":"assistant","content":null}.
-func TestConvertMessages_ThinkingOnlyAssistantSkipped(t *testing.T) {
+func TestConvertMessagesIgnoresThinkingOnlyAssistantMessage(t *testing.T) {
 	cap := &captureRequest{}
 	server := httptest.NewServer(cap.handler(t))
 	defer server.Close()

@@ -82,7 +82,7 @@ func TestConsumeStreamInto_ProviderModelIsStableWithinTurn(t *testing.T) {
 	})
 }
 
-func TestRunAgent_RequireProviderModelAcrossTurns(t *testing.T) {
+func TestRunAgent_RequireProviderModelRejectsMissingOrChangedModel(t *testing.T) {
 	t.Run("missing model fails before completion", func(t *testing.T) {
 		events := buildTextTurnEvents("answer", 1, 1)
 		events[0] = llm.StreamEvent{
@@ -174,7 +174,7 @@ func TestRunAgent_StrictStopShapeRejectsToolUseWithoutCalls(t *testing.T) {
 	}
 }
 
-func TestRunAgent_HardTotalBudgetUsesFullLocalGeneratedEstimate(t *testing.T) {
+func TestRunAgent_HardTotalBudgetRejectsOverrunsViaLocalEstimate(t *testing.T) {
 	t.Run("zero provider usage is replaced and propagated", func(t *testing.T) {
 		const answer = "provider omitted usage for this generated answer"
 		streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{buildTextTurnEvents(answer, 1, 0)}}

@@ -226,11 +226,11 @@ func TestStreamChat_AnthropicMode_MidStreamEOF_SurfacesError(t *testing.T) {
 	}
 }
 
-// TestSanitizeAnthropicContent ensures the request builder backfills the
+// TestSanitizeAnthropicContentBackfillsMissingFields ensures the request builder backfills the
 // fields z.ai's Anthropic-compat validator requires. Without this, an
 // empty `text` block or a `tool_use` block with no `input` triggers a
 // 500: "sequence item 0: expected str instance, NoneType found".
-func TestSanitizeAnthropicContent(t *testing.T) {
+func TestSanitizeAnthropicContentBackfillsMissingFields(t *testing.T) {
 	cases := []struct {
 		name string
 		in   json.RawMessage

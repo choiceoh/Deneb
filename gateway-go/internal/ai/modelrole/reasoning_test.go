@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestIsReasoningModel(t *testing.T) {
+func TestIsReasoningModelReturnsPerModelClassification(t *testing.T) {
 	tests := []struct {
 		model string
 		want  bool
@@ -35,7 +35,7 @@ func TestIsReasoningModel(t *testing.T) {
 	}
 }
 
-func TestRoleIsReasoning(t *testing.T) {
+func TestRoleIsReasoningReturnsPerRoleModel(t *testing.T) {
 	// Lightweight and Fallback both default to the local vLLM model.
 	reg := NewRegistry(slog.Default(), "zai/test-model", "qwen3.6-35b-a3b")
 	if !reg.RoleIsReasoning(RoleLightweight) {

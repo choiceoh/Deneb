@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-// TestTierRoles_DefaultToLightweight verifies tiny falls back to the
-// lightweight model when unconfigured — the prior single-tier behavior, so an
-// existing deployment is unchanged until it opts in.
-func TestTierRoles_DefaultToLightweight(t *testing.T) {
+// TestTierRolesDefaultsToLightweightWhenUnset verifies tiny falls back to
+// the lightweight model when unconfigured — the prior single-tier behavior,
+// so an existing deployment is unchanged until it opts in.
+func TestTierRolesDefaultsToLightweightWhenUnset(t *testing.T) {
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		MainModel:        "zai/glm-5-turbo",
 		LightweightModel: "vllm/light-model",
@@ -18,9 +18,9 @@ func TestTierRoles_DefaultToLightweight(t *testing.T) {
 	}
 }
 
-// TestTierRoles_ExplicitOverride verifies tiny uses its own model when
-// configured, independently of lightweight.
-func TestTierRoles_ExplicitOverride(t *testing.T) {
+// TestTierRolesUsesTinyModelWhenConfigured verifies tiny uses its own model
+// when configured, independently of lightweight.
+func TestTierRolesUsesTinyModelWhenConfigured(t *testing.T) {
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		MainModel:        "zai/glm-5-turbo",
 		LightweightModel: "vllm/light-model",

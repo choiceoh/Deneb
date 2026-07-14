@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestSystemString(t *testing.T) {
+func TestSystemStringEncodesNonEmptyOrNilWhenEmpty(t *testing.T) {
 	t.Run("non-empty string", func(t *testing.T) {
 		raw := SystemString("hello world")
 		if raw == nil {
@@ -28,7 +28,7 @@ func TestSystemString(t *testing.T) {
 	})
 }
 
-func TestSystemBlocks(t *testing.T) {
+func TestSystemBlocksEncodesNonEmptyOrNilWhenEmpty(t *testing.T) {
 	t.Run("non-empty blocks", func(t *testing.T) {
 		blocks := []ContentBlock{
 			{Type: "text", Text: "hello"},
@@ -65,7 +65,7 @@ func TestSystemBlocks(t *testing.T) {
 	})
 }
 
-func TestExtractSystemText(t *testing.T) {
+func TestExtractSystemTextParsesStringOrBlocks(t *testing.T) {
 	t.Run("plain string", func(t *testing.T) {
 		raw := SystemString("system prompt")
 		got := ExtractSystemText(raw)
@@ -111,7 +111,7 @@ func TestExtractSystemText(t *testing.T) {
 	})
 }
 
-func TestAppendJSONString(t *testing.T) {
+func TestAppendJSONStringRoundTripsSpecialCharacters(t *testing.T) {
 	cases := []struct {
 		name  string
 		input string
@@ -142,7 +142,7 @@ func TestAppendJSONString(t *testing.T) {
 	}
 }
 
-func TestAppendSystemTexts(t *testing.T) {
+func TestAppendSystemTextsAppendsAndSkipsEmpty(t *testing.T) {
 	t.Run("no additions returns unchanged", func(t *testing.T) {
 		base := SystemString("base")
 		got := AppendSystemTexts(base)
@@ -215,7 +215,7 @@ func TestAppendSystemTexts(t *testing.T) {
 	})
 }
 
-func TestNewBlockMessage(t *testing.T) {
+func TestNewBlockMessageRoundTripsContentBlocks(t *testing.T) {
 	blocks := []ContentBlock{
 		{Type: "text", Text: "hello"},
 		{Type: "image", Source: &ImageSource{Type: "base64", MediaType: "image/png", Data: "abc"}},

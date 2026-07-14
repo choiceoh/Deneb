@@ -46,7 +46,7 @@ func TestNewDefaultsNormalizesURLAndAcceptsNilLogger(t *testing.T) {
 	client.Shutdown()
 }
 
-func TestEmbedGuardsDoNotCallHTTP(t *testing.T) {
+func TestEmbedGuardClausesRejectWithoutHTTPCall(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls.Add(1) }))
 	defer server.Close()
@@ -95,7 +95,7 @@ func TestEmbedRequestAndSuccessfulResponseContract(t *testing.T) {
 	}
 }
 
-func TestEmbedResponseValidationMatrix(t *testing.T) {
+func TestEmbedRejectsMalformedResponseMatrix(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		status int
@@ -167,7 +167,7 @@ func TestEmbedCancellationAndDeadlineKeepHealth(t *testing.T) {
 	}
 }
 
-func TestProbeHealthTransitionsAndShutdownContext(t *testing.T) {
+func TestProbeUpdatesHealthOnFailureRecoveryAndCancel(t *testing.T) {
 	var status atomic.Int32
 	status.Store(http.StatusServiceUnavailable)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

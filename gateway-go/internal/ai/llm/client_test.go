@@ -17,11 +17,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
-// TestClientAppliesUserAgent verifies that LLM requests carry the honest
+// TestClientAppliesUserAgentWithOverride verifies that LLM requests carry the honest
 // gateway User-Agent by default, and that a provider config can override
 // it (and add extra headers) for endpoints that gate on the client
 // identifier.
-func TestClientAppliesUserAgent(t *testing.T) {
+func TestClientAppliesUserAgentWithOverride(t *testing.T) {
 	var gotUA, gotXApp string
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		gotUA = r.Header.Get("User-Agent")
@@ -89,10 +89,10 @@ func drainChat(t *testing.T, c *Client) {
 	}
 }
 
-// TestClientAuthScheme verifies the credential goes out as x-api-key by
+// TestClientAuthSchemeSelectsHeaderFormat verifies the credential goes out as x-api-key by
 // default and as Authorization: Bearer when the Bearer scheme is set —
 // required by OAuth-token endpoints like Kimi Code.
-func TestClientAuthScheme(t *testing.T) {
+func TestClientAuthSchemeSelectsHeaderFormat(t *testing.T) {
 	var xAPIKey, auth string
 	handler := streamStopHandler(&xAPIKey, &auth)
 
@@ -119,9 +119,9 @@ func TestClientAuthScheme(t *testing.T) {
 	}
 }
 
-// TestClientAPIKeyFunc verifies the dynamic key callback overrides the
+// TestClientAPIKeyFuncRereadsRotatedToken verifies the dynamic key callback overrides the
 // static key and is re-read per request, so a rotated token is picked up.
-func TestClientAPIKeyFunc(t *testing.T) {
+func TestClientAPIKeyFuncRereadsRotatedToken(t *testing.T) {
 	var xAPIKey, auth string
 	handler := streamStopHandler(&xAPIKey, &auth)
 
@@ -150,7 +150,7 @@ func newTestClient(t *testing.T, handler http.HandlerFunc, opts ...ClientOption)
 	return NewClient(server.URL, "test-key", opts...), server
 }
 
-func TestCloneForDeterministicRunDoesNotExtendParentDeadline(t *testing.T) {
+func TestCloneForDeterministicRunPreservesParentDeadline(t *testing.T) {
 	parent := NewClient("http://example.invalid", "test-key", WithMinRequestTimeout(2*time.Second))
 	clone := parent.CloneForDeterministicRun()
 	if clone == nil {
@@ -211,7 +211,7 @@ func TestCloneForDeterministicRunDoesNotRetryHTTP500(t *testing.T) {
 	}
 }
 
-func TestCloneForDeterministicRunDoesNotFollowRedirect(t *testing.T) {
+func TestCloneForDeterministicRunRejectsRedirectResponse(t *testing.T) {
 	type requestSnapshot struct {
 		authorization string
 		body          string
@@ -357,7 +357,7 @@ func TestDoStream_RateLimitRetryAfter(t *testing.T) {
 	}
 }
 
-func TestBackoffDelay_Jitter(t *testing.T) {
+func TestBackoffDelayWithJitterVariesWithinRange(t *testing.T) {
 	c := NewClient("http://localhost", "key",
 		WithRetry(6, 100*time.Millisecond, 10*time.Second))
 	err := &httpretry.APIError{StatusCode: 503, Message: "unavailable"}
@@ -377,7 +377,7 @@ func TestBackoffDelay_Jitter(t *testing.T) {
 	}
 }
 
-func TestBackoffDelay_RateLimitFloor(t *testing.T) {
+func TestBackoffDelayWithRateLimitFloor(t *testing.T) {
 	c := NewClient("http://localhost", "key",
 		WithRetry(6, 500*time.Millisecond, 60*time.Second))
 

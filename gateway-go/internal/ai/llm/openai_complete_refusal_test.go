@@ -43,7 +43,7 @@ func TestCompleteOpenAI_RefusalSurfacedAsError(t *testing.T) {
 }
 
 // Normal content path still decodes (guards the response-struct change).
-func TestCompleteOpenAI_NormalContent(t *testing.T) {
+func TestCompleteOpenAIDecodesNormalContent(t *testing.T) {
 	server := completeJSONServer(`{"choices":[{"message":{"content":"ok"}}]}`)
 	defer server.Close()
 
@@ -186,7 +186,7 @@ func TestCompleteOpenAI_GenuineEmptyStop_NoError(t *testing.T) {
 
 // completeOpenAI must honor caller sampling parameters; they were previously
 // dropped on the non-streaming path (only the streaming path applied them).
-func TestCompleteOpenAI_SamplingParamsSent(t *testing.T) {
+func TestCompleteOpenAIPreservesSamplingParams(t *testing.T) {
 	var captured []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured, _ = io.ReadAll(r.Body)
