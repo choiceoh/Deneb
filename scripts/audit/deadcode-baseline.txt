@@ -93,7 +93,7 @@ internal/pipeline/chat/prompt/prompt_cache.go :: PromptCache.Reset
 internal/pipeline/chat/prompt/system_prompt.go :: BuildSystemPrompt
 internal/pipeline/chat/run_provider.go :: isCacheIncompatibleProvider
 internal/pipeline/chat/tool_turn_context.go :: DetectCycle
-internal/pipeline/chat/toolctx/turn_context.go :: DetectCycle
+internal/pipeline/chat/toolport/turn_context.go :: DetectCycle
 internal/pipeline/chat/toolpreset/preset.go :: KnownPresets
 internal/pipeline/chat/tools/exec_safety.go :: DetectFileModification
 internal/pipeline/chat/tools/exec_safety.go :: sedModifiesFile

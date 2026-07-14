@@ -1,7 +1,7 @@
 """Tool-quality miner — proactive L4 supply, RSI surface expansion (Lane A).
 
 The recursion surface already INCLUDES tool descriptions: 41 of 45 tools carry
-their natural-language description as a Go literal (`toolctx.ToolDef.Description`
+their natural-language description as a Go literal (`toolport.ToolDef.Description`
 in toolreg), which is a `*.go` file = the declared gateway-source propose-only
 surface. What was missing is a SIGNAL that grounds "improve this tool's
 description/schema" candidates — the agentlog already measures it but nothing
