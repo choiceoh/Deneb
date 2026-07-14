@@ -9,7 +9,7 @@ describe("renderableBlob", () => {
     expect(out.size).toBe(src.size);
   });
 
-  it("re-stamps a typeless PDF blob (fetch dropped the header)", () => {
+  it("restores PDF mime type when fetch returns typeless blob without header", () => {
     const out = renderableBlob(new Blob(["%PDF"]), "pdf");
     expect(out.type).toBe("application/pdf");
   });
@@ -19,7 +19,7 @@ describe("renderableBlob", () => {
     expect(renderableBlob(src, "pdf")).toBe(src);
   });
 
-  it("does not touch non-PDF kinds (<img> sniffs its own bytes)", () => {
+  it("preserves non-PDF blob unchanged when kind is not PDF", () => {
     const src = new Blob([new Uint8Array([1, 2, 3])], { type: "text/plain" });
     expect(renderableBlob(src, "image")).toBe(src);
   });
@@ -40,7 +40,7 @@ describe("viewKindFor", () => {
     expect(viewKindFor("자료.xlsx", "application/octet-stream")).toBe("none");
   });
 
-  it("marks only text-family kinds editable", () => {
+  it("marks only text-family kinds editable when preview kind classified", () => {
     expect(isEditableKind("markdown")).toBe(true);
     expect(isEditableKind("text")).toBe(true);
     expect(isEditableKind("csv")).toBe(true);
@@ -53,7 +53,7 @@ describe("viewKindFor", () => {
 });
 
 describe("parseCsv", () => {
-  it("handles quotes, embedded commas/newlines, and CRLF", () => {
+  it("parses quoted CSV with embedded commas, newlines, and CRLF when fields escaped", () => {
     const rows = parseCsv('이름,금액\n"탑솔라, 주식회사","1,000"\r\n"두\n줄",2');
     expect(rows).toEqual([
       ["이름", "금액"],
@@ -62,7 +62,7 @@ describe("parseCsv", () => {
     ]);
   });
 
-  it('unescapes "" and supports TSV', () => {
+  it('unescapes doubled quotes and parses TSV when delimiter is tab', () => {
     expect(parseCsv('"그가 ""안녕""이라 말함"')).toEqual([['그가 "안녕"이라 말함']]);
     expect(parseCsv("a\tb\nc\td", "\t")).toEqual([
       ["a", "b"],
@@ -72,7 +72,7 @@ describe("parseCsv", () => {
 });
 
 describe("diffLineClass", () => {
-  it("classifies unified diff lines", () => {
+  it("classifies unified diff lines when parsing patch text", () => {
     expect(diffLineClass("+added")).toBe("add");
     expect(diffLineClass("-removed")).toBe("del");
     expect(diffLineClass("@@ -1,3 +1,4 @@")).toBe("hunk");

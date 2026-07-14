@@ -18,7 +18,7 @@ describe("MarkdownEditor", () => {
     expect(editor).toHaveStyle({ width: "100%", height: "70vh", resize: "none" });
   });
 
-  it("reports each user edit as the complete next value", async () => {
+  it("returns complete next value when user edits field", async () => {
     const onChange = vi.fn();
     render(<MarkdownEditor value="" onChange={onChange} preview={false} />);
 
@@ -27,7 +27,7 @@ describe("MarkdownEditor", () => {
     expect(onChange.mock.calls.map(([value]) => value)).toEqual(["문", "서"]);
   });
 
-  it("forwards disabled and placeholder state", () => {
+  it("forwards disabled and placeholder state when props set", () => {
     render(
       <MarkdownEditor value="" onChange={() => {}} preview={false} disabled placeholder="Markdown을 입력하세요" />,
     );
@@ -36,7 +36,7 @@ describe("MarkdownEditor", () => {
     expect(screen.getByPlaceholderText("Markdown을 입력하세요")).toBeInTheDocument();
   });
 
-  it("uses flex-fill sizing for embedded wiki editors", () => {
+  it("applies flex-fill sizing when embedded in wiki editor", () => {
     render(<MarkdownEditor value="wiki" onChange={() => {}} preview={false} fill />);
 
     expect(screen.getByRole("textbox")).toHaveStyle({ flex: "1", minHeight: "0" });
@@ -54,12 +54,12 @@ describe("MarkdownEditor", () => {
     expect(container.querySelector(".md-surface")).toHaveAttribute("aria-label", "문서 미리보기");
   });
 
-  it("keeps fixed preview sizing outside a fill container", () => {
+  it("preserves fixed preview sizing when outside fill container", () => {
     const { container } = render(<MarkdownEditor value="preview" onChange={() => {}} preview />);
     expect(container.querySelector(".md-surface")).toHaveStyle({ width: "100%", height: "70vh", overflow: "auto" });
   });
 
-  it("keeps fill preview sizing inside a flex container", () => {
+  it("preserves fill preview sizing when inside flex container", () => {
     const { container } = render(<MarkdownEditor value="preview" onChange={() => {}} preview fill />);
     expect(container.querySelector(".md-surface")).toHaveStyle({ flex: "1", minHeight: "0", overflow: "auto" });
   });
@@ -107,7 +107,7 @@ describe("MonthGrid", () => {
     expect(container.querySelector(".cal-dow")).toHaveStyle({ color: "var(--due)" });
   });
 
-  it("labels the current month and all in-month days", () => {
+  it("displays current month label and in-month day labels when calendar rendered", () => {
     renderMonth();
 
     expect(screen.getByText(monthLabel(2025, 5))).toBeInTheDocument();
@@ -138,7 +138,7 @@ describe("MonthGrid", () => {
     expect(today).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("marks the selected in-month day accessibly", () => {
+  it("marks selected in-month day accessibly when day selected", () => {
     renderMonth({ selectedKey: dayKey(new Date(2025, 5, 19)) });
     const selected = screen.getByRole("button", { name: "6월 19일" });
     expect(selected).toHaveClass("cal-selected");
@@ -172,7 +172,7 @@ describe("MonthGrid", () => {
     expect(onSelectDay).not.toHaveBeenCalled();
   });
 
-  it("handles month and today navigation", async () => {
+  it("updates visible month when navigation clicked and returns to today when today pressed", async () => {
     const { props } = renderMonth();
 
     await userEvent.click(screen.getByRole("button", { name: "이전 달" }));
@@ -184,7 +184,7 @@ describe("MonthGrid", () => {
     expect(props.onToday).toHaveBeenCalledTimes(1);
   });
 
-  it("announces the number of events on a day", () => {
+  it("announces event count when day has events", () => {
     const eventsByDay = new Map([[dayKey(new Date(2025, 5, 12)), [event(), event({ id: "event-2" })]]]);
     renderMonth({ eventsByDay });
 
@@ -193,7 +193,7 @@ describe("MonthGrid", () => {
     expect(day.querySelectorAll(".cal-marker")).toHaveLength(2);
   });
 
-  it("caps visible markers at three and adds an overflow marker", () => {
+  it("displays max three markers and overflow marker when day has many events", () => {
     const eventsByDay = new Map([
       [
         dayKey(new Date(2025, 5, 12)),
@@ -213,13 +213,13 @@ describe("MonthGrid", () => {
     [event({ category: "deadline" }), "cal-marker dot deadline"],
     [event({ allDay: true, start: { date: "2025-06-12" }, end: { date: "2025-06-13" } }), "cal-marker line mine"],
     [event({ start: "2025-06-12T09:00:00+09:00", end: "2025-06-14T10:00:00+09:00" }), "cal-marker line mine"],
-  ])("assigns semantic marker classes", (calendarEvent, expected) => {
+  ])("assigns semantic marker classes when events have deadlines", (calendarEvent, expected) => {
     const eventsByDay = new Map([[dayKey(new Date(2025, 5, 12)), [calendarEvent]]]);
     const { container } = renderMonth({ eventsByDay });
     expect(container.querySelector(".cal-markers .cal-marker")).toHaveClass(...expected.split(" "));
   });
 
-  it("does not make an out-of-month context day selectable even if it has events", () => {
+  it("denies selection of out-of-month day when it has events", () => {
     const context = new Date(2025, 6, 1);
     const eventsByDay = new Map([[dayKey(context), [event({ start: "2025-07-01T09:00:00+09:00" })]]]);
     const onSelectDay = vi.fn();
@@ -237,7 +237,7 @@ describe("ErrorBoundary", () => {
     throw new Error(message);
   }
 
-  it("passes healthy children through unchanged", () => {
+  it("preserves healthy children unchanged when children valid", () => {
     render(
       <ErrorBoundary>
         <button>작동 중</button>

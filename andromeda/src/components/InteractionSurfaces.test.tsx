@@ -33,7 +33,7 @@ function renderComposer(overrides: Partial<React.ComponentProps<typeof ChatCompo
 }
 
 describe("ChatComposer", () => {
-  it("wires both supplied element refs", () => {
+  it("wires both supplied element refs when refs provided", () => {
     const { props } = renderComposer();
     expect(props.composeRef.current).toBe(screen.getByRole("textbox", { name: "Deneb에게 메시지" }));
     expect(props.fileRef.current).toBe(document.querySelector('input[type="file"]'));
@@ -45,14 +45,14 @@ describe("ChatComposer", () => {
     expect(screen.getByPlaceholderText("custom placeholder")).toBeEnabled();
   });
 
-  it("routes controlled input changes", async () => {
+  it("emits controlled input changes when textarea value updated", async () => {
     const { props } = renderComposer();
     await userEvent.type(screen.getByRole("textbox", { name: "Deneb에게 메시지" }), "abc");
     expect(props.onInput).toHaveBeenNthCalledWith(1, "a");
     expect(props.onInput).toHaveBeenLastCalledWith("c");
   });
 
-  it("submits on form submit and plain Enter", async () => {
+  it("submits message when form submitted and when plain Enter pressed", async () => {
     const { props } = renderComposer({ input: "ready" });
     await userEvent.click(screen.getByRole("button", { name: "전송" }));
     expect(props.onSubmit).toHaveBeenCalledTimes(1);
@@ -61,7 +61,7 @@ describe("ChatComposer", () => {
     expect(props.onSubmit).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps Shift+Enter and IME Enter inside the textarea", () => {
+  it("preserves newline when Shift+Enter or IME Enter pressed in textarea", () => {
     const { props } = renderComposer({ input: "ready" });
     const input = screen.getByRole("textbox", { name: "Deneb에게 메시지" });
     fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
@@ -75,12 +75,12 @@ describe("ChatComposer", () => {
     [false, "hello", true],
     [true, "   ", true],
     [true, "hello", false],
-  ])("sets send disabled for connected=%s input=%j", (connected, input, disabled) => {
+  ])("disables send when connected=%s and input=%j", (connected, input, disabled) => {
     renderComposer({ connected, input });
     expect(screen.getByRole("button", { name: "전송" })).toHaveProperty("disabled", disabled);
   });
 
-  it("opens the hidden file input from the attach affordance", async () => {
+  it("opens hidden file input when attach affordance clicked", async () => {
     const { props } = renderComposer();
     const fileInput = props.fileRef.current!;
     const click = vi.spyOn(fileInput, "click");
@@ -91,7 +91,7 @@ describe("ChatComposer", () => {
     expect(fileInput.accept).toContain(".pdf");
   });
 
-  it("disables attachment while disconnected or busy", () => {
+  it("disables attachment when disconnected or busy", () => {
     const { unmount } = renderComposer({ connected: false });
     expect(screen.getByRole("button", { name: "파일 첨부" })).toBeDisabled();
     unmount();
@@ -99,14 +99,14 @@ describe("ChatComposer", () => {
     expect(screen.getByRole("button", { name: "파일 첨부" })).toBeDisabled();
   });
 
-  it("routes the native file input change", () => {
+  it("emits attachment when native file input change fired", () => {
     const { props } = renderComposer();
     const file = new File(["content"], "report.txt", { type: "text/plain" });
     fireEvent.change(props.fileRef.current!, { target: { files: [file] } });
     expect(props.onPick).toHaveBeenCalledOnce();
   });
 
-  it("turns pasted files into attachments", () => {
+  it("creates attachments when files pasted into composer", () => {
     const { props } = renderComposer();
     const file = new File(["image"], "shot.png", { type: "image/png" });
     const event = new Event("paste", { bubbles: true, cancelable: true });
@@ -116,7 +116,7 @@ describe("ChatComposer", () => {
     expect(props.onAttachFiles).toHaveBeenCalledWith([file]);
   });
 
-  it("leaves text-only paste to the browser", () => {
+  it("preserves text-only paste to browser when clipboard has no files", () => {
     const { props } = renderComposer();
     const event = new Event("paste", { bubbles: true, cancelable: true });
     Object.defineProperty(event, "clipboardData", { value: { files: [] } });
@@ -125,7 +125,7 @@ describe("ChatComposer", () => {
     expect(props.onAttachFiles).not.toHaveBeenCalled();
   });
 
-  it("shows a live attachment notice", () => {
+  it("displays live attachment notice when attachment pending", () => {
     renderComposer({ note: "대용량 파일은 건너뛰었습니다" });
     expect(screen.getByRole("status")).toHaveTextContent("대용량 파일은 건너뛰었습니다");
   });
@@ -206,7 +206,7 @@ describe("MonthGrid", () => {
     expect(screen.getByText(/2026/)).toBeInTheDocument();
   });
 
-  it("makes only in-month days interactive", () => {
+  it("allows clicks only on in-month days when calendar rendered", () => {
     const { container } = renderMonth();
     expect(screen.getAllByRole("button", { name: /7월 \d+일/ })).toHaveLength(31);
     expect(container.querySelectorAll(".cal-cell.out").length).toBeGreaterThan(0);
@@ -216,7 +216,7 @@ describe("MonthGrid", () => {
     }
   });
 
-  it("marks today, selection, and event count accessibly", () => {
+  it("marks today, selection, and event count accessibly when day rendered", () => {
     renderMonth();
     expect(screen.getByRole("button", { name: "7월 11일" })).toHaveClass("cal-today");
     const selected = screen.getByRole("button", { name: "7월 15일, 일정 2건" });
@@ -224,7 +224,7 @@ describe("MonthGrid", () => {
     expect(selected).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("styles timed and all-day deadline markers differently", () => {
+  it("renders timed and all-day markers with distinct styles when deadlines present", () => {
     const { container } = renderMonth();
     const selected = screen.getByRole("button", { name: "7월 15일, 일정 2건" });
     expect(selected.querySelector(".cal-marker.dot.mine")).toBeInTheDocument();
@@ -232,7 +232,7 @@ describe("MonthGrid", () => {
     expect(container.querySelectorAll(".cal-marker.overflow")).toHaveLength(0);
   });
 
-  it("caps visible markers and adds an overflow marker", () => {
+  it("displays capped markers and overflow marker when many events on day", () => {
     const events = Array.from({ length: 5 }, (_, index) => ({ ...timed, id: `event-${index}` }));
     const { container } = renderMonth({ eventsByDay: new Map([["2026-7-15", events]]) });
     const selected = screen.getByRole("button", { name: "7월 15일, 일정 5건" });
@@ -241,7 +241,7 @@ describe("MonthGrid", () => {
     expect(container.querySelector('[title="일정 5건"]')).toBeInTheDocument();
   });
 
-  it("routes click, Enter, and Space selection", async () => {
+  it("emits day selection when click, Enter, or Space pressed on day", async () => {
     const { props } = renderMonth();
     const day = screen.getByRole("button", { name: "7월 20일" });
     await userEvent.click(day);
@@ -257,7 +257,7 @@ describe("MonthGrid", () => {
     expect(props.onSelectDay).not.toHaveBeenCalled();
   });
 
-  it("routes previous, next, and today navigation", async () => {
+  it("emits navigation when previous, next, or today control activated", async () => {
     const { props } = renderMonth();
     await userEvent.click(screen.getByRole("button", { name: "이전 달" }));
     await userEvent.click(screen.getByRole("button", { name: "다음 달" }));
@@ -301,14 +301,14 @@ describe("SessionDrawer", () => {
     expect(screen.queryByText("최근 대화가 없습니다.")).not.toBeInTheDocument();
   });
 
-  it("trims labels and falls back to the session key", () => {
+  it("displays trimmed label and falls back to session key when label whitespace", () => {
     renderDrawer();
     expect(screen.getByText("첫 대화")).toBeInTheDocument();
     expect(screen.getByText("client:main:b")).toBeInTheDocument();
     expect(screen.getByText(/gpt-5/)).toBeInTheDocument();
   });
 
-  it("marks the current conversation", () => {
+  it("marks current conversation active when session matches", () => {
     const { container } = renderDrawer();
     const active = screen.getByText("첫 대화").closest("li");
     expect(active).toHaveClass("active");
@@ -325,7 +325,7 @@ describe("SessionDrawer", () => {
     expect(props.onDelete).toHaveBeenCalledWith("client:main:a");
   });
 
-  it("disables every mutation while busy", () => {
+  it("disables every mutation when busy state active", () => {
     renderDrawer({ busy: true });
     expect(screen.getByRole("button", { name: /새 대화/ })).toBeDisabled();
     for (const button of screen.getAllByRole("button", { name: /첫 대화|client:main:b|대화 삭제/ })) {
@@ -350,14 +350,14 @@ describe("ModelPicker", () => {
     ],
   };
 
-  it("stays hidden until valid sections arrive", () => {
+  it("stays hidden until valid model sections arrive when disconnected from catalog", () => {
     const { rerender } = render(<ModelPicker models={null} value="" onChange={() => {}} />);
     expect(screen.queryByRole("combobox", { name: "모델 선택" })).not.toBeInTheDocument();
     rerender(<ModelPicker models={{ current: "", roles: [], sections: [] }} value="" onChange={() => {}} />);
     expect(screen.queryByRole("combobox", { name: "모델 선택" })).not.toBeInTheDocument();
   });
 
-  it("groups models and marks unhealthy entries", () => {
+  it("groups models and marks unhealthy entries when health metadata provided", () => {
     render(<ModelPicker models={models} value="gpt-5" onChange={() => {}} />);
     const picker = screen.getByRole("combobox", { name: "모델 선택" });
     expect(picker).toHaveValue("gpt-5");
@@ -371,7 +371,7 @@ describe("ModelPicker", () => {
     expect(screen.getByRole("option", { name: "legacy-custom" })).toBeInTheDocument();
   });
 
-  it("routes changes and respects disabled state", async () => {
+  it("emits model change and respects disabled state when selection updated", async () => {
     const onChange = vi.fn();
     const { rerender } = render(<ModelPicker models={models} value="gpt-5" onChange={onChange} />);
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "모델 선택" }), "local");
@@ -394,7 +394,7 @@ describe("icon primitives", () => {
     },
   );
 
-  it("applies custom size, class, and stroke width", () => {
+  it("applies custom size, class, and stroke width when props provided", () => {
     const { container } = render(<Icon name="send" size={24} className="custom-icon" strokeWidth={2.5} />);
     expect(container.querySelector("svg")).toMatchObject({
       className: expect.objectContaining({ baseVal: "custom-icon" }),
