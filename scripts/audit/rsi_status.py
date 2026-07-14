@@ -398,7 +398,10 @@ def assess_l4(
             failed += 1
             outcome = marker_outcomes.get(rid, "")
             if (
-                (phase == "rolled_back" or outcome not in ("landed", "attempted"))
+                (
+                    phase == "rolled_back"
+                    or outcome not in ("landed", "attempted", "declined")
+                )
                 and st in ("proposed", "accepted")
                 and src.startswith(sources)
             ):

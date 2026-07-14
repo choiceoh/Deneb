@@ -267,6 +267,8 @@ class L4Test(unittest.TestCase):
         self.assertEqual(retry.metrics["dispatchable"], 1)
         blocked = assess_l4(rows, 1, 0, marker_outcomes={"c": "attempted"})
         self.assertEqual(blocked.metrics["dispatchable"], 0)
+        declined = assess_l4(rows, 1, 0, marker_outcomes={"c": "declined"})
+        self.assertEqual(declined.metrics["dispatchable"], 0)
 
     def test_status_delta_demotes_candidate(self):
         # A later status delta ({id,status}) must fold onto the candidate, not

@@ -507,7 +507,7 @@ func TestDispatchMarkerBlocks_parityWithPython(t *testing.T) {
 		{"missing", false},
 		{"landed", true},
 		{"attempted", true},
-		{"declined", false},
+		{"declined", true},
 		{"failed", false},
 		{"timeout", false},
 		{"fresh", true},
