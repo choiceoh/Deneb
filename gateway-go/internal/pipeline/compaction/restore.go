@@ -39,18 +39,33 @@ type FileReadRecord struct {
 	Tokens  int    // estimated token count
 }
 
+// fileReadPaths maps a tool_use ID to the file path that read requested.
+type fileReadPaths map[string]string
+
 // ExtractRecentFileReads scans messages for tool_result blocks from file-reading
 // tools. Returns records deduplicated by path (most recent wins), ordered most
 // recent first.
 func ExtractRecentFileReads(messages []llm.Message) []FileReadRecord {
 	// Two-pass: first collect all tool_use IDs that are file reads with their paths,
 	// then match tool_result blocks to extract content.
-	type toolUseInfo struct {
-		name string
-		path string
+	toolUses := collectFileReadToolUses(messages)
+	if len(toolUses) == 0 {
+		return nil
 	}
-	toolUses := make(map[string]toolUseInfo) // tool_use_id -> info
 
+	records := collectFileReadRecords(messages, toolUses)
+
+	// Reverse so most recent is first.
+	for i, j := 0, len(records)-1; i < j; i, j = i+1, j-1 {
+		records[i], records[j] = records[j], records[i]
+	}
+	return records
+}
+
+// collectFileReadToolUses gathers the tool_use IDs of file-reading calls that
+// carry an extractable path, keyed by tool_use ID.
+func collectFileReadToolUses(messages []llm.Message) fileReadPaths {
+	toolUses := make(fileReadPaths)
 	for _, msg := range messages {
 		if msg.Role != "assistant" {
 			continue
@@ -70,20 +85,19 @@ func ExtractRecentFileReads(messages []llm.Message) []FileReadRecord {
 			if path == "" {
 				continue
 			}
-			toolUses[b.ID] = toolUseInfo{name: b.Name, path: path}
+			toolUses[b.ID] = path
 		}
 	}
+	return toolUses
+}
 
-	if len(toolUses) == 0 {
-		return nil
-	}
-
-	// Collect results: when the same path is re-read, drop the stale entry and
-	// re-append so append order reflects actual read recency. The final reverse
-	// then puts the most recently read file first.
+// collectFileReadRecords matches tool_result blocks against the collected
+// file-read tool uses, in message order. When the same path is re-read, the
+// stale entry is dropped and re-appended so append order reflects actual read
+// recency (the caller's final reverse then puts the most recent file first).
+func collectFileReadRecords(messages []llm.Message, toolUses fileReadPaths) []FileReadRecord {
 	seen := make(map[string]int) // path -> current index in records
 	var records []FileReadRecord
-
 	for _, msg := range messages {
 		if msg.Role != "user" {
 			continue
@@ -93,43 +107,45 @@ func ExtractRecentFileReads(messages []llm.Message) []FileReadRecord {
 			continue
 		}
 		for _, b := range blocks {
-			if b.Type != "tool_result" {
-				continue
-			}
-			info, ok := toolUses[b.ToolUseID]
-			if !ok {
-				continue
-			}
-			content := b.Content
-			if content == "" || b.IsError {
-				continue
-			}
-			rec := FileReadRecord{
-				Path:    info.path,
-				Content: content,
-				Tokens:  EstimateTokens(content),
-			}
-			if idx, exists := seen[info.path]; exists {
-				// Remove the stale record and fix up indices of everything
-				// that shifted left so `seen` stays consistent.
-				records = append(records[:idx], records[idx+1:]...)
-				for p, i := range seen {
-					if i > idx {
-						seen[p] = i - 1
-					}
-				}
-				delete(seen, info.path)
-			}
-			seen[info.path] = len(records)
-			records = append(records, rec)
+			records = appendFileReadRecord(records, seen, toolUses, b)
 		}
 	}
-
-	// Reverse so most recent is first.
-	for i, j := 0, len(records)-1; i < j; i, j = i+1, j-1 {
-		records[i], records[j] = records[j], records[i]
-	}
 	return records
+}
+
+// appendFileReadRecord appends one tool_result block as a file-read record,
+// evicting any stale record for the same path first. Non-file-read, empty, and
+// error results pass through unchanged.
+func appendFileReadRecord(records []FileReadRecord, seen map[string]int, toolUses fileReadPaths, b llm.ContentBlock) []FileReadRecord {
+	if b.Type != "tool_result" {
+		return records
+	}
+	path, ok := toolUses[b.ToolUseID]
+	if !ok {
+		return records
+	}
+	content := b.Content
+	if content == "" || b.IsError {
+		return records
+	}
+	rec := FileReadRecord{
+		Path:    path,
+		Content: content,
+		Tokens:  EstimateTokens(content),
+	}
+	if idx, exists := seen[path]; exists {
+		// Remove the stale record and fix up indices of everything
+		// that shifted left so `seen` stays consistent.
+		records = append(records[:idx], records[idx+1:]...)
+		for p, i := range seen {
+			if i > idx {
+				seen[p] = i - 1
+			}
+		}
+		delete(seen, path)
+	}
+	seen[path] = len(records)
+	return append(records, rec)
 }
 
 // BuildRestorationMessages consolidates file read records into a single user
