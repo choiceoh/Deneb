@@ -434,8 +434,8 @@ func (p *Page) Sections() []string {
 	return headings
 }
 
-// H2Section is an ordered section extracted from the page body.
-type H2Section struct {
+// h2Section is an ordered section extracted from the page body.
+type h2Section struct {
 	Heading string // section heading (without "## " prefix)
 	Content string // full content including sub-headings
 }
@@ -448,9 +448,9 @@ type H2Section struct {
 // entries and captured tool output legitimately contain "## " lines, and
 // splitting on them would shred a fenced entry across sections (log rotation
 // re-assembles pages from these sections).
-func (p *Page) SplitByH2() (preamble string, sections []H2Section) {
+func (p *Page) SplitByH2() (preamble string, sections []h2Section) {
 	scanner := bufio.NewScanner(strings.NewReader(p.Body))
-	var current *H2Section
+	var current *h2Section
 	var preambleBuf, sectionBuf strings.Builder
 	inFence := false
 
@@ -471,7 +471,7 @@ func (p *Page) SplitByH2() (preamble string, sections []H2Section) {
 				preamble = strings.TrimSpace(preambleBuf.String())
 			}
 			heading := strings.TrimSpace(strings.TrimPrefix(line, "## "))
-			current = &H2Section{Heading: heading}
+			current = &h2Section{Heading: heading}
 			continue
 		}
 

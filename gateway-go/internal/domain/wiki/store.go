@@ -58,7 +58,7 @@ func ValidateCategory(cat string) bool {
 // helpers, rebuildIndex). The internal *Locked helpers and writePageInternal / maintainBacklinks
 // assume it is already held and never re-acquire it (Go mutexes are non-reentrant).
 // mu independently guards the in-memory index/backlink maps so pure readers
-// (Index, Tier1Pages, Search) never block behind a write's disk I/O.
+// (wikiIndex, Tier1Pages, Search) never block behind a write's disk I/O.
 type Store struct {
 	dir      string
 	diaryDir string
@@ -83,7 +83,7 @@ type Store struct {
 	recallMu sync.Mutex
 
 	mu       sync.RWMutex
-	index    *Index // cached master index
+	index    *wikiIndex // cached master index
 	fts      *searchDB
 	diaryFTS *diarySearchDB
 

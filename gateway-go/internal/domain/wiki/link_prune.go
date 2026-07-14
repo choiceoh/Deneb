@@ -24,8 +24,8 @@ import (
 	"strings"
 )
 
-// PruneStats summarizes one dead-link sweep.
-type PruneStats struct {
+// pruneStats summarizes one dead-link sweep.
+type pruneStats struct {
 	PagesChanged int
 	Repointed    int
 	Removed      int
@@ -148,23 +148,23 @@ func (r *linkResolver) resolve(ref string) string {
 // dropping dead entries. Hygiene-only writes: neither the swept page's Updated
 // date nor (via backlink maintenance) any target page's is stamped — a
 // metadata repair must not make a dormant page look active.
-func (s *Store) PruneDeadRelatedLinks() (PruneStats, error) {
+func (s *Store) PruneDeadRelatedLinks() (pruneStats, error) {
 	pages, err := s.ListPages("")
 	if err != nil {
-		return PruneStats{}, fmt.Errorf("wiki: prune links: %w", err)
+		return pruneStats{}, fmt.Errorf("wiki: prune links: %w", err)
 	}
 	resolver := s.newLinkResolver(pages)
 	if resolver.indexEntries == 0 && len(pages) > 0 {
-		// Index lost/empty while pages exist on disk (e.g. index.md wiped, then
+		// wikiIndex lost/empty while pages exist on disk (e.g. index.md wiped, then
 		// rebuilt empty on startup). Path-form refs would still resolve against
 		// the on-disk exists map, but title/ID-form refs would silently turn
 		// from "repairable" into "removed". Skip; the next index rebuild/write
 		// self-heals and the sweep resumes.
 		slog.Warn("wiki: prune links skipped — index empty but pages exist", "pages", len(pages))
-		return PruneStats{}, nil
+		return pruneStats{}, nil
 	}
 
-	var stats PruneStats
+	var stats pruneStats
 	for _, rp := range pages {
 		rp = strings.ReplaceAll(rp, "\\", "/")
 		repointed, removed := 0, 0

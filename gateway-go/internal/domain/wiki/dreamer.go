@@ -166,7 +166,7 @@ type WikiDreamer struct {
 
 	// openLoopSink receives unfulfilled commitments extracted each cycle
 	// (see open_loops.go). nil disables the extraction pass.
-	openLoopSink func(ctx context.Context, loops []OpenLoop) (int, error)
+	openLoopSink func(ctx context.Context, loops []openLoop) (int, error)
 
 	// personDirectory supplies the address-book snapshot for mention-driven
 	// 인물 page seeding (see person_seed.go). nil disables seeding.
