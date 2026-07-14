@@ -18,8 +18,8 @@ import (
 	"unicode/utf8"
 )
 
-// fieldChangeType is one changed commercial figure between two quotes.
-type fieldChangeType struct {
+// FieldChange is one changed commercial figure between two quotes.
+type FieldChange struct {
 	Label  string // 단가 | 물량 | 금액
 	Old    string // raw display value from the previous record
 	New    string // raw display value from the new record
@@ -27,17 +27,17 @@ type fieldChangeType struct {
 	HasPct bool
 }
 
-// requoteChange is the diff between a counterparty's new quote and its most
+// RequoteChange is the diff between a counterparty's new quote and its most
 // recent prior quote on the ledger.
-type requoteChange struct {
+type RequoteChange struct {
 	Counterparty string
 	PrevDate     string // previous quote's date (ISO or raw)
-	Fields       []fieldChangeType
+	Fields       []FieldChange
 }
 
 // StatusLine renders the change as one Korean status bullet body (the caller's
 // AppendProjectStatusLine adds the date prefix and idempotency marker).
-func (c *requoteChange) StatusLine() string {
+func (c *RequoteChange) StatusLine() string {
 	parts := make([]string, 0, len(c.Fields))
 	for _, f := range c.Fields {
 		p := fmt.Sprintf("%s %s → %s", f.Label, f.Old, f.New)
@@ -60,7 +60,7 @@ func (c *requoteChange) StatusLine() string {
 // "previous"). Deterministic and read-only; re-analysis stays safe because the
 // previous-row search skips the same SourceRef and the caller's status append
 // is ref-idempotent.
-func (s *Store) DetectRequote(in DealPageInput, now time.Time) *requoteChange {
+func (s *Store) DetectRequote(in DealPageInput, now time.Time) *RequoteChange {
 	if !strings.Contains(in.DocType, "견적") {
 		return nil // requote = 견적서 vs 견적서; contracts/invoices are PR scope 밖
 	}
@@ -93,8 +93,8 @@ func (s *Store) DetectRequote(in DealPageInput, now time.Time) *requoteChange {
 // compareQuotes diffs the figures both quotes actually carry. A field missing
 // on either side is not a change (no 추측); a unit-price comparison requires
 // the SAME unit key so 원/W never diffs against 원/m.
-func compareQuotes(prev, next DealRecord) *requoteChange {
-	var fields []fieldChangeType
+func compareQuotes(prev, next DealRecord) *RequoteChange {
+	var fields []FieldChange
 
 	if pv, pu, pok := parseUnitPrice(unitPriceOf(prev.Terms)); pok {
 		if nv, nu, nok := parseUnitPrice(unitPriceOf(next.Terms)); nok && pu == nu && pv != nv {
@@ -113,7 +113,7 @@ func compareQuotes(prev, next DealRecord) *requoteChange {
 	if len(fields) == 0 {
 		return nil
 	}
-	return &requoteChange{Counterparty: next.Counterparty, PrevDate: prev.Date, Fields: fields}
+	return &RequoteChange{Counterparty: next.Counterparty, PrevDate: prev.Date, Fields: fields}
 }
 
 func unitPriceOf(t *DealTerms) string {
@@ -123,8 +123,8 @@ func unitPriceOf(t *DealTerms) string {
 	return t.UnitPrice.Value
 }
 
-func fieldChange(label, oldRaw, newRaw string, oldV, newV float64) fieldChangeType {
-	f := fieldChangeType{Label: label, Old: strings.TrimSpace(oldRaw), New: strings.TrimSpace(newRaw)}
+func fieldChange(label, oldRaw, newRaw string, oldV, newV float64) FieldChange {
+	f := FieldChange{Label: label, Old: strings.TrimSpace(oldRaw), New: strings.TrimSpace(newRaw)}
 	if oldV != 0 {
 		f.Pct = (newV - oldV) / oldV * 100
 		f.HasPct = true

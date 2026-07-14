@@ -48,8 +48,8 @@ func toSet(ss []string) map[string]struct{} {
 // defaults (see MergePage), so the struct is currently empty.
 type MergeOptions struct{}
 
-// mergeResult summarizes a completed page merge.
-type mergeResult struct {
+// MergeResult summarizes a completed page merge.
+type MergeResult struct {
 	TargetPath    string // the surviving page
 	MergedTitle   string // target's title after the merge
 	RewriteCount  int    // other pages whose Related was repointed source→target
@@ -74,11 +74,11 @@ type mergeResult struct {
 // Backlinks are managed manually here (every write passes skipBacklinks=true)
 // because the merge already rewrites both link directions itself; letting
 // maintainBacklinks also fire would double-process the same edges.
-func (s *Store) MergePage(targetPath, sourcePath, mergedBody string, _ MergeOptions) (mergeResult, error) {
+func (s *Store) MergePage(targetPath, sourcePath, mergedBody string, _ MergeOptions) (MergeResult, error) {
 	targetPath = strings.TrimSpace(targetPath)
 	sourcePath = strings.TrimSpace(sourcePath)
 	if targetPath == "" || sourcePath == "" {
-		return mergeResult{}, fmt.Errorf("wiki: merge needs both target and source paths")
+		return MergeResult{}, fmt.Errorf("wiki: merge needs both target and source paths")
 	}
 	// Compare NORMALIZED identities: "기타/dup" and "기타/dup.md" are the same
 	// file, and a raw-string guard let that spelling variant through — the
@@ -86,7 +86,7 @@ func (s *Store) MergePage(targetPath, sourcePath, mergedBody string, _ MergeOpti
 	targetPath = normalizePagePath(targetPath)
 	sourcePath = normalizePagePath(sourcePath)
 	if targetPath == sourcePath {
-		return mergeResult{}, fmt.Errorf("wiki: cannot merge a page into itself")
+		return MergeResult{}, fmt.Errorf("wiki: cannot merge a page into itself")
 	}
 
 	// Hold writeMu across the whole merge (read both pages, write target, repoint
@@ -111,14 +111,14 @@ func (s *Store) MergePage(targetPath, sourcePath, mergedBody string, _ MergeOpti
 // read UNDER the lock, so no mid-window write can be lost), union frontmatter,
 // repoint inbound references, delete the source. The caller must hold writeMu
 // and pass normalized, non-identical paths.
-func (s *Store) mergePageLocked(targetPath, sourcePath string, bodyFn func(target, source *Page) string) (mergeResult, error) {
+func (s *Store) mergePageLocked(targetPath, sourcePath string, bodyFn func(target, source *Page) string) (MergeResult, error) {
 	target, err := s.ReadPage(targetPath)
 	if err != nil {
-		return mergeResult{}, fmt.Errorf("wiki: read merge target %q: %w", targetPath, err)
+		return MergeResult{}, fmt.Errorf("wiki: read merge target %q: %w", targetPath, err)
 	}
 	source, err := s.ReadPage(sourcePath)
 	if err != nil {
-		return mergeResult{}, fmt.Errorf("wiki: read merge source %q: %w", sourcePath, err)
+		return MergeResult{}, fmt.Errorf("wiki: read merge source %q: %w", sourcePath, err)
 	}
 
 	// Collect every page that references source. The index scan is the source
@@ -149,7 +149,7 @@ func (s *Store) mergePageLocked(targetPath, sourcePath string, bodyFn func(targe
 
 	// 4. Write target first (manual backlinks → skip auto maintenance).
 	if err := s.writePageInternal(targetPath, target, true); err != nil {
-		return mergeResult{}, fmt.Errorf("wiki: write merge target: %w", err)
+		return MergeResult{}, fmt.Errorf("wiki: write merge target: %w", err)
 	}
 
 	// 5. Repoint each referencing page: source → target.
@@ -164,13 +164,13 @@ func (s *Store) mergePageLocked(targetPath, sourcePath string, bodyFn func(targe
 	//    the backlink cleanup is a harmless no-op. deletePageLocked (not the
 	//    public DeletePage) because we already hold writeMu.
 	if err := s.deletePageLocked(sourcePath); err != nil {
-		return mergeResult{TargetPath: targetPath, MergedTitle: target.Meta.Title, RewriteCount: rewrites},
+		return MergeResult{TargetPath: targetPath, MergedTitle: target.Meta.Title, RewriteCount: rewrites},
 			fmt.Errorf("wiki: delete merge source: %w", err)
 	}
 
 	_ = s.appendLog("merge", targetPath+" ← "+sourcePath+" — "+target.Meta.Title) // best-effort: audit log is non-critical
 
-	return mergeResult{
+	return MergeResult{
 		TargetPath:    targetPath,
 		MergedTitle:   target.Meta.Title,
 		RewriteCount:  rewrites,
@@ -179,7 +179,7 @@ func (s *Store) mergePageLocked(targetPath, sourcePath string, bodyFn func(targe
 }
 
 // findPagesReferencingPath scans the master index for every page (other than
-// relPath itself) whose Related list contains relPath. wikiIndex-based so it sees
+// relPath itself) whose Related list contains relPath. Index-based so it sees
 // all inbound references regardless of any backlink-mirror drift. Matching is
 // on normalized paths — a related entry written without the ".md" extension
 // still counts as an inbound reference.
