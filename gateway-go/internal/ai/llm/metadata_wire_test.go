@@ -19,7 +19,7 @@ func metadataResultMessage(t *testing.T) Message {
 			Type:      "tool_result",
 			ToolUseID: "toolu_1",
 			Content:   "Activated 1 tool(s): graphify. You can now call them directly.",
-			Metadata: FlexibleFromRaw([]byte(`{"activatedTools":["graphify"],"secret":"code-only"}`)),
+			Metadata:  FlexibleFromRaw([]byte(`{"activatedTools":["graphify"],"secret":"code-only"}`)),
 		},
 	}
 	raw, err := json.Marshal(blocks)

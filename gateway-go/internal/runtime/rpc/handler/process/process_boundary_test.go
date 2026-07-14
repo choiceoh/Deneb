@@ -11,9 +11,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	rtevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"

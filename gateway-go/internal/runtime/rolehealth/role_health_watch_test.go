@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	rtevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"

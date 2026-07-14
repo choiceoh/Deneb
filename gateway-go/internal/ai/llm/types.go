@@ -8,52 +8,52 @@ import (
 	"unicode/utf8"
 )
 
-	// ChatRequest represents a streaming chat completion request.
-	type ChatRequest struct {
-		Model            string       `json:"model"`
-		Messages         []Message    `json:"messages"`
-		System           FlexibleJSON `json:"system,omitempty"` // string or []ContentBlock
-		MaxTokens        int          `json:"max_tokens"`
-		Tools            []Tool       `json:"tools,omitempty"`
-		Stream           bool         `json:"stream"`
-		Temperature      *float64     `json:"temperature,omitempty"`
-		TopP             *float64     `json:"top_p,omitempty"`
-		TopK             *int         `json:"top_k,omitempty"`
-		StopSequences    []string     `json:"stop_sequences,omitempty"`
-		FrequencyPenalty *float64     `json:"frequency_penalty,omitempty"`
-		PresencePenalty  *float64     `json:"presence_penalty,omitempty"`
-		// Seed requests deterministic sampling from OpenAI-compatible backends that
-		// implement the seed extension. Anthropic wire mode deliberately omits it.
-		Seed *int64 `json:"seed,omitempty"`
-	
-		// ResponseFormat requests structured output.
-		// Use &ResponseFormat{Type: "json_object"} for JSON mode.
-		ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
-	
-		// ToolChoice controls tool selection behavior.
-		// Values: "auto", "none", "required", or {"type":"function","function":{"name":"..."}}.
-		ToolChoice FlexibleJSON `json:"tool_choice,omitempty"`
-	
-		// Thinking configures extended thinking (mapped to reasoning_effort for OpenAI).
-		Thinking *ThinkingConfig `json:"thinking,omitempty"`
-	
-		// ExtraBody holds additional top-level fields merged into the OpenAI-format
-		// request body. Used for provider-specific parameters (e.g., timeout,
-		// logit_bias for CJK blocking). Values are pre-serialized JSON.
-		ExtraBody map[string]FlexibleJSON `json:"-"`
-	
-		// BetaHeaders are values to send via the `anthropic-beta` HTTP header
-		// (comma-joined). Used by Anthropic-direct and OpenRouter-proxied
-		// providers to opt in to beta features such as interleaved thinking.
-		// Other providers ignore the header.
-		BetaHeaders []string `json:"-"`
-	}
-	
-	// ResponseFormat controls the output format for OpenAI-compatible endpoints.
-	type ResponseFormat struct {
-		Type       string       `json:"type"`                  // "json_object", "json_schema", or "text"
-		JSONSchema FlexibleJSON `json:"json_schema,omitempty"` // schema definition when Type="json_schema"
-	}
+// ChatRequest represents a streaming chat completion request.
+type ChatRequest struct {
+	Model            string       `json:"model"`
+	Messages         []Message    `json:"messages"`
+	System           FlexibleJSON `json:"system,omitempty"` // string or []ContentBlock
+	MaxTokens        int          `json:"max_tokens"`
+	Tools            []Tool       `json:"tools,omitempty"`
+	Stream           bool         `json:"stream"`
+	Temperature      *float64     `json:"temperature,omitempty"`
+	TopP             *float64     `json:"top_p,omitempty"`
+	TopK             *int         `json:"top_k,omitempty"`
+	StopSequences    []string     `json:"stop_sequences,omitempty"`
+	FrequencyPenalty *float64     `json:"frequency_penalty,omitempty"`
+	PresencePenalty  *float64     `json:"presence_penalty,omitempty"`
+	// Seed requests deterministic sampling from OpenAI-compatible backends that
+	// implement the seed extension. Anthropic wire mode deliberately omits it.
+	Seed *int64 `json:"seed,omitempty"`
+
+	// ResponseFormat requests structured output.
+	// Use &ResponseFormat{Type: "json_object"} for JSON mode.
+	ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
+
+	// ToolChoice controls tool selection behavior.
+	// Values: "auto", "none", "required", or {"type":"function","function":{"name":"..."}}.
+	ToolChoice FlexibleJSON `json:"tool_choice,omitempty"`
+
+	// Thinking configures extended thinking (mapped to reasoning_effort for OpenAI).
+	Thinking *ThinkingConfig `json:"thinking,omitempty"`
+
+	// ExtraBody holds additional top-level fields merged into the OpenAI-format
+	// request body. Used for provider-specific parameters (e.g., timeout,
+	// logit_bias for CJK blocking). Values are pre-serialized JSON.
+	ExtraBody map[string]FlexibleJSON `json:"-"`
+
+	// BetaHeaders are values to send via the `anthropic-beta` HTTP header
+	// (comma-joined). Used by Anthropic-direct and OpenRouter-proxied
+	// providers to opt in to beta features such as interleaved thinking.
+	// Other providers ignore the header.
+	BetaHeaders []string `json:"-"`
+}
+
+// ResponseFormat controls the output format for OpenAI-compatible endpoints.
+type ResponseFormat struct {
+	Type       string       `json:"type"`                  // "json_object", "json_schema", or "text"
+	JSONSchema FlexibleJSON `json:"json_schema,omitempty"` // schema definition when Type="json_schema"
+}
 
 // hexChars is used by appendJSONString to encode control characters as \uXXXX.
 const hexChars = "0123456789abcdef"

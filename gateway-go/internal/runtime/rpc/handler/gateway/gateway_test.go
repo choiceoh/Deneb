@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	rtevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpctest"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"

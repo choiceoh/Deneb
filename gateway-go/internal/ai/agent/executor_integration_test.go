@@ -269,7 +269,7 @@ func TestRunAgent_TextOnlyTurnReturnsFinalText(t *testing.T) {
 		MaxTurns:  5,
 		Timeout:   10 * time.Second,
 		MaxTokens: 4096,
-		System: json.RawMessage(llm.SystemString("You are a test assistant.").Bytes()),
+		System:    json.RawMessage(llm.SystemString("You are a test assistant.").Bytes()),
 	}
 
 	messages := []llm.Message{llm.NewTextMessage("user", "Hi")}

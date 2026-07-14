@@ -5,9 +5,9 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/maintenance"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"

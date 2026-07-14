@@ -28,7 +28,7 @@ func TestRunAgent_FinalizeGateRejectsFirstFinishAllowsSecond(t *testing.T) {
 		MaxTurns:  5,
 		Timeout:   10 * time.Second,
 		MaxTokens: 4096,
-		System: json.RawMessage(llm.SystemString("test").Bytes()),
+		System:    json.RawMessage(llm.SystemString("test").Bytes()),
 		FinalizeGate: func(turn int) string {
 			if gateCalls.Add(1) == 1 {
 				return "[검증 게이트] 검증을 실행하세요."

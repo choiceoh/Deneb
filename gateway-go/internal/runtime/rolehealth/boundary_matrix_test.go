@@ -292,7 +292,11 @@ func TestApplyVerdictsEdgeBroadcastBoundary(t *testing.T) {
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logs, nil))
 	var captured []map[string]any
-	w := &roleHealthWatch{logger: logger, statePath: filepath.Join(t.TempDir(), "state.json"), broadcast: func(_ string, payload rtevents.EventPayload) { var m map[string]any; _ = json.Unmarshal(payload.Bytes(), &m); captured = append(captured, m) }, state: roleHealthState{Verdicts: map[string]string{"p": roleHealthOK}}}
+	w := &roleHealthWatch{logger: logger, statePath: filepath.Join(t.TempDir(), "state.json"), broadcast: func(_ string, payload rtevents.EventPayload) {
+		var m map[string]any
+		_ = json.Unmarshal(payload.Bytes(), &m)
+		captured = append(captured, m)
+	}, state: roleHealthState{Verdicts: map[string]string{"p": roleHealthOK}}}
 	target := roleHealthTarget{providerID: "p", model: "m", roles: []string{"main"}}
 	w.applyVerdicts([]roleHealthTarget{target}, map[string]string{"p": roleHealthAuth}, map[string]string{"p": "expired"})
 	if len(captured) != 1 || captured[0]["verdict"] != roleHealthAuth {

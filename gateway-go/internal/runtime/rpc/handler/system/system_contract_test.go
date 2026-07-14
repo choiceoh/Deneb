@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/maintenance"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/usage"

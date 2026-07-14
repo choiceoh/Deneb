@@ -10,9 +10,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"

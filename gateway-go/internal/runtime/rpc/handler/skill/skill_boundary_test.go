@@ -14,9 +14,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	rtevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
-	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	infraprocess "github.com/choiceoh/deneb/gateway-go/internal/infra/process"

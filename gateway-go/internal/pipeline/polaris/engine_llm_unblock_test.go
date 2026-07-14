@@ -271,8 +271,8 @@ func TestTrimWithFenceProtection_BalancesOrphanedToolPairs(t *testing.T) {
 		fence,
 		{Role: "assistant", Content: llm.FlexibleFromRaw(toolUse)}, // ~3K tokens — oldest raw, will be trimmed
 		{Role: "user", Content: llm.FlexibleFromRaw(toolResult)},   // its result would orphan without balancing
-		llmMsg("user", makeString(4000)),      // ~2K
-		llmMsg("assistant", makeString(4000)), // ~2K
+		llmMsg("user", makeString(4000)),                           // ~2K
+		llmMsg("assistant", makeString(4000)),                      // ~2K
 		llmMsg("user", "recent question"),
 		llmMsg("assistant", "recent answer"),
 	}

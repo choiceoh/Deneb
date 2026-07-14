@@ -182,7 +182,7 @@ func TestTurnRequestPreparerCreatesRequestWithAllConfigFields(t *testing.T) {
 	messages := []llm.Message{llm.NewTextMessage("user", "hello")}
 	cfg := AgentConfig{
 		Model:            "model",
-		System: json.RawMessage(llm.SystemString("system").Bytes()),
+		System:           json.RawMessage(llm.SystemString("system").Bytes()),
 		MaxTokens:        1234,
 		Tools:            []llm.Tool{{Name: "read"}},
 		Thinking:         thinking,
