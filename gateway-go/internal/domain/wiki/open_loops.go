@@ -23,8 +23,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
-// OpenLoop is one unfulfilled commitment found in diary/memory content.
-type OpenLoop struct {
+// openLoop is one unfulfilled commitment found in diary/memory content.
+type openLoop struct {
 	What    string `json:"what"`              // the commitment, short imperative Korean
 	Who     string `json:"who,omitempty"`     // owner/counterparty ("" = us)
 	Due     string `json:"due,omitempty"`     // YYYY-MM-DD when stated, else ""
@@ -45,7 +45,7 @@ const openLoopTimeout = 2 * time.Minute
 // extractOpenLoops runs the focused extraction pass over the cycle input.
 // Note: the openLoopSink destination was deliberately unwired in #2810
 // (approval-first policy); re-enabling means assigning WikiDreamer.openLoopSink.
-func (wd *WikiDreamer) extractOpenLoops(ctx context.Context, content string) ([]OpenLoop, error) {
+func (wd *WikiDreamer) extractOpenLoops(ctx context.Context, content string) ([]openLoop, error) {
 	if wd.client == nil || strings.TrimSpace(content) == "" {
 		return nil, nil
 	}
@@ -77,7 +77,7 @@ func (wd *WikiDreamer) extractOpenLoops(ctx context.Context, content string) ([]
 
 // parseOpenLoops decodes the extraction response: fences stripped, capped,
 // empty entries dropped, free text redacted.
-func parseOpenLoops(text string) ([]OpenLoop, error) {
+func parseOpenLoops(text string) ([]openLoop, error) {
 	text = strings.TrimSpace(text)
 	if strings.HasPrefix(text, "```") {
 		if idx := strings.Index(text[3:], "\n"); idx >= 0 {
@@ -89,7 +89,7 @@ func parseOpenLoops(text string) ([]OpenLoop, error) {
 	if text == "" {
 		return nil, nil
 	}
-	var loops []OpenLoop
+	var loops []openLoop
 	if err := json.Unmarshal([]byte(text), &loops); err != nil {
 		return nil, fmt.Errorf("parse open loops: %w (raw: %.200s)", err, text)
 	}

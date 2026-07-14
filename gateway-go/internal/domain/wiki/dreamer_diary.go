@@ -39,7 +39,7 @@ func (wd *WikiDreamer) scanDiaries(_ context.Context) (*diaryScanResult, error) 
 	for k, v := range state.Files {
 		priorFiles[k] = v
 	}
-	legacyCutoff := wd.store.LastProcessed()
+	legacyCutoff := wd.store.lastProcessedDate()
 	diaryFiles := listDiaryFiles(entries)
 	if len(diaryFiles) == 0 {
 		return nil, nil

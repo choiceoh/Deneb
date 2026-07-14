@@ -23,8 +23,8 @@ import (
 	"time"
 )
 
-// ReclassifyResult is one re-filed mail page.
-type ReclassifyResult struct {
+// reclassifyResult is one re-filed mail page.
+type reclassifyResult struct {
 	From    string
 	To      string
 	Project string
@@ -32,7 +32,7 @@ type ReclassifyResult struct {
 
 // ReclassifyUnlinkedMailAnalyses re-files pages from the category-level
 // 메일분석 bucket into per-project slots, at most maxMoves per call.
-func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) []ReclassifyResult {
+func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) []reclassifyResult {
 	if s == nil || maxMoves <= 0 {
 		return nil
 	}
@@ -50,7 +50,7 @@ func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) []Re
 		}
 	}
 
-	var moved []ReclassifyResult
+	var moved []reclassifyResult
 	for _, rp := range pages {
 		if len(moved) >= maxMoves {
 			break
@@ -89,7 +89,7 @@ func (s *Store) ReclassifyUnlinkedMailAnalyses(now time.Time, maxMoves int) []Re
 			cur.Meta.Updated = now.Format("2006-01-02")
 			return cur, nil
 		})
-		moved = append(moved, ReclassifyResult{From: rp, To: dst, Project: project})
+		moved = append(moved, reclassifyResult{From: rp, To: dst, Project: project})
 	}
 	return moved
 }

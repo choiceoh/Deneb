@@ -167,7 +167,7 @@ func TestStore_DeletePage(t *testing.T) {
 		t.Error("file should be deleted")
 	}
 
-	// Index should be updated.
+	// wikiIndex should be updated.
 	idx := store.SnapshotIndex()
 	if _, ok := idx.Entries["결정/temp.md"]; ok {
 		t.Error("deleted page still in index")

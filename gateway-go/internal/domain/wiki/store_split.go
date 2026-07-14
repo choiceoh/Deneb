@@ -50,11 +50,11 @@ func (s *Store) splitPage(relPath string, maxBytes int) ([]string, error) {
 
 	type subPage struct {
 		path     string
-		sections []H2Section
+		sections []h2Section
 	}
 
 	var subs []subPage
-	var currentSections []H2Section
+	var currentSections []h2Section
 	var currentSize int
 
 	// Reserve budget for frontmatter overhead (~300 bytes).

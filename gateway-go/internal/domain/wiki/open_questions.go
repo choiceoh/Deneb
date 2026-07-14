@@ -29,8 +29,8 @@ const (
 	maxOpenQuestionItems = 8
 )
 
-// OpenQuestionItem is one parsed bullet of a page's 미해결 질문 section.
-type OpenQuestionItem struct {
+// openQuestionItem is one parsed bullet of a page's 미해결 질문 section.
+type openQuestionItem struct {
 	Question string
 	Asked    string // YYYY-MM-DD from the bullet's leading date, "" when undated
 }
@@ -47,8 +47,8 @@ type OpenQuestion struct {
 // OpenQuestionsIn parses the `## 미해결 질문` bullets from a page body. Bullets
 // may carry a leading ISO date ("- 2026-07-05 단가 확인"); undated bullets are
 // kept with Asked="".
-func OpenQuestionsIn(body string) []OpenQuestionItem {
-	var out []OpenQuestionItem
+func OpenQuestionsIn(body string) []openQuestionItem {
+	var out []openQuestionItem
 	_, sections := (&Page{Body: body}).SplitByH2()
 	for _, sec := range sections {
 		if !strings.EqualFold(strings.TrimSpace(sec.Heading), openQuestionsHeading) {
@@ -63,7 +63,7 @@ func OpenQuestionsIn(body string) []OpenQuestionItem {
 			if t == "" {
 				continue
 			}
-			item := OpenQuestionItem{Question: t}
+			item := openQuestionItem{Question: t}
 			if len(t) >= 10 {
 				if _, err := time.Parse("2006-01-02", t[:10]); err == nil {
 					item.Asked = t[:10]

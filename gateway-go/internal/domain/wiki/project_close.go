@@ -23,14 +23,14 @@ const closedSectionHeading = "종결"
 // the dormancy check proposes closure (advisory bullet, never auto-close).
 const dormantAfterDays = 120
 
-// CloseResult summarizes a project closure.
-type CloseResult struct {
+// closeResult summarizes a project closure.
+type closeResult struct {
 	RepPath  string // the 대표페이지 the 종결 record landed on
 	Archived int    // pages newly flagged archived (rep included)
 }
 
-// ReopenResult summarizes a project reopening.
-type ReopenResult struct {
+// reopenResult summarizes a project reopening.
+type reopenResult struct {
 	RepPath  string
 	Restored int // pages un-archived
 }
@@ -117,10 +117,10 @@ func (s *Store) projectFolderPages(name, repPath string) []string {
 // the 대표페이지's "## 종결" section and archives every page in the project
 // folder. Idempotent-ish: closing an already-closed project refreshes the
 // record and re-archives stragglers. No files move or disappear.
-func (s *Store) CloseProject(ref, note string, now time.Time) (CloseResult, error) {
+func (s *Store) CloseProject(ref, note string, now time.Time) (closeResult, error) {
 	name, repPath, err := s.resolveProjectRep(ref)
 	if err != nil {
-		return CloseResult{}, err
+		return closeResult{}, err
 	}
 	date := now.Format("2006-01-02")
 
@@ -144,7 +144,7 @@ func (s *Store) CloseProject(ref, note string, now time.Time) (CloseResult, erro
 		cur.Meta.Updated = date
 		return cur, nil
 	}); err != nil {
-		return CloseResult{}, fmt.Errorf("wiki: close %s: %w", name, err)
+		return closeResult{}, fmt.Errorf("wiki: close %s: %w", name, err)
 	}
 
 	// 2. Archive the whole folder. Archived counts pages whose flag actually
@@ -172,15 +172,15 @@ func (s *Store) CloseProject(ref, note string, now time.Time) (CloseResult, erro
 		}
 	}
 	_ = s.appendLog("close-project", repPath+" — "+strings.TrimSpace(note))
-	return CloseResult{RepPath: repPath, Archived: archived}, nil
+	return closeResult{RepPath: repPath, Archived: archived}, nil
 }
 
 // ReopenProject reverses CloseProject: un-archives every page in the project
 // folder and appends a 재개 line to the 종결 record (history stays visible).
-func (s *Store) ReopenProject(ref string, now time.Time) (ReopenResult, error) {
+func (s *Store) ReopenProject(ref string, now time.Time) (reopenResult, error) {
 	name, repPath, err := s.resolveProjectRep(ref)
 	if err != nil {
-		return ReopenResult{}, err
+		return reopenResult{}, err
 	}
 	date := now.Format("2006-01-02")
 
@@ -215,10 +215,10 @@ func (s *Store) ReopenProject(ref string, now time.Time) (ReopenResult, error) {
 		}
 	}
 	if restored == 0 {
-		return ReopenResult{RepPath: repPath}, fmt.Errorf("wiki: reopen %s: 보관된 페이지 없음 (이미 활성)", name)
+		return reopenResult{RepPath: repPath}, fmt.Errorf("wiki: reopen %s: 보관된 페이지 없음 (이미 활성)", name)
 	}
 	_ = s.appendLog("reopen-project", repPath)
-	return ReopenResult{RepPath: repPath, Restored: restored}, nil
+	return reopenResult{RepPath: repPath, Restored: restored}, nil
 }
 
 // FlagDormantProjects proposes closure for ACTIVE projects with no page

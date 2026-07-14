@@ -11,9 +11,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
-// Index is the master wiki index (index.md).
+// wikiIndex is the master wiki index (index.md).
 // It maps page paths to metadata for fast LLM navigation.
-type Index struct {
+type wikiIndex struct {
 	Entries       map[string]IndexEntry // relPath -> entry
 	LastProcessed string                // last processed diary date (YYYY-MM-DD)
 	GeneratedAt   string                // ISO timestamp of last generation
@@ -42,8 +42,8 @@ type IndexEntry struct {
 }
 
 // newIndex creates an empty index.
-func newIndex() *Index {
-	return &Index{
+func newIndex() *wikiIndex {
+	return &wikiIndex{
 		Entries: make(map[string]IndexEntry),
 	}
 }
@@ -51,11 +51,11 @@ func newIndex() *Index {
 // clone returns a deep copy of the index (entry map and slice fields
 // included). Backs Store.SnapshotIndex — the copy is what makes lock-free
 // walking/rendering safe while writers mutate the live index in place.
-func (idx *Index) clone() *Index {
+func (idx *wikiIndex) clone() *wikiIndex {
 	if idx == nil {
 		return nil
 	}
-	return &Index{
+	return &wikiIndex{
 		Entries:       cloneIndexEntries(idx.Entries),
 		LastProcessed: idx.LastProcessed,
 		GeneratedAt:   idx.GeneratedAt,
@@ -77,7 +77,7 @@ func cloneIndexEntries(in map[string]IndexEntry) map[string]IndexEntry {
 // updateEntry adds or updates an index entry from a page. Slice fields are
 // copied — storing the caller's live Tags/Related slices would alias the index
 // entry to memory the caller may keep mutating after the write returns.
-func (idx *Index) updateEntry(relPath string, page *Page) {
+func (idx *wikiIndex) updateEntry(relPath string, page *Page) {
 	idx.Entries[relPath] = IndexEntry{
 		ID:         page.Meta.ID,
 		Title:      page.Meta.Title,
@@ -94,12 +94,12 @@ func (idx *Index) updateEntry(relPath string, page *Page) {
 }
 
 // removeEntry removes a page from the index.
-func (idx *Index) removeEntry(relPath string) {
+func (idx *wikiIndex) removeEntry(relPath string) {
 	delete(idx.Entries, relPath)
 }
 
 // Render produces the index.md content in TSV format for machine parsing.
-func (idx *Index) Render() string {
+func (idx *wikiIndex) Render() string {
 	var sb strings.Builder
 	sb.WriteString("# 위키 인덱스\n\n")
 	fmt.Fprintf(&sb, "_자동 생성: %s_\n\n", dentime.Now().Format("2006-01-02 15:04"))
@@ -228,7 +228,7 @@ func parseRelatedTSV(field string) []string {
 }
 
 // Save writes the index to disk.
-func (idx *Index) Save(path string) error {
+func (idx *wikiIndex) Save(path string) error {
 	idx.GeneratedAt = dentime.Now().Format(time.RFC3339)
 	data := idx.Render()
 	tmp := path + ".tmp"
@@ -244,7 +244,7 @@ func (idx *Index) Save(path string) error {
 
 // parseIndex reads and parses an existing index.md.
 // Supports both TSV format (new) and markdown list format (legacy).
-func parseIndex(path string) (*Index, error) {
+func parseIndex(path string) (*wikiIndex, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err

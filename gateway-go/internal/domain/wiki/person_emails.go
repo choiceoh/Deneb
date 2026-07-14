@@ -25,9 +25,9 @@ import (
 // held R@8 at 99% (a bare page text-matches only its own name), so surfacing them
 // needs no retrieval gate. Names that don't start with a letter (junk contact
 // rows like "#이성기…") are skipped.
-func (s *Store) EnrichEmployeePages(book []contactdomain.Contact, ourDomains []string) (PeopleEnrichResult, error) {
+func (s *Store) EnrichEmployeePages(book []contactdomain.Contact, ourDomains []string) (peopleEnrichResult, error) {
 	if len(book) == 0 || len(ourDomains) == 0 {
-		return PeopleEnrichResult{}, nil
+		return peopleEnrichResult{}, nil
 	}
 	dom := make(map[string]bool, len(ourDomains))
 	for _, d := range ourDomains {
@@ -58,7 +58,7 @@ func (s *Store) EnrichEmployeePages(book []contactdomain.Contact, ourDomains []s
 		}
 	}
 	if len(names) == 0 {
-		return PeopleEnrichResult{}, nil
+		return peopleEnrichResult{}, nil
 	}
 	return s.EnrichPeople(names, book, true)
 }
@@ -73,14 +73,14 @@ func (s *Store) EnrichEmployeePages(book []contactdomain.Contact, ourDomains []s
 // job and everyone else stays mention-curated by the dreamer. A name shared by
 // 동명이인 (최종원 = SK vs LONGi) still resolves to one page; its identity email is
 // left for EnrichPersonEmails to flag, not guessed here.
-func (s *Store) EnrichDealMentionedPages(book []contactdomain.Contact, ourDomains []string) (PeopleEnrichResult, error) {
+func (s *Store) EnrichDealMentionedPages(book []contactdomain.Contact, ourDomains []string) (peopleEnrichResult, error) {
 	if len(book) == 0 {
-		return PeopleEnrichResult{}, nil
+		return peopleEnrichResult{}, nil
 	}
 	our := domainSet(ourDomains)
 	paths, err := s.ListPages("프로젝트")
 	if err != nil {
-		return PeopleEnrichResult{}, err
+		return peopleEnrichResult{}, err
 	}
 	var sb strings.Builder
 	for _, p := range paths {
@@ -90,7 +90,7 @@ func (s *Store) EnrichDealMentionedPages(book []contactdomain.Contact, ourDomain
 		}
 	}
 	if sb.Len() == 0 {
-		return PeopleEnrichResult{}, nil
+		return peopleEnrichResult{}, nil
 	}
 	deals := strings.ToLower(sb.String())
 
@@ -117,7 +117,7 @@ func (s *Store) EnrichDealMentionedPages(book []contactdomain.Contact, ourDomain
 		}
 	}
 	if len(names) == 0 {
-		return PeopleEnrichResult{}, nil
+		return peopleEnrichResult{}, nil
 	}
 	return s.EnrichPeople(names, book, true)
 }
@@ -177,9 +177,9 @@ func domainSet(domains []string) map[string]bool {
 // at one is that person's personal address, not a distinct company that would
 // signal a homonym.)
 
-// PersonEmailResult reports an emails backfill: pages whose identity addresses
+// personEmailResult reports an emails backfill: pages whose identity addresses
 // were written, and pages skipped because the name maps to homonyms.
-type PersonEmailResult struct {
+type personEmailResult struct {
 	Updated   []string // person-page titles whose emails: was filled/changed
 	Ambiguous []string // titles skipped: name matches 동명이인 (distinct company domains)
 }
@@ -189,8 +189,8 @@ type PersonEmailResult struct {
 // addresses; a page whose name matches homonyms at distinct companies is skipped
 // and flagged (a human splits it — see the person-homonym-conflation memory).
 // Best-effort: one unwritable page never aborts the rest.
-func (s *Store) EnrichPersonEmails(book []contactdomain.Contact) (PersonEmailResult, error) {
-	var res PersonEmailResult
+func (s *Store) EnrichPersonEmails(book []contactdomain.Contact) (personEmailResult, error) {
+	var res personEmailResult
 	if len(book) == 0 {
 		return res, nil
 	}

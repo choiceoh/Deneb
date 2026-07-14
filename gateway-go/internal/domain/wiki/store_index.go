@@ -73,14 +73,14 @@ func isNonPageDir(name string) bool {
 // SnapshotIndex returns a deep copy of the cached master index, safe to walk,
 // render, or marshal without holding any lock.
 //
-// There is deliberately NO accessor returning the live *Index: writers mutate
+// There is deliberately NO accessor returning the live *wikiIndex: writers mutate
 // the entry map in place under s.mu (writePageInternal → updateEntry), so any
 // caller iterating the live map without that lock races them — the exact
-// "concurrent map iteration and map write" fatal the old Index() accessor
+// "concurrent map iteration and map write" fatal the old wikiIndex() accessor
 // caused across a dozen walkers (Tier1Pages, FindSimilarPages, verify, the
 // wiki RPC handler, …). Mutations must go through Store methods
 // (WritePage/UpdatePage/DeletePage/rebuildIndex/setLastProcessedAndSave).
-func (s *Store) SnapshotIndex() *Index {
+func (s *Store) SnapshotIndex() *wikiIndex {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.index.clone()
@@ -96,7 +96,7 @@ func (s *Store) snapshotEntries() map[string]IndexEntry {
 }
 
 // LastProcessed returns the master index's diary high-water cursor.
-func (s *Store) LastProcessed() string {
+func (s *Store) lastProcessedDate() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.index.LastProcessed
@@ -164,12 +164,12 @@ func (s *Store) rebuildIndex() error {
 
 // Tier1Pages returns all non-archived pages with importance >= minImportance,
 // sorted by importance descending. Each result includes the page path and content.
-func (s *Store) Tier1Pages(minImportance float64) []Tier1Result {
+func (s *Store) Tier1Pages(minImportance float64) []tier1Result {
 	// Snapshot, then walk without the lock — the page reads below do disk I/O
 	// and must not iterate the live map writers mutate in place.
 	entries := s.snapshotEntries()
 
-	var results []Tier1Result
+	var results []tier1Result
 	for path, entry := range entries {
 		if entry.Importance < minImportance {
 			continue
@@ -178,7 +178,7 @@ func (s *Store) Tier1Pages(minImportance float64) []Tier1Result {
 		if err != nil || page.Meta.Archived {
 			continue
 		}
-		results = append(results, Tier1Result{
+		results = append(results, tier1Result{
 			Path: path,
 			Page: page,
 		})
@@ -191,8 +191,8 @@ func (s *Store) Tier1Pages(minImportance float64) []Tier1Result {
 	return results
 }
 
-// Tier1Result is a high-importance wiki page for auto-injection.
-type Tier1Result struct {
+// tier1Result is a high-importance wiki page for auto-injection.
+type tier1Result struct {
 	Path string
 	Page *Page
 }

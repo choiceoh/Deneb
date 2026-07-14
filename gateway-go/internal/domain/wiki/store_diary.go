@@ -188,7 +188,7 @@ func (s *Store) Close() error {
 	return nil
 }
 
-func (s *Store) loadOrCreateIndex() (*Index, error) {
+func (s *Store) loadOrCreateIndex() (*wikiIndex, error) {
 	indexPath := filepath.Join(s.dir, "index.md")
 	idx, err := parseIndex(indexPath)
 	if err != nil {

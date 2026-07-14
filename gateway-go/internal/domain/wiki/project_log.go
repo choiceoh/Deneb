@@ -104,7 +104,7 @@ func (s *Store) RotateProjectLog(project string) (int, error) {
 // archive tolerating a duplicated section is the documented crash-safe
 // tradeoff). Sections appended after the pre-read land at the tail and are
 // preserved.
-func trimRotatedLogSections(cur *Page, overflow []H2Section) *Page {
+func trimRotatedLogSections(cur *Page, overflow []h2Section) *Page {
 	if cur == nil || len(overflow) == 0 {
 		return nil
 	}
