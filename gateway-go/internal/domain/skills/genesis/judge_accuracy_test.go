@@ -55,7 +55,7 @@ func TestJudgeAccuracyTask_Run(t *testing.T) {
 	if err := task.Run(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	recs, err := tr.RecentJudgeAccuracy(5)
+	recs, err := tr.recentJudgeAccuracy(5)
 	if err != nil || len(recs) != 1 {
 		t.Fatalf("ledger = %+v err=%v", recs, err)
 	}
@@ -86,7 +86,7 @@ func TestOperatorJudgeVerdictIsIdempotentAndSeparateFromLaneRuns(t *testing.T) {
 	if err := tr.LogOperatorJudgeVerdict(verdict); err != nil {
 		t.Fatal(err)
 	}
-	if runs, err := tr.RecentJudgeAccuracy(5); err != nil || len(runs) != 0 {
+	if runs, err := tr.recentJudgeAccuracy(5); err != nil || len(runs) != 0 {
 		t.Fatalf("operator label leaked into scheduled runs: %+v err=%v", runs, err)
 	}
 	labels := tr.RecentOperatorJudgeVerdicts(time.Hour, 5)
@@ -109,7 +109,7 @@ func TestJudgeAccuracyEscalation(t *testing.T) {
 		generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt])
 	seed := func(v string, dropMissed int) {
 		t.Helper()
-		if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+		if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 			JudgeVersion: v, Pairs: 2, Correct: 2 - dropMissed,
 			ByClass: map[string][2]int{
 				"imperative-drop": {1 - dropMissed, 1},
@@ -157,7 +157,7 @@ func TestJudgeAccuracyEscalation(t *testing.T) {
 	if err := task.Run(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	recs, err := tr.RecentJudgeAccuracy(1)
+	recs, err := tr.recentJudgeAccuracy(1)
 	if err != nil || len(recs) != 1 {
 		t.Fatalf("ledger read failed: %+v err=%v", recs, err)
 	}
@@ -198,8 +198,8 @@ func TestIsCharterCase(t *testing.T) {
 	charter := 0
 	for i := 0; i < 400; i++ {
 		rec := SkillValidationCaseRecord{SkillName: "sk", ID: fmt.Sprintf("case-%d", i), RequiredSubstrings: []string{"x"}}
-		first := IsCharterCase(rec)
-		if first != IsCharterCase(rec) {
+		first := isCharterCase(rec)
+		if first != isCharterCase(rec) {
 			t.Fatal("charter membership not deterministic")
 		}
 		if first {
@@ -214,7 +214,7 @@ func TestIsCharterCase(t *testing.T) {
 	var cb, cv int
 	for i := 0; i < 400; i++ {
 		rec := SkillValidationCaseRecord{SkillName: "sk", ID: fmt.Sprintf("case-%d", i), RequiredSubstrings: []string{"x"}}
-		if IsCharterCase(rec) {
+		if isCharterCase(rec) {
 			if validationCaseBlindHeldOut(rec) {
 				cb++
 			} else {

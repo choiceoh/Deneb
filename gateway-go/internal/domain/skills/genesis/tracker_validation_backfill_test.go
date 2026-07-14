@@ -17,7 +17,7 @@ func TestRecentRealUseSessionsBySkill_WindowDedupCapOrder(t *testing.T) {
 		{SkillName: "contract-review", SessionKey: "s3", Success: true, UsedAt: now - hourMs, Source: UsageSourceReal},
 		{SkillName: "contract-review", SessionKey: "s1", Success: true, UsedAt: now - 30*hourMs, Source: UsageSourceReal},
 		// Review-fork use never earns bench coverage.
-		{SkillName: "contract-review", SessionKey: "system:skill-review:x", Success: true, UsedAt: now - hourMs, Source: UsageSourceReviewConsult},
+		{SkillName: "contract-review", SessionKey: "system:skill-review:x", Success: true, UsedAt: now - hourMs, Source: usageSourceReviewConsult},
 		// Outside the window.
 		{SkillName: "ocr-run", SessionKey: "old", Success: true, UsedAt: now - 10*24*hourMs, Source: UsageSourceReal},
 	}

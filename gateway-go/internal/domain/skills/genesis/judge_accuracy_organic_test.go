@@ -21,32 +21,32 @@ func TestOrganicFalseAccepts(t *testing.T) {
 		t.Helper()
 		if withTest {
 			tr.mu.Lock()
-			tr.pendingBaselineTest[skill] = &RollbackBaselineTest{Reject: baselineConfirmed, Disagreement: !baselineConfirmed}
+			tr.pendingBaselineTest[skill] = &rollbackBaselineTest{Reject: baselineConfirmed, Disagreement: !baselineConfirmed}
 			tr.mu.Unlock()
 		}
-		if err := tr.LogEvolveRolledBack(skill); err != nil {
+		if err := tr.logEvolveRolledBack(skill); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// sk-a: judge v-live accepted, baseline-confirmed rollback → a label.
-	if err := tr.LogEvolveWithProvenance("sk-a", "1.1", "d", HarnessEditAudit{},
-		&EvolveProvenance{JudgeArtifactVersion: "v-live"}); err != nil {
+	if err := tr.logEvolveWithProvenance("sk-a", "1.1", "d", HarnessEditAudit{},
+		&evolveProvenance{JudgeArtifactVersion: "v-live"}); err != nil {
 		t.Fatal(err)
 	}
 	rollback("sk-a", true, true)
 
 	// sk-b: rollback where the e-process did NOT reject (baseline-blind
 	// threshold fire) → excluded.
-	if err := tr.LogEvolveWithProvenance("sk-b", "1.1", "d", HarnessEditAudit{},
-		&EvolveProvenance{JudgeArtifactVersion: "v-live"}); err != nil {
+	if err := tr.logEvolveWithProvenance("sk-b", "1.1", "d", HarnessEditAudit{},
+		&evolveProvenance{JudgeArtifactVersion: "v-live"}); err != nil {
 		t.Fatal(err)
 	}
 	rollback("sk-b", false, true)
 
 	// sk-c: rollback with no baseline test at all (legacy entry) → excluded.
-	if err := tr.LogEvolveWithProvenance("sk-c", "1.1", "d", HarnessEditAudit{},
-		&EvolveProvenance{JudgeArtifactVersion: "v-live"}); err != nil {
+	if err := tr.logEvolveWithProvenance("sk-c", "1.1", "d", HarnessEditAudit{},
+		&evolveProvenance{JudgeArtifactVersion: "v-live"}); err != nil {
 		t.Fatal(err)
 	}
 	rollback("sk-c", false, false)

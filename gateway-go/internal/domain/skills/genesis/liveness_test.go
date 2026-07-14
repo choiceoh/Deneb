@@ -13,7 +13,7 @@ func TestLivenessHeartbeat(t *testing.T) {
 		t.Fatalf("fresh tracker should have empty liveness, got %+v", snap)
 	}
 
-	tr.RecordEvolutionActivity(SkillActivityReview, true, "")
+	tr.RecordEvolutionActivity(skillActivityReview, true, "")
 	snap := tr.LivenessSnapshot()
 	if snap.LastReviewAt == 0 || !snap.LastReviewOK {
 		t.Fatalf("review heartbeat not recorded: %+v", snap)
@@ -26,7 +26,7 @@ func TestLivenessHeartbeat(t *testing.T) {
 		t.Fatalf("attempt/skip/rejection counters not recorded: %+v", snap)
 	}
 
-	tr.RecordEvolutionActivity(SkillActivityEvolve, false, "boom")
+	tr.RecordEvolutionActivity(skillActivityEvolve, false, "boom")
 	snap = tr.LivenessSnapshot()
 	if snap.LastEvolveAt == 0 {
 		t.Fatalf("evolve heartbeat not recorded: %+v", snap)
@@ -74,7 +74,7 @@ func TestEvolveEventTrigger_FiresAtThresholdAndResets(t *testing.T) {
 func TestEvolveEventTrigger_MinGapSuppresses(t *testing.T) {
 	tr := newTestTracker(t)
 	// Record a very recent evolve so minGap blocks the next fire.
-	tr.RecordEvolutionActivity(SkillActivityEvolve, true, "")
+	tr.RecordEvolutionActivity(skillActivityEvolve, true, "")
 
 	fired := make(chan struct{}, 2)
 	tr.SetEvolveTrigger(func() { fired <- struct{}{} }, 1, time.Hour) // threshold 1, 1h gap

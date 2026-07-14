@@ -17,12 +17,12 @@ import (
 
 // Propus activity kinds for the liveness heartbeat.
 const (
-	SkillActivityReview             = "review"
+	skillActivityReview             = "review"
 	SkillActivityReviewAttempt      = "review_attempt"
 	SkillActivityReviewSkipped      = "review_skipped"
 	SkillActivityValidationRejected = "validation_rejected"
-	SkillActivityEvolve             = "evolve"
-	SkillActivityGenesis            = "genesis"
+	skillActivityEvolve             = "evolve"
+	skillActivityGenesis            = "genesis"
 )
 
 // SkillLivenessState is a persisted heartbeat for the Propus loop.
@@ -59,8 +59,8 @@ type SkillLivenessState struct {
 const (
 	UsageSourceReal          = "real"           // genuine use in a client/cron turn
 	UsageSourceReviewVerdict = "review-verdict" // the review fork's no-op/evolve judgment
-	UsageSourceReviewConsult = "review-consult" // the review fork reading a skill to judge it
-	UsageSourceWorkout       = "workout"        // synthetic exercise lane (workout.go) — evidence only, never real usage
+	usageSourceReviewConsult = "review-consult" // the review fork reading a skill to judge it
+	usageSourceWorkout       = "workout"        // synthetic exercise lane (workout.go) — evidence only, never real usage
 )
 
 // UsageRecord represents a single skill usage event.
@@ -155,7 +155,7 @@ type Tracker struct {
 	// the moment a watch resolves, for the Log* call that follows in the
 	// resolver callback — avoids threading a new param through the rollback
 	// callback signature.
-	pendingBaselineTest map[string]*RollbackBaselineTest
+	pendingBaselineTest map[string]*rollbackBaselineTest
 
 	// Cached evolve-health summary (EvolutionHealth) so frequent /health polls
 	// don't rescan the growing lifecycle log every call. Guarded by mu.
@@ -249,7 +249,7 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 		recentErrors:        make(map[string][]string),
 		recentFailureTraces: make(map[string][]UsageFailureTrace),
 		postEvolve:          make(map[string]*evolveWatch),
-		pendingBaselineTest: make(map[string]*RollbackBaselineTest),
+		pendingBaselineTest: make(map[string]*rollbackBaselineTest),
 	}
 
 	// Rebuild in-memory state from existing JSONL.
@@ -300,7 +300,7 @@ const reviewSessionPrefix = "system:skill-review:"
 
 func isReviewUsageRecord(r UsageRecord) bool {
 	switch r.Source {
-	case UsageSourceReviewVerdict, UsageSourceReviewConsult:
+	case UsageSourceReviewVerdict, usageSourceReviewConsult:
 		return true
 	default:
 		return strings.HasPrefix(r.SessionKey, reviewSessionPrefix)

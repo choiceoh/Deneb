@@ -56,7 +56,7 @@ func TestSkillWorkoutTask_RecordsQuarantinedFailures(t *testing.T) {
 		t.Fatalf("want 1 workout record, got %d (err=%v)", len(records), err)
 	}
 	rec := records[0]
-	if rec.Source != UsageSourceWorkout || rec.Success || !strings.HasPrefix(rec.SessionKey, workoutSessionPrefix) {
+	if rec.Source != usageSourceWorkout || rec.Success || !strings.HasPrefix(rec.SessionKey, workoutSessionPrefix) {
 		t.Fatalf("workout record shape wrong: %+v", rec)
 	}
 	if isRealUsageRecord(rec) {

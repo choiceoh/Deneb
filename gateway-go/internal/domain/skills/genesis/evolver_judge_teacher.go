@@ -39,7 +39,7 @@ func (e *Evolver) pickCandidateJudge() (*llm.Client, string) {
 // judgeCandidate asks a model to validate a rewritten skill body against the
 // original. Returns (pass, reason, err). On any error the caller keeps the
 // original (fail-closed).
-func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *llm.Client, model, originalContent, candidateBody string, stats *UsageStats, prov *EvolveProvenance) (pass bool, reason string, err error) {
+func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *llm.Client, model, originalContent, candidateBody string, stats *UsageStats, prov *evolveProvenance) (pass bool, reason string, err error) {
 	if client == nil {
 		return false, "", fmt.Errorf("judge: nil client")
 	}

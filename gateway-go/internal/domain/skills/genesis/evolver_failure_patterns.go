@@ -27,68 +27,93 @@ func mineSkillFailurePatterns(stats *UsageStats) []skillFailurePattern {
 	}
 	bySignature := map[string]*skillFailurePattern{}
 	if len(stats.RecentFailureTraces) > 0 {
-		for _, trace := range stats.RecentFailureTraces {
-			signature := strings.TrimSpace(trace.Signature)
-			terminalCause := strings.TrimSpace(trace.TerminalCause)
-			mechanism := strings.TrimSpace(trace.AgentMechanism)
-			if signature == "" {
-				signature, terminalCause, mechanism = classifySkillFailure(usageFailureTraceText(trace))
-			}
-			if signature == "" {
-				continue
-			}
-			pattern := bySignature[signature]
-			if pattern == nil {
-				causalStatus := strings.TrimSpace(trace.CausalStatus)
-				if causalStatus == "" {
-					causalStatus = "real-use structured failure trace"
-				}
-				pattern = &skillFailurePattern{
-					Signature:      signature,
-					TerminalCause:  terminalCause,
-					CausalStatus:   causalStatus,
-					AgentMechanism: mechanism,
-				}
-				bySignature[signature] = pattern
-			}
-			pattern.Support++
-			if example := usageFailureTraceExample(trace); example != "" && len(pattern.Examples) < 2 {
-				pattern.Examples = append(pattern.Examples, example)
-			}
-		}
+		mineFailureTracePatterns(bySignature, stats.RecentFailureTraces)
 	} else {
-		for _, raw := range stats.RecentErrors {
-			signature, terminalCause, mechanism := classifySkillFailure(raw)
-			if signature == "" {
-				continue
+		mineRawErrorPatterns(bySignature, stats.RecentErrors)
+	}
+	backfillFailureClassification(bySignature)
+	return sortedFailurePatterns(bySignature)
+}
+
+// mineFailureTracePatterns clusters structured failure traces by signature,
+// classifying unlabeled traces from their text.
+func mineFailureTracePatterns(bySignature map[string]*skillFailurePattern, traces []UsageFailureTrace) {
+	for _, trace := range traces {
+		signature := strings.TrimSpace(trace.Signature)
+		terminalCause := strings.TrimSpace(trace.TerminalCause)
+		mechanism := strings.TrimSpace(trace.AgentMechanism)
+		if signature == "" {
+			signature, terminalCause, mechanism = classifySkillFailure(usageFailureTraceText(trace))
+		}
+		if signature == "" {
+			continue
+		}
+		pattern := bySignature[signature]
+		if pattern == nil {
+			causalStatus := strings.TrimSpace(trace.CausalStatus)
+			if causalStatus == "" {
+				causalStatus = "real-use structured failure trace"
 			}
-			pattern := bySignature[signature]
-			if pattern == nil {
-				pattern = &skillFailurePattern{
-					Signature:      signature,
-					TerminalCause:  terminalCause,
-					CausalStatus:   "filtered real-use failure; trace-level causality unavailable",
-					AgentMechanism: mechanism,
-				}
-				bySignature[signature] = pattern
+			pattern = &skillFailurePattern{
+				Signature:      signature,
+				TerminalCause:  terminalCause,
+				CausalStatus:   causalStatus,
+				AgentMechanism: mechanism,
 			}
-			pattern.Support++
-			if example := strings.TrimSpace(raw); example != "" && len(pattern.Examples) < 2 {
-				pattern.Examples = append(pattern.Examples, genesiscommon.TruncateRunes(example, 160))
-			}
+			bySignature[signature] = pattern
+		}
+		pattern.Support++
+		if example := usageFailureTraceExample(trace); example != "" && len(pattern.Examples) < 2 {
+			pattern.Examples = append(pattern.Examples, example)
 		}
 	}
+}
+
+// mineRawErrorPatterns clusters legacy free-text errors when no structured
+// traces exist for the skill.
+func mineRawErrorPatterns(bySignature map[string]*skillFailurePattern, rawErrors []string) {
+	for _, raw := range rawErrors {
+		signature, terminalCause, mechanism := classifySkillFailure(raw)
+		if signature == "" {
+			continue
+		}
+		pattern := bySignature[signature]
+		if pattern == nil {
+			pattern = &skillFailurePattern{
+				Signature:      signature,
+				TerminalCause:  terminalCause,
+				CausalStatus:   "filtered real-use failure; trace-level causality unavailable",
+				AgentMechanism: mechanism,
+			}
+			bySignature[signature] = pattern
+		}
+		pattern.Support++
+		if example := strings.TrimSpace(raw); example != "" && len(pattern.Examples) < 2 {
+			pattern.Examples = append(pattern.Examples, genesiscommon.TruncateRunes(example, 160))
+		}
+	}
+}
+
+// backfillFailureClassification fills missing cause/mechanism labels from the
+// signature so pre-labeled traces never surface half-classified patterns.
+func backfillFailureClassification(bySignature map[string]*skillFailurePattern) {
 	for signature, pattern := range bySignature {
-		if strings.TrimSpace(pattern.TerminalCause) == "" || strings.TrimSpace(pattern.AgentMechanism) == "" {
-			_, terminalCause, mechanism := classifySkillFailure(signature)
-			if pattern.TerminalCause == "" {
-				pattern.TerminalCause = terminalCause
-			}
-			if pattern.AgentMechanism == "" {
-				pattern.AgentMechanism = mechanism
-			}
+		if strings.TrimSpace(pattern.TerminalCause) != "" && strings.TrimSpace(pattern.AgentMechanism) != "" {
+			continue
+		}
+		_, terminalCause, mechanism := classifySkillFailure(signature)
+		if pattern.TerminalCause == "" {
+			pattern.TerminalCause = terminalCause
+		}
+		if pattern.AgentMechanism == "" {
+			pattern.AgentMechanism = mechanism
 		}
 	}
+}
+
+// sortedFailurePatterns orders patterns by support (then signature) and caps
+// the list at the prompt budget.
+func sortedFailurePatterns(bySignature map[string]*skillFailurePattern) []skillFailurePattern {
 	if len(bySignature) == 0 {
 		return nil
 	}

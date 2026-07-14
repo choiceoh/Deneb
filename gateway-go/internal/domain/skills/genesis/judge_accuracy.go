@@ -152,10 +152,10 @@ type OperatorJudgeVerdict struct {
 	CreatedAt    int64   `json:"createdAt"`
 }
 
-// JudgeAccuracyRecord is one lane run: the live judge's accuracy over planted
+// judgeAccuracyRecord is one lane run: the live judge's accuracy over planted
 // defects plus mined false-reject suspects, attributed to the judge prompt
 // version so P3 can segment labels per verifier revision.
-type JudgeAccuracyRecord struct {
+type judgeAccuracyRecord struct {
 	CreatedAt    int64             `json:"createdAt"`
 	JudgeVersion string            `json:"judgeVersion"`
 	Pairs        int               `json:"pairs"`
@@ -175,8 +175,8 @@ func (t *Tracker) judgeAccuracyLogPath() string {
 	return filepath.Join(filepath.Dir(t.logPath), "judge_accuracy_log.jsonl")
 }
 
-// LogJudgeAccuracy appends one lane run to the P3 label ledger.
-func (t *Tracker) LogJudgeAccuracy(rec JudgeAccuracyRecord) error {
+// logJudgeAccuracy appends one lane run to the P3 label ledger.
+func (t *Tracker) logJudgeAccuracy(rec judgeAccuracyRecord) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if rec.CreatedAt == 0 {
@@ -204,7 +204,7 @@ func (t *Tracker) LogOperatorJudgeVerdict(verdict OperatorJudgeVerdict) error {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	entries, err := jsonlstore.Load[JudgeAccuracyRecord](t.judgeAccuracyLogPath())
+	entries, err := jsonlstore.Load[judgeAccuracyRecord](t.judgeAccuracyLogPath())
 	if err != nil {
 		return fmt.Errorf("genesis-tracker: load judge accuracy: %w", err)
 	}
@@ -215,25 +215,25 @@ func (t *Tracker) LogOperatorJudgeVerdict(verdict OperatorJudgeVerdict) error {
 			}
 		}
 	}
-	return jsonlstore.Append(t.judgeAccuracyLogPath(), JudgeAccuracyRecord{
+	return jsonlstore.Append(t.judgeAccuracyLogPath(), judgeAccuracyRecord{
 		CreatedAt:        verdict.CreatedAt,
 		JudgeVersion:     verdict.JudgeVersion,
 		OperatorVerdicts: []OperatorJudgeVerdict{verdict},
 	})
 }
 
-// RecentJudgeAccuracy returns the newest lane runs, newest first.
-func (t *Tracker) RecentJudgeAccuracy(limit int) ([]JudgeAccuracyRecord, error) {
+// recentJudgeAccuracy returns the newest lane runs, newest first.
+func (t *Tracker) recentJudgeAccuracy(limit int) ([]judgeAccuracyRecord, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if limit <= 0 {
 		limit = 10
 	}
-	entries, err := jsonlstore.Load[JudgeAccuracyRecord](t.judgeAccuracyLogPath())
+	entries, err := jsonlstore.Load[judgeAccuracyRecord](t.judgeAccuracyLogPath())
 	if err != nil {
 		return nil, fmt.Errorf("genesis-tracker: load judge accuracy: %w", err)
 	}
-	out := make([]JudgeAccuracyRecord, 0, min(limit, len(entries)))
+	out := make([]judgeAccuracyRecord, 0, min(limit, len(entries)))
 	for i := len(entries) - 1; i >= 0 && len(out) < limit; i-- {
 		if entries[i].Pairs == 0 && len(entries[i].ByClass) == 0 && len(entries[i].FalseRejects) == 0 {
 			continue // operator-only labels have their own query below
@@ -247,7 +247,7 @@ func (t *Tracker) RecentJudgeAccuracy(limit int) ([]JudgeAccuracyRecord, error) 
 func (t *Tracker) RecentOperatorJudgeVerdicts(window time.Duration, limit int) []OperatorJudgeVerdict {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	entries, err := jsonlstore.Load[JudgeAccuracyRecord](t.judgeAccuracyLogPath())
+	entries, err := jsonlstore.Load[judgeAccuracyRecord](t.judgeAccuracyLogPath())
 	if err != nil {
 		return nil
 	}
@@ -278,7 +278,7 @@ func (t *Tracker) OperatorJudgeVerdictByDecisionID(decisionID string) (OperatorJ
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	entries, err := jsonlstore.Load[JudgeAccuracyRecord](t.judgeAccuracyLogPath())
+	entries, err := jsonlstore.Load[judgeAccuracyRecord](t.judgeAccuracyLogPath())
 	if err != nil {
 		return OperatorJudgeVerdict{}, false
 	}
@@ -337,7 +337,7 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 
 	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
 	judgePrompt := t.Meta.Load(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
-	rec := JudgeAccuracyRecord{
+	rec := judgeAccuracyRecord{
 		JudgeVersion: t.Meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback),
 		ByClass:      map[string][2]int{},
 		ByCategory:   map[string][2]int{},
@@ -394,7 +394,7 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 	if rec.Pairs == 0 && len(rec.FalseRejects) == 0 {
 		return nil // nothing to ledger — corpus too thin this run
 	}
-	if err := t.Tracker.LogJudgeAccuracy(rec); err != nil {
+	if err := t.Tracker.logJudgeAccuracy(rec); err != nil {
 		logger.Warn("judge-accuracy: ledger write failed", "error", err)
 		return nil
 	}
@@ -412,7 +412,7 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 // drop-tier miss keeps the harder tier locked. Uses ByClass counts, which are
 // complete — the Misses exhibit list is capped and unusable for this.
 func (t *JudgeAccuracyTask) weakenTierUnlocked(judgeVersion string) bool {
-	records, err := t.Tracker.RecentJudgeAccuracy(judgeEscalationWindow * 4)
+	records, err := t.Tracker.recentJudgeAccuracy(judgeEscalationWindow * 4)
 	if err != nil || judgeVersion == "" {
 		return false
 	}
@@ -456,7 +456,7 @@ func (t *JudgeAccuracyTask) mineFalseRejects() []falseRejectExhibit {
 		// verifier co-evolution training surface, so the frozen charter slice
 		// must NOT feed them — it stays a held-out measuring stick the judge
 		// never trains against. This is the first live consumer to honor the
-		// IsCharterCase contract (RSI code eval M5). Benches still SCORE charter
+		// isCharterCase contract (RSI code eval M5). Benches still SCORE charter
 		// cases elsewhere; only this training-surface read excludes them.
 		cases = excludeCharterCases(cases)
 		if !hasScorableValidationCase(cases) {
@@ -494,12 +494,12 @@ func (t *JudgeAccuracyTask) mineFalseRejects() []falseRejectExhibit {
 			if flipped || rjs.Total == 0 {
 				continue
 			}
-			if rjs.Percent() >= cur.Percent()+falseRejectMargin {
+			if rjs.percent() >= cur.percent()+falseRejectMargin {
 				out = append(out, falseRejectExhibit{
 					Skill:        skill,
 					RejectReason: common.TruncateRunes(rej.Reason, 160),
-					CurrentScore: cur.Percent(),
-					RejectScore:  rjs.Percent(),
+					CurrentScore: cur.percent(),
+					RejectScore:  rjs.percent(),
 					RejectedAt:   rej.CreatedAt,
 				})
 			}

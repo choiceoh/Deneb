@@ -220,7 +220,7 @@ func TestMetaEvolution_JudgeAccuracyEvidence(t *testing.T) {
 
 	// Incumbent judge: caught every blatant section-drop, missed 3/5 subtle
 	// safety-drops, and has one suspected false-reject.
-	if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+	if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 		JudgeVersion: version,
 		Pairs:        9,
 		Correct:      6,
@@ -233,7 +233,7 @@ func TestMetaEvolution_JudgeAccuracyEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A DIFFERENT judge version's misses must be ignored (may already be fixed).
-	if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+	if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 		JudgeVersion: "stale-version",
 		ByClass:      map[string][2]int{"imperative-drop": {0, 6}},
 	}); err != nil {
@@ -283,14 +283,14 @@ func TestMetaEvolution_JudgeAccuracyEvidence_OrganicLabels(t *testing.T) {
 
 	rollback := func(skill, judgeVersion string) {
 		t.Helper()
-		if err := tr.LogEvolveWithProvenance(skill, "1.1", "d", HarnessEditAudit{},
-			&EvolveProvenance{JudgeArtifactVersion: judgeVersion}); err != nil {
+		if err := tr.logEvolveWithProvenance(skill, "1.1", "d", HarnessEditAudit{},
+			&evolveProvenance{JudgeArtifactVersion: judgeVersion}); err != nil {
 			t.Fatal(err)
 		}
 		tr.mu.Lock()
-		tr.pendingBaselineTest[skill] = &RollbackBaselineTest{Reject: true}
+		tr.pendingBaselineTest[skill] = &rollbackBaselineTest{Reject: true}
 		tr.mu.Unlock()
-		if err := tr.LogEvolveRolledBack(skill); err != nil {
+		if err := tr.logEvolveRolledBack(skill); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -324,7 +324,7 @@ func TestMetaEvolution_JudgeAccuracyEvidence_CategorySkew(t *testing.T) {
 	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
 	version := meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
 
-	if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+	if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 		JudgeVersion: version,
 		Pairs:        8, Correct: 6,
 		ByClass:    map[string][2]int{"safety-drop": {6, 8}},
@@ -354,7 +354,7 @@ func TestMetaEvolution_JudgeAccuracyEvidence_CleanJudge(t *testing.T) {
 	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
 	version := meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
 
-	if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{
+	if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 		JudgeVersion: version,
 		Pairs:        8,
 		Correct:      8,

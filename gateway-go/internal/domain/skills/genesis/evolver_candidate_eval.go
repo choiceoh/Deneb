@@ -32,7 +32,7 @@ type evaluatedCandidate struct {
 	margin      float64 // held-out score margin (candidate - original); selection rank
 	// prov is the evaluator-attribution certificate accumulated while the
 	// candidate ran the gates (RSI P1.5) — recorded with the lifecycle entry.
-	prov EvolveProvenance
+	prov evolveProvenance
 	// reproduction is the producer-authored defect-reproduction case, adopted
 	// at commit only after the deterministic oracle confirms it (fails on the
 	// original body, passes on the committed body).
@@ -98,7 +98,7 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 			"skill", entry.Skill.Name, "error", berr)
 	} else if behavior.Evaluated && !behavior.Pass {
 		if e.tracker != nil {
-			if logErr := e.tracker.LogEvolveRejectedWithProvenance(entry.Skill.Name, behavior.Reason, audit, &prov); logErr != nil {
+			if logErr := e.tracker.logEvolveRejectedWithProvenance(entry.Skill.Name, behavior.Reason, audit, &prov); logErr != nil {
 				e.logger.Warn("evolver: lifecycle log write failed",
 					"skill", entry.Skill.Name, "error", logErr)
 			}
@@ -117,7 +117,7 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 	if !e.selfTest {
 		if ok, reason := e.validateCandidatePreflight(entry.Skill.Name, originalContent, candidateBody, audit, stats, reviewFinding); !ok {
 			if e.tracker != nil {
-				if logErr := e.tracker.LogEvolveRejectedWithProvenance(entry.Skill.Name, reason, audit, &prov); logErr != nil {
+				if logErr := e.tracker.logEvolveRejectedWithProvenance(entry.Skill.Name, reason, audit, &prov); logErr != nil {
 					e.logger.Warn("evolver: lifecycle log write failed",
 						"skill", entry.Skill.Name, "error", logErr)
 				}
@@ -140,7 +140,7 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 			// Best-effort lifecycle record so rejected attempts are visible in
 			// the native observability feed, not just operator logs.
 			if e.tracker != nil {
-				if logErr := e.tracker.LogEvolveRejectedWithProvenance(entry.Skill.Name, reason, audit, &prov); logErr != nil {
+				if logErr := e.tracker.logEvolveRejectedWithProvenance(entry.Skill.Name, reason, audit, &prov); logErr != nil {
 					e.logger.Warn("evolver: lifecycle log write failed",
 						"skill", entry.Skill.Name, "error", logErr)
 				}
@@ -248,7 +248,7 @@ func (e *Evolver) commitEvaluatedCandidate(entry *skills.SkillEntry, originalCon
 	// MarkSkillPatched only tracks agent-created skills, so without this a
 	// committed evolve of a user-authored skill leaves no queryable trace.
 	if e.tracker != nil {
-		if logErr := e.tracker.LogEvolveWithProvenance(entry.Skill.Name, newVersion, committedDescription, committedAudit, &eval.prov); logErr != nil {
+		if logErr := e.tracker.logEvolveWithProvenance(entry.Skill.Name, newVersion, committedDescription, committedAudit, &eval.prov); logErr != nil {
 			e.logger.Warn("evolver: lifecycle log write failed",
 				"skill", entry.Skill.Name, "error", logErr)
 		}

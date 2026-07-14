@@ -46,11 +46,11 @@ func TestValidationCasePoolPartitionIsDeterministicAndDisjoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RecentSkillValidationCases: %v", err)
 	}
-	blindPool, err := tr.RecentSkillValidationCasesPool(skill, 100, true)
+	blindPool, err := tr.recentSkillValidationCasesPool(skill, 100, true)
 	if err != nil {
 		t.Fatalf("RecentSkillValidationCasesPool(blind): %v", err)
 	}
-	visiblePool, err := tr.RecentSkillValidationCasesPool(skill, 100, false)
+	visiblePool, err := tr.recentSkillValidationCasesPool(skill, 100, false)
 	if err != nil {
 		t.Fatalf("RecentSkillValidationCasesPool(visible): %v", err)
 	}
@@ -100,7 +100,7 @@ func TestHeldOutGateScoresBlindPoolOnly(t *testing.T) {
 	seedPoolCases(t, tr, skill)
 
 	engine := NewSkillValidationEngine(tr, slog.Default())
-	blindPool, err := tr.RecentSkillValidationCasesPool(skill, 100, true)
+	blindPool, err := tr.recentSkillValidationCasesPool(skill, 100, true)
 	if err != nil {
 		t.Fatalf("RecentSkillValidationCasesPool: %v", err)
 	}

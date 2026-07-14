@@ -66,7 +66,7 @@ func (e *Evolver) detectCrossSkillRegression(skillName string) {
 			}
 			continue
 		}
-		result := CrossSkillRegression(neighbor.Skill.Name, string(body), cases)
+		result := crossSkillRegression(neighbor.Skill.Name, string(body), cases)
 		if !result.Failed {
 			continue
 		}
@@ -78,7 +78,7 @@ func (e *Evolver) detectCrossSkillRegression(skillName string) {
 				"skill", skillName, "neighbor", neighbor.Skill.Name,
 				"failedAssertions", result.Total-result.Passed, "totalAssertions", result.Total)
 		}
-		if logErr := e.tracker.LogCrossSkillRegression(skillName, neighbor.Skill.Name, reason); logErr != nil && e.logger != nil {
+		if logErr := e.tracker.logCrossSkillRegression(skillName, neighbor.Skill.Name, reason); logErr != nil && e.logger != nil {
 			e.logger.Warn("evolver: cross-skill regression lifecycle log write failed",
 				"skill", skillName, "neighbor", neighbor.Skill.Name, "error", logErr)
 		}
@@ -191,13 +191,13 @@ func backupSkillVersion(skillFile, content string) error {
 	return atomicfile.WriteFile(backup, []byte(content), &atomicfile.Options{Perm: 0o644})
 }
 
-// RollbackSkill restores the pre-evolve version of a skill from its backup. The
+// rollbackSkill restores the pre-evolve version of a skill from its backup. The
 // tracker's post-evolve watch calls this when an evolved skill fails its next
 // few uses in a row. It mirrors parseAndApply's write behavior (atomic file
 // write + lifecycle log), so the reverted skill propagates the same way an
 // evolve does. Best-effort: a missing backup or absent catalog entry is a
 // no-op (logged), never a crash.
-func (e *Evolver) RollbackSkill(skillName string) {
+func (e *Evolver) rollbackSkill(skillName string) {
 	e.RollbackSkillWithResult(skillName)
 }
 
@@ -259,7 +259,7 @@ func (e *Evolver) RollbackSkillWithResult(skillName string) bool {
 	e.logger.Info("evolver: skill rolled back after consecutive post-evolve failures",
 		"skill", skillName, "restoredVersion", restored.Skill.Version)
 	if e.tracker != nil {
-		if err := e.tracker.LogEvolveRolledBack(skillName); err != nil {
+		if err := e.tracker.logEvolveRolledBack(skillName); err != nil {
 			e.logger.Warn("evolver: rollback lifecycle log failed", "skill", skillName, "error", err)
 		}
 		if rolledBackBody != "" {

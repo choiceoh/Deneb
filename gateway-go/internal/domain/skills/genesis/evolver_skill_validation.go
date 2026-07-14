@@ -83,7 +83,7 @@ type acceptedSkillCandidate struct {
 // candidate. On fail it escalates to the teacher model (if wired) for one more
 // attempt, then re-judges. ok=false means the caller must keep the original
 // skill untouched.
-func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.SkillEntry, originalContent, candidateBody string, stats *UsageStats, audit HarnessEditAudit, reviewFinding string, prov *EvolveProvenance) (acceptedSkillCandidate, bool, string) {
+func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.SkillEntry, originalContent, candidateBody string, stats *UsageStats, audit HarnessEditAudit, reviewFinding string, prov *evolveProvenance) (acceptedSkillCandidate, bool, string) {
 	teacherClient, teacherModel := e.teacherModelSnapshot()
 	hasTeacher := teacherClient != nil && teacherModel != ""
 
@@ -132,7 +132,7 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	return teacherCandidate, true, treason
 }
 
-func (e *Evolver) validateCandidate(ctx context.Context, skillName string, client *llm.Client, model, originalContent, candidateBody string, stats *UsageStats, audit HarnessEditAudit, reviewFinding string, prov *EvolveProvenance) (pass bool, reason string, err error) {
+func (e *Evolver) validateCandidate(ctx context.Context, skillName string, client *llm.Client, model, originalContent, candidateBody string, stats *UsageStats, audit HarnessEditAudit, reviewFinding string, prov *evolveProvenance) (pass bool, reason string, err error) {
 	if ok, reason := e.validateCandidatePreflight(skillName, originalContent, candidateBody, audit, stats, reviewFinding); !ok {
 		return false, reason, nil
 	}
@@ -150,7 +150,7 @@ func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candida
 	if ok, reason := guardrails.ValidateTextualEditBudget(originalContent, candidateBody, covered); !ok {
 		return false, reason
 	}
-	if engine := e.skillValidationEngine(); engine != nil {
+	if engine := e.SkillValidationEngine(); engine != nil {
 		result, err := engine.ValidateCandidate(skillName, originalContent, candidateBody)
 		if err != nil {
 			// Fail CLOSED on ANY engine error — do NOT condition on `covered`.
@@ -181,7 +181,7 @@ func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candida
 	return true, ""
 }
 
-func (e *Evolver) skillValidationEngine() *SkillValidationEngine {
+func (e *Evolver) SkillValidationEngine() *SkillValidationEngine {
 	if e == nil || e.tracker == nil {
 		return nil
 	}
@@ -199,7 +199,7 @@ func (e *Evolver) skillValidationEngine() *SkillValidationEngine {
 // not evaluate — so uncovered skills tie and fall back to first-committable
 // order. Never blocks: an engine error is logged and treated as a 0 margin.
 func (e *Evolver) heldOutSelectionMargin(skillName, originalContent, candidateBody string) float64 {
-	engine := e.skillValidationEngine()
+	engine := e.SkillValidationEngine()
 	if engine == nil {
 		return 0
 	}
@@ -236,7 +236,7 @@ func (e *Evolver) validationCasesForPrompt(skillName string) []SkillValidationCa
 	if e == nil || e.tracker == nil {
 		return nil
 	}
-	cases, err := e.tracker.RecentSkillValidationCasesPool(skillName, skillEvolutionPromptCaseLimit, false)
+	cases, err := e.tracker.recentSkillValidationCasesPool(skillName, skillEvolutionPromptCaseLimit, false)
 	if err != nil {
 		if e.logger != nil {
 			e.logger.Warn("evolver: validation cases unavailable for prompt",

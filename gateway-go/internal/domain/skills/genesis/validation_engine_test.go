@@ -282,7 +282,7 @@ func TestCrossSkillRegressionFlagsForbiddenViolation(t *testing.T) {
 	}}
 	neighbor := "# Sibling\n\n## Procedure\n- 단일 bash block 사용\n- eval 로 동적 실행\n"
 
-	result := CrossSkillRegression("topsolar-restore", neighbor, cases)
+	result := crossSkillRegression("topsolar-restore", neighbor, cases)
 	if !result.Failed {
 		t.Fatalf("expected neighbor relying on forbidden eval to fail, got %+v", result)
 	}
@@ -304,11 +304,11 @@ func TestCrossSkillRegressionPassesCompliantNeighbor(t *testing.T) {
 		RequiredSubstrings:  []string{"단일 bash block"},
 	}}
 	neighbor := "# Sibling\n\n## Procedure\n- 단일 bash block 으로만 실행\n"
-	if result := CrossSkillRegression("topsolar-restore", neighbor, cases); result.Failed {
+	if result := crossSkillRegression("topsolar-restore", neighbor, cases); result.Failed {
 		t.Fatalf("expected compliant neighbor to pass, got %+v", result)
 	}
 
-	if result := CrossSkillRegression("topsolar-restore", neighbor, nil); result.Failed || result.Total != 0 {
+	if result := crossSkillRegression("topsolar-restore", neighbor, nil); result.Failed || result.Total != 0 {
 		t.Fatalf("expected no-op for empty case set, got %+v", result)
 	}
 }

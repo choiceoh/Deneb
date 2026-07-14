@@ -45,7 +45,7 @@ func TestRollbackSkill_PersistsEvidence(t *testing.T) {
 	catalog.Register(skills.SkillEntry{Skill: skills.Skill{Name: "sk", Version: "1.0.1", FilePath: file}})
 	e := NewEvolver(nil, catalog, tracker, "m", slog.Default())
 
-	e.RollbackSkill("sk")
+	e.rollbackSkill("sk")
 
 	restored, err := os.ReadFile(file)
 	if err != nil || string(restored) != original {

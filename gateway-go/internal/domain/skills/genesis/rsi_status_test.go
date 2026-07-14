@@ -97,7 +97,7 @@ func TestRSIStatus_AllLayersLive(t *testing.T) {
 	if err := tr.LogMetaRevision(MetaRevisionRecord{Epoch: metaEpochProducer, Artifact: "evolve.md", Proposed: true}); err != nil { // L2
 		t.Fatal(err)
 	}
-	if err := tr.LogJudgeAccuracy(JudgeAccuracyRecord{ // L3
+	if err := tr.logJudgeAccuracy(judgeAccuracyRecord{ // L3
 		JudgeVersion: "v1", Pairs: 4, Correct: 3,
 		ByClass: map[string][2]int{"safety-drop": {2, 3}},
 		Misses:  []judgeMissExhibit{{Skill: "sk", Degradation: "safety-drop", Verdict: "passed_defect"}},
@@ -112,7 +112,7 @@ func TestRSIStatus_AllLayersLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := tr.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{ // actual turn
-		ID: l4.ID, DispatchPhase: SelfCorrectionDispatchStarted, AttemptID: "attempt-live",
+		ID: l4.ID, DispatchPhase: selfCorrectionDispatchStarted, AttemptID: "attempt-live",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -356,7 +356,7 @@ func TestRSIStatus_L4FailedAttemptOnlyRequeuesWithoutUnlandedWork(t *testing.T) 
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for _, phase := range []string{SelfCorrectionDispatchStarted, SelfCorrectionDispatchFailed} {
+	for _, phase := range []string{selfCorrectionDispatchStarted, selfCorrectionDispatchFailed} {
 		if _, err := tr.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
 			ID: "retry", DispatchPhase: phase, AttemptID: "attempt-1",
 		}); err != nil {
@@ -401,17 +401,17 @@ func TestRSIStatus_L4UsesDispatchLifecycleInsteadOfCountingMarkersAsQueued(t *te
 	}
 
 	makeCandidate("in-flight")
-	record("in-flight", SelfCorrectionDispatchStarted)
+	record("in-flight", selfCorrectionDispatchStarted)
 	makeCandidate("closed")
 	for _, phase := range []string{
-		SelfCorrectionDispatchStarted, SelfCorrectionDispatchMerged,
-		SelfCorrectionDispatchDeployed, SelfCorrectionDispatchWatchPassed,
+		selfCorrectionDispatchStarted, SelfCorrectionDispatchMerged,
+		selfCorrectionDispatchDeployed, selfCorrectionDispatchWatchPassed,
 	} {
 		record("closed", phase)
 	}
 	makeCandidate("failed")
-	record("failed", SelfCorrectionDispatchStarted)
-	record("failed", SelfCorrectionDispatchFailed)
+	record("failed", selfCorrectionDispatchStarted)
+	record("failed", selfCorrectionDispatchFailed)
 
 	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
 	if l.State != rsiStateLive {

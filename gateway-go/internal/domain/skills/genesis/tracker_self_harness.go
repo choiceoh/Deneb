@@ -76,7 +76,7 @@ func (t *Tracker) countRejectedEvolveValidationDraftsLocked(cutoff int64) int {
 	}
 	count := 0
 	for _, rec := range records {
-		if rec.Type == SelfCorrectionTypeReview || rec.CreatedAt < cutoff {
+		if rec.Type == selfCorrectionTypeReview || rec.CreatedAt < cutoff {
 			continue
 		}
 		if strings.HasPrefix(strings.TrimSpace(rec.Source), "self-harness-rejected-evolve") {

@@ -146,7 +146,7 @@ func validationCaseBlindHeldOut(rec SkillValidationCaseRecord) bool {
 	return h.Sum32()%3 != 0
 }
 
-// IsCharterCase reports whether a validation case belongs to the FROZEN
+// isCharterCase reports whether a validation case belongs to the FROZEN
 // charter subset (P3 precondition #3, SkillAudit 2606.14239): a deterministic
 // ~25% slice of the corpus, hashed on the same stable dedupe identity as the
 // pool split but on an independent salt, that verifier co-evolution MUST
@@ -157,8 +157,8 @@ func validationCaseBlindHeldOut(rec SkillValidationCaseRecord) bool {
 //
 // CONTRACT for P3 implementers: any path that mutates, regenerates, or feeds
 // validation cases into judge/producer evolution must skip records where
-// IsCharterCase is true; benches and gates may still SCORE against them.
-func IsCharterCase(rec SkillValidationCaseRecord) bool {
+// isCharterCase is true; benches and gates may still SCORE against them.
+func isCharterCase(rec SkillValidationCaseRecord) bool {
 	h := fnv.New32a()
 	_, _ = io.WriteString(h, "charter|")
 	_, _ = io.WriteString(h, validationCaseDedupeKey(rec))
@@ -172,7 +172,7 @@ func IsCharterCase(rec SkillValidationCaseRecord) bool {
 func excludeCharterCases(cases []SkillValidationCaseRecord) []SkillValidationCaseRecord {
 	out := cases[:0:0]
 	for _, c := range cases {
-		if IsCharterCase(c) {
+		if isCharterCase(c) {
 			continue
 		}
 		out = append(out, c)
@@ -180,10 +180,10 @@ func excludeCharterCases(cases []SkillValidationCaseRecord) []SkillValidationCas
 	return out
 }
 
-// RecentSkillValidationCasesPool is RecentSkillValidationCases restricted to
+// recentSkillValidationCasesPool is RecentSkillValidationCases restricted to
 // one partition pool: blind=true → held-out gate pool, blind=false → visible
 // contract pool.
-func (t *Tracker) RecentSkillValidationCasesPool(skillName string, limit int, blind bool) ([]SkillValidationCaseRecord, error) {
+func (t *Tracker) recentSkillValidationCasesPool(skillName string, limit int, blind bool) ([]SkillValidationCaseRecord, error) {
 	return t.recentValidationCases(skillName, limit, func(rec SkillValidationCaseRecord) bool {
 		return validationCaseBlindHeldOut(rec) == blind
 	})

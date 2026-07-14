@@ -104,64 +104,89 @@ func (t *Tracker) computeSelfCorrectionFunnelLocked(now time.Time) SelfCorrectio
 func collectSelfCorrectionFunnel(records []SelfCorrectionCandidateRecord, cutoff int64, s *SelfCorrectionFunnelSummary) (
 	map[string]SelfCorrectionCandidateRecord, map[string]int64, map[string]int64,
 ) {
-	candidatesByID := make(map[string]SelfCorrectionCandidateRecord, len(records))
-	firstVerdicts := make(map[string]int64, len(records))
-	firstApplied := make(map[string]int64, len(records))
+	fold := funnelFold{
+		cutoff:         cutoff,
+		summary:        s,
+		candidatesByID: make(map[string]SelfCorrectionCandidateRecord, len(records)),
+		firstVerdicts:  make(map[string]int64, len(records)),
+		firstApplied:   make(map[string]int64, len(records)),
+	}
 	for _, rec := range records {
 		switch rec.Type {
-		case SelfCorrectionTypeReview:
-			if rec.CreatedAt > s.LastReviewAt {
-				s.LastReviewAt = rec.CreatedAt
-			}
-			rec.ID = strings.TrimSpace(rec.ID)
-			if rec.ID == "" {
-				continue
-			}
-			// Earliest review row = first verdict (later rows are re-verdicts).
-			status := normalizeSelfCorrectionStatus(rec.Status)
-			setEarlier(firstVerdicts, rec.ID, rec.CreatedAt)
-			if status == SelfCorrectionStatusApplied {
-				setEarlier(firstApplied, rec.ID, rec.CreatedAt)
-			}
-		case SelfCorrectionTypeDispatch:
-			rec.ID = strings.TrimSpace(rec.ID)
-			if rec.ID == "" {
-				continue
-			}
-			switch normalizeSelfCorrectionDispatchPhase(rec.DispatchPhase) {
-			case SelfCorrectionDispatchStarted:
-				if rec.CreatedAt >= cutoff {
-					s.Dispatched7d++
-				}
-			case SelfCorrectionDispatchWatchPassed:
-				if rec.CreatedAt >= cutoff {
-					s.WatchPassed7d++
-				}
-				if rec.CreatedAt > s.LastReviewAt {
-					s.LastReviewAt = rec.CreatedAt
-				}
-				setEarlier(firstVerdicts, rec.ID, rec.CreatedAt)
-				setEarlier(firstApplied, rec.ID, rec.CreatedAt)
-			case SelfCorrectionDispatchRolledBack:
-				if rec.CreatedAt >= cutoff {
-					s.RolledBack7d++
-				}
-			}
-		case "", SelfCorrectionTypeCandidate:
-			rec.ID = strings.TrimSpace(rec.ID)
-			if rec.ID == "" {
-				continue
-			}
-			if rec.CreatedAt > s.LastCaptureAt {
-				s.LastCaptureAt = rec.CreatedAt
-			}
-			// Keep the earliest candidate row per ID (the original proposal).
-			if existing, ok := candidatesByID[rec.ID]; !ok || rec.CreatedAt < existing.CreatedAt {
-				candidatesByID[rec.ID] = rec
-			}
+		case selfCorrectionTypeReview:
+			fold.review(rec)
+		case selfCorrectionTypeDispatch:
+			fold.dispatch(rec)
+		case "", selfCorrectionTypeCandidate:
+			fold.candidate(rec)
 		}
 	}
-	return candidatesByID, firstVerdicts, firstApplied
+	return fold.candidatesByID, fold.firstVerdicts, fold.firstApplied
+}
+
+// funnelFold carries the shared indexes of the single chronological fold so
+// each record-type transition stays a small, separately readable step.
+type funnelFold struct {
+	cutoff         int64
+	summary        *SelfCorrectionFunnelSummary
+	candidatesByID map[string]SelfCorrectionCandidateRecord
+	firstVerdicts  map[string]int64
+	firstApplied   map[string]int64
+}
+
+func (f *funnelFold) review(rec SelfCorrectionCandidateRecord) {
+	if rec.CreatedAt > f.summary.LastReviewAt {
+		f.summary.LastReviewAt = rec.CreatedAt
+	}
+	rec.ID = strings.TrimSpace(rec.ID)
+	if rec.ID == "" {
+		return
+	}
+	// Earliest review row = first verdict (later rows are re-verdicts).
+	setEarlier(f.firstVerdicts, rec.ID, rec.CreatedAt)
+	if normalizeSelfCorrectionStatus(rec.Status) == SelfCorrectionStatusApplied {
+		setEarlier(f.firstApplied, rec.ID, rec.CreatedAt)
+	}
+}
+
+func (f *funnelFold) dispatch(rec SelfCorrectionCandidateRecord) {
+	rec.ID = strings.TrimSpace(rec.ID)
+	if rec.ID == "" {
+		return
+	}
+	switch normalizeSelfCorrectionDispatchPhase(rec.DispatchPhase) {
+	case selfCorrectionDispatchStarted:
+		if rec.CreatedAt >= f.cutoff {
+			f.summary.Dispatched7d++
+		}
+	case selfCorrectionDispatchWatchPassed:
+		if rec.CreatedAt >= f.cutoff {
+			f.summary.WatchPassed7d++
+		}
+		if rec.CreatedAt > f.summary.LastReviewAt {
+			f.summary.LastReviewAt = rec.CreatedAt
+		}
+		setEarlier(f.firstVerdicts, rec.ID, rec.CreatedAt)
+		setEarlier(f.firstApplied, rec.ID, rec.CreatedAt)
+	case selfCorrectionDispatchRolledBack:
+		if rec.CreatedAt >= f.cutoff {
+			f.summary.RolledBack7d++
+		}
+	}
+}
+
+func (f *funnelFold) candidate(rec SelfCorrectionCandidateRecord) {
+	rec.ID = strings.TrimSpace(rec.ID)
+	if rec.ID == "" {
+		return
+	}
+	if rec.CreatedAt > f.summary.LastCaptureAt {
+		f.summary.LastCaptureAt = rec.CreatedAt
+	}
+	// Keep the earliest candidate row per ID (the original proposal).
+	if existing, ok := f.candidatesByID[rec.ID]; !ok || rec.CreatedAt < existing.CreatedAt {
+		f.candidatesByID[rec.ID] = rec
+	}
 }
 
 func setEarlier(index map[string]int64, id string, createdAt int64) {

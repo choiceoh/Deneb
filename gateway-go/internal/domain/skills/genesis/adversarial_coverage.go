@@ -301,7 +301,7 @@ func (t *AdversarialCoverageTask) Run(ctx context.Context) error {
 			// own contract, not a data gap.
 			logger.Error("adversarial-coverage: gate-exploit trap PASSED preflight — deterministic gates exploitable for this skill",
 				"skill", skill)
-			if lerr := t.Tracker.LogGateExploit(skill, "substring-stuffed trap candidate cleared validateCandidatePreflight"); lerr != nil {
+			if lerr := t.Tracker.logGateExploit(skill, "substring-stuffed trap candidate cleared validateCandidatePreflight"); lerr != nil {
 				logger.Warn("adversarial-coverage: gate-exploit ledger write failed", "skill", skill, "error", lerr)
 			}
 		}

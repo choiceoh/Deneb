@@ -7,7 +7,7 @@ import (
 )
 
 func TestClassifyUnfixableUnderperformer(t *testing.T) {
-	cfg := DefaultSkillCuratorConfig() // MinRollbacks=2, RatePct=50
+	cfg := defaultSkillCuratorConfig() // MinRollbacks=2, RatePct=50
 
 	tests := []struct {
 		name        string
@@ -32,7 +32,7 @@ func TestClassifyUnfixableUnderperformer(t *testing.T) {
 }
 
 func TestClassifyUnfixableUnderperformer_WorkoutFailuresInReason(t *testing.T) {
-	cfg := DefaultSkillCuratorConfig()
+	cfg := defaultSkillCuratorConfig()
 	reason := classifyUnfixableUnderperformer(skillUtilityCount{evolves: 2, rollbacks: 2, workoutFailures: 3}, cfg)
 	if !strings.Contains(reason, "3 workout failures") {
 		t.Errorf("workout failures should corroborate in reason: %q", reason)
@@ -60,13 +60,13 @@ func TestApplySkillCuratorTransitions_UtilityArchivesActiveThrasher(t *testing.T
 	if err := tracker.LogEvolve("thrasher", "v2", "attempt 1"); err != nil {
 		t.Fatalf("LogEvolve: %v", err)
 	}
-	if err := tracker.LogEvolveRolledBack("thrasher"); err != nil {
+	if err := tracker.logEvolveRolledBack("thrasher"); err != nil {
 		t.Fatalf("LogEvolveRolledBack: %v", err)
 	}
 	if err := tracker.LogEvolve("thrasher", "v3", "attempt 2"); err != nil {
 		t.Fatalf("LogEvolve: %v", err)
 	}
-	if err := tracker.LogEvolveRolledBack("thrasher"); err != nil {
+	if err := tracker.logEvolveRolledBack("thrasher"); err != nil {
 		t.Fatalf("LogEvolveRolledBack: %v", err)
 	}
 	// healthy: 3 committed evolves, 1 rollback → below the min-rollback floor.
@@ -75,13 +75,13 @@ func TestApplySkillCuratorTransitions_UtilityArchivesActiveThrasher(t *testing.T
 			t.Fatalf("LogEvolve healthy: %v", err)
 		}
 	}
-	if err := tracker.LogEvolveRolledBack("healthy"); err != nil {
+	if err := tracker.logEvolveRolledBack("healthy"); err != nil {
 		t.Fatalf("LogEvolveRolledBack healthy: %v", err)
 	}
 
 	// MinIdleHours=2 with brand-new skills → the idle path skips both (idle≈0),
 	// so any archival here MUST come from the utility path.
-	summary, err := tracker.ApplySkillCuratorTransitions(time.Now(), SkillCuratorConfig{
+	summary, err := tracker.applySkillCuratorTransitions(time.Now(), SkillCuratorConfig{
 		MinIdleHours:           2,
 		StaleAfterDays:         30,
 		ArchiveAfterDays:       90,
@@ -120,17 +120,17 @@ func TestApplySkillCuratorTransitions_UtilityHonorsPin(t *testing.T) {
 	if err := tracker.LogEvolve("pinned-thrasher", "v2", "a"); err != nil {
 		t.Fatalf("LogEvolve: %v", err)
 	}
-	if err := tracker.LogEvolveRolledBack("pinned-thrasher"); err != nil {
+	if err := tracker.logEvolveRolledBack("pinned-thrasher"); err != nil {
 		t.Fatalf("rollback: %v", err)
 	}
 	if err := tracker.LogEvolve("pinned-thrasher", "v3", "b"); err != nil {
 		t.Fatalf("LogEvolve: %v", err)
 	}
-	if err := tracker.LogEvolveRolledBack("pinned-thrasher"); err != nil {
+	if err := tracker.logEvolveRolledBack("pinned-thrasher"); err != nil {
 		t.Fatalf("rollback: %v", err)
 	}
 
-	summary, err := tracker.ApplySkillCuratorTransitions(time.Now(), SkillCuratorConfig{
+	summary, err := tracker.applySkillCuratorTransitions(time.Now(), SkillCuratorConfig{
 		MinIdleHours:           2,
 		UtilityMinRollbacks:    2,
 		UtilityRollbackRatePct: 50,

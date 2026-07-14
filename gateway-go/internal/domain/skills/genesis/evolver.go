@@ -252,11 +252,11 @@ func (e *Evolver) catalogEntries() []skills.SkillEntry {
 	return e.catalog.List()
 }
 
-func (e *Evolver) newProvenance() EvolveProvenance {
+func (e *Evolver) newProvenance() evolveProvenance {
 	e.configMu.RLock()
 	m := e.meta
 	e.configMu.RUnlock()
-	return EvolveProvenance{
+	return evolveProvenance{
 		EvolveArtifactVersion: m.Version(generation.MetaEvolveSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaEvolveSystemPrompt]),
 		JudgeArtifactVersion:  m.Version(generation.MetaSkillJudgeSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]),
 	}
@@ -372,7 +372,7 @@ func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding stri
 	// but must not keep driving fresh rewrites.
 	var stats *UsageStats
 	if e.tracker != nil {
-		stats, _ = e.tracker.EvolutionEvidenceStats(skillName)
+		stats, _ = e.tracker.evolutionEvidenceStats(skillName)
 	}
 	if stats == nil {
 		stats = &UsageStats{SkillName: skillName}
@@ -430,7 +430,7 @@ func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding stri
 				break
 			}
 		}
-		if exemplars, exErr := e.tracker.ConfirmedEvolveExemplars(sigs, skillName, 3); exErr == nil {
+		if exemplars, exErr := e.tracker.confirmedEvolveExemplars(sigs, skillName, 3); exErr == nil {
 			exemplarSection = formatConfirmedEvolveExemplars(exemplars)
 		}
 	}
@@ -477,7 +477,7 @@ func (e *Evolver) formatLowYieldLevers() string {
 	if e == nil || e.tracker == nil {
 		return ""
 	}
-	levers, err := e.tracker.LowYieldLevers(skillLeverYieldScanLimit, skillLeverYieldMinShips, skillLeverYieldMaxConfirmRate)
+	levers, err := e.tracker.lowYieldLevers(skillLeverYieldScanLimit, skillLeverYieldMinShips, skillLeverYieldMaxConfirmRate)
 	if err != nil || len(levers) == 0 {
 		return ""
 	}
@@ -661,9 +661,9 @@ func (e *Evolver) evolutionSuppressed(skillName string, now time.Time) (bool, st
 	return false, ""
 }
 
-// EvolveUnderperformers finds and evolves skills with poor success rates.
+// evolveUnderperformers finds and evolves skills with poor success rates.
 // Used as a periodic background task.
-func (e *Evolver) EvolveUnderperformers(ctx context.Context) ([]EvolveResult, error) {
+func (e *Evolver) evolveUnderperformers(ctx context.Context) ([]EvolveResult, error) {
 	if e.tracker == nil {
 		return nil, nil
 	}
@@ -674,7 +674,7 @@ func (e *Evolver) EvolveUnderperformers(ctx context.Context) ([]EvolveResult, er
 	}
 	defer e.runMu.Unlock()
 
-	candidates, err := e.tracker.SkillsNeedingEvolution(skillEvolutionMinEvidenceUses, 0.7)
+	candidates, err := e.tracker.skillsNeedingEvolution(skillEvolutionMinEvidenceUses, 0.7)
 	if err != nil {
 		return nil, err
 	}
@@ -799,14 +799,14 @@ func (t *EvolutionTask) Run(ctx context.Context) error {
 	// skill never resolves and the e-process label pipeline starves (backtest
 	// 2026-07-11: zero historical resolutions).
 	if t.Evolver != nil && t.Evolver.tracker != nil {
-		if n := t.Evolver.tracker.ResolveStaleWatches(watchMaxAge()); n > 0 && t.Evolver.logger != nil {
+		if n := t.Evolver.tracker.resolveStaleWatches(watchMaxAge()); n > 0 && t.Evolver.logger != nil {
 			t.Evolver.logger.Info("evolver: stale rollback watches resolved time-based", "count", n)
 		}
 	}
-	results, err := t.Evolver.EvolveUnderperformers(ctx)
+	results, err := t.Evolver.evolveUnderperformers(ctx)
 	// Heartbeat: records that the evolve cycle actually ran (liveness on /health).
 	if t.Evolver != nil && t.Evolver.tracker != nil {
-		t.Evolver.tracker.RecordEvolutionActivity(SkillActivityEvolve, err == nil, genesiscommon.ErrorString(err))
+		t.Evolver.tracker.RecordEvolutionActivity(skillActivityEvolve, err == nil, genesiscommon.ErrorString(err))
 	}
 	if err != nil {
 		return err

@@ -178,7 +178,7 @@ func TestExcludeCharterCases(t *testing.T) {
 	}
 	var charterIn int
 	for _, c := range cases {
-		if IsCharterCase(c) {
+		if isCharterCase(c) {
 			charterIn++
 		}
 	}
@@ -190,7 +190,7 @@ func TestExcludeCharterCases(t *testing.T) {
 		t.Fatalf("excludeCharterCases kept %d, want %d", len(filtered), len(cases)-charterIn)
 	}
 	for _, c := range filtered {
-		if IsCharterCase(c) {
+		if isCharterCase(c) {
 			t.Fatal("charter case survived the co-evolution training filter")
 		}
 	}

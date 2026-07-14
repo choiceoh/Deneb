@@ -42,7 +42,7 @@ func TestRollback_EProcessOwnership(t *testing.T) {
 		// e-process (clean baseline → p0 clamps to floor; ~8 consecutive
 		// fails cross 1/alpha).
 		tr.SetRollback(func(s string) bool {
-			_ = tr.LogEvolveRolledBack(s)
+			_ = tr.logEvolveRolledBack(s)
 			fired <- s
 			return true
 		}, 99)
@@ -83,7 +83,7 @@ func TestRollback_EProcessOwnership(t *testing.T) {
 		}
 		fired := make(chan string, 1)
 		tr.SetRollback(func(s string) bool {
-			_ = tr.LogEvolveRolledBack(s)
+			_ = tr.logEvolveRolledBack(s)
 			fired <- s
 			return true
 		}, 3)
@@ -142,9 +142,9 @@ func TestEProcessCutoverReadiness(t *testing.T) {
 	stash := func(skill string, disagree bool) {
 		t.Helper()
 		tr.mu.Lock()
-		tr.pendingBaselineTest[skill] = &RollbackBaselineTest{Reject: !disagree, RejectReachable: true, Disagreement: disagree}
+		tr.pendingBaselineTest[skill] = &rollbackBaselineTest{Reject: !disagree, RejectReachable: true, Disagreement: disagree}
 		tr.mu.Unlock()
-		if err := tr.LogEvolveRolledBack(skill); err != nil {
+		if err := tr.logEvolveRolledBack(skill); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -157,9 +157,9 @@ func TestEProcessCutoverReadiness(t *testing.T) {
 	// unreachable — incl. every pre-C1-fix ledger line, which lacks the
 	// field) must not count toward readiness in either direction.
 	tr.mu.Lock()
-	tr.pendingBaselineTest["sk"] = &RollbackBaselineTest{Disagreement: true}
+	tr.pendingBaselineTest["sk"] = &rollbackBaselineTest{Disagreement: true}
 	tr.mu.Unlock()
-	if err := tr.LogEvolveRolledBack("sk"); err != nil {
+	if err := tr.logEvolveRolledBack("sk"); err != nil {
 		t.Fatal(err)
 	}
 	if r := tr.eProcessCutoverReadiness(); r.Labels != 0 || r.UnfairLabels != 1 {
@@ -212,9 +212,9 @@ func TestEProcessCutoverReadiness_PureConfirmsNotReady(t *testing.T) {
 	// 25 fair, agreeing CONFIRM labels (no rollbacks).
 	for i := 0; i < 25; i++ {
 		tr.mu.Lock()
-		tr.pendingBaselineTest["sk"] = &RollbackBaselineTest{Reject: false, RejectReachable: true, Disagreement: false}
+		tr.pendingBaselineTest["sk"] = &rollbackBaselineTest{Reject: false, RejectReachable: true, Disagreement: false}
 		tr.mu.Unlock()
-		if err := tr.LogEvolveConfirmed("sk", HarnessEditAudit{}, true); err != nil {
+		if err := tr.logEvolveConfirmed("sk", HarnessEditAudit{}, true); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -231,9 +231,9 @@ func TestEProcessCutoverReadiness_PureConfirmsNotReady(t *testing.T) {
 	// One fair rollback label unlocks readiness (agreement now tested against a
 	// disagreement-capable case).
 	tr.mu.Lock()
-	tr.pendingBaselineTest["sk"] = &RollbackBaselineTest{Reject: true, RejectReachable: true, Disagreement: false}
+	tr.pendingBaselineTest["sk"] = &rollbackBaselineTest{Reject: true, RejectReachable: true, Disagreement: false}
 	tr.mu.Unlock()
-	if err := tr.LogEvolveRolledBack("sk"); err != nil {
+	if err := tr.logEvolveRolledBack("sk"); err != nil {
 		t.Fatal(err)
 	}
 	if r := tr.eProcessCutoverReadiness(); !r.Ready || r.FairRollbacks != 1 {
@@ -255,7 +255,7 @@ func TestRollback_EProcessOwnership_ProductionThreshold(t *testing.T) {
 	}
 	fired := make(chan string, 1)
 	tr.SetRollback(func(s string) bool {
-		_ = tr.LogEvolveRolledBack(s)
+		_ = tr.logEvolveRolledBack(s)
 		fired <- s
 		return true
 	}, DefaultRollbackThreshold)

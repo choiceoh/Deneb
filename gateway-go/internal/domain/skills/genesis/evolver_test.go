@@ -82,7 +82,7 @@ func TestCommitEvaluatedCandidateSurfacesOnlyLowConfidenceJudgeMargins(t *testin
 	origScore, lowScore := 70.0, 72.0
 	result, err := e.commitEvaluatedCandidate(entry, original, evaluatedCandidate{
 		body: "# Foo\n\nlow confidence improvement", newVersion: "1.0.1",
-		prov: EvolveProvenance{JudgeArtifactVersion: "judge-v1", JudgeScoreOriginal: &origScore, JudgeScoreCandidate: &lowScore},
+		prov: evolveProvenance{JudgeArtifactVersion: "judge-v1", JudgeScoreOriginal: &origScore, JudgeScoreCandidate: &lowScore},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestCommitEvaluatedCandidateSurfacesOnlyLowConfidenceJudgeMargins(t *testin
 	highScore := 74.0
 	result, err = e.commitEvaluatedCandidate(entry, string(current), evaluatedCandidate{
 		body: "# Foo\n\nhigh confidence improvement", newVersion: "1.0.2",
-		prov: EvolveProvenance{JudgeArtifactVersion: "judge-v1", JudgeScoreOriginal: &origScore, JudgeScoreCandidate: &highScore},
+		prov: evolveProvenance{JudgeArtifactVersion: "judge-v1", JudgeScoreOriginal: &origScore, JudgeScoreCandidate: &highScore},
 	})
 	if err != nil {
 		t.Fatal(err)

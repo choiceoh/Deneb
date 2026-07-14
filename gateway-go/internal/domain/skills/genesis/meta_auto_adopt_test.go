@@ -47,7 +47,7 @@ func TestMaybeRevertAdoption(t *testing.T) {
 			if err := tr.LogEvolveWithAudit("hsk", "1.0.1", "d", HarnessEditAudit{}); err != nil {
 				t.Fatal(err)
 			}
-			if err := tr.LogEvolveConfirmed("hsk", HarnessEditAudit{}, true); err != nil {
+			if err := tr.logEvolveConfirmed("hsk", HarnessEditAudit{}, true); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -55,7 +55,7 @@ func TestMaybeRevertAdoption(t *testing.T) {
 			if err := tr.LogEvolveWithAudit("hsk", "1.0.2", "d", HarnessEditAudit{}); err != nil {
 				t.Fatal(err)
 			}
-			if err := tr.LogEvolveRolledBack("hsk"); err != nil {
+			if err := tr.logEvolveRolledBack("hsk"); err != nil {
 				t.Fatal(err)
 			}
 		}

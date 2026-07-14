@@ -4,7 +4,7 @@ import "testing"
 
 // oldRuleFlags replicates the previous raw Committed/ConfirmRate gate, so the
 // test can show exactly where the refined rule diverges.
-func oldRuleFlags(y LeverYield, minShips int, maxRate float64) bool {
+func oldRuleFlags(y leverYield, minShips int, maxRate float64) bool {
 	rate := 0.0
 	if y.Committed > 0 {
 		rate = float64(y.Confirmed) / float64(y.Committed)
@@ -13,7 +13,7 @@ func oldRuleFlags(y LeverYield, minShips int, maxRate float64) bool {
 }
 
 func TestFilterLowYieldLevers_ResolvedAndSmoothed(t *testing.T) {
-	levers := []LeverYield{
+	levers := []leverYield{
 		// Good lever whose evolves are mostly still PENDING. Raw rate 3/8=0.375
 		// wrongly flags it; the resolved view (3 confirmed, 0 reverts) keeps it.
 		{Signature: "pending-good", Committed: 8, Confirmed: 3, RolledBack: 0},
