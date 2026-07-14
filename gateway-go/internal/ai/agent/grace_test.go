@@ -66,7 +66,7 @@ func TestRunAgent_GraceCall_Injected(t *testing.T) {
 		if m.Role != "user" {
 			continue
 		}
-		if strings.Contains(string(m.Content), "턴 예산") {
+		if strings.Contains(m.Content.String(), "턴 예산") {
 			found = true
 			break
 		}
@@ -115,7 +115,7 @@ func TestRunAgent_GraceCall_NoDoubleInjection(t *testing.T) {
 	// Count how many times the grace prompt appears — must be exactly once.
 	var graceCount int
 	for _, m := range result.FinalMessages {
-		if m.Role == "user" && strings.Contains(string(m.Content), "턴 예산") {
+		if m.Role == "user" && strings.Contains(m.Content.String(), "턴 예산") {
 			graceCount++
 		}
 	}
@@ -159,7 +159,7 @@ func TestRunAgent_GraceCall_NotTriggeredOnNaturalEndTurn(t *testing.T) {
 	}
 	// Grace prompt must NOT appear.
 	for _, m := range result.FinalMessages {
-		if m.Role == "user" && strings.Contains(string(m.Content), "턴 예산") {
+		if m.Role == "user" && strings.Contains(m.Content.String(), "턴 예산") {
 			t.Error("grace prompt found in FinalMessages on natural end_turn")
 			break
 		}
@@ -263,7 +263,7 @@ func TestRunAgent_GraceCall_PersistsGraceMessage(t *testing.T) {
 
 	var seenGrace bool
 	for _, m := range persisted {
-		if m.Role == "user" && strings.Contains(string(m.Content), "턴 예산") {
+		if m.Role == "user" && strings.Contains(m.Content.String(), "턴 예산") {
 			seenGrace = true
 			break
 		}

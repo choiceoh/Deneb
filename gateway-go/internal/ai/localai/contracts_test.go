@@ -29,7 +29,7 @@ func TestCacheKeySemanticIdentityContract(t *testing.T) {
 	}
 	base.ResponseFormat = &llm.ResponseFormat{
 		Type:       "json_schema",
-		JSONSchema: json.RawMessage(`{"name":"answer","schema":{"type":"object"}}`),
+		JSONSchema: llm.FlexibleFromRaw([]byte(`{"name":"answer","schema":{"type":"object"}}`)),
 	}
 
 	clone := func() Request {
@@ -42,7 +42,7 @@ func TestCacheKeySemanticIdentityContract(t *testing.T) {
 			"temperature": 0.2,
 		}
 		rf := *base.ResponseFormat
-		rf.JSONSchema = append(json.RawMessage(nil), base.ResponseFormat.JSONSchema...)
+		rf.JSONSchema = llm.FlexibleFromRaw(append([]byte(nil), base.ResponseFormat.JSONSchema.Bytes()...))
 		out.ResponseFormat = &rf
 		return out
 	}
@@ -111,7 +111,7 @@ func TestCacheKeySemanticIdentityContract(t *testing.T) {
 		{
 			name: "message content",
 			mutate: func(r *Request) {
-				r.Messages[0].Content = json.RawMessage(`"different"`)
+				r.Messages[0].Content = llm.FlexibleFromRaw([]byte(`"different"`))
 			},
 		},
 		{
@@ -135,7 +135,7 @@ func TestCacheKeySemanticIdentityContract(t *testing.T) {
 		{
 			name: "response schema",
 			mutate: func(r *Request) {
-				r.ResponseFormat.JSONSchema = json.RawMessage(`{"name":"other"}`)
+				r.ResponseFormat.JSONSchema = llm.FlexibleFromRaw([]byte(`{"name":"other"}`))
 			},
 		},
 		{
@@ -207,8 +207,8 @@ func TestCacheKeySeparatesBoundaryCollisions(t *testing.T) {
 		t.Fatal("message boundary collision was not separated")
 	}
 
-	c := Request{System: "ab", Messages: []llm.Message{{Role: "c", Content: json.RawMessage(`"d"`)}}}
-	d := Request{System: "a", Messages: []llm.Message{{Role: "bc", Content: json.RawMessage(`"d"`)}}}
+	c := Request{System: "ab", Messages: []llm.Message{{Role: "c", Content: llm.FlexibleFromRaw([]byte(`"d"`))}}}
+	d := Request{System: "a", Messages: []llm.Message{{Role: "bc", Content: llm.FlexibleFromRaw([]byte(`"d"`))}}}
 	if cacheKey(&c) == cacheKey(&d) {
 		t.Fatal("system/role boundary collision was not separated")
 	}
@@ -595,7 +595,7 @@ func TestCollectStreamContract(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return llm.StreamEvent{Type: "content_block_delta", Payload: payload}
+		return llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw(payload)}
 	}
 
 	tests := []struct {
@@ -618,9 +618,9 @@ func TestCollectStreamContract(t *testing.T) {
 		{
 			name: "non-delta events are ignored",
 			events: []llm.StreamEvent{
-				{Type: "message_start", Payload: json.RawMessage(`{}`)},
+				{Type: "message_start", Payload: llm.FlexibleFromRaw([]byte(`{}`))},
 				delta("text_delta", "answer"),
-				{Type: "message_stop", Payload: json.RawMessage(`{}`)},
+				{Type: "message_stop", Payload: llm.FlexibleFromRaw([]byte(`{}`))},
 			},
 			want: "answer",
 		},
@@ -628,7 +628,7 @@ func TestCollectStreamContract(t *testing.T) {
 			name: "private reasoning and malformed payload are ignored",
 			events: []llm.StreamEvent{
 				delta("thinking_delta", "secret"),
-				{Type: "content_block_delta", Payload: json.RawMessage(`not-json`)},
+				{Type: "content_block_delta", Payload: llm.FlexibleFromRaw([]byte(`not-json`))},
 				delta("signature_delta", "signature"),
 				delta("text_delta", "safe"),
 			},
@@ -847,7 +847,7 @@ func TestSimpleRequestAndEstimateContract(t *testing.T) {
 		t.Fatalf("messages = %+v", req.Messages)
 	}
 	var content string
-	if err := json.Unmarshal(req.Messages[0].Content, &content); err != nil {
+	if err := json.Unmarshal(req.Messages[0].Content.Bytes(), &content); err != nil {
 		t.Fatal(err)
 	}
 	if content != "사용자 메시지" {

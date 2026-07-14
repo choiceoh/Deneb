@@ -9,7 +9,7 @@ import (
 )
 
 func tbToolUse(id, name string) llm.ContentBlock {
-	return llm.ContentBlock{Type: "tool_use", ID: id, Name: name, Input: json.RawMessage(`{}`)}
+	return llm.ContentBlock{Type: "tool_use", ID: id, Name: name, Input: llm.FlexibleFromRaw([]byte(`{}`))}
 }
 
 func tbToolResult(id, content string) llm.ContentBlock {
@@ -26,7 +26,7 @@ func assertBalanced(t *testing.T, messages []llm.Message) {
 	t.Helper()
 	uses, results := map[string]bool{}, map[string]bool{}
 	for _, m := range messages {
-		blocks, ok := decodeBlocks(m.Content)
+		blocks, ok := decodeBlocks(json.RawMessage(m.Content.Bytes()))
 		if !ok {
 			continue
 		}
@@ -60,7 +60,7 @@ func TestBalanceToolBlocks_EmitsTextStubForOrphanedToolUse(t *testing.T) {
 	out := BalanceToolBlocks(msgs)
 	assertBalanced(t, out)
 
-	blocks, ok := decodeBlocks(out[1].Content)
+	blocks, ok := decodeBlocks(json.RawMessage(out[1].Content.Bytes()))
 	if !ok {
 		t.Fatal("assistant message lost its block content")
 	}
@@ -81,7 +81,7 @@ func TestBalanceToolBlocks_EmitsTextStubForOrphanedToolResult(t *testing.T) {
 	out := BalanceToolBlocks(msgs)
 	assertBalanced(t, out)
 
-	blocks, _ := decodeBlocks(out[0].Content)
+	blocks, _ := decodeBlocks(json.RawMessage(out[0].Content.Bytes()))
 	if len(blocks) != 1 || blocks[0].Type != "text" || !strings.Contains(blocks[0].Text, "omitted") {
 		t.Errorf("orphaned tool_result not stubbed to text: %+v", blocks)
 	}
@@ -92,12 +92,12 @@ func TestBalanceToolBlocks_PreservesBalancedPairBytes(t *testing.T) {
 		llm.NewBlockMessage("assistant", []llm.ContentBlock{tbToolUse("A", "read")}),
 		llm.NewBlockMessage("user", []llm.ContentBlock{tbToolResult("A", "ok")}),
 	}
-	before := []string{string(msgs[0].Content), string(msgs[1].Content)}
+	before := []string{msgs[0].Content.String(), msgs[1].Content.String()}
 	out := BalanceToolBlocks(msgs)
 	assertBalanced(t, out)
 	// A balanced input must be a byte-for-byte no-op (prompt-cache stability).
 	for i := range out {
-		if string(out[i].Content) != before[i] {
+		if out[i].Content.String() != before[i] {
 			t.Errorf("message %d was rewritten on a balanced input:\n got  %s\n want %s", i, out[i].Content, before[i])
 		}
 	}
@@ -108,10 +108,10 @@ func TestBalanceToolBlocks_PreservesStringContent(t *testing.T) {
 		llm.NewTextMessage("user", "hello"),
 		llm.NewTextMessage("assistant", "hi"),
 	}
-	before := []string{string(msgs[0].Content), string(msgs[1].Content)}
+	before := []string{msgs[0].Content.String(), msgs[1].Content.String()}
 	out := BalanceToolBlocks(msgs)
 	for i := range out {
-		if string(out[i].Content) != before[i] {
+		if out[i].Content.String() != before[i] {
 			t.Errorf("plain text message %d was modified", i)
 		}
 	}

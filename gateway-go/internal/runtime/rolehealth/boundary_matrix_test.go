@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
+	rtevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 )
 
 func roleHealthTestLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
@@ -290,20 +291,20 @@ func TestVerdictsConcurrentCopies(t *testing.T) {
 func TestApplyVerdictsEdgeBroadcastBoundary(t *testing.T) {
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logs, nil))
-	var events []map[string]any
-	w := &roleHealthWatch{logger: logger, statePath: filepath.Join(t.TempDir(), "state.json"), broadcast: func(_ string, payload any) { events = append(events, payload.(map[string]any)) }, state: roleHealthState{Verdicts: map[string]string{"p": roleHealthOK}}}
+	var captured []map[string]any
+	w := &roleHealthWatch{logger: logger, statePath: filepath.Join(t.TempDir(), "state.json"), broadcast: func(_ string, payload rtevents.EventPayload) { var m map[string]any; _ = json.Unmarshal(payload.Bytes(), &m); captured = append(captured, m) }, state: roleHealthState{Verdicts: map[string]string{"p": roleHealthOK}}}
 	target := roleHealthTarget{providerID: "p", model: "m", roles: []string{"main"}}
 	w.applyVerdicts([]roleHealthTarget{target}, map[string]string{"p": roleHealthAuth}, map[string]string{"p": "expired"})
-	if len(events) != 1 || events[0]["verdict"] != roleHealthAuth {
-		t.Errorf("events=%v", events)
+	if len(captured) != 1 || captured[0]["verdict"] != roleHealthAuth {
+		t.Errorf("events=%v", captured)
 	}
 	w.applyVerdicts([]roleHealthTarget{target}, map[string]string{"p": roleHealthAuth}, map[string]string{"p": "still"})
-	if len(events) != 1 {
-		t.Errorf("steady edge emitted events=%v", events)
+	if len(captured) != 1 {
+		t.Errorf("steady edge emitted events=%v", captured)
 	}
 	w.applyVerdicts([]roleHealthTarget{target}, map[string]string{"p": roleHealthOK}, map[string]string{})
-	if len(events) != 2 || events[1]["verdict"] != roleHealthOK {
-		t.Errorf("recovery events=%v", events)
+	if len(captured) != 2 || captured[1]["verdict"] != roleHealthOK {
+		t.Errorf("recovery events=%v", captured)
 	}
 	if !stringsContains(logs.String(), "unhealthy") || !stringsContains(logs.String(), "recovered") {
 		t.Errorf("logs=%q", logs.String())

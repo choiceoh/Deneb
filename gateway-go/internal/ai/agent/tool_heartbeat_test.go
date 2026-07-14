@@ -53,7 +53,7 @@ func TestToolHeartbeat_FiresPeriodicallyThenStopsAfterReturn(t *testing.T) {
 		Type:  "tool_use",
 		ID:    "tool_1",
 		Name:  "fake_slow_tool",
-		Input: json.RawMessage(`{}`),
+		Input: llm.FlexibleFromRaw([]byte(`{}`)),
 	}
 	tools := &slowToolExecutor{execTime: 250 * time.Millisecond}
 
@@ -104,7 +104,7 @@ func TestToolHeartbeat_NoFireWhenToolFinishesBeforeFirstTick(t *testing.T) {
 		Type:  "tool_use",
 		ID:    "tool_1",
 		Name:  "fake_fast_tool",
-		Input: json.RawMessage(`{}`),
+		Input: llm.FlexibleFromRaw([]byte(`{}`)),
 	}
 	tools := &slowToolExecutor{execTime: 10 * time.Millisecond}
 
@@ -131,7 +131,7 @@ func TestToolHeartbeat_NilHookIsSafe(t *testing.T) {
 		Type:  "tool_use",
 		ID:    "tool_1",
 		Name:  "fake_tool",
-		Input: json.RawMessage(`{}`),
+		Input: llm.FlexibleFromRaw([]byte(`{}`)),
 	}
 	tools := &slowToolExecutor{execTime: 50 * time.Millisecond}
 
@@ -171,7 +171,7 @@ func TestToolHeartbeat_ConcurrentToolsIndependent(t *testing.T) {
 			Type:  "tool_use",
 			ID:    id,
 			Name:  "fake_tool",
-			Input: json.RawMessage(`{}`),
+			Input: llm.FlexibleFromRaw([]byte(`{}`)),
 		}
 		_ = executeOneTool(context.Background(), tc, tools, hooks,
 			"", 0, slog.Default(), nil, nil)

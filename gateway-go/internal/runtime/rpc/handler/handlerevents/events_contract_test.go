@@ -176,8 +176,8 @@ func TestBroadcastHandlerDeliversEventAndPayload(t *testing.T) {
 	broadcaster := events.NewBroadcaster()
 	var mu sync.Mutex
 	var seenEvent string
-	var seenPayload any
-	broadcaster.RegisterTap(func(event string, payload any) {
+	var seenPayload events.EventPayload
+	broadcaster.RegisterTap(func(event string, payload events.EventPayload) {
 		mu.Lock()
 		seenEvent, seenPayload = event, payload
 		mu.Unlock()
@@ -194,8 +194,9 @@ func TestBroadcastHandlerDeliversEventAndPayload(t *testing.T) {
 	if event != "custom.event" {
 		t.Fatalf("event = %q", event)
 	}
-	payloadMap, ok := payload.(map[string]any)
-	if !ok || payloadMap["name"] != "테스트" || payloadMap["count"] != float64(3) {
+	var payloadMap map[string]any
+	_ = json.Unmarshal(seenPayload.Bytes(), &payloadMap)
+	if payloadMap == nil || payloadMap["name"] != "테스트" || payloadMap["count"] != float64(3) {
 		t.Fatalf("payload = %#v", payload)
 	}
 }

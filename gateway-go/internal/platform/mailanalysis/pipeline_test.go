@@ -93,8 +93,8 @@ func TestExtractWikiGraphContext_GracefulDegradation(t *testing.T) {
 // same filter (analyzer.go), so this also guards that path's behavior.
 func TestCollectStreamText_FiltersThinkingDelta(t *testing.T) {
 	ch := make(chan llm.StreamEvent, 3)
-	ch <- llm.StreamEvent{Type: "content_block_delta", Payload: []byte(`{"delta":{"type":"thinking_delta","text":"이건 내부 추론이다"}}`)}
-	ch <- llm.StreamEvent{Type: "content_block_delta", Payload: []byte(`{"delta":{"type":"text_delta","text":"결제 기한 6월 10일."}}`)}
+	ch <- llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw([]byte(`{"delta":{"type":"thinking_delta","text":"이건 내부 추론이다"}}`))}
+	ch <- llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw([]byte(`{"delta":{"type":"text_delta","text":"결제 기한 6월 10일."}}`))}
 	close(ch)
 
 	got, err := collectStreamText(context.Background(), ch)

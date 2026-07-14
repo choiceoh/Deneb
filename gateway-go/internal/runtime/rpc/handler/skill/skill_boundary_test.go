@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	rtevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
@@ -101,10 +103,11 @@ func TestSkillsInstallValidationBroadcastAndIdempotence(t *testing.T) {
 	var events []event
 	methods := Methods(Deps{
 		Skills: registry,
-		Broadcaster: func(name string, payload any) (int, []error) {
+		Broadcaster: func(name string, payload rtevents.EventPayload) (int, []error) {
 			mu.Lock()
 			defer mu.Unlock()
-			m, _ := payload.(map[string]any)
+			var m map[string]any
+			_ = json.Unmarshal(payload.Bytes(), &m)
 			events = append(events, event{name: name, payload: m})
 			return 1, nil
 		},
@@ -168,11 +171,12 @@ func TestSkillsUpdateValidationNotFoundAndMergedConfig(t *testing.T) {
 	var events int
 	methods := Methods(Deps{
 		Skills: registry,
-		Broadcaster: func(event string, payload any) (int, []error) {
+		Broadcaster: func(event string, payload rtevents.EventPayload) (int, []error) {
 			if event != "skills.changed" {
 				t.Errorf("event = %q", event)
 			}
-			m, _ := payload.(map[string]any)
+			var m map[string]any
+			_ = json.Unmarshal(payload.Bytes(), &m)
 			if m["action"] != "updated" || m["skillKey"] != "github" {
 				t.Errorf("payload = %#v", payload)
 			}
@@ -436,9 +440,9 @@ func TestWorkspaceSkillHandlersDiscoverFilterAndEmitChangeEvent(t *testing.T) {
 	var eventPayload map[string]any
 	methods := Methods(Deps{
 		Skills: skills.NewRegistry(),
-		Broadcaster: func(name string, payload any) (int, []error) {
+		Broadcaster: func(name string, payload rtevents.EventPayload) (int, []error) {
 			eventName = name
-			eventPayload, _ = payload.(map[string]any)
+			_ = json.Unmarshal(payload.Bytes(), &eventPayload)
 			return 1, nil
 		},
 	})
@@ -453,7 +457,7 @@ func TestWorkspaceSkillHandlersDiscoverFilterAndEmitChangeEvent(t *testing.T) {
 	if discover["ok"] != true || discover["count"] != float64(2) {
 		t.Fatalf("discover payload = %#v", discover)
 	}
-	if eventName != "skills.changed" || eventPayload["action"] != "discovered" || eventPayload["count"] != 2 {
+	if eventName != "skills.changed" || eventPayload["action"] != "discovered" || eventPayload["count"] != float64(2) {
 		t.Fatalf("discover event = %q %#v", eventName, eventPayload)
 	}
 

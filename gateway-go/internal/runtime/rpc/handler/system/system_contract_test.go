@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/maintenance"
@@ -450,9 +452,9 @@ func TestConfigSetBroadcastsAndRejectsStaleBaseHash(t *testing.T) {
 	t.Setenv("DENEB_CONFIG_PATH", path)
 	var event string
 	var payload map[string]any
-	methods := ConfigAdvancedMethods(ConfigAdvancedDeps{Broadcaster: func(gotEvent string, gotPayload any) (int, []error) {
+	methods := ConfigAdvancedMethods(ConfigAdvancedDeps{Broadcaster: func(gotEvent string, gotPayload events.EventPayload) (int, []error) {
 		event = gotEvent
-		payload, _ = gotPayload.(map[string]any)
+		_ = json.Unmarshal(gotPayload.Bytes(), &payload)
 		return 1, nil
 	}})
 	raw := `{"gateway":{"bind":"loopback"}}`
@@ -489,9 +491,9 @@ func TestConfigPatchMergesTopLevelObjectsAndBroadcastsContext(t *testing.T) {
 	}
 	var event string
 	var payload map[string]any
-	methods := ConfigAdvancedMethods(ConfigAdvancedDeps{Broadcaster: func(gotEvent string, gotPayload any) (int, []error) {
+	methods := ConfigAdvancedMethods(ConfigAdvancedDeps{Broadcaster: func(gotEvent string, gotPayload events.EventPayload) (int, []error) {
 		event = gotEvent
-		payload, _ = gotPayload.(map[string]any)
+		_ = json.Unmarshal(gotPayload.Bytes(), &payload)
 		return 1, nil
 	}})
 	resp := rpctest.Call(methods, "config.patch", map[string]any{

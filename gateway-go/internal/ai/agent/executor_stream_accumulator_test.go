@@ -13,7 +13,7 @@ func accumulatorEvent(t *testing.T, eventType string, payload any) llm.StreamEve
 	if err != nil {
 		t.Fatalf("marshal %s: %v", eventType, err)
 	}
-	return llm.StreamEvent{Type: eventType, Payload: raw}
+	return llm.StreamEvent{Type: eventType, Payload: llm.FlexibleFromRaw(raw)}
 }
 
 func accumulatorDelta(t *testing.T, index int, deltaType, text, thinking, signature, partialJSON string) llm.StreamEvent {
@@ -85,7 +85,7 @@ func TestStreamAccumulatorBuildsTypedBlocksAndDispatchesHooks(t *testing.T) {
 	if thinking.Thinking != "reason" || thinking.Text != "" || thinking.Signature != "sig" {
 		t.Errorf("thinking block = %+v, want reasoning/signature without visible text", thinking)
 	}
-	if len(result.toolCalls) != 1 || string(result.toolCalls[0].Input) != `{"path":"f.go"}` {
+	if len(result.toolCalls) != 1 || result.toolCalls[0].Input.String() != `{"path":"f.go"}` {
 		t.Errorf("tool calls = %+v, want one complete read call", result.toolCalls)
 	}
 	complete, err := accumulator.apply(llm.StreamEvent{Type: "message_stop"})

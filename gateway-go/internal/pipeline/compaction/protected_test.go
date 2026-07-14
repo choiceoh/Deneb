@@ -16,7 +16,7 @@ func fetchToolsCallMsg(t *testing.T, id string) llm.Message {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	return llm.Message{Role: "assistant", Content: raw}
+	return llm.Message{Role: "assistant", Content: llm.FlexibleFromRaw(raw)}
 }
 
 // toolResultMsgFor is toolResultMsg with an explicit tool_use_id.
@@ -27,7 +27,7 @@ func toolResultMsgFor(t *testing.T, toolUseID, content string) llm.Message {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	return llm.Message{Role: "user", Content: raw}
+	return llm.Message{Role: "user", Content: llm.FlexibleFromRaw(raw)}
 }
 
 func toolResultContentFor(t *testing.T, raw json.RawMessage) string {
@@ -64,10 +64,10 @@ func TestTruncateOldToolResults_ProtectsFetchToolsSchema(t *testing.T) {
 	if stubbed != 1 {
 		t.Fatalf("stubbed = %d, want 1 (only the unprotected result)", stubbed)
 	}
-	if got := toolResultContentFor(t, out[1].Content); got != schema {
+	if got := toolResultContentFor(t, json.RawMessage(out[1].Content.Bytes())); got != schema {
 		t.Errorf("fetch_tools schema was stubbed: %q", got[:min(40, len(got))])
 	}
-	if got := toolResultContentFor(t, out[2].Content); got == plain {
+	if got := toolResultContentFor(t, json.RawMessage(out[2].Content.Bytes())); got == plain {
 		t.Errorf("unprotected oversized result survived")
 	}
 }
@@ -89,10 +89,10 @@ func TestMicroCompact_PreservesFetchToolsSchemaFences(t *testing.T) {
 	if pruned != 1 {
 		t.Fatalf("pruned = %d, want 1 (only the unprotected result)", pruned)
 	}
-	if got := toolResultContentFor(t, out[1].Content); got != fenced {
+	if got := toolResultContentFor(t, json.RawMessage(out[1].Content.Bytes())); got != fenced {
 		t.Errorf("fetch_tools schema fences were stripped: %q", got)
 	}
-	if got := toolResultContentFor(t, out[2].Content); strings.Contains(got, "```") {
+	if got := toolResultContentFor(t, json.RawMessage(out[2].Content.Bytes())); strings.Contains(got, "```") {
 		t.Errorf("unprotected result kept its fences: %q", got)
 	}
 }
@@ -103,7 +103,7 @@ func TestProtectedToolResultIDs_ReturnsOnlyFetchToolsIDs(t *testing.T) {
 		func() llm.Message {
 			blocks := []llm.ContentBlock{{Type: "tool_use", ID: "ex_1", Name: "exec"}}
 			raw, _ := json.Marshal(blocks)
-			return llm.Message{Role: "assistant", Content: raw}
+			return llm.Message{Role: "assistant", Content: llm.FlexibleFromRaw(raw)}
 		}(),
 	}
 	ids := protectedToolResultIDs(messages)

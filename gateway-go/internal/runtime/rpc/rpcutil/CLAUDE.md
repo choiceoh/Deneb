@@ -13,7 +13,7 @@ composition root의 서비스 컨테이너를 소유한다. 도메인 handler는
   런타임 서비스를 한 번 조립한다. `GatewayHub.Validate`,
   `GatewayHub.AdvancePhase`, `GatewayHub.Broadcast`만 컨테이너 수준 동작이다.
 - `HandlerFunc`와 `BroadcastFunc`는 handler 패키지들이 공유하는 정본
-  시그니처다.
+  시그니처다. `BroadcastFunc`의 payload는 `events.EventPayload`다.
 
 ## 의존 방향과 불변조건
 
@@ -23,6 +23,9 @@ composition root의 서비스 컨테이너를 소유한다. 도메인 handler는
 - `GatewayHub` 등록 단계는 `PhaseInit → PhaseEarly → PhaseSession →
   PhaseLate` 순서만 허용한다. 시작 전 `Validate`가 모든 필수 의존성의 누락을
   한 오류에 보존해야 한다.
+- `BroadcastFunc`와 `GatewayHub.Broadcast`는 `events.EventPayload`를 받는다.
+  pipeline/domain 포트의 `any` payload는 server composition root에서만
+  `EventPayload`로 변환한다.
 - `Bind*`는 decode 실패 때 handler를 호출하면 안 되고, `*rpcerr.Error`의 code와
   details를 보존하며 일반 오류만 `INVALID_REQUEST`로 변환해야 한다.
 - nil request나 nil bound function은 panic하지 않고 요청 ID를 보존한 typed

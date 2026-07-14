@@ -6,6 +6,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
+
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -99,12 +101,14 @@ func TestChatBtwEmitsSideResultBroadcastOnSuccess(t *testing.T) {
 	var broadcasted bool
 	handlers := BtwMethods(BtwDeps{
 		Chat: &mockBtwHandler{result: "answer"},
-		Broadcaster: func(event string, payload any) (int, []error) {
+		Broadcaster: func(event string, payload events.EventPayload) (int, []error) {
 			broadcasted = true
 			if event != "chat.side_result" {
 				t.Fatalf("got %s, want event=chat.side_result", event)
 			}
-			m, ok := payload.(map[string]any)
+			var m map[string]any
+			_ = json.Unmarshal(payload.Bytes(), &m)
+			ok := m != nil
 			if !ok {
 				t.Fatal("expected map payload")
 			}

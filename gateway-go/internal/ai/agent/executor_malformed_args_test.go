@@ -27,14 +27,14 @@ func assertConversationIntegrity(t *testing.T, messages []llm.Message) []llm.Con
 	t.Helper()
 	var toolUses []llm.ContentBlock
 	for i, m := range messages {
-		if len(m.Content) == 0 {
+		if m.Content.Len() == 0 {
 			t.Fatalf("message %d (role=%s) has empty (0-byte) Content", i, m.Role)
 		}
-		if !json.Valid(m.Content) {
-			t.Fatalf("message %d (role=%s) has invalid JSON Content: %q", i, m.Role, m.Content)
+		if !json.Valid(m.Content.Bytes()) {
+			t.Fatalf("message %d (role=%s) has invalid JSON Content: %q", i, m.Role, m.Content.String())
 		}
 		var blocks []llm.ContentBlock
-		if err := json.Unmarshal(m.Content, &blocks); err != nil {
+		if err := json.Unmarshal(m.Content.Bytes(), &blocks); err != nil {
 			continue // plain text message
 		}
 		for _, b := range blocks {
@@ -82,7 +82,7 @@ func TestRunAgent_MalformedToolArgs_MessageIntegrity(t *testing.T) {
 	if tu.Name != "read" || tu.ID != "toolu_1" {
 		t.Errorf("tool_use mangled: name=%q id=%q", tu.Name, tu.ID)
 	}
-	if len(tu.Input) == 0 || !json.Valid(tu.Input) {
+	if tu.Input.Len() == 0 || !json.Valid(tu.Input.Bytes()) {
 		t.Errorf("tool_use Input in history is not valid JSON: %q", tu.Input)
 	}
 

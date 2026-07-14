@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+
+	rtevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpctest"
@@ -81,7 +83,7 @@ func TestStatus_withDeps(t *testing.T) {
 func TestSystemPresence_withBroadcast(t *testing.T) {
 	var capturedEvent string
 	deps := Deps{
-		Broadcast: func(event string, _ any) (int, []error) {
+		Broadcast: func(event string, _ rtevents.EventPayload) (int, []error) {
 			capturedEvent = event
 			return 2, nil
 		},
@@ -113,7 +115,7 @@ func TestSystemEvent_withBroadcast(t *testing.T) {
 	var capturedEvent string
 	var capturedPayload any
 	deps := Deps{
-		Broadcast: func(event string, payload any) (int, []error) {
+		Broadcast: func(event string, payload rtevents.EventPayload) (int, []error) {
 			capturedEvent = event
 			capturedPayload = payload
 			return 1, nil

@@ -17,9 +17,9 @@ import (
 // the trailing delta is still applied.
 func TestConsumeStreamInto_StopReasonNotClobberedByTrailingUsage(t *testing.T) {
 	events := make(chan llm.StreamEvent, 8)
-	events <- llm.StreamEvent{Type: "message_delta", Payload: json.RawMessage(`{"delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":5}}`)}
+	events <- llm.StreamEvent{Type: "message_delta", Payload: llm.FlexibleFromRaw([]byte(`{"delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":5}}`))}
 	// Trailing usage-only delta: carries final usage, no stop_reason.
-	events <- llm.StreamEvent{Type: "message_delta", Payload: json.RawMessage(`{"delta":{"stop_reason":""},"usage":{"output_tokens":12}}`)}
+	events <- llm.StreamEvent{Type: "message_delta", Payload: llm.FlexibleFromRaw([]byte(`{"delta":{"stop_reason":""},"usage":{"output_tokens":12}}`))}
 	events <- makeStreamEvent("message_stop")
 	close(events)
 
@@ -38,8 +38,8 @@ func TestConsumeStreamInto_StopReasonNotClobberedByTrailingUsage(t *testing.T) {
 
 func TestConsumeStreamInto_ZeroUsageTrailerDoesNotEraseProviderCount(t *testing.T) {
 	events := make(chan llm.StreamEvent, 4)
-	events <- llm.StreamEvent{Type: "message_delta", Payload: json.RawMessage(`{"delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":19}}`)}
-	events <- llm.StreamEvent{Type: "message_delta", Payload: json.RawMessage(`{"delta":{},"usage":{"output_tokens":0}}`)}
+	events <- llm.StreamEvent{Type: "message_delta", Payload: llm.FlexibleFromRaw([]byte(`{"delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":19}}`))}
+	events <- llm.StreamEvent{Type: "message_delta", Payload: llm.FlexibleFromRaw([]byte(`{"delta":{},"usage":{"output_tokens":0}}`))}
 	events <- makeStreamEvent("message_stop")
 	close(events)
 
@@ -55,8 +55,8 @@ func TestConsumeStreamInto_ZeroUsageTrailerDoesNotEraseProviderCount(t *testing.
 func TestConsumeStreamInto_ProviderModelIsStableWithinTurn(t *testing.T) {
 	t.Run("blank usage trailer does not erase model", func(t *testing.T) {
 		events := make(chan llm.StreamEvent, 3)
-		events <- llm.StreamEvent{Type: "message_start", Payload: json.RawMessage(`{"message":{"model":"served-model"}}`)}
-		events <- llm.StreamEvent{Type: "message_start", Payload: json.RawMessage(`{"message":{"model":""}}`)}
+		events <- llm.StreamEvent{Type: "message_start", Payload: llm.FlexibleFromRaw([]byte(`{"message":{"model":"served-model"}}`))}
+		events <- llm.StreamEvent{Type: "message_start", Payload: llm.FlexibleFromRaw([]byte(`{"message":{"model":""}}`))}
 		events <- makeStreamEvent("message_stop")
 		close(events)
 
@@ -71,8 +71,8 @@ func TestConsumeStreamInto_ProviderModelIsStableWithinTurn(t *testing.T) {
 
 	t.Run("different nonblank models fail closed", func(t *testing.T) {
 		events := make(chan llm.StreamEvent, 2)
-		events <- llm.StreamEvent{Type: "message_start", Payload: json.RawMessage(`{"message":{"model":"served-model-a"}}`)}
-		events <- llm.StreamEvent{Type: "message_start", Payload: json.RawMessage(`{"message":{"model":"served-model-b"}}`)}
+		events <- llm.StreamEvent{Type: "message_start", Payload: llm.FlexibleFromRaw([]byte(`{"message":{"model":"served-model-a"}}`))}
+		events <- llm.StreamEvent{Type: "message_start", Payload: llm.FlexibleFromRaw([]byte(`{"message":{"model":"served-model-b"}}`))}
 		close(events)
 
 		err := consumeStreamInto(context.Background(), events, StreamHooks{}, &turnResult{}, -1, nil)
@@ -87,7 +87,7 @@ func TestRunAgent_RequireProviderModelRejectsMissingOrChangedModel(t *testing.T)
 		events := buildTextTurnEvents("answer", 1, 1)
 		events[0] = llm.StreamEvent{
 			Type:    "message_start",
-			Payload: json.RawMessage(`{"message":{"usage":{"input_tokens":1}}}`),
+			Payload: llm.FlexibleFromRaw([]byte(`{"message":{"usage":{"input_tokens":1}}}`)),
 		}
 		streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{events}}
 
@@ -106,7 +106,7 @@ func TestRunAgent_RequireProviderModelRejectsMissingOrChangedModel(t *testing.T)
 		second := buildTextTurnEvents("answer", 1, 1)
 		second[0] = llm.StreamEvent{
 			Type:    "message_start",
-			Payload: json.RawMessage(`{"message":{"model":"other-model","usage":{"input_tokens":1}}}`),
+			Payload: llm.FlexibleFromRaw([]byte(`{"message":{"model":"other-model","usage":{"input_tokens":1}}}`)),
 		}
 		streamer := &fakeLLMStreamer{turns: [][]llm.StreamEvent{first, second}}
 
@@ -204,7 +204,7 @@ func TestRunAgent_HardTotalBudgetRejectsOverrunsViaLocalEstimate(t *testing.T) {
 		events := []llm.StreamEvent{
 			messageStartEvent(1),
 			contentBlockStartEvent(0, "thinking", ""),
-			{Type: "content_block_delta", Payload: thinkingPayload},
+			{Type: "content_block_delta", Payload: llm.FlexibleFromRaw(thinkingPayload)},
 			contentBlockStopEvent(0),
 			contentBlockStartToolUseEvent(1, "toolu_large", "read"),
 			toolInputDeltaEvent(1, "read", arguments),
@@ -270,7 +270,7 @@ func TestRunAgent_TotalOutputAndStreamCaps(t *testing.T) {
 
 	t.Run("stream bytes", func(t *testing.T) {
 		events := make(chan llm.StreamEvent, 1)
-		events <- llm.StreamEvent{Type: "content_block_delta", Payload: json.RawMessage(`{"payload":"too-large"}`)}
+		events <- llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw([]byte(`{"payload":"too-large"}`))}
 		close(events)
 		err := consumeStreamInto(context.Background(), events, StreamHooks{}, &turnResult{maxStreamBytes: 8}, -1, nil)
 		if !errors.Is(err, ErrStreamLimit) {

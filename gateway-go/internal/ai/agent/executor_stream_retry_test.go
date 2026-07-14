@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -103,7 +102,7 @@ func TestRunStreamingTurnWithRetryPolicy(t *testing.T) {
 	connectionErr := errors.New("dial failed")
 	errorEvent := llm.StreamEvent{
 		Type:    "error",
-		Payload: json.RawMessage(`{"message":"upstream fault"}`),
+		Payload: llm.FlexibleFromRaw([]byte(`{"message":"upstream fault"}`)),
 	}
 
 	tests := []struct {
@@ -223,7 +222,7 @@ func TestRunStreamingTurnWithRetryPreservesHooksAndResetsResult(t *testing.T) {
 		messageStartEvent(5),
 		contentBlockStartEvent(0, "text", ""),
 		textDeltaEvent(0, "partial"),
-		{Type: "error", Payload: json.RawMessage(`{"message":"interrupted"}`)},
+		{Type: "error", Payload: llm.FlexibleFromRaw([]byte(`{"message":"interrupted"}`))},
 	}
 	streamer := &scriptedRetryStreamer{attempts: []scriptedStreamAttempt{
 		{events: firstAttempt},
@@ -255,7 +254,7 @@ func TestRunAgentExposesStreamStats(t *testing.T) {
 		streamer := &scriptedRetryStreamer{attempts: []scriptedStreamAttempt{
 			{events: []llm.StreamEvent{{
 				Type:    "error",
-				Payload: json.RawMessage(`{"message":"transient"}`),
+				Payload: llm.FlexibleFromRaw([]byte(`{"message":"transient"}`)),
 			}}},
 			{events: buildTextTurnEvents("recovered", 10, 5)},
 		}}

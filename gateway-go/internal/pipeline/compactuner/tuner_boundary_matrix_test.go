@@ -69,7 +69,7 @@ func (f *boundaryLLM) StreamChat(_ context.Context, req llm.ChatRequest) (<-chan
 		payload, _ := json.Marshal(map[string]any{
 			"delta": map[string]string{"text": part},
 		})
-		ch <- llm.StreamEvent{Type: "content_block_delta", Payload: payload}
+		ch <- llm.StreamEvent{Type: "content_block_delta", Payload: llm.FlexibleFromRaw(payload)}
 	}
 	close(ch)
 	return ch, nil
@@ -621,7 +621,7 @@ func TestBoundaryCritiqueRequestContractAndClipping(t *testing.T) {
 		t.Fatalf("messages = %d, want 1", len(req.Messages))
 	}
 	var prompt string
-	if err := json.Unmarshal(req.Messages[0].Content, &prompt); err != nil {
+	if err := json.Unmarshal(req.Messages[0].Content.Bytes(), &prompt); err != nil {
 		t.Fatalf("decode message content: %v", err)
 	}
 	if !strings.Contains(prompt, "### 요약 1") || !strings.Contains(prompt, "### 요약 4") {

@@ -157,7 +157,7 @@ func TestLLMCompact_PreservesLeftoverAsRawMessages(t *testing.T) {
 	var rawSeen []string
 	for _, m := range compacted[1:] {
 		var text string
-		if jsonUnmarshalText(m.Content, &text) {
+		if jsonUnmarshalText(m.Content.Bytes(), &text) {
 			if marker := markerPattern.FindString(text); marker != "" {
 				rawSeen = append(rawSeen, marker)
 			}
@@ -169,11 +169,11 @@ func TestLLMCompact_PreservesLeftoverAsRawMessages(t *testing.T) {
 
 	// Fence first, recent tail last.
 	var fenceText string
-	if !jsonUnmarshalText(compacted[0].Content, &fenceText) || !strings.Contains(fenceText, "Polaris compaction") {
+	if !jsonUnmarshalText(compacted[0].Content.Bytes(), &fenceText) || !strings.Contains(fenceText, "Polaris compaction") {
 		t.Fatal("first message must be the compaction summary fence")
 	}
 	var lastText string
-	if !jsonUnmarshalText(compacted[len(compacted)-1].Content, &lastText) || lastText != "recent a5" {
+	if !jsonUnmarshalText(compacted[len(compacted)-1].Content.Bytes(), &lastText) || lastText != "recent a5" {
 		t.Fatalf("recent tail must be preserved; last = %q", lastText)
 	}
 }

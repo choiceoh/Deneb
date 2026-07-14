@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"slices"
 	"testing"
@@ -70,7 +71,7 @@ func TestTurnRequestPreparerLoadsDeferredInputsAfterFirstTurn(t *testing.T) {
 	deferredCall := 0
 	dynamicCall := 0
 	cfg := AgentConfig{
-		System: llm.SystemString("base"),
+		System: json.RawMessage(llm.SystemString("base").Bytes()),
 		Tools:  []llm.Tool{{Name: "write"}},
 		DeferredSystemText: func() string {
 			text := systemTexts[deferredCall]
@@ -181,7 +182,7 @@ func TestTurnRequestPreparerCreatesRequestWithAllConfigFields(t *testing.T) {
 	messages := []llm.Message{llm.NewTextMessage("user", "hello")}
 	cfg := AgentConfig{
 		Model:            "model",
-		System:           llm.SystemString("system"),
+		System: json.RawMessage(llm.SystemString("system").Bytes()),
 		MaxTokens:        1234,
 		Tools:            []llm.Tool{{Name: "read"}},
 		Thinking:         thinking,
@@ -199,7 +200,7 @@ func TestTurnRequestPreparerCreatesRequestWithAllConfigFields(t *testing.T) {
 	want := llm.ChatRequest{
 		Model:            cfg.Model,
 		Messages:         messages,
-		System:           cfg.System,
+		System:           llm.FlexibleFromRaw(cfg.System),
 		MaxTokens:        cfg.MaxTokens,
 		Tools:            cfg.Tools,
 		Stream:           true,
@@ -211,7 +212,7 @@ func TestTurnRequestPreparerCreatesRequestWithAllConfigFields(t *testing.T) {
 		PresencePenalty:  cfg.PresencePenalty,
 		StopSequences:    cfg.StopSequences,
 		ResponseFormat:   cfg.ResponseFormat,
-		ToolChoice:       cfg.ToolChoice,
+		ToolChoice:       llm.FlexibleFromValue(cfg.ToolChoice),
 	}
 	if !reflect.DeepEqual(request, want) {
 		t.Fatalf("request = %+v, want %+v", request, want)

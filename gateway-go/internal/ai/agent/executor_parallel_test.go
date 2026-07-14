@@ -24,7 +24,7 @@ func vetAll(string) bool { return true }
 
 func TestSegmentToolCalls_SplitsAtEachVetBoundary(t *testing.T) {
 	call := func(name, input string) llm.ContentBlock {
-		return llm.ContentBlock{Type: "tool_use", Name: name, Input: json.RawMessage(input)}
+		return llm.ContentBlock{Type: "tool_use", Name: name, Input: llm.FlexibleFromRaw([]byte(input))}
 	}
 	vetWeb := func(name string) bool { return name == "web" }
 	seg := func(start, end int, parallel bool) toolCallSegment {
@@ -118,7 +118,7 @@ func TestExecuteToolsParallel_OverlapsButPreservesCallOrder(t *testing.T) {
 	calls := make([]llm.ContentBlock, 3)
 	for i := range calls {
 		id := fmt.Sprintf("tu_%d", i)
-		calls[i] = llm.ContentBlock{Type: "tool_use", ID: id, Name: "web", Input: json.RawMessage(`{"id":"` + id + `"}`)}
+		calls[i] = llm.ContentBlock{Type: "tool_use", ID: id, Name: "web", Input: llm.FlexibleFromRaw([]byte(`{"id":"` + id + `"}`))}
 	}
 
 	start := time.Now()
@@ -155,17 +155,17 @@ func TestToolResultMetadata_PresentOrMissingAcrossPaths(t *testing.T) {
 		return "done", nil
 	})
 	calls := []llm.ContentBlock{
-		{Type: "tool_use", ID: "a", Name: "web", Input: json.RawMessage(`{"meta":1}`)},
-		{Type: "tool_use", ID: "b", Name: "web", Input: json.RawMessage(`{}`)},
+		{Type: "tool_use", ID: "a", Name: "web", Input: llm.FlexibleFromRaw([]byte(`{"meta":1}`))},
+		{Type: "tool_use", ID: "b", Name: "web", Input: llm.FlexibleFromRaw([]byte(`{}`))},
 	}
 
 	check := func(t *testing.T, results []llm.ContentBlock) {
 		t.Helper()
 		var tools []string
-		if !toolmeta.Get(results[0].Metadata, "activatedTools", &tools) || len(tools) != 1 {
+		if !toolmeta.Get(results[0].Metadata.Bytes(), "activatedTools", &tools) || len(tools) != 1 {
 			t.Fatalf("metadata not attached: %s", results[0].Metadata)
 		}
-		if results[1].Metadata != nil {
+		if !results[1].Metadata.IsZero() {
 			t.Fatalf("call that set nothing must keep Metadata absent, got %s", results[1].Metadata)
 		}
 	}
@@ -192,8 +192,8 @@ func TestExecuteToolsParallel_ErrorIsolation(t *testing.T) {
 		return "fine", nil
 	})
 	calls := []llm.ContentBlock{
-		{Type: "tool_use", ID: "a", Name: "web", Input: json.RawMessage(`{}`)},
-		{Type: "tool_use", ID: "b", Name: "web", Input: json.RawMessage(`{"boom":1}`)},
+		{Type: "tool_use", ID: "a", Name: "web", Input: llm.FlexibleFromRaw([]byte(`{}`))},
+		{Type: "tool_use", ID: "b", Name: "web", Input: llm.FlexibleFromRaw([]byte(`{"boom":1}`))},
 	}
 	results := executeToolsParallel(context.Background(), calls, exec, StreamHooks{}, "", 0, slog.Default(), nil, nil)
 	if results[0].IsError || results[0].Content != "fine" {

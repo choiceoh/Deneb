@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	rtevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
@@ -318,11 +320,12 @@ func TestCronAddRejectsInvalidInputAndBroadcastsOnSuccess(t *testing.T) {
 	var events []changed
 	methods := CronAdvancedMethods(CronAdvancedDeps{
 		Service: svc,
-		Broadcaster: func(name string, payload any) (int, []error) {
+		Broadcaster: func(name string, payload rtevents.EventPayload) (int, []error) {
 			if name != "cron.changed" {
 				t.Errorf("event name = %q", name)
 			}
-			m, _ := payload.(map[string]any)
+			var m map[string]any
+			_ = json.Unmarshal(payload.Bytes(), &m)
 			events = append(events, changed{action: fmt.Sprint(m["action"]), id: fmt.Sprint(m["id"])})
 			return 1, nil
 		},
