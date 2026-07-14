@@ -54,8 +54,8 @@ type restructureAction struct {
 	reason     string
 }
 
-// restructureReport summarizes a planned or applied migration.
-type restructureReport struct {
+// RestructureReport summarizes a planned or applied migration.
+type RestructureReport struct {
 	Actions []string // human-readable, in execution order
 	Skipped []string // decisions the rules refused to make (need a plan op)
 	Applied bool
@@ -70,11 +70,11 @@ var gmailIDRe = regexp.MustCompile(`^[0-9a-f]{16}$`)
 
 // RestructureProjectLayout migrates the wiki onto the per-project layout.
 // When apply is false only the report is produced; nothing is written.
-func RestructureProjectLayout(store *Store, plan []RestructureOp, apply bool) (*restructureReport, error) {
+func RestructureProjectLayout(store *Store, plan []RestructureOp, apply bool) (*RestructureReport, error) {
 	if store == nil {
 		return nil, fmt.Errorf("wiki: restructure needs a store")
 	}
-	rep := &restructureReport{}
+	rep := &RestructureReport{}
 	state, err := loadRestructurePlanningState(store, rep)
 	if err != nil {
 		return nil, err
@@ -118,11 +118,11 @@ type restructurePlanningState struct {
 	pages   map[string]*Page
 	exists  map[string]bool
 	actions []restructureAction
-	report  *restructureReport
+	report  *RestructureReport
 	today   string
 }
 
-func loadRestructurePlanningState(store *Store, report *restructureReport) (*restructurePlanningState, error) {
+func loadRestructurePlanningState(store *Store, report *RestructureReport) (*restructurePlanningState, error) {
 	paths, err := store.ListPages("")
 	if err != nil {
 		return nil, fmt.Errorf("wiki: restructure list pages: %w", err)
@@ -379,7 +379,7 @@ func renderRestructureActions(actions []restructureAction) []string {
 	return rendered
 }
 
-func executeRestructureActions(store *Store, actions []restructureAction, report *restructureReport) {
+func executeRestructureActions(store *Store, actions []restructureAction, report *RestructureReport) {
 	for _, action := range actions {
 		if err := executeRestructureAction(store, action); err != nil {
 			report.Errors = append(report.Errors,
@@ -410,7 +410,7 @@ func executeRestructureAction(store *Store, action restructureAction) error {
 	}
 }
 
-func countAppliedRestructureAction(report *restructureReport, kind string) {
+func countAppliedRestructureAction(report *RestructureReport, kind string) {
 	switch kind {
 	case "merge":
 		report.Merged++

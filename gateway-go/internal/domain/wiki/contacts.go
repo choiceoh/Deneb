@@ -83,8 +83,8 @@ func (s *Store) EnrichContacts(contactsJSON []byte) (ContactEnrichResult, error)
 	return res, nil
 }
 
-// peopleEnrichResult summarizes a write-time EnrichPeople run.
-type peopleEnrichResult struct {
+// PeopleEnrichResult summarizes a write-time EnrichPeople run.
+type PeopleEnrichResult struct {
 	Created []string // person-page titles newly created from the address book
 	Updated []string // existing person-page titles whose 연락처 was filled/changed
 }
@@ -105,8 +105,8 @@ type peopleEnrichResult struct {
 //     which is exactly the work-relevance signal the no-dump doctrine wants.
 //
 // Best-effort per name: one unreadable/unwritable page never aborts the rest.
-func (s *Store) EnrichPeople(names []string, book []contactdomain.Contact, createMissing bool) (peopleEnrichResult, error) {
-	var res peopleEnrichResult
+func (s *Store) EnrichPeople(names []string, book []contactdomain.Contact, createMissing bool) (PeopleEnrichResult, error) {
+	var res PeopleEnrichResult
 	if len(names) == 0 || len(book) == 0 {
 		return res, nil
 	}
