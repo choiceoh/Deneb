@@ -97,19 +97,7 @@ func emit(tokens []token, inputLen int, stripNoise bool) (string, *string) { //n
 
 		// --- Suppressed content ---
 		if ctx.suppressDepth > 0 {
-			alwaysSuppressed := tok.tag == tagScript || tok.tag == tagStyle || tok.tag == tagNoscript
-			noiseSuppressed := stripNoise && isNoiseTag(tok.tag)
-			if alwaysSuppressed || noiseSuppressed {
-				switch tok.kind {
-				case tokenTagOpen:
-					ctx.suppressDepth++
-				case tokenTagClose:
-					ctx.suppressDepth--
-					if ctx.suppressDepth < 0 {
-						ctx.suppressDepth = 0
-					}
-				}
-			}
+			trackSuppressed(ctx, tok, stripNoise)
 			continue
 		}
 
@@ -136,229 +124,255 @@ func emit(tokens []token, inputLen int, stripNoise bool) (string, *string) { //n
 	return ctx.out.String(), title
 }
 
+// trackSuppressed maintains the suppression nesting depth while content of a
+// suppressed element (script/style/noscript, or noise tags) is being skipped.
+func trackSuppressed(ctx *emitCtx, tok *token, stripNoise bool) {
+	alwaysSuppressed := tok.tag == tagScript || tok.tag == tagStyle || tok.tag == tagNoscript
+	noiseSuppressed := stripNoise && isNoiseTag(tok.tag)
+	if !alwaysSuppressed && !noiseSuppressed {
+		return
+	}
+	switch tok.kind {
+	case tokenTagOpen:
+		ctx.suppressDepth++
+	case tokenTagClose:
+		ctx.suppressDepth--
+		if ctx.suppressDepth < 0 {
+			ctx.suppressDepth = 0
+		}
+	}
+}
+
+// inlineMarks maps inline emphasis tags to their symmetric Markdown marker,
+// pushed on both open and close.
+var inlineMarks = map[tagName]string{
+	tagStrong: "**", tagB: "**",
+	tagEm: "*", tagI: "*",
+	tagS: "~~", tagDel: "~~", tagStrike: "~~",
+}
+
 func emitTagOpen(ctx *emitCtx, tok *token, stripNoise bool) {
+	if mark, ok := inlineMarks[tok.tag]; ok {
+		ctx.push(mark)
+		return
+	}
 	switch tok.tag {
 	// --- Suppression start ---
 	case tagScript, tagStyle, tagNoscript:
 		ctx.suppressDepth++
-		return
 	case tagNav, tagAside, tagSvg, tagIframe, tagForm:
+		// When not stripping noise, content flows as text.
 		if stripNoise {
 			ctx.suppressDepth++
-			return
 		}
-		// When not stripping noise, fall through — content flows as text.
-		return
 
-	// --- Title ---
+	// --- Compound elements buffered until close ---
 	case tagTitle:
 		ctx.inTitle = true
 		ctx.titleBuf.Reset()
-
-	// --- Links ---
 	case tagA:
 		ctx.inLink = true
 		ctx.linkHref = extractAttr(tok.raw, "href")
 		ctx.linkBuf.Reset()
-
-	// --- Emphasis (bold) ---
-	case tagStrong, tagB:
-		ctx.push("**")
-
-	// --- Emphasis (italic) ---
-	case tagEm, tagI:
-		ctx.push("*")
-
-	// --- Strikethrough ---
-	case tagS, tagDel, tagStrike:
-		ctx.push("~~")
-
-	// --- Pre blocks ---
-	case tagPre:
-		ctx.inPre = true
-
-	// --- Code ---
-	case tagCode:
-		if ctx.inPre {
-			ctx.inCodeInPre = true
-			lang := extractCodeLanguage(tok.raw)
-			ctx.out.WriteString("\n```")
-			ctx.out.WriteString(lang)
-			ctx.out.WriteByte('\n')
-		} else {
-			ctx.push("`")
-		}
-
-	// --- Headings ---
-	case tagH1, tagH2, tagH3, tagH4, tagH5, tagH6:
-		level := headingLevel(tok.tag)
-		ctx.out.WriteByte('\n')
-		for range level {
-			ctx.out.WriteByte('#')
-		}
-		ctx.out.WriteByte(' ')
-
-	// --- Images ---
-	case tagImg:
-		emitImage(ctx, tok.raw)
-
-	// --- Blockquotes ---
 	case tagBlockquote:
 		ctx.inBlockquote = true
 		ctx.blockquoteBuf.Reset()
+	case tagTable, tagTr, tagTh, tagTd:
+		openTableTag(ctx, tok.tag)
 
-	// --- Tables ---
-	case tagTable:
-		ctx.inTable = true
-		ctx.tableBuilder = tableBuilder{}
-	case tagTr:
-		if ctx.inTable {
-			ctx.tableBuilder.startRow()
-		}
-	case tagTh:
-		if ctx.inTable {
-			ctx.tableBuilder.endCell()
-			ctx.tableBuilder.startCell(true)
-		}
-	case tagTd:
-		if ctx.inTable {
-			ctx.tableBuilder.endCell()
-			ctx.tableBuilder.startCell(false)
-		}
+	// --- Code blocks ---
+	case tagPre:
+		ctx.inPre = true
+	case tagCode:
+		openCode(ctx, tok.raw)
+
+	// --- Headings ---
+	case tagH1, tagH2, tagH3, tagH4, tagH5, tagH6:
+		openHeading(ctx, tok.tag)
 
 	// --- Lists ---
-	case tagOl:
-		ctx.listStack = append(ctx.listStack, listCtx{ordered: true})
-	case tagUl:
-		ctx.listStack = append(ctx.listStack, listCtx{ordered: false})
+	case tagOl, tagUl:
+		ctx.listStack = append(ctx.listStack, listCtx{ordered: tok.tag == tagOl})
 	case tagLi:
-		if n := len(ctx.listStack); n > 0 {
-			lc := &ctx.listStack[n-1]
-			if lc.ordered {
-				lc.counter++
-				fmt.Fprintf(&ctx.out, "\n%d. ", lc.counter)
-			} else {
-				ctx.out.WriteString("\n- ")
-			}
-		} else {
-			ctx.out.WriteString("\n- ")
-		}
+		openListItem(ctx)
 
-	// --- Line breaks ---
-	case tagBr, tagHr:
-		ctx.out.WriteByte('\n')
-
-	// --- Block elements: opening does nothing (close emits newline) ---
-	case tagP, tagDiv, tagSection, tagArticle, tagHeader, tagFooter:
-		// No output on open.
+	// --- Void elements (same handling as their self-closing form) ---
+	case tagBr, tagHr, tagImg:
+		emitSelfClosing(ctx, tok)
 
 	default:
-		// tagOther and remaining tags: no special handling.
+		// Block elements (p/div/section/...) emit nothing on open (close
+		// emits a newline); tagOther has no special handling.
+	}
+}
+
+func openCode(ctx *emitCtx, raw string) {
+	if !ctx.inPre {
+		ctx.push("`")
+		return
+	}
+	ctx.inCodeInPre = true
+	lang := extractCodeLanguage(raw)
+	ctx.out.WriteString("\n```")
+	ctx.out.WriteString(lang)
+	ctx.out.WriteByte('\n')
+}
+
+func openHeading(ctx *emitCtx, tag tagName) {
+	ctx.out.WriteByte('\n')
+	for range headingLevel(tag) {
+		ctx.out.WriteByte('#')
+	}
+	ctx.out.WriteByte(' ')
+}
+
+func openListItem(ctx *emitCtx) {
+	n := len(ctx.listStack)
+	if n == 0 || !ctx.listStack[n-1].ordered {
+		ctx.out.WriteString("\n- ")
+		return
+	}
+	lc := &ctx.listStack[n-1]
+	lc.counter++
+	fmt.Fprintf(&ctx.out, "\n%d. ", lc.counter)
+}
+
+func openTableTag(ctx *emitCtx, tag tagName) {
+	if tag == tagTable {
+		ctx.inTable = true
+		ctx.tableBuilder = tableBuilder{}
+		return
+	}
+	if !ctx.inTable {
+		return
+	}
+	switch tag {
+	case tagTr:
+		ctx.tableBuilder.startRow()
+	case tagTh:
+		ctx.tableBuilder.endCell()
+		ctx.tableBuilder.startCell(true)
+	case tagTd:
+		ctx.tableBuilder.endCell()
+		ctx.tableBuilder.startCell(false)
 	}
 }
 
 func emitTagClose(ctx *emitCtx, tok *token) {
+	if mark, ok := inlineMarks[tok.tag]; ok {
+		ctx.push(mark)
+		return
+	}
 	switch tok.tag {
 	case tagTitle:
-		ctx.inTitle = false
-		t := normalizeInline(ctx.titleBuf.String())
-		if t != "" {
-			ctx.title = &t
-		}
-
+		closeTitle(ctx)
 	case tagA:
-		if ctx.inLink {
-			label := normalizeInline(ctx.linkBuf.String())
-			href := ctx.linkHref
-			target := ctx.activeBuf()
-			if href != "" {
-				if label == "" {
-					target.WriteString(href)
-				} else {
-					target.WriteByte('[')
-					target.WriteString(label)
-					target.WriteString("](")
-					target.WriteString(href)
-					target.WriteByte(')')
-				}
-			} else {
-				target.WriteString(label)
-			}
-			ctx.inLink = false
-			ctx.linkHref = ""
-		}
-
-	case tagStrong, tagB:
-		ctx.push("**")
-	case tagEm, tagI:
-		ctx.push("*")
-	case tagS, tagDel, tagStrike:
-		ctx.push("~~")
-
+		closeLink(ctx)
 	case tagPre:
-		if ctx.inPre && !ctx.inCodeInPre {
-			ctx.out.WriteString("\n```\n")
-		}
-		ctx.inPre = false
-		ctx.inCodeInPre = false
-
+		closePre(ctx)
 	case tagCode:
-		if ctx.inCodeInPre {
-			ctx.out.WriteString("\n```\n")
-			ctx.inCodeInPre = false
-		} else {
-			ctx.push("`")
-		}
-
-	case tagH1, tagH2, tagH3, tagH4, tagH5, tagH6:
-		ctx.out.WriteByte('\n')
-
+		closeCode(ctx)
 	case tagBlockquote:
-		if ctx.inBlockquote {
-			text := normalizeInline(ctx.blockquoteBuf.String())
-			if text != "" {
-				ctx.out.WriteByte('\n')
-				for _, line := range strings.Split(text, "\n") {
-					ctx.out.WriteString("> ")
-					ctx.out.WriteString(line)
-					ctx.out.WriteByte('\n')
-				}
-			}
-			ctx.inBlockquote = false
-		}
-
-	case tagTable:
-		if ctx.inTable {
-			md := ctx.tableBuilder.toMarkdown()
-			if md != "" {
-				ctx.out.WriteByte('\n')
-				ctx.out.WriteString(md)
-			}
-			ctx.inTable = false
-		}
-	case tagTr:
-		if ctx.inTable {
-			ctx.tableBuilder.endCell()
-			ctx.tableBuilder.endRow()
-		}
-	case tagTh, tagTd:
-		if ctx.inTable {
-			ctx.tableBuilder.endCell()
-		}
-
+		closeBlockquote(ctx)
+	case tagTable, tagTr, tagTh, tagTd:
+		closeTableTag(ctx, tok.tag)
 	case tagOl, tagUl:
 		if len(ctx.listStack) > 0 {
 			ctx.listStack = ctx.listStack[:len(ctx.listStack)-1]
 		}
-
-	case tagLi:
-		// No action needed.
-
-	case tagP, tagDiv, tagSection, tagArticle, tagHeader, tagFooter:
+	case tagH1, tagH2, tagH3, tagH4, tagH5, tagH6,
+		tagP, tagDiv, tagSection, tagArticle, tagHeader, tagFooter:
+		// Headings and block elements close with a newline.
 		ctx.out.WriteByte('\n')
-
 	default:
-		// tagOther, suppression tags, etc.: no close action.
+		// tagLi, tagOther, suppression tags, etc.: no close action.
+	}
+}
+
+func closeTitle(ctx *emitCtx) {
+	ctx.inTitle = false
+	t := normalizeInline(ctx.titleBuf.String())
+	if t != "" {
+		ctx.title = &t
+	}
+}
+
+// closeLink flushes the buffered link as [label](href), bare href, or bare label.
+func closeLink(ctx *emitCtx) {
+	if !ctx.inLink {
+		return
+	}
+	label := normalizeInline(ctx.linkBuf.String())
+	href := ctx.linkHref
+	ctx.inLink = false
+	ctx.linkHref = ""
+	target := ctx.activeBuf()
+	if href == "" {
+		target.WriteString(label)
+		return
+	}
+	if label == "" {
+		target.WriteString(href)
+		return
+	}
+	target.WriteByte('[')
+	target.WriteString(label)
+	target.WriteString("](")
+	target.WriteString(href)
+	target.WriteByte(')')
+}
+
+func closePre(ctx *emitCtx) {
+	if ctx.inPre && !ctx.inCodeInPre {
+		ctx.out.WriteString("\n```\n")
+	}
+	ctx.inPre = false
+	ctx.inCodeInPre = false
+}
+
+func closeCode(ctx *emitCtx) {
+	if !ctx.inCodeInPre {
+		ctx.push("`")
+		return
+	}
+	ctx.out.WriteString("\n```\n")
+	ctx.inCodeInPre = false
+}
+
+func closeBlockquote(ctx *emitCtx) {
+	if !ctx.inBlockquote {
+		return
+	}
+	ctx.inBlockquote = false
+	text := normalizeInline(ctx.blockquoteBuf.String())
+	if text == "" {
+		return
+	}
+	ctx.out.WriteByte('\n')
+	for _, line := range strings.Split(text, "\n") {
+		ctx.out.WriteString("> ")
+		ctx.out.WriteString(line)
+		ctx.out.WriteByte('\n')
+	}
+}
+
+func closeTableTag(ctx *emitCtx, tag tagName) {
+	if !ctx.inTable {
+		return
+	}
+	switch tag {
+	case tagTable:
+		md := ctx.tableBuilder.toMarkdown()
+		if md != "" {
+			ctx.out.WriteByte('\n')
+			ctx.out.WriteString(md)
+		}
+		ctx.inTable = false
+	case tagTr:
+		ctx.tableBuilder.endCell()
+		ctx.tableBuilder.endRow()
+	case tagTh, tagTd:
+		ctx.tableBuilder.endCell()
 	}
 }
 
@@ -419,17 +433,11 @@ func extractAttr(tag, attr string) string {
 		i++
 	}
 	for i < len(tag) {
-		for i < len(tag) && (isAttrSpace(tag[i]) || tag[i] == '/') {
-			i++
-		}
-		if i >= len(tag) || tag[i] == '>' {
+		name, next, ok := scanAttrName(tag, i)
+		if !ok {
 			return ""
 		}
-		nameStart := i
-		for i < len(tag) && !isAttrSpace(tag[i]) && tag[i] != '=' && tag[i] != '>' && tag[i] != '/' {
-			i++
-		}
-		name := tag[nameStart:i]
+		i = next
 		for i < len(tag) && isAttrSpace(tag[i]) {
 			i++
 		}
@@ -438,37 +446,63 @@ func extractAttr(tag, attr string) string {
 			// either the next attribute name or the end of the tag.
 			continue
 		}
-		i++
-		for i < len(tag) && isAttrSpace(tag[i]) {
-			i++
-		}
-		if i >= len(tag) {
+		valueStart, valueEnd, valueNext, valueOK := scanAttrValue(tag, i+1)
+		if !valueOK {
 			return ""
 		}
-		valueStart := i
-		valueEnd := i
-		if tag[i] == '"' || tag[i] == '\'' {
-			quote := tag[i]
-			valueStart = i + 1
-			valueEnd = valueStart
-			for valueEnd < len(tag) && tag[valueEnd] != quote {
-				valueEnd++
-			}
-			if valueEnd >= len(tag) {
-				return ""
-			}
-			i = valueEnd + 1
-		} else {
-			for valueEnd < len(tag) && !isAttrSpace(tag[valueEnd]) && tag[valueEnd] != '>' {
-				valueEnd++
-			}
-			i = valueEnd
-		}
+		i = valueNext
 		if strings.EqualFold(name, attr) {
 			return tag[valueStart:valueEnd]
 		}
 	}
 	return ""
+}
+
+// scanAttrName skips whitespace and '/' then scans one attribute name starting
+// at i. Returns the name and the index just past it; ok=false when the tag
+// ends (or '>' is reached) before another attribute starts.
+func scanAttrName(tag string, i int) (name string, next int, ok bool) {
+	for i < len(tag) && (isAttrSpace(tag[i]) || tag[i] == '/') {
+		i++
+	}
+	if i >= len(tag) || tag[i] == '>' {
+		return "", 0, false
+	}
+	start := i
+	for i < len(tag) && !isAttrSpace(tag[i]) && tag[i] != '=' && tag[i] != '>' && tag[i] != '/' {
+		i++
+	}
+	return tag[start:i], i, true
+}
+
+// scanAttrValue scans an attribute value starting just past '='. Returns the
+// value bounds and the index past the value; ok=false for a truncated tag
+// (missing value or unterminated quote).
+func scanAttrValue(tag string, i int) (start, end, next int, ok bool) {
+	for i < len(tag) && isAttrSpace(tag[i]) {
+		i++
+	}
+	if i >= len(tag) {
+		return 0, 0, 0, false
+	}
+	if tag[i] == '"' || tag[i] == '\'' {
+		quote := tag[i]
+		start = i + 1
+		end = start
+		for end < len(tag) && tag[end] != quote {
+			end++
+		}
+		if end >= len(tag) {
+			return 0, 0, 0, false
+		}
+		return start, end, end + 1, true
+	}
+	start = i
+	end = i
+	for end < len(tag) && !isAttrSpace(tag[end]) && tag[end] != '>' {
+		end++
+	}
+	return start, end, end, true
 }
 
 func isAttrSpace(ch byte) bool {

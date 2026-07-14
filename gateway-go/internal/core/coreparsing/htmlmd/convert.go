@@ -94,95 +94,26 @@ const (
 	tagForm
 )
 
+// tagNames maps lowercase tag names to their tagName constants.
+var tagNames = map[string]tagName{
+	"script": tagScript, "style": tagStyle, "noscript": tagNoscript,
+	"a": tagA, "b": tagB, "strong": tagStrong, "em": tagEm, "i": tagI,
+	"s": tagS, "del": tagDel, "strike": tagStrike,
+	"h1": tagH1, "h2": tagH2, "h3": tagH3, "h4": tagH4, "h5": tagH5, "h6": tagH6,
+	"pre": tagPre, "code": tagCode, "img": tagImg, "blockquote": tagBlockquote,
+	"table": tagTable, "tr": tagTr, "th": tagTh, "td": tagTd,
+	"ol": tagOl, "ul": tagUl, "li": tagLi, "br": tagBr, "hr": tagHr,
+	"p": tagP, "div": tagDiv, "section": tagSection, "article": tagArticle,
+	"header": tagHeader, "footer": tagFooter, "title": tagTitle,
+	"nav": tagNav, "aside": tagAside, "svg": tagSvg, "iframe": tagIframe,
+	"form": tagForm,
+}
+
 func tagNameFromLower(s string) tagName {
-	switch s {
-	case "script":
-		return tagScript
-	case "style":
-		return tagStyle
-	case "noscript":
-		return tagNoscript
-	case "a":
-		return tagA
-	case "b":
-		return tagB
-	case "strong":
-		return tagStrong
-	case "em":
-		return tagEm
-	case "i":
-		return tagI
-	case "s":
-		return tagS
-	case "del":
-		return tagDel
-	case "strike":
-		return tagStrike
-	case "h1":
-		return tagH1
-	case "h2":
-		return tagH2
-	case "h3":
-		return tagH3
-	case "h4":
-		return tagH4
-	case "h5":
-		return tagH5
-	case "h6":
-		return tagH6
-	case "pre":
-		return tagPre
-	case "code":
-		return tagCode
-	case "img":
-		return tagImg
-	case "blockquote":
-		return tagBlockquote
-	case "table":
-		return tagTable
-	case "tr":
-		return tagTr
-	case "th":
-		return tagTh
-	case "td":
-		return tagTd
-	case "ol":
-		return tagOl
-	case "ul":
-		return tagUl
-	case "li":
-		return tagLi
-	case "br":
-		return tagBr
-	case "hr":
-		return tagHr
-	case "p":
-		return tagP
-	case "div":
-		return tagDiv
-	case "section":
-		return tagSection
-	case "article":
-		return tagArticle
-	case "header":
-		return tagHeader
-	case "footer":
-		return tagFooter
-	case "title":
-		return tagTitle
-	case "nav":
-		return tagNav
-	case "aside":
-		return tagAside
-	case "svg":
-		return tagSvg
-	case "iframe":
-		return tagIframe
-	case "form":
-		return tagForm
-	default:
-		return tagOther
+	if tag, ok := tagNames[s]; ok {
+		return tag
 	}
+	return tagOther
 }
 
 func isVoidTag(tag tagName) bool {
@@ -264,21 +195,11 @@ func scanTag(input string, pos int, tokens *[]token) int {
 
 	// Closing tag?
 	if strings.HasPrefix(inner, "/") {
-		nameStr := inner[1:]
-		nameEnd := strings.IndexFunc(nameStr, isWhitespaceOrGT)
-		if nameEnd < 0 {
-			nameEnd = len(nameStr)
-		}
-		nameLower := strings.ToLower(nameStr[:nameEnd])
-		tag := tagNameFromLower(nameLower)
-		*tokens = append(*tokens, token{kind: tokenTagClose, tag: tag})
-		return gt + 1
+		return scanCloseTag(inner, gt, tokens)
 	}
 
 	// Opening or self-closing tag. Extract tag name.
-	nameEnd := strings.IndexFunc(inner, func(r rune) bool {
-		return r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == '/' || r == '>'
-	})
+	nameEnd := strings.IndexFunc(inner, isTagNameEnd)
 	if nameEnd < 0 {
 		nameEnd = len(inner)
 	}
@@ -292,9 +213,7 @@ func scanTag(input string, pos int, tokens *[]token) int {
 	tag := tagNameFromLower(nameLower)
 
 	// Self-closing: ends with '/' before '>', or is a void element.
-	isSelfClosing := strings.HasSuffix(inner, "/") || isVoidTag(tag)
-
-	if isSelfClosing {
+	if strings.HasSuffix(inner, "/") || isVoidTag(tag) {
 		*tokens = append(*tokens, token{kind: tokenSelfClosing, tag: tag, raw: tagStr})
 	} else {
 		*tokens = append(*tokens, token{kind: tokenTagOpen, tag: tag, raw: tagStr})
@@ -302,26 +221,45 @@ func scanTag(input string, pos int, tokens *[]token) int {
 
 	// For script/style/noscript: find matching close tag, emit raw content.
 	if tag == tagScript || tag == tagStyle || tag == tagNoscript {
-		closeTag := "</" + nameLower + ">"
-		searchFrom := gt + 1
-		lowerRest := strings.ToLower(input[searchFrom:])
-		closeRel := strings.Index(lowerRest, closeTag)
-		if closeRel >= 0 {
-			contentEnd := searchFrom + closeRel
-			if contentEnd > searchFrom {
-				*tokens = append(*tokens, token{kind: tokenText, text: input[searchFrom:contentEnd]})
-			}
-			*tokens = append(*tokens, token{kind: tokenTagClose, tag: tag})
-			return contentEnd + len(closeTag)
-		}
+		return scanRawContent(input, gt+1, nameLower, tag, tokens)
+	}
+
+	return gt + 1
+}
+
+// scanCloseTag processes a closing tag whose inner text (after '<') starts
+// with '/'. Returns the cursor position past the tag's '>'.
+func scanCloseTag(inner string, gt int, tokens *[]token) int {
+	nameStr := inner[1:]
+	nameEnd := strings.IndexFunc(nameStr, isWhitespaceOrGT)
+	if nameEnd < 0 {
+		nameEnd = len(nameStr)
+	}
+	tag := tagNameFromLower(strings.ToLower(nameStr[:nameEnd]))
+	*tokens = append(*tokens, token{kind: tokenTagClose, tag: tag})
+	return gt + 1
+}
+
+// scanRawContent consumes raw element content (script/style/noscript) up to
+// the matching close tag, emitting it as a single text token. Returns the
+// cursor position past the close tag, or end of input if none is found.
+func scanRawContent(input string, searchFrom int, nameLower string, tag tagName, tokens *[]token) int {
+	closeTag := "</" + nameLower + ">"
+	lowerRest := strings.ToLower(input[searchFrom:])
+	closeRel := strings.Index(lowerRest, closeTag)
+	if closeRel < 0 {
 		// No closing tag found — rest is all suppressed content.
 		if searchFrom < len(input) {
 			*tokens = append(*tokens, token{kind: tokenText, text: input[searchFrom:]})
 		}
 		return len(input)
 	}
-
-	return gt + 1
+	contentEnd := searchFrom + closeRel
+	if contentEnd > searchFrom {
+		*tokens = append(*tokens, token{kind: tokenText, text: input[searchFrom:contentEnd]})
+	}
+	*tokens = append(*tokens, token{kind: tokenTagClose, tag: tag})
+	return contentEnd + len(closeTag)
 }
 
 // scanEntity processes an entity starting at pos ('&'). Returns new cursor.
@@ -337,4 +275,9 @@ func scanEntity(input string, pos int, tokens *[]token) int {
 
 func isWhitespaceOrGT(r rune) bool {
 	return r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == '>'
+}
+
+// isTagNameEnd reports whether r terminates a tag name in an opening tag.
+func isTagNameEnd(r rune) bool {
+	return r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == '/' || r == '>'
 }
