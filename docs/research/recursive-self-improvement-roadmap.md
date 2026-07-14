@@ -452,7 +452,7 @@ Staged locks and the evidence that flips them (thresholds are proposals,
 operator-tunable):
 
 > **Ladder-readiness engine landed 2026-07-13** (`genesis/rsi_ladder.go` +
-> `rsi_status.py` mirror): every machine-checkable row below is now scored
+> `scripts/audit/rsi_status.py` mirror): every machine-checkable row below is now scored
 > CONTINUOUSLY against its evidence stream (e-process labels, dispatch-outcome
 > land rate, staged-source candidate counts, per-epoch bench samples since the
 > P5-2 window opened) and surfaced as a fifth "졸업 사다리" card (Key `GRAD`)
@@ -470,7 +470,7 @@ operator-tunable):
 > 해제도 에이전트에게 맡겨버려. 그래야 재귀적 자기개선이지"). The watch now
 > EXECUTES evidence-met unlocks itself via the loop-owned graduation state
 > (`graduation_state.go` → `~/.deneb/data/graduation_state.json`, read by
-> the Go dashboards, `coding-dispatch.sh`, and `rsi_status.py` so the three
+> the Go dashboards, `scripts/dev/coding-dispatch.sh`, and `scripts/audit/rsi_status.py` so the three
 > allowlists cannot drift). Trust architecture mirrors P2 auto-adoption:
 > compiled thresholds ARE the ratified policy (the loop executes, never
 > edits — `rsi_ladder.go`/`ladder_watch.go`/`graduation_state.go`/
@@ -488,7 +488,7 @@ operator-tunable):
 | Lock (today) | Evidence to graduate | Action |
 |---|---|---|
 | runtime-error source not dispatchable (#3491 staging) | first 3–5 mined candidates review clean (no hallucinated signatures) | allowlist flip in coding-dispatch.sh + rsi_status L4_SOURCES |
-| ~~health-finding source not dispatchable~~ **GRADUATED 2026-07-12** | first batch (7) reviewed clean: finding IDs deterministic + independently reproduced at HEAD, no hallucinated signatures, remediation directions actionable with the safety contract embedded; wiki pair ([1] volatile-contract / [6] volatile-hub) dedups via the reproduce-at-HEAD precheck; two doctrine-tension candidates (runtime/server fan-out = composition root, toolctx co-change = designed leaf) rely on the dispatch bail-out clause | flipped: coding-dispatch.sh + rsi_status (py & Go) |
+| ~~health-finding source not dispatchable~~ **GRADUATED 2026-07-12** | first batch (7) reviewed clean: finding IDs deterministic + independently reproduced at HEAD, no hallucinated signatures, remediation directions actionable with the safety contract embedded; wiki pair ([1] volatile-contract / [6] volatile-hub) dedups via the reproduce-at-HEAD precheck; two doctrine-tension candidates (runtime/server fan-out = composition root, toolport co-change = designed leaf) rely on the dispatch bail-out clause | flipped: coding-dispatch.sh + rsi_status (py & Go) |
 | e-process observation mode (#3439) | disagreement labels n≥20, legacy-agreement ≥90% — readiness now computed live (`EProcessCutoverReadiness`, rsi_status L1) | cutover mechanism landed 2026-07-12: set `DENEB_EPROCESS_OWNS_ROLLBACK=1` when readiness reads ready |
 | L4 daily dispatch cap = 2 | N dispatches with 0 deploy-watch rollbacks and ≥50% land rate — *land rate is now MEASURED (2026-07-13): each dispatch marker records its session outcome (landed/declined/failed/timeout/attempted; `dispatch_outcome.py` decision table from PR-state + worktree facts, attempted reprobed on later ticks), aggregated on `rsi_status` L4 both sides* | raise DENEB_DISPATCH_DAILY_CAP |
 | deploy-watch = binary rollback only | one rollback exercised end-to-end (real or fire-drill) | open the source auto-apply tier per the L4 note |

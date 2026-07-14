@@ -130,7 +130,7 @@ func compactTurnMessages(ctx context.Context, params RunParams, deps runDeps, mr
 	// syncCompactionStall bounds the in-turn (STW) compaction — the backstop
 	// for cases that cannot defer to the background pass (first compaction,
 	// models with no window headroom, the hard ceiling). Raised 2m→3m so the
-	// parallel chunk summaries have room to finish when the analysis model is
+	// parallel chunk summaries have room to finish when the main-role model is
 	// slow under GPU contention (the "polaris: chunk summarization failed …
 	// context deadline exceeded" warnings), rather than failing and re-running
 	// the same first compaction every turn. Stays well under the 5m turn

@@ -9,7 +9,7 @@ import (
 
 // GatewayRuntimeConfig holds the fully resolved gateway runtime settings
 // after applying CLI overrides, environment variables, and validation constraints.
-// This mirrors src/gateway/server-runtime-config.ts GatewayRuntimeConfig.
+// Originally mirrored GatewayRuntimeConfig from the retired TypeScript gateway.
 type GatewayRuntimeConfig struct {
 	BindHost          string
 	Port              int
@@ -37,7 +37,7 @@ type RuntimeConfigParams struct {
 }
 
 // ResolveGatewayRuntimeConfig validates constraints and produces the final runtime config.
-// This ports the logic from src/gateway/server-runtime-config.ts.
+// Originally ported from the retired TypeScript gateway runtime-config logic.
 func ResolveGatewayRuntimeConfig(params RuntimeConfigParams) (*GatewayRuntimeConfig, error) {
 	sources := selectGatewayRuntimeSources(params)
 	inputs := applyGatewayRuntimeDefaults(sources)

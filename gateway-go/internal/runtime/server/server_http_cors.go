@@ -10,7 +10,7 @@
 // Auth is the custom X-Deneb-Client-Token header, never a cookie, which means:
 //   - the browser sends a CORS preflight (OPTIONS) before each call, and that
 //     preflight carries no token — so we must answer it here, ahead of the mux
-//     and authenticateMiniappRequest (which would otherwise 401 it), and
+//     and nativeauth.Authenticate (which would otherwise 401 it), and
 //   - the actual request carries no ambient credentials. We echo the request
 //     Origin (with Vary: Origin) instead of "*": this is friendlier to future
 //     credentialed use and to caches, and is safe precisely because the token is

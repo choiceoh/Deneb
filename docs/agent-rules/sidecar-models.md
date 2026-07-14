@@ -1,6 +1,6 @@
 ---
 description: 로컬 GPU 사이드카 모델 운영 현황 (OCR/ASR/추출/임베딩) — 엔드포인트·기동·배선·폴백
-globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/internal/pipeline/chat/tools/asr.go", "gateway-go/internal/pipeline/chat/tools/docparse.go", "gateway-go/internal/pipeline/chat/web/web_html.go", "gateway-go/internal/ai/modelrole/**", "gateway-go/internal/pipeline/pilot/**", "gateway-go/cmd/wormhole/**", "scripts/deploy/start-wormhole.sh", "scripts/deploy/wormhole.service"]
+globs: ["gateway-go/internal/pipeline/chat/tools/document/paddleocr.go", "gateway-go/internal/pipeline/chat/tools/artifact/asr.go", "gateway-go/internal/pipeline/chat/tools/document/docparse.go", "gateway-go/internal/pipeline/chat/web/web_html.go", "gateway-go/internal/ai/modelrole/**", "gateway-go/internal/pipeline/pilot/**", "gateway-go/cmd/wormhole/**", "scripts/deploy/start-wormhole.sh", "scripts/deploy/wormhole.service"]
 ---
 
 # Sidecar Models (GPU 부가 모델 운영 현황)
@@ -11,8 +11,8 @@ globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/inte
 
 | 모델 | 역할 | 기본 엔드포인트 | 코드 진입점 | 비고 |
 |---|---|---|---|---|
-| **PaddleOCR-VL-1.6** (0.9B) | 문서 OCR (스캔 PDF·이미지 첨부) | `http://127.0.0.1:18011/v1` | `chat/tools/paddleocr.go` | 상주 서빙. tesseract 폴백 있음. ↓ 상세 |
-| **VibeVoice-ASR** (9B) | 음성 전사 + 화자분리 + 타임스탬프 (최대 60분·50+개 언어·한국어) | `http://127.0.0.1:18013` (`POST /v1/transcribe`, OpenAI 비호환) | `chat/tools/asr.go` | transformers+FastAPI 상주. 핫워드로 고유명사 교정. `miniapp.capture.audio` 캡처 배선(#1847). ↓ 상세 |
+| **PaddleOCR-VL-1.6** (0.9B) | 문서 OCR (스캔 PDF·이미지 첨부) | `http://127.0.0.1:18011/v1` | `chat/tools/document/paddleocr.go` | 상주 서빙. tesseract 폴백 있음. ↓ 상세 |
+| **VibeVoice-ASR** (9B) | 음성 전사 + 화자분리 + 타임스탬프 (최대 60분·50+개 언어·한국어) | `http://127.0.0.1:18013` (`POST /v1/transcribe`, OpenAI 비호환) | `chat/tools/artifact/asr.go` | transformers+FastAPI 상주. 핫워드로 고유명사 교정. `miniapp.capture.audio` 캡처 배선(#1847). ↓ 상세 |
 | 메인 챗 LLM | 대화/분석/도구호출 | provider config (Anthropic/OpenRouter/vLLM 등) | `pipeline/chat/run_provider.go` | modelrole `main`. 로컬일 때 기본 `http://127.0.0.1:8000/v1` |
 | lightweight 서브 LLM | mailanalysis(메일폴)/genesis/pilot 등 잡일꾼 | modelrole `lightweight` | `pipeline/pilot/localai.go` | 메인보다 작은 모델, 백그라운드 작업용 |
 | NuExtract3-FP8 | 구조화 추출 (스키마 기반) | (config-driven, 코드 하드코딩 없음) | — | `~/models/NuExtract3-FP8`. 현재 게이트웨이 코드에서 직접 참조 없음 |
@@ -38,10 +38,10 @@ globs: ["gateway-go/internal/pipeline/chat/tools/paddleocr.go", "gateway-go/inte
 
 ### 코드 통합
 
-- `gateway-go/internal/pipeline/chat/tools/paddleocr.go`:
+- `gateway-go/internal/pipeline/chat/tools/document/paddleocr.go`:
   - `paddleOCR(ctx, img, task)` — `/v1/chat/completions` 에 `image_url`(base64 data URI) + 태스크 프롬프트 전송. 태스크: `"OCR:"` / `"Table Recognition:"` / `"Formula Recognition:"` / `"Chart Recognition:"`.
   - `ocrImageBytes(ctx, img)` — **단일 OCR 진입점**. PaddleOCR-VL 우선, 실패 시 tesseract 폴백.
-- `docparse.go` 의 `imageOCR`(이미지 첨부)와 `pdfOCR`(스캔 PDF)가 `ocrImageBytes` 경유 (구 `gmail_attachment.go` 에서 이사). **`pdfOCR` 페이지 루프는 병렬**(`ocrPageConcurrency`=6, 세마포어+WaitGroup, distinct-slot 쓰기로 순서 보존) — 서버 배칭(`--max-num-seqs 8`)을 활용해 N페이지 스캔을 ~1 배칭 디코드로 접음. 동시성 상한은 서버 seq 한도 밑으로 둬 라이브 챗/메일분석과 GPU 사이드카를 공유해도 몰리지 않게.
+- `tools/document/docparse.go` 의 `imageOCR`(이미지 첨부)와 `pdfOCR`(스캔 PDF)가 `ocrImageBytes` 경유 (구 `gmail_attachment.go` 에서 이사). **`pdfOCR` 페이지 루프는 병렬**(`ocrPageConcurrency`=6, 세마포어+WaitGroup, distinct-slot 쓰기로 순서 보존) — 서버 배칭(`--max-num-seqs 8`)을 활용해 N페이지 스캔을 ~1 배칭 디코드로 접음. 동시성 상한은 서버 seq 한도 밑으로 둬 라이브 챗/메일분석과 GPU 사이드카를 공유해도 몰리지 않게.
 - **폴백 설계**: 서버가 꺼져 있으면 connection refused 로 즉시 실패 → tesseract(kor+eng) 로 graceful degradation. 즉 OCR 은 서버 없어도 깨지지 않고 품질만 낮아진다.
 - **엔드포인트 override**: 환경변수 `DENEB_OCR_VL_URL` (기본 `http://127.0.0.1:18011`). 테스트/비표준 배포용.
 
@@ -90,10 +90,10 @@ DENEB_OCR_VL_LIVE=1 DENEB_OCR_VL_IMG=/path/to.png DENEB_OCR_VL_URL=http://127.0.
 
 ### 코드 통합 (#1847)
 
-- `gateway-go/internal/pipeline/chat/tools/asr.go`:
+- `gateway-go/internal/pipeline/chat/tools/artifact/asr.go`:
   - `transcribeAudio(ctx, audio, filename, hotwords)` — `/v1/transcribe` 에 멀티파트 `file`(+ 선택 `hotwords`) 전송, `{segments, transcription}` 파싱. segment `speaker` 가 문자열 라벨 또는 숫자 인덱스 **둘 다** 와서 `flexStr` 로 수용(라이브 테스트가 잡은 함정).
   - `transcribeAudioText(ctx, audio, mimeType)` — **단일 전사 진입점**. 화자분리+타임스탬프로 포맷(`[mm:ss 화자N] …`), segment 없으면 flat transcription 폴백.
-- `chat/tools/asr_export.go` 의 `TranscribeAudio` 래퍼가 패키지-프라이빗 진입점 노출 → `miniapp.capture.audio` 브리지 RPC(`handler/chat/miniapp_bridge.go`, `deps.Transcribe != nil` 일 때만 등록)가 공유 녹음을 전사해 한 agent turn 실행. PaddleOCR 의 `miniapp.capture.image` 와 동형.
+- `chat/tools/artifact/asr_export.go` 의 `TranscribeAudio` 래퍼가 패키지-프라이빗 진입점 노출 → `miniapp.capture.audio` 브리지 RPC(`handler/chat/miniapp_bridge.go`, `deps.Transcribe != nil` 일 때만 등록)가 공유 녹음을 전사해 한 agent turn 실행. PaddleOCR 의 `miniapp.capture.image` 와 동형.
 - **네이티브 경로**: 안드로이드가 오디오 파일을 공유(`ACTION_SEND audio/*`)하면 `captureAudio` → `miniapp.capture.audio`.
 - **폴백 없음**: OCR 의 tesseract 같은 로컬 ASR 폴백이 없어 서버 다운 시 connection refused → 명확한 에러 surface (graceful degradation = 명확한 실패).
 - **override**: 환경변수 `DENEB_ASR_URL`(기본 `http://127.0.0.1:18013`), `DENEB_ASR_HOTWORDS`(고유명사 교정 bias, 선택).

@@ -2298,9 +2298,9 @@ hermes doctor — 어느 환경에서도 동일 진단
 | 언어 | Go (gateway-go) | Python |
 | 타겟 | DGX Spark 단일 기계 | 5$ VPS / GPU 클러스터 / 서버리스 |
 | UI | 네이티브 클라 전용 (안드로이드/iOS/데스크톱, 안드로이드 S26 최적화) | Telegram/Discord/Slack/… 17+ 플랫폼 |
-| 툴 | 150+ (내장) | 40+ 빌트인 + 스킬 + MCP + 플러그인 |
+| 툴 | ~45 (내장; 스키마 `tool_schemas.json`) | 40+ 빌트인 + 스킬 + MCP + 플러그인 |
 | LLM 통합 | 자체 pipeline | OpenAI-style unified protocol |
-| 메모리 | vega (자체) | 8개 플러그인 + 빌트인 MEMORY.md/USER.md |
+| 메모리 | wiki + Polaris (자체) | 8개 플러그인 + 빌트인 MEMORY.md/USER.md |
 | 스킬 | 자체 skills/ | agentskills.io 공개 표준 호환 |
 | 터미널 백엔드 | — | 6종 (local/docker/ssh/daytona/singularity/modal) |
 | 자기개선 | 제한적 | 뉴지-기반 skill/memory review |
@@ -2310,7 +2310,7 @@ hermes doctor — 어느 환경에서도 동일 진단
 ### 25.2 참고할 만한 패턴
 
 1. **프롬프트 캐시 불가침 원칙** — Deneb이 현재 어느 정도 준수하고 있지만 명시적 문서화 + 슬래시 명령 cache-aware 패턴 도입 고려 ("지연 invalidation / `--now` 플래그")
-2. **Agent-level tool 가로채기** — memory/todo/session_search 같이 에이전트 본인이 책임지는 툴을 registry 전에 인터셉트 (Deneb의 memory/vega 통합에 적용 가능)
+2. **Agent-level tool 가로채기** — memory/todo/session_search 같이 에이전트 본인이 책임지는 툴을 registry 전에 인터셉트 (Deneb의 wiki/Polaris·메모리 도구 통합에 적용 가능)
 3. **Skill을 user message로 주입** — system prompt 깨지 않는 cache-safe 패턴
 4. **Dual-layer 메시지 시퀀싱** — gateway-go의 세션 관리에 참고할 가치 (adapter queue + runner interrupt 분리)
 5. **`task_id` 기반 stateful 툴 격리** — Deneb의 멀티 세션 처리에 힌트

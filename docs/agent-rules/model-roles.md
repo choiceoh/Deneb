@@ -47,23 +47,23 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 
 | 임무 | 위치 | 역할 | 근거 |
 |---|---|---|---|
-| 일간/모닝레터 합성 | `tools/morning_letter.go`(데이터 수집만) + 크론 에이전트 턴 | **main** | 사용자 일일 브리핑 — 품질·로컬. 도구는 JSON만 반환, 합성은 main 턴 |
-| 프로젝트 위키 딥리서치 갱신 (6h) | `runtime/server/wiki_research_task.go` | **main** | 도구무거운 에이전트 턴(내부 소스 재조사→위키 본문 갱신·supersede). boot/heartbeat/goal과 동형의 에이전트 턴이라 main, 헬퍼 요약 콜 아님. wiki-research 프리셋(웹 제외)으로 내부 소스 한정, 로컬 |
+| 일간/모닝레터 합성 | `tools/routine/morning_letter.go`(데이터 수집만) + 크론 에이전트 턴 | **main** | 사용자 일일 브리핑 — 품질·로컬. 도구는 JSON만 반환, 합성은 main 턴 |
+| 프로젝트 위키 딥리서치 갱신 (6h) | `runtime/wikiwork/wiki_research_task.go` | **main** | 도구무거운 에이전트 턴(내부 소스 재조사→위키 본문 갱신·supersede). boot/heartbeat/goal과 동형의 에이전트 턴이라 main, 헬퍼 요약 콜 아님. wiki-research 프리셋(웹 제외)으로 내부 소스 한정, 로컬 |
 | 메일 리포트 종합 (stage2) | `mailAnalysisModels()` | **main** | 사용자가 읽는 리포트, 품질 최우선 — analysis 제거로 main(가장 강력·의도적 클라우드 OK) |
 | 메일 추출 (stage1) · gmail facts/actions/deal | `mailAnalysisModels()`, `platform/mailanalysis/pipeline_extractors.go` | **tiny** | 단순 구조화 JSON 추출 |
 | 거래 조건 인용 추출 (deal facts 2차 패스) | `platform/mailanalysis/deal_facts.go` | **tiny** | 거래 메일 한정 — 물량·단가·지급조건·하자보수·지체상금을 **원문 인용 필수**로 추출, Go 결정적 게이트(`verifyDealFacts`: 인용⊂원문 + 값 숫자⊂인용)가 미검증 필드 드롭. stage1과 같은 배치·같은 예산, fail-open |
 | 세션 자동 제목 | `chat/session_autotitle.go` | **tiny** | 짧은 명사구 제목 |
-| 워크피드 카드 제목+요약 | `runtime/server/workfeed_title_llm.go` | **tiny** | 짧은 제목 + 2줄 카드 요약을 단일 호출로 생성 — 세션 자동제목과 같은 단순 추출이라 tiny. lightweight였을 땐 클라우드 추론모델(deepseek-v4-flash-api)로 폴백 시 thinking-off 미적용→256토큰을 추론이 소진→빈응답→휴리스틱 폴백(라이브 확인: tiny 1.0–1.4초 정상). 휴리스틱(extractCardTitle/Summary)이 여전히 최종 폴백 |
-| goal 루프 judge | `runtime/server/goal_task.go` | **lightweight** | 바운드 판정(DONE/CONTINUE), fail-open |
-| 위키 리뷰어 중복 판정 | `runtime/server/wiki_review_task.go` (2h 자율 태스크) | **main** (⚠️클라우드) | 최근 쓰인 위키 문서의 근사중복 판정 — 결정적 후보 수집(FindSimilarPages)→단일 JSON 판정 콜→결정적 병합(FoldDuplicate, 상한·git 스냅샷·기본 관찰모드 `DENEB_WIKI_REVIEW_AUTOMERGE`). **왜 lightweight가 아닌가**: 오판정 high가 실제 페이지 두 장을 병합하는 파괴적 판단이라 판정 품질 우선 — 운영자 명시 지시(2026-07-02). analysis 제거로 품질 의도는 가장 강력한 main이 승계(2026-07-07). 호출량 극소(2h당 ≤1콜, 후보 없으면 0콜)라 비용 바운드. 스킬리뷰 교훈(텍스트 역할 toolCount=0) 반영해 도구호출 없는 bounded 파이프라인, fail-open |
+| 워크피드 카드 제목+요약 | `runtime/proactive/workfeed_title_llm.go` | **tiny** | 짧은 제목 + 2줄 카드 요약을 단일 호출로 생성 — 세션 자동제목과 같은 단순 추출이라 tiny. lightweight였을 땐 클라우드 추론모델(deepseek-v4-flash-api)로 폴백 시 thinking-off 미적용→256토큰을 추론이 소진→빈응답→휴리스틱 폴백(라이브 확인: tiny 1.0–1.4초 정상). 휴리스틱(extractCardTitle/Summary)이 여전히 최종 폴백 |
+| goal 루프 judge | `runtime/goalloop/goal_task.go` | **lightweight** | 바운드 판정(DONE/CONTINUE), fail-open |
+| 위키 리뷰어 중복 판정 | `runtime/wikiwork/wiki_review_task.go` (2h 자율 태스크) | **main** (⚠️클라우드) | 최근 쓰인 위키 문서의 근사중복 판정 — 결정적 후보 수집(FindSimilarPages)→단일 JSON 판정 콜→결정적 병합(FoldDuplicate, 상한·git 스냅샷·기본 관찰모드 `DENEB_WIKI_REVIEW_AUTOMERGE`). **왜 lightweight가 아닌가**: 오판정 high가 실제 페이지 두 장을 병합하는 파괴적 판단이라 판정 품질 우선 — 운영자 명시 지시(2026-07-02). analysis 제거로 품질 의도는 가장 강력한 main이 승계(2026-07-07). 호출량 극소(2h당 ≤1콜, 후보 없으면 0콜)라 비용 바운드. 스킬리뷰 교훈(텍스트 역할 toolCount=0) 반영해 도구호출 없는 bounded 파이프라인, fail-open |
 | 컴팩션 청크 요약 | `chat/run_prepare.go` `localAISummarizer` | **lightweight** | 내부 무손실 요약, 로컬·빠름 (#2508; 이전 analysis-클라우드가 #2489 타임아웃 주원인) |
 | youtube 자막 요약 | `chat/web/web_youtube.go` | **lightweight** | 충실도 요약, 로컬 (#2509) |
-| watch 영상 전사 분석 | `chat/tools/watch.go` | **lightweight** | 자막 기반 분석 요약 |
+| watch 영상 전사 분석 | `chat/tools/artifact/watch.go` | **lightweight** | 자막 기반 분석 요약 |
 | 도구출력 압축 | `chat/localai_hooks.go` | **lightweight** | 큰 입력 압축 |
 | polaris 검색/요약 헬퍼 | `runtime/server/chat_pipeline.go` (`LocalAIFunc`) | **lightweight** | 회상 핫패스 |
 | 구현자 서브에이전트 | `sessions_spawn(tool_preset=implementer)` | **coding** when configured, else subagent/default | 파일 쓰기·exec를 할 수 있는 코드 수정 위임. 코딩 전용 모델은 네이티브 설정의 `agents.codingModel`로 opt-in |
 | 스킬 진화 패치 생성 | `init_genesis.go` → `genesis.Evolver` | **coding** when configured, else lightweight | SKILL.md 실제 수정 후보를 만드는 경로. 코딩 전용 모델 설정 시 main teacher rewrite를 끄고 coding 역할이 패치 생성을 담당 |
-| 스킬 리뷰 (nudger fork → propose 결정) | `init_genesis.go` reviewModel → `skill_review_fork.go` SendSync | **coding** (이전 lightweight), coding 미설정 시 lightweight 폴백 | 리뷰는 `skill_lifecycle action=propose`를 **호출**해야 하는 도구호출 task. lightweight는 텍스트 역할(요약·제목·JSON — Deneb 어디서도 도구호출 안 함)이라 산문만 내고 **toolCount=0**(srv4 실측) → 전 리뷰 no-op, Propus 루프 무산출. evolver와 같은 도구-가능 역할로 정렬(dogma #7: 도구 무거운 역할엔 측정된 도구호출자). 리뷰는 backoff·2048토큰 캡 + **전용 미니 시스템 프롬프트**(메인 조립 ~50K 비상속 — 리뷰당 입력 62-68K→~12K, 스킬 인덱스는 skills action=list로 온디맨드)로 빈도/비용 바운드 |
+| 스킬 리뷰 (nudger fork → propose 결정) | `init_genesis.go` reviewModel → `runtime/skilllifecycle/skill_review_fork.go` SendSync | **coding** (이전 lightweight), coding 미설정 시 lightweight 폴백 | 리뷰는 `skill_lifecycle action=propose`를 **호출**해야 하는 도구호출 task. lightweight는 텍스트 역할(요약·제목·JSON — Deneb 어디서도 도구호출 안 함)이라 산문만 내고 **toolCount=0**(srv4 실측) → 전 리뷰 no-op, Propus 루프 무산출. evolver와 같은 도구-가능 역할로 정렬(dogma #7: 도구 무거운 역할엔 측정된 도구호출자). 리뷰는 backoff·2048토큰 캡 + **전용 미니 시스템 프롬프트**(메인 조립 ~50K 비상속 — 리뷰당 입력 62-68K→~12K, 스킬 인덱스는 skills action=list로 온디맨드)로 빈도/비용 바운드 |
 | 스킬 진화 behavioral replay (도구호출 회귀 검증) | `domain/skills/genesis/validation_executor.go` (executor) + `init_genesis.go` 배선 | **lightweight** | 후보 SKILL.md를 부작용 없이 시뮬레이션해 도구호출 plan을 뽑고, original↔candidate 행동 회귀를 채점하는 검증 게이트. 로컬·바운드. **왜 lightweight인가**: main은 챗 핫패스와 GPU 경합 + 과비용이고, 게이트는 두 본문을 **같은 모델**로 비교하므로 절대 충실도보다 일관된 판별력이 중요(executor 편향은 델타에서 상쇄). `DENEB_SKILL_EVOLVE_REPLAY`로 opt-in, fail-open |
 | 프로젝트별 최신 근황 digest | `domain/wiki/project_digest.go` (드림 사이클 Phase 3d) → 프로젝트 대표페이지 `## 현재 상태` 섹션 (`project_status.go`) → `miniapp.project.digests` (모아보기 화면) | **lightweight** | 드림 사이클이 소비하는 그 일지/메모 입력을 프로젝트별로 롤업(헤드라인+불릿 2~3)하는 내부 배경 요약. open_loops와 동형의 격리된 1콜, fail-open, 실제 `프로젝트/*` 페이지에 앵커. **왜 lightweight인가**: 컴팩션·youtube와 같은 내부 배경 요약 도그마(로컬·바운드) — analysis(클라우드)로 둘 이유 없음. 화면은 대표페이지 섹션만 읽어 LLM 핫패스 아님. 메일분석 이벤트 갱신(`wiki_mail_analysis.go` → `AppendProjectStatusLine`)은 **LLM 없는 결정적 날짜 불릿**이라 아래 표 참조 |
 | 위키 자료 인제스트 요약 (`wiki action="ingest"` URL/유튜브 캡처) | `chat/tools/wiki_ingest.go` | **lightweight** | 컴팩션·youtube와 동형의 내부 배경 요약 (도그마 #1). 바운드(입력 16K룬·출력 700tok), fail-open — 요약 실패 시 발췌로 캡처 자체는 보존, force 재인제스트로 재시도 |
@@ -73,16 +73,16 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 임무 | 위치 | 방식 | 왜 |
 |---|---|---|---|
 | 웹페이지 인앱 번역 (en/ru→ko) | `chat/tools/translate.go` → `translate_deepl.go` | DeepL API (외부 번역 서비스) | 인앱 브라우저 인플레이스 번역은 **DeepL 전용**. LLM 역할 미사용 — DeepL 미설정/실패 시 그 배치는 원문 유지(개수 보존, 드롭/재정렬 금지). 이전 `translation` 역할 LLM 폴백은 폐기(2026-07-07) |
-| 주간업무보고 | `tools/weekly_report.go` | 결정적 양식 | byte-identical 출력 (#2474) |
+| 주간업무보고 | `tools/routine/weekly_report.go` | 결정적 양식 | byte-identical 출력 (#2474) |
 | 메일 우선순위 분류 | `domain/mailpriority/score.go` | 정규식 점수 + 결합 신호 | 글랜스 트리아지 — 한국 업무메일 튜닝 휴리스틱. VIP(주소록)·활성 거래처(`wiki.ActiveCounterpartyDomains` — 최근 60일 프로젝트 연결 메일분석의 발신 도메인, freemail 제외, 서버 10분 캐시) 부스트는 콘텐츠 신호가 있을 때만 증폭(단독 발화 금지 — 글랜스성 보존). 같은 견적·금액 메일도 진행 거래처면 urgent로 — 단일 이벤트가 아닌 결합 신호(시나리오) 원칙 |
-| 카드 제목 폴백 | `runtime/server/workfeed_extract.go` | 휴리스틱 추출 | LLM 실패 시 graceful degradation |
-| 하트비트 리서치 넛지 (새 데이터 다이제스트) | `runtime/server/heartbeat_research.go` | 위키 mtime 스캔 + 마커 스로틀 (~1회/일) | 신규 유입 카운트는 결정적으로, 교차 패턴 판단·"[연구]" 항목 등록은 **하트비트 턴(main)** 이 수행 — 스캔 자체에 LLM 0회 |
-| 하트비트 자가코딩 검토 넛지 | `runtime/server/heartbeat_selfcoding.go` | 제안됨 카운트+지문 마커 (변경 즉시·불변 24h 재시도) | 대기 후보 감지는 결정적으로, 검토·실행·리뷰 기록은 **하트비트 턴(main)** 이 skill_lifecycle로 수행 — 포집만 되고 소비 안 되던 자가코딩 큐(7/5 실측: 첫 정상 가동 2건이 1일+ 방치)를 자동 소비 |
+| 카드 제목 폴백 | `runtime/proactive/workfeed_extract.go` | 휴리스틱 추출 | LLM 실패 시 graceful degradation |
+| 하트비트 리서치 넛지 (새 데이터 다이제스트) | `runtime/heartbeat/heartbeat_research.go` | 위키 mtime 스캔 + 마커 스로틀 (~1회/일) | 신규 유입 카운트는 결정적으로, 교차 패턴 판단·"[연구]" 항목 등록은 **하트비트 턴(main)** 이 수행 — 스캔 자체에 LLM 0회 |
+| 하트비트 자가코딩 검토 넛지 | `runtime/heartbeat/heartbeat_selfcoding.go` | 제안됨 카운트+지문 마커 (변경 즉시·불변 24h 재시도) | 대기 후보 감지는 결정적으로, 검토·실행·리뷰 기록은 **하트비트 턴(main)** 이 skill_lifecycle로 수행 — 포집만 되고 소비 안 되던 자가코딩 큐(7/5 실측: 첫 정상 가동 2건이 1일+ 방치)를 자동 소비 |
 | 스킬 자동 힌트 (관련 스킬 표면화) | `chat/skill_hints.go` → `run_tail_inject.go` | 결정적 트리거 매칭 (frontmatter `triggers` ⊂ 사용자 메시지, 턴당 ≤2) | 매 턴 핫패스 — 인메모리 스냅샷 매칭이면 충분. 힌트는 마지막 user 메시지 wire-only 꼬리(APC-safe) |
 | 프로젝트 현재 상태 이벤트 갱신 (메일분석) | `runtime/server/wiki_mail_analysis.go` → `domain/wiki/project_status.go:AppendProjectStatusLine` | 결정적 날짜 불릿 | 메일분석 시 관련 프로젝트 대표페이지 `## 현재 상태`에 한 줄 append (idempotent by mail id). 8h 드림 사이클을 안 기다리고 즉시 최신화 — 주기적 LLM 압축은 드리머가 |
 | 메일분석 당사자 앵커 | `platform/mailanalysis/party_anchor.go` (stage2 프롬프트 주입) | 헤더 파싱 + 우리측 도메인 셋 (`DENEB_MAIL_OUR_DOMAINS`) | 발신/수신/참조의 소속(우리 측/외부)을 결정적으로 명시해 분석 모델의 당사자 뒤집기 제거 — 실메일 섀도런 검증(2026-07-05, 모델 무관 이득). 형식은 scripts/dev/mail-bench.py 앵커와 동기 유지 |
 | 메일분석 날짜 앵커 | `platform/mailanalysis/date_anchor.go` (stage2 프롬프트 주입) | Date 헤더 파싱 + 상대 날짜 환산표(발송 주·다음 주·그 다음 주, 월요일 시작 KST) | "다음 주 금요일" 류를 계산이 아닌 표 조회로 — 상대 날짜 산술은 측정된 모델 약점(dsv4 두 형식 모두 오답, 2026-07-04 벤치). 실측: 앵커로 3/3 절대날짜+요일 명기, 무앵커 시 1/3이 상대 표현만 반복(절대 날짜 미기재). 헤더 미파싱 시 무주입 fail-open |
-| 폰 앱 사용 리듬 캐시 (`usage_update`) | `runtime/server/server_http_event_ingest.go:recordPhoneUsage` → `chat/tools/phone_usage.go` (`phone_read what=usage`) | 캐시 전용 (파일 mtime=신선도, location_update와 동형) | 이전 "usage" 이벤트는 6시간마다 judgment 턴을 태우는데 guidance가 기본 침묵이라 거의 항상 NO_REPLY — 하루 ~4턴 낭비. 사용 리듬은 능동 알림 소스가 아니라 조회용 맥락이므로 캐시로 환원, 에이전트가 필요할 때 phone_read로 읽는다. 구 클라이언트의 "usage" 타입은 기존 judgment 경로 유지 (OTA 전환기 하위호환) |
+| 폰 앱 사용 리듬 캐시 (`usage_update`) | `runtime/phoneevents/handler.go:recordPhoneUsage` → `chat/tools/phone_usage.go` (`phone_read what=usage`) | 캐시 전용 (파일 mtime=신선도, location_update와 동형) | 이전 "usage" 이벤트는 6시간마다 judgment 턴을 태우는데 guidance가 기본 침묵이라 거의 항상 NO_REPLY — 하루 ~4턴 낭비. 사용 리듬은 능동 알림 소스가 아니라 조회용 맥락이므로 캐시로 환원, 에이전트가 필요할 때 phone_read로 읽는다. 구 클라이언트의 "usage" 타입은 기존 judgment 경로 유지 (OTA 전환기 하위호환) |
 
 ## 도그마
 
@@ -92,7 +92,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 4. **결정적 포맷·트리아지 → LLM 없음.** 주간보고, 우선순위.
 5. **★ analysis 역할은 2026-07-07 제거됐다.** 내부 요약은 lightweight(로컬), 사용자 품질은 main. 요약류 헬퍼 콜을 클라우드 main에 얹으면 샌다 — "왜 로컬 lightweight로 안 되나"를 답 못 하면 lightweight를 써라. (닥스트링이 `CallLocalLLM`/local을 가리키는데 코드가 `CallRoleLLM(RoleMain)`이면 그건 드리프트 — 원복하라.)
 6. **코드에 모델 이름 하드코딩 금지.** 역할만 고른다.
-7. **★ 도구 무거운 역할(main/fallback)에 새 모델을 배선하기 전, 후보의 도구호출 역량을 측정하라.** 챗 `main`은 150+ 도구를 쓰고 도구호출이 에이전트의 성패를 가른다 — `/v1/models` 200·속도만으로는 빈 `tool_calls`(서빙설정 미스로 도구가 안 나오는 인프라 오진단의 단골)나 프롬프트 인젝션 취약을 못 잡는다. SparkFleet의 `run_tool_eval`(tool-eval-bench 래퍼)로 그 엔드포인트를 벤치해 **멀티스텝 체인·에러복구·Category K(안전·프롬프트 인젝션)** 점수를 확인하고 배선한다(결과 회독: `tool_eval_history`). 이건 코드 게이트가 아니라 **운영자 승격 절차**다 — 게이트웨이는 모델을 소비만 하고, 검증은 플릿 매니저(sparkfleet)에서 한다.
+7. **★ 도구 무거운 역할(main/fallback)에 새 모델을 배선하기 전, 후보의 도구호출 역량을 측정하라.** 챗 `main`은 ~45개 내장 도구(스키마 `tool_schemas.json`)를 쓰고 도구호출이 에이전트의 성패를 가른다 — `/v1/models` 200·속도만으로는 빈 `tool_calls`(서빙설정 미스로 도구가 안 나오는 인프라 오진단의 단골)나 프롬프트 인젝션 취약을 못 잡는다. SparkFleet의 `run_tool_eval`(tool-eval-bench 래퍼)로 그 엔드포인트를 벤치해 **멀티스텝 체인·에러복구·Category K(안전·프롬프트 인젝션)** 점수를 확인하고 배선한다(결과 회독: `tool_eval_history`). 이건 코드 게이트가 아니라 **운영자 승격 절차**다 — 게이트웨이는 모델을 소비만 하고, 검증은 플릿 매니저(sparkfleet)에서 한다.
 8. **★ 텍스트 역할(lightweight/tiny) 교체 후보는 `scripts/dev/lightweight-model-ab.py`로 실부하 A/B 후 승격하라.** 공개 벤치(특히 에이전트 벤치)는 이 역할의 실제 임무 — 한국어 압축 요약(프로덕션 4-섹션 스켈레톤)·JSON 추출·짧은 제목·바운드 판정(한 단어 + goal judge JSON 계약)·알림 트리아지(YES/NO) — 를 측정하지 않는다. 이 스크립트가 그 5종을 결정적 채점(사실 보존 체크리스트·JSON 파싱·형식 규칙 + 레이턴시/장황함)으로 비교한다: wormhole에 두 모델을 서빙해 두고 `python3 scripts/dev/lightweight-model-ab.py --model-a <현역> --model-b <후보>` → **교체하려는 역할의 서브버딕트**(`AB_VERDICT_TINY`=extract·title·triage / `AB_VERDICT_LIGHTWEIGHT`=compaction·verdict) 우세 + 레이턴시/토큰 비열화 확인 후 deneb.json 역할 매핑 교체. `json_mode=rejected`(JSON 모드 400 거부)가 뜬 후보는 총점과 무관하게 승격 불가 — 프로덕션 gmail stage1은 formatless 폴백이 없다. (에이전트 튜닝 모델의 전형적 실패 모드 — 요약에 계획 서두, 코드펜스 JSON, 판정에 사족 — 을 채점이 감지함은 `--mock` 셀프테스트로 고정.)
 
 ## PR 체크리스트 (새 LLM 호출 / 역할 변경 시)

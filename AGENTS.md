@@ -48,7 +48,8 @@ cp docs/reference/AGENTS.default.md ~/.deneb/workspace/AGENTS.md
 
 ## Session start (required)
 
-- Read `SOUL.md`, `USER.md`, and today+yesterday in `memory/`.
+- Read `SOUL.md`, `USER.md`.
+- Read recent diary via `wiki(action="daily")` (today + yesterday context).
 - Read `MEMORY.md` when present; only fall back to lowercase `memory.md` when `MEMORY.md` is absent.
 - Do it before responding.
 
@@ -65,10 +66,10 @@ cp docs/reference/AGENTS.default.md ~/.deneb/workspace/AGENTS.md
 
 ## Memory system (recommended)
 
-- Daily log: `memory/YYYY-MM-DD.md` (create `memory/` if needed).
-- Long-term memory: `MEMORY.md` for durable facts, preferences, and decisions.
+- **Diary:** `wiki(action="log")` / `wiki(action="daily")` — day-by-day logs (not a separate `memory/` folder).
+- **Knowledge pages:** `knowledge(op="record")` — curated people/projects/decisions.
+- **Curated personal context:** `MEMORY.md` for durable facts, preferences, and decisions (loaded on main-session turns).
 - Lowercase `memory.md` is legacy fallback only; do not keep both root files on purpose.
-- On session start, read today + yesterday + `MEMORY.md` when present, otherwise `memory.md`.
 - Capture: decisions, preferences, constraints, open loops.
 - Avoid secrets unless explicitly requested.
 
@@ -107,7 +108,7 @@ Skill discovery is filesystem-driven — the gateway indexes `skills/` at startu
 and the native client's Settings → 스킬 tab lists them read-only (no toggles).
 
 - **productivity/** — contract-review, decision-premortem, deep-research, email-analysis, fact-check, meeting-minutes, morning-letter, proactive-gate, retrieval-plan, session-logs, weekly-report
-- **coding/** — evolution-proposal, github, skill-creator, skill-evolution, skill-factory
+- **coding/** — evolution-proposal, github, self-evolve, skill-creator, skill-evolution, skill-factory
 - **knowledge/** — kb-interview
 - (devops/, integration/, operations/, security/ are empty placeholder categories — `DESCRIPTION.md` only, no skills yet)
 

@@ -1,6 +1,6 @@
 // install.go handles skill dependency installation via brew, npm, go, uv, or download.
 //
-// This ports src/agents/skills-install.ts to Go.
+// Originally ported skills-install from the retired TypeScript gateway.
 package skills
 
 import (

@@ -16,7 +16,7 @@ sidebarTitle: "Agent Papers 2026"
 
 ## 핵심 발견 (Deneb 관점 우선순위)
 
-1. **추출-저장형 메모리는 정보를 잃을 수 있고, "사실 수정(망각)"은 전 시스템 공통 최약점.** MemoryAgentBench에서 상용 메모리 레이어(Mem0 ~32.6, Zep ~37.5)가 정확 검색에서 bare long-context 백본(~49.2)보다 낮았고, multi-hop 사실 수정은 전부 ≤7%. Deneb는 hindsight(추출) + wiki/diary/transcript(원문 검색)를 병행하므로 구조적 헷지가 이미 있으나, **decay/supersession 메커니즘 부재**는 동일한 약점.
+1. **추출-저장형 메모리는 정보를 잃을 수 있고, "사실 수정(망각)"은 전 시스템 공통 최약점.** MemoryAgentBench에서 상용 메모리 레이어(Mem0 ~32.6, Zep ~37.5)가 정확 검색에서 bare long-context 백본(~49.2)보다 낮았고, multi-hop 사실 수정은 전부 ≤7%. Deneb는 wiki/diary/polaris·transcript(원문 검색) 회상을 쓰므로 (Hindsight 추출 레이어는 은퇴) 구조적 헷지가 이미 있으나, **decay/supersession 메커니즘 부재**는 동일한 약점.
 2. **모놀리식 LLM 재요약은 "context collapse"를 실증적으로 일으킨다** (ACE: 1스텝에 18,282→122토큰, 정확도가 무적응 베이스라인 아래로). polaris의 append형 요약 DAG는 이 함정을 피하고 있고, 위험 지점은 dreaming의 위키 문서 병합 경로.
 3. **자기생성 스킬은 평균적으로 성능을 깎는다** (SkillsBench: 인간 큐레이션 +16.2pp vs 자기생성 -1.3pp). genesis/evolve 루프는 검증 게이트 없이는 "skill debt"를 쌓는다.
 4. **셀프 크리틱은 역할 재라벨만으로 크게 좋아진다.** 모델은 자기 출력 오류의 64.5%를 못 잡지만(blind spot), 같은 내용을 user/tool/memory 역할로 제시하면 수정률 +23~93pp. 진화 self-test 등 모든 자기검증 루프에 공짜로 적용 가능.
@@ -38,7 +38,7 @@ sidebarTitle: "Agent Papers 2026"
 **Deneb 매핑**
 
 - 다중 소스 recall(원문 검색 병행)은 유지 — MemoryAgentBench의 "추출 파이프라인 정보 손실" 경고에 대한 구조적 헷지. 이미 정합.
-- **부재한 것은 망각/수정.** hindsight retain은 append-only. 현실적 1단계는 hindsight 서버 개조가 아니라 게이트웨이 측 규칙: dreaming이 이미 FactsExpired/FactsMerged를 추적하는 위키가 사실상의 consolidation 레이어이므로, recall evidence 머지에서 **충돌 시 위키(수정 반영) > hindsight(append-only)** 우선·최신성 규칙을 명시 (`recall_evidence.go`의 dedup/score 단계). 2단계로 hindsight 쪽 salience decay/supersession 기능 검토.
+- **부재한 것은 망각/수정.** 위키/드리밍 consolidation은 append-only가 아님(만료·머지 있음); 옛 hindsight retain은 은퇴. 현실적 1단계는 hindsight 서버 개조가 아니라 게이트웨이 측 규칙: dreaming이 이미 FactsExpired/FactsMerged를 추적하는 위키가 사실상의 consolidation 레이어이므로, recall evidence 머지에서 **충돌 시 위키(수정 반영) > hindsight(append-only)** 우선·최신성 규칙을 명시 (`recall_evidence.go`의 dedup/score 단계). 2단계로 hindsight 쪽 salience decay/supersession 기능 검토.
 - wiki graph 추가 투자는 우선순위 낮음 — Mem0g +2%와 HippoRAG2의 "그래프가 사실 회상을 깎는다" 증거. Deneb hybrid(벡터 0.5 가중, 문서=노드+임베딩)는 HippoRAG2의 핵심 교훈(passage 통합)과 이미 같은 형태.
 - `recall_bench_test.go`(현재 합성 코퍼스 hit rate)를 MemoryAgentBench식 **턴 단위 incremental injection + 사실 수정 케이스**로 확장하면 retain→recall 전 구간 회귀 하네스가 된다.
 
@@ -56,7 +56,7 @@ sidebarTitle: "Agent Papers 2026"
 **Deneb 매핑**
 
 - prompt-cache 독트린은 2601.06007 권고와 사실상 동일 — 외부 실증 확보, 변경 불요.
-- polaris는 append형 DAG + fence 보호로 ACE의 collapse 함정을 회피 중. **요약 품질 자체의 평가·개선 루프가 없는 것**이 갭: ACON 패턴 적용 — 압축 후 정보 누락으로 인한 재질문/오답 사례를 agentlog에서 수집 → summarizer 프롬프트(`compaction/llm.go`) 가이드라인 정제 → recall/quality metric으로 검증. lightweight role 모델로 압축기 distill까지 가능.
+- polaris는 append형 DAG + fence 보호로 ACE의 collapse 함정을 회피 중. **요약 품질 자체의 평가·개선 루프가 없는 것**이 갭: ACON 패턴 적용 — 압축 후 정보 누락으로 인한 재질문/오답 사례를 agentlog에서 수집 → summarizer 프롬프트(`gateway-go/internal/pipeline/compaction/llm.go`) 가이드라인 정제 → recall/quality metric으로 검증. lightweight role 모델로 압축기 distill까지 가능.
 - ACE 델타 패턴의 적용처는 압축이 아니라 **누적 지식 문서**: topics/*.md, MEMORY.md, 위키 자동 병합. dreaming의 LLM 재작성 병합이 collapse 위험 지점 — "불릿 단위 append + ID + 유익/유해 카운터 + 주기 curator 압축" 구조 검토.
 - branch/return folding은 컨텍스트 소진형 멀티스텝 미완료 문제의 직접 처방이지만 프롬프트-온리 한계 캐비앗이 큼 — 토큰 무거운 서브태스크(대량 검색·파일 스캔)에 한정한 실험 가치. KV 롤백 친화성은 trailing 마커 구조와 양립.
 
@@ -104,7 +104,7 @@ sidebarTitle: "Agent Papers 2026"
 **Deneb 매핑**
 
 - genesis 자동 생성 스킬은 SoK 데이터상 평균적으로 해로울 수 있음 → **검증 게이트 강화**가 핵심: 생성 시 구체성 기준(트리거·절차·반례) 체크, 모호 스킬 reject(EvolveR의 "모호함이 지배 실패모드"와 일치).
-- **evolve self-test에 역할 재라벨 적용** (`genesis/evolver.go`): 검증 대상 스킬 본문·테스트 결과를 모델 자신의 출력이 아닌 user/tool 역할 콘텐츠로 제시 — 프롬프트 구성 변경만으로 수정률 대폭 상승 기대. 난이도 최하.
+- **evolve self-test에 역할 재라벨 적용** (`gateway-go/internal/domain/skills/genesis/evolver.go`): 검증 대상 스킬 본문·테스트 결과를 모델 자신의 출력이 아닌 user/tool 역할 콘텐츠로 제시 — 프롬프트 구성 변경만으로 수정률 대폭 상승 기대. 난이도 최하.
 - 진화 후 실효 검증 부재 ↔ skill debt 경고 일치: 진화본 vs 이전본의 사용 성공률 비교(tracker 데이터 기존재)를 LogEvolve(#2271)에 추가 — A/B 폐쇄 루프.
 - skillcurator(stale 30일/archive 90일)는 EvolveR의 무한 축적 열화 증거로 정당화됨 — 유지.
 - Propus doctrine: 여러 논문 축을 하나의 제품 규칙으로 정규화한다. **검증 전 생성/진화는 debt**, **모호한 원리는 reject**, **같은 실패 후보 반복 금지**, **Self-Harness식 failure signature/edit surface/audit 필수**, **APEX식 Mixed frontier + Easy anchor는 validation case `frontierTier`로 증명될 때만 covered**, **workflow axis는 약한 APEX 근거를 gate로 승격하지 않는 진단 메타데이터**, **상태 판단은 서버 overview/summary가 단일 출처**. 코드의 단일 출처는 `genesis.PropusDoctrine()`이며, 네이티브 `miniapp.skills.lifecycle.summary`와 `skill_lifecycle status.system`이 이 스펙을 노출한다.
@@ -144,16 +144,16 @@ sidebarTitle: "Agent Papers 2026"
 
 | 순위 | 제안 | 근거 | 적용 지점 | 난이도 |
 |---|---|---|---|---|
-| P1-1 | evolve self-test 역할 재라벨 (자기 출력을 user/tool 역할로 제시) | 2606.05976, 2507.02778 | `genesis/evolver.go` 프롬프트 구성 | 하 |
+| P1-1 | evolve self-test 역할 재라벨 (자기 출력을 user/tool 역할로 제시) | 2606.05976, 2507.02778 | `gateway-go/internal/domain/skills/genesis/evolver.go` 프롬프트 구성 | 하 |
 | P1-2 | genesis 구체성 게이트 + 진화 전/후 성공률 A/B를 LogEvolve에 기록 | SoK 2602.20867, EvolveR | `genesis/genesis.go`, `evolver.go`, LogEvolve | 하~중 |
 | P1-3 | 능동 퍼널에 FTR(과개입율) 메트릭 + workfeed 카드 수락/거부 신호 수집 | ProactiveBench, ProAgentBench | `proactive_relay.go`, workfeed, agentlog | 중 |
 | P1-4 | recall 회귀 하네스를 incremental-injection + 사실수정 케이스로 확장 | MemoryAgentBench 프로토콜 | `recall_bench_test.go`, recall-metric.sh | 중 |
-| P2-5 | ACON식 polaris summarizer 가이드라인 자기정제 루프 | ACON 2510.00615 | `compaction/llm.go` + agentlog 실패 사례 | 중 |
+| P2-5 | ACON식 polaris summarizer 가이드라인 자기정제 루프 | ACON 2510.00615 | `gateway-go/internal/pipeline/compaction/llm.go` + agentlog 실패 사례 | 중 |
 | P2-6 | effort router 학습형 1단계: o_t feed 라벨 마이닝 → 임베딩 분류기 | Ares 2603.07915, 2511.10788 | `effort_router.go`, agentlog | 중~상 |
 | P2-7 | recall evidence 충돌 시 위키(수정 반영) 우선·최신성 규칙 | Zep supersession, MemoryAgentBench | `recall_evidence.go` 머지 정책 | 중 |
 | P2-8 | 모델 교체 시 fixed probe suite 자동 실행(백본 vs 하네스 분리) | 2503.16416 | modeltuner 캘리브레이션 확장 | 중 |
 | P3-9 | branch/return context folding 실험(무거운 서브태스크 한정) | 2510.11967 (프롬프트-온리 한계 유의) | agent loop + 신규 도구 2개 | 상 |
-| P3-10 | hindsight salience decay/supersession | Engram, Zep | hindsight 서비스 측 기능 검토 | 상 |
+| P3-10 | wiki/dreamer salience decay·supersession | Engram, Zep | 위키 드리밍 쪽 사실 수정 강화 | 상 |
 | P3-11 | 로컬 능동 판정기 SFT (신호 데이터 축적 후) | ProactiveBench | 별도 사이드카 | 상 |
 | — | per-turn tool retrieval은 **도입하지 않음** (캐시 독트린 충돌) | RAG-MCP/MemTool vs prompt-cache Rule B | 현행 deferral 노선 유지 | — |
 
@@ -166,7 +166,7 @@ sidebarTitle: "Agent Papers 2026"
 - **능동 noise floor(contentless 억제)** ↔ 과개입이 지배 실패모드라는 벤치 결과.
 - **skillcurator(stale/archive)** ↔ EvolveR의 무한 축적 열화 증거.
 - **effort router 자동화 가드(cron 등은 thinking 유지)** ↔ 라우터 오판 비용의 비대칭 원칙.
-- **hindsight retain 비동기 fire-and-forget** ↔ Engram의 "핫패스에 LLM 금지" 원칙과 동형.
+- **회상 프리플라이트 비동기 경로** (옛 hindsight retain은 은퇴) ↔ Engram의 "핫패스에 LLM 금지" 원칙과 동형.
 
 ## 방법론·신뢰도
 

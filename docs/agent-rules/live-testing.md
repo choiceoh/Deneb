@@ -1,6 +1,6 @@
 ---
 description: "코드 변경 후 라이브 테스트 + 품질 검증 필수 — 코드만 완성하고 실제 동작/품질을 검증하지 않으면 안 된다"
-globs: ["gateway-go/**/*.go", "proto/**/*.proto"]
+globs: ["gateway-go/**/*.go"]
 ---
 
 # Live Testing & Quality Verification (필수)
@@ -62,7 +62,7 @@ scripts/dev/live-test.sh parity    # dev vs prod 환경 비교 리포트
   live-test.sh 가 `DENEB_LIVETEST_GW_URL`/`DENEB_LIVETEST_STATE_DIR` 를 export
   해 테스트가 같은 토큰으로 인증한다.
 + 외부 네트워크 접근 0, 로그인/세션 파일 0. (텔레그램 목 서버 주입은
-  PR #1922 로 플러그인과 함께 은퇴 — `scripts/mock_telegram_*.py` 는 레거시.)
+  PR #1922 로 플러그인과 함께 제거됨 — `scripts/mock_telegram_*.py` 는 더 이상 없음.)
 
 ### Functional Testing
 
@@ -247,14 +247,14 @@ scripts/dev/live-test.sh chat-check "날씨 알려줘" --expect "날씨|기온|�
 scripts/dev/live-test.sh chat-check "안녕" --expect-not "<thinking>"
 
 # 특정 도구가 호출되는지
-scripts/dev/live-test.sh chat-check "시스템 상태" --expect-tool health
+scripts/dev/live-test.sh chat-check "시스템 상태" --expect-tool observe
 
 # 레이턴시 확인
 scripts/dev/live-test.sh chat-check "안녕" --max-latency 10000
 
 # 조합
 scripts/dev/live-test.sh chat-check "파일 목록 보여줘" \
-    --expect-korean --expect-tool fs --max-latency 30000
+    --expect-korean --expect-tool grep --max-latency 30000
 ```
 
 ### 멀티턴 재현: multi-chat
@@ -279,7 +279,7 @@ scripts/dev/live-test.sh multi-chat \
 특정 도구가 올바르게 호출 + 완료되는지:
 
 ```bash
-scripts/dev/live-test.sh tool-check health "시스템 상태 확인해줘"
+scripts/dev/live-test.sh tool-check observe "시스템 상태 확인해줘"
 scripts/dev/live-test.sh tool-check wiki "위키에서 백업 정책 찾아줘"
 ```
 
@@ -295,7 +295,7 @@ scripts/dev/live-test.sh tool-check wiki "위키에서 백업 정책 찾아줘"
 > `chat`/`chat-check`가 **유저 역할**의 주입이라면, `scripts/dev/puppet.sh`는
 > **모델(LLM) 역할**의 주입이다. dev 게이트웨이의 모든 LLM role을 로컬 브로커
 > (`scripts/dev/puppet_broker.py`, OpenAI 호환 SSE)로 돌려, 코딩 에이전트가
-> 데네브의 LLM이 받는 것(조립된 시스템 프롬프트·메시지 히스토리·도구 스키마 ~19개,
+> 데네브의 LLM이 받는 것(조립된 시스템 프롬프트·메시지 히스토리·도구 스키마 ~45개,
 > 프리셋별 상이)을 **그대로 받아 보고**, 텍스트/도구호출을 직접 결정해 턴을
 > 운전한다. 도구 호출은 게이트웨이가 **실제로 실행**해 결과를 다음 요청에 담아온다.
 > 게이트웨이 코드 수정 0줄 — config-gen 결과에 `models.providers.puppet` +
@@ -334,10 +334,11 @@ scripts/dev/puppet.sh stop                   # 게이트웨이 + 브로커 정�
   세션)에서 돌므로 장기 퍼펫 세션 중 `[시스템 하트비트]` 요청이 pending에
   나타나고, 같은 세션의 유저 턴은 그 뒤로 직렬화된다. `NO_REPLY` 텍스트로 닫으면
   된다 (하트비트 규약).
-+ **전 role 빙의가 기본** (`--main-only`로 main만): main/lightweight/tiny/analysis/
-  fallback/coding(+설정된 chatbot/vision, 서브에이전트) 전부 브로커行이라 실모델로
++ **전 role 빙의가 기본** (`--main-only`로 main만): main/lightweight/tiny/
+  fallback/coding(+설정된 vision, 서브에이전트) 전부 브로커行이라 실모델로
   새는 응답이 없고, 백그라운드 LLM 호출(스킬 넛저 리뷰·드리밍 등)도 `pending`에
-  그대로 드러난다. **role별 시트 별칭**(`main-seat`/`coding-seat`/...)이 pending의
+  그대로 드러난다. (analysis/chatbot 역할은 2026-07 은퇴 — `model-roles.md`.)
+  **role별 시트 별칭**(`main-seat`/`coding-seat`/...)이 pending의
   model 필드에 찍히므로 어느 role의 호출인지 즉시 식별된다 — 예: 도구를 몇 번
   실행하면 스킬 넛저의 백그라운드 리뷰가 `coding-seat`로 나타난다(단 dev/비프로드
   state dir에선 넛저가 기본 비활성 — genesis sidecar 오염 방지 게이트.

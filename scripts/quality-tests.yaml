@@ -173,7 +173,7 @@ tests:
   - name: code-search-component
     cat: code
     msg: "세션 관리 코드 어디 있는지 찾고, TODO 주석도 검색해줘"
-    chk: [{used_any: [grep, read, search_and_read]}, {contains_any: ["session", "internal/session", "TODO"]}]
+    chk: [{used_any: [grep, read, search_and_read]}, {contains_any: ["session", "internal/domain/session", "TODO"]}]
 
   - name: code-git-history
     cat: code
@@ -182,12 +182,12 @@ tests:
 
   - name: code-count-files
     cat: code
-    msg: "Go 파일이랑 Rust 파일 각각 몇 개 있어?"
+    msg: "Go 소스 파일이 대략 몇 개 있어?"
     chk: [has_number]
 
   - name: code-project-deps
     cat: code
-    msg: "Go 모듈 의존성이랑 Rust 크레이트 구조 설명해줘"
+    msg: "Go 모듈(go.mod) 의존성 구조를 설명해줘"
     chk: [{min_length: 80}]
 
   - name: code-explain-structure
@@ -220,7 +220,7 @@ tests:
 
   - name: task-versions
     cat: task
-    msg: "Go, Rust, Python 버전 한번에 확인해줘"
+    msg: "Go랑 Python 버전 한번에 확인해줘"
     chk: [{used_tool: exec}, has_number]
 
   - name: task-file-stats
@@ -263,7 +263,7 @@ tests:
 
   - name: search-code-usage
     cat: search
-    msg: "ffi 패키지 어디서 import하는지랑 GITHUB_WEBHOOK_SECRET 쓰는 곳 찾아줘"
+    msg: "GITHUB_WEBHOOK_SECRET 쓰는 곳 찾아줘"
     chk: [{used_any: [grep, read, exec]}]
 
   - name: search-pattern-discovery
@@ -291,8 +291,8 @@ tests:
 
   - name: know-lang-ffi
     cat: knowledge
-    msg: "왜 Go랑 Rust 같이 쓰는 거야? FFI가 뭔지도 설명해줘"
-    chk: [{contains_any: ["FFI", "Go", "Rust"]}, {min_length: 80}]
+    msg: "왜 게이트웨이를 Go로 짰는지 한 단락으로 설명해줘"
+    chk: [{contains_any: ["Go", "게이트웨이", "gateway"]}, {min_length: 80}]
 
   - name: know-protocols
     cat: knowledge
@@ -344,7 +344,7 @@ tests:
 
   - name: fmt-comparison
     cat: format
-    msg: "Go vs Rust 장단점을 항목별로 비교하고 마이크로서비스 장단점도 정리해줘"
+    msg: "Go의 장단점을 항목별로 정리하고 마이크로서비스 장단점도 정리해줘"
     chk: [{min_length: 150}, {has_list: 3}]
 
   - name: fmt-step-by-step
@@ -409,8 +409,8 @@ tests:
     cat: context
     turns:
       - {msg: "Makefile 읽어줘"}
-      - {msg: "거기서 rust 관련 타겟 뭐가 있어?"}
-    chk: [{contains_any: ["rust", "cargo", "core-rs"]}]
+      - {msg: "거기서 go 관련 타겟 뭐가 있어?"}
+    chk: [{contains_any: ["go", "gateway", "make"]}]
 
   - name: ctx-file-error-retry
     cat: context
@@ -423,7 +423,7 @@ tests:
     cat: context
     turns:
       - {msg: "Go가 뭐야?"}
-      - {msg: "Rust는?"}
+      - {msg: "Python은?"}
       - {msg: "아 그리고 디스크 공간 얼마나 남았어?"}
     chk: [has_reply]
 
@@ -934,7 +934,7 @@ tests:
 
   - name: reason-logic
     cat: reasoning
-    msg: "모든 개는 동물, 동물은 생물. 개는 생물인가? Go:고루틴 = Rust:?"
+    msg: "모든 개는 동물, 동물은 생물. 개는 생물인가? Go 고루틴을 한 문장으로 설명해줘"
     chk: [{contains_any: ["네", "예", "맞", "생물"]}, {contains_any: ["async", "tokio", "스레드"]}]
 
   - name: reason-counting-sort
@@ -1158,9 +1158,9 @@ tests:
     cat: bench-multiturn
     timeout: 90
     turns:
-      - {msg: "Go와 Rust를 한 문장씩으로 비교해줘."}
+      - {msg: "Go 게이트웨이의 역할을 한 문장으로 설명해줘."}
       - {msg: "방금 쓴 두 문장에서 각각 핵심 키워드 하나씩 뽑고, 그 두 키워드의 트레이드오프를 설명해줘."}
-    chk: [korean, {contains_any: ["Go", "Rust"]}, {min_length: 80}]
+    chk: [korean, {contains_any: ["Go", "게이트웨이"]}, {min_length: 80}]
 
   # 진단 → 실행 → 해석
   - name: bench-mt-diag-exec
@@ -1199,7 +1199,7 @@ tests:
     cat: bench-oolong
     timeout: 120
     turns:
-      - {msg: "gateway-go/internal/server/method_registry.go에서 'func '가 몇 번 나오는지 세줘."}
+      - {msg: "gateway-go/internal/runtime/server/method_registry.go에서 'func '가 몇 번 나오는지 세줘."}
       - {msg: "같은 파일에서 'hub.'는 몇 번?"}
       - {msg: "두 숫자의 차이는?"}
     chk: [{used_any: [exec, grep]}, has_number, korean]

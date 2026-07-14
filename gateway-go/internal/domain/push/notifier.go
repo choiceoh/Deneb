@@ -27,7 +27,7 @@ const fallbackDeliveryTimeout = 30 * time.Second
 
 // Notifier delivers a proactive notification to every registered device token
 // via FCM. It is the fallback used when no native client holds a live SSE
-// connection (app fully closed / Doze) — see runtime/server/proactive_relay.go.
+// connection (app fully closed / Doze) — see runtime/proactive/proactive_relay.go.
 type Notifier struct {
 	store       tokenStore
 	sender      sender

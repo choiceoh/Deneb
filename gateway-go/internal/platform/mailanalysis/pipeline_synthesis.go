@@ -408,7 +408,7 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	}
 
 	// Read Sino-Korean Hanja in the report as Hangul (報告書 → 보고서) — the
-	// analysis model may be a Chinese-lineage one (analysis role can be cloud
+	// main-role model may be a Chinese-lineage one (RoleMain can be cloud
 	// GLM). Applied to the final prose only; the structured Deal/ActionItems were
 	// already extracted above from the pre-conversion text.
 	return AnalysisResult{Text: hanja.Transliterate(clean), RelatedProjects: projects, ActionItems: actions, Deal: deal, Importance: importance}, nil

@@ -1,6 +1,6 @@
 # RFC: 모닝/이브닝레터를 deneb-ui 카드로
 
-> 상태: **draft (검토 대기)** · 작성: 2026-06 · 관련: [[skills/productivity/morning-letter]], [[skills/productivity/evening-letter]], PR #2921(레터 이모지 정리), `docs/agent-rules/native-design-system.md`
+> 상태: **draft (검토 대기)** · 작성: 2026-06 · 관련: [[skills/productivity/morning-letter]], `evening_letter` 도구(`pipeline/chat/tools/routine/evening_letter.go`; 전용 SKILL.md는 없음 — 도구+크론만), PR #2921(레터 이모지 정리), `docs/agent-rules/native-design-system.md`
 
 ## 0. TL;DR
 
@@ -10,7 +10,7 @@
 
 - **앱 코드 변경 거의 없음** — deneb-ui 렌더러는 이미 출하됨(`ui/dynamicui/DenebUiRenderer.kt`). 주 작업은 **SKILL.md가 평문 대신 카드 JSON을 emit**하게 바꾸는 것.
 - **시각 검증 가능** — `RenderPreview.kt`(desktopMain)가 이미 `DenebUiRenderer`를 호출(line 1200/1212). 샘플 레터 JSON을 `./gradlew :composeApp:renderPreviews`로 PNG 렌더 → Read로 확인. "실기기 못 봄" 리스크 해소.
-- **채널** — 안드로이드 앱 + PC 프로그램 둘뿐이고 **둘 다 동일 Compose Multiplatform 네이티브 클라이언트**(deneb-ui 렌더러 `commonMain` 공유) → 양쪽 다 카드 렌더. 텍스트 전용 채널 없음 → **Design A 확정**. 평문 floor 한 줄은 *파싱실패 안전망*으로만 남김.
+- **채널** — 모바일은 `client-android`(Compose Multiplatform), 데스크톱은 **Andromeda**(Tauri+React). 둘 다 deneb-ui를 렌더하므로 카드 전환이 유효하다. 텍스트 전용 메시징 채널은 없음 → **Design A 확정**. 평문 floor 한 줄은 *파싱실패 안전망*으로만 남김.
 
 ## 1. 배경 · 문제
 
@@ -46,7 +46,7 @@
 - **탭 액션(P2)** `ui/dynamicui/UiAction.kt` — `CallbackAction`(이벤트+폼입력을 게이트웨이로, deneb-ui prompt contract), `OpenUrlAction`, `CopyToClipboardAction`, `ToggleAction`.
 - **인라인 렌더** `ui/chat/composables/BotMessage.kt:187` — 채팅 메시지 버블 *안에서* deneb-ui fence를 카드로 렌더. **별개 화면 아님, 피드 inline.**
 - **서버 검증** `pipeline/chat/denebui/denebui.go:Validate` — fence 본문을 스키마 검증(JSON/NDJSON). 잘못된 카드를 잡을 수 있음.
-- **기존 카드 선례** `runtime/server/workfeed_extract.go:163` "morning-letter cards keep their own headings" + `proactive_relay.go:283` `CollapsedReportFence` — 인프라가 이미 이 방향.
+- **기존 카드 선례** `runtime/proactive/workfeed_extract.go` "morning-letter cards keep their own headings" + `runtime/proactive/proactive_relay.go` `CollapsedReportFence` — 인프라가 이미 이 방향.
 
 ## 4. 설계 — 모닝레터 카드
 
@@ -127,7 +127,7 @@
 
 **Design B — 채널 패리티.** 현행 평문 레터 전체를 유지(모든 채널) + 카드 fence를 덧붙임. 텍스트채널=full 평문(strip), 네이티브=평문+카드. **네이티브 중복** 발생 → 카드 있을 때 평문 데이터 숨기는 작은 앱 수정 필요.
 
-**결정: Design A 확정 (2026-06).** 채널은 **안드로이드 앱 + PC 프로그램 둘뿐**이고, 둘 다 동일 Compose Multiplatform 네이티브 클라이언트다 — deneb-ui 렌더러(`ui/dynamicui/`)가 `commonMain`에 있어 **양쪽 타깃이 같은 카드 렌더 코드를 공유**(`RenderPreview.kt`가 desktop 타깃의 `DenebUiRenderer` 호출인 점이 desktop 렌더를 직접 증명). **텍스트 전용 채널이 존재하지 않으므로 카드가 raw로 노출될 표면이 없다.**
+**결정: Design A 확정 (2026-06).** 채널은 **안드로이드/iOS 네이티브 + Andromeda 데스크톱**이고, 둘 다 deneb-ui를 렌더한다(모바일은 `commonMain` `DenebUiRenderer`, 데스크톱은 Andromeda `DenebUi.tsx`). Compose Desktop 타깃은 헤드리스 검증(`native-app.sh` / `renderPreviews`)용으로만 남는다. **텍스트 전용 메시징 채널이 없으므로 카드가 raw로 노출될 표면이 없다.**
 → floor 한 줄은 더 이상 크로스채널 안전망이 아니라 **카드 JSON 파싱실패 대비 보험**으로만 의미를 갖는다(저렴하니 유지). Design B(평문 패리티)는 불필요 — 폐기.
 
 ## 7. 에이전트가 카드를 emit하는 법
@@ -185,7 +185,7 @@ PR #2921은 레터 이모지를 ◆/☼/☾로 치환 중. 카드로 가면 **�
 - [x] §6 전달 채널 확정 — 안드로이드+PC 네이티브뿐 → **Design A**
 - [ ] `RenderPreview.kt`에 모닝/이브닝 샘플 JSON 프리뷰 추가 → PNG 렌더 → 모양 확정
 - [ ] `skills/productivity/morning-letter/SKILL.md` 템플릿을 카드 스켈레톤+조율규칙으로 교체
-- [ ] `skills/productivity/evening-letter/SKILL.md` 동일
+- [ ] 이브닝은 전용 SKILL 없이 `evening_letter` 도구 출력 계약 + 크론 프롬프트/시스템 지시에 동일 카드 규칙 반영
 - [ ] `denebui.Validate` 기반 스켈레톤 유효성 테스트
 - [ ] 도구 다이어리 요약 등 부수 텍스트 정리(§12)
 - [ ] PR — Verification(렌더 PNG 첨부 + go 게이트) 후 사용자 머지

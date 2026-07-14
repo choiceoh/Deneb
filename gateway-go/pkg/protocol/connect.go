@@ -3,7 +3,7 @@ package protocol
 import "fmt"
 
 // ConnectParams represents the handshake payload sent by the client.
-// Mirrors ConnectParamsSchema from src/gateway/protocol/schema/frames.ts.
+// Originally mirrored ConnectParamsSchema from the retired TypeScript protocol schema.
 type ConnectParams struct {
 	MinProtocol int               `json:"minProtocol"`
 	MaxProtocol int               `json:"maxProtocol"`
@@ -50,7 +50,7 @@ type ConnectAuth struct {
 }
 
 // HelloOk is the server's handshake response.
-// Mirrors HelloOk message in proto/gateway.proto.
+// HelloOk handshake result payload.
 type HelloOk struct {
 	Type     string        `json:"type"` // always "hello-ok"
 	Protocol int           `json:"protocol"`
@@ -96,7 +96,7 @@ type Snapshot struct {
 }
 
 // PresenceEntry represents a connected client's presence.
-// Mirrors PresenceEntry message in proto/gateway.proto.
+// PresenceEntry is one connected-client presence row.
 type PresenceEntry struct {
 	Host            string   `json:"host,omitempty"`
 	IP              string   `json:"ip,omitempty"`

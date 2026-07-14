@@ -78,7 +78,7 @@ type proactiveRelayDeps struct {
 
 	// cardTitler names a mail-report work-feed card from its body using the
 	// lightweight model — the 📬 icon already says "mail", so the card title should be
-	// the email's subject, not the generic "메일 분석 리포트" heading the analysis model
+	// the email's subject, not the generic "메일 분석 리포트" heading the main-role synthesis model
 	// writes — and returns the card's 2-line summary from the same call. Best-effort:
 	// returns ("", "") on any failure, and the deterministic extractCardTitle /
 	// extractCardSummary heuristics are the fallbacks (independently — a non-empty

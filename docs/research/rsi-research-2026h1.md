@@ -178,7 +178,7 @@
 | `pipeline/chat/steer.go` — 폴딩된 교정 텍스트 결정적 티잉 (fail-open) | S | 낮음 |
 | `genesis/rules.go` 신규 + `editable_surfaces.go` — RuleRecord(remind/verify/block 티어) + 5-액션 resolver | L | 규칙 스키마가 계약이 됨 |
 | nudger 리뷰 프리셋 — 교정 마이닝 액션 (tiny/lightweight 역할) | M | 과잉 마이닝은 dedup+캡 흡수 |
-| agentsys OnBeforeToolCall — block 티어 규칙 게이트 (자동 suspend + 킬스위치 3중 방어) | M | 중상 — 오발동 시 정상 툴콜 차단 |
+| ai/agent OnBeforeToolCall — block 티어 규칙 게이트 (자동 suspend + 킬스위치 3중 방어) | M | 중상 — 오발동 시 정상 툴콜 차단 |
 | FinalizeGate 조합 — verify 티어 출력 assertion (모닝레터 '유로 금지'가 여기서 잡힘) | M | false-positive 비용 1턴 한정 |
 | steer-note 주입 — remind 티어 (prompt-cache 불가침 준수, 시스템 프롬프트 불변) | S | 낮음 |
 | lifecycle 규칙 통계 + rule→skill 마이그레이션 승격 레인 | M | 낮음 |
@@ -343,7 +343,7 @@
 
 ### ① Lifecycle certificate 원장 + 평가자 버전 귀속 (SEA + RQGM 합류): **최우선**
 
-- **파일**: `gateway-go/internal/domain/skills/genesis/meta_artifacts.go` (Version()·ActiveVersions() 헬퍼, SHA-256 12hex), `tracker_lifecycle.go` + `evolver_candidate_eval.go` + `evolver_judge_teacher.go` (additive 필드: judgeArtifactVersion·evolveArtifactVersion·judgeModel·judge 점수쌍·held-out orig/cand·margin·behavioral counts)
+- **파일**: `gateway-go/internal/domain/skills/genesis/generation/meta_artifacts.go` (Version()·ActiveVersions() 헬퍼, SHA-256 12hex), `tracker_lifecycle.go` + `evolver_candidate_eval.go` + `evolver_judge_teacher.go` (additive 필드: judgeArtifactVersion·evolveArtifactVersion·judgeModel·judge 점수쌍·held-out orig/cand·margin·behavioral counts)
 - **왜 지금**: P1이 방금 랜딩해 아티팩트 파일이 존재하는 첫 시점. **하루 늦을수록 P3의 false-accept 라벨이 하루치 소실된다** — 시간에 비례해 가치가 쌓이는 유일한 후보. JSONL additive라 하위호환, 게이트 무변경. Effort S+M / Risk 낮음.
 
 ### ② `eprocess.go` 순수 프리미티브 + 롤백 워치 영속화 (PACE + SEA)

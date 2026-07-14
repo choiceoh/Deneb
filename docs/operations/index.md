@@ -28,7 +28,7 @@ proactive delivery).
   </Card>
   <Card title="Mail Analysis" icon="mail" href="/operations/mail-analysis">
     The two-stage analysis pipeline, automatic polling, persistence, and the
-    analyze tool.
+    mail analysis path.
   </Card>
   <Card title="Proactive Delivery" icon="send" href="/operations/proactive-delivery">
     The verbatim relay, the 업무 session target, native-client push, and

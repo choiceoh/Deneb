@@ -11,18 +11,22 @@ globs:
 
 ## 5 Rules (enforced by code review + snapshot test)
 
-### Rule 1: No wiring outside `method_registry.go`
+### Rule 1: No wiring outside `method_registry*.go`
 
-Handler Deps structs are assembled **only** in `method_registry.go`.
+Handler Deps structs are assembled **only** in `method_registry.go` /
+`method_registry_late.go` (early vs late registration).
 No other file may construct or wire Deps structs for handler registration.
 Exception: `registerBuiltinMethods()` in `server_rpc.go` (server-state closures).
 
 ### Rule 2: Hub is built only in `buildHub()`
 
 `server/gateway_hub.go:buildHub()` is the sole constructor (a thin wrapper over
-`rpcutil.NewGatewayHub`). Hub fields are private with read-only accessors; the
-one post-construction mutation is the Chat late-bind via `hub.SetChat` in
-`registerLateMethods`.
+`rpcutil.NewGatewayHub`). Hub fields are private with read-only accessors.
+Post-construction mutation is limited to late-bound optional services
+(`SetWikiStore`, `SetLocalAIHub`, `SetEmbeddingClient`, `SetContactsStore`,
+`SetInsights`). The chat handler lives on `Server` (`s.chatHandler`) and is
+passed into handler `Deps` from `registerLateMethods` — there is no
+`hub.SetChat`.
 
 ### Rule 3: Handlers never import Hub
 
@@ -31,14 +35,15 @@ They must NOT import `rpcutil.GatewayHub` or the `server` package.
 
 ### Rule 4: Adding a new handler (3-step process)
 
-1. Add service field to `rpcutil.GatewayHub`
-2. Add Deps wiring to `method_registry.go` (registerEarlyMethods or registerLateMethods)
+1. Add service field to `rpcutil.GatewayHub` (new domains only)
+2. Add Deps wiring to `method_registry.go` or `method_registry_late.go`
+   (`registerEarlyMethods` / `registerLateMethods`)
 3. Define `Deps` struct + `Methods(deps Deps)` in the handler package
 
 ### Rule 5: No adapter files
 
 Do not create `hub_adapters.go` or similar adapter layers.
-Inline Deps literals in `method_registry.go` are the only wiring point.
+Inline Deps literals in `method_registry*.go` are the only wiring point.
 
 ## Registration Phases
 
@@ -47,8 +52,8 @@ Inline Deps literals in `method_registry.go` are the only wiring point.
 | Builtin | `registerBuiltinMethods()` | Before hub | Gateway status (server-state closures) |
 | Early | `registerEarlyMethods(hub)` | Before chatHandler | ~50 domains via hub inline |
 | Session | `registerSessionRPCMethods()` | Creates chatHandler | Chat pipeline init + handler |
-| Late | `registerLateMethods(hub)` | After chatHandler | Chat/BTW/Miniapp-chat/Exec/Wiki/Genesis/GmailAnalyze (~7 domains). Aurora(드리밍)는 여기가 아니라 side effects 단계 |
-| Side effects | `registerWorkflowSideEffects(hub)` | After late | Non-RPC: autonomous, dreaming, notifier |
+| Late | `registerLateMethods(hub)` | After chatHandler | Chat / BTW / Miniapp-chat / Exec / Wiki / Models (`miniapp.models.*`) / Genesis / GmailAnalyze. Aurora(dreaming) is **not** here |
+| Side effects | `registerWorkflowSideEffects(hub)` | After late | Non-RPC: autonomous, dreaming (Aurora), notifier |
 
 ## Snapshot Test
 

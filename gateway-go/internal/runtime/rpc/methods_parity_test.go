@@ -17,7 +17,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// tsBaseMethods is the canonical method list from src/gateway/server-methods-list.ts.
+// tsBaseMethods is a historical baseline from the retired TypeScript gateway
+// (was src/gateway/server-methods-list.ts). Kept for parity regression against that snapshot.
 // Every method here must be registered in the Go dispatcher.
 var tsBaseMethods = []string{
 	"health",

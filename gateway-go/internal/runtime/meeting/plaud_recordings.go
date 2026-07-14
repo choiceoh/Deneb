@@ -6,7 +6,8 @@
 // mail edge. This service closes that gap from the recorder side: it polls
 // the Plaud MCP tools the gateway already registers (mcp_external_tools.go),
 // detects new recordings, pulls the speaker-attributed transcript, runs a
-// meeting-shaped synthesis (analysis role — the user reads this), and lands
+// meeting-shaped synthesis (main role — the user reads this; analysis role
+// was retired 2026-07-07), and lands
 // the result everywhere the flywheel expects:
 //
 //   - a 회의록/ wiki page (per linked project, else the category bucket),
@@ -61,9 +62,9 @@ const (
 	// synthesis call (noise, silence) — mark seen, skip.
 	plaudMinTranscriptRunes = 200
 	// Transcripts under the direct limit go to the synthesis model whole;
-	// longer ones are map-reduced (chunk gists via the local stage-1 model,
+	// longer ones are map-reduced (chunk gists via the RoleTiny stage-1 model,
 	// then one synthesis over the gists) so a 2-hour workshop cannot blow the
-	// analysis model's context or cost.
+	// main-role (RoleMain) model's context or cost.
 	plaudDirectRunes    = 28000
 	plaudChunkRunes     = 12000
 	plaudChunkMaxTokens = 500
@@ -109,9 +110,9 @@ type plaudRecordingsState struct {
 // lifecycle (nil-safe start, safego goroutine, ShutdownCtx-bound).
 type plaudRecordingsService struct {
 	execTool func(ctx context.Context, name string, args json.RawMessage) (string, error)
-	// synthesize runs the analysis-role model (user-facing report; cloud OK).
+	// synthesize runs the main-role model (RoleMain; user-facing report; cloud OK).
 	synthesize func(ctx context.Context, system, user string, maxTokens int) (string, error)
-	// gist runs the local stage-1 model for map-reduce chunk summaries.
+	// gist runs the RoleTiny stage-1 model for map-reduce chunk summaries.
 	gist       func(ctx context.Context, system, user string, maxTokens int) (string, error)
 	candidates func() []mailanalysis.ProjectCandidate
 	// topic returns the 업무 topic-knowledge block (company, org, key people)

@@ -47,7 +47,7 @@ thinking 토글은 **KV-prefix-safe** 다 (`effort_router.go`: 템플릿 플래�
 
 ## 아키텍처
 
-`gateway-go/internal/pipeline/chat/hindsight_recorder.go` 의 async retain 패턴과 동형이다: 턴 완료 → fire-and-forget 백그라운드 작업 → 로그. 라이브 응답 경로·레이턴시·APC 에 손대지 않는다.
+`the retired Hindsight recorder pattern (removed; see docs/research/README.md)` 의 async retain 패턴과 동형이다: 턴 완료 → fire-and-forget 백그라운드 작업 → 로그. 라이브 응답 경로·레이턴시·APC 에 손대지 않는다.
 
 ```text
 turn 완료 (effortDecision 확정·답 생성됨)
@@ -62,7 +62,7 @@ turn 완료 (effortDecision 확정·답 생성됨)
   Tier B: dsv4 반대모드 재실행 → blind head-to-head 비교 → delta 기록
 ```
 
-- **모델:** Tier A·비교 judge = lightweight 역할(`gateway-go/internal/pipeline/pilot/localai.go` 경로, gmailpoll/genesis/pilot 와 공유). Tier B 재실행 = 메인 역할(dsv4).
+- **모델:** Tier A·비교 judge = lightweight 역할(`gateway-go/internal/pipeline/pilot/localai.go` 경로, mailanalysis/genesis/pilot 와 공유). Tier B 재실행 = 메인 역할(dsv4).
 - **동시성 바운드:** 공유 lightweight 모델을 굶기지 않게 judge 는 foreground 백그라운드 작업에 양보(낮은 우선순위 큐 + 단일 동시 실행).
 - **kill switch:** `DENEB_EFFORT_JUDGE=off|tierA|tierA+B` env. 미설정이면 통째로 휴면(hindsight 의 `DENEB_HINDSIGHT_URL` dormant 패턴과 동일).
 
@@ -184,6 +184,6 @@ turn 완료 (effortDecision 확정·답 생성됨)
 - **잔여 judge 편향:** Tier B 블라인드 비교도 judge 자체 한계 내. 캘리브레이션이 유일한 방어 — 그 정확도의 천장은?
 - **샘플 대표성:** 보수적 샘플레이트가 드문 실패 모드(롱테일)를 놓치지 않나 — reason-tag 별 stratified 샘플 필요할 수도.
 - **라벨 드리프트:** 메인 모델 교체 시 과거 라벨 무효화 범위. model 필드로 분리 집계.
-- **공유 모델 비용:** lightweight 가 gmailpoll/genesis/pilot 와 경합 — judge 가 그 작업을 지연시키지 않는지 라이브 관측 필요.
+- **공유 모델 비용:** lightweight 가 mailanalysis/genesis/pilot 와 경합 — judge 가 그 작업을 지연시키지 않는지 라이브 관측 필요.
 
 관련: `docs/research/agent-papers-2026-deep-dive.md` (정정 2, 5B 섀도 모드), `gateway-go/internal/pipeline/chat/effort_router.go`, `gateway-go/internal/ai/router/router.go`.

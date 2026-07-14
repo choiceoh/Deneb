@@ -39,7 +39,7 @@ Deneb genesis 는 SkillHone 의 (1) 결정 히스토리를 이미 갖추고 있�
 | **역할 분리: 평가자는 스킬 수정 불가** | `SkillValidationEngine` 은 채점만 함(구조적으로 수정 경로 없음); producer≠judge 모델 강제(자기선호 편향 회피, arXiv:2508.02994 인용) + teacher/judge/replay-executor 역할별 모델 | `genesis/validation_engine.go`, `evolver_judge_teacher.go` (`pickCandidateJudge`) | ✅ **이미 구현** |
 | **역할 분리: 최적화자가 probe 정답을 못 봄 (redaction)** | **없음** — producer 프롬프트가 "Held-out validation/replay cases" 섹션에 최신 5케이스의 required/forbidden substring·heading·tool-call(=oracle 전체)을 노출하고 "검증 계약이니 충족하라"고 지시. judge·teacher 도 동일 노출. 유일한 블라인드는 replay executor(*"executor 는 정답을 못 보고 스킬 텍스트만으로 plan 도출"*) | `genesis/evolver_prompt_format.go` (`formatValidationCasesForPrompt`), `evolver_skill_validation.go` (`validationCasesForPrompt`, limit 5) vs `validation_executor.go` (블라인드) | 🟡 **격차였음 → 검토 직후 풀 분할로 해소** (아래 §3-1) |
 | **평가자산 별도 레포 격리** (암기 방지) | 파일은 분리(`skill_validation_cases.jsonl` vs 스킬 디렉토리의 SKILL.md)돼 있으나 위 행처럼 내용이 producer 에 재노출 → 물리 분리 ≠ 정보 격리 | `genesis/tracker.go`, `tracker_validation_cases.go` | 🟡 **부분** |
-| **소수 practice probe 로 큰 이득** (probe 20개→+40pt) | 케이스 채굴 기계는 존재(리뷰 세션·세션 backfill·per-use 자동 캡처+약케이스 가드)하나 **프로덕션 커버리지가 사실상 0** — 코드 주석이 자인: behavioral held-out 게이트가 대부분 스킬에서 inert, "NO skill has validation cases" 경로가 상시 | `genesis/tracker_validation_cases.go`, `gateway-go/internal/runtime/server/validation_backfill_task.go`, `genesis/evolver_candidate_eval.go` | 🟡 **알려진 약점 재확인** |
+| **소수 practice probe 로 큰 이득** (probe 20개→+40pt) | 케이스 채굴 기계는 존재(리뷰 세션·세션 backfill·per-use 자동 캡처+약케이스 가드)하나 **프로덕션 커버리지가 사실상 0** — 코드 주석이 자인: behavioral held-out 게이트가 대부분 스킬에서 inert, "NO skill has validation cases" 경로가 상시 | `genesis/tracker_validation_cases.go`, `gateway-go/internal/runtime/skilllifecycle/validation_backfill_task.go`, `genesis/evolver_candidate_eval.go` | 🟡 **알려진 약점 재확인** |
 | **개발 컨트롤러/실행 백본 모델 분리** + 소형→대형 스킬 이전 | producer=코딩 모델(glm 계열)·judge=main·replay=lightweight 로 이미 분리 배치 | `genesis/evolver.go`, `docs/agent-rules/model-roles.md` | ✅ **이미 구현** |
 | 단일 스킬 고립 진화 (논문의 한계) | Deneb 는 **cross-skill regression sweep** 이 이미 있음 (`cross_skill_regression` lifecycle 엔트리) | `genesis/tracker_lifecycle.go`, `validation_engine.go` (이웃 채점) | ✅ **Deneb 가 앞섬** |
 
@@ -98,6 +98,6 @@ Deneb genesis 는 SkillHone 의 (1) 결정 히스토리를 이미 갖추고 있�
 - RSI 로드맵 (P1–P4): `docs/research/recursive-self-improvement-roadmap.md` — 본 논문은 P3 설계 제약 + P2 원장 구조의 인접 보강
 - genesis 규칙: `docs/agent-rules/self-improvement.md`
 - 결정 히스토리 구현: `gateway-go/internal/domain/skills/genesis/` — `tracker_lifecycle.go`(원장), `tracker_rejected_edits.go`(기각 보존), `tracker_optimizer_memory.go`(방향 메모리), `evolver.go`(재주입), `evolver_prompt_format.go`(프롬프트 섹션)
-- 검증 스택: `genesis/validation_engine.go`(선택/행동 게이트, 케이스 20), `validation_executor.go`(블라인드 실행자), `tracker_validation_cases.go`(케이스 저장/backfill), `gateway-go/internal/runtime/server/validation_backfill_task.go`
+- 검증 스택: `genesis/validation_engine.go`(선택/행동 게이트, 케이스 20), `validation_executor.go`(블라인드 실행자), `tracker_validation_cases.go`(케이스 저장/backfill), `gateway-go/internal/runtime/skilllifecycle/validation_backfill_task.go`
 - 선행 검토 포맷: `docs/research/siri-intrinsic-skills-2606.02355.md`, `docs/research/self-compacting-agents-2606.23525.md`
 - 모델 역할 배치: `docs/agent-rules/model-roles.md`

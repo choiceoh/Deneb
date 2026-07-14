@@ -1,6 +1,6 @@
 // Package events provides a pub/sub event broadcasting system for SSE clients.
 //
-// This mirrors the event dispatch logic in src/gateway/server-broadcast.ts where
+// Originally ported from the retired TypeScript gateway broadcast path where
 // events are broadcast to connected clients with RBAC scope guards, slow consumer
 // detection, targeted delivery, and session subscription tracking.
 package events

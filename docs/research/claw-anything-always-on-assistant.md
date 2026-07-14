@@ -17,12 +17,12 @@
 | # | 논문 발견 | Deneb 현황 | 핵심 제안 | P |
 |---|---|---|---|---|
 | A | **Investigation–Execution Gap** — 맥락은 정확히 식별, 실행에서 실패 (지배적 실패 모드) | recall(분석)은 강함, 실행 후 검증 없음 | 실행-후 검증(post-action verify) 루프 + 실패 surface | P1 |
-| B | **Proactive 4배 난이도** — 능동 6.7% vs 반응 25.9% pass@1 | autonomous(boot/heartbeat/dreaming/gmailpoll) 있음, but 트리거가 시간 기반 | 이벤트-스트림 이상탐지 기반 proactive 트리거 | P1 |
+| B | **Proactive 4배 난이도** — 능동 6.7% vs 반응 25.9% pass@1 | autonomous(boot/heartbeat/dreaming/mailanalysis·LMTP) 있음, but 트리거가 시간 기반 | 이벤트-스트림 이상탐지 기반 proactive 트리거 | P1 |
 | C | **Long-horizon 열화** — 이력 길수록 성능↓ (있어도 못 씀) | recall = retrieval(BM25 top-3, cap 8), full-dump 아님 → **논문 비판을 이미 회피** | recall 랭킹 강화 + pinned/anchor facts | P2 |
 | D | **Multi-service 충돌 → 행동 정지** — 불일치 정보 조화 실패 | tool dispatch 에 cross-service 일관성 검사 **없음** | 충돌 감지 → 사용자 surface (정지 대신) | P2 |
-| E | **합성 데이터 파인튜닝 +23.7%p** — 구조 혁신 > 스케일링 | DGX Spark 로컬 추론 + 끊긴 chat live-test | Deneb 자체 eval 하네스(proactive/reactive 분리 측정) | P1 |
+| E | **합성 데이터 파인튜닝 +23.7%p** — 구조 혁신 > 스케일링 | DGX Spark 로컬 추론 + **chat live-test 가동** (`scripts/dev/live-test.sh` miniapp 주입) | Deneb 자체 eval 하네스(proactive/reactive 분리 측정) 강화 | P1 |
 
-> **한 줄 결론.** Deneb 의 아키텍처는 논문이 지적한 두 약점(full-context dump, retrieval 부재)을 **이미 우회**하고 있다(C). 반면 논문이 "가장 어렵다"고 못박은 영역 — **proactive(B)** 와 **investigation-execution gap(A)** — 은 Deneb 의 핵심 차별점(비서실장 페르소나)과 정확히 겹치므로, 여기에 투자하면 SOTA 모델도 못 푸는 문제에서 우위를 만든다. 그러나 그걸 **측정할 수단(E)** 이 지금 없다(chat live-test 가 PR #1922 로 끊김).
+> **한 줄 결론.** Deneb 의 아키텍처는 논문이 지적한 두 약점(full-context dump, retrieval 부재)을 **이미 우회**하고 있다(C). 반면 논문이 "가장 어렵다"고 못박은 영역 — **proactive(B)** 와 **investigation-execution gap(A)** — 은 Deneb 의 핵심 차별점(비서실장 페르소나)과 정확히 겹치므로, 여기에 투자하면 SOTA 모델도 못 푸는 문제에서 우위를 만든다. 측정 수단(E)은 `live-test.sh` chat-check/quality/bench 로 **복구됨** (원안 시점의 PR #1922 끊김은 해소).
 
 ---
 
@@ -69,7 +69,7 @@
 
 이 갭은 Deneb 의 **비서실장 페르소나(업무분석 + 업무비서)** 구조와 정확히 대응한다 — "왜 지금 중요한가(investigation)" 와 "언제까지 처리(execution)" 가 한 응답에 나와야 한다는 CLAUDE.md 원칙이 바로 이 갭을 메우려는 설계다.
 
-- **Investigation(강함):** recall preflight (`gateway-go/internal/pipeline/chat/recall_preflight.go:buildRecallPreflight`) 가 wiki/diary/polaris/transcript/hindsight 5소스를 합성. 맥락 식별은 잘 한다.
+- **Investigation(강함):** recall preflight (`gateway-go/internal/pipeline/chat/recall/recall_preflight.go:buildRecallPreflight`) 가 wiki/diary/polaris/transcript/hindsight 5소스를 합성. 맥락 식별은 잘 한다.
 - **Execution(검증 부재):** tool dispatch (`gateway-go/internal/pipeline/chat/tools.go:ToolRegistry.Execute`) 는 도구를 실행하고 결과를 truncate/cache 할 뿐, **"의도한 효과가 실제로 났는지" 검증 단계가 없다.** 메일 보냄 → 정말 전송됐나? 일정 충돌 해결 → 정말 반영됐나? 를 turn 내부에서 다시 확인하지 않는다.
 - **루프 갇힘 위험:** 논문이 Opus 의 약점으로 지목한 "과도한 명확화/루프"는 Deneb 에도 `compact_guard.go` 의 anti-thrashing 외엔 turn-level 루프 가드가 약하다.
 
@@ -114,8 +114,8 @@ Deneb 의 **업무비서 모드 = 정확히 proactive**. 그리고 SOTA 모델�
 
 - `gateway-go/internal/domain/autonomous/service.go:Service` — dreaming + periodic task 오케스트레이터. task 상태를 `~/.deneb/autonomous_state.json` 에 영속 → 24h/weekly 간격이 재시작 생존.
 - `boot_task.go` (24h, 기동 시) — `~/.deneb/BOOT.md` 기반 선제 turn.
-- `heartbeat_task.go` (30min, 08:00–23:00 KST) — `~/.deneb/HEARTBEAT.md` 기반 주기 체크.
-- `gmailpoll` — 신규 메일 주기 분석.
+- `runtime/heartbeat/heartbeat_task.go` (30min, 08:00–23:00 KST) — `~/.deneb/HEARTBEAT.md` 기반 주기 체크.
+- `gmailpoll` — 신규 메일 주기 분석 → **현행:** `mailanalysis` / LMTP ingest (`platform/mailanalysis`, `lmtpd`).
 - proactive relay (`server_rpc_session.go:proactiveRelayDeps`) — LLM 재합성 없이 `client:main` 세션에 보고 전달.
 
 즉 **"주기 모니터링"(논문 요구 1) 은 이미 있다.** Deneb 가 SOTA 보다 유리한 지점.
@@ -129,7 +129,7 @@ Deneb 의 proactive 트리거는 **시간 기반(매 30분, 매 24h)** 이지 **
 **B1. 이벤트-스트림 이상탐지 신호 레이어 — P1 / M. 🚧 1차 착수됨 (이 PR).**
 > **구현 현황:** 순수 신호 엔진 `gateway-go/internal/domain/autonomous/signal.go`
 > (`DetectSignals` — VIP 미응답 메일·일정 충돌·임박 일정·마감 임박을 가중 점수화,
-> exhaustive 단위 테스트) + heartbeat 가산 훅(`heartbeat_task.go`, nil-safe·기존
+> exhaustive 단위 테스트) + heartbeat 가산 훅(`runtime/heartbeat/heartbeat_task.go`, nil-safe·기존
 > HEARTBEAT.md 체크를 **억제하지 않고** 신호 요약을 앞에 덧붙임) + 캘린더 수집기
 > (`heartbeat_signals.go`, OAuth 없으면 무신호로 graceful). **signals-only 트리거 추가됨:**
 > 빈 HEARTBEAT.md 에서도 escalation-worthy 신호가 있으면 proactive turn 을 발화한다
@@ -141,7 +141,7 @@ heartbeat turn 이 매번 "전체를 다시 읽는" 대신, 경량 신호 추출
 - 마지막 체크 이후 **delta** (새 메일/일정 변경/마감 임박/응답 지연 스레드) 만 후보로 모음.
 - "비정상" 룰: VIP 발신자 + 미응답 N시간 / 일정 충돌 / 마감 D-1 / 평소 패턴 이탈.
 - 신호가 있을 때만 full agent turn 발화 → over-notification 금지 (CLAUDE.md "능동적이되 침해적이지 않게") 와 정합.
-- **어디서:** `autonomous/` 에 `signal.go` 추가, gmailpoll 의 priority 점수(improvement-ideas 5.2)와 통합.
+- **어디서:** `runtime/proactive/` 에 신호 경로 추가, mailanalysis 우선순위 점수(improvement-ideas)와 통합.
 
 **B2. Proactive 성공률 자체 측정 — P1 / S (E와 묶음).**
 논문의 reactive/proactive 분리 측정을 Deneb eval 하네스에 이식 (§6). proactive 가 Deneb 의 차별점인데 **회귀를 측정할 수단이 현재 0.** "선제 알림이 유용했나" 를 추적 못 하면 개선도 못 한다.
@@ -159,7 +159,7 @@ proactive 보고는 분석으로 끝나지 말고 **즉시 실행 액션**을 �
 
 이건 Deneb 가 **논문보다 앞선** 영역이다. Deneb 는 처음부터 full-dump 를 안 한다:
 
-- **Retrieval-over-dump:** recall preflight 가 BM25 로 wiki top-3 + diary top-3 + polaris + transcript 를 검색해 **8행으로 cap** (`recall_preflight.go`, cue fingerprint 로 cross-topic 오염 차단). 논문이 "권고"한 동적 retrieval 을 이미 구현.
+- **Retrieval-over-dump:** recall preflight 가 BM25 로 wiki top-3 + diary top-3 + polaris + transcript 를 검색해 **8행으로 cap** (`pipeline/chat/recall/recall_preflight.go`, cue fingerprint 로 cross-topic 오염 차단). 논문이 "권고"한 동적 retrieval 을 이미 구현.
 - **계층 요약:** compaction 3-tier (`compaction/polaris.go:Compact`) — Emergency(30K) → Micro(코드펜스 제거) → Stub(256룬 초과 tool_result) → LLM 요약(90% threshold, 20% target) → Embedding+MMR → Recency. 논문이 권고한 "계층 요약"의 정교한 구현체.
 - **frozen snapshot:** recall 을 세션 첫 evidence turn 1회만 build → latency 절감 (`docs/agent-rules/prompt-cache.md` §3.5).
 
@@ -167,7 +167,7 @@ proactive 보고는 분석으로 끝나지 말고 **즉시 실행 액션**을 �
 
 논문이 동시에 지적한 "**중요도 가중치를 학습하지 못한다**"는 Deneb recall 에도 남아 있다:
 
-- recall 랭킹이 BM25 score + recency 뿐 (`recall_preflight.go:120-125`). 사용자가 명시한 **앵커 사실**("내 호칭은 부장님", "마감 6/15")이 일반 메시지와 동일하게 경쟁 → 긴 이력에서 밀려날 수 있다.
+- recall 랭킹이 BM25 score + recency 뿐 (`pipeline/chat/recall/recall_preflight.go`). 사용자가 명시한 **앵커 사실**("내 호칭은 부장님", "마감 6/15")이 일반 메시지와 동일하게 경쟁 → 긴 이력에서 밀려날 수 있다.
 - top-3/cap-8 이 **고정** → 19만 단어급 컨텍스트에서 recall 이 너무 인색할 수 있음(논문 규모 대비).
 
 ### 제안
@@ -204,7 +204,7 @@ improvement-ideas 3.1(Polaris reopen 라운드트립 테스트)이 이 발견의
 **D1. 충돌 surface (정지 대신 보고) — P2 / M.**
 recall preflight 가 여러 소스에서 **같은 엔티티에 상충하는 사실**을 모았을 때, 이를 합치지 말고 `<recall-context>` 에 명시 태깅 ("⚠️ 출처 불일치: wiki=김부장 / 최근메일=이과장"). LLM 이 조화 실패로 정지하는 대신, 사용자에게 명확히 묻거나 최신 출처 우선 룰 적용.
 
-- **어디서:** `recall_preflight.go` 의 evidence 병합 단계에 엔티티-레벨 충돌 감지.
+- **어디서:** `pipeline/chat/recall/recall_preflight.go` 의 evidence 병합 단계에 엔티티-레벨 충돌 감지.
 
 **D2. 가벼운 참조 일관성 체크(메타-도구) — P3 / L.**
 논문 권고의 직접 구현. wiki write 시 기존 사실과 모순되면 dreamer/verification 단계에서 플래그. 단 복잡도 높음(L), D1 의 read-side 충돌 surface 가 먼저.
@@ -218,16 +218,18 @@ recall preflight 가 여러 소스에서 **같은 엔티티에 상충하는 사�
 
 > **논문.** 합성 데이터 2,000 환경 → base 모델 +23.7%p. 자동 데이터 생성 파이프라인 + reactive/proactive 분리 평가가 개선의 엔진.
 
-### Deneb 현황 (치명적 공백)
+### Deneb 현황 (측정 경로 복구됨)
 
-**Deneb 의 채팅 기반 라이브 테스트가 PR #1922 로 끊겨 있다.** (`docs/agent-rules/live-testing.md`, CLAUDE.md 명시): 목 텔레그램 주입 경로가 죽어서 `chat`/`quality`/`chat-check` 가 동작 안 함. 현재 enforced 게이트는 `make check`(빌드+단위) + `smoke`(HTTP /health) + `logs-errors` 뿐.
+**원안 시점(PR #1922):** 목 텔레그램 주입이 죽어 `chat`/`quality`/`chat-check` 가 끊겼다.
 
-즉 **A~D 의 어떤 개선도 "실제로 좋아졌나"를 측정할 수단이 없다.** 논문이 증명한 "측정 → 합성데이터 → 파인튜닝" 루프의 1단계조차 막혀 있다. DGX Spark 로컬 추론 환경은 논문의 파인튜닝 경로(+23.7%p)에 이상적인데, 측정이 없어 활용 못 한다.
+**현행:** `scripts/dev/live-test.sh` 가 `miniapp.chat.send` 네이티브 주입으로 chat/quality/chat-check/bench 를 다시 돌린다 (`docs/agent-rules/live-testing.md`). enforced 게이트는 `make check` + live smoke/`logs-errors` + (스코프에 따라) quality.
+
+즉 A~D 개선의 측정 수단은 **복구된 상태**다. 남은 갭은 reactive/proactive **분리** mini-benchmark(E2) 쪽.
 
 ### 제안
 
-**E1. 네이티브 주입 경로로 chat live-test 재작성 — P1 / M.** ★최우선★
-`docs/agent-rules/live-testing.md` 가 "후속 과제"로 남긴 것. `miniapp.chat.send` (SendSync, `miniapp_bridge.go`) 가 동기 응답을 반환하므로, 목 텔레그램 대신 **이 RPC 에 직접 주입**하면 chat/quality 테스트가 부활한다. 모든 후속 개선(A~D)의 선결조건.
+**E1. ~~네이티브 주입 경로로 chat live-test 재작성~~ — DONE.**
+`miniapp.chat.send` + `scripts/dev/live-test.sh` / `scripts/mock_native_client.py` 로 복구 완료. 후속은 E2.
 
 **E2. Claw-Anything 식 Deneb mini-benchmark — P1 / L.**
 논문 방법론을 Deneb 표면에 이식한 소규모 평가셋:
@@ -239,15 +241,15 @@ recall preflight 가 여러 소스에서 **같은 엔티티에 상충하는 사�
 - **어디서:** `docs/research/ideal-agent-environment-harness.md` 의 하네스 구상과 통합, `scripts/dev/` 에 평가 러너.
 
 **E3. 합성 trajectory 수집 → 로컬 파인튜닝 (장기) — P3 / L.**
-논문의 +23.7%p 경로. E2 의 fixture 환경에서 성공 궤적을 수집 → DGX Spark 의 lightweight 모델(`modelrole`) 파인튜닝. 단 메인 챗 LLM(Claude/외부)은 파인튜닝 불가 → **gmailpoll/genesis/pilot 등 로컬 잡일꾼 모델**의 proactive 신호 판단(B1) 정확도 개선에 적용. 현실적 타깃.
+논문의 +23.7%p 경로. E2 의 fixture 환경에서 성공 궤적을 수집 → DGX Spark 의 lightweight 모델(`modelrole`) 파인튜닝. 단 메인 챗 LLM(Claude/외부)은 파인튜닝 불가 → **mailanalysis/genesis/pilot 등 로컬 잡일꾼 모델**의 proactive 신호 판단(B1) 정확도 개선에 적용. 현실적 타깃.
 
 ---
 
 ## 7. 우선순위 종합
 
-### Now (P1) — 측정 복구 + 핵심 전장
+### Now (P1) — 측정 강화 + 핵심 전장
 
-- **E1** chat live-test 네이티브 재작성 ← *모든 것의 선결*
+- ~~**E1** chat live-test 네이티브 재작성~~ **DONE**
 - **E2** reactive/proactive 분리 mini-benchmark
 - **A1** post-action verification 루프
 - **B1** 이벤트-스트림 이상탐지 신호 레이어
@@ -280,7 +282,7 @@ recall preflight 가 여러 소스에서 **같은 엔티티에 상충하는 사�
 
 ## 9. 핵심 통찰 (운영자용 한 단락)
 
-논문은 "always-on 비서는 SOTA 도 34.5%, 3연속 20% 인 미해결 문제"라고 못박았다. 그런데 Deneb 가 **이미 잘하는 것**(retrieval-over-dump, 계층 압축, 주기 모니터링 스캐폴딩)은 논문이 "권고"한 방향이고, Deneb 가 **약한 것**(실행 검증, 이벤트-신호 기반 proactive, 충돌 surface)은 논문이 "제일 어렵다"고 한 것과 정확히 겹친다. 둘 다 Deneb 의 비서실장 페르소나의 본질이다. **문제는 이 모든 걸 측정할 수단(chat live-test)이 PR #1922 이후 끊겨 있다는 것** — 그래서 E1(측정 복구)이 단일 최우선이고, 그 위에서 B(proactive)·A(execution)에 투자하면 SOTA 모델도 못 푸는 영역에서 시스템-레벨 우위를 만든다.
+논문은 "always-on 비서는 SOTA 도 34.5%, 3연속 20% 인 미해결 문제"라고 못박았다. 그런데 Deneb 가 **이미 잘하는 것**(retrieval-over-dump, 계층 압축, 주기 모니터링 스캐폴딩)은 논문이 "권고"한 방향이고, Deneb 가 **약한 것**(실행 검증, 이벤트-신호 기반 proactive, 충돌 surface)은 논문이 "제일 어렵다"고 한 것과 정확히 겹친다. 둘 다 Deneb 의 비서실장 페르소나의 본질이다. **chat live-test 측정 경로(E1)는 `miniapp.chat.send` 주입으로 복구됐고**, 남은 메타-갭은 reactive/proactive 분리 mini-benchmark(E2). 그 위에서 B(proactive)·A(execution)에 투자하면 SOTA 모델도 못 푸는 영역에서 시스템-레벨 우위를 만든다.
 
 ---
 

@@ -4,7 +4,7 @@
 
 **프로젝트 주 목표(북극성, 2026-07): 에이전트의 재귀적 자가개선** — 개선 절차 자체를 진화 대상으로. 우선순위 판단·설계 결정은 [RSI 로드맵](docs/research/recursive-self-improvement-roadmap.md)(P1 절차 외부화 → P2 slow loop → P3 verifier 공진화 → P4 스킬+도구 번들 → P5 복리화: 수요 생성·케이던스·선제 L4 공급·재귀 표면·효용 접지)을 기준으로 한다.
 
-- `gateway-go/` — Go 게이트웨이 (HTTP+SSE, RPC 150+, 챗/LLM 파이프라인, 도구 통합). **주 런타임.**
+- `gateway-go/` — Go 게이트웨이 (HTTP+SSE, RPC 200+, 챗/LLM 파이프라인, ~45 내장 도구). **주 런타임.**
 - `client-android/` — Kotlin Multiplatform **모바일** 클라 (Android 데일리드라이버 + iOS). Compose Desktop 타깃은 헤드리스 검증용으로만 잔존.
 - `andromeda/` — **데스크톱** 워크스테이션 (Tauri 2 + React 18 + Refine + Vite). 자체 게이트/가이드 보유.
 - `skills/` — 파일시스템 발견 스킬 플러그인. `docs/` — Mintlify 문서.

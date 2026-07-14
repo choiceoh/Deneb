@@ -13,7 +13,7 @@
 //	mail-backfill --source gmail --query "in:anywhere" --since 2024-01-01
 //
 // IMAP creds: DENEB_ARCHIVE_IMAP_ADDR/USER/PASS/MAILBOXES. Gmail creds:
-// ~/.deneb/credentials (same OAuth token gmailpoll uses).
+// ~/.deneb/credentials (same OAuth token the mailanalysis service uses).
 package main
 
 import (

@@ -3,6 +3,7 @@ description: 위키 프로젝트 문서 레이아웃 규약 (프로젝트당 폴
 globs:
   - "gateway-go/internal/domain/wiki/**"
   - "gateway-go/internal/runtime/server/wiki_*.go"
+  - "gateway-go/internal/runtime/wikiwork/**"
   - "gateway-go/internal/pipeline/chat/tools/wiki.go"
   - "gateway-go/internal/pipeline/chat/tools/wiki_ingest.go"
 ---
@@ -25,7 +26,7 @@ globs:
 ├── 메일분석/    ← 메일 1통 = 1페이지 (시스템 자동 생성; 손으로 만들지 말 것)
 ├── 자료/        ← 외부 소스(URL·유튜브) 캡처, 소스 1개 = 1페이지 (wiki action="ingest"가 생성;
 │                  손으로 만들지 말 것 — 정규화 URL 멱등, frontmatter resource가 키)
-└── 회의록/      ← 회의 녹음 분석, 녹음 1개 = 1페이지 (plaud_recordings.go가 생성;
+└── 회의록/      ← 회의 녹음 분석, 녹음 1개 = 1페이지 (runtime/meeting/plaud_recordings.go가 생성;
                    손으로 만들지 말 것)
 
 프로젝트/거래/      ← 거래처 단위 원장 (프로젝트 횡단이라 프로젝트 폴더 밖)
@@ -105,7 +106,7 @@ globs:
   차단. 허용 형태: `프로젝트/<이름>/<파일>` 또는 `프로젝트/<이름>/<기자재|메일분석>/<파일>`.
 - **회상 앵커**: 질의가 활성 프로젝트를 이름으로 언급하면 recall이 그 대표페이지
   (현재 상태 포함)를 키워드 순위와 무관하게 최상위 증거로 주입한다
-  (`chat/recall_evidence.go` + `Store.MatchProjectsInText` — 결정적, 3자 미만
+  (`chat/recall/recall_evidence.go` + `Store.MatchProjectsInText` — 결정적, 3자 미만
   이름 가드, 종결 프로젝트 제외).
 - **미분류 메일 재분류**: `프로젝트/메일분석/`의 미연결 메일은 리뷰어가 매 사이클
   결정적 신호(related가 프로젝트를 가리킴 / 제목이 정확히 한 프로젝트를 지목)로
@@ -235,7 +236,7 @@ globs:
 1. **쓰기 전 가드** — 위키 도구 write가 신규 생성 시 유사 문서를 찾으면 생성을
    거부하고 기존 경로를 안내 (`force=true`로만 강행). 드리머의 create-dedup도
    같은 프리미티브.
-2. **위키 리뷰어** (`runtime/server/wiki_review_task.go`, 2h) — 최근 쓰인 문서의
+2. **위키 리뷰어** (`runtime/wikiwork/wiki_review_task.go`, 2h) — 최근 쓰인 문서의
    근사중복을 analysis 역할 단일 JSON 판정으로 사후 검수. **기본은 관찰 모드**
    (판정만 state 파일 `observed`에 기록) — 판정 품질 확인 후
    `DENEB_WIKI_REVIEW_AUTOMERGE=1`로 자동 병합을 무장한다 (사이클당 3건, git

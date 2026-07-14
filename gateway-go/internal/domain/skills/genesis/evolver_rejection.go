@@ -179,7 +179,7 @@ func (e *Evolver) queueRepeatedPatchFirstReviewDraft(skillName, reason, source s
 	for _, rec := range repeats {
 		evidence = append(evidence, "- "+genesiscommon.TruncateRunes(rec.Reason, 300))
 	}
-	targets := []string{"gateway-go/internal/domain/skills/genesis/prompts.go"}
+	targets := []string{"gateway-go/internal/domain/skills/genesis/generation/prompts.go"}
 	if e.catalog != nil {
 		if entry, ok := e.catalog.Get(skillName); ok && strings.TrimSpace(entry.Skill.FilePath) != "" {
 			targets = append([]string{entry.Skill.FilePath}, targets...)

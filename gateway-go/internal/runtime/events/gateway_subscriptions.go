@@ -2,7 +2,7 @@
 // events to the broadcaster for delivery to SSE clients.
 //
 // Mirrors createGatewayEventSubscriptions from
-// src/gateway/server-event-subscriptions.ts.
+// the retired TypeScript gateway event-subscriptions module.
 package events
 
 import (

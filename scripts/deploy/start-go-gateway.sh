@@ -31,7 +31,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-GO_BINARY="$REPO_DIR/gateway-go/gateway"
+GO_BINARY="$REPO_DIR/dist/deneb-gateway"
 
 # Check if the Go gateway binary exists.
 if [[ ! -x "$GO_BINARY" ]]; then

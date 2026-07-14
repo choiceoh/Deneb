@@ -12,7 +12,7 @@
 #
 # Prerequisites:
 #   - systemd with user service support
-#   - Go 1.24+ and Rust toolchain (for building)
+#   - Go 1.25+ (for building)
 
 set -euo pipefail
 
@@ -29,7 +29,7 @@ fi
 cd "$REPO_DIR"
 
 # Step 1: Ensure the gateway is built
-if [[ ! -f gateway-go/gateway ]]; then
+if [[ ! -f dist/deneb-gateway ]]; then
   echo "Building deneb gateway..."
   make all
 fi
@@ -38,7 +38,7 @@ fi
 if ! command -v deneb &>/dev/null; then
   echo "Linking deneb gateway into PATH..."
   mkdir -p "$HOME/.local/bin"
-  ln -sf "$REPO_DIR/gateway-go/gateway" "$HOME/.local/bin/deneb"
+  ln -sf "$REPO_DIR/dist/deneb-gateway" "$HOME/.local/bin/deneb"
   if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
     echo "Add ~/.local/bin to your PATH:"
     echo '  export PATH="$HOME/.local/bin:$PATH"'
