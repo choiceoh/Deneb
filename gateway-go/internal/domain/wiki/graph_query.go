@@ -608,7 +608,7 @@ func semanticNeighborLabel(rec graphRec) string {
 			return "거래처"
 		case IsMailAnalysisPath(p):
 			return "메일"
-		case len(seg) >= 2 && seg[1] == EquipmentDir:
+		case len(seg) >= 2 && seg[1] == equipmentDir:
 			return "기자재"
 		case len(seg) == 2 && seg[1] == LogPageFile:
 			return "로그"

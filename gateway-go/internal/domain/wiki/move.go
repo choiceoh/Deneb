@@ -60,6 +60,6 @@ func (s *Store) MovePage(from, to string) error {
 	if err := s.deletePageLocked(from); err != nil {
 		return fmt.Errorf("wiki: move: delete source %q after write: %w", from, err)
 	}
-	_ = s.AppendLog("move", from+" → "+to) // best-effort: audit log is non-critical
+	_ = s.appendLog("move", from+" → "+to) // best-effort: audit log is non-critical
 	return nil
 }

@@ -20,17 +20,17 @@ func TestCuesFrontmatterRoundtrip(t *testing.T) {
 		},
 		Body: "EPC 선수금 5천만원. 6월 15일 입금 예정.",
 	}
-	parsed, err := ParsePage(page.Render())
+	parsed, err := parsePage(page.Render())
 	if err != nil {
-		t.Fatalf("ParsePage: %v", err)
+		t.Fatalf("parsePage: %v", err)
 	}
 	if got := strings.Join(parsed.Meta.Cues, ","); got != "계약금,착수금" {
 		t.Fatalf("cues roundtrip = %q, want %q", got, "계약금,착수금")
 	}
 
-	bare, err := ParsePage((&Page{Meta: Frontmatter{Title: "t", Category: "기타"}, Body: "b"}).Render())
+	bare, err := parsePage((&Page{Meta: Frontmatter{Title: "t", Category: "기타"}, Body: "b"}).Render())
 	if err != nil {
-		t.Fatalf("ParsePage bare: %v", err)
+		t.Fatalf("parsePage bare: %v", err)
 	}
 	if len(bare.Meta.Cues) != 0 {
 		t.Fatalf("bare page grew cues: %v", bare.Meta.Cues)

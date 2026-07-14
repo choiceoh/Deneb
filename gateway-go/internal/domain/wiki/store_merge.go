@@ -168,7 +168,7 @@ func (s *Store) mergePageLocked(targetPath, sourcePath string, bodyFn func(targe
 			fmt.Errorf("wiki: delete merge source: %w", err)
 	}
 
-	_ = s.AppendLog("merge", targetPath+" ← "+sourcePath+" — "+target.Meta.Title) // best-effort: audit log is non-critical
+	_ = s.appendLog("merge", targetPath+" ← "+sourcePath+" — "+target.Meta.Title) // best-effort: audit log is non-critical
 
 	return MergeResult{
 		TargetPath:    targetPath,

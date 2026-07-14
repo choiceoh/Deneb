@@ -141,7 +141,7 @@ var unitPriceRe = regexp.MustCompile(`([0-9][0-9,.]*)\s*(.*)`)
 // unit keys, so prices in different units never diff against each other.
 // ok=false when no ASCII number is present ("협의 중") or the number is a
 // spelled-out Korean amount prefix ("5천원/W") — same out-of-scope contract as
-// ParseAmount.
+// parseAmount.
 func parseUnitPrice(raw string) (val float64, unit string, ok bool) {
 	m := unitPriceRe.FindStringSubmatch(strings.TrimSpace(raw))
 	if m == nil {

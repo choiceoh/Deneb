@@ -55,7 +55,7 @@ func (wd *WikiDreamer) seedPersonPages(_ context.Context, input string) int {
 	}
 
 	// Snapshot — never walk the live index map (writers mutate it in place).
-	entries := wd.store.SnapshotEntries()
+	entries := wd.store.snapshotEntries()
 	existingTitle := make(map[string]bool, len(entries))
 	for _, e := range entries {
 		existingTitle[strings.TrimSpace(e.Title)] = true
@@ -117,7 +117,7 @@ func (wd *WikiDreamer) seedPersonPages(_ context.Context, input string) int {
 // personPageExists reports whether a 인물 page already covers this name
 // (title search catches "<name> 부장" style titles the exact map misses).
 func (wd *WikiDreamer) personPageExists(name string) bool {
-	for _, e := range wd.store.SnapshotEntries() {
+	for _, e := range wd.store.snapshotEntries() {
 		if e.Category == "인물" && strings.Contains(e.Title, name) {
 			return true
 		}

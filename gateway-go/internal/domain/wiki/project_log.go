@@ -30,7 +30,7 @@ func LogArchivePath(project string) string {
 // is meaningless (two projects' logs legitimately share titles/shape).
 func IsProjectLogPage(relPath string) bool {
 	seg := splitProjectPath(relPath)
-	if len(seg) != 2 || IsReservedProjectDir(seg[0]) {
+	if len(seg) != 2 || isReservedProjectDir(seg[0]) {
 		return false
 	}
 	return seg[1] == LogPageFile || seg[1] == logArchiveFile
@@ -92,7 +92,7 @@ func (s *Store) RotateProjectLog(project string) (int, error) {
 	}); err != nil {
 		return 0, fmt.Errorf("wiki: rotate log trim %q: %w", logPath, err)
 	}
-	_ = s.AppendLog("rotate-log", fmt.Sprintf("%s — %d개 섹션 → %s", logPath, len(overflow), archivePath))
+	_ = s.appendLog("rotate-log", fmt.Sprintf("%s — %d개 섹션 → %s", logPath, len(overflow), archivePath))
 	return len(overflow), nil
 }
 

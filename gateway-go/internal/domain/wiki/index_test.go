@@ -10,8 +10,8 @@ import (
 )
 
 func TestIndex_RenderAndParse(t *testing.T) {
-	idx := NewIndex()
-	idx.UpdateEntry("기술/dgx-spark.md", &Page{
+	idx := newIndex()
+	idx.updateEntry("기술/dgx-spark.md", &Page{
 		Meta: Frontmatter{
 			ID:         "dgx-spark",
 			Title:      "DGX Spark",
@@ -23,7 +23,7 @@ func TestIndex_RenderAndParse(t *testing.T) {
 			Updated:    "2026-04-06",
 		},
 	})
-	idx.UpdateEntry("사람/alice.md", &Page{
+	idx.updateEntry("사람/alice.md", &Page{
 		Meta: Frontmatter{
 			Title:    "Alice",
 			Category: "사람",
@@ -59,8 +59,8 @@ func TestIndex_SaveAndReload(t *testing.T) {
 	dir := t.TempDir()
 	indexPath := filepath.Join(dir, "index.md")
 
-	idx := NewIndex()
-	idx.UpdateEntry("기술/go.md", &Page{
+	idx := newIndex()
+	idx.updateEntry("기술/go.md", &Page{
 		Meta: Frontmatter{
 			ID:         "go-lang",
 			Title:      "Go",
@@ -70,7 +70,7 @@ func TestIndex_SaveAndReload(t *testing.T) {
 			Importance: 0.7,
 		},
 	})
-	idx.UpdateEntry("결정/wiki.md", &Page{
+	idx.updateEntry("결정/wiki.md", &Page{
 		Meta: Frontmatter{
 			ID:         "wiki-switch",
 			Title:      "위키 전환",
@@ -84,7 +84,7 @@ func TestIndex_SaveAndReload(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	reloaded := testutil.Must(ParseIndex(indexPath))
+	reloaded := testutil.Must(parseIndex(indexPath))
 
 	if len(reloaded.Entries) != 2 {
 		t.Errorf("reloaded %d entries, want 2", len(reloaded.Entries))
@@ -132,8 +132,8 @@ func TestIndex_CreatedPersistsAcrossReload(t *testing.T) {
 	dir := t.TempDir()
 	indexPath := filepath.Join(dir, "index.md")
 
-	idx := NewIndex()
-	idx.UpdateEntry("프로젝트/기아/메일분석/m1.md", &Page{
+	idx := newIndex()
+	idx.updateEntry("프로젝트/기아/메일분석/m1.md", &Page{
 		Meta: Frontmatter{
 			ID:       "m1",
 			Title:    "견적 요청",
@@ -147,7 +147,7 @@ func TestIndex_CreatedPersistsAcrossReload(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	reloaded := testutil.Must(ParseIndex(indexPath))
+	reloaded := testutil.Must(parseIndex(indexPath))
 	entry, ok := reloaded.Entries["프로젝트/기아/메일분석/m1.md"]
 	if !ok {
 		t.Fatal("missing entry after reload")
@@ -199,7 +199,7 @@ _자동 생성: 2026-04-07 14:30_
 		t.Fatal(err)
 	}
 
-	idx := testutil.Must(ParseIndex(indexPath))
+	idx := testutil.Must(parseIndex(indexPath))
 
 	if idx.LastProcessed != "2026-04-05" {
 		t.Errorf("LastProcessed = %q", idx.LastProcessed)
@@ -221,15 +221,15 @@ _자동 생성: 2026-04-07 14:30_
 }
 
 func TestIndex_RemoveEntry(t *testing.T) {
-	idx := NewIndex()
-	idx.UpdateEntry("기술/test.md", &Page{
+	idx := newIndex()
+	idx.updateEntry("기술/test.md", &Page{
 		Meta: Frontmatter{Title: "Test", Category: "기술"},
 	})
 	if len(idx.Entries) != 1 {
 		t.Fatalf("got %d, want 1 entry", len(idx.Entries))
 	}
 
-	idx.RemoveEntry("기술/test.md")
+	idx.removeEntry("기술/test.md")
 	if len(idx.Entries) != 0 {
 		t.Errorf("got %d, want 0 entries after remove", len(idx.Entries))
 	}

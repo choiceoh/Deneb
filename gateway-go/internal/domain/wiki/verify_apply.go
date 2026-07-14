@@ -30,7 +30,7 @@ const maxAutoVerifyFixes = 15
 // applyVerifyFixes auto-applies the high-confidence findings (those carrying a
 // Fix) and returns the count applied. Findings without a Fix are ignored here —
 // they remain in the report as advisory items.
-func (wd *WikiDreamer) applyVerifyFixes(findings []VerifyFinding) int {
+func (wd *WikiDreamer) applyVerifyFixes(findings []verifyFinding) int {
 	applied := 0
 	for _, f := range findings {
 		if f.Fix == nil {
@@ -109,9 +109,9 @@ func (s *Store) FoldDuplicate(keep, fold string) error {
 	// buckets) still pass. Detectors also filter this upstream; this is the
 	// last-line guarantee at the shared merge chokepoint.
 	if IsMailAnalysisPath(keep) && IsMailAnalysisPath(fold) &&
-		MailAnalysisMsgID(keep) != MailAnalysisMsgID(fold) {
+		mailAnalysisMsgID(keep) != mailAnalysisMsgID(fold) {
 		return fmt.Errorf("wiki: refusing to fold two distinct mail analyses (%s ≠ %s) — 메일 1통 = 1페이지",
-			MailAnalysisMsgID(keep), MailAnalysisMsgID(fold))
+			mailAnalysisMsgID(keep), mailAnalysisMsgID(fold))
 	}
 
 	s.writeMu.Lock()
@@ -142,18 +142,18 @@ func (s *Store) archivePage(relPath string) error {
 
 // exactDupFinding builds a high-confidence duplicate finding with a merge Fix,
 // keeping the higher-importance page (a later Updated date breaks ties) and
-// folding the other into it. entries is an index snapshot (Store.SnapshotEntries).
-func exactDupFinding(entries map[string]IndexEntry, pathA, pathB, detail string) VerifyFinding {
+// folding the other into it. entries is an index snapshot (Store.snapshotEntries).
+func exactDupFinding(entries map[string]IndexEntry, pathA, pathB, detail string) verifyFinding {
 	keep, fold := pathA, pathB
 	if dupKeepSecond(entries, pathA, pathB) {
 		keep, fold = pathB, pathA
 	}
-	return VerifyFinding{
+	return verifyFinding{
 		Type:   "duplicate",
 		Detail: detail,
 		PageA:  keep,
 		PageB:  fold,
-		Fix:    &VerifyFix{Kind: "merge"},
+		Fix:    &verifyFix{Kind: "merge"},
 	}
 }
 

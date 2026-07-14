@@ -70,7 +70,7 @@ func TestEnsureProjectPage_RepPageTitle(t *testing.T) {
 	}
 }
 
-// TestSetProjectStatus_RoundTrip: SetProjectStatus writes the 현재 상태 section
+// TestSetProjectStatus_RoundTrip: setProjectStatus writes the 현재 상태 section
 // (creating the page), and ProjectStatuses reads it back with due + updated.
 func TestSetProjectStatus_RoundTrip(t *testing.T) {
 	store := newProjectTestStore(t)
@@ -78,8 +78,8 @@ func TestSetProjectStatus_RoundTrip(t *testing.T) {
 
 	now := time.Date(2026, 6, 23, 9, 0, 0, 0, time.UTC)
 	lines := []string{"모듈 발주 완료", "계약 체결", "납기 6월 말"}
-	if err := store.SetProjectStatus("프로젝트/영산고.md", lines, "2026-06-30", now); err != nil {
-		t.Fatalf("SetProjectStatus: %v", err)
+	if err := store.setProjectStatus("프로젝트/영산고.md", lines, "2026-06-30", now); err != nil {
+		t.Fatalf("setProjectStatus: %v", err)
 	}
 
 	statuses, err := store.ProjectStatuses()
@@ -103,9 +103,9 @@ func TestSetProjectStatus_RoundTrip(t *testing.T) {
 		t.Errorf("bullets = %v, want the 3 lines in order", st.Bullets)
 	}
 
-	// SetProjectStatus replaces (not appends): a second call leaves only the new lines.
-	if err := store.SetProjectStatus("프로젝트/영산고.md", []string{"시운전 시작"}, "", now); err != nil {
-		t.Fatalf("SetProjectStatus #2: %v", err)
+	// setProjectStatus replaces (not appends): a second call leaves only the new lines.
+	if err := store.setProjectStatus("프로젝트/영산고.md", []string{"시운전 시작"}, "", now); err != nil {
+		t.Fatalf("setProjectStatus #2: %v", err)
 	}
 	statuses, _ = store.ProjectStatuses()
 	if len(statuses) != 1 || len(statuses[0].Bullets) != 1 || statuses[0].Bullets[0] != "시운전 시작" {

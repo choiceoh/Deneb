@@ -10,8 +10,8 @@ import (
 func TestValidProjectCode(t *testing.T) {
 	valid := []string{"pl0-jdo-wnd-001", "pl3-tri-mod-001", "nde-ztt-cbl-001", "pl2-bs8-epc-002", "etc-gpo-wnd-001", "com-hyu-mod-010"}
 	for _, c := range valid {
-		if !ValidProjectCode(c) {
-			t.Errorf("ValidProjectCode(%q) = false, want true", c)
+		if !validProjectCode(c) {
+			t.Errorf("validProjectCode(%q) = false, want true", c)
 		}
 	}
 	invalid := []string{
@@ -24,8 +24,8 @@ func TestValidProjectCode(t *testing.T) {
 		"PL3-TRI-MOD-001",   // not normalized (uppercase)
 	}
 	for _, c := range invalid {
-		if ValidProjectCode(c) {
-			t.Errorf("ValidProjectCode(%q) = true, want false", c)
+		if validProjectCode(c) {
+			t.Errorf("validProjectCode(%q) = true, want false", c)
 		}
 	}
 }

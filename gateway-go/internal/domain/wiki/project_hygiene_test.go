@@ -23,8 +23,8 @@ func TestCleanProjectFolderName(t *testing.T) {
 		{"요청", "요청"}, // single segment never stripped to nothing
 	}
 	for _, tc := range cases {
-		if got := CleanProjectFolderName(tc.in); got != tc.want {
-			t.Errorf("CleanProjectFolderName(%q)\n got %q\nwant %q", tc.in, got, tc.want)
+		if got := cleanProjectFolderName(tc.in); got != tc.want {
+			t.Errorf("cleanProjectFolderName(%q)\n got %q\nwant %q", tc.in, got, tc.want)
 		}
 	}
 }
@@ -71,8 +71,8 @@ func TestSetProjectStatus_Dedupe(t *testing.T) {
 	}
 	rel := RepPagePath("영광-bess")
 	now := time.Date(2026, 7, 5, 9, 0, 0, 0, time.UTC)
-	if err := s.SetProjectStatus(rel, []string{"BESS 구축 진행", "BESS 구축 진행", "계약금 입금 확인"}, "", now); err != nil {
-		t.Fatalf("SetProjectStatus: %v", err)
+	if err := s.setProjectStatus(rel, []string{"BESS 구축 진행", "BESS 구축 진행", "계약금 입금 확인"}, "", now); err != nil {
+		t.Fatalf("setProjectStatus: %v", err)
 	}
 	page, err := s.ReadPage(rel)
 	if err != nil {

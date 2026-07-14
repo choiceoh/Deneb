@@ -137,9 +137,9 @@ func TestProjectOfLinkedMailAnalysis(t *testing.T) {
 		"사람/김민준.md":               {"", false},
 	}
 	for path, want := range cases {
-		project, ok := ProjectOfLinkedMailAnalysis(path)
+		project, ok := projectOfLinkedMailAnalysis(path)
 		if project != want.project || ok != want.ok {
-			t.Errorf("ProjectOfLinkedMailAnalysis(%q) = (%q, %v), want (%q, %v)", path, project, ok, want.project, want.ok)
+			t.Errorf("projectOfLinkedMailAnalysis(%q) = (%q, %v), want (%q, %v)", path, project, ok, want.project, want.ok)
 		}
 	}
 }

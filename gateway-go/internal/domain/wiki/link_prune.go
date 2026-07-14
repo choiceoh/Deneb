@@ -61,7 +61,7 @@ type linkResolver struct {
 // resolution stays index-based (only the index carries those) via a snapshot,
 // so a stale index merely skips a repair, never prunes a live page.
 func (s *Store) newLinkResolver(pages []string) *linkResolver {
-	entries := s.SnapshotEntries()
+	entries := s.snapshotEntries()
 	r := &linkResolver{
 		indexEntries: len(entries),
 		exists:       make(map[string]bool, len(pages)),
@@ -213,7 +213,7 @@ func (s *Store) PruneDeadRelatedLinks() (PruneStats, error) {
 		}
 	}
 	if stats.PagesChanged > 0 {
-		_ = s.AppendLog("prune-links", fmt.Sprintf("%d개 페이지 — 복구 %d건, 제거 %d건",
+		_ = s.appendLog("prune-links", fmt.Sprintf("%d개 페이지 — 복구 %d건, 제거 %d건",
 			stats.PagesChanged, stats.Repointed, stats.Removed))
 	}
 	return stats, nil

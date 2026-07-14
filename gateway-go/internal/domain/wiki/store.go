@@ -54,8 +54,8 @@ func ValidateCategory(cat string) bool {
 // page can't interleave (read,read,write,write) and clobber each other's edit —
 // the last-writer-wins lost update this guards against. It is acquired exactly
 // once at each public write boundary (WritePage, UpdatePage, DeletePage,
-// MarkSuperseded, MergePage, SplitPage, UpsertDealPage, EnrichPeople's person-page
-// helpers, RebuildIndex). The internal *Locked helpers and writePageInternal / maintainBacklinks
+// MarkSuperseded, MergePage, splitPage, UpsertDealPage, EnrichPeople's person-page
+// helpers, rebuildIndex). The internal *Locked helpers and writePageInternal / maintainBacklinks
 // assume it is already held and never re-acquire it (Go mutexes are non-reentrant).
 // mu independently guards the in-memory index/backlink maps so pure readers
 // (Index, Tier1Pages, Search) never block behind a write's disk I/O.
@@ -70,7 +70,7 @@ type Store struct {
 	// (.deals.jsonl), independent of page writes. See deal_records.go.
 	dealMu sync.Mutex
 
-	// logMu serializes AppendLog's append+rotate of log.md. Every current
+	// logMu serializes appendLog's append+rotate of log.md. Every current
 	// caller already holds writeMu, but the audit log is a self-contained
 	// side file: guarding it independently keeps the size-capped rotation
 	// atomic even if a future caller appends without writeMu.
@@ -243,9 +243,9 @@ func (s *Store) writePageLocked(relPath string, page *Page) error {
 	relPath = normalizePagePath(relPath)
 	// Defend every write path (dreamer, wiki tool, RPC, miniapp merge) against
 	// content that arrives with its own frontmatter prepended — storing it as a
-	// body would stack a duplicate on-disk frontmatter. See StripLeadingFrontmatter.
+	// body would stack a duplicate on-disk frontmatter. See stripLeadingFrontmatter.
 	if page != nil {
-		page.Body = StripLeadingFrontmatter(page.Body)
+		page.Body = stripLeadingFrontmatter(page.Body)
 	}
 	_, readErr := s.ReadPage(relPath)
 	op := "update"
@@ -255,7 +255,7 @@ func (s *Store) writePageLocked(relPath string, page *Page) error {
 	if err := s.writePageInternal(relPath, page, false); err != nil {
 		return err
 	}
-	_ = s.AppendLog(op, relPath+" — "+page.Meta.Title) // best-effort: audit log is non-critical
+	_ = s.appendLog(op, relPath+" — "+page.Meta.Title) // best-effort: audit log is non-critical
 	return nil
 }
 
@@ -304,7 +304,7 @@ func (s *Store) writePageInternal(relPath string, page *Page, skipBacklinks bool
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return fmt.Errorf("wiki: mkdir: %w", err)
 	}
-	if err := WritePageFile(abs, page); err != nil {
+	if err := writePageFile(abs, page); err != nil {
 		return err
 	}
 
@@ -321,7 +321,7 @@ func (s *Store) writePageInternal(relPath string, page *Page, skipBacklinks bool
 		if old, ok := s.index.Entries[relPath]; ok {
 			oldRelated = old.Related
 		}
-		s.index.UpdateEntry(relPath, page)
+		s.index.updateEntry(relPath, page)
 		return s.index.Save(filepath.Join(s.dir, "index.md"))
 	}(); err != nil {
 		return err
@@ -366,13 +366,13 @@ func (s *Store) deletePageLocked(relPath string) error {
 	if err := func() error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		s.index.RemoveEntry(relPath)
+		s.index.removeEntry(relPath)
 		return s.index.Save(filepath.Join(s.dir, "index.md"))
 	}(); err != nil {
 		return err
 	}
 
-	_ = s.AppendLog("delete", relPath) // best-effort: audit log is non-critical
+	_ = s.appendLog("delete", relPath) // best-effort: audit log is non-critical
 
 	// Remove backlinks: remove relPath from each formerly-related page.
 	s.maintainBacklinks(relPath, oldRelated, nil)

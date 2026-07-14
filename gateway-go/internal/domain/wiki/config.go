@@ -74,8 +74,8 @@ func ConfigFromEnv() Config {
 	return cachedConfig
 }
 
-// ResetConfigForTest resets the cached config so tests can set new env vars.
-func ResetConfigForTest() {
+// resetConfigForTest resets the cached config so tests can set new env vars.
+func resetConfigForTest() {
 	configOnce = sync.Once{}
 	cachedConfig = Config{}
 }

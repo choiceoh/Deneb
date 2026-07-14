@@ -41,9 +41,9 @@ var freemailDomains = map[string]struct{}{
 	"protonmail.com": {},
 }
 
-// IsFreemailDomain reports whether a (lowercased or not) mail domain is a
+// isFreemailDomain reports whether a (lowercased or not) mail domain is a
 // consumer host that must never count as a counterparty identity.
-func IsFreemailDomain(domain string) bool {
+func isFreemailDomain(domain string) bool {
 	_, ok := freemailDomains[strings.ToLower(strings.TrimSpace(domain))]
 	return ok
 }
@@ -59,7 +59,7 @@ func IsFreemailDomain(domain string) bool {
 // excluded.
 // The iteration happens under the store's read lock (the returned map is a
 // fresh copy): index entries are mutated in place by writers, so callers
-// must never walk the live index themselves — use Store.SnapshotEntries
+// must never walk the live index themselves — use Store.snapshotEntries
 // (same contract as Tier1Pages).
 func (s *Store) ActiveCounterpartyDomains(cutoff string) map[string]struct{} {
 	s.mu.RLock()
@@ -69,7 +69,7 @@ func (s *Store) ActiveCounterpartyDomains(cutoff string) map[string]struct{} {
 		return out
 	}
 	for path, entry := range s.index.Entries {
-		if _, ok := ProjectOfLinkedMailAnalysis(path); !ok {
+		if _, ok := projectOfLinkedMailAnalysis(path); !ok {
 			continue
 		}
 		created := entry.Created
@@ -83,7 +83,7 @@ func (s *Store) ActiveCounterpartyDomains(cutoff string) map[string]struct{} {
 			d := strings.ToLower(strings.TrimSpace(tag))
 			// Mail-analysis tags carry exactly the sender domain; a defensive
 			// dot check keeps any future non-domain tag out of the set.
-			if d == "" || !strings.Contains(d, ".") || IsFreemailDomain(d) {
+			if d == "" || !strings.Contains(d, ".") || isFreemailDomain(d) {
 				continue
 			}
 			out[d] = struct{}{}
@@ -112,7 +112,7 @@ func (s *Store) CounterpartyProjects(cutoff string) map[string][]string {
 	// domain → project → latest created (for recency ordering).
 	latest := map[string]map[string]string{}
 	for path, entry := range s.index.Entries {
-		project, ok := ProjectOfLinkedMailAnalysis(path)
+		project, ok := projectOfLinkedMailAnalysis(path)
 		if !ok {
 			continue
 		}
@@ -125,7 +125,7 @@ func (s *Store) CounterpartyProjects(cutoff string) map[string][]string {
 		}
 		for _, tag := range entry.Tags {
 			d := strings.ToLower(strings.TrimSpace(tag))
-			if d == "" || !strings.Contains(d, ".") || IsFreemailDomain(d) {
+			if d == "" || !strings.Contains(d, ".") || isFreemailDomain(d) {
 				continue
 			}
 			m := latest[d]

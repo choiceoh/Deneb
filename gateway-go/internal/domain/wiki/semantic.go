@@ -473,12 +473,12 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) 
 // High on purpose: a sparse, trustworthy graph beats a dense, noisy one.
 const relatedSuggestMinScore = 0.6
 
-// SuggestRelated returns the wiki paths most semantically similar to the page
+// suggestRelated returns the wiki paths most semantically similar to the page
 // at relPath, excluding itself and any page already in its Related[]. Only
 // neighbors above relatedSuggestMinScore are returned, best first. Returns nil
 // when no embedder is configured/healthy or the page isn't embeddable — so
 // callers can densify the graph opportunistically without ever forcing a link.
-func (s *Store) SuggestRelated(ctx context.Context, relPath string, limit int) []string {
+func (s *Store) suggestRelated(ctx context.Context, relPath string, limit int) []string {
 	if s.sem == nil || s.sem.embedder == nil || !s.sem.embedder.IsHealthy() {
 		return nil
 	}

@@ -33,7 +33,7 @@ NVIDIA DGX Spark.
 - fact 2
 `
 
-	page := testutil.Must(ParsePage([]byte(input)))
+	page := testutil.Must(parsePage([]byte(input)))
 
 	if page.Meta.ID != "dgx-spark" {
 		t.Errorf("id = %q, want %q", page.Meta.ID, "dgx-spark")
@@ -63,7 +63,7 @@ NVIDIA DGX Spark.
 
 func TestParsePage_NoFrontmatter(t *testing.T) {
 	input := "# Just markdown\n\nSome content."
-	page := testutil.Must(ParsePage([]byte(input)))
+	page := testutil.Must(parsePage([]byte(input)))
 	if page.Meta.Title != "" {
 		t.Errorf("title = %q, want empty", page.Meta.Title)
 	}
@@ -116,8 +116,8 @@ func TestStripLeadingFrontmatter(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := StripLeadingFrontmatter(tc.in); got != tc.want {
-				t.Errorf("StripLeadingFrontmatter(%q) = %q, want %q", tc.in, got, tc.want)
+			if got := stripLeadingFrontmatter(tc.in); got != tc.want {
+				t.Errorf("stripLeadingFrontmatter(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}
@@ -133,7 +133,7 @@ func TestPage_RenderRoundtrip(t *testing.T) {
 
 	rendered := page.Render()
 
-	parsed := testutil.Must(ParsePage(rendered))
+	parsed := testutil.Must(parsePage(rendered))
 	if parsed.Meta.ID != "test-page" {
 		t.Errorf("id roundtrip: got %q", parsed.Meta.ID)
 	}
@@ -165,7 +165,7 @@ func TestFrontmatter_ClientRoundtripAndNormalize(t *testing.T) {
 	page.Meta.Client = "금호타이어"
 	page.Body = "# 본문"
 
-	parsed := testutil.Must(ParsePage(page.Render()))
+	parsed := testutil.Must(parsePage(page.Render()))
 	if parsed.Meta.Client != "금호타이어" {
 		t.Errorf("client roundtrip: got %q", parsed.Meta.Client)
 	}
@@ -245,8 +245,8 @@ func TestWritePageFile_Atomic(t *testing.T) {
 	page := NewPage("원자적 쓰기", "기술", nil)
 	page.Body = "# 원자적 쓰기\n\nContent."
 
-	if err := WritePageFile(path, page); err != nil {
-		t.Fatalf("WritePageFile: %v", err)
+	if err := writePageFile(path, page); err != nil {
+		t.Fatalf("writePageFile: %v", err)
 	}
 
 	// Verify .tmp doesn't linger.
@@ -272,8 +272,8 @@ func TestWritePageFile_RedactsBody(t *testing.T) {
 	page := NewPage("세션 기록", "기술", []string{"NVIDIA"})
 	page.Body = "# 세션 기록\n\n## 핵심 사실\n\n- 토큰: " + token + " 를 확인했음"
 
-	if err := WritePageFile(path, page); err != nil {
-		t.Fatalf("WritePageFile: %v", err)
+	if err := writePageFile(path, page); err != nil {
+		t.Fatalf("writePageFile: %v", err)
 	}
 
 	data := testutil.Must(os.ReadFile(path))
@@ -303,8 +303,8 @@ func TestWritePageFile_RedactsSummary(t *testing.T) {
 	page.Meta.Summary = "사용자 GitHub 토큰 " + token + " 관련 변경"
 	page.Body = "# 정리"
 
-	if err := WritePageFile(path, page); err != nil {
-		t.Fatalf("WritePageFile: %v", err)
+	if err := writePageFile(path, page); err != nil {
+		t.Fatalf("writePageFile: %v", err)
 	}
 
 	data := testutil.Must(os.ReadFile(path))

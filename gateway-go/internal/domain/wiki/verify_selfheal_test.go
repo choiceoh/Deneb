@@ -12,13 +12,13 @@ import (
 // TestDetectDuplicates_NormalizedTitle: punctuation/spacing title variants get
 // a high-confidence merge Fix; genuinely different titles stay advisory.
 func TestDetectDuplicates_NormalizedTitle(t *testing.T) {
-	idx := NewIndex()
-	idx.UpdateEntry("프로젝트/영산고-태양광/대표.md", &Page{Meta: Frontmatter{Title: "영산고 태양광", Importance: 0.7}})
-	idx.UpdateEntry("프로젝트/영산고태양광/대표.md", &Page{Meta: Frontmatter{Title: "영산고-태양광", Importance: 0.5}})
-	idx.UpdateEntry("프로젝트/부산8호/대표.md", &Page{Meta: Frontmatter{Title: "부산 8호 태양광", Importance: 0.5}})
+	idx := newIndex()
+	idx.updateEntry("프로젝트/영산고-태양광/대표.md", &Page{Meta: Frontmatter{Title: "영산고 태양광", Importance: 0.7}})
+	idx.updateEntry("프로젝트/영산고태양광/대표.md", &Page{Meta: Frontmatter{Title: "영산고-태양광", Importance: 0.5}})
+	idx.updateEntry("프로젝트/부산8호/대표.md", &Page{Meta: Frontmatter{Title: "부산 8호 태양광", Importance: 0.5}})
 
 	findings := detectDuplicates(idx.Entries)
-	var normFix *VerifyFinding
+	var normFix *verifyFinding
 	for i := range findings {
 		if findings[i].Type == "duplicate" && findings[i].Fix != nil &&
 			strings.Contains(findings[i].Detail, "정규화") {
@@ -47,10 +47,10 @@ func TestDetectDuplicates_MailAnalysisGuard(t *testing.T) {
 	const sameTitle = "Re: Re: [해밀고흥솔라팜] 모듈 제작 마스터 스케쥴 요청의 건"
 
 	t.Run("different msgID is never auto-merged", func(t *testing.T) {
-		idx := NewIndex()
-		idx.UpdateEntry("프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3e4371576a3.md",
+		idx := newIndex()
+		idx.updateEntry("프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3e4371576a3.md",
 			&Page{Meta: Frontmatter{Title: sameTitle, Importance: 0.3}})
-		idx.UpdateEntry("프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3aa72de312b.md",
+		idx.updateEntry("프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3aa72de312b.md",
 			&Page{Meta: Frontmatter{Title: sameTitle, Importance: 0.3}})
 		for _, f := range detectDuplicates(idx.Entries) {
 			if f.Fix != nil {
@@ -60,10 +60,10 @@ func TestDetectDuplicates_MailAnalysisGuard(t *testing.T) {
 	})
 
 	t.Run("same msgID across buckets still merges", func(t *testing.T) {
-		idx := NewIndex()
-		idx.UpdateEntry("프로젝트/메일분석/19eaa3e4371576a3.md",
+		idx := newIndex()
+		idx.updateEntry("프로젝트/메일분석/19eaa3e4371576a3.md",
 			&Page{Meta: Frontmatter{Title: sameTitle, Importance: 0.3}})
-		idx.UpdateEntry("프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3e4371576a3.md",
+		idx.updateEntry("프로젝트/해밀고흥솔라팜-모듈/메일분석/19eaa3e4371576a3.md",
 			&Page{Meta: Frontmatter{Title: sameTitle, Importance: 0.5}})
 		merged := false
 		for _, f := range detectDuplicates(idx.Entries) {

@@ -7,7 +7,7 @@ import (
 )
 
 func TestHotwordHints(t *testing.T) {
-	s := &Store{index: NewIndex()}
+	s := &Store{index: newIndex()}
 	s.index.Entries["프로젝트/a.md"] = IndexEntry{
 		Title: "에코프로 태양광 사업", Category: "프로젝트", Type: "entity", Importance: 0.5,
 		Tags: []string{"에코프로", "탑솔라", "김대희"},
@@ -36,13 +36,13 @@ func TestHotwordHints(t *testing.T) {
 	}
 
 	// Empty wiki -> empty string.
-	if got := (&Store{index: NewIndex()}).HotwordHints(50); got != "" {
+	if got := (&Store{index: newIndex()}).HotwordHints(50); got != "" {
 		t.Errorf("empty wiki hotwords = %q, want empty", got)
 	}
 }
 
 func TestHotwordHintsCap(t *testing.T) {
-	s := &Store{index: NewIndex()}
+	s := &Store{index: newIndex()}
 	s.index.Entries["a.md"] = IndexEntry{Title: "t1", Tags: []string{"x1", "x2", "x3", "x4"}}
 	if got := strings.Split(s.HotwordHints(3), ", "); len(got) > 3 {
 		t.Errorf("maxTerms=3 exceeded: %v", got)

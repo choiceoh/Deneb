@@ -495,7 +495,7 @@ func (wd *WikiDreamer) prepareDreamUpdate(u wikiUpdate) (wikiUpdate, bool) {
 	}
 	// Store.WritePage also strips frontmatter on create, but update content is
 	// merged before that boundary and must be cleaned here.
-	u.Content = StripLeadingFrontmatter(u.Content)
+	u.Content = stripLeadingFrontmatter(u.Content)
 	if !strings.HasSuffix(u.Path, ".md") {
 		u.Path += ".md"
 	}
@@ -711,7 +711,7 @@ func (wd *WikiDreamer) splitOversizedDreamPage(path string, maxBytes int) (int, 
 	if err != nil || info.Size() <= int64(maxBytes) {
 		return 0, false
 	}
-	subPaths, splitErr := wd.store.SplitPage(path, maxBytes)
+	subPaths, splitErr := wd.store.splitPage(path, maxBytes)
 	if splitErr != nil {
 		wd.logger.Warn("wiki-dream: split failed",
 			"path", path, "error", splitErr)
@@ -728,11 +728,11 @@ func (wd *WikiDreamer) splitOversizedDreamPage(path string, maxBytes int) (int, 
 }
 
 // rebuildIndex scans all wiki pages and rebuilds the master index. It delegates
-// to Store.RebuildIndex, which holds writeMu so the disk scan + index swap is a
+// to Store.rebuildIndex, which holds writeMu so the disk scan + index swap is a
 // consistent snapshot — a page write completing concurrently (wiki-research
 // turn, mail analysis) can't have its index entry dropped by the wholesale swap.
 func (wd *WikiDreamer) rebuildIndex() error {
-	return wd.store.RebuildIndex()
+	return wd.store.rebuildIndex()
 }
 
 // findExistingPage checks if a similar page already exists by ID match,

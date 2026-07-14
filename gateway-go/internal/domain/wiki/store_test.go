@@ -131,8 +131,8 @@ func TestStore_PathNormalization(t *testing.T) {
 	}
 
 	// The master index is keyed by the normalized .md path.
-	if _, ok := store.SnapshotEntries()["프로젝트/스파이럴-테스트베드.md"]; !ok {
-		t.Errorf("index missing normalized key; entries=%v", store.SnapshotEntries())
+	if _, ok := store.snapshotEntries()["프로젝트/스파이럴-테스트베드.md"]; !ok {
+		t.Errorf("index missing normalized key; entries=%v", store.snapshotEntries())
 	}
 
 	// Re-writing with the .md form must update in place, not create a second page.
@@ -358,8 +358,8 @@ func TestStore_AppendLog_RedactsSecret(t *testing.T) {
 	defer store.Close()
 
 	token := "github_pat_11" + strings.Repeat("Z", 60)
-	if err := store.AppendLog("create", "페이지 본문에 "+token+" 포함됨"); err != nil {
-		t.Fatalf("AppendLog: %v", err)
+	if err := store.appendLog("create", "페이지 본문에 "+token+" 포함됨"); err != nil {
+		t.Fatalf("appendLog: %v", err)
 	}
 
 	data := testutil.Must(os.ReadFile(filepath.Join(dir, "wiki", "log.md")))
@@ -370,7 +370,7 @@ func TestStore_AppendLog_RedactsSecret(t *testing.T) {
 }
 
 // TestStore_AppendLog_RotatesWhenOversized verifies the size-capped rotation:
-// once log.md exceeds wikiLogMaxBytes, the next AppendLog rolls off the oldest
+// once log.md exceeds wikiLogMaxBytes, the next appendLog rolls off the oldest
 // entries, keeps the newest ~wikiLogKeepBytes, and the freshly appended entry
 // survives. Pre-seeds an oversized file so the test stays fast (no 2MB of
 // real appends).
@@ -398,8 +398,8 @@ func TestStore_AppendLog_RotatesWhenOversized(t *testing.T) {
 	seededSize := sb.Len()
 
 	// One append crosses (already over) the cap and triggers rotation.
-	if err := store.AppendLog("create", "프로젝트/freshest — 최신 항목"); err != nil {
-		t.Fatalf("AppendLog: %v", err)
+	if err := store.appendLog("create", "프로젝트/freshest — 최신 항목"); err != nil {
+		t.Fatalf("appendLog: %v", err)
 	}
 
 	after := string(testutil.Must(os.ReadFile(logPath)))

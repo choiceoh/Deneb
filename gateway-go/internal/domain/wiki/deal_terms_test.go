@@ -23,9 +23,9 @@ func TestParseCapacityMW(t *testing.T) {
 		{"협의 중", 0, false},
 	}
 	for _, tc := range cases {
-		got, ok := ParseCapacityMW(tc.in)
+		got, ok := parseCapacityMW(tc.in)
 		if ok != tc.ok || (ok && got != tc.want) {
-			t.Errorf("ParseCapacityMW(%q) = %v,%v want %v,%v", tc.in, got, ok, tc.want, tc.ok)
+			t.Errorf("parseCapacityMW(%q) = %v,%v want %v,%v", tc.in, got, ok, tc.want, tc.ok)
 		}
 	}
 }

@@ -6,7 +6,7 @@ import (
 )
 
 func TestConfigFromEnv_Overrides(t *testing.T) {
-	ResetConfigForTest()
+	resetConfigForTest()
 
 	os.Setenv("DENEB_WIKI_ENABLED", "true")
 	os.Setenv("DENEB_WIKI_DIR", "/tmp/test-wiki")
@@ -37,13 +37,13 @@ func TestConfigFromEnv_Overrides(t *testing.T) {
 // With no explicit DENEB_WIKI_DIR, the wiki + diary dirs follow DENEB_STATE_DIR so
 // a test/dev gateway with an isolated state dir keeps its wiki out of prod ~/.deneb.
 func TestConfigFromEnv_DefaultsFollowStateDir(t *testing.T) {
-	ResetConfigForTest()
+	resetConfigForTest()
 	os.Setenv("DENEB_STATE_DIR", "/tmp/deneb-iso-test")
 	os.Unsetenv("DENEB_WIKI_DIR")
 	os.Unsetenv("DENEB_WIKI_DIARY_DIR")
 	defer func() {
 		os.Unsetenv("DENEB_STATE_DIR")
-		ResetConfigForTest()
+		resetConfigForTest()
 	}()
 
 	cfg := ConfigFromEnv()

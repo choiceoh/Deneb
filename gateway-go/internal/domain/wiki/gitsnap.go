@@ -80,9 +80,9 @@ func (s *Store) SnapshotGit(ctx context.Context, message string) string {
 	return hash
 }
 
-// GitSnapshotStat returns the diffstat of a snapshot commit ("" on any
+// gitSnapshotStat returns the diffstat of a snapshot commit ("" on any
 // failure) — used for the dream-cycle change report.
-func (s *Store) GitSnapshotStat(ctx context.Context, hash string) string {
+func (s *Store) gitSnapshotStat(ctx context.Context, hash string) string {
 	if hash == "" {
 		return ""
 	}

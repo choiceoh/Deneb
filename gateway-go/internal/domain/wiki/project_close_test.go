@@ -156,7 +156,7 @@ func TestCloseProject_LegacyFlatRep(t *testing.T) {
 
 // TestCloseProject_ReservedBucketPathRejected: the 거래 ledger (and any other
 // reserved-bucket page) must never resolve as a project rep — the old fallback
-// name "거래/탑솔라" slipped past IsReservedProjectDir and the legacy lookup
+// name "거래/탑솔라" slipped past isReservedProjectDir and the legacy lookup
 // then archived the ledger itself.
 func TestCloseProject_ReservedBucketPathRejected(t *testing.T) {
 	store := newCloseStore(t)
@@ -238,7 +238,7 @@ func TestCloseProject_ByDisplayTitle(t *testing.T) {
 func TestFlagDormantProjects(t *testing.T) {
 	store := newCloseStore(t)
 	now := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
-	old := now.AddDate(0, 0, -(DormantAfterDays + 40)).Format("2006-01-02")
+	old := now.AddDate(0, 0, -(dormantAfterDays + 40)).Format("2006-01-02")
 
 	makeStale := func(name string) {
 		t.Helper()
@@ -279,7 +279,7 @@ func TestFlagDormantProjects(t *testing.T) {
 func TestFlagDormantProjects_Cap(t *testing.T) {
 	store := newCloseStore(t)
 	now := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
-	old := now.AddDate(0, 0, -(DormantAfterDays + 40)).Format("2006-01-02")
+	old := now.AddDate(0, 0, -(dormantAfterDays + 40)).Format("2006-01-02")
 	for _, name := range []string{"a사업", "b사업", "c사업"} {
 		seedProject(t, store, name)
 		if err := store.UpdatePage(RepPagePath(name), func(cur *Page) (*Page, error) {

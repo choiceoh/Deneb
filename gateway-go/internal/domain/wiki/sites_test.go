@@ -36,9 +36,9 @@ func TestFrontmatterSitesRoundtrip(t *testing.T) {
 		},
 		Body: "본문.",
 	}
-	parsed, err := ParsePage(p.Render())
+	parsed, err := parsePage(p.Render())
 	if err != nil {
-		t.Fatalf("ParsePage: %v", err)
+		t.Fatalf("parsePage: %v", err)
 	}
 	want := []string{"전북 군산시 옥구읍 수산리", "충남 당진시 송악읍"}
 	if len(parsed.Meta.Sites) != 2 || parsed.Meta.Sites[0] != want[0] || parsed.Meta.Sites[1] != want[1] {

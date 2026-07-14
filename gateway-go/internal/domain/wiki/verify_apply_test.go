@@ -49,10 +49,10 @@ func TestApplyVerifyFixes_Move(t *testing.T) {
 	s, wd := newVerifyStore(t)
 	writePageT(t, s, "기타/김부장.md", "김부장", "기타", "사람인데 기타로 잘못 분류됨")
 
-	n := wd.applyVerifyFixes([]VerifyFinding{{
+	n := wd.applyVerifyFixes([]verifyFinding{{
 		Type:  "misclassified",
 		PageA: "기타/김부장.md",
-		Fix:   &VerifyFix{Kind: "move", NewPath: "인물/김부장.md"},
+		Fix:   &verifyFix{Kind: "move", NewPath: "인물/김부장.md"},
 	}})
 	if n != 1 {
 		t.Fatalf("applied = %d, want 1", n)
@@ -71,11 +71,11 @@ func TestApplyVerifyFixes_Merge(t *testing.T) {
 	writePageT(t, s, "프로젝트/a.md", "탑솔라", "프로젝트", "AAA 본문")
 	writePageT(t, s, "프로젝트/b.md", "탑솔라", "프로젝트", "BBB 본문")
 
-	n := wd.applyVerifyFixes([]VerifyFinding{{
+	n := wd.applyVerifyFixes([]verifyFinding{{
 		Type:  "duplicate",
 		PageA: "프로젝트/a.md", // keep
 		PageB: "프로젝트/b.md", // fold
-		Fix:   &VerifyFix{Kind: "merge"},
+		Fix:   &verifyFix{Kind: "merge"},
 	}})
 	if n != 1 {
 		t.Fatalf("applied = %d, want 1", n)
@@ -98,7 +98,7 @@ func TestApplyVerifyFixes_Merge(t *testing.T) {
 func TestApplyVerifyFixes_SkipsAdvisoryAndCaps(t *testing.T) {
 	s, wd := newVerifyStore(t)
 	// One advisory finding (no Fix) must be ignored entirely.
-	advisory := VerifyFinding{Type: "misclassified", PageA: "기타/keep.md", Detail: "low-confidence"}
+	advisory := verifyFinding{Type: "misclassified", PageA: "기타/keep.md", Detail: "low-confidence"}
 	writePageT(t, s, "기타/keep.md", "keep", "기타", "stays put")
 
 	// Cap+1 high-confidence moves — the cap must hold, leaving exactly one behind.
@@ -106,16 +106,16 @@ func TestApplyVerifyFixes_SkipsAdvisoryAndCaps(t *testing.T) {
 	for i := 0; i <= maxAutoVerifyFixes; i++ {
 		names = append(names, fmt.Sprintf("p%02d", i))
 	}
-	var findings []VerifyFinding
+	var findings []verifyFinding
 	for _, name := range names {
 		writePageT(t, s, "기타/"+name+".md", name, "기타", "move me")
-		findings = append(findings, VerifyFinding{
+		findings = append(findings, verifyFinding{
 			Type:  "misclassified",
 			PageA: "기타/" + name + ".md",
-			Fix:   &VerifyFix{Kind: "move", NewPath: "인물/" + name + ".md"},
+			Fix:   &verifyFix{Kind: "move", NewPath: "인물/" + name + ".md"},
 		})
 	}
-	findings = append([]VerifyFinding{advisory}, findings...)
+	findings = append([]verifyFinding{advisory}, findings...)
 
 	n := wd.applyVerifyFixes(findings)
 	if n != maxAutoVerifyFixes {

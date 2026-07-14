@@ -19,9 +19,9 @@ import (
 // closedSectionHeading is the H2 section on a 대표페이지 recording closure.
 const closedSectionHeading = "종결"
 
-// DormantAfterDays is how long a project may sit with no page activity before
+// dormantAfterDays is how long a project may sit with no page activity before
 // the dormancy check proposes closure (advisory bullet, never auto-close).
-const DormantAfterDays = 120
+const dormantAfterDays = 120
 
 // CloseResult summarizes a project closure.
 type CloseResult struct {
@@ -64,7 +64,7 @@ func (s *Store) resolveProjectRep(ref string) (name, repPath string, err error) 
 	// already rejected the ref (reserved bucket like 프로젝트/거래/…, or another
 	// category), and letting "거래/탑솔라" through would make the legacy lookup
 	// below treat the 거래 ledger page as a rep page and archive it.
-	if name == "" || strings.Contains(name, "/") || IsReservedProjectDir(name) {
+	if name == "" || strings.Contains(name, "/") || isReservedProjectDir(name) {
 		return "", "", fmt.Errorf("wiki: %q is not a project", ref)
 	}
 	if _, rerr := s.ReadPage(RepPagePath(name)); rerr == nil {
@@ -171,7 +171,7 @@ func (s *Store) CloseProject(ref, note string, now time.Time) (CloseResult, erro
 			archived++
 		}
 	}
-	_ = s.AppendLog("close-project", repPath+" — "+strings.TrimSpace(note))
+	_ = s.appendLog("close-project", repPath+" — "+strings.TrimSpace(note))
 	return CloseResult{RepPath: repPath, Archived: archived}, nil
 }
 
@@ -217,12 +217,12 @@ func (s *Store) ReopenProject(ref string, now time.Time) (ReopenResult, error) {
 	if restored == 0 {
 		return ReopenResult{RepPath: repPath}, fmt.Errorf("wiki: reopen %s: 보관된 페이지 없음 (이미 활성)", name)
 	}
-	_ = s.AppendLog("reopen-project", repPath)
+	_ = s.appendLog("reopen-project", repPath)
 	return ReopenResult{RepPath: repPath, Restored: restored}, nil
 }
 
 // FlagDormantProjects proposes closure for ACTIVE projects with no page
-// activity for DormantAfterDays: one dated bullet on the 대표페이지's 현재 상태
+// activity for dormantAfterDays: one dated bullet on the 대표페이지's 현재 상태
 // (surfaces in the 모아보기), idempotent per quarter via the provenance ref,
 // capped per call. Never closes anything itself. Returns flagged rep paths.
 //
@@ -233,12 +233,12 @@ func (s *Store) FlagDormantProjects(now time.Time, maxFlags int) []string {
 	if maxFlags <= 0 {
 		return nil
 	}
-	cutoff := now.AddDate(0, 0, -DormantAfterDays).Format("2006-01-02")
+	cutoff := now.AddDate(0, 0, -dormantAfterDays).Format("2006-01-02")
 	quarter := fmt.Sprintf("dormant:%dQ%d", now.Year(), (int(now.Month())-1)/3+1)
 
 	// Snapshot — never walk the live index map (writers mutate it in place).
 	lastByFolder := make(map[string]string) // 프로젝트/<name> → newest Updated
-	for path, entry := range s.SnapshotEntries() {
+	for path, entry := range s.snapshotEntries() {
 		folder, ok := ProjectFolderOf(path)
 		if !ok {
 			continue

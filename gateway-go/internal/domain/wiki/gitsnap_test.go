@@ -91,7 +91,7 @@ func TestSnapshotGit_ReturnsHashAndStat(t *testing.T) {
 	if hash == "" {
 		t.Fatal("commit must return a short hash")
 	}
-	if stat := store.GitSnapshotStat(ctx, hash); !strings.Contains(stat, "changed") {
+	if stat := store.gitSnapshotStat(ctx, hash); !strings.Contains(stat, "changed") {
 		t.Errorf("diffstat missing summary line: %q", stat)
 	}
 	// Noop snapshot returns "".

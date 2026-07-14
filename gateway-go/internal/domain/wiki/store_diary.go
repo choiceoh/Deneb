@@ -97,16 +97,16 @@ const (
 	wikiLogKeepBytes = 1_000_000
 )
 
-// AppendLog appends a timestamped operation entry to log.md in the wiki root.
+// appendLog appends a timestamped operation entry to log.md in the wiki root.
 // Tracks all wiki mutations for temporal awareness (Karpathy wiki concept).
 //
 // The details string often echoes page titles or user-provided content, so it
-// is redacted before persistence for the same reason WritePageFile redacts the
+// is redacted before persistence for the same reason writePageFile redacts the
 // page body.
 //
 // log.md is size-capped: once it exceeds wikiLogMaxBytes the oldest entries are
 // rolled off, keeping the newest ~wikiLogKeepBytes worth of complete sections.
-func (s *Store) AppendLog(operation, details string) error {
+func (s *Store) appendLog(operation, details string) error {
 	s.logMu.Lock()
 	defer s.logMu.Unlock()
 
@@ -190,10 +190,10 @@ func (s *Store) Close() error {
 
 func (s *Store) loadOrCreateIndex() (*Index, error) {
 	indexPath := filepath.Join(s.dir, "index.md")
-	idx, err := ParseIndex(indexPath)
+	idx, err := parseIndex(indexPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			idx = NewIndex()
+			idx = newIndex()
 			err = idx.Save(indexPath)
 			return idx, err
 		}
@@ -223,7 +223,7 @@ func (s *Store) pruneGhostEntries() {
 // master index — pruneGhostEntries' other half. A crash in the window between
 // a page's file write and its index save (they are two separate disk writes)
 // leaves the page findable by FTS (rebuilt from disk on startup) yet invisible
-// to every index consumer until the next dream-cycle RebuildIndex. Runs once
+// to every index consumer until the next dream-cycle rebuildIndex. Runs once
 // at NewStore, before any concurrency, so it touches s.index directly. Cost is
 // bounded: one walk (ListPages) plus a parse of only the missing pages.
 func (s *Store) adoptOrphanPages() {
@@ -239,9 +239,9 @@ func (s *Store) adoptOrphanPages() {
 		}
 		page, perr := s.ReadPage(rel)
 		if perr != nil {
-			continue // unreadable/parse error: leave it out, same as RebuildIndex
+			continue // unreadable/parse error: leave it out, same as rebuildIndex
 		}
-		s.index.UpdateEntry(rel, page)
+		s.index.updateEntry(rel, page)
 		adopted++
 	}
 	if adopted == 0 {

@@ -48,13 +48,13 @@ func (s *Store) ResolvePersonPaths(names []string) map[string]string {
 	return out
 }
 
-// ResolvePeopleByEmail maps each email address to the 인물 page that declares it
+// resolvePeopleByEmail maps each email address to the 인물 page that declares it
 // in frontmatter `emails:` — the robust identity join name matching cannot do.
 // An email is unique to one identity, so 동명이인 (김성훈@marsh vs 김성훈@bohae)
 // resolve to different pages, and mail senders / org members / contacts all land
 // on the ONE page that owns their address. Keys are lowercased; an address no
 // page claims is absent. One disk scan resolves the whole batch.
-func (s *Store) ResolvePeopleByEmail(emails []string) map[string]string {
+func (s *Store) resolvePeopleByEmail(emails []string) map[string]string {
 	if len(emails) == 0 {
 		return nil
 	}
@@ -79,9 +79,9 @@ func (s *Store) ResolvePeopleByEmail(emails []string) map[string]string {
 }
 
 // ResolvePersonByEmail resolves a single address to its 인물 page relPath, or ""
-// when no page claims it. Thin single-address wrapper over ResolvePeopleByEmail.
+// when no page claims it. Thin single-address wrapper over resolvePeopleByEmail.
 func (s *Store) ResolvePersonByEmail(email string) string {
-	m := s.ResolvePeopleByEmail([]string{email})
+	m := s.resolvePeopleByEmail([]string{email})
 	return m[strings.ToLower(strings.TrimSpace(email))]
 }
 

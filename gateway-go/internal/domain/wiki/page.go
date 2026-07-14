@@ -143,8 +143,8 @@ type Frontmatter struct {
 	SupersededBy string // relPath of the superseding page; "" = current
 }
 
-// ParsePage parses a wiki page from raw bytes.
-func ParsePage(data []byte) (*Page, error) {
+// parsePage parses a wiki page from raw bytes.
+func parsePage(data []byte) (*Page, error) {
 	meta, body, err := splitFrontmatter(data)
 	if err != nil {
 		// No frontmatter — treat entire content as body.
@@ -161,7 +161,7 @@ func ParsePageFile(path string) (*Page, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ParsePage(data)
+	return parsePage(data)
 }
 
 // Render produces the full page content: frontmatter + body.
@@ -276,14 +276,14 @@ func sanitizeFlowItems(items []string) []string {
 	return out
 }
 
-// WritePageFile writes a page to disk atomically (via temp file + rename).
+// writePageFile writes a page to disk atomically (via temp file + rename).
 //
 // Free-text fields on the page (body, title, summary) pass through pkg/redact
 // before serialization so any secret that slipped into LLM-synthesized wiki
 // content never reaches disk. Structural metadata (category, tags, dates,
 // importance) is left alone — categories are from a fixed allow-list and tags
 // are keyword-sized.
-func WritePageFile(path string, page *Page) error {
+func writePageFile(path string, page *Page) error {
 	// Single choke point for cue hygiene: every producer (dreamer create/update,
 	// the agent wiki tool, duplicate folds) funnels through here, so trim/dedupe
 	// and the 10-cue cap hold regardless of which path set the field — without
@@ -346,7 +346,7 @@ func redactPage(p *Page) {
 }
 
 // normalizeCues trims, drops empties, dedupes (first occurrence wins), and caps
-// the cue-anchor list. Enforced at write time (WritePageFile) so every producer
+// the cue-anchor list. Enforced at write time (writePageFile) so every producer
 // lands within the same bounds — one over-eager LLM emission must not turn a
 // page into a match-everything BM25 magnet.
 func normalizeCues(cues []string) []string {
@@ -518,7 +518,7 @@ func splitFrontmatter(data []byte) (meta []byte, body string, err error) {
 	return []byte(rest[:idx]), strings.TrimLeft(rest[idx+5:], "\r\n"), nil
 }
 
-// StripLeadingFrontmatter removes any YAML frontmatter block(s) at the very
+// stripLeadingFrontmatter removes any YAML frontmatter block(s) at the very
 // start of s and returns the remaining body.
 //
 // LLM-synthesized page content (WikiDreamer) and agent-supplied bodies
@@ -526,7 +526,7 @@ func splitFrontmatter(data []byte) (meta []byte, body string, err error) {
 // mimics the page format it saw in the index. If that text is stored as a
 // Page.Body it round-trips into a *second* on-disk frontmatter, since Render
 // always prepends one more from Page.Meta. Repeated dream/merge passes then
-// stack the blocks, and ParsePage (which only strips the first) mis-reads the
+// stack the blocks, and parsePage (which only strips the first) mis-reads the
 // rest as body. Stripping at the content boundary keeps every page to exactly
 // one frontmatter.
 //
@@ -535,7 +535,7 @@ func splitFrontmatter(data []byte) (meta []byte, body string, err error) {
 // pair, is left untouched. Metadata in a stripped block is intentionally
 // dropped — callers populate Page.Meta from their own structured fields, so the
 // embedded copy is redundant duplication.
-func StripLeadingFrontmatter(s string) string {
+func stripLeadingFrontmatter(s string) string {
 	for {
 		trimmed := strings.TrimLeft(s, "\r\n")
 		meta, body, err := splitFrontmatter([]byte(trimmed))

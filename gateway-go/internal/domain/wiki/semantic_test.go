@@ -247,9 +247,9 @@ func TestSuggestRelatedAndEnrich(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	sugg := store.SuggestRelated(ctx, "프로젝트/risk1.md", 3)
+	sugg := store.suggestRelated(ctx, "프로젝트/risk1.md", 3)
 	if len(sugg) != 1 || sugg[0] != "프로젝트/risk2.md" {
-		t.Fatalf("SuggestRelated = %v, want [프로젝트/risk2.md]", sugg)
+		t.Fatalf("suggestRelated = %v, want [프로젝트/risk2.md]", sugg)
 	}
 
 	// Dreamer enrichment wires the suggestion onto the zero-related page.

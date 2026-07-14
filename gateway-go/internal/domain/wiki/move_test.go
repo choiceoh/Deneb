@@ -132,7 +132,7 @@ func TestMovePage_RepointDoesNotStampReferrerUpdated(t *testing.T) {
 		t.Errorf("Updated = %q, want 2025-01-01 (repoint must not stamp)", got.Meta.Updated)
 	}
 	// The master index mirrors the stamp — FlagDormantProjects reads it there.
-	if e, ok := s.SnapshotEntries()["프로젝트/휴면/대표.md"]; !ok || e.Updated != "2025-01-01" {
+	if e, ok := s.snapshotEntries()["프로젝트/휴면/대표.md"]; !ok || e.Updated != "2025-01-01" {
 		t.Errorf("index Updated = %q (present=%v), want 2025-01-01", e.Updated, ok)
 	}
 }

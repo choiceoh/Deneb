@@ -101,7 +101,7 @@ func (ci *codeIndex) resolveCode(u wikiUpdate) string {
 // splitCode splits "dept-client-dtype-NNN" into its stem ("dept-client-dtype")
 // and integer sequence. Reports false when s is not a valid project code.
 func splitCode(s string) (stem string, seq int, ok bool) {
-	if !ValidProjectCode(s) {
+	if !validProjectCode(s) {
 		return "", 0, false
 	}
 	i := strings.LastIndex(s, "-")
@@ -129,10 +129,10 @@ func codeStem(raw string) string {
 		return ""
 	}
 	dept, client, dtype := parts[0], parts[1], parts[2]
-	if _, ok := DeptCodes[dept]; !ok {
+	if _, ok := deptCodes[dept]; !ok {
 		return ""
 	}
-	if _, ok := DealTypeCodes[dtype]; !ok {
+	if _, ok := dealTypeCodes[dtype]; !ok {
 		return ""
 	}
 	if !is3charSeg(dept) || !is3charSeg(client) || !is3charSeg(dtype) {
