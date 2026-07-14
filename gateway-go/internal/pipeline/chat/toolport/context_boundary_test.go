@@ -407,7 +407,7 @@ func TestTurnContextWaitFastPathAndMultipleWaiters(t *testing.T) {
 		}()
 	}
 	close(start)
-	assertToolctxEventually(t, func() bool {
+	assertToolportEventually(t, func() bool {
 		tc.mu.Lock()
 		defer tc.mu.Unlock()
 		return len(tc.waiters["shared"]) == waiters
@@ -454,7 +454,7 @@ func TestTurnContextTimeoutAndCancellationRemoveWaiters(t *testing.T) {
 			t.Errorf("cancelled Wait = (%#v,%v)", got, ok)
 		}
 	}()
-	assertToolctxEventually(t, func() bool {
+	assertToolportEventually(t, func() bool {
 		tc.mu.Lock()
 		defer tc.mu.Unlock()
 		return len(tc.waiters["cancelled"]) == 1
@@ -643,7 +643,7 @@ func TestChatMessageTextAndContentBoundaries(t *testing.T) {
 	}
 }
 
-func assertToolctxEventually(t *testing.T, predicate func() bool) {
+func assertToolportEventually(t *testing.T, predicate func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {

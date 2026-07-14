@@ -31,7 +31,7 @@ CONTRACT = (
 
 CANDIDATE = {
     "id": "sc-test-1234",
-    "title": "toolctx 캐시 무효화 수리",
+    "title": "toolport 캐시 무효화 수리",
     "skillName": "",
     "candidate": "관찰 내용",
     "proposedChange": "제안 변경 내용",
@@ -77,7 +77,7 @@ class DispatchPromptTest(unittest.TestCase):
             self.assertEqual(rc, 0)
             # Candidate data block + contract policy, id in the header.
             self.assertIn("id=sc-test-1234", prompt)
-            self.assertIn("- 제목: toolctx 캐시 무효화 수리", prompt)
+            self.assertIn("- 제목: toolport 캐시 무효화 수리", prompt)
             self.assertIn("## 계약", prompt)
             self.assertIn("tracker RPC 원장에 기록한다", prompt)
             # Marker written with prompt provenance (RSI P1.5 attribution).
