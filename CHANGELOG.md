@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.103.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.102.0...deneb-v4.103.0) (2026-07-14)
+
+
+### ✨ Features
+
+* **rpc:** workfeed OnLadder 훅 — 졸업 카드 액션 디스패치 지점 ([#3627](https://github.com/choiceoh/Deneb/issues/3627)) ([ae06ed6](https://github.com/choiceoh/Deneb/commit/ae06ed652091169d7afdb4cc23fe5c8e1b109412))
+
+
+### 🐛 Bug Fixes
+
+* **rsi:** resolve GitHub CLI for dispatch outcomes ([#3640](https://github.com/choiceoh/Deneb/issues/3640)) ([2550867](https://github.com/choiceoh/Deneb/commit/2550867d5b7d45531aa489f5487d8f3c0e4d4fdd))
+
 ## [4.102.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.101.0...deneb-v4.102.0) (2026-07-13)
 
 
