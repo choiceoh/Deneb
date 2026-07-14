@@ -56,9 +56,9 @@ func TestBuildSkillHints_MatchAndFormat(t *testing.T) {
 	}
 }
 
-// TestBuildSkillHints_CapAndOrder: more matches than the cap keeps the
+// TestBuildSkillHintsTruncatesAtCap: more matches than the cap keeps the
 // longest-trigger (most specific) ones.
-func TestBuildSkillHints_CapAndOrder(t *testing.T) {
+func TestBuildSkillHintsTruncatesAtCap(t *testing.T) {
 	msg := "회의록이랑 계약서, 그리고 팩트체크까지 — 독소조항 있는지 확실해?"
 	out, names := buildSkillHints(RunParams{SessionKey: "client:main", Message: msg}, "", hintSkills())
 	if out == "" || len(names) == 0 || len(names) > maxSkillHints {
@@ -73,11 +73,11 @@ func TestBuildSkillHints_CapAndOrder(t *testing.T) {
 	}
 }
 
-// TestBuildSkillHints_Gates: system sessions (skill-review forks would
+// TestBuildSkillHintsReturnsEmptyWhenGated: system sessions (skill-review forks would
 // self-trigger on SKILL.md bodies), ephemeral/recall-suppressed runs, empty
 // messages, triggerless catalogs, and skills-tool-less presets (the hint would
 // instruct a blocked call) all yield no hint.
-func TestBuildSkillHints_Gates(t *testing.T) {
+func TestBuildSkillHintsReturnsEmptyWhenGated(t *testing.T) {
 	cases := []struct {
 		name   string
 		params RunParams
@@ -107,8 +107,8 @@ func TestBuildSkillHints_Gates(t *testing.T) {
 	}
 }
 
-// TestSkillHintSummary: cut at the EARLIEST separator, cap at 90 runes.
-func TestSkillHintSummary(t *testing.T) {
+// TestSkillHintSummaryTruncatesAtSeparatorAndCap: cut at the EARLIEST separator, cap at 90 runes.
+func TestSkillHintSummaryTruncatesAtSeparatorAndCap(t *testing.T) {
 	if got := skillHintSummary("짧은 설명 — 부연. Use when: x."); got != "짧은 설명" {
 		t.Errorf("earliest-separator cut failed: %q", got)
 	}
@@ -118,11 +118,11 @@ func TestSkillHintSummary(t *testing.T) {
 	}
 }
 
-// TestBuildTailAdditions_SkillHintPosition: the hint rides after reference
+// TestBuildTailAdditionsPreservesHintPosition: the hint rides after reference
 // material and before the directives, in both the recall and notebook branches
 // (a procedure pointer is orthogonal to reference material, so unlike
 // recall/feed it is NOT suppressed by notebook grounding).
-func TestBuildTailAdditions_SkillHintPosition(t *testing.T) {
+func TestBuildTailAdditionsPreservesHintPosition(t *testing.T) {
 	adds := buildTailAdditions(RunParams{AutoDeliveredOutput: true}, "recall", "", "힌트")
 	if len(adds) != 3 || adds[0] != "recall" || adds[1] != "힌트" {
 		t.Fatalf("recall branch adds = %#v", adds)
@@ -140,10 +140,10 @@ func (f *hintFakeRecorder) RecordSkillUse(sessionKey, skillName string, success 
 	f.calls++
 }
 
-// TestRecordTurnSkillUsage_SkipsReviewForks: skill-review fork sessions read
+// TestRecordTurnSkillUsageIgnoresReviewForks: skill-review fork sessions read
 // skills to judge them — that must not be recorded as usage (it inflated
 // consult counts and wrote spurious failure rows in production).
-func TestRecordTurnSkillUsage_SkipsReviewForks(t *testing.T) {
+func TestRecordTurnSkillUsageIgnoresReviewForks(t *testing.T) {
 	rec := &hintFakeRecorder{}
 	log := NewSkillConsultLog()
 	log.Add("topsolar-db")

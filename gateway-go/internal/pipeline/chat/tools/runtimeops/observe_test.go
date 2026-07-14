@@ -13,7 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 )
 
-func TestToolObserve_RoutesAndValidates(t *testing.T) {
+func TestToolObserve_RunsValidActionsAndRejectsInvalidOnes(t *testing.T) {
 	dir := t.TempDir()
 	w := agentlog.NewWriter(dir)
 	ring := observe.NewRing(10)
@@ -52,7 +52,7 @@ func TestToolObserve_RoutesAndValidates(t *testing.T) {
 // behavior renders the vLLM prefix-cache line when a metrics endpoint is
 // reachable, and stays silent (no error, no line) when the server is down —
 // the graceful-degradation contract.
-func TestToolObserve_BehaviorVllmPrefixCache(t *testing.T) {
+func TestToolObserve_BehaviorRendersPrefixCacheWhenReachable(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/metrics" {
 			http.NotFound(w, r)
@@ -88,7 +88,7 @@ func TestToolObserve_BehaviorVllmPrefixCache(t *testing.T) {
 
 // A run recorded in the agent log surfaces through observe turn, including its
 // tool list — the join the self-observation tool exists to provide.
-func TestToolObserve_TurnJoinsAgentLog(t *testing.T) {
+func TestToolObserve_TurnReturnsJoinedAgentLogData(t *testing.T) {
 	dir := t.TempDir()
 	w := agentlog.NewWriter(dir)
 	rl := agentlog.NewRunLogger(w, "client:main", "run-9")
@@ -125,7 +125,7 @@ func TestToolObserve_TurnJoinsAgentLog(t *testing.T) {
 	}
 }
 
-func TestToolObserve_Provenance(t *testing.T) {
+func TestToolObserve_ProvenanceReturnsToolEffects(t *testing.T) {
 	dir := t.TempDir()
 	w := agentlog.NewWriter(dir)
 	rl := agentlog.NewRunLogger(w, "client:main", "run-prov")

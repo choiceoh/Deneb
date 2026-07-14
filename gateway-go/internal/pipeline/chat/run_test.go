@@ -42,7 +42,7 @@ func TestParseModelID(t *testing.T) {
 	}
 }
 
-func TestDeliveryChannel(t *testing.T) {
+func TestDeliveryChannelReturnsChannelOrEmpty(t *testing.T) {
 	t.Run("nil returns empty", func(t *testing.T) {
 		if got := deliveryChannel(nil); got != "" {
 			t.Errorf("deliveryChannel(nil) = %q, want empty", got)
@@ -57,7 +57,7 @@ func TestDeliveryChannel(t *testing.T) {
 	})
 }
 
-func TestApiModeFor(t *testing.T) {
+func TestApiModeForReturnsProviderSpecificOverride(t *testing.T) {
 	tests := []struct {
 		name     string
 		provider string
@@ -84,7 +84,7 @@ func TestApiModeFor(t *testing.T) {
 	}
 }
 
-func TestResolveDefaultBaseURL(t *testing.T) {
+func TestResolveDefaultBaseURLReturnsProviderDefault(t *testing.T) {
 	tests := []struct {
 		provider string
 		wantURL  string
@@ -140,7 +140,7 @@ func TestResolveClient_UsesProviderConfigWithoutAPIKey(t *testing.T) {
 	}
 }
 
-func TestResolveClient_ExpandsProviderConfigEnvVars(t *testing.T) {
+func TestResolveClientLoadsAPIKeyFromEnvironmentVariable(t *testing.T) {
 	t.Setenv("VLLM_API_KEY", "vllm-test-key")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -177,7 +177,7 @@ func TestResolveClient_ExpandsProviderConfigEnvVars(t *testing.T) {
 	}
 }
 
-func TestBuildAttachmentBlocks(t *testing.T) {
+func TestBuildAttachmentBlocksReturnsTextAndImageBlocks(t *testing.T) {
 	t.Run("text only", func(t *testing.T) {
 		blocks := buildAttachmentBlocks("hello", nil)
 		if len(blocks) != 1 {
@@ -239,7 +239,7 @@ func TestBuildAttachmentBlocks(t *testing.T) {
 	})
 }
 
-func TestExtractTextFromMessage(t *testing.T) {
+func TestExtractTextFromMessageReturnsPlainOrBlockText(t *testing.T) {
 	t.Run("plain string content", func(t *testing.T) {
 		msg := llm.NewTextMessage("user", "hello world")
 		got := extractTextFromMessage(msg)
@@ -268,7 +268,7 @@ func TestExtractTextFromMessage(t *testing.T) {
 	})
 }
 
-func TestAppendAttachmentsToHistory(t *testing.T) {
+func TestAppendAttachmentsToHistoryUpdatesOrCreatesUserMessage(t *testing.T) {
 	t.Run("replaces last user message", func(t *testing.T) {
 		msgs := []llm.Message{
 			llm.NewTextMessage("user", "first msg"),

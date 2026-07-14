@@ -26,7 +26,7 @@ func TestFormatContextFenceScrubsNestedRecallTags(t *testing.T) {
 	}
 }
 
-func TestIsContextFenceText(t *testing.T) {
+func TestIsContextFenceText_DetectsFenceRejectsLegacy(t *testing.T) {
 	out := FormatContextFence("polaris-test", "conversation-summary", "title", "body")
 	if !IsContextFenceText(out) {
 		t.Fatalf("expected generated fence to be detected")

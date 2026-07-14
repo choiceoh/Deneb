@@ -10,7 +10,7 @@ import (
 // TestPrepareDocumentAttachments verifies that a raw document attachment (the
 // shape the native client sends: base64 Data + document MimeType, no Type) is
 // extracted into a document_text attachment, while images pass through.
-func TestPrepareDocumentAttachments(t *testing.T) {
+func TestPrepareDocumentAttachmentsParsesCSVIntoMarkdownTable(t *testing.T) {
 	csv := base64.StdEncoding.EncodeToString([]byte("이름,수량\n모듈,100\n"))
 	in := []ChatAttachment{
 		{MimeType: "text/csv", Name: "list.csv", Data: csv},
@@ -34,7 +34,7 @@ func TestPrepareDocumentAttachments(t *testing.T) {
 
 // TestPrepareDocumentAttachments_PassThrough leaves non-document and
 // already-extracted attachments unchanged.
-func TestPrepareDocumentAttachments_PassThrough(t *testing.T) {
+func TestPrepareDocumentAttachmentsPreservesNonDocumentAttachments(t *testing.T) {
 	in := []ChatAttachment{
 		{Type: "document_text", Name: "n", Data: "already text"},
 		{MimeType: "application/zip", Name: "a.zip", Data: base64.StdEncoding.EncodeToString([]byte("PK..."))},

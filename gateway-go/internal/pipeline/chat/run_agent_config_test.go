@@ -39,7 +39,7 @@ func (*configNudger) Reset(string) {}
 // Session key and tool preset must therefore be injected here, or tools like
 // sessions_spawn (parent attribution), polaris (session-scoped recall), and
 // the preset Execute gate silently read empty values on the sync path.
-func TestBuildAgentConfig_OnTurnInitSetsSessionKeyAndPreset(t *testing.T) {
+func TestBuildAgentConfigOnTurnInitReturnsSessionKeyAndPreset(t *testing.T) {
 	params := RunParams{SessionKey: "client:main"}
 	cfg, _, _ := buildAgentConfig(params, runDeps{}, nil, nil, "researcher", agentConfigDeps{}, "m-test", slog.Default())
 
@@ -56,7 +56,7 @@ func TestBuildAgentConfig_OnTurnInitSetsSessionKeyAndPreset(t *testing.T) {
 	}
 }
 
-func TestBuildAgentConfig_HandlerRunLimitsOverrideModeDefaults(t *testing.T) {
+func TestBuildAgentConfigWithRunLimitsOverridesModeDefaults(t *testing.T) {
 	wantTimeout := 7 * time.Minute
 	wantSeed := int64(42001)
 	deps := runDeps{runLimits: RunLimits{MaxTurns: 123, Timeout: wantTimeout}, samplingSeed: &wantSeed}
@@ -73,7 +73,7 @@ func TestBuildAgentConfig_HandlerRunLimitsOverrideModeDefaults(t *testing.T) {
 	}
 }
 
-func TestBuildAgentConfig_BriefcaseUsesHardDeterministicLimits(t *testing.T) {
+func TestBuildAgentConfigWithBriefcaseModeAppliesDeterministicLimits(t *testing.T) {
 	t.Setenv("DENEB_STREAM_IDLE_TIMEOUT_MS", "-1")
 	t.Setenv("DENEB_PARALLEL_TOOLS", "1")
 	maxTurns, maxTokens, maxToolCallAttempts := 7, 1234, 3
@@ -102,7 +102,7 @@ func TestBuildAgentConfig_BriefcaseUsesHardDeterministicLimits(t *testing.T) {
 	}
 }
 
-func TestBuildAgentConfig_ProductionRetainsEnvironmentControlledParallelPolicy(t *testing.T) {
+func TestBuildAgentConfigProductionPreservesParallelToolPolicy(t *testing.T) {
 	t.Setenv("DENEB_PARALLEL_TOOLS", "1")
 	cfg, _, _ := buildAgentConfig(RunParams{}, runDeps{}, nil, nil, "", agentConfigDeps{}, "m-test", slog.Default())
 
@@ -257,7 +257,7 @@ func toolNames(tools []llm.Tool) []string {
 // The reasoning sandwich boosts BOTH ends — turn 0 (planning) and the
 // verify/finish turn the gate is blocking (back half) — and stays out of the
 // way (nil) in the middle so it composes cleanly with the effort router.
-func TestReasoningSandwichThinking_BothEnds(t *testing.T) {
+func TestReasoningSandwichThinkingReturnsBoostAtBothEnds(t *testing.T) {
 	base := &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 10240} // medium → boosts to 32768
 	gate := &verifyGateState{}
 	mod := reasoningSandwichThinking(base, 65536, gate)

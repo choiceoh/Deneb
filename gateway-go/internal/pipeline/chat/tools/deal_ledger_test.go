@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
-func TestToolDealLedger(t *testing.T) {
+func TestToolDealLedgerReturnsLedgerSummary(t *testing.T) {
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

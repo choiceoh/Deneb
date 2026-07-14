@@ -10,7 +10,7 @@ import (
 
 // --- HTML noise stripping tests ---
 
-func TestStripNoiseElements(t *testing.T) {
+func TestStripNoiseElementsPreservesArticleContent(t *testing.T) {
 	html := `<html><body>
 <nav><ul><li>Home</li><li>About</li></ul></nav>
 <header><h1>Site Header</h1></header>
@@ -44,7 +44,7 @@ func TestStripNoiseElements(t *testing.T) {
 	}
 }
 
-func TestStripMatchingBlocks_CookieBanner(t *testing.T) {
+func TestStripNoiseElementsPreservesContentAroundCookieBanner(t *testing.T) {
 	html := `<p>Before</p>
 <div class="cookie-consent-banner"><p>We use cookies</p><button>Accept</button></div>
 <p>After</p>`
@@ -57,7 +57,7 @@ func TestStripMatchingBlocks_CookieBanner(t *testing.T) {
 	}
 }
 
-func TestStripTagBlock_NotConfusedByPrefix(t *testing.T) {
+func TestStripTagBlockPreservesPrefixedTagContent(t *testing.T) {
 	// <navigate> should NOT be stripped when stripping <nav>.
 	html := `<navigate>keep this</navigate><nav>remove this</nav>`
 	result := stripTagBlock(html, "nav")
@@ -71,7 +71,7 @@ func TestStripTagBlock_NotConfusedByPrefix(t *testing.T) {
 
 // --- Metadata extraction tests ---
 
-func TestExtractHTMLMeta(t *testing.T) {
+func TestExtractHTMLMetaParsesOpenGraphAndMetaTags(t *testing.T) {
 	html := `<html lang="ko">
 <head>
 <title>테스트 페이지</title>
@@ -107,7 +107,7 @@ func TestExtractHTMLMeta(t *testing.T) {
 	}
 }
 
-func TestExtractHTMLMeta_ReversedAttributes(t *testing.T) {
+func TestExtractHTMLMetaParsesReversedAttributeOrder(t *testing.T) {
 	html := `<html><head>
 <meta content="Rev Title" property="og:title">
 <meta content="Rev Desc" name="description">
@@ -124,7 +124,7 @@ func TestExtractHTMLMeta_ReversedAttributes(t *testing.T) {
 	}
 }
 
-func TestExtractJSONLD(t *testing.T) {
+func TestExtractJSONLDParsesArticleMetadata(t *testing.T) {
 	html := `<head>
 <script type="application/ld+json">
 {
@@ -160,7 +160,7 @@ func TestExtractJSONLD(t *testing.T) {
 
 // --- Signal detection tests ---
 
-func TestDetectSignals(t *testing.T) {
+func TestDetectSignalsReturnsExpectedSignalForPageType(t *testing.T) {
 	tests := []struct {
 		name string
 		html string
@@ -196,7 +196,7 @@ func TestDetectSignals(t *testing.T) {
 	}
 }
 
-func TestDetectSignals_SPAShell(t *testing.T) {
+func TestDetectSignalsReturnsJSRequiredForSPAShell(t *testing.T) {
 	// React app with empty body — should detect js_required.
 	html := `<html><body><div id="root"></div>
 <script src="/static/js/main.chunk.js"></script></body></html>`
@@ -212,7 +212,7 @@ func TestDetectSignals_SPAShell(t *testing.T) {
 	}
 }
 
-func TestDetectSignals_MetaRefreshLogin(t *testing.T) {
+func TestDetectSignalsReturnsRedirectToLoginForMetaRefresh(t *testing.T) {
 	html := `<html><head><meta http-equiv="refresh" content="0;url=/login"></head></html>`
 	signals := detectSignals(html)
 	found := false
@@ -407,7 +407,7 @@ func TestNormalizeCharset_Latin1(t *testing.T) {
 
 // --- JSON processing tests ---
 
-func TestProcessJSON(t *testing.T) {
+func TestProcessJSONFormatsRawJSON(t *testing.T) {
 	raw := `{"name":"test","value":42}`
 	result := processJSON(raw)
 	if !strings.Contains(result, "  \"name\": \"test\"") {

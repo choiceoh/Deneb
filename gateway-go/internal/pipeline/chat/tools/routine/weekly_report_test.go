@@ -73,10 +73,10 @@ func TestWeeklyWriteSidecarBadDir(t *testing.T) {
 	weeklyWriteSidecar(weeklyEnvelope{Office: "x"}, filepath.Join(t.TempDir(), "no", "such", "dir"))
 }
 
-// TestComposeWeeklyText locks the deterministic 주간업무보고 양식 — the cron path now
+// TestComposeWeeklyTextFormatsReportBody locks the deterministic 주간업무보고 양식 — the cron path now
 // emits this directly (no LLM), so the exact structure (header, ▢ group, • project
 // with 실시/예정, ⚠️ 현안) must stay byte-stable.
-func TestComposeWeeklyText(t *testing.T) {
+func TestComposeWeeklyTextFormatsReportBody(t *testing.T) {
 	env := weeklyEnvelope{
 		Office:      "기획조정실",
 		WeekDone:    "26.06.01~26.06.07",

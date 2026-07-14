@@ -28,7 +28,7 @@ func TestSendFile_RejectsProtectedPaths(t *testing.T) {
 	}
 }
 
-func TestArchiveSentFile_PersistsToStore(t *testing.T) {
+func TestArchiveSentFileSavesToStore(t *testing.T) {
 	t.Setenv("DENEB_FILES_DIR", t.TempDir()) // redirect the store off the real ~/.deneb
 	t.Setenv("DENEB_ARCHIVE_SENT_FILES", "") // default on
 
@@ -57,7 +57,7 @@ func TestArchiveSentFile_PersistsToStore(t *testing.T) {
 	}
 }
 
-func TestArchiveSentFile_DisabledByEnv(t *testing.T) {
+func TestArchiveSentFileDoesNotArchiveWhenDisabled(t *testing.T) {
 	t.Setenv("DENEB_FILES_DIR", t.TempDir())
 	t.Setenv("DENEB_ARCHIVE_SENT_FILES", "0")
 

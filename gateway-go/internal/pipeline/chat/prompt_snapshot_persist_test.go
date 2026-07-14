@@ -101,10 +101,10 @@ func TestPromptSnapshot_FirstWriteWins(t *testing.T) {
 	}
 }
 
-// TestPromptSnapshot_PruneVanishedSession confirms load drops entries whose
+// TestPromptSnapshot_EvictsVanishedSession confirms load drops entries whose
 // session no longer exists (deleted/expired) and rewrites the file, bounding
 // growth without an explicit per-delete hook.
-func TestPromptSnapshot_PruneVanishedSession(t *testing.T) {
+func TestPromptSnapshot_EvictsVanishedSession(t *testing.T) {
 	const live = "client:main:persist-live"
 	const dead = "client:main:persist-dead"
 	dir := t.TempDir()
@@ -138,8 +138,8 @@ func TestPromptSnapshot_PruneVanishedSession(t *testing.T) {
 	}
 }
 
-// TestPromptSnapshot_Forget drops a session from disk (the /reset path).
-func TestPromptSnapshot_Forget(t *testing.T) {
+// TestPromptSnapshot_DeletesSessionOnForget drops a session from disk (the /reset path).
+func TestPromptSnapshot_DeletesSessionOnForget(t *testing.T) {
 	const keep = "client:main:persist-keep"
 	const drop = "client:main:persist-drop"
 	dir := t.TempDir()
@@ -186,9 +186,9 @@ func TestPromptSnapshot_GateRejectsNonRestorable(t *testing.T) {
 	}
 }
 
-// TestPromptSnapshot_DisabledIsNoOp confirms an empty state dir keeps the
+// TestPromptSnapshot_IgnoresRecordWhenDisabled confirms an empty state dir keeps the
 // feature dormant (in-memory only), matching autonomous's SetStateDir contract.
-func TestPromptSnapshot_DisabledIsNoOp(t *testing.T) {
+func TestPromptSnapshot_IgnoresRecordWhenDisabled(t *testing.T) {
 	const key = "client:main:persist-disabled"
 	t.Cleanup(func() { clearSessionStores(key) })
 

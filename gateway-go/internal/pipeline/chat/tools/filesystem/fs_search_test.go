@@ -21,7 +21,7 @@ func callGrep(t *testing.T, defaultDir string, params map[string]any) (string, e
 	return ToolGrep(defaultDir)(context.Background(), json.RawMessage(raw))
 }
 
-func TestToolGrep_findsMatch(t *testing.T) {
+func TestToolGrepReturnsMatchingLine(t *testing.T) {
 	requireRg(t)
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "f.go"), []byte("package main\nfunc hello() {}\n"), 0o644)
@@ -34,7 +34,7 @@ func TestToolGrep_findsMatch(t *testing.T) {
 
 // ─── groupGrepOutput ────────────────────────────────────────────────────────
 
-func TestGroupGrepOutput_groupsByFile(t *testing.T) {
+func TestGroupGrepOutputFormatsFileHeaders(t *testing.T) {
 	input := "src/a.go:10:func Foo() {\nsrc/a.go:20:func Bar() {\nsrc/b.go:5:import \"fmt\"\n"
 	got := groupGrepOutput(input)
 	if !strings.Contains(got, "src/a.go:\n") {
@@ -53,7 +53,7 @@ func TestGroupGrepOutput_groupsByFile(t *testing.T) {
 }
 
 // ─── splitGlobs ─────────────────────────────────────────────────────────────
-func TestSplitGlobs_commaSeparated(t *testing.T) {
+func TestSplitGlobsParsesCommaSeparated(t *testing.T) {
 	got := splitGlobs("*.go,*.rs,*.proto")
 	if len(got) != 3 || got[0] != "*.go" || got[1] != "*.rs" || got[2] != "*.proto" {
 		t.Errorf("got %v, want [*.go *.rs *.proto]", got)
@@ -69,7 +69,7 @@ func TestSplitGlobs_braceExpansion(t *testing.T) {
 
 // ─── ToolGrep: include filter with comma-separated globs ────────────────────
 
-func TestToolGrep_commaSeparatedInclude(t *testing.T) {
+func TestToolGrepIncludesWithCommaSeparatedGlobs(t *testing.T) {
 	requireRg(t)
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "main.go"), []byte("package main\n"), 0o644)
@@ -128,7 +128,7 @@ func TestNormalizeFileType(t *testing.T) {
 
 // ─── stripRgFlag ──────────────────────────────────────────────────────────
 
-func TestStripRgFlag(t *testing.T) {
+func TestStripRgFlagReturnsArgsWithoutFlag(t *testing.T) {
 	args := []string{"-n", "--type", "go", "-e", "pattern", "--", "/path"}
 	got := stripRgFlag(args, "--type")
 	want := []string{"-n", "-e", "pattern", "--", "/path"}
@@ -144,7 +144,7 @@ func TestStripRgFlag(t *testing.T) {
 
 // ─── ToolGrep: fileType normalization ──────────────────────────────────────
 
-func TestToolGrep_fileTypeNormalization(t *testing.T) {
+func TestToolGrepNormalizesFileType(t *testing.T) {
 	requireRg(t)
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "main.go"), []byte("package main\n"), 0o644)
@@ -163,7 +163,7 @@ func TestToolGrep_fileTypeNormalization(t *testing.T) {
 
 // ─── hasGrepMatches ─────────────────────────────────────────────────────────
 
-func TestHasGrepMatches(t *testing.T) {
+func TestHasGrepMatchesReturnsMatchPresence(t *testing.T) {
 	tests := []struct {
 		name   string
 		input  string

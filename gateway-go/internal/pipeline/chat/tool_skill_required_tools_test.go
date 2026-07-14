@@ -24,10 +24,10 @@ func requiredToolsCatalog() []skills.PromptSkill {
 	}
 }
 
-// TestActivateSkillRequiredTools: a consult activates the skill's deferred
+// TestActivateSkillRequiredToolsStartsDeferredTool: a consult activates the skill's deferred
 // requires_tools — eager and unknown names are skipped, the notice names
 // exactly what was activated, and the DeferredActivation tracker receives it.
-func TestActivateSkillRequiredTools(t *testing.T) {
+func TestActivateSkillRequiredToolsStartsDeferredTool(t *testing.T) {
 	registry := requiredToolsRegistry()
 	da := toolport.NewDeferredActivation()
 	ctx := toolport.WithDeferredActivation(context.Background(), da)
@@ -44,10 +44,10 @@ func TestActivateSkillRequiredTools(t *testing.T) {
 	}
 }
 
-// TestActivateSkillRequiredTools_noOps: every path that must return "" —
+// TestActivateSkillRequiredToolsReturnsEmptyForNoOpPaths: every path that must return "" —
 // no tracker on ctx, skill without requires_tools, unknown skill, already
 // active tool, and preset-excluded tool.
-func TestActivateSkillRequiredTools_noOps(t *testing.T) {
+func TestActivateSkillRequiredToolsReturnsEmptyForNoOpPaths(t *testing.T) {
 	registry := requiredToolsRegistry()
 	catalog := requiredToolsCatalog()
 

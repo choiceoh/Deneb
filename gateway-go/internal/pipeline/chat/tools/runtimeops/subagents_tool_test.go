@@ -24,7 +24,7 @@ func TestSubagentsResult_DoneReturnsLastOutput(t *testing.T) {
 }
 
 // A still-running sub-agent reports "no result yet" rather than a blank result.
-func TestSubagentsResult_RunningReportsNoResultYet(t *testing.T) {
+func TestSubagentsResult_RunningReturnsStillRunningNotice(t *testing.T) {
 	now := time.Now().UnixMilli()
 	child := &session.Session{Key: "client:main:sub:1", Status: session.StatusRunning, StartedAt: &now}
 	out, err := subagentsResult(&tooldeps.SessionDeps{}, []*session.Session{child}, "")
@@ -37,7 +37,7 @@ func TestSubagentsResult_RunningReportsNoResultYet(t *testing.T) {
 }
 
 // With multiple sub-agents and no target, ask the caller to disambiguate.
-func TestSubagentsResult_MultipleRequiresTarget(t *testing.T) {
+func TestSubagentsResult_MultipleWithoutTargetReturnsDisambiguation(t *testing.T) {
 	children := []*session.Session{
 		{Key: "client:main:sub:1", Status: session.StatusDone, LastOutput: "A"},
 		{Key: "client:main:sub:2", Status: session.StatusDone, LastOutput: "B"},

@@ -79,9 +79,9 @@ func TestWithTrailingCacheControl_ThinkingOnlyMessageUnchanged(t *testing.T) {
 	}
 }
 
-// TestStripMessageCacheMarkersHook verifies markers are removed from a
+// TestStripMessageCacheMarkersHookClearsMarkers verifies markers are removed from a
 // per-request copy without mutating the input.
-func TestStripMessageCacheMarkersHook(t *testing.T) {
+func TestStripMessageCacheMarkersHookClearsMarkers(t *testing.T) {
 	markedContent, _ := json.Marshal([]llm.ContentBlock{
 		{Type: "text", Text: "hello", CacheControl: &llm.CacheControl{Type: "ephemeral"}},
 	})
@@ -214,7 +214,7 @@ func TestWireBeforeAPICall_UsesAnthropicClientModeWithoutProviderID(t *testing.T
 	}
 }
 
-func TestWireBeforeAPICall_BriefcaseDisablesEndpointCacheMetadata(t *testing.T) {
+func TestWireBeforeAPICallClearsCacheMetadataForBriefcase(t *testing.T) {
 	cfg := agent.AgentConfig{System: markedSystemBlocks(t)}
 	client := llm.NewClient("http://127.0.0.1:1", "", llm.WithAPIMode(llm.APIModeAnthropic))
 

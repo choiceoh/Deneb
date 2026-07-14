@@ -72,7 +72,7 @@ func TestParseRollbackCount(t *testing.T) {
 	}
 }
 
-func TestBaseName(t *testing.T) {
+func TestBaseNameReturnsLastPathSegment(t *testing.T) {
 	tests := []struct {
 		in, want string
 	}{
@@ -90,7 +90,7 @@ func TestBaseName(t *testing.T) {
 	}
 }
 
-func TestCountLines(t *testing.T) {
+func TestCountLinesReturnsLineCount(t *testing.T) {
 	tests := []struct {
 		in   string
 		want int

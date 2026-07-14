@@ -67,7 +67,7 @@ func TestStartLinkEnrichmentUsesHandlerEngineAndChatSanitizer(t *testing.T) {
 	}
 }
 
-func TestNewHandlerOwnsLinkEnrichmentEngine(t *testing.T) {
+func TestNewHandlerCreatesLinkEnrichmentEngine(t *testing.T) {
 	handler := NewHandler(session.NewManager(), nil, testLinkLogger(), DefaultHandlerConfig())
 	t.Cleanup(handler.Close)
 	if handler.linkEnrichment == nil {

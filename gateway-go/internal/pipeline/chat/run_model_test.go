@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
-func TestResolveModel_SubagentCodingRole(t *testing.T) {
+func TestResolveModelReturnsCodingModelForSubagent(t *testing.T) {
 	reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
 		MainModel:   "zai/glm-main",
 		CodingModel: "kimi/kimi-for-coding",
@@ -39,7 +39,7 @@ func TestResolveModel_SubagentCodingRole(t *testing.T) {
 	}
 }
 
-func TestResolveModel_SubagentRemapsNonCodingProvider(t *testing.T) {
+func TestResolveModelReturnsRemappedProviderForNonCodingSubagent(t *testing.T) {
 	reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
 		MainModel: "zai/glm-main",
 	})

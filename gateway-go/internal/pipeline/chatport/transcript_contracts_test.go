@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestChatMessageWireJSONStable(t *testing.T) {
+func TestChatMessageWireJSONRoundTripsStably(t *testing.T) {
 	message := ChatMessage{
 		Role:    "assistant",
 		Content: json.RawMessage(`[{"type":"text","text":"hello"}]`),
@@ -36,7 +36,7 @@ func TestChatMessageWireJSONStable(t *testing.T) {
 	}
 }
 
-func TestSearchResultWireJSONStable(t *testing.T) {
+func TestSearchResultEncodesStableWireJSON(t *testing.T) {
 	result := SearchResult{
 		SessionKey: "client:main",
 		Matches: []MatchedMsg{{
@@ -55,7 +55,7 @@ func TestSearchResultWireJSONStable(t *testing.T) {
 	}
 }
 
-func TestChatMessageTextContentJoinsRichTextBlocks(t *testing.T) {
+func TestChatMessageTextContentParsesAndJoinsTextBlocks(t *testing.T) {
 	message := ChatMessage{Content: json.RawMessage(`[
 		{"type":"text","text":"one"},
 		{"type":"tool_use","name":"read"},

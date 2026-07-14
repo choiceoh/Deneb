@@ -8,11 +8,11 @@ import (
 	"time"
 )
 
-// TestWeeklyReport_Live runs the collector against the real wiki on the host.
+// TestWeeklyReportLiveCollectsAndRendersPDF runs the collector against the real wiki on the host.
 // CI skips it (no wiki present). On the gateway host:
 //
-//	DENEB_WEEKLY_LIVE=1 go test -run TestWeeklyReport_Live ./internal/pipeline/chat/tools/ -v
-func TestWeeklyReport_Live(t *testing.T) {
+//	DENEB_WEEKLY_LIVE=1 go test -run TestWeeklyReportLiveCollectsAndRendersPDF ./internal/pipeline/chat/tools/ -v
+func TestWeeklyReportLiveCollectsAndRendersPDF(t *testing.T) {
 	if os.Getenv("DENEB_WEEKLY_LIVE") == "" {
 		t.Skip("set DENEB_WEEKLY_LIVE=1 to run against the live wiki")
 	}

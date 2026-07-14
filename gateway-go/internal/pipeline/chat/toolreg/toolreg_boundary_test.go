@@ -69,7 +69,7 @@ func allSchemaCases() []schemaCase {
 	}
 }
 
-func TestEveryGeneratedToolSchemaIsJSONSerializableObject(t *testing.T) {
+func TestEveryGeneratedToolSchemaRoundTripsAsJSONObject(t *testing.T) {
 	cases := allSchemaCases()
 	if len(cases) < 40 {
 		t.Fatalf("schema inventory unexpectedly small: %d", len(cases))
@@ -109,7 +109,7 @@ func TestEveryGeneratedToolSchemaIsJSONSerializableObject(t *testing.T) {
 	}
 }
 
-func TestGeneratedSchemasHaveValidRecursiveStructure(t *testing.T) {
+func TestGeneratedSchemasSatisfyRecursiveStructuralContract(t *testing.T) {
 	for _, tc := range allSchemaCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			validateSchemaNode(t, tc.name, tc.build())
@@ -257,7 +257,7 @@ func interfaceSlice(raw any) []any {
 	}
 }
 
-func TestRequiredFieldsAreSemanticallyMinimalAndPresent(t *testing.T) {
+func TestRequiredFieldsMatchMinimalSchemaContract(t *testing.T) {
 	want := map[string][]string{
 		"read":             {"file_path"},
 		"write":            {"file_path", "content"},
@@ -428,7 +428,7 @@ func TestRegisterCoreToolsWithMinimalDependenciesHasValidUniqueContracts(t *test
 	}
 }
 
-func TestRegisterCoreToolsDeferredPolicyMatchesOperationalIntent(t *testing.T) {
+func TestRegisterCoreToolsDeferredPolicyContractMatchesOperationalIntent(t *testing.T) {
 	reg := &mockRegistrar{}
 	RegisterCoreTools(reg, &tooldeps.CoreToolDeps{WorkspaceDir: t.TempDir()})
 	deferred := map[string]bool{
@@ -468,7 +468,7 @@ func TestWorkspaceRegistrationGroupsPreserveOrder(t *testing.T) {
 	}
 }
 
-func TestRegistrationGroupsHaveExactNamesAndNoCrossGroupDuplicates(t *testing.T) {
+func TestRegistrationGroupsEnforceExactNamesWithoutCrossGroupDuplicates(t *testing.T) {
 	type group struct {
 		name string
 		run  func(*mockRegistrar)
@@ -551,7 +551,7 @@ func TestCalendarRegistrationRequiresEitherReaderOrLocalStore(t *testing.T) {
 	}
 }
 
-func TestRegistrarReceivesIndependentDefinitions(t *testing.T) {
+func TestRegistrarPreservesIndependentSchemaCopies(t *testing.T) {
 	reg := &mockRegistrar{}
 	RegisterMediaTools(reg, t.TempDir())
 	if len(reg.tools) < 2 {

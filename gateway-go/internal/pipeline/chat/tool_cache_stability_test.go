@@ -6,7 +6,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
-func TestPartitionTools(t *testing.T) {
+func TestPartitionToolsReturnsSortedGroupsWithStableCacheKey(t *testing.T) {
 	tools := []llm.Tool{
 		{Name: "grep"},
 		{Name: "mcp_search"},
@@ -48,7 +48,7 @@ func TestPartitionTools(t *testing.T) {
 	}
 }
 
-func TestMergedTools(t *testing.T) {
+func TestMergedToolsReturnsBuiltinsBeforeDynamic(t *testing.T) {
 	tools := []llm.Tool{
 		{Name: "mcp_a"},
 		{Name: "exec"},

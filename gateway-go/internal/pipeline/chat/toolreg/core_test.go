@@ -26,7 +26,7 @@ func (m *mockRegistrar) toolNames() []string {
 
 // ─── RegisterFileTools ──────────────────────────────────────────────────────────
 
-func TestRegisterFileToolsRegistersOnlyFileTools(t *testing.T) {
+func TestRegisterFileToolsCreatesOnlyFileToolSet(t *testing.T) {
 	reg := &mockRegistrar{}
 	RegisterFileTools(reg, t.TempDir())
 
@@ -48,7 +48,7 @@ func TestRegisterFileToolsRegistersOnlyFileTools(t *testing.T) {
 
 // ─── RegisterProcessTools ─────────────────────────────────────────────────────
 
-func TestRegisterProcessTools_registersTools(t *testing.T) {
+func TestRegisterProcessToolsCreatesExecAndProcessContracts(t *testing.T) {
 	reg := &mockRegistrar{}
 	deps := &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()}
 	RegisterProcessTools(reg, deps)
@@ -73,7 +73,7 @@ func TestRegisterHeartbeatContract(t *testing.T) {
 	assertRegisteredContract(t, registeredTool(t, reg, "heartbeat_update"), false)
 }
 
-func TestRegisterScheduleAndRoutineTools(t *testing.T) {
+func TestRegisterScheduleAndRoutineToolsCreatesExpectedContracts(t *testing.T) {
 	calendarReg := &mockRegistrar{}
 	RegisterCalendarTool(calendarReg, &tooldeps.CalendarDeps{
 		Client: func() (tooldeps.CalendarReader, error) { return nil, nil },
@@ -89,7 +89,7 @@ func TestRegisterScheduleAndRoutineTools(t *testing.T) {
 	}
 }
 
-func TestRegisterMediaTools(t *testing.T) {
+func TestRegisterMediaToolsCreatesDeferredContracts(t *testing.T) {
 	reg := &mockRegistrar{}
 	RegisterMediaTools(reg, t.TempDir())
 

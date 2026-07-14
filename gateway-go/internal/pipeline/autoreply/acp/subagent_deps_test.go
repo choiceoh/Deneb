@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestSubagentCommandDeps_SpawnSubagent(t *testing.T) {
+func TestSubagentCommandDeps_SpawnSubagentCreatesIdleAgent(t *testing.T) {
 	acpRegistry := NewACPRegistry()
 	deps := &SubagentInfraDeps{
 		ACPRegistry: acpRegistry,
@@ -52,7 +52,7 @@ func TestSubagentCommandDeps_SpawnSubagent(t *testing.T) {
 // SpawnSubagent must put the tool preset on the RUNTIME session — that is
 // what the chat run reads for tool filtering (run_exec → toolpreset) — and
 // fail closed on unknown preset names.
-func TestSubagentCommandDeps_SpawnSubagent_ToolPreset(t *testing.T) {
+func TestSubagentCommandDeps_SpawnSubagentSetsToolPresetAndRejectsUnknown(t *testing.T) {
 	acpRegistry := NewACPRegistry()
 	sessions := session.NewManager()
 	deps := &SubagentInfraDeps{
@@ -86,7 +86,7 @@ func TestSubagentCommandDeps_SpawnSubagent_ToolPreset(t *testing.T) {
 	}
 }
 
-func TestSubagentCommandDeps_SpawnSubagent_MaxDepth(t *testing.T) {
+func TestSubagentCommandDeps_SpawnSubagentErrorsWhenMaxDepthExceeded(t *testing.T) {
 	acpRegistry := NewACPRegistry()
 	deps := &SubagentInfraDeps{
 		ACPRegistry: acpRegistry,
@@ -110,7 +110,7 @@ func TestSubagentCommandDeps_SpawnSubagent_MaxDepth(t *testing.T) {
 	}
 }
 
-func TestSubagentCommandDeps_KillSubagent(t *testing.T) {
+func TestSubagentCommandDeps_KillSubagentCancelsParentAndChildren(t *testing.T) {
 	acpRegistry := NewACPRegistry()
 	deps := &SubagentInfraDeps{
 		ACPRegistry: acpRegistry,
@@ -141,7 +141,7 @@ func TestSubagentCommandDeps_KillSubagent(t *testing.T) {
 	}
 }
 
-func TestSubagentCommandDeps_ListSubagents(t *testing.T) {
+func TestSubagentCommandDeps_ListSubagentsReturnsEmptyMessageWhenNoAgents(t *testing.T) {
 	acpRegistry := NewACPRegistry()
 	deps := &SubagentInfraDeps{
 		ACPRegistry: acpRegistry,
@@ -198,7 +198,7 @@ func TestSubagentCommandDeps_SpawnSubagent_MaxBreadth(t *testing.T) {
 	}
 }
 
-func TestSubagentCommandDeps_ResetSubagent_RunningGuard(t *testing.T) {
+func TestSubagentCommandDeps_ResetSubagentRejectsRunningButAllowsDone(t *testing.T) {
 	acpRegistry := NewACPRegistry()
 	deps := &SubagentInfraDeps{
 		ACPRegistry: acpRegistry,

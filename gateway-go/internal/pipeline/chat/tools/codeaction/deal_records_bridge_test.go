@@ -7,10 +7,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
-// TestDealsStructured exercises the code_action bridge surface that exposes the
+// TestDealsStructuredReturnsFilteredRecords exercises the code_action bridge surface that exposes the
 // typed deal-record ledger to the Python sandbox (UaC #2): the agent computes
 // sums/counts over typed records instead of eyeballing prose pages.
-func TestDealsStructured(t *testing.T) {
+func TestDealsStructuredReturnsFilteredRecords(t *testing.T) {
 	store, err := wiki.NewStore(t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)

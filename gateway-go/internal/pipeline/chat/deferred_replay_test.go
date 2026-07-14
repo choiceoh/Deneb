@@ -26,11 +26,11 @@ func toolResult(id, content string) llm.ContentBlock {
 	return llm.ContentBlock{Type: "tool_result", ToolUseID: id, Content: content}
 }
 
-// TestReplayActivatedTools: a paired fetch_tools call/result re-activates its
+// TestReplayActivatedToolsReturnsPairedActivations: a paired fetch_tools call/result re-activates its
 // tools; a skill-consult notice on a read result does too; unpaired calls,
 // marker text in unrelated tool output, unknown/eager tools, and
 // preset-excluded tools are all ignored. Order = first activation.
-func TestReplayActivatedTools(t *testing.T) {
+func TestReplayActivatedToolsReturnsPairedActivations(t *testing.T) {
 	registry := requiredToolsRegistry() // deferred: graphify, notebook; eager: exec
 
 	history := []llm.Message{
@@ -57,10 +57,10 @@ func TestReplayActivatedTools(t *testing.T) {
 	}
 }
 
-// TestReplayActivatedTools_presetGate: a preset that excludes the tool drops
+// TestReplayActivatedToolsReturnsNilForGatedInputs: a preset that excludes the tool drops
 // it at replay time even though the transcript proves a prior activation
 // (preset may differ from the run that activated it).
-func TestReplayActivatedTools_presetGate(t *testing.T) {
+func TestReplayActivatedToolsReturnsNilForGatedInputs(t *testing.T) {
 	registry := requiredToolsRegistry()
 	history := []llm.Message{
 		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t1", "fetch_tools")}),
@@ -78,11 +78,11 @@ func TestReplayActivatedTools_presetGate(t *testing.T) {
 	}
 }
 
-// TestReplayActivatedTools_metadataFirst: structured activatedTools metadata
+// TestReplayActivatedToolsIgnoresForgedTextWhenMetadataPresent: structured activatedTools metadata
 // is trusted without call pairing, takes precedence over text in the same
 // block (a notice-shaped string in the CONTENT of a metadata-era result can
 // no longer forge extra activations), and still passes registry/preset gates.
-func TestReplayActivatedTools_metadataFirst(t *testing.T) {
+func TestReplayActivatedToolsIgnoresForgedTextWhenMetadataPresent(t *testing.T) {
 	registry := requiredToolsRegistry()
 	withMeta := func(b llm.ContentBlock, meta string) llm.ContentBlock {
 		b.Metadata = json.RawMessage(meta)
@@ -107,9 +107,9 @@ func TestReplayActivatedTools_metadataFirst(t *testing.T) {
 	}
 }
 
-// TestReplayActivatedTools_dedupe: the same tool activated twice across runs
+// TestReplayActivatedToolsDeduplicatesRepeatedActivations: the same tool activated twice across runs
 // replays once, keeping the first position.
-func TestReplayActivatedTools_dedupe(t *testing.T) {
+func TestReplayActivatedToolsDeduplicatesRepeatedActivations(t *testing.T) {
 	registry := requiredToolsRegistry()
 	history := []llm.Message{
 		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t1", "fetch_tools")}),

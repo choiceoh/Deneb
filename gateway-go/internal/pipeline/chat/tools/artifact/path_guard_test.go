@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestCheckProtectedPath_Denied(t *testing.T) {
+func TestCheckProtectedPathRejectsSensitivePaths(t *testing.T) {
 	home := "/home/user"
 	denied := []string{
 		home + "/.deneb/credentials/telegram.json",
@@ -45,7 +45,7 @@ func TestCheckProtectedPath_Allowed(t *testing.T) {
 	}
 }
 
-func TestCheckProtectedPath_RelativeResolves(t *testing.T) {
+func TestCheckProtectedPathRejectsRelativeEnvPath(t *testing.T) {
 	// A relative .env path must be denied the same as an absolute one.
 	if err := CheckProtectedPath(".env", "write"); err == nil {
 		t.Error("relative .env should be denied")
@@ -55,7 +55,7 @@ func TestCheckProtectedPath_RelativeResolves(t *testing.T) {
 	}
 }
 
-func TestCheckProtectedPath_OpInMessage(t *testing.T) {
+func TestCheckProtectedPathErrorMentionsOp(t *testing.T) {
 	err := CheckProtectedPath("/home/user/.ssh/id_rsa", "write")
 	if err == nil || !strings.Contains(err.Error(), "write") {
 		t.Errorf("error message should mention the op, got: %v", err)

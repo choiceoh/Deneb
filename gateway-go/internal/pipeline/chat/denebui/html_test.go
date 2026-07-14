@@ -298,7 +298,7 @@ func TestParseHTML_LenientNumbersAndEnumCanon(t *testing.T) {
 	}
 }
 
-func TestValidate_HTMLInteractiveRequiresID(t *testing.T) {
+func TestValidateReturnsIssueWhenIDMissing(t *testing.T) {
 	issues, err := Validate(`<input label="이름"/>`)
 	if err != nil {
 		t.Fatalf("err = %v", err)
@@ -351,7 +351,7 @@ func TestParseHTML_ChartAndChips(t *testing.T) {
 	}
 }
 
-func TestValidate_HTMLEnumViolation(t *testing.T) {
+func TestValidateReturnsIssueForInvalidEnumValue(t *testing.T) {
 	// "fatal" now canonicalizes to error; use a word with no canonical fold.
 	issues, err := Validate(`<alert severity="catastrophic">큰일</alert>`)
 	if err != nil {

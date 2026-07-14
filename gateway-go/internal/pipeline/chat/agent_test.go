@@ -54,7 +54,7 @@ func newTestLLMClient(t *testing.T, handler http.HandlerFunc, opts ...llm.Client
 	return llm.NewClient(server.URL, "test-key", opts...)
 }
 
-func TestRunAgent_SimpleTextResponse(t *testing.T) {
+func TestRunAgentReturnsSimpleTextResponse(t *testing.T) {
 	client := newTestLLMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -130,7 +130,7 @@ func TestRunAgent_MidStreamCleanEOF_FailsTurnInsteadOfEmptySuccess(t *testing.T)
 	}
 }
 
-func TestRunAgent_ToolCallLoop(t *testing.T) {
+func TestRunAgentReturnsTextAfterToolCallLoop(t *testing.T) {
 	callCount := 0
 	client := newTestLLMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		callCount++
@@ -174,7 +174,7 @@ func TestRunAgent_ToolCallLoop(t *testing.T) {
 	}
 }
 
-func TestRunAgent_MaxTurns(t *testing.T) {
+func TestRunAgentStopsGracefullyAfterMaxTurns(t *testing.T) {
 	// Model always requests a tool. After the grace-call port, the executor
 	// injects a one-shot wrap-up user message when MaxTurns is exhausted and
 	// runs ONE extra iteration before terminating with max_turns_graceful.
@@ -243,7 +243,7 @@ func TestRunAgent_Timeout(t *testing.T) {
 	}
 }
 
-func TestRunAgent_Abort(t *testing.T) {
+func TestRunAgentReturnsAbortedWhenCanceled(t *testing.T) {
 	client := newTestLLMClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)

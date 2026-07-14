@@ -2,7 +2,7 @@ package toolport
 
 import "testing"
 
-func TestActiveNotebookBinding(t *testing.T) {
+func TestActiveNotebookBindingUpdatesAndClears(t *testing.T) {
 	const sk = "client:nb-binding-test"
 	ClearActiveNotebook(sk)
 
@@ -24,7 +24,7 @@ func TestActiveNotebookBinding(t *testing.T) {
 	}
 }
 
-func TestDedicatedNotebookSession(t *testing.T) {
+func TestDedicatedNotebookSessionParsesIDAndOverridesBinding(t *testing.T) {
 	if got := DedicatedNotebookID("notebook:topsolar"); got != "topsolar" {
 		t.Fatalf("DedicatedNotebookID = %q, want topsolar", got)
 	}

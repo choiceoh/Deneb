@@ -15,20 +15,20 @@ func TestSanitizeInput_empty(t *testing.T) {
 	}
 }
 
-func TestSanitizeInput_normalText(t *testing.T) {
+func TestSanitizeInputPreservesNormalText(t *testing.T) {
 	if got := sanitizeInput("hello world"); got != "hello world" {
 		t.Errorf("got %q, want %q", got, "hello world")
 	}
 }
 
-func TestSanitizeInput_korean(t *testing.T) {
+func TestSanitizeInputPreservesKoreanText(t *testing.T) {
 	input := "안녕하세요 세계"
 	if got := sanitizeInput(input); got != input {
 		t.Errorf("got %q, want %q", got, input)
 	}
 }
 
-func TestSanitizeInput_stripsControlChars(t *testing.T) {
+func TestSanitizeInputDeletesControlChars(t *testing.T) {
 	input := "hello\x00world\x01!"
 	want := "hello\x00world\x01!"
 	got := sanitizeInput(input)
@@ -107,7 +107,7 @@ func TestFormatUptime(t *testing.T) {
 
 // ─── pending queue operations ──────────────────────────────────────────────
 
-func TestPendingQueue_enqueueAndDrain(t *testing.T) {
+func TestPendingQueueDrainReturnsEnqueuedMessage(t *testing.T) {
 	sm := session.NewManager()
 	bc := func(event string, payload any) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
@@ -136,7 +136,7 @@ func TestPendingQueue_enqueueAndDrain(t *testing.T) {
 	}
 }
 
-func TestPendingQueue_newerSupersedes(t *testing.T) {
+func TestPendingQueueDrainReturnsNewestMessage(t *testing.T) {
 	sm := session.NewManager()
 	bc := func(event string, payload any) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
@@ -219,7 +219,7 @@ func TestInterruptActiveRun_noopWhenEmpty(t *testing.T) {
 
 // ─── countActiveRuns ───────────────────────────────────────────────────────
 
-func TestCountActiveRuns(t *testing.T) {
+func TestCountActiveRunsReturnsPerSessionTally(t *testing.T) {
 	sm := session.NewManager()
 	bc := func(event string, payload any) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
@@ -243,7 +243,7 @@ func TestCountActiveRuns(t *testing.T) {
 
 // ─── cleanupAbort ──────────────────────────────────────────────────────────
 
-func TestCleanupAbort_removesEntry(t *testing.T) {
+func TestCleanupAbortDeletesEntry(t *testing.T) {
 	sm := session.NewManager()
 	bc := func(event string, payload any) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())

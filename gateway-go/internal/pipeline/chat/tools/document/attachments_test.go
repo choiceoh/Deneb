@@ -12,7 +12,7 @@ import (
 // extractor: it must preserve attachment order and the per-doc/total rune caps
 // regardless of extraction timing.
 
-func TestExtractAttachments_PlainTextOrder(t *testing.T) {
+func TestExtractAttachmentsPreservesPlainTextOrder(t *testing.T) {
 	attachments := []Attachment{
 		{Filename: "first.txt", MimeType: "text/plain", Bytes: []byte("alpha")},
 		{Filename: "second.txt", MimeType: "text/plain", Bytes: []byte("beta")},

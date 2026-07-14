@@ -14,7 +14,7 @@ import (
 // "EphemeralAssistant=true → nil persister" gate. This is the safety boundary
 // for any future autonomous trigger that wants the legacy "drop everything"
 // behavior; if it regresses, all autonomous output starts polluting transcripts.
-func TestBuildMessagePersister_EphemeralAssistantSuppressesAssistant(t *testing.T) {
+func TestBuildMessagePersister_EphemeralAssistantReturnsNilPersister(t *testing.T) {
 	transcript := NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}
 	params := RunParams{
@@ -32,7 +32,7 @@ func TestBuildMessagePersister_EphemeralAssistantSuppressesAssistant(t *testing.
 // generic contract: suppressing the inbound self-trigger alone does not
 // implicitly suppress assistant persistence. Callers that need full isolation
 // must also set EphemeralAssistant.
-func TestBuildMessagePersister_EphemeralUserDoesNotBlockAssistant(t *testing.T) {
+func TestBuildMessagePersister_EphemeralUserAllowsAssistantPersist(t *testing.T) {
 	transcript := NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}
 	params := RunParams{
@@ -73,7 +73,7 @@ func TestBuildMessagePersister_NoTranscriptYieldsNil(t *testing.T) {
 // path: when the assistant turn is exactly NO_REPLY (no tool_use), the
 // message is not persisted — otherwise the next heartbeat would treat
 // silence as a "report" worth comparing against and we'd repeat noise.
-func TestBuildMessagePersister_StripsNoReplyOnly(t *testing.T) {
+func TestBuildMessagePersister_IgnoresNoReplyOnlyMessage(t *testing.T) {
 	transcript := NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}
 	params := RunParams{SessionKey: "telegram:1"}
@@ -100,7 +100,7 @@ func TestBuildMessagePersister_StripsNoReplyOnly(t *testing.T) {
 // token syntax must persist the recorded display value, never the raw
 // "{{market:...}}" template (2026-07-11 production transcript, client:main —
 // the native card rendered "{{market:usd_krw}}원" verbatim).
-func TestBuildMessagePersister_SubstitutesMarketLetterTokens(t *testing.T) {
+func TestBuildMessagePersister_FormatsMarketLetterTokensForDisplay(t *testing.T) {
 	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
 	transcript := NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}
@@ -135,7 +135,7 @@ func TestBuildMessagePersister_SubstitutesMarketLetterTokens(t *testing.T) {
 // any other non-text block) pass through byte-identical — a tool argument that
 // happens to contain the token syntax is the model's business, not a display
 // surface.
-func TestBuildMessagePersister_SubstitutesMarketTokensInTextBlocksOnly(t *testing.T) {
+func TestBuildMessagePersister_FormatsTextBlocksOnlyPreservingToolUse(t *testing.T) {
 	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
 	transcript := NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}
@@ -179,7 +179,7 @@ func TestBuildMessagePersister_SubstitutesMarketTokensInTextBlocksOnly(t *testin
 // BestTextRaw rule for the per-turn path: deterministic Briefcase runs must
 // not read the process-global, time-sensitive letter-token cache — persisted
 // bytes stay exactly what the model produced.
-func TestBuildMessagePersister_BriefcaseKeepsRawMarketTokens(t *testing.T) {
+func TestBuildMessagePersister_BriefcasePreservesRawMarketTokens(t *testing.T) {
 	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
 	transcript := NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript, briefcaseMode: true}

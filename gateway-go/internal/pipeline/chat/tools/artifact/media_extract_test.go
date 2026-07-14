@@ -28,7 +28,7 @@ func TestReadMediaFile_Guards(t *testing.T) {
 	}
 }
 
-func TestAudioMimeFromExt(t *testing.T) {
+func TestAudioMimeFromExtReturnsExpectedMime(t *testing.T) {
 	cases := map[string]string{
 		"a.m4a": "audio/mp4", "b.MP3": "audio/mpeg", "c.oga": "audio/ogg",
 		"d.wav": "audio/wav", "e.flac": "audio/flac", "f.unknown": "",
@@ -42,7 +42,7 @@ func TestAudioMimeFromExt(t *testing.T) {
 
 // A plain-text file routes through document.ExtractText's text branch — the OCR
 // tool's plumbing is testable without the GPU sidecars.
-func TestToolOCR_TextFile(t *testing.T) {
+func TestToolOCRReadsTextFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "메모.txt")
 	if err := os.WriteFile(path, []byte("납품 기한은 7월 11일"), 0o600); err != nil {
 		t.Fatal(err)

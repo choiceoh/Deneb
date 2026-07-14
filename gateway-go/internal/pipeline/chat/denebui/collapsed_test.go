@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestCollapsedReportFence(t *testing.T) {
+func TestCollapsedReportFenceReturnsRawBodyAsFallback(t *testing.T) {
 	t.Run("wraps title and body in a valid accordion fence", func(t *testing.T) {
 		body := "## 분석\n- **중요도**: 높음\n\n```go\nfmt.Println(\"code inside\")\n```\n끝."
 		got := CollapsedReportFence("📬 탑솔라 <견적> \"요청\"", body)
@@ -50,7 +50,7 @@ func TestCollapsedReportFence(t *testing.T) {
 	})
 }
 
-func TestValidate_MarkdownNode_LegacyJSON(t *testing.T) {
+func TestValidateAllowsLegacyJSONMarkdownNode(t *testing.T) {
 	// Old transcripts carry JSON bodies; the strict legacy path must keep
 	// accepting them (display compatibility), even though authoring is HTML.
 	issues, err := Validate(`{"type":"markdown","value":"## 제목\n본문"}`)

@@ -13,7 +13,7 @@ func execInput(cmd string) json.RawMessage {
 
 // The core ordering contract: write→finish demands verification (escalating,
 // not just once); write→verify→finish passes; verify-before-write stays armed.
-func TestVerifyGate_Ordering(t *testing.T) {
+func TestVerifyGateEscalatesWhenFinishRepeatsWithoutVerify(t *testing.T) {
 	g := &verifyGateState{}
 
 	// No mutation → inert.
@@ -54,7 +54,7 @@ func TestVerifyGate_Ordering(t *testing.T) {
 
 // TEETH: an explicit opt-out line disarms the gate so a docs-only change can
 // finish without a build — observed from the finishing turn's text.
-func TestVerifyGate_OptOutEscape(t *testing.T) {
+func TestVerifyGateDisarmsWhenOptOutStated(t *testing.T) {
 	g := &verifyGateState{}
 	g.recordTool("write", json.RawMessage(`{"path":"README.md"}`), "ok", nil)
 	if p := g.finalizePrompt(nil); p == "" {
@@ -89,7 +89,7 @@ func TestVerifyGate_OptOutEscape(t *testing.T) {
 
 // awaitingVerify (reasoning-sandwich back-half trigger) is true only once the
 // gate has injected a demand and is still armed — not on a fresh mutation.
-func TestVerifyGate_AwaitingVerify(t *testing.T) {
+func TestVerifyGateAwaitsVerifyWhenGateIsArmed(t *testing.T) {
 	g := &verifyGateState{}
 	if g.awaitingVerify() {
 		t.Fatal("inert gate must not await verify")
@@ -109,7 +109,7 @@ func TestVerifyGate_AwaitingVerify(t *testing.T) {
 }
 
 // logFinishedWhileArmed fires exactly once and only for a still-armed run.
-func TestVerifyGate_FinishedWhileArmedLogsOnce(t *testing.T) {
+func TestVerifyGateLogsEscapeOnceWhenStillArmed(t *testing.T) {
 	disc := slog.New(slog.DiscardHandler)
 
 	// Disarmed run: no escape, escaped stays false (idempotency tracked there).
@@ -139,7 +139,7 @@ func TestVerifyGate_FinishedWhileArmedLogsOnce(t *testing.T) {
 	g2.logFinishedWhileArmed(nil)
 }
 
-func TestVerifyGate_Signals(t *testing.T) {
+func TestVerifyGateReturnsGatedStatusForToolSignals(t *testing.T) {
 	cases := []struct {
 		name     string
 		tool     string

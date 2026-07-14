@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestRegisterCoreTools(t *testing.T) {
+func TestRegisterCoreToolsCreatesExpectedToolSet(t *testing.T) {
 	registry := NewToolRegistry()
 	deps := &CoreToolDeps{
 		WorkspaceDir: "/tmp/test-workspace",

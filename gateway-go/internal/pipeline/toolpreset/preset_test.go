@@ -253,10 +253,10 @@ func TestAllowedTools_Verifier(t *testing.T) {
 	}
 }
 
-// TestSpawnPresets_CannotSpawn pins the sandbox invariant: no spawn preset may
-// grant sessions_spawn/subagents, because a restricted child spawning a
-// preset-less (= unrestricted) grandchild would defeat the restriction.
-func TestSpawnPresets_CannotSpawn(t *testing.T) {
+// TestSpawnPresetsDenySessionsSpawnAndSubagents pins the sandbox invariant: no
+// spawn preset may grant sessions_spawn/subagents, because a restricted child
+// spawning a preset-less (= unrestricted) grandchild would defeat the restriction.
+func TestSpawnPresetsDenySessionsSpawnAndSubagents(t *testing.T) {
 	for _, p := range SpawnPresets() {
 		allowed := AllowedTools(p)
 		if allowed == nil {
@@ -270,7 +270,7 @@ func TestSpawnPresets_CannotSpawn(t *testing.T) {
 	}
 }
 
-func TestIsValid(t *testing.T) {
+func TestIsValidAcceptsKnownPresetsRejectsUnknown(t *testing.T) {
 	for _, p := range []Preset{
 		PresetNone, PresetConversation, PresetBoot, PresetSelfReview,
 		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch,
@@ -285,7 +285,7 @@ func TestIsValid(t *testing.T) {
 	}
 }
 
-func TestKnownPresets(t *testing.T) {
+func TestKnownPresetsReturnsValidPresetsWithAllowLists(t *testing.T) {
 	presets := KnownPresets()
 	if len(presets) != 11 {
 		t.Errorf("got %d, want 11 known presets", len(presets))
@@ -300,7 +300,7 @@ func TestKnownPresets(t *testing.T) {
 	}
 }
 
-func TestSpawnPresets_AreKnown(t *testing.T) {
+func TestSpawnPresetsAreNotMissingFromKnownPresets(t *testing.T) {
 	known := make(map[Preset]struct{})
 	for _, p := range KnownPresets() {
 		known[p] = struct{}{}

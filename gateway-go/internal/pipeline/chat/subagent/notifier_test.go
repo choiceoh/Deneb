@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
-func TestNotifyQueue_SingleItem(t *testing.T) {
+func TestNotifyQueueEmitsSingleItem(t *testing.T) {
 	var flushed []notifyItem
 	var mu sync.Mutex
 	done := make(chan struct{})
@@ -43,7 +43,7 @@ func TestNotifyQueue_SingleItem(t *testing.T) {
 	}
 }
 
-func TestNotifyQueue_Batching(t *testing.T) {
+func TestNotifyQueueEmitsBatchedItemsInOneFlush(t *testing.T) {
 	var flushed []notifyItem
 	var mu sync.Mutex
 	done := make(chan struct{})
@@ -76,7 +76,7 @@ func TestNotifyQueue_Batching(t *testing.T) {
 	}
 }
 
-func TestNotifyQueue_DebounceResets(t *testing.T) {
+func TestNotifyQueueFlushesOnceWhenEnqueuedWithinWindow(t *testing.T) {
 	var flushCount int
 	var mu sync.Mutex
 	done := make(chan struct{}, 1)
@@ -181,7 +181,7 @@ func TestFormatBatchNotification_TruncatesLongOutput(t *testing.T) {
 	}
 }
 
-func TestIsTerminalStatus(t *testing.T) {
+func TestIsTerminalStatusReturnsTrueForTerminalStates(t *testing.T) {
 	for _, s := range []session.RunStatus{session.StatusDone, session.StatusFailed, session.StatusKilled, session.StatusTimeout} {
 		if !isTerminalStatus(s) {
 			t.Errorf("expected %s to be terminal", s)
@@ -210,7 +210,7 @@ func newTestSubagentNotifier(active *bool, started *[]RunParams) *SubagentNotifi
 // core of the TOCTOU-race fix: pushNotification parks a notification in the
 // channel while the parent runs, but if that run ends before draining it via
 // DeferredSystemText, ReclaimOnIdle re-routes it instead of letting it rot.
-func TestReclaimOnIdle_IdleParentTriggersRun(t *testing.T) {
+func TestReclaimOnIdleStartsRunForIdleParent(t *testing.T) {
 	active := false
 	var started []RunParams
 	sn := newTestSubagentNotifier(&active, &started)
@@ -229,7 +229,7 @@ func TestReclaimOnIdle_IdleParentTriggersRun(t *testing.T) {
 // A parent that already has a new active run (e.g. a drained pending message)
 // must NOT get another run; the notification is pushed back so that in-flight
 // run drains it on its next turn.
-func TestReclaimOnIdle_ActiveParentPushesBack(t *testing.T) {
+func TestReclaimOnIdleRestoresNotificationForActiveParent(t *testing.T) {
 	active := true
 	var started []RunParams
 	sn := newTestSubagentNotifier(&active, &started)
@@ -267,7 +267,7 @@ func TestReclaimOnIdle_EmptyChannelNoOp(t *testing.T) {
 // Overflow must merge, never drop: pushing past the channel cap collapses the
 // backlog into a combined notification that still carries every completion.
 // A dropped completion is a result the user silently never receives.
-func TestPushNotification_OverflowMergesInsteadOfDropping(t *testing.T) {
+func TestPushNotificationPreservesAllOnOverflow(t *testing.T) {
 	active := true
 	var started []RunParams
 	sn := newTestSubagentNotifier(&active, &started)

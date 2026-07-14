@@ -12,7 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
 
-func TestEngineEnrichMessageUsesNativeYouTubeContent(t *testing.T) {
+func TestEngineEnrichMessageRendersNativeYouTubeContent(t *testing.T) {
 	engine := testEngine(nil)
 	engine.youtube = func(_ context.Context, url string) *media.YouTubeResult {
 		return &media.YouTubeResult{
@@ -33,7 +33,7 @@ func TestEngineEnrichMessageUsesNativeYouTubeContent(t *testing.T) {
 	}
 }
 
-func TestEngineEnrichMessageSkipsUnavailableYouTube(t *testing.T) {
+func TestEngineEnrichMessageReturnsEmptyForUnavailableYouTube(t *testing.T) {
 	engine := testEngine(nil)
 	engine.youtube = func(context.Context, string) *media.YouTubeResult { return nil }
 	if got := engine.enrichMessage(context.Background(), "https://youtu.be/dQw4w9WgXcQ"); got != "" {

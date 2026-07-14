@@ -143,7 +143,7 @@ func TestTruncateContent_UTF8Safe(t *testing.T) {
 	}
 }
 
-func TestClipHeadUTF8(t *testing.T) {
+func TestClipHeadUTF8TruncatesAtRuneBoundary(t *testing.T) {
 	tests := []struct {
 		name string
 		s    string
@@ -171,7 +171,7 @@ func TestClipHeadUTF8(t *testing.T) {
 	}
 }
 
-func TestClipTailUTF8(t *testing.T) {
+func TestClipTailUTF8TruncatesAtRuneBoundary(t *testing.T) {
 	tests := []struct {
 		name string
 		s    string
@@ -222,7 +222,7 @@ func TestFormatContextFilesForPrompt(t *testing.T) {
 	}
 }
 
-func TestSessionSnapshotFrozen(t *testing.T) {
+func TestSessionSnapshotPreservesFrozenContentUntilCleared(t *testing.T) {
 	ResetContextFileCacheForTest()
 	dir := t.TempDir()
 

@@ -26,7 +26,7 @@ func markActiveRun(h *Handler, sessionKey string) {
 	})
 }
 
-func TestTrySteerIntoActiveRun_FoldsShortFollowUp(t *testing.T) {
+func TestTrySteerFoldsShortFollowUpWhenRunActive(t *testing.T) {
 	h := newSteerTestHandler()
 	markActiveRun(h, "client:main")
 
@@ -43,14 +43,14 @@ func TestTrySteerIntoActiveRun_FoldsShortFollowUp(t *testing.T) {
 	}
 }
 
-// TestTrySteerIntoActiveRun_NativeClientCarveOut proves the native surface folds
+// TestTrySteerAllowsNativeClientCarveOut proves the native surface folds
 // even though it sets AutoDeliveredOutput. miniapp.chat.send ALWAYS sets that
 // flag (reply returned as the RPC result, not pushed via the message tool) AND
 // Delivery.Channel="client". Blocking steer on the flag alone left it dead on
 // the sole native entry (measured live: a mid-turn correction raced a second
 // concurrent run); the carve-out restores folding while keeping autonomous
 // AutoDeliveredOutput relays (cron/mailpoll — no client delivery) excluded.
-func TestTrySteerIntoActiveRun_NativeClientCarveOut(t *testing.T) {
+func TestTrySteerAllowsNativeClientCarveOut(t *testing.T) {
 	h := newSteerTestHandler()
 	markActiveRun(h, "client:main")
 
@@ -71,7 +71,7 @@ func TestTrySteerIntoActiveRun_NativeClientCarveOut(t *testing.T) {
 	}
 }
 
-func TestTrySteerIntoActiveRun_Gates(t *testing.T) {
+func TestTrySteerRejectsGatedCases(t *testing.T) {
 	h := newSteerTestHandler()
 	markActiveRun(h, "client:main")
 

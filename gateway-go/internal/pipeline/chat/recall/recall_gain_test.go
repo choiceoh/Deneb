@@ -143,7 +143,7 @@ func recallGainCorpus() ([]gainFact, []gainQuery) {
 // could satisfy a hit from that echo rather than from recalled evidence —
 // silently inflating the measured wiki gain. Every hit must come from a note or
 // source, so answer tokens have to be absent from the prompt.
-func TestRecallGainCorpusInvariant(t *testing.T) {
+func TestRecallGainCorpusRejectsQuestionsThatEchoWantedTokens(t *testing.T) {
 	_, queries := recallGainCorpus()
 	for _, q := range queries {
 		for _, w := range q.wantAll {
@@ -264,12 +264,12 @@ func gainHits(t *testing.T, mode string, log bool) (hits int) {
 	return hits
 }
 
-// TestRecallWikiGain is the headline measurement: the wiki's recall gain over a
+// TestRecallWikiGainErrorsWhenNegative is the headline measurement: the wiki's recall gain over a
 // diary-only (raw retrieval) baseline, on a corpus where every fact lives in
 // both layers. Informational by default (no hard floor) — it answers "does the
 // curated layer earn its weight", which is a tuning/architecture question, not a
 // pass/fail gate.
-func TestRecallWikiGain(t *testing.T) {
+func TestRecallWikiGainErrorsWhenNegative(t *testing.T) {
 	both := gainHits(t, "both", true)
 	diaryOnly := gainHits(t, "diaryonly", true)
 	wikiOnly := gainHits(t, "wikionly", false)
@@ -347,7 +347,7 @@ func markerFlagsStale(out, stale, marker string) bool {
 // it does not rewrite history. So the guard asserts the wiki flags the stale value
 // and surfaces the new one, and that it never makes the unmarked-row count worse —
 // not that the stale mention disappears.
-func TestRecallStaleBeliefGuard(t *testing.T) {
+func TestRecallStaleBeliefGuardFlagsStaleValueWithMarker(t *testing.T) {
 	_, queries := recallGainCorpus()
 	var stale gainQuery
 	for _, q := range queries {
@@ -423,7 +423,7 @@ func rowScoreContaining(out, val string) float64 {
 // asserts that: the correct raw value ranks above the drift, and (the original
 // floor) the correct value is never suppressed entirely. Remove the penalty and
 // this fails. The unit-level rule is in recall_provenance_test.go.
-func TestRecallSynthesisDrift(t *testing.T) {
+func TestRecallSynthesisDriftPreservesCorrectValueRanking(t *testing.T) {
 	const (
 		correct = "1,950" // faithful raw diary value (as first observed)
 		drift   = "2,950" // dreamer mis-summarized the SAME deal into the wiki

@@ -108,7 +108,7 @@ func pilotRequests() []map[string]any {
 	return append([]map[string]any(nil), pilotHarness.requests...)
 }
 
-func TestRoleRegistryModelAndClientResolution(t *testing.T) {
+func TestRoleRegistryReturnsModelAndClientPerRole(t *testing.T) {
 	resetPilotHarness()
 	if pkgRegistry != pilotHarness.registry {
 		t.Fatalf("package registry = %p, want %p", pkgRegistry, pilotHarness.registry)
@@ -135,7 +135,7 @@ func TestRoleRegistryModelAndClientResolution(t *testing.T) {
 	}
 }
 
-func TestCallRoleLLMShapesRequestAndMergesAllExtras(t *testing.T) {
+func TestCallRoleLLMFormatsRequestWithMergedExtras(t *testing.T) {
 	resetPilotHarness()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -207,7 +207,7 @@ func TestCallRoleLLMEmptyAndStreamErrorContracts(t *testing.T) {
 	}
 }
 
-func TestLocalAndTinyWrappersUseExpectedRoles(t *testing.T) {
+func TestLocalAndTinyWrappersReturnRoleSpecificReplies(t *testing.T) {
 	resetPilotHarness()
 	local, err := CallLocalLLM(context.Background(), "system", "user", 20)
 	if err != nil || local != "reply:light" {
@@ -365,7 +365,7 @@ func TestTruncateHeadRuneBoundariesAndLimits(t *testing.T) {
 	}
 }
 
-func TestVisionInputValidationAndConfiguredRoleSelection(t *testing.T) {
+func TestCallVisionLLMRejectsInvalidFramesAndSelectsConfiguredRole(t *testing.T) {
 	resetPilotHarness()
 	if got, err := CallVisionLLM(context.Background(), "system", "user", nil, 100); err == nil || got != "" || !strings.Contains(err.Error(), "no frames") {
 		t.Fatalf("no frames = %q/%v", got, err)
@@ -385,7 +385,7 @@ func TestVisionInputValidationAndConfiguredRoleSelection(t *testing.T) {
 	pilotHarness.registry.SetRoleModelID(modelrole.RoleVision, "test/vision")
 }
 
-func TestCallVisionLLMBuildsMultimodalRequest(t *testing.T) {
+func TestCallVisionLLMFormatsMultimodalRequestBlocks(t *testing.T) {
 	resetPilotHarness()
 	frames := []VisionFrame{
 		{MimeType: "image/png", Base64: "cG5n"},

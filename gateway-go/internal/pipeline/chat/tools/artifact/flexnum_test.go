@@ -8,7 +8,7 @@ import (
 // flexInt must accept both a JSON number and a quoted number, because LLMs
 // emit numeric tool params both ways. Pins the fix for sessions_history /
 // sessions_search erroring on `"limit":"10"`.
-func TestFlexInt_AcceptsStringAndNumber(t *testing.T) {
+func TestFlexIntParsesStringAndNumber(t *testing.T) {
 	cases := map[string]int{
 		`10`:    10,
 		`"10"`:  10,
@@ -37,7 +37,7 @@ func TestFlexInt_RejectsNonNumericString(t *testing.T) {
 
 // A flexInt field embedded in a struct unmarshals from a quoted number — the
 // exact shape that was failing in the sessions tool.
-func TestFlexInt_InStruct(t *testing.T) {
+func TestFlexIntParsesInStruct(t *testing.T) {
 	var p struct {
 		Limit FlexInt `json:"limit"`
 	}

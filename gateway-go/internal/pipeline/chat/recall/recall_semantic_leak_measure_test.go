@@ -128,10 +128,10 @@ func cosF32(a, b []float32) float64 {
 	return dot / (math.Sqrt(na) * math.Sqrt(nb))
 }
 
-// TestRecallSemanticLeak_BandCalibration proves the mock reproduces the measured
+// TestRecallSemanticLeakBandCalibrationReturnsSeparatedCosines proves the mock reproduces the measured
 // Korean cosine bands (relevant strictly above irrelevant, irrelevant in the
 // 0.58-0.69 band), so the leak gate that follows rests on realistic geometry.
-func TestRecallSemanticLeak_BandCalibration(t *testing.T) {
+func TestRecallSemanticLeakBandCalibrationReturnsSeparatedCosines(t *testing.T) {
 	emb := bandEmbedder{healthy: true}
 	ctx := context.Background()
 
@@ -180,14 +180,14 @@ func TestRecallSemanticLeak_BandCalibration(t *testing.T) {
 	}
 }
 
-// TestRecallSemanticLeak_NoOffTopicInjection is the core gate: a Korean recall
+// TestRecallSemanticLeakRejectsOffTopicPage is the core gate: a Korean recall
 // query with an explicit cue, NO on-topic wiki page, and a corpus of only
 // off-topic pages (cross-topic cosine in the irrelevant band). It drives the
 // full recall pipeline and asserts NO off-topic wiki page reaches
 // <recall-context> — and that the explicit cue instead yields the honest
 // no-evidence notice. Without the search.go floor the off-topic pages are
 // injected and this fails.
-func TestRecallSemanticLeak_NoOffTopicInjection(t *testing.T) {
+func TestRecallSemanticLeakRejectsOffTopicPage(t *testing.T) {
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {
@@ -280,11 +280,11 @@ func TestRecallSemanticLeak_NoOffTopicInjection(t *testing.T) {
 	}
 }
 
-// TestRecallSemanticLeak_OnTopicStillSurfaces is the companion guard: the floor
+// TestRecallSemanticLeakPreservesOnTopicMatch is the companion guard: the floor
 // must exclude noise, not everything. With an ON-topic page present (same topic
 // as the query → cosine 1.0) recall surfaces THAT page and still no off-topic
 // page. This fails if the floor is set so high it drops genuine semantic hits.
-func TestRecallSemanticLeak_OnTopicStillSurfaces(t *testing.T) {
+func TestRecallSemanticLeakPreservesOnTopicMatch(t *testing.T) {
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

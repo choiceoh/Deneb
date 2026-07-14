@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestRecallHeader(t *testing.T) {
+func TestRecallHeaderFormatsQueryAndCount(t *testing.T) {
 	if got := recallHeader("탑솔라", 3, "wiki"); !strings.Contains(got, "🔍") ||
 		!strings.Contains(got, "탑솔라") || !strings.Contains(got, "3건") || !strings.Contains(got, "wiki") {
 		t.Errorf("recallHeader missing parts: %q", got)
@@ -15,7 +15,7 @@ func TestRecallHeader(t *testing.T) {
 	}
 }
 
-func TestRecallRow(t *testing.T) {
+func TestRecallRowFormatsIndexedEntry(t *testing.T) {
 	row := recallRow(2, "w:인물/홍길동", "2026-06-06", "  핵심 담당자  ")
 	if !strings.Contains(row, "2. `w:인물/홍길동`") {
 		t.Errorf("row missing indexed ref: %q", row)

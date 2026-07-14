@@ -17,7 +17,7 @@ func (f *fakeUsageRecorder) RecordSkillUse(sessionKey, skillName string, success
 	f.calls = append(f.calls, usageCall{sessionKey, skillName, errMsg, model, success})
 }
 
-func TestRecordTurnSkillUsage_cleanTurnIsSuccess(t *testing.T) {
+func TestRecordTurnSkillUsageReturnsSuccessForCleanTurn(t *testing.T) {
 	rec := &fakeUsageRecorder{}
 	log := NewSkillConsultLog()
 	log.Add("research-flow")
@@ -58,7 +58,7 @@ func TestRecordTurnSkillUsage_skillsToolErrorIsNotSkillFailure(t *testing.T) {
 	// forever chasing a gateway error it cannot fix.
 	// (Session key must be a REAL session: review-fork sessions
 	// ("system:skill-review:*") are now excluded from recording entirely —
-	// see TestRecordTurnSkillUsage_SkipsReviewForks.)
+	// see TestRecordTurnSkillUsageIgnoresReviewForks.)
 	rec := &fakeUsageRecorder{}
 	log := NewSkillConsultLog()
 	log.Add("email-analysis")
@@ -89,7 +89,7 @@ func TestRecordTurnSkillUsage_nonSkillsErrorStillFailsAlongsideSkills(t *testing
 	}
 }
 
-func TestRecordTurnSkillUsage_noOps(t *testing.T) {
+func TestRecordTurnSkillUsageIgnoresEmptyAndNilInputs(t *testing.T) {
 	// Nil recorder must not panic.
 	recordTurnSkillUsage(nil, NewSkillConsultLog(), nil, "s", "m1")
 

@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 )
 
-func TestTokenestIntegration(t *testing.T) {
+func TestTokenestEstimateReturnsReasonableTokenCounts(t *testing.T) {
 	// Verify tokenest.Estimate produces reasonable values for content
 	// used in budget optimization.
 	tests := []struct {
@@ -32,7 +32,7 @@ func TestTokenestIntegration(t *testing.T) {
 	}
 }
 
-func TestNewFragment(t *testing.T) {
+func TestNewFragmentCreatesPriorityByName(t *testing.T) {
 	t.Run("known name", func(t *testing.T) {
 		f := NewFragment("soul", "content")
 		if f.Priority != 0 {
@@ -217,7 +217,7 @@ func TestOptimize_ZeroBudget(t *testing.T) {
 	}
 }
 
-func TestAssemble(t *testing.T) {
+func TestAssembleReturnsConcatenatedFragmentContent(t *testing.T) {
 	budget := PromptBudget{Total: 1000}
 	fragments := []PromptFragment{
 		{Name: "a", Content: "hello ", Priority: 0},
@@ -244,7 +244,7 @@ func TestAssemble_WithOptimization(t *testing.T) {
 	}
 }
 
-func TestShrinkContent(t *testing.T) {
+func TestShrinkContentTruncatesByFraction(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string

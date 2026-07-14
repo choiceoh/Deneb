@@ -107,7 +107,7 @@ func TestCacheBreakpointBudget_AnthropicWithEmptySkillsPrompt(t *testing.T) {
 	}
 }
 
-func TestCacheBreakpointBudget_AnthropicSingleMessage(t *testing.T) {
+func TestCacheBreakpointBudgetWithSingleMessage(t *testing.T) {
 	// Static + Semi + msg×1 = 3. The hook only marks one trailing message
 	// when only one exists; the budget invariant still holds.
 	sysBlocks := prompt.BuildSystemPromptBlocks(prompt.SystemPromptParams{
@@ -127,7 +127,7 @@ func TestCacheBreakpointBudget_AnthropicSingleMessage(t *testing.T) {
 	}
 }
 
-func TestCacheBreakpointBudget_OpenAIHookSkips(t *testing.T) {
+func TestCacheBreakpointBudgetOpenAIWithoutTrailingMarkers(t *testing.T) {
 	// Non-Anthropic providers must not gain trailing markers. System
 	// markers (Static + Semi-default) stay attached because the system
 	// blocks are built once at assembly time without knowing the wire
@@ -151,7 +151,7 @@ func TestCacheBreakpointBudget_OpenAIHookSkips(t *testing.T) {
 	}
 }
 
-func TestCacheBreakpointBudget_AnthropicMultiBlockMessages(t *testing.T) {
+func TestCacheBreakpointBudgetWithMultiBlockMessages(t *testing.T) {
 	// User messages can carry multi-block content (text + image, or
 	// tool_result blocks). The trailing hook attaches the marker to the
 	// LAST block of the LAST 2 non-system messages — total still <= 4.

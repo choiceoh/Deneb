@@ -24,7 +24,7 @@ func disabledProfile() router.Profile { return router.DefaultProfile() }
 // TestIsAutomationRun pins the chat-side automation classification the router
 // consumes as Request.IsAutomation: ephemeral + cron/acp prefixes are
 // automation; AutoDeliveredOutput alone is an interactive native chat.
-func TestIsAutomationRun(t *testing.T) {
+func TestIsAutomationRunReturnsTrueOnlyForAutomationSignals(t *testing.T) {
 	cases := []struct {
 		params RunParams
 		want   bool
@@ -90,7 +90,7 @@ func TestApplyEffortRouter_RouteAndRestore(t *testing.T) {
 
 // TestApplyEffortRouter_Gates verifies the no-route paths: flag off, inert
 // profile (no toggle), hard message — plus force-mode behavior.
-func TestApplyEffortRouter_Gates(t *testing.T) {
+func TestApplyEffortRouter_RoutesOnlyWhenGatesPass(t *testing.T) {
 	t.Setenv("DENEB_ADAPTIVE_EFFORT", "")
 	cfg := agent.AgentConfig{Model: "deepseek-v4-flash"}
 	if r, d := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, nil, enabledProfile(), nil); r != nil || d != "" {
@@ -152,7 +152,7 @@ func TestEscalatableEffortFailure(t *testing.T) {
 // sandwich's boost wins on boost turns (boost returns non-nil), and the effort
 // router's per-step policy governs every other turn (boost returns nil). A nil
 // boost returns the router policy unwrapped.
-func TestComposeEffortModulator(t *testing.T) {
+func TestComposeEffortModulatorPreservesBoostTurns(t *testing.T) {
 	boostCfg := &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 32768}
 	routerCfg := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: "thinking"}
 
@@ -188,7 +188,7 @@ func TestComposeEffortModulator(t *testing.T) {
 // pre-installed sandwich modulator instead of clobbering it: the sandwich's
 // boost turn keeps its boost even after routing, while the router governs the
 // rest. (Before #9 the router overwrote cfg.ThinkingModulator outright.)
-func TestApplyEffortRouter_ComposesSandwich(t *testing.T) {
+func TestApplyEffortRouter_PreservesSandwichBoostAfterRouting(t *testing.T) {
 	t.Setenv("DENEB_ADAPTIVE_EFFORT", "1")
 	boostCfg := &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 32768}
 	// A sandwich-shaped modulator: boost on turn 0, nil otherwise.
@@ -221,7 +221,7 @@ func TestApplyEffortRouter_ComposesSandwich(t *testing.T) {
 }
 
 // TestEffortMode checks the env mode parsing (off / adaptive / force).
-func TestEffortMode(t *testing.T) {
+func TestEffortModeParsesEnvValue(t *testing.T) {
 	for v, want := range map[string]string{
 		"": effortModeOff, "off": effortModeOff, "0": effortModeOff,
 		"1": effortModeAdaptive, "true": effortModeAdaptive, "adaptive": effortModeAdaptive,
@@ -237,7 +237,7 @@ func TestEffortMode(t *testing.T) {
 // TestEffortStepThinking covers the per-step policy e_t = f(turn, o_t) with the
 // thresholds sourced from the profile. o_t comes from the executor's run-scoped
 // ToolActivity records (no message re-parsing).
-func TestEffortStepThinking(t *testing.T) {
+func TestEffortStepThinkingReturnsPolicyForObservationSize(t *testing.T) {
 	profile := enabledProfile()
 	disabled := &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: "thinking"}
 	revert := &llm.ThinkingConfig{Type: "enabled"}

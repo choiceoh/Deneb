@@ -148,7 +148,7 @@ func TestUpdatePrechecks(t *testing.T) {
 	}
 }
 
-func TestIsUntrackedOnly(t *testing.T) {
+func TestIsUntrackedOnlyReturnsTrueForUntrackedStatus(t *testing.T) {
 	tests := []struct {
 		name   string
 		status string

@@ -28,7 +28,7 @@ func TestRecallFilesEvidence_NilSearchNoQueries(t *testing.T) {
 	}
 }
 
-func TestRecallFilesEvidence_MapsAndScores(t *testing.T) {
+func TestRecallFilesEvidenceReturnsMappedScore(t *testing.T) {
 	search := fakeFileSearch(map[string][]FileRecallHit{
 		"개발행위허가": {{Path: "/허가/신청서.pdf", Snippet: "제출 서류 안내", Score: 0.81, ModifiedAt: 123}},
 	})
@@ -55,7 +55,7 @@ func TestRecallFilesEvidence_MapsAndScores(t *testing.T) {
 	}
 }
 
-func TestRecallFilesEvidence_DedupsAcrossQueries(t *testing.T) {
+func TestRecallFilesEvidenceDeduplicatesAcrossQueries(t *testing.T) {
 	// The same file matches two different queries; it must appear once.
 	hit := FileRecallHit{Path: "/dup.txt", Snippet: "shared", Score: 0.8}
 	search := fakeFileSearch(map[string][]FileRecallHit{
@@ -68,7 +68,7 @@ func TestRecallFilesEvidence_DedupsAcrossQueries(t *testing.T) {
 	}
 }
 
-func TestRecallFilesEvidence_PerQueryQuota(t *testing.T) {
+func TestRecallFilesEvidenceRespectsPerQueryQuotaBoundary(t *testing.T) {
 	// The search is called with recallFileQuota as the per-query limit; a source
 	// returning more than that is capped by the search itself (fakeFileSearch
 	// honors the limit), so a single broad query cannot flood the evidence list.
@@ -90,7 +90,7 @@ func TestRecallFilesEvidence_PerQueryQuota(t *testing.T) {
 	}
 }
 
-func TestRecallFilesEvidence_SkipsBlankPath(t *testing.T) {
+func TestRecallFilesEvidenceIgnoresBlankPath(t *testing.T) {
 	search := fakeFileSearch(map[string][]FileRecallHit{
 		"q": {{Path: "  ", Score: 0.9}, {Path: "/real.txt", Score: 0.8}},
 	})
@@ -100,12 +100,12 @@ func TestRecallFilesEvidence_SkipsBlankPath(t *testing.T) {
 	}
 }
 
-// TestBuildRecallPreflight_FilesSourceEndToEnd drives the full preflight with a
+// TestBuildRecallPreflightSurfacesFileWhenTopical drives the full preflight with a
 // files source wired (no wiki/diary/polaris), proving the task's two scenarios:
 // a topical question surfaces the matching file as recall evidence in the tail
 // block, and an off-topic question ("오늘 날씨") injects nothing. The fake search
 // stands in for the BGE-M3 hybrid index (which needs the live embedding server).
-func TestBuildRecallPreflight_FilesSourceEndToEnd(t *testing.T) {
+func TestBuildRecallPreflightSurfacesFileWhenTopical(t *testing.T) {
 	// The fake returns the file only for queries containing a real signal term of
 	// the topical message; the weather message tokenizes to no matching query.
 	search := FileRecallFunc(func(_ context.Context, query string, _ int) []FileRecallHit {
@@ -141,7 +141,7 @@ func TestBuildRecallPreflight_FilesSourceEndToEnd(t *testing.T) {
 	}
 }
 
-func TestRecallFileConfidence(t *testing.T) {
+func TestRecallFileConfidenceReturnsHighOrMediumBand(t *testing.T) {
 	high := recallConfidence(recallEvidence{Kind: "file", Score: recallFilesSourcePrior + 0.80})
 	if high != "high" {
 		t.Errorf("strong file hit confidence = %q, want high", high)

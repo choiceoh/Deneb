@@ -314,7 +314,7 @@ func TestRunCacheInvalidateAllAndSelectiveBoundaries(t *testing.T) {
 	}
 }
 
-func TestScopeOverlapDoesNotUseSiblingPrefix(t *testing.T) {
+func TestScopeOverlapIgnoresSiblingPrefixCollision(t *testing.T) {
 	cases := []struct {
 		dir, scope string
 		want       bool
@@ -354,7 +354,7 @@ func TestCacheToolClassificationIsClosedAllowlist(t *testing.T) {
 	}
 }
 
-func TestBuildCacheKeyCanonicalizesOnlyNonSemanticFields(t *testing.T) {
+func TestBuildCacheKeyNormalizesOnlyNonSemanticFields(t *testing.T) {
 	plain := json.RawMessage(`{"query":"x","path":"src"}`)
 	if got := BuildCacheKey("grep", plain); got != `grep:{"query":"x","path":"src"}` {
 		t.Fatalf("plain key = %q", got)
@@ -379,7 +379,7 @@ func TestBuildCacheKeyCanonicalizesOnlyNonSemanticFields(t *testing.T) {
 	}
 }
 
-func TestTurnContextWaitFastPathAndMultipleWaiters(t *testing.T) {
+func TestTurnContextWaitReturnsStoredResultToMultipleWaiters(t *testing.T) {
 	tc := NewTurnContext()
 	want := &TurnResult{ToolName: "grep", Output: "found", Duration: 12 * time.Millisecond}
 	tc.Store("ready", want)
@@ -507,7 +507,7 @@ func TestTurnContextLoadIDsAndTimingStats(t *testing.T) {
 	}
 }
 
-func TestDetectCycleHandlesChainsSelfCyclesAndDisconnectedGraphs(t *testing.T) {
+func TestDetectCycleRejectsCyclicAndAllowsAcyclicRefs(t *testing.T) {
 	acyclic := []map[string]string{
 		nil,
 		{},
@@ -534,7 +534,7 @@ func TestDetectCycleHandlesChainsSelfCyclesAndDisconnectedGraphs(t *testing.T) {
 	}
 }
 
-func TestDeferredActivationOverflowDedupAndContext(t *testing.T) {
+func TestDeferredActivationOverflowDeduplicatesAndPreservesContext(t *testing.T) {
 	da := NewDeferredActivation()
 	da.Seed([]string{"web", "web", "memory"})
 	if !da.IsActive("web") || !da.IsActive("memory") || da.IsActive("exec") {
@@ -606,7 +606,7 @@ func TestExtractActivationNoticesCanonicalizesAndRejectsInjection(t *testing.T) 
 	}
 }
 
-func TestChatMessageTextAndContentBoundaries(t *testing.T) {
+func TestChatMessageTextContentBoundaryCases(t *testing.T) {
 	msg := NewTextChatMessage("user", "hello \"world\"\nnext", 123)
 	if msg.Role != "user" || msg.Timestamp != 123 || msg.TextContent() != "hello \"world\"\nnext" || !msg.HasContent() {
 		t.Fatalf("new text message = %#v text=%q", msg, msg.TextContent())

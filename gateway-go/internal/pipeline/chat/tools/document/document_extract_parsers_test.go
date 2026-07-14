@@ -34,7 +34,7 @@ func makeTestXLSX(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-func TestXLSXToText(t *testing.T) {
+func TestXLSXToTextReturnsCellValues(t *testing.T) {
 	text, err := xlsxToText(makeTestXLSX(t))
 	if err != nil {
 		t.Fatalf("xlsxToText: %v", err)
@@ -52,7 +52,7 @@ func TestXLSXToText_Invalid(t *testing.T) {
 	}
 }
 
-func TestDOCXToText(t *testing.T) {
+func TestDOCXToTextReturnsParagraphText(t *testing.T) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	w, err := zw.Create("word/document.xml")
@@ -81,7 +81,7 @@ func TestDOCXToText(t *testing.T) {
 	}
 }
 
-func TestPPTXToText(t *testing.T) {
+func TestPPTXToTextReturnsSlideText(t *testing.T) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	addSlide := func(name, body string) {
@@ -119,9 +119,9 @@ func TestPPTXToText(t *testing.T) {
 	}
 }
 
-// TestXLSXToText_MarkdownTable verifies the sheet renders as a well-formed
+// TestXLSXToTextFormatsMarkdownTable verifies the sheet renders as a well-formed
 // markdown table (header row + separator), not a loose pipe-joined blob.
-func TestXLSXToText_MarkdownTable(t *testing.T) {
+func TestXLSXToTextFormatsMarkdownTable(t *testing.T) {
 	text, err := xlsxToText(makeTestXLSX(t))
 	if err != nil {
 		t.Fatalf("xlsxToText: %v", err)
@@ -172,9 +172,9 @@ func TestXLSXToText_SparseColumns(t *testing.T) {
 	}
 }
 
-// TestDOCXTable verifies a Word table (<w:tbl>) renders as a markdown table
+// TestDOCXToTextFormatsTableAsMarkdown verifies a Word table (<w:tbl>) renders as a markdown table
 // rather than collapsing into a vertical list of cell values.
-func TestDOCXTable(t *testing.T) {
+func TestDOCXToTextFormatsTableAsMarkdown(t *testing.T) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	w, err := zw.Create("word/document.xml")
@@ -206,9 +206,9 @@ func TestDOCXTable(t *testing.T) {
 	}
 }
 
-// TestPPTXTable verifies a PowerPoint DrawingML table (<a:tbl>) renders as a
+// TestPPTXToTextFormatsTableAsMarkdown verifies a PowerPoint DrawingML table (<a:tbl>) renders as a
 // markdown table.
-func TestPPTXTable(t *testing.T) {
+func TestPPTXToTextFormatsTableAsMarkdown(t *testing.T) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	w, err := zw.Create("ppt/slides/slide1.xml")
@@ -240,7 +240,7 @@ func TestPPTXTable(t *testing.T) {
 	}
 }
 
-func TestColIndexFromRef(t *testing.T) {
+func TestColIndexFromRefParsesColumnLetters(t *testing.T) {
 	cases := map[string]int{
 		"A1": 0, "B2": 1, "Z9": 25, "AA10": 26, "AB1": 27,
 		"": -1, "1": -1, "  ": -1,
@@ -252,7 +252,7 @@ func TestColIndexFromRef(t *testing.T) {
 	}
 }
 
-func TestMdTable(t *testing.T) {
+func TestMdTableFormatsRowsAndEscapesPipes(t *testing.T) {
 	// Ragged rows are padded; a pipe in a cell is escaped.
 	got := mdTable([][]string{
 		{"a", "b"},
@@ -267,11 +267,11 @@ func TestMdTable(t *testing.T) {
 	}
 }
 
-// TestXLSXToText_OversizedRef is the security regression guard: a crafted cell
+// TestXLSXToTextIgnoresOversizedColumnRef is the security regression guard: a crafted cell
 // ref beyond Excel's column ceiling must be skipped, not drive the column-
 // padding loop into an unbounded allocation. Without the cap this would try to
 // allocate hundreds of thousands of cells (and far more for longer refs).
-func TestXLSXToText_OversizedRef(t *testing.T) {
+func TestXLSXToTextIgnoresOversizedColumnRef(t *testing.T) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	write := func(name, content string) {

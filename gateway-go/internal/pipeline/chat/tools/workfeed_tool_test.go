@@ -65,7 +65,7 @@ func TestToolWorkFeed_ListReadAck(t *testing.T) {
 	}
 }
 
-func TestToolWorkFeed_Publish(t *testing.T) {
+func TestToolWorkFeedCreatesPublishedCard(t *testing.T) {
 	store := newTestWorkFeed(t)
 	tool := ToolWorkFeed(store)
 	ctx := context.Background()

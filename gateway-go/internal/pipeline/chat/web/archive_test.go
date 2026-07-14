@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 )
 
-func TestFetchedDocVPath(t *testing.T) {
+func TestFetchedDocVPathFormatsVirtualPath(t *testing.T) {
 	cases := map[string]string{
 		"https://example.com/a/b/report.pdf?x=1": "/web/example.com/report.pdf",
 		"https://host.org/file.docx":             "/web/host.org/file.docx",
@@ -20,7 +20,7 @@ func TestFetchedDocVPath(t *testing.T) {
 	}
 }
 
-func TestArchiveFetchedDocument_PersistsToStore(t *testing.T) {
+func TestArchiveFetchedDocumentSavesToStore(t *testing.T) {
 	t.Setenv("DENEB_FILES_DIR", t.TempDir()) // redirect store off the real ~/.deneb
 	t.Setenv("DENEB_ARCHIVE_FETCHED_DOCS", "")
 
@@ -35,7 +35,7 @@ func TestArchiveFetchedDocument_PersistsToStore(t *testing.T) {
 	}
 }
 
-func TestArchiveFetchedDocument_DisabledAndOversized(t *testing.T) {
+func TestArchiveFetchedDocumentSkipsWhenDisabledOrOversized(t *testing.T) {
 	t.Setenv("DENEB_FILES_DIR", t.TempDir())
 
 	t.Setenv("DENEB_ARCHIVE_FETCHED_DOCS", "0")

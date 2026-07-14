@@ -49,7 +49,7 @@ func bigMarkedMsg(i int) llm.Message {
 	return llm.NewTextMessage("user", fmt.Sprintf("MARK-%d %s", i, strings.Repeat("내용 ", 13_000)))
 }
 
-func TestSummarizeInChunks_BatchBounded(t *testing.T) {
+func TestSummarizeInChunks_TruncatesToBatchBound(t *testing.T) {
 	// 6 one-message chunks; only the oldest maxChunksPerPass (4) may run.
 	var old []llm.Message
 	for i := 0; i < 6; i++ {
@@ -74,7 +74,7 @@ func TestSummarizeInChunks_BatchBounded(t *testing.T) {
 	}
 }
 
-func TestSummarizeInChunks_PrefixTolerance(t *testing.T) {
+func TestSummarizeInChunks_StopsAtFirstChunkFailure(t *testing.T) {
 	var old []llm.Message
 	for i := 0; i < 4; i++ {
 		old = append(old, bigMarkedMsg(i))
@@ -130,7 +130,7 @@ func TestSummarizeOldMessages_ExpiredCtxTreatedAsFailure(t *testing.T) {
 	}
 }
 
-func TestLLMCompact_LeftoverStaysRaw(t *testing.T) {
+func TestLLMCompact_PreservesLeftoverAsRawMessages(t *testing.T) {
 	// 6 big single-chunk messages + a recent tail with 6 assistant turns.
 	var msgs []llm.Message
 	for i := 0; i < 6; i++ {
@@ -178,7 +178,7 @@ func TestLLMCompact_LeftoverStaysRaw(t *testing.T) {
 	}
 }
 
-func TestSummarizeOldMessages_LargeIncrementalFallsBackToFreshChunks(t *testing.T) {
+func TestSummarizeOldMessages_LargeIncrementalUsesFreshChunkFallback(t *testing.T) {
 	cfg := NewConfig(100_000)
 	cfg.PreviousSummary = "PREV_SUMMARY"
 

@@ -30,7 +30,7 @@ func mustCallTool(t *testing.T, fn toolport.ToolFunc, params any) string {
 
 // ─── ResolvePath ────────────────────────────────────────────────────────────
 
-func TestResolvePath_absolute(t *testing.T) {
+func TestResolvePathReturnsAbsoluteUnchanged(t *testing.T) {
 	tmp := t.TempDir()
 	got := artifact.ResolvePath(tmp+"/foo.txt", tmp)
 	if got != tmp+"/foo.txt" {
@@ -38,7 +38,7 @@ func TestResolvePath_absolute(t *testing.T) {
 	}
 }
 
-func TestResolvePath_relative(t *testing.T) {
+func TestResolvePathReturnsRelativeJoinedPath(t *testing.T) {
 	tmp := t.TempDir()
 	got := artifact.ResolvePath("subdir/file.txt", tmp)
 	want := filepath.Join(tmp, "subdir/file.txt")
@@ -47,7 +47,7 @@ func TestResolvePath_relative(t *testing.T) {
 	}
 }
 
-func TestResolvePath_traversalClamped(t *testing.T) {
+func TestResolvePathClampsTraversalWithinBoundary(t *testing.T) {
 	tmp := t.TempDir()
 	got := artifact.ResolvePath("../../etc/passwd", tmp)
 	// Must not escape the workspace root.
@@ -214,7 +214,7 @@ func TestToolWrite_createsParentDir(t *testing.T) {
 
 // ─── ToolEdit ───────────────────────────────────────────────────────────────
 
-func TestToolEdit_basicReplace(t *testing.T) {
+func TestToolEditReplacesTextAndWritesFile(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "f.txt")
 	os.WriteFile(path, []byte("hello world"), 0o644)
@@ -230,7 +230,7 @@ func TestToolEdit_basicReplace(t *testing.T) {
 	}
 }
 
-func TestToolEdit_ambiguous(t *testing.T) {
+func TestToolEditRejectsAmbiguousMatch(t *testing.T) {
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "f.txt"), []byte("aaa"), 0o644)
 	_, err := callTool(t, ToolEdit(tmp), map[string]any{
@@ -243,7 +243,7 @@ func TestToolEdit_ambiguous(t *testing.T) {
 	}
 }
 
-func TestToolEdit_whitespaceTolerant(t *testing.T) {
+func TestToolEditMatchesWithTolerantWhitespace(t *testing.T) {
 	t.Run("unique indent mismatch auto-applies with re-indent", func(t *testing.T) {
 		tmp := t.TempDir()
 		path := filepath.Join(tmp, "f.go")
@@ -386,7 +386,7 @@ func TestToolEdit_whitespaceTolerant(t *testing.T) {
 	})
 }
 
-func TestToolEdit_replaceAll(t *testing.T) {
+func TestToolEditUpdatesAllOccurrences(t *testing.T) {
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "f.txt"), []byte("aaa"), 0o644)
 	mustCallTool(t, ToolEdit(tmp), map[string]any{
@@ -401,7 +401,7 @@ func TestToolEdit_replaceAll(t *testing.T) {
 	}
 }
 
-func TestToolEdit_regexReplace(t *testing.T) {
+func TestToolEditUpdatesTextWithRegexPattern(t *testing.T) {
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "f.txt"), []byte("foo123bar"), 0o644)
 	mustCallTool(t, ToolEdit(tmp), map[string]any{
@@ -416,7 +416,7 @@ func TestToolEdit_regexReplace(t *testing.T) {
 	}
 }
 
-func TestToolEdit_lineTargeted(t *testing.T) {
+func TestToolEditUpdatesOnlyTargetedLine(t *testing.T) {
 	tmp := t.TempDir()
 	os.WriteFile(filepath.Join(tmp, "f.txt"), []byte("foo\nfoo\n"), 0o644)
 	mustCallTool(t, ToolEdit(tmp), map[string]any{
@@ -445,7 +445,7 @@ func TestFindBlockEnd_simpleBraces(t *testing.T) {
 	}
 }
 
-func TestFindBlockEnd_nested(t *testing.T) {
+func TestFindBlockEndReturnsNestedBraceEnd(t *testing.T) {
 	lines := []string{
 		"func foo() {",
 		"  if x {",
@@ -474,7 +474,7 @@ func TestReadFunctionRegex_rustFn(t *testing.T) {
 }
 
 // Batch edits apply sequentially in one call and one write.
-func TestToolEdit_BatchEdits(t *testing.T) {
+func TestToolEditWritesBatchEditsOnce(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "f.txt")
 	os.WriteFile(path, []byte("alpha beta beta gamma"), 0o644)
@@ -497,7 +497,7 @@ func TestToolEdit_BatchEdits(t *testing.T) {
 }
 
 // A failing entry aborts the whole batch before any write (all-or-nothing).
-func TestToolEdit_BatchEditsAllOrNothing(t *testing.T) {
+func TestToolEditRollsBackBatchOnFailure(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "f.txt")
 	os.WriteFile(path, []byte("alpha beta"), 0o644)

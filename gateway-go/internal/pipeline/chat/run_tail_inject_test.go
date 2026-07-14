@@ -28,7 +28,7 @@ func messageText(t *testing.T, msg llm.Message) string {
 	return ""
 }
 
-func TestInjectTailAdditions_StringContent(t *testing.T) {
+func TestInjectTailAdditionsWritesIntoStringContent(t *testing.T) {
 	messages := []llm.Message{
 		llm.NewTextMessage("user", "이전 질문"),
 		llm.NewTextMessage("assistant", "이전 답"),
@@ -51,7 +51,7 @@ func TestInjectTailAdditions_StringContent(t *testing.T) {
 	}
 }
 
-func TestInjectTailAdditions_LastUserNotLastMessage(t *testing.T) {
+func TestInjectTailAdditionsWhenUserNotLastMessage(t *testing.T) {
 	// Agent-loop shape mid-run: tool results follow the user message.
 	messages := []llm.Message{
 		llm.NewTextMessage("user", "질문"),
@@ -70,7 +70,7 @@ func TestInjectTailAdditions_LastUserNotLastMessage(t *testing.T) {
 	}
 }
 
-func TestInjectTailAdditions_BlockContent(t *testing.T) {
+func TestInjectTailAdditionsWritesIntoBlockContent(t *testing.T) {
 	blocks := []llm.ContentBlock{
 		{Type: "text", Text: "사진 봐줘"},
 		{Type: "image", Source: &llm.ImageSource{Type: "base64", MediaType: "image/png", Data: "xxx"}},
@@ -95,7 +95,7 @@ func TestInjectTailAdditions_BlockContent(t *testing.T) {
 	}
 }
 
-func TestInjectTailAdditions_NoUserMessage(t *testing.T) {
+func TestInjectTailAdditionsReturnsUnchangedWhenNoUserMessage(t *testing.T) {
 	messages := []llm.Message{llm.NewTextMessage("assistant", "고아 메시지")}
 	out, ok := injectTailAdditions(messages, []string{"증거"})
 	if ok {
@@ -106,7 +106,7 @@ func TestInjectTailAdditions_NoUserMessage(t *testing.T) {
 	}
 }
 
-func TestInjectTailAdditions_NothingToAdd(t *testing.T) {
+func TestInjectTailAdditionsReturnsUnchangedWhenNothingToAdd(t *testing.T) {
 	messages := []llm.Message{llm.NewTextMessage("user", "질문")}
 	out, ok := injectTailAdditions(messages, nil)
 	if !ok {
@@ -117,7 +117,7 @@ func TestInjectTailAdditions_NothingToAdd(t *testing.T) {
 	}
 }
 
-func TestBuildTailAdditions(t *testing.T) {
+func TestBuildTailAdditionsReturnsRecallAndDeliveryDirective(t *testing.T) {
 	// Interactive turn with recall: recall first, then the directive.
 	adds := buildTailAdditions(RunParams{AutoDeliveredOutput: true}, "recall-블록", "", "")
 	if len(adds) != 2 || adds[0] != "recall-블록" ||
@@ -135,7 +135,7 @@ func TestBuildTailAdditions(t *testing.T) {
 	}
 }
 
-func TestBuildTailAdditions_NotebookGrounding(t *testing.T) {
+func TestBuildTailAdditionsWithNotebookGroundingReturnsGroundingOnly(t *testing.T) {
 	// A notebook-grounded turn withholds BOTH recall and the 업무 feed digest —
 	// the pinned sources are the explicit scope. Only grounding + delivery ride.
 	adds := buildTailAdditions(RunParams{AutoDeliveredOutput: true, FeedContext: "feed"}, "recall-블록", "노트북-그라운딩", "")

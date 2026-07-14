@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestCompactToolOutput_StripsANSI(t *testing.T) {
+func TestCompactToolOutputClearsANSIEscapes(t *testing.T) {
 	// >= compactMinInputBytes so the compactor runs; ANSI wraps the payload.
 	big := "\x1b[31m" + strings.Repeat("payload\n", 400) + "\x1b[0m"
 	got := CompactToolOutput(context.Background(), "exec", big)
@@ -16,14 +16,14 @@ func TestCompactToolOutput_StripsANSI(t *testing.T) {
 	}
 }
 
-func TestCompactToolOutput_SmallPassthrough(t *testing.T) {
+func TestCompactToolOutputPreservesSmallOutput(t *testing.T) {
 	small := "\x1b[31mred\x1b[0m" // well under compactMinInputBytes
 	if got := CompactToolOutput(context.Background(), "exec", small); got != small {
 		t.Fatalf("small output should pass through unchanged, got %q", got)
 	}
 }
 
-func TestCompactToolOutput_CollapsesDuplicateLines(t *testing.T) {
+func TestCompactToolOutputDeduplicatesRepeatedLines(t *testing.T) {
 	big := strings.Repeat("Building...\n", 500) // ~6KB, 500 identical lines
 	got := CompactToolOutput(context.Background(), "exec", big)
 	if !strings.Contains(got, "Building... (×500)") {
@@ -46,7 +46,7 @@ func TestCompactToolOutput_NoChangeReturnsOriginal(t *testing.T) {
 	}
 }
 
-func TestDedupeAdjacentLines(t *testing.T) {
+func TestDeduplicateAdjacentLinesPreservesNonAdjacentRepeats(t *testing.T) {
 	// Non-blank run gets a (×N) marker.
 	got := dedupeAdjacentLines(strings.Repeat("same\n", 10))
 	if !strings.Contains(got, "same (×10)") {
@@ -73,7 +73,7 @@ func TestDedupeAdjacentLines(t *testing.T) {
 	}
 }
 
-func TestDedupeAdjacentLines_RuneSafe(t *testing.T) {
+func TestDeduplicateAdjacentLinesRuneSafeForKorean(t *testing.T) {
 	got := dedupeAdjacentLines(strings.Repeat("한글 로그\n", 10))
 	if !strings.Contains(got, "한글 로그 (×10)") {
 		t.Fatalf("Korean line dedup broken: %q", got)

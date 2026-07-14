@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
-func TestSteerQueue_Enqueue_AcceptsAndTrims(t *testing.T) {
+func TestSteerQueueEnqueueAllowsTrimmedNote(t *testing.T) {
 	q := NewSteerQueue()
 	if !q.Enqueue("sess", "  nudge  ") {
 		t.Fatal("expected accept for non-empty note")
@@ -40,7 +40,7 @@ func TestSteerQueue_Enqueue_RejectsEmptyAndWhitespace(t *testing.T) {
 	}
 }
 
-func TestSteerQueue_Enqueue_MultipleConcat(t *testing.T) {
+func TestSteerQueueEnqueuePreservesOrder(t *testing.T) {
 	q := NewSteerQueue()
 	q.Enqueue("sess", "first")
 	q.Enqueue("sess", "second")
@@ -90,7 +90,7 @@ func TestSteerQueue_Clear(t *testing.T) {
 	}
 }
 
-func TestSteerQueue_Reset(t *testing.T) {
+func TestSteerQueueResetClearsAllSessions(t *testing.T) {
 	q := NewSteerQueue()
 	q.Enqueue("s1", "a")
 	q.Enqueue("s2", "b")
@@ -143,10 +143,10 @@ func TestSteerQueue_ConcurrentEnqueueDrain(t *testing.T) {
 	}
 }
 
-// TestSteerInject_AppendsToLastToolResult confirms the core drain-and-
+// TestSteerInjectWritesMarkerToLastToolResult confirms the core drain-and-
 // inject behaviour: the marker must land on the LAST tool_result block in the
 // LAST user message, and the original messages slice must not be mutated.
-func TestSteerInject_AppendsToLastToolResult(t *testing.T) {
+func TestSteerInjectWritesMarkerToLastToolResult(t *testing.T) {
 	// Build: user(text) / assistant(tool_use) / user(tool_result) / assistant(text)
 	toolResultBlock := llm.ContentBlock{
 		Type:      "tool_result",
@@ -202,9 +202,9 @@ func TestSteerInject_NoToolResultReturnsFalse(t *testing.T) {
 	}
 }
 
-// TestSteerInject_PrefersLastToolResult covers the multi-turn case:
+// TestSteerInjectWritesToLatestWhenMultipleResults covers the multi-turn case:
 // when several tool_result messages exist, injection must target the LATEST.
-func TestSteerInject_PrefersLastToolResult(t *testing.T) {
+func TestSteerInjectWritesToLatestWhenMultipleResults(t *testing.T) {
 	msgs := []llm.Message{
 		llm.NewBlockMessage("user", []llm.ContentBlock{
 			{Type: "tool_result", ToolUseID: "tu_1", Content: "old"},
@@ -238,9 +238,9 @@ func TestSteerInject_PrefersLastToolResult(t *testing.T) {
 	}
 }
 
-// TestSteerBeforeAPICall_EndToEnd glues SteerQueue + buildSteerBeforeAPICall
+// TestSteerBeforeAPICallWritesMarkerAndClearsQueue glues SteerQueue + buildSteerBeforeAPICall
 // together and checks the expected drain-and-inject happens on call.
-func TestSteerBeforeAPICall_EndToEnd(t *testing.T) {
+func TestSteerBeforeAPICallWritesMarkerAndClearsQueue(t *testing.T) {
 	q := NewSteerQueue()
 	q.Enqueue("sess", "do extra step")
 

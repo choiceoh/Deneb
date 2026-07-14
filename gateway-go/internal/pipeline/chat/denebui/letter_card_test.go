@@ -61,7 +61,7 @@ const eveningLetterCardHTML = `<column>
   </card>
 </column>`
 
-func TestValidate_LetterCards(t *testing.T) {
+func TestValidateReturnsNoIssuesForLetterCards(t *testing.T) {
 	for name, body := range map[string]string{
 		"morning": morningLetterCardHTML,
 		"evening": eveningLetterCardHTML,
@@ -122,7 +122,7 @@ func TestParseHTML_MorningLetterShape(t *testing.T) {
 // The delivered message is a plain head line followed by the deneb-ui fence.
 // ExtractFences must recover exactly the card body, and it must validate — this
 // guards the real on-the-wire shape the morning-letter skill emits.
-func TestValidate_LetterMessageShape(t *testing.T) {
+func TestValidateParsesAndValidatesLetterMessage(t *testing.T) {
 	msg := "좋은 아침이에요 — 6월 28일 토요일. 오후 소나기 · 부가세 신고 D-2\n\n" +
 		"```deneb-ui\n" + morningLetterCardHTML + "\n```\n"
 	fences := ExtractFences(msg)
@@ -140,7 +140,7 @@ func TestValidate_LetterMessageShape(t *testing.T) {
 
 // Legacy JSON letter card (the pre-2026-07 wire format) must keep validating —
 // old transcripts render through the same schema.
-func TestValidate_LetterCard_LegacyJSON(t *testing.T) {
+func TestValidateWithLegacyJSONCard(t *testing.T) {
 	legacy := `{"type":"column","children":[
 	  {"type":"card","children":[
 	    {"type":"row","children":[

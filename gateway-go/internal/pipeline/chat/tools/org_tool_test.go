@@ -32,7 +32,7 @@ func seedOrgFile(t *testing.T) {
 	t.Setenv("DENEB_ORG_FILE", path)
 }
 
-func TestToolOrg_TreeAndSearch(t *testing.T) {
+func TestToolOrgReturnsTreeAndSearchResults(t *testing.T) {
 	seedOrgFile(t)
 	tool := ToolOrg()
 	ctx := context.Background()
@@ -64,7 +64,7 @@ func TestToolOrg_TreeAndSearch(t *testing.T) {
 	}
 }
 
-func TestToolOrg_Unset(t *testing.T) {
+func TestToolOrgReportsUnsetWhenFileMissing(t *testing.T) {
 	t.Setenv("DENEB_ORG_FILE", filepath.Join(t.TempDir(), "missing.json"))
 	out, err := ToolOrg()(context.Background(), json.RawMessage(`{}`))
 	if err != nil {

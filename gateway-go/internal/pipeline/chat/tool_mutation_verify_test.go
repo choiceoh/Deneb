@@ -108,7 +108,7 @@ func TestMutationFailureError_StripsBanner(t *testing.T) {
 	}
 }
 
-func TestMutationVerifyTools_Deterministic(t *testing.T) {
+func TestMutationVerifyToolsReturnsSortedList(t *testing.T) {
 	got := mutationVerifyTools()
 	want := []string{"cron", "gateway", "notebook", "wiki"}
 	if len(got) != len(want) {

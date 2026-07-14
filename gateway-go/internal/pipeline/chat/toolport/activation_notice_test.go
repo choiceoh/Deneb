@@ -20,11 +20,11 @@ func TestActivationNoticeRoundTrip(t *testing.T) {
 	}
 }
 
-// TestActivationNoticeEmbedded: notices are parsed out of surrounding tool
+// TestActivationNoticeParsesEmbeddedContent: notices are parsed out of surrounding tool
 // output (schema text before the fetch sentence, SKILL.md body before the
 // skill notice), and legacy transcripts with the pre-replay fetch_tools
 // wording still parse.
-func TestActivationNoticeEmbedded(t *testing.T) {
+func TestActivationNoticeParsesEmbeddedContent(t *testing.T) {
 	cases := []struct {
 		name    string
 		content string
@@ -55,10 +55,10 @@ func TestActivationNoticeEmbedded(t *testing.T) {
 	}
 }
 
-// TestDeferredActivationSeed: seeded names are immediately visible to both
+// TestDeferredActivationSeedAndActivateMergeWithoutDuplicates: seeded names are immediately visible to both
 // IsActive (tool goroutine view) and ActivatedNames (executor view), and merge
 // with later Activate calls without duplication.
-func TestDeferredActivationSeed(t *testing.T) {
+func TestDeferredActivationSeedAndActivateMergeWithoutDuplicates(t *testing.T) {
 	da := NewDeferredActivation()
 	da.Seed([]string{"graphify", "notebook"})
 	if !da.IsActive("graphify") || !da.IsActive("notebook") {

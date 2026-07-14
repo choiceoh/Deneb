@@ -9,10 +9,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
-// TestRecallWikiEvidence_CounterpartyAnchor verifies that naming a counterparty
+// TestRecallWikiEvidenceReturnsCounterpartyAnchor verifies that naming a counterparty
 // pins its 거래 원장 into the recall evidence with the anchor sentinel (exempt
 // from the broadening penalty) at the counterparty anchor score.
-func TestRecallWikiEvidence_CounterpartyAnchor(t *testing.T) {
+func TestRecallWikiEvidenceReturnsCounterpartyAnchor(t *testing.T) {
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

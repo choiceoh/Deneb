@@ -54,7 +54,7 @@ func TestSummarizeOldMessages_IncrementalUpdate(t *testing.T) {
 	}
 }
 
-func TestSummarizeOldMessages_FreshNoPrevious(t *testing.T) {
+func TestSummarizeOldMessages_UsesFreshPromptWithoutPreviousSummary(t *testing.T) {
 	capt := &recompCapture{out: "FRESH"}
 	cfg := NewConfig(100000) // no PreviousSummary
 

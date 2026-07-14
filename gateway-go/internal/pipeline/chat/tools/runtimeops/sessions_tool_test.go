@@ -52,7 +52,7 @@ func sessionSearchJSON(t *testing.T, v any) json.RawMessage {
 	return data
 }
 
-func TestToolSessionsSearchExpandsNaturalLanguageQuery(t *testing.T) {
+func TestToolSessionsSearchReturnsExpandedNaturalLanguageMatches(t *testing.T) {
 	match := toolport.MatchedMsg{
 		Index:   3,
 		Message: toolport.NewTextChatMessage("assistant", "PR 리뷰 후 체리픽 브랜치를 만들었다", 123),
@@ -103,7 +103,7 @@ func spawnInput(t *testing.T, task, label string) json.RawMessage {
 	return sessionSearchJSON(t, map[string]string{"task": task, "label": label})
 }
 
-func TestSessionsSpawn_RecordsDepthAndLabel(t *testing.T) {
+func TestSessionsSpawn_CreatesChildWithDepthAndLabel(t *testing.T) {
 	sm := session.NewManager()
 	ctx := toolport.WithSessionKey(context.Background(), "client:main")
 
@@ -132,7 +132,7 @@ func TestSessionsSpawn_RecordsDepthAndLabel(t *testing.T) {
 	}
 }
 
-func TestSessionsSpawn_StoresToolPreset(t *testing.T) {
+func TestSessionsSpawn_CreatesChildWithToolPreset(t *testing.T) {
 	sm := session.NewManager()
 	ctx := toolport.WithSessionKey(context.Background(), "client:main")
 
@@ -216,7 +216,7 @@ func TestSessionsSpawn_RejectsExplicitCodingWhenUnconfigured(t *testing.T) {
 	}
 }
 
-func TestSessionsSpawn_ImplementerUsesLiveCodingRole(t *testing.T) {
+func TestSessionsSpawn_ImplementerLoadsCodingRoleFromLiveFn(t *testing.T) {
 	sm := session.NewManager()
 	ctx := toolport.WithSessionKey(context.Background(), "client:main")
 	deps := spawnDeps(sm)
@@ -307,7 +307,7 @@ func TestSessionsSpawn_RejectsBeyondConcurrencyCap(t *testing.T) {
 	}
 }
 
-func TestSessionsSpawn_TerminalChildrenDoNotCountAgainstCap(t *testing.T) {
+func TestSessionsSpawn_AllowsSpawnWhenTerminalChildrenExcluded(t *testing.T) {
 	sm := session.NewManager()
 	for i := range maxConcurrentSubagents {
 		key := spawnTestChildKey(i)
@@ -338,7 +338,7 @@ func spawnTestChildKey(i int) string {
 	return "client:main:worker:" + string(rune('a'+i))
 }
 
-func TestToolSessionsStats(t *testing.T) {
+func TestToolSessionsStatsReturnsAggregatedRunData(t *testing.T) {
 	w := agentlog.NewWriter(t.TempDir())
 	data, _ := json.Marshal(agentlog.RunEndData{InputTokens: 1200, OutputTokens: 340, ToolCalls: 5})
 	if err := w.Append(agentlog.LogEntry{

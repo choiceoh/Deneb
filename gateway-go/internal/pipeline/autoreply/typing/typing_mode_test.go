@@ -6,7 +6,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 )
 
-func TestResolveTypingMode(t *testing.T) {
+func TestResolveTypingModeReturnsExpectedModePerContext(t *testing.T) {
 	tests := []struct {
 		name string
 		ctx  TypingModeContext
@@ -93,7 +93,7 @@ func TestFullTypingSignaler_SignalRunStart_Never(t *testing.T) {
 	}
 }
 
-func TestFullTypingSignaler_SignalTextDelta_FiltersSilentReply(t *testing.T) {
+func TestFullTypingSignaler_SignalTextDelta_IgnoresSilentReplyToken(t *testing.T) {
 	started := false
 	tc := NewTypingController(TypingControllerConfig{
 		OnStart: func() { started = true },

@@ -16,7 +16,7 @@ func TestBuildTrailingCacheHook_NonAnthropicReturnsNil(t *testing.T) {
 	}
 }
 
-func TestBuildTrailingCacheHook_AttachesTrailingMarkers(t *testing.T) {
+func TestBuildTrailingCacheHookWritesTrailingMarkers(t *testing.T) {
 	hook := buildTrailingCacheHook(llm.APIModeAnthropic)
 	if hook == nil {
 		t.Fatal("expected non-nil hook for Anthropic mode")
@@ -48,7 +48,7 @@ func TestBuildTrailingCacheHook_AttachesTrailingMarkers(t *testing.T) {
 	}
 }
 
-func TestBuildTrailingCacheHook_DoesNotMutateInput(t *testing.T) {
+func TestBuildTrailingCacheHookPreservesInput(t *testing.T) {
 	hook := buildTrailingCacheHook(llm.APIModeAnthropic)
 	original := []llm.Message{
 		llm.NewTextMessage("user", "a"),
@@ -67,7 +67,7 @@ func TestBuildTrailingCacheHook_DoesNotMutateInput(t *testing.T) {
 	}
 }
 
-func TestBuildTrailingCacheHook_SkipsSystemMessages(t *testing.T) {
+func TestBuildTrailingCacheHookIgnoresSystemMessages(t *testing.T) {
 	hook := buildTrailingCacheHook(llm.APIModeAnthropic)
 	msgs := []llm.Message{
 		llm.NewTextMessage("user", "u"),
@@ -88,7 +88,7 @@ func TestBuildTrailingCacheHook_SkipsSystemMessages(t *testing.T) {
 	}
 }
 
-func TestBuildTrailingCacheHook_BlockContentMarksLastBlock(t *testing.T) {
+func TestBuildTrailingCacheHookWritesMarkerOnLastBlock(t *testing.T) {
 	hook := buildTrailingCacheHook(llm.APIModeAnthropic)
 	blocks := []llm.ContentBlock{
 		{Type: "text", Text: "first"},
@@ -108,7 +108,7 @@ func TestBuildTrailingCacheHook_BlockContentMarksLastBlock(t *testing.T) {
 	}
 }
 
-func TestBuildTrailingCacheHook_FewerMessagesThanLimit(t *testing.T) {
+func TestBuildTrailingCacheHookWithFewerMessagesThanLimit(t *testing.T) {
 	hook := buildTrailingCacheHook(llm.APIModeAnthropic)
 	msgs := []llm.Message{llm.NewTextMessage("user", "alone")}
 	out := hook(msgs)
@@ -128,7 +128,7 @@ func TestBuildTrailingCacheHook_EmptyMessagesNoOp(t *testing.T) {
 	}
 }
 
-func TestBuildTrailingCacheHook_ToolResultBlockIsMarkable(t *testing.T) {
+func TestBuildTrailingCacheHookAllowsToolResultBlockMarker(t *testing.T) {
 	hook := buildTrailingCacheHook(llm.APIModeAnthropic)
 	msg := llm.NewBlockMessage("user", []llm.ContentBlock{
 		{Type: "tool_result", ToolUseID: "tool_1", Content: "result text"},
@@ -140,7 +140,7 @@ func TestBuildTrailingCacheHook_ToolResultBlockIsMarkable(t *testing.T) {
 	}
 }
 
-func TestPickTrailingCacheTargets_AscendingOrder(t *testing.T) {
+func TestPickTrailingCacheTargetsReturnsAscendingIndices(t *testing.T) {
 	msgs := []llm.Message{
 		llm.NewTextMessage("user", "1"),
 		llm.NewTextMessage("assistant", "2"),

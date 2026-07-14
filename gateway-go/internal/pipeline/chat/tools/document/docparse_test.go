@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-// TestExtractDocument_ConsistentAcrossCallers is the regression guard for the
+// TestExtractDocumentReturnsConsistentTextAcrossCallers is the regression guard for the
 // dispatcher unification: the mail attachment path, the exported
 // ExtractDocumentText facade, and the files path now all funnel through the
 // single extractDocument switch, so for a real document they must extract the
 // *same* bytes — only the surrounding presentation differs.
-func TestExtractDocument_ConsistentAcrossCallers(t *testing.T) {
+func TestExtractDocumentReturnsConsistentTextAcrossCallers(t *testing.T) {
 	ctx := context.Background()
 	xlsx := makeTestXLSX(t)
 
@@ -42,12 +42,12 @@ func TestExtractDocument_ConsistentAcrossCallers(t *testing.T) {
 	}
 }
 
-// TestExtractDocument_CallerDivergences locks in the *intended* differences
+// TestExtractDocumentTextRejectsPlainTextAndUnsupportedBinary locks in the *intended* differences
 // between the callers so a future "simplification" can't quietly erase them:
 //   - plain text is a readable document for mail/files but ExtractDocumentText
 //     declines it (web fetch handles text/HTML on its own path),
 //   - an unsupported binary yields nothing on every path.
-func TestExtractDocument_CallerDivergences(t *testing.T) {
+func TestExtractDocumentTextRejectsPlainTextAndUnsupportedBinary(t *testing.T) {
 	ctx := context.Background()
 
 	// Plain text.

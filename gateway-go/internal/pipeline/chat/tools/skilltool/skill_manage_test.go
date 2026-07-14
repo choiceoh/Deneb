@@ -360,7 +360,7 @@ func TestSkillManage_CreateReportsSafetyWarnings(t *testing.T) {
 	}
 }
 
-func TestSkillManage_Patch(t *testing.T) {
+func TestSkillManage_PatchUpdatesFileAndInvalidatesCache(t *testing.T) {
 	fn, _, invalidateCount := newSkillManageHarness(t)
 	_, err := callSkillTool(t, fn, map[string]any{
 		"action":   "create",

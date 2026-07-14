@@ -98,7 +98,7 @@ func TestDeduplicateReplyPayloads(t *testing.T) {
 	}
 }
 
-func TestStripLeakedToolCallMarkup(t *testing.T) {
+func TestStripLeakedToolCallMarkupClearsEnvelopesButPreservesText(t *testing.T) {
 	tests := []struct {
 		name string
 		in   string
@@ -225,7 +225,7 @@ Done`,
 	}
 }
 
-func TestStripFencedCodeBlocks(t *testing.T) {
+func TestStripFencedCodeBlocksClearsFencesPreservingPlainText(t *testing.T) {
 	tests := []struct {
 		name string
 		in   string
@@ -267,7 +267,7 @@ func TestStripFencedCodeBlocks(t *testing.T) {
 	}
 }
 
-func TestSanitizeDraftText(t *testing.T) {
+func TestSanitizeDraftTextStripsMarkupAndPreservesPlainText(t *testing.T) {
 	tests := []struct {
 		name string
 		in   string

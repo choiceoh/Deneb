@@ -51,7 +51,7 @@ func assertBalanced(t *testing.T, messages []llm.Message) {
 	}
 }
 
-func TestBalanceToolBlocks_OrphanedToolUseStubbed(t *testing.T) {
+func TestBalanceToolBlocks_EmitsTextStubForOrphanedToolUse(t *testing.T) {
 	// Assistant called a tool but its tool_result message was dropped by a tier.
 	msgs := []llm.Message{
 		llm.NewTextMessage("user", "do it"),
@@ -72,7 +72,7 @@ func TestBalanceToolBlocks_OrphanedToolUseStubbed(t *testing.T) {
 	}
 }
 
-func TestBalanceToolBlocks_OrphanedToolResultStubbed(t *testing.T) {
+func TestBalanceToolBlocks_EmitsTextStubForOrphanedToolResult(t *testing.T) {
 	// tool_result survived but its tool_use (assistant turn) was dropped.
 	msgs := []llm.Message{
 		llm.NewBlockMessage("user", []llm.ContentBlock{tbToolResult("B", "result text")}),
@@ -87,7 +87,7 @@ func TestBalanceToolBlocks_OrphanedToolResultStubbed(t *testing.T) {
 	}
 }
 
-func TestBalanceToolBlocks_BalancedPairUnchanged(t *testing.T) {
+func TestBalanceToolBlocks_PreservesBalancedPairBytes(t *testing.T) {
 	msgs := []llm.Message{
 		llm.NewBlockMessage("assistant", []llm.ContentBlock{tbToolUse("A", "read")}),
 		llm.NewBlockMessage("user", []llm.ContentBlock{tbToolResult("A", "ok")}),
@@ -103,7 +103,7 @@ func TestBalanceToolBlocks_BalancedPairUnchanged(t *testing.T) {
 	}
 }
 
-func TestBalanceToolBlocks_StringContentUntouched(t *testing.T) {
+func TestBalanceToolBlocks_PreservesStringContent(t *testing.T) {
 	msgs := []llm.Message{
 		llm.NewTextMessage("user", "hello"),
 		llm.NewTextMessage("assistant", "hi"),

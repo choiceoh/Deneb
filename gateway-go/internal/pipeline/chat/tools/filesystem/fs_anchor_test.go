@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestLineAnchorHash_Deterministic(t *testing.T) {
+func TestLineAnchorHashReturnsConsistentDigest(t *testing.T) {
 	a := lineAnchorHash("func main() {")
 	b := lineAnchorHash("func main() {")
 	if a != b {
@@ -23,7 +23,7 @@ func TestLineAnchorHash_Deterministic(t *testing.T) {
 	}
 }
 
-func TestEditByAnchor_SingleLine(t *testing.T) {
+func TestEditByAnchorUpdatesSingleLine(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "f.txt")
 	content := "alpha\nbeta\ngamma\n"
@@ -49,7 +49,7 @@ func TestEditByAnchor_SingleLine(t *testing.T) {
 	}
 }
 
-func TestEditByAnchor_Range(t *testing.T) {
+func TestEditByAnchorUpdatesLineRange(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "f.txt")
 	content := "a\nb\nc\nd\n"
@@ -72,7 +72,7 @@ func TestEditByAnchor_Range(t *testing.T) {
 	}
 }
 
-func TestEditByAnchor_Ambiguous(t *testing.T) {
+func TestEditByAnchorRejectsAmbiguousAnchor(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "f.txt")
 	content := "x\nsame\nsame\ny\n"
@@ -86,7 +86,7 @@ func TestEditByAnchor_Ambiguous(t *testing.T) {
 	}
 }
 
-func TestEditByAnchor_NotFound(t *testing.T) {
+func TestEditByAnchorRejectsMissingAnchor(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "f.txt")
 	content := "x\ny\n"
@@ -118,7 +118,7 @@ func TestToolRead_HashesColumns(t *testing.T) {
 	}
 }
 
-func TestToolEdit_AnchorEndToEnd(t *testing.T) {
+func TestToolEditUpdatesFileViaAnchor(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "f.txt")
 	if err := os.WriteFile(path, []byte("one\ntwo\nthree\n"), 0o644); err != nil {

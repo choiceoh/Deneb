@@ -21,7 +21,7 @@ import (
 // done frame, aggregate transcript write, channel reply, LastOutput, and the
 // work-feed publisher all read Text/AllText/DeliverableText after this call,
 // so none of them can surface raw "{{market:...}}" template syntax.
-func TestSubstituteRunMarketTokens(t *testing.T) {
+func TestSubstituteRunMarketTokensUpdatesResultFields(t *testing.T) {
 	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
 	result := &agent.AgentResult{
 		Text:            "오늘 환율은 {{market:usd_krw}}원입니다.",
@@ -182,7 +182,7 @@ func errString(err error) string {
 // session.LastOutput — so a nil replyFunc at completion is the expected state,
 // not a wiring bug. Without this guard every sub-agent completion logged
 // Error + broadcast chat.delivery_failed (reason=reply_func_nil) as noise.
-func TestIsSubagentSession(t *testing.T) {
+func TestIsSubagentSessionReturnsTrueWhenSpawnedByIsSet(t *testing.T) {
 	sm := session.NewManager()
 
 	// Parent / main session: no SpawnedBy → not a sub-agent.

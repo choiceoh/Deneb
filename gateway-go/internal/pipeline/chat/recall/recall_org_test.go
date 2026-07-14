@@ -44,7 +44,7 @@ func TestRecallOrgEvidence_MemberMatchWithDeptPath(t *testing.T) {
 	}
 }
 
-func TestRecallOrgEvidence_NodeMatchListsMembers(t *testing.T) {
+func TestRecallOrgEvidenceReturnsNodeMembersList(t *testing.T) {
 	got := recallOrgEvidence(context.Background(), loadFake(fakeOrg()), nil, "모듈팀은 누구누구야?")
 	want := []recallEvidence{{
 		Kind:   "org",
@@ -95,7 +95,7 @@ func TestRecallOrgEvidence_RanksMembersBeforeNodesWithinQuota(t *testing.T) {
 	}
 }
 
-func TestRecallOrgEvidence_EntityLengthAndDuplicateFilters(t *testing.T) {
+func TestRecallOrgEvidenceReturnsFirstUniqueEntityMatch(t *testing.T) {
 	tree := org.OrgTree{Nodes: []org.OrgNode{
 		{ID: "first", Name: "팀", Members: []org.Member{{Name: "이수"}, {Name: "이수민", Rank: "과장"}}},
 		{ID: "second", Name: "지원팀", Members: []org.Member{{Name: "이수민", Position: "팀장"}}},

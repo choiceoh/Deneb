@@ -73,7 +73,7 @@ func TestNotebookDisabledWhenNoStore(t *testing.T) {
 	}
 }
 
-func TestNotebookBriefGroundsAndCites(t *testing.T) {
+func TestNotebookBriefReturnsCitedSources(t *testing.T) {
 	fn, deps := newTestNotebookTool(t)
 
 	callNotebook(t, fn, map[string]any{
@@ -149,7 +149,7 @@ func TestNotebookWikiSourceMissingPageNoted(t *testing.T) {
 	}
 }
 
-func TestNotebookBriefRespectsByteBudget(t *testing.T) {
+func TestNotebookBriefTruncatesSourcesWithinByteBudget(t *testing.T) {
 	fn, deps := newTestNotebookTool(t)
 	callNotebook(t, fn, map[string]any{"action": "create", "name": "큰 노트북"})
 	id := extractID(t, deps)
@@ -183,7 +183,7 @@ func TestNotebookBriefRespectsByteBudget(t *testing.T) {
 	}
 }
 
-func TestNotebookBriefManySourcesStaysValidJSON(t *testing.T) {
+func TestNotebookBriefWithManySourcesStaysValidJSON(t *testing.T) {
 	fn, deps := newTestNotebookTool(t)
 	callNotebook(t, fn, map[string]any{"action": "create", "name": "다건 노트북"})
 	id := extractID(t, deps)
@@ -209,7 +209,7 @@ func TestNotebookBriefManySourcesStaysValidJSON(t *testing.T) {
 	}
 }
 
-func TestNotebookPinToDealAndResolveByDealRef(t *testing.T) {
+func TestNotebookPinToDealCreatesAndResolvesByRef(t *testing.T) {
 	fn, deps := newTestNotebookTool(t)
 	const deal = "프로젝트/탑솔라.md"
 
@@ -262,7 +262,7 @@ func TestNotebookForDealCreatesAndShows(t *testing.T) {
 	}
 }
 
-func TestNotebookPinToDealRequiresRef(t *testing.T) {
+func TestNotebookPinToDealPromptsWhenRefMissing(t *testing.T) {
 	fn, _ := newTestNotebookTool(t)
 	out := callNotebook(t, fn, map[string]any{"action": "pin_to_deal", "kind": "note", "text": "x"})
 	if !strings.Contains(out, "deal_ref") {

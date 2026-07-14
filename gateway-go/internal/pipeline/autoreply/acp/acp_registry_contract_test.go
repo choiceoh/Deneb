@@ -212,7 +212,7 @@ func TestRegisterIfUnderLimitIgnoresTerminalChildren(t *testing.T) {
 	}
 }
 
-func TestACPRegistryDerivesFreshSessionState(t *testing.T) {
+func TestACPRegistryUpdatesStatusFromSessionManager(t *testing.T) {
 	mgr := session.NewManager()
 	r := NewACPRegistry()
 	r.SetSessionManager(mgr)
@@ -321,7 +321,7 @@ func TestSessionStatusMappingsCoverTerminalAndUnknownStates(t *testing.T) {
 	}
 }
 
-func TestACPSessionDetectionRequiresExactPrefix(t *testing.T) {
+func TestACPSessionDetectionRejectsInvalidPrefixVariants(t *testing.T) {
 	valid := []string{"acp:", "acp:id", "acp:client:main:worker"}
 	for _, key := range valid {
 		if !IsACPSession(key) {

@@ -45,7 +45,7 @@ func TestFormatContacts_NoMatch(t *testing.T) {
 
 // by_company enumerates everyone at an org, name-sorted, org match
 // case-insensitive substring.
-func TestContactsByOrg(t *testing.T) {
+func TestContactsByOrgReturnsSortedRoster(t *testing.T) {
 	all := []contacts.Contact{
 		{Name: "이차장", Org: "현대차 구매팀"},
 		{Name: "김부장", Org: "현대차"},

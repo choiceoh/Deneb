@@ -430,7 +430,7 @@ func TestFindSecretKeyNestedAndArrayContracts(t *testing.T) {
 	}
 }
 
-func TestApprovalRegistryBindingExpiryAndSingleUse(t *testing.T) {
+func TestApprovalRegistryRejectsExpiredOrReusedApproval(t *testing.T) {
 	pendingApprovalsMu.Lock()
 	pendingApprovals = map[string]pendingApproval{}
 	pendingApprovalsMu.Unlock()
@@ -484,7 +484,7 @@ func TestApprovalPayloadEnvelopeAndValueFormatting(t *testing.T) {
 	}
 }
 
-func TestNewActionTokenShapeUniqueness(t *testing.T) {
+func TestNewActionTokenCreatesUniquePrefixedTokens(t *testing.T) {
 	seen := map[string]bool{}
 	for range 128 {
 		token := newActionToken()
@@ -495,7 +495,7 @@ func TestNewActionTokenShapeUniqueness(t *testing.T) {
 	}
 }
 
-func TestGatewayDepsDefaultsAndOverrides(t *testing.T) {
+func TestGatewayDepsReturnsOverridesOrDefaults(t *testing.T) {
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	runner := &fakeRunner{}
 	signaller := &fakeSignaller{}

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestCompositionAdvisories(t *testing.T) {
+func TestCompositionAdvisoriesReturnsExpectedWarnings(t *testing.T) {
 	tests := []struct {
 		name string
 		body string

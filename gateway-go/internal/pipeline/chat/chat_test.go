@@ -44,7 +44,7 @@ func TestChatSend_MissingMessage(t *testing.T) {
 	}
 }
 
-func TestChatSend_AsyncOK(t *testing.T) {
+func TestChatSendReturnsAsyncOK(t *testing.T) {
 	// With native agent execution, Send starts an async run and returns immediately.
 	sessions := session.NewManager()
 	broadcastFn := func(event string, payload any) (int, []error) { return 0, nil }
@@ -94,7 +94,7 @@ func TestChatHistory_MissingSessionKey(t *testing.T) {
 	}
 }
 
-func TestChatAbort_NotFound(t *testing.T) {
+func TestChatAbortReturnsErrorWhenNotFound(t *testing.T) {
 	h := newTestHandler()
 	req := makeReq("1", "chat.abort", map[string]any{"clientRunId": "nonexistent"})
 	resp := h.Abort(context.Background(), req)
@@ -128,7 +128,7 @@ func TestSessionsSend_AsyncStart(t *testing.T) {
 	}
 }
 
-func TestSessionsSteer_AppliesModel(t *testing.T) {
+func TestSessionsSteerUpdatesModel(t *testing.T) {
 	h := newTestHandler()
 	req := makeReq("1", "sessions.steer", map[string]any{
 		"key":   "sess-2",
@@ -147,7 +147,7 @@ func TestSessionsSteer_AppliesModel(t *testing.T) {
 	}
 }
 
-func TestSessionsAbort_NoActiveRun(t *testing.T) {
+func TestSessionsAbortReturnsStatusWhenNoActiveRun(t *testing.T) {
 	h := newTestHandler()
 	req := makeReq("1", "sessions.abort", map[string]any{"key": "no-such-session"})
 	resp := h.SessionsAbort(context.Background(), req)
@@ -163,7 +163,7 @@ func TestSessionsAbort_NoActiveRun(t *testing.T) {
 	}
 }
 
-func TestSessionsAbort_ByRunID(t *testing.T) {
+func TestSessionsAbortCancelsRunByID(t *testing.T) {
 	h := newTestHandler()
 	cancelled := false
 	h.abort.Register("run-to-abort", &AbortEntry{
@@ -195,7 +195,7 @@ func TestSessionsAbort_ByRunID(t *testing.T) {
 	}
 }
 
-func TestSanitizeInput(t *testing.T) {
+func TestSanitizeInputNormalizesControlChars(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string

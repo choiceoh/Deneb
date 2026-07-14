@@ -6,7 +6,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
-func TestBoostThinkingBudget(t *testing.T) {
+func TestBoostThinkingBudgetReturnsNextTier(t *testing.T) {
 	cases := []struct{ in, want int }{
 		{0, 1024},      // below ladder → first tier
 		{1024, 4096},   // minimal → low
@@ -24,7 +24,7 @@ func TestBoostThinkingBudget(t *testing.T) {
 	}
 }
 
-func TestReasoningSandwichThinking(t *testing.T) {
+func TestReasoningSandwichThinkingReturnsBoostedFirstTurn(t *testing.T) {
 	const bigMaxTokens = 200000 // plenty of headroom: boost always applies
 
 	// nil base → nil selector (thinking disabled, leave as-is).
@@ -61,11 +61,11 @@ func TestReasoningSandwichThinking(t *testing.T) {
 	}
 }
 
-// TestReasoningSandwichThinking_ClampsToMaxTokens verifies the boost is dropped
+// TestReasoningSandwichThinkingRespectsMaxTokensBoundary verifies the boost is dropped
 // when the larger budget would not leave response headroom under max_tokens
 // (Anthropic requires budget_tokens < max_tokens) — preventing a rejected turn.
 // When dropped, the boost turn pins to the baseline (non-nil), not nil.
-func TestReasoningSandwichThinking_ClampsToMaxTokens(t *testing.T) {
+func TestReasoningSandwichThinkingRespectsMaxTokensBoundary(t *testing.T) {
 	base := &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 10240}
 
 	// boost target is 32768; with maxTokens 32768 there is no headroom

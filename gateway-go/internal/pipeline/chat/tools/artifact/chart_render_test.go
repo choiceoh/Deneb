@@ -74,7 +74,7 @@ func TestChartRender_Sample(t *testing.T) {
 
 // Stacked/horizontal flow into the Chart.js config: stacked marks both scales,
 // horizontal flips indexAxis and moves the value axis (beginAtZero) to x.
-func TestChartConfig_StackedAndHorizontal(t *testing.T) {
+func TestChartConfigRendersStackedAndHorizontalAxes(t *testing.T) {
 	p := chartParams{
 		ChartType: "bar",
 		Labels:    []string{"a", "b"},
@@ -110,7 +110,7 @@ func TestChartConfig_StackedAndHorizontal(t *testing.T) {
 
 // The HTML page carries the JS runtime that labels doughnut segments and
 // suffixes value ticks with y_unit (JSON config can't hold callbacks).
-func TestBuildChartHTML_RuntimeWiring(t *testing.T) {
+func TestBuildChartHTMLRendersRuntimeWiring(t *testing.T) {
 	p := chartParams{
 		ChartType: "doughnut",
 		Labels:    []string{"인허가", "공사"},

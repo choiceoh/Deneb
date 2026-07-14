@@ -24,7 +24,7 @@ func waitFor(t *testing.T, timeout time.Duration, condition func() bool, descrip
 	}
 }
 
-func TestNewTypingControllerDefaultsAndOverrides(t *testing.T) {
+func TestNewTypingControllerUsesOverridesAndDefaultsForInvalidValues(t *testing.T) {
 	defaults := NewTypingController(TypingControllerConfig{})
 	defer defaults.Cleanup()
 	if defaults.intervalMs != 6000 || defaults.ttlMs != 30000 || defaults.silentToken != tokens.SilentReplyToken {
@@ -85,7 +85,7 @@ func TestTypingControllerTTLExpiryCanRestart(t *testing.T) {
 	waitFor(t, 100*time.Millisecond, func() bool { return starts.Load() > firstStarts }, "restart callback")
 }
 
-func TestRefreshTypingTTLExtendsActiveLoop(t *testing.T) {
+func TestRefreshTypingTTLUpdatesActiveDeadline(t *testing.T) {
 	controller := NewTypingController(TypingControllerConfig{IntervalMs: 2, TtlMs: 15})
 	defer controller.Cleanup()
 	controller.Start()
@@ -118,7 +118,7 @@ func TestStartTypingOnTextSilentAndCustomTokens(t *testing.T) {
 	(*TypingController)(nil).StartTypingOnText("visible")
 }
 
-func TestCleanupAndSealCallbackSemantics(t *testing.T) {
+func TestCleanupStopsIdempotentlyAndSealIgnoresFurtherStop(t *testing.T) {
 	var stops, cleanups atomic.Int32
 	controller := NewTypingController(TypingControllerConfig{
 		OnStop:    func() { stops.Add(1) },
@@ -142,7 +142,7 @@ func TestCleanupAndSealCallbackSemantics(t *testing.T) {
 	}
 }
 
-func TestRunCompleteAndDispatchIdleSealInEitherOrder(t *testing.T) {
+func TestMarkRunCompleteAndDispatchIdleStopIdempotentlyInEitherOrder(t *testing.T) {
 	for _, order := range []string{"run-first", "dispatch-first"} {
 		t.Run(order, func(t *testing.T) {
 			var stops atomic.Int32
@@ -173,7 +173,7 @@ func TestRunCompleteAndDispatchIdleSealInEitherOrder(t *testing.T) {
 	}
 }
 
-func TestFullTypingSignalerModeFlagsAndDisabledContexts(t *testing.T) {
+func TestFullTypingSignalerFlagsPerModeWithHeartbeatDisabled(t *testing.T) {
 	for _, tc := range []struct {
 		mode      TypingMode
 		heartbeat bool
@@ -201,7 +201,7 @@ func TestFullTypingSignalerModeFlagsAndDisabledContexts(t *testing.T) {
 	}
 }
 
-func TestFullTypingSignalerMessagePhaseLifecycle(t *testing.T) {
+func TestFullTypingSignalerMessageModeStartsOnFirstRenderableText(t *testing.T) {
 	var starts atomic.Int32
 	controller := NewTypingController(TypingControllerConfig{OnStart: func() { starts.Add(1) }})
 	signaler := NewFullTypingSignaler(controller, TypingModeMessage, false)
@@ -229,7 +229,7 @@ func TestFullTypingSignalerMessagePhaseLifecycle(t *testing.T) {
 	}
 }
 
-func TestFullTypingSignalerThinkingAndToolProgress(t *testing.T) {
+func TestFullTypingSignalerThinkingModeToolProgressRestartsAfterTTLExpiry(t *testing.T) {
 	controller := NewTypingController(TypingControllerConfig{IntervalMs: 2, TtlMs: 20})
 	defer controller.Cleanup()
 	signaler := NewFullTypingSignaler(controller, TypingModeThinking, false)

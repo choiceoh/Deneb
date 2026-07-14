@@ -76,7 +76,7 @@ func TestFormatExecResult(t *testing.T) {
 	})
 }
 
-func TestValidateWorkdir(t *testing.T) {
+func TestValidateWorkdirErrorsWhenDirectoryMissing(t *testing.T) {
 	t.Run("valid directory", func(t *testing.T) {
 		if err := validateWorkdir("/tmp"); err != nil {
 			t.Errorf("unexpected error: %v", err)

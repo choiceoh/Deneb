@@ -11,12 +11,12 @@ import (
 	"testing"
 )
 
-// TestPaddleOCR_Live hits a real PaddleOCR-VL server. Opt-in only:
+// TestPaddleOCRReturnsTextFromLiveServer hits a real PaddleOCR-VL server. Opt-in only:
 //
 //	DENEB_OCR_VL_LIVE=1 DENEB_OCR_VL_IMG=/path/to.png go test -run Live ./...
 //
 // Skipped in CI (no GPU). Used to confirm the Go path end-to-end on the host.
-func TestPaddleOCR_Live(t *testing.T) {
+func TestPaddleOCRReturnsTextFromLiveServer(t *testing.T) {
 	if os.Getenv("DENEB_OCR_VL_LIVE") != "1" {
 		t.Skip("set DENEB_OCR_VL_LIVE=1 to run against a live PaddleOCR-VL server")
 	}
@@ -38,7 +38,7 @@ func TestPaddleOCR_Live(t *testing.T) {
 	}
 }
 
-func TestOCRVLBaseURL_EnvOverride(t *testing.T) {
+func TestOCRVLBaseURLReadsOverrideAndFallsBackToDefault(t *testing.T) {
 	t.Setenv("DENEB_OCR_VL_URL", "http://example.test:9999/")
 	if got := ocrVLBaseURL(); got != "http://example.test:9999" {
 		t.Errorf("ocrVLBaseURL() = %q, want trailing slash trimmed", got)
@@ -136,9 +136,9 @@ func TestPaddleOCR_FallbackOnError(t *testing.T) {
 	}
 }
 
-// TestHTMLTablesToMarkdown verifies that HTML tables embedded in OCR output are
+// TestHTMLTablesToMarkdownPreservesSurroundingText verifies that HTML tables embedded in OCR output are
 // normalized to markdown while the surrounding text is preserved. No GPU needed.
-func TestHTMLTablesToMarkdown(t *testing.T) {
+func TestHTMLTablesToMarkdownPreservesSurroundingText(t *testing.T) {
 	in := "보고서 요약\n" +
 		"<table><tr><td>품목</td><td>수량</td></tr><tr><td>모듈</td><td>100</td></tr></table>\n" +
 		"이상."

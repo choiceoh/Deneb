@@ -26,7 +26,7 @@ func capTestRegistry(t *testing.T, providers map[string]modelrole.ProviderResolv
 	)
 }
 
-func TestEffectiveContextBudget(t *testing.T) {
+func TestEffectiveContextBudgetReturnsClampedValue(t *testing.T) {
 	baseDeps := runDeps{
 		contextCfg: ContextConfig{MemoryTokenBudget: 170_000, SystemPromptBudget: 30_000},
 		maxTokens:  16_384,
@@ -82,7 +82,7 @@ func TestEffectiveContextBudget(t *testing.T) {
 	})
 }
 
-func TestContextWindowCeiling(t *testing.T) {
+func TestContextWindowCeilingReturnsWindowBasedThreshold(t *testing.T) {
 	// Mirrors the production budget: 170K memory - 30K system → 140K configured.
 	baseDeps := runDeps{
 		contextCfg: ContextConfig{MemoryTokenBudget: 170_000, SystemPromptBudget: 30_000},
@@ -146,7 +146,7 @@ func TestContextWindowCeiling(t *testing.T) {
 	})
 }
 
-func TestApplyModelTuning(t *testing.T) {
+func TestApplyModelTuningWithProfileDefaultsAndOverrides(t *testing.T) {
 	reg := capTestRegistry(t, map[string]modelrole.ProviderResolved{
 		"acme": {BaseURL: "https://acme.example/v1"},
 	})
@@ -238,7 +238,7 @@ func TestApplyModelTuning(t *testing.T) {
 	})
 }
 
-func TestResolveThinkingConfig_Off(t *testing.T) {
+func TestResolveThinkingConfigReturnsDisabledForOffAliases(t *testing.T) {
 	for _, level := range []string{"off", "none", "disabled", " OFF "} {
 		cfg := resolveThinkingConfig(level)
 		if cfg == nil || cfg.Type != "disabled" {
@@ -250,7 +250,7 @@ func TestResolveThinkingConfig_Off(t *testing.T) {
 	}
 }
 
-func TestModelCapability_PromptCacheOverride(t *testing.T) {
+func TestModelCapabilityWithConfigOverridesCacheRejection(t *testing.T) {
 	t.Run("builtin without registry", func(t *testing.T) {
 		if !modelCapability(runDeps{}, "kimi", "kimi-for-coding").RejectsCacheControl {
 			t.Error("kimi must reject cache_control by default")

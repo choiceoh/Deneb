@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestBuildPhoneAction_Valid(t *testing.T) {
+func TestBuildPhoneActionReturnsArgsForValidInputs(t *testing.T) {
 	cases := []struct {
 		p      phoneWriteParams
 		action string
@@ -85,7 +85,7 @@ func TestBuildPhoneAction_Rejected(t *testing.T) {
 	}
 }
 
-func TestDispatchPhoneAction(t *testing.T) {
+func TestDispatchPhoneActionWithVariousSenderOutcomes(t *testing.T) {
 	ctx := context.Background()
 
 	// nil sender → reported unavailable, never a silent drop.

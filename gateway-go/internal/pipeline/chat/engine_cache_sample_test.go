@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestEngineMetricsURL(t *testing.T) {
+func TestEngineMetricsURLDerivesLocalAndRejectsPublicHosts(t *testing.T) {
 	cases := map[string]string{
 		// Self-hosted shapes → /metrics (with /v1 stripped).
 		"http://127.0.0.1:8000/v1":       "http://127.0.0.1:8000/metrics",
@@ -35,7 +35,7 @@ func TestEngineMetricsURL(t *testing.T) {
 // derivation pointing at a router with no /metrics), and a misconfigured
 // override — public host, garbage URL — must fail safe to "" instead of
 // probing an external service.
-func TestResolveEngineMetricsURL_EnvOverride(t *testing.T) {
+func TestResolveEngineMetricsURL_OverrideWinsButRejectsUnsafeValues(t *testing.T) {
 	t.Setenv(engineMetricsURLEnv, "http://100.125.220.117:8000/metrics")
 	if got := resolveEngineMetricsURL("http://127.0.0.1:18800/v1"); got != "http://100.125.220.117:8000/metrics" {
 		t.Errorf("override not used: %q", got)
@@ -92,7 +92,7 @@ func TestEngineMetricsModelAllowed(t *testing.T) {
 	}
 }
 
-func TestSampleEngineCacheDelta(t *testing.T) {
+func TestSampleEngineCacheDeltaReturnsDeltaAfterBaseline(t *testing.T) {
 	hits, queries := 1000.0, 2000.0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, "# HELP vllm:prefix_cache_hits_total Prefix cache hits\n")
@@ -136,7 +136,7 @@ func TestSampleEngineCacheDelta_MissingMetrics(t *testing.T) {
 	}
 }
 
-func TestMetricValue(t *testing.T) {
+func TestMetricValueParsesLabeledAndBareSamples(t *testing.T) {
 	if v, ok := metricValue(`vllm:prefix_cache_hits_total{engine="0"} 1.3316096e+07`, metricPrefixCacheHits); !ok || v != 1.3316096e+07 {
 		t.Fatalf("labeled sample: got (%v, %v)", v, ok)
 	}

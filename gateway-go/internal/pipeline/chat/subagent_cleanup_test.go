@@ -41,7 +41,7 @@ func startRunning(t *testing.T, sm *session.Manager, key string, spawnedBy strin
 
 // Killing a parent must interrupt and kill its running children, marking them
 // with the cascade reason so the notifier treats them as bookkeeping.
-func TestSubagentCleanup_ParentKilledKillsRunningChildren(t *testing.T) {
+func TestSubagentCleanupStopsChildrenWhenParentKilled(t *testing.T) {
 	sm := session.NewManager()
 	startRunning(t, sm, "client:main", "")
 	startRunning(t, sm, "client:main:worker:1", "client:main")
@@ -110,7 +110,7 @@ func TestSubagentCleanup_ParentDeletedKillsRunningChildren(t *testing.T) {
 
 // A parent finishing normally (Done) must NOT touch its children — async
 // children outliving individual parent turns is the designed behavior.
-func TestSubagentCleanup_ParentDoneLeavesChildrenAlone(t *testing.T) {
+func TestSubagentCleanupPreservesChildrenWhenParentDone(t *testing.T) {
 	sm := session.NewManager()
 	startRunning(t, sm, "client:main", "")
 	startRunning(t, sm, "client:main:worker:1", "client:main")
@@ -135,7 +135,7 @@ func TestSubagentCleanup_ParentDoneLeavesChildrenAlone(t *testing.T) {
 }
 
 // Terminal children are left alone on cascade — their results stay inspectable.
-func TestSubagentCleanup_TerminalChildrenUntouched(t *testing.T) {
+func TestSubagentCleanupPreservesTerminalChildren(t *testing.T) {
 	sm := session.NewManager()
 	startRunning(t, sm, "client:main", "")
 	startRunning(t, sm, "client:main:worker:1", "client:main")

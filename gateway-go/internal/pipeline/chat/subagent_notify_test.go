@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestDeferredSubagentNotifications_Drain(t *testing.T) {
+func TestDeferredSubagentNotificationsReturnsEmptyAfterDrain(t *testing.T) {
 	ch := make(chan string, 2)
 	ch <- "child A done"
 	ch <- "child B done"

@@ -9,10 +9,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
-// TestRecallWikiEvidence_ProjectAnchor: a query naming a known project pins
+// TestRecallWikiEvidenceReturnsProjectAnchorFirst: a query naming a known project pins
 // that project's 대표페이지 (with its 현재 상태) at the top of the wiki evidence,
 // above every keyword hit — even when BM25 would prefer detail pages.
-func TestRecallWikiEvidence_ProjectAnchor(t *testing.T) {
+func TestRecallWikiEvidenceReturnsProjectAnchorFirst(t *testing.T) {
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

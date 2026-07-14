@@ -12,7 +12,7 @@ import (
 // classifies (llmerr) to Action.StripThink, while other 4xx/5xx do not. This
 // is the consumer that makes the StripThink recovery action live — without a
 // caller reading it, the classified recovery never fires.
-func TestShouldStripThinking(t *testing.T) {
+func TestShouldStripThinkingReturnsTrueForSignatureError(t *testing.T) {
 	tests := []struct {
 		name string
 		err  error
