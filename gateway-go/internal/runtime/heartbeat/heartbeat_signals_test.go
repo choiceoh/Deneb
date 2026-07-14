@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestHeartbeatShouldRun(t *testing.T) {
+func TestHeartbeatShouldRunWhenContentOrSignalPresent(t *testing.T) {
 	cases := []struct {
 		name    string
 		content string
@@ -31,7 +31,7 @@ func TestHeartbeatShouldRun(t *testing.T) {
 	}
 }
 
-func TestComposeHeartbeatBody(t *testing.T) {
+func TestComposeHeartbeatBodyFormatsSignalAndContent(t *testing.T) {
 	// signal + content: signal leads, separated from HEARTBEAT.md body.
 	got := composeHeartbeatBody("SIG", "MD", "", "", "")
 	if !strings.HasPrefix(got, "SIG") || !strings.Contains(got, "---") || !strings.Contains(got, "MD") {

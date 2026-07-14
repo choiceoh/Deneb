@@ -63,7 +63,7 @@ func (s skillLifecycleTranscriptStore) Search(string, int) ([]toolport.SearchRes
 }
 func (s skillLifecycleTranscriptStore) CloneRecent(string, string, int) error { return nil }
 
-func TestSkillLifecycleStatusFiltersBySkillAndStats(t *testing.T) {
+func TestSkillLifecycleStatusReturnsFilteredStatsForSkill(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
 	if err := tracker.RecordUsage(genesis.UsageRecord{
 		SkillName:  "deploy-helper",
@@ -267,7 +267,7 @@ func TestSkillLifecycleStatusKeepsPartialStateWhenRejectedEditsUnreadable(t *tes
 	}
 }
 
-func TestSkillLifecycleStatusIncludesOptimizerMemory(t *testing.T) {
+func TestSkillLifecycleStatusReturnsOptimizerMemoryCounts(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
 	if err := tracker.LogEvolve("deploy-helper", "1.0.1", "tighten verification steps"); err != nil {
 		t.Fatalf("LogEvolve: %v", err)
@@ -297,7 +297,7 @@ func TestSkillLifecycleStatusIncludesOptimizerMemory(t *testing.T) {
 	}
 }
 
-func TestSkillLifecycleValidationCaseRecordsAndStatusSurfacesIt(t *testing.T) {
+func TestSkillLifecycleValidationCaseCreatesRecordVisibleInStatus(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
 	backend := &skillLifecycleBackend{tracker: tracker}
 
@@ -388,7 +388,7 @@ func TestSkillLifecycleValidationCaseWithoutSkillSteersToSelfCorrection(t *testi
 	}
 }
 
-func TestSkillLifecycleStatusRequiresTieredApexFrontierEvidence(t *testing.T) {
+func TestSkillLifecycleStatusReturnsCoveredWhenTieredFrontierEvidencePresent(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
 	if err := tracker.LogGenesis("deploy-helper", "session", "telegram:1", "coding", "Deploy workflow"); err != nil {
 		t.Fatalf("LogGenesis: %v", err)
@@ -603,7 +603,7 @@ func TestSkillLifecycleValidationCaseFromSessionSkipsWeakAutomaticTrace(t *testi
 	}
 }
 
-func TestSkillLifecycleValidationBackfillScansSessionsAndSkipsWeak(t *testing.T) {
+func TestSkillLifecycleValidationBackfillRecordsSessionsAndIgnoresWeakTraces(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
 	store := skillLifecycleTranscriptStore{byKey: map[string][]toolport.ChatMessage{
 		"client:main:z-valid": {
@@ -665,7 +665,7 @@ func TestSkillLifecycleValidationBackfillScansSessionsAndSkipsWeak(t *testing.T)
 	}
 }
 
-func TestSkillReplayInputIncludesGeneralizesCommandFragments(t *testing.T) {
+func TestSkillReplayInputIncludesNormalizesCommandFragments(t *testing.T) {
 	got := skillReplayInputIncludes(`{"cmd":"ssh srv1 systemctl --user status deneb-gateway.service","workdir":"/srv/deneb"}`)
 	if len(got) != 2 || got[0] != "ssh srv1" || got[1] != "systemctl --user status" {
 		t.Fatalf("expected generalized ssh/systemctl fragments, got %+v", got)
@@ -711,7 +711,7 @@ func TestSkillLifecycleLogProposalStoresActualExecutionAndTruncates(t *testing.T
 	}
 }
 
-func TestSkillLifecycleSelfCorrectionRecordReviewAndStatus(t *testing.T) {
+func TestSkillLifecycleSelfCorrectionReviewUpdatesStatusVisibility(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
 	backend := &skillLifecycleBackend{tracker: tracker}
 
@@ -864,7 +864,7 @@ func TestProposeSkillEvolution_NoOpWithoutCandidate(t *testing.T) {
 	}
 }
 
-func TestProposeSkillEvolution_RecordsOpportunityBacklog(t *testing.T) {
+func TestProposeSkillEvolutionCreatesOpportunityBacklogRecord(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
 	b := &skillLifecycleBackend{tracker: tracker}
 
@@ -892,7 +892,7 @@ func TestProposeSkillEvolution_RecordsOpportunityBacklog(t *testing.T) {
 	}
 }
 
-// TestProposeSkillEvolution_LogsProposalIndependentOfExecution locks the
+// TestProposeSkillEvolutionPreservesProposalRecordWhenExecutionFails locks the
 // durability invariant behind the log-before-execute ordering: the proposal is
 // persisted BEFORE the slow, cancellable execution, so an interrupted
 // evolve/genesis (an auto-deploy hot-swap cancelling the review fork mid
@@ -901,7 +901,7 @@ func TestProposeSkillEvolution_RecordsOpportunityBacklog(t *testing.T) {
 // Here the evolver is unconfigured, so execution fails — yet the proposal must
 // still be on record. Guards against a future refactor re-nesting the log write
 // inside a success branch.
-func TestProposeSkillEvolution_LogsProposalIndependentOfExecution(t *testing.T) {
+func TestProposeSkillEvolutionPreservesProposalRecordWhenExecutionFails(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
 	b := &skillLifecycleBackend{tracker: tracker} // evolver nil -> execution fails
 
@@ -931,10 +931,10 @@ func TestProposeSkillEvolution_LogsProposalIndependentOfExecution(t *testing.T) 
 	}
 }
 
-// TestProposeSkillEvolution_ExecutableRouteRequiresCandidate ensures executable
+// TestProposeSkillEvolutionRejectsExecutableRouteWithoutCandidate ensures executable
 // routes (genesis/create/evolve) still require a candidate — the no-op
 // exemption must not weaken validation for routes that actually do work.
-func TestProposeSkillEvolution_ExecutableRouteRequiresCandidate(t *testing.T) {
+func TestProposeSkillEvolutionRejectsExecutableRouteWithoutCandidate(t *testing.T) {
 	b := &skillLifecycleBackend{}
 	_, err := b.ProposeSkillEvolution(context.Background(), chattools.SkillEvolutionProposalRequest{
 		Route:      "evolve",
@@ -945,13 +945,13 @@ func TestProposeSkillEvolution_ExecutableRouteRequiresCandidate(t *testing.T) {
 	}
 }
 
-// TestProposeSkillEvolution_VerdictExcludedFromSuccessRate verifies a review
+// TestProposeSkillEvolutionIgnoresVerdictsInSuccessRateStats verifies a review
 // verdict is recorded (it still drives the curator's staleness/lastUsed signal)
 // but is NOT counted toward the evolver's success-rate stats. A judgment is not
 // a real execution; conflating them pinned email-analysis as a phantom
 // underperformer that re-evolved six times in two days (PR #2328). The
 // success-rate now reflects real use only, so a pair of verdicts leaves it empty.
-func TestProposeSkillEvolution_VerdictExcludedFromSuccessRate(t *testing.T) {
+func TestProposeSkillEvolutionIgnoresVerdictsInSuccessRateStats(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
 	b := &skillLifecycleBackend{tracker: tracker}
 

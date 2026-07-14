@@ -79,7 +79,7 @@ func testSelfImprovementCodingDeps() SelfImprovementCodingDeps {
 	}
 }
 
-func TestSelfImprovementCodingList_PendingCandidates(t *testing.T) {
+func TestSelfImprovementCodingListReturnsPendingCandidatesByDefault(t *testing.T) {
 	h := selfImprovementCodingList(testSelfImprovementCodingDeps())
 	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.self_improvement_coding.list"})
 	payload := decodeSkillsPayload[SelfImprovementCodingListResponse](t, resp)
@@ -120,7 +120,7 @@ func TestSelfImprovementCodingList_PendingCandidates(t *testing.T) {
 	}
 }
 
-func TestSelfImprovementCodingList_StatusFilter(t *testing.T) {
+func TestSelfImprovementCodingListReturnsCandidatesFilteredByStatus(t *testing.T) {
 	h := selfImprovementCodingList(testSelfImprovementCodingDeps())
 	params, _ := json.Marshal(map[string]any{"status": genesis.SelfCorrectionStatusApplied})
 	resp := h(authedSkillsCtx(), &protocol.RequestFrame{
@@ -134,7 +134,7 @@ func TestSelfImprovementCodingList_StatusFilter(t *testing.T) {
 	}
 }
 
-func TestSelfImprovementCodingList_AllStatus(t *testing.T) {
+func TestSelfImprovementCodingListReturnsAllCandidatesWhenStatusAll(t *testing.T) {
 	h := selfImprovementCodingList(testSelfImprovementCodingDeps())
 	params, _ := json.Marshal(map[string]any{"status": "all"})
 	resp := h(authedSkillsCtx(), &protocol.RequestFrame{
@@ -161,7 +161,7 @@ func TestSelfImprovementCodingList_RejectsUnknownStatus(t *testing.T) {
 	}
 }
 
-func TestSelfImprovementCodingList_FunnelSummary(t *testing.T) {
+func TestSelfImprovementCodingListReturnsFunnelSummaryFromDeps(t *testing.T) {
 	h := selfImprovementCodingList(testSelfImprovementCodingDeps())
 	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.self_improvement_coding.list"})
 	payload := decodeSkillsPayload[SelfImprovementCodingListResponse](t, resp)
@@ -184,7 +184,7 @@ func TestSelfImprovementCodingList_FunnelSummary(t *testing.T) {
 	}
 }
 
-func TestSelfImprovementCodingList_FunnelOptional(t *testing.T) {
+func TestSelfImprovementCodingListReturnsZeroFunnelWhenDepsNil(t *testing.T) {
 	deps := testSelfImprovementCodingDeps()
 	deps.Funnel = nil
 	deps.LastNudgeAtMs = nil
@@ -202,7 +202,7 @@ func TestSelfImprovementCodingMethods_NilProvider(t *testing.T) {
 	}
 }
 
-func TestSelfImprovementCodingMethods_RecordOptional(t *testing.T) {
+func TestSelfImprovementCodingMethodsRecordEndpointPresentOnlyWhenConfigured(t *testing.T) {
 	deps := testSelfImprovementCodingDeps()
 	deps.RecordCandidate = nil
 	methods := SelfImprovementCodingMethods(deps)
@@ -218,7 +218,7 @@ func TestSelfImprovementCodingMethods_RecordOptional(t *testing.T) {
 	}
 }
 
-func TestSelfImprovementCodingMethods_DispatchOptional(t *testing.T) {
+func TestSelfImprovementCodingMethodsDispatchEndpointPresentOnlyWhenConfigured(t *testing.T) {
 	deps := testSelfImprovementCodingDeps()
 	methods := SelfImprovementCodingMethods(deps)
 	if _, ok := methods["miniapp.self_improvement_coding.dispatch"]; ok {
@@ -233,7 +233,7 @@ func TestSelfImprovementCodingMethods_DispatchOptional(t *testing.T) {
 	}
 }
 
-func TestSelfImprovementCodingDispatch_RecordsProvenance(t *testing.T) {
+func TestSelfImprovementCodingDispatchSavesProvenanceFields(t *testing.T) {
 	var got genesis.SelfCorrectionCandidateRecord
 	deps := testSelfImprovementCodingDeps()
 	deps.RecordDispatch = func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
@@ -258,7 +258,7 @@ func TestSelfImprovementCodingDispatch_RecordsProvenance(t *testing.T) {
 	}
 }
 
-func TestSelfImprovementCodingDispatch_RequiresAttempt(t *testing.T) {
+func TestSelfImprovementCodingDispatchReturnsErrorWithoutAttemptID(t *testing.T) {
 	h := selfImprovementCodingDispatch(SelfImprovementCodingDeps{
 		RecordDispatch: func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
 			return rec, nil
@@ -271,7 +271,7 @@ func TestSelfImprovementCodingDispatch_RequiresAttempt(t *testing.T) {
 	}
 }
 
-func TestSelfImprovementCodingRecord_FilesProposeOnly(t *testing.T) {
+func TestSelfImprovementCodingRecordPreservesSourceAndTargetFilesProposeOnly(t *testing.T) {
 	var got genesis.SelfCorrectionCandidateRecord
 	deps := testSelfImprovementCodingDeps()
 	deps.RecordCandidate = func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
@@ -313,7 +313,7 @@ func TestSelfImprovementCodingRecord_FilesProposeOnly(t *testing.T) {
 	}
 }
 
-func TestSelfImprovementCodingRecord_RequiresSource(t *testing.T) {
+func TestSelfImprovementCodingRecordReturnsErrorWithoutSource(t *testing.T) {
 	h := selfImprovementCodingRecord(testSelfImprovementCodingDeps())
 	params, _ := json.Marshal(map[string]any{"title": "no provenance"})
 	resp := h(authedSkillsCtx(), &protocol.RequestFrame{
@@ -326,7 +326,7 @@ func TestSelfImprovementCodingRecord_RequiresSource(t *testing.T) {
 	}
 }
 
-func TestSelfImprovementCodingRecord_RequiresContent(t *testing.T) {
+func TestSelfImprovementCodingRecordReturnsErrorWithoutContent(t *testing.T) {
 	h := selfImprovementCodingRecord(testSelfImprovementCodingDeps())
 	params, _ := json.Marshal(map[string]any{"source": "health-finding:x"})
 	resp := h(authedSkillsCtx(), &protocol.RequestFrame{

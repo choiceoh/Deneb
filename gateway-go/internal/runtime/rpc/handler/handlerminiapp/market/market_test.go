@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-func TestMarketMethodsOwnsQuoteProjection(t *testing.T) {
+func TestMarketMethodsReturnsQuoteSummaryWithComputedChangePct(t *testing.T) {
 	methods := MarketMethods(MarketDeps{Fetch: func(context.Context) ([]market.Quote, int64, bool, error) {
 		return []market.Quote{{Symbol: "KRW=X", Label: "원/달러", Price: 110, PrevClose: 100, Currency: "KRW"}}, 1234, true, nil
 	}})

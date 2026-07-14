@@ -104,7 +104,7 @@ func TestMethodSurfacesAndNilRegistrySemantics(t *testing.T) {
 	}
 }
 
-func TestSerializePluginOptionalInterfacesAndFreshMaps(t *testing.T) {
+func TestSerializePluginReturnsFreshMapsAndOmitsAbsentFields(t *testing.T) {
 	plain := basicPlugin{id: "plain", label: "Plain", auth: []providercore.AuthMethod{{ID: "key", Kind: "api_key"}}}
 	serialized := serializePlugin(plain)
 	if serialized["id"] != "plain" || serialized["label"] != "Plain" || serialized["auth"] == nil {
@@ -223,7 +223,7 @@ func TestProvidersCatalogSuccessUnknownPlainErrorNilAndCancellation(t *testing.T
 	}
 }
 
-func TestProvidersAuthPreparePassthroughValidationAndManagedSuccess(t *testing.T) {
+func TestProvidersAuthPrepareRejectsMissingProviderAndReturnsAuth(t *testing.T) {
 	r := registerPlugins(t, basicPlugin{id: "plain", label: "Plain"})
 	methods := Methods(Deps{Providers: r})
 	resp := rpctest.Call(methods, "providers.auth.prepare", map[string]any{"apiKey": "key"})
@@ -360,7 +360,7 @@ func TestMalformedAuthAndCatalogParamsReturnStableResponses(t *testing.T) {
 	}
 }
 
-func TestCatalogPluginFixtureIDsRemainUnique(t *testing.T) {
+func TestCatalogPluginFixtureIDsPreserveUniqueness(t *testing.T) {
 	plugins := []providercore.Plugin{
 		basicPlugin{id: "a"}, aliasOnlyPlugin{basicPlugin: basicPlugin{id: "b"}, aliases: []string{"bee"}}, catalogPlugin{id: "c"},
 	}

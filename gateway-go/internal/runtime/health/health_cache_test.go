@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestSummarizeCacheWindow(t *testing.T) {
+func TestSummarizeCacheWindowBoundaryStates(t *testing.T) {
 	now := time.Date(2026, 6, 26, 12, 0, 0, 0, time.UTC)
 	mk := func(ago time.Duration, q, h int64) cacheSample {
 		return cacheSample{at: now.Add(-ago), queries: q, hits: h}
@@ -87,7 +87,7 @@ func TestSummarizeCacheWindow(t *testing.T) {
 	})
 }
 
-func TestSummarizeCacheWindowSummaryStates(t *testing.T) {
+func TestSummarizeCacheWindowFormatsSummaryLabel(t *testing.T) {
 	now := time.Now()
 	mk := func(q, h int64) []cacheSample {
 		return []cacheSample{{at: now.Add(-time.Hour), queries: 0, hits: 0}, {at: now, queries: q, hits: h}}
@@ -114,7 +114,7 @@ func TestSummarizeCacheWindowSummaryStates(t *testing.T) {
 	}
 }
 
-func TestPruneCacheSamples(t *testing.T) {
+func TestPruneCacheSamplesEvictsBeforeCutoffAnchor(t *testing.T) {
 	base := time.Date(2026, 6, 26, 0, 0, 0, 0, time.UTC)
 	at := func(h int) time.Time { return base.Add(time.Duration(h) * time.Hour) }
 
@@ -150,10 +150,10 @@ func TestPruneCacheSamples(t *testing.T) {
 	})
 }
 
-// TestCacheHealthObserveNoBasesDegrades verifies that with no vLLM bases the
+// TestCacheHealthObserveNoBasesReturnsEmptySection verifies that with no vLLM bases the
 // collector never scrapes, the ring stays empty, and observe reports nothing to
 // surface — so /health omits the cache section on non-vLLM hosts.
-func TestCacheHealthObserveNoBasesDegrades(t *testing.T) {
+func TestCacheHealthObserveNoBasesReturnsEmptySection(t *testing.T) {
 	var c cacheHealth
 	_, ok := c.observe(context.Background(), nil)
 	if ok {

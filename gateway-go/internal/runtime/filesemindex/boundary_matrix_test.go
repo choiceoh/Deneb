@@ -261,7 +261,7 @@ func TestFileSemindexPathBoundary(t *testing.T) {
 	}
 }
 
-func TestServiceConstructionAndDegradationBoundaries(t *testing.T) {
+func TestServiceConstructionDegradesToEmptyResultsWithoutEmbedding(t *testing.T) {
 	if got := New(nil, nil, nil); got != nil {
 		t.Fatalf("nil store enabled service: %#v", got)
 	}
@@ -308,7 +308,7 @@ func TestServiceConstructionAndDegradationBoundaries(t *testing.T) {
 	}
 }
 
-func TestDisabledServiceMutationAndTaskBoundaries(t *testing.T) {
+func TestDisabledServiceMutationAndTaskReturnNil(t *testing.T) {
 	svc := &Service{}
 	paths := []string{"", "/", "/old.pdf", "relative.txt", "한글/문서.md", strings.Repeat("x", 4096)}
 	for _, path := range paths {
@@ -329,7 +329,7 @@ func TestDisabledServiceMutationAndTaskBoundaries(t *testing.T) {
 	}
 }
 
-func TestSemindexTaskMetadataAndUnhealthyRun(t *testing.T) {
+func TestSemindexTaskMetadataAndRunSucceedsWhenCanceled(t *testing.T) {
 	task := &semindexTask{}
 	if got := task.Name(); got != "file-semindex" {
 		t.Errorf("Name=%q", got)
@@ -361,7 +361,7 @@ func TestSemindexTaskMetadataAndUnhealthyRun(t *testing.T) {
 	}
 }
 
-func TestFileSemindexExtractPlainTextBoundaries(t *testing.T) {
+func TestFileSemindexExtractFormatsSupportedFileTypes(t *testing.T) {
 	tests := []struct{ name, filename, body, want string }{
 		{name: "txt", filename: "note.txt", body: "plain text", want: ""},
 		{name: "markdown", filename: "note.md", body: "# Heading\nbody", want: "Heading"},

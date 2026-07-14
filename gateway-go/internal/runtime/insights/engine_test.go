@@ -46,7 +46,7 @@ func newSession(key, model, channel string, in, out int64, status session.RunSta
 	return s
 }
 
-func TestEngineGenerateBasic(t *testing.T) {
+func TestEngineGenerateAggregatesWithinBoundary(t *testing.T) {
 	now := time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC)
 	nowMs := now.UnixMilli()
 
@@ -128,7 +128,7 @@ func TestEngineGenerateEmpty(t *testing.T) {
 	}
 }
 
-func TestEngineGenerateDefaultsDays(t *testing.T) {
+func TestEngineGenerateNormalizesZeroDaysToDefault(t *testing.T) {
 	eng := New(&fakeLister{}, nil)
 	rep, err := eng.Generate(context.Background(), 0)
 	if err != nil {
@@ -149,7 +149,7 @@ func TestEngineGenerateContextCanceled(t *testing.T) {
 	}
 }
 
-func TestEngineToolAggregator(t *testing.T) {
+func TestEngineToolAggregatorPopulatesToolsWithoutMissingNote(t *testing.T) {
 	now := time.Now()
 	eng := New(&fakeLister{items: []*session.Session{
 		newSession("tg:one", "gpt-4", "telegram", 100, 50, session.StatusDone, now.UnixMilli()),
@@ -174,7 +174,7 @@ func TestEngineToolAggregator(t *testing.T) {
 	}
 }
 
-func TestEngineSkipsInternalKinds(t *testing.T) {
+func TestEngineIgnoresInternalSessionKinds(t *testing.T) {
 	now := time.Now()
 	subagent := newSession("sub:1", "claude", "", 1_000, 100, session.StatusDone, now.UnixMilli())
 	subagent.Kind = session.KindSubagent
@@ -191,7 +191,7 @@ func TestEngineSkipsInternalKinds(t *testing.T) {
 	}
 }
 
-func TestEngineTopSessionsTrimsZeroTokenStubs(t *testing.T) {
+func TestEngineTopSessionsClearsZeroTokenStubs(t *testing.T) {
 	now := time.Now().UnixMilli()
 	stub := &session.Session{
 		Key: "tg:stub", Kind: session.KindDirect,

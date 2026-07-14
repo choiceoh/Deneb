@@ -9,7 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-func TestGmailAsk_HappyPath(t *testing.T) {
+func TestGmailAskReturnsAnswerWithGroundedMailContext(t *testing.T) {
 	cache := NewAnalysisStore(t.TempDir())
 	if err := cache.save(&analysisRecord{
 		MsgID:           "m1",
@@ -94,7 +94,7 @@ func TestGmailAsk_NotRegisteredWithoutAskCallback(t *testing.T) {
 	}
 }
 
-func TestBuildMailQAContext_NoCachedAnalysis(t *testing.T) {
+func TestBuildMailQAContextIncludesBodyWithoutAnalysisSectionOnCacheMiss(t *testing.T) {
 	deps := GmailAnalyzeDeps{Cache: NewAnalysisStore(t.TempDir())}
 	msg := &gmail.MessageDetail{ID: "x", Subject: "S", From: "f@x.com", Body: "본문내용"}
 	out := buildMailQAContext(msg, deps)

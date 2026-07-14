@@ -165,9 +165,9 @@ func TestShouldAcceptRestart(t *testing.T) {
 	})
 }
 
-// TestQuarantineSkipsSelf: when the exec path still holds the RUNNING binary
+// TestQuarantineIgnoresRunningSelf: when the exec path still holds the RUNNING binary
 // (no replacement happened), refusal paths must not rename it away.
-func TestQuarantineSkipsSelf(t *testing.T) {
+func TestQuarantineIgnoresRunningSelf(t *testing.T) {
 	self, err := os.Executable()
 	if err != nil {
 		t.Skipf("os.Executable: %v", err)

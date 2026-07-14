@@ -19,7 +19,7 @@ var (
 
 // ─── RuntimeMethods key set ──────────────────────────────────────────────────
 
-func TestRuntimeMethods_registersAllHandlers(t *testing.T) {
+func TestRuntimeMethodsRegistersHandlersWithExpectedNames(t *testing.T) {
 	m := RuntimeMethods(Deps{})
 	expected := []string{
 		"health",
@@ -133,7 +133,7 @@ func TestSystemEvent_withBroadcast(t *testing.T) {
 
 // ─── daemon.status ───────────────────────────────────────────────────────────
 
-func TestDaemonStatus_running(t *testing.T) {
+func TestDaemonStatusReturnsRunningState(t *testing.T) {
 	deps := Deps{
 		DaemonStatus: func() (any, bool) {
 			return map[string]string{"state": "running", "pid": "1234"}, true

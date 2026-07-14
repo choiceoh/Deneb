@@ -70,7 +70,7 @@ func TestAnalysisStore_LoadMiss_PromptVersionMismatch(t *testing.T) {
 
 // Defense-in-depth: a hostile msgID containing path separators must
 // neither escape the cache dir on save nor resolve on load.
-func TestAnalysisStore_PathFor_SanitizesUnsafe(t *testing.T) {
+func TestAnalysisStorePathForSanitizesUnsafeIDsWithoutEscapingCacheDir(t *testing.T) {
 	dir := t.TempDir()
 	store := NewAnalysisStore(dir)
 
@@ -115,7 +115,7 @@ func TestAnalysisStore_RoundTrip_DottedMessageID(t *testing.T) {
 
 // Nil/zero store must be safe to call — handlers use that as the
 // "caching disabled" signal.
-func TestAnalysisStore_ZeroValue_IsNoOp(t *testing.T) {
+func TestAnalysisStoreNilOrEmptyDirLoadAndSaveReturnNilError(t *testing.T) {
 	var s *AnalysisStore
 	if got, err := s.load("any"); got != nil || err != nil {
 		t.Errorf("nil store load: got=%+v err=%v, want nil/nil", got, err)

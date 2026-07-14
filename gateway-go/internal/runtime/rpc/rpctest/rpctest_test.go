@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-func TestCallMarshalsParamsAndFindsHandler(t *testing.T) {
+func TestCallEncodesParamsAndDispatchesToHandler(t *testing.T) {
 	methods := map[string]rpcutil.HandlerFunc{
 		"echo": func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 			return rpcutil.RespondOK(req.ID, map[string]any{
@@ -35,7 +35,7 @@ func TestCallReturnsNilForUnknownMethod(t *testing.T) {
 	}
 }
 
-func TestNewLoggerIsUsable(t *testing.T) {
+func TestNewLoggerReturnsErrorEnabledLogger(t *testing.T) {
 	logger := NewLogger()
 	if logger == nil || !logger.Enabled(context.Background(), 8) {
 		t.Fatal("NewLogger() must return an error-enabled logger")

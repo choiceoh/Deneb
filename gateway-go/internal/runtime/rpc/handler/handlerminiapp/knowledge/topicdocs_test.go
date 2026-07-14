@@ -19,7 +19,7 @@ func topicDocsTestDeps(dir, key string) TopicDocsDeps {
 	}
 }
 
-func TestTopicDocsMethods_RegistersConditionally(t *testing.T) {
+func TestTopicDocsMethods_ReturnsNilUnlessBothDependenciesArePresent(t *testing.T) {
 	got := TopicDocsMethods(topicDocsTestDeps(t.TempDir(), "업무"))
 	for _, name := range []string{
 		"miniapp.topicdocs.read_current",
@@ -146,7 +146,7 @@ func TestTopicDocs_RejectsUnsafeCurrentKey(t *testing.T) {
 	}
 }
 
-func TestTopicDocs_RequiresAuth(t *testing.T) {
+func TestTopicDocs_RejectsUnauthenticatedCalls(t *testing.T) {
 	methods := TopicDocsMethods(topicDocsTestDeps(t.TempDir(), "업무"))
 	for name, h := range methods {
 		resp := h(context.Background(), newReq(t, name)) // no client identity

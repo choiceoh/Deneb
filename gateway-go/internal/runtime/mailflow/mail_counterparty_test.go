@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
-func TestCounterpartyLookup(t *testing.T) {
+func TestCounterpartyLookupRetriesTTLAndRejectsInvalidDomains(t *testing.T) {
 	t.Run("nil store yields no boost and retries after TTL", func(t *testing.T) {
 		var store *wiki.Store
 		c := newCounterpartyLookup(func() *wiki.Store { return store })

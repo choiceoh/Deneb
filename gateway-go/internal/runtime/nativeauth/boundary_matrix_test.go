@@ -302,7 +302,7 @@ func TestAuthenticateDownloadRejectionBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestAuthenticateValidTokenWhitespaceAndPrecedence(t *testing.T) {
+func TestAuthenticateTrimsWhitespaceAndIgnoresCrossChannelToken(t *testing.T) {
 	token := nativeAuthTestToken(t)
 	for _, tc := range []struct{ name, supplied string }{
 		{name: "exact", supplied: token},

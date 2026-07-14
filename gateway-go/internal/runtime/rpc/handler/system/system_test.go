@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestFindLatestLogFile(t *testing.T) {
+func TestFindLatestLogFileReturnsMostRecentDatedLog(t *testing.T) {
 	dir := t.TempDir()
 
 	os.WriteFile(filepath.Join(dir, "deneb-2025-01-01.log"), []byte("old"), 0o600)

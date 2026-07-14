@@ -51,7 +51,7 @@ func methodsWithStore(t *testing.T) (map[string]rpcutil.HandlerFunc, *wiki.Store
 
 // ─── Methods registration ───────────────────────────────────────────────────
 
-func TestMethods_registersAllHandlers(t *testing.T) {
+func TestMethods_returnsAllExpectedHandlers(t *testing.T) {
 	m, _ := methodsWithStore(t)
 	expected := []string{
 		"wiki.search",
@@ -75,7 +75,7 @@ func TestMethods_registersAllHandlers(t *testing.T) {
 
 // ─── wiki.search ────────────────────────────────────────────────────────────
 
-func TestSearch_defaultLimit(t *testing.T) {
+func TestSearch_returnsMatchingResults(t *testing.T) {
 	m, store := methodsWithStore(t)
 	seedPage(t, store, "기술/golang.md", "Go Language", "기술", "Go is a statically typed language.", []string{"go"})
 
@@ -242,7 +242,7 @@ func TestDelete_existingPage(t *testing.T) {
 
 // ─── wiki.list ──────────────────────────────────────────────────────────────
 
-func TestList_allPages(t *testing.T) {
+func TestList_returnsAllPagesWithoutCategoryFilter(t *testing.T) {
 	m, store := methodsWithStore(t)
 	seedPage(t, store, "기술/a.md", "A", "기술", "body a", nil)
 	seedPage(t, store, "사람/b.md", "B", "사람", "body b", nil)
@@ -257,7 +257,7 @@ func TestList_allPages(t *testing.T) {
 	}
 }
 
-func TestList_filteredByCategory(t *testing.T) {
+func TestList_returnsOnlyPagesMatchingCategory(t *testing.T) {
 	m, store := methodsWithStore(t)
 	seedPage(t, store, "기술/x.md", "X", "기술", "tech page", nil)
 	seedPage(t, store, "사람/y.md", "Y", "사람", "people page", nil)
@@ -309,7 +309,7 @@ func TestIndex_withPages(t *testing.T) {
 	}
 }
 
-func TestIndex_filterByCategory(t *testing.T) {
+func TestIndex_returnsOnlyEntriesMatchingCategory(t *testing.T) {
 	m, store := methodsWithStore(t)
 	seedPage(t, store, "기술/go.md", "Go", "기술", "Go lang", nil)
 	seedPage(t, store, "사람/bob.md", "Bob", "사람", "Bob info", nil)
@@ -371,7 +371,7 @@ func TestStats_withPages(t *testing.T) {
 // ─── path escape guard (finding: caller paths reached ReadPage/WritePage/
 // DeletePage/ListPages unvalidated — "../../secret.md" escaped the wiki root) ─
 
-func TestPathEscapeGuard_AllPathMethods(t *testing.T) {
+func TestPathEscapeGuard_RejectsTraversalAcrossAllPathMethods(t *testing.T) {
 	m, store := methodsWithStore(t)
 	seedPage(t, store, "기술/safe.md", "Safe", "기술", "safe content", nil)
 

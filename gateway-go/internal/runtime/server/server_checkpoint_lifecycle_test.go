@@ -17,7 +17,7 @@ import (
 // the checkpoint lifecycle subscriber. Keeping this as a pure function test
 // makes the routing logic easy to reason about separately from the
 // subscription plumbing.
-func TestShouldReleaseCheckpoints(t *testing.T) {
+func TestShouldReleaseCheckpointsReturnsTrueForTerminalEvents(t *testing.T) {
 	cases := []struct {
 		name  string
 		event session.Event
@@ -47,7 +47,7 @@ func TestShouldReleaseCheckpoints(t *testing.T) {
 // When the session transitions to a terminal phase, the checkpoint directory
 // must be removed within a short timeout — proving the hook fires and the
 // removal runs end to end.
-func TestCheckpointLifecycle_RemovesOnTerminal(t *testing.T) {
+func TestCheckpointLifecycleDeletesDirOnTerminalTransition(t *testing.T) {
 	root := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -97,7 +97,7 @@ func TestCheckpointLifecycle_RemovesOnTerminal(t *testing.T) {
 // TestCheckpointLifecycle_RemovesOnReset verifies /reset-equivalent flow:
 // ResetSession emits EventStatusChanged with NewStatus="" which should
 // trigger the removal.
-func TestCheckpointLifecycle_RemovesOnReset(t *testing.T) {
+func TestCheckpointLifecycleDeletesDirOnReset(t *testing.T) {
 	root := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	s := &Server{

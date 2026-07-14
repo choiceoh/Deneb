@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestTimelineDeterministicReplayAndBoundaries(t *testing.T) {
+func TestTimelineDeterministicReplayHonorsBoundary(t *testing.T) {
 	start := time.Date(2026, 7, 11, 0, 0, 0, 0, time.UTC)
 	clock := NewManualClock(start)
 	events := []TimelineEvent{

@@ -573,7 +573,7 @@ func TestComposeGoalContinuationBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestGoalTaskConstructionAndDisabledRun(t *testing.T) {
+func TestGoalTaskConstructionWithNilDepsRunsCleanly(t *testing.T) {
 	task := NewTask(nil, nil, nil, nil, nil)
 	if task == nil {
 		t.Fatal("NewTask returned nil")
@@ -608,7 +608,7 @@ func TestGoalTaskConstructionAndDisabledRun(t *testing.T) {
 	}
 }
 
-func TestGoalTaskMetadataConstants(t *testing.T) {
+func TestGoalTaskMetadataConstantsPinDurationContract(t *testing.T) {
 	tests := []struct {
 		name      string
 		got, want time.Duration

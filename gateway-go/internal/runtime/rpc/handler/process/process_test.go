@@ -27,7 +27,7 @@ func errCode(t *testing.T, err error) string {
 
 // ─── resolveJobID (id/jobId precedence) ───────────────────────────────────────
 
-func TestResolveJobID(t *testing.T) {
+func TestResolveJobIDPrefersIdOverJobIdAndErrorsWhenBothEmpty(t *testing.T) {
 	tests := []struct {
 		name    string
 		id      string
@@ -64,7 +64,7 @@ func TestResolveJobID(t *testing.T) {
 
 // ─── ACP enabled gate ─────────────────────────────────────────────────────────
 
-func TestRequireEnabled(t *testing.T) {
+func TestRequireEnabledReturnsErrorWhenDisabled(t *testing.T) {
 	deps := &ACPDeps{} // enabled defaults to false
 
 	// Disabled → error frame carrying FEATURE_DISABLED.
@@ -83,7 +83,7 @@ func TestRequireEnabled(t *testing.T) {
 	}
 }
 
-func TestACPDeps_EnabledToggleAndLifecycle(t *testing.T) {
+func TestACPDeps_StartAndStopToggleEnabledState(t *testing.T) {
 	deps := &ACPDeps{}
 	if deps.IsEnabled() {
 		t.Fatal("new ACPDeps should start disabled")

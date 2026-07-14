@@ -14,7 +14,7 @@ import (
 
 // TestShouldReleaseSpillover mirrors the checkpoint routing table — the two
 // decision functions must remain in sync, so we assert the same scenarios.
-func TestShouldReleaseSpillover(t *testing.T) {
+func TestShouldReleaseSpilloverReturnsTrueForTerminalEvents(t *testing.T) {
 	cases := []struct {
 		name  string
 		event session.Event
@@ -42,7 +42,7 @@ func TestShouldReleaseSpillover(t *testing.T) {
 // and asserts that the spill file belonging to that session is reclaimed. A
 // spill file from a different session must survive — this is the isolation
 // guarantee that makes the lifecycle hook safe to enable by default.
-func TestSpilloverLifecycle_RemovesOnTerminal(t *testing.T) {
+func TestSpilloverLifecycleDeletesSpillOnTerminalPreservingOthers(t *testing.T) {
 	dir := t.TempDir()
 	store := agent.NewSpilloverStore(dir)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -96,7 +96,7 @@ func TestSpilloverLifecycle_RemovesOnTerminal(t *testing.T) {
 }
 
 // TestSpilloverLifecycle_RemovesOnReset verifies the /reset path (empty status).
-func TestSpilloverLifecycle_RemovesOnReset(t *testing.T) {
+func TestSpilloverLifecycleDeletesSpillOnReset(t *testing.T) {
 	dir := t.TempDir()
 	store := agent.NewSpilloverStore(dir)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

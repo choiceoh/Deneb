@@ -21,7 +21,7 @@ func TestListCache_HitWithinTTL(t *testing.T) {
 	}
 }
 
-func TestListCache_MissAfterTTL(t *testing.T) {
+func TestListCacheExpiresJustPastTTLWithInclusiveBoundary(t *testing.T) {
 	c := newListCache(30 * time.Second)
 	base := time.Unix(1000, 0)
 	c.put("k", map[string]any{"v": 1}, base)
@@ -108,7 +108,7 @@ func TestGmailListRecent_CacheHitWithinTTL(t *testing.T) {
 	}
 }
 
-func TestGmailListRecent_DistinctQueriesCacheSeparately(t *testing.T) {
+func TestGmailListRecentCachesEachQuerySeparatelyAndSkipsReloadOnRepeat(t *testing.T) {
 	var calls int
 	client := inboxStub(&calls)
 	cache := newListCache(30 * time.Second)

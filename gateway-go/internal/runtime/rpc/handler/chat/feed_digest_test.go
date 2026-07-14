@@ -18,7 +18,7 @@ func bulletCount(digest string) int {
 	return n
 }
 
-func TestBuildTodayFeedDigest(t *testing.T) {
+func TestBuildTodayFeedDigestFiltersAndFormatsTodayItems(t *testing.T) {
 	loc, err := time.LoadLocation("Asia/Seoul")
 	if err != nil {
 		t.Skip("no Asia/Seoul tzdata")

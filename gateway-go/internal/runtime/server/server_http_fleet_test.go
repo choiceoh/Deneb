@@ -54,7 +54,7 @@ func fleetTestServer(upstreamURL string) *fleetapi.Handler {
 	return fleetapi.New(sparkfleet.New(upstreamURL, slog.Default()), slog.Default())
 }
 
-func TestFleetProxyForwards(t *testing.T) {
+func TestFleetProxyReturnsUpstreamResponseWithForwardedRequest(t *testing.T) {
 	var gotPath, gotQuery, gotBody, gotCT string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath, gotQuery = r.URL.Path, r.URL.RawQuery
@@ -88,7 +88,7 @@ func TestFleetProxyForwards(t *testing.T) {
 	}
 }
 
-func TestFleetProxyDeniesUnlistedPath(t *testing.T) {
+func TestFleetProxyRejectsUnlistedPathWith403(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		t.Error("upstream must not be called for a denied path")
 		w.WriteHeader(http.StatusOK)
@@ -115,7 +115,7 @@ func TestFleetProxyOffWithoutURL(t *testing.T) {
 }
 
 // The routed handler (auth wrapper) refuses without a client token.
-func TestFleetProxyRequiresToken(t *testing.T) {
+func TestFleetProxyReturns401WithoutClientToken(t *testing.T) {
 	s := fleetTestServer("http://127.0.0.1:1")
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/fleet/api/state", nil)
 	w := httptest.NewRecorder()
@@ -138,7 +138,7 @@ func TestFleetPathAllowedJobCancel(t *testing.T) {
 
 // The fleet webhook relays SparkFleet's generic alerts to connected clients,
 // loopback-only.
-func TestFleetHookRoute(t *testing.T) {
+func TestFleetHookRouteRejectsNonLoopbackAndSuppressesDuplicateAlerts(t *testing.T) {
 	s := &Server{logger: slog.Default(), pushHub: proactive.NewHub(), alertGate: proactive.NewAlertGate()}
 	mux := s.buildMux()
 	ch, unsub := s.pushHub.Subscribe(proactive.KindMobile)

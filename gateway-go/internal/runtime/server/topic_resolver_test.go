@@ -13,7 +13,7 @@ func newTestResolver(m map[string]string) *topicResolver {
 	return &topicResolver{dir: "topics", m: fwd}
 }
 
-func TestTopicResolver_TopicKey(t *testing.T) {
+func TestTopicResolverTopicKeyReturnsMappedOrDefaultKey(t *testing.T) {
 	r := newTestResolver(map[string]string{"0": "업무", "42": "코딩", "57": "잡담"})
 
 	cases := []struct {

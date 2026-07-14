@@ -54,7 +54,7 @@ func TestRSIStatus_WithIdentity(t *testing.T) {
 	}
 }
 
-func TestRSIStatus_NoIdentity(t *testing.T) {
+func TestRSIStatusReturnsUnauthorizedWithoutIdentity(t *testing.T) {
 	h := rsiStatus(RSIStatusDeps{Status: func() rsistatus.LoopStatus {
 		t.Fatal("Status must not be called without client identity")
 		return rsistatus.LoopStatus{}

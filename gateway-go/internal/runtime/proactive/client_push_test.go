@@ -2,7 +2,7 @@ package proactive
 
 import "testing"
 
-func TestClientPushHub_PublishToSubscribers(t *testing.T) {
+func TestClientPushHub_PublishEmitsToSubscribers(t *testing.T) {
 	h := newClientPushHub()
 	ch1, unsub1 := h.subscribe(kindMobile)
 	ch2, unsub2 := h.subscribe(kindMobile)
@@ -41,7 +41,7 @@ func TestClientPushHub_UnsubscribeStopsDelivery(t *testing.T) {
 	}
 }
 
-func TestClientPushHub_SlowConsumerDropsNotBlocks(t *testing.T) {
+func TestClientPushHub_SlowConsumerDropsWithoutBlocking(t *testing.T) {
 	h := newClientPushHub()
 	_, unsub := h.subscribe(kindMobile) // never drained
 	defer unsub()
@@ -51,7 +51,7 @@ func TestClientPushHub_SlowConsumerDropsNotBlocks(t *testing.T) {
 	}
 }
 
-func TestClientPushHub_MobileSubscriberCount(t *testing.T) {
+func TestClientPushHub_MobileCountWithoutDesktopSubscribers(t *testing.T) {
 	h := newClientPushHub()
 	// A connected desktop must NOT count as a mobile subscriber, so it cannot
 	// suppress the phone's FCM fallback (the Codex-flagged multi-subscriber bug).
@@ -73,7 +73,7 @@ func TestClientPushHub_MobileSubscriberCount(t *testing.T) {
 	}
 }
 
-func TestClientKindFromHeader(t *testing.T) {
+func TestClientKindFromHeaderParsesKnownValues(t *testing.T) {
 	cases := map[string]clientKind{
 		"mobile":  kindMobile,
 		"desktop": kindDesktop,
@@ -87,7 +87,7 @@ func TestClientKindFromHeader(t *testing.T) {
 	}
 }
 
-func TestPushPreview(t *testing.T) {
+func TestPushPreviewFirstLineTruncatesLongInput(t *testing.T) {
 	if got := pushPreview("  첫 줄\n둘째 줄\n셋째"); got != "첫 줄" {
 		t.Fatalf("pushPreview first-line = %q", got)
 	}

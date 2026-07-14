@@ -40,7 +40,7 @@ func TestProjectMethods_RegistersWithWiki(t *testing.T) {
 	}
 }
 
-func TestProjectDigests_RequiresAuth(t *testing.T) {
+func TestProjectDigestsReturnsUnauthorizedWithoutIdentity(t *testing.T) {
 	h := projectDigests(projectDepsFor(fakeProjectStatusSource{}, nil))
 	resp := h(context.Background(), reqWith(t, "miniapp.project.digests", nil))
 	if resp.OK {
@@ -51,14 +51,14 @@ func TestProjectDigests_RequiresAuth(t *testing.T) {
 	}
 }
 
-func TestProjectDigests_WikiUnavailableDegrades(t *testing.T) {
+func TestProjectDigestsReturnsUnavailableWhenWikiFactoryErrors(t *testing.T) {
 	resp := projectDigests(projectDepsFor(nil, errors.New("wiki disabled")))(authedCtx(), reqWith(t, "miniapp.project.digests", nil))
 	if resp.OK {
 		t.Fatalf("expected UNAVAILABLE when the wiki factory errors")
 	}
 }
 
-func TestProjectDigests_MapsStatusesToRows(t *testing.T) {
+func TestProjectDigestsPreservesOrderAndMapsStatusesToRows(t *testing.T) {
 	// The wiki already sorts newest-first; the handler preserves that order and
 	// maps each ProjectStatus to a wire row.
 	src := fakeProjectStatusSource{statuses: []wiki.ProjectStatus{

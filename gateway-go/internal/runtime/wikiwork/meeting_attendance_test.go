@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
-func TestRecordMeetingAttendanceByPath(t *testing.T) {
+func TestRecordMeetingAttendanceByPathReturnsHandledForAllInputs(t *testing.T) {
 	store := newTestStore(t)
 	rep := &wiki.Page{Meta: wiki.Frontmatter{Title: "기아PE", Category: "프로젝트"}, Body: "## 현재 상태\n"}
 	if err := store.WritePage(wiki.RepPagePath("기아PE"), rep); err != nil {

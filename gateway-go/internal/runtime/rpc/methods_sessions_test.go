@@ -68,7 +68,7 @@ func TestToolsCatalog_ReturnsGroups(t *testing.T) {
 	}
 }
 
-func TestToolsCatalog_CoreToolCount(t *testing.T) {
+func TestToolsCatalogReturnsExpectedCoreToolCount(t *testing.T) {
 	d, _ := sessionDispatcher(t)
 	payload, resp := dispatchJSON(t, d, "tools.catalog", nil)
 	if !resp.OK {
@@ -88,7 +88,7 @@ func TestToolsCatalog_CoreToolCount(t *testing.T) {
 // sessions.patch
 // ---------------------------------------------------------------------------
 
-func TestSessionsPatch_AppliesFields(t *testing.T) {
+func TestSessionsPatchUpdatesExistingSessionFields(t *testing.T) {
 	d, deps := sessionDispatcher(t)
 	// Create a session first.
 	deps.Sessions.Create("test-session", session.KindDirect)
@@ -170,7 +170,7 @@ func TestSessionsReset_ClearsState(t *testing.T) {
 // RegisterSessionMethods registration test
 // ---------------------------------------------------------------------------
 
-func TestSessionMethodsRegistered(t *testing.T) {
+func TestSessionMethodsRegisteredWithDispatcher(t *testing.T) {
 	d, _ := sessionDispatcher(t)
 	methods := d.Methods()
 	set := make(map[string]struct{})

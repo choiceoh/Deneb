@@ -528,21 +528,21 @@ func assertWireFieldOmitsZeroValue(t *testing.T, target any, jsonName string) {
 	}
 }
 
-func TestFilesEntryOutIDOmitsZeroValue(t *testing.T) {
+func TestFilesEntryOutIDZeroValueLeavesKeyMissingFromJSON(t *testing.T) {
 	t.Parallel()
 
 	var value FilesEntryOut
 	assertWireFieldOmitsZeroValue(t, &value, "id")
 }
 
-func TestFilesEntryOutSizeOmitsZeroValue(t *testing.T) {
+func TestFilesEntryOutSizeZeroValueLeavesKeyMissingFromJSON(t *testing.T) {
 	t.Parallel()
 
 	var value FilesEntryOut
 	assertWireFieldOmitsZeroValue(t, &value, "size")
 }
 
-func TestFilesEntryOutServerModifiedOmitsZeroValue(t *testing.T) {
+func TestFilesEntryOutServerModifiedZeroValueLeavesKeyMissingFromJSON(t *testing.T) {
 	t.Parallel()
 
 	var value FilesEntryOut

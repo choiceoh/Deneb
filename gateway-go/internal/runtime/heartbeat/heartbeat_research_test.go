@@ -24,7 +24,7 @@ func writeWikiFile(t *testing.T, root, rel string, mtime time.Time) {
 	}
 }
 
-func TestScanWikiNewData_CountsAndClassifies(t *testing.T) {
+func TestScanWikiNewDataClassifiesWithinBoundary(t *testing.T) {
 	wiki := t.TempDir()
 	now := time.Now()
 	fresh := now.Add(-1 * time.Hour)
@@ -53,7 +53,7 @@ func TestScanWikiNewData_CountsAndClassifies(t *testing.T) {
 	}
 }
 
-func TestDetectResearchNudge_ThresholdThrottleAndRefire(t *testing.T) {
+func TestDetectResearchNudgeFiresAtThresholdThenExpiresThrottle(t *testing.T) {
 	home := t.TempDir()
 	task := &heartbeatTask{homeDir: home, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	wiki := filepath.Join(home, ".deneb", "wiki")
@@ -101,7 +101,7 @@ func TestDetectResearchNudge_ThresholdThrottleAndRefire(t *testing.T) {
 
 // A marker timestamp in the future (clock skew, corrupted state) must not
 // mute the lane — it is reset and the nudge fires normally.
-func TestDetectResearchNudge_FutureMarkerReset(t *testing.T) {
+func TestDetectResearchNudgeNormalizesFutureMarkerAndFires(t *testing.T) {
 	home := t.TempDir()
 	task := &heartbeatTask{homeDir: home, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	wiki := filepath.Join(home, ".deneb", "wiki")
@@ -118,7 +118,7 @@ func TestDetectResearchNudge_FutureMarkerReset(t *testing.T) {
 	}
 }
 
-func TestComposeHeartbeatBody_ResearchLane(t *testing.T) {
+func TestComposeHeartbeatBodyResearchLaneFormatsSectionOrder(t *testing.T) {
 	nudge := "[리서치 레인] 다이제스트"
 
 	// Nudge-only: agenda note appended (no user tasks in HEARTBEAT.md).

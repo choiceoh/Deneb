@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-func TestMiniappCaptureContacts_Success(t *testing.T) {
+func TestMiniappCaptureContactsReturnsSavedAndEnrichedSummary(t *testing.T) {
 	var savedPayload, enrichPayload []byte
 	deps := Deps{
 		SaveContacts: func(b []byte) (int, error) {
@@ -152,7 +152,7 @@ func TestMiniappCaptureContacts_EnrichErrorTolerated(t *testing.T) {
 
 // contactsSummary headlines the store save; wiki enrichment, when any people were
 // updated, is appended as a parenthetical bonus (with name capping/overflow).
-func TestContactsSummary(t *testing.T) {
+func TestContactsSummaryFormatsSaveAndEnrichmentCounts(t *testing.T) {
 	saveOnly := contactsSummary(2798, wiki.ContactEnrichResult{Total: 2798})
 	if !strings.Contains(saveOnly, "2798") || !strings.Contains(saveOnly, "저장") {
 		t.Errorf("save-only summary unexpected: %q", saveOnly)

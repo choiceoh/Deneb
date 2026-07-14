@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 )
 
-func TestNotiDigestConstructionAndDisabledRun(t *testing.T) {
+func TestNotiDigestConstructionReturnsErrorOnDisabledRun(t *testing.T) {
 	dir := t.TempDir()
 	task := NewNotiDigestTask(nil, nil, nil, nil,
 		filepath.Join(dir, "state.json"), filepath.Join(dir, "ledger"), "")
@@ -29,10 +29,10 @@ func TestNotiDigestConstructionAndDisabledRun(t *testing.T) {
 	}
 }
 
-// TestNotiDigestBuildPrompt pins the digestion contract: the batch renders
+// TestNotiDigestBuildPromptRendersEntriesWithGuidanceRules pins the digestion contract: the batch renders
 // with sources, untrusted discipline and noise rules are stated, the write
 // surface is log-append/person-update only, and the operator brief steers.
-func TestNotiDigestBuildPrompt(t *testing.T) {
+func TestNotiDigestBuildPromptRendersEntriesWithGuidanceRules(t *testing.T) {
 	ws := t.TempDir()
 	if err := os.WriteFile(filepath.Join(ws, wiki.WikiBriefFileName),
 		[]byte("전자결재 알림은 반드시 프로젝트 로그로"), 0o600); err != nil {
@@ -68,10 +68,10 @@ func TestNotiDigestBuildPrompt(t *testing.T) {
 	}
 }
 
-// TestNotiDigestFencesDelimiterInjection pins the prompt fence: a notification
+// TestNotiDigestFenceNormalizesInjectedDelimiter pins the prompt fence: a notification
 // body containing the block delimiter or newlines must not escape the data
 // block — the delimiter is defanged and newlines flattened to one line.
-func TestNotiDigestFencesDelimiterInjection(t *testing.T) {
+func TestNotiDigestFenceNormalizesInjectedDelimiter(t *testing.T) {
 	task := &notiDigestTask{}
 	entries := []phoneevents.LedgerEntry{{
 		TS:     "2026-07-12T09:30:00+09:00",
@@ -92,7 +92,7 @@ func TestNotiDigestFencesDelimiterInjection(t *testing.T) {
 	}
 }
 
-func TestFenceNotifText(t *testing.T) {
+func TestFenceNotifTextNormalizesNewlinesAndDelimiters(t *testing.T) {
 	if got := fenceNotifText("a\nb\r\nc"); strings.ContainsAny(got, "\n\r") {
 		t.Errorf("newlines survived: %q", got)
 	}

@@ -27,7 +27,7 @@ func peopleDepsFor(c PeopleClient) PeopleDeps {
 	return PeopleDeps{Client: func() (PeopleClient, error) { return c, nil }}
 }
 
-func TestPeopleList_HappyPath(t *testing.T) {
+func TestPeopleList_ReturnsAggregatedSendersWithDefaultWindow(t *testing.T) {
 	now := time.Date(2026, 5, 26, 15, 0, 0, 0, time.UTC)
 	earlier := now.Add(-3 * time.Hour)
 	c := &fakePeopleClient{
@@ -94,7 +94,7 @@ func findPerson(people []map[string]any, email string) map[string]any {
 	return nil
 }
 
-func TestPeopleList_CustomWindowAndLimit(t *testing.T) {
+func TestPeopleList_ReturnsLimitedResultsWithCustomWindow(t *testing.T) {
 	var seenQuery string
 	c := &fakePeopleClient{
 		searchFn: func(_ context.Context, q string, _ int) ([]gmail.MessageSummary, error) {
@@ -123,7 +123,7 @@ func TestPeopleList_CustomWindowAndLimit(t *testing.T) {
 	}
 }
 
-func TestPeopleList_LimitClamp(t *testing.T) {
+func TestPeopleList_ClampsWindowDaysWhenOverMax(t *testing.T) {
 	c := &fakePeopleClient{
 		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
 			return nil, nil
@@ -160,7 +160,7 @@ func TestPeopleList_DropsUnparseableSenders(t *testing.T) {
 	}
 }
 
-func TestPeopleList_RequiresAuth(t *testing.T) {
+func TestPeopleList_RejectsUnauthenticatedRequest(t *testing.T) {
 	h := peopleList(peopleDepsFor(&fakePeopleClient{}))
 	resp := h(context.Background(), reqWith(t, "miniapp.people.list", map[string]any{}))
 	if resp.OK || resp.Error.Code != protocol.ErrUnauthorized {
@@ -168,7 +168,7 @@ func TestPeopleList_RequiresAuth(t *testing.T) {
 	}
 }
 
-func TestPeopleList_GmailUnavailable(t *testing.T) {
+func TestPeopleList_ReturnsUnavailableWhenGmailClientErrors(t *testing.T) {
 	deps := PeopleDeps{Client: func() (PeopleClient, error) {
 		return nil, errors.New("oauth not configured")
 	}}
@@ -185,7 +185,7 @@ func TestPeopleMethods_NilClientReturnsNil(t *testing.T) {
 	}
 }
 
-func TestAggregatePeople_TiebreakDeterministic(t *testing.T) {
+func TestAggregatePeople_OrdersTiedSendersByEmailWhenCountAndTimeMatch(t *testing.T) {
 	// Two senders with the same count and same last-seen → tied on
 	// frequency and on time, must fall back to email ASC for stability.
 	msgs := []gmail.MessageSummary{
@@ -223,7 +223,7 @@ func peopleWikiStore(pages map[string]*wiki.Page) *fakeMemoryStore {
 	}
 }
 
-func TestPeopleList_MergesWikiPeople(t *testing.T) {
+func TestPeopleList_ReturnsGmailRowsMergedWithMatchingWikiPeople(t *testing.T) {
 	c := &fakePeopleClient{
 		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
 			return []gmail.MessageSummary{
@@ -309,7 +309,7 @@ func findPersonRow(rows []PersonRow, email string) *PersonRow {
 	return nil
 }
 
-func TestPeopleList_WikiUnavailableDegradesToGmailOnly(t *testing.T) {
+func TestPeopleList_ReturnsGmailOnlyWhenWikiStoreErrors(t *testing.T) {
 	c := &fakePeopleClient{
 		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
 			return []gmail.MessageSummary{
@@ -331,7 +331,7 @@ func TestPeopleList_WikiUnavailableDegradesToGmailOnly(t *testing.T) {
 	}
 }
 
-func TestContactSectionEmails_OnlyContactSection(t *testing.T) {
+func TestContactSectionEmails_ReturnsOnlyEmailsFromContactSection(t *testing.T) {
 	page := &wiki.Page{
 		Body: "# 김민준\n\n## 요약\n\n다른사람 other@x.com 언급.\n\n## 연락처\n\n- 전화: 010-0000-0000\n- 이메일: A@topsolar.kr, b@topsolar.kr\n\n_주소록에서 동기화됨_\n",
 	}

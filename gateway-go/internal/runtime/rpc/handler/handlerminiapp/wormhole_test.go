@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestWormholeStatus_ClassifiesAndNeverLeaksKeys(t *testing.T) {
+func TestWormholeStatusReturnsClassifiedModelsWithoutLeakingKeys(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := dir + "/config.json"
 	writeWHConfig(t, cfgPath, `{
@@ -65,7 +65,7 @@ func TestWormholeStatus_ClassifiesAndNeverLeaksKeys(t *testing.T) {
 	}
 }
 
-func TestWormholeStatus_LiveSurfacesFleetModels(t *testing.T) {
+func TestWormholeStatusReturnsFleetModelsWithoutLeakingToken(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := dir + "/config.json"
 	writeWHConfig(t, cfgPath, `{"token":"wh-sekret-9z","models":[{"name":"dsv4","url":"http://127.0.0.1:8000/v1","toggleKwarg":"thinking"}]}`)
@@ -161,7 +161,7 @@ func TestWormholeSetFeature_RejectsUnknownFeature(t *testing.T) {
 	}
 }
 
-func TestModelIsLocal(t *testing.T) {
+func TestModelIsLocalReturnsOverrideOrAutoDetectsFromURL(t *testing.T) {
 	f, tr := false, true
 	if modelIsLocal(&f, "http://127.0.0.1/v1") {
 		t.Error("explicit override false should win over a loopback URL")
@@ -177,7 +177,7 @@ func TestModelIsLocal(t *testing.T) {
 	}
 }
 
-func TestWormholeModelKeyVar(t *testing.T) {
+func TestWormholeModelKeyVarRejectsLiteralKeylessAndMissingModels(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := dir + "/config.json"
 	writeWHConfig(t, cfgPath, `{"models":[
@@ -201,7 +201,7 @@ func TestWormholeModelKeyVar(t *testing.T) {
 	}
 }
 
-func TestUpsertSecretLine(t *testing.T) {
+func TestUpsertSecretLineReplacesKeyPreservesOtherLines(t *testing.T) {
 	dir := t.TempDir()
 	p := dir + "/secrets.env"
 	if err := upsertSecretLine(p, "MIMO_KEY", "one"); err != nil {

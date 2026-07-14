@@ -34,7 +34,7 @@ func TestParseJudgeVerdict(t *testing.T) {
 	}
 }
 
-func TestComposeGoalContinuation(t *testing.T) {
+func TestComposeGoalContinuationFormatsGoalAndCriteria(t *testing.T) {
 	out := composeGoalContinuation("  탑솔라 6월 견적 정리  ", nil)
 	if !strings.Contains(out, "탑솔라 6월 견적 정리") {
 		t.Fatal("continuation is missing the goal text")

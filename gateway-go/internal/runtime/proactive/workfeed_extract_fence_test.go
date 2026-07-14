@@ -34,7 +34,7 @@ func TestCardExtractionReadsDenebUIFenceProse(t *testing.T) {
 	}
 }
 
-func TestPushPreviewProjectsCardHeadline(t *testing.T) {
+func TestPushPreviewParsesCardHeadlineFromFence(t *testing.T) {
 	body := "```deneb-ui\n<column><text style=\"headline\">아침 브리핑</text><text>본문 첫 줄.</text></column>\n```"
 	if got := pushPreview(body); got != "아침 브리핑" {
 		t.Errorf("pushPreview = %q, want the card headline", got)

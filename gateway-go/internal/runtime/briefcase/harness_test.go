@@ -23,7 +23,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
 
-func TestWorldVisibilityAndMaterialization(t *testing.T) {
+func TestWorldRejectsEarlyReleaseAndTamperedMaterialization(t *testing.T) {
 	pack := writeHarnessCase(t)
 	clock := NewManualClock(pack.Manifest.FrozenNow)
 	world, err := NewWorld(pack, clock)
@@ -66,7 +66,7 @@ func TestWorldVisibilityAndMaterialization(t *testing.T) {
 	}
 }
 
-func TestWorldOptionsProduceStrictTwoArmVisibility(t *testing.T) {
+func TestWorldOptionsEnforceTwoArmVisibilityBoundary(t *testing.T) {
 	pack := writeHarnessMemoryCase(t)
 	rawClock := NewManualClock(pack.Manifest.FrozenNow)
 	assistedClock := NewManualClock(pack.Manifest.FrozenNow)
@@ -239,7 +239,7 @@ func TestFixtureRegistryUsesVisibleRecordsAndOutputOnlyWrites(t *testing.T) {
 	}
 }
 
-func TestFixtureWikiSchemaOmitsAmbientActions(t *testing.T) {
+func TestFixtureWikiSchemaIgnoresAmbientActionFields(t *testing.T) {
 	pack := writeHarnessCase(t)
 	world, err := NewWorld(pack, NewManualClock(pack.Manifest.FrozenNow))
 	if err != nil {
@@ -444,7 +444,7 @@ func TestChatHarnessRunsActualHandlerWithFrozenWorld(t *testing.T) {
 	}
 }
 
-func TestChatHarnessDoesNotApplyProcessGlobalMarketTokens(t *testing.T) {
+func TestChatHarnessIgnoresProcessGlobalMarketTokens(t *testing.T) {
 	pack := writeHarnessCase(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -605,7 +605,7 @@ func TestChatHarnessReportsTwoArmsWithoutCrossRunCollisions(t *testing.T) {
 	}
 }
 
-func TestChatHarnessClaimsRunRootOnlyAfterInputValidation(t *testing.T) {
+func TestChatHarnessRejectsInvalidInputBeforeClaimingRunRoot(t *testing.T) {
 	pack := writeHarnessCase(t)
 	root, err := NewRunRoot(t.TempDir())
 	if err != nil {
@@ -681,7 +681,7 @@ func TestChatHarnessHashesCallerSessionKeyAndRejectsAbnormalStops(t *testing.T) 
 	}
 }
 
-func TestChatHarnessRequiresDeclaredDevicePlanSource(t *testing.T) {
+func TestChatHarnessRejectsMissingDevicePlanSource(t *testing.T) {
 	pack := writeHarnessDeviceCase(t)
 	root, err := NewRunRoot(t.TempDir())
 	if err != nil {

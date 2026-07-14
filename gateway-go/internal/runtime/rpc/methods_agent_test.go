@@ -76,7 +76,7 @@ func TestSessionsCreate_MissingKey(t *testing.T) {
 	}
 }
 
-func TestSessionsLifecycle_FullFields(t *testing.T) {
+func TestSessionsLifecycleUpdatesStatusAndAbortedFlag(t *testing.T) {
 	deps := testExtendedDeps()
 	defer deps.GatewaySubs.Stop()
 	d := testAgentDispatcher(deps)
@@ -175,7 +175,7 @@ func TestSessionsLifecycle_Error(t *testing.T) {
 	}
 }
 
-func TestSessionsLifecycle_ResponseIncludesAbortedLastRun(t *testing.T) {
+func TestSessionsLifecycleReturnsAbortedLastRunInPayload(t *testing.T) {
 	deps := testExtendedDeps()
 	defer deps.GatewaySubs.Stop()
 	d := testAgentDispatcher(deps)

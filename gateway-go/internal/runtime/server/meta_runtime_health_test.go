@@ -9,7 +9,7 @@ import (
 )
 
 // pct computes a whole-number percentage for the advisory one-liner.
-func TestPct(t *testing.T) {
+func TestPctReturnsPercentageWithZeroGuard(t *testing.T) {
 	if got := pct(1, 4); got != 25.0 {
 		t.Fatalf("pct(1,4) = %v, want 25", got)
 	}
@@ -19,7 +19,7 @@ func TestPct(t *testing.T) {
 }
 
 // slowestModelName picks the p95-worst model and shortens long names.
-func TestSlowestModelName(t *testing.T) {
+func TestSlowestModelNameReturnsQuestionMarkForNilStats(t *testing.T) {
 	stats := []agentlog.ModelStat{
 		{Model: "gpt-4o-2024-08-06", P95Ms: 12000},
 		{Model: "fast-model", P95Ms: 3000},

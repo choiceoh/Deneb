@@ -43,7 +43,7 @@ func writeTranscriptLine(t *testing.T, tmpHome, sessionKey string, lines ...stri
 }
 
 // Test: analyzeTranscriptTail classifies every shape correctly.
-func TestAnalyzeTranscriptTail_AllShapes(t *testing.T) {
+func TestAnalyzeTranscriptTailReturnsShapeForAllPatterns(t *testing.T) {
 	t.Parallel()
 	tmpHome := t.TempDir()
 
@@ -129,7 +129,7 @@ func TestAnalyzeTranscriptTail_AllShapes(t *testing.T) {
 }
 
 // Test: a partial/corrupt line at the tail is tolerated.
-func TestAnalyzeTranscriptTail_TolerantOfTrailingJunk(t *testing.T) {
+func TestAnalyzeTranscriptTailIgnoresTornTrailingLine(t *testing.T) {
 	t.Parallel()
 	tmpHome := t.TempDir()
 	key := "client:torn"
@@ -229,7 +229,7 @@ func waitForCondition(t *testing.T, timeout time.Duration, fn func() bool) {
 
 // Test: a fresh native client marker + user-text tail → resume fires without
 // Telegram delivery reconstruction.
-func TestAutoResume_ResumesInterruptedNativeClientTurn(t *testing.T) {
+func TestAutoResumeDispatchesWhenNativeTurnInterrupted(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
@@ -275,7 +275,7 @@ func TestAutoResume_ResumesInterruptedNativeClientTurn(t *testing.T) {
 }
 
 // Test: assistant-text tail is logically done — no resume.
-func TestAutoResume_SkipsCleanEnd(t *testing.T) {
+func TestAutoResumeClearsMarkerWithoutDispatchOnCleanEnd(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
@@ -311,7 +311,7 @@ func TestAutoResume_SkipsCleanEnd(t *testing.T) {
 }
 
 // Test: marker older than max age is discarded without resuming.
-func TestAutoResume_DiscardsStaleMarker(t *testing.T) {
+func TestAutoResumeDeletesStaleMarkerWithoutDispatch(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
@@ -345,7 +345,7 @@ func TestAutoResume_DiscardsStaleMarker(t *testing.T) {
 }
 
 // Test: already-resumed marker (attempts >= limit) does not re-resume.
-func TestAutoResume_RespectsAttemptLimit(t *testing.T) {
+func TestAutoResumeDeletesMarkerWithoutDispatchWhenAttemptsExhausted(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
@@ -378,7 +378,7 @@ func TestAutoResume_RespectsAttemptLimit(t *testing.T) {
 }
 
 // Test: disabled via Enabled=false — no dispatch, and markers are cleared.
-func TestAutoResume_DisabledDrainsMarkers(t *testing.T) {
+func TestAutoResumeClearsMarkersWithoutDispatchWhenDisabled(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
@@ -412,7 +412,7 @@ func TestAutoResume_DisabledDrainsMarkers(t *testing.T) {
 }
 
 // Test: non-user session keys (cron, btw) are skipped.
-func TestAutoResume_SkipsNonUserSessions(t *testing.T) {
+func TestAutoResumeDeletesMarkersWithoutDispatchForNonUserSessions(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 
@@ -493,7 +493,7 @@ func TestRunMarkerLifecycle_WriteOnRunningDeleteOnTerminal(t *testing.T) {
 
 // Test: lifecycle listener skips non-direct kinds (cron/subagent do not
 // need markers — those have their own retry paths).
-func TestRunMarkerLifecycle_SkipsNonDirectKinds(t *testing.T) {
+func TestRunMarkerLifecycleIgnoresNonDirectSessionKinds(t *testing.T) {
 	tmpHome := t.TempDir()
 	srv := newAutoResumeTestServer(t, tmpHome)
 	unsub := srv.initRunMarkerLifecycle()
@@ -544,7 +544,7 @@ func TestAutoResumeEnabled_DefaultWhenMissing(t *testing.T) {
 	}
 }
 
-func TestAutoResumeEnabled_ExplicitFalse(t *testing.T) {
+func TestAutoResumeEnabledReturnsFalseWhenConfigDisables(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	denebDir := filepath.Join(tmp, ".deneb")

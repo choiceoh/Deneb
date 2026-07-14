@@ -9,12 +9,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
-// TestRecordValidationCaseFromSuccessfulUse verifies the success mirror of the
+// TestRecordValidationCaseFromSuccessfulUseCreatesReplayCase verifies the success mirror of the
 // failed-use capture: a successful skill run's tool-call trace becomes a held-out
 // replay case whose ExpectedToolCalls are the proven-good calls. This is the
 // corpus the behavioral evolve gate (SkillValidationEngine.EvaluateBehavior)
 // consumes — without it the gate stays inert.
-func TestRecordValidationCaseFromSuccessfulUse(t *testing.T) {
+func TestRecordValidationCaseFromSuccessfulUseCreatesReplayCase(t *testing.T) {
 	tracker := newUsageRecorderTracker(t)
 	const sessionKey = "client:main:topsolar"
 	store := usageRecorderTranscriptStore{byKey: map[string][]toolport.ChatMessage{
@@ -64,10 +64,10 @@ func TestRecordValidationCaseFromSuccessfulUse(t *testing.T) {
 	}
 }
 
-// TestRecordValidationCaseFromSuccessfulUse_NoToolCallsSkipped verifies a
+// TestRecordValidationCaseFromSuccessfulUseIgnoresRunsWithoutToolCalls verifies a
 // successful run that made no tool calls is not recorded: there is nothing for
 // the behavioral gate to protect (and the weak-automatic guard would reject it).
-func TestRecordValidationCaseFromSuccessfulUse_NoToolCallsSkipped(t *testing.T) {
+func TestRecordValidationCaseFromSuccessfulUseIgnoresRunsWithoutToolCalls(t *testing.T) {
 	tracker := newUsageRecorderTracker(t)
 	const sessionKey = "client:main:chat"
 	store := usageRecorderTranscriptStore{byKey: map[string][]toolport.ChatMessage{

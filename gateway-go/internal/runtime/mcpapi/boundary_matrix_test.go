@@ -920,7 +920,7 @@ func TestMCPBodyLimitBoundary(t *testing.T) {
 	}
 }
 
-func TestMCPPublishedMetadataDefensiveCopies(t *testing.T) {
+func TestMCPPublishedMetadataCopiesPreserveOriginal(t *testing.T) {
 	versionsA := ProtocolVersions()
 	versionsB := ProtocolVersions()
 	versionsA[0] = "mutated"
@@ -936,7 +936,7 @@ func TestMCPPublishedMetadataDefensiveCopies(t *testing.T) {
 	}
 }
 
-func TestMCPToolCatalogSecurityInvariants(t *testing.T) {
+func TestMCPToolCatalogEnforcesSecurityContract(t *testing.T) {
 	seenNames := map[string]bool{}
 	seenMethods := map[string]bool{}
 	for i, tool := range ToolDefinitions() {

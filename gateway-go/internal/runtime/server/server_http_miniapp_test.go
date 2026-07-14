@@ -120,7 +120,7 @@ func withMiniappAttachmentClientFactory(t *testing.T, factory func() (nativeapi.
 	t.Cleanup(func() { miniappMailAttachmentClientFactory = orig })
 }
 
-func TestHandleMiniappRPC_ValidClientToken_Whoami(t *testing.T) {
+func TestHandleMiniappRPCWhoamiReturnsNativeIdentity(t *testing.T) {
 	token := withClientToken(t)
 	s := newTestServer(t)
 
@@ -208,7 +208,7 @@ func TestHandleMiniappGmailAttachment_MissingParams(t *testing.T) {
 	}
 }
 
-func TestHandleMiniappGmailAttachment_ClientUnavailable(t *testing.T) {
+func TestHandleMiniappGmailAttachmentReturns503WhenClientUnavailable(t *testing.T) {
 	token := withClientToken(t)
 	s := newTestServer(t)
 	withMiniappAttachmentClientFactory(t, func() (nativeapi.MailAttachmentClient, error) {
@@ -224,7 +224,7 @@ func TestHandleMiniappGmailAttachment_ClientUnavailable(t *testing.T) {
 	}
 }
 
-func TestHandleMiniappGmailAttachment_GmailNotFound(t *testing.T) {
+func TestHandleMiniappGmailAttachmentReturns404OnGmailNotFound(t *testing.T) {
 	token := withClientToken(t)
 	s := newTestServer(t)
 	withMiniappAttachmentClientFactory(t, func() (nativeapi.MailAttachmentClient, error) {

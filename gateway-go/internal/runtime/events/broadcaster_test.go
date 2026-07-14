@@ -31,7 +31,7 @@ type sendError struct{}
 
 func (e *sendError) Error() string { return "send failed" }
 
-func TestBroadcast_TapInvoked(t *testing.T) {
+func TestBroadcastEmitsEventsToRegisteredTap(t *testing.T) {
 	b := NewBroadcaster()
 	var (
 		mu    sync.Mutex
@@ -84,7 +84,7 @@ func TestBroadcast_TapPanicRecovered(t *testing.T) {
 	}
 }
 
-func TestBroadcast_AllSubscribers(t *testing.T) {
+func TestBroadcastEmitsToAllSubscribedReceivers(t *testing.T) {
 	b := NewBroadcaster()
 	s1 := &mockSubscriber{id: "s1", authed: true}
 	s2 := &mockSubscriber{id: "s2", authed: true}
@@ -104,7 +104,7 @@ func TestBroadcast_AllSubscribers(t *testing.T) {
 	}
 }
 
-func TestBroadcast_SkipsUnauthenticated(t *testing.T) {
+func TestBroadcastIgnoresUnauthenticatedSubscribers(t *testing.T) {
 	b := NewBroadcaster()
 	s1 := &mockSubscriber{id: "s1", authed: false}
 	s2 := &mockSubscriber{id: "s2", authed: true}
@@ -121,7 +121,7 @@ func TestBroadcast_SkipsUnauthenticated(t *testing.T) {
 	}
 }
 
-func TestBroadcast_Filter(t *testing.T) {
+func TestBroadcastFilterAllowsMatchingEventsOnly(t *testing.T) {
 	b := NewBroadcaster()
 	s1 := &mockSubscriber{id: "s1", authed: true}
 
@@ -155,7 +155,7 @@ func TestBroadcast_SendError(t *testing.T) {
 	}
 }
 
-func TestUnsubscribe(t *testing.T) {
+func TestUnsubscribeClearsSubscriberCount(t *testing.T) {
 	b := NewBroadcaster()
 	s1 := &mockSubscriber{id: "s1", authed: true}
 
@@ -170,7 +170,7 @@ func TestUnsubscribe(t *testing.T) {
 	}
 }
 
-func TestBroadcastRaw(t *testing.T) {
+func TestBroadcastRawEmitsPayloadToSubscriber(t *testing.T) {
 	b := NewBroadcaster()
 	s1 := &mockSubscriber{id: "s1", authed: true}
 
@@ -186,7 +186,7 @@ func TestBroadcastRaw(t *testing.T) {
 	}
 }
 
-func TestSequenceIncrement(t *testing.T) {
+func TestSequentialBroadcastsEmitOneMessageEach(t *testing.T) {
 	b := NewBroadcaster()
 	s := &mockSubscriber{id: "s1", authed: true}
 	b.Subscribe(s, Filter{})
@@ -202,7 +202,7 @@ func TestSequenceIncrement(t *testing.T) {
 
 // --- Phase 2 tests: targeted broadcast, session subscriptions ---
 
-func TestBroadcastToConnIDs(t *testing.T) {
+func TestBroadcastToConnIDsAllowsOnlyTargetedSubscriber(t *testing.T) {
 	b := NewBroadcaster()
 	s1 := &mockSubscriber{id: "s1", authed: true}
 	s2 := &mockSubscriber{id: "s2", authed: true}
@@ -222,7 +222,7 @@ func TestBroadcastToConnIDs(t *testing.T) {
 	}
 }
 
-func TestSessionEventSubscriptions(t *testing.T) {
+func TestSessionEventSubscriptionsUpdateOnSubscribeAndUnsubscribe(t *testing.T) {
 	b := NewBroadcaster()
 
 	b.SubscribeSessionEvents("conn-1")
@@ -240,7 +240,7 @@ func TestSessionEventSubscriptions(t *testing.T) {
 	}
 }
 
-func TestSessionMessageSubscriptions(t *testing.T) {
+func TestSessionMessageSubscriptionsUpdatePerSessionKey(t *testing.T) {
 	b := NewBroadcaster()
 
 	b.SubscribeSessionMessageEvents("conn-1", "session-abc")
@@ -263,7 +263,7 @@ func TestSessionMessageSubscriptions(t *testing.T) {
 	}
 }
 
-func TestToolEventRecipients(t *testing.T) {
+func TestToolEventRecipientsDeletedAfterUnregister(t *testing.T) {
 	b := NewBroadcaster()
 
 	b.RegisterToolEventRecipient("run-1", "conn-1")
@@ -277,7 +277,7 @@ func TestToolEventRecipients(t *testing.T) {
 	}
 }
 
-func TestUnsubscribe_CleansUpSessionSubs(t *testing.T) {
+func TestUnsubscribeClearsSessionSubscriptions(t *testing.T) {
 	b := NewBroadcaster()
 	s := &mockSubscriber{id: "conn-1", authed: true}
 	b.Subscribe(s, Filter{})

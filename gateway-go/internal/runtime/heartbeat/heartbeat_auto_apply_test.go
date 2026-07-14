@@ -35,7 +35,7 @@ func writeAutoApplyFixtures(t *testing.T, path string, n int) {
 
 // Flag off: even an accept-verdict candidate stays propose-only and the live
 // contract is untouched.
-func TestMaybeAutoApplyCandidate_FlagOffIsProposeOnly(t *testing.T) {
+func TestMaybeAutoApplyCandidateFlagOffPreservesContract(t *testing.T) {
 	dir := t.TempDir()
 	hb := filepath.Join(dir, "HEARTBEAT.md")
 	fixtures := filepath.Join(dir, "fixtures.jsonl")
@@ -62,7 +62,7 @@ func TestMaybeAutoApplyCandidate_FlagOffIsProposeOnly(t *testing.T) {
 
 // Flag on + accept verdict: the candidate lands with a backup + armed marker;
 // the anomaly watch then restores the backup after K consecutive failures.
-func TestMaybeAutoApplyCandidate_AppliesAndRollsBack(t *testing.T) {
+func TestMaybeAutoApplyCandidateAppliesThenRestoresOnFailures(t *testing.T) {
 	t.Setenv(heartbeatAutoApplyEnv, "1")
 	dir := t.TempDir()
 	hb := filepath.Join(dir, "HEARTBEAT.md")

@@ -7,10 +7,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 )
 
-// TestPublishDeliverable covers the auto-publish safety net's card-side logic:
-// a substantial deliverable files a doc_analysis card, while thin or contentless
-// responses are suppressed by the substance floor (the false-positive control).
-func TestPublishDeliverable(t *testing.T) {
+// TestPublishDeliverableCreatesCardOrSuppressesThinContent covers the
+// auto-publish safety net's card-side logic: a substantial deliverable files
+// a doc_analysis card, while thin or contentless responses are suppressed by
+// the substance floor (the false-positive control).
+func TestPublishDeliverableCreatesCardOrSuppressesThinContent(t *testing.T) {
 	structured := "## EPC 계약서 리스크 검토\n\n" +
 		"| 조항 | 리스크 |\n|---|---|\n| O&M 단가 | 1,800→1,950만원 |\n\n" +
 		"- 면책 조항 삭제 요구 (차남두 부장 회람)\n- 발전량 보증 연장 1년으로 협상"

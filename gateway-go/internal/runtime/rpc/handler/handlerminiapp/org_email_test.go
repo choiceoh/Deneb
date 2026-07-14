@@ -8,7 +8,7 @@ import (
 
 // membersToWire must prefer the EMAIL join (robust across 동명이인) and fall back
 // to the NAME match only when no enriched address resolves to a page.
-func TestMembersToWire_EmailFirstThenName(t *testing.T) {
+func TestMembersToWirePrefersEmailMatchFallsBackToNameWhenUnresolved(t *testing.T) {
 	members := []org.Member{{Name: "김성훈"}, {Name: "차남두"}, {Name: "미상"}}
 
 	lookup := func(name string) (phones, emails []string) {

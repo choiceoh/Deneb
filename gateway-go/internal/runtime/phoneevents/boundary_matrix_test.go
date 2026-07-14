@@ -612,7 +612,7 @@ func TestPhoneEventGuidanceBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestPhoneEventHandlerConstructionAndGuardBoundaries(t *testing.T) {
+func TestNewHandlerRejectsNonLoopbackAndGuardsChatUnavailable(t *testing.T) {
 	logger := phoneEventTestLogger()
 	h := New(Config{Logger: logger})
 	if h == nil {
@@ -652,7 +652,7 @@ func TestPhoneEventHandlerConstructionAndGuardBoundaries(t *testing.T) {
 	}
 }
 
-func TestPhoneEventConstantsAndPaths(t *testing.T) {
+func TestPhoneEventPathsReturnExpectedConstants(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("DENEB_STATE_DIR", dir)
 	for _, tc := range []struct{ name, got, base string }{

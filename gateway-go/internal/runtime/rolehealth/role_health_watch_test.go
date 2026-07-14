@@ -27,7 +27,7 @@ func newTestRoleHealthWatch(t *testing.T) (*roleHealthWatch, *bytes.Buffer, *[]s
 	return w, &logBuf, &events
 }
 
-func TestRoleHealthWatch_EdgeAlertsOnly(t *testing.T) {
+func TestRoleHealthWatch_EmitsAlertOnlyOnVerdictEdge(t *testing.T) {
 	w, logBuf, events := newTestRoleHealthWatch(t)
 	targets := []roleHealthTarget{{providerID: "zai", model: "glm-5.1", roles: []string{"fallback"}}}
 
@@ -127,12 +127,13 @@ func TestClassifyProbeError(t *testing.T) {
 	}
 }
 
-// TestRoleHealthProbe_Live reproduces a probe against a real endpoint so a
-// false verdict can be diagnosed with the actual error text. CI-skipped.
+// TestRoleHealthProbe_LiveWhenEnvEnabled reproduces a probe against a real
+// endpoint so a false verdict can be diagnosed with the actual error text.
+// CI-skipped.
 //
 //	DENEB_ROLEHEALTH_LIVE=1 DENEB_ROLEHEALTH_URL=http://100.125.220.117:8000/v1 \
-//	DENEB_ROLEHEALTH_MODEL=step3p7 go test -run TestRoleHealthProbe_Live ./internal/runtime/server/
-func TestRoleHealthProbe_Live(t *testing.T) {
+//	DENEB_ROLEHEALTH_MODEL=step3p7 go test -run TestRoleHealthProbe_LiveWhenEnvEnabled ./internal/runtime/server/
+func TestRoleHealthProbe_LiveWhenEnvEnabled(t *testing.T) {
 	if os.Getenv("DENEB_ROLEHEALTH_LIVE") == "" {
 		t.Skip("live probe test; set DENEB_ROLEHEALTH_LIVE=1")
 	}

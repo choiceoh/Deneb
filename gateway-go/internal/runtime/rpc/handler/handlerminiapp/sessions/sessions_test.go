@@ -50,7 +50,7 @@ func sample(key string, updatedAt int64, channel string) *session.Session {
 	}
 }
 
-func TestSessionsRecent_SortsNewestFirst(t *testing.T) {
+func TestSessionsRecentReturnsNewestFirst(t *testing.T) {
 	mgr := &fakeSessionsLister{
 		out: []*session.Session{
 			sample("old", 1_000, "telegram"),
@@ -81,7 +81,7 @@ func TestSessionsRecent_SortsNewestFirst(t *testing.T) {
 	}
 }
 
-func TestSessionsRecent_Limit(t *testing.T) {
+func TestSessionsRecentReturnsCountMatchingLimitParam(t *testing.T) {
 	out := make([]*session.Session, 0, 30)
 	for i := range 30 {
 		out = append(out, sample("s", int64(i), "telegram"))
@@ -99,7 +99,7 @@ func TestSessionsRecent_Limit(t *testing.T) {
 	}
 }
 
-func TestSessionsRecent_LimitClamp(t *testing.T) {
+func TestSessionsRecentClampsLimitToBoundaryMax(t *testing.T) {
 	out := make([]*session.Session, 0, 200)
 	for i := range 200 {
 		out = append(out, sample("s", int64(i), "telegram"))
@@ -116,7 +116,7 @@ func TestSessionsRecent_LimitClamp(t *testing.T) {
 	}
 }
 
-func TestSessionsRecent_ChannelFilter(t *testing.T) {
+func TestSessionsRecentReturnsOnlyMatchingChannel(t *testing.T) {
 	mgr := &fakeSessionsLister{
 		out: []*session.Session{
 			sample("a", 100, "telegram"),
@@ -142,7 +142,7 @@ func TestSessionsRecent_ChannelFilter(t *testing.T) {
 	}
 }
 
-func TestSessionsRecent_RequiresAuth(t *testing.T) {
+func TestSessionsRecentRejectsUnauthenticatedContext(t *testing.T) {
 	h := sessionsRecent(SessionsDeps{Manager: &fakeSessionsLister{}})
 	resp := h(context.Background(), reqWith(t, "miniapp.sessions.recent", nil))
 	if resp.OK {
@@ -293,7 +293,7 @@ func TestSessionsMethods_NilManagerReturnsNil(t *testing.T) {
 	}
 }
 
-func TestSessionsMethods_TranscriptOptional(t *testing.T) {
+func TestSessionsMethodsRegistersTranscriptOnlyWhenFactorySet(t *testing.T) {
 	// Without Transcripts factory: sessions.recent + sessions.delete register
 	// (both need only the Manager); sessions.transcript does not.
 	got := SessionsMethods(SessionsDeps{Manager: &fakeSessionsLister{}})
@@ -344,7 +344,7 @@ func transcriptDeps(loader TranscriptLoader) SessionsDeps {
 	}
 }
 
-func TestSessionsTranscript_HappyPath(t *testing.T) {
+func TestSessionsTranscriptReturnsDecodedMessagesWithDefaultLimit(t *testing.T) {
 	loader := &fakeTranscriptLoader{
 		loadFn: func(key string, limit int) ([]toolport.ChatMessage, int, error) {
 			if key != "telegram:123" {
@@ -428,7 +428,7 @@ func TestSessionsTranscript_DecodesBlocks(t *testing.T) {
 // user could quote. The transcript RPC must drop tool_result messages, hide
 // thinking/tool_use machinery, and trim link-enrichment appendages — the same
 // display sanitation chat.history applies.
-func TestSessionsTranscript_HidesToolMachineryAndEnrichment(t *testing.T) {
+func TestSessionsTranscriptDisplaysTextWithoutToolMachineryOrEnrichment(t *testing.T) {
 	enriched := "이 링크 봐줘 https://example.com\n\n---\n" +
 		toolport.LinkEnrichmentHeader + "\n\npage dump\n---"
 	loader := &fakeTranscriptLoader{
@@ -475,7 +475,7 @@ func TestSessionsTranscript_HidesToolMachineryAndEnrichment(t *testing.T) {
 	}
 }
 
-func TestSessionsTranscript_LimitClamp(t *testing.T) {
+func TestSessionsTranscriptClampsLimitToBoundaryMax(t *testing.T) {
 	var seenLimit int
 	loader := &fakeTranscriptLoader{
 		loadFn: func(_ string, limit int) ([]toolport.ChatMessage, int, error) {
@@ -503,7 +503,7 @@ func TestSessionsTranscript_MissingKey(t *testing.T) {
 	}
 }
 
-func TestSessionsTranscript_RequiresAuth(t *testing.T) {
+func TestSessionsTranscriptRejectsUnauthenticatedContext(t *testing.T) {
 	h := sessionsTranscript(transcriptDeps(&fakeTranscriptLoader{}))
 	resp := h(context.Background(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
 		"sessionKey": "k",

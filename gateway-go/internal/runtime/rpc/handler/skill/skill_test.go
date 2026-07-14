@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestBuildCoreToolCatalog(t *testing.T) {
+func TestBuildCoreToolCatalogReturnsGroupsWithCompleteToolFields(t *testing.T) {
 	groups := buildCoreToolCatalog()
 	if len(groups) == 0 {
 		t.Fatal("expected non-empty catalog groups")
@@ -41,7 +41,7 @@ func TestBuildCoreToolCatalog(t *testing.T) {
 	}
 }
 
-func TestBuildCoreToolCatalog_KnownGroups(t *testing.T) {
+func TestBuildCoreToolCatalog_LeavesNoKnownGroupMissing(t *testing.T) {
 	groups := buildCoreToolCatalog()
 
 	expectedIDs := map[string]struct{}{
@@ -58,7 +58,7 @@ func TestBuildCoreToolCatalog_KnownGroups(t *testing.T) {
 	}
 }
 
-func TestBuildCoreToolCatalog_ToolProfiles(t *testing.T) {
+func TestBuildCoreToolCatalog_ReadToolReturnsCodingProfile(t *testing.T) {
 	groups := buildCoreToolCatalog()
 
 	for _, g := range groups {
@@ -80,7 +80,7 @@ func TestBuildCoreToolCatalog_ToolProfiles(t *testing.T) {
 	t.Error("tool 'read' not found in catalog")
 }
 
-func TestCatalogProfileOptions(t *testing.T) {
+func TestCatalogProfileOptionsPreserveExpectedOrderAndLabels(t *testing.T) {
 	if len(catalogProfileOptions) != 4 {
 		t.Fatalf("got %d, want 4 profile options", len(catalogProfileOptions))
 	}

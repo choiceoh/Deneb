@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
-func TestDealDeadlines(t *testing.T) {
+func TestDealDeadlinesDeduplicatesAndSkipsInvalidDates(t *testing.T) {
 	loc := time.UTC
 	recs := []wiki.DealRecord{
 		{Counterparty: "트라이브", DocType: "세금계산서", AmountRaw: "5,000,000원", DueDate: "2026-06-20"},

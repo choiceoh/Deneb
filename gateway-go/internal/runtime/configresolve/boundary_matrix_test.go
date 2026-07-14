@@ -190,7 +190,7 @@ func TestConvertRoutingConfigBoundaryMatrix(t *testing.T) {
 	}
 }
 
-func TestConvertRoutingConfigDoesNotAliasContainer(t *testing.T) {
+func TestConvertRoutingConfigPreservesOutputAfterInputMutation(t *testing.T) {
 	var input chatport.RoutingConfig
 	if err := json.Unmarshal([]byte(`{"enabled":true,"maxSimpleRunes":10}`), &input); err != nil {
 		t.Fatal(err)

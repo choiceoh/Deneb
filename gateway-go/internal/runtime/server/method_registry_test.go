@@ -216,7 +216,7 @@ var requiredMethods = []string{
 // TestMethodRegistry_RequiredMethodsRegistered verifies that all required RPC
 // methods are registered after server.New(). If this test fails, a method was
 // likely removed from method_registry.go without removing it from the handler.
-func TestMethodRegistry_RequiredMethodsRegistered(t *testing.T) {
+func TestMethodRegistryReturnsNoMissingRequiredMethods(t *testing.T) {
 	srv := testutil.Must(New(":0"))
 	registered := make(map[string]struct{})
 	for _, m := range srv.dispatcher.Methods() {
@@ -247,7 +247,7 @@ func TestMethodRegistry_RequiredMethodsRegistered(t *testing.T) {
 // showed every role as 미설정 while models.set was rejected as "not ready".
 // The role rows come from the registry (not provider config), so a populated
 // roles list proves the controller saw the session-phase registry.
-func TestMethodRegistry_ModelPickerSeesSessionState(t *testing.T) {
+func TestMethodRegistryModelsListReturnsPopulatedRoles(t *testing.T) {
 	srv := testutil.Must(New(":0"))
 	ctx := clientauth.WithContext(context.Background(), &clientauth.Identity{})
 	resp := srv.dispatcher.Dispatch(ctx, &protocol.RequestFrame{
@@ -271,7 +271,7 @@ func TestMethodRegistry_ModelPickerSeesSessionState(t *testing.T) {
 
 // TestWiringRules_HandlersDoNotImportHub enforces Rule 3: handler packages
 // must not import rpcutil.GatewayHub. Scans Go source files for violations.
-func TestWiringRules_HandlersDoNotImportHub(t *testing.T) {
+func TestWiringRulesFailsWhenHandlerImportsHub(t *testing.T) {
 	handlerDir := filepath.Join("..", "rpc", "handler")
 	err := filepath.Walk(handlerDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".go") {
@@ -292,7 +292,7 @@ func TestWiringRules_HandlersDoNotImportHub(t *testing.T) {
 }
 
 // TestWiringRules_ValidateHub verifies that Validate() catches missing required fields.
-func TestWiringRules_ValidateHub(t *testing.T) {
+func TestWiringRulesValidateHubReturnsErrorForEmptyHub(t *testing.T) {
 	// Empty hub (via zero-value config) should fail validation.
 	hub := rpcutil.NewGatewayHub(rpcutil.HubConfig{})
 	if err := hub.Validate(); err == nil {
@@ -301,7 +301,7 @@ func TestWiringRules_ValidateHub(t *testing.T) {
 }
 
 // TestWiringRules_PhaseOrdering verifies that AdvancePhase panics on out-of-order calls.
-func TestWiringRules_PhaseOrdering(t *testing.T) {
+func TestWiringRulesPhaseOrderingPanicsWhenOutOfOrder(t *testing.T) {
 	hub := rpcutil.NewGatewayHub(rpcutil.HubConfig{})
 
 	// Skipping PhaseEarly and jumping to PhaseSession should panic.

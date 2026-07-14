@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestExtractCardTitle(t *testing.T) {
+func TestExtractCardTitleParsesHeadingFormats(t *testing.T) {
 	cases := []struct {
 		name    string
 		content string
@@ -32,12 +32,13 @@ func TestExtractCardTitle(t *testing.T) {
 	}
 }
 
-// TestExtractCardTitle_MailSubject covers the feed-card rule that a generic
-// "메일 분석 리포트/보고" heading (redundant with the 📬 card icon) is replaced by
-// the email's actual subject pulled from the body — a 제목 table row, a specific
-// sub-heading, or a bold subject line — while report scaffolding (메일 개요, 발신,
-// 중요도, …) and batch/daily summaries are left alone.
-func TestExtractCardTitle_MailSubject(t *testing.T) {
+// TestExtractCardTitle_ParsesMailSubjectFromScaffolding covers the feed-card
+// rule that a generic "메일 분석 리포트/보고" heading (redundant with the 📬 card
+// icon) is replaced by the email's actual subject pulled from the body — a
+// 제목 table row, a specific sub-heading, or a bold subject line — while
+// report scaffolding (메일 개요, 발신, 중요도, …) and batch/daily summaries are
+// left alone.
+func TestExtractCardTitle_ParsesMailSubjectFromScaffolding(t *testing.T) {
 	cases := []struct {
 		name      string
 		content   string
@@ -97,7 +98,7 @@ func TestExtractCardTitle_MailSubject(t *testing.T) {
 	}
 }
 
-func TestExtractCardTitle_ClipsLong(t *testing.T) {
+func TestExtractCardTitle_TruncatesLongHeading(t *testing.T) {
 	long := "## " + strings.Repeat("가", 60)
 	got, _ := extractCardTitle(long)
 	if n := len([]rune(got)); n != 43 { // 40 runes + "..."
@@ -108,7 +109,7 @@ func TestExtractCardTitle_ClipsLong(t *testing.T) {
 	}
 }
 
-func TestTightenMailSubject(t *testing.T) {
+func TestTightenMailSubjectNormalizesReplyAndFillerNoise(t *testing.T) {
 	cases := map[string]string{
 		"Re: 가견적서 재송부":         "가견적서 재송부",         // reply prefix
 		"RE: FW: 과업지시서":        "과업지시서",            // repeated reply/forward prefixes
@@ -136,10 +137,11 @@ func TestTightenMailSubject(t *testing.T) {
 	}
 }
 
-// TestExtractCardTitle_AnalysisLabelPrefix covers the "📧 메일 분석: <subject>" form
-// (a generic label with the subject inline after the colon) — observed in real feed
-// titles. The label is dropped and the subject leads, tightened and ≤20 runes.
-func TestExtractCardTitle_AnalysisLabelPrefix(t *testing.T) {
+// TestExtractCardTitle_ParsesSubjectAfterAnalysisLabel covers the "📧 메일 분석:
+// <subject>" form (a generic label with the subject inline after the colon)
+// — observed in real feed titles. The label is dropped and the subject
+// leads, tightened and ≤20 runes.
+func TestExtractCardTitle_ParsesSubjectAfterAnalysisLabel(t *testing.T) {
 	cases := []struct {
 		name    string
 		content string
@@ -177,7 +179,7 @@ func TestExtractCardTitle_AnalysisLabelPrefix(t *testing.T) {
 	}
 }
 
-func TestClipRunesWord(t *testing.T) {
+func TestClipRunesWordTruncatesAtWordBoundary(t *testing.T) {
 	// Within the limit: returned unchanged, no ellipsis.
 	if got := clipRunesWord("짧은 제목", 20); got != "짧은 제목" {
 		t.Errorf("clipRunesWord short = %q, want unchanged", got)
@@ -193,7 +195,7 @@ func TestClipRunesWord(t *testing.T) {
 	}
 }
 
-func TestExtractCardSummary(t *testing.T) {
+func TestExtractCardSummaryParsesBodyStrippingMarkup(t *testing.T) {
 	cases := []struct {
 		name       string
 		content    string
@@ -243,7 +245,7 @@ func TestExtractCardSummary(t *testing.T) {
 	}
 }
 
-func TestExtractCardSummary_FallsBackToTitleLine(t *testing.T) {
+func TestExtractCardSummary_FallbackToTitleLine(t *testing.T) {
 	content := "### 분석 결과"
 	_, srcLine := extractCardTitle(content)
 	if got := extractCardSummary(content, srcLine); got != "분석 결과" {
@@ -251,7 +253,7 @@ func TestExtractCardSummary_FallsBackToTitleLine(t *testing.T) {
 	}
 }
 
-func TestExtractCardSummary_SkipsTableSeparator(t *testing.T) {
+func TestExtractCardSummary_IgnoresTableSeparatorMarkup(t *testing.T) {
 	content := "## 비교\n\n| 구분 | 값 |\n|---|---|\n| A | 1 |"
 	_, srcLine := extractCardTitle(content)
 	got := extractCardSummary(content, srcLine)
@@ -263,7 +265,7 @@ func TestExtractCardSummary_SkipsTableSeparator(t *testing.T) {
 	}
 }
 
-func TestStripMarkdownLine(t *testing.T) {
+func TestStripMarkdownLineNormalizesMarkupToPlainText(t *testing.T) {
 	cases := map[string]string{
 		"## 📧 메일":        "📧 메일",
 		"- **발신**: Fred": "발신: Fred",
@@ -281,7 +283,7 @@ func TestStripMarkdownLine(t *testing.T) {
 	}
 }
 
-func TestIsHorizontalRule(t *testing.T) {
+func TestIsHorizontalRuleBoundaryCases(t *testing.T) {
 	for _, s := range []string{"---", "***", "___", "===", "------"} {
 		if !isHorizontalRule(s) {
 			t.Errorf("isHorizontalRule(%q) = false, want true", s)
@@ -294,7 +296,7 @@ func TestIsHorizontalRule(t *testing.T) {
 	}
 }
 
-func TestIsTableSeparator(t *testing.T) {
+func TestIsTableSeparatorBoundaryCases(t *testing.T) {
 	for _, s := range []string{"|---|---|", "| --- | :--: |", "|:--|"} {
 		if !isTableSeparator(s) {
 			t.Errorf("isTableSeparator(%q) = false, want true", s)
@@ -307,7 +309,7 @@ func TestIsTableSeparator(t *testing.T) {
 	}
 }
 
-func TestSubstantiveText(t *testing.T) {
+func TestSubstantiveTextNormalizesToHangulOnly(t *testing.T) {
 	// Markers, emoji, and whitespace removed; Hangul preserved.
 	if got := substantiveText("## 📧 알림\n\n- 변경 없음\n---"); got != "알림변경없음" {
 		t.Errorf("substantiveText = %q, want 알림변경없음", got)
@@ -317,7 +319,7 @@ func TestSubstantiveText(t *testing.T) {
 	}
 }
 
-func TestClipRunes(t *testing.T) {
+func TestClipRunesTruncatesWithEllipsis(t *testing.T) {
 	if got := clipRunes("짧음", 10); got != "짧음" {
 		t.Errorf("clipRunes short = %q, want 짧음", got)
 	}

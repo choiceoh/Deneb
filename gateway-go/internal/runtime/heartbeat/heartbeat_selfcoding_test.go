@@ -22,7 +22,7 @@ func selfCodingTask(t *testing.T, count int, fingerprint string) *heartbeatTask 
 // Pending proposed candidates fire the review nudge; an unchanged pending set
 // stays quiet within the retry window (a failing turn must not re-pay a cloud
 // turn every 30 minutes) but re-fires past it; a CHANGED set fires immediately.
-func TestDetectSelfCodingNudge_FireThrottleRefire(t *testing.T) {
+func TestDetectSelfCodingNudgeFiresThenExpiresThrottle(t *testing.T) {
 	task := selfCodingTask(t, 2, "2:sc-a:100")
 	now := time.Now()
 
@@ -85,7 +85,7 @@ func TestDetectSelfCodingNudge_EscalatesAfterIgnoredNudges(t *testing.T) {
 	}
 }
 
-func TestDetectSelfCodingNudge_QuietPaths(t *testing.T) {
+func TestDetectSelfCodingNudgeNilCounterAndEmptyQueueStayQuiet(t *testing.T) {
 	// No counter wired (tracker absent) → lane disabled.
 	bare := &heartbeatTask{homeDir: t.TempDir(), logger: slog.Default()}
 	if got := bare.detectSelfCodingNudge(time.Now()); got != "" {
@@ -101,7 +101,7 @@ func TestDetectSelfCodingNudge_QuietPaths(t *testing.T) {
 
 // The self-coding nudge alone must warrant a turn and sit between the user's
 // own checks and the research lane in the composed body.
-func TestComposeHeartbeatBody_SelfCodingLane(t *testing.T) {
+func TestComposeHeartbeatBodySelfCodingLaneFormatsSectionOrder(t *testing.T) {
 	body := composeHeartbeatBody("", "", "[자가코딩 제안 검토] 2건", "", "")
 	if !strings.Contains(body, "[자가코딩 제안 검토] 2건") || !strings.Contains(body, "등록된 작업은 없습니다") {
 		t.Errorf("selfcoding-only body wrong:\n%s", body)

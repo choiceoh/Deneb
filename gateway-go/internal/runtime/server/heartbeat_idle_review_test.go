@@ -15,7 +15,7 @@ import (
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 )
 
-func TestIdleReviewDue_Pacing(t *testing.T) {
+func TestIdleReviewDueReturnsTrueWhenStaleOrNeverReviewed(t *testing.T) {
 	now := time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC)
 	staleAfter := 6 * time.Hour
 	retryGap := 2 * time.Hour
@@ -49,7 +49,7 @@ func TestIdleReviewDue_Pacing(t *testing.T) {
 	}
 }
 
-func TestIdleReviewableSessionKey(t *testing.T) {
+func TestIdleReviewableSessionKeyReturnsTrueOnlyForUserSessions(t *testing.T) {
 	cases := map[string]bool{
 		"client:main":                      true,
 		"client:main:abc123":               true,
@@ -67,7 +67,7 @@ func TestIdleReviewableSessionKey(t *testing.T) {
 	}
 }
 
-func TestRecentRealSessionKeys_FilterAndOrder(t *testing.T) {
+func TestRecentRealSessionKeysReturnsNewestFilteredKeys(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name string, age time.Duration) {
 		p := filepath.Join(dir, name)
@@ -115,7 +115,7 @@ func TestIdleSkillReviewLane_QuietWithoutGenesis(t *testing.T) {
 	}
 }
 
-func TestIdleReviewStaleAfterFromEnv(t *testing.T) {
+func TestIdleReviewStaleAfterFromEnvParsesOrFallsBackToDefault(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	t.Setenv("DENEB_SKILL_IDLE_REVIEW_AFTER", "")
 	if d := idleReviewStaleAfterFromEnv(logger); d != defaultIdleReviewStaleAfter {
@@ -140,7 +140,7 @@ func TestIdleReviewStaleAfterFromEnv(t *testing.T) {
 // "nothing to do" early-return — so an otherwise empty tick still feeds the
 // review loop. chatHandler only needs to be non-nil here: with no
 // HEARTBEAT.md, no signals, and no nudges the tick returns before any turn.
-func TestHeartbeatRun_ReachesIdleReviewLane(t *testing.T) {
+func TestHeartbeatRunReachesIdleReviewLaneBeforeEarlyReturn(t *testing.T) {
 	called := false
 	kst, err := time.LoadLocation("Asia/Seoul")
 	if err != nil {
@@ -167,7 +167,7 @@ func TestHeartbeatRun_ReachesIdleReviewLane(t *testing.T) {
 // TestIdleSkillReviewLane_ProductionGate proves the wiring-level invariant: a
 // non-production state dir (dev/live-test) gets a nil lane — it must never
 // run live reviews into production Propus state.
-func TestIdleSkillReviewLane_ProductionGate(t *testing.T) {
+func TestIdleSkillReviewLaneReturnsNilForNonProductionStateDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	srv := &Server{ServerRuntime: &ServerRuntime{}, GenesisSubsystem: &GenesisSubsystem{}}

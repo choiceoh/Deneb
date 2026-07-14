@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/observatory"
 )
 
-func TestWatchdogAlerts(t *testing.T) {
+func TestWatchdogAlertsReturnsAlertsForStaleLoopsAndFailureSpikes(t *testing.T) {
 	rep := observatory.Report{
 		Liveness: []observatory.LoopStatus{
 			{Name: "dreamer", AgeHours: 60, Fresh: false},    // stale → alert
@@ -47,7 +47,7 @@ func TestWatchdogAlerts(t *testing.T) {
 	}
 }
 
-func TestWatchdogAlerts_AllHealthy(t *testing.T) {
+func TestWatchdogAlertsReturnsEmptyForHealthySnapshot(t *testing.T) {
 	rep := observatory.Report{
 		Liveness: []observatory.LoopStatus{{Name: "dreamer", AgeHours: 2, Fresh: true}},
 		Failures: []observatory.FailureCount{{Pattern: "x", Count: 1}},

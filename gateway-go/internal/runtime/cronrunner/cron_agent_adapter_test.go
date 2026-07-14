@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-// TestStripCardPreamble locks the deneb-ui card contract: at most one short
+// TestStripCardPreambleNormalizesLeakedNarration locks the deneb-ui card contract: at most one short
 // greeting line may precede the ```deneb-ui fence. The multi-line leak case is
 // the real 2026-07-08 morning-letter incident (a truncated tool payload pushed
 // the model to narrate its workaround + dump its notes ahead of the card).
-func TestStripCardPreamble(t *testing.T) {
+func TestStripCardPreambleNormalizesLeakedNarration(t *testing.T) {
 	// Card body plus a closing paragraph and the (intentional) model tag — all
 	// of which live AFTER the fence and must survive untouched.
 	const card = "```deneb-ui\n<column><text style=\"headline\">7월 8일 수요일</text></column>\n```\n\n**오늘 핵심:** 강진 신다산 계약이 가장 급합니다.\n\nglm-5.2"

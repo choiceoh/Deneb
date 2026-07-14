@@ -18,7 +18,7 @@ func writeResolveConfig(t *testing.T, body string) *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-func TestDefaultModelConfigFileMatrix(t *testing.T) {
+func TestDefaultModelParsesConfigFileMatrix(t *testing.T) {
 	tests := []struct {
 		name string
 		body string
@@ -170,7 +170,7 @@ func TestDefaultModelConfigFileMatrix(t *testing.T) {
 	}
 }
 
-func TestRoleModelConfigFileMatrix(t *testing.T) {
+func TestRoleModelParsesConfigFileMatrix(t *testing.T) {
 	tests := []struct {
 		name string
 		kind string
@@ -443,7 +443,7 @@ func TestRoleModelConfigFileMatrix(t *testing.T) {
 	}
 }
 
-func TestSubagentModelConfigFileMatrix(t *testing.T) {
+func TestSubagentModelParsesConfigFileMatrix(t *testing.T) {
 	tests := []struct {
 		name string
 		body string
@@ -550,7 +550,7 @@ func TestSubagentModelConfigFileMatrix(t *testing.T) {
 	}
 }
 
-func TestLocalVLLMModelConfigFileMatrix(t *testing.T) {
+func TestLocalVLLMModelParsesConfigFileMatrix(t *testing.T) {
 	tests := []struct {
 		name string
 		body string
@@ -642,7 +642,7 @@ func TestLocalVLLMModelConfigFileMatrix(t *testing.T) {
 	}
 }
 
-func TestProactiveThresholdConfigFileMatrix(t *testing.T) {
+func TestProactiveThresholdParsesConfigFileMatrix(t *testing.T) {
 	tests := []struct {
 		name string
 		body string
@@ -739,7 +739,7 @@ func TestProactiveThresholdConfigFileMatrix(t *testing.T) {
 	}
 }
 
-func TestSessionThinkingConfigFileMatrix(t *testing.T) {
+func TestSessionThinkingParsesConfigFileMatrix(t *testing.T) {
 	tests := []struct {
 		name            string
 		body            string

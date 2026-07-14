@@ -14,7 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
 
-func TestRecordFixturePagingBoundsAndDeepMatch(t *testing.T) {
+func TestRecordFixturePagingBoundsRejectsInvalidQueries(t *testing.T) {
 	now := time.Date(2031, time.January, 2, 3, 4, 5, 0, time.UTC)
 	world := &World{
 		clock: NewManualClock(now), visible: make(map[string]Record),

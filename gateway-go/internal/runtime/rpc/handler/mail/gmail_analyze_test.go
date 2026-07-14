@@ -30,7 +30,7 @@ func analyzeDeps(client GmailClient, pipeline AnalyzePipeline) GmailAnalyzeDeps 
 	}
 }
 
-func TestGmailAnalyze_HappyPath(t *testing.T) {
+func TestGmailAnalyzeReturnsSubjectAnalysisAndDuration(t *testing.T) {
 	var seenID string
 	gmailClient := &fakeGmailClient{
 		getMessageFn: func(_ context.Context, id string) (*gmail.MessageDetail, error) {
@@ -72,7 +72,7 @@ func TestGmailAnalyze_HappyPath(t *testing.T) {
 	}
 }
 
-func TestGmailAnalyze_RecordsWorkflowState(t *testing.T) {
+func TestGmailAnalyzeUpdatesWorkStateOnSuccess(t *testing.T) {
 	store := mailwork.New(t.TempDir() + "/mail_work_state.json")
 	gmailClient := &fakeGmailClient{
 		getMessageFn: func(_ context.Context, id string) (*gmail.MessageDetail, error) {
@@ -114,7 +114,7 @@ func TestGmailAnalyze_MissingID(t *testing.T) {
 	}
 }
 
-func TestGmailAnalyze_RequiresAuth(t *testing.T) {
+func TestGmailAnalyzeRejectsUnauthenticatedRequest(t *testing.T) {
 	h := gmailAnalyze(analyzeDeps(&fakeGmailClient{}, &fakeAnalyzePipeline{}))
 	resp := h(context.Background(), reqWith(t, "miniapp.gmail.analyze", map[string]any{"id": "m1"}))
 	if resp.OK {
@@ -125,7 +125,7 @@ func TestGmailAnalyze_RequiresAuth(t *testing.T) {
 	}
 }
 
-func TestGmailAnalyze_GmailGetNotFound(t *testing.T) {
+func TestGmailAnalyzeReturnsNotFoundWhenMessageMissing(t *testing.T) {
 	gmailClient := &fakeGmailClient{
 		getMessageFn: func(_ context.Context, _ string) (*gmail.MessageDetail, error) {
 			return nil, errors.New("HTTP 404: Not Found")
@@ -212,9 +212,9 @@ func TestGmailAnalyze_EmptyAnalysisIsRejected(t *testing.T) {
 // --- cache + wiki sink coverage --------------------------------------------
 //
 // CacheMiss + CacheHit + Force are covered further down by
-// TestGmailAnalyze_CacheMiss_RunsLLMAndPersists,
-// TestGmailAnalyze_CacheHit_SkipsLLMAndWiki, and
-// TestGmailAnalyze_Force_BypassesCache. The wiki-failure-is-non-fatal
+// TestGmailAnalyzeCacheMissRunsPipelineAndSavesResult,
+// TestGmailAnalyzeCacheHitReturnsWithoutCallingPipelineOrWiki, and
+// TestGmailAnalyzeForceParamBypassesCacheAndUpdatesStoredResult. The wiki-failure-is-non-fatal
 // contract has no sibling assertion, so it lives here.
 
 // TestGmailAnalyze_WikiSinkFailure_NonFatal: if the wiki sink returns an
@@ -258,7 +258,7 @@ func TestGmailAnalyze_PipelineFactoryError(t *testing.T) {
 // returning errors from both factories — if the handler reaches them, the
 // test fails. Also confirms the wiki sink is NOT invoked on a hit (we don't
 // want to re-write the wiki page every time the operator reopens the mail).
-func TestGmailAnalyze_CacheHit_SkipsLLMAndWiki(t *testing.T) {
+func TestGmailAnalyzeCacheHitReturnsWithoutCallingPipelineOrWiki(t *testing.T) {
 	cacheDir := t.TempDir()
 	cache := NewAnalysisStore(cacheDir)
 	if err := cache.save(&analysisRecord{
@@ -311,7 +311,7 @@ func TestGmailAnalyze_CacheHit_SkipsLLMAndWiki(t *testing.T) {
 // "위키 갱신 제안" block — must render without it. Both Mini App read paths scrub
 // the block (mailanalysis.StripWikiFactsBlock) so the operator's card stays clean
 // without forcing a re-analysis. Fresh analyses no longer carry the block at all.
-func TestGmailAnalyze_StripsLegacyWikiFactsBlockFromCache(t *testing.T) {
+func TestGmailAnalyzeAndAnalysisCachedClearLegacyWikiFactsBlock(t *testing.T) {
 	const prose = "## 저장된 분석\n핵심 요청은 견적 회신."
 	legacy := prose + "\n\n📝 위키 갱신 제안 (자동 추출):\n- **ABC상사** (deal): NDA 70%"
 
@@ -355,7 +355,7 @@ func TestGmailAnalyze_StripsLegacyWikiFactsBlockFromCache(t *testing.T) {
 }
 
 // Cache miss → LLM runs → result persisted to both cache and wiki.
-func TestGmailAnalyze_CacheMiss_RunsLLMAndPersists(t *testing.T) {
+func TestGmailAnalyzeCacheMissRunsPipelineAndSavesResult(t *testing.T) {
 	cache := NewAnalysisStore(t.TempDir())
 
 	pipelineCalls := 0
@@ -410,7 +410,7 @@ func TestGmailAnalyze_CacheMiss_RunsLLMAndPersists(t *testing.T) {
 
 // force=true must bypass the cache and re-run the LLM, replacing the
 // stored copy with the fresh result.
-func TestGmailAnalyze_Force_BypassesCache(t *testing.T) {
+func TestGmailAnalyzeForceParamBypassesCacheAndUpdatesStoredResult(t *testing.T) {
 	cache := NewAnalysisStore(t.TempDir())
 	if err := cache.save(&analysisRecord{
 		MsgID:         "m3",
@@ -462,7 +462,7 @@ func TestGmailAnalyzeMethods_MissingDepsReturnsNil(t *testing.T) {
 	}
 }
 
-func TestPipelineFromMailAnalysis_NoLLM(t *testing.T) {
+func TestPipelineFromMailAnalysisReturnsErrorWhenLLMClientNil(t *testing.T) {
 	_, err := PipelineFromMailAnalysis(nil, nil, nil, "", "", "", nil, nil, nil, nil)
 	if !errors.Is(err, ErrAnalyzeNoLLM) {
 		t.Errorf("err = %v, want ErrAnalyzeNoLLM", err)

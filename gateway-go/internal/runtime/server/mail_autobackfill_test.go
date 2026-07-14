@@ -9,7 +9,7 @@ import (
 // autoBackfillEnabled gates the one-shot historical-mail seeding: on by default,
 // but off without archive creds, off when DENEB_MAIL_AUTOBACKFILL=0, and off once
 // a completed-pass marker exists (so it runs exactly once, not every boot).
-func TestAutoBackfillEnabled(t *testing.T) {
+func TestAutoBackfillEnabledReturnsTrueOnlyWhenCredsPresentAndUnmarked(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), mailAutoBackfillMarker)
 
 	t.Run("runs when no marker + creds present", func(t *testing.T) {

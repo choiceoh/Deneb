@@ -12,7 +12,7 @@ import (
 // were dsv4 (dual-mode reasoning) spending the whole 4096-token synthesis
 // budget on chain-of-thought because the dreamer's raw client calls carried
 // no thinking-off kwarg.
-func TestDreamerLLMShape(t *testing.T) {
+func TestDreamerLLMShapeReturnsToggleAndBudgetByModel(t *testing.T) {
 	shape := func(lightweight string) (map[string]any, int) {
 		t.Helper()
 		reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{

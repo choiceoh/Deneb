@@ -18,7 +18,7 @@ func (f *fakePromptTuner) RunWithReport(context.Context) compactuner.Report {
 	return f.report
 }
 
-func TestPromptTunerRun(t *testing.T) {
+func TestPromptTunerRunReturnsReportForCompactionTarget(t *testing.T) {
 	tuner := &fakePromptTuner{report: compactuner.Report{
 		Ran:           true,
 		Changed:       true,
@@ -46,7 +46,7 @@ func TestPromptTunerRun(t *testing.T) {
 	}
 }
 
-func TestPromptTunerRun_DefaultTarget(t *testing.T) {
+func TestPromptTunerRunDefaultsTargetToCompactionWhenOmitted(t *testing.T) {
 	tuner := &fakePromptTuner{report: compactuner.Report{Reason: "too_few_summaries"}}
 	methods := PromptTunerMethods(PromptTunerDeps{Tuner: func() PromptTuner { return tuner }})
 

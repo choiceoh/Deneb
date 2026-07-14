@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calprop"
 )
 
-func TestProposalEventSource(t *testing.T) {
+func TestProposalEventSourceReturnsPrefixBeforePipe(t *testing.T) {
 	cases := map[string]string{
 		"mail:abc123|킥오프 미팅":   "mail:abc123",
 		"mail:abc123|deal-due": "mail:abc123",
@@ -22,7 +22,7 @@ func TestProposalEventSource(t *testing.T) {
 	}
 }
 
-func TestProposalTimes_AllDayDateStable(t *testing.T) {
+func TestProposalTimesAllDayPreservesDateAtNoon(t *testing.T) {
 	// A local-midnight all-day instant serializes with a TZ offset that can roll
 	// to the prior day in UTC; noon-anchoring keeps the date stable. Regression
 	// for a 6/20 proposal that created a 6/19 event.
@@ -45,7 +45,7 @@ func TestProposalTimes_AllDayDateStable(t *testing.T) {
 	}
 }
 
-func TestProposalTimes_Timed(t *testing.T) {
+func TestProposalTimesTimedReturnsOneHourDuration(t *testing.T) {
 	p := &calprop.Proposal{Start: "2026-06-20T14:00:00+09:00", AllDay: false}
 	start, end, allDay, err := proposalTimes(p)
 	if err != nil {

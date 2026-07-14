@@ -52,7 +52,7 @@ func TestCollectBaseHealthPreservesRequiredContract(t *testing.T) {
 	}
 }
 
-func TestPropusHealthCompatibilityAliasSharesSnapshot(t *testing.T) {
+func TestPropusHealthAliasesReturnSameSnapshot(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // same isolation — New() touches the HOME cron store
 	srv := testutil.Must(New(":0"))
 	srv.GenesisSubsystem = &GenesisSubsystem{}

@@ -10,14 +10,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 )
 
-// TestProviderCatalog_ExpandsEnvRefs pins the ${ENV} expansion contract for the
+// TestProviderCatalogLoadsExpandedEnvRefs pins the ${ENV} expansion contract for the
 // registry path: deneb.json keeps provider secrets as ${VAR} references, the
 // chat path expands them at call time (run_provider.go), but registry consumers
 // (buildClient → llm.NewClient) never expand — so providerCatalog must hand the
 // registry RESOLVED values. Regression guard for the wormhole-fronted kimi
 // setup where the literal "${WORMHOLE_TOKEN}" was sent as the bearer token and,
 // being non-empty, also suppressed the kimi OAuth-token fallback in buildClient.
-func TestProviderCatalog_ExpandsEnvRefs(t *testing.T) {
+func TestProviderCatalogLoadsExpandedEnvRefs(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	writeConfig := func(t *testing.T) {
 		t.Helper()

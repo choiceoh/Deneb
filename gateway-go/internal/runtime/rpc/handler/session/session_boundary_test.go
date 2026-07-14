@@ -53,7 +53,7 @@ func (s *execChatStub) SessionsAbort(_ context.Context, req *protocol.RequestFra
 	return rpcutil.RespondOK(req.ID, map[string]bool{"ok": true})
 }
 
-func TestMethodsAndCRUDMethodsExposeStableSurfaces(t *testing.T) {
+func TestMethodsAndCRUDMethodsReturnStableSurfaces(t *testing.T) {
 	methods := Methods(Deps{})
 	wantMethods := []string{"sessions.patch", "sessions.reset", "sessions.overflow_check"}
 	for _, name := range wantMethods {
@@ -311,7 +311,7 @@ func (r *transcriptRecorder) keys() []string {
 	return append([]string(nil), r.deleted...)
 }
 
-func TestSessionsCRUDListGetValidationAndCopies(t *testing.T) {
+func TestSessionsListAndGetReturnRecordsAndRejectInvalidKeys(t *testing.T) {
 	mgr := runtimesession.NewManager()
 	mgr.Create("b", runtimesession.KindGroup)
 	mgr.Create("a", runtimesession.KindDirect)
@@ -476,7 +476,7 @@ func TestAgentWaitAsyncCompletionCancellationAndIgnoreCached(t *testing.T) {
 	}
 }
 
-func TestMinMaxHelpersHandleOrderingEqualityAndNaNLikeBoundaries(t *testing.T) {
+func TestMinMaxHelpersReturnSmallerOrLargerValueRespectively(t *testing.T) {
 	if minf(1, 2) != 1 || minf(2, 1) != 1 || minf(1, 1) != 1 || minf(-2, -1) != -2 {
 		t.Fatal("minf ordering incorrect")
 	}

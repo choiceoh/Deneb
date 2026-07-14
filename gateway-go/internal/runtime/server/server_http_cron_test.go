@@ -83,7 +83,7 @@ func TestHandleCronRun_UnknownName(t *testing.T) {
 	}
 }
 
-func TestHandleCronRun_Success(t *testing.T) {
+func TestHandleCronRunReturnsOKForMatchingJobName(t *testing.T) {
 	srv := testutil.Must(New(":0"))
 	svc := installCleanCronService(t, srv)
 	finished := make(chan cron.CronEvent, 1)
@@ -130,7 +130,7 @@ func TestHandleCronRun_Success(t *testing.T) {
 	}
 }
 
-func TestHandleCronRun_ServiceUnavailable(t *testing.T) {
+func TestHandleCronRunReturns503WhenCronServiceNil(t *testing.T) {
 	srv := testutil.Must(New(":0"))
 	srv.cronService = nil
 	mux := srv.buildMux()
@@ -153,7 +153,7 @@ func TestHandleCronRun_ServiceUnavailable(t *testing.T) {
 // TestHandleCronRun_CorruptStore guards PR #1630 review feedback: when
 // the cron store cannot be parsed, the handler must surface 500 rather
 // than translating the load failure into a misleading 404 "job not found".
-func TestHandleCronRun_CorruptStore(t *testing.T) {
+func TestHandleCronRunReturns500OnCorruptStore(t *testing.T) {
 	srv := testutil.Must(New(":0"))
 	storePath := filepath.Join(t.TempDir(), "jobs.json")
 	if err := os.WriteFile(storePath, []byte("{not valid json"), 0o600); err != nil {
@@ -181,7 +181,7 @@ func TestHandleCronRun_CorruptStore(t *testing.T) {
 	}
 }
 
-func TestHandleCronRun_NonLoopback(t *testing.T) {
+func TestHandleCronRunReturns403ForNonLoopbackCaller(t *testing.T) {
 	srv := testutil.Must(New(":0"))
 	mux := srv.buildMux()
 
@@ -198,7 +198,7 @@ func TestHandleCronRun_NonLoopback(t *testing.T) {
 	}
 }
 
-func TestIsLoopbackRemote(t *testing.T) {
+func TestIsLoopbackRemoteReturnsTrueOnlyForLocalAddresses(t *testing.T) {
 	cases := []struct {
 		addr string
 		want bool

@@ -36,7 +36,7 @@ func TestModelsList_WithIdentity(t *testing.T) {
 	}
 }
 
-func TestModelsList_NoIdentity(t *testing.T) {
+func TestModelsListReturnsUnauthorizedWithoutIdentity(t *testing.T) {
 	h := modelsList(ModelDeps{
 		ListModels: func(context.Context) ([]ModelSection, error) {
 			t.Fatal("ListModels should not be called without client identity")

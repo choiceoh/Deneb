@@ -119,7 +119,7 @@ func decode(t *testing.T, resp *protocol.ResponseFrame, dest any) {
 
 // --- list_recent ---------------------------------------------------------
 
-func TestGmailListRecent_DefaultsAndShape(t *testing.T) {
+func TestGmailListRecentReturnsDefaultQueryLimitAndRowShape(t *testing.T) {
 	var seenQuery string
 	var seenLimit int
 	client := &fakeGmailClient{
@@ -185,7 +185,7 @@ func TestGmailListRecent_NilLabelsSerializeAsEmptyArray(t *testing.T) {
 	}
 }
 
-func TestGmailListRecent_CleansHumanSnippet(t *testing.T) {
+func TestGmailListRecentClearsWarningNoiseFromSnippet(t *testing.T) {
 	client := &fakeGmailClient{
 		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
 			return []gmail.MessageSummary{{
@@ -217,7 +217,7 @@ func TestGmailListRecent_CleansHumanSnippet(t *testing.T) {
 	}
 }
 
-func TestGmailListRecent_PriorityFields(t *testing.T) {
+func TestGmailListRecentOmitsPriorityFieldsWhenScorerReturnsEmpty(t *testing.T) {
 	client := &fakeGmailClient{
 		searchFn: func(_ context.Context, _ string, _ int) ([]gmail.MessageSummary, error) {
 			return []gmail.MessageSummary{
@@ -256,7 +256,7 @@ func TestGmailListRecent_PriorityFields(t *testing.T) {
 // Layered priority: a cached LLM analysis verdict beats the heuristic —
 // urgent/attention render with the "분석 판정" hint, routine suppresses a
 // heuristic that would otherwise mark, and a cache miss falls back.
-func TestGmailListRecent_AnalysisVerdictLayering(t *testing.T) {
+func TestGmailListRecentCachedAnalysisOverridesHeuristicPriorityWithFallback(t *testing.T) {
 	store := NewAnalysisStore(t.TempDir())
 	mustSave := func(id, importance string, projects ...string) {
 		t.Helper()
@@ -350,7 +350,7 @@ func TestGmailListRecent_NilPriorityDep(t *testing.T) {
 	}
 }
 
-func TestGmailListRecent_RespectsCustomParams(t *testing.T) {
+func TestGmailListRecentSearchesWithCustomQueryAndLimit(t *testing.T) {
 	var seenQuery string
 	var seenLimit int
 	client := &fakeGmailClient{
@@ -445,7 +445,7 @@ func TestGmailListRecent_EmptyPageHopBudget(t *testing.T) {
 	}
 }
 
-func TestGmailListRecent_WorkFilterScansPastFirstBackendPage(t *testing.T) {
+func TestGmailListRecentWorkFilterScansMultipleBackendPagesForFailedAnalysis(t *testing.T) {
 	store := mailwork.New(t.TempDir() + "/mail_work_state.json")
 	if _, err := store.MarkAnalysisFailed(mailwork.MessageInput{ID: "m2"}, errors.New("provider down")); err != nil {
 		t.Fatalf("seed work state: %v", err)
@@ -575,7 +575,7 @@ func TestGmailListRecent_PageTokenRoundTrip(t *testing.T) {
 	}
 }
 
-func TestGmailListRecent_LimitClamp(t *testing.T) {
+func TestGmailListRecentNormalizesOversizedLimitToMaximum(t *testing.T) {
 	var seenLimit int
 	client := &fakeGmailClient{
 		searchFn: func(_ context.Context, _ string, n int) ([]gmail.MessageSummary, error) {
@@ -591,7 +591,7 @@ func TestGmailListRecent_LimitClamp(t *testing.T) {
 	}
 }
 
-func TestGmailListRecent_RequiresAuth(t *testing.T) {
+func TestGmailListRecentRejectsUnauthenticatedRequest(t *testing.T) {
 	h := gmailListRecent(depsFor(&fakeGmailClient{}), nil)
 	resp := h(context.Background(), reqWith(t, "miniapp.gmail.list_recent", nil))
 	if resp.OK {
@@ -602,7 +602,7 @@ func TestGmailListRecent_RequiresAuth(t *testing.T) {
 	}
 }
 
-func TestGmailListRecent_ClientUnavailable(t *testing.T) {
+func TestGmailListRecentReturnsUnavailableWhenClientFactoryFails(t *testing.T) {
 	deps := GmailDeps{
 		Client: func() (GmailClient, error) { return nil, errors.New("OAuth not configured") },
 	}
@@ -618,7 +618,7 @@ func TestGmailListRecent_ClientUnavailable(t *testing.T) {
 
 // --- get -----------------------------------------------------------------
 
-func TestGmailGet_HappyPath(t *testing.T) {
+func TestGmailGetReturnsBodyAttachmentsAndReadStatus(t *testing.T) {
 	client := &fakeGmailClient{
 		getMessageFn: func(_ context.Context, id string) (*gmail.MessageDetail, error) {
 			if id != "m1" {
@@ -748,7 +748,7 @@ func TestGmailGet_MissingID(t *testing.T) {
 	}
 }
 
-func TestGmailGet_NotFound(t *testing.T) {
+func TestGmailGetReturnsNotFoundForMissingMessage(t *testing.T) {
 	client := &fakeGmailClient{
 		getMessageFn: func(_ context.Context, _ string) (*gmail.MessageDetail, error) {
 			return nil, errors.New("HTTP 404: Not Found")
@@ -791,7 +791,7 @@ func TestGmailMarkRead_RemovesUnreadLabel(t *testing.T) {
 	}
 }
 
-func TestGmailArchive_RemovesInboxLabel(t *testing.T) {
+func TestGmailArchiveUpdatesLabelsByRemovingInbox(t *testing.T) {
 	var seenRemove []string
 	client := &fakeGmailClient{
 		modifyLabelsFn: func(_ context.Context, _ string, _, remove []string) error {
@@ -831,7 +831,7 @@ func TestGmailArchive_ModifyFails(t *testing.T) {
 
 // --- trash ---------------------------------------------------------------
 
-func TestGmailTrash_CallsClientTrash(t *testing.T) {
+func TestGmailTrashReturnsOkAfterCallingClientTrash(t *testing.T) {
 	var seenID string
 	client := &fakeGmailClient{
 		trashFn: func(_ context.Context, id string) error {
@@ -863,7 +863,7 @@ func TestGmailTrash_MissingID(t *testing.T) {
 	}
 }
 
-func TestGmailTrash_RequiresAuth(t *testing.T) {
+func TestGmailTrashRejectsUnauthenticatedRequest(t *testing.T) {
 	h := gmailTrash(depsFor(&fakeGmailClient{}), nil)
 	resp := h(context.Background(), reqWith(t, "miniapp.gmail.trash", map[string]any{"id": "m1"}))
 	if resp.OK {
@@ -931,7 +931,7 @@ func TestGmailMethods_NilClientReturnsNil(t *testing.T) {
 	}
 }
 
-func TestGmailMethods_RegistersAll(t *testing.T) {
+func TestGmailMethodsReturnsHandlersForAllExpectedRPCNames(t *testing.T) {
 	got := GmailMethods(depsFor(&fakeGmailClient{}))
 	for _, name := range []string{
 		"miniapp.gmail.list_recent",
@@ -947,7 +947,7 @@ func TestGmailMethods_RegistersAll(t *testing.T) {
 	}
 }
 
-func TestGmailNativeStatus_ArchiveClient(t *testing.T) {
+func TestGmailNativeStatusReturnsMailboxAndOverlayDetailsForArchiveClient(t *testing.T) {
 	h := gmailNativeStatus(depsFor(&fakeNativeStatusClient{
 		status: mailarchive.NativeStatus{
 			Source:         "archive",

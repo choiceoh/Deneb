@@ -24,7 +24,7 @@ func harvestTestMatcher(text string) string {
 // TestRecordAttendances pins the silent attendance pass: it records every
 // matched, ended meeting once — no ask cap, deduped across ticks — and never
 // touches personal/unmatched events.
-func TestRecordAttendances(t *testing.T) {
+func TestRecordAttendancesDeduplicatesAcrossTicks(t *testing.T) {
 	now := time.Date(2026, 7, 6, 14, 0, 0, 0, harvestKST)
 	mk := func(id, summary string, endedAgo time.Duration) calendar.Event {
 		end := now.Add(-endedAgo)
@@ -70,7 +70,7 @@ func TestRecordAttendances(t *testing.T) {
 // Recorded only AFTER the recorder returns, so a recorder that fails does not
 // permanently suppress the meeting. The recorder observes its own key as NOT
 // yet marked at call time.
-func TestRecordAttendancesRecordBeforeMark(t *testing.T) {
+func TestRecordAttendancesUpdatesStateAfterRecorder(t *testing.T) {
 	now := time.Date(2026, 7, 6, 14, 0, 0, 0, harvestKST)
 	end := now.Add(-30 * time.Minute)
 	ev := calendar.Event{
@@ -141,7 +141,7 @@ func TestRecordAttendancesRetryOnFailure(t *testing.T) {
 	}
 }
 
-func TestDecideHarvests(t *testing.T) {
+func TestDecideHarvestsRespectsBudgetAndQuietHoursBoundary(t *testing.T) {
 	now := time.Date(2026, 7, 6, 14, 0, 0, 0, harvestKST)
 	mk := func(id, summary string, endedAgo time.Duration) calendar.Event {
 		end := now.Add(-endedAgo)
@@ -231,7 +231,7 @@ func TestFormatHarvestAsk(t *testing.T) {
 // TestDecideHarvests_ReviewFindings pins the #3114 review fixes: declined
 // invites stay silent, organizer-only counterparties match, and attendee
 // email DOMAIN fragments never reach the matcher (local part only).
-func TestDecideHarvests_ReviewFindings(t *testing.T) {
+func TestDecideHarvestsDeniesDeclinedAndIgnoresEmailDomains(t *testing.T) {
 	now := time.Date(2026, 7, 6, 14, 0, 0, 0, harvestKST)
 	end := now.Add(-30 * time.Minute)
 
@@ -288,7 +288,7 @@ func TestDecideHarvests_ReviewFindings(t *testing.T) {
 // dominant pattern is "<회사> <이름> <직함>" with no meeting word, which the
 // job-title list must catch. Bare "<회사> <이름>" without any evidence stays
 // silent — documented gap, second-locked by the target matcher anyway.
-func TestIsMeetingShaped_RealCalendarSample(t *testing.T) {
+func TestIsMeetingShapedAllowsRealTitlesDeniesNonMeetings(t *testing.T) {
 	shaped := []string{
 		"프라임에너지 대표 미팅",
 		"6/25(목) 11시 LG 방문 (계약서 검토 및 현물 확인)",
@@ -320,7 +320,7 @@ func TestIsMeetingShaped_RealCalendarSample(t *testing.T) {
 // containment over projects+ledgers jointly — ambiguous tokens (당진 spans
 // three projects; lg spans a project and a ledger) resolve to nothing rather
 // than guessing.
-func TestLooseUniqueNameMatch(t *testing.T) {
+func TestLooseUniqueNameMatchReturnsEmptyForAmbiguousTokens(t *testing.T) {
 	names := harvestKnownNames(
 		[]wiki.ProjectRef{
 			{Name: "비금도-154kv-케이블-및-액세서리-(ztt)"},
@@ -373,7 +373,7 @@ func TestLooseUniqueNameMatch(t *testing.T) {
 	}
 }
 
-func TestHarvestStatePersistence(t *testing.T) {
+func TestHarvestStatePersistenceLoadsAfterRestart(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError + 4}))
 	statePath := filepath.Join(t.TempDir(), harvestStateFile)
 	deliver := func(string) (bool, error) { return true, nil }

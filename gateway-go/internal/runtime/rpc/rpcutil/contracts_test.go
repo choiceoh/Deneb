@@ -48,7 +48,7 @@ func completeHubConfig() HubConfig {
 	}
 }
 
-func TestGatewayHubConstructionAccessorsAndOptionalSetters(t *testing.T) {
+func TestGatewayHubAccessorsPreserveConfiguredDependencies(t *testing.T) {
 	cfg := completeHubConfig()
 	h := NewGatewayHub(cfg)
 	if h == nil || h.Phase() != PhaseInit {
@@ -111,7 +111,7 @@ func TestGatewayHubValidateReportsAllMissingDependencies(t *testing.T) {
 	}
 }
 
-func TestGatewayHubValidateEachRequiredDependency(t *testing.T) {
+func TestGatewayHubValidateReportsMissingDependencyIndividually(t *testing.T) {
 	tests := []struct {
 		name string
 		drop func(*HubConfig)
@@ -164,7 +164,7 @@ func toString(v any) string {
 	return ""
 }
 
-func TestGatewayHubPhaseOrdering(t *testing.T) {
+func TestGatewayHubAdvancePhaseRejectsOutOfOrderTransitions(t *testing.T) {
 	h := NewGatewayHub(completeHubConfig())
 	expectPanicContaining(t, "expected phase 1", func() { h.AdvancePhase(PhaseSession) })
 	expectPanicContaining(t, "expected phase 1", func() { h.AdvancePhase(PhaseInit) })
@@ -202,7 +202,7 @@ func (s *hubSubscriber) SendEvent(data []byte) error {
 	return nil
 }
 
-func TestGatewayHubBroadcastAndUnavailableGuard(t *testing.T) {
+func TestGatewayHubBroadcastDeliversOrReturnsErrorWhenUnavailable(t *testing.T) {
 	var nilHub *GatewayHub
 	if sent, errs := nilHub.Broadcast("event", nil); sent != 0 || len(errs) != 1 || !strings.Contains(errs[0].Error(), "not available") {
 		t.Fatalf("nil hub broadcast = %d/%v", sent, errs)

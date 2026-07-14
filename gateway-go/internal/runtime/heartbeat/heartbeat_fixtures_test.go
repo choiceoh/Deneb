@@ -59,7 +59,7 @@ func TestRecordHeartbeatFixture_ShapeAndTruncation(t *testing.T) {
 
 // The corpus is a rolling window: past cap+slack the file rewrites to the
 // newest cap entries, preserving append order.
-func TestRecordHeartbeatFixture_RollingPrune(t *testing.T) {
+func TestRecordHeartbeatFixtureRollingPrunePreservesOrder(t *testing.T) {
 	task := fixtureTask(t)
 	total := heartbeatFixtureCap + heartbeatFixturePruneSlack + 1
 	for i := 0; i < total; i++ {

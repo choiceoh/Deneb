@@ -98,7 +98,7 @@ func TestSubscribeReplacementAndNilContract(t *testing.T) {
 	}
 }
 
-func TestBroadcastFrameSequenceStateAndTargeting(t *testing.T) {
+func TestBroadcastEmitsSequencedFramesWithStateAndTargeting(t *testing.T) {
 	b := NewBroadcaster()
 	one := &mockSubscriber{id: "one", authed: true}
 	two := &mockSubscriber{id: "two", authed: true}
@@ -229,7 +229,7 @@ func (s *callbackSubscriber) SendEvent([]byte) error {
 	return nil
 }
 
-func TestSubscriberAndTapCallbacksMayReenterBroadcaster(t *testing.T) {
+func TestBroadcasterAllowsReentrantSubscriberAndTapCallbacks(t *testing.T) {
 	b := NewBroadcaster()
 	sub := &callbackSubscriber{id: "self"}
 	sub.callback = func() { b.Unsubscribe("self") }
@@ -285,7 +285,7 @@ func TestSessionAndToolRegistriesIgnoreEmptyKeysAndReturnCopies(t *testing.T) {
 	}
 }
 
-func TestUnsubscribeCleansEveryRegistryReference(t *testing.T) {
+func TestUnsubscribeClearsEveryRegistryReference(t *testing.T) {
 	b := NewBroadcaster()
 	b.Subscribe(&mockSubscriber{id: "gone", authed: true}, Filter{})
 	b.SubscribeSessionEvents("gone")
@@ -334,7 +334,7 @@ func TestRawBroadcastAuthFilterSlowAndSendFailure(t *testing.T) {
 	}
 }
 
-func TestPublisherSessionMessageEnrichmentAndRecipientScopes(t *testing.T) {
+func TestPublisherEmitsEnrichedSessionMessageToScopedRecipients(t *testing.T) {
 	b := NewBroadcaster()
 	global := &mockSubscriber{id: "global", authed: true}
 	specific := &mockSubscriber{id: "specific", authed: true}
@@ -386,7 +386,7 @@ func TestPublisherRejectsIncompleteSessionUpdates(t *testing.T) {
 	}
 }
 
-func TestPublisherSessionAgentEventNeverLeaksToOutsiders(t *testing.T) {
+func TestPublisherAgentEventBoundaryExcludesOutsiders(t *testing.T) {
 	b := NewBroadcaster()
 	member := &mockSubscriber{id: "member", authed: true}
 	outsider := &mockSubscriber{id: "outsider", authed: true}
@@ -413,7 +413,7 @@ func TestPublisherSessionAgentEventNeverLeaksToOutsiders(t *testing.T) {
 	}
 }
 
-func TestPublisherGlobalAgentSequencingCleanupAndConfig(t *testing.T) {
+func TestPublisherAgentSequenceClearsOnCleanupAndConfig(t *testing.T) {
 	b := NewBroadcaster()
 	sub := &mockSubscriber{id: "sub", authed: true}
 	b.Subscribe(sub, Filter{})
@@ -445,7 +445,7 @@ func quietEventsLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-func TestPublishSessionChangedOverridesAndSnapshotAbsence(t *testing.T) {
+func TestPublishSessionChangedOmitsSessionOnMissingSnapshot(t *testing.T) {
 	b := NewBroadcaster()
 	sub := &mockSubscriber{id: "sub", authed: true}
 	b.Subscribe(sub, Filter{})

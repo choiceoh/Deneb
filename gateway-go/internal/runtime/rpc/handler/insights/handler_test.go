@@ -24,7 +24,7 @@ func TestMethodsReturnsNilWhenEngineNil(t *testing.T) {
 	}
 }
 
-func TestInsightsGenerateDefaultsTo30Days(t *testing.T) {
+func TestInsightsGenerateReturnsThirtyDayDefaultWhenDaysOmitted(t *testing.T) {
 	eng := insights.New(&stubLister{}, nil)
 	methods := Methods(Deps{Engine: eng})
 	fn := methods["insights.generate"]
@@ -47,7 +47,7 @@ func TestInsightsGenerateDefaultsTo30Days(t *testing.T) {
 	}
 }
 
-func TestInsightsGenerateCustomDays(t *testing.T) {
+func TestInsightsGenerateReturnsRequestedDaysWhenProvided(t *testing.T) {
 	eng := insights.New(&stubLister{}, nil)
 	methods := Methods(Deps{Engine: eng})
 	fn := methods["insights.generate"]

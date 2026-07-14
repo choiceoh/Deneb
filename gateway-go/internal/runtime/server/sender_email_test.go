@@ -2,7 +2,7 @@ package server
 
 import "testing"
 
-func TestSenderEmailFromHeader(t *testing.T) {
+func TestSenderEmailFromHeaderReturnsAddressOrEmpty(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"김성훈 <akim@bohae.co.kr>", "akim@bohae.co.kr"},
 		{"\"Kim, Sung-hoon\" <sunghoon.kim@marsh.com>", "sunghoon.kim@marsh.com"},

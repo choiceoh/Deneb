@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 )
 
-func TestPostDreamWorkfeedCard(t *testing.T) {
+func TestPostDreamWorkfeedCardCreatesCardOnlyWhenPagesChange(t *testing.T) {
 	dir := t.TempDir()
 	s := &Server{
 		logger: slog.Default(),
