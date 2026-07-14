@@ -107,7 +107,7 @@ type PipelineDeps struct {
 	// they arrived in the message). nil → the attachment gate is skipped.
 	AttachmentBytesFn func(ctx context.Context, messageID, attachmentID string) ([]byte, error)
 
-	// ThinkingKwarg is the analysis model's chat_template_kwargs off-switch
+	// ThinkingKwarg is the stage-2 main-role model's chat_template_kwargs off-switch
 	// (modelcaps.ThinkingToggleKwarg, e.g. dsv4's "thinking"). Attached to the
 	// "disabled" thinking config so a dual-mode vLLM model actually stops
 	// reasoning instead of exhausting the token budget on a silent <think> block

@@ -323,7 +323,7 @@ func (s *Server) callPlaudTool(ctx context.Context, name string, args json.RawMe
 func (s *Server) completePlaudAnalysis(ctx context.Context, system, user string, maxTokens int) (string, error) {
 	client, model, _, _ := s.mailAnalysisModels()
 	if client == nil {
-		return "", errors.New("analysis model unavailable")
+		return "", errors.New("main-role model unavailable")
 	}
 	return client.Complete(ctx, plaudChatRequest(model, system, user, maxTokens))
 }

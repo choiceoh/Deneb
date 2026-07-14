@@ -21,7 +21,7 @@
 루스 파일(top-level)은 기능별 클러스터로 읽는다:
 - **`run_*`** — 한 에이전트 턴의 실행 파이프라인(↓ 흐름).
 - **`tool_*`** — 도구 실행 주변(분류/압축/캐시안정/사후처리/변이검증/skill consult).
-- **`recall_*` + `run_tail_inject.go`** — 회상 프리플라이트 → 마지막 user 메시지 꼬리 주입.
+- **`recall/` + `run_tail_inject.go`** — 회상 프리플라이트(`recall/recall_preflight.go` 등) → 마지막 user 메시지 꼬리 주입.
 - **`slash_*` + `*_dispatch.go`** — 슬래시 커맨드(`/help`·`/reset`·`/status`·`/kill`·`/goal`·`/rollback`·`/update`·`/restart`·`/weekly`).
 - 캐시 마커: `cache_breakpoints.go`·`tier1_cache.go`·`prompt_snapshot_persist.go`·`calendar_glance.go`.
 
@@ -35,7 +35,7 @@ startAsyncRun (run_start.go)        # 세션 확보, abort ctx, buildRunDeps, go
               ├ prepareContextAndPrompt (run_prepare.go)  # assembleMessages(압축 포함) + finalizePrompt
               ├ resolveModel / resolveClient (run_model.go, run_provider.go)  # 역할→모델, API 모드, 캐시 호환
               ├ wireStreamHooks (run_hooks.go)            # before/after tool, steer, trailing 캐시 훅
-              └ (도구 루프는 agentsys/agent 가 구동, 도구 실행은 ToolRegistry.Execute)
+              └ (도구 루프는 ai/agent 가 구동, 도구 실행은 ToolRegistry.Execute)
       └ handleRunSuccess / handleRunError (run_lifecycle.go)  # 라이프사이클 이벤트, 실패 분류, finishRun
 ```
 

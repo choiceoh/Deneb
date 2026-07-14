@@ -30,7 +30,7 @@ func TestClassifyProposalSurfacesEmptyTargetsDefaultProposeOnly(t *testing.T) {
 // while the acceptance machinery stays forbidden — the loop must never be able
 // to queue an edit to its own gates.
 func TestSourceSurfaceAuthorization(t *testing.T) {
-	if s := ClassifySurface("gateway-go/internal/runtime/server/heartbeat_task.go"); s.Name != "gateway-source" || s.Tier != SurfaceTierProposeOnly {
+	if s := ClassifySurface("gateway-go/internal/runtime/heartbeat/heartbeat_task.go"); s.Name != "gateway-source" || s.Tier != SurfaceTierProposeOnly {
 		t.Fatalf("gateway source = %+v", s)
 	}
 	for _, acceptor := range []string{

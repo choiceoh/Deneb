@@ -11,7 +11,7 @@ Several files in this repo are **machine-generated** and carry a `// Code genera
 |---|---|---|
 | `gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go` | `gateway-go/internal/pipeline/chat/toolreg/tool_schemas.json` | `make tool-schemas` |
 | `gateway-go/internal/pipeline/chat/tool_classification_gen.go` | `gateway-go/internal/pipeline/chat/tool_classification.json` | `make data-gen` |
-| `client-android/.../deneb/generated/MiniappWireTypes.kt` | Go miniapp handler structs marked `//deneb:wire` (e.g. `gateway-go/internal/runtime/rpc/handler/handlerminiapp/calendar.go`) | `make kotlin-models` |
+| `client-android/.../deneb/generated/MiniappWireTypes.kt` | Go miniapp handler structs marked `//deneb:wire` (e.g. `gateway-go/internal/runtime/rpc/handler/handlerminiapp/schedule/calendar.go`) | `make kotlin-models` |
 | `andromeda/src/gen/miniappWire.ts` | the **same** `//deneb:wire` structs (Andromeda desktop client) | `pnpm gen:wire` (from `andromeda/`) |
 
 > The Kotlin **and** TypeScript wire types are generated from the same Go `//deneb:wire` structs, so the native client (Kotlin), the Andromeda desktop client (TS), and the gateway share one source of truth for `miniapp.*` RPC response shapes. **A change to any `//deneb:wire` struct must regenerate BOTH** (`make kotlin-models` *and* `pnpm gen:wire`) or the `wire-drift` CI check fails. To extend coverage, add a `//deneb:wire` directive to another handler struct's doc comment and rerun both (referenced struct types are pulled in transitively).

@@ -21,22 +21,22 @@ description: "프로젝트 구조 및 모듈 아키텍처 참조"
 The repo supports parallel coding agents with shared infrastructure:
 
 - **CodeGraph** (`.codegraph/`, gitignored) — SQLite symbol graph (~55K nodes) powering the `codegraph_explore` MCP tool. Auto-synced after edits via PostToolUse hooks. Config in `codegraph.json`; setup: `npm i -g @colbymchenry/codegraph && codegraph init`.
-- **rpcmap** (`scripts/dev/rpcmap.py`) — fills CodeGraph's blind spot: string-keyed indirection (RPC method → handler, tool name → handler, event name → event type). 277 mappings.
-- **Worktree isolation** — each agent gets its own worktree (`~/.zcode/`, `~/.codex/`, or Claude's `EnterWorktree`) on a namespaced branch to prevent collisions. Guards block main-checkout edits.
-- **Hook pipeline** — PreToolUse hooks (conflict detection via `clash`, rule guidance, CodeGraph nudges) and PostToolUse hooks (index sync) are shared across Claude Code, ZCode, and Codex. Configs: `.claude/settings.json`, `.zcode/config.json`, `~/.codex/hooks.json`.
+- **rpcmap** (`scripts/dev/rpcmap.py`) — fills CodeGraph's blind spot: string-keyed indirection (RPC method → handler, tool name → handler, event name → event type). ~280 mappings (`rpcmap --list`).
+- **Worktree isolation** — each agent gets its own worktree (`~/.zcode/`, `~/.codex/`, `~/.cursor/worktrees/Deneb/`, or Claude's `EnterWorktree`) on a namespaced branch to prevent collisions. Guards block main-checkout edits.
+- **Hook pipeline** — PreToolUse hooks (conflict detection via `clash`, rule guidance, CodeGraph nudges) and PostToolUse hooks (index sync) are shared across Claude Code, ZCode, Codex, and Cursor. Configs: `.claude/settings.json`, `.zcode/config.json`, `~/.codex/hooks.json`, `.cursor/hooks.json`.
 - Full guide: [docs/tools/zcode-environment.md](../tools/zcode-environment.md).
 
 ## Gateway Module Map (`gateway-go/internal/`, one-liners)
 
 Detailed per-file notes live in `docs/agent-rules/go-gateway.md`; this is the top-level orientation map.
 
-- `runtime/` — server (HTTP/SSE), rpc (dispatch), session (lifecycle), bootstrap (4-phase startup), events (pub/sub), process (exec + approval), insights, observe.
-- `pipeline/` — chat (LLM turn pipeline + tools), compaction/polaris (context compression), pilot (helper-LLM calls), chatport, autoreply, liteparse, compactuner.
-- `ai/` — llm (wire types), modelrole/modelcaps (role→model registry, capabilities), modeltuner, router (effort routing), provider, localai, embedding, observatory, regressionwatch, tokenest.
-- `domain/` — business domains: wiki, backup, mailpriority, knowledge, filestore, notebook, skills, push, code (coding-mode worktrees), contacts, org, approval, market, monitoring, nativesync, usage, ….
+- `runtime/` — server (HTTP/SSE), rpc (dispatch), bootstrap (4-phase startup), events (pub/sub), nativeapi, proactive, insights, modelpicker, briefcase, ….
+- `pipeline/` — chat (LLM turn pipeline + tools), compaction + polaris (context compression / session DAG store), pilot (helper-LLM calls), chatport, autoreply, liteparse, compactuner.
+- `ai/` — agent (LLM 도구 루프 executor — 병렬 read-only 턴·spillover·loop detector), llm (wire types), modelrole/modelcaps (role→model registry, capabilities), modeltuner, router (effort routing), provider, localai, embedding, observatory, regressionwatch, tokenest.
+- `domain/` — business domains: session (lifecycle), wiki, backup, mailpriority, knowledge, filestore, notebook, skills, push, contacts, org, approval, market, monitoring, nativesync, usage, autonomous, goals, briefcase, ….
 - `platform/` — external-system clients: gmail/mailanalysis(구 gmailpoll), calendar/calprop/localcal, localtodo, mailarchive/mailbody/mailwork, lmtpd (LMTP intake), cron, media.
-- `infra/` — clientauth (native-client token auth), config, secret, logging, metrics, middleware, httpretry, timeouts, fileshare, shortid, sparkfleet.
-- `agentsys/` — agent (LLM 도구 루프 executor — 병렬 read-only 턴·spillover·loop detector), agentlog (JSONL 런 기록), autonomous (주기 태스크), goals (standing goals); `hanja/` — Han→Korean transliteration; `core/`, `testutil/` — shared helpers.
+- `infra/` — clientauth (native-client token auth), config, secret, process (exec + approval), logging, metrics, middleware, httpretry, timeouts, fileshare, shortid, sparkfleet.
+- `hanja/` — Han→Korean transliteration. `core/`, `testutil/`, `codegen/`, `eval/` — shared helpers, generators, eval harnesses.
 
 ## Key Architectural Flows
 

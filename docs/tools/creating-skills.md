@@ -18,7 +18,9 @@ A skill is a directory containing a `SKILL.md` file (which provides instructions
 
 ### 1. Create the Directory
 
-Skills live in your workspace, usually `~/.deneb/workspace/skills/`. Create a new folder for your skill:
+Skills are discovered from four roots (later overrides earlier for the same name):
+managed `~/.deneb/skills/`, repo `skills/`, workspace `skills/`, and
+`~/.deneb/workspace/skills/`. Create a new folder for your skill:
 
 ```bash
 mkdir -p ~/.deneb/workspace/skills/hello-world
@@ -36,12 +38,12 @@ description: A simple skill that says hello.
 
 # Hello World Skill
 
-When the user asks for a greeting, use the `echo` tool to say "Hello from your custom skill!".
+When the user asks for a greeting, use the plain reply text (there is no `echo` tool) to say "Hello from your custom skill!".
 ```
 
 ### 3. Add Tools (Optional)
 
-You can define custom tools in the frontmatter or instruct the agent to use existing system tools (like `bash` or `browser`).
+You can define custom tools in the frontmatter or instruct the agent to use existing system tools (like `exec` or `web`).
 
 ### 4. Refresh Deneb
 
@@ -50,5 +52,5 @@ Ask your agent to "refresh skills" or restart the gateway. Deneb will discover t
 ## Best Practices
 
 - **Be Concise**: Instruct the model on _what_ to do, not how to be an AI.
-- **Safety First**: If your skill uses `bash`, ensure the prompts don't allow arbitrary command injection from untrusted user input.
+- **Safety First**: If your skill guides the agent to use `exec`, ensure the prompts don't allow arbitrary command injection from untrusted user input.
 - **Test Locally**: Use `scripts/dev/live-test.sh chat "use my new skill"` against the dev gateway to test.

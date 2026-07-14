@@ -1,26 +1,24 @@
 # RFC: 폰 액션을 SSH/Termux → 인앱 Intent 실행으로
 
-> 상태: **draft (검토 대기)** · 작성: 2026-06 · 관련: `tools/phone.go`, `client-android` (FcmService·Platform.android), `client_push.go`(SSE), `push/fcm.go`(FCM data) · 계기: orailnoor/private-agent 영상(안드로이드 Accessibility 에이전트)에서 "앱이 직접 폰을 조작" 아키텍처만 발췌
+> 상태: **implemented / superseded (2026-07-05)** · 원안 작성: 2026-06 · 구현: `gateway-go/internal/pipeline/chat/tools/phone.go` (`phone_read`/`phone_write`; Termux/SSH retired) · 관련: `client-android` (FcmService·Platform.android), SSE/FCM push
 
 ## 0. TL;DR
 
 Deneb의 폰 **액션**을 깨진 **SSH/Termux 브리지**에서 **네이티브 인앱 Intent 실행**으로 옮긴다. 게이트웨이 phone 툴이 SSH로 `am start`/`input`을 쏘는 대신, **이미 존재하는 게이트웨이→앱 채널**(SSE foreground / FCM data background)로 액션 명령을 보내고 **앱이 Android Intent로 실행**한다.
 
-- **로그 증거**: 로그 스윕에서 `phone ssh failed (255) ×22/일` — phone 툴의 SSH 경로가 죽어 있음(st26 Termux sshd/키). 인앱 실행은 이 의존을 제거한다.
-- **이미 깔린 것**: 앱에 `DenebNotificationListenerService`(알림 읽기)·`SmsReader`(SMS 읽기)·`FcmService`(FCM 수신)·`Platform.android` Intent(`ACTION_VIEW`/`ACTION_SEND`). 게이트웨이엔 SSE 푸시허브 + FCM data payload. **새 채널 불필요 — 재사용.**
-- **영상에서 안 가져오는 것**: 연속 스크린샷→멀티모달→탭을 *기본* 제어로. 토큰 폭식·fragile. (Accessibility는 P3 fallback 한정.)
+> **2026-07-05:** SSH/Termux 경로는 코드에서 은퇴. 현행은 인앱 Intent/`phone_read`·`phone_write` — 아래 §1은 원안 시점의 배경으로 보존.
 
-## 1. 배경 — 현재 폰 능력
+## 1. 배경 — 원안 시점의 폰 능력 (historical)
 
-| 능력 | 현황 | 경로 |
+| 능력 | 원안 시점 | 경로 (당시) |
 |---|---|---|
 | 알림 읽기 | ✅ | `DenebNotificationListenerService` → 게이트웨이 |
 | SMS 읽기 | ✅ | `SmsReader` |
-| 폰에 알림 push | ✅ | FCM (`push/fcm.go`) + SSE (`client_push.go`) |
-| 폰 **읽기**(location·battery·calllog·contacts·clipboard) | ⚠️ | `phone.go` → `ssh` exec (Termux) |
-| 폰 **액션**(notify·tts·기타) | ⚠️ | `phone.go` → `ssh` exec |
+| 폰에 알림 push | ✅ | FCM + SSE |
+| 폰 **읽기**(location·battery·calllog·contacts·clipboard) | ⚠️ → ✅ 인앱 | 당시 `phone.go` → ssh; **현재 인앱** |
+| 폰 **액션**(notify·tts·기타) | ⚠️ → ✅ 인앱 | 당시 `phone.go` → ssh; **현재 인앱** |
 
-`phone.go`는 `exec.CommandContext(ctx, "ssh", …)`로 폰(Termux)에 명령한다. 이게 **깨진 부분**: `DENEB_PHONE_SSH`→st26 ssh가 실패(`phoneSSHFailureBackoff`까지 둠), 로그에 `phone ssh failed (255) ×22`. 즉 **읽기·액션 둘 다 fragile한 SSH 단일점**에 묶여 있다.
+원안 시점의 `phone.go`는 `exec.CommandContext(ctx, "ssh", …)`로 폰(Termux)에 명령했다. 로그에 `phone ssh failed (255)` 가 쌓였고, 읽기·액션이 SSH 단일점에 묶여 있었다 — 이 RFC의 인앱으로 이전한 이유.
 
 ## 2. 빈 곳 & 영상에서 발췌할 것
 

@@ -1,6 +1,6 @@
 // Package secret manages credential/secret resolution and reloading.
 //
-// This ports the TypeScript secrets system (src/gateway/server-methods/admin/secrets.ts)
+// Originally ported from the retired TypeScript gateway secrets system (was src/gateway/server-methods/admin/secrets.ts)
 // to Go, providing in-memory secret resolution with reload capability.
 package secret
 

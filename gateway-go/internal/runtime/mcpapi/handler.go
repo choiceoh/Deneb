@@ -1,4 +1,5 @@
-// server_http_mcp.go — MCP (Model Context Protocol) gateway.
+// Package mcpapi — MCP (Model Context Protocol) gateway.
+// Formerly server_http_mcp.go.
 //
 // Exposes an ALLOWLISTED, READ-ONLY subset of the miniapp.* RPC surface as MCP
 // tools over the protocol's streamable-HTTP transport, so external AI tools —

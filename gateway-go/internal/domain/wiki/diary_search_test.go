@@ -186,7 +186,7 @@ func TestStore_AppendDiary_UpdatesIndex(t *testing.T) {
 }
 
 // TestStore_AppendDiaryTo_NoLiveIndex documents the known limitation that the
-// standalone AppendDiaryTo helper (used by gmailpoll and morning_letter) does
+// standalone AppendDiaryTo helper (used by mailanalysis and morning_letter) does
 // NOT touch the in-memory index — its entries are only searchable after the
 // next gateway restart. Captured here so a future refactor that fixes it can
 // flip this assertion intentionally.

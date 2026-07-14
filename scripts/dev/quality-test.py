@@ -10,14 +10,14 @@ token, the gateway runs one synchronous agent turn, and the reply is captured as
 a ChatCapture object. This is the same path the standalone native client uses.
 
 Usage:
-    python3 scripts/quality-test.py [--scenario all]
-    python3 scripts/quality-test.py --scenario daily       # daily chat
-    python3 scripts/quality-test.py --scenario system      # system mgmt
-    python3 scripts/quality-test.py --scenario core        # core quick tests
-    python3 scripts/quality-test.py --custom "메시지"       # custom message
-    python3 scripts/quality-test.py --apex-plan            # show frontier sample
-    python3 scripts/quality-test.py --sample apex --record # run APEX sample
-    python3 scripts/quality-test.py --list                 # list all tests
+    python3 scripts/dev/quality-test.py [--scenario all]
+    python3 scripts/dev/quality-test.py --scenario daily       # daily chat
+    python3 scripts/dev/quality-test.py --scenario system      # system mgmt
+    python3 scripts/dev/quality-test.py --scenario core        # core quick tests
+    python3 scripts/dev/quality-test.py --custom "메시지"       # custom message
+    python3 scripts/dev/quality-test.py --apex-plan            # show frontier sample
+    python3 scripts/dev/quality-test.py --sample apex --record # run APEX sample
+    python3 scripts/dev/quality-test.py --list                 # list all tests
 """
 
 import json
@@ -958,10 +958,9 @@ def _eval_param(key: str, val, capture: ChatCapture) -> tuple[str, bool, str]:
 def _build_filler_text(target_chars: int) -> str:
     """Build a large block of realistic Korean+English tech text."""
     blocks = [
-        "서버 아키텍처 분석: Go 기반 HTTP/WS 게이트웨이와 Rust FFI 코어 엔진으로 구성된 하이브리드 시스템. "
-        "gateway-go는 내부적으로 RPC 디스패처, 세션 관리, 채널 레지스트리, 챗 파이프라인을 포함한다. "
-        "core-rs는 프로토콜 검증, 보안 (constant_time_eq, SSRF 방지), 미디어 처리 (21개 MIME 포맷), "
-        "메모리 검색 (SIMD cosine + BM25 + FTS5), 컨텍스트 엔진, 컴팩션 스테이트 머신을 담당한다. ",
+        "서버 아키텍처 분석: Go 기반 HTTP/SSE 게이트웨이로 구성된 단일 런타임 시스템. "
+        "gateway-go는 내부적으로 RPC 디스패처, 세션 관리, 네이티브 클라 브리지, 챗 파이프라인을 포함한다. "
+        "코어 보안·파싱·미디어(constant_time_eq, SSRF 방지, MIME 스니핑)는 gateway-go/internal/core 패키지가 담당한다. ",
         "데이터베이스 인덱스 전략: B-Tree는 범위 쿼리에 강하고, Hash 인덱스는 등값 비교에 O(1)이다. "
         "LSM-Tree는 쓰기 집약적 워크로드에 최적화되어 있으며, Bloom filter로 읽기 성능을 보완한다. "
         "GiST(Generalized Search Tree)는 지리 공간 쿼리에 사용되며, GIN(Generalized Inverted Index)은 "
@@ -1554,7 +1553,7 @@ async def run(args):
         log(f"Connected to {version} — running {count} tests via native miniapp RPC{conc_label}")
     except Exception as e:
         log(f"Failed to connect to gateway: {e}")
-        log("Is the dev gateway + mock running? Try: scripts/live-test.sh start")
+        log("Is the dev gateway + mock running? Try: scripts/dev/live-test.sh start")
         return 1
     finally:
         await probe.close()

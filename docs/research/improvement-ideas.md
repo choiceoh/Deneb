@@ -13,8 +13,8 @@
 
 | # | 아이디어 | P | 예상 작업량 |
 |---|---|---|---|
-| 1 | `run_exec.go` (1432 LOC) 책임 분리 | P1 | M |
-| 2 | `notify_relay.go` (877 LOC) 3-way 분리 (snapshots/errors/heartbeat) | P2 | S |
+| 1 | `run_exec.go` 책임 분리 (가이드라인 ~700 LOC; 분할 진행 중) | P1 | M |
+| 2 | ~~`notify_relay.go` 3-way 분리~~ **DONE** (`notify_heartbeat.go` / `notify_status.go` 등) | P2 | ✅ |
 | 3 | Polaris bootstrap & session-reopen 라운드트립 테스트 | P1 | S |
 | 4 | CJK rune boundary 테스트 (`compaction/restore.go`) | P1 | S |
 | 5 | Dreamer 단위 테스트 (`domain/wiki/dreamer.go`) | P2 | M |
@@ -38,40 +38,32 @@
 
 ## 1. 코드 위생 (Code Hygiene)
 
-### 1.1 `run_exec.go` 1432 LOC 분리 — **P1 / M**
+### 1.1 `run_exec.go` 책임 분리 — **P1 / M**
 
-**무엇.** `gateway-go/internal/pipeline/chat/run_exec.go` 는 700 LOC 가이드라인의 2배. 한 파일이 (a) 컨텍스트 어셈블리, (b) provider 결정, (c) LLM invocation, (d) fallback retry, (e) tool histogram 포맷팅을 모두 들고 있다.
+**무엇.** `gateway-go/internal/pipeline/chat/run_exec.go` 는 chat 실행 오케스트레이션의 중심. 한 파일이 (a) 컨텍스트 어셈블리, (b) provider 결정, (c) LLM invocation, (d) fallback retry, (e) tool histogram 포맷팅을 모두 들고 있다 (LOC는 분할에 따라 변동 — 고정 수치 대신 책임 경계를 본다).
 
 **왜.** `executeAgentRun` 한 함수의 인지 비용이 너무 큼. 신규 AI 세션이 진입할 때 캐시 정책 (cache_breakpoints.go) ↔ retry (run_exec_retry_test.go) ↔ steer (steer.go) 사이 호출 그래프를 따라가기 어렵다.
 
 **어디서.**
 
-- `run_exec.go:85-91` — 타임스탬프 포맷팅 → `prompt/timestamp.go` (또는 기존 prompt/ 로 흡수)
-- `run_exec.go:1409-1431` — tool histogram → `run_helpers.go` 흡수
-- `run_exec.go:100~` — 컨텍스트 pre-warming → `run_context_prewarm.go`
+- 타임스탬프 포맷팅 → `prompt/timestamp.go` (또는 기존 prompt/ 로 흡수)
+- tool histogram → `run_helpers.go` 흡수
+- 컨텍스트 pre-warming → `run_context_prewarm.go`
 - 핵심 agent loop 만 `run_exec.go` 에 남기고 ~600 LOC 목표.
 
 **주의.** `docs/agent-rules/prompt-cache.md` 의 `BeforeAPICall` hook 부착 위치를 깨지 말 것. `cache_breakpoint_budget_test.go` 가 회귀를 잡아주지만, 분리 PR 에서 hook 등록 순서 (`ComposeBeforeAPICall(steer, trailingCache)`) 보존이 필수.
 
 ---
 
-### 1.2 `notify_relay.go` 877 LOC 3-way 분리 — **P2 / S**
+### 1.2 `notify_relay.go` 3-way 분리 — **DONE**
 
-**무엇.** `gateway-go/internal/runtime/server/notify_relay.go` 는 세 가지 무관한 책임을 묶고 있다:
-
-1. **Status snapshot** — on-demand 세션 상태 조회
-2. **Error mirror** — broadcast tap → 네이티브 클라 error notify
-3. **Health heartbeat** — periodic self-poll
-
-**어디서.** `notify_snapshots.go` / `notify_errors.go` / `notify_heartbeat.go` 로 분리. 공통 helpers 만 `notify_relay.go` 잔존. Test 도 같은 분할.
-
-**왜.** 단일 책임 + grep 가능성 향상. heartbeat 가 가장 자주 수정되는 영역인데, 매번 877 LOC 파일을 열어야 한다.
+**상태.** `notify_heartbeat.go` / `notify_status.go` 등으로 분리 완료. `notify_relay.go` 는 공통 helpers·릴레이 잔존 (~200 LOC대).
 
 ---
 
-### 1.3 `openai.go` 790 LOC 분리 — **P2 / M**
+### 1.3 `openai.go` 분리 — **P2 / M**
 
-**어디서.** `gateway-go/internal/ai/llm/openai.go` → `openai_request.go` (req 빌드) + `openai_stream.go` (SSE parsing). 현재 한 파일에 wire translation + streaming + provider fallback 이 섞여 있어 vLLM 호환성 디버깅 시 진입점을 찾기 어렵다.
+**어디서.** `gateway-go/internal/ai/llm/openai.go` → `openai_request.go` (req 빌드) + `openai_stream.go` (SSE parsing). 현재 한 파일에 wire translation + streaming + provider fallback 이 섞여 있어 vLLM 호환성 디버깅 시 진입점을 찾기 어렵다 (LOC는 분할에 따라 변동).
 
 **참고.** 같은 패키지의 `types.go` 가 wire types 의 single source 인지 확인. 분리 PR 에서 import 사이클 위험 점검.
 
@@ -89,7 +81,7 @@
 
 ### 1.5 Tool 디렉터리 sub-grouping 보류 — **P3 / 결정 필요**
 
-**현황.** `pipeline/chat/tools/` 42 파일. Explore 분석은 "flat 유지 OK" 였음. 다만 `gmail*`, `skill*`, `exec*`, `fs*` 가 prefix 군집을 형성 — 50+ 가 되면 `tools/{fs,gmail,exec,skill}/` 로 자연스럽게 분리될 가능성. **지금은 보류, 다음 5개 추가 시 재검토.**
+**현황.** `pipeline/chat/tools/` 는 `runtimeops/`·`mailarchive/`·`codeaction/` 등으로 이미 서브그룹화. flat+subpackage 혼재 — 추가 도구 시 기존 군집을 따른다.
 
 ---
 
@@ -111,7 +103,7 @@
 
 ### 2.2 Embedding-aware tool routing — **P3 / L**
 
-**무엇.** 현재 LLM 은 매 턴 42개 tool schema 를 모두 본다. 사용자 메시지 embedding 으로 후보 도구 K개 (예: top-8) 만 prompt 에 노출.
+**무엇.** 현재 LLM 은 매 턴 ~45개 tool schema 카탈로그를 본다(프리셋·deferred에 따라 노출 상이). 사용자 메시지 embedding 으로 후보 도구 K개 (예: top-8) 만 prompt 에 노출.
 
 **왜.** 토큰 절감 + LLM tool-selection 정확도 향상. 단 cache 위협 — tool list 가 동적이면 static 캐시가 매 턴 깨진다.
 
@@ -218,7 +210,7 @@
 
 **어디서.**
 
-- `gateway-go/internal/runtime/server/health.go` 에 GPU 섹션
+- `gateway-go/internal/runtime/health/ (GPU collectors) + runtime/server/health_*.go` 에 GPU 섹션
 - `nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total --format=csv` 1초 간격 캐시
 - localai client latency p50/p95
 
@@ -283,7 +275,7 @@
 
 ### 4.4 모닝 레터 / 이브닝 레터 cadence editor — **P2 / M**
 
-**현황.** `pipeline/chat/tools/morning_letter.go` + `skills/productivity/morning-letter/` 존재. cadence (몇 시, 어떤 요일) 가 hardcode 또는 config 파일.
+**현황.** `pipeline/chat/tools/routine/morning_letter.go` + `skills/productivity/morning-letter/` 존재. cadence (몇 시, 어떤 요일) 가 hardcode 또는 config 파일.
 
 **제안.**
 
@@ -331,7 +323,7 @@
 
 ### 5.2 Email priority queue (Gmail 라벨 + 사람) — **P3 / L**
 
-**현황.** `gmailpoll/pipeline.go` (757 LOC) — 메일 분석은 있으나 우선순위가 평면적 (시간순).
+**현황.** `platform/mailanalysis` 파이프라인 — 메일 분석은 있으나 우선순위가 평면적 (시간순).
 
 **제안.** 발신자/라벨/스레드 활동에 따른 priority 점수:
 

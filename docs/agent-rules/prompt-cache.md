@@ -55,7 +55,7 @@ scripts/dev/live-test.sh logs-grep "cache_read_input_tokens\|cache_creation_inpu
 
 > 메인 챗 모델이 로컬 vLLM(DSV4-Flash)로 옮겨가 있던 시기에 **마커 기반 Anthropic 캐시와 전혀 다른 제약**이 1순위가 됐다. vLLM 의 Automatic Prefix Caching 은 렌더된 프롬프트 전체에 대한 **엄격한 byte-prefix 매칭**이고, DSV4 인코더의 렌더 순서는 `[system 내용][tools 스키마][대화 히스토리]` 다. 즉 **system 끝의 per-turn 바이트 1줄이 tools + 전체 히스토리(수만 토큰)의 KV 를 통째로 무효화**한다.
 
-2026-06-13 측정(main=dsv4 시절): recall(`<recall-context>`, hindsight auto-recall 이 매 턴 변동) + tier-1 위키가 system 꼬리에 append 되던 시절 적중률 80.7%, 인터랙티브 턴 프리필 꼬리 20–40초 (프리필 스파이크는 dsv4 메모리 워치독 트립의 문서화된 원인이기도 하다). 2026-07-04 실측: main 이사 후 dsv4 엔진 누적 적중률 22% — 고장이 아니라 재사용 여지가 없는 1회성 헬퍼 호출 위주로 워크로드가 바뀐 결과(엔진 A/A 89%·웜홀 투명 89%·턴간 재사용 86% 전부 정상 확인).
+2026-06-13 측정(main=dsv4 시절): recall(`<recall-context>`, 당시 hindsight auto-recall 이 매 턴 변동 — **Hindsight는 2026-06-15 은퇴**, 현행은 cue-gated `recall/` + tail inject) + tier-1 위키가 system 꼬리에 append 되던 시절 적중률 80.7%, 인터랙티브 턴 프리필 꼬리 20–40초 (프리필 스파이크는 dsv4 메모리 워치독 트립의 문서화된 원인이기도 하다). 2026-07-04 실측: main 이사 후 dsv4 엔진 누적 적중률 22% — 고장이 아니라 재사용 여지가 없는 1회성 헬퍼 호출 위주로 워크로드가 바뀐 결과(엔진 A/A 89%·웜홀 투명 89%·턴간 재사용 86% 전부 정상 확인).
 
 ### 원칙 (Anthropic 4-마커 룰과 별개로 동시 적용)
 
@@ -146,7 +146,7 @@ func handleCmd(args []string) error {
 
 ### 현재 적용
 
-- **RecallMemory** — `gateway-go/internal/pipeline/chat/recall_cache.go`
+- **RecallMemory** — `gateway-go/internal/pipeline/chat/recall/recall_cache.go`
   - (session, cue-fingerprint) 별 cache; recall preflight 는 매 턴 실행 (no-cue 비캐시)
   - `/reset` 핸들러 (`slash_dispatch.go`) 에서 clear
   - 가치: cache 가 아니라 **latency 절감** — wiki/diary/transcript/polaris 검색 (각 1.5s timeout) 을 같은 cue 반복 시 재사용

@@ -8,7 +8,7 @@ import (
 )
 
 // spilloverRefPattern matches the read_spillover pointer that
-// agentsys/agent.TruncateHeadTail embeds when a large tool result is spilled
+// ai/agent.TruncateHeadTail embeds when a large tool result is spilled
 // to disk: `... [N lines truncated — use read_spillover("sp_abc123") for full
 // content] ...`. The id is `sp_%x` (hex) — see agent.SpilloverStore.Store.
 var spilloverRefPattern = regexp.MustCompile(`read_spillover\("(sp_[0-9a-fA-F]+)"\)`)

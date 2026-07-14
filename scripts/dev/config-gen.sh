@@ -10,10 +10,10 @@
 # is preserved so the dev instance exercises the same code paths as production.
 #
 # Usage:
-#   scripts/config-gen.sh              # generate /tmp/deneb-dev-config.json
-#   scripts/config-gen.sh --out FILE   # custom output path
-#   scripts/config-gen.sh --diff       # show what was stripped/replaced
-#   scripts/config-gen.sh --check      # exit 0 if prod config exists, 1 if not
+#   scripts/dev/config-gen.sh              # generate /tmp/deneb-dev-config.json
+#   scripts/dev/config-gen.sh --out FILE   # custom output path
+#   scripts/dev/config-gen.sh --diff       # show what was stripped/replaced
+#   scripts/dev/config-gen.sh --check      # exit 0 if prod config exists, 1 if not
 
 set -euo pipefail
 

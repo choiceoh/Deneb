@@ -1,8 +1,8 @@
 // Event publisher: enriches the broadcaster with session snapshot building,
 // presence broadcasting, and coordinated event delivery.
 //
-// This mirrors the event publishing logic from src/gateway/server-event-subscriptions.ts
-// and src/gateway/server/presence-events.ts in the TypeScript codebase.
+// Originally ported from the retired TypeScript gateway event-subscription
+// and presence publishers.
 package events
 
 import (

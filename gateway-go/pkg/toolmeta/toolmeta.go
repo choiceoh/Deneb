@@ -7,13 +7,13 @@
 // output that CONTAINS a marker-shaped string (a read of a log file, a skill
 // body, promptware) can forge evidence. This package adds a code-only channel
 // alongside the text: values set here are attached to the tool_result block's
-// Metadata field by the executor (agentsys/agent.finishToolCall), persist in
+// Metadata field by the executor (ai/agent.finishToolCall), persist in
 // the transcript verbatim, survive compaction stubbing (which replaces only
 // Content), and are NEVER sent to a provider — both wire paths project blocks
 // through explicit structs that do not copy Metadata.
 //
 // This is a leaf package so both tool implementations
-// (pipeline/chat/tools, via context) and the executor (agentsys/agent) can
+// (pipeline/chat/tools, via context) and the executor (ai/agent) can
 // use it without layering violations. Model-facing text markers stay: the
 // model still needs the prose ("call them directly", the fence). Metadata is
 // the machine half of the same fact.

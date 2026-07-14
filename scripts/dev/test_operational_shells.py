@@ -275,7 +275,7 @@ class GoGatewayLauncherTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name) / "repo"
         self.script = self.root / "scripts/deploy/start-go-gateway.sh"
-        self.gateway = self.root / "gateway-go/gateway"
+        self.gateway = self.root / "dist/deneb-gateway"
         self.bin = self.root / "fake-bin"
         self.home = self.root / "home"
         self.script.parent.mkdir(parents=True)
@@ -345,13 +345,13 @@ class GoGatewayLauncherTests(unittest.TestCase):
         write_executable(self.bin / "make", """
             #!/usr/bin/env bash
             printf 'make cwd=%s args=%s\n' "$PWD" "$*" >> "$FAKE_CALL_LOG"
-            mkdir -p gateway-go
-            cat > gateway-go/gateway <<'SH'
+            mkdir -p dist
+            cat > dist/deneb-gateway <<'SH'
 #!/usr/bin/env bash
 printf 'built-gateway cwd=%s args=%s\n' "$PWD" "$*" >> "$FAKE_CALL_LOG"
 exit 0
 SH
-            chmod +x gateway-go/gateway
+            chmod +x dist/deneb-gateway
         """)
         proc = self.run_fixture("--port", "19001")
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)

@@ -9,17 +9,17 @@ credentials required.
 
 Usage:
     # Single chat with assertions
-    python3 scripts/reproduce.py chat-check "메시지" \
+    python3 scripts/dev/reproduce.py chat-check "메시지" \
         --expect "패턴" --expect-not "금지패턴" \
-        --expect-tool health --expect-korean --max-latency 30000
+        --expect-tool observe --expect-korean --max-latency 30000
 
     # Multi-turn chat (context carryover)
-    python3 scripts/reproduce.py multi-chat \
+    python3 scripts/dev/reproduce.py multi-chat \
         "내 이름은 홍길동이야" \
         "내 이름이 뭐라고 했지?"
 
     # Tool invocation check
-    python3 scripts/reproduce.py tool-check health "시스템 상태 확인해줘"
+    python3 scripts/dev/reproduce.py tool-check observe "시스템 상태 확인해줘"
 
 """
 

@@ -1,7 +1,7 @@
 // snapshot.go orchestrates discovery + eligibility + prompt building
 // to produce a complete SkillSnapshot for a workspace.
 //
-// This ports buildWorkspaceSkillSnapshot() from src/agents/skills/workspace.ts.
+// Originally ported buildWorkspaceSkillSnapshot from the retired TypeScript skills package.
 package skills
 
 import (

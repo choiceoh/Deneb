@@ -1,4 +1,5 @@
-// server_http_miniapp.go — HTTP bridge for the native-client RPC surface.
+// Package nativeapi — HTTP bridge for the native-client RPC surface.
+// Formerly server_http_miniapp.go.
 //
 // Pipeline:
 //

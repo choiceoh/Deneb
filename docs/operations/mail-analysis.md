@@ -11,8 +11,8 @@ read_when:
 
 Deneb turns a mail message into a structured read — summary, stakeholders,
 importance, risks and deadlines, next steps. One pipeline serves two entry
-points: an automatic background poller, and on-demand analysis from the Mini
-App/local archive path. Direct agent Gmail tooling has been retired; received
+points: an automatic background poller, and on-demand analysis from the native
+client / local archive path. Direct agent Gmail tooling has been retired; received
 mail context now flows through `mail_archive` and the native mail store.
 
 ## How Analysis Works

@@ -6,11 +6,11 @@
 # Claude Code calls this repeatedly, modifying code between iterations.
 #
 # Usage:
-#   scripts/iterate.sh                    # default: smoke test (3 checks)
-#   scripts/iterate.sh --metric CMD       # custom metric command
-#   scripts/iterate.sh --port 18791       # custom port (default: 18791)
-#   scripts/iterate.sh --baseline         # compare against saved baseline
-#   scripts/iterate.sh --save-baseline    # save result as new baseline
+#   scripts/dev/iterate.sh                    # default: smoke test (3 checks)
+#   scripts/dev/iterate.sh --metric CMD       # custom metric command
+#   scripts/dev/iterate.sh --port 18791       # custom port (default: 18791)
+#   scripts/dev/iterate.sh --baseline         # compare against saved baseline
+#   scripts/dev/iterate.sh --save-baseline    # save result as new baseline
 #
 # Exit code: 0 if metric improved or stable, 1 if degraded or build failed.
 #

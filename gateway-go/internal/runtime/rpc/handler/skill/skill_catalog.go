@@ -66,7 +66,7 @@ type coreSection struct {
 	Tools []coreTool
 }
 
-// coreSections mirrors the 22 core tools from src/agents/tool-catalog.ts.
+// coreSections is the tools.catalog core list (profiles / eligibility).
 // Source ("core") and Label (== ID) are filled in by buildCoreToolCatalog.
 var coreSections = []coreSection{
 	{"fs", "Files", []coreTool{

@@ -41,11 +41,11 @@ LAYER_RANK = {
     "core": 1,
     "hanja": 1,
     "infra": 1,
+    # Agent loop lives under ai/agent (formerly top-level agentsys/).
     "ai": 2,
     "domain": 2,
     "platform": 2,
     "pipeline": 3,
-    "agentsys": 4,
     "runtime": 5,
 }
 DEFAULT_RANK = 2

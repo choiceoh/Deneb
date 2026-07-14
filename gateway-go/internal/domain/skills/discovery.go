@@ -1,6 +1,6 @@
 // discovery.go implements skill discovery from multiple source directories.
 //
-// This ports src/agents/skills/workspace.ts:loadSkillEntries() to Go.
+// Originally ported loadSkillEntries from the retired TypeScript skills package.
 // Skills are loaded from 6 sources in precedence order:
 //
 //	extra < bundled < managed < agents-personal < agents-project < workspace

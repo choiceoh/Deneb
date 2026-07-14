@@ -120,7 +120,7 @@ A1 은 그 전 단계(무-LLM 1차 방어선이자 A2 의 fallback), C 는 직�
 
 ### 5.4 휴리스틱(A1) 구체 설계 — 무-LLM, 결정적
 
-**먼저 솔직한 전제: Deneb 는 이미 mid-derivation 을 3겹으로 막는다.** ① `CompactPriorToolResults`(`agentsys/agent/executor.go:608`, 매 루프 iteration)는 **`currentTurnStart` 이후 = 현재 턴 in-flight tool_result 를 절대 안 줄인다**(prior 턴 4K rank-line 축약만) → *턴 내부* mid-derivation 컷은 구조적으로 이미 차단. ② `snapWindowStart`+`BalanceToolBlocks` 는 요약 경계가 tool_use↔tool_result 짝을 깨지 않게 한다. ③ deferred background compaction 으로 STW 제거.
+**먼저 솔직한 전제: Deneb 는 이미 mid-derivation 을 3겹으로 막는다.** ① `CompactPriorToolResults`(`ai/agent/executor.go:608`, 매 루프 iteration)는 **`currentTurnStart` 이후 = 현재 턴 in-flight tool_result 를 절대 안 줄인다**(prior 턴 4K rank-line 축약만) → *턴 내부* mid-derivation 컷은 구조적으로 이미 차단. ② `snapWindowStart`+`BalanceToolBlocks` 는 요약 경계가 tool_use↔tool_result 짝을 깨지 않게 한다. ③ deferred background compaction 으로 STW 제거.
 
 **그래서 A1 의 잔여 타깃은 둘뿐이다** — Polaris LLM 요약(`run_prepare.go`)이 *완료된 prior 턴*을 요약할 때: (C) 경계가 tool 체인 한가운데 떨어지는 것, (S) *멀티턴* 과제가 아직 수렴 전인데 요약해버리는 것. 둘 다 마지막 K 메시지의 구조만 본다(LLM·주입 0).
 

@@ -167,7 +167,7 @@
 
 ### P1. `/steer` main-agent — ✅ 완료
 
-- **새 파일**: `gateway-go/internal/pipeline/chat/steer.go` (SteerQueue), `steer_inject.go` (drain+append), `steer_test.go` (13 tests), `gateway-go/internal/runtime/server/inbound_steer.go` (파서), `inbound_steer_test.go` (13 tests)
+- **새 파일**: `gateway-go/internal/pipeline/chat/steer.go` (SteerQueue), `steer_inject.go` (drain+append), `steer_test.go` (13 tests), `gateway-go/internal/pipeline/chat/steer.go (+ runstate/steer.go)` (파서), `inbound_steer_test.go` (13 tests)
 - **수정**: `internal/ai/agent/config.go`(BeforeAPICall hook), `executor.go`, `pipeline/chat/handler.go/run.go/run_start.go/run_exec.go/slash_dispatch.go`, `runtime/rpc/handler/chat/chat.go` (`chat.steer` RPC), `runtime/server/method_registry.go` + `_test.go`, `inbound.go`
 - **테스트**: 26/26 통과 (-race)
 - **한국어 마커**: `[사용자 조정: ...]` (CLAUDE.md Korean-first 준수)
@@ -187,9 +187,9 @@
 
 - **새 패키지**: `gateway-go/pkg/checkpoint/` (manager.go 488 LOC, types.go, index.go, retention.go, adapter.go, manager_test.go 346 LOC)
 - **기능**: Snapshot/List/Restore/Diff, SHA-256 dedup, tombstone, gzip, 세션별 격리, keep-N + maxBytes retention
-- **통합**: `internal/pipeline/chat/tools/fs.go:ToolWrite` 에 `snapshotBeforeWrite` 훅 (`toolctx.Checkpointer` 인터페이스 경유)
+- **통합**: `internal/pipeline/chat/tools/filesystem/fs.go (write tool)` 에 `snapshotBeforeWrite` 훅 (`toolport.Checkpointer` 인터페이스 경유)
 - **테스트**: 11/11 통과 (-race)
-- **TODO**: 세션 부트스트랩에서 `toolctx.WithCheckpointer(ctx, ...)` 와이어링 필요 (`sessionKey` + state dir 정책 결정 필요). `ToolEdit` 에도 훅 확장 필요. 선택적으로 `checkpoint.list/restore/diff` RPC 추가.
+- **TODO**: 세션 부트스트랩에서 `toolport.WithCheckpointer(ctx, ...)` 와이어링 필요 (`sessionKey` + state dir 정책 결정 필요). `ToolEdit` 에도 훅 확장 필요. 선택적으로 `checkpoint.list/restore/diff` RPC 추가.
 
 ### P4. Insights 시스템 — ✅ 완료
 
@@ -203,7 +203,7 @@
 ### P5. Tool Interception 분석 — 결론: Scenario C (리팩토링 불필요)
 
 - **분석 문서**: `docs/research/tool-interception-gap.md`
-- **결론**: Hermes 의 `_invoke_tool` 가로채기 체인은 Python 클래스 인스턴스 상태 때문. Deneb은 이미 **closure + Deps struct** 패턴으로 agent-instance state 문제를 다르게 해결 (`toolctx.CoreToolDeps`). `ToolInterceptor` 인터페이스를 빈 채로 추가하면 투기적 일반화.
+- **결론**: Hermes 의 `_invoke_tool` 가로채기 체인은 Python 클래스 인스턴스 상태 때문. Deneb은 이미 **closure + Deps struct** 패턴으로 agent-instance state 문제를 다르게 해결 (`tooldeps.CoreToolDeps`). `ToolInterceptor` 인터페이스를 빈 채로 추가하면 투기적 일반화.
 - **작은 개선**: `internal/pipeline/chat/tools.go:RegisterTool` 에 **silent replace 경고** 추가 (plugin collision 탐지)
 
 ### 본 세션 Doctrine: `docs/agent-rules/prompt-cache.md` — ✅ 완료
@@ -340,7 +340,7 @@
    특히 P1 `/steer`, P4 `/insights` / `/사용량` 의 네이티브 클라 UX 실제 확인.
 
 3. **Checkpoint 와이어링 마무리** (P3 TODO):
-   - 세션 부트스트랩에서 `Manager` 생성 + `ctx = toolctx.WithCheckpointer(ctx, adapter)` 삽입
+   - 세션 부트스트랩에서 `Manager` 생성 + `ctx = toolport.WithCheckpointer(ctx, adapter)` 삽입
    - `ToolEdit` 에도 `snapshotBeforeWrite` 훅 확장
    - 선택적으로 `checkpoint.list/restore/diff` RPC
 
@@ -367,8 +367,8 @@ gateway-go/internal/runtime/rpc/handler/insights/ (new — handler + test)
 gateway-go/internal/pipeline/chat/steer.go            (new)
 gateway-go/internal/pipeline/chat/steer_inject.go     (new)
 gateway-go/internal/pipeline/chat/steer_test.go       (new)
-gateway-go/internal/runtime/server/inbound_steer.go   (new)
-gateway-go/internal/runtime/server/inbound_steer_test.go (new)
+gateway-go/internal/pipeline/chat/steer.go (+ runstate/steer.go)   (new)
+gateway-go/internal/pipeline/chat/steer_test.go (new)
 
 gateway-go/internal/ai/agent/config.go          (edit — BeforeAPICall hook)
 gateway-go/internal/ai/agent/executor.go        (edit — hook 호출)
@@ -380,9 +380,9 @@ gateway-go/internal/pipeline/chat/slash_dispatch.go   (edit — /reset → steer
 gateway-go/internal/pipeline/chat/slash_commands.go   (edit — /insights, /사용량 등록)
 gateway-go/internal/pipeline/chat/callbacks.go        (edit — InsightsProvider 콜백)
 gateway-go/internal/pipeline/chat/tools.go            (edit — RegisterTool replace 경고)
-gateway-go/internal/pipeline/chat/tools/fs.go         (edit — ToolWrite snapshotBeforeWrite 훅)
-gateway-go/internal/pipeline/chat/tools/fs_test.go    (edit — 통합 테스트)
-gateway-go/internal/pipeline/chat/toolctx/context.go  (edit — Checkpointer 인터페이스)
+gateway-go/internal/pipeline/chat/tools/filesystem/fs.go  (edit — write-tool snapshotBeforeWrite 훅)
+gateway-go/internal/pipeline/chat/tools/filesystem/fs_test.go    (edit — 통합 테스트)
+gateway-go/internal/pipeline/chat/toolport/context.go  (edit — Checkpointer 인터페이스)
 gateway-go/internal/pipeline/chat/run_helpers.go      (edit — isContextOverflow → llmerr.Classify)
 
 gateway-go/internal/runtime/rpc/rpcutil/gateway_hub.go (edit — Insights field)
@@ -391,7 +391,7 @@ gateway-go/internal/runtime/server/method_registry.go  (edit — insights wiring
 gateway-go/internal/runtime/server/method_registry_test.go (edit — snapshot)
 gateway-go/internal/runtime/server/server.go          (edit — insights field)
 gateway-go/internal/runtime/server/server_rpc_session.go (edit — SetInsightsProviderFunc)
-gateway-go/internal/runtime/server/inbound.go         (edit — main-agent /steer intercept)
+gateway-go/internal/runtime/nativeapi/ (miniapp HTTP surface)         (edit — main-agent /steer intercept)
 
 (+ 기타 TODO 마커 추가된 파일)
 ```

@@ -9,7 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 )
 
-// buildMux configures HTTP routing for health, RPC/WS, API, hooks, and plugin routes.
+// buildMux configures HTTP routing for health, native-client HTTP (SSE via gatewayhttp/nativeapi), hooks, and introspection routes.
 func (s *Server) buildMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	phoneEventHandler := func() *phoneevents.Handler {
