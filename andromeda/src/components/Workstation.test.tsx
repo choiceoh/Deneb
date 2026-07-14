@@ -253,14 +253,17 @@ describe("Workstation shortcuts", () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it.each(["a", "c", "v", "x", "y", "z", "A", "C"])("denies shortcut steal when editing combo %s pressed in input", (key) => {
-    const setView = vi.fn();
-    renderWorkstation(workspace({ setView }));
-    const event = new KeyboardEvent("keydown", { key, ctrlKey: true, cancelable: true });
-    window.dispatchEvent(event);
-    expect(setView).not.toHaveBeenCalled();
-    expect(event.defaultPrevented).toBe(false);
-  });
+  it.each(["a", "c", "v", "x", "y", "z", "A", "C"])(
+    "denies shortcut steal when editing combo %s pressed in input",
+    (key) => {
+      const setView = vi.fn();
+      renderWorkstation(workspace({ setView }));
+      const event = new KeyboardEvent("keydown", { key, ctrlKey: true, cancelable: true });
+      window.dispatchEvent(event);
+      expect(setView).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(false);
+    },
+  );
 
   it("ignores shortcuts without Ctrl or Meta", () => {
     const setView = vi.fn();

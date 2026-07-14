@@ -62,7 +62,7 @@ describe("parseCsv", () => {
     ]);
   });
 
-  it('unescapes doubled quotes and parses TSV when delimiter is tab', () => {
+  it("unescapes doubled quotes and parses TSV when delimiter is tab", () => {
     expect(parseCsv('"그가 ""안녕""이라 말함"')).toEqual([['그가 "안녕"이라 말함']]);
     expect(parseCsv("a\tb\nc\td", "\t")).toEqual([
       ["a", "b"],
