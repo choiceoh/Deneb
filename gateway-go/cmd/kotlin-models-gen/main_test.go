@@ -16,7 +16,7 @@ func mustExpr(t *testing.T, src string) ast.Expr {
 	return expr
 }
 
-func TestMapTypeCoversWireShapes(t *testing.T) {
+func TestMapTypeCoversSupportedShapesAndRejectsMapType(t *testing.T) {
 	structs := map[string]*ast.StructType{"child": {}}
 	tests := []struct {
 		src, typ, def string

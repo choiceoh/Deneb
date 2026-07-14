@@ -2,7 +2,7 @@ package jsonutil
 
 import "testing"
 
-func TestEscapeStringControls(t *testing.T) {
+func TestEscapeStringControlsEnablesRoundTripUnmarshal(t *testing.T) {
 	// Valid JSON (no raw controls) is unchanged.
 	valid := `{"a":"b","c":[1,2]}`
 	if got := EscapeStringControls(valid); got != valid {
@@ -34,7 +34,7 @@ type misRow struct {
 	Reason  string `json:"reason"`
 }
 
-func TestUnmarshalLLMArray(t *testing.T) {
+func TestUnmarshalLLMArrayParsesMalformedVariants(t *testing.T) {
 	cases := map[string]string{
 		"plain":            `[{"path":"a.md","correctCategory":"업무","reason":"ok"}]`,
 		"fenced":           "```json\n[{\"path\":\"a.md\",\"correctCategory\":\"업무\",\"reason\":\"ok\"}]\n```",

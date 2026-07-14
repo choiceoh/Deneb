@@ -54,7 +54,7 @@ func requiredSet(t *testing.T, schema map[string]any) map[string]bool {
 	return out
 }
 
-func TestFor_Primitives(t *testing.T) {
+func TestFor_PrimitivesCreatesRequiredScalarSchema(t *testing.T) {
 	type prim struct {
 		S string  `json:"s"`
 		I int     `json:"i"`
@@ -90,7 +90,7 @@ func TestFor_Primitives(t *testing.T) {
 	}
 }
 
-func TestFor_JSONTagRenameAndSkip(t *testing.T) {
+func TestFor_RenamesTaggedFieldsAndIgnoresDashTag(t *testing.T) {
 	type tagged struct {
 		Renamed  string `json:"renamed_name"`
 		Omit     string `json:"-"`
@@ -121,7 +121,7 @@ func TestFor_JSONTagRenameAndSkip(t *testing.T) {
 	}
 }
 
-func TestFor_EnumTag(t *testing.T) {
+func TestFor_EnumTagIgnoredOnNonStringField(t *testing.T) {
 	type withEnum struct {
 		Priority string `json:"priority" enum:"high,medium,low"`
 		Plain    string `json:"plain"`
@@ -153,7 +153,7 @@ func TestFor_EmptyEnumMemberPreserved(t *testing.T) {
 	}
 }
 
-func TestFor_NestedAndSlices(t *testing.T) {
+func TestFor_CreatesNestedObjectAndArraySchemas(t *testing.T) {
 	type item struct {
 		Index    int  `json:"index"`
 		Relevant bool `json:"relevant"`
@@ -194,7 +194,7 @@ func TestFor_NestedAndSlices(t *testing.T) {
 	}
 }
 
-func TestFor_EmbeddedFlattened(t *testing.T) {
+func TestFor_EmbeddedFieldsCreateFlatSchema(t *testing.T) {
 	type base struct {
 		A string `json:"a"`
 	}
@@ -219,7 +219,7 @@ func TestFor_EmbeddedFlattened(t *testing.T) {
 	}
 }
 
-func TestFor_ByteStable(t *testing.T) {
+func TestFor_IsIdempotentAcrossRepeatedCalls(t *testing.T) {
 	type x struct {
 		B string `json:"b"`
 		A string `json:"a"`
@@ -233,7 +233,7 @@ func TestFor_ByteStable(t *testing.T) {
 	}
 }
 
-func TestFor_ByteSliceIsString(t *testing.T) {
+func TestFor_ByteSliceEncodesAsBase64String(t *testing.T) {
 	// encoding/json encodes []byte as a base64 string, so the schema must say
 	// string — not array-of-integer (the naive reflection result).
 	type withBytes struct {
@@ -285,7 +285,7 @@ func TestFor_FailsFastOnUnrepresentable(t *testing.T) {
 	}
 }
 
-func TestFor_ByteArrayIsArrayNotString(t *testing.T) {
+func TestFor_ByteArrayTypeWithoutBase64Encoding(t *testing.T) {
 	// encoding/json base64-encodes a byte SLICE but encodes a byte ARRAY as a
 	// JSON array of numbers — the schema must distinguish them.
 	type withByteArray struct {
@@ -300,7 +300,7 @@ func TestFor_ByteArrayIsArrayNotString(t *testing.T) {
 	}
 }
 
-func TestFor_JSONNumberIsNumber(t *testing.T) {
+func TestFor_JSONNumberFormatsAsNumberType(t *testing.T) {
 	// json.Number is a string-kind type but encoding/json emits a bare number.
 	type withNum struct {
 		N json.Number `json:"n"`
@@ -310,7 +310,7 @@ func TestFor_JSONNumberIsNumber(t *testing.T) {
 	}
 }
 
-func TestFor_UintptrIsInteger(t *testing.T) {
+func TestFor_UintptrFormatsAsIntegerType(t *testing.T) {
 	type withUintptr struct {
 		P uintptr `json:"p"`
 	}
@@ -331,7 +331,7 @@ type mutB struct {
 	A *mutA `json:"a"`
 }
 
-func TestFor_CyclicTypePanics(t *testing.T) {
+func TestFor_CyclicTypesPanicRecoverably(t *testing.T) {
 	// A self-referential type must FAIL FAST (catchable panic), not recurse into
 	// an unrecoverable stack/heap exhaustion.
 	cases := map[string]func(){
@@ -368,7 +368,7 @@ type valMarshaler struct {
 
 func (v valMarshaler) MarshalJSON() ([]byte, error) { return []byte(`{"x":0}`), nil }
 
-func TestFor_PointerReceiverMarshalerIsStructural(t *testing.T) {
+func TestFor_PointerReceiverMarshalerAllowsStructuralSchema(t *testing.T) {
 	type host struct {
 		M ptrMarshaler `json:"m"`
 	}
@@ -393,7 +393,7 @@ type shadowDerived struct {
 	Name int `json:"name"` // shallower field shadows shadowBase.Name (encoding/json rule)
 }
 
-func TestFor_TaggedEmbedOfUnexportedType(t *testing.T) {
+func TestFor_TaggedEmbedPreservesUnexportedTypeAsNestedObject(t *testing.T) {
 	// A tagged anonymous field is a NAMED nested object in encoding/json, even when
 	// the embedded type is unexported — it must NOT be dropped from the schema.
 	type inner struct {
@@ -419,7 +419,7 @@ func TestFor_TaggedEmbedOfUnexportedType(t *testing.T) {
 	}
 }
 
-func TestFor_UntaggedScalarEmbed(t *testing.T) {
+func TestFor_UntaggedEmbedIgnoresUnexportedScalar(t *testing.T) {
 	// encoding/json promotes an anonymous NON-struct field only when it is exported.
 	// An untagged embedded UNEXPORTED scalar is dropped; an EXPORTED one is promoted
 	// under its type name. The schema must match both.
@@ -442,7 +442,7 @@ func TestFor_UntaggedScalarEmbed(t *testing.T) {
 	}
 }
 
-func TestFor_ValueMarshalerOnlyIsStructural(t *testing.T) {
+func TestFor_ValueMarshalerOnlyAllowsStructuralSchema(t *testing.T) {
 	// A value-receiver MarshalJSON-only type has NO custom decoder, so json.Unmarshal
 	// decodes it structurally — the schema must reflect its fields, not refuse it.
 	// (The old Marshaler-based gate wrongly refused this; the Unmarshaler-only gate
@@ -464,7 +464,7 @@ func TestFor_ValueMarshalerOnlyIsStructural(t *testing.T) {
 	}
 }
 
-func TestFor_ShadowedEmbeddedField(t *testing.T) {
+func TestFor_ShadowedFieldDeduplicatesRequiredList(t *testing.T) {
 	s := schemaOf(t, For[shadowDerived]("d"))
 	p := props(t, s)
 	// Shallower (outer) Name wins → integer, and it appears exactly once.

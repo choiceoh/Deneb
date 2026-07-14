@@ -185,7 +185,7 @@ func TestWriter_PathSanitization(t *testing.T) {
 	}
 }
 
-func TestRunLogger_Integration(t *testing.T) {
+func TestRunLoggerWritesAndReadsFullRunSequence(t *testing.T) {
 	dir := t.TempDir()
 	w := NewWriter(dir)
 	rl := NewRunLogger(w, "sess1", "run_abc")

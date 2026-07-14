@@ -130,7 +130,7 @@ func TestAppendMarshalErrorDoesNotCreateFile(t *testing.T) {
 	}
 }
 
-func TestSnapshot(t *testing.T) {
+func TestSnapshotWritesAndReloadsItems(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "snap.jsonl")
 	items := []record{
 		{Name: "x", Value: 10},

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestStripThinkingTags(t *testing.T) {
+func TestStripThinkingTagsClearsReasoningBlocks(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
@@ -95,7 +95,7 @@ func TestStripThinkingTags(t *testing.T) {
 	}
 }
 
-func TestExtractObject(t *testing.T) {
+func TestExtractObjectParsesJSONFromNoisyText(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     string
@@ -253,7 +253,7 @@ func TestExtractObject(t *testing.T) {
 	}
 }
 
-func TestExtractArray(t *testing.T) {
+func TestExtractArrayParsesJSONFromNoisyText(t *testing.T) {
 	tests := []struct {
 		name   string
 		input  string
@@ -509,7 +509,7 @@ func TestTruncate(t *testing.T) {
 	}
 }
 
-func TestStripThinkingPreamble(t *testing.T) {
+func TestStripThinkingPreambleClearsLeadingReasoningPrefix(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string

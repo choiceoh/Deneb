@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 )
 
-func TestBuildTurnView_JoinsAgentLogAndRing(t *testing.T) {
+func TestBuildTurnViewAssemblesRunDataWithRingLogs(t *testing.T) {
 	dir := t.TempDir()
 	w := agentlog.NewWriter(dir)
 	rl := agentlog.NewRunLogger(w, "client:main", "run-xyz")

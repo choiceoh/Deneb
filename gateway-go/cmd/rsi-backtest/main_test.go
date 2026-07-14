@@ -5,7 +5,7 @@ import "testing"
 // The backtest must mirror the live deciders exactly: legacy fires on the
 // threshold regardless of baseline; the e-process demands baseline-relative
 // evidence — their disagreement on noisy-baseline skills is the report's point.
-func TestBacktest(t *testing.T) {
+func TestBacktestReturnsPerSkillDeciderVerdicts(t *testing.T) {
 	mkUsage := func(skill string, at int64, ok bool) usageRec {
 		return usageRec{SkillName: skill, UsedAt: at, Success: ok}
 	}

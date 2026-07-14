@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestSecretsFileFor(t *testing.T) {
+func TestSecretsFileFor_ReturnsPathOrEmpty(t *testing.T) {
 	if got := secretsFileFor(""); got != "" {
 		t.Errorf("empty config path: got %q, want \"\"", got)
 	}
@@ -108,7 +108,7 @@ func TestReloadIfChanged_SecretsRotation(t *testing.T) {
 	}
 }
 
-func TestSecretsMtimeNanos(t *testing.T) {
+func TestSecretsMtimeNanos_ReturnsZeroForMissingPath(t *testing.T) {
 	if got := secretsMtimeNanos(""); got != 0 {
 		t.Errorf("empty path: got %d, want 0", got)
 	}

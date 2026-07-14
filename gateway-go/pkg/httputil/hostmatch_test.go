@@ -2,7 +2,7 @@ package httputil
 
 import "testing"
 
-func TestHostname(t *testing.T) {
+func TestHostnameParsesVariousURLForms(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -38,7 +38,7 @@ func TestHostname(t *testing.T) {
 	}
 }
 
-func TestHostMatches(t *testing.T) {
+func TestHostMatchesRejectsSpoofedDomains(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {

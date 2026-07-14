@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestUnmarshal(t *testing.T) {
+func TestUnmarshalWrapsErrorsWithContext(t *testing.T) {
 	type params struct {
 		Name string `json:"name"`
 		Age  int    `json:"age"`
@@ -39,7 +39,7 @@ func TestUnmarshal(t *testing.T) {
 	})
 }
 
-func TestUnmarshalInto(t *testing.T) {
+func TestUnmarshalIntoWrapsErrorsWithContext(t *testing.T) {
 	t.Run("valid JSON", func(t *testing.T) {
 		var p struct {
 			Name string `json:"name"`
@@ -64,7 +64,7 @@ func TestUnmarshalInto(t *testing.T) {
 	})
 }
 
-func TestStripTrailingCommas(t *testing.T) {
+func TestStripTrailingCommasNormalizesMalformedJSON(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
@@ -142,7 +142,7 @@ func TestStripTrailingCommas(t *testing.T) {
 	}
 }
 
-func TestUnmarshalLLM(t *testing.T) {
+func TestUnmarshalLLMParsesNoisyModelOutput(t *testing.T) {
 	type result struct {
 		Answer string `json:"answer"`
 	}

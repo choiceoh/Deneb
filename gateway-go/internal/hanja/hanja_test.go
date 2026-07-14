@@ -21,7 +21,7 @@ func TestTable_LoadedAndSane(t *testing.T) {
 	}
 }
 
-func TestApplyDueum(t *testing.T) {
+func TestApplyDueumNormalizesWordInitialReadings(t *testing.T) {
 	// Word-initial 두음법칙 cases (the reading as stored → its word-initial form).
 	cases := map[rune]rune{
 		'려': '여', '례': '예', '료': '요', '류': '유', '리': '이', '량': '양', // ㄹ + y/ㅣ → ㅇ
@@ -41,7 +41,7 @@ func TestApplyDueum(t *testing.T) {
 	}
 }
 
-func TestTransliterate_Words(t *testing.T) {
+func TestTransliterateRendersHanWordsAsKoreanReadings(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"報告書 검토 부탁드립니다.", "보고서 검토 부탁드립니다."},
 		{"見積書와 契約書를 보냅니다.", "견적서와 계약서를 보냅니다."},
@@ -114,7 +114,7 @@ func TestStreamer_MatchesWholeString(t *testing.T) {
 	}
 }
 
-func TestTransliterate_SimplifiedAndChinese(t *testing.T) {
+func TestTransliterateUsesFallbackReadingForSimplifiedAndChineseWords(t *testing.T) {
 	cases := []struct{ in, want string }{
 		// (1) Simplified Chinese reads via kTraditionalVariant: 时→時→시 etc., so
 		// Chinese Sino-vocabulary surfaces as the equivalent Korean word.

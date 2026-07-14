@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestForward_RetriesTransient5xx(t *testing.T) {
+func TestForward_RetryOnTransient5xxSucceeds(t *testing.T) {
 	var hits int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if atomic.AddInt32(&hits, 1) <= 2 { // first 2 attempts 5xx, 3rd succeeds (1 + maxUpstreamRetries)
@@ -34,7 +34,7 @@ func TestForward_RetriesTransient5xx(t *testing.T) {
 	}
 }
 
-func TestForward_ExhaustsPersistent5xx(t *testing.T) {
+func TestForward_ExhaustsRetriesOnPersistent5xxError(t *testing.T) {
 	var hits int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		atomic.AddInt32(&hits, 1)
@@ -55,7 +55,7 @@ func TestForward_ExhaustsPersistent5xx(t *testing.T) {
 	}
 }
 
-func TestNoEffortRouting_Header(t *testing.T) {
+func TestNoEffortRouting_HeaderParsesOptOutValues(t *testing.T) {
 	mk := func(v string) *http.Request {
 		r, _ := http.NewRequest("POST", "/", nil)
 		if v != "" {
@@ -79,7 +79,7 @@ func TestNoEffortRouting_Header(t *testing.T) {
 // With the opt-out header, a smart client's body passes through byte-identical —
 // wormhole skips effort routing even for a toggleKwarg model, so the gateway's own
 // thinking decision (and its prefix cache) is never disturbed.
-func TestEffortOptOut_PassesBodyThrough(t *testing.T) {
+func TestEffortOptOut_PreservesBodyUnchanged(t *testing.T) {
 	var got string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
@@ -108,7 +108,7 @@ func TestEffortOptOut_PassesBodyThrough(t *testing.T) {
 	}
 }
 
-func TestIsLoopbackListen(t *testing.T) {
+func TestIsLoopbackListen_ReturnsTrueForLoopbackAddresses(t *testing.T) {
 	cases := []struct {
 		in   string
 		want bool
@@ -127,7 +127,7 @@ func TestIsLoopbackListen(t *testing.T) {
 	}
 }
 
-func TestValidateInboundAuth(t *testing.T) {
+func TestValidateInboundAuth_RejectsMissingTokenOnNetworkListener(t *testing.T) {
 	cases := []struct {
 		name    string
 		listen  string

@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestResolve(t *testing.T) {
+func TestResolve_ReturnsAssignmentsAndMissingRefs(t *testing.T) {
 	r := NewResolver()
 	r.Set("openai.apiKey", "sk-123")
 	r.Set("openai.orgId", "org-456")

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestIdentifyClient(t *testing.T) {
+func TestIdentifyClient_ReturnsKindAndName(t *testing.T) {
 	mk := func(ua, hdr string) *http.Request {
 		r, _ := http.NewRequest("POST", "/", nil)
 		if ua != "" {

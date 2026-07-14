@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-func TestProviderMetaJSON(t *testing.T) {
+func TestProviderMetaRoundTripsThroughJSON(t *testing.T) {
 	meta := protocol.ProviderMeta{
 		ID:      "anthropic",
 		Label:   "Anthropic",

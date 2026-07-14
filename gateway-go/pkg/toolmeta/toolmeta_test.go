@@ -51,7 +51,7 @@ func TestGetRejectsMissingAndMalformed(t *testing.T) {
 	}
 }
 
-func TestUnmarshalableValueDropped(t *testing.T) {
+func TestUnmarshalableValueDroppedWithoutBreakingRoundTrip(t *testing.T) {
 	c := NewCollector()
 	c.Set("bad", func() {}) // unmarshalable — dropped silently
 	if c.JSON() != nil {

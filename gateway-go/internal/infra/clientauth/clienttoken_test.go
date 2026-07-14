@@ -15,7 +15,7 @@ func isolateStateDir(t *testing.T) string {
 	return dir
 }
 
-func TestGenerateAndVerify(t *testing.T) {
+func TestGenerateVerifyRoundTrip(t *testing.T) {
 	dir := isolateStateDir(t)
 
 	// Disabled before any token exists.
@@ -57,7 +57,7 @@ func TestGenerateAndVerify(t *testing.T) {
 	}
 }
 
-func TestGenerateRotates(t *testing.T) {
+func TestGenerateRotationRejectsOldToken(t *testing.T) {
 	isolateStateDir(t)
 
 	first, err := Generate()

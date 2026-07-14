@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func TestSmokeHealthEndpoint(t *testing.T) {
+func TestHealthEndpointReturnsOKStatus(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

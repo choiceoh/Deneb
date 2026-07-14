@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestAggregateBySession(t *testing.T) {
+func TestAggregateBySessionReturnsSortedRollupsWithinWindow(t *testing.T) {
 	w := NewWriter(t.TempDir())
 	now := time.Now().UnixMilli()
 

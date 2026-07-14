@@ -21,7 +21,7 @@ func writeScript(t *testing.T, dir, name, body string, mode os.FileMode) string 
 	return name
 }
 
-func TestProbe(t *testing.T) {
+func TestProbeClassifiesStatusAndFormatsProblem(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell-script fixtures are POSIX-only")
 	}
@@ -103,7 +103,7 @@ func TestProbe_CustomHintPreserved(t *testing.T) {
 	}
 }
 
-func TestStatusString(t *testing.T) {
+func TestStatusStringIncludesUnknownFallback(t *testing.T) {
 	cases := map[Status]string{
 		StatusOK:      "ok",
 		StatusMissing: "missing",
@@ -117,7 +117,7 @@ func TestStatusString(t *testing.T) {
 	}
 }
 
-func TestIsBrokenExit(t *testing.T) {
+func TestIsBrokenExitTreatsNilAsNotBroken(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell-script fixtures are POSIX-only")
 	}

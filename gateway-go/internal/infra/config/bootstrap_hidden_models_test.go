@@ -7,10 +7,10 @@ import (
 	"testing"
 )
 
-// TestHideModel verifies soft-hiding a cloud-catalog model: it lands in
+// TestHideModelClearsRoleIdempotently verifies soft-hiding a cloud-catalog model: it lands in
 // models.hiddenModels, clears any role that pointed at it, is visible to
 // LoadHiddenModels, and is idempotent (re-hiding does not duplicate).
-func TestHideModel(t *testing.T) {
+func TestHideModelClearsRoleIdempotently(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "deneb.json")
 	seed := `{"models":{"providers":{"openrouter":{"baseUrl":"https://openrouter.ai/api/v1","api":"openai"}}},` +

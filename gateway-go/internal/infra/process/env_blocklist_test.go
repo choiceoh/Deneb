@@ -2,7 +2,7 @@ package process
 
 import "testing"
 
-func TestIsBlockedEnvKey(t *testing.T) {
+func TestIsBlockedEnvKeyRejectsDangerousAndAllowsSafeKeys(t *testing.T) {
 	blocked := []string{
 		"LD_PRELOAD", "LD_LIBRARY_PATH", "BASH_ENV", "MAVEN_OPTS",
 		"SBT_OPTS", "GRADLE_OPTS", "_JAVA_OPTIONS", "JAVA_TOOL_OPTIONS",
@@ -27,7 +27,7 @@ func TestIsBlockedEnvKey(t *testing.T) {
 	}
 }
 
-func TestSanitizeNodeOptions(t *testing.T) {
+func TestSanitizeNodeOptions_PreservesSafeFlagsStripsDangerous(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected string
@@ -47,7 +47,7 @@ func TestSanitizeNodeOptions(t *testing.T) {
 	}
 }
 
-func TestSanitizeEnv(t *testing.T) {
+func TestSanitizeEnv_PreservesSafeVarsRemovesDangerous(t *testing.T) {
 	env := []string{
 		"PATH=/usr/bin",
 		"HOME=/root",

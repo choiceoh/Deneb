@@ -21,7 +21,7 @@ import (
 	runtimebriefcase "github.com/choiceoh/deneb/gateway-go/internal/runtime/briefcase"
 )
 
-func TestAuthorizeModelEndpoint(t *testing.T) {
+func TestAuthorizeModelEndpointRejectsUnsafeEndpoints(t *testing.T) {
 	tests := []struct {
 		name        string
 		url         string
@@ -48,7 +48,7 @@ func TestAuthorizeModelEndpoint(t *testing.T) {
 	}
 }
 
-func TestDoctorCommand(t *testing.T) {
+func TestDoctorCommandReturnsReadyStatusWithNetworkDenied(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if err := run([]string{"doctor", "--parent", t.TempDir()}, &stdout, &stderr); err != nil {
 		t.Fatalf("doctor: %v (%s)", err, stderr.String())
@@ -58,7 +58,7 @@ func TestDoctorCommand(t *testing.T) {
 	}
 }
 
-func TestPortableSmokeCaseRemainsSignedAndValid(t *testing.T) {
+func TestPortableSmokeCaseLoadsWithValidDigest(t *testing.T) {
 	caseDir := portableSmokeCaseDir()
 	pack, err := casepack.LoadDir(caseDir)
 	if err != nil {
@@ -69,7 +69,7 @@ func TestPortableSmokeCaseRemainsSignedAndValid(t *testing.T) {
 	}
 }
 
-func TestScoreCommand(t *testing.T) {
+func TestScoreCommandReturnsPassOrFailWhenAnswerChanges(t *testing.T) {
 	dir := t.TempDir()
 	caseDir := portableSmokeCaseDir()
 	pack, err := casepack.LoadDir(caseDir)
@@ -113,7 +113,7 @@ func TestScoreCommand(t *testing.T) {
 	}
 }
 
-func TestRunOutputUsesPortableArtifactRootAndScoresAfterMove(t *testing.T) {
+func TestRunOutputPreservesArtifactRootAfterMove(t *testing.T) {
 	const answer = "개정 메일이 이전 승인 예산 100을 대체했으며, Project Aurora의 최신 승인 예산은 120입니다."
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -268,7 +268,7 @@ func TestRunAutoLoadsSignedDevicePlanAndScoringRequiresIt(t *testing.T) {
 	}
 }
 
-func TestSupervisorPlanDigestCommand(t *testing.T) {
+func TestSupervisorPlanDigestCommandReturnsExpectedDigest(t *testing.T) {
 	caseDir := portableSmokeCaseDir()
 	var stdout, stderr bytes.Buffer
 	if err := run([]string{

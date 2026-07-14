@@ -8,7 +8,7 @@ import (
 
 // ── StateDirPolicy precedence ─────────────────────────────────────────────────
 
-func TestStateDirPolicyPrecedence(t *testing.T) {
+func TestStateDirPolicyPrecedenceWithOverrides(t *testing.T) {
 	cases := []struct {
 		label            string
 		envDeneb         string
@@ -60,7 +60,7 @@ func TestStateDirPolicyPrecedence(t *testing.T) {
 
 // ── ConfigPathPolicy precedence ───────────────────────────────────────────────
 
-func TestConfigPathPolicyPrecedence(t *testing.T) {
+func TestConfigPathPolicyPrecedenceWithOverrides(t *testing.T) {
 	cases := []struct {
 		label            string
 		envDeneb         string
@@ -112,7 +112,7 @@ func TestConfigPathPolicyPrecedence(t *testing.T) {
 
 // ── GatewayPortPolicy precedence ──────────────────────────────────────────────
 
-func TestGatewayPortPolicyPrecedence(t *testing.T) {
+func TestGatewayPortPolicyPrecedenceWithOverrides(t *testing.T) {
 	intPtr := func(v int) *int { return &v }
 
 	cases := []struct {

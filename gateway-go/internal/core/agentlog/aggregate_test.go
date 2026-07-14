@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestAggregate(t *testing.T) {
+func TestAggregateReturnsRunToolAndProactiveRollups(t *testing.T) {
 	dir := t.TempDir()
 	w := NewWriter(dir)
 
@@ -71,11 +71,11 @@ func TestAggregate(t *testing.T) {
 	}
 }
 
-// TestAggregate_ToolAnomalyCounters verifies the closed-loop tool metrics:
+// TestAggregateFoldsUnknownBlockedAndRepairedToolCounters verifies the closed-loop tool metrics:
 // unknown-name and blocked flags fold from turn.tool entries, repaired-args
 // counts fold from run.end's RepairedToolCalls, and output-size totals/max
 // accumulate per tool.
-func TestAggregate_ToolAnomalyCounters(t *testing.T) {
+func TestAggregateFoldsUnknownBlockedAndRepairedToolCounters(t *testing.T) {
 	dir := t.TempDir()
 	w := NewWriter(dir)
 
@@ -121,7 +121,7 @@ func TestAggregate_ToolAnomalyCounters(t *testing.T) {
 
 // A run.end-only repaired entry for a tool with no turn.tool lines in the
 // window still surfaces (Calls stays 0, AvgMs stays 0 — no divide-by-zero).
-func TestAggregate_RepairedOnlyTool(t *testing.T) {
+func TestAggregateSurfacesRepairedToolWithMissingTurnEntries(t *testing.T) {
 	dir := t.TempDir()
 	w := NewWriter(dir)
 	rl := NewRunLogger(w, "client:main", "run1")
@@ -142,9 +142,9 @@ func TestAggregate_RepairedOnlyTool(t *testing.T) {
 	}
 }
 
-// TestAggregateSince verifies the sinceMs cutoff excludes older entries: a
+// TestAggregateSinceReturnsEmptyRollupForFutureCutoff verifies the sinceMs cutoff excludes older entries: a
 // cutoff in the future yields an empty roll-up even though entries exist.
-func TestAggregateSince(t *testing.T) {
+func TestAggregateSinceReturnsEmptyRollupForFutureCutoff(t *testing.T) {
 	dir := t.TempDir()
 	w := NewWriter(dir)
 	rl := NewRunLogger(w, "client:main", "run1")

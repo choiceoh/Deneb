@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestCounterInc(t *testing.T) {
+func TestCounterInc_UpdatesLabeledCounts(t *testing.T) {
 	c := NewCounter()
 	c.Inc("foo", "ok")
 	c.Inc("foo", "ok")
@@ -19,7 +19,7 @@ func TestCounterInc(t *testing.T) {
 	}
 }
 
-func TestCounterAdd(t *testing.T) {
+func TestCounterInc_UpdatesUnlabeledCounts(t *testing.T) {
 	c := NewCounter()
 	c.Inc("input")
 	c.Inc("input")
@@ -35,7 +35,7 @@ func TestCounterAdd(t *testing.T) {
 	}
 }
 
-func TestCounterSnapshot(t *testing.T) {
+func TestCounterSnapshot_ReturnsAllTrackedKeys(t *testing.T) {
 	c := NewCounter()
 	c.Inc("a")
 	c.Inc("b")

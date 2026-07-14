@@ -75,7 +75,7 @@ func TestConfigHotReloadRejectsTokenRemovalOnNetworkListener(t *testing.T) {
 	}
 }
 
-func TestEffortRoutingOn(t *testing.T) {
+func TestEffortRoutingOn_ReturnsDefaultAndExplicitValues(t *testing.T) {
 	if !(config{}).effortRoutingOn() {
 		t.Error("absent effortRouting should default ON")
 	}
@@ -89,7 +89,7 @@ func TestEffortRoutingOn(t *testing.T) {
 	}
 }
 
-func TestEffortRoutingDisabled_SuppressesInjection(t *testing.T) {
+func TestEffortRoutingDisabled_IgnoresToggleKwargInjection(t *testing.T) {
 	var gotBody string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)

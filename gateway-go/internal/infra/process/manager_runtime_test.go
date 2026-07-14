@@ -55,7 +55,7 @@ func TestExecuteBackgroundDetachesCallerCancellation(t *testing.T) {
 	}
 }
 
-func TestExecuteReleasesRuntimeReferencesAtTerminal(t *testing.T) {
+func TestExecute_ClearsRuntimeReferencesAtTerminal(t *testing.T) {
 	manager := newTestManager(t)
 	result := manager.Execute(context.Background(), ExecRequest{
 		ID:      "release-runtime-refs",

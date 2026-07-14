@@ -38,7 +38,7 @@ func TestTruncateBytes(t *testing.T) {
 	}
 }
 
-func TestTailBytes(t *testing.T) {
+func TestTailBytesTruncatesFromRuneBoundary(t *testing.T) {
 	cases := []struct {
 		in   string
 		max  int

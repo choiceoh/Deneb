@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestNewResolverInitialStateAndMisses(t *testing.T) {
+func TestNewResolver_ReportsMissingSecretsInitially(t *testing.T) {
 	before := time.Now().UnixMilli()
 	resolver := NewResolver()
 	after := time.Now().UnixMilli()

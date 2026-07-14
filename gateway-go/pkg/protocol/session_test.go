@@ -29,7 +29,7 @@ func TestParseSessionKind(t *testing.T) {
 	}
 }
 
-func TestSessionStatusConstants(t *testing.T) {
+func TestSessionStatusConstantsMatchWireFormat(t *testing.T) {
 	// Verify wire values match TypeScript conventions.
 	if protocol.SessionStatusRunning != "running" {
 		t.Errorf("SessionStatusRunning = %q, want %q", protocol.SessionStatusRunning, "running")

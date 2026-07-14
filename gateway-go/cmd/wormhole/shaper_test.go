@@ -11,7 +11,7 @@ import (
 )
 
 // identityShaper is the default for every client today: a byte-exact pass-through.
-func TestIdentityShaperPassThrough(t *testing.T) {
+func TestIdentityShaperPreservesHeadersAndBody(t *testing.T) {
 	s := identityShaper{}
 	h := http.Header{}
 	s.header(h)
@@ -31,7 +31,7 @@ func TestIdentityShaperPassThrough(t *testing.T) {
 // shaperFor returns identity for every known client kind — the foundation ships
 // with no client-specific shaping. This pins that invariant so a future shaper is
 // added deliberately (and this test updated alongside it).
-func TestShaperForDefaultsToIdentity(t *testing.T) {
+func TestShaperFor_ReturnsIdentityForEveryClientKind(t *testing.T) {
 	for _, k := range []clientKind{
 		clientDeneb, clientClaudeCode, clientOpenAISDK,
 		clientAnthropicSDK, clientCurl, clientUnknown,

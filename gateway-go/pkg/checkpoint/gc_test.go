@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/checkpoint"
 )
 
-func TestCleanupStaleSessions_RemovesOldSessions(t *testing.T) {
+func TestCleanupStaleSessions_EvictsOldSessionDirs(t *testing.T) {
 	root := t.TempDir()
 
 	stale := filepath.Join(root, "old-session")

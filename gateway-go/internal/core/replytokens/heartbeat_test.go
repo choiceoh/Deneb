@@ -28,7 +28,7 @@ func TestIsHeartbeatContentEffectivelyEmpty(t *testing.T) {
 	}
 }
 
-func TestResolveHeartbeatPrompt(t *testing.T) {
+func TestResolveHeartbeatPromptReturnsDefaultForBlankInput(t *testing.T) {
 	if got := ResolveHeartbeatPrompt(""); got != HeartbeatPrompt {
 		t.Errorf("empty input should return default prompt")
 	}
@@ -41,7 +41,7 @@ func TestResolveHeartbeatPrompt(t *testing.T) {
 	}
 }
 
-func TestStripHeartbeatToken(t *testing.T) {
+func TestStripHeartbeatTokenWithModesAckLimitsAndTokenPosition(t *testing.T) {
 	tests := []struct {
 		name      string
 		raw       string

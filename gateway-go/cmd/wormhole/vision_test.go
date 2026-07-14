@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestModelAcceptsImages(t *testing.T) {
+func TestModelAcceptsImages_ReturnsCapabilityByModelName(t *testing.T) {
 	cases := []struct {
 		model string
 		want  bool
@@ -35,7 +35,7 @@ func TestModelAcceptsImages(t *testing.T) {
 	}
 }
 
-func TestEntryAcceptsImages_Override(t *testing.T) {
+func TestEntryAcceptsImages_OverrideWithBuiltinFallback(t *testing.T) {
 	tr, fa := true, false
 	// Override wins over the builtin table in both directions.
 	if !entryAcceptsImages(modelEntry{UpstreamModel: "glm-5.2", Vision: &tr}) {
@@ -50,7 +50,7 @@ func TestEntryAcceptsImages_Override(t *testing.T) {
 	}
 }
 
-func TestStripImageParts_OpenAI(t *testing.T) {
+func TestStripImageParts_OpenAI_PreservesTextAndFields(t *testing.T) {
 	body := []byte(`{"model":"glm-5.2","temperature":0.30,"messages":[` +
 		`{"role":"user","content":[{"type":"text","text":"이 사진 뭐야"},` +
 		`{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}]},` +
@@ -75,7 +75,7 @@ func TestStripImageParts_OpenAI(t *testing.T) {
 	}
 }
 
-func TestStripImageParts_Anthropic(t *testing.T) {
+func TestStripImageParts_Anthropic_PreservesTextBlocks(t *testing.T) {
 	body := []byte(`{"model":"kimi","messages":[{"role":"user","content":[` +
 		`{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AAAA"}},` +
 		`{"type":"text","text":"설명해줘"}]}]}`)
@@ -93,7 +93,7 @@ func TestStripImageParts_Anthropic(t *testing.T) {
 
 // The APC contract: a request without image parts must come back byte-identical
 // — including the fast-path miss and the parse-then-no-op path.
-func TestStripImageParts_NoImageBytesUntouched(t *testing.T) {
+func TestStripImageParts_PreservesBytesWithoutImageParts(t *testing.T) {
 	noMarker := []byte(`{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"안녕"}]}`)
 	if out, n := stripImageParts(noMarker, protocolOpenAI); n != 0 || !bytes.Equal(out, noMarker) {
 		t.Errorf("image-free body mutated (n=%d): %s", n, out)
@@ -112,7 +112,7 @@ func TestStripImageParts_NoImageBytesUntouched(t *testing.T) {
 	}
 }
 
-func TestApplyVisionGate(t *testing.T) {
+func TestApplyVisionGate_StripsOrPreservesByModelCapability(t *testing.T) {
 	rt := quietRouter(config{})
 	withImage := []byte(`{"model":"glm-5.2","messages":[{"role":"user","content":[` +
 		`{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}]}]}`)

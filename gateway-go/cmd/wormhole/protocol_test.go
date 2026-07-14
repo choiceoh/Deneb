@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestMessages_ForwardsToAnthropicBackend(t *testing.T) {
+func TestMessages_ForwardsAndStreamsToAnthropicBackend(t *testing.T) {
 	var gotKey, gotVer, gotPath, gotModel, gotAuth string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotKey = r.Header.Get("x-api-key")
@@ -56,7 +56,7 @@ func TestMessages_ForwardsToAnthropicBackend(t *testing.T) {
 	}
 }
 
-func TestProtocolMismatch_IsActionable400(t *testing.T) {
+func TestProtocolMismatch_ReturnsActionable400(t *testing.T) {
 	rt := quietRouter(config{Models: []modelEntry{
 		{Name: "oai", URL: "http://127.0.0.1:1/v1", Protocol: "openai", UpstreamModel: "oai"},
 		{Name: "ant", URL: "http://127.0.0.1:1/v1", Protocol: "anthropic", UpstreamModel: "ant"},
@@ -82,7 +82,7 @@ func TestProtocolMismatch_IsActionable400(t *testing.T) {
 	}
 }
 
-func TestClientToken_AcceptsXApiKey(t *testing.T) {
+func TestClientToken_AcceptsXApiKeyAndRejectsWrongToken(t *testing.T) {
 	rt := quietRouter(config{Token: "sekret", Models: []modelEntry{
 		{Name: "ant", URL: "http://127.0.0.1:1/v1", Protocol: "anthropic", UpstreamModel: "ant"},
 	}})

@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-func TestGrade_AllCheckTypesPass(t *testing.T) {
+func TestGradeReturnsPassWhenAllCheckTypesSucceed(t *testing.T) {
 	root := t.TempDir()
 	content := []byte("briefcase artifact\n")
 	if err := os.WriteFile(filepath.Join(root, "report.txt"), content, 0o600); err != nil {
@@ -54,7 +54,7 @@ func TestGrade_AllCheckTypesPass(t *testing.T) {
 	}
 }
 
-func TestGrade_WeightedThresholdAndCriticalGate(t *testing.T) {
+func TestGradeReturnsPassOrFailForWeightedThresholdAndCriticalGate(t *testing.T) {
 	base := Plan{
 		PassThreshold: 0.75,
 		Checks: []Check{
@@ -74,7 +74,7 @@ func TestGrade_WeightedThresholdAndCriticalGate(t *testing.T) {
 	}
 }
 
-func TestGrade_DefaultThresholdIsStrict(t *testing.T) {
+func TestGradeDefaultsToStrictThresholdWhenUnset(t *testing.T) {
 	report := Grade(Plan{Checks: []Check{
 		{ID: "pass", Type: CheckContains, Weight: 1, Needle: "ok"},
 		{ID: "fail", Type: CheckContains, Weight: 1, Needle: "missing"},
@@ -154,7 +154,7 @@ func TestGradeRejectsCumulativeWeightOverflow(t *testing.T) {
 	}
 }
 
-func TestGradeContextKeepsCheckDiagnosticsInPlanOrder(t *testing.T) {
+func TestGradeContextReturnsCheckDiagnosticsInPlanOrder(t *testing.T) {
 	plan := Plan{Checks: []Check{
 		{ID: "first", Type: CheckExactText, Weight: 1, ExpectedText: "missing"},
 		{ID: "first", Type: CheckExactText, Weight: 1, ExpectedText: "actual"},
@@ -184,7 +184,7 @@ func TestGradeContextKeepsCheckDiagnosticsInPlanOrder(t *testing.T) {
 	}
 }
 
-func TestGradeUsesExactWeightRatioForVerdict(t *testing.T) {
+func TestGradeReturnsFailWhenExactWeightRatioIsBelowThreshold(t *testing.T) {
 	report := Grade(Plan{PassThreshold: 1, Checks: []Check{
 		{ID: "dominant", Type: CheckExactText, Weight: MaxCheckWeight, ExpectedText: "ok"},
 		{ID: "tiny-miss", Type: CheckExactText, Weight: MinCheckWeight, ExpectedText: "no"},
@@ -194,7 +194,7 @@ func TestGradeUsesExactWeightRatioForVerdict(t *testing.T) {
 	}
 }
 
-func TestGrade_ArtifactOutcomes(t *testing.T) {
+func TestGradeReturnsFailOrInvalidForArtifactCheckOutcomes(t *testing.T) {
 	root := t.TempDir()
 	content := []byte("actual")
 	if err := os.WriteFile(filepath.Join(root, "actual.txt"), content, 0o600); err != nil {
@@ -264,7 +264,7 @@ func (r *cancelAfterRead) Read(p []byte) (int, error) {
 	return 1, nil
 }
 
-func TestGrade_StateJSONUsesSemanticEquality(t *testing.T) {
+func TestGradeStateJSONCheckReturnsSemanticEqualityVerdict(t *testing.T) {
 	tests := []struct {
 		name     string
 		expected string
@@ -289,7 +289,7 @@ func TestGrade_StateJSONUsesSemanticEquality(t *testing.T) {
 	}
 }
 
-func TestFingerprintDigestIsStableAndSensitive(t *testing.T) {
+func TestFingerprintDigestReturnsStableValueAndChangesWithFingerprint(t *testing.T) {
 	f := Fingerprint{CaseID: "case-1", BuildSHA256: strings.Repeat("a", 64), Model: "model-a", Seed: 42}
 	first, second := f.Digest(), f.Digest()
 	if first == "" || first != second || len(first) != 64 {

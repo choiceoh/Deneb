@@ -72,7 +72,7 @@ func TestHelloOkRoundTrip(t *testing.T) {
 	}
 }
 
-func TestValidateProtocolVersion(t *testing.T) {
+func TestValidateProtocolVersionAllowsOnlyMatchingRange(t *testing.T) {
 	tests := []struct {
 		name string
 		min  int
@@ -95,7 +95,7 @@ func TestValidateProtocolVersion(t *testing.T) {
 	}
 }
 
-func TestValidateConnectParams(t *testing.T) {
+func TestValidateConnectParamsRejectsEmptyFields(t *testing.T) {
 	valid := &ConnectParams{
 		MinProtocol: 1,
 		MaxProtocol: 3,

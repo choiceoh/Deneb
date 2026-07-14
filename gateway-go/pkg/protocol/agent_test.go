@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-func TestAgentStatusIsTerminal(t *testing.T) {
+func TestAgentStatusIsTerminalForStoppedStates(t *testing.T) {
 	tests := []struct {
 		status   protocol.AgentStatus
 		terminal bool
@@ -27,7 +27,7 @@ func TestAgentStatusIsTerminal(t *testing.T) {
 	}
 }
 
-func TestAgentSpawnRequestJSON(t *testing.T) {
+func TestAgentSpawnRequestRoundTripsThroughJSON(t *testing.T) {
 	model := "claude-4"
 	req := protocol.AgentSpawnRequest{
 		SessionKey: "sess-123",

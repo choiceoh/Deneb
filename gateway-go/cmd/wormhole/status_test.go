@@ -72,7 +72,7 @@ func TestStatus_MergesConfigAndFleetWithSource(t *testing.T) {
 
 // A configured model shadows a discovered one of the same name: /status shows it
 // once, sourced from config.
-func TestStatus_ConfigShadowsFleet(t *testing.T) {
+func TestStatus_ConfigShadowsFleetWithSameName(t *testing.T) {
 	rt := quietRouter(config{Models: []modelEntry{
 		{Name: "shared", URL: "http://config/v1", UpstreamModel: "shared"},
 	}})

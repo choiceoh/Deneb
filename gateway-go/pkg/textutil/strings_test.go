@@ -2,7 +2,7 @@ package textutil
 
 import "testing"
 
-func TestFirstNonBlank(t *testing.T) {
+func TestFirstNonBlankReturnsFirstTrimmedNonEmpty(t *testing.T) {
 	cases := []struct {
 		name string
 		in   []string
@@ -70,7 +70,7 @@ func TestTruncateRunesWithin(t *testing.T) {
 	}
 }
 
-func TestDedupeStrings(t *testing.T) {
+func TestDeduplicatesStringsPreservingOrder(t *testing.T) {
 	in := []string{"  b  ", "a", "", "b", "a", "  ", "c"}
 	got := DedupeStrings(in)
 	want := []string{"b", "a", "c"}

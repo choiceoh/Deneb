@@ -2,7 +2,7 @@ package promptguard
 
 import "testing"
 
-func TestScanDetectsThreats(t *testing.T) {
+func TestScanReturnsMatchesForKnownThreats(t *testing.T) {
 	cases := []struct {
 		name  string
 		text  string
@@ -40,7 +40,7 @@ func TestScanDetectsThreats(t *testing.T) {
 	}
 }
 
-func TestScanCleanContent(t *testing.T) {
+func TestScanReturnsEmptyForCleanContent(t *testing.T) {
 	clean := []string{
 		"",
 		"오늘 회의는 3시에 시작합니다.",
@@ -55,7 +55,7 @@ func TestScanCleanContent(t *testing.T) {
 	}
 }
 
-func TestLabelsDedupe(t *testing.T) {
+func TestLabelsDeduplicatesRepeatedMatches(t *testing.T) {
 	matches := []Match{{Label: "a"}, {Label: "a"}, {Label: "b"}}
 	if got := Labels(matches); got != "a, b" {
 		t.Errorf("Labels dedupe = %q, want \"a, b\"", got)

@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-// TestUpsertFieldsBoostFlipsRanking is the causal proof for field boosts: the
+// TestUpsertFieldsRanksCanonicalFirstWhenTitleBoosted is the causal proof for field boosts: the
 // same two documents, the same query — flat indexing ranks the body-heavy
 // distractor first (higher raw term frequency), while a title boost flips the
 // order so the page whose *identity* carries the term wins. This is the
 // BM25F-lite behavior the wiki identity-field boost relies on.
-func TestUpsertFieldsBoostFlipsRanking(t *testing.T) {
+func TestUpsertFieldsRanksCanonicalFirstWhenTitleBoosted(t *testing.T) {
 	const query = "정산"
 
 	seedFlat := func(idx *Index) {
@@ -52,11 +52,11 @@ func TestUpsertFieldsBoostFlipsRanking(t *testing.T) {
 	}
 }
 
-// TestSearchTieBreakDeterministic pins the equal-score ordering: candidates
+// TestSearchReturnsSameTieOrderAcrossRuns pins the equal-score ordering: candidates
 // come from map iteration, so without the ID tie-break identical documents
 // would shuffle between runs (measured as test flakiness; the same shuffle
 // would hit production ranking across restarts).
-func TestSearchTieBreakDeterministic(t *testing.T) {
+func TestSearchReturnsSameTieOrderAcrossRuns(t *testing.T) {
 	idx := New()
 	// Identical field content → identical BM25 scores for the query.
 	idx.Upsert("b-doc", "정산 안내", "내용")
@@ -87,10 +87,10 @@ func TestUpsertFieldsRejectsNaNInfWeights(t *testing.T) {
 	}
 }
 
-// TestUpsertFieldsFlatWeightEqualsUpsert — weight 1.0 everywhere must behave
+// TestUpsertFieldsWithFlatWeightPreservesUpsertBehavior — weight 1.0 everywhere must behave
 // byte-identically to plain Upsert (same candidates, same scores), so existing
 // callers can migrate without a behavior change.
-func TestUpsertFieldsFlatWeightEqualsUpsert(t *testing.T) {
+func TestUpsertFieldsWithFlatWeightPreservesUpsertBehavior(t *testing.T) {
 	plain := New()
 	plain.Upsert("a", "정산 프로세스", "본문 내용")
 	plain.Upsert("b", "회의록", "정산 논의 내용")
@@ -110,11 +110,11 @@ func TestUpsertFieldsFlatWeightEqualsUpsert(t *testing.T) {
 	}
 }
 
-// TestUpsertFieldsHiddenExcludedFromSnippet: a Hidden field must still make
+// TestUpsertFieldsHiddenFieldsExcludedFromSnippetDisplay: a Hidden field must still make
 // the document matchable (membership/scoring) but its text must never appear
 // as the result snippet — retrieval-only anchors (wiki cues) are index
 // metadata, not content.
-func TestUpsertFieldsHiddenExcludedFromSnippet(t *testing.T) {
+func TestUpsertFieldsHiddenFieldsExcludedFromSnippetDisplay(t *testing.T) {
 	idx := New()
 	idx.UpsertFields(
 		"doc",
