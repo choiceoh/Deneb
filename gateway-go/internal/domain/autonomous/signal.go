@@ -217,7 +217,6 @@ func (r SignalReport) Summary(maxPerKind int) string {
 //     (NeedsResponse events still count when imminent; RSVP urgency is noted in the reason)
 //   - a deadline due within DeadlineWindow (and not past) → DeadlineWeight each
 func DetectSignals(in SignalInputs, cfg SignalConfig) SignalReport {
-	now := in.Now
 	rep := SignalReport{Threshold: cfg.EscalateThreshold}
 
 	add := func(kind SignalKind, weight int, reason string) {
@@ -225,8 +224,21 @@ func DetectSignals(in SignalInputs, cfg SignalConfig) SignalReport {
 		rep.Score += weight
 	}
 
-	// --- Mail: VIP-unanswered (high) vs stale-unanswered (accumulating) ---
-	for _, m := range in.Mail {
+	detectMailSignals(in.Now, in.Mail, cfg, add)
+	detectCalendarConflicts(in.Events, cfg, add)
+	detectImminentEvents(in.Now, in.Events, cfg, add)
+	detectDeadlineSignals(in.Now, in.Deadlines, cfg, add)
+
+	return rep
+}
+
+// addSignalFunc appends one detected signal to the report being built.
+type addSignalFunc func(kind SignalKind, weight int, reason string)
+
+// detectMailSignals scores mail: VIP-unanswered (high) vs stale-unanswered
+// (accumulating).
+func detectMailSignals(now time.Time, mail []MailSignalInput, cfg SignalConfig, add addSignalFunc) {
+	for _, m := range mail {
 		if m.Answered || !m.Unread {
 			continue
 		}
@@ -241,10 +253,13 @@ func DetectSignals(in SignalInputs, cfg SignalConfig) SignalReport {
 			add(SignalMailStale, cfg.StaleMailWeight, fmt.Sprintf("%s (%s 경과)", who, humanizeDuration(age)))
 		}
 	}
+}
 
-	// --- Calendar conflicts: overlapping timed events ---
-	timed := make([]EventSignalInput, 0, len(in.Events))
-	for _, e := range in.Events {
+// detectCalendarConflicts scores overlapping timed events, one signal per
+// conflicting pair.
+func detectCalendarConflicts(events []EventSignalInput, cfg SignalConfig, add addSignalFunc) {
+	timed := make([]EventSignalInput, 0, len(events))
+	for _, e := range events {
 		if e.Canceled || e.AllDay || e.Start.IsZero() || e.End.IsZero() {
 			continue
 		}
@@ -261,41 +276,45 @@ func DetectSignals(in SignalInputs, cfg SignalConfig) SignalReport {
 				fmt.Sprintf("%q ↔ %q", eventTitle(timed[i]), eventTitle(timed[j])))
 		}
 	}
+}
 
-	// --- Imminent events ---
-	if cfg.ImminentEventWindow > 0 {
-		for _, e := range in.Events {
-			if e.Canceled || e.AllDay || e.Start.IsZero() {
-				continue
-			}
-			until := e.Start.Sub(now)
-			if until < 0 || until > cfg.ImminentEventWindow {
-				continue
-			}
-			reason := fmt.Sprintf("%q %s 후 시작", eventTitle(e), humanizeDuration(until.Round(time.Minute)))
-			if e.NeedsResponse {
-				reason += " (미회신)"
-			}
-			add(SignalEventImminent, cfg.ImminentWeight, reason)
-		}
+// detectImminentEvents scores timed events starting within the imminent window.
+func detectImminentEvents(now time.Time, events []EventSignalInput, cfg SignalConfig, add addSignalFunc) {
+	if cfg.ImminentEventWindow <= 0 {
+		return
 	}
-
-	// --- Deadlines ---
-	if cfg.DeadlineWindow > 0 {
-		for _, d := range in.Deadlines {
-			if d.Due.IsZero() {
-				continue
-			}
-			until := d.Due.Sub(now)
-			if until < 0 || until > cfg.DeadlineWindow {
-				continue
-			}
-			add(SignalDeadlineApproaching, cfg.DeadlineWeight,
-				fmt.Sprintf("%s (%s 남음)", d.Label, humanizeDuration(until.Round(time.Minute))))
+	for _, e := range events {
+		if e.Canceled || e.AllDay || e.Start.IsZero() {
+			continue
 		}
+		until := e.Start.Sub(now)
+		if until < 0 || until > cfg.ImminentEventWindow {
+			continue
+		}
+		reason := fmt.Sprintf("%q %s 후 시작", eventTitle(e), humanizeDuration(until.Round(time.Minute)))
+		if e.NeedsResponse {
+			reason += " (미회신)"
+		}
+		add(SignalEventImminent, cfg.ImminentWeight, reason)
 	}
+}
 
-	return rep
+// detectDeadlineSignals scores tracked due items falling within the deadline window.
+func detectDeadlineSignals(now time.Time, deadlines []DeadlineSignalInput, cfg SignalConfig, add addSignalFunc) {
+	if cfg.DeadlineWindow <= 0 {
+		return
+	}
+	for _, d := range deadlines {
+		if d.Due.IsZero() {
+			continue
+		}
+		until := d.Due.Sub(now)
+		if until < 0 || until > cfg.DeadlineWindow {
+			continue
+		}
+		add(SignalDeadlineApproaching, cfg.DeadlineWeight,
+			fmt.Sprintf("%s (%s 남음)", d.Label, humanizeDuration(until.Round(time.Minute))))
+	}
 }
 
 func mailWho(m MailSignalInput) string {
