@@ -3,7 +3,7 @@ package handlermail
 import (
 	"context"
 
-	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	miniappcontract "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/contract"
 	miniknowledge "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail/gmailops"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
@@ -15,8 +15,8 @@ import (
 type MemorySearcher = miniknowledge.MemorySearcher
 
 type (
-	senderWikiHitOut = handlerminiapp.SenderWikiHitOut
-	senderRecentOut  = handlerminiapp.SenderRecentOut
+	senderWikiHitOut = miniappcontract.SenderWikiHitOut
+	senderRecentOut  = miniappcontract.SenderRecentOut
 )
 
 func bindOptional[P any](next func(context.Context, *protocol.RequestFrame, P) *protocol.ResponseFrame) rpcutil.HandlerFunc {

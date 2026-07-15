@@ -8,7 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
-	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	miniappcontract "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/contract"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -22,13 +22,13 @@ const (
 
 // Wire type aliases — see handlerminiapp/self_improvement_coding_contract.go.
 type (
-	SelfCorrectionCandidate             = handlerminiapp.SelfCorrectionCandidate
-	SelfCorrectionImpactContract        = handlerminiapp.SelfCorrectionImpactContract
-	SelfCorrectionImpactResult          = handlerminiapp.SelfCorrectionImpactResult
-	SelfImprovementCodingStatusCount    = handlerminiapp.SelfImprovementCodingStatusCount
-	SelfImprovementCodingFunnel         = handlerminiapp.SelfImprovementCodingFunnel
-	SelfImprovementCodingListResponse   = handlerminiapp.SelfImprovementCodingListResponse
-	SelfImprovementCodingRecordResponse = handlerminiapp.SelfImprovementCodingRecordResponse
+	SelfCorrectionCandidate             = miniappcontract.SelfCorrectionCandidate
+	SelfCorrectionImpactContract        = miniappcontract.SelfCorrectionImpactContract
+	SelfCorrectionImpactResult          = miniappcontract.SelfCorrectionImpactResult
+	SelfImprovementCodingStatusCount    = miniappcontract.SelfImprovementCodingStatusCount
+	SelfImprovementCodingFunnel         = miniappcontract.SelfImprovementCodingFunnel
+	SelfImprovementCodingListResponse   = miniappcontract.SelfImprovementCodingListResponse
+	SelfImprovementCodingRecordResponse = miniappcontract.SelfImprovementCodingRecordResponse
 )
 
 // SelfImprovementCodingDeps wires the native "자가개선 코딩" settings section to

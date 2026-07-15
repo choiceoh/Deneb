@@ -19,16 +19,16 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	miniappcontract "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/contract"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 type (
-	sessionRowOut           = handlerminiapp.SessionRowOut
-	transcriptAttachmentOut = handlerminiapp.TranscriptAttachmentOut
-	transcriptMsgOut        = handlerminiapp.TranscriptMsgOut
+	sessionRowOut           = miniappcontract.SessionRowOut
+	transcriptAttachmentOut = miniappcontract.TranscriptAttachmentOut
+	transcriptMsgOut        = miniappcontract.TranscriptMsgOut
 )
 
 // SessionsLister is the subset of *session.Manager the handler needs:

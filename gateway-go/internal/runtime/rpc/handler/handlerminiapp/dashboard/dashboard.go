@@ -30,19 +30,18 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
-	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	miniappcontract "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/contract"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// The wire DTOs stay in the parent package because that package is the stable
-// source consumed by the Kotlin generator. Dashboard owns the behavior and
-// projects directly into those transport contracts.
+// The wire DTOs stay in the parent package behind the miniapp contract facade
+// because that package is the source consumed by the client generators.
 type (
-	DashboardItem = handlerminiapp.DashboardItem
-	LaneOut       = handlerminiapp.LaneOut
-	DashboardOut  = handlerminiapp.DashboardOut
+	DashboardItem = miniappcontract.DashboardItem
+	LaneOut       = miniappcontract.LaneOut
+	DashboardOut  = miniappcontract.DashboardOut
 )
 
 // RefType values name the origin kind of a dashboard item so the native client

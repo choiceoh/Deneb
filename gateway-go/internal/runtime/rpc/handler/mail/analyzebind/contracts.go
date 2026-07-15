@@ -12,7 +12,7 @@ package analyzebind
 import (
 	"context"
 
-	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	miniappcontract "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/contract"
 	miniknowledge "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail/gmailops"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
@@ -21,15 +21,15 @@ import (
 )
 
 // ProjectRef is the generated-wire project reference shared with native clients.
-type ProjectRef = handlerminiapp.ProjectRef
+type ProjectRef = miniappcontract.ProjectRef
 
 // QATurn is the generated-wire mail Q&A turn shared with native clients.
-type QATurn = handlerminiapp.QATurn
+type QATurn = miniappcontract.QATurn
 
 // MemorySearcher is the existing miniapp wiki contract used by project enrichment.
 type MemorySearcher = miniknowledge.MemorySearcher
 
-type mailAnalysisOut = handlerminiapp.MailAnalysisOut
+type mailAnalysisOut = miniappcontract.MailAnalysisOut
 
 // GmailClient, the on-disk analysis cache, and the shared Gmail-error /
 // workflow-state helpers live in the sibling gmailops package — both

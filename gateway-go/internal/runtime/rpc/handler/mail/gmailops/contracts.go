@@ -10,23 +10,23 @@ package gmailops
 import (
 	"context"
 
-	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	miniappcontract "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/contract"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 // ProjectRef is the generated-wire project reference shared with native clients.
-type ProjectRef = handlerminiapp.ProjectRef
+type ProjectRef = miniappcontract.ProjectRef
 
 type (
-	mailRowOut            = handlerminiapp.MailRowOut
-	mailAttachmentOut     = handlerminiapp.MailAttachmentOut
-	mailMessageOut        = handlerminiapp.MailMessageOut
-	mailNativeStatusOut   = handlerminiapp.MailNativeStatusOut
-	mailNativeMailboxOut  = handlerminiapp.MailNativeMailboxOut
-	mailNativeOverlayOut  = handlerminiapp.MailNativeOverlayOut
-	mailNativePipelineOut = handlerminiapp.MailNativePipelineOut
+	mailRowOut            = miniappcontract.MailRowOut
+	mailAttachmentOut     = miniappcontract.MailAttachmentOut
+	mailMessageOut        = miniappcontract.MailMessageOut
+	mailNativeStatusOut   = miniappcontract.MailNativeStatusOut
+	mailNativeMailboxOut  = miniappcontract.MailNativeMailboxOut
+	mailNativeOverlayOut  = miniappcontract.MailNativeOverlayOut
+	mailNativePipelineOut = miniappcontract.MailNativePipelineOut
 )
 
 func authenticated(next rpcutil.HandlerFunc) rpcutil.HandlerFunc {
