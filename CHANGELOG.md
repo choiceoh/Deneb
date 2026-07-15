@@ -1,5 +1,24 @@
 # Changelog
 
+## [4.106.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.105.0...deneb-v4.106.0) (2026-07-15)
+
+
+### ✨ Features
+
+* **audit:** 스킬 검증 코퍼스 relevance 스윕 도구 — 오귀속 케이스 정화 ([#3677](https://github.com/choiceoh/Deneb/issues/3677)) ([65741b2](https://github.com/choiceoh/Deneb/commit/65741b2a4d6cce936df0190f6f56f8cbd65b6b0b))
+* **search:** adopt qmd retrieval patterns ([#3678](https://github.com/choiceoh/Deneb/issues/3678)) ([8561adc](https://github.com/choiceoh/Deneb/commit/8561adc14d7a926b6e52dd14058bc996e147a05b))
+
+
+### 🐛 Bug Fixes
+
+* **genesis:** 스킬 검증 케이스 relevance 게이트 — 오귀속 코퍼스 오염 차단 ([#3673](https://github.com/choiceoh/Deneb/issues/3673)) ([fb2daac](https://github.com/choiceoh/Deneb/commit/fb2daac834f1d079f74dd8f8f59be82e6de98121))
+
+
+### 🔧 Internal
+
+* **health:** Health Bench 2.0 84.8→88.2 — contracts·fanout·tests·guides + baseline ([#3679](https://github.com/choiceoh/Deneb/issues/3679)) ([0d2d48b](https://github.com/choiceoh/Deneb/commit/0d2d48bd4127361e03fbbbb711bffa5e04c614f4))
+* **rsi:** simplify status and dispatch ownership ([#3675](https://github.com/choiceoh/Deneb/issues/3675)) ([ec1f112](https://github.com/choiceoh/Deneb/commit/ec1f1128a0d830c3af02ec5bc30d508ef75c1c17))
+
 ## [4.105.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.104.0...deneb-v4.105.0) (2026-07-15)
 
 
