@@ -19,6 +19,7 @@ from health_finding_miner import (
     MAX_RUNTIME_PER_RUN,
     REOPEN_COOLDOWN_MS,
     RUNTIME_WEAK_SCORE,
+    forbidden_target_reason,
     main,
     parse_leading_json,
     pending_impact_observations,
@@ -201,6 +202,56 @@ class SelectCandidatesTest(unittest.TestCase):
         selected, skipped = select_candidates(cands, [], NOW, cap=1)
         self.assertEqual(len(selected), 1)
         self.assertEqual(skipped[0][1], "per-run cap reached")
+
+
+class ForbiddenTargetPrefilterTest(unittest.TestCase):
+    def test_genesis_directory_is_forbidden(self):
+        self.assertIsNotNone(
+            forbidden_target_reason(
+                ["gateway-go/internal/domain/skills/genesis"]
+            )
+        )
+
+    def test_ordinary_package_is_allowed(self):
+        self.assertIsNone(
+            forbidden_target_reason(
+                ["gateway-go/internal/runtime/rpc/handler/handlerminiapp"]
+            )
+        )
+
+    def test_structural_candidates_drop_forbidden_paths(self):
+        report = structural_report(
+            findings=[
+                {
+                    "id": "volatile-hub:deadbeef",
+                    "pillar": "change-blast",
+                    "severity": "high",
+                    "path": "gateway-go/internal/domain/skills/genesis",
+                    "evidence": "volatile hub",
+                    "why": "forbidden acceptor package",
+                    "remediation": "do not file",
+                    "verify": "n/a",
+                    "priority": 99.0,
+                    "related_paths": [],
+                },
+                {
+                    "id": "fanout-hotspot:e3983434e99a",
+                    "pillar": "boundary-integrity",
+                    "severity": "high",
+                    "path": "gateway-go/internal/runtime/server",
+                    "evidence": "fanout",
+                    "why": "broad surface",
+                    "remediation": "ports",
+                    "verify": "bench",
+                    "priority": 95.0,
+                    "related_paths": [],
+                },
+            ]
+        )
+        cands = structural_candidates(report)
+        sources = [c["source"] for c in cands]
+        self.assertNotIn("health-finding:volatile-hub:deadbeef", sources)
+        self.assertIn("health-finding:fanout-hotspot:e3983434e99a", sources)
 
 
 class ParseLeadingJsonTest(unittest.TestCase):

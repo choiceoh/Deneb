@@ -105,12 +105,51 @@ class GatewayError(RuntimeError):
 
 # --- candidate builders (pure) -------------------------------------------------
 
+# Mirror of genesis/surfaces acceptance-machinery path patterns that health
+# miners commonly hit as directory targets. Gateway still rejects at record
+# time; pre-filtering here avoids burning the per-run cap on known refusals
+# (e.g. volatile-hub @ .../skills/genesis).
+_FORBIDDEN_PATH_MARKERS = (
+    "gateway-go/internal/domain/skills/genesis",
+    "/skills/genesis/",
+    "validation_engine.go",
+    "eprocess/eprocess.go",
+    "surfaces/surfaces.go",
+    "scripts/dev/coding-dispatch.sh",
+    "scripts/dev/dispatch_prompt.py",
+    "scripts/dev/dispatch_outcome.py",
+    "scripts/dev/pr.sh",
+    ".github/workflows/ci.yml",
+)
+
+
+def forbidden_target_reason(target_files: list[str] | None) -> str | None:
+    """Return a skip reason when any target is under a forbidden acceptor surface."""
+    for raw in target_files or []:
+        norm = str(raw).strip().replace("\\", "/").lower().lstrip("./").rstrip("/")
+        if not norm:
+            continue
+        for marker in _FORBIDDEN_PATH_MARKERS:
+            m = marker.lower()
+            if (
+                norm == m
+                or norm.endswith("/" + m)
+                or norm.endswith(m)
+                or m.startswith(norm + "/")
+                or ("/" + norm + "/") in ("/" + m + "/")
+                or m in norm
+                or norm in m
+            ):
+                return f"forbidden surface prefilter: {raw}"
+    return None
+
 
 def structural_candidates(report: dict[str, Any]) -> list[dict[str, Any]]:
     """High-severity structural findings, ranked by priority (desc) then id.
 
     Uncapped: the reopen/dedup filter runs before the per-run cap so blocked
-    findings do not consume dispatch slots.
+    findings do not consume dispatch slots. Forbidden acceptor paths are
+    dropped here so they never spend the cap (gateway would reject them).
     """
     revision = str(report.get("revision") or "?")[:12]
     profile = report.get("profile") or "?"
@@ -123,6 +162,9 @@ def structural_candidates(report: dict[str, Any]) -> list[dict[str, Any]]:
         findings = [f for f in findings if f.get("domain", "structure") == "structure"]
     findings.sort(key=lambda f: (-float(f.get("priority") or 0.0), str(f["id"])))
     for f in findings:
+        path = str(f["path"])
+        if forbidden_target_reason([path]):
+            continue
         fid = str(f["id"])
         kind = fid.split(":", 1)[0]
         proposed = str(f.get("remediation") or "").strip()
@@ -142,7 +184,7 @@ def structural_candidates(report: dict[str, Any]) -> list[dict[str, Any]]:
             ),
             "reason": "codebase-health high-severity structural finding — "
                       "proactive L4 supply (RSI P5 ws3)",
-            "targetFiles": [str(f["path"])],
+            "targetFiles": [path],
             "proposedChange": proposed,
             "risk": _RISK_NOTE,
             "source": f"{SOURCE_PREFIX}:{fid}",
