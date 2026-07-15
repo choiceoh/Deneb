@@ -11,7 +11,9 @@
        kotlin-check kotlin-spotless kotlin-detekt kotlin-desktop-test kotlin-desktop-smoke-test kotlin-android-compile \
        docs-lint docs-lint-fix \
        ci ci/fast go-test-cached \
-       health health-check health-v2 health-v2-check health-v2-deep health-v2-test health-v2-baseline runtime-health runtime-health-test python-test python-lint shell-lint shell-behavior-test \
+       health health-check health-v2 health-v2-check health-v2-deep health-v2-test health-v2-baseline \
+       health-v3 health-v3-check health-v3-deep health-v3-test health-v3-baseline \
+       runtime-health runtime-health-test python-test python-lint shell-lint shell-behavior-test \
        preview native-smoke \
        info
 
@@ -255,6 +257,23 @@ shell-behavior-test:
 # lower the composite or any pillar and refuses new high/critical findings.
 health-v2-baseline:
 	@python3 scripts/audit/codebase-health-v2.py --update-baseline
+
+# Health Bench 3.0 — structure + runtime + RSI fitness (geometric composite).
+# Design: docs/research/health-bench-3.0.md. Scores are not comparable to v2.
+health-v3:
+	@python3 scripts/audit/health-bench-v3.py
+
+health-v3-check:
+	@python3 scripts/audit/health-bench-v3.py --check
+
+health-v3-deep:
+	@python3 scripts/audit/health-bench-v3.py --deep --refresh-runtime-cache
+
+health-v3-test:
+	@python3 -m unittest discover -s scripts/audit -p 'test_codebase_health_v3*.py' -v
+
+health-v3-baseline:
+	@python3 scripts/audit/health-bench-v3.py --update-baseline
 
 # Runtime-health score (advisory, on-host only — reads the production gateway's
 # journald over a rolling window, so it is NON-deterministic and has NO ratchet

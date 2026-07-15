@@ -1,0 +1,56 @@
+---
+description: "Health Bench 3.0 점수·finding·baseline·도메인 ratchet 규약"
+globs: ["scripts/audit/health-bench-v3.py", "scripts/audit/codebase_health_v3.py", "scripts/audit/health_v3/**", "scripts/audit/health-v3-*.json"]
+---
+
+# Codebase Health Bench 3.0
+
+Health Bench 3.0은 구조·런타임·RSI 피트니스를 하나의 벤치로 묶고, 월드클래스
+절대 기준으로 점수를 매긴다. 설계 SoT는
+[docs/research/health-bench-3.0.md](/docs/research/health-bench-3.0) 이다.
+v1/v2 점수와 비교하거나 산술 변환하지 않는다.
+
+## 평가 원칙
+
+- Overall은 도메인 점수의 **가중 기하평균**이다 (Structure 0.55 · Runtime 0.25 ·
+  Fitness 0.20). 한 도메인의 개선으로 다른 도메인 퇴행을 가리지 않는다.
+- 필수 증거가 `unavailable`이면 측정 실패다. 모르는 상태를 100으로 채우지 않는다.
+- Fitness는 초기에는 advisory(`ratcheted=false`)이다. CI `--check`는 Structure와
+  Runtime만 래칫한다.
+- LOC·파일 수·테스트 복제는 점수가 아니다. 파일 분할만으로 점수가 오르면 rubric
+  버그다.
+
+## Rubric 3.0.0
+
+| Domain | Weight | Metrics |
+|---|---:|---|
+| Structure | 0.55 | change-blast, boundary-contracts, ai-maintainability, complexity-safety, test-truth, test-craft, delivery-proof, dead-surface |
+| Runtime | 0.25 | stability, error-rate, llm-serving, turn-reliability, tool-reliability, latency |
+| Fitness | 0.20 | live-delta, trend-28d, finding-land, feed-card |
+
+첫 baseline expect-band는 **45–55**이다.
+
+## Baseline과 ratchet
+
+```bash
+make health-v3
+make health-v3-check
+make health-v3-deep
+make health-v3-test
+python3 scripts/audit/health-bench-v3.py --update-baseline
+python3 scripts/audit/health-bench-v3.py --refresh-runtime-cache --write-snapshot
+```
+
+- `scripts/audit/health-v3-baseline.json` — 일방향 래칫
+- `scripts/audit/health-v3-runtime-cache.json` — fast 프로필 Runtime 입력 (TTL)
+- Baseline 손편집으로 check를 통과시키지 않는다. 운영자 승인 후에만
+  `--update-baseline` / `--write-baseline`을 사용한다.
+
+## 변경 시 검증
+
+Scorer를 바꾸면 `make health-v3-test`로 다음을 확인한다.
+
+- 워크시트 목표 구간(~50)과 geometric composite
+- 약한 도메인이 composite를 끌어내림 (상쇄 금지)
+- Runtime 캐시 TTL fail-closed
+- Fitness 상승이 Structure 래칫 실패를 가리지 않음

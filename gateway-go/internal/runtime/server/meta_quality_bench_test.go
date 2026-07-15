@@ -77,3 +77,41 @@ func TestMetaQualityBenchEvidenceReturnsEmptyWithoutBaseline(t *testing.T) {
 		t.Fatalf("missing baseline should yield empty, got %q", got)
 	}
 }
+
+func TestMetaQualityBenchEvidencePrefersV3BaselineAndSnapshotDelta(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DENEB_PROD_DIR", dir)
+	audit := filepath.Join(dir, "scripts", "audit")
+	if err := os.MkdirAll(audit, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	baselineJSON := `{
+		"overall": 50.7,
+		"domains": {"structure": 50.4, "runtime": 58.5, "fitness": 43.0},
+		"pillars": {"structure.change-blast": 32.0, "runtime.latency": 28.0, "fitness.feed-card": 40.0},
+		"high_findings": {"structure:x": "high"}
+	}`
+	if err := os.WriteFile(filepath.Join(audit, "health-v3-baseline.json"), []byte(baselineJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	snapshotJSON := `{"score":{"overall":52.0,"domains":{"structure":51.0,"runtime":58.5,"fitness":43.0}}}`
+	if err := os.WriteFile(filepath.Join(audit, "health-v3-snapshot.json"), []byte(snapshotJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// v2 present but must not win when v3 exists.
+	v2 := `{"overall":88.2,"pillars":{"change-locality":55.0},"high_findings":{}}`
+	if err := os.WriteFile(filepath.Join(audit, "health-v2-baseline.json"), []byte(v2), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{AutonomousSubsystem: &AutonomousSubsystem{}}
+	got := s.metaQualityBenchEvidence(context.Background())
+	if !strings.Contains(got, "Health Bench 3.0") || !strings.Contains(got, "50.7") {
+		t.Fatalf("expected v3 evidence:\n%s", got)
+	}
+	if !strings.Contains(got, "라이브 델타") || !strings.Contains(got, "+1.3") {
+		t.Fatalf("expected live delta:\n%s", got)
+	}
+	if strings.Contains(got, "88.2") {
+		t.Fatalf("v2 overall leaked while v3 present:\n%s", got)
+	}
+}

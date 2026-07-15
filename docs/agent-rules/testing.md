@@ -11,6 +11,7 @@ globs: ["**/*_test.go", "**/tests/**"]
 - Do not add repetitive test bodies to improve a line/count metric. Prefer named tables for genuinely distinct input classes and keep generated matrices tied to a checked-in generator plus drift check.
 - Keep tests discoverable from the production subject. Large cross-domain `contracts`, `hardening`, or `helpers` files should be split by responsibility unless they describe one explicit boundary.
 - `make health-v2-test` verifies the scorer's anti-gaming behavior. `make health-v2-check` ratchets behavior evidence, test maintainability, and every other Health Bench 2.0 pillar independently; see `codebase-health-v2.md`.
+- `make health-v3-test` covers Health Bench 3.0 composite/anti-compensation/runtime-cache fixtures; `make health-v3-check` ratchets Structure+Runtime (Fitness advisory); see `codebase-health-v3.md`.
 - Agents MUST NOT modify baseline, inventory, ignore, snapshot, or expected-failure files to silence failing checks without explicit approval in this chat.
 - Changelog: 루트 `CHANGELOG.md`는 release-please가 Conventional Commit에서 자동 생성한다 — **직접 편집 금지** (섹션도 `### ✨ Features`/`### 🐛 Bug Fixes` 등 자동 관리). 사용자에게 보이는 릴리스 노트는 커밋 제목 품질로 결정된다.
 - 네이티브 클라 사용자 표시 패치노트는 `client-android/app/changelog.d/` 조각 파일로 추가한다 (user-facing 변경만, 내부/메타 노트 금지 — `docs/agent-rules/release-and-deploy.md` 참조).
