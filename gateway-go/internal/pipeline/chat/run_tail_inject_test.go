@@ -11,11 +11,11 @@ import (
 func messageText(t *testing.T, msg llm.Message) string {
 	t.Helper()
 	var s string
-	if err := json.Unmarshal(msg.Content.Bytes(), &s); err == nil {
+	if err := json.Unmarshal(msg.Content, &s); err == nil {
 		return s
 	}
 	var blocks []llm.ContentBlock
-	if err := json.Unmarshal(msg.Content.Bytes(), &blocks); err == nil {
+	if err := json.Unmarshal(msg.Content, &blocks); err == nil {
 		var sb strings.Builder
 		for _, b := range blocks {
 			if b.Type == "text" {
@@ -24,7 +24,7 @@ func messageText(t *testing.T, msg llm.Message) string {
 		}
 		return sb.String()
 	}
-	t.Fatalf("unparseable message content: %s", msg.Content.String())
+	t.Fatalf("unparseable message content: %s", string(msg.Content))
 	return ""
 }
 
@@ -81,7 +81,7 @@ func TestInjectTailAdditionsWritesIntoBlockContent(t *testing.T) {
 		t.Fatal("expected injection to succeed")
 	}
 	var outBlocks []llm.ContentBlock
-	if err := json.Unmarshal(out[0].Content.Bytes(), &outBlocks); err != nil {
+	if err := json.Unmarshal(out[0].Content, &outBlocks); err != nil {
 		t.Fatalf("expected block content: %v", err)
 	}
 	if len(outBlocks) != 3 {

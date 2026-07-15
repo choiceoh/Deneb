@@ -6,13 +6,13 @@ import type { ChatTurn } from "./hooks";
 const base: ChatTurn = { id: "a", role: "assistant", text: "", parts: [], status: "streaming" };
 
 describe("appendTextPart", () => {
-  it("merges consecutive text into trailing part when adjacent text arrives", () => {
+  it("preserves merged text when appending consecutive parts", () => {
     const after = appendTextPart(appendTextPart(base, "Hello"), " world");
     expect(after.parts).toEqual([{ kind: "text", text: "Hello world" }]);
     expect(after.text).toBe("Hello world");
   });
 
-  it("creates new text part when tool chip precedes text", () => {
+  it("creates new text part when appending after tool chip", () => {
     const withTool = upsertToolPart(base, { state: "started", tool: "search", toolUseId: "t1" });
     const after = appendTextPart(withTool, "done");
     expect(after.parts?.length).toBe(2);
@@ -21,7 +21,7 @@ describe("appendTextPart", () => {
 });
 
 describe("upsertToolPart", () => {
-  it("inserts on started, then flips the same id to its completed result", () => {
+  it("returns updated tool part when same id completes", () => {
     const started = upsertToolPart(base, { state: "started", tool: "search", toolUseId: "t1" });
     expect(started.parts?.[0]).toMatchObject({ kind: "tool", id: "t1", tool: "search", state: "started" });
 

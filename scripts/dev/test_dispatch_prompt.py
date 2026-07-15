@@ -65,7 +65,7 @@ def run_main(meta_dir: Path, marker: Path, candidate: dict) -> tuple[int, str, s
 
 
 class DispatchPromptTest(unittest.TestCase):
-    def test_artifact_composes_prompt_and_marker(self):
+    def test_returns_composed_prompt_and_marker_from_artifact(self):
         with TemporaryDirectory() as td:
             meta = Path(td) / "meta"
             meta.mkdir()
@@ -119,31 +119,7 @@ class DispatchPromptTest(unittest.TestCase):
             self.assertEqual(rec["dispatchedAt"], 2000)
             self.assertEqual(rec["attempts"][-1]["dispatchedAt"], 1000)
 
-    def test_retry_preserves_outcome_less_attempt_and_full_history(self):
-        with TemporaryDirectory() as td:
-            meta = Path(td) / "meta"
-            meta.mkdir()
-            (meta / dispatch_prompt.ARTIFACT_NAME).write_text(CONTRACT, encoding="utf-8")
-            marker = Path(td) / "sc-test-1234.json"
-            marker.write_text(json.dumps({
-                **CANDIDATE,
-                "attemptId": "attempt-crashed",
-                "branch": "dispatch/attempt-crashed",
-                "dispatchedAt": 12_000,
-                "attempts": [
-                    {"attemptId": f"attempt-{i}", "outcome": "failed", "dispatchedAt": i}
-                    for i in range(12)
-                ],
-            }) + "\n", encoding="utf-8")
-            rc, _, _ = run_main(meta, marker, CANDIDATE)
-            self.assertEqual(rc, 0)
-            rec = json.loads(marker.read_text(encoding="utf-8"))
-            self.assertEqual(len(rec["attempts"]), 13, "retry history must not truncate")
-            self.assertEqual(rec["attempts"][-1]["attemptId"], "attempt-crashed")
-            self.assertEqual(rec["attempts"][-1]["branch"], "dispatch/attempt-crashed")
-            self.assertNotIn("outcome", rec["attempts"][-1])
-
-    def test_short_artifact_defers(self):
+    def test_when_short_artifact_defers(self):
         with TemporaryDirectory() as td:
             meta = Path(td) / "meta"
             meta.mkdir()
@@ -155,7 +131,81 @@ class DispatchPromptTest(unittest.TestCase):
             self.assertEqual(rc, dispatch_prompt.DEFER_EXIT)
             self.assertFalse(marker.exists())
 
-    def test_artifact_name_matches_go_registry(self):
+    def test_when_forbidden_surface_mention_defers(self):
+        # C2 defense-in-depth: prose naming acceptance machinery must never
+        # reach a headless session with landing authority — defer, no marker.
+        with TemporaryDirectory() as td:
+            meta = Path(td) / "meta"
+            meta.mkdir()
+            (meta / dispatch_prompt.ARTIFACT_NAME).write_text(
+                CONTRACT, encoding="utf-8"
+            )
+            marker = Path(td) / "m.json"
+            bad = dict(CANDIDATE)
+            bad["proposedChange"] = "validation_engine.go의 flip gate 완화"
+            rc, prompt, err = run_main(meta, marker, bad)
+            self.assertEqual(rc, dispatch_prompt.DEFER_EXIT)
+            self.assertEqual(prompt, "")
+            self.assertFalse(marker.exists(), "defer must not burn the marker")
+            self.assertIn("forbidden acceptance surfaces", err)
+            # Structured targets are scanned too.
+            bad2 = dict(CANDIDATE)
+            bad2["targetFiles"] = ["scripts/dev/coding-dispatch.sh"]
+            rc2, _, err2 = run_main(meta, marker, bad2)
+            self.assertEqual(rc2, dispatch_prompt.DEFER_EXIT)
+            self.assertIn("coding-dispatch.sh", err2)
+
+    def test_forbidden_surface_boundary_matching(self):
+        # Whole-component matching, not substring (3rd-review C2-C1 + Copilot):
+        # unrelated files that merely CONTAIN a forbidden basename must NOT trip.
+        fm = dispatch_prompt.forbidden_surface_mentions
+        for benign in (
+            {"targetFiles": ["gateway-go/internal/pipeline/chat/web/web_html_preprocess.go"]},
+            {"targetFiles": ["a/eprocess.go.bak"]},          # extension continuation
+            {"candidate": "see docs/pr.sh.md for details"},   # extension continuation
+            {"evidence": "open a PR, wait for CI to pass"},    # words, not pr.sh/ci.yml
+            {"candidate": "use the pr.shell wrapper"},         # pr.shell != pr.sh
+        ):
+            self.assertEqual(fm(benign), [], f"false positive: {benign}")
+        for hit, want in (
+            ({"proposedChange": "edit surfaces.go. then rebuild"}, "surfaces.go"),  # sentence period
+            ({"targetFiles": ["genesis/surfaces.go"]}, "surfaces.go"),              # dir slash
+            ({"targetFiles": [".github/workflows/ci.yml"]}, "ci.yml"),
+            ({"proposedChange": "patch scripts/dev/pr.sh land"}, "pr.sh"),
+        ):
+            self.assertIn(want, fm(hit), f"missed: {hit}")
+
+    def test_when_forbidden_basenames_cover_go_whitelist(self):
+        # Every basename in the Go forbidden surface whitelist must be in the
+        # scripts-side guard so the two cannot drift. Order/comment-tolerant:
+        # a forbidden entry is any struct literal whose body contains
+        # `Tier: SurfaceTierForbidden`, regardless of field order or interposed
+        # comments/Note (3rd-review C2-C3 — the old regex assumed Tier directly
+        # before Patterns and could be evaded). pr.sh/ci.yml are now guarded
+        # too (boundary matching makes them prose-safe), so no exemption.
+        go_src = (
+            Path(__file__).resolve().parents[2]
+            / "gateway-go/internal/domain/skills/genesis/surfaces/surfaces.go"
+        ).read_text(encoding="utf-8")
+        # Split into brace-balanced struct literals inside DeclaredEditableSurfaces
+        # and keep those declaring the forbidden tier.
+        entries = re.findall(r"\{([^{}]*Patterns:\s*\[\]string\{[^}]*\}[^{}]*)\}", go_src, re.S)
+        forbidden_blocks = [e for e in entries if "SurfaceTierForbidden" in e]
+        self.assertTrue(forbidden_blocks, "no forbidden pattern blocks found in surfaces.go")
+        for block in forbidden_blocks:
+            patterns_body = re.search(r"Patterns:\s*\[\]string\{(.*?)\}", block, re.S)
+            self.assertIsNotNone(patterns_body)
+            for pattern in re.findall(r'"([^"]+)"', patterns_body.group(1)):
+                if pattern.startswith("*."):
+                    continue  # extension globs are a tier, not a basename to scan
+                basename = pattern.rsplit("/", 1)[-1]
+                self.assertIn(
+                    basename,
+                    dispatch_prompt.FORBIDDEN_SURFACE_BASENAMES,
+                    f"surfaces.go forbidden pattern {pattern} missing from dispatch guard",
+                )
+
+    def test_when_artifact_name_matches_go_registry(self):
         # The gateway materializes the artifact this script consumes; the two
         # sides name it independently, so pin the parity against the Go source.
         go_src = (

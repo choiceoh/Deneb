@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 

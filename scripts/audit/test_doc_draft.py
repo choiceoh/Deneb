@@ -79,7 +79,7 @@ class SubprocessBoundaryTests(unittest.TestCase):
                 self.assertTrue(result.startswith("(command failed:"))
                 self.assertTrue(result.endswith(")"))
 
-    def test_codegraph_uses_login_path_context_and_prefers_stdout(self) -> None:
+    def test_when_codegraph_uses_login_path_context_and_prefers_stdout(self) -> None:
         completed = subprocess.CompletedProcess([], 0, stdout="graph output", stderr="diagnostic")
         with mock.patch.dict(doc_draft.os.environ, {"PATH": "/usr/bin"}, clear=True):
             with mock.patch.object(doc_draft.subprocess, "run", return_value=completed) as run:
@@ -144,7 +144,7 @@ class RepositoryGroundingTests(unittest.TestCase):
             ["domain/example", "domain/example/sub"],
         )
 
-    def test_go_doc_caps_lines_and_reports_exact_omission(self) -> None:
+    def test_go_doc_caps_lines_and_returns_exact_omission(self) -> None:
         with mock.patch.object(doc_draft, "_run", return_value="one\ntwo\nthree\nfour\nfive") as run:
             result = doc_draft._go_doc("domain/example", cap_lines=3)
         self.assertEqual(
@@ -180,7 +180,7 @@ class RepositoryGroundingTests(unittest.TestCase):
             "internal/domain/wiki/store.go",
         ])
 
-    def test_gap_report_is_loc_sorted_and_marks_only_uncovered_packages(self) -> None:
+    def test_gap_returns_is_loc_sorted_and_marks_only_uncovered_packages(self) -> None:
         write_files(self.internal, {
             "big/main.go": "package big\n\nfunc A() {}\nfunc B() {}\nfunc C() {}\n",
             "covered/main.go": "package covered\n\nfunc A() {}\nfunc B() {}\n",
@@ -210,7 +210,7 @@ class RepositoryGroundingTests(unittest.TestCase):
 
 
 class ContextAndPromptTests(unittest.TestCase):
-    def test_gather_context_orders_file_map_api_sections_then_call_graph(self) -> None:
+    def test_when_gather_context_orders_file_map_api_sections_then_call_graph(self) -> None:
         with mock.patch.object(doc_draft, "_pkg_dirs", return_value=["domain/a", "domain/b"]):
             with mock.patch.object(doc_draft, "_file_map", return_value="FILE MAP"):
                 with mock.patch.object(doc_draft, "_go_doc", side_effect=["API A", "API B"]) as go_doc:
@@ -233,7 +233,7 @@ class ContextAndPromptTests(unittest.TestCase):
         self.assertIn("(+2 packages; remaining API omitted for budget)", result)
         self.assertTrue(result.endswith("GRAPH"))
 
-    def test_prompt_is_grounded_in_target_context_and_exemplar(self) -> None:
+    def test_when_prompt_is_grounded_in_target_context_and_exemplar(self) -> None:
         system, user = doc_draft.build_prompt("mail-flow", "runtime/mail", "GROUNDING", "EXEMPLAR")
         self.assertIn("Ground EVERY claim", system)
         self.assertIn("Output ONLY the markdown document", system)
@@ -271,7 +271,7 @@ class MainContractTests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def test_list_gaps_mode_does_not_require_target_or_model(self) -> None:
+    def test_when_list_gaps_mode_does_not_require_target_or_model(self) -> None:
         with mock.patch.object(doc_draft, "list_gaps") as list_gaps:
             rc, stdout, stderr = invoke_main(doc_draft, ["--list-gaps"])
         self.assertEqual((rc, stdout, stderr), (0, "", ""))

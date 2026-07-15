@@ -20,7 +20,7 @@ function WorkspaceProbe() {
 }
 
 describe("TodayPane (오늘 대시보드)", () => {
-  it("aggregates each resource into a section card", async () => {
+  it("when aggregates each resource into a section card", async () => {
     const dataProvider = fakeProvider({
       calendar: [{ id: "c1", title: "스탠드업", start: { dateTime: "2026-06-18T09:00:00" } }],
       mail: [{ id: "m1", subject: "예산 검토", from: "kim@corp.com", unread: true }],
@@ -40,7 +40,7 @@ describe("TodayPane (오늘 대시보드)", () => {
     expect(screen.queryByText(/완료된 일/)).not.toBeInTheDocument();
   });
 
-  it("caps a section at six rows and notes the overflow", async () => {
+  it("when caps a section at six rows and notes the overflow", async () => {
     const many = Array.from({ length: 9 }, (_, i) => ({ id: i, title: `할일 ${i}`, done: false }));
     renderWithProviders(<TodayPane />, { connected: true, dataProvider: fakeProvider({ todo: many }) });
     // 9 open todos, capped at 6 → an "외 3건" overflow note.
@@ -105,7 +105,7 @@ describe("TodayPane (오늘 대시보드)", () => {
     expect(screen.getAllByText(/미연결/)).toHaveLength(1);
   });
 
-  it("hides a section via the inline editor and persists the choice", async () => {
+  it("without a section via the inline editor and persists the choice", async () => {
     const dataProvider = fakeProvider({
       calendar: [{ id: "c1", title: "스탠드업", start: { dateTime: "2026-06-18T09:00:00" } }],
       mail: [{ id: "m1", subject: "예산 검토", from: "kim@corp.com" }],
@@ -146,7 +146,7 @@ describe("TodayPane (오늘 대시보드)", () => {
     expect(screen.getByText(/▼ 2\.89%/).closest(".market-tile")).toHaveClass("down");
   });
 
-  it("toggles a section to wide and persists it", async () => {
+  it("toggles a section to wide and saves it", async () => {
     const dataProvider = fakeProvider({ mail: [{ id: "m1", subject: "예산 검토", from: "kim@corp.com" }] });
     const { container } = renderWithProviders(<TodayPane />, { connected: true, dataProvider });
     await screen.findByText(/예산 검토/);
@@ -160,7 +160,7 @@ describe("TodayPane (오늘 대시보드)", () => {
     expect(container.querySelector(".today-card.wide")).toBeTruthy();
   });
 
-  it("treats extra sections as opt-in — hidden until chosen in the editor", async () => {
+  it("when treats extra sections as opt-in — hidden until chosen in the editor", async () => {
     const dataProvider = fakeProvider({
       calendar: [{ id: "c1", title: "스탠드업", start: { dateTime: "2026-06-18T09:00:00" } }],
       progress: [{ project: "안드로메다", headline: "패널 정합 완료" }],

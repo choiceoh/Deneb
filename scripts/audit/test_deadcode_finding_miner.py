@@ -50,16 +50,16 @@ class ParseNewFindingsTest(unittest.TestCase):
         # The "- ...OnceUsed" line must never surface as a defect.
         self.assertNotIn("OnceUsed", str(parse_new_findings(AUDIT_OUTPUT)))
 
-    def test_clean_output_yields_nothing(self):
+    def test_when_clean_output_yields_nothing(self):
         self.assertEqual(parse_new_findings(CLEAN_OUTPUT), [])
 
-    def test_dedup_and_sort_are_deterministic(self):
+    def test_when_dedup_and_sort_are_deterministic(self):
         dup = AUDIT_OUTPUT + "  + internal/pipeline/chat/run_orphan.go :: orphanHelper\n"
         self.assertEqual(parse_new_findings(dup), parse_new_findings(AUDIT_OUTPUT))
 
 
 class CandidateTest(unittest.TestCase):
-    def test_candidate_shape(self):
+    def test_when_candidate_shape(self):
         cands = deadcode_candidates(parse_new_findings(AUDIT_OUTPUT))
         self.assertEqual(len(cands), 2)
         c = cands[0]
@@ -76,7 +76,7 @@ class CandidateTest(unittest.TestCase):
         cands = deadcode_candidates([("gateway-go/cmd/x/main.go", "dead")])
         self.assertEqual(cands[0]["targetFiles"], ["gateway-go/cmd/x/main.go"])
 
-    def test_source_is_stable_and_distinct(self):
+    def test_when_source_is_stable_and_distinct(self):
         a = deadcode_candidates(parse_new_findings(AUDIT_OUTPUT))
         b = deadcode_candidates(parse_new_findings(AUDIT_OUTPUT))
         self.assertEqual([c["source"] for c in a], [c["source"] for c in b])
@@ -106,7 +106,7 @@ class CliDryRunTest(unittest.TestCase):
             self.assertEqual(summary["filed"], 0)
             self.assertTrue(summary["dry_run"])
 
-    def test_cap_limits_filing_plan(self):
+    def test_when_cap_limits_filing_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
             out, err = io.StringIO(), io.StringIO()
             rc = main(
@@ -119,7 +119,7 @@ class CliDryRunTest(unittest.TestCase):
             self.assertEqual(summary["findings"], 2)
             self.assertEqual(summary["planned"], 1)
 
-    def test_real_run_refuses_to_file_blind(self):
+    def test_when_real_run_refuses_to_file_blind(self):
         with tempfile.TemporaryDirectory() as tmp:
             out, err = io.StringIO(), io.StringIO()
             rc = main(

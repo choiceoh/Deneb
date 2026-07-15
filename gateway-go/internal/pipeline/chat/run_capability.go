@@ -1,12 +1,11 @@
 package chat
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/router"
 )
 
 // Context-budget clamping constants.
@@ -24,11 +23,11 @@ const (
 // provider/model pair. The registry layers builtin defaults, vLLM discovery,
 // and deneb.json provider overrides; without a registry (tests, minimal
 // deployments) only the builtin defaults apply.
-func modelCapability(deps runDeps, providerID, model string) modelcaps.Capability {
+func modelCapability(deps runDeps, providerID, model string) leafbind.Capability {
 	if deps.registry != nil {
 		return deps.registry.CapabilityForModel(providerID, model)
 	}
-	return modelcaps.Builtin(providerID, model)
+	return leafbind.Builtin(providerID, model)
 }
 
 // routingProfileForRun resolves the effort-routing profile for the run's
@@ -37,15 +36,15 @@ func modelCapability(deps runDeps, providerID, model string) modelcaps.Capabilit
 // without a registry (tests, minimal deployments) only the builtin default plus
 // the model's toggle apply — so an unconfigured deployment still routes the
 // current main model exactly as before.
-func routingProfileForRun(deps runDeps, providerID, model string) router.Profile {
+func routingProfileForRun(deps runDeps, providerID, model string) leafbind.Profile {
 	if deps.briefcaseMode {
-		return router.Profile{}
+		return leafbind.Profile{}
 	}
 	if deps.registry != nil {
 		return deps.registry.RoutingProfileForModel(providerID, model)
 	}
-	p := router.DefaultProfile()
-	p.ToggleKwarg = modelcaps.Builtin(providerID, model).ThinkingToggleKwarg
+	p := leafbind.DefaultProfile()
+	p.ToggleKwarg = leafbind.Builtin(providerID, model).ThinkingToggleKwarg
 	p.Enabled = p.ToggleKwarg != ""
 	return p
 }

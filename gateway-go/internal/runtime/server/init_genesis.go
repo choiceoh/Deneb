@@ -13,10 +13,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	chattools "github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/lifecycle"
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	skillcore "github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/core"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/nudgeradapt"
 )
 
 // initGenesisServices creates the genesis service, tracker, and evolver.
@@ -24,7 +26,7 @@ import (
 // RPC methods can be registered in method_registry.go (Rule 1 compliance).
 //
 // Core construction (catalog/service/tracker/evolver/meta) lives in
-// skilllifecycle.BuildCore — the owning-module registrar port — so this
+// skillcore.BuildCore — the owning-module registrar port — so this
 // composition root does not import generation/review leaves.
 func (s *Server) initGenesisServices() {
 	if s.chatHandler == nil || s.modelRegistry == nil {
@@ -49,7 +51,7 @@ func (s *Server) initGenesisServices() {
 
 	var evolverRole modelrole.Role
 	var evolverModel string
-	bundle := skilllifecycle.BuildCore(skilllifecycle.CoreBuildInput{
+	bundle := skillcore.BuildCore(skillcore.CoreBuildInput{
 		Logger:                s.logger,
 		LWClient:              lwClient,
 		LWModel:               lwModel,
@@ -59,7 +61,7 @@ func (s *Server) initGenesisServices() {
 		BundledSkillsDir:      chat.BundledSkillsDir(),
 		ThinkingKwargs:        thinkingKwargs,
 		LowConfidenceObserver: s.postLowConfidenceEvolveCard,
-		ConfigureEvolver: func(evolver *skilllifecycle.Evolver) (string, string) {
+		ConfigureEvolver: func(evolver *skillcore.Evolver) (string, string) {
 			evolverRole, evolverModel = s.configureGenesisEvolverModels(evolver)
 			return string(evolverRole), evolverModel
 		},
@@ -76,7 +78,7 @@ func (s *Server) initGenesisServices() {
 
 	// Iteration-based nudger (Hermes-style): fires a mid-session skill
 	// review every N tool calls. Env var DENEB_SKILL_NUDGE_INTERVAL
-	// overrides skilllifecycle.DefaultNudgeInterval; 0 disables.
+	// overrides skillcore.DefaultNudgeInterval; 0 disables.
 	// The review fork dispatches through chat.SendSync, which re-resolves the model string into a
 	// provider via resolveModel — so it needs the FULL "provider/model" id. Model() returns the
 	// bare name (e.g. "step3p7"), which has no provider and fails client resolution
@@ -96,7 +98,7 @@ func (s *Server) initGenesisServices() {
 		reviewModel = s.modelRegistry.FullModelID(modelrole.RoleLightweight)
 	}
 	reviewFork := skilllifecycle.NewReviewFork(s.chatHandler, s.genesisTranscripts, s.genesisTracker, reviewModel, s.logger)
-	s.genesisNudger = skilllifecycle.NewNudgerFromEnvWithTrackerAndReviewer(
+	s.genesisNudger = skillcore.NewNudgerFromEnvWithTrackerAndReviewer(
 		s.genesisSvc,
 		s.genesisTracker,
 		reviewFork,
@@ -125,7 +127,7 @@ func (s *Server) initGenesisServices() {
 	if !nudgerProdState && os.Getenv("DENEB_SKILL_NUDGE_INTERVAL") == "" {
 		s.logger.Info("genesis: skill nudger disabled (non-production state dir; set DENEB_SKILL_NUDGE_INTERVAL to force)")
 	} else if s.chatHandler != nil && s.genesisNudger.Enabled() {
-		s.chatHandler.SetSkillNudger(skilllifecycle.NewChatNudgerAdapter(s.genesisNudger))
+		s.chatHandler.SetSkillNudger(nudgeradapt.New(s.genesisNudger))
 	}
 	// Usage attribution is independent of the nudger: even with the nudger
 	// disabled, recording which skills are used (and whether their turns
@@ -164,7 +166,7 @@ func (s *Server) refreshCodingModelConsumers() {
 	}
 }
 
-func (s *Server) configureGenesisEvolverModels(evolver *skilllifecycle.Evolver) (modelrole.Role, string) {
+func (s *Server) configureGenesisEvolverModels(evolver *skillcore.Evolver) (modelrole.Role, string) {
 	if evolver == nil || s.modelRegistry == nil {
 		return "", ""
 	}
@@ -380,7 +382,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 					return
 				}
 				if _, prod := s.productionStateDir(home); prod {
-					s.genesisMeta.MaterializeDefaults(skilllifecycle.DefaultMetaArtifacts())
+					s.genesisMeta.MaterializeDefaults(skillcore.DefaultMetaArtifacts())
 				}
 			},
 		}

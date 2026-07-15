@@ -30,7 +30,7 @@ describe("Grid", () => {
     expect(screen.getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["Alpha", "7", "Beta", "11"]);
   });
 
-  it("applies fixed column widths to visible headers", () => {
+  it("when applies fixed column widths to visible headers", () => {
     render(<Grid columns={columns} rows={rows} getKey={(row) => row.id} />);
 
     const [name, score] = screen.getAllByRole("columnheader");
@@ -48,7 +48,7 @@ describe("Grid", () => {
     expect(cols[1]).not.toHaveAttribute("style");
   });
 
-  it("passes each row to cell, style, title, and key projections", () => {
+  it("when passes each row to cell, style, title, and key projections", () => {
     const rowStyle = vi.fn((row: Row) => ({ opacity: row.score > 10 ? 1 : 0.5 }));
     const rowTitle = vi.fn((row: Row) => `Open ${row.id}`);
     render(
@@ -65,7 +65,7 @@ describe("Grid", () => {
     expect(rowTitle).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps noninteractive rows outside the tab order", () => {
+  it("preserves noninteractive rows outside the tab order", () => {
     render(<Grid columns={columns} rows={rows} getKey={(row) => row.id} />);
 
     for (const row of screen.getAllByRole("row").slice(1)) {
@@ -75,7 +75,7 @@ describe("Grid", () => {
     }
   });
 
-  it("invokes the row action on click", async () => {
+  it("when invokes the row action on click", async () => {
     const onRowClick = vi.fn();
     render(<Grid columns={columns} rows={rows} getKey={(row) => row.id} onRowClick={onRowClick} />);
 
@@ -107,7 +107,7 @@ describe("Grid", () => {
     expect(onRowClick).not.toHaveBeenCalled();
   });
 
-  it("marks the selected interactive row and exposes its expanded content", () => {
+  it("when marks the selected interactive row and exposes its expanded content", () => {
     render(
       <Grid
         columns={columns}
@@ -145,7 +145,7 @@ describe("Grid", () => {
     expect(container.querySelector(".dgrid-expanded-row")).toBeNull();
   });
 
-  it("passes maxWidth through to the table", () => {
+  it("when passes maxWidth through to the table", () => {
     render(<Grid columns={columns} rows={rows} getKey={(row) => row.id} maxWidth={640} />);
 
     expect(screen.getByRole("table")).toHaveStyle({ maxWidth: "640px" });
@@ -153,7 +153,7 @@ describe("Grid", () => {
 });
 
 describe("GridNotice", () => {
-  it("reports a disconnected workspace before query state", () => {
+  it("returns a disconnected workspace before query state", () => {
     renderWithProviders(
       <GridNotice query={{ isLoading: true, isError: true, error: new Error("boom") }} count={3} empty="비었음">
         <span>grid</span>
@@ -233,7 +233,7 @@ describe("RowBtn", () => {
     expect(onRow).not.toHaveBeenCalled();
   });
 
-  it("forwards disabled and title attributes", () => {
+  it("when forwards disabled and title attributes", () => {
     render(
       <RowBtn onClick={() => {}} disabled title="권한 없음">
         Delete
@@ -244,7 +244,7 @@ describe("RowBtn", () => {
     expect(screen.getByRole("button", { name: "Delete" })).toHaveAttribute("title", "권한 없음");
   });
 
-  it("uses the danger color only for destructive actions", () => {
+  it("when uses the danger color only for destructive actions", () => {
     const { rerender } = render(
       <RowBtn onClick={() => {}} danger>
         Delete

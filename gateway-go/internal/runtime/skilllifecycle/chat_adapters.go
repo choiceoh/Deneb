@@ -1,13 +1,9 @@
 package skilllifecycle
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"strings"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/review"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
@@ -16,39 +12,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
-
-type chatNudgerAdapter struct {
-	inner *review.Nudger
-}
-
-// NewChatNudgerAdapter adapts a review nudger to the stable chat port.
-func NewChatNudgerAdapter(n *review.Nudger) chatport.SkillNudger {
-	return &chatNudgerAdapter{inner: n}
-}
-
-// Enabled reports whether the handler accepts records at the requested level.
-func (a *chatNudgerAdapter) Enabled() bool { return a.inner.Enabled() }
-
-// OnToolCalls records a tool-call delta for skill nudging.
-func (a *chatNudgerAdapter) OnToolCalls(ctx context.Context, sessionKey string, delta int, snap chatport.SkillNudgeSnapshot) {
-	activities := make([]generation.ToolActivity, 0, len(snap.ToolActivities))
-	for _, t := range snap.ToolActivities {
-		activities = append(activities, generation.ToolActivity{
-			Name: t.Name, IsError: t.IsError,
-		})
-	}
-	a.inner.OnToolCalls(ctx, sessionKey, delta, generation.SessionContext{
-		Key:            sessionKey,
-		Label:          snap.Label,
-		Model:          snap.Model,
-		Turns:          snap.Turns,
-		ToolActivities: activities,
-		AllText:        snap.AllText,
-	})
-}
-
-// Reset clears the adapter state for the requested session.
-func (a *chatNudgerAdapter) Reset(sessionKey string) { a.inner.Reset(sessionKey) }
 
 type chatUsageRecorderAdapter struct {
 	inner         *genesis.Tracker

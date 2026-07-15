@@ -96,7 +96,7 @@ func LightweightModel() string {
 // centralized hub (token budget, priority queue, zombie guard) when one is
 // wired; every other role (tiny, main) takes the direct path. Optional
 // extraBody maps merge into the request body (e.g. chat_template_kwargs).
-func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
+func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage string, maxTokens int, extraBody ...rawJSON) (string, error) {
 	// Hub path: only the lightweight role is hub-managed today.
 	if hub := pkgLocalAIHub.Load(); role == modelrole.RoleLightweight && hub != nil {
 		return hub.CallLocalLLM(ctx, system, userMessage, maxTokens, extraBody...)
@@ -126,7 +126,14 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 	}
 	callerExtra := make(map[string]any)
 	for _, body := range extraBody {
-		for key, value := range body {
+		if len(body) == 0 {
+			continue
+		}
+		var fields map[string]any
+		if err := json.Unmarshal(body, &fields); err != nil {
+			return "", fmt.Errorf("decode pilot extra body: %w", err)
+		}
+		for key, value := range fields {
 			callerExtra[key] = value
 		}
 	}
@@ -213,13 +220,13 @@ const ReflectionDirective = "최종 출력 전에, 원문에 비추어 사실 �
 
 // CallLocalLLM invokes the lightweight model role — the original single local-AI
 // tier, hub-managed when wired. Back-compat wrapper over CallRoleLLM.
-func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
+func CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...rawJSON) (string, error) {
 	return CallRoleLLM(ctx, modelrole.RoleLightweight, system, userMessage, maxTokens, extraBody...)
 }
 
 // CallTinyLLM invokes the tiny model role — the smallest model, for trivial
 // classification/extraction (session titles, gmail stage-1 extractors).
-func CallTinyLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
+func CallTinyLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...rawJSON) (string, error) {
 	return CallRoleLLM(ctx, modelrole.RoleTiny, system, userMessage, maxTokens, extraBody...)
 }
 

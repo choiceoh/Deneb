@@ -16,10 +16,9 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 )
 
 // parallelSafeToolVet returns the executor's parallel-turn vet backed by the
@@ -220,9 +219,9 @@ func buildAgentTools(registry *ToolRegistry, sessionToolPreset string, replayedD
 	if registry == nil {
 		return nil
 	}
-	preset := toolpreset.Preset(sessionToolPreset)
-	rawTools := registry.FilteredLLMTools(toolpreset.AllowedTools(preset))
-	if preload := toolpreset.PreloadedDeferredTools(preset); len(preload) > 0 {
+	preset := sessionToolPreset
+	rawTools := registry.FilteredLLMTools(toolwire.AllowedTools(preset))
+	if preload := toolwire.PreloadedDeferredTools(preset); len(preload) > 0 {
 		rawTools = append(rawTools, registry.DeferredLLMTools(preload)...)
 	}
 
@@ -506,7 +505,7 @@ func shouldEnableSkillNudger(nudger SkillNudger, params RunParams, sessionToolPr
 	if params.EphemeralUser || params.EphemeralAssistant {
 		return false
 	}
-	if sessionToolPreset == string(toolpreset.PresetSelfReview) {
+	if sessionToolPreset == toolwire.PresetSelfReview {
 		return false
 	}
 	// Cron sessions are excluded: a cron is an already-codified workflow (its
@@ -724,7 +723,7 @@ func verifyGateObservingPersister(inner func(msg llm.Message), gate *verifyGateS
 //
 // When substituteMarketTokens is true, market letter tokens
 // ("{{market:usd_krw}}") in text blocks are also replaced with their recorded
-// display values (market.SubstituteLetterTokens). This is the per-turn persist
+// display values (toolwire.SubstituteMarketLetterTokens). This is the per-turn persist
 // chokepoint for streamed/async runs: a turn that mimics the morning-letter
 // skeleton (2026-07-11 production transcript, client:main) would otherwise
 // persist raw template syntax and the native card would render it verbatim.
@@ -740,7 +739,7 @@ func sanitizeAssistantForTranscript(content json.RawMessage, substituteMarketTok
 	sanitizeText := func(s string) string {
 		s = StripSilentToken(s)
 		if substituteMarketTokens {
-			s = market.SubstituteLetterTokens(s)
+			s = toolwire.SubstituteMarketLetterTokens(s)
 		}
 		return s
 	}

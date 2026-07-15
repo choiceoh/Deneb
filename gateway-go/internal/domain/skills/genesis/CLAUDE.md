@@ -1,8 +1,7 @@
 # genesis — recursive self-improvement subsystem
 
 Deneb의 자가개선 루프. 스킬을 진화시키고(L1), 진화시키는 절차 자체를
-진화시키며(L2), 판정자를 공진화시키고(L3), 소스를 자가편집한다(L4).
-L5 거버넌스는 검증기 보정이 입증될 때까지 동결한다. 정본 설계는
+진화시키며(L2), 판정자를 공진화시킨다(L3). 정본 설계는
 `docs/research/recursive-self-improvement-roadmap.md`다.
 
 ## 불가침 원칙
@@ -25,13 +24,6 @@ L5 거버넌스는 검증기 보정이 입증될 때까지 동결한다. 정본 
 | **L2 메타 진화** | evolve/judge/genesis 프롬프트를 epoch 회전으로 개정하고 벤치로 채택·롤백 | `meta_evolution.go`, `meta_judge_bench.go`, `meta_producer_bench.go`, `meta_genesis_bench.go` |
 | **L3 verifier 공진화** | 라벨된 judge 오판과 심은 결함을 재생 | `judge_accuracy.go`, `tracker_validation_cases.go`의 `IsCharterCase` |
 | **L4 소스 자가편집** | 근거 있는 코드 후보를 코딩 레인에 제안(propose-only) | `runtime_error_mining.go`, `evolver_tool_gap.go`, `surfaces/surfaces.go` |
-| **L5 메타 거버너** | 수용 정책과 안전 경계 변경(현재 동결) | `lifecycle/rsi_profile.go` |
-
-모든 층은 `lifecycle/`의 세 단계(`observe_propose` → `evaluate_execute` →
-`verify_learn`)와 정책 프로필을 공유한다. 각 층의 생산자·결정적 게이트·벤치·
-롤백 워치는 어댑터로 유지하며 공통 커널에 복제하지 않는다. L4는 review와
-delivery를 분리하고, `watch_passed` 이후에만 `applied`를 파생한다. 후보 선택과
-세션 결과 판정은 Go 원장이 소유하며 sh/py는 실행 사실과 호환 마커만 다룬다.
 
 ## L2 자문 증거 (ADVISORY — 게이트 불가침)
 
@@ -98,6 +90,19 @@ delivery를 분리하고, `watch_passed` 이후에만 `applied`를 파생한다.
   `DENEB_SKILL_WATCH_MAX_AGE_DAYS`, `DENEB_META_BENCH_SCALE`,
   `DENEB_JUDGE_ACCURACY_INTERVAL_HOURS`이며 킬 스위치는
   `DENEB_META_AUTO_ADOPT=0`이다.
+
+## Local change scope
+
+genesis는 리프 도메인이다. 루프 로직을 바꿀 때 서버/도구로 역수입하지 않는다.
+
+- 함께 바꿔도 되는 이웃: `genesis/generation`, `genesis/guardrails`,
+  `genesis/review`, `runtime/skilllifecycle`(도구 표면), `runtime/server`의
+  `init_genesis.go`(배선만). `Tracker`/`NewTracker`/`Evolver`/`NewEvolver` 계약이
+  바뀌면 `evolver_test.go`와 `meta_revision_class_test.go`를 먼저 본다.
+- 건드리지 말 것: acceptance machinery(`validation_engine.go`, `eprocess`,
+  `surfaces.go`의 forbidden 목록), `pipeline/chat` 프롬프트 캐시 경로,
+  client wire 생성물. LLM 출력을 accept/reject 결정으로 승격하지 않는다.
+- 집중 검증: `cd gateway-go && go test -count=1 ./internal/domain/skills/genesis`
 
 ## 변경과 검증
 

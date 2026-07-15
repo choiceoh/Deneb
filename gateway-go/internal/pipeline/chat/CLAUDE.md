@@ -21,7 +21,7 @@
 루스 파일(top-level)은 기능별 클러스터로 읽는다:
 - **`run_*`** — 한 에이전트 턴의 실행 파이프라인(↓ 흐름).
 - **`tool_*`** — 도구 실행 주변(분류/압축/캐시안정/사후처리/변이검증/skill consult).
-- **`recall/` + `run_tail_inject.go`** — 회상 프리플라이트(`recall/recall_preflight.go` 등) → 마지막 user 메시지 꼬리 주입.
+- **`recall_*` + `run_tail_inject.go`** — 회상 프리플라이트 → 마지막 user 메시지 꼬리 주입.
 - **`slash_*` + `*_dispatch.go`** — 슬래시 커맨드(`/help`·`/reset`·`/status`·`/kill`·`/goal`·`/rollback`·`/update`·`/restart`·`/weekly`).
 - 캐시 마커: `cache_breakpoints.go`·`tier1_cache.go`·`prompt_snapshot_persist.go`·`calendar_glance.go`.
 
@@ -35,7 +35,7 @@ startAsyncRun (run_start.go)        # 세션 확보, abort ctx, buildRunDeps, go
               ├ prepareContextAndPrompt (run_prepare.go)  # assembleMessages(압축 포함) + finalizePrompt
               ├ resolveModel / resolveClient (run_model.go, run_provider.go)  # 역할→모델, API 모드, 캐시 호환
               ├ wireStreamHooks (run_hooks.go)            # before/after tool, steer, trailing 캐시 훅
-              └ (도구 루프는 ai/agent 가 구동, 도구 실행은 ToolRegistry.Execute)
+              └ (도구 루프는 agentsys/agent 가 구동, 도구 실행은 ToolRegistry.Execute)
       └ handleRunSuccess / handleRunError (run_lifecycle.go)  # 라이프사이클 이벤트, 실패 분류, finishRun
 ```
 
@@ -54,29 +54,6 @@ startAsyncRun (run_start.go)        # 세션 확보, abort ctx, buildRunDeps, go
 | 사용자 입력 링크 보강 | `link_enrichment.go`(briefcase/caller-history gate·adapter) → `linkenrichment/engine.go`(fetch·변환·수명주기) |
 | 슬래시 커맨드 | `slash_commands.go`(전처리) → `slash_dispatch.go`(디스패치) |
 
-## 하위 패키지 진입점
-
-chat root는 하위 패키지를 포트로 소비하고, 하위 패키지가 root 실행 루프를 import하지
-않는 의존 방향을 유지한다. 이 경계가 깨지면 cache·recall·subagent 상태가 한 턴
-안에서 순서를 잃는다.
-
-- `denebui/denebui.go`의 `Validate`, `ExtractFences`와 `denebui/html.go`의
-  `ParseHTML`이 deneb-ui wire 검증 진입점이다. renderer 정책은 HTML v2 grammar에
-  묶고 chat turn 상태를 직접 읽지 않는다.
-- `recall/recall_preflight.go`의 `Build`, `recall/types.go`의 `Params`/`Deps`,
-  `recall/recall_cache.go`의 `ShouldFreeze`가 회상 프리플라이트 경계다. wiki와
-  transcript는 dependency로만 받아 마지막 user tail 주입 순서를 보존한다.
-- `runstate/pending.go`의 `NewPendingQueue`, `runstate/steer.go`의 `NewSteerQueue`는
-  실행 중 pending/steer 상태를 소유한다. 세션별 enqueue/drain 순서는 불변조건이다.
-- `subagent/notifier.go`의 `NewSubagentNotifier`와 `NotifyCh`는 subagent 완료 알림
-  포트다. parent session 상태는 `runstate.Params` alias와 dependency callback으로만
-  연결한다.
-- `transcript/store.go`의 `NewFileTranscriptStore`와 `transcript/cache.go`의
-  `NewCachedTranscriptStore`가 transcript 저장·캐시 진입점이다. cache는 source of
-  truth가 아니며 append/delete 뒤 stale read가 남으면 안 된다.
-
-`cd gateway-go && go test ./internal/pipeline/chat/denebui ./internal/pipeline/chat/recall ./internal/pipeline/chat/runstate ./internal/pipeline/chat/subagent ./internal/pipeline/chat/transcript`
-
 ## 함정 (이 서브트리 특유)
 
 - **레이어 의존 방향 엄수**: `toolport/`(안정 포트)와 `tooldeps/`(도구 의존 bag)를 `tools/`와 `toolreg/`가 소비한다. `tools/`·`toolreg/`는 **chat/를 import하지 않는다**. localai에 결합된 pilot 도구만 `toolreg_core.go`(얇은 래퍼)에서 별도 등록.
@@ -89,6 +66,19 @@ chat root는 하위 패키지를 포트로 소비하고, 하위 패키지가 roo
 - 링크 보강 goroutine과 budget을 top-level chat으로 되돌리지 않는다.
   `linkenrichment.Engine`이 start/join/cancel과 fallback을 함께 소유하고,
   chat root는 요청 gate와 사용자 표시 sanitize adapter만 소유한다.
+
+## Local change scope
+
+한 턴 실행·도구·프롬프트 변경은 chat 서브트리 안에 가둔다.
+
+- 함께 바꿔도 되는 이웃: `toolport/`·`tooldeps/`·`tools/`·`toolreg/`(도구 계약),
+  `prompt/`(시스템 프롬프트), `pipeline/compaction`·`pipeline/polaris`(압축/스토어),
+  `linkenrichment/`(링크 보강). `Execute`/`ToolRegistry`/`TurnContext`/
+  `RunCache` 계약이 바뀌면 `agent_test.go`와 해당 `run_*_test.go`를 먼저 본다.
+- 건드리지 말 것: `runtime/server` method registry, genesis acceptance machinery,
+  prompt-cache 불가침 규칙(`docs/agent-rules/prompt-cache.md`)을 깨는 system
+  프롬프트 per-turn 가변 바이트, 생성 스키마 파일 직접 수정.
+- 집중 검증: `cd gateway-go && go test ./internal/pipeline/chat`
 
 ## 집중 검증
 

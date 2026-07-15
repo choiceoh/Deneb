@@ -38,6 +38,19 @@ handler 배선은 runtime/server method registry가 소유한다.
 - 새 method는 성공만이 아니라 malformed request, dependency 부재, 권한
   실패를 같은 package 테스트에서 고정한다.
 
+## Local change scope
+
+handler는 번역 계층이다. 상태·검색·저장 규칙을 여기로 끌어오지 않는다.
+
+- 함께 바꿔도 되는 이웃: `runtime/server/method_registry.go`(등록),
+  `files/`·`knowledge/`·`schedule/` 하위 패키지, 주입되는 domain 서비스
+  (`domain/wiki`, `domain/skills`). `Deps`/`Methods`/`ProjectMethods`/
+  `SkillsMethods` 계약이 바뀌면 `miniapp_test.go`와 `models_test.go`를 먼저 본다.
+- 건드리지 말 것: `rpcutil.GatewayHub` import, domain 내부 게이트 로직 복제,
+  `//deneb:wire` 생성 Kotlin/TS 직접 수정, client-token 검증을 payload로 우회.
+- 집중 검증:
+  `cd gateway-go && go test -count=1 ./internal/runtime/rpc/handler/handlerminiapp`
+
 ## 집중 검증
 
 root handler와 files/knowledge/schedule 하위 패키지를 모두 검증한다.

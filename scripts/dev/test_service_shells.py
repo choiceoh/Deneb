@@ -243,7 +243,7 @@ class SystemdInstallerTests(unittest.TestCase):
     def calls(self) -> str:
         return self.log.read_text(encoding="utf-8") if self.log.exists() else ""
 
-    def test_auto_deploy_installer_refuses_non_main_before_writing_units(self) -> None:
+    def test_when_auto_deploy_installer_refuses_non_main_before_writing_units(self) -> None:
         proc = run_script(
             "scripts/systemd/setup-auto-deploy.sh",
             env=self.env(GIT_BRANCH="feature"),
@@ -253,7 +253,7 @@ class SystemdInstallerTests(unittest.TestCase):
         self.assertFalse((self.home / ".config/systemd/user").exists())
         self.assertNotIn("systemctl", self.calls())
 
-    def test_auto_deploy_installer_copies_units_dropin_head_and_enables_timer(self) -> None:
+    def test_when_auto_deploy_installer_copies_units_dropin_head_and_enables_timer(self) -> None:
         proc = run_script("scripts/systemd/setup-auto-deploy.sh", env=self.env())
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         units = self.home / ".config/systemd/user"
@@ -356,7 +356,7 @@ class GatewayServiceInstallerTests(unittest.TestCase):
         )
         self.assertIn("Gateway service installed", proc.stdout)
 
-    def test_port_is_forwarded_and_disabled_linger_is_enabled_for_current_user(self) -> None:
+    def test_when_port_is_forwarded_and_disabled_linger_is_enabled_for_current_user(self) -> None:
         proc = run_script(
             "scripts/systemd/setup-gateway-service.sh",
             "--port", "19000",

@@ -26,7 +26,7 @@ type TimelineEvent struct {
 	At      time.Time       `json:"at"`
 	Order   uint64          `json:"order,omitempty"`
 	Kind    string          `json:"kind"`
-	Payload json.RawMessage `json:"payload,omitempty"`
+	Payload rawJSON `json:"payload,omitempty"`
 }
 
 type TimelineHandler func(context.Context, TimelineEvent) error

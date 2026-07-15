@@ -6,18 +6,18 @@ import { describe, expect, it } from "vitest";
 import { parseBlocks } from "./parse";
 
 describe("headings", () => {
-  it("maps # depth to level and trims trailing hashes", () => {
+  it("when maps # depth to level and trims trailing hashes", () => {
     expect(parseBlocks("# Title")).toEqual([{ type: "heading", level: 1, text: "Title" }]);
     expect(parseBlocks("###### Deep")).toEqual([{ type: "heading", level: 6, text: "Deep" }]);
     expect(parseBlocks("## Closed ##")).toEqual([{ type: "heading", level: 2, text: "Closed" }]);
   });
-  it("needs a space after the hashes (else it is a paragraph)", () => {
+  it("when needs a space after the hashes (else it is a paragraph)", () => {
     expect(parseBlocks("#NoSpace")).toEqual([{ type: "para", text: "#NoSpace" }]);
   });
 });
 
 describe("code fences", () => {
-  it("captures language and body verbatim", () => {
+  it("when captures language and body verbatim", () => {
     expect(parseBlocks("```go\nfmt.Println(1)\n```")).toEqual([{ type: "code", lang: "go", text: "fmt.Println(1)" }]);
   });
   it("accepts ~~~ fences and empty lang", () => {
@@ -26,7 +26,7 @@ describe("code fences", () => {
   it("runs an unclosed fence to EOF (stream truncation)", () => {
     expect(parseBlocks("```\nno close")).toEqual([{ type: "code", lang: "", text: "no close" }]);
   });
-  it("does not interpret markup inside a fence", () => {
+  it("without interpret markup inside a fence", () => {
     expect(parseBlocks("```\n# not a heading\n- not a list\n```")).toEqual([
       { type: "code", lang: "", text: "# not a heading\n- not a list" },
     ]);
@@ -34,7 +34,7 @@ describe("code fences", () => {
 });
 
 describe("horizontal rules", () => {
-  it("recognizes -, *, _ variants including spaced", () => {
+  it("when recognizes -, *, _ variants including spaced", () => {
     expect(parseBlocks("---")).toEqual([{ type: "hr" }]);
     expect(parseBlocks("***")).toEqual([{ type: "hr" }]);
     expect(parseBlocks("___")).toEqual([{ type: "hr" }]);
@@ -52,11 +52,11 @@ describe("tables", () => {
       rows: [["1", "2", "3"]],
     });
   });
-  it("treats a bare column as no alignment", () => {
+  it("when treats a bare column as no alignment", () => {
     const [block] = parseBlocks("a|b\n-|-\nx|y");
     expect(block).toMatchObject({ header: ["a", "b"], align: [undefined, undefined], rows: [["x", "y"]] });
   });
-  it("keeps an escaped pipe as literal cell content", () => {
+  it("preserves an escaped pipe as literal cell content", () => {
     const [block] = parseBlocks("| x |\n|---|\n| a \\| b |");
     expect(block).toMatchObject({ rows: [["a | b"]] });
   });
@@ -71,7 +71,7 @@ describe("blockquotes", () => {
       { type: "quote", children: [{ type: "para", text: "hello\nworld" }] },
     ]);
   });
-  it("recurses so a quoted list stays a list", () => {
+  it("when recurses so a quoted list stays a list", () => {
     const [quote] = parseBlocks("> - a\n> - b");
     expect(quote).toMatchObject({ type: "quote", children: [{ type: "list", ordered: false }] });
     expect((quote as { children: { items: unknown[] }[] }).children[0].items).toHaveLength(2);
@@ -94,13 +94,13 @@ describe("lists", () => {
     expect(items[1]).toMatchObject({ task: true, checked: true });
     expect(items[1].children[0]).toMatchObject({ type: "para", text: "done" });
   });
-  it("nests an indented child list via recursion", () => {
+  it("when nests an indented child list via recursion", () => {
     const [list] = parseBlocks("- a\n  - b");
     const item0 = (list as { items: { children: { type: string }[] }[] }).items[0];
     expect(item0.children[0]).toMatchObject({ type: "para", text: "a" });
     expect(item0.children[1]).toMatchObject({ type: "list", ordered: false });
   });
-  it("keeps a loose list open across a blank line between siblings", () => {
+  it("preserves a loose list open across a blank line between siblings", () => {
     const [list] = parseBlocks("- a\n\n- b");
     expect((list as { items: unknown[] }).items).toHaveLength(2);
   });
@@ -120,7 +120,7 @@ describe("block math", () => {
 });
 
 describe("paragraphs", () => {
-  it("joins consecutive lines and splits on a blank line", () => {
+  it("when joins consecutive lines and splits on a blank line", () => {
     expect(parseBlocks("one\ntwo\n\nthree")).toEqual([
       { type: "para", text: "one\ntwo" },
       { type: "para", text: "three" },

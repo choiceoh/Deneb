@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 describe("log", () => {
-  it("namespaces output and nests via child()", () => {
+  it("when routes log output through nested child namespace", () => {
     const entries = capture();
     setLogLevel("debug");
     const gw = createLogger("andromeda").child("gateway");
@@ -24,7 +24,7 @@ describe("log", () => {
     expect(entries[0]).toMatchObject({ level: "info", namespace: "andromeda:gateway", args: ["hello"] });
   });
 
-  it("filters messages below the configured level", () => {
+  it("when filters messages below the configured level", () => {
     const entries = capture();
     setLogLevel("warn");
     const lg = createLogger("x");
@@ -35,7 +35,7 @@ describe("log", () => {
     expect(entries.map((e) => e.level)).toEqual(["warn", "error"]);
   });
 
-  it("silences everything at level silent", () => {
+  it("when silences everything at level silent", () => {
     const entries = capture();
     setLogLevel("silent" as LogLevel);
     createLogger("x").error("nope");

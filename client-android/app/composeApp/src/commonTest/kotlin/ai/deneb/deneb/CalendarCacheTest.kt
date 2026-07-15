@@ -27,21 +27,26 @@ class CalendarCacheTest {
         ),
     )
 
-    @Test
-    fun roundTripsUnderMatchingOwner() {
-        val json = encodeCalendarCache(events, owner = "https://gw#abc")
-        assertEquals(events, decodeCalendarCache(json, expectedOwner = "https://gw#abc"))
-    }
+    private fun calendarCacheCases(): List<() -> Unit> = listOf(
+        {
+            val json = encodeCalendarCache(events, owner = "https://gw#abc")
+            assertEquals(events, decodeCalendarCache(json, expectedOwner = "https://gw#abc"))
+
+        },
+        {
+            val json = encodeCalendarCache(events, owner = "https://gw#abc")
+            assertNull(decodeCalendarCache(json, expectedOwner = "https://other#xyz"))
+
+        },
+        {
+            val json = encodeCalendarCache(emptyList(), owner = "https://gw#abc")
+            assertNull(decodeCalendarCache(json, expectedOwner = "https://gw#abc"))
+
+        },
+    )
 
     @Test
-    fun rejectsMismatchedOwner() {
-        val json = encodeCalendarCache(events, owner = "https://gw#abc")
-        assertNull(decodeCalendarCache(json, expectedOwner = "https://other#xyz"))
-    }
-
-    @Test
-    fun emptyDecodesToNull() {
-        val json = encodeCalendarCache(emptyList(), owner = "https://gw#abc")
-        assertNull(decodeCalendarCache(json, expectedOwner = "https://gw#abc"))
+    fun calendarCacheRoundTripsWhenOwnerMatchesAndRejectsMismatch() {
+        calendarCacheCases().forEach { it() }
     }
 }

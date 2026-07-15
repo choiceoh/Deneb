@@ -31,6 +31,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/sparkfleet"
 	arSession "github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
@@ -446,10 +447,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 	}
 	s.registerSessionRPCMethods() // chat pipeline init + handler creation
 	if s.localAIHub != nil {
-		hub.SetLocalAIHub(s.localAIHub)
-	}
-	if s.embeddingClient != nil {
-		hub.SetEmbeddingClient(s.embeddingClient)
+		pilot.SetLocalAIHub(s.localAIHub)
 	}
 	hub.AdvancePhase(rpcutil.PhaseSession) // mark chatHandler as available
 	s.initGenesisServices()                // create genesis deps (before late methods for Rule 1)

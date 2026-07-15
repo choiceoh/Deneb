@@ -16,7 +16,7 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 describe("denebDataProvider getList — payload unwrapping", () => {
-  it("unwraps rows from the registry listKey (people → { people: [...] })", async () => {
+  it("returns unwrapped rows from registry listKey (people → { people: [...] })", async () => {
     rpcReturns({ people: [{ id: "p1", name: "김대희" }], windowDays: 30, scannedCount: 1 });
     const { data } = await provider.getList({ resource: "people" });
     expect(data).toHaveLength(1);
@@ -50,7 +50,7 @@ describe("denebDataProvider getList — payload unwrapping", () => {
     expect(total).toBe(0);
   });
 
-  it("passes explicit RPC params from Refine meta", async () => {
+  it("when passes explicit RPC params from Refine meta", async () => {
     let seen: unknown;
     server.use(
       http.post("*/api/v1/miniapp/rpc", async ({ request }) => {

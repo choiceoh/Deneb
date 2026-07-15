@@ -31,7 +31,7 @@ type Params struct {
 	PresencePenalty     *float64
 	Stop                []string
 	ResponseFormat      *llm.ResponseFormat
-	ToolChoice          any // "auto", "none", "required", or structured object
+	ToolChoice          rawJSON // "auto", "none", "required", or structured object
 
 	// Thinking is a per-run thinking-level override: a resolveThinkingConfig
 	// level ("minimal".."xhigh") or "off"/"none" to disable the thinking

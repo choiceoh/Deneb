@@ -1,6 +1,9 @@
 package process
 
-import "strings"
+import (
+	"log/slog"
+	"strings"
+)
 
 // isBlockedEnvKey returns true if the given environment variable key
 // should be stripped from subprocess environments.
@@ -50,7 +53,7 @@ func sanitizeNodeOptions(value string) string {
 // SanitizeEnv filters dangerous environment variables from a slice of
 // "KEY=VALUE" strings. Blocked variables are silently removed.
 // NODE_OPTIONS is sanitized rather than fully blocked.
-func SanitizeEnv(env []string, logger interface{ Info(string, ...any) }) []string {
+func SanitizeEnv(env []string, logger *slog.Logger) []string {
 	result := make([]string, 0, len(env))
 	for _, entry := range env {
 		key, value, found := strings.Cut(entry, "=")

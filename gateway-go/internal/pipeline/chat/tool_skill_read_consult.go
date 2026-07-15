@@ -11,8 +11,11 @@
 // post-processor closes that gap: when a `read` output is a SKILL.md whose
 // directory names a skill in the runtime catalog, record the consult.
 //
-// Catalog-gated on purpose: a SKILL.md read only matches when the directory
-// name is a live skill name, so unrelated documentation reads are ignored.
+// Catalog-gated on purpose: a SKILL.md read in a coding worktree (editing a
+// skill as CODE) only matches if the dirname is a live skill name — and those
+// coding sessions are additionally excluded at the recording layer
+// (recordTurnSkillUsage skips code:* sessions), so editing a skill never
+// counts as using it.
 package chat
 
 import (
@@ -23,7 +26,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 )
 
 // NewReadSkillConsultRecorder returns the per-tool post-processor for `read`.
@@ -33,7 +36,7 @@ import (
 // "[File: …]" header is still intact.
 func NewReadSkillConsultRecorder(registry *ToolRegistry) PostProcessor {
 	return func(ctx context.Context, _, output string) string {
-		if toolport.ToolPresetFromContext(ctx) == string(toolpreset.PresetBriefcase) {
+		if toolport.ToolPresetFromContext(ctx) == toolwire.PresetBriefcase {
 			return output
 		}
 		resolved := cachedResolvedSkills()

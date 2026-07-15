@@ -322,15 +322,6 @@ func buildStaticPrompt(params SystemPromptParams, eagerSet, toolSet toolNameSet)
 		// pattern; prompt audit 2026-06-12).
 		s.WriteString("- 유저가 게이트웨이 자체의 '상태'·'재시작'·'업데이트'·'설정 변경'을 말하면 `gateway` 도구가 1순위다 (`top`/`nvidia-smi` 같은 OS 레벨 세부는 명시 요청 시에만 추가).\n")
 		s.WriteString("- 메일 관련 요청(분석·요약·첨부 확인·검색)은 `mail_archive` 도구로 처리하라. Gmail 발송·회신·라벨 같은 계정 조작은 에이전트 도구 표면에 없다.\n")
-		// Self-inspection via codegraph. Gated on the deferred tool actually
-		// being wired (DENEB_MCP_SERVERS=codegraph:…) — the toolSet includes
-		// deferred names and buildStaticCacheKey folds them into the cache key,
-		// so this block's presence is keyed (same pattern as workfeed/polaris).
-		// Trigger line only; the HOW ships in each codegraph_* tool description
-		// at fetch_tools time (graphify/message pattern).
-		if _, ok := toolSet["codegraph_explore"]; ok {
-			s.WriteString("- 네 **자신의 소스 코드**(이 게이트웨이와 클라이언트의 구현)는 `codegraph_*` 도구로 조사한다 — \"이 기능 어디서 처리돼\"·\"이 심볼 바꾸면 뭐 깨지나\"·\"누가 이걸 부르나\" 같은 구조·관계·영향 질문은 grep+파일읽기 대신 이걸로 한 번에 답한다. deferred라 `fetch_tools`(query=\"codegraph\")로 먼저 활성화하라: 영역 조사=`codegraph_explore`, 정확한 심볼=`codegraph_node`, 변경 영향=`codegraph_impact`/`codegraph_callers`. 게이트웨이 동작 질문에 클라(Kotlin/TS) 심볼이 섞이면 쿼리에 `gateway-go`나 파일명을 더해 좁혀라.\n")
-		}
 		s.WriteString("- **Never output tool call syntax or shell commands as text to the user.** Always use structured tool calls. Report results, not the commands you ran.\n\n")
 	}
 

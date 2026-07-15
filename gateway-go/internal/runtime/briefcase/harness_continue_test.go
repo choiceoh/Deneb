@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 )
 
 func TestChatHarnessContinuesWithSameDenebSession(t *testing.T) {
@@ -38,6 +39,7 @@ func TestChatHarnessContinuesWithSameDenebSession(t *testing.T) {
 	defer root.Close()
 	harness, err := NewChatHarness(ChatHarnessConfig{
 		Pack: pack, Root: root, Client: llm.NewClient(server.URL, "test-key"), Model: "test-model", Arm: ArmRawPrimary,
+			TokenEstimate: tokenest.EstimateUncalibrated,
 	})
 	if err != nil {
 		t.Fatal(err)

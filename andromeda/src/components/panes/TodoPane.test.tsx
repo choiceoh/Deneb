@@ -37,7 +37,7 @@ describe("TodoPane", () => {
     expect(await screen.findByText("초안 먼저")).toBeInTheDocument();
   });
 
-  it("edits due date and note through the modal", async () => {
+  it("when edits due date and note through the modal", async () => {
     const calls: Record<string, unknown>[] = [];
     const dataProvider = capturing({ todo: [{ id: "t1", title: "보고서", done: false }] }, calls);
     renderWithProviders(<TodoPane />, { connected: true, dataProvider });
@@ -55,7 +55,7 @@ describe("TodoPane", () => {
     expectRpcDateTime(v.due);
   });
 
-  it("adds a todo through the + 새 할일 modal", async () => {
+  it("when adds a todo through the + 새 할일 modal", async () => {
     const calls: Record<string, unknown>[] = [];
     const dataProvider = capturing({ todo: [] }, calls);
     renderWithProviders(<TodoPane />, { connected: true, dataProvider });

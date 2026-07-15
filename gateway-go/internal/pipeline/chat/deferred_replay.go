@@ -31,7 +31,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 	"github.com/choiceoh/deneb/gateway-go/pkg/toolmeta"
 )
 
@@ -73,7 +73,7 @@ func replayActivatedTools(messages []llm.Message, registry *ToolRegistry, sessio
 	// executor (pkg/toolmeta), so tool output CONTENT cannot forge it and no
 	// call pairing is needed. The text-notice parse remains as the fallback
 	// for pre-metadata transcripts, gated to writer-paired results as before.
-	allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
+	allowed := toolwire.AllowedTools(sessionToolPreset)
 	seen := make(map[string]bool)
 	var names []string
 	admit := func(name string) {

@@ -12,7 +12,7 @@ function stream(chunks: string[]): ReadableStream<Uint8Array> {
 }
 
 describe("readSSE", () => {
-  it("parses event/data frames", async () => {
+  it("reads event/data frames from SSE stream", async () => {
     const frames: SSEFrame[] = [];
     await readSSE(stream(['event: delta\ndata: {"delta":"hi"}\n', 'data: {"x":1}\n']), (f) => frames.push(f));
     expect(frames).toEqual([
@@ -21,7 +21,7 @@ describe("readSSE", () => {
     ]);
   });
 
-  it("reassembles frames split across chunks", async () => {
+  it("returns reassembled frames when split across chunks", async () => {
     const frames: SSEFrame[] = [];
     await readSSE(stream(["event: don", 'e\ndata: {"text":"', 'ok"}\n']), (f) => frames.push(f));
     expect(frames).toEqual([{ event: "done", data: '{"text":"ok"}' }]);

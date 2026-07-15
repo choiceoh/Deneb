@@ -1,32 +1,41 @@
-# Runtime Events 변경 지도
+# Gateway events broadcast map
 
-이 패키지는 게이트웨이 SSE/브로드캐스트 버스다. RPC·chat·push는 이벤트
-이름과 payload만 넘기고, 연결별 fan-out·tap·구독은 여기가 소유한다.
+Owns SSE/event fan-out for the gateway: `Broadcaster` delivery, typed
+`Publisher` helpers, and gateway subscription routing. Payloads at the
+package boundary are `RawJSON` (alias of `json.RawMessage`).
 
-## 진입점과 책임
+## Entry points
 
-- `broadcaster.go`의 `Broadcaster`, `Broadcast`, `BroadcastWithOpts`,
-  `BroadcastToConnIDs`, `RegisterTap`이 fan-out과 operator tap을 소유한다.
-- `event_payload.go`의 `EventPayload`, `PayloadFromRaw`, `PayloadOf`,
-  `Bytes`가 패키지 경계의 불투명 JSON 계약이다. `any`/`json.RawMessage`를
-  export하지 않는다.
-- `publisher.go`의 `Publisher`가 session/agent/config 변경 이벤트를
-  typed helper로 발행한다.
-- `gateway_subscriptions.go`가 연결 수명주기에 묶인 구독 payload를 조립한다.
+- `broadcaster.go` — `NewBroadcaster`, `Broadcast`, `BroadcastWithOpts`,
+  `BroadcastToConnIDs`, `Subscribe`, `RegisterTap`
+- `publisher.go` — `NewPublisher`, `Publisher` session/agent helpers
+- `gateway_subscriptions.go` — `NewGatewayEventSubscriptions`,
+  `AgentEvent`, `TranscriptUpdate`
+- `raw_json.go` — `RawJSON`, `IsNullJSON`
 
-## 의존 방향과 불변조건
+## Dependency direction and invariants
 
-- 의존 방향은 `runtime/server|rpc → events`다. `domain/*`와
-  `pipeline/chat/toolport`는 이 패키지를 import하지 않는다 — composition
-  root가 `EventPayload`로 변환한다.
-- tap/`Broadcast` payload는 항상 `EventPayload`다. 호출자는 `PayloadOf` 또는
-  `PayloadFromRaw`로 감싼다.
-- 부분 전송 실패는 에러 슬라이스로 반환하고, 이미 보낸 연결을 롤백하지
-  않는다.
+- **Dependency direction / port boundary**: events is a leaf transport
+  package — it must not import chat, wiki, or handler packages. Callers
+  marshal typed payloads to `RawJSON` before `Broadcast`.
+- **Invariant**: subscriber filters must never panic a broadcast loop;
+  taps observe after encode and must tolerate bad payloads; session
+  message delivery only reaches connIDs explicitly subscribed to that
+  session key; tool-event recipients are scoped by runID registration.
+- Prefer `Publisher` helpers over ad-hoc payload maps at call sites so
+  event names stay a single source of truth.
 
-## 집중 검증
+## Local change scope
 
-`contracts_test.go`, `publisher_test.go`, `broadcaster_test.go`로 fan-out·tap·
-구독을 확인한다.
+Keep transport changes local to this package.
 
-`cd gateway-go && go test -count=1 ./internal/runtime/events`
+- May co-change: `runtime/rpc` hub wiring that constructs the broadcaster,
+  and SSE gateway HTTP adapters.
+- Do not touch: chat run lifecycle policy, wiki Store, or miniapp RPC
+  method handlers (they consume events, they do not own them).
+
+## Focused verification
+
+```
+cd gateway-go && go test -count=1 ./internal/runtime/events
+```

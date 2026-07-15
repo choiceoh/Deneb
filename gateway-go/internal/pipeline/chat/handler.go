@@ -8,16 +8,13 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/linkenrichment"
+	chatrecall "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/recall"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
@@ -73,7 +70,8 @@ type Handler struct {
 	subagent             *SubagentNotifier
 	subagentCleanupUnsub func()
 	steer                *SteerQueue // mid-run /steer notes for the main agent
-	linkEnrichment       *linkenrichment.Engine
+	linkEnrichStart      LinkEnrichStart
+	reportCardHealth     func(text, sessionKey string, logger *slog.Logger)
 
 	// checkpointRoot is the directory where per-session file-edit snapshots
 	// are stored (e.g. "~/.deneb/checkpoints"). When non-empty, each agent
@@ -110,9 +108,9 @@ type Handler struct {
 // optional; nil disables the corresponding source.
 type MemoryDeps struct {
 	// Wiki is the wiki knowledge base (tier-1 injection, recall, diary).
-	Wiki *wiki.Store
+	Wiki *tooldeps.WikiStore
 	// Notebook is the notebook session-grounding source store.
-	Notebook *notebook.Store
+	Notebook *tooldeps.NotebookStore
 	// FileRecall runs a hybrid semantic search over the on-box file store for
 	// the recall preflight (recall degrades to the other backends when nil).
 	// Injected by the server closing over the shared file semantic index.
@@ -120,7 +118,7 @@ type MemoryDeps struct {
 	// Org loads the operator's org chart (조직도) for the recall preflight's org
 	// source (org members/divisions named in a turn → their 부서 + 인물 page).
 	// Injected by the server as org.Load; nil disables the org recall source.
-	Org func() (org.OrgTree, error)
+	Org chatrecall.OrgLoader
 	// Embedding is the embedding client (BGE-M3) for the MMR compaction
 	// fallback tier.
 	Embedding compact.Embedder
@@ -199,7 +197,6 @@ type HandlerConfig struct {
 	DeliverablePublisher func(text string) (bool, error)
 	AgentLog             *agentlog.Writer    // optional; agent detail logging
 	Registry             *modelrole.Registry // centralized model role registry
-	LocalAIHub           *localai.Hub        // centralized local AI request hub
 	ContextCfg           ContextConfig
 	DefaultModel         string
 	SubagentDefaultModel string // separate default model for sub-agents (from agents.defaults.subagents.model)
@@ -232,6 +229,8 @@ type HandlerConfig struct {
 	// BriefcaseMode disables ambient production shortcuts that sit outside a
 	// signed evaluation world.
 	BriefcaseMode bool
+	LinkEnrichStart LinkEnrichStart
+	ReportCardHealth func(text, sessionKey string, logger *slog.Logger)
 	// AuditSystemPrompt receives the exact finalized system-prompt wire bytes.
 	// It is a trusted observability hook used by deterministic evaluation only.
 	AuditSystemPrompt func(sessionKey string, prompt []byte)
@@ -240,8 +239,8 @@ type HandlerConfig struct {
 	// available at handler creation time and passed here to reduce late-binding.
 	ProviderRuntime  *provider.ProviderRuntimeResolver // optional; runtime auth
 	BroadcastRaw     streaming.BroadcastRawFunc        // optional; raw event relay
-	EmitAgentFn      func(kind, sessionKey, runID string, payload map[string]any)
-	EmitTranscriptFn func(sessionKey string, message any, messageID string)
+	EmitAgentFn      func(kind, sessionKey, runID string, payload jsonObject)
+	EmitTranscriptFn func(sessionKey string, message rawJSON, messageID string)
 
 	// Ambient groups the ambient system-prompt context providers (topic
 	// knowledge, calendar/goal glances, persona override). See AmbientDeps.
@@ -341,7 +340,8 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		pending:              NewPendingQueue(),
 		mergeWindow:          NewMergeWindowTracker(),
 		steer:                NewSteerQueue(),
-		linkEnrichment:       linkenrichment.New(linkenrichment.Config{Logger: logger}),
+		linkEnrichStart:      cfg.LinkEnrichStart,
+		reportCardHealth:     cfg.ReportCardHealth,
 		maxHistoryBytes:      cfg.MaxHistoryBytes,
 		maxHistoryCount:      cfg.MaxHistoryCount,
 		maxMessageBytes:      cfg.MaxMessageBytes,
@@ -351,9 +351,6 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		pilot.SetModelRoleRegistry(h.registry)
 	}
 	// Wire centralized local AI hub for token budget management and health checks.
-	if cfg.LocalAIHub != nil {
-		pilot.SetLocalAIHub(cfg.LocalAIHub)
-	}
 	h.subagent = NewSubagentNotifier(SubagentNotifierDeps{
 		Logger:       h.logger,
 		HasActiveRun: h.abort.HasActiveRun,

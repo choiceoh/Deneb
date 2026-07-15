@@ -44,6 +44,20 @@ root다. 제품 규칙을 구현하는 곳이 아니라, 소유 패키지의 좁
 - 모델 유지관리 task를 server에서 직접 생성하지 않는다. task 활성화 조건,
   순서, 저장소와 telemetry adapter 변경은 `runtime/modelmaintenance`에서 한다.
 
+## Local change scope
+
+composition root 변경은 배선·수명주기에 가둔다. 제품 규칙을 여기로 끌어오지 않는다.
+
+- 함께 바꿔도 되는 이웃: `runtime/rpc/handler/*`(Deps 계약),
+  `runtime/gatewayhttp`(route 조립), `runtime/modelmaintenance`(task suite),
+  `method_registry.go` / `method_registry_late.go`에 등록하는 handler 패키지.
+  `Server`/`New`/`StartAndListen`/`ShutdownCtx` 수명주기가 바뀌면
+  `client_auth_test.go`와 같은 패키지 테스트에서 시작·종료 경계를 확인한다.
+- 건드리지 말 것: domain 비즈니스 판단(`domain/wiki`, `domain/skills/genesis`
+  내부 게이트), `pipeline/chat` 턴 실행 코어, `//deneb:wire` 생성물 직접 수정.
+  handler에 `GatewayHub` 전체를 넘기거나 registry 밖 중복 등록을 만들지 않는다.
+- 집중 검증: `cd gateway-go && go test ./internal/runtime/server`
+
 ## 변경과 검증
 
 배선 변경은 생성 실패, 정상 시작, shutdown, required-method parity를 관찰하는

@@ -12,25 +12,30 @@ class WorkFeedCacheTest {
         WorkFeedItem(id = "wf_2", title = "LG 모듈 계약", summary = "내일 마감", status = "unread"),
     )
 
-    @Test
-    fun roundTripsUnderMatchingOwner() {
-        val json = encodeWorkFeedCache(items, owner = "https://gw#abc")
-        assertEquals(items, decodeWorkFeedCache(json, expectedOwner = "https://gw#abc"))
-    }
+    private fun workFeedCacheCases(): List<() -> Unit> = listOf(
+        {
+            val json = encodeWorkFeedCache(items, owner = "https://gw#abc")
+            assertEquals(items, decodeWorkFeedCache(json, expectedOwner = "https://gw#abc"))
+
+        },
+        {
+            // The owner fingerprint stops a prior account's cached feed from rendering
+            // under new credentials (mirrors the mail cache guard).
+            val json = encodeWorkFeedCache(items, owner = "https://gw#abc")
+            assertNull(decodeWorkFeedCache(json, expectedOwner = "https://other#xyz"))
+
+        },
+        {
+            // An empty cache is "no last-known briefing" — the home shows its own empty
+            // state rather than a stale-but-empty render.
+            val json = encodeWorkFeedCache(emptyList(), owner = "https://gw#abc")
+            assertNull(decodeWorkFeedCache(json, expectedOwner = "https://gw#abc"))
+
+        },
+    )
 
     @Test
-    fun rejectsMismatchedOwner() {
-        // The owner fingerprint stops a prior account's cached feed from rendering
-        // under new credentials (mirrors the mail cache guard).
-        val json = encodeWorkFeedCache(items, owner = "https://gw#abc")
-        assertNull(decodeWorkFeedCache(json, expectedOwner = "https://other#xyz"))
-    }
-
-    @Test
-    fun emptyFeedDecodesToNull() {
-        // An empty cache is "no last-known briefing" — the home shows its own empty
-        // state rather than a stale-but-empty render.
-        val json = encodeWorkFeedCache(emptyList(), owner = "https://gw#abc")
-        assertNull(decodeWorkFeedCache(json, expectedOwner = "https://gw#abc"))
+    fun workFeedCacheRoundTripsWhenOwnerMatchesAndRejectsMismatch() {
+        workFeedCacheCases().forEach { it() }
     }
 }

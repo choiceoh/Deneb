@@ -246,7 +246,7 @@ class IterateShellTests(unittest.TestCase):
         self.assertFalse(data["phase"]["test"]["ok"])
         self.assertEqual([check["ok"] for check in data["checks"]], [False, True])
 
-    def test_custom_metric_extracts_last_value_and_key_value_detail(self) -> None:
+    def test_when_custom_metric_extracts_last_value_and_key_value_detail(self) -> None:
         output = (
             "metric_value=10\n"
             "noise\n"
@@ -261,7 +261,7 @@ class IterateShellTests(unittest.TestCase):
         self.assertEqual(data["quality"], {"korean": 9, "label": "good", "errors": 0})
         self.assertTrue(data["phase"]["test"]["ok"])
 
-    def test_custom_metric_uses_last_detail_line_and_keeps_float_values_as_strings(self) -> None:
+    def test_custom_metric_uses_last_detail_line_and_preserves_float_values_as_strings(self) -> None:
         output = (
             "DENEB_METRIC_DETAIL stale=1\n"
             "metric_value=55\n"
@@ -298,7 +298,7 @@ class IterateShellTests(unittest.TestCase):
             {"korean": 9, "substance": 8, "errors": 0},
         )
 
-    def test_combined_preset_weights_smoke_twenty_and_quality_eighty(self) -> None:
+    def test_when_combined_preset_weights_smoke_twenty_and_quality_eighty(self) -> None:
         proc = self.invoke("--metric", "combined", env=self.env(QUALITY_VALUE="75"))
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("metric(combined)... 80", proc.stdout)

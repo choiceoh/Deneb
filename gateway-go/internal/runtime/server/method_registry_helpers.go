@@ -23,7 +23,7 @@ import (
 // persistence entirely.
 func makeMailAnalysisWikiSink(hub *rpcutil.GatewayHub) func(handlermail.WikiAnalysisInput) error {
 	return func(in handlermail.WikiAnalysisInput) error {
-		store := hub.WikiStore()
+		store := hub.Opt.WikiStore
 		if store == nil {
 			return nil
 		}

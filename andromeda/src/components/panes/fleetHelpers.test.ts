@@ -80,7 +80,7 @@ describe("fleet display helpers", () => {
 });
 
 describe("fleet issue classification", () => {
-  it("treats the documented resource thresholds as inclusive", () => {
+  it("when treats the documented resource thresholds as inclusive", () => {
     const healthy = node({
       metrics: {
         memory: { totalKB: 100, availableKB: 11 },

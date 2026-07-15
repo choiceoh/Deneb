@@ -95,26 +95,6 @@ func TestBuildSystemPromptRendersPolarisSectionWhenToolPresent(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPromptRendersCodegraphSelfInspectionWhenWired(t *testing.T) {
-	// codegraph tools arrive DEFERRED via the external-MCP bridge, so gate on
-	// the deferred name, not an eager ToolDef.
-	with := BuildSystemPrompt(SystemPromptParams{
-		WorkspaceDir:  "/tmp",
-		ToolDefs:      []ToolDef{{Name: "read"}},
-		DeferredTools: []DeferredToolInfo{{Name: "codegraph_explore", Description: "explore an area"}},
-	})
-	if !strings.Contains(with, "자신의 소스 코드") {
-		t.Error("codegraph-wired prompt missing self-inspection note")
-	}
-	without := BuildSystemPrompt(SystemPromptParams{
-		WorkspaceDir: "/tmp",
-		ToolDefs:     []ToolDef{{Name: "read"}},
-	})
-	if strings.Contains(without, "자신의 소스 코드") {
-		t.Error("codegraph-less prompt must not coach codegraph tools")
-	}
-}
-
 func TestBuildSystemPromptRendersCompactToolList(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",

@@ -173,21 +173,11 @@ func recallWikiEvidenceResult(ctx context.Context, store *wiki.Store, queries []
 	// One batched embed for every wiki query (the server fans them across its
 	// context pool) instead of a per-query round-trip. Results stay index-aligned
 	// with queries, so queries[i] labels batch[i]'s hits.
-	// The full user turn is a deterministic intent signal for narrower per-term
-	// searches. It never admits a new page: wiki search only uses it to break an
-	// ambiguous ranking among candidates that the original query already passed.
-	// This recovers context such as a counterparty + generic noun combination
-	// without adding an LLM rewrite or another embedding request to the hot path.
-	intent := strings.TrimSpace(rawMessage)
-	if intent == "" && len(queries) > 1 {
-		intent = strings.Join(queries, " ")
-	}
-	reports, err := store.SearchBatchWithOptions(ctx, queries, 3, wiki.QueryOptions{Intent: intent})
+	batch, err := store.SearchBatch(ctx, queries, 3)
 	if err != nil {
 		return evidence, err
 	}
-	for i, report := range reports {
-		results := report.Results
+	for i, results := range batch {
 		for _, r := range results {
 			if _, ok := seen[r.Path]; ok {
 				continue

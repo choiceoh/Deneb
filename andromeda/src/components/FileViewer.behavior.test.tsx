@@ -122,7 +122,7 @@ describe("FileViewer media", () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:test-preview");
   });
 
-  it("re-stamps and embeds a mistyped PDF", async () => {
+  it("when re-stamps and embeds a mistyped PDF", async () => {
     const blob = textBlob("%PDF", "text/plain");
     const { container } = render(
       <FileViewer name="contract.pdf" load={async () => blob} downloadUrl="https://files.test/contract.pdf" />,
@@ -167,7 +167,7 @@ describe("FileViewer text editing", () => {
     expect(screen.getByRole("textbox")).not.toHaveAttribute("readonly");
   });
 
-  it("tracks dirty state and notifies the parent on transitions", async () => {
+  it("when tracks dirty state and notifies the parent on transitions", async () => {
     const onDirtyChange = vi.fn();
     render(
       <FileViewer
@@ -267,7 +267,7 @@ describe("FileViewer text editing", () => {
 });
 
 describe("FileViewer rendered text modes", () => {
-  it("opens Markdown in preview and toggles to editing", async () => {
+  it("when opens Markdown in preview and toggles to editing", async () => {
     render(<FileViewer name="README.md" load={async () => textBlob("# Heading")} onSave={vi.fn()} />);
 
     expect(await screen.findByRole("heading", { name: "Heading" })).toBeInTheDocument();
@@ -293,7 +293,7 @@ describe("FileViewer rendered text modes", () => {
     expect(within(table).getByRole("cell", { name: "1,200" })).toBeInTheDocument();
   });
 
-  it("uses tabs for TSV files", async () => {
+  it("when uses tabs for TSV files", async () => {
     render(<FileViewer name="prices.tsv" load={async () => textBlob("품목\t금액\n모듈\t1200")} />);
     const table = await screen.findByRole("table");
     expect(within(table).getByRole("columnheader", { name: "금액" })).toBeInTheDocument();
@@ -306,7 +306,7 @@ describe("FileViewer rendered text modes", () => {
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
-  it("caps a large CSV preview at five hundred rows", async () => {
+  it("when caps a large CSV preview at five hundred rows", async () => {
     const body = ["n", ...Array.from({ length: 520 }, (_, index) => String(index + 1))].join("\n");
     render(<FileViewer name="large.csv" load={async () => textBlob(body)} />);
 
@@ -314,7 +314,7 @@ describe("FileViewer rendered text modes", () => {
     expect(screen.getAllByRole("row")).toHaveLength(500);
   });
 
-  it("colorizes unified diff line categories", async () => {
+  it("when colorizes unified diff line categories", async () => {
     const diff = ["diff --git a/x b/x", "--- a/x", "+++ b/x", "@@ -1 +1 @@", "-old", "+new", " same", ""].join("\n");
     const { container } = render(<FileViewer name="change.patch" load={async () => textBlob(diff)} />);
     await screen.findByText("+new");
@@ -326,7 +326,7 @@ describe("FileViewer rendered text modes", () => {
     expect(Array.from(container.querySelectorAll(".diff-line")).at(-1)?.textContent).toBe(" ");
   });
 
-  it("toggles a diff to its editable source", async () => {
+  it("when toggles a diff to its editable source", async () => {
     render(<FileViewer name="change.diff" load={async () => textBlob("-old\n+new")} onSave={vi.fn()} />);
     await screen.findByText("+new");
     await userEvent.click(screen.getByRole("button", { name: "편집" }));

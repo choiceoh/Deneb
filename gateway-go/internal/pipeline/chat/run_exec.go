@@ -14,13 +14,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	notebooktool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/notebook"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
@@ -447,7 +446,7 @@ func logEffortRouteFailure(logger *slog.Logger, effortDecision string, effortRt 
 // (run ended first). Emitted before the done frame so the live view's last
 // tokens aren't dropped; the final/persisted text is transliterated
 // separately.
-func flushDeltaTail(deltaTranslit *hanja.Streamer, broadcaster *streaming.Broadcaster) {
+func flushDeltaTail(deltaTranslit *streaming.Streamer, broadcaster *streaming.Broadcaster) {
 	if deltaTranslit == nil || broadcaster == nil {
 		return
 	}
@@ -637,7 +636,7 @@ func persistTurnUserMessage(params RunParams, deps runDeps, logger *slog.Logger)
 		deps.strictErrors.Record(err)
 	}
 	if deps.callbacks.emitTranscriptFn != nil {
-		deps.callbacks.emitTranscriptFn(params.SessionKey, userMsg, "")
+		deps.callbacks.emitTranscriptFn(params.SessionKey, mustRawJSON(userMsg), "")
 	}
 	return formattedMessage
 }
@@ -686,7 +685,7 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 	if nbID, updated, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
 		if g, hit := cachedNotebookGrounding(params.SessionKey, nbID, updated); hit {
 			notebookGrounding = g
-		} else if g, gok := notebooktool.BuildNotebookGrounding(&tooldeps.NotebookDeps{Store: deps.memory.Notebook, Wiki: deps.memory.Wiki}, nbID); gok {
+		} else if g, gok := toolwire.BuildNotebookGrounding(&tooldeps.NotebookDeps{Store: deps.memory.Notebook, Wiki: deps.memory.Wiki}, nbID); gok {
 			notebookGrounding = g
 			storeNotebookGrounding(params.SessionKey, nbID, updated, g)
 		}
@@ -703,7 +702,7 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 		// Info + one agentlog event per fire is not spam.
 		deps.logger.Info("skill hints injected",
 			"session", params.SessionKey, "skills", strings.Join(hintedSkills, ","))
-		deps.agentLog.LogEvent(params.SessionKey, "run.skillhints", map[string]any{
+		agentlog.LogTyped(deps.agentLog, params.SessionKey, "run.skillhints", map[string]any{
 			"skills": hintedSkills,
 		})
 	}

@@ -552,7 +552,7 @@ func fileEqualsBytesContext(ctx context.Context, path string, expected []byte) (
 
 // StateJSON is a stable minimal state projection suitable for deterministic
 // state checks. Source contents are deliberately excluded.
-func (w *World) StateJSON() json.RawMessage {
+func (w *World) StateJSON() rawJSON {
 	state := struct {
 		Now              time.Time `json:"now"`
 		VisibleSourceIDs []string  `json:"visibleSourceIds"`
@@ -644,4 +644,12 @@ func cloneRecordContext(ctx context.Context, record Record) (Record, error) {
 func safeSegment(value string) bool {
 	return value != "" && value != "." && value != ".." &&
 		!strings.ContainsAny(value, `/\\`) && !strings.ContainsRune(value, '\x00')
+}
+
+// Clock returns the world clock.
+func (w *World) Clock() Clock {
+	if w == nil {
+		return nil
+	}
+	return w.clock
 }

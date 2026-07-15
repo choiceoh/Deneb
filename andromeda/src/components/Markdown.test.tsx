@@ -39,14 +39,14 @@ describe("Markdown", () => {
     expect(screen.getByRole("cell", { name: "A" })).toBeInTheDocument();
   });
 
-  it("marks a 3+ column table dense so narrow Korean columns fit, but not a 2-column one", () => {
+  it("when marks a 3+ column table dense so narrow Korean columns fit, but not a 2-column one", () => {
     const three = render(<Markdown text={"| 현장 | 규격 | 수량 |\n| --- | --- | --- |\n| A | RPS | 12 |"} />);
     expect(three.container.querySelector("table.md-table")).toHaveClass("md-table-dense");
     const two = render(<Markdown text={"| 이름 | 값 |\n| --- | --- |\n| A | 1 |"} />);
     expect(two.container.querySelector("table.md-table")).not.toHaveClass("md-table-dense");
   });
 
-  it("right-aligns a marker-less all-numeric column; explicit markers win", () => {
+  it("when right-aligns a marker-less all-numeric column; explicit markers win", () => {
     // 수량 column: every cell digit-led, no ':---:' marker → auto right-align
     // with tabular figures. 단가 column: explicit ':---' (left) marker → kept.
     render(
@@ -81,7 +81,7 @@ describe("Markdown", () => {
     expect(screen.getByText("완료")).toBeInTheDocument();
   });
 
-  it("nests a sub-list under its parent item", () => {
+  it("when nests a sub-list under its parent item", () => {
     render(<Markdown text={"- a\n  - b\n- c"} />);
     expect(screen.getAllByRole("list")).toHaveLength(2); // outer + nested
     expect(screen.getAllByRole("listitem")).toHaveLength(3); // a, b, c
@@ -102,7 +102,7 @@ describe("Markdown", () => {
     expect(screen.getByText(/나쁨/)).toBeInTheDocument();
   });
 
-  it("autolinks bare and angle-bracket URLs, trimming trailing punctuation", () => {
+  it("when autolinks bare and angle-bracket URLs, trimming trailing punctuation", () => {
     const { rerender } = render(<Markdown text={"방문: https://example.com."} />);
     expect(screen.getByRole("link", { name: "https://example.com" })).toHaveAttribute("href", "https://example.com");
 
@@ -110,7 +110,7 @@ describe("Markdown", () => {
     expect(screen.getByRole("link", { name: "https://deneb.example" })).toBeInTheDocument();
   });
 
-  it("treats a backslash-escaped marker as a literal, not emphasis", () => {
+  it("when treats a backslash-escaped marker as a literal, not emphasis", () => {
     const { container } = render(<Markdown text={"\\*리터럴\\*"} />);
     expect(container.querySelector("em, strong")).toBeNull();
     expect(screen.getByText("*리터럴*")).toBeInTheDocument();
@@ -121,7 +121,7 @@ describe("Markdown", () => {
     expect(container.querySelector("br")).not.toBeNull();
   });
 
-  it("applies GFM table column alignment", () => {
+  it("when applies GFM table column alignment", () => {
     render(<Markdown text={"| L | C | R |\n|:--|:-:|--:|\n| a | b | c |"} />);
     expect(screen.getByRole("columnheader", { name: "C" })).toHaveStyle({ textAlign: "center" });
     expect(screen.getByRole("columnheader", { name: "R" })).toHaveStyle({ textAlign: "right" });
@@ -134,7 +134,7 @@ describe("Markdown", () => {
     expect(quote?.querySelectorAll("li")).toHaveLength(2);
   });
 
-  it("shows the code fence language label", () => {
+  it("displays the code fence language label", () => {
     render(<Markdown text={"```python\nx = 1\n```"} />);
     expect(screen.getByText("python")).toBeInTheDocument();
     expect(screen.getByText("x = 1").tagName).toBe("CODE");
@@ -150,7 +150,7 @@ describe("Markdown", () => {
     expect(container.querySelector(".katex-display")).not.toBeNull();
   });
 
-  it("leaves currency amounts as plain text, not math", () => {
+  it("preserves currency amounts as plain text, not math", () => {
     const { container } = render(<Markdown text={"비용은 $5 이고 추가로 $10 입니다."} />);
     expect(container.querySelector(".katex")).toBeNull();
     expect(screen.getByText(/비용은 \$5 이고 추가로 \$10 입니다\./)).toBeInTheDocument();

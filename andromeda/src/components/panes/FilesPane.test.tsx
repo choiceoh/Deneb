@@ -71,7 +71,7 @@ afterEach(() => {
 });
 
 describe("FilesPane", () => {
-  it("hydrates the root folder from cache before the gateway refresh finishes", () => {
+  it("when hydrates the root folder from cache before the gateway refresh finishes", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(() => new Promise<Response>(() => {})),
@@ -89,7 +89,7 @@ describe("FilesPane", () => {
     expect(screen.getAllByText("cached-contract.pdf")[0]).toBeInTheDocument();
   });
 
-  it("lists folders and drills into a selected folder", async () => {
+  it("when lists folders and drills into a selected folder", async () => {
     renderWithProviders(<FilesPane />, { connected: true });
 
     await userEvent.click((await screen.findAllByText("projects"))[0]);
@@ -114,7 +114,7 @@ describe("FilesPane", () => {
     });
   });
 
-  it("searches files and shows a share link", async () => {
+  it("searches files and displays a share link", async () => {
     renderWithProviders(<FilesPane />, { connected: true });
 
     await screen.findAllByText("projects");

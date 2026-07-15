@@ -25,7 +25,7 @@ def fake_executable(path: Path, body: str) -> Path:
 
 
 class CodingDispatchExecutorTest(unittest.TestCase):
-    def test_explicit_binary_must_be_executable(self):
+    def test_when_explicit_binary_must_be_executable(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "codex"
             path.write_text("", encoding="utf-8")
@@ -53,14 +53,14 @@ class CodingDispatchExecutorTest(unittest.TestCase):
         self.assertIn("sandbox_workspace_write.network_access=true", cmd)
         self.assertEqual(cmd[-1], "-")
 
-    def test_preflight_uses_login_status(self):
+    def test_when_preflight_uses_login_status(self):
         with tempfile.TemporaryDirectory() as td:
             good = fake_executable(Path(td) / "good", '[ "$1 $2" = "login status" ]\n')
             bad = fake_executable(Path(td) / "bad", "exit 7\n")
             self.assertTrue(preflight(str(good)))
             self.assertFalse(preflight(str(bad)))
 
-    def test_prompt_is_stdin_not_an_argument(self):
+    def test_when_prompt_is_stdin_not_an_argument(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             args_path = root / "args"

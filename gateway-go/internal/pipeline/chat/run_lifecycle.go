@@ -7,10 +7,9 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/llmerr"
@@ -42,7 +41,7 @@ func handleRunSuccess(
 		// stripReasoningLeak mirrors the sync path (buildSyncResult): without it
 		// the async done frame was the one surface that could still show leaked
 		// "[thinking]" delimiters.
-		broadcaster.EmitComplete(hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.Text))), result.Usage)
+		broadcaster.EmitComplete(streaming.Transliterate(strings.TrimSpace(stripReasoningLeak(result.Text))), result.Usage)
 	}
 
 	// broadcaster != nil means EmitComplete (above) delivered the reply to the
@@ -97,7 +96,9 @@ func finishTurnSideEffects(deps runDeps, params RunParams, result *agent.AgentRe
 	maybeRecordRunDiary(deps, params, result, logger)
 	// deneb-ui card health: an invalid card degrades to a raw code block on the
 	// user's screen, so surface it in the operator log (model drift detector).
-	reportDenebUICardHealth(result.Text, params.SessionKey, logger)
+	if deps.reportCardHealth != nil {
+		deps.reportCardHealth(result.Text, params.SessionKey, logger)
+	}
 	// Deliverable → 작업 피드 auto safety net: a document-analysis turn whose result
 	// the model did not publish itself gets filed as a doc_analysis card. Anchored
 	// on a hard signal (a document was ingested this turn), so ordinary chat never
@@ -193,9 +194,9 @@ func applySilentReplyPolicy(params RunParams, result *agent.AgentResult, logger 
 // already sent to the LLM, not the finishing turn's outputs. Async-only path
 // (handleRunSuccess), so Briefcase determinism is unaffected.
 func substituteRunMarketTokens(result *agent.AgentResult) {
-	result.Text = market.SubstituteLetterTokens(result.Text)
-	result.AllText = market.SubstituteLetterTokens(result.AllText)
-	result.DeliverableText = market.SubstituteLetterTokens(result.DeliverableText)
+	result.Text = toolwire.SubstituteMarketLetterTokens(result.Text)
+	result.AllText = toolwire.SubstituteMarketLetterTokens(result.AllText)
+	result.DeliverableText = toolwire.SubstituteMarketLetterTokens(result.DeliverableText)
 }
 
 // persistAggregateAssistantText persists the run's accumulated text as one
@@ -226,7 +227,7 @@ func persistAggregateAssistantText(params RunParams, deps runDeps, result *agent
 				logger.Error("failed to persist assistant message", "error", err)
 			}
 			if deps.callbacks.emitTranscriptFn != nil {
-				deps.callbacks.emitTranscriptFn(params.SessionKey, assistantMsg, "")
+				deps.callbacks.emitTranscriptFn(params.SessionKey, mustRawJSON(assistantMsg), "")
 			}
 		}
 		// Sync Aurora summaries for channel replies when available.

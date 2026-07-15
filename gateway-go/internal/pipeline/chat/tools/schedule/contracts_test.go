@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 )
 
 func kstTime(year int, month time.Month, day, hour, minute int) time.Time {
@@ -220,8 +219,8 @@ func TestFreeWithinContract(t *testing.T) {
 
 func TestConflictDetectionContract(t *testing.T) {
 	day := kstTime(2026, time.July, 13, 0, 0)
-	event := func(title string, startHour, startMinute, endHour, endMinute int) calendar.Event {
-		return calendar.Event{
+	event := func(title string, startHour, startMinute, endHour, endMinute int) tooldeps.CalendarEvent {
+		return tooldeps.CalendarEvent{
 			Summary: title,
 			Start:   day.Add(time.Duration(startHour)*time.Hour + time.Duration(startMinute)*time.Minute),
 			End:     day.Add(time.Duration(endHour)*time.Hour + time.Duration(endMinute)*time.Minute),
@@ -229,16 +228,16 @@ func TestConflictDetectionContract(t *testing.T) {
 	}
 	tests := []struct {
 		name   string
-		events []calendar.Event
+		events []tooldeps.CalendarEvent
 		want   [][2]string
 	}{
 		{name: "empty", events: nil, want: nil},
-		{name: "touching is not overlap", events: []calendar.Event{event("A", 9, 0, 10, 0), event("B", 10, 0, 11, 0)}, want: nil},
-		{name: "one overlap", events: []calendar.Event{event("A", 9, 0, 10, 30), event("B", 10, 0, 11, 0)}, want: [][2]string{{"A", "B"}}},
-		{name: "nested overlaps", events: []calendar.Event{event("A", 9, 0, 12, 0), event("B", 9, 30, 10, 0), event("C", 11, 0, 13, 0)}, want: [][2]string{{"A", "B"}, {"A", "C"}}},
-		{name: "all day ignored", events: []calendar.Event{{Summary: "All", AllDay: true, Start: day}, event("B", 9, 0, 10, 0)}, want: nil},
-		{name: "zero start ignored", events: []calendar.Event{{Summary: "Zero"}, event("B", 9, 0, 10, 0)}, want: nil},
-		{name: "missing end defaults one hour", events: []calendar.Event{{Summary: "A", Start: day.Add(9 * time.Hour)}, event("B", 9, 30, 10, 0)}, want: [][2]string{{"A", "B"}}},
+		{name: "touching is not overlap", events: []tooldeps.CalendarEvent{event("A", 9, 0, 10, 0), event("B", 10, 0, 11, 0)}, want: nil},
+		{name: "one overlap", events: []tooldeps.CalendarEvent{event("A", 9, 0, 10, 30), event("B", 10, 0, 11, 0)}, want: [][2]string{{"A", "B"}}},
+		{name: "nested overlaps", events: []tooldeps.CalendarEvent{event("A", 9, 0, 12, 0), event("B", 9, 30, 10, 0), event("C", 11, 0, 13, 0)}, want: [][2]string{{"A", "B"}, {"A", "C"}}},
+		{name: "all day ignored", events: []tooldeps.CalendarEvent{{Summary: "All", AllDay: true, Start: day}, event("B", 9, 0, 10, 0)}, want: nil},
+		{name: "zero start ignored", events: []tooldeps.CalendarEvent{{Summary: "Zero"}, event("B", 9, 0, 10, 0)}, want: nil},
+		{name: "missing end defaults one hour", events: []tooldeps.CalendarEvent{{Summary: "A", Start: day.Add(9 * time.Hour)}, event("B", 9, 30, 10, 0)}, want: [][2]string{{"A", "B"}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -253,28 +252,28 @@ func TestCalendarFormattingContract(t *testing.T) {
 	start := kstTime(2026, time.July, 13, 9, 5)
 	end := kstTime(2026, time.July, 13, 10, 45)
 	nextDay := kstTime(2026, time.July, 14, 1, 0)
-	if got := calTitle(calendar.Event{}); got != "(제목 없음)" {
+	if got := calTitle(tooldeps.CalendarEvent{}); got != "(제목 없음)" {
 		t.Fatalf("empty title = %q", got)
 	}
-	if got := calTitle(calendar.Event{Summary: "  Review  "}); got != "Review" {
+	if got := calTitle(tooldeps.CalendarEvent{Summary: "  Review  "}); got != "Review" {
 		t.Fatalf("trimmed title = %q", got)
 	}
-	if got := calWhen(calendar.Event{Start: start, End: end}); got != "7/13(월) 09:05–10:45" {
+	if got := calWhen(tooldeps.CalendarEvent{Start: start, End: end}); got != "7/13(월) 09:05–10:45" {
 		t.Fatalf("same day compact = %q", got)
 	}
-	if got := calWhen(calendar.Event{Start: start, End: nextDay}); got != "7/13(월) 09:05" {
+	if got := calWhen(tooldeps.CalendarEvent{Start: start, End: nextDay}); got != "7/13(월) 09:05" {
 		t.Fatalf("cross day compact = %q", got)
 	}
-	if got := calWhen(calendar.Event{Start: start, AllDay: true}); got != "7/13(월) 종일" {
+	if got := calWhen(tooldeps.CalendarEvent{Start: start, AllDay: true}); got != "7/13(월) 종일" {
 		t.Fatalf("all day compact = %q", got)
 	}
-	if got := calWhenFull(calendar.Event{Start: start, End: end}); got != "7/13(월) 09:05 – 10:45" {
+	if got := calWhenFull(tooldeps.CalendarEvent{Start: start, End: end}); got != "7/13(월) 09:05 – 10:45" {
 		t.Fatalf("same day full = %q", got)
 	}
-	if got := calWhenFull(calendar.Event{Start: start, End: nextDay}); got != "7/13(월) 09:05 – 7/14(화) 01:00" {
+	if got := calWhenFull(tooldeps.CalendarEvent{Start: start, End: nextDay}); got != "7/13(월) 09:05 – 7/14(화) 01:00" {
 		t.Fatalf("cross day full = %q", got)
 	}
-	if got := calWhenFull(calendar.Event{Start: start, AllDay: true}); got != "7/13(월) (종일)" {
+	if got := calWhenFull(tooldeps.CalendarEvent{Start: start, AllDay: true}); got != "7/13(월) (종일)" {
 		t.Fatalf("all day full = %q", got)
 	}
 	if !sameDay(start, end) || sameDay(start, nextDay) {
@@ -313,13 +312,13 @@ func TestCalendarLabelContract(t *testing.T) {
 			t.Errorf("rsvp %q = %q, want %q", in, got, want)
 		}
 	}
-	if got := attendeeLabel(calendar.Attendee{DisplayName: "  Jane  ", Email: "jane@example.com"}); got != "Jane" {
+	if got := attendeeLabel(tooldeps.CalendarAttendee{DisplayName: "  Jane  ", Email: "jane@example.com"}); got != "Jane" {
 		t.Fatalf("display label = %q", got)
 	}
-	if got := attendeeLabel(calendar.Attendee{Email: " jane@example.com "}); got != "jane@example.com" {
+	if got := attendeeLabel(tooldeps.CalendarAttendee{Email: " jane@example.com "}); got != "jane@example.com" {
 		t.Fatalf("email label = %q", got)
 	}
-	if got := attendeeLabel(calendar.Attendee{}); got != "" {
+	if got := attendeeLabel(tooldeps.CalendarAttendee{}); got != "" {
 		t.Fatalf("empty label = %q", got)
 	}
 	for in, want := range map[string]string{"meeting": "미팅", "deadline": "기한", " meeting ": "미팅", "other": "", "": ""} {
@@ -332,16 +331,16 @@ func TestCalendarLabelContract(t *testing.T) {
 func TestSourceAnnotationContract(t *testing.T) {
 	tests := []struct {
 		name      string
-		event     calendar.Event
+		event     tooldeps.CalendarEvent
 		wantLine  string
 		wantBadge string
 	}{
-		{name: "none", event: calendar.Event{}, wantLine: "", wantBadge: ""},
-		{name: "kind only", event: calendar.Event{Kind: "meeting"}, wantLine: "연결: 미팅", wantBadge: " · [미팅]"},
-		{name: "label only", event: calendar.Event{SourceLabel: "Proposal"}, wantLine: "연결: 메일 「Proposal」", wantBadge: " · 「Proposal」"},
-		{name: "source only", event: calendar.Event{Source: " mail:id "}, wantLine: "연결: mail:id", wantBadge: ""},
-		{name: "kind label", event: calendar.Event{Kind: "deadline", SourceLabel: "Due date"}, wantLine: "연결: 기한 · 메일 「Due date」", wantBadge: " · [기한] 「Due date」"},
-		{name: "all", event: calendar.Event{Kind: "meeting", SourceLabel: "Invite", Source: "mail:42"}, wantLine: "연결: 미팅 · 메일 「Invite」 · mail:42", wantBadge: " · [미팅] 「Invite」"},
+		{name: "none", event: tooldeps.CalendarEvent{}, wantLine: "", wantBadge: ""},
+		{name: "kind only", event: tooldeps.CalendarEvent{Kind: "meeting"}, wantLine: "연결: 미팅", wantBadge: " · [미팅]"},
+		{name: "label only", event: tooldeps.CalendarEvent{SourceLabel: "Proposal"}, wantLine: "연결: 메일 「Proposal」", wantBadge: " · 「Proposal」"},
+		{name: "source only", event: tooldeps.CalendarEvent{Source: " mail:id "}, wantLine: "연결: mail:id", wantBadge: ""},
+		{name: "kind label", event: tooldeps.CalendarEvent{Kind: "deadline", SourceLabel: "Due date"}, wantLine: "연결: 기한 · 메일 「Due date」", wantBadge: " · [기한] 「Due date」"},
+		{name: "all", event: tooldeps.CalendarEvent{Kind: "meeting", SourceLabel: "Invite", Source: "mail:42"}, wantLine: "연결: 미팅 · 메일 「Invite」 · mail:42", wantBadge: " · [미팅] 「Invite」"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -356,7 +355,7 @@ func TestSourceAnnotationContract(t *testing.T) {
 }
 
 func TestExternalAttendeeCountContract(t *testing.T) {
-	attendees := []calendar.Attendee{
+	attendees := []tooldeps.CalendarAttendee{
 		{DisplayName: "Self", Self: true, ResponseStatus: "accepted"},
 		{DisplayName: "Declined", ResponseStatus: "declined"},
 		{DisplayName: "Accepted", ResponseStatus: "accepted"},
@@ -373,12 +372,12 @@ func TestExternalAttendeeCountContract(t *testing.T) {
 }
 
 func TestCalendarDetailDoesNotRenderEmptyAttendeeSection(t *testing.T) {
-	e := calendar.Event{
+	e := tooldeps.CalendarEvent{
 		ID:      "google-id",
 		Summary: "Review",
 		Start:   kstTime(2026, time.July, 13, 9, 0),
 		End:     kstTime(2026, time.July, 13, 10, 0),
-		Attendees: []calendar.Attendee{
+		Attendees: []tooldeps.CalendarAttendee{
 			{},
 			{DisplayName: "   ", Email: "   "},
 		},
@@ -387,7 +386,7 @@ func TestCalendarDetailDoesNotRenderEmptyAttendeeSection(t *testing.T) {
 	if strings.Contains(got, "참석자:") {
 		t.Fatalf("empty attendee header leaked:\n%s", got)
 	}
-	e.Attendees = append(e.Attendees, calendar.Attendee{DisplayName: "Jane", ResponseStatus: "accepted"})
+	e.Attendees = append(e.Attendees, tooldeps.CalendarAttendee{DisplayName: "Jane", ResponseStatus: "accepted"})
 	got = calDetail(e)
 	if !strings.Contains(got, "참석자:\n  - Jane (수락)") {
 		t.Fatalf("real attendee missing:\n%s", got)
@@ -395,7 +394,7 @@ func TestCalendarDetailDoesNotRenderEmptyAttendeeSection(t *testing.T) {
 }
 
 func TestCalendarDetailRichFieldsContract(t *testing.T) {
-	e := calendar.Event{
+	e := tooldeps.CalendarEvent{
 		ID:          "google-id",
 		Summary:     "  Executive Review  ",
 		Description: "  Bring figures  ",
@@ -403,12 +402,12 @@ func TestCalendarDetailRichFieldsContract(t *testing.T) {
 		Start:       kstTime(2026, time.July, 13, 9, 0),
 		End:         kstTime(2026, time.July, 13, 10, 0),
 		HTMLLink:    "https://calendar.example/event",
-		Organizer:   calendar.Attendee{DisplayName: "Owner"},
-		Attendees: []calendar.Attendee{
+		Organizer:   tooldeps.CalendarAttendee{DisplayName: "Owner"},
+		Attendees: []tooldeps.CalendarAttendee{
 			{DisplayName: "Jane", ResponseStatus: "accepted"},
 			{Email: "john@example.com", ResponseStatus: "tentative"},
 		},
-		Conference:  &calendar.ConferenceInfo{URI: "https://meet.example/abc"},
+		Conference:  &tooldeps.CalendarConference{URI: "https://meet.example/abc"},
 		Kind:        "meeting",
 		Source:      "mail:42",
 		SourceLabel: "Invite",
@@ -436,16 +435,16 @@ func TestCalendarDetailRichFieldsContract(t *testing.T) {
 }
 
 func TestCalendarListRowContract(t *testing.T) {
-	e := calendar.Event{
+	e := tooldeps.CalendarEvent{
 		ID:       "google-id",
 		Summary:  "Review",
 		Location: "Room",
 		Start:    kstTime(2026, time.July, 13, 9, 0),
 		End:      kstTime(2026, time.July, 13, 10, 0),
-		Conference: &calendar.ConferenceInfo{
+		Conference: &tooldeps.CalendarConference{
 			URI: "https://meet.example",
 		},
-		Attendees: []calendar.Attendee{
+		Attendees: []tooldeps.CalendarAttendee{
 			{DisplayName: "A", ResponseStatus: "accepted"},
 			{DisplayName: "B", ResponseStatus: "declined"},
 		},
@@ -547,13 +546,13 @@ func TestTimelineRangeContract(t *testing.T) {
 }
 
 func TestEventMatchesEntityContract(t *testing.T) {
-	base := calendar.Event{
+	base := tooldeps.CalendarEvent{
 		Summary:     "Alpha Review",
 		SourceLabel: "Beta Invite",
 		Location:    "Gamma Room",
 		Description: "Delta project notes",
-		Organizer:   calendar.Attendee{DisplayName: "Epsilon Owner", Email: "owner@epsilon.example"},
-		Attendees: []calendar.Attendee{
+		Organizer:   tooldeps.CalendarAttendee{DisplayName: "Epsilon Owner", Email: "owner@epsilon.example"},
+		Attendees: []tooldeps.CalendarAttendee{
 			{DisplayName: "Zeta Person", Email: "zeta@example.com"},
 		},
 	}
@@ -571,7 +570,7 @@ func TestEventMatchesEntityContract(t *testing.T) {
 
 func TestEventEndAndTimedEventsContract(t *testing.T) {
 	day := kstTime(2026, time.July, 13, 0, 0)
-	e := calendar.Event{Start: day.Add(9 * time.Hour), End: day.Add(10 * time.Hour)}
+	e := tooldeps.CalendarEvent{Start: day.Add(9 * time.Hour), End: day.Add(10 * time.Hour)}
 	if got := eventEnd(e); !got.Equal(e.End) {
 		t.Fatalf("valid end = %s", got)
 	}
@@ -584,7 +583,7 @@ func TestEventEndAndTimedEventsContract(t *testing.T) {
 		t.Fatalf("invalid end = %s", got)
 	}
 
-	events := []calendar.Event{
+	events := []tooldeps.CalendarEvent{
 		{Summary: "run-in", Start: day.Add(-time.Hour), End: day.Add(time.Hour)},
 		{Summary: "inside", Start: day.Add(9 * time.Hour), End: day.Add(10 * time.Hour)},
 		{Summary: "run-out", Start: day.Add(23 * time.Hour), End: day.Add(25 * time.Hour)},
@@ -606,22 +605,22 @@ func TestEventEndAndTimedEventsContract(t *testing.T) {
 
 func TestLongestBackToBackContract(t *testing.T) {
 	day := kstTime(2026, time.July, 13, 0, 0)
-	event := func(startMin, durationMin int) calendar.Event {
+	event := func(startMin, durationMin int) tooldeps.CalendarEvent {
 		start := day.Add(time.Duration(startMin) * time.Minute)
-		return calendar.Event{Start: start, End: start.Add(time.Duration(durationMin) * time.Minute)}
+		return tooldeps.CalendarEvent{Start: start, End: start.Add(time.Duration(durationMin) * time.Minute)}
 	}
 	tests := []struct {
 		name   string
-		events []calendar.Event
+		events []tooldeps.CalendarEvent
 		want   int
 	}{
 		{name: "empty", want: 0},
-		{name: "one", events: []calendar.Event{event(540, 60)}, want: 1},
-		{name: "exactly touching three", events: []calendar.Event{event(540, 60), event(600, 60), event(660, 60)}, want: 3},
-		{name: "nine minute gaps count", events: []calendar.Event{event(540, 60), event(609, 60), event(678, 60)}, want: 3},
-		{name: "ten minute gap breaks", events: []calendar.Event{event(540, 60), event(610, 60), event(680, 60)}, want: 1},
-		{name: "longest later run", events: []calendar.Event{event(540, 60), event(610, 60), event(720, 60), event(780, 60), event(840, 60)}, want: 3},
-		{name: "overlap counts no buffer", events: []calendar.Event{event(540, 120), event(600, 60)}, want: 2},
+		{name: "one", events: []tooldeps.CalendarEvent{event(540, 60)}, want: 1},
+		{name: "exactly touching three", events: []tooldeps.CalendarEvent{event(540, 60), event(600, 60), event(660, 60)}, want: 3},
+		{name: "nine minute gaps count", events: []tooldeps.CalendarEvent{event(540, 60), event(609, 60), event(678, 60)}, want: 3},
+		{name: "ten minute gap breaks", events: []tooldeps.CalendarEvent{event(540, 60), event(610, 60), event(680, 60)}, want: 1},
+		{name: "longest later run", events: []tooldeps.CalendarEvent{event(540, 60), event(610, 60), event(720, 60), event(780, 60), event(840, 60)}, want: 3},
+		{name: "overlap counts no buffer", events: []tooldeps.CalendarEvent{event(540, 120), event(600, 60)}, want: 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -8,10 +8,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/reply"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/typing"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/chatportwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/checkpoint"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -180,16 +178,11 @@ func (h *Handler) buildRunDeps() runDeps {
 
 		// chatport boundary: wire concrete autoreply implementations.
 		chatport: chatportAdapters{
-			NewTypingSignaler: func(onStart func()) chatport.TypingSignaler {
-				ctrl := typing.NewTypingController(typing.TypingControllerConfig{
-					OnStart:    onStart,
-					IntervalMs: 5000, // 5s keepalive cadence for the native typing indicator
-				})
-				return typing.NewFullTypingSignaler(ctrl, typing.TypingModeInstant, false)
-			},
-			SanitizeDraft:        reply.SanitizeDraftText,
-			ParseReplyDirectives: reply.ParseReplyDirectives,
+			NewTypingSignaler:     chatportwire.NewTypingSignaler,
+			SanitizeDraft:        chatportwire.SanitizeDraft,
+			ParseReplyDirectives: chatportwire.ParseReplyDirectives,
 		},
+		reportCardHealth: h.reportCardHealth,
 	}
 }
 

@@ -76,12 +76,12 @@ func toolPolarisSearch(store *polaris.Store) toolport.ToolFunc {
 		}
 
 		var sb strings.Builder
-		sb.WriteString(recallHeader(p.Query, len(hits), "polaris/세션"))
+		sb.WriteString(toolport.RecallHeader(p.Query, len(hits), "polaris/세션"))
 		for i, h := range hits {
 			ts := time.UnixMilli(h.Timestamp).Format("2006-01-02 15:04")
-			ref := fmt.Sprintf("%smsg%d", RefSession, h.MsgIndex)
+			ref := fmt.Sprintf("%smsg%d", toolport.RefSession, h.MsgIndex)
 			meta := fmt.Sprintf("%s · %s", h.Role, ts)
-			sb.WriteString(recallRow(i+1, ref, meta, h.Snippet))
+			sb.WriteString(toolport.RecallRow(i+1, ref, meta, h.Snippet))
 		}
 		sb.WriteString("원문 복원: `polaris(action=\"describe\")` 로 요약 ID 확인 후 `expand`.")
 		return sb.String(), nil

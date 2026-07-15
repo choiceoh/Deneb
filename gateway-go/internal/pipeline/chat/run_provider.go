@@ -1,13 +1,13 @@
 package chat
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"context"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 )
@@ -270,5 +270,5 @@ func resolveAPIMode(deps runDeps, providerID string) string {
 // overrides it in either direction — see modelCapability in run_capability.go,
 // which is what the run path consults.
 func isCacheIncompatibleProvider(providerID string) bool {
-	return modelcaps.RejectsCacheControl(providerID)
+	return leafbind.RejectsCacheControl(providerID)
 }

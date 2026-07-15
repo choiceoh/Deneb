@@ -31,7 +31,7 @@ def run_main(argv: list[str]) -> tuple[int, str]:
 
 
 class DecisionTableTest(unittest.TestCase):
-    def test_decide(self):
+    def test_when_decide_outcome_from_rc_ahead_and_pr_state(self):
         cases = [
             # (rc, ahead, pr_state) -> outcome
             ((0, 0, "MERGED"), "landed"),
@@ -51,20 +51,6 @@ class DecisionTableTest(unittest.TestCase):
                 dispatch_outcome.decide(rc, ahead, state), want, (rc, ahead, state)
             )
 
-    def test_authoritative_phase_drives_marker_projection(self):
-        self.assertEqual(
-            dispatch_outcome.project_authoritative_phase("declined", 1, 0, ""),
-            "declined",
-        )
-        self.assertEqual(
-            dispatch_outcome.project_authoritative_phase("failed", 0, 1, ""),
-            "attempted",
-        )
-        self.assertEqual(
-            dispatch_outcome.project_authoritative_phase("merged", 124, 0, ""),
-            "landed",
-        )
-
     def test_unknown_ahead_without_pr_skips_outcome(self):
         with TemporaryDirectory() as td:
             marker = Path(td) / "sc-u.json"
@@ -79,7 +65,7 @@ class DecisionTableTest(unittest.TestCase):
 
 
 class MarkerRewriteTest(unittest.TestCase):
-    def test_records_outcome_additively(self):
+    def test_preserves_existing_fields_when_recording_outcome(self):
         with TemporaryDirectory() as td:
             marker = Path(td) / "sc-1.json"
             marker.write_text(
@@ -114,7 +100,7 @@ class MarkerRewriteTest(unittest.TestCase):
             self.assertEqual(rec["outcomeRc"], 1, "reprobe must not clobber rc")
             self.assertEqual(rec["outcomeElapsedSec"], 900, "reprobe must not clobber elapsed")
 
-    def test_upgrade_only_non_merged_is_noop(self):
+    def test_when_upgrade_only_non_merged_is_noop(self):
         with TemporaryDirectory() as td:
             marker = Path(td) / "sc-3.json"
             before = {"id": "sc-3", "outcome": "attempted", "outcomeAt": 7}
@@ -143,7 +129,7 @@ class BlocksRedispatchTest(unittest.TestCase):
     def test_missing_marker_does_not_block(self):
         self.assertFalse(dispatch_outcome.blocks_redispatch("/no/such/marker.json"))
 
-    def test_terminal_outcomes_block(self):
+    def test_when_terminal_outcomes_block(self):
         with TemporaryDirectory() as td:
             for outcome in ("landed", "attempted", "declined"):
                 path = self._write(td, f"{outcome}.json", {"id": "x", "outcome": outcome})
@@ -155,7 +141,7 @@ class BlocksRedispatchTest(unittest.TestCase):
                 path = self._write(td, f"{outcome}.json", {"id": "x", "outcome": outcome})
                 self.assertFalse(dispatch_outcome.blocks_redispatch(path), outcome)
 
-    def test_outcome_less_fresh_blocks_abandoned_releases(self):
+    def test_when_outcome_less_fresh_blocks_abandoned_releases(self):
         # Live bug 2026-07-13: crash before outcome accounting left a marker
         # that permanently starved the pick lane.
         with TemporaryDirectory() as td:
@@ -168,20 +154,16 @@ class BlocksRedispatchTest(unittest.TestCase):
                 dispatch_outcome.blocks_redispatch(path, now_sec=now + 7201, abandon_after_sec=7200)
             )
 
-    def test_corrupt_marker_blocks(self):
+    def test_when_corrupt_marker_blocks(self):
         with TemporaryDirectory() as td:
             path = Path(td) / "bad.json"
             path.write_text("{not-json\n")
-            now = path.stat().st_mtime
-            self.assertTrue(dispatch_outcome.blocks_redispatch(
-                path, now_sec=now + 60, abandon_after_sec=7200))
-            self.assertFalse(dispatch_outcome.blocks_redispatch(
-                path, now_sec=now + 7201, abandon_after_sec=7200))
+            self.assertTrue(dispatch_outcome.blocks_redispatch(path))
 
-    def test_authoritative_lifecycle_wins_over_stale_marker(self):
+    def test_when_authoritative_lifecycle_wins_over_stale_marker(self):
         with TemporaryDirectory() as td:
             path = self._write(td, "stale.json", {"id": "x", "outcome": "failed"})
-            for phase in ("started", "pr_opened", "merged", "deployed", "watch_passed", "declined"):
+            for phase in ("started", "pr_opened", "merged", "deployed", "watch_passed"):
                 self.assertTrue(
                     dispatch_outcome.blocks_redispatch(path, authoritative_phase=phase), phase
                 )

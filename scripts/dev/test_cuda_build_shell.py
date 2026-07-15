@@ -94,7 +94,7 @@ class CUDABuildShellTests(unittest.TestCase):
         self.assertIn("venv-python -", calls)
         self.assertIn(f"GPU runtime ready at {self.venv}", proc.stdout)
 
-    def test_architecture_and_llama_version_overrides_reach_build_command(self) -> None:
+    def test_when_architecture_and_llama_version_overrides_reach_build_command(self) -> None:
         proc = run_script(
             "scripts/deploy/bge-m3-build-cuda.sh",
             env=self.env(CUDA_ARCH="89", LLAMA_CPP_VERSION="0.4.0"),

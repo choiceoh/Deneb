@@ -77,7 +77,7 @@ class BrokerStateTest(unittest.TestCase):
             else:
                 self.assertEqual(final, {"error": "timeout"})
 
-    def test_finish_is_idempotent_and_keeps_full_request(self) -> None:
+    def test_preserves_full_request_when_finish_is_idempotent(self) -> None:
         broker = broker_state.Broker("agent-seat", "")
         entry = broker.register(request_payload(), "complete")
         broker.respond(entry.id, {"text": "done"})
@@ -183,7 +183,7 @@ class BrokerHTTPTest(unittest.TestCase):
         self.assertEqual([len(piece) for piece in pieces], [48_000, 48_000, 3])
         self.assertEqual(broker_state.split_delta(""), [""])
 
-    def test_real_http_server_exposes_model_and_state_routes(self) -> None:
+    def test_when_real_http_server_exposes_model_and_state_routes(self) -> None:
         server = broker_http.ThreadingHTTPServer(("127.0.0.1", 0), broker_http.Handler)
         server.daemon_threads = True
         thread = threading.Thread(target=server.serve_forever)
@@ -214,7 +214,7 @@ class BrokerHTTPTest(unittest.TestCase):
 
 
 class EntryPointContractTest(unittest.TestCase):
-    def test_existing_cli_path_still_exposes_all_subcommands(self) -> None:
+    def test_when_existing_cli_path_still_exposes_all_subcommands(self) -> None:
         script = Path(__file__).with_name("puppet_broker.py")
         proc = subprocess.run(
             [sys.executable, str(script), "--help"],

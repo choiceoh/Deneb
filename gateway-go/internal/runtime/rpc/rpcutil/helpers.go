@@ -33,7 +33,7 @@ type BroadcastFunc func(event string, payload events.EventPayload) (int, []error
 const MaxKeyInErrorMsg = 128
 
 // UnmarshalParams safely unmarshals request params, handling nil/empty params.
-func UnmarshalParams(params json.RawMessage, v any) error {
+func UnmarshalParams[T any](params []byte, v *T) error {
 	if len(params) == 0 {
 		return errors.New("missing params")
 	}

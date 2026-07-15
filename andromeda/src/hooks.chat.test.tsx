@@ -171,7 +171,7 @@ describe("useChat send", () => {
     expect(result.current.turns[1].status).toBe("stopped");
   });
 
-  it("regenerates by replacing the trailing user and assistant pair", async () => {
+  it("when regenerates by replacing the trailing user and assistant pair", async () => {
     let answer = 0;
     mocks.chatStream.mockImplementation(streamWith((handlers) => handlers.onDone?.({ text: `answer-${++answer}` })));
     const { result } = renderHook(() => useChat(CFG));
@@ -200,7 +200,7 @@ describe("useChat send", () => {
 });
 
 describe("useChat capture", () => {
-  it.each([
+  const captureWireCases = [
     {
       name: "photo.png",
       mimeType: "image/png",
@@ -231,7 +231,11 @@ describe("useChat capture", () => {
       expectedLabel: "문서 첨부: report.pdf\ninspect",
       expectedCaption: "inspect",
     },
-  ])("captures $expectedKind attachments with the correct wire shape", async (tt) => {
+  ];
+
+  it.each(captureWireCases)(
+    "when capturing $expectedKind attachments with the correct wire shape",
+    async (tt) => {
     mocks.callRpc.mockResolvedValue({ text: " extracted text " });
     const { result, unmount } = renderHook(() => useChat(CFG));
 

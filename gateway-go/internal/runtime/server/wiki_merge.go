@@ -59,7 +59,7 @@ func (s *Server) makeWikiMergeStarter(hub *rpcutil.GatewayHub) func(targetPath, 
 			ctx, cancel := context.WithTimeout(s.ShutdownCtx(), wikiMergeJobTimeout)
 			defer cancel()
 
-			store := hub.WikiStore()
+			store := hub.Opt.WikiStore
 			if store == nil {
 				s.notifyMergeResult(ctx, "⚠️ 프로젝트 병합 실패\n위키 저장소를 사용할 수 없습니다.")
 				return

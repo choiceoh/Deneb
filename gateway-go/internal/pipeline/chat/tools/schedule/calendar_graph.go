@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 )
 
 // timelineWindowDays is how far back/forward a work-graph timeline reaches when
@@ -46,7 +45,7 @@ func calActionTimeline(ctx context.Context, d *tooldeps.CalendarDeps, p calParam
 
 	events, warn := calMerged(ctx, d, from, to)
 	ql := strings.ToLower(q)
-	matched := make([]calendar.Event, 0, len(events))
+	matched := make([]tooldeps.CalendarEvent, 0, len(events))
 	for _, e := range events {
 		if eventMatchesEntity(e, ql) {
 			matched = append(matched, e)
@@ -104,7 +103,7 @@ func parseTimelineRange(p calParams) (from, to time.Time, errMsg string) {
 // eventMatchesEntity reports whether an event is about the entity (lowercased
 // ql), matching its title, the linked-mail subject, location, description, and
 // attendees (name or email domain) — the fields that carry an entity's identity.
-func eventMatchesEntity(e calendar.Event, ql string) bool {
+func eventMatchesEntity(e tooldeps.CalendarEvent, ql string) bool {
 	if strings.Contains(strings.ToLower(calTitle(e)), ql) ||
 		strings.Contains(strings.ToLower(e.SourceLabel), ql) ||
 		strings.Contains(strings.ToLower(e.Location), ql) ||
@@ -114,7 +113,7 @@ func eventMatchesEntity(e calendar.Event, ql string) bool {
 	// Organizer is stored separately from Attendees (and on a Google event may be
 	// the only identity attached to a meeting the queried entity organized), so
 	// check it alongside the attendees.
-	for _, a := range append([]calendar.Attendee{e.Organizer}, e.Attendees...) {
+	for _, a := range append([]tooldeps.CalendarAttendee{e.Organizer}, e.Attendees...) {
 		if strings.Contains(strings.ToLower(attendeeLabel(a)), ql) ||
 			strings.Contains(strings.ToLower(a.Email), ql) {
 			return true

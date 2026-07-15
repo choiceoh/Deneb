@@ -80,14 +80,14 @@ type Check struct {
 
 	// ExpectedState is the sealed JSON value for state_json_equal. Object key
 	// order and insignificant number formatting do not affect equality.
-	ExpectedState json.RawMessage `json:"expectedState,omitempty"`
+	ExpectedState rawJSON `json:"expectedState,omitempty"`
 }
 
 // Evidence is the immutable output of one evaluated run.
 type Evidence struct {
 	Text             string           `json:"text,omitempty"`
 	ArtifactRoot     string           `json:"artifactRoot,omitempty"`
-	State            json.RawMessage  `json:"state,omitempty"`
+	State            rawJSON  `json:"state,omitempty"`
 	ArtifactMaxBytes map[string]int64 `json:"-"`
 }
 

@@ -1,5 +1,6 @@
 package ai.deneb
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.json.Json
@@ -12,7 +13,6 @@ import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertTrue
 
 /**
  * Navigation persistence contracts for every typed native route.
@@ -29,201 +29,8 @@ class AppRouteSerializationContractTest {
 
     private fun SerialDescriptor.fieldNames(): List<String> = (0 until elementsCount).map(::getElementName)
 
-    @Test
-    fun homeKeepsStableObjectRouteIdentity() {
-        val serializer = Home.serializer()
-        val encoded = json.encodeToJsonElement(serializer, Home)
-
-        assertEquals("home", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(Home, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebFeedKeepsStableObjectRouteIdentity() {
-        val serializer = DenebFeed.serializer()
-        val encoded = json.encodeToJsonElement(serializer, DenebFeed)
-
-        assertEquals("deneb_feed", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(DenebFeed, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebConfigKeepsStableObjectRouteIdentity() {
-        val serializer = DenebConfig.serializer()
-        val encoded = json.encodeToJsonElement(serializer, DenebConfig)
-
-        assertEquals("deneb_config", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(DenebConfig, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebFleetKeepsStableObjectRouteIdentity() {
-        val serializer = DenebFleet.serializer()
-        val encoded = json.encodeToJsonElement(serializer, DenebFleet)
-
-        assertEquals("deneb_fleet", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(DenebFleet, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebMailKeepsStableObjectRouteIdentity() {
-        val serializer = DenebMail.serializer()
-        val encoded = json.encodeToJsonElement(serializer, DenebMail)
-
-        assertEquals("deneb_mail", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(DenebMail, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebCalendarKeepsStableObjectRouteIdentity() {
-        val serializer = DenebCalendar.serializer()
-        val encoded = json.encodeToJsonElement(serializer, DenebCalendar)
-
-        assertEquals("deneb_calendar", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(DenebCalendar, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebSearchKeepsStableObjectRouteIdentity() {
-        val serializer = DenebSearch.serializer()
-        val encoded = json.encodeToJsonElement(serializer, DenebSearch)
-
-        assertEquals("deneb_search", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(DenebSearch, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebMoreKeepsStableObjectRouteIdentity() {
-        val serializer = DenebMore.serializer()
-        val encoded = json.encodeToJsonElement(serializer, DenebMore)
-
-        assertEquals("deneb_more", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(DenebMore, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebPeopleKeepsStableObjectRouteIdentity() {
-        val serializer = DenebPeople.serializer()
-        val encoded = json.encodeToJsonElement(serializer, DenebPeople)
-
-        assertEquals("deneb_people", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(DenebPeople, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebContactsKeepsStableObjectRouteIdentity() {
-        val serializer = DenebContacts.serializer()
-        val encoded = json.encodeToJsonElement(serializer, DenebContacts)
-
-        assertEquals("deneb_contacts", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(DenebContacts, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebCategoriesKeepsStableObjectRouteIdentity() {
-        val serializer = DenebCategories.serializer()
-        val encoded = json.encodeToJsonElement(serializer, DenebCategories)
-
-        assertEquals("deneb_categories", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(DenebCategories, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebDiaryKeepsStableObjectRouteIdentity() {
-        val serializer = DenebDiary.serializer()
-        val encoded = json.encodeToJsonElement(serializer, DenebDiary)
-
-        assertEquals("deneb_diary", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(DenebDiary, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebDashboardKeepsStableObjectRouteIdentity() {
-        val serializer = DenebDashboard.serializer()
-        val encoded = json.encodeToJsonElement(serializer, DenebDashboard)
-
-        assertEquals("deneb_dashboard", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(DenebDashboard, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebProjectDigestsKeepsStableObjectRouteIdentity() {
-        val serializer = DenebProjectDigests.serializer()
-        val encoded = json.encodeToJsonElement(serializer, DenebProjectDigests)
-
-        assertEquals("deneb_project_digests", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(DenebProjectDigests, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebOrgChartKeepsStableObjectRouteIdentity() {
-        val serializer = DenebOrgChart.serializer()
-        val encoded = json.encodeToJsonElement(serializer, DenebOrgChart)
-
-        assertEquals("deneb_org", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(DenebOrgChart, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebFilesKeepsStableObjectRouteIdentity() {
-        val serializer = DenebFiles.serializer()
-        val encoded = json.encodeToJsonElement(serializer, DenebFiles)
-
-        assertEquals("deneb_files", serializer.descriptor.serialName)
-        assertEquals(emptyList(), serializer.descriptor.fieldNames())
-        assertEquals(JsonObject(emptyMap()), encoded)
-        assertEquals(DenebFiles, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebMailDetailPreservesOpaqueRouteArguments() {
-        val serializer = DenebMailDetail.serializer()
-        val input = json.parseToJsonElement("""{"id":"id-한글 /?#"}""").jsonObject
-
-        val decoded = json.decodeFromJsonElement(serializer, input)
-        val encoded = json.encodeToJsonElement(serializer, decoded).jsonObject
-
-        assertEquals("deneb_mail_detail", serializer.descriptor.serialName)
-        assertEquals(listOf("id"), serializer.descriptor.fieldNames())
-        assertEquals(input, encoded)
-        assertEquals(decoded, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebMailDetailIgnoresUnknownFutureRouteMetadata() {
-        val serializer = DenebMailDetail.serializer()
-        val baseline = json.parseToJsonElement("""{"id":"id-한글 /?#"}""").jsonObject
-        val future = JsonObject(
+    private fun futureRouteMetadataEnvelope(baseline: JsonObject): JsonObject =
+        JsonObject(
             baseline + (
                 "futureRouteMetadata" to buildJsonObject {
                     put("source", "notification")
@@ -232,578 +39,312 @@ class AppRouteSerializationContractTest {
                 ),
         )
 
+    private fun <T> assertObjectRouteIdentity(
+        serialName: String,
+        route: T,
+        serializer: KSerializer<T>,
+    ) {
+        val encoded = json.encodeToJsonElement(serializer, route)
+
+        assertEquals(serialName, serializer.descriptor.serialName, serialName)
+        assertEquals(emptyList(), serializer.descriptor.fieldNames(), serialName)
+        assertEquals(JsonObject(emptyMap()), encoded, serialName)
+        assertEquals(route, json.decodeFromJsonElement(serializer, encoded), serialName)
+    }
+
+    private fun <T> assertOpaqueRoutePreservesArguments(
+        serialName: String,
+        fieldNames: List<String>,
+        inputJson: String,
+        serializer: KSerializer<T>,
+    ) {
+        val input = json.parseToJsonElement(inputJson).jsonObject
+
+        val decoded = json.decodeFromJsonElement(serializer, input)
+        val encoded = json.encodeToJsonElement(serializer, decoded).jsonObject
+
+        assertEquals(serialName, serializer.descriptor.serialName, serialName)
+        assertEquals(fieldNames, serializer.descriptor.fieldNames(), serialName)
+        assertEquals(input, encoded, serialName)
+        assertEquals(decoded, json.decodeFromJsonElement(serializer, encoded), serialName)
+    }
+
+    private fun <T> assertOpaqueRouteIgnoresFutureMetadata(
+        inputJson: String,
+        serializer: KSerializer<T>,
+    ) {
+        val baseline = json.parseToJsonElement(inputJson).jsonObject
+        val future = futureRouteMetadataEnvelope(baseline)
+
         assertEquals(
             json.decodeFromJsonElement(serializer, baseline),
             json.decodeFromJsonElement(serializer, future),
         )
     }
 
-    @Test
-    fun denebMailDetailRejectsMissingRequiredId() {
-        assertFailsWith<SerializationException> {
-            json.decodeFromJsonElement(
-                DenebMailDetail.serializer(),
-                buildJsonObject {},
+    private fun opaqueRouteCases(): List<() -> Unit> = listOf(
+        {
+            assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_mail_detail",
+                fieldNames = listOf("id"),
+                inputJson = """{"id":"id-한글 /?#"}""",
+                serializer = DenebMailDetail.serializer(),
             )
-        }
-    }
-
-    @Test
-    fun denebCalendarEventPreservesOpaqueRouteArguments() {
-        val serializer = DenebCalendarEvent.serializer()
-        val input = json.parseToJsonElement("""{"id":"id-한글 /?#"}""").jsonObject
-
-        val decoded = json.decodeFromJsonElement(serializer, input)
-        val encoded = json.encodeToJsonElement(serializer, decoded).jsonObject
-
-        assertEquals("deneb_calendar_event", serializer.descriptor.serialName)
-        assertEquals(listOf("id"), serializer.descriptor.fieldNames())
-        assertEquals(input, encoded)
-        assertEquals(decoded, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebCalendarEventIgnoresUnknownFutureRouteMetadata() {
-        val serializer = DenebCalendarEvent.serializer()
-        val baseline = json.parseToJsonElement("""{"id":"id-한글 /?#"}""").jsonObject
-        val future = JsonObject(
-            baseline + (
-                "futureRouteMetadata" to buildJsonObject {
-                    put("source", "notification")
-                    put("version", 99)
-                }
-                ),
-        )
-
-        assertEquals(
-            json.decodeFromJsonElement(serializer, baseline),
-            json.decodeFromJsonElement(serializer, future),
-        )
-    }
-
-    @Test
-    fun denebCalendarEventRejectsMissingRequiredId() {
-        assertFailsWith<SerializationException> {
-            json.decodeFromJsonElement(
-                DenebCalendarEvent.serializer(),
-                buildJsonObject {},
+        },
+        {
+            assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_calendar_event",
+                fieldNames = listOf("id"),
+                inputJson = """{"id":"id-한글 /?#"}""",
+                serializer = DenebCalendarEvent.serializer(),
             )
-        }
-    }
-
-    @Test
-    fun denebCalendarAddPreservesOpaqueRouteArguments() {
-        val serializer = DenebCalendarAdd.serializer()
-        val input = json.parseToJsonElement("""{"dateIso":"dateIso-한글 /?#"}""").jsonObject
-
-        val decoded = json.decodeFromJsonElement(serializer, input)
-        val encoded = json.encodeToJsonElement(serializer, decoded).jsonObject
-
-        assertEquals("deneb_calendar_add", serializer.descriptor.serialName)
-        assertEquals(listOf("dateIso"), serializer.descriptor.fieldNames())
-        assertEquals(input, encoded)
-        assertEquals(decoded, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebCalendarAddIgnoresUnknownFutureRouteMetadata() {
-        val serializer = DenebCalendarAdd.serializer()
-        val baseline = json.parseToJsonElement("""{"dateIso":"dateIso-한글 /?#"}""").jsonObject
-        val future = JsonObject(
-            baseline + (
-                "futureRouteMetadata" to buildJsonObject {
-                    put("source", "notification")
-                    put("version", 99)
-                }
-                ),
-        )
-
-        assertEquals(
-            json.decodeFromJsonElement(serializer, baseline),
-            json.decodeFromJsonElement(serializer, future),
-        )
-    }
-
-    @Test
-    fun denebCalendarAddRejectsMissingRequiredDateIso() {
-        assertFailsWith<SerializationException> {
-            json.decodeFromJsonElement(
-                DenebCalendarAdd.serializer(),
-                buildJsonObject {},
+        },
+        {
+            assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_calendar_add",
+                fieldNames = listOf("dateIso"),
+                inputJson = """{"dateIso":"dateIso-한글 /?#"}""",
+                serializer = DenebCalendarAdd.serializer(),
             )
-        }
-    }
-
-    @Test
-    fun denebCalendarEditPreservesOpaqueRouteArguments() {
-        val serializer = DenebCalendarEdit.serializer()
-        val input = json.parseToJsonElement("""{"id":"id-한글 /?#"}""").jsonObject
-
-        val decoded = json.decodeFromJsonElement(serializer, input)
-        val encoded = json.encodeToJsonElement(serializer, decoded).jsonObject
-
-        assertEquals("deneb_calendar_edit", serializer.descriptor.serialName)
-        assertEquals(listOf("id"), serializer.descriptor.fieldNames())
-        assertEquals(input, encoded)
-        assertEquals(decoded, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebCalendarEditIgnoresUnknownFutureRouteMetadata() {
-        val serializer = DenebCalendarEdit.serializer()
-        val baseline = json.parseToJsonElement("""{"id":"id-한글 /?#"}""").jsonObject
-        val future = JsonObject(
-            baseline + (
-                "futureRouteMetadata" to buildJsonObject {
-                    put("source", "notification")
-                    put("version", 99)
-                }
-                ),
-        )
-
-        assertEquals(
-            json.decodeFromJsonElement(serializer, baseline),
-            json.decodeFromJsonElement(serializer, future),
-        )
-    }
-
-    @Test
-    fun denebCalendarEditRejectsMissingRequiredId() {
-        assertFailsWith<SerializationException> {
-            json.decodeFromJsonElement(
-                DenebCalendarEdit.serializer(),
-                buildJsonObject {},
+        },
+        {
+            assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_calendar_edit",
+                fieldNames = listOf("id"),
+                inputJson = """{"id":"id-한글 /?#"}""",
+                serializer = DenebCalendarEdit.serializer(),
             )
-        }
-    }
-
-    @Test
-    fun denebTodoAddPreservesOpaqueRouteArguments() {
-        val serializer = DenebTodoAdd.serializer()
-        val input = json.parseToJsonElement("""{"dueIso":"dueIso-한글 /?#"}""").jsonObject
-
-        val decoded = json.decodeFromJsonElement(serializer, input)
-        val encoded = json.encodeToJsonElement(serializer, decoded).jsonObject
-
-        assertEquals("deneb_todo_add", serializer.descriptor.serialName)
-        assertEquals(listOf("dueIso"), serializer.descriptor.fieldNames())
-        assertEquals(input, encoded)
-        assertEquals(decoded, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebTodoAddIgnoresUnknownFutureRouteMetadata() {
-        val serializer = DenebTodoAdd.serializer()
-        val baseline = json.parseToJsonElement("""{"dueIso":"dueIso-한글 /?#"}""").jsonObject
-        val future = JsonObject(
-            baseline + (
-                "futureRouteMetadata" to buildJsonObject {
-                    put("source", "notification")
-                    put("version", 99)
-                }
-                ),
-        )
-
-        assertEquals(
-            json.decodeFromJsonElement(serializer, baseline),
-            json.decodeFromJsonElement(serializer, future),
-        )
-    }
-
-    @Test
-    fun denebTodoAddRestoresItsBackwardCompatibleDefaultArgument() {
-        val restored = json.decodeFromJsonElement(
-            DenebTodoAdd.serializer(),
-            buildJsonObject {},
-        )
-
-        assertEquals(DenebTodoAdd(), restored)
-    }
-
-    @Test
-    fun denebTodoEditPreservesOpaqueRouteArguments() {
-        val serializer = DenebTodoEdit.serializer()
-        val input = json.parseToJsonElement("""{"id":"id-한글 /?#"}""").jsonObject
-
-        val decoded = json.decodeFromJsonElement(serializer, input)
-        val encoded = json.encodeToJsonElement(serializer, decoded).jsonObject
-
-        assertEquals("deneb_todo_edit", serializer.descriptor.serialName)
-        assertEquals(listOf("id"), serializer.descriptor.fieldNames())
-        assertEquals(input, encoded)
-        assertEquals(decoded, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebTodoEditIgnoresUnknownFutureRouteMetadata() {
-        val serializer = DenebTodoEdit.serializer()
-        val baseline = json.parseToJsonElement("""{"id":"id-한글 /?#"}""").jsonObject
-        val future = JsonObject(
-            baseline + (
-                "futureRouteMetadata" to buildJsonObject {
-                    put("source", "notification")
-                    put("version", 99)
-                }
-                ),
-        )
-
-        assertEquals(
-            json.decodeFromJsonElement(serializer, baseline),
-            json.decodeFromJsonElement(serializer, future),
-        )
-    }
-
-    @Test
-    fun denebTodoEditRejectsMissingRequiredId() {
-        assertFailsWith<SerializationException> {
-            json.decodeFromJsonElement(
-                DenebTodoEdit.serializer(),
-                buildJsonObject {},
+        },
+        {
+            assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_todo_add",
+                fieldNames = listOf("dueIso"),
+                inputJson = """{"dueIso":"dueIso-한글 /?#"}""",
+                serializer = DenebTodoAdd.serializer(),
             )
-        }
-    }
-
-    @Test
-    fun denebWikiPreservesOpaqueRouteArguments() {
-        val serializer = DenebWiki.serializer()
-        val input = json.parseToJsonElement("""{"path":"path-한글 /?#"}""").jsonObject
-
-        val decoded = json.decodeFromJsonElement(serializer, input)
-        val encoded = json.encodeToJsonElement(serializer, decoded).jsonObject
-
-        assertEquals("deneb_wiki", serializer.descriptor.serialName)
-        assertEquals(listOf("path"), serializer.descriptor.fieldNames())
-        assertEquals(input, encoded)
-        assertEquals(decoded, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebWikiIgnoresUnknownFutureRouteMetadata() {
-        val serializer = DenebWiki.serializer()
-        val baseline = json.parseToJsonElement("""{"path":"path-한글 /?#"}""").jsonObject
-        val future = JsonObject(
-            baseline + (
-                "futureRouteMetadata" to buildJsonObject {
-                    put("source", "notification")
-                    put("version", 99)
-                }
-                ),
-        )
-
-        assertEquals(
-            json.decodeFromJsonElement(serializer, baseline),
-            json.decodeFromJsonElement(serializer, future),
-        )
-    }
-
-    @Test
-    fun denebWikiRejectsMissingRequiredPath() {
-        assertFailsWith<SerializationException> {
-            json.decodeFromJsonElement(
-                DenebWiki.serializer(),
-                buildJsonObject {},
+        },
+        {
+            assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_todo_edit",
+                fieldNames = listOf("id"),
+                inputJson = """{"id":"id-한글 /?#"}""",
+                serializer = DenebTodoEdit.serializer(),
             )
-        }
-    }
-
-    @Test
-    fun denebPersonPreservesOpaqueRouteArguments() {
-        val serializer = DenebPerson.serializer()
-        val input = json.parseToJsonElement("""{"sender":"sender-한글 /?#"}""").jsonObject
-
-        val decoded = json.decodeFromJsonElement(serializer, input)
-        val encoded = json.encodeToJsonElement(serializer, decoded).jsonObject
-
-        assertEquals("deneb_person", serializer.descriptor.serialName)
-        assertEquals(listOf("sender"), serializer.descriptor.fieldNames())
-        assertEquals(input, encoded)
-        assertEquals(decoded, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebPersonIgnoresUnknownFutureRouteMetadata() {
-        val serializer = DenebPerson.serializer()
-        val baseline = json.parseToJsonElement("""{"sender":"sender-한글 /?#"}""").jsonObject
-        val future = JsonObject(
-            baseline + (
-                "futureRouteMetadata" to buildJsonObject {
-                    put("source", "notification")
-                    put("version", 99)
-                }
-                ),
-        )
-
-        assertEquals(
-            json.decodeFromJsonElement(serializer, baseline),
-            json.decodeFromJsonElement(serializer, future),
-        )
-    }
-
-    @Test
-    fun denebPersonRejectsMissingRequiredSender() {
-        assertFailsWith<SerializationException> {
-            json.decodeFromJsonElement(
-                DenebPerson.serializer(),
-                buildJsonObject {},
+        },
+        {
+            assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_wiki",
+                fieldNames = listOf("path"),
+                inputJson = """{"path":"path-한글 /?#"}""",
+                serializer = DenebWiki.serializer(),
             )
-        }
-    }
-
-    @Test
-    fun denebNotebooksPreservesOpaqueRouteArguments() {
-        val serializer = DenebNotebooks.serializer()
-        val input = json.parseToJsonElement("""{"openId":"openId-한글 /?#"}""").jsonObject
-
-        val decoded = json.decodeFromJsonElement(serializer, input)
-        val encoded = json.encodeToJsonElement(serializer, decoded).jsonObject
-
-        assertEquals("deneb_notebooks", serializer.descriptor.serialName)
-        assertEquals(listOf("openId"), serializer.descriptor.fieldNames())
-        assertEquals(input, encoded)
-        assertEquals(decoded, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebNotebooksIgnoresUnknownFutureRouteMetadata() {
-        val serializer = DenebNotebooks.serializer()
-        val baseline = json.parseToJsonElement("""{"openId":"openId-한글 /?#"}""").jsonObject
-        val future = JsonObject(
-            baseline + (
-                "futureRouteMetadata" to buildJsonObject {
-                    put("source", "notification")
-                    put("version", 99)
-                }
-                ),
-        )
-
-        assertEquals(
-            json.decodeFromJsonElement(serializer, baseline),
-            json.decodeFromJsonElement(serializer, future),
-        )
-    }
-
-    @Test
-    fun denebNotebooksRestoresItsBackwardCompatibleDefaultArgument() {
-        val restored = json.decodeFromJsonElement(
-            DenebNotebooks.serializer(),
-            buildJsonObject {},
-        )
-
-        assertEquals(DenebNotebooks(), restored)
-    }
-
-    @Test
-    fun denebCategoryPagesPreservesOpaqueRouteArguments() {
-        val serializer = DenebCategoryPages.serializer()
-        val input = json.parseToJsonElement("""{"category":"category-한글 /?#"}""").jsonObject
-
-        val decoded = json.decodeFromJsonElement(serializer, input)
-        val encoded = json.encodeToJsonElement(serializer, decoded).jsonObject
-
-        assertEquals("deneb_category_pages", serializer.descriptor.serialName)
-        assertEquals(listOf("category"), serializer.descriptor.fieldNames())
-        assertEquals(input, encoded)
-        assertEquals(decoded, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebCategoryPagesIgnoresUnknownFutureRouteMetadata() {
-        val serializer = DenebCategoryPages.serializer()
-        val baseline = json.parseToJsonElement("""{"category":"category-한글 /?#"}""").jsonObject
-        val future = JsonObject(
-            baseline + (
-                "futureRouteMetadata" to buildJsonObject {
-                    put("source", "notification")
-                    put("version", 99)
-                }
-                ),
-        )
-
-        assertEquals(
-            json.decodeFromJsonElement(serializer, baseline),
-            json.decodeFromJsonElement(serializer, future),
-        )
-    }
-
-    @Test
-    fun denebCategoryPagesRejectsMissingRequiredCategory() {
-        assertFailsWith<SerializationException> {
-            json.decodeFromJsonElement(
-                DenebCategoryPages.serializer(),
-                buildJsonObject {},
+        },
+        {
+            assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_person",
+                fieldNames = listOf("sender"),
+                inputJson = """{"sender":"sender-한글 /?#"}""",
+                serializer = DenebPerson.serializer(),
             )
-        }
-    }
-
-    @Test
-    fun denebSkillPreservesOpaqueRouteArguments() {
-        val serializer = DenebSkill.serializer()
-        val input = json.parseToJsonElement("""{"name":"name-한글 /?#"}""").jsonObject
-
-        val decoded = json.decodeFromJsonElement(serializer, input)
-        val encoded = json.encodeToJsonElement(serializer, decoded).jsonObject
-
-        assertEquals("deneb_skill", serializer.descriptor.serialName)
-        assertEquals(listOf("name"), serializer.descriptor.fieldNames())
-        assertEquals(input, encoded)
-        assertEquals(decoded, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebSkillIgnoresUnknownFutureRouteMetadata() {
-        val serializer = DenebSkill.serializer()
-        val baseline = json.parseToJsonElement("""{"name":"name-한글 /?#"}""").jsonObject
-        val future = JsonObject(
-            baseline + (
-                "futureRouteMetadata" to buildJsonObject {
-                    put("source", "notification")
-                    put("version", 99)
-                }
-                ),
-        )
-
-        assertEquals(
-            json.decodeFromJsonElement(serializer, baseline),
-            json.decodeFromJsonElement(serializer, future),
-        )
-    }
-
-    @Test
-    fun denebSkillRejectsMissingRequiredName() {
-        assertFailsWith<SerializationException> {
-            json.decodeFromJsonElement(
-                DenebSkill.serializer(),
-                buildJsonObject {},
+        },
+        {
+            assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_notebooks",
+                fieldNames = listOf("openId"),
+                inputJson = """{"openId":"openId-한글 /?#"}""",
+                serializer = DenebNotebooks.serializer(),
             )
-        }
-    }
-
-    @Test
-    fun denebBrowserPreservesOpaqueRouteArguments() {
-        val serializer = DenebBrowser.serializer()
-        val input = json.parseToJsonElement("""{"url":"url-한글 /?#"}""").jsonObject
-
-        val decoded = json.decodeFromJsonElement(serializer, input)
-        val encoded = json.encodeToJsonElement(serializer, decoded).jsonObject
-
-        assertEquals("deneb_browser", serializer.descriptor.serialName)
-        assertEquals(listOf("url"), serializer.descriptor.fieldNames())
-        assertEquals(input, encoded)
-        assertEquals(decoded, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebBrowserIgnoresUnknownFutureRouteMetadata() {
-        val serializer = DenebBrowser.serializer()
-        val baseline = json.parseToJsonElement("""{"url":"url-한글 /?#"}""").jsonObject
-        val future = JsonObject(
-            baseline + (
-                "futureRouteMetadata" to buildJsonObject {
-                    put("source", "notification")
-                    put("version", 99)
-                }
-                ),
-        )
-
-        assertEquals(
-            json.decodeFromJsonElement(serializer, baseline),
-            json.decodeFromJsonElement(serializer, future),
-        )
-    }
-
-    @Test
-    fun denebBrowserRejectsMissingRequiredUrl() {
-        assertFailsWith<SerializationException> {
-            json.decodeFromJsonElement(
-                DenebBrowser.serializer(),
-                buildJsonObject {},
+        },
+        {
+            assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_category_pages",
+                fieldNames = listOf("category"),
+                inputJson = """{"category":"category-한글 /?#"}""",
+                serializer = DenebCategoryPages.serializer(),
             )
-        }
-    }
-
-    @Test
-    fun denebCronPreservesOpaqueRouteArguments() {
-        val serializer = DenebCron.serializer()
-        val input = json.parseToJsonElement("""{"cronId":"cronId-한글 /?#"}""").jsonObject
-
-        val decoded = json.decodeFromJsonElement(serializer, input)
-        val encoded = json.encodeToJsonElement(serializer, decoded).jsonObject
-
-        assertEquals("deneb_cron", serializer.descriptor.serialName)
-        assertEquals(listOf("cronId"), serializer.descriptor.fieldNames())
-        assertEquals(input, encoded)
-        assertEquals(decoded, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebCronIgnoresUnknownFutureRouteMetadata() {
-        val serializer = DenebCron.serializer()
-        val baseline = json.parseToJsonElement("""{"cronId":"cronId-한글 /?#"}""").jsonObject
-        val future = JsonObject(
-            baseline + (
-                "futureRouteMetadata" to buildJsonObject {
-                    put("source", "notification")
-                    put("version", 99)
-                }
-                ),
-        )
-
-        assertEquals(
-            json.decodeFromJsonElement(serializer, baseline),
-            json.decodeFromJsonElement(serializer, future),
-        )
-    }
-
-    @Test
-    fun denebCronRejectsMissingRequiredCronId() {
-        assertFailsWith<SerializationException> {
-            json.decodeFromJsonElement(
-                DenebCron.serializer(),
-                buildJsonObject {},
+        },
+        {
+            assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_skill",
+                fieldNames = listOf("name"),
+                inputJson = """{"name":"name-한글 /?#"}""",
+                serializer = DenebSkill.serializer(),
             )
-        }
-    }
-
-    @Test
-    fun denebCronEditPreservesOpaqueRouteArguments() {
-        val serializer = DenebCronEdit.serializer()
-        val input = json.parseToJsonElement("""{"cronId":"cronId-한글 /?#"}""").jsonObject
-
-        val decoded = json.decodeFromJsonElement(serializer, input)
-        val encoded = json.encodeToJsonElement(serializer, decoded).jsonObject
-
-        assertEquals("deneb_cron_edit", serializer.descriptor.serialName)
-        assertEquals(listOf("cronId"), serializer.descriptor.fieldNames())
-        assertEquals(input, encoded)
-        assertEquals(decoded, json.decodeFromJsonElement(serializer, encoded))
-    }
-
-    @Test
-    fun denebCronEditIgnoresUnknownFutureRouteMetadata() {
-        val serializer = DenebCronEdit.serializer()
-        val baseline = json.parseToJsonElement("""{"cronId":"cronId-한글 /?#"}""").jsonObject
-        val future = JsonObject(
-            baseline + (
-                "futureRouteMetadata" to buildJsonObject {
-                    put("source", "notification")
-                    put("version", 99)
-                }
-                ),
-        )
-
-        assertEquals(
-            json.decodeFromJsonElement(serializer, baseline),
-            json.decodeFromJsonElement(serializer, future),
-        )
-    }
-
-    @Test
-    fun denebCronEditRejectsMissingRequiredCronId() {
-        assertFailsWith<SerializationException> {
-            json.decodeFromJsonElement(
-                DenebCronEdit.serializer(),
-                buildJsonObject {},
+        },
+        {
+            assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_browser",
+                fieldNames = listOf("url"),
+                inputJson = """{"url":"url-한글 /?#"}""",
+                serializer = DenebBrowser.serializer(),
             )
-        }
+        },
+        {
+            assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_cron",
+                fieldNames = listOf("cronId"),
+                inputJson = """{"cronId":"cronId-한글 /?#"}""",
+                serializer = DenebCron.serializer(),
+            )
+        },
+        {
+            assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_cron_edit",
+                fieldNames = listOf("cronId"),
+                inputJson = """{"cronId":"cronId-한글 /?#"}""",
+                serializer = DenebCronEdit.serializer(),
+            )
+        },
+    )
+
+    private fun opaqueRouteFutureMetadataCases(): List<() -> Unit> = listOf(
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"id":"id-한글 /?#"}""",
+                serializer = DenebMailDetail.serializer(),
+            )
+        },
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"id":"id-한글 /?#"}""",
+                serializer = DenebCalendarEvent.serializer(),
+            )
+        },
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"dateIso":"dateIso-한글 /?#"}""",
+                serializer = DenebCalendarAdd.serializer(),
+            )
+        },
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"id":"id-한글 /?#"}""",
+                serializer = DenebCalendarEdit.serializer(),
+            )
+        },
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"dueIso":"dueIso-한글 /?#"}""",
+                serializer = DenebTodoAdd.serializer(),
+            )
+        },
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"id":"id-한글 /?#"}""",
+                serializer = DenebTodoEdit.serializer(),
+            )
+        },
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"path":"path-한글 /?#"}""",
+                serializer = DenebWiki.serializer(),
+            )
+        },
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"sender":"sender-한글 /?#"}""",
+                serializer = DenebPerson.serializer(),
+            )
+        },
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"openId":"openId-한글 /?#"}""",
+                serializer = DenebNotebooks.serializer(),
+            )
+        },
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"category":"category-한글 /?#"}""",
+                serializer = DenebCategoryPages.serializer(),
+            )
+        },
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"name":"name-한글 /?#"}""",
+                serializer = DenebSkill.serializer(),
+            )
+        },
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"url":"url-한글 /?#"}""",
+                serializer = DenebBrowser.serializer(),
+            )
+        },
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"cronId":"cronId-한글 /?#"}""",
+                serializer = DenebCron.serializer(),
+            )
+        },
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"cronId":"cronId-한글 /?#"}""",
+                serializer = DenebCronEdit.serializer(),
+            )
+        },
+    )
+
+    @Test
+    fun objectRoutesKeepStableRouteIdentity() {
+        listOf(
+            { assertObjectRouteIdentity("home", Home, Home.serializer()) },
+            { assertObjectRouteIdentity("deneb_feed", DenebFeed, DenebFeed.serializer()) },
+            { assertObjectRouteIdentity("deneb_config", DenebConfig, DenebConfig.serializer()) },
+            { assertObjectRouteIdentity("deneb_fleet", DenebFleet, DenebFleet.serializer()) },
+            { assertObjectRouteIdentity("deneb_mail", DenebMail, DenebMail.serializer()) },
+            { assertObjectRouteIdentity("deneb_calendar", DenebCalendar, DenebCalendar.serializer()) },
+            { assertObjectRouteIdentity("deneb_search", DenebSearch, DenebSearch.serializer()) },
+            { assertObjectRouteIdentity("deneb_more", DenebMore, DenebMore.serializer()) },
+            { assertObjectRouteIdentity("deneb_people", DenebPeople, DenebPeople.serializer()) },
+            { assertObjectRouteIdentity("deneb_contacts", DenebContacts, DenebContacts.serializer()) },
+            { assertObjectRouteIdentity("deneb_categories", DenebCategories, DenebCategories.serializer()) },
+            { assertObjectRouteIdentity("deneb_diary", DenebDiary, DenebDiary.serializer()) },
+            { assertObjectRouteIdentity("deneb_dashboard", DenebDashboard, DenebDashboard.serializer()) },
+            { assertObjectRouteIdentity("deneb_project_digests", DenebProjectDigests, DenebProjectDigests.serializer()) },
+            { assertObjectRouteIdentity("deneb_org", DenebOrgChart, DenebOrgChart.serializer()) },
+            { assertObjectRouteIdentity("deneb_files", DenebFiles, DenebFiles.serializer()) },
+        ).forEach { it() }
+    }
+
+    @Test
+    fun opaqueRoutesPreserveRouteArguments() {
+        opaqueRouteCases().forEach { it() }
+    }
+
+    @Test
+    fun opaqueRoutesIgnoreUnknownFutureRouteMetadata() {
+        opaqueRouteFutureMetadataCases().forEach { it() }
+    }
+
+    @Test
+    fun opaqueRoutesRejectMissingRequiredArguments() {
+        listOf(
+            { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebMailDetail.serializer(), buildJsonObject {}) } },
+            { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebCalendarEvent.serializer(), buildJsonObject {}) } },
+            { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebCalendarAdd.serializer(), buildJsonObject {}) } },
+            { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebCalendarEdit.serializer(), buildJsonObject {}) } },
+            { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebTodoEdit.serializer(), buildJsonObject {}) } },
+            { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebWiki.serializer(), buildJsonObject {}) } },
+            { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebPerson.serializer(), buildJsonObject {}) } },
+            { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebCategoryPages.serializer(), buildJsonObject {}) } },
+            { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebSkill.serializer(), buildJsonObject {}) } },
+            { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebBrowser.serializer(), buildJsonObject {}) } },
+            { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebCron.serializer(), buildJsonObject {}) } },
+            { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebCronEdit.serializer(), buildJsonObject {}) } },
+        ).forEach { it() }
+    }
+
+    @Test
+    fun backwardCompatibleDefaultArgumentsRestoreFromEmptyPayload() {
+        listOf(
+            {
+                val restored = json.decodeFromJsonElement(DenebTodoAdd.serializer(), buildJsonObject {})
+                assertEquals(DenebTodoAdd(), restored)
+            },
+            {
+                val restored = json.decodeFromJsonElement(DenebNotebooks.serializer(), buildJsonObject {})
+                assertEquals(DenebNotebooks(), restored)
+            },
+        ).forEach { it() }
     }
 }

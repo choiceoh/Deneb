@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 )
 
 // docExtractBudget bounds the TOTAL synchronous document-extraction time for
@@ -39,7 +39,7 @@ func hasImageAttachment(attachments []ChatAttachment) bool {
 // card, so ordinary chat can never trip it.
 func hasDocumentAttachment(attachments []ChatAttachment) bool {
 	for _, att := range attachments {
-		if att.Type == "document_text" || document.IsExtractableDocument(att.MimeType, att.Name) {
+		if att.Type == "document_text" || toolwire.IsExtractableDocument(att.MimeType, att.Name) {
 			return true
 		}
 	}
@@ -113,7 +113,7 @@ func prepareDocumentAttachments(ctx context.Context, attachments []ChatAttachmen
 	out := make([]ChatAttachment, 0, len(attachments))
 	for _, att := range attachments {
 		if att.Type == "image" || att.Type == "document_text" || att.Data == "" ||
-			!document.IsExtractableDocument(att.MimeType, att.Name) {
+			!toolwire.IsExtractableDocument(att.MimeType, att.Name) {
 			out = append(out, att)
 			continue
 		}
@@ -131,7 +131,7 @@ func prepareDocumentAttachments(ctx context.Context, attachments []ChatAttachmen
 			out = append(out, att)
 			continue
 		}
-		text, ok := document.ExtractDocumentText(extractCtx, raw, att.Name, att.MimeType)
+		text, ok := toolwire.ExtractDocumentText(extractCtx, raw, att.Name, att.MimeType)
 		if !ok || strings.TrimSpace(text) == "" {
 			out = append(out, att) // extraction failed — leave untouched
 			continue

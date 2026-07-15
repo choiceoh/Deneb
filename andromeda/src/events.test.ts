@@ -15,7 +15,7 @@ function streamResponse(chunks: string[]): Response {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("subscribeEvents", () => {
-  it("parses SSE frames into proactive events", async () => {
+  it("emits proactive events when parsing SSE frames", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
@@ -37,7 +37,7 @@ describe("subscribeEvents", () => {
     expect(got[1]).toMatchObject({ id: "e2", body: "새 메일 3건" });
   });
 
-  it("throws on a non-ok response", async () => {
+  it("fails on a non-ok response", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("nope", { status: 500 })),

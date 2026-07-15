@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { Modal } from "./Modal";
 
 describe("Modal", () => {
-  it("names the dialog via its title (aria-labelledby)", () => {
+  it("when names the dialog via its title (aria-labelledby)", () => {
     render(
       <Modal title="제목입니다" onClose={() => {}}>
         본문

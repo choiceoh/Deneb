@@ -41,17 +41,17 @@ def behavior(**overrides):
 
 
 class CandidateTest(unittest.TestCase):
-    def test_only_offenders_above_min_calls(self):
+    def test_when_only_offenders_above_min_calls(self):
         cands = tool_quality_candidates(behavior()["tools"])
         names = [c["source"].split(":")[1] for c in cands]
         self.assertEqual(set(names), {"web", "exec"})  # read healthy, asr too few calls
 
-    def test_ranked_by_impact(self):
+    def test_when_ranked_by_impact(self):
         cands = tool_quality_candidates(behavior()["tools"])
         # web: (0.30+0.01)*200=62 ; exec: (0.03+0.18)*100=21 → web first
         self.assertEqual(cands[0]["source"], f"{SOURCE_PREFIX}:web:desc")
 
-    def test_evidence_carries_exact_stats(self):
+    def test_when_evidence_carries_exact_stats(self):
         cands = tool_quality_candidates(behavior()["tools"])
         web = next(c for c in cands if c["source"].endswith(":web:desc"))
         self.assertIn("calls=200", web["evidence"])
@@ -63,14 +63,14 @@ class CandidateTest(unittest.TestCase):
         tools = [{"name": "x", "calls": MIN_CALLS - 1, "errors": MIN_CALLS, "repaired": 0}]
         self.assertEqual(tool_quality_candidates(tools), [])
 
-    def test_source_stable_per_tool(self):
+    def test_when_source_stable_per_tool(self):
         a = tool_quality_candidates(behavior()["tools"])
         b = tool_quality_candidates(behavior()["tools"])
         self.assertEqual([c["source"] for c in a], [c["source"] for c in b])
 
 
 class LatencyTest(unittest.TestCase):
-    def test_over_ceiling_flags(self):
+    def test_when_over_ceiling_flags(self):
         # read's ceiling is 800ms; 2000ms avg over enough calls is over-ceiling.
         recent = [{"name": "read", "calls": 100, "avgMs": 2000}]
         cands = latency_candidates(recent, {"read": {"avgMs": 1900}})
@@ -78,23 +78,23 @@ class LatencyTest(unittest.TestCase):
         self.assertEqual(cands[0]["source"], f"{SOURCE_PREFIX}:read:latency")
         self.assertIn("avgMs=2000", cands[0]["evidence"])
 
-    def test_regression_flags_even_under_ceiling(self):
+    def test_when_regression_flags_even_under_ceiling(self):
         # web ceiling is 12000ms; 9000ms is under it, but it doubled vs baseline.
         recent = [{"name": "web", "calls": 50, "avgMs": 9000}]
         cands = latency_candidates(recent, {"web": {"avgMs": 4000}})
         self.assertEqual(len(cands), 1)
         self.assertIn("regressed", cands[0]["candidate"])
 
-    def test_inherently_slow_but_stable_not_flagged(self):
+    def test_when_inherently_slow_but_stable_not_flagged(self):
         # web at 10000ms is under its 12000ms ceiling and steady vs baseline → OK.
         recent = [{"name": "web", "calls": 50, "avgMs": 10000}]
         self.assertEqual(latency_candidates(recent, {"web": {"avgMs": 9500}}), [])
 
-    def test_low_volume_not_flagged(self):
+    def test_when_low_volume_not_flagged(self):
         recent = [{"name": "read", "calls": MIN_CALLS - 1, "avgMs": 9000}]
         self.assertEqual(latency_candidates(recent, {}), [])
 
-    def test_latency_source_distinct_from_desc(self):
+    def test_when_latency_source_distinct_from_desc(self):
         # The :latency and :desc sources for one tool must not prefix-collide.
         lat = latency_candidates([{"name": "web", "calls": 100, "avgMs": 20000}], {})
         self.assertEqual(lat[0]["source"], f"{SOURCE_PREFIX}:web:latency")
@@ -107,7 +107,7 @@ class CliDryRunTest(unittest.TestCase):
             json.dump(behavior(), handle)
         return path
 
-    def test_dry_run_needs_no_gateway(self):
+    def test_when_dry_run_needs_no_gateway(self):
         with tempfile.TemporaryDirectory() as tmp:
             out, err = io.StringIO(), io.StringIO()
             rc = main(
@@ -122,7 +122,7 @@ class CliDryRunTest(unittest.TestCase):
             self.assertEqual(summary["filed"], 0)
             self.assertTrue(summary["dry_run"])
 
-    def test_cap_limits_plan(self):
+    def test_when_cap_limits_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
             out, err = io.StringIO(), io.StringIO()
             rc = main(
@@ -134,7 +134,7 @@ class CliDryRunTest(unittest.TestCase):
             summary = json.loads(out.getvalue().strip().splitlines()[-1])
             self.assertEqual(summary["planned"], 1)
 
-    def test_real_run_refuses_to_file_blind(self):
+    def test_when_real_run_refuses_to_file_blind(self):
         with tempfile.TemporaryDirectory() as tmp:
             out, err = io.StringIO(), io.StringIO()
             rc = main(

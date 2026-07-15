@@ -17,14 +17,14 @@ describe("MovePageModal", () => {
     return props;
   }
 
-  it("shows the current path and keeps the move disabled", () => {
+  it("shows the current path and preserves the move disabled", () => {
     renderMove();
     expect(screen.getByRole("dialog", { name: "페이지 이동" })).toBeInTheDocument();
     expect(screen.getByText("→ projects/deneb.md")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "이동" })).toBeDisabled();
   });
 
-  it("offers root, existing categories, the source category, and new category", () => {
+  it("when offers root, existing categories, the source category, and new category", () => {
     renderMove();
     expect(screen.getByRole("button", { name: "최상위" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "archive" })).toBeInTheDocument();
@@ -41,7 +41,7 @@ describe("MovePageModal", () => {
     expect(screen.queryByRole("button", { name: "(root)" })).not.toBeInTheDocument();
   });
 
-  it("moves a page to the selected existing category", async () => {
+  it("when moves a page to the selected existing category", async () => {
     const props = renderMove();
     await userEvent.click(screen.getByRole("button", { name: "archive" }));
     expect(screen.getByText("→ archive/deneb.md")).toBeInTheDocument();
@@ -65,7 +65,7 @@ describe("MovePageModal", () => {
     expect(screen.getByRole("button", { name: "이동" })).toBeDisabled();
   });
 
-  it("reveals and focuses the new-category field", async () => {
+  it("when reveals and focuses the new-category field", async () => {
     renderMove();
     await userEvent.click(screen.getByRole("button", { name: "+ 새 분류" }));
     expect(screen.getByPlaceholderText("새 분류 이름")).toHaveFocus();
@@ -122,7 +122,7 @@ describe("NewPageModal", () => {
     expect(screen.getByRole("button", { name: "생성" })).toBeDisabled();
   });
 
-  it("requires both title and category", async () => {
+  it("when requires both title and category", async () => {
     renderNew();
     await userEvent.type(screen.getByRole("textbox", { name: "제목" }), "설계 노트");
     expect(screen.getByRole("button", { name: "생성" })).toBeDisabled();
@@ -137,7 +137,7 @@ describe("NewPageModal", () => {
     expect(screen.getByRole("button", { name: "생성" })).toBeDisabled();
   });
 
-  it("submits the complete exact draft", async () => {
+  it("when submits the complete exact draft", async () => {
     const props = renderNew();
     await userEvent.type(screen.getByRole("textbox", { name: "제목" }), "설계 노트");
     await userEvent.type(screen.getByRole("textbox", { name: "분류" }), "projects");
@@ -175,14 +175,14 @@ describe("UnsavedWikiModal", () => {
     return props;
   }
 
-  it("explains both the dirty source and requested target", () => {
+  it("when explains both the dirty source and requested target", () => {
     renderUnsaved();
     expect(screen.getByRole("dialog", { name: "저장하지 않은 변경" })).toBeInTheDocument();
     expect(screen.getByText(/projects\/current.md에 저장하지 않은 변경/)).toBeInTheDocument();
     expect(screen.getByText(/projects\/next.md을 열기 전에 처리하세요/)).toBeInTheDocument();
   });
 
-  it("keeps editing", async () => {
+  it("preserves editing", async () => {
     const props = renderUnsaved();
     await userEvent.click(screen.getByRole("button", { name: "계속 편집" }));
     expect(props.onClose).toHaveBeenCalledTimes(1);
@@ -190,7 +190,7 @@ describe("UnsavedWikiModal", () => {
     expect(props.onSave).not.toHaveBeenCalled();
   });
 
-  it("discards and opens", async () => {
+  it("when discards and opens", async () => {
     const props = renderUnsaved();
     await userEvent.click(screen.getByRole("button", { name: "버리고 열기" }));
     expect(props.onDiscard).toHaveBeenCalledTimes(1);

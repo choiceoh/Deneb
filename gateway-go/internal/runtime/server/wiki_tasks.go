@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"context"
 	"os"
 	"path/filepath"
@@ -157,7 +158,7 @@ func (s *Server) registerWikiReviewTask(homeDir string) {
 		autoMerge,
 		func(ctx context.Context, system, user string, maxTokens int) (string, error) {
 			return pilot.CallRoleLLM(ctx, modelrole.RoleMain, system, user, maxTokens,
-				map[string]any{"temperature": 0, "reasoning_effort": "low"})
+				json.RawMessage(`{"temperature":0,"reasoning_effort":"low"}`))
 		},
 	)
 	s.autonomousSvc.RegisterTask(task)

@@ -45,20 +45,20 @@ describe("eventInMonth", () => {
   const ev = (start: Date, end?: Date) =>
     ({ start: start.toISOString(), end: end?.toISOString() }) as unknown as CalEvent;
 
-  it("keeps a July 1 event out of June and in July", () => {
+  it("preserves a July 1 event out of June and in July", () => {
     // The reported bug: 7월 1일 16:00~22:00 showing under the June list.
     const july1 = ev(new Date(2026, 6, 1, 16, 0), new Date(2026, 6, 1, 22, 0));
     expect(eventInMonth(july1, 2026, 5)).toBe(false); // June (0-based 5)
     expect(eventInMonth(july1, 2026, 6)).toBe(true); // July
   });
 
-  it("includes a plain June event in June only", () => {
+  it("when includes a plain June event in June only", () => {
     const june30 = ev(new Date(2026, 5, 30, 9, 0), new Date(2026, 5, 30, 10, 0));
     expect(eventInMonth(june30, 2026, 5)).toBe(true);
     expect(eventInMonth(june30, 2026, 6)).toBe(false);
   });
 
-  it("includes a month-spanning event in both months", () => {
+  it("when includes a month-spanning event in both months", () => {
     const span = ev(new Date(2026, 5, 30, 9, 0), new Date(2026, 6, 1, 10, 0));
     expect(eventInMonth(span, 2026, 5)).toBe(true);
     expect(eventInMonth(span, 2026, 6)).toBe(true);
@@ -66,7 +66,7 @@ describe("eventInMonth", () => {
 });
 
 describe("event-form date/time helpers", () => {
-  it("splits and rejoins datetime-local parts", () => {
+  it("when splits and rejoins datetime-local parts", () => {
     expect(dtDate("2026-07-01T10:00")).toBe("2026-07-01");
     expect(dtTime("2026-07-01T10:00")).toBe("10:00");
     expect(dtTime("2026-07-01")).toBe(""); // date-only (all-day) → no time slice
@@ -80,7 +80,7 @@ describe("event-form date/time helpers", () => {
     expect(addMinutesDt("", 60)).toBe(""); // unparseable → empty
   });
 
-  it("defaults a new event to the next full hour today, else 09:00 on the picked day", () => {
+  it("when defaults a new event to the next full hour today, else 09:00 on the picked day", () => {
     const now = new Date(2026, 5, 30, 9, 15); // 2026-06-30 09:15 local
     expect(defaultStartDt(null, now)).toBe("2026-06-30T10:00"); // no day → today, next hour
     expect(defaultStartDt("2026-6-30", now)).toBe("2026-06-30T10:00"); // today picked → same
@@ -89,7 +89,7 @@ describe("event-form date/time helpers", () => {
 });
 
 describe("visibleRangeForMonth", () => {
-  it("spans whole weeks and carries a matching cache key + label", () => {
+  it("when spans whole weeks and carries a matching cache key + label", () => {
     const r = visibleRangeForMonth(2026, 5); // June 2026
     expect(new Date(r.from).getTime()).toBeLessThan(new Date(r.to).getTime());
     expect(r.cacheKey).toBe(`calendar-range.${r.from}.${r.to}`);

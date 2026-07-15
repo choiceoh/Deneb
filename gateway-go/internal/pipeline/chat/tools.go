@@ -13,9 +13,9 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 )
 
 const (
@@ -44,7 +44,7 @@ type ToolRegistry struct {
 	tools          map[string]ToolDef
 	order          []string // preserves registration order
 	postProcess    *PostProcessRegistry
-	spillStore     *agent.SpilloverStore // optional; spills large tool results to disk
+	spillStore     tooldeps.SpilloverStore // optional; spills large tool results to disk
 	provenanceRoot string                // optional workspace root for content-free file effect metadata
 	cachedLLMTools []llm.Tool            // cached tool list; invalidated on RegisterTool
 }
@@ -96,7 +96,7 @@ func (r *ToolRegistry) RegisterTool(def ToolDef) {
 // If the input contains "compress": true, the tool output is automatically
 // compressed via the local AI model before returning. This lets the AI
 // agent opt-in to compression on a per-call basis to save context tokens.
-func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawMessage) (string, error) {
+func (r *ToolRegistry) Execute(ctx context.Context, name string, input rawJSON) (string, error) {
 	if ctx == nil {
 		return "", fmt.Errorf("tool %q requires a context", name)
 	}
@@ -110,7 +110,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input json.RawM
 		return "", r.unknownToolError(name)
 	}
 	presetName := toolport.ToolPresetFromContext(ctx)
-	briefcasePreset := presetName == string(toolpreset.PresetBriefcase)
+	briefcasePreset := presetName == toolwire.PresetBriefcase
 
 	if err := checkToolPresetAllowed(name, presetName); err != nil {
 		return "", err
@@ -172,7 +172,7 @@ func checkToolPresetAllowed(name, presetName string) error {
 	if presetName == "" {
 		return nil
 	}
-	allowed := toolpreset.AllowedTools(toolpreset.Preset(presetName))
+	allowed := toolwire.AllowedTools(presetName)
 	if allowed == nil {
 		return nil
 	}
@@ -301,14 +301,14 @@ func (r *ToolRegistry) SetPostProcess(pp *PostProcessRegistry) {
 }
 
 // SetSpilloverStore attaches a SpilloverStore for spilling large tool results.
-func (r *ToolRegistry) SetSpilloverStore(ss *agent.SpilloverStore) {
+func (r *ToolRegistry) SetSpilloverStore(ss tooldeps.SpilloverStore) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.spillStore = ss
 }
 
 // SpilloverStore returns the attached SpilloverStore, or nil.
-func (r *ToolRegistry) SpilloverStore() *agent.SpilloverStore {
+func (r *ToolRegistry) SpilloverStore() tooldeps.SpilloverStore {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.spillStore
@@ -347,7 +347,7 @@ func (r *ToolRegistry) ApplyMaxOutputs(budgets map[string]int) {
 // invalidation policy. Two regimes:
 //
 //   - Synchronous mutations (write/edit; foreground exec whose command is not
-//     provably read-only per runtimeops.ExecCommandPreservesRunCache) have fully
+//     provably read-only per toolwire.ExecCommandPreservesRunCache) have fully
 //     landed by the time this runs, so a point-in-time invalidation brackets
 //     them: by mutated path where known, whole cache otherwise.
 //   - Async writers (background exec with a non-read-only command; a spawned
@@ -387,7 +387,7 @@ func invalidateCachesAfterTool(ctx context.Context, name string, input json.RawM
 	switch name {
 	case "exec":
 		cmd, background := extractExecMeta(input)
-		if runtimeops.ExecCommandPreservesRunCache(cmd) {
+		if toolwire.ExecCommandPreservesRunCache(cmd) {
 			return
 		}
 		if background {
@@ -416,7 +416,7 @@ func spawnedChildCanWrite(input json.RawMessage) bool {
 	if json.Unmarshal(input, &meta) != nil {
 		return true
 	}
-	allowed := toolpreset.AllowedTools(toolpreset.Preset(strings.TrimSpace(meta.ToolPreset)))
+	allowed := toolwire.AllowedTools(strings.TrimSpace(meta.ToolPreset))
 	if allowed == nil {
 		return true // no/unknown preset — unrestricted child
 	}

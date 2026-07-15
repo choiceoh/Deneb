@@ -10,7 +10,7 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 describe("mock gateway handlers", () => {
-  it("answers ping with a version", async () => {
+  it("returns version payload when ping RPC is called", async () => {
     expect(await ping(cfg)).toMatchObject({ ok: true, version: "mock" });
   });
 
@@ -26,7 +26,7 @@ describe("mock gateway handlers", () => {
     await expect(callRpc(cfg, "miniapp.nope")).rejects.toThrow(/unknown method/);
   });
 
-  it("answers wiki browse and file browse RPCs", async () => {
+  it("when answers wiki browse and file browse RPCs", async () => {
     const categories = await callRpc<{ categories: { name: string }[] }>(cfg, "miniapp.memory.categories");
     expect(categories.categories[0]).toHaveProperty("name");
 

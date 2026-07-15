@@ -6,7 +6,7 @@ import { renderWithProviders } from "@/test/util";
 describe("Sidebar nav rail", () => {
   beforeEach(() => localStorage.clear());
 
-  it("hides configured panes when listed in andromeda.hiddenPanes and preserves 설정 entry", () => {
+  it("hides configured panes without removing 설정 from rail", () => {
     localStorage.setItem("andromeda.hiddenPanes", JSON.stringify(["mail", "wiki"]));
     renderWithProviders(<Sidebar />);
     const nav = screen.getByRole("navigation");

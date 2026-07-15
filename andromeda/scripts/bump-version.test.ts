@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest";
 import { bumpCargoVersion, bumpJsonVersion } from "./bump-version.mjs";
 
 describe("bump-version", () => {
-  it("sets the version key and keeps 2-space + trailing-newline JSON", () => {
+  it("sets the version key and preserves 2-space + trailing-newline JSON", () => {
     const out = bumpJsonVersion('{\n  "name": "andromeda",\n  "version": "0.0.1"\n}\n', "0.1.0");
     expect(JSON.parse(out).version).toBe("0.1.0");
     expect(out.endsWith("\n")).toBe(true);
     expect(out).toContain('  "version": "0.1.0"');
   });
 
-  it("replaces only the [package] version in Cargo.toml, not inline dep specs", () => {
+  it("when replaces only the [package] version in Cargo.toml, not inline dep specs", () => {
     const cargo = [
       "[package]",
       'name = "andromeda"',
@@ -26,7 +26,7 @@ describe("bump-version", () => {
     expect(out).not.toContain('version = "0.0.1"');
   });
 
-  it("throws if no [package] version line is present", () => {
+  it("fails if no [package] version line is present", () => {
     expect(() => bumpCargoVersion('[dependencies]\ntauri = { version = "2" }\n', "1.0.0")).toThrow();
   });
 });

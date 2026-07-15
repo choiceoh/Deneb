@@ -126,7 +126,7 @@ describe("SettingsPane boundary behavior", () => {
   });
 
   describe("connection identity and persistence", () => {
-    it("keeps URL and token edits independent and sends the complete next config", async () => {
+    it("preserves URL and token edits independent and sends the complete next config", async () => {
       const setCfg = vi.fn();
       renderWithProviders(<SettingsPane />, {
         connected: false,
@@ -217,7 +217,7 @@ describe("SettingsPane boundary behavior", () => {
       expect(screen.getByRole("tabpanel")).toHaveAccessibleName("연결");
     });
 
-    it("does not hijack unrelated keys", () => {
+    it("without hijack unrelated keys", () => {
       renderWithProviders(<SettingsPane />, { connected: false });
       const first = screen.getByRole("tab", { name: "연결" });
       first.focus();
@@ -226,7 +226,7 @@ describe("SettingsPane boundary behavior", () => {
       expect(first).toHaveAttribute("aria-selected", "true");
     });
 
-    it("keeps exactly one tab in the sequential focus order", () => {
+    it("preserves exactly one tab in the sequential focus order", () => {
       renderWithProviders(<SettingsPane />, { connected: false });
       fireEvent.click(screen.getByRole("tab", { name: "프롬프트" }));
       const tabs = screen.getAllByRole("tab");
@@ -254,13 +254,13 @@ describe("SettingsPane boundary behavior", () => {
       }
     });
 
-    it("does not offer a checkbox that can hide the settings escape hatch", async () => {
+    it("without offer a checkbox that can hide the settings escape hatch", async () => {
       renderWithProviders(<SettingsPane />, { connected: false });
       await userEvent.click(screen.getByRole("tab", { name: "일반" }));
       expect(screen.queryByRole("checkbox", { name: "설정" })).not.toBeInTheDocument();
     });
 
-    it("disables the first upward and last downward reorder controls", async () => {
+    it("when disables the first upward and last downward reorder controls", async () => {
       renderWithProviders(<SettingsPane />, { connected: false });
       await userEvent.click(screen.getByRole("tab", { name: "일반" }));
       const ups = screen.getAllByTitle("위로");
@@ -271,7 +271,7 @@ describe("SettingsPane boundary behavior", () => {
       expect(ups.at(-1)).toBeEnabled();
     });
 
-    it("moves a rail item and persists the new complete order", async () => {
+    it("moves a rail item and saves the new complete order", async () => {
       renderWithProviders(<SettingsPane />, { connected: false });
       await userEvent.click(screen.getByRole("tab", { name: "일반" }));
       const mailDown = screen.getByRole("button", { name: "메일 아래로" });
@@ -297,7 +297,7 @@ describe("SettingsPane boundary behavior", () => {
   });
 
   describe("prompt browser lifecycle", () => {
-    it("explains why prompts are unavailable while disconnected", async () => {
+    it("when explains why prompts are unavailable while disconnected", async () => {
       renderWithProviders(<SettingsPane />, { connected: false });
       await userEvent.click(screen.getByRole("tab", { name: "프롬프트" }));
       expect(screen.getByText("게이트웨이에 연결하면 프롬프트를 볼 수 있습니다.")).toBeInTheDocument();
@@ -396,7 +396,7 @@ describe("SettingsPane boundary behavior", () => {
       expect(calls.filter((call) => call.method === "miniapp.prompts.get")).toHaveLength(1);
     });
 
-    it("opens the next prompt after discard confirmation", async () => {
+    it("when opens the next prompt after discard confirmation", async () => {
       vi.spyOn(window, "confirm").mockReturnValue(true);
       renderWithProviders(<SettingsPane />, {
         connected: true,
@@ -476,7 +476,7 @@ describe("SettingsPane boundary behavior", () => {
       expect(screen.getByRole("button", { name: "저장" })).toBeEnabled();
     });
 
-    it("resets an overridden prompt to the server-provided default", async () => {
+    it("when resets an overridden prompt to the server-provided default", async () => {
       renderWithProviders(<SettingsPane />, {
         connected: true,
         cfg: { url: "http://test", token: "tok" },

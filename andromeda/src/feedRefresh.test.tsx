@@ -91,7 +91,7 @@ describe("useNativeSync (durable catch-up poll)", () => {
     expect(loadSyncCursor()).toBe(1);
   });
 
-  it("only baselines the cursor on a fresh install (no startup refetch)", async () => {
+  it("returns baseline cursor on fresh install without startup refetch", async () => {
     // No stored cursor → first run: jump to latestSeq, do not invalidate.
     let sawWorkfeedPull = false;
     stubFetch((method, params) => {
@@ -117,7 +117,7 @@ describe("useEvents (instant refresh on a live nudge)", () => {
     return null;
   }
 
-  it("refetches the work feed the moment a workfeed nudge arrives", async () => {
+  it("refetches workfeed when SSE workfeed nudge arrives", async () => {
     stubFetch(() => ({ ok: true }), 'data: {"id":"e1","kind":"workfeed","title":"새 작업"}\n\n');
     const { provider, workfeedCalls } = spyProvider();
 

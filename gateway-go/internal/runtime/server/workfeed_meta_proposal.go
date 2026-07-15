@@ -12,7 +12,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle"
+	skillcore "github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/core"
 )
 
 const (
@@ -247,7 +247,7 @@ func (s *Server) handleMetaProposalAction(item workfeed.Item, actionID string) {
 	if artifact == "" || artifact == "." {
 		return
 	}
-	fallback := skilllifecycle.DefaultMetaArtifacts()[artifact]
+	fallback := skillcore.DefaultMetaArtifacts()[artifact]
 	fromVersion := s.genesisMeta.Version(artifact, fallback)
 	switch actionID {
 	case metaProposalActionAdopt:

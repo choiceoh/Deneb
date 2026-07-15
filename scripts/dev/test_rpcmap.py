@@ -72,7 +72,7 @@ class MapExtractionTests(unittest.TestCase):
             """,
         })
 
-    def test_go_file_discovery_excludes_tests_and_non_go_files(self) -> None:
+    def test_when_excludes_test_and_non_go_files_from_discovery(self) -> None:
         found = [Path(path).relative_to(self.root).as_posix() for path in rpcmap._go_files(
             str(self.root), rpcmap.RPC_DIRS + rpcmap.TOOL_DIRS + rpcmap.EVENT_DIRS
         )]
@@ -86,7 +86,7 @@ class MapExtractionTests(unittest.TestCase):
             ],
         )
 
-    def test_build_map_extracts_literal_assignment_and_multiline_tool_forms(self) -> None:
+    def test_returns_rpc_tools_and_events_from_multiline_forms(self) -> None:
         result = rpcmap.build_map(str(self.root))
         self.assertEqual(
             [(name, handler) for name, handler, _path, _line in result["rpc"]],
@@ -110,7 +110,7 @@ class MapExtractionTests(unittest.TestCase):
         )
         self.assertTrue(all(not path.startswith("/") for rows in result.values() for _, _, path, _ in rows))
 
-    def test_tool_pattern_never_crosses_a_closing_struct_brace(self) -> None:
+    def test_rejects_tool_matches_across_closing_struct_brace(self) -> None:
         result = rpcmap.build_map(str(self.root))
         names = {name for name, _handler, _path, _line in result["tool"]}
         self.assertNotIn("bad", names)
@@ -176,7 +176,7 @@ class CLIContractTests(unittest.TestCase):
         self.assertIn("3 RPC methods, 2 tools, 1 events indexed", stderr)
         self.assertIn("Give a name", stderr)
 
-    def test_exact_name_wins_over_longer_substring_matches(self) -> None:
+    def test_returns_exact_name_match_over_substring_hits(self) -> None:
         rc, stdout, stderr = self.invoke(["miniapp.gmail.list"])
         self.assertEqual((rc, stderr), (0, ""))
         self.assertIn("→ gmailList", stdout)
@@ -194,13 +194,13 @@ class CLIContractTests(unittest.TestCase):
         self.assertIn("[rpc] miniapp.mail.send", stdout)
         self.assertIn("[tool] mail-send", stdout)
 
-    def test_documented_mail_alias_resolves_to_gmail_base_name(self) -> None:
+    def test_when_resolves_documented_mail_alias_to_gmail_base_name(self) -> None:
         rc, stdout, stderr = self.invoke(["miniapp.mail.list"])
         self.assertEqual(rc, 0)
         self.assertIn("miniapp.gmail.list", stdout)
         self.assertIn("miniapp.mail.list → miniapp.gmail.list 별칭", stderr)
 
-    def test_json_list_output_is_deterministic_and_unicode_safe(self) -> None:
+    def test_returns_deterministic_unicode_safe_json_list(self) -> None:
         rc, stdout, stderr = self.invoke(["--list", "--json"])
         self.assertEqual((rc, stderr), (0, ""))
         payload = json.loads(stdout)
@@ -218,7 +218,7 @@ class CLIContractTests(unittest.TestCase):
         self.assertEqual((rc, stderr), (1, ""))
         self.assertEqual(json.loads(stdout), [])
 
-    def test_text_miss_explains_static_runtime_limit(self) -> None:
+    def test_explains_static_runtime_limit_when_text_lookup_misses(self) -> None:
         rc, stdout, stderr = self.invoke(["observatory.dynamic"])
         self.assertEqual((rc, stdout), (1, ""))
         self.assertIn("no match. (3 RPC methods, 2 tools, 1 events indexed)", stderr)

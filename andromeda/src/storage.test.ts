@@ -5,7 +5,7 @@ beforeEach(() => localStorage.clear());
 afterEach(() => vi.restoreAllMocks());
 
 describe("JSON storage", () => {
-  it("round-trips structured values", () => {
+  it("returns round-tripped structured values from localStorage", () => {
     setJSON("state", { count: 2, rows: ["a", "b"] });
     expect(getJSON("state")).toEqual({ count: 2, rows: ["a", "b"] });
   });
@@ -31,7 +31,7 @@ describe("JSON storage", () => {
     expect(() => setJSON("state", { value: 1 })).not.toThrow();
   });
 
-  it("swallows values that JSON cannot serialize", () => {
+  it("returns without error when JSON cannot serialize values", () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
     expect(() => setJSON("circular", circular)).not.toThrow();
@@ -40,7 +40,7 @@ describe("JSON storage", () => {
 });
 
 describe("string storage", () => {
-  it("round-trips and removes plain values", () => {
+  it("returns empty string after remove when plain value round-trips", () => {
     setString("token", "abc");
     expect(getString("token")).toBe("abc");
     remove("token");

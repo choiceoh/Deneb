@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // registerSampleTools populates a registry with N tools that have realistic schemas.
@@ -95,6 +96,7 @@ func BenchmarkPreSerialize_vs_RawMarshal(b *testing.B) {
 		"required": []string{"file_path"},
 	}
 
+	rawSchema := testutil.Must(json.Marshal(schema))
 	b.Run("map_marshal", func(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -106,11 +108,13 @@ func BenchmarkPreSerialize_vs_RawMarshal(b *testing.B) {
 	})
 
 	b.Run("pre_serialized", func(b *testing.B) {
-		t := llm.Tool{Name: "test", Description: "test tool", RawInputSchema: llm.FlexibleFromValue(schema)}
+		t := llm.Tool{Name: "test", Description: "test tool", RawInputSchema: rawSchema}
+		t.PreSerialize()
 		b.ResetTimer()
 		b.ReportAllocs()
 		for range b.N {
-			if _, err := json.Marshal(t.RawInputSchema.Bytes()); err != nil {
+			// RawInputSchema is already []byte — marshaling it is a no-op copy.
+			if _, err := json.Marshal(t.RawInputSchema); err != nil {
 				b.Fatal(err)
 			}
 		}

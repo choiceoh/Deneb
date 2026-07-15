@@ -2,6 +2,7 @@
 package server
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/docmedia"
 	"context"
 	"fmt"
 	"os"
@@ -13,7 +14,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/lmtpd"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
@@ -71,7 +71,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 		CounterpartyProjectsFn: func(domain string) []string {
 			return s.cpProjects.Lookup(s.wikiStore, domain)
 		},
-		AttachmentExtractFn: document.ExtractAttachmentText,
+		AttachmentExtractFn: docmedia.ExtractAttachmentText,
 		PromptOverride:      s.promptOverride,
 		ThinkingKwarg:       s.mailStage2ThinkingKwarg(),
 	}
@@ -230,7 +230,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		CounterpartyProjectsFn: func(domain string) []string {
 			return s.cpProjects.Lookup(s.wikiStore, domain)
 		},
-		AttachmentExtractFn: document.ExtractAttachmentText,
+		AttachmentExtractFn: docmedia.ExtractAttachmentText,
 		PromptOverride:      s.promptOverride,
 		OnAnalyzed:          s.makeMailAnalysisSink(),
 		OnDelivered:         s.makeMailFeedDeliverySink(),

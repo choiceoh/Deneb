@@ -71,7 +71,7 @@ describe("gateway URL helpers", () => {
     });
   });
 
-  it("prefers explicit attachment wire fields", () => {
+  it("when prefers explicit attachment wire fields", () => {
     const url = new URL(
       mailAttachmentUrl(CFG, "m1", {
         id: "legacy-id",
@@ -218,7 +218,7 @@ describe("binary and stream transport", () => {
 });
 
 describe("chatStream", () => {
-  it("composes workspace context and dispatches every typed frame", async () => {
+  it("when composes workspace context and dispatches every typed frame", async () => {
     const fetchMock = vi.fn(
       async () =>
         new Response(

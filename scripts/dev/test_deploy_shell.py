@@ -104,7 +104,7 @@ class DeployShellTests(unittest.TestCase):
     def calls(self) -> str:
         return self.log.read_text(encoding="utf-8") if self.log.exists() else ""
 
-    def test_non_main_checkout_refuses_before_pull_or_build(self) -> None:
+    def test_when_non_main_checkout_refuses_before_pull_or_build(self) -> None:
         proc = self.invoke(env=self.env(GIT_BRANCH="feature"))
         self.assertEqual(proc.returncode, 1)
         self.assertIn("production must be on main (currently on feature)", proc.stderr)
@@ -182,7 +182,7 @@ class DeployShellTests(unittest.TestCase):
         )
         self.assertIn("systemctl --user kill --kill-who=main -s SIGUSR1", calls)
 
-    def test_health_probe_uses_specific_listen_address_instead_of_loopback(self) -> None:
+    def test_when_health_probe_uses_specific_listen_address_instead_of_loopback(self) -> None:
         proc = self.invoke(env=self.env(SS_ADDRESS="100.64.1.5:18789"))
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("curl -sf http://100.64.1.5:18789/health", self.calls())

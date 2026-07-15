@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
@@ -20,7 +20,10 @@ import (
 
 // MailArchiveDeps supplies archive readers and optional enrichment services.
 type MailArchiveDeps struct {
-	Wiki     *wiki.Store
+	// Wiki is an optional knowledge adapter used to attach related wiki hits to
+	// archive messages. Prefer knowledge.NewWikiAdapter(store) at the wire site
+	// so this tool package does not import the wiki domain.
+	Wiki     knowledge.Adapter
 	Calendar *tooldeps.CalendarDeps
 	// Store is the local file-backed mail mirror and the authoritative corpus:
 	// when populated it answers list/search/project_history entirely from memory,
@@ -273,21 +276,21 @@ func enrichArchiveMessage(ctx context.Context, deps MailArchiveDeps, msg mailarc
 	}
 }
 
-func relatedArchiveWiki(ctx context.Context, store *wiki.Store, msg mailarchive.ContextMessage) []mailArchiveWikiHit {
-	if store == nil {
+func relatedArchiveWiki(ctx context.Context, adapter knowledge.Adapter, msg mailarchive.ContextMessage) []mailArchiveWikiHit {
+	if adapter == nil {
 		return nil
 	}
 	query := archiveRelatedQuery(msg)
 	if query == "" {
 		return nil
 	}
-	hits, err := store.Search(ctx, query, 3)
+	hits, err := adapter.Recall(ctx, query, 3)
 	if err != nil || len(hits) == 0 {
 		return nil
 	}
 	out := make([]mailArchiveWikiHit, 0, len(hits))
 	for _, hit := range hits {
-		out = append(out, mailArchiveWikiHit{Path: hit.Path, Snippet: hit.Content, Score: hit.Score})
+		out = append(out, mailArchiveWikiHit{Path: hit.Ref.ID, Snippet: hit.Snippet, Score: hit.Score})
 	}
 	return out
 }

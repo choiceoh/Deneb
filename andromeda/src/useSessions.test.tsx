@@ -30,7 +30,7 @@ afterEach(() => {
 });
 
 describe("useSessions", () => {
-  it("loads and namespace-filters recent sessions", async () => {
+  it("returns namespace-filtered sessions when gateway lists recent", async () => {
     recent.mockResolvedValue([
       { key: "client:main:a", label: "A" },
       { key: "client:main:b", label: "B" },
@@ -43,7 +43,7 @@ describe("useSessions", () => {
     expect(recent).toHaveBeenCalledWith(cfg, 20);
   });
 
-  it("maps a selected transcript into stable chat turns", async () => {
+  it("when maps a selected transcript into stable chat turns", async () => {
     transcript.mockResolvedValue([
       { id: "u1", role: "user", content: "질문" },
       { role: "assistant", content: "답변" },
@@ -63,7 +63,7 @@ describe("useSessions", () => {
     expect(result.current.sessionErr).toBe("");
   });
 
-  it("deleting the active session removes it and mints a fresh conversation", async () => {
+  it("when deleting the active session removes it and mints a fresh conversation", async () => {
     recent.mockResolvedValue([
       { key: "client:main", label: "업무" },
       { key: "client:main:old", label: "Old" },
@@ -82,7 +82,7 @@ describe("useSessions", () => {
     expect(chat.clear).toHaveBeenCalledTimes(1);
   });
 
-  it("blocks session mutation while a turn or attachment is busy", async () => {
+  it("when blocks session mutation while a turn or attachment is busy", async () => {
     const chat = chatDouble();
     const newKey = vi.fn(() => "client:main:new");
     const { result } = renderHook(() => useSessions(cfg, true, true, chat, { newKey }));

@@ -29,7 +29,7 @@ describe("splitDenebUi boundaries", () => {
     ]);
   });
 
-  it("drops whitespace-only markdown around a fence", () => {
+  it("when drops whitespace-only markdown around a fence", () => {
     expect(splitDenebUi(" \n```deneb-ui\n<text>x</text>\n```\n  ")).toEqual([{ kind: "ui", body: "<text>x</text>" }]);
   });
 
@@ -40,12 +40,12 @@ describe("splitDenebUi boundaries", () => {
     ]);
   });
 
-  it("does not treat a language prefix as the deneb-ui fence", () => {
+  it("without treat a language prefix as the deneb-ui fence", () => {
     const input = "```deneb-ui-extra\n<text>x</text>\n```";
     expect(splitDenebUi(input)).toEqual([{ kind: "md", text: input }]);
   });
 
-  it("recognizes an opener glued to a prose tail and keeps the prose", () => {
+  it("recognizes an opener glued to a prose tail and preserves the prose", () => {
     expect(splitDenebUi("소스들을 다시 가져올게요.```deneb-ui\n<text>hi</text>\n```\n끝.")).toEqual([
       { kind: "md", text: "소스들을 다시 가져올게요." },
       { kind: "ui", body: "<text>hi</text>" },
@@ -53,7 +53,7 @@ describe("splitDenebUi boundaries", () => {
     ]);
   });
 
-  it("leaves mid-sentence fence mentions as prose", () => {
+  it("preserves mid-sentence fence mentions as prose", () => {
     const input = "```deneb-ui 펜스는 이렇게 씁니다\n본문";
     expect(splitDenebUi(input)).toEqual([{ kind: "md", text: input }]);
   });
@@ -99,7 +99,7 @@ describe("parseDenebUi legacy boundaries", () => {
     expect(parseDenebUi(JSON.stringify(value))).toEqual(value);
   });
 
-  it("wraps a bare array in a column", () => {
+  it("when wraps a bare array in a column", () => {
     expect(parseDenebUi('[{"type":"text","value":"a"},{"type":"text","value":"b"}]')).toEqual({
       type: "column",
       children: [
@@ -127,7 +127,7 @@ describe("parseDenebUi legacy boundaries", () => {
     },
   );
 
-  it("routes leading HTML after trimming", () => {
+  it("when routes leading HTML after trimming", () => {
     expect(parseDenebUi(" \n <text id='greeting'> hello </text> ")).toEqual({
       type: "text",
       id: "greeting",
@@ -153,7 +153,7 @@ describe("interactive tree detection", () => {
     "radio_group",
     "chip_group",
     "countdown",
-  ])("recognizes %s", (type) => {
+  ])("when recognizes %s", (type) => {
     expect(hasInteractiveNode({ type })).toBe(true);
   });
 
@@ -161,7 +161,7 @@ describe("interactive tree detection", () => {
     expect(hasInteractiveNode({ type })).toBe(false);
   });
 
-  it("walks arrays, children, list items, and tab children", () => {
+  it("when walks arrays, children, list items, and tab children", () => {
     expect(hasInteractiveNode([null, { type: "text" }, { type: "button" }])).toBe(true);
     expect(hasInteractiveNode({ type: "card", children: [{ type: "text_input" }] })).toBe(true);
     expect(hasInteractiveNode({ type: "list", items: [{ type: "switch" }] })).toBe(true);
@@ -177,7 +177,7 @@ describe("interactive tree detection", () => {
 });
 
 describe("form collection boundaries", () => {
-  it("walks an array root", () => {
+  it("when walks an array root", () => {
     expect(
       collectInputs([
         { type: "text_input", id: "name", value: "Ada" },
@@ -186,7 +186,7 @@ describe("form collection boundaries", () => {
     ).toEqual({ name: "Ada", ready: true });
   });
 
-  it("uses the last encountered duplicate id deterministically", () => {
+  it("when uses the last encountered duplicate id deterministically", () => {
     const result = collectInputs({
       type: "column",
       children: [
@@ -203,7 +203,7 @@ describe("form collection boundaries", () => {
     expect([...result.required]).toEqual(["display"]);
   });
 
-  it("does not mistake truthy non-boolean values for required or checked", () => {
+  it("without mistake truthy non-boolean values for required or checked", () => {
     const result = collectInputs({
       type: "column",
       children: [
@@ -244,11 +244,11 @@ describe("coerce boundaries", () => {
     [-0, "0"],
     [" already text ", " already text "],
     [{ id: 1 }, "[object Object]"],
-  ])("uses JavaScript string semantics for %j", (value, expected) => {
+  ])("when uses JavaScript string semantics for %j", (value, expected) => {
     expect(coerce(value)).toBe(expected);
   });
 
-  it("joins mixed arrays using the native callback separator", () => {
+  it("when joins mixed arrays using the native callback separator", () => {
     expect(coerce(["a", 2, false, null])).toBe("a, 2, false, ");
   });
 });

@@ -2,29 +2,190 @@ package tooldeps
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
+)
+
+// Type aliases so chat parent code can name wiki/notebook stores without
+// importing those domain packages directly (fanout reduction).
+type (
+	WikiStore     = wiki.Store
+	NotebookStore = notebook.Store
 )
 
 // TranscriptStore is the stable transcript contract owned by chatport.
 type TranscriptStore = chatport.TranscriptStore
+
+// MarketQuote is one instrument quote for the market tool.
+type MarketQuote struct {
+	Symbol    string
+	Label     string
+	Currency  string
+	Price     float64
+	PrevClose float64
+	AsOf      int64
+}
+
+// FileHit is one semantic-search hit for the files tool.
+type FileHit struct {
+	Path    string
+	Name    string
+	Score   float64
+	Snippet string
+}
+
+// WorkFeedAction is one chip/action on a work-feed card.
+type WorkFeedAction struct {
+	ID     string
+	Kind   string
+	Label  string
+	Status string
+	Prompt string
+}
+
+// WorkFeedItem is the work-feed card shape the workfeed tool mutates.
+type WorkFeedItem struct {
+	ID             string
+	Source         string
+	Title          string
+	Summary        string
+	Body           string
+	SessionKey     string
+	RefType        string
+	RefID          string
+	Metadata       map[string]string
+	Status         string
+	Priority       int
+	Question       bool
+	Actions        []WorkFeedAction
+	CreatedAtMs    int64
+	UpdatedAtMs    int64
+	SnoozedUntilMs int64
+	ReadAtMs       int64
+}
+
+// Work-feed priority levels (mirrors domain/workfeed constants).
+// Higher values surface first in the feed.
+const (
+	WorkFeedPriorityLow    = 1
+	WorkFeedPriorityNormal = 2
+	WorkFeedPriorityHigh   = 3
+	WorkFeedPriorityUrgent = 4
+)
+
+// WorkFeedSourceDocAnalysis is the source tag for agent-published cards.
+const WorkFeedSourceDocAnalysis = "doc_analysis"
+
+// ObserveToolFunc is the observe tool executor injected by the composition root.
+type ObserveToolFunc func(ctx context.Context, input json.RawMessage) (string, error)
+
+// SpilloverStore spills large tool results to disk and loads them back by ID.
+// Satisfied by *agent.SpilloverStore — no adapter needed at wire sites.
+type SpilloverStore interface {
+	Load(spillID, sessionKey string) (string, error)
+	Store(sessionKey, toolName, content string) (string, error)
+	CleanSession(sessionKey string)
+}
+
+// AgentLogAggregate is the cross-session roll-up sessions action=stats needs.
+type AgentLogAggregate struct {
+	Runs              int
+	ProactiveRuns     int
+	TotalInputTokens  int64
+	TotalOutputTokens int64
+	CacheReadTokens   int64
+}
+
+// AgentLogSessionStat is one per-session row for sessions action=stats.
+type AgentLogSessionStat struct {
+	Session      string
+	Runs         int
+	Errors       int
+	InputTokens  int64
+	OutputTokens int64
+	ToolCalls    int
+	LastTs       int64
+}
+
+// AgentLogStats is the narrow agent-log slice sessions action=stats needs.
+type AgentLogStats interface {
+	Aggregate(sinceMs int64) AgentLogAggregate
+	AggregateBySession(sinceMs int64) []AgentLogSessionStat
+}
+
+// Contact is one address-book entry the contacts/wiki tools read.
+type Contact struct {
+	Name   string   `json:"name"`
+	Phones []string `json:"phones,omitempty"`
+	Emails []string `json:"emails,omitempty"`
+	Org    string   `json:"org,omitempty"`
+}
+
+// ContactsBook is the read-only address-book port for contacts + wiki enrichment.
+type ContactsBook interface {
+	Count() int
+	LookupPhone(query string) []Contact
+	Search(query string, limit int) []Contact
+	All() []Contact
+}
+
+// CalendarEvent is one calendar event the schedule/codeaction tools read/write.
+type CalendarEvent struct {
+	ID          string
+	Summary     string
+	Description string
+	Location    string
+	Start       time.Time
+	End         time.Time
+	AllDay      bool
+	HTMLLink    string
+	Status      string
+	Organizer   CalendarAttendee
+	Attendees   []CalendarAttendee
+	Conference  *CalendarConference
+
+	Source      string
+	SourceLabel string
+	Kind        string
+	Docs        []string
+}
+
+// CalendarAttendee is a calendar participant.
+type CalendarAttendee struct {
+	Email          string
+	DisplayName    string
+	ResponseStatus string
+	Self           bool
+	Organizer      bool
+}
+
+// CalendarConference describes an attached video conference.
+type CalendarConference struct {
+	Solution string
+	URI      string
+}
+
+// CalendarCreateInput is the user-settable subset for local calendar writes.
+type CalendarCreateInput struct {
+	Summary     string
+	Description string
+	Location    string
+	Start       time.Time
+	End         time.Time
+	AllDay      bool
+	Source      string
+	SourceLabel string
+	Kind        string
+	Docs        []string
+}
 
 // CoreToolDeps holds all dependencies for core agent tools.
 // It composes focused dep structs for each tool group.
@@ -54,24 +215,23 @@ type CoreToolDeps struct {
 	Calendar         CalendarDeps
 	// MailStore is the local mail archive mirror backing the mail_archive tool's
 	// storage-first read path (no per-call IMAP round-trip). nil = IMAP only.
-	MailStore      *mailstore.Store
-	LLMClient      *llm.Client
-	DefaultModel   string
-	AgentLog       *agentlog.Writer
-	LogCapture     *observe.LogCapture   // optional; in-memory log ring for the observe tool
-	WorkFeed       *workfeed.Store       // optional; proactive-card engagement for observe action=proactive
-	SpilloverStore *agent.SpilloverStore // optional; spills large tool results to disk
+	MailStore *mailstore.Store
+	// ObserveTool is the pre-wired observe tool from the composition root
+	// (server). Keeping concrete observe/workfeed/agentlog types out of this
+	// package is intentional dependency inversion.
+	ObserveTool ObserveToolFunc
+	// SpilloverStore spills large tool results to disk; nil disables.
+	SpilloverStore SpilloverStore
 
 	// WorkFeedRW is the workfeed tool's read/settle surface. Wired to the
-	// server's native-sync-teeing wrapper (NOT the raw store above) so an
+	// server's native-sync-teeing wrapper (NOT the raw store) so an
 	// agent-side read/ack mirrors to the phone exactly like a tap in the app.
 	// nil disables the workfeed tool.
 	WorkFeedRW WorkFeedRW
 
-	// MarketSummary is market.Cache.Summary — shared with the miniapp 오늘
-	// dashboard so both surfaces serve one cache/asOf. nil disables the
-	// market tool.
-	MarketSummary func(ctx context.Context) (quotes []market.Quote, asOf int64, stale bool, err error)
+	// MarketSummary is shared with the miniapp 오늘 dashboard so both surfaces
+	// serve one cache/asOf. nil disables the market tool.
+	MarketSummary func(ctx context.Context) (quotes []MarketQuote, asOf int64, stale bool, err error)
 
 	// AsrHotwords supplies the wiki+contacts proper-noun bias for the
 	// transcribe tool (people/companies/deals — same hints the capture RPC
@@ -96,7 +256,7 @@ type CoreToolDeps struct {
 	// The server owns the embedding client + index and injects this closure; nil
 	// degrades the files tool's semantic=true to a name/content search, so the
 	// feature is optional, not load-bearing.
-	FilesSemanticSearch func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error)
+	FilesSemanticSearch func(ctx context.Context, query string, max int) ([]FileHit, error)
 
 	// ConsultPanel fans a single prompt out to the healthy models the wormhole
 	// router serves, in parallel, returning each model's answer — the engine
@@ -131,11 +291,11 @@ type FleetDeps struct {
 // mutation onto the native-sync stream so a published card reaches the phone) —
 // an interface here so tools/ never depends on the server package.
 type WorkFeedRW interface {
-	List(limit int, includeAcked bool) ([]workfeed.Item, int, error)
-	MarkRead(id string) (workfeed.Item, error)
-	Ack(id string) (workfeed.Item, error)
+	List(limit int, includeAcked bool) ([]WorkFeedItem, int, error)
+	MarkRead(id string) (WorkFeedItem, error)
+	Ack(id string) (WorkFeedItem, error)
 	// Append publishes a new card the agent authored (workfeed action="publish").
-	Append(item workfeed.Item) (workfeed.Item, error)
+	Append(item WorkFeedItem) (WorkFeedItem, error)
 }
 
 // ProcessDeps holds dependencies for exec and process management tools.
@@ -163,7 +323,7 @@ type SessionDeps struct {
 	CodingDefaultModelFn func() string
 	// AgentLog powers action=stats (per-session run/token roll-ups). nil
 	// degrades stats to an "not wired" notice; other actions are unaffected.
-	AgentLog *agentlog.Writer
+	AgentLog AgentLogStats
 }
 
 // ChronoDeps holds dependencies for the cron scheduling tool.
@@ -180,12 +340,12 @@ type WikiDeps struct {
 	// Contacts is the device address book, used at write time to auto-record a
 	// referenced person's phone/email/org into their 인물 page. May be nil when
 	// the contacts store failed to init; enrichment is simply skipped then.
-	Contacts *contacts.Store
+	Contacts ContactsBook
 }
 
 // ContactsDeps holds dependencies for the contacts address-book tool.
 type ContactsDeps struct {
-	Store *contacts.Store // may be nil when the contacts store failed to init
+	Store ContactsBook // may be nil when the contacts store failed to init
 }
 
 // NotebookDeps holds dependencies for the notebook tool (NotebookLM-style
@@ -214,17 +374,19 @@ type SourceReader func(ctx context.Context, ref string) (string, error)
 // calendar tool uses. Mirrors the miniapp handler's CalendarClient — Google
 // writes need an OAuth scope we don't require, so the tool only reads from Google.
 type CalendarReader interface {
-	ListUpcoming(ctx context.Context, from, to time.Time, maxResults int) ([]calendar.Event, error)
-	Get(ctx context.Context, eventID string) (*calendar.Event, error)
+	ListUpcoming(ctx context.Context, from, to time.Time, maxResults int) ([]CalendarEvent, error)
+	Get(ctx context.Context, eventID string) (*CalendarEvent, error)
 }
 
 // LocalCalendar is the read/write local store slice — the writable half of the
-// hybrid calendar. Same interface the miniapp calendar handler depends on.
+// hybrid calendar. Same interface the miniapp calendar handler depends on,
+// expressed in tooldeps DTOs so this package does not import platform/calendar
+// or platform/localcal.
 type LocalCalendar interface {
-	ListRange(from, to time.Time) []calendar.Event
-	Get(id string) *calendar.Event
-	Create(in localcal.CreateInput) (calendar.Event, error)
-	Update(id string, in localcal.CreateInput) (*calendar.Event, error)
+	ListRange(from, to time.Time) []CalendarEvent
+	Get(id string) *CalendarEvent
+	Create(in CalendarCreateInput) (CalendarEvent, error)
+	Update(id string, in CalendarCreateInput) (*CalendarEvent, error)
 	Delete(id string) error
 }
 

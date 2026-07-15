@@ -43,13 +43,13 @@ class InstanceIsolationTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         return proc.stdout.splitlines()
 
-    def test_default_instance_keeps_historical_paths_and_ports(self) -> None:
+    def test_default_instance_preserves_historical_paths_and_ports(self) -> None:
         self.assertEqual(
             self.source_and_print("default"),
             ["/tmp/deneb", "18790", "18791", "18793"],
         )
 
-    def test_named_instance_has_deterministic_nonoverlapping_port_offsets(self) -> None:
+    def test_when_named_instance_has_deterministic_nonoverlapping_port_offsets(self) -> None:
         first = self.source_and_print("health-wave")
         second = self.source_and_print("health-wave")
         self.assertEqual(first, second)
@@ -179,7 +179,7 @@ class ReadinessFunctionTests(unittest.TestCase):
         )
         self.assertEqual((dead_child.returncode, dead_child.stdout), (0, "1"))
 
-    def test_port_wait_distinguishes_free_and_still_held(self) -> None:
+    def test_when_port_wait_distinguishes_free_and_still_held(self) -> None:
         write_executable(self.fake_bin / "ss", """
             #!/usr/bin/env bash
             if [[ "${FAKE_PORT_HELD:-0}" == 1 ]]; then

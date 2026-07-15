@@ -21,12 +21,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 	casepack "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase/runcontract"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/briefcase/runtranscript"
 )
 
 type ChatHarnessConfig struct {
@@ -42,6 +42,8 @@ type ChatHarnessConfig struct {
 	Approval               ApprovalFunc
 	SkipRecall             bool
 	Arm                    Arm
+	// TokenEstimate overrides response token accounting; nil keeps provider OutputTokens only.
+	TokenEstimate          func(string) int
 }
 
 type (
@@ -66,7 +68,7 @@ type ChatHarness struct {
 	clock                  *ManualClock
 	world                  *World
 	memory                 *denebMemoryMirror
-	transcript             *RunTranscript
+	transcript             *runtranscript.RunTranscript
 	device                 *DeviceTwin
 	devicePlanSHA256       string
 	devicePlanSourceSHA256 string
@@ -83,6 +85,7 @@ type ChatHarness struct {
 	runID                  string
 	sessionKey             string
 	skipRecall             bool
+	tokenEstimate          func(string) int
 	arm                    Arm
 	paths                  RunPaths
 
@@ -148,7 +151,7 @@ type chatHarnessAssembly struct {
 	memory *denebMemoryMirror
 
 	profile     harnessExecutionProfile
-	transcript  *RunTranscript
+	transcript  *runtranscript.RunTranscript
 	gate        *ToolGate
 	handler     *chat.Handler
 	promptAudit *systemPromptAudit
@@ -175,7 +178,7 @@ func NewChatHarness(cfg ChatHarnessConfig) (*ChatHarness, error) {
 	}
 	// A post-claim failure deliberately consumes the RunRoot: device validation
 	// and runtime assembly may have observed or materialized attempt-local state.
-	if err := assembly.cfg.Root.claimHarness(); err != nil {
+	if err := assembly.cfg.Root.ClaimHarness(); err != nil {
 		return nil, err
 	}
 	if err := assembly.prepareDevicePlan(); err != nil {
@@ -392,7 +395,7 @@ func (a *chatHarnessAssembly) prepareExecution() error {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	transcript, err := NewRunTranscript(a.paths, logger)
+	transcript, err := runtranscript.NewRunTranscript(runtranscript.Paths{Root: a.paths.Root, State: a.paths.State}, logger)
 	if err != nil {
 		return err
 	}
@@ -432,7 +435,7 @@ func buildHarnessExecutionProfile(cfg ChatHarnessConfig, registry *chat.ToolRegi
 func newDeterministicChatHandler(
 	a *chatHarnessAssembly,
 	registry *chat.ToolRegistry,
-	transcript *RunTranscript,
+	transcript *runtranscript.RunTranscript,
 	logger *slog.Logger,
 ) (*chat.Handler, *systemPromptAudit) {
 	sessions := session.NewManager()
@@ -503,7 +506,7 @@ func (a *chatHarnessAssembly) buildHarness() *ChatHarness {
 		endpointSHA256:   a.profile.endpointSHA256, buildSHA256: a.profile.buildSHA256,
 		executionProfileSHA256: a.profile.executionProfileSHA256, sampling: a.profile.sampling, promptAudit: a.promptAudit,
 		model: a.cfg.Model, apiMode: a.cfg.Client.APIMode(), runID: runID, sessionKey: sessionKey,
-		skipRecall: a.cfg.SkipRecall || a.arm == ArmRawPrimary, arm: a.arm, paths: a.paths,
+		skipRecall: a.cfg.SkipRecall || a.arm == ArmRawPrimary, tokenEstimate: a.cfg.TokenEstimate, arm: a.arm, paths: a.paths,
 	}
 }
 
@@ -821,7 +824,7 @@ func (h *ChatHarness) sendTurn(ctx context.Context, message string, ephemeral bo
 	presencePenalty := h.sampling.PresencePenalty
 	remainingToolCallAttempts := h.gate.RemainingAttempts()
 	opts := &chat.SyncOptions{
-		ToolPreset:          string(toolpreset.PresetBriefcase),
+		ToolPreset:          toolwire.PresetBriefcase,
 		BeforeToolCall:      h.gate.BeforeToolCall,
 		OnToolResult:        h.onToolResult,
 		GateUntrustedTools:  true,
@@ -852,8 +855,10 @@ func (h *ChatHarness) sendTurn(ctx context.Context, message string, ephemeral bo
 		return nil, "", errors.New("briefcase: model-turn accounting exceeded the signed budget")
 	}
 	chargedTokens := response.OutputTokens
-	if estimate := tokenest.EstimateUncalibrated(response.AllText); estimate > chargedTokens {
-		chargedTokens = estimate
+	if h.tokenEstimate != nil {
+		if estimate := h.tokenEstimate(response.AllText); estimate > chargedTokens {
+			chargedTokens = estimate
+		}
 	}
 	if chargedTokens < 0 || chargedTokens > remainingTokens {
 		return nil, "", errors.New("briefcase: output-token accounting exceeded the signed budget")

@@ -1,36 +1,21 @@
-// link_enrichment.go bridges Handler turn policy to the link-enrichment
-// subsystem. URL extraction, fetch/conversion, budgets, and async join
-// lifecycle are owned by the linkenrichment package.
 package chat
 
-import (
-	"context"
-	"log/slog"
+import "context"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/linkenrichment"
-)
+// LinkEnrichStart starts async URL enrichment for a turn. The composition root
+// (server) wires the concrete linkenrichment engine so chat does not import it.
+type LinkEnrichStart func(ctx context.Context, message string, sanitize func(string) string) func(context.Context) string
 
-// startLinkEnrichment preserves the chat-owned eligibility gates: signed
-// briefcase turns and API calls carrying caller-owned history must remain
-// byte-for-byte untouched. Eligible interactive messages delegate their
-// asynchronous fetch/join lifecycle to the handler-scoped engine.
-func (h *Handler) startLinkEnrichment(ctx context.Context, message string, opts *SyncOptions) linkenrichment.Join {
+// startLinkEnrichment preserves chat-owned eligibility gates.
+func (h *Handler) startLinkEnrichment(ctx context.Context, message string, opts *SyncOptions) func(context.Context) string {
 	if h != nil && h.briefcaseMode {
 		return nil
 	}
 	if opts != nil && len(opts.Messages) > 0 {
 		return nil
 	}
-	engine := (*linkenrichment.Engine)(nil)
-	logger := slog.Default()
-	if h != nil {
-		engine = h.linkEnrichment
-		if h.logger != nil {
-			logger = h.logger
-		}
+	if h == nil || h.linkEnrichStart == nil {
+		return nil
 	}
-	if engine == nil {
-		engine = linkenrichment.New(linkenrichment.Config{Logger: logger})
-	}
-	return engine.Start(ctx, message, sanitizeInput)
+	return h.linkEnrichStart(ctx, message, sanitizeInput)
 }

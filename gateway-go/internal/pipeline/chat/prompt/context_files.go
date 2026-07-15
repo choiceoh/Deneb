@@ -17,7 +17,7 @@ type ContextFile struct {
 }
 
 // contextFileNames lists workspace context files in load order.
-// Filename defaults originally matched the retired TypeScript workspace constants.
+// Matches src/agents/workspace/workspace.ts DEFAULT_*_FILENAME constants.
 var contextFileNames = []string{
 	"AGENTS.md",
 	"SOUL.md",

@@ -1,8 +1,6 @@
 package chat
 
 import (
-	"encoding/json"
-
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
@@ -21,6 +19,6 @@ func IsCacheableTool(name string) bool { return toolport.IsCacheableTool(name) }
 func IsMutationTool(name string) bool { return toolport.IsMutationTool(name) }
 
 // BuildCacheKey creates a canonical cache key from the tool name and its JSON input.
-func BuildCacheKey(name string, input json.RawMessage) string {
+func BuildCacheKey(name string, input rawJSON) string {
 	return toolport.BuildCacheKey(name, input)
 }

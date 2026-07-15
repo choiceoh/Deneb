@@ -44,14 +44,14 @@ def _collect_cochange_fixture(files: dict[str, str]) -> inventory.RepositoryInve
 
 
 class CrossComponentSeamTest(unittest.TestCase):
-    def test_is_composition_root_recognizes_wiring_layer_only(self) -> None:
+    def test_when_is_composition_root_recognizes_wiring_layer_only(self) -> None:
         self.assertTrue(is_composition_root("internal/runtime/server"))
         self.assertTrue(is_composition_root("internal/runtime/bootstrap"))
         self.assertFalse(is_composition_root("internal/domain/skills/genesis"))
         self.assertFalse(is_composition_root("internal/runtime/rpc"))
         self.assertIn("runtime/server", COMPOSITION_ROOT_COMPONENTS)
 
-    def test_transport_seam_is_exact_and_does_not_exempt_nested_features(self) -> None:
+    def test_when_transport_seam_is_exact_and_does_not_exempt_nested_features(self) -> None:
         seam = "internal/runtime/rpc/handler/handlerminiapp"
         self.assertIn(seam, CROSS_COMPONENT_TRANSPORT_SEAMS)
         self.assertTrue(is_cross_component_seam(seam))

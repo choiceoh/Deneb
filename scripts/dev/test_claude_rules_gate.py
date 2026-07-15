@@ -36,7 +36,7 @@ globs: ["gateway-go/**/*.go", "client-android/**/*.kt"]
             ("Go and Kotlin rule", ["gateway-go/**/*.go", "client-android/**/*.kt"]),
         )
 
-    def test_yaml_list_and_comma_separated_forms_strip_quotes_and_blanks(self) -> None:
+    def test_when_yaml_list_and_comma_separated_forms_strip_quotes_and_blanks(self) -> None:
         yaml_text = """---
 globs:
   - 'scripts/**/*.py'
@@ -81,7 +81,7 @@ description: after list
 
 
 class GlobMatchingTests(unittest.TestCase):
-    def test_double_star_and_single_star_match_nested_paths(self) -> None:
+    def test_when_double_star_and_single_star_match_nested_paths(self) -> None:
         self.assertTrue(
             rules_gate.glob_matches(
                 "gateway-go/internal/runtime/server/server.go",
@@ -90,11 +90,11 @@ class GlobMatchingTests(unittest.TestCase):
         )
         self.assertTrue(rules_gate.glob_matches("scripts/dev/checks.py", "scripts/*.py"))
 
-    def test_matching_is_case_sensitive_and_does_not_accept_wrong_suffix(self) -> None:
+    def test_matching_is_case_sensitive_and_does_not_allows_wrong_suffix(self) -> None:
         self.assertFalse(rules_gate.glob_matches("Scripts/dev/checks.py", "scripts/**/*.py"))
         self.assertFalse(rules_gate.glob_matches("scripts/dev/checks.pyc", "scripts/**/*.py"))
 
-    def test_bare_double_star_can_span_multiple_segments(self) -> None:
+    def test_when_bare_double_star_can_span_multiple_segments(self) -> None:
         self.assertTrue(rules_gate.glob_matches("a/deep/tree/file.go", "a/**/file.go"))
         self.assertFalse(rules_gate.glob_matches("b/deep/tree/file.go", "a/**/file.go"))
 
@@ -167,7 +167,7 @@ class RulesGateMainTests(unittest.TestCase):
             ["a-first.md", "z-last.md"],
         )
 
-    def test_notebook_path_is_supported_and_session_name_is_sanitized(self) -> None:
+    def test_when_notebook_path_is_supported_and_session_name_is_sanitized(self) -> None:
         write_files(self.root, {
             "docs/agent-rules/notebooks.md": """
                 ---

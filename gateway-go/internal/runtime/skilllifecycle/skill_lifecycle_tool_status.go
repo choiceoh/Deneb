@@ -5,9 +5,8 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/lifecycletool"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/propusview"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/propuswire"
 )
 
 // Skill-lifecycle status surface split out of skill_lifecycle_tool.go (pure
@@ -18,8 +17,8 @@ import (
 func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chattools.SkillLifecycleStatusRequest) (chattools.SkillLifecycleStatusResult, error) {
 	if b.tracker == nil {
 		return chattools.SkillLifecycleStatusResult{
-			System:   propusSystemStatus(strings.TrimSpace(req.SkillName)),
-			Overview: propusUnavailableOverview(strings.TrimSpace(req.SkillName)),
+			System:   propuswire.SystemStatus(strings.TrimSpace(req.SkillName)),
+			Overview: propuswire.UnavailableOverview(strings.TrimSpace(req.SkillName)),
 			Reason:   "skill tracker is not configured",
 		}, nil
 	}
@@ -49,13 +48,13 @@ func (b *skillLifecycleBackend) skillLifecycleStatusForSkill(skillName string, l
 	common := b.collectSkillLifecycleCommonStatus(skillName, limit)
 	optimizerMemory, optimizerMemoryErr := b.optimizerMemory(skillName)
 	status := chattools.SkillLifecycleStatusResult{
-		System:          propusSystemStatus(skillName),
-		Overview:        propusSkillOverview(skillName, recent, stats, curator, common.usageQuality, common.validationSummary, common.opportunities, common.selfCorrections),
+		System:          propuswire.SystemStatus(skillName),
+		Overview:        propuswire.SkillOverview(skillName, recent, stats, curator, common.usageQuality, common.validationSummary, common.opportunities, common.selfCorrections),
 		OK:              true,
 		SkillName:       skillName,
 		Limit:           lifecycleValue(limit),
 		Recent:          lifecycleValue(recent),
-		Stats:           &chattools.SkillLifecycleStats{Scope: propus.PropusScopeSkill, Skill: stats},
+		Stats:           &chattools.SkillLifecycleStats{Scope: propuswire.ScopeSkill, Skill: stats},
 		Curator:         lifecycleValue(curator),
 		OptimizerMemory: lifecycleValue(optimizerMemory),
 	}
@@ -78,12 +77,12 @@ func (b *skillLifecycleBackend) globalSkillLifecycleStatus(limit int, recent []g
 	failureClusters := b.tracker.FailureEvidenceClusters(0)
 	workoutActivity := b.tracker.WorkoutActivitySummarize()
 	status := chattools.SkillLifecycleStatusResult{
-		System:             propusSystemStatus(""),
-		Overview:           propusGlobalOverview(recent, stats, curator, common.usageQuality, common.validationSummary, common.opportunities, common.selfCorrections, selfHarnessSignals),
+		System:             propuswire.SystemStatus(""),
+		Overview:           propuswire.GlobalOverview(recent, stats, curator, common.usageQuality, common.validationSummary, common.opportunities, common.selfCorrections, selfHarnessSignals),
 		OK:                 true,
 		Limit:              lifecycleValue(limit),
 		Recent:             lifecycleValue(recent),
-		Stats:              &chattools.SkillLifecycleStats{Scope: propus.PropusScopeGlobal, Fleet: stats},
+		Stats:              &chattools.SkillLifecycleStats{Scope: propuswire.ScopeGlobal, Fleet: stats},
 		Curator:            lifecycleValue(curator),
 		SelfHarnessSignals: lifecycleValue(selfHarnessSignals),
 		// Fleet-wide failure clusters (Self-Harness weakness mining) — the same
@@ -253,73 +252,3 @@ func (b *skillLifecycleBackend) recentSelfCorrectionCandidates(skillName string,
 	return out, ""
 }
 
-func propusUnavailableOverview(skillName string) chattools.SkillLifecycleOverview {
-	scope := "global"
-	if strings.TrimSpace(skillName) != "" {
-		scope = "skill"
-	}
-	return chattools.SkillLifecycleOverview{
-		Unavailable: &chattools.SkillLifecycleUnavailableOverview{
-			State:       "unavailable",
-			Scope:       scope,
-			SkillName:   strings.TrimSpace(skillName),
-			NextActions: []string{"configure_skill_tracker"},
-		},
-	}
-}
-
-func propusSkillOverview(
-	skillName string,
-	recent []genesis.LifecycleLogEntry,
-	stats *genesis.UsageStats,
-	curator []genesis.SkillCuratorRecord,
-	usageQuality genesis.UsageQualitySummary,
-	validationSummary genesis.SkillValidationCaseSummary,
-	opportunities []genesis.SkillOpportunityRecord,
-	selfCorrections []genesis.SelfCorrectionCandidateRecord,
-) chattools.SkillLifecycleOverview {
-	overview := propus.BuildPropusOverview(propus.PropusOverviewInput{
-		Scope:             propus.PropusScopeSkill,
-		SkillName:         skillName,
-		Recent:            propusview.LifecycleEntries(recent),
-		SkillStats:        propusview.UsageStat(stats),
-		Curator:           propusview.Curator(curator),
-		UsageQuality:      propusview.UsageQuality(usageQuality),
-		ValidationSummary: propusview.Validation(validationSummary),
-		Opportunities:     propusview.Opportunities(opportunities),
-		SelfCorrections:   propusview.SelfCorrections(selfCorrections),
-	})
-	return chattools.SkillLifecycleOverview{Operational: &overview}
-}
-
-func propusGlobalOverview(
-	recent []genesis.LifecycleLogEntry,
-	stats []genesis.UsageStats,
-	curator []genesis.SkillCuratorRecord,
-	usageQuality genesis.UsageQualitySummary,
-	validationSummary genesis.SkillValidationCaseSummary,
-	opportunities []genesis.SkillOpportunityRecord,
-	selfCorrections []genesis.SelfCorrectionCandidateRecord,
-	selfHarnessSignals genesis.SelfHarnessSignalSummary,
-) chattools.SkillLifecycleOverview {
-	overview := propus.BuildPropusOverview(propus.PropusOverviewInput{
-		Scope:              propus.PropusScopeGlobal,
-		Recent:             propusview.LifecycleEntries(recent),
-		Stats:              propusview.UsageStats(stats),
-		Curator:            propusview.Curator(curator),
-		UsageQuality:       propusview.UsageQuality(usageQuality),
-		ValidationSummary:  propusview.Validation(validationSummary),
-		Opportunities:      propusview.Opportunities(opportunities),
-		SelfCorrections:    propusview.SelfCorrections(selfCorrections),
-		SelfHarnessSignals: propusview.SelfHarness(selfHarnessSignals),
-	})
-	return chattools.SkillLifecycleOverview{Operational: &overview}
-}
-
-func propusSystemStatus(skillName string) propus.PropusSystemIdentity {
-	scope := "global"
-	if strings.TrimSpace(skillName) != "" {
-		scope = "skill"
-	}
-	return propus.BuildPropusSystemIdentity(scope)
-}

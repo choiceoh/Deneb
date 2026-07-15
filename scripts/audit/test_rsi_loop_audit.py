@@ -80,28 +80,28 @@ class TestEnvelope(unittest.TestCase):
         env = {"type": "res", "id": "x", "ok": True, "payload": body}
         self.assertEqual(unwrap_rpc_envelope(env), body)
 
-    def test_legacy_result_key_still_accepted(self):
+    def test_when_legacy_result_key_still_accepted(self):
         body = {"layers": []}
         self.assertEqual(unwrap_rpc_envelope({"result": body}), body)
 
     def test_ok_false_means_failure(self):
         self.assertIsNone(unwrap_rpc_envelope({"ok": False, "payload": {"layers": []}}))
 
-    def test_bare_body_passes_through(self):
+    def test_when_bare_body_passes_through(self):
         body = {"layers": [], "turning": 1}
         self.assertEqual(unwrap_rpc_envelope(body), body)
 
-    def test_non_dict_is_none(self):
+    def test_when_non_dict_is_none(self):
         self.assertIsNone(unwrap_rpc_envelope(None))
         self.assertIsNone(unwrap_rpc_envelope("nope"))
 
 
 class TestGenesisSection(unittest.TestCase):
-    def test_self_evolution_key(self):
+    def test_when_self_evolution_key(self):
         h = health_fixture()
         self.assertEqual(genesis_section(h)["evolves_7d"], 3)
 
-    def test_propus_alias(self):
+    def test_when_propus_alias(self):
         h = {"propus": {"evolves_7d": 1}}
         self.assertEqual(genesis_section(h)["evolves_7d"], 1)
 
@@ -111,11 +111,11 @@ class TestGenesisSection(unittest.TestCase):
 
 
 class TestLiveness(unittest.TestCase):
-    def test_live_loop_passes(self):
+    def test_when_live_loop_passes(self):
         r = check_liveness(health_fixture(), NOW)
         self.assertEqual(r.status, Result.OK)
 
-    def test_genesis_only_still_passes(self):
+    def test_when_genesis_only_still_passes(self):
         r = check_liveness(health_fixture(evolves_7d=0, genesis_7d=2), NOW)
         self.assertEqual(r.status, Result.OK)
 
@@ -135,7 +135,7 @@ class TestLiveness(unittest.TestCase):
 
 
 class TestRates(unittest.TestCase):
-    def test_zero_resolved_is_unmeasured_warn(self):
+    def test_when_zero_resolved_is_unmeasured_warn(self):
         # THE honesty case: rates exist but nothing resolved — never PASS/FAIL.
         h = health_fixture(resolved_evolves_7d=0, confirm_rate=0.0, false_accept_rate=0.0)
         self.assertEqual(check_honesty(h).status, Result.SOFT)
@@ -156,7 +156,7 @@ class TestRates(unittest.TestCase):
         self.assertEqual(check_honesty(h).status, Result.SOFT)
         self.assertEqual(check_confirm(h).status, Result.SOFT)
 
-    def test_healthy_rates_pass(self):
+    def test_when_healthy_rates_pass(self):
         h = health_fixture(resolved_evolves_7d=5, false_accept_rate=0.1, confirm_rate=0.9)
         self.assertEqual(check_honesty(h).status, Result.OK)
         self.assertEqual(check_confirm(h).status, Result.OK)
@@ -168,7 +168,7 @@ class TestRates(unittest.TestCase):
 
 
 class TestLayers(unittest.TestCase):
-    def test_l2_live_passes(self):
+    def test_when_l2_live_passes(self):
         r = check_slowloop(rsi_status_fixture(l2="LIVE"), health_fixture())
         self.assertEqual(r.status, Result.OK)
 
@@ -189,10 +189,10 @@ class TestLayers(unittest.TestCase):
         self.assertEqual(r.status, Result.SOFT)
         self.assertIn("subtle probes pending", r.diagnosis)
 
-    def test_l3_live_passes(self):
+    def test_when_l3_live_passes(self):
         self.assertEqual(check_labels(rsi_status_fixture(l3="LIVE")).status, Result.OK)
 
-    def test_l4_starved_warns(self):
+    def test_when_l4_starved_warns(self):
         r = check_dispatch(rsi_status_fixture(l4="STARVED"))
         self.assertEqual(r.status, Result.SOFT)
         self.assertIn("code-scope=0", r.detail)
@@ -215,7 +215,7 @@ class TestOverall(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         self.assertFalse(any(r.status == Result.HARD for r in results))
 
-    def test_all_healthy_exits_zero(self):
+    def test_when_all_healthy_exits_zero(self):
         results = run_checks(
             health_fixture(resolved_evolves_7d=5, confirm_rate=0.9, false_accept_rate=0.1),
             rsi_status_fixture(l2="LIVE", l3="LIVE", l4="LIVE"),
@@ -224,7 +224,7 @@ class TestOverall(unittest.TestCase):
         worst, exit_code = overall_status(results)
         self.assertEqual((worst, exit_code), (Result.OK, 0))
 
-    def test_dead_loop_exits_two(self):
+    def test_when_dead_loop_exits_two(self):
         h = health_fixture(evolves_7d=0, genesis_7d=0, last_activity_ms=NOW - 100 * HOUR)
         results = run_checks(h, rsi_status_fixture(), NOW)
         worst, exit_code = overall_status(results)

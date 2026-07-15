@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 )
 
 // TestRecallWikiEvidenceReturnsProjectAnchorFirst: a query naming a known project pins
@@ -22,7 +22,7 @@ func TestRecallWikiEvidenceReturnsProjectAnchorFirst(t *testing.T) {
 
 	rep := wiki.NewPage("기아 화성", "프로젝트", nil)
 	rep.Body = "# 기아 화성\n\n## 현재 상태\n- 모듈 RFQ 회신 완료\n"
-	if err := store.WritePage(wiki.RepPagePath("기아-화성"), rep); err != nil {
+	if err := store.WritePage("프로젝트/기아-화성/대표.md", rep); err != nil {
 		t.Fatal(err)
 	}
 	detail := wiki.NewPage("기아 AL 화성 치장장 태양광 배치", "프로젝트", nil)
@@ -36,7 +36,7 @@ func TestRecallWikiEvidenceReturnsProjectAnchorFirst(t *testing.T) {
 		t.Fatal("no evidence returned")
 	}
 	top := evidence[0]
-	if top.Source != wiki.RepPagePath("기아-화성") || top.Query != "project-anchor" {
+	if top.Source != "프로젝트/기아-화성/대표.md" || top.Query != "project-anchor" {
 		t.Fatalf("top evidence = %+v, want the project anchor", top)
 	}
 	if top.Score <= 0.80+1.1 {
@@ -50,7 +50,7 @@ func TestRecallWikiEvidenceReturnsProjectAnchorFirst(t *testing.T) {
 	// rep-page evidence rows.
 	seen := 0
 	for _, ev := range evidence {
-		if ev.Source == wiki.RepPagePath("기아-화성") {
+		if ev.Source == "프로젝트/기아-화성/대표.md" {
 			seen++
 		}
 	}

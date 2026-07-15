@@ -31,12 +31,12 @@ func TranscriptAppended(sessionKey, role, preview string, timestampMs int64) App
 		Type:       TypeTranscriptAppended,
 		EntityID:   sessionKey,
 		SessionKey: sessionKey,
-		Payload: TranscriptAppendedPayload{
+		Payload: mustRawJSON(TranscriptAppendedPayload{
 			SessionKey:  sessionKey,
 			Role:        role,
 			Preview:     preview,
 			TimestampMs: timestampMs,
-		},
+		}),
 	}
 }
 
@@ -68,14 +68,14 @@ func WorkFeedActionRun(result workfeed.ActionResult) AppendInput {
 		EntityID:       result.Item.ID,
 		SessionKey:     result.SessionKey,
 		WorkFeedItemID: result.Item.ID,
-		Payload: WorkFeedActionPayload{
+		Payload: mustRawJSON(WorkFeedActionPayload{
 			Item:           result.Item,
 			Action:         result.Action,
 			SessionKey:     result.SessionKey,
 			Prompt:         result.Prompt,
 			Message:        result.Message,
 			RemoveFromFeed: result.RemoveFromFeed,
-		},
+		}),
 	}
 }
 
@@ -85,6 +85,6 @@ func workFeedItem(typ string, item workfeed.Item) AppendInput {
 		EntityID:       item.ID,
 		SessionKey:     item.SessionKey,
 		WorkFeedItemID: item.ID,
-		Payload:        WorkFeedItemPayload{Item: item},
+		Payload:        mustRawJSON(WorkFeedItemPayload{Item: item}),
 	}
 }

@@ -293,10 +293,14 @@ func (h *Hub) Submit(ctx context.Context, req Request) (Response, error) {
 
 // CallLocalLLM is a backward-compatible wrapper matching pilot.CallLocalLLM's
 // signature. Callers that don't need full Request control use this.
-func (h *Hub) CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
+func (h *Hub) CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...rawJSON) (string, error) {
 	req := SimpleRequest(system, userMessage, maxTokens, PriorityCritical, "calllocal")
-	if len(extraBody) > 0 && extraBody[0] != nil {
-		req.ExtraBody = extraBody[0]
+	if len(extraBody) > 0 && len(extraBody[0]) > 0 {
+		var fields jsonObject
+		if err := json.Unmarshal(extraBody[0], &fields); err != nil {
+			return "", fmt.Errorf("decode localai extra body: %w", err)
+		}
+		req.ExtraBody = fields
 	}
 	resp, err := h.Submit(ctx, req)
 	if err == nil {
@@ -335,7 +339,7 @@ func (h *Hub) CallLocalLLM(ctx context.Context, system, userMessage string, maxT
 // callFallbackRole runs callDirect for a single fallback role. It returns
 // (text, true) on success and ("", false) when the role is unconfigured
 // (nil client) or the call failed.
-func (h *Hub) callFallbackRole(ctx context.Context, role modelrole.Role, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, bool) {
+func (h *Hub) callFallbackRole(ctx context.Context, role modelrole.Role, system, userMessage string, maxTokens int, extraBody ...rawJSON) (string, bool) {
 	client := h.registry.Client(role)
 	if client == nil {
 		return "", false
@@ -502,10 +506,12 @@ func (h *Hub) recordExecutionFailure(err error) {
 }
 
 // callDirect is a raw local AI call for fallback chains (bypasses queue/budget).
-func (h *Hub) callDirect(ctx context.Context, client *llm.Client, providerID, model, system, userMessage string, maxTokens int, extraBody ...map[string]any) (string, error) {
+func (h *Hub) callDirect(ctx context.Context, client *llm.Client, providerID, model, system, userMessage string, maxTokens int, extraBody ...rawJSON) (string, error) {
 	var callerExtra map[string]any
-	if len(extraBody) > 0 {
-		callerExtra = extraBody[0]
+	if len(extraBody) > 0 && len(extraBody[0]) > 0 {
+		if err := json.Unmarshal(extraBody[0], &callerExtra); err != nil {
+			return "", fmt.Errorf("decode localai extra body: %w", err)
+		}
 	}
 	merged := mergeRequestBody(h.registry, providerID, model, callerExtra)
 

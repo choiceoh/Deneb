@@ -15,13 +15,13 @@ const page = (over: Partial<SyncPullResult>): SyncPullResult => ({
 });
 
 describe("resourcesForSyncEventType", () => {
-  it("maps every work-feed event type to the workfeed list", () => {
+  it("when maps every work-feed event type to the workfeed list", () => {
     expect(resourcesForSyncEventType("workfeed.created")).toEqual(["workfeed"]);
     expect(resourcesForSyncEventType("workfeed.updated")).toEqual(["workfeed"]);
     expect(resourcesForSyncEventType("workfeed.action.run")).toEqual(["workfeed"]);
   });
 
-  it("fans calendar changes out to both calendar lists (dashboard + month)", () => {
+  it("when fans calendar changes out to both calendar lists (dashboard + month)", () => {
     expect(resourcesForSyncEventType("calendar.changed")).toEqual(["calendar", "calendar-range"]);
   });
 
@@ -32,7 +32,7 @@ describe("resourcesForSyncEventType", () => {
 });
 
 describe("drainSync", () => {
-  it("drains multiple pages and de-duplicates the affected resources", async () => {
+  it("returns deduplicated resources when draining multiple sync pages", async () => {
     const pages = [
       page({
         events: [

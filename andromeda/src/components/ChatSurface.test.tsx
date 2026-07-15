@@ -41,13 +41,13 @@ describe("ChatComposer", () => {
     expect(fileRef.current).toHaveAttribute("accept", expect.stringContaining(".pdf"));
   });
 
-  it("reports textarea changes", async () => {
+  it("returns textarea changes", async () => {
     const { props } = renderComposer({ input: "" });
     await userEvent.type(screen.getByRole("textbox"), "답");
     expect(props.onInput).toHaveBeenCalledWith("답");
   });
 
-  it("submits a nonblank connected message", async () => {
+  it("when submits a nonblank connected message", async () => {
     const { props } = renderComposer();
 
     await userEvent.click(screen.getByRole("button", { name: "전송" }));
@@ -59,12 +59,12 @@ describe("ChatComposer", () => {
     [false, "질문"],
     [true, ""],
     [true, "   \n\t"],
-  ])("disables send for connected=%s input=%j", (connected, input) => {
+  ])("without send for connected=%s input=%j", (connected, input) => {
     renderComposer({ connected, input });
     expect(screen.getByRole("button", { name: "전송" })).toBeDisabled();
   });
 
-  it.each(["질문", "  질문  "])("enables send for meaningful input %j", (input) => {
+  it.each(["질문", "  질문  "])("allows send for meaningful input %j", (input) => {
     renderComposer({ connected: true, input });
     expect(screen.getByRole("button", { name: "전송" })).toBeEnabled();
   });
@@ -78,13 +78,13 @@ describe("ChatComposer", () => {
     expect(props.onSubmit).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps Shift+Enter for multiline composition", () => {
+  it("preserves Shift+Enter for multiline composition", () => {
     const { props } = renderComposer();
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter", shiftKey: true });
     expect(props.onSubmit).not.toHaveBeenCalled();
   });
 
-  it("does not submit an IME composition confirmation", () => {
+  it("without submit an IME composition confirmation", () => {
     const { props } = renderComposer();
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter", isComposing: true });
     expect(props.onSubmit).not.toHaveBeenCalled();
@@ -97,7 +97,7 @@ describe("ChatComposer", () => {
     expect(props.onSubmit).not.toHaveBeenCalled();
   });
 
-  it("opens the hidden file picker through the attachment affordance", async () => {
+  it("when opens the hidden file picker through the attachment affordance", async () => {
     const { fileRef } = renderComposer();
     const click = vi.spyOn(fileRef.current!, "click");
 
@@ -109,12 +109,12 @@ describe("ChatComposer", () => {
   it.each([
     [false, false],
     [true, true],
-  ])("disables attachment for connected=%s busy=%s", (connected, busy) => {
+  ])("without attachment for connected=%s busy=%s", (connected, busy) => {
     renderComposer({ connected, busy });
     expect(screen.getByRole("button", { name: "파일 첨부" })).toBeDisabled();
   });
 
-  it("forwards file-picker changes", () => {
+  it("when forwards file-picker changes", () => {
     const { props, fileRef } = renderComposer();
     const file = new File(["hello"], "hello.txt", { type: "text/plain" });
 
@@ -124,7 +124,7 @@ describe("ChatComposer", () => {
     expect((props.onPick as ReturnType<typeof vi.fn>).mock.calls[0][0].target.files[0]).toBe(file);
   });
 
-  it("turns pasted files into attachments and suppresses content paste", () => {
+  it("when turns pasted files into attachments and suppresses content paste", () => {
     const { props } = renderComposer();
     const file = new File(["image"], "shot.png", { type: "image/png" });
     const event = new Event("paste", { bubbles: true, cancelable: true });
@@ -136,7 +136,7 @@ describe("ChatComposer", () => {
     expect(props.onAttachFiles).toHaveBeenCalledWith([file]);
   });
 
-  it("leaves ordinary text paste untouched", () => {
+  it("preserves ordinary text paste untouched", () => {
     const { props } = renderComposer();
     const event = new Event("paste", { bubbles: true, cancelable: true });
     Object.defineProperty(event, "clipboardData", { value: { files: [] } });
@@ -147,7 +147,7 @@ describe("ChatComposer", () => {
     expect(props.onAttachFiles).not.toHaveBeenCalled();
   });
 
-  it("shows attachment skip feedback as a live status", () => {
+  it("shows attachment ignores feedback as a live status", () => {
     renderComposer({ note: "big.pdf — 크기 초과" });
     expect(screen.getByRole("status")).toHaveTextContent("big.pdf — 크기 초과");
   });
@@ -166,7 +166,7 @@ describe("ChatComposer", () => {
     expect(props.onStop).toHaveBeenCalledTimes(1);
   });
 
-  it("shows a disabled progress control for non-abortable capture", () => {
+  it("displays a disabled progress control for non-abortable capture", () => {
     renderComposer({ busy: true, stoppable: false });
 
     const progress = screen.getByRole("button", { name: "첨부 분석 중" });
@@ -273,7 +273,7 @@ describe("AssistantBody", () => {
     ["image", "이미지 분석"],
     ["audio", "녹음 전사"],
     ["document", "문서 추출"],
-  ] as const)("labels %s attachment results", (captureKind, label) => {
+  ] as const)("when labels %s attachment results", (captureKind, label) => {
     const attachment: AttachmentPart = {
       kind: "attachment",
       id: "attachment-1",
@@ -370,12 +370,12 @@ describe("AssistantTurnActions", () => {
     [turn({ text: "", parts: [{ kind: "text", text: "부분" }] }), true],
     [turn({ text: "  ", parts: undefined }), false],
     [turn({ text: "답", status: "streaming" }), false],
-  ] as const)("shows print only for completed visible content", (value, expected) => {
+  ] as const)("displays print only for completed visible content", (value, expected) => {
     render(<AssistantTurnActions turn={value} busy={false} onRegenerate={() => {}} />);
     expect(Boolean(screen.queryByRole("button", { name: /인쇄/ }))).toBe(expected);
   });
 
-  it("prints the containing assistant turn", async () => {
+  it("when prints the containing assistant turn", async () => {
     window.print = vi.fn();
     const { container } = render(
       <article className="ai-turn">
@@ -389,7 +389,7 @@ describe("AssistantTurnActions", () => {
     expect(container.querySelector(".ai-turn")).toHaveClass("deneb-print-region");
   });
 
-  it("appends surface-specific actions", () => {
+  it("when appends surface-specific actions", () => {
     render(
       <AssistantTurnActions turn={turn({ text: "답" })} busy={false} onRegenerate={() => {}}>
         <button>노트에 저장</button>

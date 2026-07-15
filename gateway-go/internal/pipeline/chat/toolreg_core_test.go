@@ -22,7 +22,6 @@ func TestRegisterCoreToolsCreatesExpectedToolSet(t *testing.T) {
 		"cron", "gateway", "observe", "fleet", "heartbeat_update",
 		"sessions", "sessions_spawn",
 		"subagents", "fetch_tools",
-		"preference",
 	}
 
 	registered := make(map[string]struct{})

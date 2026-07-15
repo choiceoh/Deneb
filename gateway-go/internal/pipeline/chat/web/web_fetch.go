@@ -21,14 +21,15 @@
 package web
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
 
@@ -40,8 +41,8 @@ var fetchGroup singleflight
 // Tool returns the unified web tool handler (fetch + search + search+fetch).
 // spill (optional) lets the YouTube path offload full transcripts to disk while
 // returning only a summary to the conversation transcript.
-func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill *agent.SpilloverStore) func(context.Context, json.RawMessage) (string, error) {
-	return func(ctx context.Context, input json.RawMessage) (string, error) {
+func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore) toolport.ToolFunc {
+	return func(ctx context.Context, input rawJSON) (string, error) {
 		var p struct {
 			URL      string   `json:"url"`
 			Query    string   `json:"query"`
@@ -118,7 +119,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill *agent.SpilloverSt
 }
 
 // webFetchURL fetches a URL and returns extracted content with metadata envelope.
-func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill *agent.SpilloverStore, targetURL string, maxChars int) (string, error) {
+func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 20000
 	}
@@ -252,7 +253,7 @@ func webFetchViaSerper(ctx context.Context, cache *FetchCache, apiKey, targetURL
 // webParallelSearch runs multiple search queries concurrently and returns
 // combined results. Each query runs independently with optional fetch.
 // This avoids sequential LLM round-trips for multi-constraint questions.
-func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill *agent.SpilloverStore, queries []string, count, fetch, maxChars int) (string, error) {
+func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, queries []string, count, fetch, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 20000
 	}
@@ -298,7 +299,7 @@ func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 
 // webSearchAndFetch searches the web and auto-fetches the top N results.
 // Uses webSearchWithURLs() to get both formatted output and fetchable URLs.
-func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill *agent.SpilloverStore, query string, count, fetchTop, maxChars int) (string, error) {
+func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, query string, count, fetchTop, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 15000
 	}

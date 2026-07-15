@@ -274,10 +274,10 @@ func (r *RunRoot) isClosed() bool {
 	return r.closed
 }
 
-// claimHarness makes one RunRoot single-use at the harness boundary. Directory
+// ClaimHarness makes one RunRoot single-use at the harness boundary. Directory
 // emptiness alone is insufficient: a caller could delete workspace files while
 // leaving transcripts, caches, or device-derived state behind.
-func (r *RunRoot) claimHarness() error {
+func (r *RunRoot) ClaimHarness() error {
 	if r == nil {
 		return ErrRunRootClosed
 	}

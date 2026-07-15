@@ -34,7 +34,7 @@ describe("denebAuthProvider", () => {
     [{ url: "http://gateway.test", token: "" }, false],
     [{ url: "", token: "secret" }, false],
     [connected, true],
-  ] as const)("derives configured state from both credentials: %j", async (cfg, configured) => {
+  ] as const)("when derives configured state from both credentials: %j", async (cfg, configured) => {
     const provider = denebAuthProvider(cfg);
 
     await expect(provider.login({})).resolves.toEqual({ success: configured });
@@ -63,7 +63,7 @@ describe("denebAuthProvider", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("turns gateway health into the Refine identity", async () => {
+  it("when turns gateway health into the Refine identity", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => rpcResponse({ version: "2.7.1", model: "provider/smart" })),
@@ -88,7 +88,7 @@ describe("denebAuthProvider", () => {
   });
 
   it.each([
-    ["network failure", () => Promise.reject(new Error("offline"))],
+    ["network failure", () => Promise.reject(new Error("when offline"))],
     ["bad response", () => Promise.resolve(failedResponse("not ready"))],
   ])("fails identity lookup closed on %s", async (_label, implementation) => {
     vi.stubGlobal("fetch", vi.fn(implementation));
@@ -113,7 +113,7 @@ function drag(types: string[] = ["Files"], files: File[] = []): DragLike {
 }
 
 describe("useFileDrop", () => {
-  it("enters and leaves the visible drop state for file drags", () => {
+  it("enters and preserves the visible drop state for file drags", () => {
     const { result } = renderHook(() => useFileDrop(true, vi.fn()));
     const event = drag();
 
@@ -142,7 +142,7 @@ describe("useFileDrop", () => {
     expect(result.current.over).toBe(false);
   });
 
-  it("never lets the leave depth fall below zero", () => {
+  it("rejects lets the leave depth fall below zero", () => {
     const { result } = renderHook(() => useFileDrop(true, vi.fn()));
     const event = drag();
 
@@ -158,7 +158,7 @@ describe("useFileDrop", () => {
   it.each([
     [true, "copy"],
     [false, "none"],
-  ])("sets drag-over feedback for enabled=%s", (enabled, expected) => {
+  ])("when sets drag-over feedback for enabled=%s", (enabled, expected) => {
     const { result } = renderHook(() => useFileDrop(enabled, vi.fn()));
     const event = drag();
 
@@ -168,7 +168,7 @@ describe("useFileDrop", () => {
     expect(event.dataTransfer?.dropEffect).toBe(expected);
   });
 
-  it("delivers every dropped file in browser order", () => {
+  it("when delivers every dropped file in browser order", () => {
     const onFiles = vi.fn();
     const one = new File(["one"], "one.txt", { type: "text/plain" });
     const two = new File(["two"], "two.pdf", { type: "application/pdf" });
@@ -188,7 +188,7 @@ describe("useFileDrop", () => {
   it.each([
     [false, [new File(["one"], "one.txt")]],
     [true, []],
-  ])("does not deliver files for enabled=%s and count=%i", (enabled, files) => {
+  ])("when does not deliver files for enabled=%s and count=%i", (enabled, files) => {
     const onFiles = vi.fn();
     const { result } = renderHook(() => useFileDrop(enabled, onFiles));
     const event = drag(["Files"], files);
@@ -216,7 +216,7 @@ describe("useFileDrop", () => {
     expect(onFiles).not.toHaveBeenCalled();
   });
 
-  it("guards the window against navigating to a dropped file", () => {
+  it("when guards the window against navigating to a dropped file", () => {
     const { unmount } = renderHook(() => useFileDrop(true, vi.fn()));
     const event = new Event("drop", { bubbles: true, cancelable: true });
     Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"] } });
@@ -231,7 +231,7 @@ describe("useFileDrop", () => {
     expect(afterUnmount.defaultPrevented).toBe(false);
   });
 
-  it("keeps the singleton window guard until the final drop zone unmounts", () => {
+  it("preserves the singleton window guard until the final drop zone unmounts", () => {
     const first = renderHook(() => useFileDrop(true, vi.fn()));
     const second = renderHook(() => useFileDrop(true, vi.fn()));
     first.unmount();
@@ -267,7 +267,7 @@ function scrollElement(overrides: Partial<ScrollElement> = {}): ScrollElement {
 }
 
 describe("useStickyScroll", () => {
-  it("pins a newly attached transcript to its bottom on content change", () => {
+  it("when pins a newly attached transcript to its bottom on content change", () => {
     const { result, rerender } = renderHook(({ turn }) => useStickyScroll([turn]), {
       initialProps: { turn: 0 },
     });
@@ -310,7 +310,7 @@ describe("useStickyScroll", () => {
     expect(result.current.atBottom).toBe(expected);
   });
 
-  it("pin resumes following on the next dependency change", () => {
+  it("when pin resumes following on the next dependency change", () => {
     const { result, rerender } = renderHook(({ turn }) => useStickyScroll([turn]), {
       initialProps: { turn: 0 },
     });
@@ -337,7 +337,7 @@ describe("useStickyScroll", () => {
     expect(result.current.atBottom).toBe(true);
   });
 
-  it("tolerates scroll callbacks before the ref is attached", () => {
+  it("when tolerates scroll callbacks before the ref is attached", () => {
     const { result } = renderHook(() => useStickyScroll([]));
     expect(() => act(() => result.current.onScroll())).not.toThrow();
     expect(() => act(() => result.current.scrollToBottom())).not.toThrow();
@@ -362,7 +362,7 @@ describe("useRpc", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("sets busy synchronously while the request is pending", async () => {
+  it("when sets busy synchronously while the request is pending", async () => {
     let resolve!: (response: Response) => void;
     vi.stubGlobal(
       "fetch",
@@ -400,7 +400,7 @@ describe("useRpc", () => {
   });
 
   it.each([
-    ["network errors", () => Promise.reject(new Error("offline")), "오류: offline"],
+    ["network errors", () => Promise.reject(new Error("when offline")), "오류: offline"],
     ["RPC errors", () => Promise.resolve(failedResponse("permission denied", 403)), "오류: RPC miniapp.test: HTTP 403"],
   ])("turns %s into a failed result", async (_label, implementation, expected) => {
     vi.stubGlobal("fetch", vi.fn(implementation));
@@ -416,7 +416,7 @@ describe("useRpc", () => {
     expect(result.current.busy).toBe(false);
   });
 
-  it("rebinds calls to the latest gateway config", async () => {
+  it("when rebinds calls to the latest gateway config", async () => {
     const fetch = vi.fn(async () => rpcResponse({ ok: true }));
     vi.stubGlobal("fetch", fetch);
     const { result, rerender } = renderHook(({ cfg }) => useRpc(cfg), { initialProps: { cfg: connected } });

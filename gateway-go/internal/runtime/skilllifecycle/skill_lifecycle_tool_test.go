@@ -13,7 +13,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/lifecycletool"
 )
 
 func newSkillLifecycleTestTracker(t *testing.T) *genesis.Tracker {

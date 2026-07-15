@@ -34,7 +34,7 @@ describe("format primitive boundary contracts", () => {
       [false, undefined],
       [null, undefined],
       [{ toString: () => "value" }, undefined],
-    ])("asStr(%o) => %o", (input, expected) => {
+    ])("when asStr(%o) => %o", (input, expected) => {
       expect(asStr(input)).toBe(expected);
     });
 
@@ -57,7 +57,7 @@ describe("format primitive boundary contracts", () => {
       ["true", false],
       [{ valueOf: () => true }, false],
       [null, false],
-    ])("asBool(%o) accepts literal true only", (input, expected) => {
+    ])("when asBool(%o) accepts literal true only", (input, expected) => {
       expect(asBool(input)).toBe(expected);
     });
   });
@@ -69,7 +69,7 @@ describe("format primitive boundary contracts", () => {
       );
     });
 
-    it("does not coerce number, boolean or nested-object fields", () => {
+    it("without coerce number, boolean or nested-object fields", () => {
       expect(firstString({ a: 42, b: true, c: { text: "nested" } }, ["a", "b", "c"])).toBe("");
     });
 
@@ -77,7 +77,7 @@ describe("format primitive boundary contracts", () => {
       expect(firstString(input, ["name"])).toBe("");
     });
 
-    it("respects caller key precedence", () => {
+    it("when respects caller key precedence", () => {
       const value = { title: "Title", name: "Name", email: "email@example.com" };
       expect(firstString(value, ["email", "name", "title"])).toBe("email@example.com");
       expect(firstString(value, ["title", "name", "email"])).toBe("Title");
@@ -92,15 +92,15 @@ describe("format primitive boundary contracts", () => {
       [BigInt(7), "7"],
       [null, ""],
       [undefined, ""],
-    ])("text(%o) => %s", (input, expected) => {
+    ])("when text(%o) => %s", (input, expected) => {
       expect(text(input)).toBe(expected);
     });
 
-    it("uses title only after blank name and email", () => {
+    it("when uses title only after blank name and email", () => {
       expect(text({ name: "", email: " ", title: "Fallback title" })).toBe("Fallback title");
     });
 
-    it("does not leak generic object serialization", () => {
+    it("without leak generic object serialization", () => {
       expect(text({ unknown: "secret" })).toBe("");
       expect(text({ nested: { name: "secret" } })).toBe("");
     });
@@ -108,7 +108,7 @@ describe("format primitive boundary contracts", () => {
 });
 
 describe("sender header edge cases", () => {
-  it("trims whitespace around a bare address", () => {
+  it("when trims whitespace around a bare address", () => {
     expect(senderName("  person@example.com  ")).toBe("person@example.com");
   });
 
@@ -116,16 +116,16 @@ describe("sender header edge cases", () => {
     expect(senderName("   <person@example.com>  ")).toBe("person@example.com");
   });
 
-  it("removes exactly one matching quote pair", () => {
+  it("when removes exactly one matching quote pair", () => {
     expect(senderName('"Kim, Lead" <kim@example.com>')).toBe("Kim, Lead");
     expect(senderName("'Kim' <kim@example.com>")).toBe("'Kim'");
   });
 
-  it("keeps angle brackets that do not form a trailing address header", () => {
+  it("preserves angle brackets that do not form a trailing address header", () => {
     expect(senderName("Team <ops@example.com> trailing")).toBe("Team <ops@example.com> trailing");
   });
 
-  it("supports legacy object title after blank name/email", () => {
+  it("when supports legacy object title after blank name/email", () => {
     expect(senderName({ name: "", email: "", title: "Operations" })).toBe("Operations");
   });
 });
@@ -147,7 +147,7 @@ describe("absolute and relative time boundaries", () => {
     expect(fmtTime(0)).toMatch(/^\d{2}:\d{2}$/);
   });
 
-  it("keeps numeric NaN and Infinity inspectable", () => {
+  it("preserves numeric NaN and Infinity inspectable", () => {
     expect(fmtDate(Number.NaN)).toBe("NaN");
     expect(fmtTime(Number.POSITIVE_INFINITY)).toBe("Infinity");
   });
@@ -159,11 +159,11 @@ describe("absolute and relative time boundaries", () => {
     [59 * 60_000 + 59_999, "59분 전"],
     [60 * 60_000, "1시간 전"],
     [5 * 60 * 60_000 + 59 * 60_000, "5시간 전"],
-  ])("fmtMailDate uses relative copy at age %i", (age, expected) => {
+  ])("when fmtMailDate uses relative copy at age %i", (age, expected) => {
     expect(fmtMailDate(now - age, now)).toBe(expected);
   });
 
-  it("switches to absolute mail date at exactly six hours", () => {
+  it("when switches to absolute mail date at exactly six hours", () => {
     const stamp = now - 6 * 60 * 60_000;
     expect(fmtMailDate(stamp, now)).toBe(fmtDate(stamp));
   });
@@ -177,7 +177,7 @@ describe("absolute and relative time boundaries", () => {
     [now - 86_399_999, "23시간 전"],
     [now - 86_400_000, "1일 전"],
     [now - 3 * 86_400_000, "3일 전"],
-  ])("relativeTime(%i) => %s", (stamp, expected) => {
+  ])("when relativeTime(%i) => %s", (stamp, expected) => {
     expect(relativeTime(stamp)).toBe(expected);
   });
 
@@ -188,12 +188,12 @@ describe("absolute and relative time boundaries", () => {
     },
   );
 
-  it("labels local-day boundaries independently from elapsed hours", () => {
+  it("when labels local-day boundaries independently from elapsed hours", () => {
     expect(dayLabel(new Date(2026, 6, 10, 23, 59).getTime(), now)).toBe("어제");
     expect(dayLabel(new Date(2026, 6, 12, 0, 1).getTime(), now)).toBe("내일");
   });
 
-  it("floors dates before the Unix epoch to their local midnight", () => {
+  it("when floors dates before the Unix epoch to their local midnight", () => {
     const stamp = new Date(1969, 11, 31, 23, 59, 59).getTime();
     expect(startOfDay(stamp)).toBe(new Date(1969, 11, 31).getTime());
   });
@@ -226,7 +226,7 @@ describe("calendar stamp and display boundaries", () => {
     ["2026-07-01 ", false],
     ["2026-07-01T00:00:00", false],
     ["2026-07-01", true],
-  ])("uses strict YYYY-MM-DD all-day detection for %s", (value, allDay) => {
+  ])("when uses strict YYYY-MM-DD all-day detection for %s", (value, allDay) => {
     expect(calStamp(value).allDay).toBe(allDay);
   });
 
@@ -234,7 +234,7 @@ describe("calendar stamp and display boundaries", () => {
     expect(eventTitle({ id: "empty", summary: "", title: "legacy" })).toBe("");
   });
 
-  it("falls back from undefined summary to legacy title and then placeholder", () => {
+  it("when falls back from undefined summary to legacy title and then placeholder", () => {
     expect(eventTitle({ id: "legacy", title: "legacy" })).toBe("legacy");
     expect(eventTitle({ id: "missing" })).toBe("(제목 없음)");
   });
@@ -254,7 +254,7 @@ describe("calendar stamp and display boundaries", () => {
     expect(monthLabel(2026, -1)).toBe(monthLabel(2025, 11));
   });
 
-  it("uses non-padded local components in day keys", () => {
+  it("when uses non-padded local components in day keys", () => {
     expect(dayKey(new Date(2026, 0, 2))).toBe("2026-1-2");
     expect(dayKey(new Date(1999, 11, 31))).toBe("1999-12-31");
   });
@@ -292,11 +292,11 @@ describe("event coverage and termination safety", () => {
     expect(new Set(keys).size).toBe(62);
   });
 
-  it("covers timed events crossing local midnight on both days", () => {
+  it("when covers timed events crossing local midnight on both days", () => {
     expect(eventDayKeys("2026-07-11T23:55:00", "2026-07-12T00:05:00")).toEqual(["2026-7-11", "2026-7-12"]);
   });
 
-  it("treats same-instant timed event as a single day", () => {
+  it("when treats same-instant timed event as a single day", () => {
     expect(eventDayKeys("2026-07-11T10:00:00", "2026-07-11T10:00:00")).toEqual(["2026-7-11"]);
   });
 
@@ -319,7 +319,7 @@ describe("month matrix invariants", () => {
     [2024, 1, 29],
     [2026, 3, 30],
     [2026, 6, 31],
-  ])("covers every date in %i-%i (%i days)", (year, month0, days) => {
+  ])("when covers every date in %i-%i (%i days)", (year, month0, days) => {
     const cells = monthMatrix(year, month0).flat();
     const keys = new Set(cells.map(dayKey));
     for (let day = 1; day <= days; day++) expect(keys).toContain(`${year}-${month0 + 1}-${day}`);
@@ -351,7 +351,7 @@ describe("month matrix invariants", () => {
 
 describe("error text normalization", () => {
   it.each([
-    [new Error("boom"), "boom"],
+    [new Error("when boom"), "when boom"],
     [{ message: 42 }, "42"],
     [{ message: null }, "null"],
     [404, "404"],

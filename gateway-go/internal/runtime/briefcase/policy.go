@@ -170,7 +170,7 @@ func (p *Policy) WriteLimit(path string) (int64, error) {
 	return int64(casepack.MaxArtifactBytesV1), nil
 }
 
-func (p *Policy) lockMutation() func() {
+func (p *Policy) LockMutation() func() {
 	p.mutationMu.Lock()
 	return p.mutationMu.Unlock
 }

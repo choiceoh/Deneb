@@ -22,7 +22,7 @@ class JSONParsingTests(unittest.TestCase):
             {"winner": "A", "meta": {"source": "judge"}},
         )
 
-    def test_fenced_or_prefixed_simple_object_is_extracted(self) -> None:
+    def test_when_fenced_or_prefixed_simple_object_is_extracted(self) -> None:
         self.assertEqual(
             judge._parse_json('```json\n{"helpfulness":8}\n```'),
             {"helpfulness": 8},
@@ -74,7 +74,7 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(payload["temperature"], 0.0)
         self.assertEqual(payload["max_tokens"], 256)
 
-    def test_openai_compatible_request_shape_and_response_path(self) -> None:
+    def test_when_openai_compatible_request_shape_and_response_path(self) -> None:
         captured = {}
 
         def urlopen(request, timeout):
@@ -102,7 +102,7 @@ class TransportTests(unittest.TestCase):
             {"role": "user", "content": "user"},
         ])
 
-    def test_route_selects_anthropic_or_openai_compat_from_api_base(self) -> None:
+    def test_when_route_selects_anthropic_or_openai_compat_from_api_base(self) -> None:
         with mock.patch.dict(judge.os.environ, {
             "JUDGE_API_KEY": "key",
             "JUDGE_MODEL": "model",
@@ -150,7 +150,7 @@ class AbsoluteScoringTests(unittest.TestCase):
                 with mock.patch.dict(judge.os.environ, env, clear=True):
                     self.assertEqual(judge.judge_available(), expected)
 
-    def test_dimension_values_are_defaulted_integer_converted_and_clamped(self) -> None:
+    def test_when_dimension_values_are_defaulted_integer_converted_and_clamped(self) -> None:
         raw = json.dumps({
             "helpfulness": -4,
             "accuracy": 12,
@@ -188,7 +188,7 @@ class AbsoluteScoringTests(unittest.TestCase):
         self.assertEqual(second, judge._DEFAULT_SCORES)
         self.assertEqual(second["accuracy"], 5)
 
-    def test_overall_score_maps_all_zero_to_zero_and_all_ten_to_hundred(self) -> None:
+    def test_when_overall_score_maps_all_zero_to_zero_and_all_ten_to_hundred(self) -> None:
         for value, expected in ((0, 0.0), (10, 100.0)):
             with self.subTest(value=value):
                 scores = {dimension: value for dimension in judge._DIMENSIONS}
@@ -230,7 +230,7 @@ class PairwiseScoringTests(unittest.TestCase):
 
 
 class CLIContractTests(unittest.TestCase):
-    def test_check_mode_exit_and_output_follow_availability(self) -> None:
+    def test_when_check_mode_exit_and_output_follow_availability(self) -> None:
         for available, expected_rc, marker in (
             (True, 0, "yes"),
             (False, 1, "no"),
@@ -275,7 +275,7 @@ class CLIContractTests(unittest.TestCase):
         ])
         absolute.assert_called_once_with("q", "a", "exec")
 
-    def test_pairwise_cli_maps_winner_to_fixed_metric(self) -> None:
+    def test_when_pairwise_cli_maps_winner_to_fixed_metric(self) -> None:
         for winner, expected in (("A", 100), ("tie", 50), ("B", 0)):
             with self.subTest(winner=winner):
                 result = {"winner": winner, "confidence": 0.75, "reason": "fixture"}
@@ -290,7 +290,7 @@ class CLIContractTests(unittest.TestCase):
                 self.assertEqual(stdout.splitlines()[0], f"metric_value={expected}")
                 self.assertIn("confidence=0.75 reason=fixture", stdout)
 
-    def test_real_help_entrypoint_lists_all_modes(self) -> None:
+    def test_when_real_help_entrypoint_lists_all_modes(self) -> None:
         proc = subprocess.run(
             [sys.executable, judge.__file__, "--help"],
             capture_output=True,

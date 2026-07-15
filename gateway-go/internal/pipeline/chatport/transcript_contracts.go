@@ -7,7 +7,7 @@ import "encoding/json"
 // content-block arrays without depending on an LLM provider package.
 type ChatMessage struct {
 	Role        string           `json:"role"`
-	Content     json.RawMessage  `json:"content,omitempty"`
+	Content     rawJSON  `json:"content,omitempty"`
 	Attachments []ChatAttachment `json:"attachments,omitempty"`
 	Timestamp   int64            `json:"timestamp,omitempty"`
 	ParentID    string           `json:"parentId,omitempty"`
@@ -57,7 +57,7 @@ func (m *ChatMessage) HasContent() bool {
 }
 
 // MarshalJSONString returns s as a JSON-encoded string.
-func MarshalJSONString(s string) json.RawMessage {
+func MarshalJSONString(s string) rawJSON {
 	data, _ := json.Marshal(s)
 	return data
 }

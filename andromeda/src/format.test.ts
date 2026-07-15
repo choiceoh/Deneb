@@ -23,7 +23,7 @@ describe("text", () => {
   it("falls back past an empty name to the email", () => {
     expect(text({ name: "", email: "person@example.com" })).toBe("person@example.com");
   });
-  it("prefers a present name", () => {
+  it("when prefers a present name", () => {
     expect(text({ name: "Kim", email: "k@e.com" })).toBe("Kim");
   });
   it("is empty for null/empty objects", () => {
@@ -33,7 +33,7 @@ describe("text", () => {
 });
 
 describe("senderName", () => {
-  it('drops the address from a "Name <addr>" header', () => {
+  it('when drops the address from a "Name <addr>" header', () => {
     expect(senderName("홍길동 <hong@x.com>")).toBe("홍길동");
     expect(senderName("Andromeda Team <team@andromeda.io>")).toBe("Andromeda Team");
   });
@@ -44,7 +44,7 @@ describe("senderName", () => {
     expect(senderName("hong@x.com")).toBe("hong@x.com");
     expect(senderName("<hong@x.com>")).toBe("hong@x.com");
   });
-  it("handles the legacy { name, email } object (name, else email)", () => {
+  it("when handles the legacy { name, email } object (name, else email)", () => {
     expect(senderName({ name: "Kim", email: "k@e.com" })).toBe("Kim");
     expect(senderName({ name: "", email: "k@e.com" })).toBe("k@e.com");
   });
@@ -80,13 +80,13 @@ describe("fmtTime", () => {
 
 describe("dayLabel", () => {
   const now = new Date(2026, 5, 24, 15, 0).getTime(); // local 2026-06-24 15:00
-  it("labels the current local day 오늘", () => {
+  it("when labels the current local day 오늘", () => {
     expect(dayLabel(new Date(2026, 5, 24, 8, 0).getTime(), now)).toBe("오늘");
   });
-  it("labels the previous local day 어제", () => {
+  it("when labels the previous local day 어제", () => {
     expect(dayLabel(new Date(2026, 5, 23, 23, 0).getTime(), now)).toBe("어제");
   });
-  it("labels the next local day 내일", () => {
+  it("when labels the next local day 내일", () => {
     expect(dayLabel(new Date(2026, 5, 25, 1, 0).getTime(), now)).toBe("내일");
   });
   it("gives an absolute label (with the day number) for other days", () => {
@@ -102,7 +102,7 @@ describe("dayLabel", () => {
 });
 
 describe("startOfDay", () => {
-  it("floors a timed stamp to local midnight", () => {
+  it("when floors a timed stamp to local midnight", () => {
     const ms = new Date(2026, 5, 24, 15, 30, 45).getTime();
     expect(startOfDay(ms)).toBe(new Date(2026, 5, 24, 0, 0, 0, 0).getTime());
   });
@@ -110,7 +110,7 @@ describe("startOfDay", () => {
     const midnight = new Date(2026, 5, 24).getTime();
     expect(startOfDay(midnight)).toBe(midnight);
   });
-  it("defaults to today's local midnight", () => {
+  it("when defaults to today's local midnight", () => {
     const n = new Date();
     expect(startOfDay()).toBe(new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime());
   });
@@ -118,20 +118,20 @@ describe("startOfDay", () => {
 
 describe("fmtMailDate", () => {
   const now = new Date("2026-06-23T12:00:00Z").getTime();
-  it("shows '방금' under a minute", () => {
+  it("displays '방금' under a minute", () => {
     expect(fmtMailDate(new Date(now - 30_000).toISOString(), now)).toBe("방금");
   });
-  it("shows minutes under an hour", () => {
+  it("displays minutes under an hour", () => {
     expect(fmtMailDate(new Date(now - 45 * 60_000).toISOString(), now)).toBe("45분 전");
   });
   it("shows hours within six hours", () => {
     expect(fmtMailDate(new Date(now - 3 * 3_600_000).toISOString(), now)).toBe("3시간 전");
   });
-  it("falls back to the absolute date at/after six hours", () => {
+  it("when falls back to the absolute date at/after six hours", () => {
     const v = new Date(now - 6 * 3_600_000).toISOString();
     expect(fmtMailDate(v, now)).toBe(fmtDate(v));
   });
-  it("falls back to the absolute date for future timestamps", () => {
+  it("when falls back to the absolute date for future timestamps", () => {
     const v = new Date(now + 3_600_000).toISOString();
     expect(fmtMailDate(v, now)).toBe(fmtDate(v));
   });
@@ -142,11 +142,11 @@ describe("fmtMailDate", () => {
 });
 
 describe("calStamp", () => {
-  it("flags { date } and bare YYYY-MM-DD as all-day", () => {
+  it("when flags { date } and bare YYYY-MM-DD as all-day", () => {
     expect(calStamp({ date: "2026-06-17" })).toEqual({ iso: "2026-06-17", allDay: true });
     expect(calStamp("2026-06-17")).toEqual({ iso: "2026-06-17", allDay: true });
   });
-  it("flags { dateTime } and full ISO as timed", () => {
+  it("when flags { dateTime } and full ISO as timed", () => {
     expect(calStamp({ dateTime: "2026-06-17T10:00:00Z" })).toEqual({ iso: "2026-06-17T10:00:00Z", allDay: false });
     expect(calStamp("2026-06-17T10:00:00Z").allDay).toBe(false);
   });
@@ -158,7 +158,7 @@ describe("calSpan", () => {
     expect(span).not.toContain("~");
     expect(span).toContain("17");
   });
-  it("steps back Google's exclusive all-day end.date", () => {
+  it("when steps back Google's exclusive all-day end.date", () => {
     const span = calSpan({ date: "2026-06-17" }, { date: "2026-06-20" });
     expect(span).toContain("~");
     expect(span).toContain("19"); // 20 is exclusive → last inclusive day is 19
@@ -187,10 +187,10 @@ describe("eventDayKeys", () => {
   it("is a single day for a timed event without an end", () => {
     expect(eventDayKeys("2026-06-18T05:00:00", undefined)).toEqual(["2026-6-18"]);
   });
-  it("spans all-day events, stepping back the exclusive end.date", () => {
+  it("when spans all-day events, stepping back the exclusive end.date", () => {
     expect(eventDayKeys({ date: "2026-06-22" }, { date: "2026-06-24" })).toEqual(["2026-6-22", "2026-6-23"]);
   });
-  it("is one day for a single all-day event (end is exclusive)", () => {
+  it("when is one day for a single all-day event (end is exclusive)", () => {
     expect(eventDayKeys({ date: "2026-06-22" }, { date: "2026-06-23" })).toEqual(["2026-6-22"]);
   });
   it("is empty when the start is missing", () => {
@@ -202,7 +202,7 @@ describe("eventEndMs", () => {
   it("returns the end instant for a timed event", () => {
     expect(eventEndMs("2026-06-17T10:00:00Z", "2026-06-17T11:00:00Z")).toBe(Date.parse("2026-06-17T11:00:00Z"));
   });
-  it("treats the exclusive all-day end.date as the over-instant (local midnight)", () => {
+  it("when treats the exclusive all-day end.date as the over-instant (local midnight)", () => {
     expect(eventEndMs({ date: "2026-06-22" }, { date: "2026-06-23" })).toBe(new Date(2026, 5, 23).getTime());
   });
   it("ends an all-day event with no end at the next local midnight", () => {

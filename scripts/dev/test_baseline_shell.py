@@ -95,7 +95,7 @@ class BaselineShellTests(unittest.TestCase):
         proc = run_baseline("save", self.env)
         self.assertEqual(proc.returncode, 1)
         self.assertIn(f"ERROR: no result file found at {RESULT_FILE}", proc.stdout)
-        self.assertIn("Run scripts/dev/iterate.sh first", proc.stdout)
+        self.assertIn("Run scripts/iterate.sh first", proc.stdout)
         self.assertFalse(self.baseline.exists())
 
     def test_save_preserves_result_and_adds_stable_branch_metadata(self) -> None:
@@ -125,7 +125,7 @@ class BaselineShellTests(unittest.TestCase):
         self.assertEqual(proc.stdout.strip(), "no baseline for branch feature_health")
         self.assertFalse(self.baseline.exists())
 
-    def test_show_reports_counts_latency_quality_and_metadata(self) -> None:
+    def test_displays_reports_counts_latency_quality_and_metadata(self) -> None:
         saved = result(
             [("health", True), ("ready", False), ("chat", True)],
             quality={"substance": 88, "safe": True},
@@ -182,7 +182,7 @@ class BaselineShellTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 1)
         self.assertIn(f"ERROR: no current result at {RESULT_FILE}", proc.stdout)
 
-    def test_compare_improvements_and_small_drops_do_not_regress(self) -> None:
+    def test_when_compare_improvements_and_small_drops_do_not_regress(self) -> None:
         base = result(
             [("health", True), ("ready", False)],
             quality={"korean": 70, "minor": 50, "safe": True},
@@ -211,7 +211,7 @@ class BaselineShellTests(unittest.TestCase):
         self.assertIn("baseline: base123 (then)", proc.stdout)
         self.assertIn("REGRESSION: (none)", proc.stdout)
 
-    def test_compare_detects_metric_quality_boolean_and_latency_regressions(self) -> None:
+    def test_when_compare_detects_metric_quality_boolean_and_latency_regressions(self) -> None:
         base = result(
             [("health", True), ("ready", True), ("chat", True)],
             quality={"quality": 90, "safe": True},

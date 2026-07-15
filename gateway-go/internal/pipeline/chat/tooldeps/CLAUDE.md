@@ -6,6 +6,9 @@ dependency bag을 소유한다. `toolport/`의 안정 실행 계약과 분리해
 
 ## 진입점과 책임
 
+- `deps.go` — `CoreToolDeps`, `ProcessDeps`, `SessionDeps`, `ChronoDeps`,
+  `WikiDeps`, `NotebookDeps`, `ContactsDeps`, `CalendarDeps`, `FleetDeps`
+- Ports in `deps.go`: `SpilloverStore`, `AgentLogStats`, `ContactsBook`
 - `CoreToolDeps`는 composition root가 `toolreg.RegisterCoreTools`에 넘기는
   최상위 bag이다.
 - `ProcessDeps`, `SessionDeps`, `ChronoDeps`, `WikiDeps`, `NotebookDeps`,
@@ -29,4 +32,4 @@ dependency bag을 소유한다. `toolport/`의 안정 실행 계약과 분리해
 
 도구 wiring 계약을 바꿨다면 다음을 우선 실행한다.
 
-`cd gateway-go && go test -count=1 ./internal/pipeline/chat/toolreg ./internal/pipeline/chat/tools/...`
+`cd gateway-go && go test -count=1 ./internal/pipeline/chat/tooldeps`

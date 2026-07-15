@@ -16,6 +16,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 	casepack "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -395,6 +396,7 @@ func TestChatHarnessRunsActualHandlerWithFrozenWorld(t *testing.T) {
 	}
 	harness, err := NewChatHarness(ChatHarnessConfig{
 		Pack: pack, Root: root, Client: llm.NewClient(server.URL, "test-key"), Model: "test-model",
+			TokenEstimate: tokenest.EstimateUncalibrated,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -461,6 +463,7 @@ func TestChatHarnessIgnoresProcessGlobalMarketTokens(t *testing.T) {
 	defer root.Close()
 	harness, err := NewChatHarness(ChatHarnessConfig{
 		Pack: pack, Root: root, Client: llm.NewClient(server.URL, "test-key"), Model: "test-model",
+			TokenEstimate: tokenest.EstimateUncalibrated,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -499,6 +502,7 @@ func TestChatHarnessRejectsOversizedToolBatchBeforeGate(t *testing.T) {
 	defer root.Close()
 	harness, err := NewChatHarness(ChatHarnessConfig{
 		Pack: pack, Root: root, Client: llm.NewClient(server.URL, "test-key"), Model: "test-model",
+			TokenEstimate: tokenest.EstimateUncalibrated,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -551,7 +555,8 @@ func TestChatHarnessReportsTwoArmsWithoutCrossRunCollisions(t *testing.T) {
 		}
 		harness, err := NewChatHarness(ChatHarnessConfig{
 			Pack: pack, Root: root, Client: llm.NewClient(server.URL, "test-key"), Model: "test-model", Arm: arm,
-		})
+				TokenEstimate: tokenest.EstimateUncalibrated,
+	})
 		if err != nil {
 			_ = root.Close()
 			t.Fatal(err)
@@ -614,13 +619,16 @@ func TestChatHarnessRejectsInvalidInputBeforeClaimingRunRoot(t *testing.T) {
 	defer root.Close()
 	client := llm.NewClient("http://127.0.0.1:1", "")
 
-	if _, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client}); err == nil || !strings.Contains(err.Error(), "model is required") {
+	if _, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client		TokenEstimate: tokenest.EstimateUncalibrated,
+	}); err == nil || !strings.Contains(err.Error(), "model is required") {
 		t.Fatalf("missing model error = %v", err)
 	}
-	if _, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test", Arm: Arm("unsupported")}); err == nil || !strings.Contains(err.Error(), "unsupported arm") {
+	if _, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test", Arm: Arm("unsupported")		TokenEstimate: tokenest.EstimateUncalibrated,
+	}); err == nil || !strings.Contains(err.Error(), "unsupported arm") {
 		t.Fatalf("unsupported arm error = %v", err)
 	}
-	harness, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test"})
+	harness, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test"		TokenEstimate: tokenest.EstimateUncalibrated,
+	})
 	if err != nil {
 		t.Fatalf("valid construction after pre-claim validation failures: %v", err)
 	}
@@ -635,7 +643,8 @@ func TestChatHarnessRejectsRunRootReuseAcrossArms(t *testing.T) {
 	}
 	defer root.Close()
 	client := llm.NewClient("http://127.0.0.1:1", "")
-	first, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test", Arm: ArmRawPrimary})
+	first, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test", Arm: ArmRawPrimary		TokenEstimate: tokenest.EstimateUncalibrated,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -647,7 +656,8 @@ func TestChatHarnessRejectsRunRootReuseAcrossArms(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(paths.Workspace, "output")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test", Arm: ArmMemoryAssisted}); !errors.Is(err, ErrRunRootClaimed) {
+	if _, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test", Arm: ArmMemoryAssisted		TokenEstimate: tokenest.EstimateUncalibrated,
+	}); !errors.Is(err, ErrRunRootClaimed) {
 		t.Fatalf("reused RunRoot error = %v, want single-use claim rejection", err)
 	}
 }
@@ -662,6 +672,7 @@ func TestChatHarnessHashesCallerSessionKeyAndRejectsAbnormalStops(t *testing.T) 
 	harness, err := NewChatHarness(ChatHarnessConfig{
 		Pack: pack, Root: root, Client: llm.NewClient("http://127.0.0.1:1", ""), Model: "test",
 		SessionKey: "../../../../outside/session",
+			TokenEstimate: tokenest.EstimateUncalibrated,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -690,6 +701,7 @@ func TestChatHarnessRejectsMissingDevicePlanSource(t *testing.T) {
 	defer root.Close()
 	if _, err := NewChatHarness(ChatHarnessConfig{
 		Pack: pack, Root: root, Client: llm.NewClient("http://127.0.0.1:1", ""), Model: "test",
+			TokenEstimate: tokenest.EstimateUncalibrated,
 	}); err == nil || !strings.Contains(err.Error(), "must be loaded") {
 		t.Fatalf("missing signed device plan error = %v", err)
 	}
@@ -707,6 +719,7 @@ func TestChatHarnessRejectsMissingDevicePlanSource(t *testing.T) {
 	if _, err := NewChatHarness(ChatHarnessConfig{
 		Pack: pack, Root: root, Client: llm.NewClient("http://127.0.0.1:1", ""), Model: "test",
 		DevicePlanSource: data, DevicePlanSourceSHA256: role.SHA256,
+			TokenEstimate: tokenest.EstimateUncalibrated,
 	}); !errors.Is(err, ErrRunRootClaimed) {
 		t.Fatalf("post-claim device-plan retry error = %v, want ErrRunRootClaimed", err)
 	}
@@ -718,6 +731,7 @@ func TestChatHarnessRejectsMissingDevicePlanSource(t *testing.T) {
 	harness, err := NewChatHarness(ChatHarnessConfig{
 		Pack: pack, Root: configuredRoot, Client: llm.NewClient("http://127.0.0.1:1", ""), Model: "test",
 		DevicePlanSource: data, DevicePlanSourceSHA256: role.SHA256,
+			TokenEstimate: tokenest.EstimateUncalibrated,
 	})
 	if err != nil {
 		t.Fatalf("configured signed device plan: %v", err)
@@ -740,6 +754,7 @@ func TestChatHarnessConstructionFailureLeavesRunRootCleanable(t *testing.T) {
 	}
 	if _, err := NewChatHarness(ChatHarnessConfig{
 		Pack: pack, Root: root, Client: llm.NewClient("http://127.0.0.1:1", ""), Model: "test",
+			TokenEstimate: tokenest.EstimateUncalibrated,
 	}); err == nil || !strings.Contains(err.Error(), "transcript path must be a real directory") {
 		t.Fatalf("transcript setup error = %v", err)
 	}

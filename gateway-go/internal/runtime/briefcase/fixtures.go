@@ -19,9 +19,7 @@ import (
 	casepack "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolreg"
-	chatfs "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/filesystem"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 )
 
 type FixtureRegistryConfig struct {
@@ -67,16 +65,27 @@ func NewFixtureRegistry(cfg FixtureRegistryConfig) (*chat.ToolRegistry, error) {
 		advertised[def.Name] = struct{}{}
 	}
 	fsDefs := chat.NewToolRegistry()
-	toolreg.RegisterFileTools(fsDefs, workspace)
+	toolwire.RegisterFileTools(fsDefs, workspace)
+	var readFn, writeFn, editFn chat.ToolFunc
 	for _, def := range fsDefs.Definitions() {
 		switch def.Name {
 		case "read":
-			def.Fn = guardedRead(workspace, cfg.Policy)
+			readFn = def.Fn
 		case "write":
-			def.Fn = guardedOutputMutation(workspace, cfg.Policy, "write", chatfs.ToolWrite(workspace))
+			writeFn = def.Fn
+		case "edit":
+			editFn = def.Fn
+		}
+	}
+	for _, def := range fsDefs.Definitions() {
+		switch def.Name {
+		case "read":
+			def.Fn = guardedRead(workspace, cfg.Policy, readFn)
+		case "write":
+			def.Fn = guardedOutputMutation(workspace, cfg.Policy, "write", writeFn)
 		case "edit":
 			def.InputSchema = briefcaseEditSchema()
-			def.Fn = guardedOutputMutation(workspace, cfg.Policy, "edit", chatfs.ToolEdit(workspace))
+			def.Fn = guardedOutputMutation(workspace, cfg.Policy, "edit", editFn)
 		case "grep":
 			def.InputSchema = pureGrepFixtureSchema()
 			def.Fn = pureGrep(workspace, cfg.Policy)
@@ -122,16 +131,16 @@ func toolAdvertised(policy casepack.ToolPolicy, approval ApprovalFunc, name stri
 }
 
 func fixtureToolSchemaDigest(registry *chat.ToolRegistry) (string, error) {
-	preset := toolpreset.PresetBriefcase
+	preset := toolwire.PresetBriefcase
 	return toolSchemaDigest(
 		registry,
 		preset,
-		toolpreset.AllowedTools(preset),
-		toolpreset.PreloadedDeferredTools(preset),
+		toolwire.AllowedTools(preset),
+		toolwire.PreloadedDeferredTools(preset),
 	)
 }
 
-func toolSchemaDigest(registry *chat.ToolRegistry, preset toolpreset.Preset, allowed map[string]struct{}, preloaded []string) (string, error) {
+func toolSchemaDigest(registry *chat.ToolRegistry, preset string, allowed map[string]struct{}, preloaded []string) (string, error) {
 	if registry == nil {
 		return "", errors.New("briefcase: tool registry is required")
 	}
@@ -177,7 +186,7 @@ func toolSchemaDigest(registry *chat.ToolRegistry, preset toolpreset.Preset, all
 		Allowed   []string     `json:"allowed"`
 		Preloaded []string     `json:"preloaded"`
 		Tools     []digestTool `json:"tools"`
-	}{Preset: string(preset), Allowed: allowedNames, Preloaded: preloaded, Tools: tools})
+	}{Preset: preset, Allowed: allowedNames, Preloaded: preloaded, Tools: tools})
 	if err != nil {
 		return "", fmt.Errorf("briefcase: encode tool schema fingerprint: %w", err)
 	}
@@ -471,8 +480,7 @@ func kindAllowed(kind casepack.SourceKind, allowed []casepack.SourceKind) bool {
 	return false
 }
 
-func guardedRead(workspace string, policy *Policy) chat.ToolFunc {
-	base := chatfs.ToolRead(workspace)
+func guardedRead(workspace string, policy *Policy, base chat.ToolFunc) chat.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -516,7 +524,7 @@ func guardedOutputMutation(workspace string, policy *Policy, mode string, base c
 		if err := rejectMutationFixtureFields(input, mode); err != nil {
 			return "", err
 		}
-		unlock := policy.lockMutation()
+		unlock := policy.LockMutation()
 		defer unlock()
 		var params struct {
 			FilePath string `json:"file_path"`

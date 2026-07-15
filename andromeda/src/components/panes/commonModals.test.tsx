@@ -18,13 +18,13 @@ describe("OneFieldModal", () => {
     return props;
   }
 
-  it("labels the dialog and its single field", () => {
+  it("when labels the dialog and its single field", () => {
     renderModal();
     expect(screen.getByRole("dialog", { name: "파일 이동" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "새 경로" })).toBeInTheDocument();
   });
 
-  it("focuses the field for immediate typing", () => {
+  it("when focuses the field for immediate typing", () => {
     renderModal();
     expect(screen.getByRole("textbox", { name: "새 경로" })).toHaveFocus();
   });
@@ -34,18 +34,18 @@ describe("OneFieldModal", () => {
     expect(screen.getByRole("textbox")).toHaveValue("projects/old.md");
   });
 
-  it.each(["", " ", "\n\t"])("disables the action for blank value %j", (initialValue) => {
+  it.each(["", " ", "\n\t"])("without the action for blank value %j", (initialValue) => {
     renderModal({ initialValue });
     expect(screen.getByRole("button", { name: "이동" })).toBeDisabled();
   });
 
-  it("enables the action after meaningful input", async () => {
+  it("when enables the action after meaningful input", async () => {
     renderModal();
     await userEvent.type(screen.getByRole("textbox"), "projects/new.md");
     expect(screen.getByRole("button", { name: "이동" })).toBeEnabled();
   });
 
-  it("submits the exact field value", async () => {
+  it("when submits the exact field value", async () => {
     const props = renderModal({ initialValue: "  projects/new.md  " });
     await userEvent.click(screen.getByRole("button", { name: "이동" }));
     expect(props.onSubmit).toHaveBeenCalledWith("  projects/new.md  ");
@@ -67,12 +67,12 @@ describe("OneFieldModal", () => {
     expect(props.onSubmit).not.toHaveBeenCalled();
   });
 
-  it("uses the requested dialog width", () => {
+  it("when uses the requested dialog width", () => {
     renderModal({ width: 640 });
     expect(screen.getByRole("dialog")).toHaveStyle({ width: "640px" });
   });
 
-  it.each(["이동", "병합", "생성", "이름 변경"])("uses caller action copy %s", (action) => {
+  it.each(["이동", "병합", "생성", "이름 변경"])("when uses caller action copy %s", (action) => {
     renderModal({ action, initialValue: "value" });
     expect(screen.getByRole("button", { name: action })).toBeEnabled();
   });
@@ -91,18 +91,18 @@ describe("DeleteModal", () => {
     return props;
   }
 
-  it("names the dialog and shows the exact path", () => {
+  it("names the dialog and displays the exact path", () => {
     renderDelete();
     expect(screen.getByRole("dialog", { name: "파일 삭제" })).toBeInTheDocument();
     expect(screen.getByText("projects/obsolete.md")).toBeInTheDocument();
   });
 
-  it("uses compact confirmation width", () => {
+  it("when uses compact confirmation width", () => {
     renderDelete();
     expect(screen.getByRole("dialog")).toHaveStyle({ width: "420px" });
   });
 
-  it("confirms deletion", async () => {
+  it("when confirms deletion", async () => {
     const props = renderDelete();
     await userEvent.click(screen.getByRole("button", { name: "삭제" }));
     expect(props.onDelete).toHaveBeenCalledTimes(1);

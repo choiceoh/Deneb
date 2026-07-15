@@ -23,7 +23,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 	"github.com/choiceoh/deneb/gateway-go/pkg/toolmeta"
 )
 
@@ -53,7 +53,7 @@ func activateSkillRequiredTools(ctx context.Context, registry *ToolRegistry, ski
 	}
 	// Same preset gate as fetch_tools: a restricted run must not activate a
 	// tool Execute would reject anyway. nil allowed = no restriction.
-	allowed := toolpreset.AllowedTools(toolpreset.Preset(toolport.ToolPresetFromContext(ctx)))
+	allowed := toolwire.AllowedTools(toolport.ToolPresetFromContext(ctx))
 	var names []string
 	for _, name := range required {
 		if _, ok := registry.DeferredToolDef(name); !ok {

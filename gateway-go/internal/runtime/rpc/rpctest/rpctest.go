@@ -54,15 +54,14 @@ func MustErr(t *testing.T, resp *protocol.ResponseFrame) {
 	}
 }
 
-// Result unmarshals resp.Payload into a map[string]any and fails the
-// test on error.
-func Result(t *testing.T, resp *protocol.ResponseFrame) map[string]any {
+// Result unmarshals resp.Payload into T and fails the test on error.
+func Result[T any](t *testing.T, resp *protocol.ResponseFrame) T {
 	t.Helper()
-	var m map[string]any
-	if err := json.Unmarshal(resp.Payload, &m); err != nil {
+	var out T
+	if err := json.Unmarshal(resp.Payload, &out); err != nil {
 		t.Fatalf("unmarshal result: %v", err)
 	}
-	return m
+	return out
 }
 
 // NewLogger returns a quiet logger suitable for tests (error-level only).

@@ -106,7 +106,7 @@ describe("WikiPane", () => {
     expect(createParams).not.toHaveProperty("path");
   });
 
-  it("browses the folder tree: expand, drill into project slots, open a page", async () => {
+  it("when browses the folder tree: expand, drill into project slots, open a page", async () => {
     renderWithProviders(<WikiPane />, { connected: true });
 
     // Root shows top-level folders with recursive counts; children stay hidden.
@@ -136,7 +136,7 @@ describe("WikiPane", () => {
     expect(screen.queryByRole("button", { name: "대표" })).not.toBeInTheDocument();
   });
 
-  it("switches to recent diary and back to the tree", async () => {
+  it("when switches to recent diary and back to the tree", async () => {
     renderWithProviders(<WikiPane />, { connected: true });
 
     await userEvent.click(screen.getByRole("button", { name: "최근 일지" }));
@@ -146,7 +146,7 @@ describe("WikiPane", () => {
     expect(await screen.findByRole("button", { name: /프로젝트\s*3/ })).toBeInTheDocument();
   });
 
-  it("moves the selected page by clicking a destination category", async () => {
+  it("when moves the selected page by clicking a destination category", async () => {
     renderWithProviders(<WikiPane />, { connected: true });
 
     await userEvent.type(screen.getByPlaceholderText("위키 검색..."), "설계{enter}");
@@ -192,7 +192,7 @@ describe("WikiPane", () => {
     expect(screen.queryByDisplayValue(/임시 수정/)).not.toBeInTheDocument();
   });
 
-  it("opens a page in preview by default and toggles to edit", async () => {
+  it("when opens a page in preview by default and toggles to edit", async () => {
     renderWithProviders(<WikiPane />, { connected: true });
 
     await userEvent.type(screen.getByPlaceholderText("위키 검색..."), "설계{enter}");

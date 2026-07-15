@@ -1,0 +1,138 @@
+package domain
+
+import (
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	mailtool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/mailarchive"
+	notebooktool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/notebook"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/skilltool"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/wikitool"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/schema"
+)
+
+// Register wires domain tools that RegisterCoreTools owns (mail + skills deferred to chat wrapper).
+func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
+	RegisterMailArchiveTool(registry, deps)
+}
+
+// RegisterContactsTool registers the address-book lookup tool (phone lookup +
+// name/company search) over the contacts store mirrored from the native client's
+// contacts sync. Skipped when the store isn't wired so the agent doesn't see a
+// dead surface; a nil/empty store would otherwise reply "주소록이 비어 있습니다".
+func RegisterContactsTool(registry toolport.ToolRegistrar, contactsDeps *tooldeps.ContactsDeps) {
+	if contactsDeps.Store == nil {
+		return
+	}
+	// Deferred (2026-07-09): the person wiki now carries 연락처 for the people the
+	// user keeps pages for, so contacts' meeting-prep/context role is covered there
+	// (wiki/knowledge/org). Its surviving unique value is full address-book coverage
+	// + reverse phone lookup (번호→사람, normalized) — an occasional "이 번호 누구야"
+	// turn that fetches on demand. code_action's bridge still exposes it zero-hop.
+	// ASR hotword injection and wiki person enrichment read the store server-side,
+	// unaffected. Description leads with the trigger so the 80-rune summary is useful.
+	registry.RegisterTool(toolport.ToolDef{
+		Name: "contacts",
+		Description: "'이 번호 누구?'·'010-xxxx 누구야'·'OOO 연락처/번호'처럼 주소록을 물으면 짐작 말고 호출 — " +
+			"전화번호로 인물 찾기(lookup) 또는 이름·회사로 검색(search). " +
+			"네이티브 클라이언트가 동기화한 연락처 전체를 조회한다.",
+		InputSchema: schema.ContactsToolSchema(),
+		Fn:          wikitool.ToolContacts(contactsDeps),
+		Deferred:    true,
+	})
+}
+
+// RegisterWikiTools registers wiki knowledge base tools for long-term knowledge
+// access (search, read, write, log). Project-specific tools provide structured
+// access to the "프로젝트" wiki category.
+func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiDeps, workspaceDir string) {
+	// Wiki: unified knowledge base tool (search, read, write, log, daily, index, status).
+	if wikiDeps.Store != nil {
+		registry.RegisterTool(toolport.ToolDef{
+			Name:        "wiki",
+			Description: "LLM 위키 지식베이스: search (검색), read (페이지 읽기), index (목차), write (작성/수정), log (일지), daily (최근 일지), status (통계). 과거 결정/맥락/인물/프로젝트 등 장기 지식을 마크다운 위키로 관리. write 시 related/[[wikilink]]로 연결하고, 새 사실이 기존 페이지를 대체하면 supersedes로 stale 페이지를 표시한다. 본문에서 인물을 [[이름]]으로 링크하면 주소록에 있는 사람은 인물 페이지가 자동 생성·연락처 기록된다(인물 페이지를 직접 쓰면 그 사람 연락처도 자동 채워짐). ★프로젝트 문서 구조(고정): 프로젝트/<이름>/대표.md(대표페이지)·로그.md(진행 로그)·기자재/(자재 문서)·메일분석/(자동 생성). 사건·회의·결재 소식은 새 페이지를 만들지 말고 해당 프로젝트 로그.md에 날짜와 함께 append하고, 항상 write 전에 search로 기존 문서를 확인한다. 끝난 프로젝트는 사용자가 요청하면 close로 종결(보관+활성 목록 제외, 삭제 아님), reopen으로 재개",
+			InputSchema: schema.WikiToolSchema(),
+			Fn:          wikitool.ToolWiki(wikiDeps, workspaceDir),
+		})
+
+		// deal_ledger: deterministic list/sum over the typed deal-record ledger
+		// (wiki/deal_records.go) — 합계·건수·기간 질문을 모델 눈대중 대신 코드
+		// 계산으로. The ledger itself is teed on every UpsertDealPage filing.
+		// Deferred (2026-07-09): niche direct use, and code_action's bridge already
+		// exposes it zero-hop as "deals", so deferring strands nothing — a direct
+		// 거래 집계 turn fetches it. Description leads with the trigger phrases.
+		registry.RegisterTool(toolport.ToolDef{
+			Name:        "deal_ledger",
+			Description: "'총 거래액'·'올해 견적 몇 건'·'거래처별 합계' 류 거래 금액 집계 질문에 쓰는 정형 거래 원장 — 메일 분석이 파일한 거래 문서(견적·계약·세금계산서 등)의 타입드 기록에서 합계·건수·통화별 집계·기간 필터를 코드로 계산한다(위키 산문 눈대중 금지). 금액 미파싱 건은 합계에서 제외되고 원문과 함께 표기된다",
+			InputSchema: schema.DealLedgerToolSchema(),
+			Fn:          wikitool.ToolDealLedger(wikiDeps.Store),
+			Deferred:    true,
+		})
+	}
+}
+
+// RegisterNotebookTool registers the notebook tool — NotebookLM-style scoped
+// source collections for grounded, cited synthesis (딜/프로젝트 브리핑). Skipped
+// when the notebook store is unavailable.
+func RegisterNotebookTool(registry toolport.ToolRegistrar, deps *tooldeps.NotebookDeps) {
+	if deps == nil || deps.Store == nil {
+		return
+	}
+	// Deferred (2026-07-09): the notebook is a deliberate multi-step workflow
+	// (create → add_source → brief) needed only when the user explicitly asks for
+	// a grounded/cited briefing over pinned sources — rare per interactive turn,
+	// yet its schema was the 4th-largest eager tool (~2.6KB). Not on code_action's
+	// bridge and not named by any autonomous trigger, so a notebook turn fetches
+	// it. Description front-loads the WHEN so the 80-rune deferred summary is useful.
+	registry.RegisterTool(toolport.ToolDef{
+		Name:        "notebook",
+		Description: "딜/프로젝트 자료(메일·문서·메모)를 한데 모아 그 자료만으로 출처 추적 가능한 인용 브리핑을 만들 때 쓰는 NotebookLM식 노트북. action=create (노트북 생성) | list (목록) | show (자료 보기) | add_source (자료 핀: kind=wiki 위키페이지 또는 kind=note 붙여넣기 텍스트) | remove_source (자료 제거) | delete (노트북 삭제) | brief (핀된 자료에만 근거해 [S1] 형식 인용 브리핑 생성).",
+		InputSchema: schema.NotebookToolSchema(),
+		Fn:          notebooktool.ToolNotebook(deps),
+		Deferred:    true,
+	})
+}
+
+// RegisterSkillsTools registers the unified skills tool
+// (list/create/patch/delete/read/list_files/write_file/remove_file).
+func RegisterSkillsTools(registry toolport.ToolRegistrar, getSnapshot skilltool.SkillsSnapshotProvider, workspaceDir, bundledSkillsDir string, invalidateCache skilltool.SkillManageInvalidateFn) {
+	registry.RegisterTool(toolport.ToolDef{
+		Name: "skills",
+		Description: "Skill management: list (browse/search), create, patch, read, delete, list_files, write_file, remove_file. " +
+			"Use list when the current task might match a skill. Create reusable workflows from complex tasks.",
+		InputSchema: schema.SkillsToolSchema(),
+		Fn:          skilltool.ToolSkills(getSnapshot, workspaceDir, bundledSkillsDir, invalidateCache),
+		Deferred:    true,
+	})
+}
+
+// RegisterMailArchiveTool registers the received-mail archive reader.
+func RegisterMailArchiveTool(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
+	// Mail archive reader — the received-mail hand. Eager (2026-07-09): received
+	// mail is the most common 업무 surface (analysis, meeting prep, project
+	// history), so it earns its schema every turn. Left deferred, the model routed
+	// mail reads through code_action's eager bridge (deneb.mail_archive) to dodge
+	// the fetch_tools hop — overusing code_action even for plain reads and
+	// dead-ending on attachments (the attachment action is off the bridge allowlist).
+	// Reads the on-box deneb-mailarchive store over loopback IMAP.
+	registry.RegisterTool(toolport.ToolDef{
+		Name:        "mail_archive",
+		Description: "받은 메일 조회 1순위 — 메일 분석·미팅 준비·프로젝트 과거 확인에 우선 사용. 자체 메일 아카이브(자동보관 수신 메일 + 과거 백필)를 조회해 ID/Locator를 얻고, 전체 스레드와 프로젝트 히스토리를 복원한다. action=list(오늘/최근 메일) | search(키워드) | read(Locator/ID 또는 query로 원문 열기) | thread(Message-ID/References 기반 전체 대화) | project_history(회사·프로젝트 키워드 시간선+스레드 후보).",
+		InputSchema: schema.MailArchiveToolSchema(),
+		Fn: mailtool.ToolMailArchive(mailtool.MailArchiveDeps{
+			Wiki:     knowledge.NewWikiAdapter(deps.Wiki.Store),
+			Calendar: &deps.Calendar,
+			Store:    deps.MailStore,
+		}),
+	})
+}
+
+// SkillsSnapshotProvider aliases the skilltool callback so the toolwire facade
+// can re-export RegisterSkillsTools without importing tools/skilltool.
+type SkillsSnapshotProvider = skilltool.SkillsSnapshotProvider
+
+// SkillManageInvalidateFn aliases the skilltool invalidation callback.
+type SkillManageInvalidateFn = skilltool.SkillManageInvalidateFn
+
+// ToolMaxOutputs returns per-tool output character budgets from tool_schemas.json.
+func ToolMaxOutputs() map[string]int { return schema.ToolMaxOutputs() }

@@ -52,10 +52,10 @@ func TestWithTrailingCacheControl_SkipsTrailingThinkingBlock(t *testing.T) {
 		{Type: "text", Text: "answer"},
 		{Type: "thinking", Thinking: "reasoning cut by max_tokens"},
 	})
-	got := withTrailingCacheControl(llm.Message{Role: "assistant", Content: llm.FlexibleFromRaw(content)})
+	got := withTrailingCacheControl(llm.Message{Role: "assistant", Content: content})
 
 	var blocks []llm.ContentBlock
-	if err := json.Unmarshal(got.Content.Bytes(), &blocks); err != nil {
+	if err := json.Unmarshal(got.Content, &blocks); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if blocks[0].CacheControl == nil {
@@ -72,10 +72,10 @@ func TestWithTrailingCacheControl_ThinkingOnlyMessageUnchanged(t *testing.T) {
 	content, _ := json.Marshal([]llm.ContentBlock{
 		{Type: "thinking", Thinking: "only reasoning, no answer"},
 	})
-	msg := llm.Message{Role: "assistant", Content: llm.FlexibleFromRaw(content)}
+	msg := llm.Message{Role: "assistant", Content: content}
 	got := withTrailingCacheControl(msg)
-	if !bytes.Equal(got.Content.Bytes(), content) {
-		t.Errorf("thinking-only message rewritten: %s", got.Content.String())
+	if !bytes.Equal(got.Content, content) {
+		t.Errorf("thinking-only message rewritten: %s", got.Content)
 	}
 }
 
@@ -87,7 +87,7 @@ func TestStripMessageCacheMarkersHookClearsMarkers(t *testing.T) {
 	})
 	input := []llm.Message{
 		llm.NewTextMessage("user", "plain"),
-		{Role: "assistant", Content: llm.FlexibleFromRaw(markedContent)},
+		{Role: "assistant", Content: markedContent},
 	}
 
 	out := stripMessageCacheMarkersHook(input)
@@ -96,11 +96,11 @@ func TestStripMessageCacheMarkersHookClearsMarkers(t *testing.T) {
 		t.Errorf("output carries %d cache markers, want 0", got)
 	}
 	// Input untouched (per-request copy semantics).
-	if !bytes.Contains(input[1].Content.Bytes(), []byte("cache_control")) {
+	if !bytes.Contains(input[1].Content, []byte("cache_control")) {
 		t.Error("input message mutated; hook must operate on a copy")
 	}
 	// Untouched message passes through byte-identical.
-	if !bytes.Equal(out[0].Content.Bytes(), input[0].Content.Bytes()) {
+	if !bytes.Equal(out[0].Content, input[0].Content) {
 		t.Error("marker-free message rewritten")
 	}
 }

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 )
 
 // --- conflicts -----------------------------------------------------------
@@ -20,7 +19,7 @@ import (
 // sorted by start (as calMerged returns), which lets the inner loop break early:
 // once a later event starts at/after the current one's end, nothing further
 // overlaps it. All-day and zero-start events are ignored.
-func detectConflicts(events []calendar.Event) [][2]string {
+func detectConflicts(events []tooldeps.CalendarEvent) [][2]string {
 	var out [][2]string
 	for i := range events {
 		a := events[i]
@@ -328,7 +327,7 @@ type scheduleAudit struct {
 }
 
 func evaluateScheduleAudit(
-	events []calendar.Event,
+	events []tooldeps.CalendarEvent,
 	from, to, now time.Time,
 	loc *time.Location,
 	dayStart, dayEnd int,
@@ -363,7 +362,7 @@ type scheduleDayAudit struct {
 }
 
 func evaluateScheduleDay(
-	events []calendar.Event,
+	events []tooldeps.CalendarEvent,
 	day, from, to, now time.Time,
 	loc *time.Location,
 	dayStart, dayEnd int,
@@ -406,11 +405,11 @@ func boundedAuditDay(day, from, to time.Time, loc *time.Location) (time.Time, ti
 }
 
 func clipAuditEvents(
-	events []calendar.Event,
+	events []tooldeps.CalendarEvent,
 	lo, hi time.Time,
 	loc *time.Location,
-) ([]calendar.Event, []interval, time.Duration) {
-	inWindow := make([]calendar.Event, 0, len(events))
+) ([]tooldeps.CalendarEvent, []interval, time.Duration) {
+	inWindow := make([]tooldeps.CalendarEvent, 0, len(events))
 	busy := make([]interval, 0, len(events))
 	var total time.Duration
 	for _, event := range events {
@@ -464,7 +463,7 @@ func auditFocusOpportunity(
 
 // eventEnd returns an event's end, defaulting to start+1h when missing/invalid —
 // the same convention detectConflicts and free_slots use.
-func eventEnd(e calendar.Event) time.Time {
+func eventEnd(e tooldeps.CalendarEvent) time.Time {
 	end := e.End
 	if end.IsZero() || !end.After(e.Start) {
 		end = e.Start.Add(time.Hour)
@@ -477,10 +476,10 @@ func eventEnd(e calendar.Event) time.Time {
 // equality, so a meeting/travel block running in from the previous day still
 // counts toward the day's load and blocks its focus time. All-day markers are
 // excluded.
-func timedEventsOn(events []calendar.Event, day time.Time, loc *time.Location) []calendar.Event {
+func timedEventsOn(events []tooldeps.CalendarEvent, day time.Time, loc *time.Location) []tooldeps.CalendarEvent {
 	dayStart := startOfDay(day, loc)
 	dayEnd := dayStart.AddDate(0, 0, 1)
-	var out []calendar.Event
+	var out []tooldeps.CalendarEvent
 	for _, e := range events {
 		if e.AllDay || e.Start.IsZero() {
 			continue
@@ -494,7 +493,7 @@ func timedEventsOn(events []calendar.Event, day time.Time, loc *time.Location) [
 
 // longestBackToBack returns the longest run of consecutive meetings whose
 // inter-meeting gap is below the buffer threshold. Input must be start-sorted.
-func longestBackToBack(dayTimed []calendar.Event) int {
+func longestBackToBack(dayTimed []tooldeps.CalendarEvent) int {
 	if len(dayTimed) == 0 {
 		return 0
 	}

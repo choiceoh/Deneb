@@ -29,7 +29,7 @@ describe("DayPager", () => {
     return props;
   }
 
-  it("announces selected day and row count when calendar day focused", () => {
+  it("displays selected day and row count when pager renders", () => {
     renderPager();
 
     const live = screen.getByText("7월 11일 금요일").parentElement!;
@@ -37,7 +37,7 @@ describe("DayPager", () => {
     expect(within(live).getByText("4건")).toBeInTheDocument();
   });
 
-  it("updates calendar when previous, next, and today navigation triggered", async () => {
+  it("invokes navigation callbacks when prev next today clicked", async () => {
     const props = renderPager();
 
     await userEvent.click(screen.getByRole("button", { name: "이전 날" }));
@@ -49,7 +49,7 @@ describe("DayPager", () => {
     expect(props.onToday).toHaveBeenCalledTimes(1);
   });
 
-  it("disables navigation independently at either boundary", () => {
+  it("disables prev and next when boundary reached", () => {
     renderPager({ canPrev: false, canNext: false });
 
     expect(screen.getByRole("button", { name: "이전 날" })).toBeDisabled();
@@ -73,26 +73,26 @@ describe("DayPager", () => {
 });
 
 describe("DenebStar", () => {
-  it("renders decorative glyph hidden from assistive technology when marked decorative", () => {
+  it("when is decorative and hidden from assistive technology", () => {
     const { container } = render(<DenebStar />);
 
     expect(container.firstElementChild).toHaveAttribute("aria-hidden", "true");
     expect(container.querySelector("svg")).toHaveAttribute("viewBox", "0 0 24 24");
   });
 
-  it("renders default 20-pixel canvas when size not specified", () => {
+  it("when uses the default 20-pixel canvas", () => {
     const { container } = render(<DenebStar />);
     expect(container.querySelector("svg")).toHaveAttribute("width", "20");
     expect(container.querySelector("svg")).toHaveAttribute("height", "20");
   });
 
-  it.each([8, 16, 24, 48])("renders requested %i-pixel canvas when custom size provided", (size) => {
+  it.each([8, 16, 24, 48])("when uses the requested %i-pixel canvas", (size) => {
     const { container } = render(<DenebStar size={size} />);
     expect(container.querySelector("svg")).toHaveAttribute("width", String(size));
     expect(container.querySelector("svg")).toHaveAttribute("height", String(size));
   });
 
-  it("preserves one glow and one core path when icon rendered", () => {
+  it("preserves one glow and one core path", () => {
     const { container } = render(<DenebStar />);
     expect(container.querySelectorAll(".deneb-star-glow")).toHaveLength(1);
     expect(container.querySelectorAll(".deneb-star-core")).toHaveLength(1);
@@ -159,7 +159,7 @@ describe("Icon", () => {
     expect(svg.childElementCount).toBeGreaterThan(0);
   });
 
-  it.each(iconNames)("marks %s glyph as decorative when assistive hiding enabled", (name) => {
+  it.each(iconNames)("when marks the %s glyph as decorative", (name) => {
     const { container } = render(<Icon name={name} />);
     const svg = container.querySelector("svg")!;
 
@@ -167,7 +167,7 @@ describe("Icon", () => {
     expect(svg).toHaveAttribute("focusable", "false");
   });
 
-  it("forwards size, class, and stroke width when custom props provided", () => {
+  it("when forwards size, class, and stroke width", () => {
     const { container } = render(<Icon name="settings" size={28} className="nav-glyph" strokeWidth={2.5} />);
     const svg = container.querySelector("svg")!;
 
@@ -177,7 +177,7 @@ describe("Icon", () => {
     expect(svg).toHaveAttribute("stroke-width", "2.5");
   });
 
-  it("applies compact defaults when variant not specified", () => {
+  it("when uses the compact defaults", () => {
     const { container } = render(<Icon name="today" />);
     const svg = container.querySelector("svg")!;
 
@@ -211,7 +211,7 @@ describe("ModelPicker", () => {
     },
   );
 
-  it("groups models under server sections when sections provided", () => {
+  it("groups models under sections when picker renders", () => {
     render(<ModelPicker models={models} value="provider/fast" onChange={() => {}} />);
 
     const picker = screen.getByRole("combobox", { name: "모델 선택" });
@@ -222,7 +222,7 @@ describe("ModelPicker", () => {
     expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["Fast", "Smart ⚠", "Tiny"]);
   });
 
-  it("displays active model as selected when model id matches", () => {
+  it("when selects the active model", () => {
     render(<ModelPicker models={models} value="local/tiny" onChange={() => {}} />);
     expect(screen.getByRole("combobox")).toHaveValue("local/tiny");
   });
@@ -234,12 +234,12 @@ describe("ModelPicker", () => {
     expect(screen.getAllByRole("option")[0]).toHaveTextContent("custom/legacy");
   });
 
-  it("denies orphan duplicate when active model already listed in section", () => {
+  it("without duplicate a known active model as an orphan", () => {
     render(<ModelPicker models={models} value="provider/fast" onChange={() => {}} />);
     expect(screen.getAllByRole("option", { name: "Fast" })).toHaveLength(1);
   });
 
-  it("emits model id when user selects model from dropdown", async () => {
+  it("returns user selection by model id", async () => {
     const onChange = vi.fn();
     render(<ModelPicker models={models} value="provider/fast" onChange={onChange} />);
 
@@ -249,7 +249,7 @@ describe("ModelPicker", () => {
     expect(onChange).toHaveBeenCalledWith("provider/smart");
   });
 
-  it("forwards busy disabled state when busy prop set", () => {
+  it("when forwards the busy state", () => {
     render(<ModelPicker models={models} value="provider/fast" onChange={() => {}} disabled />);
     expect(screen.getByRole("combobox")).toBeDisabled();
   });
@@ -266,7 +266,7 @@ const sessions: SessionRow[] = [
 ];
 
 describe("SessionDrawer", () => {
-  it("shows an accessible empty state", () => {
+  it("shows accessible empty state when session list is empty", () => {
     render(
       <SessionDrawer
         sessions={[]}
@@ -300,7 +300,7 @@ describe("SessionDrawer", () => {
     expect(screen.queryByText("최근 대화가 없습니다.")).not.toBeInTheDocument();
   });
 
-  it("displays trimmed label and falls back to session key when label empty", () => {
+  it("when uses a trimmed label and falls back to the session key", () => {
     render(
       <SessionDrawer
         sessions={sessions}
@@ -317,7 +317,7 @@ describe("SessionDrawer", () => {
     expect(screen.getByText("client:main:beta")).toBeInTheDocument();
   });
 
-  it("marks only current conversation active when session list rendered", () => {
+  it("when marks only the current conversation active", () => {
     render(
       <SessionDrawer
         sessions={sessions}
@@ -376,7 +376,7 @@ describe("SessionDrawer", () => {
     expect(onNew).toHaveBeenCalledTimes(1);
   });
 
-  it("disables every action when busy state active", () => {
+  it("when disables every action while busy", () => {
     render(
       <SessionDrawer
         sessions={sessions}
@@ -429,7 +429,7 @@ describe("proactiveNav", () => {
     "progress",
     "notebook",
     "today",
-  ])("routes %s event to target pane when event fired", (kind) => {
+  ])("when maps the %s event to its pane", (kind) => {
     expect(proactiveNav(event(kind, "resource-7"))).toEqual({ view: kind, ref: "resource-7" });
   });
 

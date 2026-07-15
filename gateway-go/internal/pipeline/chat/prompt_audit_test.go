@@ -31,7 +31,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolreg"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 )
 
 func TestPromptAuditWritesPromptArtifacts(t *testing.T) {
@@ -45,7 +45,7 @@ func TestPromptAuditWritesPromptArtifacts(t *testing.T) {
 	}
 
 	reg := NewToolRegistry()
-	toolreg.RegisterCoreTools(reg, &tooldeps.CoreToolDeps{WorkspaceDir: ws})
+	toolwire.RegisterCoreTools(reg, &tooldeps.CoreToolDeps{WorkspaceDir: ws})
 	// NOTE: deps-gated registrations (wiki, polaris, kv, …) are absent here, so
 	// the eager set is a subset of production's. The per-tool numbers and the
 	// block structure are what the audit is for; compare tool COUNT against a

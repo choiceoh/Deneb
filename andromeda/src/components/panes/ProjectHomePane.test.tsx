@@ -134,7 +134,7 @@ const provider = fakeProvider({
 });
 
 describe("ProjectHomePane", () => {
-  it("gathers related work for the selected project", async () => {
+  it("when gathers related work for the selected project", async () => {
     renderWithProviders(<ProjectHomePane />, { connected: true, dataProvider: provider });
 
     expect(await screen.findByRole("heading", { name: "프로젝트 홈" })).toBeInTheDocument();
@@ -178,7 +178,7 @@ describe("ProjectHomePane", () => {
     expect(names).toEqual(["최신 프로젝트", "중간 프로젝트", "오래된 프로젝트", "시간없는 프로젝트"]);
   });
 
-  it("opens the selected project's wiki page", async () => {
+  it("when opens the selected project's wiki page", async () => {
     renderWithProviders(
       <>
         <ProjectHomePane />

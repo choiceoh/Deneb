@@ -6,11 +6,11 @@ describe("tauri integration (web fallback)", () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => localStorage.clear());
 
-  it("detects it is not running inside Tauri", () => {
+  it("returns false when not running inside Tauri", () => {
     expect(isTauri()).toBe(false);
   });
 
-  it("round-trips the token through localStorage off-desktop", async () => {
+  it("returns stored token when reading from localStorage off-desktop", async () => {
     expect(await secureGetToken()).toBeNull();
     await secureSetToken("hex64token");
     expect(await secureGetToken()).toBe("hex64token");

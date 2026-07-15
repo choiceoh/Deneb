@@ -2,7 +2,7 @@ package server
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle"
+	skillcore "github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/core"
 )
 
 // GenesisSubsystem groups skill genesis services: the genesis service
@@ -12,14 +12,14 @@ import (
 // and LLM clients are available.
 // Embedded in Server so fields are promoted.
 //
-// Concrete leaf types (generation/review) are reached through skilllifecycle
+// Concrete leaf types (generation/review) are reached through skilllifecycle/core
 // aliases so this composition-root package does not import those leaves.
 type GenesisSubsystem struct {
-	genesisSvc         *skilllifecycle.GenesisService
-	genesisMeta        *skilllifecycle.MetaArtifacts // RSI P1 prompt artifacts (read wiring in initGenesisServices; prod-gated materialize in registerGenesisAutonomousTasks)
-	genesisTracker     *skilllifecycle.Tracker
-	genesisEvolver     *skilllifecycle.Evolver
-	genesisNudger      *skilllifecycle.Nudger
-	skillCatalog       *skilllifecycle.Catalog
+	genesisSvc         *skillcore.GenesisService
+	genesisMeta        *skillcore.MetaArtifacts // RSI P1 prompt artifacts (read wiring in initGenesisServices; prod-gated materialize in registerGenesisAutonomousTasks)
+	genesisTracker     *skillcore.Tracker
+	genesisEvolver     *skillcore.Evolver
+	genesisNudger      *skillcore.Nudger
+	skillCatalog       *skillcore.Catalog
 	genesisTranscripts toolport.TranscriptStore
 }

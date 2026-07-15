@@ -18,9 +18,12 @@ import (
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolreg"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/docmedia"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
+		"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
@@ -187,7 +190,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 				return reg.FullModelID(modelrole.RoleCoding)
 			},
 			// Powers sessions action=stats (per-session run/token roll-ups).
-			AgentLog: agentLogWriter,
+			AgentLog: adaptAgentLogStats(agentLogWriter),
 		},
 		Chrono: chat.ChronoDeps{
 			Service: s.cronService,
@@ -197,7 +200,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 			Store: chatCfg.Memory.Wiki,
 			// Same address book the contacts tool uses; lets a wiki write
 			// auto-record a referenced person's contact details.
-			Contacts: s.contactsStore,
+			Contacts: adaptContactsBook(s.contactsStore),
 		},
 		MailStore: s.mailStore,
 		Notebook: chat.NotebookDeps{
@@ -217,28 +220,16 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		Contacts: chat.ContactsDeps{
 			// Created during registerEarlyMethods (no chat dep), so it's already
 			// wired by the time chat init runs.
-			Store: s.contactsStore,
+			Store: adaptContactsBook(s.contactsStore),
 		},
 		Calendar: chat.CalendarDeps{
-			// Same hybrid sources as the miniapp.calendar.* RPC surface: a
-			// lazy read-only Google client (nil-safe before OAuth) merged with
-			// the local store for create/edit/delete. Reusing the resolvers
-			// keeps the chat tool and the native UI on one calendar.
-			Client: func() (chat.CalendarReader, error) {
-				return calendar.DefaultClient()
-			},
-			Local: resolveLocalCalendar(s.logger),
+			Client: adaptCalendarReaderFactory(calendar.DefaultClient),
+			Local:  resolveToolLocalCalendar(s.logger),
 		},
-		LLMClient:    reg.Client(modelrole.RoleLightweight),
-		DefaultModel: reg.Model(modelrole.RoleLightweight),
 		// Deep-research panel fan-out: one prompt → every healthy wormhole-served
 		// model in parallel (research_panel tool). nil-safe — the tool checks it.
 		ConsultPanel: modelpanel.New(s.modelRegistry, s.logger).Consult,
-		AgentLog:     agentLogWriter,
-		LogCapture:   s.logCapture,
-		WorkFeed:     s.workFeedStore,
-		// Engine-level prefix-cache scrape targets for the observe tool.
-		VllmBaseURLs: reg.VllmBaseURLs,
+		ObserveTool:  tooldeps.ObserveToolFunc(toolbind.ToolObserve(s.logCapture, agentLogWriter, s.workFeedStore, reg.VllmBaseURLs)),
 		// Deliver phone_write Intent actions (open_url/share/…) to the native app
 		// over SSE for in-app execution — the SSH/Termux-free path.
 		PhoneActionSender: s.dispatchPhoneAction,
@@ -266,20 +257,22 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// Market tool shares the dashboard's quote cache (set in
 	// registerEarlyMethods, which runs before chat init).
 	if s.marketCache != nil {
-		s.toolDeps.MarketSummary = s.marketCache.Summary
+		s.toolDeps.MarketSummary = adaptMarketSummary(s.marketCache.Summary)
 	}
 	// Workfeed tool mutates through the native-sync-teeing wrapper so agent
 	// reads/acks mirror to the phone. Typed-nil guard: assigning a nil
 	// *nativeWorkFeedStore directly would make the interface non-nil.
 	if nw := s.nativeWorkFeedStore(); nw != nil {
-		s.toolDeps.WorkFeedRW = nw
+		s.toolDeps.WorkFeedRW = workFeedRWAdapter{inner: nw}
 	}
 
 	// Ambient calendar awareness: a frozen-per-day upcoming-events glance in the
 	// dynamic system-prompt block, built over the same hybrid calendar source as
 	// the calendar tool. nil when no calendar source is wired (feature off).
-	chatCfg.Ambient.CalendarGlance = chat.NewCalendarGlanceFunc(&s.toolDeps.Calendar)
+	chatCfg.Ambient.CalendarGlance = toolbind.NewCalendarGlance(&s.toolDeps.Calendar)
 	chatCfg.Ambient.GoalGlance = chat.NewGoalGlanceFunc()
+	chatCfg.ReportCardHealth = denebui.ReportCardHealth
+	chatCfg.LinkEnrichStart = toolbind.NewLinkEnrichStart(s.logger)
 
 	// Operator-edited 업무 persona (Settings prompt corner → prompt store). Returns
 	// "" when unedited so the chat pipeline renders the default persona. Reading
@@ -306,7 +299,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// background reindex task is registered later in registerWorkflowSideEffects.
 	s.fileSemindex = filesemindex.New(localFileStoreOrNil(s.logger), s.embeddingClient, s.logger)
 	if s.fileSemindex != nil {
-		s.toolDeps.FilesSemanticSearch = s.fileSemindex.Search
+		s.toolDeps.FilesSemanticSearch = adaptFilesSemanticSearch(s.fileSemindex.Search)
 	}
 
 	// Core tools (file I/O, exec, process, sessions, gateway, cron, image).
@@ -335,7 +328,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		knowledge.NewWikiAdapter(s.wikiStore),
 		filesAdapter,
 	)
-	toolreg.RegisterKnowledgeTool(chatCfg.Tools, knowledgeRouter)
+	toolwire.RegisterKnowledgeTool(chatCfg.Tools, knowledgeRouter)
 
 	// Recall preflight files source: surface relevant uploaded files as recall
 	// evidence (injected into the last user message tail like wiki/diary/session).
@@ -355,13 +348,13 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 
 	// Polaris: retrieval tools for compressed conversation history.
 	if bridge, ok := transcriptStore.(*polaris.Bridge); ok {
-		var localAI tools.LocalAIFunc
+		var localAI docmedia.LocalAIFunc
 		if pilot.LocalAIHub() != nil {
 			localAI = func(ctx context.Context, system, user string, maxTokens int) (string, error) {
 				return pilot.CallLocalLLM(ctx, system, user, maxTokens)
 			}
 		}
-		toolreg.RegisterPolarisTools(chatCfg.Tools, bridge.Store(), localAI)
+		toolwire.RegisterPolarisTools(chatCfg.Tools, bridge.Store(), localAI)
 
 		// Wire dreamer to read recent polaris summaries as a higher-density
 		// fact source alongside raw diary entries.

@@ -235,7 +235,7 @@ printf 'Signer #1 certificate SHA-256 digest: %s\n' "${CERT_GOT:-AABBCC}"
         self.assertTrue(systemctl_calls)
         self.assertTrue(all("xdg=/custom/runtime" in line for line in systemctl_calls))
 
-    def test_unreachable_srv1_warns_and_skips_both_remote_claims(self) -> None:
+    def test_unreachable_srv1_warns_and_ignores_both_remote_claims(self) -> None:
         self.setup_release_surface()
         proc = self.invoke(FAKE_SRV1_REACHABLE="0")
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
@@ -290,7 +290,7 @@ printf 'Signer #1 certificate SHA-256 digest: %s\n' "${CERT_GOT:-AABBCC}"
         self.assertIn("서명이 release 인증서와 다름", proc.stdout)
         self.assertIn("version.json code=11 ≠ serve dir 최고 빌드 12", proc.stdout)
 
-    def test_multiple_degraded_surfaces_are_all_counted_in_one_sweep(self) -> None:
+    def test_when_multiple_degraded_surfaces_are_all_counted_in_one_sweep(self) -> None:
         proc = self.invoke(
             GATEWAY_CODE="503",
             TIMER_ACTIVE="0",

@@ -26,7 +26,7 @@ describe("buildWikiTree", () => {
     expect(yeongsan.files.map((f) => f.name)).toEqual(["대표.md", "로그.md"]);
   });
 
-  it("orders slot files (대표→로그→로그-보관) ahead of ordinary pages", () => {
+  it("when orders slot files (대표→로그→로그-보관) ahead of ordinary pages", () => {
     const root = buildWikiTree([
       { path: "프로젝트/영산고/구조검토.md", title: "구조 검토" },
       { path: "프로젝트/영산고/로그-보관.md", title: "영산고 로그 보관" },
@@ -48,7 +48,7 @@ describe("buildWikiTree", () => {
 });
 
 describe("fileLabel", () => {
-  it("shows slot names for fixed slots and titles for ordinary pages", () => {
+  it("displays slot names for fixed slots and titles for ordinary pages", () => {
     expect(fileLabel({ path: "p/대표.md", name: "대표.md", title: "영산고" })).toBe("대표");
     expect(fileLabel({ path: "p/로그.md", name: "로그.md", title: "영산고 진행 로그" })).toBe("로그");
     expect(fileLabel({ path: "p/x.md", name: "x.md", title: "기아 화성 모듈 RFX" })).toBe("기아 화성 모듈 RFX");
@@ -57,7 +57,7 @@ describe("fileLabel", () => {
 });
 
 describe("ancestorsOf", () => {
-  it("lists every folder above a page, outermost first", () => {
+  it("when lists every folder above a page, outermost first", () => {
     expect(ancestorsOf("프로젝트/영산고/메일분석/abc.md")).toEqual([
       "프로젝트",
       "프로젝트/영산고",

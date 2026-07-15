@@ -15,7 +15,7 @@ from test_codebase_health_v2_support import report as _report
 
 
 class DeepEvidenceTests(unittest.TestCase):
-    def test_deep_evidence_wrong_golangci_version_is_unavailable(self) -> None:
+    def test_when_deep_evidence_wrong_golangci_version_is_unavailable(self) -> None:
         def fake_run(
             command: list[str], _cwd: Path, *, timeout: int
         ) -> tuple[bool | None, str]:
@@ -88,7 +88,7 @@ class CLIContractTests(unittest.TestCase):
         self.assertIn("executable readiness is failed or unmeasured", stdout.getvalue())
         self.assertEqual(stderr.getvalue(), "")
 
-    def test_main_json_check_keeps_diagnostics_on_stderr(self) -> None:
+    def test_main_json_check_preserves_diagnostics_on_stderr(self) -> None:
         accepted = snapshot(_report())
         current = _report(69.0, 70.0)
         stdout = io.StringIO()

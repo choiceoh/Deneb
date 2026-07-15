@@ -49,7 +49,7 @@ type Request struct {
 	// ExtraBody is merged into the OpenAI-compatible request body.
 	// The hub merges the model's typed thinking-off directive and a server-side
 	// "timeout" field; caller entries are merged on top.
-	ExtraBody map[string]any
+	ExtraBody jsonObject
 
 	// ResponseFormat requests structured output (e.g., json_object mode).
 	ResponseFormat *llm.ResponseFormat

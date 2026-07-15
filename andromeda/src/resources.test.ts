@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { NOTEBOOK_RPC, RESOURCE_DEFS, RESOURCE_MAP, refineResources, resourceDef } from "./resources";
 
 describe("resource registry", () => {
-  it("maps every def by name", () => {
+  it("when maps every def by name", () => {
     for (const def of RESOURCE_DEFS) {
       expect(RESOURCE_MAP[def.name]).toBe(def);
     }

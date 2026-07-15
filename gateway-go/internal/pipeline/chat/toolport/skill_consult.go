@@ -7,9 +7,9 @@ import (
 
 // SkillConsultLog records which skills the agent consulted (read via the
 // `skills` tool's read action) during a single agent run. It feeds the
-// Propus Evolver a real usage and success-rate signal: the chat pipeline
-// drains it after the run and attributes the whole run outcome to each skill
-// consulted, calling RecordUsage. Without this the
+// Propus Evolver a real usage and success-rate signal: the run loop
+// drains it per turn and attributes that turn's outcome (clean vs. a tool
+// error) to each skill consulted, calling RecordUsage. Without this the
 // Evolver's SkillsNeedingEvolution(minUses, maxSuccessRate) gate sees empty
 // stats and never selects anything to improve — the loop runs but never
 // converges on the skills that actually matter.
@@ -20,7 +20,7 @@ import (
 type SkillConsultLog struct {
 	mu       sync.Mutex
 	names    []string // consult order; may repeat across turns
-	recorded int      // high-water mark already drained by the chat pipeline
+	recorded int      // high-water mark already drained by the run loop
 }
 
 // NewSkillConsultLog creates an empty consult log.
@@ -40,8 +40,9 @@ func (l *SkillConsultLog) Add(skillName string) {
 }
 
 // DrainNew returns the distinct skills consulted since the previous DrainNew
-// call (first-occurrence order). Run-level usage accounting calls this after
-// completion so a skill read multiple times during one run counts once.
+// call (first-occurrence order). The run loop calls this once per turn so each
+// turn's outcome is attributed only to the skills read during that turn; a
+// skill read twice in the same window counts once.
 func (l *SkillConsultLog) DrainNew() []string {
 	if l == nil {
 		return nil

@@ -1,17 +1,16 @@
 package chat
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/chatportwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/pkg/llmerr"
@@ -120,16 +119,7 @@ func executeAgentRunWithDelta(
 // ReasonUnknown because llmerr.Classify intentionally does not match bare
 // digits inside a message.
 func classifyLLMError(err error) llmerr.Classified {
-	var apiErr *httpretry.APIError
-	status := 0
-	var body []byte
-	if errors.As(err, &apiErr) {
-		status = apiErr.StatusCode
-		if apiErr.Message != "" {
-			body = []byte(apiErr.Message)
-		}
-	}
-	return llmerr.Classify(err, status, body)
+	return chatportwire.Classify(err)
 }
 
 // isContextOverflow reports whether an error indicates a context window
@@ -193,15 +183,15 @@ func shouldStripThinking(err error) bool {
 // falling back to ~/.deneb/workspace (matching TS resolveAgentWorkspaceDir).
 func resolveWorkspaceDirForPrompt() string {
 	cachedWorkspaceDirOnce.Do(func() {
-		snap, err := config.LoadConfigFromDefaultPath()
+		snap, err := leafbind.LoadConfigFromDefaultPath()
 		if err == nil && snap != nil {
-			dir := config.ResolveAgentWorkspaceDir(&snap.Config)
+			dir := leafbind.ResolveAgentWorkspaceDir(&snap.Config)
 			if dir != "" {
 				cachedWorkspaceDir = dir
 				return
 			}
 		}
-		cachedWorkspaceDir = config.ResolveAgentWorkspaceDir(nil)
+		cachedWorkspaceDir = leafbind.ResolveAgentWorkspaceDir(nil)
 	})
 	return cachedWorkspaceDir
 }

@@ -132,7 +132,7 @@ describe("Workstation composition", () => {
     expect(screen.getByRole("button", { name: "Deneb 패널 열기" })).toBeInTheDocument();
   });
 
-  it("starts native catch-up sync with the current gateway state", () => {
+  it("starts native sync when gateway state renders", () => {
     renderWorkstation(workspace({ connected: false }));
     expect(mocks.nativeSync).toHaveBeenCalledWith(cfg, false);
   });
@@ -142,7 +142,7 @@ describe("Workstation composition", () => {
     expect(screen.getByText("today pane")).toBeInTheDocument();
   });
 
-  it("displays chat in center and hides side AI when chat tab active", () => {
+  it("shows center chat and hides side AI when chat view selected", () => {
     renderWorkstation(workspace({ view: "chat" }));
     expect(screen.queryByText("generic chat pane")).not.toBeInTheDocument();
     expect(screen.queryByRole("main")).not.toBeInTheDocument();
@@ -150,7 +150,7 @@ describe("Workstation composition", () => {
     expect(screen.getByTestId("ai-panel")).toHaveAttribute("data-hidden", "true");
   });
 
-  it("docks AI below notebook pane when notebook tab active", () => {
+  it("renders bottom AI placement when notebook view active", () => {
     const { container } = renderWorkstation(workspace({ view: "notebook" }));
     expect(screen.getByText("notebook pane")).toBeInTheDocument();
     expect(screen.getByTestId("ai-panel")).toHaveAttribute("data-placement", "bottom");
@@ -163,24 +163,24 @@ describe("Workstation composition", () => {
   it.each([
     ["folded", "ws-top-folded"],
     ["expanded", "ws-top-expanded"],
-  ] as const)("applies notebook top mode class %s when mode configured", (notebookTop, className) => {
+  ] as const)("applies notebook top mode class when %s", (notebookTop, className) => {
     const { container } = renderWorkstation(workspace({ view: "notebook", notebookTop }));
     expect(container.querySelector(".workstation-shell")).toHaveClass(className);
   });
 
-  it("preserves default notebook sizing without mode classes when mode unset", () => {
+  it("renders default notebook without mode classes", () => {
     const { container } = renderWorkstation(workspace({ view: "notebook", notebookTop: "default" }));
     expect(container.querySelector(".workstation-shell")).not.toHaveClass("ws-top-folded", "ws-top-expanded");
   });
 
-  it("marks frameless-window drag strip when platform supports drag region", () => {
+  it("renders drag strip with tauri region when frameless", () => {
     const { container } = renderWorkstation();
     expect(container.querySelector(".drag-strip")).toHaveAttribute("data-tauri-drag-region");
   });
 });
 
 describe("Workstation AI panel controls", () => {
-  it("expands AI panel and hides work pane when AI expand triggered", async () => {
+  it("hides work pane when AI panel expands", async () => {
     await renderWithPanelOpen();
     expect(screen.getByText("today pane")).toBeInTheDocument();
 
@@ -198,7 +198,7 @@ describe("Workstation AI panel controls", () => {
     expect(screen.getByTestId("ai-panel")).toHaveAttribute("data-expanded", "false");
   });
 
-  it("collapses side AI and preserves full-width work pane when AI collapsed", async () => {
+  it("collapses side AI without shrinking work pane width", async () => {
     await renderWithPanelOpen();
 
     await userEvent.click(screen.getByRole("button", { name: "collapse AI" }));
@@ -208,7 +208,7 @@ describe("Workstation AI panel controls", () => {
     expect(screen.getByRole("button", { name: "Deneb 패널 열기" })).toBeInTheDocument();
   });
 
-  it("displays collapsed AI panel again when reopen control clicked", async () => {
+  it("restores collapsed AI panel when edge tab reopens it", async () => {
     await renderWithPanelOpen();
     await userEvent.click(screen.getByRole("button", { name: "collapse AI" }));
     await userEvent.click(screen.getByRole("button", { name: "Deneb 패널 열기" }));
@@ -216,7 +216,7 @@ describe("Workstation AI panel controls", () => {
     expect(screen.queryByRole("button", { name: "Deneb 패널 열기" })).not.toBeInTheDocument();
   });
 
-  it("clears expansion state when expanded panel collapsed", async () => {
+  it("resets expansion when collapsing an expanded panel", async () => {
     await renderWithPanelOpen();
     await userEvent.click(screen.getByRole("button", { name: "toggle expand" }));
     // Expanded AIPanel intentionally has no collapse button; narrow first, then collapse.
@@ -233,7 +233,7 @@ describe("Workstation shortcuts", () => {
     ["3", "notebook"],
     ["4", "files"],
     ["5", "chat"],
-  ])("routes Ctrl+%s to %s when shortcut pressed", (key, view) => {
+  ])("switches to %s view when Ctrl+%s pressed", (key, view) => {
     const setView = vi.fn();
     renderWorkstation(workspace({ setView }));
     const event = new KeyboardEvent("keydown", { key, ctrlKey: true, cancelable: true });
@@ -244,7 +244,7 @@ describe("Workstation shortcuts", () => {
     expect(setView).toHaveBeenCalledWith(view);
   });
 
-  it("allows platform Meta modifier when shortcut includes Meta key", () => {
+  it("switches view when Meta modifier shortcut fires", () => {
     const setView = vi.fn();
     renderWorkstation(workspace({ setView }));
     const event = new KeyboardEvent("keydown", { key: "2", metaKey: true, cancelable: true });
@@ -253,17 +253,14 @@ describe("Workstation shortcuts", () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it.each(["a", "c", "v", "x", "y", "z", "A", "C"])(
-    "denies shortcut steal when editing combo %s pressed in input",
-    (key) => {
-      const setView = vi.fn();
-      renderWorkstation(workspace({ setView }));
-      const event = new KeyboardEvent("keydown", { key, ctrlKey: true, cancelable: true });
-      window.dispatchEvent(event);
-      expect(setView).not.toHaveBeenCalled();
-      expect(event.defaultPrevented).toBe(false);
-    },
-  );
+  it.each(["a", "c", "v", "x", "y", "z", "A", "C"])("ignores editing shortcut %s without switching view", (key) => {
+    const setView = vi.fn();
+    renderWorkstation(workspace({ setView }));
+    const event = new KeyboardEvent("keydown", { key, ctrlKey: true, cancelable: true });
+    window.dispatchEvent(event);
+    expect(setView).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
 
   it("ignores shortcuts without Ctrl or Meta", () => {
     const setView = vi.fn();
@@ -283,7 +280,7 @@ describe("Workstation shortcuts", () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
-  it("removes global shortcut listener when component unmounts", () => {
+  it("removes shortcut listener on unmount without leaving handlers", () => {
     const setView = vi.fn();
     const view = renderWorkstation(workspace({ setView }));
     view.unmount();
@@ -293,19 +290,19 @@ describe("Workstation shortcuts", () => {
 });
 
 describe("Workstation persistent files pane", () => {
-  it("denies files pane mount before first visit when tab never opened", () => {
+  it("omits files pane without mounting before first visit", () => {
     renderWorkstation(workspace({ view: "today" }));
     expect(screen.queryByTestId("files-pane")).not.toBeInTheDocument();
     expect(mocks.filesPane).not.toHaveBeenCalled();
   });
 
-  it("mounts dedicated files pane when files tab visited first time", () => {
+  it("renders dedicated files pane when files view first visited", () => {
     renderWorkstation(workspace({ view: "files" }));
     expect(screen.getByTestId("files-pane")).toHaveAttribute("data-active", "true");
     expect(screen.queryByText("generic files pane")).not.toBeInTheDocument();
   });
 
-  it("preserves files pane mount but marks inactive when other pane selected", () => {
+  it("preserves files mount and hides pane when switching views", () => {
     const initial = workspace({ view: "files" });
     const { rerender } = renderWorkstation(initial);
     expect(screen.getByTestId("files-pane")).toHaveAttribute("data-active", "true");

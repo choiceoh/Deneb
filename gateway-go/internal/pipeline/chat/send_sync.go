@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"context"
 	"fmt"
 	"strings"
@@ -10,11 +11,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
-	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 )
 
 // SyncResult holds the outcome of a synchronous agent run.
@@ -72,7 +72,7 @@ func (r *SyncResult) BestTextRaw() string {
 // (a letter composed in chat would otherwise surface raw tokens). No-op for
 // ordinary replies (fast path on the token prefix).
 func (r *SyncResult) BestText() string {
-	return market.SubstituteLetterTokens(r.BestTextRaw())
+	return toolwire.SubstituteMarketLetterTokens(r.BestTextRaw())
 }
 
 func (r *SyncResult) fillEmptyStopFallback() bool {
@@ -104,7 +104,7 @@ type SyncOptions struct {
 	PresencePenalty     *float64
 	Stop                []string
 	ResponseFormat      *llm.ResponseFormat
-	ToolChoice          any // "auto", "none", "required", or structured object
+	ToolChoice          rawJSON // "auto", "none", "required", or structured object
 	// Thinking overrides the session's thinking level for this run — a
 	// resolveThinkingConfig level or "off"/"none" to disable the thinking
 	// phase (cron jobs use this). Empty = session/provider default.
@@ -206,7 +206,7 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 		SessionKey:   sessionKey,
 		Message:      sanitizeInput(message),
 		Model:        model,
-		ClientRunID:  shortid.New(runIDPrefix),
+		ClientRunID:  leafbind.NewShortID(runIDPrefix),
 		WorkspaceDir: h.workspaceDir,
 	}
 
@@ -298,9 +298,9 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 	// model's output surfaces in Korean — this is the chokepoint for every
 	// BestText() consumer (the stream done frame, proactive bridge, auto-title).
 	res := &SyncResult{
-		Text:            hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.Text))),
-		AllText:         hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.AllText))),
-		DeliverableText: hanja.Transliterate(strings.TrimSpace(stripReasoningLeak(result.DeliverableText))),
+		Text:            streaming.Transliterate(strings.TrimSpace(stripReasoningLeak(result.Text))),
+		AllText:         streaming.Transliterate(strings.TrimSpace(stripReasoningLeak(result.AllText))),
+		DeliverableText: streaming.Transliterate(strings.TrimSpace(stripReasoningLeak(result.DeliverableText))),
 		Model:           resolvedModel,
 		ProviderModel:   result.ProviderModel,
 		FellBack:        result.FellBack,
@@ -512,7 +512,7 @@ func (h *Handler) trySlashSync(sessionKey, message string, opts *SyncOptions) (*
 		delivery = opts.Delivery
 	}
 	var reply strings.Builder
-	h.handleSlashCommand(shortid.New("slash"), sessionKey, delivery, cmd, func(text string) {
+	h.handleSlashCommand(leafbind.NewShortID("slash"), sessionKey, delivery, cmd, func(text string) {
 		if text == "" {
 			return
 		}

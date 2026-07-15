@@ -114,7 +114,7 @@ describe("FleetOverview", () => {
     expect(screen.getByText("작업이 없습니다.")).toBeInTheDocument();
   });
 
-  it("shows section counts", () => {
+  it("displays section counts", () => {
     renderOverview({
       issues: [{ key: "issue", title: "노드 다운", detail: "spark-2", view: "nodes", tone: "bad" }],
       runningRecipes: [runningRecipe],
@@ -128,7 +128,7 @@ describe("FleetOverview", () => {
   it.each([
     ["bad", "위험"],
     ["warn", "주의"],
-  ] as const)("routes a %s issue to its target view", async (tone, label) => {
+  ] as const)("when routes a %s issue to its target view", async (tone, label) => {
     const issue: FleetIssue = { key: tone, title: "확인", detail: "상세", view: "services", tone };
     const props = renderOverview({ issues: [issue] });
     const row = screen.getByRole("button", { name: /확인/ });
@@ -137,7 +137,7 @@ describe("FleetOverview", () => {
     expect(props.onView).toHaveBeenCalledWith("services");
   });
 
-  it("caps visible issues at eight", () => {
+  it("when caps visible issues at eight", () => {
     const issues: FleetIssue[] = Array.from({ length: 12 }, (_, index) => ({
       key: `issue-${index}`,
       title: `Issue ${index}`,
@@ -150,7 +150,7 @@ describe("FleetOverview", () => {
     expect(screen.queryByText("Issue 8")).not.toBeInTheDocument();
   });
 
-  it("caps running recipes at four", () => {
+  it("when caps running recipes at four", () => {
     const recipes = Array.from({ length: 6 }, (_, index) => ({ ...runningRecipe, name: `recipe-${index}` }));
     renderOverview({ runningRecipes: recipes });
     expect(screen.getAllByRole("button", { name: /재시작/ })).toHaveLength(4);
@@ -165,7 +165,7 @@ describe("FleetOverview", () => {
     expect(props.onRecipeAction).toHaveBeenNthCalledWith(2, runningRecipe, "stop");
   });
 
-  it("routes job expansion by id", async () => {
+  it("when routes job expansion by id", async () => {
     const props = renderOverview({ recentJobs: [runningJob] });
     await userEvent.click(screen.getByRole("button", { name: /모델 기동/ }));
     expect(props.onJobToggle).toHaveBeenCalledWith("job-running");
@@ -214,24 +214,24 @@ describe("FleetNodesView", () => {
     expect(container.querySelector(".fleet-dot")).toHaveClass("off");
   });
 
-  it("reports filtered and total counts", () => {
+  it("returns filtered and total counts", () => {
     renderNodes({ nodes: [healthyNode], total: 9 });
     expect(screen.getByText("1 / 9")).toBeInTheDocument();
   });
 
-  it("routes search input", async () => {
+  it("when routes search input", async () => {
     const { props } = renderNodes();
     await userEvent.type(screen.getByPlaceholderText("노드, 역할, 모델"), "spark");
     expect(props.onQuery).toHaveBeenLastCalledWith("k");
   });
 
-  it("routes the problems-only toggle", async () => {
+  it("when routes the problems-only toggle", async () => {
     const { props } = renderNodes();
     await userEvent.click(screen.getByRole("checkbox", { name: "문제만" }));
     expect(props.onProblemsOnly).toHaveBeenCalledWith(true);
   });
 
-  it("reflects controlled query and filter state", () => {
+  it("when reflects controlled query and filter state", () => {
     renderNodes({ query: "spark-2", problemsOnly: true });
     expect(screen.getByPlaceholderText("노드, 역할, 모델")).toHaveValue("spark-2");
     expect(screen.getByRole("checkbox", { name: "문제만" })).toBeChecked();
@@ -259,7 +259,7 @@ describe("FleetModelsView", () => {
     expect(screen.getByText("2 / 4")).toBeInTheDocument();
   });
 
-  it("routes model search", async () => {
+  it("when routes model search", async () => {
     const onQuery = vi.fn();
     render(<FleetModelsView models={models} total={2} query="" onQuery={onQuery} />);
     await userEvent.type(screen.getByPlaceholderText("모델, 노드, 역할"), "A");
@@ -293,14 +293,14 @@ describe("FleetServicesView", () => {
     ["전체", "all"],
     ["정상", "healthy"],
     ["다운", "down"],
-  ] as const)("routes %s filter", async (label, value) => {
+  ] as const)("when routes %s filter", async (label, value) => {
     const onFilter = vi.fn();
     render(<FleetServicesView services={services} total={3} filter="all" onFilter={onFilter} />);
     await userEvent.click(screen.getByRole("button", { name: label }));
     expect(onFilter).toHaveBeenCalledWith(value);
   });
 
-  it("marks the controlled filter active", () => {
+  it("when marks the controlled filter active", () => {
     render(<FleetServicesView services={services} total={3} filter="down" onFilter={() => {}} />);
     expect(screen.getByRole("button", { name: "다운" })).toHaveClass("active");
   });
@@ -356,14 +356,14 @@ describe("FleetRecipesView", () => {
     expect(props.onAction).toHaveBeenNthCalledWith(3, runningRecipe, "stop");
   });
 
-  it("locks every action while one fleet mutation is busy", () => {
+  it("when locks every action while one fleet mutation is busy", () => {
     renderRecipes({ busyAction: "smart-model:restart" });
     for (const button of screen.getAllByRole("button", { name: /tiny-model 기동|smart-model (재시작|중지)/ })) {
       expect(button).toBeDisabled();
     }
   });
 
-  it("routes query and status filters", async () => {
+  it("when routes query and status filters", async () => {
     const { props } = renderRecipes();
     await userEvent.type(screen.getByPlaceholderText("레시피, 노드, 컨테이너"), "smart");
     await userEvent.click(screen.getByRole("button", { name: "실행" }));
@@ -371,7 +371,7 @@ describe("FleetRecipesView", () => {
     expect(props.onFilter).toHaveBeenCalledWith("running");
   });
 
-  it("marks the controlled filter and count", () => {
+  it("when marks the controlled filter and count", () => {
     renderRecipes({ filter: "stopped" });
     expect(screen.getByRole("button", { name: "중지" })).toHaveClass("active");
     expect(screen.getByText("3 / 5")).toBeInTheDocument();
@@ -406,7 +406,7 @@ describe("FleetJobsView", () => {
     expect(screen.getByText("2 / 5")).toBeInTheDocument();
   });
 
-  it("shows logs only for the expanded job", () => {
+  it("displays logs only for the expanded job", () => {
     renderJobs({ expandedJob: "job-running" });
     expect(document.querySelector("pre.fleet-log")?.textContent).toBe("pulling\nstarting");
     expect(screen.queryByText("stopped")).not.toBeInTheDocument();
@@ -419,7 +419,7 @@ describe("FleetJobsView", () => {
     expect(screen.getByText("empty", { selector: ".fleet-job-title" })).toBeInTheDocument();
   });
 
-  it("routes job toggles", async () => {
+  it("when routes job toggles", async () => {
     const props = renderJobs();
     await userEvent.click(screen.getByRole("button", { name: /모델 중지/ }));
     expect(props.onToggle).toHaveBeenCalledWith("job-done");
@@ -430,7 +430,7 @@ describe("FleetJobsView", () => {
     ["진행", "running"],
     ["완료", "done"],
     ["실패", "failed"],
-  ] as const)("routes %s filter", async (_label, value) => {
+  ] as const)("when routes %s filter", async (_label, value) => {
     const props = renderJobs();
     await userEvent.click(
       screen

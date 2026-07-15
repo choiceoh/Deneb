@@ -12,7 +12,7 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 describe("fleet client", () => {
-  it("accepts successful non-json recipe action responses", async () => {
+  it("allows successful non-json recipe action responses", async () => {
     let token = "";
     server.use(
       http.post("*/api/v1/fleet/api/recipes/action", ({ request }) => {

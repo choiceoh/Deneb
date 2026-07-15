@@ -4,7 +4,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -15,7 +14,7 @@ type AgentConfig struct {
 	MaxTurns  int           // Maximum tool-call turns before stopping. Default: 25.
 	Timeout   time.Duration // Maximum wall time for the entire agent run. Default: 30m.
 	Model     string
-	System    json.RawMessage // System prompt: JSON string or array of ContentBlocks.
+	System    rawJSON // System prompt: JSON string or array of ContentBlocks.
 	Tools     []llm.Tool
 	MaxTokens int // Max output tokens per LLM call. Default: 8192.
 	// MaxTotalOutputTokens caps the sum of output tokens across every LLM call
@@ -42,7 +41,7 @@ type AgentConfig struct {
 	Seed           *int64
 	StopSequences  []string
 	ResponseFormat *llm.ResponseFormat
-	ToolChoice     any // "auto", "none", "required", or structured object
+	ToolChoice     rawJSON // "auto", "none", "required", or structured object
 
 	// OnTurn is called after each agent turn with accumulated token count.
 	// Used for mid-conversation hooks (e.g., memory extraction).

@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 describe("useModels", () => {
-  it("does not request the registry while disconnected", () => {
+  it("without request the registry while disconnected", () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
 
@@ -141,7 +141,7 @@ function textarea(): HTMLTextAreaElement {
 }
 
 describe("useComposerBehavior", () => {
-  it("autosizes the visible composer to its scroll height", () => {
+  it("when autosizes the visible composer to its scroll height", () => {
     const element = textarea();
     const ref = { current: element } as RefObject<HTMLTextAreaElement>;
 
@@ -166,7 +166,7 @@ describe("useComposerBehavior", () => {
     expect(element.style.height).toBe("120px");
   });
 
-  it("does not measure a hidden composer", () => {
+  it("without measure a hidden composer", () => {
     const element = textarea();
     element.style.height = "55px";
     const ref = { current: element } as RefObject<HTMLTextAreaElement>;
@@ -203,7 +203,7 @@ describe("useComposerBehavior", () => {
     expect(focus).toHaveBeenCalledTimes(1);
   });
 
-  it("does not steal focus for the side panel", () => {
+  it("without steal focus for the side panel", () => {
     const element = textarea();
     const focus = vi.spyOn(element, "focus");
     const ref = { current: element } as RefObject<HTMLTextAreaElement>;
@@ -255,7 +255,7 @@ describe("useComposerBehavior", () => {
     expect(focus).not.toHaveBeenCalled();
   });
 
-  it("tolerates a ref that has not mounted yet", () => {
+  it("when tolerates a ref that has not mounted yet", () => {
     const ref = createRef<HTMLTextAreaElement>();
     expect(() =>
       renderHook(() => useComposerBehavior(ref, { input: "text", busy: false, hidden: false, focusOnReveal: true })),
@@ -328,7 +328,7 @@ describe("useAttachPipeline", () => {
     expect(result.current.attachNote).toBe("");
   });
 
-  it("uses the first non-audio file as the batch caption target", async () => {
+  it("when uses the first non-audio file as the batch caption target", async () => {
     const { result, props } = attachHarness();
     const audio = new File(["voice"], "voice.mp3", { type: "audio/mpeg" });
     const image = new File(["pixels"], "photo.png", { type: "image/png" });
@@ -359,7 +359,7 @@ describe("useAttachPipeline", () => {
     expect(props.onBatchDone).toHaveBeenCalledTimes(1);
   });
 
-  it("does not consume composer text for an audio-only batch", async () => {
+  it("without consume composer text for an audio-only batch", async () => {
     const { result, props } = attachHarness();
     const audio = new File(["voice"], "voice.wav", { type: "audio/wav" });
 
@@ -378,7 +378,7 @@ describe("useAttachPipeline", () => {
     expect(props.capture).toHaveBeenCalledWith({ name: "PHOTO.PNG", mimeType: "image/png", base64: "aGVsbG8=" }, "");
   });
 
-  it("blocks synchronous re-entry while a batch is active", async () => {
+  it("when blocks synchronous re-entry while a batch is active", async () => {
     let release!: () => void;
     const capture = vi.fn(() => new Promise<void>((resolve) => (release = resolve)));
     const { result, props } = attachHarness({ capture });
