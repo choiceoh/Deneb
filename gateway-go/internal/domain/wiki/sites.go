@@ -110,15 +110,20 @@ func (s *Store) SeedSitePages(project string) ([]string, error) {
 	refs := s.knownProjects()
 
 	// One corpus pass: bucket existing 현장 pages under their owning project folder.
+	// Abort on a walk failure rather than proceed — this is a WRITE path, and an
+	// empty listing would make the seeder treat existing 현장 pages as missing and
+	// re-create/clobber stubs.
+	paths, err := s.ListPages(projectCategoryPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("list project pages: %w", err)
+	}
 	sitePagesByFolder := make(map[string][]string)
-	if paths, err := s.ListPages(projectCategoryPrefix); err == nil {
-		for _, p := range paths {
-			if !IsProjectSitePage(p) {
-				continue
-			}
-			if folder, ok := ProjectNameOf(p); ok {
-				sitePagesByFolder[folder] = append(sitePagesByFolder[folder], p)
-			}
+	for _, p := range paths {
+		if !IsProjectSitePage(p) {
+			continue
+		}
+		if folder, ok := ProjectNameOf(p); ok {
+			sitePagesByFolder[folder] = append(sitePagesByFolder[folder], p)
 		}
 	}
 
