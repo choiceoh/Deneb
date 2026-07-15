@@ -5,6 +5,7 @@ package server
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -20,9 +21,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
-		"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
@@ -31,6 +31,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/filesemindex"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/modelpanel"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/notebooksource"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 )
 
 // initMemorySubsystem initializes model registry, session memory, and wiki.
@@ -236,6 +237,12 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		// reaches the same SparkFleet control plane via s.fleet's accessors, so
 		// "is the fleet ok / restart qwen36" works from chat. "" base = off.
 		Fleet: chat.FleetDeps{BaseURL: s.fleet.BaseURL, Token: s.fleet.Token},
+		// Browser: Page Agent workstation bridge (opt-in DENEB_BROWSER_URL).
+		// "" base = off; the tool returns a calm message until configured.
+		Browser: chat.BrowserDeps{
+			BaseURL: func() string { return strings.TrimSpace(os.Getenv("DENEB_BROWSER_URL")) },
+			Token:   func() string { return strings.TrimSpace(os.Getenv("DENEB_BROWSER_TOKEN")) },
+		},
 		// ASR proper-noun bias for the transcribe tool — the same wiki+contacts
 		// hints the miniapp.capture.audio path merges (people/companies/deals).
 		AsrHotwords: func() string {

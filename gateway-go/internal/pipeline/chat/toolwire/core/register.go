@@ -52,6 +52,7 @@ type RuntimeOpsToolSet struct {
 	Gateway       toolport.ToolFunc
 	Observe       toolport.ToolFunc
 	Fleet         toolport.ToolFunc
+	Browser       toolport.ToolFunc
 	SpilloverRead toolport.ToolFunc
 }
 
@@ -86,6 +87,20 @@ func RegisterRuntimeOpsTools(registry toolport.ToolRegistrar, set RuntimeOpsTool
 			"\"플릿 괜찮아?\" · \"qwen36 재시작해줘\" · \"왜 죽었어?\" 같은 요청에 사용.",
 		InputSchema: schema.FleetToolSchema(),
 		Fn:          set.Fleet,
+		Deferred:    true,
+	})
+
+	// Browser: operate the user's real Chrome via a workstation Page Agent
+	// bridge (login sessions + SPA clicks). Deferred like fleet — niche but
+	// powerful; fetch_tools when a turn needs interactive web control.
+	registry.RegisterTool(toolport.ToolDef{
+		Name: "browser",
+		Description: "사용자 PC의 실제 Chrome 브라우저를 자연어로 조작한다 (Page Agent 브리지). " +
+			"로그인된 SaaS·SPA처럼 `web`(HTTP fetch)으로 못 읽는 화면을 클릭·입력·스크롤한다. " +
+			"action=status (허브 연결/작업 중 여부) · execute (task=자연어 지시, 블로킹) · stop (진행 중 작업 중단). " +
+			"\"이 사이트에서 …해줘\" · \"로그인한 페이지에서 폼 채워\" 류에 사용. DENEB_BROWSER_URL 미설정 시 연동 꺼짐.",
+		InputSchema: schema.BrowserToolSchema(),
+		Fn:          set.Browser,
 		Deferred:    true,
 	})
 
@@ -186,6 +201,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 		Gateway: runtimeops.ToolGateway(deps.WorkspaceDir),
 		Observe: observeFn,
 		Fleet:   runtimeops.ToolFleet(&deps.Fleet),
+		Browser: runtimeops.ToolBrowser(&deps.Browser),
 	}
 	if deps.SpilloverStore != nil {
 		runtimeOps.SpilloverRead = artifact.ToolSpilloverRead(deps.SpilloverStore)

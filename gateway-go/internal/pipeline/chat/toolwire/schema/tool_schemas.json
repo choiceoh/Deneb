@@ -1864,6 +1864,28 @@
     ]
   },
   {
+    "name": "browser",
+    "max_output": 32000,
+    "properties": {
+      "action": {
+        "type": "string",
+        "description": "Browser bridge action: status (hub connected/busy) | execute (run a natural-language task in the user's Chrome — blocking) | stop (cancel the running task)",
+        "enum": [
+          "status",
+          "execute",
+          "stop"
+        ]
+      },
+      "task": {
+        "type": "string",
+        "description": "Natural-language instructions for action=execute. Be specific: steps and what information to return after the task."
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  {
     "name": "phone_read",
     "properties": {
       "what": {

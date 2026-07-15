@@ -66,6 +66,7 @@ func allSchemaCases() []schemaCase {
 		{name: "watch", build: schema.WatchToolSchema},
 		{name: "observe", build: schema.ObserveToolSchema},
 		{name: "fleet", build: schema.FleetToolSchema},
+		{name: "browser", build: schema.BrowserToolSchema},
 		{name: "phone_read", build: schema.PhoneReadToolSchema},
 		{name: "phone_write", build: schema.PhoneWriteToolSchema},
 		{name: "workfeed", build: schema.WorkfeedToolSchema},
@@ -372,6 +373,7 @@ func TestFetchToolsSchemaMatchesGeneratedBuilderWithoutAliasing(t *testing.T) {
 
 func TestToolMaxOutputsContractAndFreshMap(t *testing.T) {
 	want := map[string]int{
+		"browser":     32000,
 		"calendar":    8000,
 		"contacts":    8000,
 		"deal_ledger": 8000,
@@ -446,7 +448,7 @@ func TestRegisterCoreToolsDeferredPolicyContractMatchesOperationalIntent(t *test
 		"sessions_spawn": false, "heartbeat_update": false, "goal": false,
 		"mail_archive": false, "transcribe": true, "ocr": true, "org": true,
 		"office": false, // eager: document work is a core operator workflow
-		"edit":   true, "gateway": true, "observe": true, "fleet": true,
+		"edit":   true, "gateway": true, "observe": true, "fleet": true, "browser": true,
 		"graphify": true, "process": true, "sessions": true, "subagents": true,
 		"message": true, "todo": true, "cron": true, "files": true,
 		"morning_letter": true, "evening_letter": true,
@@ -469,11 +471,12 @@ func TestWorkspaceRegistrationGroupsPreserveOrder(t *testing.T) {
 		Gateway:       noop,
 		Observe:       noop,
 		Fleet:         noop,
+		Browser:       noop,
 		SpilloverRead: noop,
 	})
 	core.RegisterGraphTool(reg, t.TempDir())
 
-	want := []string{"read", "write", "edit", "grep", "gateway", "observe", "fleet", "read_spillover", "graphify"}
+	want := []string{"read", "write", "edit", "grep", "gateway", "observe", "fleet", "browser", "read_spillover", "graphify"}
 	if got := reg.toolNames(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("registration order = %#v, want %#v", got, want)
 	}
@@ -489,8 +492,8 @@ func TestRegistrationGroupsEnforceExactNamesWithoutCrossGroupDuplicates(t *testi
 	groups := []group{
 		{name: "file", run: func(r *mockRegistrar) { RegisterFileTools(r, t.TempDir()) }, want: []string{"edit", "grep", "read", "write"}},
 		{name: "runtime-ops", run: func(r *mockRegistrar) {
-			core.RegisterRuntimeOpsTools(r, core.RuntimeOpsToolSet{Gateway: noop, Observe: noop, Fleet: noop})
-		}, want: []string{"fleet", "gateway", "observe"}},
+			core.RegisterRuntimeOpsTools(r, core.RuntimeOpsToolSet{Gateway: noop, Observe: noop, Fleet: noop, Browser: noop})
+		}, want: []string{"browser", "fleet", "gateway", "observe"}},
 		{name: "graph", run: func(r *mockRegistrar) { core.RegisterGraphTool(r, t.TempDir()) }, want: []string{"graphify"}},
 		{name: "phone", run: func(r *mockRegistrar) { core.RegisterPhoneTools(r, nil) }, want: []string{"phone_read", "phone_write"}},
 		{name: "process", run: func(r *mockRegistrar) { RegisterProcessTools(r, &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()}) }, want: []string{"exec", "process"}},
