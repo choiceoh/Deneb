@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.85](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.84...andromeda-v0.0.85) (2026-07-15)
+
+
+### ✨ Features
+
+* **client:** native rows for groupware ERP snapshot ([#3786](https://github.com/choiceoh/Deneb/issues/3786)) ([c418f3b](https://github.com/choiceoh/Deneb/commit/c418f3b24845d621bfbb148756648c4aa7a6281e))
+* **client:** pivot to mail, quiet pending filter, approval detail reorder ([#3788](https://github.com/choiceoh/Deneb/issues/3788)) ([e6af3c3](https://github.com/choiceoh/Deneb/commit/e6af3c336106c5772aea8ff5676e1829d5e40395))
+* **client:** zune-style pivot header + groupware surface upgrades ([#3785](https://github.com/choiceoh/Deneb/issues/3785)) ([40db5ae](https://github.com/choiceoh/Deneb/commit/40db5ae49e7a7522cf56a9ca3d306ca79c5d1595))
+
 ## [0.0.84](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.83...andromeda-v0.0.84) (2026-07-15)
 
 
