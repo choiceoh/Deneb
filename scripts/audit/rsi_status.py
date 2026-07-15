@@ -23,6 +23,7 @@ DEFAULT_GATEWAY_URL = "http://127.0.0.1:18789"
 DEFAULT_STATE_DIR = "~/.deneb"
 VALID_STATES = frozenset({"LIVE", "DATA-GATED", "STARVED", "FROZEN", "IDLE"})
 STATE_GLYPH = {"LIVE": "●", "DATA-GATED": "◐", "STARVED": "○", "FROZEN": "❄", "IDLE": "·"}
+MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
 
 class StatusError(RuntimeError):
@@ -73,7 +74,12 @@ def fetch_status(base_url: str, token: str, timeout: float = 10) -> StatusSnapsh
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            envelope = json.loads(response.read())
+            body = response.read(MAX_RESPONSE_BYTES + 1)
+            if len(body) > MAX_RESPONSE_BYTES:
+                raise StatusError(
+                    f"miniapp.rsi.status response exceeds {MAX_RESPONSE_BYTES} bytes"
+                )
+            envelope = json.loads(body)
     except (urllib.error.URLError, urllib.error.HTTPError, ValueError, OSError) as exc:
         raise StatusError(f"miniapp.rsi.status unavailable: {exc}") from exc
     if not isinstance(envelope, dict) or envelope.get("ok") is False or envelope.get("error"):
@@ -85,7 +91,15 @@ def fetch_status(base_url: str, token: str, timeout: float = 10) -> StatusSnapsh
 def snapshot_from_payload(payload: Any) -> StatusSnapshot:
     if not isinstance(payload, dict) or not isinstance(payload.get("layers"), list):
         raise StatusError("miniapp.rsi.status returned no layers")
-    layers = tuple(_layer_from_payload(raw) for raw in payload["layers"])
+    layers_list: list[LayerStatus] = []
+    layer_keys: set[str] = set()
+    for raw in payload["layers"]:
+        layer = _layer_from_payload(raw)
+        if layer.key in layer_keys:
+            raise StatusError(f"miniapp.rsi.status returned duplicate layer {layer.key!r}")
+        layer_keys.add(layer.key)
+        layers_list.append(layer)
+    layers = tuple(layers_list)
     turning = payload.get("turning")
     loop_count = sum(layer.key != "GRAD" for layer in layers)
     if isinstance(turning, bool) or not isinstance(turning, int) or not 0 <= turning <= loop_count:

@@ -2,6 +2,8 @@ package genesis
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -25,6 +27,46 @@ func TestNextSelfCorrectionDispatchCandidateSearchesBeyondRecentViewLimit(t *tes
 	got, ok, err = tracker.NextSelfCorrectionDispatchCandidate([]string{"old-accepted"})
 	if err != nil || !ok || got.ID != "new-proposed-500" {
 		t.Fatalf("selected with exclusion = %+v, ok=%v, err=%v", got, ok, err)
+	}
+}
+
+func TestSelfCorrectionSafetyDecisionsFailClosedOnCorruptLedger(t *testing.T) {
+	tracker := newTestTracker(t)
+	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		ID: "safe", Scope: "code", Status: SelfCorrectionStatusAccepted,
+		Source: "health-finding:x", CreatedAt: 1,
+	})
+	f, err := os.OpenFile(tracker.selfCorrectionPath, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("{broken\n"); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	assertCorrupt := func(name string, err error) {
+		t.Helper()
+		if err == nil || !strings.Contains(err.Error(), "malformed=1") {
+			t.Fatalf("%s error = %v, want ledger corruption", name, err)
+		}
+	}
+
+	_, err = tracker.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
+		ID: "safe", Status: SelfCorrectionStatusRejected,
+	})
+	assertCorrupt("review", err)
+	_, err = tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
+		ID: "safe", DispatchPhase: selfCorrectionDispatchStarted, AttemptID: "attempt-1",
+	})
+	assertCorrupt("dispatch", err)
+
+	got, ok, err := tracker.NextSelfCorrectionDispatchCandidate(nil)
+	assertCorrupt("selection", err)
+	if ok || got.ID != "" {
+		t.Fatalf("selected = %+v, ok=%v, err=%v; want fail-closed corruption error", got, ok, err)
 	}
 }
 

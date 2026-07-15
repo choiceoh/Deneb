@@ -65,6 +65,32 @@ not json
 	}
 }
 
+func TestScanReportsSkippedLinesAndVisitsValidRecords(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "scan.jsonl")
+	giant := strings.Repeat("x", maxLineBytes+1)
+	data := `{"name":"a","value":1}` + "\n" +
+		"not json\n" +
+		`{"name":"` + giant + `","value":2}` + "\n" +
+		`{"name":"c","value":3}` + "\n"
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var values []int
+	stats, err := Scan[record](path, func(item record) {
+		values = append(values, item.Value)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Records != 2 || stats.CorruptLines != 1 || stats.OversizeLines != 1 || stats.SkippedLines() != 2 {
+		t.Fatalf("unexpected scan stats: %+v", stats)
+	}
+	if len(values) != 2 || values[0] != 1 || values[1] != 3 {
+		t.Fatalf("unexpected visited values: %v", values)
+	}
+}
+
 func TestLoadOversizeLineIsSkippedNotFatal(t *testing.T) {
 	// RSI 4th-review M2-#3: an oversize (>maxLineBytes) line — a torn write, a
 	// merged record, or external corruption — must be skipped like any other
@@ -150,5 +176,45 @@ func TestSnapshotWritesAndReloadsItems(t *testing.T) {
 	}
 	if loaded[0].Name != "x" || loaded[1].Value != 20 {
 		t.Fatalf("unexpected data: %+v", loaded)
+	}
+}
+
+var benchmarkRecordCount int
+
+func benchmarkJSONLPath(b *testing.B) string {
+	b.Helper()
+	path := filepath.Join(b.TempDir(), "records.jsonl")
+	items := make([]record, 10_000)
+	for i := range items {
+		items[i] = record{Name: "benchmark-record", Value: i}
+	}
+	if err := Snapshot(path, items); err != nil {
+		b.Fatal(err)
+	}
+	return path
+}
+
+func BenchmarkLoad10K(b *testing.B) {
+	path := benchmarkJSONLPath(b)
+	b.ResetTimer()
+	for range b.N {
+		items, err := Load[record](path)
+		if err != nil {
+			b.Fatal(err)
+		}
+		benchmarkRecordCount = len(items)
+	}
+}
+
+func BenchmarkScan10K(b *testing.B) {
+	path := benchmarkJSONLPath(b)
+	b.ResetTimer()
+	for range b.N {
+		count := 0
+		_, err := Scan[record](path, func(_ record) { count++ })
+		if err != nil {
+			b.Fatal(err)
+		}
+		benchmarkRecordCount = count
 	}
 }

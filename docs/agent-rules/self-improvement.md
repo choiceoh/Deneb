@@ -162,9 +162,11 @@ acceptance machinery stays forbidden at record time.
   process or are already exposed as a read-only RPC.
 - **Dispatch ownership**: the gateway scans the current queue once and owns
   review/delivery/source/surface eligibility plus deterministic session-result
-  classification. `coding-dispatch.sh` only supplies local marker exclusions and
-  execution facts; `dispatch_outcome.py` projects the authoritative phase onto a
-  compatibility marker for worktree protection and older audits.
+  classification. Safety-critical readers stream-fold the ledger and fail closed
+  if any malformed or oversize row was skipped. `coding-dispatch.sh` only supplies
+  local marker exclusions and execution facts; `dispatch_outcome.py` projects the
+  authoritative phase onto a compatibility marker for worktree protection and
+  older audits.
 - **Dispatch graduation (ladder)**: coding-dispatch.sh auto-dispatches only
   allowlisted source namespaces. **Graduated** (auto-dispatch → land through the
   full gate stack): `evolve-tool-gap`, `self-harness`, `health-finding`
@@ -176,7 +178,8 @@ acceptance machinery stays forbidden at record time.
   directive 2026-07-14)**: `LadderWatchTask` unlocks a staged source once the
   review lane endorses it (accepted≥2, rejected=0 — a rejection is a standing
   veto) by writing the shared graduation state
-  (`~/.deneb/data/graduation_state.json`, read by Go + sh + py allowlists), with
+  (`~/.deneb/data/graduation_state.json`, read by Go admission/status and the
+  shell daily-cap executor), with
   a lifecycle-ledger record and a feed-card 재잠금 veto. Kill switch
   `DENEB_AUTO_GRADUATE=0`; the drift self-brake pauses execution; the
   thresholds and the executor are forbidden self-edit surfaces (the loop
@@ -204,6 +207,9 @@ acceptance machinery stays forbidden at record time.
    missing visibility; keep this fed.
 6. **Validation gates are pure** — `evolver_skill_validation.go` holds no `Evolver`
    state, deliberately apart from orchestration in `evolver.go`.
+7. **L4 ledger corruption freezes review and dispatch** — a skipped terminal
+   review or delivery row could resurrect vetoed work, so safety decisions must
+   surface malformed/oversize rows instead of silently using a partial fold.
 
 ## Where to Look Next
 
