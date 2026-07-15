@@ -1658,13 +1658,13 @@ func GroupwareToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Read-only Amaranth: status|list|read|attachment|summary. sales summary=매출마감. stock/po/receive/ship/price accept list or summary(=list). Never mutate.",
+				"description": "Read-only Amaranth: status|list|read|attachment|summary. sales summary=매출마감. stock/po/receive/ship/price/people accept list (summary=list). Never mutate.",
 				"enum":        []string{"status", "list", "read", "attachment", "summary"},
 			},
 			"area": map[string]any{
 				"type":        "string",
-				"description": "Surface: approval|board|sales|stock|po|receive|ship|price. Korean: 전자결재·게시판·매출·재고·발주·입고·출고·단가.",
-				"enum":        []string{"approval", "board", "sales", "stock", "po", "receive", "ship", "price"},
+				"description": "Surface: approval|board|sales|stock|po|receive|ship|price|people. Korean: 전자결재·게시판·매출·재고·발주·입고·출고·단가·사원.",
+				"enum":        []string{"approval", "board", "sales", "stock", "po", "receive", "ship", "price", "people"},
 			},
 			"attachment": map[string]any{
 				"type":        "string",
@@ -1676,16 +1676,16 @@ func GroupwareToolSchema() map[string]any {
 			},
 			"folder": map[string]any{
 				"type":        "string",
-				"description": "approval: pending|done|cc|total|all. sales/stock/po/receive/ship: ytd|month|today|year|last_year (receive/ship default month; sales/stock/po default ytd). Ignored for price/board.",
+				"description": "approval: pending|done|cc|total|all. sales/stock/po/receive/ship: ytd|month|today|year|last_year (receive/ship default month; sales/stock/po default ytd). Ignored for price/people/board.",
 				"enum":        []string{"pending", "done", "cc", "total", "all", "ytd", "month", "today", "year", "last_year"},
 			},
 			"limit": map[string]any{
 				"type":        "integer",
-				"description": "Max lines for list/stock/po/receive/ship/price (default 20, max 50).",
+				"description": "Max lines for list areas (default 20, max 50; people detail capped at 20).",
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Keyword (품목·거래처) or YYYYMMDD:YYYYMMDD [keyword]. price: 모듈/인버터→itemCd M-/I-. Prefix lines: for raw voucher lines (po/receive/ship). Required for action=read.",
+				"description": "Keyword (품목·거래처·사원이름) or YYYYMMDD:YYYYMMDD [keyword]. price: 모듈/인버터→itemCd M-/I-. people: name required. Prefix lines: raw voucher lines. Required for action=read and area=people.",
 			},
 		},
 		"required": []string{"action"},

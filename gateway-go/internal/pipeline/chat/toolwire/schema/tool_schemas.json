@@ -1899,7 +1899,7 @@
     "properties": {
       "action": {
         "type": "string",
-        "description": "Read-only Amaranth: status|list|read|attachment|summary. sales summary=매출마감. stock/po/receive/ship/price accept list or summary(=list). Never mutate.",
+        "description": "Read-only Amaranth: status|list|read|attachment|summary. sales summary=매출마감. stock/po/receive/ship/price/people accept list (summary=list). Never mutate.",
         "enum": [
           "status",
           "list",
@@ -1910,7 +1910,7 @@
       },
       "area": {
         "type": "string",
-        "description": "Surface: approval|board|sales|stock|po|receive|ship|price. Korean: 전자결재·게시판·매출·재고·발주·입고·출고·단가.",
+        "description": "Surface: approval|board|sales|stock|po|receive|ship|price|people. Korean: 전자결재·게시판·매출·재고·발주·입고·출고·단가·사원.",
         "enum": [
           "approval",
           "board",
@@ -1919,12 +1919,13 @@
           "po",
           "receive",
           "ship",
-          "price"
+          "price",
+          "people"
         ]
       },
       "query": {
         "type": "string",
-        "description": "Keyword (품목·거래처) or YYYYMMDD:YYYYMMDD [keyword]. price: 모듈/인버터→itemCd M-/I-. Prefix lines: for raw voucher lines (po/receive/ship). Required for action=read."
+        "description": "Keyword (품목·거래처·사원이름) or YYYYMMDD:YYYYMMDD [keyword]. price: 모듈/인버터→itemCd M-/I-. people: name required. Prefix lines: raw voucher lines. Required for action=read and area=people."
       },
       "doc_id": {
         "type": "string",
@@ -1936,11 +1937,11 @@
       },
       "limit": {
         "type": "integer",
-        "description": "Max lines for list/stock/po/receive/ship/price (default 20, max 50)."
+        "description": "Max lines for list areas (default 20, max 50; people detail capped at 20)."
       },
       "folder": {
         "type": "string",
-        "description": "approval: pending|done|cc|total|all. sales/stock/po/receive/ship: ytd|month|today|year|last_year (receive/ship default month; sales/stock/po default ytd). Ignored for price/board.",
+        "description": "approval: pending|done|cc|total|all. sales/stock/po/receive/ship: ytd|month|today|year|last_year (receive/ship default month; sales/stock/po default ytd). Ignored for price/people/board.",
         "enum": [
           "pending",
           "done",
