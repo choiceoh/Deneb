@@ -43,6 +43,10 @@ from typing import Any, TextIO
 DEFAULT_DATA_DIR = os.path.expanduser("~/.deneb/data")
 WINDOW_DAYS = 7
 DAY_MS = 24 * 60 * 60 * 1000
+# Matches Go dispatchMarkerAbandonAfter and the coding-dispatch SESSION_TIMEOUT
+# default (7200s): an outcome-less marker blocks re-dispatch only within this
+# grace window (by mtime), then abandons.
+DISPATCH_ABANDON_MS = 2 * 60 * 60 * 1000
 
 # e-process cutover graduation thresholds (must match
 # tracker_eprocess_cutover.go): observation-mode baseline-test labels justify
@@ -273,9 +277,14 @@ def assess_l2(revisions: list[dict], frozen: bool, now_ms: int) -> LayerStatus:
     if frozen:
         return LayerStatus("L2", "meta-evolution", FROZEN, metrics,
                            "drift self-brake engaged — auto-adopt frozen to propose-only")
-    if cycles == 0 and adopted == 0:
+    # Parity with Go metaActivityIn (rsi_status.go): LIVE when ANY of
+    # cycles/proposed/adopted/reverted > 0. A revert alone is the rollback watch
+    # working — meta activity — so it must NOT read IDLE (else the Go RPC shows
+    # LIVE while this audit shows IDLE, and rsi_loop_audit hard-fails a healthy
+    # brake). proposed ⊆ cycles, so it needs no separate term.
+    if cycles == 0 and adopted == 0 and reverted == 0:
         return LayerStatus("L2", "meta-evolution", IDLE, metrics,
-                           "no slow-loop cycles in 14d — awaiting the weekly cadence")
+                           "no slow-loop activity in 14d — awaiting the weekly cadence")
     return LayerStatus("L2", "meta-evolution", LIVE, metrics,
                        f"{cycles} cycles / {proposed} proposed / {adopted} adopted / "
                        f"{reverted} reverted (14d), last {last}")
@@ -286,16 +295,24 @@ def assess_l3(runs: list[dict], genesis_events: list[dict], now_ms: int) -> Laye
     (real-usage) false-accept labels are the fuel."""
     cutoff = now_ms - WINDOW_DAYS * DAY_MS
     recent = [r for r in runs if _within(r.get("createdAt"), cutoff)]
-    if not recent:
+    # Operator labels are counted by EACH verdict's own timestamp across ALL
+    # records (parity with Go RecentOperatorJudgeVerdicts) — a verdict added today
+    # to a judge run recorded 10 days ago still counts, and a stale verdict on a
+    # fresh run does not. Their presence alone keeps L3 out of IDLE (Go's
+    # len(records)==0 && operatorLabels==0 / runs==0 && operatorLabels==0 gates).
+    operator_labels = 0
+    for r in runs:
+        for v in r.get("operatorVerdicts") or []:
+            if _within(v.get("createdAt"), cutoff):
+                operator_labels += 1
+    if not recent and operator_labels == 0:
         return LayerStatus("L3", "verifier co-evolution", IDLE, {"runs": 0},
                            "judge-accuracy lane has not run in 7d")
     misses = 0
     false_rejects = 0
     classes_seen: set[str] = set()
-    operator_labels = 0
     lane_runs = 0
     for r in recent:
-        operator_labels += len(r.get("operatorVerdicts") or [])
         if not (r.get("pairs") or r.get("byClass") or r.get("falseRejects")):
             continue
         lane_runs += 1
@@ -358,6 +375,23 @@ def _merge_candidates(rows: list[dict]) -> dict[str, dict]:
     return cand
 
 
+def _marker_blocks_redispatch(marker: dict | None, mtime_ms: int, now_ms: int) -> bool:
+    """Mirror Go dispatchMarkerBlocksAt (rsi_status.go): a corrupt/non-dict
+    marker fails closed (blocks); landed/attempted/declined block; failed/timeout
+    are retryable; an outcome-less marker blocks only within the 2h abandon grace
+    (by mtime), then abandons. Parity with the pick lane so the audit's L4
+    dispatchable count agrees with the Go RPC."""
+    if not isinstance(marker, dict):
+        return True  # corrupt / unparseable → fail closed
+    outcome = marker.get("outcome")
+    outcome = outcome.strip() if isinstance(outcome, str) else ""
+    if outcome in ("landed", "attempted", "declined"):
+        return True
+    if outcome in ("failed", "timeout"):
+        return False
+    return (now_ms - mtime_ms) < DISPATCH_ABANDON_MS
+
+
 def assess_l4(
     rows: list[dict],
     dispatch_total: int,
@@ -367,13 +401,13 @@ def assess_l4(
     grad_rows: dict | None = None,
     runtime_status: dict[str, Any] | None = None,
     now_ms: int | None = None,
-    marker_outcomes: dict[str, str] | None = None,
+    marker_blocks: dict[str, bool] | None = None,
 ) -> LayerStatus:
     """Source self-edit — the coding-dispatch supply of code-scope candidates."""
     outcomes = outcomes or {}
     sources = _dispatchable_sources(grad_rows or {})
     runtime_status = runtime_status or {}
-    marker_outcomes = marker_outcomes or {}
+    marker_blocks = marker_blocks or {}
     cand = _merge_candidates(rows)
     dispatched_ids = dispatched_ids or set()
     by_scope: dict[str, int] = {}
@@ -396,14 +430,15 @@ def assess_l4(
             continue
         if scope == "code" and phase in ("failed", "rolled_back"):
             failed += 1
-            outcome = marker_outcomes.get(rid, "")
+            # Parity with Go: a candidate is re-dispatchable iff its marker does
+            # not block. A rolled_back phase is always retryable; otherwise honor
+            # the marker verdict (corrupt→blocked, outcome-less within the 2h
+            # grace→blocked, failed/timeout→retryable). A candidate with no marker
+            # defaults to not-blocked (Go: ReadFile err → False).
             if (
-                (
-                    phase == "rolled_back"
-                    or outcome not in ("landed", "attempted", "declined")
-                )
+                (phase == "rolled_back" or not marker_blocks.get(rid, False))
                 and st in ("proposed", "accepted")
-                and src.startswith(sources)
+                and _source_dispatchable(src, sources)
             ):
                 dispatchable += 1
                 created_at = int(rec.get("createdAt") or 0)
@@ -537,7 +572,7 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
     dispatch_dir = os.path.join(data_dir, "coding_dispatch")
     dispatch_total = dispatch_today = 0
     outcomes: dict[str, int] = {}
-    marker_outcomes: dict[str, str] = {}
+    marker_blocks: dict[str, bool] = {}
     dispatched_ids: set[str] = set()
     today_cutoff = now_ms - (now_ms % DAY_MS)
     try:
@@ -574,15 +609,15 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
                 ):
                     dispatch_today += 1
 
-            # Redispatch blocking follows the current attempt only. Historical
-            # failures must not make a later landed/declined marker retryable.
-            if marker is not None:
-                current_outcome = marker.get("outcome")
-                current_outcome = (
-                    current_outcome.strip() if isinstance(current_outcome, str) else ""
+            # Per-marker re-dispatch block verdict (parity with Go
+            # dispatchMarkerBlocksAt): the current marker state alone decides —
+            # corrupt fails closed, an outcome-less marker blocks within the 2h
+            # abandon grace (by mtime), failed/timeout are retryable, and
+            # landed/attempted/declined block. Historical attempts don't leak in.
+            if marker_id:
+                marker_blocks[marker_id] = _marker_blocks_redispatch(
+                    marker, fallback_at_ms, now_ms
                 )
-                if current_outcome and marker_id:
-                    marker_outcomes[marker_id] = current_outcome
     except OSError:
         pass
 
@@ -602,7 +637,7 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
         assess_l3(judge, genesis, now_ms),
         assess_l4(
             candidates, dispatch_total, dispatch_today, outcomes, dispatched_ids,
-            grad_rows, runtime_status, now_ms, marker_outcomes,
+            grad_rows, runtime_status, now_ms, marker_blocks,
         ),
         assess_ladder(genesis, revisions, candidates, outcomes, grad_rows=grad_rows),
     ]
