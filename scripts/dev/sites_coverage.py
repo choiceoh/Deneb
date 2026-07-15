@@ -1,20 +1,30 @@
 #!/usr/bin/env python3
 """Measure 현장(Sites) coverage across wiki project 대표페이지.
 
-Read-only. Answers the go/no-go question for a 현장 지도: how many projects
-actually carry a Site, and how do those Sites distribute across 시도/시군구 —
-i.e. would a map be densely populated or mostly empty?
+Read-only. Answers the go/no-go question for a 현장 지도: how many ACTIVE
+projects actually carry a Site, and how do those Sites distribute across
+시도/시군구 — i.e. would a map be densely populated or mostly empty?
 
-Sites live in the YAML frontmatter of top-level 프로젝트/*.md pages as a flow
-array `sites: [광역약칭 시/군 읍/면/동, ...]` (see wiki/page.go). This script
-mirrors the Go normalizeSiteName province-abbreviation so its 시도 bucketing
-matches the gateway's own matching keys.
+Sites live in the YAML frontmatter of project 대표페이지 as a flow array
+`sites: [광역약칭 시/군 읍/면/동, ...]`. This script mirrors the gateway's own
+rules so the numbers match what production would actually render:
+
+  - 대표페이지 detection mirrors wiki/project_layout.go IsProjectRepPage: both the
+    current folder form 프로젝트/<name>/대표.md AND legacy flat 프로젝트/<name>.md,
+    excluding reserved category buckets (거래/메일분석/자료/회의록/mail-analyses).
+    When both forms exist for one project, the folder form wins (knownProjects).
+  - archived pages (frontmatter archived: true) are skipped, exactly as
+    Store.knownProjects drops them from the active project surface.
+  - 시도 bucketing mirrors normalizeSiteName's provinceAbbrev.
 
 Usage:
-    python3 scripts/dev/sites_coverage.py <wiki-root>      # e.g. ~/.deneb/wiki
+    python3 scripts/dev/sites_coverage.py <wiki-root>          # e.g. ~/.deneb/wiki
     python3 scripts/dev/sites_coverage.py <wiki-root> --json
 """
-import sys, os, glob, json, re
+import sys
+import os
+import json
+import re
 
 # from wiki/page.go provinceAbbrev — full 광역 name -> fixed abbreviation
 PROVINCE_ABBREV = {
@@ -29,6 +39,10 @@ PROVINCE_ABBREV = {
 }
 SIDO = {"서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
         "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"}
+# from wiki/project_layout.go reservedProjectDirs — 프로젝트/ children that are
+# category buckets, not projects.
+RESERVED = {"거래", "메일분석", "mail-analyses", "자료", "회의록"}
+REP_PAGE_FILE = "대표.md"
 
 
 def normalize_site(s):
@@ -45,22 +59,26 @@ def normalize_site(s):
 
 
 def parse_frontmatter(text):
-    """Return the frontmatter block (between the first two '---' lines) or ''."""
-    if not text.startswith("---\n") and not text.startswith("---\r\n"):
+    """Return the frontmatter block or ''. Line-anchored, mirroring
+    wiki/page.go splitFrontmatter: the file must open with a '---' line, and the
+    block ends at the next line that is exactly '---' (a bare '---' in the body
+    must not be mistaken for a delimiter)."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
         return ""
-    rest = text.split("---", 2)
-    return rest[1] if len(rest) >= 3 else ""
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            return "\n".join(lines[1:i])
+    return ""  # unclosed frontmatter — treat as none
 
 
 def extract_sites(fm):
     """Extract the sites list from a frontmatter block. Handles the flow form
     `sites: [a, b]` (what Render writes) and a legacy block form."""
-    # flow: sites: [a, b, c]
     m = re.search(r"^sites:\s*\[(.*?)\]\s*$", fm, re.M)
     if m:
         inner = m.group(1).strip()
         return [x.strip() for x in inner.split(",") if x.strip()] if inner else []
-    # block: sites:\n  - a\n  - b
     m = re.search(r"^sites:\s*$", fm, re.M)
     if m:
         out = []
@@ -79,6 +97,23 @@ def extract_scalar(fm, key):
     return m.group(1).strip() if m else ""
 
 
+def collect_rep_pages(proj_dir):
+    """Return {project_name: abspath} for every 대표페이지, mirroring
+    IsProjectRepPage + knownProjects dedup (folder form wins over legacy flat)."""
+    rep = {}  # name -> (abspath, is_folder_form)
+    for entry in sorted(os.listdir(proj_dir)):
+        path = os.path.join(proj_dir, entry)
+        if os.path.isfile(path) and entry.endswith(".md"):
+            name = entry[:-3]
+            if name and name not in RESERVED:
+                rep.setdefault(name, (path, False))  # legacy flat
+        elif os.path.isdir(path) and entry not in RESERVED:
+            candidate = os.path.join(path, REP_PAGE_FILE)
+            if os.path.isfile(candidate):
+                rep[name := entry] = (candidate, True)  # folder form wins
+    return {n: p for n, (p, _folder) in rep.items()}
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     as_json = "--json" in sys.argv
@@ -91,9 +126,8 @@ def main():
         print("no 프로젝트/ dir under %s" % root, file=sys.stderr)
         sys.exit(1)
 
-    # top-level 대표페이지 only (sub-pages live in subfolders)
-    files = sorted(glob.glob(os.path.join(proj_dir, "*.md")))
-    total = len(files)
+    reps = collect_rep_pages(proj_dir)
+    total = 0                # active (non-archived, readable) 대표페이지
     with_sites = 0
     no_sites = []            # project names with zero sites
     site_total = 0
@@ -101,16 +135,21 @@ def main():
     sigungu = set()          # (시도, 시군구)
     unmatchable = []         # (project, raw site) whose 시도 token isn't a known 광역
     renderable = 0           # projects with >=1 matchable site
+    archived_skipped = 0
+    read_errors = []         # (project, error) — excluded from total, not silent
 
-    for f in files:
-        name = os.path.splitext(os.path.basename(f))[0]
+    for name in sorted(reps):
         try:
-            text = open(f, encoding="utf-8").read()
-        except Exception:
+            text = open(reps[name], encoding="utf-8").read()
+        except OSError as e:
+            read_errors.append((name, str(e)))
             continue
         fm = parse_frontmatter(text)
-        sites = [normalize_site(s) for s in extract_sites(fm)]
-        sites = [s for s in sites if s]
+        if extract_scalar(fm, "archived") == "true":
+            archived_skipped += 1
+            continue
+        total += 1
+        sites = [s for s in (normalize_site(x) for x in extract_sites(fm)) if s]
         if not sites:
             no_sites.append(name)
             continue
@@ -119,11 +158,10 @@ def main():
         for s in sites:
             site_total += 1
             toks = s.split(" ")
-            sido = toks[0]
-            if sido in SIDO:
-                by_sido[sido] = by_sido.get(sido, 0) + 1
+            if toks[0] in SIDO:
+                by_sido[toks[0]] = by_sido.get(toks[0], 0) + 1
                 if len(toks) > 1:
-                    sigungu.add((sido, toks[1]))
+                    sigungu.add((toks[0], toks[1]))
                 has_match = True
             else:
                 unmatchable.append((name, s))
@@ -140,17 +178,21 @@ def main():
             "renderable_pct": round(rcov, 1), "site_entries": site_total,
             "sido_histogram": by_sido, "sigungu_unique": len(sigungu),
             "unmatchable": unmatchable, "projects_without_sites": no_sites,
+            "archived_skipped": archived_skipped, "read_errors": read_errors,
         }, ensure_ascii=False, indent=2))
         return
 
     print("현장(Sites) 커버리지 — %s" % proj_dir)
     print("─" * 52)
-    print("프로젝트 대표페이지 총계 : %d" % total)
+    print("활성 대표페이지 총계     : %d  (대표.md 폴더형 + 레거시 flat, archived 제외)" % total)
     print("Sites ≥1 보유            : %d  (%.0f%%)" % (with_sites, cov))
     print("지도 표시 가능(매칭됨)   : %d  (%.0f%%)" % (renderable, rcov))
     print("현장(site) 엔트리 총계    : %d" % site_total)
     print("고유 시군구              : %d" % len(sigungu))
     print("매칭 실패(시도 불명)     : %d" % len(unmatchable))
+    print("archived 제외            : %d" % archived_skipped)
+    if read_errors:
+        print("읽기 실패(집계 제외)     : %d" % len(read_errors))
     if by_sido:
         print("\n시도 분포 (현장 수):")
         mx = max(by_sido.values())
@@ -161,12 +203,15 @@ def main():
         print("\n⚠ 매칭 실패 현장 (미배치로 표시됨):")
         for proj, s in unmatchable[:20]:
             print("  · [%s] %s" % (proj, s))
+    if read_errors:
+        print("\n⚠ 읽기 실패 대표페이지:")
+        for proj, e in read_errors[:20]:
+            print("  · [%s] %s" % (proj, e))
     empty = len(no_sites)
     print("\nSites 미기입 프로젝트: %d (%.0f%%)" % (empty, empty / total * 100 if total else 0))
-    # verdict
     print("\n판정:", end=" ")
     if total == 0:
-        print("프로젝트 없음 — 측정 불가")
+        print("활성 프로젝트 없음 — 측정 불가")
     elif renderable >= 8 and rcov >= 40:
         print("밀도 충분 — 지도 구현 가치 있음")
     elif renderable >= 3:
