@@ -129,7 +129,7 @@ Terminal-Bench 수렴: 상위권 하네스는 **multi-model routing — 워크�
 
 > **레지스트리(무엇이 존재하는가)는 고정이고, 프롬프트 노출(지금 모델이 무엇을 보는가)은 지연된다.**
 
-이유는 두 압력의 교집합이다: (a) §2 캐시 법 — 툴셋이 런타임에 바뀌면 정적 캐시가 깨진다 → 레지스트리는 정적, 단 eager 하게 *시작 전* 조립(arxiv: first-call latency·race 제거). (b) §1 컨텍스트 경제 — ~45개 스키마를 매 턴 다 보여줄 순 없다 → 노출은 지연. 해법: **작은 always-on hot set**(`read`, `wiki`, `polaris`) + **lazy long tail**. 임베딩 라우팅을 한다면 *결정적 bucket* 으로 캐시 안정성을 보존.
+이유는 두 압력의 교집합이다: (a) §2 캐시 법 — 툴셋이 런타임에 바뀌면 정적 캐시가 깨진다 → 레지스트리는 정적, 단 eager 하게 *시작 전* 조립(arxiv: first-call latency·race 제거). (b) §1 컨텍스트 경제 — ~50개 스키마를 매 턴 다 보여줄 순 없다 → 노출은 지연. 해법: **작은 always-on hot set**(`read`, `wiki`, `polaris`) + **lazy long tail**. 임베딩 라우팅을 한다면 *결정적 bucket* 으로 캐시 안정성을 보존.
 
 추가로 arxiv 가 강조하는 **스키마 필터링**: 서브에이전트는 *자기가 못 쓰는 도구 정의를 아예 안 본다* ("the LLM never sees tool definitions it cannot use"). Deneb 의 preset 필터링과 같다 — capability creep 차단.
 

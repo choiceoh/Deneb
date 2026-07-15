@@ -130,7 +130,7 @@ rpcmap miniapp.people.list           # RPC method → handler
 rpcmap wiki                          # chat tool → handler
 rpcmap chat.delivery_failed          # event broadcast → event type
 rpcmap --handler peopleList          # reverse lookup
-rpcmap --list                        # dump everything (~280 mappings)
+rpcmap --list                        # dump everything (~270 mappings)
 ```
 
 Feed the resolved handler to `codegraph node <handler>` for full source + callers/callees.

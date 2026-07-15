@@ -66,7 +66,7 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	for _, def := range params.ToolDefs {
 		eagerSet[def.Name] = struct{}{}
 	}
-	// toolSet: eager + deferred (for conditional prompt sections like pilot, sessions_spawn).
+	// toolSet: eager + deferred (for conditional prompt sections like sessions_spawn).
 	toolSet := make(toolNameSet, len(params.ToolDefs)+len(params.DeferredTools))
 	for k := range eagerSet {
 		toolSet[k] = struct{}{}
@@ -531,7 +531,7 @@ func writeDynamicMessaging(d *strings.Builder, eagerSet, toolSet toolNameSet) {
 	d.WriteString("- 외부 채널 전송이 실패하면 전달 상태는 실패/미확인이다. 성공을 추정하거나 현재 채팅에 보인다고 추정하지 마라.\n")
 	d.WriteString("- 특히 '여기에 떠 있다', '이미 보인다', '채널 복구 후 다시 보낼 수 있다' 같은 추정성 안내 금지. 도구가 확인한 사실만 말하라.\n")
 	// message protocol coaching gates on eagerSet, not toolSet: message is
-	// deferred by default (toolreg/core.go), and its full usage protocol
+	// deferred by default (toolwire/core/register.go), and its full usage protocol
 	// ships in the tool description at fetch_tools time. These lines render
 	// only if a deployment re-eagerizes it — avoiding per-turn dynamic cost
 	// for a tool not on the wire.

@@ -37,7 +37,7 @@
 |---|---|---|
 | fixed-interval/threshold 트리거 | ✅ **정확히 이것** — Emergency `lastInput≥30k`, LLM `≥90% budget`, micro-prune `4 turn`, target `20%` | `compaction/polaris.go:19-22,126,171` |
 | 궤적-인지 트리거 | ❌ 없음. 토큰 임계만 본다(구조 무시) | — |
-| 모델이 호출하는 압축 도구 | ❌ **없음** — 압축은 전적으로 파이프라인이 결정, 모델에 `compact` tool 미노출 | `toolreg/tool_schemas.json` (해당 tool 부재 확인) |
+| 모델이 호출하는 압축 도구 | ❌ **없음** — 압축은 전적으로 파이프라인이 결정, 모델에 `compact` tool 미노출 | `toolwire/schema/tool_schemas.json` (해당 tool 부재 확인) |
 | cheap pruning 선행 | ✅ 있음 — MicroCompact(코드펜스만) + TruncateOldToolResults(256 rune↑ stub) | `compaction/micro.go`, `restore.go` |
 | LLM tier bounded digestion | ✅ 있음 — `maxChunksPerPass=4`, per-chunk 1–2k cap, prefix-tolerance (P7) | `compaction/llm.go` |
 | 캐시-세이프 per-turn 주입 기구 | ✅ **있음** — wire-only tail suffix | `chat/run_tail_inject.go` |

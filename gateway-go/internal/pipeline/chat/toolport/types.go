@@ -1,8 +1,8 @@
 // Package toolport provides stable shared types and context helpers used across
-// the chat tool subsystem (tools/, toolreg/, chat/).
+// the chat tool subsystem (tools/, toolwire/, chat/).
 //
 // This is a leaf package with zero intra-chat imports, enabling clean
-// dependency flow: tools/ -> toolport/, toolreg/ -> toolport/, chat/ -> toolport/.
+// dependency flow: tools/ -> toolport/, toolwire/ -> toolport/, chat/ -> toolport/.
 // Volatile domain/platform dependency bags live in sibling package tooldeps.
 package toolport
 

@@ -1,6 +1,6 @@
 ---
 title: "도구 개선 방안 탐구"
-summary: "채팅 도구 시스템(스키마 ~45개, deferred ~23+)의 선택 품질·토큰 효율·계측 루프·신규 도구를 코드 조사 기반으로 분석한 제안 노트."
+summary: "채팅 도구 시스템(스키마 ~50개, deferred ~23+)의 선택 품질·토큰 효율·계측 루프·신규 도구를 코드 조사 기반으로 분석한 제안 노트."
 read_when:
   - "채팅 도구 시스템(fetch_tools, 프리셋, 출력 캡)을 개선하려 할 때"
   - "도구 사용 통계·에러율 계측을 설계할 때"
@@ -42,7 +42,7 @@ sidebarTitle: "도구 개선 탐구"
 
 개선 논의의 공통 전제. 수치는 코드에서 직접 집계했다.
 
-- **도구 스키마 ~45개** (`toolreg/tool_schemas.json` — 파라미터·max_output만 보유, 설명은 등록 코드에; `toolreg_boundary_test.go` `allSchemaCases`), 등록은 toolreg + chat 측 별도(fetch_tools, code_action, pilot). 그중 **deferred ~23+** (`Deferred: true`, `toolreg/core.go`).
+- **도구 스키마 ~50개** (`toolwire/schema/tool_schemas.json` — 파라미터·max_output만 보유, 설명은 등록 코드에; `toolwire/toolreg_boundary_test.go` `allSchemaCases`), 등록은 toolwire + chat 측 별도(fetch_tools, code_action). 그중 **deferred ~23+** (`Deferred: true`, `toolwire/core/register.go`).
 - **deferred 메커니즘**: 초기 Tools 배열에서 스키마 제외, 시스템 프롬프트에는 이름 + 80 rune 절단 설명만 노출(`prompt/system_prompt.go`). 모델이 `fetch_tools`(exact names 또는 BM25 질의, `tools/runtimeops/fetch_tools.go`)로 활성화하면 다음 턴부터 `DynamicToolsProvider`가 스키마 주입.
 - **프리셋 8종** (`toolpreset/preset.go`): conversation/boot/self-review/researcher/implementer/verifier/wiki-research/coding. 노출·활성화·실행 4지점에서 게이트.
 - **실행 경로 안전장치** (`chat/tools.go:97` `ToolRegistry.Execute`, 단일 평면 레지스트리): malformed JSON 복구(`tool_argrepair.go`) → 프리셋 방어 → `$ref` 해석 → RunCache(grep만 캐시) → 실행 → 24K head/tail 절단 + 스필오버 → 캐시 무효화 → 사후처리 → 선택적 LLM 압축(`compress:true`, 16000자 이상만 — `localai_hooks.go:44`).
@@ -79,7 +79,7 @@ sidebarTitle: "도구 개선 탐구"
 
 ### 2.4 (H) 도구 이름 충돌 fail-fast (**P2 / S**)
 
-- **현황**: 같은 이름 재등록은 last-writer-wins + `slog.Warn`이다(`gateway-go/CLAUDE.md` "Tool Interception & Safety", [tool-interception-gap §7](/research/tool-interception-gap)). 현재는 등록 지점이 `toolreg/core.go` 하나라 실위험이 낮지만, 스킬/플러그인이 도구를 공급하기 시작하면 조용한 교체가 된다.
+- **현황**: 같은 이름 재등록은 last-writer-wins + `slog.Warn`이다(`gateway-go/CLAUDE.md` "Tool Interception & Safety", [tool-interception-gap §7](/research/tool-interception-gap)). 현재는 등록 지점이 `toolwire/core/register.go` 하나라 실위험이 낮지만, 스킬/플러그인이 도구를 공급하기 시작하면 조용한 교체가 된다.
 - **제안**: 부트 시 중복 등록을 fail-fast(패닉이 아니라 기동 에러)로 승격하되, 의도적 교체는 명시 플래그(`Override: true`)로만 허용. 등록된 도구 이름 스냅샷 테스트 1개 추가(메서드 레지스트리 스냅샷 테스트와 동형).
 - **예상 효과**: 미래 플러그인 표면에 대한 선제 방어. 지금 넣는 이유는 비용이 S일 때가 가장 싸기 때문.
 - **측정**: 스냅샷 테스트 자체가 게이트.
@@ -94,7 +94,7 @@ sidebarTitle: "도구 개선 탐구"
 
 ### 3.2 (C) per-tool MaxOutput 감사 (**P2 / S**) (B 이후)
 
-- **현황**: 도구 출력은 기본 24K chars에서 head/tail 절단+스필오버된다. per-tool 캡은 `tool_schemas.json`의 `max_output` → `ToolMaxOutputs()`로 오버라이드하는데, **~45개 중 6개만 설정**되어 있다: calendar/contacts/deal_ledger 8000, exec 32000, notebook 24000, wiki 20000 (`toolreg/tool_schemas_gen.go`). 나머지 ~39개는 실측 없이 24K 기본을 쓴다.
+- **현황**: 도구 출력은 기본 24K chars에서 head/tail 절단+스필오버된다. per-tool 캡은 `tool_schemas.json`의 `max_output` → `ToolMaxOutputs()`로 오버라이드하는데, **~50개 중 6개만 설정**되어 있다: calendar/contacts/deal_ledger 8000, exec 32000, notebook 24000, wiki 20000 (`toolwire/schema/tool_schemas_gen.go`). 나머지 ~44개는 실측 없이 24K 기본을 쓴다.
 - **제안**: (B)의 출력크기 계측(도구별 출력 chars 분포)이 쌓이면, 상위 출력 도구부터 캡을 데이터 기반으로 조정한다. 예상 후보: `sessions`(히스토리 덤프), `polaris`(회상), `web`(페이지 본문), `graphify`. 계측 전 짐작으로 조정하지 않는다 — 이 항목이 P2인 이유이자 (B)가 선행인 이유.
 - **예상 효과**: 장기 런(메일분석·크론)의 히스토리 비대 완화. 컴팩션 cheap 패스 부담 감소.
 - **측정**: (B) 지표에서 도구별 p50/p95 출력 chars, 스필오버 발생률, `read_spillover` 회수율(스필오버를 실제로 다시 읽는 비율 — 낮으면 캡을 더 줄여도 된다는 신호).

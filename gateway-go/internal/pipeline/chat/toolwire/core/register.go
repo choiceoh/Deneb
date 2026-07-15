@@ -298,8 +298,6 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 		Deferred:    true,
 	})
 
-	// NOTE: Pilot tool is registered separately by chat.RegisterCoreTools
-	// because it depends on local AI hooks that live in the chat package.
 	// NOTE: fetch_tools and code_action are registered by
 	// RegisterRegistryBridgeTools (called from chat.RegisterCoreTools) because
 	// they need the concrete registry surface (FetchToolsRegistry / ToolInvoker).

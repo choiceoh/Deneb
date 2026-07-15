@@ -32,7 +32,7 @@ bounded 결과 envelope로 변환한다. media·document parser를 조합하지�
 
 ## 의존 방향과 불변조건
 
-- 의존 방향은 `toolreg/chat → web → media/document/liteparse/pilot`다. web은
+- 의존 방향은 `toolwire/chat → web → media/document/liteparse/pilot`다. web은
   tool registry나 chat runner를 import하지 않고, media의 SSRF dialer를 우회하는
   별도 transport를 만들지 않는다.
 - `Tool`은 query batch를 5개, auto-fetch를 3개로 제한하고 전체 `maxChars` 예산을

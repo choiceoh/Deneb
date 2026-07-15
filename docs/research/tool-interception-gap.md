@@ -65,7 +65,7 @@ The Hermes axis does not apply cleanly because **nothing in Deneb is agent-insta
 | `self._memory_manager` (Honcho/Mem0 intercept) | (no equivalent) | — |
 | `self._dispatch_delegate_task` | `sessions_spawn` tool | Registry + `tooldeps.SessionDeps` |
 
-**Deneb injects state through `CoreToolDeps`** at registration time (`toolreg/core.go`). The registry call `tools.ToolPolaris(store, localAI)` closes over `store`, so the executor inside the registry is still stateful, just closed-over rather than method-bound. This is the Go idiom for the same thing.
+**Deneb injects state through `CoreToolDeps`** at registration time (`toolwire/core/register.go`). The registry call `tools.ToolPolaris(store, localAI)` closes over `store`, so the executor inside the registry is still stateful, just closed-over rather than method-bound. This is the Go idiom for the same thing.
 
 Meaningful categories today:
 
@@ -204,6 +204,6 @@ contract: wireStreamHooks (goal guard) runs before wireUntrustedToolGate.
 - `gateway-go/internal/ai/agent/executor.go:533-647` (`executeOneTool`)
 - `gateway-go/internal/ai/agent/hooks.go:12-15` (`OnBeforeToolCall`)
 - `gateway-go/internal/pipeline/chat/tools.go:84-179` (`ToolRegistry.Execute`)
-- `gateway-go/internal/pipeline/chat/toolreg/core.go` (all registration)
+- `gateway-go/internal/pipeline/chat/toolwire/core/register.go` (all registration)
 - `gateway-go/internal/pipeline/chat/toolreg_core.go` (chat-side registration + skills/wiki/fetch_tools)
 - `/tmp/hermes-analysis/hermes-agent/run_agent.py:7675-7752` (Hermes reference)

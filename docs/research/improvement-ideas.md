@@ -103,7 +103,7 @@
 
 ### 2.2 Embedding-aware tool routing — **P3 / L**
 
-**무엇.** 현재 LLM 은 매 턴 ~45개 tool schema 카탈로그를 본다(프리셋·deferred에 따라 노출 상이). 사용자 메시지 embedding 으로 후보 도구 K개 (예: top-8) 만 prompt 에 노출.
+**무엇.** 현재 LLM 은 매 턴 ~50개 tool schema 카탈로그를 본다(프리셋·deferred에 따라 노출 상이). 사용자 메시지 embedding 으로 후보 도구 K개 (예: top-8) 만 prompt 에 노출.
 
 **왜.** 토큰 절감 + LLM tool-selection 정확도 향상. 단 cache 위협 — tool list 가 동적이면 static 캐시가 매 턴 깨진다.
 
