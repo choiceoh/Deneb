@@ -2,9 +2,9 @@ package runtimeops
 
 import (
 	"context"
-	"reflect"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -28,7 +28,6 @@ func TestBoundaryPhoneActionAllowlistNormalization(t *testing.T) {
 		})
 	}
 }
-
 
 func TestBoundaryBuildPhoneActionSuccessMatrix(t *testing.T) {
 	tests := []struct {
@@ -64,7 +63,6 @@ func TestBoundaryBuildPhoneActionSuccessMatrix(t *testing.T) {
 	}
 }
 
-
 func TestBoundaryBuildPhoneActionValidationFailures(t *testing.T) {
 	tests := []struct {
 		name string
@@ -97,7 +95,6 @@ func TestBoundaryBuildPhoneActionValidationFailures(t *testing.T) {
 		})
 	}
 }
-
 
 func TestBoundaryDispatchPhoneActionOutcomeMatrix(t *testing.T) {
 	wantFailure := errors.New("device rejected")
@@ -144,5 +141,3 @@ func TestBoundaryDispatchPhoneActionOutcomeMatrix(t *testing.T) {
 		})
 	}
 }
-
-

@@ -49,7 +49,6 @@ func TestBoundaryParseAlarmTimeMatrix(t *testing.T) {
 	}
 }
 
-
 func TestBoundaryParseTimerSecondsMatrix(t *testing.T) {
 	tests := []struct {
 		raw      string
@@ -94,5 +93,3 @@ func TestBoundaryParseTimerSecondsMatrix(t *testing.T) {
 		})
 	}
 }
-
-

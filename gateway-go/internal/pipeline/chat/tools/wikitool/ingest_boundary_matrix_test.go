@@ -45,7 +45,6 @@ func TestBoundaryNormalizeSourceURLMatrix(t *testing.T) {
 	}
 }
 
-
 func TestBoundaryYouTubeVideoIDMatrix(t *testing.T) {
 	tests := []struct {
 		raw  string
@@ -78,7 +77,6 @@ func TestBoundaryYouTubeVideoIDMatrix(t *testing.T) {
 	}
 }
 
-
 func TestBoundarySlugifyTitleMatrix(t *testing.T) {
 	tests := []struct {
 		name string
@@ -109,5 +107,3 @@ func TestBoundarySlugifyTitleMatrix(t *testing.T) {
 		t.Fatalf("long slug length=%d value=%q", utf8.RuneCountInString(got), got)
 	}
 }
-
-

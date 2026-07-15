@@ -1,10 +1,10 @@
 package chat
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"log/slog"
 	"strings"
 

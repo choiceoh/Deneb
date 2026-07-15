@@ -7,9 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
-
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"

@@ -28,8 +28,8 @@
 package chat
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"errors"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"log/slog"
 	"os"
 	"strings"

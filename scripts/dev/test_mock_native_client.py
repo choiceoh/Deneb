@@ -294,12 +294,19 @@ class PrerequisiteTests(unittest.TestCase):
 
 
 class NativeClientLifecycleTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.home = Path(self.tmp.name) / "home"
+        self.home.mkdir()
+
     def make_client(self, token="token"):
         env = {
+            "HOME": str(self.home),
             "DENEB_LIVETEST_CLIENT_TOKEN": token,
             "DENEB_LIVETEST_GW_URL": "http://dev-gateway:19999/",
         }
-        with mock.patch.dict(os.environ, env, clear=False):
+        with mock.patch.dict(os.environ, env, clear=True):
             return native.NativeTestClient(host="ignored", port=1, bot_username="legacy")
 
     def test_init_connect_disconnect_and_close_preserve_legacy_surface(self) -> None:
@@ -355,14 +362,21 @@ class NativeClientLifecycleTests(unittest.TestCase):
 
 
 class NativeClientChatTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.home = Path(self.tmp.name) / "home"
+        self.home.mkdir()
+
     def make_client(self, token="secret"):
         with mock.patch.dict(
             os.environ,
             {
+                "HOME": str(self.home),
                 "DENEB_LIVETEST_CLIENT_TOKEN": token,
                 "DENEB_LIVETEST_GW_URL": "http://gateway",
             },
-            clear=False,
+            clear=True,
         ):
             return native.NativeTestClient()
 

@@ -2,7 +2,6 @@ package chat
 
 import (
 	"encoding/json"
-
 )
 
 // broadcastPayload fans a typed event body out when a broadcaster is wired.

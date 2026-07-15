@@ -253,4 +253,3 @@ func (b *skillLifecycleBackend) recentSelfCorrectionCandidates(skillName string,
 	}
 	return out, ""
 }
-

@@ -95,7 +95,7 @@ class BaselineShellTests(unittest.TestCase):
         proc = run_baseline("save", self.env)
         self.assertEqual(proc.returncode, 1)
         self.assertIn(f"ERROR: no result file found at {RESULT_FILE}", proc.stdout)
-        self.assertIn("Run scripts/iterate.sh first", proc.stdout)
+        self.assertIn("Run scripts/dev/iterate.sh first", proc.stdout)
         self.assertFalse(self.baseline.exists())
 
     def test_save_preserves_result_and_adds_stable_branch_metadata(self) -> None:

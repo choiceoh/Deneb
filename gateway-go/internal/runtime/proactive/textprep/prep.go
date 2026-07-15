@@ -1,8 +1,8 @@
 package textprep
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	tokens "github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 )
 
 // StripSilentReply removes the silent-reply token from proactive bodies.

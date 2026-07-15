@@ -22,6 +22,7 @@ from .architecture_contracts import (
     _responsibility_cohesion,
     _rounded_map,
     is_composition_root,
+    is_volatile_domain_assembly_hub,
 )
 from .inventory import RepositoryInventory, collect, component_for
 from .model import (
@@ -451,6 +452,9 @@ def _change_locality(repo: RepositoryInventory) -> Pillar:
 
     for risk, package, touches, fanin in sorted(hot_risks, reverse=True)[:6]:
         if risk <= 0.30:
+            continue
+        if is_volatile_domain_assembly_hub(package):
+            # The hub's risk still fed volatile_dependency_hubs above.
             continue
         findings.append(
             _finding(

@@ -87,7 +87,7 @@ type Check struct {
 type Evidence struct {
 	Text             string           `json:"text,omitempty"`
 	ArtifactRoot     string           `json:"artifactRoot,omitempty"`
-	State            rawJSON  `json:"state,omitempty"`
+	State            rawJSON          `json:"state,omitempty"`
 	ArtifactMaxBytes map[string]int64 `json:"-"`
 }
 

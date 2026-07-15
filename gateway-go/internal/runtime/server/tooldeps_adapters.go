@@ -287,7 +287,7 @@ func mapCalendarEvent(in calendar.Event) tooldeps.CalendarEvent {
 		ID: in.ID, Summary: in.Summary, Description: in.Description, Location: in.Location,
 		Start: in.Start, End: in.End, AllDay: in.AllDay, HTMLLink: in.HTMLLink, Status: in.Status,
 		Organizer: mapCalendarAttendee(in.Organizer),
-		Source: in.Source, SourceLabel: in.SourceLabel, Kind: in.Kind, Docs: in.Docs,
+		Source:    in.Source, SourceLabel: in.SourceLabel, Kind: in.Kind, Docs: in.Docs,
 	}
 	if in.Conference != nil {
 		out.Conference = &tooldeps.CalendarConference{Solution: in.Conference.Solution, URI: in.Conference.URI}

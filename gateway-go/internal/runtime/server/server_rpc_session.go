@@ -17,8 +17,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	chattranscript "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
+	chattranscript "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
@@ -221,7 +221,7 @@ func (s *Server) buildSessionChatConfig(
 
 func (s *Server) initSessionAI(chatCfg *chat.HandlerConfig, registry *modelrole.Registry) {
 	s.localAIHub = localai.New(localai.Config{}, registry, s.logger)
-	
+
 	s.embeddingClient = embedding.New("", s.logger)
 	chatCfg.Memory.Embedding = s.embeddingClient
 	if s.polarisStore != nil {

@@ -42,6 +42,9 @@ class NativeAppShellTests(unittest.TestCase):
         self.search_counter = self.root / "search-counter"
         self.home.mkdir(parents=True)
         self.bin.mkdir()
+        bash = shutil.which("bash")
+        if bash:
+            (self.bin / "bash").symlink_to(bash)
         self.dev.mkdir(parents=True)
         self.app.mkdir(parents=True)
         shutil.copy2(NATIVE_SCRIPT, self.dev / "native-app.sh")
@@ -121,9 +124,26 @@ class NativeAppShellTests(unittest.TestCase):
         defaults.update(values)
         return isolated_env(self.home, self.bin, **defaults)
 
+
+    def link_host_tool(self, name: str) -> None:
+        if (self.bin / name).exists():
+            return
+        source = shutil.which(name)
+        if source:
+            (self.bin / name).symlink_to(source)
+
+    def link_essential_host_tools(self) -> None:
+        for tool in (
+            "bash", "dirname", "cksum", "cut", "mkdir", "readlink", "pwd",
+            "printf", "echo", "test", "grep", "sed", "cat", "rm", "mv", "cp",
+            "chmod", "ln", "date", "sleep", "kill", "ps", "env", "tr", "wc",
+            "head", "tail", "sort", "uniq", "mktemp", "realpath", "stat",
+        ):
+            self.link_host_tool(tool)
+
     def invoke(self, *args: str, env=None):
         return subprocess.run(
-            [str(self.dev / "native-app.sh"), *args],
+            ["/bin/bash", str(self.dev / "native-app.sh"), *args],
             cwd=self.root,
             env=env or self.env(),
             capture_output=True,
@@ -175,9 +195,10 @@ class NativeAppShellTests(unittest.TestCase):
         self.assertEqual(self.calls(), [])
 
     def test_start_reports_first_missing_display_dependency(self) -> None:
-        (self.bin / "scrot").unlink()
+        self.link_essential_host_tools()
+        (self.bin / "scrot").unlink(missing_ok=True)
         self.write_token()
-        proc = self.invoke("start", env=self.env(PATH=f"{self.bin}:/usr/bin:/bin"))
+        proc = self.invoke("start", env=self.env(PATH=str(self.bin)))
         self.assertEqual(proc.returncode, 1)
         self.assertIn("missing 'scrot'", proc.stderr)
         self.assertNotIn("python3", "\n".join(self.calls()))

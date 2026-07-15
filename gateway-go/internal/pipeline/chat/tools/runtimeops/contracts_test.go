@@ -333,4 +333,3 @@ func TestFormatGatewayUptimeBoundaries(t *testing.T) {
 		}
 	}
 }
-
