@@ -11,7 +11,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/sparkfleet"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/fleetapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/servermail"
 )
 
 func TestFleetPathAllowed(t *testing.T) {
@@ -140,9 +139,9 @@ func TestFleetPathAllowedJobCancel(t *testing.T) {
 // The fleet webhook relays SparkFleet's generic alerts to connected clients,
 // loopback-only.
 func TestFleetHookRouteRejectsNonLoopbackAndSuppressesDuplicateAlerts(t *testing.T) {
-	s := &Server{logger: slog.Default(), Mail: &servermail.Manager{PushHub: proactive.NewHub()}, alertGate: proactive.NewAlertGate()}
+	s := &Server{logger: slog.Default(), pushHub: proactive.NewHub(), alertGate: proactive.NewAlertGate()}
 	mux := s.buildMux()
-	ch, unsub := s.PushHub().Subscribe(proactive.KindMobile)
+	ch, unsub := s.pushHub.Subscribe(proactive.KindMobile)
 	defer unsub()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/hooks/fleet",

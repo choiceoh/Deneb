@@ -78,8 +78,8 @@ func (s *Server) observatoryWatchdogTick(now time.Time) {
 		if s.alertGate != nil && !s.alertGate.ShouldRelay(a.Title, a.Level, now) {
 			continue
 		}
-		if s.PushHub() != nil {
-			s.PushHub().Publish(proactive.Event{Title: "⚠️ 자기점검 · " + a.Title, Body: a.Body, Kind: proactive.PushKindFleet})
+		if s.pushHub != nil {
+			s.pushHub.Publish(proactive.Event{Title: "⚠️ 자기점검 · " + a.Title, Body: a.Body, Kind: proactive.PushKindFleet})
 		}
 		s.logger.Warn("observatory watchdog alert", "title", a.Title)
 	}

@@ -34,7 +34,7 @@ func (s *Server) handleCronRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.Chat.CronService == nil {
+	if s.cronService == nil {
 		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"error": "cron service unavailable",
 		})
@@ -58,7 +58,7 @@ func (s *Server) handleCronRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job, lookupErr := s.CronService().JobByName(req.Name)
+	job, lookupErr := s.cronService.JobByName(req.Name)
 	if lookupErr != nil {
 		// Surface store I/O or parse failures as 500 so a corrupt/unreadable
 		// jobs.json doesn't look like a missing job to operators. The full
@@ -82,7 +82,7 @@ func (s *Server) handleCronRun(w http.ResponseWriter, r *http.Request) {
 	// (failures are logged asynchronously inside the run loop) — the return
 	// value is intentionally ignored here so a future signature change can't
 	// silently leak internal error text to a localhost-only client.
-	_ = s.CronService().EnqueueRun(s.ShutdownCtx(), job.ID, req.Mode)
+	_ = s.cronService.EnqueueRun(s.ShutdownCtx(), job.ID, req.Mode)
 
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"status": "ok",

@@ -4,13 +4,9 @@ import (
 	"path/filepath"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/prompts"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 )
-
-// promptIDSystemPersona matches pipeline/chat/prompt.PromptIDSystemPersona.
-// Duplicated here so package server does not import chat/prompt solely for an ID
-// constant (composition-root fan-out).
-const promptIDSystemPersona = "system.persona"
 
 func newPromptStore(denebDir string) *prompts.Store {
 	return prompts.NewStore(filepath.Join(denebDir, "prompt-overrides.json"), []prompts.Template{
@@ -23,13 +19,11 @@ func newPromptStore(denebDir string) *prompts.Store {
 			Editable:    true,
 		},
 		{
-			ID:          promptIDSystemPersona,
+			ID:          prompt.PromptIDSystemPersona,
 			Title:       "시스템 페르소나 (Nev 정체성·역할)",
 			Description: "시스템 프롬프트 최상단의 Nev 정체성과 비서실장 역할 지침. 편집하면 다음 턴부터 반영된다.",
 			Category:    "시스템",
-			// Empty default: chat pipeline falls back to prompt.DefaultPersona when
-			// no operator override is stored.
-			DefaultText: "",
+			DefaultText: prompt.DefaultPersona,
 			Editable:    true,
 		},
 	})
@@ -43,7 +37,7 @@ func (s *Server) personaOverride() string {
 	if s == nil || s.promptStore == nil {
 		return ""
 	}
-	text, ok := s.promptStore.OverrideText(promptIDSystemPersona)
+	text, ok := s.promptStore.OverrideText(prompt.PromptIDSystemPersona)
 	if !ok {
 		return ""
 	}

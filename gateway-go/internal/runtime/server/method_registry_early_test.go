@@ -8,27 +8,10 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/serverauto"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/serverchat"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/servermail"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/serverwire/early"
 )
 
-// stubServer builds a partial Server with feature managers wired the same way
-// New() does, for unit tests that should not boot the full gateway.
-func stubServer() *Server {
-	s := &Server{
-		ServerRPC:     &ServerRPC{},
-		ServerRuntime: &ServerRuntime{},
-	}
-	s.Mail = servermail.New(s)
-	s.Chat = serverchat.New(s, s.Mail)
-	s.Auto = serverauto.New(s)
-	return s
-}
-
 func TestRegisterEarlyMethodsReturnsValidationErrorBeforeStoresInitialize(t *testing.T) {
-	srv := stubServer()
+	srv := &Server{MemorySubsystem: &MemorySubsystem{}}
 	hub := rpcutil.NewGatewayHub(rpcutil.HubConfig{})
 
 	err := srv.registerEarlyMethods(hub, t.TempDir())
@@ -38,15 +21,19 @@ func TestRegisterEarlyMethodsReturnsValidationErrorBeforeStoresInitialize(t *tes
 	if hub.Phase() != rpcutil.PhaseEarly {
 		t.Fatalf("hub phase = %d, want PhaseEarly", hub.Phase())
 	}
-	if srv.Mail.NativeSyncStore != nil || srv.Mail.WorkFeedStore != nil || srv.Mail.ContactsStore != nil {
+	if srv.nativeSyncStore != nil || srv.workFeedStore != nil || srv.contactsStore != nil {
 		t.Fatal("capability stores initialized before hub validation")
 	}
 }
 
 func TestEarlyCapabilityHelpers_PreserveMethodNames(t *testing.T) {
-	srv := stubServer()
+	srv := &Server{
+		ServerRPC:        &ServerRPC{},
+		MemorySubsystem:  &MemorySubsystem{},
+		ChatManager:      &ChatManager{},
+		GenesisSubsystem: &GenesisSubsystem{},
+	}
 	hub := rpcutil.NewGatewayHub(rpcutil.HubConfig{})
-	ports := srv.wirePorts()
 
 	tests := []struct {
 		name string
@@ -55,17 +42,17 @@ func TestEarlyCapabilityHelpers_PreserveMethodNames(t *testing.T) {
 	}{
 		{
 			name: "native gateway",
-			got:  early.EarlyMiniappGatewayMethods(ports, hub),
+			got:  srv.earlyMiniappGatewayMethods(hub),
 			want: []string{"miniapp.client.hello", "miniapp.ping", "miniapp.whoami"},
 		},
 		{
 			name: "projects",
-			got:  early.EarlyProjectMethods(ports, hub),
+			got:  srv.earlyProjectMethods(hub),
 			want: []string{"miniapp.project.digests", "miniapp.project.linked"},
 		},
 		{
 			name: "skills",
-			got:  early.EarlySkillMethods(ports),
+			got:  srv.earlySkillMethods(),
 			want: []string{
 				"miniapp.skills.delete",
 				"miniapp.skills.detail",
@@ -76,7 +63,7 @@ func TestEarlyCapabilityHelpers_PreserveMethodNames(t *testing.T) {
 		},
 		{
 			name: "self improvement",
-			got:  early.EarlySelfImprovementMethods(ports),
+			got:  srv.earlySelfImprovementMethods(),
 			want: []string{
 				"miniapp.self_improvement_coding.dispatch",
 				"miniapp.self_improvement_coding.list",
@@ -95,16 +82,14 @@ func TestEarlyCapabilityHelpers_PreserveMethodNames(t *testing.T) {
 }
 
 func TestEarlyProviderMethodsReturnsMethodsOnlyWithRegistry(t *testing.T) {
-	srv := stubServer()
-	ports := srv.wirePorts()
-	if got := early.EarlyProviderMethods(ports); got != nil {
+	srv := &Server{ServerRPC: &ServerRPC{}}
+	if got := srv.earlyProviderMethods(); got != nil {
 		t.Fatalf("provider groups without registry = %v, want nil", got)
 	}
 
 	srv.providers = provider.NewRegistry()
-	ports = srv.wirePorts()
 	var names []string
-	for _, methods := range early.EarlyProviderMethods(ports) {
+	for _, methods := range srv.earlyProviderMethods() {
 		names = append(names, sortedMethodNames(methods)...)
 	}
 	sort.Strings(names)

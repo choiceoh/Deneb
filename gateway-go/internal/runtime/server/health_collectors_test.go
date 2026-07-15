@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	runtimehealth "github.com/choiceoh/deneb/gateway-go/internal/runtime/health"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/serverauto"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -15,10 +14,8 @@ func TestCollectBaseHealthPreservesRequiredContract(t *testing.T) {
 	// with real crons (package convention — see server_test.go).
 	t.Setenv("HOME", t.TempDir())
 	srv := testutil.Must(New(":0"))
-	// Isolate from the host's live local-AI/embedding daemons so the subsystem
-	// contract stays "off" on every machine (New() otherwise probes 127.0.0.1).
-	srv.Chat.LocalAIHub = nil
-	srv.Chat.EmbeddingClient = nil
+	srv.ChatManager = &ChatManager{}
+	srv.GenesisSubsystem = &GenesisSubsystem{}
 	health := srv.collectBaseHealth()
 
 	wantKeys := map[string]struct{}{
@@ -42,15 +39,8 @@ func TestCollectBaseHealthPreservesRequiredContract(t *testing.T) {
 	if !ok {
 		t.Fatalf("subsystems type = %T, want map[string]any", health["subsystems"])
 	}
-	if subsystems["core"] != "go" {
+	if subsystems["core"] != "go" || subsystems["local_ai"] != "off" || subsystems["embedding"] != "off" {
 		t.Fatalf("unexpected subsystem contract: %v", subsystems)
-	}
-	for _, key := range []string{"local_ai", "embedding"} {
-		switch subsystems[key] {
-		case "off", "ok", "unhealthy":
-		default:
-			t.Fatalf("unexpected %s status: %v", key, subsystems[key])
-		}
 	}
 
 	workers, ok := health["workers"].(map[string]int)
@@ -63,8 +53,10 @@ func TestCollectBaseHealthPreservesRequiredContract(t *testing.T) {
 }
 
 func TestPropusHealthAliasesReturnSameSnapshot(t *testing.T) {
-	srv := &Server{Auto: &serverauto.Manager{}}
-	if section, ok := runtimehealth.Propus(srv.GenesisTracker()); ok || section != nil {
+	t.Setenv("HOME", t.TempDir()) // same isolation — New() touches the HOME cron store
+	srv := testutil.Must(New(":0"))
+	srv.GenesisSubsystem = &GenesisSubsystem{}
+	if section, ok := runtimehealth.Propus(srv.genesisTracker); ok || section != nil {
 		t.Fatalf("unwired Propus tracker returned section=%v, ok=%v", section, ok)
 	}
 
