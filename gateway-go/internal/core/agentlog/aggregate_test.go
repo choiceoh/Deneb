@@ -1,6 +1,7 @@
 package agentlog
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -23,10 +24,10 @@ func TestAggregateReturnsRunToolAndProactiveRollups(t *testing.T) {
 	})
 
 	// Standalone behavioral events.
-	w.LogEvent(SessionProactive, TypeProactiveRelay, ProactiveRelayData{Decision: "delivered"})
-	w.LogEvent(SessionProactive, TypeProactiveRelay, ProactiveRelayData{Decision: "suppressed", Reason: "contentless"})
-	w.LogEvent(SessionBackground, TypeBackgroundJob, BackgroundJobData{Kind: "autonomous", Name: "gmailpoll", Outcome: "ok"})
-	w.LogEvent(SessionBackground, TypeBackgroundJob, BackgroundJobData{Kind: "autonomous", Name: "gmailpoll", Outcome: "error"})
+	w.LogEvent(SessionProactive, TypeProactiveRelay, mustJSON(t, ProactiveRelayData{Decision: "delivered"}))
+	w.LogEvent(SessionProactive, TypeProactiveRelay, mustJSON(t, ProactiveRelayData{Decision: "suppressed", Reason: "contentless"}))
+	w.LogEvent(SessionBackground, TypeBackgroundJob, mustJSON(t, BackgroundJobData{Kind: "autonomous", Name: "gmailpoll", Outcome: "ok"}))
+	w.LogEvent(SessionBackground, TypeBackgroundJob, mustJSON(t, BackgroundJobData{Kind: "autonomous", Name: "gmailpoll", Outcome: "error"}))
 
 	agg := w.Aggregate(0)
 
@@ -156,4 +157,13 @@ func TestAggregateSinceReturnsEmptyRollupForFutureCutoff(t *testing.T) {
 	if agg.Runs != 0 || len(agg.Tools) != 0 {
 		t.Errorf("future cutoff: Runs=%d Tools=%d, want 0/0", agg.Runs, len(agg.Tools))
 	}
+}
+
+func mustJSON(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }

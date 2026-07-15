@@ -141,8 +141,8 @@ func TestCallRoleLLMFormatsRequestWithMergedExtras(t *testing.T) {
 	defer cancel()
 	got, err := CallRoleLLM(
 		ctx, modelrole.RoleMain, "system prompt", "user prompt", 321,
-		map[string]any{"temperature": 0.2, "first": true},
-		map[string]any{"top_p": 0.8, "first": false},
+		mustJSON(t, map[string]any{"temperature": 0.2, "first": true}),
+		mustJSON(t, map[string]any{"top_p": 0.8, "first": false}),
 	)
 	if err != nil || got != "reply:main" {
 		t.Fatalf("CallRoleLLM = %q/%v", got, err)
@@ -283,6 +283,15 @@ func TestCollectStreamNilClosedUnknownAndCancellation(t *testing.T) {
 	if got, err := CollectStream(ctx, blocking); !errorsIs(err, context.Canceled) || got != "" {
 		t.Fatalf("cancelled stream = %q/%v", got, err)
 	}
+}
+
+func mustJSON(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 func errorsIs(err, target error) bool {

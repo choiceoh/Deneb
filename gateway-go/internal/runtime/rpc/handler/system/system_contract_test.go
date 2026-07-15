@@ -63,7 +63,7 @@ func TestHealthMethodsReturnHealthAndSystemInfo(t *testing.T) {
 
 	health := rpctest.Call(methods, "health.check", nil)
 	rpctest.MustOK(t, health)
-	healthResult := rpctest.Result(t, health)
+	healthResult := rpctest.Result[map[string]any](t, health)
 	if healthResult["status"] != "ok" || healthResult["runtime"] != "go" || healthResult["sessions"] != float64(7) {
 		t.Fatalf("health result = %#v", healthResult)
 	}
@@ -73,7 +73,7 @@ func TestHealthMethodsReturnHealthAndSystemInfo(t *testing.T) {
 
 	info := rpctest.Call(methods, "system.info", nil)
 	rpctest.MustOK(t, info)
-	infoResult := rpctest.Result(t, info)
+	infoResult := rpctest.Result[map[string]any](t, info)
 	if infoResult["version"] != "v-test" || infoResult["goVersion"] != runtime.Version() {
 		t.Fatalf("system info = %#v", infoResult)
 	}
@@ -84,11 +84,11 @@ func TestHealthMethodsReturnHealthAndSystemInfo(t *testing.T) {
 
 func TestHealthMethodsReturnZeroSessionsAndUnknownVersionByDefault(t *testing.T) {
 	methods := HealthMethods(HealthDeps{})
-	health := rpctest.Result(t, rpctest.Call(methods, "health.check", nil))
+	health := rpctest.Result[map[string]any](t, rpctest.Call(methods, "health.check", nil))
 	if health["sessions"] != float64(0) {
 		t.Fatalf("sessions = %v, want 0", health["sessions"])
 	}
-	info := rpctest.Result(t, rpctest.Call(methods, "system.info", nil))
+	info := rpctest.Result[map[string]any](t, rpctest.Call(methods, "system.info", nil))
 	if info["version"] != "unknown" {
 		t.Fatalf("version = %v, want unknown", info["version"])
 	}
@@ -97,7 +97,7 @@ func TestHealthMethodsReturnZeroSessionsAndUnknownVersionByDefault(t *testing.T)
 func TestIdentityMethodsReturnStableGatewayIdentity(t *testing.T) {
 	resp := rpctest.Call(IdentityMethods("v1.2.3"), "gateway.identity.get", nil)
 	rpctest.MustOK(t, resp)
-	result := rpctest.Result(t, resp)
+	result := rpctest.Result[map[string]any](t, resp)
 	if result["version"] != "v1.2.3" || result["runtime"] != "go" || result["arch"] != runtime.GOARCH {
 		t.Fatalf("identity = %#v", result)
 	}
@@ -114,8 +114,8 @@ func TestMaintenanceMethodsRejectRunAndSummaryWhenRunnerMissing(t *testing.T) {
 	rpctest.MustErr(t, rpctest.Call(methods, "maintenance.summary", nil))
 	status := rpctest.Call(methods, "maintenance.status", nil)
 	rpctest.MustOK(t, status)
-	if rpctest.Result(t, status)["hasReport"] != false {
-		t.Fatalf("status = %#v", rpctest.Result(t, status))
+	if rpctest.Result[map[string]any](t, status)["hasReport"] != false {
+		t.Fatalf("status = %#v", rpctest.Result[map[string]any](t, status))
 	}
 }
 
@@ -123,23 +123,23 @@ func TestMaintenanceMethodsRunCreatesAndSummaryReusesReport(t *testing.T) {
 	runner := maintenance.NewRunner(t.TempDir())
 	methods := MaintenanceMethods(MaintenanceDeps{Runner: runner})
 
-	initial := rpctest.Result(t, rpctest.Call(methods, "maintenance.status", nil))
+	initial := rpctest.Result[map[string]any](t, rpctest.Call(methods, "maintenance.status", nil))
 	if initial["hasReport"] != false {
 		t.Fatalf("initial status = %#v", initial)
 	}
 
 	run := rpctest.Call(methods, "maintenance.run", map[string]any{"dryRun": true})
 	rpctest.MustOK(t, run)
-	if rpctest.Result(t, run)["dryRun"] != true {
-		t.Fatalf("run result = %#v", rpctest.Result(t, run))
+	if rpctest.Result[map[string]any](t, run)["dryRun"] != true {
+		t.Fatalf("run result = %#v", rpctest.Result[map[string]any](t, run))
 	}
 
-	status := rpctest.Result(t, rpctest.Call(methods, "maintenance.status", nil))
+	status := rpctest.Result[map[string]any](t, rpctest.Call(methods, "maintenance.status", nil))
 	if status["hasReport"] != true || status["summary"] == nil || status["report"] == nil {
 		t.Fatalf("status = %#v", status)
 	}
 
-	summary := rpctest.Result(t, rpctest.Call(methods, "maintenance.summary", nil))
+	summary := rpctest.Result[map[string]any](t, rpctest.Call(methods, "maintenance.summary", nil))
 	if summary["summary"] == nil || summary["report"] == nil {
 		t.Fatalf("summary = %#v", summary)
 	}
@@ -148,7 +148,7 @@ func TestMaintenanceMethodsRunCreatesAndSummaryReusesReport(t *testing.T) {
 func TestMaintenanceSummaryCreatesDryRunWhenNoReportExists(t *testing.T) {
 	runner := maintenance.NewRunner(t.TempDir())
 	methods := MaintenanceMethods(MaintenanceDeps{Runner: runner})
-	result := rpctest.Result(t, rpctest.Call(methods, "maintenance.summary", nil))
+	result := rpctest.Result[map[string]any](t, rpctest.Call(methods, "maintenance.summary", nil))
 	report := result["report"].(map[string]any)
 	if report["dryRun"] != true {
 		t.Fatalf("report = %#v, want dry run", report)
@@ -160,11 +160,11 @@ func TestMaintenanceSummaryCreatesDryRunWhenNoReportExists(t *testing.T) {
 
 func TestUsageMethodsReturnEmptyShapeWithoutTracker(t *testing.T) {
 	methods := UsageMethods(UsageDeps{})
-	status := rpctest.Result(t, rpctest.Call(methods, "usage.status", nil))
+	status := rpctest.Result[map[string]any](t, rpctest.Call(methods, "usage.status", nil))
 	if status["uptime"] != "0s" || len(status["providers"].(map[string]any)) != 0 {
 		t.Fatalf("status = %#v", status)
 	}
-	cost := rpctest.Result(t, rpctest.Call(methods, "usage.cost", nil))
+	cost := rpctest.Result[map[string]any](t, rpctest.Call(methods, "usage.cost", nil))
 	if cost["totalCalls"] != float64(0) || len(cost["providers"].(map[string]any)) != 0 {
 		t.Fatalf("cost = %#v", cost)
 	}
@@ -178,7 +178,7 @@ func TestUsageMethodsReturnRecordedCallsAndTokenTotals(t *testing.T) {
 	tracker.RecordTokens("openai", 100, 25, 40, 5)
 	methods := UsageMethods(UsageDeps{Tracker: tracker})
 
-	status := rpctest.Result(t, rpctest.Call(methods, "usage.status", nil))
+	status := rpctest.Result[map[string]any](t, rpctest.Call(methods, "usage.status", nil))
 	providers := status["providers"].(map[string]any)
 	openAI := providers["openai"].(map[string]any)
 	if openAI["calls"] != float64(2) || openAI["tokens"].(map[string]any)["cacheRead"] != float64(40) {
@@ -188,7 +188,7 @@ func TestUsageMethodsReturnRecordedCallsAndTokenTotals(t *testing.T) {
 		t.Fatalf("startedAt is blank: %#v", status)
 	}
 
-	cost := rpctest.Result(t, rpctest.Call(methods, "usage.cost", nil))
+	cost := rpctest.Result[map[string]any](t, rpctest.Call(methods, "usage.cost", nil))
 	if cost["totalCalls"] != float64(3) {
 		t.Fatalf("cost = %#v", cost)
 	}
@@ -196,11 +196,11 @@ func TestUsageMethodsReturnRecordedCallsAndTokenTotals(t *testing.T) {
 
 func TestMonitoringMethodsReturnStableEmptyChannelSurface(t *testing.T) {
 	methods := MonitoringMethods(MonitoringDeps{})
-	channels := rpctest.Result(t, rpctest.Call(methods, "monitoring.channel_health", nil))["channels"].([]any)
+	channels := rpctest.Result[map[string]any](t, rpctest.Call(methods, "monitoring.channel_health", nil))["channels"].([]any)
 	if len(channels) != 0 {
 		t.Fatalf("channels = %#v", channels)
 	}
-	zero := rpctest.Result(t, rpctest.Call(methods, "monitoring.rpc_zero_calls", nil))
+	zero := rpctest.Result[map[string]any](t, rpctest.Call(methods, "monitoring.rpc_zero_calls", nil))
 	if zero["total"] != float64(0) || len(zero["zeroCalls"].([]any)) != 0 {
 		t.Fatalf("nil-dispatcher result = %#v", zero)
 	}
@@ -215,7 +215,7 @@ func TestMonitoringRPCZeroCallsReturnsZeroAndCalledMethodCounts(t *testing.T) {
 	metrics.RPCRequestsTotal.Inc(calledMethod, "error", "E_UNAVAILABLE")
 
 	methods := MonitoringMethods(MonitoringDeps{Dispatcher: staticMethodLister{zeroMethod, calledMethod}})
-	result := rpctest.Result(t, rpctest.Call(methods, "monitoring.rpc_zero_calls", nil))
+	result := rpctest.Result[map[string]any](t, rpctest.Call(methods, "monitoring.rpc_zero_calls", nil))
 	if got := resultStrings(t, result["zeroCalls"]); len(got) != 1 || got[0] != zeroMethod {
 		t.Fatalf("zero calls = %#v", got)
 	}
@@ -265,7 +265,7 @@ func TestLogsTailReturnsLatestDatedLogFileByDefault(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	result := rpctest.Result(t, rpctest.Call(LogsMethods(LogsDeps{LogDir: dir}), "logs.tail", nil))
+	result := rpctest.Result[map[string]any](t, rpctest.Call(LogsMethods(LogsDeps{LogDir: dir}), "logs.tail", nil))
 	if result["file"] != "deneb-2026-07-11.log" {
 		t.Fatalf("file = %v", result["file"])
 	}
@@ -281,7 +281,7 @@ func TestLogsTailPaginatesWithoutDroppingBoundaryLine(t *testing.T) {
 		t.Fatal(err)
 	}
 	methods := LogsMethods(LogsDeps{LogDir: dir})
-	first := rpctest.Result(t, rpctest.Call(methods, "logs.tail", map[string]any{"limit": 2}))
+	first := rpctest.Result[map[string]any](t, rpctest.Call(methods, "logs.tail", map[string]any{"limit": 2}))
 	if got := resultStrings(t, first["lines"]); strings.Join(got, ",") != "one,two" {
 		t.Fatalf("first page = %#v", got)
 	}
@@ -290,7 +290,7 @@ func TestLogsTailPaginatesWithoutDroppingBoundaryLine(t *testing.T) {
 	}
 
 	cursor := int64(first["cursor"].(float64))
-	second := rpctest.Result(t, rpctest.Call(methods, "logs.tail", map[string]any{"cursor": cursor, "limit": 2}))
+	second := rpctest.Result[map[string]any](t, rpctest.Call(methods, "logs.tail", map[string]any{"cursor": cursor, "limit": 2}))
 	if got := resultStrings(t, second["lines"]); strings.Join(got, ",") != "three,four" {
 		t.Fatalf("second page = %#v", got)
 	}
@@ -306,11 +306,11 @@ func TestLogsTailPaginatesCRLFWithoutCursorDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 	methods := LogsMethods(LogsDeps{LogDir: dir})
-	first := rpctest.Result(t, rpctest.Call(methods, "logs.tail", map[string]any{"limit": 1}))
+	first := rpctest.Result[map[string]any](t, rpctest.Call(methods, "logs.tail", map[string]any{"limit": 1}))
 	if first["cursor"] != float64(len("one\r\n")) {
 		t.Fatalf("first cursor = %v, want %d", first["cursor"], len("one\r\n"))
 	}
-	second := rpctest.Result(t, rpctest.Call(methods, "logs.tail", map[string]any{
+	second := rpctest.Result[map[string]any](t, rpctest.Call(methods, "logs.tail", map[string]any{
 		"cursor": int64(first["cursor"].(float64)),
 		"limit":  1,
 	}))
@@ -325,14 +325,14 @@ func TestLogsTailByteLimitTruncatesAtBoundaryAndResumesAtNextLine(t *testing.T) 
 		t.Fatal(err)
 	}
 	methods := LogsMethods(LogsDeps{LogDir: dir})
-	first := rpctest.Result(t, rpctest.Call(methods, "logs.tail", map[string]any{"maxBytes": 5}))
+	first := rpctest.Result[map[string]any](t, rpctest.Call(methods, "logs.tail", map[string]any{"maxBytes": 5}))
 	if got := resultStrings(t, first["lines"]); len(got) != 1 || got[0] != "abcde" {
 		t.Fatalf("first page = %#v", got)
 	}
 	if first["cursor"] != float64(5) || first["truncated"] != true {
 		t.Fatalf("first page metadata = %#v", first)
 	}
-	second := rpctest.Result(t, rpctest.Call(methods, "logs.tail", map[string]any{
+	second := rpctest.Result[map[string]any](t, rpctest.Call(methods, "logs.tail", map[string]any{
 		"cursor": int64(first["cursor"].(float64)),
 	}))
 	if got := resultStrings(t, second["lines"]); len(got) != 1 || got[0] != "second" {
@@ -345,7 +345,7 @@ func TestLogsTailReadsOnlyFullLinesAfterMidLineCursor(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "deneb.log"), []byte("alpha\nbeta\ngamma\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	result := rpctest.Result(t, rpctest.Call(LogsMethods(LogsDeps{LogDir: dir}), "logs.tail", map[string]any{
+	result := rpctest.Result[map[string]any](t, rpctest.Call(LogsMethods(LogsDeps{LogDir: dir}), "logs.tail", map[string]any{
 		"cursor": 2,
 		"limit":  2,
 	}))
@@ -359,7 +359,7 @@ func TestLogsTailRestartsAfterCursorExceedsRotatedFileSize(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "deneb.log"), []byte("fresh\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	result := rpctest.Result(t, rpctest.Call(LogsMethods(LogsDeps{LogDir: dir}), "logs.tail", map[string]any{
+	result := rpctest.Result[map[string]any](t, rpctest.Call(LogsMethods(LogsDeps{LogDir: dir}), "logs.tail", map[string]any{
 		"cursor": 9999,
 	}))
 	if result["reset"] != true || int64(result["cursor"].(float64)) != int64(len("fresh\n")) {
@@ -375,7 +375,7 @@ func TestLogsTailRestartsWhenCursorIsNegative(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "deneb.log"), []byte("first\nsecond\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	result := rpctest.Result(t, rpctest.Call(LogsMethods(LogsDeps{LogDir: dir}), "logs.tail", map[string]any{
+	result := rpctest.Result[map[string]any](t, rpctest.Call(LogsMethods(LogsDeps{LogDir: dir}), "logs.tail", map[string]any{
 		"cursor": -10,
 	}))
 	if result["reset"] != true {
@@ -460,7 +460,7 @@ func TestConfigSetBroadcastsAndRejectsStaleBaseHash(t *testing.T) {
 	raw := `{"gateway":{"bind":"loopback"}}`
 	set := rpctest.Call(methods, "config.set", map[string]any{"raw": raw})
 	rpctest.MustOK(t, set)
-	result := rpctest.Result(t, set)
+	result := rpctest.Result[map[string]any](t, set)
 	if event != "config.changed" || payload["hash"] != result["hash"] {
 		t.Fatalf("broadcast event=%q payload=%#v result=%#v", event, payload, result)
 	}
@@ -533,7 +533,7 @@ func TestUpdateResultWritesSentinelAndRestartDirectiveOnlyOnSuccess(t *testing.T
 		restartDelayMs: 250,
 	})
 	rpctest.MustOK(t, success)
-	result := rpctest.Result(t, success)
+	result := rpctest.Result[map[string]any](t, success)
 	if result["restart"].(map[string]any)["delayMs"] != float64(250) {
 		t.Fatalf("restart = %#v", result["restart"])
 	}
@@ -561,7 +561,7 @@ func TestUpdateResultWritesSentinelAndRestartDirectiveOnlyOnSuccess(t *testing.T
 		restartDelayMs: 250,
 	})
 	rpctest.MustOK(t, failure)
-	failureResult := rpctest.Result(t, failure)
+	failureResult := rpctest.Result[map[string]any](t, failure)
 	if failureResult["restart"] != nil || failureResult["sentinel"] != nil {
 		t.Fatalf("failure result = %#v", failureResult)
 	}

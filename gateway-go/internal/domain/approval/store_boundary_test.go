@@ -1,6 +1,7 @@
 package approval
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -24,6 +25,7 @@ func TestCreateRequestBoundaryPreservesEveryField(t *testing.T) {
 		Shell string
 		Risk  int
 	}{Shell: "bash", Risk: 4}
+	planJSON := mustJSON(t, plan)
 	s := NewStore()
 	before := time.Now().UnixMilli()
 	got := s.CreateRequest(CreateRequestParams{
@@ -32,7 +34,7 @@ func TestCreateRequestBoundaryPreservesEveryField(t *testing.T) {
 		CommandArgv:   []string{"printf", "%s", "boundary"},
 		Env:           map[string]string{"LANG": "ko_KR.UTF-8", "MODE": "test"},
 		Cwd:           "/srv/work tree",
-		SystemRunPlan: plan,
+		SystemRunPlan: planJSON,
 		Host:          "gateway",
 		Security:      "allowlist",
 		Ask:           "on-miss",
@@ -60,7 +62,7 @@ func TestCreateRequestBoundaryPreservesEveryField(t *testing.T) {
 	if got.Cwd != "/srv/work tree" {
 		t.Fatalf("Cwd = %q", got.Cwd)
 	}
-	if !reflect.DeepEqual(got.SystemRunPlan, plan) {
+	if !reflect.DeepEqual(got.SystemRunPlan, planJSON) {
 		t.Fatalf("SystemRunPlan = %#v", got.SystemRunPlan)
 	}
 	if got.Host != "gateway" {
@@ -761,6 +763,15 @@ func TestEmptyMutableFieldsRemainIndependent(t *testing.T) {
 	if len(two.CommandArgv) != 0 || len(two.Env) != 0 {
 		t.Fatalf("empty snapshots share containers: one=%#v two=%#v", one, two)
 	}
+}
+
+func mustJSON(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 func assertClosed(t *testing.T, ch <-chan struct{}, label string) {

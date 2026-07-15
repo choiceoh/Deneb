@@ -19,7 +19,7 @@ func TestSnapshotHandlersReturnReportAndMarkdown(t *testing.T) {
 
 	resp := rpctest.Call(local, "observatory.snapshot", nil)
 	rpctest.MustOK(t, resp)
-	result := rpctest.Result(t, resp)
+	result := rpctest.Result[map[string]any](t, resp)
 	if result["report"] == nil {
 		t.Fatal("snapshot response omitted report")
 	}

@@ -20,7 +20,7 @@ func TestCallEncodesParamsAndDispatchesToHandler(t *testing.T) {
 
 	resp := Call(methods, "echo", map[string]string{"value": "ok"})
 	MustOK(t, resp)
-	result := Result(t, resp)
+	result := Result[map[string]any](t, resp)
 	if result["method"] != "echo" {
 		t.Fatalf("method = %v, want echo", result["method"])
 	}

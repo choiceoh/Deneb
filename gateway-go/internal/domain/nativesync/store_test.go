@@ -18,7 +18,7 @@ func TestStoreAppendPullReturnsPagedEvents(t *testing.T) {
 		EntityID:       "wf_1",
 		SessionKey:     "client:main",
 		WorkFeedItemID: "wf_1",
-		Payload:        map[string]any{"ok": true},
+		Payload:        mustJSON(t, map[string]any{"ok": true}),
 	})
 	if err != nil {
 		t.Fatalf("append first: %v", err)
@@ -157,6 +157,15 @@ func TestStoreAppendPreservesAllEventsUnderCap(t *testing.T) {
 	if len(remaining) != 10 {
 		t.Fatalf("retained %d events, want 10 (no prune under cap)", len(remaining))
 	}
+}
+
+func mustJSON(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 func statSize(fi os.FileInfo) int64 {
