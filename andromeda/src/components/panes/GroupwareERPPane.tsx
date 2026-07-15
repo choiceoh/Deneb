@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { errText } from "@/format";
 import { listGroupwareERP } from "@/gateway";
 import { erpTextToMarkdown } from "@/erpText";
+import { useAsyncOnOpen } from "@/useAsyncOnOpen";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Markdown } from "@/components/Markdown";
 
@@ -20,13 +21,31 @@ export function GroupwareERPPane() {
   const { cfg, connected } = useWorkspace();
   const [area, setArea] = useState(AREAS[0].id);
   const [query, setQuery] = useState("");
-  const [text, setText] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
   const [error, setError] = useState("");
-  const [loadedFor, setLoadedFor] = useState("");
+  const [searchBusy, setSearchBusy] = useState(false);
 
   const areaDef = AREAS.find((a) => a.id === area) ?? AREAS[0];
-  const cacheKey = `${area}|${areaDef.queryable ? query.trim() : ""}`;
+  // Auto-load key: area + applied search (not the in-progress input).
+  const appliedQ = areaDef.queryable ? searchQ.trim() : "";
+
+  const [text, setText] = useAsyncOnOpen(
+    async () => {
+      const r = await listGroupwareERP(cfg, area, {
+        query: appliedQ || undefined,
+        limit: 40,
+      });
+      return (r?.text ?? "").trim() || "(결과 없음)";
+    },
+    [cfg, area, appliedQ],
+    {
+      enabled: connected,
+      onError: (e) => {
+        setError(errText(e));
+        setText("");
+      },
+    },
+  );
 
   useRegisterPane(
     "groupware",
@@ -35,36 +54,29 @@ export function GroupwareERPPane() {
       : `[그룹웨어 · ${areaDef.label}]\n(조회 결과 없음)`,
   );
 
-  async function load(forceQuery?: string) {
-    if (!connected) return;
-    const q = (forceQuery ?? query).trim();
-    setBusy(true);
-    setError("");
-    setText(null);
-    try {
-      const r = await listGroupwareERP(cfg, area, {
-        query: areaDef.queryable ? q || undefined : undefined,
-        limit: 40,
-      });
-      setText((r?.text ?? "").trim() || "(결과 없음)");
-      setLoadedFor(`${area}|${areaDef.queryable ? q : ""}`);
-    } catch (e) {
-      setError(errText(e));
-      setText("");
-    } finally {
-      setBusy(false);
+  async function applySearch() {
+    if (!connected || !areaDef.queryable) return;
+    const next = query.trim();
+    if (next === searchQ.trim()) {
+      // Same filter — force refetch via setText(null) then re-run load path.
+      setSearchBusy(true);
+      setError("");
+      try {
+        const r = await listGroupwareERP(cfg, area, { query: next || undefined, limit: 40 });
+        setText((r?.text ?? "").trim() || "(결과 없음)");
+      } catch (e) {
+        setError(errText(e));
+        setText("");
+      } finally {
+        setSearchBusy(false);
+      }
+      return;
     }
+    setSearchQ(next);
   }
 
-  // Auto-fetch when area changes (and on connect). Queryable areas still load
-  // without a filter so the hub isn't an empty shell until the user types.
-  useEffect(() => {
-    if (!connected) return;
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: area/connected only
-  }, [area, connected]);
-
-  const showStale = text !== null && loadedFor !== cacheKey && areaDef.queryable;
+  const busy = connected && text === null && !error;
+  const showStale = areaDef.queryable && query.trim() !== searchQ.trim() && text !== null;
 
   return (
     <section className="groupware-pane" aria-label="그룹웨어 ERP">
@@ -85,6 +97,7 @@ export function GroupwareERPPane() {
             onClick={() => {
               setArea(a.id);
               setQuery("");
+              setSearchQ("");
               setError("");
             }}
           >
@@ -98,7 +111,7 @@ export function GroupwareERPPane() {
           className="groupware-search"
           onSubmit={(e) => {
             e.preventDefault();
-            void load();
+            void applySearch();
           }}
         >
           <input
@@ -106,24 +119,24 @@ export function GroupwareERPPane() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder={areaDef.hint ?? "검색어"}
             aria-label={`${areaDef.label} 검색`}
-            disabled={!connected || busy}
+            disabled={!connected || searchBusy}
           />
-          <button className="btn" type="submit" disabled={!connected || busy}>
-            {busy ? "조회 중…" : "검색"}
+          <button className="btn" type="submit" disabled={!connected || searchBusy || busy}>
+            {searchBusy || busy ? "조회 중…" : "검색"}
           </button>
         </form>
       )}
 
       {!connected ? (
         <p className="groupware-status">미연결</p>
-      ) : busy && text === null ? (
+      ) : busy ? (
         <p className="groupware-status">불러오는 중…</p>
       ) : (
         <div className={"groupware-result" + (showStale ? " stale" : "")}>
           {showStale && (
             <div className="groupware-stale-hint">
               검색어가 바뀌었습니다.{" "}
-              <button type="button" className="row-btn" onClick={() => void load()}>
+              <button type="button" className="row-btn" onClick={() => void applySearch()}>
                 다시 조회
               </button>
             </div>
