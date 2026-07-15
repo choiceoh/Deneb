@@ -430,6 +430,20 @@ export interface ProjectRef {
   summary?: string
 }
 
+export interface ProjectSiteRow {
+  project?: string
+  client?: string
+  path?: string
+  due?: string
+  sites?: string[]
+  kinds?: string[]
+  capacity?: number
+}
+
+export interface ProjectSitesOut {
+  sites?: ProjectSiteRow[]
+}
+
 export interface PromptDetailOut {
   id?: string
   title?: string

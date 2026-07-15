@@ -129,11 +129,15 @@ func TestPage_RenderRoundtrip(t *testing.T) {
 	page.Meta.Summary = "테스트용 페이지"
 	page.Meta.Resource = "gmail:thread/abc123"
 	page.Meta.PID = "p-pl2-001"
+	page.Meta.Capacity = 12.5
 	page.Body = "# 테스트\n\n## 요약\n테스트 내용."
 
 	rendered := page.Render()
 
 	parsed := testutil.Must(parsePage(rendered))
+	if parsed.Meta.Capacity != 12.5 {
+		t.Errorf("capacity roundtrip: got %v, want 12.5", parsed.Meta.Capacity)
+	}
 	if parsed.Meta.ID != "test-page" {
 		t.Errorf("id roundtrip: got %q", parsed.Meta.ID)
 	}

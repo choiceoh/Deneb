@@ -523,6 +523,24 @@ data class ProjectRef(
 
 @Immutable
 @Serializable
+data class ProjectSiteRow(
+    val project: String = "",
+    val client: String = "",
+    val path: String = "",
+    val due: String = "",
+    val sites: List<String> = emptyList(),
+    val kinds: List<String> = emptyList(),
+    val capacity: Double = 0.0,
+)
+
+@Immutable
+@Serializable
+data class ProjectSitesOut(
+    val sites: List<ProjectSiteRow> = emptyList(),
+)
+
+@Immutable
+@Serializable
 data class PromptDetailOut(
     val id: String = "",
     val title: String = "",

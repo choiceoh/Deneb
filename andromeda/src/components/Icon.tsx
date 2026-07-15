@@ -22,6 +22,7 @@ export type IconName =
   | "skills"
   | "rsi"
   | "observe"
+  | "sitemap"
   | "code"
   | "send"
   | "bell"
@@ -146,6 +147,12 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z" />
       <circle cx="12" cy="12" r="2.8" />
+    </>
+  ),
+  sitemap: (
+    <>
+      <path d="M12 21s6-5.7 6-10.5a6 6 0 1 0-12 0C6 15.3 12 21 12 21z" />
+      <circle cx="12" cy="10.5" r="2.3" />
     </>
   ),
   code: <path d="M8.5 8l-4 4 4 4M15.5 8l4 4-4 4" />,
