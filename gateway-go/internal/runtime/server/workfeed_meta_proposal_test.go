@@ -152,7 +152,7 @@ func TestNativeWorkFeedVerdictFailureKeepsCardRetryable(t *testing.T) {
 		store:           store,
 		onEvolveVerdict: func(workfeed.Item, string) error { return wantErr },
 	}
-	if _, err := feed.RunAction("verdict", evolveVerdictConfirm); !errors.Is(err, wantErr) {
+	if _, err := feed.RunAction("verdict", evolveVerdictConfirm, "ignored"); !errors.Is(err, wantErr) {
 		t.Fatalf("RunAction error = %v, want %v", err, wantErr)
 	}
 	items, total, err := store.List(10, false)
@@ -175,7 +175,7 @@ func TestNativeWorkFeedRelockFailureKeepsCardRetryable(t *testing.T) {
 		store:          store,
 		onLadderAction: func(workfeed.Item, string) error { return wantErr },
 	}
-	if _, err := feed.RunAction("graduation", actionID); !errors.Is(err, wantErr) {
+	if _, err := feed.RunAction("graduation", actionID, "ignored"); !errors.Is(err, wantErr) {
 		t.Fatalf("RunAction error = %v, want %v", err, wantErr)
 	}
 	items, total, err := store.List(10, false)

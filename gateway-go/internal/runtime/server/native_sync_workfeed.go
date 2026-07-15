@@ -5,6 +5,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 )
 
 type nativeWorkFeedStore struct {
@@ -13,7 +14,7 @@ type nativeWorkFeedStore struct {
 	log             interface{ Error(string, ...any) }
 	onEvolveVerdict func(workfeed.Item, string) error
 	onLadderAction  func(workfeed.Item, string) error
-	onApprovalAct   func(workfeed.Item, string) error
+	onApprovalAct   func(workfeed.Item, string, string) error
 }
 
 func (s *Server) nativeWorkFeedStore() *nativeWorkFeedStore {
@@ -140,7 +141,11 @@ func (s *nativeWorkFeedStore) Rewrite(id, newBody string) (workfeed.Item, error)
 }
 
 // RunAction executes a declared item action and publishes its result.
-func (s *nativeWorkFeedStore) RunAction(itemID, actionID string) (workfeed.ActionResult, error) {
+func (s *nativeWorkFeedStore) RunAction(itemID, actionID, comment string) (workfeed.ActionResult, error) {
+	approvalComment := ""
+	if actionID == groupwareApprovalActionReject {
+		approvalComment = groupware.SanitizeApprovalComment(comment)
+	}
 	effect := func(item workfeed.Item, action workfeed.Action) error {
 		if s.onEvolveVerdict != nil && item.Source == evolveVerdictSource &&
 			strings.HasPrefix(action.ID, "evolve-verdict:") {
@@ -152,7 +157,7 @@ func (s *nativeWorkFeedStore) RunAction(itemID, actionID string) (workfeed.Actio
 		}
 		if s.onApprovalAct != nil && item.Source == workfeed.SourceGroupwareApproval &&
 			strings.HasPrefix(action.ID, "approval:") {
-			return s.onApprovalAct(item, action.ID)
+			return s.onApprovalAct(item, action.ID, approvalComment)
 		}
 		return nil
 	}

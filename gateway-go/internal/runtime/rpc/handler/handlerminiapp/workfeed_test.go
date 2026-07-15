@@ -21,6 +21,7 @@ type fakeWorkFeedStore struct {
 	readErr     error
 	runItemID   string
 	runActionID string
+	runComment  string
 	runErr      error
 	// runItem, when its Source is set, is returned as the RunAction result's Item
 	// (lets a test exercise deal-question answer routing).
@@ -87,9 +88,10 @@ func (f *fakeWorkFeedStore) MarkRead(id string) (workfeed.Item, error) {
 	return workfeed.Item{}, workfeed.ErrNotFound
 }
 
-func (f *fakeWorkFeedStore) RunAction(itemID, actionID string) (workfeed.ActionResult, error) {
+func (f *fakeWorkFeedStore) RunAction(itemID, actionID, comment string) (workfeed.ActionResult, error) {
 	f.runItemID = itemID
 	f.runActionID = actionID
+	f.runComment = comment
 	if f.runErr != nil {
 		return workfeed.ActionResult{}, f.runErr
 	}
@@ -283,6 +285,7 @@ func TestWorkFeedActionRunReturnsPromptAndSessionKey(t *testing.T) {
 	resp := h(authedCtx(), reqWith(t, "miniapp.workfeed.action.run", map[string]any{
 		"itemId":   "item",
 		"actionId": "followup",
+		"comment":  "  전달할 의견  ",
 	}))
 
 	var got struct {
@@ -293,8 +296,8 @@ func TestWorkFeedActionRunReturnsPromptAndSessionKey(t *testing.T) {
 		Prompt     string          `json:"prompt"`
 	}
 	decode(t, resp, &got)
-	if store.runItemID != "item" || store.runActionID != "followup" {
-		t.Fatalf("run args = %q/%q", store.runItemID, store.runActionID)
+	if store.runItemID != "item" || store.runActionID != "followup" || store.runComment != "  전달할 의견  " {
+		t.Fatalf("run args = %q/%q/%q", store.runItemID, store.runActionID, store.runComment)
 	}
 	if !got.OK || got.Prompt == "" || got.SessionKey != "client:main" {
 		t.Fatalf("payload = %+v", got)
