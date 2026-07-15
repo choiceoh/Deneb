@@ -7,6 +7,7 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.handCursor
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,8 +17,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -25,6 +28,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,8 +38,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -54,8 +60,7 @@ private val koreanWeekday = listOf("월", "화", "수", "목", "금", "토", "�
 
 /**
  * 최근 전체 결재 surface (`miniapp.groupware.approvals.list`, folder=total).
- * Day-pager like 피드/메일: ← [날짜] → filters the snapshot to one local day;
- * 행 탭 → 상세(분석+본문+승인/반려).
+ * Day-pager like 피드/메일; 미결 우선 정렬·배지; 행 탭 → 상세.
  */
 @Composable
 fun DenebApprovalsScreen(
@@ -81,8 +86,15 @@ fun DenebApprovalsScreen(
 
     val list = rows
     val dayRows = remember(list, selectedDate) {
-        list?.filter { approvalLocalDate(it.date) == selectedDate }.orEmpty()
+        list
+            ?.filter { approvalLocalDate(it.date) == selectedDate }
+            ?.sortedWith(
+                compareByDescending<GroupwareApprovalRow> { it.canAct }
+                    .thenByDescending { it.docId },
+            )
+            .orEmpty()
     }
+    val pendingCount = dayRows.count { it.canAct }
     val minDate = today.minus(APPROVALS_LOOKBACK_DAYS, DateTimeUnit.DAY)
     val canPrev = selectedDate > minDate
     val canNext = selectedDate < today
@@ -90,10 +102,17 @@ fun DenebApprovalsScreen(
     DenebScreenScaffold(title = "결재", onBack = onBack, tabBar = navigationTabBar) {
         ApprovalsDateBar(
             label = approvalsDateLabel(selectedDate, today),
+            countLabel = when {
+                dayRows.isEmpty() -> null
+                pendingCount > 0 -> "${dayRows.size}건 · 미결 $pendingCount"
+                else -> "${dayRows.size}건"
+            },
             canGoPrev = canPrev,
             canGoNext = canNext,
+            showToday = selectedDate != today,
             onPrev = { if (canPrev) selectedDate = selectedDate.minus(1, DateTimeUnit.DAY) },
             onNext = { if (canNext) selectedDate = selectedDate.plus(1, DateTimeUnit.DAY) },
+            onToday = { selectedDate = today },
         )
         when {
             failed -> DenebError(
@@ -126,53 +145,103 @@ private fun ApprovalRow(
     doc: GroupwareApprovalRow,
     onOpen: () -> Unit,
 ) {
-    Column(
+    Row(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onOpen, onClickLabel = "결재 상세", role = Role.Button)
             .handCursor()
             .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.Top,
     ) {
-        Text(
-            text = doc.title.ifBlank { "(제목 없음)" },
-            style = DenebType.rowTitle,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Spacer(Modifier.height(2.dp))
-        val meta = listOfNotNull(
-            doc.drafter.takeIf { it.isNotBlank() }?.let { "기안 $it" },
-            doc.status.takeIf { it.isNotBlank() },
-            doc.docNo.takeIf { it.isNotBlank() },
-            if (doc.canAct) "미결" else null,
-        ).joinToString(" · ")
-        if (meta.isNotBlank()) {
-            Text(text = meta, style = DenebType.meta, color = denebHint())
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = doc.title.ifBlank { "(제목 없음)" },
+                style = DenebType.rowTitle.copy(
+                    fontWeight = if (doc.canAct) FontWeight.SemiBold else FontWeight.Normal,
+                ),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(4.dp))
+            val meta = listOfNotNull(
+                doc.drafter.takeIf { it.isNotBlank() }?.let { "기안 $it" },
+                doc.docNo.takeIf { it.isNotBlank() },
+            ).joinToString(" · ")
+            if (meta.isNotBlank()) {
+                Text(text = meta, style = DenebType.meta, color = denebHint())
+            }
         }
+        Spacer(Modifier.width(10.dp))
+        ApprovalStatusBadge(
+            label = when {
+                doc.canAct -> "미결"
+                doc.status.isNotBlank() -> doc.status
+                else -> "—"
+            },
+            pending = doc.canAct,
+        )
     }
+}
+
+@Composable
+private fun ApprovalStatusBadge(label: String, pending: Boolean) {
+    val bg = if (pending) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+    }
+    val fg = if (pending) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        denebHint()
+    }
+    Text(
+        text = label,
+        style = DenebType.meta.copy(fontWeight = if (pending) FontWeight.SemiBold else FontWeight.Normal),
+        color = fg,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(bg)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    )
 }
 
 @Composable
 private fun ApprovalsDateBar(
     label: String,
+    countLabel: String?,
     canGoPrev: Boolean,
     canGoNext: Boolean,
+    showToday: Boolean,
     onPrev: () -> Unit,
     onNext: () -> Unit,
+    onToday: () -> Unit,
 ) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 0.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ApprovalsDateArrow(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "이전 날", canGoPrev, onPrev)
-        Text(
-            text = label,
-            style = DenebType.rowTitle,
-            color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.weight(1f),
-        )
-        ApprovalsDateArrow(Icons.AutoMirrored.Filled.KeyboardArrowRight, "다음 날", canGoNext, onNext)
+    Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ApprovalsDateArrow(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "이전 날", canGoPrev, onPrev)
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = label,
+                    style = DenebType.rowTitle,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    textAlign = TextAlign.Center,
+                )
+                if (!countLabel.isNullOrBlank()) {
+                    Text(countLabel, style = DenebType.meta, color = denebHint())
+                }
+            }
+            ApprovalsDateArrow(Icons.AutoMirrored.Filled.KeyboardArrowRight, "다음 날", canGoNext, onNext)
+        }
+        if (showToday) {
+            TextButton(
+                onClick = onToday,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            ) { Text("오늘로") }
+        }
     }
 }
 
