@@ -75,7 +75,6 @@ API inventory, box codes, HMAC auth, and approve/reject notes:
 | `read` | `approval`/`board` | (approval) | Match by `query`; approval returns body/line/table + attachment titles only |
 | `attachment` | `approval` | — | Download/extract exactly one agent-selected file by `doc_id` + number/filename |
 
-
 ## Proactive e-approval (phone → work feed)
 
 Amaranth10 (Douzone) electronic-approval notifications already reach the gateway via

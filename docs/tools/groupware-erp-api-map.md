@@ -12,7 +12,7 @@ read_when:
 Investigation notes for `https://tsgw.topsolar.kr` ERP surfaces (물류·영업·구매·회계 일부).
 Uses the **same** session + `wehago-sign` HMAC as 전자결재/게시판 — not Douzone partner OpenAPI.
 
-Last surveyed: **2026-07-16**. Status: **confirmed** (live POST + data), **ok-empty** (SUCCESS but needs filters / no rows), **menu-only** (in tree, list body TBD), **no-access** (menu absent for this login).
+Last surveyed: **2026-07-16** (pass 2). Status: **confirmed** (live POST + rows), **ok-empty** (SUCCESS, zero rows with captured filters), **menu-only** (screen opens; list body TBD), **no-access** (menu absent for this login).
 
 Auth, session file, and signing: [groupware-amaranth.md](/tools/groupware-amaranth).
 
@@ -71,14 +71,18 @@ Children: `POST /gw/gw999A03` with `{ "upperMenuNo": "<menuNo>" }`.
 
 ## Confirmed list APIs — 영업 / 물류 (`logis`)
 
-| Screen (KR) | Hash page | Endpoint | Primary date keys | Status |
-|-------------|-----------|----------|-------------------|--------|
+| Screen (KR) | Hash page | Endpoint | Primary date / filter keys | Status |
+|-------------|-----------|----------|----------------------------|--------|
+| 판매계획현황 | `BLA0020` | `POST /logis/bla0020/0lo00001` | `pYr`, `pMm` | ok-empty |
+| 견적현황 | `BLB0040` | `POST /logis/blb0040/0lo00001` | `estDtFrom`, `estDtTo` | ok-empty |
 | 주문현황 | `BLC0030` | `POST /logis/blc0030/0lo00001` | `from`, `to` | confirmed |
-| 견적현황 | `BLB0040` | `POST /logis/blb0040/0lo00001` | (same family) | ok-empty / likely confirmed |
-| 출고현황 | `BLF0050` | `POST /logis/blf0050/0lo00001` | `isuDtFrom`, `isuDtTo` | confirmed |
 | 출고등록(list-ish) | `BLF0010` | `POST /logis/blf0010/0lo00001` | | ok-empty |
+| 출고현황 | `BLF0050` | `POST /logis/blf0050/0lo00001` | `isuDtFrom`, `isuDtTo` | confirmed |
 | 매출마감현황 | `BLG0070` | `POST /logis/blg0070/0lo00001` | `clsDtFr`, `clsDtTo` | confirmed |
-| 수금현황 | `BLH0040` | `POST /logis/blh0040/0lo00001` | | ok-empty / likely confirmed |
+| 수금현황 | `BLH0040` | `POST /logis/blh0040/0lo00001` | `rcpDtFr`, `rcpDtTo` | ok-empty |
+| 미수채권상세 | `BLL0030` | `POST /logis/bll0030/0lo00001` | `fromDt`, `toDt` | confirmed |
+| 미수채권 (footer/agg) | `BLL0030` | `POST /logis/bll0030/0lo00002` | same as above | confirmed |
+| 품목단가등록 | `BSB0010` | `POST /logis/bsb0010/0lo00001` | item filters / paging | confirmed |
 
 ### 매출마감 amount fields
 
@@ -101,8 +105,11 @@ List body also carries org/item filters: `divCds`, `deptCds`, `empCds`, `itemCds
 | Screen (KR) | Hash page | Endpoint | Primary filters | Status |
 |-------------|-----------|----------|-----------------|--------|
 | 발주현황 | `POC0030` | `POST /purchase/poc0030/0pu00001` | `poDtFr`, `poDtTo` | confirmed |
-| 발주현황 (alt shape) | `POC0030` | `POST /purchase/poc0030/0pu00002` | | confirmed (`{ data, columns, menuDesc }`) |
+| 발주현황 (alt shape) | `POC0030` | `POST /purchase/poc0030/0pu00002` | | confirmed (`data` + `columns` + `menuDesc`) |
+| 발주미납현황 | `POC0040` | `POST /purchase/poc0040/0pu00001` | `baseDt`, `dueDtFr`, `dueDtTo` | ok-empty |
 | 입고현황 | `POF0020` | `POST /purchase/pof0020/0pu00002` | `rcvDtFrom`, `rcvDtTo` | confirmed |
+| 매입마감현황 | `POG0050` | `POST /purchase/pog0050/0pu00001` | `clsDtFr`, `clsDtTo` | ok-empty |
+| 지급현황 | `POH0040` | `POST /purchase/poh0040/0pu00001` | `payDtFr`, `payDtTo` | ok-empty |
 | 현재고현황 | `POM0010` | `POST /purchase/pom0010/0pu00000` | `yyyy`, `whCds`, `searchType`, … | confirmed |
 | 결재연동 helper | — | `POST /purchase/common/approval/0lo00013` | `moduleCds` | confirmed |
 
@@ -122,9 +129,11 @@ Tenant accounting L2 (from menu tree): 프로세스갤러리, **지출결의/경
 
 | Screen | Hash | Endpoint | Status |
 |--------|------|----------|--------|
-| 지출결의 | `ACA2010` | `POST /financial/aca2010/getList` | confirmed route; body filters still **TBD** (SUCCESS, often `[]`) |
+| 지출결의 | `ACA2010` | `POST /financial/aca2010/getList` | route confirmed; **list filter body still TBD** (SUCCESS, often empty) |
 | | | `POST /financial/aca2010/getAperDivEmpInfo` | confirmed |
 | | | `POST /financial/aca2010/getSmenuIni` | confirmed |
+| 경비전표 | `ACA3010` | — | hash did not land in pass 2 (`#/` fallback) — **menu-only** |
+| 프로젝트관리 | `ACN4000` | — | screen opens; business list POST not captured yet — **menu-only** |
 | Common | — | `POST /financial/common/getSysCfg` | confirmed |
 | | | `POST /financial/docuCommon/getTaxJounalList` | ok-empty |
 | | | `POST /financial/docuCommon/getIsNonprofit` | confirmed |
@@ -147,7 +156,18 @@ Often loaded beside ERP grids:
 | `POST /logis/logisCommon/getCompanyInfo` | Company profile |
 | `POST /logis/logisCommon/selectGisu` | 기수 |
 
-Micro frontend assets (debug only): `/modules/financial|logis|purchase|system|bp/asset-manifest.json`.
+Micro frontend assets (debug only): `/modules/financial`, `/modules/logis`, `/modules/purchase`, `/modules/system`, `/modules/bp` (+ each `asset-manifest.json`).
+
+## Still open (pass 2+)
+
+| Gap | Notes |
+|-----|-------|
+| `aca2010/getList` request body | Screen loads helpers only; 조회 click did not emit list POST with dates |
+| `ACA3010` 경비전표 | Direct hash bounced to `#/` |
+| `ACN4000` 프로젝트 list API | Need leaf navigation + network capture |
+| `BSB0020` 거래처단가 | Hash opened; no business POST captured |
+| Wider date windows for ok-empty screens | 수금/견적/판매계획/지급/매입마감/발주미납 may have rows outside SPA default range |
+| Wire into chat `groupware` tool | Still eap/board only |
 
 ## Discovery cheatsheet
 
@@ -162,18 +182,17 @@ Probe from Node (same HMAC client as eap/board):
 2. Children — `POST /gw/gw999A03` `{ "upperMenuNo": "430000000" }` (영업 등)
 3. List — e.g. `POST /logis/blg0070/0lo00001` with `clsDtFr` / `clsDtTo` (`YYYYMMDD`); sum `clsgAm` only in local logs — never commit row PII
 
-Playwright: login → open `#/BL/BLG0070/BLG0070` (etc.) → capture POST bodies under `/logis|/purchase|/financial` (date keys differ per screen).
-
+Playwright: login → open `#/BL/BLG0070/BLG0070` (etc.) → capture POST bodies under `/logis`, `/purchase`, `/financial` (date keys differ per screen).
 
 ## Wiring note (Deneb)
 
 | Today | ERP |
 |-------|-----|
-| Chat tool `groupware` areas | `approval` · `board` only |
+| Chat tool `groupware` areas | `approval` and `board` only |
 | Reader adapters | `lib/actions.mjs` — eap/board |
-| ERP | **Not wired** — call via `apiPost` / future `area=logis|purchase|financial` |
+| ERP | **Not wired** — call via `apiPost` or future areas `logis`, `purchase`, `financial` |
 
-Suggested next wire (read-only): `매출마감` · `출고현황` · `입고현황` · `현재고` · `발주현황` (all confirmed with date filters). Keep mutate off the chat tool.
+Suggested next wire (read-only): `매출마감`, `출고현황`, `입고현황`, `현재고`, `발주현황`, `미수채권`, `품목단가` (confirmed with filters). Keep mutate off the chat tool.
 
 ## Explicit non-goals
 
