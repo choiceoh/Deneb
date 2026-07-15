@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.79](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.78...andromeda-v0.0.79) (2026-07-15)
+
+
+### 🔧 Internal
+
+* **health:** Health Bench 2.0 84.8→88.2 — contracts·fanout·tests·guides + baseline ([#3679](https://github.com/choiceoh/Deneb/issues/3679)) ([0d2d48b](https://github.com/choiceoh/Deneb/commit/0d2d48bd4127361e03fbbbb711bffa5e04c614f4))
+
 ## [0.0.78](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.77...andromeda-v0.0.78) (2026-07-15)
 
 
