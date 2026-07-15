@@ -60,6 +60,7 @@ func (b *skillLifecycleBackend) skillLifecycleStatusForSkill(skillName string, l
 	}
 	common.addToStatus(&status)
 	status.OptimizerMemoryError = optimizerMemoryErr
+	slimSkillLifecycleStatusForAgent(&status)
 	return status, nil
 }
 
@@ -95,6 +96,7 @@ func (b *skillLifecycleBackend) globalSkillLifecycleStatus(limit int, recent []g
 		WorkoutActivity: lifecycleValue(workoutActivity),
 	}
 	common.addToStatus(&status)
+	slimSkillLifecycleStatusForAgent(&status)
 	return status, nil
 }
 

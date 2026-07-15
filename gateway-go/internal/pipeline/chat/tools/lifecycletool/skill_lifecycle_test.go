@@ -96,7 +96,7 @@ func TestToolSkillLifecycleCreatesProposal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ToolSkillLifecycle: %v", err)
 	}
-	if !strings.Contains(out, `"executed": true`) {
+	if !strings.Contains(out, `"executed":true`) {
 		t.Fatalf("expected executed result, got %s", out)
 	}
 	if backend.proposal.Candidate != "repeatable deploy fix" || backend.proposal.Route != "genesis" || !backend.proposal.Execute {
@@ -147,7 +147,7 @@ func TestToolSkillLifecycleReadsSkillStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ToolSkillLifecycle: %v", err)
 	}
-	if !strings.Contains(out, `"limit": 3`) {
+	if !strings.Contains(out, `"limit":3`) {
 		t.Fatalf("expected status result, got %s", out)
 	}
 	if backend.status.SkillName != "skill-factory" || backend.status.Limit != 3 {
@@ -172,7 +172,7 @@ func TestToolSkillLifecycleCreatesSelfCorrectionCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ToolSkillLifecycle: %v", err)
 	}
-	if !strings.Contains(out, `"scope": "skill"`) {
+	if !strings.Contains(out, `"scope":"skill"`) {
 		t.Fatalf("expected self-correction result, got %s", out)
 	}
 	if backend.selfCorrection.SkillName != "email-analysis" || backend.selfCorrection.Scope != "skill" {
@@ -212,7 +212,7 @@ func TestToolSkillLifecycleUpdatesSkillViaCuratorAction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ToolSkillLifecycle: %v", err)
 	}
-	if !strings.Contains(out, `"action": "archive"`) {
+	if !strings.Contains(out, `"action":"archive"`) {
 		t.Fatalf("expected archive result, got %s", out)
 	}
 	if backend.curator.Action != "archive" || backend.curator.SkillName != "generated-helper" {
@@ -253,7 +253,7 @@ func TestToolSkillLifecycleCreatesValidationCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ToolSkillLifecycle: %v", err)
 	}
-	if !strings.Contains(out, `"id": "preserve-single-bash-block"`) {
+	if !strings.Contains(out, `"id":"preserve-single-bash-block"`) {
 		t.Fatalf("expected validation case result, got %s", out)
 	}
 	if backend.validationCase.SkillName != "topsolar-db" ||
@@ -294,7 +294,7 @@ func TestToolSkillLifecycleCreatesValidationCaseFromSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ToolSkillLifecycle: %v", err)
 	}
-	if !strings.Contains(out, `"sessionKey": "client:main:srv1"`) {
+	if !strings.Contains(out, `"sessionKey":"client:main:srv1"`) {
 		t.Fatalf("expected validation case result, got %s", out)
 	}
 	if backend.fromSession.SkillName != "srv1-ops" ||
@@ -325,7 +325,7 @@ func TestToolSkillLifecycleCreatesBackfilledValidationCases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ToolSkillLifecycle: %v", err)
 	}
-	if !strings.Contains(out, `"limit": 7`) {
+	if !strings.Contains(out, `"limit":7`) {
 		t.Fatalf("expected backfill result, got %s", out)
 	}
 	if backend.backfill.SkillName != "srv1-ops" ||

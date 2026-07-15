@@ -329,6 +329,9 @@ func (s *Server) registerSkillLifecycleTool() {
 		InputSchema: toolbind.SkillLifecycleToolSchema(),
 		Fn:          toolbind.ToolSkillLifecycle(backend),
 		Deferred:    true,
+		// Late-bound tool is outside tool_schemas MaxOutputs map. Status is a
+		// multi-section JSON surface; 48K leaves room after status slim.
+		MaxOutput: 48 * 1024,
 	})
 }
 
