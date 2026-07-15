@@ -158,6 +158,13 @@ export const RSI_RPC = {
   coding: "miniapp.self_improvement_coding.list",
 } as const;
 
+// Observation plane (read-only) — gateway behavior aggregate + recent warn/error
+// logs. Mirrors the native Settings「관찰」tab (ConfigObserveTab).
+export const OBSERVE_RPC = {
+  behavior: "miniapp.observe.behavior",
+  logs: "miniapp.observe.logs",
+} as const;
+
 export const WORKFEED_RPC = {
   ack: "miniapp.workfeed.ack",
   read: "miniapp.workfeed.read",

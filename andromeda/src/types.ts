@@ -235,6 +235,7 @@ export type View =
   | "workfeed"
   | "skills"
   | "rsi"
+  | "observe"
   | "settings";
 
 // Gateway wire types — generated from the gateway's //deneb:wire Go structs (the
