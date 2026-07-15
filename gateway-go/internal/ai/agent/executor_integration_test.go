@@ -66,6 +66,19 @@ func (f *fakeLLMStreamer) stream() <-chan llm.StreamEvent {
 	return ch
 }
 
+type blockingRequestContextStreamer struct {
+	ctxs chan context.Context
+}
+
+func (s *blockingRequestContextStreamer) StreamChat(ctx context.Context, _ llm.ChatRequest) (<-chan llm.StreamEvent, error) {
+	s.ctxs <- ctx
+	return make(chan llm.StreamEvent), nil
+}
+
+func (s *blockingRequestContextStreamer) Complete(context.Context, llm.ChatRequest) (string, error) {
+	return "", nil
+}
+
 // fakeToolExecutor records calls and returns configurable outputs.
 type fakeToolExecutor struct {
 	mu             sync.Mutex
@@ -396,6 +409,122 @@ func TestRunAgent_Timeout(t *testing.T) {
 
 	if result.StopReason != "timeout" {
 		t.Errorf("StopReason = %q, want %q", result.StopReason, "timeout")
+	}
+}
+
+func TestRunAgent_HardTimeoutCancelsStreamingRequestWithoutDeadline(t *testing.T) {
+	streamer := &blockingRequestContextStreamer{ctxs: make(chan context.Context, 1)}
+	resultCh := make(chan struct {
+		result *AgentResult
+		err    error
+	}, 1)
+
+	go func() {
+		result, err := RunAgent(
+			context.Background(),
+			AgentConfig{MaxTurns: 1, Timeout: 50 * time.Millisecond, MaxTokens: 1024},
+			[]llm.Message{llm.NewTextMessage("user", "slow")},
+			streamer,
+			nil,
+			StreamHooks{},
+			nil,
+			nil,
+		)
+		resultCh <- struct {
+			result *AgentResult
+			err    error
+		}{result: result, err: err}
+	}()
+
+	var requestCtx context.Context
+	select {
+	case requestCtx = <-streamer.ctxs:
+	case <-time.After(time.Second):
+		t.Fatal("StreamChat was not called")
+	}
+	if _, ok := requestCtx.Deadline(); ok {
+		t.Fatal("streaming request context unexpectedly exposes a deadline")
+	}
+
+	var got struct {
+		result *AgentResult
+		err    error
+	}
+	select {
+	case got = <-resultCh:
+	case <-time.After(time.Second):
+		t.Fatal("RunAgent did not return after timeout")
+	}
+	if got.err != nil {
+		t.Fatalf("RunAgent error = %v", got.err)
+	}
+	if got.result.StopReason != "timeout" {
+		t.Errorf("StopReason = %q, want timeout", got.result.StopReason)
+	}
+	if !errors.Is(requestCtx.Err(), context.Canceled) {
+		t.Errorf("request ctx err = %v, want context canceled", requestCtx.Err())
+	}
+	if !errors.Is(context.Cause(requestCtx), context.DeadlineExceeded) {
+		t.Errorf("request ctx cause = %v, want deadline exceeded", context.Cause(requestCtx))
+	}
+}
+
+func TestRunAgent_ParentDeadlineCancelsStreamingRequestWithoutDeadline(t *testing.T) {
+	streamer := &blockingRequestContextStreamer{ctxs: make(chan context.Context, 1)}
+	parent, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	resultCh := make(chan struct {
+		result *AgentResult
+		err    error
+	}, 1)
+
+	go func() {
+		result, err := RunAgent(
+			parent,
+			AgentConfig{MaxTurns: 1, Timeout: 10 * time.Second, MaxTokens: 1024},
+			[]llm.Message{llm.NewTextMessage("user", "slow parent")},
+			streamer,
+			nil,
+			StreamHooks{},
+			nil,
+			nil,
+		)
+		resultCh <- struct {
+			result *AgentResult
+			err    error
+		}{result: result, err: err}
+	}()
+
+	var requestCtx context.Context
+	select {
+	case requestCtx = <-streamer.ctxs:
+	case <-time.After(time.Second):
+		t.Fatal("StreamChat was not called")
+	}
+	if _, ok := requestCtx.Deadline(); ok {
+		t.Fatal("streaming request context unexpectedly exposes a parent deadline")
+	}
+
+	var got struct {
+		result *AgentResult
+		err    error
+	}
+	select {
+	case got = <-resultCh:
+	case <-time.After(time.Second):
+		t.Fatal("RunAgent did not return after parent deadline")
+	}
+	if got.err != nil {
+		t.Fatalf("RunAgent error = %v", got.err)
+	}
+	if got.result.StopReason != "timeout" {
+		t.Errorf("StopReason = %q, want timeout", got.result.StopReason)
+	}
+	if !errors.Is(requestCtx.Err(), context.Canceled) {
+		t.Errorf("request ctx err = %v, want context canceled", requestCtx.Err())
+	}
+	if !errors.Is(context.Cause(requestCtx), context.DeadlineExceeded) {
+		t.Errorf("request ctx cause = %v, want deadline exceeded", context.Cause(requestCtx))
 	}
 }
 

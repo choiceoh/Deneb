@@ -7,6 +7,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -168,7 +169,7 @@ func extractThinkingText(blocks []llm.ContentBlock) string {
 
 // stopReasonFromCtx determines the stop reason from a cancelled context.
 func stopReasonFromCtx(ctx context.Context) string {
-	if ctx.Err() == context.DeadlineExceeded {
+	if errors.Is(context.Cause(ctx), context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return "timeout"
 	}
 	return "aborted"
