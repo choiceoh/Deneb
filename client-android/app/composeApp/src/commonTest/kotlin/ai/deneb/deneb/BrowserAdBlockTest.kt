@@ -107,4 +107,16 @@ class BrowserAdBlockTest {
         assertFalse(shouldBlockBrowserAdRequest("https://larrycjohnson.substack.com/p/iran-no-longer-bound-by-mou-adjusts", isForMainFrame = true))
         assertFalse(shouldBlockBrowserAdRequest("https://larrycjohnson.substack.com/p/iran-no-longer-bound-by-mou-adjusts"))
     }
+
+    @Test
+    fun `blocks aviation21 yandex rtb and sovrn related-posts`() {
+        assertTrue(shouldBlockBrowserAdRequest("https://yandex.ru/ads/system/context.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://an.yandex.ru/system/context.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://mc.yandex.ru/metrika/tag.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://metrika.yandex.ru/watch.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://informer.yandex.ru/informer/34183010/3_0_FFFFFFFF_EFEFEFFF_0_pageviews"))
+        assertTrue(shouldBlockBrowserAdRequest("https://wprp.sovrn.com/static/js/widget.js"))
+        assertFalse(shouldBlockBrowserAdRequest("https://aviation21.ru/na-iaz-vremya-podgotovki/", isForMainFrame = true))
+        assertFalse(shouldBlockBrowserAdRequest("https://aviation21.ru/wp-content/uploads/2026/07/x.jpg"))
+    }
 }
