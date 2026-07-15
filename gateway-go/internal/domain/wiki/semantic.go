@@ -17,6 +17,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -26,6 +27,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 	"github.com/choiceoh/deneb/gateway-go/pkg/vectorutil"
 )
@@ -65,6 +67,11 @@ type semanticIndex struct {
 	vecs        map[string]cachedVec // relPath -> embedding
 	refreshing  atomic.Bool          // single-flight guard for refreshAsync
 	syncRefresh bool                 // tests only: run refreshAsync inline for deterministic assertions
+
+	cacheFingerprint   string // embedding contract that produced vecs
+	cacheDimensions    int
+	cachePreprocessing string
+	lastError          string
 
 	// Lifecycle for the background refresh goroutine: baseCtx is cancelled by
 	// shutdown() so an in-flight re-embed stops promptly, and wg lets Close wait
@@ -149,6 +156,13 @@ func (si *semanticIndex) refreshAsync(store *Store) {
 // content hash, so stale vectors for edited pages are re-embedded naturally.
 const semanticCacheFile = ".semantic-cache.json"
 
+const semanticCacheSchemaVersion = 2
+
+// semanticPreprocessingVersion identifies how a wiki page becomes embedding
+// input. Bump it whenever semanticText normalization/chunking semantics change,
+// even if the embedding model and dimensions stay the same.
+const semanticPreprocessingVersion = "wiki-semantic-text-v1"
+
 // diarySemanticCacheFile is the diary vector cache, kept beside the diary files
 // (leading dot so the diary walk never treats it as an entry file).
 const diarySemanticCacheFile = ".diary-semantic-cache.json"
@@ -213,6 +227,14 @@ type cachedVecWire struct {
 	Vec  []float32 `json:"vec"`
 }
 
+type semanticCacheEnvelope struct {
+	Version       int                      `json:"version"`
+	Fingerprint   string                   `json:"fingerprint,omitempty"`
+	Dimensions    int                      `json:"dimensions,omitempty"`
+	Preprocessing string                   `json:"preprocessing,omitempty"`
+	Entries       map[string]cachedVecWire `json:"entries"`
+}
+
 // loadCache hydrates vecs from the on-disk cache. Missing file is the normal
 // first-boot case; a corrupt file is dropped (vectors rebuild lazily).
 func (si *semanticIndex) loadCache() {
@@ -223,14 +245,20 @@ func (si *semanticIndex) loadCache() {
 	if err != nil {
 		return
 	}
+	var envelope semanticCacheEnvelope
 	var wire map[string]cachedVecWire
-	if err := json.Unmarshal(data, &wire); err != nil {
+	if err := json.Unmarshal(data, &envelope); err == nil && envelope.Version > 0 && envelope.Entries != nil {
+		wire = envelope.Entries
+	} else if err := json.Unmarshal(data, &wire); err != nil {
 		slog.Warn("wiki: semantic cache unreadable; re-embedding from scratch",
 			"path", si.cachePath, "error", err)
 		return
 	}
 	si.mu.Lock()
 	defer si.mu.Unlock()
+	si.cacheFingerprint = envelope.Fingerprint
+	si.cacheDimensions = envelope.Dimensions
+	si.cachePreprocessing = envelope.Preprocessing
 	for rp, cv := range wire {
 		if cv.Hash == "" || len(cv.Vec) == 0 {
 			continue
@@ -250,9 +278,22 @@ func (si *semanticIndex) saveCache() {
 	for rp, cv := range si.vecs {
 		wire[rp] = cachedVecWire{Hash: cv.hash, Vec: cv.vec}
 	}
+	fingerprint := si.cacheFingerprint
+	dimensions := si.cacheDimensions
+	preprocessing := semanticPreprocessingVersion
 	si.mu.Unlock()
+	if identity := embedindex.IdentityOf(si.embedder); identity.Fingerprint != "" {
+		fingerprint = identity.Fingerprint
+		dimensions = identity.Dimensions
+	}
 
-	data, err := json.Marshal(wire)
+	data, err := json.Marshal(semanticCacheEnvelope{
+		Version:       semanticCacheSchemaVersion,
+		Fingerprint:   fingerprint,
+		Dimensions:    dimensions,
+		Preprocessing: preprocessing,
+		Entries:       wire,
+	})
 	if err != nil {
 		return
 	}
@@ -265,6 +306,130 @@ func (si *semanticIndex) saveCache() {
 		os.Remove(tmp)
 		slog.Warn("wiki: semantic cache rename failed", "path", si.cachePath, "error", err)
 	}
+}
+
+// SemanticIndexStatus is the operator-facing health of the wiki vector cache.
+// Search still degrades to BM25 when this is incomplete; this status makes that
+// fallback visible instead of allowing a partial/stale cache to look healthy.
+type SemanticIndexStatus struct {
+	Enabled               bool   `json:"enabled"`
+	Healthy               bool   `json:"healthy"`
+	EmbedderHealthy       bool   `json:"embedderHealthy"`
+	Refreshing            bool   `json:"refreshing"`
+	IdentityMismatch      bool   `json:"identityMismatch"`
+	PreprocessingMismatch bool   `json:"preprocessingMismatch"`
+	Fingerprint           string `json:"fingerprint,omitempty"`
+	CacheFingerprint      string `json:"cacheFingerprint,omitempty"`
+	Dimensions            int    `json:"dimensions,omitempty"`
+	Preprocessing         string `json:"preprocessing"`
+	CachePreprocessing    string `json:"cachePreprocessing,omitempty"`
+	Expected              int    `json:"expected"`
+	Indexed               int    `json:"indexed"`
+	Pending               int    `json:"pending"`
+	Stale                 int    `json:"stale"`
+	CorpusErrors          int    `json:"corpusErrors"`
+	LastError             string `json:"lastError,omitempty"`
+	DegradedReason        string `json:"degradedReason,omitempty"`
+}
+
+// SemanticStatus compares the live wiki corpus with the vector cache and the
+// active embedding identity. It performs only local reads and is intended for
+// status/diagnostic surfaces, not the per-turn search hot path.
+func (s *Store) SemanticStatus() SemanticIndexStatus {
+	if s == nil || s.sem == nil || s.sem.embedder == nil {
+		return SemanticIndexStatus{}
+	}
+	si := s.sem
+	identity := embedindex.IdentityOf(si.embedder)
+	status := SemanticIndexStatus{
+		Enabled:         true,
+		EmbedderHealthy: si.embedder.IsHealthy(),
+		Refreshing:      si.refreshing.Load(),
+		Fingerprint:     identity.Fingerprint,
+		Dimensions:      identity.Dimensions,
+		Preprocessing:   semanticPreprocessingVersion,
+	}
+
+	si.mu.Lock()
+	vecs := make(map[string]cachedVec, len(si.vecs))
+	for path, vector := range si.vecs {
+		vecs[path] = vector
+	}
+	status.CacheFingerprint = si.cacheFingerprint
+	status.CachePreprocessing = si.cachePreprocessing
+	cacheDimensions := si.cacheDimensions
+	if status.Dimensions == 0 {
+		status.Dimensions = cacheDimensions
+	}
+	status.LastError = si.lastError
+	si.mu.Unlock()
+
+	identityMismatch := len(vecs) > 0 && identity.Fingerprint != "" &&
+		(status.CacheFingerprint == "" || status.CacheFingerprint != identity.Fingerprint ||
+			(cacheDimensions > 0 && identity.Dimensions > 0 && cacheDimensions != identity.Dimensions))
+	status.IdentityMismatch = identityMismatch
+	status.PreprocessingMismatch = len(vecs) > 0 && status.CachePreprocessing != semanticPreprocessingVersion
+	live := make(map[string]struct{})
+	paths, listErr := s.ListPages("")
+	if listErr != nil {
+		status.CorpusErrors++
+		if status.LastError == "" {
+			status.LastError = listErr.Error()
+		}
+	}
+	for _, path := range paths {
+		page, err := s.ReadPage(path)
+		if err != nil {
+			status.CorpusErrors++
+			if status.LastError == "" {
+				status.LastError = err.Error()
+			}
+			continue
+		}
+		if page == nil {
+			status.CorpusErrors++
+			continue
+		}
+		text := semanticText(page)
+		if len(text) < semanticMinChars {
+			continue
+		}
+		status.Expected++
+		live[path] = struct{}{}
+		cached, ok := vecs[path]
+		if ok && !identityMismatch && !status.PreprocessingMismatch && cached.hash == contentHash(text) && len(cached.vec) > 0 &&
+			(status.Dimensions == 0 || len(cached.vec) == status.Dimensions) {
+			status.Indexed++
+			continue
+		}
+		if ok {
+			status.Stale++
+		}
+	}
+	for path := range vecs {
+		if _, ok := live[path]; !ok {
+			status.Stale++
+		}
+	}
+	status.Pending = status.Expected - status.Indexed
+	switch {
+	case !status.EmbedderHealthy:
+		status.DegradedReason = "embedding_unhealthy"
+	case status.IdentityMismatch:
+		status.DegradedReason = "embedding_identity_mismatch"
+	case status.PreprocessingMismatch:
+		status.DegradedReason = "preprocessing_mismatch"
+	case status.CorpusErrors > 0:
+		status.DegradedReason = "corpus_read_error"
+	case status.LastError != "":
+		status.DegradedReason = "refresh_error"
+	case status.Pending > 0:
+		status.DegradedReason = "incomplete_cache"
+	case status.Stale > 0:
+		status.DegradedReason = "stale_cache"
+	}
+	status.Healthy = status.DegradedReason == ""
+	return status
 }
 
 // semanticText is the text embedded for a page: title + summary + cue anchors +
@@ -326,6 +491,14 @@ func (s *Store) searchSemanticWithVec(qv []float32, limit int) []SearchResult {
 		return nil
 	}
 	s.sem.mu.Lock()
+	identity := embedindex.IdentityOf(s.sem.embedder)
+	identityMismatch := identity.Fingerprint != "" &&
+		(s.sem.cacheFingerprint == "" || s.sem.cacheFingerprint != identity.Fingerprint ||
+			(s.sem.cacheDimensions > 0 && identity.Dimensions > 0 && s.sem.cacheDimensions != identity.Dimensions))
+	if s.sem.cachePreprocessing != semanticPreprocessingVersion || identityMismatch {
+		s.sem.mu.Unlock()
+		return nil
+	}
 	type scored struct {
 		path  string
 		score float64
@@ -401,6 +574,16 @@ func (s *Store) embedQueriesBatch(ctx context.Context, queries []string) [][]flo
 // Any mutation (even partial progress before a batch error) is mirrored to the
 // on-disk cache so the work survives the next restart.
 func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) {
+	defer func() {
+		si.mu.Lock()
+		if err != nil {
+			si.lastError = err.Error()
+		} else {
+			si.lastError = ""
+		}
+		si.mu.Unlock()
+	}()
+
 	relPaths, err := store.ListPages("")
 	if err != nil {
 		return err
@@ -419,6 +602,25 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) 
 	var toEmbedText []string
 
 	si.mu.Lock()
+	identity := embedindex.IdentityOf(si.embedder)
+	identityChanged := identity.Fingerprint != "" && (si.cacheFingerprint == "" || si.cacheFingerprint != identity.Fingerprint ||
+		(si.cacheDimensions > 0 && identity.Dimensions > 0 && si.cacheDimensions != identity.Dimensions))
+	preprocessingChanged := si.cachePreprocessing != semanticPreprocessingVersion
+	if identityChanged || preprocessingChanged {
+		if len(si.vecs) > 0 {
+			slog.Warn("wiki: semantic cache contract changed; rebuilding",
+				"cached", si.cacheFingerprint, "active", identity.Fingerprint,
+				"cachedDimensions", si.cacheDimensions, "activeDimensions", identity.Dimensions,
+				"cachedPreprocessing", si.cachePreprocessing, "activePreprocessing", semanticPreprocessingVersion)
+		}
+		clear(si.vecs)
+		mutated = true
+	}
+	if identity.Fingerprint != "" {
+		si.cacheFingerprint = identity.Fingerprint
+		si.cacheDimensions = identity.Dimensions
+	}
+	si.cachePreprocessing = semanticPreprocessingVersion
 	for _, rp := range relPaths {
 		page, perr := store.ReadPage(rp)
 		if perr != nil || page == nil {
@@ -457,7 +659,7 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) 
 			return eerr
 		}
 		if len(vecs) != end-start {
-			return nil // unexpected shape; skip this refresh, keep prior vecs
+			return fmt.Errorf("wiki: semantic embed batch returned %d vectors for %d texts", len(vecs), end-start)
 		}
 		si.mu.Lock()
 		for i, rp := range toEmbed[start:end] {

@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -32,6 +33,10 @@ type Client struct {
 	http    *http.Client
 	healthy atomic.Bool
 	logger  *slog.Logger
+
+	identityMu sync.RWMutex
+	model      string
+	dimensions int
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -68,6 +73,38 @@ func (c *Client) Shutdown() { c.cancel() }
 
 // IsHealthy returns whether the embedding server is reachable.
 func (c *Client) IsHealthy() bool { return c.healthy.Load() }
+
+// EmbeddingFingerprint identifies the vector semantics exposed by the active
+// sidecar. It intentionally stays empty until /health reports both model and
+// dimensions, so cache users do not invalidate a valid cache during the
+// asynchronous startup probe.
+func (c *Client) EmbeddingFingerprint() string {
+	c.identityMu.RLock()
+	defer c.identityMu.RUnlock()
+	if c.model == "" || c.dimensions <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s:%d", c.model, c.dimensions)
+}
+
+// EmbeddingDimensions returns the probed or most recently observed vector
+// width. Zero means the sidecar identity has not been established yet.
+func (c *Client) EmbeddingDimensions() int {
+	c.identityMu.RLock()
+	defer c.identityMu.RUnlock()
+	return c.dimensions
+}
+
+func (c *Client) recordIdentity(model string, dimensions int) {
+	c.identityMu.Lock()
+	defer c.identityMu.Unlock()
+	if strings.TrimSpace(model) != "" {
+		c.model = strings.TrimSpace(model)
+	}
+	if dimensions > 0 {
+		c.dimensions = dimensions
+	}
+}
 
 type embedRequest struct {
 	Texts []string `json:"texts"`
@@ -142,6 +179,7 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 			return nil, fmt.Errorf("embedding: embedding %d has %d dimensions, expected %d", i, len(vector), result.Dimensions)
 		}
 	}
+	c.recordIdentity("", result.Dimensions)
 	return result.Embeddings, nil
 }
 
@@ -177,7 +215,18 @@ func (c *Client) probe() {
 		c.healthy.Store(false)
 		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+
+	var health struct {
+		Model      string `json:"model"`
+		Dimensions int    `json:"dimensions"`
+	}
+	if resp.StatusCode == http.StatusOK {
+		// Identity metadata is diagnostic, not a liveness prerequisite. Older
+		// sidecars that return only {"status":"ok"} remain healthy.
+		_ = json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&health)
+		c.recordIdentity(health.Model, health.Dimensions)
+	}
 
 	wasHealthy := c.healthy.Load()
 	c.healthy.Store(resp.StatusCode == http.StatusOK)

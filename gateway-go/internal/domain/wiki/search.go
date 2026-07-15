@@ -18,10 +18,73 @@ import (
 
 // SearchResult is a single search hit.
 type SearchResult struct {
-	Path    string  // relative path within wiki dir
-	Line    int     // always 0 (line-level matching not available)
-	Content string  // matching snippet
-	Score   float64 // relevance score (0-1)
+	Path    string             `json:"path"`              // relative path within wiki dir
+	Line    int                `json:"line,omitempty"`    // always 0 (line-level matching not available)
+	Content string             `json:"content"`           // matching snippet
+	Score   float64            `json:"score"`             // relevance score (0-1)
+	Explain *SearchExplanation `json:"explain,omitempty"` // populated only for explicit diagnostic queries
+}
+
+// SearchMode selects one retrieval stage for evaluation. The zero/auto mode is
+// production behavior, including environment rollback knobs.
+type SearchMode string
+
+const (
+	SearchModeAuto     SearchMode = "auto"
+	SearchModeBM25     SearchMode = "bm25"
+	SearchModeSemantic SearchMode = "semantic"
+	SearchModeHybrid   SearchMode = "hybrid"
+	SearchModeFull     SearchMode = "full"
+)
+
+// QueryOptions configures one search without mutating process-wide environment.
+// Intent never admits a new document: it only reranks already-admitted
+// candidates, and normally runs only when the base ranking is ambiguous.
+type QueryOptions struct {
+	Mode        SearchMode
+	Explain     bool
+	Intent      string
+	ForceIntent bool
+}
+
+type SearchSignalExplanation struct {
+	Rank         int     `json:"rank"`
+	BackendScore float64 `json:"backendScore,omitempty"`
+	Contribution float64 `json:"contribution,omitempty"`
+}
+
+type SearchExplanation struct {
+	Fusion         string                   `json:"fusion"`
+	BM25           *SearchSignalExplanation `json:"bm25,omitempty"`
+	Semantic       *SearchSignalExplanation `json:"semantic,omitempty"`
+	Graph          *SearchSignalExplanation `json:"graph,omitempty"`
+	Intent         *SearchSignalExplanation `json:"intent,omitempty"`
+	BaseScore      float64                  `json:"baseScore"`
+	IntentBonus    float64                  `json:"intentBonus,omitempty"`
+	ValidityFactor float64                  `json:"validityFactor"`
+	FinalScore     float64                  `json:"finalScore"`
+}
+
+type SearchDropSummary struct {
+	Reason string `json:"reason"`
+	Count  int    `json:"count"`
+}
+
+type SearchDiagnostics struct {
+	Mode              SearchMode          `json:"mode"`
+	Fusion            string              `json:"fusion"`
+	SemanticAvailable bool                `json:"semanticAvailable"`
+	GraphCandidates   int                 `json:"graphCandidates"`
+	CommonOnlyQuery   bool                `json:"commonOnlyQuery"`
+	IntentApplied     bool                `json:"intentApplied"`
+	CandidateCount    int                 `json:"candidateCount"`
+	ReturnedCount     int                 `json:"returnedCount"`
+	Dropped           []SearchDropSummary `json:"dropped,omitempty"`
+}
+
+type SearchReport struct {
+	Results     []SearchResult    `json:"results"`
+	Diagnostics SearchDiagnostics `json:"diagnostics"`
 }
 
 // searchDB manages the in-memory FTS index for wiki pages.
@@ -110,6 +173,15 @@ func (s *searchDB) applyValidity(results []SearchResult) []SearchResult {
 		return results[a].Path < results[b].Path
 	})
 	return results
+}
+
+func (s *searchDB) validityFor(path string) float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if factor, ok := s.validity[path]; ok {
+		return factor
+	}
+	return 1
 }
 
 // search runs a full-text query and returns scored results.
@@ -265,15 +337,25 @@ func (s *searchDB) close() error {
 // query also finds pages by meaning. Semantic degradation (server down, embed
 // error) silently falls back to the BM25 result.
 func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchResult, error) {
+	report, err := s.SearchWithOptions(ctx, query, limit, QueryOptions{})
+	return report.Results, err
+}
+
+// SearchWithOptions runs a diagnosable or stage-specific search while keeping
+// Search's production defaults unchanged.
+func (s *Store) SearchWithOptions(ctx context.Context, query string, limit int, options QueryOptions) (SearchReport, error) {
+	var empty SearchReport
 	if s.fts == nil {
-		return nil, nil
+		return empty, nil
 	}
+	query = strings.TrimSpace(query)
 	if query == "" {
-		return nil, nil
+		return empty, nil
 	}
 	if limit <= 0 {
 		limit = 10
 	}
+	mode := normalizeSearchMode(options.Mode)
 	// Over-fetch, demote, THEN truncate. validityFactor (archived/superseded/
 	// aging demotion) multiplies scores after ranking — truncating at the
 	// caller's limit first could return only stale pages while the current page
@@ -289,9 +371,13 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 	if fetchLimit < limit+50 {
 		fetchLimit = limit + 50
 	}
-	bm25, err := s.fts.search(ctx, query, fetchLimit)
-	if err != nil {
-		return nil, err
+	var bm25 []SearchResult
+	var err error
+	if mode != SearchModeSemantic {
+		bm25, err = s.fts.search(ctx, query, fetchLimit)
+		if err != nil {
+			return empty, err
+		}
 	}
 	// Lexical-leak gate: a query whose only matchable tokens are corpus-common
 	// (no rare anchor term) produces BM25 hits that matched on a frequent word
@@ -308,22 +394,18 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchRe
 	if rarityFloor <= 0 {
 		rarityFloor = bm25RarityFloorValue()
 	}
-	commonOnlyQuery := s.fts.docCount() >= bm25GateMinCorpus &&
+	commonOnlyQuery := len(bm25) > 0 && s.fts.docCount() >= bm25GateMinCorpus &&
 		s.fts.queryMaxRarity(query) < rarityFloor
 
-	sem := s.searchSemantic(ctx, query, max(fetchLimit, semanticBlendK))
-	if len(sem) == 0 {
-		// Pure-BM25 path (no embedder / server down / CI). Nothing can confirm a
-		// lexical hit here, so a common-only query's hits are all weak matches and
-		// are dropped — this is the floorless branch that injected an off-topic
-		// page for a single common noun. A query WITH a rare anchor is unaffected.
-		if commonOnlyQuery {
-			return nil, nil
-		}
-		return truncateResults(s.fts.applyValidity(bm25), limit), nil
+	var sem []SearchResult
+	if mode != SearchModeBM25 {
+		sem = s.searchSemantic(ctx, query, max(fetchLimit, semanticBlendK))
 	}
-	graphPaths := s.graphBoostPaths(ctx, query)
-	return truncateResults(s.fts.applyValidity(fuseSearchResults(bm25, sem, graphPaths, fetchLimit, commonOnlyQuery)), limit), nil
+	loadIntent := func() []SearchResult {
+		intentResults, _ := s.fts.search(ctx, strings.TrimSpace(options.Intent), fetchLimit)
+		return intentResults
+	}
+	return s.composeSearchReport(ctx, query, limit, fetchLimit, bm25, sem, commonOnlyQuery, options, loadIntent), nil
 }
 
 // graphBoostPaths returns the graph-proximity ranking for query (the third RRF
@@ -360,22 +442,53 @@ func truncateResults(results []SearchResult, limit int) []SearchResult {
 // degrades that query to pure BM25, exactly like Search). The recall preflight
 // is the caller: it issues 2-3 wiki queries per turn.
 func (s *Store) SearchBatch(ctx context.Context, queries []string, limit int) ([][]SearchResult, error) {
+	reports, err := s.SearchBatchWithOptions(ctx, queries, limit, QueryOptions{})
+	if err != nil {
+		return nil, err
+	}
+	out := make([][]SearchResult, len(reports))
+	for i := range reports {
+		out[i] = reports[i].Results
+	}
+	return out, nil
+}
+
+// SearchBatchWithOptions preserves SearchBatch's single embedding request while
+// enabling the same explain/mode/intent behavior as SearchWithOptions.
+func (s *Store) SearchBatchWithOptions(ctx context.Context, queries []string, limit int, options QueryOptions) ([]SearchReport, error) {
 	if s.fts == nil || len(queries) == 0 {
 		return nil, nil
 	}
 	if limit <= 0 {
 		limit = 10
 	}
+	mode := normalizeSearchMode(options.Mode)
 	// One embed round-trip for all queries. nil (whole slice) when the embedder
 	// is unavailable; per-entry nil for a query too short to embed — both leave
 	// that query on the pure-BM25 path below.
-	qvecs := s.embedQueriesBatch(ctx, queries)
+	var qvecs [][]float32
+	if mode != SearchModeBM25 {
+		qvecs = s.embedQueriesBatch(ctx, queries)
+	}
+	intentFetchLimit := limit * 3
+	if intentFetchLimit < limit+50 {
+		intentFetchLimit = limit + 50
+	}
+	var intentOnce sync.Once
+	var intentResults []SearchResult
+	loadIntent := func() []SearchResult {
+		intentOnce.Do(func() {
+			intentResults, _ = s.fts.search(ctx, strings.TrimSpace(options.Intent), intentFetchLimit)
+		})
+		return intentResults
+	}
 
-	out := make([][]SearchResult, len(queries))
+	out := make([]SearchReport, len(queries))
 	for i, query := range queries {
 		if ctx.Err() != nil {
 			return out, ctx.Err()
 		}
+		query = strings.TrimSpace(query)
 		if query == "" {
 			continue
 		}
@@ -383,28 +496,313 @@ func (s *Store) SearchBatch(ctx context.Context, queries []string, limit int) ([
 		if fetchLimit < limit+50 {
 			fetchLimit = limit + 50
 		}
-		bm25, err := s.fts.search(ctx, query, fetchLimit)
-		if err != nil {
-			return nil, err
+		var bm25 []SearchResult
+		var err error
+		if mode != SearchModeSemantic {
+			bm25, err = s.fts.search(ctx, query, fetchLimit)
+			if err != nil {
+				return nil, err
+			}
 		}
-		commonOnlyQuery := s.fts.docCount() >= bm25GateMinCorpus &&
-			s.fts.queryMaxRarity(query) < bm25RarityFloorValue()
+		rarityFloor := s.bm25RarityFloor
+		if rarityFloor <= 0 {
+			rarityFloor = bm25RarityFloorValue()
+		}
+		commonOnlyQuery := len(bm25) > 0 && s.fts.docCount() >= bm25GateMinCorpus &&
+			s.fts.queryMaxRarity(query) < rarityFloor
 
 		var sem []SearchResult
 		if qvecs != nil && len(qvecs[i]) > 0 {
 			sem = s.searchSemanticWithVec(qvecs[i], max(fetchLimit, semanticBlendK))
 		}
-		if len(sem) == 0 {
-			if commonOnlyQuery {
-				continue
-			}
-			out[i] = truncateResults(s.fts.applyValidity(bm25), limit)
-			continue
-		}
-		graphPaths := s.graphBoostPaths(ctx, query)
-		out[i] = truncateResults(s.fts.applyValidity(fuseSearchResults(bm25, sem, graphPaths, fetchLimit, commonOnlyQuery)), limit)
+		out[i] = s.composeSearchReport(ctx, query, limit, fetchLimit, bm25, sem, commonOnlyQuery, options, loadIntent)
 	}
 	return out, nil
+}
+
+const (
+	intentAmbiguousGap   = 0.08
+	intentWeakTopScore   = 0.55
+	intentRerankMaxBonus = 0.12
+)
+
+func normalizeSearchMode(mode SearchMode) SearchMode {
+	switch mode {
+	case "", SearchModeAuto:
+		return SearchModeAuto
+	case SearchModeBM25, SearchModeSemantic, SearchModeHybrid, SearchModeFull:
+		return mode
+	default:
+		return SearchModeAuto
+	}
+}
+
+func (s *Store) composeSearchReport(
+	ctx context.Context,
+	query string,
+	limit, fetchLimit int,
+	bm25, sem []SearchResult,
+	commonOnlyQuery bool,
+	options QueryOptions,
+	loadIntent func() []SearchResult,
+) SearchReport {
+	mode := normalizeSearchMode(options.Mode)
+	diagnostics := SearchDiagnostics{
+		Mode:              mode,
+		SemanticAvailable: len(sem) > 0,
+		CommonOnlyQuery:   commonOnlyQuery,
+	}
+	var graphPaths []string
+	var results []SearchResult
+
+	switch mode {
+	case SearchModeBM25:
+		diagnostics.Fusion = "bm25"
+		if commonOnlyQuery {
+			diagnostics.Dropped = appendDrop(diagnostics.Dropped, "common_lexical_without_semantic", len(bm25))
+		} else {
+			results = append([]SearchResult(nil), bm25...)
+		}
+	case SearchModeSemantic:
+		diagnostics.Fusion = "semantic"
+		floor := semanticOnlyFloorValue()
+		for _, result := range sem {
+			if result.Score < floor {
+				diagnostics.Dropped = appendDrop(diagnostics.Dropped, "semantic_floor", 1)
+				continue
+			}
+			results = append(results, result)
+		}
+	case SearchModeHybrid, SearchModeFull, SearchModeAuto:
+		if len(sem) == 0 {
+			diagnostics.Fusion = "bm25-fallback"
+			if commonOnlyQuery {
+				diagnostics.Dropped = appendDrop(diagnostics.Dropped, "common_lexical_without_semantic", len(bm25))
+			} else {
+				results = append([]SearchResult(nil), bm25...)
+			}
+			break
+		}
+		if mode == SearchModeFull {
+			graphPaths = s.graphRankedPaths(ctx, query, semanticBlendK)
+		} else if mode == SearchModeAuto {
+			graphPaths = s.graphBoostPaths(ctx, query)
+		}
+		diagnostics.GraphCandidates = len(graphPaths)
+		if mode == SearchModeAuto && os.Getenv("DENEB_WIKI_FUSION") == "additive" {
+			diagnostics.Fusion = "additive"
+			results = mergeSearchResults(bm25, sem, fetchLimit, commonOnlyQuery)
+		} else {
+			diagnostics.Fusion = "rrf"
+			results = mergeSearchResultsRRF(bm25, sem, graphPaths, fetchLimit, commonOnlyQuery)
+		}
+		diagnostics.Dropped = append(diagnostics.Dropped, admissionDropSummary(bm25, sem, graphPaths, commonOnlyQuery)...)
+	}
+
+	diagnostics.CandidateCount = searchCandidateCount(bm25, sem, graphPaths)
+	baseScores := make(map[string]float64, len(results))
+	for _, result := range results {
+		baseScores[result.Path] = result.Score
+	}
+	results = s.fts.applyValidity(results)
+	var intentResults []SearchResult
+	if shouldIntentRerank(results, options) && loadIntent != nil {
+		intentResults = loadIntent()
+	}
+	intentBonuses, applied := s.applyIntentRerank(results, intentResults, options)
+	diagnostics.IntentApplied = applied
+
+	admitted := len(results)
+	results = truncateResults(results, limit)
+	if admitted > len(results) {
+		diagnostics.Dropped = appendDrop(diagnostics.Dropped, "result_limit", admitted-len(results))
+	}
+	diagnostics.ReturnedCount = len(results)
+	if options.Explain {
+		s.attachSearchExplanations(results, diagnostics.Fusion, bm25, sem, graphPaths, intentResults, baseScores, intentBonuses, applied)
+	}
+	return SearchReport{Results: results, Diagnostics: diagnostics}
+}
+
+func appendDrop(drops []SearchDropSummary, reason string, count int) []SearchDropSummary {
+	if count <= 0 {
+		return drops
+	}
+	for i := range drops {
+		if drops[i].Reason == reason {
+			drops[i].Count += count
+			return drops
+		}
+	}
+	return append(drops, SearchDropSummary{Reason: reason, Count: count})
+}
+
+func admissionDropSummary(bm25, sem []SearchResult, graphPaths []string, commonOnlyQuery bool) []SearchDropSummary {
+	type candidate struct {
+		bm25   bool
+		semCos float64
+		graph0 bool
+	}
+	byPath := make(map[string]*candidate, len(bm25)+len(sem)+len(graphPaths))
+	for _, result := range bm25 {
+		item := byPath[result.Path]
+		if item == nil {
+			item = &candidate{}
+			byPath[result.Path] = item
+		}
+		item.bm25 = true
+	}
+	for _, result := range sem {
+		item := byPath[result.Path]
+		if item == nil {
+			item = &candidate{}
+			byPath[result.Path] = item
+		}
+		item.semCos = max(item.semCos, result.Score)
+	}
+	if len(graphPaths) > 0 {
+		item := byPath[graphPaths[0]]
+		if item == nil {
+			item = &candidate{}
+			byPath[graphPaths[0]] = item
+		}
+		item.graph0 = true
+	}
+	var drops []SearchDropSummary
+	for _, item := range byPath {
+		if !item.bm25 && !(item.graph0 && !commonOnlyQuery) && item.semCos < semanticOnlyFloorValue() {
+			drops = appendDrop(drops, "semantic_floor", 1)
+			continue
+		}
+		if commonOnlyQuery && item.bm25 && item.semCos < semSupportThreshold {
+			drops = appendDrop(drops, "common_lexical_without_semantic", 1)
+		}
+	}
+	return drops
+}
+
+func searchCandidateCount(bm25, sem []SearchResult, graphPaths []string) int {
+	seen := make(map[string]struct{})
+	for _, results := range [][]SearchResult{bm25, sem} {
+		for _, result := range results {
+			seen[result.Path] = struct{}{}
+		}
+	}
+	for _, path := range graphPaths {
+		seen[path] = struct{}{}
+	}
+	return len(seen)
+}
+
+func (s *Store) applyIntentRerank(results, intent []SearchResult, options QueryOptions) (map[string]float64, bool) {
+	bonuses := make(map[string]float64)
+	if !shouldIntentRerank(results, options) || len(intent) == 0 {
+		return bonuses, false
+	}
+	intentRanks := resultRankMap(intent)
+	k := rrfKValue()
+	for i := range results {
+		rank, ok := intentRanks[results[i].Path]
+		if !ok {
+			continue
+		}
+		bonus := intentRerankMaxBonus * (k + 1) / (k + float64(rank))
+		bonus *= s.fts.validityFor(results[i].Path)
+		results[i].Score += bonus
+		bonuses[results[i].Path] = bonus
+	}
+	if len(bonuses) == 0 {
+		return bonuses, false
+	}
+	sort.SliceStable(results, func(i, j int) bool {
+		if results[i].Score != results[j].Score {
+			return results[i].Score > results[j].Score
+		}
+		return results[i].Path < results[j].Path
+	})
+	return bonuses, true
+}
+
+func shouldIntentRerank(results []SearchResult, options QueryOptions) bool {
+	if strings.TrimSpace(options.Intent) == "" || len(results) < 2 {
+		return false
+	}
+	if options.ForceIntent {
+		return true
+	}
+	gap := results[0].Score - results[1].Score
+	return gap < intentAmbiguousGap || results[0].Score < intentWeakTopScore
+}
+
+func resultRankMap(results []SearchResult) map[string]int {
+	ranks := make(map[string]int, len(results))
+	for i, result := range results {
+		ranks[result.Path] = i + 1
+	}
+	return ranks
+}
+
+func resultScoreMap(results []SearchResult) map[string]float64 {
+	scores := make(map[string]float64, len(results))
+	for _, result := range results {
+		scores[result.Path] = result.Score
+	}
+	return scores
+}
+
+func (s *Store) attachSearchExplanations(
+	results []SearchResult,
+	fusion string,
+	bm25, sem []SearchResult,
+	graphPaths []string,
+	intent []SearchResult,
+	baseScores, intentBonuses map[string]float64,
+	intentApplied bool,
+) {
+	bm25Ranks, semRanks := resultRankMap(bm25), resultRankMap(sem)
+	bm25Scores, semScores := resultScoreMap(bm25), resultScoreMap(sem)
+	graphRanks := make(map[string]int, len(graphPaths))
+	for i, path := range graphPaths {
+		graphRanks[path] = i + 1
+	}
+	intentRanks, intentScores := resultRankMap(intent), resultScoreMap(intent)
+	k := rrfKValue()
+	scale := 0.4 * (k + 1)
+	signal := func(source string, rank int, score float64) *SearchSignalExplanation {
+		if rank <= 0 {
+			return nil
+		}
+		contribution := 0.0
+		switch {
+		case fusion == "rrf":
+			contribution = scale / (k + float64(rank))
+		case source == "bm25" && (fusion == "bm25" || fusion == "bm25-fallback"):
+			contribution = score
+		case source == "semantic" && fusion == "semantic":
+			contribution = score
+		}
+		return &SearchSignalExplanation{Rank: rank, BackendScore: score, Contribution: contribution}
+	}
+	for i := range results {
+		path := results[i].Path
+		explanation := &SearchExplanation{
+			Fusion:         fusion,
+			BM25:           signal("bm25", bm25Ranks[path], bm25Scores[path]),
+			Semantic:       signal("semantic", semRanks[path], semScores[path]),
+			Graph:          signal("graph", graphRanks[path], 0),
+			BaseScore:      baseScores[path],
+			IntentBonus:    intentBonuses[path],
+			ValidityFactor: s.fts.validityFor(path),
+			FinalScore:     results[i].Score,
+		}
+		if intentApplied {
+			explanation.Intent = signal("intent", intentRanks[path], intentScores[path])
+			if explanation.Intent != nil {
+				explanation.Intent.Contribution = intentBonuses[path]
+			}
+		}
+		results[i].Explain = explanation
+	}
 }
 
 const (

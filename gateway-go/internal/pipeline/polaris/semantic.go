@@ -42,7 +42,7 @@ func (s *Store) SetSummaryEmbedder(e embedindex.Embedder) {
 	if e == nil {
 		return
 	}
-	s.summarySem = embedindex.New("session", e, "" /* no on-disk cache */)
+	s.summarySem = embedindex.New("session", e, "" /* no on-disk cache */, embedindex.WithPreprocessingFingerprint("session-summary-v1"))
 }
 
 // closeSummarySem stops the summary semantic index (folded into Store.Close).

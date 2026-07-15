@@ -62,11 +62,12 @@ func memoryCategories(deps MemoryDeps) rpcutil.HandlerFunc {
 			}
 			return cats[i].Name < cats[j].Name
 		})
-		return rpcutil.RespondOK(req.ID, out{
+		result := out{
 			Categories: cats,
 			TotalPages: stats.TotalPages,
 			TotalBytes: stats.TotalBytes,
-		})
+		}
+		return rpcutil.RespondOK(req.ID, result)
 	})
 }
 

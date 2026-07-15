@@ -13,9 +13,17 @@ import (
 // fakeEmbedder maps text to a 2-dim vector by concept markers, so a query can
 // match a page that shares the concept but none of the query's keywords.
 // dim0 = "risk" cluster {위험, 차질, 우려}; dim1 = mentions "gpu".
-type fakeEmbedder struct{ healthy bool }
+type fakeEmbedder struct {
+	healthy     bool
+	fingerprint string
+	dimensions  int
+}
 
 func (f fakeEmbedder) IsHealthy() bool { return f.healthy }
+
+func (f fakeEmbedder) EmbeddingFingerprint() string { return f.fingerprint }
+
+func (f fakeEmbedder) EmbeddingDimensions() int { return f.dimensions }
 
 func (f fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
 	out := make([][]float32, len(texts))
@@ -57,6 +65,55 @@ func TestWarmSemanticIndex_EmbedsAllPagesUpfrontNoopWithoutEmbedder(t *testing.T
 	store.SetEmbedder(nil)
 	if err := store.WarmSemanticIndex(context.Background()); err != nil {
 		t.Fatalf("warm without an embedder should be a no-op, got %v", err)
+	}
+}
+
+func TestSemanticStatusAndIdentityMismatchSuppressStaleVectors(t *testing.T) {
+	dir := t.TempDir()
+	wikiDir := filepath.Join(dir, "wiki")
+	diaryDir := filepath.Join(dir, "diary")
+	store, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	mustWrite(t, store, "프로젝트/risk.md", &Page{
+		Meta: Frontmatter{ID: "risk", Title: "위험 평가", Category: "프로젝트"}, Body: "납기 차질 우려가 있습니다.",
+	})
+	store.SetEmbedder(fakeEmbedder{healthy: true, fingerprint: "model-a:2", dimensions: 2})
+	before := store.SemanticStatus()
+	if before.Healthy || !before.EmbedderHealthy || before.Expected != 1 || before.Indexed != 0 || before.Pending != 1 || before.DegradedReason != "incomplete_cache" {
+		t.Fatalf("pre-warm status = %+v", before)
+	}
+	if err := store.WarmSemanticIndex(context.Background()); err != nil {
+		t.Fatalf("WarmSemanticIndex: %v", err)
+	}
+	ready := store.SemanticStatus()
+	if !ready.Healthy || ready.Indexed != 1 || ready.Pending != 0 || ready.Stale != 0 || ready.CacheFingerprint != "model-a:2" || ready.CachePreprocessing != semanticPreprocessingVersion {
+		t.Fatalf("ready status = %+v", ready)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	restarted, err := NewStore(wikiDir, diaryDir)
+	if err != nil {
+		t.Fatalf("NewStore restart: %v", err)
+	}
+	defer restarted.Close()
+	restarted.SetEmbedder(fakeEmbedder{healthy: true, fingerprint: "model-b:2", dimensions: 2})
+	mismatch := restarted.SemanticStatus()
+	if mismatch.Healthy || !mismatch.IdentityMismatch || mismatch.Stale != 1 || mismatch.DegradedReason != "embedding_identity_mismatch" {
+		t.Fatalf("mismatched status = %+v", mismatch)
+	}
+	if hits := restarted.searchSemanticWithVec([]float32{1, 0}, 5); len(hits) != 0 {
+		t.Fatalf("identity-mismatched cache served stale vectors: %+v", hits)
+	}
+	if err := restarted.WarmSemanticIndex(context.Background()); err != nil {
+		t.Fatalf("rebuild mismatched cache: %v", err)
+	}
+	rebuilt := restarted.SemanticStatus()
+	if !rebuilt.Healthy || rebuilt.IdentityMismatch || rebuilt.Indexed != 1 || rebuilt.CacheFingerprint != "model-b:2" {
+		t.Fatalf("rebuilt status = %+v", rebuilt)
 	}
 }
 

@@ -9,12 +9,12 @@
 // ALWAYS point --wiki at a COPY of the production wiki: wiki.NewStore is NOT
 // read-only (it reconciles the index and ensures category dirs) and SetEmbedder
 // warms the semantic cache into that dir, so it will mutate the tree it scores.
-// A copy keeps production untouched. The fusion under test is selected by
-// DENEB_WIKI_FUSION (and DENEB_WIKI_GRAPH_BOOST) so one binary scores every
-// variant in a single run:
+// A copy keeps production untouched. The default path honors DENEB_WIKI_FUSION
+// (and DENEB_WIKI_GRAPH_BOOST); --matrix scores BM25, semantic-only, hybrid,
+// and graph-enhanced full retrieval in one run:
 //
 //	go run ./cmd/recall-bench --wiki /scratch/wiki --diary /scratch/diary \
-//	  --gold ~/.deneb/wiki-qa-gold.jsonl --k 8
+//	  --gold ~/.deneb/wiki-qa-gold.jsonl --k 8 --matrix
 //
 // --health adds recall's loop-closing signals (production ledger utility +
 // gold-set coverage of the live project roster + a composite recall-health
@@ -34,7 +34,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
@@ -115,6 +117,7 @@ type benchmarkConfig struct {
 	// the wiki COPY; default off so `recall-bench` alone stays a pure P@K tool.
 	health   bool
 	emitGold bool
+	matrix   bool
 }
 
 type parseOutcome struct {
@@ -127,6 +130,10 @@ type benchmarkStore interface {
 	SetEmbedder(wiki.Embedder)
 	WarmSemanticIndex(context.Context) error
 	Search(context.Context, string, int) ([]wiki.SearchResult, error)
+}
+
+type benchmarkOptionStore interface {
+	SearchWithOptions(context.Context, string, int, wiki.QueryOptions) (wiki.SearchReport, error)
 }
 
 type runDependencies struct {
@@ -184,6 +191,7 @@ func parseBenchmarkConfig(program string, args []string, stderr io.Writer) (benc
 	fs.BoolVar(&cfg.verbose, "v", false, "print per-case ✓/✗")
 	fs.BoolVar(&cfg.health, "health", false, "add ledger-utility + gold coverage + composite recall-health score")
 	fs.BoolVar(&cfg.emitGold, "emit-gold", false, "print deterministic gold candidates for uncovered projects (implies -health)")
+	fs.BoolVar(&cfg.matrix, "matrix", false, "compare bm25, semantic, hybrid, and full retrieval with p50/p95 latency")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return cfg, parseOutcome{done: true}
@@ -219,11 +227,33 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 	fusion, graphBoost := resolveFusion(deps.getenv, semantic)
 	writeBenchmarkHeader(stdout, cfg, fusion, graphBoost, semantic, len(cases))
 
-	result := evaluateCases(ctx, store, cases, cfg.k, cfg.verbose, stdout)
-	if err := result.validate(); err != nil {
-		return err
+	var result benchmarkResult
+	if cfg.matrix {
+		optionStore, ok := store.(benchmarkOptionStore)
+		if !ok {
+			return fmt.Errorf("store does not expose stage-specific search required by --matrix")
+		}
+		fmt.Fprintln(stdout, "== recall-bench matrix  modes=bm25,semantic,hybrid,full")
+		for _, mode := range []wiki.SearchMode{wiki.SearchModeBM25, wiki.SearchModeSemantic, wiki.SearchModeHybrid, wiki.SearchModeFull} {
+			modeResult := evaluateCasesWithSearch(ctx, cases, cfg.k, cfg.verbose, stdout, func(ctx context.Context, query string, limit int) ([]wiki.SearchResult, error) {
+				report, searchErr := optionStore.SearchWithOptions(ctx, query, limit, wiki.QueryOptions{Mode: mode})
+				return report.Results, searchErr
+			})
+			if err := modeResult.validate(); err != nil {
+				return fmt.Errorf("mode %s: %w", mode, err)
+			}
+			writeBenchmarkMatrixResult(stdout, cfg.k, mode, modeResult)
+			if mode == wiki.SearchModeFull {
+				result = modeResult
+			}
+		}
+	} else {
+		result = evaluateCases(ctx, store, cases, cfg.k, cfg.verbose, stdout)
+		if err := result.validate(); err != nil {
+			return err
+		}
+		writeBenchmarkResult(stdout, cfg.k, fusion, result)
 	}
-	writeBenchmarkResult(stdout, cfg.k, fusion, result)
 
 	if cfg.health || cfg.emitGold {
 		reportRecallHealth(store, cases, result, cfg.emitGold, stdout, stderr)
@@ -318,6 +348,7 @@ type benchmarkResult struct {
 	scored     int
 	searchErrs int
 	mrrSum     float64
+	latencies  []time.Duration
 }
 
 func evaluateCases(
@@ -328,16 +359,30 @@ func evaluateCases(
 	verbose bool,
 	stdout io.Writer,
 ) benchmarkResult {
+	return evaluateCasesWithSearch(ctx, cases, k, verbose, stdout, store.Search)
+}
+
+func evaluateCasesWithSearch(
+	ctx context.Context,
+	cases []goldCase,
+	k int,
+	verbose bool,
+	stdout io.Writer,
+	search func(context.Context, string, int) ([]wiki.SearchResult, error),
+) benchmarkResult {
 	var result benchmarkResult
 	for _, c := range cases {
 		if len(c.GoldPaths) == 0 {
 			continue
 		}
-		matches, err := store.Search(ctx, c.Question, k)
+		started := time.Now()
+		matches, err := search(ctx, c.Question, k)
+		elapsed := time.Since(started)
 		if err != nil {
 			result.searchErrs++
 			continue
 		}
+		result.latencies = append(result.latencies, elapsed)
 		rank := findGoldRank(matches, c.GoldPaths, k)
 		result.record(rank)
 		if verbose {
@@ -345,6 +390,22 @@ func evaluateCases(
 		}
 	}
 	return result
+}
+
+func (r benchmarkResult) latencyPercentile(percentile float64) time.Duration {
+	if len(r.latencies) == 0 {
+		return 0
+	}
+	values := append([]time.Duration(nil), r.latencies...)
+	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+	index := int(math.Ceil(percentile*float64(len(values)))) - 1
+	if index < 0 {
+		index = 0
+	}
+	if index >= len(values) {
+		index = len(values) - 1
+	}
+	return values[index]
 }
 
 func findGoldRank(results []wiki.SearchResult, goldPaths []string, k int) int {
@@ -415,6 +476,16 @@ func writeBenchmarkResult(out io.Writer, k int, fusion string, result benchmarkR
 	}
 	fmt.Fprintf(out, "RECALL_BENCH hit@1=%d hit@%d=%d total=%d p@1=%.1f%% r@%d=%.1f%% mrr=%.3f fusion=%s\n",
 		result.hit1, k, result.hitK, result.scored, pct(result.hit1), k, pct(result.hitK), result.mrrSum/float64(result.scored), fusion)
+}
+
+func writeBenchmarkMatrixResult(out io.Writer, k int, mode wiki.SearchMode, result benchmarkResult) {
+	if result.searchErrs > 0 {
+		fmt.Fprintf(out, "recall-bench: mode=%s %d search error(s) excluded from the metric\n", mode, result.searchErrs)
+	}
+	pct := func(n int) float64 { return 100 * float64(n) / float64(result.scored) }
+	fmt.Fprintf(out, "RECALL_BENCH_MATRIX mode=%s hit@1=%d hit@%d=%d total=%d p@1=%.1f%% r@%d=%.1f%% mrr=%.3f p50_ms=%.3f p95_ms=%.3f\n",
+		mode, result.hit1, k, result.hitK, result.scored, pct(result.hit1), k, pct(result.hitK), result.mrrSum/float64(result.scored),
+		float64(result.latencyPercentile(0.50))/float64(time.Millisecond), float64(result.latencyPercentile(0.95))/float64(time.Millisecond))
 }
 
 // loadGold parses the gold JSONL, returning the cases and the count of malformed

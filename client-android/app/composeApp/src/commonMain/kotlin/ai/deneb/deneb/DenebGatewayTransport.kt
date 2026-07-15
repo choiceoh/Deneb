@@ -101,9 +101,7 @@ internal suspend fun streamGatewayChat(
     onDelta: (String) -> Unit,
 ): GatewayReply {
     if (clientToken.isEmpty()) return missingTokenReply()
-    var model = ""
-    var fellBack = false
-    var doneText: String? = null
+    var terminal: DoneEvent? = null
     http.preparePost("${gatewayUrl.trimEnd('/')}/api/v1/miniapp/chat/stream") {
         header(DenebGatewayClient.CLIENT_TOKEN_HEADER, clientToken)
         header("Accept", "text/event-stream")
@@ -133,11 +131,7 @@ internal suspend fun streamGatewayChat(
                 onDelta = onDelta,
                 onTool = onTool,
                 onThinking = onThinking,
-                onDone = { done ->
-                    doneText = done.text
-                    model = done.model
-                    fellBack = done.fellBack
-                },
+                onDone = { terminal = it },
             )
         }
         readSseLines(channel) { line ->
@@ -159,7 +153,11 @@ internal suspend fun streamGatewayChat(
         // frame rather than returning an empty or stale reply.
         flushEvent()
     }
-    return GatewayReply(text = doneText ?: "", model = model, fellBack = fellBack)
+    // EOF is not success until the gateway confirms the detached turn with a
+    // terminal frame. Fail so askGateway() reconciles the canonical transcript
+    // instead of committing a blank or partial answer as complete.
+    val done = terminal ?: throw IllegalStateException("chat stream ended before terminal event")
+    return GatewayReply(text = done.text, model = done.model, fellBack = done.fellBack)
 }
 
 /**
