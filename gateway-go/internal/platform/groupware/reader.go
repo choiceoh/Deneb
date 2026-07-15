@@ -421,16 +421,30 @@ func LoginCheck(ctx context.Context, cfg Config) error {
 }
 
 func defaultReaderJS() string {
-	// gateway-go/internal/platform/groupware → repo root scripts/dev/groupware-reader/read.mjs
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return ""
+	// Prefer source-relative discovery (tests / untrimmed builds). Production
+	// binaries are built with -trimpath, so runtime.Caller paths are not on
+	// disk — fall back to WorkingDirectory (systemd sets ~/deneb) and the
+	// executable's sibling repo layout (dist/deneb-gateway → ../scripts/...).
+	var candidates []string
+	if _, file, _, ok := runtime.Caller(0); ok {
+		root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", ".."))
+		candidates = append(candidates, filepath.Join(root, "scripts", "dev", "groupware-reader", "read.mjs"))
 	}
-	// .../gateway-go/internal/platform/groupware/reader.go
-	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", ".."))
-	p := filepath.Join(root, "scripts", "dev", "groupware-reader", "read.mjs")
-	if st, err := os.Stat(p); err == nil && !st.IsDir() {
-		return p
+	if wd, err := os.Getwd(); err == nil && wd != "" {
+		candidates = append(candidates, filepath.Join(wd, "scripts", "dev", "groupware-reader", "read.mjs"))
+	}
+	if exe, err := os.Executable(); err == nil && exe != "" {
+		dir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(dir, "..", "scripts", "dev", "groupware-reader", "read.mjs"),
+			filepath.Join(dir, "scripts", "dev", "groupware-reader", "read.mjs"),
+		)
+	}
+	for _, p := range candidates {
+		p = filepath.Clean(p)
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p
+		}
 	}
 	return ""
 }
