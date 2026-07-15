@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/review"
 
@@ -55,11 +56,25 @@ type chatUsageRecorderAdapter struct {
 	transcripts   toolport.TranscriptStore
 	logger        *slog.Logger
 	replayEnabled bool
+	// relevanceClient/relevanceModel drive a fresh-context relevance classifier
+	// (the lightweight role) that filters mis-attributed validation cases before
+	// they enter the corpus — a session that merely CONSULTED a skill while the
+	// real work was unrelated must not become that skill's held-out case. nil
+	// disables the gate (records everything, the prior behavior).
+	relevanceClient *llm.Client
+	relevanceModel  string
 }
 
 // NewChatUsageRecorder adapts a genesis tracker to chatport.SkillUsageRecorder.
-func NewChatUsageRecorder(t *genesis.Tracker, transcripts toolport.TranscriptStore, logger *slog.Logger, replayEnabled bool) chatport.SkillUsageRecorder {
-	return &chatUsageRecorderAdapter{inner: t, transcripts: transcripts, logger: logger, replayEnabled: replayEnabled}
+// relevanceClient/relevanceModel are optional: when wired (the lightweight text
+// role), successful-use validation-case capture is gated by a relevance check so
+// off-topic sessions do not contaminate a skill's held-out corpus. Pass nil to
+// keep the record-everything behavior.
+func NewChatUsageRecorder(t *genesis.Tracker, transcripts toolport.TranscriptStore, logger *slog.Logger, replayEnabled bool, relevanceClient *llm.Client, relevanceModel string) chatport.SkillUsageRecorder {
+	return &chatUsageRecorderAdapter{
+		inner: t, transcripts: transcripts, logger: logger, replayEnabled: replayEnabled,
+		relevanceClient: relevanceClient, relevanceModel: strings.TrimSpace(relevanceModel),
+	}
 }
 
 // RecordSkillUse records the outcome of one skill invocation.
@@ -199,6 +214,17 @@ func (a *chatUsageRecorderAdapter) recordValidationCaseFromSuccessfulUse(session
 			a.logger.Warn("genesis: auto success validation case transcript load failed",
 				"skill", skillName, "session", sessionKey, "error", err)
 		}
+		return
+	}
+	// Relevance gate: a skill is recorded as "used" when it was merely CONSULTED
+	// during the turn (run_agent_config.recordRunSkillUsage), so a session about
+	// something unrelated (e.g. a mail/project query that happened to load
+	// system-health-check) would otherwise capture that session's tool calls as
+	// the skill's held-out case. Those mis-attributed cases demand irrelevant
+	// tools the skill's body can never satisfy, pinning it at an unimprovable
+	// score so the evolve gate rejects good on-topic rewrites. Skip when the
+	// classifier says the session did not exercise this skill.
+	if !sessionExercisesSkill(a.logger, a.relevanceClient, a.relevanceModel, skillName, sctx) {
 		return
 	}
 	record := BuildValidationCaseFromSession(chattools.SkillValidationCaseFromSessionRequest{

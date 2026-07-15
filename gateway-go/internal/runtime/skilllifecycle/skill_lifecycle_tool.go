@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
@@ -23,11 +24,13 @@ const (
 )
 
 type skillLifecycleBackend struct {
-	genesis     *generation.Service
-	evolver     *genesis.Evolver
-	tracker     *genesis.Tracker
-	transcripts toolport.TranscriptStore
-	logger      *slog.Logger
+	genesis         *generation.Service
+	evolver         *genesis.Evolver
+	tracker         *genesis.Tracker
+	transcripts     toolport.TranscriptStore
+	logger          *slog.Logger
+	relevanceClient *llm.Client
+	relevanceModel  string
 
 	// Heartbeat shadow-replay deps (P1, heartbeat_shadow_replay.go). Nil/empty
 	// on backends that never serve the tool (e.g. the backfill task).
@@ -42,23 +45,31 @@ type Backend = skillLifecycleBackend
 // BackendConfig contains the Propus services and optional replay boundary used
 // by a lifecycle backend.
 type BackendConfig struct {
-	Genesis      *generation.Service
-	Evolver      *genesis.Evolver
-	Tracker      *genesis.Tracker
-	Transcripts  toolport.TranscriptStore
-	Logger       *slog.Logger
-	ShadowReplay func(ctx context.Context, candidate string, limit int) (chattools.HeartbeatShadowReplayResult, error)
+	Genesis     *generation.Service
+	Evolver     *genesis.Evolver
+	Tracker     *genesis.Tracker
+	Transcripts toolport.TranscriptStore
+	Logger      *slog.Logger
+	// RelevanceClient/RelevanceModel (lightweight text role) gate retro-backfilled
+	// validation cases by whether the session actually exercised the skill —
+	// keeping consulted-but-off-topic sessions out of a skill's held-out corpus.
+	// Optional; nil records everything (prior behavior).
+	RelevanceClient *llm.Client
+	RelevanceModel  string
+	ShadowReplay    func(ctx context.Context, candidate string, limit int) (chattools.HeartbeatShadowReplayResult, error)
 }
 
 // NewBackend constructs a lifecycle backend from explicit dependencies.
 func NewBackend(cfg BackendConfig) *Backend {
 	return &skillLifecycleBackend{
-		genesis:      cfg.Genesis,
-		evolver:      cfg.Evolver,
-		tracker:      cfg.Tracker,
-		transcripts:  cfg.Transcripts,
-		logger:       cfg.Logger,
-		shadowReplay: cfg.ShadowReplay,
+		genesis:         cfg.Genesis,
+		evolver:         cfg.Evolver,
+		tracker:         cfg.Tracker,
+		transcripts:     cfg.Transcripts,
+		logger:          cfg.Logger,
+		relevanceClient: cfg.RelevanceClient,
+		relevanceModel:  strings.TrimSpace(cfg.RelevanceModel),
+		shadowReplay:    cfg.ShadowReplay,
 	}
 }
 
