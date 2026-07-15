@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.84](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.83...andromeda-v0.0.84) (2026-07-15)
+
+
+### ✨ Features
+
+* **wiki:** 현장 공정 일정 지도 타임라인 + 임박 검사일 서피싱 ([#3772](https://github.com/choiceoh/Deneb/issues/3772)) ([9a44aab](https://github.com/choiceoh/Deneb/commit/9a44aabaa906e6c08f038d257c4facf4f707780f))
+
 ## [0.0.83](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.82...andromeda-v0.0.83) (2026-07-15)
 
 
