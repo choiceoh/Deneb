@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -57,13 +58,26 @@ func (r *Router) Layers() []Layer {
 // orders the rows. A single-layer router is unaffected (quota ≥ limit).
 const layerRecallQuota = 0.6
 
+// mergeRRFK is the Reciprocal Rank Fusion damping constant for cross-layer
+// merge (same default as wiki search rrfK). Layers use incomparable raw score
+// bands; RRF orders by per-layer rank only.
+const mergeRRFK = 20.0
+
 // Recall queries every adapter in parallel and merges the results. Within each
 // layer hits are ordered by score; across layers a per-layer quota
 // (layerRecallQuota) prevents one score band from monopolizing the merged
-// window, then the kept rows are returned in global score order. Per-adapter
-// errors are swallowed so a single flaky backend (e.g. one unreachable) does
-// not block the call; callers see the successful subset.
+// window, then kept rows are fused by per-layer rank RRF (not raw score).
+// Per-adapter errors are swallowed so a single flaky backend does not block
+// the call; callers see the successful subset. Prefer RecallWithMeta when the
+// caller needs degrade notes (e.g. files timeout).
 func (r *Router) Recall(ctx context.Context, query string, limit int) []Result {
+	hits, _ := r.RecallWithMeta(ctx, query, limit)
+	return hits
+}
+
+// RecallWithMeta is Recall plus human-readable degrade notes (e.g. files-layer
+// timeout). Notes are empty when every layer completed normally.
+func (r *Router) RecallWithMeta(ctx context.Context, query string, limit int) ([]Result, []string) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -72,6 +86,7 @@ func (r *Router) Recall(ctx context.Context, query string, limit int) []Result {
 		mu      sync.Mutex
 		byHits  = make(map[Layer][]Result, len(r.adapters))
 		layerMs = make(map[Layer]int64, len(r.adapters))
+		notes   []string
 	)
 	started := time.Now()
 	for _, a := range r.adapters {
@@ -82,11 +97,18 @@ func (r *Router) Recall(ctx context.Context, query string, limit int) []Result {
 			hits, err := a.Recall(ctx, query, limit)
 			elapsed := time.Since(layerStart).Milliseconds()
 			mu.Lock()
+			defer mu.Unlock()
 			layerMs[a.Layer()] = elapsed
 			if err == nil {
 				byHits[a.Layer()] = append(byHits[a.Layer()], hits...)
+				return
 			}
-			mu.Unlock()
+			if errors.Is(err, ErrFilesRecallTimeout) {
+				notes = append(notes, "files 레이어 타임아웃 — 위키 결과만 포함")
+				return
+			}
+			// Other adapter errors: swallow (same as before) so one flaky
+			// backend cannot fail the whole recall.
 		}(a)
 	}
 	wg.Wait()
@@ -98,20 +120,61 @@ func (r *Router) Recall(ctx context.Context, query string, limit int) []Result {
 	if quota < 1 {
 		quota = 1
 	}
-	var all []Result
+	type rankedHit struct {
+		res  Result
+		rank int // 1-based within its layer after quota trim
+	}
+	var ranked []rankedHit
 	for _, hits := range byHits {
 		sort.SliceStable(hits, func(i, j int) bool { return hits[i].Score > hits[j].Score })
 		if len(byHits) > 1 && len(hits) > quota {
 			hits = hits[:quota]
 		}
-		all = append(all, hits...)
+		for i, h := range hits {
+			ranked = append(ranked, rankedHit{res: h, rank: i + 1})
+		}
 	}
 
-	sort.SliceStable(all, func(i, j int) bool { return all[i].Score > all[j].Score })
+	// Cross-layer RRF: fused score depends only on per-layer rank so wiki BM25
+	// and files cosine never share an axis. Scale matches wiki mergeSearchResultsRRF
+	// (0.4*(k+1)) so a rank-1 hit lands near 0.4 on the 0–1 band.
+	scale := 0.4 * (mergeRRFK + 1)
+	for i := range ranked {
+		rrf := 1.0 / (mergeRRFK + float64(ranked[i].rank))
+		ranked[i].res.Score = rrf * scale
+	}
+	sort.SliceStable(ranked, func(i, j int) bool {
+		if ranked[i].res.Score != ranked[j].res.Score {
+			return ranked[i].res.Score > ranked[j].res.Score
+		}
+		// Same rank across layers: prefer curated wiki over files, then
+		// stable ref order — never fall back to raw backend scores.
+		if ranked[i].res.Ref.Layer != ranked[j].res.Ref.Layer {
+			if ranked[i].res.Ref.Layer == LayerWiki {
+				return true
+			}
+			if ranked[j].res.Ref.Layer == LayerWiki {
+				return false
+			}
+		}
+		return ranked[i].res.Ref.String() < ranked[j].res.Ref.String()
+	})
+
+	all := make([]Result, 0, len(ranked))
+	for _, rh := range ranked {
+		all = append(all, rh.res)
+	}
 	if len(all) > limit {
 		all = all[:limit]
 	}
 
+	filesDegraded := ""
+	for _, n := range notes {
+		if n != "" {
+			filesDegraded = "timeout"
+			break
+		}
+	}
 	slog.Info("knowledge recall",
 		"query_len", len(query),
 		"limit", limit,
@@ -119,9 +182,10 @@ func (r *Router) Recall(ctx context.Context, query string, limit int) []Result {
 		"layers", r.Layers(),
 		"wiki_ms", layerMs[LayerWiki],
 		"files_ms", layerMs[LayerFiles],
+		"files_degraded", filesDegraded,
 		"total_ms", time.Since(started).Milliseconds(),
 	)
-	return all
+	return all, notes
 }
 
 // Read dispatches to the adapter that owns the ref's layer.

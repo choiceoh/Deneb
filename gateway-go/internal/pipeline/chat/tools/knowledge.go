@@ -82,20 +82,30 @@ func knowledgeRecall(ctx context.Context, router *knowledge.Router, query string
 	}
 
 	started := time.Now()
-	hits := router.Recall(ctx, query, limit)
+	hits, notes := router.RecallWithMeta(ctx, query, limit)
 	slog.Info("knowledge tool recall",
 		"query_len", len(query),
 		"limit", limit,
 		"hit_count", len(hits),
 		"layers", router.Layers(),
+		"notes", len(notes),
 		"total_ms", time.Since(started).Milliseconds(),
 	)
 	if len(hits) == 0 {
-		return fmt.Sprintf("검색 결과 없음: %q (위키)", query), nil
+		msg := fmt.Sprintf("검색 결과 없음: %q (layers=%v)", query, router.Layers())
+		if len(notes) > 0 {
+			msg += "\n참고: " + strings.Join(notes, "; ")
+		}
+		return msg, nil
 	}
 
 	var sb strings.Builder
 	sb.WriteString(toolport.RecallHeader(query, len(hits), fmt.Sprintf("layers=%v", router.Layers())))
+	for _, n := range notes {
+		sb.WriteString("참고: ")
+		sb.WriteString(n)
+		sb.WriteByte('\n')
+	}
 	for i, h := range hits {
 		metaParts := make([]string, 0, 2)
 		if startLine := strings.TrimSpace(h.Meta["startLine"]); startLine != "" {
