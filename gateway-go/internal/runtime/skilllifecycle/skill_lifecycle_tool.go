@@ -19,7 +19,7 @@ import (
 const (
 	skillLifecycleTimeout                       = 90 * time.Second
 	skillLifecycleMaxStatusLogEntries           = 50
-	skillLifecycleMaxProposalResultBytes        = 4096
+	skillLifecycleMaxProposalResultBytes        = 12288
 	skillLifecycleMaxValidationBackfillSessions = 50
 )
 

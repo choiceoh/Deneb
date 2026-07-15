@@ -326,7 +326,9 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 		if err != nil {
 			return "", err
 		}
-		data, err := json.MarshalIndent(result, "", "  ")
+		// Compact JSON: indented status dumps were routinely blowing the tool
+		// MaxOutput and triggering head/tail truncation of the useful middle.
+		data, err := json.Marshal(result)
 		if err != nil {
 			return "", err
 		}
