@@ -17,6 +17,7 @@ import (
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
@@ -25,8 +26,9 @@ import (
 
 // MorningLetterOpts holds optional configuration for the morning letter tool.
 type MorningLetterOpts struct {
-	DiaryDir string // wiki diary directory; empty = no diary logging
-	WikiDir  string // wiki root directory; empty = no deadline/open-question scans
+	DiaryDir           string                    // wiki diary directory; empty = no diary logging
+	WikiDir            string                    // wiki root directory; empty = no deadline/open-question scans
+	GroupwareCollector func(context.Context) any // optional test/alternate collector
 }
 
 // ToolMorningLetter returns the morning_letter tool — collects 7 data sections
@@ -40,9 +42,13 @@ type MorningLetterOpts struct {
 // (project 미해결 질문 that stayed open too long).
 func ToolMorningLetter(opts ...MorningLetterOpts) toolport.ToolFunc {
 	var diaryDir, wikiDir string
+	groupwareCollector := fetchGroupwarePending
 	if len(opts) > 0 {
 		diaryDir = opts[0].DiaryDir
 		wikiDir = opts[0].WikiDir
+		if opts[0].GroupwareCollector != nil {
+			groupwareCollector = opts[0].GroupwareCollector
+		}
 	}
 
 	return func(ctx context.Context, _ json.RawMessage) (string, error) {
@@ -56,9 +62,10 @@ func ToolMorningLetter(opts ...MorningLetterOpts) toolport.ToolFunc {
 			{4, func(ctx context.Context) any { return fetchEmail(ctx) }},
 			{5, func(_ context.Context) any { return fetchDeadlines(wikiDir, now) }},
 			{6, func(_ context.Context) any { return fetchOpenQuestions(wikiDir, now) }},
+			{7, groupwareCollector},
 		}
 
-		results := collectLetterSections(ctx, 7, collectors)
+		results := collectLetterSections(ctx, 8, collectors)
 		dateStr := koreanDate(now)
 		envelope := map[string]any{
 			"date":      dateStr,
@@ -67,13 +74,14 @@ func ToolMorningLetter(opts ...MorningLetterOpts) toolport.ToolFunc {
 			// the model places digit-free tokens; the relay injects real values.
 			"note": "시세(환율·구리) 숫자는 절대 직접 쓰지 말 것 — exchange의 usd_krw_token, copper의 token 플레이스홀더를 문장 안에 그대로 배치하면 발송 시 실제 숫자로 자동 치환된다. 토큰은 숫자만 치환되므로 단위(원, 달러, /t 등)는 문장에 직접 쓴다. 환율은 달러(USD/KRW)만 — 유로 등 다른 통화는 제공하지 않는다",
 			"sections": map[string]any{
-				"weather":        results[0],
-				"exchange":       results[1],
-				"copper":         results[2],
-				"calendar":       results[3],
-				"email":          results[4],
-				"deadlines":      results[5],
-				"open_questions": results[6],
+				"weather":           results[0],
+				"exchange":          results[1],
+				"copper":            results[2],
+				"calendar":          results[3],
+				"email":             results[4],
+				"deadlines":         results[5],
+				"open_questions":    results[6],
+				"groupware_pending": results[7],
 			},
 		}
 
@@ -123,6 +131,11 @@ func formatMorningDiarySummary(dateStr string, results []any) string {
 
 	if dl, ok := results[5].(deadlineData); ok && dl.OK && len(dl.Items) > 0 {
 		fmt.Fprintf(&sb, "- 임박 마감: %d건\n", len(dl.Items))
+	}
+	if len(results) > 7 {
+		if gw, ok := results[7].(groupwarePendingData); ok && gw.OK && gw.Count > 0 {
+			fmt.Fprintf(&sb, "- 미결 전자결재: %d건\n", gw.Count)
+		}
 	}
 
 	return sb.String()
@@ -193,6 +206,21 @@ type emailEntry struct {
 	Snippet string `json:"snippet,omitempty"`
 }
 
+type groupwarePendingData struct {
+	OK         bool                    `json:"ok"`
+	Configured bool                    `json:"configured"`
+	Count      int                     `json:"count,omitempty"`
+	Items      []groupwarePendingEntry `json:"items,omitempty"`
+	Error      string                  `json:"error,omitempty"`
+}
+
+type groupwarePendingEntry struct {
+	DocID   string `json:"doc_id"`
+	Title   string `json:"title"`
+	Drafter string `json:"drafter,omitempty"`
+	Date    string `json:"date,omitempty"`
+}
+
 type deadlineData struct {
 	OK    bool            `json:"ok"`
 	Items []deadlineEntry `json:"items,omitempty"`
@@ -207,6 +235,22 @@ type deadlineEntry struct {
 }
 
 // --- Section collectors (return structured data for LLM to format) ---
+
+func fetchGroupwarePending(ctx context.Context) any {
+	cfg, ok := groupware.FromEnv()
+	if !ok {
+		return groupwarePendingData{Configured: false}
+	}
+	docs, err := groupware.ListApprovals(ctx, cfg, "pending", 20)
+	if err != nil {
+		return groupwarePendingData{Configured: true, Error: err.Error()}
+	}
+	items := make([]groupwarePendingEntry, 0, len(docs))
+	for _, doc := range docs {
+		items = append(items, groupwarePendingEntry{DocID: doc.DocID, Title: doc.Title, Drafter: doc.Drafter, Date: doc.Date})
+	}
+	return groupwarePendingData{OK: true, Configured: true, Count: len(items), Items: items}
+}
 
 func fetchWeather(ctx context.Context) any {
 	req, err := http.NewRequestWithContext(ctx, "GET",

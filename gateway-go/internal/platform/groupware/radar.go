@@ -18,11 +18,14 @@ import (
 )
 
 const (
-	RadarTaskName           = "groupware-radar"
-	DefaultRadarInterval    = 10 * time.Minute
-	DefaultRadarMaxPerCycle = 3
-	radarApprovalListLimit  = 50
-	radarIntervalMinutesEnv = "DENEB_GROUPWARE_RADAR_INTERVAL_MINUTES"
+	RadarTaskName                  = "groupware-radar"
+	DefaultRadarInterval           = 10 * time.Minute
+	DefaultRadarMaxPerCycle        = 3
+	DefaultRadarMaxEscalations     = 3
+	RadarEscalationLevelFourHours  = 1
+	RadarEscalationLevelTwentyFour = 2
+	radarApprovalListLimit         = 50
+	radarIntervalMinutesEnv        = "DENEB_GROUPWARE_RADAR_INTERVAL_MINUTES"
 )
 
 var radarKST = time.FixedZone("KST", 9*60*60)
@@ -32,27 +35,31 @@ type RadarListFunc func(context.Context, Config, string, int) ([]ApprovalSummary
 
 // RadarConfig supplies the reader, durable state, callbacks, and test seams.
 type RadarConfig struct {
-	Reader      Config
-	StatePath   string
-	Interval    time.Duration
-	MaxPerCycle int
-	List        RadarListFunc
-	Now         func() time.Time
-	OnPending   func(context.Context, ApprovalSummary) error
-	OnResolved  func(context.Context, ApprovalSummary) error
+	Reader         Config
+	StatePath      string
+	Interval       time.Duration
+	MaxPerCycle    int
+	MaxEscalations int
+	List           RadarListFunc
+	Now            func() time.Time
+	OnPending      func(context.Context, ApprovalSummary) error
+	OnEscalated    func(context.Context, ApprovalSummary, int, time.Duration) error
+	OnResolved     func(context.Context, ApprovalSummary) error
 }
 
 // Radar deterministically diffs pending approval snapshots and reconciles cards
 // only after the same docId is positively observed in the done folder.
 type Radar struct {
-	reader      Config
-	statePath   string
-	interval    time.Duration
-	maxPerCycle int
-	list        RadarListFunc
-	now         func() time.Time
-	onPending   func(context.Context, ApprovalSummary) error
-	onResolved  func(context.Context, ApprovalSummary) error
+	reader         Config
+	statePath      string
+	interval       time.Duration
+	maxPerCycle    int
+	maxEscalations int
+	list           RadarListFunc
+	now            func() time.Time
+	onPending      func(context.Context, ApprovalSummary) error
+	onEscalated    func(context.Context, ApprovalSummary, int, time.Duration) error
+	onResolved     func(context.Context, ApprovalSummary) error
 }
 
 var _ autonomous.PeriodicTask = (*Radar)(nil)
@@ -63,9 +70,11 @@ type radarState struct {
 }
 
 type radarDocState struct {
-	Fingerprint string `json:"fingerprint"`
-	Notified    bool   `json:"notified"`
-	LastSeenAt  int64  `json:"lastSeenAt"`
+	Fingerprint     string `json:"fingerprint"`
+	Notified        bool   `json:"notified"`
+	FirstSeenAt     int64  `json:"firstSeenAt,omitempty"`
+	LastSeenAt      int64  `json:"lastSeenAt"`
+	EscalationLevel int    `json:"escalationLevel,omitempty"`
 }
 
 // NewRadar constructs a serial periodic approval radar.
@@ -78,6 +87,10 @@ func NewRadar(cfg RadarConfig) *Radar {
 	if maxPerCycle <= 0 {
 		maxPerCycle = DefaultRadarMaxPerCycle
 	}
+	maxEscalations := cfg.MaxEscalations
+	if maxEscalations <= 0 {
+		maxEscalations = DefaultRadarMaxEscalations
+	}
 	list := cfg.List
 	if list == nil {
 		list = ListApprovals
@@ -87,14 +100,16 @@ func NewRadar(cfg RadarConfig) *Radar {
 		now = time.Now
 	}
 	return &Radar{
-		reader:      cfg.Reader,
-		statePath:   strings.TrimSpace(cfg.StatePath),
-		interval:    interval,
-		maxPerCycle: maxPerCycle,
-		list:        list,
-		now:         now,
-		onPending:   cfg.OnPending,
-		onResolved:  cfg.OnResolved,
+		reader:         cfg.Reader,
+		statePath:      strings.TrimSpace(cfg.StatePath),
+		interval:       interval,
+		maxPerCycle:    maxPerCycle,
+		maxEscalations: maxEscalations,
+		list:           list,
+		now:            now,
+		onPending:      cfg.OnPending,
+		onEscalated:    cfg.OnEscalated,
+		onResolved:     cfg.OnResolved,
 	}
 }
 
@@ -166,6 +181,13 @@ func (r *Radar) Run(ctx context.Context) error {
 			stored.Fingerprint = fingerprint
 			stored.Notified = false
 		}
+		if stored.FirstSeenAt == 0 {
+			if stored.LastSeenAt > 0 {
+				stored.FirstSeenAt = stored.LastSeenAt
+			} else {
+				stored.FirstSeenAt = nowMs
+			}
+		}
 		stored.LastSeenAt = nowMs
 		state.Docs[id] = stored
 		if !stored.Notified {
@@ -189,6 +211,34 @@ func (r *Radar) Run(ctx context.Context) error {
 		stored := state.Docs[doc.DocID]
 		stored.Notified = true
 		state.Docs[doc.DocID] = stored
+	}
+
+	// Escalate an existing card at most once per threshold without another LLM turn.
+	escalated := 0
+	for _, doc := range pending {
+		if escalated >= r.maxEscalations {
+			break
+		}
+		stored := state.Docs[doc.DocID]
+		if !stored.Notified || stored.FirstSeenAt == 0 {
+			continue
+		}
+		age := time.Duration(nowMs-stored.FirstSeenAt) * time.Millisecond
+		level := radarEscalationLevel(age)
+		if level <= stored.EscalationLevel {
+			continue
+		}
+		if r.onEscalated == nil {
+			runErrs = append(runErrs, fmt.Errorf("escalate approval %s: callback unavailable", doc.DocID))
+			continue
+		}
+		if err := r.onEscalated(ctx, doc, level, age); err != nil {
+			runErrs = append(runErrs, fmt.Errorf("escalate approval %s: %w", doc.DocID, err))
+			continue
+		}
+		stored.EscalationLevel = level
+		state.Docs[doc.DocID] = stored
+		escalated++
 	}
 
 	trackedIDs := make([]string, 0, len(state.Docs))
@@ -219,6 +269,17 @@ func (r *Radar) Run(ctx context.Context) error {
 		runErrs = append(runErrs, err)
 	}
 	return errors.Join(runErrs...)
+}
+
+func radarEscalationLevel(age time.Duration) int {
+	switch {
+	case age >= 24*time.Hour:
+		return RadarEscalationLevelTwentyFour
+	case age >= 4*time.Hour:
+		return RadarEscalationLevelFourHours
+	default:
+		return 0
+	}
 }
 
 func radarIntervalFromEnv() time.Duration {

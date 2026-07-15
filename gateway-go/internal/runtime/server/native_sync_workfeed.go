@@ -92,6 +92,21 @@ func (s *nativeWorkFeedStore) Ack(id string) (workfeed.Item, error) {
 	return item, nil
 }
 
+// EscalateApprovalBySourceRef updates one existing approval card and mirrors
+// the workfeed.updated event. Missing cards are an idempotent no-op.
+func (s *nativeWorkFeedStore) EscalateApprovalBySourceRef(refID string, level int, ageLabel string) (bool, error) {
+	item, ok, err := s.store.FindActiveBySourceRef(workfeed.SourceGroupwareApproval, refID)
+	if err != nil || !ok {
+		return false, err
+	}
+	item, err = s.store.EscalateApproval(item.ID, level, ageLabel)
+	if err != nil {
+		return false, err
+	}
+	s.record(nativesync.WorkFeedUpdated(item))
+	return true, nil
+}
+
 // MarkRead records that an item was opened and publishes the updated state.
 func (s *nativeWorkFeedStore) MarkRead(id string) (workfeed.Item, error) {
 	item, err := s.store.MarkRead(id)

@@ -3,6 +3,7 @@ package workfeed
 import (
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -58,8 +59,9 @@ const (
 )
 
 var (
-	ErrNotFound       = errors.New("workfeed item not found")
-	ErrActionNotFound = errors.New("workfeed action not found")
+	ErrNotFound          = errors.New("workfeed item not found")
+	ErrActionNotFound    = errors.New("workfeed action not found")
+	ErrInvalidEscalation = errors.New("invalid workfeed escalation")
 )
 
 // snoozeDuration is how long a snoozed work-feed item stays hidden before it
@@ -507,6 +509,54 @@ func (s *Store) Correct(id, note string) (Item, error) {
 func formatCorrection(note string, atMs int64) string {
 	date := time.UnixMilli(atMs).Format("2006-01-02")
 	return "\n\n---\n\n✏️ **사용자 정정** (" + date + ")\n" + note
+}
+
+var approvalStaleNoteMarker = "\n\n---\n\n**결재 Radar:**"
+
+// EscalateApproval raises an active approval card's priority and replaces its
+// single bounded radar note. Repeated calls at the same/lower level are no-ops.
+func (s *Store) EscalateApproval(id string, level int, ageLabel string) (Item, error) {
+	id = strings.TrimSpace(id)
+	ageLabel = strings.TrimSpace(ageLabel)
+	if id == "" || level < 1 || level > 2 || ageLabel == "" {
+		return Item{}, ErrInvalidEscalation
+	}
+	return s.mutateItem(id, func(item *Item, now int64) bool {
+		if item.Source != SourceGroupwareApproval || item.Status == StatusAcked {
+			return false
+		}
+		if item.Metadata == nil {
+			item.Metadata = make(map[string]string)
+		}
+		previous, _ := strconv.Atoi(item.Metadata["groupwareEscalationLevel"])
+		if previous >= level {
+			return false
+		}
+		originalSummary := item.Metadata["groupwareOriginalSummary"]
+		if originalSummary == "" {
+			originalSummary = strings.TrimSpace(item.Summary)
+			item.Metadata["groupwareOriginalSummary"] = originalSummary
+		}
+		item.Metadata["groupwareEscalationLevel"] = strconv.Itoa(level)
+		item.Metadata["groupwareEscalationAge"] = ageLabel
+		prefix := ageLabel + " 미결"
+		if originalSummary != "" {
+			item.Summary = prefix + " · " + originalSummary
+		} else {
+			item.Summary = prefix
+		}
+		if i := strings.Index(item.Body, approvalStaleNoteMarker); i >= 0 {
+			item.Body = strings.TrimRight(item.Body[:i], "\n")
+		}
+		item.Body += approvalStaleNoteMarker + " " + prefix + ". 확인이 필요합니다."
+		if level >= 2 {
+			item.Priority = PriorityUrgent
+		} else {
+			item.Priority = PriorityHigh
+		}
+		item.UpdatedAtMs = now
+		return true
+	})
 }
 
 // Rewrite replaces the body of the card identified by id with newBody (a freshly

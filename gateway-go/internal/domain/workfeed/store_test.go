@@ -591,3 +591,59 @@ func TestStoreGroupwareApprovalAckAllowsReopenedRefID(t *testing.T) {
 		t.Fatalf("reopened lookup = item %+v ok=%v err=%v", found, ok, err)
 	}
 }
+
+func TestEscalateApprovalUpdatesOneBoundedRadarNote(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "feed.jsonl"))
+	item, err := store.Append(Item{Source: SourceGroupwareApproval, RefID: "99178", Summary: "원본 요약", Body: "원본 본문"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.EscalateApproval(item.ID, 1, "4시간째")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Priority != PriorityHigh || got.Summary != "4시간째 미결 · 원본 요약" {
+		t.Fatalf("level1 %+v", got)
+	}
+	if strings.Count(got.Body, approvalStaleNoteMarker) != 1 {
+		t.Fatalf("level1 body %q", got.Body)
+	}
+	got, err = store.EscalateApproval(item.ID, 2, "24시간 이상")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Priority != PriorityUrgent || got.Summary != "24시간 이상 미결 · 원본 요약" {
+		t.Fatalf("level2 %+v", got)
+	}
+	if strings.Count(got.Body, approvalStaleNoteMarker) != 1 || strings.Contains(got.Body, "4시간째") {
+		t.Fatalf("unbounded body %q", got.Body)
+	}
+	if got.Metadata["groupwareEscalationLevel"] != "2" || got.Metadata["groupwareOriginalSummary"] != "원본 요약" {
+		t.Fatalf("metadata %+v", got.Metadata)
+	}
+	again, err := store.EscalateApproval(item.ID, 1, "4시간째")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Summary != got.Summary || again.Body != got.Body {
+		t.Fatal("lower level changed escalated card")
+	}
+}
+
+func TestEscalateApprovalRejectsInvalidOrNonApproval(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "feed.jsonl"))
+	item, err := store.Append(Item{Source: SourceProactive, Body: "body"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.EscalateApproval(item.ID, 1, "4시간째")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Priority == PriorityHigh {
+		t.Fatal("non-approval card escalated")
+	}
+	if _, err := store.EscalateApproval(item.ID, 0, "bad"); !errors.Is(err, ErrInvalidEscalation) {
+		t.Fatalf("invalid err %v", err)
+	}
+}

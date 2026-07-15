@@ -443,13 +443,13 @@
   },
   {
     "name": "morning_letter",
-    "description": "Collect the six morning-letter data sections in parallel — weather (Gwangju), exchange rates, copper price, today's calendar, unread email, upcoming wiki deadlines — and return raw JSON. The agent composes the letter (tone, interpretation, priorities). No parameters.",
+    "description": "Collect the morning-letter data sections in parallel — weather (Gwangju), exchange rates, copper price, today's calendar, unread email, upcoming wiki deadlines, open questions, pending groupware approvals — and return raw JSON. The agent composes the letter (tone, interpretation, priorities). No parameters.",
     "properties": {},
     "required": []
   },
   {
     "name": "evening_letter",
-    "description": "Collect the evening-letter data sections in parallel — calendar (today + tomorrow), unhandled email, approaching wiki deadlines — and return raw JSON. The end-of-day counterpart to morning_letter; the morning-only market sections (weather, FX, copper) are omitted. The agent composes the letter (reflection, tomorrow prep, priorities). No parameters.",
+    "description": "Collect the evening-letter data sections in parallel — calendar (today + tomorrow), unhandled email, approaching wiki deadlines, pending groupware approvals — and return raw JSON. The end-of-day counterpart to morning_letter; the morning-only market sections (weather, FX, copper) are omitted. The agent composes the letter (reflection, tomorrow prep, priorities). No parameters.",
     "properties": {},
     "required": []
   },
