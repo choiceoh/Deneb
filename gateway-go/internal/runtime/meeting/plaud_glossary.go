@@ -3,7 +3,9 @@
 package meeting
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,12 +20,23 @@ import (
 const (
 	// PlaudDoNotCorrectFile lists forbidden ASR "corrections" (A must not become B).
 	PlaudDoNotCorrectFile = "plaud-do-not-correct.md"
+	// PlaudPromotePendingFile tracks pair sightings before glossary promotion.
+	PlaudPromotePendingFile = "plaud-promote-pending.json"
 
 	plaudDoNotCorrectMaxRunes  = 4_000
 	plaudGlossarySliceMaxRunes = 4_500
 	plaudAutoPromoteHeading    = "## 자동 승격"
 	plaudPromoteMaxPerMeeting  = 20
+	// plaudPromoteMinSightings: pair must appear in this many distinct recordings.
+	plaudPromoteMinSightings = 2
+	// plaudAutoPromoteMaxLines caps the promote section growth.
+	plaudAutoPromoteMaxLines = 60
 )
+
+type promotePendingState struct {
+	Version   int                 `json:"version"`
+	Sightings map[string][]string `json:"sightings"` // "from\x00to" → recording ids
+}
 
 // CorrectionPair is one 원문 → 교정 mapping.
 type CorrectionPair struct {
@@ -217,10 +230,11 @@ func alwaysOnGlossarySection(heading string) bool {
 		strings.Contains(heading, "고신뢰"),
 		strings.Contains(heading, "회의록에서 반복"),
 		strings.Contains(heading, "단위"),
-		strings.Contains(heading, "자동 승격"),
+		// ## 자동 승격 is hint-matched only (slice budget).
 		strings.Contains(heading, "탑솔라 그룹"),
 		strings.Contains(heading, "핵심 인물"),
-		strings.Contains(heading, "본사 임원"):
+		strings.Contains(heading, "본사 임원"),
+		strings.Contains(heading, "고신뢰 교정"):
 		return true
 	default:
 		return false
@@ -311,7 +325,8 @@ func trimRunes(s string, max int) string {
 	return strings.TrimSpace(string([]rune(s)[:max]))
 }
 
-// PromotePlaudCorrections appends new pairs under ## 자동 승격. Returns count added.
+// PromotePlaudCorrections records sightings and appends pairs under ## 자동 승격
+// once they appear in plaudPromoteMinSightings distinct recordings.
 func PromotePlaudCorrections(topicsDir string, pairs []CorrectionPair, sourceID string) (int, error) {
 	topicsDir = strings.TrimSpace(topicsDir)
 	if topicsDir == "" || len(pairs) == 0 {
@@ -327,6 +342,12 @@ func PromotePlaudCorrections(topicsDir string, pairs []CorrectionPair, sourceID 
 		have[p.From+"\x00"+p.To] = true
 	}
 
+	pending := loadPromotePending(topicsDir)
+	srcID := strings.TrimSpace(sourceID)
+	if srcID == "" {
+		srcID = "unknown"
+	}
+
 	var add []CorrectionPair
 	for _, p := range pairs {
 		if len(add) >= plaudPromoteMaxPerMeeting {
@@ -339,8 +360,16 @@ func PromotePlaudCorrections(topicsDir string, pairs []CorrectionPair, sourceID 
 		if have[key] {
 			continue
 		}
+		n := recordPromoteSighting(&pending, key, srcID)
+		if n < plaudPromoteMinSightings {
+			continue
+		}
 		have[key] = true
 		add = append(add, p)
+		delete(pending.Sightings, key)
+	}
+	if err := savePromotePending(topicsDir, pending); err != nil {
+		return 0, err
 	}
 	if len(add) == 0 {
 		return 0, nil
@@ -352,23 +381,103 @@ func PromotePlaudCorrections(topicsDir string, pairs []CorrectionPair, sourceID 
 	}
 	if !strings.Contains(body, plaudAutoPromoteHeading) {
 		body = strings.TrimRight(body, "\n") + "\n\n" + plaudAutoPromoteHeading + "\n\n" +
-			"> 회의록 「표기 교정」에서 자동 승격. 잘못된 항목은 지우고 `plaud-do-not-correct.md`에 넣으세요.\n"
+			"> 회의록 「표기 교정」에서 자동 승격(≥2회 관측). 잘못된 항목은 지우고 `plaud-do-not-correct.md`에 넣으세요.\n"
 	}
 	var b strings.Builder
 	b.WriteString(strings.TrimRight(body, "\n"))
 	b.WriteByte('\n')
 	day := time.Now().In(time.FixedZone("KST", 9*3600)).Format("2006-01-02")
-	src := strings.TrimSpace(sourceID)
-	if src == "" {
-		src = "unknown"
-	}
 	for _, p := range add {
-		fmt.Fprintf(&b, "- %s → %s (%s · plaud:%s)\n", p.From, p.To, day, src)
+		fmt.Fprintf(&b, "- %s → %s (%s · plaud:%s)\n", p.From, p.To, day, srcID)
 	}
-	if err := atomicfile.WriteFile(path, []byte(b.String()), nil); err != nil {
+	out := trimAutoPromoteSection(b.String(), plaudAutoPromoteMaxLines)
+	if err := atomicfile.WriteFile(path, []byte(out), nil); err != nil {
 		return 0, err
 	}
 	return len(add), nil
+}
+
+func loadPromotePending(topicsDir string) promotePendingState {
+	st := promotePendingState{Version: 1, Sightings: map[string][]string{}}
+	data, err := os.ReadFile(filepath.Join(topicsDir, PlaudPromotePendingFile))
+	if err != nil {
+		return st
+	}
+	if json.Unmarshal(data, &st) != nil || st.Sightings == nil {
+		return promotePendingState{Version: 1, Sightings: map[string][]string{}}
+	}
+	return st
+}
+
+func savePromotePending(topicsDir string, st promotePendingState) error {
+	st.Version = 1
+	if st.Sightings == nil {
+		st.Sightings = map[string][]string{}
+	}
+	data, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		return err
+	}
+	return atomicfile.WriteFile(filepath.Join(topicsDir, PlaudPromotePendingFile), data, &atomicfile.Options{Perm: 0o600})
+}
+
+func recordPromoteSighting(st *promotePendingState, key, sourceID string) int {
+	if st.Sightings == nil {
+		st.Sightings = map[string][]string{}
+	}
+	for _, id := range st.Sightings[key] {
+		if id == sourceID {
+			return len(st.Sightings[key])
+		}
+	}
+	st.Sightings[key] = append(st.Sightings[key], sourceID)
+	return len(st.Sightings[key])
+}
+
+// trimAutoPromoteSection keeps the newest bullet lines under ## 자동 승격.
+func trimAutoPromoteSection(body string, maxLines int) string {
+	if maxLines <= 0 || !strings.Contains(body, plaudAutoPromoteHeading) {
+		return body
+	}
+	lines := strings.Split(body, "\n")
+	start := -1
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), plaudAutoPromoteHeading) {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return body
+	}
+	end := len(lines)
+	for i := start + 1; i < len(lines); i++ {
+		trim := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(trim, "## ") {
+			end = i
+			break
+		}
+	}
+	var bullets []string
+	var head []string
+	for _, line := range lines[start+1 : end] {
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, "- ") {
+			bullets = append(bullets, line)
+		} else {
+			head = append(head, line)
+		}
+	}
+	if len(bullets) <= maxLines {
+		return body
+	}
+	bullets = bullets[len(bullets)-maxLines:]
+	var out []string
+	out = append(out, lines[:start+1]...)
+	out = append(out, head...)
+	out = append(out, bullets...)
+	out = append(out, lines[end:]...)
+	return strings.Join(out, "\n")
 }
 
 // promotablePair rejects noisy LLM correction lines before they enter the glossary.
@@ -397,7 +506,7 @@ func LoadPlaudGlossaryHotwords(topicsDir string, maxTerms int) string {
 	addFrom := func(body string) {
 		for _, p := range ParseCorrectionPairs(body) {
 			_ = terms.Add(p.To)
-			// Also bias the protected left side of ≠ lines via Parse? handled below
+			_ = terms.Add(p.From) // mishearing forms help ASR bias
 		}
 		for _, line := range strings.Split(body, "\n") {
 			line = strings.TrimSpace(line)

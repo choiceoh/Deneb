@@ -515,3 +515,28 @@ func TestStoreProactiveEmptyTitleFallsBack(t *testing.T) {
 		t.Fatalf("title = %q, want 업무 리포트", items[0].Title)
 	}
 }
+
+func TestAppendIfNewMeetingNearDupAcrossSources(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(filepath.Join(dir, "feed.jsonl"))
+	first, created, err := s.AppendIfNew(Item{
+		Source: SourceMailReport,
+		Title:  "비금도 잔금 회의",
+		Body:   "메일 분석\n2026-07-15\n비금도 잔금 회의 요약",
+	})
+	if err != nil || !created {
+		t.Fatalf("first: created=%v err=%v", created, err)
+	}
+	_, created, err = s.AppendIfNew(Item{
+		Source: SourceMeetingReport,
+		Title:  "비금도 잔금 회의",
+		Body:   "🎙 회의 분석: 비금도 잔금 회의\n2026-07-15 (KST) · 40분\n\n## 요약\n- x",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created {
+		t.Fatal("meeting card should near-dedupe against prior mail meeting card")
+	}
+	_ = first
+}

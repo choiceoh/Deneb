@@ -82,8 +82,18 @@ func TestPromotePlaudCorrectionsAppendsAndDedups(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if n != 0 {
+		t.Fatalf("first sighting must not promote yet, got %d", n)
+	}
+	n, err = PromotePlaudCorrections(dir, []CorrectionPair{
+		{From: "당안리", To: "당암리"},
+		{From: "오형석", To: "오선택"},
+	}, "def456")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if n != 1 {
-		t.Fatalf("promoted %d want 1", n)
+		t.Fatalf("second distinct recording should promote 1, got %d", n)
 	}
 	body := LoadPlaudGlossary(dir)
 	if !strings.Contains(body, plaudAutoPromoteHeading) || !strings.Contains(body, "당안리 → 당암리") {
@@ -92,7 +102,7 @@ func TestPromotePlaudCorrectionsAppendsAndDedups(t *testing.T) {
 	if strings.Contains(body, "오형석 → 오선택") {
 		t.Fatal("forbidden pair must not promote")
 	}
-	n2, err := PromotePlaudCorrections(dir, []CorrectionPair{{From: "당안리", To: "당암리"}}, "abc123")
+	n2, err := PromotePlaudCorrections(dir, []CorrectionPair{{From: "당안리", To: "당암리"}}, "ghi789")
 	if err != nil || n2 != 0 {
 		t.Fatalf("dedup: n=%d err=%v", n2, err)
 	}
@@ -116,7 +126,7 @@ func TestLoadPlaudGlossaryHotwords(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := LoadPlaudGlossaryHotwords(dir, 20)
-	if !strings.Contains(got, "임하댐") || !strings.Contains(got, "탑솔라") {
+	if !strings.Contains(got, "임하댐") || !strings.Contains(got, "탑솔라") || !strings.Contains(got, "이마댐") {
 		t.Fatalf("hotwords=%q", got)
 	}
 }

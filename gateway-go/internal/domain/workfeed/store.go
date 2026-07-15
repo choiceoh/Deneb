@@ -164,8 +164,10 @@ func (s *Store) AppendIfNew(item Item) (Item, bool, error) {
 		}
 		return item, true, nil
 	}
-	if n := len(items); n > 0 && isDuplicateCard(items[n-1], item) {
-		return items[n-1], false, nil
+	for i := len(items) - 1; i >= 0 && i >= len(items)-30; i-- {
+		if isDuplicateCard(items[i], item) || isMeetingNearDuplicate(items[i], item) {
+			return items[i], false, nil
+		}
 	}
 	items = append(items, item)
 	items = pruneRetention(items)
@@ -196,6 +198,84 @@ func isDuplicateCard(prev, cur Item) bool {
 // differences don't defeat dedup while any real content difference is kept.
 func fingerprint(body string) string {
 	return strings.Join(strings.Fields(body), " ")
+}
+
+// isMeetingNearDuplicate collapses AutoFlow mail_report and Plaud meeting_report
+// cards that describe the same meeting (shared title + KST date fingerprint).
+func isMeetingNearDuplicate(prev, cur Item) bool {
+	if !meetingLikeSource(prev.Source) || !meetingLikeSource(cur.Source) {
+		return false
+	}
+	a, ok1 := meetingCardFingerprint(prev)
+	b, ok2 := meetingCardFingerprint(cur)
+	return ok1 && ok2 && a == b
+}
+
+func meetingLikeSource(src string) bool {
+	return src == SourceMeetingReport || src == SourceMailReport
+}
+
+func meetingCardFingerprint(it Item) (string, bool) {
+	body := it.Body
+	if body == "" {
+		body = it.Title + "\n" + it.Summary
+	}
+	if i := strings.Index(body, "Plaud `"); i >= 0 {
+		rest := body[i+len("Plaud `"):]
+		if j := strings.Index(rest, "`"); j > 0 {
+			return "plaud:" + rest[:j], true
+		}
+	}
+	if i := strings.Index(body, "plaud:"); i >= 0 {
+		rest := body[i+len("plaud:"):]
+		end := 0
+		for end < len(rest) {
+			c := rest[end]
+			if (c >= 'a' && c <= 'f') || (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') {
+				end++
+				continue
+			}
+			break
+		}
+		if end >= 8 {
+			return "plaud:" + strings.ToLower(rest[:end]), true
+		}
+	}
+	title := strings.TrimSpace(it.Title)
+	if title == "" {
+		for _, line := range strings.Split(body, "\n") {
+			line = strings.TrimSpace(line)
+			line = strings.TrimPrefix(line, "🎙")
+			line = strings.TrimSpace(line)
+			line = strings.TrimPrefix(line, "회의 분석:")
+			line = strings.TrimSpace(line)
+			if line != "" {
+				title = line
+				break
+			}
+		}
+	}
+	if title == "" {
+		return "", false
+	}
+	date := ""
+	for _, s := range []string{body, title} {
+		for i := 0; i+10 <= len(s); i++ {
+			chunk := s[i : i+10]
+			if chunk[4] == '-' && chunk[7] == '-' && chunk[0] >= '0' && chunk[0] <= '9' {
+				date = chunk
+				break
+			}
+		}
+		if date != "" {
+			break
+		}
+	}
+	key := strings.ToLower(strings.Join(strings.Fields(title), " "))
+	if date != "" {
+		return date + "|" + key, true
+	}
+	return key, true
 }
 
 // ListOptions controls work-feed filtering, ordering, and pagination.

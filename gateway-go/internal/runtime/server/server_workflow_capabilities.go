@@ -316,6 +316,14 @@ func (s *Server) registerPlaudWorkflow(homeDir string) {
 		filepath.Join(stateDir, runtimemeeting.PlaudStateFile),
 		s.logger,
 	)
+	s.plaudRecordings.SetCalendarLister(func(ctx context.Context, from, to time.Time) ([]calendar.Event, error) {
+		client, err := runtimemeeting.ResolveCalendarClient()
+		if err != nil || client == nil {
+			return nil, err
+		}
+		return client.ListUpcoming(ctx, from, to, 40)
+	})
+	s.plaudRecordings.SetPriorMeetingLoader(s.plaudPriorMeeting)
 	s.plaudRecordings.Start(s.ShutdownCtx())
 }
 
@@ -417,6 +425,41 @@ func (s *Server) plaudProjectEntities(paths []string) []runtimemeeting.ProjectEn
 		out = append(out, fact)
 	}
 	return out
+}
+
+// plaudPriorMeeting returns the newest prior 회의록 under the same project for
+// synthesis continuity. projectPath is a 대표페이지 path.
+func (s *Server) plaudPriorMeeting(projectPath string) (title, body string) {
+	if s.wikiStore == nil {
+		return "", ""
+	}
+	name, ok := wiki.ProjectNameOf(projectPath)
+	if !ok || name == "" {
+		return "", ""
+	}
+	prefix := "프로젝트/" + name + "/회의록/"
+	pages, err := s.wikiStore.ListPages("프로젝트")
+	if err != nil {
+		return "", ""
+	}
+	var newest string
+	for _, p := range pages {
+		p = filepath.ToSlash(p)
+		if !strings.HasPrefix(p, prefix) || !strings.HasSuffix(p, ".md") {
+			continue
+		}
+		if newest == "" || p > newest {
+			newest = p
+		}
+	}
+	if newest == "" {
+		return "", ""
+	}
+	page, err := s.wikiStore.ReadPage(newest)
+	if err != nil || page == nil {
+		return "", ""
+	}
+	return page.Meta.Title, page.Body
 }
 
 func (s *Server) relayMeetingReport(text string) (bool, error) {
