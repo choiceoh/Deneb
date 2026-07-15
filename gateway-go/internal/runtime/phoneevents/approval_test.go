@@ -8,6 +8,9 @@ func TestExtractGroupwareDocID(t *testing.T) {
 	if got := extractGroupwareDocID(body); got != "99178" {
 		t.Fatalf("id: line: got %q", got)
 	}
+	if got := extractGroupwareDocID("문서ID: 99179"); got != "99179" {
+		t.Fatalf("structured id: got %q", got)
+	}
 	if got := extractGroupwareDocID("1. 제목 · id=99178 · 기안"); got != "99178" {
 		t.Fatalf("id= inline: got %q", got)
 	}

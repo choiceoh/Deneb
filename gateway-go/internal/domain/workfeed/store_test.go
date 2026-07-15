@@ -540,3 +540,54 @@ func TestAppendIfNewMeetingNearDupAcrossSources(t *testing.T) {
 	}
 	_ = first
 }
+
+func TestStoreGroupwareApprovalRefIDDedupesActiveAcrossBodiesAndHistory(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	first, created, err := store.AppendIfNew(Item{
+		ID: "approval-old", Source: SourceGroupwareApproval, RefID: "99178", Body: "original analysis",
+	})
+	if err != nil || !created {
+		t.Fatalf("first append: item=%+v created=%v err=%v", first, created, err)
+	}
+	for i := 0; i < 35; i++ {
+		mustAppendIfNew(t, store, Item{Source: SourceProactive, Body: "filler " + string(rune('A'+i))})
+	}
+	got, created, err := store.AppendIfNew(Item{
+		ID: "approval-poll", Source: SourceGroupwareApproval, RefID: "99178", Body: "changed poll analysis",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created || got.ID != "approval-old" {
+		t.Fatalf("active RefID duplicate = item %+v created=%v", got, created)
+	}
+	found, ok, err := store.FindActiveBySourceRef(SourceGroupwareApproval, "99178")
+	if err != nil || !ok || found.ID != "approval-old" {
+		t.Fatalf("FindActiveBySourceRef = item %+v ok=%v err=%v", found, ok, err)
+	}
+}
+
+func TestStoreGroupwareApprovalAckAllowsReopenedRefID(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	if _, err := store.Append(Item{
+		ID: "approval-first", Source: SourceGroupwareApproval, RefID: "7", Body: "same analysis",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Ack("approval-first"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := store.FindActiveBySourceRef(SourceGroupwareApproval, "7"); err != nil || ok {
+		t.Fatalf("acked lookup ok=%v err=%v, want inactive", ok, err)
+	}
+	reopened, created, err := store.AppendIfNew(Item{
+		ID: "approval-reopened", Source: SourceGroupwareApproval, RefID: "7", Body: "same analysis",
+	})
+	if err != nil || !created || reopened.ID != "approval-reopened" {
+		t.Fatalf("reopened append = item %+v created=%v err=%v", reopened, created, err)
+	}
+	found, ok, err := store.FindActiveBySourceRef(SourceGroupwareApproval, "7")
+	if err != nil || !ok || found.ID != "approval-reopened" {
+		t.Fatalf("reopened lookup = item %+v ok=%v err=%v", found, ok, err)
+	}
+}

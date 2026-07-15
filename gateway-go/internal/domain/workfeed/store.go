@@ -166,9 +166,21 @@ func (s *Store) AppendIfNew(item Item) (Item, bool, error) {
 		}
 		return item, true, nil
 	}
-	for i := len(items) - 1; i >= 0 && i >= len(items)-30; i-- {
-		if isDuplicateCard(items[i], item) || isMeetingNearDuplicate(items[i], item) {
-			return items[i], false, nil
+	// E-approval cards are idempotent by durable Amaranth docId across the
+	// phone-notification and polling paths. Scan all retained cards, not only
+	// the recent body-fingerprint window; an acked card deliberately does not
+	// block a genuinely reopened document.
+	hasApprovalRef := item.Source == SourceGroupwareApproval && item.RefID != ""
+	if hasApprovalRef {
+		if existing, ok := findActiveBySourceRef(items, item.Source, item.RefID); ok {
+			return existing, false, nil
+		}
+	}
+	if !hasApprovalRef {
+		for i := len(items) - 1; i >= 0 && i >= len(items)-30; i-- {
+			if isDuplicateCard(items[i], item) || isMeetingNearDuplicate(items[i], item) {
+				return items[i], false, nil
+			}
 		}
 	}
 	items = append(items, item)
@@ -200,6 +212,35 @@ func isDuplicateCard(prev, cur Item) bool {
 // differences don't defeat dedup while any real content difference is kept.
 func fingerprint(body string) string {
 	return strings.Join(strings.Fields(body), " ")
+}
+
+// FindActiveBySourceRef returns the newest retained non-acked card matching the
+// source and stable reference identifier. Snoozed cards remain active.
+func (s *Store) FindActiveBySourceRef(source, refID string) (Item, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	source = strings.TrimSpace(source)
+	refID = strings.TrimSpace(refID)
+	if source == "" || refID == "" {
+		return Item{}, false, nil
+	}
+	items, err := jsonlstore.Load[Item](s.path)
+	if err != nil {
+		return Item{}, false, err
+	}
+	item, ok := findActiveBySourceRef(items, source, refID)
+	return item, ok, nil
+}
+
+func findActiveBySourceRef(items []Item, source, refID string) (Item, bool) {
+	for i := len(items) - 1; i >= 0; i-- {
+		item := normalizeExisting(items[i])
+		if item.Source == source && item.RefID == refID && item.Status != StatusAcked {
+			return item, true
+		}
+	}
+	return Item{}, false
 }
 
 // isMeetingNearDuplicate collapses AutoFlow mail_report and Plaud meeting_report

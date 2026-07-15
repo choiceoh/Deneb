@@ -181,20 +181,46 @@ export function htmlToText(html) {
   return merged.join("\n").slice(0, 16_000);
 }
 
-function formatApprovalMeta(d) {
-  const title = d.DOC_TITLE_ORIGIN || d.doc_title || d.DOC_TITLE || "";
-  const no = d.DOC_NO || d.doc_no || "";
-  const user = d.userNm || d.user_name || d.DISP_TITLE_HEAD || "";
-  const when = d.REP_DT || d.req_dt || d.draft_dt || d.rep_dt || "";
-  const sts = d.RET_ITEM_NM || d.box_nm || "";
-  const id = d.DOC_ID || d.doc_id || "";
+function firstApprovalValue(...values) {
+  for (const value of values) {
+    const normalized = String(value ?? "").trim();
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+/** Normalize the two Amaranth approval-list payload shapes into one stable
+ * machine-readable record. `folder` is supplied by the caller because neither
+ * list endpoint reliably echoes the source box in each document. */
+export function normalizeApprovalDoc(d, folder = "") {
+  const doc = d || {};
+  const folderValue = firstApprovalValue(folder, doc.folder);
+  return {
+    docId: firstApprovalValue(doc.DOC_ID, doc.doc_id, doc.docId),
+    title: firstApprovalValue(doc.DOC_TITLE_ORIGIN, doc.doc_title, doc.DOC_TITLE, doc.title),
+    docNo: firstApprovalValue(doc.DOC_NO, doc.doc_no, doc.docNo),
+    drafter: firstApprovalValue(
+      doc.userNm,
+      doc.user_name,
+      doc.DISP_TITLE_HEAD,
+      doc.displayNm,
+      doc.drafter,
+    ),
+    date: firstApprovalValue(doc.REP_DT, doc.req_dt, doc.draft_dt, doc.rep_dt, doc.date),
+    status: firstApprovalValue(doc.RET_ITEM_NM, doc.box_nm, doc.status),
+    folder: folderValue ? normalizeFolder(folderValue) : "",
+  };
+}
+
+function formatApprovalMeta(d, folder = "") {
+  const doc = normalizeApprovalDoc(d, folder);
   const bits = [
-    title,
-    no && `문서번호 ${no}`,
-    user && `기안 ${user}`,
-    when && `일자 ${when}`,
-    sts && `상태 ${sts}`,
-    id && `id=${id}`,
+    doc.title,
+    doc.docNo && `문서번호 ${doc.docNo}`,
+    doc.drafter && `기안 ${doc.drafter}`,
+    doc.date && `일자 ${doc.date}`,
+    doc.status && `상태 ${doc.status}`,
+    doc.docId && `id=${doc.docId}`,
   ].filter(Boolean);
   return bits.join(" · ");
 }
@@ -629,21 +655,38 @@ function formatDocRead(folderTitle, query, detail, lines, attachBlock) {
   );
 }
 
-export async function listApproval(folder, limit) {
+export async function listApprovalEntries(folder, limit, loaders = {}) {
+  const lim = Math.min(Math.max(limit || 20, 1), 50);
+  const normalizedFolder = normalizeFolder(folder);
+  const loadBox = loaders.listBoxPortlet || listBoxPortlet;
+  const loadTotal = loaders.listTotal || listTotal;
+  if (normalizedFolder === "all") {
+    const entries = [];
+    for (const key of ["pending", "done", "cc", "total"]) {
+      entries.push(
+        ...(await listApprovalEntries(key, Math.max(4, Math.ceil(lim / 4)), loaders)),
+      );
+    }
+    return entries;
+  }
+  const docs =
+    normalizedFolder === "total" ? await loadTotal(lim) : await loadBox(normalizedFolder, lim);
+  return docs.map((doc) => normalizeApprovalDoc(doc, normalizedFolder));
+}
+
+export async function listApproval(folder, limit, loaders = {}) {
   const lim = Math.min(Math.max(limit || 20, 1), 50);
   if (folder === "all") {
     const parts = [];
     for (const key of ["pending", "done", "cc", "total"]) {
-      parts.push(await listApproval(key, Math.max(4, Math.ceil(lim / 4))));
+      parts.push(await listApproval(key, Math.max(4, Math.ceil(lim / 4)), loaders));
     }
     return parts.join("\n\n");
   }
   const title = FOLDER_TITLE[folder] || folder;
-  let docs;
-  if (folder === "total") docs = await listTotal(lim);
-  else docs = await listBoxPortlet(folder, lim);
+  const docs = await listApprovalEntries(folder, lim, loaders);
   if (!docs.length) return `전자결재 · ${title}\n\n(문서 없음)`;
-  const lines = docs.map((d, i) => `${i + 1}. ${formatApprovalMeta(d)}`);
+  const lines = docs.map((d, i) => `${i + 1}. ${formatApprovalMeta(d, folder)}`);
   return `전자결재 · ${title} (${docs.length}건)\n\n${lines.join("\n")}`;
 }
 

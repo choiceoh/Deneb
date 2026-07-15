@@ -27,6 +27,7 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 
 	if s.chatHandler != nil {
 		homeDir := workflowHomeDir()
+		s.registerGroupwareRadarTask(homeDir)
 		s.registerHeartbeatWorkflowTasks(homeDir)
 		s.registerGoalWorkflowTask(homeDir)
 

@@ -22,11 +22,11 @@ Last surveyed: 2026-07-15. Status legend: **confirmed** (live POST), **list-only
 ## Architecture (Deneb)
 
 ```
-Consumers: chat tool `groupware` · phone enrich · CLI read.mjs
+Consumers: chat tool · phone enrich · weekday approval radar · CLI read.mjs
                 │
-        Go thin bridge (platform/groupware.Run)
+ Go bridge (Run / ListApprovals) + deterministic radar state diff
                 │
-   Domain adapters (lib/actions.mjs) — approval + board
+   Domain adapters (lib/actions.mjs) — approval + board + ERP
                 │
    Signed client (HMAC wehago-sign) + session cache
                 │
@@ -38,6 +38,7 @@ Product split (planned):
 | Concern | Surface |
 |---------|---------|
 | Read (list/body/line + attachment titles; selected attachment on demand) | Deferred tool `groupware` + phone enrich |
+| Radar (new/changed pending docs; positive done reconciliation) | `groupware-radar` periodic task → synchronous phone approval pipeline → work feed |
 | Write (승인/반려) | Work-feed chips → `miniapp.workfeed.action.run` — **not** the chat tool |
 
 See also: [page-agent-browser.md](./page-agent-browser.md) (tool env + phone path) ·
@@ -49,11 +50,34 @@ See also: [page-agent-browser.md](./page-agent-browser.md) (tool env + phone pat
 |------|----------|
 | Creds | `~/.deneb/groupware.env` → systemd `EnvironmentFile` on srv4 |
 | Vars | `DENEB_GROUPWARE_URL`, `COMPANY`, `USER`, `PASSWORD` |
+| Radar controls | `DENEB_GROUPWARE_RADAR_DISABLE=1`, `DENEB_GROUPWARE_RADAR_INTERVAL_MINUTES` (default `10`), `DENEB_GROUPWARE_RADAR_MAX_PER_CYCLE` (default `3`) |
+| Dev-only radar opt-in | `DENEB_GROUPWARE_RADAR_ALLOW_DEV=1` (production state dir is otherwise required) |
 | Session cache | `~/.deneb/groupware-session.json` (mode `0600`) |
+| Radar state | `<stateDir>/groupware_radar_state.json` (atomic, mode `0600`) |
 
 Session fields used by the client: `url`, `token` (`auth_a_token`), `hashKey`
 (`hash_key`), plus emp metadata from login. Cache TTL ~12h; refresh on 401 /
 auth-ish result codes (`136`, `601`, Korean auth messages).
+
+### Approval radar
+
+`groupware-radar` polls `pending` and `done` snapshots every 10 minutes on weekdays
+from 08:30 inclusive to 19:00 exclusive KST. Missing credentials, a missing
+autonomous service, a non-production state directory, or
+`DENEB_GROUPWARE_RADAR_DISABLE=1` disables registration.
+
+The state file stores each `docId` fingerprint, notification state, and last-seen
+time plus the last successful poll. Snapshot comparison is deterministic: an
+unchanged cycle performs **zero LLM calls**. New, changed, or previously failed
+pending documents synchronously reuse the phone e-approval enrich → judgment →
+work-feed relay, capped at three per cycle by default; callback failures remain
+retryable. Phone and polling deliveries share `groupware-approval` + `docId` RefID
+idempotency, while an acknowledged card does not block a genuinely reopened doc.
+
+Reconciliation is deliberately one-way safe: disappearance from `pending` never
+means completion. The radar acknowledges a card only when the same `docId` is
+positively present in the `done` snapshot, and removes its state only after that
+ack callback succeeds.
 
 ### HMAC request signing
 
@@ -332,8 +356,9 @@ ERP list endpoints and permission notes: [groupware-erp-api-map.md](./groupware-
 | P1 | Attachment titles only on read → agent-selected single-file download/extract; PaddleOCR-VL for image·scanned PDF | Done |
 | P2 | Board `ViewPost` on `read` | Done |
 | P3 | Approve/reject (`eap110A21`) + feed chips (native/Andromeda) | Wired; **live mutate untested** |
-| P4 | Phone enrich API-first; DOM/Page Agent last resort | In progress |
-| P5 | Read-only ERP lists (매출마감·출고·입고·현재고·발주) | 매출마감 **wired** (`area=sales`); others mapped |
+| P4 | Phone enrich API-first; DOM/Page Agent last resort | Done |
+| P5 | Read-only ERP lists (매출마감·출고·입고·현재고·발주) | Wired |
+| P6 | Wave 1 approval radar: structured snapshots, deterministic diff, RefID dedupe, positive-done reconciliation | Done |
 
 ## Smoke (no secrets in output)
 

@@ -32,6 +32,7 @@ import { envConfig, loginAndSave, loadSession } from "./lib/client.mjs";
 import {
   actApproval,
   listApproval,
+  listApprovalEntries,
   listBoard,
   normalizeFolder,
   readApproval,
@@ -51,6 +52,7 @@ function argValue(flag) {
 }
 
 const loginCheck = process.argv.includes("--login-check");
+const jsonOutput = process.argv.includes("--json");
 const area = (argValue("--area") || "approval").trim().toLowerCase();
 let action = (argValue("--action") || (loginCheck ? "login-check" : "read")).trim().toLowerCase();
 const query = (argValue("--query") || "").trim();
@@ -109,6 +111,9 @@ async function main() {
   if (area === "approval" && !["attachment", "act"].includes(action) && !["pending", "done", "cc", "total", "all"].includes(folder)) {
     die(`unknown --folder ${folder}`);
   }
+  if (jsonOutput && (area !== "approval" || action !== "list")) {
+    die("--json is only valid for approval list");
+  }
 
   const erpFolder = ["all", "pending", "done", "cc", "total"].includes(folder)
     ? (area === "receive" || area === "ship" ? "month" : "ytd")
@@ -135,13 +140,15 @@ async function main() {
   } else if (area === "board") {
     out = action === "list" ? await listBoard(limit) : await readBoard(query);
   } else if (action === "list") {
-    out = await listApproval(folder, limit);
+    out = jsonOutput
+      ? await listApprovalEntries(folder, limit)
+      : await listApproval(folder, limit);
   } else {
     const noti = await readStdin();
     out = await readApproval(folder, query, noti);
   }
-  if (source) out = `출처: ${source}\n` + out;
-  console.log(out);
+  if (source && !jsonOutput) out = `출처: ${source}\n` + out;
+  console.log(jsonOutput ? JSON.stringify(out) : out);
   console.error(`ok ${Date.now() - t0}ms session=${loadSession() ? "cached" : "none"}`);
 }
 

@@ -1,0 +1,239 @@
+package groupware
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
+	"testing"
+	"time"
+)
+
+var radarMonday = time.Date(2026, 7, 13, 10, 0, 0, 0, radarKST)
+
+func TestIsRadarBusinessHoursBoundaries(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		at   time.Time
+		want bool
+	}{
+		{"before open", time.Date(2026, 7, 13, 8, 29, 59, 0, radarKST), false},
+		{"open inclusive", time.Date(2026, 7, 13, 8, 30, 0, 0, radarKST), true},
+		{"before close", time.Date(2026, 7, 13, 18, 59, 59, 0, radarKST), true},
+		{"close exclusive", time.Date(2026, 7, 13, 19, 0, 0, 0, radarKST), false},
+		{"saturday", time.Date(2026, 7, 18, 12, 0, 0, 0, radarKST), false},
+		{"UTC converted to KST", time.Date(2026, 7, 12, 23, 30, 0, 0, time.UTC), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsRadarBusinessHours(tc.at); got != tc.want {
+				t.Fatalf("IsRadarBusinessHours(%s) = %v, want %v", tc.at, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRadarIntervalEnvironment(t *testing.T) {
+	t.Setenv(radarIntervalMinutesEnv, "17")
+	if got := NewRadar(RadarConfig{}).Interval(); got != 17*time.Minute {
+		t.Fatalf("interval = %v, want 17m", got)
+	}
+	t.Setenv(radarIntervalMinutesEnv, "0")
+	if got := NewRadar(RadarConfig{}).Interval(); got != DefaultRadarInterval {
+		t.Fatalf("invalid interval = %v, want %v", got, DefaultRadarInterval)
+	}
+}
+
+func TestRadarFirstRunCapUnchangedAndChange(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "radar.json")
+	pending := []ApprovalSummary{
+		approval("4", "four"), approval("2", "two"), approval("1", "one"), approval("3", "three"),
+	}
+	var calls []string
+	var listCalls []string
+	radar := NewRadar(RadarConfig{
+		StatePath:   statePath,
+		MaxPerCycle: 2,
+		Now:         func() time.Time { return radarMonday },
+		List: func(_ context.Context, _ Config, folder string, limit int) ([]ApprovalSummary, error) {
+			if limit != radarApprovalListLimit {
+				t.Fatalf("limit = %d, want %d", limit, radarApprovalListLimit)
+			}
+			listCalls = append(listCalls, folder)
+			if folder == "pending" {
+				return append([]ApprovalSummary(nil), pending...), nil
+			}
+			return nil, nil
+		},
+		OnPending: func(_ context.Context, doc ApprovalSummary) error {
+			calls = append(calls, doc.DocID)
+			return nil
+		},
+		OnResolved: func(context.Context, ApprovalSummary) error { return nil },
+	})
+
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(calls, []string{"1", "2"}) {
+		t.Fatalf("first capped calls = %v", calls)
+	}
+	state, err := loadRadarState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Docs["3"].Notified || state.Docs["4"].Notified {
+		t.Fatalf("overflow docs must remain retryable: %+v", state.Docs)
+	}
+
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(calls, []string{"1", "2", "3", "4"}) {
+		t.Fatalf("second cycle overflow calls = %v", calls)
+	}
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 4 {
+		t.Fatalf("unchanged snapshot invoked callback: %v", calls)
+	}
+
+	pending[1].Title = "two changed"
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(calls, []string{"1", "2", "3", "4", "2"}) {
+		t.Fatalf("changed doc calls = %v", calls)
+	}
+	if len(listCalls) != 8 || listCalls[len(listCalls)-2] != "pending" || listCalls[len(listCalls)-1] != "done" {
+		t.Fatalf("list calls = %v", listCalls)
+	}
+}
+
+func TestRadarPendingFailureStaysRetryable(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "radar.json")
+	attempts := 0
+	radar := NewRadar(RadarConfig{
+		StatePath: statePath,
+		Now:       func() time.Time { return radarMonday },
+		List: func(_ context.Context, _ Config, folder string, _ int) ([]ApprovalSummary, error) {
+			if folder == "pending" {
+				return []ApprovalSummary{approval("9", "retry")}, nil
+			}
+			return nil, nil
+		},
+		OnPending: func(context.Context, ApprovalSummary) error {
+			attempts++
+			if attempts == 1 {
+				return errors.New("relay failed")
+			}
+			return nil
+		},
+		OnResolved: func(context.Context, ApprovalSummary) error { return nil },
+	})
+	if err := radar.Run(context.Background()); err == nil {
+		t.Fatal("expected callback failure")
+	}
+	state, err := loadRadarState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Docs["9"].Notified {
+		t.Fatal("failed callback marked notified")
+	}
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+}
+
+func TestRadarRequiresPositiveDoneBeforeResolution(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "radar.json")
+	pending := []ApprovalSummary{approval("7", "resolve safely")}
+	var done []ApprovalSummary
+	resolvedAttempts := 0
+	radar := NewRadar(RadarConfig{
+		StatePath: statePath,
+		Now:       func() time.Time { return radarMonday },
+		List: func(_ context.Context, _ Config, folder string, _ int) ([]ApprovalSummary, error) {
+			if folder == "pending" {
+				return pending, nil
+			}
+			return done, nil
+		},
+		OnPending: func(context.Context, ApprovalSummary) error { return nil },
+		OnResolved: func(_ context.Context, doc ApprovalSummary) error {
+			resolvedAttempts++
+			if doc.DocID != "7" {
+				t.Fatalf("resolved doc = %+v", doc)
+			}
+			if resolvedAttempts == 1 {
+				return errors.New("ack failed")
+			}
+			return nil
+		},
+	})
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	pending = nil
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if resolvedAttempts != 0 {
+		t.Fatal("pending disappearance alone resolved the card")
+	}
+	state, _ := loadRadarState(statePath)
+	if _, ok := state.Docs["7"]; !ok {
+		t.Fatal("disappeared pending doc was removed without done confirmation")
+	}
+
+	done = []ApprovalSummary{approval("7", "resolved")}
+	if err := radar.Run(context.Background()); err == nil {
+		t.Fatal("expected failed resolution callback")
+	}
+	state, _ = loadRadarState(statePath)
+	if _, ok := state.Docs["7"]; !ok {
+		t.Fatal("failed resolution callback removed state")
+	}
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	state, _ = loadRadarState(statePath)
+	if _, ok := state.Docs["7"]; ok {
+		t.Fatal("successful positive-done resolution retained state")
+	}
+}
+
+func TestRadarStateFileMode0600(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "nested", "radar.json")
+	radar := NewRadar(RadarConfig{
+		StatePath:  statePath,
+		Now:        func() time.Time { return radarMonday },
+		List:       func(context.Context, Config, string, int) ([]ApprovalSummary, error) { return nil, nil },
+		OnPending:  func(context.Context, ApprovalSummary) error { return nil },
+		OnResolved: func(context.Context, ApprovalSummary) error { return nil },
+	})
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("state mode = %o, want 600", got)
+	}
+}
+
+func approval(id, title string) ApprovalSummary {
+	return ApprovalSummary{
+		DocID: id, Title: title, DocNo: "EAP-" + id, Drafter: "drafter",
+		Date: "2026-07-13", Status: "pending", Folder: "pending",
+	}
+}

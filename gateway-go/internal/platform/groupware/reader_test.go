@@ -66,3 +66,20 @@ func TestExtractDocID(t *testing.T) {
 		t.Fatalf("empty got %q", got)
 	}
 }
+
+func TestParseApprovalSummaries(t *testing.T) {
+	t.Parallel()
+	got, err := parseApprovalSummaries(`[{
+		"docId":"99178","title":"구매 품의","docNo":"EAP-42",
+		"drafter":"홍길동","date":"2026-07-16","status":"결재대기","folder":"pending"
+	}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].DocID != "99178" || got[0].Folder != "pending" || got[0].Drafter != "홍길동" {
+		t.Fatalf("parsed summaries = %+v", got)
+	}
+	if _, err := parseApprovalSummaries("출처: radar\n[]"); err == nil {
+		t.Fatal("expected provenance-prefixed human output to fail JSON parsing")
+	}
+}
