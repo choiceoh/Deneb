@@ -176,9 +176,22 @@ acceptance machinery stays forbidden at record time.
   the exact dispatch attempt and deterministic Go classifies the terminal
   result as `verified`, `no_effect`, or `regressed`. Legacy candidates without
   a contract remain valid and do not fabricate an impact verdict. The health
-  miner closes its own contracts from a fresh bench run; ad-hoc evaluators use
-  `self_correction_dispatch.py impact` rather than editing the append-only
-  ledger.
+  miner closes deterministic contracts from fresh reports. Supported metrics:
+  `health.finding_present:<id>`, `runtime.health.score:<dimension>`,
+  `health.score:overall`, `health.domain.score:<domain>`,
+  `health.metric.score:<domain>/<metric>`, and the matching RSI Bench forms
+  `rsi.bench.score:overall`, `rsi.bench.domain.score:<domain>`, and
+  `rsi.bench.metric.score:<domain>/<metric>` (a globally unique metric id may
+  omit the domain). Unknown or unavailable metrics stay pending; ad-hoc
+  evaluators use `self_correction_dispatch.py impact` rather than editing the
+  append-only ledger.
+- **Impact drives retry policy**: within the same review state, dispatch ranks a
+  source whose latest verdict is `regressed` before `no_effect`, then ordinary
+  newest-first work. A latest `verified` verdict clears older negative priority.
+  If the latest two terminal outcomes for one exact source are negative, another
+  unattended attempt is blocked until `proposedChange` names a non-empty strategy
+  different from every negatively measured strategy. L4 status uses the same
+  complete-ledger policy and exposes blocked rows as `전략 변경 필요`.
 - **Dispatch graduation (ladder)**: coding-dispatch.sh auto-dispatches only
   allowlisted source namespaces. **Graduated** (auto-dispatch → land through the
   full gate stack): `evolve-tool-gap`, `self-harness`, `health-finding`

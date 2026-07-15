@@ -90,6 +90,27 @@ def runtime_report():
     }
 
 
+def rsi_report():
+    return {
+        "score": {
+            "overall": 25.8,
+            "domains": {"process": 31.3, "utility": 20.4},
+        },
+        "domains": [
+            {
+                "id": "process",
+                "score": 31.3,
+                "metrics": [{"id": "acceptor-trust", "score": 28.0}],
+            },
+            {
+                "id": "utility",
+                "score": 20.4,
+                "metrics": [{"id": "dispatch-land", "score": 22.0}],
+            },
+        ],
+    }
+
+
 class StructuralCandidatesTest(unittest.TestCase):
     def test_when_only_high_severity_ranked_by_priority(self):
         cands = structural_candidates(structural_report())
@@ -302,6 +323,55 @@ class PendingImpactObservationsTest(unittest.TestCase):
         self.assertEqual(skipped, [])
         self.assertEqual(observations[0]["observed"], 51.1)
         self.assertEqual(observations[0]["samples"], 523)
+
+    def test_health_score_namespaces_resolve_overall_domain_and_metric(self):
+        candidates = [
+            self._candidate("health.score:overall"),
+            self._candidate("health.domain.score:structure"),
+            self._candidate("health.metric.score:structure/change-blast"),
+        ]
+        report = structural_report(
+            score={"overall": 47.4, "domains": {"structure": 50.4}},
+            domains=[{
+                "id": "structure", "score": 50.4,
+                "metrics": [{"id": "change-blast", "score": 32.2}],
+            }],
+        )
+        for index, candidate in enumerate(candidates):
+            candidate["id"] = f"health-{index}"
+        observations, skipped = pending_impact_observations(
+            candidates, report, runtime_report(), NOW
+        )
+        self.assertEqual(skipped, [])
+        self.assertEqual([row["observed"] for row in observations], [47.4, 50.4, 32.2])
+
+    def test_rsi_bench_namespaces_resolve_overall_domain_and_metric(self):
+        candidates = [
+            self._candidate("rsi.bench.score:overall"),
+            self._candidate("rsi.bench.domain.score:utility"),
+            self._candidate("rsi.bench.metric.score:dispatch-land"),
+        ]
+        for index, candidate in enumerate(candidates):
+            candidate["id"] = f"rsi-{index}"
+        observations, skipped = pending_impact_observations(
+            candidates, structural_report(), runtime_report(), NOW, rsi_report()
+        )
+        self.assertEqual(skipped, [])
+        self.assertEqual([row["observed"] for row in observations], [25.8, 20.4, 22.0])
+        self.assertTrue(all(row["samples"] == 1 for row in observations))
+
+    def test_known_but_unavailable_metric_stays_pending(self):
+        candidates = [
+            self._candidate("health.domain.score:missing"),
+            self._candidate("rsi.bench.score:overall"),
+        ]
+        candidates[1]["id"] = "rsi-missing"
+        observations, skipped = pending_impact_observations(
+            candidates, structural_report(), runtime_report(), NOW
+        )
+        self.assertEqual(observations, [])
+        self.assertIn("health domain unavailable", skipped[0][1])
+        self.assertIn("RSI Bench report unavailable", skipped[1][1])
 
     def test_observation_window_and_foreign_metric_stay_pending(self):
         candidates = [

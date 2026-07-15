@@ -7,12 +7,16 @@ the first PROACTIVE source: it reads the two deterministic health benches and
 files their standing defects as propose-only, scope=code self-correction
 candidates through the existing review lane.
 
-Inputs (both deterministic, both already scored):
+Candidate inputs (both deterministic, both already scored):
 
   - ``codebase-health-v2.py --format json`` findings with severity high or
     critical (e.g. the volatile-contract blast on ``domain/wiki``).
   - ``runtime-health.py --json`` dimensions scoring below a standing-weakness
     bar (e.g. latency, the #1 weakness at proposal time).
+
+The post-deploy evaluator also understands Health Bench and RSI Bench overall,
+domain, and metric score contracts. RSI Bench runs only when a pending contract
+uses its namespace, so ordinary mining keeps its existing cost.
 
 Design decision (2026-07-12, recorded per the P5-ws3 brief): this lane is a
 SCRIPTS-SIDE miner filing over the miniapp RPC, NOT a gateway PeriodicTask,
@@ -101,6 +105,10 @@ _RISK_NOTE = (
 
 class GatewayError(RuntimeError):
     """The gateway RPC failed — the miner must fail loud, not file silently."""
+
+
+class ImpactMetricUnavailable(ValueError):
+    """A known metric namespace is missing the requested fresh observation."""
 
 
 # --- candidate builders (pure) -------------------------------------------------
@@ -371,28 +379,134 @@ def record_candidate(base_url: str, token: str, cand: dict[str, Any]) -> str:
     return str(recorded.get("id") or "?")
 
 
+def _numeric(value: Any) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+def _report_overall_score(report: dict[str, Any], label: str) -> float:
+    score = report.get("score")
+    value = _numeric(score.get("overall")) if isinstance(score, dict) else _numeric(score)
+    if value is None:
+        value = _numeric(report.get("overall"))
+    if value is None:
+        raise ImpactMetricUnavailable(f"{label} overall score unavailable")
+    return value
+
+
+def _report_domain_score(report: dict[str, Any], domain_id: str, label: str) -> float:
+    domain_id = domain_id.strip()
+    score = report.get("score")
+    if isinstance(score, dict) and isinstance(score.get("domains"), dict):
+        value = _numeric(score["domains"].get(domain_id))
+        if value is not None:
+            return value
+    for domain in report.get("domains") or []:
+        if str(domain.get("id") or "") == domain_id:
+            value = _numeric(domain.get("score"))
+            if value is not None:
+                return value
+    raise ImpactMetricUnavailable(f"{label} domain unavailable: {domain_id or '?'}")
+
+
+def _report_metric_score(report: dict[str, Any], selector: str, label: str) -> float:
+    selector = selector.strip()
+    domain_filter, separator, metric_id = selector.partition("/")
+    if not separator:
+        metric_id, domain_filter = domain_filter, ""
+    matches: list[float] = []
+    for domain in report.get("domains") or []:
+        if domain_filter and str(domain.get("id") or "") != domain_filter:
+            continue
+        for metric in domain.get("metrics") or []:
+            if str(metric.get("id") or "") == metric_id:
+                value = _numeric(metric.get("score"))
+                if value is not None:
+                    matches.append(value)
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ImpactMetricUnavailable(
+            f"{label} metric is ambiguous; use domain/metric: {metric_id}"
+        )
+    raise ImpactMetricUnavailable(f"{label} metric unavailable: {selector or '?'}")
+
+
+SCORE_METRIC_NAMESPACES = (
+    ("health.score:", "health", "overall"),
+    ("health.domain.score:", "health", "domain"),
+    ("health.metric.score:", "health", "metric"),
+    ("rsi.bench.score:", "rsi", "overall"),
+    ("rsi.bench.domain.score:", "rsi", "domain"),
+    ("rsi.bench.metric.score:", "rsi", "metric"),
+)
+
+
+def resolve_impact_metric(
+    metric: str,
+    structural_report: dict[str, Any],
+    runtime_report: dict[str, Any] | None,
+    rsi_report: dict[str, Any] | None,
+) -> tuple[float, int, str] | None:
+    """Resolve an owned metric, return None for another evaluator's namespace."""
+    finding_prefix = "health.finding_present:"
+    if metric.startswith(finding_prefix):
+        finding_id = metric.removeprefix(finding_prefix)
+        present = any(
+            str(finding.get("id") or "") == finding_id
+            for finding in structural_report.get("findings") or []
+        )
+        state = "still present" if present else "absent"
+        return float(present), 1, f"fresh health bench: finding {finding_id} {state}"
+
+    runtime_prefix = "runtime.health.score:"
+    if metric.startswith(runtime_prefix):
+        dimension = metric.removeprefix(runtime_prefix)
+        runtime = runtime_report or {}
+        value = _numeric((runtime.get("dims") or {}).get(dimension))
+        if value is None:
+            raise ImpactMetricUnavailable(
+                f"runtime dimension unavailable: {dimension or '?'}"
+            )
+        samples = (runtime.get("meta") or {}).get("runs")
+        if not isinstance(samples, (int, float)) or isinstance(samples, bool) or samples < 1:
+            samples = 1
+        return value, int(samples), f"fresh runtime health bench: {dimension}={value:g}"
+
+    for prefix, report_name, score_kind in SCORE_METRIC_NAMESPACES:
+        if not metric.startswith(prefix):
+            continue
+        report = structural_report if report_name == "health" else rsi_report
+        label = "health" if report_name == "health" else "RSI Bench"
+        if not isinstance(report, dict):
+            raise ImpactMetricUnavailable(f"{label} report unavailable")
+        selector = metric.removeprefix(prefix)
+        if score_kind == "overall":
+            if selector != "overall":
+                raise ImpactMetricUnavailable(f"{label} score unavailable: {selector or '?'}")
+            value = _report_overall_score(report, label)
+        elif score_kind == "domain":
+            value = _report_domain_score(report, selector, label)
+        else:
+            value = _report_metric_score(report, selector, label)
+        bench = "health bench" if report_name == "health" else "RSI Bench"
+        return value, 1, f"fresh {bench}: {score_kind} {selector}={value:g}"
+    return None
+
+
 def pending_impact_observations(
     existing: list[dict[str, Any]],
     structural_report: dict[str, Any],
     runtime_report: dict[str, Any] | None,
     now_ms: int,
+    rsi_report: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[tuple[str, str]]]:
     """Build post-watch observations from fresh deterministic bench output.
 
     Only contracts owned by this miner are interpreted. Unknown metrics remain
     pending for their own evaluator rather than being guessed here.
     """
-    finding_ids = {
-        str(finding["id"])
-        for finding in structural_report.get("findings") or []
-        if finding.get("id")
-    }
-    runtime_dims = (runtime_report or {}).get("dims") or {}
-    runtime_meta = (runtime_report or {}).get("meta") or {}
-    runtime_samples = runtime_meta.get("runs")
-    if not isinstance(runtime_samples, (int, float)) or runtime_samples < 1:
-        runtime_samples = 1
-
     observations: list[dict[str, Any]] = []
     skipped: list[tuple[str, str]] = []
     for candidate in existing:
@@ -417,26 +531,18 @@ def pending_impact_observations(
             skipped.append((cid, f"observation window pending until {ready_at}"))
             continue
 
-        if metric.startswith("health.finding_present:"):
-            finding_id = metric.removeprefix("health.finding_present:")
-            observed = 1 if finding_id in finding_ids else 0
-            samples = 1
-            note = (
-                f"fresh health bench: finding {finding_id} "
-                f"{'still present' if observed else 'absent'}"
+        try:
+            resolved = resolve_impact_metric(
+                metric, structural_report, runtime_report, rsi_report
             )
-        elif metric.startswith("runtime.health.score:"):
-            dimension = metric.removeprefix("runtime.health.score:")
-            value = runtime_dims.get(dimension)
-            if not isinstance(value, (int, float)):
-                skipped.append((cid, f"runtime dimension unavailable: {dimension}"))
-                continue
-            observed = float(value)
-            samples = int(runtime_samples)
-            note = f"fresh runtime health bench: {dimension}={observed:g}"
-        else:
+        except ImpactMetricUnavailable as exc:
+            skipped.append((cid, str(exc)))
+            continue
+        if resolved is None:
             skipped.append((cid, f"metric owned by another evaluator: {metric or '?'}"))
             continue
+
+        observed, samples, note = resolved
 
         observations.append({
             "id": cid,
@@ -537,6 +643,33 @@ def run_runtime_bench(root: str, stderr: TextIO) -> dict[str, Any] | None:
         return None
 
 
+def run_rsi_bench(root: str, stderr: TextIO) -> dict[str, Any] | None:
+    """RSI Bench snapshot, only called for a pending rsi.bench.* contract."""
+    script = os.path.join(root, "scripts", "audit", "rsi-bench.py")
+    print("running RSI Bench…", file=stderr)
+    try:
+        proc = subprocess.run(
+            [sys.executable, script, "--format", "json"],
+            capture_output=True, text=True, cwd=root, check=False, timeout=600,
+        )
+        if proc.returncode != 0:
+            raise ValueError(proc.stderr[-200:] or f"rc={proc.returncode}")
+        return parse_leading_json(proc.stdout)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        print(f"RSI Bench unavailable — impact stays pending: {exc}", file=stderr)
+        return None
+
+
+def needs_rsi_bench(existing: list[dict[str, Any]]) -> bool:
+    return any(
+        (candidate.get("impactResult") or {}).get("status") == "pending"
+        and str((candidate.get("impactContract") or {}).get("metric") or "").startswith(
+            "rsi.bench."
+        )
+        for candidate in existing
+    )
+
+
 # --- CLI -------------------------------------------------------------------------
 
 
@@ -544,6 +677,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--report", help="pre-generated codebase-health-v2 JSON report path")
     parser.add_argument("--runtime-report", help="pre-generated runtime-health --json output path")
+    parser.add_argument("--rsi-report", help="pre-generated rsi-bench --format json report path")
     parser.add_argument("--url", default=os.environ.get("DENEB_GATEWAY_URL", DEFAULT_GATEWAY_URL),
                         help="gateway base URL (env DENEB_GATEWAY_URL)")
     parser.add_argument("--token", default=os.environ.get("DENEB_CLIENT_TOKEN", ""),
@@ -602,6 +736,15 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
         print(f"gateway unreachable — DRY-RUN continues WITHOUT dedup: {exc}", file=err)
         existing = []
 
+    rsi_report: dict[str, Any] | None = None
+    if args.rsi_report:
+        try:
+            rsi_report = _load_json_file(args.rsi_report)
+        except (OSError, ValueError) as exc:
+            print(f"RSI report unreadable — impact stays pending: {exc}", file=err)
+    elif needs_rsi_bench(existing):
+        rsi_report = run_rsi_bench(root, err)
+
     structural_sel, structural_skip = select_candidates(
         structural_candidates(report), existing, now_ms, max(args.max_structural, 0))
     runtime_sel, runtime_skip = select_candidates(
@@ -610,7 +753,7 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
     skipped = structural_skip + runtime_skip
 
     impact_observations, impact_skipped = pending_impact_observations(
-        existing, report, runtime, now_ms
+        existing, report, runtime, now_ms, rsi_report
     )
     impact_evaluated: list[dict[str, str]] = []
     impact_errors: list[str] = []
