@@ -238,7 +238,7 @@ class BaselineRatchetTests(unittest.TestCase):
             )
 
             self.assertEqual(load(path), migrated)
-        self.assertEqual(migrated["rubric_version"], "2.2.0")
+        self.assertEqual(migrated["rubric_version"], "2.2.1")
         self.assertEqual(migrated["overall"], 50.0)
         self.assertEqual(
             migrated["provenance"],

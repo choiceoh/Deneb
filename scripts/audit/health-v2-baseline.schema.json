@@ -18,7 +18,7 @@
   "properties": {
     "_keep_policy": { "type": "string", "minLength": 1 },
     "schema_version": { "const": 2 },
-    "rubric_version": { "const": "2.2.0" },
+    "rubric_version": { "const": "2.2.1" },
     "profile": { "enum": ["fast", "deep"] },
     "revision": { "type": "string", "minLength": 7 },
     "overall": { "type": "number", "minimum": 0, "maximum": 100 },
