@@ -1840,6 +1840,18 @@ class MiniappWireNullCompatibilityTest {
             field = "sites",
         ),
         nullContract(
+            name = "ProjectSiteRow.kinds",
+            serializer = ProjectSiteRow.serializer(),
+            empty = ProjectSiteRow(),
+            field = "kinds",
+        ),
+        nullContract(
+            name = "ProjectSiteRow.capacity",
+            serializer = ProjectSiteRow.serializer(),
+            empty = ProjectSiteRow(),
+            field = "capacity",
+        ),
+        nullContract(
             name = "ProjectSitesOut.sites",
             serializer = ProjectSitesOut.serializer(),
             empty = ProjectSitesOut(),

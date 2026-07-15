@@ -436,6 +436,8 @@ export interface ProjectSiteRow {
   path?: string
   due?: string
   sites?: string[]
+  kinds?: string[]
+  capacity?: number
 }
 
 export interface ProjectSitesOut {

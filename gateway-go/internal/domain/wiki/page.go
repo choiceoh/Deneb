@@ -128,7 +128,11 @@ type Frontmatter struct {
 	// vocabulary are dropped at parse/render (normalizeKinds), legacy flat
 	// values auto-upgrade (모듈→기자재/모듈, 시공·개발→태양광), and a bare
 	// parent folds away when its child is present. 대표페이지 전용.
-	Kinds      []string
+	Kinds []string
+	// Capacity is the project's 용량 in MW (megawatts) — the deal's scale. The
+	// 현장 지도 sizes each pin by it. 0 = unrecorded (drawn at a base size).
+	// 대표페이지 전용.
+	Capacity   float64
 	Created    string  // YYYY-MM-DD
 	Updated    string  // YYYY-MM-DD
 	Due        string  // YYYY-MM-DD — upcoming deadline (payment due, delivery, milestone); empty if none
@@ -213,6 +217,9 @@ func (p *Page) Render() []byte {
 	}
 	if kinds := normalizeKinds(p.Meta.Kinds); len(kinds) > 0 {
 		buf.WriteString("kinds: [" + strings.Join(sanitizeFlowItems(kinds), ", ") + "]\n")
+	}
+	if p.Meta.Capacity > 0 {
+		buf.WriteString("capacity: " + strconv.FormatFloat(p.Meta.Capacity, 'g', -1, 64) + "\n")
 	}
 	if p.Meta.Created != "" {
 		buf.WriteString("created: " + sanitizeScalar(p.Meta.Created) + "\n")
@@ -619,6 +626,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Sites = normalizeSites(parseFlowArray(val))
 		case "kinds":
 			fm.Kinds = normalizeKinds(parseFlowArray(val))
+		case "capacity":
+			fm.Capacity, _ = strconv.ParseFloat(strings.TrimSpace(val), 64) // best-effort: defaults to zero
 		case "created":
 			fm.Created = val
 		case "updated":

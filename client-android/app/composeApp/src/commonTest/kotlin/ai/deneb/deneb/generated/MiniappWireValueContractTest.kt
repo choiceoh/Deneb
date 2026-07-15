@@ -1931,6 +1931,16 @@ class MiniappWireValueContractTest {
                     value = stringList,
                     expectation = Expectation.Exact,
                 ),
+                fieldValue(
+                    name = "kinds",
+                    value = stringList,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "capacity",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
             ),
             invalidField = "project",
             invalidValue = JsonObject(emptyMap()),

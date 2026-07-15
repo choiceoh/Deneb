@@ -316,7 +316,7 @@ class MiniappWireDescriptorContractTest {
             name = "ProjectSiteRow",
             serializer = ProjectSiteRow.serializer(),
             empty = ProjectSiteRow(),
-            fields = listOf("project", "client", "path", "due", "sites"),
+            fields = listOf("project", "client", "path", "due", "sites", "kinds", "capacity"),
         ),
         contract(
             name = "ProjectSitesOut",

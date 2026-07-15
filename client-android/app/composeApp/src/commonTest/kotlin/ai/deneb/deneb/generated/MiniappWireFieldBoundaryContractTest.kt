@@ -2461,6 +2461,22 @@ class MiniappWireFieldBoundaryContractTest {
             expectation = Expectation.Exact,
         ),
         fieldContract(
+            name = "ProjectSiteRow.kinds",
+            serializer = ProjectSiteRow.serializer(),
+            field = "kinds",
+            valid = stringList,
+            invalid = JsonObject(mapOf("not" to JsonPrimitive("a-list"))),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
+            name = "ProjectSiteRow.capacity",
+            serializer = ProjectSiteRow.serializer(),
+            field = "capacity",
+            valid = JsonPrimitive(-12345.6789),
+            invalid = JsonPrimitive("not-a-double"),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
             name = "ProjectSitesOut.sites",
             serializer = ProjectSitesOut.serializer(),
             field = "sites",

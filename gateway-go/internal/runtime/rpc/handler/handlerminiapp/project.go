@@ -107,11 +107,13 @@ type ProjectDigestsOut struct {
 //
 //deneb:wire
 type ProjectSiteRow struct {
-	Project string   `json:"project"`
-	Client  string   `json:"client,omitempty"`
-	Path    string   `json:"path,omitempty"`
-	Due     string   `json:"due,omitempty"`
-	Sites   []string `json:"sites"`
+	Project  string   `json:"project"`
+	Client   string   `json:"client,omitempty"`
+	Path     string   `json:"path,omitempty"`
+	Due      string   `json:"due,omitempty"`
+	Sites    []string `json:"sites"`
+	Kinds    []string `json:"kinds,omitempty"`
+	Capacity float64  `json:"capacity,omitempty"`
 }
 
 // ProjectSitesOut is the miniapp.project.sites response.
@@ -166,11 +168,13 @@ func projectSites(deps ProjectDeps) rpcutil.HandlerFunc {
 		rows := make([]ProjectSiteRow, 0, len(sites))
 		for _, s := range sites {
 			rows = append(rows, ProjectSiteRow{
-				Project: s.Name,
-				Client:  s.Client,
-				Path:    s.Path,
-				Due:     s.Due,
-				Sites:   s.Sites,
+				Project:  s.Name,
+				Client:   s.Client,
+				Path:     s.Path,
+				Due:      s.Due,
+				Sites:    s.Sites,
+				Kinds:    s.Kinds,
+				Capacity: s.Capacity,
 			})
 		}
 		return rpcutil.RespondOK(req.ID, ProjectSitesOut{Sites: rows})

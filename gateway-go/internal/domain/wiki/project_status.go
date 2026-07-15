@@ -34,13 +34,14 @@ const maxProjectStatusBullets = 8
 
 // ProjectRef names a real project bucket via its 대표페이지.
 type ProjectRef struct {
-	Name    string   // display name (page Title, else the project folder name)
-	Path    string   // 대표페이지 path, e.g. "프로젝트/영산고/대표.md" (legacy: "프로젝트/영산고.md")
-	Summary string   // page Meta.Summary — one-line description for pickers
-	Code    string   // page Meta.Code — frozen project identity, "" if unset
-	Client  string   // page Meta.Client — 거래처 (top grouping level + matching key), "" if unset
-	Sites   []string // page Meta.Sites — canonical 현장 admin paths (matching keys)
-	Kinds   []string // page Meta.Kinds — 특성 enum (시공/모듈/케이블/… 복수)
+	Name     string   // display name (page Title, else the project folder name)
+	Path     string   // 대표페이지 path, e.g. "프로젝트/영산고/대표.md" (legacy: "프로젝트/영산고.md")
+	Summary  string   // page Meta.Summary — one-line description for pickers
+	Code     string   // page Meta.Code — frozen project identity, "" if unset
+	Client   string   // page Meta.Client — 거래처 (top grouping level + matching key), "" if unset
+	Sites    []string // page Meta.Sites — canonical 현장 admin paths (matching keys)
+	Kinds    []string // page Meta.Kinds — 에너지원/특성 two-level enum (태양광/루프탑 …, 복수)
+	Capacity float64  // page Meta.Capacity — 용량 in MW, 0 if unrecorded
 }
 
 // KnownProjects lists the real projects by their 대표페이지 (see project_layout.go;
@@ -89,6 +90,7 @@ func (s *Store) knownProjects() []ProjectRef {
 			ref.Client = strings.TrimSpace(page.Meta.Client)
 			ref.Sites = page.Meta.Sites
 			ref.Kinds = page.Meta.Kinds
+			ref.Capacity = page.Meta.Capacity
 		}
 		refs = append(refs, ref)
 	}
@@ -114,11 +116,13 @@ type ProjectStatus struct {
 // whether or not it has a 현재 상태 section — so the map shows all current sites,
 // not just projects that have a progress digest.
 type ProjectSite struct {
-	Name   string   // display name (page Title, else folder name)
-	Client string   // page Meta.Client — 거래처, "" if unset
-	Path   string   // 대표페이지 path so a tap opens the wiki
-	Due    string   // page Meta.Due — imminent deadline, "" if none
-	Sites  []string // page Meta.Sites — canonical 현장 admin paths
+	Name     string   // display name (page Title, else folder name)
+	Client   string   // page Meta.Client — 거래처, "" if unset
+	Path     string   // 대표페이지 path so a tap opens the wiki
+	Due      string   // page Meta.Due — imminent deadline, "" if none
+	Sites    []string // page Meta.Sites — canonical 현장 admin paths
+	Kinds    []string // page Meta.Kinds — 에너지원/특성 (태양광/루프탑 …); map colors by 에너지원, shapes by 특성
+	Capacity float64  // page Meta.Capacity — 용량 in MW; the map sizes pins by this
 }
 
 // ProjectSites returns every active project (knownProjects) that carries ≥1 현장,
@@ -130,7 +134,7 @@ func (s *Store) ProjectSites() ([]ProjectSite, error) {
 		if len(ref.Sites) == 0 {
 			continue
 		}
-		row := ProjectSite{Name: ref.Name, Client: ref.Client, Path: ref.Path, Sites: ref.Sites}
+		row := ProjectSite{Name: ref.Name, Client: ref.Client, Path: ref.Path, Sites: ref.Sites, Kinds: ref.Kinds, Capacity: ref.Capacity}
 		if page, err := s.ReadPage(ref.Path); err == nil && page != nil {
 			row.Due = strings.TrimSpace(page.Meta.Due)
 		}

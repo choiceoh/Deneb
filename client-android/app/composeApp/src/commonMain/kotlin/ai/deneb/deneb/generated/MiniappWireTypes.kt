@@ -529,6 +529,8 @@ data class ProjectSiteRow(
     val path: String = "",
     val due: String = "",
     val sites: List<String> = emptyList(),
+    val kinds: List<String> = emptyList(),
+    val capacity: Double = 0.0,
 )
 
 @Immutable
