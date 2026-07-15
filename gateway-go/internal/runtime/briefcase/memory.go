@@ -11,7 +11,7 @@ import (
 	"time"
 
 	casepack "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 )
 
 // denebMemoryMirror projects currently visible wiki/diary records plus explicit

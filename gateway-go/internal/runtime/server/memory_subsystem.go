@@ -4,7 +4,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mailflow"
 )

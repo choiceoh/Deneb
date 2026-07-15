@@ -15,7 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	domskills "github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolreg"

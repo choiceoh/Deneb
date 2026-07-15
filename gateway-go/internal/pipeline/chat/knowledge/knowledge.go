@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 

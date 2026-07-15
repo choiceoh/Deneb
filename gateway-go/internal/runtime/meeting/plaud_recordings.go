@@ -36,7 +36,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"

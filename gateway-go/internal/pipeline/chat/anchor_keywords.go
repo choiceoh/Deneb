@@ -1,7 +1,7 @@
 package chat
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 )
 
 // anchorMinImportance gates which wiki Tier1 pages become Polaris compaction

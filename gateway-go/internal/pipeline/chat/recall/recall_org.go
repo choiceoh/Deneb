@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 )
 
 // recallOrgQuota caps org rows per turn (mirrors recallFileQuota: a source with

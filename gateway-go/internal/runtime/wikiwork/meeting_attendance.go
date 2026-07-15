@@ -15,7 +15,7 @@ package wikiwork
 import (
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 )
 
 // RecordMeetingAttendanceByPath appends a silent 회의 op to the 로그.md of the

@@ -15,7 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/linkenrichment"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"

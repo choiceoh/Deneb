@@ -17,7 +17,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 )
 
 // ToolDealLedger returns the deal_ledger tool over the wiki store's typed

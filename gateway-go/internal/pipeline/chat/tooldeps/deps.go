@@ -13,7 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
