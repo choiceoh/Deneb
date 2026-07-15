@@ -115,6 +115,24 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("entry"),
         ),
         contract(
+            name = "GroupwareApprovalActResponse",
+            serializer = GroupwareApprovalActResponse.serializer(),
+            empty = GroupwareApprovalActResponse(),
+            fields = listOf("ok", "docId", "decision", "result"),
+        ),
+        contract(
+            name = "GroupwareApprovalRow",
+            serializer = GroupwareApprovalRow.serializer(),
+            empty = GroupwareApprovalRow(),
+            fields = listOf("docId", "title", "docNo", "drafter", "date", "status", "folder", "canAct"),
+        ),
+        contract(
+            name = "GroupwareApprovalsListResponse",
+            serializer = GroupwareApprovalsListResponse.serializer(),
+            empty = GroupwareApprovalsListResponse(),
+            fields = listOf("approvals", "folder"),
+        ),
+        contract(
             name = "LaneOut",
             serializer = LaneOut.serializer(),
             empty = LaneOut(),
