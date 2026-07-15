@@ -1756,12 +1756,6 @@ class MiniappWireNullCompatibilityTest {
             field = "refs",
         ),
         nullContract(
-            name = "ProjectDigestRow.sites",
-            serializer = ProjectDigestRow.serializer(),
-            empty = ProjectDigestRow(),
-            field = "sites",
-        ),
-        nullContract(
             name = "ProjectDigestsOut.digests",
             serializer = ProjectDigestsOut.serializer(),
             empty = ProjectDigestsOut(),
@@ -1814,6 +1808,42 @@ class MiniappWireNullCompatibilityTest {
             serializer = ProjectRef.serializer(),
             empty = ProjectRef(),
             field = "summary",
+        ),
+        nullContract(
+            name = "ProjectSiteRow.project",
+            serializer = ProjectSiteRow.serializer(),
+            empty = ProjectSiteRow(),
+            field = "project",
+        ),
+        nullContract(
+            name = "ProjectSiteRow.client",
+            serializer = ProjectSiteRow.serializer(),
+            empty = ProjectSiteRow(),
+            field = "client",
+        ),
+        nullContract(
+            name = "ProjectSiteRow.path",
+            serializer = ProjectSiteRow.serializer(),
+            empty = ProjectSiteRow(),
+            field = "path",
+        ),
+        nullContract(
+            name = "ProjectSiteRow.due",
+            serializer = ProjectSiteRow.serializer(),
+            empty = ProjectSiteRow(),
+            field = "due",
+        ),
+        nullContract(
+            name = "ProjectSiteRow.sites",
+            serializer = ProjectSiteRow.serializer(),
+            empty = ProjectSiteRow(),
+            field = "sites",
+        ),
+        nullContract(
+            name = "ProjectSitesOut.sites",
+            serializer = ProjectSitesOut.serializer(),
+            empty = ProjectSitesOut(),
+            field = "sites",
         ),
         nullContract(
             name = "PromptDetailOut.id",

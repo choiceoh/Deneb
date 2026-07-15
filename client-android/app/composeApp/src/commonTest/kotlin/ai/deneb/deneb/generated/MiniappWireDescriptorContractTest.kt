@@ -292,7 +292,7 @@ class MiniappWireDescriptorContractTest {
             name = "ProjectDigestRow",
             serializer = ProjectDigestRow.serializer(),
             empty = ProjectDigestRow(),
-            fields = listOf("project", "headline", "bullets", "due", "updatedAtMs", "path", "code", "client", "refs", "sites"),
+            fields = listOf("project", "headline", "bullets", "due", "updatedAtMs", "path", "code", "client", "refs"),
         ),
         contract(
             name = "ProjectDigestsOut",
@@ -311,6 +311,18 @@ class MiniappWireDescriptorContractTest {
             serializer = ProjectRef.serializer(),
             empty = ProjectRef(),
             fields = listOf("path", "title", "summary"),
+        ),
+        contract(
+            name = "ProjectSiteRow",
+            serializer = ProjectSiteRow.serializer(),
+            empty = ProjectSiteRow(),
+            fields = listOf("project", "client", "path", "due", "sites"),
+        ),
+        contract(
+            name = "ProjectSitesOut",
+            serializer = ProjectSitesOut.serializer(),
+            empty = ProjectSitesOut(),
+            fields = listOf("sites"),
         ),
         contract(
             name = "PromptDetailOut",

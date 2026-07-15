@@ -107,7 +107,37 @@ type ProjectStatus struct {
 	Due       string   // page Meta.Due — imminent deadline, "" if none
 	Bullets   []string // the "## 현재 상태" lines, newest first
 	UpdatedMs int64    // page Meta.Updated (YYYY-MM-DD) as epoch millis, 0 if unparseable
-	Sites     []string // page Meta.Sites — 현장 (canonical 광역약칭 시/군 …); matching keys for the 현장 지도
+}
+
+// ProjectSite is one active project's 현장 for the 현장 지도. Unlike ProjectStatus
+// (digests), this is emitted for EVERY active 대표페이지 that carries Sites —
+// whether or not it has a 현재 상태 section — so the map shows all current sites,
+// not just projects that have a progress digest.
+type ProjectSite struct {
+	Name   string   // display name (page Title, else folder name)
+	Client string   // page Meta.Client — 거래처, "" if unset
+	Path   string   // 대표페이지 path so a tap opens the wiki
+	Due    string   // page Meta.Due — imminent deadline, "" if none
+	Sites  []string // page Meta.Sites — canonical 현장 admin paths
+}
+
+// ProjectSites returns every active project (knownProjects) that carries ≥1 현장,
+// regardless of whether it has a 현재 상태 digest. Sorted by name.
+func (s *Store) ProjectSites() ([]ProjectSite, error) {
+	refs := s.knownProjects()
+	out := make([]ProjectSite, 0, len(refs))
+	for _, ref := range refs {
+		if len(ref.Sites) == 0 {
+			continue
+		}
+		row := ProjectSite{Name: ref.Name, Client: ref.Client, Path: ref.Path, Sites: ref.Sites}
+		if page, err := s.ReadPage(ref.Path); err == nil && page != nil {
+			row.Due = strings.TrimSpace(page.Meta.Due)
+		}
+		out = append(out, row)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
 }
 
 // ProjectStatuses returns each project that has a non-empty 현재 상태 section,
@@ -135,7 +165,6 @@ func (s *Store) ProjectStatuses() ([]ProjectStatus, error) {
 			Due:       strings.TrimSpace(page.Meta.Due),
 			Bullets:   bullets,
 			UpdatedMs: dateToMillis(page.Meta.Updated),
-			Sites:     page.Meta.Sites,
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool {

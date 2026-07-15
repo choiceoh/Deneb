@@ -1829,11 +1829,6 @@ class MiniappWireValueContractTest {
                     value = stringList,
                     expectation = Expectation.Exact,
                 ),
-                fieldValue(
-                    name = "sites",
-                    value = stringList,
-                    expectation = Expectation.Exact,
-                ),
             ),
             invalidField = "project",
             invalidValue = JsonObject(emptyMap()),
@@ -1906,6 +1901,52 @@ class MiniappWireValueContractTest {
             ),
             invalidField = "path",
             invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "ProjectSiteRow",
+            serializer = ProjectSiteRow.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "project",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "client",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "path",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "due",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "sites",
+                    value = stringList,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "project",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "ProjectSitesOut",
+            serializer = ProjectSitesOut.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "sites",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+            ),
+            invalidField = "sites",
+            invalidValue = JsonObject(mapOf("not" to JsonPrimitive("a-list"))),
         ),
         wireContract(
             name = "PromptDetailOut",

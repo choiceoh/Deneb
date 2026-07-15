@@ -495,7 +495,6 @@ data class ProjectDigestRow(
     val code: String = "",
     val client: String = "",
     val refs: List<String> = emptyList(),
-    val sites: List<String> = emptyList(),
 )
 
 @Immutable
@@ -520,6 +519,22 @@ data class ProjectRef(
     val path: String = "",
     val title: String = "",
     val summary: String = "",
+)
+
+@Immutable
+@Serializable
+data class ProjectSiteRow(
+    val project: String = "",
+    val client: String = "",
+    val path: String = "",
+    val due: String = "",
+    val sites: List<String> = emptyList(),
+)
+
+@Immutable
+@Serializable
+data class ProjectSitesOut(
+    val sites: List<ProjectSiteRow> = emptyList(),
 )
 
 @Immutable

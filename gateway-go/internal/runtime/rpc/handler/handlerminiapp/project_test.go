@@ -11,11 +11,16 @@ import (
 
 type fakeProjectStatusSource struct {
 	statuses []wiki.ProjectStatus
+	sites    []wiki.ProjectSite
 	err      error
 }
 
 func (f fakeProjectStatusSource) ProjectStatuses() ([]wiki.ProjectStatus, error) {
 	return f.statuses, f.err
+}
+
+func (f fakeProjectStatusSource) ProjectSites() ([]wiki.ProjectSite, error) {
+	return f.sites, f.err
 }
 
 func projectDepsFor(src ProjectStatusSource, factoryErr error) ProjectDeps {
@@ -83,5 +88,40 @@ func TestProjectDigestsPreservesOrderAndMapsStatusesToRows(t *testing.T) {
 	}
 	if len(ys.Bullets) != 2 || ys.UpdatedAtMs != 100 {
 		t.Errorf("영산고 row = %+v, want 2 bullets and updatedAtMs=100", ys)
+	}
+}
+
+func TestProjectSitesReturnsUnavailableWhenWikiFactoryErrors(t *testing.T) {
+	resp := projectSites(projectDepsFor(nil, errors.New("wiki disabled")))(authedCtx(), reqWith(t, "miniapp.project.sites", nil))
+	if resp.OK {
+		t.Fatalf("expected UNAVAILABLE when the wiki factory errors")
+	}
+}
+
+func TestProjectSitesMapsActiveProjectsWithSitesToRows(t *testing.T) {
+	// Every active project carrying Sites is emitted (whether or not it has a
+	// 현재 상태 digest), mapped ProjectSite → wire row.
+	src := fakeProjectStatusSource{sites: []wiki.ProjectSite{
+		{Name: "영산고", Client: "영산", Path: "프로젝트/영산고/대표.md", Due: "2026-06-30", Sites: []string{"전남 해남군 산이면"}},
+		{Name: "군산수산리", Path: "프로젝트/군산수산리.md", Sites: []string{"전북 군산시 옥구읍 수산리", "전북 군산시 옥서면"}},
+	}}
+	resp := projectSites(projectDepsFor(src, nil))(authedCtx(), reqWith(t, "miniapp.project.sites", nil))
+	if !resp.OK {
+		t.Fatalf("expected OK, got code=%s", resp.Error.Code)
+	}
+	var got ProjectSitesOut
+	decode(t, resp, &got)
+	if len(got.Sites) != 2 {
+		t.Fatalf("sites = %d, want 2", len(got.Sites))
+	}
+	first := got.Sites[0]
+	if first.Project != "영산고" || first.Client != "영산" || first.Due != "2026-06-30" || first.Path != "프로젝트/영산고/대표.md" {
+		t.Errorf("영산고 row = %+v, unexpected", first)
+	}
+	if len(first.Sites) != 1 || first.Sites[0] != "전남 해남군 산이면" {
+		t.Errorf("영산고 sites = %v, want [전남 해남군 산이면]", first.Sites)
+	}
+	if len(got.Sites[1].Sites) != 2 {
+		t.Errorf("군산수산리 sites = %v, want 2", got.Sites[1].Sites)
 	}
 }

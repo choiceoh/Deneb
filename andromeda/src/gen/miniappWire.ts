@@ -410,7 +410,6 @@ export interface ProjectDigestRow {
   code?: string
   client?: string
   refs?: string[]
-  sites?: string[]
 }
 
 export interface ProjectDigestsOut {
@@ -429,6 +428,18 @@ export interface ProjectRef {
   path?: string
   title?: string
   summary?: string
+}
+
+export interface ProjectSiteRow {
+  project?: string
+  client?: string
+  path?: string
+  due?: string
+  sites?: string[]
+}
+
+export interface ProjectSitesOut {
+  sites?: ProjectSiteRow[]
 }
 
 export interface PromptDetailOut {

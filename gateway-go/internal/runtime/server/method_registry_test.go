@@ -181,6 +181,9 @@ var requiredMethods = []string{
 	// Server-side project↔item matching (linked mail/work-feed/notebook IDs);
 	// registers with project.digests under the same wiki factory.
 	"miniapp.project.linked",
+	// Active projects that carry a 현장, for the 현장 지도 (all sites, not just
+	// projects with a progress digest); same wiki factory.
+	"miniapp.project.sites",
 	// Org chart editor — Load/SavePath are always wired (org.Load / ResolvePath),
 	// so these register unconditionally.
 	"miniapp.org.get",

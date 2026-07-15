@@ -25,6 +25,7 @@ import (
 // the wiki store (*wiki.Store.ProjectStatuses).
 type ProjectStatusSource interface {
 	ProjectStatuses() ([]wiki.ProjectStatus, error)
+	ProjectSites() ([]wiki.ProjectSite, error)
 }
 
 // ProjectLinkedNotebook / ProjectLinkedWorkItem are the minimal item projections
@@ -89,10 +90,6 @@ type ProjectDigestRow struct {
 	// explicitly-linked pages), resolved server-side from the wiki graph so the
 	// client can link items that reference an owned page, not just the 대표페이지.
 	Refs []string `json:"refs,omitempty"`
-	// Sites are the project's 현장 as canonical administrative paths
-	// ("광역약칭 시/군 읍/면/동", e.g. "전북 군산시 옥구읍 수산리"), for the 현장 지도.
-	// The first token is the 시도 and the second the 시군구 — the map keys on those.
-	Sites []string `json:"sites,omitempty"`
 }
 
 // ProjectDigestsOut is the miniapp.project.digests response: every project that
@@ -101,6 +98,27 @@ type ProjectDigestRow struct {
 //deneb:wire
 type ProjectDigestsOut struct {
 	Digests []ProjectDigestRow `json:"digests"`
+}
+
+// ProjectSiteRow is one active project's 현장 for the 현장 지도. Emitted for every
+// active 대표페이지 carrying Sites (unlike digests, which require a 현재 상태
+// section), so the map represents all current sites. Sites are canonical
+// administrative paths ("광역약칭 시/군 …"); the map keys on the first two tokens.
+//
+//deneb:wire
+type ProjectSiteRow struct {
+	Project string   `json:"project"`
+	Client  string   `json:"client,omitempty"`
+	Path    string   `json:"path,omitempty"`
+	Due     string   `json:"due,omitempty"`
+	Sites   []string `json:"sites"`
+}
+
+// ProjectSitesOut is the miniapp.project.sites response.
+//
+//deneb:wire
+type ProjectSitesOut struct {
+	Sites []ProjectSiteRow `json:"sites"`
 }
 
 // ProjectLinkedOut is the miniapp.project.linked response: the IDs of items
@@ -128,7 +146,35 @@ func ProjectMethods(deps ProjectDeps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
 		"miniapp.project.digests": projectDigests(deps),
 		"miniapp.project.linked":  projectLinked(deps),
+		"miniapp.project.sites":   projectSites(deps),
 	}
+}
+
+// projectSites lists every active project that carries a 현장, for the 현장 지도.
+// Unlike digests it does not require a 현재 상태 section, so the map shows all
+// current sites — quiet/new projects included.
+func projectSites(deps ProjectDeps) rpcutil.HandlerFunc {
+	return authenticated(func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		src, err := deps.Wiki()
+		if err != nil {
+			return rpcerr.WrapUnavailable("project sites unavailable", err).Response(req.ID)
+		}
+		sites, err := src.ProjectSites()
+		if err != nil {
+			return rpcerr.WrapUnavailable("project sites unavailable", err).Response(req.ID)
+		}
+		rows := make([]ProjectSiteRow, 0, len(sites))
+		for _, s := range sites {
+			rows = append(rows, ProjectSiteRow{
+				Project: s.Name,
+				Client:  s.Client,
+				Path:    s.Path,
+				Due:     s.Due,
+				Sites:   s.Sites,
+			})
+		}
+		return rpcutil.RespondOK(req.ID, ProjectSitesOut{Sites: rows})
+	})
 }
 
 // projectLinked resolves which items (mail/work-feed/notebook) are linked to one
@@ -229,7 +275,6 @@ func projectDigests(deps ProjectDeps) rpcutil.HandlerFunc {
 				Code:        st.Code,
 				Client:      st.Client,
 				Refs:        st.Refs,
-				Sites:       st.Sites,
 			})
 		}
 		return rpcutil.RespondOK(req.ID, ProjectDigestsOut{Digests: rows})

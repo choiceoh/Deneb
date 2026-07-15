@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { ProjectDigestRow } from "@/types";
+import type { ProjectSiteRow } from "@/types";
 import { serializeList } from "@/aiText";
 import { useCachedList } from "@/cachedList";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
@@ -25,12 +25,16 @@ interface Pin {
   due?: string;
 }
 
-// Days until a YYYY-MM-DD due date; null when absent/unparseable.
+// Whole calendar days until a YYYY-MM-DD due date; null when absent/unparseable.
+// Compared date-to-date (both at local midnight) so a project due *today* reads
+// as 0 (임박), not a fraction of a day negative (지연).
 function dueDays(due?: string): number | null {
-  if (!due) return null;
-  const t = Date.parse(`${due}T00:00:00`);
-  if (Number.isNaN(t)) return null;
-  return Math.floor((t - Date.now()) / 86_400_000);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((due ?? "").trim());
+  if (!m) return null;
+  const dueDate = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.round((dueDate - today) / 86_400_000);
 }
 
 function urgencyOf(due?: string): Pin["urgency"] {
@@ -47,13 +51,33 @@ const URGENCY_COLOR: Record<Pin["urgency"], string> = {
   normal: "var(--accent)",
 };
 
-// Resolve a site string to map coords: 시군구 centroid, else 시도 centroid, else
-// null (unplaceable). Returns whether it matched at the finer 시군구 level.
+// The 2013 boundary asset predates a few district renames/splits; alias those
+// current 시군구 to the nearest legacy centroid so their 현장 still land in-area.
+const DISTRICT_ALIAS: Record<string, string> = {
+  "인천|미추홀구": "인천|남구",
+  "충북|청주시서원구": "충북|청주시흥덕구",
+  "충북|청주시청원구": "충북|청주시상당구",
+};
+
+function lookupSigungu(key: string): [number, number] | undefined {
+  return SIGUNGU[key] ?? SIGUNGU[DISTRICT_ALIAS[key] ?? ""];
+}
+
+// Resolve a site string to map coords. Warded cities are keyed combined in the
+// centroid table (e.g. "경기|성남시분당구"), so try 시+구 first, then the plain
+// 시/군, then the 시도 centroid; null when even the 시도 doesn't match.
 function resolveSite(site: string): [number, number] | null {
   const toks = site.trim().split(/\s+/);
-  const [sido, sigungu] = toks;
+  const sido = toks[0];
   if (!sido) return null;
-  if (sigungu && SIGUNGU[`${sido}|${sigungu}`]) return SIGUNGU[`${sido}|${sigungu}`];
+  if (toks[1] && toks[2]) {
+    const ward = lookupSigungu(`${sido}|${toks[1]}${toks[2]}`);
+    if (ward) return ward;
+  }
+  if (toks[1]) {
+    const city = lookupSigungu(`${sido}|${toks[1]}`);
+    if (city) return city;
+  }
   return PROVINCE_CENTROID[sido] ?? null;
 }
 
@@ -62,7 +86,7 @@ interface Placed {
   unplaced: { site: string; project: string }[];
 }
 
-function placeSites(rows: ProjectDigestRow[]): Placed {
+function placeSites(rows: ProjectSiteRow[]): Placed {
   const pins: Pin[] = [];
   const unplaced: { site: string; project: string }[] = [];
   const seen = new Map<string, number>(); // coord key → how many already there (jitter)
@@ -98,7 +122,7 @@ function placeSites(rows: ProjectDigestRow[]): Placed {
 
 export function SiteMapPane() {
   const { connected, openWiki } = useWorkspace();
-  const { result, query } = useCachedList<ProjectDigestRow>("progress", connected);
+  const { result, query } = useCachedList<ProjectSiteRow>("sitemap", connected);
   const rows = result?.data ?? [];
 
   const { pins, unplaced } = useMemo(() => placeSites(rows), [rows]);
@@ -110,7 +134,7 @@ export function SiteMapPane() {
   const aiFull = unplaced.length
     ? `${aiText}\n\n미배치(주소 매칭 실패) ${unplaced.length}건: ${unplaced.map((u) => u.site).join(", ")}`
     : aiText;
-  useRegisterPane(undefined, aiFull);
+  useRegisterPane("sitemap", aiFull);
 
   const soon = pins.filter((p) => p.urgency !== "normal").length;
 
@@ -125,7 +149,7 @@ export function SiteMapPane() {
         </span>
       </div>
 
-      <GridNotice query={query} count={rows.length} empty="현장이 있는 프로젝트가 없습니다.">
+      <GridNotice query={query} count={pins.length + unplaced.length} empty="현장이 있는 프로젝트가 없습니다.">
         <div
           className="fade-up"
           style={{
