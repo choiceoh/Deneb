@@ -137,6 +137,12 @@ internal val BROWSER_AD_HOST_SUFFIXES: Set<String> = setOf(
     "cdn.segment.com",
     "api.segment.io",
     "cdn.segment.io",
+    // WordPress Jetpack stats (eurasiantimes.com Newspaper theme, etc.)
+    "stats.wp.com",
+    "pixel.wp.com",
+    // Video / native stacks listed in eurasiantimes.com ads.txt
+    "vdo.ai",
+    "atlas5.co",
 )
 
 /** Slash-bounded path segments that mark ad creatives / delivery.

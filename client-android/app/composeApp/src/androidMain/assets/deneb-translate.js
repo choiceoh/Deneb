@@ -85,6 +85,8 @@
     '.single-post',
     '.newsletter-post',
     '[data-testid="post-content"]',
+    // tagDiv Newspaper (eurasiantimes.com) — <article> also wraps share/related chrome
+    '.td-post-content',
     'article',
     'main',
     '[role="main"]',
@@ -104,7 +106,7 @@
     '#main'
   ];
   // Leftover ad/CMP chrome after network blocking — never ship to DeepL.
-  var SKIP_SELECTOR = '.banner-full-story,.banner-block,.banner-block *,[id^="yandex_rtb"],[id^="adfox"],[id*="yandex_rtb"],.dle_b_floor_ad,.adsbygoogle,.taboola,[id^="taboola"],.consentframework,[class*="consentframework"],.subscribe-widget,[class*="subscribe-widget"],.paywall,[class*="paywall"],.modal-container,[data-testid="subscribe-widget"],.wp_rp_content,.related_post,.cat-post-widget,.category-posts-internal,[class*="yandex-rtb"],.ya-site-form';
+  var SKIP_SELECTOR = '.banner-full-story,.banner-block,.banner-block *,[id^="yandex_rtb"],[id^="adfox"],[id*="yandex_rtb"],.dle_b_floor_ad,.adsbygoogle,.taboola,[id^="taboola"],.consentframework,[class*="consentframework"],.subscribe-widget,[class*="subscribe-widget"],.paywall,[class*="paywall"],.modal-container,[data-testid="subscribe-widget"],.wp_rp_content,.related_post,.cat-post-widget,.category-posts-internal,[class*="yandex-rtb"],.ya-site-form,.td-a-rec,.td-g-rec,amp-embed,.td-post-sharing,.td-post-sharing-top,.td-post-sharing-bottom,.td-post-next-prev,.td_block_related_posts_mob,.td-related-row,.wp-gdpr-cookie-notice-content-wrap';
   var OBSERVE_OPTS = { childList: true, subtree: true, characterData: true };
 
   function translatable(text) {
