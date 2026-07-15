@@ -32,10 +32,11 @@ describe("resource registry", () => {
     expect(resourceDef("calendar-range").list).toBe("miniapp.calendar.list_range");
   });
 
-  it("registers the read-mostly resources (people/crons/workfeed)", () => {
-    for (const name of ["people", "crons", "workfeed"]) {
+  it("registers the read-mostly resources (people/crons/workfeed/approvals)", () => {
+    for (const name of ["people", "crons", "workfeed", "approvals"]) {
       expect(resourceDef(name).list).toMatch(/^miniapp\./);
     }
+    expect(resourceDef("approvals").list).toBe("miniapp.groupware.approvals.list");
   });
 
   it("wires notebook create, delete, and source pin RPCs", () => {

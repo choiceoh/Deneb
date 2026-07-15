@@ -66,6 +66,13 @@ export const RESOURCE_DEFS: ResourceDef[] = [
     remove: "miniapp.crons.remove",
   },
   { name: "workfeed", label: "피드", list: "miniapp.workfeed.list", listKey: "items" },
+  // 전자결재 — recent 전체 결재 (folder=total). Day-pager filters client-side.
+  {
+    name: "approvals",
+    label: "결재",
+    list: "miniapp.groupware.approvals.list",
+    listKey: "approvals",
+  },
   // Project progress digests (Deneb #2834) — a parameterless read, so it flows
   // straight into a grid/card pane like people/workfeed. Rows carry no id; the
   // pane keys on `path`/`project`.
@@ -175,6 +182,11 @@ export const WORKFEED_RPC = {
   answer: "miniapp.workfeed.answer",
   feedback: "miniapp.workfeed.feedback",
   rewrite: "miniapp.workfeed.rewrite",
+} as const;
+
+export const APPROVALS_RPC = {
+  list: "miniapp.groupware.approvals.list",
+  act: "miniapp.groupware.approvals.act",
 } as const;
 
 export const RESOURCE_MAP: Record<string, ResourceDef> = Object.fromEntries(RESOURCE_DEFS.map((r) => [r.name, r]));

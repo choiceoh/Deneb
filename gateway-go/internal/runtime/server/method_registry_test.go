@@ -200,6 +200,9 @@ var requiredMethods = []string{
 	"miniapp.contacts.list",
 	// 시장 시세 (miniapp.market.summary) — keyless cache fetcher is always wired.
 	"miniapp.market.summary",
+	// 전자결재 browse/act — always registered; FromEnv fails the call when unset.
+	"miniapp.groupware.approvals.list",
+	"miniapp.groupware.approvals.act",
 	// Single-topic background editor — registers whenever topics resolve
 	// (the test harness loads the real deneb.json topics map {"0":"업무"}).
 	"miniapp.topicdocs.read_current",

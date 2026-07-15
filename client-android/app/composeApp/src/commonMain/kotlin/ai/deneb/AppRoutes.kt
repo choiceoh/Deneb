@@ -71,6 +71,10 @@ data class DenebWiki(val path: String)
 object DenebPeople
 
 @Serializable
+@SerialName("deneb_approvals")
+object DenebApprovals
+
+@Serializable
 @SerialName("deneb_person")
 data class DenebPerson(val sender: String)
 

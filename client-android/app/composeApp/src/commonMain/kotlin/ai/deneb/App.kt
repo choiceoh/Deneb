@@ -5,6 +5,7 @@ package ai.deneb
 import ai.deneb.data.AppSettings
 import ai.deneb.data.DataRepository
 import ai.deneb.data.ThemeMode
+import ai.deneb.deneb.DenebApprovalsScreen
 import ai.deneb.deneb.DenebBrowserScreen
 import ai.deneb.deneb.DenebCalendarAddScreen
 import ai.deneb.deneb.DenebCalendarEventScreen
@@ -579,6 +580,15 @@ internal fun AppContent(
                                                 onBack = { navController.navigateUp() },
                                                 onOpenPerson = { sender -> navController.navigate(DenebPerson(sender)) },
                                                 onOpenWiki = { path -> navController.navigate(DenebWiki(path)) },
+                                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                            )
+                                        }
+                                    }
+                                    denebComposable<DenebApprovals> {
+                                        denebClient?.let { client ->
+                                            DenebApprovalsScreen(
+                                                client = client,
+                                                onBack = { navController.navigateUp() },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                                             )
                                         }

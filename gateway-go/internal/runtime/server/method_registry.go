@@ -36,6 +36,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
@@ -466,6 +467,25 @@ func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub) []map[string]rpcu
 		s.earlyProjectMethods(hub),
 		handlerminiapp.OrgMethods(s.orgDeps()),
 		minischedule.TodoMethods(minischedule.TodoDeps{Store: resolveLocalTodos(s.logger)}),
+		// 전자결재 browse/act — always registered; FromEnv fails the call with
+		// DEPENDENCY_FAILED when credentials are unset (same pattern as live
+		// work-feed chips calling ActApproval).
+		handlerminiapp.GroupwareApprovalsMethods(handlerminiapp.GroupwareApprovalsDeps{
+			List: func(ctx context.Context, folder string, limit int) ([]groupware.ApprovalSummary, error) {
+				cfg, ok := groupware.FromEnv()
+				if !ok {
+					return nil, fmt.Errorf("groupware credentials unset")
+				}
+				return groupware.ListApprovals(ctx, cfg, folder, limit)
+			},
+			Act: func(ctx context.Context, docID, decision, comment string) (string, error) {
+				cfg, ok := groupware.FromEnv()
+				if !ok {
+					return "", fmt.Errorf("groupware credentials unset")
+				}
+				return groupware.ActApproval(ctx, cfg, docID, decision, comment)
+			},
+		}),
 	}
 }
 
