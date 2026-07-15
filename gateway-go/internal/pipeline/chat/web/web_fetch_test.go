@@ -482,3 +482,74 @@ func TestSelectFetchURLsRespectsLimit(t *testing.T) {
 		t.Fatal("limit 0 should return nil")
 	}
 }
+
+func TestRankFetchCandidatesPrefersAnswerBoxAndSkipsSocial(t *testing.T) {
+	organic := []searchResult{
+		{URL: "https://www.facebook.com/post/1"},
+		{URL: "https://good.example/article"},
+		{URL: "https://pinterest.com/pin/9"},
+		{URL: "https://news.example/story"},
+	}
+	got := rankFetchCandidates("https://answer.example/box", organic, 3)
+	want := []string{
+		"https://answer.example/box",
+		"https://good.example/article",
+		"https://news.example/story",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}
+
+func TestSelectUsableFetchesSkipsErrorAndThin(t *testing.T) {
+	candidates := []string{
+		"https://a.example/err",
+		"https://b.example/thin",
+		"https://c.example/ok",
+		"https://d.example/ok2",
+	}
+	thin := "<metadata>\nSignals: js_required, empty_body\n</metadata>\n<content>\nshort\n</content>"
+	ok := "<metadata>\nSignals: serper_scrape\n</metadata>\n<content>\n" + strings.Repeat("body ", 100) + "\n</content>"
+	results := []searchFetchOutcome{
+		{content: formatFetchError(webFetchErr{Code: "http_403", Message: "forbidden"})},
+		{content: thin},
+		{content: ok},
+		{content: ok},
+	}
+	got := selectUsableFetches(candidates, results, 2)
+	if len(got) != 2 {
+		t.Fatalf("len=%d want 2: %+v", len(got), got)
+	}
+	if got[0].url != "https://c.example/ok" || got[1].url != "https://d.example/ok2" {
+		t.Fatalf("urls=%v %v", got[0].url, got[1].url)
+	}
+}
+
+func TestBuildSerperRequestAddsLocaleForHangul(t *testing.T) {
+	ko := buildSerperRequest("덴브 별", 5)
+	if ko.GL != "kr" || ko.HL != "ko" || ko.Num != 5 {
+		t.Fatalf("hangul request = %+v", ko)
+	}
+	en := buildSerperRequest("Deneb star", 3)
+	if en.GL != "" || en.HL != "" || en.Q != "Deneb star" {
+		t.Fatalf("ascii request = %+v", en)
+	}
+}
+
+func TestFetchCandidatePoolSize(t *testing.T) {
+	if got := fetchCandidatePoolSize(5, 2); got != 4 {
+		t.Fatalf("pool=%d want 4", got)
+	}
+	if got := fetchCandidatePoolSize(3, 2); got != 3 {
+		t.Fatalf("pool capped by count=%d", got)
+	}
+	if got := fetchCandidatePoolSize(10, 4); got != 5 {
+		t.Fatalf("pool capped at 5=%d", got)
+	}
+}
+

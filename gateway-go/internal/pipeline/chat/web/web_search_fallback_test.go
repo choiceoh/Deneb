@@ -59,12 +59,15 @@ func TestWebSearchWithURLsFallsThroughSerperFailureToBrave(t *testing.T) {
 		return []searchResult{{Title: "B", URL: "https://b.example/", Description: "d"}}, nil
 	}
 
-	out, urls, err := webSearchWithURLs(context.Background(), "q", 2)
+	out, results, answerLink, err := webSearchWithURLs(context.Background(), "q", 2)
 	if err != nil {
 		t.Fatalf("webSearchWithURLs: %v", err)
 	}
-	if len(urls) != 1 || urls[0] != "https://b.example/" {
-		t.Fatalf("urls=%v", urls)
+	if answerLink != "" {
+		t.Fatalf("answerLink=%q, want empty for Brave", answerLink)
+	}
+	if len(results) != 1 || results[0].URL != "https://b.example/" {
+		t.Fatalf("results=%v", results)
 	}
 	if !strings.Contains(out, "B") || !strings.Contains(out, "https://b.example/") {
 		t.Fatalf("unexpected output:\n%s", out)
