@@ -180,6 +180,47 @@ func (c *imapConn) uidSearch(criteria string) ([]string, error) {
 	return uids, nil
 }
 
+// sentDateKeyRe matches IMAP SENTSINCE/SENTBEFORE date keys. Maddy (and some
+// other servers) reject the whole SEARCH with NO when any message's Date
+// header is unparseable into ENVELOPE — which blanks Andromeda's day pager
+// (after:/before: → SENTSINCE/SENTBEFORE). Callers that can post-filter by
+// Date header should use uidSearchSentAware so one bad envelope can't take
+// the inbox down.
+var sentDateKeyRe = regexp.MustCompile(`(?i)\bSENT(?:SINCE|BEFORE)\s+\d{1,2}-[A-Za-z]{3}-\d{4}\b`)
+
+// stripSentDateCriteria drops SENTSINCE/SENTBEFORE keys. Empty remainder
+// becomes ALL so a pure day-window query still scans the mailbox.
+func stripSentDateCriteria(criteria string) (string, bool) {
+	if !sentDateKeyRe.MatchString(criteria) {
+		return criteria, false
+	}
+	stripped := strings.TrimSpace(sentDateKeyRe.ReplaceAllString(criteria, " "))
+	stripped = strings.Join(strings.Fields(stripped), " ")
+	if stripped == "" {
+		stripped = "ALL"
+	}
+	return stripped, true
+}
+
+// uidSearchSentAware tries criteria as-is. If the server rejects a search that
+// includes SENTSINCE/SENTBEFORE, it retries without those keys so the caller
+// can post-filter by Date header (see sentInHalfOpenRange).
+func (c *imapConn) uidSearchSentAware(criteria string) ([]string, error) {
+	uids, err := c.uidSearch(criteria)
+	if err == nil {
+		return uids, nil
+	}
+	stripped, changed := stripSentDateCriteria(criteria)
+	if !changed {
+		return nil, err
+	}
+	uids, err2 := c.uidSearch(stripped)
+	if err2 != nil {
+		return nil, fmt.Errorf("%w (sent-date fallback also failed: %v)", err, err2)
+	}
+	return uids, nil
+}
+
 // uidFetchMessages fetches full message bodies (BODY.PEEK[]) for the given UID
 // set (e.g. "1,4,9"). It preserves the returned UID for each FETCH entry so
 // higher-level repository code can re-open an already-listed message without a

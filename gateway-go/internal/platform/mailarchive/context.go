@@ -364,7 +364,7 @@ func searchContextMessagesLimited(ctx context.Context, c *imapConn, cfg Config, 
 		if err := c.examine(mailbox); err != nil {
 			continue
 		}
-		uids, err := c.uidSearch(criteria)
+		uids, err := c.uidSearchSentAware(criteria)
 		if err != nil {
 			continue
 		}
@@ -587,6 +587,27 @@ func filterSentOnOrAfter(msgs []ContextMessage, since time.Time) []ContextMessag
 		}
 	}
 	return out
+}
+
+// sentInHalfOpenRange reports whether dateHeader falls in [since, before) on
+// KST calendar days — the Gmail after:/before: day-pager window. Unparseable
+// dates are excluded (they can't be bucketed onto a day the user asked for).
+func sentInHalfOpenRange(dateHeader string, since, before time.Time) bool {
+	if since.IsZero() && before.IsZero() {
+		return true
+	}
+	t := mailbody.ParseMailDate(dateHeader)
+	if t.IsZero() {
+		return false
+	}
+	if !since.IsZero() && !sentOnOrAfter(dateHeader, since) {
+		return false
+	}
+	// before is exclusive: a Date on/after that calendar day is out of range.
+	if !before.IsZero() && sentOnOrAfter(dateHeader, before) {
+		return false
+	}
+	return true
 }
 
 func clampContextLimit(limit int) int {

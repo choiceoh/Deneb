@@ -36,6 +36,9 @@ thread/sender 문맥을, native mail UI에는 Gmail-like repository 계약을
   상한을 보존한다. 한 message의 실패가 무제한 scan으로 번지면 안 된다.
 - imported mail의 날짜 범위는 Date header 기준 `SENTSINCE/SENTBEFORE`다.
   INTERNALDATE로 되돌리면 bulk import가 일자별 조회에서 사라진다.
+  `SENTSINCE`가 서버에서 NO로 거부되면(`uidSearchSentAware`) ALL/나머지
+  criteria로 재검색하고 Date header 반개구간(`[SentSince, SentBefore)`)으로
+  post-filter 한다 — 깨진 ENVELOPE 한 통이 day-pager 전체를 멈추게 하지 않는다.
 - 지원하지 않는 Gmail query는 bounded recent view로 명시적으로 degrade하고
   mailbox candidate scan은 상한을 지킨다. 일부 mailbox 실패는 다른 mailbox가
   완료됐을 때만 degrade하며, 전부 실패한 장애를 빈 inbox 성공으로 숨기지 않는다.

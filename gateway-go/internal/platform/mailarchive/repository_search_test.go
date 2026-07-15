@@ -150,6 +150,31 @@ func TestRepositorySearchPageReturnsEmptyForOversizedPageToken(t *testing.T) {
 	}
 }
 
+// When Maddy rejects SENTSINCE (e.g. one message with an unparseable ENVELOPE
+// Date), the day-pager query must still return Date-header-scoped rows via the
+// ALL fallback + post-filter — otherwise Andromeda spins on "불러오는 중…".
+func TestSearchPageFallsBackWhenSentSearchRejected(t *testing.T) {
+	raw := archiveTestMessage("day@example.com", "sender@example.com", "Day mail", "body", "")
+	srv := newTestIMAPArchiveRejectingSentSearch(t, map[string]map[string][]byte{
+		"INBOX": {"1": []byte(raw)},
+	})
+	repo := newArchiveSearchTestRepository(t, srv.addr, []string{"INBOX"}, nil)
+
+	rows, _, err := repo.SearchPage(context.Background(), "in:inbox after:2026/6/17 before:2026/6/18", "", 10)
+	if err != nil {
+		t.Fatalf("SearchPage: %v", err)
+	}
+	assertArchiveRowIDs(t, rows, "day@example.com")
+
+	rows, _, err = repo.SearchPage(context.Background(), "in:inbox after:2026/6/16 before:2026/6/17", "", 10)
+	if err != nil {
+		t.Fatalf("SearchPage other day: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("other day rows = %#v, want empty", rows)
+	}
+}
+
 func newArchiveSearchTestRepository(t *testing.T, addr string, mailboxes []string, fallback FallbackClient) *Repository {
 	t.Helper()
 	return NewRepository(Config{

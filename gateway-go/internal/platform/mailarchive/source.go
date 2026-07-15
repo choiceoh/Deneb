@@ -159,7 +159,7 @@ func findSenderUIDs(ctx context.Context, c *imapConn, sender, sinceCriteria stri
 	if sender == "" || ctx.Err() != nil {
 		return nil
 	}
-	found, err := c.uidSearch(fmt.Sprintf(`FROM %s %s`, quote(sender), sinceCriteria))
+	found, err := c.uidSearchSentAware(fmt.Sprintf(`FROM %s %s`, quote(sender), sinceCriteria))
 	if err != nil {
 		return nil
 	}
