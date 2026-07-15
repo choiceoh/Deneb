@@ -39,6 +39,36 @@ func TestDefaultReaderJS_FindsScript(t *testing.T) {
 	}
 }
 
+func TestDefaultReaderJS_FallsBackWhenCallerPathMissing(t *testing.T) {
+	// Simulate production WorkingDirectory=/repo-root (systemd) without relying
+	// on runtime.Caller surviving -trimpath: chdir to repo root and ensure the
+	// cwd candidate still resolves.
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := wd
+	for {
+		if _, err := os.Stat(filepath.Join(root, "scripts", "dev", "groupware-reader", "read.mjs")); err == nil {
+			break
+		}
+		parent := filepath.Dir(root)
+		if parent == root {
+			t.Fatal("repo root not found from test cwd")
+		}
+		root = parent
+	}
+	t.Chdir(root)
+	p := defaultReaderJS()
+	if p == "" {
+		t.Fatal("cwd fallback should find read.mjs")
+	}
+	want := filepath.Join(root, "scripts", "dev", "groupware-reader", "read.mjs")
+	if filepath.Clean(p) != filepath.Clean(want) && !strings.HasSuffix(filepath.Clean(p), "groupware-reader/read.mjs") {
+		t.Fatalf("got %q", p)
+	}
+}
+
 func TestStatusLine_OffAndOn(t *testing.T) {
 	if !strings.Contains(StatusLine(Config{}, false), "꺼짐") {
 		t.Fatal("expected off message")
