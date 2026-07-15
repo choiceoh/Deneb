@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.82](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.81...andromeda-v0.0.82) (2026-07-15)
+
+
+### ✨ Features
+
+* **sitemap:** client-android 현장 지도 포팅 + andromeda 휠 줌·팬 ([#3737](https://github.com/choiceoh/Deneb/issues/3737)) ([d82ecba](https://github.com/choiceoh/Deneb/commit/d82ecbac006a6bb637c4b4ab26f820afc6842510))
+* **wiki:** 현장 서브페이지 데이터 모델 + 지도 상태 필터 ([#3744](https://github.com/choiceoh/Deneb/issues/3744)) ([b68ae20](https://github.com/choiceoh/Deneb/commit/b68ae203b5bf96e34d9e95c9b3390e536c6ea7bd))
+
 ## [0.0.81](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.80...andromeda-v0.0.81) (2026-07-15)
 
 
