@@ -487,6 +487,11 @@ export interface ProjectSiteRow {
   kinds?: string[]
   capacity?: number
   status?: string
+  contract_date?: string
+  construction_start?: string
+  module_delivery?: string
+  pre_use_inspection?: string
+  completion_inspection?: string
 }
 
 export interface ProjectSitesOut {

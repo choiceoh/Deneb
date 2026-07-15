@@ -592,6 +592,11 @@ data class ProjectSiteRow(
     val kinds: List<String> = emptyList(),
     val capacity: Double = 0.0,
     val status: String = "",
+    val contract_date: String = "",
+    val construction_start: String = "",
+    val module_delivery: String = "",
+    val pre_use_inspection: String = "",
+    val completion_inspection: String = "",
 )
 
 @Immutable

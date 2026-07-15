@@ -2144,6 +2144,31 @@ class MiniappWireValueContractTest {
                     value = boundaryText,
                     expectation = Expectation.Exact,
                 ),
+                fieldValue(
+                    name = "contract_date",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "construction_start",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "module_delivery",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "pre_use_inspection",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "completion_inspection",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
             ),
             invalidField = "project",
             invalidValue = JsonObject(emptyMap()),

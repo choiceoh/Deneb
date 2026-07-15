@@ -33,7 +33,25 @@ interface Pin {
   capacity: number; // MW, 0 = unrecorded
   status: string; // 현장 lifecycle (후보/계약/개설/준공); "" = 미분류
   due?: string; // kept for the detail card only — not a visual dimension
+  sched: Sched; // 공정 일정 milestone dates (detail-only)
 }
+
+// 공정 일정 — the 현장 공통 포맷 milestone dates, in process order. Rendered as a
+// timeline in the detail sheet; the two 검사일 also drive 임박 검사 surfacing.
+interface Sched {
+  contractDate: string;
+  constructionStart: string;
+  moduleDelivery: string;
+  preUseInspection: string;
+  completionInspection: string;
+}
+const MILESTONES: { key: keyof Sched; label: string; inspection?: boolean }[] = [
+  { key: "contractDate", label: "계약" },
+  { key: "constructionStart", label: "공사개시" },
+  { key: "moduleDelivery", label: "모듈입고" },
+  { key: "preUseInspection", label: "사용전검사", inspection: true },
+  { key: "completionInspection", label: "준공검사", inspection: true },
+];
 
 // 후보(prospective) 현장 are hidden by default — the map is for real, contracted
 // sites ("계약해서 개설된 현장"). A "" status (미분류, e.g. 대표페이지 fallback rows)
@@ -132,6 +150,13 @@ function placeSites(rows: ProjectSiteRow[]): Placed {
     const { source, type } = primaryKind(kinds);
     const capacity = r.capacity ?? 0;
     const status = (r.status ?? "").trim();
+    const sched: Sched = {
+      contractDate: (r.contract_date ?? "").trim(),
+      constructionStart: (r.construction_start ?? "").trim(),
+      moduleDelivery: (r.module_delivery ?? "").trim(),
+      preUseInspection: (r.pre_use_inspection ?? "").trim(),
+      completionInspection: (r.completion_inspection ?? "").trim(),
+    };
     const rad = radiusOf(capacity);
     const siteList = r.sites ?? [];
     // A 현장 page with no address yet (empty sites) still surfaces — as a 미배치 row.
@@ -165,6 +190,7 @@ function placeSites(rows: ProjectSiteRow[]): Placed {
         capacity,
         status: (r.status ?? "").trim(),
         due: r.due,
+        sched,
       });
     }
   }
@@ -184,6 +210,53 @@ function Mark({ shape, fill, r }: { shape: Shape; fill: string; r: number }) {
 function capacityText(mw: number): string {
   if (!mw || mw <= 0) return "미기재";
   return `${Number.isInteger(mw) ? mw : mw.toFixed(1)}MW`;
+}
+
+// Parse a YYYY-MM-DD milestone date to a local midnight Date, else null. 모듈입고 may
+// be a free-form 기간 ("3월 중순~4월 초") — those simply don't parse and are shown
+// as-is in the timeline without a D-day.
+function parseYmd(s: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim());
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// daysUntil returns whole days from today to a YYYY-MM-DD date (negative = past),
+// or null when unparseable.
+function daysUntil(s: string): number | null {
+  const d = parseYmd(s);
+  if (!d) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((d.getTime() - today.getTime()) / 86_400_000);
+}
+
+// The nearest not-yet-past 검사일 (사용전검사 or 준공검사) for a 현장 — the "임박 검사일"
+// the map surfaces so an inspection never sneaks up. null when both are blank/past.
+interface Inspection {
+  label: string;
+  date: string;
+  days: number;
+}
+function upcomingInspection(s: Sched): Inspection | null {
+  const cands = [
+    { label: "사용전검사", date: s.preUseInspection },
+    { label: "준공검사", date: s.completionInspection },
+  ];
+  let best: Inspection | null = null;
+  for (const c of cands) {
+    const days = daysUntil(c.date);
+    if (days === null || days < 0) continue;
+    if (!best || days < best.days) best = { label: c.label, date: c.date, days };
+  }
+  return best;
+}
+
+// 임박 = within IMMINENT_DAYS. Drives the header count + the accent-hued D-day badge.
+const IMMINENT_DAYS = 30;
+function ddayText(days: number): string {
+  return days === 0 ? "D-day" : `D-${days}`;
 }
 
 export function SiteMapPane() {
@@ -285,6 +358,16 @@ export function SiteMapPane() {
   );
 
   const totalMw = useMemo(() => shown.reduce((sum, p) => sum + (p.capacity || 0), 0), [shown]);
+  // 임박 검사 — how many shown 현장 have a 검사일 within IMMINENT_DAYS. A proactive
+  // header nudge so an upcoming 사용전/준공검사 is visible without opening each site.
+  const imminentCount = useMemo(
+    () =>
+      shown.filter((p) => {
+        const up = upcomingInspection(p.sched);
+        return up !== null && up.days <= IMMINENT_DAYS;
+      }).length,
+    [shown],
+  );
   // 미배치 hides 후보 too (unless the toggle is on), so a hidden candidate site never
   // leaks into the tray/count.
   const shownUnplaced = useMemo(
@@ -295,7 +378,10 @@ export function SiteMapPane() {
   const aiText = serializeList("현장 지도", shown, (p) => {
     const tags = [p.source, typeLabel(p.type), p.capacity ? capacityText(p.capacity) : ""].filter(Boolean).join("/");
     const head = `- ${p.client ? `[${p.client}] ` : ""}${p.project} · ${p.site}${tags ? ` (${tags})` : ""}`;
-    return p.due ? `${head} — 마감 ${p.due}` : head;
+    const up = upcomingInspection(p.sched);
+    const insp = up ? ` — ${up.label} ${up.date} (${ddayText(up.days)})` : "";
+    const due = p.due ? ` — 마감 ${p.due}` : "";
+    return `${head}${insp}${due}`;
   });
   const aiFull = shownUnplaced.length
     ? `${aiText}\n\n미배치(주소 매칭 실패) ${shownUnplaced.length}건: ${shownUnplaced.map((u) => u.site).join(", ")}`
@@ -319,6 +405,7 @@ export function SiteMapPane() {
           {shown.length !== pins.length && <span style={{ color: "var(--faint)" }}>/{pins.length}</span>}
           {totalMw > 0 && <span style={{ color: "var(--faint)" }}> · 총 {capacityText(totalMw)}</span>}
           {shownUnplaced.length > 0 && <span style={{ color: "var(--faint)" }}> · 미배치 {shownUnplaced.length}</span>}
+          {imminentCount > 0 && <span style={{ color: "var(--due)" }}> · 임박검사 {imminentCount}</span>}
         </span>
       </div>
 
@@ -546,8 +633,11 @@ export function SiteMapPane() {
                     {pin.client ? ` · ${pin.client}` : ""}
                   </span>
                 </span>
-                <span style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap" }}>
-                  {[pin.source, capacityText(pin.capacity)].filter(Boolean).join(" · ")}
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+                  <InspectionBadge sched={pin.sched} />
+                  <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                    {[pin.source, capacityText(pin.capacity)].filter(Boolean).join(" · ")}
+                  </span>
                 </span>
               </button>
             ))}
@@ -604,6 +694,7 @@ export function SiteMapPane() {
           <Detail label="용량" value={capacityText(selected.capacity)} />
           {selected.kinds.length > 0 && <Detail label="분류" value={selected.kinds.join(", ")} />}
           <Detail label="마감" value={selected.due || "미정"} />
+          <ScheduleTimeline sched={selected.sched} />
         </Modal>
       )}
     </>
@@ -669,6 +760,88 @@ function LegendShape({ shape, label }: { shape: Shape; label: string }) {
     </span>
   );
 }
+// A compact D-day pill for the nearest upcoming 검사일 — accent-hued once 임박
+// (≤IMMINENT_DAYS), muted otherwise. Nothing renders when there's no upcoming 검사.
+function InspectionBadge({ sched }: { sched: Sched }) {
+  const up = upcomingInspection(sched);
+  if (!up) return null;
+  const imminent = up.days <= IMMINENT_DAYS;
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        fontSize: 10.5,
+        padding: "1px 7px",
+        borderRadius: "var(--radius-pill)",
+        border: `1px solid ${imminent ? "var(--due)" : "var(--line-2)"}`,
+        color: imminent ? "var(--due)" : "var(--muted)",
+        background: imminent ? "var(--danger-soft)" : "transparent",
+      }}
+    >
+      {up.label.replace("검사", "")} {ddayText(up.days)}
+    </span>
+  );
+}
+
+// 공정 일정 — a small vertical timeline of the five milestone dates in process
+// order. Blank milestones stay visible (dimmed) so the operator sees what's left
+// to fill; a parseable date shows its D-day, and the nearest upcoming 검사 is
+// accented. Renders nothing when the whole schedule is blank (fallback rows).
+function ScheduleTimeline({ sched }: { sched: Sched }) {
+  const filled = MILESTONES.some((m) => sched[m.key].trim() !== "");
+  if (!filled) return null;
+  const up = upcomingInspection(sched);
+  return (
+    <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-2)", marginBottom: 8 }}>공정 일정</div>
+      <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 7 }}>
+        {MILESTONES.map((m) => {
+          const date = sched[m.key].trim();
+          const has = date !== "";
+          const days = has ? daysUntil(date) : null;
+          const isNextInspection = !!up && m.inspection && date === up.date && up.label === m.label;
+          const done = days !== null && days < 0;
+          return (
+            <li key={m.key} style={{ display: "flex", alignItems: "center", gap: 9 }}>
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  flexShrink: 0,
+                  background: isNextInspection
+                    ? "var(--due)"
+                    : has
+                      ? done
+                        ? "var(--online)"
+                        : "var(--accent)"
+                      : "var(--line-2)",
+                }}
+              />
+              <span style={{ fontSize: 12, color: has ? "var(--ink-2)" : "var(--faint)", minWidth: 64 }}>
+                {m.label}
+              </span>
+              <span style={{ fontSize: 12, color: has ? "var(--ink)" : "var(--faint)" }}>{date || "미정"}</span>
+              {days !== null && (
+                <span
+                  style={{
+                    fontSize: 10.5,
+                    color: isNextInspection ? "var(--due)" : done ? "var(--faint)" : "var(--muted)",
+                  }}
+                >
+                  {done ? "완료" : ddayText(days)}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 // Two reference circles — small vs large — to read the 용량→크기 mapping.
 function LegendSize() {
   return (
