@@ -56,7 +56,13 @@ export function ApprovalsPane() {
       const ms = approvalDayMs(a.date);
       return (ms ?? todayMs) === dayMs;
     })
-    .sort((a, b) => String(b.docId ?? "").localeCompare(String(a.docId ?? "")));
+    .sort((a, b) => {
+      // 미결 first, then newest docId.
+      if (a.canAct !== b.canAct) return a.canAct ? -1 : 1;
+      return String(b.docId ?? "").localeCompare(String(a.docId ?? ""));
+    });
+
+  const pendingCount = dayRows.filter((a) => a.canAct).length;
 
   const itemDays = rows.map((a) => approvalDayMs(a.date) ?? todayMs);
   const minDayMs = Math.min(addDays(todayMs, -APPROVALS_LOOKBACK_DAYS), ...itemDays, todayMs);
@@ -86,14 +92,17 @@ export function ApprovalsPane() {
     {
       header: "상태",
       width: 88,
-      tdStyle: { verticalAlign: "top", fontSize: 13, opacity: 0.75 },
-      cell: (a) => a.status || (a.folder === "pending" ? "미결" : "—"),
+      tdStyle: { verticalAlign: "top" },
+      cell: (a) => {
+        const label = a.canAct ? "미결" : a.status?.trim() || "—";
+        return <span className={"approval-status" + (a.canAct ? " pending" : "")}>{label}</span>;
+      },
     },
     {
       header: "제목",
       cell: (a) => (
         <div>
-          <div>{a.title || "(제목 없음)"}</div>
+          <div style={{ fontWeight: a.canAct ? 600 : undefined }}>{a.title || "(제목 없음)"}</div>
           {(a.drafter || a.docNo) && (
             <div style={{ fontSize: 12, opacity: 0.65, marginTop: 2 }}>
               {[a.drafter && `기안 ${a.drafter}`, a.docNo].filter(Boolean).join(" · ")}
@@ -109,6 +118,11 @@ export function ApprovalsPane() {
   return (
     <>
       <h2 style={{ marginTop: 2 }}>결재</h2>
+      <p className="groupware-lede">
+        {pendingCount > 0
+          ? `이 날 미결 ${pendingCount}건 · 행을 열어 분석·승인/반려`
+          : "날짜를 옮기며 문서를 보고, 미결은 펼쳐서 승인·반려"}
+      </p>
       {error && <p className="pane-error">오류: {error}</p>}
       {connected && (
         <DayPager

@@ -1,70 +1,101 @@
 import { useState } from "react";
 import { errText } from "@/format";
 import { listGroupwareERP } from "@/gateway";
+import { erpTextToMarkdown } from "@/erpText";
+import { useAsyncOnOpen } from "@/useAsyncOnOpen";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
+import { Markdown } from "@/components/Markdown";
 
-const AREAS: { id: string; label: string; queryable?: boolean }[] = [
-  { id: "stock", label: "재고", queryable: true },
+const AREAS: { id: string; label: string; queryable?: boolean; hint?: string }[] = [
+  { id: "stock", label: "재고", queryable: true, hint: "품목·코드" },
   { id: "po", label: "발주" },
   { id: "receive", label: "입고" },
   { id: "ship", label: "출고" },
   { id: "price", label: "단가" },
   { id: "sales", label: "매출" },
-  { id: "people", label: "사원", queryable: true },
+  { id: "people", label: "사원", queryable: true, hint: "이름·부서" },
 ];
 
-/** Read-only Amaranth ERP hub — area chips + text snapshot (챗 groupware 패리티). */
+/** Read-only Amaranth ERP hub — area tabs, auto-fetch, markdown snapshot. */
 export function GroupwareERPPane() {
   const { cfg, connected } = useWorkspace();
   const [area, setArea] = useState(AREAS[0].id);
   const [query, setQuery] = useState("");
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
   const [error, setError] = useState("");
+  const [searchBusy, setSearchBusy] = useState(false);
 
   const areaDef = AREAS.find((a) => a.id === area) ?? AREAS[0];
+  // Auto-load key: area + applied search (not the in-progress input).
+  const appliedQ = areaDef.queryable ? searchQ.trim() : "";
+
+  const [text, setText] = useAsyncOnOpen(
+    async () => {
+      const r = await listGroupwareERP(cfg, area, {
+        query: appliedQ || undefined,
+        limit: 40,
+      });
+      return (r?.text ?? "").trim() || "(결과 없음)";
+    },
+    [cfg, area, appliedQ],
+    {
+      enabled: connected,
+      onError: (e) => {
+        setError(errText(e));
+        setText("");
+      },
+    },
+  );
 
   useRegisterPane(
     "groupware",
-    text
-      ? `[그룹웨어 · ${areaDef.label}]\n${text}`
-      : `[그룹웨어 · ${areaDef.label}]\n(조회 결과 없음 — 영역을 고르고 조회하세요)`,
+    text ? `[그룹웨어 · ${areaDef.label}]\n${text}` : `[그룹웨어 · ${areaDef.label}]\n(조회 결과 없음)`,
   );
 
-  async function load() {
-    if (!connected) return;
-    setBusy(true);
-    setError("");
-    try {
-      const r = await listGroupwareERP(cfg, area, {
-        query: areaDef.queryable ? query.trim() || undefined : undefined,
-        limit: 40,
-      });
-      setText((r?.text ?? "").trim() || "(결과 없음)");
-    } catch (e) {
-      setError(errText(e));
-      setText("");
-    } finally {
-      setBusy(false);
+  async function applySearch() {
+    if (!connected || !areaDef.queryable) return;
+    const next = query.trim();
+    if (next === searchQ.trim()) {
+      // Same filter — force refetch via setText(null) then re-run load path.
+      setSearchBusy(true);
+      setError("");
+      try {
+        const r = await listGroupwareERP(cfg, area, { query: next || undefined, limit: 40 });
+        setText((r?.text ?? "").trim() || "(결과 없음)");
+      } catch (e) {
+        setError(errText(e));
+        setText("");
+      } finally {
+        setSearchBusy(false);
+      }
+      return;
     }
+    setSearchQ(next);
   }
 
+  const busy = connected && text === null && !error;
+  const showStale = areaDef.queryable && query.trim() !== searchQ.trim() && text !== null;
+
   return (
-    <>
+    <section className="groupware-pane" aria-label="그룹웨어 ERP">
       <h2 style={{ marginTop: 2 }}>그룹웨어</h2>
-      <p style={{ opacity: 0.7, fontSize: 13, marginTop: 0 }}>
-        Amaranth ERP 조회 전용 (재고·발주·입출고·단가·매출·사원). 결재 승인/반려는 「결재」 탭.
+      <p className="groupware-lede">
+        Amaranth ERP 조회 · 결재 승인/반려는 <strong>결재</strong> 탭
       </p>
       {error && <p className="pane-error">오류: {error}</p>}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+
+      <div className="mail-view-tabs groupware-area-tabs" role="tablist" aria-label="ERP 영역">
         {AREAS.map((a) => (
           <button
             key={a.id}
-            className={"row-btn" + (a.id === area ? " active" : "")}
-            aria-pressed={a.id === area}
+            type="button"
+            role="tab"
+            className={"mail-view-tab" + (a.id === area ? " active" : "")}
+            aria-selected={a.id === area}
             onClick={() => {
               setArea(a.id);
-              setText("");
+              setQuery("");
+              setSearchQ("");
               setError("");
             }}
           >
@@ -72,36 +103,53 @@ export function GroupwareERPPane() {
           </button>
         ))}
       </div>
+
       {areaDef.queryable && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <form
+          className="groupware-search"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void applySearch();
+          }}
+        >
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={area === "people" ? "사원 이름·부서" : "품목·코드"}
-            style={{ flex: 1, minWidth: 0 }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void load();
-            }}
+            placeholder={areaDef.hint ?? "검색어"}
+            aria-label={`${areaDef.label} 검색`}
+            disabled={!connected || searchBusy}
           />
+          <button className="btn" type="submit" disabled={!connected || searchBusy || busy}>
+            {searchBusy || busy ? "조회 중…" : "검색"}
+          </button>
+        </form>
+      )}
+
+      {!connected ? (
+        <p className="groupware-status">미연결</p>
+      ) : busy ? (
+        <p className="groupware-status">불러오는 중…</p>
+      ) : (
+        <div className={"groupware-result" + (showStale ? " stale" : "")}>
+          {showStale && (
+            <div className="groupware-stale-hint">
+              검색어가 바뀌었습니다.{" "}
+              <button type="button" className="row-btn" onClick={() => void applySearch()}>
+                다시 조회
+              </button>
+            </div>
+          )}
+          {text ? (
+            text === "(결과 없음)" ? (
+              <p className="groupware-status">결과 없음</p>
+            ) : (
+              <div className="mail-body groupware-body">
+                <Markdown text={erpTextToMarkdown(text)} />
+              </div>
+            )
+          ) : null}
         </div>
       )}
-      <button className="btn" disabled={!connected || busy} onClick={() => void load()}>
-        {busy ? "조회 중…" : "조회"}
-      </button>
-      {text && (
-        <pre
-          style={{
-            marginTop: 12,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            fontSize: 13,
-            lineHeight: 1.45,
-            opacity: 0.92,
-          }}
-        >
-          {text}
-        </pre>
-      )}
-    </>
+    </section>
   );
 }
