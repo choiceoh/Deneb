@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.DenebApprovals
 import ai.deneb.DenebBrowser
 import ai.deneb.DenebCategories
 import ai.deneb.DenebConfig
@@ -8,7 +9,6 @@ import ai.deneb.DenebDashboard
 import ai.deneb.DenebFiles
 import ai.deneb.DenebNotebooks
 import ai.deneb.DenebOrgChart
-import ai.deneb.DenebApprovals
 import ai.deneb.DenebProjectDigests
 import ai.deneb.DenebRsi
 import ai.deneb.DenebSearch

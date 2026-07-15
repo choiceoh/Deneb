@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { GroupwareApprovalRow } from "@/gen/miniappWire";
 import { useCachedList } from "@/cachedList";
 import { APPROVALS_RPC } from "@/resources";
@@ -37,10 +37,9 @@ export function ApprovalsPane() {
   const { result, query } = useCachedList<GroupwareApprovalRow & { id?: string }>("approvals", connected, {
     meta: { rpcParams: { folder: "total", limit: APPROVALS_LIMIT } },
   });
-  const rows = useMemo(
-    () => (result?.data ?? []).map((a) => ({ ...a, id: a.docId ?? a.id })),
-    [result?.data],
-  );
+  // id alias for Refine BaseRecord; plain map (no useMemo) — rows is already a
+  // fresh array from the list cache snapshot each render.
+  const rows = (result?.data ?? []).map((a) => ({ ...a, id: a.docId ?? a.id }));
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const { run, error, busy } = useAction(() => void query.refetch());
 
@@ -48,18 +47,19 @@ export function ApprovalsPane() {
   const nowMs = Date.now();
   const todayMs = startOfDay(nowMs);
 
-  const dayRows = useMemo(() => {
-    return rows
-      .filter((a) => {
-        const ms = approvalDayMs(a.date);
-        return (ms ?? todayMs) === dayMs;
-      })
-      .sort((a, b) => String(b.docId ?? "").localeCompare(String(a.docId ?? "")));
-  }, [rows, dayMs, todayMs]);
+  // Inline filter like WorkfeedPane — avoid useMemo+todayMs (React Compiler
+  // preserve-manual-memoization rejects a render-time clock dep).
+  const dayRows = rows
+    .filter((a) => {
+      const ms = approvalDayMs(a.date);
+      return (ms ?? todayMs) === dayMs;
+    })
+    .sort((a, b) => String(b.docId ?? "").localeCompare(String(a.docId ?? "")));
 
   const itemDays = rows.map((a) => approvalDayMs(a.date) ?? todayMs);
   const minDayMs = Math.min(addDays(todayMs, -APPROVALS_LOOKBACK_DAYS), ...itemDays, todayMs);
   const maxDayMs = Math.max(todayMs, ...itemDays);
+
 
   const aiText =
     `[결재 · ${dayLabel(dayMs, nowMs)}]\n` +
