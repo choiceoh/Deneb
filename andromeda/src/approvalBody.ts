@@ -3,13 +3,30 @@
 // section headers — the detail UI folds line + attachments so the body leads.
 
 export type ApprovalDocSections = {
-  meta: string;
+  // Structured header fields (문서번호/id are agent plumbing and dropped).
+  title: string;
+  form: string;
+  drafter: string;
+  draftedAt: string;
   line: string;
   lineCount: number;
   body: string;
   attachments: string;
   attachmentHeader: string;
   attachmentCount: number;
+};
+
+const EMPTY: ApprovalDocSections = {
+  title: "",
+  form: "",
+  drafter: "",
+  draftedAt: "",
+  line: "",
+  lineCount: 0,
+  body: "",
+  attachments: "",
+  attachmentHeader: "",
+  attachmentCount: 0,
 };
 
 const LINE_HEADER = /^결재선\s*$/;
@@ -28,7 +45,7 @@ function countAttachRows(block: string): number {
 export function parseApprovalDocBody(raw: string): ApprovalDocSections {
   const text = (raw ?? "").replace(/\r\n/g, "\n");
   if (!text.trim()) {
-    return { meta: "", line: "", lineCount: 0, body: "", attachments: "", attachmentHeader: "", attachmentCount: 0 };
+    return { ...EMPTY };
   }
 
   const lines = text.split("\n");
@@ -44,15 +61,7 @@ export function parseApprovalDocBody(raw: string): ApprovalDocSections {
 
   // No known markers → treat entire blob as body (legacy / chat paste).
   if (lineStart < 0 && bodyStart < 0 && attachStart < 0) {
-    return {
-      meta: "",
-      line: "",
-      lineCount: 0,
-      body: text.trim(),
-      attachments: "",
-      attachmentHeader: "",
-      attachmentCount: 0,
-    };
+    return { ...EMPTY, body: text.trim() };
   }
 
   const endOf = (start: number, ...stops: number[]) => {
@@ -71,18 +80,18 @@ export function parseApprovalDocBody(raw: string): ApprovalDocSections {
   if (bodyStart >= 0) metaEnd = Math.min(metaEnd, bodyStart);
   if (attachStart >= 0) metaEnd = Math.min(metaEnd, attachStart);
 
-  const metaRaw = lines.slice(0, metaEnd).join("\n").trim();
-  // Drop reader banner + query line — the detail chrome already shows the title.
-  const meta = metaRaw
-    .split("\n")
-    .filter((l) => {
-      const t = l.trim();
-      if (!t) return false;
-      if (t.startsWith("[그룹웨어")) return false;
-      if (t.startsWith("조회:")) return false;
-      return true;
-    })
-    .join("\n");
+  // Lift 양식·기안·기안일·제목 into structured header fields; 문서번호/id stay out.
+  let title = "";
+  let form = "";
+  let drafter = "";
+  let draftedAt = "";
+  for (const rawLine of lines.slice(0, metaEnd)) {
+    const t = rawLine.trim();
+    if (t.startsWith("제목:")) title = t.slice("제목:".length).trim();
+    else if (t.startsWith("양식:")) form = t.slice("양식:".length).trim();
+    else if (t.startsWith("기안:")) drafter = t.slice("기안:".length).trim();
+    else if (t.startsWith("기안일:")) draftedAt = t.slice("기안일:".length).trim();
+  }
 
   const line = lineStart >= 0 ? sliceBlock(lineStart, endOf(lineStart, bodyStart, attachStart)) : "";
   const body =
@@ -95,7 +104,10 @@ export function parseApprovalDocBody(raw: string): ApprovalDocSections {
   const attachments = attachStart >= 0 ? sliceBlock(attachStart, lines.length) : "";
 
   return {
-    meta,
+    title,
+    form,
+    drafter,
+    draftedAt,
     line,
     lineCount: countNumberedRows(line),
     body,

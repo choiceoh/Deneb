@@ -24,10 +24,10 @@ const SAMPLE = `[그룹웨어 전자결재 · 전체결재문서]
 `;
 
 describe("parseApprovalDocBody", () => {
-  it("splits meta, line, body, and attachments", () => {
+  it("splits header fields, line, body, and attachments", () => {
     const s = parseApprovalDocBody(SAMPLE);
-    expect(s.meta).toContain("제목: 다과비 품의");
-    expect(s.meta).not.toContain("그룹웨어");
+    expect(s.title).toBe("다과비 품의");
+    expect(s.drafter).toBe("김승리");
     expect(s.lineCount).toBe(2);
     expect(s.line).toContain("김승리");
     expect(s.body).toContain("| 항목 | 금액 |");

@@ -31,8 +31,8 @@ class ApprovalDocSectionsTest {
         """.trimIndent()
 
         val s = parseApprovalDocBody(sample)
-        assertTrue(s.meta.contains("제목: 다과비 품의"))
-        assertTrue(!s.meta.contains("그룹웨어"))
+        assertEquals("다과비 품의", s.title)
+        assertEquals("김승리", s.drafter)
         assertEquals(2, s.lineCount)
         assertTrue(s.line.contains("김승리"))
         assertTrue(s.body.contains("| 항목 | 금액 |"))

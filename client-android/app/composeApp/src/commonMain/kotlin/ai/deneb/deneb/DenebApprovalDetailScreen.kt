@@ -49,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -155,15 +156,32 @@ fun DenebApprovalDetailScreen(
 
                 val sections = remember(doc.body) { parseApprovalDocBody(doc.body) }
 
+                // Document header: 양식 badge + title + 기안 meta. 문서번호/id stay
+                // out of the UI — agent plumbing, not operator info.
+                if (sections.form.isNotBlank()) {
+                    Text(
+                        sections.form,
+                        style = DenebType.meta.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
                 Text(
-                    text = title.ifBlank { doc.title }.ifBlank { "(제목 없음)" },
+                    text = sections.title
+                        .ifBlank { title }
+                        .ifBlank { doc.title }
+                        .ifBlank { "(제목 없음)" },
                     style = DenebType.subject,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 val meta = listOfNotNull(
-                    drafter.takeIf { it.isNotBlank() }?.let { "기안 $it" },
-                    date.takeIf { it.isNotBlank() },
+                    sections.drafter.ifBlank { drafter }.takeIf { it.isNotBlank() }?.let { "기안 $it" },
+                    sections.draftedAt.ifBlank { date }.takeIf { it.isNotBlank() },
                 ).joinToString(" · ")
                 if (meta.isNotBlank()) {
                     Text(meta, style = DenebType.meta, color = denebHint())
@@ -180,15 +198,27 @@ fun DenebApprovalDetailScreen(
                     },
                 )
 
-                if (sections.meta.isNotBlank()) {
-                    ApprovalSectionGap()
-                    Text("문서 정보", style = DenebType.sectionLabel, color = denebHint())
-                    Spacer(Modifier.height(8.dp))
-                    SelectionContainer {
-                        Text(sections.meta, style = DenebType.body, color = MaterialTheme.colorScheme.onSurface)
+                ApprovalSectionGap()
+                Text("본문", style = DenebType.sectionLabel, color = denebHint())
+                Spacer(Modifier.height(8.dp))
+                SelectionContainer {
+                    val content = sections.body.ifBlank { doc.body }
+                    if (content.isBlank()) {
+                        Text(
+                            "(본문 없음)",
+                            style = DenebType.body,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    } else {
+                        MarkdownContent(
+                            content = content,
+                            modifier = Modifier.fillMaxWidth(),
+                            baseStyle = DenebType.body,
+                        )
                     }
                 }
 
+                // Reference sections live below the read: 결재선·첨부 fold at the bottom.
                 if (sections.line.isNotBlank()) {
                     ApprovalSectionGap()
                     ApprovalDisclosure(
@@ -231,26 +261,6 @@ fun DenebApprovalDetailScreen(
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
-                    }
-                }
-
-                ApprovalSectionGap()
-                Text("본문", style = DenebType.sectionLabel, color = denebHint())
-                Spacer(Modifier.height(8.dp))
-                SelectionContainer {
-                    val content = sections.body.ifBlank { doc.body }
-                    if (content.isBlank()) {
-                        Text(
-                            "(본문 없음)",
-                            style = DenebType.body,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    } else {
-                        MarkdownContent(
-                            content = content,
-                            modifier = Modifier.fillMaxWidth(),
-                            baseStyle = DenebType.body,
-                        )
                     }
                 }
                 Spacer(Modifier.height(24.dp))

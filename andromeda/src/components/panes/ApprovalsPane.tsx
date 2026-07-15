@@ -250,7 +250,13 @@ function ApprovalDetail({
     }
   }
 
-  const meta = [doc.status, doc.drafter && `기안 ${doc.drafter}`, doc.docNo, doc.docId && `id ${doc.docId}`]
+  // 문서번호/id are agent plumbing — the header carries 상태·양식·기안·기안일 only.
+  const meta = [
+    doc.status,
+    sections.form,
+    (sections.drafter || doc.drafter) && `기안 ${sections.drafter || doc.drafter}`,
+    sections.draftedAt || doc.date,
+  ]
     .filter(Boolean)
     .join(" · ");
   const text = analysis?.analysis?.trim() ? analysis.analysis : "";
@@ -268,7 +274,7 @@ function ApprovalDetail({
       <div className="workfeed-detail-head">
         <div className="workfeed-detail-heading">
           <div className="workfeed-detail-meta">{meta}</div>
-          <div className="workfeed-detail-title">{doc.title ?? "(제목 없음)"}</div>
+          <div className="workfeed-detail-title">{sections.title || doc.title || "(제목 없음)"}</div>
         </div>
         <div className="workfeed-detail-actions">
           <button className="row-btn" onClick={onClose}>
@@ -332,13 +338,11 @@ function ApprovalDetail({
         <div className="mail-card-line">본문 불러오는 중…</div>
       ) : (
         <div className="approval-doc">
-          {sections.meta ? (
-            <div className="mail-card">
-              <div className="mail-card-title">문서 정보</div>
-              <pre className="approval-doc-meta">{sections.meta}</pre>
-            </div>
-          ) : null}
+          <div className="mail-body">
+            {sections.body ? <Markdown text={sections.body} /> : <div className="mail-detail-empty">본문 없음</div>}
+          </div>
 
+          {/* Reference sections live below the read: 결재선·첨부 fold at the bottom. */}
           {sections.line ? (
             <div className="mail-card">
               <button
@@ -370,13 +374,6 @@ function ApprovalDetail({
               {attachOpen ? <pre className="approval-doc-block">{sections.attachments}</pre> : null}
             </div>
           ) : null}
-
-          <div className="mail-body">
-            <div className="mail-card-title" style={{ marginBottom: 8 }}>
-              본문
-            </div>
-            {sections.body ? <Markdown text={sections.body} /> : <div className="mail-detail-empty">본문 없음</div>}
-          </div>
         </div>
       )}
 

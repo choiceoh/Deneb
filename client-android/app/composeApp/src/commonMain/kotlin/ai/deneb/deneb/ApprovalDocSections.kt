@@ -3,10 +3,14 @@ package ai.deneb.deneb
 /**
  * Split Amaranth approval reader text into meta / 결재선 / 본문 / 첨부.
  * Mirrors andromeda/src/approvalBody.ts — formatDocRead concatenates these
- * with bare section headers.
+ * with bare section headers. 문서번호/id are agent plumbing and dropped; the
+ * useful meta (양식·기안·기안일) is lifted into structured fields for the header.
  */
 data class ApprovalDocSections(
-    val meta: String = "",
+    val title: String = "",
+    val form: String = "",
+    val drafter: String = "",
+    val draftedAt: String = "",
     val line: String = "",
     val lineCount: Int = 0,
     val body: String = "",
@@ -48,12 +52,19 @@ fun parseApprovalDocBody(raw: String): ApprovalDocSections {
     if (bodyStart >= 0) metaEnd = minOf(metaEnd, bodyStart)
     if (attachStart >= 0) metaEnd = minOf(metaEnd, attachStart)
 
-    val meta = lines.subList(0, metaEnd)
-        .asSequence()
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-        .filterNot { it.startsWith("[그룹웨어") || it.startsWith("조회:") }
-        .joinToString("\n")
+    var title = ""
+    var form = ""
+    var drafter = ""
+    var draftedAt = ""
+    for (raw in lines.subList(0, metaEnd)) {
+        val t = raw.trim()
+        when {
+            t.startsWith("제목:") -> title = t.removePrefix("제목:").trim()
+            t.startsWith("양식:") -> form = t.removePrefix("양식:").trim()
+            t.startsWith("기안:") -> drafter = t.removePrefix("기안:").trim()
+            t.startsWith("기안일:") -> draftedAt = t.removePrefix("기안일:").trim()
+        }
+    }
 
     val line = if (lineStart >= 0) {
         sliceBlock(lineStart, endOf(lineStart, bodyStart, attachStart))
@@ -71,7 +82,10 @@ fun parseApprovalDocBody(raw: String): ApprovalDocSections {
     fun countRows(block: String): Int = block.lineSequence().count { approvalNumberedRow.containsMatchIn(it) }
 
     return ApprovalDocSections(
-        meta = meta,
+        title = title,
+        form = form,
+        drafter = drafter,
+        draftedAt = draftedAt,
         line = line,
         lineCount = countRows(line),
         body = body,
