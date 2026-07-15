@@ -122,29 +122,39 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.Spillover
 
 // webFetchURL fetches a URL and returns extracted content with metadata envelope.
 func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int) (string, error) {
+	out, err := webFetchURLDetailed(ctx, cache, localAI, spill, targetURL, maxChars)
+	if err != nil {
+		return "", err
+	}
+	return out.Content, nil
+}
+
+// webFetchURLDetailed is the search+fetch path: same fetch as webFetchURL but
+// returns a structured usability verdict alongside the envelope.
+func webFetchURLDetailed(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int) (fetchOutcome, error) {
 	if maxChars <= 0 {
 		maxChars = 20000
 	}
 
 	// YouTube → summarized transcript (full text offloaded to spillover).
 	if media.IsYouTubeURL(targetURL) {
-		return fetchYouTube(ctx, spill, targetURL)
+		content, err := fetchYouTube(ctx, spill, targetURL)
+		if err != nil {
+			return fetchOutcome{Assess: fetchUsability{HasError: true}}, err
+		}
+		return fetchOutcome{Content: content, Assess: assessFetchResult(content, nil)}, nil
 	}
 
-	// Cache hit.
+	// Cache hit — envelope only; fall back to parsing for assess.
 	if cached, ok := cache.Get(targetURL); ok {
 		slog.Info("web fetch", "url", targetURL, "cache_hit", true)
-		return applyTruncation(cached, maxChars), nil
+		truncated := applyTruncation(cached, maxChars)
+		return fetchOutcome{Content: truncated, Assess: assessFetchResult(truncated, nil)}, nil
 	}
 
 	// Singleflight: collapse concurrent fetches for the same URL into one request.
 	// The result is cached after the first fetch completes.
 	v, err := fetchGroup.do(targetURL, func() (any, error) {
-		// Prefer Serper's scrape endpoint when available: it returns clean
-		// markdown + head metadata, sidesteps bot-blocks, and is cheaper than
-		// rendering HTML through our own pipeline. Binary URLs (PDF, Office,
-		// archives, media) skip this and fall through to the raw fetcher so
-		// liteparse can handle them.
 		if key := serperAPIKey(); key != "" && !looksLikeBinaryURL(targetURL) {
 			if result, ok := webFetchViaSerper(ctx, cache, key, targetURL); ok {
 				return result, nil
@@ -163,7 +173,8 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 			slog.Info("web fetch",
 				"url", targetURL, "provider", "stealth", "cache_hit", false,
 				"fetch_ms", fetchMs, "error", err.Error())
-			return formatFetchError(classifyFetchError(err, targetURL)), nil
+			envelope := formatFetchError(classifyFetchError(err, targetURL))
+			return fetchOutcome{Content: envelope, Assess: fetchUsability{HasError: true}}, nil
 		}
 
 		rawContent := normalizeCharset(result.Data, result.ContentType)
@@ -179,17 +190,9 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 		content := processFetchedContent(ctx, rawContent, result.Data, result.ContentType, targetURL, localAI, &meta)
 		meta.ExtractChars = len(content)
 
-		// Escalation: a 200 OK that extracted almost nothing AND signaled
-		// js_required/empty_body is an unrendered SPA shell. Retry ONCE through a
-		// headless backend (Jina). shouldEscalateThinContent gates on the thin +
-		// signal combination so we never escalate a complete-but-short page, and
-		// escalateThinContent runs at most once and only adopts a strictly richer
-		// result — otherwise we keep this original. (Binary docs never carry these
-		// signals, so they're naturally excluded.)
 		if shouldEscalateThinContent(&meta) {
 			if escContent, ok := escalateThinContent(ctx, targetURL, maxBytes, localAI, &meta); ok {
 				content = escContent
-				// meta.ExtractChars/WordCount/Signals updated inside on success.
 			}
 		}
 		extractMs := time.Since(extractStart).Milliseconds()
@@ -203,27 +206,27 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 			meta.WordCount = estimateWordCount(content)
 		}
 
+		assess := assessMetaBody(meta.Signals, content)
 		slog.Info("web fetch",
 			"url", targetURL, "provider", meta.Provider, "cache_hit", false,
 			"fetch_ms", fetchMs, "extract_ms", extractMs,
-			"extract_chars", meta.ExtractChars, "signals", meta.Signals)
+			"extract_chars", meta.ExtractChars, "signals", meta.Signals,
+			"usable", assess.Usable, "thin", assess.Thin)
 
 		fullResult := formatFetchResult(meta, content)
 		cache.Put(targetURL, fullResult)
-		return fullResult, nil
+		return fetchOutcome{Content: fullResult, Assess: assess}, nil
 	})
 	if err != nil {
-		return "", err
+		return fetchOutcome{}, err
 	}
 
-	// Comma-ok rather than v.(string): if the singleflight leader panicked, a
-	// waiter can receive (nil, nil) — a bare assertion would panic here (the
-	// agent loop recovers it into a tool error, but a clean error is better).
-	s, ok := v.(string)
+	out, ok := v.(fetchOutcome)
 	if !ok {
-		return "", fmt.Errorf("web fetch %q: unexpected result type %T", targetURL, v)
+		return fetchOutcome{}, fmt.Errorf("web fetch %q: unexpected result type %T", targetURL, v)
 	}
-	return applyTruncation(s, maxChars), nil
+	out.Content = applyTruncation(out.Content, maxChars)
+	return out, nil
 }
 
 // webFetchViaSerper extracts content for a single URL via Serper's dedicated
@@ -232,16 +235,16 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 // fetcher (e.g. non-HTML URL, empty response, or API error).
 //
 // The returned result is already cached; the caller does not need to re-cache.
-func webFetchViaSerper(ctx context.Context, cache *FetchCache, apiKey, targetURL string) (string, bool) {
+func webFetchViaSerper(ctx context.Context, cache *FetchCache, apiKey, targetURL string) (fetchOutcome, bool) {
 	fetchStart := time.Now()
 	scrape, err := serperScrape(ctx, apiKey, targetURL)
 	fetchMs := time.Since(fetchStart).Milliseconds()
 	if err != nil {
-		return "", false
+		return fetchOutcome{}, false
 	}
 	content := pickScrapeContent(scrape)
 	if strings.TrimSpace(content) == "" {
-		return "", false
+		return fetchOutcome{}, false
 	}
 
 	origChars := len(content)
@@ -259,13 +262,15 @@ func webFetchViaSerper(ctx context.Context, cache *FetchCache, apiKey, targetURL
 	}
 	populateScrapeMetadata(&meta, scrape.Metadata)
 
+	assess := assessMetaBody(meta.Signals, content)
 	slog.Info("web fetch",
 		"url", targetURL, "provider", "serper", "cache_hit", false,
-		"fetch_ms", fetchMs, "extract_chars", origChars)
+		"fetch_ms", fetchMs, "extract_chars", origChars,
+		"usable", assess.Usable, "thin", assess.Thin)
 
 	fullResult := formatFetchResult(meta, content)
 	cache.Put(targetURL, fullResult)
-	return fullResult, true
+	return fetchOutcome{Content: fullResult, Assess: assess}, true
 }
 
 // webParallelSearch runs multiple search queries concurrently and returns
@@ -316,8 +321,8 @@ func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 }
 
 // webSearchAndFetch searches the web and auto-fetches the top N usable pages.
-// Candidates are ranked (answer-box, query overlap, diversity, denylist), then
-// filled sequentially until fetchTop usable results are collected.
+// Candidates are ranked (answer-box, knowledge graph, query overlap, denylist),
+// then filled with a parallel wave + sequential early-stop.
 func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, query string, count, fetchTop, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 15000
@@ -326,7 +331,7 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 		fetchTop = 1
 	}
 
-	searchOutput, organic, answerLink, err := webSearchWithURLs(ctx, query, count)
+	searchOutput, organic, answerLink, knowledgeLink, err := webSearchWithURLs(ctx, query, count)
 	if err != nil {
 		return "", err
 	}
@@ -340,7 +345,19 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 	sb.WriteString("\n</search_results>\n\n")
 
 	poolSize := fetchCandidatePoolSize(count, fetchTop)
-	candidates := rankFetchCandidates(query, answerLink, organic, poolSize)
+	candidates, fstats := rankFetchCandidates(query, answerLink, knowledgeLink, organic, poolSize)
+	slog.Info("web search+fetch candidates",
+		"query", query,
+		"pool", len(candidates),
+		"answer_link", answerLink != "",
+		"knowledge_link", knowledgeLink != "",
+		"denied_host", fstats.DeniedHost,
+		"denied_youtube", fstats.DeniedYT,
+		"denied_path", fstats.DeniedPath,
+		"denied_media", fstats.DeniedMedia,
+		"dup_host", fstats.DupHost,
+		"dup_etld", fstats.DupETLD,
+	)
 	if len(candidates) == 0 {
 		sb.WriteString("\n[Note: fetch requested but no fetchable URLs (provider=duckduckgo or filtered). " +
 			"search+fetch needs Serper/Brave organic results; use web(url=...) for specific pages.]\n")

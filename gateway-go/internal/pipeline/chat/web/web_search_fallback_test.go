@@ -21,8 +21,8 @@ func TestWebSearchFallsThroughSerperFailureToBrave(t *testing.T) {
 		duckDuckGoSearchFn = origDDG
 	})
 
-	serperSearchRawFn = func(context.Context, string, string, int) ([]searchResult, serperAnswerBox, error) {
-		return nil, serperAnswerBox{}, errors.New("serper HTTP 500")
+	serperSearchRawFn = func(context.Context, string, string, int) ([]searchResult, serperAnswerBox, string, error) {
+		return nil, serperAnswerBox{}, "", errors.New("serper HTTP 500")
 	}
 	braveSearchRawFn = func(context.Context, string, string, int) ([]searchResult, error) {
 		return []searchResult{{Title: "Brave Hit", URL: "https://brave.example/a", Description: "ok"}}, nil
@@ -52,19 +52,19 @@ func TestWebSearchWithURLsFallsThroughSerperFailureToBrave(t *testing.T) {
 		braveSearchRawFn = origBrave
 	})
 
-	serperSearchRawFn = func(context.Context, string, string, int) ([]searchResult, serperAnswerBox, error) {
-		return nil, serperAnswerBox{}, errors.New("serper down")
+	serperSearchRawFn = func(context.Context, string, string, int) ([]searchResult, serperAnswerBox, string, error) {
+		return nil, serperAnswerBox{}, "", errors.New("serper down")
 	}
 	braveSearchRawFn = func(context.Context, string, string, int) ([]searchResult, error) {
 		return []searchResult{{Title: "B", URL: "https://b.example/", Description: "d"}}, nil
 	}
 
-	out, results, answerLink, err := webSearchWithURLs(context.Background(), "q", 2)
+	out, results, answerLink, knowledgeLink, err := webSearchWithURLs(context.Background(), "q", 2)
 	if err != nil {
 		t.Fatalf("webSearchWithURLs: %v", err)
 	}
-	if answerLink != "" {
-		t.Fatalf("answerLink=%q, want empty for Brave", answerLink)
+	if answerLink != "" || knowledgeLink != "" {
+		t.Fatalf("answerLink=%q knowledgeLink=%q, want empty for Brave", answerLink, knowledgeLink)
 	}
 	if len(results) != 1 || results[0].URL != "https://b.example/" {
 		t.Fatalf("results=%v", results)
@@ -87,8 +87,8 @@ func TestWebSearchFallsThroughToDuckDuckGoWhenKeyedProvidersFail(t *testing.T) {
 		duckDuckGoSearchFn = origDDG
 	})
 
-	serperSearchRawFn = func(context.Context, string, string, int) ([]searchResult, serperAnswerBox, error) {
-		return nil, serperAnswerBox{}, errors.New("serper fail")
+	serperSearchRawFn = func(context.Context, string, string, int) ([]searchResult, serperAnswerBox, string, error) {
+		return nil, serperAnswerBox{}, "", errors.New("serper fail")
 	}
 	braveSearchRawFn = func(context.Context, string, string, int) ([]searchResult, error) {
 		return nil, errors.New("brave fail")
