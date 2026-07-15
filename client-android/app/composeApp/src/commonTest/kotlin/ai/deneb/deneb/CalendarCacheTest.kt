@@ -31,17 +31,14 @@ class CalendarCacheTest {
         {
             val json = encodeCalendarCache(events, owner = "https://gw#abc")
             assertEquals(events, decodeCalendarCache(json, expectedOwner = "https://gw#abc"))
-
         },
         {
             val json = encodeCalendarCache(events, owner = "https://gw#abc")
             assertNull(decodeCalendarCache(json, expectedOwner = "https://other#xyz"))
-
         },
         {
             val json = encodeCalendarCache(emptyList(), owner = "https://gw#abc")
             assertNull(decodeCalendarCache(json, expectedOwner = "https://gw#abc"))
-
         },
     )
 

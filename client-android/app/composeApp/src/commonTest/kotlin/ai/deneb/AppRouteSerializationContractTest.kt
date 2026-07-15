@@ -29,15 +29,14 @@ class AppRouteSerializationContractTest {
 
     private fun SerialDescriptor.fieldNames(): List<String> = (0 until elementsCount).map(::getElementName)
 
-    private fun futureRouteMetadataEnvelope(baseline: JsonObject): JsonObject =
-        JsonObject(
-            baseline + (
-                "futureRouteMetadata" to buildJsonObject {
-                    put("source", "notification")
-                    put("version", 99)
-                }
-                ),
-        )
+    private fun futureRouteMetadataEnvelope(baseline: JsonObject): JsonObject = JsonObject(
+        baseline + (
+            "futureRouteMetadata" to buildJsonObject {
+                put("source", "notification")
+                put("version", 99)
+            }
+            ),
+    )
 
     private fun <T> assertObjectRouteIdentity(
         serialName: String,

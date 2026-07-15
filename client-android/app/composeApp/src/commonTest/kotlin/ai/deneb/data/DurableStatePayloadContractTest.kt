@@ -50,7 +50,6 @@ class DurableStatePayloadContractTest {
             assertEquals(input["mimeType"], encoded["mimeType"])
             assertEquals(input["fileName"], encoded["fileName"])
             assertEquals(decoded, json.decodeFromJsonElement(Attachment.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -74,7 +73,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(Attachment.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -83,7 +81,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"data":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -141,7 +138,6 @@ class DurableStatePayloadContractTest {
             assertTrue(encoded["shellTranscript"] is JsonArray)
             assertEquals(1, (encoded["shellTranscript"] as JsonArray).size)
             assertEquals(decoded, json.decodeFromJsonElement(Conversation.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -197,7 +193,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(Conversation.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -206,7 +201,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"id":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -254,7 +248,6 @@ class DurableStatePayloadContractTest {
             assertEquals(input["data"], encoded["data"])
             assertEquals(input["fileName"], encoded["fileName"])
             assertEquals(decoded, json.decodeFromJsonElement(Conversation.Message.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -295,7 +288,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(Conversation.Message.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -304,7 +296,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"id":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -327,7 +318,6 @@ class DurableStatePayloadContractTest {
             assertTrue("key" in (encoded["values"] as JsonObject))
             assertEquals(input["pressedEvent"], encoded["pressedEvent"])
             assertEquals(decoded, json.decodeFromJsonElement(UiSubmission.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -353,7 +343,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(UiSubmission.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -362,7 +351,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"sourceContent":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -419,7 +407,6 @@ class DurableStatePayloadContractTest {
             assertTrue(encoded["conversations"] is JsonArray)
             assertEquals(1, (encoded["conversations"] as JsonArray).size)
             assertEquals(decoded, json.decodeFromJsonElement(ConversationsData.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -480,7 +467,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(ConversationsData.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -489,7 +475,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"version":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -521,7 +506,6 @@ class DurableStatePayloadContractTest {
             assertEquals(input["username"], encoded["username"])
             assertEquals(input["useStartTls"], encoded["useStartTls"])
             assertEquals(decoded, json.decodeFromJsonElement(EmailAccount.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -551,7 +535,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(EmailAccount.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -560,7 +543,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"id":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -600,7 +582,6 @@ class DurableStatePayloadContractTest {
             assertEquals(input["listUnsubscribe"], encoded["listUnsubscribe"])
             assertEquals(input["listUnsubscribePost"], encoded["listUnsubscribePost"])
             assertEquals(decoded, json.decodeFromJsonElement(EmailMessage.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -634,7 +615,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(EmailMessage.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -643,7 +623,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"uid":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -669,7 +648,6 @@ class DurableStatePayloadContractTest {
             assertEquals(input["lastAttemptEpochMs"], encoded["lastAttemptEpochMs"])
             assertEquals(input["lastError"], encoded["lastError"])
             assertEquals(decoded, json.decodeFromJsonElement(EmailSyncState.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -696,7 +674,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(EmailSyncState.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -705,7 +682,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"accountId":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -725,7 +701,6 @@ class DurableStatePayloadContractTest {
             assertEquals(input["success"], encoded["success"])
             assertEquals(input["error"], encoded["error"])
             assertEquals(decoded, json.decodeFromJsonElement(HeartbeatLogEntry.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -749,7 +724,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(HeartbeatLogEntry.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -758,7 +732,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"timestampEpochMs":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -784,7 +757,6 @@ class DurableStatePayloadContractTest {
             assertEquals(input["lastHeartbeatEpochMs"], encoded["lastHeartbeatEpochMs"])
             assertEquals(input["heartbeatInstanceId"], encoded["heartbeatInstanceId"])
             assertEquals(decoded, json.decodeFromJsonElement(HeartbeatConfig.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -811,7 +783,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(HeartbeatConfig.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -820,7 +791,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"enabled":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -848,7 +818,6 @@ class DurableStatePayloadContractTest {
             assertEquals(input["hitCount"], encoded["hitCount"])
             assertEquals(input["source"], encoded["source"])
             assertEquals(decoded, json.decodeFromJsonElement(MemoryEntry.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -876,7 +845,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(MemoryEntry.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -885,7 +853,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"key":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -942,7 +909,6 @@ class DurableStatePayloadContractTest {
             assertEquals(input["consecutiveFailures"], encoded["consecutiveFailures"])
             assertEquals(input["recentExecutions"], encoded["recentExecutions"])
             assertEquals(decoded, json.decodeFromJsonElement(ScheduledTask.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -972,7 +938,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(ScheduledTask.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -981,7 +946,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"id":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -1001,7 +965,6 @@ class DurableStatePayloadContractTest {
             assertEquals(input["success"], encoded["success"])
             assertEquals(input["message"], encoded["message"])
             assertEquals(decoded, json.decodeFromJsonElement(TaskExecutionLogEntry.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -1025,7 +988,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(TaskExecutionLogEntry.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -1034,7 +996,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"timestampEpochMs":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -1060,7 +1021,6 @@ class DurableStatePayloadContractTest {
             assertEquals(input["body"], encoded["body"])
             assertEquals(input["read"], encoded["read"])
             assertEquals(decoded, json.decodeFromJsonElement(SmsMessage.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -1087,7 +1047,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(SmsMessage.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -1096,7 +1055,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"id":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -1120,7 +1078,6 @@ class DurableStatePayloadContractTest {
             assertEquals(input["unreadCount"], encoded["unreadCount"])
             assertEquals(input["lastError"], encoded["lastError"])
             assertEquals(decoded, json.decodeFromJsonElement(SmsSyncState.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -1146,7 +1103,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(SmsSyncState.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -1155,7 +1111,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"lastSeenId":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -1183,7 +1138,6 @@ class DurableStatePayloadContractTest {
             assertEquals(input["status"], encoded["status"])
             assertEquals(input["lastError"], encoded["lastError"])
             assertEquals(decoded, json.decodeFromJsonElement(SmsDraft.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -1211,7 +1165,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(SmsDraft.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -1220,7 +1173,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"id":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -1236,7 +1188,6 @@ class DurableStatePayloadContractTest {
             assertEquals(setOf("text"), encoded.keys)
             assertEquals(input["text"], encoded["text"])
             assertEquals(decoded, json.decodeFromJsonElement(TerminalLine.Command.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -1258,7 +1209,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(TerminalLine.Command.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -1267,7 +1217,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"text":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -1283,7 +1232,6 @@ class DurableStatePayloadContractTest {
             assertEquals(setOf("text"), encoded.keys)
             assertEquals(input["text"], encoded["text"])
             assertEquals(decoded, json.decodeFromJsonElement(TerminalLine.Output.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -1305,7 +1253,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(TerminalLine.Output.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -1314,7 +1261,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"text":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -1330,7 +1276,6 @@ class DurableStatePayloadContractTest {
             assertEquals(setOf("text"), encoded.keys)
             assertEquals(input["text"], encoded["text"])
             assertEquals(decoded, json.decodeFromJsonElement(TerminalLine.Error.serializer(), encoded))
-
         },
         {
             val baseline = json.parseToJsonElement(
@@ -1352,7 +1297,6 @@ class DurableStatePayloadContractTest {
             val actual = json.decodeFromJsonElement(TerminalLine.Error.serializer(), future)
 
             assertEquals(expected, actual)
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -1361,7 +1305,6 @@ class DurableStatePayloadContractTest {
                     json.parseToJsonElement("""{"text":{}}"""),
                 )
             }
-
         },
     )
 
