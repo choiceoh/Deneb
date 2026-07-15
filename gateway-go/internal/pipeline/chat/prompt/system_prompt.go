@@ -19,7 +19,7 @@ var toolCategories = []struct {
 	{"File", []string{"read", "write", "edit", "grep"}},
 	{"Exec", []string{"exec", "process"}},
 	{"Web", []string{"web"}},
-	{"Business", []string{"groupware", "org", "contacts", "deals", "market"}},
+	{"Business", []string{"groupware", "org", "contacts", "deal_ledger", "market"}},
 	{"Memory", []string{"wiki", "polaris"}},
 	{"System", []string{"message", "gateway"}},
 	{"Routine", []string{"cron"}},
