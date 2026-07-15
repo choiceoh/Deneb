@@ -329,7 +329,7 @@ func buildStaticPrompt(params SystemPromptParams, eagerSet, toolSet toolNameSet)
 		// Trigger line only; the HOW ships in each codegraph_* tool description
 		// at fetch_tools time (graphify/message pattern).
 		if _, ok := toolSet["codegraph_explore"]; ok {
-			s.WriteString("- 네 **자신의 소스 코드**(이 게이트웨이와 클라이언트의 구현)는 `codegraph_*` 도구로 조사한다 — \"이 기능 어디서 처리돼\"·\"이 심볼 바꾸면 뭐 깨지나\"·\"누가 이걸 부르나\" 같은 구조·관계·영향 질문은 grep+파일읽기 대신 이걸로 한 번에 답한다. deferred라 `fetch_tools`(query=\"codegraph\")로 먼저 활성화하라: 영역 조사=`codegraph_explore`, 정확한 심볼=`codegraph_node`, 변경 영향=`codegraph_impact`/`codegraph_callers`.\n")
+			s.WriteString("- 네 **자신의 소스 코드**(이 게이트웨이와 클라이언트의 구현)는 `codegraph_*` 도구로 조사한다 — \"이 기능 어디서 처리돼\"·\"이 심볼 바꾸면 뭐 깨지나\"·\"누가 이걸 부르나\" 같은 구조·관계·영향 질문은 grep+파일읽기 대신 이걸로 한 번에 답한다. deferred라 `fetch_tools`(query=\"codegraph\")로 먼저 활성화하라: 영역 조사=`codegraph_explore`, 정확한 심볼=`codegraph_node`, 변경 영향=`codegraph_impact`/`codegraph_callers`. 게이트웨이 동작 질문에 클라(Kotlin/TS) 심볼이 섞이면 쿼리에 `gateway-go`나 파일명을 더해 좁혀라.\n")
 		}
 		s.WriteString("- **Never output tool call syntax or shell commands as text to the user.** Always use structured tool calls. Report results, not the commands you ran.\n\n")
 	}

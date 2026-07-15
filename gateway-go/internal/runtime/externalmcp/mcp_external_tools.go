@@ -191,14 +191,21 @@ func registerMCPServerTools(
 		name := clampToolName(namespaced, t.Name)
 		names = append(names, name)
 		remote := t.Name
+		var fn toolport.ToolFunc = func(ctx context.Context, input json.RawMessage) (string, error) {
+			return call(ctx, remote, input)
+		}
+		// codegraph's search ranking is a black box with no precision knobs;
+		// Deneb-side tuning (single-symbol explore → node reroute) removes the
+		// measured sub-token noise. No-op for every other server/tool.
+		if spec.Name == codegraphServerName {
+			fn = tuneCodegraphTool(remote, fn, call)
+		}
 		registry.RegisterTool(toolport.ToolDef{
 			Name:        name,
 			Description: desc(t.Description),
 			InputSchema: t.InputSchema,
 			Deferred:    true,
-			Fn: func(ctx context.Context, input json.RawMessage) (string, error) {
-				return call(ctx, remote, input)
-			},
+			Fn:          fn,
 		})
 	}
 	return names
