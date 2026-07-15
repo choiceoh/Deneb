@@ -2038,6 +2038,36 @@ class MiniappWireNullCompatibilityTest {
             field = "status",
         ),
         nullContract(
+            name = "ProjectSiteRow.contract_date",
+            serializer = ProjectSiteRow.serializer(),
+            empty = ProjectSiteRow(),
+            field = "contract_date",
+        ),
+        nullContract(
+            name = "ProjectSiteRow.construction_start",
+            serializer = ProjectSiteRow.serializer(),
+            empty = ProjectSiteRow(),
+            field = "construction_start",
+        ),
+        nullContract(
+            name = "ProjectSiteRow.module_delivery",
+            serializer = ProjectSiteRow.serializer(),
+            empty = ProjectSiteRow(),
+            field = "module_delivery",
+        ),
+        nullContract(
+            name = "ProjectSiteRow.pre_use_inspection",
+            serializer = ProjectSiteRow.serializer(),
+            empty = ProjectSiteRow(),
+            field = "pre_use_inspection",
+        ),
+        nullContract(
+            name = "ProjectSiteRow.completion_inspection",
+            serializer = ProjectSiteRow.serializer(),
+            empty = ProjectSiteRow(),
+            field = "completion_inspection",
+        ),
+        nullContract(
             name = "ProjectSitesOut.sites",
             serializer = ProjectSitesOut.serializer(),
             empty = ProjectSitesOut(),

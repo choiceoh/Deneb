@@ -59,10 +59,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.daysUntil
+import kotlinx.datetime.todayIn
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.time.Clock
 
 /**
  * 현장 지도 — plots each active project's 현장(sites) onto a map of Korea (the mobile
@@ -117,6 +122,52 @@ private fun capacityText(mw: Double): String {
     return if (rounded == rounded.toLong().toDouble()) "${rounded.toLong()}MW" else "${rounded}MW"
 }
 
+// 공정 일정 — the 현장 공통 포맷 milestone dates, in process order. Rendered as a
+// timeline in the detail sheet; the two 검사일 also drive 임박 검사 surfacing.
+private data class Sched(
+    val contractDate: String,
+    val constructionStart: String,
+    val moduleDelivery: String,
+    val preUseInspection: String,
+    val completionInspection: String,
+) {
+    fun anyFilled(): Boolean = contractDate.isNotEmpty() || constructionStart.isNotEmpty() || moduleDelivery.isNotEmpty() ||
+        preUseInspection.isNotEmpty() || completionInspection.isNotEmpty()
+}
+
+private data class Milestone(val label: String, val date: String, val inspection: Boolean)
+
+private fun Sched.milestones(): List<Milestone> = listOf(
+    Milestone("계약", contractDate, false),
+    Milestone("공사개시", constructionStart, false),
+    Milestone("모듈입고", moduleDelivery, false),
+    Milestone("사용전검사", preUseInspection, true),
+    Milestone("준공검사", completionInspection, true),
+)
+
+// Parse a YYYY-MM-DD milestone date, else null. 모듈입고 may be a free-form 기간 —
+// those simply don't parse and show as-is in the timeline without a D-day.
+private fun parseYmd(s: String): LocalDate? = runCatching { LocalDate.parse(s.trim()) }.getOrNull()
+
+// The nearest not-yet-past 검사일 (사용전/준공) — the "임박 검사일" the map surfaces so an
+// inspection never sneaks up. null when both are blank or already past.
+private data class Inspection(val label: String, val date: String, val days: Int)
+
+private fun upcomingInspection(sched: Sched, today: LocalDate): Inspection? {
+    var best: Inspection? = null
+    for ((label, date) in listOf("사용전검사" to sched.preUseInspection, "준공검사" to sched.completionInspection)) {
+        val d = parseYmd(date) ?: continue
+        val days = today.daysUntil(d)
+        if (days < 0) continue
+        if (best == null || days < best.days) best = Inspection(label, date, days)
+    }
+    return best
+}
+
+// 임박 = within IMMINENT_DAYS. Drives the header count + the error-hued D-day badge.
+private const val IMMINENT_DAYS = 30
+private fun ddayText(days: Int): String = if (days == 0) "D-day" else "D-$days"
+
 // A project's Kinds are "상위/하위" (e.g. "태양광/루프탑"); the primary kind is the first
 // entry. Split it into 에너지원 (source) and 특성 (type).
 private fun primaryKind(kinds: List<String>): Pair<String, String> {
@@ -169,6 +220,7 @@ private data class SitePin(
     val status: String,
     val due: String,
     val kinds: List<String>,
+    val sched: Sched,
 )
 
 // 후보(prospective) 현장 are hidden by default — the map is for real, contracted
@@ -176,8 +228,9 @@ private data class SitePin(
 // explicit 후보 is gated behind the toggle.
 private const val PROSPECTIVE = "후보"
 
-// An unplaceable 현장 — carries status so the 미배치 tray can hide 후보 too.
-private data class UnplacedSite(val site: String, val project: String, val status: String)
+// An unplaceable 현장 — carries status so the 미배치 tray can hide 후보 too, and its
+// 공정 일정 so an imminent 검사 isn't hidden just because the address doesn't resolve.
+private data class UnplacedSite(val site: String, val project: String, val status: String, val sched: Sched)
 
 private data class Placed(val pins: List<SitePin>, val unplaced: List<UnplacedSite>)
 
@@ -189,15 +242,22 @@ private fun placeSites(rows: List<ProjectSiteRow>): Placed {
         val (source, type) = primaryKind(r.kinds)
         val rad = radiusDpOf(r.capacity)
         val status = r.status.trim()
+        val sched = Sched(
+            contractDate = r.contract_date.trim(),
+            constructionStart = r.construction_start.trim(),
+            moduleDelivery = r.module_delivery.trim(),
+            preUseInspection = r.pre_use_inspection.trim(),
+            completionInspection = r.completion_inspection.trim(),
+        )
         // A 현장 page with no address yet (empty sites) still surfaces — as a 미배치 row.
         if (r.sites.isEmpty()) {
-            unplaced.add(UnplacedSite("(주소 미기재)", r.project, status))
+            unplaced.add(UnplacedSite("(주소 미기재)", r.project, status, sched))
             continue
         }
         for (site in r.sites) {
             val xy = resolveSite(site)
             if (xy == null) {
-                unplaced.add(UnplacedSite(site, r.project, status))
+                unplaced.add(UnplacedSite(site, r.project, status, sched))
                 continue
             }
             val key = "${xy[0]},${xy[1]}"
@@ -220,6 +280,7 @@ private fun placeSites(rows: List<ProjectSiteRow>): Placed {
                     status = status,
                     due = r.due,
                     kinds = r.kinds,
+                    sched = sched,
                 ),
             )
         }
@@ -339,6 +400,19 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
         unplaced.filter { showProspective || it.status != PROSPECTIVE }
     }
     val totalMw = remember(shown) { shown.sumOf { it.capacity } }
+    // Re-derive "today" whenever the fetched rows change (keyed on [rows]) so a
+    // pull-to-refresh the next day advances the D-day baseline — remembering it forever
+    // would freeze the imminent-inspection surfacing at the day the screen first mounted.
+    val today = remember(rows) { Clock.System.todayIn(TimeZone.currentSystemDefault()) }
+    // 임박 검사 — how many shown 현장 have a 검사일 within IMMINENT_DAYS. Unplaced 현장 count
+    // too: an approaching 검사 must not be hidden just because the address doesn't resolve.
+    val imminentCount = remember(shown, shownUnplaced, today) {
+        fun imminent(s: Sched): Boolean {
+            val up = upcomingInspection(s, today)
+            return up != null && up.days <= IMMINENT_DAYS
+        }
+        shown.count { imminent(it.sched) } + shownUnplaced.count { imminent(it.sched) }
+    }
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         // Summary line
@@ -351,6 +425,10 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
             if (shownUnplaced.isNotEmpty()) {
                 Spacer(Modifier.width(8.dp))
                 Text("미배치 ${shownUnplaced.size}", style = DenebType.meta, color = denebHint())
+            }
+            if (imminentCount > 0) {
+                Spacer(Modifier.width(8.dp))
+                Text("임박검사 $imminentCount", style = DenebType.meta, color = MaterialTheme.colorScheme.error)
             }
         }
 
@@ -401,7 +479,7 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
         DenebSectionLabel("현장 목록")
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             shown.sortedByDescending { it.capacity }.forEach { pin ->
-                SiteRow(pin) { select(pin) }
+                SiteRow(pin, today) { select(pin) }
             }
         }
     }
@@ -410,11 +488,12 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
         Spacer(Modifier.height(16.dp))
         DenebSectionLabel("미배치 — 주소를 지도에 매칭하지 못한 현장")
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            shownUnplaced.forEach { (site, project) ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Text(site, style = DenebType.rowSubtitle)
+            shownUnplaced.forEach { u ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(u.site, style = DenebType.rowSubtitle)
                     Spacer(Modifier.width(6.dp))
-                    Text(project, style = DenebType.meta, color = denebHint())
+                    Text(u.project, style = DenebType.meta, color = denebHint(), modifier = Modifier.weight(1f))
+                    InspectionBadge(u.sched, today)
                 }
             }
         }
@@ -434,6 +513,7 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
                 if (pin.type.isNotEmpty()) DetailRow("특성", typeLabel(pin.type))
                 DetailRow("용량", capacityText(pin.capacity))
                 DetailRow("마감", pin.due.ifEmpty { "미정" })
+                ScheduleTimeline(pin.sched, today)
                 if (pin.path.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
                     TextButton(onClick = {
@@ -460,8 +540,51 @@ private fun DetailRow(label: String, value: String) {
     }
 }
 
+// 공정 일정 — a small timeline of the five milestone dates in process order. Blank
+// milestones stay visible (dimmed) so what's left to fill is obvious; a parseable
+// date shows its D-day, past dates read 완료, and the nearest upcoming 검사 is
+// error-hued. Renders nothing when the whole schedule is blank (fallback rows).
 @Composable
-private fun SiteRow(pin: SitePin, onClick: () -> Unit) {
+private fun ScheduleTimeline(sched: Sched, today: LocalDate) {
+    if (!sched.anyFilled()) return
+    val up = upcomingInspection(sched, today)
+    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        Text("공정 일정", style = DenebType.meta, color = denebHint())
+        Spacer(Modifier.height(6.dp))
+        sched.milestones().forEach { m ->
+            val has = m.date.isNotEmpty()
+            val days = if (has) parseYmd(m.date)?.let { today.daysUntil(it) } else null
+            val isNextInspection = up != null && m.inspection && m.date == up.date && m.label == up.label
+            val done = days != null && days < 0
+            val dotColor = when {
+                isNextInspection -> MaterialTheme.colorScheme.error
+                done -> MaterialTheme.colorScheme.outline
+                has -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.outlineVariant
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(8.dp).background(dotColor, RoundedCornerShape(50)))
+                Spacer(Modifier.width(9.dp))
+                Text(m.label, style = DenebType.meta, color = denebHint(), modifier = Modifier.width(72.dp))
+                Text(m.date.ifEmpty { "미정" }, style = DenebType.body, color = if (has) MaterialTheme.colorScheme.onSurface else denebHint())
+                if (days != null) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (done) "완료" else ddayText(days),
+                        style = DenebType.meta,
+                        color = if (isNextInspection) MaterialTheme.colorScheme.error else denebHint(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SiteRow(pin: SitePin, today: LocalDate, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -488,11 +611,30 @@ private fun SiteRow(pin: SitePin, onClick: () -> Unit) {
             )
         }
         Spacer(Modifier.width(8.dp))
+        InspectionBadge(pin.sched, today)
         Text(
             listOf(pin.source, capacityText(pin.capacity)).filter { it.isNotEmpty() }.joinToString(" · "),
             style = DenebType.meta,
             color = denebHint(),
         )
+    }
+}
+
+// A compact D-day pill for the nearest upcoming 검사일 — error-hued once 임박
+// (≤IMMINENT_DAYS), muted otherwise. Renders nothing when no upcoming 검사.
+@Composable
+private fun InspectionBadge(sched: Sched, today: LocalDate) {
+    val up = upcomingInspection(sched, today) ?: return
+    val imminent = up.days <= IMMINENT_DAYS
+    val tint = if (imminent) MaterialTheme.colorScheme.error else denebHint()
+    Row(
+        Modifier
+            .padding(end = 8.dp)
+            .border(1.dp, tint, RoundedCornerShape(50))
+            .padding(horizontal = 7.dp, vertical = 1.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("${up.label.replace("검사", "")} ${ddayText(up.days)}", style = DenebType.meta, color = tint)
     }
 }
 

@@ -125,6 +125,14 @@ type ProjectSite struct {
 	Kinds    []string // Meta.Kinds — 에너지원/특성 (태양광/루프탑 …); map colors by 에너지원, shapes by 특성
 	Capacity float64  // Meta.Capacity — this site's 용량 in MW; the map sizes pins by this
 	Status   string   // 현장 page's lifecycle (후보/계약/개설/준공); "" = 미분류 (fallback rows)
+	// 공정 일정 — the milestone dates the 현장 지도 renders as a timeline (blank for
+	// 대표페이지-fallback rows, which have no per-site schedule). YYYY-MM-DD, except
+	// ModuleDelivery which may be a free-form 기간 (e.g. "3월 중순~4월 초").
+	ContractDate         string // 계약일
+	ConstructionStart    string // 공사개시일
+	ModuleDelivery       string // 모듈입고(기간 가능)
+	PreUseInspection     string // 사용전검사일
+	CompletionInspection string // 준공검사일
 }
 
 // ProjectSites enumerates every 현장 across all active projects for the 현장 지도.
@@ -168,14 +176,19 @@ func (s *Store) ProjectSites() ([]ProjectSite, error) {
 				client = ref.Client
 			}
 			out = append(out, ProjectSite{
-				Name:     ref.Name,
-				Client:   client,
-				Path:     sp,
-				Due:      strings.TrimSpace(page.Meta.Due),
-				Sites:    addrSlice(addr),
-				Kinds:    page.Meta.Kinds,
-				Capacity: page.Meta.Capacity,
-				Status:   strings.TrimSpace(page.Meta.Status),
+				Name:                 ref.Name,
+				Client:               client,
+				Path:                 sp,
+				Due:                  strings.TrimSpace(page.Meta.Due),
+				Sites:                addrSlice(addr),
+				Kinds:                page.Meta.Kinds,
+				Capacity:             page.Meta.Capacity,
+				Status:               strings.TrimSpace(page.Meta.Status),
+				ContractDate:         strings.TrimSpace(page.Meta.ContractDate),
+				ConstructionStart:    strings.TrimSpace(page.Meta.ConstructionStart),
+				ModuleDelivery:       strings.TrimSpace(page.Meta.ModuleDelivery),
+				PreUseInspection:     strings.TrimSpace(page.Meta.PreUseInspection),
+				CompletionInspection: strings.TrimSpace(page.Meta.CompletionInspection),
 			})
 			if addr != "" {
 				covered[addr] = true

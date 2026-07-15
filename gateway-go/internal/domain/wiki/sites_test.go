@@ -314,7 +314,8 @@ func TestProjectSites_SitePagesRichPlusRepFallback(t *testing.T) {
 		Meta: Frontmatter{
 			Title: "수산리", Type: "site",
 			Address: "전북 군산시 옥구읍 수산리", Status: "계약", Capacity: 24,
-			Kinds: []string{"태양광/루프탑"},
+			Kinds:        []string{"태양광/루프탑"},
+			ContractDate: "2026-06-01", PreUseInspection: "2026-09-20",
 		},
 		Body: "현장.",
 	})
@@ -343,9 +344,18 @@ func TestProjectSites_SitePagesRichPlusRepFallback(t *testing.T) {
 	if len(sur.Kinds) != 1 || sur.Kinds[0] != "태양광/루프탑" {
 		t.Errorf("수산리 kinds = %v, want site-page [태양광/루프탑]", sur.Kinds)
 	}
+	// 공정 일정 milestone dates propagate from the 현장 page to the map row.
+	if sur.ContractDate != "2026-06-01" || sur.PreUseInspection != "2026-09-20" {
+		t.Errorf("수산리 milestones = contract %q / pre-use %q, want 2026-06-01 / 2026-09-20",
+			sur.ContractDate, sur.PreUseInspection)
+	}
 	sok := byAddr["충남 당진시 석문면"]
 	if sok.Status != "" || sok.Capacity != 50 || sok.Path != "프로젝트/A/대표.md" {
 		t.Errorf("석문면 (fallback) = %+v, want blank status / rep cap 50 / rep path", sok)
+	}
+	// Fallback rows carry no per-site schedule.
+	if sok.ContractDate != "" || sok.PreUseInspection != "" {
+		t.Errorf("석문면 (fallback) milestones = contract %q / pre-use %q, want blank", sok.ContractDate, sok.PreUseInspection)
 	}
 	if _, ok := byAddr["경남 밀양시 부북면"]; !ok {
 		t.Errorf("B fallback site missing: %+v", rows)

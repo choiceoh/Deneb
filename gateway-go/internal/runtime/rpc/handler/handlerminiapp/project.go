@@ -117,6 +117,14 @@ type ProjectSiteRow struct {
 	// Status is the 현장's lifecycle stage (후보/계약/개설/준공); "" = 미분류. The map
 	// hides 후보 by default and offers it as a filter axis.
 	Status string `json:"status,omitempty"`
+	// 공정 일정 milestone dates — the map renders these as a timeline in the site
+	// detail sheet and surfaces the nearest upcoming 검사일. YYYY-MM-DD (모듈입고 may
+	// be a free-form 기간). Blank for 대표페이지-fallback rows.
+	ContractDate         string `json:"contract_date,omitempty"`
+	ConstructionStart    string `json:"construction_start,omitempty"`
+	ModuleDelivery       string `json:"module_delivery,omitempty"`
+	PreUseInspection     string `json:"pre_use_inspection,omitempty"`
+	CompletionInspection string `json:"completion_inspection,omitempty"`
 }
 
 // ProjectSitesOut is the miniapp.project.sites response.
@@ -172,14 +180,19 @@ func projectSites(deps ProjectDeps) rpcutil.HandlerFunc {
 		rows := make([]ProjectSiteRow, 0, len(sites))
 		for _, s := range sites {
 			rows = append(rows, ProjectSiteRow{
-				Project:  s.Name,
-				Client:   s.Client,
-				Path:     s.Path,
-				Due:      s.Due,
-				Sites:    s.Sites,
-				Kinds:    s.Kinds,
-				Capacity: s.Capacity,
-				Status:   s.Status,
+				Project:              s.Name,
+				Client:               s.Client,
+				Path:                 s.Path,
+				Due:                  s.Due,
+				Sites:                s.Sites,
+				Kinds:                s.Kinds,
+				Capacity:             s.Capacity,
+				Status:               s.Status,
+				ContractDate:         s.ContractDate,
+				ConstructionStart:    s.ConstructionStart,
+				ModuleDelivery:       s.ModuleDelivery,
+				PreUseInspection:     s.PreUseInspection,
+				CompletionInspection: s.CompletionInspection,
 			})
 		}
 		return rpcutil.RespondOK(req.ID, ProjectSitesOut{Sites: rows})
