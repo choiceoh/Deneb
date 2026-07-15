@@ -2,7 +2,10 @@ package wiki
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func TestNormalizeSiteName(t *testing.T) {
@@ -129,17 +132,65 @@ func TestProjectAnchor_MatchesBySiteNameMentionIgnoresUnrelatedText(t *testing.T
 	}
 }
 
+// TestUpsertSitePage_CreateThenPartialEdit: create a 현장 page in the 공통 포맷, then
+// a partial edit sets a later milestone without clobbering the earlier fields.
+func TestUpsertSitePage_CreateThenPartialEdit(t *testing.T) {
+	store := newProjectTestStore(t)
+	defer store.Close()
+
+	path, err := store.UpsertSitePage("군산수산리", "수산리", SiteFields{
+		Client: "금호", Address: "전라북도 군산시 옥구읍 수산리.", Status: "계약",
+		Capacity: 24, Kinds: []string{"루프탑"}, ContractDate: "2026-06-01",
+	})
+	if err != nil {
+		t.Fatalf("UpsertSitePage create: %v", err)
+	}
+	if path != SitePagePath("군산수산리", "수산리") {
+		t.Fatalf("path = %q", path)
+	}
+	page := testutil.Must(store.ReadPage(path))
+	if page.Meta.Type != "site" || page.Meta.Address != "전북 군산시 옥구읍 수산리" ||
+		page.Meta.Status != "계약" || page.Meta.Capacity != 24 || page.Meta.ContractDate != "2026-06-01" {
+		t.Errorf("created site page meta = %+v", page.Meta)
+	}
+	if len(page.Meta.Kinds) != 1 || page.Meta.Kinds[0] != "태양광/루프탑" {
+		t.Errorf("kinds = %v, want normalized [태양광/루프탑]", page.Meta.Kinds)
+	}
+	if !strings.Contains(page.Body, "## 공정 현황") {
+		t.Errorf("new page missing standard body scaffold: %q", page.Body)
+	}
+
+	// Partial edit: advance status + add a later milestone; earlier fields survive.
+	if _, err := store.UpsertSitePage("군산수산리", "수산리", SiteFields{
+		Status: "개설", ConstructionStart: "2026-07-10",
+	}); err != nil {
+		t.Fatalf("UpsertSitePage edit: %v", err)
+	}
+	page = testutil.Must(store.ReadPage(path))
+	if page.Meta.Status != "개설" || page.Meta.ConstructionStart != "2026-07-10" {
+		t.Errorf("edit didn't apply: status=%q start=%q", page.Meta.Status, page.Meta.ConstructionStart)
+	}
+	if page.Meta.ContractDate != "2026-06-01" || page.Meta.Capacity != 24 || page.Meta.Address == "" {
+		t.Errorf("partial edit clobbered earlier fields: %+v", page.Meta)
+	}
+}
+
 // TestFrontmatterAddressStatusRoundtrip: a 현장 page's address (normalized like
 // Sites) and status survive Render→Parse.
 func TestFrontmatterAddressStatusRoundtrip(t *testing.T) {
 	p := &Page{
 		Meta: Frontmatter{
-			Title:    "수산리",
-			Type:     "site",
-			Address:  "전라북도 군산시 옥구읍 수산리.", // full province + trailing period → normalized
-			Status:   "계약",
-			Capacity: 24,
-			Kinds:    []string{"루프탑"},
+			Title:                "수산리",
+			Type:                 "site",
+			Address:              "전라북도 군산시 옥구읍 수산리.", // full province + trailing period → normalized
+			Status:               "개설",
+			Capacity:             24,
+			Kinds:                []string{"루프탑"},
+			ContractDate:         "2026-06-01",
+			ConstructionStart:    "2026-07-10",
+			ModuleDelivery:       "2026-08-01~2026-08-15",
+			PreUseInspection:     "2026-09-20",
+			CompletionInspection: "2026-10-05",
 		},
 		Body: "현장 메모.",
 	}
@@ -150,11 +201,16 @@ func TestFrontmatterAddressStatusRoundtrip(t *testing.T) {
 	if parsed.Meta.Address != "전북 군산시 옥구읍 수산리" {
 		t.Errorf("address roundtrip = %q, want normalized 전북 군산시 옥구읍 수산리", parsed.Meta.Address)
 	}
-	if parsed.Meta.Status != "계약" {
-		t.Errorf("status roundtrip = %q, want 계약", parsed.Meta.Status)
+	if parsed.Meta.Status != "개설" {
+		t.Errorf("status roundtrip = %q, want 개설", parsed.Meta.Status)
 	}
 	if parsed.Meta.Capacity != 24 {
 		t.Errorf("capacity roundtrip = %v, want 24", parsed.Meta.Capacity)
+	}
+	if parsed.Meta.ContractDate != "2026-06-01" || parsed.Meta.ConstructionStart != "2026-07-10" ||
+		parsed.Meta.ModuleDelivery != "2026-08-01~2026-08-15" || parsed.Meta.PreUseInspection != "2026-09-20" ||
+		parsed.Meta.CompletionInspection != "2026-10-05" {
+		t.Errorf("milestone roundtrip lost data: %+v", parsed.Meta)
 	}
 }
 

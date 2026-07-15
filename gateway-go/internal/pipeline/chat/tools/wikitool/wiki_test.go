@@ -572,3 +572,42 @@ func TestWikiReadWrite_RejectsPathEscape(t *testing.T) {
 		t.Errorf("expected category rejection, got: %q", out)
 	}
 }
+
+func TestWikiWriteSite_CreateEditAndValidate(t *testing.T) {
+	store := newTestWikiStore(t)
+
+	// Missing project/title → guidance, no write.
+	if out, _ := wikiWriteSite(store, "", "수산리", wiki.SiteFields{}); !strings.Contains(out, "필요") {
+		t.Errorf("expected required-field guidance, got: %q", out)
+	}
+
+	// Create in the 현장 공통 포맷.
+	out, err := wikiWriteSite(store, "군산수산리", "수산리", wiki.SiteFields{
+		Client: "금호", Address: "전북 군산시 옥구읍 수산리", Status: "계약",
+		Capacity: 24, Kinds: []string{"루프탑"}, ContractDate: "2026-06-01",
+	})
+	if err != nil {
+		t.Fatalf("wikiWriteSite create: %v", err)
+	}
+	if !strings.Contains(out, "프로젝트/군산수산리/현장/수산리.md") || !strings.Contains(out, "계약") {
+		t.Errorf("unexpected create output: %q", out)
+	}
+	page, rerr := store.ReadPage("프로젝트/군산수산리/현장/수산리.md")
+	if rerr != nil || page == nil {
+		t.Fatalf("read site page: %v", rerr)
+	}
+	if page.Meta.Status != "계약" || page.Meta.Capacity != 24 || page.Meta.ContractDate != "2026-06-01" {
+		t.Errorf("site page meta = %+v", page.Meta)
+	}
+
+	// Partial edit advances status + a later milestone; earlier fields survive.
+	if _, err := wikiWriteSite(store, "군산수산리", "수산리", wiki.SiteFields{
+		Status: "준공", CompletionInspection: "2026-10-05",
+	}); err != nil {
+		t.Fatalf("wikiWriteSite edit: %v", err)
+	}
+	page, _ = store.ReadPage("프로젝트/군산수산리/현장/수산리.md")
+	if page.Meta.Status != "준공" || page.Meta.CompletionInspection != "2026-10-05" || page.Meta.ContractDate != "2026-06-01" {
+		t.Errorf("partial edit wrong: %+v", page.Meta)
+	}
+}
