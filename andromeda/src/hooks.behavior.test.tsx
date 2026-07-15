@@ -400,7 +400,7 @@ describe("useRpc", () => {
   });
 
   it.each([
-    ["network errors", () => Promise.reject(new Error("when offline")), "오류: offline"],
+    ["network errors", () => Promise.reject(new Error("when offline")), "오류: when offline"],
     ["RPC errors", () => Promise.resolve(failedResponse("permission denied", 403)), "오류: RPC miniapp.test: HTTP 403"],
   ])("turns %s into a failed result", async (_label, implementation, expected) => {
     vi.stubGlobal("fetch", vi.fn(implementation));

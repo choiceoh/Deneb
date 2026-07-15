@@ -21,6 +21,7 @@ export type IconName =
   | "workfeed"
   | "skills"
   | "rsi"
+  | "observe"
   | "code"
   | "send"
   | "bell"
@@ -138,6 +139,13 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M18.5 8A7.5 7.5 0 0 0 5 9.5M5.5 16A7.5 7.5 0 0 0 19 14.5" />
       <path d="M18.5 4.5V8H15M5.5 19.5V16H9" />
+    </>
+  ),
+  // Eye — read-only observation of gateway behavior / logs.
+  observe: (
+    <>
+      <path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z" />
+      <circle cx="12" cy="12" r="2.8" />
     </>
   ),
   code: <path d="M8.5 8l-4 4 4 4M15.5 8l4 4-4 4" />,

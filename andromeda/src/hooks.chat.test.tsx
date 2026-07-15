@@ -233,9 +233,7 @@ describe("useChat capture", () => {
     },
   ];
 
-  it.each(captureWireCases)(
-    "when capturing $expectedKind attachments with the correct wire shape",
-    async (tt) => {
+  it.each(captureWireCases)("when capturing $expectedKind attachments with the correct wire shape", async (tt) => {
     mocks.callRpc.mockResolvedValue({ text: " extracted text " });
     const { result, unmount } = renderHook(() => useChat(CFG));
 
