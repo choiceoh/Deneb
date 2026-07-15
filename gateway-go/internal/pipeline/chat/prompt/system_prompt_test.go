@@ -120,13 +120,26 @@ func TestBuildSystemPromptRendersCompactToolList(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPromptRendersSkillsAndPropusDoctrine(t *testing.T) {
+func TestWriteCompactToolListSortsUncategorizedTools(t *testing.T) {
+	var prompt strings.Builder
+	writeCompactToolList(&prompt, toolNameSet{
+		"office":           {},
+		"goal":             {},
+		"mail_archive":     {},
+		"heartbeat_update": {},
+	})
+	if got, want := prompt.String(), "Other: goal, heartbeat_update, mail_archive, office\n"; got != want {
+		t.Fatalf("uncategorized tool list = %q, want stable ordering %q", got, want)
+	}
+}
+
+func TestBuildSystemPromptRendersSkillsAndThinPropusRouter(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
 		SkillsPrompt: `<available_skills><skill><name>test-skill</name></skill></available_skills>`,
 	}
 
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSemiStaticPrompt(params)
 	if !strings.Contains(prompt, "## 스킬") {
 		t.Error("missing skills section")
 	}
@@ -136,17 +149,34 @@ func TestBuildSystemPromptRendersSkillsAndPropusDoctrine(t *testing.T) {
 	if !strings.Contains(prompt, "skills") {
 		t.Error("missing skills tool hint for discoverable skills")
 	}
-	doctrine := propus.PropusDoctrine()
 	for _, want := range []string{
 		"### Propus",
+		"`evolution-proposal` SKILL.md를 읽고",
+		"상세 doctrine·route·검증·자가수정 queue·rollback 규칙의 유일한 소유자는 `evolution-proposal`",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("missing thin Propus router content %q", want)
+		}
+	}
+
+	doctrine := propus.PropusDoctrine()
+	for _, detail := range []string{
 		doctrine.Version,
 		doctrine.SourceIDs()[0],
 		doctrine.QualityGates[0],
 		doctrine.ProductRules()[2],
 	} {
-		if !strings.Contains(prompt, want) {
-			t.Errorf("missing Propus doctrine prompt content %q", want)
+		if strings.Contains(prompt, detail) {
+			t.Errorf("ambient prompt must defer Propus detail %q to evolution-proposal", detail)
 		}
+	}
+
+	start := strings.Index(prompt, "### Propus")
+	if start < 0 {
+		t.Fatal("missing Propus router")
+	}
+	if got := len(prompt[start:]); got > 1_000 {
+		t.Errorf("ambient Propus router = %d bytes, want <= 1000; move procedure detail to evolution-proposal", got)
 	}
 }
 
