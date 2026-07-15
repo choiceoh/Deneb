@@ -119,6 +119,11 @@ func isIrreversibleTool(name string, input []byte) bool {
 	switch name {
 	case "exec":
 		return true
+	case "preference":
+		// preference appends a DURABLE standing rule to SOUL.md that steers every
+		// future session — exactly the kind of persistent persona mutation a
+		// prompt injection must not be able to plant.
+		return true
 	case "wiki":
 		// forget is a hard page delete — block it on a tainted turn. Every other
 		// wiki action (search/read/write/log/close/…) is reversible or checkpointed
