@@ -188,6 +188,44 @@ class GatewayRuntimeEndpointContractTest {
     }
 
     @Test
+    fun observeHealthSendsExactRuntimeContract() = runTest {
+        val f = gatewayClientFixture(token = "runtime-token")
+        f.transport.enqueueRpc(payload = "{}", ok = false)
+
+        f.client.observeHealth()
+
+        val request = f.transport.singleRequest()
+        val params = request.requireRpc("miniapp.observe.health")
+        assertEquals("POST", request.method.value)
+        assertEquals(ContentType.Application.Json, request.bodyContentType?.withoutParameters())
+        assertEquals("runtime-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
+        assertEquals(emptySet(), params.keys)
+    }
+
+    @Test
+    fun observeHealthSkipsNetworkWithoutCredentials() = runTest {
+        val f = gatewayClientFixture(token = "")
+
+        f.client.observeHealth()
+
+        assertTrue(f.transport.requests.isEmpty())
+    }
+
+    @Test
+    fun observeHealthPropagatesCancellationWithoutPublishingFallbackData() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueFailure(CancellationException("cancel observeHealth"))
+
+        val failure = assertFailsWith<CancellationException> {
+            f.client.observeHealth()
+        }
+
+        assertEquals("cancel observeHealth", failure.message)
+        assertEquals(1, f.transport.requests.size)
+        assertEquals("miniapp.observe.health", f.transport.singleRequest().rpcMethod)
+    }
+
+    @Test
     fun runWorkFeedActionSendsExactRuntimeContract() = runTest {
         val f = gatewayClientFixture(token = "runtime-token")
         f.transport.enqueueRpc(payload = "{}", ok = false)

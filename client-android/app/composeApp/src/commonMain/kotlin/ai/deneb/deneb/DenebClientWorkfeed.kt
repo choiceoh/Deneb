@@ -297,6 +297,9 @@ internal suspend fun DenebGatewayClient.observeLogs(level: String, limit: Int, d
     },
 )
 
+/** Observation-plane liveness (capture/agentlog wiring, ring fill, 24h glance). */
+internal suspend fun DenebGatewayClient.observeHealth(): ObserveHealth? = callRpc("miniapp.observe.health", buildJsonObject {})
+
 suspend fun DenebGatewayClient.openWorkFeedItem(id: String): String? {
     // Opening a 업무 card runs its analysis in a dedicated side-conversation off
     // the client:main home — NOT in client:main itself. The old path adopted the

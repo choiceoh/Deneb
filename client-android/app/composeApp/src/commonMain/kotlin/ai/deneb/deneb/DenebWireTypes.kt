@@ -211,6 +211,11 @@ internal data class ObserveToolStat(
     val calls: Int = 0,
     val errors: Int = 0,
     val avgMs: Long = 0,
+    val repaired: Int = 0,
+    val unknown: Int = 0,
+    val blocked: Int = 0,
+    val cacheHits: Int = 0,
+    val truncated: Int = 0,
 )
 
 @Serializable
@@ -218,19 +223,48 @@ internal data class ObserveBehavior(
     val runs: Int = 0,
     val proactiveRuns: Int = 0,
     val compactedRuns: Int = 0,
+    val totalInputTokens: Long = 0,
+    val totalOutputTokens: Long = 0,
+    val cacheReadTokens: Long = 0,
     val tools: List<ObserveToolStat> = emptyList(),
+    val proactiveDecisions: Map<String, Int> = emptyMap(),
+    val backgroundJobs: Map<String, Int> = emptyMap(),
     val backgroundErrors: Map<String, Int> = emptyMap(),
 )
 
 @Serializable
 internal data class ObserveLogLine(
+    val ts: Long = 0,
     val level: String = "",
     val msg: String = "",
     val runId: String = "",
+    val session: String = "",
 )
 
 @Serializable
 internal data class ObserveLogsPayload(
     val lines: List<ObserveLogLine> = emptyList(),
     val count: Int = 0,
+)
+
+@Serializable
+internal data class ObserveVllmPrefixCache(
+    val model: String = "",
+    val queries: Long = 0,
+    val hits: Long = 0,
+    val hitRatePct: Double = 0.0,
+)
+
+@Serializable
+internal data class ObserveHealth(
+    val captureEnabled: Boolean = false,
+    val agentLogEnabled: Boolean = false,
+    val ringCapacity: Int = 0,
+    val ringUsed: Int = 0,
+    val recentErrors: Int = 0,
+    val runs24h: Int = 0,
+    val proactiveRuns24h: Int = 0,
+    val compactedRuns24h: Int = 0,
+    val backgroundErrors24h: Int = 0,
+    val vllmPrefixCache: List<ObserveVllmPrefixCache> = emptyList(),
 )

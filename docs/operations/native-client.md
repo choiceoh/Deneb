@@ -173,8 +173,10 @@ The 설정 hub has these tabs:
   doctrine version and quality gates from the gateway.
 - **크론** — the gateway's scheduled tasks, with a per-task detail screen
   (schedule, instruction, delivery target, state; enable, run now, delete).
-- **관찰** — a read-only operator dashboard: the gateway's recent behavior plus
-  warn/error log lines.
+- **관찰** — a read-only operator dashboard: observation-plane health (capture/agentlog
+  wiring, ring fill, 24h glance), behavior aggregates for the selected 1d/7d window
+  (runs, tokens/cache, proactive funnel, background jobs/errors, per-tool usage and
+  anomaly counters), plus recent warn/error log lines with runId and expandable bodies.
 
 ## Instant Proactive Push
 

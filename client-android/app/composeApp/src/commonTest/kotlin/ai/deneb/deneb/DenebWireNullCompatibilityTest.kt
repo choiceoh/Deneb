@@ -25,7 +25,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(RecentPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -34,7 +33,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(TranscriptPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -43,7 +41,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WorkFeedPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -52,7 +49,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WorkFeedActionRunPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -61,7 +57,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WorkFeedActionRunPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -70,7 +65,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WorkFeedActionRunPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -79,7 +73,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WorkFeedActionRunPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -88,7 +81,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WorkFeedActionRunPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -97,7 +89,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WorkFeedActionRunPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -106,7 +97,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WorkFeedFeedbackPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -115,7 +105,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WorkFeedFeedbackPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -124,7 +113,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WorkFeedFeedbackPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -133,7 +121,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WorkFeedFeedbackPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -142,7 +129,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(NativeSyncPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -151,7 +137,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(NativeSyncPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -160,7 +145,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(NativeSyncPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -169,7 +153,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(NativeSyncPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -178,7 +161,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(NativeSyncEvent(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -187,7 +169,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(NativeSyncEvent(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -196,7 +177,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(NativeSyncEvent(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -205,7 +185,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(NativeSyncEvent(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -214,7 +193,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(NativeSyncEvent(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -223,7 +201,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(NativeSyncEvent(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -232,7 +209,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(NativeSyncEvent(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -241,7 +217,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(NativeSyncActionPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -250,7 +225,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(NativeSyncActionPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -259,7 +233,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(MemoryListPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -268,7 +241,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(DiaryRecentPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -277,7 +249,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(DiaryRecentRow(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -286,7 +257,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(DiaryRecentRow(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -295,7 +265,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(DiaryRecentRow(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -304,7 +273,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(DiaryRecentRow(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -313,7 +281,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(DeletePagesPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -322,7 +289,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(DeletePagesPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -331,7 +297,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(MovePagePayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -340,7 +305,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(CategoriesPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -349,7 +313,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(CategoriesPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -358,7 +321,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(CategoriesPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -367,7 +329,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(CronListPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -376,7 +337,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ModelsPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -385,7 +345,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ModelsPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -394,7 +353,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ModelsPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -403,7 +361,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ModelsPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -412,7 +369,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ClientHelloPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -421,7 +377,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ClientHelloPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -430,7 +385,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ClientHelloPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -439,7 +393,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ClientHelloPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -448,7 +401,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ClientHelloPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -457,7 +409,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ClientHelloPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -466,7 +417,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(MailListPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -475,7 +425,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(MailListPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -484,7 +433,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(OkPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -493,7 +441,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(AskPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -502,7 +449,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(SenderContextPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -511,7 +457,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(SenderContextPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -520,7 +465,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(SenderContextPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -529,7 +473,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(SenderContextPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -538,7 +481,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(SenderContextPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -547,7 +489,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(SenderContextPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -556,7 +497,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(CalListPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -565,7 +505,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(CalProposalsPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -574,7 +513,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(TodoListPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -583,7 +521,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(PeopleListPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -592,7 +529,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ContactsListPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -601,7 +537,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WikiPagePayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -610,7 +545,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WikiPagePayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -619,7 +553,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WikiPagePayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -628,7 +561,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WikiPagePayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -637,7 +569,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WikiPagePayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -646,7 +577,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WikiPagePayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -655,7 +585,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WikiPagePayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -664,7 +593,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(WikiPagePayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -673,7 +601,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(CaptureImagePayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -682,7 +609,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(CaptureAudioPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -691,7 +617,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(CaptureDocumentPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -700,7 +625,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(CaptureContactsPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -709,7 +633,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ObserveToolStat(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -718,7 +641,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ObserveToolStat(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -727,7 +649,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ObserveToolStat(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -736,7 +657,46 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ObserveToolStat(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveToolStat.serializer(),
+                """{"repaired":null}""",
+            )
 
+            assertEquals(ObserveToolStat(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveToolStat.serializer(),
+                """{"unknown":null}""",
+            )
+
+            assertEquals(ObserveToolStat(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveToolStat.serializer(),
+                """{"blocked":null}""",
+            )
+
+            assertEquals(ObserveToolStat(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveToolStat.serializer(),
+                """{"cacheHits":null}""",
+            )
+
+            assertEquals(ObserveToolStat(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveToolStat.serializer(),
+                """{"truncated":null}""",
+            )
+
+            assertEquals(ObserveToolStat(), decoded)
         },
         {
             val decoded = json.decodeFromString(
@@ -745,7 +705,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ObserveBehavior(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -754,7 +713,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ObserveBehavior(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -763,7 +721,30 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ObserveBehavior(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveBehavior.serializer(),
+                """{"totalInputTokens":null}""",
+            )
 
+            assertEquals(ObserveBehavior(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveBehavior.serializer(),
+                """{"totalOutputTokens":null}""",
+            )
+
+            assertEquals(ObserveBehavior(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveBehavior.serializer(),
+                """{"cacheReadTokens":null}""",
+            )
+
+            assertEquals(ObserveBehavior(), decoded)
         },
         {
             val decoded = json.decodeFromString(
@@ -772,7 +753,22 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ObserveBehavior(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveBehavior.serializer(),
+                """{"proactiveDecisions":null}""",
+            )
 
+            assertEquals(ObserveBehavior(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveBehavior.serializer(),
+                """{"backgroundJobs":null}""",
+            )
+
+            assertEquals(ObserveBehavior(), decoded)
         },
         {
             val decoded = json.decodeFromString(
@@ -781,7 +777,14 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ObserveBehavior(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveLogLine.serializer(),
+                """{"ts":null}""",
+            )
 
+            assertEquals(ObserveLogLine(), decoded)
         },
         {
             val decoded = json.decodeFromString(
@@ -790,7 +793,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ObserveLogLine(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -799,7 +801,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ObserveLogLine(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -808,7 +809,14 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ObserveLogLine(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveLogLine.serializer(),
+                """{"session":null}""",
+            )
 
+            assertEquals(ObserveLogLine(), decoded)
         },
         {
             val decoded = json.decodeFromString(
@@ -817,7 +825,6 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ObserveLogsPayload(), decoded)
-
         },
         {
             val decoded = json.decodeFromString(
@@ -826,7 +833,118 @@ class DenebWireNullCompatibilityTest {
             )
 
             assertEquals(ObserveLogsPayload(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveVllmPrefixCache.serializer(),
+                """{"model":null}""",
+            )
 
+            assertEquals(ObserveVllmPrefixCache(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveVllmPrefixCache.serializer(),
+                """{"queries":null}""",
+            )
+
+            assertEquals(ObserveVllmPrefixCache(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveVllmPrefixCache.serializer(),
+                """{"hits":null}""",
+            )
+
+            assertEquals(ObserveVllmPrefixCache(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveVllmPrefixCache.serializer(),
+                """{"hitRatePct":null}""",
+            )
+
+            assertEquals(ObserveVllmPrefixCache(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveHealth.serializer(),
+                """{"captureEnabled":null}""",
+            )
+
+            assertEquals(ObserveHealth(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveHealth.serializer(),
+                """{"agentLogEnabled":null}""",
+            )
+
+            assertEquals(ObserveHealth(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveHealth.serializer(),
+                """{"ringCapacity":null}""",
+            )
+
+            assertEquals(ObserveHealth(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveHealth.serializer(),
+                """{"ringUsed":null}""",
+            )
+
+            assertEquals(ObserveHealth(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveHealth.serializer(),
+                """{"recentErrors":null}""",
+            )
+
+            assertEquals(ObserveHealth(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveHealth.serializer(),
+                """{"runs24h":null}""",
+            )
+
+            assertEquals(ObserveHealth(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveHealth.serializer(),
+                """{"proactiveRuns24h":null}""",
+            )
+
+            assertEquals(ObserveHealth(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveHealth.serializer(),
+                """{"compactedRuns24h":null}""",
+            )
+
+            assertEquals(ObserveHealth(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveHealth.serializer(),
+                """{"backgroundErrors24h":null}""",
+            )
+
+            assertEquals(ObserveHealth(), decoded)
+        },
+        {
+            val decoded = json.decodeFromString(
+                ObserveHealth.serializer(),
+                """{"vllmPrefixCache":null}""",
+            )
+
+            assertEquals(ObserveHealth(), decoded)
         },
     )
 
