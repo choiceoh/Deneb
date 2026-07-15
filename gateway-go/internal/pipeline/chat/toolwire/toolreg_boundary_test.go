@@ -450,7 +450,7 @@ func TestRegisterCoreToolsDeferredPolicyContractMatchesOperationalIntent(t *test
 		"sessions_spawn": false, "heartbeat_update": false, "goal": false,
 		"mail_archive": false, "transcribe": true, "ocr": true, "org": true,
 		"office": false, // eager: document work is a core operator workflow
-		"edit":   true, "gateway": true, "observe": true, "fleet": true, "browser": true, "groupware": true,
+		"edit":   true, "gateway": true, "observe": true, "fleet": true, "browser": true, "groupware": false,
 		"graphify": true, "process": true, "sessions": true, "subagents": true,
 		"message": true, "todo": true, "cron": true, "files": true,
 		"morning_letter": true, "evening_letter": true,

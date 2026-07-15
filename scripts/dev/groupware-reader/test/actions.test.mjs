@@ -12,7 +12,18 @@ import {
   humanSize,
   selectAttachment,
   resolveSalesPeriod,
+  resolveErpPeriod,
   formatWon,
+  splitErpQuery,
+  parseErpView,
+  capLimit,
+  aggregateStockByItem,
+  aggregateByItem,
+  topTraders,
+  unitPrices,
+  matchQuery,
+  matchItemFilter,
+  expandItemFilter,
 } from "../lib/actions.mjs";
 
 // Real eap126A05 payload keys the user as `user_id` (string), NOT `emp_seq`.
@@ -183,4 +194,94 @@ test("resolveSalesPeriod explicit range", () => {
 test("formatWon uses eok/man", () => {
   assert.match(formatWon(294031347655), /억/);
   assert.match(formatWon(12345), /12,345원/);
+});
+
+test("resolveErpPeriod aliases resolveSalesPeriod", () => {
+  const a = resolveSalesPeriod("month", "", new Date("2026-07-16T01:00:00+09:00"));
+  const b = resolveErpPeriod("month", "", new Date("2026-07-16T01:00:00+09:00"));
+  assert.deepEqual(a, b);
+});
+
+test("splitErpQuery separates range and keyword", () => {
+  assert.deepEqual(splitErpQuery("20260301:20260331 모듈"), {
+    periodQuery: "20260301:20260331",
+    filter: "모듈",
+  });
+  assert.deepEqual(splitErpQuery("인버터"), { periodQuery: "", filter: "인버터" });
+  assert.deepEqual(splitErpQuery(""), { periodQuery: "", filter: "" });
+});
+
+test("capLimit clamps 1..50", () => {
+  assert.equal(capLimit(0), 20);
+  assert.equal(capLimit(3), 3);
+  assert.equal(capLimit(999), 50);
+});
+
+test("aggregateStockByItem sums warehouses", () => {
+  const rows = aggregateStockByItem([
+    { itemCd: "A", itemNm: "모듈", jegoQt: 10, gayongQt: 8, whNm: "본사" },
+    { itemCd: "A", itemNm: "모듈", jegoQt: 5, gayongQt: 5, whNm: "부산" },
+    { itemCd: "B", itemNm: "인버터", jegoQt: 0, gayongQt: 0, whNm: "본사" },
+  ]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].itemCd, "A");
+  assert.equal(rows[0].jegoQt, 15);
+  assert.equal(rows[0].whCount, 2);
+});
+
+test("aggregateByItem sums amount and qty", () => {
+  const rows = aggregateByItem(
+    [
+      { itemCd: "A", itemNm: "x", poQt: 2, pohAm: 100, poDt: "20260701", trNm: "갑" },
+      { itemCd: "A", itemNm: "x", poQt: 3, pohAm: 150, poDt: "20260710", trNm: "을" },
+    ],
+    { qtyField: "poQt", amtField: "pohAm" },
+  );
+  assert.equal(rows[0].qty, 5);
+  assert.equal(rows[0].amt, 250);
+  assert.equal(rows[0].lines, 2);
+  assert.equal(rows[0].lastDt, "20260710");
+  assert.equal(rows[0].trCount, 2);
+});
+
+test("unitPrices prefers purch/std/sta", () => {
+  assert.equal(unitPrices({ purchUm: 1000, stdUm: 0, staUm: 0 }).any, 1000);
+  assert.equal(unitPrices({ stdUm: 200 }).std, 200);
+});
+
+test("matchQuery is case-insensitive substring", () => {
+  assert.equal(matchQuery({ itemNm: "태양광모듈" }, "모듈", ["itemNm"]), true);
+  assert.equal(matchQuery({ itemNm: "인버터" }, "모듈", ["itemNm"]), false);
+});
+
+test("expandItemFilter maps Korean categories to itemCd prefix", () => {
+  assert.equal(expandItemFilter("모듈").prefix, "M-");
+  assert.equal(expandItemFilter("인버터").prefix, "I-");
+  assert.equal(expandItemFilter("M-LR").prefix, "");
+});
+
+test("matchItemFilter accepts 모듈 via M- prefix", () => {
+  assert.equal(matchItemFilter({ itemCd: "M-LR0650-02", itemNm: "LR8" }, "모듈", ["itemNm"]), true);
+  assert.equal(matchItemFilter({ itemCd: "I-OP3000-01", itemNm: "x" }, "모듈", ["itemNm"]), false);
+  assert.equal(matchItemFilter({ itemCd: "I-OP3000-01", itemNm: "x" }, "인버터", ["itemNm"]), true);
+});
+
+test("parseErpView detects lines mode", () => {
+  assert.deepEqual(parseErpView("lines:모듈"), { mode: "lines", query: "모듈" });
+  assert.deepEqual(parseErpView("라인:20260701:20260710"), { mode: "lines", query: "20260701:20260710" });
+  assert.deepEqual(parseErpView("모듈"), { mode: "items", query: "모듈" });
+});
+
+test("topTraders ranks by amount", () => {
+  const top = topTraders(
+    [
+      { trNm: "갑", isugAm: 100 },
+      { trNm: "을", isugAm: 300 },
+      { trNm: "갑", isugAm: 50 },
+    ],
+    "isugAm",
+    2,
+  );
+  assert.equal(top[0].name, "을");
+  assert.equal(top[1].amt, 150);
 });

@@ -126,3 +126,40 @@ func TestToolGroupware_SummaryRequiresSales(t *testing.T) {
 		t.Fatalf("got %q", out)
 	}
 }
+
+func TestToolGroupware_ErpPeriodDefaults(t *testing.T) {
+	f, err := normalizeFolder("", "list", "po")
+	if err != nil || f != "ytd" {
+		t.Fatalf("po default %q %v", f, err)
+	}
+	f, err = normalizeFolder("", "list", "stock")
+	if err != nil || f != "ytd" {
+		t.Fatalf("stock default %q %v", f, err)
+	}
+	f, err = normalizeFolder("오늘", "list", "ship")
+	if err != nil || f != "today" {
+		t.Fatalf("ship today %q %v", f, err)
+	}
+	f, err = normalizeFolder("", "list", "receive")
+	if err != nil || f != "month" {
+		t.Fatalf("receive default %q %v", f, err)
+	}
+	f, err = normalizeFolder("", "list", "ship")
+	if err != nil || f != "month" {
+		t.Fatalf("ship default %q %v", f, err)
+	}
+}
+
+func TestToolGroupware_StockAreaAlias(t *testing.T) {
+	t.Setenv("DENEB_GROUPWARE_USER", "alice")
+	t.Setenv("DENEB_GROUPWARE_PASSWORD", "secret")
+	t.Setenv("DENEB_GROUPWARE_READER", "/nonexistent/read.mjs")
+	fn := ToolGroupware()
+	out, err := fn(context.Background(), json.RawMessage(`{"action":"list","area":"재고","query":"모듈"}`))
+	if err == nil && out == "" {
+		t.Fatal("expected reader failure output")
+	}
+	if err == nil && !(strings.Contains(out, "실패") || strings.Contains(out, "찾지")) {
+		t.Fatalf("got %q", out)
+	}
+}

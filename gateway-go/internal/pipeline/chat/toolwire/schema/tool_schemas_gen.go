@@ -1658,13 +1658,13 @@ func GroupwareToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Read-only Amaranth on srv4: status | list | read | attachment | summary. summary = 매출마감 합계 (area=sales). Never approve, post, or delete.",
+				"description": "Read-only Amaranth: status|list|read|attachment|summary. sales summary=매출마감. stock/po/receive/ship/price accept list or summary(=list). Never mutate.",
 				"enum":        []string{"status", "list", "read", "attachment", "summary"},
 			},
 			"area": map[string]any{
 				"type":        "string",
-				"description": "Surface: approval(전자결재) | board(게시판) | sales(매출마감). Required for list/read/summary; attachment defaults to approval. Korean aliases 전자결재·게시판·매출 accepted.",
-				"enum":        []string{"approval", "board", "sales"},
+				"description": "Surface: approval|board|sales|stock|po|receive|ship|price. Korean: 전자결재·게시판·매출·재고·발주·입고·출고·단가.",
+				"enum":        []string{"approval", "board", "sales", "stock", "po", "receive", "ship", "price"},
 			},
 			"attachment": map[string]any{
 				"type":        "string",
@@ -1676,16 +1676,16 @@ func GroupwareToolSchema() map[string]any {
 			},
 			"folder": map[string]any{
 				"type":        "string",
-				"description": "approval: pending|done|cc|total|all. sales: ytd(올해누적, default)|month|today|year|last_year. sales also accepts query as YYYYMMDD:YYYYMMDD range.",
+				"description": "approval: pending|done|cc|total|all. sales/stock/po/receive/ship: ytd|month|today|year|last_year (receive/ship default month; sales/stock/po default ytd). Ignored for price/board.",
 				"enum":        []string{"pending", "done", "cc", "total", "all", "ytd", "month", "today", "year", "last_year"},
 			},
 			"limit": map[string]any{
 				"type":        "integer",
-				"description": "Max list lines to return (default 20, max 50). Ignored for read/attachment/status.",
+				"description": "Max lines for list/stock/po/receive/ship/price (default 20, max 50).",
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Title/keyword for read; optional list hint; for sales optional explicit range YYYYMMDD:YYYYMMDD (overrides folder).",
+				"description": "Keyword (품목·거래처) or YYYYMMDD:YYYYMMDD [keyword]. price: 모듈/인버터→itemCd M-/I-. Prefix lines: for raw voucher lines (po/receive/ship). Required for action=read.",
 			},
 		},
 		"required": []string{"action"},
