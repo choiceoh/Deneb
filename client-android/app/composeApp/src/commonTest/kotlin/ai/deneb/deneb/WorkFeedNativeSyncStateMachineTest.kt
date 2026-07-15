@@ -648,6 +648,8 @@ class WorkFeedNativeSyncStateMachineTest {
 
         assertEquals("Alert", notification.await().title)
         assertEquals("Summary", notification.getCompleted().body)
+        assertEquals("workfeed", notification.getCompleted().kind)
+        assertEquals("new", notification.getCompleted().ref)
     }
 
     @Test
