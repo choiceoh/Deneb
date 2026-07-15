@@ -82,10 +82,10 @@ func tuneCodegraphTool(
 		if err != nil || strings.TrimSpace(out) == "" {
 			return out, err
 		}
-		root, werr := os.Getwd()
-		if werr != nil {
-			return out, nil // can't resolve paths → skip enrichment, never fail
-		}
+		// os.Getwd failure returns an empty dir, which enrichWithFolderDocs
+		// treats as "no root → no enrichment" — so a bare read is safe and the
+		// tool call never fails on it.
+		root, _ := os.Getwd()
 		return enrichWithFolderDocs(out, root, os.ReadFile), nil
 	}
 }
