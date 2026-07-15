@@ -50,8 +50,9 @@ class FakeResponse:
     def __exit__(self, *_args):
         return False
 
-    def read(self) -> bytes:
-        return json.dumps(self.payload).encode()
+    def read(self, size: int = -1) -> bytes:
+        body = json.dumps(self.payload).encode()
+        return body if size < 0 else body[:size]
 
 
 class SnapshotTest(unittest.TestCase):
@@ -71,6 +72,12 @@ class SnapshotTest(unittest.TestCase):
         payload = sample_payload()
         payload["layers"][0]["metrics"] *= 2
         with self.assertRaisesRegex(rsi_status.StatusError, "duplicate metric"):
+            rsi_status.snapshot_from_payload(payload)
+
+    def test_projection_rejects_duplicate_layers(self):
+        payload = sample_payload()
+        payload["layers"].append(dict(payload["layers"][0]))
+        with self.assertRaisesRegex(rsi_status.StatusError, "duplicate layer"):
             rsi_status.snapshot_from_payload(payload)
 
 
@@ -101,6 +108,18 @@ class TransportTest(unittest.TestCase):
             self.assertRaisesRegex(rsi_status.StatusError, "unavailable"),
         ):
             rsi_status.fetch_status("http://gateway.test", "")
+
+    def test_fetch_rejects_oversize_response(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
+        response.read.return_value = b"x" * (rsi_status.MAX_RESPONSE_BYTES + 1)
+        with (
+            mock.patch.object(rsi_status.urllib.request, "urlopen", return_value=response),
+            self.assertRaisesRegex(rsi_status.StatusError, "response exceeds"),
+        ):
+            rsi_status.fetch_status("http://gateway.test", "")
+        response.read.assert_called_once_with(rsi_status.MAX_RESPONSE_BYTES + 1)
 
 
 class RenderingTest(unittest.TestCase):

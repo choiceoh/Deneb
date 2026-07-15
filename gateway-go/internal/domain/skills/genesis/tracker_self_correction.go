@@ -144,11 +144,10 @@ func (t *Tracker) RecordSelfCorrectionReview(record SelfCorrectionCandidateRecor
 	if record.Status == "" || record.Status == SelfCorrectionStatusProposed {
 		return record, fmt.Errorf("genesis-tracker: review status must be accepted, rejected, superseded, or applied")
 	}
-	entries, err := jsonlstore.Load[SelfCorrectionCandidateRecord](t.selfCorrectionPath)
+	current, found, err := t.mergedSelfCorrectionCandidateLocked(record.ID)
 	if err != nil {
 		return record, fmt.Errorf("genesis-tracker: load self-correction candidates: %w", err)
 	}
-	current, found := mergedSelfCorrectionCandidate(entries, record.ID)
 	if !found {
 		return record, fmt.Errorf("genesis-tracker: self-correction candidate not found: %s", record.ID)
 	}
@@ -195,11 +194,10 @@ func (t *Tracker) RecordSelfCorrectionDispatch(record SelfCorrectionCandidateRec
 		return record, fmt.Errorf("genesis-tracker: self-correction dispatch attemptId is required")
 	}
 
-	entries, err := jsonlstore.Load[SelfCorrectionCandidateRecord](t.selfCorrectionPath)
+	current, found, err := t.mergedSelfCorrectionCandidateLocked(record.ID)
 	if err != nil {
 		return record, fmt.Errorf("genesis-tracker: load self-correction candidates: %w", err)
 	}
-	current, found := mergedSelfCorrectionCandidate(entries, record.ID)
 	if !found {
 		return record, fmt.Errorf("genesis-tracker: self-correction candidate not found: %s", record.ID)
 	}
@@ -302,39 +300,79 @@ func (t *Tracker) RecentSelfCorrectionCandidates(skillName, statusFilter string,
 }
 
 func (t *Tracker) mergedSelfCorrectionCandidatesLocked() (map[string]SelfCorrectionCandidateRecord, error) {
-	entries, err := jsonlstore.Load[SelfCorrectionCandidateRecord](t.selfCorrectionPath)
-	if err != nil {
-		return nil, err
-	}
-	return mergeSelfCorrectionRecords(entries), nil
-}
-
-func mergedSelfCorrectionCandidate(entries []SelfCorrectionCandidateRecord, id string) (SelfCorrectionCandidateRecord, bool) {
-	rec, ok := mergeSelfCorrectionRecords(entries)[strings.TrimSpace(id)]
-	return rec, ok
-}
-
-func mergeSelfCorrectionRecords(entries []SelfCorrectionCandidateRecord) map[string]SelfCorrectionCandidateRecord {
 	merged := make(map[string]SelfCorrectionCandidateRecord)
-	for _, rec := range entries {
+	err := t.scanSelfCorrectionRecords(func(rec SelfCorrectionCandidateRecord) {
+		mergeSelfCorrectionRecord(merged, rec)
+	})
+	return merged, err
+}
+
+func (t *Tracker) mergedSelfCorrectionCandidateLocked(id string) (SelfCorrectionCandidateRecord, bool, error) {
+	id = strings.TrimSpace(id)
+	var current SelfCorrectionCandidateRecord
+	found := false
+	err := t.scanSelfCorrectionRecords(func(rec SelfCorrectionCandidateRecord) {
 		rec.ID = strings.TrimSpace(rec.ID)
-		if rec.ID == "" {
-			continue
+		if rec.ID == id {
+			current, found = foldSelfCorrectionRecord(current, found, rec)
 		}
-		switch rec.Type {
-		case selfCorrectionTypeReview:
-			if base, ok := merged[rec.ID]; ok {
-				merged[rec.ID] = applySelfCorrectionReview(base, rec)
-			}
-		case selfCorrectionTypeDispatch:
-			if base, ok := merged[rec.ID]; ok {
-				merged[rec.ID] = applySelfCorrectionDispatch(base, rec)
-			}
-		case "", selfCorrectionTypeCandidate: // empty type is a legacy candidate row
-			merged[rec.ID] = normalizedSelfCorrectionCandidate(rec)
-		}
+	})
+	return current, found, err
+}
+
+func (t *Tracker) scanSelfCorrectionRecords(visit func(SelfCorrectionCandidateRecord)) error {
+	stats, err := jsonlstore.Scan(t.selfCorrectionPath, visit)
+	if err != nil {
+		return err
+	}
+	if stats.SkippedLines() > 0 {
+		return fmt.Errorf(
+			"self-correction ledger %s is corrupt (malformed=%d oversize=%d)",
+			t.selfCorrectionPath,
+			stats.CorruptLines,
+			stats.OversizeLines,
+		)
+	}
+	return nil
+}
+
+func mergeSelfCorrectionRecord(merged map[string]SelfCorrectionCandidateRecord, rec SelfCorrectionCandidateRecord) {
+	id := strings.TrimSpace(rec.ID)
+	if id == "" {
+		return
+	}
+	base, found := merged[id]
+	if next, ok := foldSelfCorrectionRecord(base, found, rec); ok {
+		merged[id] = next
+	}
+}
+
+func mergeSelfCorrectionRecords(records []SelfCorrectionCandidateRecord) map[string]SelfCorrectionCandidateRecord {
+	merged := make(map[string]SelfCorrectionCandidateRecord)
+	for _, rec := range records {
+		mergeSelfCorrectionRecord(merged, rec)
 	}
 	return merged
+}
+
+func foldSelfCorrectionRecord(
+	base SelfCorrectionCandidateRecord,
+	found bool,
+	rec SelfCorrectionCandidateRecord,
+) (SelfCorrectionCandidateRecord, bool) {
+	switch rec.Type {
+	case selfCorrectionTypeReview:
+		if found {
+			base = applySelfCorrectionReview(base, rec)
+		}
+	case selfCorrectionTypeDispatch:
+		if found {
+			base = applySelfCorrectionDispatch(base, rec)
+		}
+	case "", selfCorrectionTypeCandidate: // empty type is a legacy candidate row
+		return normalizedSelfCorrectionCandidate(rec), true
+	}
+	return base, found
 }
 
 // applySelfCorrectionReview folds one review row into the merged candidate.

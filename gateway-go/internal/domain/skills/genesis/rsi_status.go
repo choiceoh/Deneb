@@ -33,7 +33,6 @@ import (
 	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
 	rsistatus "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/status"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
-	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
 // Private aliases keep the engine implementation concise while exposing the
@@ -670,16 +669,15 @@ type rsiDispatchEvidenceEvent struct {
 // the denominator. When terminalLimit is positive, graduation uses only the
 // latest terminal cohort so an old rollback cannot poison the loop forever.
 func (t *Tracker) rsiDispatchEvidence(terminalLimit int) (rsiDispatchEvidence, error) {
-	entries, err := jsonlstore.Load[SelfCorrectionCandidateRecord](t.selfCorrectionPath)
-	if err != nil {
-		return rsiDispatchEvidence{}, err
-	}
 	phases := map[string]string{}
-	for _, entry := range entries {
+	err := t.scanSelfCorrectionRecords(func(entry SelfCorrectionCandidateRecord) {
 		if entry.Type != selfCorrectionTypeDispatch || strings.TrimSpace(entry.AttemptID) == "" {
-			continue
+			return
 		}
 		phases[strings.TrimSpace(entry.AttemptID)] = normalizeSelfCorrectionDispatchPhase(entry.DispatchPhase)
+	})
+	if err != nil {
+		return rsiDispatchEvidence{}, err
 	}
 
 	var events []rsiDispatchEvidenceEvent

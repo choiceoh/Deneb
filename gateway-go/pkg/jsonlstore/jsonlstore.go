@@ -1,8 +1,9 @@
 // Package jsonlstore provides JSONL (JSON Lines) file persistence
 // with atomic snapshots and append-only logging.
 //
-// Designed for small-to-medium datasets that fit in memory (single-user).
-// Uses stdlib only — zero external dependencies.
+// Load serves small-to-medium datasets that fit in memory; Scan lets callers
+// fold larger append-only ledgers with bounded per-line memory. Uses stdlib
+// only — zero external dependencies.
 package jsonlstore
 
 import (
@@ -21,6 +22,18 @@ import (
 // corruption and skipped (see Load) rather than read wholesale into memory.
 const maxLineBytes = 1 << 20 // 1MB
 
+// ScanStats reports records delivered to the visitor and lines skipped during
+// crash recovery. Callers that make safety decisions can fail closed when any
+// line was skipped, while diagnostic readers can retain Load's tolerant policy.
+type ScanStats struct {
+	Records       int
+	CorruptLines  int
+	OversizeLines int
+}
+
+// SkippedLines returns the number of malformed or oversize lines omitted.
+func (s ScanStats) SkippedLines() int { return s.CorruptLines + s.OversizeLines }
+
 // Load reads a JSONL file and decodes each line into T.
 // Blank lines, corrupt lines, and oversize (>maxLineBytes) lines are skipped
 // (crash recovery). Skipping is per-line: one bad line never aborts the scan
@@ -29,16 +42,27 @@ const maxLineBytes = 1 << 20 // 1MB
 // held-out gate fails CLOSED on a read error, so one corrupt line would
 // otherwise silently freeze evolution for every skill (RSI 4th-review M2-#3).
 func Load[T any](path string) ([]T, error) {
+	var items []T
+	_, err := Scan(path, func(item T) {
+		items = append(items, item)
+	})
+	return items, err
+}
+
+// Scan decodes a JSONL file one record at a time without retaining the full
+// file. Blank lines are ignored; malformed and oversize lines are counted and
+// skipped so the caller can choose tolerant or fail-closed semantics.
+func Scan[T any](path string, visit func(T)) (ScanStats, error) {
+	var stats ScanStats
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return stats, nil
 		}
-		return nil, fmt.Errorf("jsonlstore: open %s: %w", path, err)
+		return stats, fmt.Errorf("jsonlstore: open %s: %w", path, err)
 	}
 	defer f.Close()
 
-	var items []T
 	reader := bufio.NewReader(f)
 	for {
 		line, over, err := readBoundedLine(reader, maxLineBytes)
@@ -49,21 +73,27 @@ func Load[T any](path string) ([]T, error) {
 		// have. A clean io.EOF, by contrast, hands back a legitimate final
 		// unterminated record, which we still decode below.
 		if err != nil && !errors.Is(err, io.EOF) {
-			return items, fmt.Errorf("jsonlstore: read %s: %w", path, err)
+			return stats, fmt.Errorf("jsonlstore: read %s: %w", path, err)
 		}
 		// An oversize line (over) is dropped: only up to maxLineBytes is ever
 		// buffered before oversize is detected, and the unbounded remainder is
 		// drained without buffering — so a torn/merged/externally-corrupted
 		// giant line stays bounded in memory and does not stop the scan.
-		if len(line) > 0 && !over {
+		if over {
+			stats.OversizeLines++
+		} else if len(line) > 0 {
 			var item T
 			if uErr := json.Unmarshal(line, &item); uErr == nil {
-				items = append(items, item)
+				stats.Records++
+				if visit != nil {
+					visit(item)
+				}
+			} else {
+				stats.CorruptLines++
 			}
-			// Corrupt line (unmarshal failed) — skipped (partial writes).
 		}
 		if err != nil { // io.EOF: the final record has been handled above.
-			return items, nil
+			return stats, nil
 		}
 	}
 }
