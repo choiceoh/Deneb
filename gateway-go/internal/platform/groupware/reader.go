@@ -37,8 +37,9 @@ const (
 type Action string
 
 const (
-	ActionList Action = "list"
-	ActionRead Action = "read"
+	ActionList       Action = "list"
+	ActionRead       Action = "read"
+	ActionAttachment Action = "attachment" // explicitly selected attachment only
 	// ActionAct is mutate (approve/reject). Not exposed on the chat tool —
 	// work-feed chips call ActApproval directly.
 	ActionAct Action = "act"
@@ -46,13 +47,15 @@ const (
 
 // Request drives scripts/dev/groupware-reader/read.mjs.
 type Request struct {
-	Area      Area
-	Action    Action
-	Folder    string // approval only: pending|done|cc|total|all (미결|기결|수신참조|전체결재문서|순회)
-	Query     string // title / keyword for list filter or read target
-	Source    string // optional provenance label (e.g. phone notification source)
-	MatchText string // notification body on stdin for approval read matching
-	Limit     int    // list max lines (default 20, capped in JS)
+	Area       Area
+	Action     Action
+	Folder     string // approval only: pending|done|cc|total|all (미결|기결|수신참조|전체결재문서|순회)
+	Query      string // title / keyword for list filter or read target
+	DocID      string // attachment only: approval document id from read output
+	Attachment string // attachment only: 1-based number, filename, fileKey, or fileId
+	Source     string // optional provenance label (e.g. phone notification source)
+	MatchText  string // notification body on stdin for approval read matching
+	Limit      int    // list max lines (default 20, capped in JS)
 }
 
 // FromEnv loads DENEB_GROUPWARE_* settings. Enabled only when both user and password are set.
@@ -138,6 +141,12 @@ func Run(ctx context.Context, cfg Config, req Request) (string, error) {
 	}
 	if q := strings.TrimSpace(req.Query); q != "" {
 		args = append(args, "--query", q)
+	}
+	if docID := strings.TrimSpace(req.DocID); docID != "" {
+		args = append(args, "--doc-id", docID)
+	}
+	if attachment := strings.TrimSpace(req.Attachment); attachment != "" {
+		args = append(args, "--attachment", attachment)
 	}
 	if src := strings.TrimSpace(req.Source); src != "" {
 		args = append(args, "--source", src)

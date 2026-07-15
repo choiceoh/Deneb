@@ -3,9 +3,12 @@ import test from "node:test";
 import {
   cleanOcr,
   dedupeOcrText,
+  htmlTableMatrix,
+  htmlTableToMarkdown,
   htmlToText,
   normalizeFolder,
   selectApprovalLine,
+  selectAttachment,
 } from "../lib/actions.mjs";
 
 // Real eap126A05 payload keys the user as `user_id` (string), NOT `emp_seq`.
@@ -72,4 +75,65 @@ test("cleanOcr keeps real Korean receipt text", () => {
 test("cleanOcr suppresses symbol-soup OCR of a photo collage", () => {
   const soup = "| = =\n0 a | ey\nar | 「 < Nia aes\n『 칙 NY cy ^ 져 ^ i) ESS\n~ ~ 00 세";
   assert.equal(cleanOcr(soup), "");
+});
+
+
+test("htmlTableToMarkdown preserves rows and columns", () => {
+  const html = `<table>
+    <tr><th>발전소명</th><th>수량</th><th>합계</th></tr>
+    <tr><td>석문호</td><td>70EA</td><td>231,000,000원</td></tr>
+    <tr><td>두온에너지</td><td>1EA</td><td>3,740,000원</td></tr>
+  </table>`;
+  assert.equal(
+    htmlTableToMarkdown(html),
+    "| 발전소명 | 수량 | 합계 |\n| --- | --- | --- |\n| 석문호 | 70EA | 231,000,000원 |\n| 두온에너지 | 1EA | 3,740,000원 |",
+  );
+});
+
+test("htmlTableMatrix expands colspan and rowspan to rectangular blanks", () => {
+  const html = `<table>
+    <tr><td rowspan="2">구분</td><td>A</td><td>B</td></tr>
+    <tr><td colspan="2">합계</td></tr>
+  </table>`;
+  assert.deepEqual(htmlTableMatrix(html), [["구분", "A", "B"], ["", "합계", ""]]);
+});
+
+test("one-row layout table remains a sentence, not a fake table", () => {
+  const html = "<table><tr><td>금 액</td><td>一金</td><td>105,440</td><td>원整</td></tr></table>";
+  assert.equal(htmlTableToMarkdown(html), "금 액 一金 105,440 원整");
+});
+
+test("htmlToText reinserts markdown table between surrounding prose", () => {
+  const html = `<p>구매 내역</p><table><tr><td>품목</td><td>금액</td></tr><tr><td>인버터</td><td>100원</td></tr></table><p>이상.</p>`;
+  const out = htmlToText(html);
+  assert.ok(out.includes("구매 내역"));
+  assert.ok(out.includes("| 품목 | 금액 |"));
+  assert.ok(out.includes("| 인버터 | 100원 |"));
+  assert.ok(out.endsWith("이상."));
+});
+
+test("table cells escape markdown pipes and keep line breaks", () => {
+  const html = `<table><tr><td>A|B</td><td>설명</td></tr><tr><td>1</td><td>첫줄<br>둘째줄</td></tr></table>`;
+  const out = htmlTableToMarkdown(html);
+  assert.ok(out.includes("A\\|B"));
+  assert.ok(out.includes("첫줄<br>둘째줄"));
+});
+
+
+test("selectAttachment resolves one-based number, exact title, and fileKey", () => {
+  const files = [
+    { dispFileNm: "영수증", fileExtsn: "jpg", fileKey: 101 },
+    { dispFileNm: "사진대지", fileExtsn: "pdf", fileKey: 202 },
+  ];
+  assert.equal(selectAttachment(files, "2")?.fileKey, 202);
+  assert.equal(selectAttachment(files, "영수증.jpg")?.fileKey, 101);
+  assert.equal(selectAttachment(files, "202")?.fileKey, 202);
+});
+
+test("selectAttachment refuses ambiguous partial filenames", () => {
+  const files = [
+    { dispFileNm: "6월 거래명세서", fileExtsn: "pdf", fileKey: 1 },
+    { dispFileNm: "7월 거래명세서", fileExtsn: "pdf", fileKey: 2 },
+  ];
+  assert.throws(() => selectAttachment(files, "거래명세서"), /모호/);
 });
