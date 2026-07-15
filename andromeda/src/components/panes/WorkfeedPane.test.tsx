@@ -81,7 +81,7 @@ describe("WorkfeedPane", () => {
     expect(chatCalls[0]).toMatchObject({ message: "승인합니다", sessionKey: "client:main" });
   });
 
-  it("keeps generic action chips hidden on a non-question card (wide body)", async () => {
+  it("preserves generic action chips hidden on a non-question card (wide body)", async () => {
     // A non-question card's quick-action chips stay hidden — the desktop detail keeps
     // the body wide (unlike the phone's action sheet). Answer chips only appear on a
     // question card (see the boundary test's action.run coverage), matching native.
@@ -172,7 +172,7 @@ describe("WorkfeedPane", () => {
     expect(within(detail).getAllByText("120")).toHaveLength(2);
   });
 
-  it("lands on today and flips to the previous / next day", async () => {
+  it("when lands on today and flips to the previous / next day", async () => {
     // Anchor the fixtures to the real clock so the component's "today" matches.
     const t = new Date();
     const at = (daysAgo: number, hour: number) =>

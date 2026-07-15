@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 )
 
 // maxSkillHints caps how many skills one turn may surface — a hint is a nudge,
@@ -118,7 +118,7 @@ func buildSkillHints(params RunParams, sessionToolPreset string, resolved []skil
 // permits calling the `skills` tool the hint points at. An empty/unknown
 // preset means no restriction (AllowedTools nil).
 func presetAllowsSkillsTool(sessionToolPreset string) bool {
-	allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
+	allowed := toolwire.AllowedTools(sessionToolPreset)
 	if allowed == nil {
 		return true
 	}

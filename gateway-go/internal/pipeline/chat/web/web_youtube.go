@@ -23,7 +23,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
@@ -57,7 +57,7 @@ const youtubeSummarySystemPrompt = "당신은 유튜브 영상 자막을 한국�
 // for the conversation transcript: metadata + a generated summary, with the
 // full transcript offloaded to spillover. Short or transcript-less results pass
 // through unchanged.
-func summarizeYouTubeResult(ctx context.Context, spill *agent.SpilloverStore, r *media.YouTubeResult) string {
+func summarizeYouTubeResult(ctx context.Context, spill tooldeps.SpilloverStore, r *media.YouTubeResult) string {
 	if !r.HasTranscript() || utf8.RuneCountInString(r.Transcript) < youtubeSummarizeMinChars {
 		return media.FormatYouTubeResult(r)
 	}
@@ -95,7 +95,7 @@ func summarizeTranscript(ctx context.Context, r *media.YouTubeResult) (string, e
 
 // storeYouTubeTranscript writes the full formatted result to spillover and
 // returns its ID (empty when no store is wired or the write fails).
-func storeYouTubeTranscript(ctx context.Context, spill *agent.SpilloverStore, r *media.YouTubeResult) string {
+func storeYouTubeTranscript(ctx context.Context, spill tooldeps.SpilloverStore, r *media.YouTubeResult) string {
 	if spill == nil {
 		return ""
 	}

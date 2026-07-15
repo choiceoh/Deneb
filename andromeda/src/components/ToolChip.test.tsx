@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { ToolChip } from "./ToolChip";
 
 describe("ToolChip", () => {
-  it("humanizes the tool id and shows its detail", () => {
+  it("humanizes the tool id and displays its detail", () => {
     render(
       <ToolChip part={{ kind: "tool", id: "t1", tool: "gmail.list_recent", state: "completed", detail: "메일 3건" }} />,
     );

@@ -8,6 +8,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
+// OrgLoader loads the operator org chart for the recall org source.
+type OrgLoader func() (org.OrgTree, error)
+
 // Params contains only the turn metadata required by recall preflight.
 type Params struct {
 	SessionKey    string
@@ -21,7 +24,7 @@ type Deps struct {
 	Wiki         *wiki.Store
 	Transcript   toolport.TranscriptStore
 	FileRecall   FileRecallFunc
-	Org          func() (org.OrgTree, error)
+	Org          OrgLoader
 	Briefcase    bool
 	StrictErrors interface{ Record(error) }
 	Now          func() time.Time

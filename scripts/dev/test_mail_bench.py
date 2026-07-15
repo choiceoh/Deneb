@@ -90,7 +90,7 @@ class TokenAndTransportTests(unittest.TestCase):
 
 
 class PromptAndProbeTests(unittest.TestCase):
-    def test_prompt_section_order_and_optional_anchor_are_deterministic(self) -> None:
+    def test_when_prompt_section_order_and_optional_anchor_are_deterministic(self) -> None:
         prompt = mail_bench.build_prompt("MAIL", "THREAD", "MEMORY", "ANCHOR")
         self.assertTrue(prompt.startswith(mail_bench.DEFAULT_PROMPT))
         positions = [
@@ -102,7 +102,7 @@ class PromptAndProbeTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
         self.assertNotIn("당사자 앵커", mail_bench.build_prompt("M", "T", "R"))
 
-    def test_probe_requires_every_all_group_and_one_any_variant(self) -> None:
+    def test_when_probe_requires_every_all_group_and_one_any_variant(self) -> None:
         fixture = {
             "probes": [
                 {
@@ -135,7 +135,7 @@ class HeaderAndBodyTests(unittest.TestCase):
         self.assertEqual(mail_bench.decode_header(encoded), "홍길동 <user@example.com>")
         self.assertEqual(mail_bench.decode_header(None), "")
 
-    def test_plain_part_wins_over_html_alternative(self) -> None:
+    def test_when_plain_part_wins_over_html_alternative(self) -> None:
         msg = EmailMessage()
         msg.set_content("plain body")
         msg.add_alternative("<p>html body</p>", subtype="html")
@@ -178,7 +178,7 @@ class HeaderAndBodyTests(unittest.TestCase):
         self.assertIn("- 참조: Other <other@example.net> — 외부(example.net)", anchor)
         self.assertTrue(anchor.endswith(mail_bench.ANCHOR_RULES))
 
-    def test_trap_anchor_extracts_only_sender_and_injects_known_recipient(self) -> None:
+    def test_when_trap_anchor_extracts_only_sender_and_injects_known_recipient(self) -> None:
         args = SimpleNamespace(
             our_domain_set={"topsolar.kr"},
             org_map_dict={"vendor.com": "Vendor"},

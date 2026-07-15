@@ -86,7 +86,7 @@ type ToolDefinition struct {
 	Name        string
 	Description string
 	Method      string // miniapp.* method the tool dispatches to (read-only!)
-	Schema      map[string]any
+	Schema      jsonObject
 }
 
 // mcpTools is the v1 read-only surface. Adding a WRITE tool here is a security
@@ -342,7 +342,7 @@ func (s *Handler) handleMCPToolCall(w http.ResponseWriter, r *http.Request, iden
 // so a client-chosen id can't inflate internal ids/log lines. The response is
 // matched synchronously (the JSON-RPC reply echoes msg.ID itself), so the
 // derived id is tracing-only — a cap-induced tie is harmless.
-func InternalID(id json.RawMessage) string {
+func InternalID(id rawJSON) string {
 	raw := string(id)
 	prefix := "n" // number (id validation upstream leaves string/number only)
 	if strings.HasPrefix(raw, `"`) {

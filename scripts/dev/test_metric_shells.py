@@ -159,7 +159,7 @@ class RecallGainTests(FakeGoTestCase):
 
 
 class RecallMetricTests(FakeGoTestCase):
-    def test_success_extracts_last_metric_line_and_value(self) -> None:
+    def test_when_success_extracts_last_metric_line_and_value(self) -> None:
         output = (
             "RECALL_METRIC hits=1 total=2 pct=50\n"
             "noise\n"
@@ -267,7 +267,7 @@ class NativeTestClient:
         ])
         self.assertIn("korean=25 substance=25 clean=20", proc.stderr)
 
-    def test_threshold_boundaries_use_lower_bucket_at_exact_cutoffs(self) -> None:
+    def test_when_threshold_boundaries_use_lower_bucket_at_exact_cutoffs(self) -> None:
         proc = self.run_program(
             FAKE_REPLY="abcdefghi",
             FAKE_LATENCY="10000",

@@ -24,7 +24,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 )
 
 // buildBM25LeakStore builds a realistic-N (> wiki gate min corpus) pure-BM25

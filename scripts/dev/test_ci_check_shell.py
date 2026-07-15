@@ -108,7 +108,7 @@ class CICheckShellTests(unittest.TestCase):
         self.assertIn("make ci ARGS=--go", proc.stderr)
         self.assertEqual(self.calls(), [])
 
-    def test_audit_lane_runs_all_three_health_gates_and_cleans_logs(self) -> None:
+    def test_when_audit_lane_runs_all_three_health_gates_and_cleans_logs(self) -> None:
         proc = self.invoke("--audit")
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("3 gates, selected lanes run in parallel", proc.stdout)
@@ -139,7 +139,7 @@ class CICheckShellTests(unittest.TestCase):
         self.assertEqual(len(dirs), 1)
         self.assertTrue((dirs[0] / "runtime-health-test.log").exists())
 
-    def test_go_lane_runs_generation_substeps_and_all_five_gates(self) -> None:
+    def test_when_go_lane_runs_generation_substeps_and_all_five_gates(self) -> None:
         proc = self.invoke("--go")
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("5 passed, 0 failed", proc.stdout)
@@ -185,7 +185,7 @@ class CICheckShellTests(unittest.TestCase):
         self.assertIn("run the full", proc.stdout)
         self.assertFalse(any(call.startswith("make ") for call in self.calls()))
 
-    def test_fast_mode_merges_all_git_change_surfaces_and_uses_cached_go_tests(self) -> None:
+    def test_when_fast_mode_merges_all_git_change_surfaces_and_uses_cached_go_tests(self) -> None:
         proc = self.invoke(
             "--fast",
             env=self.env(
@@ -201,7 +201,7 @@ class CICheckShellTests(unittest.TestCase):
         self.assertNotIn("make go-test", self.calls())
         self.assertIn("make ci/fast PASSED", proc.stdout)
 
-    def test_fast_mode_can_select_only_runtime_audit_from_untracked_change(self) -> None:
+    def test_when_fast_mode_can_select_only_runtime_audit_from_untracked_change(self) -> None:
         proc = self.invoke(
             "--fast",
             env=self.env(CHANGED_UNTRACKED="scripts/audit/runtime_health.py\\n"),
@@ -217,7 +217,7 @@ class CICheckShellTests(unittest.TestCase):
             ],
         )
 
-    def test_unresolvable_fast_base_warns_and_runs_all_lanes(self) -> None:
+    def test_when_unresolvable_fast_base_warns_and_runs_all_lanes(self) -> None:
         proc = self.invoke("--fast", env=self.env(GIT_BASE_OK="0"))
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("can't resolve 'origin/main' merge-base", proc.stderr)

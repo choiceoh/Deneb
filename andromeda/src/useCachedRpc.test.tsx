@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 describe("useCachedRpc", () => {
-  it("uses fresh cached data before refreshing from the gateway", async () => {
+  it("returns cached data before refreshing from the gateway", async () => {
     const method = "miniapp.search.all";
     const params = { query: "설계" };
     localStorage.setItem(
@@ -56,7 +56,7 @@ describe("useCachedRpc", () => {
     expect(result.current.readCache(method, params)).toBeUndefined();
   });
 
-  it("does not apply or cache a late response after a newer request in the same scope", async () => {
+  it("ignores late RPC response when a newer same-scope request finished first", async () => {
     type Payload = { path: string };
     const method = "miniapp.files.list";
     const resolvers: Array<(value: Response) => void> = [];

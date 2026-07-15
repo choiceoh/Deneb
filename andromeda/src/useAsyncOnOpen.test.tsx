@@ -35,7 +35,7 @@ describe("useAsyncOnOpen", () => {
     );
   });
 
-  it("exposes setData for imperative updates", async () => {
+  it("returns setData hook for imperative cache updates", async () => {
     const { result } = renderHook(() => useAsyncOnOpen(() => Promise.resolve("a"), []));
     await waitFor(() => expect(result.current[0]).toBe("a"));
     act(() => result.current[1]("b"));

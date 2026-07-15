@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 )
 
 // --- shared helpers ------------------------------------------------------
@@ -20,7 +19,7 @@ import (
 // calMerged returns Google + local events in [from, to) sorted by start. The
 // returned warn string is a non-fatal note (e.g. Google fetch failed but local
 // answered) so the agent still gets the events it can.
-func calMerged(ctx context.Context, d *tooldeps.CalendarDeps, from, to time.Time) (merged []calendar.Event, warn string) {
+func calMerged(ctx context.Context, d *tooldeps.CalendarDeps, from, to time.Time) (merged []tooldeps.CalendarEvent, warn string) {
 	if d.Client != nil {
 		client, err := d.Client()
 		if err != nil {
@@ -46,7 +45,7 @@ func calMerged(ctx context.Context, d *tooldeps.CalendarDeps, from, to time.Time
 }
 
 // calTitle returns a non-empty display title.
-func calTitle(e calendar.Event) string {
+func calTitle(e tooldeps.CalendarEvent) string {
 	if t := strings.TrimSpace(e.Summary); t != "" {
 		return t
 	}
@@ -55,7 +54,7 @@ func calTitle(e calendar.Event) string {
 
 // calWhen renders a compact KST time for a list row: "6/10(화) 15:00–16:00",
 // or "6/10(화) 종일" for all-day events.
-func calWhen(e calendar.Event) string {
+func calWhen(e tooldeps.CalendarEvent) string {
 	loc := calDisplayLoc()
 	start := e.Start.In(loc)
 	if e.AllDay {
@@ -72,7 +71,7 @@ func calWhen(e calendar.Event) string {
 }
 
 // calWhenFull renders the full KST time for the detail view.
-func calWhenFull(e calendar.Event) string {
+func calWhenFull(e tooldeps.CalendarEvent) string {
 	loc := calDisplayLoc()
 	start := e.Start.In(loc)
 	if e.AllDay {
@@ -137,7 +136,7 @@ func rsvpKorean(status string) string {
 }
 
 // attendeeLabel returns a display name (or email) for an attendee, "" if both empty.
-func attendeeLabel(a calendar.Attendee) string {
+func attendeeLabel(a tooldeps.CalendarAttendee) string {
 	if n := strings.TrimSpace(a.DisplayName); n != "" {
 		return n
 	}
@@ -160,7 +159,7 @@ func calKindLabel(kind string) string {
 // mail it came from, and the machine link the agent can follow back (mail:<id>)
 // — so the agent can brief and prep over it. "" for a plain manual or Google
 // event that carries no Deneb annotation.
-func calSourceLine(e calendar.Event) string {
+func calSourceLine(e tooldeps.CalendarEvent) string {
 	src := strings.TrimSpace(e.Source)
 	kind := calKindLabel(e.Kind)
 	label := strings.TrimSpace(e.SourceLabel)
@@ -182,7 +181,7 @@ func calSourceLine(e calendar.Event) string {
 
 // calLinkBadge renders a compact inline annotation of an event's Deneb origin
 // (kind + the mail it came from) for list/brief rows, "" when it carries none.
-func calLinkBadge(e calendar.Event) string {
+func calLinkBadge(e tooldeps.CalendarEvent) string {
 	kind := calKindLabel(e.Kind)
 	lbl := strings.TrimSpace(e.SourceLabel)
 	switch {
@@ -199,7 +198,7 @@ func calLinkBadge(e calendar.Event) string {
 
 // countExternalAttendees counts non-self, non-declined attendees — the people
 // the user is actually meeting, for the list badge.
-func countExternalAttendees(attendees []calendar.Attendee) int {
+func countExternalAttendees(attendees []tooldeps.CalendarAttendee) int {
 	n := 0
 	for _, a := range attendees {
 		if a.Self || a.ResponseStatus == "declined" {
@@ -251,7 +250,7 @@ func CalendarGlance(ctx context.Context, d *tooldeps.CalendarDeps, now time.Time
 }
 
 // glanceWhen renders an event's time with a relative day label for the glance.
-func glanceWhen(e calendar.Event, now time.Time) string {
+func glanceWhen(e tooldeps.CalendarEvent, now time.Time) string {
 	loc := now.Location()
 	start := e.Start.In(loc)
 	day := relativeDay(start, now)

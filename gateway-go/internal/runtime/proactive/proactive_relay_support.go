@@ -7,18 +7,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
-)
-
-// Compile-time interface compliance — same notifier satisfies both the
-// autonomous service (wiki dreaming) and gmail polling.
-var (
-	_ autonomous.Notifier   = (*relayNotifier)(nil)
-	_ mailanalysis.Notifier = (*relayNotifier)(nil)
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive/textprep"
 )
 
 // contentlessProactiveFragments mark a proactive body as carrying nothing
@@ -340,7 +331,7 @@ func pushPreview(content string) string {
 	// A body that opens with a deneb-ui fence would preview as "```deneb-ui" —
 	// project cards to their prose first, so the notification carries the
 	// card's own headline instead of markup.
-	s := strings.TrimSpace(denebui.ReplaceFences(content, denebui.PlainText))
+	s := strings.TrimSpace(textprep.ReplaceFences(content, textprep.PlainText))
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		s = strings.TrimSpace(s[:i])
 	}

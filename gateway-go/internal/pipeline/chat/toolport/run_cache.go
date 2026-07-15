@@ -147,9 +147,8 @@ var cacheableTools = map[string]struct{}{
 }
 
 var mutationTools = map[string]struct{}{
-	"write":      {},
-	"edit":       {},
-	"preference": {}, // appends to SOUL.md; a cached grep of the workspace must invalidate
+	"write": {},
+	"edit":  {},
 }
 
 // IsCacheableTool returns true if the named tool's results can be cached.
@@ -168,7 +167,7 @@ func IsMutationTool(name string) bool {
 
 // BuildCacheKey creates a canonical cache key from tool name and input JSON.
 // Non-semantic fields (compress, $ref) are stripped before key generation.
-func BuildCacheKey(name string, input json.RawMessage) string {
+func BuildCacheKey(name string, input rawJSON) string {
 	if !bytes.Contains(input, []byte(`"compress"`)) && !bytes.Contains(input, []byte(`"$ref"`)) {
 		return name + ":" + string(input)
 	}

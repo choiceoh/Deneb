@@ -5,6 +5,7 @@
 package secret
 
 import (
+	"encoding/json"
 	"sync"
 	"time"
 )
@@ -13,7 +14,7 @@ import (
 type Assignment struct {
 	Path         string   `json:"path"`
 	PathSegments []string `json:"pathSegments"`
-	Value        any      `json:"value"`
+	Value        rawJSON  `json:"value"`
 }
 
 // ResolveResult holds the result of a secret resolution call.
@@ -33,7 +34,7 @@ type ReloadResult struct {
 // Resolver manages secret resolution and caching.
 type Resolver struct {
 	mu         sync.RWMutex
-	secrets    map[string]any // flat path -> value
+	secrets    map[string]rawJSON // flat path -> value
 	loadedAtMs int64
 	warnings   []string
 }
@@ -41,7 +42,7 @@ type Resolver struct {
 // NewResolver creates a new secret resolver.
 func NewResolver() *Resolver {
 	return &Resolver{
-		secrets:    make(map[string]any),
+		secrets:    make(map[string]rawJSON),
 		loadedAtMs: time.Now().UnixMilli(),
 	}
 }
@@ -96,8 +97,17 @@ func (r *Resolver) Resolve(commandName string, targetIDs []string) *ResolveResul
 }
 
 // Set stores a secret value at the given path.
-func (r *Resolver) Set(path string, value any) {
+func (r *Resolver) Set(path string, value rawJSON) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.secrets[path] = value
+}
+
+// SetValue marshals v and stores it at path.
+func (r *Resolver) SetValue(path string, v any) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return
+	}
+	r.Set(path, raw)
 }

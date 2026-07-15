@@ -1,16 +1,16 @@
 package chat
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"path/filepath"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 )
 
 // guidelineStorePath is the learned-guidelines file under the resolved state
 // dir (DENEB_STATE_DIR-aware), the same path the compaction tuner writes.
 func guidelineStorePath() string {
-	dir := config.ResolveStateDir()
+	dir := leafbind.ResolveStateDir()
 	if dir == "" {
 		return ""
 	}

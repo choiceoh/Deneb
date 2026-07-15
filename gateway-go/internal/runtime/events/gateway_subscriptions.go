@@ -19,7 +19,7 @@ type AgentEvent struct {
 	Kind       string `json:"kind"`
 	SessionKey string `json:"sessionKey,omitempty"`
 	RunID      string `json:"runId,omitempty"`
-	Payload    any    `json:"payload,omitempty"`
+	Payload    EventPayload `json:"payload,omitempty"`
 }
 
 // TranscriptUpdate represents a session transcript message update.
@@ -27,7 +27,7 @@ type TranscriptUpdate struct {
 	SessionKey string `json:"sessionKey,omitempty"`
 	MessageID  string `json:"messageId,omitempty"`
 	MessageSeq *int   `json:"messageSeq,omitempty"`
-	Message    any    `json:"message,omitempty"`
+	Message    EventPayload `json:"message,omitempty"`
 }
 
 // LifecycleChangeEvent represents a session lifecycle state change.
@@ -162,7 +162,7 @@ func (g *GatewayEventSubscriptions) runTranscriptLoop(params GatewaySubscription
 			}
 
 			// Fallback: direct broadcast without session snapshot enrichment.
-			if update.SessionKey == "" || update.Message == nil {
+			if update.SessionKey == "" || update.Message.IsZero() {
 				continue
 			}
 

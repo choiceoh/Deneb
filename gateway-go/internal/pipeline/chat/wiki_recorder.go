@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 )
 
 type diarySignal struct {
@@ -89,7 +89,7 @@ func shouldRecordRunDiary(params RunParams) bool {
 // No LLM needed — raw data is appended as-is. The classified signal is
 // returned alongside so the caller can propagate preference cues (선호) to the
 // dreamer's accelerated cadence.
-func recordDiary(store *wiki.Store, logger *slog.Logger, userMsg string, toolNames []string, assistantText, stopReason string, turns int) (bool, diarySignal) {
+func recordDiary(store *tooldeps.WikiStore, logger *slog.Logger, userMsg string, toolNames []string, assistantText, stopReason string, turns int) (bool, diarySignal) {
 	if store == nil {
 		return false, diarySignal{}
 	}

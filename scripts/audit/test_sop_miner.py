@@ -33,13 +33,13 @@ def write_transcript(dirpath: str, key: str, tools: list[str], ts: int = NOW) ->
 
 
 class ExtractTest(unittest.TestCase):
-    def test_orders_tools_and_tolerates_corruption(self):
+    def test_when_orders_tools_and_tolerates_corruption(self):
         with tempfile.TemporaryDirectory() as d:
             write_transcript(d, "client:a", ["fs", "exec", "git"])
             seq = extract_tool_sequence(os.path.join(d, "client:a.jsonl"), NOW - 1)
             self.assertEqual(seq, ["fs", "exec", "git"])
 
-    def test_stale_transcript_yields_nothing(self):
+    def test_when_stale_transcript_yields_nothing(self):
         with tempfile.TemporaryDirectory() as d:
             write_transcript(d, "client:old", ["fs", "exec", "git"], ts=NOW - 100)
             self.assertEqual(
@@ -67,21 +67,21 @@ class MineTest(unittest.TestCase):
         # Deterministic: same input, same source hash.
         self.assertEqual(top["source"], mine_sops(seqs)[0]["source"])
 
-    def test_below_session_floor_is_silent(self):
+    def test_when_below_session_floor_is_silent(self):
         mined = mine_sops(self._sequences(SOP_MIN_SESSIONS - 1, 5))
         self.assertEqual(mined, [])
 
-    def test_below_occurrence_floor_is_silent(self):
+    def test_when_below_occurrence_floor_is_silent(self):
         seqs = {f"s{i}": ["fs", "exec", "git"] for i in range(SOP_MIN_SESSIONS)}
         # 3 occurrences total < SOP_MIN_OCCURRENCES (5)
         self.assertLess(SOP_MIN_SESSIONS, SOP_MIN_OCCURRENCES)
         self.assertEqual(mine_sops(seqs), [])
 
-    def test_single_tool_loop_is_not_a_procedure(self):
+    def test_when_single_tool_loop_is_not_a_procedure(self):
         seqs = {f"s{i}": ["fs"] * 20 for i in range(SOP_MIN_SESSIONS + 2)}
         self.assertEqual(mine_sops(seqs), [])
 
-    def test_subsumed_shorter_gram_is_suppressed(self):
+    def test_when_subsumed_shorter_gram_is_suppressed(self):
         seqs = self._sequences(SOP_MIN_SESSIONS + 1, 4)
         mined = mine_sops(seqs)
         flows = [c["title"] for c in mined]

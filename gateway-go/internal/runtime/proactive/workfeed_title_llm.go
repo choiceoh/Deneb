@@ -2,12 +2,9 @@ package proactive
 
 import (
 	"context"
-	"regexp"
 	"strings"
-	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive/cardtitle"
 )
 
 // Tiny-LLM card titler + summarizer for proactive work-feed cards.
@@ -19,7 +16,7 @@ import (
 // role — used both for mail reports (to surface the email's real subject) and for
 // any proactive body whose heuristic title is weak (see isWeakCardTitle).
 //
-// Why tiny, not lightweight: this call caps output at cardTitleMaxTokens, which
+// Why tiny, not lightweight: this call caps output at a small token budget, which
 // only fits an answer with the thinking channel OFF. The tiny role is an explicit
 // self-hosted extraction model (agents.tinyModel, e.g. vLLM qwen3.6-35b-a3b) whose
 // thinking-off toggle is honored on the vLLM path — same role session titles and
@@ -40,36 +37,7 @@ const (
 	// / topic sits at the top of a report, so the head is plenty and keeps the call
 	// cheap.
 	cardTitleMaxInputRunes = 1200
-	// cardTitleMaxTokens caps the generated output. It must fit a short title plus a
-	// two-line summary, so it is larger than a title-only cap.
-	cardTitleMaxTokens = 256
-	// cardTitleTimeout bounds the tiny call so a stalled model never holds
-	// up proactive delivery.
-	cardTitleTimeout = 8 * time.Second
-	// No hard length clamp on the LLM title: the prompt asks for ≤20 Korean
-	// characters and we trust it, so a good title isn't chopped mid-word. (The
-	// desktop work-feed card has room for the fuller title; the native client
-	// wraps/elides as needed.) The heuristic fallback still bounds raw subjects at
-	// workFeedTitleMaxRunes (40).
 )
-
-// llmTitleLabelRe / llmSummaryLabelRe match the "제목:" / "요약:" labels the model is
-// asked to lead each line with (also the English forms, full-width colon, and an
-// optional space before the colon), so the two fields can be parsed apart.
-var (
-	llmTitleLabelRe   = regexp.MustCompile(`(?i)^\s*(제목|title)\s*[:：]\s*`)
-	llmSummaryLabelRe = regexp.MustCompile(`(?i)^\s*(요약|summary)\s*[:：]\s*`)
-)
-
-const cardTitleSystemPrompt = `너는 업무 알림 카드의 제목과 짧은 요약을 뽑아내는 도구다. 입력은 메일 분석 리포트, 일정 브리핑, 분석 메모 등이다.
-정확히 아래 두 줄 형식으로만 출력한다:
-제목: <핵심 명사구>
-요약: <무엇에 관한 것이고 왜 중요한지>
-
-규칙:
-- 제목은 한글 20자 이내. "메일 분석", "리포트", "보고" 같은 군더더기 단어를 붙이지 마라.
-- 요약은 카드 미리보기용으로 2문장(약 80자) 이내. 제목을 그대로 반복하지 말고 핵심 내용과 이유를 담는다.
-- 따옴표·마크다운·머리기호·이모지 금지. 위 두 줄 외에 다른 설명·접두어를 출력하지 마라.`
 
 // CardTitleSummary returns a tiny-model-generated card title and 2-line summary
 // for a proactive body, or ("", "") on any failure (so the heuristic fallbacks
@@ -79,63 +47,11 @@ func CardTitleSummary(ctx context.Context, content string) (title, summary strin
 	if r := []rune(body); len(r) > cardTitleMaxInputRunes {
 		body = string(r[:cardTitleMaxInputRunes])
 	}
-	ctx, cancel := context.WithTimeout(ctx, cardTitleTimeout)
-	defer cancel()
-	out, err := pilot.CallTinyLLM(ctx, cardTitleSystemPrompt, body, cardTitleMaxTokens)
+	out, err := cardtitle.CallTiny(ctx, body)
 	if err != nil {
 		return "", ""
 	}
 	return parseLLMTitleSummary(out)
-}
-
-// EvaluateCardTitleRole runs the production card-title prompt against one
-// explicit model role. It supports opt-in live diagnostics without exposing
-// prompt or parsing internals to the gateway package.
-func EvaluateCardTitleRole(ctx context.Context, role modelrole.Role, content string) (title, summary, raw string, err error) {
-	raw, err = pilot.CallRoleLLM(ctx, role, cardTitleSystemPrompt, content, cardTitleMaxTokens)
-	if err != nil {
-		return "", "", raw, err
-	}
-	title, summary = parseLLMTitleSummary(raw)
-	return title, summary, raw, nil
-}
-
-// parseLLMTitleSummary splits the model's "제목: …\n요약: …" output into a cleaned
-// title and summary. It tolerates the model dropping the labels: the first unlabeled
-// line becomes the title and the rest the summary. Either field may come back "" (the
-// caller keeps its heuristic for that field).
-func parseLLMTitleSummary(raw string) (title, summary string) {
-	var titleRaw, summaryRaw string
-	var unlabeled []string
-	for _, ln := range strings.Split(raw, "\n") {
-		l := strings.TrimSpace(ln)
-		if l == "" {
-			continue
-		}
-		if loc := llmTitleLabelRe.FindStringIndex(l); loc != nil {
-			if titleRaw == "" {
-				titleRaw = l[loc[1]:]
-			}
-			continue
-		}
-		if loc := llmSummaryLabelRe.FindStringIndex(l); loc != nil {
-			if summaryRaw == "" {
-				summaryRaw = l[loc[1]:]
-			}
-			continue
-		}
-		unlabeled = append(unlabeled, l)
-	}
-	// Tolerate dropped labels: a missing title takes the first unlabeled line; a
-	// missing summary takes whatever unlabeled lines remain.
-	if titleRaw == "" && len(unlabeled) > 0 {
-		titleRaw = unlabeled[0]
-		unlabeled = unlabeled[1:]
-	}
-	if summaryRaw == "" && len(unlabeled) > 0 {
-		summaryRaw = strings.Join(unlabeled, " ")
-	}
-	return cleanLLMCardTitle(titleRaw), cleanLLMCardSummary(summaryRaw)
 }
 
 // cleanLLMCardTitle normalizes a raw lightweight-model title into a card-ready
@@ -175,4 +91,10 @@ func cleanLLMCardSummary(raw string) string {
 		return ""
 	}
 	return clipRunes(s, workFeedSummaryMaxRunes)
+}
+
+
+func parseLLMTitleSummary(raw string) (title, summary string) {
+	title, summary = cardtitle.ParseLLMTitleSummary(raw)
+	return cleanLLMCardTitle(title), cleanLLMCardSummary(summary)
 }

@@ -27,7 +27,7 @@ describe("App against the mock gateway (real stack)", () => {
     expect(await screen.findByText("분기 보고서 초안 작성")).toBeInTheDocument();
   });
 
-  it("switches to the mail pane and shows mock mail", async () => {
+  it("switches to the mail pane and displays mock mail", async () => {
     render(<App />);
     // Scope to the sidebar nav: the dashboard also renders a 메일 card button.
     await userEvent.click(within(screen.getByRole("navigation")).getByRole("button", { name: /메일/ }));
@@ -46,7 +46,7 @@ describe("App against the mock gateway (real stack)", () => {
     expect(within(detail).getByText(/회의 전까지 초안 자료를 공유/)).toBeInTheDocument();
   });
 
-  it("shows the AI analysis and sender-context cards in the mail detail", async () => {
+  it("displays the AI analysis and sender-context cards in the mail detail", async () => {
     render(<App />);
     await userEvent.click(within(screen.getByRole("navigation")).getByRole("button", { name: /메일/ }));
     await userEvent.click(await screen.findByText("분기 리뷰 일정 확정"));
@@ -62,7 +62,7 @@ describe("App against the mock gateway (real stack)", () => {
     expect(within(detail).getByText("발신자")).toBeInTheDocument();
   });
 
-  it("populates the AI model picker from miniapp.models.list", async () => {
+  it("when populates the AI model picker from miniapp.models.list", async () => {
     render(<App />);
     // 우측 데네브 패널은 기본 접힘 — 우측 탭으로 열어야 패널 컨트롤이 보인다.
     await userEvent.click(await screen.findByRole("button", { name: "Deneb 패널 열기" }));

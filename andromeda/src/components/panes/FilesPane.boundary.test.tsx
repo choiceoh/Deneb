@@ -95,7 +95,7 @@ describe("FilesPane boundary behavior", () => {
   });
 
   describe("connection and path navigation", () => {
-    it("disables every network mutation while disconnected", () => {
+    it("when disables every network mutation while disconnected", () => {
       renderFiles(false);
       expect(screen.getByRole("button", { name: "상위" })).toBeDisabled();
       expect(screen.getByRole("button", { name: "새로고침" })).toBeDisabled();
@@ -113,7 +113,7 @@ describe("FilesPane boundary behavior", () => {
       expect(screen.getByLabelText("파일 경로")).toHaveValue("/");
     });
 
-    it("treats both folder and dir tags as navigable directories", async () => {
+    it("when treats both folder and dir tags as navigable directories", async () => {
       renderFiles();
       await screen.findAllByText("projects");
       expect(screen.getAllByText("폴더")).toHaveLength(2);
@@ -121,7 +121,7 @@ describe("FilesPane boundary behavior", () => {
       expect(lastCall(calls, FILES_RPC.list)?.params).toMatchObject({ path: "archive" });
     });
 
-    it("navigates down and then back to its canonical parent", async () => {
+    it("when navigates down and then back to its canonical parent", async () => {
       renderFiles();
       await enterProjects();
       expect(screen.getByLabelText("파일 경로")).toHaveValue("projects");
@@ -130,7 +130,7 @@ describe("FilesPane boundary behavior", () => {
       expect(lastCall(calls, FILES_RPC.list)?.params.path).toBe("");
     });
 
-    it("disables parent navigation at root", async () => {
+    it("when disables parent navigation at root", async () => {
       renderFiles();
       await screen.findAllByText("projects");
       expect(screen.getByRole("button", { name: "상위" })).toBeDisabled();
@@ -146,7 +146,7 @@ describe("FilesPane boundary behavior", () => {
       expect(lastCall(calls, FILES_RPC.list)?.params).toEqual({ path: "projects", limit: 300 });
     });
 
-    it("does not navigate on unrelated path keys", async () => {
+    it("without navigate on unrelated path keys", async () => {
       renderFiles();
       await screen.findAllByText("projects");
       const before = calls.filter((call) => call.method === FILES_RPC.list).length;
@@ -175,7 +175,7 @@ describe("FilesPane boundary behavior", () => {
   });
 
   describe("search state and parameters", () => {
-    it("sends trimmed query plus explicit content and semantic flags", async () => {
+    it("when sends trimmed query plus explicit content and semantic flags", async () => {
       renderFiles();
       await screen.findAllByText("projects");
       await userEvent.type(screen.getByPlaceholderText("파일 검색..."), "  contract  ");
@@ -253,7 +253,7 @@ describe("FilesPane boundary behavior", () => {
       expect(within(row).getByRole("button", { name: "삭제" })).toBeInTheDocument();
     });
 
-    it("shares a file by its canonical path and selects its row", async () => {
+    it("when shares a file by its canonical path and selects its row", async () => {
       renderFiles();
       await enterProjects();
       const row = screen.getByText("contract.pdf").closest("tr")!;
@@ -320,7 +320,7 @@ describe("FilesPane boundary behavior", () => {
       expect(await screen.findByText("이동됨")).toBeInTheDocument();
     });
 
-    it("requires destructive confirmation before deleting", async () => {
+    it("when requires destructive confirmation before deleting", async () => {
       renderFiles();
       await enterProjects();
       const row = screen.getByText("contract.pdf").closest("tr")!;
@@ -376,7 +376,7 @@ describe("FilesPane boundary behavior", () => {
       expect(download.getAttribute("href")).toContain("projects%2Fnotes.md");
     });
 
-    it("opens clean, switches to edit, and tracks dirty state", async () => {
+    it("when opens clean, switches to edit, and tracks dirty state", async () => {
       const dialog = await openNotes();
       expect(await within(dialog).findByText("저장됨")).toBeInTheDocument();
       await userEvent.click(within(dialog).getByRole("button", { name: "편집" }));
@@ -435,7 +435,7 @@ describe("FilesPane boundary behavior", () => {
       expect(screen.getByRole("dialog", { name: "notes.md" })).toBeInTheDocument();
     });
 
-    it("discards dirty preview only after explicit confirmation", async () => {
+    it("when discards dirty preview only after explicit confirmation", async () => {
       const dialog = await openNotes();
       await userEvent.click(await within(dialog).findByRole("button", { name: "편집" }));
       await userEvent.type(await within(dialog).findByDisplayValue(/저장 전 본문/), " 추가");

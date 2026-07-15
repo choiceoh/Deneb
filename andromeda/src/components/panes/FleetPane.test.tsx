@@ -45,7 +45,7 @@ describe("FleetPane", () => {
     expect(within(services).getByText("node")).toBeInTheDocument();
   });
 
-  it("runs a recipe action through a confirmation dialog", async () => {
+  it("when runs a recipe action through a confirmation dialog", async () => {
     const user = userEvent.setup();
     renderWithProviders(<FleetPane />, { connected: true, cfg: { url: "http://mock.local", token: "mock" } });
 

@@ -88,7 +88,7 @@ const (
 type ToolInfo struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
-	InputSchema map[string]any `json:"inputSchema"`
+	InputSchema jsonObject `json:"inputSchema"`
 }
 
 // Client manages one MCP server child process. Calls may run concurrently;
@@ -241,7 +241,7 @@ func (c *Client) ListTools(ctx context.Context) ([]ToolInfo, error) {
 
 // CallTool invokes a named tool and renders the result for agent
 // consumption (see renderToolResult for the fidelity rules).
-func (c *Client) CallTool(ctx context.Context, name string, args json.RawMessage) (string, error) {
+func (c *Client) CallTool(ctx context.Context, name string, args rawJSON) (string, error) {
 	if err := c.ensureReady(ctx); err != nil {
 		return "", err
 	}

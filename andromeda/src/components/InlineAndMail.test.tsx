@@ -46,7 +46,7 @@ describe("renderInline", () => {
     expect(container.querySelectorAll("strong,em,code,a")).toHaveLength(4);
   });
 
-  it("leaves unmatched markers literal", () => {
+  it("preserves unmatched markers literal", () => {
     const { container } = renderText("unfinished **bold and `code");
     expect(container.querySelector("p")?.textContent).toBe("unfinished **bold and `code");
     expect(container.querySelector("strong,code")).toBeNull();
@@ -74,11 +74,11 @@ describe("mailBody", () => {
     expect(mailBody({ id: "m1", ...mail })).toBe(Object.values(mail)[0]);
   });
 
-  it("uses the first populated body alias", () => {
+  it("when uses the first populated body alias", () => {
     expect(mailBody({ id: "m1", body: "Body", plain: "Plain", text: "Text" })).toBe("Body");
   });
 
-  it("skips blank aliases", () => {
+  it("ignores blank aliases", () => {
     expect(mailBody({ id: "m1", body: "  ", plain: "Plain" })).toBe("Plain");
   });
 
@@ -87,11 +87,11 @@ describe("mailBody", () => {
     expect(mailBody({ id: "m1", body: text })).toBe(text);
   });
 
-  it("uses snippet before HTML", () => {
+  it("when uses snippet before HTML", () => {
     expect(mailBody({ id: "m1", snippet: "목록 요약", html: "<p>HTML 본문</p>" })).toBe("목록 요약");
   });
 
-  it("converts HTML to visible text", () => {
+  it("when converts HTML to visible text", () => {
     expect(mailBody({ id: "m1", html: "<h1>제목</h1><p>본문 <strong>강조</strong></p>" })).toBe("제목본문 강조");
   });
 

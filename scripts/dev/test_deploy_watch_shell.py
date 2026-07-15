@@ -15,7 +15,7 @@ WATCH = REPO_ROOT / "scripts/deploy/deploy-watch.sh"
 
 
 class DeployWatchShellTest(unittest.TestCase):
-    def test_new_head_waits_for_old_watch_and_is_actually_watched(self):
+    def test_when_new_head_waits_for_old_watch_and_is_actually_watched(self):
         with TemporaryDirectory() as td:
             root = Path(td)
             state = root / "state"

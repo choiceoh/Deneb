@@ -64,7 +64,7 @@ func NewPublisher(b *Broadcaster, snapshots SessionSnapshotProvider, logger *slo
 // Sends "session.message" to session subscribers and "sessions.changed" to
 // session event subscribers.
 func (p *Publisher) PublishSessionMessage(update TranscriptUpdate) {
-	if p == nil || p.broadcaster == nil || update.SessionKey == "" || update.Message == nil {
+	if p == nil || p.broadcaster == nil || update.SessionKey == "" || update.Message.IsZero() {
 		return
 	}
 
@@ -118,7 +118,7 @@ func (p *Publisher) PublishAgentEvent(evt AgentEvent) {
 		payload["seq"] = p.agentSeq[evt.RunID]
 		p.seqMu.Unlock()
 	}
-	if evt.Payload != nil {
+	if !evt.Payload.IsZero() {
 		payload["payload"] = evt.Payload
 	}
 

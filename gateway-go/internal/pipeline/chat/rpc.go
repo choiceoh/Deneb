@@ -1,15 +1,14 @@
 package chat
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -31,16 +30,16 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		SkipMerge bool `json:"skipMerge,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return rpcerr.WrapInvalidRequest("invalid chat.send params", err).Response(req.ID)
+		return leafbind.RPCWrapInvalidRequest("invalid chat.send params", err).Response(req.ID)
 	}
 	if p.SessionKey == "" {
-		return rpcerr.MissingParam("sessionKey").Response(req.ID)
+		return leafbind.RPCMissingParam("sessionKey").Response(req.ID)
 	}
 	if p.Message == "" && len(p.Attachments) == 0 {
-		return rpcerr.New(protocol.ErrMissingParam, "message or attachments required").Response(req.ID)
+		return leafbind.RPCNew(protocol.ErrMissingParam, "message or attachments required").Response(req.ID)
 	}
 	if len(p.Message) > h.maxMessageBytes {
-		return rpcerr.Newf(protocol.ErrInvalidRequest, "message too large: %d bytes exceeds limit of %d", len(p.Message), h.maxMessageBytes).Response(req.ID)
+		return leafbind.RPCNewf(protocol.ErrInvalidRequest, "message too large: %d bytes exceeds limit of %d", len(p.Message), h.maxMessageBytes).Response(req.ID)
 	}
 	if h.recordActivity != nil && !p.SkipMerge {
 		h.recordActivity(p.SessionKey)
@@ -154,10 +153,10 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 		IdempotencyKey string           `json:"idempotencyKey,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return rpcerr.WrapInvalidRequest("invalid sessions.send params", err).Response(req.ID)
+		return leafbind.RPCWrapInvalidRequest("invalid sessions.send params", err).Response(req.ID)
 	}
 	if p.Key == "" {
-		return rpcerr.MissingParam("key").Response(req.ID)
+		return leafbind.RPCMissingParam("key").Response(req.ID)
 	}
 	if h.recordActivity != nil {
 		h.recordActivity(p.Key)
@@ -172,7 +171,7 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 
 	runID := p.IdempotencyKey
 	if runID == "" {
-		runID = shortid.New("run")
+		runID = leafbind.NewShortID("run")
 	}
 
 	// Derive DeliveryContext from the session key ("client:<id>" →
@@ -205,10 +204,10 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 		SystemPrompt string `json:"systemPrompt,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return rpcerr.WrapInvalidRequest("invalid sessions.steer params", err).Response(req.ID)
+		return leafbind.RPCWrapInvalidRequest("invalid sessions.steer params", err).Response(req.ID)
 	}
 	if p.Key == "" {
-		return rpcerr.MissingParam("key").Response(req.ID)
+		return leafbind.RPCMissingParam("key").Response(req.ID)
 	}
 	if h.recordActivity != nil {
 		h.recordActivity(p.Key)
@@ -218,7 +217,7 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 	h.InterruptActiveRun(p.Key)
 	h.pending.Clear(p.Key)
 
-	runID := shortid.New("steer")
+	runID := leafbind.NewShortID("steer")
 
 	return h.startAsyncRun(req.ID, RunParams{
 		SessionKey:  p.Key,
@@ -237,10 +236,10 @@ func (h *Handler) SessionsAbort(_ context.Context, req *protocol.RequestFrame) *
 		RunID string `json:"runId,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return rpcerr.WrapInvalidRequest("invalid sessions.abort params", err).Response(req.ID)
+		return leafbind.RPCWrapInvalidRequest("invalid sessions.abort params", err).Response(req.ID)
 	}
 	if p.Key == "" && p.RunID == "" {
-		return rpcerr.New(protocol.ErrMissingParam, "key or runId is required").Response(req.ID)
+		return leafbind.RPCNew(protocol.ErrMissingParam, "key or runId is required").Response(req.ID)
 	}
 
 	var abortedRunID string
@@ -296,7 +295,7 @@ func (h *Handler) HandleBtw(ctx context.Context, sessionKey, question string) (s
 	defer cancel()
 
 	// Ephemeral session — isolates writes from the caller's session.
-	btwKey := "btw:" + shortid.New("btw")
+	btwKey := "btw:" + leafbind.NewShortID("btw")
 	defer func() {
 		h.sessions.Delete(btwKey)
 		if h.transcript != nil {
@@ -342,10 +341,10 @@ func (h *Handler) History(_ context.Context, req *protocol.RequestFrame) *protoc
 		Limit      int    `json:"limit,omitempty"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return rpcerr.InvalidRequest("invalid chat.history params").Response(req.ID)
+		return leafbind.RPCInvalidRequest("invalid chat.history params").Response(req.ID)
 	}
 	if p.SessionKey == "" {
-		return rpcerr.MissingParam("sessionKey").Response(req.ID)
+		return leafbind.RPCMissingParam("sessionKey").Response(req.ID)
 	}
 
 	limit := p.Limit
@@ -357,7 +356,7 @@ func (h *Handler) History(_ context.Context, req *protocol.RequestFrame) *protoc
 	if h.transcript != nil {
 		msgs, total, err := h.transcript.Load(p.SessionKey, limit)
 		if err != nil {
-			return rpcerr.WrapDependencyFailed("transcript load error", err).Response(req.ID)
+			return leafbind.RPCWrapDependencyFailed("transcript load error", err).Response(req.ID)
 		}
 		if msgs == nil {
 			msgs = []ChatMessage{}
@@ -393,10 +392,10 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 		SessionKey  string `json:"sessionKey"`
 	}
 	if err := json.Unmarshal(req.Params, &p); err != nil {
-		return rpcerr.InvalidRequest("invalid chat.abort params").Response(req.ID)
+		return leafbind.RPCInvalidRequest("invalid chat.abort params").Response(req.ID)
 	}
 	if p.ClientRunID == "" && p.SessionKey == "" {
-		return rpcerr.New(protocol.ErrMissingParam, "clientRunId or sessionKey is required").Response(req.ID)
+		return leafbind.RPCNew(protocol.ErrMissingParam, "clientRunId or sessionKey is required").Response(req.ID)
 	}
 
 	var resolvedKey string
@@ -412,7 +411,7 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 	}
 
 	if !found {
-		return rpcerr.NotFound("no active run").Response(req.ID)
+		return leafbind.RPCNotFound("no active run").Response(req.ID)
 	}
 
 	// Clear pending queue and transition session to killed.
@@ -465,6 +464,9 @@ func (h *Handler) SendDirect(sessionKey, message string) {
 // "client:main:thread:42" → adds ThreadID="42" so reply paths
 // without an explicit Delivery (e.g. cron-driven autoreply, internal
 // dispatches) still land in the forum/topic the session belongs to.
+// DeliveryFromSessionKey is the exported form used by composition-root wiring.
+func DeliveryFromSessionKey(key string) *DeliveryContext { return deliveryFromSessionKey(key) }
+
 func deliveryFromSessionKey(key string) *DeliveryContext {
 	idx := strings.Index(key, ":")
 	if idx < 0 {

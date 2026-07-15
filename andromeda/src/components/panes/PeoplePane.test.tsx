@@ -35,7 +35,7 @@ function renderPeople(rows = people, connected = true) {
 beforeEach(() => localStorage.clear());
 
 describe("PeoplePane list", () => {
-  it("shows disconnected state before querying rows", () => {
+  it("displays disconnected state before querying rows", () => {
     renderPeople(people, false);
     expect(screen.getByText("미연결")).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
@@ -62,7 +62,7 @@ describe("PeoplePane list", () => {
     expect(within(table).getByText("설계 검토")).toBeInTheDocument();
   });
 
-  it("falls back for a wiki-only or unnamed contact", async () => {
+  it("when falls back for a wiki-only or unnamed contact", async () => {
     renderPeople();
     const table = await screen.findByRole("table");
     const row = within(table).getByText("anonymous@example.com").closest("tr")!;
@@ -72,7 +72,7 @@ describe("PeoplePane list", () => {
     expect(within(row).queryByText("0")).not.toBeInTheDocument();
   });
 
-  it("makes each data row keyboard-accessible", async () => {
+  it("when makes each data row keyboard-accessible", async () => {
     renderPeople();
     const table = await screen.findByRole("table");
     const row = within(table).getByText("김데네브").closest("tr")!;
@@ -84,7 +84,7 @@ describe("PeoplePane list", () => {
     expect(screen.getByRole("dialog", { name: "김데네브" })).toBeInTheDocument();
   });
 
-  it("opens a detail card by click", async () => {
+  it("when opens a detail card by click", async () => {
     renderPeople();
     await userEvent.click(await screen.findByText("김데네브"));
 
@@ -127,7 +127,7 @@ describe("PeoplePane list", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("uses the latest subject before a wiki summary in the compact row", async () => {
+  it("when uses the latest subject before a wiki summary in the compact row", async () => {
     renderPeople();
     const row = (await screen.findByText("김데네브")).closest("tr")!;
     expect(within(row).getByText("설계 검토")).toBeInTheDocument();

@@ -41,7 +41,7 @@ func (*configNudger) Reset(string) {}
 // the preset Execute gate silently read empty values on the sync path.
 func TestBuildAgentConfigOnTurnInitReturnsSessionKeyAndPreset(t *testing.T) {
 	params := RunParams{SessionKey: "client:main"}
-	cfg, _, _, _ := buildAgentConfig(params, runDeps{}, nil, nil, "researcher", agentConfigDeps{}, slog.Default())
+	cfg, _, _ := buildAgentConfig(params, runDeps{}, nil, nil, "researcher", agentConfigDeps{}, "m-test", slog.Default())
 
 	if cfg.OnTurnInit == nil {
 		t.Fatal("OnTurnInit must be set")
@@ -60,7 +60,7 @@ func TestBuildAgentConfigWithRunLimitsOverridesModeDefaults(t *testing.T) {
 	wantTimeout := 7 * time.Minute
 	wantSeed := int64(42001)
 	deps := runDeps{runLimits: RunLimits{MaxTurns: 123, Timeout: wantTimeout}, samplingSeed: &wantSeed}
-	cfg, _, _, _ := buildAgentConfig(RunParams{}, deps, nil, nil, "briefcase", agentConfigDeps{}, slog.Default())
+	cfg, _, _ := buildAgentConfig(RunParams{}, deps, nil, nil, "briefcase", agentConfigDeps{}, "m-test", slog.Default())
 
 	if cfg.MaxTurns != 123 {
 		t.Fatalf("MaxTurns = %d, want 123", cfg.MaxTurns)
@@ -77,11 +77,11 @@ func TestBuildAgentConfigWithBriefcaseModeAppliesDeterministicLimits(t *testing.
 	t.Setenv("DENEB_STREAM_IDLE_TIMEOUT_MS", "-1")
 	t.Setenv("DENEB_PARALLEL_TOOLS", "1")
 	maxTurns, maxTokens, maxToolCallAttempts := 7, 1234, 3
-	cfg, _, _, _ := buildAgentConfig(RunParams{
+	cfg, _, _ := buildAgentConfig(RunParams{
 		MaxTurns: &maxTurns, MaxTokens: &maxTokens, MaxToolCallAttempts: &maxToolCallAttempts,
 	}, runDeps{
 		briefcaseMode: true, runLimits: RunLimits{MaxTurns: 99, Timeout: time.Minute},
-	}, nil, nil, string(toolpreset.PresetBriefcase), agentConfigDeps{MaxTokens: maxTokens}, slog.Default())
+	}, nil, nil, string(toolpreset.PresetBriefcase), agentConfigDeps{MaxTokens: maxTokens}, "m-test", slog.Default())
 
 	if cfg.MaxTurns != maxTurns || cfg.MaxTokens != maxTokens || cfg.MaxTotalOutputTokens != maxTokens {
 		t.Fatalf("briefcase budgets = turns %d tokens %d total %d", cfg.MaxTurns, cfg.MaxTokens, cfg.MaxTotalOutputTokens)
@@ -104,7 +104,7 @@ func TestBuildAgentConfigWithBriefcaseModeAppliesDeterministicLimits(t *testing.
 
 func TestBuildAgentConfigProductionPreservesParallelToolPolicy(t *testing.T) {
 	t.Setenv("DENEB_PARALLEL_TOOLS", "1")
-	cfg, _, _, _ := buildAgentConfig(RunParams{}, runDeps{}, nil, nil, "", agentConfigDeps{}, slog.Default())
+	cfg, _, _ := buildAgentConfig(RunParams{}, runDeps{}, nil, nil, "", agentConfigDeps{}, "m-test", slog.Default())
 
 	if cfg.StreamIdleTimeout != 0 {
 		t.Fatalf("production StreamIdleTimeout = %s, want zero so the executor can apply its normal env/default policy", cfg.StreamIdleTimeout)
@@ -163,11 +163,13 @@ func TestBuildAgentConfig_PreservesCombinedPolicyAndHookContracts(t *testing.T) 
 			"wiki",
 			"notebook",
 		},
-		EmitAgentFn: func(kind, sessionKey, runID string, payload map[string]any) {
+		EmitAgentFn: func(kind, sessionKey, runID string, payload json.RawMessage) {
 			if kind != "heartbeat" || sessionKey != params.SessionKey || runID != params.ClientRunID {
 				t.Fatalf("unexpected heartbeat envelope: kind=%q session=%q run=%q", kind, sessionKey, runID)
 			}
-			heartbeat = payload
+			if err := json.Unmarshal(payload, &heartbeat); err != nil {
+				t.Fatalf("unmarshal heartbeat payload: %v", err)
+			}
 		},
 	}
 	shutdownCtx, cancel := context.WithCancel(context.Background())
@@ -178,13 +180,14 @@ func TestBuildAgentConfig_PreservesCombinedPolicyAndHookContracts(t *testing.T) 
 		callbacks:     CallbackSnapshot{shutdownCtx: shutdownCtx},
 	}
 
-	cfg, spawnFlag, execStats, skillConsults := buildAgentConfig(
+	cfg, spawnFlag, execStats := buildAgentConfig(
 		params,
 		deps,
 		cachedSession,
 		json.RawMessage(`"system"`),
 		string(toolpreset.PresetBriefcase),
 		acd,
+		"resolved-model",
 		slog.Default(),
 	)
 
@@ -207,8 +210,8 @@ func TestBuildAgentConfig_PreservesCombinedPolicyAndHookContracts(t *testing.T) 
 	if cfg.ThinkingModulator != nil || cfg.FinalizeGate != nil {
 		t.Fatal("Briefcase must exclude ambient reasoning and verification policies")
 	}
-	productionCfg, _, _, _ := buildAgentConfig(
-		RunParams{}, runDeps{}, cachedSession, nil, "", agentConfigDeps{MaxTokens: 65536}, slog.Default(),
+	productionCfg, _, _ := buildAgentConfig(
+		RunParams{}, runDeps{}, cachedSession, nil, "", agentConfigDeps{MaxTokens: 65536}, "resolved-model", slog.Default(),
 	)
 	if productionCfg.ThinkingModulator == nil || productionCfg.FinalizeGate == nil {
 		t.Fatal("production must retain enabled reasoning and verification policies")
@@ -236,12 +239,8 @@ func TestBuildAgentConfig_PreservesCombinedPolicyAndHookContracts(t *testing.T) 
 	}
 	toolport.SkillConsultLogFromContext(ctx).Add("risk-skill")
 	cfg.OnToolTurn(4, []agent.ToolActivity{{Name: "read"}})
-	if len(usage.calls) != 0 {
-		t.Fatalf("skill usage was recorded before run completion: %+v", usage.calls)
-	}
-	recordRunSkillUsage(usage, skillConsults, &agent.AgentResult{Text: "done", StopReason: "end_turn"}, nil, params.SessionKey, "actual-model")
-	if len(usage.calls) != 1 || usage.calls[0].skill != "risk-skill" || usage.calls[0].model != "actual-model" {
-		t.Fatalf("completed-run skill usage calls = %+v", usage.calls)
+	if len(usage.calls) != 1 || usage.calls[0].skill != "risk-skill" || usage.calls[0].model != "resolved-model" {
+		t.Fatalf("skill usage hook calls = %+v", usage.calls)
 	}
 	if len(nudger.calls) != 1 || nudger.calls[0].sessionKey != params.SessionKey || nudger.calls[0].count != 1 ||
 		nudger.calls[0].snapshot.Model != params.Model || nudger.calls[0].snapshot.Turns != 4 {

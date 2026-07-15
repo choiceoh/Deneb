@@ -27,7 +27,7 @@ describe("ProactiveList", () => {
     expect(screen.getByText("능동 알림 · 오류: events: HTTP 500 · 1초 후 재연결…")).toBeInTheDocument();
   });
 
-  it("shows the count, title, body, and a relative receipt time", () => {
+  it("displays the count, title, body, and a relative receipt time", () => {
     const events = [ev({ id: "e1", title: "회의 10분 전", body: "분기 리뷰 준비", ts: NOW - 5 * 60_000 })];
     render(<ProactiveList events={events} onDismiss={() => {}} onClearAll={() => {}} now={NOW} />);
     expect(screen.getByText("알림 1")).toBeInTheDocument();
@@ -49,7 +49,7 @@ describe("ProactiveList", () => {
     expect(onClearAll).toHaveBeenCalledTimes(1);
   });
 
-  it("makes a deep-link nudge clickable → navigates then dismisses", async () => {
+  it("when makes a deep-link nudge clickable → navigates then dismisses", async () => {
     const onNavigate = vi.fn();
     const onDismiss = vi.fn();
     const events = [ev({ id: "e1", kind: "workfeed", ref: "wf-9", title: "작업 카드", ts: NOW })];
@@ -61,7 +61,7 @@ describe("ProactiveList", () => {
     expect(onDismiss).toHaveBeenCalledWith("e1");
   });
 
-  it("leaves a target-less nudge as plain text (not clickable)", async () => {
+  it("preserves a target-less nudge as plain text (not clickable)", async () => {
     const onNavigate = vi.fn();
     const events = [ev({ id: "e1", kind: "push", title: "그냥 알림", ts: NOW })];
     render(
@@ -74,7 +74,7 @@ describe("ProactiveList", () => {
 });
 
 describe("proactiveNav", () => {
-  it("maps a gateway kind+ref to a pane target", () => {
+  it("when maps a gateway kind+ref to a pane target", () => {
     expect(proactiveNav(ev({ kind: "workfeed", ref: "wf-9" }))).toEqual({ view: "workfeed", ref: "wf-9" });
     expect(proactiveNav(ev({ kind: "fleet" }))).toEqual({ view: "fleet", ref: undefined });
   });

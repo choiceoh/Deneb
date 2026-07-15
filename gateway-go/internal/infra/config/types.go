@@ -4,8 +4,6 @@
 // Go gateway to read ~/.deneb/deneb.json and resolve gateway-specific settings.
 package config
 
-import "encoding/json"
-
 // ── Typed enum constants ─────────────────────────────────────────────────────
 
 // Gateway bind modes.
@@ -208,7 +206,7 @@ type AgentsConfig struct {
 // AgentsDefaultsConfig holds nested agents.defaults.* fields.
 // Model accepts string or {primary, fallbacks} — kept as raw JSON to avoid parse errors.
 type AgentsDefaultsConfig struct {
-	Model     json.RawMessage         `json:"model,omitempty"`
+	Model     rawJSON                 `json:"model,omitempty"`
 	Workspace string                  `json:"workspace,omitempty"`
 	Thinking  *AgentsThinkingDefaults `json:"thinking,omitempty"`
 }

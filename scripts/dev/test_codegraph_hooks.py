@@ -17,8 +17,6 @@ from test_support import invoke_main, load_script
 
 nudge = load_script("scripts/dev/codegraph-nudge.py")
 autoindex = load_script("scripts/dev/codegraph-autoindex.py")
-# Index build logic lives in the shared helper; autoindex.py is a thin SessionStart wrapper.
-worktree_index = load_script("scripts/dev/codegraph_worktree_index.py")
 remind = load_script("scripts/dev/codegraph-remind.py")
 
 
@@ -33,7 +31,7 @@ class NudgeParserTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertFalse(nudge.bare_identifier(value))
 
-    def test_pattern_from_simple_grep_commands_skips_flags_and_respects_quotes(self) -> None:
+    def test_pattern_from_simple_grep_commands_ignores_flags_and_respects_quotes(self) -> None:
         cases = {
             "rg -n Handler gateway-go": "Handler",
             "grep --fixed-strings 'two words' file": "two words",
@@ -56,7 +54,7 @@ class NudgeParserTests(unittest.TestCase):
 
 
 class NudgeResolutionTests(unittest.TestCase):
-    def test_codegraph_binary_uses_first_resolvable_candidate(self) -> None:
+    def test_when_codegraph_binary_uses_first_resolvable_candidate(self) -> None:
         def which(candidate):
             return "/custom/codegraph" if candidate.endswith(".local/bin/codegraph") else None
 
@@ -71,7 +69,7 @@ class NudgeResolutionTests(unittest.TestCase):
                 self.assertFalse(nudge.is_defined_symbol("Handler", "/repo"))
         run.assert_not_called()
 
-    def test_symbol_query_accepts_supported_json_shapes_and_requires_exact_case(self) -> None:
+    def test_symbol_query_allows_supported_json_shapes_and_requires_exact_case(self) -> None:
         payloads = [
             [{"name": "Handler"}],
             {"results": [{"node": {"name": "Handler"}}]},
@@ -163,7 +161,7 @@ class NudgeMainTests(unittest.TestCase):
                 env={"CLAUDE_PROJECT_DIR": str(self.root)},
             )
 
-    def test_known_symbol_blocks_once_per_sanitized_session_and_pattern(self) -> None:
+    def test_when_known_symbol_blocks_once_per_sanitized_session_and_pattern(self) -> None:
         payload = {
             "session_id": "session/one",
             "tool_name": "Grep",
@@ -181,7 +179,7 @@ class NudgeMainTests(unittest.TestCase):
         marker = marker_dir / hashlib.sha1(b"Handler").hexdigest()
         self.assertTrue(marker.is_file())
 
-    def test_bash_pattern_and_dotted_rpc_take_the_expected_resolver_paths(self) -> None:
+    def test_when_bash_pattern_and_dotted_rpc_take_the_expected_resolver_paths(self) -> None:
         bash_payload = {
             "tool_name": "Bash",
             "tool_input": {"command": "rg UnknownSymbol gateway-go"},
@@ -226,66 +224,68 @@ class AutoindexTests(unittest.TestCase):
         self.marker_root.mkdir()
         (self.root / ".git").write_text("gitdir: fixture", encoding="utf-8")
 
-    def ensure(self, *, popen=None):
-        """Drive codegraph_worktree_index.ensure_index under controlled PATH/tempdir."""
+    def invoke(self, *, stdin="{}", popen=None):
         patches = [
-            mock.patch.object(worktree_index, "codegraph_bin", return_value="/bin/codegraph"),
-            mock.patch.object(worktree_index.tempfile, "gettempdir", return_value=str(self.marker_root)),
+            mock.patch.object(autoindex, "codegraph_bin", return_value="/bin/codegraph"),
+            mock.patch.object(autoindex.tempfile, "gettempdir", return_value=str(self.marker_root)),
         ]
         for patcher in patches:
             patcher.start()
             self.addCleanup(patcher.stop)
         if popen is None:
             popen = mock.Mock(return_value=mock.Mock())
-        with mock.patch.object(worktree_index.subprocess, "Popen", popen):
-            worktree_index.ensure_index(str(self.root))
-        return popen
-
-    def test_session_start_wrapper_calls_ensure_index_and_fail_opens(self) -> None:
-        with mock.patch.object(autoindex, "ensure_index") as ensure:
+        with mock.patch.object(autoindex.subprocess, "Popen", popen):
             result = invoke_main(
                 autoindex,
-                stdin="{invalid json",
+                stdin=stdin,
                 env={"CLAUDE_PROJECT_DIR": str(self.root)},
             )
-        self.assertEqual(result, (0, "", ""))
-        ensure.assert_called_once_with(str(self.root))
+        return result, popen
 
     def test_binary_resolution_and_missing_prerequisites_fail_open(self) -> None:
-        with mock.patch.object(worktree_index.shutil, "which", side_effect=lambda p: p if p == "codegraph" else None):
-            self.assertEqual(worktree_index.codegraph_bin(), "codegraph")
-        with mock.patch.object(worktree_index.shutil, "which", return_value=None):
-            self.assertIsNone(worktree_index.codegraph_bin())
+        with mock.patch.object(autoindex.shutil, "which", side_effect=lambda p: p if p == "codegraph" else None):
+            self.assertEqual(autoindex.codegraph_bin(), "codegraph")
+        with mock.patch.object(autoindex.shutil, "which", return_value=None):
+            self.assertIsNone(autoindex.codegraph_bin())
 
-        with mock.patch.object(worktree_index, "codegraph_bin", return_value=None):
-            with mock.patch.object(worktree_index.subprocess, "Popen") as popen:
-                worktree_index.ensure_index(str(self.root))
+        with mock.patch.object(autoindex, "codegraph_bin", return_value=None):
+            with mock.patch.object(autoindex.subprocess, "Popen") as popen:
+                result = invoke_main(
+                    autoindex,
+                    stdin="{invalid json",
+                    env={"CLAUDE_PROJECT_DIR": str(self.root)},
+                )
+        self.assertEqual(result, (0, "", ""))
         popen.assert_not_called()
 
         (self.root / ".git").unlink()
-        popen = self.ensure()
+        result, popen = self.invoke()
+        self.assertEqual(result, (0, "", ""))
         popen.assert_not_called()
 
-    def test_existing_index_or_fresh_lock_suppresses_duplicate_background_work(self) -> None:
+    def test_when_existing_index_or_fresh_lock_suppresses_duplicate_background_work(self) -> None:
         (self.root / ".codegraph").mkdir()
-        popen = self.ensure()
+        result, popen = self.invoke()
+        self.assertEqual(result, (0, "", ""))
         popen.assert_not_called()
         (self.root / ".codegraph").rmdir()
 
         key = hashlib.sha1(str(self.root.resolve()).encode()).hexdigest()
         lock = self.marker_root / f"codegraph-autoindex-{key}"
         lock.write_text("", encoding="utf-8")
-        popen = self.ensure()
+        result, popen = self.invoke()
+        self.assertEqual(result, (0, "", ""))
         popen.assert_not_called()
 
-    def test_no_donor_launches_first_time_init_and_refreshes_stale_lock(self) -> None:
+    def test_when_no_donor_launches_first_time_init_and_refreshes_stale_lock(self) -> None:
         key = hashlib.sha1(str(self.root.resolve()).encode()).hexdigest()
         lock = self.marker_root / f"codegraph-autoindex-{key}"
         lock.write_text("stale", encoding="utf-8")
         old = time.time() - 901
         os.utime(lock, (old, old))
 
-        popen = self.ensure()
+        result, popen = self.invoke()
+        self.assertEqual(result, (0, "", ""))
         popen.assert_called_once()
         command = popen.call_args.args[0]
         self.assertEqual(command[:2], ["bash", "-lc"])
@@ -305,7 +305,8 @@ class AutoindexTests(unittest.TestCase):
         os.utime(old_donor, (now - 100, now - 100))
         os.utime(fresh_donor, (now, now))
 
-        popen = self.ensure()
+        result, popen = self.invoke()
+        self.assertEqual(result, (0, "", ""))
         command = popen.call_args.args[0][2]
         self.assertIn(f"cp -r {fresh_donor}", command)
         self.assertNotIn(f"cp -r {old_donor}", command)
@@ -316,8 +317,10 @@ class AutoindexTests(unittest.TestCase):
 
     def test_background_spawn_error_is_swallowed(self) -> None:
         popen = mock.Mock(side_effect=OSError("cannot spawn"))
-        self.ensure(popen=popen)
+        result, _ = self.invoke(popen=popen)
+        self.assertEqual(result, (0, "", ""))
         popen.assert_called_once()
+
 
 class ReminderTests(unittest.TestCase):
     def setUp(self) -> None:

@@ -27,7 +27,7 @@ describe("useFileDrop zone state", () => {
     expect(result.current.over).toBe(false);
   });
 
-  it("enters and leaves for file drags", () => {
+  it("enters and preserves for file drags", () => {
     const { result } = renderHook(() => useFileDrop(true, vi.fn()));
     const enter = dragEvent();
     act(() => result.current.dropProps.onDragEnter(enter));
@@ -39,7 +39,7 @@ describe("useFileDrop zone state", () => {
     expect(result.current.over).toBe(false);
   });
 
-  it("keeps the overlay while a nested target is still entered", () => {
+  it("preserves the overlay while a nested target is still entered", () => {
     const { result } = renderHook(() => useFileDrop(true, vi.fn()));
     act(() => {
       result.current.dropProps.onDragEnter(dragEvent());
@@ -52,7 +52,7 @@ describe("useFileDrop zone state", () => {
     expect(result.current.over).toBe(false);
   });
 
-  it("never lets leave depth become negative", () => {
+  it("rejects lets leave depth become negative", () => {
     const { result } = renderHook(() => useFileDrop(true, vi.fn()));
     act(() => {
       result.current.dropProps.onDragLeave(dragEvent());
@@ -79,7 +79,7 @@ describe("useFileDrop zone state", () => {
 });
 
 describe("useFileDrop drag-over contract", () => {
-  it("advertises copy for an enabled file zone", () => {
+  it("when advertises copy for an enabled file zone", () => {
     const { result } = renderHook(() => useFileDrop(true, vi.fn()));
     const event = dragEvent();
     act(() => result.current.dropProps.onDragOver(event));
@@ -87,7 +87,7 @@ describe("useFileDrop drag-over contract", () => {
     expect(event.dataTransfer.dropEffect).toBe("copy");
   });
 
-  it("advertises none for a disabled file zone", () => {
+  it("when advertises none for a disabled file zone", () => {
     const { result } = renderHook(() => useFileDrop(false, vi.fn()));
     const event = dragEvent();
     act(() => result.current.dropProps.onDragOver(event));
@@ -95,7 +95,7 @@ describe("useFileDrop drag-over contract", () => {
     expect(event.dataTransfer.dropEffect).toBe("none");
   });
 
-  it("does not alter text drags", () => {
+  it("without alter text drags", () => {
     const { result } = renderHook(() => useFileDrop(true, vi.fn()));
     const event = dragEvent(["text/plain"]);
     act(() => result.current.dropProps.onDragOver(event));
@@ -105,7 +105,7 @@ describe("useFileDrop drag-over contract", () => {
 });
 
 describe("useFileDrop delivery", () => {
-  it("delivers every dropped file in order", () => {
+  it("when delivers every dropped file in order", () => {
     const onFiles = vi.fn();
     const { result } = renderHook(() => useFileDrop(true, onFiles));
     const files = [new File(["a"], "a.txt", { type: "text/plain" }), new File(["b"], "b.png", { type: "image/png" })];
@@ -149,7 +149,7 @@ describe("useFileDrop delivery", () => {
     expect(onFiles).not.toHaveBeenCalled();
   });
 
-  it("resets nested depth after a successful drop", () => {
+  it("when resets nested depth after a successful drop", () => {
     const { result } = renderHook(() => useFileDrop(true, vi.fn()));
     act(() => {
       result.current.dropProps.onDragEnter(dragEvent());
@@ -165,7 +165,7 @@ describe("useFileDrop delivery", () => {
 });
 
 describe("useFileDrop window guard", () => {
-  it.each(["dragover", "drop"] as const)("prevents window %s navigation for files", (type) => {
+  it.each(["dragover", "drop"] as const)("when prevents window %s navigation for files", (type) => {
     const { unmount } = renderHook(() => useFileDrop(true, vi.fn()));
     const event = windowDrag(type, ["Files"]);
     window.dispatchEvent(event);
@@ -173,7 +173,7 @@ describe("useFileDrop window guard", () => {
     unmount();
   });
 
-  it.each(["dragover", "drop"] as const)("leaves window %s text drags untouched", (type) => {
+  it.each(["dragover", "drop"] as const)("preserves window %s text drags untouched", (type) => {
     const { unmount } = renderHook(() => useFileDrop(true, vi.fn()));
     const event = windowDrag(type, ["text/plain"]);
     window.dispatchEvent(event);
@@ -181,7 +181,7 @@ describe("useFileDrop window guard", () => {
     unmount();
   });
 
-  it("removes the guard after the last drop zone unmounts", () => {
+  it("when removes the guard after the last drop zone unmounts", () => {
     const first = renderHook(() => useFileDrop(true, vi.fn()));
     const second = renderHook(() => useFileDrop(true, vi.fn()));
 

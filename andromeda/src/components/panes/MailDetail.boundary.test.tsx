@@ -165,7 +165,7 @@ describe("MailDetail boundary behavior", () => {
       expect(onTrash).toHaveBeenCalledOnce();
     });
 
-    it("disables destructive mail operations while a mutation is busy", () => {
+    it("when disables destructive mail operations while a mutation is busy", () => {
       renderMail({}, { busy: true });
       expect(screen.getByRole("button", { name: "읽음" })).toBeDisabled();
       expect(screen.getByRole("button", { name: "보관" })).toBeDisabled();
@@ -173,7 +173,7 @@ describe("MailDetail boundary behavior", () => {
       expect(screen.getByRole("button", { name: "인쇄" })).toBeEnabled();
     });
 
-    it("exposes analysis/body selection as a pressed-state group", async () => {
+    it("when exposes analysis/body selection as a pressed-state group", async () => {
       renderMail();
       const group = screen.getByRole("group", { name: "메일 보기 방식" });
       expect(within(group).getByRole("button", { name: "분석" })).toHaveAttribute("aria-pressed", "true");
@@ -198,7 +198,7 @@ describe("MailDetail boundary behavior", () => {
       expect(screen.getByText("본문 없음")).toBeInTheDocument();
     });
 
-    it("does not keep the raw body mounted behind analysis mode", () => {
+    it("without keep the raw body mounted behind analysis mode", () => {
       renderMail();
       expect(screen.queryByRole("heading", { name: "요청" })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: /이 메일 분석/ })).toBeInTheDocument();
@@ -206,7 +206,7 @@ describe("MailDetail boundary behavior", () => {
   });
 
   describe("analysis lifecycle", () => {
-    it("requests cached analysis by stable mail id on open", async () => {
+    it("when requests cached analysis by stable mail id on open", async () => {
       renderMail();
       await waitFor(() => expect(lastCall(calls, "miniapp.mail.analysis_cached")).toBeDefined());
       expect(lastCall(calls, "miniapp.mail.analysis_cached")?.params).toEqual({ id: "mail-42" });
@@ -232,7 +232,7 @@ describe("MailDetail boundary behavior", () => {
       expect(screen.getByText("일정 제안 2 · 할일 후보 3")).toBeInTheDocument();
     });
 
-    it("does not treat a non-hot quality label as urgent", async () => {
+    it("without treat a non-hot quality label as urgent", async () => {
       installGateway(calls, {
         "miniapp.mail.analysis_cached": () =>
           reply({ id: "mail-42", cached: true, analysis: "참고 분석", analysisQuality: "normal" }),
@@ -258,7 +258,7 @@ describe("MailDetail boundary behavior", () => {
       await waitFor(() => expect(lastCall(calls, "miniapp.mail.analyze")?.params.force).toBe(true));
     });
 
-    it("disables manual analysis while disconnected", () => {
+    it("when disables manual analysis while disconnected", () => {
       renderMail({}, { connected: false });
       expect(screen.getByRole("button", { name: /이 메일 분석/ })).toBeDisabled();
       expect(calls.filter((call) => call.method.startsWith("miniapp.mail.analysis"))).toHaveLength(0);
@@ -272,7 +272,7 @@ describe("MailDetail boundary behavior", () => {
       expect(screen.getByRole("button", { name: /이 메일 분석/ })).toBeEnabled();
     });
 
-    it("opens a related project through the workspace wiki channel", async () => {
+    it("when opens a related project through the workspace wiki channel", async () => {
       installGateway(calls, {
         "miniapp.mail.analysis_cached": () =>
           reply({
@@ -330,7 +330,7 @@ describe("MailDetail boundary behavior", () => {
       expect(await screen.findByText("위키 2건")).toBeInTheDocument();
     });
 
-    it("expands recent details, wiki facts and curated page chips", async () => {
+    it("when expands recent details, wiki facts and curated page chips", async () => {
       installGateway(calls, {
         "miniapp.mail.sender_context": () =>
           reply({
@@ -401,13 +401,13 @@ describe("MailDetail boundary behavior", () => {
   });
 
   describe("grounded Q&A", () => {
-    it("disables question input and submit while disconnected", () => {
+    it("when disables question input and submit while disconnected", () => {
       renderMail({}, { connected: false });
       expect(screen.getByPlaceholderText("예: 핵심 요청이 뭐야?")).toBeDisabled();
       expect(screen.getByRole("button", { name: "질문" })).toBeDisabled();
     });
 
-    it("enables submit only for nonblank trimmed questions", () => {
+    it("when enables submit only for nonblank trimmed questions", () => {
       renderMail();
       const input = screen.getByPlaceholderText("예: 핵심 요청이 뭐야?");
       const submit = screen.getByRole("button", { name: "질문" });
@@ -438,7 +438,7 @@ describe("MailDetail boundary behavior", () => {
       expect(input).toHaveValue("");
     });
 
-    it("resends prior turns as grounded history on follow-up", async () => {
+    it("when resends prior turns as grounded history on follow-up", async () => {
       renderMail();
       const input = screen.getByPlaceholderText("예: 핵심 요청이 뭐야?");
       fireEvent.change(input, { target: { value: "첫 질문" } });

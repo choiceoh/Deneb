@@ -72,20 +72,15 @@ func (w *Writer) Append(entry LogEntry) error {
 // Unlike RunLogger (which binds one agent run), this is for events that are not
 // part of a run — proactive delivery decisions, background job cycles. nil-safe:
 // a nil Writer is a no-op, so callers need no guard of their own.
-func (w *Writer) LogEvent(sessionKey, eventType string, data any) {
+func (w *Writer) LogEvent(sessionKey, eventType string, data rawJSON) {
 	if w == nil {
-		return
-	}
-	raw, err := json.Marshal(data)
-	if err != nil {
-		slog.Warn("agentlog: event marshal failed", "type", eventType, "error", err)
 		return
 	}
 	if err := w.Append(LogEntry{
 		Ts:      time.Now().UnixMilli(),
 		Type:    eventType,
 		Session: sessionKey,
-		Data:    raw,
+		Data:    data,
 	}); err != nil {
 		slog.Warn("agentlog: event append failed", "type", eventType, "error", err)
 	}

@@ -45,11 +45,11 @@ const (
 type DevicePlan struct {
 	ActionID    string          `json:"actionId"`
 	Kind        string          `json:"kind"`
-	Payload     json.RawMessage `json:"payload,omitempty"`
+	Payload     rawJSON `json:"payload,omitempty"`
 	Status      DeviceStatus    `json:"status"`
 	Delay       time.Duration   `json:"delay,omitempty"`
 	FinalStatus DeviceStatus    `json:"finalStatus,omitempty"`
-	Result      json.RawMessage `json:"result,omitempty"`
+	Result      rawJSON `json:"result,omitempty"`
 	Failure     string          `json:"failure,omitempty"`
 }
 
@@ -117,7 +117,7 @@ func DecodeDevicePlanSource(data []byte) ([]DevicePlan, error) {
 type DeviceAction struct {
 	ActionID string          `json:"actionId"`
 	Kind     string          `json:"kind"`
-	Payload  json.RawMessage `json:"payload,omitempty"`
+	Payload  rawJSON `json:"payload,omitempty"`
 }
 
 type DeviceActionRecord = runcontract.DeviceActionRecord
@@ -137,7 +137,7 @@ func DevicePlansDigest(plans []DevicePlan) (string, error) {
 		Status      DeviceStatus    `json:"status"`
 		DelayNanos  int64           `json:"delayNanos,omitempty"`
 		FinalStatus DeviceStatus    `json:"finalStatus,omitempty"`
-		Result      json.RawMessage `json:"result,omitempty"`
+		Result      rawJSON `json:"result,omitempty"`
 		Failure     string          `json:"failure,omitempty"`
 	}
 	wire := make([]wirePlan, 0, len(plans))
@@ -425,7 +425,7 @@ func deviceFingerprint(kind string, payload json.RawMessage) string {
 // DerivedDeviceActionID returns the stable case-local ID used when the native
 // phone_write contract has no explicit action ID. Case authors can use the same
 // helper to script the corresponding DevicePlan.
-func DerivedDeviceActionID(kind string, payload json.RawMessage) (string, error) {
+func DerivedDeviceActionID(kind string, payload rawJSON) (string, error) {
 	kind = strings.TrimSpace(kind)
 	if kind == "" {
 		return "", fmt.Errorf("%w: device kind is required", ErrInvalidDevicePlan)

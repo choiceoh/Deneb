@@ -42,7 +42,7 @@ describe("ChatView (업무 채팅 탭)", () => {
     expect(screen.getByRole("textbox", { name: "Deneb에게 메시지" })).toHaveFocus();
   });
 
-  it("offers a file-attach button (image OCR · document · audio)", () => {
+  it("when offers a file-attach button (image OCR · document · audio)", () => {
     renderWithProviders(<ChatView cfg={{ url: "http://test", token: "tok" }} />, { connected: true });
     expect(screen.getByRole("button", { name: "파일 첨부" })).toBeInTheDocument();
   });
@@ -87,7 +87,7 @@ describe("ChatView (업무 채팅 탭)", () => {
     });
   });
 
-  it("drops a file anywhere on the chat column to attach", async () => {
+  it("when drops a file anywhere on the chat column to attach", async () => {
     const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
     vi.stubGlobal(
       "fetch",
@@ -132,7 +132,7 @@ describe("ChatView (업무 채팅 탭)", () => {
     });
   });
 
-  it("pastes a clipboard image as an attachment (client:main)", async () => {
+  it("when pastes a clipboard image as an attachment (client:main)", async () => {
     const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
     vi.stubGlobal(
       "fetch",
@@ -216,7 +216,7 @@ describe("ChatView (업무 채팅 탭)", () => {
     expect(composer).toHaveValue("이 녹음 요약해줘");
   });
 
-  it("sends the typed composer text as the image attachment caption", async () => {
+  it("when sends the typed composer text as the image attachment caption", async () => {
     const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
     vi.stubGlobal(
       "fetch",

@@ -6,13 +6,13 @@ afterEach(() => {
 });
 
 describe("rpcCache", () => {
-  it("builds stable keys for equivalent params", () => {
+  it("returns stable cache keys for equivalent params", () => {
     expect(rpcCacheKey("miniapp.memory.search", { limit: 20, query: "설계" })).toBe(
       rpcCacheKey("miniapp.memory.search", { query: "설계", limit: 20 }),
     );
   });
 
-  it("round-trips one RPC result and clears by resource", () => {
+  it("returns cached RPC result and clears by resource", () => {
     const key = rpcCacheKey("miniapp.files.list", { path: "", limit: 300 });
     writeCachedRpc("files", key, { entries: [{ name: "cached.pdf" }] });
     localStorage.setItem(cachedRpcStorageKey("wiki", key), "keep");

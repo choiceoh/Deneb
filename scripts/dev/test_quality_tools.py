@@ -147,7 +147,7 @@ class ResultStoreTests(unittest.TestCase):
         self.assertEqual(self.store.compare_runs(999, run_b), {"error": "Run #999 not found"})
         self.assertEqual(self.store.compare_runs(run_a, 999), {"error": "Run #999 not found"})
 
-    def test_trend_is_newest_first_and_limit_is_enforced(self) -> None:
+    def test_when_trend_is_newest_first_and_limit_is_enforced(self) -> None:
         for index, score in enumerate((0.2, 0.5, 0.9), 1):
             self.store.record_run([result("daily-trend", score >= 0.5, score)], self.metadata(str(index)))
         trend = self.store.test_trend("daily-trend", limit=2)
@@ -155,7 +155,7 @@ class ResultStoreTests(unittest.TestCase):
         self.assertEqual([row["score"] for row in trend], [0.9, 0.5])
         self.assertEqual(self.store.test_trend("missing"), [])
 
-    def test_apex_case_states_classify_easy_hard_mixed_and_latest_skip(self) -> None:
+    def test_apex_case_states_classify_easy_hard_mixed_and_latest_ignores(self) -> None:
         self.store.record_run([
             result("easy", True, 1.0),
             result("hard", False, 0.0),
@@ -219,7 +219,7 @@ class ApexSelectionTests(unittest.TestCase):
                 self.assertFalse(plan["enabled"])
                 self.assertEqual(plan["reason"], "budget covers the full scenario")
 
-    def test_frontier_selection_is_unique_seeded_and_always_keeps_required(self) -> None:
+    def test_frontier_selection_is_unique_seeded_and_always_preserves_required(self) -> None:
         tests, states = self.fixture()
         first, plan = quality.select_apex_tests(
             tests, states, budget=4, anchor_ratio=1.0, seed=17
@@ -238,7 +238,7 @@ class ApexSelectionTests(unittest.TestCase):
         self.assertEqual(list(plan["bucket_counts"]), sorted(plan["bucket_counts"]))
         self.assertIn("mixed-fail", plan["mutation_frontier"])
 
-    def test_pass_rate_prefers_current_states_then_falls_back_to_history(self) -> None:
+    def test_when_pass_rate_prefers_current_states_then_falls_back_to_history(self) -> None:
         current = [
             quality.ApexCaseState(name="a", current_state=1, outcomes=[0]),
             quality.ApexCaseState(name="b", current_state=0, outcomes=[1]),
@@ -290,7 +290,7 @@ class QualityEvaluatorTests(unittest.TestCase):
         streamed = capture(events=[{"event": "chat.delta"}], deltas=[{"text": "x"}])
         self.assertEqual(quality.check_streaming_flow(streamed), (True, "1 chat events, 1 deltas"))
 
-    def test_parameter_checks_cover_text_list_length_tokens_and_growth_boundaries(self) -> None:
+    def test_when_parameter_checks_cover_text_list_length_tokens_and_growth_boundaries(self) -> None:
         cap = capture(
             "Alpha\n- one\n- two",
             token_usage={
@@ -353,7 +353,7 @@ class QualityEvaluatorTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "PyYAML is required"):
                 quality.load_tests(Path("unused"))
 
-    def test_json_report_has_stable_rounding_optional_fields_and_exit_status(self) -> None:
+    def test_json_returns_has_stable_rounding_optional_fields_and_exit_status(self) -> None:
         passing = result("daily-pass", True, 0.8765, (True, True))
         passing.tool_calls = ["health"]
         failing = result("code-fail", False, 0.3333, (True, False))
@@ -387,7 +387,7 @@ class ReproduceCheckTests(unittest.TestCase):
         self.assertFalse(turn.passed)
         self.assertEqual(turn.failed_checks, [failed])
 
-    def test_regex_positive_negative_context_and_length_checks(self) -> None:
+    def test_when_regex_positive_negative_context_and_length_checks(self) -> None:
         self.assertTrue(reproduce.check_expect("Alpha\nBeta", "alpha.*beta").passed)
         self.assertFalse(reproduce.check_expect("Alpha", "missing").passed)
         self.assertTrue(reproduce.check_expect_not("Alpha", "missing").passed)
@@ -410,7 +410,7 @@ class ReproduceCheckTests(unittest.TestCase):
         self.assertFalse(reproduce.check_streaming(capture(events=[{}, {}])).passed)
         self.assertTrue(reproduce.check_streaming(capture(events=[{}, {}, {}])).passed)
 
-    def test_tool_checks_are_explicitly_skipped_not_false_successes(self) -> None:
+    def test_when_tool_checks_are_explicitly_skipped_not_false_successes(self) -> None:
         cap = capture()
         checks = [
             reproduce.check_expect_tool(cap, "read"),
@@ -450,7 +450,7 @@ class ReproduceCheckTests(unittest.TestCase):
 
 
 class QualityRunnerTests(unittest.TestCase):
-    def test_chat_runner_scores_all_checks_but_critical_prefix_controls_pass(self) -> None:
+    def test_when_chat_runner_scores_all_checks_but_critical_prefix_controls_pass(self) -> None:
         cap = capture("required phrase with enough substance")
 
         class Client:
@@ -479,7 +479,7 @@ class QualityRunnerTests(unittest.TestCase):
         self.assertTrue(item.passed)
         self.assertEqual(cap._bench_message, "question")
 
-    def test_multiturn_runner_reuses_session_tracks_tokens_and_delays_only_between_repeats(self) -> None:
+    def test_when_multiturn_runner_reuses_session_tracks_tokens_and_delays_only_between_repeats(self) -> None:
         captures = [
             capture("first", token_usage={"inputTokens": 10, "outputTokens": 2}),
             capture("second", token_usage={"inputTokens": 15, "outputTokens": 3}),
@@ -551,7 +551,7 @@ class HealthRunnerTests(unittest.TestCase):
         def read(self) -> bytes:
             return json.dumps(self.payload).encode("utf-8")
 
-    def test_rpc_health_checks_transport_status_and_latency(self) -> None:
+    def test_when_rpc_health_checks_transport_status_and_latency(self) -> None:
         class Client:
             def __init__(self) -> None:
                 self.methods = []
@@ -675,7 +675,7 @@ class HealthRunnerTests(unittest.TestCase):
         self.assertEqual(unknown.score, 0.0)
         self.assertFalse(unknown.passed)
 
-    def test_dispatch_selects_health_multiturn_or_single_turn_runner(self) -> None:
+    def test_when_dispatch_selects_health_multiturn_or_single_turn_runner(self) -> None:
         client = object()
         health = quality.QualityResult("health")
         multiturn = quality.QualityResult("multiturn")
@@ -729,7 +729,7 @@ class HealthRunnerTests(unittest.TestCase):
 
 
 class EntryPointTests(unittest.TestCase):
-    def test_quality_and_reproduce_help_keep_existing_cli_surface(self) -> None:
+    def test_quality_and_reproduce_help_preserves_existing_cli_surface(self) -> None:
         expectations = {
             quality.__file__: ("--scenario", "--sample", "--record", "--history", "--compare"),
             reproduce.__file__: ("chat-check", "multi-chat", "tool-check", "--timeout"),

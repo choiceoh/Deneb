@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 )
 
 // TestDealsStructuredReturnsFilteredRecords exercises the code_action bridge surface that exposes the

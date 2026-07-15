@@ -18,6 +18,31 @@ type fakeSessionTranscript struct {
 	results  map[string][]toolport.SearchResult
 }
 
+// testAgentLogStats adapts *agentlog.Writer onto tooldeps.AgentLogStats for tests.
+type testAgentLogStats struct{ w *agentlog.Writer }
+
+func (a testAgentLogStats) Aggregate(sinceMs int64) tooldeps.AgentLogAggregate {
+	r := a.w.Aggregate(sinceMs)
+	return tooldeps.AgentLogAggregate{
+		Runs: r.Runs, ProactiveRuns: r.ProactiveRuns,
+		TotalInputTokens: r.TotalInputTokens, TotalOutputTokens: r.TotalOutputTokens,
+		CacheReadTokens: r.CacheReadTokens,
+	}
+}
+
+func (a testAgentLogStats) AggregateBySession(sinceMs int64) []tooldeps.AgentLogSessionStat {
+	in := a.w.AggregateBySession(sinceMs)
+	out := make([]tooldeps.AgentLogSessionStat, len(in))
+	for i, st := range in {
+		out[i] = tooldeps.AgentLogSessionStat{
+			Session: st.Session, Runs: st.Runs, Errors: st.Errors,
+			InputTokens: st.InputTokens, OutputTokens: st.OutputTokens,
+			ToolCalls: st.ToolCalls, LastTs: st.LastTs,
+		}
+	}
+	return out
+}
+
 func (f *fakeSessionTranscript) Load(string, int) ([]toolport.ChatMessage, int, error) {
 	return nil, 0, nil
 }
@@ -347,7 +372,7 @@ func TestToolSessionsStatsReturnsAggregatedRunData(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	tool := ToolSessions(&tooldeps.SessionDeps{AgentLog: w})
+	tool := ToolSessions(&tooldeps.SessionDeps{AgentLog: testAgentLogStats{w}})
 	out, err := tool(context.Background(), json.RawMessage(`{"action":"stats","days":7}`))
 	if err != nil {
 		t.Fatalf("stats: %v", err)

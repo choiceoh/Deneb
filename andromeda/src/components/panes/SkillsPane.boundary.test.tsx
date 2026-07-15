@@ -191,7 +191,7 @@ describe("SkillsPane boundary behavior", () => {
       expect(calls.filter((call) => call.method === "miniapp.skills.detail")).toHaveLength(0);
     });
 
-    it("distinguishes genesis and original origin badges", async () => {
+    it("when distinguishes genesis and original origin badges", async () => {
       renderSkills([
         { name: "generated", origin: "genesis" },
         { name: "bundled", origin: "initial" },
@@ -201,7 +201,7 @@ describe("SkillsPane boundary behavior", () => {
       expect(screen.getByText("최초")).toBeInTheDocument();
     });
 
-    it("publishes the visible catalog into the AI pane projection", async () => {
+    it("when publishes the visible catalog into the AI pane projection", async () => {
       renderSkills([
         { name: "pdf", description: "PDF 읽기", category: "productivity", source: "bundled" },
         { name: "research", description: "근거 조사", totalUses: 4 },
@@ -237,7 +237,7 @@ describe("SkillsPane boundary behavior", () => {
       expect(within(dialog).queryByText(/description: frontmatter/)).not.toBeInTheDocument();
     });
 
-    it("strips a UTF-8 BOM before recognizing frontmatter", async () => {
+    it("when strips a UTF-8 BOM before recognizing frontmatter", async () => {
       calls = [];
       installRpc(calls, {
         "miniapp.skills.detail": () => reply({ ...defaultDetail, body: "\uFEFF---\nname: bom\n---\n\n# BOM 본문" }),
@@ -247,7 +247,7 @@ describe("SkillsPane boundary behavior", () => {
       expect(within(dialog).queryByText(/name: bom/)).not.toBeInTheDocument();
     });
 
-    it("keeps an unterminated frontmatter document visible instead of deleting user content", async () => {
+    it("preserves an unterminated frontmatter document visible instead of deleting user content", async () => {
       calls = [];
       installRpc(calls, {
         "miniapp.skills.detail": () => reply({ ...defaultDetail, body: "---\nname: broken\n# 여전히 보여야 함" }),
@@ -305,7 +305,7 @@ describe("SkillsPane boundary behavior", () => {
       ["active", "상태 활성"],
       ["stale", "상태 정체"],
       ["archived", "상태 보관됨"],
-    ])("maps curator state %s", async (curatorState, label) => {
+    ])("when maps curator state %s", async (curatorState, label) => {
       calls = [];
       installRpc(calls, {
         "miniapp.skills.detail": () => reply({ ...defaultDetail, skill: { ...editableSkill, curatorState } }),
@@ -445,7 +445,7 @@ describe("SkillsPane boundary behavior", () => {
       [{ editable: true, deletable: false }, true, false, "앱에서 수정 가능"],
       [{ editable: false, deletable: true }, false, true, "앱에서 삭제 가능"],
       [{ editable: false, deletable: false }, false, false, ""],
-    ])("honors independent mutation capabilities %#", async (flags, edit, del, fact) => {
+    ])("when honors independent mutation capabilities %#", async (flags, edit, del, fact) => {
       calls = [];
       installRpc(calls, {
         "miniapp.skills.detail": () => reply({ ...defaultDetail, skill: { ...editableSkill, ...flags } }),
@@ -464,7 +464,7 @@ describe("SkillsPane boundary behavior", () => {
       await userEvent.click(screen.getByRole("button", { name: "Propus 로그" }));
     }
 
-    it("does not fetch lifecycle while disconnected", async () => {
+    it("without fetch lifecycle while disconnected", async () => {
       renderSkills([], false);
       await userEvent.click(screen.getByRole("button", { name: "Propus 로그" }));
       expect(screen.getByText("미연결")).toBeInTheDocument();
@@ -486,7 +486,7 @@ describe("SkillsPane boundary behavior", () => {
       expect(screen.getByText("회귀 테스트를 확인하세요.")).toBeInTheDocument();
     });
 
-    it("prioritizes attention count over a nominal lifecycle state", async () => {
+    it("when prioritizes attention count over a nominal lifecycle state", async () => {
       calls = [];
       installRpc(calls, {
         "miniapp.skills.lifecycle": () =>
@@ -510,7 +510,7 @@ describe("SkillsPane boundary behavior", () => {
       ["needs_review", "리뷰 필요"],
       ["attention", "주의 필요"],
       ["future-state", "정상 관찰 중"],
-    ])("maps summary state %s", async (state, label) => {
+    ])("when maps summary state %s", async (state, label) => {
       calls = [];
       installRpc(calls, {
         "miniapp.skills.lifecycle": () => reply({ ...lifecycle, summary: { system: "Propus", state } }),
@@ -544,7 +544,7 @@ describe("SkillsPane boundary behavior", () => {
       ["evolve_rejected", "기각"],
       ["evolve_rolled_back", "롤백"],
       ["future-event", "리뷰"],
-    ])("maps lifecycle event %s to %s", async (type, label) => {
+    ])("when maps lifecycle event %s to %s", async (type, label) => {
       calls = [];
       installRpc(calls, {
         "miniapp.skills.lifecycle": () => reply({ events: [{ type, skillName: `skill-${type}`, detail: type }] }),
@@ -559,7 +559,7 @@ describe("SkillsPane boundary behavior", () => {
       ["genesis", "판정: 새 스킬 생성(자동)"],
       ["create", "판정: 새 스킬 생성(수동)"],
       ["manual-review", "판정: manual-review"],
-    ])("shows route %s only after an event is expanded", async (route, verdict) => {
+    ])("displays route %s only after an event is expanded", async (route, verdict) => {
       calls = [];
       installRpc(calls, {
         "miniapp.skills.lifecycle": () =>
@@ -571,7 +571,7 @@ describe("SkillsPane boundary behavior", () => {
       expect(screen.getByText(verdict)).toBeInTheDocument();
     });
 
-    it("shows evidence and a skill navigation action only in expanded state", async () => {
+    it("displays evidence and a skill navigation action only in expanded state", async () => {
       await openPropus();
       expect(screen.queryByText(/근거: 반복된 계약 검토 요청/)).not.toBeInTheDocument();
       await userEvent.click(await screen.findByText(/계약 위험 분석 스킬 생성/));
@@ -579,7 +579,7 @@ describe("SkillsPane boundary behavior", () => {
       expect(screen.getByRole("button", { name: "스킬 보기 →" })).toBeInTheDocument();
     });
 
-    it("opens the event skill detail and switches back to the catalog", async () => {
+    it("when opens the event skill detail and switches back to the catalog", async () => {
       await openPropus();
       await userEvent.click(await screen.findByText(/계약 위험 분석 스킬 생성/));
       await userEvent.click(screen.getByRole("button", { name: "스킬 보기 →" }));

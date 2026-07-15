@@ -13,11 +13,36 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 )
+
+// testContactsBook adapts *contacts.Store onto tooldeps.ContactsBook.
+type testContactsBook struct{ inner *contacts.Store }
+
+func (b testContactsBook) Count() int { return b.inner.Count() }
+func (b testContactsBook) LookupPhone(q string) []tooldeps.Contact {
+	return mapTestContacts(b.inner.LookupPhone(q))
+}
+func (b testContactsBook) Search(q string, limit int) []tooldeps.Contact {
+	return mapTestContacts(b.inner.Search(q, limit))
+}
+func (b testContactsBook) All() []tooldeps.Contact { return mapTestContacts(b.inner.All()) }
+
+func mapTestContacts(in []contacts.Contact) []tooldeps.Contact {
+	out := make([]tooldeps.Contact, len(in))
+	for i, c := range in {
+		out[i] = tooldeps.Contact{Name: c.Name, Phones: c.Phones, Emails: c.Emails, Org: c.Org}
+	}
+	return out
+}
+
+func wrapTestContacts(store *contacts.Store) tooldeps.ContactsBook {
+	if store == nil {
+		return nil
+	}
+	return testContactsBook{inner: store}
+}
 
 // recordingInvoker captures the tool calls the bridge forwards and returns a
 // canned result, so the security boundary can be tested without real tools.
@@ -339,13 +364,13 @@ print("WROTE", open(p).read())
 func TestContactsStructuredReturnsMatchesAndRejectsMutations(t *testing.T) {
 	store := newTestContactsStore(t)
 
-	val, err := contactsStructured(store, map[string]any{"action": "search", "query": "탑솔라"})
+	val, err := contactsStructured(wrapTestContacts(store), map[string]any{"action": "search", "query": "탑솔라"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	list, ok := val.([]contacts.Contact)
+	list, ok := val.([]tooldeps.Contact)
 	if !ok {
-		t.Fatalf("want []contacts.Contact, got %T", val)
+		t.Fatalf("want []tooldeps.Contact, got %T", val)
 	}
 	found := false
 	for _, c := range list {
@@ -358,7 +383,7 @@ func TestContactsStructuredReturnsMatchesAndRejectsMutations(t *testing.T) {
 	}
 
 	// Empty result is a non-nil slice (Python decodes to [], not None).
-	empty, err := contactsStructured(store, map[string]any{"action": "search", "query": "존재하지않는검색어zzz"})
+	empty, err := contactsStructured(wrapTestContacts(store), map[string]any{"action": "search", "query": "존재하지않는검색어zzz"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -367,7 +392,7 @@ func TestContactsStructuredReturnsMatchesAndRejectsMutations(t *testing.T) {
 	}
 
 	// A non-read action is rejected even on the structured path.
-	if _, err := contactsStructured(store, map[string]any{"action": "create"}); err == nil {
+	if _, err := contactsStructured(wrapTestContacts(store), map[string]any{"action": "create"}); err == nil {
 		t.Fatal("contacts structured 'create' must be rejected")
 	}
 }
@@ -376,7 +401,7 @@ func TestContactsStructuredReturnsMatchesAndRejectsMutations(t *testing.T) {
 // a marshaled []Contact, and a tool without a structured handler errors clearly.
 func TestCodeActionBridgeStructuredJSONReturnsDataOrError(t *testing.T) {
 	store := newTestContactsStore(t)
-	b := &codeActionBridge{invoker: &recordingInvoker{}, contacts: store, token: "tok", ctx: context.Background()}
+	b := &codeActionBridge{invoker: &recordingInvoker{}, contacts: wrapTestContacts(store), token: "tok", ctx: context.Background()}
 	srv := httptest.NewServer(b)
 	defer srv.Close()
 
@@ -418,7 +443,7 @@ func TestCodeActionBridgeStructuredJSONReturnsDataOrError(t *testing.T) {
 func TestCodeActionReturnsStructuredContactsList(t *testing.T) {
 	requirePython(t)
 	store := newTestContactsStore(t)
-	out := runCodeAction(t, CodeActionDeps{Invoker: &recordingInvoker{}, Contacts: store}, `
+	out := runCodeAction(t, CodeActionDeps{Invoker: &recordingInvoker{}, Contacts: wrapTestContacts(store)}, `
 rows = deneb.contacts("search", "탑솔라", as_json=True)
 print("TYPE", type(rows).__name__)
 hits = [r for r in rows if "탑솔라" in (r.get("org") or "")]
@@ -449,10 +474,10 @@ func TestCodeAction_ReadThroughBridge(t *testing.T) {
 }
 
 // fakeLocalCal is a minimal LocalCalendar for the structured-calendar tests.
-type fakeLocalCal struct{ events []calendar.Event }
+type fakeLocalCal struct{ events []tooldeps.CalendarEvent }
 
-func (f *fakeLocalCal) ListRange(_, _ time.Time) []calendar.Event { return f.events }
-func (f *fakeLocalCal) Get(id string) *calendar.Event {
+func (f *fakeLocalCal) ListRange(_, _ time.Time) []tooldeps.CalendarEvent { return f.events }
+func (f *fakeLocalCal) Get(id string) *tooldeps.CalendarEvent {
 	for i := range f.events {
 		if f.events[i].ID == id {
 			return &f.events[i]
@@ -461,11 +486,11 @@ func (f *fakeLocalCal) Get(id string) *calendar.Event {
 	return nil
 }
 
-func (f *fakeLocalCal) Create(localcal.CreateInput) (calendar.Event, error) {
-	return calendar.Event{}, nil
+func (f *fakeLocalCal) Create(tooldeps.CalendarCreateInput) (tooldeps.CalendarEvent, error) {
+	return tooldeps.CalendarEvent{}, nil
 }
 
-func (f *fakeLocalCal) Update(string, localcal.CreateInput) (*calendar.Event, error) {
+func (f *fakeLocalCal) Update(string, tooldeps.CalendarCreateInput) (*tooldeps.CalendarEvent, error) {
 	return nil, nil
 }
 func (f *fakeLocalCal) Delete(string) error { return nil }
@@ -475,9 +500,9 @@ func (f *fakeLocalCal) Delete(string) error { return nil }
 // are rejected.
 func TestCalendarStructuredReturnsEventsAndRejectsMutations(t *testing.T) {
 	start := time.Now().Add(time.Hour)
-	fake := &fakeLocalCal{events: []calendar.Event{{
+	fake := &fakeLocalCal{events: []tooldeps.CalendarEvent{{
 		ID: "local:evt1", Summary: "탑솔라 미팅", Start: start, End: start.Add(time.Hour),
-		Location: "본사", Attendees: []calendar.Attendee{{Email: "a@x.com"}, {Email: "b@x.com"}},
+		Location: "본사", Attendees: []tooldeps.CalendarAttendee{{Email: "a@x.com"}, {Email: "b@x.com"}},
 	}}}
 	d := &tooldeps.CalendarDeps{Local: fake}
 
@@ -580,7 +605,7 @@ func TestWikiStructuredReturnsPagesAndRejectsWrites(t *testing.T) {
 func TestCodeActionReturnsStructuredCalendarEvents(t *testing.T) {
 	requirePython(t)
 	start := time.Now().Add(time.Hour)
-	fake := &fakeLocalCal{events: []calendar.Event{{
+	fake := &fakeLocalCal{events: []tooldeps.CalendarEvent{{
 		ID: "local:evt1", Summary: "탑솔라 미팅", Start: start, End: start.Add(time.Hour),
 	}}}
 	out := runCodeAction(t, CodeActionDeps{Invoker: &recordingInvoker{}, Calendar: &tooldeps.CalendarDeps{Local: fake}}, `

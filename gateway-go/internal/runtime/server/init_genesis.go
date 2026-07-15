@@ -13,7 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle"
@@ -125,7 +125,7 @@ func (s *Server) initGenesisServices() {
 	if !nudgerProdState && os.Getenv("DENEB_SKILL_NUDGE_INTERVAL") == "" {
 		s.logger.Info("genesis: skill nudger disabled (non-production state dir; set DENEB_SKILL_NUDGE_INTERVAL to force)")
 	} else if s.chatHandler != nil && s.genesisNudger.Enabled() {
-		s.chatHandler.SetSkillNudger(skilllifecycle.NewChatNudgerAdapter(s.genesisNudger))
+		s.chatHandler.SetSkillNudger(skilllifecycle.NewSkillNudger(s.genesisNudger))
 	}
 	// Usage attribution is independent of the nudger: even with the nudger
 	// disabled, recording which skills are used (and whether their turns
@@ -297,12 +297,12 @@ func (s *Server) registerSkillLifecycleTool() {
 			return lwClient.Complete(ctx, req)
 		}
 	}
-	var shadowReplay func(context.Context, string, int) (chattools.HeartbeatShadowReplayResult, error)
+	var shadowReplay func(context.Context, string, int) (toolbind.HeartbeatShadowReplayResult, error)
 	if fixturePath != "" && shadowComplete != nil {
-		shadowReplay = func(ctx context.Context, candidate string, limit int) (chattools.HeartbeatShadowReplayResult, error) {
+		shadowReplay = func(ctx context.Context, candidate string, limit int) (toolbind.HeartbeatShadowReplayResult, error) {
 			report, err := runtimeheartbeat.RunShadowReplay(ctx, fixturePath, candidate, limit, shadowComplete)
 			if err != nil {
-				return chattools.HeartbeatShadowReplayResult{}, err
+				return toolbind.HeartbeatShadowReplayResult{}, err
 			}
 			return heartbeatShadowReplayToolResult(report), nil
 		}
@@ -326,16 +326,16 @@ func (s *Server) registerSkillLifecycleTool() {
 			"validation_backfill (batch-extract replay cases), self_correction/self_correction_review (deferred code/prompt/skill fixes), " +
 			"pin/unpin/archive/restore (manual state for agent-created skills). " +
 			"Use through the evolution-proposal skill after meaningful workflows.",
-		InputSchema: chattools.SkillLifecycleToolSchema(),
-		Fn:          chattools.ToolSkillLifecycle(backend),
+		InputSchema: toolbind.SkillLifecycleToolSchema(),
+		Fn:          toolbind.ToolSkillLifecycle(backend),
 		Deferred:    true,
 	})
 }
 
-func heartbeatShadowReplayToolResult(report runtimeheartbeat.ShadowReplayReport) chattools.HeartbeatShadowReplayResult {
-	results := make([]chattools.HeartbeatShadowReplayFixtureResult, 0, len(report.Results))
+func heartbeatShadowReplayToolResult(report runtimeheartbeat.ShadowReplayReport) toolbind.HeartbeatShadowReplayResult {
+	results := make([]toolbind.HeartbeatShadowReplayFixtureResult, 0, len(report.Results))
 	for _, result := range report.Results {
-		results = append(results, chattools.HeartbeatShadowReplayFixtureResult{
+		results = append(results, toolbind.HeartbeatShadowReplayFixtureResult{
 			FiredAt:       result.FiredAt,
 			Split:         result.Split,
 			Quiet:         result.Quiet,
@@ -344,7 +344,7 @@ func heartbeatShadowReplayToolResult(report runtimeheartbeat.ShadowReplayReport)
 			Note:          result.Note,
 		})
 	}
-	return chattools.HeartbeatShadowReplayResult{
+	return toolbind.HeartbeatShadowReplayResult{
 		OK:                report.OK,
 		Verdict:           report.Verdict,
 		Reason:            report.Reason,

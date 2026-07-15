@@ -29,7 +29,7 @@ func TestWidgetValue(t *testing.T) {
 }
 """
 
-    def test_typed_ports_are_not_counted_as_dynamic_contracts(self) -> None:
+    def test_excludes_typed_ports_from_dynamic_contract_count(self) -> None:
         source = """\
 package widget
 
@@ -47,7 +47,7 @@ type Payload any
         self.assertEqual(exported, 3)
         self.assertEqual(dynamic, 2)
 
-    def test_universal_generic_constraints_are_not_dynamic_values(self) -> None:
+    def test_ignores_universal_generic_constraints_when_counting_dynamic_values(self) -> None:
         source = """\
 package widget
 
@@ -72,7 +72,7 @@ func DynamicMap[T ~map[string]any](value T) T { return value }
         self.assertEqual(exported, 6)
         self.assertEqual(dynamic, 3)
 
-    def test_rubric_weights_include_ai_change_readiness_and_total_one_hundred(
+    def test_preserves_ai_change_readiness_weight_and_hundred_total(
         self,
     ) -> None:
         workflow = """\
@@ -105,7 +105,7 @@ jobs:
         self.assertEqual(sum(item.weight for item in pillars), 100)
         self.assertEqual(len(by_id), len(pillars))
 
-    def test_placeholder_and_false_guide_references_receive_no_credit(self) -> None:
+    def test_rejects_placeholder_and_false_guide_references_without_credit(self) -> None:
         placeholder = """\
 # Widget
 
@@ -184,7 +184,7 @@ an unverified navigation path or definition of done score as executable truth.
         )
         self.assertEqual(result.score, 100.0)
 
-    def test_frequently_changed_local_package_is_not_a_false_hotspot(self) -> None:
+    def test_preserves_frequent_local_package_without_false_hotspot_penalty(self) -> None:
         repo = self._locality_repo(
             [ChangeCommit(packages=(("internal/domain/widget", 1),)) for _ in range(20)]
         )
@@ -202,7 +202,7 @@ an unverified navigation path or definition of done score as executable truth.
         self.assertEqual(result.score, 100.0)
         self.assertFalse(any(item.id.startswith("change-hotspot:") for item in result.findings))
 
-    def test_non_composition_cross_component_hotspot_remains_penalized(self) -> None:
+    def test_when_penalizes_non_composition_cross_component_hotspot(self) -> None:
         repo = self._locality_repo(
             [
                 ChangeCommit(
@@ -225,7 +225,7 @@ an unverified navigation path or definition of done score as executable truth.
         self.assertEqual(result.score, 30.0)
         self.assertTrue(any(item.id.startswith("change-hotspot:") for item in result.findings))
 
-    def test_package_nested_under_composition_root_cannot_gain_exemption(self) -> None:
+    def test_when_package_nested_under_composition_root_cannot_gain_exemption(self) -> None:
         repo = self._locality_repo(
             [
                 ChangeCommit(
@@ -250,7 +250,7 @@ an unverified navigation path or definition of done score as executable truth.
         )
         self.assertEqual(result.score, 30.0)
 
-    def test_composition_root_exemption_does_not_hide_scattered_changes(self) -> None:
+    def test_when_composition_root_exemption_does_not_hide_scattered_changes(self) -> None:
         repo = self._locality_repo(
             [
                 ChangeCommit(

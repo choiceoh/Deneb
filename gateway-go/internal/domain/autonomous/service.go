@@ -643,7 +643,7 @@ func (s *Service) executeTask(ctx context.Context, task PeriodicTask) {
 	}
 	quietTick := err == nil && elapsed < time.Second && task.Interval() < 30*time.Minute
 	if !quietTick {
-		s.behaviorLog.LogEvent(agentlog.SessionBackground, agentlog.TypeBackgroundJob, agentlog.BackgroundJobData{
+		agentlog.LogTyped(s.behaviorLog, agentlog.SessionBackground, agentlog.TypeBackgroundJob, agentlog.BackgroundJobData{
 			Kind:       "autonomous",
 			Name:       name,
 			Outcome:    outcome,
@@ -677,7 +677,7 @@ func (s *Service) emit(event CycleEvent) {
 		if event.Type == "dreaming_failed" {
 			outcome = "error"
 		}
-		s.behaviorLog.LogEvent(agentlog.SessionBackground, agentlog.TypeBackgroundJob, agentlog.BackgroundJobData{
+		agentlog.LogTyped(s.behaviorLog, agentlog.SessionBackground, agentlog.TypeBackgroundJob, agentlog.BackgroundJobData{
 			Kind:    "autonomous",
 			Name:    "aurora-dream",
 			Outcome: outcome,

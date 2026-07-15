@@ -89,13 +89,13 @@ def runtime_report():
 
 
 class StructuralCandidatesTest(unittest.TestCase):
-    def test_only_high_severity_ranked_by_priority(self):
+    def test_when_only_high_severity_ranked_by_priority(self):
         cands = structural_candidates(structural_report())
         self.assertEqual(len(cands), 2)  # medium finding dropped
         self.assertEqual(cands[0]["source"], "health-finding:fanout-hotspot:e3983434e99a")
         self.assertEqual(cands[1]["source"], "health-finding:volatile-hub:46a381ef4981")
 
-    def test_candidate_carries_finding_id_and_evidence(self):
+    def test_when_candidate_carries_finding_id_and_evidence(self):
         cand = structural_candidates(structural_report())[1]
         self.assertIn("volatile-hub:46a381ef4981", cand["evidence"])
         self.assertIn("Volatile-hub index is 5.13", cand["evidence"])
@@ -109,7 +109,7 @@ class StructuralCandidatesTest(unittest.TestCase):
 
 
 class RuntimeCandidatesTest(unittest.TestCase):
-    def test_weakest_dim_below_bar_selected(self):
+    def test_when_weakest_dim_below_bar_selected(self):
         cands = runtime_candidates(runtime_report())
         self.assertEqual(len(cands), MAX_RUNTIME_PER_RUN)
         cand = cands[0]
@@ -118,7 +118,7 @@ class RuntimeCandidatesTest(unittest.TestCase):
         self.assertIn("p95_s=148.0", cand["evidence"])
         self.assertIn("51.1", cand["title"])
 
-    def test_healthy_dims_do_not_file(self):
+    def test_when_healthy_dims_do_not_file(self):
         report = runtime_report()
         report["dims"] = {"stability": 100.0, "latency": RUNTIME_WEAK_SCORE}
         self.assertEqual(runtime_candidates(report), [])
@@ -136,22 +136,22 @@ class ReopenBlockedTest(unittest.TestCase):
     def test_never_filed_allows(self):
         self.assertIsNone(reopen_blocked([], self.SRC, NOW))
 
-    def test_open_twin_blocks(self):
+    def test_when_open_twin_blocks(self):
         for status in ("proposed", "accepted"):
             self.assertIsNotNone(reopen_blocked(self._existing(status), self.SRC, NOW))
 
-    def test_operator_veto_never_refiles(self):
+    def test_when_operator_veto_never_refiles(self):
         old = NOW - 10 * REOPEN_COOLDOWN_MS
         for status in ("rejected", "superseded"):
             self.assertIsNotNone(reopen_blocked(self._existing(status, old), self.SRC, NOW))
 
-    def test_applied_blocks_inside_cooldown_then_reopens(self):
+    def test_when_applied_blocks_inside_cooldown_then_reopens(self):
         fresh = self._existing("applied", NOW - REOPEN_COOLDOWN_MS + 60_000)
         self.assertIsNotNone(reopen_blocked(fresh, self.SRC, NOW))
         cooled = self._existing("applied", NOW - REOPEN_COOLDOWN_MS - 60_000)
         self.assertIsNone(reopen_blocked(cooled, self.SRC, NOW))
 
-    def test_reopen_cap_blocks_after_six_twins(self):
+    def test_when_reopen_cap_blocks_after_six_twins(self):
         # Cap is 5; the 6th twin permanently blocks (Go selfCorrectionReopenCap).
         cooled = NOW - REOPEN_COOLDOWN_MS - 60_000
         twins = [
@@ -162,7 +162,7 @@ class ReopenBlockedTest(unittest.TestCase):
         self.assertIsNotNone(reason)
         self.assertIn("reopen cap", reason)
 
-    def test_newest_twin_wins(self):
+    def test_when_newest_twin_wins(self):
 
         rows = [
             {"id": "old", "source": self.SRC, "status": "applied",
@@ -173,7 +173,7 @@ class ReopenBlockedTest(unittest.TestCase):
 
 
 class SelectCandidatesTest(unittest.TestCase):
-    def test_blocked_rows_do_not_consume_cap(self):
+    def test_when_blocked_rows_do_not_consume_cap(self):
         cands = structural_candidates(structural_report())
         existing = [{
             "id": "sc-1", "source": cands[0]["source"], "status": "proposed", "createdAt": NOW,
@@ -183,7 +183,7 @@ class SelectCandidatesTest(unittest.TestCase):
         self.assertEqual(len(skipped), 1)
         self.assertIn("proposed twin", skipped[0][1])
 
-    def test_cap_enforced(self):
+    def test_when_cap_enforced(self):
         cands = structural_candidates(structural_report())
         selected, skipped = select_candidates(cands, [], NOW, cap=1)
         self.assertEqual(len(selected), 1)
@@ -191,7 +191,7 @@ class SelectCandidatesTest(unittest.TestCase):
 
 
 class ParseLeadingJsonTest(unittest.TestCase):
-    def test_trailing_metric_lines_tolerated(self):
+    def test_when_trailing_metric_lines_tolerated(self):
         text = '{"composite": 82.3}\nmetric_value=82.3\nDENEB_RUNTIME_DETAIL {...}\n'
         self.assertEqual(parse_leading_json(text), {"composite": 82.3})
 
@@ -221,7 +221,7 @@ class CliDryRunTest(unittest.TestCase):
             self.assertTrue(summary["dry_run"])
             self.assertIn("health-finding:runtime-latency", out.getvalue())
 
-    def test_real_run_refuses_to_file_blind(self):
+    def test_when_real_run_refuses_to_file_blind(self):
         with tempfile.TemporaryDirectory() as tmp:
             report_path = os.path.join(tmp, "health.json")
             with open(report_path, "w", encoding="utf-8") as handle:

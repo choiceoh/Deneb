@@ -24,10 +24,10 @@ class DispatchReclaimDecisionTest(unittest.TestCase):
         ).__dict__ | changes
         return ReclaimFacts(**values)
 
-    def test_clean_abandoned_started_attempt_is_reclaimable(self):
+    def test_allows_reclaim_when_abandoned_started_attempt_is_clean(self):
         self.assertTrue(decide_reclaim(self.base())[0])
 
-    def test_open_or_merged_pr_is_never_reclaimed(self):
+    def test_when_open_or_merged_pr_is_never_reclaimed(self):
         for state in ("OPEN", "MERGED"):
             self.assertFalse(decide_reclaim(self.base(pr_state=state))[0], state)
 
@@ -46,7 +46,7 @@ class DispatchReclaimDecisionTest(unittest.TestCase):
         self.assertFalse(decide_reclaim(self.base(remote_branch=True))[0])
         self.assertTrue(decide_reclaim(self.base(ledger_phase="failed", remote_branch=True))[0])
 
-    def test_authoritative_inflight_and_terminal_success_phases_block_reclaim(self):
+    def test_when_authoritative_inflight_and_terminal_success_phases_block_reclaim(self):
         for phase in ("pr_opened", "merged", "deployed", "watch_passed"):
             self.assertFalse(decide_reclaim(self.base(ledger_phase=phase))[0], phase)
 
@@ -80,7 +80,7 @@ class DispatchReclaimDecisionTest(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertEqual(out.getvalue(), "")
 
-    def test_cli_accepts_legacy_candidate_branch_after_authoritative_checks(self):
+    def test_cli_allows_legacy_candidate_branch_after_authoritative_checks(self):
         with TemporaryDirectory() as td:
             root = Path(td)
             dispatch_dir = root / "markers"

@@ -67,7 +67,7 @@ describe("Cfb", () => {
     expect(() => new Cfb(new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8]).buffer)).toThrow(/compound/);
   });
 
-  it("follows the extended DIFAT chain for FAT sectors beyond the header's 109", () => {
+  it("when follows the extended DIFAT chain for FAT sectors beyond the header's 109", () => {
     // The stream's chain links live in a FAT sector only reachable via the DIFAT
     // chain — a reader that stops at the header DIFAT truncates it to one sector.
     const { buf, expected } = buildCfbDifatChain();
@@ -122,7 +122,7 @@ describe("Cfb", () => {
 });
 
 describe("parseHwp", () => {
-  it("extracts paragraphs in document order", async () => {
+  it("when extracts paragraphs in document order", async () => {
     const buf = doc(
       buildParagraph("탑솔라 견적서"),
       buildParagraph("품목: 태양광 모듈"),
@@ -134,7 +134,7 @@ describe("parseHwp", () => {
     expect(d.blocks.every((b) => b.type === "para")).toBe(true);
   });
 
-  it("reconstructs a table into a grid", async () => {
+  it("when reconstructs a table into a grid", async () => {
     const buf = doc(
       buildParagraph("발주 내역"),
       buildTable([
@@ -155,7 +155,7 @@ describe("parseHwp", () => {
     expect(d.blocks[0]).toEqual({ type: "para", text: "발주 내역" });
   });
 
-  it("skips inline/extended controls but keeps tabs and breaks", async () => {
+  it("ignores inline/extended controls but keeps tabs and breaks", async () => {
     const wchars = [
       ...hwpWchars("가"),
       9,
@@ -183,7 +183,7 @@ describe("parseHwp", () => {
     expect(d.paragraphs[0]).toBe("가\t나다\n라");
   });
 
-  it("extracts a BinData image as a data URI (magic-sniffed)", async () => {
+  it("when extracts a BinData image as a data URI (magic-sniffed)", async () => {
     // A minimal PNG-magic'd stream — the sniff only needs the signature, and the
     // fixture is uncompressed so no inflate is required in jsdom.
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
@@ -245,7 +245,7 @@ describe("parseHwp", () => {
     await expect(parseHwp(buf)).rejects.toThrow(/배포용/);
   });
 
-  it("caps a runaway decompression (deflate bomb) and falls back to the raw bytes", async () => {
+  it("when caps a runaway decompression (deflate bomb) and falls back to the raw bytes", async () => {
     // A fake DecompressionStream that "inflates" endlessly: without the output
     // cap parseHwp would accumulate unbounded chunks (this test would hang).
     class BombDS {

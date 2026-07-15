@@ -18,7 +18,7 @@ import lightweight_model_ab_transport as transport
 
 
 class ScoringContractTest(unittest.TestCase):
-    def test_good_vectors_keep_full_scores(self) -> None:
+    def test_good_vectors_preserves_full_scores(self) -> None:
         self.assertEqual(
             battery.score_compaction(
                 battery.COMPACTION_CASES[0],
@@ -41,7 +41,7 @@ class ScoringContractTest(unittest.TestCase):
             100.0,
         )
 
-    def test_cross_case_contamination_is_penalized(self) -> None:
+    def test_when_cross_case_contamination_is_penalized(self) -> None:
         case = battery.COMPACTION_CASES[0]
         clean = runner.MOCK_GOOD["compaction-deal"]
         contaminated = clean + "\n서버 포트 18789와 spark4tb도 확인"
@@ -119,7 +119,7 @@ class TransportTest(unittest.TestCase):
 
 
 class MockEndToEndTest(unittest.TestCase):
-    def test_builtin_mock_battery_still_passes(self) -> None:
+    def test_when_builtin_mock_battery_still_passes(self) -> None:
         stdout = io.StringIO()
         stderr = io.StringIO()
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):

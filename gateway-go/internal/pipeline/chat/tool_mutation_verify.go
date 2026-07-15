@@ -38,12 +38,10 @@ const mutationFailureBanner = "⚠️ 실행 실패 — 이 작업은 완료되�
 // it emits (verified against the tool implementations in tools/). When any marker
 // is present in the output, the action failed despite the nil error slot.
 var mutationFailureMarkers = map[string][]string{
-	"wiki":        {"위키 페이지 쓰기 실패", "일지 쓰기 실패"},
-	"wiki_forget": {"잊기 실패"},
-	"preference":  {"선호 저장 실패"},
-	"notebook":    {"노트북 생성 실패", "자료 추가 실패", "자료 제거 실패", "노트북 삭제 실패"},
-	"cron":        {"실행 실패"},
-	"gateway":     {"재시작 신호 전송 실패", "설정 파일 저장 실패", "설정 저장 실패", "설정 경로 적용 실패", "update 실패"},
+	"wiki":     {"위키 페이지 쓰기 실패", "일지 쓰기 실패"},
+	"notebook": {"노트북 생성 실패", "자료 추가 실패", "자료 제거 실패", "노트북 삭제 실패"},
+	"cron":     {"실행 실패"},
+	"gateway":  {"재시작 신호 전송 실패", "설정 파일 저장 실패", "설정 저장 실패", "설정 경로 적용 실패", "update 실패"},
 }
 
 // mutationVerifyTools returns the tool names with mutation-failure verification,

@@ -8,9 +8,6 @@
 
 - `store.go`의 `Store`와 `NewStore`가 저장소 수명주기와 디렉터리 경계를
   정의한다. 새 영속 동작은 먼저 이 계약이 소유해야 하는지 판단한다.
-- 패키지 밖 소비자는 `internal/domain/wiki`를 직접 import하지 말고
-  `internal/domain/wikiport`의 안정 포트와 DTO를 통한다. 위키 구현 변경은 이
-  패키지 안에 머물고, 외부 계약 변경은 `wikiport`에서 명시적으로 검토한다.
 - `page.go`의 `Page`와 `NewPage`는 위키 페이지의 메타데이터·본문 모델을
   소유한다. 프런트매터 해석 규칙을 호출자에 복제하지 않는다.
 - `index.go`의 `Index`와 `newIndex`는 검색 인덱스의 단일 진입점이다. 인덱스
@@ -38,6 +35,19 @@
   적용한다. LLM 출력 자체를 저장 계약으로 취급하지 않는다.
 - 외부 전송용 DTO는 RPC 계층에서 조립한다. 이 패키지의 도메인 타입에
   `map[string]any` 기반 wire 스키마를 추가하지 않는다.
+
+## Local change scope
+
+이 패키지만 바꿀 때 함께 열어볼 이웃은 좁게 유지한다.
+
+- 함께 바꿔도 되는 이웃: `internal/domain/contacts`(주소록 match-key 정본),
+  `internal/runtime/rpc/handler/wiki`(RPC 표면만), `internal/runtime/wikiwork`
+  (주기 작업 배선). 위키 저장 계약이 바뀌면 `store_hardening_test.go`와
+  `dreamer_test.go`에서 `Store`/`WikiDreamer` 회귀를 먼저 본다.
+- 건드리지 말 것: `pipeline/chat` 도구 구현, `runtime/server` method registry,
+  client wire(`//deneb:wire`) 생성물. 위키 파일을 RPC/chat에서 직접 파싱하는
+  경로를 새로 만들지 않는다.
+- 집중 검증: `cd gateway-go && go test ./internal/domain/wiki`
 
 ## 변경과 검증
 

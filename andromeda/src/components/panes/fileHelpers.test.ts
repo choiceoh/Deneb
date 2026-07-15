@@ -12,7 +12,7 @@ describe("entryPath", () => {
 });
 
 describe("isFolder", () => {
-  it("treats folder/dir tags as folders, everything else not", () => {
+  it("when treats folder/dir tags as folders, everything else not", () => {
     expect(isFolder({ tag: "folder" } as FileEntry)).toBe(true);
     expect(isFolder({ tag: "dir" } as FileEntry)).toBe(true);
     expect(isFolder({ tag: "file" } as FileEntry)).toBe(false);
@@ -21,7 +21,7 @@ describe("isFolder", () => {
 });
 
 describe("joinPath", () => {
-  it("joins base + name, tolerating stray slashes", () => {
+  it("when joins base + name, tolerating stray slashes", () => {
     expect(joinPath("docs", "a.txt")).toBe("docs/a.txt");
     expect(joinPath("docs/", "/a.txt")).toBe("docs/a.txt");
     expect(joinPath("", "a.txt")).toBe("a.txt");

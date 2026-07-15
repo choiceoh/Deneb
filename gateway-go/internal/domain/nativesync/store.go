@@ -46,7 +46,7 @@ type Event struct {
 	SessionKey     string          `json:"sessionKey,omitempty"`
 	WorkFeedItemID string          `json:"workFeedItemId,omitempty"`
 	TimestampMs    int64           `json:"timestampMs"`
-	Payload        json.RawMessage `json:"payload,omitempty"`
+	Payload        rawJSON `json:"payload,omitempty"`
 }
 
 // AppendInput carries an event type, payload, and optional deduplication key.
@@ -55,7 +55,7 @@ type AppendInput struct {
 	EntityID       string
 	SessionKey     string
 	WorkFeedItemID string
-	Payload        any
+	Payload        rawJSON
 }
 
 // PullResult is a bounded event page and its latest sequence watermark.

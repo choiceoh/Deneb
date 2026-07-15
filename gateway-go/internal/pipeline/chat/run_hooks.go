@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/hanja"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
@@ -24,15 +23,15 @@ func wireStreamHooks(
 	deps runDeps,
 	broadcaster *streaming.Broadcaster,
 	typingSignaler chatport.TypingSignaler,
-) *hanja.Streamer {
-	var deltaTranslit *hanja.Streamer
+) *streaming.Streamer {
+	var deltaTranslit *streaming.Streamer
 	// Broadcaster: SSE streaming deltas. Read Sino-Korean Hanja as Hangul
 	// live (報告書 → 보고서) so a Chinese-lineage model's stream doesn't flash Hanja
 	// before the final settle. The Streamer is stream-safe (carries fence/word
 	// state across deltas) and EmitDelta no-ops on the empty string it returns
 	// while holding a partial fence marker.
 	if broadcaster != nil {
-		deltaTranslit = hanja.NewStreamer()
+		deltaTranslit = streaming.NewStreamer()
 		hc.OnTextDelta(func(s string) { broadcaster.EmitDelta(deltaTranslit.Write(s)) })
 		// Reasoning liveness for streaming transports (throttled inside the
 		// broadcaster — OnThinking fires once per reasoning delta).

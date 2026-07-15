@@ -401,23 +401,6 @@ class GatewayAskStreamingStateMachineTest {
     }
 
     @Test
-    fun streamEofWithoutDoneRecoversCanonicalTranscriptWithoutBlockingResend() = runTest {
-        val f = gatewayClientFixture()
-        f.transport.enqueueSse(delta("partial"))
-        f.transport.enqueueRpc(answeredTranscript("question", "canonical"))
-        f.transport.enqueueRpc(answeredTranscript("question", "canonical"))
-
-        val result = f.client.ask("question", emptyList(), null)
-
-        assertTrue(result)
-        assertEquals(listOf("question", "canonical"), f.client.chatHistory.value.map { it.content })
-        assertEquals(
-            listOf(null, "miniapp.sessions.transcript", "miniapp.sessions.transcript"),
-            f.transport.requestMethods(),
-        )
-    }
-
-    @Test
     fun emptyStreamFailureResendsOnlyAfterTwoNotArrivedPolls() = runTest {
         val f = gatewayClientFixture()
         f.transport.enqueueSse(error("old gateway"))

@@ -521,7 +521,7 @@ func notificationLikeEvent(eventType string) bool {
 func worthFullJudgment(ctx context.Context, source, text string) bool {
 	const system = "당신은 스마트폰 알림 분류기다. 사용자에게 즉시 알릴 가치가 있는 업무·일정·금전·중요 연락이면 YES, " +
 		"광고·프로모션·스팸·인증번호(OTP)·결제 영수증·배송/마케팅 알림·일상적 시스템/앱 알림이면 NO. YES 또는 NO 한 단어만 답하라."
-	out, err := pilot.CallTinyLLM(ctx, system, "앱: "+source+"\n알림 내용:\n"+text, 4, map[string]any{"temperature": 0})
+	out, err := pilot.CallTinyLLM(ctx, system, "앱: "+source+"\n알림 내용:\n"+text, 4, json.RawMessage(`{"temperature":0}`))
 	if err != nil {
 		return true // fail-open: run the full judgment rather than drop on a gate error
 	}

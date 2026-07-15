@@ -117,14 +117,14 @@ describe("WorkspaceProvider core state", () => {
     expect(screen.getByTestId("view")).toHaveTextContent("files");
   });
 
-  it("registers the active pane's semantic AI projection", async () => {
+  it("when registers the active pane's semantic AI projection", async () => {
     renderProvider();
     await userEvent.click(screen.getByRole("button", { name: "register pane" }));
     expect(screen.getByTestId("ai-text")).toHaveTextContent("semantic wiki text");
     expect(screen.getByTestId("active-resource")).toHaveTextContent("wiki");
   });
 
-  it("opens and consumes a wiki target", async () => {
+  it("when opens and consumes a wiki target", async () => {
     renderProvider();
     await userEvent.click(screen.getByRole("button", { name: "open wiki" }));
     expect(screen.getByTestId("view")).toHaveTextContent("wiki");
@@ -144,7 +144,7 @@ describe("WorkspaceProvider core state", () => {
     expect(screen.getByTestId("sink")).toHaveTextContent("none");
   });
 
-  it("forwards config edits to the lifted owner", async () => {
+  it("when forwards config edits to the lifted owner", async () => {
     const setCfg = vi.fn();
     renderProvider({ setCfg });
     await userEvent.click(screen.getByRole("button", { name: "set config" }));
@@ -178,7 +178,7 @@ describe("WorkspaceProvider navigation persistence", () => {
     expect(screen.getByTestId("hidden")).toBeEmptyDOMElement();
   });
 
-  it("toggles a normal view and persists both transitions", async () => {
+  it("toggles a normal view and saves both transitions", async () => {
     renderProvider();
     await userEvent.click(screen.getByRole("button", { name: "toggle mail hidden" }));
     expect(screen.getByTestId("hidden")).toHaveTextContent("mail");
@@ -189,7 +189,7 @@ describe("WorkspaceProvider navigation persistence", () => {
     await waitFor(() => expect(localStorage.getItem("andromeda.hiddenPanes")).toBe("[]"));
   });
 
-  it("never hides settings", async () => {
+  it("rejects hides settings", async () => {
     renderProvider();
     await userEvent.click(screen.getByRole("button", { name: "toggle settings hidden" }));
     expect(screen.getByTestId("hidden")).toBeEmptyDOMElement();
@@ -202,7 +202,7 @@ describe("WorkspaceProvider navigation persistence", () => {
     expect(screen.getByTestId("order")).toHaveTextContent("wiki,mail");
   });
 
-  it("persists a replacement view order", async () => {
+  it("saves a replacement view order", async () => {
     renderProvider();
     await userEvent.click(screen.getByRole("button", { name: "set order" }));
     expect(screen.getByTestId("order")).toHaveTextContent("wiki,today,mail");
@@ -229,7 +229,7 @@ describe("WorkspaceProvider notebook sizing", () => {
     expect(screen.getByTestId("notebook-top")).toHaveTextContent("default");
   });
 
-  it("persists folded and expanded transitions", async () => {
+  it("saves folded and expanded transitions", async () => {
     renderProvider();
     await userEvent.click(screen.getByRole("button", { name: "fold notebook" }));
     expect(screen.getByTestId("notebook-top")).toHaveTextContent("folded");

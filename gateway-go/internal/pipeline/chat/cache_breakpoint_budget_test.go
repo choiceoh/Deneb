@@ -29,7 +29,7 @@ func countCacheBreakpoints(sysBlocks []llm.ContentBlock, messages []llm.Message,
 	}
 	for _, m := range messages {
 		var blocks []llm.ContentBlock
-		if err := json.Unmarshal(m.Content.Bytes(), &blocks); err != nil {
+		if err := json.Unmarshal(m.Content, &blocks); err != nil {
 			// String content carries no per-block markers; nothing to count.
 			continue
 		}
@@ -167,7 +167,7 @@ func TestCacheBreakpointBudgetWithMultiBlockMessages(t *testing.T) {
 		}),
 		llm.NewBlockMessage("assistant", []llm.ContentBlock{
 			{Type: "text", Text: "thinking"},
-			{Type: "tool_use", ID: "t1", Name: "read", Input: llm.FlexibleFromRaw([]byte(`{}`))},
+			{Type: "tool_use", ID: "t1", Name: "read", Input: json.RawMessage(`{}`)},
 		}),
 		llm.NewBlockMessage("user", []llm.ContentBlock{
 			{Type: "tool_result", ToolUseID: "t1", Content: "ok"},

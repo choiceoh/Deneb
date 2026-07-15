@@ -37,7 +37,7 @@ from health_v2.report import render_human
 
 
 class ModelContractTests(unittest.TestCase):
-    def test_report_requires_weights_totaling_one_hundred(self) -> None:
+    def test_rejects_report_when_weights_do_not_total_one_hundred(self) -> None:
         with self.assertRaisesRegex(ValueError, "weights must total 100"):
             Report(
                 profile="fast",
@@ -86,7 +86,7 @@ class ModelContractTests(unittest.TestCase):
                 readiness={},
             )
 
-    def test_json_and_finding_order_are_deterministic(self) -> None:
+    def test_preserves_deterministic_json_and_finding_order(self) -> None:
         report = _report(
             findings=[
                 _finding("lower-priority", priority=10),
@@ -111,7 +111,7 @@ class ModelContractTests(unittest.TestCase):
             stable_id("rule", "path", "symbol"),
         )
 
-    def test_unavailable_evidence_or_readiness_is_not_healthy(self) -> None:
+    def test_returns_unhealthy_when_evidence_or_readiness_unavailable(self) -> None:
         unknown_readiness = _report(readiness={"go-test": None})
         missing_evidence = _report(
             evidence=[Evidence("inventory", "unavailable", "git failed", required=True)],
@@ -122,7 +122,7 @@ class ModelContractTests(unittest.TestCase):
         self.assertFalse(missing_evidence.healthy)
         self.assertLess(missing_evidence.confidence, 100.0)
 
-    def test_score_helpers_are_monotonic(self) -> None:
+    def test_preserves_monotonic_score_helper_ordering(self) -> None:
         values = [-1, 0, 5, 10, 15, 20, 30]
         descending = [descending_grade(value, 5, 20) for value in values]
         ascending = [ascending_grade(value, 5, 20) for value in values]
@@ -170,7 +170,7 @@ class BaselineRatchetTests(unittest.TestCase):
             self.assertEqual(load(path), accepted)
             self.assertEqual(list(Path(folder).glob(".baseline.json.*.tmp")), [])
 
-    def test_overall_and_pillar_regressions_cannot_mask_each_other(self) -> None:
+    def test_detects_regressions_without_masking_overall_and_pillar(self) -> None:
         accepted = snapshot(_report())
 
         overall = check(_report(69.5, 69.5), accepted)
@@ -194,7 +194,7 @@ class BaselineRatchetTests(unittest.TestCase):
         self.assertEqual(result.new_findings, ("new-contract-gap",))
         self.assertTrue(any("new high finding" in item for item in result.regressions))
 
-    def test_update_refuses_to_lower_baseline(self) -> None:
+    def test_update_rejects_baseline_lowering(self) -> None:
         with tempfile.TemporaryDirectory(prefix="deneb-health-baseline-") as folder:
             path = Path(folder) / "baseline.json"
             accepted = update(path, _report())
@@ -272,7 +272,7 @@ class BaselineRatchetTests(unittest.TestCase):
 
 
 class HumanReportTests(unittest.TestCase):
-    def test_action_fields_appear_before_score(self) -> None:
+    def test_renders_action_fields_before_score_in_human_report(self) -> None:
         output = render_human(
             _report(findings=[_finding("contract-gap", severity="high")])
         )

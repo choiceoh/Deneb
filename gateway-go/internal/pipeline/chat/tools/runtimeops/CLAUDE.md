@@ -15,7 +15,8 @@ session 상태는 주입된 infra/domain service가 소유한다.
 - `sessions_tool.go`의 `ToolSessions`, `ToolSessionsSpawn`과
   `subagents_tool.go`의 `ToolSubagents`가 session 조회·생성·결과 회수를 담당한다.
 - `fetch_tools.go`의 `FetchToolsRegistry`, `ToolFetchTools`가 deferred schema
-  검색·활성화를, `observe.go`의 `ToolObserve`가 agentlog/health 관찰을 제공한다.
+  검색·활성화를 제공한다. Observe (`ToolObserve`) lives in leaf package
+  `observeops/` and is wired via `server/toolbind/observebind`.
 - `gateway.go`의 `GatewayDeps`, `ToolGateway`, `ToolGatewayWithDeps`가 status,
   config, restart, update approval 흐름을 소유한다.
 

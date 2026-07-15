@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
 
@@ -87,7 +87,7 @@ func isRetryableError(err error) bool {
 // The full transcript is summarized in an isolated local-LLM call and offloaded
 // to spillover (when available) so it never enters the main conversation
 // transcript — see web_youtube.go for the rationale.
-func fetchYouTube(ctx context.Context, spill *agent.SpilloverStore, url string) (string, error) {
+func fetchYouTube(ctx context.Context, spill tooldeps.SpilloverStore, url string) (string, error) {
 	result, err := extractYouTube(ctx, url)
 	if err != nil {
 		//nolint:nilerr // tool surfaces fetch failures as content for the LLM, not as Go errors

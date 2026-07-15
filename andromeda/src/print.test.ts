@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 describe("printElement", () => {
-  it("marks the region + ancestor chain and calls window.print", () => {
+  it("when marks the region + ancestor chain and calls window.print", () => {
     document.body.innerHTML = `<div class="root"><section class="outer"><article class="target"><p>hi</p></article><article class="sibling"></article></section></div>`;
     const target = document.querySelector<HTMLElement>(".target")!;
 
@@ -42,7 +42,7 @@ describe("printElement", () => {
     expect(document.querySelector(".outer")!.className).toBe("outer");
   });
 
-  it("drops markers left behind by a previous uncleaned print", () => {
+  it("when drops markers left behind by a previous uncleaned print", () => {
     document.body.innerHTML = `<div class="a"><div class="b"></div></div>`;
     const a = document.querySelector<HTMLElement>(".a")!;
     const b = document.querySelector<HTMLElement>(".b")!;
@@ -64,7 +64,7 @@ describe("printElement", () => {
 });
 
 describe("printClosest", () => {
-  it("prints the nearest matching ancestor of the target", () => {
+  it("when prints the nearest matching ancestor of the target", () => {
     document.body.innerHTML = `<div class="turn"><button class="p">인쇄</button></div>`;
 
     printClosest(document.querySelector<HTMLElement>(".p"), ".turn");

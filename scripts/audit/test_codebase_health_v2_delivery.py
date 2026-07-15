@@ -49,7 +49,7 @@ jobs:
 
         self.assertEqual(workflows, {})
 
-    def test_only_executable_failure_prevention_commands_are_scored(self) -> None:
+    def test_scores_only_executable_failure_prevention_commands(self) -> None:
         fake_workflow = """\
 # gofmt; go build; go test -tags=integration; pnpm exec playwright test
 name: gofmt go build playwright presentation only
@@ -256,7 +256,7 @@ runs:
         self.assertEqual(before[0].score, after[0].score)
         self.assertEqual(before[0].metrics, after[0].metrics)
 
-    def test_capability_importance_and_lane_impact_change_composite(self) -> None:
+    def test_changes_composite_when_capability_importance_and_lane_impact_shift(self) -> None:
         def capability(
             lane: str, name: str, present: bool, importance: float
         ) -> delivery._Capability:
@@ -323,7 +323,7 @@ runs:
             round(PRODUCT_LANE_IMPACT["go"] / impact_total, 3),
         )
 
-    def test_untracked_delivery_evidence_cannot_change_score(self) -> None:
+    def test_preserves_score_when_untracked_delivery_evidence_added(self) -> None:
         tracked_workflow = """\
 name: tracked gate
 on: pull_request
@@ -366,7 +366,7 @@ jobs:
         self.assertEqual(before[0].score, after[0].score)
         self.assertEqual(before[0].metrics, after[0].metrics)
 
-    def test_test_evidence_uses_the_same_product_impact_weighting(self) -> None:
+    def test_when_applies_same_product_impact_weighting_to_test_evidence(self) -> None:
         go_gap = testing._language_average({"go": 0.0, "python": 100.0})
         python_gap = testing._language_average({"go": 100.0, "python": 0.0})
 
@@ -378,7 +378,7 @@ jobs:
             / (PRODUCT_LANE_IMPACT["go"] + PRODUCT_LANE_IMPACT["python"]),
         )
 
-    def test_support_test_lane_gap_cannot_create_core_severity(self) -> None:
+    def test_limits_support_lane_gap_severity_without_core_escalation(self) -> None:
         def finding(language: str):
             return testing._signal_finding(
                 pillar="test-effectiveness",

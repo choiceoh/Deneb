@@ -172,7 +172,7 @@ JSON
         self.assertEqual(agents["lightweightModel"], "puppet/lightweight-seat")
         self.assertEqual(agents["fallbackModel"], "puppet/fallback-seat")
         self.assertEqual(agents["tinyModel"], "puppet/tiny-seat")
-        self.assertNotIn("analysisModel", agents)
+        self.assertEqual(agents["analysisModel"], "puppet/analysis-seat")
         self.assertEqual(agents["codingModel"], "puppet/coding-seat")
         self.assertEqual(agents["chatbotModel"], "puppet/chatbot-seat")
         self.assertEqual(agents["visionModel"], "puppet/vision-seat")
@@ -182,7 +182,7 @@ JSON
         self.assertEqual(ACTIVE_MARKER.read_text().splitlines(), ["fixture", "http://127.0.0.1:18793"])
         self.assertIn("idle=-1", "\n".join(self.call_lines()))
 
-    def test_main_only_overlay_leaves_other_production_roles_unchanged(self) -> None:
+    def test_main_only_overlay_preserves_other_production_roles_unchanged(self) -> None:
         proc = self.invoke("start", "--main-only")
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("main → puppet/main-seat", proc.stdout)
@@ -260,7 +260,7 @@ JSON
         self.assertIn("broker:  RUNNING (http://127.0.0.1:18793)", running.stdout)
         self.assertIn('{"pending":2}', running.stdout)
 
-    def test_other_instance_hint_is_only_printed_for_reachable_live_marker(self) -> None:
+    def test_when_other_instance_hint_is_only_printed_for_reachable_live_marker(self) -> None:
         ACTIVE_MARKER.write_text("other\nhttp://other.test:19000\n")
         hinted = self.invoke("status", env=self.env(OTHER_UP="1"))
         self.assertEqual(hinted.returncode, 0)
@@ -272,7 +272,7 @@ JSON
         self.assertEqual(silent.returncode, 0)
         self.assertNotIn("instance 'other'", silent.stderr)
 
-    def test_send_argument_validation_happens_before_gateway_preflight(self) -> None:
+    def test_when_send_argument_validation_happens_before_gateway_preflight(self) -> None:
         missing = self.invoke("send")
         self.assertEqual(missing.returncode, 1)
         self.assertIn("Usage: puppet.sh send MESSAGE", missing.stderr)

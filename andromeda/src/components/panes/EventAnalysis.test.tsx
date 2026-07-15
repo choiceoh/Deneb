@@ -60,7 +60,7 @@ describe("EventAnalysis fallback", () => {
     expect(screen.getByText(/장소 정보가 없으면 직전에 확인 비용이 생길 수 있습니다/)).toBeInTheDocument();
   });
 
-  it("describes a multi-day schedule", () => {
+  it("when describes a multi-day schedule", () => {
     render(
       <EventAnalysis
         event={calendarEvent({
@@ -77,7 +77,7 @@ describe("EventAnalysis fallback", () => {
     expect(screen.getByText(/3일에 걸친 일정입니다/)).toBeInTheDocument();
   });
 
-  it("describes a single all-day schedule", () => {
+  it("when describes a single all-day schedule", () => {
     render(
       <EventAnalysis
         event={calendarEvent({
@@ -94,7 +94,7 @@ describe("EventAnalysis fallback", () => {
     expect(screen.getByText(/종일 일정입니다/)).toBeInTheDocument();
   });
 
-  it("marks a past schedule and focuses on follow-up", () => {
+  it("when marks a past schedule and focuses on follow-up", () => {
     render(
       <EventAnalysis
         event={calendarEvent({
@@ -111,7 +111,7 @@ describe("EventAnalysis fallback", () => {
     expect(screen.getByText(/후속 기록이나 액션 아이템만 남기면 됩니다/)).toBeInTheDocument();
   });
 
-  it("disables AI refresh while disconnected", () => {
+  it("when disables AI refresh while disconnected", () => {
     render(<EventAnalysis event={calendarEvent({ description: undefined })} connected={false} cfg={cfg} />);
     expect(screen.getByRole("button", { name: "AI 분석" })).toBeDisabled();
   });
@@ -143,7 +143,7 @@ describe("EventAnalysis streaming", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("sends a scoped session and semantic event context", async () => {
+  it("when sends a scoped session and semantic event context", async () => {
     const fetch = vi.fn(async (_url: string, _init: RequestInit) => sse(["done", { text: "분석 완료" }]));
     vi.stubGlobal("fetch", fetch);
     const event = calendarEvent();
@@ -213,7 +213,7 @@ describe("EventAnalysis streaming", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("changes the action label while and after analysis", async () => {
+  it("when changes the action label while and after analysis", async () => {
     let resolve!: (response: Response) => void;
     vi.stubGlobal(
       "fetch",

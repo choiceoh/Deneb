@@ -41,7 +41,7 @@ describe("usePaneTarget", () => {
     expect(ws.consumePaneTarget).not.toHaveBeenCalled();
   });
 
-  it("passes a dayKey-only target (no id) through to apply", () => {
+  it("when passes a dayKey-only target (no id) through to apply", () => {
     ws.paneTarget = { view: "calendar", dayKey: "2026-6-7" };
     const apply = vi.fn(() => undefined);
     renderHook(() => usePaneTarget("calendar", apply));

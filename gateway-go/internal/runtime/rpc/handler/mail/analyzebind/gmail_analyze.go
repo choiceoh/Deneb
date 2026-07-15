@@ -1,0 +1,407 @@
+// gmail_analyze.go — miniapp.gmail.analyze RPC.
+//
+// Operator taps "🔍 분석" on a Mini App email detail; the gateway runs the
+// same analysis pipeline the agent's `mail_archive` / mailanalysis path uses (intent + key
+// stakeholders + risks + next-step suggestions) and returns the result as
+// markdown for inline rendering.
+//
+// Reuses `mailanalysis.AnalyzeEmailPipeline` verbatim — no separate prompt
+// or LLM wrapper to maintain. The pipeline already falls back to a single
+// LLM call when LocalClient is absent, so the Mini App path doesn't need
+// to know about the two-stage detail.
+//
+// Long requests: the pipeline's stage-2 timeout is 360 seconds. The
+// dispatcher wraps every handler in safeCall with the request context;
+// the HTTP bridge does not impose its own deadline, so the call is bound
+// by the operator's network and the LLM provider. Frontend shows a
+// loading indicator and warns the operator after 30s.
+package analyzebind
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail/gmailops"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
+)
+
+// AnalyzePipeline is the subset of mailanalysis the analyze handler depends
+// on. Pulling it behind an interface keeps the handler testable without
+// standing up an LLM.
+type AnalyzePipeline interface {
+	Analyze(ctx context.Context, msg *gmail.MessageDetail) (mailanalysis.AnalysisResult, error)
+}
+
+// WikiAnalysisInput is the payload the handler hands to SaveToWiki when a
+// fresh analysis succeeds. Kept as a flat struct so the handler stays
+// ignorant of the wiki package's frontmatter/page types.
+type WikiAnalysisInput struct {
+	MsgID           string
+	Subject         string
+	From            string
+	Date            string
+	Analysis        string
+	RelatedProjects []string // wiki paths of related project pages → page.Related
+}
+
+// GmailAnalyzeDeps groups the factories the handler needs. Client supplies
+// the Gmail OAuth client; Pipeline supplies the analysis driver
+// (production wires it to `mailanalysis.AnalyzeEmailPipeline` with a real
+// LLM client + main model). Cache and SaveToWiki are optional; nil/zero
+// values disable cache lookups and wiki persistence respectively so the
+// handler keeps working when those subsystems aren't wired yet.
+type GmailAnalyzeDeps struct {
+	Client     func() (GmailClient, error)
+	Pipeline   func() (AnalyzePipeline, error)
+	Cache      *AnalysisStore
+	WorkState  *gmailops.WorkStore
+	SaveToWiki func(in WikiAnalysisInput) error
+	// WikiStore (optional) enriches related-project paths with their
+	// title/summary for display. nil → chips fall back to the bare path.
+	WikiStore func() (MemorySearcher, error)
+	// Ask runs an ephemeral, isolated LLM Q&A grounded in the mail context
+	// (body + analysis + projects). nil → miniapp.gmail.ask is not registered.
+	Ask func(ctx context.Context, mailContext string, history []QATurn, question string) (string, error)
+}
+
+// GmailAnalyzeMethods returns the miniapp.gmail.analyze handler. Returns
+// nil if either factory is missing so registration can skip cleanly when
+// the LLM client hasn't been wired (e.g. early in startup).
+func GmailAnalyzeMethods(deps GmailAnalyzeDeps) map[string]rpcutil.HandlerFunc {
+	if deps.Client == nil || deps.Pipeline == nil {
+		return nil
+	}
+	m := map[string]rpcutil.HandlerFunc{
+		"miniapp.gmail.analyze":         gmailAnalyze(deps),
+		"miniapp.gmail.analysis_cached": gmailAnalysisCached(deps),
+	}
+	// Follow-up Q&A is registered only when the chat-backed Ask callback is
+	// wired (late phase, after chatHandler exists).
+	if deps.Ask != nil {
+		m["miniapp.gmail.ask"] = gmailAsk(deps)
+	}
+	return m
+}
+
+func applyMailWorkAnalysis(out *mailAnalysisOut, st gmailops.WorkMessageState) {
+	if out == nil {
+		return
+	}
+	out.AnalysisStatus = st.AnalysisStatus
+	out.AnalysisQuality = st.AnalysisQuality
+	out.FeedStatus = st.FeedStatus
+	out.CalendarProposalCount = st.CalendarProposalCount
+	out.TodoCount = st.TodoCount
+	out.WorkStateHint = st.LastError
+}
+
+func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID    string `json:"id"`
+		Force bool   `json:"force,omitempty"`
+	}
+	return bindOptional(func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		if strings.TrimSpace(p.ID) == "" {
+			return gmailops.RPCMissingParam("id").Response(req.ID)
+		}
+
+		// Cache lookup. force=true skips it so "🔄 다시 분석" always
+		// re-runs the LLM. Load errors are logged-and-ignored so a
+		// corrupt cache file never blocks a fresh run.
+		if !p.Force && deps.Cache != nil {
+			if rec, err := deps.Cache.Load(p.ID); err == nil && rec != nil {
+				out := mailAnalysisOut{
+					ID:              rec.MsgID,
+					Subject:         rec.Subject,
+					From:            rec.From,
+					Date:            rec.Date,
+					Analysis:        mailanalysis.StripWikiFactsBlock(rec.Analysis), // drop legacy 위키 갱신 제안 block (no longer emitted)
+					RelatedProjects: enrichProjects(deps, rec.RelatedProjects),
+					DurationMs:      rec.DurationMs,
+					Cached:          true,
+					CreatedAt:       rec.CreatedAt,
+				}
+				if deps.WorkState != nil {
+					st, _ := deps.WorkState.MarkAnalysisDone(gmailops.WorkAnalysisInput{
+						MessageInput: gmailops.WorkMessageInput{
+							ID:      rec.MsgID,
+							Subject: rec.Subject,
+							From:    rec.From,
+							Date:    rec.Date,
+						},
+						Quality:    rec.Importance,
+						DurationMs: rec.DurationMs,
+					})
+					applyMailWorkAnalysis(&out, st)
+				}
+				return rpcutil.RespondOK(req.ID, out)
+			}
+		}
+
+		client, err := deps.Client()
+		if err != nil {
+			if deps.WorkState != nil {
+				_, _ = deps.WorkState.MarkAnalysisFailed(gmailops.WorkMessageInput{ID: p.ID}, err)
+			}
+			return gmailops.RPCWrapUnavailable("gmail client unavailable", err).Response(req.ID)
+		}
+		pipeline, err := deps.Pipeline()
+		if err != nil {
+			if deps.WorkState != nil {
+				_, _ = deps.WorkState.MarkAnalysisFailed(gmailops.WorkMessageInput{ID: p.ID}, err)
+			}
+			return gmailops.RPCWrapUnavailable("analysis pipeline unavailable", err).Response(req.ID)
+		}
+
+		msg, err := client.GetMessage(ctx, p.ID)
+		if err != nil {
+			if deps.WorkState != nil {
+				_, _ = deps.WorkState.MarkAnalysisFailed(gmailops.WorkMessageInput{ID: p.ID}, err)
+			}
+			return mapGmailError(req.ID, "gmail get failed", err)
+		}
+		if msg == nil {
+			if deps.WorkState != nil {
+				_, _ = deps.WorkState.MarkAnalysisFailed(gmailops.WorkMessageInput{ID: p.ID}, errGmailNotFound)
+			}
+			return gmailops.RPCNotFound("message " + rpcutil.TruncateForError(p.ID)).Response(req.ID)
+		}
+		if deps.WorkState != nil {
+			_, _ = deps.WorkState.MarkAnalysisAnalyzing(messageInputFromDetail(msg))
+		}
+
+		start := time.Now()
+		result, err := pipeline.Analyze(ctx, msg)
+		dur := time.Since(start)
+		if err != nil {
+			if deps.WorkState != nil {
+				_, _ = deps.WorkState.MarkAnalysisFailed(messageInputFromDetail(msg), err)
+			}
+			return gmailops.RPCWrapUnavailable("email analysis failed", err).Response(req.ID)
+		}
+		if strings.TrimSpace(result.Text) == "" {
+			if deps.WorkState != nil {
+				_, _ = deps.WorkState.MarkAnalysisFailed(messageInputFromDetail(msg), errors.New("analysis returned empty result"))
+			}
+			return gmailops.RPCUnavailable("analysis returned empty result").Response(req.ID)
+		}
+
+		date := normalizeDate(msg.Date)
+		now := time.Now().UTC()
+		rec := &AnalysisRecord{
+			MsgID:           msg.ID,
+			Subject:         msg.Subject,
+			From:            msg.From,
+			Date:            date,
+			Analysis:        result.Text,
+			Importance:      result.Importance,
+			RelatedProjects: result.RelatedProjects,
+			DurationMs:      dur.Milliseconds(),
+			PromptVersion:   AnalysisPromptVersion,
+			CreatedAt:       now,
+		}
+		// Persistence is best-effort. A working LLM result must not be
+		// surfaced as a failure just because disk or wiki write blipped.
+		if deps.Cache != nil {
+			_ = deps.Cache.Save(rec)
+		}
+		if deps.SaveToWiki != nil {
+			_ = deps.SaveToWiki(WikiAnalysisInput{
+				MsgID:           msg.ID,
+				Subject:         msg.Subject,
+				From:            msg.From,
+				Date:            date,
+				Analysis:        result.Text,
+				RelatedProjects: result.RelatedProjects,
+			})
+		}
+
+		out := mailAnalysisOut{
+			ID:              msg.ID,
+			Subject:         msg.Subject,
+			From:            msg.From,
+			Date:            date,
+			Analysis:        result.Text,
+			RelatedProjects: enrichProjects(deps, result.RelatedProjects),
+			DurationMs:      dur.Milliseconds(),
+			Cached:          false,
+			CreatedAt:       now,
+		}
+		if deps.WorkState != nil {
+			st, _ := deps.WorkState.MarkAnalysisDone(gmailops.WorkAnalysisInput{
+				MessageInput: messageInputFromDetail(msg),
+				Quality:      result.Importance,
+				DurationMs:   dur.Milliseconds(),
+			})
+			applyMailWorkAnalysis(&out, st)
+		}
+		return rpcutil.RespondOK(req.ID, out)
+	})
+}
+
+// enrichProjects resolves project wiki paths to ProjectRefs with title and
+// summary for display. Best-effort: a path that can't be read falls back to
+// just the path so the chip still links somewhere.
+func enrichProjects(deps GmailAnalyzeDeps, paths []string) []ProjectRef {
+	if len(paths) == 0 {
+		return nil
+	}
+	var store MemorySearcher
+	if deps.WikiStore != nil {
+		store, _ = deps.WikiStore()
+	}
+	refs := make([]ProjectRef, 0, len(paths))
+	for _, p := range paths {
+		ref := ProjectRef{Path: p}
+		if store != nil {
+			if page, err := store.ReadPage(p); err == nil && page != nil {
+				ref.Title = page.Meta.Title
+				ref.Summary = page.Meta.Summary
+			}
+		}
+		refs = append(refs, ref)
+	}
+	return refs
+}
+
+// gmailAnalysisCached returns a stored analysis without ever running the
+// LLM. The Mini App calls this when opening an email so a pre-computed
+// analysis (from the autonomous poller or a prior manual run) shows up
+// instantly, including its related projects. On a miss it returns
+// cached=false with an empty analysis, and the client offers the manual
+// analyze button.
+func gmailAnalysisCached(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID string `json:"id"`
+	}
+	type out struct {
+		ID                    string       `json:"id"`
+		Analysis              string       `json:"analysis"`
+		RelatedProjects       []ProjectRef `json:"relatedProjects,omitempty"`
+		Cached                bool         `json:"cached"`
+		CreatedAt             time.Time    `json:"createdAt,omitempty"`
+		AnalysisStatus        string       `json:"analysisStatus,omitempty"`
+		AnalysisQuality       string       `json:"analysisQuality,omitempty"`
+		FeedStatus            string       `json:"feedStatus,omitempty"`
+		CalendarProposalCount int          `json:"calendarProposalCount,omitempty"`
+		TodoCount             int          `json:"todoCount,omitempty"`
+		WorkStateHint         string       `json:"workStateHint,omitempty"`
+	}
+	withState := func(payload out, st gmailops.WorkMessageState) out {
+		payload.AnalysisStatus = st.AnalysisStatus
+		payload.AnalysisQuality = st.AnalysisQuality
+		payload.FeedStatus = st.FeedStatus
+		payload.CalendarProposalCount = st.CalendarProposalCount
+		payload.TodoCount = st.TodoCount
+		payload.WorkStateHint = st.LastError
+		return payload
+	}
+	return bindOptional(func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		if strings.TrimSpace(p.ID) == "" {
+			return gmailops.RPCMissingParam("id").Response(req.ID)
+		}
+		if deps.Cache == nil {
+			st := gmailops.WorkMessageState{}
+			if deps.WorkState != nil {
+				st = deps.WorkState.Get(p.ID)
+			}
+			return rpcutil.RespondOK(req.ID, withState(out{ID: p.ID}, st))
+		}
+		rec, err := deps.Cache.Load(p.ID)
+		if err != nil || rec == nil {
+			st := gmailops.WorkMessageState{}
+			if deps.WorkState != nil {
+				st = deps.WorkState.Get(p.ID)
+			}
+			return rpcutil.RespondOK(req.ID, withState(out{ID: p.ID}, st))
+		}
+		payload := out{
+			ID:              rec.MsgID,
+			Analysis:        mailanalysis.StripWikiFactsBlock(rec.Analysis), // drop legacy 위키 갱신 제안 block (no longer emitted)
+			RelatedProjects: enrichProjects(deps, rec.RelatedProjects),
+			Cached:          true,
+			CreatedAt:       rec.CreatedAt,
+		}
+		if deps.WorkState != nil {
+			st, _ := deps.WorkState.MarkAnalysisDone(gmailops.WorkAnalysisInput{
+				MessageInput: gmailops.WorkMessageInput{
+					ID:      rec.MsgID,
+					Subject: rec.Subject,
+					From:    rec.From,
+					Date:    rec.Date,
+				},
+				Quality:    rec.Importance,
+				DurationMs: rec.DurationMs,
+			})
+			payload = withState(payload, st)
+		}
+		return rpcutil.RespondOK(req.ID, payload)
+	})
+}
+
+// ErrAnalyzeNoLLM is returned by the production pipeline factory when no
+// LLM client / main model is configured (e.g., dev environment without
+// any provider credentials). Surfaced as UNAVAILABLE to the client.
+var ErrAnalyzeNoLLM = errors.New("analyze pipeline: LLM client not configured")
+
+// interactiveAnalysisStage2Tokens is the final-synthesis token budget for the
+// user-initiated Mini App analyze path — larger than the autonomous poller's
+// default so a deliberate "analyze this" tap can synthesize at depth and leave
+// room for extended thinking when the synthesis model supports it.
+const interactiveAnalysisStage2Tokens = 4096
+
+// PipelineFromMailAnalysis adapts mailanalysis.AnalyzeEmailPipeline to the
+// AnalyzePipeline interface. Returns ErrAnalyzeNoLLM when the inputs are
+// missing so callers can map cleanly to UNAVAILABLE without touching the
+// mailanalysis package internals.
+//
+// localClient/localModel drive the stage-1 extractors (thread context + wiki
+// fact extraction, JSON-mode on the lightweight/local model). When both are
+// supplied the Mini App analyze runs the full 2-stage pipeline — thread
+// history, sender wiki-graph facts, fact extraction — instead of the shallow
+// single-call fallback; stage-2 synthesis still runs on llmClient (the cloud
+// fallback role) so it never hits the local vLLM's free-text failure (#1816).
+// Pass nil/"" for the local pair to keep the single-call behavior.
+// senderFactsFn (optional) resolves sender context in-process from the wiki
+// graph; when supplied it is preferred over the external graphify CLI so the
+// analysis always has "who is this person to us" even on a fresh deploy.
+func PipelineFromMailAnalysis(gmailClient *gmail.Client, llmClient, localClient *llm.Client, mainModel, localModel, analysisPrompt string, projectsFn func() []mailanalysis.ProjectCandidate, senderFactsFn func(ctx context.Context, displayName string) string, attachmentExtractFn func(ctx context.Context, data []byte, filename, mimeType string) string, counterpartyProjectsFn func(domain string) []string) (AnalyzePipeline, error) {
+	if llmClient == nil || strings.TrimSpace(mainModel) == "" {
+		return nil, ErrAnalyzeNoLLM
+	}
+	return &mailAnalysisPipeline{
+		deps: mailanalysis.PipelineDeps{
+			GmailClient:         gmailClient,
+			LLMClient:           llmClient,
+			LocalClient:         localClient,
+			LocalModel:          localModel,
+			MainModel:           mainModel,
+			AnalysisPrompt:      strings.TrimSpace(analysisPrompt),
+			ProjectsFn:          projectsFn,
+			SenderFactsFn:       senderFactsFn,
+			AttachmentExtractFn: attachmentExtractFn,
+			// Manual analyze/re-analyze must render the same active-counterparty
+			// labels as the autonomous poller (review-sweep on #3096).
+			CounterpartyProjectsFn: counterpartyProjectsFn,
+			// Interactive path: deeper budget + extended thinking (gated to
+			// Anthropic-mode providers inside the pipeline).
+			Stage2MaxTokens: interactiveAnalysisStage2Tokens,
+			DeepThinking:    true,
+		},
+	}, nil
+}
+
+type mailAnalysisPipeline struct {
+	deps mailanalysis.PipelineDeps
+}
+
+// Analyze runs the mail-analysis pipeline for one message.
+func (g *mailAnalysisPipeline) Analyze(ctx context.Context, msg *gmail.MessageDetail) (mailanalysis.AnalysisResult, error) {
+	return mailanalysis.AnalyzeEmailPipeline(ctx, g.deps, msg)
+}

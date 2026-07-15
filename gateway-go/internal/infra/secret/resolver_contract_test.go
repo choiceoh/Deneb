@@ -31,9 +31,9 @@ func TestNewResolver_ReportsMissingSecretsInitially(t *testing.T) {
 
 func TestResolverPreservesTargetOrderDuplicatesAndValueTypes(t *testing.T) {
 	resolver := NewResolver()
-	resolver.Set("svc.first", "secret")
-	resolver.Set("svc.second", 42)
-	resolver.Set("svc.flag", true)
+	resolver.SetValue("svc.first", "secret")
+	resolver.SetValue("svc.second", 42)
+	resolver.SetValue("svc.flag", true)
 	targets := []string{"second", "missing", "first", "second", "flag"}
 	result := resolver.Resolve("svc", targets)
 	if !result.OK || len(result.Assignments) != 4 || len(result.InactiveRefPaths) != 1 {
@@ -65,9 +65,9 @@ func indexForAssignment(i int) int {
 
 func TestResolverSetOverwritesAndBlankPathIsAddressable(t *testing.T) {
 	resolver := NewResolver()
-	resolver.Set("svc.key", "first")
-	resolver.Set("svc.key", "second")
-	resolver.Set(".", "blank")
+	resolver.SetValue("svc.key", "first")
+	resolver.SetValue("svc.key", "second")
+	resolver.SetValue(".", "blank")
 	result := resolver.Resolve("svc", []string{"key"})
 	if len(result.Assignments) != 1 || result.Assignments[0].Value != "second" {
 		t.Fatalf("overwrite result = %+v", result)
@@ -80,7 +80,7 @@ func TestResolverSetOverwritesAndBlankPathIsAddressable(t *testing.T) {
 
 func TestReloadClearsWarningsButRetainsSecrets(t *testing.T) {
 	resolver := NewResolver()
-	resolver.Set("svc.key", "value")
+	resolver.SetValue("svc.key", "value")
 	resolver.warnings = []string{"one", "two"}
 	resolver.loadedAtMs = 1
 	result := resolver.Reload()
@@ -111,7 +111,7 @@ func TestResolverConcurrentSetResolveAndReload(t *testing.T) {
 				key := fmt.Sprintf("svc.key-%d", (i+j)%40)
 				switch i % 3 {
 				case 0:
-					resolver.Set(key, i*1000+j)
+					resolver.SetValue(key, i*1000+j)
 				case 1:
 					_ = resolver.Resolve("svc", []string{fmt.Sprintf("key-%d", (i+j)%40), "missing"})
 				default:

@@ -1,14 +1,14 @@
 package chat
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	subagentnotify "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/subagent"
 )
 
 // SubagentNotifier routes completed child results back to their parent.
-type SubagentNotifier = subagentnotify.SubagentNotifier
+type SubagentNotifier = leafbind.SubagentNotifier
 
 // SubagentNotifierDeps supplies parent-run callbacks without coupling the
 // notifier package to the chat handler.
@@ -22,7 +22,7 @@ type SubagentNotifierDeps struct {
 
 // NewSubagentNotifier creates and subscribes a child-completion notifier.
 func NewSubagentNotifier(deps SubagentNotifierDeps) *SubagentNotifier {
-	return subagentnotify.NewSubagentNotifier(subagentnotify.SubagentNotifierDeps{
+	return leafbind.NewSubagentNotifier(leafbind.SubagentNotifierDeps{
 		Logger:                 deps.Logger,
 		HasActiveRun:           deps.HasActiveRun,
 		StartRun:               deps.StartRun,

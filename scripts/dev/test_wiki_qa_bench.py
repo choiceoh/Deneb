@@ -72,17 +72,17 @@ class RPCWireTests(unittest.TestCase):
 
 
 class MatchingBoundaryTests(unittest.TestCase):
-    def test_digit_relaxation_removes_only_commas_and_whitespace(self) -> None:
+    def test_when_digit_relaxation_removes_only_commas_and_whitespace(self) -> None:
         self.assertEqual(wiki_qa.digits_relaxed(" 1, 068\tMW "), "1068MW")
         self.assertEqual(wiki_qa.digits_relaxed("1.068-MW"), "1.068-MW")
 
-    def test_digit_match_requires_both_boundaries_and_checks_later_occurrences(self) -> None:
+    def test_when_digit_match_requires_both_boundaries_and_checks_later_occurrences(self) -> None:
         self.assertTrue(wiki_qa.digits_bounded("x1068y", "1068"))
         self.assertFalse(wiki_qa.digits_bounded("11068", "1068"))
         self.assertFalse(wiki_qa.digits_bounded("10680", "1068"))
         self.assertTrue(wiki_qa.digits_bounded("11068and1068MW", "1068"))
 
-    def test_contains_supports_casefold_alternatives_and_relaxed_numbers(self) -> None:
+    def test_when_contains_supports_casefold_alternatives_and_relaxed_numbers(self) -> None:
         self.assertTrue(wiki_qa.contains("완료일은 6월 2일입니다", "6/2|6월 2일"))
         self.assertTrue(wiki_qa.contains("Project ALPHA finished", "alpha"))
         self.assertTrue(wiki_qa.contains("용량 1 068 MW", "1,068"))
@@ -97,7 +97,7 @@ class MatchingBoundaryTests(unittest.TestCase):
 
 
 class ScoringFunctionTests(unittest.TestCase):
-    def test_recall_uses_question_limit_top_k_and_segment_matching(self) -> None:
+    def test_when_recall_uses_question_limit_top_k_and_segment_matching(self) -> None:
         response = {
             "payload": {
                 "results": [
@@ -133,7 +133,7 @@ class ScoringFunctionTests(unittest.TestCase):
         self.assertEqual(result, (None, 0, ""))
         rpc.assert_not_called()
 
-    def test_valid_answer_runs_one_reset_turn_and_reports_latency(self) -> None:
+    def test_valid_answer_runs_one_reset_turn_and_returns_latency(self) -> None:
         case = {"question": "capacity?", "must_contain": ["1,068"], "must_not": ["unknown"]}
         response = {"payload": {"text": "총 1 068 MW입니다"}}
         with mock.patch.object(wiki_qa, "rpc", side_effect=[{}, response]) as rpc:
@@ -284,7 +284,7 @@ class MainOutputTests(unittest.TestCase):
         self.assertEqual(stderr.strip(), "no cases selected")
         recall.assert_not_called()
 
-    def test_gateway_default_prefers_explicit_qa_environment(self) -> None:
+    def test_when_gateway_default_prefers_explicit_qa_environment(self) -> None:
         with mock.patch.object(wiki_qa, "score_recall", return_value=(True, ["업무/hit"])) as recall:
             rc, _, _ = invoke_main(
                 wiki_qa,

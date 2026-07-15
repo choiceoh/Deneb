@@ -258,7 +258,7 @@ describe("MailPane", () => {
     expect(link).toHaveAttribute("href", "https://example.com");
   });
 
-  it("shows only the sender name in the list, dropping the address", async () => {
+  it("displays only the sender name in the list, dropping the address", async () => {
     const dataProvider = fakeProvider({
       mail: [{ id: "m1", subject: "이름만 표시", from: "김철수 <kim@corp.com>" }],
     });

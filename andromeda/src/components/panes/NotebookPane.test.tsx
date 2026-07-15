@@ -97,7 +97,7 @@ afterEach(() => {
 });
 
 describe("NotebookPane", () => {
-  it("auto-opens latest notebook on load and expands preview when source chip clicked", async () => {
+  it("when auto-opens the latest notebook; a source chip expands into the preview on click", async () => {
     renderWithProviders(<NotebookPane />, { connected: true });
     // Picking is once-per-task → the freshest notebook (ZTT) auto-opens, no manual click.
     expect(await screen.findByRole("heading", { name: "ZTT" })).toBeInTheDocument();
@@ -112,7 +112,7 @@ describe("NotebookPane", () => {
     expect(screen.queryByRole("group", { name: "자료 내용" })).not.toBeInTheDocument();
   });
 
-  it("cycles materials height 기본→확대→접힘→기본 and persists choice when toggled", async () => {
+  it("cycles the materials area height — 기본 → 확대 → 접힘 → 기본 — and the choice saves", async () => {
     renderWithProviders(<NotebookPane />, { connected: true });
     expect(await screen.findByRole("heading", { name: "ZTT" })).toBeInTheDocument();
     // Open a chip preview first — cycling the height must not lose it.
@@ -157,7 +157,7 @@ describe("NotebookPane", () => {
     expect(screen.getByRole("button", { name: "자료 영역 펼치기" })).toBeInTheDocument();
   });
 
-  it("registers note sink when notebook open and pins note source when AI answer saved", async () => {
+  it("when registers a note sink while a notebook is open — saving an AI answer pins a note source", async () => {
     // Consume the workspace channel the way AIPanel does: while NotebookPane has a
     // notebook open it registers a sink; feeding it an answer pins a kind=note source.
     let sink: ((text: string) => void) | null = null;
@@ -201,7 +201,7 @@ describe("NotebookPane", () => {
     expect((await screen.findAllByText(/잔금 6\/25/)).length).toBeGreaterThan(0);
   });
 
-  it("pins wiki page source when added and expands supported source kinds", async () => {
+  it("when pins a wiki page as a source — expands the supported source kinds", async () => {
     renderWithProviders(<NotebookPane />, { connected: true });
 
     await userEvent.click(await screen.findByRole("button", { name: "새 노트북" }));
@@ -221,7 +221,7 @@ describe("NotebookPane", () => {
     expect((await screen.findAllByText("탑솔라")).length).toBeGreaterThan(0);
   });
 
-  it("pins gateway-ingested source kinds when ref provided", async () => {
+  it("when pins gateway-ingested source kinds by ref", async () => {
     renderWithProviders(<NotebookPane />, { connected: true });
 
     await userEvent.click(await screen.findByRole("button", { name: "새 노트북" }));
@@ -239,7 +239,7 @@ describe("NotebookPane", () => {
     expect((await screen.findAllByText("계약서")).length).toBeGreaterThan(0);
   });
 
-  it("removes source from open notebook when delete action triggered", async () => {
+  it("when removes a source from the open notebook", async () => {
     renderWithProviders(<NotebookPane />, { connected: true });
 
     // ZTT auto-opens; its source row carries the delete control.

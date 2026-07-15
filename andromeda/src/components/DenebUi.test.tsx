@@ -131,7 +131,7 @@ describe("deneb-ui renderer parity conventions", () => {
     expect(container.querySelector(".dui-timeline-time")?.textContent).toBe("09:00");
   });
 
-  it("bolds the key of '키 — 내용' list items", () => {
+  it("when bolds the key of '키 — 내용' list items", () => {
     const spec = { type: "list", items: [{ type: "text", value: "김부장 — 견적서 회신 요청" }] };
     const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
     expect(container.querySelector("li strong")?.textContent).toBe("김부장");
@@ -147,7 +147,7 @@ describe("deneb-ui renderer parity conventions", () => {
     expect(li?.textContent).toContain("고건 — 구조검토 요청");
   });
 
-  it("tints status badges and stat trends", () => {
+  it("when tints status badges and stat trends", () => {
     const spec = {
       type: "column",
       children: [
@@ -161,7 +161,7 @@ describe("deneb-ui renderer parity conventions", () => {
     expect(desc?.textContent).toBe("▲ 2.1%");
   });
 
-  it("right-aligns numeric table columns", () => {
+  it("when right-aligns numeric table columns", () => {
     const spec = {
       type: "table",
       headers: ["현장", "수량"],
@@ -176,7 +176,7 @@ describe("deneb-ui renderer parity conventions", () => {
     expect((cells[0] as HTMLElement).style.textAlign).toBe("");
   });
 
-  it("marks a 3+ column table dense, but not a 2-column one", () => {
+  it("when marks a 3+ column table dense, but not a 2-column one", () => {
     const three = render(
       <DenebUi
         spec={{ type: "table", headers: ["현장", "규격", "수량"], rows: [["화성", "RPS", "12"]] }}
@@ -221,7 +221,7 @@ describe("deneb-ui renderer parity conventions", () => {
     expect(container.querySelector(".dui-quote strong")?.textContent).toBe("품질");
   });
 
-  it("draws vertical bars scaled from the real series max (fractional series)", () => {
+  it("when draws vertical bars scaled from the real series max (fractional series)", () => {
     const spec = { type: "chart", chartType: "bar", labels: ["a", "b"], values: [0.12, 0.18] };
     const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
     const rects = container.querySelectorAll(".dui-bar-rect");
@@ -234,7 +234,7 @@ describe("deneb-ui renderer parity conventions", () => {
     expect(h0 / h1).toBeCloseTo(0.12 / 0.18, 2);
   });
 
-  it("omits the bar for a zero value but keeps its label", () => {
+  it("without the bar for a zero value but keeps its label", () => {
     const spec = { type: "chart", chartType: "bar", labels: ["a", "b"], values: [0, 5] };
     const { container } = render(<DenebUi spec={spec} onSubmit={() => {}} />);
     // Zero is a real claim → no rect drawn, but the value text (0) still shows.
@@ -259,7 +259,7 @@ describe("deneb-ui renderer parity conventions", () => {
     expect(container.textContent).not.toContain("](");
   });
 
-  it("promotes an icon+caption first row to the card header voice", () => {
+  it("when promotes an icon+caption first row to the card header voice", () => {
     const spec = {
       type: "card",
       children: [
@@ -327,7 +327,7 @@ describe("deneb-ui renderer parity conventions", () => {
     expect(container.querySelectorAll("text.dui-line-val")).toHaveLength(3);
   });
 
-  it("stat count-up frames keep decimals/grouping and settle on the exact original", () => {
+  it("stat count-up frames preserves decimals/grouping and settle on the exact original", () => {
     // Settled frame IS the original string — exact metrics keep precision.
     expect(statCountUpFrame("12.45%", 1)).toBe("12.45%");
     // Zero frame keeps the decimal width and the prefix/suffix.
@@ -354,7 +354,7 @@ describe("deneb-ui renderer parity conventions", () => {
 // Rendering-quality parity with the native renderer (the desktop nodes that
 // previously rendered barer than the phone).
 describe("DenebUi node rendering polish", () => {
-  it("ticks a countdown node down each second as MM:SS", () => {
+  it("when ticks a countdown node down each second as MM:SS", () => {
     vi.useFakeTimers();
     try {
       render(<DenebUi spec={{ type: "countdown", label: "마감", seconds: 90 }} onSubmit={() => {}} />);
@@ -387,7 +387,7 @@ describe("DenebUi node rendering polish", () => {
     expect(fill).toHaveStyle({ width: "50%" });
   });
 
-  it("gives a secondary badge its own class, distinct from primary", () => {
+  it("when gives a secondary badge its own class, distinct from primary", () => {
     const { container } = render(
       <DenebUi spec={{ type: "badge", value: "보조", color: "secondary" }} onSubmit={() => {}} />,
     );
@@ -396,7 +396,7 @@ describe("DenebUi node rendering polish", () => {
     expect(badge).not.toHaveClass("primary");
   });
 
-  it("builds up to two-word avatar initials and falls back to an icon, not a question mark", () => {
+  it("when builds up to two-word avatar initials and falls back to an icon, not a question mark", () => {
     render(<DenebUi spec={{ type: "avatar", name: "John Doe" }} onSubmit={() => {}} />);
     expect(screen.getByText("JD")).toBeInTheDocument();
     const empty = render(<DenebUi spec={{ type: "avatar" }} onSubmit={() => {}} />);
@@ -422,7 +422,7 @@ describe("DenebUi node rendering polish", () => {
     expect(ok.container.querySelector("img.dui-image")).not.toBeNull();
   });
 
-  it("aligns a box by contentAlignment", () => {
+  it("when aligns a box by contentAlignment", () => {
     const { container } = render(
       <DenebUi
         spec={{ type: "box", contentAlignment: "center", children: [{ type: "text", value: "가운데" }] }}
@@ -443,7 +443,7 @@ describe("DenebUi node rendering polish", () => {
     expect(unknown.container.querySelector(".dui-icon")).toBeNull();
   });
 
-  it("splits a stat value into a hero number and a unit suffix, but keeps a bare number whole", () => {
+  it("splits a stat value into a hero number and a unit suffix, but preserves a bare number whole", () => {
     const withUnit = render(<DenebUi spec={{ type: "stat", value: "381톤", label: "생산" }} onSubmit={() => {}} />);
     expect(withUnit.container.querySelector(".dui-stat-value")?.textContent).toBe("381");
     expect(withUnit.container.querySelector(".dui-stat-unit")?.textContent).toBe("톤");

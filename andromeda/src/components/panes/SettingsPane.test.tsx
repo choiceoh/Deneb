@@ -11,7 +11,7 @@ describe("SettingsPane (설정)", () => {
     vi.unstubAllGlobals();
   });
 
-  it("shows the section tabs and the gateway section by default", () => {
+  it("displays the section tabs and the gateway section by default", () => {
     renderWithProviders(<SettingsPane />, { connected: false });
     expect(screen.getByRole("heading", { name: "설정" })).toBeInTheDocument();
     // The three section tabs are present, with 연결 active first…
@@ -25,7 +25,7 @@ describe("SettingsPane (설정)", () => {
     expect(screen.queryByText("좌측 탭")).not.toBeInTheDocument();
   });
 
-  it("switches to the 정보 tab and shows the app version", () => {
+  it("switches to the 정보 tab and displays the app version", () => {
     renderWithProviders(<SettingsPane />, { connected: false });
     expect(screen.queryByText(/v\d+\.\d+\.\d+/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "정보" }));
@@ -51,7 +51,7 @@ describe("SettingsPane (설정)", () => {
     expect(screen.getByText("게이트웨이 연결")).toBeInTheDocument();
   });
 
-  it("hides a nav tab via the 좌측 탭 toggles on the 일반 tab and keeps the reorder controls", () => {
+  it("hides a nav tab via the 좌측 탭 toggles on the 일반 tab and preserves the reorder controls", () => {
     renderWithProviders(<SettingsPane />, { connected: false });
     fireEvent.click(screen.getByRole("tab", { name: "일반" }));
     // settings is never hideable — it's the way back to this screen.
@@ -65,7 +65,7 @@ describe("SettingsPane (설정)", () => {
     expect(JSON.parse(localStorage.getItem("andromeda.hiddenPanes") ?? "[]")).toContain("mail");
   });
 
-  it("edits the gateway URL through setCfg", () => {
+  it("when edits the gateway URL through setCfg", () => {
     const setCfg = vi.fn();
     renderWithProviders(<SettingsPane />, { connected: false, cfg: { url: "", token: "" }, setCfg });
     fireEvent.change(screen.getByPlaceholderText("https://gateway.example"), {
@@ -74,7 +74,7 @@ describe("SettingsPane (설정)", () => {
     expect(setCfg).toHaveBeenCalledWith({ url: "https://gw.test", token: "" });
   });
 
-  it("applies and persists the log level on the 일반 tab", () => {
+  it("applies and saves the log level on the 일반 tab", () => {
     renderWithProviders(<SettingsPane />, { connected: false });
     fireEvent.click(screen.getByRole("tab", { name: "일반" }));
     fireEvent.click(screen.getByRole("button", { name: "오류" }));

@@ -155,7 +155,7 @@ describe("ProjectHomePane boundary behavior", () => {
   });
 
   describe("source-of-truth linkage", () => {
-    it("requests linked ids for the freshest project's exact wiki path", async () => {
+    it("when requests linked ids for the freshest project's exact wiki path", async () => {
       renderHome();
       await screen.findByRole("heading", { name: "Alpha" });
       await waitFor(() => expect(calls.some((call) => call.method === "miniapp.project.linked")).toBe(true));
@@ -230,7 +230,7 @@ describe("ProjectHomePane boundary behavior", () => {
       expect(rows[1]).toHaveTextContent("Alpha 후속 회의");
     });
 
-    it("filters completed todos before sorting by due date", async () => {
+    it("when filters completed todos before sorting by due date", async () => {
       renderHome();
       const section = (await screen.findByText("관련 할일")).closest("section")!;
       const rows = await within(section).findAllByRole("button");
@@ -239,7 +239,7 @@ describe("ProjectHomePane boundary behavior", () => {
       expect(within(section).queryByText("Alpha 완료 할일")).not.toBeInTheDocument();
     });
 
-    it("sorts workfeed and notebooks newest first", async () => {
+    it("when sorts workfeed and notebooks newest first", async () => {
       renderHome();
       const feed = (await screen.findByText("관련 피드")).closest("section")!;
       expect((await within(feed).findAllByRole("button"))[0]).toHaveTextContent("Alpha 최신 피드");
@@ -247,7 +247,7 @@ describe("ProjectHomePane boundary behavior", () => {
       expect((await within(notebooks).findAllByRole("button"))[0]).toHaveTextContent("Alpha 최신 노트북");
     });
 
-    it("caps every related section at five rows after sorting", async () => {
+    it("when caps every related section at five rows after sorting", async () => {
       const manyMail = Array.from({ length: 8 }, (_, index) => ({
         id: `mail-${index}`,
         subject: `메일 ${index}`,
@@ -329,14 +329,14 @@ describe("ProjectHomePane boundary behavior", () => {
       expect(screen.getByTestId("target")).toHaveTextContent(`"id":"${id}"`);
     });
 
-    it("opens the selected canonical wiki path", async () => {
+    it("when opens the selected canonical wiki path", async () => {
       renderHome();
       await userEvent.click(await screen.findByRole("button", { name: "위키 열기" }));
       expect(screen.getByTestId("view")).toHaveTextContent("wiki");
       expect(screen.getByTestId("wiki")).toHaveTextContent("projects/alpha");
     });
 
-    it("projects the same selected digest and explicit linked rows into AI context", async () => {
+    it("when projects the same selected digest and explicit linked rows into AI context", async () => {
       renderHome();
       await screen.findByText("Alpha 최신 메일");
       const ai = screen.getByTestId("ai");

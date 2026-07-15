@@ -46,7 +46,7 @@ func TestIsAutomationRunReturnsTrueOnlyForAutomationSignals(t *testing.T) {
 // TestApplyEffortRouter_RouteAndRestore covers the route lifecycle: apply swaps
 // Thinking to template-toggle "disabled", restore puts the session's original
 // config back by plain assignment (no shared state).
-func TestApplyEffortRouter_RouteAndRestore(t *testing.T) {
+func TestApplyEffortRouter_RouteAndrestoreEffort(t *testing.T) {
 	t.Setenv("DENEB_ADAPTIVE_EFFORT", "1")
 	orig := &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 4096}
 	origMod := func(int, []agent.ToolActivity) *llm.ThinkingConfig { return nil }

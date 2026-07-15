@@ -10,7 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive/cardtitle"
 )
 
 // TestCardTitle_RoleCompare_Live exercises the REAL card-title prompt against the
@@ -49,7 +49,7 @@ func TestCardTitleRoleCompareLiveSkipsWithoutEnvFlag(t *testing.T) {
 		for i, body := range samples {
 			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 			start := time.Now()
-			title, summary, out, err := proactive.EvaluateCardTitleRole(ctx, role, body)
+			title, summary, out, err := cardtitle.EvaluateCardTitleRole(ctx, role, body)
 			el := time.Since(start).Round(time.Millisecond)
 			cancel()
 			verdict := "OK"

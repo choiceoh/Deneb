@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 describe("SearchPane", () => {
-  it("centers search box before query and displays clickable hits when search returns results", async () => {
+  it("shows clickable hits when search returns results", async () => {
     renderWithProviders(<SearchPane />, { connected: true });
 
     // Centered (pre-search) state: the big hero title is shown, no results yet.

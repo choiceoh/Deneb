@@ -19,7 +19,7 @@ describe("stripMailChrome — top banner (preamble)", () => {
     ["[AD]", "[AD]"],
   ];
   for (const [preamble, absent] of cases) {
-    it(`strips "${absent}"`, () => {
+    it(`clears "${absent}"`, () => {
       const got = stripMailChrome(`${preamble}\n\n${chromeBody}\n`);
       expect(got).not.toContain(absent);
       expect(got).toContain("이번 주 출시");
@@ -44,7 +44,7 @@ describe("stripMailChrome — footer / signature", () => {
     ["--\n홍길동\n팀장 / 마케팅", "홍길동"],
   ];
   for (const [footer, absent] of cases) {
-    it(`strips "${absent}"`, () => {
+    it(`clears "${absent}"`, () => {
       const got = stripMailChrome(`${chromeBody}\n\n${footer}\n`);
       expect(got).not.toContain(absent);
       expect(got).toContain("이번 주 출시");
@@ -63,7 +63,7 @@ describe("stripMailChrome — quoted reply / forward", () => {
     ["[원문 메시지]", "보낸 사람: alice\n\n원본 내용입니다.", "원본 내용"],
   ];
   for (const [marker, quoted, leak] of cases) {
-    it(`cuts at "${marker.slice(0, 20)}…"`, () => {
+    it(`when cuts at "${marker.slice(0, 20)}…"`, () => {
       const got = stripMailChrome(`${reply}\n\n${marker}\n${quoted}`);
       expect(got).toContain("답장입니다");
       expect(got).not.toContain(marker);
@@ -73,11 +73,11 @@ describe("stripMailChrome — quoted reply / forward", () => {
 });
 
 describe("stripMailChrome — safety gates", () => {
-  it("leaves short bodies untouched", () => {
+  it("preserves short bodies untouched", () => {
     const input = "OTP: 123456 — Sent from my iPhone";
     expect(stripMailChrome(input)).toBe(input);
   });
-  it("aborts an over-aggressive chrome cut", () => {
+  it("when aborts an over-aggressive chrome cut", () => {
     const input = "View in browser. ".repeat(30) + "\nshort";
     expect(stripMailChrome(input)).toBe(input);
   });
@@ -92,11 +92,11 @@ describe("stripMailChrome — safety gates", () => {
       "ㅇㅋ\n\n----- Original Message -----\n" + "긴 원본 본문이 여기에 길게 들어 있다고 가정합니다. ".repeat(8);
     expect(stripMailChrome(input)).toContain("긴 원본 본문");
   });
-  it("does not treat mid-sentence '보낸 사람을' as an Outlook header", () => {
+  it("without treat mid-sentence '보낸 사람을' as an Outlook header", () => {
     const body = "이번 분기 보낸 사람을 추적하는 시스템 개선안에 대해 검토했습니다. ".repeat(5);
     expect(stripMailChrome(body)).toContain("추적하는 시스템");
   });
-  it("strips a preamble that lands deep inside the head window", () => {
+  it("when strips a preamble that lands deep inside the head window", () => {
     const filler = "Acme Corporation Newsletter Header Line. ".repeat(14);
     const got = stripMailChrome(`${filler}\nView this email online\n\n${chromeBody}`);
     expect(got).not.toContain("View this email online");
@@ -114,7 +114,7 @@ describe("visibleRuneCount", () => {
     ["a b\nc", 3],
   ];
   for (const [input, want] of cases) {
-    it(`counts ${JSON.stringify(input)} = ${want}`, () => {
+    it(`when counts ${JSON.stringify(input)} = ${want}`, () => {
       expect(visibleRuneCount(input)).toBe(want);
     });
   }

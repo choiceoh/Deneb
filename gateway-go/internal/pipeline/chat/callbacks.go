@@ -27,9 +27,9 @@ type ChannelCallbacks struct {
 	broadcastRaw streaming.BroadcastRawFunc
 
 	// emitAgentFn sends agent lifecycle events to gateway event subscriptions.
-	emitAgentFn func(kind, sessionKey, runID string, payload map[string]any)
+	emitAgentFn func(kind, sessionKey, runID string, payload jsonObject)
 	// emitTranscriptFn sends transcript updates to gateway event subscriptions.
-	emitTranscriptFn func(sessionKey string, message any, messageID string)
+	emitTranscriptFn func(sessionKey string, message rawJSON, messageID string)
 
 	// uploadLimits maps channelID → max file upload size in bytes.
 	uploadLimits map[string]int64
@@ -81,8 +81,8 @@ type CallbackSnapshot struct {
 	draftEditFn      DraftEditFunc
 	deleteMsgFn      MessageDeleter
 	broadcastRaw     streaming.BroadcastRawFunc
-	emitAgentFn      func(kind, sessionKey, runID string, payload map[string]any)
-	emitTranscriptFn func(sessionKey string, message any, messageID string)
+	emitAgentFn      func(kind, sessionKey, runID string, payload jsonObject)
+	emitTranscriptFn func(sessionKey string, message rawJSON, messageID string)
 	shutdownCtx      context.Context
 	defaultModel     string
 }

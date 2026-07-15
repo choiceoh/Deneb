@@ -115,7 +115,7 @@ class NativeAppSmokeShellTests(unittest.TestCase):
     def call_lines(self) -> list[str]:
         return self.calls.read_text(encoding="utf-8").splitlines() if self.calls.exists() else []
 
-    def test_clean_phone_walk_passes_all_primary_secondary_and_detail_screens(self) -> None:
+    def test_when_clean_phone_walk_passes_all_primary_secondary_and_detail_screens(self) -> None:
         proc = self.invoke()
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("PASS — every key screen rendered", proc.stdout)
@@ -156,7 +156,7 @@ class NativeAppSmokeShellTests(unittest.TestCase):
         self.assertIn("could not resolve app log path", proc.stdout)
         self.assertFalse(any(line.startswith("shot ") for line in self.call_lines()))
 
-    def test_preexisting_crash_line_is_not_misattributed_to_new_screen(self) -> None:
+    def test_when_preexisting_crash_line_is_not_misattributed_to_new_screen(self) -> None:
         self.app_log.write_text(
             "IllegalArgumentException: historical before smoke\nboot recovered\n",
             encoding="utf-8",
@@ -199,7 +199,7 @@ class NativeAppSmokeShellTests(unittest.TestCase):
         self.assertIn("IllegalStateException: scroll crash", proc.stdout)
         self.assertIn("FAIL  scroll-smoke-01-feed (step 2)", proc.stdout)
 
-    def test_flaky_anchor_retries_navigation_once_then_passes(self) -> None:
+    def test_when_flaky_anchor_retries_navigation_once_then_passes(self) -> None:
         proc = self.invoke(self.env(FLAKY_ANCHOR="카테고리"))
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         calls = self.call_lines()

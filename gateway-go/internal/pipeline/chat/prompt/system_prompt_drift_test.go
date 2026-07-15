@@ -17,7 +17,7 @@ var clockPattern = regexp.MustCompile(`\b\d{1,2}:\d{2}\b`)
 // accumulating — the render-time filter silently drops them, so drift is
 // invisible without this check.
 func TestToolCategoriesHaveNoMissingRegistryNames(t *testing.T) {
-	data, err := os.ReadFile("../toolreg/tool_schemas.json")
+	data, err := os.ReadFile("../toolwire/tool_schemas.json")
 	if err != nil {
 		t.Fatalf("read tool_schemas.json: %v", err)
 	}

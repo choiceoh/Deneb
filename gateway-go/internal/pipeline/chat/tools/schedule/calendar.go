@@ -31,7 +31,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 )
 
@@ -241,7 +240,7 @@ func calResolveWindow(fromStr, toStr string, hoursAhead int) (from, to time.Time
 
 // calListRow renders one compact event line: index, source-tagged ID, KST time
 // range, title, and lightweight badges (location, Meet, attendee count).
-func calListRow(n int, e calendar.Event) string {
+func calListRow(n int, e tooldeps.CalendarEvent) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d. [id=%s] %s · %s", n, e.ID, calWhen(e), calTitle(e))
 	if loc := strings.TrimSpace(e.Location); loc != "" {
@@ -276,7 +275,7 @@ func calActionGet(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) st
 // calLookup resolves an event by id from the local store ("local:" prefix) or
 // Google. Returns (nil, errMsg) with a user-facing Korean message on any failure,
 // (event, "") on success. Shared by get and prep.
-func calLookup(ctx context.Context, d *tooldeps.CalendarDeps, rawID string) (*calendar.Event, string) {
+func calLookup(ctx context.Context, d *tooldeps.CalendarDeps, rawID string) (*tooldeps.CalendarEvent, string) {
 	id := strings.TrimSpace(rawID)
 	if id == "" {
 		return nil, "id는 필수입니다 (list로 일정 ID를 먼저 확인하세요)."
@@ -315,7 +314,7 @@ func calLookup(ctx context.Context, d *tooldeps.CalendarDeps, rawID string) (*ca
 // event carries) and build a prep checklist. With no id it targets the next
 // upcoming event, so "다음 미팅 준비해줘" works. The agent does the fetch + synthesis.
 func calActionPrep(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) string {
-	var ev *calendar.Event
+	var ev *tooldeps.CalendarEvent
 	if strings.TrimSpace(p.ID) != "" {
 		got, errMsg := calLookup(ctx, d, p.ID)
 		if errMsg != "" {
@@ -350,7 +349,7 @@ func calActionPrep(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) s
 // Delegation-aware: the user is a delegating executive, so only their own
 // follow-ups are surfaced; delegable execution stays in the minutes body.
 func calActionCapture(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) string {
-	var ev *calendar.Event
+	var ev *tooldeps.CalendarEvent
 	if strings.TrimSpace(p.ID) != "" {
 		got, errMsg := calLookup(ctx, d, p.ID)
 		if errMsg != "" {
@@ -381,10 +380,10 @@ func calActionCapture(ctx context.Context, d *tooldeps.CalendarDeps, p calParams
 // calRecentEndedEvent returns the most recently ended timed meeting in the last
 // 24h, so "방금 회의 정리해줘" (capture with no id) targets the meeting that just
 // wrapped. All-day markers and not-yet-ended events are skipped.
-func calRecentEndedEvent(ctx context.Context, d *tooldeps.CalendarDeps) *calendar.Event {
+func calRecentEndedEvent(ctx context.Context, d *tooldeps.CalendarDeps) *tooldeps.CalendarEvent {
 	now := time.Now()
 	events, _ := calMerged(ctx, d, now.Add(-24*time.Hour), now)
-	var best *calendar.Event
+	var best *tooldeps.CalendarEvent
 	for i := range events {
 		e := events[i]
 		if e.AllDay || e.End.IsZero() || e.End.After(now) {
@@ -399,7 +398,7 @@ func calRecentEndedEvent(ctx context.Context, d *tooldeps.CalendarDeps) *calenda
 }
 
 // calNextEvent returns the soonest event from now (next 14 days), or nil.
-func calNextEvent(ctx context.Context, d *tooldeps.CalendarDeps) *calendar.Event {
+func calNextEvent(ctx context.Context, d *tooldeps.CalendarDeps) *tooldeps.CalendarEvent {
 	now := time.Now()
 	events, _ := calMerged(ctx, d, now, now.Add(14*24*time.Hour))
 	if len(events) == 0 {
@@ -419,7 +418,7 @@ func calNextEvent(ctx context.Context, d *tooldeps.CalendarDeps) *calendar.Event
 
 // calDetail formats one event in full. Korean-first, plain text (the native
 // client renders the transcript body directly).
-func calDetail(e calendar.Event) string {
+func calDetail(e tooldeps.CalendarEvent) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "📅 %s\n", calTitle(e))
 	fmt.Fprintf(&sb, "🕒 %s\n", calWhenFull(e))
@@ -509,26 +508,26 @@ func calActionUpdate(d *tooldeps.CalendarDeps, p calParams) string {
 }
 
 // calParseInput validates summary+start (required) and parses start/end into a
-// localcal.CreateInput, returning a Korean error message on bad input.
-func calParseInput(p calParams) (in localcal.CreateInput, errMsg string) {
+// tooldeps.CalendarCreateInput, returning a Korean error message on bad input.
+func calParseInput(p calParams) (in tooldeps.CalendarCreateInput, errMsg string) {
 	if strings.TrimSpace(p.Summary) == "" {
-		return localcal.CreateInput{}, "summary(제목)는 필수입니다."
+		return tooldeps.CalendarCreateInput{}, "summary(제목)는 필수입니다."
 	}
 	if strings.TrimSpace(p.Start) == "" {
-		return localcal.CreateInput{}, "start(시작 시각)는 필수입니다 (RFC3339, 예: 2026-06-10T15:00:00+09:00)."
+		return tooldeps.CalendarCreateInput{}, "start(시작 시각)는 필수입니다 (RFC3339, 예: 2026-06-10T15:00:00+09:00)."
 	}
 	start, err := time.Parse(time.RFC3339, strings.TrimSpace(p.Start))
 	if err != nil {
-		return localcal.CreateInput{}, "start는 RFC3339 형식이어야 합니다 (예: 2026-06-10T15:00:00+09:00)."
+		return tooldeps.CalendarCreateInput{}, "start는 RFC3339 형식이어야 합니다 (예: 2026-06-10T15:00:00+09:00)."
 	}
 	var end time.Time
 	if s := strings.TrimSpace(p.End); s != "" {
 		end, err = time.Parse(time.RFC3339, s)
 		if err != nil {
-			return localcal.CreateInput{}, "end는 RFC3339 형식이어야 합니다 (생략하면 1시간으로 설정)."
+			return tooldeps.CalendarCreateInput{}, "end는 RFC3339 형식이어야 합니다 (생략하면 1시간으로 설정)."
 		}
 	}
-	return localcal.CreateInput{
+	return tooldeps.CalendarCreateInput{
 		Summary:     p.Summary,
 		Description: p.Description,
 		Location:    p.Location,

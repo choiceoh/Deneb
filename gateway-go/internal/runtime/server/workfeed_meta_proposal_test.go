@@ -11,7 +11,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle"
+	skillcore "github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/core"
 )
 
 // Feed-card adoption closes the P2 human loop: 채택 promotes the .proposed
@@ -29,7 +29,7 @@ func TestHandleMetaProposalActionUpdatesArtifactOnAdoptOrReject(t *testing.T) {
 		return &Server{
 			logger: slog.Default(),
 			GenesisSubsystem: &GenesisSubsystem{
-				genesisMeta:    skilllifecycle.NewMetaArtifacts(metaDir, slog.Default()),
+				genesisMeta:    skillcore.NewMetaArtifacts(metaDir, slog.Default()),
 				genesisTracker: tracker,
 			},
 		}, metaDir

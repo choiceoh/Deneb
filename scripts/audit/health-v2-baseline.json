@@ -3,32 +3,25 @@
   "schema_version": 2,
   "rubric_version": "2.2.0",
   "profile": "fast",
-  "revision": "6902c7cf988c29cb52662c4f795743c2fce7503b",
-  "overall": 82.7,
+  "revision": "6141f025b2dbb9341ed4825e1143452827af48e1",
+  "overall": 88.2,
   "pillars": {
-    "ai-change-readiness": 92.8,
-    "ai-navigability": 95.7,
-    "boundary-integrity": 74.4,
+    "ai-change-readiness": 93.3,
+    "ai-navigability": 96.2,
+    "boundary-integrity": 90.7,
     "change-locality": 55.0,
-    "complexity-hotspots": 81.6,
-    "contract-explicitness": 80.8,
+    "complexity-hotspots": 89.6,
+    "contract-explicitness": 100.0,
     "delivery-confidence": 100.0,
-    "responsibility-cohesion": 51.4,
+    "responsibility-cohesion": 56.6,
     "runtime-safety": 100.0,
-    "test-effectiveness": 92.6,
-    "test-maintainability": 75.9
+    "test-effectiveness": 92.8,
+    "test-maintainability": 90.1
   },
   "high_findings": {
     "diffuse-change-responsibility:3ef63a16f7d7": "high",
-    "dynamic-exported-contract:24c7dff4db03": "high",
-    "fanout-hotspot:4377ea3f4d16": "high",
     "fanout-hotspot:e3983434e99a": "high",
-    "responsibility-cochange:1f9976bcc2ef": "high",
-    "responsibility-cochange:bf0c5ca48a1e": "high",
-    "two-hop-blast:7753391fbc89": "high",
-    "two-hop-blast:ac823ac2dd00": "high",
-    "volatile-contract-responsibility:b33b6623198a": "high",
-    "volatile-hub:46a381ef4981": "high"
+    "two-hop-blast:ac823ac2dd00": "high"
   },
   "tolerances": {
     "overall": 0.3,

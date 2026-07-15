@@ -57,7 +57,7 @@ class ObserveShellTests(unittest.TestCase):
         args = self.request_args()
         return json.loads(args[args.index("-d") + 1])
 
-    def test_default_health_uses_configured_url_token_and_rpc_frame(self) -> None:
+    def test_when_default_health_uses_configured_url_token_and_rpc_frame(self) -> None:
         proc = self.invoke()
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(json.loads(proc.stdout), {"accepted": True})
@@ -100,7 +100,7 @@ class ObserveShellTests(unittest.TestCase):
             "sinceMs": 1700000000000,
         })
 
-    def test_turn_bare_positional_and_explicit_run_have_same_wire_shape(self) -> None:
+    def test_when_turn_bare_positional_and_explicit_run_have_same_wire_shape(self) -> None:
         for args in [("turn", "run_0003"), ("turn", "--run", "run_0003")]:
             with self.subTest(args=args):
                 self.log.unlink(missing_ok=True)
@@ -275,7 +275,7 @@ class GoGatewayLauncherTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name) / "repo"
         self.script = self.root / "scripts/deploy/start-go-gateway.sh"
-        self.gateway = self.root / "dist/deneb-gateway"
+        self.gateway = self.root / "gateway-go/gateway"
         self.bin = self.root / "fake-bin"
         self.home = self.root / "home"
         self.script.parent.mkdir(parents=True)
@@ -345,13 +345,13 @@ class GoGatewayLauncherTests(unittest.TestCase):
         write_executable(self.bin / "make", """
             #!/usr/bin/env bash
             printf 'make cwd=%s args=%s\n' "$PWD" "$*" >> "$FAKE_CALL_LOG"
-            mkdir -p dist
-            cat > dist/deneb-gateway <<'SH'
+            mkdir -p gateway-go
+            cat > gateway-go/gateway <<'SH'
 #!/usr/bin/env bash
 printf 'built-gateway cwd=%s args=%s\n' "$PWD" "$*" >> "$FAKE_CALL_LOG"
 exit 0
 SH
-            chmod +x dist/deneb-gateway
+            chmod +x gateway-go/gateway
         """)
         proc = self.run_fixture("--port", "19001")
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
@@ -370,7 +370,7 @@ SH
         self.assertIn("Gateway requested restart (exit 75), restarting", proc.stdout)
         self.assertEqual((self.root / "counter").read_text().strip(), "2")
 
-    def test_exit_75_inside_rate_limit_is_not_looped(self) -> None:
+    def test_when_exit_75_inside_rate_limit_is_not_looped(self) -> None:
         self.install_gateway()
         write_executable(
             self.bin / "date",

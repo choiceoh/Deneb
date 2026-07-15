@@ -154,7 +154,7 @@ printf 'delegate-ok\n'
     def test_default_help_unknown_command_and_legacy_global_flag_are_side_effect_free(self) -> None:
         default = self.invoke()
         self.assertEqual(default.returncode, 0)
-        self.assertIn("Usage: scripts/dev/live-test.sh COMMAND", default.stdout)
+        self.assertIn("Usage: scripts/live-test.sh COMMAND", default.stdout)
         self.assertIn("네이티브 miniapp RPC", default.stdout)
 
         unknown = self.invoke("does-not-exist")
@@ -282,7 +282,7 @@ printf 'delegate-ok\n'
         self.assertIn("prod token present → seeded on next 'start'", present.stdout)
         self.assertIn("No parity gaps detected", present.stdout)
 
-    def test_quality_reproduction_benchmark_and_utility_dispatch_keep_arguments(self) -> None:
+    def test_quality_reproduction_benchmark_and_utility_dispatch_preserves_arguments(self) -> None:
         commands = (
             (("quality", "core", "--record"), "quality-test.py --port 18790 --scenario core --record"),
             (("quality-custom", "안녕", "--model", "main"), "quality-test.py --port 18790 --custom 안녕 --model main"),

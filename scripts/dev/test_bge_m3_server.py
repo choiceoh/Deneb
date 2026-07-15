@@ -235,7 +235,7 @@ class EndpointTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 503)
         self.assertEqual(raised.exception.detail, "model not loaded")
 
-    def test_embed_uses_ordered_executor_map_and_reports_shape(self) -> None:
+    def test_embed_uses_ordered_executor_map_and_returns_shape(self) -> None:
         calls = []
 
         class Executor:
@@ -280,7 +280,7 @@ class EndpointTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 500)
         self.assertEqual(raised.exception.detail, "worker failed")
 
-    def test_lifespan_yields_and_logs_shutdown(self) -> None:
+    def test_when_lifespan_yields_and_logs_shutdown(self) -> None:
         async def exercise():
             context = bge.lifespan(bge.app)
             await context.__aenter__()
@@ -292,7 +292,7 @@ class EndpointTests(unittest.TestCase):
 
 
 class EntryPointTests(unittest.TestCase):
-    def test_health_access_filter_drops_only_health_messages(self) -> None:
+    def test_when_health_access_filter_drops_only_health_messages(self) -> None:
         filt = bge._HealthAccessFilter()
         health = logging.LogRecord("uvicorn", logging.INFO, "", 0, "GET /health 200", (), None)
         embed = logging.LogRecord("uvicorn", logging.INFO, "", 0, "POST /embed 200", (), None)
@@ -301,7 +301,7 @@ class EntryPointTests(unittest.TestCase):
         self.assertTrue(filt.filter(embed))
         self.assertTrue(filt.filter(embedded_word))
 
-    def test_main_clamps_pool_size_installs_signal_filter_and_runs_uvicorn(self) -> None:
+    def test_when_main_clamps_pool_size_installs_signal_filter_and_runs_uvicorn(self) -> None:
         access_logger = mock.Mock()
         fake_uvicorn.run.reset_mock()
         argv = [

@@ -2,9 +2,9 @@
 //
 // The routing POLICY (is this run simple enough to skip thinking?) lives in the
 // reusable internal/ai/router package, parameterized by a per-model
-// router.Profile that modelrole resolves (builtin defaults + deneb.json
+// leafbind.Profile that modelrole resolves (builtin defaults + deneb.json
 // overrides). This file owns the chat-specific LIFECYCLE the policy can't:
-// translating a RunParams turn into a router.Request, swapping the agent's
+// translating a RunParams turn into a leafbind.Request, swapping the agent's
 // thinking config, the per-step modulator, and the escalation/fallback restore.
 //
 // Dual-mode models (DeepSeek V4 family today) ship with an always-thinking
@@ -28,6 +28,7 @@
 package chat
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"errors"
 	"log/slog"
 	"os"
@@ -35,7 +36,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/router"
 )
 
 // envFlagEnabled reports whether an opt-in env flag is truthy. Shared by the
@@ -103,7 +103,7 @@ func isAutomationRun(params RunParams) bool {
 // restore on escalation/fallback (nil when not routed) plus the decision string
 // ("routed:…"/"kept:…", "" when the router gate is closed) for the structured
 // run-complete record.
-func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, messages []llm.Message, profile router.Profile, logger *slog.Logger) (*effortRoute, string) {
+func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, messages []llm.Message, profile leafbind.Profile, logger *slog.Logger) (*effortRoute, string) {
 	// Always arm the thinking-runaway recovery for models with a chat_template
 	// off-toggle (dsv4), independent of routing/mode: a KEPT-thinking run (e.g.
 	// kept:automation cron analysis) can still loop in the thinking channel until
@@ -115,7 +115,7 @@ func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, messages []llm.
 	if mode == effortModeOff || !profile.Enabled {
 		return nil, ""
 	}
-	dec := router.Decide(profile, router.Request{
+	dec := leafbind.Decide(profile, leafbind.Request{
 		Message:        params.Message,
 		HasAttachments: len(params.Attachments) > 0,
 		IsAutomation:   isAutomationRun(params),
@@ -183,7 +183,7 @@ func composeEffortModulator(boost, step func(turn int, acts []agent.ToolActivity
 // DEFAULT (applySamplingParams emits nothing for enabled with BudgetTokens 0 —
 // the dual-mode template then thinks again). Shared by the initial route and the
 // fallback chain (which rebuilds it for the fallback model's own profile).
-func effortStepModulator(profile router.Profile, disabled, origThinking *llm.ThinkingConfig) func(turn int, acts []agent.ToolActivity) *llm.ThinkingConfig {
+func effortStepModulator(profile leafbind.Profile, disabled, origThinking *llm.ThinkingConfig) func(turn int, acts []agent.ToolActivity) *llm.ThinkingConfig {
 	revert := origThinking
 	if revert == nil {
 		revert = &llm.ThinkingConfig{Type: "enabled"}
@@ -201,7 +201,7 @@ func effortStepModulator(profile router.Profile, disabled, origThinking *llm.Thi
 // message re-parsing. Batch-aware: calls sharing a Turn form one batch, and the
 // LATEST batch counts its LARGEST result while ANY error across the run reverts.
 // Thresholds come from the profile so an operator can retune per model.
-func effortStepThinking(profile router.Profile, turn int, acts []agent.ToolActivity, disabled, revert *llm.ThinkingConfig) *llm.ThinkingConfig {
+func effortStepThinking(profile leafbind.Profile, turn int, acts []agent.ToolActivity, disabled, revert *llm.ThinkingConfig) *llm.ThinkingConfig {
 	if turn == 0 {
 		return disabled
 	}

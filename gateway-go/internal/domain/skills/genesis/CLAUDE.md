@@ -100,6 +100,19 @@ review와 delivery를 분리하고, `watch_passed` 이후에만 `applied`를 파
   `DENEB_JUDGE_ACCURACY_INTERVAL_HOURS`이며 킬 스위치는
   `DENEB_META_AUTO_ADOPT=0`이다.
 
+## Local change scope
+
+genesis는 리프 도메인이다. 루프 로직을 바꿀 때 서버/도구로 역수입하지 않는다.
+
+- 함께 바꿔도 되는 이웃: `genesis/generation`, `genesis/guardrails`,
+  `genesis/review`, `runtime/skilllifecycle`(도구 표면), `runtime/server`의
+  `init_genesis.go`(배선만). `Tracker`/`NewTracker`/`Evolver`/`NewEvolver` 계약이
+  바뀌면 `evolver_test.go`와 `meta_revision_class_test.go`를 먼저 본다.
+- 건드리지 말 것: acceptance machinery(`validation_engine.go`, `eprocess`,
+  `surfaces.go`의 forbidden 목록), `pipeline/chat` 프롬프트 캐시 경로,
+  client wire 생성물. LLM 출력을 accept/reject 결정으로 승격하지 않는다.
+- 집중 검증: `cd gateway-go && go test -count=1 ./internal/domain/skills/genesis`
+
 ## 변경과 검증
 
 새 전이나 평가 신호를 추가할 때 정상, 거절, 재시작 복원, 중복 실행 멱등성을

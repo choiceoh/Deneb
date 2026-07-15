@@ -76,13 +76,13 @@ type ToolResultRecord struct {
 type DeviceActionRecord struct {
 	ActionID          string          `json:"actionId"`
 	Kind              string          `json:"kind"`
-	Payload           json.RawMessage `json:"payload"`
+	Payload           rawJSON `json:"payload"`
 	Fingerprint       string          `json:"fingerprint"`
 	Status            DeviceStatus    `json:"status"`
 	RequestedAt       time.Time       `json:"requestedAt"`
 	ReadyAt           time.Time       `json:"readyAt,omitempty"`
 	ResolvedAt        time.Time       `json:"resolvedAt,omitempty"`
-	Result            json.RawMessage `json:"result,omitempty"`
+	Result            rawJSON `json:"result,omitempty"`
 	Failure           string          `json:"failure,omitempty"`
 	DuplicateAttempts int             `json:"duplicateAttempts,omitempty"`
 }
@@ -113,7 +113,7 @@ type RunResult struct {
 	SystemPromptSequenceSHA256 string               `json:"systemPromptSequenceSha256"`
 	Sampling                   SamplingProfile      `json:"sampling"`
 	ArtifactRoot               string               `json:"artifactRoot"`
-	State                      json.RawMessage      `json:"state"`
+	State                      rawJSON      `json:"state"`
 }
 
 // HarnessBinding is immutable provenance exposed before execution.

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { moveItem, orderedItems } from "./listReorder";
 
 describe("moveItem", () => {
-  it("swaps an item with its neighbour in the given direction", () => {
+  it("returns reordered array when swapping with neighbour", () => {
     expect(moveItem(["a", "b", "c"], "b", -1)).toEqual(["b", "a", "c"]);
     expect(moveItem(["a", "b", "c"], "b", 1)).toEqual(["a", "c", "b"]);
   });
@@ -17,7 +17,7 @@ describe("moveItem", () => {
     expect(moveItem(["a", "b", "c"], "z", 1)).toEqual(["a", "b", "c"]);
   });
 
-  it("does not mutate the input array", () => {
+  it("returns new array without mutating input", () => {
     const input = ["a", "b", "c"];
     moveItem(input, "b", 1);
     expect(input).toEqual(["a", "b", "c"]);

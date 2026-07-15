@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 )
 
 // APC divergence classes, ordered from harmless to expensive.
@@ -179,25 +179,7 @@ func (d *apcDiagRun) finish() {
 // (so e.g. a sidecar OCR engine on another port cannot pollute the delta).
 // Falls back to the sum of all rows when no row matches.
 func scrapeAPCCounters(ctx context.Context, bases []string, model string) (queries, hits int64, ok bool) {
-	rows := observe.FetchVllmPrefixCaches(ctx, bases)
-	if len(rows) == 0 {
-		return 0, 0, false
-	}
-	var mq, mh int64
-	matched := false
-	for _, r := range rows {
-		queries += r.Queries
-		hits += r.Hits
-		if r.Model == model {
-			mq += r.Queries
-			mh += r.Hits
-			matched = true
-		}
-	}
-	if matched {
-		return mq, mh, true
-	}
-	return queries, hits, true
+	return toolwire.SumVllmPrefixCacheCounters(ctx, bases, model)
 }
 
 func apcHashBytes(b []byte) uint64 {

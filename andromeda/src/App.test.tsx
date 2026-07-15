@@ -48,7 +48,7 @@ describe("Workstation (connected, fixtures)", () => {
     mail: [{ id: "m1", subject: "분기 보고서", from: "lead@corp.com" }],
   });
 
-  it("displays 오늘 dashboard when landing and switches to resource pane when nav clicked", async () => {
+  it("switches to todo pane when rail selects 할일 after dashboard landing", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,
       dataProvider,
@@ -65,7 +65,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(await screen.findByRole("button", { name: /새 할일/ })).toBeInTheDocument();
   });
 
-  it("expands Deneb panel over work pane when opened and restores collapsed layout when closed", async () => {
+  it("hides work pane when panel expands and restores it when narrowed", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,
       dataProvider,
@@ -88,7 +88,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(await screen.findByRole("button", { name: /새 할일/ })).toBeInTheDocument();
   });
 
-  it("collapses Deneb panel when dismissed and displays panel again when edge tab clicked", async () => {
+  it("hides panel when collapsed and restores it when edge tab opens", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,
       dataProvider,
@@ -110,7 +110,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(screen.queryByRole("button", { name: "Deneb 패널 열기" })).not.toBeInTheDocument();
   });
 
-  it("preserves Ctrl+C for copy when editing and denies pane switches on editing combos", async () => {
+  it("preserves dashboard view when Ctrl+C pressed without switching panes", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,
       dataProvider,
@@ -126,7 +126,7 @@ describe("Workstation (connected, fixtures)", () => {
     await waitFor(() => expect(screen.queryByText("세금 신고")).not.toBeInTheDocument());
   });
 
-  it("displays 채팅 tab when rail clicked and renders center chat greeting", async () => {
+  it("reveals center chat when rail selects 채팅 tab", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,
       dataProvider,
@@ -139,7 +139,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(screen.getByText(/^선택님, /)).toBeVisible();
   });
 
-  it("opens mail pane when dashboard mail row clicked and displays selected message", async () => {
+  it("opens mail pane with body when dashboard row is clicked", async () => {
     renderWithProviders(<Workstation cfg={{ url: "http://test", token: "tok" }} />, {
       connected: true,
       dataProvider: fakeProvider({
@@ -156,7 +156,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(await within(detail).findByText("본문까지 바로 열립니다.")).toBeInTheDocument();
   });
 
-  it("allows multiline AI prompts with Shift+Enter and sends message when plain Enter pressed", async () => {
+  it("preserves multiline input on Shift+Enter and sends on plain Enter", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -222,7 +222,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(screen.getByText("메일 3건")).toBeInTheDocument();
   });
 
-  it("attaches a file from the work panel with typed text as caption (client:main)", async () => {
+  it("attaches file with caption to client:main when work panel upload completes", async () => {
     const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
     vi.stubGlobal(
       "fetch",
@@ -273,7 +273,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(within(result).getByText("견적 금액은 1,200만원")).toBeInTheDocument();
   });
 
-  it("displays subtle drop ring when file drag is over panel and accepts dropped file", async () => {
+  it("shows drop ring when drag enters and attaches via capture when dropped", async () => {
     const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
     vi.stubGlobal(
       "fetch",
@@ -325,7 +325,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(await screen.findByRole("group", { name: "첨부 분석 결과" })).toBeInTheDocument();
   });
 
-  it("creates composer attachment when clipboard image pasted", async () => {
+  it("attaches clipboard image via capture when paste contains files", async () => {
     const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
     vi.stubGlobal(
       "fetch",
@@ -365,7 +365,7 @@ describe("Workstation (connected, fixtures)", () => {
     });
   });
 
-  it("attaches multiple dropped files in order — caption on the first, unsupported skipped with a notice", async () => {
+  it("attaches files in order with caption on first and rejects unsupported with notice", async () => {
     const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
     vi.stubGlobal(
       "fetch",
@@ -441,7 +441,7 @@ describe("Workstation (connected, fixtures)", () => {
     expect(composer).not.toBeDisabled();
   });
 
-  it("does not steal focus back when the user moved it elsewhere during a turn", async () => {
+  it("preserves user focus when history button selected during attachment turn", async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => {
       release = r;

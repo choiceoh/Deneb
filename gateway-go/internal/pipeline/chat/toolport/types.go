@@ -8,20 +8,19 @@ package toolport
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 // ToolFunc is an adapter to use ordinary functions as tool executors.
-type ToolFunc func(ctx context.Context, input json.RawMessage) (string, error)
+type ToolFunc func(ctx context.Context, input rawJSON) (string, error)
 
 // ToolDef describes a tool with its schema, description, and executor function.
 type ToolDef struct {
 	Name        string
 	Description string
-	InputSchema map[string]any
+	InputSchema jsonObject
 	Fn          ToolFunc
 	Hidden      bool   // if true, excluded from LLMTools() but still callable via Execute
 	Deferred    bool   // if true, excluded from initial LLMTools() but activatable via fetch_tools
@@ -42,11 +41,11 @@ type ToolRegistrar interface {
 
 // ToolExecutor executes a named tool with JSON input and returns the result.
 type ToolExecutor interface {
-	Execute(ctx context.Context, name string, input json.RawMessage) (string, error)
+	Execute(ctx context.Context, name string, input rawJSON) (string, error)
 }
 
 // BroadcastFunc sends an event to all matching subscribers.
-type BroadcastFunc func(event string, payload any) (int, []error)
+type BroadcastFunc func(event string, payload rawJSON) (int, []error)
 
 // ReplyFunc delivers the assistant response back to the originating channel.
 type ReplyFunc func(ctx context.Context, delivery *DeliveryContext, text string) error
@@ -91,8 +90,8 @@ func NewTextChatMessage(role, text string, ts int64) ChatMessage {
 }
 
 // MarshalJSONString preserves the legacy toolport helper surface.
-func MarshalJSONString(s string) json.RawMessage {
-	return chatport.MarshalJSONString(s)
+func MarshalJSONString(s string) rawJSON {
+	return rawJSON(chatport.MarshalJSONString(s))
 }
 
 // AbortEntry tracks an active abort controller for a running chat session.

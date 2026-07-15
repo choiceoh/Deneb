@@ -55,7 +55,7 @@ describe("TodayPane boundary behavior", () => {
   });
 
   describe("connection and empty states", () => {
-    it("does not offer editor controls while disconnected", () => {
+    it("without offer editor controls while disconnected", () => {
       renderToday({}, false);
       expect(screen.getByText("미연결")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "편집" })).not.toBeInTheDocument();
@@ -138,7 +138,7 @@ describe("TodayPane boundary behavior", () => {
       expect(rows[1]).toHaveTextContent("legacy unread only");
     });
 
-    it("filters completed todos before counting and overflow calculation", async () => {
+    it("when filters completed todos before counting and overflow calculation", async () => {
       renderToday({
         todo: [
           ...Array.from({ length: 6 }, (_, i) => ({ id: `done-${i}`, title: `완료 ${i}`, done: true })),
@@ -186,7 +186,7 @@ describe("TodayPane boundary behavior", () => {
       [6, 0],
       [7, 1],
       [11, 5],
-    ])("caps %i workfeed entries and reports %i hidden rows", async (count, hidden) => {
+    ])("when caps %i workfeed entries and reports %i hidden rows", async (count, hidden) => {
       renderToday({
         workfeed: Array.from({ length: count }, (_, i) => ({ id: `w-${i}`, title: `피드 ${i}`, source: "test" })),
       });
@@ -213,7 +213,7 @@ describe("TodayPane boundary behavior", () => {
       expect(screen.getByTestId("target")).toHaveTextContent('"dayKey":"2026-7-13"');
     });
 
-    it("opens a timed calendar event using its local calendar day", async () => {
+    it("when opens a timed calendar event using its local calendar day", async () => {
       renderToday({
         calendar: [
           {
@@ -244,7 +244,7 @@ describe("TodayPane boundary behavior", () => {
       ["메일 열기", "mail"],
       ["할일 열기", "todo"],
       ["피드 열기", "workfeed"],
-    ])("opens the %s card through its header", async (name, view) => {
+    ])("when opens the %s card through its header", async (name, view) => {
       renderToday();
       await userEvent.click(await screen.findByRole("button", { name }));
       expect(screen.getByTestId("view")).toHaveTextContent(view);
@@ -301,7 +301,7 @@ describe("TodayPane boundary behavior", () => {
       expect(new Set(stored).size).toBe(8);
     });
 
-    it("disables moves beyond both order boundaries", async () => {
+    it("when disables moves beyond both order boundaries", async () => {
       renderToday();
       const editor = await openEditor();
       expect(within(editor).getByRole("button", { name: "일정 위로" })).toBeDisabled();
@@ -310,7 +310,7 @@ describe("TodayPane boundary behavior", () => {
       expect(within(editor).getByRole("button", { name: "시장 위로" })).toBeEnabled();
     });
 
-    it("persists wide cards independently from visibility", async () => {
+    it("saves wide cards independently from visibility", async () => {
       renderToday({ mail: [{ id: "m", subject: "넓은 메일", from: "x@example.com" }] });
       const editor = await openEditor();
       const mailRow = within(editor).getByRole("checkbox", { name: "메일" }).closest(".today-editor-row")!;
@@ -350,7 +350,7 @@ describe("TodayPane boundary behavior", () => {
       expect(await screen.findByText("마감 이번 주")).toBeInTheDocument();
     });
 
-    it("uses person name and latest subject while falling back to email and wiki summary", async () => {
+    it("when uses person name and latest subject while falling back to email and wiki summary", async () => {
       setDashboardState("Order", ["people"]);
       setDashboardState("Hidden", []);
       renderToday({
@@ -385,7 +385,7 @@ describe("TodayPane boundary behavior", () => {
       expect(screen.getByText(change).closest(".market-tile")).toHaveClass(tone);
     });
 
-    it("keeps market tiles non-interactive because no destination pane exists", async () => {
+    it("preserves market tiles non-interactive because no destination pane exists", async () => {
       setDashboardState("Order", ["market"]);
       setDashboardState("Hidden", []);
       renderToday({ market: [{ symbol: "USD", label: "원/달러", price: 1_400, changePct: 0.1 }] });
@@ -396,7 +396,7 @@ describe("TodayPane boundary behavior", () => {
   });
 
   describe("AI context parity", () => {
-    it("projects only visible sections and the same capped rows shown on screen", async () => {
+    it("when projects only visible sections and the same capped rows shown on screen", async () => {
       setDashboardState("Order", ["mail", "todo"]);
       setDashboardState("Hidden", ["todo"]);
       renderToday({

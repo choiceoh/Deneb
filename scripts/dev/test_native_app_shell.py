@@ -210,7 +210,7 @@ class NativeAppShellTests(unittest.TestCase):
         self.assertTrue((self.state / "app.pid").exists())
         self.assertEqual((self.state / "app_jvm.pid").read_text().strip(), str(os.getpid()))
 
-    def test_seed_requires_token_file_but_explicit_token_bypasses_it(self) -> None:
+    def test_when_seed_requires_token_file_but_explicit_token_bypasses_it(self) -> None:
         missing = self.invoke("seed", "http://custom")
         self.assertEqual(missing.returncode, 1)
         self.assertIn("no token given", missing.stderr)
@@ -235,7 +235,7 @@ class NativeAppShellTests(unittest.TestCase):
         self.assertIn(f"scrot --overwrite {output}", calls)
         self.assertIn(f"scrot -o {output}", calls)
 
-    def test_tap_doubletap_and_swipe_forward_exact_window_coordinates(self) -> None:
+    def test_when_tap_doubletap_and_swipe_forward_exact_window_coordinates(self) -> None:
         commands = [
             (("tap", "20", "30"), "mousemove --window 777 20 30 click 1"),
             (("dbltap", "40", "50"), "mousemove --window 777 40 50 click --repeat 2 1"),
@@ -265,7 +265,7 @@ class NativeAppShellTests(unittest.TestCase):
         self.assertIn("windowfocus 777", calls)
         self.assertIn("key --clearmodifiers -- ctrl+a BackSpace", calls)
 
-    def test_scroll_uses_profile_center_and_direction_specific_mouse_button(self) -> None:
+    def test_when_scroll_uses_profile_center_and_direction_specific_mouse_button(self) -> None:
         self.write_profile()
         down = self.invoke("scroll", "down", "6")
         self.assertEqual(down.returncode, 0)
@@ -321,7 +321,7 @@ class OCRLocatorTests(unittest.TestCase):
             check=False,
         )
 
-    def test_locator_joins_words_by_line_filters_confidence_and_scales_center(self) -> None:
+    def test_when_locator_joins_words_by_line_filters_confidence_and_scales_center(self) -> None:
         self.tsv.write_text(
             "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n"
             "5\t1\t1\t1\t1\t1\t300\t150\t90\t30\t96\t받은\n"

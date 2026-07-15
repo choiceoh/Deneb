@@ -26,7 +26,7 @@ describe("markdown block recognition", () => {
     ["#missing-space", false],
     ["plain # marker", false],
     ["", false],
-  ])("recognizes heading %j", (input, expected) => {
+  ])("when recognizes heading %j", (input, expected) => {
     expect(isMarkdownHeading(input)).toBe(expected);
   });
 
@@ -39,23 +39,23 @@ describe("markdown block recognition", () => {
     ["-item", false],
     ["1 item", false],
     ["item", false],
-  ])("recognizes bullet %j", (input, expected) => {
+  ])("when recognizes bullet %j", (input, expected) => {
     expect(isMarkdownBullet(input)).toBe(expected);
   });
 
-  it("requires repeated list or pipe rows", () => {
+  it("when requires repeated list or pipe rows", () => {
     expect(looksLikeMarkdownBlock("- one")).toBe(false);
     expect(looksLikeMarkdownBlock("- one\n- two")).toBe(true);
     expect(looksLikeMarkdownBlock("| one | two |")).toBe(false);
     expect(looksLikeMarkdownBlock("| one | two |\n| --- | --- |")).toBe(true);
   });
 
-  it("recognizes fenced code and headings anywhere in the run", () => {
+  it("when recognizes fenced code and headings anywhere in the run", () => {
     expect(looksLikeMarkdownBlock("before\n```ts\nconst x = 1\n```\nafter")).toBe(true);
     expect(looksLikeMarkdownBlock("before\n## details\nafter")).toBe(true);
   });
 
-  it("chooses the correct implicit node kind and trims the run", () => {
+  it("when chooses the correct implicit node kind and trims the run", () => {
     expect(textBlockNode("  ordinary text  ")).toEqual({ type: "text", value: "ordinary text" });
     expect(textBlockNode("\n- first\n- second\n")).toEqual({
       type: "markdown",
@@ -96,7 +96,7 @@ describe("truthy", () => {
     ["yes", true],
     ["", true],
     ["unexpected", true],
-  ])("maps %j to %s", (input, expected) => {
+  ])("when maps %j to %s", (input, expected) => {
     expect(truthy(input)).toBe(expected);
   });
 });
@@ -116,11 +116,11 @@ describe("lenientFloat", () => {
     ["none", undefined],
     ["1.2.3", 1.2],
     ["10.", 10],
-  ])("extracts %j", (input, expected) => {
+  ])("when extracts %j", (input, expected) => {
     expect(lenientFloat(input)).toBe(expected);
   });
 
-  it("keeps exact exponential notation", () => {
+  it("preserves exact exponential notation", () => {
     expect(lenientFloat("1e3")).toBe(1000);
     expect(lenientFloat("-2E-2")).toBe(-0.02);
   });
@@ -136,7 +136,7 @@ describe("enum canonicalization", () => {
     ["grey", "secondary"],
     ["custom", "custom"],
     [undefined, undefined],
-  ])("canonicalizes badge color %j", (input, expected) => {
+  ])("normalizes badge color %j", (input, expected) => {
     expect(canonBadgeColor(input)).toBe(expected);
   });
 
@@ -150,7 +150,7 @@ describe("enum canonicalization", () => {
     ["notice", "info"],
     ["information", "info"],
     ["custom", "custom"],
-  ])("canonicalizes severity %j", (input, expected) => {
+  ])("normalizes severity %j", (input, expected) => {
     expect(canonSeverity(input)).toBe(expected);
   });
 
@@ -162,7 +162,7 @@ describe("enum canonicalization", () => {
     ["area", "line"],
     ["trend", "line"],
     ["pie", "pie"],
-  ])("canonicalizes chart type %j", (input, expected) => {
+  ])("normalizes chart type %j", (input, expected) => {
     expect(canonChartType(input)).toBe(expected);
   });
 
@@ -172,7 +172,7 @@ describe("enum canonicalization", () => {
     ["subtitle", "title"],
     ["subheading", "title"],
     ["caption", "caption"],
-  ])("canonicalizes text style %j", (input, expected) => {
+  ])("normalizes text style %j", (input, expected) => {
     expect(canonTextStyle(input)).toBe(expected);
   });
 });
@@ -185,7 +185,7 @@ describe("token character helpers", () => {
     ["\r", true],
     ["a", false],
     ["\u00a0", false],
-  ])("classifies space %j", (input, expected) => {
+  ])("when classifies space %j", (input, expected) => {
     expect(isSpace(input)).toBe(expected);
   });
 
@@ -208,7 +208,7 @@ describe("token character helpers", () => {
     ["_", true],
     [":", false],
     ["한", false],
-  ])("classifies name continuation %j", (input, expected) => {
+  ])("when classifies name continuation %j", (input, expected) => {
     expect(isNameChar(input)).toBe(expected);
   });
 });
@@ -228,12 +228,12 @@ describe("entity decoding", () => {
     );
   });
 
-  it("does not throw for an out-of-range numeric reference", () => {
+  it("does not fails for an out-of-range numeric reference", () => {
     expect(() => decodeEntities("before &#99999999; after")).not.toThrow();
     expect(decodeEntities("before &#99999999; after")).toBe("before &#99999999; after");
   });
 
-  it("handles consecutive entities and ordinary ampersands", () => {
+  it("when handles consecutive entities and ordinary ampersands", () => {
     expect(decodeEntities("A&B &amp;&amp; C")).toBe("A&B && C");
   });
 

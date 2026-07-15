@@ -1,6 +1,7 @@
 package push
 
 import (
+	"encoding/json"
 	"context"
 	"log/slog"
 	"time"
@@ -32,7 +33,7 @@ type Notifier struct {
 	store       tokenStore
 	sender      sender
 	logger      *slog.Logger
-	broadcast   func(event string, payload any)
+	broadcast   func(event string, payload rawJSON)
 	shutdownCtx context.Context
 }
 
@@ -41,7 +42,7 @@ type NotifierDeps struct {
 	Store       tokenStore
 	Sender      sender
 	Logger      *slog.Logger
-	Broadcast   func(event string, payload any) // operator-visible failure mirror
+	Broadcast   func(event string, payload rawJSON) // operator-visible failure mirror
 	ShutdownCtx context.Context
 }
 
@@ -146,11 +147,18 @@ func (n *Notifier) report(total, delivered int, authFail bool, lastErr error) {
 				"reason", reason, "devices", total, "error", errStr(lastErr))
 		}
 		if n.broadcast != nil {
-			n.broadcast("push.delivery_failed", map[string]any{
+			raw, err := json.Marshal(map[string]any{
 				"reason":  reason,
 				"devices": total,
 				"error":   errStr(lastErr),
 			})
+			if err != nil {
+				if n.logger != nil {
+					n.logger.Warn("push delivery_failed marshal failed", "error", err)
+				}
+			} else {
+				n.broadcast("push.delivery_failed", raw)
+			}
 		}
 	}
 }

@@ -7,15 +7,13 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
-	tokens "github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
 	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive/relaylog"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive/textprep"
 )
 
 const (
@@ -55,7 +53,7 @@ type proactiveRelayDeps struct {
 	// error) under system:proactive so the autonomous-delivery funnel is
 	// observable: how often it fires and how much is suppressed and why. nil-safe;
 	// nil in older wiring/tests.
-	behaviorLog *agentlog.Writer
+	behaviorLog *relaylog.Writer
 
 	// pushHub fans a {title, body} frame out to connected native clients when a
 	// report arrives, so the app raises a notification live instead of waiting
@@ -119,7 +117,7 @@ type Relay = proactiveRelayDeps
 type Deps struct {
 	TranscriptStore toolport.TranscriptStore
 	Logger          interface{ Error(string, ...any) }
-	BehaviorLog     *agentlog.Writer
+	BehaviorLog     *relaylog.Writer
 	PushHub         *Hub
 	PushFCM         *push.Notifier
 	WorkFeed        interface {
@@ -239,13 +237,13 @@ func (d proactiveRelayDeps) prepareProactiveDelivery(sessionKey, content string)
 		target = nativeWorkSessionKey
 	}
 	originalLength := len(content)
-	content = tokens.StripSilentToken(content, tokens.SilentReplyToken)
+	content = textprep.StripSilentReply(content)
 	if strings.TrimSpace(content) == "" {
 		d.logProactive("suppressed", "silent_token", originalLength, "")
 		return preparedProactiveDelivery{}, false
 	}
 
-	content = stripProactiveMetaPreamble(market.SubstituteLetterTokens(content))
+	content = stripProactiveMetaPreamble(textprep.SubstituteLetterTokens(content))
 	if isContentlessProactive(content) {
 		d.logProactive("suppressed", "contentless", originalLength, pushPreview(content))
 		return preparedProactiveDelivery{}, false
@@ -317,7 +315,7 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 		// literal text. Deliver card-first bodies as-is.
 		if opts.collapse && !startsWithDenebUIFence(deliverBody) {
 			if title, titleLine := extractCardTitle(content); strings.TrimSpace(title) != "" {
-				transcriptBody = denebui.CollapsedReportFence(title, collapsedReportBody(deliverBody, title, titleLine))
+				transcriptBody = textprep.CollapsedReportFence(title, collapsedReportBody(deliverBody, title, titleLine))
 			}
 		}
 		msg := toolport.NewTextChatMessage("assistant", transcriptBody, time.Now().UnixMilli())
@@ -382,7 +380,7 @@ func (d proactiveRelayDeps) appendProactiveWorkFeed(
 	// that is mostly a deneb-ui fence is otherwise invisible to the
 	// fence-skipping scans — the title fell back to the generic "업무 리포트"
 	// and the titler echoed "```deneb-ui" as the summary (2026-07-12 live feed).
-	extractSrc := denebui.ReplaceFences(cardSrc, denebui.PlainText)
+	extractSrc := textprep.ReplaceFences(cardSrc, textprep.PlainText)
 	title, titleLine := extractCardTitle(extractSrc)
 	source := strings.TrimSpace(opts.workFeedSource)
 	if source == "" {
@@ -482,7 +480,7 @@ func (d proactiveRelayDeps) publishDeliverable(content string) (bool, error) {
 	}
 	// Same prose projection as the relay card path — a doc analysis whose
 	// answer is a deneb-ui card must not title itself "```deneb-ui".
-	extractSrc := denebui.ReplaceFences(content, denebui.PlainText)
+	extractSrc := textprep.ReplaceFences(content, textprep.PlainText)
 	title, titleLine := extractCardTitle(extractSrc)
 	summary := extractCardSummary(extractSrc, titleLine)
 	if d.cardTitler != nil && isWeakCardTitle(title, titleLine) {
@@ -516,12 +514,12 @@ func (d proactiveRelayDeps) PublishDeliverable(content string) (bool, error) {
 }
 
 // startsWithDenebUIFence reports whether the body's first line opens a
-// deneb-ui fence under the EXTRACTOR's contract (denebui.IsFenceOpenLine) —
+// deneb-ui fence under the EXTRACTOR's contract (textprep.IsFenceOpenLine) —
 // a prefix check would bypass the accordion for openers the renderers reject
 // ("```deneb-ui extra"), landing literal markup in the transcript.
 func startsWithDenebUIFence(body string) bool {
 	first, _, _ := strings.Cut(strings.TrimSpace(body), "\n")
-	return denebui.IsFenceOpenLine(first)
+	return textprep.IsFenceOpenLine(first)
 }
 
 // collapsedReportBody returns content with its leading title line removed when
@@ -559,12 +557,7 @@ func collapsedReportBody(content, title, titleLine string) string {
 // proactive funnel (fire → suppress / deliver) is queryable after the fact.
 // nil-safe via Writer.LogEvent.
 func (d proactiveRelayDeps) logProactive(decision, reason string, contentLen int, preview string) {
-	d.behaviorLog.LogEvent(agentlog.SessionProactive, agentlog.TypeProactiveRelay, agentlog.ProactiveRelayData{
-		Decision:   decision,
-		Reason:     reason,
-		ContentLen: contentLen,
-		Preview:    preview,
-	})
+	relaylog.Decision(d.behaviorLog, decision, reason, contentLen, preview)
 }
 
 // deliverNativeImage appends an image attachment (e.g. the rendered 주간업무보고

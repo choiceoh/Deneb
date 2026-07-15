@@ -180,7 +180,7 @@ type WikiDreamer struct {
 	// whole output budget on chain-of-thought and returns empty content
 	// (observed: 2026-07-02/03 synthesis failures, reasoning_chars≈13K vs
 	// MaxTokens 4096). nil = no shaping (previous behavior).
-	llmExtraBody map[string]any
+	llmExtraBody jsonObject
 
 	// synthesisMaxTokens overrides wikiDreamMaxTokens for the synthesis call
 	// (0 = default). Set for reasoning models with no thinking off-switch,
@@ -254,7 +254,7 @@ func (wd *WikiDreamer) SetWorkspaceDir(dir string) {
 // synthesis MaxTokens override (0 keeps wikiDreamMaxTokens; used to budget
 // chain-of-thought on reasoning models that cannot switch it off). Call
 // before the first dream cycle; the wiring lives in server/chat_pipeline.go.
-func (wd *WikiDreamer) SetLLMRequestShape(extraBody map[string]any, synthesisMaxTokens int) {
+func (wd *WikiDreamer) SetLLMRequestShape(extraBody jsonObject, synthesisMaxTokens int) {
 	wd.llmExtraBody = extraBody
 	wd.synthesisMaxTokens = synthesisMaxTokens
 }

@@ -14,7 +14,7 @@ describe("loadConfig", () => {
     expect(loadConfig()).toEqual({ url: "", token: "" });
   });
 
-  it("falls back to env defaults for auto-connect", () => {
+  it("when falls back to env defaults for auto-connect", () => {
     vi.stubEnv("VITE_GATEWAY_URL", "http://env:18789");
     vi.stubEnv("VITE_GATEWAY_TOKEN", "envtoken");
     expect(loadConfig()).toEqual({ url: "http://env:18789", token: "envtoken" });

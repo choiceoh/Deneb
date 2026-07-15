@@ -13,12 +13,11 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 	chatrecall "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/recall"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
@@ -126,8 +125,7 @@ func buildTier1WikiSnapshot(params RunParams, deps runDeps) string {
 		if cached, ok := cachedTier1Wiki(params.SessionKey); ok {
 			tier1 = cached
 		} else {
-			cfg := wiki.ConfigFromEnv()
-			tier1 = knowledge.FormatTier1(deps.memory.Wiki, cfg.Tier1MinImportance)
+			tier1 = tooldeps.FormatWikiTier1(deps.memory.Wiki)
 			storeTier1Wiki(params.SessionKey, tier1)
 		}
 	}
@@ -252,12 +250,12 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 		ch = sessionFallbackChannel(params.SessionKey)
 	}
 	// Build tool defs — filtered if a preset is active.
-	allowed := toolpreset.AllowedTools(toolpreset.Preset(sessionToolPreset))
+	allowed := toolwire.AllowedTools(sessionToolPreset)
 	toolDefs := toPromptToolDefs(deps.tools.FilteredDefinitions(allowed))
 
 	// Deferred tool summaries for system prompt listing.
 	preloaded := make(map[string]struct{})
-	for _, n := range toolpreset.PreloadedDeferredTools(toolpreset.Preset(sessionToolPreset)) {
+	for _, n := range toolwire.PreloadedDeferredTools(sessionToolPreset) {
 		preloaded[n] = struct{}{}
 	}
 	deferredSummaries := deps.tools.DeferredSummaries()

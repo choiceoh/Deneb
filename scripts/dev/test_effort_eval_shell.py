@@ -92,7 +92,7 @@ class EffortReportTests(unittest.TestCase):
         self.assertIn("always-non arm has 12 rows / 9 with tokens", proc.stdout)
         self.assertFalse(self.output.exists())
 
-    def test_equal_quality_frontier_passes_and_reports_simple_subset_saving(self) -> None:
+    def test_equal_quality_frontier_passes_and_returns_simple_subset_saving(self) -> None:
         self.write_rows(self.full_specs())
         proc = self.run_program()
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
@@ -118,7 +118,7 @@ class EffortReportTests(unittest.TestCase):
         self.assertIn("quality_drop 40.0pt >2pt", proc.stdout)
         self.assertIn("Interpolation quality", self.output.read_text(encoding="utf-8"))
 
-    def test_router_below_nondegenerate_interpolation_line_is_explicit_miss(self) -> None:
+    def test_when_router_below_nondegenerate_interpolation_line_is_explicit_miss(self) -> None:
         specs = self.full_specs()
         specs["always-non"] = {"tokens": 20, "text": english_text("non")}
         specs["router"] = {"tokens": 60, "text": english_text("router")}
@@ -130,7 +130,7 @@ class EffortReportTests(unittest.TestCase):
         self.assertIn("Interpolation quality @ router's spend: 80.0", report)
         self.assertIn("router 60.0", report)
 
-    def test_router_spend_is_clamped_to_fixed_policy_segment(self) -> None:
+    def test_when_router_spend_is_clamped_to_fixed_policy_segment(self) -> None:
         specs = self.full_specs()
         specs["always-non"] = {"tokens": 20, "text": english_text("non")}
         specs["router"] = {"tokens": 5, "text": english_text("router")}
@@ -141,7 +141,7 @@ class EffortReportTests(unittest.TestCase):
         self.assertIn("Interpolation quality @ router's spend: 60.0", report)
         self.assertNotIn("Interpolation quality @ router's spend: 52", report)
 
-    def test_report_html_escapes_markup_and_escapes_markdown_pipes(self) -> None:
+    def test_returns_html_escapes_markup_and_escapes_markdown_pipes(self) -> None:
         specs = self.full_specs()
         specs["router"]["text"] = lambda index: (
             korean_text("router") + f" <script>{index}</script> | 구분"

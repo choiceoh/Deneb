@@ -12,7 +12,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 )
 
 const skillReviewMaxTranscriptRunes = 8000
@@ -103,7 +102,7 @@ func (r *skillReviewFork) RunSkillReview(ctx context.Context, sessionKey string,
 		Message:            prompt,
 		Model:              r.model,
 		SystemPrompt:       skillReviewSystemPrompt,
-		ToolPreset:         string(toolpreset.PresetSelfReview),
+		ToolPreset:         "self-review", // toolpreset.PresetSelfReview
 		MaxTokens:          &maxTokens,
 		MaxHistoryTokens:   skillReviewHistoryBudget,
 		EphemeralUser:      true,

@@ -20,7 +20,9 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 	casepack "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase"
+	briefcasefb "github.com/choiceoh/deneb/gateway-go/internal/domain/briefcase/feedback"
 	evalbriefcase "github.com/choiceoh/deneb/gateway-go/internal/eval/briefcase"
 	closedloop "github.com/choiceoh/deneb/gateway-go/internal/eval/briefcase/closedloop"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
@@ -238,6 +240,7 @@ func runCase(args []string, stdout, stderr io.Writer) (returnErr error) {
 		DevicePlanSource: devicePlanSource, DevicePlanSourceSHA256: devicePlanDigest,
 		SkipRecall: *skipRecall,
 		Arm:        runtimebriefcase.Arm(strings.TrimSpace(*arm)),
+			TokenEstimate: tokenest.EstimateUncalibrated,
 	})
 	if err != nil {
 		return err
@@ -378,36 +381,36 @@ func loadClosedLoopPlans(pack *casepack.Pack, options closedLoopOptions) (closed
 	}, nil
 }
 
-func loadClosedLoopUserPlan(pack *casepack.Pack, path string) ([]byte, string, runtimebriefcase.UserSimulatorPlan, error) {
+func loadClosedLoopUserPlan(pack *casepack.Pack, path string) ([]byte, string, briefcasefb.UserSimulatorPlan, error) {
 	if pack.Manifest.RunPolicy.MaxFollowUps == 0 {
 		if strings.TrimSpace(path) != "" {
-			return nil, "", runtimebriefcase.UserSimulatorPlan{}, errors.New("--user-plan is forbidden when the signed maxFollowUps is zero")
+			return nil, "", briefcasefb.UserSimulatorPlan{}, errors.New("--user-plan is forbidden when the signed maxFollowUps is zero")
 		}
-		return nil, "", runtimebriefcase.UserSimulatorPlan{}, nil
+		return nil, "", briefcasefb.UserSimulatorPlan{}, nil
 	}
 	data, digest, err := readSealedSource(pack, path, userSimulatorPlanSourceRef)
 	if err != nil {
-		return nil, "", runtimebriefcase.UserSimulatorPlan{}, fmt.Errorf("user simulator plan: %w", err)
+		return nil, "", briefcasefb.UserSimulatorPlan{}, fmt.Errorf("user simulator plan: %w", err)
 	}
-	var userPlan runtimebriefcase.UserSimulatorPlan
+	var userPlan briefcasefb.UserSimulatorPlan
 	if err := decodeJSONBytes(data, &userPlan); err != nil {
-		return nil, "", runtimebriefcase.UserSimulatorPlan{}, fmt.Errorf("user simulator plan: %w", err)
+		return nil, "", briefcasefb.UserSimulatorPlan{}, fmt.Errorf("user simulator plan: %w", err)
 	}
 	if userPlan.CaseID != pack.Manifest.CaseID {
-		return nil, "", runtimebriefcase.UserSimulatorPlan{}, errors.New("user simulator plan caseId does not match the signed case")
+		return nil, "", briefcasefb.UserSimulatorPlan{}, errors.New("user simulator plan caseId does not match the signed case")
 	}
-	if _, err := runtimebriefcase.NewScriptedUserSimulator(userPlan, pack.Manifest.RunPolicy.MaxFollowUps); err != nil {
-		return nil, "", runtimebriefcase.UserSimulatorPlan{}, err
+	if _, err := briefcasefb.NewScriptedUserSimulator(userPlan, pack.Manifest.RunPolicy.MaxFollowUps); err != nil {
+		return nil, "", briefcasefb.UserSimulatorPlan{}, err
 	}
 	return data, digest, userPlan, nil
 }
 
-func validateClosedLoopFeedback(pack *casepack.Pack, supervisorPlan evalbriefcase.SupervisorPlan, userPlan runtimebriefcase.UserSimulatorPlan, userSourceDigest, supervisorSourceDigest string) error {
+func validateClosedLoopFeedback(pack *casepack.Pack, supervisorPlan evalbriefcase.SupervisorPlan, userPlan briefcasefb.UserSimulatorPlan, userSourceDigest, supervisorSourceDigest string) error {
 	hidden, err := closedloop.HiddenFeedbackInputs(pack, supervisorPlan, userSourceDigest, supervisorSourceDigest)
 	if err != nil {
 		return fmt.Errorf("feedback firewall inputs: %w", err)
 	}
-	firewall, err := runtimebriefcase.NewFeedbackFirewall(hidden, runtimebriefcase.FeedbackLimits{})
+	firewall, err := briefcasefb.NewFeedbackFirewall(hidden, briefcasefb.FeedbackLimits{})
 	if err != nil {
 		return fmt.Errorf("feedback firewall: %w", err)
 	}
@@ -465,6 +468,7 @@ func runClosedLoop(args []string, stdout, stderr io.Writer) (returnErr error) {
 		DevicePlanSource: devicePlanSource, DevicePlanSourceSHA256: devicePlanDigest,
 		SkipRecall: options.skipRecall,
 		Arm:        runtimebriefcase.Arm(strings.TrimSpace(options.arm)),
+			TokenEstimate: tokenest.EstimateUncalibrated,
 	})
 	if err != nil {
 		return err
@@ -1110,7 +1114,7 @@ func validateDevicePlanBinding(pack *casepack.Pack, result runtimebriefcase.RunR
 	}
 }
 
-func loadSignedUserSimulatorPlan(pack *casepack.Pack) (runtimebriefcase.UserSimulatorPlan, error) {
+func loadSignedUserSimulatorPlan(pack *casepack.Pack) (briefcasefb.UserSimulatorPlan, error) {
 	var source *casepack.Source
 	count := 0
 	for index := range pack.Manifest.Sources {
@@ -1121,21 +1125,21 @@ func loadSignedUserSimulatorPlan(pack *casepack.Pack) (runtimebriefcase.UserSimu
 		}
 	}
 	if count != 1 || source == nil {
-		return runtimebriefcase.UserSimulatorPlan{}, errors.New("run follow-ups require one signed user-simulator plan")
+		return briefcasefb.UserSimulatorPlan{}, errors.New("run follow-ups require one signed user-simulator plan")
 	}
 	data, err := pack.ReadFile(source.Path)
 	if err != nil {
-		return runtimebriefcase.UserSimulatorPlan{}, fmt.Errorf("read signed user-simulator plan: %w", err)
+		return briefcasefb.UserSimulatorPlan{}, fmt.Errorf("read signed user-simulator plan: %w", err)
 	}
-	var plan runtimebriefcase.UserSimulatorPlan
+	var plan briefcasefb.UserSimulatorPlan
 	if err := decodeJSONBytes(data, &plan); err != nil {
-		return runtimebriefcase.UserSimulatorPlan{}, fmt.Errorf("decode signed user-simulator plan: %w", err)
+		return briefcasefb.UserSimulatorPlan{}, fmt.Errorf("decode signed user-simulator plan: %w", err)
 	}
 	if plan.CaseID != pack.Manifest.CaseID {
-		return runtimebriefcase.UserSimulatorPlan{}, errors.New("signed user-simulator plan caseId does not match")
+		return briefcasefb.UserSimulatorPlan{}, errors.New("signed user-simulator plan caseId does not match")
 	}
-	if _, err := runtimebriefcase.NewScriptedUserSimulator(plan, pack.Manifest.RunPolicy.MaxFollowUps); err != nil {
-		return runtimebriefcase.UserSimulatorPlan{}, err
+	if _, err := briefcasefb.NewScriptedUserSimulator(plan, pack.Manifest.RunPolicy.MaxFollowUps); err != nil {
+		return briefcasefb.UserSimulatorPlan{}, err
 	}
 	return plan, nil
 }

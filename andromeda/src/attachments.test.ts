@@ -25,7 +25,7 @@ describe("splitAttachable", () => {
 });
 
 describe("isAttachableMime", () => {
-  it("accepts image/audio prefixes and known document MIMEs only", () => {
+  it("allows image/audio prefixes and known document MIMEs only", () => {
     expect(isAttachableMime("image/webp")).toBe(true);
     expect(isAttachableMime("audio/mp4")).toBe(true);
     expect(isAttachableMime("text/csv")).toBe(true);

@@ -11,6 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/dashboard"
 	marketapi "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/market"
 	sessionsapi "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/skillsrpc"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/syncapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 )
@@ -27,17 +28,39 @@ func (e *DuplicateMethodError) Error() string {
 }
 
 type (
-	ContactsDeps            = contactsapi.ContactsDeps
-	DashboardDeps           = dashboard.DashboardDeps
-	DashboardCalendarSource = dashboard.DashboardCalendarSource
-	DashboardWorkFeedSource = dashboard.DashboardWorkFeedSource
-	SessionsDeps            = sessionsapi.SessionsDeps
-	SessionsLister          = sessionsapi.SessionsLister
-	TranscriptLoader        = sessionsapi.TranscriptLoader
-	MarketDeps              = marketapi.MarketDeps
-	SyncDeps                = syncapi.SyncDeps
-	NativeSyncStore         = syncapi.NativeSyncStore
+	ContactsDeps              = contactsapi.ContactsDeps
+	DashboardDeps             = dashboard.DashboardDeps
+	DashboardCalendarSource   = dashboard.DashboardCalendarSource
+	DashboardWorkFeedSource   = dashboard.DashboardWorkFeedSource
+	SessionsDeps              = sessionsapi.SessionsDeps
+	SessionsLister            = sessionsapi.SessionsLister
+	TranscriptLoader          = sessionsapi.TranscriptLoader
+	MarketDeps                = marketapi.MarketDeps
+	SyncDeps                  = syncapi.SyncDeps
+	NativeSyncStore           = syncapi.NativeSyncStore
+	SkillsDeps                = skillsrpc.SkillsDeps
+	RSIStatusDeps             = skillsrpc.RSIStatusDeps
+	SelfImprovementCodingDeps = skillsrpc.SelfImprovementCodingDeps
 )
+
+// SkillsMethods, RSIStatusMethods, and SelfImprovementCodingMethods pass
+// through to the skillsrpc subpackage. They are registered independently in
+// method_registry.go (not part of Dependencies/Methods above) because the
+// parent handlerminiapp package cannot import skillsrpc — skillsrpc imports
+// handlerminiapp for its wire type aliases, and importing it back would be a
+// cycle. Routing the call through module keeps that constraint invisible to
+// method_registry.go.
+func SkillsMethods(deps SkillsDeps) map[string]rpcutil.HandlerFunc {
+	return skillsrpc.SkillsMethods(deps)
+}
+
+func RSIStatusMethods(deps RSIStatusDeps) map[string]rpcutil.HandlerFunc {
+	return skillsrpc.RSIStatusMethods(deps)
+}
+
+func SelfImprovementCodingMethods(deps SelfImprovementCodingDeps) map[string]rpcutil.HandlerFunc {
+	return skillsrpc.SelfImprovementCodingMethods(deps)
+}
 
 // OrgDashboardDeps binds the dashboard to the org chart as its source of
 // classification rules and lane definitions. Keeping this policy in the

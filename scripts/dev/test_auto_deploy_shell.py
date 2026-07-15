@@ -164,7 +164,7 @@ class AutoDeployShellTests(unittest.TestCase):
     def call_text(self) -> str:
         return self.calls.read_text(encoding="utf-8") if self.calls.exists() else ""
 
-    def test_busy_lock_exits_silently_before_repo_or_git_checks(self) -> None:
+    def test_when_busy_lock_exits_silently_before_repo_or_git_checks(self) -> None:
         proc = self.invoke(self.env(FLOCK_RC="1"))
         self.assertEqual((proc.returncode, proc.stdout, proc.stderr), (0, "", ""))
         self.assertEqual(self.call_text().strip(), "flock -n 9")
@@ -177,7 +177,7 @@ class AutoDeployShellTests(unittest.TestCase):
         self.assertIn(f"ERROR: {missing} is not a git repo; skipping", self.log_text())
         self.assertNotIn("git ", self.call_text())
 
-    def test_pause_reason_is_logged_once_then_throttled(self) -> None:
+    def test_when_pause_reason_is_logged_once_then_throttled(self) -> None:
         pause = self.state / "auto-deploy.paused"
         pause.write_text("operator maintenance\nextra ignored\n", encoding="utf-8")
         first = self.invoke()
@@ -188,13 +188,13 @@ class AutoDeployShellTests(unittest.TestCase):
         self.assertEqual(dirty, ["paused", "2000"])
         self.assertNotIn("git branch", self.call_text())
 
-    def test_non_main_branch_warns_and_never_fetches(self) -> None:
+    def test_when_non_main_branch_warns_and_never_fetches(self) -> None:
         proc = self.invoke(self.env(GIT_BRANCH="release"))
         self.assertEqual(proc.returncode, 0)
         self.assertIn("production is on 'release', not main; skipping", self.log_text())
         self.assertNotIn("git fetch", self.call_text())
 
-    def test_unmerged_conflicts_are_listed_bounded_and_throttled(self) -> None:
+    def test_when_unmerged_conflicts_are_listed_bounded_and_throttled(self) -> None:
         conflicts = "a.txt\\nb.txt\\nc.txt\\nd.txt\\ne.txt\\nf.txt\\n"
         first = self.invoke(self.env(GIT_UNMERGED=conflicts))
         second = self.invoke(self.env(GIT_UNMERGED=conflicts))
@@ -254,7 +254,7 @@ class AutoDeployShellTests(unittest.TestCase):
         self.assertNotIn("deploy cwd=", self.call_text())
         self.assertIn("deploy-watch active for same333", self.log_text())
 
-    def test_equal_local_remote_and_recorded_head_is_quiet_noop(self) -> None:
+    def test_when_equal_local_remote_and_recorded_head_is_quiet_noop(self) -> None:
         (self.state / "auto-deploy.deployed-head").write_text("same333\n")
         proc = self.invoke(self.env(GIT_LOCAL_HEAD="same333", GIT_REMOTE_HEAD="same333"))
         self.assertEqual(proc.returncode, 0)
@@ -271,7 +271,7 @@ class AutoDeployShellTests(unittest.TestCase):
         self.assertNotIn("watch head=", self.call_text())
         self.assertIn("deploy-watch acknowledged for same333", self.log_text())
 
-    def test_stale_watch_ack_is_removed_and_replaced(self) -> None:
+    def test_when_stale_watch_ack_is_removed_and_replaced(self) -> None:
         (self.state / "auto-deploy.deployed-head").write_text("same333\n")
         (self.state / "auto-deploy.unverified-head").write_text("same333 1999 watcher_not_ready\n")
         (self.state / "deploy-watch.ready").write_text("same333 999999 2000\n")
@@ -288,7 +288,7 @@ class AutoDeployShellTests(unittest.TestCase):
         self.assertNotIn("deploy cwd=", self.call_text())
         self.assertEqual(self.log_text(), "")
 
-    def test_quiet_period_defers_hot_main_and_reports_age(self) -> None:
+    def test_quiet_period_defers_hot_main_and_returns_age(self) -> None:
         proc = self.invoke(self.env(
             DENEB_AUTO_DEPLOY_QUIET_SEC="300",
             GIT_REMOTE_TS="1900",
@@ -328,7 +328,7 @@ class AutoDeployShellTests(unittest.TestCase):
         self.assertNotIn("watch head=remote222", self.call_text())
         self.assertIn("transient service failed to start", self.log_text())
 
-    def test_unacknowledged_watch_stays_unverified_and_noop_retries(self) -> None:
+    def test_when_unacknowledged_watch_stays_unverified_and_noop_retries(self) -> None:
         first = self.invoke(self.env(WATCH_ACK="0"))
         self.assertEqual(first.returncode, 0)
         self.assertEqual(

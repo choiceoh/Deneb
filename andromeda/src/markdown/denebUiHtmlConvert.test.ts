@@ -32,11 +32,11 @@ describe("convert layout and typography", () => {
     expect(convert(element("box"))).toEqual({ type: "box", children: [] });
   });
 
-  it.each(["hr", "divider"])("maps %s to a divider", (tag) => {
+  it.each(["hr", "divider"])("when maps %s to a divider", (tag) => {
     expect(convert(element(tag, { id: "rule" }))).toEqual({ id: "rule", type: "divider" });
   });
 
-  it("maps text flags and canonical style", () => {
+  it("when maps text flags and canonical style", () => {
     expect(
       convert(element("text", { style: "heading", bold: "yes", italic: "0", color: "#123" }, "  hello  ")),
     ).toEqual({
@@ -49,7 +49,7 @@ describe("convert layout and typography", () => {
     });
   });
 
-  it("upgrades markdown-shaped text", () => {
+  it("when upgrades markdown-shaped text", () => {
     expect(convert(element("text", {}, "- one\n- two"))).toEqual({
       type: "markdown",
       value: "- one\n- two",
@@ -62,7 +62,7 @@ describe("convert layout and typography", () => {
     ["h3", { style: "title" }],
     ["h4", { bold: true }],
     ["p", {}],
-  ])("maps %s aliases", (tag, extra) => {
+  ])("when maps %s aliases", (tag, extra) => {
     expect(convert(element(tag, {}, "Title"))).toEqual({ type: "text", value: "Title", ...extra });
   });
 
@@ -113,7 +113,7 @@ describe("convert media and display nodes", () => {
     });
   });
 
-  it("maps badges, stats, and avatars", () => {
+  it("when maps badges, stats, and avatars", () => {
     expect(convert(element("badge", { color: "red" }, "late"))).toEqual({
       type: "badge",
       value: "late",
@@ -146,7 +146,7 @@ describe("convert media and display nodes", () => {
     expect(node.value).toBe(expected);
   });
 
-  it("maps alerts and count-down defaults", () => {
+  it("when maps alerts and count-down defaults", () => {
     expect(convert(element("alert", { title: "Careful", severity: "critical" }, "message"))).toEqual({
       type: "alert",
       title: "Careful",
@@ -181,7 +181,7 @@ describe("convert structural children", () => {
     });
   });
 
-  it("promotes the first header row and retains subsequent rows", () => {
+  it("when promotes the first header row and retains subsequent rows", () => {
     const header: Structural = {
       kind: "tr",
       cells: [
@@ -203,7 +203,7 @@ describe("convert structural children", () => {
     });
   });
 
-  it("maps table row and cell structural records", () => {
+  it("when maps table row and cell structural records", () => {
     const cells: Structural[] = [
       { kind: "cell", text: "A", header: true },
       { kind: "cell", text: "B", header: false },
@@ -214,7 +214,7 @@ describe("convert structural children", () => {
     expect(convert(element("td", {}, " Value "))).toEqual({ kind: "cell", text: "Value", header: false });
   });
 
-  it("builds ordered and unordered lists from list items", () => {
+  it("when builds ordered and unordered lists from list items", () => {
     const items: Structural[] = [
       { kind: "li", text: "plain", children: [] },
       { kind: "li", text: "ignored", children: [{ type: "badge", value: "one" }] },
@@ -245,7 +245,7 @@ describe("convert structural children", () => {
     expect(convert(element("ul", {}, "", [], items))).not.toHaveProperty("ordered");
   });
 
-  it("maps tabs and accordions", () => {
+  it("when maps tabs and accordions", () => {
     const tabs: Structural[] = [
       { kind: "tab", label: "One", children: [{ type: "text", value: "1" }] },
       { kind: "tab", label: "Two", children: [] },
@@ -304,12 +304,12 @@ describe("convert controls", () => {
     [{ toggle: "details" }, { type: "toggle", targetId: "details" }],
     [{ copy: "text" }, { type: "copy_to_clipboard", text: "text" }],
     [{}, undefined],
-  ])("maps non-callback action attributes", (attrs, expected) => {
+  ])("when maps non-callback action attributes", (attrs, expected) => {
     expect(convert(element("button", attrs, "Act"))).toMatchObject({ type: "button", label: "Act" });
     expect((convert(element("button", attrs, "Act")) as Record<string, unknown>).action).toEqual(expected);
   });
 
-  it("maps text, date, time, and textarea inputs", () => {
+  it("when maps text, date, time, and textarea inputs", () => {
     expect(
       convert(
         element("input", {
@@ -345,7 +345,7 @@ describe("convert controls", () => {
     });
   });
 
-  it("maps checkbox and switch labels from attributes or text", () => {
+  it("when maps checkbox and switch labels from attributes or text", () => {
     expect(convert(element("input", { type: "checkbox", id: "a", label: "A", checked: "off" }))).toEqual({
       type: "checkbox",
       id: "a",
@@ -388,7 +388,7 @@ describe("convert controls", () => {
     });
   });
 
-  it("maps sliders and chip groups", () => {
+  it("when maps sliders and chip groups", () => {
     expect(
       convert(element("slider", { id: "volume", label: "Volume", value: "5", min: "0", max: "10", step: "2" })),
     ).toEqual({

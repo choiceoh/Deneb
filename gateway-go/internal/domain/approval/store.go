@@ -28,7 +28,7 @@ type Request struct {
 	CommandArgv    []string          `json:"commandArgv,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	Cwd            string            `json:"cwd,omitempty"`
-	SystemRunPlan  any               `json:"systemRunPlan,omitempty"`
+	SystemRunPlan  rawJSON           `json:"systemRunPlan,omitempty"`
 	Host           string            `json:"host,omitempty"`
 	Security       string            `json:"security,omitempty"`
 	Ask            string            `json:"ask,omitempty"`
@@ -143,7 +143,7 @@ type CreateRequestParams struct {
 	CommandArgv   []string
 	Env           map[string]string
 	Cwd           string
-	SystemRunPlan any
+	SystemRunPlan rawJSON
 	Host          string
 	Security      string
 	Ask           string

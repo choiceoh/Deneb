@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,10 +11,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/routine"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
@@ -35,7 +32,7 @@ import (
 // Called after registerSessionRPCMethods() which creates the chat handler.
 func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 	hub.AdvancePhase(rpcutil.PhaseLate)
-	hub.SetWikiStore(s.wikiStore) // late-bound: created during session phase
+	hub.Opt.WikiStore = s.wikiStore // late-bound: created during session phase
 
 	domains := []map[string]rpcutil.HandlerFunc{
 		handlerchat.Methods(handlerchat.Deps{
@@ -51,18 +48,18 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		// SendSync, with deneb-ui emission enabled (channel "client").
 		handlerchat.MiniappMethods(handlerchat.Deps{
 			Chat:       s.chatHandler,
-			OcrImage:   document.OCRImage,
-			Transcribe: artifact.TranscribeAudio,
+			OcrImage:   toolbind.OCRImage,
+			Transcribe: toolbind.TranscribeAudio,
 			// Document attach (pdf/doc/sheet) → in-house extractor (PDF/Excel/Word/
 			// PowerPoint/CSV/text, with a scanned-PDF / image OCR fallback).
-			ExtractDocument: document.ExtractAttachmentText,
+			ExtractDocument: toolbind.ExtractAttachmentText,
 			// In-app browser in-place translation (en/ru → ko) — DeepL-only.
-			Translate: tools.TranslateSegments,
+			Translate: toolbind.TranslateSegments,
 			// Raw capture persistence: full OCR text / diarized transcript →
 			// {memory}/captures/ + diary breadcrumb (recallable, dream-distilled,
 			// backed up). The agent turn only summarizes; this keeps the original.
 			SaveCapture: func(kind, context, text string) (string, error) {
-				ws := hub.WikiStore()
+				ws := hub.Opt.WikiStore
 				if ws == nil {
 					return "", fmt.Errorf("wiki store unavailable")
 				}
@@ -73,12 +70,12 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			// address book (every saved name + org). Either may be empty.
 			Hotwords: func() string {
 				var parts []string
-				if ws := hub.WikiStore(); ws != nil {
+				if ws := hub.Opt.WikiStore; ws != nil {
 					if h := ws.HotwordHints(150); h != "" {
 						parts = append(parts, h)
 					}
 				}
-				if cs := hub.ContactsStore(); cs != nil {
+				if cs := hub.Opt.ContactsStore; cs != nil {
 					if h := cs.HotwordHints(100); h != "" {
 						parts = append(parts, h)
 					}
@@ -88,7 +85,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			// Primary contacts sync: persist the whole address book into the
 			// contacts store (phone lookup / name search / ASR hotwords).
 			SaveContacts: func(contactsJSON []byte) (int, error) {
-				cs := hub.ContactsStore()
+				cs := hub.Opt.ContactsStore
 				if cs == nil {
 					return 0, fmt.Errorf("contacts store unavailable")
 				}
@@ -104,7 +101,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			// Enriches only 사람 pages already in the wiki — it creates none — so
 			// the phone book strengthens the curated set without flooding it.
 			EnrichContacts: func(contactsJSON []byte) (wiki.ContactEnrichResult, error) {
-				ws := hub.WikiStore()
+				ws := hub.Opt.WikiStore
 				if ws == nil {
 					return wiki.ContactEnrichResult{}, fmt.Errorf("wiki store unavailable")
 				}
@@ -167,7 +164,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		}),
 		// --- Wiki knowledge base (feature-flagged, late-bound) ---
 		handlerwiki.Methods(handlerwiki.Deps{
-			Store: hub.WikiStore(),
+			Store: hub.Opt.WikiStore,
 		}),
 
 		// --- Native model picker (miniapp.models.*) ---
@@ -233,7 +230,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				if err != nil {
 					return nil, err
 				}
-				return handlermail.PipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, document.ExtractAttachmentText, func(domain string) []string {
+				return handlermail.PipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, toolbind.ExtractAttachmentText, func(domain string) []string {
 					return s.cpProjects.Lookup(s.wikiStore, domain)
 				})
 			},
@@ -241,7 +238,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			WorkState:  mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json")),
 			SaveToWiki: makeMailAnalysisWikiSink(hub),
 			WikiStore: func() (miniknowledge.MemorySearcher, error) {
-				store := hub.WikiStore()
+				store := hub.Opt.WikiStore
 				if store == nil {
 					return nil, errWikiDisabled
 				}
@@ -270,7 +267,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		if s.wikiStore != nil {
 			wikiDir := s.wikiStore.Dir()
 			weeklyDataFn = func(ctx context.Context) (string, error) {
-				return routine.CollectWeeklyReportData(ctx, routine.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
+				return toolbind.CollectWeeklyReportData(ctx, toolbind.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
 			}
 			// Deterministic report body — a head line + server-assembled deneb-ui
 			// card (RenderWeeklyReportCard), preferred over the LLM turn so the
@@ -278,10 +275,10 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			// The plain-text 양식 (RenderWeeklyReportText) remains the PDF path's
 			// fallback composition.
 			weeklyTextFn = func(_ context.Context) (string, error) {
-				return routine.RenderWeeklyReportCard(routine.WeeklyReportOpts{WikiDir: wikiDir}, time.Now()), nil
+				return toolbind.RenderWeeklyReportCard(toolbind.WeeklyReportOpts{WikiDir: wikiDir}, time.Now()), nil
 			}
 			weeklyFormFn = func(ctx context.Context) error {
-				img, ok := routine.BuildWeeklyReportImage(ctx, routine.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
+				img, ok := toolbind.BuildWeeklyReportImage(ctx, toolbind.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
 				if !ok {
 					return nil // render unavailable (low memory/disk) → text report only
 				}

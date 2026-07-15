@@ -17,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	chattranscript "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
@@ -42,8 +43,8 @@ func (s *Server) registerSessionRPCMethods() {
 
 	s.chatHandler = chat.NewHandler(
 		s.sessions,
-		func(event string, payload any) (int, []error) {
-			return s.broadcastSessionEvent(event, eventPayloadFromAny(payload))
+		func(event string, payload json.RawMessage) (int, []error) {
+			return s.broadcastSessionEvent(event, events.PayloadFromRaw(payload))
 		},
 		s.logger,
 		chatCfg,
@@ -127,7 +128,7 @@ func (s *Server) openSessionTranscriptStore() (chat.TranscriptStore, string, *po
 		return nil, "", nil
 	}
 
-	cached := chat.NewCachedTranscriptStore(chat.NewFileTranscriptStore(transcriptDir), 0)
+	cached := chattranscript.NewCachedTranscriptStore(chattranscript.NewFileTranscriptStore(transcriptDir), 0)
 	transcriptStore, polarisStore := s.openPolarisTranscriptBridge(cached)
 	if transcriptStore == nil {
 		// Assembly will return an error, but the gateway can still serve other functions.
@@ -220,8 +221,7 @@ func (s *Server) buildSessionChatConfig(
 
 func (s *Server) initSessionAI(chatCfg *chat.HandlerConfig, registry *modelrole.Registry) {
 	s.localAIHub = localai.New(localai.Config{}, registry, s.logger)
-	chatCfg.LocalAIHub = s.localAIHub
-
+	
 	s.embeddingClient = embedding.New("", s.logger)
 	chatCfg.Memory.Embedding = s.embeddingClient
 	if s.polarisStore != nil {
@@ -269,17 +269,18 @@ func (s *Server) configureSessionChatCallbacks(chatCfg *chat.HandlerConfig) {
 	})
 	if s.gatewaySubs != nil {
 		chatCfg.EmitAgentFn = func(kind, sessionKey, runID string, payload map[string]any) {
+			ep, _ := events.PayloadOf(payload)
 			s.gatewaySubs.EmitAgent(events.AgentEvent{
 				Kind:       kind,
 				SessionKey: sessionKey,
 				RunID:      runID,
-				Payload:    payload,
+				Payload:    ep,
 			})
 		}
-		chatCfg.EmitTranscriptFn = func(sessionKey string, message any, messageID string) {
+		chatCfg.EmitTranscriptFn = func(sessionKey string, message json.RawMessage, messageID string) {
 			s.gatewaySubs.EmitTranscript(events.TranscriptUpdate{
 				SessionKey: sessionKey,
-				Message:    message,
+				Message:    events.PayloadFromRaw(message),
 				MessageID:  messageID,
 			})
 		}

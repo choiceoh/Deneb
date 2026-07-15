@@ -177,33 +177,33 @@ describe("AIPanel shell", () => {
     expect(screen.getByRole("log", { name: "Deneb 대화", hidden: true })).toBeInTheDocument();
   });
 
-  it("uses fixed side-panel sizing by default", () => {
+  it("when uses fixed side-panel sizing by default", () => {
     const { container } = render(wrapper(workspace(), <AIPanel cfg={cfg} />));
     expect(container.querySelector("aside")).toHaveStyle({ width: "var(--ai-w)", flex: "0 0 auto" });
     expect(container.querySelector("aside")).not.toHaveClass("ai-expanded", "ai-bottom");
   });
 
-  it("expands across the available work area", () => {
+  it("when expands across the available work area", () => {
     const { container } = render(wrapper(workspace(), <AIPanel cfg={cfg} expanded />));
     expect(container.querySelector("aside")).toHaveClass("ai-expanded");
     expect(container.querySelector("aside")).toHaveStyle({ width: "auto", flex: "1 1 auto" });
   });
 
-  it("uses docked sizing for notebook placement", () => {
+  it("when uses docked sizing for notebook placement", () => {
     const { container } = render(wrapper(workspace(), <AIPanel cfg={cfg} placement="bottom" />));
     expect(container.querySelector("aside")).toHaveClass("ai-bottom");
     expect(container.querySelector("aside")).toHaveStyle({ minHeight: "0", padding: "12px 16px" });
     expect(container.querySelector("aside")).not.toHaveStyle({ width: "var(--ai-w)" });
   });
 
-  it("surfaces active file drag state", () => {
+  it("when surfaces active file drag state", () => {
     mocks.useFileDrop.mockReturnValue({ over: true, dropProps: { title: "drop target" } });
     const { container } = render(wrapper(workspace(), <AIPanel cfg={cfg} />));
     expect(container.querySelector("aside")).toHaveClass("drop-over");
     expect(container.querySelector("aside")).toHaveAttribute("title", "drop target");
   });
 
-  it("invokes expand and collapse shell controls", async () => {
+  it("when invokes expand and collapse shell controls", async () => {
     const onToggleExpand = vi.fn();
     const onCollapse = vi.fn();
     render(wrapper(workspace(), <AIPanel cfg={cfg} onToggleExpand={onToggleExpand} onCollapse={onCollapse} />));
@@ -215,7 +215,7 @@ describe("AIPanel shell", () => {
     expect(onCollapse).toHaveBeenCalledTimes(1);
   });
 
-  it("changes the expand affordance in expanded mode and hides collapse", () => {
+  it("changes the expand affordance in expanded mode and without collapse", () => {
     render(wrapper(workspace(), <AIPanel cfg={cfg} expanded onToggleExpand={() => {}} onCollapse={() => {}} />));
     expect(screen.getByRole("button", { name: "패널 좁히기" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("button", { name: "Deneb 패널 접기" })).not.toBeInTheDocument();
@@ -307,7 +307,7 @@ describe("AIPanel conversations", () => {
     expect(screen.getByText("달력 확인 중…")).toHaveClass("ai-thinking");
   });
 
-  it("opens and routes the session drawer", async () => {
+  it("when opens and routes the session drawer", async () => {
     const toggleSessions = vi.fn();
     const selectSession = vi.fn();
     const removeSession = vi.fn();
@@ -335,7 +335,7 @@ describe("AIPanel conversations", () => {
     expect(newChat).toHaveBeenCalledTimes(1);
   });
 
-  it("locks session actions while chat work is busy", () => {
+  it("when locks session actions while chat work is busy", () => {
     mocks.useChat.mockReturnValue(chatState({ busy: true }));
     mocks.useSessions.mockReturnValue({
       ...sessionActions,
@@ -366,7 +366,7 @@ describe("AIPanel conversations", () => {
 });
 
 describe("AIPanel notebook output loop", () => {
-  it("offers completed assistant text to the active notebook", () => {
+  it("when offers completed assistant text to the active notebook", () => {
     const noteSink = vi.fn(async () => true);
     mocks.useChat.mockReturnValue(chatState({ turns: [assistantTurn] }));
     render(wrapper(workspace({ noteSink }), <AIPanel cfg={cfg} />));

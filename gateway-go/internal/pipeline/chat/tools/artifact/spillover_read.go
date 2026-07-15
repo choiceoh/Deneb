@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -26,7 +26,7 @@ const (
 // tool result by its spill ID — paged (offset/limit lines) or filtered (grep),
 // never the whole blob at once. Access is session-scoped: the caller must
 // belong to the same session.
-func ToolSpilloverRead(store *agent.SpilloverStore) toolport.ToolFunc {
+func ToolSpilloverRead(store tooldeps.SpilloverStore) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			SpillID string `json:"spill_id"`

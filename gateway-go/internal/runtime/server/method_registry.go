@@ -11,8 +11,10 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"path/filepath"
 	"strings"
 	"time"
@@ -31,13 +33,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mailflow"
@@ -184,7 +186,7 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 	// snapshots and usage tracker state. Stored on both the hub (for RPC
 	// handlers) and the server (so the chat dispatcher can wire /insights).
 	insightsEngine := insights.New(hub.Sessions(), s.usageTracker)
-	hub.SetInsights(insightsEngine)
+	hub.Opt.Insights = insightsEngine
 	s.insights = insightsEngine
 
 	// Device address book mirror (native-client contacts sync) — no chat dependency,
@@ -195,7 +197,7 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 		s.logger.Warn("contacts store init failed; contacts sync disabled", "error", err)
 	} else {
 		s.contactsStore = cs
-		hub.SetContactsStore(cs)
+		hub.Opt.ContactsStore = cs
 	}
 	s.nativeSyncStore = nativesync.NewStore(filepath.Join(denebDir, "native_sync.jsonl"))
 	s.workFeedStore = workfeed.NewStore(filepath.Join(denebDir, "workfeed.jsonl"))
@@ -228,8 +230,8 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 				Store:  s.pushTokenStore,
 				Sender: sender,
 				Logger: s.logger,
-				Broadcast: func(event string, payload any) {
-					s.broadcaster.Broadcast(event, eventPayloadFromAny(payload))
+				Broadcast: func(event string, payload json.RawMessage) {
+					s.broadcaster.Broadcast(event, events.PayloadFromRaw(payload))
 				},
 				ShutdownCtx: s.ShutdownCtx(),
 			})
@@ -292,7 +294,7 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 		},
 		Contacts: minimodule.ContactsDeps{
 			Store: func() (*contacts.Store, error) {
-				cs := hub.ContactsStore()
+				cs := hub.Opt.ContactsStore
 				if cs == nil {
 					return nil, errors.New("contacts store not configured")
 				}
@@ -390,7 +392,7 @@ func (s *Server) earlyCoreMethods(hub *rpcutil.GatewayHub, denebDir string, capa
 		handlerobserve.Methods(capabilities.observe),
 		handlerobservatory.Methods(capabilities.observatory),
 		handlerinsights.Methods(handlerinsights.Deps{
-			Engine: hub.Insights(),
+			Engine: hub.Opt.Insights,
 			Logger: hub.Logger(),
 		}),
 		handlercheckpoint.Methods(handlercheckpoint.Deps{
@@ -471,7 +473,7 @@ func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub) []map[string]rpcu
 // not prevent gateway startup.
 func (s *Server) earlyKnowledgeMethods(hub *rpcutil.GatewayHub) []map[string]rpcutil.HandlerFunc {
 	wikiStore := func() (miniknowledge.MemorySearcher, error) {
-		store := hub.WikiStore()
+		store := hub.Opt.WikiStore
 		if store == nil {
 			return nil, errWikiDisabled
 		}
@@ -542,7 +544,7 @@ func (s *Server) earlyImprovementMethods(hub *rpcutil.GatewayHub) []map[string]r
 		s.earlyRSIStatusMethods(),
 		miniknowledge.SearchMethods(miniknowledge.SearchDeps{
 			Store: func() (miniknowledge.MemorySearcher, error) {
-				store := hub.WikiStore()
+				store := hub.Opt.WikiStore
 				if store == nil {
 					return nil, errWikiDisabled
 				}
@@ -573,7 +575,7 @@ func (s *Server) earlyMiniappGatewayMethods(hub *rpcutil.GatewayHub) map[string]
 			return ""
 		},
 		Capabilities: func() map[string]bool {
-			wikiReady := hub.WikiStore() != nil
+			wikiReady := hub.Opt.WikiStore != nil
 			chatReady := s.chatHandler != nil
 			return map[string]bool{
 				"rpc":             true,
@@ -589,7 +591,7 @@ func (s *Server) earlyMiniappGatewayMethods(hub *rpcutil.GatewayHub) map[string]
 				"crons":           hub.CronService() != nil,
 				"captureImage":    chatReady,
 				"captureAudio":    chatReady,
-				"captureContacts": hub.ContactsStore() != nil,
+				"captureContacts": hub.Opt.ContactsStore != nil,
 				"workFeed":        s.workFeedStore != nil,
 				"workFeedActions": s.workFeedStore != nil,
 				"nativeSync":      s.nativeSyncStore != nil,
@@ -612,7 +614,7 @@ func (s *Server) earlyFileMethods() map[string]rpcutil.HandlerFunc {
 	return minifiles.FilesBrowseMethods(minifiles.FilesBrowseDeps{
 		Store: localFileStoreOrNil(s.logger),
 		ExtractText: func(ctx context.Context, data []byte, name string) string {
-			text, _ := document.ExtractDocumentText(ctx, data, name, "")
+			text, _ := toolbind.ExtractDocumentText(ctx, data, name, "")
 			return text
 		},
 		SemanticSearch: func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error) {
@@ -644,7 +646,7 @@ func (s *Server) earlyFileMethods() map[string]rpcutil.HandlerFunc {
 func (s *Server) earlyProjectMethods(hub *rpcutil.GatewayHub) map[string]rpcutil.HandlerFunc {
 	return handlerminiapp.ProjectMethods(handlerminiapp.ProjectDeps{
 		Wiki: func() (handlerminiapp.ProjectStatusSource, error) {
-			store := hub.WikiStore()
+			store := hub.Opt.WikiStore
 			if store == nil {
 				return nil, errWikiDisabled
 			}
@@ -700,7 +702,7 @@ func (s *Server) earlyProjectMethods(hub *rpcutil.GatewayHub) map[string]rpcutil
 // earlySkillMethods wires the native skill catalog to late-bound Genesis
 // projections. Missing tracker state degrades to an unenriched catalog.
 func (s *Server) earlySkillMethods() map[string]rpcutil.HandlerFunc {
-	return handlerminiapp.SkillsMethods(handlerminiapp.SkillsDeps{
+	return minimodule.SkillsMethods(minimodule.SkillsDeps{
 		List: func() []skills.SkillEntry {
 			var toolNames []string
 			if s.chatHandler != nil {
@@ -755,7 +757,7 @@ func (s *Server) earlySkillMethods() map[string]rpcutil.HandlerFunc {
 }
 
 func (s *Server) earlySelfImprovementMethods() map[string]rpcutil.HandlerFunc {
-	return handlerminiapp.SelfImprovementCodingMethods(handlerminiapp.SelfImprovementCodingDeps{
+	return minimodule.SelfImprovementCodingMethods(minimodule.SelfImprovementCodingDeps{
 		RecentCandidates: func(status string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error) {
 			if s.genesisTracker == nil {
 				return nil, nil
@@ -791,7 +793,7 @@ func (s *Server) earlySelfImprovementMethods() map[string]rpcutil.HandlerFunc {
 }
 
 func (s *Server) earlyRSIStatusMethods() map[string]rpcutil.HandlerFunc {
-	return handlerminiapp.RSIStatusMethods(handlerminiapp.RSIStatusDeps{
+	return minimodule.RSIStatusMethods(minimodule.RSIStatusDeps{
 		Status: func() genesis.RSILoopStatus {
 			if s.genesisTracker == nil {
 				return genesis.RSILoopStatus{}

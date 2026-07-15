@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
@@ -495,7 +494,7 @@ func finalizePrompt(
 
 	if tier1Addition != "" {
 		promptBudget := prompt.PromptBudget{Total: contextCfg.SystemPromptBudget}
-		baseTokens := uint64(tokenest.Estimate(string(systemPrompt)))
+		baseTokens := uint64(prompt.EstimateTokens(string(systemPrompt)))
 		var remainingBudget uint64
 		if promptBudget.Total > baseTokens {
 			remainingBudget = promptBudget.Total - baseTokens

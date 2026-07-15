@@ -21,7 +21,7 @@ class FenceAndLanguageTests(unittest.TestCase):
         )
         self.assertEqual(checks.strip_deneb_ui_fences(text), "before\n\nmiddle\n")
 
-    def test_strip_deneb_ui_fences_leaves_other_code_blocks(self) -> None:
+    def test_strip_deneb_ui_fences_preserves_other_code_blocks(self) -> None:
         text = "```python\nprint('visible')\n```"
         self.assertEqual(checks.strip_deneb_ui_fences(text), text)
 
@@ -39,7 +39,7 @@ class FenceAndLanguageTests(unittest.TestCase):
         self.assertTrue(passed)
         self.assertIn("80%", detail)
 
-    def test_language_check_counts_korean_and_english_together(self) -> None:
+    def test_when_language_check_counts_korean_and_english_together(self) -> None:
         passed, detail = checks.check_korean_response("진행 done 완료")
         self.assertTrue(passed)
         self.assertIn("ko=4", detail)
@@ -74,7 +74,7 @@ class MarkupAndDeliveryTests(unittest.TestCase):
         self.assertFalse(passed)
         self.assertIn("exceeds 4096", detail)
 
-    def test_delivery_html_balance_is_checked_only_in_prose(self) -> None:
+    def test_when_delivery_html_balance_is_checked_only_in_prose(self) -> None:
         self.assertTrue(checks.check_telegram_safe("<b>safe</b>")[0])
         passed, detail = checks.check_telegram_safe("<b>broken")
         self.assertFalse(passed)
@@ -149,7 +149,7 @@ class SubstanceFillerAndLatencyTests(unittest.TestCase):
         )
         self.assertEqual(checks.check_response_substance("abcde12345"), (True, "10 chars"))
 
-    def test_substance_thresholds_are_configurable_and_inclusive(self) -> None:
+    def test_when_substance_thresholds_are_configurable_and_inclusive(self) -> None:
         self.assertTrue(checks.check_response_substance("abc", min_chars=3, min_alpha=3)[0])
         self.assertFalse(checks.check_response_substance("abc", min_chars=4, min_alpha=3)[0])
         self.assertFalse(checks.check_response_substance("abc", min_chars=3, min_alpha=4)[0])

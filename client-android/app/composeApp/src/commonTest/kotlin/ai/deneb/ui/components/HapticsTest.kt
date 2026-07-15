@@ -16,7 +16,7 @@ class HapticsTest {
     }
 
     @Test
-    fun emitsPlatformHapticWhenSemanticActionCalled() {
+    fun everySemanticActionMapsToItsPlatformHaptic() {
         val feedback = RecordingFeedback()
         val haptics = Haptics(feedback)
 
@@ -47,7 +47,7 @@ class HapticsTest {
     }
 
     @Test
-    fun routesToggleHapticWhenBooleanStateChanges() {
+    fun toggleRoutesFromTheNewBooleanState() {
         val feedback = RecordingFeedback()
         val haptics = Haptics(feedback)
 
@@ -68,7 +68,7 @@ class HapticsTest {
     }
 
     @Test
-    fun emitsOneFeedbackEventWhenSingleActionCalled() {
+    fun oneActionProducesExactlyOneFeedbackEvent() {
         val feedback = RecordingFeedback()
         val haptics = Haptics(feedback)
 

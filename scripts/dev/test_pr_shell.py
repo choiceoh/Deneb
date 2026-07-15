@@ -145,7 +145,7 @@ class PRShellTests(unittest.TestCase):
         self.assertIn("git merge-base --is-ancestor merge999 origin/main", calls)
         self.assertIn("git push origin --delete codex/health", calls)
 
-    def test_open_nonoverlapping_pr_fetches_checks_and_squash_merges(self) -> None:
+    def test_when_open_nonoverlapping_pr_fetches_checks_and_squash_merges(self) -> None:
         env = self.env(
             PR_FILES="scripts/dev/tool.py\\nREADME.md\\n",
             MAIN_FILES="gateway-go/main.go\\ndocs/guide.md\\n",
@@ -158,7 +158,7 @@ class PRShellTests(unittest.TestCase):
         self.assertIn("gh pr merge 42 --squash", calls)
         self.assertIn("git merge-base --is-ancestor merge999 origin/main", calls)
 
-    def test_overlapping_main_change_refuses_merge_and_lists_each_file(self) -> None:
+    def test_when_overlapping_main_change_refuses_merge_and_lists_each_file(self) -> None:
         env = self.env(
             PR_FILES="shared/a.txt\\nshared/b.txt\\nonly-pr.txt\\n",
             MAIN_FILES="shared/b.txt\\nshared/a.txt\\nonly-main.txt\\n",
@@ -200,7 +200,7 @@ class PRShellTests(unittest.TestCase):
         self.assertIn("git fetch origin main refs/pull/42/head --quiet", calls)
         self.assertGreaterEqual(calls.count("git fetch origin main --quiet"), 2)
 
-    def test_merge_commit_must_really_be_ancestor_of_origin_main(self) -> None:
+    def test_when_merge_commit_must_really_be_ancestor_of_origin_main(self) -> None:
         env = self.env(
             GH_STATE="MERGED",
             GIT_ANCESTOR_RC="1",

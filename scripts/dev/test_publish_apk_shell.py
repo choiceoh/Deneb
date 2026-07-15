@@ -133,7 +133,7 @@ class PublishAPKShellTests(unittest.TestCase):
         self.assertFalse(self.apk_dir.exists())
         self.assertEqual(self.calls(), "")
 
-    def test_release_requires_default_signing_material_unless_explicitly_overridden(self) -> None:
+    def test_when_release_requires_default_signing_material_unless_explicitly_overridden(self) -> None:
         proc = self.invoke(env=self.env(
             DENEB_APK_VARIANT="fossRelease",
             DENEB_SKIP_SMOKE="1",
@@ -172,7 +172,7 @@ class PublishAPKShellTests(unittest.TestCase):
         self.assertIn("DENEB_ALLOW_DEBUG_SIGNING=1", proc.stderr)
         self.assertIn("packageFossReleaseUniversalApk", self.calls())
 
-    def test_valid_signing_env_is_exported_to_gradle_and_release_artifact_is_renamed(self) -> None:
+    def test_when_valid_signing_env_is_exported_to_gradle_and_release_artifact_is_renamed(self) -> None:
         signing = self.signing_env()
         proc = self.invoke("release", env=self.env(
             DENEB_APK_VARIANT="fossRelease",
@@ -185,7 +185,7 @@ class PublishAPKShellTests(unittest.TestCase):
         artifact = self.apk_dir / "deneb-600-deadbeef-fossRelease.apk"
         self.assertEqual(artifact.read_text(), "apk-600\n")
 
-    def test_release_r8_mapping_is_published_next_to_apk(self) -> None:
+    def test_when_release_r8_mapping_is_published_next_to_apk(self) -> None:
         signing = self.signing_env()
         proc = self.invoke(env=self.env(
             DENEB_APK_VARIANT="fossRelease",
@@ -231,7 +231,7 @@ class PublishAPKShellTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertIn("building WITHOUT FCM push", absent.stderr)
 
-    def test_version_code_uses_max_of_serve_increment_and_library_floor(self) -> None:
+    def test_when_version_code_uses_max_of_serve_increment_and_library_floor(self) -> None:
         self.apk_dir.mkdir()
         (self.apk_dir / "deneb-598-old-fossDebug.apk").write_text("old")
         (self.apk_dir / "deneb-4.2.1-605-legacy.apk").write_text("legacy")
@@ -272,14 +272,14 @@ class PublishAPKShellTests(unittest.TestCase):
         self.assertNotIn("native-app", calls)
         self.assertNotIn("gradle", calls)
 
-    def test_explicit_skip_smoke_never_invokes_live_harness(self) -> None:
+    def test_explicit_ignores_smoke_never_invokes_live_harness(self) -> None:
         proc = self.invoke(env=self.env(DENEB_SKIP_SMOKE="reason"))
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("pre-publish smoke: SKIPPED", proc.stdout)
         self.assertNotIn("native-app", self.calls())
         self.assertNotIn("native-smoke", self.calls())
 
-    def test_unavailable_live_harness_warns_but_does_not_block_publish(self) -> None:
+    def test_when_unavailable_live_harness_warns_but_does_not_block_publish(self) -> None:
         proc = self.invoke(env=self.env(DENEB_SKIP_SMOKE="", NATIVE_START_RC="3"))
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("native live-app harness could not start", proc.stderr)
@@ -324,7 +324,7 @@ class PublishAPKShellTests(unittest.TestCase):
         self.assertIn("build did not produce", proc.stderr)
         self.assertEqual(manifest.read_text(), '{"code":599}\n')
 
-    def test_notes_backslashes_and_quotes_remain_valid_json(self) -> None:
+    def test_when_notes_backslashes_and_quotes_remain_valid_json(self) -> None:
         notes = 'Windows C:\\Deneb says "ready"'
         proc = self.invoke(notes)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)

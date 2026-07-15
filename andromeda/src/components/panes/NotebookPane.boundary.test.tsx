@@ -192,7 +192,7 @@ describe("NotebookPane boundary behavior", () => {
       expect(screen.queryByText("직접 메모")).not.toBeInTheDocument();
     });
 
-    it("opens a linked project wiki from the active notebook", async () => {
+    it("when opens a linked project wiki from the active notebook", async () => {
       function WikiProbe() {
         const { wikiTarget } = useWorkspace();
         return <output data-testid="wiki-target">{wikiTarget}</output>;
@@ -216,7 +216,7 @@ describe("NotebookPane boundary behavior", () => {
       ["프로젝트 위키", "위키"],
       ["계약서", "파일"],
       ["협상 메일", "메일"],
-    ])("labels %s as %s", async (title, kind) => {
+    ])("when labels %s as %s", async (title, kind) => {
       renderNotebook();
       await screen.findByRole("heading", { name: "최신 노트북" });
       const chip = screen.getByRole("button", { name: new RegExp(title) });
@@ -277,7 +277,7 @@ describe("NotebookPane boundary behavior", () => {
   });
 
   describe("create and source validation", () => {
-    it("requires a nonblank notebook name", async () => {
+    it("when requires a nonblank notebook name", async () => {
       renderNotebook();
       await screen.findByRole("heading", { name: "최신 노트북" });
       await userEvent.click(screen.getByRole("button", { name: "새 노트북" }));
@@ -316,7 +316,7 @@ describe("NotebookPane boundary behavior", () => {
       expect(calls.filter((call) => call.method === "miniapp.notebook.create")).toHaveLength(0);
     });
 
-    it("requires text for note sources", async () => {
+    it("when requires text for note sources", async () => {
       renderNotebook();
       await screen.findByRole("heading", { name: "최신 노트북" });
       await userEvent.click(screen.getByRole("button", { name: "자료 추가" }));
@@ -331,7 +331,7 @@ describe("NotebookPane boundary behavior", () => {
       ["파일", "파일 경로", "contracts/a.pdf", "file"],
       ["메일", "메일 ID", "message-42", "mail"],
       ["URL", "URL", "https://example.com/source", "url"],
-    ])("adds a %s source by canonical ref", async (tab, field, ref, kind) => {
+    ])("when adds a %s source by canonical ref", async (tab, field, ref, kind) => {
       renderNotebook();
       await screen.findByRole("heading", { name: "최신 노트북" });
       await userEvent.click(screen.getByRole("button", { name: "자료 추가" }));
@@ -364,7 +364,7 @@ describe("NotebookPane boundary behavior", () => {
   });
 
   describe("note sink and destructive changes", () => {
-    it("registers a note sink only while a notebook is open", async () => {
+    it("when registers a note sink only while a notebook is open", async () => {
       function SinkProbe() {
         const { noteSink } = useWorkspace();
         return <output data-testid="sink">{noteSink ? "registered" : "none"}</output>;
@@ -420,7 +420,7 @@ describe("NotebookPane boundary behavior", () => {
       expect(await screen.findByText(/HTTP 500/)).toBeInTheDocument();
     });
 
-    it("requires confirmation before removing a cited source", async () => {
+    it("when requires confirmation before removing a cited source", async () => {
       renderNotebook();
       await screen.findByRole("heading", { name: "최신 노트북" });
       await userEvent.click(screen.getByRole("button", { name: "인용자료 삭제 S2" }));
@@ -447,7 +447,7 @@ describe("NotebookPane boundary behavior", () => {
       expect(screen.getByText("직접 메모")).toBeInTheDocument();
     });
 
-    it("requires confirmation before deleting the whole notebook", async () => {
+    it("when requires confirmation before deleting the whole notebook", async () => {
       renderNotebook();
       await screen.findByRole("heading", { name: "최신 노트북" });
       await userEvent.click(screen.getByRole("button", { name: "노트북 삭제" }));

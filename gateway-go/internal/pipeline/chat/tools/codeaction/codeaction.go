@@ -43,12 +43,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/schedule"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
@@ -62,7 +60,7 @@ var codeActionRuntime string
 // into. *chat.ToolRegistry already satisfies it (see chat/tools.go), so no new
 // wiring is needed — the registry passes itself in toolreg_core.go.
 type ToolInvoker interface {
-	Execute(ctx context.Context, name string, input json.RawMessage) (string, error)
+	Execute(ctx context.Context, name string, input rawJSON) (string, error)
 }
 
 // CodeActionDeps wires the code_action tool. Invoker is the read-only tool
@@ -72,7 +70,7 @@ type ToolInvoker interface {
 // fall back to formatted text).
 type CodeActionDeps struct {
 	Invoker  ToolInvoker
-	Contacts *contacts.Store
+	Contacts tooldeps.ContactsBook
 	Calendar *tooldeps.CalendarDeps
 	Wiki     *wiki.Store
 }
@@ -154,7 +152,7 @@ func sortedActionKeys(m map[string]bool) []string {
 // preset / TurnContext / run-cache propagate exactly as a top-level call would).
 type codeActionBridge struct {
 	invoker  ToolInvoker
-	contacts *contacts.Store        // optional; backs structured (as_json) contacts
+	contacts tooldeps.ContactsBook  // optional; backs structured (as_json) contacts
 	calendar *tooldeps.CalendarDeps // optional; backs structured calendar
 	wiki     *wiki.Store            // optional; backs structured wiki
 	token    string
@@ -296,7 +294,7 @@ type caWikiPage struct {
 	Body     string   `json:"body"`
 }
 
-func caEventOf(e calendar.Event) caEvent {
+func caEventOf(e tooldeps.CalendarEvent) caEvent {
 	var att []string
 	for _, a := range e.Attendees {
 		if a.Email != "" {
@@ -352,7 +350,7 @@ func calendarStructured(ctx context.Context, d *tooldeps.CalendarDeps, args map[
 
 // calStructGet resolves one event by ID, routing local: IDs to the local store
 // and others to the read-only Google client (mirrors calActionGet).
-func calStructGet(ctx context.Context, d *tooldeps.CalendarDeps, id string) (*calendar.Event, error) {
+func calStructGet(ctx context.Context, d *tooldeps.CalendarDeps, id string) (*tooldeps.CalendarEvent, error) {
 	if localcal.IsLocalID(id) {
 		if d.Local == nil {
 			return nil, fmt.Errorf("local calendar unavailable")
@@ -440,9 +438,6 @@ func intArg(args map[string]any, key string) int {
 	return 0
 }
 
-// contactsStructured answers a read-only contacts call with []contacts.Contact
-// (json-tagged) instead of formatted text. Always returns a non-nil slice so
-// the Python side decodes to a list, never None.
 // dealsStructured returns the typed deal-record ledger (deal_records.go) so model
 // code can sum/count/group business documents deterministically rather than
 // eyeballing prose pages. action "list"; optional counterparty (substring, case-
@@ -473,10 +468,13 @@ func dealsStructured(store *wiki.Store, args map[string]any) (any, error) {
 	return out, nil
 }
 
-func contactsStructured(store *contacts.Store, args map[string]any) (any, error) {
+// contactsStructured answers a read-only contacts call with []tooldeps.Contact
+// (json-tagged) instead of formatted text. Always returns a non-nil slice so
+// the Python side decodes to a list, never None.
+func contactsStructured(store tooldeps.ContactsBook, args map[string]any) (any, error) {
 	action, _ := args["action"].(string)
 	query, _ := args["query"].(string)
-	var res []contacts.Contact
+	var res []tooldeps.Contact
 	switch action {
 	case "lookup":
 		res = store.LookupPhone(query)
@@ -490,7 +488,7 @@ func contactsStructured(store *contacts.Store, args map[string]any) (any, error)
 		return nil, fmt.Errorf("contacts structured: action %q not supported (lookup, search)", action)
 	}
 	if res == nil {
-		res = []contacts.Contact{}
+		res = []tooldeps.Contact{}
 	}
 	return res, nil
 }
@@ -651,7 +649,7 @@ func promoteCodeActionWorkflow(ctx context.Context, invoker ToolInvoker, promoti
 	if err != nil {
 		return "[code_action skill promotion: failed to encode proposal: " + err.Error() + "]"
 	}
-	out, err := invoker.Execute(ctx, "skill_lifecycle", data)
+	out, err := invoker.Execute(ctx, "skill_lifecycle", json.RawMessage(data))
 	if err != nil {
 		return "[code_action skill promotion: skill_lifecycle unavailable or failed: " + err.Error() + "]"
 	}
@@ -744,7 +742,7 @@ func formatCodeActionResult(stdout, stderr string, runErr, ctxErr error) string 
 
 // CodeActionSchema is the input schema (defined in Go, like fetch_tools, since
 // code_action is registered in toolreg_core.go and not via tool_schemas.json).
-func CodeActionSchema() map[string]any {
+func CodeActionSchema() jsonObject {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{

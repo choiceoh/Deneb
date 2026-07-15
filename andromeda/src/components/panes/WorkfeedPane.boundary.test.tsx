@@ -119,14 +119,14 @@ describe("WorkfeedPane boundary behavior", () => {
   });
 
   describe("daily range and ordering", () => {
-    it("does not fetch or show day navigation while disconnected", () => {
+    it("without fetch or show day navigation while disconnected", () => {
       renderFeed(todayItems, false);
       expect(screen.getByText("미연결")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "이전 날" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "다음 날" })).not.toBeInTheDocument();
     });
 
-    it("requests the complete selected local-day half-open range", async () => {
+    it("when requests the complete selected local-day half-open range", async () => {
       const ranges: Record<string, unknown>[] = [];
       const base = fakeProvider({ workfeed: todayItems });
       const provider: DataProvider = {
@@ -143,7 +143,7 @@ describe("WorkfeedPane boundary behavior", () => {
       expect(ranges[0]).toEqual({ limit: 100, sinceMs: at(0, 0), beforeMs: at(1, 0) });
     });
 
-    it("sorts a day's entries newest first regardless of provider order", async () => {
+    it("when sorts a day's entries newest first regardless of provider order", async () => {
       renderFeed([...todayItems].reverse());
       const rows = await screen.findAllByTitle(/상세$/);
       expect(rows.map((row) => row.textContent)).toEqual([
@@ -234,7 +234,7 @@ describe("WorkfeedPane boundary behavior", () => {
       ["custom_signal", "custom signal"],
       ["custom-signal", "custom signal"],
       ["", "피드"],
-    ])("labels source %s as %s", async (source, label) => {
+    ])("when labels source %s as %s", async (source, label) => {
       renderFeed([{ id: source || "none", source, title: `item-${source}`, createdAtMs: at(0, 9) }]);
       expect(await screen.findByText(label)).toBeInTheDocument();
     });
@@ -308,7 +308,7 @@ describe("WorkfeedPane boundary behavior", () => {
       expect(within(detail).queryByRole("button", { name: /분석/ })).not.toBeInTheDocument();
     });
 
-    it("includes source, date and reference id in detail metadata", async () => {
+    it("when includes source, date and reference id in detail metadata", async () => {
       renderFeed(todayItems);
       await userEvent.click(await screen.findByText("계약 승인 여부"));
       expect(screen.getByRole("region", { name: "피드 상세" })).toHaveTextContent(/질문.*ref deal-42/);
@@ -419,7 +419,7 @@ describe("WorkfeedPane boundary behavior", () => {
       await waitFor(() => expect(chats).toEqual([{ message: "조건부 승인", sessionKey: "client:main" }]));
     });
 
-    it("disables answer until trimmed input is nonblank", async () => {
+    it("when disables answer until trimmed input is nonblank", async () => {
       renderFeed(todayItems);
       await userEvent.click(await screen.findByText("계약 승인 여부"));
       const detail = screen.getByRole("region", { name: "피드 상세" });
@@ -505,7 +505,7 @@ describe("WorkfeedPane boundary behavior", () => {
   });
 
   describe("pane target and AI projection", () => {
-    it("opens a requested workfeed id once data arrives", async () => {
+    it("when opens a requested workfeed id once data arrives", async () => {
       function TargetSetter() {
         const { openPane } = useWorkspace();
         return <button onClick={() => openPane("workfeed", { id: "alert" })}>target</button>;

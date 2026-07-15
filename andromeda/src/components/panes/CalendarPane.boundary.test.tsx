@@ -120,7 +120,7 @@ describe("CalendarPane boundary behavior", () => {
   });
 
   describe("month navigation and agenda scope", () => {
-    it("queries a grid-covering range rather than only the numbered month", async () => {
+    it("when queries a grid-covering range rather than only the numbered month", async () => {
       const ranges: Record<string, unknown>[] = [];
       renderWithProviders(<CalendarPane />, { connected: true, dataProvider: provider(juneEvents, [], ranges) });
       await screen.findByText("정기 회의");
@@ -130,7 +130,7 @@ describe("CalendarPane boundary behavior", () => {
       expect(new Date(rpcParams.to).getTime()).toBeGreaterThan(new Date("2026-06-30T00:00:00Z").getTime());
     });
 
-    it("steps from January backward into the previous year", async () => {
+    it("when steps from January backward into the previous year", async () => {
       vi.setSystemTime(new Date("2026-01-15T00:00:00Z"));
       renderWithProviders(<CalendarPane />, { connected: true, dataProvider: provider([]) });
       expect(await screen.findByText(monthLabel(2026, 0))).toBeInTheDocument();
@@ -138,7 +138,7 @@ describe("CalendarPane boundary behavior", () => {
       expect(screen.getByText(monthLabel(2025, 11))).toBeInTheDocument();
     });
 
-    it("steps from December forward into the next year", async () => {
+    it("when steps from December forward into the next year", async () => {
       vi.setSystemTime(new Date("2026-12-15T00:00:00Z"));
       renderWithProviders(<CalendarPane />, { connected: true, dataProvider: provider([]) });
       expect(await screen.findByText(monthLabel(2026, 11))).toBeInTheDocument();
@@ -163,7 +163,7 @@ describe("CalendarPane boundary behavior", () => {
       expect(screen.getByText(`${monthLabel(2026, 6)} 일정`)).toBeInTheDocument();
     });
 
-    it("toggles the same day back to month scope", async () => {
+    it("when toggles the same day back to month scope", async () => {
       renderWithProviders(<CalendarPane />, { connected: true, dataProvider: provider(juneEvents) });
       const day = await screen.findByRole("button", { name: /6월 18일, 일정 1건/ });
       await userEvent.click(day);
@@ -172,7 +172,7 @@ describe("CalendarPane boundary behavior", () => {
       expect(screen.getByText(`${monthLabel(2026, 5)} 일정`)).toBeInTheDocument();
     });
 
-    it("places a multi-day all-day event on each covered day but excludes the exclusive end", async () => {
+    it("when places a multi-day all-day event on each covered day but excludes the exclusive end", async () => {
       const span = [
         {
           id: "span",
@@ -189,7 +189,7 @@ describe("CalendarPane boundary behavior", () => {
       expect(screen.getByRole("button", { name: /^6월 23일$/ })).toBeInTheDocument();
     });
 
-    it("does not leak an adjacent-month event into the month agenda", async () => {
+    it("without leak an adjacent-month event into the month agenda", async () => {
       const spill = [
         ...juneEvents,
         { id: "july", summary: "7월 시작", start: "2026-07-01T01:00:00Z", end: "2026-07-01T02:00:00Z" },
@@ -199,7 +199,7 @@ describe("CalendarPane boundary behavior", () => {
       expect(screen.queryByText("7월 시작")).not.toBeInTheDocument();
     });
 
-    it("keeps historical events in a non-current month agenda", async () => {
+    it("preserves historical events in a non-current month agenda", async () => {
       const may = [{ id: "past", summary: "5월 회고", start: "2026-05-02T01:00:00Z", end: "2026-05-02T02:00:00Z" }];
       renderWithProviders(<CalendarPane />, { connected: true, dataProvider: provider(may) });
       await userEvent.click(screen.getByRole("button", { name: "이전 달" }));
@@ -262,7 +262,7 @@ describe("CalendarPane boundary behavior", () => {
   });
 
   describe("new event form constraints", () => {
-    it("prefills the next full hour and a one-hour end", async () => {
+    it("when prefills the next full hour and a one-hour end", async () => {
       const dialog = await openCreate();
       expect(within(dialog).getByLabelText("시작 날짜")).toHaveValue("2026-06-15");
       expect(within(dialog).getByLabelText("시작 시간")).toHaveValue("10:00");
@@ -270,7 +270,7 @@ describe("CalendarPane boundary behavior", () => {
       expect(within(dialog).getByLabelText("종료 시간")).toHaveValue("11:00");
     });
 
-    it("prefills a clicked day at the working-hour default", async () => {
+    it("when prefills a clicked day at the working-hour default", async () => {
       renderWithProviders(<CalendarPane />, { connected: true, dataProvider: provider(juneEvents) });
       await userEvent.click(await screen.findByRole("button", { name: /^6월 29일$/ }));
       const dialog = await openCreate();
@@ -301,7 +301,7 @@ describe("CalendarPane boundary behavior", () => {
       ["30분", "10:30"],
       ["1시간", "11:00"],
       ["2시간", "12:00"],
-    ])("applies the %s quick duration", async (label, end) => {
+    ])("when applies the %s quick duration", async (label, end) => {
       const dialog = await openCreate();
       await userEvent.click(within(dialog).getByRole("button", { name: label }));
       expect(within(dialog).getByLabelText("종료 시간")).toHaveValue(end);
@@ -324,7 +324,7 @@ describe("CalendarPane boundary behavior", () => {
       expect(within(dialog).getByLabelText("종료 날짜")).toHaveValue("2026-06-21");
     });
 
-    it("trims title, location and description before persistence", async () => {
+    it("when trims title, location and description before persistence", async () => {
       const mutations: MutationCall[] = [];
       renderWithProviders(<CalendarPane />, { connected: true, dataProvider: provider([], mutations) });
       const dialog = await openCreate();
@@ -365,7 +365,7 @@ describe("CalendarPane boundary behavior", () => {
   });
 
   describe("existing event editing", () => {
-    it("hydrates every editable field from a local event", async () => {
+    it("when hydrates every editable field from a local event", async () => {
       renderWithProviders(<CalendarPane />, { connected: true, dataProvider: provider(juneEvents) });
       await userEvent.click(await screen.findByText("정기 회의"));
       const workspace = screen.getByRole("region", { name: "선택한 일정" });
@@ -460,7 +460,7 @@ describe("CalendarPane boundary behavior", () => {
       expect(within(tray).getByRole("button", { name: "수락" })).toBeEnabled();
     });
 
-    it("disables both decisions while one proposal request is in flight", async () => {
+    it("when disables both decisions while one proposal request is in flight", async () => {
       let resolve!: (response: Response) => void;
       installFetch(rpc, {
         "miniapp.calendar.proposals.list": () => response({ proposals: [{ id: "p", title: "대기 후보" }] }),

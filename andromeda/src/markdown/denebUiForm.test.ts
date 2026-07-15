@@ -15,7 +15,7 @@ describe("coerce", () => {
     expect(coerce(["a", "b", "c"])).toBe("a, b, c");
     expect(coerce([])).toBe("");
   });
-  it("stringifies booleans and numbers", () => {
+  it("when stringifies booleans and numbers", () => {
     expect(coerce(true)).toBe("true");
     expect(coerce(false)).toBe("false");
     expect(coerce(0)).toBe("0");
@@ -35,7 +35,7 @@ describe("collectInputs", () => {
     });
     expect(initial).toEqual({ name: "김", when: "", at: "09:00" });
   });
-  it("seeds select/radio from selected and checkbox/switch as booleans", () => {
+  it("when seeds select/radio from selected and checkbox/switch as booleans", () => {
     const { initial } = collectInputs({
       type: "column",
       children: [
@@ -47,7 +47,7 @@ describe("collectInputs", () => {
     });
     expect(initial).toEqual({ s: "b", r: "", c: true, w: false });
   });
-  it("seeds slider from value, then min, then 0", () => {
+  it("when seeds slider from value, then min, then 0", () => {
     const { initial } = collectInputs({
       type: "column",
       children: [
@@ -68,7 +68,7 @@ describe("collectInputs", () => {
     });
     expect(initial).toEqual({ multi: [], single: "" });
   });
-  it("collects required ids across the tree", () => {
+  it("when collects required ids across the tree", () => {
     const { required } = collectInputs({
       type: "column",
       children: [
@@ -79,7 +79,7 @@ describe("collectInputs", () => {
     });
     expect([...required].sort()).toEqual(["a", "c"]);
   });
-  it("descends into children, items, and tab bodies", () => {
+  it("when descends into children, items, and tab bodies", () => {
     const { initial } = collectInputs({
       type: "card",
       children: [{ type: "list", items: [{ type: "text_input", id: "deep", value: "x" }] }],

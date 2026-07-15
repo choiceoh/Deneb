@@ -29,7 +29,7 @@ class CaptureContractTests(unittest.TestCase):
         self.assertAlmostEqual(capture.first_token_ms, 125.0)
         self.assertEqual(capture.token_usage, {"inputTokens": 9, "outputTokens": 4})
 
-    def test_empty_capture_has_zero_first_token_and_independent_mutable_fields(self) -> None:
+    def test_returns_zero_first_token_for_empty_capture_without_aliasing(self) -> None:
         first = native.ChatCapture()
         second = native.ChatCapture()
         first.events.append({"event": "one"})
@@ -59,7 +59,7 @@ class ResolutionTests(unittest.TestCase):
         base.update(values)
         return base
 
-    def test_environment_token_has_precedence_and_is_trimmed(self) -> None:
+    def test_when_environment_token_has_precedence_and_is_trimmed(self) -> None:
         (self.state / "client_token").write_text("state-token\n", encoding="utf-8")
         (self.home / ".deneb/client_token").write_text("home-token\n", encoding="utf-8")
         with mock.patch.dict(
@@ -282,7 +282,7 @@ class PrerequisiteTests(unittest.TestCase):
         self.assertIn("refused", detail)
         token.assert_not_called()
 
-    def test_reachable_gateway_requires_token_and_success_is_exact(self) -> None:
+    def test_when_reachable_gateway_requires_token_and_success_is_exact(self) -> None:
         with mock.patch.object(native, "_http_get_json", return_value={"status": "ok"}):
             with mock.patch.object(native, "resolve_client_token", return_value=""):
                 missing = native.check_prerequisites()
@@ -331,7 +331,7 @@ class NativeClientLifecycleTests(unittest.TestCase):
         self.assertEqual(client.token, "late-token")
         self.assertTrue(client._connected)
 
-    def test_session_rotation_prefixing_and_counter_are_deterministic(self) -> None:
+    def test_when_session_rotation_prefixing_and_counter_are_deterministic(self) -> None:
         client = self.make_client()
         client.set_chat_id(42)
         self.assertEqual(client.session_key, "client:lt-42")
@@ -377,7 +377,7 @@ class NativeClientChatTests(unittest.TestCase):
         self.assertEqual(capture.final_response, {"ok": False})
         self.assertAlmostEqual(capture.latency_ms, 25.0)
 
-    def test_chat_refreshes_late_token_before_constructing_rpc_request(self) -> None:
+    def test_when_chat_refreshes_late_token_before_constructing_rpc_request(self) -> None:
         client = self.make_client(token="")
         response = {"ok": True, "payload": {"text": "ready"}}
         with mock.patch.object(native, "resolve_client_token", return_value="rotated-token"):
