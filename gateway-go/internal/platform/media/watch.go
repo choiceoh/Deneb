@@ -14,6 +14,11 @@
 // Frame budgeting follows a duration-adaptive scale (denser for short clips,
 // sparser for long ones) so the vision payload stays bounded regardless of
 // length. An optional [start, end] window narrows analysis to one segment.
+// After extraction, a near-duplicate pass drops held-slide frames so the
+// budget is spent on visually distinct content.
+//
+// TranscriptOnly skips the video download + frame path entirely when captions
+// (or ASR) are enough — the cheap summary mode.
 //
 // Requires yt-dlp (YouTube download) and ffmpeg (frame extraction). Both are
 // already project dependencies (see youtube.go / frames.go).
@@ -27,6 +32,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -58,6 +64,11 @@ type WatchOptions struct {
 	// MaxFrames overrides the duration-adaptive frame count. Zero uses the
 	// adaptive default (see selectWatchFrameCount).
 	MaxFrames int
+
+	// TranscriptOnly skips video download and frame extraction. Returns
+	// captions/ASR only — used for cheap summaries when visuals aren't needed.
+	// YouTube only; local files have no caption track and return an error.
+	TranscriptOnly bool
 }
 
 // Watch frame budgeting — denser sampling for short clips, sparse for long ones.
@@ -100,6 +111,11 @@ const (
 	// is computed per-pixel, so a small luma plane is dramatically cheaper and
 	// just as good at spotting cuts.
 	sceneScanWidth = 320
+
+	// watchCandidateOversample pulls extra timestamp candidates before the
+	// near-dup pass so the final frame budget is spent on distinct frames
+	// (held slides collapse instead of consuming slots).
+	watchCandidateOversample = 2
 )
 
 // WatchVideo extracts frames + subtitles from a YouTube URL or local file.
@@ -172,6 +188,14 @@ func watchYouTube(ctx context.Context, url string, opts WatchOptions) (*WatchRes
 		}
 	}
 
+	// Cheap path: captions/ASR only — skip the video download + ffmpeg work.
+	if opts.TranscriptOnly {
+		if strings.TrimSpace(result.Transcript) == "" {
+			return nil, fmt.Errorf("transcript-only watch: no captions or ASR transcript available")
+		}
+		return result, nil
+	}
+
 	// Download a watchable copy. Prefer a compact MP4 (<=720p) to bound size and
 	// keep ffmpeg seeking fast — we only need representative frames.
 	videoPath, err := downloadYouTubeVideo(ctx, ytdlpPath, url, tmpDir)
@@ -190,6 +214,10 @@ func watchYouTube(ctx context.Context, url string, opts WatchOptions) (*WatchRes
 
 // watchLocalFile extracts frames + (optional) subtitles from a local video file.
 func watchLocalFile(ctx context.Context, path string, opts WatchOptions) (*WatchResult, error) {
+	if opts.TranscriptOnly {
+		return nil, fmt.Errorf("transcript-only watch requires a YouTube URL with captions (local files have no caption track)")
+	}
+
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("video file not found: %w", err)
@@ -259,19 +287,30 @@ func downloadYouTubeVideo(ctx context.Context, ytdlpPath, url, tmpDir string) (s
 // extractFramesAtWindow selects representative timestamps across the video (or
 // the requested [start,end] window) and extracts a JPEG frame at each via
 // ffmpeg. Scene-change timestamps are preferred; even spacing is the fallback.
+// Candidates are oversampled, near-duplicates dropped, then thinned to the
+// frame budget so held slides don't waste vision tokens.
 func extractFramesAtWindow(ctx context.Context, videoPath string, duration int, opts WatchOptions) (frames [][]byte, timestamps []float64, err error) {
 	count := opts.MaxFrames
 	if count <= 0 {
 		count = selectWatchFrameCount(duration)
 	}
+	candidateCount := count * watchCandidateOversample
+	if candidateCount < count {
+		candidateCount = count
+	}
 
-	stamps := selectSceneTimestamps(ctx, videoPath, duration, count, opts.StartSec, opts.EndSec)
+	stamps := selectSceneTimestamps(ctx, videoPath, duration, candidateCount, opts.StartSec, opts.EndSec)
 	if len(stamps) == 0 {
-		stamps = selectWatchTimestamps(duration, count, opts.StartSec, opts.EndSec)
+		stamps = selectWatchTimestamps(duration, candidateCount, opts.StartSec, opts.EndSec)
 	}
 	frames, timestamps = extractFramesFromPath(videoPath, stamps)
 	if len(frames) == 0 {
 		return nil, nil, fmt.Errorf("no frames extracted (ffmpeg may be unavailable)")
+	}
+	frames, timestamps = dedupNearDuplicateFrames(frames, timestamps)
+	frames, timestamps = downsampleFramePairs(frames, timestamps, count)
+	if len(frames) == 0 {
+		return nil, nil, fmt.Errorf("no frames remaining after near-duplicate filter")
 	}
 	return frames, timestamps, nil
 }
