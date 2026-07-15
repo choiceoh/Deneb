@@ -302,6 +302,10 @@ type MetaEvolutionTask struct {
 	// (overall score, weakest pillars) as ADVISORY evidence (RSI P5-5). Grounds
 	// the producer on structural quality; no gate reads it. Nil = skip.
 	QualityBench func(ctx context.Context) string
+	// RSIBench, when set, injects a compact RSI Bench summary (process+utility)
+	// as ADVISORY evidence (P5-5). Grounds the producer on loop compounding;
+	// no gate reads it. Nil = skip.
+	RSIBench func(ctx context.Context) string
 	// GenesisGen, when set, executes one genesis generation with an explicit
 	// system prompt on the PRODUCTION genesis model — the genesis-epoch shadow
 	// bench's executor (server wires generation.Service.ShadowGenerate). Nil
@@ -713,6 +717,13 @@ func (t *MetaEvolutionTask) assembleEvidence(ctx context.Context, epoch string) 
 	if t.QualityBench != nil {
 		if line := strings.TrimSpace(t.QualityBench(ctx)); line != "" {
 			b.WriteString("\n## 코드베이스 건강 (자문 — 게이트 아님, P5-5)\n")
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+	if t.RSIBench != nil {
+		if line := strings.TrimSpace(t.RSIBench(ctx)); line != "" {
+			b.WriteString("\n## RSI 벤치 (자문 — 게이트 아님, P5-5)\n")
 			b.WriteString(line)
 			b.WriteString("\n")
 		}

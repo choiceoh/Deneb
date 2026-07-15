@@ -1,0 +1,47 @@
+---
+description: "RSI Bench 점수·finding·baseline·과정/효용 도메인 ratchet 규약"
+globs: ["scripts/audit/rsi-bench.py", "scripts/audit/rsi_bench_main.py", "scripts/audit/rsi_bench/**", "scripts/audit/rsi-bench-*.json"]
+---
+
+# RSI Bench
+
+RSI Bench는 재귀적 자가개선 루프의 **과정(Process)** 과 **효용(Utility)** 을
+하나의 벤치로 묶는다. 설계 SoT는 `docs/research/rsi-bench.md` 이다.
+Health Bench 3.0 점수와 비교하거나 산술 변환하지 않는다.
+
+## 평가 원칙
+
+- Overall은 도메인 점수의 **가중 기하평균**이다 (Process 0.55 · Utility 0.45).
+- LLM이 이 벤치를 채점하지 않는다. ledger / cache 집계만.
+- `resolved < 3` 인 비율은 unmeasured (soft watch도 **soft_confirmed ≥ 3**).
+- Soft 점수는 `SOFT_RESOLVE_SCORE_CAP` (55) 상한.
+- **1.2부터 Process와 Utility 모두 `--check` 래칫** (`ratcheted=true`).
+- `--check`는 confidence < `MIN_CHECK_CONFIDENCE`(60)이면 실패 (증거 얇은 상태의 Utility 래칫 신뢰 금지).
+- Health Fitness의 finding-land / feed-card는 RSI Utility를 **thin re-export**.
+- `swap-consistency` / `ability-transfer`는 전용 코퍼스 전까지 **proxy ceiling** (각각 ≤58, 포화 시 swap ≤52).
+
+## Rubric 1.2.0
+
+| Domain | Weight | Metrics |
+|---|---:|---|
+| Process | 0.55 | acceptor-trust, confirm-honesty, judge-fuel, preference-collapse, swap-consistency, probe-coverage, timescale-turn, ability-transfer, anti-collapse |
+| Utility | 0.45 | closure-land, operator-verdict, codebase-delta, retention-proxy, dispatch-land |
+
+expect-band **25–40**. 루브릭 승격 시 `--migrate-rubric`.
+
+## Baseline과 ratchet
+
+```bash
+make rsi-bench
+make rsi-bench-check
+make bench-check
+make rsi-bench-deep
+make rsi-bench-test
+python3 scripts/audit/rsi-bench.py --update-baseline --migrate-rubric --expect-band 25:40
+```
+
+## 변경 시 검증
+
+- `make rsi-bench-test`
+- 게이트웨이 변경 시 `go test ./internal/runtime/server/ -run MetaRSI`
+- 한 도메인 상승이 다른 도메인 래칫 실패를 가리지 않음 (기하평균)

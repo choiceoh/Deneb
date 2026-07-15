@@ -415,6 +415,8 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// prose on the accepted structural quality state (overall score,
 			// weakest pillars). Sourced from the checked-in health-v2 baseline.
 			QualityBench: s.metaQualityBenchEvidence,
+			// RSI P5-5: advisory RSI Bench evidence — process+utility composite.
+			RSIBench: s.metaRSIBenchEvidence,
 			// RSI P5-4 slice 2: the genesis-epoch shadow bench executes both
 			// prompts on the PRODUCTION genesis model (never persists, no
 			// daily-cap interaction).

@@ -619,15 +619,15 @@ func TestChatHarnessRejectsInvalidInputBeforeClaimingRunRoot(t *testing.T) {
 	defer root.Close()
 	client := llm.NewClient("http://127.0.0.1:1", "")
 
-	if _, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client		TokenEstimate: tokenest.EstimateUncalibrated,
+	if _, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, TokenEstimate: tokenest.EstimateUncalibrated,
 	}); err == nil || !strings.Contains(err.Error(), "model is required") {
 		t.Fatalf("missing model error = %v", err)
 	}
-	if _, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test", Arm: Arm("unsupported")		TokenEstimate: tokenest.EstimateUncalibrated,
+	if _, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test", Arm: Arm("unsupported"), TokenEstimate: tokenest.EstimateUncalibrated,
 	}); err == nil || !strings.Contains(err.Error(), "unsupported arm") {
 		t.Fatalf("unsupported arm error = %v", err)
 	}
-	harness, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test"		TokenEstimate: tokenest.EstimateUncalibrated,
+	harness, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test", TokenEstimate: tokenest.EstimateUncalibrated,
 	})
 	if err != nil {
 		t.Fatalf("valid construction after pre-claim validation failures: %v", err)
@@ -643,7 +643,7 @@ func TestChatHarnessRejectsRunRootReuseAcrossArms(t *testing.T) {
 	}
 	defer root.Close()
 	client := llm.NewClient("http://127.0.0.1:1", "")
-	first, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test", Arm: ArmRawPrimary		TokenEstimate: tokenest.EstimateUncalibrated,
+	first, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test", Arm: ArmRawPrimary,		TokenEstimate: tokenest.EstimateUncalibrated,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -656,7 +656,7 @@ func TestChatHarnessRejectsRunRootReuseAcrossArms(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(paths.Workspace, "output")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test", Arm: ArmMemoryAssisted		TokenEstimate: tokenest.EstimateUncalibrated,
+	if _, err := NewChatHarness(ChatHarnessConfig{Pack: pack, Root: root, Client: client, Model: "test", Arm: ArmMemoryAssisted,		TokenEstimate: tokenest.EstimateUncalibrated,
 	}); !errors.Is(err, ErrRunRootClaimed) {
 		t.Fatalf("reused RunRoot error = %v, want single-use claim rejection", err)
 	}

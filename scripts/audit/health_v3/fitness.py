@@ -126,98 +126,38 @@ def _data_dir() -> Path:
 
 
 def _score_finding_land() -> tuple[float, Evidence, list[Finding]]:
-    path = _data_dir() / "self_correction_candidates.jsonl"
-    if not path.is_file():
-        return (
-            BOOTSTRAP["finding-land"],
-            Evidence("fitness-finding-land", "bootstrap", f"missing {path.name}", required=False),
-            [],
-        )
-    proposed = dispatched = landed = reverted = 0
+    """Thin re-export of RSI Bench closure-land (shared L4 fidelity signal)."""
     try:
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            row = json.loads(line)
-            skill = str(row.get("skillName") or row.get("skill_name") or "")
-            if "health" not in skill and not str(row.get("id", "")).startswith("health-finding"):
-                # Count health-adjacent + generic code candidates lightly.
-                if row.get("scope") != "code":
-                    continue
-            status = str(row.get("status") or "").lower()
-            proposed += 1
-            if status in {"dispatched", "applied", "accepted", "landed"}:
-                dispatched += 1
-            if status in {"applied", "landed", "accepted"}:
-                landed += 1
-            if status in {"reverted", "rejected"}:
-                reverted += 1
-    except (OSError, json.JSONDecodeError):
+        from rsi_bench.utility import score_closure_land
+    except ImportError:
         return (
             BOOTSTRAP["finding-land"],
-            Evidence("fitness-finding-land", "unavailable", "jsonl parse failed", required=False),
+            Evidence("fitness-finding-land", "unavailable", "rsi_bench not importable", required=False),
             [],
         )
-    if proposed == 0:
-        return (
-            BOOTSTRAP["finding-land"],
-            Evidence("fitness-finding-land", "bootstrap", "no code candidates", required=False),
-            [],
-        )
-    land_rate = landed / proposed
-    revert_rate = reverted / proposed
-    score = clamp(100.0 * land_rate * (1.0 - min(1.0, revert_rate * 2.0)))
-    # Blend with bootstrap so sparse early data cannot spike to 100.
-    score = clamp(0.6 * score + 0.4 * BOOTSTRAP["finding-land"])
+    score, _ev, _findings = score_closure_land()
     return (
         score,
-        Evidence(
-            "fitness-finding-land",
-            "measured",
-            f"proposed={proposed} dispatched={dispatched} landed={landed} reverted={reverted}",
-            required=False,
-        ),
+        Evidence("fitness-finding-land", "measured", f"re-export rsi closure-land score={score:.1f}"),
         [],
     )
 
 
 def _score_feed_card() -> tuple[float, Evidence, list[Finding]]:
-    # Feed-card ledger is gateway-owned; without a checked-in export use bootstrap.
-    export = os.environ.get("DENEB_FEED_CARD_EXPORT", "").strip()
-    if not export:
+    """Thin re-export of RSI Bench operator-verdict."""
+    try:
+        from rsi_bench.utility import score_operator_verdict
+    except ImportError:
         return (
             BOOTSTRAP["feed-card"],
-            Evidence("fitness-feed-card", "bootstrap", "DENEB_FEED_CARD_EXPORT unset", required=False),
+            Evidence("fitness-feed-card", "unavailable", "rsi_bench not importable", required=False),
             [],
         )
-    data = _read_json(Path(export))
-    if not data:
-        return (
-            BOOTSTRAP["feed-card"],
-            Evidence("fitness-feed-card", "unavailable", "export unreadable", required=False),
-            [],
-        )
-    adopted = float(data.get("adopted", 0))
-    rejected = float(data.get("rejected", 0))
-    reverted = float(data.get("reverted", 0))
-    total = adopted + rejected + reverted
-    if total <= 0:
-        return (
-            BOOTSTRAP["feed-card"],
-            Evidence("fitness-feed-card", "bootstrap", "empty feed-card window", required=False),
-            [],
-        )
-    adopt_rate = adopted / total
-    revert_rate = reverted / total
-    score = clamp(100.0 * adopt_rate * (1.0 - revert_rate))
+    score, ev, _findings = score_operator_verdict()
+    status = ev.status if ev.status in {"measured", "bootstrap", "unavailable"} else "bootstrap"
     return (
         score,
-        Evidence(
-            "fitness-feed-card",
-            "measured",
-            f"adopted={adopted:.0f} rejected={rejected:.0f} reverted={reverted:.0f}",
-            required=False,
-        ),
+        Evidence("fitness-feed-card", status, f"re-export rsi operator-verdict: {ev.detail}"),
         [],
     )
 

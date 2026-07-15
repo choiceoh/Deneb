@@ -54,7 +54,7 @@ func TestResolverPreservesTargetOrderDuplicatesAndValueTypes(t *testing.T) {
 	if !reflect.DeepEqual(gotPaths, wantPaths) || result.InactiveRefPaths[0] != "svc.missing" {
 		t.Fatalf("paths = %#v inactive=%#v", gotPaths, result.InactiveRefPaths)
 	}
-	if result.Assignments[0].Value != 42 || result.Assignments[1].Value != "secret" || result.Assignments[3].Value != true {
+	if string(result.Assignments[0].Value) != "42" || string(result.Assignments[1].Value) != `"secret"` || string(result.Assignments[3].Value) != "true" {
 		t.Fatalf("values = %+v", result.Assignments)
 	}
 }
@@ -69,11 +69,11 @@ func TestResolverSetOverwritesAndBlankPathIsAddressable(t *testing.T) {
 	resolver.SetValue("svc.key", "second")
 	resolver.SetValue(".", "blank")
 	result := resolver.Resolve("svc", []string{"key"})
-	if len(result.Assignments) != 1 || result.Assignments[0].Value != "second" {
+	if len(result.Assignments) != 1 || string(result.Assignments[0].Value) != `"second"` {
 		t.Fatalf("overwrite result = %+v", result)
 	}
 	blank := resolver.Resolve("", []string{""})
-	if len(blank.Assignments) != 1 || blank.Assignments[0].Path != "." || blank.Assignments[0].Value != "blank" {
+	if len(blank.Assignments) != 1 || blank.Assignments[0].Path != "." || string(blank.Assignments[0].Value) != `"blank"` {
 		t.Fatalf("blank path result = %+v", blank)
 	}
 }
@@ -91,7 +91,7 @@ func TestReloadClearsWarningsButRetainsSecrets(t *testing.T) {
 		t.Fatalf("reload state timestamp=%d warnings=%#v", resolver.loadedAtMs, resolver.warnings)
 	}
 	resolved := resolver.Resolve("svc", []string{"key"})
-	if len(resolved.Assignments) != 1 || resolved.Assignments[0].Value != "value" {
+	if len(resolved.Assignments) != 1 || string(resolved.Assignments[0].Value) != `"value"` {
 		t.Fatalf("Reload discarded secrets: %+v", resolved)
 	}
 	second := resolver.Reload()

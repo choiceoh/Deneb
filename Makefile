@@ -13,6 +13,8 @@
        ci ci/fast go-test-cached \
        health health-check health-v2 health-v2-check health-v2-deep health-v2-test health-v2-baseline \
        health-v3 health-v3-check health-v3-deep health-v3-test health-v3-baseline \
+       rsi-bench rsi-bench-check rsi-bench-deep rsi-bench-test rsi-bench-baseline \
+       bench-check \
        runtime-health runtime-health-test python-test python-lint shell-lint shell-behavior-test \
        preview native-smoke \
        info
@@ -274,6 +276,26 @@ health-v3-test:
 
 health-v3-baseline:
 	@python3 scripts/audit/health-bench-v3.py --update-baseline
+
+# RSI Bench 1.0 — process (acceptor honesty) + utility (land/verdict) geometric
+# composite. Design: docs/research/rsi-bench.md. Not comparable to Health 3.0.
+rsi-bench:
+	@python3 scripts/audit/rsi-bench.py
+
+rsi-bench-check:
+	@python3 scripts/audit/rsi-bench.py --check
+
+# Combined structural + RSI ratchet (PR / operator gate).
+bench-check: health-v3-check rsi-bench-check
+
+rsi-bench-deep:
+	@python3 scripts/audit/rsi-bench.py --deep --refresh-cache
+
+rsi-bench-test:
+	@python3 -m unittest discover -s scripts/audit -p 'test_rsi_bench*.py' -v
+
+rsi-bench-baseline:
+	@python3 scripts/audit/rsi-bench.py --update-baseline --migrate-rubric --expect-band 25:40
 
 # Runtime-health score (advisory, on-host only — reads the production gateway's
 # journald over a rolling window, so it is NON-deterministic and has NO ratchet

@@ -6,8 +6,8 @@ import (
 
 func TestResolve_ReturnsAssignmentsAndMissingRefs(t *testing.T) {
 	r := NewResolver()
-	r.Set("openai.apiKey", "sk-123")
-	r.Set("openai.orgId", "org-456")
+	r.SetValue("openai.apiKey", "sk-123")
+	r.SetValue("openai.orgId", "org-456")
 
 	result := r.Resolve("openai", []string{"apiKey", "orgId", "missing"})
 	if !result.OK {
