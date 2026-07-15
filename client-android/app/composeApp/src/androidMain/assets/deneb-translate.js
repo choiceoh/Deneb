@@ -66,8 +66,18 @@
   var MAX_IFRAME_DEPTH = 2;
   var SEGMENT_PAYLOAD_PREFIX = '\uE000deneb_translate_segment:v1:';
   var PARTS_RESULT_PREFIX = '\uE000deneb_translate_parts:v1:';
-  var BLOCK_SELECTOR = 'p,li,blockquote,figcaption,caption,td,th,dt,dd,h1,h2,h3,h4,h5,h6,article,section';
+  // Include DLE (.full-story-text) and Forumotion (.post-content) containers so
+  // link-split sentence fragments group into one DeepL unit instead of 3 orphans.
+  var BLOCK_SELECTOR = 'p,li,blockquote,figcaption,caption,td,th,dt,dd,h1,h2,h3,h4,h5,h6,article,section,div.full-story-text,div.post-content,div.postbody,div.quote';
   var CONTENT_SELECTORS = [
+    // DLE CMS article body (topwar.ru, topcor.ru) — prefer over wrapping <article>
+    '.full-story-text',
+    '#full-story',
+    '.full-story-cont',
+    // Forumotion posts (russiadefence.net)
+    '.post-content',
+    '.postbody',
+    '#page-body',
     'article',
     'main',
     '[role="main"]',
@@ -76,7 +86,6 @@
     '.article-content',
     '.entry-content',
     '.main-content',
-    '.post-content',
     '.story-body',
     '.content-body',
     '.markdown-body',
@@ -87,6 +96,8 @@
     '#content',
     '#main'
   ];
+  // Leftover ad/CMP chrome after network blocking — never ship to DeepL.
+  var SKIP_SELECTOR = '.banner-full-story,.banner-block,.banner-block *,[id^="yandex_rtb"],[id^="adfox"],[id*="yandex_rtb"],.dle_b_floor_ad,.adsbygoogle,.taboola,[id^="taboola"],.consentframework,[class*="consentframework"]';
   var OBSERVE_OPTS = { childList: true, subtree: true, characterData: true };
 
   function translatable(text) {
@@ -94,6 +105,8 @@
     if (t.length < 2) return false;        // skip whitespace / single glyphs
     if (HANGUL.test(t)) return false;       // already Korean
     if (!/[A-Za-zЀ-ӿ]/.test(t)) return false; // no Latin/Cyrillic → nothing to do
+    // Inline script leftovers / CMP stubs sometimes land as text nodes.
+    if (/^(window\.|var\s|function\s|Ya\.|_taboola|FA_pbjs|yaContextCb)/.test(t)) return false;
     return true;
   }
 
@@ -275,6 +288,9 @@
     while (p && p.nodeType === 1) {
       if (SKIP_TAGS[p.tagName]) return true;
       if (p.isContentEditable) return true;
+      try {
+        if (p.matches && p.matches(SKIP_SELECTOR)) return true;
+      } catch (e) {}
       p = p.parentNode;
     }
     return false;
@@ -466,7 +482,7 @@
       if (ar !== br) return ar - br;
       return textLength(b) - textLength(a);
     });
-    for (var i = 0; i < candidates.length && roots.length < 4; i++) {
+    for (var i = 0; i < candidates.length && roots.length < 12; i++) {
       var el = candidates[i];
       if (!el || textLength(el) < 80) continue;
       var nested = false;
