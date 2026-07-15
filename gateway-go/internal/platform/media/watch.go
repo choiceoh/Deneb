@@ -181,24 +181,24 @@ func watchYouTube(ctx context.Context, url string, opts WatchOptions) (*WatchRes
 			result.Language = lang
 		}
 	}
-		if result.Transcript == "" {
-			if t, asrLang := transcriptViaASR(ctx, ytdlpPath, url, tmpDir, int(opts.StartSec), int(opts.EndSec), meta.Duration); t != "" {
-				result.Transcript = t
-				result.Language = asrLang
-			}
+	if result.Transcript == "" {
+		if t, asrLang := transcriptViaASR(ctx, ytdlpPath, url, tmpDir, int(opts.StartSec), int(opts.EndSec), meta.Duration); t != "" {
+			result.Transcript = t
+			result.Language = asrLang
 		}
+	}
 
-		// Cheap path: captions/ASR only — skip the video download + ffmpeg work.
-		if opts.TranscriptOnly {
-			if strings.TrimSpace(result.Transcript) == "" {
-				return nil, fmt.Errorf("transcript-only watch: no captions or ASR transcript available")
-			}
-			return result, nil
+	// Cheap path: captions/ASR only — skip the video download + ffmpeg work.
+	if opts.TranscriptOnly {
+		if strings.TrimSpace(result.Transcript) == "" {
+			return nil, fmt.Errorf("transcript-only watch: no captions or ASR transcript available")
 		}
+		return result, nil
+	}
 
-		// Download a watchable copy. Prefer a compact MP4 (<=720p) to bound size and
-		// keep ffmpeg seeking fast — we only need representative frames.
-		videoPath, err := downloadYouTubeVideo(ctx, ytdlpPath, url, tmpDir)
+	// Download a watchable copy. Prefer a compact MP4 (<=720p) to bound size and
+	// keep ffmpeg seeking fast — we only need representative frames.
+	videoPath, err := downloadYouTubeVideo(ctx, ytdlpPath, url, tmpDir)
 	if err != nil {
 		return nil, fmt.Errorf("video download: %w", err)
 	}
