@@ -243,6 +243,37 @@ class GatewayRuntimeEndpointContractTest {
     }
 
     @Test
+    fun runWorkFeedRejectActionSendsTrimmedComment() = runTest {
+        val f = gatewayClientFixture(token = "runtime-token")
+        f.transport.enqueueRpc(payload = "{}", ok = false)
+
+        f.client.runWorkFeedAction(
+            "item-7",
+            "approval:reject",
+            comment = "  예산 재검토  ",
+            adoptSession = false,
+        )
+
+        val params = f.transport.singleRequest().requireRpc("miniapp.workfeed.action.run")
+        assertEquals(setOf("itemId", "actionId", "comment"), params.keys)
+        assertEquals("예산 재검토", params["comment"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun runWorkFeedActionDropsCommentUnlessNonBlankReject() = runTest {
+        val f = gatewayClientFixture(token = "runtime-token")
+        repeat(3) { f.transport.enqueueRpc(payload = "{}", ok = false) }
+
+        f.client.runWorkFeedAction("item-1", "approval:approve", comment = "drop", adoptSession = false)
+        f.client.runWorkFeedAction("item-2", "ack", comment = "drop", adoptSession = false)
+        f.client.runWorkFeedAction("item-3", "approval:reject", comment = "  ", adoptSession = false)
+
+        f.transport.requests.forEach { request ->
+            assertFalse(request.requireRpc("miniapp.workfeed.action.run").containsKey("comment"))
+        }
+    }
+
+    @Test
     fun runWorkFeedActionSkipsNetworkWithoutCredentials() = runTest {
         val f = gatewayClientFixture(token = "")
 
