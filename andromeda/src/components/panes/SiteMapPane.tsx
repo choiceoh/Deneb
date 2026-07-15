@@ -31,8 +31,14 @@ interface Pin {
   source: string; // 에너지원 (Kinds 상위: 태양광/풍력/기자재/기타/"")
   type: string; // 특성 (Kinds 하위: 토지/루프탑/수상/…/"")
   capacity: number; // MW, 0 = unrecorded
+  status: string; // 현장 lifecycle (후보/계약/개설/준공); "" = 미분류
   due?: string; // kept for the detail card only — not a visual dimension
 }
+
+// 후보(prospective) 현장 are hidden by default — the map is for real, contracted
+// sites ("계약해서 개설된 현장"). A "" status (미분류, e.g. 대표페이지 fallback rows)
+// is always shown; only an explicit 후보 is gated behind the toggle.
+const PROSPECTIVE = "후보";
 
 // 에너지원 → color. The warm-Zen palette is deliberately narrow, so we map the
 // four sources onto the theme's semantic tokens rather than inventing hues:
@@ -144,6 +150,7 @@ function placeSites(rows: ProjectSiteRow[]): Placed {
         source,
         type,
         capacity,
+        status: (r.status ?? "").trim(),
         due: r.due,
       });
     }
@@ -174,6 +181,7 @@ export function SiteMapPane() {
   const [sourceFilter, setSourceFilter] = useState<Set<string>>(new Set());
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [sidoFilter, setSidoFilter] = useState<string | null>(null);
+  const [showProspective, setShowProspective] = useState(false);
   const [selected, setSelected] = useState<Pin | null>(null);
 
   // Wheel-zoom + drag-pan via a controlled viewBox. Full extent = the whole map;
@@ -249,15 +257,18 @@ export function SiteMapPane() {
     return TYPE_ORDER.filter((k) => s.has(k));
   }, [pins]);
 
+  const prospectiveCount = useMemo(() => pins.filter((p) => p.status === PROSPECTIVE).length, [pins]);
+
   const shown = useMemo(
     () =>
       pins.filter(
         (p) =>
+          (showProspective || p.status !== PROSPECTIVE) &&
           (sourceFilter.size === 0 || sourceFilter.has(p.source)) &&
           (typeFilter.size === 0 || typeFilter.has(typeLabel(p.type))) &&
           (!sidoFilter || p.sido === sidoFilter),
       ),
-    [pins, sourceFilter, typeFilter, sidoFilter],
+    [pins, sourceFilter, typeFilter, sidoFilter, showProspective],
   );
 
   const totalMw = useMemo(() => shown.reduce((sum, p) => sum + (p.capacity || 0), 0), [shown]);
@@ -320,6 +331,11 @@ export function SiteMapPane() {
         {sidoFilter && (
           <Chip on onClick={() => setSidoFilter(null)}>
             {sidoFilter} ✕
+          </Chip>
+        )}
+        {prospectiveCount > 0 && (
+          <Chip on={showProspective} onClick={() => setShowProspective((v) => !v)}>
+            후보 포함 {prospectiveCount}
           </Chip>
         )}
         {filtered && (
@@ -563,6 +579,7 @@ export function SiteMapPane() {
         >
           {selected.client && <Detail label="거래처" value={selected.client} />}
           <Detail label="현장" value={selected.site} />
+          {selected.status && <Detail label="상태" value={selected.status} />}
           {selected.source && <Detail label="에너지원" value={selected.source} />}
           {selected.type && <Detail label="특성" value={typeLabel(selected.type)} />}
           <Detail label="용량" value={capacityText(selected.capacity)} />

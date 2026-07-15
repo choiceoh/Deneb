@@ -166,9 +166,15 @@ private data class SitePin(
     val source: String,
     val type: String,
     val capacity: Double,
+    val status: String,
     val due: String,
     val kinds: List<String>,
 )
+
+// 후보(prospective) 현장 are hidden by default — the map is for real, contracted
+// sites. A "" status (미분류, e.g. 대표페이지 fallback rows) is always shown; only an
+// explicit 후보 is gated behind the toggle.
+private const val PROSPECTIVE = "후보"
 
 private data class Placed(val pins: List<SitePin>, val unplaced: List<Pair<String, String>>)
 
@@ -202,6 +208,7 @@ private fun placeSites(rows: List<ProjectSiteRow>): Placed {
                     source = source,
                     type = type,
                     capacity = r.capacity,
+                    status = r.status.trim(),
                     due = r.due,
                     kinds = r.kinds,
                 ),
@@ -290,6 +297,7 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
 
     var sourceFilter by remember { mutableStateOf<Set<String>>(emptySet()) }
     var typeFilter by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showProspective by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<SitePin?>(null) }
 
     fun select(pin: SitePin) {
@@ -306,9 +314,12 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
         typeOrder.filter { it in present }
     }
 
-    val shown = remember(pins, sourceFilter, typeFilter) {
+    val prospectiveCount = remember(pins) { pins.count { it.status == PROSPECTIVE } }
+
+    val shown = remember(pins, sourceFilter, typeFilter, showProspective) {
         pins.filter {
-            (sourceFilter.isEmpty() || it.source in sourceFilter) &&
+            (showProspective || it.status != PROSPECTIVE) &&
+                (sourceFilter.isEmpty() || it.source in sourceFilter) &&
                 (typeFilter.isEmpty() || typeLabel(it.type) in typeFilter)
         }
     }
@@ -350,6 +361,11 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
                     onClick = { typeFilter = typeFilter.toggle(t) },
                 ) {
                     Text(t, style = DenebType.meta)
+                }
+            }
+            if (prospectiveCount > 0) {
+                DenebChip(selected = showProspective, onClick = { showProspective = !showProspective }) {
+                    Text("후보 포함 $prospectiveCount", style = DenebType.meta())
                 }
             }
         }
@@ -398,6 +414,7 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
                 Spacer(Modifier.height(12.dp))
                 if (pin.client.isNotEmpty()) DetailRow("거래처", pin.client)
                 DetailRow("현장", pin.site)
+                if (pin.status.isNotEmpty()) DetailRow("상태", pin.status)
                 if (pin.source.isNotEmpty()) DetailRow("에너지원", pin.source)
                 if (pin.type.isNotEmpty()) DetailRow("특성", typeLabel(pin.type))
                 DetailRow("용량", capacityText(pin.capacity))
