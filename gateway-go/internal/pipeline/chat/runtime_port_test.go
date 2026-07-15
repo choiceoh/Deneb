@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/runstate"
 )
 
 func TestChatPortRejectsTypedNilHandler(t *testing.T) {
@@ -48,6 +49,46 @@ func TestBeginDrainMarksHandlerUnreadyAndRejectsNewSyncRuns(t *testing.T) {
 	}
 	if _, err := h.SendSyncStream(context.Background(), "client:main", "hello", "", nil, nil); !errors.Is(err, ErrRuntimeDraining) {
 		t.Fatalf("SendSyncStream error = %v, want ErrRuntimeDraining", err)
+	}
+}
+
+func TestStartOrQueueRunEnqueuesDuringDrainWhenParentStillActive(t *testing.T) {
+	h := &Handler{
+		abort:       NewAbortTracker(),
+		pending:     NewPendingQueue(),
+		mergeWindow: NewMergeWindowTracker(),
+	}
+	t.Cleanup(h.abort.Close)
+
+	active := &runstate.AbortEntry{
+		SessionKey: "client:main",
+		ClientRun:  "run-parent",
+		CancelFn:   func(error) {},
+		ExpiresAt:  time.Now().Add(time.Hour),
+	}
+	if !h.abort.TryRegister(active.ClientRun, active) {
+		t.Fatal("parent run was not registered")
+	}
+	drained := h.abort.BeginDrain()
+	t.Cleanup(func() {
+		h.abort.Cleanup(active.ClientRun)
+		select {
+		case <-drained:
+		default:
+		}
+	})
+
+	h.startOrQueueRun("subnotify-child", RunParams{
+		SessionKey:  "client:main",
+		Message:     "child completed",
+		ClientRunID: "subnotify-child",
+	}, false)
+
+	if h.pending.Len("client:main") != 1 {
+		t.Fatalf("pending len = %d, want 1 (notification must enqueue during drain)", h.pending.Len("client:main"))
+	}
+	if h.abort.AcquireAdmission() {
+		t.Fatal("new top-level admission opened during drain")
 	}
 }
 

@@ -37,12 +37,27 @@ func (h *Handler) startQueuedAsyncRun(reqID string, params RunParams) *protocol.
 // chat. A stale active/idle observation can therefore neither start parallel
 // runs nor strand a notification behind a run that just finished.
 func (h *Handler) startOrQueueRun(reqID string, params RunParams, isSteer bool) {
-	if h.abort == nil || !h.abort.AcquireAdmission() {
+	if h.abort == nil {
+		return
+	}
+
+	sessLock := h.mergeWindow.SessionLock(params.SessionKey)
+	sessLock.Lock()
+	if h.abort.HasActiveRun(params.SessionKey) {
+		// Queue-only handoff never consumes a top-level admission slot. During
+		// shutdown drain the parent run will hand off this continuation via
+		// finishRunWithPendingHandoff without reopening admission.
+		h.pending.Enqueue(params.SessionKey, params)
+		sessLock.Unlock()
+		return
+	}
+	sessLock.Unlock()
+
+	if !h.abort.AcquireAdmission() {
 		return
 	}
 	defer h.abort.ReleaseAdmission()
 
-	sessLock := h.mergeWindow.SessionLock(params.SessionKey)
 	sessLock.Lock()
 	defer sessLock.Unlock()
 	if h.abort.HasActiveRun(params.SessionKey) {
