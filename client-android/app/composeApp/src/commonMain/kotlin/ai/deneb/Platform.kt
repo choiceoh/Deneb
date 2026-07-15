@@ -93,13 +93,17 @@ expect suspend fun shareImageToApps(bytes: ByteArray, baseName: String, extensio
 expect fun sendHeartbeatNotification(title: String, body: String)
 
 /**
- * Like [sendHeartbeatNotification] but for proactive gateway reports
- * (morning-letter, email-analysis) pushed over the events stream. On Android,
- * tapping it deep-links to the 업무 (General) topic — where the report was
- * mirrored — rather than the heartbeat conversation. Other platforms surface it
- * the same way as a heartbeat notification.
+ * Like [sendHeartbeatNotification] but for proactive gateway reports pushed over
+ * the events stream. Android deep-links a `kind=workfeed` notification with a
+ * non-blank [ref] to that exact feed card; older payloads without a ref retain
+ * the legacy 업무-topic destination. Other platforms surface it like a heartbeat.
  */
-expect fun sendProactiveReportNotification(title: String, body: String)
+expect fun sendProactiveReportNotification(
+    title: String,
+    body: String,
+    kind: String = "",
+    ref: String = "",
+)
 
 /**
  * Executes a phone Intent action the gateway's phone_write tool dispatched over

@@ -115,7 +115,12 @@ class TaskScheduler(
                 // feed update (backgrounded). Foreground reports refresh the feed
                 // live via onProactiveReportForeground.
                 if (!appInForeground) {
-                    sendProactiveReportNotification(title = report.title, body = report.body)
+                    sendProactiveReportNotification(
+                        title = report.title,
+                        body = report.body,
+                        kind = report.kind,
+                        ref = report.ref,
+                    )
                 }
             }
         }

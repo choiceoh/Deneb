@@ -9,7 +9,10 @@ object Home
 
 @Serializable
 @SerialName("deneb_feed")
-object DenebFeed
+data class DenebFeed(
+    val openItemId: String? = null,
+    val openItemCreatedAtMs: Long = 0L,
+)
 
 @Serializable
 @SerialName("deneb_config")

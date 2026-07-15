@@ -46,6 +46,7 @@ import nl.marc_apps.tts.rememberTextToSpeechOrNull
 import org.koin.android.ext.android.get
 
 class MainActivity : ComponentActivity() {
+    private var pendingWorkFeedItemId by mutableStateOf<String?>(null)
 
     // System speech-to-text result -> Deneb chat (the 음성 캡처 app shortcut).
     private val speechLauncher =
@@ -130,6 +131,10 @@ class MainActivity : ComponentActivity() {
                     onDocumentFile = { file -> captureDocumentFromPlatformFile(file) },
                     onVoiceInput = { launchVoiceCapture() },
                 ),
+                openWorkFeedItemId = pendingWorkFeedItemId,
+                onWorkFeedItemConsumed = { consumedId ->
+                    if (pendingWorkFeedItemId == consumedId) pendingWorkFeedItemId = null
+                },
             )
         }
     }
@@ -285,6 +290,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleDeepLinkIntent(intent: Intent?) {
+        val feedItemId = intent
+            ?.getStringExtra(EXTRA_OPEN_WORK_FEED_ITEM_ID)
+            ?.trim()
+            ?.takeIf(String::isNotEmpty)
+        intent?.removeExtra(EXTRA_OPEN_WORK_FEED_ITEM_ID)
+        if (feedItemId != null) {
+            pendingWorkFeedItemId = feedItemId
+        }
         if (intent?.getBooleanExtra(EXTRA_OPEN_HEARTBEAT, false) == true) {
             val dataRepository: DataRepository = get()
             dataRepository.requestOpenHeartbeat()
@@ -294,8 +307,10 @@ class MainActivity : ComponentActivity() {
         }
         // Proactive report push → open the 업무 (General) topic where it was mirrored.
         if (intent?.getBooleanExtra(EXTRA_OPEN_WORK_TOPIC, false) == true) {
-            val dataRepository: DataRepository = get()
-            dataRepository.requestOpenWorkTopic()
+            if (feedItemId == null) {
+                val dataRepository: DataRepository = get()
+                dataRepository.requestOpenWorkTopic()
+            }
             intent.removeExtra(EXTRA_OPEN_WORK_TOPIC)
         }
         // Android assist gesture (홈버튼 길게 누르기 / 사이드 버튼): with Deneb set as the

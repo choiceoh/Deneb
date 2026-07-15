@@ -26,6 +26,8 @@ fun App(
     isKoinStarted: Boolean = false,
     onAppOpens: ((Int) -> Unit)? = null,
     captureActions: CaptureActions? = null,
+    openWorkFeedItemId: String? = null,
+    onWorkFeedItemConsumed: (String) -> Unit = {},
 ) {
     setSingletonImageLoaderFactory { context: PlatformContext ->
         ImageLoader.Builder(context)
@@ -40,14 +42,30 @@ fun App(
     // otherwise create a new instance (iOS, Desktop, Wasm).
     CompositionLocalProvider(LocalCaptureActions provides captureActions) {
         if (isKoinStarted) {
-            AppContent(navController, lightColorScheme, darkColorScheme, textToSpeech, onAppOpens)
+            AppContent(
+                navController,
+                lightColorScheme,
+                darkColorScheme,
+                textToSpeech,
+                onAppOpens,
+                openWorkFeedItemId,
+                onWorkFeedItemConsumed,
+            )
         } else {
             KoinApplication(
                 configuration = koinConfiguration {
                     modules(appModule)
                 },
             ) {
-                AppContent(navController, lightColorScheme, darkColorScheme, textToSpeech, onAppOpens)
+                AppContent(
+                    navController,
+                    lightColorScheme,
+                    darkColorScheme,
+                    textToSpeech,
+                    onAppOpens,
+                    openWorkFeedItemId,
+                    onWorkFeedItemConsumed,
+                )
             }
         }
     }
