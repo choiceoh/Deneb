@@ -5,7 +5,7 @@
 # 오퍼레이터 승인(2026-07-12, memory: source-self-edit-authorization): dev
 # 트리에서만 편집, 전체 게이트 그린일 때만 랜딩·핫스왑. 이 스크립트는 그
 # 계약의 배차원이다:
-#   1. ~/.deneb/data/self_correction_candidates.jsonl에서 미배차 후보
+#   1. gateway tracker의 공통 lifecycle policy에서 미배차 후보
 #      (scope=code, 증거 기반 Source, status=accepted 우선 → proposed) 1건을 고른다.
 #   2. 프로덕션 클론의 시도별 워크트리(~/deneb-agent-worktrees/<attempt-id>)를 만들고
 #   3. Codex CLI를 헤드리스로 실행 — CLAUDE.md 게이트 규약이 세션에 그대로
@@ -23,13 +23,12 @@
 #
 # 안전:
 # - 항상 exit 0 (systemd 타이머 컨벤션). flock 단일 인스턴스 + 세션 타임아웃.
-# - 수용 게이트 회로·보안 CODEOWNERS는 record-time에 이미 forbidden이라
-#   큐에 존재하지 않는다(genesis/surfaces.go) — 여기서 재검사하지 않는다.
+# - 수용 게이트 회로·보안 CODEOWNERS 후보는 gateway의 canonical selection
+#   policy(genesis/surfaces.go)에서 차단한다 — 여기서 재검사하지 않는다.
 # - 프로드 트리는 읽기 전용(워크트리 분기만); 편집은 워크트리에서.
 set -euo pipefail
 
 STATE_DIR="${DENEB_STATE_DIR:-$HOME/.deneb}"
-QUEUE_FILE="$STATE_DIR/data/self_correction_candidates.jsonl"
 DISPATCH_DIR="$STATE_DIR/data/coding_dispatch"
 PROD_DIR="${DENEB_PROD_DIR:-$HOME/deneb}"
 WORKTREE_ROOT="${DENEB_DISPATCH_WORKTREE_ROOT:-$HOME/deneb-agent-worktrees}"
@@ -188,7 +187,7 @@ record_session_status() {
     local candidate="$1" pr_outcome="$2" outcome="$3" rc="$4"
     case "$pr_outcome" in
         merged) record_runtime_status merged "PR merged" "$candidate" ;;
-        open) record_runtime_status pr_opened "PR open" "$candidate" ;;
+        pr_opened) record_runtime_status pr_opened "PR open" "$candidate" ;;
         *)
             case "$outcome" in
                 declined)
@@ -363,39 +362,21 @@ PR_OUTCOME="none"
 record_pr_outcome() {
     local cid="$1" attempt="$2" branch="$3" rc="$4" elapsed="$5" ahead="$6"
     local pr_json state number url merge_sha
-    if ! pr_json=$(pr_json_for_branch "$branch"); then
-        PR_OUTCOME="unknown"
-        return 1
-    fi
+    local -a result_args
+    pr_json=$(pr_json_for_branch "$branch" || printf '[]')
     state=$(jq -r '.[0].state // empty' <<<"${pr_json:-[]}" 2>/dev/null || true)
     number=$(jq -r '.[0].number // 0' <<<"${pr_json:-[]}" 2>/dev/null || printf '0')
     url=$(jq -r '.[0].url // empty' <<<"${pr_json:-[]}" 2>/dev/null || true)
     merge_sha=$(jq -r '.[0].mergeCommit.oid // empty' <<<"${pr_json:-[]}" 2>/dev/null || true)
-    case "$state" in
-        MERGED)
-            PR_OUTCOME="merged"
-            record_event --id "$cid" --phase merged --attempt-id "$attempt" --branch "$branch" \
-                --pr-number "$number" --pr-url "$url" --commit-sha "$merge_sha" \
-                --note "dispatch session rc=$rc elapsed=${elapsed}s; PR merged"
-            ;;
-        OPEN)
-            PR_OUTCOME="open"
-            record_event --id "$cid" --phase pr_opened --attempt-id "$attempt" --branch "$branch" \
-                --pr-number "$number" --pr-url "$url" \
-                --note "dispatch session rc=$rc elapsed=${elapsed}s; PR open"
-            ;;
-        *)
-            if [[ "$rc" -eq 0 && "$ahead" == "0" ]]; then
-                PR_OUTCOME="declined"
-                record_event --id "$cid" --phase declined --attempt-id "$attempt" --branch "$branch" \
-                    --note "dispatch session completed cleanly with no diff or PR"
-            else
-                PR_OUTCOME="failed"
-                record_event --id "$cid" --phase failed --attempt-id "$attempt" --branch "$branch" \
-                    --note "dispatch session rc=$rc elapsed=${elapsed}s; no merged/open PR"
-            fi
-            ;;
-    esac
+    result_args=(--state-dir "$STATE_DIR" result --id "$cid" --attempt-id "$attempt" \
+        --branch "$branch" --rc "$rc" --pr-number "$number" --pr-url "$url" \
+        --commit-sha "$merge_sha" --note "dispatch session rc=$rc elapsed=${elapsed}s; prState=${state:-unknown}")
+    [[ -n "$ahead" ]] && result_args+=(--ahead "$ahead")
+    [[ -n "$state" ]] && result_args+=(--pr-state "$state")
+    if ! PR_OUTCOME=$(python3 "$DISPATCH_RPC" "${result_args[@]}" 2>>"$LOG_FILE"); then
+        PR_OUTCOME="unknown"
+        return 1
+    fi
 }
 
 main() {
@@ -448,12 +429,6 @@ main() {
         exit 0
     fi
 
-    if [[ ! -f "$QUEUE_FILE" ]]; then
-        log "queue file missing — idle"
-        record_runtime_status queue_missing "$QUEUE_FILE"
-        exit 0
-    fi
-
     if [[ ! -f "$DISPATCH_EXECUTOR" ]] || ! python3 "$DISPATCH_EXECUTOR" --check >>"$LOG_FILE" 2>&1; then
         log "Codex executor unavailable or not logged in — idle"
         record_runtime_status environment_failed "Codex executor unavailable or not logged in"
@@ -465,94 +440,26 @@ main() {
     # Pick + setup: keep trying until a worktree is ready or the queue is
     # exhausted this tick (hard-capping at 5 left candidate 6+ permanently
     # starved across timer ticks when the head of queue was poison — bot #3615).
-    local pick="" cid="" wt="" skip_ids="" attempt_id="" branch="" ledger_phase="" had_setup_failure=0
+    local pick="" cid="" wt="" skip_ids="" attempt_id="" branch="" had_setup_failure=0
     local attempt=0
     while (( attempt < 40 )); do
         attempt=$((attempt + 1))
-        # Newest undispatched proposed/accepted code candidate with an evidence-
-        # bearing source. Marker skip: dispatch_outcome.blocks_redispatch.
-        # Optional argv[5]=comma-separated ids to skip this tick after setup fail.
-        pick=$(python3 - "$QUEUE_FILE" "$DISPATCH_DIR" "$script_dir" "$SESSION_TIMEOUT" "$skip_ids" <<'PYEOF'
-import json, os, re, sys
-queue, dispatch_dir, script_dir = sys.argv[1], sys.argv[2], sys.argv[3]
-abandon_after = int(sys.argv[4])
-skip = {s for s in (sys.argv[5] if len(sys.argv) > 5 else "").split(",") if s}
-sys.path.insert(0, script_dir)
-import dispatch_outcome
-import dispatch_prompt
-# Executed graduation-ladder unlocks admit staged sources at runtime (rows
-# keyed "source:<prefix>" in ~/.deneb/data/graduation_state.json — the same
-# file genesis rsiSourceDispatchable and rsi_status.py read, so the three
-# allowlists cannot drift).
-graduated_sources = []
-try:
-    _grows = json.load(open(os.path.expanduser("~/.deneb/data/graduation_state.json"))).get("rows") or {}
-    graduated_sources = [k[len("source:"):] for k, v in _grows.items()
-                         if k.startswith("source:") and (v or {}).get("unlocked")]
-except Exception:
-    pass
-cand, status, dispatch_phase = {}, {}, {}
-for line in open(queue, errors="replace"):
-    line = line.strip()
-    if not line:
-        continue
-    try:
-        rec = json.loads(line)
-    except json.JSONDecodeError:
-        continue
-    rid = rec.get("id") or ""
-    if not isinstance(rid, str) or not re.fullmatch(r"[A-Za-z0-9._-]+", rid):
-        continue
-    if rec.get("type") == "self_correction_candidate":
-        cand[rid] = rec
-    if rec.get("type") == "self_correction_dispatch":
-        dispatch_phase[rid] = rec.get("dispatchPhase") or ""
-    if rec.get("status"):
-        status[rid] = rec["status"]
-def pick_order(kv):
-    rid, rec = kv
-    st = status.get(rid, rec.get("status") or "proposed")
-    return (0 if st == "accepted" else 1, -(rec.get("createdAt") or 0))
-for rid, rec in sorted(cand.items(), key=pick_order):
-    if rid in skip:
-        continue
-    if status.get(rid, rec.get("status") or "proposed") not in ("proposed", "accepted"):
-        continue
-    if rec.get("scope") != "code":
-        continue
-    src = rec.get("source") or ""
-    # Namespace match must be separator-aware: bare startswith let any caller
-    # self-select auto-dispatch by prefixing a graduated namespace
-    # ("health-finding-x") — RSI code eval M7.
-    def ns_match(val, ns):
-        return val == ns or val.startswith(ns + ":")
-    allowed = ("evolve-tool-gap", "self-harness", "health-finding", "tool-quality")
-    if not (any(ns_match(src, ns) for ns in allowed) or any(ns_match(src, g) for g in graduated_sources)):
-        continue
-    # A candidate whose prose names acceptance machinery must NOT be
-    # auto-dispatched — but it also must not starve the queue by being
-    # re-picked every tick only to DEFER at prompt composition (the prompt-side
-    # guard is defense-in-depth, not the selection gate). Skip it here so
-    # lower-priority safe candidates still run; it stays queued for operator
-    # review (Codex review of RSI eval C2).
-    if dispatch_prompt.forbidden_surface_mentions(rec):
-        continue
-    phase = dispatch_phase.get(rid, "")
-    if phase in ("started", "pr_opened", "merged", "deployed", "watch_passed", "declined"):
-        continue
-    marker_path = os.path.join(dispatch_dir, rid + ".json")
-    if dispatch_outcome.blocks_redispatch(
-            marker_path,
-            abandon_after_sec=abandon_after,
-            authoritative_phase=phase):
-        continue
-    out = dict(rec)
-    out["status"] = status.get(rid, rec.get("status") or "proposed")
-    out["_dispatchPhase"] = phase
-    print(json.dumps(out, ensure_ascii=False))
-    break
-PYEOF
-        )
+        # The gateway owns review, delivery, source, and forbidden-surface policy.
+        # This client contributes only local marker residue plus setup failures from
+        # the current tick as exclusions, then asks for one canonical candidate.
+        local -a next_args skipped_ids
+        next_args=(--state-dir "$STATE_DIR" next --dispatch-dir "$DISPATCH_DIR" \
+            --abandon-after "$SESSION_TIMEOUT")
+        IFS=',' read -r -a skipped_ids <<<"$skip_ids"
+        local skipped_id
+        for skipped_id in "${skipped_ids[@]}"; do
+            [[ -n "$skipped_id" ]] && next_args+=(--exclude-id "$skipped_id")
+        done
+        if ! pick=$(python3 "$DISPATCH_RPC" "${next_args[@]}" 2>>"$LOG_FILE"); then
+            log "authoritative dispatch policy unavailable — idle"
+            record_runtime_status ledger_failed "candidate selection RPC unavailable"
+            exit 0
+        fi
         if [[ -z "$pick" ]]; then
             log "no dispatchable candidate (attempt=$attempt skip=${skip_ids:-none}) — idle"
             if [[ "$had_setup_failure" -eq 1 ]]; then
@@ -563,7 +470,6 @@ PYEOF
             exit 0
         fi
         cid=$(printf '%s' "$pick" | python3 -c "import json,sys;print(json.load(sys.stdin)['id'])")
-        ledger_phase=$(printf '%s' "$pick" | python3 -c "import json,sys;print(json.load(sys.stdin).get('_dispatchPhase',''))")
         attempt_id="$cid-$(date +%s)-$$-$attempt"
         branch="dispatch/$attempt_id"
         wt="$WORKTREE_ROOT/dispatch-$attempt_id"
@@ -705,7 +611,8 @@ PYEOF
     fi
     local outcome
     outcome=$(python3 "$script_dir/dispatch_outcome.py" --marker "$DISPATCH_DIR/$cid.json" \
-        --rc "$rc" --elapsed "$elapsed" --ahead "$ahead" --pr-state "$pr_state" 2>>"$LOG_FILE" || echo "unknown")
+        --rc "$rc" --elapsed "$elapsed" --ahead "$ahead" --pr-state "$pr_state" \
+        --authoritative-phase "$PR_OUTCOME" 2>>"$LOG_FILE" || echo "unknown")
     log "dispatch $cid outcome: $outcome (prState=${pr_state:-n/a}, ahead=${ahead:-n/a})"
 
     if [[ "$terminal_recorded" -eq 0 ]]; then

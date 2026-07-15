@@ -31,6 +31,7 @@ import (
 	"strings"
 	"time"
 
+	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
 	rsistatus "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/status"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
@@ -83,14 +84,19 @@ var rsiDispatchSources = []string{"evolve-tool-gap", "self-harness", "health-fin
 // clients can label each candidate 자동수리 vs 검토 대기.
 func SourceAutoDispatches(source string) bool { return rsiSourceDispatchable(source) }
 
-// rsiLayerDetails is the per-layer "what is this loop" explanation the viewers
-// reveal on tap — static role text, keyed by layer.
-var rsiLayerDetails = map[string]string{
-	"L1":   "저성과 스킬의 본문을 자동으로 다시 쓰고, 보류 검증과 롤백으로 회귀를 막는 기본 자가개선 루프입니다.",
-	"L2":   "스킬을 고치는 프롬프트(생성·판정) 자체를 주간 단위로 개정하는 메타 루프입니다. 벤치를 통과하면 자동 채택되고, 드리프트가 감지되면 스스로 동결합니다.",
-	"L3":   "판정자가 자신의 오판으로 학습하는 검증기 공진화 루프입니다. 판정 정확도 레인이 심은 결함을 재생해 오판 라벨을 만듭니다.",
-	"L4":   "게이트웨이 소스 자체를 고치는 자가편집 루프입니다. 근거 있는 후보만 코딩 레인에 배차되고, 게이트 통과와 배포 롤백 워치로 보호됩니다.",
-	"GRAD": "자율성 졸업 사다리의 행별 증거를 상시 심사하고, 임계 충족 시 잠금 해제를 자동 실행하는 계기판입니다 (2026-07-14 위임). 모든 실행은 원장 기록과 재잠금 비토 카드를 남기며, 임계값 정책 자체는 루프가 편집할 수 없습니다.",
+const rsiGraduationDetail = "자율성 졸업 사다리의 행별 증거를 상시 심사하고, 임계 충족 시 잠금 해제를 자동 실행하는 계기판입니다 (2026-07-14 위임). 모든 실행은 원장 기록과 재잠금 비토 카드를 남기며, 임계값 정책 자체는 루프가 편집할 수 없습니다."
+
+func newRSILayer(layer rsilifecycle.Layer, metrics []rsiMetric) rsiLayer {
+	profile, ok := rsilifecycle.ProfileFor(layer)
+	if !ok {
+		return rsiLayer{Key: string(layer), Metrics: metrics}
+	}
+	return rsiLayer{
+		Key:     string(profile.Layer),
+		Title:   profile.Title,
+		Detail:  profile.Detail,
+		Metrics: metrics,
+	}
 }
 
 // RSIStatus composes the four layer assessments from the tracker's public
@@ -99,10 +105,10 @@ func (t *Tracker) RSIStatus() rsistatus.LoopStatus {
 	layers := []rsiLayer{t.rsiAssessL1(), t.rsiAssessL2(), t.rsiAssessL3(), t.rsiAssessL4(), t.rsiAssessLadder()}
 	turning := 0
 	for i := range layers {
-		layers[i].Detail = rsiLayerDetails[layers[i].Key]
 		// The graduation-ladder pseudo-layer is an evidence dashboard, not a
 		// loop — it never counts toward the "N/4 turning" headline.
 		if layers[i].Key == "GRAD" {
+			layers[i].Detail = rsiGraduationDetail
 			continue
 		}
 		if layers[i].State == rsiStateLive || layers[i].State == rsiStateFrozen {
@@ -142,7 +148,7 @@ func (t *Tracker) rsiAssessL1() rsiLayer {
 		{Label: "e-process", Value: rsiEProcessValue(t.eProcessCutoverReadiness())},
 		{Label: "라벨러 사각", Value: strconv.Itoa(len(t.labelerBlindSpots(evolutionHealthWindow)))},
 	}
-	base := rsiLayer{Key: "L1", Title: "스킬 진화", Metrics: metrics}
+	base := newRSILayer(rsilifecycle.LayerL1, metrics)
 	switch {
 	case committed > 0:
 		base.State = rsiStateLive
@@ -183,7 +189,7 @@ func (t *Tracker) rsiAssessL2() rsiLayer {
 			metrics = append(metrics, rsiMetric{Label: "연속 파라미터형 채택", Value: strconv.Itoa(bal.AdoptedParametricStreak)})
 		}
 	}
-	base := rsiLayer{Key: "L2", Title: "메타 진화", Metrics: metrics}
+	base := newRSILayer(rsilifecycle.LayerL2, metrics)
 	switch {
 	case t.AutoAdoptFrozen():
 		base.State = rsiStateFrozen
@@ -249,7 +255,9 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 	records, err := t.recentJudgeAccuracy(20)
 	operatorLabels := len(t.RecentOperatorJudgeVerdicts(7*24*time.Hour, 100))
 	if err != nil || (len(records) == 0 && operatorLabels == 0) {
-		return rsiLayer{Key: "L3", Title: "판정자 공진화", State: rsiStateIdle, Diagnosis: "판정 정확도 레인이 아직 실행되지 않았습니다"}
+		base := newRSILayer(rsilifecycle.LayerL3, nil)
+		base.State, base.Diagnosis = rsiStateIdle, "판정 정확도 레인이 아직 실행되지 않았습니다"
+		return base
 	}
 	cutoff := time.Now().Add(-7 * 24 * time.Hour).UnixMilli()
 	runs, misses, falseRejects := 0, 0, 0
@@ -271,7 +279,9 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 		}
 	}
 	if runs == 0 && operatorLabels == 0 {
-		return rsiLayer{Key: "L3", Title: "판정자 공진화", State: rsiStateIdle, Diagnosis: "판정 정확도 레인이 최근 7일간 실행되지 않았습니다"}
+		base := newRSILayer(rsilifecycle.LayerL3, nil)
+		base.State, base.Diagnosis = rsiStateIdle, "판정 정확도 레인이 최근 7일간 실행되지 않았습니다"
+		return base
 	}
 	organic := len(t.organicFalseAccepts(organicFalseAcceptWindow, 50))
 	metrics := []rsiMetric{
@@ -281,7 +291,7 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 		{Label: "실전 라벨(30일)", Value: strconv.Itoa(organic)},
 		{Label: "운영자 라벨(7일)", Value: strconv.Itoa(operatorLabels)},
 	}
-	base := rsiLayer{Key: "L3", Title: "판정자 공진화", Metrics: metrics}
+	base := newRSILayer(rsilifecycle.LayerL3, metrics)
 	switch {
 	case misses > 0 || falseRejects > 0 || organic > 0 || operatorLabels > 0:
 		base.State = rsiStateLive
@@ -302,16 +312,14 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 func (t *Tracker) rsiAssessL4() rsiLayer {
 	cands, err := t.RecentSelfCorrectionCandidates("", "", 300)
 	if err != nil {
-		return rsiLayer{Key: "L4", Title: "소스 자가편집", State: rsiStateIdle, Diagnosis: "후보 저장소를 읽을 수 없습니다"}
+		base := newRSILayer(rsilifecycle.LayerL4, nil)
+		base.State, base.Diagnosis = rsiStateIdle, "후보 저장소를 읽을 수 없습니다"
+		return base
 	}
 	tally := t.tallyL4Candidates(cands)
 	_, dispatchedToday := t.codingDispatchCounts()
 	runtime := t.codingDispatchRuntimeStatus()
-	base := rsiLayer{
-		Key:     "L4",
-		Title:   "소스 자가편집",
-		Metrics: rsiL4Metrics(tally, len(cands), dispatchedToday, runtime),
-	}
+	base := newRSILayer(rsilifecycle.LayerL4, rsiL4Metrics(tally, len(cands), dispatchedToday, runtime))
 	base.State, base.Diagnosis = rsiL4Verdict(tally, len(cands), runtime)
 	// Dispatch-outcome history (graduation-ladder evidence: the cap-raise row
 	// needs a measured land rate) rides the diagnosis text — no new metric row,
@@ -355,36 +363,35 @@ func (t *Tracker) tallyL4Candidates(cands []SelfCorrectionCandidateRecord) l4Tal
 		// proposed = unreviewed backlog; accepted = review-endorsed, awaiting
 		// implementation — both are queued dispatch supply (the heartbeat review
 		// lane accepts candidates it cannot implement itself).
-		st := normalizeSelfCorrectionStatus(c.Status)
-		queued := st == SelfCorrectionStatusProposed || st == SelfCorrectionStatusAccepted
-		phase := normalizeSelfCorrectionDispatchPhase(c.DispatchPhase)
-		switch phase {
-		case selfCorrectionDispatchStarted, selfCorrectionDispatchPROpened,
-			SelfCorrectionDispatchMerged, selfCorrectionDispatchDeployed:
+		review := rsilifecycle.NormalizeReview(c.Status)
+		queued := rsilifecycle.CanDispatch(review, "")
+		phase := rsilifecycle.NormalizeDelivery(c.DispatchPhase)
+		switch rsilifecycle.ClassifyDelivery(phase) {
+		case rsilifecycle.DeliveryInFlight:
 			tally.inFlight++
-		case selfCorrectionDispatchWatchPassed:
+		case rsilifecycle.DeliveryVerified:
 			tally.applied++
-		case selfCorrectionDispatchDeclined:
+		case rsilifecycle.DeliverySafeNoop:
 			// A clean session with no diff is a terminal, healthy no-op. It is
 			// neither in flight nor a failed dispatch.
 			tally.declined++
-		case selfCorrectionDispatchFailed, selfCorrectionDispatchRolledBack:
+		case rsilifecycle.DeliveryRetryable:
 			// Compatibility for sessions completed before the declined lifecycle
 			// phase shipped: the marker was correct, but the old shell wrote failed.
-			if phase == selfCorrectionDispatchFailed && t.dispatchMarkerOutcome(c.ID) == "declined" {
+			if phase == rsilifecycle.DeliveryFailed && t.dispatchMarkerOutcome(c.ID) == "declined" {
 				tally.declined++
 				continue
 			}
 			tally.failed++
-			if (phase == selfCorrectionDispatchRolledBack || !t.DispatchMarkerBlocks(c.ID)) &&
-				queued && rsiSourceDispatchable(c.Source) {
+			if (phase == rsilifecycle.DeliveryRolledBack || !t.DispatchMarkerBlocks(c.ID)) &&
+				SelfCorrectionDispatchEligible(c) {
 				tally.markPending(c.CreatedAt)
 			}
-		case "":
+		case rsilifecycle.DeliveryQueued:
 			if !queued {
 				continue
 			}
-			if rsiSourceDispatchable(c.Source) {
+			if SelfCorrectionDispatchEligible(c) {
 				tally.markPending(c.CreatedAt)
 			} else {
 				// Code candidate from a source not yet in the dispatch

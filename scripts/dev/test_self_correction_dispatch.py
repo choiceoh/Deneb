@@ -86,6 +86,60 @@ class SelfCorrectionDispatchTest(unittest.TestCase):
             "id": "sc-1", "attemptId": "a1", "dispatchPhase": "started", "branch": "dispatch/a1",
         }])
 
+    def test_next_delegates_policy_to_gateway_and_excludes_blocking_markers(self):
+        with TemporaryDirectory() as td:
+            dispatch_dir = Path(td, "coding_dispatch")
+            dispatch_dir.mkdir()
+            Path(dispatch_dir, "blocked.json").write_text(
+                json.dumps({"id": "blocked", "outcome": "attempted"}),
+                encoding="utf-8",
+            )
+            seen = {}
+
+            def urlopen(request, timeout):
+                seen["body"] = json.loads(request.data)
+                return FakeResponse({
+                    "ok": True,
+                    "payload": {"candidates": [{"id": "selected", "status": "accepted"}]},
+                })
+
+            out = io.StringIO()
+            with (
+                mock.patch.object(dispatch.urllib.request, "urlopen", side_effect=urlopen),
+                redirect_stdout(out),
+            ):
+                rc = dispatch.main([
+                    "next", "--dispatch-dir", str(dispatch_dir), "--exclude-id", "setup-failed",
+                ])
+            self.assertEqual(rc, 0)
+            self.assertEqual(json.loads(out.getvalue())["id"], "selected")
+            params = seen["body"]["params"]
+            self.assertTrue(params["dispatchableOnly"])
+            self.assertEqual(params["excludeIds"], ["blocked", "setup-failed"])
+
+    def test_result_sends_facts_and_prints_authoritative_phase(self):
+        seen = {}
+
+        def urlopen(request, timeout):
+            seen["body"] = json.loads(request.data)
+            return FakeResponse({"ok": True, "payload": {"dispatchPhase": "declined"}})
+
+        out = io.StringIO()
+        with (
+            mock.patch.object(dispatch.urllib.request, "urlopen", side_effect=urlopen),
+            redirect_stdout(out),
+        ):
+            rc = dispatch.main([
+                "result", "--id", "sc-1", "--attempt-id", "a1", "--rc", "0",
+                "--ahead", "0", "--pr-state", "CLOSED",
+            ])
+        self.assertEqual(rc, 0)
+        self.assertEqual(out.getvalue(), "declined\n")
+        params = seen["body"]["params"]
+        self.assertEqual(params["returnCode"], 0)
+        self.assertEqual(params["ahead"], 0)
+        self.assertNotIn("dispatchPhase", params)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -84,7 +84,8 @@ class CodingDispatchStatusTest(unittest.TestCase):
     def test_unavailable_github_probe_is_not_recorded_as_candidate_failure(self):
         dispatcher_path = Path(__file__).with_name("coding-dispatch.sh")
         dispatcher = dispatcher_path.read_text(encoding="utf-8")
-        self.assertIn('if ! pr_json=$(pr_json_for_branch "$branch"); then', dispatcher)
+        self.assertIn("pr_json=$(pr_json_for_branch \"$branch\" || printf '[]')", dispatcher)
+        self.assertIn('result --id "$cid"', dispatcher)
         self.assertIn('PR_OUTCOME="unknown"', dispatcher)
         env = {"HOME": "/tmp/deneb-test-no-gh", "PATH": "/usr/bin:/bin"}
         proc = subprocess.run(
@@ -92,6 +93,7 @@ class CodingDispatchStatusTest(unittest.TestCase):
                 "/bin/bash",
                 "-c",
                 'source "$1"; GH_BIN=""; set +e; '
+                'python3() { printf "declined"; }; '
                 "record_pr_outcome cid attempt branch 0 1 0; rc=$?; "
                 'printf "%s:%s" "$rc" "$PR_OUTCOME"',
                 "test",
@@ -102,7 +104,7 @@ class CodingDispatchStatusTest(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        self.assertEqual(proc.stdout, "1:unknown")
+        self.assertEqual(proc.stdout, "0:declined")
 
     def test_instant_process_failure_below_cap_is_classified_as_environment_failure(self):
         dispatcher = Path(__file__).with_name("coding-dispatch.sh").read_text(encoding="utf-8")
@@ -134,14 +136,14 @@ class CodingDispatchStatusTest(unittest.TestCase):
                 "/bin/bash", "-c",
                 'source "$1"; '
                 'pr_json_for_branch() { printf "[]"; }; '
-                'record_event() { printf "%s" "$4"; }; '
+                'python3() { printf "declined"; }; '
                 'record_pr_outcome cid attempt branch 0 1 0; '
-                'printf ":%s" "$PR_OUTCOME"',
+                'printf "%s" "$PR_OUTCOME"',
                 "test", str(dispatcher_path),
             ],
             check=True, capture_output=True, text=True,
         )
-        self.assertEqual(proc.stdout, "declined:declined")
+        self.assertEqual(proc.stdout, "declined")
 
     def test_reconcile_never_regresses_terminal_or_post_merge_phases(self):
         dispatcher_path = Path(__file__).with_name("coding-dispatch.sh")
@@ -184,8 +186,10 @@ class CodingDispatchStatusTest(unittest.TestCase):
 
     def test_picker_delegates_corrupt_marker_age_to_shared_outcome_policy(self):
         dispatcher = Path(__file__).with_name("coding-dispatch.sh").read_text(encoding="utf-8")
+        client = Path(__file__).with_name("self_correction_dispatch.py").read_text(encoding="utf-8")
         self.assertNotIn("os.path.isfile(marker_path) and not phase", dispatcher)
-        self.assertIn("dispatch_outcome.blocks_redispatch(", dispatcher)
+        self.assertIn('next --dispatch-dir "$DISPATCH_DIR"', dispatcher)
+        self.assertIn("dispatch_outcome.blocks_redispatch(", client)
 
     def test_shell_daily_cap_uses_operator_timezone(self):
         dispatcher_path = Path(__file__).with_name("coding-dispatch.sh")
@@ -218,7 +222,7 @@ class CodingDispatchStatusTest(unittest.TestCase):
             self._session_status("failed", "timeout", 124).startswith("session_failed|")
         )
         self.assertEqual(
-            self._session_status("open", "attempted", 0),
+            self._session_status("pr_opened", "attempted", 0),
             "pr_opened|PR open|candidate",
         )
 

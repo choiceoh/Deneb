@@ -35,6 +35,20 @@ things it shouldn't.
 7. **Post-evolve watch** → the tracker watches next uses; `DefaultRollbackThreshold` (3) consecutive failures → `RollbackSkill` restores the backup.
 8. **Curation** (`curator.go`) → staleness lifecycle `active → stale → archived` at `staleAfterDays` (30) / `archiveAfterDays` (90).
 
+## Shared RSI Lifecycle
+
+L1-L5 use one domain lifecycle in `genesis/lifecycle`: `observe_propose` →
+`evaluate_execute` → `verify_learn`. The layer profiles change the artifact and
+automation policy, not the orchestration shape: L1 skill, L2 procedure, L3
+verifier, L4 source, and frozen L5 governance. Each layer keeps its specialized
+producer, deterministic gates, bench, and rollback watch behind that profile.
+
+For L4, review and delivery are independent axes. `accepted` authorizes an
+attempt; it does not mean the change shipped. Delivery advances through
+`started` → `pr_opened` → `merged` → `deployed` → `watch_passed`, and only
+`watch_passed` derives review state `applied`. `declined` is a healthy no-op;
+`failed` and `rolled_back` are retryable after local residue checks.
+
 ## Key Files
 
 | File | Role |
@@ -50,6 +64,8 @@ things it shouldn't.
 | `workout.go` | Synthetic exercise lane — evidence only, never real usage |
 | `curriculum.go` | Demand-generation lane (RSI P5-1) — coverage-gap mining; files route=genesis opportunities with validation cases authored first (source=`curriculum`, propose-only) |
 | `tracker_self_correction.go` | Self-correction candidate record/query + forbidden-surface gate |
+| `tracker_self_correction_dispatch_selection.go` | Canonical O(n) L4 candidate selection across review, delivery, source, and surface policy |
+| `lifecycle/` | Shared L1-L5 profiles and authoritative L4 review/delivery state kernel |
 | `tracker_recurrence_promotion.go` | Recurrence/cluster → self-correction candidate promotion |
 | `meta_evolution.go` | L2 slow loop — weekly meta-artifact revision (evolve/judge prompts) with epoch benches, auto-adopt + rollback watch |
 | `runtime_error_mining.go` | L4 proactive source — recurring code-actionable errors → propose-only scope=code candidates |
@@ -144,6 +160,11 @@ acceptance machinery stays forbidden at record time.
   Deliberately NOT gateway PeriodicTasks — the inputs (git checkout, journald,
   whole-program reachability, agentlog aggregate) live outside the serving
   process or are already exposed as a read-only RPC.
+- **Dispatch ownership**: the gateway scans the current queue once and owns
+  review/delivery/source/surface eligibility plus deterministic session-result
+  classification. `coding-dispatch.sh` only supplies local marker exclusions and
+  execution facts; `dispatch_outcome.py` projects the authoritative phase onto a
+  compatibility marker for worktree protection and older audits.
 - **Dispatch graduation (ladder)**: coding-dispatch.sh auto-dispatches only
   allowlisted source namespaces. **Graduated** (auto-dispatch → land through the
   full gate stack): `evolve-tool-gap`, `self-harness`, `health-finding`

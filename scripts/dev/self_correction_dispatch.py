@@ -17,6 +17,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+import dispatch_outcome
+
 DEFAULT_GATEWAY_URL = "http://127.0.0.1:18789"
 
 
@@ -80,6 +82,23 @@ def build_parser() -> argparse.ArgumentParser:
     listing = sub.add_parser("list", help="print current candidates as tab-separated lifecycle rows")
     listing.add_argument("--phase", action="append", default=[])
     listing.add_argument("--json", action="store_true", help="print matching candidate rows as JSON")
+
+    next_candidate = sub.add_parser("next", help="print the next policy-approved dispatch candidate")
+    next_candidate.add_argument("--dispatch-dir", required=True)
+    next_candidate.add_argument("--abandon-after", type=int, default=dispatch_outcome.DEFAULT_ABANDON_AFTER_SEC)
+    next_candidate.add_argument("--exclude-id", action="append", default=[])
+
+    result = sub.add_parser("result", help="classify and append one session result from deterministic facts")
+    result.add_argument("--id", required=True)
+    result.add_argument("--attempt-id", required=True)
+    result.add_argument("--branch", default="")
+    result.add_argument("--rc", type=int, required=True)
+    result.add_argument("--ahead", type=int)
+    result.add_argument("--pr-state", default="")
+    result.add_argument("--pr-number", type=int, default=0)
+    result.add_argument("--pr-url", default="")
+    result.add_argument("--commit-sha", default="")
+    result.add_argument("--note", default="")
     return parser
 
 
@@ -105,6 +124,57 @@ def main(argv: list[str] | None = None) -> int:
                     "outcomeNote": args.note,
                 },
             )
+            return 0
+
+        if args.command == "result":
+            params = {
+                "id": args.id,
+                "attemptId": args.attempt_id,
+                "branch": args.branch,
+                "returnCode": args.rc,
+                "prState": args.pr_state,
+                "prNumber": args.pr_number,
+                "prUrl": args.pr_url,
+                "commitSha": args.commit_sha,
+                "outcomeNote": args.note,
+            }
+            if args.ahead is not None:
+                params["ahead"] = args.ahead
+            payload = call_rpc(
+                args.url,
+                token,
+                "miniapp.self_improvement_coding.dispatch",
+                params,
+            )
+            phase = str(payload.get("dispatchPhase") or "")
+            if not phase:
+                raise RPCError("dispatch result returned no phase")
+            print(phase)
+            return 0
+
+        if args.command == "next":
+            excluded = {str(value).strip() for value in args.exclude_id if str(value).strip()}
+            dispatch_dir = Path(args.dispatch_dir).expanduser()
+            for marker in dispatch_dir.glob("*.json"):
+                if dispatch_outcome.blocks_redispatch(
+                    marker,
+                    abandon_after_sec=args.abandon_after,
+                ):
+                    excluded.add(marker.stem)
+            payload = call_rpc(
+                args.url,
+                token,
+                "miniapp.self_improvement_coding.list",
+                {
+                    "status": "all",
+                    "limit": 500,
+                    "dispatchableOnly": True,
+                    "excludeIds": sorted(excluded),
+                },
+            )
+            candidates = payload.get("candidates") or []
+            if candidates:
+                print(json.dumps(candidates[0], ensure_ascii=False))
             return 0
 
         payload = call_rpc(

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/surfaces"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
@@ -17,20 +18,20 @@ const (
 	selfCorrectionTypeReview    = "self_correction_review"
 	selfCorrectionTypeDispatch  = "self_correction_dispatch"
 
-	SelfCorrectionStatusProposed   = "proposed"
-	SelfCorrectionStatusAccepted   = "accepted"
-	SelfCorrectionStatusRejected   = "rejected"
-	SelfCorrectionStatusSuperseded = "superseded"
-	SelfCorrectionStatusApplied    = "applied"
+	SelfCorrectionStatusProposed   = string(rsilifecycle.ReviewProposed)
+	SelfCorrectionStatusAccepted   = string(rsilifecycle.ReviewAccepted)
+	SelfCorrectionStatusRejected   = string(rsilifecycle.ReviewRejected)
+	SelfCorrectionStatusSuperseded = string(rsilifecycle.ReviewSuperseded)
+	SelfCorrectionStatusApplied    = string(rsilifecycle.ReviewApplied)
 
-	selfCorrectionDispatchStarted     = "started"
-	selfCorrectionDispatchPROpened    = "pr_opened"
-	SelfCorrectionDispatchMerged      = "merged"
-	selfCorrectionDispatchDeployed    = "deployed"
-	selfCorrectionDispatchWatchPassed = "watch_passed"
-	selfCorrectionDispatchDeclined    = "declined"
-	selfCorrectionDispatchFailed      = "failed"
-	selfCorrectionDispatchRolledBack  = "rolled_back"
+	selfCorrectionDispatchStarted     = string(rsilifecycle.DeliveryStarted)
+	selfCorrectionDispatchPROpened    = string(rsilifecycle.DeliveryPROpened)
+	SelfCorrectionDispatchMerged      = string(rsilifecycle.DeliveryMerged)
+	selfCorrectionDispatchDeployed    = string(rsilifecycle.DeliveryDeployed)
+	selfCorrectionDispatchWatchPassed = string(rsilifecycle.DeliveryWatchPassed)
+	selfCorrectionDispatchDeclined    = string(rsilifecycle.DeliveryDeclined)
+	selfCorrectionDispatchFailed      = string(rsilifecycle.DeliveryFailed)
+	selfCorrectionDispatchRolledBack  = string(rsilifecycle.DeliveryRolledBack)
 )
 
 // SelfCorrectionCandidateRecord is an append-only proposal for a future coding
@@ -363,7 +364,10 @@ func applySelfCorrectionDispatch(base, rec SelfCorrectionCandidateRecord) SelfCo
 	if rec.OutcomeNote != "" && (!samePhase || base.OutcomeNote == "") {
 		base.OutcomeNote = rec.OutcomeNote
 	}
-	if base.DispatchPhase == selfCorrectionDispatchWatchPassed {
+	if derived := rsilifecycle.ReviewAfterDelivery(
+		rsilifecycle.ReviewState(base.Status),
+		rsilifecycle.DeliveryPhase(base.DispatchPhase),
+	); derived == rsilifecycle.ReviewApplied && base.Status != SelfCorrectionStatusApplied {
 		base.Status = SelfCorrectionStatusApplied
 		base.Reviewer = "deploy-watch"
 		if base.ReviewNote == "" {
@@ -424,76 +428,28 @@ func normalizedSelfCorrectionCandidate(rec SelfCorrectionCandidateRecord) SelfCo
 }
 
 func validSelfCorrectionStatusTransition(from, to string) bool {
-	from = normalizeSelfCorrectionStatus(from)
-	to = normalizeSelfCorrectionStatus(to)
-	switch from {
-	case SelfCorrectionStatusProposed:
-		return to == SelfCorrectionStatusAccepted || to == SelfCorrectionStatusRejected ||
-			to == SelfCorrectionStatusSuperseded || to == SelfCorrectionStatusApplied
-	case SelfCorrectionStatusAccepted:
-		return to == SelfCorrectionStatusRejected || to == SelfCorrectionStatusSuperseded || to == SelfCorrectionStatusApplied
-	default:
-		return false // rejected/superseded/applied are terminal
-	}
+	return rsilifecycle.CanReviewTransition(
+		rsilifecycle.ReviewState(from),
+		rsilifecycle.ReviewState(to),
+	)
 }
 
 func normalizeSelfCorrectionDispatchPhase(phase string) string {
-	switch strings.ToLower(strings.TrimSpace(phase)) {
-	case selfCorrectionDispatchStarted, selfCorrectionDispatchPROpened,
-		SelfCorrectionDispatchMerged, selfCorrectionDispatchDeployed,
-		selfCorrectionDispatchWatchPassed, selfCorrectionDispatchDeclined,
-		selfCorrectionDispatchFailed,
-		selfCorrectionDispatchRolledBack:
-		return strings.ToLower(strings.TrimSpace(phase))
-	default:
-		return ""
-	}
+	return string(rsilifecycle.NormalizeDelivery(phase))
 }
 
 func validSelfCorrectionDispatchTransition(from, to string) bool {
-	from = normalizeSelfCorrectionDispatchPhase(from)
-	to = normalizeSelfCorrectionDispatchPhase(to)
-	switch from {
-	case "":
-		return to == selfCorrectionDispatchStarted
-	case selfCorrectionDispatchStarted:
-		return to == selfCorrectionDispatchPROpened || to == SelfCorrectionDispatchMerged ||
-			to == selfCorrectionDispatchDeclined || to == selfCorrectionDispatchFailed
-	case selfCorrectionDispatchPROpened:
-		return to == SelfCorrectionDispatchMerged || to == selfCorrectionDispatchDeclined || to == selfCorrectionDispatchFailed
-	case SelfCorrectionDispatchMerged:
-		return to == selfCorrectionDispatchDeployed || to == selfCorrectionDispatchFailed
-	case selfCorrectionDispatchDeployed:
-		return to == selfCorrectionDispatchWatchPassed || to == selfCorrectionDispatchRolledBack
-	case selfCorrectionDispatchFailed:
-		// A session can exit before GitHub exposes the PR. Late reconciliation
-		// may promote that same attempt from failed to its observed PR state.
-		return to == selfCorrectionDispatchStarted || to == selfCorrectionDispatchPROpened || to == SelfCorrectionDispatchMerged
-	case selfCorrectionDispatchRolledBack:
-		return to == selfCorrectionDispatchStarted
-	default:
-		return false // watch_passed is terminal
-	}
+	return rsilifecycle.CanDeliveryTransition(
+		rsilifecycle.DeliveryPhase(from),
+		rsilifecycle.DeliveryPhase(to),
+	)
 }
 
 func normalizeSelfCorrectionStatus(status string) string {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "", "pending", "proposed", "open":
-		if strings.TrimSpace(status) == "" {
-			return ""
-		}
-		return SelfCorrectionStatusProposed
-	case "accept", "accepted":
-		return SelfCorrectionStatusAccepted
-	case "reject", "rejected":
-		return SelfCorrectionStatusRejected
-	case "supersede", "superseded":
-		return SelfCorrectionStatusSuperseded
-	case "apply", "applied":
-		return SelfCorrectionStatusApplied
-	default:
+	if strings.TrimSpace(status) == "" {
 		return ""
 	}
+	return string(rsilifecycle.NormalizeReview(status))
 }
 
 func normalizeSelfCorrectionScope(scope string) string {
