@@ -121,14 +121,18 @@ verification을 공유하는 증상은 하나의 intervention으로 묶고, 중�
 
 ## Baseline과 ratchet
 
-기본 허용치는 overall 0.3점, pillar 1.0점이다. Check는 다음 중 하나라도
-발생하면 실패한다.
+기본 허용치는 overall 0.3점, pillar 1.0점이다. `python3 … --check` / nightly는
+다음 중 하나라도 발생하면 실패한다.
 
 - overall이 허용치보다 더 하락
 - 어느 pillar든 허용치보다 더 하락
-- 새로운 `high` 또는 `critical` finding 발생
-- 기존 finding이 `high`에서 `critical`로 악화
+- 새로운 `critical` finding 발생 (또는 기존 finding이 `critical`로 악화)
 - schema, rubric, profile 또는 pillar 집합 불일치
+
+새 `high` finding은 보고서에 남지만 `--check`를 막지 않는다 — rolling git
+윈도 tip churn이 무관한 PR을 빨간불로 만들지 않기 위함이다. Baseline *update*는
+여전히 새 high/critical을 거부한다. PR CI의 Health Bench ratchet 스텝은
+advisory(`continue-on-error`); fail-closed 스윕은 Nightly Drift Watch다.
 
 Baseline update는 허용치를 적용하지 않는 엄격한 단방향 갱신이다. Overall이나
 어떤 pillar라도 낮추거나 새 고위험 finding을 받아들이는 갱신은 거부한다.

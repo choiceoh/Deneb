@@ -78,7 +78,8 @@ jobs:
             --accept 200,204,206,301,302,307,308,429
             "docs/**/*.md"
             "README.md"
-          fail: true
+          # External URL outages must not fail PRs (nightly also skips link-check).
+          fail: false
           jobSummary: true
 
   # ── 3. Mintlify build check ──────────────────────────────────
