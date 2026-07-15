@@ -7,7 +7,7 @@ globs: ["scripts/audit/health-bench-v3.py", "scripts/audit/codebase_health_v3.py
 
 Health Bench 3.0은 구조·런타임·RSI 피트니스를 하나의 벤치로 묶고, 월드클래스
 절대 기준으로 점수를 매긴다. 설계 SoT는
-[docs/research/health-bench-3.0.md](/docs/research/health-bench-3.0) 이다.
+`docs/research/health-bench-3.0.md` 이다.
 v1/v2 점수와 비교하거나 산술 변환하지 않는다.
 
 ## 평가 원칙
