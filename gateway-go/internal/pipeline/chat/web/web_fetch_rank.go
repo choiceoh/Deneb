@@ -475,7 +475,8 @@ func fillUsableFetches(
 		consider(candidates[i], o, e)
 	}
 
-	slog.Info("web search+fetch fill",
+	slog.Info(
+		"web search+fetch fill",
 		"wanted", fetchTop,
 		"filled", len(out),
 		"tried", tried,

@@ -2,6 +2,7 @@ package attach
 
 import (
 	"context"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	notebooktool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/notebook"

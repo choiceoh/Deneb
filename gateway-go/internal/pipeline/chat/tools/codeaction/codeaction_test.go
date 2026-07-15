@@ -24,6 +24,7 @@ func (b testContactsBook) Count() int { return b.inner.Count() }
 func (b testContactsBook) LookupPhone(q string) []tooldeps.Contact {
 	return mapTestContacts(b.inner.LookupPhone(q))
 }
+
 func (b testContactsBook) Search(q string, limit int) []tooldeps.Contact {
 	return mapTestContacts(b.inner.Search(q, limit))
 }

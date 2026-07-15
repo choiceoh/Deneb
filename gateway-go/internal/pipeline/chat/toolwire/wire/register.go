@@ -67,8 +67,10 @@ func RegisterSkillsTools(registry toolport.ToolRegistrar, getSnapshot domain.Ski
 
 func ToolMaxOutputs() map[string]int { return domain.ToolMaxOutputs() }
 
-type SkillsSnapshotProvider = domain.SkillsSnapshotProvider
-type SkillManageInvalidateFn = domain.SkillManageInvalidateFn
+type (
+	SkillsSnapshotProvider  = domain.SkillsSnapshotProvider
+	SkillManageInvalidateFn = domain.SkillManageInvalidateFn
+)
 
 // NewGoalGlanceFunc builds the ambient standing-goal glance.
 func NewGoalGlanceFunc() func(ctx context.Context, sessionKey string) string {
@@ -81,13 +83,15 @@ func HandleGoalCommand(sessionKey, args string, respond func(text string)) {
 }
 
 // Type aliases so the toolwire facade can avoid importing toolport/tooldeps.
-type ToolRegistrar = toolport.ToolRegistrar
-type CoreToolDeps = tooldeps.CoreToolDeps
-type ProcessDeps = tooldeps.ProcessDeps
-type SessionDeps = tooldeps.SessionDeps
-type CalendarDeps = tooldeps.CalendarDeps
-type ContactsDeps = tooldeps.ContactsDeps
-type WikiDeps = tooldeps.WikiDeps
-type NotebookDeps = tooldeps.NotebookDeps
-type SpilloverStore = tooldeps.SpilloverStore
-type SessionCacheFlushFn = wikitool.SessionCacheFlushFn
+type (
+	ToolRegistrar       = toolport.ToolRegistrar
+	CoreToolDeps        = tooldeps.CoreToolDeps
+	ProcessDeps         = tooldeps.ProcessDeps
+	SessionDeps         = tooldeps.SessionDeps
+	CalendarDeps        = tooldeps.CalendarDeps
+	ContactsDeps        = tooldeps.ContactsDeps
+	WikiDeps            = tooldeps.WikiDeps
+	NotebookDeps        = tooldeps.NotebookDeps
+	SpilloverStore      = tooldeps.SpilloverStore
+	SessionCacheFlushFn = wikitool.SessionCacheFlushFn
+)
