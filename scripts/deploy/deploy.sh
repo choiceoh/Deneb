@@ -302,6 +302,14 @@ git -c pull.rebase=false pull --ff-only origin main
 echo "==> make gateway-prod"
 make gateway-prod
 
+# Amaranth reader (Playwright) — node_modules is gitignored; keep prod in sync
+# so miniapp.groupware.* / radar don't fail with ERR_MODULE_NOT_FOUND.
+if [[ -f scripts/dev/groupware-reader/package-lock.json ]]; then
+    echo "==> groupware-reader npm ci"
+    (cd scripts/dev/groupware-reader && npm ci --omit=dev) || \
+        echo "WARN: groupware-reader npm ci failed (전자결재 RPC may be broken)" >&2
+fi
+
 if [[ "${1:-}" == "--build-only" ]]; then
     echo "==> build done (--build-only, skipping restart)"
     exit 0
