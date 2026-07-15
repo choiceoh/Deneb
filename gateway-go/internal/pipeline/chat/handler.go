@@ -228,8 +228,8 @@ type HandlerConfig struct {
 	PromptWorkspaceDir string
 	// BriefcaseMode disables ambient production shortcuts that sit outside a
 	// signed evaluation world.
-	BriefcaseMode bool
-	LinkEnrichStart LinkEnrichStart
+	BriefcaseMode    bool
+	LinkEnrichStart  LinkEnrichStart
 	ReportCardHealth func(text, sessionKey string, logger *slog.Logger)
 	// AuditSystemPrompt receives the exact finalized system-prompt wire bytes.
 	// It is a trusted observability hook used by deterministic evaluation only.
@@ -355,10 +355,12 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		Logger:       h.logger,
 		HasActiveRun: h.abort.HasActiveRun,
 		StartRun: func(reqID string, params RunParams, isSteer bool) {
-			h.startAsyncRun(reqID, params, isSteer)
+			h.startOrQueueRun(reqID, params, isSteer)
 		},
-		EnqueuePend: h.pending.Enqueue,
-		Sessions:    func() *session.Manager { return h.sessions },
+		EnqueuePend: func(sessionKey string, params RunParams) {
+			h.startOrQueueRun("subnotify-"+params.ClientRunID, params, false)
+		},
+		Sessions: func() *session.Manager { return h.sessions },
 	})
 	// Cascade cleanup: when a parent session is killed or deleted, interrupt and
 	// kill its running children. Subscribed for the handler's lifetime (same as

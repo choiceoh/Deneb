@@ -1,7 +1,6 @@
 package chat
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -41,6 +41,11 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 	if len(p.Message) > h.maxMessageBytes {
 		return leafbind.RPCNewf(protocol.ErrInvalidRequest, "message too large: %d bytes exceeds limit of %d", len(p.Message), h.maxMessageBytes).Response(req.ID)
 	}
+	releaseAdmission, resp := h.admitRun(req.ID)
+	if resp != nil {
+		return resp
+	}
+	defer releaseAdmission()
 	if h.recordActivity != nil && !p.SkipMerge {
 		h.recordActivity(p.SessionKey)
 	}
@@ -120,7 +125,7 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 					DeltaMs:    deltaMs,
 				})
 			}
-			return h.startAsyncRun(req.ID, runParams, false)
+			return h.startAdmittedAsyncRun(req.ID, runParams, false)
 		}
 
 		// Outside the merge window (or explicitly opted out): queue the
@@ -139,7 +144,7 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 		return resp
 	}
 
-	return h.startAsyncRun(req.ID, runParams, false)
+	return h.startAdmittedAsyncRun(req.ID, runParams, false)
 }
 
 // SessionsSend handles "sessions.send" — interrupts any active run, then starts a new one.
@@ -158,6 +163,11 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 	if p.Key == "" {
 		return leafbind.RPCMissingParam("key").Response(req.ID)
 	}
+	releaseAdmission, resp := h.admitRun(req.ID)
+	if resp != nil {
+		return resp
+	}
+	defer releaseAdmission()
 	if h.recordActivity != nil {
 		h.recordActivity(p.Key)
 	}
@@ -185,7 +195,7 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 	// non-channel prefix like "cron:<id>" yields Channel="cron" and the
 	// reply layer decides what to do with the unregistered channel
 	// (delivery_route_test.go locks this in).
-	return h.startAsyncRun(req.ID, RunParams{
+	return h.startAdmittedAsyncRun(req.ID, RunParams{
 		SessionKey:  p.Key,
 		Message:     sanitizeInput(p.Message),
 		Attachments: p.Attachments,
@@ -209,6 +219,11 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 	if p.Key == "" {
 		return leafbind.RPCMissingParam("key").Response(req.ID)
 	}
+	releaseAdmission, resp := h.admitRun(req.ID)
+	if resp != nil {
+		return resp
+	}
+	defer releaseAdmission()
 	if h.recordActivity != nil {
 		h.recordActivity(p.Key)
 	}
@@ -219,7 +234,7 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 
 	runID := leafbind.NewShortID("steer")
 
-	return h.startAsyncRun(req.ID, RunParams{
+	return h.startAdmittedAsyncRun(req.ID, RunParams{
 		SessionKey:  p.Key,
 		Message:     sanitizeInput(p.Message),
 		Model:       p.Model,
@@ -444,6 +459,14 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 // Delivery context is derived from the session key (e.g., "client:main" →
 // channel="client", to="main") so the response reaches the user's device.
 func (h *Handler) SendDirect(sessionKey, message string) {
+	if h.abort == nil || !h.abort.AcquireAdmission() {
+		return
+	}
+	defer h.abort.ReleaseAdmission()
+	sessLock := h.mergeWindow.SessionLock(sessionKey)
+	sessLock.Lock()
+	defer sessLock.Unlock()
+
 	params := RunParams{
 		SessionKey: sessionKey,
 		Message:    sanitizeInput(message),
@@ -456,7 +479,14 @@ func (h *Handler) SendDirect(sessionKey, message string) {
 		return
 	}
 
-	h.startAsyncRun("bridge", params, false)
+	h.startAdmittedAsyncRun("bridge", params, false)
+}
+
+func (h *Handler) admitRun(reqID string) (func(), *protocol.ResponseFrame) {
+	if h.abort != nil && h.abort.AcquireAdmission() {
+		return h.abort.ReleaseAdmission, nil
+	}
+	return func() {}, leafbind.RPCNew(protocol.ErrUnavailable, ErrRuntimeDraining.Error()).Response(reqID)
 }
 
 // deliveryFromSessionKey extracts a DeliveryContext from a session key.

@@ -1,20 +1,19 @@
 package chat
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"context"
 	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
-
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
 // SyncResult holds the outcome of a synchronous agent run.
@@ -327,6 +326,10 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 // complete or the context is canceled. Used by the OpenAI-compatible HTTP
 // endpoints and the native client's miniapp.chat.send.
 func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model string, opts *SyncOptions) (*SyncResult, error) {
+	if h.abort == nil || !h.abort.AcquireAdmission() {
+		return nil, ErrRuntimeDraining
+	}
+	defer h.abort.ReleaseAdmission()
 	if res, handled := h.trySlashSync(sessionKey, message, opts); handled {
 		return res, nil
 	}
@@ -347,7 +350,7 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	// (miniapp.chat.send, cron single-run, heartbeat, boot, mail-qa, BTW) is
 	// invisible in ~/.deneb/agent-logs and to the modeltuner's AggregateByModel.
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
-	return h.withSyncRunLifecycle(ctx, sessionKey, params.ClientRunID,
+	return h.withAdmittedSyncRunLifecycle(ctx, sessionKey, params.ClientRunID,
 		func(runCtx context.Context) (*SyncResult, error) {
 			result, err := executeAgentRun(runCtx, params, deps, nil, nil, h.logger, runLog)
 			if err != nil {
@@ -384,27 +387,45 @@ func (h *Handler) withSyncRunLifecycle(
 	ctx context.Context, sessionKey, clientRunID string,
 	fn func(context.Context) (*SyncResult, error),
 ) (*SyncResult, error) {
+	return h.withSyncRunLifecycleAdmission(ctx, sessionKey, clientRunID, false, fn)
+}
+
+func (h *Handler) withAdmittedSyncRunLifecycle(
+	ctx context.Context, sessionKey, clientRunID string,
+	fn func(context.Context) (*SyncResult, error),
+) (*SyncResult, error) {
+	return h.withSyncRunLifecycleAdmission(ctx, sessionKey, clientRunID, true, fn)
+}
+
+func (h *Handler) withSyncRunLifecycleAdmission(
+	ctx context.Context, sessionKey, clientRunID string, admitted bool,
+	fn func(context.Context) (*SyncResult, error),
+) (*SyncResult, error) {
 	runCtx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
-	h.abort.Register(clientRunID, &AbortEntry{
+	entry := &AbortEntry{
 		SessionKey: sessionKey,
 		ClientRun:  clientRunID,
 		CancelFn:   cancel,
 		ExpiresAt:  time.Now().Add(4 * time.Hour),
-	})
+	}
+	var registered bool
+	if admitted {
+		registered = h.abort.RegisterAdmitted(clientRunID, entry)
+	} else {
+		registered = h.abort.TryRegister(clientRunID, entry)
+	}
+	if !registered {
+		return nil, ErrRuntimeDraining
+	}
 	defer func() {
-		// Cleanup BEFORE the reclaim/drain so HasActiveRun reports this session
-		// idle while they run (else they'd re-park against the still-"active" run).
-		h.abort.Cleanup(clientRunID)
+		// Register an already-accepted continuation before removing this entry,
+		// under the same decision lock used by producers. This keeps both the
+		// normal sync handoff and shutdown drain free of an idle-gap race.
+		h.finishRunWithPendingHandoff(sessionKey, clientRunID)
 		if h.subagent != nil {
 			h.subagent.ReclaimOnIdle(sessionKey)
-		}
-		// A message that arrived during this run (SendDirect/bridge Enqueue while
-		// HasActiveRun was true) is drained by the async path only; the sync path
-		// must hand it off explicitly or it strands until an unrelated future run.
-		if pending := h.pending.Drain(sessionKey); pending != nil {
-			h.startAsyncRun("pending-"+pending.ClientRunID, *pending, false)
 		}
 	}()
 
@@ -539,6 +560,10 @@ func (h *Handler) trySlashSync(sessionKey, message string, opts *SyncOptions) (*
 // then returning the final result. Used by streaming OpenAI-compatible
 // endpoints and the native client's miniapp.chat.stream.
 func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model string, opts *SyncOptions, onDelta func(string)) (*SyncResult, error) {
+	if h.abort == nil || !h.abort.AcquireAdmission() {
+		return nil, ErrRuntimeDraining
+	}
+	defer h.abort.ReleaseAdmission()
 	if res, handled := h.trySlashSync(sessionKey, message, opts); handled {
 		if onDelta != nil && res.Text != "" {
 			onDelta(res.Text)
@@ -577,7 +602,7 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		sinks.OnTool = opts.OnToolEvent
 		sinks.OnThinking = opts.OnThinking
 	}
-	return h.withSyncRunLifecycle(ctx, sessionKey, params.ClientRunID,
+	return h.withAdmittedSyncRunLifecycle(ctx, sessionKey, params.ClientRunID,
 		func(runCtx context.Context) (*SyncResult, error) {
 			result, err := executeAgentRunWithDelta(runCtx, params, deps, sinks, h.logger)
 			if err != nil {

@@ -12,39 +12,32 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/logging"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 // DefaultTurnDeadline is the end-to-end budget for one user turn.
 const DefaultTurnDeadline = 5 * time.Minute
 
+// chatDrainTimeout lets a detached native stream use its 6-minute backstop
+// before shutdown cancels the server lifecycle. New runs are rejected while
+// this wait is active, so deploys do not extend indefinitely under traffic.
+const chatDrainTimeout = chatport.InteractiveTurnDeadline
+
 // initAndListen creates the HTTP server, binds to the address, and starts
 // background subsystems (tick broadcaster, monitoring, session GC, hooks).
 // Shared by Run and StartAndListen to avoid duplicating the startup sequence.
 func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
-	// Lifecycle context was initialised in New() so that background
-	// goroutines launched before initAndListen runs (e.g. checkpoint GC
-	// in New) can read it race-free via ShutdownCtx(). Here we only need
-	// to propagate the caller's parent-ctx cancellation into the already-
-	// live lifecycle context. Running the forwarder on a detached goroutine
-	// keeps initAndListen lock-free and preserves the doShutdown() path.
-	//
-	// Capture parentCtx by value before the subsequent `ctx = s.lifecycleCtx`
-	// reassignment so the closure below reads the original caller context,
-	// not the reassigned local. Otherwise -race flags the closure's read
-	// against the local-var reassignment as a data race.
-	parentCtx := ctx
-	if parentCtx != nil && parentCtx.Done() != nil {
-		lifecycleDone := s.lifecycleCtx.Done()
-		cancelFn := s.lifecycleCancel
-		s.safeGo("lifecycle-parent-cancel-forwarder", func() {
-			select {
-			case <-parentCtx.Done():
-				if cancelFn != nil {
-					cancelFn()
-				}
-			case <-lifecycleDone:
-			}
-		})
+	// Run observes the caller context and enters doShutdown itself. Do not wire
+	// that context directly into lifecycleCtx: native streaming turns are
+	// intentionally detached from their socket and use lifecycleCtx so a deploy
+	// can stop admission, drain them, and only then cancel background work.
+	// StartAndListen has the same explicit contract: its caller must call Close.
+	if ctx != nil {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 	}
 	ctx = s.lifecycleCtx
 
@@ -213,20 +206,44 @@ func (s *Server) doShutdown() error {
 	s.ready.Store(false)
 	logging.PrintShutdown(os.Stderr, time.Since(s.startedAt), s.logColor)
 
-	// 1. Stop accepting new connections.
+	// 1. Stop admitting new chat runs, then let every already-accepted turn
+	// finish while the old listener and detached stream contexts are still live.
+	// If a run exceeds the turn budget, continue teardown and let lifecycle
+	// cancellation below abort it rather than wedging the deploy forever.
+	if s.chatHandler != nil {
+		drainStarted := time.Now()
+		s.logger.Info("chat admission closed; draining accepted runs", "timeout", chatDrainTimeout)
+		drainCtx, drainCancel := context.WithTimeout(context.Background(), chatDrainTimeout)
+		if err := s.chatHandler.BeginDrain(drainCtx); err != nil {
+			s.logger.Warn("chat drain exceeded shutdown budget; cancelling remaining runs",
+				"timeout", chatDrainTimeout, "error", err)
+		} else {
+			s.logger.Info("chat drain complete", "elapsed", time.Since(drainStarted))
+		}
+		drainCancel()
+	}
+
+	// 2. Cancel the server lifecycle only after the chat drain. This closes the
+	// persistent native events SSE and stops background producers, allowing the
+	// HTTP server to shut down promptly without sacrificing an in-flight reply.
+	if s.lifecycleCancel != nil {
+		s.lifecycleCancel()
+	}
+
+	// 3. Stop accepting new connections and drain any non-chat HTTP handlers.
 	var httpErr error
 	if s.httpServer != nil {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
 		httpErr = s.httpServer.Shutdown(shutdownCtx)
+		cancel()
 	}
 
-	// 2. Stop gateway event subscriptions (bounded to avoid hanging).
+	// 4. Stop gateway event subscriptions (bounded to avoid hanging).
 	if s.gatewaySubs != nil {
 		stopWithTimeout(5*time.Second, "gatewaySubs.Stop", s.logger, s.gatewaySubs.Stop)
 	}
 
-	// 3. Stop cron service. The bounded context cancels every in-flight
+	// 5. Stop cron service. The bounded context cancels every in-flight
 	// executor (scheduler, recovery, async POST /api/cron/run) and waits
 	// for them so that downstream subsystems (the chat handler) are not
 	// torn down while a cron run is still using them.
@@ -238,13 +255,13 @@ func (s *Server) doShutdown() error {
 	}
 
 	// Every drain below is wrapped in stopWithTimeout. doShutdown closes the
-	// HTTP listener first (step 1), so any step that blocks indefinitely keeps
+	// HTTP listener above, so any step that blocks indefinitely keeps
 	// the gateway un-serving until it returns; an unbounded drain therefore
 	// stretches the listener-closed window up to the lifecycle watchdog's grace
-	// (45s) before the process is force-exited. Bounding each step keeps that
+	// before the process is force-exited. Bounding each step keeps that
 	// window short — the watchdog stays a last resort, not the routine path.
 
-	// 4. Stop autonomous service (dreaming).
+	// 6. Stop autonomous service (dreaming).
 	if s.autonomousSvc != nil {
 		stopWithTimeout(10*time.Second, "autonomousSvc.Stop", s.logger, s.autonomousSvc.Stop)
 	}
@@ -318,11 +335,8 @@ func (s *Server) doShutdown() error {
 		s.runMarkerUnsub()
 	}
 
-	// 13. Cancel lifecycle context so remaining background goroutines exit,
-	// then wait for them to finish.
-	if s.lifecycleCancel != nil {
-		s.lifecycleCancel()
-	}
+	// The lifecycle context was cancelled immediately after the chat drain;
+	// join the background goroutines after their owned subsystems are closed.
 	stopWithTimeout(5*time.Second, "bgWg.Wait", s.logger, s.bgWg.Wait)
 
 	return httpErr

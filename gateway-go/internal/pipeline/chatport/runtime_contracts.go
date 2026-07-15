@@ -1,6 +1,14 @@
 package chatport
 
-import "context"
+import (
+	"context"
+	"time"
+)
+
+// InteractiveTurnDeadline is the transport-level backstop shared by native
+// streaming, blocking fallback/capture turns, and graceful restart draining.
+// The chat pipeline's own 5-minute budget should normally fire first.
+const InteractiveTurnDeadline = 6 * time.Minute
 
 // ProviderConfig is the stable provider configuration consumed outside the
 // chat implementation. The concrete chat handler aliases this type so runtime

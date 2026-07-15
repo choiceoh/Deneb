@@ -2,7 +2,9 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
@@ -17,11 +19,80 @@ func TestChatPortRejectsTypedNilHandler(t *testing.T) {
 	if streamRunner.ChatReady() {
 		t.Fatal("typed nil stream handler reported ready")
 	}
+	if (&Handler{}).ChatReady() {
+		t.Fatal("partially initialized handler reported ready")
+	}
 	if _, err := runner.RunSync(context.Background(), chatport.SyncRequest{}); err == nil {
 		t.Fatal("typed nil RunSync returned nil error")
 	}
 	if _, err := streamRunner.RunSyncStream(context.Background(), chatport.SyncRequest{}, nil); err == nil {
 		t.Fatal("typed nil RunSyncStream returned nil error")
+	}
+}
+
+func TestBeginDrainMarksHandlerUnreadyAndRejectsNewSyncRuns(t *testing.T) {
+	h := &Handler{abort: NewAbortTracker()}
+	t.Cleanup(h.abort.Close)
+
+	if !h.ChatReady() {
+		t.Fatal("new handler reported unready before drain")
+	}
+	if err := h.BeginDrain(context.Background()); err != nil {
+		t.Fatalf("BeginDrain: %v", err)
+	}
+	if h.ChatReady() {
+		t.Fatal("draining handler still reported ready")
+	}
+	if _, err := h.SendSync(context.Background(), "client:main", "hello", "", nil); !errors.Is(err, ErrRuntimeDraining) {
+		t.Fatalf("SendSync error = %v, want ErrRuntimeDraining", err)
+	}
+	if _, err := h.SendSyncStream(context.Background(), "client:main", "hello", "", nil, nil); !errors.Is(err, ErrRuntimeDraining) {
+		t.Fatalf("SendSyncStream error = %v, want ErrRuntimeDraining", err)
+	}
+}
+
+func TestBeginDrainWaitsForAdmittedSyncRunToActuallyReturn(t *testing.T) {
+	h := &Handler{
+		abort:       NewAbortTracker(),
+		pending:     NewPendingQueue(),
+		mergeWindow: NewMergeWindowTracker(),
+	}
+	t.Cleanup(h.abort.Close)
+	if !h.abort.AcquireAdmission() {
+		t.Fatal("pre-drain sync request was not admitted")
+	}
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	runDone := make(chan error, 1)
+	go func() {
+		defer h.abort.ReleaseAdmission()
+		_, err := h.withAdmittedSyncRunLifecycle(context.Background(), "client:main", "run-sync",
+			func(context.Context) (*SyncResult, error) {
+				close(started)
+				<-release
+				return &SyncResult{Text: "complete"}, nil
+			})
+		runDone <- err
+	}()
+	<-started
+
+	drainCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	drainDone := make(chan error, 1)
+	go func() { drainDone <- h.BeginDrain(drainCtx) }()
+	select {
+	case err := <-drainDone:
+		t.Fatalf("drain returned before the admitted run: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(release)
+	if err := <-runDone; err != nil {
+		t.Fatalf("sync run failed: %v", err)
+	}
+	if err := <-drainDone; err != nil {
+		t.Fatalf("drain failed after sync run returned: %v", err)
 	}
 }
 
