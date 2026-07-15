@@ -54,7 +54,7 @@ dependencies = [
 
 [[package]]
 name = "andromeda"
-version = "0.0.77"
+version = "0.0.78"
 dependencies = [
  "dirs",
  "keyring",
