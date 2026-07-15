@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.108.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.107.0...deneb-v4.108.0) (2026-07-15)
+
+
+### ✨ Features
+
+* **groupware:** Amaranth HMAC 리더·툴·피드 승인칩 ([#3733](https://github.com/choiceoh/Deneb/issues/3733)) ([f480684](https://github.com/choiceoh/Deneb/commit/f48068476ca0ef31a67b61a1866936e7ebb0c81f))
+
 ## [4.107.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.106.0...deneb-v4.107.0) (2026-07-15)
 
 
