@@ -1,13 +1,14 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
@@ -17,6 +18,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/cronrunner"
+	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/modelpicker"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
@@ -79,6 +81,9 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 					if h := cs.HotwordHints(100); h != "" {
 						parts = append(parts, h)
 					}
+				}
+				if h := runtimemeeting.LoadPlaudGlossaryHotwords(configresolve.TopicsDir(), 80); h != "" {
+					parts = append(parts, h)
 				}
 				return strings.Join(parts, ", ")
 			},

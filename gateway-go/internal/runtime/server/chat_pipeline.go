@@ -29,6 +29,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/externalmcp"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/filesemindex"
+	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/modelpanel"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/notebooksource"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
@@ -256,6 +257,9 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 				if h := c.HotwordHints(100); h != "" {
 					parts = append(parts, h)
 				}
+			}
+			if h := runtimemeeting.LoadPlaudGlossaryHotwords(configresolve.TopicsDir(), 80); h != "" {
+				parts = append(parts, h)
 			}
 			return strings.Join(parts, ", ")
 		},
