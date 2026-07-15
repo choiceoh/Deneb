@@ -93,6 +93,8 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 				Summary:              p.Summary,
 				Note:                 p.Content,
 			})
+		case "seed-sites":
+			return wikiSeedSites(d.Store, p.Project)
 		case "log":
 			return wikiLog(workspaceDir, d.Store, p.Content)
 		case "daily":
@@ -106,7 +108,7 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 		case "ingest":
 			return wikiIngest(ctx, d.Store, p.Query, p.Project, p.Title, p.Content, p.Force)
 		default:
-			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: search, read, index, write, write-site, log, daily, status, close, reopen, ingest", p.Action), nil
+			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: search, read, index, write, write-site, seed-sites, log, daily, status, close, reopen, ingest", p.Action), nil
 		}
 	}
 }
@@ -133,6 +135,27 @@ func orDash(s string) string {
 		return "미분류"
 	}
 	return s
+}
+
+// wikiSeedSites bootstraps 현장 page stubs from projects' 대표페이지 Meta.Sites so
+// existing projects enter the 현장 공통 포맷 in one shot. project 미지정이면 전체.
+func wikiSeedSites(store *wiki.Store, project string) (string, error) {
+	if store == nil {
+		return "위키가 비활성 상태입니다.", nil
+	}
+	created, err := store.SeedSitePages(strings.TrimSpace(project))
+	if err != nil {
+		return "", fmt.Errorf("현장 시드 실패: %w", err)
+	}
+	if len(created) == 0 {
+		return "새로 만든 현장 페이지 없음 — 이미 모두 있거나 대표페이지 sites가 없습니다.", nil
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "현장 페이지 %d개 생성 (상태·용량·공정 일정은 비어 있으니 write-site로 채우세요):\n", len(created))
+	for _, p := range created {
+		b.WriteString("- " + p + "\n")
+	}
+	return b.String(), nil
 }
 
 func wikiSearch(ctx context.Context, store *wiki.Store, query string, limit int) (string, error) {
