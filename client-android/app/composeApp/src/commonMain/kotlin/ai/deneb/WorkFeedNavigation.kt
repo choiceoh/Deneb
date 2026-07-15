@@ -7,7 +7,7 @@ internal const val WORK_FEED_REF_TYPE = "workfeed"
  * Blank refs and other ref types deliberately fall back to the caller's legacy
  * navigation behavior.
  */
-internal fun workFeedItemId(refType: String?, refId: String?): String? {
+fun workFeedItemId(refType: String?, refId: String?): String? {
     if (!refType?.trim().equals(WORK_FEED_REF_TYPE, ignoreCase = true)) return null
     return refId?.trim()?.takeIf(String::isNotEmpty)
 }

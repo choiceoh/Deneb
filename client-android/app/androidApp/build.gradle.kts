@@ -161,8 +161,7 @@ androidComponents {
                 providers.of(GitShaValueSource::class) {
                     parameters.projectDir.set(rootProject.layout.projectDirectory)
                 },
-            )
-            .map { it.ifBlank { "nogit" } }
+            ).map { it.ifBlank { "nogit" } }
             .getOrElse("nogit")
     onVariants { variant ->
         variant.outputs.forEach { output ->
