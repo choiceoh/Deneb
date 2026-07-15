@@ -92,4 +92,19 @@ class BrowserAdBlockTest {
         assertEquals("image/png", browserBlockedResponseMime("https://x.com/a.png"))
         assertEquals("text/plain", browserBlockedResponseMime("https://x.com/a"))
     }
+
+    @Test
+    fun `blocks substack publisher pixels and trackers`() {
+        assertTrue(shouldBlockBrowserAdRequest("https://connect.facebook.net/en_US/fbevents.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://www.facebook.com/tr?id=123&ev=PageView"))
+        assertTrue(shouldBlockBrowserAdRequest("https://analytics.twitter.com/i/adsct?x=1"))
+        assertTrue(shouldBlockBrowserAdRequest("https://cdn.parsely.com/keys/x/p.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://cdn.amplitude.com/libs/analytics-browser-2.0.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://cdn.segment.com/analytics.js/v1/x/analytics.min.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://www.googletagmanager.com/gtag/js?id=G-XXXX"))
+        // Substack CDN assets and the post itself stay.
+        assertFalse(shouldBlockBrowserAdRequest("https://substackcdn.com/image/fetch/w_1456/https://x.jpeg"))
+        assertFalse(shouldBlockBrowserAdRequest("https://larrycjohnson.substack.com/p/iran-no-longer-bound-by-mou-adjusts", isForMainFrame = true))
+        assertFalse(shouldBlockBrowserAdRequest("https://larrycjohnson.substack.com/p/iran-no-longer-bound-by-mou-adjusts"))
+    }
 }
