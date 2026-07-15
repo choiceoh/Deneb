@@ -52,7 +52,7 @@ func TestChatUsageRecorderAutoValidationCaseFromFailedUse(t *testing.T) {
 			{"type":"tool_result","tool_use_id":"tu_1","content":"Active: failed","is_error":true}
 		]`)},
 	}}
-	rec := NewChatUsageRecorder(tracker, store, slog.Default(), true)
+	rec := NewChatUsageRecorder(tracker, store, slog.Default(), true, nil, "")
 
 	rec.RecordSkillUse("client:main:srv1", "srv1-ops", false, "turn failed: tool exec errored", "m1")
 
