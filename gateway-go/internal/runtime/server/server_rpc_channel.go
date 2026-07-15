@@ -56,10 +56,10 @@ func (s *Server) propagateConfigReload(_ *config.ConfigSnapshot, deferralTimeout
 	}
 
 	// Restart autonomous service so periodic tasks pick up config changes.
-	if s.autonomousSvc != nil {
+	if s.AutonomousSvc() != nil {
 		s.safeGo("config:restart-autonomous", func() {
-			s.autonomousSvc.Stop()
-			s.autonomousSvc.Start()
+			s.AutonomousSvc().Stop()
+			s.AutonomousSvc().Start()
 			s.logger.Info("config reload: autonomous service restarted")
 		})
 	}

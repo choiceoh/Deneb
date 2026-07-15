@@ -30,23 +30,18 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/sparkfleet"
 	arSession "github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	runtimehealth "github.com/choiceoh/deneb/gateway-go/internal/runtime/health"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
-	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
 	runtimenotify "github.com/choiceoh/deneb/gateway-go/internal/runtime/notify"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
-	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/sessionstore"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/serverauto"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/serverchat"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/servermail"
 	"github.com/choiceoh/deneb/gateway-go/pkg/checkpoint"
 )
 
@@ -79,16 +74,10 @@ func (s *Server) BoundAddr() string {
 
 // ServerRPC owns dispatcher construction and RPC wiring state.
 type ServerRPC struct {
-	dispatcher               *rpc.Dispatcher
-	providers                *provider.Registry
-	authManager              *provider.AuthManager
-	providerRuntime          *provider.ProviderRuntimeResolver
-	acpDeps                  *handlerprocess.ACPDeps
-	acpLifecycleUnsub        func()
-	acpResultInjectionUnsub  func()
-	snapshotLifecycleUnsub   func()
-	checkpointLifecycleUnsub func()
-	spilloverLifecycleUnsub  func()
+	dispatcher      *rpc.Dispatcher
+	providers       *provider.Registry
+	authManager     *provider.AuthManager
+	providerRuntime *provider.ProviderRuntimeResolver
 }
 
 // ServerRuntime owns long-running runtime health/activity trackers.
@@ -97,14 +86,6 @@ type ServerRuntime struct {
 	shutdownOnce sync.Once
 	gatewaySubs  *events.GatewayEventSubscriptions
 	activity     *monitoring.ActivityTracker
-	// Auto-resume state: the marker store persists "run active at T"
-	// records across gateway restarts. See auto_resume.go for the
-	// resume policy and file layout. resumeMu guards markerStore's
-	// lazy init, and runMarkerUnsub tears down the lifecycle listener
-	// on shutdown.
-	resumeMu       sync.Mutex
-	markerStore    *sessionstore.RunMarkerStore
-	runMarkerUnsub func()
 
 	// cacheHealth holds the rolling vLLM prefix-cache hit-ratio samples surfaced
 	// on /health and /status. gpuHealth caches the latest nvidia-smi reading for
@@ -122,41 +103,22 @@ type Server struct {
 
 	// Decomposed from ServerIntegrations — each independently constructable/testable.
 	*WorkflowSubsystem
-	*MemorySubsystem
-	*AutonomousSubsystem
 	*InfraSubsystem
-	*GenesisSubsystem
+
+	// Feature composition roots — see docs/agent-rules/hub-wiring.md.
+	// Mail owns mail/calendar/phone/wiki-mail/workfeed wiring; Chat owns the
+	// chat pipeline, session lifecycle, and cron/hook subsystems; Auto owns
+	// background autonomous services and the Genesis skill-lifecycle
+	// subsystem. Each holds a serverport.Host (*Server implements it, see
+	// host.go) and never imports runtime/server directly.
+	Mail *servermail.Manager
+	Chat *serverchat.Manager
+	Auto *serverauto.Manager
 
 	broadcaster *events.Broadcaster
 	publisher   *events.Publisher
 	processes   *process.Manager
 	daemon      *daemon.Daemon
-
-	// pushHub fans proactive 업무-topic reports out to connected native clients
-	// over their long-lived SSE connection (GET /api/v1/miniapp/events). Created
-	// in New so it's non-nil before any handler or relay touches it.
-	pushHub *proactive.Hub
-
-	// phoneActions correlates dispatched phone_write actions with the app's
-	// execution reports (phone_action_result events) so the tool can return
-	// confirmed/failed/unconfirmed instead of fire-and-forget. Created in New
-	// alongside pushHub. See server_phone_action.go.
-	phoneActions *phoneActionAwaiter
-
-	// phoneEventLedger is the shared notification raw ledger — both phone-event
-	// entry doors (RPC bridge + HTTP loopback) record into one instance. The
-	// HTTP door (/api/event/ingest) builds its handler per request, so the lazy
-	// init is guarded by phoneEventLedgerOnce (concurrent ingests must share one
-	// ledger, not race two into existence — server_phone_action.go).
-	phoneEventLedger     *phoneevents.Ledger
-	phoneEventLedgerOnce sync.Once
-
-	// siteVisitRecorder logs project 현장 visits from phone location fixes
-	// (wikiwork.SiteVisitRecorder). Lazily created (guarded by
-	// siteVisitRecorderOnce — same per-request door as the ledger); nil when no
-	// wiki store.
-	siteVisitRecorder     *wikiwork.SiteVisitRecorder
-	siteVisitRecorderOnce sync.Once
 
 	// alertGate is the process-wide cooldown shared by external Fleet alerts and
 	// the observatory watchdog. One instance for the server lifetime prevents a
@@ -189,45 +151,10 @@ type Server struct {
 	// Created during registerEarlyMethods; nil until then.
 	insights *insights.Engine
 
-	// polarisStore is the compaction summary store, created in
-	// registerSessionRPCMethods (Session phase) and read by the opt-in
-	// compaction tuner registered in registerWorkflowSideEffects (later phase).
-	polarisStore *polaris.Store
-
-	// mailStore is the local file-backed mail archive mirror (created in
-	// initMemorySubsystem). LMTP intake writes new mail to it; the mail_archive
-	// tool reads from it (IMAP fallback on miss). nil = IMAP only.
-	mailStore *mailstore.Store
-
 	// notify mirrors user-impacting error events and status snapshots to the
 	// native client (live push) and the operator log. Created during
 	// registerEarlyMethods.
 	notify *runtimenotify.Service
-
-	// calendarBriefing is the D-15min meeting push service, delivered to the
-	// native client. nil when calendar OAuth tokens aren't configured — safe to
-	// call start() unconditionally; the service is a no-op.
-	calendarBriefing *runtimemeeting.CalendarBriefingService
-
-	// meetingHarvest asks "회의 어떻게 됐어요?" after work-linked calendar events
-	// end, pulling meeting/call outcomes into the wiki flywheel (mail is only
-	// half the negotiation). nil-safe start(); see meeting_harvest.go.
-	meetingHarvest *runtimemeeting.HarvestService
-
-	// plaudRecordings analyzes new Plaud meeting recordings via the external
-	// MCP tools (transcript → meeting report → 회의록 wiki page + feed card).
-	// nil-safe start(); see plaud_recordings.go.
-	plaudRecordings *runtimemeeting.PlaudService
-
-	// chatToolRegistry is the chat pipeline's tool registry, captured at
-	// pipeline build so background services (plaud recordings) can execute
-	// registered tools outside a chat turn. nil until buildChatPipeline runs.
-	chatToolRegistry *chat.ToolRegistry
-
-	// mailIngestHealth stores mailIngestHealth when LMTP ingest is enabled so
-	// /health exposes archive-context degradation instead of leaving it in logs.
-	mailIngestHealth     atomic.Value
-	mailIngestQueueStats func() map[string]int
 
 	// logSwap wraps the gateway logger so the notify service can install
 	// an ERROR-mirroring handler after creation. Set once in New(); never
@@ -249,11 +176,6 @@ type Server struct {
 	// promptStore persists operator-editable prompt overrides surfaced in the
 	// native Settings prompt corner. nil only if initialization is skipped in tests.
 	promptStore *prompts.Store
-
-	// Session, chat, and hook subsystems — logically grouped to reduce God-Object growth.
-	*SessionManager // sessions, transcript
-	*ChatManager    // chatHandler, toolDeps, modelRegistry
-	*HookManager    // hooks, cron, cronRunLog
 
 	// lifecycleCtx is cancelled by doShutdown() so background goroutines
 	// exit promptly even if the caller's original context is still alive.
@@ -327,26 +249,20 @@ func (s *Server) safeGo(name string, fn func()) {
 // New creates a new gateway server bound to the given address.
 func New(addr string, opts ...Option) (*Server, error) {
 	s := &Server{
-		ServerTransport:     &ServerTransport{addr: addr},
-		ServerRPC:           &ServerRPC{},
-		ServerRuntime:       &ServerRuntime{},
-		MemorySubsystem:     &MemorySubsystem{},
-		AutonomousSubsystem: &AutonomousSubsystem{},
-		GenesisSubsystem:    &GenesisSubsystem{},
-		version:             "0.1.0-go",
-		logger:              slog.Default(),
-		pushHub:             proactive.NewHub(),
-		phoneActions:        newPhoneActionAwaiter(),
-		alertGate:           proactive.NewAlertGate(),
-		SessionManager: &SessionManager{
-			sessions:       session.NewManager(),
-			abortMemory:    arSession.NewAbortMemory(2000),
-			historyTracker: arSession.NewHistoryTracker(),
-			sessionUsage:   &arSession.SessionUsage{},
-		},
-		ChatManager: &ChatManager{},
-		HookManager: &HookManager{},
+		ServerTransport: &ServerTransport{addr: addr},
+		ServerRPC:       &ServerRPC{},
+		ServerRuntime:   &ServerRuntime{},
+		version:         "0.1.0-go",
+		logger:          slog.Default(),
+		alertGate:       proactive.NewAlertGate(),
 	}
+	s.Mail = servermail.New(s)
+	s.Chat = serverchat.New(s, s.Mail)
+	s.Auto = serverauto.New(s)
+	s.Chat.Sessions = session.NewManager()
+	s.Chat.AbortMemory = arSession.NewAbortMemory(2000)
+	s.Chat.HistoryTracker = arSession.NewHistoryTracker()
+	s.Chat.SessionUsage = &arSession.SessionUsage{}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -381,7 +297,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		Broadcaster: s.broadcaster,
 		Logger:      s.logger,
 	})
-	s.publisher = events.NewPublisher(s.broadcaster, &sessionSnapshotProvider{sessions: s.sessions}, s.logger)
+	s.publisher = events.NewPublisher(s.broadcaster, &sessionSnapshotProvider{sessions: s.Chat.Sessions}, s.logger)
 	s.gatewaySubs.SetPublisher(s.publisher)
 	s.processes = process.NewManager(s.logger)
 	if homeDir, err := os.UserHomeDir(); err == nil {
@@ -396,19 +312,19 @@ func New(addr string, opts ...Option) (*Server, error) {
 			}
 		}
 		storePath := cron.DefaultCronStorePath(homeDir)
-		s.cronRunLog = cron.NewPersistentRunLog(storePath)
+		s.Chat.CronRunLog = cron.NewPersistentRunLog(storePath)
 		// Cron delivery defaults: every report routes to the native client's
 		// 업무 chat (client:main) via MainSessionHandoff regardless of the
 		// per-job target. Default targetless jobs straight to that native
 		// sentinel — without it a job with no explicit Delivery.To fails
 		// ResolveDeliveryTarget ("no delivery recipient configured") before its
 		// agent even runs, and with Telegram retired there is no other channel.
-		s.cronService = cron.NewService(cron.ServiceConfig{
+		s.Chat.CronService = cron.NewService(cron.ServiceConfig{
 			StorePath:      storePath,
 			DefaultChannel: "client",
 			DefaultTo:      proactive.NativeWorkSessionTarget,
 			Enabled:        cronEnabled,
-			Sessions:       s.sessions,
+			Sessions:       s.Chat.Sessions,
 		}, nil, s.logger) // agent runner wired later during chat handler setup
 		if !cronEnabled {
 			s.logger.Info("cron service disabled by config")
@@ -430,7 +346,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 	s.WorkflowSubsystem = NewWorkflowSubsystem(s.logger)
 
 	// ACP subsystem: registry, bindings, persistence, lifecycle sync.
-	s.initACPSubsystem(denebDir)
+	s.Chat.InitACPSubsystem(denebDir)
 
 	s.dispatcher = rpc.NewDispatcher(s.logger)
 	s.dispatcher.UseMiddleware(metrics.RPCInstrumentation(), middleware.Logging(s.logger))
@@ -444,15 +360,15 @@ func New(addr string, opts ...Option) (*Server, error) {
 	if err := s.registerEarlyMethods(hub, denebDir); err != nil {
 		return nil, fmt.Errorf("register early methods: %w", err)
 	}
-	s.registerSessionRPCMethods() // chat pipeline init + handler creation
-	if s.localAIHub != nil {
-		hub.SetLocalAIHub(s.localAIHub)
+	s.Chat.RegisterSessionRPCMethods() // chat pipeline init + handler creation
+	if s.Chat.LocalAIHub != nil {
+		hub.SetLocalAIHub(s.Chat.LocalAIHub)
 	}
-	if s.embeddingClient != nil {
-		hub.SetEmbeddingClient(s.embeddingClient)
+	if s.Chat.EmbeddingClient != nil {
+		hub.SetEmbeddingClient(s.Chat.EmbeddingClient)
 	}
 	hub.AdvancePhase(rpcutil.PhaseSession) // mark chatHandler as available
-	s.initGenesisServices()                // create genesis deps (before late methods for Rule 1)
+	s.Auto.InitGenesisServices()           // create genesis deps (before late methods for Rule 1)
 	s.registerLateMethods(hub)             // Chat-dependent domains
 	s.registerWorkflowSideEffects(hub)     // non-RPC: autonomous, dreaming, notifier
 
@@ -484,7 +400,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 	// Persist "run active" markers on session state transitions so the
 	// auto-resume subsystem can recover runs that a gateway crash or
 	// restart interrupted. See auto_resume.go for the resume policy.
-	s.runMarkerUnsub = s.initRunMarkerLifecycle()
+	s.Auto.RunMarkerUnsub = s.Auto.InitRunMarkerLifecycle()
 
 	// SparkFleet control-plane discovery (opt-in via DENEB_SPARKFLEET_URL): surface
 	// which GPU backends are actually up instead of degrading silently. New returns

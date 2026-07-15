@@ -7,26 +7,29 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/gatewayhttp"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/servermail"
 )
 
 // buildMux configures HTTP routing for health, native-client HTTP (SSE via gatewayhttp/nativeapi), hooks, and introspection routes.
 func (s *Server) buildMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	phoneEventHandler := func() *phoneevents.Handler {
-		return phoneevents.New(phoneevents.Config{
-			ChatHandler:     s.chatHandler,
-			Relay:           &s.proactiveRelay,
+		cfg := phoneevents.Config{
 			ShutdownContext: s.ShutdownCtx(),
 			Logger:          s.logger,
-			Ledger:          s.phoneEventLedgerInstance(),
-			OnLocationPlace: s.siteVisitOnLocation(),
-			ResolvePhoneAction: func(res phoneevents.ActionResult) bool {
-				if s.phoneActions == nil {
-					return false
-				}
-				return s.phoneActions.resolve(phoneActionResult{ID: res.ID, OK: res.OK, Error: res.Error})
-			},
-		})
+		}
+		if s.Chat != nil {
+			cfg.ChatHandler = s.Chat.ChatHandler
+			cfg.Relay = &s.Chat.ProactiveRelay
+		}
+		if s.Mail != nil {
+			cfg.Ledger = s.Mail.PhoneEventLedgerInstance()
+			cfg.OnLocationPlace = s.Mail.SiteVisitOnLocation()
+			cfg.ResolvePhoneAction = func(res phoneevents.ActionResult) bool {
+				return s.Mail.ResolvePhoneAction(servermail.PhoneActionResult{ID: res.ID, OK: res.OK, Error: res.Error})
+			}
+		}
+		return phoneevents.New(cfg)
 	}
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /healthz", s.handleHealth)
@@ -36,20 +39,22 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/cron/run", s.handleCronRun)
 	mux.HandleFunc("POST /api/event/ingest", func(w http.ResponseWriter, r *http.Request) { phoneEventHandler().ServeHTTP(w, r) })
 	clientRoutes := gatewayhttp.Config{
-		PushHub:           s.pushHub,
-		ShutdownContext:   s.ShutdownCtx(),
-		Logger:            s.logger,
-		AttachmentFactory: s.newMiniappMailAttachmentClient,
-		Fleet:             s.fleet,
-		Version:           s.version,
+		ShutdownContext: s.ShutdownCtx(),
+		Logger:          s.logger,
+		Fleet:           s.fleet,
+		Version:         s.version,
+	}
+	if s.Mail != nil {
+		clientRoutes.PushHub = s.Mail.PushHub
+		clientRoutes.AttachmentFactory = s.Mail.NewMiniappMailAttachmentClient
 	}
 	// Keep route discovery available to lightweight tests and diagnostics that
 	// construct a zero-value Server without the full RPC/chat bootstrap.
 	if s.ServerRPC != nil {
 		clientRoutes.Dispatcher = s.dispatcher
 	}
-	if s.ChatManager != nil {
-		clientRoutes.ChatHandler = s.chatHandler
+	if s.Chat != nil {
+		clientRoutes.ChatHandler = s.Chat.ChatHandler
 	}
 	gatewayhttp.RegisterRoutes(mux, clientRoutes)
 	// Production-fidelity extraction benchmark: run a real extractor against a named
@@ -59,7 +64,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	gatewayhttp.RegisterFleetAlertRoute(mux, gatewayhttp.FleetAlertConfig{
 		Gate: s.alertGate,
 		Publish: func(title, body string) {
-			proactive.PublishWithFallback(s.pushHub, s.pushNotifier, proactive.Event{
+			proactive.PublishWithFallback(s.PushHub(), s.pushNotifier, proactive.Event{
 				Title: title,
 				Body:  body,
 				Kind:  proactive.PushKindFleet,

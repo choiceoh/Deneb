@@ -33,7 +33,15 @@ VERIFY = (
 # domain. They are exempted from the cochange FINDING only; their rate still
 # feeds the soft tail subscore, so the exemption cannot hide a real regression
 # (the pillar score is unchanged) and every OTHER package remains fully scored.
-COMPOSITION_ROOT_COMPONENTS = frozenset({"runtime/server", "runtime/bootstrap"})
+COMPOSITION_ROOT_COMPONENTS = frozenset({
+    "runtime/server",
+    "runtime/serverauto",
+    "runtime/serverchat",
+    "runtime/servermail",
+    "runtime/serverport",
+    "runtime/serverwire",
+    "runtime/bootstrap",
+})
 
 # Exact transport facades also cross component boundaries by design: their one
 # responsibility is adapting several product capabilities onto one protocol
