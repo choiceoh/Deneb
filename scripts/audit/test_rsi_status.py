@@ -31,6 +31,8 @@ from rsi_status import (
     main,
     turning,
     render_markdown,
+    _marker_blocks_redispatch,
+    DISPATCH_ABANDON_MS,
 )
 
 NOW = 1_700_000_000_000  # fixed clock (ms)
@@ -129,6 +131,14 @@ class L2Test(unittest.TestCase):
     def test_empty_is_idle(self):
         self.assertEqual(assess_l2([], frozen=False, now_ms=NOW).state, IDLE)
 
+    def test_revert_only_window_is_live(self):
+        # A revert alone (the rollback watch firing on an old adoption) is meta
+        # activity — L2 must read LIVE, not IDLE (parity with Go metaActivityIn),
+        # else the Go RPC and this audit disagree and rsi_loop_audit hard-fails.
+        s = assess_l2([{"createdAt": RECENT, "action": "auto_reverted"}], frozen=False, now_ms=NOW)
+        self.assertEqual(s.state, LIVE)
+        self.assertEqual(s.metrics["reverted"], 1)
+
     def test_assess_reads_last_freeze_verdict_not_file_presence(self):
         # Parity with Go AutoAdoptFrozen: frozen:false unfreezes even though
         # the marker file still exists.
@@ -214,11 +224,32 @@ class L3Test(unittest.TestCase):
         s = assess_l3([{
             "createdAt": RECENT,
             "judgeVersion": "v1",
-            "operatorVerdicts": [{"decisionId": "sk@1.0.1", "verdict": "confirm"}],
+            "operatorVerdicts": [{"decisionId": "sk@1.0.1", "verdict": "confirm", "createdAt": RECENT}],
         }], [], NOW)
         self.assertEqual(s.state, LIVE)
         self.assertEqual(s.metrics["runs"], 0)
         self.assertEqual(s.metrics["operator_labels_7d"], 1)
+
+    def test_operator_label_window_follows_each_verdict_timestamp(self):
+        # A judge run recorded 10 days ago (out of the 7d window) gets an operator
+        # verdict added today. The verdict's OWN timestamp is in-window, so it must
+        # count (parity with Go RecentOperatorJudgeVerdicts) — and its presence
+        # alone lifts L3 out of IDLE even though no run is in-window.
+        s = assess_l3([{
+            "createdAt": OLD,
+            "judgeVersion": "v1",
+            "operatorVerdicts": [{"decisionId": "sk@1.0.1", "verdict": "confirm", "createdAt": RECENT}],
+        }], [], NOW)
+        self.assertEqual(s.state, LIVE)
+        self.assertEqual(s.metrics["operator_labels_7d"], 1)
+
+        # The reverse: a stale verdict (out of window) on a fresh run does not count.
+        stale = assess_l3([{
+            "createdAt": RECENT,
+            "judgeVersion": "v1",
+            "operatorVerdicts": [{"decisionId": "sk@1.0.1", "verdict": "confirm", "createdAt": OLD}],
+        }], [], NOW)
+        self.assertEqual(stale.metrics["operator_labels_7d"], 0)
 
 
 class L4Test(unittest.TestCase):
@@ -265,12 +296,32 @@ class L4Test(unittest.TestCase):
             {"type": "self_correction_dispatch", "id": "c", "dispatchPhase": "failed",
              "attemptId": "a1"},
         ]
-        retry = assess_l4(rows, 1, 0, marker_outcomes={"c": "failed"})
+        # The re-dispatch decision follows the marker's block verdict (built by
+        # the scan via _marker_blocks_redispatch): not-blocked → requeues.
+        retry = assess_l4(rows, 1, 0, marker_blocks={"c": False})
         self.assertEqual(retry.metrics["dispatchable"], 1)
-        blocked = assess_l4(rows, 1, 0, marker_outcomes={"c": "attempted"})
+        blocked = assess_l4(rows, 1, 0, marker_blocks={"c": True})
         self.assertEqual(blocked.metrics["dispatchable"], 0)
+        # declined-as-failed compat (old shell wrote phase=failed for a declined
+        # marker) still keys off the marker's outcome string, not the verdict.
         declined = assess_l4(rows, 1, 0, marker_outcomes={"c": "declined"})
         self.assertEqual(declined.metrics["dispatchable"], 0)
+        self.assertEqual(declined.metrics["declined"], 1)
+
+    def test_marker_block_verdict_matches_go_dispatch_marker_blocks(self):
+        now = 10_000_000
+        # Corrupt / non-dict marker fails closed (blocks).
+        self.assertTrue(_marker_blocks_redispatch(None, now, now))
+        self.assertTrue(_marker_blocks_redispatch(["not", "a", "dict"], now, now))
+        # Terminal blocking outcomes.
+        for oc in ("landed", "attempted", "declined"):
+            self.assertTrue(_marker_blocks_redispatch({"outcome": oc}, now, now))
+        # Retryable outcomes.
+        for oc in ("failed", "timeout"):
+            self.assertFalse(_marker_blocks_redispatch({"outcome": oc}, now, now))
+        # Outcome-less: blocks within the 2h grace, abandons after.
+        self.assertTrue(_marker_blocks_redispatch({}, now - DISPATCH_ABANDON_MS + 1, now))
+        self.assertFalse(_marker_blocks_redispatch({}, now - DISPATCH_ABANDON_MS - 1, now))
 
     def test_status_delta_demotes_candidate(self):
         # A later status delta ({id,status}) must fold onto the candidate, not
