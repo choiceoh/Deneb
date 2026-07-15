@@ -506,8 +506,19 @@ async function downloadAndExtract(docId, file) {
   }
 }
 
-function attachmentName(file) {
-  const name = String(file.dispFileNm || file.fileNm || file.filePath || "첨부").trim();
+export function humanSize(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  if (n < 1024) return `${n}B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)}KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+export function attachmentName(file) {
+  let name = String(file.dispFileNm || file.fileNm || file.filePath || "첨부").trim();
+  // Amaranth often stores the display name already numbered ("1. 지출영수증"); drop
+  // that leading ordinal so the reader's own numbered list doesn't read "1. 1. …".
+  name = name.replace(/^\s*\d+\s*[.)]\s*/, "");
   const ext = String(file.fileExtsn || path.extname(String(file.filePath || "")) || "")
     .replace(/^\./, "")
     .toLowerCase();
@@ -521,11 +532,11 @@ async function formatAttachments(docId) {
   if (!list.length) return "";
   const lines = [
     `첨부 (${list.length}건 · 내용 미열람)`,
-    `필요한 파일만 groupware action=attachment, doc_id=${docId}, attachment=<번호·파일명> 으로 읽기`,
+    `필요한 파일만 groupware action=attachment, doc_id=${docId}, attachment=<번호 또는 파일명> 으로 읽기`,
   ];
   for (const [i, file] of list.entries()) {
-    const size = file.fileSize != null ? ` · ${file.fileSize}B` : "";
-    lines.push(`${i + 1}. ${attachmentName(file)}${size}`);
+    const size = humanSize(file.fileSize);
+    lines.push(`${i + 1}. ${attachmentName(file)}${size ? ` · ${size}` : ""}`);
   }
   return lines.join("\n");
 }
@@ -573,7 +584,7 @@ export async function readApprovalAttachment(docId, selector) {
     `[그룹웨어 전자결재 · 선택 첨부]`,
     `docId: ${id}`,
     `파일: ${attachmentName(file)}`,
-    got.size ? `크기: ${got.size}B` : "",
+    got.size ? `크기: ${humanSize(got.size)}` : "",
   ].filter(Boolean).join("\n");
   if (got.extracted) return `${header}\n\n추출 본문\n${got.extracted}`;
   return `${header}\n\n(${got.note || "텍스트 추출 결과 없음"})`;

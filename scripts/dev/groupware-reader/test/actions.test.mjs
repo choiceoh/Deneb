@@ -8,6 +8,8 @@ import {
   htmlToText,
   normalizeFolder,
   selectApprovalLine,
+  attachmentName,
+  humanSize,
   selectAttachment,
 } from "../lib/actions.mjs";
 
@@ -136,4 +138,18 @@ test("selectAttachment refuses ambiguous partial filenames", () => {
     { dispFileNm: "7월 거래명세서", fileExtsn: "pdf", fileKey: 2 },
   ];
   assert.throws(() => selectAttachment(files, "거래명세서"), /모호/);
+});
+
+
+test("humanSize renders B/KB/MB and skips zero", () => {
+  assert.equal(humanSize(512), "512B");
+  assert.equal(humanSize(64968), "63KB");
+  assert.equal(humanSize(2627887), "2.5MB");
+  assert.equal(humanSize(0), "");
+});
+
+test("attachmentName strips Amaranth's leading ordinal so lists don't double-number", () => {
+  assert.equal(attachmentName({ dispFileNm: "1. 지출영수증", fileExtsn: "jpg" }), "지출영수증.jpg");
+  assert.equal(attachmentName({ dispFileNm: "3) 사진대지", fileExtsn: "pdf" }), "사진대지.pdf");
+  assert.equal(attachmentName({ dispFileNm: "거래명세서.pdf" }), "거래명세서.pdf");
 });
