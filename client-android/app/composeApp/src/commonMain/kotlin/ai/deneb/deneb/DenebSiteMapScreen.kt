@@ -13,6 +13,10 @@ import ai.deneb.ui.denebPressable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,6 +58,7 @@ import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
@@ -672,6 +677,12 @@ private fun SiteMapCanvas(pins: List<SitePin>, onPinTap: (SitePin) -> Unit) {
     // Cache the parsed province paths once — PathParser is not cheap and the data is static.
     val provincePaths = remember { KoreaGeo.provinces.map { PathParser().parsePathString(it.d).toPath() } }
 
+    // 핀치 줌 + 팬 (데스크톱 휠 줌 대응). scale/offset을 graphicsLayer로 적용한다. 탭
+    // 좌표는 graphicsLayer의 역변환을 거쳐 detectTapGestures로 전달되므로, 아래 히트
+    // 테스트는 확대 여부와 무관하게 원본(1×) 좌표계 그대로 쓰면 된다.
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+
     Box(
         Modifier
             .fillMaxWidth()
@@ -683,6 +694,26 @@ private fun SiteMapCanvas(pins: List<SitePin>, onPinTap: (SitePin) -> Unit) {
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(KoreaGeo.WIDTH / KoreaGeo.HEIGHT)
+                .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offset.x, translationY = offset.y, clip = true)
+                .pointerInput(Unit) {
+                    // Engage zoom/pan only on a real pinch (2 fingers) or once already zoomed;
+                    // a single-finger drag at 1× is left unconsumed so the parent list scrolls.
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        do {
+                            val event = awaitPointerEvent()
+                            if (event.changes.count { it.pressed } >= 2 || scale > 1f) {
+                                val zoom = event.calculateZoom()
+                                val pan = event.calculatePan()
+                                if (zoom != 1f || pan != Offset.Zero) {
+                                    scale = (scale * zoom).coerceIn(1f, 5f)
+                                    offset = if (scale > 1f) offset + pan else Offset.Zero
+                                    event.changes.forEach { if (it.pressed) it.consume() }
+                                }
+                            }
+                        } while (event.changes.any { it.pressed })
+                    }
+                }
                 .pointerInput(pins) {
                     detectTapGestures { pos ->
                         val s = size.width / KoreaGeo.WIDTH
@@ -721,6 +752,16 @@ private fun SiteMapCanvas(pins: List<SitePin>, onPinTap: (SitePin) -> Unit) {
                 drawCircle(color, radius = r + 3.dp.toPx(), center = Offset(cx, cy), alpha = 0.16f)
                 drawMark(shapeOfType(pin.type), Offset(cx, cy), r, color)
             }
+        }
+        // 맞춤 — reset zoom/pan, shown only while zoomed in (mirrors the desktop button).
+        if (scale > 1f) {
+            TextButton(
+                onClick = {
+                    scale = 1f
+                    offset = Offset.Zero
+                },
+                modifier = Modifier.align(Alignment.TopEnd),
+            ) { Text("맞춤", style = DenebType.button) }
         }
     }
 }
