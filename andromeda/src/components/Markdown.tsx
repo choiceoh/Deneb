@@ -32,7 +32,8 @@ function safeHref(url: string): string | null {
 // markers. Each alternative captures its inner text for recursive rendering.
 const INLINE: { kind: string; re: RegExp }[] = [
   { kind: "esc", re: /\\([\\`*_{}[\]()#+\-.!~>|"'$])/ },
-  { kind: "br", re: /\n/ },
+  // Newline hard-breaks + literal <br>/<br/> (Amaranth/e-approval table cells).
+  { kind: "br", re: /\n|<br\s*\/?>/i },
   { kind: "image", re: /!\[([^\]]*)\]\(([^)\s]+)\)/ },
   { kind: "code", re: /`([^`]+)`/ },
   // Inline math: $…$ with currency guards — no space just inside the delimiters

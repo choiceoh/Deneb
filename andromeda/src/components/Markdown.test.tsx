@@ -121,6 +121,12 @@ describe("Markdown", () => {
     expect(container.querySelector("br")).not.toBeNull();
   });
 
+  it("renders literal <br> tags as hard breaks (e-approval table cells)", () => {
+    const { container } = render(<Markdown text={"위<br>아래<br/>끝"} />);
+    expect(container.querySelectorAll("br")).toHaveLength(2);
+    expect(container.textContent).toBe("위아래끝");
+  });
+
   it("when applies GFM table column alignment", () => {
     render(<Markdown text={"| L | C | R |\n|:--|:-:|--:|\n| a | b | c |"} />);
     expect(screen.getByRole("columnheader", { name: "C" })).toHaveStyle({ textAlign: "center" });

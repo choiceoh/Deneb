@@ -174,12 +174,22 @@ fun DenebApprovalDetailScreen(
             Spacer(Modifier.height(12.dp))
             Text("본문", style = DenebType.sectionLabel, color = denebHint())
             Spacer(Modifier.height(8.dp))
+            // Same renderer as chat/피드 — Amaranth bodies ship GFM tables (and
+            // occasional <br> cell breaks). Plain Text leaked raw "| … |" pipes.
             SelectionContainer {
-                Text(
-                    text = doc.body.ifBlank { "(본문 없음)" },
-                    style = DenebType.body,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+                if (doc.body.isBlank()) {
+                    Text(
+                        "(본문 없음)",
+                        style = DenebType.body,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                } else {
+                    MarkdownContent(
+                        content = doc.body,
+                        modifier = Modifier.fillMaxWidth(),
+                        baseStyle = DenebType.body,
+                    )
+                }
             }
 
             if (canAct) {
