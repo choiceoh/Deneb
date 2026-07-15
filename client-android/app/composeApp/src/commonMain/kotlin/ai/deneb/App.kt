@@ -348,6 +348,8 @@ internal fun AppContent(
                                                     feedState.actions.openWorkFeedItem(id)
                                                     navigateToDenebSection(navController, Home)
                                                 },
+                                                // Zune-style title pivot: 결재 is the feed's 동형 sibling.
+                                                onOpenApprovals = { navController.navigate(DenebApprovals) },
                                             )
                                             // Feed-card 정정 피드백은 위키를 고치는 ephemeral 에이전트 턴을 돌린다.
                                             // 시트는 낙관적으로 먼저 닫히므로, 돌아온 1~3줄 보고를 여기 스낵바로 띄운다.
@@ -628,6 +630,8 @@ internal fun AppContent(
                                                         ),
                                                     )
                                                 },
+                                                onOpenFeed = { navigateToDenebSection(navController, DenebFeed()) },
+                                                onOpenGroupware = { navController.navigate(DenebGroupware) },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                                             )
                                         }
@@ -653,6 +657,7 @@ internal fun AppContent(
                                             DenebGroupwareERPScreen(
                                                 client = client,
                                                 onBack = { navController.navigateUp() },
+                                                onOpenApprovals = { navController.navigate(DenebApprovals) },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                                             )
                                         }

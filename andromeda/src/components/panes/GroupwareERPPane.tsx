@@ -14,6 +14,17 @@ const AREAS: { id: string; label: string; queryable?: boolean; hint?: string }[]
   { id: "price", label: "단가" },
   { id: "sales", label: "매출" },
   { id: "people", label: "사원", queryable: true, hint: "이름·부서" },
+  { id: "board", label: "게시판" },
+];
+
+// 매출 기간 (reader sales folder → 요약 집계; 빈 값 = 최근 목록).
+const SALES_PERIODS: { id: string; label: string }[] = [
+  { id: "", label: "최근" },
+  { id: "today", label: "오늘" },
+  { id: "month", label: "이번 달" },
+  { id: "ytd", label: "연초부터" },
+  { id: "year", label: "올해" },
+  { id: "last_year", label: "작년" },
 ];
 
 /** Read-only Amaranth ERP hub — area tabs, auto-fetch, markdown snapshot. */
@@ -22,22 +33,25 @@ export function GroupwareERPPane() {
   const [area, setArea] = useState(AREAS[0].id);
   const [query, setQuery] = useState("");
   const [searchQ, setSearchQ] = useState("");
+  const [salesPeriod, setSalesPeriod] = useState("");
   const [error, setError] = useState("");
   const [searchBusy, setSearchBusy] = useState(false);
 
   const areaDef = AREAS.find((a) => a.id === area) ?? AREAS[0];
-  // Auto-load key: area + applied search (not the in-progress input).
+  // Auto-load key: area + applied search (not the in-progress input) + sales period.
   const appliedQ = areaDef.queryable ? searchQ.trim() : "";
+  const appliedFolder = area === "sales" ? salesPeriod : "";
 
   const [text, setText] = useAsyncOnOpen(
     async () => {
       const r = await listGroupwareERP(cfg, area, {
+        folder: appliedFolder || undefined,
         query: appliedQ || undefined,
         limit: 40,
       });
       return (r?.text ?? "").trim() || "(결과 없음)";
     },
-    [cfg, area, appliedQ],
+    [cfg, area, appliedQ, appliedFolder],
     {
       enabled: connected,
       onError: (e) => {
@@ -96,6 +110,7 @@ export function GroupwareERPPane() {
               setArea(a.id);
               setQuery("");
               setSearchQ("");
+              setSalesPeriod("");
               setError("");
             }}
           >
@@ -103,6 +118,22 @@ export function GroupwareERPPane() {
           </button>
         ))}
       </div>
+
+      {area === "sales" && (
+        <div className="groupware-period-chips" role="group" aria-label="매출 기간">
+          {SALES_PERIODS.map((p) => (
+            <button
+              key={p.id || "recent"}
+              type="button"
+              className={"row-btn" + (salesPeriod === p.id ? " active" : "")}
+              aria-pressed={salesPeriod === p.id}
+              onClick={() => setSalesPeriod(p.id)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {areaDef.queryable && (
         <form

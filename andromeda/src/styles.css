@@ -2410,6 +2410,12 @@ textarea {
   margin-bottom: 12px;
   flex-wrap: wrap;
 }
+.groupware-period-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
 .groupware-search {
   display: flex;
   gap: 8px;
@@ -2454,6 +2460,14 @@ textarea {
 .groupware-body .md h2 {
   font-size: 15px;
   margin: 0 0 8px;
+}
+
+/* Approval list: 미결만 filter row */
+.approval-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
 /* Approval list status badge */

@@ -36,6 +36,7 @@ function rowLine(a: GroupwareApprovalRow): string {
 export function ApprovalsPane() {
   const { connected } = useWorkspace();
   const [dayMs, setDayMs] = useState<number>(() => startOfDay());
+  const [pendingOnly, setPendingOnly] = useState(false);
   const { result, query } = useCachedList<GroupwareApprovalRow & { id?: string }>("approvals", connected, {
     meta: { rpcParams: { folder: "total", limit: APPROVALS_LIMIT } },
   });
@@ -62,15 +63,23 @@ export function ApprovalsPane() {
       return String(b.docId ?? "").localeCompare(String(a.docId ?? ""));
     });
 
+  // 미결만: cross-day inbox — a pending doc from days ago must not hide
+  // behind the day pager.
+  const pendingRows = rows
+    .filter((a) => a.canAct)
+    .sort((a, b) => String(b.docId ?? "").localeCompare(String(a.docId ?? "")));
+  const shownRows = pendingOnly ? pendingRows : dayRows;
+
   const pendingCount = dayRows.filter((a) => a.canAct).length;
 
   const itemDays = rows.map((a) => approvalDayMs(a.date) ?? todayMs);
   const minDayMs = Math.min(addDays(todayMs, -APPROVALS_LOOKBACK_DAYS), ...itemDays, todayMs);
   const maxDayMs = Math.max(todayMs, ...itemDays);
 
-  const aiText =
-    `[결재 · ${dayLabel(dayMs, nowMs)}]\n` +
-    (dayRows.length ? dayRows.map(rowLine).join("\n") : "(이 날짜에는 결재 문서가 없습니다)");
+  const aiText = pendingOnly
+    ? `[결재 · 미결만]\n` + (pendingRows.length ? pendingRows.map(rowLine).join("\n") : "(미결 문서가 없습니다)")
+    : `[결재 · ${dayLabel(dayMs, nowMs)}]\n` +
+      (dayRows.length ? dayRows.map(rowLine).join("\n") : "(이 날짜에는 결재 문서가 없습니다)");
   useRegisterPane("approvals", aiText);
 
   function goToDay(next: number) {
@@ -103,9 +112,9 @@ export function ApprovalsPane() {
       cell: (a) => (
         <div>
           <div style={{ fontWeight: a.canAct ? 600 : undefined }}>{a.title || "(제목 없음)"}</div>
-          {(a.drafter || a.docNo) && (
+          {(a.drafter || a.docNo || (pendingOnly && a.date)) && (
             <div style={{ fontSize: 12, opacity: 0.65, marginTop: 2 }}>
-              {[a.drafter && `기안 ${a.drafter}`, a.docNo].filter(Boolean).join(" · ")}
+              {[a.drafter && `기안 ${a.drafter}`, pendingOnly ? a.date : "", a.docNo].filter(Boolean).join(" · ")}
             </div>
           )}
         </div>
@@ -113,7 +122,7 @@ export function ApprovalsPane() {
     },
   ];
 
-  const selected = dayRows.find((a) => String(a.docId) === String(selectedId));
+  const selected = shownRows.find((a) => String(a.docId) === String(selectedId));
 
   return (
     <>
@@ -124,7 +133,21 @@ export function ApprovalsPane() {
           : "날짜를 옮기며 문서를 보고, 미결은 펼쳐서 승인·반려"}
       </p>
       {error && <p className="pane-error">오류: {error}</p>}
-      {connected && (
+      <div className="approval-filter-row">
+        <button
+          type="button"
+          className={"row-btn" + (pendingOnly ? " active" : "")}
+          aria-pressed={pendingOnly}
+          onClick={() => {
+            setPendingOnly((v) => !v);
+            setSelectedId(undefined);
+          }}
+        >
+          {pendingRows.length > 0 ? `미결만 ${pendingRows.length}` : "미결만"}
+        </button>
+        {pendingOnly && <span className="groupware-status">전체 기간의 미결 문서</span>}
+      </div>
+      {connected && !pendingOnly && (
         <DayPager
           label={dayLabel(dayMs, nowMs)}
           count={dayRows.length}
@@ -136,10 +159,14 @@ export function ApprovalsPane() {
           onToday={() => goToDay(todayMs)}
         />
       )}
-      <GridNotice query={query} count={dayRows.length} empty="이 날짜에는 결재 문서가 없습니다.">
+      <GridNotice
+        query={query}
+        count={shownRows.length}
+        empty={pendingOnly ? "미결 문서가 없습니다." : "이 날짜에는 결재 문서가 없습니다."}
+      >
         <Grid
           columns={columns}
-          rows={dayRows}
+          rows={shownRows}
           getKey={(a) => String(a.docId ?? "")}
           onRowClick={(a) => setSelectedId((cur) => (String(cur) === String(a.docId) ? undefined : String(a.docId)))}
           isRowSelected={(a) => String(a.docId) === String(selectedId)}

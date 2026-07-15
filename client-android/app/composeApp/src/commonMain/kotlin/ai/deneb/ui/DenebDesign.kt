@@ -174,6 +174,9 @@ fun DenebScreenScaffold(
     modifier: Modifier = Modifier,
     tabBar: (@Composable () -> Unit)? = null,
     actions: (@Composable RowScope.() -> Unit)? = null,
+    // Zune-style pivot labels rendered right after the title (dimmed, tappable) —
+    // sibling surfaces one tap away (피드 ⇄ 결재 ⇄ 그룹웨어). See [DenebTitlePivot].
+    titlePivot: (@Composable RowScope.() -> Unit)? = null,
     maxContentWidth: Dp = DenebMaxContentWidth,
     showBack: Boolean = true,
     fillWidth: Boolean = false,
@@ -230,14 +233,20 @@ fun DenebScreenScaffold(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                text = title,
-                                style = DenebType.viewTitle,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.weight(1f),
-                            )
+                            ) {
+                                Text(
+                                    text = title,
+                                    style = DenebType.viewTitle,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                titlePivot?.invoke(this)
+                            }
                             if (actions != null) {
                                 Row(verticalAlignment = Alignment.CenterVertically, content = actions)
                             }
@@ -248,4 +257,23 @@ fun DenebScreenScaffold(
             }
         }
     }
+}
+
+/**
+ * Zune-HD-style pivot label for [DenebScreenScaffold]'s `titlePivot` slot: a
+ * dimmed sibling-surface title sitting right of the active one (피드 **결재**).
+ * Tapping jumps to that surface — the 동형 UI pair reads as one pivot header.
+ */
+@Composable
+fun DenebTitlePivot(label: String, onClick: () -> Unit) {
+    Text(
+        text = label,
+        style = DenebType.viewTitle,
+        color = denebHint().copy(alpha = 0.55f),
+        maxLines = 1,
+        modifier = Modifier
+            .padding(start = 14.dp)
+            .clickable(onClickLabel = "$label 화면으로", role = Role.Button, onClick = onClick)
+            .handCursor(),
+    )
 }

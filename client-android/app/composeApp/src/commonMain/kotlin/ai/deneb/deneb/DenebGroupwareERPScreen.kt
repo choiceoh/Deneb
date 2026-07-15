@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebTitlePivot
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.rememberHaptics
@@ -43,6 +44,17 @@ private val erpAreas = listOf(
     ErpArea("price", "단가"),
     ErpArea("sales", "매출"),
     ErpArea("people", "사원", searchable = true, hint = "이름·부서"),
+    ErpArea("board", "게시판"),
+)
+
+// 매출 기간 (reader sales folder → 요약 집계; 빈 값 = 최근 목록).
+private val salesPeriods = listOf(
+    "" to "최근",
+    "today" to "오늘",
+    "month" to "이번 달",
+    "ytd" to "연초부터",
+    "year" to "올해",
+    "last_year" to "작년",
 )
 
 /** Promote the first summary line to a markdown heading (Andromeda parity). */
@@ -70,10 +82,12 @@ internal fun erpTextToMarkdown(raw: String): String {
 fun DenebGroupwareERPScreen(
     client: DenebGatewayClient,
     onBack: () -> Unit,
+    onOpenApprovals: (() -> Unit)? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var selected by remember { mutableStateOf(erpAreas.first()) }
     var query by remember { mutableStateOf("") }
+    var salesPeriod by remember { mutableStateOf("") }
     var text by remember { mutableStateOf<String?>(null) }
     var failed by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
@@ -83,7 +97,8 @@ fun DenebGroupwareERPScreen(
         failed = false
         text = null
         val q = if (selected.searchable) query.trim().ifBlank { null } else null
-        val resp = client.fetchERP(area = selected.key, query = q)
+        val folder = if (selected.key == "sales") salesPeriod.ifBlank { null } else null
+        val resp = client.fetchERP(area = selected.key, folder = folder, query = q)
         if (resp == null) {
             failed = true
         } else {
@@ -93,10 +108,16 @@ fun DenebGroupwareERPScreen(
 
     LaunchedEffect(selected.key) {
         query = ""
+        salesPeriod = ""
         load()
     }
 
-    DenebScreenScaffold(title = "그룹웨어", onBack = onBack, tabBar = navigationTabBar) {
+    DenebScreenScaffold(
+        title = "그룹웨어",
+        onBack = onBack,
+        tabBar = navigationTabBar,
+        titlePivot = onOpenApprovals?.let { open -> { DenebTitlePivot("결재", onClick = open) } },
+    ) {
         Column(Modifier.fillMaxSize()) {
             Text(
                 "Amaranth ERP 조회 · 결재는 「결재」에서",
@@ -119,6 +140,26 @@ fun DenebGroupwareERPScreen(
                             selected = area
                         },
                     ) { Text(area.label, style = DenebType.button) }
+                }
+            }
+            if (selected.key == "sales") {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    salesPeriods.forEach { (key, label) ->
+                        DenebChip(
+                            selected = salesPeriod == key,
+                            onClick = {
+                                haptics.tap()
+                                salesPeriod = key
+                                scope.launch { load() }
+                            },
+                        ) { Text(label, style = DenebType.button) }
+                    }
                 }
             }
             if (selected.searchable) {
