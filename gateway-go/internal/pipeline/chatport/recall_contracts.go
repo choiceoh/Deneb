@@ -7,6 +7,8 @@ import "context"
 type FileRecallHit struct {
 	Path       string
 	Snippet    string
+	StartLine  int
+	EndLine    int
 	Score      float64
 	ModifiedAt int64
 }

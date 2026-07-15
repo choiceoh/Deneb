@@ -30,17 +30,18 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textchunk"
 	"github.com/choiceoh/deneb/gateway-go/pkg/vectorutil"
 )
 
 // semindexVersion is bumped when the on-disk shape or chunking changes, so a
 // stale cache from an older layout is dropped and rebuilt rather than misread.
-const semindexVersion = 2
+const semindexVersion = 3
 
 // filestorePreprocessingVersion covers extraction-to-chunk semantics. Bump it
 // whenever chunk boundaries or normalization change without changing the
 // embedding model itself.
-const filestorePreprocessingVersion = "filestore-extract-chunk-v1"
+const filestorePreprocessingVersion = "filestore-structure-chunk-v2"
 
 // chunkRunes is the target size of one text chunk (~512 tokens for mixed
 // Korean/English). Rune-based so a chunk boundary never splits a CJK character.
@@ -121,8 +122,11 @@ type ExtractFunc func(ctx context.Context, data []byte, name string) string
 
 // chunk is one embedded slice of a file's text.
 type chunk struct {
-	Snippet string    `json:"snippet"`
-	Vector  []float32 `json:"vector"`
+	Snippet   string    `json:"snippet"`
+	Vector    []float32 `json:"vector"`
+	StartLine int       `json:"startLine,omitempty"`
+	EndLine   int       `json:"endLine,omitempty"`
+	Kind      string    `json:"kind,omitempty"`
 }
 
 // fileEntry is the index record for one file: its identity (path), the
@@ -170,9 +174,11 @@ type SemanticIndex struct {
 // ScoredEntry is one search hit: the matched file plus its best chunk score and
 // the snippet that scored highest (for display / agent context).
 type ScoredEntry struct {
-	Entry   Entry
-	Score   float64
-	Snippet string
+	Entry     Entry
+	Score     float64
+	Snippet   string
+	StartLine int
+	EndLine   int
 }
 
 // ReindexStats summarizes one Reindex pass for logging.
@@ -305,22 +311,26 @@ func (si *SemanticIndex) Rename(oldPath, newPath string) {
 	}
 }
 
-// chunkText splits s into <=chunkRunes-rune chunks on rune boundaries, dropping
-// chunks shorter than minChunkRunes, and caps the count at maxChunksPerFile.
+// chunkText preserves the historical test/helper surface while delegating to
+// the shared structure-aware splitter. Unknown text uses paragraph boundaries.
 func chunkText(s string) []string {
-	r := []rune(strings.TrimSpace(s))
-	if len(r) == 0 {
+	chunks := structuredChunks("content.txt", s)
+	if len(chunks) == 0 {
 		return nil
 	}
-	var out []string
-	for start := 0; start < len(r) && len(out) < maxChunksPerFile; start += chunkRunes {
-		end := start + chunkRunes
-		if end > len(r) {
-			end = len(r)
-		}
-		piece := strings.TrimSpace(string(r[start:end]))
-		if len([]rune(piece)) >= minChunkRunes {
-			out = append(out, piece)
+	out := make([]string, 0, len(chunks))
+	for _, chunk := range chunks {
+		out = append(out, chunk.Text)
+	}
+	return out
+}
+
+func structuredChunks(name, text string) []textchunk.Chunk {
+	chunks := textchunk.Split(name, text, textchunk.Options{TargetRunes: chunkRunes, MaxChunks: maxChunksPerFile})
+	out := chunks[:0]
+	for _, chunk := range chunks {
+		if len([]rune(strings.TrimSpace(chunk.Text))) >= minChunkRunes {
+			out = append(out, chunk)
 		}
 	}
 	return out
@@ -518,7 +528,7 @@ func (si *SemanticIndex) embedFile(ctx context.Context, store Store, extractFn E
 	}
 	content := contentHashOfBytes(data, e.Size)
 	text := extractFn(ctx, data, e.Name)
-	chunks := chunkText(text)
+	chunks := structuredChunks(e.Name, text)
 	if len(chunks) == 0 {
 		// No extractable text: record a fresh, empty entry so we don't re-extract
 		// this unchanged file every pass (the mtime/size/content key marks it current).
@@ -532,12 +542,17 @@ func (si *SemanticIndex) embedFile(ctx context.Context, store Store, extractFn E
 		if end > len(chunks) {
 			end = len(chunks)
 		}
-		vecs, eerr := embed.Embed(ctx, chunks[start:end])
+		texts := make([]string, end-start)
+		for i := start; i < end; i++ {
+			texts[i-start] = chunks[i].Text
+		}
+		vecs, eerr := embed.Embed(ctx, texts)
 		if eerr != nil || len(vecs) != end-start {
 			return nil, false // skip this file; retried next pass
 		}
 		for i, v := range vecs {
-			out = append(out, chunk{Snippet: chunks[start+i], Vector: v})
+			piece := chunks[start+i]
+			out = append(out, chunk{Snippet: piece.Text, Vector: v, StartLine: piece.StartLine, EndLine: piece.EndLine, Kind: piece.Kind})
 		}
 	}
 	mtime, size := freshKey(e)
@@ -561,23 +576,28 @@ func (si *SemanticIndex) Search(ctx context.Context, query string, max int, embe
 		mtime   string
 		score   float64
 		snippet string
+		start   int
+		end     int
 	}
 	hits := make([]scored, 0, len(entries))
 	for _, fe := range entries {
 		best := -1.0
 		bestSnip := ""
+		bestStart, bestEnd := 0, 0
 		for i := range fe.Chunks {
 			s := cosine(qv, fe.Chunks[i].Vector)
 			if s > best {
 				best = s
 				bestSnip = fe.Chunks[i].Snippet
+				bestStart = fe.Chunks[i].StartLine
+				bestEnd = fe.Chunks[i].EndLine
 			}
 		}
 		if best < minSemanticScore {
 			continue // below the cosine floor (empty entry, or only noise-level
 			// similarity) ⇒ not a semantic hit; the caller's lexical fallback handles it
 		}
-		hits = append(hits, scored{path: fe.Path, size: fe.Size, mtime: fe.MTime, score: best, snippet: bestSnip})
+		hits = append(hits, scored{path: fe.Path, size: fe.Size, mtime: fe.MTime, score: best, snippet: bestSnip, start: bestStart, end: bestEnd})
 	}
 
 	sort.Slice(hits, func(a, b int) bool {
@@ -602,8 +622,10 @@ func (si *SemanticIndex) Search(ctx context.Context, query string, max int, embe
 				Size:           h.size,
 				ServerModified: h.mtime,
 			},
-			Score:   h.score,
-			Snippet: h.snippet,
+			Score:     h.score,
+			Snippet:   h.snippet,
+			StartLine: h.start,
+			EndLine:   h.end,
 		})
 	}
 	return out, nil

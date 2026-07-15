@@ -257,6 +257,8 @@ func (s *Service) Recall(ctx context.Context, query string, limit int) []chatpor
 		out = append(out, chatport.FileRecallHit{
 			Path:       h.Entry.PathDisplay,
 			Snippet:    h.Snippet,
+			StartLine:  h.StartLine,
+			EndLine:    h.EndLine,
 			Score:      h.Score,
 			ModifiedAt: fileServerModifiedMillis(h.Entry.ServerModified),
 		})

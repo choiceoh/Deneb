@@ -111,6 +111,9 @@ func TestFilesAdapter_Recall_MapsHitsAndRejectsBelowFloor(t *testing.T) {
 	if h.Score < 0.73 {
 		t.Errorf("score = %v, want >= floor 0.73 (cosine surfaced)", h.Score)
 	}
+	if h.Meta["startLine"] != "1" || h.Meta["endLine"] != "1" {
+		t.Errorf("line metadata = %#v, want line 1", h.Meta)
+	}
 }
 
 func TestFilesAdapter_Recall_OffTopicEmpty(t *testing.T) {

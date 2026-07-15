@@ -7,7 +7,8 @@ type Result struct {
 	Ref     Ref
 	Snippet string
 	Score   float64
-	Time    int64 // unix milli, 0 when the backend does not surface a timestamp
+	Meta    map[string]string // backend-specific result metadata (for example, absolute line ranges)
+	Time    int64             // unix milli, 0 when the backend does not surface a timestamp
 }
 
 // Document is the full content of one knowledge entry fetched by Read.

@@ -65,11 +65,19 @@ func recallFilesEvidence(ctx context.Context, search FileRecallFunc, queries []s
 				continue
 			}
 			seen[path] = struct{}{}
+			snippet := h.Snippet
+			if h.StartLine > 0 {
+				lineRef := fmt.Sprintf("L%d", h.StartLine)
+				if h.EndLine > h.StartLine {
+					lineRef = fmt.Sprintf("L%d-L%d", h.StartLine, h.EndLine)
+				}
+				snippet = lineRef + ": " + snippet
+			}
 			evidence = append(evidence, recallEvidence{
 				Kind:   "file",
 				Source: path,
 				Query:  q,
-				Note:   formatRecallFileNote(path, h.Snippet),
+				Note:   formatRecallFileNote(path, snippet),
 				// Source prior + cosine (already a stable 0–1 number). The cosine
 				// carries the per-file ordering; the prior places files in the
 				// cross-source hierarchy. See recallFilesSourcePrior.
@@ -170,37 +178,38 @@ func recallWikiEvidenceResult(ctx context.Context, store *wiki.Store, queries []
 		})
 	}
 
-	// One batched embed for every wiki query (the server fans them across its
-	// context pool) instead of a per-query round-trip. Results stay index-aligned
-	// with queries, so queries[i] labels batch[i]'s hits.
-	// The full user turn is a deterministic intent signal for narrower per-term
-	// searches. It never admits a new page: wiki search only uses it to break an
-	// ambiguous ranking among candidates that the original query already passed.
-	// This recovers context such as a counterparty + generic noun combination
-	// without adding an LLM rewrite or another embedding request to the hot path.
+	// Execute one typed query plan: the original user turn carries the 2x prior
+	// as a vector clause, while deterministic signal-term clauses broaden lexical
+	// recall without flattening every expression into one ambiguous string.
 	intent := strings.TrimSpace(rawMessage)
 	if intent == "" && len(queries) > 1 {
 		intent = strings.Join(queries, " ")
 	}
-	reports, err := store.SearchBatchWithOptions(ctx, queries, 3, wiki.QueryOptions{Intent: intent})
+	plan := wiki.QueryPlan{Intent: intent}
+	if intent != "" {
+		plan.Clauses = append(plan.Clauses, wiki.QueryClause{Kind: wiki.QueryKindVec, Query: intent, Weight: 2})
+	}
+	for i, query := range queries {
+		weight := 1.0
+		if i == 0 {
+			weight = 2
+		}
+		plan.Clauses = append(plan.Clauses, wiki.QueryClause{Kind: wiki.QueryKindLex, Query: query, Weight: weight})
+	}
+	report, err := store.SearchPlan(ctx, plan, min(8, max(3, len(queries)*3)))
 	if err != nil {
 		return evidence, err
 	}
-	for i, report := range reports {
-		results := report.Results
-		for _, r := range results {
-			if _, ok := seen[r.Path]; ok {
-				continue
-			}
-			seen[r.Path] = struct{}{}
-			evidence = append(evidence, recallEvidence{
-				Kind:   "wiki",
-				Source: r.Path,
-				Query:  queries[i],
-				Note:   formatRecallWikiNote(store, r),
-				Score:  0.80 + r.Score,
-			})
+	queryLabel := queries[0]
+	for _, r := range report.Results {
+		if _, ok := seen[r.Path]; ok {
+			continue
 		}
+		seen[r.Path] = struct{}{}
+		evidence = append(evidence, recallEvidence{
+			Kind: "wiki", Source: r.Path, Query: queryLabel,
+			Note: formatRecallWikiNote(store, r), Score: 0.80 + r.Score,
+		})
 	}
 	return evidence, nil
 }

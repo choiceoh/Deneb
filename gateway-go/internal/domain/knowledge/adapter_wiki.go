@@ -34,10 +34,16 @@ func (a *wikiAdapter) Recall(ctx context.Context, query string, limit int) ([]Re
 	}
 	out := make([]Result, 0, len(hits))
 	for _, h := range hits {
+		meta := map[string]string{}
+		if h.Line > 0 {
+			meta["startLine"] = fmt.Sprintf("%d", h.Line)
+			meta["endLine"] = fmt.Sprintf("%d", h.EndLine)
+		}
 		out = append(out, Result{
 			Ref:     Ref{Layer: LayerWiki, ID: h.Path},
 			Snippet: h.Content,
 			Score:   h.Score,
+			Meta:    meta,
 		})
 	}
 	return out, nil

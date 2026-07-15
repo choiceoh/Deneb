@@ -22,7 +22,10 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 		var p struct {
 			Action     string   `json:"action"`
 			Query      string   `json:"query"`
+			Plan       string   `json:"plan"`
 			Paths      []string `json:"paths"`
+			Scopes     []string `json:"scopes"`
+			Intent     string   `json:"intent"`
 			Title      string   `json:"title"`
 			ID         string   `json:"id"`
 			Summary    string   `json:"summary"`
@@ -40,8 +43,12 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 			Confidence string   `json:"confidence"`
 			Due        string   `json:"due"`
 			Section    string   `json:"section"`
+			FromLine   int      `json:"from_line"`
+			MaxLines   int      `json:"max_lines"`
 			Limit      int      `json:"limit"`
 			Force      bool     `json:"force"`
+			Explain    bool     `json:"explain"`
+			Rerank     bool     `json:"rerank"`
 			Project    string   `json:"project"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
@@ -54,12 +61,12 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 
 		switch p.Action {
 		case "search":
-			return wikiSearch(ctx, d.Store, p.Query, p.Limit)
+			return wikiSearchWithPlan(ctx, d.Store, p.Query, p.Plan, p.Intent, p.Scopes, p.Limit, p.Explain, p.Rerank)
 		case "read":
 			if len(p.Paths) > 0 {
-				return wikiReadBatch(ctx, d.Store, p.Paths, p.Section)
+				return wikiReadBatchRange(ctx, d.Store, p.Paths, p.Section, p.FromLine, p.MaxLines)
 			}
-			return wikiRead(ctx, d.Store, p.Query, p.Section)
+			return wikiReadRange(ctx, d.Store, p.Query, p.Section, p.FromLine, p.MaxLines)
 		case "index":
 			return wikiIndex(d.Store, p.Category)
 		case "write":
@@ -69,7 +76,7 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 		case "daily":
 			return wikiDaily(d.Store.DiaryDir(), p.Limit)
 		case "status":
-			return wikiStatus(d.Store), nil
+			return wikiStatusWithDoctor(ctx, d.Store), nil
 		case "close":
 			return wikiCloseProject(d.Store, p.Query, p.Content)
 		case "reopen":
@@ -83,14 +90,40 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 }
 
 func wikiSearch(ctx context.Context, store *wiki.Store, query string, limit int) (string, error) {
+	return wikiSearchWithPlan(ctx, store, query, "", "", nil, limit, false, false)
+}
+
+func wikiSearchWithPlan(ctx context.Context, store *wiki.Store, query, planText, intent string, scopes []string, limit int, explain, forceRerank bool) (string, error) {
+	if strings.TrimSpace(planText) == "" && query == "" {
+		return "query 또는 plan은 필수입니다.", nil
+	}
 	if query == "" {
-		return "query는 필수입니다.", nil
+		query = planText
 	}
 	if limit <= 0 {
 		limit = 10
 	}
 
-	results, err := store.Search(ctx, query, limit)
+	var (
+		results []wiki.SearchResult
+		err     error
+	)
+	if strings.TrimSpace(planText) != "" || len(scopes) > 0 || strings.TrimSpace(intent) != "" || explain || forceRerank {
+		plan := wiki.ParseQueryPlan(planText)
+		if len(plan.Clauses) == 0 {
+			plan = wiki.ParseQueryPlan(query)
+		}
+		if strings.TrimSpace(intent) != "" {
+			plan.Intent = strings.TrimSpace(intent)
+		}
+		plan.Scopes = append(plan.Scopes, scopes...)
+		plan.Explain = explain
+		plan.ForceRerank = forceRerank
+		report, searchErr := store.SearchPlan(ctx, plan, limit)
+		results, err = report.Results, searchErr
+	} else {
+		results, err = store.Search(ctx, query, limit)
+	}
 	if err != nil {
 		return fmt.Sprintf("위키 검색 실패: %v", err), nil
 	}
@@ -102,14 +135,25 @@ func wikiSearch(ctx context.Context, store *wiki.Store, query string, limit int)
 	sb.WriteString(recallHeader(query, len(results), "wiki"))
 	for i, r := range results {
 		ref := RefWiki + strings.TrimSuffix(r.Path, ".md")
-		meta := fmt.Sprintf("L%d · 관련도 %.2f", r.Line, r.Score)
+		lineRef := fmt.Sprintf("L%d", r.Line)
+		if r.EndLine > r.Line {
+			lineRef = fmt.Sprintf("L%d-L%d", r.Line, r.EndLine)
+		}
+		meta := fmt.Sprintf("%s · 관련도 %.2f", lineRef, r.Score)
+		if len(r.Context) > 0 {
+			meta += " · " + strings.Join(r.Context, " › ")
+		}
 		sb.WriteString(recallRow(i+1, ref, meta, r.Content))
 	}
-	sb.WriteString("자세한 내용은 `wiki(action=\"read\", query=\"w:...\")` (knowledge read와 동일 ref). 여러 페이지가 필요하면 read 한 번에 `paths=[\"...\", \"...\"]`로 묶어 호출하세요 — 페이지마다 따로 부르지 말 것.")
+	sb.WriteString("자세한 내용은 `wiki(action=\"read\", query=\"w:...\", from_line=N, max_lines=M)`로 정확한 줄 범위를 읽으세요. 여러 페이지가 필요하면 read 한 번에 `paths=[\"...\", \"...\"]`로 묶어 호출하세요 — 페이지마다 따로 부르지 말 것.")
 	return sb.String(), nil
 }
 
 func wikiRead(ctx context.Context, store *wiki.Store, path, section string) (string, error) {
+	return wikiReadRange(ctx, store, path, section, 0, 0)
+}
+
+func wikiReadRange(ctx context.Context, store *wiki.Store, path, section string, fromLine, maxLines int) (string, error) {
 	if path == "" {
 		return "query에 페이지 경로를 지정하세요 (예: 기술/dgx-spark.md).", nil
 	}
@@ -147,6 +191,9 @@ func wikiRead(ctx context.Context, store *wiki.Store, path, section string) (str
 		}
 		return fmt.Sprintf("## %s — %s\n\n%s", page.Meta.Title, section, content), nil
 	}
+	if fromLine > 0 || maxLines > 0 {
+		return formatWikiLineRange(path, page, fromLine, maxLines), nil
+	}
 
 	// Return full page, with a compact graph-neighbor footer so the agent sees
 	// what this page connects to at the point of reading and can choose to
@@ -156,6 +203,32 @@ func wikiRead(ctx context.Context, store *wiki.Store, path, section string) (str
 		out += "\n\n---\n연결된 항목: " + conns
 	}
 	return out, nil
+}
+
+const wikiReadMaxLines = 400
+
+func formatWikiLineRange(path string, page *wiki.Page, fromLine, maxLines int) string {
+	lines := strings.Split(string(page.Render()), "\n")
+	if fromLine <= 0 {
+		fromLine = 1
+	}
+	if fromLine > len(lines) {
+		return fmt.Sprintf("페이지 '%s'는 %d줄입니다. from_line=%d는 범위를 벗어납니다.", path, len(lines), fromLine)
+	}
+	if maxLines <= 0 {
+		maxLines = 120
+	}
+	maxLines = min(maxLines, wikiReadMaxLines)
+	end := min(len(lines), fromLine-1+maxLines)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "## %s — %s L%d-L%d\n\n", page.Meta.Title, path, fromLine, end)
+	for i := fromLine - 1; i < end; i++ {
+		fmt.Fprintf(&sb, "L%d: %s\n", i+1, lines[i])
+	}
+	if end < len(lines) {
+		fmt.Fprintf(&sb, "\n[계속: from_line=%d, max_lines=%d]", end+1, maxLines)
+	}
+	return strings.TrimRight(sb.String(), "\n")
 }
 
 // wikiReadBatchMaxPages bounds one batched read. Big enough for "every hit of
@@ -169,6 +242,10 @@ const wikiReadBatchMaxPages = 8
 // per-page output identical to a single read, joined under numbered page
 // headers. A missing page fills its own slot instead of failing the batch.
 func wikiReadBatch(ctx context.Context, store *wiki.Store, paths []string, section string) (string, error) {
+	return wikiReadBatchRange(ctx, store, paths, section, 0, 0)
+}
+
+func wikiReadBatchRange(ctx context.Context, store *wiki.Store, paths []string, section string, fromLine, maxLines int) (string, error) {
 	trimmed := make([]string, 0, len(paths))
 	for _, p := range paths {
 		if s := strings.TrimSpace(p); s != "" {
@@ -186,7 +263,7 @@ func wikiReadBatch(ctx context.Context, store *wiki.Store, paths []string, secti
 	}
 	var sb strings.Builder
 	for i, path := range trimmed {
-		out, err := wikiRead(ctx, store, path, section)
+		out, err := wikiReadRange(ctx, store, path, section, fromLine, maxLines)
 		if err != nil {
 			out = fmt.Sprintf("페이지 읽기 실패: %v", err)
 		}
@@ -667,6 +744,28 @@ func wikiStatus(store *wiki.Store) string {
 	}
 
 	sb.WriteString(memorySystemStatus(store))
+	return sb.String()
+}
+
+func wikiStatusWithDoctor(ctx context.Context, store *wiki.Store) string {
+	out := wikiStatus(store)
+	doctor := store.SearchDoctor(ctx)
+	var sb strings.Builder
+	sb.WriteString(out)
+	sb.WriteString("\n\n## 검색 Doctor\n\n")
+	fmt.Fprintf(&sb, "- 전체 상태: %t\n", doctor.Healthy)
+	fmt.Fprintf(&sb, "- 어휘 인덱스: %d 문서\n", doctor.LexicalDocuments)
+	fmt.Fprintf(&sb, "- 벡터 캐시: %d/%d (pending %d, stale %d)\n", doctor.Semantic.Indexed, doctor.Semantic.Expected, doctor.Semantic.Pending, doctor.Semantic.Stale)
+	if doctor.SemanticProbe.Attempted {
+		fmt.Fprintf(&sb, "- 임베딩 실측: healthy=%t, %dms, %d차원\n", doctor.SemanticProbe.Healthy, doctor.SemanticProbe.LatencyMS, doctor.SemanticProbe.Dimensions)
+	}
+	fmt.Fprintf(&sb, "- reranker: enabled=%t, healthy=%t", doctor.Reranker.Enabled, doctor.Reranker.Healthy)
+	if doctor.Reranker.Identity != "" {
+		fmt.Fprintf(&sb, " (%s)", doctor.Reranker.Identity)
+	}
+	if len(doctor.Recommendations) > 0 {
+		sb.WriteString("\n- 권장 조치: " + strings.Join(doctor.Recommendations, ", "))
+	}
 	return sb.String()
 }
 
