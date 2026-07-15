@@ -39,6 +39,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	runtimehealth "github.com/choiceoh/deneb/gateway-go/internal/runtime/health"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
+	runtimemanifest "github.com/choiceoh/deneb/gateway-go/internal/runtime/manifest"
 	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
 	runtimenotify "github.com/choiceoh/deneb/gateway-go/internal/runtime/notify"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
@@ -94,10 +95,11 @@ type ServerRPC struct {
 
 // ServerRuntime owns long-running runtime health/activity trackers.
 type ServerRuntime struct {
-	ready        atomic.Bool
-	shutdownOnce sync.Once
-	gatewaySubs  *events.GatewayEventSubscriptions
-	activity     *monitoring.ActivityTracker
+	ready           atomic.Bool
+	shutdownOnce    sync.Once
+	gatewaySubs     *events.GatewayEventSubscriptions
+	activity        *monitoring.ActivityTracker
+	runtimeManifest *runtimemanifest.Builder
 	// Auto-resume state: the marker store persists "run active at T"
 	// records across gateway restarts. See auto_resume.go for the
 	// resume policy and file layout. resumeMu guards markerStore's
@@ -330,7 +332,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 	s := &Server{
 		ServerTransport:     &ServerTransport{addr: addr},
 		ServerRPC:           &ServerRPC{},
-		ServerRuntime:       &ServerRuntime{},
+		ServerRuntime:       &ServerRuntime{runtimeManifest: runtimemanifest.NewBuilder()},
 		MemorySubsystem:     &MemorySubsystem{},
 		AutonomousSubsystem: &AutonomousSubsystem{},
 		GenesisSubsystem:    &GenesisSubsystem{},

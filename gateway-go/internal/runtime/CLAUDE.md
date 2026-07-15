@@ -13,6 +13,7 @@
 | `rpc/rpcerr/`·`rpc/rpctest/` | 에러 타입 / 테스트 헬퍼 |
 | `../domain/session/` | 세션 도메인 상태기계(`IDLE→RUNNING→DONE/FAILED/KILLED/TIMEOUT`), 전이 검증, 이벤트 pub/sub 버스. runtime보다 아래 계층이라 pipeline/platform도 역의존 없이 사용 |
 | `bootstrap/` | 기동 시퀀스 조립 |
+| `manifest/` | `/health`에 노출하는 실행 바이너리·스킬·도구·모델 구성의 비식별 SHA-256 지문 |
 | `process/` | exec 프로세스 추적 |
 | `observe/` | LogCapture ring + observe 평면([project_observe_plane]) |
 | `events/`·`insights/` | 이벤트 버스 / 인사이트 집계 |
