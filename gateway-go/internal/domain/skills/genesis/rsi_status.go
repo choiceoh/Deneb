@@ -69,17 +69,21 @@ var rsiSubtleDegradationClasses = map[string]bool{
 var rsiWeakenDegradationClasses = map[string]bool{"imperative-weaken": true, "scope-narrow": true}
 
 // rsiDispatchSources is the canonical set of accepted candidate sources: a code
-// candidate from any other source is not yet dispatchable. health-finding
-// graduated 2026-07-12 (first mined batch reviewed clean — roadmap P5 ladder);
-// tool-quality graduated 2026-07-13 (operator directive); runtime-error and
-// deadcode-finding stay staged until their own batch review. Dispatch selection,
-// status, and client projection all call this Go policy.
-var rsiDispatchSources = []string{"evolve-tool-gap", "self-harness", "health-finding", "tool-quality"}
+// candidate from any other source is not yet dispatchable until the graduation
+// ladder admits it (or it is added here). health-finding graduated 2026-07-12;
+// tool-quality 2026-07-13; runtime-error and deadcode-finding 2026-07-15
+// (operator directive: drop the first-batch human-review gate — miners already
+// ground + forbidden-surface filter, and dispatch keeps propose→PR→deploy-watch).
+// Dispatch selection, status, and client projection all call this Go policy.
+var rsiDispatchSources = []string{
+	"evolve-tool-gap", "self-harness", "health-finding", "tool-quality",
+	"runtime-error", "deadcode-finding",
+}
 
 // SourceAutoDispatches reports whether a self-correction candidate from this
-// source is on the auto-dispatch track (graduated into coding-dispatch.sh's
-// allowlist) vs staged for review. Exported for the miniapp wire projection so
-// clients can label each candidate 자동수리 vs 검토 대기.
+// source is on the auto-dispatch track (compiled allowlist or ladder-graduated)
+// vs still staged. Exported for the miniapp wire projection so clients can
+// label each candidate 자동수리 vs 검토 대기.
 func SourceAutoDispatches(source string) bool { return rsiSourceDispatchable(source) }
 
 const rsiGraduationDetail = "자율성 졸업 사다리의 행별 증거를 상시 심사하고, 임계 충족 시 잠금 해제를 자동 실행하는 계기판입니다 (2026-07-14 위임). 모든 실행은 원장 기록과 재잠금 비토 카드를 남기며, 임계값 정책 자체는 루프가 편집할 수 없습니다."

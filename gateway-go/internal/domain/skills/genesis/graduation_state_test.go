@@ -29,24 +29,24 @@ func TestGraduationStateUnlockIsIdempotentAndWidensDispatchPredicate(t *testing.
 	}
 
 	// Graduated staged source widens the dispatch predicate everywhere.
-	if rsiSourceDispatchable("runtime-error:abcd") {
-		t.Fatal("runtime-error must start staged")
+	if rsiSourceDispatchable("novel-miner:abcd") {
+		t.Fatal("novel-miner must start staged")
 	}
-	if _, err := tr.unlockGraduation(graduationSourceKey("runtime-error"), "리뷰 승인 2·기각 0", 0, true); err != nil {
+	if _, err := tr.unlockGraduation(graduationSourceKey("novel-miner"), "스테이징 후보 1건·기각 0", 0, true); err != nil {
 		t.Fatal(err)
 	}
-	if !rsiSourceDispatchable("runtime-error:abcd") {
+	if !rsiSourceDispatchable("novel-miner:abcd") {
 		t.Fatal("graduated source must dispatch")
 	}
-	if got := graduatedDispatchSources(); len(got) != 1 || got[0] != "runtime-error" {
+	if got := graduatedDispatchSources(); len(got) != 1 || got[0] != "novel-miner" {
 		t.Fatalf("graduated sources = %v", got)
 	}
 
 	// Relock restores the lock and both transitions are ledgered.
-	if err := tr.RelockGraduation(graduationSourceKey("runtime-error"), "operator veto"); err != nil {
+	if err := tr.RelockGraduation(graduationSourceKey("novel-miner"), "operator veto"); err != nil {
 		t.Fatal(err)
 	}
-	if rsiSourceDispatchable("runtime-error:abcd") {
+	if rsiSourceDispatchable("novel-miner:abcd") {
 		t.Fatal("relocked source must not dispatch")
 	}
 	entries, err := tr.RecentLifecycleLog(10)
@@ -131,8 +131,9 @@ func TestEProcessOwnsRollbackFlipsOnGraduationAndEnvOverride(t *testing.T) {
 	}
 }
 
-// The auto-graduator executes evidence-met unlocks once, respects the review
-// veto, the kill switch, and the drift brake.
+// The auto-graduator executes evidence-met unlocks once, respects a rejection
+// veto, the kill switch, and the drift brake. Staged sources graduate on
+// candidate supply alone (no human first-batch endorsement).
 func TestLadderWatchAutoGraduatesOnFloorStopsForVetoKillSwitchAndDriftFreeze(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("DENEB_AUTO_GRADUATE", "")
@@ -157,26 +158,17 @@ func TestLadderWatchAutoGraduatesOnFloorStopsForVetoKillSwitchAndDriftFreeze(t *
 		}
 	}
 
-	// One accepted endorsement is below the floor — no auto-graduation.
-	seed("runtime-error:a1", SelfCorrectionStatusAccepted)
+	// One proposed candidate meets the supply floor — source graduates once.
+	seed("novel-miner:a1", SelfCorrectionStatusProposed)
 	var graduated []string
 	task.OnGraduated = func(key, _, _ string) { graduated = append(graduated, key) }
 	if err := task.Run(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if len(graduated) != 0 {
-		t.Fatalf("below-floor endorsement must not graduate: %v", graduated)
+	if len(graduated) != 1 || !strings.Contains(graduated[0], "novel-miner") {
+		t.Fatalf("graduations = %v, want the novel-miner source", graduated)
 	}
-
-	// Second endorsement meets the floor — the source graduates exactly once.
-	seed("runtime-error:a2", SelfCorrectionStatusAccepted)
-	if err := task.Run(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if len(graduated) != 1 || !strings.Contains(graduated[0], "runtime-error") {
-		t.Fatalf("graduations = %v, want the runtime-error source", graduated)
-	}
-	if !rsiSourceDispatchable("runtime-error:zzz") {
+	if !rsiSourceDispatchable("novel-miner:zzz") {
 		t.Fatal("graduated source must dispatch")
 	}
 	if err := task.Run(context.Background()); err != nil { // idempotent
@@ -187,9 +179,8 @@ func TestLadderWatchAutoGraduatesOnFloorStopsForVetoKillSwitchAndDriftFreeze(t *
 	}
 
 	// A rejection anywhere in a source blocks its graduation (standing veto).
-	seed("sop-mining:b1", SelfCorrectionStatusAccepted)
-	seed("sop-mining:b2", SelfCorrectionStatusAccepted)
-	seed("sop-mining:b3", SelfCorrectionStatusRejected)
+	seed("sop-mining:b1", SelfCorrectionStatusProposed)
+	seed("sop-mining:b2", SelfCorrectionStatusRejected)
 	if err := task.Run(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -199,8 +190,7 @@ func TestLadderWatchAutoGraduatesOnFloorStopsForVetoKillSwitchAndDriftFreeze(t *
 
 	// Kill switch reverts to notify-only.
 	t.Setenv("DENEB_AUTO_GRADUATE", "0")
-	seed("deadcode-finding:c1", SelfCorrectionStatusAccepted)
-	seed("deadcode-finding:c2", SelfCorrectionStatusAccepted)
+	seed("other-miner:c1", SelfCorrectionStatusProposed)
 	if err := task.Run(context.Background()); err != nil {
 		t.Fatal(err)
 	}

@@ -32,12 +32,12 @@ import (
 // ledger cadence (hours to days), not seconds.
 const ladderWatchDefaultInterval = 6 * time.Hour
 
-// ladderSourceMinEndorsed is the review-lane endorsement floor that
-// auto-graduates a staged dispatch source: at least this many of its
-// candidates review-ACCEPTED and none rejected (an operator/review veto
-// blocks the source until the rejection is superseded — mirrors the
-// reopen semantics). "Candidates exist" alone stays notify-only.
-const ladderSourceMinEndorsed = 2
+// ladderSourceMinSupply is the staged-source auto-graduation floor: at least
+// this many open code candidates (proposed or accepted) and none rejected.
+// A rejection is a standing veto until superseded. Human first-batch review
+// was dropped 2026-07-15 — supply itself is the evidence; dispatch still
+// runs propose→PR→deploy-watch before anything lands.
+const ladderSourceMinSupply = 1
 
 // autoGraduateEnabled is the kill switch (default ON per the 2026-07-14
 // operator directive; set DENEB_AUTO_GRADUATE=0 to revert to notify-only).
@@ -194,27 +194,29 @@ func (t *Tracker) autoGraduations() []autoGraduation {
 		}
 	}
 
-	// Staged sources: review-lane endorsement (accepted >= floor, rejected
-	// == 0) graduates the source into the dispatch allowlist. A rejection is
-	// a standing veto until superseded.
+	// Staged sources: candidate supply (proposed|accepted >= floor, rejected
+	// == 0) graduates the source into the dispatch allowlist — no human
+	// first-batch endorsement. A rejection remains a standing veto.
 	for prefix, st := range t.stagedSourceReviewStats() {
 		key := graduationSourceKey(prefix)
-		if graduationUnlocked(key) || st.rejected > 0 || st.accepted < ladderSourceMinEndorsed {
+		supply := st.proposed + st.accepted
+		if graduationUnlocked(key) || st.rejected > 0 || supply < ladderSourceMinSupply {
 			continue
 		}
 		out = append(out, autoGraduation{
 			Key: key, Title: "스테이징 소스 졸업: " + prefix,
-			Evidence: fmt.Sprintf("리뷰 승인 %d건·기각 0건 (임계 승인≥%d) → 배차 허용목록 편입", st.accepted, ladderSourceMinEndorsed),
+			Evidence: fmt.Sprintf("스테이징 후보 %d건·기각 0건 (임계 공급≥%d, 사람 리뷰 없음) → 배차 허용목록 편입",
+				supply, ladderSourceMinSupply),
 		})
 	}
 	return out
 }
 
-// sourceReviewStats aggregates review verdicts for one staged source prefix.
-type sourceReviewStats struct{ accepted, rejected int }
+// sourceReviewStats aggregates open supply + vetoes for one staged source prefix.
+type sourceReviewStats struct{ proposed, accepted, rejected int }
 
-// stagedSourceReviewStats counts review-lane verdicts per NON-dispatchable
-// code-source prefix — the endorsement evidence auto-graduation consumes.
+// stagedSourceReviewStats counts open code candidates per NON-dispatchable
+// source prefix — the supply evidence auto-graduation consumes.
 func (t *Tracker) stagedSourceReviewStats() map[string]sourceReviewStats {
 	cands, err := t.RecentSelfCorrectionCandidates("", "", 300)
 	if err != nil {
@@ -231,6 +233,8 @@ func (t *Tracker) stagedSourceReviewStats() map[string]sourceReviewStats {
 		}
 		st := stats[prefix]
 		switch normalizeSelfCorrectionStatus(c.Status) {
+		case SelfCorrectionStatusProposed:
+			st.proposed++
 		case SelfCorrectionStatusAccepted:
 			st.accepted++
 		case SelfCorrectionStatusRejected:

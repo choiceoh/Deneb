@@ -140,9 +140,10 @@ func (t *Tracker) ladderDispatchCapRow() ladderRow {
 	return ladderRow{"배차 캡 상향", ladderStateGrowing, detail}
 }
 
-// ladderStagedSourcesRow: staged L4 sources graduate on a clean first-batch
-// review — candidates existing IS the actionable evidence (the review can
-// happen now), so any staged supply reads READY-to-review.
+// ladderStagedSourcesRow: novel L4 sources auto-graduate on candidate supply
+// (no human first-batch review). Any still-staged open code candidates mean
+// the watch can unlock on its next tick — surface READY so the dashboard
+// shows actionable supply before the unlock lands.
 func (t *Tracker) ladderStagedSourcesRow() ladderRow {
 	cands, err := t.RecentSelfCorrectionCandidates("", "", 300)
 	if err != nil {
@@ -171,7 +172,7 @@ func (t *Tracker) ladderStagedSourcesRow() ladderRow {
 		parts = append(parts, fmt.Sprintf("%s %d건", src, n))
 	}
 	sort.Strings(parts)
-	return ladderRow{"스테이징 소스 졸업", ladderStateReady, "첫 배치 리뷰 가능: " + strings.Join(parts, "·")}
+		return ladderRow{"스테이징 소스 졸업", ladderStateReady, "공급 충족 → 자동 졸업 대기: " + strings.Join(parts, "·")}
 }
 
 // ladderCalibrationRow: the P5-2 window closes when every rotating epoch has

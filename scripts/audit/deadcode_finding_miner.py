@@ -23,9 +23,9 @@ as the normal "found deltas" signal, not a failure.
 
 Safety (mirrors the template lane):
 
-  - Propose-only: the ``deadcode-finding`` source namespace is deliberately NOT
-    in coding-dispatch.sh's allowlist. Candidates accumulate for review; the
-    allowlist flip is a separate one-line graduation (roadmap ladder).
+  - Propose-only landing: miners only file candidates. ``deadcode-finding`` is
+    on the compiled dispatch allowlist as of 2026-07-15 (first-batch human
+    review dropped); coding-dispatch + deploy-watch remain the ship gates.
   - Dedup/reopen mirrors genesis ``selfCorrectionReopenBlocked`` via the shared
     ``select_candidates`` — one open candidate per finding; a rejected twin
     never re-files (an operator "keep this dead code" veto is respected); an
