@@ -207,5 +207,4 @@ actual fun sendHeartbeatNotification(title: String, body: String) {
 }
 
 // iOS has no deep-link target; surface proactive reports like a heartbeat.
-actual fun sendProactiveReportNotification(title: String, body: String, kind: String, ref: String) =
-    sendHeartbeatNotification(title, body)
+actual fun sendProactiveReportNotification(title: String, body: String, kind: String, ref: String) = sendHeartbeatNotification(title, body)

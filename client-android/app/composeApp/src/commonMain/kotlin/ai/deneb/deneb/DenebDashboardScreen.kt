@@ -1,6 +1,5 @@
 package ai.deneb.deneb
 
-import ai.deneb.workFeedItemId
 import ai.deneb.deneb.generated.DashboardItem
 import ai.deneb.deneb.generated.DashboardOut
 import ai.deneb.deneb.generated.LaneOut
@@ -10,6 +9,7 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
+import ai.deneb.workFeedItemId
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
