@@ -83,3 +83,27 @@ func TestParseApprovalSummaries(t *testing.T) {
 		t.Fatal("expected provenance-prefixed human output to fail JSON parsing")
 	}
 }
+
+func TestParseBoardSummaries(t *testing.T) {
+	t.Parallel()
+	got, err := parseBoardSummaries(`[{
+		"postId":"17106","title":"휴무 일정","author":"인사팀",
+		"date":"2026-07-16","categoryId":"42"
+	}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].PostID != "17106" || got[0].Author != "인사팀" || got[0].CategoryID != "42" {
+		t.Fatalf("parsed summaries = %+v", got)
+	}
+	empty, err := parseBoardSummaries("null")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if empty == nil || len(empty) != 0 {
+		t.Fatalf("null summaries = %#v, want non-nil empty slice", empty)
+	}
+	if _, err := parseBoardSummaries("게시판 최근 글"); err == nil {
+		t.Fatal("expected human output to fail JSON parsing")
+	}
+}

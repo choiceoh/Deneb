@@ -22,9 +22,9 @@ Last surveyed: 2026-07-15. Status legend: **confirmed** (live POST), **list-only
 ## Architecture (Deneb)
 
 ```
-Consumers: chat tool · phone enrich · weekday approval radar · CLI read.mjs
+Consumers: chat tool · phone enrich · weekday approval/board radars · CLI read.mjs
                 │
- Go bridge (Run / ListApprovals) + deterministic radar state diff
+ Go bridge (Run / ListApprovals / ListBoardPosts) + deterministic state diffs
                 │
    Domain adapters (lib/actions.mjs) — approval + board + ERP
                 │
@@ -38,7 +38,8 @@ Product split (planned):
 | Concern | Surface |
 |---------|---------|
 | Read (list/body/line + attachment titles; selected attachment on demand; ERP sales/stock/po/receive/ship/price/people) | Eager chat tool `groupware` + phone enrich |
-| Radar (new/changed pending docs; positive done reconciliation) | `groupware-radar` periodic task → synchronous phone approval pipeline → work feed |
+| Approval radar (pending diff; positive done reconciliation) | `groupware-radar` → synchronous phone approval pipeline → actionable work-feed card |
+| Board radar (recent notice diff; importance judgment) | `groupware-board-radar` → body read → one bounded synchronous turn → read-only work-feed card |
 | Write (승인/반려) | Work-feed chips → `miniapp.workfeed.action.run` — **not** the chat tool |
 
 See also: [page-agent-browser.md](./page-agent-browser.md) (tool env + phone path) ·
@@ -52,8 +53,11 @@ See also: [page-agent-browser.md](./page-agent-browser.md) (tool env + phone pat
 | Vars | `DENEB_GROUPWARE_URL`, `COMPANY`, `USER`, `PASSWORD` |
 | Radar controls | `DENEB_GROUPWARE_RADAR_DISABLE=1`, `DENEB_GROUPWARE_RADAR_INTERVAL_MINUTES` (default `10`), `DENEB_GROUPWARE_RADAR_MAX_PER_CYCLE` (default `3`), `DENEB_GROUPWARE_RADAR_MAX_ESCALATIONS` (default `3`) |
 | Dev-only radar opt-in | `DENEB_GROUPWARE_RADAR_ALLOW_DEV=1` (production state dir is otherwise required) |
+| Board radar controls | `DENEB_GROUPWARE_BOARD_RADAR_DISABLE=1`, `DENEB_GROUPWARE_BOARD_RADAR_INTERVAL_MINUTES` (default `30`), `DENEB_GROUPWARE_BOARD_RADAR_MAX_PER_CYCLE` (default `3`) |
+| Dev-only board radar opt-in | `DENEB_GROUPWARE_BOARD_RADAR_ALLOW_DEV=1` (production state dir is otherwise required) |
 | Session cache | `~/.deneb/groupware-session.json` (mode `0600`) |
-| Radar state | `<stateDir>/groupware_radar_state.json` (atomic, mode `0600`) |
+| Approval radar state | `<stateDir>/groupware_radar_state.json` (atomic, mode `0600`) |
+| Board radar state | `<stateDir>/groupware_board_radar_state.json` (atomic, mode `0600`) |
 
 Session fields used by the client: `url`, `token` (`auth_a_token`), `hashKey`
 (`hash_key`), plus emp metadata from login. Cache TTL ~12h; refresh on 401 /
@@ -86,6 +90,38 @@ same `docId` card is updated rather than duplicated. Morning and evening letter
 data now include a `groupware_pending` section (count + title/drafter/date + radar `age_hours`/`stale_label` when available), so
 regular briefings reflect the authoritative pending snapshot even without a
 phone notification.
+
+### Board radar
+
+`groupware-board-radar` polls the recent notice list every 30 minutes on weekdays
+from 08:30 inclusive to 19:00 exclusive KST. Registration is production-only by
+default and requires groupware credentials, the synchronous chat runner,
+autonomous service, and work-feed store. The board-specific disable and
+`ALLOW_DEV` variables do not alter the approval radar.
+
+The first successful snapshot is a baseline: every existing `postId` is stored
+as notified and no body is read, no model runs, and no card is sent. Later
+cycles fingerprint the structured `postId`, title, author, date, and category.
+An unchanged cycle therefore performs **zero LLM calls**. Only new, changed, or
+previously failed posts have their body read and enter one synchronous,
+tool-disabled importance turn, capped at three posts per cycle by default.
+Overflow and callback failures remain `notified=false` for retry; entries that
+leave the current recent-list window are pruned so state stays bounded.
+
+The judgment returns `NO_REPLY` for routine, duplicate, or non-actionable
+notices. Only company operations, policy, schedule/holiday, security, HR
+deadlines, or project/work impact produce a card. Important notices use
+work-feed source `groupware-board` and `postId` as `RefID`, with no question or
+action chips. Active same-source/same-ref cards deduplicate across the retained
+feed; acknowledging one permits a later changed/reopened notice to publish
+again. A substantive relay is considered successful only after the active
+`RefID` card is observable, while exact `NO_REPLY` is a successful silent
+outcome.
+
+Board polling and judgment are read-only. The turn is isolated under
+`system:groupware-board-radar`, persists neither side of the conversation,
+allows one model turn and zero tool calls, and never writes, comments, edits,
+or deletes in Amaranth.
 
 ### HMAC request signing
 
@@ -229,7 +265,7 @@ POST /board/APIHandler/getNewNoticeListForPortlet
 - Response: `resultData.articleList[]` — `art_title`, `art_seq_no`, `cat_seq_no`,
   `mbr_nick`, `write_date`
 
-### Article body — **confirmed** (not yet wired in reader)
+### Article body — **confirmed** (implemented)
 
 ```
 POST /board/APIHandler/ViewPost
@@ -254,8 +290,8 @@ POST /board/APIHandler/ViewPostSubContent
 → sub_content: ""   // auxiliary; do not treat as main article
 ```
 
-`readBoard` in `lib/actions.mjs` still falls back to meta + SubContent; wire
-`ViewPost` → `art_content` / `contents_text` next (P2).
+`readBoard` uses `ViewPost` and projects `art_content`, then `contents_text`,
+then `sub_content` into the existing text/Markdown normalization path.
 
 ## Approve / reject — **high confidence, untested mutate** (do not call)
 
@@ -321,7 +357,8 @@ fields.
 
 ### Product safety (planned)
 
-- Chat `groupware` tool stays **read-only**.
+- Chat `groupware` tool and board radar stay **read-only**. Board judgment has
+  zero tool-call allowance and can only relay a read-only work-feed card.
 - Writes only via work-feed chips `approval:approve` / `approval:reject` →
   `miniapp.workfeed.action.run` + `RunActionWithEffect` (Amaranth **before**
   settle; failure keeps card).
@@ -353,7 +390,8 @@ ERP list endpoints and permission notes: [groupware-erp-api-map.md](./groupware-
 | `scripts/dev/groupware-reader/lib/session.mjs` | Playwright login + cache |
 | `scripts/dev/groupware-reader/lib/client.mjs` | HMAC `apiPost` |
 | `scripts/dev/groupware-reader/lib/actions.mjs` | list/read adapters |
-| `gateway-go/internal/platform/groupware/` | Go runner (`Run`, `ReadApproval`) |
+| `gateway-go/internal/platform/groupware/` | Go runner (`Run`, structured lists) + approval/board radar state machines |
+| `gateway-go/internal/runtime/server/groupware_board_radar.go` | Production board judgment + work-feed relay wiring |
 | `gateway-go/.../runtimeops/groupware.go` | Eager chat tool `groupware` |
 
 ## Roadmap snapshot
@@ -368,6 +406,7 @@ ERP list endpoints and permission notes: [groupware-erp-api-map.md](./groupware-
 | P5 | Read-only ERP lists (매출마감·출고·입고·현재고·발주) | Wired |
 | P6 | Wave 1 approval radar: structured snapshots, deterministic diff, RefID dedupe, positive-done reconciliation | Done |
 | P7 | Wave 2: 4h/24h bounded escalation + morning/evening letter pending section | Done |
+| P8 | Board radar: baseline recent posts, zero-LLM unchanged diff, one-shot importance judgment, read-only RefID cards | Done |
 
 ## Smoke (no secrets in output)
 

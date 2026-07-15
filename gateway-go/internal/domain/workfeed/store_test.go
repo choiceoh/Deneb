@@ -592,6 +592,41 @@ func TestStoreGroupwareApprovalAckAllowsReopenedRefID(t *testing.T) {
 	}
 }
 
+func TestStoreGroupwareBoardRefIDDedupesActiveAndAckAllowsRepublished(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	first, created, err := store.AppendIfNew(Item{
+		ID: "board-first", Source: SourceGroupwareBoard, RefID: "17106", Body: "first summary",
+	})
+	if err != nil || !created {
+		t.Fatalf("first append: item=%+v created=%v err=%v", first, created, err)
+	}
+	for i := 0; i < 35; i++ {
+		mustAppendIfNew(t, store, Item{Source: SourceProactive, Body: "board filler " + string(rune('A'+i))})
+	}
+	got, created, err := store.AppendIfNew(Item{
+		ID: "board-duplicate", Source: SourceGroupwareBoard, RefID: "17106", Body: "changed summary",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created || got.ID != "board-first" {
+		t.Fatalf("active RefID duplicate = item %+v created=%v", got, created)
+	}
+	if _, err := store.Ack("board-first"); err != nil {
+		t.Fatal(err)
+	}
+	republished, created, err := store.AppendIfNew(Item{
+		ID: "board-republished", Source: SourceGroupwareBoard, RefID: "17106", Body: "changed summary",
+	})
+	if err != nil || !created || republished.ID != "board-republished" {
+		t.Fatalf("republished append = item %+v created=%v err=%v", republished, created, err)
+	}
+	found, ok, err := store.FindActiveBySourceRef(SourceGroupwareBoard, "17106")
+	if err != nil || !ok || found.ID != "board-republished" {
+		t.Fatalf("republished lookup = item %+v ok=%v err=%v", found, ok, err)
+	}
+}
+
 func TestEscalateApprovalUpdatesOneBoundedRadarNote(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "feed.jsonl"))
 	item, err := store.Append(Item{Source: SourceGroupwareApproval, RefID: "99178", Summary: "원본 요약", Body: "원본 본문"})

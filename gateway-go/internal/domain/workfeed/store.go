@@ -28,6 +28,8 @@ const (
 	SourceDocAnalysis = "doc_analysis"
 	// SourceGroupwareApproval is an Amaranth e-approval card with 승인/반려 chips.
 	SourceGroupwareApproval = "groupware-approval"
+	// SourceGroupwareBoard is an important Amaranth notice surfaced read-only.
+	SourceGroupwareBoard = "groupware-board"
 
 	StatusUnread  = "unread"
 	StatusAcked   = "acked"
@@ -168,17 +170,17 @@ func (s *Store) AppendIfNew(item Item) (Item, bool, error) {
 		}
 		return item, true, nil
 	}
-	// E-approval cards are idempotent by durable Amaranth docId across the
-	// phone-notification and polling paths. Scan all retained cards, not only
-	// the recent body-fingerprint window; an acked card deliberately does not
-	// block a genuinely reopened document.
-	hasApprovalRef := item.Source == SourceGroupwareApproval && item.RefID != ""
-	if hasApprovalRef {
+	// Groupware cards are idempotent by durable Amaranth reference across their
+	// independent ingestion paths. Scan all retained cards, not only the recent
+	// body-fingerprint window; an acked card deliberately does not block a
+	// genuinely reopened or republished entity.
+	hasGroupwareRef := isGroupwareRefSource(item.Source) && item.RefID != ""
+	if hasGroupwareRef {
 		if existing, ok := findActiveBySourceRef(items, item.Source, item.RefID); ok {
 			return existing, false, nil
 		}
 	}
-	if !hasApprovalRef {
+	if !hasGroupwareRef {
 		for i := len(items) - 1; i >= 0 && i >= len(items)-30; i-- {
 			if isDuplicateCard(items[i], item) || isMeetingNearDuplicate(items[i], item) {
 				return items[i], false, nil
@@ -191,6 +193,10 @@ func (s *Store) AppendIfNew(item Item) (Item, bool, error) {
 		return Item{}, false, err
 	}
 	return item, true, nil
+}
+
+func isGroupwareRefSource(source string) bool {
+	return source == SourceGroupwareApproval || source == SourceGroupwareBoard
 }
 
 // isDuplicateCard reports whether cur duplicates prev: same source and the same

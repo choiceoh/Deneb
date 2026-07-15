@@ -728,7 +728,20 @@ export async function readApproval(folder, query, matchText) {
   throw new Error(`문서를 찾지 못했습니다: ${q}`);
 }
 
-export async function listBoard(limit) {
+/** Normalize one recent-board payload row into the stable JSON boundary used by
+ * the gateway radar. Amaranth has emitted both snake_case and camelCase keys. */
+export function normalizeBoardPost(a) {
+  const post = a || {};
+  return {
+    postId: firstApprovalValue(post.art_seq_no, post.artSeqNo, post.postId),
+    title: firstApprovalValue(post.art_title, post.artTitle, post.title),
+    author: firstApprovalValue(post.mbr_nick, post.mbrNick, post.author),
+    date: firstApprovalValue(post.write_date, post.writeDate, post.date),
+    categoryId: firstApprovalValue(post.cat_seq_no, post.catSeqNo, post.categoryId),
+  };
+}
+
+async function fetchBoardEntries(limit) {
   const lim = Math.min(Math.max(limit || 20, 1), 50);
   const r = await apiPost("/board/APIHandler/getNewNoticeListForPortlet", {
     page: "1",
@@ -737,14 +750,25 @@ export async function listBoard(limit) {
   if (r.json?.resultCode !== 0 && r.json?.resultCode !== 200) {
     throw new Error(r.json?.resultMsg || `board list failed (${r.status})`);
   }
-  const arts = r.json?.resultData?.articleList || [];
+  return r.json?.resultData?.articleList || [];
+}
+
+export async function listBoardEntries(limit, loaders = {}) {
+  const lim = Math.min(Math.max(limit || 20, 1), 50);
+  const loadEntries = loaders.fetchBoardEntries || fetchBoardEntries;
+  const arts = await loadEntries(lim);
+  return arts.map(normalizeBoardPost);
+}
+
+export async function listBoard(limit, loaders = {}) {
+  const arts = await listBoardEntries(limit, loaders);
   if (!arts.length) return "게시판 최근 글\n\n(글 없음)";
   const lines = arts.map((a, i) => {
     const bits = [
-      a.art_title,
-      a.mbr_nick && `작성 ${a.mbr_nick}`,
-      a.write_date && `일자 ${a.write_date}`,
-      a.art_seq_no && `id=${a.art_seq_no}`,
+      a.title,
+      a.author && `작성 ${a.author}`,
+      a.date && `일자 ${a.date}`,
+      a.postId && `id=${a.postId}`,
     ].filter(Boolean);
     return `${i + 1}. ${bits.join(" · ")}`;
   });
@@ -756,7 +780,9 @@ export async function readBoard(query) {
   if (!q) throw new Error("board read requires --query");
   const r = await apiPost("/board/APIHandler/getNewNoticeListForPortlet", {
     page: "1",
-    pageSize: "40",
+    // Keep the read lookup window aligned with ListBoardPosts/BoardRadar so
+    // every candidate from the current structured snapshot remains readable.
+    pageSize: "50",
   });
   const arts = r.json?.resultData?.articleList || [];
   const hit = arts.find(

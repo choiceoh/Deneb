@@ -35,6 +35,7 @@ import {
   listApproval,
   listApprovalEntries,
   listBoard,
+  listBoardEntries,
   normalizeFolder,
   readApproval,
   readApprovalAttachment,
@@ -118,8 +119,11 @@ async function main() {
   if (area === "approval" && !["attachment", "act"].includes(action) && !["pending", "done", "cc", "total", "all"].includes(folder)) {
     die(`unknown --folder ${folder}`);
   }
-  if (jsonOutput && (area !== "approval" || action !== "list")) {
-    die("--json is only valid for approval list");
+  if (jsonOutput && action !== "list") {
+    die("--json is only valid for list actions");
+  }
+  if (jsonOutput && area !== "approval" && area !== "board") {
+    die("--json is only valid for approval or board list");
   }
 
   const erpFolder = ["all", "pending", "done", "cc", "total"].includes(folder)
@@ -147,7 +151,12 @@ async function main() {
   } else if (action === "attachment") {
     out = await readApprovalAttachment(docId, attachment || query);
   } else if (area === "board") {
-    out = action === "list" ? await listBoard(limit) : await readBoard(query);
+    out =
+      action === "list"
+        ? jsonOutput
+          ? await listBoardEntries(limit)
+          : await listBoard(limit)
+        : await readBoard(query);
   } else if (action === "list") {
     out = jsonOutput
       ? await listApprovalEntries(folder, limit)

@@ -211,6 +211,15 @@ type ApprovalSummary struct {
 	Folder  string `json:"folder"`
 }
 
+// BoardSummary is the stable machine-readable projection of one recent notice.
+type BoardSummary struct {
+	PostID     string `json:"postId"`
+	Title      string `json:"title"`
+	Author     string `json:"author"`
+	Date       string `json:"date"`
+	CategoryID string `json:"categoryId"`
+}
+
 // ListApprovals returns a structured approval-folder snapshot without parsing the
 // human-facing list output.
 func ListApprovals(ctx context.Context, cfg Config, folder string, limit int) ([]ApprovalSummary, error) {
@@ -234,6 +243,32 @@ func parseApprovalSummaries(raw string) ([]ApprovalSummary, error) {
 	}
 	if summaries == nil {
 		summaries = []ApprovalSummary{}
+	}
+	return summaries, nil
+}
+
+// ListBoardPosts returns a structured recent-notice snapshot without parsing the
+// human-facing board list.
+func ListBoardPosts(ctx context.Context, cfg Config, limit int) ([]BoardSummary, error) {
+	out, err := Run(ctx, cfg, Request{
+		Area:   AreaBoard,
+		Action: ActionList,
+		Limit:  limit,
+		JSON:   true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return parseBoardSummaries(out)
+}
+
+func parseBoardSummaries(raw string) ([]BoardSummary, error) {
+	var summaries []BoardSummary
+	if err := json.Unmarshal([]byte(raw), &summaries); err != nil {
+		return nil, fmt.Errorf("parse groupware board list JSON: %w", err)
+	}
+	if summaries == nil {
+		summaries = []BoardSummary{}
 	}
 	return summaries, nil
 }
