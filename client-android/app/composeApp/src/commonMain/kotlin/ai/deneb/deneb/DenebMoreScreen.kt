@@ -11,6 +11,7 @@ import ai.deneb.DenebOrgChart
 import ai.deneb.DenebProjectDigests
 import ai.deneb.DenebRsi
 import ai.deneb.DenebSearch
+import ai.deneb.DenebSiteMap
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.KeyboardVoice
+import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
@@ -69,6 +71,7 @@ internal val moreGroups: List<Pair<String, List<MoreEntry>>> = listOf(
         MoreEntry("파트별 업무 현황", DenebDashboard, Icons.Outlined.Dashboard, key = "deneb_dashboard"),
         MoreEntry("재귀적 자가개선", DenebRsi, Icons.Outlined.Autorenew, key = "deneb_rsi"),
         MoreEntry("프로젝트 진행상황", DenebProjectDigests, Icons.Outlined.Insights, key = "deneb_project_digests"),
+        MoreEntry("현장 지도", DenebSiteMap, Icons.Outlined.Place, key = "deneb_site_map"),
         MoreEntry("조직도", DenebOrgChart, Icons.Outlined.AccountTree, key = "deneb_org"),
         MoreEntry("검색", DenebSearch, Icons.Outlined.Search, key = "deneb_search"),
         MoreEntry("카테고리", DenebCategories, Icons.Outlined.GridView, key = "deneb_categories"),
