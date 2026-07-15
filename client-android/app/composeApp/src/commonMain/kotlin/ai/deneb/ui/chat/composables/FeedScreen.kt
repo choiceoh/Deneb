@@ -7,6 +7,7 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebTitlePivot
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.chat.WorkFeedAction
 import ai.deneb.ui.chat.WorkFeedItem
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBannerEnter
@@ -376,15 +377,32 @@ private fun FeedRowWithBody(
     onAnswer: (WorkFeedItem, String, String?, String?) -> Unit,
     onLongAction: (WorkFeedItem) -> Unit,
 ) {
+    val usesInlineApprovalActions = remember(item) { item.hasInlineApprovalActions() }
+    var pendingApproval by remember(item.id) { mutableStateOf<WorkFeedAction?>(null) }
+    pendingApproval?.let { action ->
+        WorkFeedApprovalDialog(
+            item = item,
+            action = action,
+            onDismiss = { pendingApproval = null },
+            onAnswer = onAnswer,
+        )
+    }
     WorkFeedRow(item = item, onOpen = onOpen, onRunAction = onRunAction, expanded = expanded, onLongAction = onLongAction)
     if (expanded && item.body.isNotBlank()) {
         // Proactive reports are markdown (tables, headings, lists), so render with
         // the full chat renderer — a plain Text leaked raw "| 항목 | 내용 |" pipes and
-        // "##" markers (broken tables). Read-only (isInteractive = false); wrapped in
-        // SelectionContainer so the report stays copyable.
+        // "##" markers (broken tables). Groupware approval cards are the one interactive
+        // exception: their inline buttons route into the same guarded action dialog as
+        // the fallback chips. Everything else remains read-only and copyable.
         SelectionContainer {
             MarkdownContent(
                 content = item.body,
+                isInteractive = usesInlineApprovalActions,
+                onUiCallback = approvalCallback@{ event, _ ->
+                    val actionId = approvalActionIdForUiEvent(event) ?: return@approvalCallback
+                    pendingApproval = item.actions.firstOrNull { action -> action.id == actionId }
+                        ?: return@approvalCallback
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 12.dp),
@@ -392,7 +410,7 @@ private fun FeedRowWithBody(
         }
     }
     // A question card the agent is waiting on: inline answer chips / reply field.
-    if (expanded && item.question) {
+    if (expanded && item.question && !usesInlineApprovalActions) {
         WorkFeedAnswerBlock(item = item, onAnswer = onAnswer)
     }
 }

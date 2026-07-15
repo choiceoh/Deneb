@@ -73,6 +73,35 @@ import kotlin.time.Clock
 
 internal const val MaxApprovalCommentCharacters = 500
 
+private val InlineButtonEventRegex = Regex(
+    pattern = """<button\b[^>]*\bevent\s*=\s*[\"']([^\"']+)[\"']""",
+    option = RegexOption.IGNORE_CASE,
+)
+
+internal fun approvalActionIdForUiEvent(event: String): String? {
+    val normalized = event.trim().lowercase()
+    return when {
+        normalized == "approval:approve" || normalized == "approve" || normalized.startsWith("approve_") ->
+            "approval:approve"
+
+        normalized == "approval:reject" || normalized == "reject" || normalized.startsWith("reject_") ->
+            "approval:reject"
+
+        else -> null
+    }
+}
+
+internal fun WorkFeedItem.hasInlineApprovalActions(): Boolean {
+    if (source != "groupware-approval") return false
+    val availableActionIds = actions.mapTo(mutableSetOf()) { it.id }
+    val inlineActionIds = InlineButtonEventRegex.findAll(body)
+        .mapNotNull { match -> approvalActionIdForUiEvent(match.groupValues[1]) }
+        .toSet()
+    return setOf("approval:approve", "approval:reject").all { actionId ->
+        actionId in availableActionIds && actionId in inlineActionIds
+    }
+}
+
 internal fun approvalCommentCharacterCount(value: String): Int {
     var count = 0
     var index = 0
@@ -253,6 +282,69 @@ internal fun WorkFeedRow(
     }
 }
 
+@Composable
+internal fun WorkFeedApprovalDialog(
+    item: WorkFeedItem,
+    action: WorkFeedAction,
+    onDismiss: () -> Unit,
+    onAnswer: (WorkFeedItem, String, String?, String?) -> Unit,
+) {
+    val haptics = rememberHaptics()
+    val isReject = action.id == "approval:reject"
+    var rejectionComment by remember(item.id, action.id) { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${action.label}할까요?", style = DenebType.subject) },
+        text = {
+            Column {
+                Text(
+                    buildString {
+                        append(item.title.ifBlank { "이 결재 문서" })
+                        if (item.refId.isNotBlank()) append(" (doc ${item.refId})")
+                        append("을(를) ${action.label}합니다. 그룹웨어에 즉시 반영됩니다.")
+                    },
+                    style = DenebType.body,
+                )
+                if (isReject) {
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = rejectionComment,
+                        onValueChange = { rejectionComment = limitApprovalComment(it) },
+                        label = { Text("반려 사유 (선택)", style = DenebType.meta) },
+                        supportingText = {
+                            Text(
+                                "${approvalCommentCharacterCount(rejectionComment)}/$MaxApprovalCommentCharacters",
+                                modifier = Modifier.fillMaxWidth(),
+                                style = DenebType.meta,
+                                color = denebHint(),
+                                textAlign = TextAlign.End,
+                            )
+                        },
+                        minLines = 3,
+                        maxLines = 5,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val comment = rejectionComment.trim().takeIf { isReject && it.isNotEmpty() }
+                    onDismiss()
+                    if (isReject) haptics.reject() else haptics.confirm()
+                    onAnswer(item, action.label, action.id, comment)
+                },
+            ) { Text(action.label, style = DenebType.button) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("취소", style = DenebType.button)
+            }
+        },
+    )
+}
+
 /**
  * Inline answer affordance for a question card (Toss-style). Renders the card's
  * options as tappable chips, or — when there are no fixed options — a free-text
@@ -270,58 +362,11 @@ internal fun WorkFeedAnswerBlock(
     val haptics = rememberHaptics()
     var pendingApproval by remember(item.id) { mutableStateOf<WorkFeedAction?>(null) }
     pendingApproval?.let { action ->
-        val isReject = action.id == "approval:reject"
-        var rejectionComment by remember(item.id, action.id) { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { pendingApproval = null },
-            title = { Text("${action.label}할까요?", style = DenebType.subject) },
-            text = {
-                Column {
-                    Text(
-                        buildString {
-                            append(item.title.ifBlank { "이 결재 문서" })
-                            if (item.refId.isNotBlank()) append(" (doc ${item.refId})")
-                            append("을(를) ${action.label}합니다. 그룹웨어에 즉시 반영됩니다.")
-                        },
-                        style = DenebType.body,
-                    )
-                    if (isReject) {
-                        Spacer(Modifier.height(16.dp))
-                        OutlinedTextField(
-                            value = rejectionComment,
-                            onValueChange = { rejectionComment = limitApprovalComment(it) },
-                            label = { Text("반려 사유 (선택)", style = DenebType.meta) },
-                            supportingText = {
-                                Text(
-                                    "${approvalCommentCharacterCount(rejectionComment)}/$MaxApprovalCommentCharacters",
-                                    modifier = Modifier.fillMaxWidth(),
-                                    style = DenebType.meta,
-                                    color = denebHint(),
-                                    textAlign = TextAlign.End,
-                                )
-                            },
-                            minLines = 3,
-                            maxLines = 5,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val comment = rejectionComment.trim().takeIf { isReject && it.isNotEmpty() }
-                        pendingApproval = null
-                        if (isReject) haptics.reject() else haptics.confirm()
-                        onAnswer(item, action.label, action.id, comment)
-                    },
-                ) { Text(action.label, style = DenebType.button) }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingApproval = null }) {
-                    Text("취소", style = DenebType.button)
-                }
-            },
+        WorkFeedApprovalDialog(
+            item = item,
+            action = action,
+            onDismiss = { pendingApproval = null },
+            onAnswer = onAnswer,
         )
     }
     Column(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
