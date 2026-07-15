@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/lifecycletool"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
 )
 
 type (
@@ -12,6 +13,7 @@ type (
 )
 
 var (
-	SkillLifecycleToolSchema = chattools.SkillLifecycleToolSchema
-	ToolSkillLifecycle       = chattools.ToolSkillLifecycle
+	SkillLifecycleToolSchema   = chattools.SkillLifecycleToolSchema
+	ToolSkillLifecycle         = chattools.ToolSkillLifecycle
+	ErrPhoneActionUnconfirmed  = runtimeops.ErrPhoneActionUnconfirmed
 )

@@ -5,7 +5,6 @@ import (
 	"context"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/surface"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/filesystem"
@@ -125,7 +124,7 @@ func RegisterGraphTool(registry toolport.ToolRegistrar, workspaceDir string) {
 			"(d) wiki search보다 graphify가 강한 상황: 관계·맥락·연쇄 추론이 필요할 때 (단순 키워드 룩업은 wiki/grep로 충분). " +
 			"(e) wiki + code 두 그래프를 묶어서 답하라 — \"이 함수가 어떤 개념을 구현하나\"면 code에서 함수 노드 explain 후 wiki에서 같은 개념을 query.",
 		InputSchema: schema.GraphifyToolSchema(),
-		Fn:          tools.ToolGraphify(workspaceDir),
+		Fn:          surface.ToolGraphify(workspaceDir),
 		Deferred:    true,
 	})
 }
@@ -134,13 +133,13 @@ func RegisterGraphTool(registry toolport.ToolRegistrar, workspaceDir string) {
 // system-prompt block. Re-exported so the chat parent does not import
 // domain/goals or the tools package solely for ambient wiring.
 func NewGoalGlanceFunc() func(ctx context.Context, sessionKey string) string {
-	return tools.NewGoalGlanceFunc()
+	return surface.NewGoalGlanceFunc()
 }
 
 // HandleGoalCommand processes the /goal slash command against the process goal
 // store. Re-exported so chat slash dispatch does not import domain/goals.
 func HandleGoalCommand(sessionKey, args string, respond func(text string)) {
-	tools.HandleGoalCommand(sessionKey, args, respond)
+	surface.HandleGoalCommand(sessionKey, args, respond)
 }
 
 // RegisterCoreTools populates the tool registrar with all core agent tools.
@@ -178,7 +177,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 		Name:        "goal",
 		Description: "다단계·장기 작업을 여러 턴에 걸쳐 끝까지 진행해야 할 때 표준 목표(standing goal)를 설정·관리한다. action=set(목표 설정) | subgoal(완료 기준 추가) | status | pause | resume | stop. 설정하면 사용자가 자리를 비운 동안 자동으로 한 단계씩 진행하고 완료를 판정한다. 이미 실행한 작업은 멱등 가드로 중복되지 않는다.",
 		InputSchema: schema.GoalToolSchema(),
-		Fn:          tools.ToolGoal(),
+		Fn:          surface.ToolGoal(),
 	})
 
 	// Research panel: fan a question out to every healthy model in parallel
@@ -190,7 +189,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 			Name:        "research_panel",
 			Description: "딥리서치·고위험 의사결정의 교차검증용 — 하나의 질문을 가동 중(헬시)인 모든 모델에게 병렬로 던져 모델별 답을 모아 온다(이종 모델 패널 팬아웃). 반환된 모델별 답을 당신이 직접 종합하라 — 서로 다른 계열이 합의하면 강한 신뢰, 모순은 명시하고, 자신만만한 답에 닻 내리지 말 것. 단순 사실질문엔 쓰지 마라(비용이 모델 수만큼 N배). models로 특정 모델만 지정 가능, 비우면 전체.",
 			InputSchema: schema.ResearchPanelToolSchema(),
-			Fn:          tools.ToolResearchPanel(deps.ConsultPanel),
+			Fn:          surface.ToolResearchPanel(deps.ConsultPanel),
 			Deferred:    true,
 		})
 	}
@@ -248,7 +247,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 		Name:        "org",
 		Description: "조직도 조회(읽기 전용) — '1팀 팀장 누구'·'회사 조직 어떻게 되지'·직급/직책 확인에 사용. query로 사람/팀/회사 이름 검색, 생략 시 전체 트리. 연락처(전화/메일)는 contacts 도구.",
 		InputSchema: schema.OrgToolSchema(),
-		Fn:          tools.ToolOrg(),
+		Fn:          surface.ToolOrg(),
 		Deferred:    true,
 	})
 
@@ -366,7 +365,7 @@ func RegisterChronoTools(registry toolport.ToolRegistrar) {
 			"**사용자가 방금 보낸 메시지에 대한 응답에는 절대 쓰지 마라** — 일반 응답은 턴의 최종 텍스트가 자동 전달된다. " +
 			"이 도구로 사용자에게 보일 내용을 이미 전송했다면, 중복 전달을 막기 위해 턴의 최종 텍스트는 정확히 NO_REPLY 한 단어만 출력하라(다른 텍스트와 섞지 말 것).",
 		InputSchema: schema.MessageToolSchema(),
-		Fn:          tools.ToolMessage(),
+		Fn:          surface.ToolMessage(),
 		Deferred:    true,
 	})
 	registry.RegisterTool(toolport.ToolDef{

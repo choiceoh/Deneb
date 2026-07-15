@@ -14,7 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/docmedia"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"path/filepath"
 	"strings"
 	"time"
@@ -614,7 +614,7 @@ func (s *Server) earlyFileMethods() map[string]rpcutil.HandlerFunc {
 	return minifiles.FilesBrowseMethods(minifiles.FilesBrowseDeps{
 		Store: localFileStoreOrNil(s.logger),
 		ExtractText: func(ctx context.Context, data []byte, name string) string {
-			text, _ := docmedia.ExtractDocumentText(ctx, data, name, "")
+			text, _ := toolbind.ExtractDocumentText(ctx, data, name, "")
 			return text
 		},
 		SemanticSearch: func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error) {

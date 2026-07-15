@@ -9,7 +9,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/review"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/nudgeradapt"
 )
 
 // Type aliases so runtime/server can depend on this adhesion package instead of
@@ -58,6 +60,11 @@ func NewNudgerFromEnvWithTrackerAndReviewer(
 	logger *slog.Logger,
 ) *Nudger {
 	return review.NewNudgerFromEnvWithTrackerAndReviewer(svc, tracker, reviewer, logger)
+}
+
+// NewSkillNudger adapts a review nudger to the stable chat port.
+func NewSkillNudger(n *Nudger) chatport.SkillNudger {
+	return nudgeradapt.New(n)
 }
 
 // CoreBuildInput is the model/workspace surface needed to construct a GenesisBundle

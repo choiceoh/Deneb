@@ -24,10 +24,9 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail/gmailops"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -61,7 +60,7 @@ type GmailAnalyzeDeps struct {
 	Client     func() (GmailClient, error)
 	Pipeline   func() (AnalyzePipeline, error)
 	Cache      *AnalysisStore
-	WorkState  *mailwork.Store
+	WorkState  *gmailops.WorkStore
 	SaveToWiki func(in WikiAnalysisInput) error
 	// WikiStore (optional) enriches related-project paths with their
 	// title/summary for display. nil → chips fall back to the bare path.
@@ -90,7 +89,7 @@ func GmailAnalyzeMethods(deps GmailAnalyzeDeps) map[string]rpcutil.HandlerFunc {
 	return m
 }
 
-func applyMailWorkAnalysis(out *mailAnalysisOut, st mailwork.MessageState) {
+func applyMailWorkAnalysis(out *mailAnalysisOut, st gmailops.WorkMessageState) {
 	if out == nil {
 		return
 	}
@@ -109,7 +108,7 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 	}
 	return bindOptional(func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		if strings.TrimSpace(p.ID) == "" {
-			return rpcerr.MissingParam("id").Response(req.ID)
+			return gmailops.RPCMissingParam("id").Response(req.ID)
 		}
 
 		// Cache lookup. force=true skips it so "🔄 다시 분석" always
@@ -129,8 +128,8 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 					CreatedAt:       rec.CreatedAt,
 				}
 				if deps.WorkState != nil {
-					st, _ := deps.WorkState.MarkAnalysisDone(mailwork.AnalysisInput{
-						MessageInput: mailwork.MessageInput{
+					st, _ := deps.WorkState.MarkAnalysisDone(gmailops.WorkAnalysisInput{
+						MessageInput: gmailops.WorkMessageInput{
 							ID:      rec.MsgID,
 							Subject: rec.Subject,
 							From:    rec.From,
@@ -148,30 +147,30 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 		client, err := deps.Client()
 		if err != nil {
 			if deps.WorkState != nil {
-				_, _ = deps.WorkState.MarkAnalysisFailed(mailwork.MessageInput{ID: p.ID}, err)
+				_, _ = deps.WorkState.MarkAnalysisFailed(gmailops.WorkMessageInput{ID: p.ID}, err)
 			}
-			return rpcerr.WrapUnavailable("gmail client unavailable", err).Response(req.ID)
+			return gmailops.RPCWrapUnavailable("gmail client unavailable", err).Response(req.ID)
 		}
 		pipeline, err := deps.Pipeline()
 		if err != nil {
 			if deps.WorkState != nil {
-				_, _ = deps.WorkState.MarkAnalysisFailed(mailwork.MessageInput{ID: p.ID}, err)
+				_, _ = deps.WorkState.MarkAnalysisFailed(gmailops.WorkMessageInput{ID: p.ID}, err)
 			}
-			return rpcerr.WrapUnavailable("analysis pipeline unavailable", err).Response(req.ID)
+			return gmailops.RPCWrapUnavailable("analysis pipeline unavailable", err).Response(req.ID)
 		}
 
 		msg, err := client.GetMessage(ctx, p.ID)
 		if err != nil {
 			if deps.WorkState != nil {
-				_, _ = deps.WorkState.MarkAnalysisFailed(mailwork.MessageInput{ID: p.ID}, err)
+				_, _ = deps.WorkState.MarkAnalysisFailed(gmailops.WorkMessageInput{ID: p.ID}, err)
 			}
 			return mapGmailError(req.ID, "gmail get failed", err)
 		}
 		if msg == nil {
 			if deps.WorkState != nil {
-				_, _ = deps.WorkState.MarkAnalysisFailed(mailwork.MessageInput{ID: p.ID}, errGmailNotFound)
+				_, _ = deps.WorkState.MarkAnalysisFailed(gmailops.WorkMessageInput{ID: p.ID}, errGmailNotFound)
 			}
-			return rpcerr.NotFound("message " + rpcutil.TruncateForError(p.ID)).Response(req.ID)
+			return gmailops.RPCNotFound("message " + rpcutil.TruncateForError(p.ID)).Response(req.ID)
 		}
 		if deps.WorkState != nil {
 			_, _ = deps.WorkState.MarkAnalysisAnalyzing(messageInputFromDetail(msg))
@@ -184,13 +183,13 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 			if deps.WorkState != nil {
 				_, _ = deps.WorkState.MarkAnalysisFailed(messageInputFromDetail(msg), err)
 			}
-			return rpcerr.WrapUnavailable("email analysis failed", err).Response(req.ID)
+			return gmailops.RPCWrapUnavailable("email analysis failed", err).Response(req.ID)
 		}
 		if strings.TrimSpace(result.Text) == "" {
 			if deps.WorkState != nil {
 				_, _ = deps.WorkState.MarkAnalysisFailed(messageInputFromDetail(msg), errors.New("analysis returned empty result"))
 			}
-			return rpcerr.Unavailable("analysis returned empty result").Response(req.ID)
+			return gmailops.RPCUnavailable("analysis returned empty result").Response(req.ID)
 		}
 
 		date := normalizeDate(msg.Date)
@@ -235,7 +234,7 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 			CreatedAt:       now,
 		}
 		if deps.WorkState != nil {
-			st, _ := deps.WorkState.MarkAnalysisDone(mailwork.AnalysisInput{
+			st, _ := deps.WorkState.MarkAnalysisDone(gmailops.WorkAnalysisInput{
 				MessageInput: messageInputFromDetail(msg),
 				Quality:      result.Importance,
 				DurationMs:   dur.Milliseconds(),
@@ -294,7 +293,7 @@ func gmailAnalysisCached(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 		TodoCount             int          `json:"todoCount,omitempty"`
 		WorkStateHint         string       `json:"workStateHint,omitempty"`
 	}
-	withState := func(payload out, st mailwork.MessageState) out {
+	withState := func(payload out, st gmailops.WorkMessageState) out {
 		payload.AnalysisStatus = st.AnalysisStatus
 		payload.AnalysisQuality = st.AnalysisQuality
 		payload.FeedStatus = st.FeedStatus
@@ -305,10 +304,10 @@ func gmailAnalysisCached(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 	}
 	return bindOptional(func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		if strings.TrimSpace(p.ID) == "" {
-			return rpcerr.MissingParam("id").Response(req.ID)
+			return gmailops.RPCMissingParam("id").Response(req.ID)
 		}
 		if deps.Cache == nil {
-			st := mailwork.MessageState{}
+			st := gmailops.WorkMessageState{}
 			if deps.WorkState != nil {
 				st = deps.WorkState.Get(p.ID)
 			}
@@ -316,7 +315,7 @@ func gmailAnalysisCached(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 		}
 		rec, err := deps.Cache.Load(p.ID)
 		if err != nil || rec == nil {
-			st := mailwork.MessageState{}
+			st := gmailops.WorkMessageState{}
 			if deps.WorkState != nil {
 				st = deps.WorkState.Get(p.ID)
 			}
@@ -330,8 +329,8 @@ func gmailAnalysisCached(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 			CreatedAt:       rec.CreatedAt,
 		}
 		if deps.WorkState != nil {
-			st, _ := deps.WorkState.MarkAnalysisDone(mailwork.AnalysisInput{
-				MessageInput: mailwork.MessageInput{
+			st, _ := deps.WorkState.MarkAnalysisDone(gmailops.WorkAnalysisInput{
+				MessageInput: gmailops.WorkMessageInput{
 					ID:      rec.MsgID,
 					Subject: rec.Subject,
 					From:    rec.From,

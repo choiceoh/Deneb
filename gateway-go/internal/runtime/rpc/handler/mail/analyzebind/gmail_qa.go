@@ -15,9 +15,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail/gmailops"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -36,35 +36,35 @@ func gmailAsk(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 	}
 	return bindOptional(func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		if strings.TrimSpace(p.ID) == "" {
-			return rpcerr.MissingParam("id").Response(req.ID)
+			return gmailops.RPCMissingParam("id").Response(req.ID)
 		}
 		if strings.TrimSpace(p.Question) == "" {
-			return rpcerr.MissingParam("question").Response(req.ID)
+			return gmailops.RPCMissingParam("question").Response(req.ID)
 		}
 		if deps.Ask == nil {
-			return rpcerr.Unavailable("mail Q&A not configured").Response(req.ID)
+			return gmailops.RPCUnavailable("mail Q&A not configured").Response(req.ID)
 		}
 
 		client, err := deps.Client()
 		if err != nil {
-			return rpcerr.WrapUnavailable("gmail client unavailable", err).Response(req.ID)
+			return gmailops.RPCWrapUnavailable("gmail client unavailable", err).Response(req.ID)
 		}
 		msg, err := client.GetMessage(ctx, p.ID)
 		if err != nil {
 			return mapGmailError(req.ID, "gmail get failed", err)
 		}
 		if msg == nil {
-			return rpcerr.NotFound("message " + rpcutil.TruncateForError(p.ID)).Response(req.ID)
+			return gmailops.RPCNotFound("message " + rpcutil.TruncateForError(p.ID)).Response(req.ID)
 		}
 
 		mailContext := buildMailQAContext(msg, deps)
 
 		answer, err := deps.Ask(ctx, mailContext, p.History, p.Question)
 		if err != nil {
-			return rpcerr.WrapUnavailable("mail Q&A failed", err).Response(req.ID)
+			return gmailops.RPCWrapUnavailable("mail Q&A failed", err).Response(req.ID)
 		}
 		if strings.TrimSpace(answer) == "" {
-			return rpcerr.Unavailable("Q&A returned empty result").Response(req.ID)
+			return gmailops.RPCUnavailable("Q&A returned empty result").Response(req.ID)
 		}
 		return rpcutil.RespondOK(req.ID, out{Answer: answer})
 	})

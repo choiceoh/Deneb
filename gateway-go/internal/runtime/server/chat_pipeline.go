@@ -21,7 +21,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/docmedia"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 		"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
@@ -348,7 +347,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 
 	// Polaris: retrieval tools for compressed conversation history.
 	if bridge, ok := transcriptStore.(*polaris.Bridge); ok {
-		var localAI docmedia.LocalAIFunc
+		var localAI toolbind.LocalAIFunc
 		if pilot.LocalAIHub() != nil {
 			localAI = func(ctx context.Context, system, user string, maxTokens int) (string, error) {
 				return pilot.CallLocalLLM(ctx, system, user, maxTokens)

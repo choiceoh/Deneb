@@ -11,7 +11,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
 	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive/relaylog"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive/textprep"
@@ -316,7 +315,7 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 		// literal text. Deliver card-first bodies as-is.
 		if opts.collapse && !startsWithDenebUIFence(deliverBody) {
 			if title, titleLine := extractCardTitle(content); strings.TrimSpace(title) != "" {
-				transcriptBody = denebui.CollapsedReportFence(title, collapsedReportBody(deliverBody, title, titleLine))
+				transcriptBody = textprep.CollapsedReportFence(title, collapsedReportBody(deliverBody, title, titleLine))
 			}
 		}
 		msg := toolport.NewTextChatMessage("assistant", transcriptBody, time.Now().UnixMilli())
@@ -381,7 +380,7 @@ func (d proactiveRelayDeps) appendProactiveWorkFeed(
 	// that is mostly a deneb-ui fence is otherwise invisible to the
 	// fence-skipping scans — the title fell back to the generic "업무 리포트"
 	// and the titler echoed "```deneb-ui" as the summary (2026-07-12 live feed).
-	extractSrc := denebui.ReplaceFences(cardSrc, denebui.PlainText)
+	extractSrc := textprep.ReplaceFences(cardSrc, textprep.PlainText)
 	title, titleLine := extractCardTitle(extractSrc)
 	source := strings.TrimSpace(opts.workFeedSource)
 	if source == "" {
@@ -481,7 +480,7 @@ func (d proactiveRelayDeps) publishDeliverable(content string) (bool, error) {
 	}
 	// Same prose projection as the relay card path — a doc analysis whose
 	// answer is a deneb-ui card must not title itself "```deneb-ui".
-	extractSrc := denebui.ReplaceFences(content, denebui.PlainText)
+	extractSrc := textprep.ReplaceFences(content, textprep.PlainText)
 	title, titleLine := extractCardTitle(extractSrc)
 	summary := extractCardSummary(extractSrc, titleLine)
 	if d.cardTitler != nil && isWeakCardTitle(title, titleLine) {
@@ -515,12 +514,12 @@ func (d proactiveRelayDeps) PublishDeliverable(content string) (bool, error) {
 }
 
 // startsWithDenebUIFence reports whether the body's first line opens a
-// deneb-ui fence under the EXTRACTOR's contract (denebui.IsFenceOpenLine) —
+// deneb-ui fence under the EXTRACTOR's contract (textprep.IsFenceOpenLine) —
 // a prefix check would bypass the accordion for openers the renderers reject
 // ("```deneb-ui extra"), landing literal markup in the transcript.
 func startsWithDenebUIFence(body string) bool {
 	first, _, _ := strings.Cut(strings.TrimSpace(body), "\n")
-	return denebui.IsFenceOpenLine(first)
+	return textprep.IsFenceOpenLine(first)
 }
 
 // collapsedReportBody returns content with its leading title line removed when

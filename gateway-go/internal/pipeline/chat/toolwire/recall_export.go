@@ -1,17 +1,13 @@
 package toolwire
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/recall"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 )
 
-func RegisterPolarisTools(registry toolport.ToolRegistrar, store *polaris.Store, localAI tools.LocalAIFunc) {
+func RegisterPolarisTools(registry recall.ToolRegistrar, store *recall.Store, localAI recall.LocalAIFunc) {
 	recall.RegisterPolarisTools(registry, store, localAI)
 }
 
-func RegisterKnowledgeTool(registry toolport.ToolRegistrar, router *knowledge.Router) {
+func RegisterKnowledgeTool(registry recall.ToolRegistrar, router *recall.Router) {
 	recall.RegisterKnowledgeTool(registry, router)
 }

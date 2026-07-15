@@ -2,7 +2,7 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/docmedia"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"context"
 	"fmt"
 	"os"
@@ -71,7 +71,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 		CounterpartyProjectsFn: func(domain string) []string {
 			return s.cpProjects.Lookup(s.wikiStore, domain)
 		},
-		AttachmentExtractFn: docmedia.ExtractAttachmentText,
+		AttachmentExtractFn: toolbind.ExtractAttachmentText,
 		PromptOverride:      s.promptOverride,
 		ThinkingKwarg:       s.mailStage2ThinkingKwarg(),
 	}
@@ -230,7 +230,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		CounterpartyProjectsFn: func(domain string) []string {
 			return s.cpProjects.Lookup(s.wikiStore, domain)
 		},
-		AttachmentExtractFn: docmedia.ExtractAttachmentText,
+		AttachmentExtractFn: toolbind.ExtractAttachmentText,
 		PromptOverride:      s.promptOverride,
 		OnAnalyzed:          s.makeMailAnalysisSink(),
 		OnDelivered:         s.makeMailFeedDeliverySink(),

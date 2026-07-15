@@ -1,8 +1,7 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/docmedia"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/weekly"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -49,13 +48,13 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		// SendSync, with deneb-ui emission enabled (channel "client").
 		handlerchat.MiniappMethods(handlerchat.Deps{
 			Chat:       s.chatHandler,
-			OcrImage:   docmedia.OCRImage,
-			Transcribe: docmedia.TranscribeAudio,
+			OcrImage:   toolbind.OCRImage,
+			Transcribe: toolbind.TranscribeAudio,
 			// Document attach (pdf/doc/sheet) → in-house extractor (PDF/Excel/Word/
 			// PowerPoint/CSV/text, with a scanned-PDF / image OCR fallback).
-			ExtractDocument: docmedia.ExtractAttachmentText,
+			ExtractDocument: toolbind.ExtractAttachmentText,
 			// In-app browser in-place translation (en/ru → ko) — DeepL-only.
-			Translate: docmedia.TranslateSegments,
+			Translate: toolbind.TranslateSegments,
 			// Raw capture persistence: full OCR text / diarized transcript →
 			// {memory}/captures/ + diary breadcrumb (recallable, dream-distilled,
 			// backed up). The agent turn only summarizes; this keeps the original.
@@ -231,7 +230,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				if err != nil {
 					return nil, err
 				}
-				return handlermail.PipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, docmedia.ExtractAttachmentText, func(domain string) []string {
+				return handlermail.PipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, toolbind.ExtractAttachmentText, func(domain string) []string {
 					return s.cpProjects.Lookup(s.wikiStore, domain)
 				})
 			},
@@ -268,7 +267,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		if s.wikiStore != nil {
 			wikiDir := s.wikiStore.Dir()
 			weeklyDataFn = func(ctx context.Context) (string, error) {
-				return weekly.CollectWeeklyReportData(ctx, weekly.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
+				return toolbind.CollectWeeklyReportData(ctx, toolbind.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
 			}
 			// Deterministic report body — a head line + server-assembled deneb-ui
 			// card (RenderWeeklyReportCard), preferred over the LLM turn so the
@@ -276,10 +275,10 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			// The plain-text 양식 (RenderWeeklyReportText) remains the PDF path's
 			// fallback composition.
 			weeklyTextFn = func(_ context.Context) (string, error) {
-				return weekly.RenderWeeklyReportCard(weekly.WeeklyReportOpts{WikiDir: wikiDir}, time.Now()), nil
+				return toolbind.RenderWeeklyReportCard(toolbind.WeeklyReportOpts{WikiDir: wikiDir}, time.Now()), nil
 			}
 			weeklyFormFn = func(ctx context.Context) error {
-				img, ok := weekly.BuildWeeklyReportImage(ctx, weekly.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
+				img, ok := toolbind.BuildWeeklyReportImage(ctx, toolbind.WeeklyReportOpts{WikiDir: wikiDir}, time.Now())
 				if !ok {
 					return nil // render unavailable (low memory/disk) → text report only
 				}

@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/phoneops"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -51,7 +51,7 @@ func (s *Server) siteVisitOnLocation() func(string) {
 
 // phoneActionConfirmWait bounds how long a phone_write dispatch waits for the
 // app's execution report before degrading to dispatched-unconfirmed
-// (phoneops.ErrPhoneActionUnconfirmed). Foreground SSE execution reports back
+// (toolbind.ErrPhoneActionUnconfirmed). Foreground SSE execution reports back
 // well under a second; the cap only bites on a backgrounded phone (Doze) or
 // an app build that predates result reporting — both degrade to the old
 // fire-and-forget semantics instead of blocking the turn.
@@ -187,7 +187,7 @@ func newPhoneActionID() string {
 // Result round-trip: after publishing, the dispatch waits up to
 // phoneActionConfirmWait for the app's phone_action_result report (correlated
 // by Ref id) — nil only on a confirmed launch, a real error once every
-// fanned-out subscriber reported failure, phoneops.ErrPhoneActionUnconfirmed when
+// fanned-out subscriber reported failure, toolbind.ErrPhoneActionUnconfirmed when
 // no verdict arrives (fail-open: the action may still execute late, so the
 // tool tells the agent not to retry). sync_state stays fire-and-forget — it
 // has no in-app execution result; its effect arrives as
@@ -251,7 +251,7 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 	case res := <-result:
 		return finish(res)
 	case <-ctx.Done():
-		return fmt.Errorf("%w: turn ended while waiting", phoneops.ErrPhoneActionUnconfirmed)
+		return fmt.Errorf("%w: turn ended while waiting", toolbind.ErrPhoneActionUnconfirmed)
 	case <-timer.C:
 		// Boundary drain: resolve may have delivered right as the timer fired;
 		// without this a reported verdict could be masked as benign-unconfirmed
@@ -264,6 +264,6 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 		}
 		s.logger.Info("phone action result not reported in time", "action", action, "id", id,
 			"wait", phoneActionConfirmWait)
-		return phoneops.ErrPhoneActionUnconfirmed
+		return toolbind.ErrPhoneActionUnconfirmed
 	}
 }
