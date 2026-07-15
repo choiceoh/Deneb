@@ -1548,13 +1548,18 @@ func WatchToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"detail": map[string]any{
+				"type":        "string",
+				"description": "frames (default): scene frames + subtitles with vision analysis. transcript: captions/ASR only — skips video download and frames (faster for summaries; YouTube only).",
+				"enum":        []string{"frames", "transcript"},
+			},
 			"end": map[string]any{
 				"type":        "number",
 				"description": "Optional analysis window end in seconds",
 			},
 			"source": map[string]any{
 				"type":        "string",
-				"description": "YouTube URL or local video file path. Extracts representative frames + the subtitle transcript (with chapter sections) and analyzes them with the vision model — the model SEES the screen, not just the captions. For transcript/chapter summarization without needing the visuals, the web tool on the YouTube URL is lighter and faster.",
+				"description": "YouTube URL or local video file path. Extracts representative frames + the subtitle transcript (with chapter sections) and analyzes them with the vision model — the model SEES the screen, not just the captions. Use detail=transcript for caption/ASR-only summaries (skips video download and frames).",
 			},
 			"start": map[string]any{
 				"type":        "number",

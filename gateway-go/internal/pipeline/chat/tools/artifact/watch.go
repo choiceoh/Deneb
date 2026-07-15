@@ -27,10 +27,11 @@ import (
 )
 
 type watchParams struct {
-	Source string  `json:"source"`          // YouTube URL or local video file path
-	Task   string  `json:"task,omitempty"`  // what to analyze (default: general analysis)
-	Start  float64 `json:"start,omitempty"` // optional window start (seconds)
-	End    float64 `json:"end,omitempty"`   // optional window end (seconds)
+	Source string  `json:"source"`           // YouTube URL or local video file path
+	Task   string  `json:"task,omitempty"`   // what to analyze (default: general analysis)
+	Start  float64 `json:"start,omitempty"`  // optional window start (seconds)
+	End    float64 `json:"end,omitempty"`    // optional window end (seconds)
+	Detail string  `json:"detail,omitempty"` // "frames" (default) | "transcript"
 }
 
 const (
@@ -59,6 +60,11 @@ func ToolWatch(workspaceDir string) toolport.ToolFunc {
 		if p.Source == "" {
 			return "", fmt.Errorf("source는 필수입니다 (유튜브 URL 또는 영상 파일 경로)")
 		}
+		detail, err := normalizeWatchDetail(p.Detail)
+		if err != nil {
+			return "", err
+		}
+		p.Detail = detail
 
 		// Local files are jailed to the workspace and screened by the
 		// prompt-injection path guard, mirroring the fs tools.
@@ -74,12 +80,22 @@ func ToolWatch(workspaceDir string) toolport.ToolFunc {
 		}
 
 		result, err := media.WatchVideo(ctx, p.Source, media.WatchOptions{
-			StartSec: p.Start,
-			EndSec:   p.End,
+			StartSec:       p.Start,
+			EndSec:         p.End,
+			TranscriptOnly: detail == watchDetailTranscript,
 		})
 		if err != nil {
 			return "", fmt.Errorf("영상 처리 실패: %w", err)
 		}
+
+		// Transcript-only: skip vision entirely — captions/ASR already collected.
+		if detail == watchDetailTranscript {
+			if textAnalysis := summarizeWatchTranscript(ctx, &p, result); textAnalysis != "" {
+				return formatWatchTextResult(result, textAnalysis), nil
+			}
+			return "", fmt.Errorf("자막/전사 분석에 실패했습니다")
+		}
+
 		if len(result.Frames) == 0 {
 			return "", fmt.Errorf("영상에서 프레임을 추출하지 못했습니다 (ffmpeg 설치 여부 확인)")
 		}
@@ -96,6 +112,22 @@ func ToolWatch(workspaceDir string) toolport.ToolFunc {
 			return formatWatchFallback(result, err), nil
 		}
 		return formatWatchResult(result, analysis), nil
+	}
+}
+
+const (
+	watchDetailFrames     = "frames"
+	watchDetailTranscript = "transcript"
+)
+
+func normalizeWatchDetail(detail string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(detail)) {
+	case "", watchDetailFrames:
+		return watchDetailFrames, nil
+	case watchDetailTranscript:
+		return watchDetailTranscript, nil
+	default:
+		return "", fmt.Errorf("detail은 frames 또는 transcript 여야 합니다 (got %q)", detail)
 	}
 }
 
