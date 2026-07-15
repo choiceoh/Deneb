@@ -362,13 +362,22 @@ fields.
 - Writes only via work-feed chips `approval:approve` / `approval:reject` →
   `miniapp.workfeed.action.run` + `RunActionWithEffect` (Amaranth **before**
   settle; failure keeps card).
+- `miniapp.workfeed.action.run.comment` is transient RPC input, never persisted
+  on the work-feed item or emitted through native sync/wire models. Only
+  `approval:reject` forwards a nonblank optional comment; approve and every
+  non-approval action drop it.
+- Reject comments are trimmed, flattened to one line, stripped of controls and
+  raw angle brackets, whitespace-collapsed, and rune-safe truncated to 500 by
+  `groupware.SanitizeApprovalComment`.
 - Confirm UI: title, doc no, amount, line, action; default-disable 전결/`1000`.
 - Dry-run: verify own line `app_sts==20` via `eap126A05` before any mutate.
 - Mutate requires `DENEB_GROUPWARE_ACT=1` (set only by `ActApproval` / feed path; bare CLI stays read-safe).
 - Line selection targets **only** the caller's line with `app_sts=20` (진행), matched by `user_id` (not `emp_seq` — real payloads use `user_id`). Already-approved (30) / downstream (70) lines are refused.
 - No retract/회수 API found in EAP JS — an approve is effectively irreversible from here; undo in the Amaranth UI.
 - First live mutate only on disposable / sandbox docs.
-- Audit: docID, docLineSts, actID, seqs, client, time, API result.
+- Approval action audit logs record only `docId`, `decision`,
+  `commentPresent`, and sanitized rune `commentLen`; comment text is never
+  logged.
 
 ## Related discovery APIs
 

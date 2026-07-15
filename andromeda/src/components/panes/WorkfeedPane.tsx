@@ -10,6 +10,7 @@ import { useRegisterPane, useWorkspace, type PaneTarget } from "@/workspaceConte
 import { Column, Grid, GridNotice } from "@/components/Grid";
 import { AssistantText } from "@/components/DenebUi";
 import { workfeedSourceLabel } from "@/workfeedSource";
+import { Field, Modal } from "@/components/Modal";
 
 // The gateway clamps workfeed.list to 100 (maxWorkFeedLimit); a single day fits well
 // under that, so request the full page and let the day-range scope it.
@@ -218,6 +219,7 @@ export function WorkfeedPane() {
             <WorkItemDetail
               w={w}
               busy={busy}
+              error={error}
               run={run}
               onAck={() => void ackItem(w)}
               onClose={() => setSelectedId(undefined)}
@@ -233,12 +235,14 @@ export function WorkfeedPane() {
 function WorkItemDetail({
   w,
   busy,
+  error,
   run,
   onAck,
   onClose,
 }: {
   w: WorkItem;
   busy: boolean;
+  error: string;
   run: RunFn;
   onAck: () => void;
   onClose: () => void;
@@ -252,6 +256,8 @@ function WorkItemDetail({
   const question = w.question === true || isQuestion(w);
   const [text, setText] = useState("");
   const [feedback, setFeedback] = useState("");
+  const [rejectAction, setRejectAction] = useState<WorkAction | null>(null);
+  const [rejectComment, setRejectComment] = useState("");
   // AI 분석 본문은 기본 전체 펼침; 길면 "분석 접기"로 접는다 (스크롤 박스 대신 토글).
   const [bodyOpen, setBodyOpen] = useState(true);
   const created = fmtDate(w.createdAtMs);
@@ -268,13 +274,34 @@ function WorkItemDetail({
   // the gateway settles the card and returns {sessionKey, prompt}, which useAction's
   // onResult streams to the asking session — the same handler the free-text field uses.
   // Approval chips confirm first — Amaranth mutate is irreversible from the feed.
+  // Rejection uses an in-app dialog so an optional reason can travel with the action.
   const runAction = (a: WorkAction) => {
-    if (String(a.id || "").startsWith("approval:")) {
+    if (a.id === "approval:reject") {
+      setRejectComment("");
+      setRejectAction(a);
+      return;
+    }
+    if (a.id === "approval:approve") {
       const title = w.title || "이 결재 문서";
       const ref = w.refId ? ` (doc ${w.refId})` : "";
       if (!window.confirm(`${a.label}할까요?\n\n${title}${ref}\n그룹웨어에 즉시 반영됩니다.`)) return;
     }
     void run(WORKFEED_RPC.actionRun, { itemId: w.id, actionId: a.id });
+  };
+
+  const closeRejectDialog = () => {
+    if (busy) return;
+    setRejectAction(null);
+    setRejectComment("");
+  };
+
+  const submitReject = async () => {
+    if (!rejectAction || busy) return;
+    const comment = rejectComment.trim();
+    const params: Record<string, unknown> = { itemId: w.id, actionId: rejectAction.id };
+    if (comment) params.comment = comment;
+    const result = await run(WORKFEED_RPC.actionRun, params);
+    if (result !== undefined) closeRejectDialog();
   };
 
   const submitFeedback = () => {
@@ -371,6 +398,46 @@ function WorkItemDetail({
           </section>
         </div>
       </div>
+      {rejectAction && (
+        <Modal
+          title="결재 반려"
+          onClose={closeRejectDialog}
+          footer={
+            <>
+              <button className="btn" onClick={closeRejectDialog} disabled={busy}>
+                취소
+              </button>
+              <button className="btn btn-accent" onClick={() => void submitReject()} disabled={busy}>
+                {busy ? "반려 중…" : "반려"}
+              </button>
+            </>
+          }
+        >
+          <div className="workfeed-detail-meta">문서</div>
+          <div className="workfeed-detail-title">{w.title || "이 결재 문서"}</div>
+          {w.refId && <p className="pane-status">문서 참조: {w.refId}</p>}
+          <p>그룹웨어에 즉시 반영됩니다.</p>
+          <Field label="반려 사유 (선택)">
+            <textarea
+              className="field"
+              rows={4}
+              value={rejectComment}
+              maxLength={500}
+              autoFocus
+              disabled={busy}
+              onChange={(e) => setRejectComment(e.target.value)}
+            />
+          </Field>
+          <div className="pane-status" aria-live="polite">
+            {rejectComment.length}/500
+          </div>
+          {error && (
+            <p className="pane-error" role="alert">
+              오류: {error}
+            </p>
+          )}
+        </Modal>
+      )}
     </section>
   );
 }

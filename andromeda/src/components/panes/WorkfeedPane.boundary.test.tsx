@@ -43,6 +43,20 @@ const todayItems: WorkItem[] = [
   },
 ];
 
+const approvalItem: WorkItem = {
+  id: "approval-7",
+  source: "groupware-approval",
+  title: "모듈 구매 품의",
+  body: "공급가액과 납기를 확인하세요.",
+  refId: "DOC-99178",
+  question: true,
+  actions: [
+    { id: "approval:approve", kind: "ack", label: "승인" },
+    { id: "approval:reject", kind: "ack", label: "반려" },
+  ],
+  createdAtMs: at(0, 13),
+};
+
 function rpcReply(payload: unknown, ok = true): Response {
   return new Response(JSON.stringify(ok ? { ok: true, payload } : { ok: false, error: String(payload) }), {
     status: ok ? 200 : 500,
@@ -401,6 +415,80 @@ describe("WorkfeedPane boundary behavior", () => {
       // Flush the run's onResult microtasks, then assert the blank prompt produced no chat.
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(chats).toHaveLength(0);
+    });
+
+    it("opens an accessible reject dialog with document context and a 500-character limit", async () => {
+      renderFeed([approvalItem]);
+      await userEvent.click(await screen.findByText("모듈 구매 품의"));
+      await userEvent.click(screen.getByRole("button", { name: "반려" }));
+
+      const dialog = screen.getByRole("dialog", { name: "결재 반려" });
+      expect(dialog).toHaveTextContent("모듈 구매 품의");
+      expect(dialog).toHaveTextContent("문서 참조: DOC-99178");
+      const comment = within(dialog).getByRole("textbox", { name: "반려 사유 (선택)" });
+      expect(comment).toHaveAttribute("maxlength", "500");
+      await userEvent.type(comment, "가".repeat(501));
+      expect(comment).toHaveValue("가".repeat(500));
+      expect(within(dialog).getByText("500/500")).toBeInTheDocument();
+
+      await userEvent.click(within(dialog).getByRole("button", { name: "취소" }));
+      expect(screen.queryByRole("dialog", { name: "결재 반려" })).not.toBeInTheDocument();
+      expect(rpc.filter((call) => call.method === "miniapp.workfeed.action.run")).toHaveLength(0);
+    });
+
+    it("submits a nonblank reject comment and omits comments from approve", async () => {
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      renderFeed([approvalItem]);
+      await userEvent.click(await screen.findByText("모듈 구매 품의"));
+
+      await userEvent.click(screen.getByRole("button", { name: "반려" }));
+      const dialog = screen.getByRole("dialog", { name: "결재 반려" });
+      await userEvent.type(within(dialog).getByRole("textbox", { name: "반려 사유 (선택)" }), "  예산 재검토  ");
+      await userEvent.click(within(dialog).getByRole("button", { name: "반려" }));
+      await waitFor(() =>
+        expect(lastRpc(rpc, "miniapp.workfeed.action.run")?.params).toEqual({
+          itemId: "approval-7",
+          actionId: "approval:reject",
+          comment: "예산 재검토",
+        }),
+      );
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "결재 반려" })).not.toBeInTheDocument());
+
+      await userEvent.click(screen.getByRole("button", { name: "승인" }));
+      await waitFor(() =>
+        expect(lastRpc(rpc, "miniapp.workfeed.action.run")?.params).toEqual({
+          itemId: "approval-7",
+          actionId: "approval:approve",
+        }),
+      );
+
+      await userEvent.click(screen.getByRole("button", { name: "반려" }));
+      const blankDialog = screen.getByRole("dialog", { name: "결재 반려" });
+      expect(within(blankDialog).getByRole("textbox", { name: "반려 사유 (선택)" })).toHaveValue("");
+      await userEvent.click(within(blankDialog).getByRole("button", { name: "반려" }));
+      await waitFor(() =>
+        expect(lastRpc(rpc, "miniapp.workfeed.action.run")?.params).toEqual({
+          itemId: "approval-7",
+          actionId: "approval:reject",
+        }),
+      );
+    });
+
+    it("keeps the reject dialog and card open when submission fails", async () => {
+      installGateway(rpc, chats, {
+        "miniapp.workfeed.action.run": () => rpcReply("reject denied", false),
+      });
+      renderFeed([approvalItem]);
+      await userEvent.click(await screen.findByText("모듈 구매 품의"));
+      await userEvent.click(screen.getByRole("button", { name: "반려" }));
+      const dialog = screen.getByRole("dialog", { name: "결재 반려" });
+      await userEvent.type(within(dialog).getByRole("textbox", { name: "반려 사유 (선택)" }), "사유");
+      await userEvent.click(within(dialog).getByRole("button", { name: "반려" }));
+
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent("HTTP 500");
+      expect(screen.getByRole("dialog", { name: "결재 반려" })).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "피드 상세" })).toBeInTheDocument();
+      expect(screen.getAllByText("모듈 구매 품의").length).toBeGreaterThan(0);
     });
 
     it("trims answers, clears the field and delivers the returned prompt", async () => {
