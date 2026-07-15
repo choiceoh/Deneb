@@ -389,6 +389,11 @@ func TestParseArchiveQueryDateRange(t *testing.T) {
 	if !strings.Contains(spec.Criteria, "SENTBEFORE 01-Jul-2026") {
 		t.Errorf("criteria %q missing SENTBEFORE 01-Jul-2026", spec.Criteria)
 	}
+	wantSince := time.Date(2026, 6, 30, 0, 0, 0, 0, now.Location())
+	wantBefore := time.Date(2026, 7, 1, 0, 0, 0, 0, now.Location())
+	if !spec.SentSince.Equal(wantSince) || !spec.SentBefore.Equal(wantBefore) {
+		t.Errorf("SentSince/Before = %v/%v, want %v/%v", spec.SentSince, spec.SentBefore, wantSince, wantBefore)
+	}
 	if !spec.InboxOnly {
 		t.Errorf("expected InboxOnly for an in:inbox query")
 	}
@@ -453,14 +458,22 @@ func (f *fakeRepositoryFallback) GetAttachment(ctx context.Context, messageID, a
 }
 
 type testIMAPArchive struct {
-	addr          string
-	ln            net.Listener
-	msgs          map[string]map[string][]byte
-	rejectExamine map[string]bool
+	addr             string
+	ln               net.Listener
+	msgs             map[string]map[string][]byte
+	rejectExamine    map[string]bool
+	rejectSentSearch bool
 }
 
 func newTestIMAPArchive(t *testing.T, msgs map[string]map[string][]byte) *testIMAPArchive {
 	return newTestIMAPArchiveRejecting(t, msgs, nil)
+}
+
+func newTestIMAPArchiveRejectingSentSearch(t *testing.T, msgs map[string]map[string][]byte) *testIMAPArchive {
+	t.Helper()
+	srv := newTestIMAPArchiveRejecting(t, msgs, nil)
+	srv.rejectSentSearch = true
+	return srv
 }
 
 func newTestIMAPArchiveRejecting(t *testing.T, msgs map[string]map[string][]byte, mailboxes []string) *testIMAPArchive {
@@ -518,7 +531,12 @@ func (s *testIMAPArchive) handle(conn net.Conn) {
 			mailbox = requested
 			_, _ = fmt.Fprintf(conn, "* %d EXISTS\r\n%s OK examine\r\n", len(s.msgs[mailbox]), tag)
 		case strings.HasPrefix(upper, "UID SEARCH "):
-			uids := s.searchUIDs(mailbox, cmd[len("UID SEARCH "):])
+			criteria := cmd[len("UID SEARCH "):]
+			if s.rejectSentSearch && sentDateKeyRe.MatchString(criteria) {
+				_, _ = fmt.Fprintf(conn, "%s NO mail: header could not be parsed\r\n", tag)
+				continue
+			}
+			uids := s.searchUIDs(mailbox, criteria)
 			_, _ = fmt.Fprintf(conn, "* SEARCH %s\r\n%s OK search\r\n", strings.Join(uids, " "), tag)
 		case strings.HasPrefix(upper, "UID FETCH "):
 			uidSet := strings.Fields(cmd[len("UID FETCH "):])[0]

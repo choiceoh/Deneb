@@ -124,7 +124,7 @@ func (r *Repository) scanArchiveMailbox(c *imapConn, mailbox string, plan archiv
 	if err := c.examine(mailbox); err != nil {
 		return nil, fmt.Errorf("mailarchive: examine %q: %w", mailbox, err)
 	}
-	uids, err := c.uidSearch(plan.spec.Criteria)
+	uids, err := c.uidSearchSentAware(plan.spec.Criteria)
 	if err != nil {
 		return nil, fmt.Errorf("mailarchive: search %q: %w", mailbox, err)
 	}
@@ -191,7 +191,16 @@ func archiveMessageVisible(spec archiveQuery, detail *gmail.MessageDetail, state
 	if state.Archived && (spec.InboxOnly || spec.DefaultView) {
 		return false
 	}
-	return !spec.HasAttachment || len(detail.Attachments) > 0
+	if spec.HasAttachment && len(detail.Attachments) == 0 {
+		return false
+	}
+	// Day-pager post-filter: keep rows whose Date header falls in
+	// [SentSince, SentBefore). Required when IMAP SENTSINCE was rejected and
+	// the search fell back to ALL/SINCE (uidSearchSentAware).
+	if !spec.SentSince.IsZero() || !spec.SentBefore.IsZero() {
+		return sentInHalfOpenRange(detail.Date, spec.SentSince, spec.SentBefore)
+	}
+	return true
 }
 
 func pageArchiveRows(rows []archiveRow, plan archiveSearchPlan) ([]gmail.MessageSummary, string) {

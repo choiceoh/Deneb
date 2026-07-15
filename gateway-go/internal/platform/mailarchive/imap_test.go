@@ -97,3 +97,41 @@ func TestQuoteEncodesBackslashesAndQuotes(t *testing.T) {
 		t.Fatalf("quote escaping wrong: %s", got)
 	}
 }
+
+func TestStripSentDateCriteriaDropsSentKeys(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    string
+		changed bool
+	}{
+		{in: "ALL", want: "ALL", changed: false},
+		{in: "SENTSINCE 15-Jul-2026 SENTBEFORE 16-Jul-2026", want: "ALL", changed: true},
+		{in: `FROM "a@b.c" SENTSINCE 15-Jul-2026`, want: `FROM "a@b.c"`, changed: true},
+		{in: "SINCE 14-Jul-2026", want: "SINCE 14-Jul-2026", changed: false},
+	}
+	for _, tt := range tests {
+		got, changed := stripSentDateCriteria(tt.in)
+		if got != tt.want || changed != tt.changed {
+			t.Errorf("stripSentDateCriteria(%q) = (%q, %v), want (%q, %v)", tt.in, got, changed, tt.want, tt.changed)
+		}
+	}
+}
+
+func TestSentInHalfOpenRangeBucketsByKSTDay(t *testing.T) {
+	since := time.Date(2026, 7, 15, 0, 0, 0, 0, archiveDayLoc)
+	before := time.Date(2026, 7, 16, 0, 0, 0, 0, archiveDayLoc)
+	tests := []struct {
+		date string
+		want bool
+	}{
+		{date: "Wed, 15 Jul 2026 16:02:03 +0900", want: true},
+		{date: "Tue, 14 Jul 2026 23:00:00 +0900", want: false},
+		{date: "Thu, 16 Jul 2026 00:00:00 +0900", want: false},
+		{date: "", want: false},
+	}
+	for _, tt := range tests {
+		if got := sentInHalfOpenRange(tt.date, since, before); got != tt.want {
+			t.Errorf("sentInHalfOpenRange(%q) = %v, want %v", tt.date, got, tt.want)
+		}
+	}
+}

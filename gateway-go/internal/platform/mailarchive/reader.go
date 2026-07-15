@@ -77,7 +77,7 @@ func readSummaries(ctx context.Context, cfg Config, mailbox, criteria string, li
 		return nil, fmt.Errorf("examine %q: %w", mailbox, err)
 	}
 
-	uids, err := c.uidSearch(criteria)
+	uids, err := c.uidSearchSentAware(criteria)
 	if err != nil {
 		return nil, err
 	}

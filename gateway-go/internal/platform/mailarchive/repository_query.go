@@ -13,6 +13,12 @@ type archiveQuery struct {
 	DefaultView   bool
 	HasAttachment bool
 	InboxOnly     bool
+	// SentSince/SentBefore are the half-open Date-header window for after:/before:
+	// day-pager queries ([SentSince, SentBefore)). Kept beside Criteria so a
+	// SENTSINCE/SENTBEFORE IMAP rejection can fall back to a broader SEARCH and
+	// still post-filter rows to the requested day (see uidSearchSentAware).
+	SentSince  time.Time
+	SentBefore time.Time
 	// Degraded is a non-empty reason when an unparseable operator was dropped and the
 	// query fell back to a bounded recent view (instead of erroring). The caller logs
 	// it — there is no Gmail fallback to silently absorb the mismatch anymore.
@@ -112,6 +118,8 @@ func parseArchiveQuery(query string, now time.Time) archiveQuery {
 		DefaultView:   defaultView,
 		HasAttachment: hasAttachment,
 		InboxOnly:     inboxOnly,
+		SentSince:     sentSince,
+		SentBefore:    sentBefore,
 		Degraded:      degraded,
 	}
 }
