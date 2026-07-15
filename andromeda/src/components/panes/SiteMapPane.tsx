@@ -111,25 +111,38 @@ function resolveSite(site: string): [number, number] | null {
   return PROVINCE_CENTROID[sido] ?? null;
 }
 
+interface Unplaced {
+  site: string;
+  project: string;
+  status: string; // carried so the 미배치 tray can hide 후보 too
+}
+
 interface Placed {
   pins: Pin[];
-  unplaced: { site: string; project: string }[];
+  unplaced: Unplaced[];
 }
 
 function placeSites(rows: ProjectSiteRow[]): Placed {
   const pins: Pin[] = [];
-  const unplaced: { site: string; project: string }[] = [];
+  const unplaced: Unplaced[] = [];
   const seen = new Map<string, number>();
   for (const r of rows) {
     const project = r.project ?? "";
     const kinds = r.kinds ?? [];
     const { source, type } = primaryKind(kinds);
     const capacity = r.capacity ?? 0;
+    const status = (r.status ?? "").trim();
     const rad = radiusOf(capacity);
-    for (const site of r.sites ?? []) {
+    const siteList = r.sites ?? [];
+    // A 현장 page with no address yet (empty sites) still surfaces — as a 미배치 row.
+    if (siteList.length === 0) {
+      unplaced.push({ site: "(주소 미기재)", project, status });
+      continue;
+    }
+    for (const site of siteList) {
       const xy = resolveSite(site);
       if (!xy) {
-        unplaced.push({ site, project });
+        unplaced.push({ site, project, status });
         continue;
       }
       const key = `${xy[0]},${xy[1]}`;
@@ -272,14 +285,20 @@ export function SiteMapPane() {
   );
 
   const totalMw = useMemo(() => shown.reduce((sum, p) => sum + (p.capacity || 0), 0), [shown]);
+  // 미배치 hides 후보 too (unless the toggle is on), so a hidden candidate site never
+  // leaks into the tray/count.
+  const shownUnplaced = useMemo(
+    () => unplaced.filter((u) => showProspective || u.status !== PROSPECTIVE),
+    [unplaced, showProspective],
+  );
 
   const aiText = serializeList("현장 지도", shown, (p) => {
     const tags = [p.source, typeLabel(p.type), p.capacity ? capacityText(p.capacity) : ""].filter(Boolean).join("/");
     const head = `- ${p.client ? `[${p.client}] ` : ""}${p.project} · ${p.site}${tags ? ` (${tags})` : ""}`;
     return p.due ? `${head} — 마감 ${p.due}` : head;
   });
-  const aiFull = unplaced.length
-    ? `${aiText}\n\n미배치(주소 매칭 실패) ${unplaced.length}건: ${unplaced.map((u) => u.site).join(", ")}`
+  const aiFull = shownUnplaced.length
+    ? `${aiText}\n\n미배치(주소 매칭 실패) ${shownUnplaced.length}건: ${shownUnplaced.map((u) => u.site).join(", ")}`
     : aiText;
   useRegisterPane("sitemap", aiFull);
 
@@ -299,7 +318,7 @@ export function SiteMapPane() {
           현장 {shown.length}
           {shown.length !== pins.length && <span style={{ color: "var(--faint)" }}>/{pins.length}</span>}
           {totalMw > 0 && <span style={{ color: "var(--faint)" }}> · 총 {capacityText(totalMw)}</span>}
-          {unplaced.length > 0 && <span style={{ color: "var(--faint)" }}> · 미배치 {unplaced.length}</span>}
+          {shownUnplaced.length > 0 && <span style={{ color: "var(--faint)" }}> · 미배치 {shownUnplaced.length}</span>}
         </span>
       </div>
 
@@ -535,7 +554,7 @@ export function SiteMapPane() {
         </div>
       )}
 
-      {unplaced.length > 0 && (
+      {shownUnplaced.length > 0 && (
         <section
           className="fade-up"
           style={{
@@ -546,10 +565,10 @@ export function SiteMapPane() {
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-2)", marginBottom: 6 }}>
-            미배치 {unplaced.length} — 주소를 지도에 매칭하지 못한 현장
+            미배치 {shownUnplaced.length} — 주소를 지도에 매칭하지 못한 현장
           </div>
           <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 4 }}>
-            {unplaced.map((u, i) => (
+            {shownUnplaced.map((u, i) => (
               <li key={i} style={{ fontSize: 12, color: "var(--muted)" }}>
                 {u.site} <span style={{ color: "var(--faint)" }}>· {u.project}</span>
               </li>

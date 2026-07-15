@@ -250,3 +250,39 @@ func TestProjectSites_SitePagesRichPlusRepFallback(t *testing.T) {
 		t.Errorf("B fallback site missing: %+v", rows)
 	}
 }
+
+// TestProjectSites_SitePagesKeyedByFolderNotTitle: 현장 pages must resolve to their
+// owner by FOLDER slug, not the (often different) 대표페이지 title — else a titled
+// project loses all its rich site rows.
+func TestProjectSites_SitePagesKeyedByFolderNotTitle(t *testing.T) {
+	store := newProjectTestStore(t)
+	defer store.Close()
+
+	// Folder slug "군산수산리" but a human title that differs.
+	mustWrite(t, store, "프로젝트/군산수산리/대표.md", &Page{
+		Meta: Frontmatter{Title: "군산 수산리 태양광 발전소", Type: "project"},
+		Body: "# 군산",
+	})
+	mustWrite(t, store, SitePagePath("군산수산리", "수산리"), &Page{
+		Meta: Frontmatter{
+			Title: "수산리", Type: "site",
+			Address: "전북 군산시 옥구읍 수산리", Status: "개설", Capacity: 24,
+		},
+		Body: "현장.",
+	})
+
+	rows, err := store.ProjectSites()
+	if err != nil {
+		t.Fatalf("ProjectSites: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("ProjectSites() = %d rows, want 1 (the 현장 page): %+v", len(rows), rows)
+	}
+	r := rows[0]
+	if r.Name != "군산 수산리 태양광 발전소" || r.Status != "개설" || r.Capacity != 24 {
+		t.Errorf("row = %+v, want titled project name + 개설/24 from the 현장 page", r)
+	}
+	if r.Path != SitePagePath("군산수산리", "수산리") {
+		t.Errorf("path = %q, want the 현장 page path (not the 대표페이지)", r.Path)
+	}
+}

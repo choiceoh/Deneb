@@ -135,20 +135,19 @@ type ProjectSite struct {
 // Sorted by project name then address.
 func (s *Store) ProjectSites() ([]ProjectSite, error) {
 	refs := s.knownProjects()
-	// Index active projects by name so a 현장 page resolves to its owner.
-	byName := make(map[string]*ProjectRef, len(refs))
-	for i := range refs {
-		byName[refs[i].Name] = &refs[i]
-	}
-	// One corpus pass to bucket 현장 pages under their owning project.
+	// One corpus pass to bucket 현장 pages under their owning project's FOLDER name
+	// (프로젝트/<folder>/현장/…). knownProjects overwrites ref.Name with the page
+	// title, which often differs from the folder slug, so we must key + look up by
+	// folder name (ProjectNameOf), not by ref.Name — else titled projects lose all
+	// their 현장 pages.
 	sitePagesByProject := make(map[string][]string)
 	if paths, err := s.ListPages(projectCategoryPrefix); err == nil {
 		for _, p := range paths {
 			if !IsProjectSitePage(p) {
 				continue
 			}
-			if name, ok := ProjectNameOf(p); ok {
-				sitePagesByProject[name] = append(sitePagesByProject[name], p)
+			if folder, ok := ProjectNameOf(p); ok {
+				sitePagesByProject[folder] = append(sitePagesByProject[folder], p)
 			}
 		}
 	}
@@ -156,8 +155,9 @@ func (s *Store) ProjectSites() ([]ProjectSite, error) {
 	out := make([]ProjectSite, 0, len(refs))
 	for i := range refs {
 		ref := &refs[i]
+		folder, _ := ProjectNameOf(ref.Path) // the project's folder slug (== ref.Name only when untitled)
 		covered := make(map[string]bool)
-		for _, sp := range sitePagesByProject[ref.Name] {
+		for _, sp := range sitePagesByProject[folder] {
 			page, err := s.ReadPage(sp)
 			if err != nil || page == nil {
 				continue
@@ -215,8 +215,10 @@ func (s *Store) ProjectSites() ([]ProjectSite, error) {
 	return out, nil
 }
 
-// addrSlice returns [addr] for a non-empty address, else an empty slice (a 현장
-// page with no address still yields a row, just unplaceable on the map).
+// addrSlice returns [addr] for a non-empty address, else an empty slice. A 현장
+// page with no address yet still yields a row (with its status/용량) — the clients
+// route an empty-sites row into the 미배치 tray, so it stays visible instead of
+// silently vanishing while it's being authored.
 func addrSlice(addr string) []string {
 	if addr == "" {
 		return []string{}
