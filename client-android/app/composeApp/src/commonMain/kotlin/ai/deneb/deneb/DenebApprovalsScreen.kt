@@ -4,7 +4,6 @@ import ai.deneb.deneb.generated.GroupwareApprovalRow
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebTitlePivot
 import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -47,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -77,7 +77,7 @@ fun DenebApprovalsScreen(
     onBack: () -> Unit,
     onOpenDetail: (GroupwareApprovalRow) -> Unit = {},
     onOpenFeed: (() -> Unit)? = null,
-    onOpenGroupware: (() -> Unit)? = null,
+    onOpenMail: (() -> Unit)? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var rows by remember { mutableStateOf<List<GroupwareApprovalRow>?>(null) }
@@ -128,7 +128,7 @@ fun DenebApprovalsScreen(
         tabBar = navigationTabBar,
         titlePivot = {
             onOpenFeed?.let { DenebTitlePivot("피드", onClick = it) }
-            onOpenGroupware?.let { DenebTitlePivot("그룹웨어", onClick = it) }
+            onOpenMail?.let { DenebTitlePivot("메일", onClick = it) }
         },
     ) {
         if (!pendingOnly) {
@@ -148,17 +148,18 @@ fun DenebApprovalsScreen(
             )
         }
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            DenebChip(
-                selected = pendingOnly,
-                onClick = {
+            PendingOnlyToggle(
+                count = pendingRows.size,
+                active = pendingOnly,
+                onToggle = {
                     haptics.tap()
                     pendingOnly = !pendingOnly
                 },
-            ) { Text(if (pendingRows.isEmpty()) "미결만" else "미결만 ${pendingRows.size}", style = DenebType.button) }
+            )
             if (pendingOnly) {
                 Text("전체 기간의 미결 문서", style = DenebType.meta, color = denebHint())
             }
@@ -252,6 +253,29 @@ private fun ApprovalRow(
             pending = doc.canAct,
         )
     }
+}
+
+// Quiet inline filter — meta-sized text pill, not a full chip (a bordered 48dp
+// chip shouted over the list). Active = tinted primary pill, inactive = hint text.
+@Composable
+private fun PendingOnlyToggle(count: Int, active: Boolean, onToggle: () -> Unit) {
+    Text(
+        text = if (count > 0) "미결만 $count" else "미결만",
+        style = DenebType.meta.copy(fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal),
+        color = if (active) MaterialTheme.colorScheme.primary else denebHint(),
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(
+                if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
+            )
+            .clickable(
+                onClickLabel = if (active) "전체 보기" else "미결만 보기",
+                role = Role.Button,
+                onClick = onToggle,
+            )
+            .handCursor()
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    )
 }
 
 @Composable

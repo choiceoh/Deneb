@@ -93,14 +93,18 @@ internal fun FeedScreen(
     initialOpenItemId: String? = null,
     initialOpenItemCreatedAtMs: Long = 0L,
     onOpenApprovals: (() -> Unit)? = null,
+    onOpenMail: (() -> Unit)? = null,
 ) {
     DenebScreenScaffold(
         title = "피드",
         onBack = {},
         showBack = false,
-        // 결재 is the feed's 동형 sibling (same day-paged list shape) — a Zune-style
-        // dimmed pivot next to the title jumps straight there.
-        titlePivot = onOpenApprovals?.let { open -> { DenebTitlePivot("결재", onClick = open) } },
+        // 결재·메일 are the feed's 동형 siblings (same day-paged list shape) —
+        // Zune-style dimmed pivots next to the title jump straight there.
+        titlePivot = {
+            onOpenApprovals?.let { DenebTitlePivot("결재", onClick = it) }
+            onOpenMail?.let { DenebTitlePivot("메일", onClick = it) }
+        },
     ) {
         // Keep the selected date independent of the loaded item list. A ranged fetch
         // for today can legitimately return zero items; if selectedDate were derived

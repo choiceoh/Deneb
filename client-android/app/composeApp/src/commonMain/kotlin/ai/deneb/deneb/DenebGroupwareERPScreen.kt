@@ -2,7 +2,6 @@ package ai.deneb.deneb
 
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
-import ai.deneb.ui.DenebTitlePivot
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.rememberHaptics
@@ -93,7 +92,6 @@ internal fun erpTextToMarkdown(raw: String): String {
 fun DenebGroupwareERPScreen(
     client: DenebGatewayClient,
     onBack: () -> Unit,
-    onOpenApprovals: (() -> Unit)? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var selected by remember { mutableStateOf(erpAreas.first()) }
@@ -128,12 +126,7 @@ fun DenebGroupwareERPScreen(
         load()
     }
 
-    DenebScreenScaffold(
-        title = "그룹웨어",
-        onBack = onBack,
-        tabBar = navigationTabBar,
-        titlePivot = onOpenApprovals?.let { open -> { DenebTitlePivot("결재", onClick = open) } },
-    ) {
+    DenebScreenScaffold(title = "그룹웨어", onBack = onBack, tabBar = navigationTabBar) {
         Column(Modifier.fillMaxSize()) {
             Text(
                 "Amaranth ERP 조회 · 결재는 「결재」에서",

@@ -2,6 +2,7 @@ package ai.deneb.deneb
 
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
+import ai.deneb.ui.DenebTitlePivot
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.DenebUnderlineSearchField
@@ -88,6 +89,8 @@ fun DenebMailScreen(
     client: DenebGatewayClient,
     onBack: () -> Unit,
     onOpenDetail: (String) -> Unit = {},
+    onOpenFeed: (() -> Unit)? = null,
+    onOpenApprovals: (() -> Unit)? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     val mail by client.denebMail.collectAsState()
@@ -164,6 +167,16 @@ fun DenebMailScreen(
         title = screenTitle,
         onBack = onBack,
         tabBar = navigationTabBar,
+        // Zune-style pivot to the 동형 day-paged siblings — only in the default
+        // inbox state so search/filter titles keep the full row.
+        titlePivot = if (screenTitle == "받은 메일" && !selecting) {
+            {
+                onOpenFeed?.let { DenebTitlePivot("피드", onClick = it) }
+                onOpenApprovals?.let { DenebTitlePivot("결재", onClick = it) }
+            }
+        } else {
+            null
+        },
         actions = {
             if (!selecting) {
                 IconButton(
