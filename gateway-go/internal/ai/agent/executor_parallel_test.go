@@ -176,7 +176,7 @@ func TestToolResultMetadata_PresentOrMissingAcrossPaths(t *testing.T) {
 	t.Run("sequential", func(t *testing.T) {
 		results := make([]llm.ContentBlock, len(calls))
 		for i, tc := range calls {
-			results[i] = executeOneTool(context.Background(), tc, exec, StreamHooks{}, "", 0, slog.Default(), nil, nil)
+			results[i] = executeOneToolTracked(context.Background(), tc, exec, StreamHooks{}, "", 0, slog.Default(), nil, nil).block
 		}
 		check(t, results)
 	})

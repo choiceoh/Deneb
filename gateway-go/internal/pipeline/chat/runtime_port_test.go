@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/runstate"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 func TestChatPortRejectsTypedNilHandler(t *testing.T) {
