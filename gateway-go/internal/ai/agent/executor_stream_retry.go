@@ -161,21 +161,10 @@ func runStreamingTurnWithPolicy(
 	return outcome, err
 }
 
-// runStreamingAttempt gives every connection its own cancellation boundary.
-// consumeStreamInto may abandon a still-open provider stream after an idle
-// timeout or error event; canceling here releases that attempt's response body,
-// parser, and forwarder before the caller starts a retry.
-func runStreamingAttempt(
-	ctx context.Context,
-	client LLMStreamer,
-	req llm.ChatRequest,
-	hooks StreamHooks,
-	idleTimeout time.Duration,
-	logger *slog.Logger,
-) (*turnResult, bool, error) {
-	return runStreamingAttemptWithLimit(ctx, client, req, hooks, idleTimeout, logger, 0)
-}
-
+// runStreamingAttemptWithLimit gives every connection its own cancellation
+// boundary. consumeStreamInto may abandon a still-open provider stream after an
+// idle timeout or error event; canceling here releases that attempt's response
+// body, parser, and forwarder before the caller starts a retry.
 func runStreamingAttemptWithLimit(
 	ctx context.Context,
 	client LLMStreamer,
