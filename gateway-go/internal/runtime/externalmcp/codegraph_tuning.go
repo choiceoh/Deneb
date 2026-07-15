@@ -20,6 +20,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -45,16 +48,44 @@ const codegraphNodeMiss = "not found in the codebase"
 // min 3 chars. Dotted names (RPC methods) and multi-word queries are excluded.
 var codegraphSymbolRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{2,}$`)
 
-// tuneCodegraphTool wraps one codegraph tool's call. Only codegraph_explore is
-// tuned; every other tool is returned unchanged.
+// tuneCodegraphTool wraps one codegraph tool's call with two Deneb-side tunings:
+//   - reroute: a single-symbol codegraph_explore → codegraph_node (precision);
+//   - enrich: append the nearest folder's CLAUDE.md subtree map to explore/node
+//     results, so the runtime agent gets the folder's INTENT (role/rules/gotchas)
+//     alongside codegraph's STRUCTURE. The runtime agent's system prompt carries
+//     only the root CLAUDE.md, never these subtree maps, so this is the moment it
+//     otherwise never sees them. Every other codegraph tool is passed through.
 func tuneCodegraphTool(
 	remote string,
 	base toolport.ToolFunc,
 	call func(ctx context.Context, name string, args json.RawMessage) (string, error),
 ) toolport.ToolFunc {
-	if remote != codegraphExploreTool {
-		return base
+	inner := base
+	if remote == codegraphExploreTool {
+		inner = exploreRerouteFn(base, call)
 	}
+	// Only the source-returning tools carry file paths worth mapping to a folder.
+	if remote != codegraphExploreTool && remote != codegraphNodeTool {
+		return inner
+	}
+	return func(ctx context.Context, input json.RawMessage) (string, error) {
+		out, err := inner(ctx, input)
+		if err != nil || strings.TrimSpace(out) == "" {
+			return out, err
+		}
+		root, werr := os.Getwd()
+		if werr != nil {
+			return out, nil // can't resolve paths → skip enrichment, never fail
+		}
+		return enrichWithFolderDocs(out, root, os.ReadFile), nil
+	}
+}
+
+// exploreRerouteFn reroutes a single specific-symbol explore to node.
+func exploreRerouteFn(
+	base toolport.ToolFunc,
+	call func(ctx context.Context, name string, args json.RawMessage) (string, error),
+) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		sym, ok := singleSymbolExploreQuery(input)
 		if !ok {
@@ -102,4 +133,87 @@ func codegraphRerouteNote(sym string) string {
 		"[codegraph: %q는 단일 심볼이라 explore 대신 node로 정밀 조회했다(서브토큰 노이즈 제거). 주변 영역·여러 심볼·흐름을 보려면 공백으로 구분한 여러 토큰이나 질문 문장으로 explore를 다시 불러라.]\n\n",
 		sym,
 	)
+}
+
+// --- Folder-doc enrichment: attach the nearest CLAUDE.md subtree map ---
+
+const (
+	// maxFolderDocs caps how many distinct folder maps ride one result — the
+	// top few by result order (relevance); more would crowd the model's budget.
+	maxFolderDocs = 3
+	// perFolderDocCap caps one map's attached bytes. Subtree maps run 1–15 KB;
+	// the role/intro + directory table (what a searcher needs) lead the file, so
+	// a head-truncation keeps the useful part. Budgeted for a local model.
+	perFolderDocCap = 1000
+)
+
+// sourcePathRe matches a repo-relative source path in codegraph output
+// (`gateway-go/internal/…/file.go`), across the languages codegraph indexes.
+var sourcePathRe = regexp.MustCompile(`[A-Za-z0-9_][\w./-]*\.(?:go|kt|kts|ts|tsx|js|jsx|rs|py|java|swift|c|cc|cpp|h|hpp)`)
+
+// enrichWithFolderDocs appends the nearest-ancestor CLAUDE.md subtree map for
+// each folder the result touches (deduped, capped, top maxFolderDocs by result
+// order). Fail-open: no paths, no maps, or read errors → the result is returned
+// unchanged. readFile is injected for testing; production passes os.ReadFile.
+func enrichWithFolderDocs(out, root string, readFile func(string) ([]byte, error)) string {
+	if root == "" {
+		return out
+	}
+	seenPath := map[string]bool{} // dedup file paths
+	seenDoc := map[string]bool{}  // dedup resolved CLAUDE.md
+	type doc struct{ rel, content string }
+	var docs []doc
+	for _, m := range sourcePathRe.FindAllString(out, -1) {
+		if !strings.Contains(m, "/") || seenPath[m] {
+			continue // need a folder to map; skip bare basenames + repeats
+		}
+		seenPath[m] = true
+		rel, content := nearestSubtreeClaudeMd(path.Dir(m), root, readFile)
+		if rel == "" || seenDoc[rel] {
+			continue
+		}
+		seenDoc[rel] = true
+		docs = append(docs, doc{rel, content})
+		if len(docs) >= maxFolderDocs {
+			break
+		}
+	}
+	if len(docs) == 0 {
+		return out
+	}
+	var b strings.Builder
+	b.WriteString(out)
+	b.WriteString("\n\n## 폴더 맥락 (CLAUDE.md 서브트리 맵)\n")
+	b.WriteString("검색 결과가 속한 폴더의 설명 — 이 코드를 다룰 때의 역할·규칙·함정이다.\n")
+	for _, d := range docs {
+		fmt.Fprintf(&b, "\n### %s\n%s\n", d.rel, capHead(d.content, perFolderDocCap))
+	}
+	return b.String()
+}
+
+// nearestSubtreeClaudeMd walks up from a repo-relative dir to the closest
+// CLAUDE.md, WITHOUT reaching the repo root (root's CLAUDE.md is already in the
+// system prompt). Returns the repo-relative map path + its content, or "","".
+func nearestSubtreeClaudeMd(dir, root string, readFile func(string) ([]byte, error)) (string, string) {
+	for dir != "." && dir != "/" && dir != "" {
+		rel := dir + "/CLAUDE.md"
+		if b, err := readFile(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
+			return rel, string(b)
+		}
+		dir = path.Dir(dir)
+	}
+	return "", ""
+}
+
+// capHead truncates to n bytes on a line boundary (keeping whole lines), noting
+// the cut so the model knows the map continues in the file.
+func capHead(s string, n int) string {
+	if len(s) <= n {
+		return strings.TrimRight(s, "\n")
+	}
+	cut := s[:n]
+	if i := strings.LastIndexByte(cut, '\n'); i > 0 {
+		cut = cut[:i]
+	}
+	return strings.TrimRight(cut, "\n") + "\n…(생략 — 전문은 해당 CLAUDE.md 참조)"
 }

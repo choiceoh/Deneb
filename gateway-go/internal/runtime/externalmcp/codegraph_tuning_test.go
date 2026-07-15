@@ -3,9 +3,76 @@ package externalmcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func fakeReadFileMap(files map[string]string) func(string) ([]byte, error) {
+	return func(p string) ([]byte, error) {
+		if c, ok := files[p]; ok {
+			return []byte(c), nil
+		}
+		return nil, os.ErrNotExist
+	}
+}
+
+func TestEnrichWithFolderDocsAttachesNearestSubtreeMap(t *testing.T) {
+	root := "/repo"
+	files := map[string]string{
+		filepath.Join(root, "gateway-go/internal/runtime/CLAUDE.md"): "runtime map: RPC server.",
+		filepath.Join(root, "CLAUDE.md"):                             "ROOT map — must NOT attach.",
+	}
+	// externalmcp/ and runtime/server/ have no CLAUDE.md here → both resolve to
+	// runtime/CLAUDE.md (nearest ancestor); main.go walks up only to the root.
+	out := "`gateway-go/internal/runtime/externalmcp/mcp_external_tools.go:166`, " +
+		"gateway-go/internal/runtime/server/server.go:10, main.go:1"
+	got := enrichWithFolderDocs(out, root, fakeReadFileMap(files))
+
+	if !strings.Contains(got, "## 폴더 맥락") || !strings.Contains(got, "runtime map") {
+		t.Fatalf("missing nearest-ancestor folder map: %q", got)
+	}
+	if n := strings.Count(got, "gateway-go/internal/runtime/CLAUDE.md"); n != 1 {
+		t.Fatalf("nearest-ancestor + dedup should attach runtime map once, got %d", n)
+	}
+	if strings.Contains(got, "ROOT map") {
+		t.Fatal("root CLAUDE.md must never be attached (already in system prompt)")
+	}
+}
+
+func TestEnrichWithFolderDocsCapsFolderCount(t *testing.T) {
+	root := "/repo"
+	files := map[string]string{}
+	var out strings.Builder
+	for _, d := range []string{"a", "b", "c", "d", "e"} {
+		files[filepath.Join(root, "pkg/"+d+"/CLAUDE.md")] = "map " + d
+		fmt.Fprintf(&out, "pkg/%s/x.go:1 ", d)
+	}
+	got := enrichWithFolderDocs(out.String(), root, fakeReadFileMap(files))
+	if n := strings.Count(got, "\n### "); n != maxFolderDocs {
+		t.Fatalf("expected at most %d folder docs, got %d", maxFolderDocs, n)
+	}
+}
+
+func TestEnrichWithFolderDocsTruncatesLongMap(t *testing.T) {
+	root := "/repo"
+	long := strings.Repeat("한 줄의 맵 내용\n", 300) // well over perFolderDocCap
+	files := map[string]string{filepath.Join(root, "pkg/big/CLAUDE.md"): long}
+	got := enrichWithFolderDocs("pkg/big/x.go:1", root, fakeReadFileMap(files))
+	if !strings.Contains(got, "생략") {
+		t.Fatalf("long map should be head-truncated with a note: %q", got[:min(len(got), 200)])
+	}
+}
+
+func TestEnrichWithFolderDocsNoPathsUnchanged(t *testing.T) {
+	in := "prose with no file paths, just words"
+	got := enrichWithFolderDocs(in, "/repo", func(string) ([]byte, error) { return nil, os.ErrNotExist })
+	if got != in {
+		t.Fatalf("output with no source paths must be unchanged, got %q", got)
+	}
+}
 
 // fakeCall records the last remote tool + args and returns canned output. When
 // nodeOut contains codegraphNodeMiss the reroute treats it as a miss.
