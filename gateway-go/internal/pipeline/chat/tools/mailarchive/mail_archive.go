@@ -8,6 +8,7 @@ import (
 	"net/mail"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
@@ -257,11 +258,56 @@ func enrichProjectHistory(ctx context.Context, deps MailArchiveDeps, history mai
 	}
 }
 
+const (
+	// maxEnrichConcurrency bounds the parallel per-message enrichment. Each
+	// enriched message costs a wiki semantic recall (embed + fusion) and a
+	// calendar scan; running a result list sequentially made mail_archive
+	// latency track the recall latency × N (observed 5–40s on busy turns when
+	// recall spiked). A small pool overlaps them without flooding the shared
+	// embedder (BGE pool is 4).
+	maxEnrichConcurrency = 6
+	// maxEnrichedMessages caps the related-wiki/events decoration to the head of
+	// the result list. Beyond it the message is returned plain: the decoration is
+	// supplementary and the caller acts on the top ranked/recent hits, so paying
+	// a recall for every one of a 50-row list is wasted latency.
+	maxEnrichedMessages = 12
+)
+
+// enrichArchiveMessages attaches related wiki/calendar context to each message,
+// bounded-parallel and capped so a long list does not serialize N wiki recalls.
+// Order is preserved (out[i] ↔ msgs[i]); read serves a single message and calls
+// enrichArchiveMessage directly.
 func enrichArchiveMessages(ctx context.Context, deps MailArchiveDeps, msgs []mailarchive.ContextMessage, includeBody bool) []mailArchiveMessageOut {
-	out := make([]mailArchiveMessageOut, 0, len(msgs))
-	for _, msg := range msgs {
-		out = append(out, enrichArchiveMessage(ctx, deps, msg, includeBody))
+	out := make([]mailArchiveMessageOut, len(msgs))
+	plain := func(msg mailarchive.ContextMessage) mailArchiveMessageOut {
+		if !includeBody {
+			msg.Body = ""
+		}
+		return mailArchiveMessageOut{ContextMessage: msg}
 	}
+	sem := make(chan struct{}, maxEnrichConcurrency)
+	var wg sync.WaitGroup
+	for i := range msgs {
+		if i >= maxEnrichedMessages {
+			out[i] = plain(msgs[i])
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(idx int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			defer func() {
+				// One message's enrichment must never panic the turn; fall back plain.
+				if r := recover(); r != nil {
+					out[idx] = plain(msgs[idx])
+					slog.Error("panic enriching archive message", "index", idx, "panic", r)
+				}
+			}()
+			out[idx] = enrichArchiveMessage(ctx, deps, msgs[idx], includeBody)
+		}(i)
+	}
+	wg.Wait()
 	return out
 }
 
