@@ -78,7 +78,7 @@ func (d *diarySearchDB) attachSemantic(e embedindex.Embedder, cachePath string) 
 	if e == nil {
 		return
 	}
-	d.sem = embedindex.New("diary", e, cachePath)
+	d.sem = embedindex.New("diary", e, cachePath, embedindex.WithPreprocessingFingerprint("wiki-diary-entry-v1"))
 }
 
 // semanticItems enumerates the current diary entries for embedding — one item per

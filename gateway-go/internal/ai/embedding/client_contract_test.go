@@ -196,6 +196,35 @@ func TestProbeUpdatesHealthOnFailureRecoveryAndCancel(t *testing.T) {
 	}
 }
 
+func TestProbeAndEmbedRecordEmbeddingIdentity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/health":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"model":"BAAI/bge-m3","dimensions":1024}`)
+		case "/embed":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"embeddings":[[1,2,3]],"dimensions":3,"count":1}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	client := &Client{baseURL: server.URL, http: server.Client(), logger: slog.Default(), ctx: ctx, cancel: cancel}
+
+	client.probe()
+	if got := client.EmbeddingFingerprint(); got != "BAAI/bge-m3:1024" || client.EmbeddingDimensions() != 1024 {
+		t.Fatalf("probed identity = %q/%d", got, client.EmbeddingDimensions())
+	}
+	if _, err := client.Embed(context.Background(), []string{"identity shape update"}); err != nil {
+		t.Fatalf("Embed: %v", err)
+	}
+	if got := client.EmbeddingFingerprint(); got != "BAAI/bge-m3:3" || client.EmbeddingDimensions() != 3 {
+		t.Fatalf("embedded identity = %q/%d", got, client.EmbeddingDimensions())
+	}
+}
+
 func TestShutdownIsIdempotent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	client := &Client{ctx: ctx, cancel: cancel}

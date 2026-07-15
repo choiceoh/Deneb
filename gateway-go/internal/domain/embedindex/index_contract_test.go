@@ -14,16 +14,22 @@ import (
 )
 
 type recordingEmbedder struct {
-	mu      sync.Mutex
-	healthy bool
-	calls   [][]string
-	err     error
-	badLen  bool
-	block   <-chan struct{}
-	started chan<- struct{}
+	mu          sync.Mutex
+	healthy     bool
+	calls       [][]string
+	err         error
+	badLen      bool
+	block       <-chan struct{}
+	started     chan<- struct{}
+	fingerprint string
+	dimensions  int
 }
 
 func (e *recordingEmbedder) IsHealthy() bool { return e != nil && e.healthy }
+
+func (e *recordingEmbedder) EmbeddingFingerprint() string { return e.fingerprint }
+
+func (e *recordingEmbedder) EmbeddingDimensions() int { return e.dimensions }
 
 func (e *recordingEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	e.mu.Lock()
@@ -174,8 +180,8 @@ func TestWarmPreservesPriorVectorsOnEmbedFailureAndBadShape(t *testing.T) {
 
 	embedder.err = nil
 	embedder.badLen = true
-	if err := ix.Warm(context.Background(), func() []Item { return changed }); err != nil {
-		t.Fatalf("bad-shape Warm returned error: %v", err)
+	if err := ix.Warm(context.Background(), func() []Item { return changed }); err == nil {
+		t.Fatal("bad-shape Warm returned nil error")
 	}
 	if got := ix.vecs["a"]; got.hash != "one" || !reflect.DeepEqual(got.vec, prior) {
 		t.Fatalf("bad shape replaced prior vector: %+v", got)
@@ -191,6 +197,7 @@ func TestSearchVecRejectsInvalidInputsAndBreaksTiesStably(t *testing.T) {
 		"b": {hash: "b", vec: []float32{0, 1}},
 		"n": {hash: "n", vec: []float32{-1, 0}},
 	}
+	ix.cachePreprocessing = ix.preprocessing
 
 	if got := ix.SearchVec(nil, 3); got != nil {
 		t.Fatalf("empty query vector = %v", got)
@@ -269,8 +276,8 @@ func TestCacheRoundTripAndInvalidEntries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
-	var raw map[string]cachedVecWire
-	if err := json.Unmarshal(data, &raw); err != nil || raw["a"].Hash != "hash-a" {
+	var raw cacheEnvelope
+	if err := json.Unmarshal(data, &raw); err != nil || raw.Version != cacheSchemaVersion || raw.Preprocessing != "persist:v1" || raw.Entries["a"].Hash != "hash-a" {
 		t.Fatalf("cache JSON = %#v, err=%v", raw, err)
 	}
 
@@ -304,6 +311,40 @@ func TestCacheRoundTripAndInvalidEntries(t *testing.T) {
 	defer corrupt.Close()
 	if len(corrupt.vecs) != 0 {
 		t.Fatalf("corrupt cache loaded vectors: %#v", corrupt.vecs)
+	}
+}
+
+func TestEmbeddingIdentityMismatchSuppressesAndRebuildsCache(t *testing.T) {
+	embedder := &recordingEmbedder{healthy: true, fingerprint: "model-a:3", dimensions: 3}
+	ix := New("identity", embedder, "")
+	defer ix.Close()
+	items := []Item{{ID: "a", Hash: "ha", Text: "identity protected text"}}
+	if err := ix.Warm(context.Background(), func() []Item { return items }); err != nil {
+		t.Fatalf("Warm: %v", err)
+	}
+	if hits := ix.SearchVec([]float32{1, 0, 0}, 5); len(hits) != 1 {
+		t.Fatalf("baseline hits = %+v", hits)
+	}
+
+	embedder.fingerprint = "model-b:3"
+	if hits := ix.SearchVec([]float32{1, 0, 0}, 5); len(hits) != 0 {
+		t.Fatalf("mismatched cache served hits = %+v", hits)
+	}
+	if err := ix.Warm(context.Background(), func() []Item { return items }); err != nil {
+		t.Fatalf("rebuild Warm: %v", err)
+	}
+	if ix.cacheFingerprint != "model-b:3" || len(ix.vecs) != 1 {
+		t.Fatalf("rebuilt identity=%q vectors=%d", ix.cacheFingerprint, len(ix.vecs))
+	}
+	ix.preprocessing = "identity:v2"
+	if hits := ix.SearchVec([]float32{1, 0, 0}, 5); len(hits) != 0 {
+		t.Fatalf("preprocessing-mismatched cache served hits = %+v", hits)
+	}
+	if err := ix.Warm(context.Background(), func() []Item { return items }); err != nil {
+		t.Fatalf("preprocessing rebuild Warm: %v", err)
+	}
+	if ix.cachePreprocessing != "identity:v2" || len(ix.vecs) != 1 {
+		t.Fatalf("rebuilt preprocessing=%q vectors=%d", ix.cachePreprocessing, len(ix.vecs))
 	}
 }
 

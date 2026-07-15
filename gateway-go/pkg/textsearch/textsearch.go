@@ -354,8 +354,9 @@ func (idx *Index) collectCandidates(queryTokens []string, andMode bool) map[stri
 }
 
 // DocFreq returns the number of indexed documents a query token matches,
-// using the SAME matching semantics as scoring (exact for Latin, Hangul-prefix
-// for Hangul) so the value equals the `df` the BM25 IDF is computed from. Zero
+// using the SAME matching semantics as scoring (exact for Latin; prefix,
+// compound substring, and conservative particle handling for Hangul) so the
+// value equals the `df` the BM25 IDF is computed from. Zero
 // means the token is absent. Token is lowercased to match the index. Callers
 // use it to gauge a term's corpus rarity (high df == common-in-corpus == a weak
 // recall anchor); see NormalizedRarity.
@@ -443,20 +444,24 @@ func (idx *Index) QueryMaxRarity(query string) float64 {
 	return maxR
 }
 
-// matchingDocs returns all document IDs matching a token.
-// Supports Hangul prefix matching: if the token contains Hangul,
-// also matches index entries that start with the token.
+// matchingDocs returns all document IDs matching a token. Latin and numeric
+// tokens stay exact. Hangul additionally supports compound-word substring
+// matches and a conservative set of trailing Korean particles so natural
+// queries such as "대한전선은" match an indexed "대한전선". A one-syllable
+// substring is deliberately rejected because it floods a Korean corpus with
+// accidental matches.
 func (idx *Index) matchingDocs(token string) map[string]struct{} {
 	// Exact match first.
 	if set, ok := idx.inverted[token]; ok && !containsHangul(token) {
 		return set
 	}
 
-	// For Hangul tokens or tokens not found exactly, try prefix matching.
+	// Hangul requires a vocabulary scan because a query can match the middle of
+	// a compound token or carry a grammatical particle absent from the index.
 	if containsHangul(token) {
 		merged := make(map[string]struct{})
 		for indexToken, set := range idx.inverted {
-			if strings.HasPrefix(indexToken, token) {
+			if hangulTokenMatches(indexToken, token) {
 				for id := range set {
 					merged[id] = struct{}{}
 				}
@@ -506,6 +511,45 @@ func containsHangul(s string) bool {
 	return false
 }
 
+var hangulParticles = []string{
+	"으로부터", "에게서", "이라도", "이든지", "이라면", "이랑", "으로", "에서", "에게", "부터", "까지", "처럼", "보다", "마다", "조차", "마저",
+	"은", "는", "이", "가", "을", "를", "에", "의", "로", "와", "과", "도", "만", "랑",
+}
+
+func hangulTokenMatches(indexToken, queryToken string) bool {
+	if indexToken == queryToken {
+		return true
+	}
+	queryBase := trimHangulParticle(queryToken)
+	for _, query := range []string{queryToken, queryBase} {
+		if query == "" {
+			continue
+		}
+		// Preserve the original Hangul-prefix behavior ("레시" -> "레시피")
+		// and add safe compound-token recall ("행위허가" -> "개발행위허가").
+		if strings.HasPrefix(indexToken, query) {
+			return true
+		}
+		if len([]rune(query)) >= 2 && strings.Contains(indexToken, query) {
+			return true
+		}
+	}
+	return false
+}
+
+func trimHangulParticle(token string) string {
+	for _, suffix := range hangulParticles {
+		if !strings.HasSuffix(token, suffix) {
+			continue
+		}
+		base := strings.TrimSuffix(token, suffix)
+		if len([]rune(base)) >= 2 {
+			return base
+		}
+	}
+	return token
+}
+
 func termFrequencies(tokens []string) map[string]int {
 	tf := make(map[string]int, len(tokens))
 	for _, t := range tokens {
@@ -520,7 +564,7 @@ func matchedTermFrequency(tokens []string, queryToken string) int {
 	}
 	count := 0
 	for _, tok := range tokens {
-		if strings.HasPrefix(tok, queryToken) {
+		if hangulTokenMatches(tok, queryToken) {
 			count++
 		}
 	}

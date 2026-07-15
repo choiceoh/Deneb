@@ -12,10 +12,12 @@ import (
 // fixed vocabulary. Texts sharing vocabulary get high cosine similarity, so
 // ranking is predictable without a real embedding server.
 type fakeEmbedder struct {
-	healthy bool
-	vocab   []string
-	calls   int // number of Embed invocations (to assert incrementality)
-	texts   int // total texts embedded across all calls
+	healthy     bool
+	vocab       []string
+	calls       int // number of Embed invocations (to assert incrementality)
+	texts       int // total texts embedded across all calls
+	fingerprint string
+	dimensions  int
 }
 
 func newFakeEmbedder(vocab ...string) *fakeEmbedder {
@@ -23,6 +25,10 @@ func newFakeEmbedder(vocab ...string) *fakeEmbedder {
 }
 
 func (f *fakeEmbedder) IsHealthy() bool { return f.healthy }
+
+func (f *fakeEmbedder) EmbeddingFingerprint() string { return f.fingerprint }
+
+func (f *fakeEmbedder) EmbeddingDimensions() int { return f.dimensions }
 
 func (f *fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
 	f.calls++
@@ -376,6 +382,36 @@ func TestSemanticIndex_PersistenceLoadsWithoutReembedding(t *testing.T) {
 	if embed2.texts != 1 {
 		// Only the query is embedded (1 text); files came from the loaded cache.
 		t.Errorf("reload embedded %d texts, want 1 (query only)", embed2.texts)
+	}
+}
+
+func TestSemanticIndex_IdentityMismatchSuppressesAndRebuildsPersistedVectors(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	mustPut(t, store, "/a.txt", "delivery delay 납기 지연 계약")
+	path := filepath.Join(t.TempDir(), "idx.json")
+	embedA := newFakeEmbedder("delivery", "delay", "납기", "지연")
+	embedA.fingerprint, embedA.dimensions = "model-a:4", 4
+	idx := NewSemanticIndex(path)
+	if _, err := idx.Reindex(ctx, store, plainText, embedA); err != nil {
+		t.Fatalf("Reindex model A: %v", err)
+	}
+
+	idx2 := NewSemanticIndex(path)
+	embedB := newFakeEmbedder("delivery", "delay", "납기", "지연")
+	embedB.fingerprint, embedB.dimensions = "model-b:4", 4
+	if hits, err := idx2.Search(ctx, "delivery delay 납기 지연", 5, embedB); err != nil || len(hits) != 0 {
+		t.Fatalf("mismatched search = %+v, %v; want empty fallback", hits, err)
+	}
+	stats, err := idx2.Reindex(ctx, store, plainText, embedB)
+	if err != nil {
+		t.Fatalf("Reindex model B: %v", err)
+	}
+	if stats.Embedded != 1 || idx2.cacheFingerprint != "model-b:4" {
+		t.Fatalf("rebuild stats=%+v identity=%q", stats, idx2.cacheFingerprint)
+	}
+	if hits, err := idx2.Search(ctx, "delivery delay 납기 지연", 5, embedB); err != nil || len(hits) != 1 {
+		t.Fatalf("rebuilt search = %+v, %v; want one hit", hits, err)
 	}
 }
 

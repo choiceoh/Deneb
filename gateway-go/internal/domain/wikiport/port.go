@@ -12,45 +12,58 @@ import (
 )
 
 type (
-	Store               = wiki.Store
-	Config              = wiki.Config
-	SearchOptions       = wiki.SearchOptions
-	WikiDreamer         = wiki.WikiDreamer
-	Page                = wiki.Page
-	Frontmatter         = wiki.Frontmatter
-	H2Section           = wiki.H2Section
-	SearchResult        = wiki.SearchResult
-	DiaryHit            = wiki.DiaryHit
-	StoreStats          = wiki.StoreStats
-	Tier1Result         = wiki.Tier1Result
-	IndexEntry          = wiki.IndexEntry
-	ProjectStatus       = wiki.ProjectStatus
-	ContactEnrichResult = wiki.ContactEnrichResult
-	DealRecord          = wiki.DealRecord
-	DealRecordFilter    = wiki.DealRecordFilter
-	DealTotals          = wiki.DealTotals
-	DealPageInput       = wiki.DealPageInput
-	DealTerms           = wiki.DealTerms
-	QuotedTerm          = wiki.QuotedTerm
-	ProjectRef          = wiki.ProjectRef
-	CounterpartyRef     = wiki.CounterpartyRef
-	SimilarQuery        = wiki.SimilarQuery
-	SimilarHit          = wiki.SimilarHit
-	OpenQuestionItem    = wiki.OpenQuestionItem
-	OpenQuestion        = wiki.OpenQuestion
-	CloseResult         = wiki.CloseResult
-	ReopenResult        = wiki.ReopenResult
-	MergeOptions        = wiki.MergeOptions
-	MergeResult         = wiki.MergeResult
-	SnapshotResult      = wiki.SnapshotResult
-	PersonSeed          = wiki.PersonSeed
+	Store                   = wiki.Store
+	Config                  = wiki.Config
+	SearchOptions           = wiki.SearchOptions
+	WikiDreamer             = wiki.WikiDreamer
+	Page                    = wiki.Page
+	Frontmatter             = wiki.Frontmatter
+	H2Section               = wiki.H2Section
+	SearchResult            = wiki.SearchResult
+	SearchMode              = wiki.SearchMode
+	QueryOptions            = wiki.QueryOptions
+	SearchSignalExplanation = wiki.SearchSignalExplanation
+	SearchExplanation       = wiki.SearchExplanation
+	SearchDropSummary       = wiki.SearchDropSummary
+	SearchDiagnostics       = wiki.SearchDiagnostics
+	SearchReport            = wiki.SearchReport
+	SemanticIndexStatus     = wiki.SemanticIndexStatus
+	DiaryHit                = wiki.DiaryHit
+	StoreStats              = wiki.StoreStats
+	Tier1Result             = wiki.Tier1Result
+	IndexEntry              = wiki.IndexEntry
+	ProjectStatus           = wiki.ProjectStatus
+	ContactEnrichResult     = wiki.ContactEnrichResult
+	DealRecord              = wiki.DealRecord
+	DealRecordFilter        = wiki.DealRecordFilter
+	DealTotals              = wiki.DealTotals
+	DealPageInput           = wiki.DealPageInput
+	DealTerms               = wiki.DealTerms
+	QuotedTerm              = wiki.QuotedTerm
+	ProjectRef              = wiki.ProjectRef
+	CounterpartyRef         = wiki.CounterpartyRef
+	SimilarQuery            = wiki.SimilarQuery
+	SimilarHit              = wiki.SimilarHit
+	OpenQuestionItem        = wiki.OpenQuestionItem
+	OpenQuestion            = wiki.OpenQuestion
+	CloseResult             = wiki.CloseResult
+	ReopenResult            = wiki.ReopenResult
+	MergeOptions            = wiki.MergeOptions
+	MergeResult             = wiki.MergeResult
+	SnapshotResult          = wiki.SnapshotResult
+	PersonSeed              = wiki.PersonSeed
 )
 
 const (
-	RepPageFile       = wiki.RepPageFile
-	LogPageFile       = wiki.LogPageFile
-	LogKeepSections   = wiki.LogKeepSections
-	RepSkeletonMarker = wiki.RepSkeletonMarker
+	RepPageFile        = wiki.RepPageFile
+	LogPageFile        = wiki.LogPageFile
+	LogKeepSections    = wiki.LogKeepSections
+	RepSkeletonMarker  = wiki.RepSkeletonMarker
+	SearchModeAuto     = wiki.SearchModeAuto
+	SearchModeBM25     = wiki.SearchModeBM25
+	SearchModeSemantic = wiki.SearchModeSemantic
+	SearchModeHybrid   = wiki.SearchModeHybrid
+	SearchModeFull     = wiki.SearchModeFull
 )
 
 // Tier1Store is the prompt-injection read surface for high-importance pages.

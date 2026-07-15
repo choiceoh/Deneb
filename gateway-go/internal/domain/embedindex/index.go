@@ -19,6 +19,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"sort"
@@ -80,6 +81,11 @@ type Index struct {
 	refreshing  atomic.Bool          // single-flight guard for RefreshAsync
 	syncRefresh bool                 // tests: run RefreshAsync inline
 
+	cacheFingerprint   string
+	cacheDimensions    int
+	cachePreprocessing string
+	preprocessing      string
+
 	// Lifecycle for the background refresh goroutine (mirrors wiki.semanticIndex):
 	// baseCtx is cancelled by Close so an in-flight embed stops; wg lets Close wait
 	// so no saveCache write lands after teardown; closed (under mu) serializes
@@ -107,20 +113,32 @@ func WithBatchSize(n int) Option {
 // WithSyncRefresh runs RefreshAsync inline (tests only, deterministic).
 func WithSyncRefresh() Option { return func(ix *Index) { ix.syncRefresh = true } }
 
+// WithPreprocessingFingerprint identifies the caller's text construction and
+// normalization contract. Change it when identical source items would be
+// embedded differently under new preprocessing semantics.
+func WithPreprocessingFingerprint(fingerprint string) Option {
+	return func(ix *Index) {
+		if fingerprint = strings.TrimSpace(fingerprint); fingerprint != "" {
+			ix.preprocessing = fingerprint
+		}
+	}
+}
+
 // New builds an index. name labels logs; cachePath is the on-disk vector cache
 // ("" disables persistence). A nil embedder yields an index that always returns
 // zero hits (the caller degrades to its lexical index).
 func New(name string, e Embedder, cachePath string, opts ...Option) *Index {
 	ctx, cancel := context.WithCancel(context.Background())
 	ix := &Index{
-		name:      name,
-		embedder:  e,
-		cachePath: cachePath,
-		batch:     64,
-		refreshTO: 3 * time.Minute,
-		vecs:      make(map[string]cachedVec),
-		baseCtx:   ctx,
-		cancel:    cancel,
+		name:          name,
+		embedder:      e,
+		cachePath:     cachePath,
+		batch:         64,
+		refreshTO:     3 * time.Minute,
+		vecs:          make(map[string]cachedVec),
+		preprocessing: name + ":v1",
+		baseCtx:       ctx,
+		cancel:        cancel,
 	}
 	for _, o := range opts {
 		o(ix)
@@ -208,6 +226,25 @@ func (ix *Index) refresh(ctx context.Context, supplier Supplier) error {
 	var toEmbedText []string
 
 	ix.mu.Lock()
+	identity := IdentityOf(ix.embedder)
+	identityChanged := identity.Fingerprint != "" && (ix.cacheFingerprint == "" || ix.cacheFingerprint != identity.Fingerprint ||
+		(ix.cacheDimensions > 0 && identity.Dimensions > 0 && ix.cacheDimensions != identity.Dimensions))
+	preprocessingChanged := ix.cachePreprocessing != ix.preprocessing
+	if identityChanged || preprocessingChanged {
+		if len(ix.vecs) > 0 {
+			slog.Warn("embedindex: cache contract changed; rebuilding",
+				"index", ix.name, "cached", ix.cacheFingerprint, "active", identity.Fingerprint,
+				"cachedDimensions", ix.cacheDimensions, "activeDimensions", identity.Dimensions,
+				"cachedPreprocessing", ix.cachePreprocessing, "activePreprocessing", ix.preprocessing)
+		}
+		clear(ix.vecs)
+		mutated = true
+	}
+	if identity.Fingerprint != "" {
+		ix.cacheFingerprint = identity.Fingerprint
+		ix.cacheDimensions = identity.Dimensions
+	}
+	ix.cachePreprocessing = ix.preprocessing
 	for _, it := range items {
 		if len(strings.TrimSpace(it.Text)) < minEmbedChars {
 			continue
@@ -238,7 +275,7 @@ func (ix *Index) refresh(ctx context.Context, supplier Supplier) error {
 			return err
 		}
 		if len(vecs) != end-start {
-			return nil // unexpected shape; keep prior vecs
+			return fmt.Errorf("embedindex: %s embed batch returned %d vectors for %d texts", ix.name, len(vecs), end-start)
 		}
 		ix.mu.Lock()
 		for i, id := range toEmbedID[start:end] {
@@ -299,6 +336,16 @@ func (ix *Index) SearchVec(qv []float32, limit int) []Hit {
 		return nil
 	}
 	ix.mu.Lock()
+	if identity := IdentityOf(ix.embedder); identity.Fingerprint != "" &&
+		(ix.cacheFingerprint == "" || ix.cacheFingerprint != identity.Fingerprint ||
+			(ix.cacheDimensions > 0 && identity.Dimensions > 0 && ix.cacheDimensions != identity.Dimensions)) {
+		ix.mu.Unlock()
+		return nil
+	}
+	if ix.cachePreprocessing != ix.preprocessing {
+		ix.mu.Unlock()
+		return nil
+	}
 	hits := make([]Hit, 0, len(ix.vecs))
 	for id, cv := range ix.vecs {
 		hits = append(hits, Hit{ID: id, Score: cosine(qv, cv.vec)})
@@ -329,6 +376,16 @@ type cachedVecWire struct {
 	Vec  []float32 `json:"vec"`
 }
 
+const cacheSchemaVersion = 2
+
+type cacheEnvelope struct {
+	Version       int                      `json:"version"`
+	Fingerprint   string                   `json:"fingerprint,omitempty"`
+	Dimensions    int                      `json:"dimensions,omitempty"`
+	Preprocessing string                   `json:"preprocessing,omitempty"`
+	Entries       map[string]cachedVecWire `json:"entries"`
+}
+
 func (ix *Index) loadCache() {
 	if ix.cachePath == "" {
 		return
@@ -337,14 +394,20 @@ func (ix *Index) loadCache() {
 	if err != nil {
 		return
 	}
+	var envelope cacheEnvelope
 	var wire map[string]cachedVecWire
-	if err := json.Unmarshal(data, &wire); err != nil {
+	if err := json.Unmarshal(data, &envelope); err == nil && envelope.Version > 0 && envelope.Entries != nil {
+		wire = envelope.Entries
+	} else if err := json.Unmarshal(data, &wire); err != nil {
 		slog.Warn("embedindex: cache unreadable; re-embedding from scratch",
 			"index", ix.name, "path", ix.cachePath, "error", err)
 		return
 	}
 	ix.mu.Lock()
 	defer ix.mu.Unlock()
+	ix.cacheFingerprint = envelope.Fingerprint
+	ix.cacheDimensions = envelope.Dimensions
+	ix.cachePreprocessing = envelope.Preprocessing
 	for id, cv := range wire {
 		if cv.Hash == "" || len(cv.Vec) == 0 {
 			continue
@@ -362,9 +425,22 @@ func (ix *Index) saveCache() {
 	for id, cv := range ix.vecs {
 		wire[id] = cachedVecWire{Hash: cv.hash, Vec: cv.vec}
 	}
+	fingerprint := ix.cacheFingerprint
+	dimensions := ix.cacheDimensions
+	preprocessing := ix.preprocessing
 	ix.mu.Unlock()
+	if identity := IdentityOf(ix.embedder); identity.Fingerprint != "" {
+		fingerprint = identity.Fingerprint
+		dimensions = identity.Dimensions
+	}
 
-	data, err := json.Marshal(wire)
+	data, err := json.Marshal(cacheEnvelope{
+		Version:       cacheSchemaVersion,
+		Fingerprint:   fingerprint,
+		Dimensions:    dimensions,
+		Preprocessing: preprocessing,
+		Entries:       wire,
+	})
 	if err != nil {
 		return
 	}

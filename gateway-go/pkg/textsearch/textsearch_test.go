@@ -73,6 +73,29 @@ func TestHangulPrefixSearchReturnsPositiveScore(t *testing.T) {
 	}
 }
 
+func TestHangulCompoundSubstringAndParticleSearch(t *testing.T) {
+	idx := New()
+	idx.Upsert("permit", "개발행위허가 신청 절차")
+	idx.Upsert("deal", "대한전선 프로젝트 계약 일정")
+	idx.Upsert("noise", "가나다 단일 음절 경계")
+
+	if hits := idx.Search("행위허가", 10); len(hits) != 1 || hits[0].ID != "permit" {
+		t.Fatalf("compound substring hits = %+v, want permit", hits)
+	}
+	if hits := idx.Search("대한전선은", 10); len(hits) != 1 || hits[0].ID != "deal" {
+		t.Fatalf("particle-suffixed hits = %+v, want deal", hits)
+	}
+	if hits := idx.Search("나", 10); len(hits) != 0 {
+		t.Fatalf("one-syllable infix should stay rejected, got %+v", hits)
+	}
+	if df := idx.DocFreq("대한전선은"); df != 1 {
+		t.Fatalf("particle DocFreq = %d, want scoring-consistent 1", df)
+	}
+	if rarity := idx.QueryMaxRarity("대한전선은"); rarity == 0 {
+		t.Fatal("particle query rarity should see the matched indexed token")
+	}
+}
+
 func TestDocFreqAndNormalizedRarityAcrossTermFrequencies(t *testing.T) {
 	idx := New()
 	// 10 docs: "common" in all 10, "rare" in 1. Hangul "보고" in 4 (+ prefix

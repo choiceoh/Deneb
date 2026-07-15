@@ -131,6 +131,38 @@ func TestRunCLIPreservesScoringAndSearchErrorPolicy(t *testing.T) {
 	}
 }
 
+func TestRunCLIMatrixComparesAllRetrievalStagesWithLatency(t *testing.T) {
+	store := &fakeBenchmarkStore{results: map[string][]wiki.SearchResult{
+		"alpha": {{Path: "projects/alpha.md"}},
+	}}
+	deps := successfulRunDependencies(store, &fakeBenchmarkEmbedder{}, []goldCase{{
+		ID: "one", Question: "alpha", GoldPaths: []string{"projects/alpha.md"},
+	}})
+
+	var stdout, stderr bytes.Buffer
+	code := runCLI("recall-bench", []string{"--wiki", "wiki-copy", "--matrix"}, &stdout, &stderr, deps)
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("exit=%d stderr=%q", code, stderr.String())
+	}
+	for _, mode := range []wiki.SearchMode{wiki.SearchModeBM25, wiki.SearchModeSemantic, wiki.SearchModeHybrid, wiki.SearchModeFull} {
+		if !strings.Contains(stdout.String(), "RECALL_BENCH_MATRIX mode="+string(mode)) {
+			t.Fatalf("matrix output missing mode %s:\n%s", mode, stdout.String())
+		}
+	}
+	if !strings.Contains(stdout.String(), "p50_ms=") || !strings.Contains(stdout.String(), "p95_ms=") {
+		t.Fatalf("matrix latency percentiles missing:\n%s", stdout.String())
+	}
+	wantCalls := []wiki.SearchMode{wiki.SearchModeBM25, wiki.SearchModeSemantic, wiki.SearchModeHybrid, wiki.SearchModeFull}
+	if len(store.optionCalls) != len(wantCalls) {
+		t.Fatalf("mode calls = %v, want %v", store.optionCalls, wantCalls)
+	}
+	for i := range wantCalls {
+		if store.optionCalls[i] != wantCalls[i] {
+			t.Fatalf("mode calls = %v, want %v", store.optionCalls, wantCalls)
+		}
+	}
+}
+
 func TestRunCLIPreservesSemanticWarmFailureAndCleanup(t *testing.T) {
 	t.Parallel()
 	store := &fakeBenchmarkStore{warmErr: errors.New("warm failed")}
@@ -226,11 +258,18 @@ func TestResolveFusionReturnsEffectiveGraphState(t *testing.T) {
 }
 
 type fakeBenchmarkStore struct {
-	results    map[string][]wiki.SearchResult
-	searchErrs map[string]error
-	warmErr    error
-	embedder   wiki.Embedder
-	closed     bool
+	results     map[string][]wiki.SearchResult
+	searchErrs  map[string]error
+	warmErr     error
+	embedder    wiki.Embedder
+	closed      bool
+	optionCalls []wiki.SearchMode
+}
+
+func (s *fakeBenchmarkStore) SearchWithOptions(ctx context.Context, query string, limit int, options wiki.QueryOptions) (wiki.SearchReport, error) {
+	s.optionCalls = append(s.optionCalls, options.Mode)
+	results, err := s.Search(ctx, query, limit)
+	return wiki.SearchReport{Results: results}, err
 }
 
 func (s *fakeBenchmarkStore) Close() error {

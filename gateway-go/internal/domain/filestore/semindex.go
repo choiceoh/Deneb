@@ -28,13 +28,19 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/vectorutil"
 )
 
 // semindexVersion is bumped when the on-disk shape or chunking changes, so a
 // stale cache from an older layout is dropped and rebuilt rather than misread.
-const semindexVersion = 1
+const semindexVersion = 2
+
+// filestorePreprocessingVersion covers extraction-to-chunk semantics. Bump it
+// whenever chunk boundaries or normalization change without changing the
+// embedding model itself.
+const filestorePreprocessingVersion = "filestore-extract-chunk-v1"
 
 // chunkRunes is the target size of one text chunk (~512 tokens for mixed
 // Korean/English). Rune-based so a chunk boundary never splits a CJK character.
@@ -132,8 +138,11 @@ type fileEntry struct {
 
 // indexData is the on-disk JSON shape (version + path→entry map).
 type indexData struct {
-	Version int                   `json:"version"`
-	Files   map[string]*fileEntry `json:"files"`
+	Version       int                   `json:"version"`
+	Fingerprint   string                `json:"fingerprint,omitempty"`
+	Dimensions    int                   `json:"dimensions,omitempty"`
+	Preprocessing string                `json:"preprocessing,omitempty"`
+	Files         map[string]*fileEntry `json:"files"`
 }
 
 // SemanticIndex is a file-backed, incrementally-maintained vector index over the
@@ -151,8 +160,11 @@ type indexData struct {
 type SemanticIndex struct {
 	path string // sidecar JSON path; "" disables persistence (tests)
 
-	mu    sync.Mutex
-	files map[string]*fileEntry
+	mu                 sync.Mutex
+	files              map[string]*fileEntry
+	cacheFingerprint   string
+	cacheDimensions    int
+	cachePreprocessing string
 }
 
 // ScoredEntry is one search hit: the matched file plus its best chunk score and
@@ -197,6 +209,9 @@ func (si *SemanticIndex) load() {
 	}
 	si.mu.Lock()
 	defer si.mu.Unlock()
+	si.cacheFingerprint = d.Fingerprint
+	si.cacheDimensions = d.Dimensions
+	si.cachePreprocessing = d.Preprocessing
 	for p, fe := range d.Files {
 		if fe == nil {
 			continue
@@ -223,9 +238,18 @@ func (si *SemanticIndex) save() error {
 	for p, fe := range si.files {
 		snapshot[p] = fe
 	}
+	fingerprint := si.cacheFingerprint
+	dimensions := si.cacheDimensions
+	preprocessing := si.cachePreprocessing
 	si.mu.Unlock()
 
-	raw, err := json.Marshal(indexData{Version: semindexVersion, Files: snapshot})
+	raw, err := json.Marshal(indexData{
+		Version:       semindexVersion,
+		Fingerprint:   fingerprint,
+		Dimensions:    dimensions,
+		Preprocessing: preprocessing,
+		Files:         snapshot,
+	})
 	if err != nil {
 		return fmt.Errorf("filestore semindex: marshal: %w", err)
 	}
@@ -354,6 +378,7 @@ func (si *SemanticIndex) Reindex(ctx context.Context, store Store, extractFn Ext
 	if store == nil || embed == nil || !embed.IsHealthy() || extractFn == nil {
 		return stats, nil // nothing to do; caller-side guard, not an error
 	}
+	identityChanged := si.adoptEmbeddingIdentity(embed)
 
 	// Enumerate every file once. defaultListCap bounds the candidate set.
 	all, err := store.List(ctx, "/", true, defaultListCap)
@@ -420,7 +445,7 @@ func (si *SemanticIndex) Reindex(ctx context.Context, store Store, extractFn Ext
 	// Stable order so a partial run (ctx cancel) is deterministic and resumable.
 	sort.Slice(toEmbed, func(a, b int) bool { return toEmbed[a].PathDisplay < toEmbed[b].PathDisplay })
 
-	mutated := removed > 0
+	mutated := identityChanged || removed > 0
 	for _, e := range toEmbed {
 		if cerr := ctx.Err(); cerr != nil {
 			// Persist progress so far; a save error here is secondary to the
@@ -444,6 +469,29 @@ func (si *SemanticIndex) Reindex(ctx context.Context, store Store, extractFn Ext
 		return stats, err
 	}
 	return stats, nil
+}
+
+// adoptEmbeddingIdentity invalidates vectors produced by another embedding
+// contract. An unknown identity leaves the cache provisional; Search suppresses
+// a known mismatch until the next Reindex rebuilds it.
+func (si *SemanticIndex) adoptEmbeddingIdentity(embed Embedder) bool {
+	identity := embedindex.IdentityOf(embed)
+	si.mu.Lock()
+	defer si.mu.Unlock()
+	changed := si.cachePreprocessing != filestorePreprocessingVersion
+	if identity.Fingerprint != "" {
+		changed = changed || si.cacheFingerprint == "" || si.cacheFingerprint != identity.Fingerprint ||
+			(si.cacheDimensions > 0 && identity.Dimensions > 0 && si.cacheDimensions != identity.Dimensions)
+	}
+	if changed {
+		clear(si.files)
+	}
+	if identity.Fingerprint != "" {
+		si.cacheFingerprint = identity.Fingerprint
+		si.cacheDimensions = identity.Dimensions
+	}
+	si.cachePreprocessing = filestorePreprocessingVersion
+	return changed
 }
 
 // persistIfMutated saves the index when something changed; a save error is
@@ -571,6 +619,17 @@ func (si *SemanticIndex) prepareSemanticQuery(
 	embed Embedder,
 ) (string, []float32, []*fileEntry, int, bool) {
 	if si == nil || embed == nil || !embed.IsHealthy() {
+		return "", nil, nil, max, false
+	}
+	identity := embedindex.IdentityOf(embed)
+	si.mu.Lock()
+	mismatch := si.cachePreprocessing != filestorePreprocessingVersion
+	if identity.Fingerprint != "" {
+		mismatch = mismatch || si.cacheFingerprint == "" || si.cacheFingerprint != identity.Fingerprint ||
+			(si.cacheDimensions > 0 && identity.Dimensions > 0 && si.cacheDimensions != identity.Dimensions)
+	}
+	si.mu.Unlock()
+	if mismatch {
 		return "", nil, nil, max, false
 	}
 	query = strings.TrimSpace(query)
