@@ -6,6 +6,8 @@ package wiki
 
 import (
 	"fmt"
+	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -95,4 +97,93 @@ func (s *Store) UpsertSitePage(project, name string, f SiteFields) (string, erro
 // frontmatter, so the body just holds narrative sections.
 func siteBodyScaffold(name string) string {
 	return "# " + name + " 현장\n\n## 개요\n\n## 공정 현황\n\n## 이슈\n"
+}
+
+// SeedSitePages bootstraps 현장 page stubs from a project's 대표페이지 Meta.Sites —
+// one page per site address not yet backed by a 현장 page — so existing projects
+// enter the 현장 공통 포맷 without hand-creating each page. The stub carries the
+// address plus the project's 거래처·특성 as defaults; status·용량·공정 일정 stay
+// blank for the operator to fill. project=="" seeds every active project.
+// Idempotent (an address already covered by a 현장 page is skipped). Returns the
+// created page paths, sorted.
+func (s *Store) SeedSitePages(project string) ([]string, error) {
+	refs := s.knownProjects()
+
+	// One corpus pass: bucket existing 현장 pages under their owning project folder.
+	sitePagesByFolder := make(map[string][]string)
+	if paths, err := s.ListPages(projectCategoryPrefix); err == nil {
+		for _, p := range paths {
+			if !IsProjectSitePage(p) {
+				continue
+			}
+			if folder, ok := ProjectNameOf(p); ok {
+				sitePagesByFolder[folder] = append(sitePagesByFolder[folder], p)
+			}
+		}
+	}
+
+	var created []string
+	for i := range refs {
+		ref := &refs[i]
+		folder, ok := ProjectNameOf(ref.Path)
+		if !ok || len(ref.Sites) == 0 {
+			continue
+		}
+		if project != "" && folder != project && ref.Name != project {
+			continue
+		}
+		// Addresses already covered + page names already taken in this project.
+		covered := make(map[string]bool)
+		usedNames := make(map[string]bool)
+		for _, sp := range sitePagesByFolder[folder] {
+			usedNames[strings.TrimSuffix(filepath.Base(sp), ".md")] = true
+			if page, err := s.ReadPage(sp); err == nil && page != nil {
+				if a := normalizeSiteName(page.Meta.Address); a != "" {
+					covered[a] = true
+				}
+			}
+		}
+		for _, addr := range ref.Sites {
+			na := normalizeSiteName(addr)
+			if na == "" || covered[na] {
+				continue
+			}
+			covered[na] = true
+			name := deriveSiteName(na, usedNames)
+			usedNames[name] = true
+			path, err := s.UpsertSitePage(folder, name, SiteFields{
+				Address: na, Client: ref.Client, Kinds: ref.Kinds,
+			})
+			if err != nil {
+				return created, err
+			}
+			created = append(created, path)
+		}
+	}
+	sort.Strings(created)
+	return created, nil
+}
+
+// deriveSiteName picks a page filename for a site address: the finest token
+// (읍/면/동/리) by default, disambiguated with the parent token (then a numeric
+// suffix) when a name is already taken in the project.
+func deriveSiteName(address string, used map[string]bool) string {
+	toks := strings.Fields(address)
+	if len(toks) == 0 {
+		return "현장"
+	}
+	name := toks[len(toks)-1]
+	if !used[name] {
+		return name
+	}
+	if len(toks) >= 2 {
+		if combined := toks[len(toks)-2] + name; !used[combined] {
+			return combined
+		}
+	}
+	for i := 2; ; i++ {
+		if cand := fmt.Sprintf("%s-%d", name, i); !used[cand] {
+			return cand
+		}
+	}
 }

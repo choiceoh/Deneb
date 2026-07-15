@@ -611,3 +611,30 @@ func TestWikiWriteSite_CreateEditAndValidate(t *testing.T) {
 		t.Errorf("partial edit wrong: %+v", page.Meta)
 	}
 }
+
+func TestWikiSeedSites_BootstrapsStubs(t *testing.T) {
+	store := newTestWikiStore(t)
+	rep := wiki.NewPage("금호 곡성", "프로젝트", nil)
+	rep.Meta.Type = "project"
+	rep.Meta.Client = "금호"
+	rep.Meta.Sites = []string{"전남 곡성군 오곡면"}
+	rep.Meta.Kinds = []string{"태양광/토지"}
+	if err := store.WritePage("프로젝트/금호곡성/대표.md", rep); err != nil {
+		t.Fatalf("write rep: %v", err)
+	}
+	out, err := wikiSeedSites(store, "금호곡성")
+	if err != nil {
+		t.Fatalf("wikiSeedSites: %v", err)
+	}
+	if !strings.Contains(out, "프로젝트/금호곡성/현장/오곡면.md") {
+		t.Errorf("unexpected seed output: %q", out)
+	}
+	page, rerr := store.ReadPage("프로젝트/금호곡성/현장/오곡면.md")
+	if rerr != nil || page == nil || page.Meta.Address != "전남 곡성군 오곡면" || page.Meta.Client != "금호" {
+		t.Errorf("stub not created correctly: %+v (err %v)", page, rerr)
+	}
+	// Empty result path.
+	if out2, _ := wikiSeedSites(store, "금호곡성"); !strings.Contains(out2, "없음") {
+		t.Errorf("second seed should be empty, got: %q", out2)
+	}
+}

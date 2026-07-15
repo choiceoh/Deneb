@@ -175,6 +175,51 @@ func TestUpsertSitePage_CreateThenPartialEdit(t *testing.T) {
 	}
 }
 
+// TestSeedSitePages_BootstrapsUncoveredIdempotent: seeding creates a stub for each
+// 대표페이지 Meta.Sites address without a 현장 page (address·거래처·특성 defaults,
+// blank status), skips already-covered addresses, and is idempotent.
+func TestSeedSitePages_BootstrapsUncoveredIdempotent(t *testing.T) {
+	store := newProjectTestStore(t)
+	defer store.Close()
+
+	mustWrite(t, store, "프로젝트/군산수산리/대표.md", &Page{
+		Meta: Frontmatter{
+			Title: "군산 수산리 태양광", Type: "project", Client: "금호",
+			Sites: []string{"전북 군산시 옥구읍 수산리", "전북 군산시 옥서면"},
+			Kinds: []string{"태양광/토지"},
+		},
+		Body: "# 군산",
+	})
+	// 수산리 already has a 현장 page → should be skipped by the seeder.
+	mustWrite(t, store, SitePagePath("군산수산리", "수산리"), &Page{
+		Meta: Frontmatter{Title: "수산리", Type: "site", Address: "전북 군산시 옥구읍 수산리", Status: "계약"},
+		Body: "현장.",
+	})
+
+	created, err := store.SeedSitePages("군산수산리")
+	if err != nil {
+		t.Fatalf("SeedSitePages: %v", err)
+	}
+	if len(created) != 1 || created[0] != SitePagePath("군산수산리", "옥서면") {
+		t.Fatalf("created = %v, want only 프로젝트/군산수산리/현장/옥서면.md", created)
+	}
+	stub := testutil.Must(store.ReadPage(created[0]))
+	if stub.Meta.Address != "전북 군산시 옥서면" || stub.Meta.Client != "금호" ||
+		len(stub.Meta.Kinds) != 1 || stub.Meta.Kinds[0] != "태양광/토지" || stub.Meta.Status != "" {
+		t.Errorf("stub meta = %+v, want address/거래처/특성 defaults + blank status", stub.Meta)
+	}
+	// The pre-existing 수산리 page must be untouched (still 계약).
+	sur := testutil.Must(store.ReadPage(SitePagePath("군산수산리", "수산리")))
+	if sur.Meta.Status != "계약" {
+		t.Errorf("existing 수산리 page clobbered: %+v", sur.Meta)
+	}
+	// Idempotent: a second seed creates nothing.
+	again, err := store.SeedSitePages("군산수산리")
+	if err != nil || len(again) != 0 {
+		t.Errorf("second seed = %v (err %v), want empty", again, err)
+	}
+}
+
 // TestFrontmatterAddressStatusRoundtrip: a 현장 page's address (normalized like
 // Sites) and status survive Render→Parse.
 func TestFrontmatterAddressStatusRoundtrip(t *testing.T) {
