@@ -77,16 +77,21 @@ def parse_frontmatter(text):
 
 
 def extract_sites(fm):
-    """Extract sites from a frontmatter block — flow form `sites: [a, b]` ONLY,
-    mirroring wiki/page.go: parseFlowArray receives just the same-line scalar, so
-    YAML block form (`sites:` then `- a`) yields NO sites in production. We match
-    that (block form → empty) so the verdict never counts sites the gateway
-    would silently ignore."""
-    m = re.search(r"^sites:\s*\[(.*?)\]\s*$", fm, re.M)
+    """Extract sites, mirroring wiki/page.go exactly: the SAME-LINE scalar after
+    `sites:` is handed to parseFlowArray, which strips OPTIONAL surrounding
+    brackets then splits on commas. So `sites: [a, b]`, `sites: a, b`, and a bare
+    `sites: a` all parse, while YAML block form (`sites:` then `- a`) leaves the
+    scalar empty → no sites, which production also ignores. Matching this avoids
+    both false negatives (bracket-less scalars) and false positives (block form)."""
+    m = re.search(r"^sites:(.*)$", fm, re.M)
     if not m:
         return []
-    inner = m.group(1).strip()
-    return [x.strip() for x in inner.split(",") if x.strip()] if inner else []
+    val = m.group(1).strip()  # parseFlowArray: TrimPrefix "[", TrimSuffix "]", split ","
+    if val.startswith("["):
+        val = val[1:]
+    if val.endswith("]"):
+        val = val[:-1]
+    return [x.strip() for x in val.split(",") if x.strip()]
 
 
 def extract_scalar(fm, key):
