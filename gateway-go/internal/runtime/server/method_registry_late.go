@@ -216,7 +216,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				// 2026-06-10).
 				llmClient, model, localClient, localModel := s.mailAnalysisModels()
 				if llmClient == nil {
-					return nil, handlerops.MailErrAnalyzeNoLLM
+					return nil, handlerops.ErrMailAnalyzeNoLLM
 				}
 				gmailClient, err := platbind.DefaultGmailClient()
 				if err != nil {

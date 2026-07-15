@@ -89,7 +89,7 @@ type (
 )
 
 var (
-	MailErrAnalyzeNoLLM          = handlermail.ErrAnalyzeNoLLM
+	ErrMailAnalyzeNoLLM          = handlermail.ErrAnalyzeNoLLM
 	MailGmailAnalyzeMethods      = handlermail.GmailAnalyzeMethods
 	MailGmailContextMethods      = handlermail.GmailContextMethods
 	MailGmailMethods             = handlermail.GmailMethods
