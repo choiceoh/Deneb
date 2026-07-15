@@ -233,10 +233,11 @@ func TestRSIDispatchMetricsCountRetryHistoryNotMarkerFiles(t *testing.T) {
 	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	marker := fmt.Sprintf(`{
 		"id":"retry",
+		"attemptId":"a-declined",
 		"outcome":"declined",
 		"dispatchedAt":%d,
 		"attempts":[
-			{"outcome":"landed","dispatchedAt":%d},
+			{"attemptId":"a-landed","outcome":"landed","dispatchedAt":%d},
 			{"outcome":"failed","dispatchedAt":%d}
 		]
 	}`, now.Add(-time.Minute).UnixMilli(), now.Add(-2*time.Minute).UnixMilli(), dayStart.Add(-time.Minute).UnixMilli())
@@ -248,14 +249,43 @@ func TestRSIDispatchMetricsCountRetryHistoryNotMarkerFiles(t *testing.T) {
 	if total != 3 || today != 2 {
 		t.Fatalf("dispatch counts = total %d today %d, want 3/2", total, today)
 	}
-	outcomes, decided, landed := rsiDispatchOutcomes(dir)
-	if decided != 3 || landed != 1 {
-		t.Fatalf("outcomes = %+v decided=%d landed=%d, want 3 decisions/1 landed", outcomes, decided, landed)
+	if err := os.WriteFile(tr.selfCorrectionPath, []byte(`{"type":"self_correction_dispatch","attemptId":"a-landed","dispatchPhase":"watch_passed"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := tr.rsiDispatchEvidence(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if evidence.Decided != 3 || evidence.Landed != 1 {
+		t.Fatalf("outcomes = %+v decided=%d landed=%d, want 3 decisions/1 landed", evidence.Outcomes, evidence.Decided, evidence.Landed)
 	}
 	for outcome, want := range map[string]int{"landed": 1, "failed": 1, "declined": 1} {
-		if got := outcomes[outcome]; got != want {
-			t.Fatalf("outcomes[%s] = %d, want %d (%+v)", outcome, got, want, outcomes)
+		if got := evidence.Outcomes[outcome]; got != want {
+			t.Fatalf("outcomes[%s] = %d, want %d (%+v)", outcome, got, want, evidence.Outcomes)
 		}
+	}
+}
+
+func TestCodingDispatchCountsUseOperatorTimezoneDay(t *testing.T) {
+	tr := newTestTracker(t)
+	dir := tr.dispatchMarkerDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seoul, err := time.LoadLocation("Asia/Seoul")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 23:30 UTC belongs to the next KST calendar day.
+	dispatched := time.Date(2026, 7, 14, 23, 30, 0, 0, time.UTC)
+	body := fmt.Sprintf(`{"dispatchedAt":%d}`, dispatched.UnixMilli())
+	if err := os.WriteFile(filepath.Join(dir, "kst.json"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 7, 15, 8, 0, 0, 0, seoul)
+	_, today := tr.codingDispatchCountsAt(now)
+	if today != 1 {
+		t.Fatalf("KST today count = %d, want 1", today)
 	}
 }
 
@@ -473,6 +503,38 @@ func rsiMetricValue(metrics []rsiMetric, label string) string {
 	return ""
 }
 
+func TestRSIStatusTreatsLegacyFailedPhaseWithDeclinedMarkerAsHealthyTerminal(t *testing.T) {
+	tr := newTestTracker(t)
+	candidate, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		ID: "legacy-decline", Scope: "code", Status: SelfCorrectionStatusProposed,
+		Title: "no safe change", Source: "self-harness:test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, phase := range []string{selfCorrectionDispatchStarted, selfCorrectionDispatchFailed} {
+		if _, err := tr.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
+			ID: candidate.ID, DispatchPhase: phase, AttemptID: "attempt-1",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(tr.dispatchMarkerDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tr.dispatchMarkerDir(), candidate.ID+".json"),
+		[]byte(`{"outcome":"declined"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l4 := tr.rsiAssessL4()
+	if got := rsiMetricValue(l4.Metrics, "실패/롤백"); got != "0" {
+		t.Fatalf("legacy clean decline counted as failure: %s (%s)", got, l4.Diagnosis)
+	}
+	if l4.State != rsiStateLive || rsiMetricValue(l4.Metrics, "안전 종료") != "1" {
+		t.Fatalf("legacy clean decline not surfaced as healthy terminal: %+v", l4)
+	}
+}
+
 // TestRSIStatusL4DiagnosisNotesLandRateOnlyWhenMarkersCarryOutcome exercises
 // dispatch-outcome accounting (graduation-ladder evidence): recorded marker
 // outcomes surface as a land-rate note on the L4 diagnosis; a queue whose
@@ -489,9 +551,12 @@ func TestRSIStatusL4DiagnosisNotesLandRateOnlyWhenMarkersCarryOutcome(t *testing
 			t.Fatal(err)
 		}
 	}
-	write("a.json", `{"id":"a","outcome":"landed"}`)
+	write("a.json", `{"id":"a","attemptId":"a1","outcome":"landed"}`)
 	write("b.json", `{"id":"b","outcome":"declined"}`)
 	write("c.json", `{"id":"c"}`) // pre-accounting marker — carries no outcome
+	if err := os.WriteFile(tr.selfCorrectionPath, []byte(`{"type":"self_correction_dispatch","attemptId":"a1","dispatchPhase":"watch_passed"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	l4 := tr.rsiAssessL4()
 	if !strings.Contains(l4.Diagnosis, "배차 결과") || !strings.Contains(l4.Diagnosis, "랜딩률 50%") {
@@ -528,11 +593,19 @@ func TestDispatchMarkerBlocks_parityWithPython(t *testing.T) {
 	write("timeout", `{"outcome":"timeout"}`)
 	fresh := write("fresh", `{"id":"fresh"}`)
 	stale := write("stale", `{"id":"stale"}`)
+	corruptFresh := write("corrupt-fresh", `{`)
+	corruptStale := write("corrupt-stale", `{`)
 	if err := os.Chtimes(fresh, now, now); err != nil {
 		t.Fatal(err)
 	}
 	old := now.Add(-dispatchMarkerAbandonAfter - time.Minute)
 	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(corruptFresh, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(corruptStale, old, old); err != nil {
 		t.Fatal(err)
 	}
 
@@ -549,6 +622,8 @@ func TestDispatchMarkerBlocks_parityWithPython(t *testing.T) {
 		{"timeout", false},
 		{"fresh", true},
 		{"stale", false},
+		{"corrupt-fresh", true},
+		{"corrupt-stale", false},
 	}
 	for _, tc := range cases {
 		if got := tr.dispatchMarkerBlocksAt(tc.id, now); got != tc.want {

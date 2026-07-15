@@ -116,22 +116,26 @@ func (t *Tracker) ladderEProcessRow() ladderRow {
 	}
 }
 
-// ladderDispatchCapRow: daily dispatch cap raise on measured land rate.
-// Deploy-watch rollbacks are ledgered (deploy_watch_log.jsonl) and consumed
-// by the AUTO path (ladder_watch autoGraduations); this display row shows
-// the land-rate evidence and reads 완료 once the unlock executed.
+// ladderDispatchCapRow: daily dispatch cap raise on the latest terminal cohort.
+// Marker results are joined to the per-attempt lifecycle, so only watch_passed
+// counts as landed and a rollback blocks the same cohort. The row reads 완료
+// once the unlock executes.
 func (t *Tracker) ladderDispatchCapRow() ladderRow {
 	if row := loadGraduationState().Rows[graduationDispatchCap]; row.Unlocked {
 		return ladderRow{"배차 캡 상향", ladderStateDone, fmt.Sprintf("실행됨 — 일일 캡 %d (자동 졸업)", row.Value)}
 	}
-	outcomes, decided, landed := rsiDispatchOutcomes(t.dispatchMarkerDir())
+	evidence, err := t.rsiDispatchEvidence(ladderDispatchMinDecided)
+	if err != nil {
+		return ladderRow{"배차 캡 상향", ladderStateGrowing, "배차 결과 원장을 읽을 수 없음"}
+	}
+	outcomes, decided, landed := evidence.CohortOutcomes, evidence.Decided, evidence.Landed
 	if decided == 0 {
 		return ladderRow{"배차 캡 상향", ladderStateGrowing, "판정된 배차 0건"}
 	}
 	rate := float64(landed) / float64(decided)
 	detail := fmt.Sprintf("판정 %d건·랜딩률 %.0f%% (%s)", decided, rate*100, rsiOutcomeSummary(outcomes))
-	if decided >= ladderDispatchMinDecided && rate >= ladderDispatchMinLandRate {
-		return ladderRow{"배차 캡 상향", ladderStateReady, detail + " — 롤백 0건은 수동 확인 후 캡 결정"}
+	if decided >= ladderDispatchMinDecided && rate >= ladderDispatchMinLandRate && evidence.RolledBack == 0 {
+		return ladderRow{"배차 캡 상향", ladderStateReady, detail + " · 감시 롤백 0건"}
 	}
 	return ladderRow{"배차 캡 상향", ladderStateGrowing, detail}
 }

@@ -46,7 +46,7 @@ TIMEOUT_RC = 124  # coreutils timeout(1) convention
 BLOCKING_OUTCOMES = frozenset({"landed", "attempted", "declined"})
 REDISPATCH_OUTCOMES = frozenset({"failed", "timeout"})
 DEFAULT_ABANDON_AFTER_SEC = 7200
-ACTIVE_LEDGER_PHASES = frozenset({"started", "pr_opened", "merged", "deployed", "watch_passed"})
+ACTIVE_LEDGER_PHASES = frozenset({"started", "pr_opened", "merged", "deployed", "watch_passed", "declined"})
 RETRYABLE_LEDGER_PHASES = frozenset({"failed", "rolled_back"})
 
 
@@ -70,15 +70,21 @@ def blocks_redispatch(
         raw = path.read_text(encoding="utf-8", errors="replace")
         marker = json.loads(raw)
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
-        return True
+        return _marker_is_fresh(path, now_sec, abandon_after_sec)
     if not isinstance(marker, dict):
-        return True
+        return _marker_is_fresh(path, now_sec, abandon_after_sec)
     outcome_raw = marker.get("outcome")
     outcome = outcome_raw.strip() if isinstance(outcome_raw, str) else ""
     if outcome in BLOCKING_OUTCOMES:
         return True
     if outcome in REDISPATCH_OUTCOMES:
         return False
+    return _marker_is_fresh(path, now_sec, abandon_after_sec)
+
+
+def _marker_is_fresh(
+    path: Path, now_sec: float | None, abandon_after_sec: int
+) -> bool:
     if now_sec is None:
         now_sec = time.time()
     try:

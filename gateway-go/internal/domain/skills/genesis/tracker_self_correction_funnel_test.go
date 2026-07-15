@@ -163,6 +163,28 @@ func TestSelfCorrectionFunnelEmptyClosureForUnverdictedPendingCandidate(t *testi
 	}
 }
 
+func TestSelfCorrectionFunnelDeclinedDispatchIsNotPending(t *testing.T) {
+	tr := newTestTracker(t)
+	now := time.Now()
+	appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		Type: selfCorrectionTypeCandidate, ID: "sc-declined", Status: SelfCorrectionStatusProposed,
+		Scope: "code", CreatedAt: now.Add(-time.Hour).UnixMilli(),
+	})
+	for _, phase := range []string{selfCorrectionDispatchStarted, selfCorrectionDispatchDeclined} {
+		appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+			Type: selfCorrectionTypeDispatch, ID: "sc-declined", DispatchPhase: phase,
+			AttemptID: "attempt-1", CreatedAt: now.UnixMilli(),
+		})
+	}
+
+	tr.mu.Lock()
+	s := tr.computeSelfCorrectionFunnelLocked(now)
+	tr.mu.Unlock()
+	if s.PendingCount != 0 {
+		t.Fatalf("declined terminal still counted as pending: %+v", s)
+	}
+}
+
 func TestSelfCorrectionFunnelReturnsAcceptedThroughWatchPassedAsApplied(t *testing.T) {
 	tr := newTestTracker(t)
 	now := time.UnixMilli(1_783_500_000_000)

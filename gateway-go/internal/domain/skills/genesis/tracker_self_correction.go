@@ -28,6 +28,7 @@ const (
 	SelfCorrectionDispatchMerged      = "merged"
 	selfCorrectionDispatchDeployed    = "deployed"
 	selfCorrectionDispatchWatchPassed = "watch_passed"
+	selfCorrectionDispatchDeclined    = "declined"
 	selfCorrectionDispatchFailed      = "failed"
 	selfCorrectionDispatchRolledBack  = "rolled_back"
 )
@@ -440,7 +441,8 @@ func normalizeSelfCorrectionDispatchPhase(phase string) string {
 	switch strings.ToLower(strings.TrimSpace(phase)) {
 	case selfCorrectionDispatchStarted, selfCorrectionDispatchPROpened,
 		SelfCorrectionDispatchMerged, selfCorrectionDispatchDeployed,
-		selfCorrectionDispatchWatchPassed, selfCorrectionDispatchFailed,
+		selfCorrectionDispatchWatchPassed, selfCorrectionDispatchDeclined,
+		selfCorrectionDispatchFailed,
 		selfCorrectionDispatchRolledBack:
 		return strings.ToLower(strings.TrimSpace(phase))
 	default:
@@ -455,9 +457,10 @@ func validSelfCorrectionDispatchTransition(from, to string) bool {
 	case "":
 		return to == selfCorrectionDispatchStarted
 	case selfCorrectionDispatchStarted:
-		return to == selfCorrectionDispatchPROpened || to == SelfCorrectionDispatchMerged || to == selfCorrectionDispatchFailed
+		return to == selfCorrectionDispatchPROpened || to == SelfCorrectionDispatchMerged ||
+			to == selfCorrectionDispatchDeclined || to == selfCorrectionDispatchFailed
 	case selfCorrectionDispatchPROpened:
-		return to == SelfCorrectionDispatchMerged || to == selfCorrectionDispatchFailed
+		return to == SelfCorrectionDispatchMerged || to == selfCorrectionDispatchDeclined || to == selfCorrectionDispatchFailed
 	case SelfCorrectionDispatchMerged:
 		return to == selfCorrectionDispatchDeployed || to == selfCorrectionDispatchFailed
 	case selfCorrectionDispatchDeployed:

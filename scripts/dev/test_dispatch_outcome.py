@@ -158,12 +158,16 @@ class BlocksRedispatchTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             path = Path(td) / "bad.json"
             path.write_text("{not-json\n")
-            self.assertTrue(dispatch_outcome.blocks_redispatch(path))
+            now = path.stat().st_mtime
+            self.assertTrue(dispatch_outcome.blocks_redispatch(
+                path, now_sec=now + 60, abandon_after_sec=7200))
+            self.assertFalse(dispatch_outcome.blocks_redispatch(
+                path, now_sec=now + 7201, abandon_after_sec=7200))
 
     def test_authoritative_lifecycle_wins_over_stale_marker(self):
         with TemporaryDirectory() as td:
             path = self._write(td, "stale.json", {"id": "x", "outcome": "failed"})
-            for phase in ("started", "pr_opened", "merged", "deployed", "watch_passed"):
+            for phase in ("started", "pr_opened", "merged", "deployed", "watch_passed", "declined"):
                 self.assertTrue(
                     dispatch_outcome.blocks_redispatch(path, authoritative_phase=phase), phase
                 )

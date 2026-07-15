@@ -41,10 +41,9 @@ def record_status(
         current["candidateId"] = candidate_id
     if result == "dispatched":
         current["lastDispatchAtMs"] = now_ms
-        current["consecutiveFailures"] = 0
     elif result in FAILURE_RESULTS:
         current["consecutiveFailures"] = int(current.get("consecutiveFailures") or 0) + 1
-    elif result != "busy":
+    elif result in SUCCESS_RESULTS:
         current["consecutiveFailures"] = 0
     if result in SUCCESS_RESULTS:
         current["lastSuccessfulAtMs"] = now_ms

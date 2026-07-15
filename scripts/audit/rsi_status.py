@@ -38,7 +38,9 @@ import os
 import sys
 import time
 from dataclasses import dataclass, field
+from datetime import time as daytime, timedelta
 from typing import Any, TextIO
+from zoneinfo import ZoneInfo
 
 DEFAULT_DATA_DIR = os.path.expanduser("~/.deneb/data")
 WINDOW_DAYS = 7
@@ -109,6 +111,7 @@ def _source_dispatchable(src: str, sources: tuple) -> bool:
     return any(src == ns or src.startswith(ns + ":") for ns in sources)
 
 LIVE, DATA_GATED, STARVED, FROZEN, IDLE = "LIVE", "DATA-GATED", "STARVED", "FROZEN", "IDLE"
+TERMINAL_DISPATCH_OUTCOMES = frozenset({"landed", "declined", "failed", "timeout", "rolled_back"})
 
 
 @dataclass
@@ -379,7 +382,7 @@ def assess_l4(
     by_scope: dict[str, int] = {}
     dispatchable = 0
     staged = 0
-    in_flight = applied = failed = legacy_in_flight = 0
+    in_flight = applied = declined = failed = legacy_in_flight = 0
     staged_sources: dict[str, int] = {}
     oldest_pending_at = 0
     for rid, rec in cand.items():
@@ -394,16 +397,25 @@ def assess_l4(
         if scope == "code" and phase == "watch_passed":
             applied += 1
             continue
+        if scope == "code" and phase == "declined":
+            declined += 1
+            continue
         if scope == "code" and phase in ("failed", "rolled_back"):
-            failed += 1
             outcome = marker_outcomes.get(rid, "")
+            # Compatibility for sessions completed before the authoritative
+            # declined phase shipped: their marker says declined while the
+            # old shell incorrectly wrote dispatchPhase=failed.
+            if phase == "failed" and outcome == "declined":
+                declined += 1
+                continue
+            failed += 1
             if (
                 (
                     phase == "rolled_back"
                     or outcome not in ("landed", "attempted", "declined")
                 )
                 and st in ("proposed", "accepted")
-                and src.startswith(sources)
+                and _source_dispatchable(src, sources)
             ):
                 dispatchable += 1
                 created_at = int(rec.get("createdAt") or 0)
@@ -429,11 +441,9 @@ def assess_l4(
                 staged += 1
                 prefix = src.split(":", 1)[0] if src else "(no source)"
                 staged_sources[prefix] = staged_sources.get(prefix, 0) + 1
-    # Land rate over DECIDED dispatches (ladder row: raise the daily cap after
-    # N dispatches with >=50% land rate). "attempted" is non-terminal (a later
-    # reprobe may upgrade it), but counting it in the denominator keeps the
-    # rate honest rather than flattering.
-    decided = sum(outcomes.values())
+    # Only terminal lifecycle outcomes enter the denominator. attempted and a
+    # merge still awaiting deployment watch remain pending evidence.
+    decided = sum(v for k, v in outcomes.items() if k in TERMINAL_DISPATCH_OUTCOMES)
     landed = outcomes.get("landed", 0)
     land_rate = (landed / decided) if decided else None
     metrics = {
@@ -444,6 +454,7 @@ def assess_l4(
         "staged_sources": staged_sources,
         "in_flight": in_flight,
         "applied": applied,
+        "declined": declined,
         "failed_or_rolled_back": failed,
         "legacy_in_flight": legacy_in_flight,
         "dispatched_total": dispatch_total,
@@ -459,9 +470,12 @@ def assess_l4(
         ),
     }
     outcome_note = ""
-    if decided:
+    if outcomes:
         parts = ", ".join(f"{k}:{v}" for k, v in sorted(outcomes.items()))
-        outcome_note = f" · outcomes {parts} (land rate {land_rate:.0%})"
+        outcome_note = (
+            f" · outcomes {parts} (land rate {land_rate:.0%})"
+            if decided else f" · outcomes {parts} (awaiting terminal evidence)"
+        )
     if in_flight > 0:
         return LayerStatus("L4", "source self-edit", LIVE, metrics,
                            f"{in_flight} candidates crossing PR/deploy/watch lifecycle"
@@ -473,6 +487,10 @@ def assess_l4(
     if applied > 0:
         return LayerStatus("L4", "source self-edit", LIVE, metrics,
                            f"{applied} source edits survived merged deployment rollback watch"
+                           + outcome_note)
+    if declined > 0:
+        return LayerStatus("L4", "source self-edit", LIVE, metrics,
+                           f"{declined} code candidates closed safely with no change"
                            + outcome_note)
     if dispatchable > 0 and metrics["consecutive_failures"] > 0:
         return LayerStatus("L4", "source self-edit", STARVED, metrics,
@@ -514,6 +532,8 @@ def _dispatch_attempts(marker: dict | None, fallback_at_ms: int) -> list[dict[st
         return [{"dispatchedAt": fallback_at_ms}]
     attempts = [a for a in (marker.get("attempts") or []) if isinstance(a, dict)]
     current: dict[str, Any] = {}
+    if isinstance(marker.get("attemptId"), str):
+        current["attemptId"] = marker["attemptId"]
     if isinstance(marker.get("outcome"), str):
         current["outcome"] = marker["outcome"]
     dispatched_at = marker.get("dispatchedAt")
@@ -521,6 +541,49 @@ def _dispatch_attempts(marker: dict | None, fallback_at_ms: int) -> list[dict[st
         int(dispatched_at) if isinstance(dispatched_at, (int, float)) else fallback_at_ms
     )
     return attempts + [current]
+
+
+def _dispatch_phases_by_attempt(rows: list[dict]) -> dict[str, str]:
+    phases: dict[str, str] = {}
+    for row in rows:
+        attempt_id = row.get("attemptId")
+        if row.get("type") == "self_correction_dispatch" and isinstance(attempt_id, str) and attempt_id:
+            phases[attempt_id] = str(row.get("dispatchPhase") or "").strip().lower()
+    return phases
+
+
+def _classified_dispatch_outcome(raw: str, phase: str) -> tuple[str, bool]:
+    """Return (display outcome, terminal) after joining marker + lifecycle."""
+    if raw == "landed":
+        if phase == "watch_passed":
+            return "landed", True
+        if phase == "rolled_back":
+            return "rolled_back", True
+        return "pending_watch", False
+    if raw in ("declined", "failed", "timeout", "rolled_back"):
+        return raw, True
+    return raw, False
+
+
+def _dispatch_day_bounds_ms(data_dir: str, now_ms: int) -> tuple[int, int]:
+    zone_name = os.environ.get("DENEB_TIMEZONE", "").strip()
+    if not zone_name:
+        try:
+            config_path = os.path.join(
+                os.path.dirname(os.path.abspath(data_dir)), "deneb.json"
+            )
+            with open(config_path, encoding="utf-8") as handle:
+                zone_name = str((json.load(handle) or {}).get("timezone") or "").strip()
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+    try:
+        zone = ZoneInfo(zone_name) if zone_name else datetime.datetime.now().astimezone().tzinfo
+    except (KeyError, ValueError):
+        zone = datetime.datetime.now().astimezone().tzinfo
+    now = datetime.datetime.fromtimestamp(now_ms / 1000, tz=zone)
+    start = datetime.datetime.combine(now.date(), daytime.min, tzinfo=zone)
+    end = datetime.datetime.combine(now.date() + timedelta(days=1), daytime.min, tzinfo=zone)
+    return int(start.timestamp() * 1000), int(end.timestamp() * 1000)
 
 
 def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
@@ -537,9 +600,11 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
     dispatch_dir = os.path.join(data_dir, "coding_dispatch")
     dispatch_total = dispatch_today = 0
     outcomes: dict[str, int] = {}
+    terminal_events: list[tuple[int, str]] = []
     marker_outcomes: dict[str, str] = {}
     dispatched_ids: set[str] = set()
-    today_cutoff = now_ms - (now_ms % DAY_MS)
+    today_start, today_end = _dispatch_day_bounds_ms(data_dir, now_ms)
+    phases_by_attempt = _dispatch_phases_by_attempt(candidates)
     try:
         for name in os.listdir(dispatch_dir):
             if not name.endswith(".json"):
@@ -563,14 +628,19 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
             attempts = _dispatch_attempts(marker, fallback_at_ms)
             dispatch_total += len(attempts)
             for attempt in attempts:
-                outcome = attempt.get("outcome")
-                outcome = outcome.strip() if isinstance(outcome, str) else ""
-                if outcome:
+                raw_outcome = attempt.get("outcome")
+                raw_outcome = raw_outcome.strip() if isinstance(raw_outcome, str) else ""
+                if raw_outcome:
+                    attempt_id = attempt.get("attemptId")
+                    phase = phases_by_attempt.get(attempt_id, "") if isinstance(attempt_id, str) else ""
+                    outcome, terminal = _classified_dispatch_outcome(raw_outcome, phase)
                     outcomes[outcome] = outcomes.get(outcome, 0) + 1
+                    if terminal:
+                        terminal_events.append((int(attempt.get("dispatchedAt") or 0), outcome))
                 dispatched_at = attempt.get("dispatchedAt")
                 if (
                     isinstance(dispatched_at, (int, float))
-                    and today_cutoff <= dispatched_at < today_cutoff + DAY_MS
+                    and today_start <= dispatched_at < today_end
                 ):
                     dispatch_today += 1
 
@@ -585,6 +655,11 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
                     marker_outcomes[marker_id] = current_outcome
     except OSError:
         pass
+
+    terminal_events.sort(key=lambda item: item[0], reverse=True)
+    graduation_outcomes: dict[str, int] = {}
+    for _, outcome in terminal_events[:LADDER_DISPATCH_MIN_DECIDED]:
+        graduation_outcomes[outcome] = graduation_outcomes.get(outcome, 0) + 1
 
     grad_rows = _graduation_rows(os.path.join(data_dir, "graduation_state.json"))
     runtime_status: dict[str, Any] = {}
@@ -604,7 +679,7 @@ def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
             candidates, dispatch_total, dispatch_today, outcomes, dispatched_ids,
             grad_rows, runtime_status, now_ms, marker_outcomes,
         ),
-        assess_ladder(genesis, revisions, candidates, outcomes, grad_rows=grad_rows),
+        assess_ladder(genesis, revisions, candidates, graduation_outcomes, grad_rows=grad_rows),
     ]
 
 
@@ -647,8 +722,9 @@ def assess_ladder(genesis_events: list[dict], revisions: list[dict],
         rows.append(("e-process 컷오버", LADDER_GROWING, f"라벨 {ep['eprocess_labels']}/20"))
 
     cap_row = grad.get("dispatch-cap") or {}
-    decided = sum(outcomes.values())
+    decided = sum(v for k, v in outcomes.items() if k in TERMINAL_DISPATCH_OUTCOMES)
     landed = outcomes.get("landed", 0)
+    rolled_back = outcomes.get("rolled_back", 0)
     if cap_row.get("unlocked"):
         rows.append(("배차 캡 상향", LADDER_DONE, f"실행됨 — 일일 캡 {cap_row.get('value') or '?'} (자동 졸업)"))
     elif decided == 0:
@@ -656,8 +732,9 @@ def assess_ladder(genesis_events: list[dict], revisions: list[dict],
     else:
         rate = landed / decided
         detail = f"판정 {decided}건·랜딩률 {rate:.0%}"
-        if decided >= LADDER_DISPATCH_MIN_DECIDED and rate >= LADDER_DISPATCH_MIN_LAND_RATE:
-            rows.append(("배차 캡 상향", LADDER_READY, detail + " — 롤백 0건은 수동 확인 후 캡 결정"))
+        if (decided >= LADDER_DISPATCH_MIN_DECIDED
+                and rate >= LADDER_DISPATCH_MIN_LAND_RATE and rolled_back == 0):
+            rows.append(("배차 캡 상향", LADDER_READY, detail + " · 감시 롤백 0건"))
         else:
             rows.append(("배차 캡 상향", LADDER_GROWING, detail))
 

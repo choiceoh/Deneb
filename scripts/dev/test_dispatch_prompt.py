@@ -119,6 +119,30 @@ class DispatchPromptTest(unittest.TestCase):
             self.assertEqual(rec["dispatchedAt"], 2000)
             self.assertEqual(rec["attempts"][-1]["dispatchedAt"], 1000)
 
+    def test_retry_preserves_outcome_less_attempt_and_full_history(self):
+        with TemporaryDirectory() as td:
+            meta = Path(td) / "meta"
+            meta.mkdir()
+            (meta / dispatch_prompt.ARTIFACT_NAME).write_text(CONTRACT, encoding="utf-8")
+            marker = Path(td) / "sc-test-1234.json"
+            marker.write_text(json.dumps({
+                **CANDIDATE,
+                "attemptId": "attempt-crashed",
+                "branch": "dispatch/attempt-crashed",
+                "dispatchedAt": 12_000,
+                "attempts": [
+                    {"attemptId": f"attempt-{i}", "outcome": "failed", "dispatchedAt": i}
+                    for i in range(12)
+                ],
+            }) + "\n", encoding="utf-8")
+            rc, _, _ = run_main(meta, marker, CANDIDATE)
+            self.assertEqual(rc, 0)
+            rec = json.loads(marker.read_text(encoding="utf-8"))
+            self.assertEqual(len(rec["attempts"]), 13, "retry history must not truncate")
+            self.assertEqual(rec["attempts"][-1]["attemptId"], "attempt-crashed")
+            self.assertEqual(rec["attempts"][-1]["branch"], "dispatch/attempt-crashed")
+            self.assertNotIn("outcome", rec["attempts"][-1])
+
     def test_short_artifact_defers(self):
         with TemporaryDirectory() as td:
             meta = Path(td) / "meta"

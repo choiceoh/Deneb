@@ -257,6 +257,9 @@ func addSelfCorrectionPendingMetrics(s *SelfCorrectionFunnelSummary, records []S
 		if cand.Status != SelfCorrectionStatusProposed && cand.Status != SelfCorrectionStatusAccepted {
 			continue
 		}
+		if normalizeSelfCorrectionDispatchPhase(cand.DispatchPhase) == selfCorrectionDispatchDeclined {
+			continue
+		}
 		s.PendingCount++
 		age := nowMs - cand.CreatedAt
 		if age > s.OldestPendingAgeMs {

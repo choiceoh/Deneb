@@ -451,6 +451,34 @@ func TestSelfCorrectionDispatchFSMRejectsSkippedAndCrossAttemptPhases(t *testing
 	}
 }
 
+func TestSelfCorrectionDispatchFSMRecordsCleanDeclineAsTerminal(t *testing.T) {
+	tracker := newTestTracker(t)
+	if _, err := tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		ID: "sc-declined", Scope: "code", Title: "no safe change", Source: "self-harness:test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, phase := range []string{selfCorrectionDispatchStarted, selfCorrectionDispatchDeclined} {
+		if _, err := tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
+			ID: "sc-declined", DispatchPhase: phase, AttemptID: "attempt-1",
+		}); err != nil {
+			t.Fatalf("record %s: %v", phase, err)
+		}
+	}
+	rows, err := tracker.RecentSelfCorrectionCandidates("", "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].DispatchPhase != selfCorrectionDispatchDeclined || rows[0].Status == SelfCorrectionStatusApplied {
+		t.Fatalf("declined lifecycle folded incorrectly: %+v", rows)
+	}
+	if _, err := tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
+		ID: "sc-declined", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1",
+	}); err == nil {
+		t.Fatal("declined terminal unexpectedly transitioned to merged")
+	}
+}
+
 func TestSelfCorrectionDispatchSamePhaseCanEnrichMissingProvenance(t *testing.T) {
 	tracker := newTestTracker(t)
 	if _, err := tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
