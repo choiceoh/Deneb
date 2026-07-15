@@ -20,6 +20,9 @@ import re
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from codegraph_worktree_index import ensure_index  # noqa: E402
+
 SOURCE_EXT = {
     ".go", ".ts", ".tsx", ".js", ".jsx", ".kt", ".kts", ".rs",
     ".py", ".java", ".c", ".cc", ".cpp", ".h", ".hpp", ".swift", ".scala",
@@ -36,6 +39,14 @@ REMINDER = (
 
 def main():
     payload = json.load(sys.stdin)
+
+    # Self-heal a mid-session worktree's index before we point the model at
+    # codegraph. A worktree entered via EnterWorktree never ran the SessionStart
+    # autoindex, so codegraph would serve the parent checkout's (stale) index.
+    # Cheap + idempotent; uses the ACTUAL cwd (the worktree) rather than
+    # CLAUDE_PROJECT_DIR, which still points at the original checkout.
+    ensure_index(payload.get("cwd") or os.getcwd())
+
     ti = payload.get("tool_input") or {}
     path = ti.get("file_path") or ti.get("notebook_path") or ""
     if not path:

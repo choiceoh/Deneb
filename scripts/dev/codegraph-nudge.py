@@ -26,6 +26,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from codegraph_worktree_index import ensure_index  # noqa: E402
+
 IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{2,}$")
 GREP_TOKENS = {"grep", "egrep", "fgrep", "rg", "ripgrep"}
 
@@ -121,6 +124,12 @@ def resolves_via_rpcmap(pat, root):
 
 def main():
     payload = json.load(sys.stdin)
+
+    # Self-heal a mid-session worktree's index (see codegraph-remind.py) so the
+    # symbol grep we're about to gate — and the codegraph search it steers to —
+    # hit THIS worktree's code, not the parent checkout's stale index.
+    ensure_index(payload.get("cwd") or os.getcwd())
+
     tool = payload.get("tool_name") or ""
     ti = payload.get("tool_input") or {}
 
