@@ -40,6 +40,9 @@ const (
 	maxFeedDigestItems = 100
 	feedDigestLineCap  = 20
 	feedDigestRuneCap  = 200
+	// Keep the blocking fallback and capture-triggered turns bounded like the
+	// streaming native route, so a connected client cannot strand a run forever.
+	nativeSyncTurnDeadline = chatport.InteractiveTurnDeadline
 )
 
 // buildTodayFeedDigest renders the work-feed items created today (Asia/Seoul)
@@ -445,13 +448,19 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 }
 
 func sendUntrustedCapture(ctx context.Context, deps Deps, sessionKey, message string) (*chatport.SyncResult, error) {
-	return deps.Chat.RunSync(ctx, chatport.SyncRequest{
+	return runNativeSync(ctx, deps, chatport.SyncRequest{
 		SessionKey:          sessionKey,
 		Message:             message,
 		Delivery:            &chatport.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
 		AutoDeliveredOutput: true,
 		GateUntrustedTools:  true,
 	})
+}
+
+func runNativeSync(ctx context.Context, deps Deps, req chatport.SyncRequest) (*chatport.SyncResult, error) {
+	turnCtx, cancel := context.WithTimeout(ctx, nativeSyncTurnDeadline)
+	defer cancel()
+	return deps.Chat.RunSync(turnCtx, req)
 }
 
 // handleMiniappCaptureContacts stores a shared address book into the contacts
@@ -646,7 +655,7 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 			}
 		}
 
-		res, err := deps.Chat.RunSync(ctx, chatport.SyncRequest{
+		res, err := runNativeSync(ctx, deps, chatport.SyncRequest{
 			SessionKey: sessionKey,
 			Message:    p.Message,
 			Model:      strings.TrimSpace(p.Model),

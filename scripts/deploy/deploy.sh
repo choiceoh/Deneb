@@ -7,6 +7,11 @@ PROD_DIR="${DENEB_PROD_DIR:-$HOME/deneb}"
 PROD_PORT="${DENEB_GATEWAY_PORT:-18789}"
 GATEWAY_SERVICE="${DENEB_GATEWAY_SERVICE:-deneb-gateway.service}"
 RESTART_MODE="${DENEB_DEPLOY_RESTART_MODE:-auto}" # auto | systemd | nohup
+# A gateway restart can drain an already-running chat for up to six minutes,
+# then spend bounded time closing the remaining subsystems. Keep the deploy
+# waiter beyond the gateway's 8-minute force-exit watchdog so a healthy drain is
+# never mistaken for a refused SIGUSR1 and escalated into a reply-killing restart.
+RESTART_WAIT_SEC="${DENEB_DEPLOY_RESTART_WAIT_SEC:-510}"
 # Remote deploy: when set, build locally (this host has Go + the git repo) and
 # ship the binary to a gateway host that lacks a toolchain — instead of an
 # in-place restart. This was the 2026-06-20~07-06 split (srv1 built, srv4 ran;
@@ -46,7 +51,7 @@ systemd_main_pid() {
 
 wait_for_systemd_health() {
     local before_pid="${1:-0}"
-    local deadline=$((SECONDS + 90))
+    local deadline=$((SECONDS + RESTART_WAIT_SEC))
     local pid=""
 
     while (( SECONDS < deadline )); do
@@ -102,7 +107,7 @@ restart_with_systemd() {
 }
 
 restart_with_nohup() {
-    # Restart — graceful first (SIGTERM, up to 10s), then SIGKILL as fallback.
+    # Restart — graceful first, then SIGKILL only after the drain/watchdog window.
     # This gives active agent runs a chance to finish instead of being killed
     # mid-turn, which otherwise leaves replies half-delivered to the native client.
     echo "==> restarting gateway with nohup fallback (port $PROD_PORT)"
@@ -115,16 +120,16 @@ restart_with_nohup() {
         existing_pid=$(pgrep -f 'dist/deneb-gateway' || true)
     fi
     if [[ -n "$existing_pid" ]]; then
-        echo "    graceful SIGTERM -> pid $existing_pid (up to 10s drain)"
+        echo "    graceful SIGTERM -> pid $existing_pid (up to ${RESTART_WAIT_SEC}s drain)"
         kill -TERM "$existing_pid" 2>/dev/null || true
-        for _ in 1 2 3 4 5 6 7 8 9 10; do
+        for _ in $(seq 1 "$RESTART_WAIT_SEC"); do
             if ! kill -0 "$existing_pid" 2>/dev/null; then
                 break
             fi
             sleep 1
         done
         if kill -0 "$existing_pid" 2>/dev/null; then
-            echo "    still alive after 10s -> SIGKILL"
+            echo "    still alive after ${RESTART_WAIT_SEC}s -> SIGKILL"
             kill -KILL "$existing_pid" 2>/dev/null || true
             sleep 1
         fi
@@ -193,7 +198,8 @@ restart_remote() {
     # is the real wall — this fails fast with a clear message. A candidate that
     # cannot answer --print-version is a pre-guard (stale) build: same handling,
     # or a forced rollback to an old build would never mint the marker and a
-    # non-forced one would only fail after the 45s poll.
+    # non-forced one would only fail after the restart poll.
+    # shellcheck disable=SC2029 # values intentionally expand on the sender
     ssh "$remote" "PROD_PORT='$PROD_PORT' DIR='$dir' DENEB_DEPLOY_FORCE='${DENEB_DEPLOY_FORCE:-}' bash -s" <<'GATE'
 set -euo pipefail
 cd "$HOME/$DIR/dist"
@@ -235,7 +241,8 @@ GATE
     echo "    syncing skills/ → $remote:~/$dir/skills"
     rsync -a --delete skills/ "$remote:$dir/skills/"
     # PHASE 2 — cutover.
-    ssh "$remote" "GATEWAY_SERVICE='$GATEWAY_SERVICE' PROD_PORT='$PROD_PORT' DIR='$dir' bash -s" <<'REMOTE'
+    # shellcheck disable=SC2029 # values intentionally expand on the sender
+    ssh "$remote" "GATEWAY_SERVICE='$GATEWAY_SERVICE' PROD_PORT='$PROD_PORT' DIR='$dir' RESTART_WAIT_SEC='$RESTART_WAIT_SEC' bash -s" <<'REMOTE'
 set -euo pipefail
 cd "$HOME/$DIR/dist"
 cp -p deneb-gateway deneb-gateway.bak-prev 2>/dev/null || true
@@ -246,7 +253,7 @@ oldpid=$(systemctl --user show "$GATEWAY_SERVICE" -p MainPID --value 2>/dev/null
 oldver=$(curl -sf -m 3 "http://127.0.0.1:$PROD_PORT/health" | tr ',' '\n' | grep '"version"' | head -1 | cut -d'"' -f4 || true)
 echo "    SIGUSR1 → pid $oldpid (cutover, old version ${oldver:-unknown})"
 kill -USR1 "$oldpid"
-for i in $(seq 1 45); do
+for i in $(seq 1 "$RESTART_WAIT_SEC"); do
     pid=$(systemctl --user show "$GATEWAY_SERVICE" -p MainPID --value 2>/dev/null || true)
     [ -z "${pid:-}" ] && pid=$(pgrep -f 'dist/deneb-gateway' | head -1 || true)
     if [ -n "${pid:-}" ] && [ "$pid" != "$oldpid" ] && curl -sf -o /dev/null "http://127.0.0.1:$PROD_PORT/health"; then

@@ -126,3 +126,120 @@ func TestAbortTrackerCloseIsIdempotent(t *testing.T) {
 		t.Fatal("Close did not clear entries")
 	}
 }
+
+func TestAbortTrackerDrainRejectsNewRunsAndWaitsForContinuations(t *testing.T) {
+	tracker := NewAbortTracker()
+	t.Cleanup(tracker.Close)
+
+	active, _ := abortEntry("client:main", "run-active")
+	if !tracker.TryRegister(active.ClientRun, active) {
+		t.Fatal("initial run was rejected before draining")
+	}
+	drained := tracker.BeginDrain()
+
+	newRun, _ := abortEntry("client:new", "run-new")
+	if tracker.TryRegister(newRun.ClientRun, newRun) {
+		t.Fatal("new top-level run was admitted after draining began")
+	}
+	continuation, _ := abortEntry("client:main", "run-queued")
+	if !tracker.RegisterContinuation(continuation.ClientRun, continuation) {
+		t.Fatal("already-queued continuation was rejected while its parent was active")
+	}
+
+	tracker.Cleanup(active.ClientRun)
+	select {
+	case <-drained:
+		t.Fatal("drain completed while an accepted continuation was still active")
+	default:
+	}
+
+	tracker.Cleanup(continuation.ClientRun)
+	select {
+	case <-drained:
+	case <-time.After(time.Second):
+		t.Fatal("drain did not complete after the final accepted run cleaned up")
+	}
+
+	lateContinuation, _ := abortEntry("client:main", "run-late")
+	if tracker.RegisterContinuation(lateContinuation.ClientRun, lateContinuation) {
+		t.Fatal("continuation reopened admission after idle was observed")
+	}
+}
+
+func TestAbortTrackerDrainWaitsForCancelledRunCleanup(t *testing.T) {
+	tracker := NewAbortTracker()
+	t.Cleanup(tracker.Close)
+
+	entry, _ := abortEntry("client:main", "run-cancelled")
+	tracker.Register(entry.ClientRun, entry)
+	drained := tracker.BeginDrain()
+	tracker.CancelByRunID(entry.ClientRun)
+
+	select {
+	case <-drained:
+		t.Fatal("cancellation released drain before the run goroutine cleaned up")
+	default:
+	}
+	tracker.Cleanup(entry.ClientRun)
+	select {
+	case <-drained:
+	case <-time.After(time.Second):
+		t.Fatal("cleanup did not release drain after cancellation")
+	}
+}
+
+func TestAbortTrackerDrainWaitsForPreDrainAdmissionToRegister(t *testing.T) {
+	tracker := NewAbortTracker()
+	t.Cleanup(tracker.Close)
+
+	if !tracker.AcquireAdmission() {
+		t.Fatal("request admission was rejected before draining")
+	}
+	drained := tracker.BeginDrain()
+	select {
+	case <-drained:
+		t.Fatal("drain completed while a pre-drain admission was still reserved")
+	default:
+	}
+
+	entry, _ := abortEntry("client:main", "run-admitted")
+	if !tracker.RegisterAdmitted(entry.ClientRun, entry) {
+		t.Fatal("pre-drain admission could not register after draining began")
+	}
+	tracker.ReleaseAdmission()
+	select {
+	case <-drained:
+		t.Fatal("drain completed while the admitted run was still active")
+	default:
+	}
+
+	tracker.Cleanup(entry.ClientRun)
+	select {
+	case <-drained:
+	case <-time.After(time.Second):
+		t.Fatal("drain did not complete after admitted run cleanup")
+	}
+}
+
+func TestAbortTrackerHasOtherActiveRunIgnoresFinishingRun(t *testing.T) {
+	tracker := NewAbortTracker()
+	t.Cleanup(tracker.Close)
+
+	current, _ := abortEntry("client:main", "run-current")
+	other, _ := abortEntry("client:main", "run-other")
+	unrelated, _ := abortEntry("client:other", "run-unrelated")
+	tracker.Register(current.ClientRun, current)
+	tracker.Register(unrelated.ClientRun, unrelated)
+
+	if tracker.HasOtherActiveRun("client:main", current.ClientRun) {
+		t.Fatal("unrelated session was mistaken for a successor")
+	}
+	tracker.Register(other.ClientRun, other)
+	if !tracker.HasOtherActiveRun("client:main", current.ClientRun) {
+		t.Fatal("same-session successor was not detected")
+	}
+	tracker.Cleanup(other.ClientRun)
+	if tracker.HasOtherActiveRun("client:main", current.ClientRun) {
+		t.Fatal("cleaned-up successor still reported active")
+	}
+}
