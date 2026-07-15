@@ -73,6 +73,19 @@ actual fun DenebWebView(
                             null,
                         )
                     }
+
+                    // SPA soft-nav often updates history without a full reload. Hint the
+                    // injected translator so it re-collects when JS history hooks miss.
+                    override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
+                        super.doUpdateVisitedHistory(view, url, isReload)
+                        state.currentUrl = url
+                        state.canGoBack = view.canGoBack()
+                        state.canGoForward = view.canGoForward()
+                        view.evaluateJavascript(
+                            "window.DenebTranslate&&window.DenebTranslate.onLocationChange&&window.DenebTranslate.onLocationChange();",
+                            null,
+                        )
+                    }
                 }
                 web.webChromeClient = object : WebChromeClient() {
                     override fun onReceivedTitle(view: WebView, title: String?) {

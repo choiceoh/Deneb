@@ -139,6 +139,7 @@ func TestTranslateSegments_TranslatesBatchesConcurrently(t *testing.T) {
 }
 
 func TestTranslateBatchDeepL_ReturnsTranslatedTextAndParts(t *testing.T) {
+	resetTranslateTextCache()
 	oldClient := deeplHTTPClient
 	defer func() { deeplHTTPClient = oldClient }()
 
@@ -207,6 +208,7 @@ func TestTranslateBatchDeepL_ReturnsTranslatedTextAndParts(t *testing.T) {
 }
 
 func TestTranslateBatchDeepLDisabledWithoutKey(t *testing.T) {
+	resetTranslateTextCache()
 	t.Setenv("DEEPL_API_KEY", "")
 	out, ok := translateBatchDeepL(context.Background(), []translateInput{{Text: "Hello"}}, "ko")
 	if ok || out != nil {
@@ -215,6 +217,7 @@ func TestTranslateBatchDeepLDisabledWithoutKey(t *testing.T) {
 }
 
 func TestTranslateBatchDeepLMismatchTriggersFallback(t *testing.T) {
+	resetTranslateTextCache()
 	oldClient := deeplHTTPClient
 	defer func() { deeplHTTPClient = oldClient }()
 
@@ -236,6 +239,116 @@ func TestTranslateBatchDeepLMismatchTriggersFallback(t *testing.T) {
 	}, "Korean")
 	if ok || out != nil {
 		t.Fatalf("out=%v ok=%v, want nil,false", out, ok)
+	}
+}
+
+func TestTranslateBatchDeepL_UsesServerCacheOnSecondCall(t *testing.T) {
+	resetTranslateTextCache()
+	oldClient := deeplHTTPClient
+	defer func() { deeplHTTPClient = oldClient }()
+
+	calls := 0
+	deeplHTTPClient = &http.Client{Transport: deepLRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		calls++
+		return deepLTestResponse(http.StatusOK, `{"translations":[{"text":"안녕"}]}`), nil
+	})}
+	t.Setenv("DEEPL_API_KEY", "test-key")
+
+	first, ok := translateBatchDeepL(context.Background(), []translateInput{{Text: "Hello"}}, "ko")
+	if !ok || len(first) != 1 || first[0] != "안녕" {
+		t.Fatalf("first out=%v ok=%v", first, ok)
+	}
+	second, ok := translateBatchDeepL(context.Background(), []translateInput{{Text: "Hello"}}, "ko")
+	if !ok || len(second) != 1 || second[0] != "안녕" {
+		t.Fatalf("second out=%v ok=%v", second, ok)
+	}
+	if calls != 1 {
+		t.Fatalf("DeepL calls=%d want 1 (second served from server cache)", calls)
+	}
+}
+
+func TestTranslateBatchDeepL_SingleflightCollapsesConcurrentMisses(t *testing.T) {
+	resetTranslateTextCache()
+	oldClient := deeplHTTPClient
+	defer func() { deeplHTTPClient = oldClient }()
+
+	var mu sync.Mutex
+	calls := 0
+	var startOnce sync.Once
+	started := make(chan struct{})
+	release := make(chan struct{})
+	deeplHTTPClient = &http.Client{Transport: deepLRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		startOnce.Do(func() { close(started) })
+		<-release
+		return deepLTestResponse(http.StatusOK, `{"translations":[{"text":"세계"}]}`), nil
+	})}
+	t.Setenv("DEEPL_API_KEY", "test-key")
+
+	const n = 8
+	var wg sync.WaitGroup
+	errs := make(chan string, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			out, ok := translateBatchDeepL(context.Background(), []translateInput{{Text: "World"}}, "ko")
+			if !ok || len(out) != 1 || out[0] != "세계" {
+				errs <- fmt.Sprintf("out=%v ok=%v", out, ok)
+			}
+		}()
+	}
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for DeepL call")
+	}
+	close(release)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	got := calls
+	mu.Unlock()
+	if got != 1 {
+		t.Fatalf("DeepL calls=%d want 1 (singleflight)", got)
+	}
+}
+
+func TestTranslateBatchDeepL_PartialCacheSkipsCachedTexts(t *testing.T) {
+	resetTranslateTextCache()
+	oldClient := deeplHTTPClient
+	defer func() { deeplHTTPClient = oldClient }()
+
+	rememberTranslated("KO", "Hello", "안녕")
+	var sawTexts []string
+	deeplHTTPClient = &http.Client{Transport: deepLRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("ParseForm: %v", err)
+			return deepLTestResponse(http.StatusBadRequest, `{}`), nil
+		}
+		sawTexts = append([]string(nil), r.Form["text"]...)
+		return deepLTestResponse(http.StatusOK, `{"translations":[{"text":"세계"}]}`), nil
+	})}
+	t.Setenv("DEEPL_API_KEY", "test-key")
+
+	out, ok := translateBatchDeepL(context.Background(), []translateInput{
+		{Text: "Hello"},
+		{Text: "World"},
+	}, "ko")
+	if !ok {
+		t.Fatal("translateBatchDeepL returned !ok")
+	}
+	if got, want := strings.Join(sawTexts, "|"), "World"; got != want {
+		t.Fatalf("DeepL texts=%q want only miss %q", got, want)
+	}
+	if len(out) != 2 || out[0] != "안녕" || out[1] != "세계" {
+		t.Fatalf("out=%v", out)
 	}
 }
 
