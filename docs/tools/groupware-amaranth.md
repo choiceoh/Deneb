@@ -50,7 +50,7 @@ See also: [page-agent-browser.md](./page-agent-browser.md) (tool env + phone pat
 |------|----------|
 | Creds | `~/.deneb/groupware.env` → systemd `EnvironmentFile` on srv4 |
 | Vars | `DENEB_GROUPWARE_URL`, `COMPANY`, `USER`, `PASSWORD` |
-| Radar controls | `DENEB_GROUPWARE_RADAR_DISABLE=1`, `DENEB_GROUPWARE_RADAR_INTERVAL_MINUTES` (default `10`), `DENEB_GROUPWARE_RADAR_MAX_PER_CYCLE` (default `3`) |
+| Radar controls | `DENEB_GROUPWARE_RADAR_DISABLE=1`, `DENEB_GROUPWARE_RADAR_INTERVAL_MINUTES` (default `10`), `DENEB_GROUPWARE_RADAR_MAX_PER_CYCLE` (default `3`), `DENEB_GROUPWARE_RADAR_MAX_ESCALATIONS` (default `3`) |
 | Dev-only radar opt-in | `DENEB_GROUPWARE_RADAR_ALLOW_DEV=1` (production state dir is otherwise required) |
 | Session cache | `~/.deneb/groupware-session.json` (mode `0600`) |
 | Radar state | `<stateDir>/groupware_radar_state.json` (atomic, mode `0600`) |
@@ -66,8 +66,8 @@ from 08:30 inclusive to 19:00 exclusive KST. Missing credentials, a missing
 autonomous service, a non-production state directory, or
 `DENEB_GROUPWARE_RADAR_DISABLE=1` disables registration.
 
-The state file stores each `docId` fingerprint, notification state, and last-seen
-time plus the last successful poll. Snapshot comparison is deterministic: an
+The state file stores each `docId` fingerprint, notification state, first/last-seen
+time, escalation level, and the last successful poll. Snapshot comparison is deterministic: an
 unchanged cycle performs **zero LLM calls**. New, changed, or previously failed
 pending documents synchronously reuse the phone e-approval enrich → judgment →
 work-feed relay, capped at three per cycle by default; callback failures remain
@@ -78,6 +78,14 @@ Reconciliation is deliberately one-way safe: disappearance from `pending` never
 means completion. The radar acknowledges a card only when the same `docId` is
 positively present in the `done` snapshot, and removes its state only after that
 ack callback succeeds.
+
+Pending cards are escalated without another LLM turn: at 4 hours the existing
+card becomes high priority and receives one bounded radar note/push; at 24 hours
+it becomes urgent. Each threshold fires once, callback failures retry, and the
+same `docId` card is updated rather than duplicated. Morning and evening letter
+data now include a `groupware_pending` section (count + title/drafter/date), so
+regular briefings reflect the authoritative pending snapshot even without a
+phone notification.
 
 ### HMAC request signing
 
@@ -359,6 +367,7 @@ ERP list endpoints and permission notes: [groupware-erp-api-map.md](./groupware-
 | P4 | Phone enrich API-first; DOM/Page Agent last resort | Done |
 | P5 | Read-only ERP lists (매출마감·출고·입고·현재고·발주) | Wired |
 | P6 | Wave 1 approval radar: structured snapshots, deterministic diff, RefID dedupe, positive-done reconciliation | Done |
+| P7 | Wave 2: 4h/24h bounded escalation + morning/evening letter pending section | Done |
 
 ## Smoke (no secrets in output)
 
