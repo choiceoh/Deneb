@@ -217,7 +217,9 @@ func serperScrape(ctx context.Context, apiKey, targetURL string) (*serperScrapeR
 		return nil, fmt.Errorf("marshal serper scrape request: %w", err)
 	}
 
-	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// Fail-fast: a slow scrape burns the turn; fall through to stealth instead.
+	const serperScrapeTimeout = 10 * time.Second
+	reqCtx, cancel := context.WithTimeout(ctx, serperScrapeTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost,
@@ -228,7 +230,7 @@ func serperScrape(ctx context.Context, apiKey, targetURL string) (*serperScrapeR
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-KEY", apiKey)
 
-	resp, err := SharedClient(30 * time.Second).Do(req)
+	resp, err := SharedClient(serperScrapeTimeout).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("serper scrape request failed: %w", err)
 	}

@@ -28,7 +28,7 @@ import (
 // 1. Extract metadata from raw HTML
 // 2. Detect quality signals
 // 3. Strip noise elements (nav, aside, footer, ads, cookie banners)
-// 4. Convert to Markdown (local AI, with the htmlmd pure-Go converter as fallback)
+// 4. Convert to Markdown (htmlmd default; LocalAI only when gated)
 func processHTML(ctx context.Context, html, url string, localAI *LocalAIExtractor, meta *webFetchMeta) string {
 	// Step 1: Extract metadata from raw HTML (before any stripping).
 	extractHTMLMeta(html, meta)
@@ -42,19 +42,17 @@ func processHTML(ctx context.Context, html, url string, localAI *LocalAIExtracto
 	// comments) is handled by Go's StripNoiseElements.
 	cleaned := StripNoiseElements(html)
 
-	// Step 4: Convert to Markdown.
-	var content string
-	if localAI.available() {
+	// Step 4: htmlmd first — LocalAI is reserved for large/noisy pages where
+	// pure-Go conversion keeps too much chrome (see shouldCallLocalAI).
+	content := htmlmdConvertStripNoise(cleaned)
+	if localAI != nil && shouldCallLocalAI(content, meta.OrigChars) && localAI.available() {
 		extracted, err := localAI.extract(ctx, cleaned, url, meta.Language)
 		if err != nil {
 			slog.Warn("localai extraction failed, falling back to htmlmd",
 				"url", url, "error", err)
-			content = htmlmdConvertStripNoise(cleaned)
 		} else {
 			content = extracted
 		}
-	} else {
-		content = htmlmdConvertStripNoise(cleaned)
 	}
 
 	// Step 5: Post-extraction quality check.
@@ -64,6 +62,24 @@ func processHTML(ctx context.Context, html, url string, localAI *LocalAIExtracto
 	}
 
 	return content
+}
+
+// localAIMinMDChars is the markdown size above which LocalAI noise-cleaning
+// may be worth a sync LLM call. Below this, htmlmd is the default path.
+const localAIMinMDChars = 10000
+
+// shouldCallLocalAI gates the sync LocalAI extractor (≤45s). Tiny/SPA shells
+// are recovered by headless escalation, not LocalAI. Large pages with low
+// retention vs raw HTML (heavy chrome) may still benefit from AI cleaning.
+func shouldCallLocalAI(md string, origChars int) bool {
+	n := len(strings.TrimSpace(md))
+	if n < 2000 {
+		return false
+	}
+	if n < localAIMinMDChars || origChars <= 0 {
+		return false
+	}
+	return float64(n)/float64(origChars) < 0.20
 }
 
 // htmlmdConvert performs HTML -> Markdown conversion via coreparsing/htmlmd.

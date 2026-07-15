@@ -76,8 +76,12 @@ var firefoxProfile = browserProfile{
 // Escalation stages:
 //
 //	0: Chrome profile
-//	1: Firefox profile + cookie jar (handles cookie-gated blocks)
+//	1: Firefox profile + cookie jar (handles cookie-gated soft-blocks)
 //	2: Jina Reader fallback (headless render; recovers SPA/JS/bot-walled pages)
+//
+// Fixed inter-stage sleeps are intentionally omitted — they only added latency
+// on already-failing paths. Soft-blocks still try Firefox (cookie jar); SPA
+// shells (js_required/empty_body) skip Firefox and go straight to Jina.
 //
 // Returns on first successful non-blocked response.
 func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media.FetchResult, error) {
@@ -85,21 +89,22 @@ func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media
 		profile browserProfile
 		jar     bool
 		jina    bool
-		backoff time.Duration
 	}{
-		{chromeProfile, false, false, 0},
-		{firefoxProfile, true, false, 800 * time.Millisecond},
-		{chromeProfile, false, true, 1200 * time.Millisecond},
+		{chromeProfile, false, false},
+		{firefoxProfile, true, false},
+		{chromeProfile, false, true},
 	}
 
 	var fetchErrors []error
+	var spaFallback *media.FetchResult
+	skipFirefox := false
+
 	for i, stage := range stages {
-		if stage.backoff > 0 {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(stage.backoff):
-			}
+		if stage.jar && skipFirefox {
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 
 		fetchURL := targetURL
@@ -155,10 +160,49 @@ func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media
 			continue
 		}
 
+		// SPA shell after Chrome: Firefox won't execute JS either — skip to Jina.
+		if i == 0 && !stage.jina && isSPAShellResult(result) {
+			slog.Debug("spa shell detected, skipping firefox for jina",
+				"stage", i, "url", targetURL)
+			spaFallback = result
+			skipFirefox = true
+			fetchErrors = append(fetchErrors, fmt.Errorf("stage %d (%s): spa shell (js_required/empty_body)", i, stage.profile.name))
+			continue
+		}
+
+		slog.Info("web stealth fetch done",
+			"url", targetURL, "stage", i, "profile", stage.profile.name, "jina", stage.jina)
 		return result, nil
 	}
 
+	// Jina failed after an SPA shell — return the Chrome body so thin-content
+	// escalation (or the agent) still has something rather than a hard error.
+	if spaFallback != nil {
+		slog.Info("web stealth fetch spa fallback",
+			"url", targetURL, "stage", 0, "profile", chromeProfile.name)
+		return spaFallback, nil
+	}
+
 	return nil, errors.Join(fetchErrors...)
+}
+
+// isSPAShellResult reports whether a successful origin fetch is an unrendered
+// JS shell (js_required / empty_body). Soft-blocks are handled separately and
+// must still try the Firefox+cookie path.
+func isSPAShellResult(result *media.FetchResult) bool {
+	if result == nil || len(result.Data) == 0 {
+		return false
+	}
+	if !strings.Contains(result.ContentType, "text/html") &&
+		!strings.Contains(result.ContentType, "application/xhtml") {
+		return false
+	}
+	for _, s := range detectSignals(string(result.Data)) {
+		if s == "js_required" || s == "empty_body" {
+			return true
+		}
+	}
+	return false
 }
 
 // isBlockError returns true for HTTP errors that indicate bot blocking.

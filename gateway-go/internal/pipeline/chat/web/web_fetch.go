@@ -21,15 +21,16 @@
 package web
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
 
@@ -131,6 +132,7 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 
 	// Cache hit.
 	if cached, ok := cache.Get(targetURL); ok {
+		slog.Info("web fetch", "url", targetURL, "cache_hit", true)
 		return applyTruncation(cached, maxChars), nil
 	}
 
@@ -157,6 +159,9 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 		result, err := fetchWithRetry(ctx, targetURL, maxBytes)
 		fetchMs := time.Since(fetchStart).Milliseconds()
 		if err != nil {
+			slog.Info("web fetch",
+				"url", targetURL, "provider", "stealth", "cache_hit", false,
+				"fetch_ms", fetchMs, "error", err.Error())
 			return formatFetchError(classifyFetchError(err, targetURL)), nil
 		}
 
@@ -166,9 +171,10 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 		meta := webFetchMeta{
 			URL: targetURL, FinalURL: result.FinalURL,
 			ContentType: result.ContentType, StatusCode: result.StatusCode,
-			FetchMs: fetchMs, OrigChars: origChars,
+			FetchMs: fetchMs, Provider: "stealth", OrigChars: origChars,
 		}
 
+		extractStart := time.Now()
 		content := processFetchedContent(ctx, rawContent, result.Data, result.ContentType, targetURL, localAI, &meta)
 		meta.ExtractChars = len(content)
 
@@ -185,6 +191,7 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 				// meta.ExtractChars/WordCount/Signals updated inside on success.
 			}
 		}
+		extractMs := time.Since(extractStart).Milliseconds()
 
 		if origChars > 0 {
 			meta.Retention = fmt.Sprintf("%.1f%%", float64(meta.ExtractChars)/float64(origChars)*100)
@@ -194,6 +201,11 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 		if meta.WordCount == 0 {
 			meta.WordCount = estimateWordCount(content)
 		}
+
+		slog.Info("web fetch",
+			"url", targetURL, "provider", meta.Provider, "cache_hit", false,
+			"fetch_ms", fetchMs, "extract_ms", extractMs,
+			"extract_chars", meta.ExtractChars, "signals", meta.Signals)
 
 		fullResult := formatFetchResult(meta, content)
 		cache.Put(targetURL, fullResult)
@@ -237,6 +249,7 @@ func webFetchViaSerper(ctx context.Context, cache *FetchCache, apiKey, targetURL
 		ContentType:  "text/html",
 		StatusCode:   200,
 		FetchMs:      fetchMs,
+		Provider:     "serper",
 		OrigChars:    origChars,
 		ExtractChars: origChars,
 		Retention:    "100.0%",
@@ -244,6 +257,10 @@ func webFetchViaSerper(ctx context.Context, cache *FetchCache, apiKey, targetURL
 		Signals:      []string{"serper_scrape"},
 	}
 	populateScrapeMetadata(&meta, scrape.Metadata)
+
+	slog.Info("web fetch",
+		"url", targetURL, "provider", "serper", "cache_hit", false,
+		"fetch_ms", fetchMs, "extract_chars", origChars)
 
 	fullResult := formatFetchResult(meta, content)
 	cache.Put(targetURL, fullResult)

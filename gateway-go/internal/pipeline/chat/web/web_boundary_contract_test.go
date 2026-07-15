@@ -179,6 +179,8 @@ func TestFormatFetchResultIncludesOnlyMeaningfulMetadata(t *testing.T) {
 		Language:     "ko",
 		Published:    "2026-07-11",
 		StatusCode:   200,
+		FetchMs:      120,
+		Provider:     "stealth",
 		WordCount:    42,
 		Truncated:    true,
 		Signals:      []string{"article", "json_ld"},
@@ -188,7 +190,8 @@ func TestFormatFetchResultIncludesOnlyMeaningfulMetadata(t *testing.T) {
 		"<metadata>", "Title: Title", "Description: Description", "Author: Author", "Site: Site",
 		"URL: https://example.com/original", "FinalURL: https://example.com/final",
 		"Canonical: https://example.com/canonical", "Language: ko", "Published: 2026-07-11",
-		"StatusCode: 200", "WordCount: 42", "Truncated: true", "Signals: article, json_ld",
+		"StatusCode: 200", "FetchMs: 120", "Provider: stealth", "WordCount: 42", "Truncated: true",
+		"Signals: article, json_ld",
 		"<content>\nbody\n</content>",
 	} {
 		if !strings.Contains(got, want) {
@@ -197,7 +200,7 @@ func TestFormatFetchResultIncludesOnlyMeaningfulMetadata(t *testing.T) {
 	}
 
 	minimal := formatFetchResult(webFetchMeta{URL: "u", FinalURL: "u", CanonicalURL: "u", StatusCode: 204}, "")
-	for _, absent := range []string{"Title:", "Description:", "FinalURL:", "Canonical:", "WordCount:", "Truncated:", "Signals:"} {
+	for _, absent := range []string{"Title:", "Description:", "FinalURL:", "Canonical:", "FetchMs:", "Provider:", "WordCount:", "Truncated:", "Signals:"} {
 		if strings.Contains(minimal, absent) {
 			t.Errorf("minimal metadata unexpectedly contains %q: %s", absent, minimal)
 		}
