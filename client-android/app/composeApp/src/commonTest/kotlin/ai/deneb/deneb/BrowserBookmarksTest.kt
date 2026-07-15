@@ -50,16 +50,20 @@ class BrowserBookmarksTest {
     }
 
     @Test
-    fun `resolveBrowserStartUrl prefers nav url then last http page`() {
+    fun `resolveBrowserStartUrl prefers nav then last then home`() {
         assertEquals(
             "https://nav.example/path",
-            resolveBrowserStartUrl(" https://nav.example/path ", "https://last.example"),
+            resolveBrowserStartUrl(" https://nav.example/path ", "https://last.example", "https://home.example"),
         )
         assertEquals(
             "https://last.example/page",
-            resolveBrowserStartUrl("", " https://last.example/page "),
+            resolveBrowserStartUrl("", " https://last.example/page ", "https://home.example"),
         )
-        assertEquals("", resolveBrowserStartUrl("", "about:blank"))
-        assertEquals("", resolveBrowserStartUrl("  ", ""))
+        assertEquals(
+            "https://home.example/",
+            resolveBrowserStartUrl("", "about:blank", " https://home.example/ "),
+        )
+        assertEquals("", resolveBrowserStartUrl("", "about:blank", "about:blank"))
+        assertEquals("", resolveBrowserStartUrl("  ", "", ""))
     }
 }
