@@ -19,8 +19,13 @@
  *  - When a text node is part of a paragraph/list/table block, ship a small
  *    same-block context envelope. The gateway translates only the node text, but
  *    can use the context for better terminology and sentence flow.
- *  - Debounce + a MutationObserver pick up dynamically loaded / infinite-scroll
- *    content. A scroll listener retries newly visible nodes first.
+ *  - Debounce + MutationObserver (incl. characterData) pick up dynamically
+ *    loaded / infinite-scroll content and SPA text swaps. A scroll listener
+ *    retries newly visible nodes first.
+ *  - Coverage beyond the light DOM: open Shadow DOM (closed roots are
+ *    inaccessible), same-origin iframes (max 8, nest depth 2; cross-origin
+ *    skipped), and SPA soft navigation (history push/replace + popstate /
+ *    hashchange + native onLocationChange hint).
  *  - Toggle: OFF by default — translation starts only when the native chrome
  *    calls setEnabled(true). Turning OFF restores originals; turning ON again
  *    re-applies cached translations + translates anything new (applyAll).
@@ -46,6 +51,7 @@
   var enabled = false; // OFF by default — the native chrome calls setEnabled(true) per the toggle
   var debounceTimer = null;
   var viewportTimer = null;
+  var lastPageKey = '';
   var HANGUL = /[가-힣]/;
   var SKIP_TAGS = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, CODE: 1, PRE: 1, TEXTAREA: 1, KBD: 1, SAMP: 1 };
   var MAX_SEGMENTS_PER_BATCH = 40;
@@ -56,6 +62,8 @@
   var MAX_GROUP_PARTS = 8;
   var MAX_GROUP_CHARS = 800;
   var VIEWPORT_MARGIN = 900;
+  var MAX_IFRAMES = 8;
+  var MAX_IFRAME_DEPTH = 2;
   var SEGMENT_PAYLOAD_PREFIX = '\uE000deneb_translate_segment:v1:';
   var PARTS_RESULT_PREFIX = '\uE000deneb_translate_parts:v1:';
   var BLOCK_SELECTOR = 'p,li,blockquote,figcaption,caption,td,th,dt,dd,h1,h2,h3,h4,h5,h6,article,section';
@@ -79,6 +87,7 @@
     '#content',
     '#main'
   ];
+  var OBSERVE_OPTS = { childList: true, subtree: true, characterData: true };
 
   function translatable(text) {
     var t = (text || '').trim();
@@ -245,6 +254,22 @@
     }
   }
 
+  function nodeView(node) {
+    var doc = node && (node.nodeType === 9 ? node : node.ownerDocument);
+    return (doc && doc.defaultView) || window;
+  }
+
+  function ownerBody(node) {
+    var doc = node && (node.nodeType === 9 ? node : node.ownerDocument);
+    return (doc && doc.body) || null;
+  }
+
+  function rootDocument(root) {
+    if (!root) return document;
+    if (root.nodeType === 9) return root;
+    return root.ownerDocument || document;
+  }
+
   function skipParent(node) {
     var p = node.parentNode;
     while (p && p.nodeType === 1) {
@@ -257,9 +282,10 @@
 
   function hiddenParent(node) {
     var p = node.parentNode;
+    var view = nodeView(node);
     while (p && p.nodeType === 1) {
       if (p.getAttribute && p.getAttribute('aria-hidden') === 'true') return true;
-      var style = window.getComputedStyle ? window.getComputedStyle(p) : null;
+      var style = view.getComputedStyle ? view.getComputedStyle(p) : null;
       if (style && (style.display === 'none' || style.visibility === 'hidden')) return true;
       p = p.parentNode;
     }
@@ -268,7 +294,8 @@
 
   function nearestTextBlock(node) {
     var el = node && node.parentElement;
-    while (el && el !== document.body && el.nodeType === 1) {
+    var body = ownerBody(node);
+    while (el && el !== body && el.nodeType === 1) {
       try {
         if (el.matches && el.matches(BLOCK_SELECTOR)) return el;
       } catch (e) {}
@@ -279,7 +306,8 @@
 
   function groupTextBlock(node) {
     var el = node && node.parentElement;
-    while (el && el !== document.body && el.nodeType === 1) {
+    var body = ownerBody(node);
+    while (el && el !== body && el.nodeType === 1) {
       try {
         if (el.matches && el.matches(BLOCK_SELECTOR)) return el;
       } catch (e) {}
@@ -423,11 +451,12 @@
     return CONTENT_SELECTORS.length;
   }
 
-  function contentRoots() {
+  function contentRoots(doc) {
+    doc = doc || document;
     var roots = [];
     var candidates = [];
     try {
-      candidates = Array.prototype.slice.call(document.querySelectorAll(CONTENT_SELECTORS.join(',')));
+      candidates = Array.prototype.slice.call(doc.querySelectorAll(CONTENT_SELECTORS.join(',')));
     } catch (e) {
       candidates = [];
     }
@@ -456,33 +485,92 @@
     var el = rec && rec.node && rec.node.parentElement;
     if (!el || !el.getBoundingClientRect) return false;
     var rect = el.getBoundingClientRect();
-    var h = window.innerHeight || document.documentElement.clientHeight || 0;
-    var w = window.innerWidth || document.documentElement.clientWidth || 0;
+    var view = nodeView(el);
+    var h = view.innerHeight || (view.document && view.document.documentElement && view.document.documentElement.clientHeight) || 0;
+    var w = view.innerWidth || (view.document && view.document.documentElement && view.document.documentElement.clientWidth) || 0;
     if ((rect.width <= 0 && rect.height <= 0) || rect.bottom < -VIEWPORT_MARGIN || rect.top > h + VIEWPORT_MARGIN) return false;
     return rect.right >= -80 && rect.left <= w + 80;
   }
 
-  // Collect untranslated text nodes under root, assigning each a stable tid.
+  function registerTextNode(n, primary, fresh) {
+    n.__denebSeen = true;
+    var tid = String(nextId++);
+    n.__denebTid = tid;
+    var original = n.nodeValue;
+    nodes[tid] = { node: n, original: original, primary: !!primary };
+    if (n.parentElement) {
+      try { n.parentElement.setAttribute(ATTR, tid); } catch (e) {}
+    }
+    fresh.push(tid);
+  }
+
+  // SPA soft-nav / characterData: a seen node whose text was swapped to new
+  // Latin/Cyrillic content must re-enter the translate queue.
+  function maybeReadmit(n, primary, fresh) {
+    var tid = n.__denebTid;
+    var rec = tid && nodes[tid];
+    if (!rec) {
+      if (translatable(n.nodeValue) && !skipParent(n) && !hiddenParent(n)) {
+        registerTextNode(n, primary, fresh);
+      }
+      return;
+    }
+    if (primary) rec.primary = true;
+    var cur = n.nodeValue;
+    if (cur === rec.original) return;
+    var applied = cache[rec.original];
+    if (applied != null && cur === applied) return;
+    if (!translatable(cur) || skipParent(n) || hiddenParent(n)) return;
+    delete inFlight[tid];
+    rec.original = cur;
+    rec.context = null;
+    fresh.push(tid);
+  }
+
+  function shadowHostsUnder(root) {
+    var hosts = [];
+    try {
+      if (root.nodeType === 1 && root.shadowRoot) hosts.push(root);
+      if (root.querySelectorAll) {
+        var els = root.querySelectorAll('*');
+        for (var i = 0; i < els.length; i++) {
+          if (els[i].shadowRoot) hosts.push(els[i]);
+        }
+      }
+    } catch (e) {}
+    return hosts;
+  }
+
+  // Collect untranslated text nodes under root (light DOM), then recurse into
+  // open shadow roots. Closed shadow roots are inaccessible and skipped.
   function collect(root, primary) {
     var fresh = [];
     if (!root) return fresh;
-    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+    var doc = rootDocument(root);
+    var walker;
+    try {
+      walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+    } catch (e) {
+      return fresh;
+    }
     var n;
     while ((n = walker.nextNode())) {
       if (n.__denebSeen) {
-        if (primary && n.__denebTid && nodes[n.__denebTid]) nodes[n.__denebTid].primary = true;
+        maybeReadmit(n, primary, fresh);
         continue;
       }
       if (!translatable(n.nodeValue)) { n.__denebSeen = true; continue; }
       if (skipParent(n)) { n.__denebSeen = true; continue; }
       if (hiddenParent(n)) continue;
-      n.__denebSeen = true;
-      var tid = String(nextId++);
-      n.__denebTid = tid;
-      var original = n.nodeValue;
-      nodes[tid] = { node: n, original: original, primary: !!primary };
-      if (n.parentElement) n.parentElement.setAttribute(ATTR, tid);
-      fresh.push(tid);
+      registerTextNode(n, primary, fresh);
+    }
+    var hosts = shadowHostsUnder(root);
+    for (var h = 0; h < hosts.length; h++) {
+      var sr = hosts[h].shadowRoot;
+      if (!sr) continue;
+      observeRoot(sr);
+      var nested = collect(sr, primary);
+      for (var k = 0; k < nested.length; k++) fresh.push(nested[k]);
     }
     return fresh;
   }
@@ -505,10 +593,90 @@
     return out;
   }
 
+  function tryContentDocument(frame) {
+    try {
+      return frame.contentDocument || (frame.contentWindow && frame.contentWindow.document) || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Main document + same-origin iframes (cross-origin throws → skipped).
+  function accessibleDocuments() {
+    var out = [];
+    function addDoc(doc, depth) {
+      if (!doc) return;
+      for (var i = 0; i < out.length; i++) if (out[i] === doc) return;
+      out.push(doc);
+      if (depth >= MAX_IFRAME_DEPTH) return;
+      if (out.length >= 1 + MAX_IFRAMES) return;
+      var frames;
+      try {
+        frames = doc.querySelectorAll('iframe, frame');
+      } catch (e) {
+        return;
+      }
+      for (var j = 0; j < frames.length; j++) {
+        if (out.length >= 1 + MAX_IFRAMES) break;
+        var child = tryContentDocument(frames[j]);
+        if (child) addDoc(child, depth + 1);
+      }
+    }
+    addDoc(document, 0);
+    return out;
+  }
+
+  function bindFrameLoads(doc) {
+    if (!doc || !doc.querySelectorAll) return;
+    var frames;
+    try {
+      frames = doc.querySelectorAll('iframe, frame');
+    } catch (e) {
+      return;
+    }
+    for (var i = 0; i < frames.length; i++) {
+      var frame = frames[i];
+      if (frame.__denebLoadBound) continue;
+      frame.__denebLoadBound = true;
+      try {
+        frame.addEventListener('load', function () {
+          var child = tryContentDocument(this);
+          if (!child) return;
+          observeRoot(child.documentElement || child.body);
+          bindFrameLoads(child);
+          if (enabled) scheduleScan();
+        });
+      } catch (e) {}
+      var ready = tryContentDocument(frame);
+      if (ready) {
+        observeRoot(ready.documentElement || ready.body);
+        bindFrameLoads(ready);
+      }
+    }
+  }
+
+  function pruneDetached() {
+    for (var tid in nodes) {
+      if (!nodes.hasOwnProperty(tid)) continue;
+      var rec = nodes[tid];
+      var n = rec && rec.node;
+      if (!n || !n.isConnected) {
+        delete nodes[tid];
+        delete inFlight[tid];
+      }
+    }
+  }
+
   function collectPage() {
-    var roots = contentRoots();
-    for (var i = 0; i < roots.length; i++) collect(roots[i], true);
-    collect(document.body, false);
+    bindFrameLoads(document);
+    var docs = accessibleDocuments();
+    for (var d = 0; d < docs.length; d++) {
+      var doc = docs[d];
+      observeRoot(doc.documentElement || doc.body);
+      var roots = contentRoots(doc);
+      for (var i = 0; i < roots.length; i++) collect(roots[i], true);
+      if (doc.body) collect(doc.body, false);
+    }
   }
 
   function dispatch(tids) {
@@ -629,6 +797,7 @@
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(function () {
       debounceTimer = null;
+      pruneDetached();
       collectPage();
       dispatchPrioritized(knownTids());
     }, 400);
@@ -648,6 +817,7 @@
   // why re-enabling after a disable actually re-translates — collect() alone only
   // returns never-seen nodes, so the old scan()-only path left the page in originals.
   function applyAll() {
+    pruneDetached();
     collectPage();
     dispatchPrioritized(knownTids());
   }
@@ -676,19 +846,57 @@
     }
   }
 
+  function onLocationChange() {
+    pruneDetached();
+    var key = pageCacheKey();
+    if (key !== lastPageKey) lastPageKey = key;
+    bindFrameLoads(document);
+    if (enabled) scheduleScan();
+  }
+
+  function installHistoryHooks() {
+    if (window.__denebHistoryHooked) return;
+    window.__denebHistoryHooked = true;
+    function wrap(fn) {
+      return function () {
+        var ret = fn.apply(this, arguments);
+        try { onLocationChange(); } catch (e) {}
+        return ret;
+      };
+    }
+    try {
+      if (history && history.pushState) history.pushState = wrap(history.pushState.bind(history));
+      if (history && history.replaceState) history.replaceState = wrap(history.replaceState.bind(history));
+    } catch (e) {}
+    try {
+      window.addEventListener('popstate', onLocationChange);
+      window.addEventListener('hashchange', onLocationChange);
+    } catch (e) {}
+  }
+
   var observer = new MutationObserver(function () { if (enabled) scheduleScan(); });
+
+  function observeRoot(root) {
+    if (!root || root.__denebObserved) return;
+    root.__denebObserved = true;
+    try {
+      observer.observe(root, OBSERVE_OPTS);
+    } catch (e) {}
+  }
 
   window.DenebTranslate = {
     __installed: true,
     applyBatch: applyBatch,
     setEnabled: setEnabled,
+    onLocationChange: onLocationChange,
     start: function () {
-      // Install the observer only; translation stays OFF until the native chrome
+      // Install observers/hooks only; translation stays OFF until the native chrome
       // calls setEnabled(true). So a page browsed with translation off never ships
       // a translate request on load.
-      try {
-        observer.observe(document.documentElement || document.body, { childList: true, subtree: true, characterData: false });
-      } catch (e) {}
+      lastPageKey = pageCacheKey();
+      observeRoot(document.documentElement || document.body);
+      installHistoryHooks();
+      bindFrameLoads(document);
       try {
         window.addEventListener('scroll', scheduleViewportScan, { passive: true });
       } catch (e) {}
