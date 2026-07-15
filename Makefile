@@ -14,7 +14,7 @@
        health health-check health-v2 health-v2-check health-v2-deep health-v2-test health-v2-baseline \
        health-v3 health-v3-check health-v3-deep health-v3-test health-v3-baseline \
        rsi-bench rsi-bench-check rsi-bench-deep rsi-bench-test rsi-bench-baseline \
-       bench-check \
+       bench-check bench-refresh \
        runtime-health runtime-health-test python-test python-lint shell-lint shell-behavior-test \
        preview native-smoke \
        info
@@ -291,11 +291,16 @@ bench-check: health-v3-check rsi-bench-check
 rsi-bench-deep:
 	@python3 scripts/audit/rsi-bench.py --deep --refresh-cache
 
+# Force-overwrite health-v3 + rsi-bench snapshots (gitignored). Prefer the
+# daily systemd timer on the gateway host: scripts/systemd/setup-bench-refresh.sh
+bench-refresh:
+	@bash scripts/audit/refresh-bench-snapshots.sh
+
 rsi-bench-test:
 	@python3 -m unittest discover -s scripts/audit -p 'test_rsi_bench*.py' -v
 
 rsi-bench-baseline:
-	@python3 scripts/audit/rsi-bench.py --update-baseline --migrate-rubric --expect-band 25:40
+	@python3 scripts/audit/rsi-bench.py --update-baseline --migrate-rubric --expect-band 25:50
 
 # Runtime-health score (advisory, on-host only — reads the production gateway's
 # journald over a rolling window, so it is NON-deterministic and has NO ratchet

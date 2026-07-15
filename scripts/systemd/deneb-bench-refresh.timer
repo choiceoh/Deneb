@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Deneb Health+RSI bench snapshot refresh
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+Persistent=true
+RandomizedDelaySec=10min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

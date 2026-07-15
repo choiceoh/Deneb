@@ -301,31 +301,84 @@ def load_transfer_window(data: Path | None = None, *, days: int = 7) -> Transfer
     return out
 
 
+# Soft usage reconstruct horizon: longer than the 14d stale-confirm window so
+# skills that accrued ≥3 real uses but lost their watch file without
+# evolve_confirmed (sparse-traffic gap) still count toward soft≥3.
+_SOFT_USAGE_HORIZON_DAYS = 28
+_LAND_OUTCOMES = frozenset({"landed", "merged", "deployed", "watch_passed", "applied"})
+_FAIL_OUTCOMES = frozenset({"failed", "error", "timeout", "session_failed", "abandoned"})
+_ROLLBACK_OUTCOMES = frozenset({"rolled_back", "reverted"})
+_ACCEPT_STATUSES = frozenset({"accepted", "dispatched", "started", "pr_opened", "attempted"})
+
+
+def _soft_skills_from_usage(
+    root: Path, *, soft_confirm_uses: int, days: int = _SOFT_USAGE_HORIZON_DAYS
+) -> set[str]:
+    """Skills evolved in-horizon that accrued ≥soft_confirm_uses real post-evolve uses.
+
+    Open watches alone under-count when a watch file is cleared without writing
+    evolve_confirmed (sparse traffic never reaches the 6-use hard window).
+    """
+    cutoff = now_ms() - days * 86400 * 1000
+    latest_evolve: dict[str, int] = {}
+    for row in iter_jsonl(root / "skill_genesis_log.jsonl"):
+        if str(row.get("type") or "") != "evolved":
+            continue
+        ts = _created_at_ms(row)
+        if ts is None or ts < cutoff:
+            continue
+        name = str(row.get("skillName") or row.get("skill") or "").strip()
+        if not name:
+            continue
+        latest_evolve[name] = max(latest_evolve.get(name, 0), ts)
+    if not latest_evolve:
+        return set()
+    uses: dict[str, int] = {name: 0 for name in latest_evolve}
+    for row in iter_jsonl(root / "skill_usage.jsonl"):
+        name = str(row.get("skillName") or row.get("skill") or "").strip()
+        if name not in uses:
+            continue
+        src = str(row.get("source") or "").strip().lower()
+        if src not in {"", "real"}:
+            continue
+        used = row.get("usedAt")
+        try:
+            used_ms = int(used) if used is not None else 0
+        except (TypeError, ValueError):
+            continue
+        if used_ms >= latest_evolve[name]:
+            uses[name] += 1
+    return {name for name, n in uses.items() if n >= soft_confirm_uses}
+
+
 def load_watch_window(data: Path | None = None, *, soft_confirm_uses: int = 3) -> WatchWindow:
     root = data or data_dir()
     path = root / "skill_evolve_watch.json"
     out = WatchWindow()
-    if not path.is_file():
-        return out
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return out
-    if not isinstance(payload, dict):
-        return out
-    for _skill, entry in payload.items():
-        if not isinstance(entry, dict):
-            continue
-        out.watches += 1
-        uses = int(entry.get("postUses") or entry.get("post_uses") or 0)
-        if uses >= soft_confirm_uses:
-            out.soft_confirmed += 1
-        elif uses >= 1:
-            out.soft_open += 1
+    soft_skills: set[str] = set()
+    if path.is_file():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+        if isinstance(payload, dict):
+            for skill, entry in payload.items():
+                if not isinstance(entry, dict):
+                    continue
+                out.watches += 1
+                uses = int(entry.get("postUses") or entry.get("post_uses") or 0)
+                name = str(skill)
+                if uses >= soft_confirm_uses:
+                    soft_skills.add(name)
+                elif uses >= 1:
+                    out.soft_open += 1
+    soft_skills |= _soft_skills_from_usage(root, soft_confirm_uses=soft_confirm_uses)
+    out.soft_confirmed = len(soft_skills)
     return out
 
 
 def load_dispatch_window(data: Path | None = None) -> DispatchWindow:
+    """Count L4 markers. Land truth is marker ``outcome`` (review ``status`` stays accepted)."""
     root = data or data_dir()
     out = DispatchWindow()
     folder = root / "coding_dispatch"
@@ -340,13 +393,15 @@ def load_dispatch_window(data: Path | None = None) -> DispatchWindow:
             continue
         out.files += 1
         status = str(row.get("status") or row.get("state") or "").lower()
-        if status in {"accepted", "dispatched", "started", "pr_opened"}:
+        outcome = str(row.get("outcome") or row.get("_dispatchPhase") or "").lower()
+        terminal = outcome or status
+        if status in _ACCEPT_STATUSES or outcome in _LAND_OUTCOMES | _FAIL_OUTCOMES | {"declined"}:
             out.accepted += 1
-        if status in {"landed", "merged", "deployed", "watch_passed", "applied"}:
+        if terminal in _LAND_OUTCOMES:
             out.landed += 1
-        if status in {"failed", "error"}:
+        if terminal in _FAIL_OUTCOMES:
             out.failed += 1
-        if status in {"rolled_back", "reverted"}:
+        if terminal in _ROLLBACK_OUTCOMES:
             out.rolled_back += 1
     return out
 

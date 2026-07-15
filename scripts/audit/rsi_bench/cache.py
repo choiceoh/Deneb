@@ -88,10 +88,14 @@ def _rpc_rsi_status(base: str, token: str, timeout: float = 5.0) -> dict[str, An
     return payload if isinstance(payload, dict) else None
 
 
-def _embed_health_v3(root: Path) -> dict[str, Any] | None:
-    """Embed Health Bench 3 overall for codebase-delta (leaf: run Python bench externally)."""
+def _embed_health_v3(root: Path, *, force: bool = True) -> dict[str, Any] | None:
+    """Embed Health Bench 3 overall for codebase-delta (leaf: run Python bench externally).
+
+    When ``force`` (default on refresh_cache), always recompute and overwrite the
+    gitignored snapshot so cadence timers cannot stick on a stale overall.
+    """
     snap_path = root / "scripts" / "audit" / "health-v3-snapshot.json"
-    if snap_path.is_file():
+    if not force and snap_path.is_file():
         try:
             snap = json.loads(snap_path.read_text(encoding="utf-8"))
             overall = float((snap.get("score") or {}).get("overall", snap.get("overall") or 0))
@@ -99,7 +103,6 @@ def _embed_health_v3(root: Path) -> dict[str, Any] | None:
                 return {"overall": overall, "source": "snapshot"}
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             pass
-    # Compute a fresh snapshot when refresh is requested (gitignored write).
     try:
         import codebase_health_v3 as hv3
 
@@ -112,6 +115,14 @@ def _embed_health_v3(root: Path) -> dict[str, Any] | None:
         )
         return {"overall": report.overall, "source": "computed"}
     except Exception as exc:  # noqa: BLE001 — advisory embed; never fail cache refresh
+        if snap_path.is_file():
+            try:
+                snap = json.loads(snap_path.read_text(encoding="utf-8"))
+                overall = float((snap.get("score") or {}).get("overall", snap.get("overall") or 0))
+                if overall > 0:
+                    return {"overall": overall, "source": "snapshot-fallback", "error": str(exc)[:200]}
+            except (OSError, json.JSONDecodeError, TypeError, ValueError):
+                pass
         return {"overall": None, "source": "unavailable", "error": str(exc)[:200]}
 
 
