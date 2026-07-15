@@ -43,6 +43,31 @@ var noiseClassIDPattern = regexp.MustCompile(
 // This is a critical preprocessing step: without it, nav menus, cookie banners,
 // and ad blocks consume tokens that should be spent on actual content.
 // Exported for use by link_enrichment and other callers that convert HTML.
+// asciiLower lowercases only ASCII A–Z, leaving every other byte — including
+// bytes of multi-byte UTF-8 runes and invalid UTF-8 bytes — untouched. Unlike
+// strings.ToLower it is strictly length-preserving byte-for-byte, so an index
+// computed on the result stays valid for the original html. These strip helpers
+// deliberately mix lower-derived indices with slices of the *original* string,
+// and strings.ToLower can grow the string (each invalid UTF-8 byte becomes a
+// 3-byte U+FFFD), which pushed a lower-index past len(html) and panicked with
+// "slice bounds out of range" on non-UTF-8 pages (e.g. EUC-KR). Tag/attribute
+// tokens are all ASCII, so ASCII-only folding matches identically.
+func asciiLower(s string) string {
+	var b []byte
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; c >= 'A' && c <= 'Z' {
+			if b == nil {
+				b = []byte(s)
+			}
+			b[i] = c + ('a' - 'A')
+		}
+	}
+	if b == nil {
+		return s
+	}
+	return string(b)
+}
+
 func StripNoiseElements(html string) string {
 	// Phase 1: Strip known noise tag blocks.
 	result := html
@@ -97,7 +122,7 @@ func skipToBlockEnd(html, lower string, searchFrom int, openPrefix, closeTag str
 // stripTagBlock removes all occurrences of <tag ...>...</tag> (case-insensitive).
 // Handles nested tags of the same type by tracking depth.
 func stripTagBlock(html, tag string) string {
-	lower := strings.ToLower(html)
+	lower := asciiLower(html)
 	openPrefix := "<" + tag
 	closeTag := "</" + tag + ">"
 
@@ -164,7 +189,7 @@ func stripMatchingBlocks(html string, pattern *regexp.Regexp) string {
 	type removeRange struct{ start, end int }
 	var ranges []removeRange
 
-	lower := strings.ToLower(html)
+	lower := asciiLower(html)
 	for _, loc := range locs {
 		matchStart := loc[0]
 
@@ -299,7 +324,7 @@ func extractHTMLMeta(html string, meta *webFetchMeta) {
 
 // findHeadSection returns the portion of HTML up to </head> or first 16K.
 func findHeadSection(html string) string {
-	lower := strings.ToLower(html)
+	lower := asciiLower(html)
 	if idx := strings.Index(lower, "</head>"); idx >= 0 && idx < 32768 {
 		return html[:idx+7]
 	}
@@ -494,7 +519,7 @@ var spaIndicators = []string{
 }
 
 func detectSignals(html string) []string {
-	lower := strings.ToLower(html)
+	lower := asciiLower(html)
 	var signals []string
 
 	// Pattern-based signal detection.

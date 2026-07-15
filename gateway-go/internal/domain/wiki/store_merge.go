@@ -245,10 +245,11 @@ func (s *Store) repointReference(relPath, oldRef, newRef string) bool {
 }
 
 // mergeFrontmatterInto folds src's frontmatter into dst while keeping dst's
-// identity. Tags and cue anchors become a union; importance takes the max;
-// due/created take the earlier date (a merged entity's history starts at the
-// earliest); summary, the frozen project code, and the resource URI fill in
-// from src only when dst's is empty (the code is the move-stable project
+// identity. Tags, cue anchors, emails, sites, and kinds become a union; PID
+// and client fill in from src only when dst's is empty; importance takes the
+// max; due/created take the earlier date (a merged entity's history starts at
+// the earliest); summary, the frozen project code, and the resource URI fill
+// in from src only when dst's is empty (the code is the move-stable project
 // identity — dropping it on a legacy-flat merge kills every code-form related
 // edge into the surviving page). Title, Category, Type, Confidence, Archived,
 // and ID stay dst's.
@@ -258,6 +259,13 @@ func mergeFrontmatterInto(dst *Frontmatter, src Frontmatter) {
 	// duplicate-fold would silently kill the paraphrase queries that page
 	// answered. Union with dst priority; normalizeCues dedupes/trims/caps.
 	dst.Cues = normalizeCues(append(append([]string{}, dst.Cues...), src.Cues...))
+	// Emails, sites, and kinds are identity/anchor keys the fold must not drop
+	// with the deleted source: emails are the canonical 동명이인 disambiguation
+	// key, sites/kinds the project's 현장/특성 recall-anchor + digest-grouping
+	// keys. Union so the survivor keeps both pages' values (normalize dedupes).
+	dst.Emails = unionStrings(dst.Emails, src.Emails)
+	dst.Sites = normalizeSites(append(append([]string{}, dst.Sites...), src.Sites...))
+	dst.Kinds = normalizeKinds(append(append([]string{}, dst.Kinds...), src.Kinds...))
 	if src.Importance > dst.Importance {
 		dst.Importance = src.Importance
 	}
@@ -266,6 +274,14 @@ func mergeFrontmatterInto(dst *Frontmatter, src Frontmatter) {
 	}
 	if strings.TrimSpace(dst.Code) == "" {
 		dst.Code = src.Code
+	}
+	// PID is the move-stable, frozen person identity (the person-only analogue of
+	// Code); client is fill-only per the wiki-layout rule (기존 값 덮어쓰기 금지).
+	if strings.TrimSpace(dst.PID) == "" {
+		dst.PID = src.PID
+	}
+	if strings.TrimSpace(dst.Client) == "" {
+		dst.Client = src.Client
 	}
 	if strings.TrimSpace(dst.Resource) == "" {
 		dst.Resource = src.Resource
