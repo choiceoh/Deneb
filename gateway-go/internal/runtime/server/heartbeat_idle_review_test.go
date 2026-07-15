@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 )
 
@@ -138,7 +138,7 @@ func TestIdleReviewStaleAfterFromEnvParsesOrFallsBackToDefault(t *testing.T) {
 // TestHeartbeatRun_ReachesIdleReviewLane proves the Run() ordering contract:
 // the idle-review lane executes with the deterministic lanes, BEFORE the
 // "nothing to do" early-return — so an otherwise empty tick still feeds the
-// review loop. chatHandler only needs to be non-nil here: with no
+// review loop. ChatHandler only needs to report ChatReady: with no
 // HEARTBEAT.md, no signals, and no nudges the tick returns before any turn.
 func TestHeartbeatRunReachesIdleReviewLaneBeforeEarlyReturn(t *testing.T) {
 	called := false
@@ -148,7 +148,7 @@ func TestHeartbeatRunReachesIdleReviewLaneBeforeEarlyReturn(t *testing.T) {
 	}
 	task := runtimeheartbeat.NewTask(runtimeheartbeat.TaskConfig{
 		Now:         func() time.Time { return time.Date(2026, 7, 11, 12, 0, 0, 0, kst) },
-		ChatHandler: &chat.Handler{},
+		ChatHandler: readyChatStub{},
 		Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
 		HomeDir:     t.TempDir(),
 		IdleSkillReview: func(context.Context) (bool, string) {
@@ -162,6 +162,16 @@ func TestHeartbeatRunReachesIdleReviewLaneBeforeEarlyReturn(t *testing.T) {
 	if !called {
 		t.Fatal("idleSkillReview lane was not reached by Run()")
 	}
+}
+
+// readyChatStub admits heartbeat ticks without constructing a full chat.Handler
+// (zero Handler fails ChatReady because abort is nil).
+type readyChatStub struct{}
+
+func (readyChatStub) ChatReady() bool { return true }
+
+func (readyChatStub) RunSync(context.Context, chatport.SyncRequest) (*chatport.SyncResult, error) {
+	return &chatport.SyncResult{}, nil
 }
 
 // TestIdleSkillReviewLane_ProductionGate proves the wiring-level invariant: a

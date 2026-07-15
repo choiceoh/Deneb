@@ -87,15 +87,15 @@ func (a *filesAdapter) Recall(ctx context.Context, query string, limit int) ([]R
 	}
 	qctx, cancel := context.WithTimeout(ctx, filesRecallTimeout)
 	defer cancel()
-		hits, err := a.index.HybridSearch(qctx, query, limit, a.embed, a.extractFn)
-		if err != nil {
-			// Timeout / cancel → sentinel so Router can surface a degrade note
-			// instead of looking like "no file knowledge".
-			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || qctx.Err() != nil {
-				return nil, ErrFilesRecallTimeout
-			}
-			return nil, err
+	hits, err := a.index.HybridSearch(qctx, query, limit, a.embed, a.extractFn)
+	if err != nil {
+		// Timeout / cancel → sentinel so Router can surface a degrade note
+		// instead of looking like "no file knowledge".
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || qctx.Err() != nil {
+			return nil, ErrFilesRecallTimeout
 		}
+		return nil, err
+	}
 	out := make([]Result, 0, len(hits))
 	for _, h := range hits {
 		meta := map[string]string{}

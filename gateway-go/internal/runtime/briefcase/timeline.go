@@ -22,11 +22,11 @@ var (
 // TimelineEvent is an immutable input event. Events are replayed by At, Order,
 // then ID, so ordering does not depend on map iteration or input slice order.
 type TimelineEvent struct {
-	ID      string          `json:"id"`
-	At      time.Time       `json:"at"`
-	Order   uint64          `json:"order,omitempty"`
-	Kind    string          `json:"kind"`
-	Payload rawJSON `json:"payload,omitempty"`
+	ID      string    `json:"id"`
+	At      time.Time `json:"at"`
+	Order   uint64    `json:"order,omitempty"`
+	Kind    string    `json:"kind"`
+	Payload rawJSON   `json:"payload,omitempty"`
 }
 
 type TimelineHandler func(context.Context, TimelineEvent) error

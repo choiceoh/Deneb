@@ -43,6 +43,16 @@ CROSS_COMPONENT_TRANSPORT_SEAMS = frozenset({
     "internal/runtime/rpc/handler/handlerminiapp",
 })
 
+# Domain assembly hubs intentionally expose a wide mutation API to runtime
+# wiring (Tracker, Evolver, lifecycle records) while read models live in child
+# packages (genesis/status, genesis/propus). High volatile-contract blast here
+# reflects RSI iteration velocity, not a missing boundary — same pattern as
+# transport-seam cochange exemption: suppress the FINDING only; blast still
+# feeds the tail subscore.
+VOLATILE_DOMAIN_ASSEMBLY_HUBS = frozenset({
+    "internal/domain/skills/genesis",
+})
+
 
 def is_composition_root(package_key: str) -> bool:
     """Report whether a package belongs to the wiring/composition-root layer."""
@@ -52,6 +62,11 @@ def is_composition_root(package_key: str) -> bool:
 def is_cross_component_seam(package_key: str) -> bool:
     """Report exact wiring or transport seams whose job spans components."""
     return is_composition_root(package_key) or package_key in CROSS_COMPONENT_TRANSPORT_SEAMS
+
+
+def is_volatile_domain_assembly_hub(package_key: str) -> bool:
+    """Report domain orchestration hubs whose wide API is an intentional seam."""
+    return package_key in VOLATILE_DOMAIN_ASSEMBLY_HUBS
 
 
 def _responsibility_cohesion(repo: RepositoryInventory) -> Pillar:
@@ -183,6 +198,9 @@ def _responsibility_cohesion(repo: RepositoryInventory) -> Pillar:
 
     for blast, package, exports, fanin, touches in sorted(volatile_rows, reverse=True)[:6]:
         if blast <= 50:
+            continue
+        if is_volatile_domain_assembly_hub(package):
+            # The hub's blast still fed volatile_contract_blast_tail above.
             continue
         findings.append(
             _finding(

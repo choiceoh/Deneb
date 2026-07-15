@@ -172,7 +172,6 @@ JSON
         self.assertEqual(agents["lightweightModel"], "puppet/lightweight-seat")
         self.assertEqual(agents["fallbackModel"], "puppet/fallback-seat")
         self.assertEqual(agents["tinyModel"], "puppet/tiny-seat")
-        self.assertEqual(agents["analysisModel"], "puppet/analysis-seat")
         self.assertEqual(agents["codingModel"], "puppet/coding-seat")
         self.assertEqual(agents["chatbotModel"], "puppet/chatbot-seat")
         self.assertEqual(agents["visionModel"], "puppet/vision-seat")

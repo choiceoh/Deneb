@@ -13,7 +13,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from test_support import invoke_main, load_script
+from test_support import REPO_ROOT, invoke_main, load_script
+
+sys.path.insert(0, str(REPO_ROOT / "scripts/dev"))
+import codegraph_worktree_index as worktree_index
 
 nudge = load_script("scripts/dev/codegraph-nudge.py")
 autoindex = load_script("scripts/dev/codegraph-autoindex.py")
@@ -226,15 +229,15 @@ class AutoindexTests(unittest.TestCase):
 
     def invoke(self, *, stdin="{}", popen=None):
         patches = [
-            mock.patch.object(autoindex, "codegraph_bin", return_value="/bin/codegraph"),
-            mock.patch.object(autoindex.tempfile, "gettempdir", return_value=str(self.marker_root)),
+            mock.patch.object(worktree_index, "codegraph_bin", return_value="/bin/codegraph"),
+            mock.patch.object(worktree_index.tempfile, "gettempdir", return_value=str(self.marker_root)),
         ]
         for patcher in patches:
             patcher.start()
             self.addCleanup(patcher.stop)
         if popen is None:
             popen = mock.Mock(return_value=mock.Mock())
-        with mock.patch.object(autoindex.subprocess, "Popen", popen):
+        with mock.patch.object(worktree_index.subprocess, "Popen", popen):
             result = invoke_main(
                 autoindex,
                 stdin=stdin,
@@ -243,13 +246,13 @@ class AutoindexTests(unittest.TestCase):
         return result, popen
 
     def test_binary_resolution_and_missing_prerequisites_fail_open(self) -> None:
-        with mock.patch.object(autoindex.shutil, "which", side_effect=lambda p: p if p == "codegraph" else None):
-            self.assertEqual(autoindex.codegraph_bin(), "codegraph")
-        with mock.patch.object(autoindex.shutil, "which", return_value=None):
-            self.assertIsNone(autoindex.codegraph_bin())
+        with mock.patch.object(worktree_index.shutil, "which", side_effect=lambda p: p if p == "codegraph" else None):
+            self.assertEqual(worktree_index.codegraph_bin(), "codegraph")
+        with mock.patch.object(worktree_index.shutil, "which", return_value=None):
+            self.assertIsNone(worktree_index.codegraph_bin())
 
-        with mock.patch.object(autoindex, "codegraph_bin", return_value=None):
-            with mock.patch.object(autoindex.subprocess, "Popen") as popen:
+        with mock.patch.object(worktree_index, "codegraph_bin", return_value=None):
+            with mock.patch.object(worktree_index.subprocess, "Popen") as popen:
                 result = invoke_main(
                     autoindex,
                     stdin="{invalid json",

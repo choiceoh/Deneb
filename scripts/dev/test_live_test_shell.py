@@ -154,7 +154,7 @@ printf 'delegate-ok\n'
     def test_default_help_unknown_command_and_legacy_global_flag_are_side_effect_free(self) -> None:
         default = self.invoke()
         self.assertEqual(default.returncode, 0)
-        self.assertIn("Usage: scripts/live-test.sh COMMAND", default.stdout)
+        self.assertIn("Usage: scripts/dev/live-test.sh COMMAND", default.stdout)
         self.assertIn("네이티브 miniapp RPC", default.stdout)
 
         unknown = self.invoke("does-not-exist")

@@ -93,7 +93,6 @@ func cleanLLMCardSummary(raw string) string {
 	return clipRunes(s, workFeedSummaryMaxRunes)
 }
 
-
 func parseLLMTitleSummary(raw string) (title, summary string) {
 	title, summary = cardtitle.ParseLLMTitleSummary(raw)
 	return cleanLLMCardTitle(title), cleanLLMCardSummary(summary)

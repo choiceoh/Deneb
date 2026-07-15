@@ -45,8 +45,8 @@ type ToolRegistry struct {
 	order          []string // preserves registration order
 	postProcess    *PostProcessRegistry
 	spillStore     tooldeps.SpilloverStore // optional; spills large tool results to disk
-	provenanceRoot string                // optional workspace root for content-free file effect metadata
-	cachedLLMTools []llm.Tool            // cached tool list; invalidated on RegisterTool
+	provenanceRoot string                  // optional workspace root for content-free file effect metadata
+	cachedLLMTools []llm.Tool              // cached tool list; invalidated on RegisterTool
 }
 
 // NewToolRegistry creates an empty tool registry.

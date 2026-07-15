@@ -21,21 +21,21 @@ type (
 )
 
 var (
-	Builtin              = modelcaps.Builtin
-	RejectsCacheControl  = modelcaps.RejectsCacheControl
-	DefaultProfile       = router.DefaultProfile
-	Decide               = router.Decide
-	NewShortID           = shortid.New
-	ResolveStateDir      = config.ResolveStateDir
+	Builtin                   = modelcaps.Builtin
+	RejectsCacheControl       = modelcaps.RejectsCacheControl
+	DefaultProfile            = router.DefaultProfile
+	Decide                    = router.Decide
+	NewShortID                = shortid.New
+	ResolveStateDir           = config.ResolveStateDir
 	LoadConfigFromDefaultPath = config.LoadConfigFromDefaultPath
 	ResolveAgentWorkspaceDir  = config.ResolveAgentWorkspaceDir
-	NewSubagentNotifier  = subagent.NewSubagentNotifier
+	NewSubagentNotifier       = subagent.NewSubagentNotifier
 
-	RPCNew                   = rpcerr.New
-	RPCNewf                  = rpcerr.Newf
-	RPCMissingParam          = rpcerr.MissingParam
-	RPCNotFound              = rpcerr.NotFound
-	RPCInvalidRequest        = rpcerr.InvalidRequest
-	RPCWrapInvalidRequest    = rpcerr.WrapInvalidRequest
-	RPCWrapDependencyFailed  = rpcerr.WrapDependencyFailed
+	RPCNew                  = rpcerr.New
+	RPCNewf                 = rpcerr.Newf
+	RPCMissingParam         = rpcerr.MissingParam
+	RPCNotFound             = rpcerr.NotFound
+	RPCInvalidRequest       = rpcerr.InvalidRequest
+	RPCWrapInvalidRequest   = rpcerr.WrapInvalidRequest
+	RPCWrapDependencyFailed = rpcerr.WrapDependencyFailed
 )

@@ -82,7 +82,10 @@ class CodingDispatchStatusTest(unittest.TestCase):
     def test_unavailable_github_probe_is_not_recorded_as_candidate_failure(self):
         dispatcher_path = Path(__file__).with_name("coding-dispatch.sh")
         dispatcher = dispatcher_path.read_text(encoding="utf-8")
-        self.assertIn('if ! pr_json=$(pr_json_for_branch "$branch"); then', dispatcher)
+        self.assertIn(
+            'pr_json=$(pr_json_for_branch "$branch" || printf \'[]\')',
+            dispatcher,
+        )
         self.assertIn('PR_OUTCOME="unknown"', dispatcher)
         env = {"HOME": "/tmp/deneb-test-no-gh", "PATH": "/usr/bin:/bin"}
         proc = subprocess.run(
@@ -90,7 +93,7 @@ class CodingDispatchStatusTest(unittest.TestCase):
                 "/bin/bash",
                 "-c",
                 'source "$1"; GH_BIN=""; set +e; '
-                "record_pr_outcome cid attempt branch 0 1; rc=$?; "
+                "record_pr_outcome cid attempt branch 0 1 '' ; rc=$?; "
                 'printf "%s:%s" "$rc" "$PR_OUTCOME"',
                 "test",
                 str(dispatcher_path),
@@ -105,7 +108,7 @@ class CodingDispatchStatusTest(unittest.TestCase):
     def test_instant_process_failure_is_classified_as_environment_failure(self):
         dispatcher = Path(__file__).with_name("coding-dispatch.sh").read_text(encoding="utf-8")
         expected = (
-            'record_runtime_status environment_failed "instant environment failure rc=$rc" "$cid"'
+            'record_runtime_status environment_failed "instant environment failure rc=$rc (${ifails}/${INSTANT_FAIL_MAX})" "$cid"'
         )
         self.assertIn(expected, dispatcher)
 
@@ -123,7 +126,7 @@ class CodingDispatchStatusTest(unittest.TestCase):
             self._session_status("failed", "timeout", 124).startswith("session_failed|")
         )
         self.assertEqual(
-            self._session_status("open", "attempted", 0),
+            self._session_status("pr_opened", "attempted", 0),
             "pr_opened|PR open|candidate",
         )
 

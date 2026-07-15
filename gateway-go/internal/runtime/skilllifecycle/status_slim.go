@@ -18,8 +18,8 @@ const (
 	statusSlimCandidateRunes = 400
 	// Bodies longer than this are omitted entirely (not head-truncated) so a
 	// 2KB SKILL.md dump cannot crowd out nextActions / open corrections.
-	statusSlimBodyOmitAbove  = 800
-	statusSlimBodyOmitNote   = "[omitted from status — see rejected-edit store / validation corpus]"
+	statusSlimBodyOmitAbove = 800
+	statusSlimBodyOmitNote  = "[omitted from status — see rejected-edit store / validation corpus]"
 )
 
 // slimSkillLifecycleStatusForAgent mutates status in place to drop bulky
