@@ -65,6 +65,7 @@ type semanticIndex struct {
 	vecs        map[string]cachedVec // relPath -> embedding
 	refreshing  atomic.Bool          // single-flight guard for refreshAsync
 	syncRefresh bool                 // tests only: run refreshAsync inline for deterministic assertions
+	forgetEpoch uint64               // bumped under mu on each forget; a refresh drops its write-back if this changed mid-flight so an in-flight embed can't resurrect a vector a concurrent forget deleted
 
 	// Lifecycle for the background refresh goroutine: baseCtx is cancelled by
 	// shutdown() so an in-flight re-embed stops promptly, and wg lets Close wait
@@ -185,6 +186,9 @@ func (s *Store) dropSemanticVector(relPath string) {
 	s.sem.mu.Lock()
 	_, existed := s.sem.vecs[relPath]
 	delete(s.sem.vecs, relPath)
+	// Bump the epoch so a refresh that snapshotted this page before the delete
+	// and is embedding it outside the lock won't write the vector back after us.
+	s.sem.forgetEpoch++
 	s.sem.mu.Unlock()
 	if existed {
 		// Persist the removal: otherwise a gateway restart reloads the forgotten
@@ -464,6 +468,10 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) 
 			mutated = true
 		}
 	}
+	// Snapshot the forget epoch under the same lock as the page snapshot: if it
+	// advances before a write-back below, a forget deleted a page we are still
+	// embedding and the write-back must be abandoned to avoid resurrecting it.
+	startEpoch := si.forgetEpoch
 	si.mu.Unlock()
 
 	// Embed changed pages in bounded batches (outside the lock).
@@ -482,6 +490,13 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) 
 			return nil // unexpected shape; skip this refresh, keep prior vecs
 		}
 		si.mu.Lock()
+		if si.forgetEpoch != startEpoch {
+			// A forget raced this refresh; its deletion must win. Abandon the
+			// write-back (the next refresh re-embeds any legitimately changed
+			// pages) so an in-flight embed never resurrects a forgotten vector.
+			si.mu.Unlock()
+			return nil
+		}
 		for i, rp := range toEmbed[start:end] {
 			si.vecs[rp] = cachedVec{hash: want[rp], vec: vecs[i]}
 		}

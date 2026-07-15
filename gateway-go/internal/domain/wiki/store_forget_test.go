@@ -145,6 +145,62 @@ func TestForgetSemanticRemovalSurvivesReload(t *testing.T) {
 	}
 }
 
+// blockingEmbedder pauses inside Embed until released, so a test can drive a
+// forget while a refresh is mid-embed (the P1 resurrection race).
+type blockingEmbedder struct {
+	fakeEmbedder
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (b *blockingEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	select {
+	case b.entered <- struct{}{}:
+	default:
+	}
+	<-b.release
+	return b.fakeEmbedder.Embed(ctx, texts)
+}
+
+func TestForgetDuringInFlightRefreshIsNotResurrected(t *testing.T) {
+	store := newForgetTestStore(t)
+	emb := &blockingEmbedder{
+		fakeEmbedder: fakeEmbedder{healthy: true},
+		entered:      make(chan struct{}, 1),
+		release:      make(chan struct{}),
+	}
+	store.SetEmbedder(emb)
+	page := NewPage("경합", "기타", nil)
+	page.Body = "임베딩 중에 잊혀야 하는 본문"
+	if err := store.WritePage("기타/경합.md", page); err != nil {
+		t.Fatalf("WritePage: %v", err)
+	}
+
+	// Refresh runs in a goroutine and blocks inside Embed, holding a page
+	// snapshot that still includes 경합 and the epoch captured before the forget.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = store.WarmSemanticIndex(context.Background())
+	}()
+	<-emb.entered // refresh is now embedding 경합, outside the lock
+
+	if _, err := store.Forget("기타/경합", "프라이버시"); err != nil {
+		t.Fatalf("Forget: %v", err)
+	}
+	close(emb.release) // let the in-flight embed finish and attempt write-back
+	<-done
+
+	// The write-back must have been abandoned (epoch advanced), so the forgotten
+	// page's vector must NOT be present.
+	store.sem.mu.Lock()
+	_, back := store.sem.vecs["기타/경합.md"]
+	store.sem.mu.Unlock()
+	if back {
+		t.Fatalf("in-flight refresh resurrected the forgotten vector")
+	}
+}
+
 func TestForgetRequiresReason(t *testing.T) {
 	store := newForgetTestStore(t)
 	page := NewPage("x", "기타", nil)

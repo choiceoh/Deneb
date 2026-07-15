@@ -63,7 +63,7 @@ func ToolPersonaPref(workspaceDir string) toolport.ToolFunc {
 		rule = strings.Join(strings.Fields(rule), " ")
 
 		if workspaceDir == "" {
-			return "워크스페이스가 설정되지 않아 선호를 저장할 수 없습니다.", nil
+			return "선호 저장 실패: 워크스페이스가 설정되지 않았습니다.", nil
 		}
 		soulPath := resolvePersonaSoulPath(workspaceDir)
 
@@ -84,7 +84,7 @@ func ToolPersonaPref(workspaceDir string) toolport.ToolFunc {
 
 		chunk := buildPreferenceChunk(current, rule)
 		if len(current)+len(chunk) > personaSoulMaxBytes {
-			return fmt.Sprintf("SOUL.md가 한도(%dB)에 가까워 더 추가할 수 없습니다. 사용자에게 SOUL.md의 오래된 규칙 정리를 요청하세요(축약은 사람만 가능).", personaSoulMaxBytes), nil
+			return fmt.Sprintf("선호 저장 실패: SOUL.md가 한도(%dB)에 도달해 더 추가할 수 없습니다. 사용자에게 SOUL.md의 오래된 규칙 정리를 요청하세요(축약은 사람만 가능).", personaSoulMaxBytes), nil
 		}
 
 		if err := os.MkdirAll(filepath.Dir(soulPath), 0o755); err != nil {
