@@ -197,9 +197,11 @@ Usage examples:
 - sales: `groupware(area="sales", action="summary", folder="ytd")`
 - stock: `groupware(area="stock", action="list", query="모듈")`
 - po / receive / ship: `folder=month|ytd`, optional `query` keyword
-- price: `groupware(area="price", action="list", query="인버터")`
+- price: `groupware(area="price", action="list", query="인버터")` (→ itemCd `I-*`)
+- raw lines: `query="lines:모듈"` or `query="라인: YYYYMMDD:YYYYMMDD"`
 
-Amounts use supply fields where available (`clsgAm` / `rcvgAm` / `pohAm` / `isugAm`). Keep mutate off the chat tool.
+Defaults: list output is **품목 집계**; po/receive/ship also append 거래처 상위.
+Amounts use supply fields (`clsgAm` / `rcvgAm` / `pohAm` / `isugAm`). Keep mutate off the chat tool.
 
 ### Wired chat areas (amount / qty fields)
 

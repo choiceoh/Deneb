@@ -1685,7 +1685,7 @@ func GroupwareToolSchema() map[string]any {
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Keyword filter (품목·거래처 등) or sales/ERP date range YYYYMMDD:YYYYMMDD. Required for action=read.",
+				"description": "Keyword (품목·거래처) or YYYYMMDD:YYYYMMDD [keyword]. price: 모듈/인버터→itemCd M-/I-. Prefix lines: for raw voucher lines (po/receive/ship). Required for action=read.",
 			},
 		},
 		"required": []string{"action"},

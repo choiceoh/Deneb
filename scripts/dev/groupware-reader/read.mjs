@@ -11,7 +11,7 @@
  *   area=sales     action=summary|list  folder=ytd|month|today|year|last_year
  *   area=stock|po|receive|ship|price  action=list|summary
  *                  folder=ytd|month|today|… (receive/ship default month; else ytd; price ignores)
- *                  query=keyword or YYYYMMDD:YYYYMMDD [keyword]
+ *                  query=keyword | YYYYMMDD:YYYYMMDD [keyword] | lines:… | 모듈/인버터(→M-/I-)
  *   action=act (approval only) — mutate; used by work-feed chips, not chat tool
  *
  * Env:

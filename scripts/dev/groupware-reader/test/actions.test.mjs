@@ -15,11 +15,15 @@ import {
   resolveErpPeriod,
   formatWon,
   splitErpQuery,
+  parseErpView,
   capLimit,
   aggregateStockByItem,
   aggregateByItem,
+  topTraders,
   unitPrices,
   matchQuery,
+  matchItemFilter,
+  expandItemFilter,
 } from "../lib/actions.mjs";
 
 // Real eap126A05 payload keys the user as `user_id` (string), NOT `emp_seq`.
@@ -237,6 +241,7 @@ test("aggregateByItem sums amount and qty", () => {
   assert.equal(rows[0].amt, 250);
   assert.equal(rows[0].lines, 2);
   assert.equal(rows[0].lastDt, "20260710");
+  assert.equal(rows[0].trCount, 2);
 });
 
 test("unitPrices prefers purch/std/sta", () => {
@@ -247,4 +252,36 @@ test("unitPrices prefers purch/std/sta", () => {
 test("matchQuery is case-insensitive substring", () => {
   assert.equal(matchQuery({ itemNm: "태양광모듈" }, "모듈", ["itemNm"]), true);
   assert.equal(matchQuery({ itemNm: "인버터" }, "모듈", ["itemNm"]), false);
+});
+
+test("expandItemFilter maps Korean categories to itemCd prefix", () => {
+  assert.equal(expandItemFilter("모듈").prefix, "M-");
+  assert.equal(expandItemFilter("인버터").prefix, "I-");
+  assert.equal(expandItemFilter("M-LR").prefix, "");
+});
+
+test("matchItemFilter accepts 모듈 via M- prefix", () => {
+  assert.equal(matchItemFilter({ itemCd: "M-LR0650-02", itemNm: "LR8" }, "모듈", ["itemNm"]), true);
+  assert.equal(matchItemFilter({ itemCd: "I-OP3000-01", itemNm: "x" }, "모듈", ["itemNm"]), false);
+  assert.equal(matchItemFilter({ itemCd: "I-OP3000-01", itemNm: "x" }, "인버터", ["itemNm"]), true);
+});
+
+test("parseErpView detects lines mode", () => {
+  assert.deepEqual(parseErpView("lines:모듈"), { mode: "lines", query: "모듈" });
+  assert.deepEqual(parseErpView("라인:20260701:20260710"), { mode: "lines", query: "20260701:20260710" });
+  assert.deepEqual(parseErpView("모듈"), { mode: "items", query: "모듈" });
+});
+
+test("topTraders ranks by amount", () => {
+  const top = topTraders(
+    [
+      { trNm: "갑", isugAm: 100 },
+      { trNm: "을", isugAm: 300 },
+      { trNm: "갑", isugAm: 50 },
+    ],
+    "isugAm",
+    2,
+  );
+  assert.equal(top[0].name, "을");
+  assert.equal(top[1].amt, 150);
 });
