@@ -828,3 +828,172 @@ export async function actApproval(docId, decision, comment = "") {
   const label = docLineSts === "30" ? "승인" : "반려";
   return `결재 ${label} 완료 · docId=${id} · line=${docLineMSeq}/${docLineSSeq}`;
 }
+
+
+/** KST calendar helpers for sales closing (매출마감) periods. */
+function kstParts(d = new Date()) {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  // en-CA → YYYY-MM-DD
+  const [y, m, day] = fmt.format(d).split("-").map((x) => Number(x));
+  return { y, m, d: day };
+}
+
+function ymd(y, m, d) {
+  return `${String(y).padStart(4, "0")}${String(m).padStart(2, "0")}${String(d).padStart(2, "0")}`;
+}
+
+function ymdDash(s) {
+  const t = String(s || "");
+  if (t.length === 8) return `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)}`;
+  return t;
+}
+
+/**
+ * Resolve a sales period.
+ * folder/query presets: ytd|month|today|year|last_year
+ * explicit: query "YYYYMMDD:YYYYMMDD" or "YYYY-MM-DD~YYYY-MM-DD"
+ */
+export function resolveSalesPeriod(folder = "", query = "", now = new Date()) {
+  const q = String(query || "").trim();
+  const range = q.match(
+    /^(\d{4})-?(\d{2})-?(\d{2})\s*[:~～-]\s*(\d{4})-?(\d{2})-?(\d{2})$/,
+  );
+  if (range) {
+    const from = `${range[1]}${range[2]}${range[3]}`;
+    const to = `${range[4]}${range[5]}${range[6]}`;
+    return { from, to, label: `${ymdDash(from)} ~ ${ymdDash(to)} (지정)` };
+  }
+  const key = String(folder || q || "ytd")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  const { y, m, d } = kstParts(now);
+  const today = ymd(y, m, d);
+  if (["today", "오늘", "당일"].includes(key)) {
+    return { from: today, to: today, label: `${ymdDash(today)} (오늘)` };
+  }
+  if (["month", "이번달", "당월", "월"].includes(key)) {
+    return {
+      from: ymd(y, m, 1),
+      to: today,
+      label: `${y}-${String(m).padStart(2, "0")} (당월·오늘까지)`,
+    };
+  }
+  if (["year", "올해", "연간", "당해"].includes(key)) {
+    return {
+      from: ymd(y, 1, 1),
+      to: today,
+      label: `${y}년 (연초~오늘)`,
+    };
+  }
+  if (["last_year", "lastyear", "작년", "전년"].includes(key)) {
+    const ly = y - 1;
+    return {
+      from: ymd(ly, 1, 1),
+      to: ymd(ly, 12, 31),
+      label: `${ly}년 (전년)`,
+    };
+  }
+  // default ytd
+  return {
+    from: ymd(y, 1, 1),
+    to: today,
+    label: `${y} YTD (${ymdDash(ymd(y, 1, 1))} ~ ${ymdDash(today)})`,
+  };
+}
+
+export function formatWon(n) {
+  const v = Number(n) || 0;
+  const abs = Math.abs(v);
+  const sign = v < 0 ? "-" : "";
+  const eok = Math.floor(abs / 100_000_000);
+  const man = Math.floor((abs % 100_000_000) / 10_000);
+  const rest = abs % 10_000;
+  const parts = [];
+  if (eok) parts.push(`${eok.toLocaleString("ko-KR")}억`);
+  if (man) parts.push(`${man.toLocaleString("ko-KR")}만`);
+  if (rest || parts.length === 0) parts.push(`${rest.toLocaleString("ko-KR")}`);
+  return `${sign}${parts.join(" ")}원 (${v.toLocaleString("ko-KR")}원)`;
+}
+
+function sumField(rows, field) {
+  let s = 0;
+  for (const r of rows) {
+    const v = Number(r?.[field]);
+    if (Number.isFinite(v)) s += v;
+  }
+  return s;
+}
+
+/** 매출마감현황 summary via signed /logis/blg0070/0lo00001 (공급가액=clsgAm). */
+export async function summarySales(folder = "ytd", query = "") {
+  const period = resolveSalesPeriod(folder, query);
+  const body = {
+    divCds: [],
+    deptCds: [],
+    empCds: [],
+    clsDtFr: period.from,
+    clsDtTo: period.to,
+    clsNb: "",
+    remarkDc: "",
+    remarkDcFg: "",
+    gubun: "",
+    isTotalItemCdSelect: false,
+    itemCds: [],
+    itemgrpCds: [],
+    lCds: [],
+    mCds: [],
+    sCds: [],
+  };
+  const r = await apiPost("/logis/blg0070/0lo00001", body);
+  const code = r.json?.resultCode;
+  if (code !== 0 && code !== 200) {
+    throw new Error(r.json?.resultMsg || `매출마감 조회 실패 code=${code}`);
+  }
+  const rows = Array.isArray(r.json?.resultData)
+    ? r.json.resultData
+    : r.json?.resultData?.data || [];
+  const supply = sumField(rows, "clsgAm");
+  const vat = sumField(rows, "clsvAm");
+  const total = sumField(rows, "clshAm");
+  const qty = sumField(rows, "clsQt");
+
+  // Top lines by supply (for agent context; capped)
+  const top = [...rows]
+    .filter((x) => Number(x?.clsgAm) > 0)
+    .sort((a, b) => Number(b.clsgAm) - Number(a.clsgAm))
+    .slice(0, 8)
+    .map((x, i) => {
+      const nm = x.itemNm || x.attrNm || x.trNm || "(품목없음)";
+      const who = x.plnNm || x.deptNm || "";
+      const dt = ymdDash(String(x.clsDt || x.isuDt || ""));
+      return `${i + 1}. ${nm} · ${formatWon(x.clsgAm)} · ${dt}${who ? ` · ${who}` : ""}`;
+    });
+
+  const lines = [
+    "매출마감 요약 (영업관리 · Amaranth · 공급가액 기준)",
+    `기간: ${period.label}`,
+    `건수: ${rows.length.toLocaleString("ko-KR")}`,
+    `공급가액: ${formatWon(supply)}`,
+    `수량합: ${qty.toLocaleString("ko-KR")}`,
+    "",
+    "참고(부가세 포함 합계는 보통 쓰지 않음):",
+    `부가세: ${formatWon(vat)}`,
+    `합계: ${formatWon(total)}`,
+  ];
+  if (top.length) {
+    lines.push("", "공급가액 상위 항목:");
+    lines.push(...top);
+  }
+  lines.push(
+    "",
+    "출처: POST /logis/blg0070/0lo00001 · 필드는 clsgAm(공급가액). 재무제표·원장이 아님.",
+  );
+  return lines.join("\n");
+}
+

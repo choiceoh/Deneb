@@ -31,6 +31,7 @@ type Area string
 const (
 	AreaApproval Area = "approval" // 전자결재
 	AreaBoard    Area = "board"    // 게시판
+	AreaSales    Area = "sales"    // 영업 매출마감
 )
 
 // Action is a read-only operation against an Area.
@@ -40,6 +41,7 @@ const (
 	ActionList       Action = "list"
 	ActionRead       Action = "read"
 	ActionAttachment Action = "attachment" // explicitly selected attachment only
+	ActionSummary    Action = "summary"    // sales closing totals
 	// ActionAct is mutate (approve/reject). Not exposed on the chat tool —
 	// work-feed chips call ActApproval directly.
 	ActionAct Action = "act"
@@ -49,7 +51,7 @@ const (
 type Request struct {
 	Area       Area
 	Action     Action
-	Folder     string // approval only: pending|done|cc|total|all (미결|기결|수신참조|전체결재문서|순회)
+	Folder     string // approval: pending|done|cc|total|all; sales: ytd|month|today|year|last_year
 	Query      string // title / keyword for list filter or read target
 	DocID      string // attachment only: approval document id from read output
 	Attachment string // attachment only: 1-based number, filename, fileKey, or fileId
@@ -88,7 +90,7 @@ func FromEnv() (Config, bool) {
 func StatusLine(cfg Config, ok bool) string {
 	if !ok || strings.TrimSpace(cfg.User) == "" || cfg.Password == "" {
 		return "그룹웨어 리더: 꺼짐 (DENEB_GROUPWARE_USER / DENEB_GROUPWARE_PASSWORD 미설정). " +
-			"srv4에 아마란스 계정을 넣으면 전자결재·게시판을 읽을 수 있다."
+			"srv4에 아마란스 계정을 넣으면 전자결재·게시판·매출마감을 읽을 수 있다."
 	}
 	u := strings.TrimSpace(cfg.URL)
 	if u == "" {
@@ -98,7 +100,7 @@ func StatusLine(cfg Config, ok bool) string {
 	if co == "" {
 		co = "topsolar"
 	}
-	return fmt.Sprintf("그룹웨어 리더: 설정됨 · %s · 회사=%s · 사용자=%s · 읽기 전용(전자결재·게시판)",
+	return fmt.Sprintf("그룹웨어 리더: 설정됨 · %s · 회사=%s · 사용자=%s · 읽기 전용(전자결재·게시판·매출마감)",
 		u, co, cfg.User)
 }
 

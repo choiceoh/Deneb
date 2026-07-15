@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// ToolGroupware reads Amaranth10 전자결재 / 게시판 via srv4 headless login.
+// ToolGroupware reads Amaranth10 전자결재 / 게시판 / 매출마감 via srv4 headless login.
 // Approval folders: pending(미결) · done(기결) · cc(수신참조) · total(전체결재문서) · all(순회).
 // Read-only: never approve, post, or delete. Unconfigured → calm off message.
 func ToolGroupware() toolport.ToolFunc {
@@ -34,10 +34,10 @@ func ToolGroupware() toolport.ToolFunc {
 		switch action {
 		case "", "status":
 			return groupware.StatusLine(cfg, ok), nil
-		case "list", "read", "attachment":
+		case "list", "read", "attachment", "summary":
 			// continue
 		default:
-			return "", fmt.Errorf("unknown groupware action %q (status|list|read|attachment)", p.Action)
+			return "", fmt.Errorf("unknown groupware action %q (status|list|read|attachment|summary)", p.Action)
 		}
 
 		if !ok {
@@ -49,15 +49,27 @@ func ToolGroupware() toolport.ToolFunc {
 			area = "approval"
 		}
 		switch area {
-		case "approval", "board":
+		case "approval", "board", "sales":
 		case "전자결재", "결재":
 			area = "approval"
 		case "게시판", "공지", "공지사항":
 			area = "board"
+		case "매출", "매출마감", "영업":
+			area = "sales"
 		case "":
-			return "area가 필요합니다 — approval(전자결재) 또는 board(게시판).", nil
+			return "area가 필요합니다 — approval(전자결재) · board(게시판) · sales(매출마감).", nil
 		default:
-			return "", fmt.Errorf("unknown groupware area %q (approval|board)", p.Area)
+			return "", fmt.Errorf("unknown groupware area %q (approval|board|sales)", p.Area)
+		}
+
+		if area == "sales" {
+			switch action {
+			case "summary", "list":
+			default:
+				return "sales는 action=summary(또는 list)만 지원합니다 — 기간은 folder=ytd|month|today|year|last_year.", nil
+			}
+		} else if action == "summary" {
+			return "summary는 area=sales(매출마감)에서만 지원합니다.", nil
 		}
 
 		folder, ferr := normalizeFolder(p.Folder, action, area)
@@ -97,6 +109,23 @@ func ToolGroupware() toolport.ToolFunc {
 }
 
 func normalizeFolder(raw, action, area string) (string, error) {
+	if area == "sales" {
+		f := strings.ToLower(strings.TrimSpace(raw))
+		switch f {
+		case "", "ytd", "올해", "연초", "올해누적":
+			return "ytd", nil
+		case "month", "이번달", "당월", "월":
+			return "month", nil
+		case "today", "오늘", "당일":
+			return "today", nil
+		case "year", "연간", "당해":
+			return "year", nil
+		case "last_year", "lastyear", "작년", "전년":
+			return "last_year", nil
+		default:
+			return "", fmt.Errorf("unknown sales folder %q (ytd|month|today|year|last_year)", raw)
+		}
+	}
 	if area != "approval" {
 		return "", nil
 	}

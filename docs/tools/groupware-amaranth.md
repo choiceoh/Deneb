@@ -333,7 +333,7 @@ ERP list endpoints and permission notes: [groupware-erp-api-map.md](./groupware-
 | P2 | Board `ViewPost` on `read` | Done |
 | P3 | Approve/reject (`eap110A21`) + feed chips (native/Andromeda) | Wired; **live mutate untested** |
 | P4 | Phone enrich API-first; DOM/Page Agent last resort | In progress |
-| P5 | Read-only ERP lists (매출마감·출고·입고·현재고·발주) | Mapped; **not wired** |
+| P5 | Read-only ERP lists (매출마감·출고·입고·현재고·발주) | 매출마감 **wired** (`area=sales`); others mapped |
 
 ## Smoke (no secrets in output)
 

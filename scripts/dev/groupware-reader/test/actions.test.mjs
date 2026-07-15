@@ -11,6 +11,8 @@ import {
   attachmentName,
   humanSize,
   selectAttachment,
+  resolveSalesPeriod,
+  formatWon,
 } from "../lib/actions.mjs";
 
 // Real eap126A05 payload keys the user as `user_id` (string), NOT `emp_seq`.
@@ -152,4 +154,33 @@ test("attachmentName strips Amaranth's leading ordinal so lists don't double-num
   assert.equal(attachmentName({ dispFileNm: "1. 지출영수증", fileExtsn: "jpg" }), "지출영수증.jpg");
   assert.equal(attachmentName({ dispFileNm: "3) 사진대지", fileExtsn: "pdf" }), "사진대지.pdf");
   assert.equal(attachmentName({ dispFileNm: "거래명세서.pdf" }), "거래명세서.pdf");
+});
+
+test("resolveSalesPeriod defaults to YTD", () => {
+  const p = resolveSalesPeriod("", "", new Date("2026-07-16T01:00:00+09:00"));
+  assert.equal(p.from, "20260101");
+  assert.equal(p.to, "20260716");
+  assert.match(p.label, /YTD|연초/);
+});
+
+test("resolveSalesPeriod month/today/last_year", () => {
+  const now = new Date("2026-07-16T01:00:00+09:00");
+  assert.deepEqual(
+    { from: resolveSalesPeriod("month", "", now).from, to: resolveSalesPeriod("month", "", now).to },
+    { from: "20260701", to: "20260716" },
+  );
+  assert.equal(resolveSalesPeriod("today", "", now).from, "20260716");
+  assert.equal(resolveSalesPeriod("작년", "", now).from, "20250101");
+  assert.equal(resolveSalesPeriod("작년", "", now).to, "20251231");
+});
+
+test("resolveSalesPeriod explicit range", () => {
+  const p = resolveSalesPeriod("ytd", "20260301:20260331");
+  assert.equal(p.from, "20260301");
+  assert.equal(p.to, "20260331");
+});
+
+test("formatWon uses eok/man", () => {
+  assert.match(formatWon(294031347655), /억/);
+  assert.match(formatWon(12345), /12,345원/);
 });
