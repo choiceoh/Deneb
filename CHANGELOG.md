@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.108.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.108.0...deneb-v4.108.1) (2026-07-15)
+
+
+### 🐛 Bug Fixes
+
+* **groupware:** act opt-in 가드·결재선 user_id 매칭·첨부 예산·JS 테스트 ([#3735](https://github.com/choiceoh/Deneb/issues/3735)) ([0485c0f](https://github.com/choiceoh/Deneb/commit/0485c0f1b17fca2a56e87b967f092ed77677bf4e))
+
 ## [4.108.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.107.0...deneb-v4.108.0) (2026-07-15)
 
 
