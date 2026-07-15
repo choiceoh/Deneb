@@ -500,6 +500,16 @@ internal fun AppContent(
                                             DenebDashboardScreen(
                                                 client = client,
                                                 onBack = { navController.navigateUp() },
+                                                onOpenWorkFeedItem = { itemId, createdAtMs ->
+                                                    navigateToDenebSection(
+                                                        navController,
+                                                        DenebFeed(
+                                                            openItemId = itemId,
+                                                            openItemCreatedAtMs = createdAtMs,
+                                                        ),
+                                                        restoreState = false,
+                                                    )
+                                                },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                                             )
                                         }

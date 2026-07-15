@@ -8,6 +8,7 @@ import { getJSON, setJSON } from "@/storage";
 import { Icon, type IconName } from "@/components/Icon";
 import { GridNotice } from "@/components/Grid";
 import { type PaneTarget, useRegisterPane, useWorkspace } from "@/workspaceContext";
+import { workfeedSourceLabel } from "@/workfeedSource";
 
 // "오늘" dashboard — the workstation's landing pane. It adds NO new gateway
 // plumbing: it fans out the existing list resources (calendar/mail/todo/workfeed)
@@ -224,7 +225,7 @@ export function TodayPane() {
       total: items.length,
       lines: items.slice(0, MAX).map((w) => ({
         title: w.title ?? "(항목)",
-        meta: w.source || undefined,
+        meta: w.source ? workfeedSourceLabel(w.source) : undefined,
         target: { view: "workfeed", id: w.id },
       })),
     },

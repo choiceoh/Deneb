@@ -9,6 +9,7 @@ import { useAction } from "@/useAction";
 import { useRegisterPane, useWorkspace, type PaneTarget } from "@/workspaceContext";
 import { Column, Grid, GridNotice } from "@/components/Grid";
 import { AssistantText } from "@/components/DenebUi";
+import { workfeedSourceLabel } from "@/workfeedSource";
 
 // The gateway clamps workfeed.list to 100 (maxWorkFeedLimit); a single day fits well
 // under that, so request the full page and let the day-range scope it.
@@ -30,20 +31,6 @@ function addDays(dayMs: number, delta: number): number {
 // workfeed.answer/action.run, then returns a sessionKey+prompt to deliver.
 const isQuestion = (w: WorkItem) => (w.source ?? "").includes("question");
 const ignoreUiSubmit = () => {};
-
-const SOURCE_LABELS: Record<string, string> = {
-  alert: "알림",
-  deal_question: "질문",
-  followup: "후속",
-  proactive: "제안",
-  "groupware-approval": "전자결재",
-};
-
-function sourceLabel(source?: string) {
-  const key = source?.trim();
-  if (!key) return "피드";
-  return SOURCE_LABELS[key] ?? key.replace(/[_-]+/g, " ");
-}
 
 // One line per item — shared by the AI text projection so the day's rows read the
 // same as the on-screen list.
@@ -170,7 +157,7 @@ export function WorkfeedPane() {
       header: "유형",
       width: 92,
       tdStyle: { verticalAlign: "top" },
-      cell: (w) => <span className="workfeed-kind">{sourceLabel(w.source)}</span>,
+      cell: (w) => <span className="workfeed-kind">{workfeedSourceLabel(w.source)}</span>,
     },
     {
       header: "항목",
@@ -268,7 +255,7 @@ function WorkItemDetail({
   // AI 분석 본문은 기본 전체 펼침; 길면 "분석 접기"로 접는다 (스크롤 박스 대신 토글).
   const [bodyOpen, setBodyOpen] = useState(true);
   const created = fmtDate(w.createdAtMs);
-  const meta = [sourceLabel(w.source), created, w.refId ? `ref ${w.refId}` : ""].filter(Boolean).join(" · ");
+  const meta = [workfeedSourceLabel(w.source), created, w.refId ? `ref ${w.refId}` : ""].filter(Boolean).join(" · ");
 
   const submit = () => {
     const t = text.trim();
