@@ -91,6 +91,20 @@ class AppSettings(internal val settings: Settings) {
         }
     }
 
+    // In-place DeepL toggle preference — remembered across browser opens.
+    fun isBrowserTranslateEnabled(): Boolean = settings.getBoolean(KEY_BROWSER_TRANSLATE_ENABLED, false)
+
+    fun setBrowserTranslateEnabled(enabled: Boolean) {
+        settings.putBoolean(KEY_BROWSER_TRANSLATE_ENABLED, enabled)
+    }
+
+    // Recent visits (newest first). JSON list of {url, title, visitedAtMs}.
+    fun getBrowserHistoryJson(): String = settings.getString(KEY_BROWSER_HISTORY, "[]")
+
+    fun setBrowserHistoryJson(json: String) {
+        settings.putString(KEY_BROWSER_HISTORY, json)
+    }
+
     fun getCurrentConversationId(): String? = settings.getStringOrNull(KEY_CURRENT_CONVERSATION_ID)
 
     fun setCurrentConversationId(id: String?) {
@@ -416,6 +430,8 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_HIDDEN_MORE_TILES = "hidden_more_tiles"
         const val KEY_BROWSER_BOOKMARKS = "browser_bookmarks"
         const val KEY_BROWSER_LAST_URL = "browser_last_url"
+        const val KEY_BROWSER_TRANSLATE_ENABLED = "browser_translate_enabled"
+        const val KEY_BROWSER_HISTORY = "browser_history"
         const val KEY_CONVERSATIONS = "conversations_json"
         const val KEY_CURRENT_CONVERSATION_ID = "current_conversation_id"
         const val KEY_CURRENT_CONVERSATION_MIGRATED = "current_conversation_migrated"
