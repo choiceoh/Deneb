@@ -20,6 +20,10 @@ from .model import Report, RUBRIC_VERSION, SCHEMA_VERSION, SEVERITY_ORDER
 OVERALL_TOLERANCE = 0.3
 PILLAR_TOLERANCE = 1.0
 BLOCKING_SEVERITIES = frozenset({"high", "critical"})
+# --check only fails closed on *critical* findings. New "high" tips from the
+# rolling git window were false-reding unrelated PRs without a product bug.
+# Baseline *update* still rejects new high+critical (BLOCKING_SEVERITIES).
+CHECK_FINDING_SEVERITIES = frozenset({"critical"})
 _EPSILON = 1e-9
 
 KEEP_POLICY = (
@@ -148,11 +152,14 @@ def _report_scores(report: Report) -> tuple[float, dict[str, float]]:
     )
 
 
-def _blocking_findings(report: Report) -> dict[str, str]:
+def _blocking_findings(
+    report: Report, *, severities: frozenset[str] | None = None
+) -> dict[str, str]:
+    allowed = BLOCKING_SEVERITIES if severities is None else severities
     return {
         finding.id: finding.severity
         for finding in report.findings
-        if finding.severity in BLOCKING_SEVERITIES
+        if finding.severity in allowed
     }
 
 
@@ -179,13 +186,16 @@ def _ensure_compatible(report: Report, baseline: Mapping[str, Any]) -> None:
 
 
 def _new_or_escalated_findings(
-    report: Report, baseline: Mapping[str, Any]
+    report: Report,
+    baseline: Mapping[str, Any],
+    *,
+    severities: frozenset[str] | None = None,
 ) -> tuple[list[str], list[str]]:
     accepted = baseline["high_findings"]
     finding_ids: list[str] = []
     messages: list[str] = []
     by_id = {finding.id: finding for finding in report.findings}
-    for finding_id, severity in sorted(_blocking_findings(report).items()):
+    for finding_id, severity in sorted(_blocking_findings(report, severities=severities).items()):
         old_severity = accepted.get(finding_id)
         finding = by_id[finding_id]
         if old_severity is None:
@@ -227,7 +237,9 @@ def check(
                 f"(allowed drop {PILLAR_TOLERANCE:.1f})"
             )
 
-    finding_ids, finding_messages = _new_or_escalated_findings(report, baseline)
+    finding_ids, finding_messages = _new_or_escalated_findings(
+        report, baseline, severities=CHECK_FINDING_SEVERITIES
+    )
     regressions.extend(finding_messages)
     return CheckResult(tuple(regressions), tuple(finding_ids))
 

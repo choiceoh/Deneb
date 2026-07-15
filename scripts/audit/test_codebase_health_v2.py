@@ -184,15 +184,23 @@ class BaselineRatchetTests(unittest.TestCase):
             any("overall score" in item for item in masked_pillar.regressions)
         )
 
-    def test_new_high_finding_fails_even_when_scores_do_not_regress(self) -> None:
+    def test_new_high_finding_is_advisory_on_check(self) -> None:
+        # Rolling-window "high" tips must not fail --check; critical still does.
         accepted = snapshot(_report())
-        current = _report(findings=[_finding("new-contract-gap", severity="high")])
+        high_only = check(
+            _report(findings=[_finding("new-contract-gap", severity="high")]),
+            accepted,
+        )
+        self.assertTrue(high_only.ok)
+        self.assertEqual(high_only.new_findings, ())
 
-        result = check(current, accepted)
-
-        self.assertFalse(result.ok)
-        self.assertEqual(result.new_findings, ("new-contract-gap",))
-        self.assertTrue(any("new high finding" in item for item in result.regressions))
+        critical = check(
+            _report(findings=[_finding("new-critical-gap", severity="critical")]),
+            accepted,
+        )
+        self.assertFalse(critical.ok)
+        self.assertEqual(critical.new_findings, ("new-critical-gap",))
+        self.assertTrue(any("new critical finding" in item for item in critical.regressions))
 
     def test_update_rejects_baseline_lowering(self) -> None:
         with tempfile.TemporaryDirectory(prefix="deneb-health-baseline-") as folder:

@@ -189,7 +189,9 @@ clean: go-clean
 check-go: go-fmt go-vet go-lint go-test
 
 # Full check: generate-check first (sequential), then Go and deterministic audit checks.
-check: generate-check check-go runtime-health-test health-v2-test health-v2-check
+# health-v2-check is advisory (git-window high findings false-red); run it via
+# `make health-v2-check` or Nightly Drift. Scorer unit tests stay in the gate.
+check: generate-check check-go runtime-health-test health-v2-test
 	@echo "All checks passed"
 
 # Fast check: format + vet + lint only (no tests). Good for pre-commit gate.
@@ -218,9 +220,9 @@ health-check:
 health-v2:
 	@python3 scripts/audit/codebase-health-v2.py
 
-# Multi-axis ratchet: overall, every pillar, and new high-risk findings are
-# checked independently so improvement in one area cannot hide regression in
-# another.
+# Multi-axis ratchet (operator/nightly). PR CI runs this advisory-only; `make
+# check` no longer fails closed on it. New *critical* findings and score drops
+# still fail when this target is invoked explicitly.
 health-v2-check:
 	@python3 scripts/audit/codebase-health-v2.py --check
 
@@ -235,8 +237,13 @@ health-v2-test:
 
 # All checked-in Python behavior tests. Keep the two roots isolated so their
 # fixture/support modules resolve exactly as they do when invoked directly.
+# Ops/dev scripts always; audit suites except Health Bench 2.0 (covered by
+# `make health-v2-test` / the code-health CI job — avoid double-running ~60 cases
+# and attributing scorer failures to the "Python support tooling" lane).
 python-test:
-	@python3 -m unittest discover -s scripts/audit -p 'test_*.py' -v
+	@cd scripts/audit && \
+	  mods=$$(for f in test_*.py; do case "$$f" in test_codebase_health_v2*) ;; *) printf '%s ' "$${f%.py}"; esac; done); \
+	  python3 -m unittest $$mods -v
 	@python3 -m unittest discover -s scripts/dev -p 'test_*.py' -v
 
 # Static analysis for support, audit, and deployment Python. CI installs the
