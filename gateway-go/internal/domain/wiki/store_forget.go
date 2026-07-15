@@ -68,5 +68,11 @@ func (s *Store) Forget(relPath, reason string) (ForgetResult, error) {
 		return ForgetResult{}, fmt.Errorf("wiki: forget: delete: %w", err)
 	}
 
+	// Drop the semantic vector synchronously. deletePageLocked only clears the
+	// lexical (FTS) index; the embedding would otherwise linger until the next
+	// async refresh, and semantic recall ranks live vectors — a privacy "forget"
+	// must not leave the page returnable in that window.
+	s.dropSemanticVector(relPath)
+
 	return ForgetResult{Path: relPath, Title: title}, nil
 }

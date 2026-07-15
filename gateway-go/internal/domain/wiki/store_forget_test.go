@@ -85,6 +85,39 @@ func TestForgetFlattensMultilineReasonInTombstone(t *testing.T) {
 	}
 }
 
+func TestForgetDropsSemanticVectorSynchronously(t *testing.T) {
+	store := newForgetTestStore(t)
+	store.SetEmbedder(fakeEmbedder{healthy: true})
+	page := NewPage("잊을거", "기타", nil)
+	page.Body = "semantic recall 대상 본문"
+	if err := store.WritePage("기타/잊을거.md", page); err != nil {
+		t.Fatalf("WritePage: %v", err)
+	}
+	// Warm the index so the page's vector is live in s.sem.vecs.
+	if err := store.WarmSemanticIndex(context.Background()); err != nil {
+		t.Fatalf("WarmSemanticIndex: %v", err)
+	}
+	store.sem.mu.Lock()
+	_, present := store.sem.vecs["기타/잊을거.md"]
+	store.sem.mu.Unlock()
+	if !present {
+		t.Fatalf("precondition: vector should be present after warm")
+	}
+
+	if _, err := store.Forget("기타/잊을거", "프라이버시"); err != nil {
+		t.Fatalf("Forget: %v", err)
+	}
+
+	// The vector must be gone immediately — not left for an async refresh that
+	// Search would race against (privacy contract).
+	store.sem.mu.Lock()
+	_, stillThere := store.sem.vecs["기타/잊을거.md"]
+	store.sem.mu.Unlock()
+	if stillThere {
+		t.Fatalf("forgotten page's semantic vector still present")
+	}
+}
+
 func TestForgetRequiresReason(t *testing.T) {
 	store := newForgetTestStore(t)
 	page := NewPage("x", "기타", nil)

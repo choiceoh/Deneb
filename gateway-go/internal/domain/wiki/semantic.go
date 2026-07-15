@@ -173,6 +173,20 @@ func (s *Store) SetEmbedder(e Embedder) {
 	}
 }
 
+// dropSemanticVector synchronously removes a page's cached embedding so a
+// hard-deleted page stops surfacing in semantic recall immediately. Without it,
+// the vector lingers in s.sem.vecs until the next async refresh prune, and
+// searchSemanticWithVec ranks the live vecs — so a just-forgotten page could
+// still be returned in the race window. No-op when no embedder is wired.
+func (s *Store) dropSemanticVector(relPath string) {
+	if s.sem == nil {
+		return
+	}
+	s.sem.mu.Lock()
+	delete(s.sem.vecs, relPath)
+	s.sem.mu.Unlock()
+}
+
 // SearchDiarySemanticBatch returns semantic (cosine-ranked) diary hits per query,
 // index-aligned with queries — the dense-vector complement to SearchDiary's BM25.
 // Score is the raw cosine (0–1); the recall layer applies the diary source prior.

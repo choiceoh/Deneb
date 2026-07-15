@@ -65,7 +65,7 @@ func ToolPersonaPref(workspaceDir string) toolport.ToolFunc {
 		if workspaceDir == "" {
 			return "워크스페이스가 설정되지 않아 선호를 저장할 수 없습니다.", nil
 		}
-		soulPath := filepath.Join(workspaceDir, personaSoulFile)
+		soulPath := resolvePersonaSoulPath(workspaceDir)
 
 		existing, err := os.ReadFile(soulPath)
 		if err != nil && !os.IsNotExist(err) {
@@ -87,7 +87,7 @@ func ToolPersonaPref(workspaceDir string) toolport.ToolFunc {
 			return fmt.Sprintf("SOUL.md가 한도(%dB)에 가까워 더 추가할 수 없습니다. 사용자에게 SOUL.md의 오래된 규칙 정리를 요청하세요(축약은 사람만 가능).", personaSoulMaxBytes), nil
 		}
 
-		if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(soulPath), 0o755); err != nil {
 			return "", fmt.Errorf("create workspace dir: %w", err)
 		}
 		// True append: open O_APPEND and add only the new chunk. The tool never
@@ -106,6 +106,38 @@ func ToolPersonaPref(workspaceDir string) toolport.ToolFunc {
 
 		return fmt.Sprintf("선호를 SOUL.md에 저장했습니다: %q. 이 규칙은 다음 세션부터 페르소나에 반영됩니다 (append-only — 삭제·수정은 사용자만 SOUL.md 편집으로 가능).", rule), nil
 	}
+}
+
+// resolvePersonaSoulPath returns the SOUL.md the prompt would actually load: the
+// closest existing SOUL.md walking from workspaceDir up its ancestors, so an
+// append never shadows a human-authored ancestor persona with a new
+// workspace-root file. Falls back to <workspaceDir>/SOUL.md when none exists.
+//
+// The ancestor walk mirrors prompt/context_files.go collectSearchDirs (workspace
+// first, then up to 6 parents, stopping at $HOME/root). tools/ cannot import
+// prompt/, so the small walk is duplicated here — keep the two in sync.
+func resolvePersonaSoulPath(workspaceDir string) string {
+	home, _ := os.UserHomeDir()
+	dirs := []string{workspaceDir}
+	current := workspaceDir
+	for range 6 {
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		dirs = append(dirs, parent)
+		if home != "" && parent == home {
+			break // include $HOME but never search above it
+		}
+		current = parent
+	}
+	for _, dir := range dirs {
+		p := filepath.Join(dir, personaSoulFile)
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			return p // closest existing persona file wins (loader precedence)
+		}
+	}
+	return filepath.Join(workspaceDir, personaSoulFile)
 }
 
 // hasBulletLine reports whether content already has bullet as a standalone line

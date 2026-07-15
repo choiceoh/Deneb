@@ -109,6 +109,36 @@ func TestPreferenceDedupDoesNotFalsePositiveOnSubstring(t *testing.T) {
 	}
 }
 
+func TestPreferenceAppendsToAncestorSoulInsteadOfShadowing(t *testing.T) {
+	root := t.TempDir()
+	// Persona lives in an ANCESTOR of the workspace (mirrors LoadContextFiles'
+	// ancestor inheritance). The workspace itself has no SOUL.md.
+	ancestorSoul := filepath.Join(root, "SOUL.md")
+	const persona = "# 페르소나\n\n담백하게.\n"
+	if err := os.WriteFile(ancestorSoul, []byte(persona), 0o644); err != nil {
+		t.Fatalf("seed ancestor SOUL.md: %v", err)
+	}
+	workspace := filepath.Join(root, "sub", "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+
+	runPreference(t, workspace, "항상 존댓말")
+
+	// The rule must be appended to the ANCESTOR file the prompt actually loads,
+	// not written into a new workspace-root SOUL.md that would shadow it.
+	if _, err := os.Stat(filepath.Join(workspace, "SOUL.md")); !os.IsNotExist(err) {
+		t.Fatalf("a shadowing workspace-root SOUL.md was created")
+	}
+	body, _ := os.ReadFile(ancestorSoul)
+	if !strings.HasPrefix(string(body), persona) {
+		t.Fatalf("ancestor persona not preserved:\n%s", body)
+	}
+	if !strings.Contains(string(body), "- 항상 존댓말") {
+		t.Fatalf("rule not appended to ancestor SOUL.md:\n%s", body)
+	}
+}
+
 func TestPreferenceRejectsEmptyRule(t *testing.T) {
 	dir := t.TempDir()
 	out := runPreference(t, dir, "   ")

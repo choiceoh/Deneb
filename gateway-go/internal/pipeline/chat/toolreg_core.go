@@ -22,9 +22,17 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	toolreg.RegisterWikiTools(registry, &deps.Wiki, deps.WorkspaceDir)
 
 	// preference: append-only standing behavior rules → workspace SOUL.md.
-	// Uses the same workspace dir the prompt reads context files from so the
-	// appended rule is picked up on the next session's context-file load.
-	toolreg.RegisterPersonaTools(registry, resolveWorkspaceDirForPrompt())
+	// Bind to the SAME workspace file/wiki tools use (deps.WorkspaceDir), falling
+	// back to the prompt default only when unset — this mirrors how the prompt
+	// resolves context files (prewarmPromptWorkspace: params.WorkspaceDir else
+	// default), so the rule is written where the active prompt reads SOUL.md and
+	// an isolated (eval/subagent) run writes to its own workspace, not the real
+	// persona file.
+	personaWorkspace := deps.WorkspaceDir
+	if personaWorkspace == "" {
+		personaWorkspace = resolveWorkspaceDirForPrompt()
+	}
+	toolreg.RegisterPersonaTools(registry, personaWorkspace)
 
 	// Notebook: NotebookLM-style scoped source collections for grounded, cited
 	// synthesis (딜/프로젝트 브리핑). Active when the notebook store is wired.

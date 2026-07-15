@@ -15,6 +15,7 @@ func TestMutationOutcomeIsFailure(t *testing.T) {
 	}{
 		{"wiki write failure", "wiki", "위키 페이지 쓰기 실패: disk full", true},
 		{"wiki diary failure", "wiki", "일지 쓰기 실패: permission denied", true},
+		{"wiki forget failure", "wiki", "잊기 실패: wiki: forget: read: not found", true},
 		{"wiki read success not flagged", "wiki", "# 문서 제목\n본문...", false},
 		{"cron run failure", "cron", "❌ **job1** 실행 실패 (2s): boom", true},
 		{"cron add success not flagged", "cron", "✅ 크론 작업 **job1** 추가 완료", false},
