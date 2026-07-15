@@ -98,3 +98,31 @@ func TestToolGroupware_AttachmentRejectsBoard(t *testing.T) {
 		t.Fatalf("got %q", out)
 	}
 }
+
+func TestToolGroupware_SalesFolderAlias(t *testing.T) {
+	f, err := normalizeFolder("", "summary", "sales")
+	if err != nil || f != "ytd" {
+		t.Fatalf("default %q %v", f, err)
+	}
+	f, err = normalizeFolder("이번달", "summary", "sales")
+	if err != nil || f != "month" {
+		t.Fatalf("month %q %v", f, err)
+	}
+	f, err = normalizeFolder("작년", "list", "sales")
+	if err != nil || f != "last_year" {
+		t.Fatalf("last_year %q %v", f, err)
+	}
+}
+
+func TestToolGroupware_SummaryRequiresSales(t *testing.T) {
+	t.Setenv("DENEB_GROUPWARE_USER", "alice")
+	t.Setenv("DENEB_GROUPWARE_PASSWORD", "secret")
+	fn := ToolGroupware()
+	out, err := fn(context.Background(), json.RawMessage(`{"action":"summary","area":"approval"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "sales") {
+		t.Fatalf("got %q", out)
+	}
+}

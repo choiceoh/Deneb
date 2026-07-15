@@ -8,6 +8,8 @@
  * Surfaces:
  *   area=approval  folder=pending|done|cc|total|all
  *   area=board
+ *   area=sales     action=summary|list  folder=ytd|month|today|year|last_year
+ *                  query=YYYYMMDD:YYYYMMDD optional explicit range
  *   action=act (approval only) — mutate; used by work-feed chips, not chat tool
  *
  * Env:
@@ -20,6 +22,7 @@
  *   node read.mjs --area approval --action read --query '제목'
  *   node read.mjs --area approval --action attachment --doc-id 99178 --attachment '지출영수증'
  *   node read.mjs --area board --action list|read ...
+ *   node read.mjs --area sales --action summary [--folder ytd|month|today]
  *   node read.mjs --area approval --action act --decision approve|reject --doc-id 99178
  */
 import { stdin as input } from "node:process";
@@ -32,6 +35,7 @@ import {
   readApproval,
   readApprovalAttachment,
   readBoard,
+  summarySales,
 } from "./lib/actions.mjs";
 
 function argValue(flag) {
@@ -80,8 +84,13 @@ async function main() {
     return;
   }
 
-  if (!["approval", "board"].includes(area)) die(`unknown --area ${area}`);
-  if (!["list", "read", "attachment", "act"].includes(action)) die(`unknown --action ${action}`);
+  if (area === "sales" && (action === "read" || action === "")) action = "summary";
+  if (!["approval", "board", "sales"].includes(area)) die(`unknown --area ${area}`);
+  if (area === "sales") {
+    if (!["summary", "list"].includes(action)) die(`sales action must be summary|list (got ${action})`);
+  } else if (!["list", "read", "attachment", "act"].includes(action)) {
+    die(`unknown --action ${action}`);
+  }
   if (["attachment", "act"].includes(action) && area !== "approval") {
     die(`${action} is only valid for --area approval`);
   }
@@ -91,7 +100,9 @@ async function main() {
 
   const t0 = Date.now();
   let out;
-  if (action === "act") {
+  if (area === "sales") {
+    out = await summarySales(folder === "all" || folder === "pending" ? "ytd" : folder, query);
+  } else if (action === "act") {
     out = await actApproval(docId || query, decision, comment);
   } else if (action === "attachment") {
     out = await readApprovalAttachment(docId, attachment || query);

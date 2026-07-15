@@ -188,11 +188,12 @@ Playwright: login → open `#/BL/BLG0070/BLG0070` (etc.) → capture POST bodies
 
 | Today | ERP |
 |-------|-----|
-| Chat tool `groupware` areas | `approval` and `board` only |
-| Reader adapters | `lib/actions.mjs` — eap/board |
-| ERP | **Not wired** — call via `apiPost` or future areas `logis`, `purchase`, `financial` |
+| Chat tool `groupware` areas | approval, board, sales (매출마감 summary) |
+| Reader adapters | `lib/actions.mjs` — eap/board + `summarySales` |
+| Other ERP lists | Still unwired — call via `apiPost` / future areas |
 
-Suggested next wire (read-only): `매출마감`, `출고현황`, `입고현황`, `현재고`, `발주현황`, `미수채권`, `품목단가` (confirmed with filters). Keep mutate off the chat tool.
+Sales usage: `groupware(area="sales", action="summary", folder="ytd"|"month"|"today"|"year"|"last_year")`.
+Supply amount (`clsgAm`) only in the headline. Keep mutate off the chat tool.
 
 ## Explicit non-goals
 
