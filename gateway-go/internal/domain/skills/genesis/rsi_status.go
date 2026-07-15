@@ -1,11 +1,10 @@
 package genesis
 
-// RSI loop-status computation — the in-process companion to
-// scripts/audit/rsi_status.py, serving the native + andromeda "recursive
-// self-improvement" viewers over the miniapp.rsi.status RPC. The Python audit
-// script re-parses JSONL; this composes the tracker's live 7-day aggregates.
+// RSI loop-status computation serves the native, Andromeda, and audit viewers
+// over the miniapp.rsi.status RPC. This Go path is the only layer classifier;
+// scripts/audit/rsi_status.py validates and formats the resulting read model.
 //
-// The four layers and their honest states mirror the audit script exactly:
+// The four operational layers use these honest states:
 //
 //	LIVE        producing AND consuming — the loop is turning.
 //	DATA-GATED  built and running, waiting for fuel to accumulate (NOT a defect).
@@ -70,12 +69,12 @@ var rsiSubtleDegradationClasses = map[string]bool{
 // the ledger means the lane already probes at its current difficulty ceiling.
 var rsiWeakenDegradationClasses = map[string]bool{"imperative-weaken": true, "scope-narrow": true}
 
-// rsiDispatchSources mirrors coding-dispatch.sh's accepted candidate sources: a
-// code candidate from any other source is not yet dispatchable. health-finding
+// rsiDispatchSources is the canonical set of accepted candidate sources: a code
+// candidate from any other source is not yet dispatchable. health-finding
 // graduated 2026-07-12 (first mined batch reviewed clean — roadmap P5 ladder);
 // tool-quality graduated 2026-07-13 (operator directive); runtime-error and
-// deadcode-finding stay staged until their own batch review. MUST match the
-// allowlist in scripts/dev/coding-dispatch.sh (and scripts/audit/rsi_status.py).
+// deadcode-finding stay staged until their own batch review. Dispatch selection,
+// status, and client projection all call this Go policy.
 var rsiDispatchSources = []string{"evolve-tool-gap", "self-harness", "health-finding", "tool-quality"}
 
 // SourceAutoDispatches reports whether a self-correction candidate from this
@@ -87,14 +86,14 @@ func SourceAutoDispatches(source string) bool { return rsiSourceDispatchable(sou
 const rsiGraduationDetail = "자율성 졸업 사다리의 행별 증거를 상시 심사하고, 임계 충족 시 잠금 해제를 자동 실행하는 계기판입니다 (2026-07-14 위임). 모든 실행은 원장 기록과 재잠금 비토 카드를 남기며, 임계값 정책 자체는 루프가 편집할 수 없습니다."
 
 func newRSILayer(layer rsilifecycle.Layer, metrics []rsiMetric) rsiLayer {
-	profile, ok := rsilifecycle.ProfileFor(layer)
+	identity, ok := rsilifecycle.IdentityFor(layer)
 	if !ok {
 		return rsiLayer{Key: string(layer), Metrics: metrics}
 	}
 	return rsiLayer{
-		Key:     string(profile.Layer),
-		Title:   profile.Title,
-		Detail:  profile.Detail,
+		Key:     string(identity.Layer),
+		Title:   identity.Title,
+		Detail:  identity.Detail,
 		Metrics: metrics,
 	}
 }
@@ -223,9 +222,8 @@ func (t *Tracker) metaActivityIn(window time.Duration) bool {
 	return cycles+proposed+adopted+reverted > 0
 }
 
-// metaCycleCountsIn tallies slow-loop ledger rows inside window, matching
-// scripts/audit/rsi_status.py assess_l2 (action=="" → cycle; proposed flag;
-// adopted/reverted action rows).
+// metaCycleCountsIn tallies slow-loop ledger rows inside window
+// (action=="" → cycle; proposed flag; adopted/reverted action rows).
 func (t *Tracker) metaCycleCountsIn(window time.Duration) (cycles, proposed, adopted, reverted int) {
 	entries, err := t.RecentMetaRevisions(50)
 	if err != nil || len(entries) == 0 {
@@ -527,8 +525,8 @@ func rsiDispatchAttempts(path string, fallbackAt int64) []rsiDispatchAttempt {
 	return append(marker.Attempts, current)
 }
 
-// codingDispatchCounts mirrors scripts/audit/rsi_status.py's coding_dispatch/
-// attempt scan: retained retry history plus each marker's current attempt.
+// codingDispatchCounts scans retained retry history plus each dispatch marker's
+// current attempt.
 func (t *Tracker) codingDispatchCounts() (total, today int) {
 	return t.codingDispatchCountsAt(dentime.Now())
 }
@@ -768,8 +766,8 @@ func rsiSourceDispatchable(source string) bool {
 		}
 	}
 	// Executed graduation-ladder unlocks admit staged sources at runtime
-	// (operator directive 2026-07-14); coding-dispatch.sh and rsi_status.py
-	// read the same state file so the three allowlists cannot drift.
+	// (operator directive 2026-07-14). All selection and status readers use
+	// this Go policy so source admission cannot drift between consumers.
 	for _, s := range graduatedDispatchSources() {
 		if s != "" && rsiSourceMatchesNamespace(source, s) {
 			return true

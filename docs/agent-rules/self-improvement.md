@@ -35,13 +35,13 @@ things it shouldn't.
 7. **Post-evolve watch** → the tracker watches next uses; `DefaultRollbackThreshold` (3) consecutive failures → `RollbackSkill` restores the backup.
 8. **Curation** (`curator.go`) → staleness lifecycle `active → stale → archived` at `staleAfterDays` (30) / `archiveAfterDays` (90).
 
-## Shared RSI Lifecycle
+## RSI Lifecycle Boundaries
 
-L1-L5 use one domain lifecycle in `genesis/lifecycle`: `observe_propose` →
-`evaluate_execute` → `verify_learn`. The layer profiles change the artifact and
-automation policy, not the orchestration shape: L1 skill, L2 procedure, L3
-verifier, L4 source, and frozen L5 governance. Each layer keeps its specialized
-producer, deterministic gates, bench, and rollback watch behind that profile.
+L1-L5 share a conceptual observe → evaluate → verify progression, but not a
+generic runtime orchestrator. Each layer owns its producer, deterministic gates,
+bench, cadence, and rollback policy. `genesis/lifecycle` stores only stable
+L1-L4 display identity plus the authoritative L4 review/delivery state machine;
+it does not declare unused automation, artifact, or frozen-L5 policy.
 
 For L4, review and delivery are independent axes. `accepted` authorizes an
 attempt; it does not mean the change shipped. Delivery advances through
@@ -65,7 +65,7 @@ attempt; it does not mean the change shipped. Delivery advances through
 | `curriculum.go` | Demand-generation lane (RSI P5-1) — coverage-gap mining; files route=genesis opportunities with validation cases authored first (source=`curriculum`, propose-only) |
 | `tracker_self_correction.go` | Self-correction candidate record/query + forbidden-surface gate |
 | `tracker_self_correction_dispatch_selection.go` | Canonical O(n) L4 candidate selection across review, delivery, source, and surface policy |
-| `lifecycle/` | Shared L1-L5 profiles and authoritative L4 review/delivery state kernel |
+| `lifecycle/` | Stable L1-L4 display identity and authoritative L4 review/delivery state kernel |
 | `tracker_recurrence_promotion.go` | Recurrence/cluster → self-correction candidate promotion |
 | `meta_evolution.go` | L2 slow loop — weekly meta-artifact revision (evolve/judge prompts) with epoch benches, auto-adopt + rollback watch |
 | `runtime_error_mining.go` | L4 proactive source — recurring code-actionable errors → propose-only scope=code candidates |

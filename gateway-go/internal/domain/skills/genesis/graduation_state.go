@@ -4,11 +4,10 @@ package genesis
 // 2026-07-14: "잠금 해제도 에이전트에게 맡겨버려. 그래야 재귀적 자기개선이지").
 //
 // The graduation LADDER (rsi_ladder.go) scores evidence; this file is where
-// an evidence-met row becomes an EXECUTED unlock. The flip consumers —
-// e-process rollback ownership, the coding-dispatch allowlist and daily cap
-// (Go dashboards + coding-dispatch.sh + rsi_status.py all read this JSON) —
-// consult the state in addition to their env/compiled defaults, with the
-// operator's explicit env knob always winning.
+// an evidence-met row becomes an EXECUTED unlock. The flip consumers are the Go
+// e-process, source-admission, and RSI-status paths plus the shell dispatch
+// executor's daily cap. They consult the state in addition to their
+// env/compiled defaults, with the operator's explicit env knob always winning.
 //
 // Trust architecture mirrors P2 auto-adoption exactly:
 //   - evidence thresholds stay compiled (rsi_ladder.go) — the loop EXECUTES a
@@ -61,7 +60,7 @@ type graduationState struct {
 
 // graduationStatePath is FIXED under ~/.deneb/data (same convention as the
 // Tracker ledgers, and the same gotcha: DENEB_STATE_DIR does not move it) so
-// coding-dispatch.sh and rsi_status.py read the identical file.
+// the Go paths and shell dispatch executor read the same unlock ledger.
 func graduationStatePath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {

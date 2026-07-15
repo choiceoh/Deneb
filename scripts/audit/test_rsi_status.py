@@ -1,653 +1,150 @@
-"""Deterministic tests for the RSI loop-status classifier.
-
-The whole value of this surface is telling DATA-GATED (built, waiting for fuel)
-apart from STARVED (built, input wiring empty) — so those two are the load-
-bearing assertions.
-"""
+"""Tests for the RPC-backed RSI status formatter."""
 
 from __future__ import annotations
 
 import io
-import datetime
 import json
-import os
 import tempfile
 import unittest
+import urllib.error
+from pathlib import Path
 from unittest import mock
 
-from rsi_status import (
-    LADDER_CALIBRATION_OPENED_MS,
-    assess_ladder,
-    DATA_GATED,
-    FROZEN,
-    IDLE,
-    LIVE,
-    STARVED,
-    assess,
-    assess_l1,
-    assess_l2,
-    assess_l3,
-    assess_l4,
-    main,
-    turning,
-    render_markdown,
-    _marker_blocks_redispatch,
-    DISPATCH_ABANDON_MS,
-)
-
-NOW = 1_700_000_000_000  # fixed clock (ms)
-DAY = 24 * 60 * 60 * 1000
-RECENT = NOW - DAY  # inside every window
-OLD = NOW - 90 * DAY  # outside every window
+import rsi_status
 
 
-class L1Test(unittest.TestCase):
-    def test_committed_evolves_are_live(self):
-        # Real genesis-log schema keys by `type`, not event/action.
-        s = assess_l1([{"createdAt": RECENT, "type": "evolved"},
-                       {"createdAt": RECENT, "type": "genesis"},
-                       {"createdAt": RECENT, "type": "evolution_proposal"}], NOW)
-        self.assertEqual(s.state, LIVE)
-        self.assertEqual(s.metrics["evolved"], 1)
-        self.assertEqual(s.metrics["genesis"], 1)
-        self.assertEqual(s.metrics["proposal"], 1)
-
-    def test_proposals_without_commits_is_data_gated(self):
-        # The lane is active but nothing clears the gate — DATA-GATED, not IDLE.
-        s = assess_l1([{"createdAt": RECENT, "type": "evolution_proposal"},
-                       {"createdAt": RECENT, "type": "evolve_rejected"}], NOW)
-        self.assertEqual(s.state, DATA_GATED)
-        self.assertEqual(s.metrics["rejected"], 1)
-
-    def test_no_recent_events_is_idle(self):
-        s = assess_l1([{"createdAt": OLD, "type": "evolved"}], NOW)
-        self.assertEqual(s.state, IDLE)
-
-    def test_eprocess_readiness_counts_all_history(self):
-        # 20 baseline-test labels with 1 disagreement (95% agreement) → ready.
-        # Labels are counted over the WHOLE ledger (old entries included) —
-        # the ladder evidence accumulates, it does not expire.
-        events = [{"createdAt": OLD, "type": "evolve_rolled_back",
-                   "baselineTest": {"reject": True, "rejectReachable": True, "disagreement": i == 0}}
-                  for i in range(20)]
-        events.append({"createdAt": RECENT, "type": "evolved"})
-        s = assess_l1(events, NOW)
-        self.assertEqual(s.metrics["eprocess_labels"], 20)
-        self.assertEqual(s.metrics["eprocess_disagreements"], 1)
-        self.assertTrue(s.metrics["eprocess_cutover_ready"])
-
-    def test_eprocess_readiness_needs_agreement_and_n(self):
-        # n=19 all-agree: below the floor. n=20 at 85%: below agreement bar.
-        base = {"createdAt": OLD, "type": "evolve_confirmed"}
-        n19 = [dict(base, baselineTest={"rejectReachable": True, "disagreement": False}) for _ in range(19)]
-        self.assertFalse(assess_l1(n19, NOW).metrics["eprocess_cutover_ready"])
-        n20_noisy = [dict(base, baselineTest={"rejectReachable": True, "disagreement": i < 3}) for i in range(20)]
-        self.assertFalse(assess_l1(n20_noisy, NOW).metrics["eprocess_cutover_ready"])
-
-    def test_eprocess_readiness_pure_confirms_not_ready(self):
-        # C1-D1: a pure-confirm population (no rollback labels) is agreement-
-        # biased ~1.0; readiness requires >=1 fair rollback so agreement was
-        # tested against a disagreement-capable case (mirrors Go).
-        confirms = [{"createdAt": OLD, "type": "evolve_confirmed",
-                     "baselineTest": {"reject": False, "rejectReachable": True, "disagreement": False}}
-                    for _ in range(25)]
-        s = assess_l1(confirms, NOW)
-        self.assertGreaterEqual(s.metrics["eprocess_labels"], 20)
-        self.assertEqual(s.metrics["eprocess_fair_rollbacks"], 0)
-        self.assertFalse(s.metrics["eprocess_cutover_ready"])
-        # One fair rollback unlocks it.
-        confirms.append({"createdAt": RECENT, "type": "evolve_rolled_back",
-                         "baselineTest": {"reject": True, "rejectReachable": True, "disagreement": False}})
-        s2 = assess_l1(confirms, NOW)
-        self.assertEqual(s2.metrics["eprocess_fair_rollbacks"], 1)
-        self.assertTrue(s2.metrics["eprocess_cutover_ready"])
-
-    def test_eprocess_readiness_excludes_unreachable_labels(self):
-        # Labels recorded while rejection was mathematically unreachable
-        # (rejectReachable false/absent) are excluded from the count — matching
-        # the Go filter, so the dashboard cannot show a false READY (Codex).
-        events = [{"createdAt": OLD, "type": "evolve_rolled_back",
-                   "baselineTest": {"disagreement": False}}  # no rejectReachable → unfair
-                  for _ in range(25)]
-        s = assess_l1(events, NOW)
-        self.assertEqual(s.metrics["eprocess_labels"], 0)
-        self.assertEqual(s.metrics["eprocess_unfair_labels"], 25)
-        self.assertFalse(s.metrics["eprocess_cutover_ready"])
+NOW = 1_700_000_000_000
 
 
-class L2Test(unittest.TestCase):
-    def test_freeze_wins(self):
-        s = assess_l2([{"createdAt": RECENT, "action": "", "proposed": True}], frozen=True, now_ms=NOW)
-        self.assertEqual(s.state, FROZEN)
-
-    def test_cycles_are_live(self):
-        s = assess_l2([
-            {"createdAt": RECENT, "epoch": "evaluator", "artifact": "judge.md", "proposed": True},
-            {"createdAt": RECENT, "action": "auto_adopted"},
-        ], frozen=False, now_ms=NOW)
-        self.assertEqual(s.state, LIVE)
-        self.assertEqual(s.metrics["adopted"], 1)
-
-    def test_empty_is_idle(self):
-        self.assertEqual(assess_l2([], frozen=False, now_ms=NOW).state, IDLE)
-
-    def test_revert_only_window_is_live(self):
-        # A revert alone (the rollback watch firing on an old adoption) is meta
-        # activity — L2 must read LIVE, not IDLE (parity with Go metaActivityIn),
-        # else the Go RPC and this audit disagree and rsi_loop_audit hard-fails.
-        s = assess_l2([{"createdAt": RECENT, "action": "auto_reverted"}], frozen=False, now_ms=NOW)
-        self.assertEqual(s.state, LIVE)
-        self.assertEqual(s.metrics["reverted"], 1)
-
-    def test_assess_reads_last_freeze_verdict_not_file_presence(self):
-        # Parity with Go AutoAdoptFrozen: frozen:false unfreezes even though
-        # the marker file still exists.
-        with tempfile.TemporaryDirectory() as data_dir:
-            freeze = os.path.join(data_dir, "auto_adopt_freeze.json")
-            with open(freeze, "w", encoding="utf-8") as handle:
-                handle.write(json.dumps({"frozen": True, "createdAt": OLD}) + "\n")
-                handle.write(json.dumps({"frozen": False, "createdAt": RECENT}) + "\n")
-            layers = {layer.key: layer.state for layer in assess(data_dir, NOW)}
-            self.assertEqual(layers["L2"], IDLE)
-            with open(freeze, "a", encoding="utf-8") as handle:
-                handle.write(json.dumps({"frozen": True, "createdAt": RECENT}) + "\n")
-            layers = {layer.key: layer.state for layer in assess(data_dir, NOW)}
-            self.assertEqual(layers["L2"], FROZEN)
+def sample_payload() -> dict:
+    return {
+        "turning": 1,
+        "health": {"evolves7d": 2, "thrash": False},
+        "layers": [
+            {
+                "key": "L1",
+                "title": "skill evolution",
+                "state": "LIVE",
+                "diagnosis": "turning | safely",
+                "detail": "skill policy",
+                "metrics": [{"label": "evolved", "value": "2"}],
+            },
+            {
+                "key": "GRAD",
+                "title": "graduation ladder",
+                "state": "DATA-GATED",
+                "diagnosis": "evidence accumulating",
+                "metrics": [],
+            },
+        ],
+    }
 
 
-class L3Test(unittest.TestCase):
-    def test_blatant_only_is_data_gated_not_starved(self):
-        # The judge catches every blatant defect; subtle probes not deployed yet.
-        # This is the P3 data-gate — must read DATA-GATED, never STARVED/LIVE.
-        s = assess_l3([{"createdAt": RECENT, "pairs": 12, "correct": 12,
-                        "byClass": {"section-drop": [3, 3], "fake-tool": [3, 3],
-                                    "truncation": [3, 3], "overfit": [3, 3]},
-                        "misses": []}], [], NOW)
-        self.assertEqual(s.state, DATA_GATED)
-        self.assertFalse(s.metrics["subtle_probes_deployed"])
-        self.assertIn("subtle", s.diagnosis.lower())
+class FakeResponse:
+    def __init__(self, payload: dict):
+        self.payload = payload
 
-    def test_misses_are_live_fuel(self):
-        s = assess_l3([{"createdAt": RECENT, "pairs": 8, "correct": 6,
-                        "byClass": {"safety-drop": [2, 4], "section-drop": [4, 4]},
-                        "misses": [{"skill": "sk", "degradation": "safety-drop", "verdict": "passed_defect"},
-                                   {"skill": "sk", "degradation": "safety-drop", "verdict": "passed_defect"}]}], [], NOW)
-        self.assertEqual(s.state, LIVE)
-        self.assertEqual(s.metrics["misses"], 2)
+    def __enter__(self):
+        return self
 
-    def test_false_reject_only_is_live(self):
-        s = assess_l3([{"createdAt": RECENT, "byClass": {"safety-drop": [4, 4]},
-                        "falseRejects": [{"skill": "sk"}]}], [], NOW)
-        self.assertEqual(s.state, LIVE)
+    def __exit__(self, *_args):
+        return False
 
-    def test_weaken_tier_zero_miss_reads_probe_ceiling(self):
-        # Escalated (weaken-tier) probes in the ledger with zero misses: still
-        # DATA-GATED, but the diagnosis must say the lane already probes at its
-        # difficulty ceiling — not promise a future escalation.
-        s = assess_l3([{"createdAt": RECENT, "pairs": 4, "correct": 4,
-                        "byClass": {"imperative-drop": [2, 2], "imperative-weaken": [2, 2]},
-                        "misses": []}], [], NOW)
-        self.assertEqual(s.state, DATA_GATED)
-        self.assertTrue(s.metrics["weaken_probes_deployed"])
-        self.assertIn("weaken tier", s.diagnosis)
-
-    def test_drop_tier_zero_miss_promises_escalation(self):
-        # Drop-tier-only saturation names the ladder's next step.
-        s = assess_l3([{"createdAt": RECENT, "pairs": 2, "correct": 2,
-                        "byClass": {"imperative-drop": [1, 1], "safety-drop": [1, 1]},
-                        "misses": []}], [], NOW)
-        self.assertEqual(s.state, DATA_GATED)
-        self.assertFalse(s.metrics["weaken_probes_deployed"])
-        self.assertIn("escalates", s.diagnosis)
-
-    def test_organic_false_accepts_are_live_fuel(self):
-        # A baseline-CONFIRMED rollback (e-process agreed) is a real-usage P3
-        # label; a baseline-quiet rollback is a disagreement label, not fuel.
-        runs = [{"createdAt": RECENT, "pairs": 8, "correct": 8,
-                 "byClass": {"safety-drop": [4, 4]}, "misses": []}]
-        genesis = [
-            {"createdAt": RECENT, "type": "evolve_rolled_back",
-             "baselineTest": {"reject": True, "disagreement": False}},
-            {"createdAt": RECENT, "type": "evolve_rolled_back",
-             "baselineTest": {"reject": False, "disagreement": True}},
-            {"createdAt": OLD, "type": "evolve_rolled_back",  # outside 30d
-             "baselineTest": {"reject": True, "disagreement": False}},
-        ]
-        s = assess_l3(runs, genesis, NOW)
-        self.assertEqual(s.state, LIVE)
-        self.assertEqual(s.metrics["organic_false_accepts_30d"], 1)
-
-    def test_no_runs_is_idle(self):
-        self.assertEqual(assess_l3([], [], NOW).state, IDLE)
-
-    def test_operator_verdict_is_live_fuel_without_synthetic_run(self):
-        s = assess_l3([{
-            "createdAt": RECENT,
-            "judgeVersion": "v1",
-            "operatorVerdicts": [{"decisionId": "sk@1.0.1", "verdict": "confirm", "createdAt": RECENT}],
-        }], [], NOW)
-        self.assertEqual(s.state, LIVE)
-        self.assertEqual(s.metrics["runs"], 0)
-        self.assertEqual(s.metrics["operator_labels_7d"], 1)
-
-    def test_operator_label_window_follows_each_verdict_timestamp(self):
-        # A judge run recorded 10 days ago (out of the 7d window) gets an operator
-        # verdict added today. The verdict's OWN timestamp is in-window, so it must
-        # count (parity with Go RecentOperatorJudgeVerdicts) — and its presence
-        # alone lifts L3 out of IDLE even though no run is in-window.
-        s = assess_l3([{
-            "createdAt": OLD,
-            "judgeVersion": "v1",
-            "operatorVerdicts": [{"decisionId": "sk@1.0.1", "verdict": "confirm", "createdAt": RECENT}],
-        }], [], NOW)
-        self.assertEqual(s.state, LIVE)
-        self.assertEqual(s.metrics["operator_labels_7d"], 1)
-
-        # The reverse: a stale verdict (out of window) on a fresh run does not count.
-        stale = assess_l3([{
-            "createdAt": RECENT,
-            "judgeVersion": "v1",
-            "operatorVerdicts": [{"decisionId": "sk@1.0.1", "verdict": "confirm", "createdAt": OLD}],
-        }], [], NOW)
-        self.assertEqual(stale.metrics["operator_labels_7d"], 0)
+    def read(self) -> bytes:
+        return json.dumps(self.payload).encode()
 
 
-class L4Test(unittest.TestCase):
-    def test_skill_and_test_scope_only_is_starved(self):
-        # Candidates exist but none are code-scope from a dispatch source — the
-        # actual production state we diagnosed. Must be STARVED (wiring gap),
-        # not IDLE (no candidates) and not DATA-GATED.
-        rows = [
-            {"type": "self_correction_candidate", "id": "a", "scope": "skill", "source": "skill-lifecycle"},
-            {"type": "self_correction_candidate", "id": "b", "scope": "test", "source": "self-harness"},
-        ]
-        s = assess_l4(rows, dispatch_total=0, dispatch_today=0)
-        self.assertEqual(s.state, STARVED)
-        self.assertEqual(s.metrics["dispatchable"], 0)
-        self.assertEqual(s.metrics["by_scope"], {"skill": 1, "test": 1})
+class SnapshotTest(unittest.TestCase):
+    def test_projection_uses_server_turning_and_preformatted_metrics(self):
+        snapshot = rsi_status.snapshot_from_payload(sample_payload())
+        self.assertEqual(snapshot.turning, 1)
+        self.assertEqual(snapshot.layers[0].metrics, {"evolved": "2"})
+        self.assertEqual(snapshot.health["evolves7d"], 2)
 
-    def test_code_scope_from_dispatch_source_is_queued_until_dispatch_starts(self):
-        rows = [{"type": "self_correction_candidate", "id": "c", "scope": "code",
-                 "status": "proposed", "source": "evolve-tool-gap:xyz"}]
-        s = assess_l4(rows, dispatch_total=0, dispatch_today=0)
-        self.assertEqual(s.state, IDLE)
-        self.assertEqual(s.metrics["dispatchable"], 1)
+    def test_projection_rejects_unknown_state(self):
+        payload = sample_payload()
+        payload["layers"][0]["state"] = "MAYBE"
+        with self.assertRaisesRegex(rsi_status.StatusError, "unknown state"):
+            rsi_status.snapshot_from_payload(payload)
 
-    def test_dispatcher_failures_make_queued_supply_starved(self):
-        rows = [{"type": "self_correction_candidate", "id": "c", "scope": "code",
-                 "status": "proposed", "source": "evolve-tool-gap:xyz", "createdAt": RECENT}]
-        status = {
-            "lastTickAtMs": RECENT,
-            "lastResult": "environment_failed",
-            "lastSuccessfulAtMs": 0,
-            "consecutiveFailures": 3,
-        }
-        s = assess_l4(rows, dispatch_total=0, dispatch_today=0,
-                      runtime_status=status, now_ms=NOW)
-        self.assertEqual(s.state, STARVED)
-        self.assertEqual(s.metrics["consecutive_failures"], 3)
-        self.assertEqual(s.metrics["oldest_pending_age_ms"], NOW - RECENT)
-        self.assertIn("environment_failed", s.diagnosis)
-
-    def test_failed_attempt_requeues_only_without_unlanded_work(self):
-        rows = [
-            {"type": "self_correction_candidate", "id": "c", "scope": "code",
-             "status": "proposed", "source": "self-harness:x"},
-            {"type": "self_correction_dispatch", "id": "c", "dispatchPhase": "failed",
-             "attemptId": "a1"},
-        ]
-        # The re-dispatch decision follows the marker's block verdict (built by
-        # the scan via _marker_blocks_redispatch): not-blocked → requeues.
-        retry = assess_l4(rows, 1, 0, marker_blocks={"c": False})
-        self.assertEqual(retry.metrics["dispatchable"], 1)
-        blocked = assess_l4(rows, 1, 0, marker_blocks={"c": True})
-        self.assertEqual(blocked.metrics["dispatchable"], 0)
-        # declined-as-failed compat (old shell wrote phase=failed for a declined
-        # marker) still keys off the marker's outcome string, not the verdict.
-        declined = assess_l4(rows, 1, 0, marker_outcomes={"c": "declined"})
-        self.assertEqual(declined.metrics["dispatchable"], 0)
-        self.assertEqual(declined.metrics["declined"], 1)
-
-    def test_marker_block_verdict_matches_go_dispatch_marker_blocks(self):
-        now = 10_000_000
-        # Corrupt / non-dict marker fails closed (blocks).
-        self.assertTrue(_marker_blocks_redispatch(None, now, now))
-        self.assertTrue(_marker_blocks_redispatch(["not", "a", "dict"], now, now))
-        # Terminal blocking outcomes.
-        for oc in ("landed", "attempted", "declined"):
-            self.assertTrue(_marker_blocks_redispatch({"outcome": oc}, now, now))
-        # Retryable outcomes.
-        for oc in ("failed", "timeout"):
-            self.assertFalse(_marker_blocks_redispatch({"outcome": oc}, now, now))
-        # Outcome-less: blocks within the 2h grace, abandons after.
-        self.assertTrue(_marker_blocks_redispatch({}, now - DISPATCH_ABANDON_MS + 1, now))
-        self.assertFalse(_marker_blocks_redispatch({}, now - DISPATCH_ABANDON_MS - 1, now))
-
-    def test_status_delta_demotes_candidate(self):
-        # A later status delta ({id,status}) must fold onto the candidate, not
-        # be counted as a fresh record — an applied candidate is not dispatchable.
-        rows = [
-            {"type": "self_correction_candidate", "id": "c", "scope": "code",
-             "status": "proposed", "source": "evolve-tool-gap:xyz"},
-            {"id": "c", "status": "applied"},
-        ]
-        s = assess_l4(rows, dispatch_total=1, dispatch_today=0)
-        self.assertEqual(s.metrics["dispatchable"], 0)
-        self.assertEqual(s.state, STARVED)
-
-    def test_dispatch_outcomes_feed_land_rate(self):
-        # Graduation-ladder evidence: recorded marker outcomes yield a land
-        # rate over DECIDED dispatches; the LIVE diagnosis names it.
-        rows = [{"type": "self_correction_candidate", "id": "d", "scope": "code",
-                 "status": "accepted", "source": "health-finding:x"}]
-        s = assess_l4(rows, dispatch_total=3, dispatch_today=0,
-                      outcomes={"landed": 1, "declined": 1})
-        self.assertEqual(s.metrics["land_rate"], 0.5)
-        self.assertEqual(s.metrics["dispatch_outcomes"], {"landed": 1, "declined": 1})
-        self.assertIn("land rate 50%", s.diagnosis)
-        # No outcomes recorded yet (pre-accounting markers): rate is None, not 0.
-        s = assess_l4(rows, dispatch_total=3, dispatch_today=0, outcomes={})
-        self.assertIsNone(s.metrics["land_rate"])
-        self.assertNotIn("land rate", s.diagnosis)
-
-    def test_dispatch_lifecycle_replaces_marker_guessing(self):
-        rows = [
-            {"type": "self_correction_candidate", "id": "flight", "scope": "code",
-             "status": "proposed", "source": "self-harness:x"},
-            {"type": "self_correction_dispatch", "id": "flight", "dispatchPhase": "started",
-             "attemptId": "a1"},
-            {"type": "self_correction_candidate", "id": "closed", "scope": "code",
-             "status": "accepted", "source": "self-harness:y"},
-            {"type": "self_correction_dispatch", "id": "closed", "dispatchPhase": "watch_passed",
-             "attemptId": "a2"},
-        ]
-        s = assess_l4(rows, dispatch_total=2, dispatch_today=0)
-        self.assertEqual(s.state, LIVE)
-        self.assertEqual(s.metrics["dispatchable"], 0)
-        self.assertEqual(s.metrics["in_flight"], 1)
-        self.assertEqual(s.metrics["applied"], 1)
-
-    def test_legacy_marker_id_is_not_double_counted_as_dispatchable(self):
-        rows = [{"type": "self_correction_candidate", "id": "legacy", "scope": "code",
-                 "status": "proposed", "source": "self-harness:x"}]
-        s = assess_l4(rows, dispatch_total=1, dispatch_today=0, dispatched_ids={"legacy"})
-        self.assertEqual(s.state, LIVE)
-        self.assertEqual(s.metrics["dispatchable"], 0)
-        self.assertEqual(s.metrics["legacy_in_flight"], 1)
-
-    def test_staged_non_dispatch_code_supply_is_visible(self):
-        # Proposed code candidates from sources outside the dispatch allowlist
-        # (runtime-error #3491) are staged supply. The layer stays STARVED
-        # (nothing dispatchable) but must count them and must NOT claim "no
-        # source produces code candidates".
-        rows = [
-            {"type": "self_correction_candidate", "id": "r1", "scope": "code",
-             "status": "proposed", "source": "runtime-error:abc123"},
-        ]
-        s = assess_l4(rows, dispatch_total=0, dispatch_today=0)
-        self.assertEqual(s.state, STARVED)
-        self.assertEqual(s.metrics["dispatchable"], 0)
-        self.assertEqual(s.metrics["staged"], 1)
-        self.assertEqual(s.metrics["staged_sources"], {"runtime-error": 1})
-        self.assertIn("staged", s.diagnosis)
-        self.assertIn("allowlist graduation", s.diagnosis)
-        self.assertNotIn("wiring gap", s.diagnosis)
-
-    def test_health_finding_graduated_to_dispatchable(self):
-        # Graduation regression (2026-07-12): health-finding cleared its first
-        # batch review, so its candidates count DISPATCHABLE and remain queued
-        # until an authoritative dispatch starts; runtime-error stays staged.
-        rows = [
-            {"type": "self_correction_candidate", "id": "h1", "scope": "code",
-             "status": "proposed", "source": "health-finding:volatile-hub:46a381ef4981"},
-            {"type": "self_correction_candidate", "id": "r1", "scope": "code",
-             "status": "proposed", "source": "runtime-error:abc123"},
-        ]
-        s = assess_l4(rows, dispatch_total=0, dispatch_today=0)
-        self.assertEqual(s.state, IDLE)
-        self.assertEqual(s.metrics["dispatchable"], 1)
-        self.assertEqual(s.metrics["staged"], 1)
-        self.assertEqual(s.metrics["staged_sources"], {"runtime-error": 1})
-
-    def test_accepted_candidate_is_dispatch_supply(self):
-        # Review-endorsed (accepted) candidates are queued dispatch supply, not
-        # settled: the heartbeat review lane accepts queue candidates it cannot
-        # implement itself (observed live 2026-07-12), and the dispatcher picks
-        # them first. rejected/applied still settle.
-        rows = [
-            {"type": "self_correction_candidate", "id": "h1", "scope": "code",
-             "status": "proposed", "source": "health-finding:x"},
-            {"id": "h1", "status": "accepted"},
-        ]
-        s = assess_l4(rows, dispatch_total=0, dispatch_today=0)
-        self.assertEqual(s.state, IDLE)
-        self.assertEqual(s.metrics["dispatchable"], 1)
-
-    def test_reviewed_staged_candidate_stops_counting(self):
-        # A rejected staged candidate is settled, not awaiting graduation.
-        rows = [
-            {"type": "self_correction_candidate", "id": "h1", "scope": "code",
-             "status": "proposed", "source": "health-finding:x"},
-            {"id": "h1", "status": "rejected"},
-        ]
-        s = assess_l4(rows, dispatch_total=0, dispatch_today=0)
-        self.assertEqual(s.metrics["staged"], 0)
-        self.assertIn("wiring gap", s.diagnosis)
-
-    def test_no_candidates_is_idle(self):
-        self.assertEqual(assess_l4([], 0, 0).state, IDLE)
+    def test_projection_rejects_duplicate_metric_labels(self):
+        payload = sample_payload()
+        payload["layers"][0]["metrics"] *= 2
+        with self.assertRaisesRegex(rsi_status.StatusError, "duplicate metric"):
+            rsi_status.snapshot_from_payload(payload)
 
 
-class AssessAndCliTest(unittest.TestCase):
-    def _write(self, data_dir, name, records):
-        with open(os.path.join(data_dir, name), "w", encoding="utf-8") as handle:
-            for r in records:
-                handle.write(json.dumps(r) + "\n")
+class TransportTest(unittest.TestCase):
+    def test_fetch_uses_authenticated_canonical_rpc(self):
+        seen = {}
 
-    def test_assess_end_to_end_and_json_cli(self):
-        with tempfile.TemporaryDirectory() as data_dir:
-            self._write(data_dir, "skill_genesis_log.jsonl", [{"createdAt": RECENT, "type": "evolved"}])
-            self._write(data_dir, "judge_accuracy_log.jsonl",
-                        [{"createdAt": RECENT, "pairs": 12, "correct": 12,
-                          "byClass": {"section-drop": [3, 3]}, "misses": []}])
-            self._write(data_dir, "self_correction_candidates.jsonl",
-                        [{"type": "self_correction_candidate", "id": "a", "scope": "skill", "source": "skill-lifecycle"}])
+        def urlopen(request, timeout):
+            seen["request"] = request
+            seen["timeout"] = timeout
+            return FakeResponse({"ok": True, "payload": sample_payload()})
 
-            layers = {layer.key: layer.state for layer in assess(data_dir, NOW)}
-            self.assertEqual(layers["L1"], LIVE)
-            self.assertEqual(layers["L2"], IDLE)       # no meta ledger
-            self.assertEqual(layers["L3"], DATA_GATED)  # blatant-only
-            self.assertEqual(layers["L4"], STARVED)     # skill-scope only
+        with mock.patch.object(rsi_status.urllib.request, "urlopen", side_effect=urlopen):
+            snapshot = rsi_status.fetch_status("http://gateway.test/", "secret", 3)
+        self.assertEqual(snapshot.turning, 1)
+        self.assertEqual(seen["timeout"], 3)
+        self.assertEqual(seen["request"].get_header("X-deneb-client-token"), "secret")
+        body = json.loads(seen["request"].data)
+        self.assertEqual(body["method"], "miniapp.rsi.status")
 
-            out = io.StringIO()
-            rc = main(["--json", "--data-dir", data_dir, "--now-ms", str(NOW)], stdout=out, stderr=io.StringIO())
-            self.assertEqual(rc, 0)
-            payload = json.loads(out.getvalue().split("DENEB_RSI_STATUS")[0])
-            self.assertEqual(len(payload["layers"]), 5)  # L1-L4 + GRAD ladder
-            self.assertEqual(payload["turning"], 1)  # only L1 live; GRAD never counts
+    def test_fetch_surfaces_transport_failure(self):
+        with (
+            mock.patch.object(
+                rsi_status.urllib.request,
+                "urlopen",
+                side_effect=urllib.error.URLError("offline"),
+            ),
+            self.assertRaisesRegex(rsi_status.StatusError, "unavailable"),
+        ):
+            rsi_status.fetch_status("http://gateway.test", "")
 
-    def test_missing_data_dir_is_all_idle_not_a_crash(self):
-        layers = {layer.key: layer.state for layer in assess("/nonexistent/deneb/data", NOW)}
-        self.assertEqual(layers.pop("GRAD"), DATA_GATED)  # ladder: evidence accumulating
-        self.assertEqual(set(layers.values()), {IDLE})
 
-    def test_dispatch_metrics_count_retry_history_not_marker_files(self):
-        with tempfile.TemporaryDirectory() as data_dir:
-            dispatch_dir = os.path.join(data_dir, "coding_dispatch")
-            os.makedirs(dispatch_dir)
-            today_cutoff = NOW - (NOW % DAY)
-            marker = {
-                "id": "retry",
-                "attemptId": "a-declined",
-                "outcome": "declined",
-                "dispatchedAt": NOW - 1_000,
-                "attempts": [
-                    {"attemptId": "a-landed", "outcome": "landed", "dispatchedAt": NOW - 2_000},
-                    {"outcome": "failed", "dispatchedAt": today_cutoff - 1_000},
-                ],
-            }
-            with open(os.path.join(dispatch_dir, "retry.json"), "w", encoding="utf-8") as handle:
-                json.dump(marker, handle)
+class RenderingTest(unittest.TestCase):
+    def setUp(self):
+        self.snapshot = rsi_status.snapshot_from_payload(sample_payload())
 
-            self._write(data_dir, "self_correction_candidates.jsonl", [{
-                "type": "self_correction_dispatch", "attemptId": "a-landed",
-                "dispatchPhase": "watch_passed",
-            }])
-
-            l4 = next(layer for layer in assess(data_dir, NOW) if layer.key == "L4")
-            self.assertEqual(l4.metrics["dispatched_total"], 3)
-            self.assertEqual(l4.metrics["dispatched_today"], 2)
-            self.assertEqual(
-                l4.metrics["dispatch_outcomes"],
-                {"landed": 1, "failed": 1, "declined": 1},
-            )
-            self.assertAlmostEqual(l4.metrics["land_rate"], 1 / 3)
-
-    def test_dispatch_today_uses_operator_timezone(self):
-        with tempfile.TemporaryDirectory() as data_dir:
-            dispatch_dir = os.path.join(data_dir, "coding_dispatch")
-            os.makedirs(dispatch_dir)
-            dispatched = datetime.datetime(2026, 7, 14, 23, 30, tzinfo=datetime.timezone.utc)
-            now = datetime.datetime(2026, 7, 15, 8, 0,
-                                    tzinfo=datetime.timezone(datetime.timedelta(hours=9)))
-            with open(os.path.join(dispatch_dir, "kst.json"), "w", encoding="utf-8") as handle:
-                json.dump({"dispatchedAt": int(dispatched.timestamp() * 1000)}, handle)
-            with mock.patch.dict(os.environ, {"DENEB_TIMEZONE": "Asia/Seoul"}):
-                l4 = next(layer for layer in assess(
-                    data_dir, int(now.timestamp() * 1000)) if layer.key == "L4")
-            self.assertEqual(l4.metrics["dispatched_today"], 1)
-
-    def test_declined_dispatch_is_healthy_terminal_not_failure(self):
-        rows = [
-            {"type": "self_correction_candidate", "id": "d", "scope": "code",
-             "status": "proposed", "source": "self-harness:test"},
-            {"type": "self_correction_dispatch", "id": "d",
-             "dispatchPhase": "declined", "attemptId": "a"},
-        ]
-        l4 = assess_l4(rows, 1, 0, {"declined": 1})
-        self.assertEqual(l4.state, LIVE)
-        self.assertEqual(l4.metrics["declined"], 1)
-        self.assertEqual(l4.metrics["failed_or_rolled_back"], 0)
-
-    def test_graduation_uses_latest_terminal_watched_cohort(self):
-        with tempfile.TemporaryDirectory() as data_dir:
-            dispatch_dir = os.path.join(data_dir, "coding_dispatch")
-            os.makedirs(dispatch_dir)
-            ledger = []
-
-            def marker(name: str, outcome: str, at: int, phase: str = "") -> None:
-                attempt = f"attempt-{name}"
-                with open(os.path.join(dispatch_dir, name + ".json"), "w", encoding="utf-8") as handle:
-                    json.dump({
-                        "id": name, "attemptId": attempt, "outcome": outcome,
-                        "dispatchedAt": at,
-                    }, handle)
-                if phase:
-                    ledger.append({
-                        "type": "self_correction_dispatch", "attemptId": attempt,
-                        "dispatchPhase": phase,
-                    })
-
-            marker("old-rollback", "landed", 1, "rolled_back")
-            marker("new-attempted", "attempted", 999, "pr_opened")
-            for i, outcome in enumerate(("landed", "landed", "landed", "declined", "declined")):
-                marker(f"new-{i}", outcome, 100 + i,
-                       "watch_passed" if outcome == "landed" else "declined")
-            self._write(data_dir, "self_correction_candidates.jsonl", ledger)
-
-            grad = next(layer for layer in assess(data_dir, NOW) if layer.key == "GRAD")
-            self.assertEqual(grad.metrics["배차 캡 상향"], "준비됨")
-
-    def test_markdown_is_generated_from_the_same_snapshot(self):
-        layers = [assess_l1([{"createdAt": RECENT, "type": "evolved"}], NOW)]
-        doc = render_markdown(layers, NOW, "/tmp/deneb-data")
-        self.assertIn("# Deneb RSI live status", doc)
+    def test_markdown_uses_server_snapshot_and_excludes_grad_from_denominator(self):
+        doc = rsi_status.render_markdown(self.snapshot, NOW, "http://gateway.test/")
         self.assertIn("**Turning: 1/1**", doc)
-        self.assertIn("| L1 — skill evolution | LIVE |", doc)
-        self.assertIn("Do not edit by hand", doc)
+        self.assertIn("| L1 — skill evolution | LIVE | turning \\| safely |", doc)
+        self.assertIn('"evolved": "2"', doc)
+        self.assertIn('"evolves7d": 2', doc)
+        self.assertIn("via `miniapp.rsi.status`", doc)
 
-    def test_cli_can_atomically_write_markdown(self):
-        with tempfile.TemporaryDirectory() as data_dir:
-            output = os.path.join(data_dir, "generated", "rsi-status.md")
-            rc = main(["--data-dir", data_dir, "--now-ms", str(NOW),
-                       "--write-markdown", output], stdout=io.StringIO(), stderr=io.StringIO())
+    def test_json_mode_is_machine_readable_without_status_suffix(self):
+        out = io.StringIO()
+        with mock.patch.object(rsi_status, "fetch_status", return_value=self.snapshot):
+            rc = rsi_status.main(["--json"], stdout=out, stderr=io.StringIO())
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out.getvalue())["turning"], 1)
+
+    def test_cli_atomically_writes_markdown(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "generated" / "rsi-status.md"
+            with mock.patch.object(rsi_status, "fetch_status", return_value=self.snapshot):
+                rc = rsi_status.main(
+                    ["--now-ms", str(NOW), "--write-markdown", str(output)],
+                    stdout=io.StringIO(),
+                    stderr=io.StringIO(),
+                )
             self.assertEqual(rc, 0)
-            with open(output, encoding="utf-8") as handle:
-                self.assertIn("# Deneb RSI live status", handle.read())
+            self.assertIn("# Deneb RSI live status", output.read_text(encoding="utf-8"))
+            self.assertFalse(output.with_name(output.name + ".tmp").exists())
 
-
-class LadderTest(unittest.TestCase):
-    def test_empty_evidence_accumulates(self):
-        s = assess_ladder([], [], [], {})
-        self.assertEqual((s.key, s.state), ("GRAD", DATA_GATED))
-        self.assertEqual(len(s.metrics), 5)
-        self.assertIn("증거 축적 중", s.diagnosis)
-
-    def test_dispatch_and_staged_evidence_read_ready(self):
-        cands = [{"type": "self_correction_candidate", "id": "r1", "scope": "code",
-                  "status": "proposed", "source": "runtime-error:abcd"}]
-        s = assess_ladder([], [], cands, {"landed": 3, "declined": 2})
-        self.assertEqual(s.state, LIVE)
-        self.assertEqual(s.metrics["배차 캡 상향"], "준비됨")
-        self.assertEqual(s.metrics["스테이징 소스 졸업"], "준비됨")
-        self.assertIn("운영자 결정 가능", s.diagnosis)
-        # Below the land-rate floor the cap row keeps accumulating.
-        s = assess_ladder([], [], [], {"landed": 1, "failed": 4})
-        self.assertEqual(s.metrics["배차 캡 상향"], "축적 중")
-
-    def test_dispatch_ladder_excludes_pending_and_blocks_cohort_rollback(self):
-        pending = assess_ladder([], [], [], {"landed": 3, "attempted": 2})
-        self.assertEqual(pending.metrics["배차 캡 상향"], "축적 중")
-        rolled_back = assess_ladder([], [], [], {"landed": 4, "rolled_back": 1})
-        self.assertEqual(rolled_back.metrics["배차 캡 상향"], "축적 중")
-
-    def test_calibration_needs_every_epoch_at_target(self):
-        revs = [{"createdAt": LADDER_CALIBRATION_OPENED_MS + 1, "epoch": e,
-                 "benchShadow": {"skills": 1}} for e in ("producer",) * 10 + ("evaluator",) * 10]
-        s = assess_ladder([], revs, [], {})
-        self.assertEqual(s.metrics["캘리브레이션 창 종료"], "축적 중")
-        revs += [{"createdAt": LADDER_CALIBRATION_OPENED_MS + 1, "epoch": "genesis",
-                  "benchGenesis": {"scenarios": 3}}] * 10
-        s = assess_ladder([], revs, [], {})
-        self.assertEqual(s.metrics["캘리브레이션 창 종료"], "준비됨")
-
-    def test_ladder_never_counts_toward_turning(self):
-        ready = assess_ladder([], [], [], {"landed": 5})
-        self.assertEqual(ready.state, LIVE)
-        self.assertEqual(turning([ready]), 0)
-
-    def test_markdown_denominator_excludes_grad(self):
-        # H4: the markdown "Turning: n/N" denominator must exclude the GRAD
-        # dashboard, matching print_summary and the "never counts toward the
-        # headline" contract — it previously used len(layers) (N+1).
-        l1 = assess_l1([{"createdAt": RECENT, "type": "evolved"}], NOW)
-        grad = assess_ladder([], [], [], {"landed": 5})
-        doc = render_markdown([l1, grad], NOW, "/tmp/deneb-data")
-        self.assertIn("**Turning: 1/1**", doc)
-
-
-class MirrorParityTest(unittest.TestCase):
-    """The Go (rsi_ladder.go / rsi_status.go) and Python mirrors classify the
-    same ledgers; a drifted constant made them disagree by a day (H4). Pin the
-    load-bearing shared constants against the Go source so they cannot drift
-    silently again."""
-
-    def _go_source(self, rel: str) -> str:
-        import pathlib
-        return (pathlib.Path(__file__).resolve().parents[2] / rel).read_text(encoding="utf-8")
-
-    def test_calibration_window_constant_matches_go(self):
-        import datetime
-        import re
-        go = self._go_source(
-            "gateway-go/internal/domain/skills/genesis/rsi_ladder.go")
-        m = re.search(
-            r"ladderCalibrationOpenedMs\s*=\s*time\.Date\((\d+),\s*(\d+),\s*(\d+),",
-            go)
-        self.assertIsNotNone(m, "ladderCalibrationOpenedMs not found in rsi_ladder.go")
-        y, mo, d = (int(g) for g in m.groups())
-        want = int(datetime.datetime(y, mo, d, tzinfo=datetime.timezone.utc).timestamp() * 1000)
-        self.assertEqual(LADDER_CALIBRATION_OPENED_MS, want)
+    def test_cli_fails_closed_when_gateway_is_unavailable(self):
+        err = io.StringIO()
+        with mock.patch.object(
+            rsi_status,
+            "fetch_status",
+            side_effect=rsi_status.StatusError("offline"),
+        ):
+            rc = rsi_status.main([], stdout=io.StringIO(), stderr=err)
+        self.assertEqual(rc, 2)
+        self.assertIn("offline", err.getvalue())
 
 
 if __name__ == "__main__":
