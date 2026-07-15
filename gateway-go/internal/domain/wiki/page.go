@@ -141,14 +141,23 @@ type Frontmatter struct {
 	// Status is a 현장 page's lifecycle stage — 후보 / 계약 / 개설 / 준공 (prospective
 	// → contracted → opened → completed). The 현장 지도 filters by it (계약·개설·준공
 	// shown by default, 후보 hidden). Free-form; empty = 미분류. 현장 페이지 전용.
-	Status     string
-	Created    string  // YYYY-MM-DD
-	Updated    string  // YYYY-MM-DD
-	Due        string  // YYYY-MM-DD — upcoming deadline (payment due, delivery, milestone); empty if none
-	Importance float64 // 0.0-1.0
-	Archived   bool
-	Type       string // concept, entity, source, comparison, log
-	Confidence string // high, medium, low
+	Status string
+	// 현장 공정 일정 (site milestone dates) — the standard 현장 lifecycle, aligned with
+	// Status: 계약→ContractDate, 개설→ConstructionStart·ModuleDelivery, 준공→
+	// PreUseInspection·CompletionInspection. YYYY-MM-DD, except ModuleDelivery which
+	// may be a range ("2026-08-01~2026-08-15"). 현장 페이지 전용; empty until reached.
+	ContractDate         string  // 계약일
+	ConstructionStart    string  // 공사개시일
+	ModuleDelivery       string  // 모듈입고(기간 가능)
+	PreUseInspection     string  // 사용전검사일
+	CompletionInspection string  // 준공검사일
+	Created              string  // YYYY-MM-DD
+	Updated              string  // YYYY-MM-DD
+	Due                  string  // YYYY-MM-DD — upcoming deadline (payment due, delivery, milestone); empty if none
+	Importance           float64 // 0.0-1.0
+	Archived             bool
+	Type                 string // concept, entity, source, comparison, log
+	Confidence           string // high, medium, low
 	// SupersededBy points at the page that replaced this one's facts. Set by
 	// the dreamer when new information contradicts/replaces an old page;
 	// search demotes superseded pages so stale facts stop surfacing as
@@ -235,6 +244,17 @@ func (p *Page) Render() []byte {
 	}
 	if p.Meta.Status != "" {
 		buf.WriteString("status: " + sanitizeScalar(p.Meta.Status) + "\n")
+	}
+	for _, m := range []struct{ key, val string }{
+		{"contract_date", p.Meta.ContractDate},
+		{"construction_start", p.Meta.ConstructionStart},
+		{"module_delivery", p.Meta.ModuleDelivery},
+		{"pre_use_inspection", p.Meta.PreUseInspection},
+		{"completion_inspection", p.Meta.CompletionInspection},
+	} {
+		if strings.TrimSpace(m.val) != "" {
+			buf.WriteString(m.key + ": " + sanitizeScalar(strings.TrimSpace(m.val)) + "\n")
+		}
 	}
 	if p.Meta.Created != "" {
 		buf.WriteString("created: " + sanitizeScalar(p.Meta.Created) + "\n")
@@ -647,6 +667,16 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Address = normalizeSiteName(val)
 		case "status":
 			fm.Status = strings.TrimSpace(val)
+		case "contract_date":
+			fm.ContractDate = strings.TrimSpace(val)
+		case "construction_start":
+			fm.ConstructionStart = strings.TrimSpace(val)
+		case "module_delivery":
+			fm.ModuleDelivery = strings.TrimSpace(val)
+		case "pre_use_inspection":
+			fm.PreUseInspection = strings.TrimSpace(val)
+		case "completion_inspection":
+			fm.CompletionInspection = strings.TrimSpace(val)
 		case "created":
 			fm.Created = val
 		case "updated":
