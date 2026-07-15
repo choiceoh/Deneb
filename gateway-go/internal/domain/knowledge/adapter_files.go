@@ -10,6 +10,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 )
 
+// ErrFilesRecallTimeout is returned when HybridSearch hits the files-layer
+// deadline. The Router treats it as a soft degrade (empty files hits + note)
+// rather than a hard recall failure.
+var ErrFilesRecallTimeout = errors.New("files recall timeout")
+
 // filesAdapter exposes the on-box file store's semantic (hybrid) index as a
 // read-only knowledge backend. It is the recall counterpart to the chat files
 // tool and the miniapp.files.search RPC — all three share one
@@ -82,14 +87,15 @@ func (a *filesAdapter) Recall(ctx context.Context, query string, limit int) ([]R
 	}
 	qctx, cancel := context.WithTimeout(ctx, filesRecallTimeout)
 	defer cancel()
-	hits, err := a.index.HybridSearch(qctx, query, limit, a.embed, a.extractFn)
-	if err != nil {
-		// Timeout / cancel → empty hits (graceful degrade), same as an unhealthy embedder.
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || qctx.Err() != nil {
-			return nil, nil
+		hits, err := a.index.HybridSearch(qctx, query, limit, a.embed, a.extractFn)
+		if err != nil {
+			// Timeout / cancel → sentinel so Router can surface a degrade note
+			// instead of looking like "no file knowledge".
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || qctx.Err() != nil {
+				return nil, ErrFilesRecallTimeout
+			}
+			return nil, err
 		}
-		return nil, err
-	}
 	out := make([]Result, 0, len(hits))
 	for _, h := range hits {
 		meta := map[string]string{}

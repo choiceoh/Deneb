@@ -27,11 +27,11 @@ func NewWikiAdapter(store *wiki.Store) Adapter {
 func (a *wikiAdapter) Layer() Layer { return LayerWiki }
 
 // Recall searches the adapter for knowledge relevant to the query.
-// Uses SkipRerank so the agent knowledge tool avoids the cross-encoder
-// (≤800ms) while keeping BM25/semantic/graph RRF — miniapp memory.search
-// still calls Store.Search with the full pipeline.
+// Uses the full wiki pipeline (BM25/semantic/graph RRF + validity + gated
+// model rerank). applyModelRerank only runs when top scores are ambiguous
+// (or ForceRerank), so clear winners skip the ≤800ms cross-encoder.
 func (a *wikiAdapter) Recall(ctx context.Context, query string, limit int) ([]Result, error) {
-	report, err := a.store.SearchWithOptions(ctx, query, limit, wiki.QueryOptions{SkipRerank: true})
+	report, err := a.store.SearchWithOptions(ctx, query, limit, wiki.QueryOptions{})
 	if err != nil {
 		return nil, err
 	}

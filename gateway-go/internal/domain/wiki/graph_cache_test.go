@@ -70,9 +70,10 @@ func TestLoadGraphCorpusCachesUntilWrite(t *testing.T) {
 	}
 }
 
-func TestWikiAdapterRecallUsesSkipRerankOption(t *testing.T) {
-	// Compile-time / behavioral smoke: SearchWithOptions with SkipRerank must
-	// succeed on an empty-ish store (no panic, no error).
+func TestWikiSearchSkipRerankOption(t *testing.T) {
+	// Behavioral smoke: SearchWithOptions with SkipRerank must not attempt
+	// model rerank (API still available for lean callers; agent knowledge
+	// adapter uses the default gated path instead).
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
 	if err != nil {

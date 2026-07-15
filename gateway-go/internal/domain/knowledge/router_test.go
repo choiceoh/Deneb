@@ -3,6 +3,7 @@ package knowledge
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -104,9 +105,58 @@ func TestRouter_Recall_MergesAndReturnsHighestFirst(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("got %d hits, want 3", len(got))
 	}
-	// Highest score first.
-	if got[0].Score != 0.95 {
-		t.Errorf("first hit score = %v, want 0.95", got[0].Score)
+	// Cross-layer RRF: both layer rank-1s outrank the layer rank-2. Wiki wins
+	// the rank-1 tie (curated preference).
+	if got[0].Ref.ID != "인물/박부장" {
+		t.Errorf("first hit = %s, want wiki rank-1", got[0].Ref.String())
+	}
+	if got[1].Ref.ID != "mem-2" {
+		t.Errorf("second hit = %s, want test-layer rank-1", got[1].Ref.String())
+	}
+	if got[2].Ref.ID != "mem-1" {
+		t.Errorf("third hit = %s, want test-layer rank-2", got[2].Ref.String())
+	}
+}
+
+// TestRouter_Recall_RRFPrefersWikiRankOverFilesCosine ensures final ordering
+// uses per-layer rank RRF, not raw backend scores: a low wiki BM25 rank-1 still
+// beats a high files cosine rank-2.
+func TestRouter_Recall_RRFPrefersWikiRankOverFilesCosine(t *testing.T) {
+	wikiA := &mockAdapter{layer: LayerWiki, results: []Result{
+		{Ref: Ref{Layer: LayerWiki, ID: "인물/박부장"}, Score: 0.40},
+	}}
+	files := &mockAdapter{layer: LayerFiles, results: []Result{
+		{Ref: Ref{Layer: LayerFiles, ID: "/a.pdf"}, Score: 0.95},
+		{Ref: Ref{Layer: LayerFiles, ID: "/b.pdf"}, Score: 0.90},
+	}}
+	r := New(wikiA, files)
+	got := r.Recall(context.Background(), "q", 5)
+	if len(got) != 3 {
+		t.Fatalf("got %d hits, want 3", len(got))
+	}
+	if got[0].Ref.Layer != LayerWiki {
+		t.Fatalf("first hit layer = %s, want wiki (rank-1 tie → curated)", got[0].Ref.Layer)
+	}
+	if got[1].Ref.ID != "/a.pdf" {
+		t.Fatalf("second hit = %s, want files rank-1", got[1].Ref.String())
+	}
+	if got[2].Ref.ID != "/b.pdf" {
+		t.Fatalf("third hit = %s, want files rank-2 (must not beat wiki via cosine)", got[2].Ref.String())
+	}
+}
+
+func TestRouter_RecallWithMeta_FilesTimeoutNote(t *testing.T) {
+	wikiA := &mockAdapter{layer: LayerWiki, results: []Result{
+		{Ref: Ref{Layer: LayerWiki, ID: "p"}, Score: 0.7},
+	}}
+	files := &mockAdapter{layer: LayerFiles, recErr: ErrFilesRecallTimeout}
+	r := New(wikiA, files)
+	hits, notes := r.RecallWithMeta(context.Background(), "q", 5)
+	if len(hits) != 1 || hits[0].Ref.Layer != LayerWiki {
+		t.Fatalf("hits = %+v, want single wiki hit", hits)
+	}
+	if len(notes) != 1 || !strings.Contains(notes[0], "타임아웃") {
+		t.Fatalf("notes = %v, want files timeout note", notes)
 	}
 }
 
