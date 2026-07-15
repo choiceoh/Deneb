@@ -1,18 +1,19 @@
 ---
 title: Amaranth ERP API map
-summary: Signed internal API map for topsolar Amaranth logistics, sales, purchase, and partial accounting — same HMAC session as eap/board.
+summary: Signed internal API map for topsolar Amaranth logistics, sales, purchase, partial accounting, and 임직원(personal/human) HR — same HMAC session as eap/board.
 read_when:
   - Extending the groupware tool beyond 전자결재·게시판
-  - Looking up logis/purchase/financial list endpoints
+  - Looking up logis/purchase/financial/personal/human list endpoints
   - Checking which ERP menus this tenant can actually call
+  - Extending groupware people / leave / attendance reads
 ---
 
 # Amaranth ERP API map (topsolar)
 
-Investigation notes for `https://tsgw.topsolar.kr` ERP surfaces (물류·영업·구매·회계 일부).
+Investigation notes for `https://tsgw.topsolar.kr` ERP + 임직원업무관리 surfaces (물류·영업·구매·회계 일부·인사/근태/연차).
 Uses the **same** session + `wehago-sign` HMAC as 전자결재/게시판 — not Douzone partner OpenAPI.
 
-Last surveyed: **2026-07-16** (pass 2). Status: **confirmed** (live POST + rows), **ok-empty** (SUCCESS, zero rows with captured filters), **menu-only** (screen opens; list body TBD), **no-access** (menu absent for this login).
+Last surveyed: **2026-07-16** (pass 3 — 임직원/HR inventory). Status: **confirmed** (live POST + rows), **ok-empty** (SUCCESS, zero rows with captured filters), **menu-only** (screen opens; list body TBD), **no-access** (menu absent for this login).
 
 Auth, session file, and signing: [groupware-amaranth.md](/tools/groupware-amaranth).
 
@@ -23,7 +24,7 @@ Chat tool groupware(area=sales|stock|po|receive|ship|price|…)
                 │
         HMAC client (scripts/dev/groupware-reader/lib/client.mjs)
                 │
-   Micro-frontends: /modules/{financial|logis|purchase|system|bp}/
+   Micro-frontends: /modules/{financial|logis|purchase|system|bp|personal|human}/
                 │
    Signed POST /{micro}/{screen}/{op}
 ```
@@ -35,15 +36,16 @@ Shell SPA lazy-loads module bundles under `/modules/<micro>/`. Hash routes:
 #/BL/BLF0050/BLF0050   → 출고현황
 #/PO/POM0010/POM0010   → 현재고현황
 #/A/ACA2010/ACA2010    → 지출결의
+#/HP/HPH0120/HPH0120 → 인사정보조회
 ```
 
 API path convention (confirmed):
 
 ```text
 /{microModule}/{screenLower}/{op}
-  microModule = financial | logis | purchase | system | bp | …
-  screenLower = blf0050, poc0030, aca2010, …
-  op          = 0lo00001 | 0pu00002 | getList | SYB0010_selectTradeList | …
+  microModule = financial | logis | purchase | system | bp | personal | human | …
+  screenLower = blf0050, poc0030, aca2010, hph0120, hpd0550, hrd0570, …
+  op          = 0lo00001 | 0pu00002 | 0hp00001 | 0hr00001 | getList | …
 ```
 
 ## Top modules (this tenant)
@@ -56,8 +58,9 @@ API path convention (confirmed):
 | 물류공통관리 | `420000000` | `logis` | `BS` | Masters, unit price, settings |
 | 영업관리 | `430000000` | `logis` | `BL` | Quote → order → ship → **매출마감** → collect |
 | 구매/자재관리 | `440000000` | `purchase` | `PO` | PO → receive → stock → pay |
+| 임직원업무관리 | `406000000` | `personal` (+ `human`) | `HP` | 인사·근태·연차·급여 — see HR section |
 
-Also present (non-ERP for this map): PORTAL, 전자결재(`eap`), 메일, 일정, 자원, 게시판, 업무관리, ONEFFICE, ONECHAMBER, 프로세스관리, 임직원업무관리.
+Also present: PORTAL, 전자결재(`eap`), 메일, 일정, 자원, 게시판, 업무관리, ONEFFICE, ONECHAMBER, 프로세스관리, **임직원업무관리(`personal`/`human`)** — mapped in the HR section below.
 
 Children: `POST /gw/gw999A03` with `{ "upperMenuNo": "<menuNo>" }`.
 
@@ -141,6 +144,85 @@ Tenant accounting L2 (from menu tree): 프로세스갤러리, **지출결의/경
 
 **No-access (this login):** 재무제표, 손익/재무상태표, 총계정원장 등 정식 회계보고 메뉴 — not in `gw999A03` under `409000000`.
 
+## 임직원 / 인사 / 조직 (`personal` · `human`) — pass 3
+
+Top module: **임직원업무관리** `menuNo=406000000`, `microModuleCode=personal`, `menuGubun=HP`.
+Admin/aggregate screens often use micro **`human`** (same HMAC session). Bundle inventory (JS scrape of `/modules/personal` + `/modules/human` asset-manifest chunks): **~770** `personal/*` paths, **~2500** `human/*` paths — only live-probed reads are listed below.
+
+### Menu tree (leaves under `406000000`)
+
+| Area | Example screens (menuCode) | micro |
+|------|----------------------------|-------|
+| 마이페이지 | 개인인사정보조회 `HPM0110`, 주소록 `HPM0310`/`HPM0410`, 업무보고 | `personal` |
+| 근태관리 | 근태신청 `HPD0110`, 개인근태신청현황 `HPD0120`, 근무시간 `HPD0220`/`HPD025x`, 연차 `HPD0550`/`HPD0570` | `personal` / `human` |
+| 인사관리 | 인사정보조회 `HPH0120`, 발령 `HPH0410`/`HPH0420`, 교육 `HPH0230`, 증명서 `HPH0310` | `personal` / `human` |
+| 급여관리 | 급여명세서 `HPP0120`, 연말정산 `HPP0210`… | `personal` / `human` |
+| 기타 | 경비청구 `APA*`, 개인지출결의 `NPA*`, 법정의무교육 `HPE0010`, 노무계약 `HPL0110` | mixed |
+
+Children: `POST /gw/gw999A03` `{ "upperMenuNo": "406000000" }` (and recurse).
+
+### Confirmed people / identity (wired or ready)
+
+| Screen / role | Endpoint | Body / notes | Status |
+|---------------|----------|--------------|--------|
+| 사원 피커 | `POST /personal/APCodePicker/ApAperUserCode` | `{ helpTy: "APER_USER_INFO", searchText }` → `empCd`,`korNm`,… (~283 emp). Other `helpTy` values (`APER_DEPT`, `ORG`, `DIV`, …) still return the **same emp list shape** on this tenant — **not** a dept tree. | confirmed |
+| 사원 상세 | `POST /personal/hph0120/0hp00001` | `{ empCd }` → `deptNm`,`divNm`,`korHcls`,`emgcTel`,`tel`,`brthDt`,`enrlFgNm`,… **Strip `rsrgNo` / address — never surface.** | confirmed (chat `area=people`) |
+| 상세 옵션 | `POST /personal/hph0120/0hp00002` | `{ empCd }` → `visibleList`, `payinfoOption` | confirmed |
+| 내 인사카드 | `POST /personal/hpm0110/selectEmpInfo` | `{}` or `{ empCd }` → `UpperInfo` / `Summary` | confirmed |
+| 내 인사 상세 | `POST /personal/hpm0110/selectEmpDetail` | needs fuller body | SERVER ERROR (−1) |
+| 표시 필드 | `POST /personal/hpm0110/getVisibleList` | `{}` | confirmed (HTTP 200 array) |
+
+Chat wiring: `groupware` `area=people` → reader `listPeople` (+ `DENEB_PEOPLE_JSON` → wiki enrich + `org.Load` name match). **Amaranth has no separate org-chart POST found**; org affiliation for agents is still Deneb `org.json` + person `deptNm`/`divNm`.
+
+### Confirmed leave / attendance (read)
+
+| Screen | Endpoint | Body | Status / keys |
+|--------|----------|------|----------------|
+| 개인연차현황 | `POST /personal/hpd0550/0hp00001` | date range (`fromDt`/`toDt`) | confirmed — year list (`ycYy`) |
+| 개인연차현황 | `POST /personal/hpd0550/0hp00002` | date range | confirmed — balances: `basicDy`,`useDy`,`addDy`,`deptNm`,`hclsNm`,… |
+| 개인연차현황 | `POST /personal/hpd0550/0hp00003` / `0hp00004` | `{ yyyy }` | ok-empty (needs richer body) |
+| 월별연차사용 | `POST /personal/hpd0560/0hp00007` | date range | ok-empty |
+| 개인근태신청현황 | `POST /personal/hpd0120/0hp00001` | date range | confirmed — `totalCount`, `atPopUpCountInfos`, `atPopUpDetailInfos` |
+| 연차현황 (관리) | `POST /human/hrd0570/0hr00001` | `{ yyyy }` | confirmed — **company-wide** rows (`divNm`,`deptNm`,`basicDy`,…) |
+| 근태코드 | `POST /human/common/attend/getAttendCodeList` | `{}` | confirmed (~94 codes: `atCd`,`atNm`,…) |
+| 금일/기간 출퇴근 | `POST /human/hrd0250/0hr00001` | requires `workDtFrom`+`workDtTo` | body shape known; query still FAIL (−97) without full filters |
+| | `POST /human/hrd0250/getEmployeeList` | same dates | ok-empty with dates only |
+| 개인근무시간 | `POST /personal/hpd0220/0hr00001`… | date range | FAIL (−1) — body TBD |
+
+### Other live HR probes
+
+| Endpoint | Status | Notes |
+|----------|--------|-------|
+| `POST /personal/hph0310/getIssuFgList` | confirmed | 증명서 발급구분 (`issuFg`,`issuNm`) |
+| `POST /personal/hpp0120/0hp00000` | confirmed | payslip meta (`fileName`,`langFg`) — treat as sensitive |
+| `POST /personal/hpp0120/0hp00001` | ok-empty | payslip list needs period/body |
+| `POST /personal/hpp0130/getUserBirthday` | ok-empty | birthday helper |
+| `POST /personal/APCodePicker/ApGroupCode` | ok-empty | |
+| `POST /human/hrd0510/getTreeList` | confirmed | **not org chart** — attend/config code tree (`clasCd`,`ctrNm`,…) |
+| `POST /human/common/annualleave/getAnnualLeaveInfoOfEmployee` | needs `coCd` | |
+| `POST /human/codepickers/CP0001A0001` | 500 | body TBD |
+
+### Bundle inventory highlights (not all live-probed)
+
+Useful screen prefixes seen in JS (read vs mutate mixed — **do not wire writes** into chat):
+
+- **People / HR master (`human/hrh*`):** `hrh0110`…`hrh0950` (personnel master, career, certificates, org-side HR admin)
+- **Attendance admin (`human/hrd*`):** `hrd0110`…`hrd1970` (config, approval, aggregates, today-board)
+- **Payroll (`human/hrp*` / `personal/hpp*`):** large surface — **sensitive**; prefer explicit operator ask
+- **Personal apps (`personal/hpd*`, `hph*`, `hpm*`):** employee self-service mirrors of above
+- **Pickers:** `/personal/APCodePicker/*`, `/human/codepickers/CP0001A0001`, `/human/common/annualleave/*`, `/human/common/attend*`
+
+Assets: `/modules/personal/asset-manifest.json`, `/modules/human/asset-manifest.json`.
+
+### Explicit HR gaps
+
+| Gap | Notes |
+|-----|-------|
+| **조직도 / 부서 트리 API** | No dedicated dept/org-tree POST found. `ApAperUserCode` helpTy aliases ≠ dept list. Affiliation = person detail `divNm`/`deptNm` + Deneb `org.json`. |
+| 주소록 `HPM0310` list body | Menu present; `/personal/hpm0310/0hp00001` 404 — real op names still in lazy chunks / need Playwright capture |
+| `hpd0220` / `hrd0250` full filter body | Date keys alone insufficient |
+| Wire leave/attendance into chat | Not yet — candidates: personal leave `hpd0550`, company leave `hrd0570` (permission-sensitive) |
+
 ## Masters / system helpers
 
 Often loaded beside ERP grids:
@@ -156,9 +238,9 @@ Often loaded beside ERP grids:
 | `POST /logis/logisCommon/getCompanyInfo` | Company profile |
 | `POST /logis/logisCommon/selectGisu` | 기수 |
 
-Micro frontend assets (debug only): `/modules/financial`, `/modules/logis`, `/modules/purchase`, `/modules/system`, `/modules/bp` (+ each `asset-manifest.json`).
+Micro frontend assets (debug only): `/modules/financial`, `/modules/logis`, `/modules/purchase`, `/modules/system`, `/modules/bp`, `/modules/personal`, `/modules/human` (+ each `asset-manifest.json`).
 
-## Still open (pass 2+)
+## Still open (pass 3+)
 
 | Gap | Notes |
 |-----|-------|
@@ -167,7 +249,9 @@ Micro frontend assets (debug only): `/modules/financial`, `/modules/logis`, `/mo
 | `ACN4000` 프로젝트 list API | Need leaf navigation + network capture |
 | `BSB0020` 거래처단가 | Hash opened; no business POST captured |
 | Wider date windows for ok-empty screens | 수금/견적/판매계획/지급/매입마감/발주미납 may have rows outside SPA default range |
-| Wire into chat `groupware` tool | Still eap/board only |
+| HR org/dept tree | See 임직원 section — no Amaranth org-chart POST yet |
+| HR address-book / attend board bodies | Playwright capture on `HPM0310`, `HPD0250`/`HRD0250` |
+| Wire more HR into chat | people done; leave/attend/org still open |
 
 ## Discovery cheatsheet
 
@@ -179,8 +263,9 @@ cd scripts/dev/groupware-reader
 Probe from Node (same HMAC client as eap/board):
 
 1. Top modules — `POST /gw/gw999A01` `{}` → `name`, `menuNo`, `microModuleCode`
-2. Children — `POST /gw/gw999A03` `{ "upperMenuNo": "430000000" }` (영업 등)
-3. List — e.g. `POST /logis/blg0070/0lo00001` with `clsDtFr` / `clsDtTo` (`YYYYMMDD`); sum `clsgAm` only in local logs — never commit row PII
+2. Children — `POST /gw/gw999A03` `{ "upperMenuNo": "430000000" }` (영업) or `"406000000"` (임직원)
+3. HR bundle scrape — GET `/modules/personal/asset-manifest.json` (+ `human`) → download JS chunks → grep `/personal/` `/human/`
+4. List — e.g. `POST /logis/blg0070/0lo00001` with `clsDtFr` / `clsDtTo` (`YYYYMMDD`); sum `clsgAm` only in local logs — never commit row PII
 
 Playwright: login → open `#/BL/BLG0070/BLG0070` (etc.) → capture POST bodies under `/logis`, `/purchase`, `/financial` (date keys differ per screen).
 
@@ -190,7 +275,7 @@ Playwright: login → open `#/BL/BLG0070/BLG0070` (etc.) → capture POST bodies
 |-------|-----|
 | Chat tool `groupware` areas | approval, board, sales, stock, po, receive, ship, price, people |
 | Reader adapters | `summarySales`, `listStock`, `listPurchaseOrders`, `listReceiving`, `listShipments`, `listItemPrices`, `listPeople` |
-| Still unwired | 미수채권, 매입마감, 수금, 지출결의 list body, … |
+| Still unwired | 미수채권, 매입마감, 수금, 지출결의 list body, 연차/근태/주소록, … |
 
 Usage examples:
 
