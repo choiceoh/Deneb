@@ -175,7 +175,7 @@ func executeAgentRun(
 	acd := buildAgentConfigDeps(deps, messages, sessionToolPreset, logger)
 	// execStats threads into recordRunCompletion (LogEnd's RepairedToolCalls) —
 	// #3117 introduced it while #3121 moved LogEnd into the completion sink.
-	cfg, spawnFlag, execStats := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, model, logger)
+	cfg, spawnFlag, execStats, skillConsults := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
 	cfg.Model = model // set the resolved model
 	// Per-model defaults (profile sampling, tuned max-tokens floor) — only
 	// fills values the request left unset; request-level params, cache-safe.
@@ -209,7 +209,12 @@ func executeAgentRun(
 	agentStart := time.Now()
 	agentResult, actualModel, fellBack, err := runAgentWithFallback(ctx, cfg, messages, client, deps, providerID, initialRole, effortRt, hooks, logger, runLog)
 	logEffortRouteFailure(logger, effortDecision, effortRt, actualModel, err)
+	usageModel := actualModel
+	if usageModel == "" {
+		usageModel = model
+	}
 	if err != nil {
+		recordRunSkillUsage(acd.SkillUsageRecorder, skillConsults, agentResult, err, params.SessionKey, usageModel)
 		// Log run.error here — not in the async-only completion handler — so
 		// every entry path (runAgentAsync, SendSync, SendSyncStream) closes the
 		// run.start it opened in the same per-session log file. The sync paths
@@ -222,8 +227,11 @@ func executeAgentRun(
 		return nil, err
 	}
 	if err := deps.strictErrors.Err(); err != nil {
-		return nil, fmt.Errorf("briefcase transcript persistence: %w", err)
+		runErr := fmt.Errorf("briefcase transcript persistence: %w", err)
+		recordRunSkillUsage(acd.SkillUsageRecorder, skillConsults, agentResult, runErr, params.SessionKey, usageModel)
+		return nil, runErr
 	}
+	recordRunSkillUsage(acd.SkillUsageRecorder, skillConsults, agentResult, nil, params.SessionKey, usageModel)
 
 	flushDeltaTail(deltaTranslit, broadcaster)
 

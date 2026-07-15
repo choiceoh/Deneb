@@ -11,11 +11,8 @@
 // post-processor closes that gap: when a `read` output is a SKILL.md whose
 // directory names a skill in the runtime catalog, record the consult.
 //
-// Catalog-gated on purpose: a SKILL.md read in a coding worktree (editing a
-// skill as CODE) only matches if the dirname is a live skill name — and those
-// coding sessions are additionally excluded at the recording layer
-// (recordTurnSkillUsage skips code:* sessions), so editing a skill never
-// counts as using it.
+// Catalog-gated on purpose: a SKILL.md read only matches when the directory
+// name is a live skill name, so unrelated documentation reads are ignored.
 package chat
 
 import (

@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
@@ -17,11 +18,15 @@ func (f *fakeUsageRecorder) RecordSkillUse(sessionKey, skillName string, success
 	f.calls = append(f.calls, usageCall{sessionKey, skillName, errMsg, model, success})
 }
 
-func TestRecordTurnSkillUsageReturnsSuccessForCleanTurn(t *testing.T) {
+func TestRecordRunSkillUsageReturnsSuccessForCleanRun(t *testing.T) {
 	rec := &fakeUsageRecorder{}
 	log := NewSkillConsultLog()
 	log.Add("research-flow")
-	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills"}, {Name: "read"}}, "client:main", "m1")
+	recordRunSkillUsage(rec, log, &agent.AgentResult{
+		Text:           "done",
+		StopReason:     "end_turn",
+		ToolActivities: []agent.ToolActivity{{Name: "skills"}, {Name: "read"}},
+	}, nil, "client:main", "m1")
 
 	if len(rec.calls) != 1 {
 		t.Fatalf("got %d calls, want 1: %+v", len(rec.calls), rec.calls)
@@ -32,25 +37,29 @@ func TestRecordTurnSkillUsageReturnsSuccessForCleanTurn(t *testing.T) {
 	}
 }
 
-func TestRecordTurnSkillUsage_erroredTurnIsFailure(t *testing.T) {
+func TestRecordRunSkillUsage_LaterToolErrorIsFailure(t *testing.T) {
 	rec := &fakeUsageRecorder{}
 	log := NewSkillConsultLog()
 	log.Add("deploy-flow")
-	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills"}, {Name: "exec", IsError: true}}, "client:main", "m1")
+	recordRunSkillUsage(rec, log, &agent.AgentResult{
+		Text:           "recovered answer",
+		StopReason:     "end_turn",
+		ToolActivities: []agent.ToolActivity{{Name: "skills"}, {Name: "read"}, {Name: "exec", IsError: true}},
+	}, nil, "client:main", "m1")
 
 	if len(rec.calls) != 1 {
 		t.Fatalf("got %d calls, want 1: %+v", len(rec.calls), rec.calls)
 	}
 	c := rec.calls[0]
 	if c.success {
-		t.Fatalf("turn with a tool error must record failure: %+v", c)
+		t.Fatalf("run with a later tool error must record failure: %+v", c)
 	}
 	if c.errMsg == "" {
 		t.Fatalf("failure should carry an error message naming the tool: %+v", c)
 	}
 }
 
-func TestRecordTurnSkillUsage_skillsToolErrorIsNotSkillFailure(t *testing.T) {
+func TestRecordRunSkillUsage_SkillsToolErrorIsNotSkillFailure(t *testing.T) {
 	// When the "skills" tool itself errors, the consult mechanism failed to load
 	// the skill (a gateway path/catalog bug) — that is not the skill performing
 	// badly, so the consulted skill must NOT be recorded as a failure. Otherwise
@@ -62,7 +71,11 @@ func TestRecordTurnSkillUsage_skillsToolErrorIsNotSkillFailure(t *testing.T) {
 	rec := &fakeUsageRecorder{}
 	log := NewSkillConsultLog()
 	log.Add("email-analysis")
-	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills", IsError: true}}, "client:main", "m1")
+	recordRunSkillUsage(rec, log, &agent.AgentResult{
+		Text:           "done",
+		StopReason:     "end_turn",
+		ToolActivities: []agent.ToolActivity{{Name: "skills", IsError: true}},
+	}, nil, "client:main", "m1")
 
 	if len(rec.calls) != 1 {
 		t.Fatalf("got %d calls, want 1: %+v", len(rec.calls), rec.calls)
@@ -73,13 +86,17 @@ func TestRecordTurnSkillUsage_skillsToolErrorIsNotSkillFailure(t *testing.T) {
 	}
 }
 
-func TestRecordTurnSkillUsage_nonSkillsErrorStillFailsAlongsideSkills(t *testing.T) {
+func TestRecordRunSkillUsage_NonSkillsErrorStillFailsAlongsideSkills(t *testing.T) {
 	// A genuine non-"skills" tool error is still a real failure even when the
 	// skills tool also appears in the turn's activities.
 	rec := &fakeUsageRecorder{}
 	log := NewSkillConsultLog()
 	log.Add("deploy-flow")
-	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills", IsError: true}, {Name: "exec", IsError: true}}, "client:main", "m1")
+	recordRunSkillUsage(rec, log, &agent.AgentResult{
+		Text:           "done",
+		StopReason:     "end_turn",
+		ToolActivities: []agent.ToolActivity{{Name: "skills", IsError: true}, {Name: "exec", IsError: true}},
+	}, nil, "client:main", "m1")
 
 	if len(rec.calls) != 1 {
 		t.Fatalf("got %d calls, want 1: %+v", len(rec.calls), rec.calls)
@@ -89,23 +106,45 @@ func TestRecordTurnSkillUsage_nonSkillsErrorStillFailsAlongsideSkills(t *testing
 	}
 }
 
-func TestRecordTurnSkillUsageIgnoresEmptyAndNilInputs(t *testing.T) {
+func TestRecordRunSkillUsage_MissingFinalDeliverableIsFailure(t *testing.T) {
+	rec := &fakeUsageRecorder{}
+	log := NewSkillConsultLog()
+	log.Add("report-flow")
+	recordRunSkillUsage(rec, log, &agent.AgentResult{StopReason: "end_turn"}, nil, "client:main", "m1")
+
+	if len(rec.calls) != 1 || rec.calls[0].success || rec.calls[0].errMsg != "run failed: no final deliverable" {
+		t.Fatalf("missing final deliverable was not recorded as failure: %+v", rec.calls)
+	}
+}
+
+func TestRecordRunSkillUsage_RunErrorIsFailure(t *testing.T) {
+	rec := &fakeUsageRecorder{}
+	log := NewSkillConsultLog()
+	log.Add("report-flow")
+	recordRunSkillUsage(rec, log, nil, errors.New("cancelled"), "client:main", "m1")
+
+	if len(rec.calls) != 1 || rec.calls[0].success || rec.calls[0].errMsg != "run failed: cancelled" {
+		t.Fatalf("run error was not recorded as failure: %+v", rec.calls)
+	}
+}
+
+func TestRecordRunSkillUsageIgnoresEmptyAndNilInputs(t *testing.T) {
 	// Nil recorder must not panic.
-	recordTurnSkillUsage(nil, NewSkillConsultLog(), nil, "s", "m1")
+	recordRunSkillUsage(nil, NewSkillConsultLog(), nil, nil, "s", "m1")
 
 	// Nothing consulted → no records.
 	rec := &fakeUsageRecorder{}
-	recordTurnSkillUsage(rec, NewSkillConsultLog(), []agent.ToolActivity{{Name: "read"}}, "s", "m1")
+	recordRunSkillUsage(rec, NewSkillConsultLog(), &agent.AgentResult{Text: "done"}, nil, "s", "m1")
 	if len(rec.calls) != 0 {
 		t.Fatalf("no-consult turn recorded %+v, want none", rec.calls)
 	}
 
-	// A skill is attributed only once per turn even if its consult is drained;
-	// a second call with nothing new drains empty.
+	// A skill is attributed only once per run even if consulted repeatedly.
 	log := NewSkillConsultLog()
 	log.Add("once")
-	recordTurnSkillUsage(rec, log, nil, "s", "m1")
-	recordTurnSkillUsage(rec, log, nil, "s", "m1")
+	log.Add("once")
+	recordRunSkillUsage(rec, log, &agent.AgentResult{Text: "done"}, nil, "s", "m1")
+	recordRunSkillUsage(rec, log, &agent.AgentResult{Text: "done"}, nil, "s", "m1")
 	if len(rec.calls) != 1 || rec.calls[0].skill != "once" {
 		t.Fatalf("expected single attribution for 'once', got %+v", rec.calls)
 	}
