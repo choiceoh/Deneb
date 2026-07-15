@@ -133,6 +133,7 @@ interface Unplaced {
   site: string;
   project: string;
   status: string; // carried so the 미배치 tray can hide 후보 too
+  sched: Sched; // 공정 일정 — so an imminent 검사 isn't hidden by an unresolved address
 }
 
 interface Placed {
@@ -161,13 +162,13 @@ function placeSites(rows: ProjectSiteRow[]): Placed {
     const siteList = r.sites ?? [];
     // A 현장 page with no address yet (empty sites) still surfaces — as a 미배치 row.
     if (siteList.length === 0) {
-      unplaced.push({ site: "(주소 미기재)", project, status });
+      unplaced.push({ site: "(주소 미기재)", project, status, sched });
       continue;
     }
     for (const site of siteList) {
       const xy = resolveSite(site);
       if (!xy) {
-        unplaced.push({ site, project, status });
+        unplaced.push({ site, project, status, sched });
         continue;
       }
       const key = `${xy[0]},${xy[1]}`;
@@ -212,24 +213,31 @@ function capacityText(mw: number): string {
   return `${Number.isInteger(mw) ? mw : mw.toFixed(1)}MW`;
 }
 
-// Parse a YYYY-MM-DD milestone date to a local midnight Date, else null. 모듈입고 may
-// be a free-form 기간 ("3월 중순~4월 초") — those simply don't parse and are shown
-// as-is in the timeline without a D-day.
+// Parse a YYYY-MM-DD milestone date to a UTC-midnight Date, else null. 모듈입고 may be
+// a free-form 기간 ("3월 중순~4월 초") — those don't parse and show as-is (no D-day).
+// The Y/M/D components are validated against the constructed date so an out-of-range
+// value (2026-02-31) is rejected rather than silently normalized to March 3 — matching
+// Kotlin's strict LocalDate.parse. UTC-only avoids DST off-by-one in the day delta.
 function parseYmd(s: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim());
   if (!m) return null;
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return Number.isNaN(d.getTime()) ? null : d;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return null;
+  return date;
 }
 
-// daysUntil returns whole days from today to a YYYY-MM-DD date (negative = past),
-// or null when unparseable.
+// daysUntil returns whole days from today to a YYYY-MM-DD date (negative = past), or
+// null when unparseable. Both endpoints are UTC-midnight of their calendar date, so the
+// delta is exact whole days regardless of DST.
 function daysUntil(s: string): number | null {
   const d = parseYmd(s);
   if (!d) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.round((d.getTime() - today.getTime()) / 86_400_000);
+  const now = new Date();
+  const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((d.getTime() - todayUtc) / 86_400_000);
 }
 
 // The nearest not-yet-past 검사일 (사용전검사 or 준공검사) for a 현장 — the "임박 검사일"
@@ -358,22 +366,21 @@ export function SiteMapPane() {
   );
 
   const totalMw = useMemo(() => shown.reduce((sum, p) => sum + (p.capacity || 0), 0), [shown]);
-  // 임박 검사 — how many shown 현장 have a 검사일 within IMMINENT_DAYS. A proactive
-  // header nudge so an upcoming 사용전/준공검사 is visible without opening each site.
-  const imminentCount = useMemo(
-    () =>
-      shown.filter((p) => {
-        const up = upcomingInspection(p.sched);
-        return up !== null && up.days <= IMMINENT_DAYS;
-      }).length,
-    [shown],
-  );
   // 미배치 hides 후보 too (unless the toggle is on), so a hidden candidate site never
   // leaks into the tray/count.
   const shownUnplaced = useMemo(
     () => unplaced.filter((u) => showProspective || u.status !== PROSPECTIVE),
     [unplaced, showProspective],
   );
+  // 임박 검사 — how many 현장 have a 검사일 within IMMINENT_DAYS. Unplaced 현장 count too:
+  // an approaching 검사 must not be hidden just because the address doesn't resolve.
+  const imminentCount = useMemo(() => {
+    const imminent = (s: Sched) => {
+      const up = upcomingInspection(s);
+      return up !== null && up.days <= IMMINENT_DAYS;
+    };
+    return shown.filter((p) => imminent(p.sched)).length + shownUnplaced.filter((u) => imminent(u.sched)).length;
+  }, [shown, shownUnplaced]);
 
   const aiText = serializeList("현장 지도", shown, (p) => {
     const tags = [p.source, typeLabel(p.type), p.capacity ? capacityText(p.capacity) : ""].filter(Boolean).join("/");
@@ -384,7 +391,12 @@ export function SiteMapPane() {
     return `${head}${insp}${due}`;
   });
   const aiFull = shownUnplaced.length
-    ? `${aiText}\n\n미배치(주소 매칭 실패) ${shownUnplaced.length}건: ${shownUnplaced.map((u) => u.site).join(", ")}`
+    ? `${aiText}\n\n미배치(주소 매칭 실패) ${shownUnplaced.length}건: ${shownUnplaced
+        .map((u) => {
+          const up = upcomingInspection(u.sched);
+          return up ? `${u.site} (${up.label} ${up.date} ${ddayText(up.days)})` : u.site;
+        })
+        .join(", ")}`
     : aiText;
   useRegisterPane("sitemap", aiFull);
 
@@ -659,8 +671,14 @@ export function SiteMapPane() {
           </div>
           <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 4 }}>
             {shownUnplaced.map((u, i) => (
-              <li key={i} style={{ fontSize: 12, color: "var(--muted)" }}>
-                {u.site} <span style={{ color: "var(--faint)" }}>· {u.project}</span>
+              <li
+                key={i}
+                style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--muted)" }}
+              >
+                <span style={{ minWidth: 0 }}>
+                  {u.site} <span style={{ color: "var(--faint)" }}>· {u.project}</span>
+                </span>
+                <InspectionBadge sched={u.sched} />
               </li>
             ))}
           </ul>

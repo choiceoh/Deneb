@@ -131,9 +131,8 @@ private data class Sched(
     val preUseInspection: String,
     val completionInspection: String,
 ) {
-    fun anyFilled(): Boolean =
-        contractDate.isNotEmpty() || constructionStart.isNotEmpty() || moduleDelivery.isNotEmpty() ||
-            preUseInspection.isNotEmpty() || completionInspection.isNotEmpty()
+    fun anyFilled(): Boolean = contractDate.isNotEmpty() || constructionStart.isNotEmpty() || moduleDelivery.isNotEmpty() ||
+        preUseInspection.isNotEmpty() || completionInspection.isNotEmpty()
 }
 
 private data class Milestone(val label: String, val date: String, val inspection: Boolean)
@@ -229,8 +228,9 @@ private data class SitePin(
 // explicit 후보 is gated behind the toggle.
 private const val PROSPECTIVE = "후보"
 
-// An unplaceable 현장 — carries status so the 미배치 tray can hide 후보 too.
-private data class UnplacedSite(val site: String, val project: String, val status: String)
+// An unplaceable 현장 — carries status so the 미배치 tray can hide 후보 too, and its
+// 공정 일정 so an imminent 검사 isn't hidden just because the address doesn't resolve.
+private data class UnplacedSite(val site: String, val project: String, val status: String, val sched: Sched)
 
 private data class Placed(val pins: List<SitePin>, val unplaced: List<UnplacedSite>)
 
@@ -251,13 +251,13 @@ private fun placeSites(rows: List<ProjectSiteRow>): Placed {
         )
         // A 현장 page with no address yet (empty sites) still surfaces — as a 미배치 row.
         if (r.sites.isEmpty()) {
-            unplaced.add(UnplacedSite("(주소 미기재)", r.project, status))
+            unplaced.add(UnplacedSite("(주소 미기재)", r.project, status, sched))
             continue
         }
         for (site in r.sites) {
             val xy = resolveSite(site)
             if (xy == null) {
-                unplaced.add(UnplacedSite(site, r.project, status))
+                unplaced.add(UnplacedSite(site, r.project, status, sched))
                 continue
             }
             val key = "${xy[0]},${xy[1]}"
@@ -400,11 +400,18 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
         unplaced.filter { showProspective || it.status != PROSPECTIVE }
     }
     val totalMw = remember(shown) { shown.sumOf { it.capacity } }
-    val today = remember { Clock.System.todayIn(TimeZone.currentSystemDefault()) }
-    // 임박 검사 — how many shown 현장 have a 검사일 within IMMINENT_DAYS. A proactive
-    // header nudge so an upcoming 사용전/준공검사 is visible without opening each site.
-    val imminentCount = remember(shown, today) {
-        shown.count { val up = upcomingInspection(it.sched, today); up != null && up.days <= IMMINENT_DAYS }
+    // Re-derive "today" whenever the fetched rows change (keyed on [rows]) so a
+    // pull-to-refresh the next day advances the D-day baseline — remembering it forever
+    // would freeze the imminent-inspection surfacing at the day the screen first mounted.
+    val today = remember(rows) { Clock.System.todayIn(TimeZone.currentSystemDefault()) }
+    // 임박 검사 — how many shown 현장 have a 검사일 within IMMINENT_DAYS. Unplaced 현장 count
+    // too: an approaching 검사 must not be hidden just because the address doesn't resolve.
+    val imminentCount = remember(shown, shownUnplaced, today) {
+        fun imminent(s: Sched): Boolean {
+            val up = upcomingInspection(s, today)
+            return up != null && up.days <= IMMINENT_DAYS
+        }
+        shown.count { imminent(it.sched) } + shownUnplaced.count { imminent(it.sched) }
     }
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
@@ -481,11 +488,12 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
         Spacer(Modifier.height(16.dp))
         DenebSectionLabel("미배치 — 주소를 지도에 매칭하지 못한 현장")
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            shownUnplaced.forEach { (site, project) ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Text(site, style = DenebType.rowSubtitle)
+            shownUnplaced.forEach { u ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(u.site, style = DenebType.rowSubtitle)
                     Spacer(Modifier.width(6.dp))
-                    Text(project, style = DenebType.meta, color = denebHint())
+                    Text(u.project, style = DenebType.meta, color = denebHint(), modifier = Modifier.weight(1f))
+                    InspectionBadge(u.sched, today)
                 }
             }
         }
