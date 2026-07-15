@@ -109,10 +109,11 @@ func RegisterRuntimeOpsTools(registry toolport.ToolRegistrar, set RuntimeOpsTool
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "groupware",
 		Description: "아마란스(더존) 그룹웨어 읽기 전용 — 전자결재·게시판. " +
-			"action=status (계정 설정 여부) · list (area=approval|board) · read (area + query=제목/키워드). " +
+			"action=status (계정 설정 여부) · list (area=approval|board) · read (본문+결재선+표, 첨부는 제목만) · " +
+			"attachment (read가 준 doc_id로 첨부 1개만 골라 다운로드·추출; 필요할 때만). " +
 			"결재함 folder=pending(미결)·done(기결)·cc(수신참조)·total(전체결재문서)·all(순회; list 기본값). " +
 			"승인·반려·상신·게시글 작성은 하지 않는다. " +
-			"\"미결/기결/수신참조 뭐 있어?\" · \"그 품의 본문 읽어\" · \"게시판 공지 확인해\" 류에 사용. " +
+			"\"미결/기결/수신참조 뭐 있어?\" · \"그 품의 본문 읽어\" · \"영수증 첨부 확인해\" · \"게시판 공지 확인해\" 류에 사용. " +
 			"DENEB_GROUPWARE_USER/PASSWORD 미설정 시 연동 꺼짐.",
 		InputSchema: schema.GroupwareToolSchema(),
 		Fn:          set.Groupware,
