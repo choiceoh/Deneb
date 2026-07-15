@@ -31,6 +31,9 @@ type CalendarDeps = tooldeps.CalendarDeps
 // FleetDeps holds the SparkFleet base URL + token for the fleet tool.
 type FleetDeps = tooldeps.FleetDeps
 
+// BrowserDeps holds the Page Agent bridge base URL + token for the browser tool.
+type BrowserDeps = tooldeps.BrowserDeps
+
 // CalendarReader is the read-only Google calendar slice the calendar tool uses.
 type CalendarReader = tooldeps.CalendarReader
 

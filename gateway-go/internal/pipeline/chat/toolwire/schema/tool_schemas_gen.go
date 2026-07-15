@@ -1629,6 +1629,24 @@ func FleetToolSchema() map[string]any {
 	}
 }
 
+func BrowserToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "Browser bridge action: status (hub connected/busy) | execute (run a natural-language task in the user's Chrome — blocking) | stop (cancel the running task)",
+				"enum":        []string{"status", "execute", "stop"},
+			},
+			"task": map[string]any{
+				"type":        "string",
+				"description": "Natural-language instructions for action=execute. Be specific: steps and what information to return after the task.",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 func PhoneReadToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1906,6 +1924,7 @@ func OfficeToolSchema() map[string]any {
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {
 	return map[string]int{
+		"browser":     32000,
 		"calendar":    8000,
 		"contacts":    8000,
 		"deal_ledger": 8000,

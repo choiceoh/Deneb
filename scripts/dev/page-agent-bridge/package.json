@@ -1,0 +1,14 @@
+{
+  "name": "deneb-page-agent-bridge",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.21.0"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

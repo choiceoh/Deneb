@@ -252,6 +252,11 @@ type CoreToolDeps struct {
 	// — disables fleet management; the tool reports the integration is off.
 	Fleet FleetDeps
 
+	// Browser wires the agent's browser tool to a workstation Page Agent bridge
+	// (scripts/dev/page-agent-bridge). A nil BaseURL — or one returning "" —
+	// disables browser control; the tool reports the integration is off.
+	Browser BrowserDeps
+
 	// FilesSemanticSearch powers the files tool's semantic (vector) search mode.
 	// The server owns the embedding client + index and injects this closure; nil
 	// degrades the files tool's semantic=true to a name/content search, so the
@@ -283,6 +288,13 @@ type PanelAnswer struct {
 type FleetDeps struct {
 	BaseURL func() string // SparkFleet base, e.g. http://127.0.0.1:18900; "" = off
 	Token   func() string // sent as X-Fleet-Token when non-empty
+}
+
+// BrowserDeps gives the browser tool the Page Agent bridge base URL + token.
+// Set from DENEB_BROWSER_URL / DENEB_BROWSER_TOKEN on the gateway host.
+type BrowserDeps struct {
+	BaseURL func() string // bridge base, e.g. http://100.x.x.x:38401; "" = off
+	Token   func() string // Bearer / X-Deneb-Browser-Token when non-empty
 }
 
 // WorkFeedRW is the mutating slice of the work-feed store the workfeed tool
