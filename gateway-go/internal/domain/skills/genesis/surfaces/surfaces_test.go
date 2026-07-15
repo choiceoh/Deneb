@@ -114,10 +114,10 @@ func TestForbiddenSurfaceMentionsMatchesComponentsWithoutSubstringFalsePositives
 		}
 	}
 	for input, want := range map[string]string{
-		"edit surfaces.go. then rebuild":                                     "surfaces.go",
+		"edit surfaces.go. then rebuild":                                      "surfaces.go",
 		"gateway-go/internal/domain/skills/genesis/lifecycle/rsi_identity.go": "rsi_identity.go",
-		"patch scripts/dev/pr.sh land":                                       "pr.sh",
-		"change .github/workflows/ci.yml":                                    "ci.yml",
+		"patch scripts/dev/pr.sh land":                                        "pr.sh",
+		"change .github/workflows/ci.yml":                                     "ci.yml",
 	} {
 		got := ForbiddenSurfaceMentions(input)
 		found := false
