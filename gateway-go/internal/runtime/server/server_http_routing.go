@@ -5,6 +5,7 @@ import (
 	"net/http/pprof"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 )
 
 // buildMux configures HTTP routing for health, native-client HTTP (SSE via gatewayhttp/nativeapi), hooks, and introspection routes.
@@ -57,10 +58,10 @@ func (s *Server) buildMux() *http.ServeMux {
 	svcbind.RegisterFleetAlertRoute(mux, svcbind.FleetAlertConfig{
 		Gate: s.alertGate,
 		Publish: func(title, body string) {
-			svcbind.PublishWithFallback(s.pushHub, s.pushNotifier, svcbind.Event{
+			svcops.PublishWithFallback(s.pushHub, s.pushNotifier, svcops.Event{
 				Title: title,
 				Body:  body,
-				Kind:  svcbind.PushKindFleet,
+				Kind:  svcops.PushKindFleet,
 			})
 		},
 		Logger: s.logger,

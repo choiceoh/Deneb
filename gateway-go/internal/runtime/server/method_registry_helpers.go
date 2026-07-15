@@ -4,7 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
-	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerops"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
@@ -17,8 +17,8 @@ import (
 // wiki_mail_analysis.go so this file stays focused on wiring. Returns nil
 // if no wiki store is available, which is the handler's signal to skip
 // persistence entirely.
-func makeMailAnalysisWikiSink(hub *rpcutil.GatewayHub) func(handlerwire.MailWikiAnalysisInput) error {
-	return func(in handlerwire.MailWikiAnalysisInput) error {
+func makeMailAnalysisWikiSink(hub *rpcutil.GatewayHub) func(handlerops.MailWikiAnalysisInput) error {
+	return func(in handlerops.MailWikiAnalysisInput) error {
 		store := hub.Opt.WikiStore
 		if store == nil {
 			return nil

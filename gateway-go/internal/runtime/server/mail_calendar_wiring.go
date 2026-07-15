@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 )
 
 // autoProposeCalendarFromMail persists the conservative proposals derived by
@@ -13,11 +13,11 @@ func (s *Server) autoProposeCalendarFromMail(msg *platbind.MessageDetail, items 
 	if msg == nil {
 		return 0
 	}
-	inputs := svcbind.CalendarProposalsFromMail(
+	inputs := svcops.CalendarProposalsFromMail(
 		msg.ID,
 		msg.Subject,
 		msg.From,
-		svcbind.DocumentAttachmentNames(msg.Attachments),
+		svcops.DocumentAttachmentNames(msg.Attachments),
 		items,
 		deal,
 		importance,

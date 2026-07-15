@@ -15,6 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 )
 
@@ -251,10 +252,10 @@ func (s *Server) initToolsAndDeps(chatCfg *pipebind.HandlerConfig, reg *aibind.M
 	// Ambient calendar awareness: a frozen-per-day upcoming-events glance in the
 	// dynamic system-prompt block, built over the same hybrid calendar source as
 	// the calendar tool. nil when no calendar source is wired (feature off).
-	chatCfg.Ambient.CalendarGlance = chatwire.NewCalendarGlance(&s.toolDeps.Calendar)
+	chatCfg.Ambient.CalendarGlance = pipebind.CalendarGlanceFunc(chatwire.NewCalendarGlance(&s.toolDeps.Calendar))
 	chatCfg.Ambient.GoalGlance = pipebind.NewGoalGlanceFunc()
 	chatCfg.ReportCardHealth = chatwire.ReportCardHealth
-	chatCfg.LinkEnrichStart = chatwire.NewLinkEnrichStart(s.logger)
+	chatCfg.LinkEnrichStart = pipebind.LinkEnrichStart(chatwire.NewLinkEnrichStart(s.logger))
 
 	// Operator-edited 업무 persona (Settings prompt corner → prompt store). Returns
 	// "" when unedited so the chat pipeline renders the default persona. Reading
@@ -279,7 +280,7 @@ func (s *Server) initToolsAndDeps(chatCfg *pipebind.HandlerConfig, reg *aibind.M
 	// and wires s.toolDeps.FilesSemanticSearch. Must run before RegisterCoreTools
 	// (the files tool captures the search closure at registration time). The
 	// background reindex task is registered later in registerWorkflowSideEffects.
-	s.fileSemindex = svcbind.NewFileSemIndex(localFileStoreOrNil(s.logger), s.embeddingClient, s.logger)
+	s.fileSemindex = svcops.NewFileSemIndex(localFileStoreOrNil(s.logger), s.embeddingClient, s.logger)
 	if s.fileSemindex != nil {
 		s.toolDeps.FilesSemanticSearch = adaptFilesSemanticSearch(s.fileSemindex.Search)
 	}

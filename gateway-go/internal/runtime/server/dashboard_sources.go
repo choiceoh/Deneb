@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
-	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerops"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 )
@@ -64,12 +64,12 @@ func (d dashboardCalendarSource) ListRange(ctx context.Context, from, to time.Ti
 // {stateDir}/classification_rules.json (or keyword defaults), and domainbind.LoadLanes
 // → nil so the handler uses its hardcoded part set. Both are always non-nil so
 // the dashboard always registers and always renders a part skeleton.
-func (s *Server) dashboardDeps() handlerwire.MiniDashboardDeps {
-	var wf handlerwire.MiniDashboardWorkFeedSource
+func (s *Server) dashboardDeps() handlerops.MiniDashboardDeps {
+	var wf handlerops.MiniDashboardWorkFeedSource
 	if nwf := s.nativeWorkFeedStore(); nwf != nil {
 		wf = nwf
 	}
-	return handlerwire.MiniOrgDashboardDeps(
+	return handlerops.MiniOrgDashboardDeps(
 		dashboardCalendarSource{
 			client: func() (handlerminiapp.CalendarClient, error) { return platbind.DefaultCalendarClient() },
 			local:  resolveLocalCalendar(s.logger),

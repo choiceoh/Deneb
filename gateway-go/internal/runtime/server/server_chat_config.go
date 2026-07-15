@@ -15,7 +15,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 )
 
 // noopGmailNotifier is a platbind.Notifier that drops messages. Used in
@@ -134,7 +134,7 @@ func (s *Server) initGmailPoll(snap *infrabind.ConfigSnapshot) {
 		s.gmailPollSvc.SetNotifier(noopGmailNotifier{})
 		s.logger.Info("gmailpoll: silent mode — cache/wiki pre-warm only, chat delivery suppressed")
 	} else {
-		s.gmailPollSvc.SetNotifier(s.proactiveRelay.MailNotifierForSession(svcbind.NativeWorkSessionKey))
+		s.gmailPollSvc.SetNotifier(s.proactiveRelay.MailNotifierForSession(svcops.NativeWorkSessionKey))
 	}
 
 	// Register as a periodic task within the autonomous service.
@@ -244,7 +244,7 @@ func (s *Server) initLMTPServer(snap *infrabind.ConfigSnapshot) {
 	// (wiki, mail_archive) execute instead of leaking as <tool_call> text.
 	cfg.AgentSynthesisFn = s.mailAnalysisAgentSynthesis
 	svc := platbind.NewMailAnalysisService(cfg, s.logger)
-	svc.SetNotifier(s.proactiveRelay.MailNotifierForSession(svcbind.NativeWorkSessionKey))
+	svc.SetNotifier(s.proactiveRelay.MailNotifierForSession(svcops.NativeWorkSessionKey))
 
 	queue, err := platbind.NewQueue(filepath.Join(stateDir, "lmtp-queue"))
 	if err != nil {

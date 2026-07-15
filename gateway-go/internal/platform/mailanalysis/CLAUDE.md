@@ -61,6 +61,18 @@ service.go (주기 폴 / 외부 트리거)
 - **dev가 prod cron 공유 실행** → 라이브 검증 시 prod 부수효과(위키 쓰기 등). 검증 후 즉시 stop([reference_livetest_dev_cron_shared]).
 - **무응답 실패는 `Error`+broadcast**(`docs/agent-rules/logging.md`) — 분석 결과가 사용자에게 안 닿으면 평상 로그에 묻히면 안 된다.
 
+## Local change scope
+
+분석 파이프라인 변경은 이 패키지와 인접 인테이크/소비 경계에 가둔다.
+
+- 함께 바꿔도 되는 이웃: `internal/platform/mailarchive`(첨부 바이트),
+  `internal/platform/lmtpd`(수신 인테이크), `internal/domain/wikiport`(fact 소비),
+  `internal/runtime/server`(모델 역할 배선 `mailAnalysisModels`).
+  `AnalyzeEmailPipeline`/`PipelineDeps` 계약이 바뀌면 `pipeline*_test.go`를 먼저 본다.
+- 건드리지 말 것: `internal/pipeline/chat` turn loop, `internal/ai/llm` wire client
+  직접 수정, mailarchive 안으로 OCR/추출기를 import하는 레이어 역전.
+- 집중 검증: `cd gateway-go && go test -count=1 ./internal/platform/mailanalysis`
+
 ## 집중 검증
 
 메일 분석 단계나 `AnalyzeEmailPipeline` 계약을 바꾼 뒤에는 실제 패키지 테스트를

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/genesisbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
@@ -27,7 +28,7 @@ const (
 // postLowConfidenceEvolveCard turns a borderline-but-admissible judge decision
 // into a real operator label. The evolve remains protected by the normal
 // post-use rollback watch; this card only adds fast, explicit P3 feedback.
-func (s *Server) postLowConfidenceEvolveCard(result domainbind.EvolveResult) {
+func (s *Server) postLowConfidenceEvolveCard(result genesisbind.EvolveResult) {
 	if !result.Evolved || !result.NeedsOperatorVerdict || result.JudgeMargin == nil {
 		return
 	}
@@ -87,7 +88,7 @@ func (s *Server) handleEvolveVerdictAction(item domainbind.Item, actionID string
 	if _, settled := s.genesisTracker.OperatorJudgeVerdictByDecisionID(decisionID); settled {
 		return nil
 	}
-	verdict := domainbind.OperatorJudgeVerdictConfirm
+	verdict := genesisbind.OperatorJudgeVerdictConfirm
 	if actionID == evolveVerdictRollback {
 		if s.skillCatalog == nil {
 			return fmt.Errorf("skill catalog unavailable")
@@ -101,11 +102,11 @@ func (s *Server) handleEvolveVerdictAction(item domainbind.Item, actionID string
 			s.logger.Warn("operator evolve rollback failed", "skill", skill, "version", version)
 			return fmt.Errorf("operator evolve rollback failed for %s@%s", skill, version)
 		}
-		verdict = domainbind.OperatorJudgeVerdictRollback
+		verdict = genesisbind.OperatorJudgeVerdictRollback
 	} else if actionID != evolveVerdictConfirm {
 		return fmt.Errorf("unsupported evolve verdict action %q", actionID)
 	}
-	if err := s.genesisTracker.LogOperatorJudgeVerdict(domainbind.OperatorJudgeVerdict{
+	if err := s.genesisTracker.LogOperatorJudgeVerdict(genesisbind.OperatorJudgeVerdict{
 		DecisionID:   decisionID,
 		Skill:        skill,
 		Version:      version,
@@ -260,13 +261,13 @@ func (s *Server) handleMetaProposalAction(item domainbind.Item, actionID string)
 		// an operator-adopted revision was never revert-watched (reviewer
 		// feedback, #3459).
 		eh := s.genesisTracker.EvolutionHealth()
-		if err := s.genesisTracker.LogMetaRevision(domainbind.MetaRevisionRecord{
+		if err := s.genesisTracker.LogMetaRevision(genesisbind.MetaRevisionRecord{
 			Artifact:    artifact,
 			FromVersion: fromVersion,
 			ToVersion:   toVersion,
 			Action:      "adopted",
 			Reason:      "operator adopted from feed card",
-			AdoptionHealth: &domainbind.MetaAdoptionHealth{
+			AdoptionHealth: &genesisbind.MetaAdoptionHealth{
 				ConfirmRate:     eh.ConfirmRate,
 				FalseAcceptRate: eh.FalseAcceptRate,
 				Resolved:        eh.ResolvedEvolves7d,
@@ -281,7 +282,7 @@ func (s *Server) handleMetaProposalAction(item domainbind.Item, actionID string)
 			s.logger.Warn("meta proposal 되돌리기 실패", "artifact", artifact, "error", err)
 			return
 		}
-		if err := s.genesisTracker.LogMetaRevision(domainbind.MetaRevisionRecord{
+		if err := s.genesisTracker.LogMetaRevision(genesisbind.MetaRevisionRecord{
 			Artifact:    artifact,
 			FromVersion: fromVersion,
 			ToVersion:   toVersion,
@@ -296,7 +297,7 @@ func (s *Server) handleMetaProposalAction(item domainbind.Item, actionID string)
 			s.logger.Warn("meta proposal 기각 실패", "artifact", artifact, "error", err)
 			return
 		}
-		if err := s.genesisTracker.LogMetaRevision(domainbind.MetaRevisionRecord{
+		if err := s.genesisTracker.LogMetaRevision(genesisbind.MetaRevisionRecord{
 			Artifact:    artifact,
 			FromVersion: fromVersion,
 			Action:      "rejected",

@@ -7,7 +7,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 )
 
 const (
@@ -79,7 +79,7 @@ func (s *Server) observatoryWatchdogTick(now time.Time) {
 			continue
 		}
 		if s.pushHub != nil {
-			s.pushHub.Publish(svcbind.Event{Title: "⚠️ 자기점검 · " + a.Title, Body: a.Body, Kind: svcbind.PushKindFleet})
+			s.pushHub.Publish(svcops.Event{Title: "⚠️ 자기점검 · " + a.Title, Body: a.Body, Kind: svcops.PushKindFleet})
 		}
 		s.logger.Warn("observatory watchdog alert", "title", a.Title)
 	}
@@ -88,7 +88,7 @@ func (s *Server) observatoryWatchdogTick(now time.Time) {
 // runObservatoryWatchdog periodically checks whether Deneb's own improvement
 // loops have gone silent — the dreamer/skill-curator/config-audit deaths that
 // rotted unnoticed for weeks. It mirrors the fleet hook (which exists for the
-// same reason: a silent SparkFleet death), gated by [svcbind.AlertGate] against the
+// same reason: a silent SparkFleet death), gated by [svcops.AlertGate] against the
 // over-notification the project forbids. Stops when ctx is canceled.
 func (s *Server) runObservatoryWatchdog(ctx context.Context) {
 	select {

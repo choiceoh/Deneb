@@ -53,22 +53,24 @@ var (
 // --- pipeline/chat ---
 
 type (
-	CalendarDeps    = chat.CalendarDeps
-	ChronoDeps      = chat.ChronoDeps
-	ContactsDeps    = chat.ContactsDeps
-	CoreToolDeps    = chat.CoreToolDeps
-	FleetDeps       = chat.FleetDeps
-	Handler         = chat.Handler
-	HandlerConfig   = chat.HandlerConfig
-	NotebookDeps    = chat.NotebookDeps
-	ProcessDeps     = chat.ProcessDeps
-	SessionDeps     = chat.SessionDeps
-	StatusDeps      = chat.StatusDeps
-	SyncOptions     = chat.SyncOptions
-	ToolRegistry    = chat.ToolRegistry
-	TopicResolver   = chat.TopicResolver
-	TranscriptStore = chat.TranscriptStore
-	WikiDeps        = chat.WikiDeps
+	CalendarDeps       = chat.CalendarDeps
+	CalendarGlanceFunc = chat.CalendarGlanceFunc
+	ChronoDeps         = chat.ChronoDeps
+	ContactsDeps       = chat.ContactsDeps
+	CoreToolDeps       = chat.CoreToolDeps
+	FleetDeps          = chat.FleetDeps
+	Handler            = chat.Handler
+	HandlerConfig      = chat.HandlerConfig
+	LinkEnrichStart    = chat.LinkEnrichStart
+	NotebookDeps       = chat.NotebookDeps
+	ProcessDeps        = chat.ProcessDeps
+	SessionDeps        = chat.SessionDeps
+	StatusDeps         = chat.StatusDeps
+	SyncOptions        = chat.SyncOptions
+	ToolRegistry       = chat.ToolRegistry
+	TopicResolver      = chat.TopicResolver
+	TranscriptStore    = chat.TranscriptStore
+	WikiDeps           = chat.WikiDeps
 )
 
 var (

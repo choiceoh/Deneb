@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
@@ -26,6 +27,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 	"github.com/choiceoh/deneb/gateway-go/pkg/checkpoint"
 )
 
@@ -109,12 +111,12 @@ type Server struct {
 	broadcaster *svcbind.Broadcaster
 	publisher   *svcbind.Publisher
 	processes   *infrabind.Manager
-	daemon      *domainbind.Daemon
+	daemon      *daemon.Daemon
 
 	// pushHub fans proactive 업무-topic reports out to connected native clients
 	// over their long-lived SSE connection (GET /api/v1/miniapp/events). Created
 	// in New so it's non-nil before any handler or relay touches it.
-	pushHub *svcbind.Hub
+	pushHub *svcops.Hub
 
 	// phoneActions correlates dispatched phone_write actions with the app's
 	// execution reports (phone_action_result events) so the tool can return
@@ -131,16 +133,16 @@ type Server struct {
 	phoneEventLedgerOnce sync.Once
 
 	// siteVisitRecorder logs project 현장 visits from phone location fixes
-	// (svcbind.SiteVisitRecorder). Lazily created (guarded by
+	// (svcops.SiteVisitRecorder). Lazily created (guarded by
 	// siteVisitRecorderOnce — same per-request door as the ledger); nil when no
 	// wiki store.
-	siteVisitRecorder     *svcbind.SiteVisitRecorder
+	siteVisitRecorder     *svcops.SiteVisitRecorder
 	siteVisitRecorderOnce sync.Once
 
 	// alertGate is the process-wide cooldown shared by external Fleet alerts and
 	// the observatory watchdog. One instance for the server lifetime prevents a
 	// route rebuild or repeated watchdog tick from resetting suppression state.
-	alertGate *svcbind.AlertGate
+	alertGate *svcops.AlertGate
 
 	// pushTokenStore holds native-client FCM registration IDs (durable). The
 	// registration RPCs (miniapp.push.register/unregister) write here regardless
@@ -166,7 +168,7 @@ type Server struct {
 
 	// insights aggregates session/usage data for /insights reports.
 	// Created during registerEarlyMethods; nil until then.
-	insights *svcbind.Engine
+	insights *svcops.Engine
 
 	// polarisStore is the compaction summary store, created in
 	// registerSessionRPCMethods (Session phase) and read by the opt-in
@@ -186,17 +188,17 @@ type Server struct {
 	// calendarBriefing is the D-15min meeting push service, delivered to the
 	// native client. nil when calendar OAuth tokens aren't configured — safe to
 	// call start() unconditionally; the service is a no-op.
-	calendarBriefing *svcbind.CalendarBriefingService
+	calendarBriefing *svcops.CalendarBriefingService
 
 	// meetingHarvest asks "회의 어떻게 됐어요?" after work-linked calendar events
 	// end, pulling meeting/call outcomes into the wiki flywheel (mail is only
 	// half the negotiation). nil-safe start(); see meeting_harvest.go.
-	meetingHarvest *svcbind.HarvestService
+	meetingHarvest *svcops.HarvestService
 
 	// plaudRecordings analyzes new Plaud meeting recordings via the external
 	// MCP tools (transcript → meeting report → 회의록 wiki page + feed card).
 	// nil-safe start(); see plaud_recordings.go.
-	plaudRecordings *svcbind.PlaudService
+	plaudRecordings *svcops.PlaudService
 
 	// chatToolRegistry is the chat pipeline's tool registry, captured at
 	// pipeline build so background services (plaud recordings) can execute
@@ -314,9 +316,9 @@ func New(addr string, opts ...Option) (*Server, error) {
 		GenesisSubsystem:    &GenesisSubsystem{},
 		version:             "0.1.0-go",
 		logger:              slog.Default(),
-		pushHub:             svcbind.NewHub(),
+		pushHub:             svcops.NewHub(),
 		phoneActions:        newPhoneActionAwaiter(),
-		alertGate:           svcbind.NewAlertGate(),
+		alertGate:           svcops.NewAlertGate(),
 		SessionManager: &SessionManager{
 			sessions:       domainbind.NewManager(),
 			abortMemory:    pipebind.NewAbortMemory(2000),
@@ -385,7 +387,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		s.cronService = platbind.NewCronService(platbind.ServiceConfig{
 			StorePath:      storePath,
 			DefaultChannel: "client",
-			DefaultTo:      svcbind.NativeWorkSessionTarget,
+			DefaultTo:      svcops.NativeWorkSessionTarget,
 			Enabled:        cronEnabled,
 			Sessions:       s.sessions,
 		}, nil, s.logger) // agent runner wired later during chat handler setup

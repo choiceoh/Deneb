@@ -9,10 +9,11 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/genesisbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 )
 
@@ -271,9 +272,9 @@ func (s *Server) registerSkillLifecycleTool() {
 	}
 	var fixturePath string
 	if home, err := os.UserHomeDir(); err == nil {
-		fixturePath = svcbind.FixturePath(home)
+		fixturePath = svcops.FixturePath(home)
 	}
-	var shadowComplete svcbind.ShadowCompleteFunc
+	var shadowComplete svcops.ShadowCompleteFunc
 	// Heartbeat shadow-replay wiring (P1): text-only lightweight executor over
 	// the harvested fixture corpus. Same model both sides, thinking disabled on
 	// dual-mode models (the evolver judge's dsv4 lesson). Missing pieces leave
@@ -297,7 +298,7 @@ func (s *Server) registerSkillLifecycleTool() {
 	var shadowReplay func(context.Context, string, int) (toolbind.HeartbeatShadowReplayResult, error)
 	if fixturePath != "" && shadowComplete != nil {
 		shadowReplay = func(ctx context.Context, candidate string, limit int) (toolbind.HeartbeatShadowReplayResult, error) {
-			report, err := svcbind.RunShadowReplay(ctx, fixturePath, candidate, limit, shadowComplete)
+			report, err := svcops.RunShadowReplay(ctx, fixturePath, candidate, limit, shadowComplete)
 			if err != nil {
 				return toolbind.HeartbeatShadowReplayResult{}, err
 			}
@@ -332,7 +333,7 @@ func (s *Server) registerSkillLifecycleTool() {
 	})
 }
 
-func heartbeatShadowReplayToolResult(report svcbind.ShadowReplayReport) toolbind.HeartbeatShadowReplayResult {
+func heartbeatShadowReplayToolResult(report svcops.ShadowReplayReport) toolbind.HeartbeatShadowReplayResult {
 	results := make([]toolbind.HeartbeatShadowReplayFixtureResult, 0, len(report.Results))
 	for _, result := range report.Results {
 		results = append(results, toolbind.HeartbeatShadowReplayFixtureResult{
@@ -369,7 +370,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 	}
 
 	if s.genesisTracker != nil {
-		evolveTask := &domainbind.EvolutionTask{
+		evolveTask := &genesisbind.EvolutionTask{
 			Evolver: s.genesisEvolver,
 			Logger:  s.logger,
 			// RSI P1 materialization rides the first real evolution tick:
@@ -392,7 +393,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 		// RSI P2 slow loop (propose-only): weekly, one meta-artifact revision
 		// proposal per cycle, alternating producer/evaluator epochs. Never
 		// touches live artifacts — writes <name>.proposed + the ledger.
-		s.autonomousSvc.RegisterTask(&domainbind.MetaEvolutionTask{
+		s.autonomousSvc.RegisterTask(&genesisbind.MetaEvolutionTask{
 			Evolver: s.genesisEvolver,
 			Meta:    s.genesisMeta,
 			Tracker: s.genesisTracker,
@@ -417,10 +418,10 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// daily-cap interaction).
 			GenesisGen: s.genesisSvc.ShadowGenerate,
 		})
-		s.autonomousSvc.RegisterTask(&domainbind.SkillCuratorTask{
+		s.autonomousSvc.RegisterTask(&genesisbind.SkillCuratorTask{
 			Tracker: s.genesisTracker,
 			Logger:  s.logger,
-			Config:  domainbind.SkillCuratorConfigFromEnv(),
+			Config:  genesisbind.SkillCuratorConfigFromEnv(),
 		})
 
 		// Deterministic bench growth: retro-extract held-out validation cases
@@ -463,7 +464,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 		// replay through the LIVE judge + deterministic false-reject mining.
 		// Same gate as workout — live model calls + shared genesis writes.
 		if isProdState {
-			s.autonomousSvc.RegisterTask(&domainbind.JudgeAccuracyTask{
+			s.autonomousSvc.RegisterTask(&genesisbind.JudgeAccuracyTask{
 				Evolver: s.genesisEvolver,
 				Meta:    s.genesisMeta,
 				Tracker: s.genesisTracker,
@@ -473,7 +474,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// transition into READY (evidence met — operator decision
 			// available). Prod-gated: writes the shared snapshot and posts
 			// operator-facing cards.
-			s.autonomousSvc.RegisterTask(&domainbind.LadderWatchTask{
+			s.autonomousSvc.RegisterTask(&genesisbind.LadderWatchTask{
 				Tracker: s.genesisTracker,
 				Logger:  s.logger,
 				OnReady: s.postLadderReadyCard,
@@ -486,7 +487,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// cases that catch uncaught mutations — "harder tests, found
 			// automatically". No LLM; prod-gated because it writes shared
 			// validation state.
-			s.autonomousSvc.RegisterTask(&domainbind.AdversarialCoverageTask{
+			s.autonomousSvc.RegisterTask(&genesisbind.AdversarialCoverageTask{
 				Evolver: s.genesisEvolver,
 				Tracker: s.genesisTracker,
 				Logger:  s.logger,
@@ -498,7 +499,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// runtime-error source, so candidates accumulate for review before any
 			// autonomous source edit is dispatched.
 			if s.logCapture != nil {
-				s.autonomousSvc.RegisterTask(&domainbind.RuntimeErrorMiningTask{
+				s.autonomousSvc.RegisterTask(&genesisbind.RuntimeErrorMiningTask{
 					ErrorLines: func(limit int) []infrabind.LogLine {
 						r := s.logCapture.Ring()
 						if r == nil {
@@ -516,7 +517,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// opportunity for the existing reviews to route. Propose-only;
 			// prod-gated for the same reason as the lanes above (live LLM call +
 			// shared genesis writes).
-			s.autonomousSvc.RegisterTask(&domainbind.CurriculumTask{
+			s.autonomousSvc.RegisterTask(&genesisbind.CurriculumTask{
 				Evolver: s.genesisEvolver,
 				Tracker: s.genesisTracker,
 				Logger:  s.logger,
@@ -527,12 +528,12 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			})
 		}
 		if replayExecutorEnabled() && isProdState {
-			workoutEngine := domainbind.NewSkillValidationEngine(s.genesisTracker, s.logger)
+			workoutEngine := genesisbind.NewSkillValidationEngine(s.genesisTracker, s.logger)
 			workoutEngine.SetExecutor(
 				s.modelRegistry.Client(aibind.RoleLightweight),
 				s.modelRegistry.Model(aibind.RoleLightweight),
 			)
-			s.autonomousSvc.RegisterTask(&domainbind.SkillWorkoutTask{
+			s.autonomousSvc.RegisterTask(&genesisbind.SkillWorkoutTask{
 				Engine:  workoutEngine,
 				Tracker: s.genesisTracker,
 				Catalog: s.skillCatalog,
@@ -551,11 +552,11 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			ctx, cancel := context.WithTimeout(s.ShutdownCtx(), 10*time.Minute)
 			defer cancel()
 			_ = evolveTask.Run(ctx)
-		}, domainbind.DefaultEvolveEventThreshold, 30*time.Minute)
+		}, genesisbind.DefaultEvolveEventThreshold, 30*time.Minute)
 
 		// Post-evolve rollback: revert an evolution that regresses (N consecutive
 		// post-evolve failures restore the skill from its backup). Closes the
 		// evolve loop — generate -> gate -> cross-model judge -> watch -> revert.
-		s.genesisTracker.SetRollback(s.genesisEvolver.RollbackSkillWithResult, domainbind.DefaultRollbackThreshold)
+		s.genesisTracker.SetRollback(s.genesisEvolver.RollbackSkillWithResult, genesisbind.DefaultRollbackThreshold)
 	}
 }

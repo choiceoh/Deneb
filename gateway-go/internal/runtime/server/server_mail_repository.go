@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerops"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
@@ -19,8 +19,8 @@ import (
 // dropped the per-mail AI analyses keyed by archive Message-IDs).
 var errNativeMailUnconfigured = errors.New("native mail archive not configured (set DENEB_ARCHIVE_IMAP_ADDR/USER/PASS)")
 
-func (s *Server) miniappMailClientFactory(denebDir string) func() (handlerwire.MailGmailClient, error) {
-	return func() (handlerwire.MailGmailClient, error) {
+func (s *Server) miniappMailClientFactory(denebDir string) func() (handlerops.MailGmailClient, error) {
+	return func() (handlerops.MailGmailClient, error) {
 		client, err := s.newMiniappMailClient(denebDir)
 		if err != nil {
 			return nil, err
@@ -29,7 +29,7 @@ func (s *Server) miniappMailClientFactory(denebDir string) func() (handlerwire.M
 	}
 }
 
-func (s *Server) newMiniappMailClient(denebDir string) (handlerwire.MailGmailClient, error) {
+func (s *Server) newMiniappMailClient(denebDir string) (handlerops.MailGmailClient, error) {
 	// Native-archive-only — no Gmail fallback (see errNativeMailUnconfigured).
 	if repo := s.newArchiveMailRepository(denebDir, nil); repo != nil {
 		return repo, nil

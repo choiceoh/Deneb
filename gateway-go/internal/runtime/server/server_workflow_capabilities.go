@@ -13,10 +13,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/genesisbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
@@ -75,7 +77,7 @@ func (s *Server) configureAutonomousWorkflow(hub *rpcutil.GatewayHub) {
 			s.postDreamWorkfeedCard(event.DreamReport)
 		}
 	})
-	if n := s.proactiveRelay.NotifierForSession(svcbind.DreamWorkSessionKey); n != nil {
+	if n := s.proactiveRelay.NotifierForSession(svcops.DreamWorkSessionKey); n != nil {
 		s.autonomousSvc.SetNotifier(n)
 	}
 	// Keep SetDreamer last: it starts the timer loop and can immediately emit.
@@ -93,18 +95,18 @@ func workflowHomeDir() string {
 }
 
 func (s *Server) registerHeartbeatWorkflowTasks(homeDir string) {
-	s.autonomousSvc.RegisterTask(svcbind.NewBootTask(
+	s.autonomousSvc.RegisterTask(svcops.NewBootTask(
 		s.chatHandler, s.activity, s.logger, homeDir,
 	))
-	s.autonomousSvc.RegisterTask(svcbind.NewHeartbeatTask(svcbind.TaskConfig{
+	s.autonomousSvc.RegisterTask(svcops.NewHeartbeatTask(svcops.TaskConfig{
 		ChatHandler: s.chatHandler,
 		Activity:    s.activity,
 		Logger:      s.logger,
 		HomeDir:     homeDir,
-		CollectSignals: svcbind.CombineCollectors(
-			svcbind.CalendarSignalCollector(svcbind.ResolveCalendarClient),
-			svcbind.TodoDeadlineCollector(),
-			svcbind.DealDeadlineSignalCollector(func() *domainbind.WikiStore { return s.wikiStore }),
+		CollectSignals: svcops.CombineCollectors(
+			svcops.CalendarSignalCollector(svcops.ResolveCalendarClient),
+			svcops.TodoDeadlineCollector(),
+			svcops.DealDeadlineSignalCollector(func() *domainbind.WikiStore { return s.wikiStore }),
 		),
 		SignalConfig:              domainbind.SignalConfigForThreshold(svcbind.ProactiveEscalateThreshold(s.logger)),
 		ProposedSelfCoding:        s.proposedSelfCodingFingerprint,
@@ -122,7 +124,7 @@ func (s *Server) proposedSelfCodingFingerprint() (int, string) {
 	if tracker == nil {
 		return 0, ""
 	}
-	recs, err := tracker.RecentSelfCorrectionCandidates("", domainbind.SelfCorrectionStatusProposed, 20)
+	recs, err := tracker.RecentSelfCorrectionCandidates("", genesisbind.SelfCorrectionStatusProposed, 20)
 	if err != nil || len(recs) == 0 {
 		return 0, ""
 	}
@@ -145,7 +147,7 @@ func (s *Server) dispatchBacklogSelfCodingCount() int {
 	if tracker == nil {
 		return 0
 	}
-	recs, err := tracker.RecentSelfCorrectionCandidates("", domainbind.SelfCorrectionStatusAccepted, 100)
+	recs, err := tracker.RecentSelfCorrectionCandidates("", genesisbind.SelfCorrectionStatusAccepted, 100)
 	if err != nil {
 		if s.logger != nil {
 			s.logger.Warn("dispatch backlog: self-correction read failed — suppressing sweep", "error", err)
@@ -157,7 +159,7 @@ func (s *Server) dispatchBacklogSelfCodingCount() int {
 		if rec.Scope != "code" {
 			continue
 		}
-		if !domainbind.SourceAutoDispatches(rec.Source) {
+		if !genesisbind.SourceAutoDispatches(rec.Source) {
 			continue
 		}
 		if tracker.DispatchMarkerBlocks(rec.ID) {
@@ -184,15 +186,15 @@ func (s *Server) promoteSelfCodingClusters() (int, error) {
 	return tracker.PromoteFailureClusterCandidates()
 }
 
-func (s *Server) selfCodingFunnelSignals() (domainbind.SelfCorrectionFunnelSummary, int) {
+func (s *Server) selfCodingFunnelSignals() (genesisbind.SelfCorrectionFunnelSummary, int) {
 	tracker := s.genesisTracker
 	if tracker == nil {
-		return domainbind.SelfCorrectionFunnelSummary{}, 0
+		return genesisbind.SelfCorrectionFunnelSummary{}, 0
 	}
 	return tracker.SelfCorrectionFunnel(), tracker.SelfHarnessSignals().TargetRecurrences7d
 }
 
-func (s *Server) selfCodingFailureEvidence(limit int) []domainbind.FailureClusterSummary {
+func (s *Server) selfCodingFailureEvidence(limit int) []genesisbind.FailureClusterSummary {
 	tracker := s.genesisTracker
 	if tracker == nil {
 		return nil
@@ -207,7 +209,7 @@ func (s *Server) registerGoalWorkflowTask(homeDir string) {
 	}
 	goalStore := domainbind.NewGoalsStore(goalStateDir, s.logger)
 	domainbind.SetDefault(goalStore)
-	s.autonomousSvc.RegisterTask(svcbind.NewGoalLoopTask(
+	s.autonomousSvc.RegisterTask(svcops.NewGoalLoopTask(
 		s.chatHandler,
 		goalStore,
 		s.activity,
@@ -230,14 +232,14 @@ func (s *Server) registerMeetingHarvestWorkflow(homeDir string) {
 	if !ok {
 		return
 	}
-	s.meetingHarvest = svcbind.NewHarvestService(
+	s.meetingHarvest = svcops.NewHarvestService(
 		func(text string) (bool, error) {
 			return s.proactiveRelay.RelayNativeToOptions("", text,
-				svcbind.Options{MirrorTranscript: true})
+				svcops.Options{MirrorTranscript: true})
 		},
-		svcbind.ResolveCalendarClient,
+		svcops.ResolveCalendarClient,
 		s.matchMeetingProjectName,
-		filepath.Join(stateDir, svcbind.HarvestStateFile),
+		filepath.Join(stateDir, svcops.HarvestStateFile),
 		s.logger,
 	)
 	// Silent attendance record: log that a matched meeting happened to its
@@ -252,11 +254,11 @@ func (s *Server) registerMeetingHarvestWorkflow(homeDir string) {
 		if st == nil {
 			return true
 		}
-		ref, ok := st.UniqueProjectInText(svcbind.MeetingMatchText(ev))
+		ref, ok := st.UniqueProjectInText(svcops.MeetingMatchText(ev))
 		if !ok {
 			return true // no single project — skip, don't retry
 		}
-		return svcbind.RecordMeetingAttendanceByPath(st, ref.Path, ev.Summary,
+		return svcops.RecordMeetingAttendanceByPath(st, ref.Path, ev.Summary,
 			ev.End.In(dentime.Location()).Format("2006-01-02"))
 	})
 	s.meetingHarvest.Start(s.ShutdownCtx())
@@ -273,19 +275,19 @@ func (s *Server) matchMeetingProjectName(text string) string {
 	if counterparties := st.MatchCounterpartiesInText(text, 1); len(counterparties) > 0 {
 		return counterparties[0].Name
 	}
-	return svcbind.LooseUniqueNameMatch(text,
-		svcbind.KnownNames(st.KnownProjects(), st.KnownCounterparties()))
+	return svcops.LooseUniqueNameMatch(text,
+		svcops.KnownNames(st.KnownProjects(), st.KnownCounterparties()))
 }
 
 func (s *Server) registerPlaudWorkflow(homeDir string) {
-	if os.Getenv(svcbind.PlaudDisableEnv) == "1" {
+	if os.Getenv(svcops.PlaudDisableEnv) == "1" {
 		return
 	}
 	stateDir, ok := s.productionStateDir(homeDir)
 	if !ok || s.wikiStore == nil {
 		return
 	}
-	s.plaudRecordings = svcbind.NewPlaudService(
+	s.plaudRecordings = svcops.NewPlaudService(
 		s.callPlaudTool,
 		s.completePlaudAnalysis,
 		s.completePlaudStageOne,
@@ -294,7 +296,7 @@ func (s *Server) registerPlaudWorkflow(homeDir string) {
 		s.wikiStore.WritePage,
 		s.wikiStore.AppendProjectStatusLine,
 		s.relayMeetingReport,
-		filepath.Join(stateDir, svcbind.PlaudStateFile),
+		filepath.Join(stateDir, svcops.PlaudStateFile),
 		s.logger,
 	)
 	s.plaudRecordings.Start(s.ShutdownCtx())
@@ -344,7 +346,7 @@ func (s *Server) businessTopicKnowledge() string {
 
 func (s *Server) relayMeetingReport(text string) (bool, error) {
 	return s.proactiveRelay.RelayNativeToOptions("", text,
-		svcbind.Options{WorkFeedSource: domainbind.SourceMeetingReport})
+		svcops.Options{WorkFeedSource: domainbind.SourceMeetingReport})
 }
 
 func (s *Server) registerModelMaintenanceWorkflows() {
@@ -352,10 +354,10 @@ func (s *Server) registerModelMaintenanceWorkflows() {
 		return
 	}
 	var notify func(ctx context.Context, msg string) error
-	if notifier := s.proactiveRelay.NotifierForSession(svcbind.NativeWorkSessionKey); notifier != nil {
+	if notifier := s.proactiveRelay.NotifierForSession(svcops.NativeWorkSessionKey); notifier != nil {
 		notify = notifier.Notify
 	}
-	s.modelMaintenance = svcbind.NewModelMaintenance(svcbind.ModelMaintenanceDeps{
+	s.modelMaintenance = svcops.NewModelMaintenance(svcops.ModelMaintenanceDeps{
 		Logs:      s.agentLogWriter,
 		Registry:  s.modelRegistry,
 		Summaries: s.polarisStore,
@@ -385,9 +387,9 @@ func (s *Server) registerMailIngestWorkflows() {
 }
 
 func (s *Server) registerCalendarBriefingWorkflow() {
-	s.calendarBriefing = svcbind.NewCalendarBriefingService(
+	s.calendarBriefing = svcops.NewCalendarBriefingService(
 		func(text string) (bool, error) { return s.proactiveRelay.RelayNative(text) },
-		svcbind.ResolveCalendarClient,
+		svcops.ResolveCalendarClient,
 		s.logger,
 	)
 	if s.calendarBriefing != nil {

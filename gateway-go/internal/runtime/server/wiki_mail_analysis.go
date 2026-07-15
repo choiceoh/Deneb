@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerops"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
@@ -53,7 +53,7 @@ func mailProjectName(relatedProjects []string) string {
 // buildMailAnalysisPage renders a domainbind.Page from a fresh analysis. The
 // body is a short metadata blockquote followed by the LLM markdown so
 // memory.search hits show the From/Date/ID in the preview.
-func buildMailAnalysisPage(in handlerwire.MailWikiAnalysisInput) *domainbind.Page {
+func buildMailAnalysisPage(in handlerops.MailWikiAnalysisInput) *domainbind.Page {
 	title := strings.TrimSpace(in.Subject)
 	if title == "" {
 		title = "(제목 없음) " + in.MsgID
@@ -155,14 +155,14 @@ func (s *Server) projectCandidatesFn() func() []platbind.ProjectCandidate {
 // what lets a polled email show up already-analyzed in the Mini App with no
 // manual tap.
 func (s *Server) makeMailAnalysisSink() func(*platbind.MessageDetail, platbind.AnalysisResult) error {
-	cacheStore := handlerwire.MailNewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis"))
+	cacheStore := handlerops.MailNewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis"))
 	workStore := platbind.NewMailWork(filepath.Join(s.denebDir, "mail_work_state.json"))
 	return func(msg *platbind.MessageDetail, res platbind.AnalysisResult) error {
 		if msg == nil {
 			return nil
 		}
 		var errs []error
-		if err := cacheStore.SaveAnalysis(handlerwire.MailCachedAnalysis{
+		if err := cacheStore.SaveAnalysis(handlerops.MailCachedAnalysis{
 			MsgID:           msg.ID,
 			Subject:         msg.Subject,
 			From:            msg.From,
@@ -176,7 +176,7 @@ func (s *Server) makeMailAnalysisSink() func(*platbind.MessageDetail, platbind.A
 			errs = append(errs, err)
 		}
 		if s.wikiStore != nil {
-			page := buildMailAnalysisPage(handlerwire.MailWikiAnalysisInput{
+			page := buildMailAnalysisPage(handlerops.MailWikiAnalysisInput{
 				MsgID:           msg.ID,
 				Subject:         msg.Subject,
 				From:            msg.From,

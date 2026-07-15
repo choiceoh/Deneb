@@ -32,6 +32,18 @@ channel delivery and session policy remain outside this package.
 - Stream retries reset partial accumulation, retain hook semantics, and never
   erase a valid stop reason or usage trailer.
 
+
+## Local change scope
+
+Keep loop changes inside the agent execution boundary.
+
+- Safe neighbors: `internal/ai/llm` (stream contracts), caller-provided
+  `ToolExecutor` ports, and this package's `*_test.go` files
+  (`executor_integration_test.go` first).
+- Do not touch: `internal/pipeline/chat` handler wiring,
+  `internal/runtime/server` composition, channel delivery adapters.
+- Focused verify: `cd gateway-go && go test -count=1 ./internal/ai/agent`
+
 ## Focused verification
 
 Start with `executor_integration_test.go`, then the matching recovery,

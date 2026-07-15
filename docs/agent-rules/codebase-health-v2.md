@@ -33,6 +33,18 @@ Health Bench 2.0은 줄 수를 줄이는 게임이 아니라, 변경이 국소�
 - 필수 증거가 없으면 check를 tooling error로 끝낸다. 모르는 상태를 건강한
   상태로 간주하지 않는다.
 
+## Rubric 2.2.2
+
+2.2.2 keeps 2.2.1 weights and:
+
+- applies composition-root fan-out bars to every package under a
+  composition-root component (`runtime/server`, `runtime/bootstrap`,
+  `pipeline/chat`) and exact cross-component transport seams
+  (`handlerminiapp`), not only the exact root package path
+- widens composition-root two-hop soft/hard to 120/180 and non-root
+  two-hop soft to 40 (hard stays 60) so intentional bind/facade
+  extraction is not punished as an integration hub
+
 ## Rubric 2.2.1
 
 2.2.1 keeps 2.2.0 weights and adds Local change scope

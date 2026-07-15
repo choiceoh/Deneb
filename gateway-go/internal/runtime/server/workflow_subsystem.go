@@ -3,6 +3,8 @@ package server
 import (
 	"log/slog"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/usage"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 )
@@ -15,7 +17,7 @@ type WorkflowSubsystem struct {
 	approvals    *domainbind.ApprovalStore
 	skills       *domainbind.Registry
 	jobTracker   *aibind.JobTracker
-	usageTracker *domainbind.Tracker
+	usageTracker *usage.Tracker
 }
 
 // NewWorkflowSubsystem creates all workflow domain stores.
@@ -25,6 +27,6 @@ func NewWorkflowSubsystem(logger *slog.Logger) *WorkflowSubsystem {
 		approvals:    domainbind.NewApprovalStore(),
 		skills:       domainbind.NewRegistry(),
 		jobTracker:   aibind.NewJobTracker(logger),
-		usageTracker: domainbind.NewUsage(),
+		usageTracker: usage.New(),
 	}
 }

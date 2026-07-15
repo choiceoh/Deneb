@@ -4,7 +4,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 )
 
 // ChatManager groups the chat pipeline and its channel delivery backends.
@@ -17,7 +17,7 @@ type ChatManager struct {
 	embeddingClient *aibind.EmbeddingClient
 
 	// fileSemindex owns the shared on-box store and semantic sidecar.
-	fileSemindex *svcbind.FileSemIndexService
+	fileSemindex *svcops.FileSemIndexService
 
 	// proactiveRelay delivers agent-initiated messages (cron results,
 	// gmail poll summaries, wiki dreaming notifications) to the user's
@@ -25,7 +25,7 @@ type ChatManager struct {
 	// and mirrored into the session transcript so follow-up user turns
 	// retain context. Set in registerSessionRPCMethods once the
 	// transcript store is available.
-	proactiveRelay svcbind.Relay
+	proactiveRelay svcops.Relay
 
 	// externalMCP holds one shared client per configured external MCP server
 	// (DENEB_MCP_SERVERS), keyed by server name. Populated synchronously at

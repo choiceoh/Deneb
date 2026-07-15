@@ -9,12 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 // SetDaemon attaches the daemon used by server monitoring.
-func (s *Server) SetDaemon(d *domainbind.Daemon) {
+func (s *Server) SetDaemon(d *daemon.Daemon) {
 	s.daemon = d
 }
 

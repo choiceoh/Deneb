@@ -9,11 +9,11 @@ package server
 import (
 	"context"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 )
 
 func (s *Server) curriculumEnvDigest(_ context.Context) string {
-	src := svcbind.Sources{}
+	src := svcops.Sources{}
 	if s.workFeedStore != nil {
 		src.Feed = s.workFeedStore
 	}
@@ -23,5 +23,5 @@ func (s *Server) curriculumEnvDigest(_ context.Context) string {
 	if s.agentLogWriter != nil {
 		src.AgentLog = s.agentLogWriter
 	}
-	return svcbind.Digest(src)
+	return svcops.Digest(src)
 }

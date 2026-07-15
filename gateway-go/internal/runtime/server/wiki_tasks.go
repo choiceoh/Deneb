@@ -9,13 +9,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 )
 
 // registerWikiResearchTask wires the project-wiki refresh only for the
 // production state directory. scout (nil when disabled) receives an immediate
 // trigger after each research turn so freshly written open questions go
 // external without waiting for the scheduled scout cycle.
-func (s *Server) registerWikiResearchTask(homeDir string, scout *svcbind.ScoutTask) {
+func (s *Server) registerWikiResearchTask(homeDir string, scout *svcops.ScoutTask) {
 	if s.chatHandler == nil || s.wikiStore == nil {
 		return
 	}
@@ -27,12 +28,12 @@ func (s *Server) registerWikiResearchTask(homeDir string, scout *svcbind.ScoutTa
 	if !ok {
 		return
 	}
-	task := svcbind.NewResearchTask(
+	task := svcops.NewResearchTask(
 		s.chatHandler,
 		s.wikiStore,
 		s.activity,
 		s.logger,
-		filepath.Join(stateDir, svcbind.ResearchStateFile),
+		filepath.Join(stateDir, svcops.ResearchStateFile),
 		svcbind.WorkspaceDir(),
 	)
 	if scout != nil {
@@ -43,14 +44,14 @@ func (s *Server) registerWikiResearchTask(homeDir string, scout *svcbind.ScoutTa
 	}
 	s.autonomousSvc.RegisterTask(task)
 	s.logger.Info("wiki-research task registered",
-		"interval", svcbind.ResearchInterval.String(), "scoutTrigger", scout != nil)
+		"interval", svcops.ResearchInterval.String(), "scoutTrigger", scout != nil)
 }
 
 // registerWikiScoutTask wires the external-scouting twin of wiki-research
 // (open questions + WIKI.md brief topics → bounded web turn) only for the
 // production state directory. Returns the task (nil when disabled) so the
 // research task can wire its immediate post-cycle trigger.
-func (s *Server) registerWikiScoutTask(homeDir string) *svcbind.ScoutTask {
+func (s *Server) registerWikiScoutTask(homeDir string) *svcops.ScoutTask {
 	if s.chatHandler == nil || s.wikiStore == nil {
 		return nil
 	}
@@ -62,16 +63,16 @@ func (s *Server) registerWikiScoutTask(homeDir string) *svcbind.ScoutTask {
 	if !ok {
 		return nil
 	}
-	task := svcbind.NewScoutTask(
+	task := svcops.NewScoutTask(
 		s.chatHandler,
 		s.wikiStore,
 		s.activity,
 		s.logger,
-		filepath.Join(stateDir, svcbind.ScoutStateFile),
+		filepath.Join(stateDir, svcops.ScoutStateFile),
 		svcbind.WorkspaceDir(),
 	)
 	s.autonomousSvc.RegisterTask(task)
-	s.logger.Info("wiki-scout task registered", "interval", svcbind.ScoutInterval.String())
+	s.logger.Info("wiki-scout task registered", "interval", svcops.ScoutInterval.String())
 	return task
 }
 
@@ -90,16 +91,16 @@ func (s *Server) registerNotiDigestTask(homeDir string) {
 	if !ok {
 		return
 	}
-	s.autonomousSvc.RegisterTask(svcbind.NewNotiDigestTask(
+	s.autonomousSvc.RegisterTask(svcops.NewNotiDigestTask(
 		s.chatHandler,
 		s.wikiStore,
 		s.activity,
 		s.logger,
-		filepath.Join(stateDir, svcbind.NotiDigestStateFile),
+		filepath.Join(stateDir, svcops.NotiDigestStateFile),
 		filepath.Join(stateDir, svcbind.LedgerDirname),
 		svcbind.WorkspaceDir(),
 	))
-	s.logger.Info("noti-digest task registered", "interval", svcbind.NotiDigestInterval.String())
+	s.logger.Info("noti-digest task registered", "interval", svcops.NotiDigestInterval.String())
 }
 
 // registerSupernoteDigestTask wires the Supernote (Manta) handwritten-note
@@ -119,18 +120,18 @@ func (s *Server) registerSupernoteDigestTask(homeDir string) {
 	if !ok {
 		return
 	}
-	s.autonomousSvc.RegisterTask(svcbind.NewSupernoteDigestTask(
+	s.autonomousSvc.RegisterTask(svcops.NewSupernoteDigestTask(
 		s.chatHandler,
 		s.wikiStore,
 		s.activity,
 		s.logger,
-		filepath.Join(stateDir, svcbind.SupernoteStateFile),
-		os.Getenv(svcbind.DriveFolderEnv),
+		filepath.Join(stateDir, svcops.SupernoteStateFile),
+		os.Getenv(svcops.DriveFolderEnv),
 		svcbind.WorkspaceDir(),
 	))
 	s.logger.Info("supernote-digest task registered",
-		"interval", svcbind.SupernoteInterval.String(),
-		"configured", os.Getenv(svcbind.DriveFolderEnv) != "")
+		"interval", svcops.SupernoteInterval.String(),
+		"configured", os.Getenv(svcops.DriveFolderEnv) != "")
 }
 
 // registerWikiReviewTask wires post-write review and deterministic maintenance
@@ -148,11 +149,11 @@ func (s *Server) registerWikiReviewTask(homeDir string) {
 		return
 	}
 	autoMerge := os.Getenv("DENEB_WIKI_REVIEW_AUTOMERGE") == "1"
-	task := svcbind.NewReviewTask(
+	task := svcops.NewReviewTask(
 		s.wikiStore,
 		s.activity,
 		s.logger,
-		filepath.Join(stateDir, svcbind.ReviewStateFile),
+		filepath.Join(stateDir, svcops.ReviewStateFile),
 		autoMerge,
 		func(ctx context.Context, system, user string, maxTokens int) (string, error) {
 			return pipebind.CallRoleLLM(ctx, aibind.RoleMain, system, user, maxTokens,
@@ -161,5 +162,5 @@ func (s *Server) registerWikiReviewTask(homeDir string) {
 	)
 	s.autonomousSvc.RegisterTask(task)
 	s.logger.Info("wiki-review task registered",
-		"interval", svcbind.ReviewInterval.String(), "autoMerge", autoMerge)
+		"interval", svcops.ReviewInterval.String(), "autoMerge", autoMerge)
 }

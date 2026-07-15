@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
@@ -166,19 +167,19 @@ func (s *Server) wireSessionInsights(agentLogWriter *infrabind.Writer) {
 	if s.insights == nil || agentLogWriter == nil {
 		return
 	}
-	s.insights.SetToolAggregator(func(_ context.Context, since time.Time) []svcbind.ToolStat {
+	s.insights.SetToolAggregator(func(_ context.Context, since time.Time) []svcops.ToolStat {
 		return sessionInsightToolStats(agentLogWriter.Aggregate(since.UnixMilli()).Tools)
 	})
 }
 
-func sessionInsightToolStats(stats []infrabind.ToolStat) []svcbind.ToolStat {
-	out := make([]svcbind.ToolStat, 0, len(stats))
+func sessionInsightToolStats(stats []infrabind.ToolStat) []svcops.ToolStat {
+	out := make([]svcops.ToolStat, 0, len(stats))
 	for _, stat := range stats {
 		errorRate := 0.0
 		if stat.Calls > 0 {
 			errorRate = float64(stat.Errors) / float64(stat.Calls)
 		}
-		out = append(out, svcbind.ToolStat{
+		out = append(out, svcops.ToolStat{
 			Name:      stat.Name,
 			Calls:     stat.Calls,
 			ErrorRate: errorRate,
@@ -330,7 +331,7 @@ func (s *Server) initSessionProactiveRelay(
 	transcriptStore pipebind.TranscriptStore,
 	agentLogWriter *infrabind.Writer,
 ) {
-	s.proactiveRelay = svcbind.NewRelay(svcbind.ProactiveDeps{
+	s.proactiveRelay = svcops.NewRelay(svcops.ProactiveDeps{
 		TranscriptStore: transcriptStore,
 		Logger:          s.logger,
 		PushHub:         s.pushHub,
@@ -340,7 +341,7 @@ func (s *Server) initSessionProactiveRelay(
 		BehaviorLog:     agentLogWriter,
 		Sessions:        s.sessions,
 		CardTitler: func(content string) (string, string) {
-			return svcbind.CardTitleSummary(s.ShutdownCtx(), content)
+			return svcops.CardTitleSummary(s.ShutdownCtx(), content)
 		},
 		WorkModel: s.resolveFeedWorkModel,
 	})

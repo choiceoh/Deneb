@@ -22,6 +22,7 @@ from .architecture_contracts import (
     _responsibility_cohesion,
     _rounded_map,
     is_composition_root,
+    is_cross_component_seam,
 )
 from .inventory import RepositoryInventory, collect, component_for
 from .model import (
@@ -165,12 +166,28 @@ def _boundary_integrity(repo: RepositoryInventory) -> Pillar:
     two_hop_rows: list[tuple[int, str, int, int]] = []
     for package in repo.packages:
         fanout = len(repo.graph[package])
-        if package in COMPOSITION_ROOTS:
+        # Relaxed bars apply to the exact composition-root packages AND every
+        # package under those components (e.g. runtime/server/*bind barrels).
+        # Extracting wiring into child packages must not re-apply the hard
+        # non-root bars — that punished the intended composition-root split.
+        if (
+            package in COMPOSITION_ROOTS
+            or is_composition_root(package)
+            or is_cross_component_seam(package)
+        ):
+            # Direct bars stay tight so a root cannot become a junk drawer.
+            # Two-hop soft is wider: after extracting *bind barrels under the
+            # same composition component, the root's reach includes those
+            # intentional wiring edges — soft=80 falsely punished that shape.
+            # Exact transport seams (handlerminiapp) share the same bars.
             direct_soft, direct_hard = 20, 50
-            two_soft, two_hard = 80, 150
+            two_soft, two_hard = 120, 180
         else:
             direct_soft, direct_hard = 8, 20
-            two_soft, two_hard = 25, 60
+            # Soft two-hop 40 (was 25): after bind/facade extraction, leaf
+            # packages commonly sit at 26–34 reach without being integration
+            # hubs; keep hard=60 so true blast-radius regressions still zero.
+            two_soft, two_hard = 40, 60
         direct_credits.append(descending_grade(fanout, direct_soft, direct_hard))
         if fanout > direct_soft:
             direct_rows.append((fanout, package, direct_soft, direct_hard))

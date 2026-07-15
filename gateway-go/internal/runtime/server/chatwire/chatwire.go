@@ -10,7 +10,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/linkenrichment"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
@@ -80,12 +79,12 @@ func RegisterPolarisTools(registry toolport.ToolRegistrar, store *polaris.Store,
 }
 
 // NewCalendarGlance wires the ambient calendar glance for chat.HandlerConfig.
-func NewCalendarGlance(d *tooldeps.CalendarDeps) chat.CalendarGlanceFunc {
-	return chat.CalendarGlanceFunc(schedule.NewCalendarGlanceFunc(d))
+func NewCalendarGlance(d *tooldeps.CalendarDeps) schedule.CalendarGlanceFunc {
+	return schedule.NewCalendarGlanceFunc(d)
 }
 
 // NewLinkEnrichStart wires the concrete linkenrichment engine for chat.HandlerConfig.
-func NewLinkEnrichStart(logger *slog.Logger) chat.LinkEnrichStart {
+func NewLinkEnrichStart(logger *slog.Logger) func(context.Context, string, func(string) string) func(context.Context) string {
 	engine := linkenrichment.New(linkenrichment.Config{Logger: logger})
 	return func(ctx context.Context, message string, sanitize func(string) string) func(context.Context) string {
 		return engine.Start(ctx, message, sanitize)

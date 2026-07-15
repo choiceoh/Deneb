@@ -6,7 +6,6 @@ import (
 	approval "github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
 	autonomous "github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	contacts "github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
-	daemon "github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
 	filestore "github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 	goals "github.com/choiceoh/deneb/gateway-go/internal/domain/goals"
 	mailpriority "github.com/choiceoh/deneb/gateway-go/internal/domain/mailpriority"
@@ -20,8 +19,6 @@ import (
 	push "github.com/choiceoh/deneb/gateway-go/internal/domain/push"
 	domainsession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	skills "github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	genesis "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	usage "github.com/choiceoh/deneb/gateway-go/internal/domain/usage"
 	wikiport "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	workfeed "github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 )
@@ -62,12 +59,6 @@ type (
 var (
 	NewContactsStore    = contacts.NewStore
 	NormalizePersonName = contacts.NormalizePersonName
-)
-
-// --- domain/daemon ---
-
-type (
-	Daemon = daemon.Daemon
 )
 
 // --- domain/filestore ---
@@ -225,64 +216,6 @@ var (
 	DefaultPersonalSkillsDir = skills.DefaultPersonalSkillsDir
 	NewRegistry              = skills.NewRegistry
 )
-
-// --- domain/skills/genesis ---
-
-type (
-	AdversarialCoverageTask       = genesis.AdversarialCoverageTask
-	CurriculumTask                = genesis.CurriculumTask
-	EvolutionTask                 = genesis.EvolutionTask
-	EvolveResult                  = genesis.EvolveResult
-	Evolver                       = genesis.Evolver
-	FailureClusterSummary         = genesis.FailureClusterSummary
-	HarnessEditAudit              = genesis.HarnessEditAudit
-	JudgeAccuracyTask             = genesis.JudgeAccuracyTask
-	LadderWatchTask               = genesis.LadderWatchTask
-	LifecycleLogEntry             = genesis.LifecycleLogEntry
-	MetaAdoptionHealth            = genesis.MetaAdoptionHealth
-	MetaEvolutionTask             = genesis.MetaEvolutionTask
-	MetaRevisionRecord            = genesis.MetaRevisionRecord
-	OperatorJudgeVerdict          = genesis.OperatorJudgeVerdict
-	RSILoopStatus                 = genesis.RSILoopStatus
-	RuntimeErrorMiningTask        = genesis.RuntimeErrorMiningTask
-	SelfCorrectionCandidateRecord = genesis.SelfCorrectionCandidateRecord
-	SelfCorrectionFunnelSummary   = genesis.SelfCorrectionFunnelSummary
-	SelfHarnessSignalSummary      = genesis.SelfHarnessSignalSummary
-	SkillCuratorRecord            = genesis.SkillCuratorRecord
-	SkillCuratorTask              = genesis.SkillCuratorTask
-	SkillOpportunityRecord        = genesis.SkillOpportunityRecord
-	SkillReplayCaseRecord         = genesis.SkillReplayCaseRecord
-	SkillReplayToolCallRecord     = genesis.SkillReplayToolCallRecord
-	SkillValidationCaseRecord     = genesis.SkillValidationCaseRecord
-	SkillValidationCaseSummary    = genesis.SkillValidationCaseSummary
-	SkillWorkoutTask              = genesis.SkillWorkoutTask
-	UsageRecord                   = genesis.UsageRecord
-	UsageStats                    = genesis.UsageStats
-)
-
-var (
-	DefaultEvolveEventThreshold     = genesis.DefaultEvolveEventThreshold
-	DefaultRollbackThreshold        = genesis.DefaultRollbackThreshold
-	NewSkillValidationEngine        = genesis.NewSkillValidationEngine
-	NewTracker                      = genesis.NewTracker
-	OperatorJudgeVerdictConfirm     = genesis.OperatorJudgeVerdictConfirm
-	OperatorJudgeVerdictRollback    = genesis.OperatorJudgeVerdictRollback
-	SelfCorrectionStatusAccepted    = genesis.SelfCorrectionStatusAccepted
-	SelfCorrectionStatusProposed    = genesis.SelfCorrectionStatusProposed
-	SkillActivityReviewAttempt      = genesis.SkillActivityReviewAttempt
-	SkillActivityReviewSkipped      = genesis.SkillActivityReviewSkipped
-	SkillActivityValidationRejected = genesis.SkillActivityValidationRejected
-	SkillCuratorConfigFromEnv       = genesis.SkillCuratorConfigFromEnv
-	SourceAutoDispatches            = genesis.SourceAutoDispatches
-)
-
-// --- domain/usage ---
-
-type (
-	Tracker = usage.Tracker
-)
-
-var NewUsage = usage.New
 
 // --- domain/wikiport ---
 

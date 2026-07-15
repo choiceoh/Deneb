@@ -5,6 +5,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 )
 
 // AutonomousSubsystem groups background/periodic services: the autonomous
@@ -17,7 +18,7 @@ type AutonomousSubsystem struct {
 	wikiDreamer      *domainbind.WikiDreamer // set during initMemorySubsystem()
 	gmailPollSvc     *platbind.MailAnalysisService
 	roleHealth       *svcbind.Watch // set during registerWorkflowSideEffects()
-	modelMaintenance *svcbind.Suite
+	modelMaintenance *svcops.Suite
 
 	// agentLogWriter is the shared behavioral event log (the same instance the
 	// chat pipeline uses). Promoted to Server so registerWorkflowSideEffects can

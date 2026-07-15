@@ -14,6 +14,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 )
 
 // phoneEventLedgerInstance lazily creates the shared notification ledger. The
@@ -40,9 +41,9 @@ func (s *Server) siteVisitOnLocation() func(string) {
 		return nil
 	}
 	s.siteVisitRecorderOnce.Do(func() {
-		s.siteVisitRecorder = svcbind.NewSiteVisitRecorder(
+		s.siteVisitRecorder = svcops.NewSiteVisitRecorder(
 			s.wikiStore, s.logger,
-			filepath.Join(infrabind.ResolveStateDir(), svcbind.SiteVisitStateFile),
+			filepath.Join(infrabind.ResolveStateDir(), svcops.SiteVisitStateFile),
 		)
 	})
 	return s.siteVisitRecorder.RecordFromLocationPayload
@@ -206,8 +207,8 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 	data["action"] = action
 
 	if action == "sync_state" {
-		s.pushHub.Publish(svcbind.Event{
-			Kind:  svcbind.PushKindPhoneAction,
+		s.pushHub.Publish(svcops.Event{
+			Kind:  svcops.PushKindPhoneAction,
 			Title: "phone action",
 			Body:  action,
 			Data:  data,
@@ -220,8 +221,8 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 	result := s.phoneActions.register(id, fanout)
 	defer s.phoneActions.drop(id)
 
-	s.pushHub.Publish(svcbind.Event{
-		Kind:  svcbind.PushKindPhoneAction,
+	s.pushHub.Publish(svcops.Event{
+		Kind:  svcops.PushKindPhoneAction,
 		Title: "phone action",
 		Body:  action,
 		Ref:   id,

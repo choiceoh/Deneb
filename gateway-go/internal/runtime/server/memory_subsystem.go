@@ -2,7 +2,7 @@ package server
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 )
 
 // MemorySubsystem groups the wiki knowledge base and contacts address-book mirror.
@@ -20,5 +20,5 @@ type MemorySubsystem struct {
 	// cpProjects caches the wiki-derived counterparty→projects map for the
 	// mail-analysis party anchor (mail_counterparty.go). Zero value ready;
 	// reads tolerate the late-bound wikiStore.
-	cpProjects svcbind.CounterpartyProjectsCache
+	cpProjects svcops.CounterpartyProjectsCache
 }

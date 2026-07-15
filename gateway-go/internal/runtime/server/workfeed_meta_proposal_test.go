@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/genesisbind"
 	skillcore "github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/core"
 )
 
@@ -21,7 +22,7 @@ func TestHandleMetaProposalActionUpdatesArtifactOnAdoptOrReject(t *testing.T) {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())
 		metaDir := filepath.Join(t.TempDir(), "meta")
-		tracker, err := domainbind.NewTracker(slog.Default())
+		tracker, err := genesisbind.NewTracker(slog.Default())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -93,7 +94,7 @@ func TestHandleMetaProposalActionUpdatesArtifactOnAdoptOrReject(t *testing.T) {
 
 func TestLowConfidenceEvolveCardPreservesFirstOperatorVerdict(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	tracker, err := domainbind.NewTracker(slog.Default())
+	tracker, err := genesisbind.NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,10 +106,10 @@ func TestLowConfidenceEvolveCardPreservesFirstOperatorVerdict(t *testing.T) {
 		},
 		GenesisSubsystem: &GenesisSubsystem{
 			genesisTracker: tracker,
-			genesisEvolver: &domainbind.Evolver{},
+			genesisEvolver: &genesisbind.Evolver{},
 		},
 	}
-	result := domainbind.EvolveResult{
+	result := genesisbind.EvolveResult{
 		SkillName: "email-analysis", Evolved: true, NewVersion: "1.0.1",
 		JudgeVersion: "judge-v1", JudgeMargin: &margin, NeedsOperatorVerdict: true,
 	}
@@ -125,7 +126,7 @@ func TestLowConfidenceEvolveCardPreservesFirstOperatorVerdict(t *testing.T) {
 		t.Fatal(err)
 	}
 	labels := tracker.RecentOperatorJudgeVerdicts(time.Hour, 5)
-	if len(labels) != 1 || labels[0].Verdict != domainbind.OperatorJudgeVerdictConfirm || labels[0].JudgeMargin != margin {
+	if len(labels) != 1 || labels[0].Verdict != genesisbind.OperatorJudgeVerdictConfirm || labels[0].JudgeMargin != margin {
 		t.Fatalf("operator labels = %+v", labels)
 	}
 	// A later tap on the opposite chip is a no-op: the first decision wins.
@@ -133,7 +134,7 @@ func TestLowConfidenceEvolveCardPreservesFirstOperatorVerdict(t *testing.T) {
 		t.Fatal(err)
 	}
 	labels = tracker.RecentOperatorJudgeVerdicts(time.Hour, 5)
-	if len(labels) != 1 || labels[0].Verdict != domainbind.OperatorJudgeVerdictConfirm {
+	if len(labels) != 1 || labels[0].Verdict != genesisbind.OperatorJudgeVerdictConfirm {
 		t.Fatalf("settled verdict changed: %+v", labels)
 	}
 }

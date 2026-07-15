@@ -18,7 +18,7 @@ import (
 	"context"
 	"strings"
 
-	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerops"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
@@ -35,11 +35,11 @@ const mailQAMaxTokens = 1536
 // makeMailQAAsk returns the Ask callback wired into GmailAnalyzeDeps. Returns
 // nil when chatHandler isn't ready, in which case the handler skips
 // registering miniapp.gmail.ask entirely.
-func (s *Server) makeMailQAAsk() func(context.Context, string, []handlerwire.MailQATurn, string) (string, error) {
+func (s *Server) makeMailQAAsk() func(context.Context, string, []handlerops.MailQATurn, string) (string, error) {
 	if s.chatHandler == nil {
 		return nil
 	}
-	return func(ctx context.Context, mailContext string, history []handlerwire.MailQATurn, question string) (string, error) {
+	return func(ctx context.Context, mailContext string, history []handlerops.MailQATurn, question string) (string, error) {
 		msgs := make([]aibind.Message, 0, len(history)*2+1)
 		for _, t := range history {
 			if strings.TrimSpace(t.Q) != "" {

@@ -46,3 +46,16 @@ vision)을 실제 provider/model과 LLM client로 해석한다. 호출자는 역
 재해석과 health half-open을 테스트한다. 결정적 패키지 검증 명령은:
 
 `cd gateway-go && go test -count=1 ./internal/ai/modelrole`
+
+## Local change scope
+
+역할→모델 해석 변경은 이 패키지와 catalog 문서에 가둔다.
+
+- 함께 바꿔도 되는 이웃: `internal/ai/llm`(client wire),
+  `internal/ai/modelcaps`·router helpers, `docs/agent-rules/model-roles.md`.
+  `Registry`/`ResolveModel`/`Client` 계약이 바뀌면 `registry*_test.go`를 먼저 본다.
+- 건드리지 말 것: `internal/pipeline/chat` turn loop,
+  `internal/runtime/server` 배선에서 concrete model ID를 직접 박기,
+  registry가 server/chat를 import하는 역전.
+- 집중 검증: `cd gateway-go && go test -count=1 ./internal/ai/modelrole`
+

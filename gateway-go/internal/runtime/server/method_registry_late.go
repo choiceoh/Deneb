@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerops"
 	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcops"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 )
 
@@ -153,7 +155,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			JobTracker: hub.JobTracker(),
 		}),
 		// --- Wiki knowledge base (feature-flagged, late-bound) ---
-		handlerwire.WikiMethods(handlerwire.WikiDeps{
+		handlerops.WikiMethods(handlerops.WikiDeps{
 			Store: hub.Opt.WikiStore,
 		}),
 
@@ -180,7 +182,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		}).Methods(),
 
 		// --- Skill genesis (depends on chatHandler for LLM client) ---
-		handlerwire.SkillGenesisMethods(handlerwire.SkillGenesisDeps{
+		handlerops.SkillGenesisMethods(handlerops.SkillGenesisDeps{
 			Genesis:     s.genesisSvc,
 			Evolver:     s.genesisEvolver,
 			Tracker:     s.genesisTracker,
@@ -193,7 +195,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		// init right before this phase. Lazy factory still — operator
 		// runs without any provider configured, the call returns
 		// UNAVAILABLE rather than crashing the gateway.
-		withMailAliases(handlerwire.MailGmailAnalyzeMethods(handlerwire.MailGmailAnalyzeDeps{
+		withMailAliases(handlerops.MailGmailAnalyzeMethods(handlerops.MailGmailAnalyzeDeps{
 			// Archive-first client — the same factory the native mail list/detail
 			// surface uses. Mail now arrives via LMTP and lives in the on-box
 			// archive keyed by RFC822 Message-ID. The old platbind.DefaultGmailClient()
@@ -202,7 +204,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			// "Invalid id value". The miniapp mail surface is now native-archive-only
 			// (the Gmail fallback was removed — see server_mail_repository.go).
 			Client: s.miniappMailClientFactory(s.denebDir),
-			Pipeline: func() (handlerwire.MailAnalyzePipeline, error) {
+			Pipeline: func() (handlerops.MailAnalyzePipeline, error) {
 				// Role selection is shared with the autonomous poller via
 				// mailAnalysisModels (stage-2 = main role, stage-1 = tiny
 				// role) so the two mail-analysis paths cannot drift apart.
@@ -214,17 +216,17 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				// 2026-06-10).
 				llmClient, model, localClient, localModel := s.mailAnalysisModels()
 				if llmClient == nil {
-					return nil, handlerwire.MailErrAnalyzeNoLLM
+					return nil, handlerops.MailErrAnalyzeNoLLM
 				}
 				gmailClient, err := platbind.DefaultGmailClient()
 				if err != nil {
 					return nil, err
 				}
-				return handlerwire.MailPipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, toolbind.ExtractAttachmentText, func(domain string) []string {
+				return handlerops.MailPipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, toolbind.ExtractAttachmentText, func(domain string) []string {
 					return s.cpProjects.Lookup(s.wikiStore, domain)
 				})
 			},
-			Cache:      handlerwire.MailNewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
+			Cache:      handlerops.MailNewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
 			WorkState:  platbind.NewMailWork(filepath.Join(s.denebDir, "mail_work_state.json")),
 			SaveToWiki: makeMailAnalysisWikiSink(hub),
 			WikiStore: func() (handlerminiapp.MemorySearcher, error) {
@@ -276,7 +278,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				return err
 			}
 		}
-		s.cronService.SetAgentRunner(svcbind.NewCronRunner(svcbind.CronRunnerConfig{
+		s.cronService.SetAgentRunner(svcops.NewCronRunner(svcops.CronRunnerConfig{
 			Chat:              s.chatHandler,
 			Logger:            s.logger,
 			WeeklyReportData:  weeklyDataFn,
@@ -290,7 +292,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			s.chatHandler.SetWeeklyReport(weeklyTextFn, weeklyFormFn)
 		}
 		if s.acpDeps != nil {
-			s.cronService.SetSubagentPoller(svcbind.NewSubagentPoller(
+			s.cronService.SetSubagentPoller(svcops.NewSubagentPoller(
 				s.acpDeps.Registry,
 				s.sessions,
 			))
