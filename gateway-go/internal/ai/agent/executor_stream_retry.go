@@ -56,24 +56,11 @@ func (s *StreamStats) record(outcome streamingTurnOutcome) {
 	s.TerminationReason = string(outcome.terminationReason)
 }
 
-// runStreamingTurnWithRetry owns the same-model stream retry policy for one
-// agent turn. Initial connection failures are never retried. Once connected,
-// an idle watchdog or provider error event gets exactly one retry; all other
+// runStreamingTurnWithPolicy owns the same-model stream retry policy for one
+// agent turn, including deterministic-run retry toggles and translated stream
+// limits. Initial connection failures are never retried. Once connected, an
+// idle watchdog or provider error event gets exactly one retry; all other
 // errors and context cancellation terminate immediately.
-func runStreamingTurnWithRetry(
-	ctx context.Context,
-	client LLMStreamer,
-	req llm.ChatRequest,
-	hooks StreamHooks,
-	idleTimeout time.Duration,
-	logger *slog.Logger,
-	turn int,
-) (streamingTurnOutcome, error) {
-	return runStreamingTurnWithPolicy(ctx, client, req, hooks, idleTimeout, logger, turn, false, 0)
-}
-
-// runStreamingTurnWithPolicy applies deterministic-run retry and translated
-// stream limits while retaining runStreamingTurnWithRetry's production API.
 func runStreamingTurnWithPolicy(
 	ctx context.Context,
 	client LLMStreamer,
