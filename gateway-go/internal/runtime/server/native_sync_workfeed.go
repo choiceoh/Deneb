@@ -54,6 +54,34 @@ func (s *nativeWorkFeedStore) ListRange(limit int, includeAcked bool, sinceMs, b
 	return s.store.ListRange(limit, includeAcked, sinceMs, beforeMs)
 }
 
+func (s *nativeWorkFeedStore) HasActiveSourceRef(source, refID string) (bool, error) {
+	if s == nil || s.store == nil {
+		return false, nil
+	}
+	_, ok, err := s.store.FindActiveBySourceRef(source, refID)
+	return ok, err
+}
+
+// AckBySourceRef idempotently acknowledges every active card matching source and
+// refID, routing each update through Ack so native sync receives the existing event.
+func (s *nativeWorkFeedStore) AckBySourceRef(source, refID string) error {
+	if s == nil || s.store == nil {
+		return nil
+	}
+	for {
+		item, ok, err := s.store.FindActiveBySourceRef(source, refID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+		if _, err := s.Ack(item.ID); err != nil {
+			return err
+		}
+	}
+}
+
 // Ack acknowledges an item and publishes the updated state to native clients.
 func (s *nativeWorkFeedStore) Ack(id string) (workfeed.Item, error) {
 	item, err := s.store.Ack(id)

@@ -74,6 +74,12 @@ const (
 func extractGroupwareDocID(body string) string {
 	for _, line := range strings.Split(body, "\n") {
 		s := strings.TrimSpace(line)
+		if strings.HasPrefix(s, "문서ID:") {
+			return strings.TrimSpace(strings.TrimPrefix(s, "문서ID:"))
+		}
+		if strings.HasPrefix(s, "문서ID=") {
+			return strings.TrimSpace(strings.TrimPrefix(s, "문서ID="))
+		}
 		if strings.HasPrefix(s, "id:") {
 			return strings.TrimSpace(strings.TrimPrefix(s, "id:"))
 		}

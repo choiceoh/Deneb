@@ -436,6 +436,51 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 		s.ledger.Append(eventType, source, text)
 	}
 	approval := isElectronicApprovalEvent(source, text)
+	safego.GoWithSlog(s.logger, "phone-event-ingest", func() {
+		deadline := phoneEventTurnDeadline
+		if approval {
+			deadline = phoneEventApprovalDeadline
+		}
+		ctx, cancel := context.WithTimeout(s.shutdownContext, deadline)
+		defer cancel()
+		_, _ = s.processJudgment(ctx, eventType, source, text)
+	})
+}
+
+// IngestApprovalSync validates a structured e-approval notification and runs the
+// same enrich → judgment → work-feed relay used by phone ingestion. It does not
+// append a synthetic phone ledger entry and returns only after delivery succeeds.
+func (s *Handler) IngestApprovalSync(ctx context.Context, source, text string) error {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		source = "(미상)"
+	}
+	text = strings.TrimSpace(text)
+	if !isElectronicApprovalEvent(source, text) {
+		return errors.New("structured electronic approval notification required")
+	}
+	if extractGroupwareDocID(text) == "" {
+		return errors.New("structured electronic approval docId required")
+	}
+	if ctx == nil {
+		ctx = s.shutdownContext
+	}
+	ctx, cancel := context.WithTimeout(ctx, phoneEventApprovalDeadline)
+	defer cancel()
+	delivered, err := s.processJudgment(ctx, "notification", source, text)
+	if err != nil {
+		return err
+	}
+	if !delivered {
+		return errors.New("electronic approval work-feed relay did not deliver")
+	}
+	return nil
+}
+
+// processJudgment owns the expensive shared path after source-specific early
+// handling: tiny gate, optional approval enrich, agent judgment, and relay.
+func (s *Handler) processJudgment(ctx context.Context, eventType, source, text string) (bool, error) {
+	approval := isElectronicApprovalEvent(source, text)
 	guidance := phoneEventGuidance(eventType)
 	if approval {
 		guidance = electronicApprovalGuidance()
@@ -444,84 +489,80 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 		phoneEventKindLabel(eventType), source, text,
 		fmt.Sprintf(guidance, tokens.SilentReplyToken))
 
-	safego.GoWithSlog(s.logger, "phone-event-ingest", func() {
-		deadline := phoneEventTurnDeadline
-		if approval {
-			deadline = phoneEventApprovalDeadline
-		}
-		ctx, cancel := context.WithTimeout(s.shutdownContext, deadline)
-		defer cancel()
+	// Tiered triage: a cheap tiny-model gate before the expensive tool-calling
+	// judgment turn. Electronic approvals always bypass it. Fail-open.
+	if !approval && notificationLikeEvent(eventType) && !worthFullJudgment(ctx, source, text) {
+		s.logger.Debug("phone-event tiny-gate dropped", "source", source, "type", eventType)
+		return false, nil
+	}
 
-		// Tiered triage: a cheap tiny-model gate before the expensive tool-calling
-		// judgment turn. For high-volume notification/sms events, skip the full turn
-		// when the tiny model says it's obvious noise (ads/OTP/promo/routine — which
-		// the full judgment would also NO_REPLY) without spending a main-model turn.
-		// Electronic-approval notifications always run (and may enrich via browser).
-		// Rare, intentional events (context/clipboard) skip the gate. Fail-open.
-		if !approval && notificationLikeEvent(eventType) && !worthFullJudgment(ctx, source, text) {
-			s.logger.Debug("phone-event tiny-gate dropped", "source", source, "type", eventType)
-			return
-		}
-
-		msg := command
-		approvalDocID := ""
-		if approval && s.browserEnrich != nil {
-			if body := strings.TrimSpace(s.browserEnrich(ctx, source, text)); body != "" {
-				msg = command + "\n\n[브라우저에서 읽은 결재 본문]\n" + body
-				approvalDocID = extractGroupwareDocID(body)
-				s.logger.Info("phone-event approval browser enrich ok",
-					"source", source, "bodyLen", len(body), "docId", approvalDocID)
-			} else {
-				s.logger.Info("phone-event approval browser enrich skipped",
-					"source", source)
+	msg := command
+	approvalDocID := extractGroupwareDocID(text)
+	if approval && s.browserEnrich != nil {
+		if body := strings.TrimSpace(s.browserEnrich(ctx, source, text)); body != "" {
+			msg = command + "\n\n[브라우저에서 읽은 결재 본문]\n" + body
+			if enrichedDocID := extractGroupwareDocID(body); enrichedDocID != "" {
+				approvalDocID = enrichedDocID
 			}
-		}
-
-		maxTok := phoneEventMaxTokens
-		sessionKey := phoneEventSessionPrefix + ":" + shortid.New("e")
-		result, err := s.chatHandler.RunSync(ctx, chatport.SyncRequest{
-			SessionKey:          sessionKey,
-			Message:             msg,
-			MaxTokens:           &maxTok,
-			EphemeralUser:       true, // throwaway session — persist nothing
-			EphemeralAssistant:  true,
-			AutoDeliveredOutput: true, // relayNative delivers; agent must not use message tool
-		})
-		if err != nil {
-			s.logger.Error("phone-event judgment turn failed",
-				"source", source, "type", eventType, "error", err)
-			return
-		}
-		// relayNative applies the same noise floor as every proactive surface:
-		// a NO_REPLY or "별 일 없음" judgment is suppressed (delivered=false) and
-		// never reaches the work feed or push.
-		output := result.BestText
-		if s.relay == nil {
-			s.logger.Error("phone-event relay unavailable", "source", source, "type", eventType)
-			return
-		}
-		var delivered bool
-		var relayErr error
-		if approval && approvalDocID != "" {
-			delivered, relayErr = s.relay.RelayNativeToOptions("", output, proactive.Options{
-				WorkFeedSource: workfeed.SourceGroupwareApproval,
-				RefID:          approvalDocID,
-				ForceQuestion:  true,
-				Actions:        groupwareApprovalFeedActions(),
-			})
+			s.logger.Info("phone-event approval browser enrich ok",
+				"source", source, "bodyLen", len(body), "docId", approvalDocID)
 		} else {
-			delivered, relayErr = s.relay.RelayNative(output)
+			s.logger.Info("phone-event approval browser enrich skipped",
+				"source", source)
 		}
-		if relayErr != nil {
-			s.logger.Error("phone-event relay failed",
-				"source", source, "type", eventType, "error", relayErr)
-			return
-		}
-		s.logger.Info("phone-event processed",
-			"source", source, "type", eventType,
-			"delivered", delivered, "outputLen", len(output), "approval", approval,
-			"docId", approvalDocID)
+	}
+
+	if s.chatHandler == nil || !s.chatHandler.ChatReady() {
+		err := errors.New("phone-event chat handler unavailable")
+		s.logger.Error("phone-event judgment turn failed",
+			"source", source, "type", eventType, "error", err)
+		return false, err
+	}
+	maxTok := phoneEventMaxTokens
+	sessionKey := phoneEventSessionPrefix + ":" + shortid.New("e")
+	result, err := s.chatHandler.RunSync(ctx, chatport.SyncRequest{
+		SessionKey:          sessionKey,
+		Message:             msg,
+		MaxTokens:           &maxTok,
+		EphemeralUser:       true, // throwaway session — persist nothing
+		EphemeralAssistant:  true,
+		AutoDeliveredOutput: true, // relayNative delivers; agent must not use message tool
 	})
+	if err != nil {
+		s.logger.Error("phone-event judgment turn failed",
+			"source", source, "type", eventType, "error", err)
+		return false, err
+	}
+	// relayNative applies the same noise floor as every proactive surface:
+	// a NO_REPLY or "별 일 없음" judgment is suppressed (delivered=false).
+	output := result.BestText
+	if s.relay == nil {
+		err := errors.New("phone-event relay unavailable")
+		s.logger.Error("phone-event relay unavailable", "source", source, "type", eventType)
+		return false, err
+	}
+	var delivered bool
+	var relayErr error
+	if approval && approvalDocID != "" {
+		delivered, relayErr = s.relay.RelayNativeToOptions("", output, proactive.Options{
+			WorkFeedSource: workfeed.SourceGroupwareApproval,
+			RefID:          approvalDocID,
+			ForceQuestion:  true,
+			Actions:        groupwareApprovalFeedActions(),
+		})
+	} else {
+		delivered, relayErr = s.relay.RelayNative(output)
+	}
+	if relayErr != nil {
+		s.logger.Error("phone-event relay failed",
+			"source", source, "type", eventType, "error", relayErr)
+		return false, relayErr
+	}
+	s.logger.Info("phone-event processed",
+		"source", source, "type", eventType,
+		"delivered", delivered, "outputLen", len(output), "approval", approval,
+		"docId", approvalDocID)
+	return delivered, nil
 }
 
 // isPolledGmailNotification reports whether a phone event is a Gmail app
