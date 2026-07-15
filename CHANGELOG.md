@@ -1,5 +1,37 @@
 # Changelog
 
+## [4.109.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.108.1...deneb-v4.109.0) (2026-07-15)
+
+
+### ✨ Features
+
+* **browser:** aviation21 WordPress adblock and translate body ([#3750](https://github.com/choiceoh/Deneb/issues/3750)) ([f76f6bd](https://github.com/choiceoh/Deneb/commit/f76f6bded920d761078b0e3b3502986eb45ed329))
+* **browser:** block Yandex RTB and Forumotion ads for RU news sites ([#3746](https://github.com/choiceoh/Deneb/issues/3746)) ([a4069ab](https://github.com/choiceoh/Deneb/commit/a4069ab1d1d4b3bcd4958b9cbccd1fb56f5f9e6a))
+* **browser:** Eurasian Times Newspaper adblock and translate body ([#3751](https://github.com/choiceoh/Deneb/issues/3751)) ([73e51e7](https://github.com/choiceoh/Deneb/commit/73e51e7046589429b2b7d623febfdf6edaebaada))
+* **browser:** lightweight network adblock for translate WebView ([#3739](https://github.com/choiceoh/Deneb/issues/3739)) ([e55e616](https://github.com/choiceoh/Deneb/commit/e55e616df6c1425074f1fa145b8ce8d9df59ab35))
+* **browser:** Substack adblock pixels and translate body selectors ([#3749](https://github.com/choiceoh/Deneb/issues/3749)) ([562845b](https://github.com/choiceoh/Deneb/commit/562845b10f07e1c8d5df6e95fe4172290aa4b3c2))
+* **browser:** widen adblock coverage and show per-page block count ([#3745](https://github.com/choiceoh/Deneb/issues/3745)) ([46a6c7f](https://github.com/choiceoh/Deneb/commit/46a6c7fdaa7b932a449559c9a4ad412b51308e22))
+* **groupware:** ERP 조회 확장 — stock/po/receive/ship/price ([#3755](https://github.com/choiceoh/Deneb/issues/3755)) ([3704327](https://github.com/choiceoh/Deneb/commit/37043275a3cb0ed20541d5afb07a38ee3c443f4c))
+* **groupware:** 매출마감 조회 — area=sales summary (YTD/당월/오늘) ([#3754](https://github.com/choiceoh/Deneb/issues/3754)) ([1eb2474](https://github.com/choiceoh/Deneb/commit/1eb24742c31226385680a2a7a38e0c5a9df70a37))
+* **groupware:** 미결 Radar·RefID 정합 자동화 ([#3756](https://github.com/choiceoh/Deneb/issues/3756)) ([664dfb0](https://github.com/choiceoh/Deneb/commit/664dfb062d39504e86d09f723e8e9017377abcd3))
+* **groupware:** 에이전트 사용성 — 딥퍼링 요약에 attachment 노출·첨부 번호 중복 제거·크기 표기 ([#3747](https://github.com/choiceoh/Deneb/issues/3747)) ([b103e67](https://github.com/choiceoh/Deneb/commit/b103e67d04c60f93cf927f7ea1645958e363dc1d))
+* **groupware:** 첨부 OCR을 PaddleOCR-VL로 승격 + 스캔 PDF 래스터화·노이즈 억제 ([#3740](https://github.com/choiceoh/Deneb/issues/3740)) ([f5dfd71](https://github.com/choiceoh/Deneb/commit/f5dfd7110fa4d54989b1e464ae0a28b323e450e7))
+* **groupware:** 표 구조 보존·첨부 선택 읽기 ([#3743](https://github.com/choiceoh/Deneb/issues/3743)) ([8bee4e2](https://github.com/choiceoh/Deneb/commit/8bee4e2c804a6d29ea0ea84538646f2d3ba169c0))
+* **sitemap:** client-android 현장 지도 포팅 + andromeda 휠 줌·팬 ([#3737](https://github.com/choiceoh/Deneb/issues/3737)) ([d82ecba](https://github.com/choiceoh/Deneb/commit/d82ecbac006a6bb637c4b4ab26f820afc6842510))
+* **wiki:** 현장 공통 포맷 — 공정 일정 필드 + write-site 작성 경로 ([#3757](https://github.com/choiceoh/Deneb/issues/3757)) ([c2358a8](https://github.com/choiceoh/Deneb/commit/c2358a8f0967d0a030daa4b087db78be99499048))
+* **wiki:** 현장 서브페이지 데이터 모델 + 지도 상태 필터 ([#3744](https://github.com/choiceoh/Deneb/issues/3744)) ([b68ae20](https://github.com/choiceoh/Deneb/commit/b68ae203b5bf96e34d9e95c9b3390e536c6ea7bd))
+
+
+### 🐛 Bug Fixes
+
+* **browser:** improve translate coverage for topwar/topcor/russiadefence ([#3748](https://github.com/choiceoh/Deneb/issues/3748)) ([16bd4b7](https://github.com/choiceoh/Deneb/commit/16bd4b7a5cd7e429fe381c57c7adae5ec47620f9))
+* **sitemap:** DenebType style props + spotless emptyBlockedResponse ([#3741](https://github.com/choiceoh/Deneb/issues/3741)) ([e52f720](https://github.com/choiceoh/Deneb/commit/e52f72083a8b14b5eeaab39d6a186d3fba3b70e5))
+
+
+### 🔧 Internal
+
+* **agent:** remove dead executeOneTool wrapper ([#3742](https://github.com/choiceoh/Deneb/issues/3742)) ([cc79fed](https://github.com/choiceoh/Deneb/commit/cc79fedc49beb4456245910f904dbb48b5e62d61))
+
 ## [4.108.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.108.0...deneb-v4.108.1) (2026-07-15)
 
 
