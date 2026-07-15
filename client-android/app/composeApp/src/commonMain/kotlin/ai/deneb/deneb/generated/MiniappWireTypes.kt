@@ -115,6 +115,66 @@ data class FilesUploadOut(
 
 @Immutable
 @Serializable
+data class GroupwareApprovalActResponse(
+    val ok: Boolean = false,
+    val docId: String = "",
+    val decision: String = "",
+    val result: String = "",
+)
+
+@Immutable
+@Serializable
+data class GroupwareApprovalAnalysisOut(
+    val docId: String = "",
+    val title: String = "",
+    val drafter: String = "",
+    val date: String = "",
+    val analysis: String = "",
+    val importance: String = "",
+    val durationMs: Long = 0L,
+    val cached: Boolean = false,
+    val createdAt: String = "",
+)
+
+@Immutable
+@Serializable
+data class GroupwareApprovalGetResponse(
+    val docId: String = "",
+    val title: String = "",
+    val body: String = "",
+)
+
+@Immutable
+@Serializable
+data class GroupwareApprovalRow(
+    val docId: String = "",
+    val title: String = "",
+    val docNo: String = "",
+    val drafter: String = "",
+    val date: String = "",
+    val status: String = "",
+    val folder: String = "",
+    val canAct: Boolean = false,
+)
+
+@Immutable
+@Serializable
+data class GroupwareApprovalsListResponse(
+    val approvals: List<GroupwareApprovalRow> = emptyList(),
+    val folder: String = "",
+)
+
+@Immutable
+@Serializable
+data class GroupwareERPListResponse(
+    val area: String = "",
+    val folder: String = "",
+    val query: String = "",
+    val text: String = "",
+)
+
+@Immutable
+@Serializable
 data class LaneOut(
     val key: String = "",
     val name: String = "",

@@ -424,6 +424,204 @@ class MiniappWireValueContractTest {
             invalidValue = JsonPrimitive("not-an-object"),
         ),
         wireContract(
+            name = "GroupwareApprovalActResponse",
+            serializer = GroupwareApprovalActResponse.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "ok",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "docId",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "decision",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "result",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "ok",
+            invalidValue = JsonPrimitive(1),
+        ),
+        wireContract(
+            name = "GroupwareApprovalAnalysisOut",
+            serializer = GroupwareApprovalAnalysisOut.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "docId",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "title",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "drafter",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "date",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "analysis",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "importance",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "durationMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "cached",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "createdAt",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "docId",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "GroupwareApprovalGetResponse",
+            serializer = GroupwareApprovalGetResponse.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "docId",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "title",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "body",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "docId",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "GroupwareApprovalRow",
+            serializer = GroupwareApprovalRow.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "docId",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "title",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "docNo",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "drafter",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "date",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "status",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "folder",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "canAct",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "docId",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "GroupwareApprovalsListResponse",
+            serializer = GroupwareApprovalsListResponse.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "approvals",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "folder",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "approvals",
+            invalidValue = JsonObject(mapOf("not" to JsonPrimitive("a-list"))),
+        ),
+        wireContract(
+            name = "GroupwareERPListResponse",
+            serializer = GroupwareERPListResponse.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "area",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "folder",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "query",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "text",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "area",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
             name = "LaneOut",
             serializer = LaneOut.serializer(),
             fields = listOf(

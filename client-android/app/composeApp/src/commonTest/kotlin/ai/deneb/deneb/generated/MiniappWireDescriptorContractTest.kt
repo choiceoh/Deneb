@@ -115,6 +115,42 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("entry"),
         ),
         contract(
+            name = "GroupwareApprovalActResponse",
+            serializer = GroupwareApprovalActResponse.serializer(),
+            empty = GroupwareApprovalActResponse(),
+            fields = listOf("ok", "docId", "decision", "result"),
+        ),
+        contract(
+            name = "GroupwareApprovalAnalysisOut",
+            serializer = GroupwareApprovalAnalysisOut.serializer(),
+            empty = GroupwareApprovalAnalysisOut(),
+            fields = listOf("docId", "title", "drafter", "date", "analysis", "importance", "durationMs", "cached", "createdAt"),
+        ),
+        contract(
+            name = "GroupwareApprovalGetResponse",
+            serializer = GroupwareApprovalGetResponse.serializer(),
+            empty = GroupwareApprovalGetResponse(),
+            fields = listOf("docId", "title", "body"),
+        ),
+        contract(
+            name = "GroupwareApprovalRow",
+            serializer = GroupwareApprovalRow.serializer(),
+            empty = GroupwareApprovalRow(),
+            fields = listOf("docId", "title", "docNo", "drafter", "date", "status", "folder", "canAct"),
+        ),
+        contract(
+            name = "GroupwareApprovalsListResponse",
+            serializer = GroupwareApprovalsListResponse.serializer(),
+            empty = GroupwareApprovalsListResponse(),
+            fields = listOf("approvals", "folder"),
+        ),
+        contract(
+            name = "GroupwareERPListResponse",
+            serializer = GroupwareERPListResponse.serializer(),
+            empty = GroupwareERPListResponse(),
+            fields = listOf("area", "folder", "query", "text"),
+        ),
+        contract(
             name = "LaneOut",
             serializer = LaneOut.serializer(),
             empty = LaneOut(),

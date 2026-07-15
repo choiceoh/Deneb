@@ -40,7 +40,7 @@ func TestGroupwareRadarCallbacksDedupeAndResolveByRefID(t *testing.T) {
 			ID: "approval-card", Source: workfeed.SourceGroupwareApproval, RefID: "7", Body: "analysis",
 		})
 		return err
-	}, func(context.Context, groupware.ApprovalSummary, int, time.Duration) error { return nil })
+	}, func(context.Context, groupware.ApprovalSummary, int, time.Duration) error { return nil }, nil)
 	doc := groupware.ApprovalSummary{DocID: "7", Title: "품의", Status: "미결"}
 	if err := onPending(context.Background(), doc); err != nil {
 		t.Fatal(err)

@@ -88,6 +88,54 @@ export interface FilesUploadOut {
   entry?: FilesEntryOut
 }
 
+export interface GroupwareApprovalActResponse {
+  ok?: boolean
+  docId?: string
+  decision?: string
+  result?: string
+}
+
+export interface GroupwareApprovalAnalysisOut {
+  docId?: string
+  title?: string
+  drafter?: string
+  date?: string
+  analysis?: string
+  importance?: string
+  durationMs?: number
+  cached?: boolean
+  createdAt?: string
+}
+
+export interface GroupwareApprovalGetResponse {
+  docId?: string
+  title?: string
+  body?: string
+}
+
+export interface GroupwareApprovalRow {
+  docId?: string
+  title?: string
+  docNo?: string
+  drafter?: string
+  date?: string
+  status?: string
+  folder?: string
+  canAct?: boolean
+}
+
+export interface GroupwareApprovalsListResponse {
+  approvals?: GroupwareApprovalRow[]
+  folder?: string
+}
+
+export interface GroupwareERPListResponse {
+  area?: string
+  folder?: string
+  query?: string
+  text?: string
+}
+
 export interface LaneOut {
   key?: string
   name?: string

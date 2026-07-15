@@ -100,6 +100,14 @@ class AppRouteSerializationContractTest {
         },
         {
             assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_approval_detail",
+                fieldNames = listOf("docId", "title", "drafter", "date", "canAct"),
+                inputJson = """{"docId":"doc-한글 /?#","title":"품의","drafter":"홍길동","date":"2026-07-16","canAct":true}""",
+                serializer = DenebApprovalDetail.serializer(),
+            )
+        },
+        {
+            assertOpaqueRoutePreservesArguments(
                 serialName = "deneb_calendar_event",
                 fieldNames = listOf("id"),
                 inputJson = """{"id":"id-한글 /?#"}""",
@@ -219,6 +227,12 @@ class AppRouteSerializationContractTest {
         },
         {
             assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"docId":"doc-한글 /?#","title":"품의","drafter":"홍길동","date":"2026-07-16","canAct":true}""",
+                serializer = DenebApprovalDetail.serializer(),
+            )
+        },
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
                 inputJson = """{"id":"id-한글 /?#"}""",
                 serializer = DenebCalendarEvent.serializer(),
             )
@@ -308,6 +322,8 @@ class AppRouteSerializationContractTest {
             { assertObjectRouteIdentity("deneb_search", DenebSearch, DenebSearch.serializer()) },
             { assertObjectRouteIdentity("deneb_more", DenebMore, DenebMore.serializer()) },
             { assertObjectRouteIdentity("deneb_people", DenebPeople, DenebPeople.serializer()) },
+            { assertObjectRouteIdentity("deneb_approvals", DenebApprovals, DenebApprovals.serializer()) },
+            { assertObjectRouteIdentity("deneb_groupware", DenebGroupware, DenebGroupware.serializer()) },
             { assertObjectRouteIdentity("deneb_contacts", DenebContacts, DenebContacts.serializer()) },
             { assertObjectRouteIdentity("deneb_categories", DenebCategories, DenebCategories.serializer()) },
             { assertObjectRouteIdentity("deneb_diary", DenebDiary, DenebDiary.serializer()) },
@@ -332,6 +348,7 @@ class AppRouteSerializationContractTest {
     fun opaqueRoutesRejectMissingRequiredArguments() {
         listOf(
             { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebMailDetail.serializer(), buildJsonObject {}) } },
+            { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebApprovalDetail.serializer(), buildJsonObject {}) } },
             { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebCalendarEvent.serializer(), buildJsonObject {}) } },
             { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebCalendarAdd.serializer(), buildJsonObject {}) } },
             { assertFailsWith<SerializationException> { json.decodeFromJsonElement(DenebCalendarEdit.serializer(), buildJsonObject {}) } },

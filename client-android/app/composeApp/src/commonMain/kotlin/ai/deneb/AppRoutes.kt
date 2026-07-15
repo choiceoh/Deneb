@@ -74,6 +74,24 @@ data class DenebWiki(val path: String)
 object DenebPeople
 
 @Serializable
+@SerialName("deneb_approvals")
+object DenebApprovals
+
+@Serializable
+@SerialName("deneb_approval_detail")
+data class DenebApprovalDetail(
+    val docId: String,
+    val title: String = "",
+    val drafter: String = "",
+    val date: String = "",
+    val canAct: Boolean = false,
+)
+
+@Serializable
+@SerialName("deneb_groupware")
+object DenebGroupware
+
+@Serializable
 @SerialName("deneb_person")
 data class DenebPerson(val sender: String)
 

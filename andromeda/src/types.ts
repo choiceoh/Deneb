@@ -233,6 +233,8 @@ export type View =
   | "crons"
   | "fleet"
   | "workfeed"
+  | "approvals"
+  | "groupware"
   | "skills"
   | "rsi"
   | "observe"
