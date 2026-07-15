@@ -7,12 +7,17 @@ bounded 결과 envelope로 변환한다. media·document parser를 조합하지�
 ## 진입점과 소유권
 
 - `web_fetch.go`의 `Tool`이 url, query, queries, search+fetch 모드를 분기하고
-  cache와 singleflight를 거쳐 결과를 조립한다.
+  cache와 singleflight를 거쳐 결과를 조립한다. 메타에 `FetchMs`/`Provider`를
+  넣고 slog로 fetch/extract 지연을 남긴다.
 - `web_http.go`의 `FetchRaw`, `SharedClient`가 pooled SSRF-safe transport와
   구조화된 fetch error 경계를 노출한다.
 - `web_content.go`가 content type 분류와 metadata/error envelope를,
   `web_html.go`의 `LocalAIExtractor`, `NewLocalAIExtractor`가 HTML 정제를
-  담당한다. binary document는 `tools/document`로 위임한다.
+  담당한다. 기본 추출은 htmlmd이고 LocalAI는 대용량·저retention에만 게이트된다.
+  binary document는 `tools/document`로 위임한다.
+- `web_fetch_stealth.go`는 stage 간 고정 sleep 없이 Chrome→(soft-block 시)
+  Firefox→Jina로 올리고, SPA shell(`js_required`/`empty_body`)은 Firefox를
+  건너뛰고 Jina로 간다. Serper scrape 타임아웃은 10s fail-fast.
 - `archive.go`는 fetch된 document만 `filestore`에 보존하며 일반 HTML은
   archive하지 않는다.
 

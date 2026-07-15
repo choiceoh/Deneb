@@ -54,11 +54,31 @@ func TestFetchCache_Eviction(t *testing.T) {
 	}
 
 	// Adding a 4th should evict the oldest (a.com).
+	// Note: Gets above promote each key; final order is still a,b,c (oldest=a).
 	c.Put("https://d.com", "d")
 	if _, ok := c.Get("https://a.com"); ok {
 		t.Fatal("expected a.com to be evicted")
 	}
 	if _, ok := c.Get("https://d.com"); !ok {
 		t.Fatal("expected hit for d.com")
+	}
+}
+
+func TestFetchCache_GetPromotesLRU(t *testing.T) {
+	c := NewFetchCacheWithTTL(3, time.Minute)
+	c.Put("https://a.com", "a")
+	c.Put("https://b.com", "b")
+	c.Put("https://c.com", "c")
+
+	// Touch a so it becomes newest; b is then the oldest.
+	if _, ok := c.Get("https://a.com"); !ok {
+		t.Fatal("expected hit for a.com")
+	}
+	c.Put("https://d.com", "d")
+	if _, ok := c.Get("https://b.com"); ok {
+		t.Fatal("expected b.com to be evicted after a was promoted")
+	}
+	if _, ok := c.Get("https://a.com"); !ok {
+		t.Fatal("expected a.com to survive after promote-on-Get")
 	}
 }

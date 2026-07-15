@@ -69,6 +69,8 @@ func (c *FetchCache) Get(url string) (string, bool) {
 		c.removeLocked(url)
 		return "", false
 	}
+	// Promote on hit so frequently read URLs survive eviction.
+	c.order.MoveToBack(item.element)
 	return item.entry.content, true
 }
 

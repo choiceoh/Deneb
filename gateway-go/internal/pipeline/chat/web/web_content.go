@@ -32,6 +32,7 @@ type webFetchMeta struct {
 	ContentType  string   `json:"content_type"`
 	StatusCode   int      `json:"status_code"`
 	FetchMs      int64    `json:"fetch_ms"`
+	Provider     string   `json:"provider,omitempty"` // serper | stealth
 	OrigChars    int      `json:"original_chars"`
 	ExtractChars int      `json:"extracted_chars"`
 	Retention    string   `json:"retention_ratio"`
@@ -174,6 +175,12 @@ func formatFetchResult(meta webFetchMeta, content string) string {
 		fmt.Fprintf(&b, "Published: %s\n", meta.Published)
 	}
 	fmt.Fprintf(&b, "StatusCode: %d\n", meta.StatusCode)
+	if meta.FetchMs > 0 {
+		fmt.Fprintf(&b, "FetchMs: %d\n", meta.FetchMs)
+	}
+	if meta.Provider != "" {
+		fmt.Fprintf(&b, "Provider: %s\n", meta.Provider)
+	}
 	if meta.WordCount > 0 {
 		fmt.Fprintf(&b, "WordCount: %d\n", meta.WordCount)
 	}

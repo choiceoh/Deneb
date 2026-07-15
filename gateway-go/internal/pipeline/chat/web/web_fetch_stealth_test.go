@@ -1,6 +1,7 @@
 package web
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
@@ -126,6 +127,33 @@ func TestJinaReaderURL(t *testing.T) {
 			t.Errorf("got %q, want %q", got, want)
 		}
 	})
+}
+
+func TestIsSPAShellResult(t *testing.T) {
+	spa := &media.FetchResult{
+		Data: []byte(`<!DOCTYPE html><html><head><script src="/_next/static/chunks/main.js"></script></head>` +
+			`<body><div id="__next"></div></body></html>`),
+		ContentType: "text/html",
+		Size:        200,
+	}
+	if !isSPAShellResult(spa) {
+		t.Fatal("expected SPA shell with __next + thin body to signal js_required")
+	}
+
+	article := &media.FetchResult{
+		Data: []byte(`<html><body><article><h1>Title</h1><p>` +
+			strings.Repeat(" substantive paragraph text ", 40) +
+			`</p></article></body></html>`),
+		ContentType: "text/html",
+		Size:        5000,
+	}
+	if isSPAShellResult(article) {
+		t.Fatal("normal article must not be treated as SPA shell")
+	}
+
+	if isSPAShellResult(&media.FetchResult{Data: []byte(`{"ok":true}`), ContentType: "application/json"}) {
+		t.Fatal("non-HTML must not be SPA shell")
+	}
 }
 
 func TestBrowserProfilesEmitHeadersWithoutBotUserAgent(t *testing.T) {
