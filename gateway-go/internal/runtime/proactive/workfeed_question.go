@@ -69,6 +69,15 @@ func choiceAnswerActions(choices []string) []workfeed.Action {
 	return actions
 }
 
+// coalesceActions prefers explicit operator chips (e.g. 승인/반려) over choices
+// parsed from the judgment text.
+func coalesceActions(explicit, fromChoices []workfeed.Action) []workfeed.Action {
+	if len(explicit) > 0 {
+		return explicit
+	}
+	return fromChoices
+}
+
 // endsWithQuestionMark reports whether the trimmed text ends with a question mark
 // (ASCII or fullwidth) — the heuristic that flags a free-text proactive question
 // (no ```choices) as an answerable card so the native shows a reply field.

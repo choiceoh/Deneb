@@ -3,6 +3,7 @@ package ai.deneb.ui.chat.composables
 import ai.deneb.deneb.DenebEmpty
 import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.chat.WorkFeedAction
 import ai.deneb.ui.chat.WorkFeedItem
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.QuestionAnswer
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -238,14 +240,49 @@ internal fun WorkFeedAnswerBlock(
     onAnswer: (WorkFeedItem, String, String?) -> Unit,
 ) {
     val haptics = rememberHaptics()
+    var pendingApproval by remember(item.id) { mutableStateOf<WorkFeedAction?>(null) }
+    pendingApproval?.let { action ->
+        AlertDialog(
+            onDismissRequest = { pendingApproval = null },
+            title = { Text("${action.label}할까요?", style = DenebType.subject) },
+            text = {
+                Text(
+                    buildString {
+                        append(item.title.ifBlank { "이 결재 문서" })
+                        if (item.refId.isNotBlank()) append(" (doc ${item.refId})")
+                        append("을(를) ${action.label}합니다. 그룹웨어에 즉시 반영됩니다.")
+                    },
+                    style = DenebType.body,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingApproval = null
+                        haptics.confirm()
+                        onAnswer(item, action.label, action.id)
+                    },
+                ) { Text(action.label, style = DenebType.button) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingApproval = null }) {
+                    Text("취소", style = DenebType.button)
+                }
+            },
+        )
+    }
     Column(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
         if (item.actions.isNotEmpty()) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item.actions.forEach { action ->
                     AssistChip(
                         onClick = {
-                            haptics.confirm()
-                            onAnswer(item, action.label, action.id)
+                            if (action.id.startsWith("approval:")) {
+                                pendingApproval = action
+                            } else {
+                                haptics.confirm()
+                                onAnswer(item, action.label, action.id)
+                            }
                         },
                         label = { Text(action.label, style = DenebType.button) },
                         modifier = Modifier.handCursor(),

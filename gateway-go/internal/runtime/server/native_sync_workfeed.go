@@ -13,6 +13,7 @@ type nativeWorkFeedStore struct {
 	log             interface{ Error(string, ...any) }
 	onEvolveVerdict func(workfeed.Item, string) error
 	onLadderAction  func(workfeed.Item, string) error
+	onApprovalAct   func(workfeed.Item, string) error
 }
 
 func (s *Server) nativeWorkFeedStore() *nativeWorkFeedStore {
@@ -25,6 +26,7 @@ func (s *Server) nativeWorkFeedStore() *nativeWorkFeedStore {
 		log:             s.logger,
 		onEvolveVerdict: s.handleEvolveVerdictAction,
 		onLadderAction:  s.handleLadderCardAction,
+		onApprovalAct:   s.handleGroupwareApprovalAction,
 	}
 }
 
@@ -104,6 +106,10 @@ func (s *nativeWorkFeedStore) RunAction(itemID, actionID string) (workfeed.Actio
 		if s.onLadderAction != nil && item.Source == ladderReadySource &&
 			strings.HasPrefix(action.ID, ladderActionRelockPrefix) {
 			return s.onLadderAction(item, action.ID)
+		}
+		if s.onApprovalAct != nil && item.Source == workfeed.SourceGroupwareApproval &&
+			strings.HasPrefix(action.ID, "approval:") {
+			return s.onApprovalAct(item, action.ID)
 		}
 		return nil
 	}

@@ -5,6 +5,7 @@ read_when:
   - Enabling interactive browser control for logged-in SaaS/SPA pages
   - Setting DENEB_BROWSER_URL on the gateway host
   - Running scripts/dev/page-agent-bridge on a desktop
+  - Wiring Amaranth/electronic-approval phone notifications to work-feed summaries
 ---
 
 # Page Agent browser
@@ -58,6 +59,56 @@ After restart, the agent activates the deferred `browser` tool via `fetch_tools`
 | `stop` | Cancel the running task |
 
 When unset, `browser` returns an "integration off" message (same pattern as `fleet`).
+
+## `groupware` tool (전자결재 · 게시판)
+
+API inventory, box codes, HMAC auth, and approve/reject notes:
+[groupware-amaranth.md](./groupware-amaranth.md).
+
+**How it works (fast path):** Playwright logs in once and caches `auth_a_token` + `hash_key` in `~/.deneb/groupware-session.json`. Subsequent `list`/`read` call Amaranth internal APIs with HMAC (`wehago-sign`) — typically **tens of ms**, not a full browser scrape.
+
+| action | area | folder | Meaning |
+|--------|------|--------|---------|
+| `status` | — | — | Credentials configured? |
+| `list` | `approval` | `pending`/`done`/`cc`/`total`/`all` | 미결 · 기결 · 수신참조 · 전체결재문서 (list 기본=`all` 순회) |
+| `list` | `board` | — | 게시판 최근 글 |
+| `read` | `approval`/`board` | (approval) | Match by `query` title/keyword (approval 기본=`pending`) |
+
+
+## Proactive e-approval (phone → work feed)
+
+Amaranth10 (Douzone) electronic-approval notifications already reach the gateway via
+`miniapp.event.ingest` (`DenebNotificationListenerService` → structured
+`종류: 전자결재` text).
+
+### Preferred: srv4 headless login
+
+Set credentials on the gateway host — no PC Chrome bridge required:
+
+```bash
+export DENEB_GROUPWARE_URL='https://tsgw.topsolar.kr'   # default
+export DENEB_GROUPWARE_COMPANY='topsolar'               # default
+export DENEB_GROUPWARE_USER='…'
+export DENEB_GROUPWARE_PASSWORD='…'
+```
+
+Smoke login (does not print the password):
+
+```bash
+cd scripts/dev/groupware-reader && npm install
+DENEB_GROUPWARE_USER=… DENEB_GROUPWARE_PASSWORD=… npm run login-check
+```
+
+When both user and password are set, the gateway runs Playwright headless on srv4
+(`scripts/dev/groupware-reader/read.mjs`, same path as the `groupware` tool) before the judgment turn and injects
+`[브라우저에서 읽은 결재 본문]`. Approve/reject is never automated.
+
+### Fallback: workstation Page Agent bridge
+
+If credentials are unset (or the headless read fails), the gateway falls back to
+`DENEB_BROWSER_URL` / `DENEB_BROWSER_TOKEN` (PC Chrome session).
+
+Tiny-gate is skipped for e-approval events so they are not dropped as routine noise.
 
 ## Security
 

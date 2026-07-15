@@ -56,6 +56,8 @@ data class WorkFeedItem(
     // server ack — the card stays in the feed, just de-emphasized. Shared via the
     // gateway so reading on the desktop shows read here too.
     val readAtMs: Long = 0,
+    // Optional durable pointer (e.g. Amaranth docId for groupware-approval chips).
+    val refId: String = "",
 )
 
 /**

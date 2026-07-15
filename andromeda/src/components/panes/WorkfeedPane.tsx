@@ -36,6 +36,7 @@ const SOURCE_LABELS: Record<string, string> = {
   deal_question: "질문",
   followup: "후속",
   proactive: "제안",
+  "groupware-approval": "전자결재",
 };
 
 function sourceLabel(source?: string) {
@@ -279,7 +280,15 @@ function WorkItemDetail({
   // Run a chip's work-feed action. Mirrors the native answerWorkFeed(actionId) path:
   // the gateway settles the card and returns {sessionKey, prompt}, which useAction's
   // onResult streams to the asking session — the same handler the free-text field uses.
-  const runAction = (a: WorkAction) => void run(WORKFEED_RPC.actionRun, { itemId: w.id, actionId: a.id });
+  // Approval chips confirm first — Amaranth mutate is irreversible from the feed.
+  const runAction = (a: WorkAction) => {
+    if (String(a.id || "").startsWith("approval:")) {
+      const title = w.title || "이 결재 문서";
+      const ref = w.refId ? ` (doc ${w.refId})` : "";
+      if (!window.confirm(`${a.label}할까요?\n\n${title}${ref}\n그룹웨어에 즉시 반영됩니다.`)) return;
+    }
+    void run(WORKFEED_RPC.actionRun, { itemId: w.id, actionId: a.id });
+  };
 
   const submitFeedback = () => {
     const t = feedback.trim();

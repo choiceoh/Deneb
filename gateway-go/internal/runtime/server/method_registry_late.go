@@ -147,20 +147,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			PublishDeliverable: func(text string) (bool, error) {
 				return s.proactiveRelay.PublishDeliverable(text)
 			},
-			IngestEvent: phoneevents.New(phoneevents.Config{
-				ChatHandler:     s.chatHandler,
-				Relay:           &s.proactiveRelay,
-				ShutdownContext: s.ShutdownCtx(),
-				Logger:          s.logger,
-				Ledger:          s.phoneEventLedgerInstance(),
-				OnLocationPlace: s.siteVisitOnLocation(),
-				ResolvePhoneAction: func(res phoneevents.ActionResult) bool {
-					if s.phoneActions == nil {
-						return false
-					}
-					return s.phoneActions.resolve(phoneActionResult{ID: res.ID, OK: res.OK, Error: res.Error})
-				},
-			}).IngestAsync,
+			IngestEvent: phoneevents.New(s.phoneEventHandlerConfig()).IngestAsync,
 		}),
 		handlersession.ExecMethods(handlersession.ExecDeps{
 			Chat:       s.chatHandler,

@@ -13,20 +13,7 @@ import (
 func (s *Server) buildMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	phoneEventHandler := func() *phoneevents.Handler {
-		return phoneevents.New(phoneevents.Config{
-			ChatHandler:     s.chatHandler,
-			Relay:           &s.proactiveRelay,
-			ShutdownContext: s.ShutdownCtx(),
-			Logger:          s.logger,
-			Ledger:          s.phoneEventLedgerInstance(),
-			OnLocationPlace: s.siteVisitOnLocation(),
-			ResolvePhoneAction: func(res phoneevents.ActionResult) bool {
-				if s.phoneActions == nil {
-					return false
-				}
-				return s.phoneActions.resolve(phoneActionResult{ID: res.ID, OK: res.OK, Error: res.Error})
-			},
-		})
+		return phoneevents.New(s.phoneEventHandlerConfig())
 	}
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /healthz", s.handleHealth)

@@ -215,6 +215,9 @@ type proactiveRelayOptions struct {
 	// into the transcript, the agent receives "승인됐어요" with no clue which
 	// meeting/project it refers to and cannot file the outcome.
 	mirrorTranscript bool
+	refID            string
+	forceQuestion    bool
+	actions          []workfeed.Action
 }
 
 // Options carries source and transcript-mirroring metadata for an individual
@@ -222,6 +225,9 @@ type proactiveRelayOptions struct {
 type Options struct {
 	WorkFeedSource   string
 	MirrorTranscript bool
+	RefID            string
+	ForceQuestion    bool
+	Actions          []workfeed.Action
 }
 
 type preparedProactiveDelivery struct {
@@ -409,8 +415,9 @@ func (d proactiveRelayDeps) appendProactiveWorkFeed(
 		Summary:    summary,
 		Body:       cardBody,
 		SessionKey: target,
-		Question:   len(choices) > 0 || endsWithQuestionMark(extractSrc),
-		Actions:    choiceAnswerActions(choices),
+		RefID:      strings.TrimSpace(opts.refID),
+		Question:   opts.forceQuestion || len(choices) > 0 || endsWithQuestionMark(extractSrc),
+		Actions:    coalesceActions(opts.actions, choiceAnswerActions(choices)),
 	})
 	if err != nil {
 		if d.logger != nil {
@@ -442,6 +449,9 @@ func (d proactiveRelayDeps) RelayNativeToOptions(sessionKey, content string, opt
 	return d.relayNativeToOptions(sessionKey, content, proactiveRelayOptions{
 		workFeedSource:   opts.WorkFeedSource,
 		mirrorTranscript: opts.MirrorTranscript,
+		refID:            opts.RefID,
+		forceQuestion:    opts.ForceQuestion,
+		actions:          opts.Actions,
 	})
 }
 

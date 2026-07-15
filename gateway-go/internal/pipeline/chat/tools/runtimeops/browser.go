@@ -181,3 +181,68 @@ func browserStop(ctx context.Context, c *browserCaller) (string, error) {
 	}
 	return "브라우저 작업 중지 신호를 보냈습니다.", nil
 }
+
+// ApprovalBrowserEnrich reads an electronic-approval document through the Page
+// Agent workstation bridge. The gateway (srv4) orchestrates; the user's logged-in
+// Chrome on the workstation executes. Returns "" when the bridge is off,
+// disconnected, busy, or the read fails — callers then fall back to the phone
+// notification text alone. Never errors: proactive ingest must not abort on a
+// browser hiccup.
+//
+// groupwareURL is the Douzone/Amaranth web base (e.g. https://tsgw.topsolar.kr);
+// empty falls back to a generic "open groupware" instruction.
+func ApprovalBrowserEnrich(ctx context.Context, baseURL, token, groupwareURL, source, text string) string {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if base == "" {
+		return ""
+	}
+	c := &browserCaller{base: base, token: token}
+
+	statusCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	raw, code, err := c.do(statusCtx, http.MethodGet, "/v1/status", nil)
+	if err != nil || code >= 400 {
+		return ""
+	}
+	var st struct {
+		Connected bool `json:"connected"`
+		Busy      bool `json:"busy"`
+	}
+	if json.Unmarshal(raw, &st) != nil || !st.Connected || st.Busy {
+		return ""
+	}
+
+	out, _ := browserExecute(ctx, c, buildApprovalReadTask(groupwareURL, source, text))
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return ""
+	}
+	// Transport / auth / execute failures stay as calm tool strings — treat them
+	// as "no enrichment" so the judgment turn still runs on the notification.
+	if strings.HasPrefix(out, "브라우저 ") && !strings.HasPrefix(out, "브라우저 작업 완료") {
+		return ""
+	}
+	out = strings.TrimPrefix(out, "브라우저 작업 완료.\n\n")
+	out = strings.TrimPrefix(out, "브라우저 작업 완료.")
+	return strings.TrimSpace(out)
+}
+
+func buildApprovalReadTask(groupwareURL, source, text string) string {
+	src := strings.TrimSpace(source)
+	if src == "" {
+		src = "그룹웨어"
+	}
+	site := strings.TrimSpace(groupwareURL)
+	var open string
+	if site != "" {
+		open = fmt.Sprintf("%s 로 이동해 전자결재(아마란스)를 연 뒤", site)
+	} else {
+		open = "전자결재(아마란스/그룹웨어) 화면을 연 뒤"
+	}
+	return fmt.Sprintf(
+		"%s 아래 알림에 해당하는 문서를 찾고, "+
+			"본문·금액·결재선·첨부·마감/긴급도를 한국어로 요약하라. "+
+			"결재를 승인·반려·상신하지 말고 읽기만 하라.\n\n출처: %s\n알림:\n%s",
+		open, src, strings.TrimSpace(text),
+	)
+}
