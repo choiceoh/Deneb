@@ -12,13 +12,18 @@ import (
 // a repeat run stays silent (snapshot persisted), a fall-back-and-re-earn
 // fires again, and a nil OnReady never panics.
 func TestLadderWatchFiresOnceOnReadyTransitionRetriesOnMissingOrFailedCallback(t *testing.T) {
+	// Notify-only path: with auto-graduation on, supply would unlock immediately
+	// and never surface as READY. Pin the kill switch so this test covers the
+	// READY card transition itself.
+	t.Setenv("DENEB_AUTO_GRADUATE", "0")
 	tr := newTestTracker(t)
 	task := &LadderWatchTask{Tracker: tr}
 
 	// Make the staged-sources row READY: one non-allowlist code candidate.
+	// (runtime-error is compiled-dispatchable; use a novel prefix.)
 	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "sk",
-		Title: "runtime error: nil deref", Source: "runtime-error:abcd",
+		Title: "novel finding: triage gap", Source: "novel-miner:abcd",
 	}); err != nil {
 		t.Fatal(err)
 	}

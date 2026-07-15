@@ -20,19 +20,20 @@ func rsiLayerByKey(layers []rsiLayer, key string) rsiLayer {
 
 // TestSourceAutoDispatchesReturnsTrueForGraduatedFalseForStagedSources exercises
 // SourceAutoDispatches, the single graduation predicate the L4 count and the
-// wire projection both read — it must include tool-quality (:desc/:latency) as
-// of the 2026-07-13 graduation, and exclude still-staged sources.
+// wire projection both read — compiled allowlist sources auto-dispatch;
+// unknown prefixes stay staged until ladder supply-graduation.
 func TestSourceAutoDispatchesReturnsTrueForGraduatedFalseForStagedSources(t *testing.T) {
 	graduated := []string{
 		"evolve-tool-gap", "self-harness",
 		"health-finding:volatile-hub:46a3", "tool-quality:web:desc", "tool-quality:exec:latency",
+		"runtime-error:abc", "deadcode-finding:1a2b3c",
 	}
 	for _, s := range graduated {
 		if !SourceAutoDispatches(s) {
 			t.Fatalf("%q should be auto-dispatch (graduated)", s)
 		}
 	}
-	staged := []string{"runtime-error:abc", "deadcode-finding:1a2b3c", "sop-mining:xyz", ""}
+	staged := []string{"sop-mining:xyz", "novel-miner:1", ""}
 	for _, s := range staged {
 		if SourceAutoDispatches(s) {
 			t.Fatalf("%q should be staged (not auto-dispatch)", s)
@@ -289,15 +290,14 @@ func TestCodingDispatchCountsUseOperatorTimezoneDay(t *testing.T) {
 	}
 }
 
-// L4 with only a non-dispatchable code candidate (e.g. the staged runtime-error
-// source, not yet in the dispatch allowlist) is STARVED — code fuel exists but
-// nothing is dispatchable. The staged metric and diagnosis must say so
-// explicitly: supply awaiting review, not a wiring gap.
+// L4 with only a non-dispatchable code candidate (novel prefix not on the
+// compiled allowlist) is STARVED — code fuel exists but nothing is
+// dispatchable until ladder supply-graduation admits the source.
 func TestRSIStatusL4StarvedWhenOnlyStagedNonDispatchableCandidateExists(t *testing.T) {
 	tr := newTestTracker(t)
 	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
-		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "gateway-runtime",
-		Title: "recurring runtime error: x", Source: "runtime-error:abc123",
+		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "novel",
+		Title: "novel finding: x", Source: "novel-miner:abc123",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -316,10 +316,9 @@ func TestRSIStatusL4StarvedWhenOnlyStagedNonDispatchableCandidateExists(t *testi
 	}
 }
 
-// Graduation regression (2026-07-12): health-finding cleared its first batch
-// review and is in the dispatch allowlist — its candidates count dispatchable
-// while a staged runtime-error next to it keeps counting. Supply alone remains
-// IDLE until the authoritative dispatcher records a started lifecycle.
+// health-finding and runtime-error are both on the compiled allowlist
+// (runtime-error graduated 2026-07-15). Supply alone remains IDLE until the
+// authoritative dispatcher records a started lifecycle.
 func TestRSIStatusL4HealthFindingCountsDispatchableAlongsideStagedRuntimeError(t *testing.T) {
 	tr := newTestTracker(t)
 	for _, rec := range []SelfCorrectionCandidateRecord{
@@ -340,21 +339,21 @@ func TestRSIStatusL4HealthFindingCountsDispatchableAlongsideStagedRuntimeError(t
 	if l.State != rsiStateIdle {
 		t.Fatalf("L4 = %s, want IDLE (%s)", l.State, l.Diagnosis)
 	}
-	if got := rsiMetricValue(l.Metrics, "배차 가능"); got != "1" {
-		t.Fatalf("dispatchable metric = %q, want 1 (%+v)", got, l.Metrics)
+	if got := rsiMetricValue(l.Metrics, "배차 가능"); got != "2" {
+		t.Fatalf("dispatchable metric = %q, want 2 (%+v)", got, l.Metrics)
 	}
-	if got := rsiMetricValue(l.Metrics, "검토 대기(비배차)"); got != "1" {
-		t.Fatalf("staged metric = %q, want 1", got)
+	if got := rsiMetricValue(l.Metrics, "검토 대기(비배차)"); got != "0" {
+		t.Fatalf("staged metric = %q, want 0", got)
 	}
 }
 
 // A dispatch-source candidate remains visible as queued supply alongside
-// staged extras without claiming that L4 is already turning.
+// still-staged extras without claiming that L4 is already turning.
 func TestRSIStatus_L4QueuedWithStagedExtras(t *testing.T) {
 	tr := newTestTracker(t)
 	for _, rec := range []SelfCorrectionCandidateRecord{
 		{Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "sk", Title: "tool gap: wiki_search — sk", Source: "evolve-tool-gap"},
-		{Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "gateway-runtime", Title: "recurring runtime error: x", Source: "runtime-error:abc123"},
+		{Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "novel", Title: "novel finding: x", Source: "novel-miner:abc123"},
 	} {
 		if _, err := tr.RecordSelfCorrectionCandidate(rec); err != nil {
 			t.Fatal(err)

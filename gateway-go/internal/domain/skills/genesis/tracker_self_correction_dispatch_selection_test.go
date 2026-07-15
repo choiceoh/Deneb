@@ -82,7 +82,7 @@ func TestSelfCorrectionDispatchEligibleCentralizesReviewDeliveryAndSurfacePolicy
 		{ID: "wrong-scope", Scope: "skill", Status: SelfCorrectionStatusProposed, Source: "health-finding:x"},
 		{ID: "rejected", Scope: "code", Status: SelfCorrectionStatusRejected, Source: "health-finding:x"},
 		{ID: "active", Scope: "code", Status: SelfCorrectionStatusAccepted, Source: "health-finding:x", DispatchPhase: selfCorrectionDispatchStarted},
-		{ID: "staged", Scope: "code", Status: SelfCorrectionStatusProposed, Source: "runtime-error:x"},
+		{ID: "staged", Scope: "code", Status: SelfCorrectionStatusProposed, Source: "novel-miner:x"},
 		{ID: "forbidden-prose", Scope: "code", Status: SelfCorrectionStatusAccepted, Source: "health-finding:x", ProposedChange: "relax validation_engine.go"},
 	}
 	for _, record := range tests {

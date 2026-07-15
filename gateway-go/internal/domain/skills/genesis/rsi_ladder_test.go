@@ -61,12 +61,12 @@ func TestRSIAssessLadderFlipsLiveWhenARowReachesReady(t *testing.T) {
 	// Staged supply: a non-allowlist code candidate makes the review row READY.
 	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "sk",
-		Title: "runtime error: nil deref", Source: "runtime-error:abcd",
+		Title: "novel finding: triage gap", Source: "novel-miner:abcd",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	row = tr.ladderStagedSourcesRow()
-	if row.State != ladderStateReady || !strings.Contains(row.Detail, "runtime-error 1건") {
+	if row.State != ladderStateReady || !strings.Contains(row.Detail, "novel-miner 1건") {
 		t.Fatalf("staged row = %+v", row)
 	}
 

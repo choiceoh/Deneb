@@ -22,11 +22,10 @@ package genesis
 //     the coding-dispatch inherits the CLAUDE.md rules-gate on top.
 //   - Dedup + reopen: one open candidate per SIGNATURE; an APPLIED fix whose
 //     signature recurs after the cooldown re-opens ("the fix did not stick").
-//   - Propose-only + staged: these candidates use a distinct source that the
-//     coding-dispatch does NOT yet accept — they accumulate for review before
-//     the dispatch allowlist is flipped, so no autonomous source edit lands off
-//     an unproven signature.
-//   - Production-gated at registration (reads the live ring, writes shared state).
+	//   - Propose-only + auto-dispatch: source namespace is on rsiDispatchSources
+	//     (graduated 2026-07-15 — first-batch human review dropped). Miners still
+	//     only PROPOSE; coding-dispatch + deploy-watch remain the landing gates.
+	//   - Production-gated at registration (reads the live ring, writes shared state).
 
 import (
 	"context"
@@ -53,10 +52,11 @@ const (
 	runtimeErrorMaxCandidatesPerRun = 2
 	// runtimeErrorRingScan is how many recent error lines to pull from the ring.
 	runtimeErrorRingScan = 3000
-	// runtimeErrorSourcePrefix is the candidate Source namespace. It is
-	// deliberately NOT in coding-dispatch.sh's accepted sources yet: this lane
-	// produces reviewable fuel; enabling auto-dispatch is a separate flip.
-	runtimeErrorSourcePrefix = "runtime-error"
+		// runtimeErrorSourcePrefix is the candidate Source namespace. On the
+		// compiled dispatch allowlist as of 2026-07-15 (first-batch human
+		// review dropped); miners still only propose — landing stays behind
+		// coding-dispatch + deploy-watch.
+		runtimeErrorSourcePrefix = "runtime-error"
 	// runtimeErrorMiningSkill labels these non-skill, runtime-level candidates.
 	runtimeErrorMiningSkill = "gateway-runtime"
 )
