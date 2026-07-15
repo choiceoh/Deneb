@@ -1652,6 +1652,38 @@ func BrowserToolSchema() map[string]any {
 	}
 }
 
+func GroupwareToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "Read-only Amaranth groupware scrape on srv4: status (credentials configured?) | list (recent items for area/folder) | read (open one item by query). Never approve, post, or delete.",
+				"enum":        []string{"status", "list", "read"},
+			},
+			"area": map[string]any{
+				"type":        "string",
+				"description": "Surface — required for list/read: approval (전자결재) | board (게시판). Korean aliases 전자결재·게시판 accepted.",
+				"enum":        []string{"approval", "board"},
+			},
+			"folder": map[string]any{
+				"type":        "string",
+				"description": "Approval inbox only (area=approval). pending=미결문서 | done=기결문서 | cc=수신참조문서 | total=전체결재문서 | all=네 함 순회. Default: list→all, read→pending. Korean aliases 미결·기결·수신참조·전체결재문서·순회. \"전체\" maps to total (전체결재문서). Ignored for board.",
+				"enum":        []string{"pending", "done", "cc", "total", "all"},
+			},
+			"limit": map[string]any{
+				"type":        "integer",
+				"description": "Max list lines to return (default 20, max 50). Ignored for read/status.",
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "Title or keyword. Required for action=read; optional filter hint for list.",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 func PhoneReadToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -1934,6 +1966,7 @@ func ToolMaxOutputs() map[string]int {
 		"contacts":    8000,
 		"deal_ledger": 8000,
 		"exec":        32000,
+		"groupware":   32000,
 		"notebook":    24000,
 		"office":      32000,
 		"wiki":        20000,

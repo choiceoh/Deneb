@@ -53,6 +53,7 @@ type RuntimeOpsToolSet struct {
 	Observe       toolport.ToolFunc
 	Fleet         toolport.ToolFunc
 	Browser       toolport.ToolFunc
+	Groupware     toolport.ToolFunc
 	SpilloverRead toolport.ToolFunc
 }
 
@@ -101,6 +102,20 @@ func RegisterRuntimeOpsTools(registry toolport.ToolRegistrar, set RuntimeOpsTool
 			"\"이 사이트에서 …해줘\" · \"로그인한 페이지에서 폼 채워\" 류에 사용. DENEB_BROWSER_URL 미설정 시 연동 꺼짐.",
 		InputSchema: schema.BrowserToolSchema(),
 		Fn:          set.Browser,
+		Deferred:    true,
+	})
+
+	// Groupware: srv4 headless Amaranth login — 전자결재 + 게시판 read-only.
+	registry.RegisterTool(toolport.ToolDef{
+		Name: "groupware",
+		Description: "아마란스(더존) 그룹웨어 읽기 전용 — 전자결재·게시판. " +
+			"action=status (계정 설정 여부) · list (area=approval|board) · read (area + query=제목/키워드). " +
+			"결재함 folder=pending(미결)·done(기결)·cc(수신참조)·total(전체결재문서)·all(순회; list 기본값). " +
+			"승인·반려·상신·게시글 작성은 하지 않는다. " +
+			"\"미결/기결/수신참조 뭐 있어?\" · \"그 품의 본문 읽어\" · \"게시판 공지 확인해\" 류에 사용. " +
+			"DENEB_GROUPWARE_USER/PASSWORD 미설정 시 연동 꺼짐.",
+		InputSchema: schema.GroupwareToolSchema(),
+		Fn:          set.Groupware,
 		Deferred:    true,
 	})
 
@@ -198,10 +213,11 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 		})
 	}
 	runtimeOps := RuntimeOpsToolSet{
-		Gateway: runtimeops.ToolGateway(deps.WorkspaceDir),
-		Observe: observeFn,
-		Fleet:   runtimeops.ToolFleet(&deps.Fleet),
-		Browser: runtimeops.ToolBrowser(&deps.Browser),
+		Gateway:   runtimeops.ToolGateway(deps.WorkspaceDir),
+		Observe:   observeFn,
+		Fleet:     runtimeops.ToolFleet(&deps.Fleet),
+		Browser:   runtimeops.ToolBrowser(&deps.Browser),
+		Groupware: runtimeops.ToolGroupware(),
 	}
 	if deps.SpilloverStore != nil {
 		runtimeOps.SpilloverRead = artifact.ToolSpilloverRead(deps.SpilloverStore)

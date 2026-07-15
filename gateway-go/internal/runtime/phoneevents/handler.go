@@ -33,6 +33,7 @@ import (
 	"time"
 
 	tokens "github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
@@ -64,6 +65,12 @@ type Config struct {
 	// site-visit recorder can match its geocoded place against project 현장
 	// and log a visit. nil disables site-visit recording.
 	OnLocationPlace func(payload string)
+	// BrowserEnrich, if set, is called for electronic-approval notifications
+	// before the judgment turn. The gateway orchestrates; the workstation Page
+	// Agent bridge reads the user's logged-in Chrome. Return "" to skip
+	// enrichment (bridge off / busy / failure) — judgment still runs on the
+	// notification text alone.
+	BrowserEnrich func(ctx context.Context, source, text string) string
 }
 
 // Handler accepts phone telemetry and runs proactive judgment turns.
@@ -75,6 +82,7 @@ type Handler struct {
 	logger             *slog.Logger
 	ledger             *Ledger
 	onLocationPlace    func(payload string)
+	browserEnrich      func(ctx context.Context, source, text string) string
 }
 
 // New creates a phone-event handler.
@@ -91,6 +99,7 @@ func New(cfg Config) *Handler {
 		logger:             cfg.Logger,
 		ledger:             cfg.Ledger,
 		onLocationPlace:    cfg.OnLocationPlace,
+		browserEnrich:      cfg.BrowserEnrich,
 	}
 }
 
@@ -206,6 +215,10 @@ const phoneEventMaxTokens = 1536
 // tool calls (calendar/wiki/mail/contact lookups) but capped so a wedged turn
 // cannot leak a goroutine past graceful shutdown.
 const phoneEventTurnDeadline = 4 * time.Minute
+
+// phoneEventApprovalDeadline covers a Page Agent read of the e-approval document
+// (browser tool timeout is 10m) plus the subsequent summarization turn.
+const phoneEventApprovalDeadline = 12 * time.Minute
 
 // phoneEventSessionPrefix scopes each event to a throwaway session key
 // ("phone-event:<id>"). Combined with EphemeralUser/Assistant the run persists
@@ -422,29 +435,53 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 	if notificationLikeEvent(eventType) {
 		s.ledger.Append(eventType, source, text)
 	}
+	approval := isElectronicApprovalEvent(source, text)
+	guidance := phoneEventGuidance(eventType)
+	if approval {
+		guidance = electronicApprovalGuidance()
+	}
 	command := fmt.Sprintf(phoneEventPromptTmpl,
 		phoneEventKindLabel(eventType), source, text,
-		fmt.Sprintf(phoneEventGuidance(eventType), tokens.SilentReplyToken))
+		fmt.Sprintf(guidance, tokens.SilentReplyToken))
 
 	safego.GoWithSlog(s.logger, "phone-event-ingest", func() {
-		ctx, cancel := context.WithTimeout(s.shutdownContext, phoneEventTurnDeadline)
+		deadline := phoneEventTurnDeadline
+		if approval {
+			deadline = phoneEventApprovalDeadline
+		}
+		ctx, cancel := context.WithTimeout(s.shutdownContext, deadline)
 		defer cancel()
 
 		// Tiered triage: a cheap tiny-model gate before the expensive tool-calling
 		// judgment turn. For high-volume notification/sms events, skip the full turn
 		// when the tiny model says it's obvious noise (ads/OTP/promo/routine — which
 		// the full judgment would also NO_REPLY) without spending a main-model turn.
+		// Electronic-approval notifications always run (and may enrich via browser).
 		// Rare, intentional events (context/clipboard) skip the gate. Fail-open.
-		if notificationLikeEvent(eventType) && !worthFullJudgment(ctx, source, text) {
+		if !approval && notificationLikeEvent(eventType) && !worthFullJudgment(ctx, source, text) {
 			s.logger.Debug("phone-event tiny-gate dropped", "source", source, "type", eventType)
 			return
+		}
+
+		msg := command
+		approvalDocID := ""
+		if approval && s.browserEnrich != nil {
+			if body := strings.TrimSpace(s.browserEnrich(ctx, source, text)); body != "" {
+				msg = command + "\n\n[브라우저에서 읽은 결재 본문]\n" + body
+				approvalDocID = extractGroupwareDocID(body)
+				s.logger.Info("phone-event approval browser enrich ok",
+					"source", source, "bodyLen", len(body), "docId", approvalDocID)
+			} else {
+				s.logger.Info("phone-event approval browser enrich skipped",
+					"source", source)
+			}
 		}
 
 		maxTok := phoneEventMaxTokens
 		sessionKey := phoneEventSessionPrefix + ":" + shortid.New("e")
 		result, err := s.chatHandler.RunSync(ctx, chatport.SyncRequest{
 			SessionKey:          sessionKey,
-			Message:             command,
+			Message:             msg,
 			MaxTokens:           &maxTok,
 			EphemeralUser:       true, // throwaway session — persist nothing
 			EphemeralAssistant:  true,
@@ -463,7 +500,18 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 			s.logger.Error("phone-event relay unavailable", "source", source, "type", eventType)
 			return
 		}
-		delivered, relayErr := s.relay.RelayNative(output)
+		var delivered bool
+		var relayErr error
+		if approval && approvalDocID != "" {
+			delivered, relayErr = s.relay.RelayNativeToOptions("", output, proactive.Options{
+				WorkFeedSource: workfeed.SourceGroupwareApproval,
+				RefID:          approvalDocID,
+				ForceQuestion:  true,
+				Actions:        groupwareApprovalFeedActions(),
+			})
+		} else {
+			delivered, relayErr = s.relay.RelayNative(output)
+		}
 		if relayErr != nil {
 			s.logger.Error("phone-event relay failed",
 				"source", source, "type", eventType, "error", relayErr)
@@ -471,7 +519,8 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 		}
 		s.logger.Info("phone-event processed",
 			"source", source, "type", eventType,
-			"delivered", delivered, "outputLen", len(output))
+			"delivered", delivered, "outputLen", len(output), "approval", approval,
+			"docId", approvalDocID)
 	})
 }
 

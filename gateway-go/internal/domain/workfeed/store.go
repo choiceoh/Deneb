@@ -25,6 +25,8 @@ const (
 	// only a wiki page + an ephemeral chat summary. Renders with the generic file
 	// glyph (native sourcePainter else-branch — no icon map change needed).
 	SourceDocAnalysis = "doc_analysis"
+	// SourceGroupwareApproval is an Amaranth e-approval card with 승인/반려 chips.
+	SourceGroupwareApproval = "groupware-approval"
 
 	StatusUnread  = "unread"
 	StatusAcked   = "acked"
