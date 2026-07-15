@@ -94,11 +94,14 @@ suspend fun DenebGatewayClient.analyzeApproval(
     },
 )?.toApprovalAnalysis()
 
-private fun GroupwareApprovalAnalysisOut.toApprovalAnalysis(): ApprovalAnalysis? =
-    if (analysis.isBlank()) null else ApprovalAnalysis(
+private fun GroupwareApprovalAnalysisOut.toApprovalAnalysis(): ApprovalAnalysis? = if (analysis.isBlank()) {
+    null
+} else {
+    ApprovalAnalysis(
         text = analysis,
         importance = importance,
         cached = cached,
         createdAt = createdAt,
         durationMs = durationMs,
     )
+}

@@ -126,7 +126,9 @@ fun DenebGroupwareERPScreen(
             Spacer(Modifier.height(12.dp))
             when {
                 failed -> DenebError("ERP 데이터를 불러오지 못했습니다.", onRetry = { scope.launch { load() } })
+
                 text == null -> DenebLoading()
+
                 else -> SelectionContainer {
                     Text(
                         text = text.orEmpty(),
