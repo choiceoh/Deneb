@@ -17,6 +17,7 @@ const (
 	selfCorrectionTypeCandidate = "self_correction_candidate"
 	selfCorrectionTypeReview    = "self_correction_review"
 	selfCorrectionTypeDispatch  = "self_correction_dispatch"
+	selfCorrectionTypeImpact    = "self_correction_impact"
 
 	SelfCorrectionStatusProposed   = string(rsilifecycle.ReviewProposed)
 	SelfCorrectionStatusAccepted   = string(rsilifecycle.ReviewAccepted)
@@ -53,12 +54,14 @@ type SelfCorrectionCandidateRecord struct {
 	// Surface is the declared editable-surface tier summarizing TargetFiles
 	// (editable_surfaces.go): auto-apply | propose-only. Empty on legacy rows
 	// and target-less candidates.
-	Surface        string `json:"surface,omitempty"`
-	ProposedChange string `json:"proposedChange,omitempty"`
-	Risk           string `json:"risk,omitempty"`
-	Source         string `json:"source,omitempty"`
-	Reviewer       string `json:"reviewer,omitempty"`
-	ReviewNote     string `json:"reviewNote,omitempty"`
+	Surface        string                        `json:"surface,omitempty"`
+	ProposedChange string                        `json:"proposedChange,omitempty"`
+	Risk           string                        `json:"risk,omitempty"`
+	Source         string                        `json:"source,omitempty"`
+	Reviewer       string                        `json:"reviewer,omitempty"`
+	ReviewNote     string                        `json:"reviewNote,omitempty"`
+	ImpactContract *SelfCorrectionImpactContract `json:"impactContract,omitempty"`
+	ImpactResult   *SelfCorrectionImpactResult   `json:"impactResult,omitempty"`
 	// Dispatch fields are populated on self_correction_dispatch rows and folded
 	// onto the candidate read model. The review status and delivery status are
 	// deliberately separate: accepted means "approved to try"; applied means a
@@ -97,6 +100,11 @@ func (t *Tracker) RecordSelfCorrectionCandidate(record SelfCorrectionCandidateRe
 	record.SessionKey = strings.TrimSpace(record.SessionKey)
 	record.SkillName = strings.TrimSpace(record.SkillName)
 	record.TargetFiles = cleanSelfCorrectionStrings(record.TargetFiles, 20)
+	impactContract, err := normalizeSelfCorrectionImpactContract(record.ImpactContract)
+	if err != nil {
+		return record, fmt.Errorf("genesis-tracker: invalid self-correction impact contract: %w", err)
+	}
+	record.ImpactContract = impactContract
 	// Declared-surface enforcement (Self-Harness: permission control outside
 	// the loop): a forbidden target rejects the whole candidate at record time,
 	// and the summary tier travels with the record so reviewers see at a glance
@@ -368,6 +376,10 @@ func foldSelfCorrectionRecord(
 	case selfCorrectionTypeDispatch:
 		if found {
 			base = applySelfCorrectionDispatch(base, rec)
+		}
+	case selfCorrectionTypeImpact:
+		if found {
+			base = applySelfCorrectionImpact(base, rec)
 		}
 	case "", selfCorrectionTypeCandidate: // empty type is a legacy candidate row
 		return normalizedSelfCorrectionCandidate(rec), true

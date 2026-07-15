@@ -44,6 +44,9 @@ Safety (mirrors the template lane):
     ``REOPEN_CAP`` twins the signature is permanently blocked.
   - Per-run caps bound queue growth; every candidate carries the bench finding
     ID plus the evidence string so review stays deterministic.
+  - Every filed health candidate carries a deterministic impact contract. On a
+    later run, this same miner closes pending post-deploy observations from the
+    fresh bench instead of relying on a human to declare that the fix worked.
 
 stdlib-only and importable for deterministic tests; the CLI is
 ``scripts/audit/health-finding-miner.py``.
@@ -72,6 +75,7 @@ MAX_STRUCTURAL_PER_RUN = 3
 # run — runtime weaknesses are broad and a queue full of them helps nobody.
 RUNTIME_WEAK_SCORE = 60.0
 MAX_RUNTIME_PER_RUN = 1
+RUNTIME_IMPACT_WINDOW_MS = 24 * 60 * 60 * 1000
 
 # Mirrors genesis selfCorrectionReopenCooldown (2 × the 7d evolution-health
 # window): an applied fix gets this long to prove itself before the same
@@ -142,6 +146,13 @@ def structural_candidates(report: dict[str, Any]) -> list[dict[str, Any]]:
             "proposedChange": proposed,
             "risk": _RISK_NOTE,
             "source": f"{SOURCE_PREFIX}:{fid}",
+            "impactContract": {
+                "metric": f"health.finding_present:{fid}",
+                "direction": "decrease",
+                "baseline": 1,
+                "target": 0,
+                "minSamples": 1,
+            },
         })
     return out
 
@@ -191,6 +202,14 @@ def runtime_candidates(runtime: dict[str, Any] | None) -> list[dict[str, Any]]:
             ),
             "risk": _RISK_NOTE,
             "source": f"{SOURCE_PREFIX}:runtime-{name}",
+            "impactContract": {
+                "metric": f"runtime.health.score:{name}",
+                "direction": "increase",
+                "baseline": score,
+                "target": RUNTIME_WEAK_SCORE,
+                "minSamples": 1,
+                "observationWindowMs": RUNTIME_IMPACT_WINDOW_MS,
+            },
         })
     return out
 
@@ -308,6 +327,90 @@ def record_candidate(base_url: str, token: str, cand: dict[str, Any]) -> str:
     payload = call_rpc(base_url, "miniapp.self_improvement_coding.record", cand, token)
     recorded = payload.get("candidate") or {}
     return str(recorded.get("id") or "?")
+
+
+def pending_impact_observations(
+    existing: list[dict[str, Any]],
+    structural_report: dict[str, Any],
+    runtime_report: dict[str, Any] | None,
+    now_ms: int,
+) -> tuple[list[dict[str, Any]], list[tuple[str, str]]]:
+    """Build post-watch observations from fresh deterministic bench output.
+
+    Only contracts owned by this miner are interpreted. Unknown metrics remain
+    pending for their own evaluator rather than being guessed here.
+    """
+    finding_ids = {
+        str(finding["id"])
+        for finding in structural_report.get("findings") or []
+        if finding.get("id")
+    }
+    runtime_dims = (runtime_report or {}).get("dims") or {}
+    runtime_meta = (runtime_report or {}).get("meta") or {}
+    runtime_samples = runtime_meta.get("runs")
+    if not isinstance(runtime_samples, (int, float)) or runtime_samples < 1:
+        runtime_samples = 1
+
+    observations: list[dict[str, Any]] = []
+    skipped: list[tuple[str, str]] = []
+    for candidate in existing:
+        result = candidate.get("impactResult") or {}
+        if result.get("status") != "pending":
+            continue
+        cid = str(candidate.get("id") or "?")
+        attempt_id = str(candidate.get("attemptId") or "").strip()
+        contract = candidate.get("impactContract") or {}
+        metric = str(contract.get("metric") or "")
+        if not attempt_id:
+            skipped.append((cid, "pending candidate has no dispatch attempt"))
+            continue
+        try:
+            ready_at = int(candidate.get("updatedAt") or 0) + int(
+                contract.get("observationWindowMs") or 0
+            )
+        except (TypeError, ValueError):
+            skipped.append((cid, "invalid observation window"))
+            continue
+        if now_ms < ready_at:
+            skipped.append((cid, f"observation window pending until {ready_at}"))
+            continue
+
+        if metric.startswith("health.finding_present:"):
+            finding_id = metric.removeprefix("health.finding_present:")
+            observed = 1 if finding_id in finding_ids else 0
+            samples = 1
+            note = (
+                f"fresh health bench: finding {finding_id} "
+                f"{'still present' if observed else 'absent'}"
+            )
+        elif metric.startswith("runtime.health.score:"):
+            dimension = metric.removeprefix("runtime.health.score:")
+            value = runtime_dims.get(dimension)
+            if not isinstance(value, (int, float)):
+                skipped.append((cid, f"runtime dimension unavailable: {dimension}"))
+                continue
+            observed = float(value)
+            samples = int(runtime_samples)
+            note = f"fresh runtime health bench: {dimension}={observed:g}"
+        else:
+            skipped.append((cid, f"metric owned by another evaluator: {metric or '?'}"))
+            continue
+
+        observations.append({
+            "id": cid,
+            "attemptId": attempt_id,
+            "observed": observed,
+            "samples": samples,
+            "note": note,
+        })
+    return observations, skipped
+
+
+def record_impact(base_url: str, token: str, observation: dict[str, Any]) -> str:
+    payload = call_rpc(
+        base_url, "miniapp.self_improvement_coding.impact", observation, token
+    )
+    return str(payload.get("impactStatus") or "?")
 
 
 # --- bench runners (thin subprocess edges) ---------------------------------------
@@ -464,6 +567,29 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
     to_file = structural_sel + runtime_sel
     skipped = structural_skip + runtime_skip
 
+    impact_observations, impact_skipped = pending_impact_observations(
+        existing, report, runtime, now_ms
+    )
+    impact_evaluated: list[dict[str, str]] = []
+    impact_errors: list[str] = []
+    for observation in impact_observations:
+        if args.dry_run:
+            print(
+                f"DRY-RUN would evaluate impact: {observation['id']} "
+                f"observed={observation['observed']}",
+                file=out,
+            )
+            continue
+        try:
+            status = record_impact(base_url, token, observation)
+            impact_evaluated.append({"id": observation["id"], "status": status})
+            print(f"impact {status}  {observation['id']}", file=out)
+        except GatewayError as exc:
+            impact_errors.append(f"{observation['id']}: {exc}")
+            print(f"impact rejected  {observation['id']}: {exc}", file=err)
+    for cid, reason in impact_skipped:
+        print(f"impact skip {cid}: {reason}", file=out)
+
     filed: list[dict[str, str]] = []
     errors: list[str] = []
     for cand in to_file:
@@ -490,13 +616,21 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
         "rejected": len(errors),
         "dry_run": bool(args.dry_run),
         "candidates": filed,
+        "impactPlanned": len(impact_observations),
+        "impactEvaluated": len(impact_evaluated),
+        "impactPending": len(impact_skipped),
+        "impactRejected": len(impact_errors),
+        "impacts": impact_evaluated,
     }
     if args.json:
         print(json.dumps(summary, ensure_ascii=False), file=out)
     else:
         print(
             f"health-finding-miner: planned={summary['planned']} filed={summary['filed']} "
-            f"skipped={summary['skipped']} rejected={summary['rejected']}"
+            f"skipped={summary['skipped']} rejected={summary['rejected']} "
+            f"impact-evaluated={summary['impactEvaluated']} "
+            f"impact-pending={summary['impactPending']} "
+            f"impact-rejected={summary['impactRejected']}"
             + (" (dry-run)" if args.dry_run else ""),
             file=out,
         )

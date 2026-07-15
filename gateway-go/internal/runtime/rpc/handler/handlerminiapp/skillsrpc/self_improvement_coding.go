@@ -18,6 +18,8 @@ import (
 // Wire type aliases — see handlerminiapp/self_improvement_coding_contract.go.
 type (
 	SelfCorrectionCandidate             = handlerminiapp.SelfCorrectionCandidate
+	SelfCorrectionImpactContract        = handlerminiapp.SelfCorrectionImpactContract
+	SelfCorrectionImpactResult          = handlerminiapp.SelfCorrectionImpactResult
 	SelfImprovementCodingStatusCount    = handlerminiapp.SelfImprovementCodingStatusCount
 	SelfImprovementCodingFunnel         = handlerminiapp.SelfImprovementCodingFunnel
 	SelfImprovementCodingListResponse   = handlerminiapp.SelfImprovementCodingListResponse
@@ -39,6 +41,9 @@ type SelfImprovementCodingDeps struct {
 	// RecordDispatch appends one authoritative delivery event (started -> PR ->
 	// merged -> deployed -> watched/rolled back). Optional for read-only servers.
 	RecordDispatch func(genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error)
+	// RecordImpact appends a deterministic usefulness verdict after the exact
+	// dispatch attempt reaches watch_passed.
+	RecordImpact func(genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error)
 	// Funnel reports capture-side activity (optional — zero summary when absent).
 	Funnel func() genesis.SelfCorrectionFunnelSummary
 	// LastNudgeAtMs reports when the heartbeat self-coding review lane last
@@ -60,7 +65,47 @@ func SelfImprovementCodingMethods(deps SelfImprovementCodingDeps) map[string]rpc
 	if deps.RecordDispatch != nil {
 		methods["miniapp.self_improvement_coding.dispatch"] = selfImprovementCodingDispatch(deps)
 	}
+	if deps.RecordImpact != nil {
+		methods["miniapp.self_improvement_coding.impact"] = selfImprovementCodingImpact(deps)
+	}
 	return methods
+}
+
+// selfImprovementCodingImpact records observations only; the tracker owns the
+// terminal usefulness classification and rejects pre-watch or stale attempts.
+func selfImprovementCodingImpact(deps SelfImprovementCodingDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID                  string   `json:"id"`
+		AttemptID           string   `json:"attemptId"`
+		Observed            float64  `json:"observed"`
+		Samples             int      `json:"samples"`
+		GuardrailViolations []string `json:"guardrailViolations"`
+		Note                string   `json:"note"`
+	}
+	return minibind.Bind[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		if strings.TrimSpace(p.ID) == "" {
+			return rpcerr.MissingParam("id").Response(req.ID)
+		}
+		if strings.TrimSpace(p.AttemptID) == "" {
+			return rpcerr.MissingParam("attemptId").Response(req.ID)
+		}
+		record, err := deps.RecordImpact(genesis.SelfCorrectionCandidateRecord{
+			ID:        p.ID,
+			AttemptID: p.AttemptID,
+			ImpactResult: &genesis.SelfCorrectionImpactResult{
+				Observed:            p.Observed,
+				Samples:             p.Samples,
+				GuardrailViolations: p.GuardrailViolations,
+				Note:                p.Note,
+			},
+		})
+		if err != nil {
+			return rpcerr.WrapValidationFailed("self-correction impact rejected", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"ok": true, "id": strings.TrimSpace(p.ID), "impactStatus": record.ImpactResult.Status,
+		})
+	})
 }
 
 // selfImprovementCodingDispatch records one deterministic delivery transition.
@@ -132,16 +177,17 @@ func selfImprovementCodingDispatch(deps SelfImprovementCodingDeps) rpcutil.Handl
 // so no RPC caller can inject a pre-approved edit.
 func selfImprovementCodingRecord(deps SelfImprovementCodingDeps) rpcutil.HandlerFunc {
 	type params struct {
-		Scope          string   `json:"scope"`
-		SkillName      string   `json:"skillName"`
-		Title          string   `json:"title"`
-		Candidate      string   `json:"candidate"`
-		Evidence       string   `json:"evidence"`
-		Reason         string   `json:"reason"`
-		TargetFiles    []string `json:"targetFiles"`
-		ProposedChange string   `json:"proposedChange"`
-		Risk           string   `json:"risk"`
-		Source         string   `json:"source"`
+		Scope          string                        `json:"scope"`
+		SkillName      string                        `json:"skillName"`
+		Title          string                        `json:"title"`
+		Candidate      string                        `json:"candidate"`
+		Evidence       string                        `json:"evidence"`
+		Reason         string                        `json:"reason"`
+		TargetFiles    []string                      `json:"targetFiles"`
+		ProposedChange string                        `json:"proposedChange"`
+		Risk           string                        `json:"risk"`
+		Source         string                        `json:"source"`
+		ImpactContract *SelfCorrectionImpactContract `json:"impactContract"`
 	}
 	return minibind.Bind[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		// Provenance is mandatory: source-less rows are indistinguishable from
@@ -164,6 +210,7 @@ func selfImprovementCodingRecord(deps SelfImprovementCodingDeps) rpcutil.Handler
 			ProposedChange: p.ProposedChange,
 			Risk:           p.Risk,
 			Source:         p.Source,
+			ImpactContract: genesisImpactContract(p.ImpactContract),
 		})
 		if err != nil {
 			// Includes record-time forbidden-surface rejections — the candidate
@@ -293,6 +340,8 @@ func selfCorrectionCandidate(rec genesis.SelfCorrectionCandidateRecord) SelfCorr
 		AutoDispatch:   rec.Scope == "code" && genesis.SourceAutoDispatches(rec.Source),
 		Reviewer:       rec.Reviewer,
 		ReviewNote:     textutil.TruncateRunes(rec.ReviewNote, lifecycleTextMaxRunes, "…"),
+		ImpactContract: selfCorrectionImpactContract(rec.ImpactContract),
+		ImpactResult:   selfCorrectionImpactResult(rec),
 		EvidenceKinds:  selfCorrectionEvidenceKinds(rec),
 		ReviewActions:  selfCorrectionReviewActions(rec),
 		DispatchPhase:  rec.DispatchPhase,
@@ -305,6 +354,46 @@ func selfCorrectionCandidate(rec genesis.SelfCorrectionCandidateRecord) SelfCorr
 		OutcomeNote:    textutil.TruncateRunes(rec.OutcomeNote, lifecycleTextMaxRunes, "…"),
 		CreatedAt:      rec.CreatedAt,
 		UpdatedAt:      rec.UpdatedAt,
+	}
+}
+
+func genesisImpactContract(contract *SelfCorrectionImpactContract) *genesis.SelfCorrectionImpactContract {
+	if contract == nil {
+		return nil
+	}
+	return &genesis.SelfCorrectionImpactContract{
+		Metric: contract.Metric, Direction: contract.Direction,
+		Baseline: contract.Baseline, Target: contract.Target,
+		MinSamples: contract.MinSamples, ObservationWindowMs: contract.ObservationWindowMs,
+		Guardrails: contract.Guardrails,
+	}
+}
+
+func selfCorrectionImpactContract(contract *genesis.SelfCorrectionImpactContract) *SelfCorrectionImpactContract {
+	if contract == nil {
+		return nil
+	}
+	return &SelfCorrectionImpactContract{
+		Metric: contract.Metric, Direction: contract.Direction,
+		Baseline: contract.Baseline, Target: contract.Target,
+		MinSamples: contract.MinSamples, ObservationWindowMs: contract.ObservationWindowMs,
+		Guardrails: contract.Guardrails,
+	}
+}
+
+func selfCorrectionImpactResult(rec genesis.SelfCorrectionCandidateRecord) *SelfCorrectionImpactResult {
+	status := genesis.SelfCorrectionImpactStatus(rec)
+	if status == "" {
+		return nil
+	}
+	if rec.ImpactResult == nil {
+		return &SelfCorrectionImpactResult{Status: status}
+	}
+	return &SelfCorrectionImpactResult{
+		Status: status, Observed: rec.ImpactResult.Observed, Samples: rec.ImpactResult.Samples,
+		GuardrailViolations: rec.ImpactResult.GuardrailViolations,
+		Note:                textutil.TruncateRunes(rec.ImpactResult.Note, lifecycleTextMaxRunes, "…"),
+		CheckedAt:           rec.ImpactResult.CheckedAt,
 	}
 }
 

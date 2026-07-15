@@ -14,10 +14,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
@@ -781,6 +782,12 @@ func (s *Server) earlySelfImprovementMethods() map[string]rpcutil.HandlerFunc {
 				return genesis.SelfCorrectionCandidateRecord{}, errors.New("genesis tracker unavailable")
 			}
 			return s.genesisTracker.RecordSelfCorrectionDispatch(rec)
+		},
+		RecordImpact: func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
+			if s.genesisTracker == nil {
+				return genesis.SelfCorrectionCandidateRecord{}, errors.New("genesis tracker unavailable")
+			}
+			return s.genesisTracker.RecordSelfCorrectionImpact(rec)
 		},
 		Funnel: func() genesis.SelfCorrectionFunnelSummary {
 			if s.genesisTracker == nil {
