@@ -50,6 +50,8 @@ type GroupwareApprovalsDeps struct {
 	Cache   *groupware.ApprovalAnalysisStore
 	// ListERP powers miniapp.groupware.erp.list (stock/po/…/people/board).
 	ListERP func(ctx context.Context, area, folder, query string, limit int) (string, error)
+	// ReadBoard powers miniapp.groupware.board.get (one post body by id/title).
+	ReadBoard func(ctx context.Context, query string) (string, error)
 }
 
 // GroupwareApprovalsMethods returns the miniapp.groupware.* map, or nil when
@@ -71,6 +73,9 @@ func GroupwareApprovalsMethods(deps GroupwareApprovalsDeps) map[string]rpcutil.H
 	}
 	if deps.ListERP != nil {
 		m["miniapp.groupware.erp.list"] = groupwareERPList(deps)
+	}
+	if deps.ReadBoard != nil {
+		m["miniapp.groupware.board.get"] = groupwareBoardGet(deps)
 	}
 	return m
 }
@@ -311,6 +316,23 @@ func groupwareERPList(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc {
 			Query:  strings.TrimSpace(p.Query),
 			Text:   text,
 		})
+	})
+}
+
+func groupwareBoardGet(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc {
+	type params struct {
+		Query string `json:"query"`
+	}
+	return bindAuthenticated[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		query := strings.TrimSpace(p.Query)
+		if query == "" {
+			return rpcerr.MissingParam("query").Response(req.ID)
+		}
+		text, err := deps.ReadBoard(ctx, query)
+		if err != nil {
+			return rpcerr.WrapDependencyFailed("read groupware board post", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, GroupwareBoardPostResponse{Query: query, Text: text})
 	})
 }
 

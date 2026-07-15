@@ -594,6 +594,24 @@ class MiniappWireValueContractTest {
             invalidValue = JsonObject(mapOf("not" to JsonPrimitive("a-list"))),
         ),
         wireContract(
+            name = "GroupwareBoardPostResponse",
+            serializer = GroupwareBoardPostResponse.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "query",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "text",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "query",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
             name = "GroupwareERPListResponse",
             serializer = GroupwareERPListResponse.serializer(),
             fields = listOf(

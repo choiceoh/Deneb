@@ -129,6 +129,11 @@ export interface GroupwareApprovalsListResponse {
   folder?: string
 }
 
+export interface GroupwareBoardPostResponse {
+  query?: string
+  text?: string
+}
+
 export interface GroupwareERPListResponse {
   area?: string
   folder?: string

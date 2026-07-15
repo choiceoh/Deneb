@@ -69,3 +69,11 @@ type GroupwareERPListResponse struct {
 	Query  string `json:"query,omitempty"`
 	Text   string `json:"text"`
 }
+
+// GroupwareBoardPostResponse is miniapp.groupware.board.get (one 게시판 post body).
+//
+//deneb:wire
+type GroupwareBoardPostResponse struct {
+	Query string `json:"query"`
+	Text  string `json:"text"`
+}

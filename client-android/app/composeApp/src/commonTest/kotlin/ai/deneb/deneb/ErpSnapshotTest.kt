@@ -29,11 +29,12 @@ class ErpSnapshotTest {
     }
 
     @Test
-    fun dropsInternalIdSegments() {
+    fun liftsIdSegmentIntoRefId() {
         val blocks = parseErpSnapshot("게시판 최근 글 (5건)\n\n1. 하계휴가 안내 · 작성 국연정 · 일자 2026-07-02 · id=17106")
         val row = blocks.filterIsInstance<ErpBlock.Row>().single()
         assertEquals("하계휴가 안내", row.title)
         assertEquals("작성 국연정 · 일자 2026-07-02", row.meta)
+        assertEquals("17106", row.refId)
     }
 
     @Test

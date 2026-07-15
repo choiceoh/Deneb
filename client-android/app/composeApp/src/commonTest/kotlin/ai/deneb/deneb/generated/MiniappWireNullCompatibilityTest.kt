@@ -508,6 +508,18 @@ class MiniappWireNullCompatibilityTest {
             field = "folder",
         ),
         nullContract(
+            name = "GroupwareBoardPostResponse.query",
+            serializer = GroupwareBoardPostResponse.serializer(),
+            empty = GroupwareBoardPostResponse(),
+            field = "query",
+        ),
+        nullContract(
+            name = "GroupwareBoardPostResponse.text",
+            serializer = GroupwareBoardPostResponse.serializer(),
+            empty = GroupwareBoardPostResponse(),
+            field = "text",
+        ),
+        nullContract(
             name = "GroupwareERPListResponse.area",
             serializer = GroupwareERPListResponse.serializer(),
             empty = GroupwareERPListResponse(),

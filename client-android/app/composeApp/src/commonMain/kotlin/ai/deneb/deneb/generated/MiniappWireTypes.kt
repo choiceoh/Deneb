@@ -166,6 +166,13 @@ data class GroupwareApprovalsListResponse(
 
 @Immutable
 @Serializable
+data class GroupwareBoardPostResponse(
+    val query: String = "",
+    val text: String = "",
+)
+
+@Immutable
+@Serializable
 data class GroupwareERPListResponse(
     val area: String = "",
     val folder: String = "",

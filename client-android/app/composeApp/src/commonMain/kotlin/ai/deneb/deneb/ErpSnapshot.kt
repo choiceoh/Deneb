@@ -11,7 +11,8 @@ sealed interface ErpBlock {
 
     data class Section(val label: String) : ErpBlock
 
-    data class Row(val index: Int, val title: String, val meta: String) : ErpBlock
+    /** [refId] carries a hidden `id=` segment (board post id) for open-on-tap. */
+    data class Row(val index: Int, val title: String, val meta: String, val refId: String = "") : ErpBlock
 }
 
 private val erpRowRegex = Regex("""^\s*(\d+)\.\s+(.+)$""")
@@ -38,9 +39,12 @@ fun parseErpSnapshot(raw: String): List<ErpBlock> {
             flushSummary()
             val segs = row.groupValues[2].split(" · ")
             val title = segs.first().trim()
-            // Internal ids are agent plumbing, not operator info.
-            val meta = segs.drop(1).map(String::trim).filterNot { it.startsWith("id=") }
-            blocks += ErpBlock.Row(row.groupValues[1].toInt(), title, meta.joinToString(" · "))
+            // Internal ids stay out of the display but ride along as refId so a
+            // board row can open its post.
+            val rest = segs.drop(1).map(String::trim)
+            val refId = rest.firstOrNull { it.startsWith("id=") }?.removePrefix("id=").orEmpty()
+            val meta = rest.filterNot { it.startsWith("id=") }
+            blocks += ErpBlock.Row(row.groupValues[1].toInt(), title, meta.joinToString(" · "), refId)
             continue
         }
         if (t.endsWith(":")) {

@@ -504,6 +504,13 @@ func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return groupware.ListERP(ctx, cfg, area, folder, query, limit)
 			},
+			ReadBoard: func(ctx context.Context, query string) (string, error) {
+				cfg, ok := groupware.FromEnv()
+				if !ok {
+					return "", fmt.Errorf("groupware credentials unset")
+				}
+				return groupware.ReadBoardPost(ctx, cfg, query)
+			},
 		}),
 	}
 }
