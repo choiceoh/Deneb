@@ -53,6 +53,10 @@ class DenebWebViewState(
     /** Drop known ad/tracker network requests in the Android WebView. */
     var adBlockEnabled by mutableStateOf(adBlockEnabled)
 
+    /** Subresource requests dropped by adblock since the current page started. */
+    var adBlockedCount by mutableStateOf(0)
+        internal set
+
     // Monotonic command ticks the actual observes via LaunchedEffect, so a
     // repeated tap (reload twice) still fires.
     internal var goBackTick by mutableStateOf(0)

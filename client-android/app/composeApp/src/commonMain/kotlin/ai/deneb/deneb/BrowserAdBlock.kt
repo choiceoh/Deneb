@@ -2,53 +2,46 @@ package ai.deneb.deneb
 
 /**
  * Lightweight network ad/tracker blocking for the in-app translation browser.
- * Host-suffix + path heuristics only — no EasyList parser, no cosmetic CSS
+ * Host-suffix + path/query heuristics only — no EasyList parser, no cosmetic CSS
  * (keeps the translate DOM walker undisturbed).
  */
 
 /** Host suffixes that are almost always ad/tracker delivery (not first-party content). */
 internal val BROWSER_AD_HOST_SUFFIXES: Set<String> = setOf(
+    // Google / DoubleClick
     "doubleclick.net",
     "googlesyndication.com",
     "googleadservices.com",
     "googletagservices.com",
-    "pagead2.googlesyndication.com",
     "adservice.google.com",
     "adservice.google.co.kr",
+    "adtrafficquality.google",
+    "2mdn.net",
+    // Amazon / social ads
     "amazon-adsystem.com",
     "ads-twitter.com",
+    "ads.linkedin.com",
     "ads.yahoo.com",
     "advertising.com",
+    "pixel.facebook.com",
+    "an.facebook.com",
+    // Exchanges / SSPs
     "adnxs.com",
     "adsafeprotected.com",
     "adform.net",
     "adcolony.com",
     "adsrvr.org",
-    "adtrafficquality.google",
-    "taboola.com",
-    "outbrain.com",
-    "criteo.com",
-    "criteo.net",
     "casalemedia.com",
     "pubmatic.com",
     "rubiconproject.com",
     "openx.net",
     "moatads.com",
-    "scorecardresearch.com",
-    "quantserve.com",
-    "2mdn.net",
     "media.net",
-    "mgid.com",
-    "revcontent.com",
     "smartadserver.com",
     "serving-sys.com",
     "yieldmo.com",
     "bidswitch.net",
     "contextweb.com",
-    "exelator.com",
-    "bluekai.com",
-    "rlcdn.com",
-    "liadm.com",
     "3lift.com",
     "sharethrough.com",
     "sovrn.com",
@@ -59,34 +52,87 @@ internal val BROWSER_AD_HOST_SUFFIXES: Set<String> = setOf(
     "unityads.unity3d.com",
     "applovin.com",
     "mopub.com",
+    "creativecdn.com",
+    "targetingsource.com",
+    // Content recommendation / native ads
+    "taboola.com",
+    "outbrain.com",
+    "criteo.com",
+    "criteo.net",
+    "mgid.com",
+    "revcontent.com",
+    // Analytics / session replay (noise for reading)
+    "scorecardresearch.com",
+    "quantserve.com",
     "chartbeat.com",
     "hotjar.com",
     "mouseflow.com",
     "fullstory.com",
     "clarity.ms",
+    "google-analytics.com",
+    // Mobile attribution
     "branch.io",
     "appsflyer.com",
     "adjust.com",
     "kochava.com",
-    "sentry-cdn.com",
+    // Korea / APAC common ad nets (news & commerce)
+    "ad.daum.net",
+    "display.ad.daum.net",
+    "analytics.ad.daum.net",
+    "ad.kakao.com",
+    "ads.kakao.com",
+    "displayad.kakao.com",
+    "ad.naver.com",
+    "adn.naver.com",
+    "siape.veta.naver.com",
+    "veta.naver.com",
+    "realclick.co.kr",
+    "adison.co",
+    "adison.biz",
+    "ad.about.co.kr",
+    "ads-partners.coupang.com",
+    "linkprice.com",
+    "ad.mail.ru",
+    "yandexadexchange.net",
+    "ads.yahoo.co.jp",
 )
 
-/** Path / query fragments that usually mark ad creatives or trackers. */
-private val BROWSER_AD_PATH_MARKERS: List<String> = listOf(
+/** Slash-bounded path segments that mark ad creatives / delivery.
+ *  Avoid bare "/ad/" — it false-positives on "/admin/". */
+private val BROWSER_AD_PATH_SEGMENTS: List<String> = listOf(
     "/pagead/",
     "/pagead2/",
     "/adsense/",
-    "/ads/",
     "/adserver/",
     "/ad-delivery/",
     "/adx/",
-    "googleads.",
+    "/gampad/",
+    "/adsbygoogle",
+    "/ads/",
+)
+
+/** Host-ish tokens that appear inside ad CDN URLs. */
+private val BROWSER_AD_PATH_HOSTISH: List<String> = listOf(
     "googlesyndication",
     "doubleclick",
-    "/pixel.",
-    "/pixels/",
-    "/beacon/",
+    "googleads.",
     "adsystem",
+    "amazon-adsystem",
+)
+
+/** Query keys that almost always mean ad or tracking pixels. */
+private val BROWSER_AD_QUERY_MARKERS: List<String> = listOf(
+    "google_ads",
+    "google_ad_",
+    "ad_slot=",
+    "adunit=",
+    "adunitid=",
+    "ad_type=",
+    "adsense",
+    "gampad",
+    "pagead",
+    "fb_pixel",
+    "fbevents",
 )
 
 /**
@@ -98,34 +144,42 @@ internal fun shouldBlockBrowserAdRequest(url: String, isForMainFrame: Boolean = 
     val raw = url.trim()
     if (raw.isEmpty()) return false
     val lower = raw.lowercase()
-    // data:/blob:/about: never ads
     if (lower.startsWith("data:") || lower.startsWith("blob:") || lower.startsWith("about:")) return false
 
     val host = browserRequestHost(lower) ?: return false
-    if (BROWSER_AD_HOST_SUFFIXES.any { host == it || host.endsWith(".$it") }) return true
+    if (isBrowserAdHost(host)) return true
 
-    // Path heuristics — only on known ad-ish hosts or clear /ads/ paths on any host.
     val pathAndQuery = lower.substringAfter("://", missingDelimiterValue = lower).substringAfter('/', missingDelimiterValue = "")
     val marked = "/$pathAndQuery"
-    if (BROWSER_AD_PATH_MARKERS.any { marked.contains(it) }) {
-        // Avoid nuking first-party content paths like "/ads/" on obscure sites? Still usually ads.
-        // Skip when the marker is only inside a non-ad host's document path that looks like content
-        // (e.g. example.com/blog/ads-policy) — require slash-bounded "/ads/" or ad host already matched.
-        if (marked.contains("/pagead/") ||
-            marked.contains("/pagead2/") ||
-            marked.contains("/adsense/") ||
-            marked.contains("/adserver/") ||
-            marked.contains("/ad-delivery/") ||
-            marked.contains("googlesyndication") ||
-            marked.contains("doubleclick") ||
-            marked.contains("adsystem") ||
-            marked.contains("/ads/") ||
-            marked.contains("/adx/")
-        ) {
-            return true
-        }
-    }
+
+    if (BROWSER_AD_PATH_SEGMENTS.any { marked.contains(it) }) return true
+    if (BROWSER_AD_PATH_HOSTISH.any { marked.contains(it) }) return true
+    if (marked.contains("/pixel.") || marked.contains("/pixels/") || marked.contains("/beacon/")) return true
+
+    val query = marked.substringAfter('?', missingDelimiterValue = "")
+    if (query.isNotEmpty() && BROWSER_AD_QUERY_MARKERS.any { query.contains(it) }) return true
     return false
+}
+
+internal fun isBrowserAdHost(host: String): Boolean = BROWSER_AD_HOST_SUFFIXES.any { host == it || host.endsWith(".$it") }
+
+/**
+ * MIME hint for the empty [android.webkit.WebResourceResponse] so script/CSS
+ * intercepts don't trip type mismatches as often as text/plain.
+ */
+internal fun browserBlockedResponseMime(url: String): String {
+    val path = url.lowercase().substringBefore('?').substringBefore('#')
+    return when {
+        path.endsWith(".js") || path.endsWith(".mjs") -> "application/javascript"
+        path.endsWith(".css") -> "text/css"
+        path.endsWith(".json") -> "application/json"
+        path.endsWith(".svg") -> "image/svg+xml"
+        path.endsWith(".png") -> "image/png"
+        path.endsWith(".gif") -> "image/gif"
+        path.endsWith(".jpg") || path.endsWith(".jpeg") || path.endsWith(".webp") -> "image/jpeg"
+        path.endsWith(".woff") || path.endsWith(".woff2") || path.endsWith(".ttf") -> "application/octet-stream"
+        else -> "text/plain"
+    }
 }
 
 internal fun browserRequestHost(urlLower: String): String? {
@@ -136,7 +190,6 @@ internal fun browserRequestHost(urlLower: String): String? {
     }
     val authority = afterScheme.substringBefore('/').substringBefore('?').substringBefore('#')
     if (authority.isBlank()) return null
-    // strip userinfo and port
     val hostPort = authority.substringAfter('@')
     return hostPort.substringBefore(':').trim('.').takeIf { it.isNotBlank() }
 }

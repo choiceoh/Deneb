@@ -25,6 +25,7 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import java.io.ByteArrayInputStream
+import java.util.concurrent.atomic.AtomicInteger
 
 private val webViewJson = Json { ignoreUnknownKeys = true }
 
@@ -53,6 +54,8 @@ actual fun DenebWebView(
         factory = { ctx ->
             WebView(ctx).also { web ->
                 holder.web = web
+                val adBlockHits = AtomicInteger(0)
+                val mainHandler = Handler(Looper.getMainLooper())
                 web.settings.javaScriptEnabled = true
                 web.settings.domStorageEnabled = true
                 web.addJavascriptInterface(TranslateBridge(scope, translate, holder), BRIDGE_NAME)
@@ -66,20 +69,26 @@ actual fun DenebWebView(
                         if (!shouldBlockBrowserAdRequest(url, isForMainFrame = request.isForMainFrame)) {
                             return null
                         }
-                        return emptyBlockedResponse()
+                        val n = adBlockHits.incrementAndGet()
+                        mainHandler.post { state.adBlockedCount = n }
+                        return emptyBlockedResponse(url)
                     }
 
                     @Deprecated("Deprecated in Java")
                     override fun shouldInterceptRequest(view: WebView, url: String): WebResourceResponse? {
                         if (!state.adBlockEnabled) return null
                         if (!shouldBlockBrowserAdRequest(url, isForMainFrame = false)) return null
-                        return emptyBlockedResponse()
+                        val n = adBlockHits.incrementAndGet()
+                        mainHandler.post { state.adBlockedCount = n }
+                        return emptyBlockedResponse(url)
                     }
 
                     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                         state.currentUrl = url
                         state.pageTitle = ""
                         state.loading = true
+                        adBlockHits.set(0)
+                        state.adBlockedCount = 0
                         state.canGoBack = view.canGoBack()
                         state.canGoForward = view.canGoForward()
                     }
@@ -228,8 +237,8 @@ private fun encodeStringList(values: List<String>): String = webViewJson.encodeT
 private fun jsStringLiteral(value: String): String = webViewJson.encodeToString(String.serializer(), value)
 
 /** Empty successful response used to drop ad/tracker subresource requests. */
-private fun emptyBlockedResponse(): WebResourceResponse = WebResourceResponse(
-    "text/plain",
+private fun emptyBlockedResponse(url: String): WebResourceResponse = WebResourceResponse(
+    browserBlockedResponseMime(url),
     "utf-8",
     ByteArrayInputStream(ByteArray(0)),
 )
