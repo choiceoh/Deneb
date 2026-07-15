@@ -105,19 +105,18 @@ func RegisterRuntimeOpsTools(registry toolport.ToolRegistrar, set RuntimeOpsTool
 		Deferred:    true,
 	})
 
-	// Groupware: srv4 headless Amaranth login — 전자결재 + 게시판 read-only.
+	// Groupware: srv4 headless Amaranth — 전자결재·게시판·매출·재고·발주·입고·출고·단가.
+	// Eager: ops asks about 재고/출고/매출 often; fetch_tools round-trip was pure latency.
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "groupware",
-		Description: "아마란스(더존) 그룹웨어 읽기 전용 — 전자결재·게시판. " +
-			"action=status (계정 설정 여부) · list (area=approval|board) · read (본문+결재선+표, 첨부는 제목만) · " +
-			"attachment (read가 준 doc_id로 첨부 1개만 골라 다운로드·추출; 필요할 때만). " +
-			"결재함 folder=pending(미결)·done(기결)·cc(수신참조)·total(전체결재문서)·all(순회; list 기본값). " +
-			"승인·반려·상신·게시글 작성은 하지 않는다. " +
-			"\"미결/기결/수신참조 뭐 있어?\" · \"그 품의 본문 읽어\" · \"영수증 첨부 확인해\" · \"게시판 공지 확인해\" 류에 사용. " +
-			"DENEB_GROUPWARE_USER/PASSWORD 미설정 시 연동 꺼짐.",
+		Description: "아마란스(더존) 그룹웨어 읽기 전용 — 전자결재·게시판·매출마감·재고·발주·입고·출고·품목단가. " +
+			"action=status|list|read|attachment|summary. " +
+			"area=approval|board|sales|stock|po|receive|ship|price. " +
+			"결재함 folder=pending|done|cc|total|all · ERP 기간 folder=ytd|month|today|year|last_year. " +
+			"query=키워드 또는 YYYYMMDD:YYYYMMDD · price는 모듈→M-/인버터→I- · lines:로 전표라인. " +
+			"승인·반려·상신·전표 작성은 하지 않는다. DENEB_GROUPWARE_USER/PASSWORD 미설정 시 연동 꺼짐.",
 		InputSchema: schema.GroupwareToolSchema(),
 		Fn:          set.Groupware,
-		Deferred:    true,
 	})
 
 	// Spillover: read full content of a previously spilled large tool result.
