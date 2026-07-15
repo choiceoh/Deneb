@@ -4,12 +4,16 @@ import ai.deneb.network.httpTeardownTolerantHandler
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebExpandIn
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebInsightContainer
+import ai.deneb.ui.denebShrinkOut
 import ai.deneb.ui.markdown.MarkdownContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +27,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,6 +36,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,8 +58,7 @@ import kotlinx.coroutines.withContext
 private val approvalTeardownHandler = httpTeardownTolerantHandler("ApprovalDetail")
 
 /**
- * 전자결재 상세 — AI 분석(캐시 우선) 위, 본문 아래, 미결 시 하단 승인/반려.
- * 메일 상세 패리티를 따르되 Q&A·접기 없이 단순하게 유지.
+ * 전자결재 상세 — AI 분석 위, 결재선·첨부는 접기, 본문 분리, 미결 시 하단 고정 승인/반려.
  */
 @Composable
 fun DenebApprovalDetailScreen(
@@ -75,6 +81,8 @@ fun DenebApprovalDetailScreen(
     var loadFailed by remember(docId) { mutableStateOf(false) }
     var acting by remember(docId) { mutableStateOf(false) }
     var pendingAct by remember(docId) { mutableStateOf<String?>(null) }
+    var lineOpen by remember(docId) { mutableStateOf(false) }
+    var attachOpen by remember(docId) { mutableStateOf(false) }
 
     suspend fun load() {
         loadFailed = false
@@ -126,94 +134,157 @@ fun DenebApprovalDetailScreen(
     }
 
     DenebScreenScaffold(title = "결재", onBack = onBack, tabBar = navigationTabBar) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp),
-        ) {
-            Spacer(Modifier.height(8.dp))
-            val doc = body
-            if (doc == null) {
-                if (loadFailed) {
-                    DenebError("결재 문서를 불러오지 못했습니다.", onRetry = { scope.launch { load() } })
-                } else {
-                    DenebLoading()
+        Column(Modifier.fillMaxWidth().weight(1f)) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp),
+            ) {
+                Spacer(Modifier.height(8.dp))
+                val doc = body
+                if (doc == null) {
+                    if (loadFailed) {
+                        DenebError("결재 문서를 불러오지 못했습니다.", onRetry = { scope.launch { load() } })
+                    } else {
+                        DenebLoading()
+                    }
+                    return@Column
                 }
-                return@Column
-            }
 
-            Text(
-                text = title.ifBlank { doc.title }.ifBlank { "(제목 없음)" },
-                style = DenebType.subject,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(6.dp))
-            val meta = listOfNotNull(
-                drafter.takeIf { it.isNotBlank() }?.let { "기안 $it" },
-                date.takeIf { it.isNotBlank() },
-            ).joinToString(" · ")
-            if (meta.isNotBlank()) {
-                Text(meta, style = DenebType.meta, color = denebHint())
-            }
-            Spacer(Modifier.height(16.dp))
+                val sections = remember(doc.body) { parseApprovalDocBody(doc.body) }
 
-            ApprovalAnalysisCard(
-                analysis = analysis,
-                analyzing = analyzing,
-                failed = analysisFailed,
-                onRerun = {
-                    haptics.tap()
-                    runAnalysis(force = true)
-                },
-            )
-
-            Spacer(Modifier.height(16.dp))
-            HorizontalDivider(color = denebHairline())
-            Spacer(Modifier.height(12.dp))
-            Text("본문", style = DenebType.sectionLabel, color = denebHint())
-            Spacer(Modifier.height(8.dp))
-            // Same renderer as chat/피드 — Amaranth bodies ship GFM tables (and
-            // occasional <br> cell breaks). Plain Text leaked raw "| … |" pipes.
-            SelectionContainer {
-                if (doc.body.isBlank()) {
-                    Text(
-                        "(본문 없음)",
-                        style = DenebType.body,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                } else {
-                    MarkdownContent(
-                        content = doc.body,
-                        modifier = Modifier.fillMaxWidth(),
-                        baseStyle = DenebType.body,
-                    )
+                Text(
+                    text = title.ifBlank { doc.title }.ifBlank { "(제목 없음)" },
+                    style = DenebType.subject,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(6.dp))
+                val meta = listOfNotNull(
+                    drafter.takeIf { it.isNotBlank() }?.let { "기안 $it" },
+                    date.takeIf { it.isNotBlank() },
+                ).joinToString(" · ")
+                if (meta.isNotBlank()) {
+                    Text(meta, style = DenebType.meta, color = denebHint())
                 }
-            }
 
-            if (canAct) {
-                Spacer(Modifier.height(20.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(
-                        onClick = {
+                Spacer(Modifier.height(16.dp))
+                ApprovalAnalysisCard(
+                    analysis = analysis,
+                    analyzing = analyzing,
+                    failed = analysisFailed,
+                    onRerun = {
+                        haptics.tap()
+                        runAnalysis(force = true)
+                    },
+                )
+
+                if (sections.meta.isNotBlank()) {
+                    ApprovalSectionGap()
+                    Text("문서 정보", style = DenebType.sectionLabel, color = denebHint())
+                    Spacer(Modifier.height(8.dp))
+                    SelectionContainer {
+                        Text(sections.meta, style = DenebType.body, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+
+                if (sections.line.isNotBlank()) {
+                    ApprovalSectionGap()
+                    ApprovalDisclosure(
+                        title = "결재선",
+                        teaser = if (sections.lineCount > 0) "${sections.lineCount}명" else null,
+                        expanded = lineOpen,
+                        onToggle = {
                             haptics.tap()
-                            pendingAct = "approve"
+                            lineOpen = !lineOpen
                         },
-                        enabled = !acting,
-                        modifier = Modifier.weight(1f),
-                    ) { Text("승인") }
-                    FilledTonalButton(
-                        onClick = {
-                            haptics.reject()
-                            pendingAct = "reject"
+                    ) {
+                        SelectionContainer {
+                            Text(sections.line, style = DenebType.body, color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
+
+                if (sections.attachments.isNotBlank()) {
+                    ApprovalSectionGap()
+                    ApprovalDisclosure(
+                        title = "첨부",
+                        teaser = when {
+                            sections.attachmentCount > 0 -> "${sections.attachmentCount}건"
+
+                            sections.attachmentHeader.isNotBlank() ->
+                                sections.attachmentHeader.removePrefix("첨부").trim()
+
+                            else -> null
                         },
-                        enabled = !acting,
-                        modifier = Modifier.weight(1f),
-                    ) { Text("반려") }
+                        expanded = attachOpen,
+                        onToggle = {
+                            haptics.tap()
+                            attachOpen = !attachOpen
+                        },
+                    ) {
+                        SelectionContainer {
+                            Text(
+                                sections.attachments,
+                                style = DenebType.body,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                }
+
+                ApprovalSectionGap()
+                Text("본문", style = DenebType.sectionLabel, color = denebHint())
+                Spacer(Modifier.height(8.dp))
+                SelectionContainer {
+                    val content = sections.body.ifBlank { doc.body }
+                    if (content.isBlank()) {
+                        Text(
+                            "(본문 없음)",
+                            style = DenebType.body,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    } else {
+                        MarkdownContent(
+                            content = content,
+                            modifier = Modifier.fillMaxWidth(),
+                            baseStyle = DenebType.body,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+
+            // Sticky act bar — always visible while scrolling the body (미결 only).
+            if (canAct && body != null) {
+                HorizontalDivider(color = denebHairline())
+                Surface(tonalElevation = 2.dp) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        FilledTonalButton(
+                            onClick = {
+                                haptics.tap()
+                                pendingAct = "approve"
+                            },
+                            enabled = !acting,
+                            modifier = Modifier.weight(1f),
+                        ) { Text("승인") }
+                        FilledTonalButton(
+                            onClick = {
+                                haptics.reject()
+                                pendingAct = "reject"
+                            },
+                            enabled = !acting,
+                            modifier = Modifier.weight(1f),
+                        ) { Text("반려") }
+                    }
                 }
             }
-            Spacer(Modifier.height(24.dp))
         }
     }
 
@@ -252,6 +323,58 @@ fun DenebApprovalDetailScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun ApprovalSectionGap() {
+    Spacer(Modifier.height(16.dp))
+    HorizontalDivider(color = denebHairline())
+    Spacer(Modifier.height(12.dp))
+}
+
+@Composable
+private fun ApprovalDisclosure(
+    title: String,
+    teaser: String?,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(onClick = onToggle)
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, style = DenebType.sectionLabel, color = denebHint())
+            if (!expanded && !teaser.isNullOrBlank()) {
+                Text(
+                    " · $teaser",
+                    style = DenebType.meta,
+                    color = denebHint(),
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f).padding(start = 4.dp),
+                )
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
+            Icon(
+                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (expanded) "$title 접기" else "$title 펼치기",
+                tint = denebHint(),
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        AnimatedVisibility(visible = expanded, enter = denebExpandIn, exit = denebShrinkOut) {
+            Column {
+                Spacer(Modifier.height(6.dp))
+                content()
+            }
+        }
     }
 }
 
