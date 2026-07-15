@@ -144,6 +144,7 @@ class DenebClientMailReadOverlayTest {
         assertEquals("분석중", mailRowAnalysisStatusLabel(MailWorkState(analysisStatus = "analyzing")))
         assertEquals("대기", mailRowAnalysisStatusLabel(MailWorkState(analysisStatus = "queued")))
         assertEquals("재분석", mailRowAnalysisStatusLabel(MailWorkState(analysisStatus = "stale")))
+        assertEquals("검토", mailRowAnalysisStatusLabel(MailWorkState(analysisStatus = "review")))
     }
 
     @Test

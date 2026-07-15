@@ -43,6 +43,8 @@ type AnalyzePipeline interface {
 // ignorant of the wiki package's frontmatter/page types.
 type WikiAnalysisInput struct {
 	MsgID           string
+	ThreadID        string
+	MessageIDHeader string
 	Subject         string
 	From            string
 	Date            string
@@ -98,7 +100,7 @@ func applyMailWorkAnalysis(out *mailAnalysisOut, st gmailops.WorkMessageState) {
 	out.FeedStatus = st.FeedStatus
 	out.CalendarProposalCount = st.CalendarProposalCount
 	out.TodoCount = st.TodoCount
-	out.WorkStateHint = st.LastError
+	out.WorkStateHint = st.Hint()
 }
 
 func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
@@ -214,6 +216,8 @@ func gmailAnalyze(deps GmailAnalyzeDeps) rpcutil.HandlerFunc {
 		if deps.SaveToWiki != nil {
 			_ = deps.SaveToWiki(WikiAnalysisInput{
 				MsgID:           msg.ID,
+				ThreadID:        msg.ThreadID,
+				MessageIDHeader: msg.MessageIDHeader,
 				Subject:         msg.Subject,
 				From:            msg.From,
 				Date:            date,

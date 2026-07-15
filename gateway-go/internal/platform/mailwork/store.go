@@ -25,6 +25,7 @@ const (
 	AnalysisDone      = "done"
 	AnalysisFailed    = "failed"
 	AnalysisStale     = "stale"
+	AnalysisReview    = "review"
 
 	FeedCreated = "created"
 	FeedFailed  = "failed"
@@ -71,6 +72,7 @@ type MessageState struct {
 	AnalysisQuality       string `json:"analysisQuality,omitempty"`
 	AnalysisDurationMs    int64  `json:"analysisDurationMs,omitempty"`
 	AnalysisUpdatedAtMs   int64  `json:"analysisUpdatedAtMs,omitempty"`
+	ReviewReason          string `json:"reviewReason,omitempty"`
 	FeedStatus            string `json:"feedStatus,omitempty"`
 	FeedUpdatedAtMs       int64  `json:"feedUpdatedAtMs,omitempty"`
 	CalendarProposalCount int    `json:"calendarProposalCount,omitempty"`
@@ -174,6 +176,14 @@ func (s *Store) MarkAnalysisAnalyzing(in MessageInput) (MessageState, error) {
 	return s.markAnalysis(in, AnalysisAnalyzing, "", nil)
 }
 
+// MarkAnalysisReview records a metadata-only item that autonomous analysis did
+// not trust. Manual analysis may transition it through analyzing to done.
+func (s *Store) MarkAnalysisReview(in MessageInput, reason string) (MessageState, error) {
+	return s.markAnalysis(in, AnalysisReview, "", func(ms *MessageState) {
+		ms.ReviewReason = truncateError(reason)
+	})
+}
+
 // MarkAnalysisDone records a successful analysis and known derived counts.
 func (s *Store) MarkAnalysisDone(in AnalysisInput) (MessageState, error) {
 	if strings.TrimSpace(in.ID) == "" {
@@ -190,6 +200,7 @@ func (s *Store) MarkAnalysisDone(in AnalysisInput) (MessageState, error) {
 		ms.AnalysisQuality = strings.TrimSpace(in.Quality)
 		ms.AnalysisDurationMs = maxInt64(0, in.DurationMs)
 		ms.AnalysisUpdatedAtMs = now
+		ms.ReviewReason = ""
 		if in.DerivedCountsKnown {
 			ms.CalendarProposalCount = nonNegativeInt(in.CalendarProposalCount)
 			ms.TodoCount = nonNegativeInt(in.TodoCount)
@@ -242,12 +253,24 @@ func (s *Store) markAnalysis(in MessageInput, status, lastError string, extra fu
 		ms.AnalysisStatus = status
 		ms.AnalysisUpdatedAtMs = now
 		ms.LastError = truncateError(lastError)
+		if status != AnalysisReview {
+			ms.ReviewReason = ""
+		}
 		if extra != nil {
 			extra(&ms)
 		}
 		ms.UpdatedAtMs = now
 		return ms
 	})
+}
+
+// Hint returns the operator-facing explanation for the current state without
+// overloading review decisions as analysis errors.
+func (ms MessageState) Hint() string {
+	if ms.AnalysisStatus == AnalysisReview && strings.TrimSpace(ms.ReviewReason) != "" {
+		return ms.ReviewReason
+	}
+	return ms.LastError
 }
 
 func (s *Store) markFeed(id, status string, err error) (MessageState, error) {

@@ -71,10 +71,18 @@ type Config struct {
 	// callback is only for native workflow observability.
 	OnAnalysisFailed func(msg *gmail.MessageDetail, err error)
 
-	// MailStoreSink, when set, mirrors each Gmail message fetched in a poll cycle
-	// into the local mailstore so it is searchable via the mail_archive tool (and
-	// the app mail get action) without an API round-trip. Best-effort, idempotent
-	// by Message-ID. nil = skip (LMTP intake still fills the store).
+	// SenderTrustFn runs on metadata only, before autonomous intake fetches or
+	// stores a body. nil preserves the legacy trusted-by-default behavior.
+	SenderTrustFn func(msg *gmail.MessageDetail) SenderTrustDecision
+
+	// OnSenderReview persists a metadata-only review item when SenderTrustFn
+	// returns SenderReview. A review item is terminal for autonomous intake but
+	// remains manually analyzable from the mail detail screen.
+	OnSenderReview func(msg *gmail.MessageDetail, decision SenderTrustDecision) error
+
+	// MailStoreSink, when set, mirrors trusted mail into the local mailstore so it
+	// is searchable via mail_archive without an API round-trip. Review items are
+	// mirrored with metadata only. Best-effort and idempotent by Message-ID.
 	MailStoreSink func(mailarchive.ContextMessage) (bool, error)
 
 	// ProjectsFn lists registered project wiki pages so analysis can cite
@@ -240,7 +248,18 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	}
 
 	s.log.Info("새 메일 발견", "count", len(newMessages))
-	details := s.fetchMessageDetails(ctx, client.GetMessage, newMessages, pollState)
+	trustedMessages, reviewed := s.partitionPollMessages(newMessages, pollState)
+	if reviewed > 0 {
+		// Persist successful review decisions before any trusted mail enters the
+		// fallible LLM path. Otherwise an all-failed analysis would replay review
+		// items on the next cycle.
+		s.saveState(pollState)
+	}
+	if len(trustedMessages) == 0 {
+		s.finishPoll(pollState)
+		return nil
+	}
+	details := s.fetchMessageDetails(ctx, client.GetMessage, trustedMessages, pollState)
 
 	if len(details) == 0 {
 		s.finishPoll(pollState)
@@ -252,7 +271,7 @@ func (s *Service) poll(ctx context.Context, client *gmail.Client) error {
 	// Batch analysis: each email analyzed individually + one consolidated report.
 	report, items, analysisErr := s.batchAnalyze(ctx, client, details)
 	if report, ok := s.resolvePollAnalysis(details, report, items, analysisErr); ok {
-		s.finishAnalyzedPoll(ctx, client, pollState, newMessages, details, report, items, analysisErr)
+		s.finishAnalyzedPoll(ctx, client, pollState, trustedMessages, details, report, items, analysisErr)
 	}
 	return nil
 }
@@ -326,6 +345,28 @@ func (s *Service) selectNewMessages(messages []gmail.MessageSummary, pollState *
 	return newMessages
 }
 
+func (s *Service) partitionPollMessages(messages []gmail.MessageSummary, pollState *PollState) ([]gmail.MessageSummary, int) {
+	trusted := make([]gmail.MessageSummary, 0, len(messages))
+	reviewed := 0
+	for _, summary := range messages {
+		metadata := messageDetailFromSummary(summary)
+		decision := s.senderTrustDecision(metadata)
+		if decision.Disposition != SenderReview {
+			trusted = append(trusted, summary)
+			continue
+		}
+		if err := s.recordSenderReview(metadata, decision); err != nil {
+			s.log.Warn("발신자 검토 상태 저장 실패; 다음 폴링에서 재시도", "id", summary.ID, "error", err)
+			continue
+		}
+		s.mirrorMessage("Gmail", metadata)
+		pollState.markSeen(summary.ID)
+		reviewed++
+		s.log.Info("미확인 발신자 메일 검토 대기", "id", summary.ID, "from", oneLine(summary.From))
+	}
+	return trusted, reviewed
+}
+
 func (s *Service) finishNoMessagePoll(pollState *PollState) {
 	s.log.Debug("새 메일 없음")
 	pollState.LastPollAt = time.Now().UnixMilli()
@@ -370,14 +411,18 @@ func messageDetailFromSummary(summary gmail.MessageSummary) *gmail.MessageDetail
 }
 
 func (s *Service) mirrorPollMessages(details []*gmail.MessageDetail) {
-	if s.cfg.MailStoreSink == nil {
+	for _, detail := range details {
+		s.mirrorMessage("Gmail", detail)
+	}
+}
+
+func (s *Service) mirrorMessage(mailbox string, msg *gmail.MessageDetail) {
+	if s.cfg.MailStoreSink == nil || msg == nil {
 		return
 	}
-	for _, detail := range details {
-		message := mailarchive.ContextMessageFromDetail("Gmail", detail.ID, detail, 0)
-		if _, err := s.cfg.MailStoreSink(message); err != nil {
-			s.log.Warn("gmailpoll mailstore put 실패", "id", detail.ID, "error", err)
-		}
+	message := mailarchive.ContextMessageFromDetail(mailbox, msg.ID, msg, 0)
+	if _, err := s.cfg.MailStoreSink(message); err != nil {
+		s.log.Warn("mailstore put 실패", "id", msg.ID, "error", err)
 	}
 }
 
@@ -559,11 +604,24 @@ func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail, a
 	if msg == nil {
 		return AnalysisResult{}, fmt.Errorf("email message is required")
 	}
+	decision := s.senderTrustDecision(msg)
+	if decision.Disposition == SenderReview {
+		if err := s.recordSenderReview(msg, decision); err != nil {
+			return AnalysisResult{}, err
+		}
+		s.mirrorMessage("INBOX", messageMetadataOnly(msg))
+		s.log.Info("미확인 발신자 메일 검토 대기", "id", msg.ID, "from", oneLine(msg.From))
+		return AnalysisResult{}, nil
+	}
 	// Read s.gmailClient under the lock the poll loop writes it with, so a
 	// concurrent lazy-init in Run() can't race this read.
 	s.mu.Lock()
 	gmailClient := s.gmailClient
 	s.mu.Unlock()
+
+	// Only trusted mail enters the searchable local archive. The upstream MTA
+	// remains the record for review items, whose Deneb state is metadata-only.
+	s.mirrorMessage("INBOX", msg)
 
 	// 대용량첨부: resolve large-file download links in the HTML body into real
 	// attachment bytes BEFORE the attachment gate/closure below, so they are OCR'd

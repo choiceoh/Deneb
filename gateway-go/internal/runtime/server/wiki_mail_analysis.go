@@ -11,6 +11,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -72,12 +73,30 @@ func buildMailAnalysisPage(in handlermail.WikiAnalysisInput) *wiki.Page {
 
 	var body strings.Builder
 	body.WriteString("> From: ")
-	body.WriteString(in.From)
+	body.WriteString(mailMetadataLine(in.From))
 	body.WriteString("\n> Date: ")
-	body.WriteString(in.Date)
+	body.WriteString(mailMetadataLine(in.Date))
 	body.WriteString("\n> Message ID: `")
-	body.WriteString(in.MsgID)
-	body.WriteString("`\n\n")
+	body.WriteString(mailMetadataLine(in.MsgID))
+	body.WriteString("`\n> Source: `")
+	body.WriteString(mailSourceLocator(in.MsgID))
+	body.WriteString("`")
+	if link := gmailThreadLink(in.ThreadID); link != "" {
+		body.WriteString(" ([Gmail 원문](")
+		body.WriteString(link)
+		body.WriteString("))")
+	}
+	if threadID := mailMetadataLine(in.ThreadID); threadID != "" {
+		body.WriteString("\n> Thread ID: `")
+		body.WriteString(threadID)
+		body.WriteString("`")
+	}
+	if messageID := mailMetadataLine(in.MessageIDHeader); messageID != "" {
+		body.WriteString("\n> RFC Message-ID: `")
+		body.WriteString(messageID)
+		body.WriteString("`")
+	}
+	body.WriteString("\n\n")
 	body.WriteString(in.Analysis)
 
 	return &wiki.Page{
@@ -92,9 +111,34 @@ func buildMailAnalysisPage(in handlermail.WikiAnalysisInput) *wiki.Page {
 			Type:       "log",
 			Confidence: "medium",
 			Importance: 0.3,
+			Resource:   mailSourceLocator(in.MsgID),
 		},
 		Body: body.String(),
 	}
+}
+
+func mailSourceLocator(msgID string) string {
+	return "mail:" + mailMetadataLine(msgID)
+}
+
+func gmailThreadLink(threadID string) string {
+	threadID = mailMetadataLine(threadID)
+	if threadID == "" {
+		return ""
+	}
+	u := url.URL{
+		Scheme:   "https",
+		Host:     "mail.google.com",
+		Path:     "/mail/u/0/",
+		Fragment: "all/" + threadID,
+	}
+	return u.String()
+}
+
+// Header values are untrusted. Keep each provenance field on exactly one line
+// so a forged folded header cannot inject wiki markdown or metadata rows.
+func mailMetadataLine(value string) string {
+	return strings.Join(strings.Fields(value), " ")
 }
 
 // senderDomain pulls "domain.tld" from a From header. Handles both raw
@@ -181,6 +225,8 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, mailanalysis.
 		if s.wikiStore != nil {
 			page := buildMailAnalysisPage(handlermail.WikiAnalysisInput{
 				MsgID:           msg.ID,
+				ThreadID:        msg.ThreadID,
+				MessageIDHeader: msg.MessageIDHeader,
 				Subject:         msg.Subject,
 				From:            msg.From,
 				Date:            msg.Date,
@@ -264,6 +310,26 @@ func (s *Server) makeMailAnalysisFailureSink() func(*gmail.MessageDetail, error)
 		}, err); werr != nil {
 			s.logger.Warn("mail workflow failure 상태 저장 실패", "id", msg.ID, "error", werr)
 		}
+	}
+}
+
+func (s *Server) makeMailSenderReviewSink() func(*gmail.MessageDetail, mailanalysis.SenderTrustDecision) error {
+	workStore := mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json"))
+	return func(msg *gmail.MessageDetail, decision mailanalysis.SenderTrustDecision) error {
+		if msg == nil || strings.TrimSpace(msg.ID) == "" {
+			return nil
+		}
+		_, err := workStore.MarkAnalysisReview(mailwork.MessageInput{
+			ID:       msg.ID,
+			ThreadID: msg.ThreadID,
+			From:     msg.From,
+			Subject:  msg.Subject,
+			Date:     msg.Date,
+		}, decision.Reason)
+		if err != nil {
+			s.logger.Warn("mail workflow 검토 상태 저장 실패", "id", msg.ID, "error", err)
+		}
+		return err
 	}
 }
 

@@ -75,6 +75,8 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 		AttachmentExtractFn: toolbind.ExtractAttachmentText,
 		PromptOverride:      s.promptOverride,
 		ThinkingKwarg:       s.mailStage2ThinkingKwarg(),
+		SenderTrustFn:       s.mailSenderTrustDecision,
+		OnSenderReview:      s.makeMailSenderReviewSink(),
 	}
 
 	if pollCfg.IntervalMin != nil {
@@ -236,9 +238,14 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		OnAnalyzed:          s.makeMailAnalysisSink(),
 		OnDelivered:         s.makeMailFeedDeliverySink(),
 		OnAnalysisFailed:    s.makeMailAnalysisFailureSink(),
+		SenderTrustFn:       s.mailSenderTrustDecision,
+		OnSenderReview:      s.makeMailSenderReviewSink(),
 		ProjectsFn:          s.projectCandidatesFn(),
 		ThreadSource:        threadSource,
 		ThinkingKwarg:       s.mailStage2ThinkingKwarg(),
+	}
+	if s.mailStore != nil {
+		cfg.MailStoreSink = s.mailStore.Put
 	}
 	if s.wikiStore != nil && s.wikiStore.DiaryDir() != "" {
 		cfg.DiaryDir = s.wikiStore.DiaryDir()
@@ -297,16 +304,6 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		queued, err := queue.Enqueue(m)
 		if err != nil {
 			return err // 451: MTA retries; no post-ACK loss
-		}
-		// Mirror the parsed message into the local store so the mail_archive tool
-		// reads it without an IMAP round-trip. Best-effort: a store failure must
-		// not fail delivery (the durable queue + IMAP archive stay the records of
-		// record). Idempotent by Message-ID, so a re-delivery re-Puts harmlessly.
-		if s.mailStore != nil && m.Detail != nil {
-			cm := mailarchive.ContextMessageFromDetail("INBOX", "", m.Detail, 0)
-			if _, perr := s.mailStore.Put(cm); perr != nil {
-				s.logger.Warn("mailstore put 실패(분석은 계속)", "key", m.DedupKey, "error", perr)
-			}
 		}
 		if !queued {
 			s.logger.Info("LMTP 중복 메일 건너뜀 (이미 큐에 있음)", "key", m.DedupKey, "subject", m.Detail.Subject)

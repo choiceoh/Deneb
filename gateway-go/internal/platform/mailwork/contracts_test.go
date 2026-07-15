@@ -28,6 +28,7 @@ func TestNilAndEmptyStoreContracts(t *testing.T) {
 	for _, call := range []func() (MessageState, error){
 		func() (MessageState, error) { return nilStore.RememberMessage(MessageInput{ID: "id"}) },
 		func() (MessageState, error) { return nilStore.MarkAnalysisAnalyzing(MessageInput{ID: "id"}) },
+		func() (MessageState, error) { return nilStore.MarkAnalysisReview(MessageInput{ID: "id"}, "unknown") },
 		func() (MessageState, error) {
 			return nilStore.MarkAnalysisDone(AnalysisInput{MessageInput: MessageInput{ID: "id"}})
 		},
@@ -126,15 +127,32 @@ func TestSummarizeAllStatesContract(t *testing.T) {
 		"analyzing":    {AnalysisStatus: AnalysisAnalyzing, TodoCount: 2, UpdatedAtMs: 15},
 		"queued":       {AnalysisStatus: AnalysisQueued, UpdatedAtMs: 5},
 		"failed":       {AnalysisStatus: AnalysisFailed, FeedStatus: FeedFailed, UpdatedAtMs: 8},
+		"review":       {AnalysisStatus: AnalysisReview, ReviewReason: "unknown", UpdatedAtMs: 9},
 		"stale":        {AnalysisStatus: AnalysisStale, CalendarProposalCount: -1, TodoCount: -1, UpdatedAtMs: 2},
 	}
 	got := summarize(msgs)
-	want := Summary{Messages: 6, Analyzed: 2, Analyzing: 2, Failed: 1, FeedCreated: 1, FeedMissing: 1, CalendarCandidates: 3, TodoCandidates: 3, UpdatedAtMs: 20}
+	want := Summary{Messages: 7, Analyzed: 2, Analyzing: 2, Failed: 1, FeedCreated: 1, FeedMissing: 1, CalendarCandidates: 3, TodoCandidates: 3, UpdatedAtMs: 20}
 	if got != want {
 		t.Fatalf("summary = %+v, want %+v", got, want)
 	}
 	if got := summarize(nil); got != (Summary{}) {
 		t.Fatalf("nil summary = %+v", got)
+	}
+}
+
+func TestReviewStateTransitionsAndHintContract(t *testing.T) {
+	s := New(filepath.Join(t.TempDir(), "state.json"))
+	reviewed, err := s.MarkAnalysisReview(MessageInput{ID: "mail", From: "new@example.test"}, "  unknown sender  ")
+	if err != nil || reviewed.AnalysisStatus != AnalysisReview || reviewed.ReviewReason != "unknown sender" || reviewed.Hint() != "unknown sender" || reviewed.LastError != "" {
+		t.Fatalf("reviewed = %+v/%v", reviewed, err)
+	}
+	analyzing, err := s.MarkAnalysisAnalyzing(MessageInput{ID: "mail"})
+	if err != nil || analyzing.AnalysisStatus != AnalysisAnalyzing || analyzing.ReviewReason != "" || analyzing.Hint() != "" {
+		t.Fatalf("analyzing = %+v/%v", analyzing, err)
+	}
+	failed, err := s.MarkAnalysisFailed(MessageInput{ID: "mail"}, errors.New("provider down"))
+	if err != nil || failed.Hint() != "provider down" {
+		t.Fatalf("failed = %+v/%v", failed, err)
 	}
 }
 
