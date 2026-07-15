@@ -2,9 +2,11 @@ package web
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
 
@@ -489,8 +491,10 @@ func TestRankFetchCandidatesPrefersAnswerBoxAndSkipsSocial(t *testing.T) {
 		{URL: "https://good.example/article"},
 		{URL: "https://pinterest.com/pin/9"},
 		{URL: "https://news.example/story"},
+		{URL: "https://www.linkedin.com/pulse/x"},
+		{URL: "https://www.youtube.com/@SomeChannel"},
 	}
-	got := rankFetchCandidates("https://answer.example/box", organic, 3)
+	got := rankFetchCandidates("", "https://answer.example/box", organic, 4)
 	want := []string{
 		"https://answer.example/box",
 		"https://good.example/article",
@@ -503,6 +507,109 @@ func TestRankFetchCandidatesPrefersAnswerBoxAndSkipsSocial(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("got %v, want %v", got, want)
 		}
+	}
+}
+
+func TestRankFetchCandidatesQueryOverlapAndDiversity(t *testing.T) {
+	organic := []searchResult{
+		{Title: "Unrelated shop", URL: "https://a.example/cart", Description: "buy now"},
+		{Title: "Deneb star facts", URL: "https://wiki.example/deneb", Description: "Deneb is a star"},
+		{Title: "Also deneb", URL: "https://blog.wiki.example/post", Description: "more deneb"},
+		{Title: "Other topic", URL: "https://news.example/x", Description: "politics"},
+	}
+	got := rankFetchCandidates("Deneb star", "", organic, 3)
+	if len(got) < 2 || got[0] != "https://wiki.example/deneb" {
+		t.Fatalf("expected deneb wiki first, got %v", got)
+	}
+	// blog.wiki.example shares eTLD+1 with wiki.example under naive registrableDomain
+	// (example) — actually wiki.example vs blog.wiki.example → example vs example?
+	// wiki.example → example (last 2: wiki.example → wait parts=["wiki","example"] → wiki.example)
+	// blog.wiki.example → parts=["blog","wiki","example"] → wiki.example
+	// so second deneb URL should be demoted/skipped by eTLD diversity in filter.
+	for _, u := range got {
+		if strings.Contains(u, "/cart") {
+			t.Fatalf("cart path should be filtered: %v", got)
+		}
+		if strings.Contains(u, "blog.wiki.example") {
+			t.Fatalf("same eTLD+1 as wiki.example should be filtered: %v", got)
+		}
+	}
+}
+
+func TestAssessFetchResultStructured(t *testing.T) {
+	errA := assessFetchResult(formatFetchError(webFetchErr{Code: "http_403", Message: "no"}), nil)
+	if !errA.HasError || errA.Usable {
+		t.Fatalf("error envelope: %+v", errA)
+	}
+	thin := assessFetchResult("<metadata>\nSignals: js_required\n</metadata>\n<content>\nshort\n</content>", nil)
+	if !thin.Thin || thin.Usable || thin.BodyChars == 0 {
+		t.Fatalf("thin: %+v", thin)
+	}
+	okBody := "<metadata>\nSignals: serper_scrape\n</metadata>\n<content>\n" + strings.Repeat("body ", 100) + "\n</content>"
+	ok := assessFetchResult(okBody, nil)
+	if !ok.Usable || ok.HasError {
+		t.Fatalf("ok: %+v", ok)
+	}
+}
+
+func TestFillUsableFetchesEarlyStop(t *testing.T) {
+	ok := "<metadata>\nSignals: serper_scrape\n</metadata>\n<content>\n" + strings.Repeat("body ", 100) + "\n</content>"
+	thin := "<metadata>\nSignals: js_required\n</metadata>\n<content>\nx\n</content>"
+	var calls []string
+	fetch := func(_ context.Context, _ *FetchCache, _ *LocalAIExtractor, _ tooldeps.SpilloverStore, u string, _ int) (string, error) {
+		calls = append(calls, u)
+		if strings.Contains(u, "thin") || strings.Contains(u, "err") {
+			if strings.Contains(u, "err") {
+				return formatFetchError(webFetchErr{Code: "http_403", Message: "no"}), nil
+			}
+			return thin, nil
+		}
+		return ok, nil
+	}
+	candidates := []string{
+		"https://a.example/err",
+		"https://b.example/thin",
+		"https://c.example/ok1",
+		"https://d.example/ok2",
+		"https://e.example/ok3",
+	}
+	got := fillUsableFetches(context.Background(), nil, nil, nil, candidates, 2, 1000, fetch)
+	if len(got) != 2 {
+		t.Fatalf("len=%d want 2: %+v", len(got), got)
+	}
+	if got[0].url != "https://c.example/ok1" || got[1].url != "https://d.example/ok2" {
+		t.Fatalf("urls=%v", got)
+	}
+	// Early stop: must not fetch ok3 after filling 2.
+	for _, c := range calls {
+		if c == "https://e.example/ok3" {
+			t.Fatalf("fetched past fill target: %v", calls)
+		}
+	}
+	if len(calls) != 4 { // err, thin, ok1, ok2
+		t.Fatalf("calls=%v want 4", calls)
+	}
+}
+
+func TestKeepYouTubeWatchRejectChannel(t *testing.T) {
+	watch, _ := url.Parse("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+	channel, _ := url.Parse("https://www.youtube.com/@DenvFeed")
+	if isDeniedYouTubeURL(watch) {
+		t.Fatal("watch URL should be kept")
+	}
+	if !isDeniedYouTubeURL(channel) {
+		t.Fatal("channel URL should be denied")
+	}
+}
+
+func TestBuildBraveSearchURLLocaleForHangul(t *testing.T) {
+	ko := buildBraveSearchURL("덴브 별", 5)
+	if !strings.Contains(ko, "country=KR") || !strings.Contains(ko, "search_lang=ko") {
+		t.Fatalf("hangul brave url=%s", ko)
+	}
+	en := buildBraveSearchURL("Deneb star", 3)
+	if strings.Contains(en, "country=") || strings.Contains(en, "search_lang=") {
+		t.Fatalf("ascii brave url should omit locale: %s", en)
 	}
 }
 
