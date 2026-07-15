@@ -19,6 +19,7 @@ func TestIsIrreversibleToolReturnsExpectedClassification(t *testing.T) {
 		{"exec always gated", "exec", `{"command":"ls"}`, true},
 		{"mail archive read allowed", "mail_archive", `{"action":"read"}`, false},
 		{"unrelated tool", "wiki", `{"action":"write"}`, false},
+		{"wiki forget gated", "wiki", `{"action":"forget"}`, true},
 		{"read tool", "read", `{"path":"/x"}`, false},
 	}
 	for _, tc := range cases {

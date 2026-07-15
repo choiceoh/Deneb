@@ -15,6 +15,7 @@
 package chat
 
 import (
+	"encoding/json"
 	"log/slog"
 	"strings"
 	"sync/atomic"
@@ -118,9 +119,27 @@ func isIrreversibleTool(name string, input []byte) bool {
 	switch name {
 	case "exec":
 		return true
+	case "wiki":
+		// forget is a hard page delete — block it on a tainted turn. Every other
+		// wiki action (search/read/write/log/close/…) is reversible or checkpointed
+		// and stays available so a tainted turn can still do safe work.
+		return wikiActionIsForget(input)
 	default:
 		return false
 	}
+}
+
+// wikiActionIsForget reports whether a wiki tool call selects the destructive
+// forget action. Malformed input is treated as non-forget (the tool itself will
+// reject it); this gate only needs to catch a real forget attempt.
+func wikiActionIsForget(input []byte) bool {
+	var p struct {
+		Action string `json:"action"`
+	}
+	if json.Unmarshal(input, &p) != nil {
+		return false
+	}
+	return p.Action == "forget"
 }
 
 // wireUntrustedToolGate installs the untrusted-origin tool gate on the hook
