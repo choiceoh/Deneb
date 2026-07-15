@@ -84,8 +84,7 @@ export function parseApprovalDocBody(raw: string): ApprovalDocSections {
     })
     .join("\n");
 
-  const line =
-    lineStart >= 0 ? sliceBlock(lineStart, endOf(lineStart, bodyStart, attachStart)) : "";
+  const line = lineStart >= 0 ? sliceBlock(lineStart, endOf(lineStart, bodyStart, attachStart)) : "";
   const body =
     bodyStart >= 0
       ? sliceBlock(bodyStart, endOf(bodyStart, attachStart))
