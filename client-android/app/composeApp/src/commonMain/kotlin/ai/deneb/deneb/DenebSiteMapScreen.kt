@@ -556,6 +556,7 @@ private fun SiteMapCanvas(pins: List<SitePin>, onPinTap: (SitePin) -> Unit) {
 private fun DrawScope.drawMark(shape: String, center: Offset, r: Float, color: Color) {
     when (shape) {
         "square" -> drawRect(color, topLeft = Offset(center.x - r, center.y - r), size = Size(r * 2, r * 2))
+
         "triangle" -> {
             val p = Path().apply {
                 moveTo(center.x, center.y - r * 1.15f)
@@ -565,6 +566,7 @@ private fun DrawScope.drawMark(shape: String, center: Offset, r: Float, color: C
             }
             drawPath(p, color)
         }
+
         "diamond" -> {
             val p = Path().apply {
                 moveTo(center.x, center.y - r * 1.2f)
@@ -575,6 +577,7 @@ private fun DrawScope.drawMark(shape: String, center: Offset, r: Float, color: C
             }
             drawPath(p, color)
         }
+
         else -> drawCircle(color, radius = r, center = center)
     }
 }
