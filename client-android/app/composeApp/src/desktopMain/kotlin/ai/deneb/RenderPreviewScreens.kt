@@ -26,6 +26,7 @@ import ai.deneb.deneb.RsiStatusContent
 import ai.deneb.deneb.ScheduleDraft
 import ai.deneb.deneb.SearchContent
 import ai.deneb.deneb.SelfImprovementCodingContent
+import ai.deneb.deneb.SiteMapContent
 import ai.deneb.deneb.SkillDetailContent
 import ai.deneb.deneb.SkillLifecycleContent
 import ai.deneb.deneb.SkillLifecycleRow
@@ -93,6 +94,15 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             DenebScreenScaffold(title = "프로젝트 진행상황", onBack = {}) {
                 Column(Modifier.fillMaxWidth()) {
                     ProjectDigestContent(sampleDigests) {}
+                }
+            }
+        }
+    },
+    "site_map" to { scheme ->
+        MaterialTheme(colorScheme = scheme) {
+            DenebScreenScaffold(title = "현장 지도", onBack = {}) {
+                Column(Modifier.fillMaxWidth()) {
+                    SiteMapContent(sampleSites) {}
                 }
             }
         }
