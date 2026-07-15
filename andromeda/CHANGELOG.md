@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.0.83](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.82...andromeda-v0.0.83) (2026-07-15)
+
+
+### ✨ Features
+
+* **client:** 전자결재 피드 카드 딥링크·소스 표현 ([#3770](https://github.com/choiceoh/Deneb/issues/3770)) ([15a3836](https://github.com/choiceoh/Deneb/commit/15a38365f779652e555025eb572eb025a8aac381))
+* **groupware:** 결재 AI 분석·날짜별 표면 + ERP 허브 ([#3768](https://github.com/choiceoh/Deneb/issues/3768)) ([c6bf0a4](https://github.com/choiceoh/Deneb/commit/c6bf0a4802c2b87fa553b5a76ac3a8c9833fbbf5))
+* **groupware:** 반려 사유 E2E 입력·전달 ([#3771](https://github.com/choiceoh/Deneb/issues/3771)) ([924893f](https://github.com/choiceoh/Deneb/commit/924893f328a8e5dd2b9991949fb3fe0be8c12d19))
+
+
+### 🐛 Bug Fixes
+
+* **client:** separate approval sections and restore act buttons ([#3778](https://github.com/choiceoh/Deneb/issues/3778)) ([72d2d41](https://github.com/choiceoh/Deneb/commit/72d2d414f709fd6202d4edf8c0bfba745d511320))
+* **client:** 결재 본문 마크다운 표 렌더 ([#3774](https://github.com/choiceoh/Deneb/issues/3774)) ([dae33e5](https://github.com/choiceoh/Deneb/commit/dae33e5b7a69c4c4ab7728e1f3a28f80b28f7315))
+* **client:** 그룹웨어·결재 화면 퀄리티 정리 ([#3779](https://github.com/choiceoh/Deneb/issues/3779)) ([e882133](https://github.com/choiceoh/Deneb/commit/e88213300fb7c5b6c36e27174ae17416632d695d))
+
 ## [0.0.82](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.81...andromeda-v0.0.82) (2026-07-15)
 
 

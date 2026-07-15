@@ -1,5 +1,35 @@
 # Changelog
 
+## [4.110.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.109.0...deneb-v4.110.0) (2026-07-15)
+
+
+### ✨ Features
+
+* **client:** 전자결재 피드 카드 딥링크·소스 표현 ([#3770](https://github.com/choiceoh/Deneb/issues/3770)) ([15a3836](https://github.com/choiceoh/Deneb/commit/15a38365f779652e555025eb572eb025a8aac381))
+* **groupware:** 결재 AI 분석·날짜별 표면 + ERP 허브 ([#3768](https://github.com/choiceoh/Deneb/issues/3768)) ([c6bf0a4](https://github.com/choiceoh/Deneb/commit/c6bf0a4802c2b87fa553b5a76ac3a8c9833fbbf5))
+* **groupware:** 기존 API 라우팅·레터 방치표시 보강 ([#3764](https://github.com/choiceoh/Deneb/issues/3764)) ([7b7cac0](https://github.com/choiceoh/Deneb/commit/7b7cac00d08d23e33e7832b8c2add09ecea93245))
+* **groupware:** 미결 에스컬레이션·레터 통합 ([#3761](https://github.com/choiceoh/Deneb/issues/3761)) ([959615e](https://github.com/choiceoh/Deneb/commit/959615ed79d967c847021b85283073c737502576))
+* **groupware:** 반려 사유 E2E 입력·전달 ([#3771](https://github.com/choiceoh/Deneb/issues/3771)) ([924893f](https://github.com/choiceoh/Deneb/commit/924893f328a8e5dd2b9991949fb3fe0be8c12d19))
+* **groupware:** 사원 조회 — 이름·부서·직급/호칭·휴대폰·생년월일 ([#3758](https://github.com/choiceoh/Deneb/issues/3758)) ([73fb0ec](https://github.com/choiceoh/Deneb/commit/73fb0ec996eb12fb0f589093fc88ddb90734b4b0))
+* **groupware:** 중요 게시판 공지 Radar ([#3769](https://github.com/choiceoh/Deneb/issues/3769)) ([cbe9a00](https://github.com/choiceoh/Deneb/commit/cbe9a00799209a3e22eb4cd10143cf92778febca))
+* **wiki:** 현장 페이지 일괄 시더 — 대표 Sites 부트스트랩 ([#3763](https://github.com/choiceoh/Deneb/issues/3763)) ([47bdca1](https://github.com/choiceoh/Deneb/commit/47bdca16dad450866c1c63cf5cd4abb42b76fc20))
+
+
+### 🐛 Bug Fixes
+
+* **build:** config-cache-safe git sha via ValueSource (androidApp) ([#3759](https://github.com/choiceoh/Deneb/issues/3759)) ([75229ed](https://github.com/choiceoh/Deneb/commit/75229eda33ef11e7b386563b82967c47b959d075))
+* **chat:** Business 도구 카테고리를 deal_ledger에 맞춤 ([#3766](https://github.com/choiceoh/Deneb/issues/3766)) ([3f75072](https://github.com/choiceoh/Deneb/commit/3f75072d4585bae95fbe688fad74320f5165f88d))
+* **client:** separate approval sections and restore act buttons ([#3778](https://github.com/choiceoh/Deneb/issues/3778)) ([72d2d41](https://github.com/choiceoh/Deneb/commit/72d2d414f709fd6202d4edf8c0bfba745d511320))
+* **client:** 결재 본문 마크다운 표 렌더 ([#3774](https://github.com/choiceoh/Deneb/issues/3774)) ([dae33e5](https://github.com/choiceoh/Deneb/commit/dae33e5b7a69c4c4ab7728e1f3a28f80b28f7315))
+* **client:** 그룹웨어·결재 화면 퀄리티 정리 ([#3779](https://github.com/choiceoh/Deneb/issues/3779)) ([e882133](https://github.com/choiceoh/Deneb/commit/e88213300fb7c5b6c36e27174ae17416632d695d))
+* **groupware:** prod reader 경로·Playwright 의존성 ([#3773](https://github.com/choiceoh/Deneb/issues/3773)) ([628cbbd](https://github.com/choiceoh/Deneb/commit/628cbbd3759201e4d57652aad0495c75c934c22d))
+* **wiki:** abort SeedSitePages on ListPages error ([#3765](https://github.com/choiceoh/Deneb/issues/3765)) ([84c734d](https://github.com/choiceoh/Deneb/commit/84c734d1b96d3fb5a1522abffd8441c19040aa0b))
+
+
+### 🔧 Internal
+
+* **agent:** remove dead stream retry wrapper ([#3767](https://github.com/choiceoh/Deneb/issues/3767)) ([1a89b7a](https://github.com/choiceoh/Deneb/commit/1a89b7a8e1af43a8537bb6b0bd3da579f34daa1c))
+
 ## [4.109.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.108.1...deneb-v4.109.0) (2026-07-15)
 
 
