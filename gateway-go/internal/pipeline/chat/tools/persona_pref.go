@@ -75,8 +75,10 @@ func ToolPersonaPref(workspaceDir string) toolport.ToolFunc {
 
 		// Idempotent: the rule is already present. SOUL.md is session-frozen, so
 		// the agent can't "see" a rule it appended this session — dedup keeps it
-		// from stacking the same rule every turn.
-		if strings.Contains(current, rule) {
+		// from stacking the same rule every turn. Match the exact bullet LINE, not
+		// a raw substring: a Contains check would false-positive when the rule text
+		// is a substring of a longer existing rule (or of the persona prose).
+		if hasBulletLine(current, "- "+rule) {
 			return "이미 저장된 선호입니다 (중복 저장 안 함).", nil
 		}
 
@@ -104,6 +106,18 @@ func ToolPersonaPref(workspaceDir string) toolport.ToolFunc {
 
 		return fmt.Sprintf("선호를 SOUL.md에 저장했습니다: %q. 이 규칙은 다음 세션부터 페르소나에 반영됩니다 (append-only — 삭제·수정은 사용자만 SOUL.md 편집으로 가능).", rule), nil
 	}
+}
+
+// hasBulletLine reports whether content already has bullet as a standalone line
+// (trailing whitespace/CR ignored). Line-based so it matches regardless of the
+// file's trailing newline and never false-positives on a substring.
+func hasBulletLine(content, bullet string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		if strings.TrimRight(line, " \t\r") == bullet {
+			return true
+		}
+	}
+	return false
 }
 
 // buildPreferenceChunk returns the text to append to SOUL.md for a new rule: a

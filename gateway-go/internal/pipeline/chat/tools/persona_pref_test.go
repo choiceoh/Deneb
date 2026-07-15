@@ -88,6 +88,27 @@ func TestPreferenceDedupesRepeatedRule(t *testing.T) {
 	}
 }
 
+func TestPreferenceDedupDoesNotFalsePositiveOnSubstring(t *testing.T) {
+	dir := t.TempDir()
+	// A longer rule that CONTAINS the shorter one as a substring.
+	runPreference(t, dir, "이모지 쓰지 마세요 항상")
+	// The shorter rule is a distinct preference — must still be appended, not
+	// swallowed by a raw substring dedup.
+	out := runPreference(t, dir, "이모지 쓰지 마")
+	if !strings.Contains(out, "저장했습니다") {
+		t.Fatalf("distinct substring rule was wrongly deduped: %s", out)
+	}
+	body, _ := os.ReadFile(filepath.Join(dir, "SOUL.md"))
+	if !strings.Contains(string(body), "- 이모지 쓰지 마\n") {
+		t.Fatalf("shorter rule bullet missing:\n%s", body)
+	}
+	// But an exact repeat of the shorter rule IS deduped.
+	out = runPreference(t, dir, "이모지 쓰지 마")
+	if !strings.Contains(out, "이미 저장된") {
+		t.Fatalf("exact repeat should dedup: %s", out)
+	}
+}
+
 func TestPreferenceRejectsEmptyRule(t *testing.T) {
 	dir := t.TempDir()
 	out := runPreference(t, dir, "   ")

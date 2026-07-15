@@ -4,8 +4,9 @@
 // supersession keeps a stale page readable and merely demotes it in search,
 // Forget REMOVES the page from active memory. The trade is deliberate — a
 // privacy/correctness "forget this" that left the fact readable would not be a
-// forget. The only trace left behind is an audit-log tombstone (path, title,
-// reason), so the deletion stays accountable.
+// forget. The page itself is gone; what remains is the audit log — a "forget"
+// tombstone (path, title, reason) alongside the delete path's standard entry —
+// so the removal stays accountable.
 package wiki
 
 import (
@@ -23,8 +24,9 @@ type ForgetResult struct {
 // ("forget this fact"), first recording an auditable tombstone (page path,
 // title, and the caller's reason) to the wiki log. Unlike MarkSuperseded — the
 // soft path, which keeps the page readable and only demotes it in search —
-// Forget is a HARD delete: the page is gone, and the log entry is its only
-// remaining trace.
+// Forget is a HARD delete: the page is gone, and what remains is the audit log
+// (the "forget" tombstone with the reason, alongside the delete path's own
+// best-effort "delete" entry).
 //
 // A reason is required and the tombstone is written BEFORE the delete: an
 // unaudited forget is not auditable, and this is the one wiki tool path that
@@ -52,7 +54,11 @@ func (s *Store) Forget(relPath, reason string) (ForgetResult, error) {
 	title := page.Meta.Title
 
 	// Tombstone first: fail closed if we can't record why the fact was removed.
-	if err := s.appendLog("forget", fmt.Sprintf("%s — %s — reason: %s", relPath, title, reason)); err != nil {
+	// Flatten title/reason to a single line so a multi-line value can't inject a
+	// fake "## [ts] op" heading into log.md and corrupt the audit structure.
+	logTitle := strings.Join(strings.Fields(title), " ")
+	logReason := strings.Join(strings.Fields(reason), " ")
+	if err := s.appendLog("forget", fmt.Sprintf("%s — %s — reason: %s", relPath, logTitle, logReason)); err != nil {
 		return ForgetResult{}, fmt.Errorf("wiki: forget: record tombstone: %w", err)
 	}
 

@@ -60,6 +60,31 @@ func TestForgetRemovesPageAndRecordsTombstone(t *testing.T) {
 	}
 }
 
+func TestForgetFlattensMultilineReasonInTombstone(t *testing.T) {
+	store := newForgetTestStore(t)
+	page := NewPage("멀티라인", "기타", nil)
+	if err := store.WritePage("기타/멀티라인.md", page); err != nil {
+		t.Fatalf("WritePage: %v", err)
+	}
+	// A multi-line reason attempting to inject a fake log heading.
+	if _, err := store.Forget("기타/멀티라인", "진짜 사유\n## [2000-01-01 00:00] 가짜op\n스푸핑"); err != nil {
+		t.Fatalf("Forget: %v", err)
+	}
+	logBody, err := os.ReadFile(filepath.Join(store.dir, "log.md"))
+	if err != nil {
+		t.Fatalf("read log.md: %v", err)
+	}
+	// The forget entry's reason line must be single-line: no injected heading.
+	for _, line := range strings.Split(string(logBody), "\n") {
+		if strings.Contains(line, "가짜op") && strings.HasPrefix(strings.TrimSpace(line), "##") {
+			t.Fatalf("multi-line reason injected a fake heading:\n%s", logBody)
+		}
+	}
+	if !strings.Contains(string(logBody), "진짜 사유 ## [2000-01-01 00:00] 가짜op 스푸핑") {
+		t.Fatalf("reason not flattened to one line:\n%s", logBody)
+	}
+}
+
 func TestForgetRequiresReason(t *testing.T) {
 	store := newForgetTestStore(t)
 	page := NewPage("x", "기타", nil)
