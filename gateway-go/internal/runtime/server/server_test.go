@@ -96,7 +96,7 @@ func TestHealthEndpointReturnsUsageQualityAndPropusSignals(t *testing.T) {
 	}
 
 	srv := testutil.Must(New(":0"))
-	srv.Auto.GenesisTracker = tracker
+	srv.GenesisSubsystem = &GenesisSubsystem{genesisTracker: tracker}
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 	srv.handleHealth(w, req)

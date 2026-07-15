@@ -40,7 +40,7 @@ func (s *Server) registerBuiltinMethods() {
 		Version:        s.version,
 		StartedAt:      s.startedAt,
 		ChannelsStatus: func() any { return map[string]any{} },
-		SessionCount:   s.Sessions().Count,
+		SessionCount:   s.sessions.Count,
 		LastHeartbeatMs: func() int64 {
 			if s.activity == nil {
 				return 0
@@ -67,13 +67,13 @@ func (s *Server) registerBuiltinMethods() {
 			return s.jobTracker.CacheSize()
 		},
 		CurrentModel: func() string {
-			if s.ChatHandler() != nil {
-				if m := s.ChatHandler().DefaultModel(); m != "" {
+			if s.chatHandler != nil {
+				if m := s.chatHandler.DefaultModel(); m != "" {
 					return m
 				}
 			}
-			if s.ModelRegistry() != nil {
-				return s.ModelRegistry().FullModelID(modelrole.RoleMain)
+			if s.modelRegistry != nil {
+				return s.modelRegistry.FullModelID(modelrole.RoleMain)
 			}
 			return ""
 		},

@@ -53,14 +53,6 @@ COMPOSITION_ROOTS = {
     "internal/pipeline/chat",
     "internal/runtime/bootstrap",
     "internal/runtime/server",
-    "internal/runtime/serverauto",
-    "internal/runtime/serverchat",
-    "internal/runtime/servermail",
-    "internal/runtime/serverport",
-    "internal/runtime/serverwire",
-    "internal/runtime/serverwire/early",
-    "internal/runtime/serverwire/late",
-    "internal/runtime/serverwire/porttypes",
 }
 
 
