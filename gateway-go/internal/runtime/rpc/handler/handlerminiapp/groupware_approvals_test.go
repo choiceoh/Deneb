@@ -146,3 +146,88 @@ func TestApprovalDayKey(t *testing.T) {
 		}
 	}
 }
+
+func TestGroupwareApprovalsGetAndAnalyzeCache(t *testing.T) {
+	dir := t.TempDir()
+	cache := groupware.NewApprovalAnalysisStore(dir)
+	var analyzeCalls int
+	h := GroupwareApprovalsMethods(GroupwareApprovalsDeps{
+		List: func(context.Context, string, int) ([]groupware.ApprovalSummary, error) { return nil, nil },
+		Act:  func(context.Context, string, string, string) (string, error) { return "", nil },
+		Get: func(_ context.Context, docID string) (string, error) {
+			if docID != "42" {
+				t.Fatalf("docId = %q", docID)
+			}
+			return "본문 내용\n금액 100", nil
+		},
+		Cache: cache,
+		Analyze: func(_ context.Context, title, body string) (string, string, error) {
+			analyzeCalls++
+			if title == "" || body == "" {
+				t.Fatalf("empty analyze input title=%q body=%q", title, body)
+			}
+			return "## 요지\nok\nIMPORTANCE: urgent", "urgent", nil
+		},
+	})
+
+	get := h["miniapp.groupware.approvals.get"]
+	resp := get(authedCtx(), reqWith(t, "miniapp.groupware.approvals.get", map[string]any{
+		"docId": "42", "title": "품의",
+	}))
+	var got GroupwareApprovalGetResponse
+	decode(t, resp, &got)
+	if got.Body == "" || got.DocID != "42" {
+		t.Fatalf("get = %+v", got)
+	}
+
+	cached := h["miniapp.groupware.approvals.analysis_cached"]
+	resp = cached(authedCtx(), reqWith(t, "miniapp.groupware.approvals.analysis_cached", map[string]any{"docId": "42"}))
+	var miss GroupwareApprovalAnalysisOut
+	decode(t, resp, &miss)
+	if miss.Cached || miss.Analysis != "" {
+		t.Fatalf("expected cache miss, got %+v", miss)
+	}
+
+	analyze := h["miniapp.groupware.approvals.analyze"]
+	resp = analyze(authedCtx(), reqWith(t, "miniapp.groupware.approvals.analyze", map[string]any{
+		"docId": "42", "title": "품의",
+	}))
+	var out GroupwareApprovalAnalysisOut
+	decode(t, resp, &out)
+	if out.Cached || out.Analysis == "" || out.Importance != "urgent" {
+		t.Fatalf("analyze = %+v", out)
+	}
+	if analyzeCalls != 1 {
+		t.Fatalf("analyzeCalls = %d", analyzeCalls)
+	}
+
+	resp = analyze(authedCtx(), reqWith(t, "miniapp.groupware.approvals.analyze", map[string]any{
+		"docId": "42", "title": "품의",
+	}))
+	decode(t, resp, &out)
+	if !out.Cached || analyzeCalls != 1 {
+		t.Fatalf("second analyze should hit cache: cached=%v calls=%d", out.Cached, analyzeCalls)
+	}
+}
+
+func TestGroupwareERPList(t *testing.T) {
+	var gotArea, gotFolder, gotQuery string
+	var gotLimit int
+	h := GroupwareApprovalsMethods(GroupwareApprovalsDeps{
+		List: func(context.Context, string, int) ([]groupware.ApprovalSummary, error) { return nil, nil },
+		Act:  func(context.Context, string, string, string) (string, error) { return "", nil },
+		ListERP: func(_ context.Context, area, folder, query string, limit int) (string, error) {
+			gotArea, gotFolder, gotQuery, gotLimit = area, folder, query, limit
+			return "재고 2건", nil
+		},
+	})["miniapp.groupware.erp.list"]
+	resp := h(authedCtx(), reqWith(t, "miniapp.groupware.erp.list", map[string]any{
+		"area": "stock", "query": "볼트",
+	}))
+	var out GroupwareERPListResponse
+	decode(t, resp, &out)
+	if out.Text != "재고 2건" || gotArea != "stock" || gotQuery != "볼트" || gotLimit != defaultERPLimit {
+		t.Fatalf("out=%+v area=%s query=%s limit=%d", out, gotArea, gotQuery, gotLimit)
+	}
+	_ = gotFolder
+}

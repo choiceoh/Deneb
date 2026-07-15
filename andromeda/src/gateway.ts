@@ -305,6 +305,51 @@ export const cachedMailAnalysis = (cfg: GatewayConfig, id: string) =>
 export const analyzeMail = (cfg: GatewayConfig, id: string, force = false) =>
   callRpc<MailAnalysis>(cfg, "miniapp.mail.analyze", { id, force });
 
+// --- 전자결재 enrichment (miniapp.groupware.approvals.get / analyze / analysis_cached) ---
+
+export interface ApprovalAnalysis {
+  docId: string;
+  title?: string;
+  analysis: string;
+  importance?: string;
+  cached: boolean;
+  createdAt?: string;
+}
+
+export const cachedApprovalAnalysis = (cfg: GatewayConfig, docId: string) =>
+  callRpc<ApprovalAnalysis>(cfg, "miniapp.groupware.approvals.analysis_cached", { docId });
+
+export const analyzeApproval = (
+  cfg: GatewayConfig,
+  docId: string,
+  opts: { title?: string; force?: boolean; drafter?: string; date?: string } = {},
+) =>
+  callRpc<ApprovalAnalysis>(cfg, "miniapp.groupware.approvals.analyze", {
+    docId,
+    title: opts.title,
+    force: opts.force ?? false,
+    drafter: opts.drafter,
+    date: opts.date,
+  });
+
+export const fetchApprovalBody = (cfg: GatewayConfig, docId: string, title?: string) =>
+  callRpc<{ docId?: string; title?: string; body?: string }>(cfg, "miniapp.groupware.approvals.get", {
+    docId,
+    title,
+  });
+
+export const listGroupwareERP = (
+  cfg: GatewayConfig,
+  area: string,
+  opts: { folder?: string; query?: string; limit?: number } = {},
+) =>
+  callRpc<{ area?: string; folder?: string; query?: string; text?: string }>(cfg, "miniapp.groupware.erp.list", {
+    area,
+    folder: opts.folder,
+    query: opts.query,
+    limit: opts.limit,
+  });
+
 // Sender context card (sender_context): recent volume + hand-curated wiki pages.
 export interface SenderRecent {
   count: number;

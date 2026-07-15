@@ -95,6 +95,24 @@ export interface GroupwareApprovalActResponse {
   result?: string
 }
 
+export interface GroupwareApprovalAnalysisOut {
+  docId?: string
+  title?: string
+  drafter?: string
+  date?: string
+  analysis?: string
+  importance?: string
+  durationMs?: number
+  cached?: boolean
+  createdAt?: string
+}
+
+export interface GroupwareApprovalGetResponse {
+  docId?: string
+  title?: string
+  body?: string
+}
+
 export interface GroupwareApprovalRow {
   docId?: string
   title?: string
@@ -109,6 +127,13 @@ export interface GroupwareApprovalRow {
 export interface GroupwareApprovalsListResponse {
   approvals?: GroupwareApprovalRow[]
   folder?: string
+}
+
+export interface GroupwareERPListResponse {
+  area?: string
+  folder?: string
+  query?: string
+  text?: string
 }
 
 export interface LaneOut {

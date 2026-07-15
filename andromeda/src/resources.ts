@@ -187,6 +187,13 @@ export const WORKFEED_RPC = {
 export const APPROVALS_RPC = {
   list: "miniapp.groupware.approvals.list",
   act: "miniapp.groupware.approvals.act",
+  get: "miniapp.groupware.approvals.get",
+  analyze: "miniapp.groupware.approvals.analyze",
+  analysisCached: "miniapp.groupware.approvals.analysis_cached",
+} as const;
+
+export const GROUPWARE_ERP_RPC = {
+  list: "miniapp.groupware.erp.list",
 } as const;
 
 export const RESOURCE_MAP: Record<string, ResourceDef> = Object.fromEntries(RESOURCE_DEFS.map((r) => [r.name, r]));

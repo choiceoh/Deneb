@@ -2,16 +2,20 @@ import { useState } from "react";
 import type { GroupwareApprovalRow } from "@/gen/miniappWire";
 import { useCachedList } from "@/cachedList";
 import { APPROVALS_RPC } from "@/resources";
-import { addDays, dayLabel, startOfDay } from "@/format";
+import { addDays, dayLabel, errText, startOfDay } from "@/format";
+import { analyzeApproval, cachedApprovalAnalysis, fetchApprovalBody } from "@/gateway";
 import { useAction } from "@/useAction";
+import { useAsyncOnOpen } from "@/useAsyncOnOpen";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { DayPager } from "@/components/DayPager";
 import { Column, Grid, GridNotice } from "@/components/Grid";
+import { Markdown } from "@/components/Markdown";
 
 // Recent 전체 결재 snapshot; day-pager filters client-side (Amaranth list has no
 // date-range API). Mirrors mail/feed lookback so empty days never trap the pager.
 const APPROVALS_LIMIT = 100;
 const APPROVALS_LOOKBACK_DAYS = 31;
+const HOT_IMPORTANCE = /urgent|high|중요|긴급|priority/i;
 
 /** Parse Amaranth date stamps (2026-07-16 / 2026.07.16 / 20260716) → local midnight ms. */
 export function approvalDayMs(date?: string): number | null {
@@ -22,12 +26,9 @@ export function approvalDayMs(date?: string): number | null {
 }
 
 function rowLine(a: GroupwareApprovalRow): string {
-  const bits = [
-    a.title ?? "(제목 없음)",
-    a.drafter ? `기안 ${a.drafter}` : "",
-    a.status ?? "",
-    a.docNo ?? "",
-  ].filter(Boolean);
+  const bits = [a.title ?? "(제목 없음)", a.drafter ? `기안 ${a.drafter}` : "", a.status ?? "", a.docNo ?? ""].filter(
+    Boolean,
+  );
   return `- ${bits.join(" · ")}`;
 }
 
@@ -59,7 +60,6 @@ export function ApprovalsPane() {
   const itemDays = rows.map((a) => approvalDayMs(a.date) ?? todayMs);
   const minDayMs = Math.min(addDays(todayMs, -APPROVALS_LOOKBACK_DAYS), ...itemDays, todayMs);
   const maxDayMs = Math.max(todayMs, ...itemDays);
-
 
   const aiText =
     `[결재 · ${dayLabel(dayMs, nowMs)}]\n` +
@@ -126,9 +126,7 @@ export function ApprovalsPane() {
           columns={columns}
           rows={dayRows}
           getKey={(a) => String(a.docId ?? "")}
-          onRowClick={(a) =>
-            setSelectedId((cur) => (String(cur) === String(a.docId) ? undefined : String(a.docId)))
-          }
+          onRowClick={(a) => setSelectedId((cur) => (String(cur) === String(a.docId) ? undefined : String(a.docId)))}
           isRowSelected={(a) => String(a.docId) === String(selectedId)}
           rowTitle={(a) => a.title ?? "(제목 없음)"}
           renderExpandedRow={() =>
@@ -161,9 +159,58 @@ function ApprovalDetail({
   onReject: () => void;
   onClose: () => void;
 }) {
+  const { cfg, connected } = useWorkspace();
+  const docId = String(doc.docId ?? "").trim();
+  const [view, setView] = useState<"analysis" | "body">("analysis");
+  const [analysis, setAnalysis] = useAsyncOnOpen(
+    async () => {
+      const cached = await cachedApprovalAnalysis(cfg, docId);
+      if (cached?.analysis?.trim()) return cached;
+      return analyzeApproval(cfg, docId, {
+        title: doc.title,
+        drafter: doc.drafter,
+        date: doc.date,
+      });
+    },
+    [cfg, docId, doc.title, doc.drafter, doc.date],
+    { enabled: connected && Boolean(docId) },
+  );
+  const [body] = useAsyncOnOpen(
+    async () => {
+      const r = await fetchApprovalBody(cfg, docId, doc.title);
+      return r?.body ?? "";
+    },
+    [cfg, docId, doc.title],
+    { enabled: connected && Boolean(docId) },
+  );
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisErr, setAnalysisErr] = useState("");
+
+  async function rerun() {
+    setAnalyzing(true);
+    setAnalysisErr("");
+    try {
+      setAnalysis(
+        await analyzeApproval(cfg, docId, {
+          title: doc.title,
+          force: true,
+          drafter: doc.drafter,
+          date: doc.date,
+        }),
+      );
+    } catch (e) {
+      setAnalysisErr(errText(e));
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
   const meta = [doc.status, doc.drafter && `기안 ${doc.drafter}`, doc.docNo, doc.docId && `id ${doc.docId}`]
     .filter(Boolean)
     .join(" · ");
+  const text = analysis?.analysis?.trim() ? analysis.analysis : "";
+  const importance = analysis?.importance?.trim();
+
   return (
     <section className="workfeed-detail" aria-label="결재 상세">
       <div className="workfeed-detail-head">
@@ -187,6 +234,67 @@ function ApprovalDetail({
           </button>
         </div>
       </div>
+
+      <div className="mail-view-tabs" role="group" aria-label="결재 보기 방식">
+        <button
+          className={"mail-view-tab" + (view === "analysis" ? " active" : "")}
+          aria-pressed={view === "analysis"}
+          onClick={() => setView("analysis")}
+        >
+          분석
+        </button>
+        <button
+          className={"mail-view-tab" + (view === "body" ? " active" : "")}
+          aria-pressed={view === "body"}
+          onClick={() => setView("body")}
+        >
+          본문
+        </button>
+      </div>
+
+      {view === "analysis" ? (
+        <div className="mail-card">
+          {(importance || (text && !analyzing)) && (
+            <div className="mail-card-head">
+              {importance && (
+                <span className={"mail-badge" + (HOT_IMPORTANCE.test(importance) ? " hot" : "")}>{importance}</span>
+              )}
+              {text && !analyzing && (
+                <button className="row-btn" onClick={() => void rerun()} disabled={!connected} title="다시 분석">
+                  다시 분석
+                </button>
+              )}
+            </div>
+          )}
+          {analyzing || (connected && analysis === null && !analysisErr) ? (
+            <div className="mail-card-line">분석 중… (수십 초 걸릴 수 있어요)</div>
+          ) : analysisErr ? (
+            <div className="mail-card-line error">
+              {analysisErr}{" "}
+              <button className="row-btn" onClick={() => void rerun()}>
+                다시 시도
+              </button>
+            </div>
+          ) : text ? (
+            <Markdown text={text} />
+          ) : (
+            <div className="mail-card-line">
+              분석 없음{" "}
+              <button className="row-btn" onClick={() => void rerun()} disabled={!connected}>
+                분석하기
+              </button>
+            </div>
+          )}
+        </div>
+      ) : body === null ? (
+        <div className="mail-card-line">본문 불러오는 중…</div>
+      ) : body ? (
+        <div className="mail-body">
+          <Markdown text={body} />
+        </div>
+      ) : (
+        <div className="mail-body mail-detail-empty">본문 없음</div>
+      )}
     </section>
   );
 }

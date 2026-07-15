@@ -5,6 +5,7 @@ package ai.deneb
 import ai.deneb.data.AppSettings
 import ai.deneb.data.DataRepository
 import ai.deneb.data.ThemeMode
+import ai.deneb.deneb.DenebApprovalDetailScreen
 import ai.deneb.deneb.DenebApprovalsScreen
 import ai.deneb.deneb.DenebBrowserScreen
 import ai.deneb.deneb.DenebCalendarAddScreen
@@ -21,6 +22,7 @@ import ai.deneb.deneb.DenebDiaryScreen
 import ai.deneb.deneb.DenebFilesScreen
 import ai.deneb.deneb.DenebFleetScreen
 import ai.deneb.deneb.DenebGatewayClient
+import ai.deneb.deneb.DenebGroupwareERPScreen
 import ai.deneb.deneb.DenebMailDetailScreen
 import ai.deneb.deneb.DenebMailScreen
 import ai.deneb.deneb.DenebMoreScreen
@@ -587,6 +589,42 @@ internal fun AppContent(
                                     denebComposable<DenebApprovals> {
                                         denebClient?.let { client ->
                                             DenebApprovalsScreen(
+                                                client = client,
+                                                onBack = { navController.navigateUp() },
+                                                onOpenDetail = { doc ->
+                                                    navController.navigate(
+                                                        DenebApprovalDetail(
+                                                            docId = doc.docId,
+                                                            title = doc.title,
+                                                            drafter = doc.drafter,
+                                                            date = doc.date,
+                                                            canAct = doc.canAct,
+                                                        ),
+                                                    )
+                                                },
+                                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                            )
+                                        }
+                                    }
+                                    denebComposable<DenebApprovalDetail> { entry ->
+                                        denebClient?.let { client ->
+                                            val route = entry.toRoute<DenebApprovalDetail>()
+                                            DenebApprovalDetailScreen(
+                                                client = client,
+                                                docId = route.docId,
+                                                title = route.title,
+                                                drafter = route.drafter,
+                                                date = route.date,
+                                                canAct = route.canAct,
+                                                onBack = { navController.navigateUp() },
+                                                onActed = { navController.navigateUp() },
+                                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                            )
+                                        }
+                                    }
+                                    denebComposable<DenebGroupware> {
+                                        denebClient?.let { client ->
+                                            DenebGroupwareERPScreen(
                                                 client = client,
                                                 onBack = { navController.navigateUp() },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,

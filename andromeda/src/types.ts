@@ -234,6 +234,7 @@ export type View =
   | "fleet"
   | "workfeed"
   | "approvals"
+  | "groupware"
   | "skills"
   | "rsi"
   | "observe"

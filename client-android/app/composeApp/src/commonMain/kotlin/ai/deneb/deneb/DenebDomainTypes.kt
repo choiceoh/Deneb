@@ -154,6 +154,24 @@ data class MailNativePipeline(
 @Immutable
 data class RelatedProject(val path: String, val title: String, val summary: String)
 
+/** Amaranth 전자결재 document body. */
+@Immutable
+data class ApprovalBody(
+    val docId: String,
+    val title: String = "",
+    val body: String = "",
+)
+
+/** Result of an AI approval analysis (fresh or cached). */
+@Immutable
+data class ApprovalAnalysis(
+    val text: String,
+    val importance: String = "",
+    val cached: Boolean = false,
+    val createdAt: String = "",
+    val durationMs: Long = 0,
+)
+
 /** Result of an AI mail analysis (fresh or cached). */
 @Immutable
 data class MailAnalysis(

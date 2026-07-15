@@ -42,6 +42,7 @@ func (s *Server) registerGroupwareRadarTask(homeDir string) {
 			return phoneevents.New(s.phoneEventHandlerConfig()).IngestApprovalSync(ctx, source, text)
 		},
 		s.notifyGroupwareRadarEscalation,
+		s.analyzeApprovalBestEffort,
 	)
 	task := groupware.NewRadar(groupware.RadarConfig{
 		Reader:         reader,
@@ -61,14 +62,16 @@ func (s *Server) registerGroupwareRadarTask(homeDir string) {
 }
 
 type (
-	groupwareRadarIngest   func(context.Context, string, string) error
-	groupwareRadarEscalate func(context.Context, groupware.ApprovalSummary, int, time.Duration) error
+	groupwareRadarIngest       func(context.Context, string, string) error
+	groupwareRadarEscalate     func(context.Context, groupware.ApprovalSummary, int, time.Duration) error
+	groupwareRadarAfterPending func(context.Context, groupware.ApprovalSummary)
 )
 
 func groupwareRadarCallbacks(
 	feed *nativeWorkFeedStore,
 	ingest groupwareRadarIngest,
 	escalate groupwareRadarEscalate,
+	afterPending groupwareRadarAfterPending,
 ) (
 	func(context.Context, groupware.ApprovalSummary) error,
 	func(context.Context, groupware.ApprovalSummary, int, time.Duration) error,
@@ -96,6 +99,11 @@ func groupwareRadarCallbacks(
 		}
 		if !active {
 			return fmt.Errorf("groupware approval %s relay completed without active card", doc.DocID)
+		}
+		// AI analysis is best-effort after the feed card is durable — failures
+		// must not roll back the notified state (메일 poll 패리티).
+		if afterPending != nil {
+			afterPending(ctx, doc)
 		}
 		return nil
 	}

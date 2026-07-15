@@ -452,6 +452,82 @@ class MiniappWireValueContractTest {
             invalidValue = JsonPrimitive(1),
         ),
         wireContract(
+            name = "GroupwareApprovalAnalysisOut",
+            serializer = GroupwareApprovalAnalysisOut.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "docId",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "title",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "drafter",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "date",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "analysis",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "importance",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "durationMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "cached",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "createdAt",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "docId",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "GroupwareApprovalGetResponse",
+            serializer = GroupwareApprovalGetResponse.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "docId",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "title",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "body",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "docId",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
             name = "GroupwareApprovalRow",
             serializer = GroupwareApprovalRow.serializer(),
             fields = listOf(
@@ -516,6 +592,34 @@ class MiniappWireValueContractTest {
             ),
             invalidField = "approvals",
             invalidValue = JsonObject(mapOf("not" to JsonPrimitive("a-list"))),
+        ),
+        wireContract(
+            name = "GroupwareERPListResponse",
+            serializer = GroupwareERPListResponse.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "area",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "folder",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "query",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "text",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "area",
+            invalidValue = JsonObject(emptyMap()),
         ),
         wireContract(
             name = "LaneOut",

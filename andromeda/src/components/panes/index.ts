@@ -18,6 +18,7 @@ import { CronsPane } from "./CronsPane";
 import { FleetPane } from "./FleetPane";
 import { WorkfeedPane } from "./WorkfeedPane";
 import { ApprovalsPane } from "./ApprovalsPane";
+import { GroupwareERPPane } from "./GroupwareERPPane";
 import { SkillsPane } from "./SkillsPane";
 import { RsiPane } from "./RsiPane";
 import { ObservePane } from "./ObservePane";
@@ -55,6 +56,7 @@ export const PANES: PaneDef[] = [
   { key: "fleet", label: "플릿", shortcut: "l", Component: FleetPane },
   { key: "workfeed", label: "피드", shortcut: "9", Component: WorkfeedPane },
   { key: "approvals", label: "결재", shortcut: "a", Component: ApprovalsPane },
+  { key: "groupware", label: "그룹웨어", shortcut: "u", Component: GroupwareERPPane },
   { key: "skills", label: "스킬", shortcut: "k", Component: SkillsPane },
   { key: "rsi", label: "자가개선", shortcut: "r", Component: RsiPane },
   { key: "observe", label: "관찰", shortcut: "o", Component: ObservePane },

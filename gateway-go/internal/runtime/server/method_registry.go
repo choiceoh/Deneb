@@ -325,7 +325,7 @@ func (s *Server) registerEarlyCapabilityDomains(hub *rpcutil.GatewayHub, denebDi
 	domains := s.earlyCoreMethods(hub, denebDir, capabilities)
 	domains = append(domains, s.earlyNativeClientMethods(hub, capabilities)...)
 	domains = append(domains, s.earlyMailAndCalendarMethods(denebDir)...)
-	domains = append(domains, s.earlyPlanningMethods(hub)...)
+	domains = append(domains, s.earlyPlanningMethods(hub, denebDir)...)
 	domains = append(domains, s.earlyKnowledgeMethods(hub)...)
 	domains = append(domains, s.earlyImprovementMethods(hub)...)
 
@@ -462,14 +462,15 @@ func (s *Server) earlyMailAndCalendarMethods(denebDir string) []map[string]rpcut
 	}
 }
 
-func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub) []map[string]rpcutil.HandlerFunc {
+func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub, denebDir string) []map[string]rpcutil.HandlerFunc {
+	approvalCache := groupware.NewApprovalAnalysisStore(filepath.Join(denebDir, "cache", "approval_analysis"))
 	return []map[string]rpcutil.HandlerFunc{
 		s.earlyProjectMethods(hub),
 		handlerminiapp.OrgMethods(s.orgDeps()),
 		minischedule.TodoMethods(minischedule.TodoDeps{Store: resolveLocalTodos(s.logger)}),
-		// 전자결재 browse/act — always registered; FromEnv fails the call with
-		// DEPENDENCY_FAILED when credentials are unset (same pattern as live
-		// work-feed chips calling ActApproval).
+		// 전자결재 browse/act/get/analyze + ERP list — always registered;
+		// FromEnv fails the call with DEPENDENCY_FAILED when credentials are
+		// unset (same pattern as live work-feed chips calling ActApproval).
 		handlerminiapp.GroupwareApprovalsMethods(handlerminiapp.GroupwareApprovalsDeps{
 			List: func(ctx context.Context, folder string, limit int) ([]groupware.ApprovalSummary, error) {
 				cfg, ok := groupware.FromEnv()
@@ -484,6 +485,24 @@ func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub) []map[string]rpcu
 					return "", fmt.Errorf("groupware credentials unset")
 				}
 				return groupware.ActApproval(ctx, cfg, docID, decision, comment)
+			},
+			Get: func(ctx context.Context, docID string) (string, error) {
+				cfg, ok := groupware.FromEnv()
+				if !ok {
+					return "", fmt.Errorf("groupware credentials unset")
+				}
+				return groupware.ReadApprovalByDocID(ctx, cfg, docID)
+			},
+			Cache: approvalCache,
+			Analyze: func(ctx context.Context, title, body string) (string, string, error) {
+				return s.completeApprovalAnalysis(ctx, title, body)
+			},
+			ListERP: func(ctx context.Context, area, folder, query string, limit int) (string, error) {
+				cfg, ok := groupware.FromEnv()
+				if !ok {
+					return "", fmt.Errorf("groupware credentials unset")
+				}
+				return groupware.ListERP(ctx, cfg, area, folder, query, limit)
 			},
 		}),
 	}

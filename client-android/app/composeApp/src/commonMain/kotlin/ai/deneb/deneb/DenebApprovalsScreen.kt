@@ -21,12 +21,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,18 +55,17 @@ private val koreanWeekday = listOf("월", "화", "수", "목", "금", "토", "�
 /**
  * 최근 전체 결재 surface (`miniapp.groupware.approvals.list`, folder=total).
  * Day-pager like 피드/메일: ← [날짜] → filters the snapshot to one local day;
- * 미결 rows offer 승인/반려 (operator mutate path).
+ * 행 탭 → 상세(분석+본문+승인/반려).
  */
 @Composable
 fun DenebApprovalsScreen(
     client: DenebGatewayClient,
     onBack: () -> Unit,
+    onOpenDetail: (GroupwareApprovalRow) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var rows by remember { mutableStateOf<List<GroupwareApprovalRow>?>(null) }
     var failed by remember { mutableStateOf(false) }
-    var acting by remember { mutableStateOf(false) }
-    var pendingAct by remember { mutableStateOf<Pair<GroupwareApprovalRow, String>?>(null) }
     val today = remember { Clock.System.todayIn(TimeZone.currentSystemDefault()) }
     var selectedDate by remember { mutableStateOf(today) }
     val haptics = rememberHaptics()
@@ -112,14 +109,9 @@ fun DenebApprovalsScreen(
                 items(dayRows, key = { it.docId }) { doc ->
                     ApprovalRow(
                         doc = doc,
-                        acting = acting,
-                        onApprove = {
+                        onOpen = {
                             haptics.tap()
-                            pendingAct = doc to "approve"
-                        },
-                        onReject = {
-                            haptics.tap()
-                            pendingAct = doc to "reject"
+                            onOpenDetail(doc)
                         },
                     )
                     HorizontalDivider(color = denebHairline(), thickness = 0.5.dp)
@@ -127,41 +119,36 @@ fun DenebApprovalsScreen(
             }
         }
     }
+}
 
-    pendingAct?.let { (doc, decision) ->
-        val label = if (decision == "approve") "승인" else "반려"
-        AlertDialog(
-            onDismissRequest = { if (!acting) pendingAct = null },
-            title = { Text("${label}할까요?") },
-            text = {
-                Text(
-                    buildString {
-                        append(doc.title.ifBlank { "이 결재 문서" })
-                        if (doc.docId.isNotBlank()) append(" (doc ${doc.docId})")
-                        append("\n그룹웨어에 즉시 반영됩니다.")
-                    },
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = !acting,
-                    onClick = {
-                        scope.launch {
-                            acting = true
-                            val ok = client.actApproval(doc.docId, decision)?.ok == true
-                            acting = false
-                            pendingAct = null
-                            if (ok) load()
-                        }
-                    },
-                ) { Text(label) }
-            },
-            dismissButton = {
-                TextButton(enabled = !acting, onClick = { pendingAct = null }) {
-                    Text("취소")
-                }
-            },
+@Composable
+private fun ApprovalRow(
+    doc: GroupwareApprovalRow,
+    onOpen: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpen, onClickLabel = "결재 상세", role = Role.Button)
+            .handCursor()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Text(
+            text = doc.title.ifBlank { "(제목 없음)" },
+            style = DenebType.rowTitle,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
+        Spacer(Modifier.height(2.dp))
+        val meta = listOfNotNull(
+            doc.drafter.takeIf { it.isNotBlank() }?.let { "기안 $it" },
+            doc.status.takeIf { it.isNotBlank() },
+            doc.docNo.takeIf { it.isNotBlank() },
+            if (doc.canAct) "미결" else null,
+        ).joinToString(" · ")
+        if (meta.isNotBlank()) {
+            Text(text = meta, style = DenebType.meta, color = denebHint())
+        }
     }
 }
 
@@ -209,47 +196,6 @@ private fun ApprovalsDateArrow(
             tint = if (enabled) denebHint() else denebHint().copy(alpha = 0.25f),
             modifier = Modifier.size(22.dp),
         )
-    }
-}
-
-@Composable
-private fun ApprovalRow(
-    doc: GroupwareApprovalRow,
-    acting: Boolean,
-    onApprove: () -> Unit,
-    onReject: () -> Unit,
-) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-    ) {
-        Text(
-            text = doc.title.ifBlank { "(제목 없음)" },
-            style = DenebType.rowTitle,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Spacer(Modifier.height(2.dp))
-        val meta = listOfNotNull(
-            doc.drafter.takeIf { it.isNotBlank() }?.let { "기안 $it" },
-            doc.status.takeIf { it.isNotBlank() },
-            doc.docNo.takeIf { it.isNotBlank() },
-        ).joinToString(" · ")
-        if (meta.isNotBlank()) {
-            Text(text = meta, style = DenebType.meta, color = denebHint())
-        }
-        if (doc.canAct) {
-            Spacer(Modifier.height(8.dp))
-            Row {
-                TextButton(enabled = !acting, onClick = onApprove) {
-                    Text("승인")
-                }
-                TextButton(enabled = !acting, onClick = onReject) {
-                    Text("반려")
-                }
-            }
-        }
     }
 }
 
