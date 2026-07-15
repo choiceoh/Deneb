@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -35,8 +36,8 @@ func newSyncTestHandler(server *httptest.Server, transcript TranscriptStore) *Ha
 func TestSendSyncReturnsErrorForUninitializedHandler(t *testing.T) {
 	h := &Handler{}
 	_, err := h.SendSync(context.Background(), "sess-1", "hello", "", nil)
-	if err == nil || err.Error() != "chat handler not initialized" {
-		t.Fatalf("expected initialization error, got: %v", err)
+	if err == nil || !errors.Is(err, ErrRuntimeDraining) {
+		t.Fatalf("expected ErrRuntimeDraining for nil abort, got: %v", err)
 	}
 }
 
