@@ -158,6 +158,46 @@ func TestBoardRadarFailureStaysRetryable(t *testing.T) {
 	}
 }
 
+func TestBoardRadarFirstSuccessfulListCreatesBaseline(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "board-radar.json")
+	listAttempts := 0
+	callbacks := 0
+	radar := NewBoardRadar(BoardRadarConfig{
+		StatePath: statePath,
+		Now:       func() time.Time { return radarMonday },
+		List: func(context.Context, Config, int) ([]BoardSummary, error) {
+			listAttempts++
+			if listAttempts == 1 {
+				return nil, errors.New("temporary list failure")
+			}
+			return []BoardSummary{boardPost("1", "existing")}, nil
+		},
+		OnCandidate: func(context.Context, BoardSummary) error {
+			callbacks++
+			return nil
+		},
+	})
+	if err := radar.Run(context.Background()); err == nil {
+		t.Fatal("expected initial list failure")
+	}
+	if _, err := os.Stat(statePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("failed list state stat = %v, want missing", err)
+	}
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if callbacks != 0 {
+		t.Fatalf("first successful baseline callbacks = %d", callbacks)
+	}
+	state, err := loadBoardRadarState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.Initialized || !state.Posts["1"].Notified {
+		t.Fatalf("baseline state = %+v", state)
+	}
+}
+
 func TestBoardRadarOutsideBusinessHoursSkipsList(t *testing.T) {
 	listed := false
 	radar := NewBoardRadar(BoardRadarConfig{

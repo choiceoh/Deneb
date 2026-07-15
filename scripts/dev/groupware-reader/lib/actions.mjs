@@ -780,7 +780,9 @@ export async function readBoard(query) {
   if (!q) throw new Error("board read requires --query");
   const r = await apiPost("/board/APIHandler/getNewNoticeListForPortlet", {
     page: "1",
-    pageSize: "40",
+    // Keep the read lookup window aligned with ListBoardPosts/BoardRadar so
+    // every candidate from the current structured snapshot remains readable.
+    pageSize: "50",
   });
   const arts = r.json?.resultData?.articleList || [];
   const hit = arts.find(
