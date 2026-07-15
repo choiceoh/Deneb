@@ -34,7 +34,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/propusview"
-	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	miniappcontract "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/contract"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
@@ -46,12 +46,12 @@ import (
 // (handlerminiapp/skills_contract.go) as the client generator's source of
 // truth; this package owns behavior only.
 type (
-	SkillRow                = handlerminiapp.SkillRow
-	SkillsListResponse      = handlerminiapp.SkillsListResponse
-	SkillLifecycleEvent     = handlerminiapp.SkillLifecycleEvent
-	PropusLifecycleSummary  = handlerminiapp.PropusLifecycleSummary
-	SkillsLifecycleResponse = handlerminiapp.SkillsLifecycleResponse
-	SkillDetailResponse     = handlerminiapp.SkillDetailResponse
+	SkillRow                = miniappcontract.SkillRow
+	SkillsListResponse      = miniappcontract.SkillsListResponse
+	SkillLifecycleEvent     = miniappcontract.SkillLifecycleEvent
+	PropusLifecycleSummary  = miniappcontract.PropusLifecycleSummary
+	SkillsLifecycleResponse = miniappcontract.SkillsLifecycleResponse
+	SkillDetailResponse     = miniappcontract.SkillDetailResponse
 )
 
 // Skill origins for SkillRow.Origin: loop-generated vs pre-existing.

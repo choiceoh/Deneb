@@ -83,7 +83,8 @@ func knowledgeRecall(ctx context.Context, router *knowledge.Router, query string
 
 	started := time.Now()
 	hits, notes := router.RecallWithMeta(ctx, query, limit)
-	slog.Info("knowledge tool recall",
+	slog.Info(
+		"knowledge tool recall",
 		"query_len", len(query),
 		"limit", limit,
 		"hit_count", len(hits),

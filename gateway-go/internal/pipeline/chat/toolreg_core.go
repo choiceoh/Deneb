@@ -63,5 +63,7 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 }
 
 // Ensure *ToolRegistry satisfies the bridge surface used by toolwire.
-var _ toolwire.RegistryBridge = (*ToolRegistry)(nil)
-var _ toolport.ToolRegistrar = (*ToolRegistry)(nil)
+var (
+	_ toolwire.RegistryBridge = (*ToolRegistry)(nil)
+	_ toolport.ToolRegistrar  = (*ToolRegistry)(nil)
+)

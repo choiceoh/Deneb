@@ -2,8 +2,10 @@ package chat
 
 import "encoding/json"
 
-type rawJSON = json.RawMessage
-type jsonObject = map[string]any
+type (
+	rawJSON    = json.RawMessage
+	jsonObject = map[string]any
+)
 
 func mustRawJSON(v any) rawJSON {
 	raw, err := json.Marshal(v)

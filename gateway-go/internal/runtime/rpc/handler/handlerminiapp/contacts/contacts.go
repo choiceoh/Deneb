@@ -15,13 +15,13 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
-	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	miniappcontract "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/contract"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-type ContactRow = handlerminiapp.ContactRow
+type ContactRow = miniappcontract.ContactRow
 
 // ContactsDeps holds the lazy contacts-store factory. Same UNAVAILABLE-per-call
 // pattern as the other domains: an unconfigured store surfaces the right error

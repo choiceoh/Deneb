@@ -11,15 +11,15 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
-	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	miniappcontract "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/contract"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 type (
-	MarketQuote   = handlerminiapp.MarketQuote
-	MarketSummary = handlerminiapp.MarketSummary
+	MarketQuote   = miniappcontract.MarketQuote
+	MarketSummary = miniappcontract.MarketSummary
 )
 
 // MarketDeps holds the cache fetcher. nil Fetch → handler not registered.

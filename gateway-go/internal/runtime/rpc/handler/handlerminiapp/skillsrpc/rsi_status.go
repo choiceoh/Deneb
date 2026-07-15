@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	miniappcontract "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/contract"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/minibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -12,10 +12,10 @@ import (
 
 // Wire type aliases — see handlerminiapp/rsi_status_contract.go.
 type (
-	RSILoopStatusResponse = handlerminiapp.RSILoopStatusResponse
-	RSIHealthView         = handlerminiapp.RSIHealthView
-	RSILayerView          = handlerminiapp.RSILayerView
-	RSIMetricView         = handlerminiapp.RSIMetricView
+	RSILoopStatusResponse = miniappcontract.RSILoopStatusResponse
+	RSIHealthView         = miniappcontract.RSIHealthView
+	RSILayerView          = miniappcontract.RSILayerView
+	RSIMetricView         = miniappcontract.RSIMetricView
 )
 
 // RSIStatusDeps wires the native + andromeda "recursive self-improvement"
