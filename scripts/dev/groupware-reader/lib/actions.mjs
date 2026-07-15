@@ -259,10 +259,24 @@ async function formatAttachments(docId) {
   let downloaded = 0;
   for (const f of list) {
     const name = f.dispFileNm || f.fileNm || f.filePath || "첨부";
-    const ext = f.fileExtsn || "";
+    const ext = String(f.fileExtsn || path.extname(String(f.filePath || "")) || "")
+      .replace(/^\./, "")
+      .toLowerCase();
     const size = f.fileSize != null ? `${f.fileSize}B` : "";
     lines.push(`- ${name}${ext ? `.${ext}` : ""}${size ? ` (${size})` : ""}`);
-    if (downloaded >= MAX_ATTACH_DOWNLOAD) continue;
+    // Metadata-only for skipped types; don't spend the download budget on a JPG
+    // we won't OCR (image OCR is opt-in via DENEB_GROUPWARE_OCR=1).
+    if (!wantExtract(ext)) {
+      const img = ["jpg", "jpeg", "png", "tif", "tiff", "bmp", "webp"].includes(ext);
+      lines.push(
+        `  (${img ? "이미지 — OCR 생략 (DENEB_GROUPWARE_OCR=1 시 추출)" : "추출 미지원 형식"})`,
+      );
+      continue;
+    }
+    if (downloaded >= MAX_ATTACH_DOWNLOAD) {
+      lines.push("  (다운로드 상한 도달 — 메타만)");
+      continue;
+    }
     downloaded += 1;
     try {
       const got = await downloadAndExtract(docId, f);
@@ -439,8 +453,33 @@ export async function readBoard(query) {
   );
 }
 
+/** The signed-in user's id on an eap126A05 line (Amaranth stores it as user_id). */
+function lineEmpId(line) {
+  return String(line.user_id ?? line.emp_seq ?? line.empSeq ?? line.userId ?? "");
+}
+
+/**
+ * Pick the operator's actionable approval line. Amaranth marks the line awaiting
+ * this user as app_sts "20" (진행); already-approved lines are "30", downstream
+ * lines "70" (예결). Require an exactly-pending line owned by empSeq so a mutate
+ * can never target someone else's slot or an already-settled one. Exported for
+ * tests — real payloads key the user as user_id, not emp_seq (that field mismatch
+ * silently missed every line before this).
+ */
+export function selectApprovalLine(lines, empSeq) {
+  const me = String(empSeq || "");
+  if (!me) return null;
+  return (
+    lines.find((l) => lineEmpId(l) === me && String(l.app_sts ?? l.appSts ?? "") === "20") || null
+  );
+}
+
 /** docLineSts: 30=승인, 50=반려. Never call without an explicit operator decision. */
 export async function actApproval(docId, decision, comment = "") {
+  // Opt-in mutate: the feed/Go path sets this; a bare CLI call stays read-safe.
+  if (process.env.DENEB_GROUPWARE_ACT !== "1") {
+    throw new Error("act blocked — set DENEB_GROUPWARE_ACT=1 to allow Amaranth approve/reject");
+  }
   const id = String(docId || "").trim();
   if (!id) throw new Error("act requires --doc-id");
   const d = String(decision || "").trim().toLowerCase();
@@ -453,19 +492,15 @@ export async function actApproval(docId, decision, comment = "") {
   if (!sess?.empSeq) throw new Error("session missing empSeq — re-login");
 
   const lines = await fetchDocLine(id);
-  const mine =
-    lines.find((l) => {
-      const emp = String(l.emp_seq ?? l.empSeq ?? "");
-      const sts = String(l.app_sts ?? l.appSts ?? "");
-      return emp === String(sess.empSeq) && sts === "20";
-    }) ||
-    lines.find((l) => {
-      const emp = String(l.emp_seq ?? l.empSeq ?? "");
-      const act = String(l.act_id ?? l.actID ?? "");
-      return emp === String(sess.empSeq) && act === "3000";
-    });
+  const mine = selectApprovalLine(lines, sess.empSeq);
   if (!mine) {
-    throw new Error(`내 미결 결재선을 찾지 못했습니다 (docId=${id}, empSeq=${sess.empSeq})`);
+    // Distinguish "not my turn yet / already done" from "not on this line at all".
+    const onLine = lines.some((l) => lineEmpId(l) === String(sess.empSeq));
+    throw new Error(
+      onLine
+        ? `지금 내 차례가 아닙니다 (docId=${id}) — 이미 처리됐거나 상위 결재 대기 중`
+        : `내 결재선이 아닙니다 (docId=${id}, empSeq=${sess.empSeq})`,
+    );
   }
 
   const actID = String(mine.act_id ?? mine.actID ?? "3000");
