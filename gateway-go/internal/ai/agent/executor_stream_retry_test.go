@@ -58,7 +58,7 @@ func (s *scriptedRetryStreamer) StreamChat(ctx context.Context, _ llm.ChatReques
 	return events, nil
 }
 
-func TestRunStreamingTurnWithRetryCancelsEachAttempt(t *testing.T) {
+func TestRunStreamingTurnWithPolicyCancelsEachAttempt(t *testing.T) {
 	parent := context.Background()
 	streamer := &scriptedRetryStreamer{
 		requirePreviousCanceled: true,
@@ -68,13 +68,15 @@ func TestRunStreamingTurnWithRetryCancelsEachAttempt(t *testing.T) {
 		},
 	}
 
-	outcome, err := runStreamingTurnWithRetry(
+	outcome, err := runStreamingTurnWithPolicy(
 		parent,
 		streamer,
 		llm.ChatRequest{Stream: true},
 		StreamHooks{},
 		10*time.Millisecond,
 		nil,
+		0,
+		false,
 		0,
 	)
 	testutil.NoError(t, err)
@@ -98,7 +100,7 @@ func (*scriptedRetryStreamer) Complete(context.Context, llm.ChatRequest) (string
 	return "", nil
 }
 
-func TestRunStreamingTurnWithRetryPolicy(t *testing.T) {
+func TestRunStreamingTurnWithPolicyRetryBehavior(t *testing.T) {
 	connectionErr := errors.New("dial failed")
 	errorEvent := llm.StreamEvent{
 		Type:    "error",
@@ -182,13 +184,15 @@ func TestRunStreamingTurnWithRetryPolicy(t *testing.T) {
 				ctx = tt.ctx()
 			}
 			streamer := &scriptedRetryStreamer{attempts: tt.attempts}
-			outcome, err := runStreamingTurnWithRetry(
+			outcome, err := runStreamingTurnWithPolicy(
 				ctx,
 				streamer,
 				llm.ChatRequest{Stream: true},
 				StreamHooks{},
 				tt.idleTimeout,
 				nil,
+				0,
+				false,
 				0,
 			)
 
@@ -217,7 +221,7 @@ func TestRunStreamingTurnWithRetryPolicy(t *testing.T) {
 	}
 }
 
-func TestRunStreamingTurnWithRetryPreservesHooksAndResetsResult(t *testing.T) {
+func TestRunStreamingTurnWithPolicyPreservesHooksAndResetsResult(t *testing.T) {
 	firstAttempt := []llm.StreamEvent{
 		messageStartEvent(5),
 		contentBlockStartEvent(0, "text", ""),
@@ -230,13 +234,15 @@ func TestRunStreamingTurnWithRetryPreservesHooksAndResetsResult(t *testing.T) {
 	}}
 	var deltas []string
 
-	outcome, err := runStreamingTurnWithRetry(
+	outcome, err := runStreamingTurnWithPolicy(
 		context.Background(),
 		streamer,
 		llm.ChatRequest{Stream: true},
 		StreamHooks{OnTextDelta: func(delta string) { deltas = append(deltas, delta) }},
 		-1,
 		nil,
+		0,
+		false,
 		0,
 	)
 	testutil.NoError(t, err)
