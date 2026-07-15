@@ -2477,6 +2477,14 @@ class MiniappWireFieldBoundaryContractTest {
             expectation = Expectation.Exact,
         ),
         fieldContract(
+            name = "ProjectSiteRow.status",
+            serializer = ProjectSiteRow.serializer(),
+            field = "status",
+            valid = boundaryText,
+            invalid = JsonObject(emptyMap()),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
             name = "ProjectSitesOut.sites",
             serializer = ProjectSitesOut.serializer(),
             field = "sites",

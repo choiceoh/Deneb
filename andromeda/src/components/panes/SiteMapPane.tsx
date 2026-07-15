@@ -31,8 +31,14 @@ interface Pin {
   source: string; // 에너지원 (Kinds 상위: 태양광/풍력/기자재/기타/"")
   type: string; // 특성 (Kinds 하위: 토지/루프탑/수상/…/"")
   capacity: number; // MW, 0 = unrecorded
+  status: string; // 현장 lifecycle (후보/계약/개설/준공); "" = 미분류
   due?: string; // kept for the detail card only — not a visual dimension
 }
+
+// 후보(prospective) 현장 are hidden by default — the map is for real, contracted
+// sites ("계약해서 개설된 현장"). A "" status (미분류, e.g. 대표페이지 fallback rows)
+// is always shown; only an explicit 후보 is gated behind the toggle.
+const PROSPECTIVE = "후보";
 
 // 에너지원 → color. The warm-Zen palette is deliberately narrow, so we map the
 // four sources onto the theme's semantic tokens rather than inventing hues:
@@ -105,25 +111,38 @@ function resolveSite(site: string): [number, number] | null {
   return PROVINCE_CENTROID[sido] ?? null;
 }
 
+interface Unplaced {
+  site: string;
+  project: string;
+  status: string; // carried so the 미배치 tray can hide 후보 too
+}
+
 interface Placed {
   pins: Pin[];
-  unplaced: { site: string; project: string }[];
+  unplaced: Unplaced[];
 }
 
 function placeSites(rows: ProjectSiteRow[]): Placed {
   const pins: Pin[] = [];
-  const unplaced: { site: string; project: string }[] = [];
+  const unplaced: Unplaced[] = [];
   const seen = new Map<string, number>();
   for (const r of rows) {
     const project = r.project ?? "";
     const kinds = r.kinds ?? [];
     const { source, type } = primaryKind(kinds);
     const capacity = r.capacity ?? 0;
+    const status = (r.status ?? "").trim();
     const rad = radiusOf(capacity);
-    for (const site of r.sites ?? []) {
+    const siteList = r.sites ?? [];
+    // A 현장 page with no address yet (empty sites) still surfaces — as a 미배치 row.
+    if (siteList.length === 0) {
+      unplaced.push({ site: "(주소 미기재)", project, status });
+      continue;
+    }
+    for (const site of siteList) {
       const xy = resolveSite(site);
       if (!xy) {
-        unplaced.push({ site, project });
+        unplaced.push({ site, project, status });
         continue;
       }
       const key = `${xy[0]},${xy[1]}`;
@@ -144,6 +163,7 @@ function placeSites(rows: ProjectSiteRow[]): Placed {
         source,
         type,
         capacity,
+        status: (r.status ?? "").trim(),
         due: r.due,
       });
     }
@@ -174,6 +194,7 @@ export function SiteMapPane() {
   const [sourceFilter, setSourceFilter] = useState<Set<string>>(new Set());
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [sidoFilter, setSidoFilter] = useState<string | null>(null);
+  const [showProspective, setShowProspective] = useState(false);
   const [selected, setSelected] = useState<Pin | null>(null);
 
   // Wheel-zoom + drag-pan via a controlled viewBox. Full extent = the whole map;
@@ -249,26 +270,35 @@ export function SiteMapPane() {
     return TYPE_ORDER.filter((k) => s.has(k));
   }, [pins]);
 
+  const prospectiveCount = useMemo(() => pins.filter((p) => p.status === PROSPECTIVE).length, [pins]);
+
   const shown = useMemo(
     () =>
       pins.filter(
         (p) =>
+          (showProspective || p.status !== PROSPECTIVE) &&
           (sourceFilter.size === 0 || sourceFilter.has(p.source)) &&
           (typeFilter.size === 0 || typeFilter.has(typeLabel(p.type))) &&
           (!sidoFilter || p.sido === sidoFilter),
       ),
-    [pins, sourceFilter, typeFilter, sidoFilter],
+    [pins, sourceFilter, typeFilter, sidoFilter, showProspective],
   );
 
   const totalMw = useMemo(() => shown.reduce((sum, p) => sum + (p.capacity || 0), 0), [shown]);
+  // 미배치 hides 후보 too (unless the toggle is on), so a hidden candidate site never
+  // leaks into the tray/count.
+  const shownUnplaced = useMemo(
+    () => unplaced.filter((u) => showProspective || u.status !== PROSPECTIVE),
+    [unplaced, showProspective],
+  );
 
   const aiText = serializeList("현장 지도", shown, (p) => {
     const tags = [p.source, typeLabel(p.type), p.capacity ? capacityText(p.capacity) : ""].filter(Boolean).join("/");
     const head = `- ${p.client ? `[${p.client}] ` : ""}${p.project} · ${p.site}${tags ? ` (${tags})` : ""}`;
     return p.due ? `${head} — 마감 ${p.due}` : head;
   });
-  const aiFull = unplaced.length
-    ? `${aiText}\n\n미배치(주소 매칭 실패) ${unplaced.length}건: ${unplaced.map((u) => u.site).join(", ")}`
+  const aiFull = shownUnplaced.length
+    ? `${aiText}\n\n미배치(주소 매칭 실패) ${shownUnplaced.length}건: ${shownUnplaced.map((u) => u.site).join(", ")}`
     : aiText;
   useRegisterPane("sitemap", aiFull);
 
@@ -288,7 +318,7 @@ export function SiteMapPane() {
           현장 {shown.length}
           {shown.length !== pins.length && <span style={{ color: "var(--faint)" }}>/{pins.length}</span>}
           {totalMw > 0 && <span style={{ color: "var(--faint)" }}> · 총 {capacityText(totalMw)}</span>}
-          {unplaced.length > 0 && <span style={{ color: "var(--faint)" }}> · 미배치 {unplaced.length}</span>}
+          {shownUnplaced.length > 0 && <span style={{ color: "var(--faint)" }}> · 미배치 {shownUnplaced.length}</span>}
         </span>
       </div>
 
@@ -320,6 +350,11 @@ export function SiteMapPane() {
         {sidoFilter && (
           <Chip on onClick={() => setSidoFilter(null)}>
             {sidoFilter} ✕
+          </Chip>
+        )}
+        {prospectiveCount > 0 && (
+          <Chip on={showProspective} onClick={() => setShowProspective((v) => !v)}>
+            후보 포함 {prospectiveCount}
           </Chip>
         )}
         {filtered && (
@@ -519,7 +554,7 @@ export function SiteMapPane() {
         </div>
       )}
 
-      {unplaced.length > 0 && (
+      {shownUnplaced.length > 0 && (
         <section
           className="fade-up"
           style={{
@@ -530,10 +565,10 @@ export function SiteMapPane() {
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-2)", marginBottom: 6 }}>
-            미배치 {unplaced.length} — 주소를 지도에 매칭하지 못한 현장
+            미배치 {shownUnplaced.length} — 주소를 지도에 매칭하지 못한 현장
           </div>
           <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 4 }}>
-            {unplaced.map((u, i) => (
+            {shownUnplaced.map((u, i) => (
               <li key={i} style={{ fontSize: 12, color: "var(--muted)" }}>
                 {u.site} <span style={{ color: "var(--faint)" }}>· {u.project}</span>
               </li>
@@ -563,6 +598,7 @@ export function SiteMapPane() {
         >
           {selected.client && <Detail label="거래처" value={selected.client} />}
           <Detail label="현장" value={selected.site} />
+          {selected.status && <Detail label="상태" value={selected.status} />}
           {selected.source && <Detail label="에너지원" value={selected.source} />}
           {selected.type && <Detail label="특성" value={typeLabel(selected.type)} />}
           <Detail label="용량" value={capacityText(selected.capacity)} />

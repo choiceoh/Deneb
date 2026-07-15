@@ -166,23 +166,38 @@ private data class SitePin(
     val source: String,
     val type: String,
     val capacity: Double,
+    val status: String,
     val due: String,
     val kinds: List<String>,
 )
 
-private data class Placed(val pins: List<SitePin>, val unplaced: List<Pair<String, String>>)
+// 후보(prospective) 현장 are hidden by default — the map is for real, contracted
+// sites. A "" status (미분류, e.g. 대표페이지 fallback rows) is always shown; only an
+// explicit 후보 is gated behind the toggle.
+private const val PROSPECTIVE = "후보"
+
+// An unplaceable 현장 — carries status so the 미배치 tray can hide 후보 too.
+private data class UnplacedSite(val site: String, val project: String, val status: String)
+
+private data class Placed(val pins: List<SitePin>, val unplaced: List<UnplacedSite>)
 
 private fun placeSites(rows: List<ProjectSiteRow>): Placed {
     val pins = mutableListOf<SitePin>()
-    val unplaced = mutableListOf<Pair<String, String>>()
+    val unplaced = mutableListOf<UnplacedSite>()
     val seen = mutableMapOf<String, Int>()
     for (r in rows) {
         val (source, type) = primaryKind(r.kinds)
         val rad = radiusDpOf(r.capacity)
+        val status = r.status.trim()
+        // A 현장 page with no address yet (empty sites) still surfaces — as a 미배치 row.
+        if (r.sites.isEmpty()) {
+            unplaced.add(UnplacedSite("(주소 미기재)", r.project, status))
+            continue
+        }
         for (site in r.sites) {
             val xy = resolveSite(site)
             if (xy == null) {
-                unplaced.add(site to r.project)
+                unplaced.add(UnplacedSite(site, r.project, status))
                 continue
             }
             val key = "${xy[0]},${xy[1]}"
@@ -202,6 +217,7 @@ private fun placeSites(rows: List<ProjectSiteRow>): Placed {
                     source = source,
                     type = type,
                     capacity = r.capacity,
+                    status = status,
                     due = r.due,
                     kinds = r.kinds,
                 ),
@@ -290,6 +306,7 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
 
     var sourceFilter by remember { mutableStateOf<Set<String>>(emptySet()) }
     var typeFilter by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showProspective by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<SitePin?>(null) }
 
     fun select(pin: SitePin) {
@@ -306,11 +323,20 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
         typeOrder.filter { it in present }
     }
 
-    val shown = remember(pins, sourceFilter, typeFilter) {
+    val prospectiveCount = remember(pins, unplaced) {
+        pins.count { it.status == PROSPECTIVE } + unplaced.count { it.status == PROSPECTIVE }
+    }
+
+    val shown = remember(pins, sourceFilter, typeFilter, showProspective) {
         pins.filter {
-            (sourceFilter.isEmpty() || it.source in sourceFilter) &&
+            (showProspective || it.status != PROSPECTIVE) &&
+                (sourceFilter.isEmpty() || it.source in sourceFilter) &&
                 (typeFilter.isEmpty() || typeLabel(it.type) in typeFilter)
         }
+    }
+    // 미배치 hides 후보 too (unless the toggle is on) so a hidden candidate never leaks in.
+    val shownUnplaced = remember(unplaced, showProspective) {
+        unplaced.filter { showProspective || it.status != PROSPECTIVE }
     }
     val totalMw = remember(shown) { shown.sumOf { it.capacity } }
 
@@ -322,9 +348,9 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
                 Spacer(Modifier.width(8.dp))
                 Text("총 ${capacityText(totalMw)}", style = DenebType.meta, color = denebHint())
             }
-            if (unplaced.isNotEmpty()) {
+            if (shownUnplaced.isNotEmpty()) {
                 Spacer(Modifier.width(8.dp))
-                Text("미배치 ${unplaced.size}", style = DenebType.meta, color = denebHint())
+                Text("미배치 ${shownUnplaced.size}", style = DenebType.meta, color = denebHint())
             }
         }
 
@@ -352,6 +378,11 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
                     Text(t, style = DenebType.meta)
                 }
             }
+            if (prospectiveCount > 0) {
+                DenebChip(selected = showProspective, onClick = { showProspective = !showProspective }) {
+                    Text("후보 포함 $prospectiveCount", style = DenebType.meta)
+                }
+            }
         }
 
         Spacer(Modifier.height(12.dp))
@@ -375,11 +406,11 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
         }
     }
 
-    if (unplaced.isNotEmpty()) {
+    if (shownUnplaced.isNotEmpty()) {
         Spacer(Modifier.height(16.dp))
         DenebSectionLabel("미배치 — 주소를 지도에 매칭하지 못한 현장")
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            unplaced.forEach { (site, project) ->
+            shownUnplaced.forEach { (site, project) ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Text(site, style = DenebType.rowSubtitle)
                     Spacer(Modifier.width(6.dp))
@@ -398,6 +429,7 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
                 Spacer(Modifier.height(12.dp))
                 if (pin.client.isNotEmpty()) DetailRow("거래처", pin.client)
                 DetailRow("현장", pin.site)
+                if (pin.status.isNotEmpty()) DetailRow("상태", pin.status)
                 if (pin.source.isNotEmpty()) DetailRow("에너지원", pin.source)
                 if (pin.type.isNotEmpty()) DetailRow("특성", typeLabel(pin.type))
                 DetailRow("용량", capacityText(pin.capacity))

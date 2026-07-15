@@ -102,7 +102,7 @@ func TestProjectSitesMapsActiveProjectsWithSitesToRows(t *testing.T) {
 	// Every active project carrying Sites is emitted (whether or not it has a
 	// 현재 상태 digest), mapped ProjectSite → wire row.
 	src := fakeProjectStatusSource{sites: []wiki.ProjectSite{
-		{Name: "영산고", Client: "영산", Path: "프로젝트/영산고/대표.md", Due: "2026-06-30", Sites: []string{"전남 해남군 산이면"}, Kinds: []string{"태양광/토지"}, Capacity: 24},
+		{Name: "영산고", Client: "영산", Path: "프로젝트/영산고/대표.md", Due: "2026-06-30", Sites: []string{"전남 해남군 산이면"}, Kinds: []string{"태양광/토지"}, Capacity: 24, Status: "계약"},
 		{Name: "군산수산리", Path: "프로젝트/군산수산리.md", Sites: []string{"전북 군산시 옥구읍 수산리", "전북 군산시 옥서면"}},
 	}}
 	resp := projectSites(projectDepsFor(src, nil))(authedCtx(), reqWith(t, "miniapp.project.sites", nil))
@@ -121,8 +121,8 @@ func TestProjectSitesMapsActiveProjectsWithSitesToRows(t *testing.T) {
 	if len(first.Sites) != 1 || first.Sites[0] != "전남 해남군 산이면" {
 		t.Errorf("영산고 sites = %v, want [전남 해남군 산이면]", first.Sites)
 	}
-	if len(first.Kinds) != 1 || first.Kinds[0] != "태양광/토지" || first.Capacity != 24 {
-		t.Errorf("영산고 kinds/capacity = %v/%v, want [태양광/토지]/24", first.Kinds, first.Capacity)
+	if len(first.Kinds) != 1 || first.Kinds[0] != "태양광/토지" || first.Capacity != 24 || first.Status != "계약" {
+		t.Errorf("영산고 kinds/capacity/status = %v/%v/%q, want [태양광/토지]/24/계약", first.Kinds, first.Capacity, first.Status)
 	}
 	if len(got.Sites[1].Sites) != 2 {
 		t.Errorf("군산수산리 sites = %v, want 2", got.Sites[1].Sites)
