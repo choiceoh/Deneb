@@ -167,7 +167,7 @@ func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (Sear
 		}
 	}
 	for clauseIndex, clause := range plan.Clauses {
-		options := QueryOptions{skipMetadata: true, skipRerank: true, skipValidity: true}
+		options := QueryOptions{skipMetadata: true, SkipRerank: true, skipValidity: true}
 		var report SearchReport
 		if clause.Kind == QueryKindVec || clause.Kind == QueryKindHyDE {
 			options.Mode = SearchModeSemantic

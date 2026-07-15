@@ -246,7 +246,25 @@ func newGraphCorpus(capacity int) graphCorpus {
 // loadGraphCorpus snapshots readable pages in ListPages order. Individual page
 // read failures remain best-effort skips, while context cancellation aborts the
 // whole build exactly as the former inline loop did.
+//
+// Successful builds are cached on the Store and reused until a page write/delete
+// invalidates them — Auto search's graph boost used to re-read every page on
+// each recall, which dominated agent knowledge(op=recall) latency.
 func (s *Store) loadGraphCorpus(ctx context.Context) (graphCorpus, error) {
+	if s == nil {
+		return graphCorpus{}, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return graphCorpus{}, err
+	}
+	s.graphMu.RLock()
+	if s.graphCache != nil {
+		cached := *s.graphCache
+		s.graphMu.RUnlock()
+		return cached, nil
+	}
+	s.graphMu.RUnlock()
+
 	relPaths, err := s.ListPages("")
 	if err != nil {
 		return graphCorpus{}, err
@@ -262,7 +280,22 @@ func (s *Store) loadGraphCorpus(ctx context.Context) (graphCorpus, error) {
 		}
 		corpus.add(graphRecord(relPath, page))
 	}
+
+	s.graphMu.Lock()
+	s.graphCache = &corpus
+	s.graphMu.Unlock()
 	return corpus, nil
+}
+
+// invalidateGraphCorpus drops the cached graph snapshot. Called from page
+// write/delete paths so the next recall rebuilds against fresh Related/links.
+func (s *Store) invalidateGraphCorpus() {
+	if s == nil {
+		return
+	}
+	s.graphMu.Lock()
+	s.graphCache = nil
+	s.graphMu.Unlock()
 }
 
 func graphRecord(relPath string, page *Page) graphRec {

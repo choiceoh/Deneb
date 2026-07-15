@@ -94,6 +94,12 @@ type Store struct {
 	sem             *semanticIndex
 	reranker        Reranker
 	bm25RarityFloor float64
+
+	// graphCache holds the last successful loadGraphCorpus snapshot so Auto
+	// search does not re-ReadPage every wiki page on each recall. Invalidated
+	// on page write/delete (see invalidateGraphCorpus).
+	graphMu    sync.RWMutex
+	graphCache *graphCorpus
 }
 
 // SearchOptions fixes search-time inputs that production normally obtains
@@ -328,6 +334,8 @@ func (s *Store) writePageInternal(relPath string, page *Page, skipBacklinks bool
 		return err
 	}
 
+	s.invalidateGraphCorpus()
+
 	// Maintain bidirectional backlinks.
 	if !skipBacklinks {
 		s.maintainBacklinks(relPath, oldRelated, page.Meta.Related)
@@ -372,6 +380,8 @@ func (s *Store) deletePageLocked(relPath string) error {
 	}(); err != nil {
 		return err
 	}
+
+	s.invalidateGraphCorpus()
 
 	_ = s.appendLog("delete", relPath) // best-effort: audit log is non-critical
 
