@@ -114,9 +114,17 @@ func (g *untrustedToolGate) markTainted(source string) {
 // visible effects that must not run on a promptware-tainted turn. Other tools
 // — reads, searches, wiki writes (checkpointed, internal) — stay available so a
 // tainted turn can still do safe work and explain itself.
-func isIrreversibleTool(name string, input []byte) bool {
+func isIrreversibleTool(name string, _ []byte) bool {
 	switch name {
 	case "exec":
+		// exec = arbitrary shell (RCE).
+		return true
+	case "preference":
+		// preference appends a DURABLE standing rule to SOUL.md that steers every
+		// future session — a persistent persona mutation an injection must not plant.
+		return true
+	case "wiki_forget":
+		// wiki_forget hard-deletes a page — irreversible data loss.
 		return true
 	default:
 		return false

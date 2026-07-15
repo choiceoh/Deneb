@@ -21,8 +21,12 @@ func RegisterContactsTool(registry wire.ToolRegistrar, contactsDeps *wire.Contac
 	wire.RegisterContactsTool(registry, contactsDeps)
 }
 
-func RegisterWikiTools(registry wire.ToolRegistrar, wikiDeps *wire.WikiDeps, workspaceDir string) {
-	wire.RegisterWikiTools(registry, wikiDeps, workspaceDir)
+func RegisterWikiTools(registry wire.ToolRegistrar, wikiDeps *wire.WikiDeps, workspaceDir string, sessionCacheFlush wire.SessionCacheFlushFn) {
+	wire.RegisterWikiTools(registry, wikiDeps, workspaceDir, sessionCacheFlush)
+}
+
+func RegisterPersonaTools(registry wire.ToolRegistrar, workspaceDir string) {
+	wire.RegisterPersonaTools(registry, workspaceDir)
 }
 
 func RegisterNotebookTool(registry wire.ToolRegistrar, deps *wire.NotebookDeps) {

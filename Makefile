@@ -305,20 +305,20 @@ fmt:
 
 # --- Tool schema code generation ---
 
-# Regenerate gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go from tool_schemas.json.
+# Regenerate gateway-go/internal/pipeline/chat/toolwire/schema/tool_schemas_gen.go from tool_schemas.json.
 tool-schemas:
 	cd gateway-go && go run cmd/tool-schema-gen/main.go \
-		-json internal/pipeline/chat/toolreg/tool_schemas.json \
-		-out  internal/pipeline/chat/toolreg/tool_schemas_gen.go \
-		-pkg  toolreg
+		-json internal/pipeline/chat/toolwire/schema/tool_schemas.json \
+		-out  internal/pipeline/chat/toolwire/schema/tool_schemas_gen.go \
+		-pkg  schema
 
 # Verify tool_schemas_gen.go is up to date (fails if json and Go are out of sync).
 tool-schemas-check:
 	cd gateway-go && go run cmd/tool-schema-gen/main.go \
-		-json internal/pipeline/chat/toolreg/tool_schemas.json \
-		-out  internal/pipeline/chat/toolreg/tool_schemas_gen.go \
-		-pkg  toolreg
-	@git diff --exit-code -- gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go
+		-json internal/pipeline/chat/toolwire/schema/tool_schemas.json \
+		-out  internal/pipeline/chat/toolwire/schema/tool_schemas_gen.go \
+		-pkg  schema
+	@git diff --exit-code -- gateway-go/internal/pipeline/chat/toolwire/schema/tool_schemas_gen.go
 
 # --- Data table code generation ---
 #
