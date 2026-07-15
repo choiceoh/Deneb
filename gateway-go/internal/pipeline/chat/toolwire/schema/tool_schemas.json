@@ -312,7 +312,7 @@
       },
       "query": {
         "type": "string",
-        "description": "Web search query. Serper (Google) > Brave > DuckDuckGo fallback"
+        "description": "Web search query. Serper (Google) → Brave → DuckDuckGo on missing key or provider failure"
       },
       "queries": {
         "type": "array",
@@ -327,7 +327,7 @@
       },
       "maxChars": {
         "type": "number",
-        "description": "Maximum content characters total (default: 50000)"
+        "description": "Maximum content characters total (default: 20000). search+fetch may use a lower internal budget"
       },
       "count": {
         "type": "number",

@@ -25,6 +25,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -334,12 +336,10 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 	sb.WriteString(searchOutput)
 	sb.WriteString("\n</search_results>\n\n")
 
-	// Auto-fetch top N URLs.
-	if fetchTop > len(fetchURLs) {
-		fetchTop = len(fetchURLs)
-	}
-	if fetchTop == 0 {
-		sb.WriteString("\n[Note: fetch requested but no fetchable URLs from this search provider. Use web(url=...) to fetch specific pages.]\n")
+	fetchURLs = selectFetchURLs(fetchURLs, fetchTop)
+	if len(fetchURLs) == 0 {
+		sb.WriteString("\n[Note: fetch requested but no fetchable URLs (provider=duckduckgo or filtered). " +
+			"search+fetch needs Serper/Brave organic results; use web(url=...) for specific pages.]\n")
 		return sb.String(), nil
 	}
 
@@ -348,10 +348,10 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 		content string
 		err     error
 	}
-	perResultChars := maxChars / fetchTop
-	results := make([]fetchResult, fetchTop)
+	perResultChars := maxChars / len(fetchURLs)
+	results := make([]fetchResult, len(fetchURLs))
 	var wg sync.WaitGroup
-	for i := range fetchTop {
+	for i := range fetchURLs {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -361,7 +361,7 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 	}
 	wg.Wait()
 
-	for i := range fetchTop {
+	for i := range fetchURLs {
 		fmt.Fprintf(&sb, "<fetched index=\"%d\" url=\"%s\">\n", i+1, fetchURLs[i])
 		if results[i].err != nil {
 			fmt.Fprintf(&sb, "Fetch failed: %s\n", results[i].err.Error())
@@ -372,4 +372,50 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 	}
 
 	return sb.String(), nil
+}
+
+// selectFetchURLs picks up to limit auto-fetch candidates: drops empty/javascript
+// URLs, obvious non-document media, and duplicate hosts (first wins). PDF and
+// Office URLs stay — liteparse handles them on the fetch path.
+func selectFetchURLs(urls []string, limit int) []string {
+	if limit <= 0 {
+		return nil
+	}
+	seenHost := make(map[string]struct{}, limit)
+	out := make([]string, 0, limit)
+	for _, raw := range urls {
+		raw = strings.TrimSpace(raw)
+		if raw == "" || strings.HasPrefix(strings.ToLower(raw), "javascript:") {
+			continue
+		}
+		parsed, err := url.Parse(raw)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			continue
+		}
+		if isNonDocumentMediaURL(parsed) {
+			continue
+		}
+		host := strings.ToLower(parsed.Host)
+		if _, ok := seenHost[host]; ok {
+			continue
+		}
+		seenHost[host] = struct{}{}
+		out = append(out, raw)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+var nonDocumentMediaExt = map[string]struct{}{
+	".jpg": {}, ".jpeg": {}, ".png": {}, ".gif": {}, ".webp": {}, ".svg": {}, ".ico": {},
+	".mp4": {}, ".webm": {}, ".mov": {}, ".avi": {}, ".mkv": {},
+	".mp3": {}, ".wav": {}, ".m4a": {}, ".flac": {}, ".ogg": {},
+}
+
+func isNonDocumentMediaURL(u *url.URL) bool {
+	ext := strings.ToLower(path.Ext(u.Path))
+	_, ok := nonDocumentMediaExt[ext]
+	return ok
 }

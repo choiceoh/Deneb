@@ -336,7 +336,7 @@ func TestClassifyFetchError_Hints(t *testing.T) {
 		err      error
 		wantHint string
 	}{
-		{"403", &media.MediaFetchError{Code: media.ErrHTTPError, Status: 403, Message: "forbidden"}, "custom headers"},
+		{"403", &media.MediaFetchError{Code: media.ErrHTTPError, Status: 403, Message: "forbidden"}, "web(query=...)"},
 		{"429", &media.MediaFetchError{Code: media.ErrHTTPError, Status: 429, Message: "too many requests"}, "Rate limited"},
 		{"500", &media.MediaFetchError{Code: media.ErrHTTPError, Status: 500, Message: "internal error"}, "Server error"},
 		{"SSRF", &media.MediaFetchError{Code: media.ErrFetchFailed, Message: "SSRF: blocked"}, "public URL"},
@@ -438,5 +438,47 @@ func TestIsRetryableError(t *testing.T) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSelectFetchURLsFiltersMediaDupesAndJavascript(t *testing.T) {
+	in := []string{
+		"",
+		"javascript:void(0)",
+		"https://a.example/page",
+		"https://a.example/other", // same host — skip
+		"https://cdn.example/img.png",
+		"https://docs.example/report.pdf", // keep
+		"https://b.example/article",
+		"not-a-url",
+	}
+	got := selectFetchURLs(in, 3)
+	want := []string{
+		"https://a.example/page",
+		"https://docs.example/report.pdf",
+		"https://b.example/article",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}
+
+func TestSelectFetchURLsRespectsLimit(t *testing.T) {
+	in := []string{
+		"https://a.example/1",
+		"https://b.example/2",
+		"https://c.example/3",
+	}
+	got := selectFetchURLs(in, 2)
+	if len(got) != 2 {
+		t.Fatalf("len=%d want 2: %v", len(got), got)
+	}
+	if selectFetchURLs(in, 0) != nil {
+		t.Fatal("limit 0 should return nil")
 	}
 }
