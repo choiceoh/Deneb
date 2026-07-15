@@ -2,10 +2,11 @@ package chat
 
 import (
 	"context"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"

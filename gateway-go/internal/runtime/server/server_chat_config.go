@@ -4,11 +4,12 @@ package server
 import (
 	"context"
 	"fmt"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
