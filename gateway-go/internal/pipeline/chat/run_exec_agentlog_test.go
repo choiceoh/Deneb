@@ -38,7 +38,7 @@ func newAgentLogSyncHandler(t *testing.T, server *httptest.Server, clientOpts ..
 	t.Helper()
 	logDir := t.TempDir()
 	sm := session.NewManager()
-	broadcast := func(event string, payload any) (int, []error) { return 1, nil }
+	broadcast := func(event string, payload json.RawMessage) (int, []error) { return 1, nil }
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := DefaultHandlerConfig()
 	cfg.LLMClient = llm.NewClient(server.URL, "test-key", clientOpts...)

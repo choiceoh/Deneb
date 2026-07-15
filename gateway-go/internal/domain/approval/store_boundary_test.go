@@ -1,6 +1,8 @@
 package approval
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -24,6 +26,10 @@ func TestCreateRequestBoundaryPreservesEveryField(t *testing.T) {
 		Shell string
 		Risk  int
 	}{Shell: "bash", Risk: 4}
+	planJSON, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
 	s := NewStore()
 	before := time.Now().UnixMilli()
 	got := s.CreateRequest(CreateRequestParams{
@@ -32,7 +38,7 @@ func TestCreateRequestBoundaryPreservesEveryField(t *testing.T) {
 		CommandArgv:   []string{"printf", "%s", "boundary"},
 		Env:           map[string]string{"LANG": "ko_KR.UTF-8", "MODE": "test"},
 		Cwd:           "/srv/work tree",
-		SystemRunPlan: plan,
+		SystemRunPlan: planJSON,
 		Host:          "gateway",
 		Security:      "allowlist",
 		Ask:           "on-miss",
@@ -60,8 +66,8 @@ func TestCreateRequestBoundaryPreservesEveryField(t *testing.T) {
 	if got.Cwd != "/srv/work tree" {
 		t.Fatalf("Cwd = %q", got.Cwd)
 	}
-	if !reflect.DeepEqual(got.SystemRunPlan, plan) {
-		t.Fatalf("SystemRunPlan = %#v", got.SystemRunPlan)
+	if !bytes.Equal(got.SystemRunPlan, planJSON) {
+		t.Fatalf("SystemRunPlan = %s", got.SystemRunPlan)
 	}
 	if got.Host != "gateway" {
 		t.Fatalf("Host = %q", got.Host)

@@ -108,7 +108,7 @@ func BenchmarkPreSerialize_vs_RawMarshal(b *testing.B) {
 	})
 
 	b.Run("pre_serialized", func(b *testing.B) {
-		t := llm.Tool{Name: "test", Description: "test tool", RawInputSchema: rawSchema}
+		t := llm.Tool{Name: "test", Description: "test tool", RawInputSchema: llm.FlexibleFromRaw(rawSchema)}
 		t.PreSerialize()
 		b.ResetTimer()
 		b.ReportAllocs()

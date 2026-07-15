@@ -56,7 +56,7 @@ func TestStripCacheControlMarkers_ClearsAllMarkers(t *testing.T) {
 }
 
 func TestStripCacheControlMarkers_PreservesStringSystem(t *testing.T) {
-	raw := llm.SystemString("plain system prompt")
+	raw := json.RawMessage(llm.SystemString("plain system prompt").Bytes())
 	if out := stripCacheControlMarkers(raw); string(out) != string(raw) {
 		t.Fatalf("string system prompt must be unchanged, got %s", out)
 	}

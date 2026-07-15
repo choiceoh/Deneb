@@ -16,7 +16,7 @@ var (
 	callMethod    = rpctest.Call
 	mustOK        = rpctest.MustOK
 	mustErr       = rpctest.MustErr
-	extractResult = rpctest.Result
+	extractResult = rpctest.Result[map[string]any]
 )
 
 // ─── RuntimeMethods key set ──────────────────────────────────────────────────

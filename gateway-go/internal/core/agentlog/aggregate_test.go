@@ -1,6 +1,7 @@
 package agentlog
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -23,10 +24,14 @@ func TestAggregateReturnsRunToolAndProactiveRollups(t *testing.T) {
 	})
 
 	// Standalone behavioral events.
-	w.LogEvent(SessionProactive, TypeProactiveRelay, ProactiveRelayData{Decision: "delivered"})
-	w.LogEvent(SessionProactive, TypeProactiveRelay, ProactiveRelayData{Decision: "suppressed", Reason: "contentless"})
-	w.LogEvent(SessionBackground, TypeBackgroundJob, BackgroundJobData{Kind: "autonomous", Name: "gmailpoll", Outcome: "ok"})
-	w.LogEvent(SessionBackground, TypeBackgroundJob, BackgroundJobData{Kind: "autonomous", Name: "gmailpoll", Outcome: "error"})
+	relayDelivered, _ := json.Marshal(ProactiveRelayData{Decision: "delivered"})
+	w.LogEvent(SessionProactive, TypeProactiveRelay, relayDelivered)
+	relaySuppressed, _ := json.Marshal(ProactiveRelayData{Decision: "suppressed", Reason: "contentless"})
+	w.LogEvent(SessionProactive, TypeProactiveRelay, relaySuppressed)
+	jobOK, _ := json.Marshal(BackgroundJobData{Kind: "autonomous", Name: "gmailpoll", Outcome: "ok"})
+	w.LogEvent(SessionBackground, TypeBackgroundJob, jobOK)
+	jobErr, _ := json.Marshal(BackgroundJobData{Kind: "autonomous", Name: "gmailpoll", Outcome: "error"})
+	w.LogEvent(SessionBackground, TypeBackgroundJob, jobErr)
 
 	agg := w.Aggregate(0)
 

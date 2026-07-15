@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"encoding/json"
 	"io"
 	"log/slog"
 	"testing"
@@ -36,11 +37,15 @@ func TestReportCompactionDegradedBroadcastsOnlyWhenCompactionRemainsOverBudget(t
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	params := runParams{SessionKey: "session-1"}
 	var events []chatCompactionDegradedEvent
-	deps := runDeps{broadcast: func(event string, payload any) (int, []error) {
+	deps := runDeps{broadcast: func(event string, payload json.RawMessage) (int, []error) {
 		if event != "chat.compaction_degraded" {
 			t.Fatalf("event = %q", event)
 		}
-		events = append(events, payload.(chatCompactionDegradedEvent))
+		var ev chatCompactionDegradedEvent
+		if err := json.Unmarshal(payload, &ev); err != nil {
+			t.Fatalf("unmarshal payload: %v", err)
+		}
+		events = append(events, ev)
 		return 1, nil
 	}}
 

@@ -2,6 +2,7 @@ package push
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"sync"
 	"testing"
@@ -108,7 +109,7 @@ func TestNotifierDeliverFallbackSucceedsWithoutPruning(t *testing.T) {
 		Store:  store,
 		Sender: fakeSender{results: map[string]SendResult{"a": {OK: true}, "b": {OK: true}}},
 		Logger: logger,
-		Broadcast: func(string, any) {
+		Broadcast: func(string, json.RawMessage) {
 			t.Error("broadcast should not fire on full delivery")
 		},
 	})
@@ -149,9 +150,14 @@ func TestNotifier_AllFailedBroadcastsAndErrors(t *testing.T) {
 			"b": {AuthFailed: true},
 		}},
 		Logger: logger,
-		Broadcast: func(event string, payload any) {
+		Broadcast: func(event string, payload json.RawMessage) {
 			if event == "push.delivery_failed" {
-				bc <- payload.(map[string]any)
+				var m map[string]any
+				if err := json.Unmarshal(payload, &m); err != nil {
+					t.Errorf("unmarshal broadcast payload: %v", err)
+					return
+				}
+				bc <- m
 			}
 		},
 	})

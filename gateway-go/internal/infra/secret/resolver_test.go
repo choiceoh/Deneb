@@ -1,13 +1,14 @@
 package secret
 
 import (
+	"encoding/json"
 	"testing"
 )
 
 func TestResolve_ReturnsAssignmentsAndMissingRefs(t *testing.T) {
 	r := NewResolver()
-	r.Set("openai.apiKey", "sk-123")
-	r.Set("openai.orgId", "org-456")
+	r.Set("openai.apiKey", json.RawMessage(`"sk-123"`))
+	r.Set("openai.orgId", json.RawMessage(`"org-456"`))
 
 	result := r.Resolve("openai", []string{"apiKey", "orgId", "missing"})
 	if !result.OK {

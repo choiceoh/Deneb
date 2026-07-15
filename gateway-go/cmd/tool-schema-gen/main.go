@@ -84,7 +84,10 @@ func generate(tools []map[string]any, pkg, source string) string {
 
 	for _, tool := range tools {
 		name, _ := tool["name"].(string)
-		fn := camelCase(name) + "ToolSchema"
+		// Exported: the generated *ToolSchema functions are referenced from other
+		// packages (toolwire/core, toolwire/recall registrars), so they must be
+		// PascalCase, not camelCase.
+		fn := pascalCase(name) + "ToolSchema"
 
 		fmt.Fprintf(&b, "func %s() map[string]any {\n", fn)
 		fmt.Fprintf(&b, "\treturn map[string]any{\n")
@@ -284,6 +287,16 @@ func camelCase(name string) string {
 		}
 	}
 	return strings.Join(parts, "")
+}
+
+// pascalCase is camelCase with the first letter uppercased, so the generated
+// function names are exported (tool names are ASCII, so byte-slicing is safe).
+func pascalCase(name string) string {
+	c := camelCase(name)
+	if c == "" {
+		return c
+	}
+	return strings.ToUpper(c[:1]) + c[1:]
 }
 
 func goStr(s string) string {

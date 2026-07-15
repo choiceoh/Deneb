@@ -72,16 +72,6 @@ type (
 	SkillManageInvalidateFn = domain.SkillManageInvalidateFn
 )
 
-// NewGoalGlanceFunc builds the ambient standing-goal glance.
-func NewGoalGlanceFunc() func(ctx context.Context, sessionKey string) string {
-	return core.NewGoalGlanceFunc()
-}
-
-// HandleGoalCommand processes the /goal slash command.
-func HandleGoalCommand(sessionKey, args string, respond func(text string)) {
-	core.HandleGoalCommand(sessionKey, args, respond)
-}
-
 // Type aliases so the toolwire facade can avoid importing toolport/tooldeps.
 type (
 	ToolRegistrar       = toolport.ToolRegistrar
@@ -95,3 +85,14 @@ type (
 	SpilloverStore      = tooldeps.SpilloverStore
 	SessionCacheFlushFn = wikitool.SessionCacheFlushFn
 )
+
+
+// NewGoalGlanceFunc builds the ambient standing-goal glance.
+func NewGoalGlanceFunc() func(ctx context.Context, sessionKey string) string {
+	return core.NewGoalGlanceFunc()
+}
+
+// HandleGoalCommand processes the /goal slash command.
+func HandleGoalCommand(sessionKey, args string, respond func(text string)) {
+	core.HandleGoalCommand(sessionKey, args, respond)
+}

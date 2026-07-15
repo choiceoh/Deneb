@@ -15,6 +15,16 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/externalmcp"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/filesemindex"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/modelpanel"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/notebooksource"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 )
 

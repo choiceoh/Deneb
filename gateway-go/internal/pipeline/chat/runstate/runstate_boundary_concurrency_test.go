@@ -2,6 +2,7 @@ package runstate
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -446,7 +447,7 @@ func TestBoundaryPendingQueueLatestValueFieldMatrix(t *testing.T) {
 		PresencePenalty:      &presence,
 		Stop:                 []string{"STOP", "END"},
 		ResponseFormat:       &llm.ResponseFormat{Type: "json_object"},
-		ToolChoice:           "required",
+		ToolChoice:           json.RawMessage(`"required"`),
 		Thinking:             "high",
 		EphemeralUser:        true,
 		AppendCurrentMessage: true,

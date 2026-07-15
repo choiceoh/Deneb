@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -71,7 +72,7 @@ func TestDeliverRunReply_PreservesDecisionAndSideEffectOrder(t *testing.T) {
 					return nil
 				},
 			},
-			broadcast: func(event string, _ any) (int, []error) {
+			broadcast: func(event string, _ json.RawMessage) (int, []error) {
 				events = append(events, "event:"+event)
 				return 0, nil
 			},
@@ -137,7 +138,7 @@ func TestDeliverRunReply_PreservesDecisionAndSideEffectOrder(t *testing.T) {
 				events = append(events, "parse")
 				return chatport.ReplyDirectives{Text: "답변"}
 			}},
-			broadcast: func(event string, _ any) (int, []error) {
+			broadcast: func(event string, _ json.RawMessage) (int, []error) {
 				events = append(events, "event:"+event)
 				return 0, nil
 			},
@@ -163,7 +164,7 @@ func TestDeliverRunReply_PreservesDecisionAndSideEffectOrder(t *testing.T) {
 				events = append(events, "reply")
 				return errors.New("reply failed")
 			}},
-			broadcast: func(event string, _ any) (int, []error) {
+			broadcast: func(event string, _ json.RawMessage) (int, []error) {
 				events = append(events, "event:"+event)
 				return 0, nil
 			},

@@ -139,10 +139,17 @@ func TestCallRoleLLMFormatsRequestWithMergedExtras(t *testing.T) {
 	resetPilotHarness()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
+	extraA, err := json.Marshal(map[string]any{"temperature": 0.2, "first": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	extraB, err := json.Marshal(map[string]any{"top_p": 0.8, "first": false})
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := CallRoleLLM(
 		ctx, modelrole.RoleMain, "system prompt", "user prompt", 321,
-		map[string]any{"temperature": 0.2, "first": true},
-		map[string]any{"top_p": 0.8, "first": false},
+		extraA, extraB,
 	)
 	if err != nil || got != "reply:main" {
 		t.Fatalf("CallRoleLLM = %q/%v", got, err)

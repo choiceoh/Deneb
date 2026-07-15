@@ -74,10 +74,23 @@ func TestStartLinkEnrichmentUsesHandlerEngineAndChatSanitizer(t *testing.T) {
 }
 
 func TestNewHandlerCreatesLinkEnrichmentEngine(t *testing.T) {
-	handler := NewHandler(session.NewManager(), nil, testLinkLogger(), DefaultHandlerConfig())
+	// #3679 moved link-enrichment construction to the composition root: the
+	// handler now wires whatever LinkEnrichStart the config supplies (the server
+	// injects the concrete engine via toolbind.NewLinkEnrichStart).
+	engine := linkenrichment.New(linkenrichment.Config{
+		Fetch: func(context.Context, string) ([]byte, string, error) {
+			return []byte("body"), "text/plain", nil
+		},
+		Logger: testLinkLogger(),
+	})
+	cfg := DefaultHandlerConfig()
+	cfg.LinkEnrichStart = func(ctx context.Context, message string, sanitize func(string) string) func(context.Context) string {
+		return engine.Start(ctx, message, sanitize)
+	}
+	handler := NewHandler(session.NewManager(), nil, testLinkLogger(), cfg)
 	t.Cleanup(handler.Close)
 	if handler.linkEnrichStart == nil {
-		t.Fatal("NewHandler did not initialize its link enrichment lifecycle")
+		t.Fatal("NewHandler did not wire the configured link enrichment lifecycle")
 	}
 	if join := handler.startLinkEnrichment(context.Background(), "링크 없는 일반 질문", nil); join != nil {
 		t.Fatal("linkless message did not keep the normal persist-first path")

@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -109,7 +110,7 @@ func TestFormatUptime(t *testing.T) {
 
 func TestPendingQueueDrainReturnsEnqueuedMessage(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
@@ -138,7 +139,7 @@ func TestPendingQueueDrainReturnsEnqueuedMessage(t *testing.T) {
 
 func TestPendingQueueDrainReturnsNewestMessage(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
@@ -158,7 +159,7 @@ func TestPendingQueueDrainReturnsNewestMessage(t *testing.T) {
 
 func TestPendingQueue_clearRemovesAll(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
@@ -175,7 +176,7 @@ func TestPendingQueue_clearRemovesAll(t *testing.T) {
 
 func TestInterruptActiveRun_cancelsMatchingSession(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
@@ -209,7 +210,7 @@ func TestInterruptActiveRun_cancelsMatchingSession(t *testing.T) {
 
 func TestInterruptActiveRun_noopWhenEmpty(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
@@ -221,7 +222,7 @@ func TestInterruptActiveRun_noopWhenEmpty(t *testing.T) {
 
 func TestCountActiveRunsReturnsPerSessionTally(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
@@ -245,7 +246,7 @@ func TestCountActiveRunsReturnsPerSessionTally(t *testing.T) {
 
 func TestCleanupAbortDeletesEntry(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
@@ -260,7 +261,7 @@ func TestCleanupAbortDeletesEntry(t *testing.T) {
 
 func TestCleanupAbort_emptyIDNoop(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 

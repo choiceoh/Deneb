@@ -34,7 +34,7 @@ func TestPublisherEmitsAtLeastOneEventOnSessionMessage(t *testing.T) {
 		SessionKey: "session-1",
 		MessageID:  "msg-1",
 		MessageSeq: &seq,
-		Message:    map[string]any{"role": "user", "content": "hello"},
+		Message:    mustPayload(t, map[string]any{"role": "user", "content": "hello"}),
 	})
 
 	// Should receive both session.message and sessions.changed.

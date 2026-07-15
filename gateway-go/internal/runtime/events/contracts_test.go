@@ -15,6 +15,15 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
+func mustPayload(t *testing.T, v any) EventPayload {
+	t.Helper()
+	p, err := PayloadOf(v)
+	if err != nil {
+		t.Fatalf("PayloadOf: %v", err)
+	}
+	return p
+}
+
 func subscriberFrames(t *testing.T, sub *mockSubscriber) []protocol.EventFrame {
 	t.Helper()
 	sub.mu.Lock()
@@ -359,7 +368,8 @@ func TestPublisherEmitsEnrichedSessionMessageToScopedRecipients(t *testing.T) {
 	}}
 	pub := NewPublisher(b, provider, nil)
 	seq := 7
-	pub.PublishSessionMessage(TranscriptUpdate{SessionKey: "session-1", MessageID: "message-1", MessageSeq: &seq, Message: map[string]any{"role": "assistant"}})
+	messageWire, _ := PayloadOf(map[string]any{"role": "assistant"})
+	pub.PublishSessionMessage(TranscriptUpdate{SessionKey: "session-1", MessageID: "message-1", MessageSeq: &seq, Message: messageWire})
 
 	globalFrames := subscriberFrames(t, global)
 	specificFrames := subscriberFrames(t, specific)
@@ -387,9 +397,9 @@ func TestPublisherRejectsIncompleteSessionUpdates(t *testing.T) {
 	sub := &mockSubscriber{id: "sub", authed: true}
 	b.Subscribe(sub, Filter{})
 	pub := NewPublisher(b, nil, nil)
-	pub.PublishSessionMessage(TranscriptUpdate{Message: "missing key"})
+	pub.PublishSessionMessage(TranscriptUpdate{Message: mustPayload(t, "missing key")})
 	pub.PublishSessionMessage(TranscriptUpdate{SessionKey: "session"})
-	pub.PublishSessionMessage(TranscriptUpdate{SessionKey: "unsubscribed", Message: "no recipient"})
+	pub.PublishSessionMessage(TranscriptUpdate{SessionKey: "unsubscribed", Message: mustPayload(t, "no recipient")})
 	if len(subscriberFrames(t, sub)) != 0 {
 		t.Fatalf("invalid session updates were published: %+v", subscriberFrames(t, sub))
 	}
@@ -408,7 +418,7 @@ func TestPublisherAgentEventBoundaryExcludesOutsiders(t *testing.T) {
 		t.Fatal("session agent event with no recipients leaked globally")
 	}
 	b.SubscribeSessionMessageEvents("member", "private")
-	pub.PublishAgentEvent(AgentEvent{Kind: "tool.end", SessionKey: "private", RunID: "run-1", Payload: map[string]any{"ok": true}})
+	pub.PublishAgentEvent(AgentEvent{Kind: "tool.end", SessionKey: "private", RunID: "run-1", Payload: mustPayload(t, map[string]any{"ok": true})})
 	frames := subscriberFrames(t, member)
 	if len(frames) != 1 || frames[0].Event != "agent.event" || frames[0].Seq != nil {
 		t.Fatalf("member frames = %+v", frames)
@@ -476,13 +486,13 @@ func TestPublishSessionChangedOmitsSessionOnMissingSnapshot(t *testing.T) {
 
 func TestPublisherNilSafetyContract(t *testing.T) {
 	var nilPublisher *Publisher
-	nilPublisher.PublishSessionMessage(TranscriptUpdate{SessionKey: "s", Message: "m"})
+	nilPublisher.PublishSessionMessage(TranscriptUpdate{SessionKey: "s", Message: mustPayload(t, "m")})
 	nilPublisher.PublishAgentEvent(AgentEvent{Kind: "x"})
 	nilPublisher.PublishConfigChanged("x")
 	nilPublisher.CleanupAgentSeq("x")
 	nilPublisher.publishSessionChanged("s", "p", nil)
 	empty := NewPublisher(nil, nil, nil)
-	empty.PublishSessionMessage(TranscriptUpdate{SessionKey: "s", Message: "m"})
+	empty.PublishSessionMessage(TranscriptUpdate{SessionKey: "s", Message: mustPayload(t, "m")})
 	empty.PublishAgentEvent(AgentEvent{Kind: "x"})
 	empty.PublishConfigChanged("x")
 	empty.publishSessionChanged("s", "p", nil)
@@ -546,7 +556,7 @@ func TestGatewayLoopsUsePublisherAndStopPromptly(t *testing.T) {
 	pub := NewPublisher(b, nil, nil)
 	g.SetPublisher(pub)
 	g.EmitAgent(AgentEvent{Kind: "agent", SessionKey: "session", RunID: "run"})
-	g.EmitTranscript(TranscriptUpdate{SessionKey: "session", Message: "hello"})
+	g.EmitTranscript(TranscriptUpdate{SessionKey: "session", Message: mustPayload(t, "hello")})
 	frames := waitForFrameCount(t, sub, 2)
 	eventsSeen := map[string]bool{}
 	for _, frame := range frames {

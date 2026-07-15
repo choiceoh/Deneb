@@ -68,7 +68,7 @@ func TestGatewaySubscriptions_EmitTranscript(t *testing.T) {
 	gs.EmitTranscript(TranscriptUpdate{
 		SessionKey: "session-x",
 		MessageID:  "msg-1",
-		Message:    map[string]string{"role": "assistant", "content": "hello"},
+		Message:    mustPayload(t, map[string]string{"role": "assistant", "content": "hello"}),
 	})
 	time.Sleep(50 * time.Millisecond)
 
@@ -92,7 +92,7 @@ func TestGatewaySubscriptions_EmitTranscript_WithSessionEventSub(t *testing.T) {
 	gs.EmitTranscript(TranscriptUpdate{
 		SessionKey: "session-x",
 		MessageID:  "msg-1",
-		Message:    map[string]string{"role": "assistant", "content": "hello"},
+		Message:    mustPayload(t, map[string]string{"role": "assistant", "content": "hello"}),
 	})
 	time.Sleep(50 * time.Millisecond)
 

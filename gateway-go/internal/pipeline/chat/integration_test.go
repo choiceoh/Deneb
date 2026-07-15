@@ -34,10 +34,10 @@ type broadcastCollector struct {
 
 type broadcastEvent struct {
 	Event   string
-	Payload any
+	Payload json.RawMessage
 }
 
-func (bc *broadcastCollector) broadcast(event string, payload any) (int, []error) {
+func (bc *broadcastCollector) broadcast(event string, payload json.RawMessage) (int, []error) {
 	bc.mu.Lock()
 	defer bc.mu.Unlock()
 	bc.events = append(bc.events, broadcastEvent{Event: event, Payload: payload})
@@ -193,8 +193,8 @@ func TestIntegration_SavesSimpleTextResponse(t *testing.T) {
 	hasCompleted := false
 	for _, ev := range events {
 		if ev.Event == "sessions.changed" {
-			p, ok := ev.Payload.(sessionsChangedEvent)
-			if ok {
+			var p sessionsChangedEvent
+			if err := json.Unmarshal(ev.Payload, &p); err == nil {
 				if p.Status == "running" {
 					hasStarted = true
 				}
@@ -599,8 +599,8 @@ func TestIntegration_LLMError(t *testing.T) {
 	hasError := false
 	for _, ev := range events {
 		if ev.Event == "sessions.changed" {
-			p, ok := ev.Payload.(sessionsChangedEvent)
-			if ok && p.Status == "failed" {
+			var p sessionsChangedEvent
+			if err := json.Unmarshal(ev.Payload, &p); err == nil && p.Status == "failed" {
 				hasError = true
 			}
 		}

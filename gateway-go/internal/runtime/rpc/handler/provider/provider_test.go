@@ -39,7 +39,7 @@ func TestMethodsReturnNilAndEmptyModelsWithoutRegistry(t *testing.T) {
 	}
 	resp := rpctest.Call(ModelsMethods(ModelsDeps{}), "models.list", nil)
 	rpctest.MustOK(t, resp)
-	if models := rpctest.Result(t, resp)["models"].([]any); len(models) != 0 {
+	if models := rpctest.Result[map[string]any](t, resp)["models"].([]any); len(models) != 0 {
 		t.Fatalf("models = %v", models)
 	}
 }
@@ -58,7 +58,7 @@ func TestProviderHandlersReturnSortedAndSerializedPlugins(t *testing.T) {
 
 	list := rpctest.Call(methods, "providers.list", nil)
 	rpctest.MustOK(t, list)
-	providers := rpctest.Result(t, list)["providers"].([]any)
+	providers := rpctest.Result[map[string]any](t, list)["providers"].([]any)
 	first := providers[0].(map[string]any)
 	if first["id"] != "alpha" || first["capabilities"] == nil || first["aliases"] == nil {
 		t.Fatalf("first provider = %#v", first)
@@ -66,13 +66,13 @@ func TestProviderHandlersReturnSortedAndSerializedPlugins(t *testing.T) {
 
 	get := rpctest.Call(methods, "providers.get", map[string]string{"id": "alias-zeta"})
 	rpctest.MustOK(t, get)
-	if got := rpctest.Result(t, get)["id"]; got != "zeta" {
+	if got := rpctest.Result[map[string]any](t, get)["id"]; got != "zeta" {
 		t.Fatalf("provider id = %v", got)
 	}
 
 	models := rpctest.Call(ModelsMethods(ModelsDeps{Providers: registry}), "models.list", nil)
 	rpctest.MustOK(t, models)
-	if got := rpctest.Result(t, models)["models"].([]any); len(got) != 2 {
+	if got := rpctest.Result[map[string]any](t, models)["models"].([]any); len(got) != 2 {
 		t.Fatalf("models = %#v", got)
 	}
 }
@@ -84,7 +84,7 @@ func TestCatalogErrorsDegradeToEmpty(t *testing.T) {
 	}
 	resp := rpctest.Call(Methods(Deps{Providers: registry}), "providers.catalog", map[string]string{"provider": "broken"})
 	rpctest.MustOK(t, resp)
-	entries := rpctest.Result(t, resp)["entries"].([]any)
+	entries := rpctest.Result[map[string]any](t, resp)["entries"].([]any)
 	if len(entries) != 0 {
 		t.Fatalf("entries = %#v", entries)
 	}

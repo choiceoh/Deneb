@@ -18,7 +18,7 @@ func TestStoreAppendPullReturnsPagedEvents(t *testing.T) {
 		EntityID:       "wf_1",
 		SessionKey:     "client:main",
 		WorkFeedItemID: "wf_1",
-		Payload:        map[string]any{"ok": true},
+		Payload:        json.RawMessage(`{"ok":true}`),
 	})
 	if err != nil {
 		t.Fatalf("append first: %v", err)
