@@ -160,4 +160,14 @@ class AppSettingsLogicTest {
         s.setBrowserHomeUrl("   ")
         assertEquals("", s.getBrowserHomeUrl())
     }
+
+    @Test
+    fun `browser adblock preference defaults on and persists`() {
+        val s = fresh()
+        assertTrue(s.isBrowserAdBlockEnabled())
+        s.setBrowserAdBlockEnabled(false)
+        assertFalse(s.isBrowserAdBlockEnabled())
+        s.setBrowserAdBlockEnabled(true)
+        assertTrue(s.isBrowserAdBlockEnabled())
+    }
 }

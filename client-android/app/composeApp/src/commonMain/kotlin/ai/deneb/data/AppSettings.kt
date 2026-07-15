@@ -118,6 +118,13 @@ class AppSettings(internal val settings: Settings) {
         }
     }
 
+    // Network ad/tracker blocking for the in-app translation browser (default ON).
+    fun isBrowserAdBlockEnabled(): Boolean = settings.getBoolean(KEY_BROWSER_ADBLOCK_ENABLED, true)
+
+    fun setBrowserAdBlockEnabled(enabled: Boolean) {
+        settings.putBoolean(KEY_BROWSER_ADBLOCK_ENABLED, enabled)
+    }
+
     fun getCurrentConversationId(): String? = settings.getStringOrNull(KEY_CURRENT_CONVERSATION_ID)
 
     fun setCurrentConversationId(id: String?) {
@@ -446,6 +453,7 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_BROWSER_TRANSLATE_ENABLED = "browser_translate_enabled"
         const val KEY_BROWSER_HISTORY = "browser_history"
         const val KEY_BROWSER_HOME_URL = "browser_home_url"
+        const val KEY_BROWSER_ADBLOCK_ENABLED = "browser_adblock_enabled"
         const val KEY_CONVERSATIONS = "conversations_json"
         const val KEY_CURRENT_CONVERSATION_ID = "current_conversation_id"
         const val KEY_CURRENT_CONVERSATION_MIGRATED = "current_conversation_migrated"
