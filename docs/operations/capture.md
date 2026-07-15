@@ -88,7 +88,6 @@ prefixed `📥 공유: …` and the agent triages it like any other message. The
 no dedicated capture RPC for text; it rides the ordinary `miniapp.chat.send`
 path.
 
-
 ## Plaud meeting recordings
 
 Autonomous ingest (`gateway-go/internal/runtime/meeting/plaud_recordings.go`) polls
