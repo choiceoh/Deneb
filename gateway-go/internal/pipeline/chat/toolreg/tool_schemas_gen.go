@@ -1002,7 +1002,7 @@ func wikiToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: search (ripgrep full-text search), read (wiki page(s) — one via query, several at once via paths), index (master/category index), write (create/update page), log (append diary entry), daily (recent diary), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명), ingest (외부 자료 캡처: query=URL — 웹페이지/유튜브를 요약+발췌와 함께 자료 페이지로 영속화. 사용자가 '기억해둬/저장해둬'라며 링크를 주면 web 대신 이걸 쓴다. project=연결 프로젝트명(선택), content=메모(선택); 같은 URL은 멱등, 갱신은 force=true)",
+				"description": "Action: search (ripgrep full-text search), read (wiki page(s) — one via query, several at once via paths), index (master/category index), write (create/update page), log (append diary entry), daily (recent diary), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명), ingest (외부 자료 캡처: query=URL — 웹페이지/유튜브를 요약+발췌와 함께 자료 페이지로 영속화. 사용자가 '기억해둬/저장해둬'라며 링크를 주면 web 대신 이걸 쓴다. project=연결 프로젝트명(선택), content=메모(선택); 같은 URL은 멱등, 갱신은 force=true). 페이지를 영구 삭제(잊기)하려면 별도 도구 wiki_forget을 쓴다",
 				"enum":        []string{"search", "read", "index", "write", "log", "daily", "status", "close", "reopen", "ingest"},
 			},
 			"category": map[string]any{
@@ -1804,6 +1804,36 @@ func mailArchiveToolSchema() map[string]any {
 			},
 		},
 		"required": []string{"action"},
+	}
+}
+
+func preferenceToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"rule": map[string]any{
+				"type":        "string",
+				"description": "저장할 서 있는 선호/행동 규칙 한 줄 (예: '보고는 항상 결론부터 3줄 요약으로', '주말엔 알림 최소화'). SOUL.md에 append-only로 추가되고 다음 세션부터 반영된다. 추가만 가능하며 삭제·수정은 사용자만 SOUL.md 편집으로 한다.",
+			},
+		},
+		"required": []string{"rule"},
+	}
+}
+
+func wikiForgetToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"path": map[string]any{
+				"type":        "string",
+				"description": "잊을(영구 삭제할) 위키 페이지 경로 (예: 인물/홍길동.md 또는 w: ref). 먼저 wiki search로 정확한 경로를 확인하라.",
+			},
+			"reason": map[string]any{
+				"type":        "string",
+				"description": "잊는 사유 한 줄 — 감사 로그에 기록된다 (오정보·프라이버시 등).",
+			},
+		},
+		"required": []string{"path", "reason"},
 	}
 }
 

@@ -147,8 +147,9 @@ var cacheableTools = map[string]struct{}{
 }
 
 var mutationTools = map[string]struct{}{
-	"write": {},
-	"edit":  {},
+	"write":      {},
+	"edit":       {},
+	"preference": {}, // appends to SOUL.md; a cached grep of the workspace must invalidate
 }
 
 // IsCacheableTool returns true if the named tool's results can be cached.

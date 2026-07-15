@@ -67,6 +67,7 @@ type semanticIndex struct {
 	vecs        map[string]cachedVec // relPath -> embedding
 	refreshing  atomic.Bool          // single-flight guard for refreshAsync
 	syncRefresh bool                 // tests only: run refreshAsync inline for deterministic assertions
+	forgetEpoch uint64               // bumped under mu on each forget; a refresh drops its write-back if this changed mid-flight so an in-flight embed can't resurrect a vector a concurrent forget deleted
 
 	cacheFingerprint   string // embedding contract that produced vecs
 	cacheDimensions    int
@@ -184,6 +185,31 @@ func (s *Store) SetEmbedder(e Embedder) {
 	s.sem = si
 	if s.diaryFTS != nil && s.diaryDir != "" {
 		s.diaryFTS.attachSemantic(e, filepath.Join(s.diaryDir, diarySemanticCacheFile))
+	}
+}
+
+// dropSemanticVector synchronously removes a page's cached embedding so a
+// hard-deleted page stops surfacing in semantic recall immediately. Without it,
+// the vector lingers in s.sem.vecs until the next async refresh prune, and
+// searchSemanticWithVec ranks the live vecs — so a just-forgotten page could
+// still be returned in the race window. No-op when no embedder is wired.
+func (s *Store) dropSemanticVector(relPath string) {
+	if s.sem == nil {
+		return
+	}
+	s.sem.mu.Lock()
+	_, existed := s.sem.vecs[relPath]
+	delete(s.sem.vecs, relPath)
+	// Bump the epoch so a refresh that snapshotted this page before the delete
+	// and is embedding it outside the lock won't write the vector back after us.
+	s.sem.forgetEpoch++
+	s.sem.mu.Unlock()
+	if existed {
+		// Persist the removal: otherwise a gateway restart reloads the forgotten
+		// vector from .semantic-cache.json in SetEmbedder and the first semantic
+		// search ranks it before the async prune wins — resurfacing the page.
+		// saveCache locks si.mu itself, so call it after releasing the lock.
+		s.sem.saveCache()
 	}
 }
 
@@ -644,6 +670,10 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) 
 			mutated = true
 		}
 	}
+	// Snapshot the forget epoch under the same lock as the page snapshot: if it
+	// advances before a write-back below, a forget deleted a page we are still
+	// embedding and the write-back must be abandoned to avoid resurrecting it.
+	startEpoch := si.forgetEpoch
 	si.mu.Unlock()
 
 	// Embed changed pages in bounded batches (outside the lock).
@@ -662,6 +692,13 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) 
 			return fmt.Errorf("wiki: semantic embed batch returned %d vectors for %d texts", len(vecs), end-start)
 		}
 		si.mu.Lock()
+		if si.forgetEpoch != startEpoch {
+			// A forget raced this refresh; its deletion must win. Abandon the
+			// write-back (the next refresh re-embeds any legitimately changed
+			// pages) so an in-flight embed never resurrects a forgotten vector.
+			si.mu.Unlock()
+			return nil
+		}
 		for i, rp := range toEmbed[start:end] {
 			si.vecs[rp] = cachedVec{hash: want[rp], vec: vecs[i]}
 		}
