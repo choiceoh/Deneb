@@ -6,6 +6,9 @@ import {
   htmlTableMatrix,
   htmlTableToMarkdown,
   htmlToText,
+  listApproval,
+  listApprovalEntries,
+  normalizeApprovalDoc,
   normalizeFolder,
   selectApprovalLine,
   attachmentName,
@@ -66,6 +69,60 @@ test("normalizeFolder maps Korean + aliases", () => {
   assert.equal(normalizeFolder("수신참조"), "cc");
   assert.equal(normalizeFolder("전체결재문서"), "total");
   assert.equal(normalizeFolder(""), "all");
+});
+
+test("normalizeApprovalDoc handles both approval list payload shapes", () => {
+  assert.deepEqual(
+    normalizeApprovalDoc(
+      {
+        DOC_ID: 99178,
+        DOC_TITLE_ORIGIN: "구매 품의",
+        DOC_NO: "EAP-42",
+        userNm: "홍길동",
+        REP_DT: "2026-07-16",
+        RET_ITEM_NM: "결재대기",
+      },
+      "미결",
+    ),
+    {
+      docId: "99178",
+      title: "구매 품의",
+      docNo: "EAP-42",
+      drafter: "홍길동",
+      date: "2026-07-16",
+      status: "결재대기",
+      folder: "pending",
+    },
+  );
+  assert.deepEqual(normalizeApprovalDoc({ doc_id: "7", doc_title: "휴가", user_name: "김" }, "done"), {
+    docId: "7",
+    title: "휴가",
+    docNo: "",
+    drafter: "김",
+    date: "",
+    status: "",
+    folder: "done",
+  });
+});
+
+test("listApprovalEntries normalizes without network and preserves human list output", async () => {
+  const calls = [];
+  const loaders = {
+    async listBoxPortlet(folder, limit) {
+      calls.push([folder, limit]);
+      return [{ DOC_ID: "12", DOC_TITLE_ORIGIN: "지출결의", userNm: "이대리" }];
+    },
+    async listTotal() {
+      throw new Error("unexpected total loader");
+    },
+  };
+  const entries = await listApprovalEntries("pending", 80, loaders);
+  assert.deepEqual(calls, [["pending", 50]]);
+  assert.equal(entries[0].docId, "12");
+  assert.equal(entries[0].folder, "pending");
+
+  const human = await listApproval("pending", 80, loaders);
+  assert.equal(human, "전자결재 · 미결문서 (1건)\n\n1. 지출결의 · 기안 이대리 · id=12");
 });
 
 test("htmlToText strips tags and decodes entities", () => {

@@ -3,6 +3,7 @@ package groupware
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -63,6 +64,7 @@ type Request struct {
 	Source     string // optional provenance label (e.g. phone notification source)
 	MatchText  string // notification body on stdin for approval read matching
 	Limit      int    // list max lines (default 20, capped in JS)
+	JSON       bool   // internal machine-readable approval-list output
 }
 
 // FromEnv loads DENEB_GROUPWARE_* settings. Enabled only when both user and password are set.
@@ -161,6 +163,9 @@ func Run(ctx context.Context, cfg Config, req Request) (string, error) {
 	if req.Limit > 0 {
 		args = append(args, "--limit", strconv.Itoa(req.Limit))
 	}
+	if req.JSON {
+		args = append(args, "--json")
+	}
 
 	cmd := exec.CommandContext(ctx, node, args...)
 	cmd.Stdin = strings.NewReader(req.MatchText)
@@ -192,6 +197,44 @@ func Run(ctx context.Context, cfg Config, req Request) (string, error) {
 			fmt.Errorf("empty groupware output")
 	}
 	return out, nil
+}
+
+// ApprovalSummary is the stable machine-readable projection of one approval-list row.
+type ApprovalSummary struct {
+	DocID   string `json:"docId"`
+	Title   string `json:"title"`
+	DocNo   string `json:"docNo"`
+	Drafter string `json:"drafter"`
+	Date    string `json:"date"`
+	Status  string `json:"status"`
+	Folder  string `json:"folder"`
+}
+
+// ListApprovals returns a structured approval-folder snapshot without parsing the
+// human-facing list output.
+func ListApprovals(ctx context.Context, cfg Config, folder string, limit int) ([]ApprovalSummary, error) {
+	out, err := Run(ctx, cfg, Request{
+		Area:   AreaApproval,
+		Action: ActionList,
+		Folder: folder,
+		Limit:  limit,
+		JSON:   true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return parseApprovalSummaries(out)
+}
+
+func parseApprovalSummaries(raw string) ([]ApprovalSummary, error) {
+	var summaries []ApprovalSummary
+	if err := json.Unmarshal([]byte(raw), &summaries); err != nil {
+		return nil, fmt.Errorf("parse groupware approval list JSON: %w", err)
+	}
+	if summaries == nil {
+		summaries = []ApprovalSummary{}
+	}
+	return summaries, nil
 }
 
 // ReadApproval logs into Amaranth on srv4 and returns the document text matching notiText.
