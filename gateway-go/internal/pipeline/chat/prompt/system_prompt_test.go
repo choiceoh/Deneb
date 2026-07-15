@@ -559,3 +559,27 @@ func TestBuildSystemPrompt_NoWebGuidanceWithoutTools(t *testing.T) {
 		t.Error("web guidance should not appear without web/http tools")
 	}
 }
+
+func TestBuildSystemPromptGroupwareTriggers(t *testing.T) {
+	params := SystemPromptParams{
+		WorkspaceDir: "/tmp",
+		ToolDefs: []ToolDef{
+			{Name: "groupware"},
+			{Name: "calendar"},
+			{Name: "contacts"},
+		},
+	}
+	prompt := BuildSystemPrompt(params)
+	for _, want := range []string{
+		"`groupware`가 1순위",
+		`groupware(area="people")`,
+		"Business: groupware",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("missing %q in prompt", want)
+		}
+	}
+	if !strings.Contains(prompt, "사내 참석자는 `groupware") {
+		t.Error("expected meeting-prep to mention groupware people")
+	}
+}

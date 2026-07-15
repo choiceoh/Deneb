@@ -94,7 +94,11 @@ func formatEveningDiarySummary(dateStr string, results []any) string {
 	}
 	if len(results) > 3 {
 		if gw, ok := results[3].(groupwarePendingData); ok && gw.OK && gw.Count > 0 {
-			fmt.Fprintf(&sb, "- 미결 전자결재: %d건\n", gw.Count)
+			if gw.StaleCount > 0 {
+				fmt.Fprintf(&sb, "- 미결 전자결재: %d건 (방치 %d건)\n", gw.Count, gw.StaleCount)
+			} else {
+				fmt.Fprintf(&sb, "- 미결 전자결재: %d건\n", gw.Count)
+			}
 		}
 	}
 
