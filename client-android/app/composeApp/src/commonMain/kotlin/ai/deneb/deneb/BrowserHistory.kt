@@ -21,8 +21,7 @@ internal fun decodeBrowserHistory(raw: String): List<BrowserVisit> = runCatching
     browserHistoryJson.decodeFromString<List<BrowserVisit>>(raw)
 }.getOrDefault(emptyList()).sanitizedBrowserHistory()
 
-internal fun encodeBrowserHistory(visits: List<BrowserVisit>): String =
-    browserHistoryJson.encodeToString(visits.sanitizedBrowserHistory())
+internal fun encodeBrowserHistory(visits: List<BrowserVisit>): String = browserHistoryJson.encodeToString(visits.sanitizedBrowserHistory())
 
 internal fun recordBrowserVisit(
     visits: List<BrowserVisit>,
@@ -45,8 +44,7 @@ internal fun removeBrowserVisit(visits: List<BrowserVisit>, url: String): List<B
     return visits.filterNot { it.url.trim() == key }.sanitizedBrowserHistory()
 }
 
-internal fun browserVisitDisplayTitle(visit: BrowserVisit): String =
-    visit.title.ifBlank { browserHistoryHost(visit.url) }.ifBlank { visit.url }
+internal fun browserVisitDisplayTitle(visit: BrowserVisit): String = visit.title.ifBlank { browserHistoryHost(visit.url) }.ifBlank { visit.url }
 
 private fun List<BrowserVisit>.sanitizedBrowserHistory(): List<BrowserVisit> = asSequence()
     .mapNotNull { visit ->
