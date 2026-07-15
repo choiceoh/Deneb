@@ -48,6 +48,11 @@ const (
 	// Plaud recording — plaud_recordings.go), and also the category-level
 	// bucket (프로젝트/회의록/) for meetings linked to no project.
 	meetingDir = "회의록"
+	// siteDir is the per-project 현장 sub-folder (one page per site — its
+	// address, 계약/개설 status, per-site 용량·에너지원/특성). The 현장 지도 reads
+	// these as first-class site entities. Per-project only (no category-level
+	// bucket — a site always belongs to a project), like 기자재.
+	siteDir = "현장"
 	// legacyMailAnalysisDir is the pre-migration global mail-analysis bucket.
 	legacyMailAnalysisDir = "mail-analyses"
 	// dealDir is the category-level per-counterparty deal ledger.
@@ -90,6 +95,21 @@ func RepPagePath(project string) string {
 // "프로젝트/<name>/로그.md".
 func LogPagePath(project string) string {
 	return projectCategoryPrefix + "/" + project + "/" + LogPageFile
+}
+
+// SitePagePath returns a 현장 page path for a project + site name:
+// "프로젝트/<project>/현장/<site>.md". The site name is the page's identity (a
+// human-readable 현장명 like "수산리" or the address tail), NOT the full address —
+// the canonical address lives in the page's frontmatter.
+func SitePagePath(project, site string) string {
+	return projectCategoryPrefix + "/" + project + "/" + siteDir + "/" + site + ".md"
+}
+
+// IsProjectSitePage reports whether relPath is a per-project 현장 page
+// (프로젝트/<name>/현장/<site>.md). Path-shape only — no page read.
+func IsProjectSitePage(relPath string) bool {
+	seg := splitProjectPath(relPath)
+	return len(seg) == 3 && !isReservedProjectDir(seg[0]) && seg[1] == siteDir && strings.HasSuffix(seg[2], ".md")
 }
 
 // MailAnalysisPagePath maps a Gmail message ID to its wiki page path: under the
@@ -235,7 +255,7 @@ func NormalizeProjectPagePath(relPath string) string {
 		return RepPagePath(name)
 	case len(seg) == 2: // 프로젝트/<name>/<file>.md — canonical detail/slot
 		return relPath
-	case seg[1] == equipmentDir || seg[1] == mailAnalysisDir || seg[1] == legacyMailAnalysisDir || seg[1] == materialDir || seg[1] == meetingDir:
+	case seg[1] == equipmentDir || seg[1] == mailAnalysisDir || seg[1] == legacyMailAnalysisDir || seg[1] == materialDir || seg[1] == meetingDir || seg[1] == siteDir:
 		if len(seg) == 3 { // canonical slot file
 			return relPath
 		}

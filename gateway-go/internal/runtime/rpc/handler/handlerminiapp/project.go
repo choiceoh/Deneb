@@ -114,6 +114,9 @@ type ProjectSiteRow struct {
 	Sites    []string `json:"sites"`
 	Kinds    []string `json:"kinds,omitempty"`
 	Capacity float64  `json:"capacity,omitempty"`
+	// Status is the 현장's lifecycle stage (후보/계약/개설/준공); "" = 미분류. The map
+	// hides 후보 by default and offers it as a filter axis.
+	Status string `json:"status,omitempty"`
 }
 
 // ProjectSitesOut is the miniapp.project.sites response.
@@ -176,6 +179,7 @@ func projectSites(deps ProjectDeps) rpcutil.HandlerFunc {
 				Sites:    s.Sites,
 				Kinds:    s.Kinds,
 				Capacity: s.Capacity,
+				Status:   s.Status,
 			})
 		}
 		return rpcutil.RespondOK(req.ID, ProjectSitesOut{Sites: rows})

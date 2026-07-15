@@ -438,6 +438,7 @@ export interface ProjectSiteRow {
   sites?: string[]
   kinds?: string[]
   capacity?: number
+  status?: string
 }
 
 export interface ProjectSitesOut {

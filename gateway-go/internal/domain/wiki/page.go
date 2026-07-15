@@ -129,10 +129,19 @@ type Frontmatter struct {
 	// values auto-upgrade (모듈→기자재/모듈, 시공·개발→태양광), and a bare
 	// parent folds away when its child is present. 대표페이지 전용.
 	Kinds []string
-	// Capacity is the project's 용량 in MW (megawatts) — the deal's scale. The
-	// 현장 지도 sizes each pin by it. 0 = unrecorded (drawn at a base size).
-	// 대표페이지 전용.
-	Capacity   float64
+	// Capacity is the project's (or a 현장 page's) 용량 in MW (megawatts) — the
+	// deal's scale. The 현장 지도 sizes each pin by it. 0 = unrecorded (drawn at a
+	// base size). On a 대표페이지 it is the project total; on a 현장 page it is that
+	// single site's capacity.
+	Capacity float64
+	// Address is a 현장 page's canonical site location ("광역약칭 시/군 읍/면", same
+	// convention as Sites — see normalizeSiteName). 현장 페이지 전용 (the 대표페이지
+	// keeps the flat Sites[] matching keys); empty elsewhere.
+	Address string
+	// Status is a 현장 page's lifecycle stage — 후보 / 계약 / 개설 / 준공 (prospective
+	// → contracted → opened → completed). The 현장 지도 filters by it (계약·개설·준공
+	// shown by default, 후보 hidden). Free-form; empty = 미분류. 현장 페이지 전용.
+	Status     string
 	Created    string  // YYYY-MM-DD
 	Updated    string  // YYYY-MM-DD
 	Due        string  // YYYY-MM-DD — upcoming deadline (payment due, delivery, milestone); empty if none
@@ -220,6 +229,12 @@ func (p *Page) Render() []byte {
 	}
 	if p.Meta.Capacity > 0 {
 		buf.WriteString("capacity: " + strconv.FormatFloat(p.Meta.Capacity, 'g', -1, 64) + "\n")
+	}
+	if addr := normalizeSiteName(p.Meta.Address); addr != "" {
+		buf.WriteString("address: " + sanitizeScalar(addr) + "\n")
+	}
+	if p.Meta.Status != "" {
+		buf.WriteString("status: " + sanitizeScalar(p.Meta.Status) + "\n")
 	}
 	if p.Meta.Created != "" {
 		buf.WriteString("created: " + sanitizeScalar(p.Meta.Created) + "\n")
@@ -628,6 +643,10 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Kinds = normalizeKinds(parseFlowArray(val))
 		case "capacity":
 			fm.Capacity, _ = strconv.ParseFloat(strings.TrimSpace(val), 64) // best-effort: defaults to zero
+		case "address":
+			fm.Address = normalizeSiteName(val)
+		case "status":
+			fm.Status = strings.TrimSpace(val)
 		case "created":
 			fm.Created = val
 		case "updated":

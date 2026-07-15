@@ -531,6 +531,7 @@ data class ProjectSiteRow(
     val sites: List<String> = emptyList(),
     val kinds: List<String> = emptyList(),
     val capacity: Double = 0.0,
+    val status: String = "",
 )
 
 @Immutable

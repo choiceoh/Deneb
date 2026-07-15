@@ -111,37 +111,124 @@ type ProjectStatus struct {
 	UpdatedMs int64    // page Meta.Updated (YYYY-MM-DD) as epoch millis, 0 if unparseable
 }
 
-// ProjectSite is one active project's 현장 for the 현장 지도. Unlike ProjectStatus
-// (digests), this is emitted for EVERY active 대표페이지 that carries Sites —
-// whether or not it has a 현재 상태 section — so the map shows all current sites,
-// not just projects that have a progress digest.
+// ProjectSite is one 현장 for the 현장 지도 — a single site, not a whole project.
+// It comes either from a first-class 현장 page (프로젝트/<name>/현장/<site>.md, with
+// its own address·status·용량·에너지원/특성) or, for projects not yet migrated to
+// 현장 pages, synthesized from the 대표페이지's flat Meta.Sites (status "" = 미분류).
+// Either way one ProjectSite = one pin; Sites holds exactly that site's address.
 type ProjectSite struct {
-	Name     string   // display name (page Title, else folder name)
-	Client   string   // page Meta.Client — 거래처, "" if unset
-	Path     string   // 대표페이지 path so a tap opens the wiki
-	Due      string   // page Meta.Due — imminent deadline, "" if none
-	Sites    []string // page Meta.Sites — canonical 현장 admin paths
-	Kinds    []string // page Meta.Kinds — 에너지원/특성 (태양광/루프탑 …); map colors by 에너지원, shapes by 특성
-	Capacity float64  // page Meta.Capacity — 용량 in MW; the map sizes pins by this
+	Name     string   // owning project's display name (the pin's 프로젝트 label)
+	Client   string   // 거래처 (site page's, else the project's), "" if unset
+	Path     string   // wiki path a tap opens — the 현장 page when there is one, else the 대표페이지
+	Due      string   // Meta.Due — imminent deadline, "" if none
+	Sites    []string // exactly one canonical 현장 address ("광역약칭 시/군 읍/면")
+	Kinds    []string // Meta.Kinds — 에너지원/특성 (태양광/루프탑 …); map colors by 에너지원, shapes by 특성
+	Capacity float64  // Meta.Capacity — this site's 용량 in MW; the map sizes pins by this
+	Status   string   // 현장 page's lifecycle (후보/계약/개설/준공); "" = 미분류 (fallback rows)
 }
 
-// ProjectSites returns every active project (knownProjects) that carries ≥1 현장,
-// regardless of whether it has a 현재 상태 digest. Sorted by name.
+// ProjectSites enumerates every 현장 across all active projects for the 현장 지도.
+// For each active project it emits one row per first-class 현장 page (rich, with
+// per-site status·용량), then falls back to the 대표페이지's flat Meta.Sites for any
+// address not yet covered by a 현장 page — so a project keeps showing every site
+// during the migration to 현장 pages, gaining per-site fields as pages are created.
+// Sorted by project name then address.
 func (s *Store) ProjectSites() ([]ProjectSite, error) {
 	refs := s.knownProjects()
+	// Index active projects by name so a 현장 page resolves to its owner.
+	byName := make(map[string]*ProjectRef, len(refs))
+	for i := range refs {
+		byName[refs[i].Name] = &refs[i]
+	}
+	// One corpus pass to bucket 현장 pages under their owning project.
+	sitePagesByProject := make(map[string][]string)
+	if paths, err := s.ListPages(projectCategoryPrefix); err == nil {
+		for _, p := range paths {
+			if !IsProjectSitePage(p) {
+				continue
+			}
+			if name, ok := ProjectNameOf(p); ok {
+				sitePagesByProject[name] = append(sitePagesByProject[name], p)
+			}
+		}
+	}
+
 	out := make([]ProjectSite, 0, len(refs))
-	for _, ref := range refs {
+	for i := range refs {
+		ref := &refs[i]
+		covered := make(map[string]bool)
+		for _, sp := range sitePagesByProject[ref.Name] {
+			page, err := s.ReadPage(sp)
+			if err != nil || page == nil {
+				continue
+			}
+			addr := normalizeSiteName(page.Meta.Address)
+			client := strings.TrimSpace(page.Meta.Client)
+			if client == "" {
+				client = ref.Client
+			}
+			out = append(out, ProjectSite{
+				Name:     ref.Name,
+				Client:   client,
+				Path:     sp,
+				Due:      strings.TrimSpace(page.Meta.Due),
+				Sites:    addrSlice(addr),
+				Kinds:    page.Meta.Kinds,
+				Capacity: page.Meta.Capacity,
+				Status:   strings.TrimSpace(page.Meta.Status),
+			})
+			if addr != "" {
+				covered[addr] = true
+			}
+		}
+		// Fallback: 대표페이지 addresses without a 현장 page — one status-blank pin each.
 		if len(ref.Sites) == 0 {
 			continue
 		}
-		row := ProjectSite{Name: ref.Name, Client: ref.Client, Path: ref.Path, Sites: ref.Sites, Kinds: ref.Kinds, Capacity: ref.Capacity}
+		var repDue string
 		if page, err := s.ReadPage(ref.Path); err == nil && page != nil {
-			row.Due = strings.TrimSpace(page.Meta.Due)
+			repDue = strings.TrimSpace(page.Meta.Due)
 		}
-		out = append(out, row)
+		for _, addr := range ref.Sites {
+			na := normalizeSiteName(addr)
+			if na == "" || covered[na] {
+				continue
+			}
+			covered[na] = true
+			out = append(out, ProjectSite{
+				Name:     ref.Name,
+				Client:   ref.Client,
+				Path:     ref.Path,
+				Due:      repDue,
+				Sites:    []string{addr},
+				Kinds:    ref.Kinds,
+				Capacity: ref.Capacity,
+			})
+		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+		return firstOf(out[i].Sites) < firstOf(out[j].Sites)
+	})
 	return out, nil
+}
+
+// addrSlice returns [addr] for a non-empty address, else an empty slice (a 현장
+// page with no address still yields a row, just unplaceable on the map).
+func addrSlice(addr string) []string {
+	if addr == "" {
+		return []string{}
+	}
+	return []string{addr}
+}
+
+func firstOf(ss []string) string {
+	if len(ss) == 0 {
+		return ""
+	}
+	return ss[0]
 }
 
 // ProjectStatuses returns each project that has a non-empty 현재 상태 section,
